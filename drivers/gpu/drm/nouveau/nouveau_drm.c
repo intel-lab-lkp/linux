@@ -60,6 +60,7 @@
 #include "nouveau_vga.h"
 #include "nouveau_led.h"
 #include "nouveau_hwmon.h"
+#include "nouveau_devfreq.h"
 #include "nouveau_acpi.h"
 #include "nouveau_bios.h"
 #include "nouveau_ioctl.h"
@@ -587,6 +588,7 @@ nouveau_drm_device_fini(struct nouveau_drm *drm)
 		pm_runtime_forbid(dev->dev);
 	}
 
+	nouveau_devfreq_fini(drm);
 	nouveau_led_fini(dev);
 	nouveau_dmem_fini(drm);
 	nouveau_svm_fini(drm);
@@ -679,6 +681,7 @@ nouveau_drm_device_init(struct nouveau_drm *drm)
 	nouveau_svm_init(drm);
 	nouveau_dmem_init(drm);
 	nouveau_led_init(dev);
+	nouveau_devfreq_init(drm);
 
 	if (nouveau_pmops_runtime()) {
 		pm_runtime_use_autosuspend(dev->dev);
@@ -993,6 +996,7 @@ nouveau_do_suspend(struct nouveau_drm *drm, bool runtime)
 	}
 
 	NV_DEBUG(drm, "suspending object tree...\n");
+	nouveau_devfreq_suspend(drm);
 	ret = nvif_client_suspend(&drm->_client, runtime);
 	if (ret)
 		goto fail_client;
@@ -1000,6 +1004,7 @@ nouveau_do_suspend(struct nouveau_drm *drm, bool runtime)
 	return 0;
 
 fail_client:
+	nouveau_devfreq_resume(drm);
 	if (drm->fence && nouveau_fence(drm)->resume)
 		nouveau_fence(drm)->resume(drm);
 
@@ -1023,6 +1028,8 @@ nouveau_do_resume(struct nouveau_drm *drm, bool runtime)
 		NV_ERROR(drm, "Client resume failed with error: %d\n", ret);
 		return ret;
 	}
+
+	nouveau_devfreq_resume(drm);
 
 	NV_DEBUG(drm, "resuming fence...\n");
 	if (drm->fence && nouveau_fence(drm)->resume)

@@ -298,6 +298,7 @@ struct nouveau_drm {
 	/* power management */
 	struct nouveau_hwmon *hwmon;
 	struct nouveau_debugfs *debugfs;
+	struct nouveau_devfreq *devfreq;
 
 	/* led management */
 	struct nouveau_led *led;
