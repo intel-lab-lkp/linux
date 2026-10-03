@@ -199,10 +199,13 @@ bool xchacha20poly1305_decrypt(u8 *dst, const u8 *src, const size_t src_len,
 			       const u8 key[at_least CHACHA20POLY1305_KEY_SIZE])
 {
 	struct chacha_state chacha_state;
+	bool ret;
 
 	xchacha_init(&chacha_state, key, nonce);
-	return __chacha20poly1305_decrypt(dst, src, src_len, ad, ad_len,
+	ret = __chacha20poly1305_decrypt(dst, src, src_len, ad, ad_len,
 					  &chacha_state);
+	chacha_zeroize_state(&chacha_state);
+	return ret;
 }
 EXPORT_SYMBOL(xchacha20poly1305_decrypt);
 
