@@ -86,6 +86,9 @@ static u8 ack_frame[PORT100_FRAME_ACK_SIZE] = {
 #define PORT100_CMD_STATUS_OK      0x00
 #define PORT100_CMD_STATUS_TIMEOUT 0x80
 
+/* Timeout in ms for port100_send_cmd_sync() */
+#define PORT100_SYNC_CMD_TIMEOUT 5000
+
 #define PORT100_MDAA_TGT_HAS_BEEN_ACTIVATED_MASK 0x01
 #define PORT100_MDAA_TGT_WAS_ACTIVATED_MASK      0x02
 
@@ -930,7 +933,16 @@ static struct sk_buff *port100_send_cmd_sync(struct port100 *dev, u8 cmd_code,
 		return ERR_PTR(rc);
 	}
 
-	wait_for_completion(&arg.done);
+	if (!wait_for_completion_timeout(&arg.done,
+					 msecs_to_jiffies(PORT100_SYNC_CMD_TIMEOUT))) {
+		/*
+		 * No answer from the device. Kill in_urb so the command
+		 * completes with an error, and wait for that, since the
+		 * completion handler still writes to arg.
+		 */
+		usb_kill_urb(dev->in_urb);
+		wait_for_completion(&arg.done);
+	}
 
 	return arg.resp;
 }
