@@ -485,6 +485,18 @@
 			status = "disabled";
 		};
 
+		sid: efuse@1c1b000 {
+			compatible = "allwinner,sun8i-r40-sid",
+				     "allwinner,sun50i-a64-sid";
+			reg = <0x01c1b000 0x400>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			ths_calibration: thermal-sensor-calibration@40 {
+				reg = <0x40 0x4>;
+			};
+		};
+
 		ehci2: usb@1c1c000 {
 			compatible = "allwinner,sun8i-r40-ehci", "generic-ehci";
 			reg = <0x01c1c000 0x100>;
@@ -832,7 +844,8 @@
 			clock-names = "bus", "mod";
 			interrupts = <GIC_SPI 36 IRQ_TYPE_LEVEL_HIGH>;
 			resets = <&ccu RST_BUS_THS>;
-			/* TODO: add nvmem-cells for calibration */
+			nvmem-cells = <&ths_calibration>;
+			nvmem-cell-names = "calibration";
 			#thermal-sensor-cells = <1>;
 		};
 
