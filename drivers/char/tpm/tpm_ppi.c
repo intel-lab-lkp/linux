@@ -234,7 +234,7 @@ static ssize_t tpm_show_ppi_response(struct device *dev,
 				     struct device_attribute *attr,
 				     char *buf)
 {
-	acpi_status status = -EINVAL;
+	ssize_t status = -EINVAL;
 	union acpi_object *obj, *ret_obj;
 	u64 req, res;
 	struct tpm_chip *chip = to_tpm_chip(dev);
