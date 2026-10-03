@@ -30,7 +30,12 @@
 
 #define MANAGE_MAGIC_NUMBER		((__force __le32)0x43494151) /* "QAIC" in little endian */
 #define QAIC_DBC_Q_GAP			SZ_256
-#define QAIC_DBC_Q_BUF_ALIGN		SZ_4K
+#define QAIC_DBC_Q_MAX_SIZE		SZ_256K
+#define QAIC_DBC_Q_MIN_SIZE		(ALIGN(2 * (get_dbc_req_elem_size() + \
+						    get_dbc_rsp_elem_size()) + \
+					       QAIC_DBC_Q_GAP, SZ_4K))
+#define QAIC_DBC_NELEM(size)		(((size) - QAIC_DBC_Q_GAP) / \
+					(get_dbc_req_elem_size() + get_dbc_rsp_elem_size()))
 #define QAIC_MANAGE_WIRE_MSG_LENGTH	SZ_64K /* Max DMA message length */
 #define QAIC_WRAPPER_MAX_SIZE		SZ_4K
 #define QAIC_MHI_RETRY_WAIT_MS		100
@@ -635,13 +640,13 @@ static int encode_activate(struct qaic_device *qdev, void *trans, struct wrapper
 	struct qaic_manage_trans_activate_to_dev *in_trans = trans;
 	struct wire_trans_activate_to_dev *out_trans;
 	struct wrapper_msg *trans_wrapper;
+	u32 size = QAIC_DBC_Q_MAX_SIZE;
 	struct wrapper_msg *wrapper;
 	struct wire_msg *msg;
 	dma_addr_t dma_addr;
 	u32 msg_hdr_len;
-	void *buf;
 	u32 nelem;
-	u32 size;
+	void *buf;
 	int ret;
 
 	wrapper = list_first_entry(&wrappers->list, struct wrapper_msg, list);
@@ -657,20 +662,16 @@ static int encode_activate(struct qaic_device *qdev, void *trans, struct wrapper
 	if (in_trans->pad)
 		return -EINVAL;
 
-	nelem = in_trans->queue_size;
-	if (check_mul_overflow((u32)(get_dbc_req_elem_size() + get_dbc_rsp_elem_size()),
-			       nelem,
-			       &size))
-		return -EINVAL;
-
-	if (size + QAIC_DBC_Q_GAP + QAIC_DBC_Q_BUF_ALIGN < size)
-		return -EINVAL;
-
-	size = ALIGN((size + QAIC_DBC_Q_GAP), QAIC_DBC_Q_BUF_ALIGN);
-
-	buf = dma_alloc_coherent(&qdev->pdev->dev, size, &dma_addr, GFP_KERNEL);
+	while (size >= QAIC_DBC_Q_MIN_SIZE) {
+		buf = dma_alloc_coherent(&qdev->pdev->dev, size, &dma_addr, GFP_KERNEL);
+		if (!buf)
+			size >>= 1;
+		else
+			break;
+	}
 	if (!buf)
 		return -ENOMEM;
+	nelem = QAIC_DBC_NELEM(size);
 
 	trans_wrapper = add_wrapper(wrappers,
 				    offsetof(struct wrapper_msg, trans) + sizeof(*out_trans));

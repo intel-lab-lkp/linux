@@ -95,8 +95,6 @@ void set_dbc_scaling_ratio(struct dma_bridge_chan *dbc, u32 nelem)
 		dbc->credit_ratio = QAIC_CREDITS;
 		return;
 	}
-	if (QAIC_CREDITS % nelem != 0)
-		pr_debug("Credits not evenly divisible by queue size: size = %d\n", nelem);
 	dbc->credit_ratio = DIV_ROUND_UP(QAIC_CREDITS, nelem);
 }
 
