@@ -122,6 +122,12 @@ properties:
   nvmem-cells:
     maxItems: 1
 
+  mediatek,mfgcfg:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to the MFG configuration block, which routes the SoC system
+      timer to the GPU timestamp counter.
+
 required:
   - compatible
   - reg
@@ -226,6 +232,17 @@ allOf:
       required:
         - power-domains
         - power-domain-names
+  - if:
+      properties:
+        compatible:
+          not:
+            contains:
+              enum:
+                - mediatek,mt8188-mali
+                - mediatek,mt8370-mali
+    then:
+      properties:
+        mediatek,mfgcfg: false
   - if:
       properties:
         compatible:
