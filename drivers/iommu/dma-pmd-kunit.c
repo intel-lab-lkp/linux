@@ -53,7 +53,7 @@ static void test_meta_invalid_phys(struct kunit *test)
 
 static void dma_pmd_meta_set_pooled(struct dma_pmd_meta *m, bool pooled)
 {
-	WRITE_ONCE(m->pooled, pooled);
+	WRITE_ONCE(m->flags, pooled ? DMA_PMD_POOLED : 0);
 }
 
 static void test_meta_pooled_toggle(struct kunit *test)

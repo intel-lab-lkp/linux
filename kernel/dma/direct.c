@@ -7,6 +7,7 @@
 #include <linux/memblock.h> /* for max_pfn */
 #include <linux/export.h>
 #include <linux/mm.h>
+#include <linux/dma-pmd.h>
 #include <linux/dma-map-ops.h>
 #include <linux/scatterlist.h>
 #include <linux/pfn.h>
@@ -679,7 +680,10 @@ dma_addr_t dma_direct_map_phys(struct device *dev, phys_addr_t phys,
 			attrs |= DMA_ATTR_CC_SHARED;
 	}
 
-	if (is_swiotlb_force_bounce(dev)) {
+	if (dma_is_pmd_direct(phys)) {
+		if (force_dma_unencrypted(dev))
+			attrs |= DMA_ATTR_CC_SHARED;
+	} else if (is_swiotlb_force_bounce(dev)) {
 		if (attrs & (DMA_ATTR_MMIO | DMA_ATTR_REQUIRE_COHERENT))
 			return DMA_MAPPING_ERROR;
 

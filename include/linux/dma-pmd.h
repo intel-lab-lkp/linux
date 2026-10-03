@@ -16,6 +16,7 @@ struct dma_pmd_pool;
 extern void *dma_pmd_meta_array;
 
 bool __dma_is_pmd_page(unsigned long pfn);
+bool __dma_is_pmd_direct(unsigned long pfn);
 
 static inline bool dma_is_pmd_page(unsigned long pfn)
 {
@@ -27,6 +28,15 @@ static inline bool dma_is_pmd_page(unsigned long pfn)
 		return false;
 
 	return __dma_is_pmd_page(pfn);
+}
+
+static inline bool dma_is_pmd_direct(phys_addr_t phys)
+{
+	/* Pairs with smp_store_release() in dma_pmd_meta_init(). */
+	if (likely(!smp_load_acquire(&dma_pmd_meta_array)))
+		return false;
+
+	return __dma_is_pmd_direct(phys >> PAGE_SHIFT);
 }
 
 bool __dma_pmd_free_page(struct page *page);
@@ -113,6 +123,11 @@ static inline bool dma_pmd_free(struct device *dev, size_t size,
 #else /* !CONFIG_DMA_PMD */
 
 static inline bool dma_is_pmd_page(unsigned long pfn)
+{
+	return false;
+}
+
+static inline bool dma_is_pmd_direct(phys_addr_t phys)
 {
 	return false;
 }

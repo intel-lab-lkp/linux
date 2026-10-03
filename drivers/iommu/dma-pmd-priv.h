@@ -107,10 +107,16 @@ enum {
 #define DMA_PMD_META_SHIFT		8
 #define DMA_PMD_META_SIZE		BIT(DMA_PMD_META_SHIFT)
 
+enum {
+	DMA_PMD_POOLED		= BIT(0),
+	DMA_PMD_DECRYPTED	= BIT(1),
+	DMA_PMD_PINNED		= BIT(2),
+};
+
 /**
  * struct dma_pmd_meta - Metadata for a single DMA_PMD page
- * @pooled:	True while this page is owned by an dma_pmd_pool (offset 0)
- *		read locklessly by dma_is_pmd_page().
+ * @flags:	Bitmask of DMA_PMD_POOLED, DMA_PMD_DECRYPTED, DMA_PMD_PINNED
+ *		(offset 0), read locklessly by dma_is_pmd_page() and dma_is_pmd_direct().
  * @nr_free:	Number of zeroed available blocks in @free_bitmap
  * @nr_dirty:	Number of dirty available blocks in @dirty_bitmap
  * @map_lock:	Spinlock protecting slow-path updates to @domains_mapped
@@ -138,7 +144,7 @@ enum {
  * physical pages (128 KB per GB of RAM).
  */
 struct dma_pmd_meta {
-	bool pooled;
+	u8 flags;
 	u16 nr_free;
 	u16 nr_dirty;
 	spinlock_t map_lock;
@@ -160,7 +166,7 @@ struct dma_pmd_meta {
 	DECLARE_BITMAP(dirty_bitmap, 1U << PMD_ORDER) ____cacheline_aligned;
 } __aligned(DMA_PMD_META_SIZE);
 
-static_assert(offsetof(struct dma_pmd_meta, pooled) == 0);
+static_assert(offsetof(struct dma_pmd_meta, flags) == 0);
 static_assert(sizeof(struct dma_pmd_meta) == DMA_PMD_META_SIZE);
 
 static inline unsigned int dma_pmd_meta_avail(const struct dma_pmd_meta *m)

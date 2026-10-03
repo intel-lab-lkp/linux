@@ -8,6 +8,7 @@
 #include <linux/bitmap.h>
 #include <linux/cache.h>
 #include <linux/cacheflush.h>
+#include <linux/cc_platform.h>
 #include <linux/dma-pmd.h>
 #include <linux/export.h>
 #include <linux/gfp.h>
@@ -64,9 +65,21 @@ static __always_inline struct dma_pmd_meta *__dma_pmd_meta_of_pfn(unsigned long 
 
 bool __dma_is_pmd_page(unsigned long pfn)
 {
-	return READ_ONCE(__dma_pmd_meta_of_pfn(pfn)->pooled);
+	return READ_ONCE(__dma_pmd_meta_of_pfn(pfn)->flags) & DMA_PMD_POOLED;
 }
 EXPORT_SYMBOL(__dma_is_pmd_page);
+
+bool __dma_is_pmd_direct(unsigned long pfn)
+{
+	u8 flags = READ_ONCE(__dma_pmd_meta_of_pfn(pfn)->flags);
+
+	if (cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT) &&
+	    !(flags & DMA_PMD_DECRYPTED))
+		return false;
+	return (flags & DMA_PMD_POOLED) &&
+	       (flags & (DMA_PMD_DECRYPTED | DMA_PMD_PINNED));
+}
+EXPORT_SYMBOL(__dma_is_pmd_direct);
 
 /**
  * dma_pmd_meta_of_pfn - Metadata for a PFN known to be used by DMA_PMD.

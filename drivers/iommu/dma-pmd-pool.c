@@ -9,6 +9,7 @@
 #include <linux/bitmap.h>
 #include <linux/bitops.h>
 #include <linux/cache.h>
+#include <linux/cc_platform.h>
 #include <linux/debugfs.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-pmd.h>
@@ -22,6 +23,7 @@
 #include <linux/mutex.h>
 #include <linux/rcupdate.h>
 #include <linux/seq_file.h>
+#include <linux/set_memory.h>
 #include <linux/shrinker.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -38,6 +40,14 @@ static LLIST_HEAD(dma_pmd_free_list);
 
 /* Dedicated WQ_MEM_RECLAIM workqueue, can run without allocations. */
 static struct workqueue_struct *dma_pmd_wq __ro_after_init;
+
+/* Mark pooled PMD pages decrypted for DMA (auto-enabled on CoCo guests). */
+static bool dma_pmd_decrypt __read_mostly;
+module_param_named(decrypt, dma_pmd_decrypt, bool, 0644);
+
+/* Pin pooled PMD pages in the host hypervisor on allocation and unpin on release. */
+static bool dma_pmd_pin __read_mostly;
+module_param_named(pin, dma_pmd_pin, bool, 0644);
 
 /*
  * Running total and global ceiling on DMA_PMD pages pinned across all pools.
@@ -65,6 +75,70 @@ static void dma_pmd_pool_free_kref(struct kref *kref)
 	dma_pmd_schedule_reclaim();
 }
 
+static int dma_pmd_page_prepare(struct page *page, struct dma_pmd_meta *meta,
+				bool can_block)
+{
+	bool want_decrypt = READ_ONCE(dma_pmd_decrypt);
+	bool want_pin = READ_ONCE(dma_pmd_pin);
+	void *vaddr = page_address(page);
+	int ret;
+
+	if (!want_decrypt && !want_pin)
+		return 0;
+
+	/*
+	 * Decryption and host-pinning hypercalls may sleep. In atomic context,
+	 * leave DMA_PMD_DECRYPTED/PINNED unset so the page is still pooled but
+	 * uses normal swiotlb bounce buffering when required.
+	 */
+	if (!can_block) {
+		pr_warn_ratelimited("%s: cannot block but want %s %s\n", __func__,
+				    want_decrypt ? "decrypt" : "", want_pin ? "pin" : "");
+		return 0;
+	}
+
+	/*
+	 * Explicit page decryption is for CoCo guests (where force_dma_unencrypted()
+	 * is true), not bare-metal SME hosts where 64-bit devices and the IOMMU
+	 * set the encryption bit in DMA addresses and IOMMU PTEs.
+	 */
+	if (want_decrypt && !WARN_ON_ONCE(cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT))) {
+		ret = set_memory_decrypted((unsigned long)vaddr, 1 << PMD_ORDER);
+		if (ret)
+			return ret;
+		/* Initialize cleartext cachelines after flipping encryption state. */
+		memset(vaddr, 0, PMD_SIZE);
+		meta->flags |= DMA_PMD_DECRYPTED;
+	}
+
+	if (want_pin) {
+		/* Hook point for hypervisor GPA range pinning. */
+		meta->flags |= DMA_PMD_PINNED;
+	}
+
+	return 0;
+}
+
+static int dma_pmd_page_unprepare(struct dma_pmd_meta *meta)
+{
+	struct page *page = pfn_to_page(dma_pmd_meta_to_pfn(meta));
+
+	if (meta->flags & DMA_PMD_PINNED) {
+		/* Hook point for hypervisor GPA range unpinning. */
+		WRITE_ONCE(meta->flags, meta->flags & ~DMA_PMD_PINNED);
+	}
+
+	if (meta->flags & DMA_PMD_DECRYPTED) {
+		if (set_memory_encrypted((unsigned long)page_address(page),
+					 1 << PMD_ORDER)) {
+			pr_warn_ratelimited("dma_pmd: leaking PMD page that could not be re-encrypted\n");
+			return -EIO;
+		}
+		WRITE_ONCE(meta->flags, meta->flags & ~DMA_PMD_DECRYPTED);
+	}
+	return 0;
+}
+
 /*
  * Releasing an idle PMD page proceeds in three stages:
  *
@@ -74,7 +148,7 @@ static void dma_pmd_pool_free_kref(struct kref *kref)
  *    pushed locklessly onto dma_pmd_free_list and dma_pmd_reclaim_work is
  *    scheduled on dma_pmd_wq.
  * 2. In process context, dma_pmd_release_page() unmaps all IOMMU domains
- *    (dma_pmd_unmap_all()), clears meta->pooled so new lockless readers stop
+ *    (dma_pmd_unmap_all()), clears DMA_PMD_POOLED so new lockless readers stop
  *    entering @meta, and queues dma_pmd_release_page_rcu() via call_rcu().
  * 3. After an RCU grace period (once no concurrent dma_pmd_free_page() reader
  *    can still be dereferencing @meta), dma_pmd_release_page_rcu() unfreezes
@@ -97,21 +171,20 @@ static void dma_pmd_release_page_rcu(struct rcu_head *head)
 	 * block is freed, the PMD frame can be reallocated and @meta overwritten.
 	 */
 	struct dma_pmd_meta *meta = container_of(head, struct dma_pmd_meta, rcu);
-	struct page *page = pfn_to_page(dma_pmd_meta_to_pfn(meta));
+	struct page *block, *page = pfn_to_page(dma_pmd_meta_to_pfn(meta));
 	struct dma_pmd_pool *pool = READ_ONCE(meta->pool);
-	unsigned int nr = DMA_PMD_BLOCKS(pool->order);
-	unsigned int order = pool->order;
+	unsigned int order = pool->order, i, nr = DMA_PMD_BLOCKS(order);
+	bool leak = READ_ONCE(meta->flags) & DMA_PMD_DECRYPTED;
 	unsigned long flags;
-	unsigned int i;
 
-	for (i = 0; i < nr; i++) {
-		struct page *block = page + (i << order);
-
-		page_ref_unfreeze(block, 1);
-		__free_pages(block, order);
+	if (!leak) {
+		for (i = 0; i < nr; i++) {
+			block = page + (i << order);
+			page_ref_unfreeze(block, 1);
+			__free_pages(block, order);
+		}
+		atomic_long_dec(&dma_pmd_nr_pages);
 	}
-
-	atomic_long_dec(&dma_pmd_nr_pages);
 
 	spin_lock_irqsave(&pool->lock, flags);
 	pool->pmd_free_cnt++;
@@ -138,7 +211,9 @@ static void dma_pmd_release_page(struct dma_pmd_meta *meta)
 	 * dma_is_pmd_page() just before this may still be reading @meta, so
 	 * the PMD page and its metadata entry must outlive the grace period.
 	 */
-	WRITE_ONCE(meta->pooled, false);
+	WRITE_ONCE(meta->flags, meta->flags & ~DMA_PMD_POOLED);
+	dma_pmd_page_unprepare(meta);
+
 	call_rcu(&meta->rcu, dma_pmd_release_page_rcu);
 }
 
@@ -392,20 +467,33 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 		return NULL;
 	}
 
-	/* Fails with -EBUSY if a concurrent PFN walker holds a speculative ref. */
-	if (split_page_compound(page, PMD_ORDER, pool->order)) {
-		__free_pages(page, PMD_ORDER);
-		atomic_long_dec(&dma_pmd_nr_pages);
-		return NULL;
-	}
-
 	meta = dma_pmd_meta_of_pfn(page_to_pfn(page));
 	memset(meta, 0, sizeof(*meta));
 	meta->pool = pool;
 	spin_lock_init(&meta->map_lock);
 
-	bitmap_set(meta->dirty_bitmap, 0, nr);
-	meta->nr_dirty = nr;
+	if (dma_pmd_page_prepare(page, meta, can_block)) {
+		__free_pages(page, PMD_ORDER);
+		atomic_long_dec(&dma_pmd_nr_pages);
+		return NULL;
+	}
+
+	/* Fails with -EBUSY if a concurrent PFN walker holds a speculative ref. */
+	if (split_page_compound(page, PMD_ORDER, pool->order)) {
+		if (!dma_pmd_page_unprepare(meta)) {
+			__free_pages(page, PMD_ORDER);
+			atomic_long_dec(&dma_pmd_nr_pages);
+		}
+		return NULL;
+	}
+
+	if (meta->flags & DMA_PMD_DECRYPTED) {
+		bitmap_set(meta->free_bitmap, 0, nr);
+		meta->nr_free = nr;
+	} else {
+		bitmap_set(meta->dirty_bitmap, 0, nr);
+		meta->nr_dirty = nr;
+	}
 
 	kref_get(&pool->refcount);
 
@@ -418,7 +506,7 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 	 * function returns and the caller publishes the PMD page under
 	 * @pool->lock, whose release orders both stores against every consumer.
 	 */
-	WRITE_ONCE(meta->pooled, true);
+	WRITE_ONCE(meta->flags, meta->flags | DMA_PMD_POOLED);
 
 	return meta;
 }
@@ -764,10 +852,18 @@ static unsigned long dma_pmd_shrink_scan(struct shrinker *shrink,
 	/*
 	 * Retiring is done outside both locks: dma_pmd_release_page() unmaps
 	 * from the IOMMU, which is far too long to hold pool->lock for.
+	 * Pages that need set_memory_encrypted() cannot be released under
+	 * fs_reclaim (CPA allocates PTE pages on x86); hand them to the
+	 * reclaim workqueue instead.
 	 */
 	list_for_each_entry_safe(meta, tmp, &release_list, list) {
-		list_del(&meta->list);
-		dma_pmd_release_page(meta);
+		list_del_init(&meta->list);
+		if (meta->flags & (DMA_PMD_DECRYPTED | DMA_PMD_PINNED)) {
+			llist_add(&meta->llnode, &dma_pmd_free_list);
+			dma_pmd_schedule_reclaim();
+		} else {
+			dma_pmd_release_page(meta);
+		}
 	}
 	srcu_read_unlock(&dma_pmd_srcu, srcu_idx);
 
@@ -805,6 +901,9 @@ static int __init dma_pmd_init(void)
 	 */
 	if (!dma_pmd_max_pages)
 		dma_pmd_max_pages = max(totalram_pages() >> (PMD_ORDER + 3), 16UL);
+
+	if (cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT))
+		dma_pmd_decrypt = true;
 
 	/*
 	 * Reclaim frees memory, so it must not queue behind arbitrary work on
