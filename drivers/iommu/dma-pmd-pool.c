@@ -39,6 +39,17 @@ static LLIST_HEAD(dma_pmd_free_list);
 /* Dedicated WQ_MEM_RECLAIM workqueue, can run without allocations. */
 static struct workqueue_struct *dma_pmd_wq __ro_after_init;
 
+/*
+ * Running total and global ceiling on DMA_PMD pages pinned across all pools.
+ * If zero, it is set at boot at 1/8 of total RAM.
+ * Without this the bound is per-pool, so the footprint scales with the number
+ * of pools (one per RX queue, two per CPU for sockets) with nothing watching
+ * the aggregate.
+ */
+static atomic_long_t dma_pmd_nr_pages __cacheline_aligned_in_smp;
+static unsigned long dma_pmd_max_pages __read_mostly;
+core_param(dma_pmd_max_pages, dma_pmd_max_pages, ulong, 0644);
+
 /* All live pools. */
 static LIST_HEAD(dma_pmd_pools);
 static DEFINE_MUTEX(dma_pmd_pools_lock);
@@ -101,6 +112,8 @@ static void dma_pmd_release_page_rcu(struct rcu_head *head)
 		__free_pages(block, order);
 	}
 
+	atomic_long_dec(&dma_pmd_nr_pages);
+
 	spin_lock_irqsave(&pool->lock, flags);
 	pool->pmd_free_cnt++;
 	spin_unlock_irqrestore(&pool->lock, flags);
@@ -115,7 +128,7 @@ static void dma_pmd_release_page_rcu(struct rcu_head *head)
  * Cost: Slow path; clears the membership bit. The blocks themselves are
  *       returned after an RCU grace period.
  * Locking: Must not hold @pool->lock.
- * Frequency: Rare (background reclaim workqueue, pool destruction).
+ * Frequency: Rare (background reclaim workqueue, shrinker, pool destruction).
  */
 static void dma_pmd_release_page(struct dma_pmd_meta *meta)
 {
@@ -168,7 +181,9 @@ static void dma_pmd_schedule_reclaim(void)
  * @order: Block order to dispense, must be <= PMD_ORDER.
  * @max_idle_pages: Maximum number of completely idle PMD pages to keep cached in
  *               the pool before asynchronously releasing excess PMD pages to buddy
- *               (0 uses default of 16 = 32 MB).
+ *               (0 uses default of 16 = 32 MB). This is a per-pool bound; the
+ *               aggregate across all pools is additionally capped by
+ *               dma_pmd_max_pages and trimmed by the shrinker.
  *
  * New PMD physical pages are allocated on demand on the NUMA node of the
  * calling CPU (the NAPI CPU for RX queue refill, or the application CPU for TX).
@@ -294,6 +309,15 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 	if (!can_block && time_before(jiffies, READ_ONCE(pool->next_alloc_attempt)))
 		return NULL;
 
+	/* Aggregate ceiling across every pool, independent of max_idle_pages. */
+	if (atomic_long_inc_return(&dma_pmd_nr_pages) > READ_ONCE(dma_pmd_max_pages)) {
+		atomic_long_dec(&dma_pmd_nr_pages);
+		if (!can_block)
+			WRITE_ONCE(pool->next_alloc_attempt,
+				   jiffies + DIV_ROUND_UP(HZ, 100));
+		return NULL;
+	}
+
 	/*
 	 * The following flags are discarded:
 	 *
@@ -324,6 +348,7 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 
 	page = alloc_pages_node(nid, alloc_gfp, PMD_ORDER);
 	if (!page) {
+		atomic_long_dec(&dma_pmd_nr_pages);
 		/* Retry backoff; could be made shorter or tunable in future. */
 		if (!can_block)
 			WRITE_ONCE(pool->next_alloc_attempt,
@@ -338,12 +363,14 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 	 */
 	if (unlikely(!dma_pmd_meta_ensure_pfn(page_to_pfn(page), can_block))) {
 		__free_pages(page, PMD_ORDER);
+		atomic_long_dec(&dma_pmd_nr_pages);
 		return NULL;
 	}
 
 	/* Fails with -EBUSY if a concurrent PFN walker holds a speculative ref. */
 	if (split_page_compound(page, PMD_ORDER, pool->order)) {
 		__free_pages(page, PMD_ORDER);
+		atomic_long_dec(&dma_pmd_nr_pages);
 		return NULL;
 	}
 
@@ -642,8 +669,112 @@ bool __dma_pmd_free_page(struct page *page)
 }
 EXPORT_SYMBOL(__dma_pmd_free_page);
 
+/*
+ * Idle PMD pages are retained per pool up to max_idle_pages, which is a throughput
+ * knob and deliberately does not react to memory pressure. The shrinker is
+ * what makes that safe: under reclaim every completely idle PMD page in every
+ * pool becomes available, so the pools give the memory back instead of
+ * pinning their high-water mark for the lifetime of the machine.
+ *
+ * Both callbacks use mutex_trylock() rather than mutex_lock(): a thread that
+ * already holds dma_pmd_pools_lock can enter direct reclaim from an
+ * allocation it makes under that lock, and reclaim calls straight back in
+ * here. Giving up is always correct, since there is nothing this shrinker
+ * could free that the holder is not already about to account for.
+ */
+static unsigned long dma_pmd_shrink_count(struct shrinker *shrink,
+					  struct shrink_control *sc)
+{
+	struct dma_pmd_pool *pool;
+	unsigned long nr = 0;
+
+	if (!mutex_trylock(&dma_pmd_pools_lock))
+		return 0;
+
+	list_for_each_entry(pool, &dma_pmd_pools, node)
+		nr += READ_ONCE(pool->num_idle_pages);
+
+	mutex_unlock(&dma_pmd_pools_lock);
+
+	return nr << PMD_ORDER;
+}
+
+static unsigned long dma_pmd_shrink_scan(struct shrinker *shrink,
+					 struct shrink_control *sc)
+{
+	struct dma_pmd_meta *meta, *tmp;
+	struct dma_pmd_pool *pool;
+	unsigned long freed = 0;
+	LIST_HEAD(release_list);
+	unsigned long flags;
+
+	if (!mutex_trylock(&dma_pmd_pools_lock))
+		return SHRINK_STOP;
+
+	list_for_each_entry(pool, &dma_pmd_pools, node) {
+		/*
+		 * Every PMD page on @idle is a candidate, so this detaches one
+		 * per iteration and stops as soon as the reclaim path has
+		 * what it asked for: the IRQs-off section is bounded by the
+		 * work done, not by how many PMD pages the pool holds.
+		 */
+		spin_lock_irqsave(&pool->lock, flags);
+		list_for_each_entry_safe(meta, tmp, &pool->idle, list) {
+			if (freed >= sc->nr_to_scan)
+				break;
+			list_move(&meta->list, &release_list);
+			pool->num_idle_pages--;
+			freed += 1UL << PMD_ORDER;
+		}
+		spin_unlock_irqrestore(&pool->lock, flags);
+
+		if (freed >= sc->nr_to_scan)
+			break;
+	}
+
+	mutex_unlock(&dma_pmd_pools_lock);
+
+	/* Retiring must not run under @pool->lock. */
+	list_for_each_entry_safe(meta, tmp, &release_list, list) {
+		list_del(&meta->list);
+		dma_pmd_release_page(meta);
+	}
+
+	/*
+	 * Both counts are in pages, matching dma_pmd_shrink_count(). A
+	 * 2M page is 512 of them and cannot be freed in parts, so a
+	 * SHRINK_BATCH sized request always overshoots. Report what was
+	 * really reclaimed so that do_shrink_slab() charges its budget for
+	 * the whole PMD page instead of the 128 pages it asked for, and does
+	 * not come back four times over for the same pressure.
+	 *
+	 * Zero scanned pages would leave that budget untouched and spin,
+	 * so a scan that reclaimed nothing has to say SHRINK_STOP.
+	 */
+	sc->nr_scanned = freed;
+
+	return freed ?: SHRINK_STOP;
+}
+
 static int __init dma_pmd_init(void)
 {
+	struct shrinker *shrink;
+
+	/*
+	 * Hard ceiling on memory diverted from the buddy allocator into 2MB
+	 * pools, in PMD pages. One eighth of RAM is far above what the per-pool
+	 * watermarks should ever reach; it exists to bound a pathological
+	 * configuration (many queues, many CPUs, all pools at their high
+	 * water mark) rather than to be hit in normal operation. The floor
+	 * keeps small machines usable. Zero here means the dma_pmd_max_pages=
+	 * boot parameter did not override it.
+	 *
+	 * Lowering the cap later only stops pools from growing; the PMD pages
+	 * already held are returned by the shrinker as they fall idle.
+	 */
+	if (!dma_pmd_max_pages)
+		dma_pmd_max_pages = max(totalram_pages() >> (PMD_ORDER + 3), 16UL);
+
 	/*
 	 * Reclaim frees memory, so it must not queue behind arbitrary work on
 	 * system_wq when the machine is already short of it. Failure is not
@@ -652,6 +783,17 @@ static int __init dma_pmd_init(void)
 	dma_pmd_wq = alloc_workqueue("dma_pmd", WQ_MEM_RECLAIM, 0);
 	if (!dma_pmd_wq)
 		pr_warn("dma_pmd: no reclaim workqueue, falling back to system_wq\n");
+
+	shrink = shrinker_alloc(0, "dma_pmd");
+	if (!shrink) {
+		pr_warn("dma_pmd: shrinker registration failed\n");
+		return 0;
+	}
+
+	shrink->count_objects = dma_pmd_shrink_count;
+	shrink->scan_objects = dma_pmd_shrink_scan;
+	shrink->seeks = DEFAULT_SEEKS;
+	shrinker_register(shrink);
 
 	return 0;
 }

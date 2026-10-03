@@ -21,6 +21,8 @@
  *			when can_block is true. It is not nested with pool->lock
  *			or meta->map_lock, and sits inside dma_pmd_pools_lock
  *			when dma_pmd_pool_create() calls dma_pmd_meta_init().
+ *			The only reverse edge on dma_pmd_pools_lock is the
+ *			shrinker's mutex_trylock(), which cannot block.
  *
  * dma_pmd_pools_lock	Mutex over the list of live pools. Outermost of the
  *			three, and it must not be taken from a context that

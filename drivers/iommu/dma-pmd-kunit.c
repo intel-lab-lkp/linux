@@ -88,8 +88,8 @@ static void test_meta_pooled_toggle(struct kunit *test)
 
 static void test_pool_alloc_and_recycle(struct kunit *test)
 {
-	struct dma_pmd_pool *pool;
-	struct page *p1, *p2;
+	struct dma_pmd_pool *pool, *pool_wm;
+	struct page *p1, *p2, *b1, *b2, *b3;
 	unsigned int order;
 
 	KUNIT_EXPECT_NULL(test, dma_pmd_pool_destroy(NULL));
@@ -121,6 +121,23 @@ static void test_pool_alloc_and_recycle(struct kunit *test)
 		if (p2)
 			__free_pages(p2, order);
 	}
+
+	/*
+	 * Exercise max_idle_2m = 1 watermark release: an order-(PMD_ORDER - 1)
+	 * pool has 2 blocks per 2M page, so 3 allocations span two 2M pages.
+	 */
+	pool_wm = dma_pmd_pool_create(PMD_ORDER - 1, 1);
+	KUNIT_ASSERT_NOT_NULL(test, pool_wm);
+	b1 = dma_pmd_pool_alloc(pool_wm, GFP_KERNEL);
+	b2 = dma_pmd_pool_alloc(pool_wm, GFP_KERNEL);
+	b3 = dma_pmd_pool_alloc(pool_wm, GFP_KERNEL);
+	if (b1)
+		__free_pages(b1, PMD_ORDER - 1);
+	if (b2)
+		__free_pages(b2, PMD_ORDER - 1);
+	if (b3)
+		__free_pages(b3, PMD_ORDER - 1);
+	dma_pmd_pool_destroy(pool_wm);
 }
 
 static struct kunit_case dma_pmd_meta_test_cases[] = {
