@@ -994,8 +994,10 @@ static enum folio_references folio_check_references(struct folio *folio,
 		return FOLIOREF_KEEP;
 
 	if (lru_gen_enabled() && !lru_gen_switching()) {
-		if (!referenced_ptes)
+		if (!referenced_ptes) {
+			folio_clear_referenced(folio);
 			return FOLIOREF_RECLAIM;
+		}
 
 		return lru_gen_set_refs(folio, &vma_flags) ? FOLIOREF_ACTIVATE : FOLIOREF_KEEP;
 	}
@@ -5110,7 +5112,8 @@ retry:
 			continue;
 
 		/* retry folios that may have missed folio_rotate_reclaimable() */
-		if (!skip_retry && !folio_test_active(folio) && !folio_mapped(folio) &&
+		if (!skip_retry && !folio_test_active(folio) &&
+		    !folio_test_referenced(folio) && !folio_mapped(folio) &&
 		    !folio_test_dirty(folio) && !folio_test_writeback(folio)) {
 			list_move(&folio->lru, &clean);
 			continue;
