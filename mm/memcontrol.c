@@ -2696,6 +2696,46 @@ out:
 	css_put(&memcg->css);
 }
 
+static bool memcg_charge_may_reclaim(gfp_t gfp_mask)
+{
+	if (unlikely(task_in_memcg_oom(current)))
+		return false;
+
+	if (!gfpflags_allow_blocking(gfp_mask))
+		return false;
+
+	/*
+	 * OOM victim still needs to charge memory to exit. OOM reaper should
+	 * help but it might fail on mmap_lock contention. If the victim is a
+	 * large thread group then all exiting threads might compete on oom_lock
+	 * just to learn that there is nothing really killable anymore. Bail
+	 * out early and fail the charge to expedite their exit. They are
+	 * considered fully reclaimed by the oom reaper and they shouldn't
+	 * contribute further charges.
+	 */
+	if (tsk_is_oom_victim(current) &&
+	    mm_flags_test(MMF_OOM_SKIP, current->signal->oom_mm))
+		return false;
+
+	return true;
+}
+
+static unsigned long memcg_charge_reclaim(struct mem_cgroup *memcg,
+					  unsigned long nr_pages,
+					  gfp_t gfp_mask,
+					  unsigned int reclaim_options)
+{
+	unsigned long nr_reclaimed, pflags;
+
+	memcg_memory_event(memcg, MEMCG_MAX);
+	psi_memstall_enter(&pflags);
+	nr_reclaimed = try_to_free_mem_cgroup_pages(memcg, nr_pages, gfp_mask,
+						    reclaim_options, NULL);
+	psi_memstall_leave(&pflags);
+
+	return nr_reclaimed;
+}
+
 static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 			    unsigned int nr_pages)
 {
@@ -2708,7 +2748,6 @@ static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 	unsigned int reclaim_options;
 	bool drained = false;
 	bool raised_max_event = false;
-	unsigned long pflags;
 	bool allow_spinning = gfpflags_allow_spinning(gfp_mask);
 	int ret = 0;
 
@@ -2747,32 +2786,12 @@ retry:
 	if (unlikely(current->flags & PF_MEMALLOC))
 		goto force;
 
-	if (unlikely(task_in_memcg_oom(current)))
+	if (!memcg_charge_may_reclaim(gfp_mask))
 		goto nomem;
 
-	if (!gfpflags_allow_blocking(gfp_mask))
-		goto nomem;
-
-	/*
-	 * OOM victim still needs to charge memory to exit. OOM reaper should
-	 * help but it might fail on mmap_lock contention. If the victim is a
-	 * large thread group then all exiting threads might compete on oom_lock
-	 * just to learn that there is nothing really killable anymore. Bail
-	 * out early and fail the charge to expedite their exit. They are
-	 * considered fully reclaimed by the oom reaper and they shouldn't
-	 * contribute further charges.
-	 */
-	if (tsk_is_oom_victim(current) &&
-	    mm_flags_test(MMF_OOM_SKIP, current->signal->oom_mm))
-		goto nomem;
-
-	__memcg_memory_event(mem_over_limit, MEMCG_MAX, allow_spinning);
+	nr_reclaimed = memcg_charge_reclaim(mem_over_limit, nr_pages, gfp_mask,
+					    reclaim_options);
 	raised_max_event = true;
-
-	psi_memstall_enter(&pflags);
-	nr_reclaimed = try_to_free_mem_cgroup_pages(mem_over_limit, nr_pages,
-						    gfp_mask, reclaim_options, NULL);
-	psi_memstall_leave(&pflags);
 
 	if (mem_cgroup_margin(mem_over_limit) >= nr_pages)
 		goto retry;
