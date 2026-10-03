@@ -779,12 +779,17 @@ static int twl4030_usb_probe(struct platform_device *pdev)
 	if (pdata)
 		err = phy_create_lookup(phy, "usb", "musb-hdrc.0");
 	if (err)
-		return err;
+		goto err_free_irq;
 
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(twl->dev);
 
 	return 0;
+
+err_free_irq:
+	devm_free_irq(twl->dev, twl->irq, twl);
+	cancel_delayed_work_sync(&twl->id_workaround_work);
+	return err;
 }
 
 static void twl4030_usb_remove(struct platform_device *pdev)
@@ -794,6 +799,7 @@ static void twl4030_usb_remove(struct platform_device *pdev)
 
 	usb_remove_phy(&twl->phy);
 	pm_runtime_get_sync(twl->dev);
+	devm_free_irq(twl->dev, twl->irq, twl);
 	cancel_delayed_work_sync(&twl->id_workaround_work);
 	device_remove_file(twl->dev, &dev_attr_vbus);
 
