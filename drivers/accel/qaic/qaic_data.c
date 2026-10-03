@@ -184,9 +184,12 @@ struct qaic_exec_data_req {
 	int idx;
 };
 
+/* Caller should be holding bo->lock */
 static inline bool bo_queued(struct qaic_bo *bo)
 {
-	return !list_empty(&bo->xfer_list);
+	if (bo->fence)
+		return !dma_fence_is_signaled(&bo->fence->base);
+	return false;
 }
 
 inline int get_dbc_req_elem_size(void)
@@ -745,16 +748,8 @@ static const struct drm_gem_object_funcs qaic_gem_funcs = {
 	.vm_ops = &drm_vm_ops,
 };
 
-static void qaic_init_bo(struct qaic_bo *bo, bool reinit)
+static void qaic_init_bo_lists(struct qaic_bo *bo)
 {
-	if (reinit) {
-		bo->sliced = false;
-		reinit_completion(&bo->xfer_done);
-	} else {
-		mutex_init(&bo->lock);
-		init_completion(&bo->xfer_done);
-	}
-	complete_all(&bo->xfer_done);
 	INIT_LIST_HEAD(&bo->slices);
 	INIT_LIST_HEAD(&bo->xfer_list);
 }
@@ -767,7 +762,9 @@ static struct qaic_bo *qaic_alloc_init_bo(void)
 	if (!bo)
 		return ERR_PTR(-ENOMEM);
 
-	qaic_init_bo(bo, false);
+	mutex_init(&bo->lock);
+	bo->fence_context = dma_fence_context_alloc(1);
+	qaic_init_bo_lists(bo);
 
 	return bo;
 }
@@ -996,6 +993,7 @@ static void qaic_unprepare_bo(struct qaic_device *qdev, struct qaic_bo *bo)
 	bo->dir = 0;
 	bo->dbc = NULL;
 	bo->nr_slice = 0;
+	bo->sliced = false;
 }
 
 static void qaic_free_slices_bo(struct qaic_bo *bo)
@@ -1304,9 +1302,7 @@ static int send_bo_list_to_device(struct qaic_device *qdev, struct drm_file *fil
 			goto unlock_bo;
 		}
 
-		spin_lock_irqsave(&dbc->xfer_lock, flags);
 		if (bo_queued(bo)) {
-			spin_unlock_irqrestore(&dbc->xfer_lock, flags);
 			ret = -EINVAL;
 			goto unlock_bo;
 		}
@@ -1327,12 +1323,15 @@ static int send_bo_list_to_device(struct qaic_device *qdev, struct drm_file *fil
 							     head, tail);
 			else
 				ret = copy_exec_reqs(qdev, slice, dbc->id, head, tail);
-			if (ret) {
-				spin_unlock_irqrestore(&dbc->xfer_lock, flags);
+			if (ret)
 				goto unlock_bo;
-			}
 		}
-		reinit_completion(&bo->xfer_done);
+
+		ret = qaic_acquire_bo_fence(bo);
+		if (ret)
+			goto unlock_bo;
+
+		spin_lock_irqsave(&dbc->xfer_lock, flags);
 		list_add_tail(&bo->xfer_list, &dbc->xfer_list);
 		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
 		dma_sync_sgtable_for_device(&qdev->pdev->dev, bo->sgt, bo->dir);
@@ -1787,11 +1786,13 @@ read_fifo:
 			 * At this point we have received all the interrupts for
 			 * BO, which means BO execution is complete.
 			 */
-			dma_sync_sgtable_for_cpu(&qdev->pdev->dev, bo->sgt, bo->dir);
 			bo->nr_slice_xfer_done = 0;
 			list_del_init(&bo->xfer_list);
-			bo->perf_stats.req_processed_ts = ktime_get_ns();
-			complete_all(&bo->xfer_done);
+			/*
+			 * fence is put when it is executed next, during xfer_list
+			 * cleanup, or when slice is detached
+			 */
+			dma_fence_signal(&bo->fence->base);
 			drm_gem_object_put(&bo->base);
 			break;
 		}
@@ -1840,6 +1841,7 @@ int qaic_wait_bo_ioctl(struct drm_device *dev, void *data, struct drm_file *file
 	struct dma_bridge_chan *dbc;
 	struct drm_gem_object *obj;
 	struct qaic_device *qdev;
+	struct dma_fence *fence;
 	unsigned long timeout;
 	struct qaic_user *usr;
 	struct qaic_bo *bo;
@@ -1881,6 +1883,9 @@ int qaic_wait_bo_ioctl(struct drm_device *dev, void *data, struct drm_file *file
 		goto unlock_ch_srcu;
 	}
 
+	timeout = args->timeout ? args->timeout : wait_exec_default_timeout_ms;
+	timeout = msecs_to_jiffies(timeout);
+
 	obj = drm_gem_object_lookup(file_priv, args->handle);
 	if (!obj) {
 		ret = -ENOENT;
@@ -1888,15 +1893,24 @@ int qaic_wait_bo_ioctl(struct drm_device *dev, void *data, struct drm_file *file
 	}
 
 	bo = to_qaic_bo(obj);
-	timeout = args->timeout ? args->timeout : wait_exec_default_timeout_ms;
-	timeout = msecs_to_jiffies(timeout);
-	ret = wait_for_completion_interruptible_timeout(&bo->xfer_done, timeout);
-	if (!ret) {
-		ret = -ETIMEDOUT;
+	ret = mutex_lock_interruptible(&bo->lock);
+	if (ret)
+		goto put_obj;
+
+	if (!bo->fence) {
+		ret = -ENOENT;
+		mutex_unlock(&bo->lock);
 		goto put_obj;
 	}
-	if (ret > 0)
-		ret = 0;
+
+	fence = &bo->fence->base;
+	dma_fence_get(fence);
+	mutex_unlock(&bo->lock);
+
+	ret = qaic_fence_wait(fence, timeout);
+	dma_fence_put(fence);
+	if (ret)
+		goto put_obj;
 
 	if (!dbc->usr)
 		ret = -EPERM;
@@ -2000,9 +2014,10 @@ unlock_usr_srcu:
 
 static void detach_slice_bo(struct qaic_device *qdev, struct qaic_bo *bo)
 {
+	qaic_remove_bo_fence(bo);
 	qaic_free_slices_bo(bo);
 	qaic_unprepare_bo(qdev, bo);
-	qaic_init_bo(bo, true);
+	qaic_init_bo_lists(bo);
 	list_del(&bo->bo_list);
 	drm_gem_object_put(&bo->base);
 }
@@ -2015,7 +2030,6 @@ int qaic_detach_slice_bo_ioctl(struct drm_device *dev, void *data, struct drm_fi
 	struct drm_gem_object *obj;
 	struct qaic_device *qdev;
 	struct qaic_user *usr;
-	unsigned long flags;
 	struct qaic_bo *bo;
 	int ret;
 
@@ -2060,13 +2074,10 @@ int qaic_detach_slice_bo_ioctl(struct drm_device *dev, void *data, struct drm_fi
 	}
 
 	/* Check if BO is committed to H/W for DMA */
-	spin_lock_irqsave(&dbc->xfer_lock, flags);
 	if (bo_queued(bo)) {
-		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
 		ret = -EBUSY;
 		goto unlock_ch_srcu;
 	}
-	spin_unlock_irqrestore(&dbc->xfer_lock, flags);
 
 	detach_slice_bo(qdev, bo);
 
@@ -2093,14 +2104,19 @@ static void empty_xfer_list(struct qaic_device *qdev, struct dma_bridge_chan *db
 		bo = list_first_entry(&dbc->xfer_list, typeof(*bo), xfer_list);
 		list_del_init(&bo->xfer_list);
 		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
+		mutex_lock(&bo->lock);
 		bo->nr_slice_xfer_done = 0;
 		bo->req_id = 0;
 		bo->perf_stats.req_received_ts = 0;
 		bo->perf_stats.req_submit_ts = 0;
 		bo->perf_stats.req_processed_ts = 0;
 		bo->perf_stats.queue_level_before = 0;
-		dma_sync_sgtable_for_cpu(&qdev->pdev->dev, bo->sgt, bo->dir);
-		complete_all(&bo->xfer_done);
+		dma_fence_get(&bo->fence->base);
+		dma_fence_set_error(&bo->fence->base, -ECANCELED);
+		dma_fence_signal(&bo->fence->base);
+		dma_fence_put(&bo->fence->base);
+		qaic_remove_bo_fence(bo);
+		mutex_unlock(&bo->lock);
 		drm_gem_object_put(&bo->base);
 		spin_lock_irqsave(&dbc->xfer_lock, flags);
 	}

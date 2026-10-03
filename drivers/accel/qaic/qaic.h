@@ -6,6 +6,7 @@
 #ifndef _QAIC_H_
 #define _QAIC_H_
 
+#include <linux/dma-fence.h>
 #include <linux/interrupt.h>
 #include <linux/kref.h>
 #include <linux/mhi.h>
@@ -18,9 +19,11 @@
 #include <drm/drm_device.h>
 #include <drm/drm_gem.h>
 
+#define QAIC_NAME		"qaic"
 #define QAIC_DBC_BASE		SZ_128K
 #define QAIC_DBC_SIZE		SZ_4K
 #define QAIC_SSR_DBC_SENTINEL	U32_MAX /* No ongoing SSR sentinel */
+#define QAIC_TIMELINE_LEN	32 /* Should fit max sized DBC id/BO handle */
 
 #define QAIC_NO_PARTITION	-1
 
@@ -227,6 +230,16 @@ struct qaic_drm_device {
 	void			*sysfs_attrs;
 };
 
+struct qaic_fence {
+	struct dma_fence	base;
+	/* Spinlock used for initializing this fence */
+	spinlock_t		lock;
+	/* Name of fence context */
+	char			timeline_name[QAIC_TIMELINE_LEN];
+	/* Cached value of dbc_id for use in populating timeline_name */
+	u32			dbc_id;
+};
+
 struct qaic_bo {
 	struct drm_gem_object	base;
 	/* Scatter/gather table for allocate/imported BO */
@@ -253,8 +266,10 @@ struct qaic_bo {
 	bool			sliced;
 	/* Request ID of this BO if it is queued for execution */
 	u16			req_id;
-	/* Wait on this for completion of DMA transfer of this BO */
-	struct completion	xfer_done;
+	/* Wait on this fence for DMA transfer of this BO */
+	struct qaic_fence	*fence;
+	/* Current fence context for this BO */
+	u64			fence_context;
 	/*
 	 * Node in linked list where head is dbc->xfer_list.
 	 * This link list contain BO's that are queued for DMA transfer.
@@ -290,6 +305,8 @@ struct qaic_bo {
 	} perf_stats;
 	/* Synchronizes BO operations */
 	struct mutex		lock;
+	/* Callback to sync BO with CPU */
+	struct dma_fence_cb	cb;
 };
 
 struct bo_slice {
@@ -350,6 +367,11 @@ int qaic_detach_slice_bo_ioctl(struct drm_device *dev, void *data, struct drm_fi
 void qaic_irq_polling_work(struct work_struct *work);
 void qaic_dbc_enter_ssr(struct qaic_device *qdev, u32 dbc_id);
 void qaic_dbc_exit_ssr(struct qaic_device *qdev);
+
+/* qaic_fence.c */
+int qaic_fence_wait(struct dma_fence *fence, signed long timeout);
+void qaic_remove_bo_fence(struct qaic_bo *bo);
+int qaic_acquire_bo_fence(struct qaic_bo *bo);
 
 /* qaic_sysfs.c */
 int qaic_sysfs_init(struct qaic_drm_device *qddev);
