@@ -645,6 +645,10 @@ static void a6xx_rpmh_stop(struct a6xx_gmu *gmu)
 	if (!test_and_clear_bit(GMU_STATUS_FW_START, &gmu->status))
 		return;
 
+	/* Some platforms reboot instead of powering off if the GPU PDC is asleep */
+	if (system_state == SYSTEM_POWER_OFF || system_state == SYSTEM_HALT)
+		return;
+
 	if (adreno_is_a840(adreno_gpu))
 		bitmask = BIT(30);
 

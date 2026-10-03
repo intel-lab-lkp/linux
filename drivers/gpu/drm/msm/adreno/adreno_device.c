@@ -290,6 +290,11 @@ static void adreno_remove(struct platform_device *pdev)
 
 static void adreno_shutdown(struct platform_device *pdev)
 {
+	/* Resuming wakes the GMU RSC/PDC; the final stop then leaves it awake */
+	if (dev_to_gpu(&pdev->dev) &&
+	    (system_state == SYSTEM_POWER_OFF || system_state == SYSTEM_HALT))
+		pm_runtime_get_sync(&pdev->dev);
+
 	WARN_ON_ONCE(adreno_system_suspend(&pdev->dev));
 }
 
