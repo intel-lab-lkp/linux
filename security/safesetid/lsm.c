@@ -148,13 +148,16 @@ static int safesetid_security_capable(const struct cred *cred,
 static bool id_permitted_for_cred(const struct cred *old, kid_t new_id, enum setid_type new_type)
 {
 	bool permitted;
+	kid_t source_id;
 
 	/* If our old creds already had this ID in it, it's fine. */
 	if (new_type == UID) {
+		source_id.uid = old->uid;
 		if (uid_eq(new_id.uid, old->uid) || uid_eq(new_id.uid, old->euid) ||
 			uid_eq(new_id.uid, old->suid))
 			return true;
 	} else if (new_type == GID){
+		source_id.gid = old->gid;
 		if (gid_eq(new_id.gid, old->gid) || gid_eq(new_id.gid, old->egid) ||
 			gid_eq(new_id.gid, old->sgid))
 			return true;
@@ -162,11 +165,10 @@ static bool id_permitted_for_cred(const struct cred *old, kid_t new_id, enum set
 		return false;
 
 	/*
-	 * Transitions to new UIDs require a check against the policy of the old
-	 * RUID.
+	 * Transitions require a check against the policy of the old real ID.
 	 */
 	permitted =
-	    setid_policy_lookup((kid_t){.uid = old->uid}, new_id, new_type) != SIDPOL_CONSTRAINED;
+	    setid_policy_lookup(source_id, new_id, new_type) != SIDPOL_CONSTRAINED;
 
 	if (!permitted) {
 		if (new_type == UID) {
