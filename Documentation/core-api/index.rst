@@ -113,6 +113,7 @@ more memory-management documentation in Documentation/mm/index.rst.
    dma-attributes
    dma-isa-lpc
    swiotlb
+   dma-pmd
    mm-api
    cgroup
    genalloc

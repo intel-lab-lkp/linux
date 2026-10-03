@@ -158,6 +158,38 @@ config IOMMU_DMA
 	select NEED_SG_DMA_LENGTH
 	select NEED_SG_DMA_FLAGS if SWIOTLB
 
+# PMD_SIZE IOMMU backing for DMA-coherent devices
+config DMA_PMD
+	bool "PMD_SIZE IOMMU backing for DMA-coherent devices"
+	depends on IOMMU_DMA
+	depends on X86_64 || (ARM64 && ARM64_4K_PAGES)
+	depends on !PREEMPT_RT
+	default y
+	help
+	  Hand out DMA buffers carved out of PMD_SIZE physically contiguous
+	  blocks that the IOMMU maps with a single leaf PTE. Mapping,
+	  unmapping and IOTLB flushing are done lazily to reduce CPU overhead.
+	  The large mappings greatly reduce IOTLB usage. As in strict iommu
+	  mode, pages are returned to the buddy allocator only when any existing
+	  mappings have been removed and IOTLB flushed.
+	  Costs 128KB of metadata per GB of DMA_PMD buffers, allocated on demand.
+
+	  The config option enforces requirements (2MB PMD and !PREEMPT_RT) at compile
+	  time. Other constraints (e.g. dma-coherent devices) are verified at runtime.
+
+	  If unsure, say Y.
+
+config DMA_PMD_META_KUNIT_TEST
+	bool "KUnit test for DMA_PMD metadata table (built-in)" if !KUNIT_ALL_TESTS
+	depends on DMA_PMD && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Builds KUnit unit tests for the sparse, per-PMD-frame metadata table,
+	  PMD page pools, and coherent DMA arenas in drivers/iommu/dma-pmd*.c,
+	  verifying metadata lookup, pool recycling, and arena block allocation.
+
+	  If unsure, say N.
+
 # Shared Virtual Addressing
 config IOMMU_SVA
 	select IOMMU_MM_DATA
