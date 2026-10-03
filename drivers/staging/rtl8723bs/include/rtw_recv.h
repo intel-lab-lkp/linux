@@ -58,7 +58,6 @@ struct	stainfo_rxcache	{
 */
 };
 
-
 struct signal_stat {
 	u8 update_req;		/* used to indicate */
 	u8 avg_val;		/* avg of valid elements */
@@ -140,7 +139,6 @@ struct rx_pkt_attrib	{
 	struct phy_info phy_info;
 };
 
-
 /* These definition is used for Rx packet reordering. */
 #define SN_LESS(a, b)		(((a - b) & 0x800) != 0)
 #define SN_EQUAL(a, b)	(a == b)
@@ -212,7 +210,6 @@ struct recv_priv {
 	/* s8 RxRssi[2]; */
 	/* int FalseAlmCnt_all; */
 
-
 	struct timer_list signal_stat_timer;
 	u32 signal_stat_sampling_interval;
 	/* u32 signal_stat_converging_constant; */
@@ -238,7 +235,6 @@ struct sta_recv_priv {
 
 };
 
-
 struct recv_buf {
 	struct list_head list;
 
@@ -261,7 +257,6 @@ struct recv_buf {
 	u8 reuse;
 };
 
-
 /*
 	head  ----->
 
@@ -270,7 +265,6 @@ struct recv_buf {
 			payload
 
 		tail  ----->
-
 
 	end   ----->
 
@@ -298,14 +292,12 @@ struct recv_frame_hdr {
 
 	void *precvbuf;
 
-
 	/*  */
 	struct sta_info *psta;
 
 	/* for A-MPDU Rx reordering buffer control */
 	struct recv_reorder_ctrl *preorder_ctrl;
 };
-
 
 union recv_frame {
 	union{
@@ -361,10 +353,8 @@ static inline u8 *recvframe_pull(union recv_frame *precvframe, signed int sz)
 
 	/* used for extract sz bytes from rx_data, update rx_data and return the updated rx_data to the caller */
 
-
 	if (!precvframe)
 		return NULL;
-
 
 	precvframe->u.hdr.rx_data += sz;
 
@@ -405,8 +395,6 @@ static inline u8 *recvframe_put(union recv_frame *precvframe, signed int sz)
 
 }
 
-
-
 static inline u8 *recvframe_pull_tail(union recv_frame *precvframe, signed int sz)
 {
 	/*  rmv data from rx_tail (by yitsen) */
@@ -435,7 +423,6 @@ static inline signed int get_recvframe_len(union recv_frame *precvframe)
 	return precvframe->u.hdr.len;
 }
 
-
 static inline s32 translate_percentage_to_dbm(u32 SignalStrengthIndex)
 {
 	s32	SignalPower; /*  in dBm. */
@@ -446,7 +433,6 @@ static inline s32 translate_percentage_to_dbm(u32 SignalStrengthIndex)
 
 	return SignalPower;
 }
-
 
 struct sta_info;
 
