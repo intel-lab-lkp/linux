@@ -88,6 +88,8 @@ struct qaic_job {
 	/* Node of list of jobs associated with a DBC */
 	struct list_head	queue;
 	struct kref		ref_count;
+	/* Offset of requests this job needs to skip within the slice */
+	unsigned int		req_offset;
 	/* Number of requests this job executes */
 	unsigned int		num_req;
 	/* True if this job is partially executed */
@@ -461,8 +463,8 @@ void enable_dbc(struct qaic_device *qdev, u32 dbc_id, struct qaic_user *usr);
 void wakeup_dbc(struct qaic_device *qdev, u32 dbc_id);
 void release_dbc(struct qaic_device *qdev, u32 dbc_id);
 void qaic_data_get_fifo_info(struct dma_bridge_chan *dbc, u32 *head, u32 *tail);
-int qaic_submit_reqs_to_hw(struct bo_slice *slice, unsigned int num_req,
-			   bool is_partial, u32 partial_size, u16 job_id);
+int qaic_submit_reqs_to_hw(struct bo_slice *slice, struct dbc_req *reqs,
+			   unsigned int num_req, bool is_partial, u32 partial_size, u16 job_id);
 
 void wake_all_cntl(struct qaic_device *qdev);
 void qaic_dev_reset_clean_local_state(struct qaic_device *qdev);
@@ -491,7 +493,8 @@ void qaic_remove_bo_fence(struct qaic_bo *bo);
 int qaicm_sched_init(struct drm_device *drm, struct dma_bridge_chan *dbc);
 void qaic_sched_entity_init(struct dma_bridge_chan *dbc);
 struct qaic_job *qaic_create_job(struct drm_file *file_priv, struct bo_slice *slice,
-				 unsigned int num_req, u64 seq_no, struct list_head *tmp_list);
+				 unsigned int req_offset, unsigned int num_full_reqs, u64 seq_no,
+				 struct list_head *tmp_list);
 void qaic_submit_job(struct dma_bridge_chan *dbc, struct qaic_job *job);
 void qaic_free_job(struct kref *ref);
 void qaic_put_job(struct qaic_job *job);

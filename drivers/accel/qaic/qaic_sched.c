@@ -41,8 +41,8 @@ static struct dma_fence *qaic_job_run(struct drm_sched_job *sched_job)
 	if (ret)
 		goto exit;
 
-	ret = qaic_submit_reqs_to_hw(slice, job->num_req, job->partial,
-				     job->partial_size, job->id);
+	ret = qaic_submit_reqs_to_hw(slice, &slice->reqs[job->req_offset], job->num_req,
+				     job->partial, job->partial_size, job->id);
 	if (ret)
 		goto unlock_dbc;
 	mutex_unlock(&dbc->req_lock);
@@ -146,14 +146,18 @@ void qaic_sched_entity_init(struct dma_bridge_chan *dbc)
 }
 
 struct qaic_job *qaic_create_job(struct drm_file *file_priv, struct bo_slice *slice,
-				 unsigned int num_req, u64 seq_no, struct list_head *tmp_list)
+				 unsigned int req_offset, unsigned int num_full_reqs, u64 seq_no,
+				 struct list_head *tmp_list)
 {
 	struct dma_bridge_chan *dbc = slice->bo->dbc;
 	struct qaic_bo *bo = slice->bo;
-	struct qaic_job *job;
+	struct qaic_job *job, *dep_job;
+	unsigned int num_req;
 	u32 credits;
 	u16 req_id;
 	int ret, i;
+
+	num_req = min(slice->bo->dbc->nelem - 1, num_full_reqs - req_offset);
 
 	if (check_mul_overflow((u32)num_req, dbc->credit_ratio, &credits))
 		return ERR_PTR(-EINVAL);
@@ -185,13 +189,24 @@ struct qaic_job *qaic_create_job(struct drm_file *file_priv, struct bo_slice *sl
 		goto job_cleanup;
 
 	job->slice = slice;
+	job->req_offset = req_offset;
 	job->num_req = num_req;
 	job->dbc = dbc;
 	INIT_LIST_HEAD(&job->queue);
 	job->id = req_id;
 	kref_init(&job->ref_count);
 	for (i = 0; i < job->num_req; i++)
-		slice->reqs[i].req_id = cpu_to_le16(job->id);
+		slice->reqs[i + job->req_offset].req_id = cpu_to_le16(job->id);
+
+	/* Handle BOs that have been split into many jobs */
+	if (seq_no) {
+		dep_job = list_last_entry(tmp_list, struct qaic_job, queue);
+		ret = drm_sched_job_add_dependency(&job->base,
+						   dma_fence_get(&dep_job->irq_fence->base));
+		/* add_dependency() will put() the fence on error */
+		if (ret)
+			goto job_cleanup;
+	}
 
 	list_add_tail(&job->queue, tmp_list);
 	drm_gem_object_get(&bo->base);

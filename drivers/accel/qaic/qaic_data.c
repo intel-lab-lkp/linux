@@ -948,11 +948,6 @@ static int qaic_attach_slicing_bo(struct qaic_device *qdev, struct qaic_bo *bo,
 		}
 	}
 
-	if (bo->total_slice_nents > bo->dbc->nelem) {
-		qaic_free_slices_bo(bo);
-		return -ENOSPC;
-	}
-
 	return 0;
 }
 
@@ -1108,11 +1103,11 @@ static void submit_reqs_to_fifo(struct dma_bridge_chan *dbc, struct dbc_req *req
 }
 
 /* Caller should be holding dbc->req_lock */
-int qaic_submit_reqs_to_hw(struct bo_slice *slice, unsigned int num_req,
-			   bool is_partial, u32 partial_size, u16 job_id)
+int qaic_submit_reqs_to_hw(struct bo_slice *slice, struct dbc_req *reqs,
+			   unsigned int num_req, bool is_partial,
+			   u32 partial_size, u16 job_id)
 {
 	struct dma_bridge_chan *dbc = slice->bo->dbc;
-	struct dbc_req *reqs = slice->reqs;
 	struct qaic_bo *bo = slice->bo;
 	struct dbc_req *last_req;
 	u32 head, tail, avail;
@@ -1129,12 +1124,12 @@ int qaic_submit_reqs_to_hw(struct bo_slice *slice, unsigned int num_req,
 
 	submit_reqs_to_fifo(dbc, reqs, num_req, head, tail);
 
+	last_req = fifo_at(dbc->req_q_base, (tail + num_req - 1) % dbc->nelem);
 	if (is_partial) {
 		/*
 		 * Copy over the last entry. Here we need to adjust len to the left over
 		 * size, and set src and dst to the entry it is copied to.
 		 */
-		last_req = fifo_at(dbc->req_q_base, (tail + num_req - 1) % dbc->nelem);
 		memcpy(last_req, &slice->reqs[slice->nents - 1], sizeof(*last_req));
 		last_req->len = cpu_to_le32(partial_size);
 		last_req->src_addr = reqs[num_req - 1].src_addr;
@@ -1144,6 +1139,8 @@ int qaic_submit_reqs_to_hw(struct bo_slice *slice, unsigned int num_req,
 		if (!last_req->len)
 			last_req->cmd &= ~GENMASK(1, 0);
 	}
+	/* When a BO has been split into multiple jobs, each job needs to signal its completion */
+	last_req->cmd |= GEN_COMPLETION;
 
 	tail = (tail + num_req) % dbc->nelem;
 
@@ -1169,11 +1166,11 @@ static inline void qaic_dbc_put_job(struct dma_bridge_chan *dbc, struct qaic_job
 static int create_slice_jobs(struct drm_file *file_priv, struct bo_slice *slice, bool partial,
 			     u64 resize, struct list_head *tmp_list)
 {
+	unsigned int nents_offset, nents_xfer;
 	struct dbc_req *reqs = slice->reqs;
-	struct qaic_job *job = NULL;
+	struct qaic_job *job, *job_i;
 	unsigned int job_count = 0;
-	unsigned int nents_xfer;
-	u64 last_bytes;
+	u64 last_bytes, seq_no;
 	u32 first_n;
 
 	/*
@@ -1194,15 +1191,31 @@ static int create_slice_jobs(struct drm_file *file_priv, struct bo_slice *slice,
 	else
 		nents_xfer = slice->nents;
 
-	job = qaic_create_job(file_priv, slice, nents_xfer, 0, tmp_list);
-	if (IS_ERR(job))
-		return PTR_ERR(job);
-	job_count++;
+	nents_offset = 0;
+	seq_no = 0;
+	job = NULL;
+	while (nents_xfer > nents_offset) {
+		job = qaic_create_job(file_priv, slice, nents_offset, nents_xfer,
+				      seq_no++, tmp_list);
+		if (IS_ERR(job))
+			goto free_jobs;
+
+		job_count++;
+		nents_offset += job->num_req;
+	}
 
 	/* job points to the last job for this slice, only valid for partial execute ioctl */
 	job->partial_size = last_bytes;
 	job->partial = partial;
 
+	return job_count;
+
+free_jobs:
+	list_for_each_entry_safe_reverse(job, job_i, tmp_list, queue)
+		if (job_count--)
+			qaic_cleanup_job(job);
+		else
+			break;
 	return job_count;
 }
 
