@@ -451,6 +451,8 @@ patternProperties:
     description: Zhejiang Ebang Communication Co., Ltd
   "^ebbg,.*":
     description: EBBG
+  "^ebdee,.*":
+    description: Shanghai Xin'yi Electronics Technology Co., Ltd. (EBDEE)
   "^ebs-systart,.*":
     description: EBS-SYSTART GmbH
   "^ebv,.*":
