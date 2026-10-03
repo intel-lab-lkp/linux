@@ -1275,6 +1275,26 @@ config HID_TIVO
 	help
 	Say Y if you have a TiVo Slide Bluetooth remote control.
 
+config HID_TOPPING
+	tristate "Topping M62 vendor controls"
+	depends on USB_HID
+	depends on SND_USB_AUDIO
+	select CRC16
+	help
+	  The vendor protocol behind the analogue input gains, output
+	  volumes and output source selectors of the Topping M62 USB
+	  audio interface. These are not described by the USB Audio
+	  Class and are reached over the card's HID interface, so a
+	  driver is needed for them to work at all.
+
+	  The controls themselves belong to snd-usb-audio, on the sound
+	  card it makes for the same device; this driver carries them
+	  to the card, so both are needed. The card works without this
+	  one; its vendor controls simply never appear.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called hid-topping.
+
 config HID_TOPSEED
 	tristate "TopSeed Cyberlink, BTC Emprex, Conceptronic remote control support"
 	help
