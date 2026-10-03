@@ -90,10 +90,17 @@ Combination with trigger action
 The event trigger action can extend the utilization of this wprobe.
 
 - set_wprobe:WPEVENT:FIELD[+|-ADJUST][:COUNT]
+- set_wprobe:WPEVENT:(STRUCT[,ASGN])EVENT_FIELD->MEMBER[+|-ADJUST][:COUNT]
 - clear_wprobe:WPEVENT[:FIELD[+|-ADJUST][:COUNT]]
+- clear_wprobe:WPEVENT[:(STRUCT[,ASGN])EVENT_FIELD->MEMBER[+|-ADJUST][:COUNT]]
 
 Set these triggers to the target event, then the WPROBE event will be
 setup to trace the memory access at FIELD[+|-ADJUST] address.
+If BTF is supported, the target address can also be resolved using BTF
+struct offset resolution: `(STRUCT[,ASGN])EVENT_FIELD->MEMBER[+|-ADJUST]`.
+Here, EVENT_FIELD is an event field containing a pointer to STRUCT (or to
+the ASGN member if ASGN is specified), and MEMBER is the struct member whose
+offset is resolved automatically via BTF.
 When clear_wprobe is hit, if FIELD is NOT specified, the WPEVENT is
 forcibly cleared. If FIELD[+|-ADJUST] is set, it clears WPEVENT only
 if its watching address is the same as the FIELD[+|-ADJUST] value.
