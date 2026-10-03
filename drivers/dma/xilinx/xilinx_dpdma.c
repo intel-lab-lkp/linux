@@ -410,14 +410,10 @@ static ssize_t xilinx_dpdma_debugfs_write(struct file *f,
 	if (dpdma_debugfs.testcase != DPDMA_TC_NONE)
 		return -EBUSY;
 
-	kern_buff = kzalloc(size, GFP_KERNEL);
-	if (!kern_buff)
-		return -ENOMEM;
+	kern_buff = memdup_user_nul(buf, size);
+	if (IS_ERR(kern_buff))
+		return PTR_ERR(kern_buff);
 	kern_buff_start = kern_buff;
-
-	ret = strncpy_from_user(kern_buff, buf, size);
-	if (ret < 0)
-		goto done;
 
 	/* Read the testcase name from a user request. */
 	testcase = strsep(&kern_buff, " ");
