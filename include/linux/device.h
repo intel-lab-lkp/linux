@@ -794,6 +794,11 @@ struct device {
 
 	enum device_removable	removable;
 
+	bool			dma_pmd_rxbuf;
+	bool			dma_pmd_tx_hdrs;
+	bool			dma_pmd_rings;
+	bool			dma_pmd_debug;
+
 	DECLARE_BITMAP(flags, DEV_FLAG_COUNT);
 };
 

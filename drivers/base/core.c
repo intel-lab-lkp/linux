@@ -2905,6 +2905,43 @@ static ssize_t removable_show(struct device *dev, const struct device_attribute 
 }
 static const DEVICE_ATTR_RO(removable);
 
+/* Per-device configuration to selectively enable DMA_PMD */
+#define DMA_PMD_BOOL_ATTR(name)						\
+static ssize_t name##_show(struct device *dev,				\
+			   struct device_attribute *attr, char *buf)	\
+{									\
+	return sysfs_emit(buf, "%u\n", READ_ONCE(dev->name));		\
+}									\
+static ssize_t name##_store(struct device *dev,				\
+			    struct device_attribute *attr,		\
+			    const char *buf, size_t count)		\
+{									\
+	bool val;							\
+	int ret = kstrtobool(buf, &val);				\
+	if (ret < 0)							\
+		return ret;						\
+	WRITE_ONCE(dev->name, val);					\
+	return count;							\
+}									\
+static DEVICE_ATTR_RW(name)
+
+DMA_PMD_BOOL_ATTR(dma_pmd_rxbuf);
+DMA_PMD_BOOL_ATTR(dma_pmd_tx_hdrs);
+DMA_PMD_BOOL_ATTR(dma_pmd_rings);
+DMA_PMD_BOOL_ATTR(dma_pmd_debug);
+
+static struct attribute *dev_attr_dma_pmd[] = {
+	&dev_attr_dma_pmd_rxbuf.attr,
+	&dev_attr_dma_pmd_tx_hdrs.attr,
+	&dev_attr_dma_pmd_rings.attr,
+	&dev_attr_dma_pmd_debug.attr,
+	NULL,
+};
+
+static const struct attribute_group dev_attr_dma_pmd_group = {
+	.attrs = dev_attr_dma_pmd,
+};
+
 int device_add_groups(struct device *dev,
 		      const struct attribute_group *const *groups)
 {
@@ -3012,8 +3049,20 @@ static int device_add_attrs(struct device *dev)
 			goto err_remove_dev_removable;
 	}
 
+	if (dev->dma_mask) {
+		error = device_add_group(dev, &dev_attr_dma_pmd_group);
+		if (error)
+			goto err_remove_dev_physical_location;
+	}
+
 	return 0;
 
+ err_remove_dev_physical_location:
+	if (dev->physical_location) {
+		device_remove_group(dev, &dev_attr_physical_location_group);
+		kfree(dev->physical_location);
+		dev->physical_location = NULL;
+	}
  err_remove_dev_removable:
 	device_remove_file(dev, &dev_attr_removable);
  err_remove_dev_waiting_for_supplier:
@@ -3036,6 +3085,8 @@ static void device_remove_attrs(struct device *dev)
 {
 	const struct class *class = dev->class;
 	const struct device_type *type = dev->type;
+
+	device_remove_group(dev, &dev_attr_dma_pmd_group);
 
 	if (dev->physical_location) {
 		device_remove_group(dev, &dev_attr_physical_location_group);
