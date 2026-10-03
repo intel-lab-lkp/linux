@@ -1055,6 +1055,11 @@ static int gve_queues_mem_alloc(struct gve_priv *priv,
 	if (err)
 		goto free_tx;
 
+	if (rx_alloc_cfg->raw_addressing && priv->pdev->dev.dma_pmd_rxbuf)
+		dev_info(&priv->pdev->dev,
+			 "DMA_PMD rx_bufs pool: enabled on %u RX queue(s)\n",
+			 rx_alloc_cfg->qcfg_rx->num_queues);
+
 	return 0;
 
 free_tx:
