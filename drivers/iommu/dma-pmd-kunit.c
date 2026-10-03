@@ -169,11 +169,16 @@ static void test_window_helpers(struct kunit *test)
 static void test_arena_alloc_and_free(struct kunit *test)
 {
 	struct device dev = { .numa_node = NUMA_NO_NODE };
-	void *v1, *v2, *v3, *vl1;
 	dma_addr_t d1, d2, d3, dl1;
+	void *v1, *v2, *v3, *vl1;
 
-	KUNIT_EXPECT_NULL(test,
-			  dma_pmd_arena_alloc(NULL, SZ_4K, &d1, NUMA_NO_NODE));
+	KUNIT_EXPECT_NULL(test, dma_pmd_arena_alloc(NULL, SZ_4K, &d1, NUMA_NO_NODE));
+	KUNIT_EXPECT_NULL(test, dma_pmd_dma_alloc(NULL, SZ_4K, &d1, GFP_KERNEL, 0));
+	KUNIT_EXPECT_NULL(test, dma_pmd_dma_alloc(&dev, SZ_4K, &d1, GFP_KERNEL, 0));
+	KUNIT_EXPECT_NULL(test, dma_pmd_dma_alloc(&dev, SZ_4K, &d1,
+						  GFP_KERNEL | __GFP_ACCOUNT, 0));
+	KUNIT_EXPECT_FALSE(test, dma_pmd_free(&dev, SZ_4K, NULL, 0));
+	KUNIT_EXPECT_FALSE(test, dma_is_pmd_dma(&dev, 0));
 
 	v1 = dma_pmd_arena_alloc(&dev, SZ_64K, &d1, NUMA_NO_NODE);
 	KUNIT_ASSERT_NOT_NULL(test, v1);

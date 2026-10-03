@@ -383,3 +383,30 @@ err_fallback:
 	return NULL;
 }
 EXPORT_SYMBOL(dma_pmd_arena_alloc);
+
+void *dma_pmd_dma_alloc(struct device *dev, size_t size, dma_addr_t *dma,
+			gfp_t gfp, unsigned long attrs)
+{
+	void *va;
+
+	if (!dev || !dev->iommu_group || !dev_is_dma_coherent(dev))
+		return NULL;
+	/*
+	 * The arena allocates PMD pages, IOMMU page tables, and vmap() areas
+	 * with GFP_KERNEL, and shares PMD pages across allocations on the same
+	 * device. Decline non-GFP_KERNEL requests (including GFP_NOFS/GFP_NOIO
+	 * or scoped memalloc_nofs/noio contexts) and per-allocation modifiers
+	 * such as __GFP_ACCOUNT or __GFP_NORETRY so the caller falls back to
+	 * the standard DMA allocator.
+	 */
+	if ((current_gfp_context(gfp) & ~(__GFP_ZERO | __GFP_NOWARN)) != GFP_KERNEL ||
+	    (attrs & ~DMA_ATTR_NO_WARN))
+		return NULL;
+
+	va = dma_pmd_arena_alloc(dev, size, dma, dev_to_node(dev));
+	if (!va && !(gfp & __GFP_NOWARN) && !(attrs & DMA_ATTR_NO_WARN))
+		dev_warn_ratelimited(dev, "DMA_PMD arena alloc failed (size %zu)\n",
+				     size);
+	return va;
+}
+EXPORT_SYMBOL(dma_pmd_dma_alloc);

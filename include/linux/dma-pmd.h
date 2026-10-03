@@ -96,7 +96,19 @@ static inline struct page *dma_pmd_pool_alloc(struct dma_pmd_pool *pool, gfp_t g
 bool dma_pmd_pool_has_free(struct dma_pmd_pool *pool);
 
 /* Hooks for kernel/dma/mapping.c */
+void *dma_pmd_dma_alloc(struct device *dev, size_t size, dma_addr_t *dma,
+			gfp_t gfp, unsigned long attrs);
 bool dma_pmd_arena_free(struct device *dev, size_t size, void *cpu_addr, dma_addr_t dma);
+bool dma_is_pmd_dma(struct device *dev, dma_addr_t dma);
+
+static inline bool dma_pmd_free(struct device *dev, size_t size,
+				void *cpu_addr, dma_addr_t dma_handle)
+{
+	/* Pairs with smp_store_release() in dma_pmd_meta_init(). */
+	if (likely(!smp_load_acquire(&dma_pmd_meta_array)))
+		return false;
+	return dma_pmd_arena_free(dev, size, cpu_addr, dma_handle);
+}
 
 #else /* !CONFIG_DMA_PMD */
 
@@ -144,8 +156,25 @@ static inline bool dma_pmd_pool_has_free(struct dma_pmd_pool *pool)
 	return false;
 }
 
+static inline void *dma_pmd_dma_alloc(struct device *dev, size_t size, dma_addr_t *dma,
+				      gfp_t gfp, unsigned long attrs)
+{
+	return NULL;
+}
+
 static inline bool dma_pmd_arena_free(struct device *dev, size_t size,
 				      void *cpu_addr, dma_addr_t dma)
+{
+	return false;
+}
+
+static inline bool dma_is_pmd_dma(struct device *dev, dma_addr_t dma)
+{
+	return false;
+}
+
+static inline bool dma_pmd_free(struct device *dev, size_t size,
+				void *cpu_addr, dma_addr_t dma_handle)
 {
 	return false;
 }

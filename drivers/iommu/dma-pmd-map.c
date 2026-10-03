@@ -381,6 +381,23 @@ out:
 }
 
 /**
+ * dma_is_pmd_dma - Test whether @dma lies in @dev's DMA_PMD IOVA window
+ * @dev: Device performing DMA
+ * @dma: DMA address to test
+ */
+bool dma_is_pmd_dma(struct device *dev, dma_addr_t dma)
+{
+	struct dma_pmd_window *win;
+
+	if (!dev || !dev->iommu_group)
+		return false;
+
+	win = dma_pmd_dma_window(iommu_get_dma_domain(dev));
+	return win && dma_pmd_window_owns(win, dma);
+}
+EXPORT_SYMBOL(dma_is_pmd_dma);
+
+/**
  * dma_pmd_dma_map_phys - Derive the IOVA of a pool address, mapping if needed
  * @dev: Device performing DMA
  * @domain: @dev's DMA domain

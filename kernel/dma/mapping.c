@@ -10,6 +10,8 @@
 #include <linux/dma-map-ops.h>
 #include <linux/export.h>
 #include <linux/gfp.h>
+#include <linux/ktime.h>
+#include <linux/dma-pmd.h>
 #include <linux/iommu-dma.h>
 #include <linux/kmsan.h>
 #include <linux/of_device.h>
@@ -180,7 +182,8 @@ dma_addr_t dma_map_phys(struct device *dev, phys_addr_t phys, size_t size,
 	if (!is_mmio)
 		kmsan_handle_dma(phys, size, dir);
 	trace_dma_map_phys(dev, phys, addr, size, dir, attrs);
-	debug_dma_map_phys(dev, phys, size, dir, addr, attrs);
+	if (IS_ENABLED(CONFIG_DMA_API_DEBUG) && !dma_is_pmd_dma(dev, addr))
+		debug_dma_map_phys(dev, phys, size, dir, addr, attrs);
 
 	return addr;
 }
@@ -223,7 +226,8 @@ void dma_unmap_phys(struct device *dev, dma_addr_t addr, size_t size,
 	else if (ops->unmap_phys)
 		ops->unmap_phys(dev, addr, size, dir, attrs);
 	trace_dma_unmap_phys(dev, addr, size, dir, attrs);
-	debug_dma_unmap_phys(dev, addr, size, dir, attrs);
+	if (IS_ENABLED(CONFIG_DMA_API_DEBUG) && !dma_is_pmd_dma(dev, addr))
+		debug_dma_unmap_phys(dev, addr, size, dir, attrs);
 }
 EXPORT_SYMBOL_GPL(dma_unmap_phys);
 
@@ -633,7 +637,11 @@ EXPORT_SYMBOL_GPL(dma_get_required_mask);
 void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 		gfp_t flag, unsigned long attrs)
 {
+	bool debug = unlikely(READ_ONCE(dev->dma_pmd_debug)) && gfpflags_allow_blocking(flag);
 	const struct dma_map_ops *ops = get_dma_ops(dev);
+	bool can_block = gfpflags_allow_blocking(flag);
+	bool from_arena = false;
+	u64 start_ns = 0;
 	void *cpu_addr;
 
 	WARN_ON_ONCE(!dev->coherent_dma_mask);
@@ -655,10 +663,14 @@ void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 	if (force_dma_unencrypted(dev))
 		attrs |= __DMA_ATTR_ALLOC_CC_SHARED;
 
+	if (debug) {
+		start_ns = ktime_get_ns();
+		*dma_handle = 0;
+	}
 	if (dma_alloc_from_dev_coherent(dev, size, dma_handle, &cpu_addr)) {
 		trace_dma_alloc(dev, cpu_addr, *dma_handle, size,
 				DMA_BIDIRECTIONAL, flag, attrs);
-		return cpu_addr;
+		goto out_debug;
 	}
 
 	/* let the implementation decide on the zone to allocate from: */
@@ -667,18 +679,31 @@ void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 	if (dma_alloc_direct(dev, ops) || arch_dma_alloc_direct(dev)) {
 		cpu_addr = dma_direct_alloc(dev, size, dma_handle, flag, attrs);
 	} else if (use_dma_iommu(dev)) {
-		cpu_addr = iommu_dma_alloc(dev, size, dma_handle, flag, attrs);
+		if (READ_ONCE(dev->dma_pmd_rings) && can_block) {
+			cpu_addr = dma_pmd_dma_alloc(dev, size, dma_handle, flag, attrs);
+			from_arena = !!cpu_addr;
+		}
+		if (!from_arena)
+			cpu_addr = iommu_dma_alloc(dev, size, dma_handle, flag, attrs);
 	} else if (ops->alloc) {
 		cpu_addr = ops->alloc(dev, size, dma_handle, flag, attrs);
 	} else {
+		cpu_addr = NULL;
 		trace_dma_alloc(dev, NULL, 0, size, DMA_BIDIRECTIONAL, flag,
 				attrs);
-		return NULL;
+		goto out_debug;
 	}
 
 	trace_dma_alloc(dev, cpu_addr, *dma_handle, size, DMA_BIDIRECTIONAL,
 			flag, attrs);
-	debug_dma_alloc_coherent(dev, size, *dma_handle, cpu_addr, attrs);
+	if (!from_arena)
+		debug_dma_alloc_coherent(dev, size, *dma_handle, cpu_addr, attrs);
+out_debug:
+	if (debug)
+		dev_info(dev,
+			 "dma_alloc_coherent(size=%zu, gfp=%pGg, attrs=%#lx) -> va=%p, dma=%pad, arena=%d in %llu ns\n",
+			 size, &flag, attrs, cpu_addr, dma_handle, from_arena,
+			 ktime_get_ns() - start_ns);
 	return cpu_addr;
 }
 EXPORT_SYMBOL(dma_alloc_attrs);
@@ -702,6 +727,8 @@ void dma_free_attrs(struct device *dev, size_t size, void *cpu_addr,
 	trace_dma_free(dev, cpu_addr, dma_handle, size, DMA_BIDIRECTIONAL,
 		       attrs);
 	if (!cpu_addr)
+		return;
+	if (use_dma_iommu(dev) && dma_pmd_free(dev, size, cpu_addr, dma_handle))
 		return;
 
 	debug_dma_free_coherent(dev, size, cpu_addr, dma_handle, attrs);
