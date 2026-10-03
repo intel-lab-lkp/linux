@@ -13,6 +13,7 @@
 #include <linux/devm-helpers.h>
 #include <linux/i2c.h>
 #include <linux/limits.h>
+#include <linux/lockdep.h>
 #include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -359,6 +360,8 @@ static int dps310_set_pres_precision(struct dps310_data *data, int val)
 	int rc;
 	u8 shift_en;
 
+	lockdep_assert_held(&data->lock);
+
 	if (val < 0 || val > 128)
 		return -EINVAL;
 
@@ -378,6 +381,8 @@ static int dps310_set_temp_precision(struct dps310_data *data, int val)
 	int rc;
 	u8 shift_en;
 
+	lockdep_assert_held(&data->lock);
+
 	if (val < 0 || val > 128)
 		return -EINVAL;
 
@@ -396,6 +401,8 @@ static int dps310_set_pres_samp_freq(struct dps310_data *data, int freq)
 {
 	u8 val;
 
+	lockdep_assert_held(&data->lock);
+
 	if (freq < 0 || freq > 128)
 		return -EINVAL;
 
@@ -409,6 +416,8 @@ static int dps310_set_temp_samp_freq(struct dps310_data *data, int freq)
 	__must_hold(&data->lock)
 {
 	u8 val;
+
+	lockdep_assert_held(&data->lock);
 
 	if (freq < 0 || freq > 128)
 		return -EINVAL;
@@ -509,6 +518,8 @@ static int dps310_ready(struct dps310_data *data, int ready_bit, int timeout)
 {
 	int rc;
 
+	lockdep_assert_held(&data->lock);
+
 	rc = dps310_ready_status(data, ready_bit, timeout);
 	if (rc) {
 		if (rc == -ETIMEDOUT && !data->timeout_recovery_failed) {
@@ -539,6 +550,8 @@ static int dps310_read_pres_raw_locked(struct dps310_data *data)
 	int timeout;
 	u8 val[3];
 
+	lockdep_assert_held(&data->lock);
+
 	rc = dps310_get_pres_samp_freq(data, &rate);
 	if (rc)
 		return rc;
@@ -565,6 +578,8 @@ static int dps310_read_temp_ready(struct dps310_data *data)
 	int rc;
 	u8 val[3];
 
+	lockdep_assert_held(&data->lock);
+
 	rc = regmap_bulk_read(data->regmap, DPS310_TMP_BASE, val, sizeof(val));
 	if (rc < 0)
 		return rc;
@@ -580,6 +595,8 @@ static int dps310_read_temp_raw_locked(struct dps310_data *data)
 	int rc;
 	int rate;
 	int timeout;
+
+	lockdep_assert_held(&data->lock);
 
 	rc = dps310_get_temp_samp_freq(data, &rate);
 	if (rc)
@@ -601,6 +618,8 @@ static void dps310_refresh_temp_locked(struct dps310_data *data)
 {
 	int rc;
 	int t_ready;
+
+	lockdep_assert_held(&data->lock);
 
 	rc = regmap_read(data->regmap, DPS310_MEAS_CFG, &t_ready);
 	if (rc)
@@ -706,6 +725,8 @@ static int dps310_calculate_pressure(struct dps310_data *data, int *val)
 	s64 rems[7];
 	s64 kp;
 	s64 kt;
+
+	lockdep_assert_held(&data->lock);
 
 	rc = dps310_get_pres_k(data, &kpi);
 	if (rc)
@@ -832,6 +853,8 @@ static int dps310_calculate_temp(struct dps310_data *data, int *val)
 	s64 t;
 	int kt, rc;
 
+	lockdep_assert_held(&data->lock);
+
 	rc = dps310_get_temp_k(data, &kt);
 	if (rc)
 		return rc;
@@ -940,6 +963,8 @@ static int dps310_fill_channels(struct dps310_data *data,
 	unsigned int i;
 	int rc;
 
+	lockdep_assert_held(&data->lock);
+
 	/* Compensation needs a temperature, so it is sampled either way */
 	rc = dps310_read_temp_raw_locked(data);
 	if (rc)
@@ -970,12 +995,16 @@ static int dps310_fill_channels(struct dps310_data *data,
 static int dps310_fifo_hw_flush(struct dps310_data *data)
 	__must_hold(&data->lock)
 {
+	lockdep_assert_held(&data->lock);
+
 	return regmap_write(data->regmap, DPS310_RESET, DPS310_FIFO_FLUSH);
 }
 
 static int dps310_fifo_set_enable(struct dps310_data *data, bool enable)
 	__must_hold(&data->lock)
 {
+	lockdep_assert_held(&data->lock);
+
 	return regmap_assign_bits(data->regmap, DPS310_CFG_REG, DPS310_FIFO_EN,
 				  enable);
 }
@@ -1014,6 +1043,8 @@ static int dps310_fifo_read_entry(struct dps310_data *data, s32 *value)
 	s32 raw;
 	int rc;
 
+	lockdep_assert_held(&data->lock);
+
 	/* Entries come out of the pressure registers whichever made them */
 	rc = regmap_bulk_read(data->regmap, DPS310_PRS_BASE, val, sizeof(val));
 	if (rc < 0)
@@ -1036,6 +1067,8 @@ static int dps310_fifo_push_scan(struct dps310_data *data, s32 temp_raw,
 	s32 channels[2] = { };
 	unsigned int i;
 	int rc;
+
+	lockdep_assert_held(&data->lock);
 
 	/* Direct-mode claim keeps sysfs reads off these */
 	data->temp_raw = temp_raw;
@@ -1063,6 +1096,8 @@ static int dps310_fifo_push_scan(struct dps310_data *data, s32 temp_raw,
 static void dps310_fifo_hold(struct dps310_data *data, s32 pressure_raw)
 	__must_hold(&data->lock)
 {
+	lockdep_assert_held(&data->lock);
+
 	if (data->fifo_held < data->fifo_hold_max)
 		data->fifo_hold[data->fifo_held++] = pressure_raw;
 }
@@ -1072,6 +1107,8 @@ static unsigned int dps310_fifo_push_held(struct dps310_data *data)
 	__must_hold(&data->lock)
 {
 	unsigned int pushed = 0;
+
+	lockdep_assert_held(&data->lock);
 
 	for (unsigned int i = 0; i < data->fifo_held; i++) {
 		if (!dps310_fifo_push_scan(data, data->fifo_temp_raw,
@@ -1104,6 +1141,8 @@ static int dps310_fifo_drain(struct dps310_data *data, unsigned int max_scans)
 	unsigned int cnt;
 	bool is_pressure;
 	int rc;
+
+	lockdep_assert_held(&data->lock);
 
 	for (cnt = 0; cnt < DPS310_FIFO_DEPTH; cnt++) {
 		if (max_scans && scans >= max_scans)
@@ -1175,6 +1214,8 @@ static int dps310_fifo_hold_alloc(struct dps310_data *data, int prs_rate,
 				  int tmp_rate)
 	__must_hold(&data->lock)
 {
+	lockdep_assert_held(&data->lock);
+
 	data->fifo_temp_valid = false;
 	data->fifo_held = 0;
 	data->fifo_hold = NULL;
@@ -1221,6 +1262,8 @@ static int dps310_fifo_start(struct dps310_data *data)
 	__must_hold(&data->lock)
 {
 	int rc, prs_rate, tmp_rate;
+
+	lockdep_assert_held(&data->lock);
 
 	rc = dps310_get_pres_samp_freq(data, &prs_rate);
 	if (rc)
