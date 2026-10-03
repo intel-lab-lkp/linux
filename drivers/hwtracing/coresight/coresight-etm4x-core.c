@@ -960,7 +960,7 @@ static int etm4_enable_sysfs(struct coresight_device *csdev, struct coresight_pa
 	arg.path = path;
 
 	scoped_guard(raw_spinlock, &drvdata->spinlock) {
-		drvdata->curr_config = drvdata->config;
+		drvdata->curr_config = drvdata->sysfs_config;
 	}
 
 	ret = smp_call_function_single(drvdata->cpu,
@@ -1153,7 +1153,7 @@ static void etm4_disable_sysfs(struct coresight_device *csdev)
 {
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 	const struct etmv4_caps *caps = &drvdata->caps;
-	struct etmv4_config *config = &drvdata->config;
+	struct etmv4_config *sysfs_config = &drvdata->sysfs_config;
 	const struct etmv4_config *curr_config = &drvdata->curr_config;
 	int i;
 
@@ -1169,9 +1169,9 @@ static void etm4_disable_sysfs(struct coresight_device *csdev)
 	 * the sysfs-session has been disabled.
 	 */
 	for (i = 0; i < caps->nr_cntr; i++)
-		config->cntr_val[i] = curr_config->cntr_val[i];
+		sysfs_config->cntr_val[i] = curr_config->cntr_val[i];
 
-	config->seq_state = curr_config->seq_state;
+	sysfs_config->seq_state = curr_config->seq_state;
 
 	coresight_set_mode(drvdata->csdev, CS_MODE_DISABLED);
 
@@ -2214,7 +2214,7 @@ static int etm4_add_coresight_dev(struct etm4_init_arg *init_arg)
 	if (!desc.name)
 		return -ENOMEM;
 
-	etm4_set_default(&drvdata->config, caps);
+	etm4_set_default(&drvdata->sysfs_config, caps);
 
 	if (etm4x_always_pm_save(dev, init_arg->csa))
 		pm_save = true;
