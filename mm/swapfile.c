@@ -49,6 +49,8 @@
 #include <linux/leafops.h>
 #include "swap_table.h"
 #include "internal.h"
+#include <linux/debugfs.h>
+
 #include "swap.h"
 #define DEF_SWAP_PRIO  -1
 
@@ -84,6 +86,7 @@
 
 static bool xswap_should_grow(struct swap_info_struct *si);
 static unsigned long xswap_grow(struct swap_info_struct *si);
+static void xswap_debugfs_del(struct swap_info_struct *si);
 
 /* Batch size for the fallback unmap; keeps the stack array small. */
 #define XSWAP_UNMAP_BATCH_PAGES		16
@@ -3416,6 +3419,7 @@ static void free_swap_cluster_info(struct swap_info_struct *si)
 		}
 		/* free_vm_area() drops the mapping without freeing the pages. */
 		xswap_unmap_clusters(si, 0, si->nr_clusters_mapped);
+		xswap_debugfs_del(si);
 		free_vm_area(si->cluster_vm);
 		si->cluster_vm = NULL;
 		si->cluster_info = NULL;
@@ -4134,6 +4138,7 @@ static unsigned long xswap_grow(struct swap_info_struct *si)
 		spin_unlock(&ci->lock);
 	}
 
+	atomic_long_inc(&si->xswap_grows);
 	return nr_new;
 }
 
@@ -4370,9 +4375,78 @@ static void xswap_try_shrink(struct swap_info_struct *si)
 	spin_unlock(&si->lock);
 
 	xswap_unmap_clusters_locked(si, start_idx, nr_unmap);
+	atomic_long_inc(&si->xswap_shrinks);
 
 out_unlock:
 	mutex_unlock(&si->xswap_lock);
+}
+
+/* Not an interface: how far the mapped range has moved, for testing. */
+static ssize_t xswap_debugfs_read(struct file *file, char __user *buf,
+				  size_t count, loff_t *ppos)
+{
+	struct swap_info_struct *si = file->private_data;
+	struct swap_cluster_info *ci;
+	unsigned long mapped, tail = 0;
+	char tmp[192];
+	int len;
+
+	/*
+	 * The same scan the shrink does.  xswap_lock is what keeps
+	 * cluster_info from being unmapped under it.
+	 */
+	mutex_lock(&si->xswap_lock);
+	mapped = READ_ONCE(si->nr_clusters_mapped);
+	if (si->cluster_info) {
+		while (mapped - tail > 1) {
+			ci = &si->cluster_info[mapped - tail - 1];
+			if (READ_ONCE(ci->count) ||
+			    READ_ONCE(ci->flags) != CLUSTER_FLAG_FREE)
+				break;
+			tail++;
+		}
+	}
+	len = scnprintf(tmp, sizeof(tmp),
+			"clusters_max %lu\nclusters_mapped %lu\nusage_pages %lu\ntail_free %lu\ngrows %lu\nshrinks %lu\n",
+			READ_ONCE(si->nr_clusters_max), mapped,
+			swap_usage_in_pages(si), tail,
+			atomic_long_read(&si->xswap_grows),
+			atomic_long_read(&si->xswap_shrinks));
+	mutex_unlock(&si->xswap_lock);
+
+	return simple_read_from_buffer(buf, count, ppos, tmp, len);
+}
+
+static const struct file_operations xswap_debugfs_fops = {
+	.read	= xswap_debugfs_read,
+	.open	= simple_open,
+	.llseek	= default_llseek,
+};
+
+static struct dentry *xswap_debugfs_root;
+
+static void xswap_debugfs_add(struct swap_info_struct *si)
+{
+	char name[16];
+
+	if (!xswap_debugfs_root)
+		xswap_debugfs_root = debugfs_create_dir("xswap", NULL);
+	if (IS_ERR_OR_NULL(xswap_debugfs_root))
+		return;
+
+	/* debugfs_create_file() takes the name as it is; no formatting. */
+	snprintf(name, sizeof(name), "type%d", si->type);
+	si->xswap_debugfs = debugfs_create_file(name, 0444,
+						xswap_debugfs_root, si,
+						&xswap_debugfs_fops);
+	if (IS_ERR(si->xswap_debugfs))
+		si->xswap_debugfs = NULL;
+}
+
+static void xswap_debugfs_del(struct swap_info_struct *si)
+{
+	debugfs_remove(si->xswap_debugfs);
+	si->xswap_debugfs = NULL;
 }
 #endif /* CONFIG_XSWAP */
 
@@ -4568,9 +4642,15 @@ static int xswap_create(int prio)
 	 */
 	si->ops = &swap_bdev_ops;
 
+	si->xswap_debugfs = NULL;
+	atomic_long_set(&si->xswap_grows, 0);
+	atomic_long_set(&si->xswap_shrinks, 0);
+
 	error = setup_swap_clusters_info(si, NULL, maxpages);
 	if (error)
 		goto bad_swap;
+
+	xswap_debugfs_add(si);
 
 	error = zswap_swapon(si->type, si->max);
 	if (error)
