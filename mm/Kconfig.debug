@@ -307,3 +307,14 @@ config MEM_ALLOC_PROFILING_DEBUG
 	help
 	  Adds warnings with helpful error messages for memory allocation
 	  profiling.
+
+config SPLIT_PAGE_COMPOUND_KUNIT_TEST
+	bool "KUnit test for split_page_compound() (built-in)" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Builds KUnit unit tests for split_page_compound() in mm/page_alloc.c,
+	  verifying compound splitting, sub-block freezing, and speculative
+	  reference handling.
+
+	  If unsure, say N.

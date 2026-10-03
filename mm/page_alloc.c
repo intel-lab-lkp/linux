@@ -3123,6 +3123,91 @@ void split_page(struct page *page, unsigned int order)
 }
 EXPORT_SYMBOL_GPL(split_page);
 
+/*
+ * split_page_compound() - split an order-@old_order page into compound pages
+ *			   of order @new_order
+ * @page: the page to split
+ * @old_order: the current order of @page
+ * @new_order: the order of the resulting pages
+ *
+ * Unlike split_page(), which produces order-0 pages, this produces
+ * 1 << (@old_order - @new_order) compound pages, each with its own head.
+ * @page must not be compound, and the caller must hold the only reference to
+ * it: the block is frozen while the new heads are built.
+ *
+ * All pieces (including @page at index 0) are returned frozen, with a zero
+ * refcount. Publish each piece with
+ * page_ref_unfreeze(piece, 1) before handing it out: its release store orders
+ * the compound layout built here against anyone who then observes the
+ * refcount. A relaxed set_page_count() would not, and on a weakly ordered
+ * machine a PFN walker could see a live refcount on a head whose layout is
+ * not visible yet.
+ *
+ * Memcg-charged pages are rejected: the accounting helpers assume a split
+ * produces order-0 pages and would mis-attribute the new compound heads.
+ *
+ * Return: 0 on success, -EINVAL if @page cannot be split or if @new_order is
+ * larger than @old_order, -EBUSY if anyone but the caller holds a reference
+ * to it.
+ */
+int split_page_compound(struct page *page, unsigned int old_order,
+			unsigned int new_order)
+{
+	unsigned int i, step = 1U << new_order, nr = 1U << old_order;
+
+	if (WARN_ON_ONCE(PageCompound(page) || !page_count(page)))
+		return -EINVAL;
+
+	if (WARN_ON_ONCE(new_order > old_order))
+		return -EINVAL;
+
+	if (WARN_ON_ONCE(memcg_kmem_online() && PageMemcgKmem(page)))
+		return -EINVAL;
+
+	/*
+	 * Shape the new compound pages while the block is frozen, which is
+	 * the order __alloc_pages_noprof() itself uses: prep_new_page()
+	 * builds the page with a zero refcount and the set_page_refcounted()
+	 * that follows is what makes it visible.
+	 *
+	 * Freezing stops a speculative PFN walker from resolving a compound
+	 * page that is only half built: get_page_unless_zero() fails for as
+	 * long as the layout below is being written. It does not order
+	 * against memory_failure(), which sets PG_hwpoison before taking any
+	 * reference, so the non-atomic __SetPageHead() below can still lose a
+	 * concurrent poison bit - exactly as it can for every other
+	 * prep_compound_page() caller, the page allocator included.
+	 *
+	 * A failed freeze is not a bug, it means someone holds a speculative
+	 * reference. Every PFN walker in the tree gates
+	 * get_page_unless_zero() on PageLRU, which a freshly allocated block
+	 * is not, so in practice only the hwpoison machinery gets here. Let
+	 * the caller fall back rather than warn: a machine running
+	 * panic_on_warn should not die of a condition the caller handles.
+	 */
+	if (!page_ref_freeze(page, 1))
+		return -EBUSY;
+
+	if (!new_order) {
+		/*
+		 * The subpages of a non-compound block are already
+		 * independent frozen pages, so only the bookkeeping applies.
+		 */
+		split_page_owner(page, old_order, 0);
+		pgalloc_tag_split(page_folio(page), old_order, 0);
+		split_page_memcg(page, old_order);
+		return 0;
+	}
+
+	split_page_owner(page, old_order, new_order);
+	pgalloc_tag_split(page_folio(page), old_order, new_order);
+
+	for (i = 0; i < nr; i += step)
+		prep_compound_page(page + i, new_order);
+
+	return 0;
+}
+
 int __isolate_free_page(struct page *page, unsigned int order)
 {
 	struct zone *zone = page_zone(page);
