@@ -5423,7 +5423,8 @@ static int r8169_mdio_write_reg_c45(struct mii_bus *mii_bus, int addr,
 	return 0;
 }
 
-static int r8169_mdio_register(struct rtl8169_private *tp)
+static int r8169_mdio_register(struct rtl8169_private *tp,
+			       const struct rtl_chip_info *chip)
 {
 	struct pci_dev *pdev = tp->pci_dev;
 	struct mii_bus *new_bus;
@@ -5483,6 +5484,13 @@ static int r8169_mdio_register(struct rtl8169_private *tp)
 	if (tp->mac_version == RTL_GIGA_MAC_VER_61)
 		phy_disable_eee_mode(tp->phydev,
 				     ETHTOOL_LINK_MODE_2500baseT_Full_BIT);
+
+	/* RTL8125D rev.a can lose packets with 2.5G EEE on some link
+	 * partners. Leave it available for explicit opt-in.
+	 */
+	if (tp->mac_version == RTL_GIGA_MAC_VER_64 && chip->val == 0x688)
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
+				   tp->phydev->advertising_eee);
 
 	/* Keep EEE off but the version stays EEE-capable so that link-up
 	 * still clears the MAC TX-LPI bits.
@@ -5794,7 +5802,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	pci_set_drvdata(pdev, tp);
 
-	rc = r8169_mdio_register(tp);
+	rc = r8169_mdio_register(tp, chip);
 	if (rc)
 		return rc;
 
