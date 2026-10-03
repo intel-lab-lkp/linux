@@ -122,6 +122,10 @@ void ath9k_stop_wmi(struct ath9k_htc_priv *priv)
 
 void ath9k_destroy_wmi(struct ath9k_htc_priv *priv)
 {
+	struct wmi *wmi = priv->wmi;
+
+	tasklet_kill(&wmi->wmi_event_tasklet);
+	skb_queue_purge(&wmi->wmi_event_queue);
 	kfree(priv->wmi);
 }
 
@@ -148,6 +152,10 @@ void ath9k_wmi_event_tasklet(struct tasklet_struct *t)
 
 	/* Check if ath9k_init_device() completed. */
 	if (!smp_load_acquire(&priv->initialized)) {
+		if (READ_ONCE(wmi->stopped)) {
+			skb_queue_purge(&wmi->wmi_event_queue);
+			return;
+		}
 		tasklet_schedule(t);
 		return;
 	}
