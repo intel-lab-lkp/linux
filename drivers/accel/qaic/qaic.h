@@ -18,12 +18,14 @@
 #include <linux/workqueue.h>
 #include <drm/drm_device.h>
 #include <drm/drm_gem.h>
+#include <drm/gpu_scheduler.h>
 
 #define QAIC_NAME		"qaic"
 #define QAIC_DBC_BASE		SZ_128K
 #define QAIC_DBC_SIZE		SZ_4K
 #define QAIC_SSR_DBC_SENTINEL	U32_MAX /* No ongoing SSR sentinel */
-#define QAIC_TIMELINE_LEN	32 /* Should fit max sized DBC id/BO handle */
+#define QAIC_TIMELINE_LEN	32 /* Should fit max sized DBC id/Job id */
+#define QAIC_DBC_NAME_LEN	8
 
 #define QAIC_NO_PARTITION	-1
 
@@ -34,6 +36,7 @@
 #define to_drm(qddev) (&(qddev)->drm)
 #define to_accel_kdev(qddev) (to_drm(qddev)->accel->kdev) /* Return Linux device of accel node */
 #define to_qaic_device(dev) (to_qaic_drm_device((dev))->qdev)
+#define to_qaic_job(job) container_of((job), struct qaic_job, base)
 
 enum aic_families {
 	FAMILY_AIC100,
@@ -68,6 +71,32 @@ enum dbc_states {
 
 extern bool datapath_polling;
 
+struct qaic_job {
+	/*
+	 * Base job structure, internal to DRM.
+	 * Do not update any fields in base directly in this driver
+	 */
+	struct drm_sched_job	base;
+	/* QAIC GEM object this job is referencing */
+	struct qaic_bo		*bo;
+	/* Slice this job is executing */
+	struct bo_slice		*slice;
+	/* DBC associated with this job */
+	struct dma_bridge_chan	*dbc;
+	/* QAIC will signal this fence after execution of this job */
+	struct qaic_fence	*irq_fence;
+	/* Node of list of jobs associated with a DBC */
+	struct list_head	queue;
+	struct kref		ref_count;
+	/* Number of requests this job executes */
+	unsigned int		num_req;
+	/* True if this job is partially executed */
+	bool			partial;
+	u32			partial_size;
+	/* Identifier for this job */
+	u16			id;
+};
+
 struct qaic_user {
 	/* Uniquely identifies this user for the device */
 	int			handle;
@@ -86,8 +115,8 @@ struct dma_bridge_chan {
 	struct qaic_device	*qdev;
 	/* ID of this DMA bridge channel(DBC) */
 	unsigned int		id;
-	/* Synchronizes access to xfer_list */
-	spinlock_t		xfer_lock;
+	/* Synchronizes access to job queue */
+	spinlock_t		job_q_lock;
 	/* Base address of request queue */
 	void			*req_q_base;
 	/* Base address of response queue */
@@ -108,7 +137,7 @@ struct dma_bridge_chan {
 	 * memory handle can enqueue more than one request elements, all
 	 * this requests that belong to same memory handle have same request ID
 	 */
-	u16			next_req_id;
+	atomic_t		next_req_id;
 	/* true: DBC is in use; false: DBC not in use */
 	bool			in_use;
 	/*
@@ -118,8 +147,6 @@ struct dma_bridge_chan {
 	void __iomem		*dbc_base;
 	/* Synchronizes access to Request queue's head and tail pointer */
 	struct mutex		req_lock;
-	/* Head of list where each node is a memory handle queued in request queue */
-	struct list_head	xfer_list;
 	/* Synchronizes DBC readers during cleanup */
 	struct srcu_struct	ch_lock;
 	/*
@@ -135,6 +162,23 @@ struct dma_bridge_chan {
 	struct work_struct	poll_work;
 	/* Represents various states of this DBC from enum dbc_states */
 	unsigned int		state;
+	/*
+	 * Name of this DBC. Format is "dbcXXX" where XXX is DBC id
+	 * with leading 0's
+	 */
+	char				name[QAIC_DBC_NAME_LEN];
+	/* Job scheduler for this DBC */
+	struct drm_gpu_scheduler	sched;
+	/* Custom DRM scheduler workqueue for multi-device performance */
+	struct workqueue_struct		*submit_wq;
+	/* Scheduler entity for this DBC */
+	struct drm_sched_entity		sched_entity;
+	/* List head for jobs scheduled for execution */
+	struct list_head		job_queue;
+	/* Ratio to scale FIFO length to scheduler credit constant */
+	u32				credit_ratio;
+	/* Total number of requests that have been queued to this DBC */
+	u32				pending_reqs;
 };
 
 struct qaic_device {
@@ -238,6 +282,8 @@ struct qaic_fence {
 	char			timeline_name[QAIC_TIMELINE_LEN];
 	/* Cached value of dbc_id for use in populating timeline_name */
 	u32			dbc_id;
+	/* ID of associated Job */
+	u16			job_id;
 };
 
 struct qaic_bo {
@@ -257,24 +303,15 @@ struct qaic_bo {
 	struct dma_bridge_chan	*dbc;
 	/* Number of slice that belongs to this buffer */
 	u32			nr_slice;
-	/* Number of slice that have been transferred by DMA engine */
-	u32			nr_slice_xfer_done;
 	/*
 	 * If true then user has attached slicing information to this BO by
 	 * calling DRM_IOCTL_QAIC_ATTACH_SLICE_BO ioctl.
 	 */
 	bool			sliced;
-	/* Request ID of this BO if it is queued for execution */
-	u16			req_id;
 	/* Wait on this fence for DMA transfer of this BO */
-	struct qaic_fence	*fence;
+	struct dma_fence	*fence;
 	/* Current fence context for this BO */
 	u64			fence_context;
-	/*
-	 * Node in linked list where head is dbc->xfer_list.
-	 * This link list contain BO's that are queued for DMA transfer.
-	 */
-	struct list_head	xfer_list;
 	/*
 	 * Node in linked list where head is dbc->bo_lists.
 	 * This link list contain BO's that are associated with the DBC it is
@@ -307,6 +344,8 @@ struct qaic_bo {
 	struct mutex		lock;
 	/* Callback to sync BO with CPU */
 	struct dma_fence_cb	cb;
+	/* True if BO needs to be sync'd with device; otherwise no need */
+	bool			need_dev_sync;
 };
 
 struct bo_slice {
@@ -331,6 +370,78 @@ struct bo_slice {
 	u64			offset;
 };
 
+struct dbc_req {
+	/*
+	 * A request ID is assigned to each memory handle going in DMA queue.
+	 * As a single memory handle can enqueue multiple elements in DMA queue
+	 * all of them will have the same request ID.
+	 */
+	__le16	req_id;
+	/* Future use */
+	__u8	seq_id;
+	/*
+	 * Special encoded variable
+	 * 7	0 - Do not force to generate MSI after DMA is completed
+	 *	1 - Force to generate MSI after DMA is completed
+	 * 6:5	Reserved
+	 * 4	1 - Generate completion element in the response queue
+	 *	0 - No Completion Code
+	 * 3	0 - DMA request is a Link list transfer
+	 *	1 - DMA request is a Bulk transfer
+	 * 2	Reserved
+	 * 1:0	00 - No DMA transfer involved
+	 *	01 - DMA transfer is part of inbound transfer
+	 *	10 - DMA transfer has outbound transfer
+	 *	11 - NA
+	 */
+	__u8	cmd;
+	__le32	resv;
+	/* Source address for the transfer */
+	__le64	src_addr;
+	/* Destination address for the transfer */
+	__le64	dest_addr;
+	/* Length of transfer request */
+	__le32	len;
+	__le32	resv2;
+	/* Doorbell address */
+	__le64	db_addr;
+	/*
+	 * Special encoded variable
+	 * 7	1 - Doorbell(db) write
+	 *	0 - No doorbell write
+	 * 6:2	Reserved
+	 * 1:0	00 - 32 bit access, db address must be aligned to 32bit-boundary
+	 *	01 - 16 bit access, db address must be aligned to 16bit-boundary
+	 *	10 - 8 bit access, db address must be aligned to 8bit-boundary
+	 *	11 - Reserved
+	 */
+	__u8	db_len;
+	__u8	resv3;
+	__le16	resv4;
+	/* 32 bit data written to doorbell address */
+	__le32	db_data;
+	/*
+	 * Special encoded variable
+	 * All the fields of sem_cmdX are passed from user and all are ORed
+	 * together to form sem_cmd.
+	 * 0:11		Semaphore value
+	 * 15:12	Reserved
+	 * 20:16	Semaphore index
+	 * 21		Reserved
+	 * 22		Semaphore Sync
+	 * 23		Reserved
+	 * 26:24	Semaphore command
+	 * 28:27	Reserved
+	 * 29		Semaphore DMA out bound sync fence
+	 * 30		Semaphore DMA in bound sync fence
+	 * 31		Enable semaphore command
+	 */
+	__le32	sem_cmd0;
+	__le32	sem_cmd1;
+	__le32	sem_cmd2;
+	__le32	sem_cmd3;
+} __packed;
+
 int get_dbc_req_elem_size(void);
 int get_dbc_rsp_elem_size(void);
 int get_cntl_version(struct qaic_device *qdev, struct qaic_user *usr, u16 *major, u16 *minor);
@@ -350,6 +461,8 @@ void enable_dbc(struct qaic_device *qdev, u32 dbc_id, struct qaic_user *usr);
 void wakeup_dbc(struct qaic_device *qdev, u32 dbc_id);
 void release_dbc(struct qaic_device *qdev, u32 dbc_id);
 void qaic_data_get_fifo_info(struct dma_bridge_chan *dbc, u32 *head, u32 *tail);
+int qaic_submit_reqs_to_hw(struct bo_slice *slice, unsigned int num_req,
+			   bool is_partial, u32 partial_size, u16 job_id);
 
 void wake_all_cntl(struct qaic_device *qdev);
 void qaic_dev_reset_clean_local_state(struct qaic_device *qdev);
@@ -370,8 +483,20 @@ void qaic_dbc_exit_ssr(struct qaic_device *qdev);
 
 /* qaic_fence.c */
 int qaic_fence_wait(struct dma_fence *fence, signed long timeout);
+struct qaic_fence *qaic_create_irq_fence(struct qaic_bo *bo, u64 seqno, u16 job_id);
+int qaic_acquire_bo_fence(struct qaic_bo *bo, int job_count, struct list_head *job_list);
 void qaic_remove_bo_fence(struct qaic_bo *bo);
-int qaic_acquire_bo_fence(struct qaic_bo *bo);
+
+/* qaic_sched.c */
+int qaicm_sched_init(struct drm_device *drm, struct dma_bridge_chan *dbc);
+void qaic_sched_entity_init(struct dma_bridge_chan *dbc);
+struct qaic_job *qaic_create_job(struct drm_file *file_priv, struct bo_slice *slice,
+				 unsigned int num_req, u64 seq_no, struct list_head *tmp_list);
+void qaic_submit_job(struct dma_bridge_chan *dbc, struct qaic_job *job);
+void qaic_free_job(struct kref *ref);
+void qaic_put_job(struct qaic_job *job);
+void qaic_cleanup_job(struct qaic_job *job);
+void set_dbc_scaling_ratio(struct dma_bridge_chan *dbc, u32 nelem);
 
 /* qaic_sysfs.c */
 int qaic_sysfs_init(struct qaic_drm_device *qddev);

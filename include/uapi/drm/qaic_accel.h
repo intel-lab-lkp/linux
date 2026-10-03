@@ -346,7 +346,7 @@ struct qaic_perf_stats {
  * struct qaic_perf_stats_entry - Defines a BO perf info.
  * @handle: In. GEM handle of the BO to get perf stats for.
  * @queue_level_before: Out. Number of elements in the queue before this BO
- *			was submitted.
+ *			was submitted, including those not yet scheduled to HW.
  * @num_queue_element: Out. Number of elements added to the queue to submit
  *		       this BO.
  * @submit_latency_us: Out. Time taken by the driver to submit this BO.

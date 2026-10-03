@@ -919,7 +919,12 @@ static int decode_deactivate(struct qaic_device *qdev, void *trans, u32 *msg_len
 		 * Releasing resources failed on the device side, which puts
 		 * us in a bind since they may still be in use, so enable the
 		 * dbc. User is expected to retry deactivation.
+		 *
+		 * Scheduler entity must be destroyed before it's reinitialized
+		 * in enable_dbc, otherwise entity list element points to itself
+		 * and causes a cycle in any list it was a node of.
 		 */
+		drm_sched_entity_destroy(&qdev->dbc[dbc_id].sched_entity);
 		enable_dbc(qdev, dbc_id, usr);
 		return -ECANCELED;
 	}

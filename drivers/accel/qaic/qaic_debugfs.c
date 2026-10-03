@@ -100,7 +100,6 @@ void qaic_debugfs_init(struct qaic_drm_device *qddev)
 	struct qaic_device *qdev = qddev->qdev;
 	struct dentry *debugfs_root;
 	struct dentry *debugfs_dir;
-	char name[QAIC_DBC_DIR_NAME];
 	u32 i;
 
 	debugfs_root = to_drm(qddev)->debugfs_root;
@@ -111,8 +110,7 @@ void qaic_debugfs_init(struct qaic_drm_device *qddev)
 	 * reasonable range.
 	 */
 	for (i = 0; i < qdev->num_dbc && i < 256; ++i) {
-		snprintf(name, QAIC_DBC_DIR_NAME, "dbc%03u", i);
-		debugfs_dir = debugfs_create_dir(name, debugfs_root);
+		debugfs_dir = debugfs_create_dir(qdev->dbc[i].name, debugfs_root);
 		debugfs_create_file("fifo_size", 0400, debugfs_dir, &qdev->dbc[i], &fifo_size_fops);
 		debugfs_create_file("queued", 0400, debugfs_dir, &qdev->dbc[i], &queued_fops);
 	}

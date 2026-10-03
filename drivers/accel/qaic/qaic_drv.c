@@ -461,16 +461,20 @@ static struct qaic_device *create_qdev(struct pci_dev *pdev,
 	INIT_LIST_HEAD(&qddev->users);
 
 	for (i = 0; i < qdev->num_dbc; ++i) {
-		spin_lock_init(&qdev->dbc[i].xfer_lock);
+		spin_lock_init(&qdev->dbc[i].job_q_lock);
 		qdev->dbc[i].qdev = qdev;
 		qdev->dbc[i].id = i;
-		INIT_LIST_HEAD(&qdev->dbc[i].xfer_list);
+		INIT_LIST_HEAD(&qdev->dbc[i].job_queue);
+		scnprintf(qdev->dbc[i].name, ARRAY_SIZE(qdev->dbc[i].name), "dbc%03u", i);
 		ret = qaicm_srcu_init(drm, &qdev->dbc[i].ch_lock);
 		if (ret)
 			return NULL;
 		init_waitqueue_head(&qdev->dbc[i].dbc_release);
 		INIT_LIST_HEAD(&qdev->dbc[i].bo_lists);
 		ret = drmm_mutex_init(drm, &qdev->dbc[i].req_lock);
+		if (ret)
+			return NULL;
+		ret = qaicm_sched_init(drm, &qdev->dbc[i]);
 		if (ret)
 			return NULL;
 	}
@@ -708,9 +712,9 @@ static bool qaic_data_path_busy(struct qaic_device *qdev)
 			srcu_read_unlock(&dbc->ch_lock, ch_rcu_id);
 			continue;
 		}
-		spin_lock_irqsave(&dbc->xfer_lock, flags);
-		ret = !list_empty(&dbc->xfer_list);
-		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
+		spin_lock_irqsave(&dbc->job_q_lock, flags);
+		ret = !list_empty(&dbc->job_queue);
+		spin_unlock_irqrestore(&dbc->job_q_lock, flags);
 		srcu_read_unlock(&dbc->ch_lock, ch_rcu_id);
 		if (ret)
 			break;

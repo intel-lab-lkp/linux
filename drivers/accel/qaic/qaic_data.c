@@ -64,78 +64,6 @@ module_param(datapath_poll_interval_us, uint, 0600);
 MODULE_PARM_DESC(datapath_poll_interval_us,
 		 "Amount of time to sleep between activity when datapath polling is enabled");
 
-struct dbc_req {
-	/*
-	 * A request ID is assigned to each memory handle going in DMA queue.
-	 * As a single memory handle can enqueue multiple elements in DMA queue
-	 * all of them will have the same request ID.
-	 */
-	__le16	req_id;
-	/* Future use */
-	__u8	seq_id;
-	/*
-	 * Special encoded variable
-	 * 7	0 - Do not force to generate MSI after DMA is completed
-	 *	1 - Force to generate MSI after DMA is completed
-	 * 6:5	Reserved
-	 * 4	1 - Generate completion element in the response queue
-	 *	0 - No Completion Code
-	 * 3	0 - DMA request is a Link list transfer
-	 *	1 - DMA request is a Bulk transfer
-	 * 2	Reserved
-	 * 1:0	00 - No DMA transfer involved
-	 *	01 - DMA transfer is part of inbound transfer
-	 *	10 - DMA transfer has outbound transfer
-	 *	11 - NA
-	 */
-	__u8	cmd;
-	__le32	resv;
-	/* Source address for the transfer */
-	__le64	src_addr;
-	/* Destination address for the transfer */
-	__le64	dest_addr;
-	/* Length of transfer request */
-	__le32	len;
-	__le32	resv2;
-	/* Doorbell address */
-	__le64	db_addr;
-	/*
-	 * Special encoded variable
-	 * 7	1 - Doorbell(db) write
-	 *	0 - No doorbell write
-	 * 6:2	Reserved
-	 * 1:0	00 - 32 bit access, db address must be aligned to 32bit-boundary
-	 *	01 - 16 bit access, db address must be aligned to 16bit-boundary
-	 *	10 - 8 bit access, db address must be aligned to 8bit-boundary
-	 *	11 - Reserved
-	 */
-	__u8	db_len;
-	__u8	resv3;
-	__le16	resv4;
-	/* 32 bit data written to doorbell address */
-	__le32	db_data;
-	/*
-	 * Special encoded variable
-	 * All the fields of sem_cmdX are passed from user and all are ORed
-	 * together to form sem_cmd.
-	 * 0:11		Semaphore value
-	 * 15:12	Reserved
-	 * 20:16	Semaphore index
-	 * 21		Reserved
-	 * 22		Semaphore Sync
-	 * 23		Reserved
-	 * 26:24	Semaphore command
-	 * 28:27	Reserved
-	 * 29		Semaphore DMA out bound sync fence
-	 * 30		Semaphore DMA in bound sync fence
-	 * 31		Enable semaphore command
-	 */
-	__le32	sem_cmd0;
-	__le32	sem_cmd1;
-	__le32	sem_cmd2;
-	__le32	sem_cmd3;
-} __packed;
-
 struct dbc_rsp {
 	/* Request ID of the memory handle whose DMA transaction is completed */
 	__le16	req_id;
@@ -188,7 +116,7 @@ struct qaic_exec_data_req {
 static inline bool bo_queued(struct qaic_bo *bo)
 {
 	if (bo->fence)
-		return !dma_fence_is_signaled(&bo->fence->base);
+		return !dma_fence_is_signaled(bo->fence);
 	return false;
 }
 
@@ -751,7 +679,6 @@ static const struct drm_gem_object_funcs qaic_gem_funcs = {
 static void qaic_init_bo_lists(struct qaic_bo *bo)
 {
 	INIT_LIST_HEAD(&bo->slices);
-	INIT_LIST_HEAD(&bo->xfer_list);
 }
 
 static struct qaic_bo *qaic_alloc_init_bo(void)
@@ -1181,9 +1108,8 @@ static void submit_reqs_to_fifo(struct dma_bridge_chan *dbc, struct dbc_req *req
 }
 
 /* Caller should be holding dbc->req_lock */
-static inline int qaic_submit_reqs_to_hw(struct bo_slice *slice,
-					 unsigned int num_req,
-					 bool is_partial, u32 partial_size)
+int qaic_submit_reqs_to_hw(struct bo_slice *slice, unsigned int num_req,
+			   bool is_partial, u32 partial_size, u16 job_id)
 {
 	struct dma_bridge_chan *dbc = slice->bo->dbc;
 	struct dbc_req *reqs = slice->reqs;
@@ -1225,27 +1151,30 @@ static inline int qaic_submit_reqs_to_hw(struct bo_slice *slice,
 	bo->perf_stats.req_submit_ts = ktime_get_ns();
 
 	/* Finalize commit to hardware */
-	dma_sync_sgtable_for_device(&dbc->qdev->pdev->dev, bo->sgt, bo->dir);
+	if (bo->need_dev_sync) {
+		bo->need_dev_sync = false;
+		dma_sync_sgtable_for_device(&dbc->qdev->pdev->dev, bo->sgt, bo->dir);
+	}
 	writel(tail, dbc->dbc_base + REQTP_OFF);
 	return 0;
 }
 
-static inline int copy_exec_reqs(struct bo_slice *slice)
+static inline void qaic_dbc_put_job(struct dma_bridge_chan *dbc, struct qaic_job *job)
 {
-	int ret;
-
-	ret = qaic_submit_reqs_to_hw(slice, slice->nents, false, 0);
-
-	return ret;
+	list_del_init(&job->queue);
+	dbc->pending_reqs -= job->num_req;
+	qaic_put_job(job);
 }
 
-static inline int copy_partial_exec_reqs(struct bo_slice *slice, u64 resize)
+static int create_slice_jobs(struct drm_file *file_priv, struct bo_slice *slice, bool partial,
+			     u64 resize, struct list_head *tmp_list)
 {
 	struct dbc_req *reqs = slice->reqs;
+	struct qaic_job *job = NULL;
+	unsigned int job_count = 0;
 	unsigned int nents_xfer;
 	u64 last_bytes;
 	u32 first_n;
-	int ret;
 
 	/*
 	 * After this for loop is complete, first_n represents the index
@@ -1260,20 +1189,33 @@ static inline int copy_partial_exec_reqs(struct bo_slice *slice, u64 resize)
 		else
 			break;
 
-	nents_xfer = first_n + 1;
+	if (partial)
+		nents_xfer = first_n + 1;
+	else
+		nents_xfer = slice->nents;
 
-	ret = qaic_submit_reqs_to_hw(slice, nents_xfer, true, last_bytes);
+	job = qaic_create_job(file_priv, slice, nents_xfer, 0, tmp_list);
+	if (IS_ERR(job))
+		return PTR_ERR(job);
+	job_count++;
 
-	return ret;
+	/* job points to the last job for this slice, only valid for partial execute ioctl */
+	job->partial_size = last_bytes;
+	job->partial = partial;
+
+	return job_count;
 }
 
-static int send_bo_list_to_device(struct qaic_device *qdev, struct drm_file *file_priv,
-				  struct execute_info *exec, struct dma_bridge_chan *dbc)
+static int send_bo_list_to_sched(struct qaic_device *qdev, struct drm_file *file_priv,
+				 struct execute_info *exec, struct dma_bridge_chan *dbc)
 {
+	struct qaic_job *job, *job_i, *tmp;
 	struct ww_acquire_ctx acquire_ctx;
 	struct bo_slice *slice;
 	unsigned long flags;
+	LIST_HEAD(tmp_list);
 	struct qaic_bo *bo;
+	int job_count;
 	u64 resize;
 	u32 handle;
 	int i, j;
@@ -1290,13 +1232,7 @@ static int send_bo_list_to_device(struct qaic_device *qdev, struct drm_file *fil
 		handle = exec->handle_arr[i];
 		ret = mutex_lock_interruptible(&bo->lock);
 		if (ret)
-			goto failed_to_send_bo;
-
-		/*
-		 * Take reference to object before sending to device,
-		 * released when transfer is complete (in dbc_irq_threaded_fn()).
-		 */
-		drm_gem_object_get(&bo->base);
+			goto free_jobs;
 
 		if (!bo->sliced) {
 			ret = -EINVAL;
@@ -1313,54 +1249,54 @@ static int send_bo_list_to_device(struct qaic_device *qdev, struct drm_file *fil
 			goto unlock_bo;
 		}
 
-		bo->req_id = dbc->next_req_id++;
-
-		spin_lock_irqsave(&dbc->xfer_lock, flags);
-		list_add_tail(&bo->xfer_list, &dbc->xfer_list);
-		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
-
-		ret = qaic_acquire_bo_fence(bo);
-		if (ret)
-			goto fence_failed;
-
+		job_count = 0;
 		list_for_each_entry(slice, &bo->slices, slice) {
-			for (j = 0; j < slice->nents; j++)
-				slice->reqs[j].req_id = cpu_to_le16(bo->req_id);
-
 			if (exec->is_partial && (!resize || resize <= slice->offset))
 				/* Configure the slice for no DMA transfer */
-				ret = copy_partial_exec_reqs(slice, 0);
+				ret = create_slice_jobs(file_priv, slice, true, 0, &tmp_list);
 			else if (exec->is_partial && resize < slice->offset + slice->size)
 				/* Configure the slice to be partially DMA transferred */
-				ret = copy_partial_exec_reqs(slice, resize - slice->offset);
+				ret = create_slice_jobs(file_priv, slice, true,
+							resize - slice->offset, &tmp_list);
 			else
-				ret = copy_exec_reqs(slice);
-			if (ret)
-				goto submit_failed;
+				ret = create_slice_jobs(file_priv, slice, false, 0, &tmp_list);
+			if (ret <= 0)
+				goto unlock_bo;
+			job_count += ret;
 		}
+
+		ret = qaic_acquire_bo_fence(bo, job_count, &tmp_list);
+		if (ret)
+			goto unlock_bo;
+
+		bo->need_dev_sync = true;
 		mutex_unlock(&bo->lock);
 	}
 
+	spin_lock_irqsave(&dbc->job_q_lock, flags);
+	job = list_last_entry(&dbc->job_queue, typeof(*job), queue);
+	list_splice_tail_init(&tmp_list, &dbc->job_queue);
+	list_for_each_entry_continue(job, &dbc->job_queue, queue)
+		qaic_submit_job(dbc, job);
+	spin_unlock_irqrestore(&dbc->job_q_lock, flags);
+
 	goto unlock_resv;
 
-submit_failed:
-	qaic_remove_bo_fence(bo);
-fence_failed:
-	spin_lock_irqsave(&dbc->xfer_lock, flags);
-	list_del_init(&bo->xfer_list);
-	spin_unlock_irqrestore(&dbc->xfer_lock, flags);
 unlock_bo:
-	drm_gem_object_put(&bo->base);
 	mutex_unlock(&bo->lock);
-failed_to_send_bo:
-	for (j = 0; j < i; j++) {
-		drm_gem_object_put(&exec->bo_arr[j]->base);
-		spin_lock_irqsave(&dbc->xfer_lock, flags);
-		bo = list_last_entry(&dbc->xfer_list, struct qaic_bo, xfer_list);
-		list_del_init(&bo->xfer_list);
-		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
-		dma_sync_sgtable_for_cpu(&qdev->pdev->dev, bo->sgt, bo->dir);
+free_jobs:
+	for (j = i - 1; i > 0 && j >= 0; j--) {
+		bo = exec->bo_arr[j];
+		ret = mutex_lock_interruptible(&bo->lock);
+		if (!ret) {
+			bo->need_dev_sync = false;
+			dma_fence_put(bo->fence);
+			bo->fence = NULL;
+			mutex_unlock(&bo->lock);
+		}
 	}
+	list_for_each_entry_safe_reverse(job_i, tmp, &tmp_list, queue)
+		qaic_cleanup_job(job_i);
 unlock_resv:
 	drm_gem_unlock_reservations((struct drm_gem_object **)exec->bo_arr,
 				    exec->count, &acquire_ctx);
@@ -1451,7 +1387,6 @@ static int __qaic_execute_bo_ioctl(struct drm_device *dev, void *data, struct dr
 	struct qaic_user *usr;
 	size_t elem_size_sum;
 	void *usr_exec_ent;
-	u32 head, tail;
 	int i, ret;
 
 	exec.perf_stats.received_ts = ktime_get_ns();
@@ -1530,36 +1465,20 @@ static int __qaic_execute_bo_ioctl(struct drm_device *dev, void *data, struct dr
 		goto release_ch_rcu;
 	}
 
-	ret = mutex_lock_interruptible(&dbc->req_lock);
+	/* Not locking to read pending_reqs since exact value not necessary */
+	exec.perf_stats.queue_level = dbc->pending_reqs;
+
+	ret = send_bo_list_to_sched(qdev, file_priv, &exec, dbc);
 	if (ret)
 		goto release_ch_rcu;
 
-	head = readl(dbc->dbc_base + REQHP_OFF);
-	tail = readl(dbc->dbc_base + REQTP_OFF);
-
-	if (head == U32_MAX || tail == U32_MAX) {
-		/* PCI link error */
-		ret = -ENODEV;
-		goto unlock_req_lock;
-	}
-
-	exec.perf_stats.queue_level = head <= tail ? tail - head : dbc->nelem - (head - tail);
-
-	ret = send_bo_list_to_device(qdev, file_priv, &exec, dbc);
-	if (ret)
-		goto unlock_req_lock;
-
 	exec.perf_stats.submit_ts = ktime_get_ns();
-	mutex_unlock(&dbc->req_lock);
 
 	update_profiling_data(&exec);
 
 	if (datapath_polling)
 		schedule_work(&dbc->poll_work);
 
-unlock_req_lock:
-	if (ret)
-		mutex_unlock(&dbc->req_lock);
 release_ch_rcu:
 	srcu_read_unlock(&dbc->ch_lock, ch_rcu_id);
 	for (i = 0; i < exec.count; i++)
@@ -1683,13 +1602,13 @@ void qaic_irq_polling_work(struct work_struct *work)
 			srcu_read_unlock(&dbc->ch_lock, rcu_id);
 			return;
 		}
-		spin_lock_irqsave(&dbc->xfer_lock, flags);
-		if (list_empty(&dbc->xfer_list)) {
-			spin_unlock_irqrestore(&dbc->xfer_lock, flags);
+		spin_lock_irqsave(&dbc->job_q_lock, flags);
+		if (list_empty(&dbc->job_queue)) {
+			spin_unlock_irqrestore(&dbc->job_q_lock, flags);
 			srcu_read_unlock(&dbc->ch_lock, rcu_id);
 			return;
 		}
-		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
+		spin_unlock_irqrestore(&dbc->job_q_lock, flags);
 
 		head = readl(dbc->dbc_base + RSPHP_OFF);
 		if (head == U32_MAX) { /* PCI link error */
@@ -1719,8 +1638,8 @@ irqreturn_t dbc_irq_threaded_fn(int irq, void *data)
 	struct dma_bridge_chan *dbc = data;
 	int event_count = NUM_EVENTS;
 	int delay_count = NUM_DELAYS;
+	struct qaic_job *job, *tmp;
 	struct qaic_device *qdev;
-	struct qaic_bo *bo, *i;
 	struct dbc_rsp *rsp;
 	unsigned long flags;
 	int rcu_id;
@@ -1773,37 +1692,17 @@ read_fifo:
 		status = le16_to_cpu(rsp->status);
 		if (status)
 			pci_dbg(qdev->pdev, "req_id %d failed with status %d\n", req_id, status);
-		spin_lock_irqsave(&dbc->xfer_lock, flags);
-		/*
-		 * A BO can receive multiple interrupts, since a BO can be
-		 * divided into multiple slices and a buffer receives as many
-		 * interrupts as slices. So until it receives interrupts for
-		 * all the slices we cannot mark that buffer complete.
-		 */
-		list_for_each_entry_safe(bo, i, &dbc->xfer_list, xfer_list) {
-			if (bo->req_id == req_id)
-				bo->nr_slice_xfer_done++;
-			else
-				continue;
 
-			if (bo->nr_slice_xfer_done < bo->nr_slice)
+		spin_lock_irqsave(&dbc->job_q_lock, flags);
+		list_for_each_entry_safe(job, tmp, &dbc->job_queue, queue) {
+			if (job->id == req_id) {
+				dma_fence_signal(&job->irq_fence->base);
+				qaic_dbc_put_job(dbc, job);
 				break;
-
-			/*
-			 * At this point we have received all the interrupts for
-			 * BO, which means BO execution is complete.
-			 */
-			bo->nr_slice_xfer_done = 0;
-			list_del_init(&bo->xfer_list);
-			/*
-			 * fence is put when it is executed next, during xfer_list
-			 * cleanup, or when slice is detached
-			 */
-			dma_fence_signal(&bo->fence->base);
-			drm_gem_object_put(&bo->base);
-			break;
+			}
 		}
-		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
+		spin_unlock_irqrestore(&dbc->job_q_lock, flags);
+
 		head = (head + 1) % dbc->nelem;
 	}
 
@@ -1910,7 +1809,7 @@ int qaic_wait_bo_ioctl(struct drm_device *dev, void *data, struct drm_file *file
 		goto put_obj;
 	}
 
-	fence = &bo->fence->base;
+	fence = bo->fence;
 	dma_fence_get(fence);
 	mutex_unlock(&bo->lock);
 
@@ -2101,44 +2000,31 @@ unlock_usr_srcu:
 	return ret;
 }
 
-static void empty_xfer_list(struct qaic_device *qdev, struct dma_bridge_chan *dbc)
+static void empty_xfer_list(struct dma_bridge_chan *dbc)
 {
+	struct qaic_job *job, *tmp;
 	unsigned long flags;
-	struct qaic_bo *bo;
 
-	spin_lock_irqsave(&dbc->xfer_lock, flags);
-	while (!list_empty(&dbc->xfer_list)) {
-		bo = list_first_entry(&dbc->xfer_list, typeof(*bo), xfer_list);
-		list_del_init(&bo->xfer_list);
-		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
-		mutex_lock(&bo->lock);
-		bo->nr_slice_xfer_done = 0;
-		bo->req_id = 0;
-		bo->perf_stats.req_received_ts = 0;
-		bo->perf_stats.req_submit_ts = 0;
-		bo->perf_stats.req_processed_ts = 0;
-		bo->perf_stats.queue_level_before = 0;
-		dma_fence_get(&bo->fence->base);
-		dma_fence_set_error(&bo->fence->base, -ECANCELED);
-		dma_fence_signal(&bo->fence->base);
-		dma_fence_put(&bo->fence->base);
-		qaic_remove_bo_fence(bo);
-		mutex_unlock(&bo->lock);
-		drm_gem_object_put(&bo->base);
-		spin_lock_irqsave(&dbc->xfer_lock, flags);
+	spin_lock_irqsave(&dbc->job_q_lock, flags);
+	list_for_each_entry_safe_reverse(job, tmp, &dbc->job_queue, queue) {
+		dma_fence_get(&job->irq_fence->base);
+		dma_fence_set_error(&job->irq_fence->base, -ECANCELED);
+		dma_fence_signal(&job->irq_fence->base);
+		dma_fence_put(&job->irq_fence->base);
+		qaic_dbc_put_job(dbc, job);
 	}
-	spin_unlock_irqrestore(&dbc->xfer_lock, flags);
+	spin_unlock_irqrestore(&dbc->job_q_lock, flags);
 }
 
-static void sync_empty_xfer_list(struct qaic_device *qdev, struct dma_bridge_chan *dbc)
+static void sync_empty_xfer_list(struct dma_bridge_chan *dbc)
 {
-	empty_xfer_list(qdev, dbc);
+	empty_xfer_list(dbc);
 	synchronize_srcu(&dbc->ch_lock);
 	/*
 	 * Threads holding channel lock, may add more elements in the xfer_list.
 	 * Flush out these elements from xfer_list.
 	 */
-	empty_xfer_list(qdev, dbc);
+	empty_xfer_list(dbc);
 }
 
 int disable_dbc(struct qaic_device *qdev, u32 dbc_id, struct qaic_user *usr)
@@ -2161,6 +2047,8 @@ int disable_dbc(struct qaic_device *qdev, u32 dbc_id, struct qaic_user *usr)
  */
 void enable_dbc(struct qaic_device *qdev, u32 dbc_id, struct qaic_user *usr)
 {
+	qaic_sched_entity_init(&qdev->dbc[dbc_id]);
+	set_dbc_scaling_ratio(&qdev->dbc[dbc_id], qdev->dbc[dbc_id].nelem);
 	qdev->dbc[dbc_id].usr = usr;
 }
 
@@ -2169,7 +2057,7 @@ void wakeup_dbc(struct qaic_device *qdev, u32 dbc_id)
 	struct dma_bridge_chan *dbc = &qdev->dbc[dbc_id];
 
 	dbc->usr = NULL;
-	sync_empty_xfer_list(qdev, dbc);
+	sync_empty_xfer_list(dbc);
 }
 
 void release_dbc(struct qaic_device *qdev, u32 dbc_id)
@@ -2182,6 +2070,7 @@ void release_dbc(struct qaic_device *qdev, u32 dbc_id)
 		return;
 
 	wakeup_dbc(qdev, dbc_id);
+	drm_sched_entity_destroy(&dbc->sched_entity);
 
 	dma_free_coherent(&qdev->pdev->dev, dbc->total_size, dbc->req_q_base, dbc->dma_addr);
 	dbc->total_size = 0;

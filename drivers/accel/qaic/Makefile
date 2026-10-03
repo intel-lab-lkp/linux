@@ -12,6 +12,7 @@ qaic-y := \
 	qaic_drv.o \
 	qaic_fence.o \
 	qaic_ras.o \
+	qaic_sched.o \
 	qaic_ssr.o \
 	qaic_sysfs.o \
 	qaic_timesync.o \
