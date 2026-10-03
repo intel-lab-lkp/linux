@@ -758,6 +758,8 @@ static int exfat_extend_valid_size(struct inode *inode, loff_t new_valid_size)
 	int ret = 0;
 
 	if (old_valid_size < new_valid_size) {
+		inode_dio_wait(inode);
+
 		/* Do not re-zero blocks already covered by zeroed_size. */
 		loff_t gap_start = max(old_valid_size, ei->zeroed_size);
 
@@ -806,6 +808,8 @@ static ssize_t exfat_fallback_buffered_write(struct kiocb *iocb,
 	int ret;
 
 	iocb->ki_flags &= ~IOCB_DIRECT;
+
+	inode_dio_wait(file_inode(iocb->ki_filp));
 
 	written = iomap_file_buffered_write(iocb, from, &exfat_write_iomap_ops,
 			NULL, NULL);
@@ -889,11 +893,17 @@ static ssize_t exfat_file_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 			goto unlock;
 	}
 
-	if (iocb->ki_flags & IOCB_DIRECT)
+	if (iocb->ki_flags & IOCB_DIRECT) {
 		ret = exfat_dio_write_iter(iocb, iter);
-	else
+	} else {
+		/*
+		 * Prevent concurrent direct I/O and buffered I/O to the same file
+		 * range. Wait for in-flight DIO to finish before dirtying pages.
+		 */
+		inode_dio_wait(inode);
 		ret = iomap_file_buffered_write(iocb, iter,
 				&exfat_write_iomap_ops, NULL, NULL);
+	}
 	if (ret < 0)
 		goto unlock;
 
