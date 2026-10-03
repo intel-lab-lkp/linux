@@ -524,13 +524,13 @@ static int __init tpm_init(void)
 
 	rc = class_register(&tpm_class);
 	if (rc) {
-		pr_err("couldn't create tpm class\n");
+		pr_err("tpm: couldn't create tpm class\n");
 		return rc;
 	}
 
 	rc = class_register(&tpmrm_class);
 	if (rc) {
-		pr_err("couldn't create tpmrm class\n");
+		pr_err("tpm: couldn't create tpmrm class\n");
 		goto out_destroy_tpm_class;
 	}
 
@@ -542,7 +542,7 @@ static int __init tpm_init(void)
 
 	rc = tpm_dev_common_init();
 	if (rc) {
-		pr_err("tpm: failed to allocate char dev region\n");
+		pr_err("tpm: failed to allocate TPM workqueue\n");
 		goto out_unreg_chrdev;
 	}
 
