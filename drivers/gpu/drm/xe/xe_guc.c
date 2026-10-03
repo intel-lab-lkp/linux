@@ -1476,13 +1476,15 @@ int xe_guc_suspend(struct xe_guc *guc)
  * Wa_22016122933: on the standalone media GT, memory shared between the
  * CPU and the GuC must not be mapped cached on the CPU side, otherwise
  * the CPU can read stale data written by the GuC (e.g. G2H CTB writes)
- * for multiple seconds.
+ * for multiple seconds. Map it WC on the CPU side and UC on the GPU side,
+ * as i915 does.
  *
  * Return: additional XE_BO_FLAG_* to use when allocating GuC-shared memory
  */
 u32 xe_guc_bo_wa_flags(struct xe_gt *gt)
 {
-	return XE_GT_WA(gt, 22016122933) ? XE_BO_FLAG_NEEDS_UC : 0;
+	return XE_GT_WA(gt, 22016122933) ?
+	       XE_BO_FLAG_NEEDS_UC | XE_BO_FLAG_FORCE_WC : 0;
 }
 
 void xe_guc_notify(struct xe_guc *guc)

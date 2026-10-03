@@ -533,7 +533,12 @@ static struct ttm_tt *xe_ttm_tt_create(struct ttm_buffer_object *ttm_bo,
 		 * which cpu_caching is never initialized.
 		 */
 		xe_assert(xe, bo->cpu_caching == 0);
-		caching = ttm_uncached;
+		/*
+		 * With FORCE_WC also set, map WC on the CPU side. The GGTT PTEs
+		 * stay XE_CACHE_NONE because they key off NEEDS_UC alone.
+		 */
+		caching = bo->flags & XE_BO_FLAG_FORCE_WC ? ttm_write_combined :
+							    ttm_uncached;
 	}
 
 	if (ttm_bo->type != ttm_bo_type_sg)
