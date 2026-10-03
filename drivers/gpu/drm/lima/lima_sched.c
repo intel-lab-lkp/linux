@@ -44,6 +44,7 @@ int lima_sched_slab_init(void)
 void lima_sched_slab_fini(void)
 {
 	if (!--lima_fence_slab_refcnt) {
+		rcu_barrier();
 		kmem_cache_destroy(lima_fence_slab);
 		lima_fence_slab = NULL;
 	}
