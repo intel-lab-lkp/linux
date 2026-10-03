@@ -365,7 +365,9 @@ mlx5e_tx_dma_unmap(struct device *pdev, struct mlx5e_sq_dma *dma)
 {
 	switch (dma->type) {
 	case MLX5E_DMA_MAP_SINGLE:
-		dma_unmap_single(pdev, dma->addr, dma->size, DMA_TO_DEVICE);
+		if (dma->size)
+			dma_unmap_single(pdev, dma->addr, dma->size,
+					 DMA_TO_DEVICE);
 		break;
 	case MLX5E_DMA_MAP_PAGE:
 		netmem_dma_unmap_page_attrs(pdev, dma->addr, dma->size,

@@ -1666,6 +1666,13 @@ static void mlx5e_free_icosq(struct mlx5e_icosq *sq)
 
 void mlx5e_free_txqsq_db(struct mlx5e_txqsq *sq)
 {
+	if (sq->db.tx_hdr_bufs) {
+		int wq_sz = mlx5_wq_cyc_get_size(&sq->wq);
+		int df_sz = wq_sz * MLX5_SEND_WQEBB_NUM_DS;
+
+		dma_free_coherent(sq->pdev, df_sz * MAX_TCP_HEADER,
+				  sq->db.tx_hdr_bufs, sq->db.tx_hdr_bufs_dma);
+	}
 	kvfree(sq->db.wqe_info);
 	kvfree(sq->db.skb_fifo.fifo);
 	kvfree(sq->db.dma_fifo);
@@ -1689,6 +1696,13 @@ int mlx5e_alloc_txqsq_db(struct mlx5e_txqsq *sq, int numa)
 		mlx5e_free_txqsq_db(sq);
 		return -ENOMEM;
 	}
+
+	if (sq->pdev->dma_pmd_tx_hdrs)
+		sq->db.tx_hdr_bufs =
+			dma_alloc_coherent(sq->pdev,
+					   df_sz * MAX_TCP_HEADER,
+					   &sq->db.tx_hdr_bufs_dma,
+					   GFP_KERNEL | __GFP_NOWARN);
 
 	sq->dma_fifo_mask = df_sz - 1;
 

@@ -442,6 +442,8 @@ struct mlx5e_txqsq {
 		struct mlx5e_sq_dma       *dma_fifo;
 		struct mlx5e_skb_fifo      skb_fifo;
 		struct mlx5e_tx_wqe_info  *wqe_info;
+		void                      *tx_hdr_bufs;
+		dma_addr_t                 tx_hdr_bufs_dma;
 	} db;
 	void __iomem              *uar_map;
 	struct netdev_queue       *txq;

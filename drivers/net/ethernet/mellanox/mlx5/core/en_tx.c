@@ -177,6 +177,27 @@ mlx5e_tx_get_gso_ihs(struct mlx5e_txqsq *sq, struct sk_buff *skb)
 	return ihs;
 }
 
+static inline dma_addr_t
+mlx5e_tx_map_hdr(struct mlx5e_txqsq *sq, unsigned char *data, u32 len)
+{
+	dma_addr_t dma_addr;
+
+	if (sq->db.tx_hdr_bufs && len <= MAX_TCP_HEADER) {
+		u32 off = (sq->dma_fifo_pc & sq->dma_fifo_mask) *
+			  MAX_TCP_HEADER;
+
+		memcpy(sq->db.tx_hdr_bufs + off, data, len);
+		dma_addr = sq->db.tx_hdr_bufs_dma + off;
+		mlx5e_dma_push_single(sq, dma_addr, 0);
+		return dma_addr;
+	}
+
+	dma_addr = dma_map_single(sq->pdev, data, len, DMA_TO_DEVICE);
+	if (likely(!dma_mapping_error(sq->pdev, dma_addr)))
+		mlx5e_dma_push_single(sq, dma_addr, len);
+	return dma_addr;
+}
+
 static inline int
 mlx5e_txwqe_build_dsegs(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 			unsigned char *skb_data, u16 headlen,
@@ -187,8 +208,7 @@ mlx5e_txwqe_build_dsegs(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	int i;
 
 	if (headlen) {
-		dma_addr = dma_map_single(sq->pdev, skb_data, headlen,
-					  DMA_TO_DEVICE);
+		dma_addr = mlx5e_tx_map_hdr(sq, skb_data, headlen);
 		if (unlikely(dma_mapping_error(sq->pdev, dma_addr)))
 			goto dma_unmap_wqe_err;
 
@@ -196,7 +216,6 @@ mlx5e_txwqe_build_dsegs(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		dseg->lkey       = sq->mkey_be;
 		dseg->byte_count = cpu_to_be32(headlen);
 
-		mlx5e_dma_push_single(sq, dma_addr, headlen);
 		num_dma++;
 		dseg++;
 	}
@@ -578,7 +597,7 @@ mlx5e_sq_xmit_mpwqe(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	txd.data = skb->data;
 	txd.len = skb->len;
 
-	txd.dma_addr = dma_map_single(sq->pdev, txd.data, txd.len, DMA_TO_DEVICE);
+	txd.dma_addr = mlx5e_tx_map_hdr(sq, txd.data, txd.len);
 	if (unlikely(dma_mapping_error(sq->pdev, txd.dma_addr)))
 		goto err_unmap;
 
@@ -591,7 +610,6 @@ mlx5e_sq_xmit_mpwqe(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 
 	sq->stats->xmit_more += xmit_more;
 
-	mlx5e_dma_push_single(sq, txd.dma_addr, txd.len);
 	mlx5e_skb_fifo_push(&sq->db.skb_fifo, skb);
 	mlx5e_tx_mpwqe_add_dseg(sq, &txd);
 	mlx5e_tx_skb_update_ts_flags(skb);
