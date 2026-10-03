@@ -758,9 +758,15 @@ bool intel_pps_vdd_on_unlocked(struct intel_dp *intel_dp)
 	if (edp_have_panel_vdd(intel_dp))
 		return need_to_disable;
 
-	drm_WARN_ON(display->drm, intel_dp->pps.vdd_wakeref);
-	intel_dp->pps.vdd_wakeref = intel_display_power_get(display,
-							    intel_aux_power_domain(dig_port));
+	if (intel_dp->pps.vdd_wakeref_boot) {
+		intel_dp->pps.vdd_wakeref_boot = false;
+	} else {
+		drm_WARN_ON(display->drm, intel_dp->pps.vdd_wakeref);
+		if (!intel_dp->pps.vdd_wakeref)
+			intel_dp->pps.vdd_wakeref =
+				intel_display_power_get(display,
+							intel_aux_power_domain(dig_port));
+	}
 
 	pp_stat_reg = _pp_stat_reg(intel_dp);
 	pp_ctrl_reg = _pp_ctrl_reg(intel_dp);
@@ -832,7 +838,7 @@ static void intel_pps_vdd_off_sync_unlocked(struct intel_dp *intel_dp)
 
 	drm_WARN_ON(display->drm, intel_dp->pps.want_panel_vdd);
 
-	if (!edp_have_panel_vdd(intel_dp))
+	if (!edp_have_panel_vdd(intel_dp) && !intel_dp->pps.vdd_wakeref)
 		return;
 
 	drm_dbg_kms(display->drm, "[ENCODER:%d:%s] %s turning VDD off\n",
@@ -861,6 +867,7 @@ static void intel_pps_vdd_off_sync_unlocked(struct intel_dp *intel_dp)
 		intel_dp_invalidate_source_oui(intel_dp);
 	}
 
+	intel_dp->pps.vdd_wakeref_boot = false;
 	intel_display_power_put(display,
 				intel_aux_power_domain(dig_port),
 				fetch_and_zero(&intel_dp->pps.vdd_wakeref));
@@ -1063,6 +1070,7 @@ void intel_pps_off_unlocked(struct intel_dp *intel_dp)
 	intel_dp_invalidate_source_oui(intel_dp);
 
 	/* We got a reference when we enabled the VDD. */
+	intel_dp->pps.vdd_wakeref_boot = false;
 	intel_display_power_put(display,
 				intel_aux_power_domain(dig_port),
 				fetch_and_zero(&intel_dp->pps.vdd_wakeref));
@@ -1337,6 +1345,7 @@ static void pps_vdd_init(struct intel_dp *intel_dp)
 	drm_WARN_ON(display->drm, intel_dp->pps.vdd_wakeref);
 	intel_dp->pps.vdd_wakeref = intel_display_power_get(display,
 							    intel_aux_power_domain(dig_port));
+	intel_dp->pps.vdd_wakeref_boot = true;
 }
 
 bool intel_pps_have_panel_power_or_vdd(struct intel_dp *intel_dp)
