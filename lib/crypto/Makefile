@@ -376,6 +376,12 @@ endif # CONFIG_CRYPTO_LIB_SHA3_ARCH
 
 ################################################################################
 
+# SipHash support is always built-in because it's used by core components such
+# as printk (for pointer hashing) and networking.
+obj-y += siphash.o
+
+################################################################################
+
 obj-$(CONFIG_CRYPTO_LIB_SM3) += libsm3.o
 libsm3-y := sm3.o
 ifeq ($(CONFIG_CRYPTO_LIB_SM3_ARCH),y)
