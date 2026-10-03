@@ -5219,8 +5219,9 @@ fec_probe(struct platform_device *pdev)
 	fec_enet_get_queue_num(pdev, &num_tx_qs, &num_rx_qs);
 
 	/* Init network device */
-	ndev = alloc_etherdev_mqs(sizeof(struct fec_enet_private) +
-				  FEC_STATS_SIZE, num_tx_qs, num_rx_qs);
+	ndev = devm_alloc_etherdev_mqs(&pdev->dev,
+				       sizeof(struct fec_enet_private) +
+				       FEC_STATS_SIZE, num_tx_qs, num_rx_qs);
 	if (!ndev)
 		return -ENOMEM;
 
@@ -5247,10 +5248,8 @@ fec_probe(struct platform_device *pdev)
 	pinctrl_pm_select_default_state(&pdev->dev);
 
 	fep->hwp = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(fep->hwp)) {
-		ret = PTR_ERR(fep->hwp);
-		goto failed_ioremap;
-	}
+	if (IS_ERR(fep->hwp))
+		return PTR_ERR(fep->hwp);
 
 	fep->pdev = pdev;
 	fep->dev_id = dev_id++;
@@ -5455,6 +5454,9 @@ failed_register:
 	fec_enet_mii_remove(fep);
 failed_mii_init:
 failed_irq:
+	fec_irqs_disable(ndev);
+	while (i--)
+		disable_irq(fep->irq[i]);
 	fec_enet_deinit(ndev);
 failed_init:
 	if (fep->bufdesc_ex)
@@ -5479,9 +5481,6 @@ failed_stop_mode:
 failed_ipc_init:
 failed_phy:
 	dev_id--;
-failed_ioremap:
-	free_netdev(ndev);
-
 	return ret;
 }
 
@@ -5491,7 +5490,7 @@ fec_drv_remove(struct platform_device *pdev)
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct fec_enet_private *fep = netdev_priv(ndev);
 	struct device_node *np = pdev->dev.of_node;
-	int ret;
+	int i, irq_cnt, ret;
 
 	ret = pm_runtime_get_sync(&pdev->dev);
 	if (ret < 0)
@@ -5502,7 +5501,15 @@ fec_drv_remove(struct platform_device *pdev)
 	cancel_work_sync(&fep->tx_timeout_work);
 	if (fep->bufdesc_ex)
 		fec_ptp_stop(pdev);
+	if (ret >= 0)
+		fec_irqs_disable(ndev);
+	irq_cnt = fec_enet_get_irq_cnt(pdev);
+	for (i = 0; i < irq_cnt; i++)
+		disable_irq(fep->irq[i]);
 	unregister_netdev(ndev);
+	/* fec_stop() enables the default interrupt mask. */
+	if (ret >= 0)
+		fec_irqs_disable(ndev);
 	fec_enet_mii_remove(fep);
 	if (fep->reg_phy)
 		regulator_disable(fep->reg_phy);
@@ -5522,7 +5529,6 @@ fec_drv_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 
 	fec_enet_deinit(ndev);
-	free_netdev(ndev);
 }
 
 static int fec_suspend(struct device *dev)
