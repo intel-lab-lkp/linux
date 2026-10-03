@@ -1868,10 +1868,11 @@ static enum scan_result try_collapse_pte_mapped_thp(struct mm_struct *mm, unsign
 		return SCAN_VMA_CHECK;
 
 	/*
-	 * Keep pmd pgtable while the uffd bit is in use; see comment in
-	 * retract_page_tables().
+	 * Don't collapse if there might be PTE markers for userfaultfd-based
+	 * access protection or if collapsing might bypass userfaultfd minor
+	 * faults.
 	 */
-	if (userfaultfd_protected(vma))
+	if (userfaultfd_protected(vma) || userfaultfd_minor(vma))
 		return SCAN_PTE_UFFD;
 
 	folio = filemap_lock_folio(vma->vm_file->f_mapping,
@@ -2093,8 +2094,13 @@ static bool file_backed_vma_is_retractable(struct vm_area_struct *vma)
 	 * and cannot be recycled to a shared PMD. Other vmas can still
 	 * have the same file mapped hugely, but skip this one: it will
 	 * always be mapped in small page size for these registrations.
+	 *
+	 * Userfaultfd-minor-registered VMAs should also not be retracted.
+	 * PMDs will not be installed, as doing so can suppress minor faults.
+	 * If retraction were allowed, khugepaged might continually cause
+	 * unnecessary userfaultfd minor faults for already-CONTINUE'd pages.
 	 */
-	if (userfaultfd_protected(vma))
+	if (userfaultfd_protected(vma) || userfaultfd_minor(vma))
 		return false;
 
 	/*
