@@ -4614,7 +4614,7 @@ dequeue_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se)
 }
 
 static void
-rescale_entity(struct sched_entity *se, unsigned long weight, bool rel_vprot)
+rescale_entity(struct sched_entity *se, unsigned long weight)
 {
 	long old_weight = se->h_load.weight;
 
@@ -4712,7 +4712,7 @@ rescale_entity(struct sched_entity *se, unsigned long weight, bool rel_vprot)
 	if (se->rel_deadline)
 		se->deadline = div64_long(se->deadline * old_weight, weight);
 
-	if (rel_vprot)
+	if (se->rel_vprot)
 		se->vprot = div64_long(se->vprot * old_weight, weight);
 }
 
@@ -4720,7 +4720,6 @@ static void reweight_eevdf(struct cfs_rq *cfs_rq, struct sched_entity *se,
 			   unsigned long weight, bool on_rq)
 {
 	bool curr = cfs_rq->curr == se;
-	bool rel_vprot = false;
 	u64 avruntime = 0;
 
 	if (se->h_load.weight == weight)
@@ -4733,7 +4732,7 @@ static void reweight_eevdf(struct cfs_rq *cfs_rq, struct sched_entity *se,
 		se->rel_deadline = 1;
 		if (curr && protect_slice(se)) {
 			se->vprot -= avruntime;
-			rel_vprot = true;
+			se->rel_vprot = 1;
 		}
 
 		cfs_rq->h_nr_queued--;
@@ -4741,16 +4740,22 @@ static void reweight_eevdf(struct cfs_rq *cfs_rq, struct sched_entity *se,
 			__dequeue_entity(cfs_rq, se);
 	}
 
-	rescale_entity(se, weight, rel_vprot);
+	rescale_entity(se, weight);
 
 	update_load_set(&se->h_load, weight);
 
 	if (on_rq) {
-		if (rel_vprot)
-			se->vprot += avruntime;
 		se->deadline += avruntime;
 		se->rel_deadline = 0;
 		se->vruntime = avruntime - se->vlag;
+
+		if (se->rel_vprot) {
+			se->vprot += avruntime;
+			se->rel_vprot = 0;
+		} else if (curr) {
+			/* Reweighting must not revive expired slice protection. */
+			cancel_protect_slice(se);
+		}
 
 		if (!curr)
 			__enqueue_entity(cfs_rq, se);
@@ -6296,6 +6301,11 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	}
 
 	se->vruntime = vruntime - lag;
+
+	if (se->rel_vprot) {
+		se->vprot += se->vruntime;
+		se->rel_vprot = 0;
+	}
 
 	if (update_zero)
 		update_zero_vruntime(cfs_rq, -lag);
@@ -8143,9 +8153,13 @@ static bool __dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 
 	dequeue_hierarchy(p, flags);
 
-	if (sched_feat(PLACE_REL_DEADLINE) && !task_sleep) {
-		se->deadline -= se->vruntime;
-		se->rel_deadline = 1;
+	if (!task_sleep) {
+		se->vprot = protect_slice(se) ? se->vprot - se->vruntime : 0;
+		se->rel_vprot = 1;
+		if (sched_feat(PLACE_REL_DEADLINE)) {
+			se->deadline -= se->vruntime;
+			se->rel_deadline = 1;
+		}
 	}
 	if (se != cfs_rq->curr)
 		__dequeue_entity(cfs_rq, se);

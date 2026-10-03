@@ -584,6 +584,7 @@ struct sched_entity {
 	unsigned char			on_rq;
 	unsigned char			sched_delayed;
 	unsigned char			rel_deadline;
+	unsigned char			rel_vprot;
 	unsigned char			custom_slice;
 					/* hole */
 
