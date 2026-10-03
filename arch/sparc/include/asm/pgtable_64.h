@@ -971,6 +971,9 @@ struct seq_file;
 void mmu_info(struct seq_file *);
 
 struct vm_area_struct;
+#define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
+int ptep_set_access_flags(struct vm_area_struct *vma, unsigned long address,
+			  pte_t *ptep, pte_t entry, int dirty);
 void update_mmu_cache_range(struct vm_fault *, struct vm_area_struct *,
 		unsigned long addr, pte_t *ptep, unsigned int nr);
 #define update_mmu_cache(vma, addr, ptep) \

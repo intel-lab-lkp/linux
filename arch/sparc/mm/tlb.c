@@ -22,6 +22,16 @@
 
 static DEFINE_PER_CPU(struct tlb_batch, tlb_batch);
 
+int ptep_set_access_flags(struct vm_area_struct *vma, unsigned long address,
+			  pte_t *ptep, pte_t entry, int dirty)
+{
+	int changed = !pte_same(ptep_get(ptep), entry);
+
+	if (changed)
+		set_pte_at(vma->vm_mm, address, ptep, entry);
+	return changed;
+}
+
 void flush_tlb_pending(void)
 {
 	struct tlb_batch *tb = &get_cpu_var(tlb_batch);
