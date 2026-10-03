@@ -71,7 +71,7 @@ struct mxc_gpio_port {
 	u32 both_edges;
 	struct mxc_gpio_reg_saved gpio_saved_reg;
 	bool power_off;
-	u32 wakeup_pads;
+	unsigned long wakeup_pads;
 	bool is_pad_wakeup;
 	u32 pad_type[32];
 	const struct mxc_gpio_hwdata *hwdata;
@@ -330,13 +330,15 @@ static int gpio_set_wake_irq(struct irq_data *d, u32 enable)
 			ret = enable_irq_wake(port->irq_high);
 		else
 			ret = enable_irq_wake(port->irq);
-		port->wakeup_pads |= BIT(gpio_idx);
+		if (!ret)
+			set_bit(gpio_idx, &port->wakeup_pads);
 	} else {
 		if (port->irq_high && (gpio_idx >= 16))
 			ret = disable_irq_wake(port->irq_high);
 		else
 			ret = disable_irq_wake(port->irq);
-		port->wakeup_pads &= ~BIT(gpio_idx);
+		if (!ret)
+			clear_bit(gpio_idx, &port->wakeup_pads);
 	}
 
 	return ret;
@@ -599,7 +601,7 @@ static bool mxc_gpio_set_pad_wakeup(struct mxc_gpio_port *port, bool enable)
 	};
 
 	for (i = 0; i < 32; i++) {
-		if ((port->wakeup_pads & (1 << i))) {
+		if (test_bit(i, &port->wakeup_pads)) {
 			type = port->pad_type[i];
 			if (enable)
 				config = pad_type_map[type];
