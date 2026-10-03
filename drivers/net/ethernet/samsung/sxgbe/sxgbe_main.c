@@ -2007,7 +2007,7 @@ static int sxgbe_hw_init(struct sxgbe_priv_data * const priv)
 {
 	u32 ctrl_ids;
 
-	priv->hw = kmalloc_obj(*priv->hw);
+	priv->hw = devm_kmalloc(priv->device, sizeof(*priv->hw), GFP_KERNEL);
 	if(!priv->hw)
 		return -ENOMEM;
 
@@ -2058,7 +2058,7 @@ static int sxgbe_sw_reset(void __iomem *addr)
  * @plat_dat: platform data pointer
  * @addr: iobase memory address
  * Description: this is the main probe function used to
- * call the alloc_etherdev, allocate the priv structure.
+ * allocate the netdev and priv structure.
  */
 struct sxgbe_priv_data *sxgbe_drv_probe(struct device *device,
 					struct sxgbe_plat_data *plat_dat,
@@ -2069,8 +2069,8 @@ struct sxgbe_priv_data *sxgbe_drv_probe(struct device *device,
 	int ret;
 	u8 queue_num;
 
-	ndev = alloc_etherdev_mqs(sizeof(struct sxgbe_priv_data),
-				  SXGBE_TX_QUEUES, SXGBE_RX_QUEUES);
+	ndev = devm_alloc_etherdev_mqs(device, sizeof(struct sxgbe_priv_data),
+				       SXGBE_TX_QUEUES, SXGBE_RX_QUEUES);
 	if (!ndev)
 		return NULL;
 
@@ -2086,7 +2086,7 @@ struct sxgbe_priv_data *sxgbe_drv_probe(struct device *device,
 
 	ret = sxgbe_sw_reset(priv->ioaddr);
 	if (ret)
-		goto error_free_netdev;
+		goto error_return;
 
 	/* Verify driver arguments */
 	sxgbe_verify_args();
@@ -2094,16 +2094,16 @@ struct sxgbe_priv_data *sxgbe_drv_probe(struct device *device,
 	/* Init MAC and get the capabilities */
 	ret = sxgbe_hw_init(priv);
 	if (ret)
-		goto error_free_netdev;
+		goto error_return;
 
 	/* allocate memory resources for Descriptor rings */
 	ret = txring_mem_alloc(priv);
 	if (ret)
-		goto error_free_hw;
+		goto error_return;
 
 	ret = rxring_mem_alloc(priv);
 	if (ret)
-		goto error_free_hw;
+		goto error_return;
 
 	ndev->netdev_ops = &sxgbe_netdev_ops;
 
@@ -2191,11 +2191,7 @@ error_clk_put:
 	clk_put(priv->sxgbe_clk);
 error_napi_del:
 	netif_napi_del(&priv->napi);
-error_free_hw:
-	kfree(priv->hw);
-error_free_netdev:
-	free_netdev(ndev);
-
+error_return:
 	return NULL;
 }
 
@@ -2229,10 +2225,6 @@ void sxgbe_drv_remove(struct net_device *ndev)
 	clk_put(priv->sxgbe_clk);
 
 	netif_napi_del(&priv->napi);
-
-	kfree(priv->hw);
-
-	free_netdev(ndev);
 }
 
 #ifdef CONFIG_PM
