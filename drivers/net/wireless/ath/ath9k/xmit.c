@@ -1432,7 +1432,7 @@ static void ath_tx_fill_desc(struct ath_softc *sc, struct ath_buf *bf,
 			if (!sc->tx99_state)
 				info.flags = ATH9K_TXDESC_INTREQ;
 			if ((tx_info->flags & IEEE80211_TX_CTL_CLEAR_PS_FILT) ||
-			    txq == sc->tx.uapsdq)
+			    txq == sc->tx.uapsdq || !aggr)
 				info.flags |= ATH9K_TXDESC_CLRDMASK;
 
 			if (tx_info->flags & IEEE80211_TX_CTL_NO_ACK)
