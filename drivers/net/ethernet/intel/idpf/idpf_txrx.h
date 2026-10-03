@@ -8,6 +8,7 @@
 #include <linux/net/intel/virtchnl2_lan_desc.h>
 
 #include <net/libeth/cache.h>
+#include <net/libeth/tx.h>
 #include <net/libeth/types.h>
 #include <net/netdev_queues.h>
 #include <net/tcp.h>
@@ -639,6 +640,8 @@ libeth_cacheline_set_assert(struct idpf_rx_queue,
  * @q_vector: Backreference to associated vector
  * @buf_pool_size: Total number of idpf_tx_buf
  * @rel_q_id: relative virtchnl queue index
+ * @hdr_buf_va: Base of the TX header bounce buffer array, or NULL
+ * @hdr_buf_dma: DMA address matching @hdr_buf_va
  */
 struct idpf_tx_queue {
 	__cacheline_group_begin_aligned(read_mostly);
@@ -715,6 +718,8 @@ struct idpf_tx_queue {
 
 	u32 buf_pool_size;
 	u32 rel_q_id;
+	void *hdr_buf_va;
+	dma_addr_t hdr_buf_dma;
 	__cacheline_group_end_aligned(cold);
 };
 libeth_cacheline_set_assert(struct idpf_tx_queue, 64,
@@ -723,7 +728,7 @@ libeth_cacheline_set_assert(struct idpf_tx_queue, 64,
 			    offsetofend(struct idpf_tx_queue, timer) +
 			    offsetof(struct idpf_tx_queue, q_stats) -
 			    offsetofend(struct idpf_tx_queue, tstamp_task),
-			    32);
+			    48);
 
 /**
  * struct idpf_buf_queue - software structure representing a buffer queue
@@ -1130,5 +1135,25 @@ bool idpf_rx_process_skb_fields(struct sk_buff *skb,
 int idpf_tso(struct sk_buff *skb, struct idpf_tx_offload_params *off);
 
 void idpf_wait_for_sw_marker_completion(const struct idpf_tx_queue *txq);
+
+static inline dma_addr_t idpf_tx_map_hdr(struct idpf_tx_queue *tx_q,
+					 const struct sk_buff *skb,
+					 struct libeth_sqe *first,
+					 unsigned int size)
+{
+	u32 buf_idx = first - tx_q->tx_buf;
+
+	if (tx_q->hdr_buf_va && buf_idx < tx_q->buf_pool_size &&
+	    size <= MAX_TCP_HEADER) {
+		u32 offset = buf_idx * MAX_TCP_HEADER;
+
+		memcpy(tx_q->hdr_buf_va + offset, skb->data, size);
+		dma_unmap_len_set(first, len, 0);
+		return tx_q->hdr_buf_dma + offset;
+	}
+
+	dma_unmap_len_set(first, len, size);
+	return dma_map_single(tx_q->dev, skb->data, size, DMA_TO_DEVICE);
+}
 
 #endif /* !_IDPF_TXRX_H_ */

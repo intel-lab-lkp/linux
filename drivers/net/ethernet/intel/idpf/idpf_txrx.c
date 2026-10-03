@@ -90,6 +90,14 @@ static void idpf_tx_buf_rel_all(struct idpf_tx_queue *txq)
 	else
 		idpf_tx_buf_clean(txq);
 
+	if (txq->hdr_buf_va) {
+		dma_free_coherent(txq->dev,
+				  txq->buf_pool_size * MAX_TCP_HEADER,
+				  txq->hdr_buf_va, txq->hdr_buf_dma);
+		txq->hdr_buf_va = NULL;
+		txq->hdr_buf_dma = 0;
+	}
+
 	kfree(txq->tx_buf);
 	txq->tx_buf = NULL;
 }
@@ -186,6 +194,13 @@ static int idpf_tx_buf_alloc_all(struct idpf_tx_queue *tx_q)
 	tx_q->tx_buf = kzalloc_objs(*tx_q->tx_buf, tx_q->buf_pool_size);
 	if (!tx_q->tx_buf)
 		return -ENOMEM;
+
+	if (tx_q->dev->dma_pmd_tx_hdrs)
+		tx_q->hdr_buf_va =
+			dma_alloc_coherent(tx_q->dev,
+					   tx_q->buf_pool_size * MAX_TCP_HEADER,
+					   &tx_q->hdr_buf_dma,
+					   GFP_KERNEL | __GFP_NOWARN);
 
 	return 0;
 }
@@ -2663,7 +2678,7 @@ static void idpf_tx_splitq_map(struct idpf_tx_queue *tx_q,
 
 	tx_desc = &tx_q->flex_tx[i];
 
-	dma = dma_map_single(tx_q->dev, skb->data, size, DMA_TO_DEVICE);
+	dma = idpf_tx_map_hdr(tx_q, skb, first, size);
 
 	tx_buf = first;
 	first->nr_frags = 0;
@@ -2680,8 +2695,7 @@ static void idpf_tx_splitq_map(struct idpf_tx_queue *tx_q,
 		first->nr_frags++;
 		tx_buf->type = LIBETH_SQE_FRAG;
 
-		/* record length, and DMA address */
-		dma_unmap_len_set(tx_buf, len, size);
+		/* record DMA address */
 		dma_unmap_addr_set(tx_buf, dma, dma);
 
 		/* buf_addr is in same location for both desc types */
@@ -2784,6 +2798,7 @@ static void idpf_tx_splitq_map(struct idpf_tx_queue *tx_q,
 
 		size = skb_frag_size(frag);
 		data_len -= size;
+		dma_unmap_len_set(tx_buf, len, size);
 
 		dma = skb_frag_dma_map(tx_q->dev, frag, 0, size,
 				       DMA_TO_DEVICE);

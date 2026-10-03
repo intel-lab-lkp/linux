@@ -130,8 +130,9 @@ static inline void libeth_tx_complete(struct libeth_sqe *sqe,
 	case LIBETH_SQE_SKB:
 	case LIBETH_SQE_FRAG:
 	case LIBETH_SQE_SLAB:
-		dma_unmap_page(cp->dev, dma_unmap_addr(sqe, dma),
-			       dma_unmap_len(sqe, len), DMA_TO_DEVICE);
+		if (dma_unmap_len(sqe, len))
+			dma_unmap_page(cp->dev, dma_unmap_addr(sqe, dma),
+				       dma_unmap_len(sqe, len), DMA_TO_DEVICE);
 		break;
 	default:
 		break;

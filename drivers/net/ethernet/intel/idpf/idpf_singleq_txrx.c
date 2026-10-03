@@ -261,7 +261,7 @@ static void idpf_tx_singleq_map(struct idpf_tx_queue *tx_q,
 
 	tx_desc = &tx_q->base_tx[i];
 
-	dma = dma_map_single(tx_q->dev, skb->data, size, DMA_TO_DEVICE);
+	dma = idpf_tx_map_hdr(tx_q, skb, first, size);
 
 	/* write each descriptor with CRC bit */
 	if (idpf_queue_has(CRC_EN, tx_q))
@@ -274,8 +274,7 @@ static void idpf_tx_singleq_map(struct idpf_tx_queue *tx_q,
 			return idpf_tx_singleq_dma_map_error(tx_q, skb,
 							     first, i);
 
-		/* record length, and DMA address */
-		dma_unmap_len_set(tx_buf, len, size);
+		/* record DMA address */
 		dma_unmap_addr_set(tx_buf, dma, dma);
 		tx_buf->type = LIBETH_SQE_FRAG;
 
@@ -326,6 +325,7 @@ static void idpf_tx_singleq_map(struct idpf_tx_queue *tx_q,
 
 		size = skb_frag_size(frag);
 		data_len -= size;
+		dma_unmap_len_set(tx_buf, len, size);
 
 		dma = skb_frag_dma_map(tx_q->dev, frag, 0, size,
 				       DMA_TO_DEVICE);
