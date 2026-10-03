@@ -13,14 +13,16 @@
 #include "msm_kms.h"
 #include "hdmi.h"
 
-static void msm_hdmi_power_on(struct drm_bridge *bridge)
+static int msm_hdmi_power_on(struct drm_bridge *bridge)
 {
 	struct drm_device *dev = bridge->dev;
 	struct hdmi_bridge *hdmi_bridge = to_hdmi_bridge(bridge);
 	struct hdmi *hdmi = hdmi_bridge->hdmi;
 	int ret;
 
-	pm_runtime_resume_and_get(&hdmi->pdev->dev);
+	ret = pm_runtime_resume_and_get(&hdmi->pdev->dev);
+	if (ret < 0)
+		return ret;
 
 	if (hdmi->extp_clk) {
 		DBG("pixclock: %lu", hdmi->pixclock);
@@ -32,6 +34,8 @@ static void msm_hdmi_power_on(struct drm_bridge *bridge)
 		if (ret)
 			DRM_DEV_ERROR(dev->dev, "failed to enable extp clk: %d\n", ret);
 	}
+
+	return 0;
 }
 
 static void power_off(struct drm_bridge *bridge)
@@ -276,6 +280,7 @@ static void msm_hdmi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	struct drm_connector *connector;
 	struct drm_connector_state *conn_state;
 	struct drm_crtc_state *crtc_state;
+	int ret;
 
 	DBG("power up");
 
@@ -289,8 +294,16 @@ static void msm_hdmi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 
 	mutex_lock(&hdmi->state_mutex);
 	if (!hdmi->power_on) {
-		msm_hdmi_phy_resource_enable(phy);
-		msm_hdmi_power_on(bridge);
+		ret = msm_hdmi_phy_resource_enable(phy);
+		if (ret)
+			goto unlock;
+
+		ret = msm_hdmi_power_on(bridge);
+		if (ret) {
+			msm_hdmi_phy_resource_disable(phy);
+			goto unlock;
+		}
+
 		hdmi->power_on = true;
 	}
 	mutex_unlock(&hdmi->state_mutex);
@@ -306,6 +319,11 @@ static void msm_hdmi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 
 	if (hdmi->hdcp_ctrl)
 		msm_hdmi_hdcp_on(hdmi->hdcp_ctrl);
+
+	return;
+
+unlock:
+	mutex_unlock(&hdmi->state_mutex);
 }
 
 static void msm_hdmi_bridge_atomic_post_disable(struct drm_bridge *bridge,
