@@ -408,6 +408,7 @@ struct ath11k_vif {
 	int txpower;
 	bool rsnie_present;
 	bool wpaie_present;
+	bool beacon_prot;
 	bool bcca_zero_sent;
 	bool do_not_send_tmpl;
 	struct ath11k_arp_ns_offload arp_ns_offload;

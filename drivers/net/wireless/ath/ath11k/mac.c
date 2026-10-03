@@ -1495,6 +1495,44 @@ static int ath11k_mac_remove_vendor_ie(struct sk_buff *skb, unsigned int oui,
 	return 0;
 }
 
+static bool ath11k_mac_ext_capa_bcn_prot(const struct element *ext_capa)
+{
+	return ext_capa && ext_capa->datalen >= 11 &&
+	       (ext_capa->data[10] & WLAN_EXT_CAPA11_BCN_PROTECT);
+}
+
+/* Beacon protection covers the whole beacon, so enable it when the
+ * transmitted BSS or any nontransmitted profile in it advertises it.
+ */
+static bool ath11k_mac_bcn_prot_enabled(struct sk_buff *bcn)
+{
+	struct ieee80211_mgmt *mgmt = (struct ieee80211_mgmt *)bcn->data;
+	const u8 *ies = mgmt->u.beacon.variable;
+	int ies_len = skb_tail_pointer(bcn) - ies;
+	const struct element *elem, *profile;
+
+	if (ath11k_mac_ext_capa_bcn_prot(cfg80211_find_elem(WLAN_EID_EXT_CAPABILITY,
+							    ies, ies_len)))
+		return true;
+
+	for_each_element_id(elem, WLAN_EID_MULTIPLE_BSSID, ies, ies_len) {
+		if (elem->datalen < 1)
+			continue;
+
+		for_each_element(profile, elem->data + 1, elem->datalen - 1) {
+			if (profile->id != 0)
+				continue;
+
+			if (ath11k_mac_ext_capa_bcn_prot(cfg80211_find_elem(WLAN_EID_EXT_CAPABILITY,
+									    profile->data,
+									    profile->datalen)))
+				return true;
+		}
+	}
+
+	return false;
+}
+
 static int ath11k_mac_set_vif_params(struct ath11k_vif *arvif,
 				     struct sk_buff *bcn)
 {
@@ -1598,6 +1636,7 @@ static int ath11k_mac_setup_bcn_tmpl_ema(struct ath11k_vif *arvif,
 		params |= ((!i ? 1 : 0) << WMI_EMA_FIRST_TMPL_SHIFT);
 		params |= ((i + 1 == beacons->cnt ? 1 : 0) << WMI_EMA_LAST_TMPL_SHIFT);
 
+		tx_arvif->beacon_prot = ath11k_mac_bcn_prot_enabled(beacons->bcn[i].skb);
 		ret = ath11k_wmi_bcn_tmpl(tx_arvif->ar, tx_arvif->vdev_id,
 					  &beacons->bcn[i].offs,
 					  beacons->bcn[i].skb, params);
@@ -1651,6 +1690,7 @@ static int ath11k_mac_setup_bcn_tmpl_mbssid(struct ath11k_vif *arvif,
 		goto free;
 	}
 
+	arvif->beacon_prot = ath11k_mac_bcn_prot_enabled(bcn);
 	ret = ath11k_wmi_bcn_tmpl(ar, arvif->vdev_id, &offs, bcn, 0);
 	if (ret)
 		ath11k_warn(ab, "failed to submit beacon template command: %d\n",
@@ -4412,6 +4452,14 @@ static int ath11k_install_key(struct ath11k_vif *arvif,
 		arg.key_cipher = WMI_CIPHER_AES_GCM;
 		key->flags |= IEEE80211_KEY_FLAG_GENERATE_IV_MGMT;
 		break;
+	case WLAN_CIPHER_SUITE_AES_CMAC:
+	case WLAN_CIPHER_SUITE_BIP_CMAC_256:
+		arg.key_cipher = WMI_CIPHER_AES_CMAC;
+		break;
+	case WLAN_CIPHER_SUITE_BIP_GMAC_128:
+	case WLAN_CIPHER_SUITE_BIP_GMAC_256:
+		arg.key_cipher = WMI_CIPHER_AES_GMAC;
+		break;
 	default:
 		ath11k_warn(ar->ab, "cipher %d is not supported\n", key->cipher);
 		return -EOPNOTSUPP;
@@ -4523,11 +4571,10 @@ static int ath11k_mac_op_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	int ret = 0;
 	u32 flags = 0;
 
-	/* BIP needs to be done in software */
-	if (key->cipher == WLAN_CIPHER_SUITE_AES_CMAC ||
-	    key->cipher == WLAN_CIPHER_SUITE_BIP_GMAC_128 ||
-	    key->cipher == WLAN_CIPHER_SUITE_BIP_GMAC_256 ||
-	    key->cipher == WLAN_CIPHER_SUITE_BIP_CMAC_256)
+	/* The IGTK protects management frames, which are done in software;
+	 * only the BIGTK (index 6/7) goes to the firmware, which signs beacons.
+	 */
+	if (key->keyidx == 4 || key->keyidx == 5)
 		return 1;
 
 	if (test_bit(ATH11K_FLAG_HW_CRYPTO_DISABLED, &ar->ab->dev_flags))
@@ -10632,6 +10679,10 @@ static int __ath11k_mac_register(struct ath11k *ar)
 	if (test_bit(WMI_TLV_SERVICE_RTT, ar->ab->wmi_ab.svc_map))
 		wiphy_ext_feature_set(ar->hw->wiphy,
 				      NL80211_EXT_FEATURE_ENABLE_FTM_RESPONDER);
+
+	if (test_bit(WMI_TLV_SERVICE_BEACON_PROTECTION_SUPPORT, ar->ab->wmi_ab.svc_map))
+		wiphy_ext_feature_set(ar->hw->wiphy,
+				      NL80211_EXT_FEATURE_BEACON_PROTECTION);
 
 	ar->hw->wiphy->mbssid_max_interfaces = TARGET_NUM_VDEVS(ab);
 	ar->hw->wiphy->ema_max_profile_periodicity = TARGET_EMA_MAX_PROFILE_PERIOD;

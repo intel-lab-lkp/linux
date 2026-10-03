@@ -1811,6 +1811,8 @@ int ath11k_wmi_bcn_tmpl(struct ath11k *ar, u32 vdev_id,
 	cmd->buf_len = bcn->len;
 	cmd->mbssid_ie_offset = offs->mbssid_off;
 	cmd->ema_params = ema_params;
+	if (arvif->beacon_prot)
+		cmd->feature_enable_bitmap |= WMI_BCN_TMPL_BEACON_PROTECTION_EN;
 
 	ptr = skb->data + sizeof(*cmd);
 
