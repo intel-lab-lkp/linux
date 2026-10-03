@@ -14,7 +14,7 @@
  * babyfacepro.c holds the card lifecycle, the PCM stream and the
  * mixer-state persistence across re-probes and resume;
  * babyfacepro-ctl.c holds the ALSA control surface - the hardware
- * mixer and the front panel.
+ * mixer, the front panel and the DSP EQ.
  *
  * The protocol (vendor requests + 14x32-bit frame layout) was
  * reverse-engineered from Windows captures and validated on hardware -
@@ -296,6 +296,24 @@ extern const u8 bf_xpoint_block[6];
  */
 #define BF_SRC_PB1			8
 
+/* One analog-input strip of the DSP EQ (babyfacepro-ctl.c).  A named type
+ * rather than one nested in the chip, so it can also be saved with the rest
+ * of the mixer state (struct bf_saved).
+ */
+struct bf_eq_channel {
+	bool on;		/* EQ engaged (else identity blocks) */
+	s32 slope_db;		/* low-cut slope 6/12/18/24 (0 = off) */
+	s32 lc_hz;		/* low-cut freq, 0 = off */
+	u32 lc_raw;		/* cached 0x38 word */
+	u8 slope;		/* cached slope byte (2^n - 1) */
+	s32 band_type[3];	/* 0 off, 1 bell, 2 low shelf, 3 high shelf */
+	s32 band_freq[3];	/* Hz */
+	s32 band_q[3];		/* Q x 100 */
+	s32 band_gain[3];	/* dB x 10 */
+	s32 words[3][4];	/* cached c0..c3 */
+	s32 shared;		/* cached c4 (shared by the slots) */
+};
+
 struct snd_usb_babyface {
 	struct snd_card *card;
 	struct usb_device *dev;
@@ -458,6 +476,9 @@ struct snd_usb_babyface {
 	struct snd_kcontrol *panel_select_kctl[3]; /* per IN pair, likewise */
 	struct snd_kcontrol *dim_press_kctl;
 	u32 dim_press_count;		/* front-panel DIM presses, wraps */
+
+	/* DSP EQ (babyfacepro-ctl.c) - 4 analog-input strips, params kept in state */
+	struct bf_eq_channel eq[4];
 };
 
 /* The mixer state cached across interface re-probes/resume (see
@@ -485,6 +506,7 @@ struct bf_saved {
 	int width;
 	u16 fx_send;
 	bool dim;
+	struct bf_eq_channel eq[4];
 	s8 panel_sel[3];
 };
 
@@ -545,6 +567,11 @@ int babyface_create_panel(struct snd_usb_babyface *chip);
 void babyface_panel_start(struct snd_usb_babyface *chip);
 void babyface_panel_stop(struct snd_usb_babyface *chip);
 void babyface_panel_work(struct work_struct *work);
+void bf_eq_band_words(s32 *w, int type, s32 freq_hz, s32 q100,
+		      s32 gain_x10, s32 fs);
+void bf_eq_reupload(struct snd_usb_babyface *chip);
+void bf_eq_defaults(struct snd_usb_babyface *chip);
+int babyface_create_eq(struct snd_usb_babyface *chip);
 
 /* Master gain-law helpers (babyfacepro-ctl.c). */
 int bf_master_half_db(u16 vol16);	/* 16-bit master -> dBx2 */

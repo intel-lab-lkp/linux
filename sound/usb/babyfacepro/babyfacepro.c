@@ -537,6 +537,7 @@ void bf_state_save(struct snd_usb_babyface *chip)
 	s->width = chip->width;
 	s->fx_send = chip->fx_send;
 	s->dim = chip->dim;
+	memcpy(s->eq, chip->eq, sizeof(s->eq));
 	memcpy(s->panel_sel, chip->panel_sel, sizeof(s->panel_sel));
 	mutex_unlock(&bf_saved_mutex);
 }
@@ -575,6 +576,7 @@ int bf_state_restore(struct snd_usb_babyface *chip)
 		chip->width = s->width;
 		chip->fx_send = s->fx_send;
 		chip->dim = s->dim;
+		memcpy(chip->eq, s->eq, sizeof(chip->eq));
 		memcpy(chip->panel_sel, s->panel_sel, sizeof(chip->panel_sel));
 		ret = 1;
 		break;
@@ -587,6 +589,12 @@ int bf_state_restore(struct snd_usb_babyface *chip)
 	ret = babyface_restore_state(chip);
 	if (ret == 0)
 		ret = bf_state_apply_flags(chip);
+	if (ret == 0)
+		/* The DSP is not part of the register state the cold init
+		 * clears; re-upload the restored coefficients so a usbfs
+		 * detach/re-probe keeps the EQ too.
+		 */
+		bf_eq_reupload(chip);
 	mutex_unlock(&chip->mutex);
 	return ret ? ret : 1;
 }
@@ -1367,6 +1375,8 @@ static int babyface_pcm_hw_params(struct snd_pcm_substream *subs,
 		new_rate = true;
 		chip->alt = r->alt;
 		chip->frame_bytes = r->frame_bytes;
+		/* The DSP EQ coefficients depend on fs: re-upload. */
+		bf_eq_reupload(chip);
 		dev_dbg(&chip->dev->dev, "rate %u Hz (alt %u)\n",
 			chip->rate, chip->alt);
 	}
@@ -1763,6 +1773,8 @@ static int babyface_probe(struct usb_interface *intf,
 	else
 		chip->preamp = st[0];
 
+	bf_eq_defaults(chip);
+
 	/* Restore the mixer state saved at the last disconnect (if any);
 	 * the device keeps its registers across a usbfs detach, but the
 	 * cold init above cleared them, so push the user's settings back.
@@ -1868,6 +1880,20 @@ static int babyface_probe(struct usb_interface *intf,
 	err = babyface_create_panel(chip);
 	if (err < 0) {
 		dev_err(&intf->dev, "front-panel control creation failed: %d\n", err);
+		goto error;
+	}
+
+	/* The DSP coefficient stream (EQ, bulk ep 0x0A) lives on interface
+	 * 1, which has a single altsetting (alt 0) already active in the
+	 * default configuration - the endpoint is scheduled, no
+	 * SET_INTERFACE or interface claim is needed (the earlier
+	 * -EAGAIN was the on-stack transfer buffer, and SET_INTERFACE on
+	 * interface 1 wedged the iface-5 audio stream - playback URBs
+	 * never completed).
+	 */
+	err = babyface_create_eq(chip);
+	if (err < 0) {
+		dev_err(&intf->dev, "EQ control creation failed: %d\n", err);
 		goto error;
 	}
 
@@ -1998,6 +2024,13 @@ static int babyface_resume(struct usb_interface *intf)
 	if (err < 0)
 		goto out;
 	err = bf_state_apply_flags(chip);
+	if (err < 0)
+		goto out;
+	/* The device lost its DSP across the suspend; the bulk EQ uploads
+	 * are not part of the register state re-applied above, so re-send
+	 * them.
+	 */
+	bf_eq_reupload(chip);
 out:
 	mutex_unlock(&chip->mutex);
 	if (!err)
