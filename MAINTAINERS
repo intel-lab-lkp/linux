@@ -23647,6 +23647,12 @@ F:	include/dt-bindings/power/thead,th1520-power.h
 F:	include/dt-bindings/reset/thead,th1520-reset.h
 F:	include/linux/firmware/thead/thead,th1520-aon.h
 
+RME BABYFACE PRO DRIVER (PROPRIETARY MODE)
+M:	Ismaïl Bahloul <i.bahloul01@gmail.com>
+L:	linux-sound@vger.kernel.org
+S:	Maintained
+F:	sound/usb/babyfacepro/
+
 RNBD BLOCK DRIVERS
 M:	Md. Haris Iqbal <haris.iqbal@ionos.com>
 M:	Jack Wang <jinpu.wang@ionos.com>
