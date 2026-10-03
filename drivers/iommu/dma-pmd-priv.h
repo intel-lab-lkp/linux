@@ -178,7 +178,8 @@ static inline unsigned int dma_pmd_meta_avail(const struct dma_pmd_meta *m)
  * struct dma_pmd_pool - Pool managing PMD-backed blocks of a fixed order
  *
  * @lock:	Spinlock protecting @partial, @idle, @full, @num_idle_pages,
- *		block bitmaps and the statistics counters
+ *		the block bitmaps and the u64 statistics counters. The
+ *		atomic64_t counters below are deliberately outside it.
  * @order:	Block order managed by this pool (<= PMD_ORDER)
  * @destroyed:	Set when dma_pmd_pool_destroy() has been called
  * @partial:	List of partially used PMD pages with @nr_free > 0 (clean-only
@@ -196,6 +197,7 @@ static inline unsigned int dma_pmd_meta_avail(const struct dma_pmd_meta *m)
  * @block_alloc_cnt: Statistics counter of block allocations satisfied
  * @block_free_cnt: Statistics counter of block frees recycled into pool
  * @block_scrub_cnt: Statistics counter of dirty blocks zeroed by scrubber
+ * @numa_mismatch_cnt: Block allocations satisfied from a non-target NUMA node
  * @next_alloc_attempt: Do not attempt a new order-9 allocation before this time.
  *		Damps repeated high-order GFP_ATOMIC failures under
  *		fragmentation, which would otherwise be retried on every
@@ -203,6 +205,26 @@ static inline unsigned int dma_pmd_meta_avail(const struct dma_pmd_meta *m)
  * @refcount:	Reference count; held by pool creator and each active PMD page
  * @node:	Node in the global dma_pmd_pools list
  * @dead_node:	Node in dma_pmd_dead_pools once @refcount reaches 0
+ * @fail_backoff: PMD page acquisitions skipped because @next_alloc_attempt was set
+ * @fail_budget: PMD page acquisitions refused by global dma_pmd_max_pages
+ * @fail_nomem: PMD page acquisitions that ran out of memory for the order-9
+ *		allocation. Silent otherwise: the request carries __GFP_NOWARN
+ *		so the page allocator says nothing.
+ * @fail_split: split_page_compound() rejections
+ * @block_alloc_fail: PMD page acquisitions that failed, making
+ *		dma_pmd_pool_alloc() return NULL so the caller had to fall
+ *		back to a plain page
+ * @fail_gfp:	dma_pmd_pool_alloc() calls declined due to unsupported GFP
+ *		flags (__GFP_DMA, __GFP_DMA32, __GFP_THISNODE, __GFP_ACCOUNT)
+ * @pmd_map_cnt: PMD page mappings established across all domains
+ * @fallback_nowindow: Buffers mapped individually because the domain has no
+ *		usable IOVA window - no free range large enough, no free
+ *		domain index, or a window the device cannot address
+ * @fallback_nopool: Buffers mapped individually because the domain can never
+ *		pool: direct isolation, or no PMD page size
+ * @fallback_maperr: Buffers mapped individually because the PMD page mapping
+ *		itself failed
+ * @domain_forget_cnt: Cached mappings dropped by dma_pmd_domain_release()
  */
 struct dma_pmd_pool {
 	/* First cacheline: hot fields touched on block alloc and free. */
@@ -222,12 +244,31 @@ struct dma_pmd_pool {
 	u64			block_alloc_cnt;
 	u64			block_free_cnt;
 	u64			block_scrub_cnt;
+	u64			numa_mismatch_cnt;
 
 	/* Cold. */
 	unsigned long		next_alloc_attempt;
 	struct kref		refcount;
 	struct list_head	node;
 	struct llist_node	dead_node;
+
+	/*
+	 * Statistics updated without @lock. dma_pmd_add_page() runs outside
+	 * it, and the map slow path holds @meta->map_lock - taking @lock there
+	 * would invert the order against dma_pmd_domain_release(), which
+	 * walks @lock then map_lock.
+	 */
+	atomic64_t		fail_backoff;
+	atomic64_t		fail_budget;
+	atomic64_t		fail_nomem;
+	atomic64_t		fail_split;
+	atomic64_t		block_alloc_fail;
+	atomic64_t		fail_gfp;
+	atomic64_t		pmd_map_cnt;
+	atomic64_t		fallback_nowindow;
+	atomic64_t		fallback_nopool;
+	atomic64_t		fallback_maperr;
+	atomic64_t		domain_forget_cnt;
 } ____cacheline_aligned;
 
 extern unsigned long dma_pmd_meta_nframes;

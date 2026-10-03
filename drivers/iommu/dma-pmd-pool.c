@@ -682,16 +682,21 @@ unsigned int dma_pmd_pools_forget_domain(int idx)
 
 	mutex_lock(&dma_pmd_pools_lock);
 	list_for_each_entry(pool, &dma_pmd_pools, node) {
+		unsigned int n = 0;
+
 		spin_lock_irqsave(&pool->lock, flags);
 		list_for_each_entry(meta, &pool->partial, list)
-			dropped += dma_pmd_forget_domain(meta, idx);
+			n += dma_pmd_forget_domain(meta, idx);
 		list_for_each_entry(meta, &pool->partial_dirty, list)
-			dropped += dma_pmd_forget_domain(meta, idx);
+			n += dma_pmd_forget_domain(meta, idx);
 		list_for_each_entry(meta, &pool->idle, list)
-			dropped += dma_pmd_forget_domain(meta, idx);
+			n += dma_pmd_forget_domain(meta, idx);
 		list_for_each_entry(meta, &pool->full, list)
-			dropped += dma_pmd_forget_domain(meta, idx);
+			n += dma_pmd_forget_domain(meta, idx);
 		spin_unlock_irqrestore(&pool->lock, flags);
+
+		atomic64_add(n, &pool->domain_forget_cnt);
+		dropped += n;
 	}
 	mutex_unlock(&dma_pmd_pools_lock);
 
@@ -843,8 +848,10 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 	 * A high-order allocation is expensive when it fails, and under fragmentation
 	 * it fails on every pool miss. For GFP_ATOMIC, back off briefly.
 	 */
-	if (!can_block && time_before(jiffies, READ_ONCE(pool->next_alloc_attempt)))
+	if (!can_block && time_before(jiffies, READ_ONCE(pool->next_alloc_attempt))) {
+		atomic64_inc(&pool->fail_backoff);
 		return NULL;
+	}
 
 	/* Aggregate ceiling across every pool, independent of max_idle_pages. */
 	if (atomic_long_inc_return(&dma_pmd_nr_pages) > READ_ONCE(dma_pmd_max_pages)) {
@@ -852,6 +859,7 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 		if (!can_block)
 			WRITE_ONCE(pool->next_alloc_attempt,
 				   jiffies + DIV_ROUND_UP(HZ, 100));
+		atomic64_inc(&pool->fail_budget);
 		return NULL;
 	}
 
@@ -890,6 +898,14 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 		if (!can_block)
 			WRITE_ONCE(pool->next_alloc_attempt,
 				   jiffies + DIV_ROUND_UP(HZ, 100));
+		atomic64_inc(&pool->fail_nomem);
+		/*
+		 * __GFP_NOWARN suppresses the page allocator's own report, so
+		 * without this the pool can stop pooling entirely and look
+		 * exactly like one that is working.
+		 */
+		pr_warn_once("dma_pmd: order-%u allocation failed for pool %p; further failures are counted in debugfs only\n",
+			     PMD_ORDER, pool);
 		return NULL;
 	}
 
@@ -922,6 +938,7 @@ prepare:
 			__free_pages(page, PMD_ORDER);
 			atomic_long_dec(&dma_pmd_nr_pages);
 		}
+		atomic64_inc(&pool->fail_split);
 		return NULL;
 	}
 
@@ -1020,7 +1037,7 @@ static struct dma_pmd_meta *dma_pmd_pick_meta(struct dma_pmd_pool *pool, bool ze
 /* Extract up to @want available blocks from @meta under @pool->lock. */
 static unsigned long dma_pmd_take_blocks(struct dma_pmd_pool *pool,
 					 struct dma_pmd_meta *meta,
-					 unsigned long want,
+					 int target_nid, unsigned long want,
 					 struct page **out, bool zero)
 {
 	unsigned long base_pfn = dma_pmd_meta_to_pfn(meta);
@@ -1040,6 +1057,8 @@ static unsigned long dma_pmd_take_blocks(struct dma_pmd_pool *pool,
 		meta->nr_dirty = 0;
 	}
 	dma_pmd_place_meta(pool, meta);
+	if (page_to_nid(pfn_to_page(base_pfn)) != target_nid)
+		pool->numa_mismatch_cnt += used;
 
 	return got;
 }
@@ -1075,13 +1094,18 @@ unsigned long dma_pmd_pool_alloc_bulk_node(struct dma_pmd_pool *pool, gfp_t gfp,
 {
 	unsigned long allocated = 0, flags;
 	bool should_scrub = false;
+	int target_nid;
 	bool zero;
 
-	if (unlikely(!pool || pool->destroyed || !nr_pages ||
-		     (gfp & (__GFP_DMA | __GFP_DMA32 | __GFP_THISNODE |
-			     __GFP_ACCOUNT))))
+	if (unlikely(!pool || pool->destroyed || !nr_pages))
 		return 0;
 
+	if (unlikely(gfp & (__GFP_DMA | __GFP_DMA32 | __GFP_THISNODE | __GFP_ACCOUNT))) {
+		atomic64_inc(&pool->fail_gfp);
+		return 0;
+	}
+
+	target_nid = (nid == NUMA_NO_NODE) ? numa_mem_id() : nid;
 	zero = want_init_on_alloc(gfp);
 
 	spin_lock_irqsave(&pool->lock, flags);
@@ -1093,8 +1117,11 @@ unsigned long dma_pmd_pool_alloc_bulk_node(struct dma_pmd_pool *pool, gfp_t gfp,
 			/* Fallback to a new allocation */
 			spin_unlock_irqrestore(&pool->lock, flags);
 			meta = dma_pmd_add_page(pool, gfp, nid, zero);
-			if (!meta)
+			if (!meta) {
+				if (!allocated)
+					atomic64_inc(&pool->block_alloc_fail);
 				goto out;
+			}
 			spin_lock_irqsave(&pool->lock, flags);
 			pool->pmd_alloc_cnt++;
 			list_add(&meta->list, &pool->partial);
@@ -1102,7 +1129,7 @@ unsigned long dma_pmd_pool_alloc_bulk_node(struct dma_pmd_pool *pool, gfp_t gfp,
 				should_scrub = true;
 		}
 
-		allocated += dma_pmd_take_blocks(pool, meta,
+		allocated += dma_pmd_take_blocks(pool, meta, target_nid,
 						 nr_pages - allocated,
 						 &page_array[allocated], zero);
 	}
@@ -1366,6 +1393,91 @@ static unsigned long dma_pmd_shrink_scan(struct shrinker *shrink,
 	return freed ?: SHRINK_STOP;
 }
 
+/*
+ * One block of lines per pool, in /sys/kernel/debug/dma_pmd/pools.
+ *
+ * Pools that have seen no activity at all are skipped: two are created per
+ * possible CPU and one per RX queue, so on a large machine the overwhelming
+ * majority are idle and would bury the few that carry traffic. A pool that
+ * tried and failed is never skipped - that is the case this file exists for.
+ *
+ * The u64 statistics are snapshotted under @pool->lock and printed after it is
+ * dropped; the atomic64 ones are read locklessly, so a line is not a
+ * consistent instant. That is fine for what this is used for - watching which
+ * way a counter moves - and keeps the file off the locking hot path.
+ *
+ * The partial/full split is not reported: counting it means walking both lists
+ * with @pool->lock held and interrupts off, which is unbounded in the number of
+ * PMD pages a pool holds. "held" is derived from the got/put counters instead.
+ */
+static int dma_pmd_pools_show(struct seq_file *s, void *unused)
+{
+	unsigned int reservoir_nr = 0;
+	struct dma_pmd_pool *pool;
+	int nid;
+
+	for_each_node_state(nid, N_MEMORY)
+		reservoir_nr += READ_ONCE(dma_pmd_reservoirs[nid].nr_pages);
+
+	seq_printf(s, "2m_pages %ld/%lu reservoir %u; pools with no activity are omitted\n",
+		   atomic_long_read(&dma_pmd_nr_pages), dma_pmd_max_pages, reservoir_nr);
+
+	mutex_lock(&dma_pmd_pools_lock);
+	list_for_each_entry(pool, &dma_pmd_pools, node) {
+		u64 alloc_2m, free_2m, block_alloc, block_free, block_scrub;
+		u64 block_fail, fail_gfp, numa_mismatch;
+		unsigned int num_idle, max_idle;
+		unsigned long flags;
+
+		block_fail = atomic64_read(&pool->block_alloc_fail);
+		fail_gfp = atomic64_read(&pool->fail_gfp);
+
+		spin_lock_irqsave(&pool->lock, flags);
+		alloc_2m = pool->pmd_alloc_cnt;
+		free_2m = pool->pmd_free_cnt;
+		block_alloc = pool->block_alloc_cnt;
+		block_free = pool->block_free_cnt;
+		block_scrub = pool->block_scrub_cnt;
+		numa_mismatch = pool->numa_mismatch_cnt;
+		num_idle = pool->num_idle_pages;
+		max_idle = pool->max_idle_pages;
+		spin_unlock_irqrestore(&pool->lock, flags);
+
+		/*
+		 * A pool that acquired no PMD page is the one worth looking at,
+		 * not the one to hide: it is indistinguishable from a healthy
+		 * pool everywhere else, because its callers just fall back.
+		 * Omit a pool only when nothing has ever happened to it, which
+		 * is the idle-per-CPU case this filter exists for.
+		 */
+		if (!alloc_2m && !block_alloc && !block_fail && !fail_gfp)
+			continue;
+
+		seq_printf(s, "pool %p order %u\n", pool, pool->order);
+		seq_printf(s, "  2m_pages  got %llu put %llu held %llu idle %u/%u\n",
+			   alloc_2m, free_2m, alloc_2m - free_2m, num_idle, max_idle);
+		seq_printf(s, "  blocks    alloc %llu free %llu scrub %llu numa_mismatch %llu failed %llu gfp %llu\n",
+			   block_alloc, block_free, block_scrub, numa_mismatch,
+			   block_fail, fail_gfp);
+		seq_printf(s, "  no_2m     backoff %lld budget %lld nomem %lld split %lld\n",
+			   atomic64_read(&pool->fail_backoff),
+			   atomic64_read(&pool->fail_budget),
+			   atomic64_read(&pool->fail_nomem),
+			   atomic64_read(&pool->fail_split));
+		seq_printf(s, "  domains   mapped %lld forgotten %lld\n",
+			   atomic64_read(&pool->pmd_map_cnt),
+			   atomic64_read(&pool->domain_forget_cnt));
+		seq_printf(s, "  per_buf   no_window %lld no_pool %lld map_err %lld\n",
+			   atomic64_read(&pool->fallback_nowindow),
+			   atomic64_read(&pool->fallback_nopool),
+			   atomic64_read(&pool->fallback_maperr));
+	}
+	mutex_unlock(&dma_pmd_pools_lock);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(dma_pmd_pools);
+
 static int __init dma_pmd_init(void)
 {
 	struct shrinker *shrink;
@@ -1377,7 +1489,7 @@ static int __init dma_pmd_init(void)
 	}
 
 	/*
-	 * Hard ceiling on memory diverted from the buddy allocator into 2MB
+	 * Hard ceiling on memory diverted from the buddy allocator into DMA_PMD
 	 * pools, in PMD pages. One eighth of RAM is far above what the per-pool
 	 * watermarks should ever reach; it exists to bound a pathological
 	 * configuration (many queues, many CPUs, all pools at their high
@@ -1402,6 +1514,13 @@ static int __init dma_pmd_init(void)
 	dma_pmd_wq = alloc_workqueue("dma_pmd", WQ_MEM_RECLAIM, 0);
 	if (!dma_pmd_wq)
 		pr_warn("dma_pmd: no reclaim workqueue, falling back to system_wq\n");
+
+	/*
+	 * No error handling and no dentry kept: this is built in and never
+	 * unloaded, and the stubs are no-ops when debugfs is disabled.
+	 */
+	debugfs_create_file("pools", 0444, debugfs_create_dir("dma_pmd", NULL),
+			    NULL, &dma_pmd_pools_fops);
 
 	shrink = shrinker_alloc(0, "dma_pmd");
 	if (!shrink) {

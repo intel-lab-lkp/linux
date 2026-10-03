@@ -468,8 +468,13 @@ dma_addr_t dma_pmd_dma_map_phys(struct device *dev, struct iommu_domain *domain,
 		else
 			ret = dma_pmd_window_assign(dev, domain, win);
 
-		if (ret)
+		if (ret) {
+			if (ret == -EOPNOTSUPP)
+				atomic64_inc(&meta->pool->fallback_nopool);
+			else
+				atomic64_inc(&meta->pool->fallback_nowindow);
 			return DMA_MAPPING_ERROR;
+		}
 		win_size = READ_ONCE(win->size);
 	}
 
@@ -482,8 +487,10 @@ dma_addr_t dma_pmd_dma_map_phys(struct device *dev, struct iommu_domain *domain,
 	 * device mask.
 	 */
 	if (unlikely(iova - win->base + size > win_size ||
-		     iova + size - 1 > min_not_zero(dma_mask, dev->bus_dma_limit)))
+		     iova + size - 1 > min_not_zero(dma_mask, dev->bus_dma_limit))) {
+		atomic64_inc(&meta->pool->fallback_nowindow);
 		return DMA_MAPPING_ERROR;
+	}
 
 	domain_idx = win->domain_idx - DMA_PMD_IDX_FIRST;
 	if (likely(test_bit(domain_idx, &meta->domains_mapped)))
@@ -510,12 +517,15 @@ dma_addr_t dma_pmd_dma_map_phys(struct device *dev, struct iommu_domain *domain,
 			 */
 			smp_mb__before_atomic();
 			set_bit(domain_idx, &meta->domains_mapped);
+			atomic64_inc(&meta->pool->pmd_map_cnt);
 		}
 	}
 	spin_unlock_irqrestore(&meta->map_lock, flags);
 
-	if (unlikely(ret))
+	if (unlikely(ret)) {
+		atomic64_inc(&meta->pool->fallback_maperr);
 		return DMA_MAPPING_ERROR;
+	}
 
 	return iova;
 }
