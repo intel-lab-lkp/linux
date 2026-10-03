@@ -24266,6 +24266,7 @@ M:	Micah Morton <mortonm@chromium.org>
 S:	Supported
 F:	Documentation/admin-guide/LSM/SafeSetID.rst
 F:	security/safesetid/
+F:	tools/testing/selftests/safesetid/
 
 SAMSUNG AUDIO (ASoC) DRIVERS
 M:	Sylwester Nawrocki <s.nawrocki@samsung.com>

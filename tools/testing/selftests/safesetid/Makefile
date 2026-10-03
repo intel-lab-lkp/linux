@@ -3,7 +3,7 @@
 CFLAGS = -Wall -O2
 LDLIBS = -lcap
 
-TEST_PROGS := safesetid-test.sh
-TEST_GEN_FILES := safesetid-test
+TEST_PROGS := safesetid-test.sh safesetid-gid-policy-test.sh
+TEST_GEN_FILES := safesetid-test safesetid-gid-policy-test
 
 include ../lib.mk
