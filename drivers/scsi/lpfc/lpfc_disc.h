@@ -87,7 +87,9 @@ enum lpfc_fc4_xpt_flags {
 	SCSI_XPT_REGD		= 0x2,
 	NVME_XPT_REGD		= 0x4,
 	NVME_XPT_UNREG_WAIT	= 0x8,
-	NLP_XPT_HAS_HH		= 0x10
+	NLP_XPT_HAS_HH		= 0x10,
+	/* SCSI node reference, protected by ndlp->lock. */
+	SCSI_XPT_REF		= 0x20
 };
 
 enum lpfc_nlp_save_flags { /* mask bits */

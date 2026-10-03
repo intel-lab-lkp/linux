@@ -83,64 +83,61 @@ lpfc_valid_xpt_node(struct lpfc_nodelist *ndlp)
 		return 1;
 	return 0;
 }
-/* The source of a terminate rport I/O is either a dev_loss_tmo
- * event or a call to fc_remove_host.  While the rport should be
- * valid during these downcalls, the transport can call twice
- * in a single event.  This routine provides somoe protection
- * as the NDLP isn't really free, just released to the pool.
+
+/*
+ * Unregistration can release the node before the transport's delayed
+ * callbacks run.  Treat dd_data->pnode only as a lookup key, not as a
+ * dereferenceable pointer.  Final node release removes the node from
+ * fc_nodes under fc_nodes_list_lock before freeing it.  Holding that lock
+ * lets us safely acquire a reference, unless final release has started.
+ * Association checks belong to the caller: failed registration can clear
+ * ndlp->rport while an old rport still needs devloss cleanup.
  */
-static int
-lpfc_rport_invalid(struct fc_rport *rport)
+static struct lpfc_nodelist *
+lpfc_rport_get_node(struct fc_rport *rport)
 {
-	struct lpfc_rport_data *rdata;
-	struct lpfc_nodelist *ndlp;
+	struct Scsi_Host *shost = rport_to_shost(rport);
+	struct lpfc_vport *vport = (struct lpfc_vport *)shost->hostdata;
+	struct lpfc_rport_data *rdata = rport->dd_data;
+	struct lpfc_nodelist *ndlp, *pnode, *found = NULL;
+	unsigned long iflags;
 
-	if (!rport) {
-		pr_err("**** %s: NULL rport, exit.\n", __func__);
-		return -EINVAL;
-	}
+	if (!rdata)
+		return NULL;
 
-	if (rport->flags & FC_RPORT_DEVLOSS_CALLBK_DONE) {
-		pr_info("**** %s: devloss_callbk_done rport x%px SID x%x\n",
-			__func__, rport, rport->scsi_target_id);
-		return -EINVAL;
+	spin_lock_irqsave(&vport->fc_nodes_list_lock, iflags);
+	/*
+	 * Registration can reuse this rport for another node without taking
+	 * the list lock. Keep one lookup key throughout the list traversal.
+	 */
+	pnode = READ_ONCE(rdata->pnode);
+	list_for_each_entry(ndlp, &vport->fc_nodes, nlp_listp) {
+		if (ndlp == pnode) {
+			if (kref_get_unless_zero(&ndlp->kref))
+				found = ndlp;
+			break;
+		}
 	}
-
-	rdata = rport->dd_data;
-	if (!rdata) {
-		pr_err("**** %s: NULL dd_data on rport x%px SID x%x\n",
-		       __func__, rport, rport->scsi_target_id);
-		return -EINVAL;
-	}
-
-	ndlp = rdata->pnode;
-	if (!rdata->pnode) {
-		pr_info("**** %s: NULL ndlp on rport x%px SID x%x\n",
-			__func__, rport, rport->scsi_target_id);
-		return -EINVAL;
-	}
-
-	if (!ndlp->vport) {
-		pr_err("**** %s: Null vport on ndlp x%px, DID x%x rport x%px "
-		       "SID x%x\n", __func__, ndlp, ndlp->nlp_DID, rport,
-		       rport->scsi_target_id);
-		return -EINVAL;
-	}
-	return 0;
+	spin_unlock_irqrestore(&vport->fc_nodes_list_lock, iflags);
+	return found;
 }
 
 void
 lpfc_terminate_rport_io(struct fc_rport *rport)
 {
-	struct lpfc_rport_data *rdata;
 	struct lpfc_nodelist *ndlp;
 	struct lpfc_vport *vport;
 
-	if (lpfc_rport_invalid(rport))
+	if (!rport || (READ_ONCE(rport->flags) & FC_RPORT_DEVLOSS_CALLBK_DONE))
 		return;
 
-	rdata = rport->dd_data;
-	ndlp = rdata->pnode;
+	ndlp = lpfc_rport_get_node(rport);
+	if (!ndlp)
+		return;
+
+	if (READ_ONCE(ndlp->rport) != rport)
+		goto out;
+
 	vport = ndlp->vport;
 	lpfc_debugfs_disc_trc(vport, LPFC_DISC_TRC_RPORT,
 			      "rport terminate: sid:x%x did:x%x flg:x%lx",
@@ -148,6 +145,8 @@ lpfc_terminate_rport_io(struct fc_rport *rport)
 
 	if (ndlp->nlp_sid != NLP_NO_SID)
 		lpfc_sli_abort_iocb(vport, ndlp->nlp_sid, 0, LPFC_CTX_TGT);
+out:
+	lpfc_nlp_put(ndlp);
 }
 
 /*
@@ -162,8 +161,9 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 	struct lpfc_work_evt *evtp;
 	unsigned long iflags;
 	bool drop_initial_node_ref = false;
+	bool drop_scsi_node_ref = false;
 
-	ndlp = ((struct lpfc_rport_data *)rport->dd_data)->pnode;
+	ndlp = lpfc_rport_get_node(rport);
 	if (!ndlp)
 		return;
 
@@ -186,8 +186,13 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 	    (phba->sli_rev == LPFC_SLI_REV4 &&
 	    !test_bit(HBA_SETUP, &phba->hba_flag))) {
 
+		/*
+		 * Teardown cleans up the node, not just this rport association.
+		 * An old rport may be the last callback that can find the node
+		 * after rport reuse. Do not require ndlp->rport == rport here.
+		 */
 		spin_lock_irqsave(&ndlp->lock, iflags);
-		ndlp->rport = NULL;
+		WRITE_ONCE(ndlp->rport, NULL);
 
 		/* Only 1 thread can drop the initial node reference.
 		 * If not registered for NVME and NLP_DROPPED flag is
@@ -203,43 +208,37 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 		if (ndlp->fc4_xpt_flags & SCSI_XPT_REGD) {
 			ndlp->fc4_xpt_flags &= ~SCSI_XPT_REGD;
 
-			/* If NLP_XPT_REGD was cleared in lpfc_nlp_unreg_node,
-			 * unregister calls were made to the scsi and nvme
-			 * transports and refcnt was already decremented. Clear
-			 * the NLP_XPT_REGD flag only if the NVME nrport is
-			 * confirmed unregistered.
-			 */
-			if (ndlp->fc4_xpt_flags & NLP_XPT_REGD) {
-				if (!(ndlp->fc4_xpt_flags & NVME_XPT_REGD))
-					ndlp->fc4_xpt_flags &= ~NLP_XPT_REGD;
-				spin_unlock_irqrestore(&ndlp->lock, iflags);
-
-				/* Release scsi transport reference */
-				lpfc_nlp_put(ndlp);
-			} else {
-				spin_unlock_irqrestore(&ndlp->lock, iflags);
-			}
-		} else {
-			spin_unlock_irqrestore(&ndlp->lock, iflags);
+			/* Leave backend registration set while NVMe is active. */
+			if (!(ndlp->fc4_xpt_flags & NVME_XPT_REGD))
+				ndlp->fc4_xpt_flags &= ~NLP_XPT_REGD;
 		}
+		if (ndlp->fc4_xpt_flags & SCSI_XPT_REF) {
+			ndlp->fc4_xpt_flags &= ~SCSI_XPT_REF;
+			drop_scsi_node_ref = true;
+		}
+		spin_unlock_irqrestore(&ndlp->lock, iflags);
 
 		if (drop_initial_node_ref)
 			lpfc_nlp_put(ndlp);
-		return;
+		goto out;
 	}
 
-	if (ndlp->nlp_state == NLP_STE_MAPPED_NODE)
-		return;
+	spin_lock_irqsave(&ndlp->lock, iflags);
+	if (ndlp->nlp_state == NLP_STE_MAPPED_NODE) {
+		spin_unlock_irqrestore(&ndlp->lock, iflags);
+		goto out;
+	}
 
-	/* Ignore callback for a mismatched (stale) rport */
+	/* Serialize association validation and detachment with registration. */
 	if (ndlp->rport != rport) {
+		spin_unlock_irqrestore(&ndlp->lock, iflags);
 		lpfc_vlog_msg(vport, KERN_WARNING, LOG_NODE,
 			      "6788 fc rport mismatch: d_id x%06x ndlp x%px "
 			      "fc rport x%px node rport x%px state x%x "
 			      "refcnt %u\n",
 			      ndlp->nlp_DID, ndlp, rport, ndlp->rport,
 			      ndlp->nlp_state, kref_read(&ndlp->kref));
-		return;
+		goto out;
 	}
 
 	if (rport->port_name != wwn_to_u64(ndlp->nlp_portname.u.wwn))
@@ -251,15 +250,15 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 	evtp = &ndlp->dev_loss_evt;
 
 	if (!list_empty(&evtp->evt_listp)) {
+		spin_unlock_irqrestore(&ndlp->lock, iflags);
 		lpfc_printf_vlog(vport, KERN_ERR, LOG_TRACE_EVENT,
 				 "6790 rport name %llx dev_loss_evt pending\n",
 				 rport->port_name);
-		return;
+		goto out;
 	}
 
 	set_bit(NLP_IN_DEV_LOSS, &ndlp->nlp_flag);
 
-	spin_lock_irqsave(&ndlp->lock, iflags);
 	/* If there is a PLOGI in progress, and we are in a
 	 * NLP_NPR_2B_DISC state, don't turn off the flag.
 	 */
@@ -271,8 +270,12 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 	 * rport. Remove the association between rport and ndlp.
 	 */
 	ndlp->fc4_xpt_flags &= ~SCSI_XPT_REGD;
-	((struct lpfc_rport_data *)rport->dd_data)->pnode = NULL;
-	ndlp->rport = NULL;
+	if (ndlp->fc4_xpt_flags & SCSI_XPT_REF) {
+		ndlp->fc4_xpt_flags &= ~SCSI_XPT_REF;
+		drop_scsi_node_ref = true;
+	}
+	WRITE_ONCE(((struct lpfc_rport_data *)rport->dd_data)->pnode, NULL);
+	WRITE_ONCE(ndlp->rport, NULL);
 	spin_unlock_irqrestore(&ndlp->lock, iflags);
 
 	if (phba->worker_thread) {
@@ -287,7 +290,7 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 			list_add_tail(&evtp->evt_listp, &phba->work_list);
 			spin_unlock_irqrestore(&phba->hbalock, iflags);
 			lpfc_worker_wake_up(phba);
-			return;
+			goto out;
 		}
 		spin_unlock_irqrestore(&phba->hbalock, iflags);
 	} else {
@@ -304,6 +307,10 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 						NLP_EVT_DEVICE_RM);
 		}
 	}
+out:
+	if (drop_scsi_node_ref)
+		lpfc_nlp_put(ndlp);
+	lpfc_nlp_put(ndlp);
 }
 
 /**
@@ -4506,8 +4513,11 @@ lpfc_register_remote_port(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 	if (test_bit(FC_UNLOADING, &vport->load_flag))
 		return;
 
-	ndlp->rport = rport = fc_remote_port_add(shost, 0, &rport_ids);
+	rport = fc_remote_port_add(shost, 0, &rport_ids);
 	if (!rport) {
+		spin_lock_irqsave(&ndlp->lock, flags);
+		WRITE_ONCE(ndlp->rport, NULL);
+		spin_unlock_irqrestore(&ndlp->lock, flags);
 		dev_printk(KERN_WARNING, &phba->pcidev->dev,
 			   "Warning: fc_remote_port_add failed\n");
 		return;
@@ -4517,17 +4527,20 @@ lpfc_register_remote_port(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 	rport->maxframe_size = ndlp->nlp_maxframe;
 	rport->supported_classes = ndlp->nlp_class_sup;
 	rdata = rport->dd_data;
-	rdata->pnode = lpfc_nlp_get(ndlp);
-	if (!rdata->pnode) {
+	spin_lock_irqsave(&ndlp->lock, flags);
+	if (!kref_get_unless_zero(&ndlp->kref)) {
+		WRITE_ONCE(ndlp->rport, NULL);
+		spin_unlock_irqrestore(&ndlp->lock, flags);
 		dev_warn(&phba->pcidev->dev,
 			 "Warning - node ref failed. Unreg rport\n");
 		fc_remote_port_delete(rport);
-		ndlp->rport = NULL;
 		return;
 	}
 
-	spin_lock_irqsave(&ndlp->lock, flags);
-	ndlp->fc4_xpt_flags |= SCSI_XPT_REGD;
+	/* Record the acquired reference separately from association flags. */
+	WRITE_ONCE(ndlp->rport, rport);
+	WRITE_ONCE(rdata->pnode, ndlp);
+	ndlp->fc4_xpt_flags |= SCSI_XPT_REGD | SCSI_XPT_REF;
 	spin_unlock_irqrestore(&ndlp->lock, flags);
 
 	if (ndlp->nlp_type & NLP_FCP_TARGET)
@@ -4558,13 +4571,9 @@ lpfc_register_remote_port(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 }
 
 static void
-lpfc_unregister_remote_port(struct lpfc_nodelist *ndlp)
+lpfc_unregister_remote_port(struct lpfc_nodelist *ndlp, struct fc_rport *rport)
 {
-	struct fc_rport *rport = ndlp->rport;
 	struct lpfc_vport *vport = ndlp->vport;
-
-	if (vport->cfg_enable_fc4_type == LPFC_ENABLE_NVME)
-		return;
 
 	lpfc_debugfs_disc_trc(vport, LPFC_DISC_TRC_RPORT,
 		"rport delete:    did:x%x flg:x%lx type x%x",
@@ -4577,7 +4586,6 @@ lpfc_unregister_remote_port(struct lpfc_nodelist *ndlp)
 			 kref_read(&ndlp->kref));
 
 	fc_remote_port_delete(rport);
-	lpfc_nlp_put(ndlp);
 }
 
 static void
@@ -4675,7 +4683,9 @@ lpfc_nlp_reg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 void
 lpfc_nlp_unreg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 {
+	struct fc_rport *rport = NULL;
 	unsigned long iflags;
+	bool drop_scsi_node_ref = false;
 
 	spin_lock_irqsave(&ndlp->lock, iflags);
 	if (!(ndlp->fc4_xpt_flags & NLP_XPT_REGD)) {
@@ -4690,12 +4700,21 @@ lpfc_nlp_unreg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 	}
 
 	ndlp->fc4_xpt_flags &= ~NLP_XPT_REGD;
+	if (ndlp->rport && (ndlp->fc4_xpt_flags & SCSI_XPT_REF)) {
+		ndlp->fc4_xpt_flags &= ~SCSI_XPT_REF;
+		drop_scsi_node_ref = true;
+		rport = ndlp->rport;
+		/*
+		 * Keep the old rport alive if registration replaces ndlp->rport
+		 * or devloss detaches it before fc_remote_port_delete().
+		 */
+		get_device(&rport->dev);
+	}
 	spin_unlock_irqrestore(&ndlp->lock, iflags);
 
-	if (ndlp->rport &&
-	    ndlp->fc4_xpt_flags & SCSI_XPT_REGD) {
+	if (drop_scsi_node_ref) {
 		vport->phba->nport_event_cnt++;
-		lpfc_unregister_remote_port(ndlp);
+		lpfc_unregister_remote_port(ndlp, rport);
 	} else if (!ndlp->rport) {
 		lpfc_printf_vlog(vport, KERN_INFO,
 				 LOG_ELS | LOG_NODE | LOG_DISCOVERY,
@@ -4716,6 +4735,11 @@ lpfc_nlp_unreg_node(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp)
 		}
 	}
 
+	/* Keep both references through all node accesses and final release. */
+	if (drop_scsi_node_ref) {
+		lpfc_nlp_put(ndlp);
+		put_device(&rport->dev);
+	}
 }
 
 /*
