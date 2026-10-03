@@ -94,7 +94,7 @@ int jfs_ioc_trim(struct inode *ip, struct fstrim_range *range)
 		return -EINVAL;
 	}
 
-	if (end >= bmp->db_mapsize)
+	if (end >= bmp->db_mapsize || end < start)
 		end = bmp->db_mapsize - 1;
 
 	/**
@@ -102,6 +102,13 @@ int jfs_ioc_trim(struct inode *ip, struct fstrim_range *range)
 	 */
 	agno = BLKTOAG(start, JFS_SBI(ip->i_sb));
 	agno_end = BLKTOAG(end, JFS_SBI(ip->i_sb));
+	if (agno >= bmp->db_numag) {
+		up_read(&sb->s_umount);
+		return 0;
+	}
+	if (agno_end >= bmp->db_numag)
+		agno_end = bmp->db_numag - 1;
+
 	while (agno <= agno_end) {
 		trimmed += dbDiscardAG(ip, agno, minlen);
 		agno++;

@@ -1673,15 +1673,26 @@ s64 dbDiscardAG(struct inode *ip, int agno, s64 minlen)
 	int count = 0, range_cnt;
 	u64 max_ranges;
 
+	if (agno < 0 || agno >= bmp->db_numag || minlen <= 0)
+		return 0;
+
 	/* prevent others from writing new stuff here, while trimming */
 	IWRITE_LOCK(ipbmap, RDWRLOCK_DMAP);
 
 	nblocks = bmp->db_agfree[agno];
+	if (nblocks < minlen) {
+		IWRITE_UNLOCK(ipbmap);
+		return 0;
+	}
+
+	if (nblocks > bmp->db_agsize)
+		nblocks = bmp->db_agsize;
+
 	max_ranges = nblocks;
 	do_div(max_ranges, minlen);
 	range_cnt = min_t(u64, max_ranges + 1, 32 * 1024);
 	totrim = kmalloc_objs(struct range2trim, range_cnt, GFP_NOFS);
-	if (totrim == NULL) {
+	if (ZERO_OR_NULL_PTR(totrim)) {
 		jfs_error(bmp->db_ipbmap->i_sb, "no memory for trim array\n");
 		IWRITE_UNLOCK(ipbmap);
 		return 0;
@@ -1704,6 +1715,8 @@ s64 dbDiscardAG(struct inode *ip, int agno, s64 minlen)
 
 			/* give a hint for the next while */
 			nblocks = bmp->db_agfree[agno];
+			if (nblocks > bmp->db_agsize)
+				nblocks = bmp->db_agsize;
 			continue;
 		} else if (rc == -ENOSPC) {
 			/* search for next smaller log2 block */
