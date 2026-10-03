@@ -95,6 +95,9 @@ static inline struct page *dma_pmd_pool_alloc(struct dma_pmd_pool *pool, gfp_t g
 }
 bool dma_pmd_pool_has_free(struct dma_pmd_pool *pool);
 
+/* Hooks for kernel/dma/mapping.c */
+bool dma_pmd_arena_free(struct device *dev, size_t size, void *cpu_addr, dma_addr_t dma);
+
 #else /* !CONFIG_DMA_PMD */
 
 static inline bool dma_is_pmd_page(unsigned long pfn)
@@ -137,6 +140,12 @@ static inline struct page *dma_pmd_pool_alloc(struct dma_pmd_pool *pool, gfp_t g
 }
 
 static inline bool dma_pmd_pool_has_free(struct dma_pmd_pool *pool)
+{
+	return false;
+}
+
+static inline bool dma_pmd_arena_free(struct device *dev, size_t size,
+				      void *cpu_addr, dma_addr_t dma)
 {
 	return false;
 }

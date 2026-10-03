@@ -16,8 +16,9 @@ struct iommu_domain;
 
 /**
  * struct dma_pmd_window - A domain's IOVA window reserved for DMA_PMD pages
- * @base: First IOVA of the window. A page at @phys is mapped, in every domain
- *        that has a window, at @base + @phys.
+ * @base: First IOVA of the window. The leading ARENA_REGION_SIZE bytes
+ *        [base, base + ARENA_REGION_SIZE) form ARENA_REGION; a pooled RAM
+ *        page at @phys is mapped at @base + ARENA_REGION_SIZE + @phys.
  * @size: Window size in bytes, or 0 if this domain has no window, either
  *        because nothing has pooled through it yet, or because it could not
  *        find a free range that large. 0 must make both the map and the unmap
@@ -40,6 +41,8 @@ struct dma_pmd_window {
 #ifdef CONFIG_DMA_PMD
 
 #define DMA_PMD_BLOCKS(order)		(1U << (PMD_ORDER - (order)))
+#define DMA_PMD_ARENA_PAGES		8192U
+#define ARENA_REGION_SIZE		((u64)DMA_PMD_ARENA_PAGES * PMD_SIZE)
 
 /*
  * Number of IOMMU domains that may use DMA_PMD at once.
@@ -116,8 +119,9 @@ enum {
  * @domains_mapped: One bit per domain index: set once this PMD page's leaf
  *		PTE is installed in that domain.
  *
- * Alloc/free fast path, all under pool->lock:
+ * Alloc/free fast path, all under pool->lock (or dma_pmd_arena.lock):
  * @pool:	Owning dma_pmd_pool (holds a kref on the pool while pooled)
+ * @arena_page:	Allocated 2MB struct page for an ARENA_REGION entry
  * @list:	Node in pool->partial, pool->idle or pool->full
  *
  * Slow path only (disjoint lifetimes):
@@ -125,11 +129,13 @@ enum {
  * @rcu:	RCU head used to defer buddy release past lockless readers
  *
  * @free_bitmap: Bitmap of zeroed available block indices (up to 1 << PMD_ORDER)
- * @dirty_bitmap: Bitmap of dirty available block indices
+ *		 for pools, or allocated 4KB blocks for ARENA_REGION entries
+ * @dirty_bitmap: Bitmap of dirty available block indices for pools
  *
  * Lives in the sparse per-PMD-frame array @dma_pmd_meta_array indexed by
- * (pfn >> PMD_ORDER). Only chunks covering valid RAM are backed by physical
- * pages (128 KB per GB of RAM).
+ * (pfn >> PMD_ORDER), preceded by DMA_PMD_ARENA_PAGES entries for
+ * ARENA_REGION. Only chunks covering valid RAM and ARENA_REGION are backed by
+ * physical pages (128 KB per GB of RAM).
  */
 struct dma_pmd_meta {
 	bool pooled;
@@ -139,7 +145,10 @@ struct dma_pmd_meta {
 
 	unsigned long domains_mapped;
 
-	struct dma_pmd_pool *pool;
+	union {
+		struct dma_pmd_pool *pool;
+		struct page *arena_page;
+	};
 	struct list_head list;
 
 	union {
@@ -224,18 +233,29 @@ static inline struct dma_pmd_meta *dma_pmd_meta_base(void)
 
 /*
  * Highest PFN covered by the allocated @dma_pmd_meta_array reservation.
- * Every domain's IOVA window is sized to match this bound.
+ * Every domain's IOVA window is sized up to this bound.
  */
 static inline unsigned long dma_pmd_top_pfn(void)
 {
 	return dma_pmd_meta_nframes << PMD_ORDER;
 }
 
+static inline struct dma_pmd_meta *dma_pmd_arena_meta(unsigned int slot)
+{
+	return (dma_pmd_meta_base() - DMA_PMD_ARENA_PAGES) + slot;
+}
+
 /* IOVA of @phys in @win. Only valid once the PMD page's PTE is installed. */
 static inline dma_addr_t dma_pmd_window_iova(const struct dma_pmd_window *win,
 					     phys_addr_t phys)
 {
-	return win->base + phys;
+	return win->base + ARENA_REGION_SIZE + phys;
+}
+
+/* Offset of @m (either arena or RAM) from the start of a domain's window. */
+static inline dma_addr_t dma_pmd_meta_win_offset(const struct dma_pmd_meta *m)
+{
+	return (dma_addr_t)(m - dma_pmd_arena_meta(0)) << PMD_SHIFT;
 }
 
 int dma_pmd_meta_init(void);
@@ -250,6 +270,7 @@ void dma_pmd_unmap_all(struct dma_pmd_meta *meta);
 unsigned int dma_pmd_forget_domain(struct dma_pmd_meta *meta, int idx);
 int dma_pmd_window_assign(struct device *dev, struct iommu_domain *domain,
 			  struct dma_pmd_window *win);
+bool dma_pmd_domain_active(unsigned int idx, const struct iommu_domain *domain);
 
 static inline bool dma_is_pmd_phys(phys_addr_t phys)
 {
@@ -280,6 +301,8 @@ dma_addr_t dma_pmd_dma_map_phys(struct device *dev, struct iommu_domain *domain,
 				size_t size, int prot, u64 dma_mask);
 
 void dma_pmd_domain_release(struct iommu_domain *domain);
+
+void *dma_pmd_arena_alloc(struct device *dev, size_t size, dma_addr_t *dma, int node);
 
 #else /* !CONFIG_DMA_PMD */
 

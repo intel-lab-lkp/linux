@@ -51,6 +51,11 @@ static DEFINE_SPINLOCK(dma_pmd_domains_lock);
  */
 DEFINE_SRCU(dma_pmd_srcu);
 
+bool dma_pmd_domain_active(unsigned int idx, const struct iommu_domain *domain)
+{
+	return READ_ONCE(dma_pmd_domains[idx].domain) == domain;
+}
+
 /**
  * dma_pmd_unmap_all - Remove a PMD page's PTE from every domain holding it
  * @meta: PMD page metadata structure
@@ -77,7 +82,7 @@ DEFINE_SRCU(dma_pmd_srcu);
  */
 void dma_pmd_unmap_all(struct dma_pmd_meta *meta)
 {
-	phys_addr_t phys = dma_pmd_meta_to_phys(meta);
+	dma_addr_t offset = dma_pmd_meta_win_offset(meta);
 	unsigned long mapped, flags;
 	int idx, srcu_idx;
 
@@ -104,7 +109,7 @@ void dma_pmd_unmap_all(struct dma_pmd_meta *meta)
 		if (!domain)
 			continue;
 
-		iommu_unmap(domain, base + phys, PMD_SIZE);
+		iommu_unmap(domain, base + offset, PMD_SIZE);
 	}
 	srcu_read_unlock(&dma_pmd_srcu, srcu_idx);
 }
@@ -170,6 +175,7 @@ void dma_pmd_domain_release(struct iommu_domain *domain)
 {
 	unsigned int dropped = 0;
 	unsigned long flags;
+	unsigned int i;
 	int idx;
 
 	/* Nothing has ever been pooled, so nothing can reference @domain. */
@@ -199,6 +205,9 @@ void dma_pmd_domain_release(struct iommu_domain *domain)
 
 	dropped += dma_pmd_pools_forget_domain(idx);
 
+	for (i = 0; i < DMA_PMD_ARENA_PAGES; i++)
+		dropped += dma_pmd_forget_domain(dma_pmd_arena_meta(i), idx);
+
 	/*
 	 * Any PMD page removed from a pool list before the walk above is either
 	 * already on @dma_pmd_free_list (placed there under @pool->lock in
@@ -225,7 +234,7 @@ void dma_pmd_domain_release(struct iommu_domain *domain)
  * dma_pmd_dma_window_alloc - Allocate an IOVA window for DMA_PMD mappings
  * @dev: Device whose addressing limits the window must respect
  * @domain: Domain to take the window from
- * @size: Window size in bytes
+ * @sizep: In/out window size in bytes
  *
  * Allocates a contiguous IOVA range out of @domain's iova_domain on first use,
  * aligned to PMD_SIZE matching the mapping. Callers on the map path still
@@ -237,9 +246,9 @@ void dma_pmd_domain_release(struct iommu_domain *domain)
 static dma_addr_t dma_pmd_dma_window_alloc(struct device *dev,
 					   struct iommu_domain *domain, u64 *sizep)
 {
+	u64 min_size = ARENA_REGION_SIZE + ALIGN(PFN_PHYS(max_pfn), PMD_SIZE);
 	u64 limit = min_not_zero(dma_get_mask(dev), dev->bus_dma_limit);
 	struct iova_domain *iovad = dma_pmd_dma_iovad(domain);
-	u64 min_size = ALIGN(PFN_PHYS(max_pfn), PMD_SIZE);
 	unsigned long shift, iova_len;
 	struct iova *new_iova;
 
@@ -295,7 +304,7 @@ static dma_addr_t dma_pmd_dma_window_alloc(struct device *dev,
 int dma_pmd_window_assign(struct device *dev, struct iommu_domain *domain,
 			  struct dma_pmd_window *win)
 {
-	u64 size = ALIGN(PFN_PHYS(dma_pmd_top_pfn()), PMD_SIZE);
+	u64 size = ALIGN(PFN_PHYS(dma_pmd_top_pfn()), PMD_SIZE) + ARENA_REGION_SIZE;
 	unsigned long flags;
 	int idx, ret = 0;
 	dma_addr_t base;

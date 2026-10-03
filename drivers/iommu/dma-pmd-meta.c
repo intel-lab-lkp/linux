@@ -186,8 +186,9 @@ static inline bool dma_pmd_pfn_online(unsigned long pfn)
  *
  * Return: 0, or -ENOMEM with the range partially backed.
  */
-static int dma_pmd_meta_populate(struct dma_pmd_meta *array, unsigned long nframes,
-				 unsigned long start_pfn, unsigned long end_pfn, bool force)
+static int dma_pmd_meta_populate(struct dma_pmd_meta *array, unsigned long *bitmap,
+				 unsigned long nframes, unsigned long start_pfn,
+				 unsigned long end_pfn, bool force)
 {
 	unsigned long chunk, last, pfn;
 
@@ -208,7 +209,8 @@ static int dma_pmd_meta_populate(struct dma_pmd_meta *array, unsigned long nfram
 
 		addr = (unsigned long)array + (chunk << PAGE_SHIFT);
 		if (vmalloc_to_page((void *)addr)) {
-			set_bit(chunk, dma_pmd_chunk_bitmap);
+			if (bitmap)
+				set_bit(chunk, bitmap);
 			continue;		/* already backed */
 		}
 
@@ -247,14 +249,17 @@ static int dma_pmd_meta_populate(struct dma_pmd_meta *array, unsigned long nfram
 			 * never leak the page it declined to consume.
 			 */
 			__free_page(page);
-			set_bit(chunk, dma_pmd_chunk_bitmap);
+			if (bitmap)
+				set_bit(chunk, bitmap);
 			continue;
 		}
 
 		flush_cache_vmap(addr, addr + PAGE_SIZE);
-		/* Pair with test_bit_acquire() in readers. */
-		smp_mb__before_atomic();
-		set_bit(chunk, dma_pmd_chunk_bitmap);
+		if (bitmap) {
+			/* Pair with test_bit_acquire() in readers. */
+			smp_mb__before_atomic();
+			set_bit(chunk, bitmap);
+		}
 		dma_pmd_meta_pages++;
 	}
 
@@ -273,8 +278,9 @@ bool dma_pmd_meta_ensure_pfn(unsigned long pfn, bool can_block)
 		return false;
 
 	mutex_lock(&dma_pmd_meta_mutex);
-	ret = dma_pmd_meta_populate(dma_pmd_meta_base(), dma_pmd_meta_nframes,
-				    pfn, pfn + (1UL << PMD_ORDER), true);
+	ret = dma_pmd_meta_populate(dma_pmd_meta_base(), dma_pmd_chunk_bitmap,
+				    dma_pmd_meta_nframes, pfn,
+				    pfn + (1UL << PMD_ORDER), true);
 	mutex_unlock(&dma_pmd_meta_mutex);
 
 	return !ret;
@@ -284,17 +290,19 @@ EXPORT_SYMBOL(dma_pmd_meta_ensure_pfn);
 /**
  * dma_pmd_meta_init - Reserve and populate the sparse per-PMD metadata array
  *
- * Populates all present RAM pages before publishing @dma_pmd_meta_array so
- * no concurrent reader ever sees an unmapped entry.
+ * Populates all present RAM pages and ARENA_REGION entries before publishing
+ * @dma_pmd_meta_array so no concurrent reader ever sees an unmapped entry.
  *
  * Return: 0 on success, or negative errno on failure.
  */
 int dma_pmd_meta_init(void)
 {
-	unsigned long nframes, nchunks, size;
-	struct dma_pmd_meta *array;
+	unsigned long nframes, total_frames, nchunks, size, i;
+	struct dma_pmd_meta *raw, *array;
 	struct vm_struct *vm;
 	int ret = 0;
+
+	static_assert(IS_ALIGNED(DMA_PMD_ARENA_PAGES << DMA_PMD_META_SHIFT, PAGE_SIZE));
 
 	if (likely(dma_pmd_meta_base()))
 		return 0;
@@ -308,8 +316,9 @@ int dma_pmd_meta_init(void)
 				    (unsigned long)min_t(u64, iomem_resource.end >> PAGE_SHIFT,
 							 1ULL << (MAX_PHYSMEM_BITS - PAGE_SHIFT))),
 			       1UL << PMD_ORDER);
-	size = PAGE_ALIGN(nframes << DMA_PMD_META_SHIFT);
-	nchunks = size >> PAGE_SHIFT;
+	total_frames = DMA_PMD_ARENA_PAGES + nframes;
+	size = PAGE_ALIGN(total_frames << DMA_PMD_META_SHIFT);
+	nchunks = PAGE_ALIGN(nframes << DMA_PMD_META_SHIFT) >> PAGE_SHIFT;
 
 	dma_pmd_chunk_bitmap = bitmap_zalloc(nchunks, GFP_KERNEL);
 	if (!dma_pmd_chunk_bitmap) {
@@ -324,14 +333,25 @@ int dma_pmd_meta_init(void)
 		ret = -ENOMEM;
 		goto out_unlock;
 	}
-	array = vm->addr;
+	raw = vm->addr;
+	array = raw + DMA_PMD_ARENA_PAGES;
 
-	ret = dma_pmd_meta_populate(array, nframes, 0, max_pfn, false);
+	ret = dma_pmd_meta_populate(raw, NULL, DMA_PMD_ARENA_PAGES,
+				    0, DMA_PMD_ARENA_PAGES << PMD_ORDER, true);
+	if (!ret)
+		ret = dma_pmd_meta_populate(array, dma_pmd_chunk_bitmap,
+					    nframes, 0, max_pfn, false);
 	if (ret) {
+		unsigned long off, chunk;
 		struct page *p, *next;
-		unsigned long chunk;
 		LIST_HEAD(pages);
 
+		for (off = 0; off < (DMA_PMD_ARENA_PAGES << DMA_PMD_META_SHIFT);
+		     off += PAGE_SIZE) {
+			p = vmalloc_to_page((void *)raw + off);
+			if (p)
+				list_add(&p->lru, &pages);
+		}
 		for_each_set_bit(chunk, dma_pmd_chunk_bitmap, nchunks) {
 			p = vmalloc_to_page((void *)array + (chunk << PAGE_SHIFT));
 			if (p)
@@ -347,6 +367,9 @@ int dma_pmd_meta_init(void)
 		}
 		goto out_unlock;
 	}
+
+	for (i = 0; i < DMA_PMD_ARENA_PAGES; i++)
+		spin_lock_init(&raw[i].map_lock);
 
 	/*
 	 * Publish @nframes and the populated pages before the array pointer:

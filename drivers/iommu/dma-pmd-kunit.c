@@ -166,12 +166,47 @@ static void test_window_helpers(struct kunit *test)
 	dma_pmd_pool_destroy(pool);
 }
 
+static void test_arena_alloc_and_free(struct kunit *test)
+{
+	struct device dev = { .numa_node = NUMA_NO_NODE };
+	void *v1, *v2, *v3, *vl1;
+	dma_addr_t d1, d2, d3, dl1;
+
+	KUNIT_EXPECT_NULL(test,
+			  dma_pmd_arena_alloc(NULL, SZ_4K, &d1, NUMA_NO_NODE));
+
+	v1 = dma_pmd_arena_alloc(&dev, SZ_64K, &d1, NUMA_NO_NODE);
+	KUNIT_ASSERT_NOT_NULL(test, v1);
+	v2 = dma_pmd_arena_alloc(&dev, SZ_64K, &d2, NUMA_NO_NODE);
+	KUNIT_ASSERT_NOT_NULL(test, v2);
+	KUNIT_EXPECT_PTR_EQ(test, v2, v1 + SZ_64K);
+	KUNIT_EXPECT_EQ(test, d2, d1 + SZ_64K);
+
+	/* Freeing v1 unreserves [0, 64K); next 64K alloc reuses it. */
+	KUNIT_EXPECT_TRUE(test, dma_pmd_arena_free(&dev, SZ_64K, v1, d1));
+	v3 = dma_pmd_arena_alloc(&dev, SZ_64K, &d3, NUMA_NO_NODE);
+	KUNIT_EXPECT_PTR_EQ(test, v3, v1);
+	KUNIT_EXPECT_EQ(test, d3, d1);
+
+	/*
+	 * Allocate 3MB (spans 2 contiguous fully_empty slots in ARENA_REGION);
+	 * the trailing 1MB in the second slot is marked partial_empty and can
+	 * satisfy a <= 1MB allocation before both are freed.
+	 */
+	vl1 = dma_pmd_arena_alloc(&dev, SZ_2M + SZ_1M, &dl1, NUMA_NO_NODE);
+	KUNIT_ASSERT_NOT_NULL(test, vl1);
+	KUNIT_EXPECT_TRUE(test, dma_pmd_arena_free(&dev, SZ_2M + SZ_1M, vl1, dl1));
+	KUNIT_EXPECT_TRUE(test, dma_pmd_arena_free(&dev, SZ_64K, v2, d2));
+	KUNIT_EXPECT_TRUE(test, dma_pmd_arena_free(&dev, SZ_64K, v3, d3));
+}
+
 static struct kunit_case dma_pmd_meta_test_cases[] = {
 	KUNIT_CASE(test_meta_init_and_roundtrip),
 	KUNIT_CASE(test_meta_invalid_phys),
 	KUNIT_CASE(test_meta_pooled_toggle),
 	KUNIT_CASE(test_pool_alloc_and_recycle),
 	KUNIT_CASE(test_window_helpers),
+	KUNIT_CASE(test_arena_alloc_and_free),
 	{}
 };
 
