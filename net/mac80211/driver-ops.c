@@ -157,6 +157,10 @@ int drv_sta_state(struct ieee80211_local *local,
 			sta->uploaded = true;
 			if (rcu_access_pointer(sta->sta.rates))
 				drv_sta_rate_tbl_update(local, sdata, &sta->sta);
+			if (sta->airtime_weight != IEEE80211_DEFAULT_AIRTIME_WEIGHT)
+				drv_sta_set_airtime_weight(local, sdata,
+							   &sta->sta,
+							   sta->airtime_weight);
 		}
 	} else if (old_state == IEEE80211_STA_ASSOC &&
 		   new_state == IEEE80211_STA_AUTH) {

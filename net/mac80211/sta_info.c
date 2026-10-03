@@ -872,8 +872,13 @@ static int sta_info_insert_drv_state(struct ieee80211_local *local,
 		 * Drivers using legacy sta_add/sta_remove callbacks only
 		 * get uploaded set to true after sta_add is called.
 		 */
-		if (!local->ops->sta_add)
+		if (!local->ops->sta_add) {
 			sta->uploaded = true;
+			if (sta->airtime_weight != IEEE80211_DEFAULT_AIRTIME_WEIGHT)
+				drv_sta_set_airtime_weight(local, sdata,
+							   &sta->sta,
+							   sta->airtime_weight);
+		}
 		return 0;
 	}
 
