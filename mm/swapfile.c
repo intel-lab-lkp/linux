@@ -70,6 +70,19 @@
 #define XSWAP_GROW_CLUSTERS \
 	max_t(unsigned long, PAGE_SIZE / sizeof(struct swap_cluster_info), 16)
 
+/*
+ * Grow and shrink thresholds, as a percentage of the mapped range in use.
+ * Each one lands inside (SHRINK_WHEN, GROW_WHEN), so neither can leave the
+ * range in a state that wakes the other up.
+ */
+#define XSWAP_SHRINK_WHEN	50
+#define XSWAP_SHRINK_UNTIL	70
+#define XSWAP_GROW_UNTIL	65
+#define XSWAP_GROW_WHEN		85
+#define XSWAP_GROW_CHUNKS	4
+
+static bool xswap_should_grow(struct swap_info_struct *si);
+static unsigned long xswap_grow(struct swap_info_struct *si);
 static int xswap_map_clusters(struct swap_info_struct *si,
 			      unsigned long start_idx, unsigned long nr);
 static void xswap_unmap_clusters(struct swap_info_struct *si,
@@ -1204,6 +1217,17 @@ static unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si,
 	if (order && !(si->flags & SWP_BLKDEV))
 		return 0;
 
+#ifdef CONFIG_XSWAP
+	/*
+	 * Top the range up early.  Every path below leaves through `done`,
+	 * so this has to come first; mapping pages can sleep, and doing it
+	 * from the allocation that would otherwise fail leaves nothing to
+	 * fall back on.
+	 */
+	if ((si->flags & SWP_XSWAP) && xswap_should_grow(si))
+		xswap_grow(si);
+#endif
+
 	if (!(si->flags & SWP_SOLIDSTATE)) {
 		/* Serialize HDD SWAP allocation for each device. */
 		spin_lock(&si->global_cluster_lock);
@@ -1280,6 +1304,12 @@ new_cluster:
 		if (found)
 			goto done;
 	}
+
+#ifdef CONFIG_XSWAP
+	/* A concurrent free or grow may have added clusters; retry once. */
+	if (!found && (si->flags & SWP_XSWAP))
+		found = alloc_swap_scan_list(si, &si->free_clusters, folio, false);
+#endif
 done:
 	if (!(si->flags & SWP_SOLIDSTATE))
 		spin_unlock(&si->global_cluster_lock);
@@ -3907,6 +3937,69 @@ fail:
 	kfree(pages);
 	mutex_unlock(&si->xswap_lock);
 	return -ENOMEM;
+}
+
+static bool xswap_should_grow(struct swap_info_struct *si)
+{
+	unsigned long mapped = READ_ONCE(si->nr_clusters_mapped);
+
+	if (mapped >= READ_ONCE(si->nr_clusters_max))
+		return false;
+
+	return swap_usage_in_pages(si) * 100 >=
+	       mapped * SWAPFILE_CLUSTER * XSWAP_GROW_WHEN;
+}
+
+/*
+ * Map more of the cluster_info array, up to GROW_UNTIL in use.  The caller
+ * holds percpu_swap_cluster.lock, which this drops while it sleeps.
+ */
+static unsigned long xswap_grow(struct swap_info_struct *si)
+{
+	unsigned long mapped = READ_ONCE(si->nr_clusters_mapped);
+	unsigned long nr_new, want, i;
+	int ret;
+
+	/* The unmap below is paired with the caller's lock. */
+	lockdep_assert_held(&percpu_swap_cluster.lock);
+
+	want = DIV_ROUND_UP(swap_usage_in_pages(si) * 100,
+			    XSWAP_GROW_UNTIL * SWAPFILE_CLUSTER);
+	if (want <= mapped)
+		return 0;
+
+	nr_new = rounddown(want - mapped, XSWAP_GROW_CLUSTERS);
+	if (!nr_new)
+		nr_new = XSWAP_GROW_CLUSTERS;
+	if (nr_new > XSWAP_GROW_CHUNKS * XSWAP_GROW_CLUSTERS)
+		nr_new = XSWAP_GROW_CHUNKS * XSWAP_GROW_CLUSTERS;
+	nr_new = min(nr_new, READ_ONCE(si->nr_clusters_max) - mapped);
+
+	/*
+	 * Mapping pages can sleep.  The lock only guards the per-cpu
+	 * cluster cache, which this path does not touch.
+	 */
+	local_unlock(&percpu_swap_cluster.lock);
+	ret = xswap_map_clusters(si, mapped, nr_new);
+	local_lock(&percpu_swap_cluster.lock);
+	if (ret)
+		return 0;
+
+	for (i = mapped; i < mapped + nr_new; i++) {
+		struct swap_cluster_info *ci = &si->cluster_info[i];
+
+		/*
+		 * A concurrent grower may have taken these already;
+		 * only add the off-list ones.
+		 */
+		spin_lock(&ci->lock);
+		if (ci->flags == CLUSTER_FLAG_NONE)
+			move_cluster(si, ci, &si->free_clusters,
+				     CLUSTER_FLAG_FREE);
+		spin_unlock(&ci->lock);
+	}
+
+	return nr_new;
 }
 
 static void xswap_unmap_clusters(struct swap_info_struct *si,
