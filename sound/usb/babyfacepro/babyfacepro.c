@@ -537,6 +537,7 @@ void bf_state_save(struct snd_usb_babyface *chip)
 	s->width = chip->width;
 	s->fx_send = chip->fx_send;
 	s->dim = chip->dim;
+	memcpy(s->panel_sel, chip->panel_sel, sizeof(s->panel_sel));
 	mutex_unlock(&bf_saved_mutex);
 }
 
@@ -574,6 +575,7 @@ int bf_state_restore(struct snd_usb_babyface *chip)
 		chip->width = s->width;
 		chip->fx_send = s->fx_send;
 		chip->dim = s->dim;
+		memcpy(chip->panel_sel, s->panel_sel, sizeof(chip->panel_sel));
 		ret = 1;
 		break;
 	}
@@ -1582,6 +1584,7 @@ static char *id[SNDRV_CARDS] = SNDRV_DEFAULT_STR;
 static int frames_per_urb = BF_FRAMES_PER_URB_DEFAULT;
 static int urb_frames_min = 32;
 static int nurbs = BF_NURBS_DEFAULT;
+static int panel_poll_ms = BF_PANEL_POLL_MS_DEFAULT;
 
 module_param_array(index, int, NULL, 0444);
 MODULE_PARM_DESC(index, "Index value for the Babyface Pro sound card.");
@@ -1593,6 +1596,8 @@ module_param(urb_frames_min, int, 0444);
 MODULE_PARM_DESC(urb_frames_min, "Smallest URB in audio frames, 8..1024 (32 = default, 16 = low-latency floor).");
 module_param(nurbs, int, 0444);
 MODULE_PARM_DESC(nurbs, "Most URBs in flight per direction, 2..16 (8 = default).");
+module_param(panel_poll_ms, int, 0444);
+MODULE_PARM_DESC(panel_poll_ms, "Front-panel poll interval in ms, 10..1000 (20 = default, matches Windows' ~50 Hz).");
 
 /* -- USB driver ------------------------- */
 
@@ -1671,11 +1676,12 @@ static int babyface_probe(struct usb_interface *intf,
 	chip->dev = usb_get_dev(dev);
 	/* USB autosuspend is untested: babyface_suspend()/_resume() don't
 	 * check PMSG_IS_AUTO, and nothing in this driver holds a PM
-	 * reference while streaming, so an autosuspend request could race
-	 * a live stream.  Disable it explicitly rather than ship an
-	 * untested code path - full autosuspend support (correct
-	 * autopm_get/put pairing around the stream) is a deliberate
-	 * follow-up, not an oversight.
+	 * reference while streaming or while the panel poll/keepalive
+	 * timers are running, so an autosuspend request could race a
+	 * live stream or panel tick. Disable it explicitly rather than
+	 * ship an untested code path - full autosuspend support (correct
+	 * autopm_get/put pairing around the stream and the panel/keepalive
+	 * work) is a deliberate follow-up, not an oversight.
 	 */
 	usb_disable_autosuspend(chip->dev);
 	chip->iface = intf;
@@ -1690,10 +1696,13 @@ static int babyface_probe(struct usb_interface *intf,
 	chip->alt = BF_ALT_1;
 	chip->frame_bytes = 56;
 	chip->preamp = BF_PREAMP_BASE;
+	memset(chip->panel_sel, -1, sizeof(chip->panel_sel));
+	chip->panel_poll_ms = clamp(panel_poll_ms, 10, 1000);
 	mutex_init(&chip->mutex);
 	spin_lock_init(&chip->lock);
 	atomic_set(&chip->urb_err, 0);
 	INIT_WORK(&chip->stream_work, babyface_stream_work);
+	INIT_DELAYED_WORK(&chip->panel_work, babyface_panel_work);
 	chip->card->private_free = babyface_private_free;
 
 	/* Model-neutral on purpose.  The FS and the original (2015)
@@ -1856,11 +1865,22 @@ static int babyface_probe(struct usb_interface *intf,
 		goto error;
 	}
 
+	err = babyface_create_panel(chip);
+	if (err < 0) {
+		dev_err(&intf->dev, "front-panel control creation failed: %d\n", err);
+		goto error;
+	}
+
 	err = snd_card_register(chip->card);
 	if (err < 0) {
 		dev_err(&intf->dev, "snd_card_register failed: %d\n", err);
 		goto error;
 	}
+
+	/* The panel poll mirrors the physical buttons/wheel into the
+	 * Front Panel controls; it runs for the whole card lifetime.
+	 */
+	babyface_panel_start(chip);
 
 	usb_set_intfdata(intf, chip);
 	dev_info(&intf->dev,
@@ -1904,9 +1924,13 @@ static void babyface_disconnect(struct usb_interface *intf)
 		babyface_stream_kill(chip);
 	mutex_unlock(&chip->mutex);
 	cancel_work_sync(&chip->stream_work);
+	babyface_panel_stop(chip);
 	/* Keep the mixer state for the next probe: a userspace usbfs claim
 	 * (PipeWire sink grab, TuxMix daemon) detaches us and the cold init
-	 * of the re-probe would otherwise wipe the settings.
+	 * of the re-probe would otherwise wipe the settings.  Saved after
+	 * the panel poll is stopped: the worker writes master/gain/xpoint
+	 * under chip->mutex and this copy does not take it, so an unplug
+	 * during a wheel turn could otherwise snapshot a torn state.
 	 */
 	bf_state_save(chip);
 	/* Balance the probe()-time usb_disable_autosuspend(): the usb_device
@@ -1946,6 +1970,7 @@ static int babyface_suspend(struct usb_interface *intf, pm_message_t message)
 		babyface_stream_kill(chip);
 	mutex_unlock(&chip->mutex);
 	cancel_work_sync(&chip->stream_work);
+	babyface_panel_stop(chip);
 	return 0;
 }
 
@@ -1975,6 +2000,8 @@ static int babyface_resume(struct usb_interface *intf)
 	err = bf_state_apply_flags(chip);
 out:
 	mutex_unlock(&chip->mutex);
+	if (!err)
+		babyface_panel_start(chip);
 	return err;
 }
 
