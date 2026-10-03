@@ -164,8 +164,6 @@ gt215_link_train(struct gt215_ram *ram)
 	struct nvbios_M0205T M0205T = { 0 };
 	u8 ver, hdr, cnt, len, snr, ssz;
 	unsigned int clk_current;
-	unsigned long flags;
-	unsigned long *f = &flags;
 
 	if (nvkm_boolopt(device->cfgopt, "NvMemExec", true) != true)
 		return -ENOSYS;
@@ -186,7 +184,12 @@ gt215_link_train(struct gt215_ram *ram)
 
 	clk_current = nvkm_clk_read(clk, nv_clk_src_mem);
 
-	ret = gt215_clk_pre(clk, f);
+	/*
+	 * Talking to the PMU below sleeps, so do not pause PFIFO under its
+	 * lock.  gt215_clk_pre() still halts it through 0x002504, which is
+	 * all a normal memory reclock relies on as well.
+	 */
+	ret = gt215_clk_pre(clk, NULL);
 	if (ret)
 		goto out;
 
@@ -241,7 +244,7 @@ gt215_link_train(struct gt215_ram *ram)
 	nvkm_mask(device, 0x616308, 0x10, 0x10);
 	nvkm_mask(device, 0x616b08, 0x10, 0x10);
 
-	gt215_clk_post(clk, f);
+	gt215_clk_post(clk, NULL);
 
 	ram_train_result(ram->base.fb, result, 64);
 	for (i = 0; i < 64; i++)
@@ -258,12 +261,9 @@ gt215_link_train(struct gt215_ram *ram)
 	return ret;
 
 out:
-	if(ret == -EBUSY)
-		f = NULL;
-
 	train->state = NVA3_TRAIN_UNSUPPORTED;
 
-	gt215_clk_post(clk, f);
+	gt215_clk_post(clk, NULL);
 	kfree(result);
 	return ret;
 }

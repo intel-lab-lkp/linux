@@ -303,6 +303,11 @@ calc_host(struct gt215_clk *clk, struct nvkm_cstate *cstate)
 	return ret;
 }
 
+/*
+ * Halt PFIFO and wait for the execution engines to go idle.  If @flags is
+ * not NULL, PFIFO is also paused under the FIFO lock with interrupts disabled
+ * until gt215_clk_post(), so the caller must not sleep in between.
+ */
 int
 gt215_clk_pre(struct nvkm_clk *clk, unsigned long *flags)
 {
@@ -319,7 +324,7 @@ gt215_clk_pre(struct nvkm_clk *clk, unsigned long *flags)
 	) < 0)
 		return -EBUSY;
 
-	if (fifo)
+	if (fifo && flags)
 		nvkm_fifo_pause(fifo, flags);
 
 	if (nvkm_msec(device, 2000,
