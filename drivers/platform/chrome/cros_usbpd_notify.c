@@ -110,24 +110,25 @@ static int cros_usbpd_notify_probe_acpi(struct platform_device *pdev)
 	if (!pdnotify)
 		return -ENOMEM;
 
-	/* Get the EC device pointer needed to talk to the EC. */
-	ec_dev = dev_get_drvdata(dev->parent);
-	if (!ec_dev) {
-		/*
-		 * We continue even for older devices which don't have the
-		 * correct device hierarchy, namely, GOOG0003 is a child
-		 * of GOOG0004. If GOOG0003 is a child of GOOG0004 and we
-		 * can't get a pointer to the Chrome EC device, defer the
-		 * probe function.
-		 */
-		parent_fwnode = fwnode_get_parent(dev->fwnode);
-		if (parent_fwnode) {
-			parent_adev = to_acpi_device_node(parent_fwnode);
-			if (parent_adev &&
-			    acpi_dev_hid_match(parent_adev, CREC_DRV_NAME)) {
-				return -EPROBE_DEFER;
-			}
-		}
+	/*
+	 * Get the EC device pointer needed to talk to the EC. Only the Chrome
+	 * EC (GOOG0004) stores a struct cros_ec_device as its driver data, so
+	 * only use the parent's driver data when GOOG0003 is a child of
+	 * GOOG0004, and defer the probe until that driver has bound.
+	 *
+	 * We continue without the pointer for older devices which don't have
+	 * the correct device hierarchy. There GOOG0003 is a child of another
+	 * device, such as the ACPI EC (PNP0C09), whose driver data is not a
+	 * struct cros_ec_device.
+	 */
+	parent_fwnode = fwnode_get_parent(dev->fwnode);
+	parent_adev = to_acpi_device_node(parent_fwnode);
+	if (parent_adev && acpi_dev_hid_match(parent_adev, CREC_DRV_NAME)) {
+		ec_dev = dev_get_drvdata(dev->parent);
+		if (!ec_dev)
+			return -EPROBE_DEFER;
+	} else {
+		ec_dev = NULL;
 		dev_warn(dev, "Couldn't get Chrome EC device pointer.\n");
 	}
 
