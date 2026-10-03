@@ -18,6 +18,7 @@
 #include <linux/clocksource.h>
 #include <linux/sched/task.h>
 #include <linux/kallsyms.h>
+#include <linux/module_symbol.h>
 #include <linux/security.h>
 #include <linux/seq_file.h>
 #include <linux/tracefs.h>
@@ -4385,6 +4386,109 @@ static int test_for_valid_rec(struct dyn_ftrace *rec)
 	return 1;
 }
 
+#if defined(CONFIG_MODULES) && defined(CONFIG_KALLSYMS)
+#define FTRACE_MOD_SYMS
+/*
+ * test_for_valid_rec() resolves an address with kallsyms_lookup(), which
+ * scans the whole symbol table of a module. Calling it for every record of
+ * a module being loaded costs O(records * symbols): several seconds for a
+ * driver as large as amdgpu, all of it under ftrace_lock. Sort the symbol
+ * addresses of the module once instead and binary search them. The module
+ * symbol table itself is left untouched, as livepatch relies on its order.
+ */
+struct ftrace_mod_syms {
+	unsigned long *addrs;
+	unsigned int nr;
+};
+
+static int ftrace_cmp_addr(const void *a, const void *b)
+{
+	unsigned long x = *(const unsigned long *)a;
+	unsigned long y = *(const unsigned long *)b;
+
+	return x < y ? -1 : x > y;
+}
+
+/* Collect the symbols find_kallsyms_symbol() would consider. */
+static void ftrace_mod_syms_init(struct ftrace_mod_syms *syms,
+				 struct module *mod)
+{
+	/* A coming module cannot have its kallsyms replaced under us. */
+	struct mod_kallsyms *kallsyms = rcu_dereference_raw(mod->kallsyms);
+	unsigned int i;
+
+	syms->nr = 0;
+	syms->addrs = kvmalloc_array(kallsyms->num_symtab,
+				     sizeof(*syms->addrs), GFP_KERNEL);
+	if (!syms->addrs)
+		return;
+
+	for (i = 1; i < kallsyms->num_symtab; i++) {
+		const Elf_Sym *sym = &kallsyms->symtab[i];
+		const char *name = kallsyms->strtab + sym->st_name;
+
+		if (sym->st_shndx == SHN_UNDEF || *name == '\0' ||
+		    is_mapping_symbol(name))
+			continue;
+		syms->addrs[syms->nr++] = kallsyms_symbol_value(sym);
+	}
+
+	sort(syms->addrs, syms->nr, sizeof(*syms->addrs), ftrace_cmp_addr, NULL);
+}
+
+/* Same answer as test_for_valid_rec(), using the sorted addresses. */
+static int test_for_valid_mod_rec(struct ftrace_mod_syms *syms,
+				  struct module *mod, struct dyn_ftrace *rec)
+{
+	unsigned long ip = rec->ip, base, best;
+	unsigned int lo = 0, hi = syms->nr, mid;
+	struct module_memory *mod_mem = NULL;
+
+	if (!syms->addrs)
+		return test_for_valid_rec(rec);
+
+	for_each_mod_mem_type(type) {
+#ifndef CONFIG_KALLSYMS_ALL
+		if (!mod_mem_type_is_text(type))
+			continue;
+#endif
+		if (within_module_mem_type(ip, mod, type)) {
+			mod_mem = &mod->mem[type];
+			break;
+		}
+	}
+	if (!mod_mem)
+		goto invalid;
+	base = (unsigned long)mod_mem->base;
+
+	/* Find the last symbol at or below ip. */
+	while (lo < hi) {
+		mid = lo + (hi - lo) / 2;
+		if (syms->addrs[mid] <= ip)
+			lo = mid + 1;
+		else
+			hi = mid;
+	}
+	if (!lo)
+		goto invalid;
+	best = syms->addrs[lo - 1];
+
+	/* Weak functions can cause invalid addresses */
+	if (best < base || ip - best > FTRACE_MCOUNT_MAX_OFFSET)
+		goto invalid;
+	return 1;
+
+invalid:
+	rec->flags |= FTRACE_FL_DISABLED;
+	return 0;
+}
+
+static void ftrace_mod_syms_free(struct ftrace_mod_syms *syms)
+{
+	kvfree(syms->addrs);
+}
+#endif
+
 static struct workqueue_struct *ftrace_check_wq __initdata;
 static struct work_struct ftrace_check_work __initdata;
 
@@ -8010,10 +8114,29 @@ void ftrace_release_mod(struct module *mod)
 	}
 }
 
+#ifndef FTRACE_MOD_SYMS
+struct ftrace_mod_syms { };
+
+static inline void ftrace_mod_syms_init(struct ftrace_mod_syms *syms,
+					struct module *mod) { }
+
+static inline int test_for_valid_mod_rec(struct ftrace_mod_syms *syms,
+					 struct module *mod,
+					 struct dyn_ftrace *rec)
+{
+	return test_for_valid_rec(rec);
+}
+
+static inline void ftrace_mod_syms_free(struct ftrace_mod_syms *syms) { }
+#endif
+
 void ftrace_module_enable(struct module *mod)
 {
+	struct ftrace_mod_syms syms;
 	struct dyn_ftrace *rec;
 	struct ftrace_page *pg;
+
+	ftrace_mod_syms_init(&syms, mod);
 
 	mutex_lock(&ftrace_lock);
 
@@ -8050,7 +8173,7 @@ void ftrace_module_enable(struct module *mod)
 		cond_resched();
 
 		/* Weak functions should still be ignored */
-		if (!test_for_valid_rec(rec)) {
+		if (!test_for_valid_mod_rec(&syms, mod, rec)) {
 			/* Clear all other flags. Should not be enabled anyway */
 			rec->flags = FTRACE_FL_DISABLED;
 			continue;
@@ -8086,6 +8209,8 @@ void ftrace_module_enable(struct module *mod)
 
  out_unlock:
 	mutex_unlock(&ftrace_lock);
+
+	ftrace_mod_syms_free(&syms);
 
 	process_cached_mods(mod->name);
 }
