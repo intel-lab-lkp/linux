@@ -164,6 +164,63 @@ static struct attribute *xswap_attrs[] = {
 	NULL,
 };
 
+/* Size of a new device, from xswap.max=.  A percentage unless bytes is set. */
+static unsigned int xswap_size_pct = 200;
+static unsigned long xswap_size_bytes;
+
+static int __init xswap_max_setup(char *str)
+{
+	unsigned int pct;
+	char *end;
+
+	end = strchr(str, '%');
+	if (end) {
+		if (end[1]) {
+			pr_err("xswap: bad xswap.max=%s\n", str);
+			return 1;
+		}
+		*end = '\0';	/* writable copy, see parse_args() */
+		if (kstrtouint(str, 0, &pct) || !pct) {
+			pr_err("xswap: bad xswap.max=%s%%\n", str);
+			return 1;
+		}
+		xswap_size_pct = pct;
+		xswap_size_bytes = 0;
+		return 1;
+	}
+
+	xswap_size_bytes = memparse(str, &end);
+	if (*end || xswap_size_bytes < PAGE_SIZE) {
+		pr_err("xswap: bad xswap.max=%s\n", str);
+		xswap_size_bytes = 0;
+		return 1;
+	}
+	xswap_size_pct = 0;
+	return 1;
+}
+__setup("xswap.max=", xswap_max_setup);
+
+/* The most a device can address, whatever xswap.max= asked for. */
+static unsigned long xswap_size_limit(void)
+{
+	unsigned long limit = swapfile_maximum_size;
+
+	/* A cluster index is an unsigned int. */
+	if (limit / SWAPFILE_CLUSTER > UINT_MAX)
+		limit = (unsigned long)UINT_MAX * SWAPFILE_CLUSTER;
+
+	return limit;
+}
+
+static unsigned long xswap_size_pages(void)
+{
+	if (xswap_size_bytes)
+		return xswap_size_bytes >> PAGE_SHIFT;
+
+	return div_u64((unsigned long long)totalram_pages() * xswap_size_pct,
+		       100);
+}
+
 static const struct attribute_group xswap_attr_group = {
 	.attrs = xswap_attrs,
 };
@@ -4601,7 +4658,7 @@ err:
 static int xswap_create(int prio)
 {
 	struct swap_info_struct *si;
-	unsigned long ram, maxpages;
+	unsigned long maxpages;
 	int error;
 
 	if (prio != DEF_XSWAP_PRIO &&
@@ -4612,6 +4669,23 @@ static int xswap_create(int prio)
 	if (!zswap_is_enabled())
 		return -EOPNOTSUPP;
 
+	/* Refuse rather than clamp: xswap.max= should give what was asked. */
+	maxpages = xswap_size_pages();
+	if (maxpages > xswap_size_limit()) {
+		pr_err("xswap: xswap.max is larger than the device can address\n");
+		return -EINVAL;
+	}
+	/*
+	 * Below one cluster the device is not cluster-aligned, so its only
+	 * cluster would hold slots past si->max.  Nothing masks those, and a
+	 * slot allocated there is past the end of the device: it can never be
+	 * read back or given up again.
+	 */
+	if (maxpages < SWAPFILE_CLUSTER) {
+		pr_err("xswap: xswap.max is smaller than one cluster\n");
+		return -EINVAL;
+	}
+
 	si = alloc_swap_info();
 	if (IS_ERR(si))
 		return PTR_ERR(si);
@@ -4619,16 +4693,8 @@ static int xswap_create(int prio)
 	INIT_WORK(&si->discard_work, swap_discard_work);
 	INIT_WORK(&si->reclaim_work, swap_reclaim_work);
 
-	ram = totalram_pages();
-	maxpages = min_t(unsigned long, ram * 2, swapfile_maximum_size);
-	/* A cluster index is an unsigned int, so cap the cluster count. */
-	if (maxpages / SWAPFILE_CLUSTER > UINT_MAX)
-		maxpages = (unsigned long)UINT_MAX * SWAPFILE_CLUSTER;
 	/* Cluster-aligned, so no cluster holds a slot past si->max. */
-	if (maxpages > SWAPFILE_CLUSTER)
-		maxpages = rounddown(maxpages, SWAPFILE_CLUSTER);
-	if (maxpages < 2)
-		maxpages = 2;
+	maxpages = rounddown(maxpages, SWAPFILE_CLUSTER);
 
 	si->bdev = NULL;
 	si->flags |= SWP_XSWAP | SWP_SOLIDSTATE;
