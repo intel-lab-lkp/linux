@@ -621,6 +621,7 @@ ecryptfs_write_tag_70_packet(char *dest, size_t *remaining_bytes,
 {
 	struct ecryptfs_write_tag_70_packet_silly_stack *s;
 	struct key *auth_tok_key = NULL;
+	struct user_key_payload *ukp;
 	int rc = 0;
 
 	s = kzalloc_obj(*s);
@@ -735,6 +736,20 @@ ecryptfs_write_tag_70_packet(char *dest, size_t *remaining_bytes,
 		rc = -EOPNOTSUPP;
 		printk(KERN_INFO "%s: Filename encryption only supports "
 		       "password tokens\n", __func__);
+		goto out_free_unlock;
+	}
+
+	ukp = user_key_payload_locked(auth_tok_key);
+	if (!ukp || ukp->datalen < sizeof(struct ecryptfs_auth_tok)) {
+		printk(KERN_ERR "Error key payload too small\n");
+		rc = -EINVAL;
+		goto out_free_unlock;
+	}
+
+	if (s->auth_tok->token.password.session_key_encryption_key_bytes >
+			sizeof(s->auth_tok->token.password.session_key_encryption_key)) {
+		printk(KERN_ERR "Error FNEK key size too large\n");
+		rc = -EINVAL;
 		goto out_free_unlock;
 	}
 
