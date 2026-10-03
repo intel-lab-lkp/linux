@@ -11,7 +11,10 @@
  * standalone (snd-usb-caiaq-style interrupt streaming) instead of an
  * snd-usb-audio quirk.
  *
- * babyfacepro.c holds the card lifecycle and the PCM stream.
+ * babyfacepro.c holds the card lifecycle, the PCM stream and the
+ * mixer-state persistence across re-probes;
+ * babyfacepro-ctl.c holds the ALSA control surface - the hardware
+ * mixer.
  *
  * The protocol (vendor requests + 14x32-bit frame layout) was
  * reverse-engineered from Windows captures and validated on hardware -
@@ -90,8 +93,10 @@
 
 /* Vendor requests (bmRequestType 0x40, value in wValue, no data phase). */
 #define BF_REQ_KEEPALIVE		0x10	/* settings word / stream trigger */
+#define BF_REQ_CROSSPOINT		0x12	/* 16-bit crosspoint / master */
 #define BF_REQ_REG_CLEAR		0x16	/* cold-init register clear */
 #define BF_REQ_PREAMP			0x17	/* 48V/PAD state + readback */
+#define BF_REQ_GAIN			0x1a	/* 8-bit gain / master companion */
 #define BF_REQ_DDS			0x1b	/* clock quads */
 #define BF_REQ_STATUS_2			0x1c	/* read 4 B */
 #define BF_REQ_SESSION_START		0x1d
@@ -113,6 +118,80 @@
  * state register", hardware-verified 2026-08-22/23).
  */
 #define BF_SETTINGS_CLOCK_INTERNAL	0x0001
+
+/* Register addresses (masters + crosspoint matrix). */
+#define BF_REG_MASTER_16		0x03e0	/* + 2*out (bReq 0x12) */
+#define BF_REG_MASTER_8			0x0004	/* + 2*out (bReq 0x1a) */
+#define BF_REG_CROSS_BASE_L		0x0034	/* + 0x34*out + src (bReq 0x12) */
+#define BF_REG_CROSS_BASE_R		0x004e	/* + 0x34*out + src */
+#define BF_REG_CROSS_STRIDE		0x0034
+/* Low map (the AN1/2 monitor bus's own per-source registers, one set
+ * shared across every output - not one per output block like the
+ * standard crosspoint map above). NOT a shadow/mirror of the standard
+ * map for AN1/2: it is what that output actually sums from, and the
+ * standard map alone has no audible effect on it (hardware-verified
+ * 2026-09-14, see bf_xpoint_write's own comment and KERNEL-DRIVER.md).
+ */
+#define BF_REG_LOWMAP_BASE_L		0x0000	/* + idx_l */
+#define BF_REG_LOWMAP_BASE_R		0x001a	/* + idx_r */
+
+/* The "cross" register block within each output: the L-registers sit at
+ * odd offsets 5..23 and the R-registers at even offsets 4..22 (the stereo
+ * source pairs that can be cross-linked).  bf_crosspoint_clear_cross()
+ * zeroes them because the cold-init clear does not cover them.
+ */
+#define BF_CROSS_L_FIRST		5
+#define BF_CROSS_L_LAST			23
+#define BF_CROSS_R_FIRST		4
+#define BF_CROSS_R_LAST			22
+
+/* Calibrated master value: 0 dB = 0x2000 (+6 dB = 0x4000).  See
+ * CALIBRATION.md.  The crosspoint fader curve is DIFFERENT (0 dB =
+ * 0x16a0, top 0x2d41 - see below).
+ */
+#define BF_MASTER_0DB			0x2000
+
+/* The 8-bit master is the REAL output volume (hardware-verified
+ * 2026-08-24: writing it changes the level, the 16-bit does not).
+ * Scale: 0.5 dB per step, 0xf3 = 0 dB (the scene-load default),
+ * bottom 0x73 = -64 dB (silence), top 0xff = +6 dB.  The 16-bit
+ * register is a companion kept in sync (TotalMix writes both).
+ * The mute value is 0x3B.
+ */
+#define BF_MASTER_8_0DB			0xf3
+#define BF_MASTER_8_MIN			0x73
+#define BF_MASTER_MUTE			0x3b
+#define BF_MASTER_UNMUTE		0xf3
+/* -20 dB master, 8-bit and 16-bit: the exact pair the hardware DIM
+ * button writes (cap_dim2.pcap), reused as the power-on default.
+ */
+#define BF_MASTER_MINUS20_8		0xcb
+#define BF_MASTER_MINUS20_16		0x0333
+
+/* Crosspoint fader curve: 0 dB = 0x16a0, +6 dB = 0x2d41 (fader curve,
+ * DIFFERENT from the master 0x4000 top - see CALIBRATION.md).
+ */
+#define BF_FADER_0DB			0x16a0
+#define BF_FADER_TOP			0x2d41
+
+/* The crosspoint matrix sources (14 controls per output). */
+struct bf_source {
+	const char *name;
+	u8 idx_l;
+	u8 idx_r;
+};
+
+/* Crosspoint-source order + register block maps (babyfacepro-ctl.c). */
+extern const struct bf_source bf_sources[14];
+extern const u8 bf_xpoint_block[6];
+
+/* The first playback source in bf_sources[]: the four analog inputs, the
+ * optical input and the three ADAT pairs come first, the six playback
+ * channels last.  babyface_write_default_mixer() routes only the
+ * playback out of the box; a hardware input is not monitored into any
+ * output until a mixer raises its crosspoint.
+ */
+#define BF_SRC_PB1			8
 
 struct snd_usb_babyface {
 	struct snd_card *card;
@@ -160,6 +239,25 @@ struct snd_usb_babyface {
 	 */
 	ktime_t in_done;
 	unsigned int out_inflight;
+
+	/* mixer state (no gain readback exists - host-side mirror) */
+	u8 flag_cnt;			/* 0xc000/0x4000/0x8000/0x0000 */
+	struct snd_kcontrol *master_kctl[6];
+	u16 master[6][2];		/* cached 16-bit masters */
+	bool muted[6];
+	u16 xpoint[6][14][2];		/* cached crosspoints (out, src, L/R) */
+};
+
+/* The mixer state cached across interface re-probes (see
+ * babyfacepro.c's own comment on bf_state_save/bf_state_restore).
+ */
+struct bf_saved {
+	struct list_head list;
+	char key[32];
+	u8 flag_cnt;
+	u16 master[6][2];
+	bool muted[6];
+	u16 xpoint[6][14][2];
 };
 
 struct bf_rate {
@@ -185,3 +283,26 @@ void babyface_stream_kill(struct snd_usb_babyface *chip);
 void babyface_pcm_stop_both(struct snd_usb_babyface *chip, snd_pcm_state_t state);
 void babyface_stream_work(struct work_struct *work);
 extern const struct snd_pcm_hw_constraint_list bf_rates_constraint;
+
+/* Mixer-state persistence across interface re-probes. */
+void bf_state_save(struct snd_usb_babyface *chip);
+int bf_state_restore(struct snd_usb_babyface *chip);
+void bf_state_purge(void);
+int babyface_restore_state(struct snd_usb_babyface *chip);
+
+/* -- babyfacepro-ctl.c ----------------------- */
+extern const u16 bf_flag_cycle[4];
+int bf_vendor_write_cycle(struct snd_usb_babyface *chip, u8 req, u16 val, u16 idx);
+int bf_crosspoint_clear_cross(struct snd_usb_babyface *chip,
+			      unsigned int blk);
+int babyface_write_default_mixer(struct snd_usb_babyface *chip);
+int bf_apply_masters(struct snd_usb_babyface *chip);
+int bf_xpoint_write(struct snd_usb_babyface *chip, int out, int src,
+		    u16 l, u16 r);
+int babyface_create_masters(struct snd_usb_babyface *chip);
+int babyface_create_xpoints(struct snd_usb_babyface *chip);
+
+/* Master gain-law helpers (babyfacepro-ctl.c). */
+int bf_master_half_db(u16 vol16);	/* 16-bit master -> dBx2 */
+int bf_master_16bit(int half_db);	/* dBx2 -> 16-bit master */
+u8 bf_master_8bit(u16 vol16);		/* 16-bit master -> 8-bit companion */
