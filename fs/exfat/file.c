@@ -751,7 +751,7 @@ static ssize_t exfat_fallback_buffered_write(struct kiocb *iocb,
 	iocb->ki_flags &= ~IOCB_DIRECT;
 
 	written = iomap_file_buffered_write(iocb, from, &exfat_write_iomap_ops,
-			NULL, NULL);
+			&exfat_iomap_write_ops, NULL);
 	if (written < 0)
 		return written;
 
@@ -837,9 +837,13 @@ static ssize_t exfat_file_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 		ret = exfat_dio_write_iter(iocb, iter);
 	else
 		ret = iomap_file_buffered_write(iocb, iter,
-				&exfat_write_iomap_ops, NULL, NULL);
+				&exfat_write_iomap_ops, &exfat_iomap_write_ops,
+				NULL);
 	if (ret < 0)
 		goto unlock;
+
+	if (exfat_get_valid_size(ei) > valid_size)
+		mark_inode_dirty(inode);
 
 	inode_unlock(inode);
 
