@@ -1164,47 +1164,88 @@ static inline u32 fifo_space_avail(u32 head, u32 tail, u32 q_size)
 	return avail;
 }
 
-static inline int copy_exec_reqs(struct qaic_device *qdev, struct bo_slice *slice, u32 dbc_id,
-				 u32 head, u32 *ptail)
+static void submit_reqs_to_fifo(struct dma_bridge_chan *dbc, struct dbc_req *reqs,
+			       u32 num_req, u32 head, u32 tail)
 {
-	struct dma_bridge_chan *dbc = &qdev->dbc[dbc_id];
-	struct dbc_req *reqs = slice->reqs;
-	u32 tail = *ptail;
-	u32 avail;
+	u32 num_submit;
 
+	if (tail + num_req > dbc->nelem) {
+		num_submit = dbc->nelem - tail;
+		memcpy(fifo_at(dbc->req_q_base, tail), reqs, sizeof(*reqs) * num_submit);
+		reqs += num_submit;
+		num_submit = num_req - num_submit;
+		memcpy(dbc->req_q_base, reqs, sizeof(*reqs) * num_submit);
+	} else {
+		memcpy(fifo_at(dbc->req_q_base, tail), reqs, sizeof(*reqs) * num_req);
+	}
+}
+
+/* Caller should be holding dbc->req_lock */
+static inline int qaic_submit_reqs_to_hw(struct bo_slice *slice,
+					 unsigned int num_req,
+					 bool is_partial, u32 partial_size)
+{
+	struct dma_bridge_chan *dbc = slice->bo->dbc;
+	struct dbc_req *reqs = slice->reqs;
+	struct qaic_bo *bo = slice->bo;
+	struct dbc_req *last_req;
+	u32 head, tail, avail;
+
+	qaic_data_get_fifo_info(dbc, &head, &tail);
 	avail = fifo_space_avail(head, tail, dbc->nelem);
-	if (avail < slice->nents)
+
+	/* PCI link error */
+	if (head == U32_MAX || tail == U32_MAX)
+		return -ENODEV;
+
+	if (avail < num_req)
 		return -EAGAIN;
 
-	if (tail + slice->nents > dbc->nelem) {
-		avail = dbc->nelem - tail;
-		avail = min_t(u32, avail, slice->nents);
-		memcpy(fifo_at(dbc->req_q_base, tail), reqs, sizeof(*reqs) * avail);
-		reqs += avail;
-		avail = slice->nents - avail;
-		if (avail)
-			memcpy(dbc->req_q_base, reqs, sizeof(*reqs) * avail);
-	} else {
-		memcpy(fifo_at(dbc->req_q_base, tail), reqs, sizeof(*reqs) * slice->nents);
+	submit_reqs_to_fifo(dbc, reqs, num_req, head, tail);
+
+	if (is_partial) {
+		/*
+		 * Copy over the last entry. Here we need to adjust len to the left over
+		 * size, and set src and dst to the entry it is copied to.
+		 */
+		last_req = fifo_at(dbc->req_q_base, (tail + num_req - 1) % dbc->nelem);
+		memcpy(last_req, &slice->reqs[slice->nents - 1], sizeof(*last_req));
+		last_req->len = cpu_to_le32(partial_size);
+		last_req->src_addr = reqs[num_req - 1].src_addr;
+		last_req->dest_addr = reqs[num_req - 1].dest_addr;
+		last_req->req_id = reqs[num_req - 1].req_id;
+		/* Disable DMA transfer */
+		if (!last_req->len)
+			last_req->cmd &= ~GENMASK(1, 0);
 	}
 
-	*ptail = (tail + slice->nents) % dbc->nelem;
+	tail = (tail + num_req) % dbc->nelem;
 
+	/* Submit_ts will be taken for the last job of this BO */
+	bo->perf_stats.req_submit_ts = ktime_get_ns();
+
+	/* Finalize commit to hardware */
+	dma_sync_sgtable_for_device(&dbc->qdev->pdev->dev, bo->sgt, bo->dir);
+	writel(tail, dbc->dbc_base + REQTP_OFF);
 	return 0;
 }
 
-static inline int copy_partial_exec_reqs(struct qaic_device *qdev, struct bo_slice *slice,
-					 u64 resize, struct dma_bridge_chan *dbc, u32 head,
-					 u32 *ptail)
+static inline int copy_exec_reqs(struct bo_slice *slice)
+{
+	int ret;
+
+	ret = qaic_submit_reqs_to_hw(slice, slice->nents, false, 0);
+
+	return ret;
+}
+
+static inline int copy_partial_exec_reqs(struct bo_slice *slice, u64 resize)
 {
 	struct dbc_req *reqs = slice->reqs;
-	struct dbc_req *last_req;
-	u32 tail = *ptail;
+	unsigned int nents_xfer;
 	u64 last_bytes;
 	u32 first_n;
-	u32 avail;
-
-	avail = fifo_space_avail(head, tail, dbc->nelem);
+	int ret;
 
 	/*
 	 * After this for loop is complete, first_n represents the index
@@ -1219,50 +1260,15 @@ static inline int copy_partial_exec_reqs(struct qaic_device *qdev, struct bo_sli
 		else
 			break;
 
-	if (avail < (first_n + 1))
-		return -EAGAIN;
+	nents_xfer = first_n + 1;
 
-	if (first_n) {
-		if (tail + first_n > dbc->nelem) {
-			avail = dbc->nelem - tail;
-			avail = min_t(u32, avail, first_n);
-			memcpy(fifo_at(dbc->req_q_base, tail), reqs, sizeof(*reqs) * avail);
-			last_req = reqs + avail;
-			avail = first_n - avail;
-			if (avail)
-				memcpy(dbc->req_q_base, last_req, sizeof(*reqs) * avail);
-		} else {
-			memcpy(fifo_at(dbc->req_q_base, tail), reqs, sizeof(*reqs) * first_n);
-		}
-	}
+	ret = qaic_submit_reqs_to_hw(slice, nents_xfer, true, last_bytes);
 
-	/*
-	 * Copy over the last entry. Here we need to adjust len to the left over
-	 * size, and set src and dst to the entry it is copied to.
-	 */
-	last_req = fifo_at(dbc->req_q_base, (tail + first_n) % dbc->nelem);
-	memcpy(last_req, reqs + slice->nents - 1, sizeof(*reqs));
-
-	/*
-	 * last_bytes holds size of a DMA segment, maximum DMA segment size is
-	 * set to UINT_MAX by qaic and hence last_bytes can never exceed u32
-	 * range. So, by down sizing we are not corrupting the value.
-	 */
-	last_req->len = cpu_to_le32((u32)last_bytes);
-	last_req->src_addr = reqs[first_n].src_addr;
-	last_req->dest_addr = reqs[first_n].dest_addr;
-	if (!last_bytes)
-		/* Disable DMA transfer */
-		last_req->cmd = GENMASK(7, 2) & reqs[first_n].cmd;
-
-	*ptail = (tail + first_n + 1) % dbc->nelem;
-
-	return 0;
+	return ret;
 }
 
 static int send_bo_list_to_device(struct qaic_device *qdev, struct drm_file *file_priv,
-				  struct execute_info *exec, struct dma_bridge_chan *dbc,
-				  u32 head, u32 *tail)
+				  struct execute_info *exec, struct dma_bridge_chan *dbc)
 {
 	struct ww_acquire_ctx acquire_ctx;
 	struct bo_slice *slice;
@@ -1309,37 +1315,40 @@ static int send_bo_list_to_device(struct qaic_device *qdev, struct drm_file *fil
 
 		bo->req_id = dbc->next_req_id++;
 
+		spin_lock_irqsave(&dbc->xfer_lock, flags);
+		list_add_tail(&bo->xfer_list, &dbc->xfer_list);
+		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
+
+		ret = qaic_acquire_bo_fence(bo);
+		if (ret)
+			goto fence_failed;
+
 		list_for_each_entry(slice, &bo->slices, slice) {
 			for (j = 0; j < slice->nents; j++)
 				slice->reqs[j].req_id = cpu_to_le16(bo->req_id);
 
 			if (exec->is_partial && (!resize || resize <= slice->offset))
 				/* Configure the slice for no DMA transfer */
-				ret = copy_partial_exec_reqs(qdev, slice, 0, dbc, head, tail);
+				ret = copy_partial_exec_reqs(slice, 0);
 			else if (exec->is_partial && resize < slice->offset + slice->size)
 				/* Configure the slice to be partially DMA transferred */
-				ret = copy_partial_exec_reqs(qdev, slice,
-							     resize - slice->offset, dbc,
-							     head, tail);
+				ret = copy_partial_exec_reqs(slice, resize - slice->offset);
 			else
-				ret = copy_exec_reqs(qdev, slice, dbc->id, head, tail);
+				ret = copy_exec_reqs(slice);
 			if (ret)
-				goto unlock_bo;
+				goto submit_failed;
 		}
-
-		ret = qaic_acquire_bo_fence(bo);
-		if (ret)
-			goto unlock_bo;
-
-		spin_lock_irqsave(&dbc->xfer_lock, flags);
-		list_add_tail(&bo->xfer_list, &dbc->xfer_list);
-		spin_unlock_irqrestore(&dbc->xfer_lock, flags);
-		dma_sync_sgtable_for_device(&qdev->pdev->dev, bo->sgt, bo->dir);
 		mutex_unlock(&bo->lock);
 	}
 
 	goto unlock_resv;
 
+submit_failed:
+	qaic_remove_bo_fence(bo);
+fence_failed:
+	spin_lock_irqsave(&dbc->xfer_lock, flags);
+	list_del_init(&bo->xfer_list);
+	spin_unlock_irqrestore(&dbc->xfer_lock, flags);
 unlock_bo:
 	drm_gem_object_put(&bo->base);
 	mutex_unlock(&bo->lock);
@@ -1536,13 +1545,11 @@ static int __qaic_execute_bo_ioctl(struct drm_device *dev, void *data, struct dr
 
 	exec.perf_stats.queue_level = head <= tail ? tail - head : dbc->nelem - (head - tail);
 
-	ret = send_bo_list_to_device(qdev, file_priv, &exec, dbc, head, &tail);
+	ret = send_bo_list_to_device(qdev, file_priv, &exec, dbc);
 	if (ret)
 		goto unlock_req_lock;
 
-	/* Finalize commit to hardware */
 	exec.perf_stats.submit_ts = ktime_get_ns();
-	writel(tail, dbc->dbc_base + REQTP_OFF);
 	mutex_unlock(&dbc->req_lock);
 
 	update_profiling_data(&exec);
