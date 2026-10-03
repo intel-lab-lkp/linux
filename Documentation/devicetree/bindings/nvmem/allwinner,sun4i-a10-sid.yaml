@@ -25,6 +25,7 @@ properties:
       - const: allwinner,sun50i-a64-sid
       - items:
           - enum:
+              - allwinner,sun8i-r40-sid
               - allwinner,sun50i-a100-sid
               - allwinner,sun50i-h616-sid
               - allwinner,sun55i-a523-sid
