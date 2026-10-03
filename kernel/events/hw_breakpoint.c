@@ -832,6 +832,50 @@ void unregister_hw_breakpoint(struct perf_event *bp)
 EXPORT_SYMBOL_GPL(unregister_hw_breakpoint);
 
 /**
+ * register_wide_hw_breakpoint_cpuslocked - register a wide breakpoint with cpus locked
+ * @attr: breakpoint attributes
+ * @triggered: callback to trigger when we hit the breakpoint
+ * @context: context data could be used in the triggered callback
+ *
+ * Same as register_wide_hw_breakpoint(), but caller must hold cpus_read_lock().
+ *
+ * @return a set of per_cpu pointers to perf events
+ */
+struct perf_event * __percpu *
+register_wide_hw_breakpoint_cpuslocked(struct perf_event_attr *attr,
+				       perf_overflow_handler_t triggered,
+				       void *context)
+{
+	struct perf_event * __percpu *cpu_events, *bp;
+	long err = 0;
+	int cpu;
+
+	lockdep_assert_cpus_held();
+
+	cpu_events = alloc_percpu(typeof(*cpu_events));
+	if (!cpu_events)
+		return ERR_PTR_PCPU(-ENOMEM);
+
+	for_each_online_cpu(cpu) {
+		bp = perf_event_create_kernel_counter(attr, cpu, NULL,
+						      triggered, context);
+		if (IS_ERR(bp)) {
+			err = PTR_ERR(bp);
+			break;
+		}
+
+		per_cpu(*cpu_events, cpu) = bp;
+	}
+
+	if (likely(!err))
+		return cpu_events;
+
+	unregister_wide_hw_breakpoint(cpu_events);
+	return ERR_PTR_PCPU(err);
+}
+EXPORT_SYMBOL_GPL(register_wide_hw_breakpoint_cpuslocked);
+
+/**
  * register_wide_hw_breakpoint - register a wide breakpoint in the kernel
  * @attr: breakpoint attributes
  * @triggered: callback to trigger when we hit the breakpoint
@@ -844,32 +888,14 @@ register_wide_hw_breakpoint(struct perf_event_attr *attr,
 			    perf_overflow_handler_t triggered,
 			    void *context)
 {
-	struct perf_event * __percpu *cpu_events, *bp;
-	long err = 0;
-	int cpu;
-
-	cpu_events = alloc_percpu(typeof(*cpu_events));
-	if (!cpu_events)
-		return ERR_PTR_PCPU(-ENOMEM);
+	struct perf_event * __percpu *cpu_events;
 
 	cpus_read_lock();
-	for_each_online_cpu(cpu) {
-		bp = perf_event_create_kernel_counter(attr, cpu, NULL,
-						      triggered, context);
-		if (IS_ERR(bp)) {
-			err = PTR_ERR(bp);
-			break;
-		}
-
-		per_cpu(*cpu_events, cpu) = bp;
-	}
+	cpu_events = register_wide_hw_breakpoint_cpuslocked(attr, triggered,
+							    context);
 	cpus_read_unlock();
 
-	if (likely(!err))
-		return cpu_events;
-
-	unregister_wide_hw_breakpoint(cpu_events);
-	return ERR_PTR_PCPU(err);
+	return cpu_events;
 }
 EXPORT_SYMBOL_GPL(register_wide_hw_breakpoint);
 
