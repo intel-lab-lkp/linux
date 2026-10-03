@@ -204,6 +204,41 @@ static struct folio *ractl_alloc_folio(struct readahead_control *ractl,
 	return folio;
 }
 
+/*
+ * Max number of memcg reclaim attempts per readahead request. The first
+ * makes room for the rest of the readahead window. If the window runs out
+ * of room again, try one more time since other readers in the same memcg
+ * might have used that room up.
+ */
+#define READAHEAD_MAX_MEMCG_RECLAIMS	2
+
+/*
+ * Add a readahead folio to the page cache without direct reclaim. This prevents
+ * a memcg at its limit from running reclaim for every folio in the readahead
+ * window (folios in the window are charged one at a time). If adding the folio
+ * to the page cache returns -ENOMEM, reclaim enough room for the rest of the
+ * window and retry adding it.
+ */
+static int readahead_add_folio(struct readahead_control *ractl,
+			       struct folio *folio, pgoff_t index,
+			       unsigned long nr_pages_left, gfp_t gfp)
+{
+	struct address_space *mapping = ractl->mapping;
+	int ret;
+
+	ret = filemap_add_folio(mapping, folio, index,
+				gfp & ~__GFP_DIRECT_RECLAIM);
+	if (ret == -ENOMEM &&
+	    ractl->_nr_memcg_reclaims < READAHEAD_MAX_MEMCG_RECLAIMS) {
+		ractl->_nr_memcg_reclaims++;
+		nr_pages_left = max(nr_pages_left, folio_nr_pages(folio));
+		if (mem_cgroup_reclaim_for_batch(nr_pages_left, gfp))
+			ret = filemap_add_folio(mapping, folio, index,
+						gfp & ~__GFP_DIRECT_RECLAIM);
+	}
+	return ret;
+}
+
 /**
  * page_cache_ra_unbounded - Start unchecked readahead.
  * @ractl: Readahead control.
@@ -290,7 +325,8 @@ void page_cache_ra_unbounded(struct readahead_control *ractl,
 		if (!folio)
 			break;
 
-		ret = filemap_add_folio(mapping, folio, index + i, gfp_mask);
+		ret = readahead_add_folio(ractl, folio, index + i,
+					  nr_to_read - i, gfp_mask);
 		if (ret < 0) {
 			folio_put(folio);
 			if (ret == -ENOMEM)
@@ -457,7 +493,7 @@ static unsigned long get_next_ra_size(struct file_ra_state *ra,
  */
 
 static inline int ra_alloc_folio(struct readahead_control *ractl, pgoff_t index,
-		pgoff_t mark, unsigned int order, gfp_t gfp)
+		pgoff_t mark, pgoff_t limit, unsigned int order, gfp_t gfp)
 {
 	int err;
 	struct folio *folio = ractl_alloc_folio(ractl, gfp, order);
@@ -467,7 +503,7 @@ static inline int ra_alloc_folio(struct readahead_control *ractl, pgoff_t index,
 	mark = round_down(mark, 1UL << order);
 	if (index == mark)
 		folio_set_readahead(folio);
-	err = filemap_add_folio(ractl->mapping, folio, index, gfp);
+	err = readahead_add_folio(ractl, folio, index, limit - index + 1, gfp);
 	if (err) {
 		folio_put(folio);
 		return err;
@@ -532,7 +568,7 @@ void page_cache_ra_order(struct readahead_control *ractl,
 		/* Don't allocate pages past EOF */
 		while (order > min_order && index + (1UL << order) - 1 > limit)
 			order--;
-		err = ra_alloc_folio(ractl, index, mark, order, gfp);
+		err = ra_alloc_folio(ractl, index, mark, limit, order, gfp);
 		if (err)
 			break;
 		index += 1UL << order;
@@ -813,7 +849,8 @@ void readahead_expand(struct readahead_control *ractl,
 			return;
 
 		index = mapping_align_index(mapping, index);
-		if (filemap_add_folio(mapping, folio, index, gfp_mask) < 0) {
+		if (readahead_add_folio(ractl, folio, index,
+					ractl->_index - new_index, gfp_mask) < 0) {
 			folio_put(folio);
 			return;
 		}
@@ -842,7 +879,9 @@ void readahead_expand(struct readahead_control *ractl,
 			return;
 
 		index = mapping_align_index(mapping, index);
-		if (filemap_add_folio(mapping, folio, index, gfp_mask) < 0) {
+		if (readahead_add_folio(ractl, folio, index,
+					new_nr_pages - ractl->_nr_pages,
+					gfp_mask) < 0) {
 			folio_put(folio);
 			return;
 		}
