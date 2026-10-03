@@ -430,6 +430,12 @@ void iommu_put_dma_cookie(struct iommu_domain *domain)
 	struct iommu_dma_cookie *cookie = domain->iova_cookie;
 	struct iommu_dma_msi_page *msi, *tmp;
 
+	/*
+	 * Drop any DMA_PMD mappings cached against this domain before its
+	 * page tables and IOVA domain go away.
+	 */
+	dma_pmd_domain_release(domain);
+
 	if (cookie->iovad.granule) {
 		iommu_dma_free_fq(cookie);
 		put_iova_domain(&cookie->iovad);

@@ -7,7 +7,10 @@
 #include <linux/list.h>
 #include <linux/llist.h>
 #include <linux/spinlock.h>
+#include <linux/srcu.h>
 #include <linux/types.h>
+
+struct iommu_domain;
 
 /**
  * struct dma_pmd_window - A domain's IOVA window reserved for DMA_PMD pages
@@ -35,6 +38,15 @@ struct dma_pmd_window {
 #ifdef CONFIG_DMA_PMD
 
 #define DMA_PMD_BLOCKS(order)		(1U << (PMD_ORDER - (order)))
+
+/*
+ * Number of IOMMU domains that may use DMA_PMD at once.
+ *
+ * Each such domain is given a dense index, which is the bit position it uses
+ * in dma_pmd_meta.domains_mapped. One word per PMD page records every domain
+ * that has mapped this PMD page. Used to speed up map and unmap.
+ */
+#define DMA_PMD_MAX_DOMAINS		BITS_PER_LONG
 
 /*
  * Sentinel values of dma_pmd_window.domain_idx below DMA_PMD_IDX_FIRST:
@@ -71,6 +83,17 @@ enum {
  * meta->map_lock	IRQ-safe spinlock over one PMD frame's domains_mapped
  *			bitmap. Innermost, and never held across anything that
  *			sleeps.
+ *
+ * The full order is dma_pmd_pools_lock -> pool->lock -> meta->map_lock, as
+ * taken by dma_pmd_domain_release().
+ *
+ * dma_pmd_domains_lock IRQ-safe spinlock over the domain index table and the
+ *			per-domain windows. Taken on its own; it is never
+ *			nested with dma_pmd_pools_lock in either direction.
+ *
+ * dma_pmd_srcu	Read side lets the unmap path dereference a domain out
+ *			of dma_pmd_domains[] without blocking a concurrent
+ *			dma_pmd_domain_release().
  */
 
 /*
@@ -186,6 +209,7 @@ struct dma_pmd_pool {
 } ____cacheline_aligned;
 
 extern unsigned long dma_pmd_meta_nframes;
+extern struct srcu_struct dma_pmd_srcu;
 
 static inline struct dma_pmd_meta *dma_pmd_meta_base(void)
 {
@@ -202,6 +226,10 @@ struct dma_pmd_meta *dma_pmd_meta_of_pfn(unsigned long pfn);
 struct dma_pmd_meta *dma_pmd_meta_from_phys(phys_addr_t pa);
 unsigned long dma_pmd_meta_to_pfn(const struct dma_pmd_meta *m);
 phys_addr_t dma_pmd_meta_to_phys(const struct dma_pmd_meta *m);
+
+unsigned int dma_pmd_pools_forget_domain(int idx);
+void dma_pmd_unmap_all(struct dma_pmd_meta *meta);
+unsigned int dma_pmd_forget_domain(struct dma_pmd_meta *meta, int idx);
 
 static inline bool dma_is_pmd_phys(phys_addr_t phys)
 {
@@ -227,6 +255,8 @@ static inline bool dma_pmd_window_owns(const struct dma_pmd_window *win, dma_add
 	return size && dma - win->base < size;
 }
 
+void dma_pmd_domain_release(struct iommu_domain *domain);
+
 #else /* !CONFIG_DMA_PMD */
 
 static inline bool dma_is_pmd_phys(phys_addr_t phys)
@@ -237,6 +267,10 @@ static inline bool dma_is_pmd_phys(phys_addr_t phys)
 static inline bool dma_pmd_window_owns(const struct dma_pmd_window *win, dma_addr_t dma)
 {
 	return false;
+}
+
+static inline void dma_pmd_domain_release(struct iommu_domain *domain)
+{
 }
 
 #endif /* CONFIG_DMA_PMD */

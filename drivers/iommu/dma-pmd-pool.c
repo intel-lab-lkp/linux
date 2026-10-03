@@ -74,9 +74,8 @@ static void dma_pmd_pool_free_kref(struct kref *kref)
  *    pushed locklessly onto dma_pmd_free_list and dma_pmd_reclaim_work is
  *    scheduled on dma_pmd_wq.
  * 2. In process context, dma_pmd_release_page() unmaps all IOMMU domains
- *    (dma_pmd_unmap_all(), added in a later commit), clears meta->pooled so
- *    new lockless readers stop entering @meta, and queues
- *    dma_pmd_release_page_rcu() via call_rcu().
+ *    (dma_pmd_unmap_all()), clears meta->pooled so new lockless readers stop
+ *    entering @meta, and queues dma_pmd_release_page_rcu() via call_rcu().
  * 3. After an RCU grace period (once no concurrent dma_pmd_free_page() reader
  *    can still be dereferencing @meta), dma_pmd_release_page_rcu() unfreezes
  *    all order-pool->order blocks (already split by split_page_compound()),
@@ -125,14 +124,14 @@ static void dma_pmd_release_page_rcu(struct rcu_head *head)
  * dma_pmd_release_page - Retire a PMD page and schedule its buddy release
  * @meta: PMD page metadata structure (must have all usable blocks idle)
  *
- * Cost: Slow path; clears the membership bit. The blocks themselves are
- *       returned after an RCU grace period.
- * Locking: Must not hold @pool->lock.
+ * Cost: Slow path; unmaps the IOMMU domains and clears the membership bit.
+ *       The blocks themselves are returned after an RCU grace period.
+ * Locking: Process context (calls iommu_unmap). Must not hold @pool->lock.
  * Frequency: Rare (background reclaim workqueue, shrinker, pool destruction).
  */
 static void dma_pmd_release_page(struct dma_pmd_meta *meta)
 {
-	/* dma_pmd_unmap_all(meta) will be called here once IOMMU mappings are added. */
+	dma_pmd_unmap_all(meta);
 
 	/*
 	 * Clear membership before the grace period. A reader that passed
@@ -174,6 +173,31 @@ static void dma_pmd_schedule_reclaim(void)
 		queue_work(wq, &dma_pmd_reclaim_work);
 	else
 		schedule_work(&dma_pmd_reclaim_work);
+}
+
+unsigned int dma_pmd_pools_forget_domain(int idx)
+{
+	struct dma_pmd_pool *pool;
+	struct dma_pmd_meta *meta;
+	unsigned int dropped = 0;
+	unsigned long flags;
+
+	mutex_lock(&dma_pmd_pools_lock);
+	list_for_each_entry(pool, &dma_pmd_pools, node) {
+		spin_lock_irqsave(&pool->lock, flags);
+		list_for_each_entry(meta, &pool->partial, list)
+			dropped += dma_pmd_forget_domain(meta, idx);
+		list_for_each_entry(meta, &pool->idle, list)
+			dropped += dma_pmd_forget_domain(meta, idx);
+		list_for_each_entry(meta, &pool->full, list)
+			dropped += dma_pmd_forget_domain(meta, idx);
+		spin_unlock_irqrestore(&pool->lock, flags);
+	}
+	mutex_unlock(&dma_pmd_pools_lock);
+
+	dma_pmd_schedule_reclaim();
+	flush_work(&dma_pmd_reclaim_work);
+	return dropped;
 }
 
 /**
@@ -232,12 +256,10 @@ EXPORT_SYMBOL(dma_pmd_pool_create);
  * dma_pmd_pool_destroy - Destroy a DMA_PMD page pool and unmap cached PMD pages
  * @pool: Pool to destroy
  *
- * Frees completely idle 2M pages immediately. Device DMA must be quiesced by
- * the caller first, but blocks already handed to the networking stack (e.g.,
- * RX skbs waiting in socket queues or TX skbs in TCP retransmit queues) may
- * still be in flight; those 2M pages stay on @pool->partial / @pool->full and
- * keep @pool alive on @dma_pmd_pools via @pool->refcount until their last
- * blocks free.
+ * Unmaps and frees completely idle PMD pages. If any blocks are still in flight
+ * (e.g., held by socket queues or SKBs), the pool structure and active pages
+ * remain on @dma_pmd_pools via @pool->refcount (visible to dma_pmd_domain_release())
+ * and are automatically unmapped and reclaimed as their last blocks free.
  *
  * Cost: Control plane teardown; flushes async reclaim workqueue.
  * Locking: Process context (may sleep in flush_work). Acquires @pool->lock.
@@ -250,10 +272,12 @@ struct dma_pmd_pool *dma_pmd_pool_destroy(struct dma_pmd_pool *pool)
 	struct dma_pmd_meta *meta, *tmp;
 	LIST_HEAD(release_list);
 	unsigned long flags;
+	int srcu_idx;
 
 	if (!pool)
 		return NULL;
 
+	srcu_idx = srcu_read_lock(&dma_pmd_srcu);
 	spin_lock_irqsave(&pool->lock, flags);
 	pool->destroyed = true;
 
@@ -267,6 +291,7 @@ struct dma_pmd_pool *dma_pmd_pool_destroy(struct dma_pmd_pool *pool)
 		list_del(&meta->list);
 		dma_pmd_release_page(meta);
 	}
+	srcu_read_unlock(&dma_pmd_srcu, srcu_idx);
 
 	kref_put(&pool->refcount, dma_pmd_pool_free_kref);
 	flush_work(&dma_pmd_reclaim_work);
@@ -707,10 +732,12 @@ static unsigned long dma_pmd_shrink_scan(struct shrinker *shrink,
 	unsigned long freed = 0;
 	LIST_HEAD(release_list);
 	unsigned long flags;
+	int srcu_idx;
 
 	if (!mutex_trylock(&dma_pmd_pools_lock))
 		return SHRINK_STOP;
 
+	srcu_idx = srcu_read_lock(&dma_pmd_srcu);
 	list_for_each_entry(pool, &dma_pmd_pools, node) {
 		/*
 		 * Every PMD page on @idle is a candidate, so this detaches one
@@ -734,11 +761,15 @@ static unsigned long dma_pmd_shrink_scan(struct shrinker *shrink,
 
 	mutex_unlock(&dma_pmd_pools_lock);
 
-	/* Retiring must not run under @pool->lock. */
+	/*
+	 * Retiring is done outside both locks: dma_pmd_release_page() unmaps
+	 * from the IOMMU, which is far too long to hold pool->lock for.
+	 */
 	list_for_each_entry_safe(meta, tmp, &release_list, list) {
 		list_del(&meta->list);
 		dma_pmd_release_page(meta);
 	}
+	srcu_read_unlock(&dma_pmd_srcu, srcu_idx);
 
 	/*
 	 * Both counts are in pages, matching dma_pmd_shrink_count(). A

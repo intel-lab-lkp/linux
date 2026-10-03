@@ -5,6 +5,7 @@
 #include <kunit/test.h>
 #include <linux/gfp.h>
 #include <linux/dma-pmd.h>
+#include <linux/iommu.h>
 #include <linux/mm.h>
 
 #include "dma-pmd-priv.h"
@@ -142,7 +143,9 @@ static void test_pool_alloc_and_recycle(struct kunit *test)
 
 static void test_window_helpers(struct kunit *test)
 {
+	struct iommu_domain dummy_domain = {};
 	struct dma_pmd_window win = {};
+	struct dma_pmd_pool *pool;
 
 	KUNIT_ASSERT_EQ(test, dma_pmd_meta_init(), 0);
 
@@ -156,6 +159,11 @@ static void test_window_helpers(struct kunit *test)
 	KUNIT_EXPECT_TRUE(test, dma_pmd_window_owns(&win, SZ_4G));
 	KUNIT_EXPECT_TRUE(test, dma_pmd_window_owns(&win, SZ_4G + SZ_2G - 1));
 	KUNIT_EXPECT_FALSE(test, dma_pmd_window_owns(&win, SZ_4G + SZ_2G));
+	/* Releasing an unregistered domain with an active pool is a safe no-op. */
+	pool = dma_pmd_pool_create(0, 1);
+	KUNIT_ASSERT_NOT_NULL(test, pool);
+	dma_pmd_domain_release(&dummy_domain);
+	dma_pmd_pool_destroy(pool);
 }
 
 static struct kunit_case dma_pmd_meta_test_cases[] = {
