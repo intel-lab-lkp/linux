@@ -96,6 +96,8 @@ err_read:
  */
 
 static struct timespec64 old_rtc, old_system, old_delta;
+/* Set when rtc_suspend() took the snapshot rtc_resume() relies on */
+static bool old_rtc_valid;
 
 static int rtc_suspend(struct device *dev)
 {
@@ -104,10 +106,12 @@ static int rtc_suspend(struct device *dev)
 	struct timespec64	delta, delta_delta;
 	int err;
 
-	if (timekeeping_rtc_skipsuspend())
+	if (strcmp(dev_name(&rtc->dev), CONFIG_RTC_HCTOSYS_DEVICE) != 0)
 		return 0;
 
-	if (strcmp(dev_name(&rtc->dev), CONFIG_RTC_HCTOSYS_DEVICE) != 0)
+	old_rtc_valid = false;
+
+	if (timekeeping_rtc_skipsuspend())
 		return 0;
 
 	/* snapshot the current RTC and system time at suspend*/
@@ -119,6 +123,7 @@ static int rtc_suspend(struct device *dev)
 
 	ktime_get_real_ts64(&old_system);
 	old_rtc.tv_sec = rtc_tm_to_time64(&tm);
+	old_rtc_valid = true;
 
 	/*
 	 * To avoid drift caused by repeated suspend/resumes,
@@ -151,6 +156,18 @@ static int rtc_resume(struct device *dev)
 	int err;
 
 	if (timekeeping_rtc_skipresume())
+		return 0;
+
+	/*
+	 * rtc_suspend() takes no snapshot when the persistent clock is in
+	 * charge of the sleep time or when the RTC could not be read. The
+	 * timekeeping core still asks for sleep time if the persistent clock
+	 * did not advance, which happens when the system was suspended for
+	 * less than a second. Without a snapshot there is nothing to compute
+	 * the sleep time from. Using the stale old_rtc and old_system would
+	 * inject the offset between the RTC and system time.
+	 */
+	if (!old_rtc_valid)
 		return 0;
 
 	rtc_hctosys_ret = -ENODEV;
