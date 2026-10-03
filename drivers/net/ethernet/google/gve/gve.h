@@ -18,6 +18,7 @@
 #include <linux/ptp_clock_kernel.h>
 #include <linux/u64_stats_sync.h>
 #include <net/page_pool/helpers.h>
+#include <net/tcp.h>
 #include <net/xdp.h>
 
 #include "gve_desc.h"
@@ -642,6 +643,8 @@ struct gve_tx_ring {
 			};
 		} dqo;
 	} ____cacheline_aligned;
+	void *tx_hdr_bufs;
+	dma_addr_t tx_hdr_bufs_dma;
 	struct netdev_queue *netdev_txq;
 	struct gve_queue_resources *q_resources; /* head and tail pointer idx */
 	struct device *dev;

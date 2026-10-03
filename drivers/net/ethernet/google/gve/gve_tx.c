@@ -224,6 +224,11 @@ static void gve_tx_free_ring_gqi(struct gve_priv *priv, struct gve_tx_ring *tx,
 	u32 slots;
 
 	slots = tx->mask + 1;
+	if (tx->tx_hdr_bufs) {
+		dma_free_coherent(hdev, slots * MAX_TCP_HEADER,
+				  tx->tx_hdr_bufs, tx->tx_hdr_bufs_dma);
+		tx->tx_hdr_bufs = NULL;
+	}
 	dma_free_coherent(hdev, sizeof(*tx->q_resources),
 			  tx->q_resources, tx->q_resources_bus);
 	tx->q_resources = NULL;
@@ -298,6 +303,11 @@ static int gve_tx_alloc_ring_gqi(struct gve_priv *priv,
 		/* map Tx FIFO */
 		if (gve_tx_fifo_init(priv, &tx->tx_fifo))
 			goto abort_with_qpl;
+	} else if (hdev->dma_pmd_tx_hdrs) {
+		tx->tx_hdr_bufs = dma_alloc_coherent(hdev,
+						     cfg->ring_size * MAX_TCP_HEADER,
+						     &tx->tx_hdr_bufs_dma,
+						     GFP_KERNEL);
 	}
 
 	tx->q_resources =
@@ -311,6 +321,12 @@ static int gve_tx_alloc_ring_gqi(struct gve_priv *priv,
 	return 0;
 
 abort_with_fifo:
+	if (tx->tx_hdr_bufs) {
+		dma_free_coherent(hdev,
+				  cfg->ring_size * MAX_TCP_HEADER,
+				  tx->tx_hdr_bufs, tx->tx_hdr_bufs_dma);
+		tx->tx_hdr_bufs = NULL;
+	}
 	if (!tx->raw_addressing)
 		gve_tx_fifo_release(priv, &tx->tx_fifo);
 abort_with_qpl:
@@ -423,6 +439,8 @@ static inline int gve_skb_fifo_bytes_required(struct gve_tx_ring *tx,
 #define MAX_TX_DESC_NEEDED	(MAX_SKB_FRAGS + 4)
 static void gve_tx_unmap_buf(struct device *dev, struct gve_tx_buffer_state *info)
 {
+	if (!dma_unmap_len(info, len))
+		return;
 	if (info->skb) {
 		dma_unmap_single(dev, dma_unmap_addr(info, dma),
 				 dma_unmap_len(info, len),
@@ -657,13 +675,21 @@ static int gve_tx_add_skb_no_copy(struct gve_priv *priv, struct gve_tx_ring *tx,
 
 	info->skb =  skb;
 
-	addr = dma_map_single(tx->dev, skb->data, len, DMA_TO_DEVICE);
-	if (unlikely(dma_mapping_error(tx->dev, addr))) {
-		tx->dma_mapping_error++;
-		goto drop;
+	if (tx->tx_hdr_bufs && len <= MAX_TCP_HEADER) {
+		u32 hdr_off = idx * MAX_TCP_HEADER;
+
+		memcpy(tx->tx_hdr_bufs + hdr_off, skb->data, len);
+		addr = tx->tx_hdr_bufs_dma + hdr_off;
+		dma_unmap_len_set(info, len, 0);
+	} else {
+		addr = dma_map_single(tx->dev, skb->data, len, DMA_TO_DEVICE);
+		if (unlikely(dma_mapping_error(tx->dev, addr))) {
+			tx->dma_mapping_error++;
+			goto drop;
+		}
+		dma_unmap_len_set(info, len, len);
+		dma_unmap_addr_set(info, dma, addr);
 	}
-	dma_unmap_len_set(info, len, len);
-	dma_unmap_addr_set(info, dma, addr);
 
 	num_descriptors = 1 + shinfo->nr_frags;
 	if (hlen < len)

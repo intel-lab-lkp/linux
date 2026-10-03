@@ -176,8 +176,9 @@ static void gve_unmap_packet(struct device *dev,
 		return;
 
 	/* SKB linear portion is guaranteed to be mapped */
-	dma_unmap_single(dev, dma_unmap_addr(pkt, dma[0]),
-			 dma_unmap_len(pkt, len[0]), DMA_TO_DEVICE);
+	if (dma_unmap_len(pkt, len[0]))
+		dma_unmap_single(dev, dma_unmap_addr(pkt, dma[0]),
+				 dma_unmap_len(pkt, len[0]), DMA_TO_DEVICE);
 	for (i = 1; i < pkt->num_bufs; i++) {
 		netmem_dma_unmap_page_attrs(dev, dma_unmap_addr(pkt, dma[i]),
 					    dma_unmap_len(pkt, len[i]),
@@ -231,6 +232,13 @@ static void gve_tx_free_ring_dqo(struct gve_priv *priv, struct gve_tx_ring *tx,
 	int idx = tx->q_num;
 	size_t bytes;
 	u32 qpl_id;
+
+	if (tx->tx_hdr_bufs) {
+		dma_free_coherent(hdev,
+				  tx->dqo.num_pending_packets * MAX_TCP_HEADER,
+				  tx->tx_hdr_bufs, tx->tx_hdr_bufs_dma);
+		tx->tx_hdr_bufs = NULL;
+	}
 
 	if (tx->q_resources) {
 		dma_free_coherent(hdev, sizeof(*tx->q_resources),
@@ -399,6 +407,12 @@ static int gve_tx_alloc_ring_dqo(struct gve_priv *priv,
 
 		if (gve_tx_qpl_buf_init(tx))
 			goto err;
+	} else if (hdev->dma_pmd_tx_hdrs) {
+		tx->tx_hdr_bufs =
+			dma_alloc_coherent(hdev,
+					   tx->dqo.num_pending_packets * MAX_TCP_HEADER,
+					   &tx->tx_hdr_bufs_dma,
+					   GFP_KERNEL);
 	}
 
 	return 0;
@@ -712,12 +726,20 @@ static int gve_tx_add_skb_no_copy_dqo(struct gve_tx_ring *tx,
 		u32 len = skb_headlen(skb);
 		dma_addr_t addr;
 
-		addr = dma_map_single(tx->dev, skb->data, len, DMA_TO_DEVICE);
-		if (unlikely(dma_mapping_error(tx->dev, addr)))
-			goto err;
+		if (tx->tx_hdr_bufs && len <= MAX_TCP_HEADER) {
+			u32 hdr_off = (u32)completion_tag * MAX_TCP_HEADER;
 
-		dma_unmap_len_set(pkt, len[pkt->num_bufs], len);
-		dma_unmap_addr_set(pkt, dma[pkt->num_bufs], addr);
+			memcpy(tx->tx_hdr_bufs + hdr_off, skb->data, len);
+			addr = tx->tx_hdr_bufs_dma + hdr_off;
+			dma_unmap_len_set(pkt, len[pkt->num_bufs], 0);
+		} else {
+			addr = dma_map_single(tx->dev, skb->data, len,
+					      DMA_TO_DEVICE);
+			if (unlikely(dma_mapping_error(tx->dev, addr)))
+				goto err;
+			dma_unmap_len_set(pkt, len[pkt->num_bufs], len);
+			dma_unmap_addr_set(pkt, dma[pkt->num_bufs], addr);
+		}
 		++pkt->num_bufs;
 
 		gve_tx_fill_pkt_desc_dqo(tx, desc_idx, enable_csum, len, addr,
@@ -748,10 +770,11 @@ static int gve_tx_add_skb_no_copy_dqo(struct gve_tx_ring *tx,
 err:
 	for (i = 0; i < pkt->num_bufs; i++) {
 		if (i == 0) {
-			dma_unmap_single(tx->dev,
-					 dma_unmap_addr(pkt, dma[i]),
-					 dma_unmap_len(pkt, len[i]),
-					 DMA_TO_DEVICE);
+			if (dma_unmap_len(pkt, len[i]))
+				dma_unmap_single(tx->dev,
+						 dma_unmap_addr(pkt, dma[i]),
+						 dma_unmap_len(pkt, len[i]),
+						 DMA_TO_DEVICE);
 		} else {
 			dma_unmap_page(tx->dev,
 				       dma_unmap_addr(pkt, dma[i]),
