@@ -1031,6 +1031,10 @@ static int lynxfb_pci_probe(struct pci_dev *pdev,
 
 release_fb:
 	sm750fb_framebuffer_release(sm750_dev);
+	arch_phys_wc_del(sm750_dev->mtrr.vram);
+	iounmap(sm750_dev->vmem);
+	iounmap(sm750_dev->mmio);
+	pci_release_region(pdev, 1);
 	return err;
 }
 
