@@ -51,6 +51,35 @@ nvkm_pmu_pgob(struct nvkm_pmu *pmu, bool enable)
 		pmu->func->pgob(pmu, enable);
 }
 
+/*
+ * Set up the PMU counters that nvkm_pmu_perfmon_read() samples.  PMU
+ * initialisation resets the PMU, so this has to be repeated after resume.
+ */
+int
+nvkm_pmu_perfmon_init(struct nvkm_pmu *pmu)
+{
+	if (!pmu || !pmu->func->perfmon.init)
+		return -ENODEV;
+
+	pmu->func->perfmon.init(pmu);
+	return 0;
+}
+
+/*
+ * Return the number of PMU clock cycles that passed, and how many of them the
+ * graphics engine was busy for, since the previous call or since
+ * nvkm_pmu_perfmon_init(), and restart counting.
+ */
+int
+nvkm_pmu_perfmon_read(struct nvkm_pmu *pmu, u32 *busy, u32 *total)
+{
+	if (!pmu || !pmu->func->perfmon.read)
+		return -ENODEV;
+
+	pmu->func->perfmon.read(pmu, busy, total);
+	return 0;
+}
+
 static void
 nvkm_pmu_recv(struct work_struct *work)
 {

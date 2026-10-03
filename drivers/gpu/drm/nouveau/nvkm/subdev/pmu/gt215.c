@@ -260,6 +260,44 @@ gt215_pmu_init(struct nvkm_pmu *pmu)
 	return 0;
 }
 
+/*
+ * PDAEMON idle counters.  Each one has a mask of engine idle signals at
+ * 0x10a504, a cycle count at 0x10a508 (bit 31 clears it) and a mode at
+ * 0x10a50c: bit 0 counts cycles in which all masked signals are set, bit 1
+ * cycles in which they are all clear, and both together count every cycle.
+ * Idle signal bit 0 is the graphics engine.
+ */
+#define GT215_PMU_COUNTER_TOTAL 0
+#define GT215_PMU_COUNTER_GR    1
+
+static void
+gt215_pmu_perfmon_init(struct nvkm_pmu *pmu)
+{
+	struct nvkm_device *device = pmu->subdev.device;
+
+	nvkm_wr32(device, 0x10a504 + GT215_PMU_COUNTER_TOTAL * 0x10, 0x00000000);
+	nvkm_wr32(device, 0x10a50c + GT215_PMU_COUNTER_TOTAL * 0x10, 0x00000003);
+	nvkm_wr32(device, 0x10a508 + GT215_PMU_COUNTER_TOTAL * 0x10, 0x80000000);
+
+	nvkm_wr32(device, 0x10a504 + GT215_PMU_COUNTER_GR * 0x10, 0x00000001);
+	nvkm_wr32(device, 0x10a50c + GT215_PMU_COUNTER_GR * 0x10, 0x00000002);
+	nvkm_wr32(device, 0x10a508 + GT215_PMU_COUNTER_GR * 0x10, 0x80000000);
+}
+
+static void
+gt215_pmu_perfmon_read(struct nvkm_pmu *pmu, u32 *busy, u32 *total)
+{
+	struct nvkm_device *device = pmu->subdev.device;
+
+	*busy = nvkm_rd32(device, 0x10a508 + GT215_PMU_COUNTER_GR * 0x10);
+	*total = nvkm_rd32(device, 0x10a508 + GT215_PMU_COUNTER_TOTAL * 0x10);
+	nvkm_wr32(device, 0x10a508 + GT215_PMU_COUNTER_GR * 0x10, 0x80000000);
+	nvkm_wr32(device, 0x10a508 + GT215_PMU_COUNTER_TOTAL * 0x10, 0x80000000);
+
+	*busy &= 0x7fffffff;
+	*total &= 0x7fffffff;
+}
+
 const struct nvkm_falcon_func
 gt215_pmu_flcn = {
 };
@@ -278,6 +316,8 @@ gt215_pmu = {
 	.intr = gt215_pmu_intr,
 	.send = gt215_pmu_send,
 	.recv = gt215_pmu_recv,
+	.perfmon.init = gt215_pmu_perfmon_init,
+	.perfmon.read = gt215_pmu_perfmon_read,
 };
 
 static const struct nvkm_pmu_fwif

@@ -39,6 +39,8 @@ int nvkm_pmu_send(struct nvkm_pmu *, u32 reply[2], u32 process,
 		  u32 message, u32 data0, u32 data1);
 void nvkm_pmu_pgob(struct nvkm_pmu *, bool enable);
 bool nvkm_pmu_fan_controlled(struct nvkm_device *);
+int nvkm_pmu_perfmon_init(struct nvkm_pmu *pmu);
+int nvkm_pmu_perfmon_read(struct nvkm_pmu *pmu, u32 *busy, u32 *total);
 
 int gt215_pmu_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_pmu **);
 int gf100_pmu_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_pmu **);

@@ -30,6 +30,11 @@ struct nvkm_pmu_func {
 	void (*recv)(struct nvkm_pmu *);
 	int (*initmsg)(struct nvkm_pmu *);
 	void (*pgob)(struct nvkm_pmu *, bool);
+
+	struct {
+		void (*init)(struct nvkm_pmu *pmu);
+		void (*read)(struct nvkm_pmu *pmu, u32 *busy, u32 *total);
+	} perfmon;
 };
 
 extern const struct nvkm_falcon_func gt215_pmu_flcn;
