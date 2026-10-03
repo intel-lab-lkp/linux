@@ -269,6 +269,7 @@ struct mana_ib_qp {
 	bool pending_mmq_fence;
 	bool sq_sig_all;
 	enum ib_mtu mtu;
+	enum ib_qp_state state;
 
 	/* Serializes receive WR posting. */
 	spinlock_t rq_lock;
