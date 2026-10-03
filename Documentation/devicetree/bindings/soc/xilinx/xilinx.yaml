@@ -46,6 +46,7 @@ properties:
 
       - items:
           - enum:
+              - ebdee,edgeboard-fz3a
               - xlnx,zynqmp-zc1751
           - const: xlnx,zynqmp
 
