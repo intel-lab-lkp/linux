@@ -184,7 +184,7 @@ static int usbio_ctrl_msg(struct usbio_device *usbio, u8 type, u8 cmd,
 	dev_dbg(usbio->dev, "control in %d hdr %*phN data %*phN\n", ret,
 		(int)sizeof(*cpkt), cpkt, (int)cpkt->len, cpkt->data);
 
-	if (ret < sizeof(*cpkt)) {
+	if (ret < (int)sizeof(*cpkt)) {
 		dev_err(usbio->dev, "USB control in failed: %d\n", ret);
 		return (ret < 0) ? ret : -EPROTO;
 	}
