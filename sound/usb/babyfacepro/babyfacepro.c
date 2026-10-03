@@ -105,14 +105,23 @@ int bf_vendor_read(struct snd_usb_babyface *chip, u8 req, u16 idx, u8 *buf)
 				    0, idx, buf, 4, BF_CTL_TIMEOUT, GFP_KERNEL);
 }
 
-/* Sends the BF_REG_KEEPALIVE_SETTINGS word (PROTOCOL.md: "keepalive
- * 0x10 0x05CF wVal = host settings-state register" - a single shared
- * word, not independent per-setting writes).  The clock source is
- * Internal.
+/* Composes and sends the BF_REG_KEEPALIVE_SETTINGS word from every
+ * currently-tracked flag together (PROTOCOL.md: "keepalive 0x10 0x05CF
+ * wVal = host settings-state register" - a single shared word, not
+ * independent per-setting writes).  Only clock source is tracked so
+ * far; the single call site this replaces (which used to hardcode
+ * 0x0001, i.e. "always Internal") is why this exists as its own
+ * function rather than an inline write at each call site - the next
+ * flag added to this word (EQ for Record / Optical-Out SPDIF, this
+ * driver's own upstream follow-up list) just OR's in here too, instead
+ * of every caller needing to remember every other bit.
  */
 int bf_settings_write(struct snd_usb_babyface *chip)
 {
-	return bf_vendor_write(chip, BF_REQ_KEEPALIVE, BF_SETTINGS_CLOCK_INTERNAL,
+	u16 w = chip->clock_optical ? BF_SETTINGS_CLOCK_OPTICAL :
+				       BF_SETTINGS_CLOCK_INTERNAL;
+
+	return bf_vendor_write(chip, BF_REQ_KEEPALIVE, w,
 			       BF_REG_KEEPALIVE_SETTINGS);
 }
 
@@ -231,7 +240,9 @@ int bf_cold_init(struct snd_usb_babyface *chip)
 	if (!r)
 		return -EINVAL;
 	ret = bf_vendor_write(chip, BF_REQ_KEEPALIVE,
-			      (bf_rate_family(r) << 4) | BF_SETTINGS_CLOCK_INTERNAL,
+			      (bf_rate_family(r) << 4) |
+			      (chip->clock_optical ? BF_SETTINGS_CLOCK_OPTICAL :
+						     BF_SETTINGS_CLOCK_INTERNAL),
 			      BF_REG_KEEPALIVE_INIT);
 	if (ret < 0)
 		return ret;
@@ -323,14 +334,111 @@ int babyface_restore_state(struct snd_usb_babyface *chip)
 	return bf_pitch_write(chip, chip->pitch);
 }
 
-/* Re-apply the per-input state that sits on top of the crosspoints
- * (phase invert, stereo split, trim) after a state restore.  The write
- * patterns mirror the corresponding _put() handlers.  Caller holds
- * chip->mutex.
+/* Re-apply the state that sits on top of the masters and crosspoints
+ * (the routing flags, DIM, phase invert, stereo split, trim) after a
+ * state restore.  The write patterns mirror the corresponding _put()
+ * handlers.  Caller holds chip->mutex.
  */
 int bf_state_apply_flags(struct snd_usb_babyface *chip)
 {
-	int ret;
+	int out, ret, on_out = -1;
+	u16 l, r;
+
+	/* Loopback: the full 30-channel map from the cached state (the
+	 * single-active invariant keeps at most one pair at 0x0001).
+	 */
+	for (out = 0; out < 6; out++) {
+		if (chip->loopback[out]) {
+			on_out = out;
+			break;
+		}
+	}
+	ret = bf_loopback_write_map(chip, on_out, on_out >= 0);
+	if (ret < 0)
+		return ret;
+
+	ret = bf_vendor_write(chip, BF_REQ_PREAMP,
+			      (chip->linked ? 0x0400 : 0x0000) |
+			      (chip->an12 ? 0x1000 : 0x0000), 0x1000);
+	if (ret < 0)
+		return ret;
+	ret = bf_vendor_write(chip, BF_REQ_PREAMP_COMMIT, 0x0000, 0x0000);
+	if (ret < 0)
+		return ret;
+
+	l = (u16)(((0x2000 * (100 + chip->width) / 2) + 50) / 100);
+	r = 0x2000 - l;
+	ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, l, 0x0000);
+	if (ret < 0)
+		return ret;
+	ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, r, 0x001a);
+	if (ret < 0)
+		return ret;
+	ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, r, 0x0001);
+	if (ret < 0)
+		return ret;
+	ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, l, 0x001b);
+	if (ret < 0)
+		return ret;
+
+	ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, chip->fx_send, 0x0138);
+	if (ret < 0)
+		return ret;
+	ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, chip->fx_send, 0x0153);
+	if (ret < 0)
+		return ret;
+
+	if (chip->ms_proc) {
+		/* Same ON pattern as bf_ms_put (cap_ms2.pcap): mute the AN2
+		 * (side) crosspoints, both maps.
+		 */
+		ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, 0x0000, 0x0035);
+		if (ret < 0)
+			return ret;
+		ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, 0x0000, 0x004f);
+		if (ret < 0)
+			return ret;
+		ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, 0x0000, 0x0001);
+		if (ret < 0)
+			return ret;
+		ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, 0x0000, 0x001b);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Re-apply an engaged DIM (the fixed -20 dB Phones pair + flag).  The
+	 * level DIM releases back to is not persisted: it always tracks the
+	 * Phones master while DIM is engaged, so rebuild it here - otherwise a
+	 * DIM released after a re-probe would drive Phones to
+	 * silence (dim_saved still zero on the fresh chip).
+	 */
+	if (chip->dim) {
+		chip->dim_saved[0] = chip->master[1][0];
+		chip->dim_saved[1] = chip->master[1][1];
+		ret = bf_vendor_write(chip, BF_REQ_GAIN, 0xcb,
+				      BF_REG_MASTER_8 + 2 * 1);
+		if (ret < 0)
+			return ret;
+		ret = bf_vendor_write(chip, BF_REQ_GAIN, 0xcb,
+				      BF_REG_MASTER_8 + 2 * 1 + 1);
+		if (ret < 0)
+			return ret;
+		ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, 0x0333,
+				      (BF_REG_MASTER_16 + 2 * 1) |
+				      bf_flag_cycle[chip->flag_cnt]);
+		if (ret < 0)
+			return ret;
+		chip->flag_cnt = (chip->flag_cnt + 1) & 3;
+		ret = bf_vendor_write(chip, BF_REQ_CROSSPOINT, 0x0333,
+				      (BF_REG_MASTER_16 + 2 * 1 + 1) |
+				      bf_flag_cycle[chip->flag_cnt]);
+		if (ret < 0)
+			return ret;
+		chip->flag_cnt = (chip->flag_cnt + 1) & 3;
+		ret = bf_vendor_write(chip, BF_REQ_PREAMP, 0x2000, 0x2000);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* Re-apply any engaged Phase invert - the crosspoint restore loop
 	 * above already re-wrote xpoint[][] as PLAIN values, so a phase
@@ -419,6 +527,15 @@ void bf_state_save(struct snd_usb_babyface *chip)
 	memcpy(s->trim, chip->trim, sizeof(s->trim));
 	memcpy(s->split, chip->split, sizeof(s->split));
 	s->ref_level = chip->ref_level;
+	s->pitch = chip->pitch;
+	memcpy(s->loopback, chip->loopback, sizeof(s->loopback));
+	s->an12 = chip->an12;
+	s->linked = chip->linked;
+	s->ms_proc = chip->ms_proc;
+	s->clock_optical = chip->clock_optical;
+	s->width = chip->width;
+	s->fx_send = chip->fx_send;
+	s->dim = chip->dim;
 	mutex_unlock(&bf_saved_mutex);
 }
 
@@ -447,6 +564,15 @@ int bf_state_restore(struct snd_usb_babyface *chip)
 		memcpy(chip->trim, s->trim, sizeof(chip->trim));
 		memcpy(chip->split, s->split, sizeof(chip->split));
 		chip->ref_level = s->ref_level;
+		chip->pitch = s->pitch;
+		memcpy(chip->loopback, s->loopback, sizeof(chip->loopback));
+		chip->an12 = s->an12;
+		chip->linked = s->linked;
+		chip->ms_proc = s->ms_proc;
+		chip->clock_optical = s->clock_optical;
+		chip->width = s->width;
+		chip->fx_send = s->fx_send;
+		chip->dim = s->dim;
 		ret = 1;
 		break;
 	}
@@ -1640,6 +1766,14 @@ static int babyface_probe(struct usb_interface *intf,
 			dev_err(&intf->dev, "default mixer restore failed: %d\n", err);
 			goto error;
 		}
+		/* The cold init cleared the flag registers as well. */
+		mutex_lock(&chip->mutex);
+		err = bf_state_apply_flags(chip);
+		mutex_unlock(&chip->mutex);
+		if (err < 0) {
+			dev_err(&intf->dev, "flag restore failed: %d\n", err);
+			goto error;
+		}
 	} else if (err < 0) {
 		dev_err(&intf->dev, "mixer state restore failed: %d\n", err);
 		goto error;
@@ -1710,6 +1844,12 @@ static int babyface_probe(struct usb_interface *intf,
 	err = babyface_create_preamp(chip);
 	if (err < 0) {
 		dev_err(&intf->dev, "preamp control creation failed: %d\n", err);
+		goto error;
+	}
+
+	err = babyface_create_flags(chip);
+	if (err < 0) {
+		dev_err(&intf->dev, "flag control creation failed: %d\n", err);
 		goto error;
 	}
 
