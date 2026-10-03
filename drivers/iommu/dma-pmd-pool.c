@@ -21,6 +21,7 @@
 #include <linux/mm.h>
 #include <linux/moduleparam.h>
 #include <linux/mutex.h>
+#include <linux/nodemask.h>
 #include <linux/rcupdate.h>
 #include <linux/seq_file.h>
 #include <linux/set_memory.h>
@@ -62,6 +63,18 @@ static atomic_long_t dma_pmd_nr_pages __cacheline_aligned_in_smp;
 static unsigned long dma_pmd_max_pages __read_mostly;
 core_param(dma_pmd_max_pages, dma_pmd_max_pages, ulong, 0644);
 
+/* Target number of pre-allocated PMD pages per NUMA node in reservoir. */
+static unsigned int dma_pmd_reservoir_max __read_mostly = 16;
+module_param_named(reservoir_max, dma_pmd_reservoir_max, uint, 0644);
+
+struct dma_pmd_reservoir {
+	spinlock_t		lock;	/* protects @pages and @nr_pages */
+	struct list_head	pages;
+	unsigned int		nr_pages;
+};
+
+static struct dma_pmd_reservoir dma_pmd_reservoirs[MAX_NUMNODES];
+
 /* All live pools. */
 static LIST_HEAD(dma_pmd_pools);
 static DEFINE_MUTEX(dma_pmd_pools_lock);
@@ -69,6 +82,7 @@ static LLIST_HEAD(dma_pmd_dead_pools);
 
 static void dma_pmd_schedule_reclaim(void);
 static void dma_pmd_schedule_scrub(void);
+static void dma_pmd_schedule_reservoir(void);
 
 static void dma_pmd_pool_free_kref(struct kref *kref)
 {
@@ -81,8 +95,10 @@ static void dma_pmd_pool_free_kref(struct kref *kref)
 static int dma_pmd_page_prepare(struct page *page, struct dma_pmd_meta *meta,
 				bool can_block)
 {
-	bool want_decrypt = READ_ONCE(dma_pmd_decrypt);
-	bool want_pin = READ_ONCE(dma_pmd_pin);
+	bool want_decrypt = READ_ONCE(dma_pmd_decrypt) &&
+			    !(meta->flags & DMA_PMD_DECRYPTED);
+	bool want_pin = READ_ONCE(dma_pmd_pin) &&
+			!(meta->flags & DMA_PMD_PINNED);
 	void *vaddr = page_address(page);
 	int ret;
 
@@ -140,6 +156,16 @@ static int dma_pmd_page_unprepare(struct dma_pmd_meta *meta)
 		WRITE_ONCE(meta->flags, meta->flags & ~DMA_PMD_DECRYPTED);
 	}
 	return 0;
+}
+
+static void dma_pmd_free_reservoir_page(struct dma_pmd_meta *meta)
+{
+	struct page *page = pfn_to_page(dma_pmd_meta_to_pfn(meta));
+
+	if (!dma_pmd_page_unprepare(meta)) {
+		__free_pages(page, PMD_ORDER);
+		atomic_long_dec(&dma_pmd_nr_pages);
+	}
 }
 
 /*
@@ -226,8 +252,12 @@ static void dma_pmd_reclaim_work_fn(struct work_struct *work)
 	struct dma_pmd_pool *pool, *ptmp;
 	struct dma_pmd_meta *meta, *tmp;
 
-	llist_for_each_entry_safe(meta, tmp, node, llnode)
-		dma_pmd_release_page(meta);
+	llist_for_each_entry_safe(meta, tmp, node, llnode) {
+		if (meta->pool)
+			dma_pmd_release_page(meta);
+		else
+			dma_pmd_free_reservoir_page(meta);
+	}
 
 	node = llist_del_all(&dma_pmd_dead_pools);
 	if (node) {
@@ -463,6 +493,186 @@ static void dma_pmd_schedule_scrub(void)
 		schedule_work(&dma_pmd_scrub_work);
 }
 
+/*
+ * Per-NUMA-node PMD page reservoir
+ * --------------------------------
+ * Order-9 (2MB) buddy allocations can compact/reclaim and fail or stall in
+ * atomic context (such as NAPI RX refill or softirq TX), and CoCo decryption /
+ * hypervisor pinning cannot run in atomic context at all.
+ *
+ * Each NUMA node maintains a small reservoir of up to @dma_pmd_reservoir_max
+ * (default 8 = 16 MB/node) pre-allocated, pre-zeroed, and pre-decrypted/pinned
+ * PMD pages. On a pool miss, dma_pmd_add_page() pops a ready PMD page from the
+ * target node's reservoir in O(1) under a spinlock (falling back to other
+ * nodes before calling alloc_pages_node() directly).
+ *
+ * A background worker on system_wq refills nodes whenever a node's count drops
+ * to or below half of @dma_pmd_reservoir_max, on a reservoir miss, or when a
+ * new pool is created. Pages held in the reservoir count toward the global
+ * @dma_pmd_nr_pages budget and are reclaimable by the shrinker under memory
+ * pressure.
+ */
+
+/**
+ * dma_pmd_reservoir_refill_node - Refill node @nid's reservoir up to @max
+ * @nid: NUMA node ID
+ * @max: Target number of PMD pages to hold in @nid's reservoir
+ *
+ * Cost: Slow path; allocates order-9 pages with GFP_KERNEL | __GFP_RETRY_MAYFAIL,
+ *       populates metadata, decrypts/pins if configured, and zeroes 2MB per page.
+ * Locking: Process context (system_wq); sleeps during buddy allocation, CPA
+ *          decryption, and cond_resched(). Takes @res->lock briefly to enqueue.
+ * Frequency: Rare (when reservoir drops to <= @max / 2 or on pool creation).
+ */
+static void dma_pmd_reservoir_refill_node(int nid, unsigned int max)
+{
+	gfp_t gfp = GFP_KERNEL | __GFP_THISNODE | __GFP_NOWARN | __GFP_RETRY_MAYFAIL;
+	struct dma_pmd_reservoir *res = &dma_pmd_reservoirs[nid];
+
+	while (READ_ONCE(res->nr_pages) < max) {
+		struct dma_pmd_meta *meta;
+		unsigned long flags;
+		struct page *page;
+
+		if (atomic_long_inc_return(&dma_pmd_nr_pages) >
+		    READ_ONCE(dma_pmd_max_pages)) {
+			atomic_long_dec(&dma_pmd_nr_pages);
+			break;
+		}
+
+		page = alloc_pages_node(nid, gfp, PMD_ORDER);
+		if (!page) {
+			atomic_long_dec(&dma_pmd_nr_pages);
+			break;
+		}
+
+		if (unlikely(!dma_pmd_meta_ensure_pfn(page_to_pfn(page), true))) {
+			__free_pages(page, PMD_ORDER);
+			atomic_long_dec(&dma_pmd_nr_pages);
+			break;
+		}
+
+		meta = dma_pmd_meta_of_pfn(page_to_pfn(page));
+		memset(meta, 0, sizeof(*meta));
+		spin_lock_init(&meta->map_lock);
+
+		if (dma_pmd_page_prepare(page, meta, true)) {
+			__free_pages(page, PMD_ORDER);
+			atomic_long_dec(&dma_pmd_nr_pages);
+			break;
+		}
+
+		if (!(meta->flags & DMA_PMD_DECRYPTED))
+			memset(page_address(page), 0, PMD_SIZE);
+
+		spin_lock_irqsave(&res->lock, flags);
+		list_add(&meta->list, &res->pages);
+		res->nr_pages++;
+		spin_unlock_irqrestore(&res->lock, flags);
+
+		cond_resched();
+	}
+}
+
+static void dma_pmd_reservoir_work_fn(struct work_struct *work)
+{
+	unsigned int max = READ_ONCE(dma_pmd_reservoir_max);
+	int nid;
+
+	if (!max || !dma_pmd_meta_base())
+		return;
+
+	for_each_node_state(nid, N_MEMORY)
+		dma_pmd_reservoir_refill_node(nid, max);
+}
+
+static DECLARE_WORK(dma_pmd_reservoir_work, dma_pmd_reservoir_work_fn);
+
+static void dma_pmd_schedule_reservoir(void)
+{
+	if (READ_ONCE(dma_pmd_reservoir_max) &&
+	    !work_pending(&dma_pmd_reservoir_work))
+		schedule_work(&dma_pmd_reservoir_work);
+}
+
+/*
+ * Pop one pre-prepared PMD page from node @nid's reservoir.
+ *
+ * Cost: O(1) list pop under @res->lock.
+ * Locking: Acquires @res->lock (irqsave). Safe from any context (IRQ, softirq,
+ *          process). Never sleeps.
+ * Frequency: Only on pool miss (dma_pmd_add_page()).
+ */
+static struct dma_pmd_meta *dma_pmd_reservoir_pop_node(int nid, unsigned int max)
+{
+	struct dma_pmd_reservoir *res = &dma_pmd_reservoirs[nid];
+	struct dma_pmd_meta *meta;
+	unsigned long flags;
+	bool refill = false;
+
+	if (!READ_ONCE(res->nr_pages))
+		return NULL;
+
+	spin_lock_irqsave(&res->lock, flags);
+	meta = list_first_entry_or_null(&res->pages, struct dma_pmd_meta, list);
+	if (meta) {
+		list_del_init(&meta->list);
+		res->nr_pages--;
+		refill = res->nr_pages <= max / 2;
+	}
+	spin_unlock_irqrestore(&res->lock, flags);
+
+	if (refill)
+		dma_pmd_schedule_reservoir();
+
+	return meta;
+}
+
+/**
+ * dma_pmd_reservoir_get - Obtain a pre-prepared PMD page, preferring @nid
+ * @nid: Preferred NUMA node (or NUMA_NO_NODE for local node)
+ *
+ * Tries @nid's reservoir first, then falls back to other memory nodes and
+ * schedules an async refill if a fallback or empty reservoir is encountered.
+ *
+ * Cost: O(1) on local node hit; O(MAX_NUMNODES) lockless checks on miss.
+ * Locking: Acquires @res->lock (irqsave) on non-empty node. Safe from any
+ *          context. Never sleeps.
+ * Frequency: Only on pool miss (dma_pmd_add_page()).
+ *
+ * Return: Metadata pointer of a ready PMD page (not yet compound-split or
+ *         bound to a pool), or NULL if all reservoirs are empty.
+ */
+static struct dma_pmd_meta *dma_pmd_reservoir_get(int nid)
+{
+	unsigned int max = READ_ONCE(dma_pmd_reservoir_max);
+	struct dma_pmd_meta *meta;
+	int target_nid, n;
+
+	if (!max)
+		return NULL;
+
+	target_nid = (nid == NUMA_NO_NODE) ? numa_mem_id() : nid;
+	if (target_nid >= 0 && target_nid < MAX_NUMNODES) {
+		meta = dma_pmd_reservoir_pop_node(target_nid, max);
+		if (meta)
+			return meta;
+	}
+
+	for_each_node_state(n, N_MEMORY) {
+		if (n == target_nid)
+			continue;
+		meta = dma_pmd_reservoir_pop_node(n, max);
+		if (meta) {
+			dma_pmd_schedule_reservoir();
+			return meta;
+		}
+	}
+
+	dma_pmd_schedule_reservoir();
+	return NULL;
+}
+
 unsigned int dma_pmd_pools_forget_domain(int idx)
 {
 	struct dma_pmd_pool *pool;
@@ -538,6 +748,7 @@ struct dma_pmd_pool *dma_pmd_pool_create(unsigned int order, unsigned int max_id
 	}
 	list_add(&pool->node, &dma_pmd_pools);
 	mutex_unlock(&dma_pmd_pools_lock);
+	dma_pmd_schedule_reservoir();
 
 	return pool;
 }
@@ -616,9 +827,17 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 	 */
 	bool can_block = (gfp & GFP_KERNEL) == GFP_KERNEL;
 	unsigned int nr = DMA_PMD_BLOCKS(pool->order);
+	bool from_reservoir = false;
 	struct dma_pmd_meta *meta;
 	gfp_t alloc_gfp, base_gfp;
 	struct page *page;
+
+	meta = dma_pmd_reservoir_get(nid);
+	if (meta) {
+		page = pfn_to_page(dma_pmd_meta_to_pfn(meta));
+		from_reservoir = true;
+		goto prepare;
+	}
 
 	/*
 	 * A high-order allocation is expensive when it fails, and under fragmentation
@@ -687,9 +906,10 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 
 	meta = dma_pmd_meta_of_pfn(page_to_pfn(page));
 	memset(meta, 0, sizeof(*meta));
-	meta->pool = pool;
 	spin_lock_init(&meta->map_lock);
 
+prepare:
+	meta->pool = pool;
 	if (dma_pmd_page_prepare(page, meta, can_block)) {
 		__free_pages(page, PMD_ORDER);
 		atomic_long_dec(&dma_pmd_nr_pages);
@@ -705,8 +925,8 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 		return NULL;
 	}
 
-	if (zero || (meta->flags & DMA_PMD_DECRYPTED)) {
-		if (!(meta->flags & DMA_PMD_DECRYPTED))
+	if (from_reservoir || zero || (meta->flags & DMA_PMD_DECRYPTED)) {
+		if (!from_reservoir && !(meta->flags & DMA_PMD_DECRYPTED))
 			memset(page_address(page), 0, PMD_SIZE);
 		bitmap_set(meta->free_bitmap, 0, nr);
 		meta->nr_free = nr;
@@ -1042,14 +1262,17 @@ static unsigned long dma_pmd_shrink_count(struct shrinker *shrink,
 {
 	struct dma_pmd_pool *pool;
 	unsigned long nr = 0;
+	int nid;
 
-	if (!mutex_trylock(&dma_pmd_pools_lock))
-		return 0;
+	for_each_node_state(nid, N_MEMORY)
+		nr += READ_ONCE(dma_pmd_reservoirs[nid].nr_pages);
 
-	list_for_each_entry(pool, &dma_pmd_pools, node)
-		nr += READ_ONCE(pool->num_idle_pages);
+	if (mutex_trylock(&dma_pmd_pools_lock)) {
+		list_for_each_entry(pool, &dma_pmd_pools, node)
+			nr += READ_ONCE(pool->num_idle_pages);
 
-	mutex_unlock(&dma_pmd_pools_lock);
+		mutex_unlock(&dma_pmd_pools_lock);
+	}
 
 	return nr << PMD_ORDER;
 }
@@ -1062,34 +1285,50 @@ static unsigned long dma_pmd_shrink_scan(struct shrinker *shrink,
 	unsigned long freed = 0;
 	LIST_HEAD(release_list);
 	unsigned long flags;
-	int srcu_idx;
+	int srcu_idx, nid;
 
-	if (!mutex_trylock(&dma_pmd_pools_lock))
-		return SHRINK_STOP;
+	for_each_node_state(nid, N_MEMORY) {
+		struct dma_pmd_reservoir *res = &dma_pmd_reservoirs[nid];
 
-	srcu_idx = srcu_read_lock(&dma_pmd_srcu);
-	list_for_each_entry(pool, &dma_pmd_pools, node) {
-		/*
-		 * Every PMD page on @idle is a candidate, so this detaches one
-		 * per iteration and stops as soon as the reclaim path has
-		 * what it asked for: the IRQs-off section is bounded by the
-		 * work done, not by how many PMD pages the pool holds.
-		 */
-		spin_lock_irqsave(&pool->lock, flags);
-		list_for_each_entry_safe(meta, tmp, &pool->idle, list) {
+		if (!READ_ONCE(res->nr_pages))
+			continue;
+		spin_lock_irqsave(&res->lock, flags);
+		list_for_each_entry_safe(meta, tmp, &res->pages, list) {
 			if (freed >= sc->nr_to_scan)
 				break;
 			list_move(&meta->list, &release_list);
-			pool->num_idle_pages--;
+			res->nr_pages--;
 			freed += 1UL << PMD_ORDER;
 		}
-		spin_unlock_irqrestore(&pool->lock, flags);
-
+		spin_unlock_irqrestore(&res->lock, flags);
 		if (freed >= sc->nr_to_scan)
 			break;
 	}
 
-	mutex_unlock(&dma_pmd_pools_lock);
+	srcu_idx = srcu_read_lock(&dma_pmd_srcu);
+	if (freed < sc->nr_to_scan && mutex_trylock(&dma_pmd_pools_lock)) {
+		list_for_each_entry(pool, &dma_pmd_pools, node) {
+			/*
+			 * Every PMD page on @idle is a candidate, so this detaches one
+			 * per iteration and stops as soon as the reclaim path has
+			 * what it asked for: the IRQs-off section is bounded by the
+			 * work done, not by how many PMD pages the pool holds.
+			 */
+			spin_lock_irqsave(&pool->lock, flags);
+			list_for_each_entry_safe(meta, tmp, &pool->idle, list) {
+				if (freed >= sc->nr_to_scan)
+					break;
+				list_move(&meta->list, &release_list);
+				pool->num_idle_pages--;
+				freed += 1UL << PMD_ORDER;
+			}
+			spin_unlock_irqrestore(&pool->lock, flags);
+
+			if (freed >= sc->nr_to_scan)
+				break;
+		}
+		mutex_unlock(&dma_pmd_pools_lock);
+	}
 
 	/*
 	 * Retiring is done outside both locks: dma_pmd_release_page() unmaps
@@ -1103,8 +1342,10 @@ static unsigned long dma_pmd_shrink_scan(struct shrinker *shrink,
 		if (meta->flags & (DMA_PMD_DECRYPTED | DMA_PMD_PINNED)) {
 			llist_add(&meta->llnode, &dma_pmd_free_list);
 			dma_pmd_schedule_reclaim();
-		} else {
+		} else if (meta->pool) {
 			dma_pmd_release_page(meta);
+		} else {
+			dma_pmd_free_reservoir_page(meta);
 		}
 	}
 	srcu_read_unlock(&dma_pmd_srcu, srcu_idx);
@@ -1128,6 +1369,12 @@ static unsigned long dma_pmd_shrink_scan(struct shrinker *shrink,
 static int __init dma_pmd_init(void)
 {
 	struct shrinker *shrink;
+	int nid;
+
+	for (nid = 0; nid < MAX_NUMNODES; nid++) {
+		spin_lock_init(&dma_pmd_reservoirs[nid].lock);
+		INIT_LIST_HEAD(&dma_pmd_reservoirs[nid].pages);
+	}
 
 	/*
 	 * Hard ceiling on memory diverted from the buddy allocator into 2MB
