@@ -52,6 +52,15 @@
 		#sound-dai-cells = <1>;
 	};
 
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pm8550_pwm 3 500000>;
+		enable-gpios = <&pmc8380_3_gpios 4 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-0 = <&edp_bl_pwm>;
+		pinctrl-names = "default";
+	};
+
 	chosen {
 		stdout-path = "serial0:115200n8";
 	};
@@ -997,6 +1006,7 @@
 	aux-bus {
 		panel {
 			compatible = "edp-panel";
+			backlight = <&backlight>;
 			power-supply = <&vreg_edp_3p3>;
 
 			port {
@@ -1084,6 +1094,11 @@
 };
 
 &pm8550_gpios {
+	edp_bl_pwm: edp-bl-pwm-state {
+		pins = "gpio8";
+		function = "func1";
+	};
+
 	rtmr0_default: rtmr0-reset-n-active-state {
 		pins = "gpio10";
 		function = "normal";
@@ -1101,6 +1116,10 @@
 		input-disable;
 		output-enable;
 	};
+};
+
+&pm8550_pwm {
+	status = "okay";
 };
 
 &pm8550ve_9_gpios {
