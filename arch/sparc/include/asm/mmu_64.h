@@ -115,6 +115,11 @@ typedef struct {
 	bool			adi;
 	tag_storage_desc_t	*tag_store;
 	spinlock_t		tag_lock;
+	/* TSB being replaced by tsb_grow(), still used by CPUs that
+	 * have not run tsb_sync() yet.
+	 */
+	struct tsb		*tsb_old[MM_NUM_TSBS];
+	unsigned long		tsb_old_nentries[MM_NUM_TSBS];
 } mm_context_t;
 
 #endif /* !__ASSEMBLER__ */

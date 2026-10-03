@@ -135,6 +135,20 @@ void flush_tsb_user(struct tlb_batch *tb)
 			__flush_huge_tsb_one(tb, PAGE_SHIFT, base, nentries,
 					     tb->hugepage_shift);
 #endif
+		if (mm->context.tsb_old[MM_TSB_BASE]) {
+			base = (unsigned long) mm->context.tsb_old[MM_TSB_BASE];
+			nentries = mm->context.tsb_old_nentries[MM_TSB_BASE];
+			if (tlb_type == cheetah_plus || tlb_type == hypervisor)
+				base = __pa(base);
+			if (tb->hugepage_shift == PAGE_SHIFT)
+				__flush_tsb_one(tb, PAGE_SHIFT, base, nentries);
+#if defined(CONFIG_HUGETLB_PAGE)
+			else
+				__flush_huge_tsb_one(tb, PAGE_SHIFT, base,
+						     nentries,
+						     tb->hugepage_shift);
+#endif
+		}
 	}
 #if defined(CONFIG_HUGETLB_PAGE) || defined(CONFIG_TRANSPARENT_HUGEPAGE)
 	else if (mm->context.tsb_block[MM_TSB_HUGE].tsb) {
@@ -144,6 +158,14 @@ void flush_tsb_user(struct tlb_batch *tb)
 			base = __pa(base);
 		__flush_huge_tsb_one(tb, REAL_HPAGE_SHIFT, base, nentries,
 				     tb->hugepage_shift);
+		if (mm->context.tsb_old[MM_TSB_HUGE]) {
+			base = (unsigned long) mm->context.tsb_old[MM_TSB_HUGE];
+			nentries = mm->context.tsb_old_nentries[MM_TSB_HUGE];
+			if (tlb_type == cheetah_plus || tlb_type == hypervisor)
+				base = __pa(base);
+			__flush_huge_tsb_one(tb, REAL_HPAGE_SHIFT, base,
+					     nentries, tb->hugepage_shift);
+		}
 	}
 #endif
 	spin_unlock_irqrestore(&mm->context.lock, flags);
@@ -169,6 +191,21 @@ void flush_tsb_user_page(struct mm_struct *mm, unsigned long vaddr,
 			__flush_huge_tsb_one_entry(base, vaddr, PAGE_SHIFT,
 						   nentries, hugepage_shift);
 #endif
+		if (mm->context.tsb_old[MM_TSB_BASE]) {
+			base = (unsigned long) mm->context.tsb_old[MM_TSB_BASE];
+			nentries = mm->context.tsb_old_nentries[MM_TSB_BASE];
+			if (tlb_type == cheetah_plus || tlb_type == hypervisor)
+				base = __pa(base);
+			if (hugepage_shift == PAGE_SHIFT)
+				__flush_tsb_one_entry(base, vaddr, PAGE_SHIFT,
+						      nentries);
+#if defined(CONFIG_HUGETLB_PAGE)
+			else
+				__flush_huge_tsb_one_entry(base, vaddr,
+							   PAGE_SHIFT, nentries,
+							   hugepage_shift);
+#endif
+		}
 	}
 #if defined(CONFIG_HUGETLB_PAGE) || defined(CONFIG_TRANSPARENT_HUGEPAGE)
 	else if (mm->context.tsb_block[MM_TSB_HUGE].tsb) {
@@ -178,6 +215,15 @@ void flush_tsb_user_page(struct mm_struct *mm, unsigned long vaddr,
 			base = __pa(base);
 		__flush_huge_tsb_one_entry(base, vaddr, REAL_HPAGE_SHIFT,
 					   nentries, hugepage_shift);
+		if (mm->context.tsb_old[MM_TSB_HUGE]) {
+			base = (unsigned long) mm->context.tsb_old[MM_TSB_HUGE];
+			nentries = mm->context.tsb_old_nentries[MM_TSB_HUGE];
+			if (tlb_type == cheetah_plus || tlb_type == hypervisor)
+				base = __pa(base);
+			__flush_huge_tsb_one_entry(base, vaddr,
+						   REAL_HPAGE_SHIFT, nentries,
+						   hugepage_shift);
+		}
 	}
 #endif
 	spin_unlock_irqrestore(&mm->context.lock, flags);
@@ -460,17 +506,26 @@ retry_tsb_alloc:
 	 * accessing the old TSB via TLB miss handling.  This is OK
 	 * because those actions are just propagating state from the
 	 * Linux page tables into the TSB, page table mappings are not
-	 * being changed.  If a real fault occurs, the processor will
-	 * synchronize with us when it hits flush_tsb_user(), this is
-	 * also true for the case where vmscan is modifying the page
-	 * tables.  The only thing we need to be careful with is to
-	 * skip any locked TSB entries during copy_tsb().
+	 * being changed.  Processors keep using the old TSB until they
+	 * have run tsb_context_switch(), so the old TSB is recorded in
+	 * tsb_old[] and flushed along with the new one until the
+	 * smp_tsb_sync() below has returned.  The only thing we need
+	 * to be careful with is to skip any locked TSB entries during
+	 * copy_tsb().
 	 *
 	 * When we finish committing to the new TSB, we have to drop
 	 * the lock and ask all other cpus running this address space
 	 * to run tsb_context_switch() to see the new TSB table.
+	 *
+	 * An earlier grow of this TSB may still be waiting for the
+	 * other cpus; its old TSB has to stay recorded until then.
 	 */
 	spin_lock_irqsave(&mm->context.lock, flags);
+	while (mm->context.tsb_old[tsb_index]) {
+		spin_unlock_irqrestore(&mm->context.lock, flags);
+		cond_resched();
+		spin_lock_irqsave(&mm->context.lock, flags);
+	}
 
 	old_tsb = mm->context.tsb_block[tsb_index].tsb;
 	old_cache_index =
@@ -511,6 +566,11 @@ retry_tsb_alloc:
 			PAGE_SHIFT : REAL_HPAGE_SHIFT);
 	}
 
+	if (old_tsb) {
+		mm->context.tsb_old[tsb_index] = old_tsb;
+		mm->context.tsb_old_nentries[tsb_index] =
+			mm->context.tsb_block[tsb_index].tsb_nentries;
+	}
 	mm->context.tsb_block[tsb_index].tsb = new_tsb;
 	setup_tsb_params(mm, tsb_index, new_size);
 
@@ -529,6 +589,12 @@ retry_tsb_alloc:
 		preempt_enable();
 
 		/* Now it is safe to free the old tsb.  */
+		spin_lock_irqsave(&mm->context.lock, flags);
+		if (mm->context.tsb_old[tsb_index] == old_tsb) {
+			mm->context.tsb_old[tsb_index] = NULL;
+			mm->context.tsb_old_nentries[tsb_index] = 0;
+		}
+		spin_unlock_irqrestore(&mm->context.lock, flags);
 		kmem_cache_free(tsb_caches[old_cache_index], old_tsb);
 	}
 }
@@ -566,8 +632,10 @@ int init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 	 * us, so we need to zero out the TSB pointer or else tsb_grow()
 	 * will be confused and think there is an older TSB to free up.
 	 */
-	for (i = 0; i < MM_NUM_TSBS; i++)
+	for (i = 0; i < MM_NUM_TSBS; i++) {
 		mm->context.tsb_block[i].tsb = NULL;
+		mm->context.tsb_old[i] = NULL;
+	}
 
 	/* If this is fork, inherit the parent's TSB size.  We would
 	 * grow it to that size on the first page fault anyways.
