@@ -2963,28 +2963,35 @@ static int ravb_probe(struct platform_device *pdev)
 		priv->num_rx_ring[RAVB_NC] = NC_RX_RING_SIZE;
 	}
 
+	if (!devres_open_group(&pdev->dev, priv, GFP_KERNEL)) {
+		error = -ENOMEM;
+		goto out_reset_assert;
+	}
+
 	error = ravb_setup_irqs(priv);
 	if (error)
-		goto out_reset_assert;
+		goto out_release_irq_group;
+
+	devres_close_group(&pdev->dev, priv);
 
 	priv->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(priv->clk)) {
 		error = PTR_ERR(priv->clk);
-		goto out_reset_assert;
+		goto out_release_irq_group;
 	}
 
 	if (info->gptp_ref_clk) {
 		priv->gptp_clk = devm_clk_get(&pdev->dev, "gptp");
 		if (IS_ERR(priv->gptp_clk)) {
 			error = PTR_ERR(priv->gptp_clk);
-			goto out_reset_assert;
+			goto out_release_irq_group;
 		}
 	}
 
 	priv->refclk = devm_clk_get_optional(&pdev->dev, "refclk");
 	if (IS_ERR(priv->refclk)) {
 		error = PTR_ERR(priv->refclk);
-		goto out_reset_assert;
+		goto out_release_irq_group;
 	}
 	clk_prepare(priv->refclk);
 
@@ -3124,6 +3131,8 @@ out_rpm_disable:
 	pm_runtime_disable(&pdev->dev);
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	clk_unprepare(priv->refclk);
+out_release_irq_group:
+	devres_release_group(&pdev->dev, priv);
 out_reset_assert:
 	reset_control_assert(rstc);
 out_free_netdev:
@@ -3144,6 +3153,7 @@ static void ravb_remove(struct platform_device *pdev)
 		return;
 
 	unregister_netdev(ndev);
+	devres_release_group(dev, priv);
 	if (info->nc_queues)
 		netif_napi_del(&priv->napi[RAVB_NC]);
 	netif_napi_del(&priv->napi[RAVB_BE]);
