@@ -32,6 +32,31 @@ int ptep_set_access_flags(struct vm_area_struct *vma, unsigned long address,
 	return changed;
 }
 
+/* Only base pages get here: hugetlb uses huge_ptep_set_access_flags() and
+ * THP the PMD variant below.
+ */
+void flush_tlb_fix_spurious_fault(struct vm_area_struct *vma,
+				  unsigned long address, pte_t *ptep)
+{
+	address &= PAGE_MASK;
+	flush_tsb_user_page(vma->vm_mm, address, PAGE_SHIFT);
+	global_flush_tlb_page(vma->vm_mm, address);
+}
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+void flush_tlb_fix_spurious_fault_pmd(struct vm_area_struct *vma,
+				      unsigned long address, pmd_t *pmdp)
+{
+	struct mm_struct *mm = vma->vm_mm;
+
+	address &= HPAGE_MASK;
+	flush_tsb_user_page(mm, address, REAL_HPAGE_SHIFT);
+	flush_tsb_user_page(mm, address + REAL_HPAGE_SIZE, REAL_HPAGE_SHIFT);
+	global_flush_tlb_page(mm, address);
+	global_flush_tlb_page(mm, address + REAL_HPAGE_SIZE);
+}
+#endif
+
 void flush_tlb_pending(void)
 {
 	struct tlb_batch *tb = &get_cpu_var(tlb_batch);

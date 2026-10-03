@@ -48,6 +48,16 @@ void __flush_tlb_all(void);
 void __flush_tlb_page(unsigned long context, unsigned long vaddr);
 void __flush_tlb_kernel_range(unsigned long start, unsigned long end);
 
+struct vm_area_struct;
+#define flush_tlb_fix_spurious_fault flush_tlb_fix_spurious_fault
+void flush_tlb_fix_spurious_fault(struct vm_area_struct *vma,
+				  unsigned long address, pte_t *ptep);
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#define flush_tlb_fix_spurious_fault_pmd flush_tlb_fix_spurious_fault_pmd
+void flush_tlb_fix_spurious_fault_pmd(struct vm_area_struct *vma,
+				      unsigned long address, pmd_t *pmdp);
+#endif
+
 #ifndef CONFIG_SMP
 
 static inline void global_flush_tlb_page(struct mm_struct *mm, unsigned long vaddr)
