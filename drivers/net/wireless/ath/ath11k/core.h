@@ -542,6 +542,7 @@ struct ath11k_per_peer_cfr_capture {
 
 struct ath11k_sta {
 	struct ath11k_vif *arvif;
+	u16 airtime_weight;
 
 	/* the following are protected by ar->data_lock */
 	u32 changed; /* IEEE80211_RC_* */

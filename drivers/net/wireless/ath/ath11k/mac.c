@@ -6732,6 +6732,16 @@ static int ath11k_mac_op_start(struct ieee80211_hw *hw)
 		goto err;
 	}
 
+	if (test_bit(WMI_TLV_SERVICE_ATF, ab->wmi_ab.svc_map)) {
+		ret = ath11k_wmi_pdev_set_param(ar, WMI_PDEV_PARAM_ATF_DYNAMIC_ENABLE,
+						1, pdev->pdev_id);
+		if (ret) {
+			ath11k_err(ab, "failed to enable airtime fairness: %d\n",
+				   ret);
+			goto err;
+		}
+	}
+
 	ret = ath11k_wmi_send_dfs_phyerr_offload_enable_cmd(ar, pdev->pdev_id);
 	if (ret) {
 		ath11k_err(ab, "failed to offload radar detection: %d\n",
@@ -9985,6 +9995,90 @@ static int ath11k_mac_station_remove(struct ath11k *ar,
 	return ret;
 }
 
+#define ATH11K_ATF_PEERS_PER_CMD 32
+
+struct ath11k_mac_atf_iter {
+	struct ath11k_wmi_atf_peer_arg *peers;
+	u16 *weights;
+	u32 num, max, total;
+};
+
+static void ath11k_mac_atf_iter(void *data, struct ieee80211_sta *sta)
+{
+	struct ath11k_mac_atf_iter *it = data;
+	struct ath11k_sta *arsta = ath11k_sta_to_arsta(sta);
+
+	if (it->num == it->max || !arsta->arvif ||
+	    arsta->arvif->vdev_type != WMI_VDEV_TYPE_AP)
+		return;
+
+	ether_addr_copy(it->peers[it->num].addr, sta->addr);
+	it->peers[it->num].vdev_id = arsta->arvif->vdev_id;
+	it->weights[it->num] = arsta->airtime_weight;
+	it->total += arsta->airtime_weight;
+	it->num++;
+}
+
+/* Firmware airtime fairness: give every station of the radio its share of
+ * the airtime, in proportion to its airtime weight. The firmware schedules
+ * a station only by the share of its group, so group 0 (every station's)
+ * gets the whole radio first.
+ */
+static int ath11k_mac_atf_update(struct ath11k *ar)
+{
+	struct ath11k_mac_atf_iter it = { .max = ar->max_num_stations };
+	u32 i, n;
+	int ret = 0;
+
+	lockdep_assert_held(&ar->conf_mutex);
+
+	if (!test_bit(WMI_TLV_SERVICE_ATF, ar->ab->wmi_ab.svc_map))
+		return 0;
+
+	it.peers = kcalloc(it.max, sizeof(*it.peers), GFP_KERNEL);
+	it.weights = kcalloc(it.max, sizeof(*it.weights), GFP_KERNEL);
+	if (!it.peers || !it.weights) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ieee80211_iterate_stations_atomic(ar->hw, ath11k_mac_atf_iter, &it);
+
+	for (i = 0; i < it.num; i++)
+		it.peers[i].units = max_t(u32, 1, div_u64((u64)WMI_ATF_DENOMINATION *
+							  it.weights[i], it.total));
+
+	ret = ath11k_wmi_send_atf_group(ar, 0, WMI_ATF_DENOMINATION);
+	if (ret)
+		goto out;
+
+	for (i = 0; i < it.num; i += n) {
+		n = min_t(u32, it.num - i, ATH11K_ATF_PEERS_PER_CMD);
+		ret = ath11k_wmi_send_peer_atf_request(ar, &it.peers[i], n,
+						       i + n < it.num);
+		if (ret)
+			break;
+	}
+
+out:
+	kfree(it.weights);
+	kfree(it.peers);
+	return ret;
+}
+
+static void ath11k_mac_op_sta_set_airtime_weight(struct ieee80211_hw *hw,
+						 struct ieee80211_vif *vif,
+						 struct ieee80211_sta *sta, u16 weight)
+{
+	struct ath11k_sta *arsta = ath11k_sta_to_arsta(sta);
+	struct ath11k *ar = hw->priv;
+
+	mutex_lock(&ar->conf_mutex);
+	arsta->airtime_weight = weight;
+	ath11k_mac_atf_update(ar);
+	mutex_unlock(&ar->conf_mutex);
+}
+
 static int ath11k_mac_op_sta_state(struct ieee80211_hw *hw,
 				   struct ieee80211_vif *vif,
 				   struct ieee80211_sta *sta,
@@ -10012,6 +10106,7 @@ static int ath11k_mac_op_sta_state(struct ieee80211_hw *hw,
 	    new_state == IEEE80211_STA_NONE) {
 		memset(arsta, 0, sizeof(*arsta));
 		arsta->arvif = arvif;
+		arsta->airtime_weight = IEEE80211_DEFAULT_AIRTIME_WEIGHT;
 		arsta->peer_ps_state = WMI_PEER_PS_STATE_DISABLED;
 		INIT_WORK(&arsta->update_wk, ath11k_sta_rc_update_wk);
 		INIT_WORK(&arsta->set_4addr_wk, ath11k_sta_set_4addr_wk);
@@ -10043,6 +10138,9 @@ static int ath11k_mac_op_sta_state(struct ieee80211_hw *hw,
 		mutex_unlock(&ar->ab->tbl_mtx_lock);
 
 		ath11k_cfr_decrement_peer_count(ar, arsta);
+
+		if (vif->type == NL80211_IFTYPE_AP)
+			ath11k_mac_atf_update(ar);
 	} else if (old_state == IEEE80211_STA_AUTH &&
 		   new_state == IEEE80211_STA_ASSOC &&
 		   (vif->type == NL80211_IFTYPE_AP ||
@@ -10052,6 +10150,8 @@ static int ath11k_mac_op_sta_state(struct ieee80211_hw *hw,
 		if (ret)
 			ath11k_warn(ar->ab, "Failed to associate station: %pM\n",
 				    sta->addr);
+		else if (vif->type == NL80211_IFTYPE_AP)
+			ath11k_mac_atf_update(ar);
 
 		spin_lock_bh(&ar->data_lock);
 		/* Set arsta bw and prev bw */
@@ -10143,6 +10243,7 @@ static const struct ieee80211_ops ath11k_ops = {
 	.sta_state                      = ath11k_mac_op_sta_state,
 	.sta_set_4addr                  = ath11k_mac_op_sta_set_4addr,
 	.sta_set_txpwr			= ath11k_mac_op_sta_set_txpwr,
+	.sta_set_airtime_weight		= ath11k_mac_op_sta_set_airtime_weight,
 	.link_sta_rc_update		= ath11k_mac_op_sta_rc_update,
 	.conf_tx                        = ath11k_mac_op_conf_tx,
 	.set_antenna			= ath11k_mac_op_set_antenna,
@@ -10683,6 +10784,10 @@ static int __ath11k_mac_register(struct ath11k *ar)
 	if (test_bit(WMI_TLV_SERVICE_BEACON_PROTECTION_SUPPORT, ar->ab->wmi_ab.svc_map))
 		wiphy_ext_feature_set(ar->hw->wiphy,
 				      NL80211_EXT_FEATURE_BEACON_PROTECTION);
+
+	if (test_bit(WMI_TLV_SERVICE_ATF, ar->ab->wmi_ab.svc_map))
+		wiphy_ext_feature_set(ar->hw->wiphy,
+				      NL80211_EXT_FEATURE_AIRTIME_FAIRNESS);
 
 	ar->hw->wiphy->mbssid_max_interfaces = TARGET_NUM_VDEVS(ab);
 	ar->hw->wiphy->ema_max_profile_periodicity = TARGET_EMA_MAX_PROFILE_PERIOD;

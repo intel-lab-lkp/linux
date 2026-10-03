@@ -4468,6 +4468,100 @@ int ath11k_wmi_set_hw_mode(struct ath11k_base *ab,
 	return 0;
 }
 
+int ath11k_wmi_send_atf_group(struct ath11k *ar, u32 group_id, u32 units)
+{
+	struct ath11k_pdev_wmi *wmi = ar->wmi;
+	struct wmi_atf_ssid_grp_request_cmd *cmd;
+	struct wmi_atf_group_info *grp;
+	struct wmi_tlv *tlv;
+	struct sk_buff *skb;
+	int ret;
+
+	skb = ath11k_wmi_alloc_skb(wmi->wmi_ab, sizeof(*cmd) + TLV_HDR_SIZE + sizeof(*grp));
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct wmi_atf_ssid_grp_request_cmd *)skb->data;
+	cmd->tlv_header = FIELD_PREP(WMI_TLV_TAG, WMI_TAG_ATF_SSID_GRP_REQUEST) |
+			  FIELD_PREP(WMI_TLV_LEN, sizeof(*cmd) - TLV_HDR_SIZE);
+	cmd->pdev_id = ar->pdev->pdev_id;
+
+	tlv = (struct wmi_tlv *)(skb->data + sizeof(*cmd));
+	tlv->header = FIELD_PREP(WMI_TLV_TAG, WMI_TAG_ARRAY_STRUCT) |
+		      FIELD_PREP(WMI_TLV_LEN, sizeof(*grp));
+	grp = (struct wmi_atf_group_info *)tlv->value;
+	grp->tlv_header = FIELD_PREP(WMI_TLV_TAG, WMI_TAG_ATF_GROUP_INFO) |
+			  FIELD_PREP(WMI_TLV_LEN, sizeof(*grp) - TLV_HDR_SIZE);
+	grp->atf_group_id = group_id;
+	grp->atf_group_units = units;
+	grp->atf_group_flags = WMI_ATF_GROUP_POLICY_FAIR;
+
+	ret = ath11k_wmi_cmd_send(wmi, skb, WMI_ATF_SSID_GROUPING_REQUEST_CMDID);
+	if (ret) {
+		ath11k_warn(ar->ab, "failed to send atf group request: %d\n", ret);
+		dev_kfree_skb(skb);
+		return ret;
+	}
+
+	ath11k_dbg(ar->ab, ATH11K_DBG_WMI, "cmd atf group %u units %u\n", group_id, units);
+
+	return 0;
+}
+
+int ath11k_wmi_send_peer_atf_request(struct ath11k *ar,
+				     const struct ath11k_wmi_atf_peer_arg *peers,
+				     u32 num_peers, bool more)
+{
+	struct ath11k_pdev_wmi *wmi = ar->wmi;
+	struct wmi_peer_atf_request_cmd *cmd;
+	struct wmi_atf_peer_info *info;
+	struct wmi_tlv *tlv;
+	struct sk_buff *skb;
+	u32 i, pdev_id = ar->pdev->pdev_id;
+	int ret, len;
+
+	len = sizeof(*cmd) + TLV_HDR_SIZE + num_peers * sizeof(*info);
+	skb = ath11k_wmi_alloc_skb(wmi->wmi_ab, len);
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (struct wmi_peer_atf_request_cmd *)skb->data;
+	cmd->tlv_header = FIELD_PREP(WMI_TLV_TAG, WMI_TAG_PEER_ATF_REQUEST) |
+			  FIELD_PREP(WMI_TLV_LEN, sizeof(*cmd) - TLV_HDR_SIZE);
+	cmd->num_peers = num_peers;
+	cmd->pdev_id = pdev_id;
+	cmd->atf_flags = WMI_PEER_ATF_REQ_FLAG_FULL_UPDATE |
+			 WMI_PEER_ATF_REQ_FLAG_PDEV_ID_VALID;
+	if (more)
+		cmd->atf_flags |= WMI_PEER_ATF_REQ_FLAG_PENDING_CMDS;
+
+	tlv = (struct wmi_tlv *)(skb->data + sizeof(*cmd));
+	tlv->header = FIELD_PREP(WMI_TLV_TAG, WMI_TAG_ARRAY_STRUCT) |
+		      FIELD_PREP(WMI_TLV_LEN, num_peers * sizeof(*info));
+	info = (struct wmi_atf_peer_info *)tlv->value;
+
+	for (i = 0; i < num_peers; i++, info++) {
+		info->tlv_header = FIELD_PREP(WMI_TLV_TAG, WMI_TAG_ATF_PEER_INFO) |
+				   FIELD_PREP(WMI_TLV_LEN, sizeof(*info) - TLV_HDR_SIZE);
+		ether_addr_copy(info->peer_macaddr.addr, peers[i].addr);
+		info->atf_units = peers[i].units;
+		info->vdev_id = peers[i].vdev_id;
+		info->pdev_id = pdev_id;
+	}
+
+	ret = ath11k_wmi_cmd_send(wmi, skb, WMI_PEER_ATF_REQUEST_CMDID);
+	if (ret) {
+		ath11k_warn(ar->ab, "failed to send peer atf request: %d\n", ret);
+		dev_kfree_skb(skb);
+		return ret;
+	}
+
+	ath11k_dbg(ar->ab, ATH11K_DBG_WMI, "cmd peer atf request pdev %u peers %u%s\n",
+		   pdev_id, num_peers, more ? " (more)" : "");
+
+	return 0;
+}
+
 int ath11k_wmi_cmd_init(struct ath11k_base *ab)
 {
 	struct ath11k_wmi_base *wmi_ab = &ab->wmi_ab;
@@ -4482,6 +4576,9 @@ int ath11k_wmi_cmd_init(struct ath11k_base *ab)
 	if (test_bit(WMI_TLV_SERVICE_REG_CC_EXT_EVENT_SUPPORT,
 		     ab->wmi_ab.svc_map))
 		config.is_reg_cc_ext_event_supported = 1;
+
+	if (test_bit(WMI_TLV_SERVICE_ATF, ab->wmi_ab.svc_map))
+		config.flag1 |= WMI_RSRC_CFG_FLAG1_ATF_CONFIG_ENABLE;
 
 	memcpy(&wmi_ab->wlan_resource_config, &config, sizeof(config));
 

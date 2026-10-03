@@ -212,6 +212,7 @@ enum wmi_cmd_group {
 	WMI_GRP_TWT            = 0x3e,
 	WMI_GRP_MOTION_DET     = 0x3f,
 	WMI_GRP_SPATIAL_REUSE  = 0x40,
+	WMI_GRP_ATM            = 0x45,
 };
 
 #define WMI_CMD_GRP(grp_id) (((grp_id) << 12) | 0x1)
@@ -2354,6 +2355,7 @@ struct wmi_init_cmd {
 } __packed;
 
 #define WMI_RSRC_CFG_FLAG1_BSS_CHANNEL_INFO_64 BIT(5)
+#define WMI_RSRC_CFG_FLAG1_ATF_CONFIG_ENABLE BIT(6)
 #define WMI_RSRC_CFG_FLAG2_CALC_NEXT_DTIM_COUNT_SET BIT(9)
 #define WMI_RSRC_CFG_FLAG1_ACK_RSSI BIT(18)
 
@@ -3630,6 +3632,53 @@ struct ath11k_wmi_p2p_noa_info {
 #define WMI_EMA_LAST_TMPL_SHIFT           24
 
 #define WMI_BCN_TMPL_BEACON_PROTECTION_EN BIT(0)
+
+/* Airtime fairness: a share is in parts per thousand of the radio's airtime */
+#define WMI_ATF_DENOMINATION			1000
+#define WMI_PEER_ATF_REQ_FLAG_FULL_UPDATE	BIT(0)
+#define WMI_PEER_ATF_REQ_FLAG_PENDING_CMDS	BIT(1)
+#define WMI_PEER_ATF_REQ_FLAG_PDEV_ID_VALID	BIT(2)
+#define WMI_ATF_GROUP_POLICY_FAIR		0
+
+#define WMI_ATF_SSID_GROUPING_REQUEST_CMDID	WMI_TLV_CMD(WMI_GRP_ATM)
+/* Outside enum wmi_tlv_tag: its WMI_TAG_MAX sizes the TLV policy table. */
+#define WMI_TAG_ATF_SSID_GRP_REQUEST		0x346
+#define WMI_TAG_ATF_GROUP_INFO			0x347
+
+struct wmi_atf_ssid_grp_request_cmd {
+	u32 tlv_header;
+	u32 pdev_id;
+} __packed;
+
+struct wmi_atf_group_info {
+	u32 tlv_header;
+	u32 atf_group_id;
+	u32 atf_group_units;
+	u32 atf_group_flags;
+} __packed;
+
+struct wmi_peer_atf_request_cmd {
+	u32 tlv_header;
+	u32 num_peers;
+	u32 pdev_id;
+	u32 atf_flags;
+} __packed;
+
+struct wmi_atf_peer_info {
+	u32 tlv_header;
+	struct wmi_mac_addr peer_macaddr;
+	u32 atf_units;
+	u32 atf_groupid;
+	u32 atf_units_reserved;
+	u32 vdev_id;
+	u32 pdev_id;
+} __packed;
+
+struct ath11k_wmi_atf_peer_arg {
+	u8 addr[ETH_ALEN];
+	u32 vdev_id;
+	u32 units;
+};
 
 struct wmi_bcn_tmpl_cmd {
 	u32 tlv_header;
@@ -6453,6 +6502,10 @@ int ath11k_wmi_vdev_start(struct ath11k *ar, struct wmi_vdev_start_req_arg *arg,
 			  bool restart);
 int ath11k_wmi_set_peer_param(struct ath11k *ar, const u8 *peer_addr,
 			      u32 vdev_id, u32 param_id, u32 param_val);
+int ath11k_wmi_send_atf_group(struct ath11k *ar, u32 group_id, u32 units);
+int ath11k_wmi_send_peer_atf_request(struct ath11k *ar,
+				     const struct ath11k_wmi_atf_peer_arg *peers,
+				     u32 num_peers, bool more);
 int ath11k_wmi_pdev_set_param(struct ath11k *ar, u32 param_id,
 			      u32 param_value, u8 pdev_id);
 int ath11k_wmi_pdev_set_ps_mode(struct ath11k *ar, int vdev_id,
