@@ -1,6 +1,10 @@
 config TDX_HOST_SERVICES
-	tristate
+	tristate "TDX host user interface driver"
 	depends on INTEL_TDX_HOST
 	select FW_LOADER
 	select FW_UPLOAD
 	default m
+	help
+	  See INTEL_TDX_HOST for details.
+
+	  If unsure, say N.
