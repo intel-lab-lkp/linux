@@ -414,6 +414,8 @@ struct mddev {
 	unsigned long			sb_flags;
 
 	int				suspended;
+	/* Set while do_md_stop() has dropped reconfig_mutex to drain IO. */
+	int				stop_draining;
 	struct mutex			suspend_mutex;
 	struct percpu_ref		active_io;
 	int				ro;
@@ -717,6 +719,11 @@ static inline int __must_check mddev_lock(struct mddev *mddev)
 	 */
 	if (!ret && test_bit(MD_DELETED, &mddev->flags)) {
 		ret = -ENODEV;
+		mutex_unlock(&mddev->reconfig_mutex);
+	}
+	/* do_md_stop() is waiting for active_io with the mutex dropped. */
+	if (!ret && READ_ONCE(mddev->stop_draining)) {
+		ret = -EBUSY;
 		mutex_unlock(&mddev->reconfig_mutex);
 	}
 

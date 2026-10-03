@@ -395,6 +395,8 @@ static bool is_suspended(struct mddev *mddev, struct bio *bio)
 
 bool md_handle_request(struct mddev *mddev, struct bio *bio)
 {
+	struct md_personality *pers;
+
 check_suspended:
 	if (unlikely(md_cloned_bio(mddev, bio))) {
 		/*
@@ -402,6 +404,12 @@ check_suspended:
 		 * active_io reference, so percpu_ref_get() is safe here.
 		 */
 		percpu_ref_get(&mddev->active_io);
+		pers = READ_ONCE(mddev->pers);
+		if (!pers) {
+			percpu_ref_put(&mddev->active_io);
+			bio_io_error(bio);
+			return true;
+		}
 	} else {
 		if (is_suspended(mddev, bio)) {
 			/* Bail out if REQ_NOWAIT is set for the bio */
@@ -409,14 +417,20 @@ check_suspended:
 				bio_wouldblock_error(bio);
 				return true;
 			}
-			wait_event(mddev->sb_wait, !is_suspended(mddev, bio));
+			wait_event(mddev->sb_wait, !is_suspended(mddev, bio) ||
+				   !READ_ONCE(mddev->pers));
+		}
+		pers = READ_ONCE(mddev->pers);
+		if (!pers) {
+			bio_io_error(bio);
+			return true;
 		}
 		if (!percpu_ref_tryget_live(&mddev->active_io))
 			goto check_suspended;
 	}
-	if (!mddev->pers->make_request(mddev, bio)) {
+	if (!pers->make_request(mddev, bio)) {
 		percpu_ref_put(&mddev->active_io);
-		if (mddev_is_dm(mddev) && mddev->pers->prepare_suspend)
+		if (mddev_is_dm(mddev) && pers->prepare_suspend)
 			return false;
 		goto check_suspended;
 	}
@@ -7097,6 +7111,32 @@ static void __md_stop(struct mddev *mddev)
 	clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 }
 
+/* Drop reconfig_mutex around suspend so in-flight IO can update the superblock. */
+static int md_suspend_for_stop(struct mddev *mddev, bool interruptible)
+{
+	int err;
+
+	lockdep_assert_held(&mddev->reconfig_mutex);
+
+	WRITE_ONCE(mddev->stop_draining, 1);
+	mutex_unlock(&mddev->reconfig_mutex);
+	err = mddev_suspend(mddev, interruptible);
+	mddev_lock_nointr(mddev);
+	WRITE_ONCE(mddev->stop_draining, 0);
+	return err;
+}
+
+static void md_resume_for_stop(struct mddev *mddev)
+{
+	lockdep_assert_held(&mddev->reconfig_mutex);
+
+	WRITE_ONCE(mddev->stop_draining, 1);
+	mutex_unlock(&mddev->reconfig_mutex);
+	__mddev_resume(mddev, false);
+	mddev_lock_nointr(mddev);
+	WRITE_ONCE(mddev->stop_draining, 0);
+}
+
 void md_stop(struct mddev *mddev)
 {
 	lockdep_assert_held(&mddev->reconfig_mutex);
@@ -7164,6 +7204,8 @@ static int do_md_stop(struct mddev *mddev, int mode)
 	struct gendisk *disk = mddev->gendisk;
 	struct md_rdev *rdev;
 	int did_freeze = 0;
+	int err = 0;
+	int resume = 0;
 
 	if (!test_bit(MD_RECOVERY_FROZEN, &mddev->recovery)) {
 		did_freeze = 1;
@@ -7180,6 +7222,18 @@ static int do_md_stop(struct mddev *mddev, int mode)
 			set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 		}
 		return -EBUSY;
+	}
+
+	if (mddev->pers) {
+		err = md_suspend_for_stop(mddev, true);
+		if (err) {
+			if (did_freeze) {
+				clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
+				set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
+			}
+			return err;
+		}
+		resume = 1;
 	}
 	if (mddev->pers) {
 		if (!md_is_rdwr(mddev))
@@ -7205,6 +7259,8 @@ static int do_md_stop(struct mddev *mddev, int mode)
 		if (!md_is_rdwr(mddev))
 			mddev->ro = MD_RDWR;
 	}
+	if (resume)
+		md_resume_for_stop(mddev);
 	/*
 	 * Free resources if final stop
 	 */
