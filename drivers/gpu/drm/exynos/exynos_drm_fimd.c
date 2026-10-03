@@ -1049,12 +1049,18 @@ static void fimd_dp_clock_enable(struct exynos_drm_clk *clk, bool enable)
 	struct fimd_context *ctx = container_of(clk, struct fimd_context,
 						dp_clk);
 	u32 val = enable ? DP_MIE_CLK_DP_ENABLE : DP_MIE_CLK_DISABLE;
+	int ret;
 
 	if (enable == ctx->dp_clk_enabled)
 		return;
 
-	if (enable)
-		pm_runtime_resume_and_get(ctx->dev);
+	if (enable) {
+		ret = pm_runtime_resume_and_get(ctx->dev);
+		if (ret < 0) {
+			dev_warn(ctx->dev, "failed to enable FIMD device: %d\n", ret);
+			return;
+		}
+	}
 
 	ctx->dp_clk_enabled = enable;
 	writel(val, ctx->regs + DP_MIE_CLKCON);
