@@ -309,7 +309,7 @@ static int etm_parse_event_config(struct etm_drvdata *drvdata,
 				  struct perf_event *event)
 {
 	const struct etm_caps *caps = &drvdata->caps;
-	struct etm_config *config = &drvdata->curr_config;
+	struct etm_config *curr_config = &drvdata->curr_config;
 	struct perf_event_attr *attr = &event->attr;
 	u8 ts_level;
 
@@ -317,28 +317,28 @@ static int etm_parse_event_config(struct etm_drvdata *drvdata,
 		return -EINVAL;
 
 	/* Clear configuration from previous run */
-	memset(config, 0, sizeof(struct etm_config));
+	memset(curr_config, 0, sizeof(struct etm_config));
 
 	if (attr->exclude_kernel)
-		config->mode = ETM_MODE_EXCL_KERN;
+		curr_config->mode = ETM_MODE_EXCL_KERN;
 
 	if (attr->exclude_user)
-		config->mode = ETM_MODE_EXCL_USER;
+		curr_config->mode = ETM_MODE_EXCL_USER;
 
 	/* Always start from the default config */
-	etm_set_default(config);
+	etm_set_default(curr_config);
 
 	/*
 	 * By default the tracers are configured to trace the whole address
 	 * range.  Narrow the field only if requested by user space.
 	 */
-	if (config->mode)
-		etm_config_trace_mode(config);
+	if (curr_config->mode)
+		etm_config_trace_mode(curr_config);
 
-	config->ctrl = 0;
+	curr_config->ctrl = 0;
 
 	if (ATTR_CFG_GET_FLD(attr, cycacc))
-		config->ctrl |= ETMCR_CYC_ACC;
+		curr_config->ctrl |= ETMCR_CYC_ACC;
 
 	ts_level = max(ATTR_CFG_GET_FLD(attr, timestamp),
 		       ATTR_CFG_GET_FLD(attr, deprecated_timestamp));
@@ -350,7 +350,7 @@ static int etm_parse_event_config(struct etm_drvdata *drvdata,
 	}
 
 	if (ts_level)
-		config->ctrl |= ETMCR_TIMESTAMP_EN;
+		curr_config->ctrl |= ETMCR_TIMESTAMP_EN;
 
 	/*
 	 * Possible to have cores with PTM (supports ret stack) and ETM (never
@@ -358,7 +358,7 @@ static int etm_parse_event_config(struct etm_drvdata *drvdata,
 	 * - trace will still continue normally otherwise.
 	 */
 	if (ATTR_CFG_GET_FLD(attr, retstack) && (caps->retstack))
-		config->ctrl |= ETMCR_RETURN_STACK;
+		curr_config->ctrl |= ETMCR_RETURN_STACK;
 
 	return 0;
 }
@@ -368,7 +368,7 @@ static int etm_enable_hw(struct etm_drvdata *drvdata)
 	int i, rc;
 	u32 etmcr;
 	const struct etm_caps *caps = &drvdata->caps;
-	struct etm_config *config = &drvdata->curr_config;
+	struct etm_config *curr_config = &drvdata->curr_config;
 	struct coresight_device *csdev = drvdata->csdev;
 
 	CS_UNLOCK(drvdata->csa.base);
@@ -391,39 +391,39 @@ static int etm_enable_hw(struct etm_drvdata *drvdata)
 	etmcr &= ~ETM3X_SUPPORTED_OPTIONS;
 	etmcr |= caps->port_size;
 	etmcr |= ETMCR_ETM_EN;
-	etm_writel(drvdata, config->ctrl | etmcr, ETMCR);
-	etm_writel(drvdata, config->trigger_event, ETMTRIGGER);
-	etm_writel(drvdata, config->startstop_ctrl, ETMTSSCR);
-	etm_writel(drvdata, config->enable_event, ETMTEEVR);
-	etm_writel(drvdata, config->enable_ctrl1, ETMTECR1);
-	etm_writel(drvdata, config->fifofull_level, ETMFFLR);
+	etm_writel(drvdata, curr_config->ctrl | etmcr, ETMCR);
+	etm_writel(drvdata, curr_config->trigger_event, ETMTRIGGER);
+	etm_writel(drvdata, curr_config->startstop_ctrl, ETMTSSCR);
+	etm_writel(drvdata, curr_config->enable_event, ETMTEEVR);
+	etm_writel(drvdata, curr_config->enable_ctrl1, ETMTECR1);
+	etm_writel(drvdata, curr_config->fifofull_level, ETMFFLR);
 	for (i = 0; i < caps->nr_addr_cmp; i++) {
-		etm_writel(drvdata, config->addr_val[i], ETMACVRn(i));
-		etm_writel(drvdata, config->addr_acctype[i], ETMACTRn(i));
+		etm_writel(drvdata, curr_config->addr_val[i], ETMACVRn(i));
+		etm_writel(drvdata, curr_config->addr_acctype[i], ETMACTRn(i));
 	}
 	for (i = 0; i < caps->nr_cntr; i++) {
-		etm_writel(drvdata, config->cntr_rld_val[i], ETMCNTRLDVRn(i));
-		etm_writel(drvdata, config->cntr_event[i], ETMCNTENRn(i));
-		etm_writel(drvdata, config->cntr_rld_event[i],
+		etm_writel(drvdata, curr_config->cntr_rld_val[i], ETMCNTRLDVRn(i));
+		etm_writel(drvdata, curr_config->cntr_event[i], ETMCNTENRn(i));
+		etm_writel(drvdata, curr_config->cntr_rld_event[i],
 			   ETMCNTRLDEVRn(i));
-		etm_writel(drvdata, config->cntr_val[i], ETMCNTVRn(i));
+		etm_writel(drvdata, curr_config->cntr_val[i], ETMCNTVRn(i));
 	}
-	etm_writel(drvdata, config->seq_12_event, ETMSQ12EVR);
-	etm_writel(drvdata, config->seq_21_event, ETMSQ21EVR);
-	etm_writel(drvdata, config->seq_23_event, ETMSQ23EVR);
-	etm_writel(drvdata, config->seq_31_event, ETMSQ31EVR);
-	etm_writel(drvdata, config->seq_32_event, ETMSQ32EVR);
-	etm_writel(drvdata, config->seq_13_event, ETMSQ13EVR);
-	etm_writel(drvdata, config->seq_curr_state, ETMSQR);
+	etm_writel(drvdata, curr_config->seq_12_event, ETMSQ12EVR);
+	etm_writel(drvdata, curr_config->seq_21_event, ETMSQ21EVR);
+	etm_writel(drvdata, curr_config->seq_23_event, ETMSQ23EVR);
+	etm_writel(drvdata, curr_config->seq_31_event, ETMSQ31EVR);
+	etm_writel(drvdata, curr_config->seq_32_event, ETMSQ32EVR);
+	etm_writel(drvdata, curr_config->seq_13_event, ETMSQ13EVR);
+	etm_writel(drvdata, curr_config->seq_curr_state, ETMSQR);
 	for (i = 0; i < caps->nr_ext_out; i++)
 		etm_writel(drvdata, ETM_DEFAULT_EVENT_VAL, ETMEXTOUTEVRn(i));
 	for (i = 0; i < caps->nr_ctxid_cmp; i++)
-		etm_writel(drvdata, config->ctxid_pid[i], ETMCIDCVRn(i));
-	etm_writel(drvdata, config->ctxid_mask, ETMCIDCMR);
-	etm_writel(drvdata, config->sync_freq, ETMSYNCFR);
+		etm_writel(drvdata, curr_config->ctxid_pid[i], ETMCIDCVRn(i));
+	etm_writel(drvdata, curr_config->ctxid_mask, ETMCIDCMR);
+	etm_writel(drvdata, curr_config->sync_freq, ETMSYNCFR);
 	/* No external input selected */
 	etm_writel(drvdata, 0x0, ETMEXTINSELR);
-	etm_writel(drvdata, config->timestamp_event, ETMTSEVR);
+	etm_writel(drvdata, curr_config->timestamp_event, ETMTSEVR);
 	/* No auxiliary control selected */
 	etm_writel(drvdata, 0x0, ETMAUXCR);
 	etm_writel(drvdata, drvdata->traceid, ETMTRACEIDR);
@@ -562,17 +562,17 @@ static void etm_disable_hw(struct etm_drvdata *drvdata)
 {
 	int i;
 	const struct etm_caps *caps = &drvdata->caps;
-	struct etm_config *config = &drvdata->curr_config;
+	struct etm_config *curr_config = &drvdata->curr_config;
 	struct coresight_device *csdev = drvdata->csdev;
 
 	CS_UNLOCK(drvdata->csa.base);
 	etm_set_prog(drvdata);
 
 	/* Read back sequencer and counters for post trace analysis */
-	config->seq_curr_state = (etm_readl(drvdata, ETMSQR) & ETM_SQR_MASK);
+	curr_config->seq_curr_state = (etm_readl(drvdata, ETMSQR) & ETM_SQR_MASK);
 
 	for (i = 0; i < caps->nr_cntr; i++)
-		config->cntr_val[i] = etm_readl(drvdata, ETMCNTVRn(i));
+		curr_config->cntr_val[i] = etm_readl(drvdata, ETMCNTVRn(i));
 
 	etm_set_pwrdwn(drvdata);
 	coresight_disclaim_device_unlocked(csdev);
