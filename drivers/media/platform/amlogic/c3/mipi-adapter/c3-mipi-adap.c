@@ -455,7 +455,9 @@ static int c3_mipi_adap_enable_streams(struct v4l2_subdev *sd,
 
 	src_sd = media_entity_to_v4l2_subdev(adap->src_pad->entity);
 
-	pm_runtime_resume_and_get(adap->dev);
+	ret = pm_runtime_resume_and_get(adap->dev);
+	if (ret < 0)
+		return ret;
 
 	fmt = v4l2_subdev_state_get_format(state, C3_MIPI_ADAP_PAD_SINK);
 
