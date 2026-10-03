@@ -115,6 +115,7 @@
 #include <linux/memcontrol.h>
 #include <linux/prefetch.h>
 #include <linux/compat.h>
+#include <linux/dma-pmd.h>
 #include <linux/mroute.h>
 #include <linux/mroute6.h>
 #include <linux/icmpv6.h>
@@ -3173,6 +3174,87 @@ static void sk_leave_memory_pressure(struct sock *sk)
 }
 
 DEFINE_STATIC_KEY_FALSE(net_high_order_alloc_disable_key);
+DEFINE_STATIC_KEY_FALSE(net_tx_enable_dma_pmd_key);
+
+static DEFINE_PER_CPU(struct dma_pmd_pool *, tx_pmd_pool_high);
+static DEFINE_PER_CPU(struct dma_pmd_pool *, tx_pmd_pool_order0);
+
+/*
+ * Lazily initialize the per-CPU DMA_PMD page pools on the first write to sysctl
+ * net.core.tx_enable_dma_pmd.
+ *
+ * Once initialized, the struct dma_pmd_pool descriptors remain allocated for
+ * the lifetime of the kernel so that lockless raw_cpu_read() in
+ * __alloc_pmd() is always safe against concurrent sysctl
+ * toggles. If pool creation fails partway through, all pools created so far are
+ * destroyed and per-CPU pointers are reset to NULL.
+ */
+static int net_tx_dma_pmd_init(void)
+{
+	static DEFINE_MUTEX(mutex);
+	struct dma_pmd_pool *pool;
+	static bool initialized;
+	int cpu;
+
+	if (!IS_ENABLED(CONFIG_DMA_PMD))
+		return -EOPNOTSUPP;
+
+	mutex_lock(&mutex);
+	if (initialized) {
+		mutex_unlock(&mutex);
+		return 0;
+	}
+
+	for_each_possible_cpu(cpu) {
+		if (SKB_FRAG_PAGE_ORDER) {
+			pool = dma_pmd_pool_create(SKB_FRAG_PAGE_ORDER, 16);
+			if (!pool)
+				goto err_cleanup;
+			per_cpu(tx_pmd_pool_high, cpu) = pool;
+		}
+
+		pool = dma_pmd_pool_create(0, 16);
+		if (!pool)
+			goto err_cleanup;
+		per_cpu(tx_pmd_pool_order0, cpu) = pool;
+	}
+
+	initialized = true;
+	mutex_unlock(&mutex);
+	return 0;
+
+err_cleanup:
+	for_each_possible_cpu(cpu) {
+		per_cpu(tx_pmd_pool_high, cpu) =
+			dma_pmd_pool_destroy(per_cpu(tx_pmd_pool_high, cpu));
+		per_cpu(tx_pmd_pool_order0, cpu) =
+			dma_pmd_pool_destroy(per_cpu(tx_pmd_pool_order0, cpu));
+	}
+	mutex_unlock(&mutex);
+	return -ENOMEM;
+}
+
+int net_tx_dma_pmd_sysctl(const struct ctl_table *table, int write,
+			  void *buffer, size_t *lenp, loff_t *ppos)
+{
+	if (write) {
+		int ret = net_tx_dma_pmd_init();
+
+		if (ret)
+			return ret;
+	}
+
+	return proc_do_static_key(table, write, buffer, lenp, ppos);
+}
+
+static struct page *__alloc_pmd(gfp_t gfp, unsigned int order)
+{
+	if (!static_branch_unlikely(&net_tx_enable_dma_pmd_key))
+		return alloc_pages(gfp, order);
+	if (order == SKB_FRAG_PAGE_ORDER)
+		return dma_pmd_pool_alloc(raw_cpu_read(tx_pmd_pool_high), gfp);
+	return dma_pmd_pool_alloc(raw_cpu_read(tx_pmd_pool_order0), gfp) ?: alloc_page(gfp);
+}
 
 /**
  * skb_page_frag_refill - check that a page_frag contains enough room
@@ -3200,7 +3282,7 @@ bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t gfp)
 	if (SKB_FRAG_PAGE_ORDER &&
 	    !static_branch_unlikely(&net_high_order_alloc_disable_key)) {
 		/* Avoid direct reclaim but allow kswapd to wake */
-		pfrag->page = alloc_pages((gfp & ~__GFP_DIRECT_RECLAIM) |
+		pfrag->page = __alloc_pmd((gfp & ~__GFP_DIRECT_RECLAIM) |
 					  __GFP_COMP | __GFP_NOWARN |
 					  __GFP_NORETRY,
 					  SKB_FRAG_PAGE_ORDER);
@@ -3209,7 +3291,7 @@ bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t gfp)
 			return true;
 		}
 	}
-	pfrag->page = alloc_page(gfp);
+	pfrag->page = __alloc_pmd(gfp, 0);
 	if (likely(pfrag->page)) {
 		pfrag->size = PAGE_SIZE;
 		return true;

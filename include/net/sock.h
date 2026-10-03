@@ -3092,6 +3092,9 @@ extern __u32 sysctl_rmem_default;
 
 #define SKB_FRAG_PAGE_ORDER	get_order(32768)
 DECLARE_STATIC_KEY_FALSE(net_high_order_alloc_disable_key);
+DECLARE_STATIC_KEY_FALSE(net_tx_enable_dma_pmd_key);
+int net_tx_dma_pmd_sysctl(const struct ctl_table *table, int write,
+			  void *buffer, size_t *lenp, loff_t *ppos);
 
 static inline int sk_get_wmem0(const struct sock *sk, const struct proto *proto)
 {

@@ -652,6 +652,13 @@ static struct ctl_table net_core_table[] = {
 		.proc_handler	= proc_do_static_key,
 	},
 	{
+		.procname	= "tx_enable_dma_pmd",
+		.data		= &net_tx_enable_dma_pmd_key.key,
+		.maxlen		= sizeof(net_tx_enable_dma_pmd_key),
+		.mode		= 0644,
+		.proc_handler	= net_tx_dma_pmd_sysctl,
+	},
+	{
 		.procname	= "gro_normal_batch",
 		.data		= &net_hotdata.gro_normal_batch,
 		.maxlen		= sizeof(unsigned int),
