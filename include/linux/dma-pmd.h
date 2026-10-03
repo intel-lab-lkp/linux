@@ -5,6 +5,7 @@
 
 #include <linux/types.h>
 #include <linux/mm.h>
+#include <linux/numa.h>
 #include <linux/rcupdate.h>
 
 struct device;
@@ -77,6 +78,22 @@ static inline bool dma_pmd_free_page(struct page *page)
  */
 struct dma_pmd_pool *dma_pmd_pool_create(unsigned int order, unsigned int max_idle_pages);
 struct dma_pmd_pool *dma_pmd_pool_destroy(struct dma_pmd_pool *pool);
+unsigned long dma_pmd_pool_alloc_bulk_node(struct dma_pmd_pool *pool, gfp_t gfp,
+					   int nid, unsigned long nr_pages,
+					   struct page **page_array);
+static inline struct page *dma_pmd_pool_alloc_node(struct dma_pmd_pool *pool,
+						   gfp_t gfp, int nid)
+{
+	struct page *page = NULL;
+
+	dma_pmd_pool_alloc_bulk_node(pool, gfp, nid, 1, &page);
+	return page;
+}
+static inline struct page *dma_pmd_pool_alloc(struct dma_pmd_pool *pool, gfp_t gfp)
+{
+	return dma_pmd_pool_alloc_node(pool, gfp, NUMA_NO_NODE);
+}
+bool dma_pmd_pool_has_free(struct dma_pmd_pool *pool);
 
 #else /* !CONFIG_DMA_PMD */
 
@@ -99,6 +116,29 @@ dma_pmd_pool_create(unsigned int order, unsigned int max_idle_pages)
 static inline struct dma_pmd_pool *dma_pmd_pool_destroy(struct dma_pmd_pool *pool)
 {
 	return NULL;
+}
+
+static inline unsigned long
+dma_pmd_pool_alloc_bulk_node(struct dma_pmd_pool *pool, gfp_t gfp, int nid,
+			     unsigned long nr_pages, struct page **page_array)
+{
+	return 0;
+}
+
+static inline struct page *
+dma_pmd_pool_alloc_node(struct dma_pmd_pool *pool, gfp_t gfp, int nid)
+{
+	return NULL;
+}
+
+static inline struct page *dma_pmd_pool_alloc(struct dma_pmd_pool *pool, gfp_t gfp)
+{
+	return NULL;
+}
+
+static inline bool dma_pmd_pool_has_free(struct dma_pmd_pool *pool)
+{
+	return false;
 }
 
 #endif /* CONFIG_DMA_PMD */

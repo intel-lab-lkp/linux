@@ -70,6 +70,7 @@ static void test_meta_pooled_toggle(struct kunit *test)
 	base_pfn = ALIGN_DOWN(pfn, 1UL << PMD_ORDER);
 	/* The buddy allocator returns naturally aligned blocks. */
 	KUNIT_EXPECT_EQ(test, pfn, base_pfn);
+	KUNIT_ASSERT_TRUE(test, dma_pmd_meta_ensure_pfn(pfn, true));
 	m = dma_pmd_meta_of_pfn(pfn);
 
 	KUNIT_EXPECT_FALSE(test, dma_is_pmd_page(pfn));
@@ -85,10 +86,48 @@ static void test_meta_pooled_toggle(struct kunit *test)
 	__free_pages(page, PMD_ORDER);
 }
 
+static void test_pool_alloc_and_recycle(struct kunit *test)
+{
+	struct dma_pmd_pool *pool;
+	struct page *p1, *p2;
+	unsigned int order;
+
+	KUNIT_EXPECT_NULL(test, dma_pmd_pool_destroy(NULL));
+
+	for (order = 0; order <= PMD_ORDER + 1; order++) {
+		pool = dma_pmd_pool_create(order, 2);
+		if (order > PMD_ORDER) {
+			KUNIT_EXPECT_NULL(test, pool);
+			continue;
+		}
+		KUNIT_ASSERT_NOT_NULL(test, pool);
+		KUNIT_EXPECT_FALSE(test, dma_pmd_pool_has_free(pool));
+
+		p1 = dma_pmd_pool_alloc(pool, GFP_KERNEL | __GFP_ZERO);
+		if (!p1)
+			dma_pmd_pool_destroy(pool);
+		KUNIT_ASSERT_NOT_NULL(test, p1);
+		KUNIT_EXPECT_TRUE(test, dma_is_pmd_page(page_to_pfn(p1)));
+		KUNIT_EXPECT_EQ(test, dma_pmd_pool_has_free(pool), order < PMD_ORDER);
+
+		/* Freeing p1 returns it to the pool; next allocation reuses index 0. */
+		__free_pages(p1, order);
+		KUNIT_EXPECT_TRUE(test, dma_pmd_pool_has_free(pool));
+		p2 = dma_pmd_pool_alloc(pool, GFP_KERNEL);
+		KUNIT_EXPECT_PTR_EQ(test, p1, p2);
+
+		/* Destroy with p2 still in flight; freeing p2 releases the 2M page. */
+		dma_pmd_pool_destroy(pool);
+		if (p2)
+			__free_pages(p2, order);
+	}
+}
+
 static struct kunit_case dma_pmd_meta_test_cases[] = {
 	KUNIT_CASE(test_meta_init_and_roundtrip),
 	KUNIT_CASE(test_meta_invalid_phys),
 	KUNIT_CASE(test_meta_pooled_toggle),
+	KUNIT_CASE(test_pool_alloc_and_recycle),
 	{}
 };
 
@@ -98,5 +137,5 @@ static struct kunit_suite dma_pmd_meta_test_suite = {
 };
 
 kunit_test_suite(dma_pmd_meta_test_suite);
-MODULE_DESCRIPTION("KUnit tests for struct dma_pmd_meta table");
+MODULE_DESCRIPTION("KUnit tests for struct dma_pmd_meta table and DMA_PMD pool");
 MODULE_LICENSE("Dual BSD/GPL");
