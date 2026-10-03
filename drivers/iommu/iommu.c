@@ -2867,7 +2867,7 @@ ssize_t iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
 	while (i <= nents) {
 		phys_addr_t s_phys = sg_phys(sg);
 
-		if (len && s_phys != start + len) {
+		if (len && (sg_dma_is_bus_address(sg) || s_phys != start + len)) {
 			ret = iommu_map_nosync(domain, iova + mapped, start,
 					len, prot, gfp);
 			if (ret)

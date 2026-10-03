@@ -2,6 +2,7 @@
 #ifndef _DRIVERS_IOMMU_DMA_PMD_PRIV_H
 #define _DRIVERS_IOMMU_DMA_PMD_PRIV_H
 
+#include <linux/dma-mapping.h>
 #include <linux/dma-pmd.h>
 #include <linux/kref.h>
 #include <linux/list.h>
@@ -10,6 +11,7 @@
 #include <linux/srcu.h>
 #include <linux/types.h>
 
+struct device;
 struct iommu_domain;
 
 /**
@@ -220,6 +222,22 @@ static inline struct dma_pmd_meta *dma_pmd_meta_base(void)
 	return smp_load_acquire(&dma_pmd_meta_array);
 }
 
+/*
+ * Highest PFN covered by the allocated @dma_pmd_meta_array reservation.
+ * Every domain's IOVA window is sized to match this bound.
+ */
+static inline unsigned long dma_pmd_top_pfn(void)
+{
+	return dma_pmd_meta_nframes << PMD_ORDER;
+}
+
+/* IOVA of @phys in @win. Only valid once the PMD page's PTE is installed. */
+static inline dma_addr_t dma_pmd_window_iova(const struct dma_pmd_window *win,
+					     phys_addr_t phys)
+{
+	return win->base + phys;
+}
+
 int dma_pmd_meta_init(void);
 bool dma_pmd_meta_ensure_pfn(unsigned long pfn, bool can_block);
 struct dma_pmd_meta *dma_pmd_meta_of_pfn(unsigned long pfn);
@@ -230,6 +248,8 @@ phys_addr_t dma_pmd_meta_to_phys(const struct dma_pmd_meta *m);
 unsigned int dma_pmd_pools_forget_domain(int idx);
 void dma_pmd_unmap_all(struct dma_pmd_meta *meta);
 unsigned int dma_pmd_forget_domain(struct dma_pmd_meta *meta, int idx);
+int dma_pmd_window_assign(struct device *dev, struct iommu_domain *domain,
+			  struct dma_pmd_window *win);
 
 static inline bool dma_is_pmd_phys(phys_addr_t phys)
 {
@@ -255,6 +275,10 @@ static inline bool dma_pmd_window_owns(const struct dma_pmd_window *win, dma_add
 	return size && dma - win->base < size;
 }
 
+dma_addr_t dma_pmd_dma_map_phys(struct device *dev, struct iommu_domain *domain,
+				struct dma_pmd_window *win, phys_addr_t phys,
+				size_t size, int prot, u64 dma_mask);
+
 void dma_pmd_domain_release(struct iommu_domain *domain);
 
 #else /* !CONFIG_DMA_PMD */
@@ -267,6 +291,15 @@ static inline bool dma_is_pmd_phys(phys_addr_t phys)
 static inline bool dma_pmd_window_owns(const struct dma_pmd_window *win, dma_addr_t dma)
 {
 	return false;
+}
+
+static inline dma_addr_t dma_pmd_dma_map_phys(struct device *dev,
+					      struct iommu_domain *domain,
+					      struct dma_pmd_window *win,
+					      phys_addr_t phys, size_t size,
+					      int prot, u64 dma_mask)
+{
+	return DMA_MAPPING_ERROR;
 }
 
 static inline void dma_pmd_domain_release(struct iommu_domain *domain)

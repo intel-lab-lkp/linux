@@ -164,6 +164,7 @@ config DMA_PMD
 	depends on IOMMU_DMA
 	depends on X86_64 || (ARM64 && ARM64_4K_PAGES)
 	depends on !PREEMPT_RT
+	select NEED_SG_DMA_FLAGS
 	default y
 	help
 	  Hand out DMA buffers carved out of PMD_SIZE physically contiguous

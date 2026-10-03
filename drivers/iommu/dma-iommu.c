@@ -1286,6 +1286,14 @@ dma_addr_t iommu_dma_map_phys(struct device *dev, phys_addr_t phys, size_t size,
 		arch_sync_dma_flush();
 	}
 
+	if (dma_is_pmd_phys(phys)) {
+		iova = dma_pmd_dma_map_phys(dev, domain,
+					    &domain->iova_cookie->win_dma_pmd,
+					    phys, size, prot, dma_mask);
+		if (likely(iova != DMA_MAPPING_ERROR))
+			return iova;
+	}
+
 	iova = __iommu_dma_map(dev, phys, size, prot, dma_mask);
 	if (iova == DMA_MAPPING_ERROR &&
 	    !(attrs & (DMA_ATTR_MMIO | DMA_ATTR_REQUIRE_COHERENT)))
@@ -1296,14 +1304,19 @@ dma_addr_t iommu_dma_map_phys(struct device *dev, phys_addr_t phys, size_t size,
 void iommu_dma_unmap_phys(struct device *dev, dma_addr_t dma_handle,
 		size_t size, enum dma_data_direction dir, unsigned long attrs)
 {
+	struct iommu_domain *domain = iommu_get_dma_domain(dev);
 	phys_addr_t phys;
+
+	/* DMA_PMD mapped buffer: nothing to unmap or release. */
+	if (dma_pmd_window_owns(&domain->iova_cookie->win_dma_pmd, dma_handle))
+		return;
 
 	if (attrs & (DMA_ATTR_MMIO | DMA_ATTR_REQUIRE_COHERENT)) {
 		__iommu_dma_unmap(dev, dma_handle, size);
 		return;
 	}
 
-	phys = iommu_iova_to_phys(iommu_get_dma_domain(dev), dma_handle);
+	phys = iommu_iova_to_phys(domain, dma_handle);
 	if (WARN_ON(!phys))
 		return;
 
@@ -1499,6 +1512,18 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 			 */
 			break;
 		case PCI_P2PDMA_MAP_NONE:
+			if (dma_is_pmd_phys(sg_phys(s))) {
+				iova = dma_pmd_dma_map_phys(dev, domain,
+							    &cookie->win_dma_pmd,
+							    sg_phys(s), s_length,
+							    prot, dma_get_mask(dev));
+				if (likely(iova != DMA_MAPPING_ERROR)) {
+					s->dma_address = iova;
+					sg_dma_len(s) = s_length;
+					sg_dma_mark_bus_address(s);
+					continue;
+				}
+			}
 			break;
 		case PCI_P2PDMA_MAP_BUS_ADDR:
 			/*
