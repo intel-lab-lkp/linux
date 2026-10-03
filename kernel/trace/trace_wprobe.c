@@ -6,7 +6,11 @@
  */
 #define pr_fmt(fmt)	"trace_wprobe: " fmt
 
+#include <linux/atomic.h>
 #include <linux/compiler.h>
+#include <linux/cpu.h>
+#include <linux/cpuhotplug.h>
+#include <linux/errno.h>
 #include <linux/hw_breakpoint.h>
 #include <linux/kallsyms.h>
 #include <linux/list.h>
@@ -15,11 +19,16 @@
 #include <linux/perf_event.h>
 #include <linux/rculist.h>
 #include <linux/security.h>
+#include <linux/spinlock.h>
 #include <linux/tracepoint.h>
 #include <linux/uaccess.h>
+#include <linux/workqueue.h>
+#include <linux/irq_work.h>
+#include <linux/preempt.h>
 
 #include <asm/ptrace.h>
 
+#include "trace.h"
 #include "trace_dynevent.h"
 #include "trace_probe.h"
 #include "trace_probe_kernel.h"
@@ -45,12 +54,24 @@ static struct dyn_event_operations trace_wprobe_ops = {
 
 struct trace_wprobe {
 	struct dyn_event	devent;
+	struct list_head	active_list;
 	struct perf_event * __percpu *bp_event;
 	unsigned long		addr;
 	int			offset;
 	int			len;
 	int			type;
 	const char		*symbol;
+	raw_spinlock_t		lock;
+	struct irq_work		irq_work;
+	struct work_struct	work;
+	atomic_t		missed;
+	/*
+	 * work_pending is set to 1 before irq_work_queue() and cleared to 0
+	 * after wprobe_work_func() finishes on_each_cpu(). This prevents a
+	 * new trigger from overwriting tw->addr while the work is propagating
+	 * the old address to per-CPU debug registers via IPI.
+	 */
+	atomic_t		work_pending;
 	struct trace_probe	tp;
 };
 
@@ -63,6 +84,9 @@ static struct trace_wprobe *to_trace_wprobe(struct dyn_event *ev)
 {
 	return container_of(ev, struct trace_wprobe, devent);
 }
+
+static DEFINE_MUTEX(wprobe_mutex);
+static LIST_HEAD(active_wprobes);
 
 #define for_each_trace_wprobe(pos, dpos)			\
 	for_each_dyn_event(dpos)				\
@@ -185,13 +209,22 @@ static int __register_trace_wprobe(struct trace_wprobe *tw)
 	attr.bp_len = tw->len;
 	attr.bp_type = tw->type;
 
-	tw->bp_event = register_wide_hw_breakpoint(&attr, wprobe_perf_handler, tw);
+	cpus_read_lock();
+	tw->bp_event = register_wide_hw_breakpoint_cpuslocked(&attr,
+							      wprobe_perf_handler,
+							      tw);
 	if (IS_ERR_PCPU(tw->bp_event)) {
 		int ret = PTR_ERR_PCPU(tw->bp_event);
 
 		tw->bp_event = NULL;
+		cpus_read_unlock();
 		return ret;
 	}
+
+	mutex_lock(&wprobe_mutex);
+	list_add(&tw->active_list, &active_wprobes);
+	mutex_unlock(&wprobe_mutex);
+	cpus_read_unlock();
 
 	return 0;
 }
@@ -199,14 +232,120 @@ static int __register_trace_wprobe(struct trace_wprobe *tw)
 static void __unregister_trace_wprobe(struct trace_wprobe *tw)
 {
 	if (tw->bp_event) {
+		mutex_lock(&wprobe_mutex);
+		list_del_init(&tw->active_list);
+		mutex_unlock(&wprobe_mutex);
+
+		irq_work_sync(&tw->irq_work);
+		cancel_work_sync(&tw->work);
 		unregister_wide_hw_breakpoint(tw->bp_event);
 		tw->bp_event = NULL;
 	}
 }
 
+static int wprobe_cpu_online(unsigned int cpu)
+{
+	struct trace_wprobe *tw;
+
+	mutex_lock(&wprobe_mutex);
+	list_for_each_entry(tw, &active_wprobes, active_list) {
+		if (tw->bp_event && !per_cpu(*tw->bp_event, cpu)) {
+			struct perf_event_attr attr;
+			struct perf_event *bp;
+
+			hw_breakpoint_init(&attr);
+			attr.bp_addr = READ_ONCE(tw->addr);
+			attr.bp_len = tw->len;
+			attr.bp_type = tw->type;
+
+			bp = perf_event_create_kernel_counter(&attr, cpu, NULL,
+							      wprobe_perf_handler, tw);
+			if (!IS_ERR(bp))
+				per_cpu(*tw->bp_event, cpu) = bp;
+		}
+	}
+	mutex_unlock(&wprobe_mutex);
+
+	return 0;
+}
+
+static int wprobe_cpu_offline(unsigned int cpu)
+{
+	struct trace_wprobe *tw;
+
+	mutex_lock(&wprobe_mutex);
+	list_for_each_entry(tw, &active_wprobes, active_list) {
+		if (tw->bp_event) {
+			struct perf_event *bp = per_cpu(*tw->bp_event, cpu);
+
+			if (bp) {
+				per_cpu(*tw->bp_event, cpu) = NULL;
+				unregister_hw_breakpoint(bp);
+			}
+		}
+	}
+	mutex_unlock(&wprobe_mutex);
+
+	return 0;
+}
+
+static int trace_wprobe_update_local(struct trace_wprobe *tw, unsigned long addr)
+{
+	struct perf_event * __percpu *pevent;
+	struct perf_event *bp;
+
+	pevent = tw->bp_event;
+	if (!pevent)
+		return -EINVAL;
+
+	bp = *this_cpu_ptr(pevent);
+	if (!bp)
+		return -EINVAL;
+
+	if (bp->attr.bp_addr == addr)
+		return 0;
+
+	return modify_local_hw_breakpoint_addr(bp, addr);
+}
+
+static void wprobe_smp_update_func(void *info)
+{
+	struct trace_wprobe *tw = info;
+	unsigned long addr = READ_ONCE(tw->addr);
+
+	if (trace_wprobe_update_local(tw, addr))
+		atomic_inc(&tw->missed);
+}
+
+static void wprobe_work_func(struct work_struct *work)
+{
+	struct trace_wprobe *tw = container_of(work, struct trace_wprobe, work);
+
+	cpus_read_lock();
+	on_each_cpu(wprobe_smp_update_func, tw, true);
+	cpus_read_unlock();
+	/*
+	 * Clear work_pending after all CPUs have updated their local debug
+	 * registers.  A new trigger may now update tw->addr and queue a new
+	 * irq_work.
+	 */
+	atomic_set(&tw->work_pending, 0);
+}
+
+static void wprobe_irq_work_func(struct irq_work *irq_work)
+{
+	struct trace_wprobe *tw = container_of(irq_work, struct trace_wprobe, irq_work);
+
+	schedule_work(&tw->work);
+}
+
 static void free_trace_wprobe(struct trace_wprobe *tw)
 {
 	if (tw) {
+		if (tw->work.func) {
+			irq_work_sync(&tw->irq_work);
+			cancel_work_sync(&tw->work);
+		}
 		trace_probe_cleanup(&tw->tp);
 		kfree(tw->symbol);
 		kfree(tw);
@@ -230,6 +369,13 @@ static struct trace_wprobe *alloc_trace_wprobe(const char *group,
 	tw = kzalloc_flex(*tw, tp.args, nargs);
 	if (!tw)
 		return ERR_PTR(-ENOMEM);
+
+	raw_spin_lock_init(&tw->lock);
+	INIT_LIST_HEAD(&tw->active_list);
+	init_irq_work(&tw->irq_work, wprobe_irq_work_func);
+	INIT_WORK(&tw->work, wprobe_work_func);
+	atomic_set(&tw->missed, 0);
+	atomic_set(&tw->work_pending, 0);
 
 	if (symbol) {
 		tw->symbol = kstrdup(symbol, GFP_KERNEL);
@@ -509,6 +655,11 @@ static bool trace_wprobe_is_valid_addr(unsigned long addr, int len)
 	return true;
 }
 
+#ifdef CONFIG_WPROBE_TRIGGERS
+static u64 wprobe_trigger_clear_target __aligned(8);
+#define WPROBE_DEFAULT_CLEAR_ADDRESS ((unsigned long)&wprobe_trigger_clear_target)
+#endif
+
 static int parse_address_spec(const char *spec, unsigned long *addr, int *type,
 			      int *len, char **symbol, int *offset)
 {
@@ -572,7 +723,13 @@ static int parse_address_spec(const char *spec, unsigned long *addr, int *type,
 		}
 	}
 
+#ifdef CONFIG_WPROBE_TRIGGERS
+	if (strcmp(at + 1, "-1") == 0) {
+		_addr = WPROBE_DEFAULT_CLEAR_ADDRESS;
+	} else if (kstrtoul(at + 1, 0, &_addr) != 0) {
+#else
 	if (kstrtoul(at + 1, 0, &_addr) != 0) {
+#endif
 		char *off_str = strpbrk(at + 1, "+-");
 
 		if (off_str) {
@@ -756,6 +913,10 @@ static int trace_wprobe_show(struct seq_file *m, struct dyn_event *ev)
 				   tw->offset, len);
 		else
 			seq_printf(m, " %s@%s:%d", type_str, tw->symbol, len);
+#ifdef CONFIG_WPROBE_TRIGGERS
+	} else if (tw->addr == WPROBE_DEFAULT_CLEAR_ADDRESS) {
+		seq_printf(m, " %s@-1:%d", type_str, len);
+#endif
 	} else {
 		seq_printf(m, " %s@0x%lx:%d", type_str, tw->addr, len);
 	}
@@ -767,9 +928,632 @@ static int trace_wprobe_show(struct seq_file *m, struct dyn_event *ev)
 	return 0;
 }
 
+static enum cpuhp_state wprobe_hp_state __ro_after_init;
+
 static __init int init_wprobe_trace(void)
 {
-	return dyn_event_register(&trace_wprobe_ops);
+	int ret;
+
+	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "trace/wprobe:online",
+				wprobe_cpu_online, wprobe_cpu_offline);
+	if (ret < 0)
+		return ret;
+
+	wprobe_hp_state = ret;
+
+	ret = dyn_event_register(&trace_wprobe_ops);
+	if (ret)
+		cpuhp_remove_state(wprobe_hp_state);
+
+	return ret;
 }
 fs_initcall(init_wprobe_trace);
 
+#ifdef CONFIG_WPROBE_TRIGGERS
+
+#define SET_WPROBE_STR		"set_wprobe"
+#define CLEAR_WPROBE_STR	"clear_wprobe"
+#define wprobe_trigger_log_err(file, glob, offs, err) \
+	tracing_log_err((file)->tr, "wprobe_trigger", glob, \
+			trace_probe_err_text, TP_ERR_##err, offs)
+
+struct wprobe_trigger_data {
+	struct rcu_head		rcu;
+	struct trace_event_file	*file;
+	struct trace_wprobe	*tw;
+	int			offset;
+	long			adjust;
+	const char		*field;
+	bool			clear;
+};
+
+static bool __wprobe_count_func(struct event_trigger_data *data,
+				unsigned long addr)
+{
+	struct wprobe_trigger_data *wprobe_data = data->private_data;
+	struct trace_wprobe *tw = wprobe_data->tw;
+	unsigned long cur_addr;
+
+	if (atomic_read(&tw->work_pending))
+		return false;
+
+	cur_addr = READ_ONCE(tw->addr);
+
+	if (!wprobe_data->clear) {
+		if (cur_addr != WPROBE_DEFAULT_CLEAR_ADDRESS)
+			return false;
+		if (!trace_wprobe_is_valid_addr(addr, tw->len))
+			return false;
+	} else {
+		if (cur_addr == WPROBE_DEFAULT_CLEAR_ADDRESS)
+			return false;
+		if (wprobe_data->field && cur_addr != addr)
+			return false;
+	}
+
+	return true;
+}
+
+static bool wprobe_count_func(struct event_trigger_data *data,
+			      struct trace_buffer *buffer, void *rec,
+			      struct ring_buffer_event *event)
+{
+	struct wprobe_trigger_data *wprobe_data = data->private_data;
+	struct trace_wprobe *tw = wprobe_data->tw;
+	unsigned long addr = 0;
+
+	if (in_nmi())
+		return false;
+
+	if (!data->count)
+		return false;
+
+	if (wprobe_data->field) {
+		if (!rec)
+			return false;
+		addr = *(unsigned long *)((char *)rec + wprobe_data->offset);
+		addr += wprobe_data->adjust;
+	}
+
+	/*
+	 * Pre-check locklessly whether the wprobe can accept this trigger.
+	 * If the probe is already busy, record it as missed and do not invoke
+	 * wprobe_trigger(). Note that data->count is not decremented here;
+	 * it is decremented under tw->lock in wprobe_trigger() to ensure
+	 * count budget is only consumed when the hardware update succeeds.
+	 */
+	if (!__wprobe_count_func(data, addr)) {
+		atomic_inc(&tw->missed);
+		return false;
+	}
+
+	return true;
+}
+
+static void wprobe_trigger(struct event_trigger_data *data,
+			   struct trace_buffer *buffer,  void *rec,
+			   struct ring_buffer_event *event)
+{
+	struct wprobe_trigger_data *wprobe_data = data->private_data;
+	struct trace_wprobe *tw = wprobe_data->tw;
+	unsigned long target_addr, addr = 0, flags;
+
+	if (in_nmi())
+		return;
+
+	if (wprobe_data->field) {
+		if (!rec)
+			return;
+		addr = *(unsigned long *)((char *)rec + wprobe_data->offset);
+		addr += wprobe_data->adjust;
+	}
+
+	raw_spin_lock_irqsave(&tw->lock, flags);
+
+	if (!__wprobe_count_func(data, addr)) {
+		atomic_inc(&tw->missed);
+		goto out;
+	}
+
+	/*
+	 * For counted triggers, verify data->count is still available under
+	 * tw->lock to prevent concurrent executions from exceeding the limit.
+	 */
+	if ((data->flags & EVENT_TRIGGER_FL_COUNT) && !data->count)
+		goto out;
+
+	target_addr = wprobe_data->clear ? WPROBE_DEFAULT_CLEAR_ADDRESS : addr;
+
+	/*
+	 * Try updating the hardware breakpoint on the local CPU first.
+	 * If this fails, skip updating tw->addr and do not queue irq_work.
+	 * Note that this wprobe will not be traced until tw_addr is updated.
+	 * (e.g. NMI happens on this CPU.)
+	 */
+	if (trace_wprobe_update_local(tw, target_addr)) {
+		atomic_inc(&tw->missed);
+		goto out;
+	}
+
+	/*
+	 * Decrement data->count here under tw->lock only after the local
+	 * hardware breakpoint has been successfully updated. This avoids:
+	 * 1) Consuming count on trigger attempts that failed/missed.
+	 * 2) Race windows where concurrent CPUs decrement count and underflow
+	 *    to -1 (unlimited).
+	 */
+	if (data->flags & EVENT_TRIGGER_FL_COUNT) {
+		if (data->count > 0)
+			(data->count)--;
+	}
+
+	WRITE_ONCE(tw->addr, target_addr);
+	if (!wprobe_data->clear)
+		clear_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &wprobe_data->file->flags);
+	else
+		set_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &wprobe_data->file->flags);
+
+	/*
+	 * For other CPUs, kick irq_work to asynchronously propagate
+	 * the new address.
+	 */
+	if (num_online_cpus() > 1) {
+		atomic_set(&tw->work_pending, 1);
+		irq_work_queue(&tw->irq_work);
+	}
+
+out:
+	raw_spin_unlock_irqrestore(&tw->lock, flags);
+}
+
+static void free_wprobe_trigger_data(struct wprobe_trigger_data *wprobe_data)
+{
+	if (wprobe_data) {
+		kfree(wprobe_data->field);
+		kfree(wprobe_data);
+	}
+}
+DEFINE_FREE(free_wprobe_trigger_data, struct wprobe_trigger_data *, free_wprobe_trigger_data(_T));
+
+static void free_private_wprobe_trigger_data(struct event_trigger_data *data)
+{
+	free_wprobe_trigger_data(data->private_data);
+}
+
+static int wprobe_trigger_print(struct seq_file *m,
+			       struct event_trigger_data *data)
+{
+	struct wprobe_trigger_data *wprobe_data = data->private_data;
+	int missed = atomic_read(&wprobe_data->tw->missed);
+
+	if (wprobe_data->clear) {
+		seq_printf(m, "%s:%s", CLEAR_WPROBE_STR,
+			   trace_event_name(wprobe_data->file->event_call));
+		if (wprobe_data->field) {
+			seq_printf(m, ":%s%+ld",
+				   wprobe_data->field, wprobe_data->adjust);
+		}
+	} else {
+		seq_printf(m, "%s:%s:%s%+ld", SET_WPROBE_STR,
+			   trace_event_name(wprobe_data->file->event_call),
+			   wprobe_data->field, wprobe_data->adjust);
+	}
+
+	if (data->count == -1)
+		seq_puts(m, ":unlimited");
+	else
+		seq_printf(m, ":count=%ld", data->count);
+
+	if (data->filter_str)
+		seq_printf(m, " if %s", data->filter_str);
+
+	if (missed)
+		seq_printf(m, " # missed: %d", missed);
+
+	seq_putc(m, '\n');
+
+	return 0;
+}
+
+static struct wprobe_trigger_data *
+wprobe_trigger_alloc(struct trace_wprobe *tw, struct trace_event_file *file,
+		     bool clear)
+{
+	struct wprobe_trigger_data *wprobe_data;
+
+	wprobe_data = kzalloc_obj(*wprobe_data);
+	if (!wprobe_data)
+		return NULL;
+
+	wprobe_data->tw = tw;
+	wprobe_data->clear = clear;
+	wprobe_data->file = file;
+
+	return wprobe_data;
+}
+
+static void wprobe_trigger_free(struct event_trigger_data *data)
+{
+	struct wprobe_trigger_data *wprobe_data = data->private_data;
+
+	if (WARN_ON_ONCE(data->ref <= 0))
+		return;
+
+	data->ref--;
+	if (!data->ref) {
+		/*
+		 * Ensure SOFT_DISABLED flag is restored before clearing soft
+		 * mode so that if the user did not explicitly enable this
+		 * event, __ftrace_event_enable_disable() unregisters it.
+		 */
+		set_bit(EVENT_FILE_FL_SOFT_DISABLED_BIT, &wprobe_data->file->flags);
+		/* Remove the SOFT_MODE flag */
+		trace_event_enable_disable(wprobe_data->file, 0, 1);
+		trace_event_put_ref(wprobe_data->file->event_call);
+		trigger_data_free(data);
+	}
+}
+
+static int wprobe_trigger_cmd_parse(struct event_command *cmd_ops,
+				    struct trace_event_file *file,
+				    char *glob, char *cmd,
+				    char *param_and_filter)
+{
+	/*
+	 * set_wprobe:EVENT:FIELD[+OFFS]
+	 * clear_wprobe:EVENT[:FIELD[+OFFS]]
+	 */
+	struct wprobe_trigger_data *wprobe_data = NULL;
+	struct event_trigger_data *trigger_data = NULL;
+	struct trace_event_file *wprobe_file;
+	struct trace_array *tr = file->tr;
+	char *event_str, *field_str, *comment;
+	struct ftrace_event_field *field;
+	struct trace_event_call *event;
+	bool remove, clear = false;
+	unsigned long orig_addr = 0;
+	struct trace_wprobe *tw;
+	char *param, *filter;
+	int ret;
+
+	remove = event_trigger_check_remove(glob);
+
+	if (!strcmp(cmd, CLEAR_WPROBE_STR))
+		clear = true;
+
+	if (param_and_filter) {
+		/* Recover original trigger string to show the error log correctly. */
+		if (*(param_and_filter - 1) == '\0')
+			*(param_and_filter - 1) = ':';
+		comment = strchr(param_and_filter, '#');
+		if (comment)
+			*comment = '\0';
+	}
+
+	if (event_trigger_empty_param(param_and_filter)) {
+		wprobe_trigger_log_err(file, glob, strlen(cmd) + 1, WPROBE_NOT_FOUND);
+		return -EINVAL;
+	}
+
+	ret = event_trigger_separate_filter(param_and_filter, &param, &filter, true);
+	if (ret)
+		return ret;
+
+	if (file->event_call->flags & TRACE_EVENT_FL_KPROBE) {
+		wprobe_trigger_log_err(file, glob, 0, WPROBE_ON_KPROBE);
+		return -EOPNOTSUPP;
+	}
+
+	event_str = strsep(&param, ":");
+
+	/* Find target wprobe */
+	tw = find_trace_wprobe(event_str, WPROBE_EVENT_SYSTEM);
+	if (!tw) {
+		wprobe_trigger_log_err(file, glob, event_str - glob, WPROBE_NOT_FOUND);
+		return -ENOENT;
+	}
+	/* The target wprobe must not be used (unless clear) */
+	if (!remove && !clear && trace_probe_is_enabled(&tw->tp)) {
+		wprobe_trigger_log_err(file, glob, event_str - glob, WPROBE_BUSY);
+		return -EBUSY;
+	}
+
+	wprobe_file = find_event_file(tr, WPROBE_EVENT_SYSTEM, event_str);
+	if (!wprobe_file) {
+		wprobe_trigger_log_err(file, glob, event_str - glob, WPROBE_NOT_FOUND);
+		return -EINVAL;
+	}
+
+	wprobe_data = wprobe_trigger_alloc(tw, wprobe_file, clear);
+	if (!wprobe_data)
+		return -ENOMEM;
+
+	/* clear_wprobe does not need field, but can have optional field. */
+	if (!clear) {
+		char *offs;
+
+		/* Find target field, which must be equivalent to "void *" */
+		field_str = strsep(&param, ":");
+		if (!field_str) {
+			wprobe_trigger_log_err(file, glob, strlen(glob), WPROBE_NEED_FIELD);
+			ret = -EINVAL;
+			goto out_free;
+		}
+
+		offs = strpbrk(field_str, "+-");
+		if (offs) {
+			long val;
+
+			if (kstrtol(offs, 0, &val) < 0) {
+				wprobe_trigger_log_err(file, glob, offs - glob, BAD_DEREF_OFFS);
+				ret = -EINVAL;
+				goto out_free;
+			}
+			wprobe_data->adjust = val;
+			*offs = '\0';
+		}
+
+		event = file->event_call;
+		field = trace_find_event_field(event, field_str);
+		if (!field) {
+			wprobe_trigger_log_err(file, glob, field_str - glob, NO_EVENT_FIELD);
+			ret = -ENOENT;
+			goto out_free;
+		}
+
+		if (field->size != sizeof(void *)) {
+			wprobe_trigger_log_err(file, glob, field_str - glob, WPROBE_BAD_FIELD);
+			ret = -ENOEXEC;
+			goto out_free;
+		}
+		wprobe_data->offset = field->offset;
+		wprobe_data->field = kstrdup(field_str, GFP_KERNEL);
+		if (!wprobe_data->field) {
+			ret = -ENOMEM;
+			goto out_free;
+		}
+	} else if (param && (isalpha(param[0]) || param[0] == '_')) {
+		if (strncmp(param, "count=", 6) != 0 &&
+		    (strcmp(param, "unlimited") != 0 ||
+		     trace_find_event_field(file->event_call, "unlimited"))) {
+			char *offs;
+
+			field_str = strsep(&param, ":");
+			offs = strpbrk(field_str, "+-");
+			if (offs) {
+				long val;
+
+				if (kstrtol(offs, 0, &val) < 0) {
+					wprobe_trigger_log_err(file, glob,
+							       offs - glob,
+							       BAD_DEREF_OFFS);
+					ret = -EINVAL;
+					goto out_free;
+				}
+				wprobe_data->adjust = val;
+				*offs = '\0';
+			}
+
+			event = file->event_call;
+			field = trace_find_event_field(event, field_str);
+			if (!field) {
+				wprobe_trigger_log_err(file, glob,
+						       field_str - glob,
+						       NO_EVENT_FIELD);
+				ret = -ENOENT;
+				goto out_free;
+			}
+
+			if (field->size != sizeof(void *)) {
+				wprobe_trigger_log_err(file, glob,
+						       field_str - glob,
+						       WPROBE_BAD_FIELD);
+				ret = -ENOEXEC;
+				goto out_free;
+			}
+			wprobe_data->offset = field->offset;
+			wprobe_data->field = kstrdup(field_str, GFP_KERNEL);
+			if (!wprobe_data->field) {
+				ret = -ENOMEM;
+				goto out_free;
+			}
+		}
+	}
+
+	if (param) {
+		if (!strcmp(param, "unlimited"))
+			param = NULL;
+		else if (!strncmp(param, "count=", 6))
+			param += 6;
+	}
+
+	trigger_data = trigger_data_alloc(cmd_ops, cmd, param, wprobe_data);
+	if (!trigger_data) {
+		ret = -ENOMEM;
+		goto out_free;
+	}
+
+	trigger_data->private_data_free = free_private_wprobe_trigger_data;
+
+	if (remove) {
+		event_trigger_unregister(cmd_ops, file, glob+1, trigger_data);
+		trigger_data_free(trigger_data);
+		return 0;
+	}
+
+	/* Up the trigger_data count to make sure nothing frees it on failure */
+	event_trigger_init(trigger_data);
+
+	ret = event_trigger_parse_num(param, trigger_data);
+	if (ret) {
+		wprobe_trigger_log_err(file, glob, param - glob, BAD_IMM);
+		goto out_free_trigger;
+	}
+
+	ret = event_trigger_set_filter(cmd_ops, file, filter, trigger_data);
+	if (ret < 0)
+		goto out_free_trigger;
+
+	/* Soft-enable (register) wprobe event on WPROBE_DEFAULT_CLEAR_ADDRESS */
+	if (!trace_event_try_get_ref(wprobe_file->event_call)) {
+		ret = -ENODEV;
+		goto out_free_trigger;
+	}
+
+	if (!clear) {
+		orig_addr = tw->addr;
+		WRITE_ONCE(tw->addr, WPROBE_DEFAULT_CLEAR_ADDRESS);
+	}
+
+	ret = trace_event_enable_disable(wprobe_file, 1, 1);
+	if (ret < 0) {
+		if (!clear)
+			WRITE_ONCE(tw->addr, orig_addr);
+		goto out_put;
+	}
+
+	ret = event_trigger_register(cmd_ops, file, glob, trigger_data);
+	if (ret)
+		goto out_disable;
+
+	/* Balance the event_trigger_init() at registration start */
+	event_trigger_free(trigger_data);
+	return 0;
+
+out_disable:
+	if (!clear)
+		WRITE_ONCE(tw->addr, orig_addr);
+	trace_event_enable_disable(wprobe_file, 0, 1);
+out_put:
+	trace_event_put_ref(wprobe_file->event_call);
+out_free_trigger:
+	event_trigger_reset_filter(cmd_ops, trigger_data);
+	trigger_data_free(trigger_data);
+	return ret;
+
+out_free:
+	free_wprobe_trigger_data(wprobe_data);
+	return ret;
+}
+
+/* Return event_trigger_data if there is a trigger which points the same wprobe */
+static struct event_trigger_data *
+wprobe_trigger_find_same(struct event_trigger_data *test,
+			 struct trace_event_file *file)
+{
+	struct wprobe_trigger_data *test_wprobe_data = test->private_data;
+	struct wprobe_trigger_data *wprobe_data;
+	struct event_trigger_data *iter;
+
+	list_for_each_entry(iter, &file->triggers, list) {
+		wprobe_data = iter->private_data;
+		if (!wprobe_data ||
+		    iter->cmd_ops->trigger_type !=
+		    test->cmd_ops->trigger_type)
+			continue;
+		if (wprobe_data->tw == test_wprobe_data->tw &&
+		    wprobe_data->clear == test_wprobe_data->clear)
+			return iter;
+	}
+	return NULL;
+}
+
+static int wprobe_register_trigger(char *glob,
+				   struct event_trigger_data *data,
+				   struct trace_event_file *file)
+{
+	int ret = 0;
+
+	lockdep_assert_held(&event_mutex);
+
+	/* The same wprobe is not accept on the same file (event) */
+	if (wprobe_trigger_find_same(data, file))
+		return -EEXIST;
+
+	if (data->cmd_ops->init) {
+		ret = data->cmd_ops->init(data);
+		if (ret < 0)
+			return ret;
+	}
+
+	list_add_rcu(&data->list, &file->triggers);
+
+	update_cond_flag(file);
+	ret = trace_event_trigger_enable_disable(file, 1);
+	if (ret < 0) {
+		list_del_rcu(&data->list);
+		update_cond_flag(file);
+		tracepoint_synchronize_unregister();
+		if (data->cmd_ops->free)
+			data->cmd_ops->free(data);
+	}
+	return ret;
+}
+
+static void wprobe_unregister_trigger(char *glob,
+				      struct event_trigger_data *test,
+				      struct trace_event_file *file)
+{
+	struct event_trigger_data *data;
+
+	lockdep_assert_held(&event_mutex);
+
+	data = wprobe_trigger_find_same(test, file);
+	if (!data)
+		return;
+
+	list_del_rcu(&data->list);
+	trace_event_trigger_enable_disable(file, 0);
+	update_cond_flag(file);
+	tracepoint_synchronize_unregister();
+	if (data->cmd_ops->free)
+		data->cmd_ops->free(data);
+}
+
+static struct event_command trigger_wprobe_set_cmd = {
+	.name			= SET_WPROBE_STR,
+	.trigger_type		= ETT_EVENT_WPROBE,
+	/* This triggers after when the event is recorded. */
+	.flags			= EVENT_CMD_FL_NEEDS_REC,
+	.parse			= wprobe_trigger_cmd_parse,
+	.reg			= wprobe_register_trigger,
+	.unreg			= wprobe_unregister_trigger,
+	.set_filter		= set_trigger_filter,
+	.trigger		= wprobe_trigger,
+	.count_func		= wprobe_count_func,
+	.print			= wprobe_trigger_print,
+	.init			= event_trigger_init,
+	.free			= wprobe_trigger_free,
+};
+
+static struct event_command trigger_wprobe_clear_cmd = {
+	.name			= CLEAR_WPROBE_STR,
+	.trigger_type		= ETT_EVENT_WPROBE,
+	/* This triggers after when the event is recorded. */
+	.flags			= EVENT_CMD_FL_NEEDS_REC,
+	.parse			= wprobe_trigger_cmd_parse,
+	.reg			= wprobe_register_trigger,
+	.unreg			= wprobe_unregister_trigger,
+	.set_filter		= set_trigger_filter,
+	.trigger		= wprobe_trigger,
+	.count_func		= wprobe_count_func,
+	.print			= wprobe_trigger_print,
+	.init			= event_trigger_init,
+	.free			= wprobe_trigger_free,
+};
+
+static __init int init_trigger_wprobe_cmds(void)
+{
+	int ret;
+
+	ret = register_event_command(&trigger_wprobe_set_cmd);
+	if (WARN_ON(ret < 0))
+		return ret;
+	ret = register_event_command(&trigger_wprobe_clear_cmd);
+	if (WARN_ON(ret < 0))
+		unregister_event_command(&trigger_wprobe_set_cmd);
+
+	return ret;
+}
+fs_initcall(init_trigger_wprobe_cmds);
+#endif /* CONFIG_WPROBE_TRIGGERS */
