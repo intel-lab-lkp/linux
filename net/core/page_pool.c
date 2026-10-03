@@ -22,6 +22,7 @@
 #include <linux/page-flags.h>
 #include <linux/mm.h> /* for put_page() */
 #include <linux/poison.h>
+#include <linux/dma-pmd.h>
 #include <linux/ethtool.h>
 #include <linux/netdevice.h>
 
@@ -304,6 +305,10 @@ static int page_pool_init(struct page_pool *pool,
 		goto free_ptr_ring;
 	}
 
+	if (pool->dma_map && pool->p.dev && !pool->mp_ops &&
+	    READ_ONCE(pool->p.dev->dma_pmd_rxbuf))
+		pool->dma_pmd_pool = dma_pmd_pool_create(pool->p.order, 8);
+
 	return 0;
 
 free_ptr_ring:
@@ -318,6 +323,7 @@ free_ptr_ring:
 
 static void page_pool_uninit(struct page_pool *pool)
 {
+	pool->dma_pmd_pool = dma_pmd_pool_destroy(pool->dma_pmd_pool);
 	ptr_ring_cleanup(&pool->ring, NULL);
 	xa_destroy(&pool->dma_mapped);
 
@@ -406,7 +412,9 @@ static noinline netmem_ref page_pool_refill_alloc_cache(struct page_pool *pool)
 		if (unlikely(!netmem))
 			break;
 
-		if (likely(netmem_is_pref_nid(netmem, pref_nid))) {
+		if (likely(netmem_is_pref_nid(netmem, pref_nid)) ||
+		    (pool->dma_pmd_pool &&
+		     dma_is_pmd_page(page_to_pfn(netmem_to_page(netmem))))) {
 			pool->alloc.cache[pool->alloc.count++] = netmem;
 		} else {
 			/* NUMA mismatch;
@@ -565,9 +573,20 @@ static bool page_pool_dma_map(struct page_pool *pool, netmem_ref netmem, gfp_t g
 		goto unmap_failed;
 	}
 
-	err = page_pool_register_dma_index(pool, netmem, gfp);
-	if (err)
-		goto unset_failed;
+	/*
+	 * DMA_PMD mappings are owned by dma_pmd_pool (and torn down on pool or
+	 * IOMMU domain release without pool->p.dev), not unmapped per-page in
+	 * page_pool_scrub(). Leave dma_index == 0 so page_pool_release_dma_index()
+	 * skips dma_unmap_page_attrs() without dereferencing pool->p.dev on
+	 * late returns after device removal.
+	 */
+	if (pool->dma_pmd_pool && dma_is_pmd_dma(pool->p.dev, dma)) {
+		netmem_set_dma_index(netmem, 0);
+	} else {
+		err = page_pool_register_dma_index(pool, netmem, gfp);
+		if (err)
+			goto unset_failed;
+	}
 
 	page_pool_dma_sync_for_device(pool, netmem, pool->p.max_len);
 
@@ -585,10 +604,13 @@ unmap_failed:
 static struct page *__page_pool_alloc_page_order(struct page_pool *pool,
 						 gfp_t gfp)
 {
-	struct page *page;
+	struct page *page = NULL;
 
 	gfp |= __GFP_COMP;
-	page = alloc_pages_node(pool->p.nid, gfp, pool->p.order);
+	if (pool->dma_pmd_pool)
+		page = dma_pmd_pool_alloc_node(pool->dma_pmd_pool, gfp, pool->p.nid);
+	if (!page)
+		page = alloc_pages_node(pool->p.nid, gfp, pool->p.order);
 	if (unlikely(!page))
 		return NULL;
 
@@ -634,8 +656,14 @@ static noinline netmem_ref __page_pool_alloc_netmems_slow(struct page_pool *pool
 	/* Mark empty alloc.cache slots "empty" for alloc_pages_bulk */
 	memset(&pool->alloc.cache, 0, sizeof(void *) * bulk);
 
-	nr_pages = alloc_pages_bulk_node(gfp, pool->p.nid, bulk,
-					 (struct page **)pool->alloc.cache);
+	nr_pages = 0;
+	if (pool->dma_pmd_pool)
+		nr_pages = dma_pmd_pool_alloc_bulk_node(pool->dma_pmd_pool, gfp,
+							pool->p.nid, bulk,
+							(struct page **)pool->alloc.cache);
+	if (!nr_pages)
+		nr_pages = alloc_pages_bulk_node(gfp, pool->p.nid, bulk,
+						 (struct page **)pool->alloc.cache);
 	if (unlikely(!nr_pages))
 		return 0;
 
@@ -825,9 +853,18 @@ static bool page_pool_recycle_in_cache(netmem_ref netmem,
 
 static bool __page_pool_page_can_be_recycled(netmem_ref netmem)
 {
-	return netmem_is_net_iov(netmem) ||
-	       (page_ref_count(netmem_to_page(netmem)) == 1 &&
-		!page_is_pfmemalloc(netmem_to_page(netmem)));
+	struct page *page;
+
+	if (netmem_is_net_iov(netmem))
+		return true;
+
+	page = netmem_to_page(netmem);
+	if (page_ref_count(page) != 1 || page_is_pfmemalloc(page))
+		return false;
+	if (page->pp->dma_pmd_pool && !dma_is_pmd_page(page_to_pfn(page)) &&
+	    dma_pmd_pool_has_free(page->pp->dma_pmd_pool))
+		return false;
+	return true;
 }
 
 /* If the page refcnt == 1, this will try to recycle the page.
@@ -1178,7 +1215,7 @@ static void page_pool_scrub(struct page_pool *pool)
 			 * if there are no outstanding mapped pages.
 			 */
 			if (dma_dev_need_sync(pool->p.dev) &&
-			    !xa_empty(&pool->dma_mapped))
+			    (pool->dma_pmd_pool || !xa_empty(&pool->dma_mapped)))
 				synchronize_net();
 		}
 
