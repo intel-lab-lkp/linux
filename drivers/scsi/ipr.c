@@ -9700,6 +9700,7 @@ static void __ipr_remove(struct pci_dev *pdev)
 	flush_work(&ioa_cfg->work_q);
 	if (ioa_cfg->reset_work_q)
 		flush_workqueue(ioa_cfg->reset_work_q);
+	cancel_work_sync(&ioa_cfg->scsi_add_work_q);
 	INIT_LIST_HEAD(&ioa_cfg->used_res_q);
 	spin_lock_irqsave(ioa_cfg->host->host_lock, host_lock_flags);
 
