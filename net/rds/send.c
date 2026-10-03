@@ -1256,7 +1256,7 @@ int rds_sendmsg(struct socket *sock, struct msghdr *msg, size_t payload_len)
 		lock_sock(sk);
 		daddr = rs->rs_conn_addr;
 		dport = rs->rs_conn_port;
-		scope_id = rs->rs_bound_scope_id;
+		scope_id = rs->rs_conn_scope_id;
 		release_sock(sk);
 	}
 
