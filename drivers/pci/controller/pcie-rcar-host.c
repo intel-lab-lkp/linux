@@ -341,6 +341,32 @@ done:
 		 (macsr & LINK_SPEED) == LINK_SPEED_5_0GTS ? "5" : "2.5");
 }
 
+static int rcar_pcie_validate_resource_count(struct rcar_pcie_host *host)
+{
+	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(host);
+	struct rcar_pcie *pcie = &host->pcie;
+	struct resource_entry *win;
+	int i = 0;
+
+	resource_list_for_each_entry(win, &bridge->windows) {
+		struct resource *res = win->res;
+		unsigned long type = resource_type(res);
+
+		if (!res->flags)
+			continue;
+
+		if (type == IORESOURCE_IO || type == IORESOURCE_MEM)
+			i++;
+
+		if (i > RCAR_PCI_MAX_RESOURCES)
+			return dev_err_probe(pcie->dev, -ENOSPC,
+					     "Too many IO/MEM entries in DT 'ranges' property, limit is %d\n",
+					     RCAR_PCI_MAX_RESOURCES);
+	}
+
+	return 0;
+}
+
 static void rcar_pcie_hw_enable(struct rcar_pcie_host *host)
 {
 	struct rcar_pcie *pcie = &host->pcie;
@@ -947,6 +973,11 @@ static int rcar_pcie_probe(struct platform_device *pdev)
 	host = pci_host_bridge_priv(bridge);
 	pcie = &host->pcie;
 	pcie->dev = dev;
+
+	err = rcar_pcie_validate_resource_count(host);
+	if (err)
+		return err;
+
 	platform_set_drvdata(pdev, host);
 
 	for (i = 0; i < ARRAY_SIZE(rcar_pcie_supplies); i++) {
