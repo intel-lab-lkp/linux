@@ -220,7 +220,9 @@ int wave5_vpu_dec_close(struct vpu_instance *inst, u32 *fail_res)
 	if (!inst->codec_info)
 		return -EINVAL;
 
-	pm_runtime_resume_and_get(inst->dev->dev);
+	ret = pm_runtime_resume_and_get(inst->dev->dev);
+	if (ret < 0)
+		return ret;
 
 	ret_mutex = mutex_lock_interruptible(&vpu_dev->hw_lock);
 	if (ret_mutex) {
@@ -750,7 +752,9 @@ int wave5_vpu_enc_close(struct vpu_instance *inst, u32 *fail_res)
 	if (!inst->codec_info)
 		return -EINVAL;
 
-	pm_runtime_resume_and_get(inst->dev->dev);
+	ret = pm_runtime_resume_and_get(inst->dev->dev);
+	if (ret < 0)
+		return ret;
 
 	ret = mutex_lock_interruptible(&vpu_dev->hw_lock);
 	if (ret) {
