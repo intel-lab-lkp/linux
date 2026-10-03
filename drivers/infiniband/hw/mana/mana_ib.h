@@ -12,6 +12,7 @@
 #include <rdma/mana-abi.h>
 #include <rdma/uverbs_ioctl.h>
 #include <linux/dmapool.h>
+#include <linux/workqueue.h>
 
 #include <net/mana/mana.h>
 #include "shadow_queue.h"
@@ -32,6 +33,11 @@
 #define MANA_SENDQ_MASK	BIT(0)
 /* Queue ID encodes type in the lower 2 bits */
 #define MANA_QID_SUBTYPE_MASK 0x3
+
+#define MANA_QID_SUBTYPE_SREQ 0x0
+#define MANA_QID_SUBTYPE_MMQ 0x2
+#define MANA_QID_SUBTYPE_RRESP 0x0
+#define MANA_QID_SUBTYPE_RREQ 0x1
 
 /*
  * The hardware limit of number of MRs is greater than maximum number of MRs
@@ -275,8 +281,9 @@ struct mana_ib_qp {
 	spinlock_t rq_lock;
 	/* Serializes send and memory-management WR posting. */
 	spinlock_t sq_lock;
-	/* Serializes QP modification and error-list transitions. */
+	/* Serializes QP modification and deferred error work. */
 	struct mutex modify_lock;
+	struct work_struct error_work;
 
 	struct list_head send_err_node;
 	struct list_head recv_err_node;
@@ -645,20 +652,30 @@ struct rdma_recv_oob {
 
 enum mana_ib_error_code {
 	VENDOR_ERR_OK					= 0x0,
+	VENDOR_ERR_RX_OP_REQ                            = 0x03,
 	VENDOR_ERR_RX_PKT_LEN                           = 0x05,
+	VENDOR_ERR_RX_ATB_RKEY_MISCONFIG_ERR            = 0x43,
+	VENDOR_ERR_RX_ATB_RKEY_ADDR_RIGHT               = 0x83,
+	VENDOR_ERR_RX_ATB_RKEY_ADDR_RANGE               = 0xc3,
 	VENDOR_ERR_RX_MSG_LEN_OVFL                      = 0x102,
 	VENDOR_ERR_RX_MISBEHAVING_CLIENT                = 0x108,
 	VENDOR_ERR_RX_MALFORMED_WQE                     = 0x109,
 	VENDOR_ERR_RX_CLIENT_ID                         = 0x10a,
 	VENDOR_ERR_RX_GFID                              = 0x10b,
+	VENDOR_ERR_RX_READRESP_LEN_MISMATCH             = 0x10f,
 	VENDOR_ERR_RX_PCIE                              = 0x10c,
 	VENDOR_ERR_RX_NO_AVAIL_WQE                      = 0x111,
 	VENDOR_ERR_RX_ATB_SGE_MISSCONFIG                = 0x143,
 	VENDOR_ERR_RX_ATB_WQE_MISCONFIG                 = 0x145,
+	VENDOR_ERR_RX_INVALID_REQ_NAK                   = 0x161,
+	VENDOR_ERR_RX_REMOTE_ACCESS_NAK                 = 0x162,
+	VENDOR_ERR_RX_REMOTE_OP_ERR_NAK                 = 0x163,
+	VENDOR_ERR_RX_RNR_NAK                           = 0x164,
 	VENDOR_ERR_RX_ATB_SGE_ADDR_RIGHT                = 0x183,
 	VENDOR_ERR_RX_ATB_WQE_ADDR_RIGHT                = 0x185,
 	VENDOR_ERR_RX_ATB_SGE_ADDR_RANGE                = 0x1c3,
 	VENDOR_ERR_RX_ATB_WQE_ADDR_RANGE                = 0x1c5,
+	VENDOR_ERR_TX_RETRY_LIMIT_EXCEEDED              = 0x1c6,
 	VENDOR_ERR_RX_NOT_EMPTY_ON_DISABLE              = 0x1c7,
 	VENDOR_ERR_TX_GDMA_CORRUPTED_WQE                = 0x201,
 	VENDOR_ERR_TX_ATB_WQE_ACCESS_VIOLATION          = 0x202,
@@ -680,6 +697,14 @@ enum mana_ib_error_code {
 	VENDOR_ERR_TX_RDMA_WQE_LEN_ERR                  = 0x216,
 	VENDOR_ERR_TX_RDMA_MTU_ERR                      = 0x217,
 	VENDOR_ERR_TX_RDMA_VFID_MISMATCH                = 0x218,
+	VENDOR_ERR_TX_RDMA_ATB_CMD_MISS                 = 0x220,
+	VENDOR_ERR_TX_RDMA_ATB_CMD_IDX_ERROR            = 0x221,
+	VENDOR_ERR_TX_RDMA_ATB_CMD_TAG_MISMATCH_ERROR   = 0x222,
+	VENDOR_ERR_TX_RDMA_ATB_CMD_PDID_MISMATCH_ERROR  = 0x223,
+	VENDOR_ERR_TX_RDMA_ATB_CMD_AR_ERROR             = 0x224,
+	VENDOR_ERR_TX_RDMA_ATB_CMD_PT_OVF               = 0x225,
+	VENDOR_ERR_TX_RDMA_ATB_CMD_PT_LENGHT_MISMATCH   = 0x226,
+	VENDOR_ERR_TX_RDMA_ATB_CMD_ILLEGAL_CMD          = 0x227,
 	VENDOR_ERR_HW_MAX                               = 0x3ff,
 	/* SW vendor errors */
 	VENDOR_ERR_SW_FLUSHED				= 0xfff,
@@ -694,6 +719,7 @@ enum mana_ib_cqe_type {
 	CQE_TYPE_RC_WRITE_IMM = 6,
 	CQE_TYPE_ARMED_CMPL = 7,
 	CQE_TYPE_LWR = 8,
+	CQE_TYPE_ERROR = 34,
 }; /* HW DATA */
 
 struct mana_rdma_cqe {
@@ -726,6 +752,19 @@ struct mana_rdma_cqe {
 			u32 imm_data;
 			u32 rx_wqe_offset;
 		} rc_recv;
+		struct {
+			u32 cqe_type		: 8;
+			u32 vendor_error	: 10;
+			u32 reserved1		: 14;
+			u32 msn			: 24;
+			u32 syndrome		: 8;
+			u32 psn			: 24;
+			u32 opcode		: 8;
+			u32 rsp_msn		: 24;
+			u32 reserved2		: 8;
+			u32 rsp_psn		: 24;
+			u32 reserved3		: 8;
+		} error;
 		struct {
 			u32 cqe_type		: 8;
 			u32 reserved1		: 24;

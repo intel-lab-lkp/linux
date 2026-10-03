@@ -5,6 +5,8 @@
 
 #include "mana_ib.h"
 
+static void mana_ib_qp_error_work(struct work_struct *work);
+
 static int mana_ib_cfg_vport_steering(struct mana_ib_dev *dev,
 				      struct net_device *ndev,
 				      mana_handle_t default_rxobj,
@@ -512,6 +514,7 @@ static void mana_table_drain_qp_ref(struct mana_ib_qp *qp)
 {
 	mana_put_qp_ref(qp);
 	wait_for_completion(&qp->free);
+	flush_work(&qp->error_work);
 }
 
 static int mana_table_store_qp_qid(struct mana_ib_dev *mdev, struct mana_ib_qp *qp,
@@ -943,6 +946,7 @@ int mana_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attr,
 	spin_lock_init(&qp->rq_lock);
 	spin_lock_init(&qp->sq_lock);
 	mutex_init(&qp->modify_lock);
+	INIT_WORK(&qp->error_work, mana_ib_qp_error_work);
 	INIT_LIST_HEAD(&qp->send_err_node);
 	INIT_LIST_HEAD(&qp->recv_err_node);
 
@@ -1136,6 +1140,20 @@ out_unlock:
 		mana_ib_notify_error_cqs(qp);
 
 	return ret;
+}
+
+static void mana_ib_qp_error_work(struct work_struct *work)
+{
+	struct mana_ib_qp *qp = container_of(work, struct mana_ib_qp, error_work);
+	struct ib_qp_attr attr = { .qp_state = IB_QPS_ERR };
+	int ret;
+
+	ret = mana_ib_modify_qp(&qp->ibqp, &attr, IB_QP_STATE, NULL);
+	if (ret)
+		ibdev_err(qp->ibqp.device, "Failed to move QP %u to ERR: %d\n",
+			  qp->ibqp.qp_num, ret);
+
+	mana_put_qp_ref(qp);
 }
 
 static int mana_ib_destroy_qp_rss(struct mana_ib_qp *qp,

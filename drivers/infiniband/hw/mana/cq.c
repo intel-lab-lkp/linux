@@ -18,6 +18,7 @@ static enum ib_wc_status vendor_error_to_wc_error(uint32_t vendor_error)
 		return IB_WC_SUCCESS;
 	case VENDOR_ERR_RX_PKT_LEN:
 	case VENDOR_ERR_RX_MSG_LEN_OVFL:
+	case VENDOR_ERR_RX_READRESP_LEN_MISMATCH:
 		return IB_WC_LOC_LEN_ERR;
 	case VENDOR_ERR_TX_GDMA_CORRUPTED_WQE:
 	case VENDOR_ERR_TX_PCIE_WQE:
@@ -37,12 +38,30 @@ static enum ib_wc_status vendor_error_to_wc_error(uint32_t vendor_error)
 	case VENDOR_ERR_TX_ATB_WQE_ACCESS_VIOLATION:
 	case VENDOR_ERR_TX_ATB_WQE_ADDR_RANGE:
 	case VENDOR_ERR_TX_ATB_WQE_CONFIG_ERR:
+	case VENDOR_ERR_TX_RDMA_ATB_CMD_MISS:
+	case VENDOR_ERR_TX_RDMA_ATB_CMD_IDX_ERROR:
+	case VENDOR_ERR_TX_RDMA_ATB_CMD_TAG_MISMATCH_ERROR:
+	case VENDOR_ERR_TX_RDMA_ATB_CMD_PDID_MISMATCH_ERROR:
+	case VENDOR_ERR_TX_RDMA_ATB_CMD_AR_ERROR:
+	case VENDOR_ERR_TX_RDMA_ATB_CMD_PT_OVF:
+	case VENDOR_ERR_TX_RDMA_ATB_CMD_PT_LENGHT_MISMATCH:
+	case VENDOR_ERR_TX_RDMA_ATB_CMD_ILLEGAL_CMD:
 	case VENDOR_ERR_RX_ATB_SGE_ADDR_RANGE:
 	case VENDOR_ERR_RX_ATB_SGE_MISSCONFIG:
 		return IB_WC_LOC_PROT_ERR;
 	case VENDOR_ERR_RX_ATB_SGE_ADDR_RIGHT:
 	case VENDOR_ERR_RX_GFID:
 		return IB_WC_LOC_ACCESS_ERR;
+	case VENDOR_ERR_RX_OP_REQ:
+		return IB_WC_REM_INV_REQ_ERR;
+	case VENDOR_ERR_RX_ATB_RKEY_MISCONFIG_ERR:
+	case VENDOR_ERR_RX_ATB_RKEY_ADDR_RIGHT:
+	case VENDOR_ERR_RX_ATB_RKEY_ADDR_RANGE:
+	case VENDOR_ERR_RX_REMOTE_ACCESS_NAK:
+		return IB_WC_REM_ACCESS_ERR;
+	case VENDOR_ERR_RX_INVALID_REQ_NAK:
+	case VENDOR_ERR_RX_REMOTE_OP_ERR_NAK:
+		return IB_WC_REM_OP_ERR;
 	case VENDOR_ERR_RX_MISBEHAVING_CLIENT:
 	case VENDOR_ERR_RX_CLIENT_ID:
 	case VENDOR_ERR_RX_PCIE:
@@ -58,6 +77,10 @@ static enum ib_wc_status vendor_error_to_wc_error(uint32_t vendor_error)
 	case VENDOR_ERR_RX_NOT_EMPTY_ON_DISABLE:
 	case VENDOR_ERR_SW_FLUSHED:
 		return IB_WC_WR_FLUSH_ERR;
+	case VENDOR_ERR_TX_RETRY_LIMIT_EXCEEDED:
+		return IB_WC_RETRY_EXC_ERR;
+	case VENDOR_ERR_RX_RNR_NAK:
+		return IB_WC_RNR_RETRY_EXC_ERR;
 	default:
 		return IB_WC_GENERAL_ERR;
 	}
@@ -489,6 +512,71 @@ static bool handle_psn_cqe(struct mana_ib_qp *qp, u32 psn,
 	return consumed;
 }
 
+static bool mana_cqe_is_send(struct mana_ib_qp *qp, struct gdma_comp *cqe)
+{
+	u32 qtype = cqe->wq_num & MANA_QID_SUBTYPE_MASK;
+
+	if (qp->ibqp.qp_type != IB_QPT_RC)
+		return cqe->is_sq;
+
+	return cqe->is_sq ? (qtype == MANA_QID_SUBTYPE_SREQ ||
+			    qtype == MANA_QID_SUBTYPE_MMQ) :
+			    qtype == MANA_QID_SUBTYPE_RREQ;
+}
+
+static void mana_ib_schedule_qp_error(struct mana_ib_qp *qp)
+{
+	/* CQ polling cannot sleep; teardown drains this reference before freeing. */
+	refcount_inc(&qp->refcount);
+	if (!schedule_work(&qp->error_work))
+		mana_put_qp_ref(qp);
+}
+
+static bool handle_error_cqe(struct mana_ib_cq *cq, struct mana_ib_qp *qp,
+			     struct gdma_comp *cqe, struct mana_cq_poll *poll)
+{
+	bool mmq = cqe->is_sq && (cqe->wq_num & MANA_QID_SUBTYPE_MASK) == MANA_QID_SUBTYPE_MMQ;
+	struct mana_rdma_cqe *rdma_cqe = (struct mana_rdma_cqe *)cqe->cqe_data;
+	bool send = mana_cqe_is_send(qp, cqe);
+	u32 vendor_err = rdma_cqe->error.vendor_error;
+	struct shadow_wqe_header *shadow_wqe;
+	struct shadow_queue *shadow_q;
+
+	if (send && qp->ibqp.qp_type == IB_QPT_RC) {
+		/* The error PSN/FSN belongs to the failing WQE, not a success. */
+		if (!mana_advance_send(qp, mmq, rdma_cqe->error.psn - 1, poll))
+			return false;
+		if (poll->produced == poll->budget)
+			return false;
+	}
+
+	if (!send)
+		shadow_q = &qp->shadow_rq;
+	else if (mmq)
+		shadow_q = &qp->shadow_mmq;
+	else
+		shadow_q = &qp->shadow_sq;
+
+	shadow_wqe = shadow_queue_get_next_to_consume(shadow_q);
+	if (shadow_wqe) {
+		mana_fill_wc(qp, poll, shadow_wqe,
+			     send ? shadow_wqe->send_opcode : IB_WC_RECV, vendor_err);
+		shadow_queue_advance_consumer(shadow_q);
+	}
+
+	if (send) {
+		if (list_empty(&qp->send_err_node))
+			list_add_tail(&qp->send_err_node, &cq->send_err_qp_list);
+	} else {
+		if (list_empty(&qp->recv_err_node))
+			list_add_tail(&qp->recv_err_node, &cq->recv_err_qp_list);
+	}
+	if (qp->ibqp.qp_type != IB_QPT_GSI)
+		mana_ib_schedule_qp_error(qp);
+
+	return true;
+}
+
 static bool next_shadow_wqe_is_sq(struct shadow_wqe_header *shadow_wqe_sq,
 				  struct shadow_wqe_header *shadow_wqe_mq)
 {
@@ -519,6 +607,9 @@ static bool mana_handle_cqe(struct mana_ib_cq *cq, struct mana_ib_dev *mdev,
 		break;
 	case CQE_TYPE_LWR:
 		consumed = handle_mmq_cqe(qp, rdma_cqe->rc_mm.fsn, poll);
+		break;
+	case CQE_TYPE_ERROR:
+		consumed = handle_error_cqe(cq, qp, cqe, poll);
 		break;
 	case CQE_TYPE_UD_SEND:
 		if (cqe->is_sq) {
