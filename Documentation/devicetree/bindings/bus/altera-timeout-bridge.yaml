@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bus/altera-timeout-bridge.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Altera Timeout Bridge
+
+maintainers:
+  - Vyacheslav Yurkov <V.Yurkov.EXT@bruker.com>
+
+description: |
+  Altera timeout bridge bus.
+
+properties:
+  compatible:
+    items:
+      - const: altera-timeout-bridge
+      - const: simple-bus
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  ranges: true
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - interrupt-parent
+  - ranges
+  - "#address-cells"
+  - "#size-cells"
+
+patternProperties:
+  "^[a-zA-Z][a-zA-Z0-9,+._-]*@[0-9a-f]+$":
+    type: object
+    description: |
+      Device connected to the timeout bridge.
+
+    required:
+      - compatible
+      - reg
+
+    additionalProperties: true
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    intc: interrupt-controller {
+        interrupt-controller;
+        #interrupt-cells = <3>;
+    };
+
+    timeout_bridge_hps@10000 {
+        compatible = "altera-timeout-bridge", "simple-bus";
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        reg = <0x10000 0xF>;
+
+        interrupts = <0 12 IRQ_TYPE_LEVEL_HIGH>;
+        interrupt-parent = <&intc>;
+
+        ranges = <0x0 0x10010 0x1000>;
+
+        timeout-device@100 {
+            compatible = "timeout-device";
+            reg = <0x100 0x10>;
+        };
+    };
