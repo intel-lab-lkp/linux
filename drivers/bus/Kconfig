@@ -247,6 +247,16 @@ config DA8XX_MSTPRI
 	  configuration. Allows to adjust the priorities of all master
 	  peripherals.
 
+config ALTERA_TIMEOUT_BRIDGE
+	tristate "Altera AXI Timeout Bridge bus"
+	depends on OF
+	default n
+	help
+	  Driver for Altera AXI Timeout Bridge, which can be used a bus.
+	  The subordinate devices can be connected to the bridge, which
+	  detects frozen read/write requests and notifies user space by
+	  means of a sysfs interrupt flag.
+
 source "drivers/bus/fsl-mc/Kconfig"
 source "drivers/bus/mhi/Kconfig"
 
