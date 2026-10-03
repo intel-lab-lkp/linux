@@ -982,7 +982,7 @@ static int csi2rx_probe(struct platform_device *pdev)
 		dev_dbg(csi2rx->dev, "Optional interrupt not defined, proceeding without it\n");
 	} else {
 		ret = devm_request_irq(csi2rx->dev, csi2rx->error_irq,
-				       csi2rx_irq_handler, 0,
+				       csi2rx_irq_handler, IRQF_NO_AUTOEN,
 				       dev_name(&pdev->dev), csi2rx);
 		if (ret) {
 			dev_err(csi2rx->dev,
@@ -1042,6 +1042,10 @@ static int csi2rx_runtime_suspend(struct device *dev)
 {
 	struct csi2rx_priv *csi2rx = dev_get_drvdata(dev);
 
+	/* Drain the handler before disabling the clocks it needs. */
+	if (csi2rx->error_irq >= 0)
+		disable_irq(csi2rx->error_irq);
+
 	reset_control_assert(csi2rx->sys_rst);
 	clk_disable_unprepare(csi2rx->sys_clk);
 
@@ -1081,6 +1085,9 @@ static int csi2rx_runtime_resume(struct device *dev)
 		goto err_disable_pixclk;
 
 	reset_control_deassert(csi2rx->sys_rst);
+
+	if (csi2rx->error_irq >= 0)
+		enable_irq(csi2rx->error_irq);
 
 	return 0;
 
