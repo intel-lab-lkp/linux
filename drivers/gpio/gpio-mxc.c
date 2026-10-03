@@ -428,17 +428,18 @@ static int mxc_gpio_probe(struct platform_device *pdev)
 {
 	struct gpio_generic_chip_config config = { };
 	struct device_node *np = pdev->dev.of_node;
+	struct device *dev = &pdev->dev;
 	struct mxc_gpio_port *port;
 	int irq_count;
 	int irq_base;
 	int err;
 
-	port = devm_kzalloc(&pdev->dev, sizeof(*port), GFP_KERNEL);
+	port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return -ENOMEM;
 
-	port->dev = &pdev->dev;
-	port->hwdata = device_get_match_data(&pdev->dev);
+	port->dev = dev;
+	port->hwdata = device_get_match_data(dev);
 
 	port->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(port->base))
@@ -459,30 +460,30 @@ static int mxc_gpio_probe(struct platform_device *pdev)
 		return port->irq;
 
 	/* the controller clock is optional */
-	port->clk = devm_clk_get_optional_enabled(&pdev->dev, NULL);
+	port->clk = devm_clk_get_optional_enabled(dev, NULL);
 	if (IS_ERR(port->clk))
 		return PTR_ERR(port->clk);
 
-	if (of_device_is_compatible(np, "fsl,imx7d-gpio"))
+	if (device_is_compatible(dev, "fsl,imx7d-gpio"))
 		port->power_off = true;
 
-	if (of_device_is_compatible(np, "fsl,imx8dxl-gpio") ||
-	    of_device_is_compatible(np, "fsl,imx8qxp-gpio") ||
-	    of_device_is_compatible(np, "fsl,imx8qm-gpio"))
+	if (device_is_compatible(dev, "fsl,imx8dxl-gpio") ||
+	    device_is_compatible(dev, "fsl,imx8qxp-gpio") ||
+	    device_is_compatible(dev, "fsl,imx8qm-gpio"))
 		port->has_pad_wakeup = true;
 
-	if (of_device_is_compatible(np, "fsl,imx8qm-gpio"))
+	if (device_is_compatible(dev, "fsl,imx8qm-gpio"))
 		port->is_imx8qm = true;
 
-	devm_pm_runtime_get_noresume(&pdev->dev);
-	pm_runtime_set_active(&pdev->dev);
-	devm_pm_runtime_enable(&pdev->dev);
+	devm_pm_runtime_get_noresume(dev);
+	pm_runtime_set_active(dev);
+	devm_pm_runtime_enable(dev);
 
 	/* disable the interrupt and clear the status */
 	writel(0, port->base + GPIO_IMR);
 	writel(~0, port->base + GPIO_ISR);
 
-	if (of_device_is_compatible(np, "fsl,imx21-gpio")) {
+	if (device_is_compatible(dev, "fsl,imx21-gpio")) {
 		/*
 		 * Setup one handler for all GPIO interrupts. Actually setting
 		 * the handler is needed only once, but doing it for every port
@@ -493,7 +494,7 @@ static int mxc_gpio_probe(struct platform_device *pdev)
 	} else
 		port->mx_irq_handler = mx3_gpio_irq_handler;
 
-	config.dev = &pdev->dev;
+	config.dev = dev;
 	config.sz = 4;
 	config.dat = port->base + GPIO_PSR;
 	config.set = port->base + GPIO_DR;
@@ -502,7 +503,7 @@ static int mxc_gpio_probe(struct platform_device *pdev)
 
 	err = gpio_generic_chip_init(&port->gen_gc, &config);
 	if (err)
-		return dev_err_probe(&pdev->dev, err, "Failed to init gpio chip\n");
+		return dev_err_probe(dev, err, "Failed to init gpio chip\n");
 
 	port->gen_gc.gc.request = mxc_gpio_request;
 	port->gen_gc.gc.free = mxc_gpio_free;
@@ -516,36 +517,36 @@ static int mxc_gpio_probe(struct platform_device *pdev)
 	else /* silence boot time warning */
 		port->gen_gc.gc.base = -1;
 
-	err = devm_gpiochip_add_data(&pdev->dev, &port->gen_gc.gc, port);
+	err = devm_gpiochip_add_data(dev, &port->gen_gc.gc, port);
 	if (err)
-		return dev_err_probe(&pdev->dev, err, "Failed to add gpiochip data\n");
+		return dev_err_probe(dev, err, "Failed to add gpiochip data\n");
 
-	irq_base = devm_irq_alloc_descs(&pdev->dev, -1, 0, 32, numa_node_id());
+	irq_base = devm_irq_alloc_descs(dev, -1, 0, 32, numa_node_id());
 	if (irq_base < 0)
-		return dev_err_probe(&pdev->dev, irq_base, "Failed to alloc irq desc\n");
+		return dev_err_probe(dev, irq_base, "Failed to alloc irq desc\n");
 
-	port->domain = irq_domain_create_legacy(dev_fwnode(&pdev->dev), 32, irq_base, 0,
+	port->domain = irq_domain_create_legacy(dev_fwnode(dev), 32, irq_base, 0,
 						&irq_domain_simple_ops, NULL);
 	if (!port->domain)
-		return dev_err_probe(&pdev->dev, -ENODEV, "Failed to create irq domain\n");
+		return dev_err_probe(dev, -ENODEV, "Failed to create irq domain\n");
 
-	err = devm_add_action_or_reset(&pdev->dev, mxc_gpio_irq_domain_remove, port->domain);
+	err = devm_add_action_or_reset(dev, mxc_gpio_irq_domain_remove, port->domain);
 	if (err)
-		return dev_err_probe(&pdev->dev, err, "Failed to add irq_domain_remove\n");
+		return dev_err_probe(dev, err, "Failed to add irq_domain_remove\n");
 
-	irq_domain_set_pm_device(port->domain, &pdev->dev);
+	irq_domain_set_pm_device(port->domain, dev);
 
 	/* gpio-mxc can be a generic irq chip */
 	err = mxc_gpio_init_gc(port, irq_base);
 	if (err < 0)
-		return dev_err_probe(&pdev->dev, err, "Failed mxc_gpio_init_gc\n");
+		return dev_err_probe(dev, err, "Failed mxc_gpio_init_gc\n");
 
 	list_add_tail(&port->node, &mxc_gpio_ports);
 
 	mxc_update_irq_chained_handler(port, true);
 
 	platform_set_drvdata(pdev, port);
-	pm_runtime_put_autosuspend(&pdev->dev);
+	pm_runtime_put_autosuspend(dev);
 
 	return 0;
 }
