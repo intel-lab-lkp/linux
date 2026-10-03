@@ -43,7 +43,9 @@ EXPORT_SYMBOL(dma_pmd_meta_array);
 unsigned long dma_pmd_meta_nframes __read_mostly;
 static unsigned long *dma_pmd_chunk_bitmap __read_mostly;
 
-static struct dma_pmd_meta dma_pmd_meta_nil;
+static struct dma_pmd_meta dma_pmd_meta_nil = {
+	.map_lock = __SPIN_LOCK_UNLOCKED(dma_pmd_meta_nil.map_lock),
+};
 
 static unsigned long dma_pmd_meta_pages;
 static DEFINE_MUTEX(dma_pmd_meta_mutex);

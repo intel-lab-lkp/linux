@@ -17,6 +17,7 @@
 #include <linux/stddef.h>
 #include <linux/mm.h>
 #include <linux/highmem.h>
+#include <linux/dma-pmd.h>
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
 #include <linux/compiler.h>
@@ -1309,6 +1310,9 @@ static __always_inline bool __free_pages_prepare(struct page *page,
 		return true;
 
 	VM_BUG_ON_PAGE(PageTail(page), page);
+
+	if (unlikely(dma_pmd_free_page(page)))
+		return false;
 
 	trace_mm_page_free(page, order);
 	kmsan_free_page(page, order);
