@@ -2736,6 +2736,70 @@ static unsigned long memcg_charge_reclaim(struct mem_cgroup *memcg,
 	return nr_reclaimed;
 }
 
+/**
+ * mem_cgroup_reclaim_for_batch - make room for a batch of upcoming charges
+ * @nr_pages: number of pages about to be charged
+ * @gfp: reclaim context
+ *
+ * Reclaim is needed when a memcg's margin (limit minus usage) is less than
+ * @nr_pages. Starting from the memcg that the current task's charges go to,
+ * reclaim @nr_pages from the closest ancestor whose margin is too small, with
+ * at most one retry. This lets callers that charge a batch of folios one at a
+ * time (like readahead) reclaim @nr_pages at once instead of once per folio.
+ * Callers must be ok with the charges failing.
+ *
+ * Returns true if reclaim was needed and done or false if no reclaim was
+ * needed or if the current task may not reclaim.
+ */
+bool mem_cgroup_reclaim_for_batch(unsigned long nr_pages, gfp_t gfp)
+{
+	unsigned int reclaim_options = MEMCG_RECLAIM_MAY_SWAP;
+	struct mem_cgroup *orig, *memcg;
+
+	if (mem_cgroup_disabled() || !memcg_charge_may_reclaim(gfp))
+		return false;
+
+	orig = get_mem_cgroup_from_mm(NULL);
+	for (memcg = orig; !mem_cgroup_is_root(memcg);
+	     memcg = parent_mem_cgroup(memcg))
+		if (mem_cgroup_margin(memcg) < nr_pages)
+			break;
+
+	/* No reclaim needed. No memcg up to the root lacks the margin */
+	if (mem_cgroup_is_root(memcg)) {
+		css_put(&orig->css);
+		return false;
+	}
+
+	/*
+	 * cgroup v1 can limit memory+swap together (memsw). If memsw is the
+	 * limit being hit, swapping a page out doesn't help, so reclaim without
+	 * swapping.
+	 */
+	if (do_memsw_account() &&
+	    page_counter_read(&memcg->memsw) + nr_pages >
+	    READ_ONCE(memcg->memsw.max))
+		reclaim_options &= ~MEMCG_RECLAIM_MAY_SWAP;
+
+	memcg_charge_reclaim(memcg, nr_pages, gfp, reclaim_options);
+	/*
+	 * Like try_charge_memcg(), if reclaiming didn't make enough room, drain
+	 * the per-cpu stocks and if that doesn't help enough either, try
+	 * reclaiming again. Other tasks charging the same memcg may have used
+	 * up what was just reclaimed. Unlike try_charge_memcg(), only retry
+	 * once rather than up to MAX_RECLAIM_RETRIES times, since failing is
+	 * acceptable for the caller's charges.
+	 */
+	if (mem_cgroup_margin(memcg) < nr_pages) {
+		drain_all_stock(memcg);
+		if (mem_cgroup_margin(memcg) < nr_pages)
+			memcg_charge_reclaim(memcg, nr_pages, gfp,
+					     reclaim_options);
+	}
+	css_put(&orig->css);
+	return true;
+}
+
 static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 			    unsigned int nr_pages)
 {

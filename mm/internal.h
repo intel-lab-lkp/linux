@@ -1652,4 +1652,14 @@ static inline bool can_spin_trylock(void)
 /* char-mem.c */
 bool file_is_dev_zero(const struct file *file);
 
+#ifdef CONFIG_MEMCG
+bool mem_cgroup_reclaim_for_batch(unsigned long nr_pages, gfp_t gfp);
+#else
+static inline bool mem_cgroup_reclaim_for_batch(unsigned long nr_pages,
+						gfp_t gfp)
+{
+	return false;
+}
+#endif
+
 #endif	/* __MM_INTERNAL_H */
