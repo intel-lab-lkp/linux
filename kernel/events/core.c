@@ -5491,8 +5491,9 @@ again:
 				continue;
 			cd = rcu_dereference(p->perf_ctx_data);
 			if (cd && !cd->global) {
-				cd->global = 1;
-				if (!refcount_inc_not_zero(&cd->refcount))
+				if (refcount_inc_not_zero(&cd->refcount))
+					cd->global = 1;
+				else
 					cd = NULL;
 			}
 			if (!cd) {
@@ -5562,19 +5563,33 @@ detach_task_ctx_data(struct task_struct *p)
 		perf_free_ctx_data_rcu(cd);
 }
 
-static void __detach_global_ctx_data(void)
+/*
+ * Drop the reference owned by the system-wide events, if @p still holds one.
+ *
+ * Both __detach_global_ctx_data() and perf_event_exit_task() may try to drop
+ * it concurrently; claiming ->global with xchg() makes sure only one of them
+ * does, otherwise the refcount is decremented twice.
+ */
+static void detach_task_global_ctx_data(struct task_struct *p)
 {
-	struct task_struct *g, *p;
 	struct perf_ctx_data *cd;
 
 	scoped_guard (rcu) {
-		for_each_process_thread(g, p) {
-			cd = rcu_dereference(p->perf_ctx_data);
-			if (cd && cd->global) {
-				cd->global = 0;
-				detach_task_ctx_data(p);
-			}
-		}
+		cd = rcu_dereference(p->perf_ctx_data);
+		if (!cd || !xchg(&cd->global, 0))
+			return;
+	}
+
+	detach_task_ctx_data(p);
+}
+
+static void __detach_global_ctx_data(void)
+{
+	struct task_struct *g, *p;
+
+	scoped_guard (rcu) {
+		for_each_process_thread(g, p)
+			detach_task_global_ctx_data(p);
 	}
 }
 
@@ -9332,8 +9347,8 @@ perf_event_alloc_task_data(struct task_struct *child,
 		}
 
 		if (!cd->global) {
-			cd->global = 1;
 			refcount_inc(&cd->refcount);
+			cd->global = 1;
 		}
 	}
 
@@ -14751,7 +14766,7 @@ void perf_event_exit_task(struct task_struct *task)
 	 * attach_global_ctx_data() will skip over this task, but otherwise
 	 * attach_task_ctx_data() will observe PF_EXITING.
 	 */
-	detach_task_ctx_data(task);
+	detach_task_global_ctx_data(task);
 }
 
 /*
