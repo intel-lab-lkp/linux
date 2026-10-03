@@ -27,6 +27,8 @@
 #include <linux/slab.h>
 #include <linux/tty_flip.h>
 
+#include "serial_mctrl_gpio.h"
+
 /* All registers are 8-bit width */
 #define UARTBDH			0x00
 #define UARTBDL			0x01
@@ -291,6 +293,7 @@ struct lpuart_port {
 	bool			is_cs7; /* Set to true when character size is 7 */
 					/* and the parity is enabled		*/
 	bool			dma_idle_int;
+	struct mctrl_gpios	*gpios;
 };
 
 struct lpuart_soc_data {
@@ -1528,6 +1531,7 @@ static int lpuart32_config_rs485(struct uart_port *port, struct ktermios *termio
 
 static unsigned int lpuart_get_mctrl(struct uart_port *port)
 {
+	struct lpuart_port *sport = container_of(port, struct lpuart_port, port);
 	unsigned int mctrl = 0;
 	u8 cr1;
 
@@ -1535,11 +1539,12 @@ static unsigned int lpuart_get_mctrl(struct uart_port *port)
 	if (cr1 & UARTCR1_LOOPS)
 		mctrl |= TIOCM_LOOP;
 
-	return mctrl;
+	return mctrl_gpio_get(sport->gpios, &mctrl);
 }
 
 static unsigned int lpuart32_get_mctrl(struct uart_port *port)
 {
+	struct lpuart_port *sport = container_of(port, struct lpuart_port, port);
 	unsigned int mctrl = TIOCM_CAR | TIOCM_DSR | TIOCM_CTS;
 	u32 ctrl;
 
@@ -1547,11 +1552,13 @@ static unsigned int lpuart32_get_mctrl(struct uart_port *port)
 	if (ctrl & UARTCTRL_LOOPS)
 		mctrl |= TIOCM_LOOP;
 
-	return mctrl;
+	/* A cts-gpio, when present, overrides the assumed-asserted CTS above. */
+	return mctrl_gpio_get(sport->gpios, &mctrl);
 }
 
 static void lpuart_set_mctrl(struct uart_port *port, unsigned int mctrl)
 {
+	struct lpuart_port *sport = container_of(port, struct lpuart_port, port);
 	u8 cr1;
 
 	cr1 = readb(port->membase + UARTCR1);
@@ -1562,10 +1569,13 @@ static void lpuart_set_mctrl(struct uart_port *port, unsigned int mctrl)
 		cr1 |= UARTCR1_LOOPS;
 
 	writeb(cr1, port->membase + UARTCR1);
+
+	mctrl_gpio_set(sport->gpios, mctrl);
 }
 
 static void lpuart32_set_mctrl(struct uart_port *port, unsigned int mctrl)
 {
+	struct lpuart_port *sport = container_of(port, struct lpuart_port, port);
 	u32 ctrl;
 
 	ctrl = lpuart32_read(port, UARTCTRL);
@@ -1576,6 +1586,15 @@ static void lpuart32_set_mctrl(struct uart_port *port, unsigned int mctrl)
 		ctrl |= UARTCTRL_LOOPS;
 
 	lpuart32_write(port, ctrl, UARTCTRL);
+
+	mctrl_gpio_set(sport->gpios, mctrl);
+}
+
+static void lpuart_enable_ms(struct uart_port *port)
+{
+	struct lpuart_port *sport = container_of(port, struct lpuart_port, port);
+
+	mctrl_gpio_enable_ms(sport->gpios);
 }
 
 static void lpuart_break_ctl(struct uart_port *port, int break_state)
@@ -1844,6 +1863,8 @@ static int lpuart_startup(struct uart_port *port)
 	lpuart_request_dma(sport);
 	lpuart_hw_setup(sport);
 
+	mctrl_gpio_enable_ms(sport->gpios);
+
 	return 0;
 }
 
@@ -1915,6 +1936,8 @@ static int lpuart32_startup(struct uart_port *port)
 	lpuart_request_dma(sport);
 	lpuart32_hw_setup(sport);
 
+	mctrl_gpio_enable_ms(sport->gpios);
+
 	return 0;
 }
 
@@ -1956,6 +1979,7 @@ static void lpuart_shutdown(struct uart_port *port)
 
 	uart_port_unlock_irqrestore(port, flags);
 
+	mctrl_gpio_disable_ms_sync(sport->gpios);
 	lpuart_dma_shutdown(sport);
 }
 
@@ -1990,6 +2014,7 @@ static void lpuart32_shutdown(struct uart_port *port)
 
 	uart_port_unlock_irqrestore(port, flags);
 
+	mctrl_gpio_disable_ms_sync(sport->gpios);
 	lpuart_dma_shutdown(sport);
 }
 
@@ -2441,6 +2466,7 @@ static const struct uart_ops lpuart_pops = {
 	.tx_empty	= lpuart_tx_empty,
 	.set_mctrl	= lpuart_set_mctrl,
 	.get_mctrl	= lpuart_get_mctrl,
+	.enable_ms	= lpuart_enable_ms,
 	.stop_tx	= lpuart_stop_tx,
 	.start_tx	= lpuart_start_tx,
 	.stop_rx	= lpuart_stop_rx,
@@ -2466,6 +2492,7 @@ static const struct uart_ops lpuart32_pops = {
 	.tx_empty	= lpuart32_tx_empty,
 	.set_mctrl	= lpuart32_set_mctrl,
 	.get_mctrl	= lpuart32_get_mctrl,
+	.enable_ms	= lpuart_enable_ms,
 	.stop_tx	= lpuart32_stop_tx,
 	.start_tx	= lpuart32_start_tx,
 	.stop_rx	= lpuart32_stop_rx,
@@ -2911,6 +2938,10 @@ static int lpuart_probe(struct platform_device *pdev)
 	else
 		sport->port.rs485_config = lpuart_config_rs485;
 	sport->port.rs485_supported = lpuart_rs485_supported;
+
+	sport->gpios = mctrl_gpio_init(&sport->port, 0);
+	if (IS_ERR(sport->gpios))
+		return PTR_ERR(sport->gpios);
 
 	sport->ipg_clk = devm_clk_get(&pdev->dev, "ipg");
 	if (IS_ERR(sport->ipg_clk)) {
