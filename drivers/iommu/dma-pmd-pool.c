@@ -32,6 +32,8 @@
 
 #include "dma-pmd-priv.h"
 
+#define DMA_PMD_SCRUB_BATCH	64U
+
 /*
  * DMA_PMD pages whose last block has just been freed and which are over the
  * pool's idle watermark are pushed here locklessly for later release.
@@ -66,6 +68,7 @@ static DEFINE_MUTEX(dma_pmd_pools_lock);
 static LLIST_HEAD(dma_pmd_dead_pools);
 
 static void dma_pmd_schedule_reclaim(void);
+static void dma_pmd_schedule_scrub(void);
 
 static void dma_pmd_pool_free_kref(struct kref *kref)
 {
@@ -250,6 +253,216 @@ static void dma_pmd_schedule_reclaim(void)
 		schedule_work(&dma_pmd_reclaim_work);
 }
 
+/*
+ * Background page scrubber
+ * ------------------------
+ * Freed blocks are returned to @meta->dirty_bitmap so __dma_pmd_free_page()
+ * never pays a memset() on the free hot path. Callers that do not require
+ * zeroed memory take dirty blocks first, while callers with __GFP_ZERO (or
+ * init_on_alloc) take pre-zeroed blocks from @meta->free_bitmap.
+ *
+ * The scrubber runs on system_wq to asynchronously convert dirty blocks into
+ * zeroed blocks in @meta->free_bitmap. To avoid holding @pool->lock across
+ * memset(), it detaches up to DMA_PMD_SCRUB_BATCH (64) dirty bits under
+ * @pool->lock, zeroes the pages unlocked (while their bits are clear in both
+ * bitmaps so no allocator or double-free check can race on them), and
+ * republishes them in @meta->free_bitmap under @pool->lock.
+ *
+ * Triggered lazily (without touching any list on every __dma_pmd_free_page()):
+ * when a PMD page transitions from 0 to 1 dirty block, when a page with dirty
+ * blocks becomes completely idle, or when a __GFP_ZERO allocation misses on
+ * clean pages while dirty pages are present.
+ */
+
+/*
+ * Place @meta on the appropriate pool list according to its available clean
+ * (@nr_free) and dirty (@nr_dirty) block counts. Caller must hold @pool->lock
+ * and update @pool->num_idle_pages when moving into or out of @pool->idle.
+ *
+ * List invariants:
+ * - @pool->full:          avail == 0
+ * - @pool->partial:       0 < avail < nr, nr_free > 0
+ *                         (nr_dirty == 0 at head, nr_dirty > 0 at tail)
+ * - @pool->partial_dirty: 0 < avail < nr, nr_free == 0, nr_dirty > 0
+ * - @pool->idle:          avail == nr
+ *                         (nr_dirty == 0 at head, nr_dirty > 0 at tail)
+ */
+static void dma_pmd_place_meta(struct dma_pmd_pool *pool,
+			       struct dma_pmd_meta *meta)
+{
+	unsigned int avail = dma_pmd_meta_avail(meta);
+	unsigned int nr = DMA_PMD_BLOCKS(pool->order);
+
+	if (!avail) {
+		list_move(&meta->list, &pool->full);
+	} else if (avail == nr) {
+		if (!meta->nr_dirty)
+			list_move(&meta->list, &pool->idle);
+		else
+			list_move_tail(&meta->list, &pool->idle);
+	} else if (!meta->nr_free) {
+		list_move_tail(&meta->list, &pool->partial_dirty);
+	} else if (!meta->nr_dirty) {
+		list_move(&meta->list, &pool->partial);
+	} else {
+		list_move_tail(&meta->list, &pool->partial);
+	}
+}
+
+static struct dma_pmd_meta *dma_pmd_pick_dirty_meta(struct dma_pmd_pool *pool)
+{
+	struct dma_pmd_meta *meta;
+
+	meta = list_first_entry_or_null(&pool->partial_dirty,
+					struct dma_pmd_meta, list);
+	if (meta)
+		return meta;
+
+	if (!list_empty(&pool->partial)) {
+		meta = list_last_entry(&pool->partial, struct dma_pmd_meta, list);
+		if (meta->nr_dirty)
+			return meta;
+	}
+
+	if (!list_empty(&pool->idle)) {
+		meta = list_last_entry(&pool->idle, struct dma_pmd_meta, list);
+		if (meta->nr_dirty) {
+			pool->num_idle_pages--;
+			return meta;
+		}
+	}
+
+	return NULL;
+}
+
+/**
+ * dma_pmd_scrub_pool - Scrub one batch of dirty blocks in @pool
+ * @pool: Pool to scrub
+ *
+ * Cost: Zeroes up to DMA_PMD_SCRUB_BATCH blocks (e.g. up to 256 KB for
+ *       order-0) outside @pool->lock; two brief O(batch) bitmap passes under
+ *       @pool->lock.
+ * Locking: Process context. Acquires @pool->lock (irqsave) to detach and
+ *          republish block bits; drops lock during memset().
+ * Frequency: Background worker only (on system_wq).
+ *
+ * Return: true if a batch was scrubbed (more dirty blocks may remain),
+ *         false if @pool has no dirty blocks left or is destroyed.
+ */
+static bool dma_pmd_scrub_pool(struct dma_pmd_pool *pool)
+{
+	unsigned int nr, order, idx, count = 0, used = 0;
+	u16 idxs[DMA_PMD_SCRUB_BATCH];
+	struct dma_pmd_meta *meta;
+	bool should_release = false;
+	unsigned long base_pfn;
+	unsigned long flags;
+
+	spin_lock_irqsave(&pool->lock, flags);
+	if (pool->destroyed) {
+		spin_unlock_irqrestore(&pool->lock, flags);
+		return false;
+	}
+
+	meta = dma_pmd_pick_dirty_meta(pool);
+	if (!meta) {
+		spin_unlock_irqrestore(&pool->lock, flags);
+		return false;
+	}
+
+	order = pool->order;
+	nr = DMA_PMD_BLOCKS(order);
+	base_pfn = dma_pmd_meta_to_pfn(meta);
+
+	for_each_set_bit(idx, meta->dirty_bitmap, nr) {
+		struct page *block = pfn_to_page(base_pfn + (idx << order));
+
+		__clear_bit(idx, meta->dirty_bitmap);
+		used++;
+		if (unlikely(folio_contain_hwpoisoned_page(page_folio(block)))) {
+			pr_err_once("dma_pmd: poisoned block at pfn %lu, leaking it to keep pool %p intact\n",
+				    page_to_pfn(block), pool);
+		} else {
+			idxs[count++] = idx;
+		}
+		if (used == meta->nr_dirty || count == DMA_PMD_SCRUB_BATCH)
+			break;
+	}
+	meta->nr_dirty -= used;
+	dma_pmd_place_meta(pool, meta);
+	spin_unlock_irqrestore(&pool->lock, flags);
+
+	if (unlikely(!count))
+		return used > 0;
+
+	for (idx = 0; idx < count; idx++) {
+		struct page *block = pfn_to_page(base_pfn + (idxs[idx] << order));
+
+		memset(page_address(block), 0, PAGE_SIZE << order);
+	}
+
+	spin_lock_irqsave(&pool->lock, flags);
+	for (idx = 0; idx < count; idx++)
+		__set_bit(idxs[idx], meta->free_bitmap);
+	meta->nr_free += count;
+	pool->block_scrub_cnt += count;
+
+	if (dma_pmd_meta_avail(meta) == nr) {
+		if (pool->destroyed || pool->num_idle_pages >= pool->max_idle_pages) {
+			list_del_init(&meta->list);
+			llist_add(&meta->llnode, &dma_pmd_free_list);
+			should_release = true;
+		} else {
+			pool->num_idle_pages++;
+			dma_pmd_place_meta(pool, meta);
+		}
+	} else if (!pool->destroyed) {
+		dma_pmd_place_meta(pool, meta);
+	}
+	spin_unlock_irqrestore(&pool->lock, flags);
+
+	if (should_release)
+		dma_pmd_schedule_reclaim();
+
+	return true;
+}
+
+/*
+ * Walk all live pools and scrub dirty blocks until every pool is clean.
+ *
+ * Cost: Proportional to total dirty blocks across all pools; yields via
+ *       cond_resched() between batches of DMA_PMD_SCRUB_BATCH blocks.
+ * Locking: Process context (system_wq). Holds @dma_pmd_pools_lock across the
+ *          pool walk.
+ * Frequency: Scheduled on demand via dma_pmd_schedule_scrub(); coalesced by
+ *            work_pending().
+ */
+static void dma_pmd_scrub_work_fn(struct work_struct *work)
+{
+	struct dma_pmd_pool *pool;
+	bool progress;
+
+	do {
+		progress = false;
+		mutex_lock(&dma_pmd_pools_lock);
+		list_for_each_entry(pool, &dma_pmd_pools, node) {
+			while (dma_pmd_scrub_pool(pool)) {
+				progress = true;
+				cond_resched();
+			}
+		}
+		mutex_unlock(&dma_pmd_pools_lock);
+	} while (progress);
+}
+
+static DECLARE_WORK(dma_pmd_scrub_work, dma_pmd_scrub_work_fn);
+
+static void dma_pmd_schedule_scrub(void)
+{
+	if (!work_pending(&dma_pmd_scrub_work))
+		schedule_work(&dma_pmd_scrub_work);
+}
+
 unsigned int dma_pmd_pools_forget_domain(int idx)
 {
 	struct dma_pmd_pool *pool;
@@ -261,6 +474,8 @@ unsigned int dma_pmd_pools_forget_domain(int idx)
 	list_for_each_entry(pool, &dma_pmd_pools, node) {
 		spin_lock_irqsave(&pool->lock, flags);
 		list_for_each_entry(meta, &pool->partial, list)
+			dropped += dma_pmd_forget_domain(meta, idx);
+		list_for_each_entry(meta, &pool->partial_dirty, list)
 			dropped += dma_pmd_forget_domain(meta, idx);
 		list_for_each_entry(meta, &pool->idle, list)
 			dropped += dma_pmd_forget_domain(meta, idx);
@@ -311,6 +526,7 @@ struct dma_pmd_pool *dma_pmd_pool_create(unsigned int order, unsigned int max_id
 	pool->max_idle_pages = max_idle_pages ? : 16;
 	pool->next_alloc_attempt = jiffies;
 	INIT_LIST_HEAD(&pool->partial);
+	INIT_LIST_HEAD(&pool->partial_dirty);
 	INIT_LIST_HEAD(&pool->idle);
 	INIT_LIST_HEAD(&pool->full);
 
@@ -368,6 +584,7 @@ struct dma_pmd_pool *dma_pmd_pool_destroy(struct dma_pmd_pool *pool)
 	}
 	srcu_read_unlock(&dma_pmd_srcu, srcu_idx);
 
+	flush_work(&dma_pmd_scrub_work);
 	kref_put(&pool->refcount, dma_pmd_pool_free_kref);
 	flush_work(&dma_pmd_reclaim_work);
 	return NULL;
@@ -379,6 +596,7 @@ EXPORT_SYMBOL(dma_pmd_pool_destroy);
  * @pool: Owning pool
  * @gfp: GFP allocation flags
  * @nid: Target NUMA node (or NUMA_NO_NODE for local node)
+ * @zero: True if caller requires zeroed blocks in @meta->free_bitmap
  *
  * Cost: Slow path (pool miss); allocates PMD page from buddy on @nid,
  *       splits into compound blocks, and sets the PMD page's membership bit.
@@ -390,7 +608,7 @@ EXPORT_SYMBOL(dma_pmd_pool_destroy);
  *         on failure.
  */
 static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
-					     gfp_t gfp, int nid)
+					     gfp_t gfp, int nid, bool zero)
 {
 	/*
 	 * Require full GFP_KERNEL (not just gfpflags_allow_blocking()):
@@ -431,7 +649,7 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 	 * is shaped into compound pieces by hand. What is left is also free
 	 * of everything slab treats as a bug in GFP_SLAB_BUG_MASK, so the
 	 * metadata allocation below can use it as it stands.
-	 * __GFP_ZERO is handled per-block in dma_pmd_pool_alloc_bulk_node().
+	 * __GFP_ZERO is handled explicitly below after dma_pmd_page_prepare().
 	 */
 	base_gfp = gfp & ~(__GFP_COMP | __GFP_HIGHMEM | __GFP_MOVABLE | __GFP_ZERO);
 
@@ -487,7 +705,9 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 		return NULL;
 	}
 
-	if (meta->flags & DMA_PMD_DECRYPTED) {
+	if (zero || (meta->flags & DMA_PMD_DECRYPTED)) {
+		if (!(meta->flags & DMA_PMD_DECRYPTED))
+			memset(page_address(page), 0, PMD_SIZE);
 		bitmap_set(meta->free_bitmap, 0, nr);
 		meta->nr_free = nr;
 	} else {
@@ -514,8 +734,7 @@ static struct dma_pmd_meta *dma_pmd_add_page(struct dma_pmd_pool *pool,
 static unsigned int dma_pmd_scan_bitmap(struct dma_pmd_pool *pool,
 					unsigned long *bitmap, u16 *countp,
 					unsigned long base_pfn, unsigned int nr,
-					unsigned long want, struct page **out,
-					bool unfreeze)
+					unsigned long want, struct page **out)
 {
 	unsigned int idx, got = 0, used = 0;
 
@@ -531,8 +750,7 @@ static unsigned int dma_pmd_scan_bitmap(struct dma_pmd_pool *pool,
 			pr_err_once("dma_pmd: poisoned block at pfn %lu, leaking it to keep pool %p intact\n",
 				    page_to_pfn(block), pool);
 		} else {
-			if (unfreeze)
-				page_ref_unfreeze(block, 1);
+			page_ref_unfreeze(block, 1);
 			out[got++] = block;
 		}
 
@@ -542,6 +760,41 @@ static unsigned int dma_pmd_scan_bitmap(struct dma_pmd_pool *pool,
 	*countp -= used;
 	pool->block_alloc_cnt += used;
 	return got;
+}
+
+static struct dma_pmd_meta *dma_pmd_pick_meta(struct dma_pmd_pool *pool, bool zero)
+{
+	struct dma_pmd_meta *meta;
+
+	if (!zero) {
+		meta = list_first_entry_or_null(&pool->partial_dirty,
+						struct dma_pmd_meta, list);
+		if (meta)
+			return meta;
+		if (!list_empty(&pool->partial))
+			return list_last_entry(&pool->partial,
+					       struct dma_pmd_meta, list);
+		if (!list_empty(&pool->idle)) {
+			meta = list_last_entry(&pool->idle,
+					       struct dma_pmd_meta, list);
+			pool->num_idle_pages--;
+			return meta;
+		}
+		return NULL;
+	}
+
+	meta = list_first_entry_or_null(&pool->partial, struct dma_pmd_meta, list);
+	if (meta)
+		return meta;
+
+	list_for_each_entry(meta, &pool->idle, list) {
+		if (meta->nr_free) {
+			pool->num_idle_pages--;
+			return meta;
+		}
+	}
+
+	return NULL;
 }
 
 /* Extract up to @want available blocks from @meta under @pool->lock. */
@@ -555,23 +808,18 @@ static unsigned long dma_pmd_take_blocks(struct dma_pmd_pool *pool,
 	unsigned int nr = DMA_PMD_BLOCKS(pool->order);
 	unsigned int got = 0, used;
 
-	if (zero) {
-		got += dma_pmd_scan_bitmap(pool, meta->free_bitmap, &meta->nr_free,
-					   base_pfn, nr, want, out, true);
+	if (!zero)
 		got += dma_pmd_scan_bitmap(pool, meta->dirty_bitmap, &meta->nr_dirty,
-					   base_pfn, nr, want - got, out + got, false);
-	} else {
-		got += dma_pmd_scan_bitmap(pool, meta->dirty_bitmap, &meta->nr_dirty,
-					   base_pfn, nr, want, out, false);
-		got += dma_pmd_scan_bitmap(pool, meta->free_bitmap, &meta->nr_free,
-					   base_pfn, nr, want - got, out + got, true);
-	}
+					   base_pfn, nr, want, out);
+	got += dma_pmd_scan_bitmap(pool, meta->free_bitmap, &meta->nr_free,
+				   base_pfn, nr, want - got, out + got);
+
 	used = avail_before - dma_pmd_meta_avail(meta);
-	if (!dma_pmd_meta_avail(meta) || WARN_ON_ONCE(!used)) {
+	if (WARN_ON_ONCE(!used)) {
 		meta->nr_free = 0;
 		meta->nr_dirty = 0;
-		list_move(&meta->list, &pool->full);
 	}
+	dma_pmd_place_meta(pool, meta);
 
 	return got;
 }
@@ -588,7 +836,7 @@ static unsigned long dma_pmd_take_blocks(struct dma_pmd_pool *pool,
  *       under a single lock acquisition. Slow path (both empty) calls
  *       dma_pmd_add_page().
  * Locking: Acquires @pool->lock (irqsave) for the bitmap scan. Drops lock
- *          during slow-path PMD buddy allocation and per-block initialization.
+ *          during slow-path PMD buddy allocation.
  * Frequency: High (called per RX buffer refill or per SKB TX page frag refill).
  *
  * A pool hands out a block of a PMD page it already owns, on the node that
@@ -605,7 +853,8 @@ unsigned long dma_pmd_pool_alloc_bulk_node(struct dma_pmd_pool *pool, gfp_t gfp,
 					   int nid, unsigned long nr_pages,
 					   struct page **page_array)
 {
-	unsigned long allocated = 0, flags, i;
+	unsigned long allocated = 0, flags;
+	bool should_scrub = false;
 	bool zero;
 
 	if (unlikely(!pool || pool->destroyed || !nr_pages ||
@@ -619,22 +868,18 @@ unsigned long dma_pmd_pool_alloc_bulk_node(struct dma_pmd_pool *pool, gfp_t gfp,
 	while (allocated < nr_pages) {
 		struct dma_pmd_meta *meta;
 
-		/* Partially used pages first, idle ones next. */
-		meta = list_first_entry_or_null(&pool->partial, struct dma_pmd_meta, list);
-		if (!meta && !list_empty(&pool->idle)) {
-			meta = list_first_entry(&pool->idle, struct dma_pmd_meta, list);
-			list_move(&meta->list, &pool->partial);
-			pool->num_idle_pages--;
-		}
+		meta = dma_pmd_pick_meta(pool, zero);
 		if (!meta) {
 			/* Fallback to a new allocation */
 			spin_unlock_irqrestore(&pool->lock, flags);
-			meta = dma_pmd_add_page(pool, gfp, nid);
+			meta = dma_pmd_add_page(pool, gfp, nid, zero);
 			if (!meta)
-				goto out_prep;
+				goto out;
 			spin_lock_irqsave(&pool->lock, flags);
 			pool->pmd_alloc_cnt++;
 			list_add(&meta->list, &pool->partial);
+			if (meta->nr_dirty)
+				should_scrub = true;
 		}
 
 		allocated += dma_pmd_take_blocks(pool, meta,
@@ -643,14 +888,9 @@ unsigned long dma_pmd_pool_alloc_bulk_node(struct dma_pmd_pool *pool, gfp_t gfp,
 	}
 	spin_unlock_irqrestore(&pool->lock, flags);
 
-out_prep:
-	for (i = 0; i < allocated; i++) {
-		if (!page_count(page_array[i])) {
-			page_ref_unfreeze(page_array[i], 1);
-			if (zero)
-				memset(page_address(page_array[i]), 0, PAGE_SIZE << pool->order);
-		}
-	}
+out:
+	if (should_scrub)
+		dma_pmd_schedule_scrub();
 	return allocated;
 }
 EXPORT_SYMBOL(dma_pmd_pool_alloc_bulk_node);
@@ -674,7 +914,9 @@ EXPORT_SYMBOL(dma_pmd_pool_alloc_bulk_node);
 bool dma_pmd_pool_has_free(struct dma_pmd_pool *pool)
 {
 	return pool && !READ_ONCE(pool->destroyed) &&
-	       (!list_empty_careful(&pool->partial) || !list_empty_careful(&pool->idle));
+	       (!list_empty_careful(&pool->partial) ||
+		!list_empty_careful(&pool->partial_dirty) ||
+		!list_empty_careful(&pool->idle));
 }
 EXPORT_SYMBOL(dma_pmd_pool_has_free);
 
@@ -706,8 +948,8 @@ bool __dma_pmd_free_page(struct page *page)
 	struct dma_pmd_pool *pool = meta->pool;
 	unsigned long pfn = page_to_pfn(page);
 	bool should_release = false;
+	bool should_scrub = false;
 	bool zeroed_on_free = false;
-	unsigned int avail;
 	unsigned long flags;
 
 	idx = (pfn - dma_pmd_meta_to_pfn(meta)) >> pool->order;
@@ -755,28 +997,28 @@ bool __dma_pmd_free_page(struct page *page)
 		meta->nr_free++;
 	} else {
 		__set_bit(idx, meta->dirty_bitmap);
-		meta->nr_dirty++;
+		should_scrub = !meta->nr_dirty++;
 	}
-	avail = dma_pmd_meta_avail(meta);
 	pool->block_free_cnt++;
 
-	if (avail == 1 && !pool->destroyed)
-		list_move(&meta->list, &pool->partial);
-
-	if (avail == nr) {
+	if (dma_pmd_meta_avail(meta) == nr) {
 		if (pool->destroyed || pool->num_idle_pages >= pool->max_idle_pages) {
 			list_del_init(&meta->list);
 			llist_add(&meta->llnode, &dma_pmd_free_list);
 			should_release = true;
 		} else {
-			list_move(&meta->list, &pool->idle);
 			pool->num_idle_pages++;
+			dma_pmd_place_meta(pool, meta);
 		}
+	} else if (!pool->destroyed) {
+		dma_pmd_place_meta(pool, meta);
 	}
 	spin_unlock_irqrestore(&pool->lock, flags);
 
 	if (should_release)
 		dma_pmd_schedule_reclaim();
+	else if (should_scrub)
+		dma_pmd_schedule_scrub();
 
 	return true;
 }

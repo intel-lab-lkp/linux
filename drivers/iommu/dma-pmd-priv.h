@@ -181,8 +181,10 @@ static inline unsigned int dma_pmd_meta_avail(const struct dma_pmd_meta *m)
  *		block bitmaps and the statistics counters
  * @order:	Block order managed by this pool (<= PMD_ORDER)
  * @destroyed:	Set when dma_pmd_pool_destroy() has been called
- * @partial:	List of PMD pages with at least 1 free block, but not all
- *		of them (MRU ordered). Candidates for allocation.
+ * @partial:	List of partially used PMD pages with @nr_free > 0 (clean-only
+ *		at head, mixed clean/dirty at tail)
+ * @partial_dirty: List of partially used PMD pages with @nr_free == 0 and
+ *		@nr_dirty > 0
  * @idle:	List of PMD pages whose every usable block is free. Held
  *		separately because they can be released under pressure.
  * @full:	List of PMD pages with 0 free blocks
@@ -193,6 +195,7 @@ static inline unsigned int dma_pmd_meta_avail(const struct dma_pmd_meta *m)
  * @pmd_free_cnt: Statistics counter of PMD pages released back to buddy
  * @block_alloc_cnt: Statistics counter of block allocations satisfied
  * @block_free_cnt: Statistics counter of block frees recycled into pool
+ * @block_scrub_cnt: Statistics counter of dirty blocks zeroed by scrubber
  * @next_alloc_attempt: Do not attempt a new order-9 allocation before this time.
  *		Damps repeated high-order GFP_ATOMIC failures under
  *		fragmentation, which would otherwise be retried on every
@@ -207,6 +210,7 @@ struct dma_pmd_pool {
 	u8			order;
 	bool			destroyed;
 	struct list_head	partial;
+	struct list_head	partial_dirty;
 	struct list_head	idle;
 	struct list_head	full;
 	unsigned int		num_idle_pages;
@@ -217,6 +221,7 @@ struct dma_pmd_pool {
 	u64			pmd_free_cnt;
 	u64			block_alloc_cnt;
 	u64			block_free_cnt;
+	u64			block_scrub_cnt;
 
 	/* Cold. */
 	unsigned long		next_alloc_attempt;
