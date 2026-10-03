@@ -9,9 +9,45 @@
 #include <linux/spinlock.h>
 #include <linux/types.h>
 
+/**
+ * struct dma_pmd_window - A domain's IOVA window reserved for DMA_PMD pages
+ * @base: First IOVA of the window. A page at @phys is mapped, in every domain
+ *        that has a window, at @base + @phys.
+ * @size: Window size in bytes, or 0 if this domain has no window, either
+ *        because nothing has pooled through it yet, or because it could not
+ *        find a free range that large. 0 must make both the map and the unmap
+ *        side decline, see dma_pmd_window_owns().
+ * @domain_idx: Dense domain index + DMA_PMD_IDX_FIRST, used for per-PMD-page
+ *       presence (bit @domain_idx - DMA_PMD_IDX_FIRST), or one of
+ *       DMA_PMD_IDX_NONE, DMA_PMD_IDX_NOHUGE or DMA_PMD_IDX_NOSPACE while
+ *       @size is 0. Of the three sentinels, only DMA_PMD_IDX_NONE is retried.
+ *
+ * Lives in the domain's iommu_dma_cookie. The window is a real allocation out
+ * of the domain's iova_domain, so no ordinary IOVA can ever fall inside it,
+ * which is what lets the unmap path recognise a pooled IOVA by range alone.
+ */
+struct dma_pmd_window {
+	dma_addr_t base;
+	u64 size;
+	u16 domain_idx;
+};
+
 #ifdef CONFIG_DMA_PMD
 
 #define DMA_PMD_BLOCKS(order)		(1U << (PMD_ORDER - (order)))
+
+/*
+ * Sentinel values of dma_pmd_window.domain_idx below DMA_PMD_IDX_FIRST:
+ * never attempted (0, matching kzalloc), or permanently declined. A real
+ * domain index is >= DMA_PMD_IDX_FIRST (subtract DMA_PMD_IDX_FIRST for
+ * the bitmap bit position).
+ */
+enum {
+	DMA_PMD_IDX_NONE,	/* not attempted yet */
+	DMA_PMD_IDX_NOHUGE,	/* @domain can never pool */
+	DMA_PMD_IDX_NOSPACE,	/* no index or no IOVA range */
+	DMA_PMD_IDX_FIRST,	/* first valid domain index */
+};
 
 /*
  * Locking
@@ -166,6 +202,42 @@ struct dma_pmd_meta *dma_pmd_meta_of_pfn(unsigned long pfn);
 struct dma_pmd_meta *dma_pmd_meta_from_phys(phys_addr_t pa);
 unsigned long dma_pmd_meta_to_pfn(const struct dma_pmd_meta *m);
 phys_addr_t dma_pmd_meta_to_phys(const struct dma_pmd_meta *m);
+
+static inline bool dma_is_pmd_phys(phys_addr_t phys)
+{
+	return dma_is_pmd_page(phys >> PAGE_SHIFT);
+}
+
+/**
+ * dma_pmd_window_owns - Was @dma handed out by a DMA_PMD mapping?
+ * @win: The unmapping domain's window
+ * @dma: IOVA being unmapped
+ *
+ * Only DMA_PMD pages can be mapped within the reserved IOVA window
+ * so a range check suffices.
+ * A domain that has no window has @size 0, so the unsigned subtraction
+ * underflows to a huge value and the test is always false. That is the same
+ * check that stops the map path from using a window the domain does not own.
+ */
+static inline bool dma_pmd_window_owns(const struct dma_pmd_window *win, dma_addr_t dma)
+{
+	/* Acquire pairs with the release of @size in dma_pmd_window_assign(). */
+	u64 size = smp_load_acquire(&win->size);
+
+	return size && dma - win->base < size;
+}
+
+#else /* !CONFIG_DMA_PMD */
+
+static inline bool dma_is_pmd_phys(phys_addr_t phys)
+{
+	return false;
+}
+
+static inline bool dma_pmd_window_owns(const struct dma_pmd_window *win, dma_addr_t dma)
+{
+	return false;
+}
 
 #endif /* CONFIG_DMA_PMD */
 #endif /* _DRIVERS_IOMMU_DMA_PMD_PRIV_H */

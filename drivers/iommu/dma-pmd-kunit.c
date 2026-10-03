@@ -140,11 +140,30 @@ static void test_pool_alloc_and_recycle(struct kunit *test)
 	dma_pmd_pool_destroy(pool_wm);
 }
 
+static void test_window_helpers(struct kunit *test)
+{
+	struct dma_pmd_window win = {};
+
+	KUNIT_ASSERT_EQ(test, dma_pmd_meta_init(), 0);
+
+	/* Empty window (size == 0) never owns any IOVA. */
+	KUNIT_EXPECT_FALSE(test, dma_pmd_window_owns(&win, 0));
+	KUNIT_EXPECT_FALSE(test, dma_pmd_window_owns(&win, SZ_4G));
+
+	win.base = SZ_4G;
+	win.size = SZ_2G;
+	KUNIT_EXPECT_FALSE(test, dma_pmd_window_owns(&win, SZ_4G - 1));
+	KUNIT_EXPECT_TRUE(test, dma_pmd_window_owns(&win, SZ_4G));
+	KUNIT_EXPECT_TRUE(test, dma_pmd_window_owns(&win, SZ_4G + SZ_2G - 1));
+	KUNIT_EXPECT_FALSE(test, dma_pmd_window_owns(&win, SZ_4G + SZ_2G));
+}
+
 static struct kunit_case dma_pmd_meta_test_cases[] = {
 	KUNIT_CASE(test_meta_init_and_roundtrip),
 	KUNIT_CASE(test_meta_invalid_phys),
 	KUNIT_CASE(test_meta_pooled_toggle),
 	KUNIT_CASE(test_pool_alloc_and_recycle),
+	KUNIT_CASE(test_window_helpers),
 	{}
 };
 

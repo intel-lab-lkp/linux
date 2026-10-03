@@ -18,6 +18,7 @@
 #include <linux/gfp.h>
 #include <linux/huge_mm.h>
 #include <linux/iommu.h>
+#include <linux/dma-pmd.h>
 #include <linux/iommu-dma.h>
 #include <linux/iova.h>
 #include <linux/irq.h>
@@ -36,6 +37,7 @@
 #include <trace/events/swiotlb.h>
 
 #include "dma-iommu.h"
+#include "dma-pmd-priv.h"
 #include "iommu-pages.h"
 
 struct iommu_dma_msi_page {
@@ -75,6 +77,8 @@ struct iommu_dma_cookie {
 	struct iommu_domain *fq_domain;
 	/* Options for dma-iommu use */
 	struct iommu_dma_options options;
+	/* IOVA window reserved for DMA_PMD pages. Nothing else can go here. */
+	struct dma_pmd_window win_dma_pmd;
 };
 
 struct iommu_dma_msi_cookie {
@@ -732,7 +736,7 @@ static int iommu_dma_init_domain(struct iommu_domain *domain, struct device *dev
  *
  * Return: corresponding IOMMU API page protection flags
  */
-static int dma_info_to_prot(enum dma_data_direction dir, bool coherent,
+int dma_info_to_prot(enum dma_data_direction dir, bool coherent,
 		     unsigned long attrs)
 {
 	int prot;
@@ -1212,6 +1216,39 @@ static inline size_t iova_unaligned(struct iova_domain *iovad, phys_addr_t phys,
 				    size_t size)
 {
 	return iova_offset(iovad, phys | size);
+}
+
+/**
+ * dma_pmd_dma_window - This domain's IOVA window for DMA_PMD
+ * @domain: Domain to look at
+ *
+ * For the DMA_PMD code's slow paths, which need a window but do not have the
+ * cookie layout. The DMA map path is handed the pointer by its caller instead,
+ * so this is never called at map frequency.
+ *
+ * Return: the window, or NULL if @domain is NULL or does not carry a DMA-IOVA
+ * cookie. The cookie shares a union with the MSI, iommufd and fault-handler
+ * ones, so the type has to be tested rather than the pointer. An identity,
+ * passthrough, or MSI-only domain has no window, and a device can be moved to
+ * one after its pool was created (e.g. via sysfs domain type changes or VFIO
+ * attachment).
+ */
+struct dma_pmd_window *dma_pmd_dma_window(struct iommu_domain *domain)
+{
+	/*
+	 * Also decline in kdump kernels (iommu_deferred_attach_enabled);
+	 * dma_pmd_dma_iovad() uses this check so win->size stays 0.
+	 */
+	if (static_branch_unlikely(&iommu_deferred_attach_enabled) ||
+	    !domain || domain->cookie_type != IOMMU_COOKIE_DMA_IOVA)
+		return NULL;
+
+	return &domain->iova_cookie->win_dma_pmd;
+}
+
+struct iova_domain *dma_pmd_dma_iovad(struct iommu_domain *domain)
+{
+	return dma_pmd_dma_window(domain) ? &domain->iova_cookie->iovad : NULL;
 }
 
 dma_addr_t iommu_dma_map_phys(struct device *dev, phys_addr_t phys, size_t size,
