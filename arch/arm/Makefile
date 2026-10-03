@@ -150,7 +150,11 @@ endif
 KBUILD_CPPFLAGS	+=$(cpp-y)
 KBUILD_CFLAGS	+=$(CFLAGS_ABI) $(CFLAGS_ISA) $(arch-y) $(tune-y) $(call cc-option,-mshort-load-bytes,$(call cc-option,-malignment-traps,)) -msoft-float -Uarm
 KBUILD_AFLAGS	+=$(CFLAGS_ABI) $(AFLAGS_ISA) -Wa,$(arch-y) $(tune-y) -include $(srctree)/arch/arm/include/asm/unified.h -msoft-float
+ifdef CONFIG_CPU_32v5
+KBUILD_RUSTFLAGS += --target=armv5te-unknown-linux-gnueabi
+else
 KBUILD_RUSTFLAGS += --target=arm-unknown-linux-gnueabi
+endif
 
 CHECKFLAGS	+= -D__arm__
 
