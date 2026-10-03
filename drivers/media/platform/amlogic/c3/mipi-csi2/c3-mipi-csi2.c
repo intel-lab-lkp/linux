@@ -431,7 +431,9 @@ static int c3_mipi_csi_enable_streams(struct v4l2_subdev *sd,
 
 	src_sd = media_entity_to_v4l2_subdev(csi->src_pad->entity);
 
-	pm_runtime_resume_and_get(csi->dev);
+	ret = pm_runtime_resume_and_get(csi->dev);
+	if (ret < 0)
+		return ret;
 
 	c3_mipi_csi_start_stream(csi);
 
