@@ -12,7 +12,7 @@
  * snd-usb-audio quirk.
  *
  * babyfacepro.c holds the card lifecycle, the PCM stream and the
- * mixer-state persistence across re-probes;
+ * mixer-state persistence across re-probes and resume;
  * babyfacepro-ctl.c holds the ALSA control surface - the hardware
  * mixer.
  *
@@ -344,7 +344,7 @@ struct snd_usb_babyface {
 	struct snd_kcontrol *dim_kctl;      /* for snd_ctl_notify */
 };
 
-/* The mixer state cached across interface re-probes (see
+/* The mixer state cached across interface re-probes/resume (see
  * babyfacepro.c's own comment on bf_state_save/bf_state_restore).
  */
 struct bf_saved {
@@ -395,7 +395,7 @@ void babyface_pcm_stop_both(struct snd_usb_babyface *chip, snd_pcm_state_t state
 void babyface_stream_work(struct work_struct *work);
 extern const struct snd_pcm_hw_constraint_list bf_rates_constraint;
 
-/* Mixer-state persistence across interface re-probes. */
+/* Mixer-state persistence across interface re-probes/resume. */
 void bf_state_save(struct snd_usb_babyface *chip);
 int bf_state_restore(struct snd_usb_babyface *chip);
 void bf_state_purge(void);
