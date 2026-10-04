@@ -575,9 +575,13 @@ enum igc_boards {
 #define IGC_MAX_TXD_PWR		15
 #define IGC_MAX_DATA_PER_TXD	BIT(IGC_MAX_TXD_PWR)
 
-/* Tx Descriptors needed, worst case */
 #define TXD_USE_COUNT(S)	DIV_ROUND_UP((S), IGC_MAX_DATA_PER_TXD)
-#define DESC_NEEDED	(MAX_SKB_FRAGS + 4)
+
+/* Tx descriptor budget for a head and MAX_SKB_FRAGS fragments,
+ * each fitting in one data descriptor: one context descriptor,
+ * two descriptors for an optional empty frame, and two spare entries.
+ */
+#define DESC_NEEDED	(MAX_SKB_FRAGS + 6)
 
 struct igc_rx_buffer {
 	union {
