@@ -3746,8 +3746,10 @@ move_data:
 		off = le32_to_cpu(((struct BITMAP_RANGE *)data)->bitmap_off);
 		bits = le32_to_cpu(((struct BITMAP_RANGE *)data)->bits);
 
-		if (cbo + (off + 7) / 8 > lco ||
-		    cbo + ((off + bits + 7) / 8) > lco) {
+		if (check_add_overflow(off, 7u, &nsize) ||
+		    check_add_overflow(off, bits, &t32) ||
+		    check_add_overflow(t32, 7u, &t32) ||
+		    cbo + nsize / 8 > lco || cbo + t32 / 8 > lco) {
 			goto dirty_vol;
 		}
 
@@ -3759,8 +3761,10 @@ move_data:
 		off = le32_to_cpu(((struct BITMAP_RANGE *)data)->bitmap_off);
 		bits = le32_to_cpu(((struct BITMAP_RANGE *)data)->bits);
 
-		if (cbo + (off + 7) / 8 > lco ||
-		    cbo + ((off + bits + 7) / 8) > lco) {
+		if (check_add_overflow(off, 7u, &nsize) ||
+		    check_add_overflow(off, bits, &t32) ||
+		    check_add_overflow(t32, 7u, &t32) ||
+		    cbo + nsize / 8 > lco || cbo + t32 / 8 > lco) {
 			goto dirty_vol;
 		}
 
