@@ -1444,6 +1444,7 @@ bool ixgbe_check_mdd_event(struct ixgbe_adapter *adapter)
 {
 	struct ixgbe_hw *hw = &adapter->hw;
 	DECLARE_BITMAP(vf_bitmap, 64);
+	unsigned long flags;
 	bool ret = false;
 	int i;
 
@@ -1466,11 +1467,16 @@ bool ixgbe_check_mdd_event(struct ixgbe_adapter *adapter)
 
 			hw->mac.ops.restore_mdd_vf(hw, i);
 
-			/* get the VF to rebuild its queues */
-			adapter->vfinfo[i].clear_to_send = 0;
-			ping = IXGBE_PF_CONTROL_MSG |
-			       IXGBE_VT_MSGTYPE_CTS;
-			ixgbe_write_mbx(hw, &ping, 1, i);
+			/* indexes >= num_vfs are PF queues, no VF to notify */
+			spin_lock_irqsave(&adapter->vfs_lock, flags);
+			if (i < adapter->num_vfs) {
+				/* get the VF to rebuild its queues */
+				adapter->vfinfo[i].clear_to_send = 0;
+				ping = IXGBE_PF_CONTROL_MSG |
+				       IXGBE_VT_MSGTYPE_CTS;
+				ixgbe_write_mbx(hw, &ping, 1, i);
+			}
+			spin_unlock_irqrestore(&adapter->vfs_lock, flags);
 		}
 
 		ret = true;
