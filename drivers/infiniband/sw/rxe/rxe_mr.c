@@ -421,7 +421,8 @@ int copy_data(
 	enum rxe_mr_copy_dir	dir)
 {
 	int			bytes;
-	struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
+	struct rxe_sge		*sge;
+	u32			cur_sge	= READ_ONCE(dma->cur_sge);
 	int			offset	= dma->sge_offset;
 	int			resid	= dma->resid;
 	struct rxe_mr		*mr	= NULL;
@@ -435,6 +436,16 @@ int copy_data(
 		err = -EINVAL;
 		goto err2;
 	}
+
+	/*
+	 * dma may live in a user-mapped queue, so read cur_sge once and
+	 * validate the value that is actually used to index sge[].
+	 */
+	if (unlikely(cur_sge >= dma->num_sge)) {
+		err = -EINVAL;
+		goto err2;
+	}
+	sge = &dma->sge[cur_sge];
 
 	if (sge->length && (offset < sge->length)) {
 		mr = lookup_mr(pd, access, sge->lkey, RXE_LOOKUP_LOCAL);
