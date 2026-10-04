@@ -1279,11 +1279,13 @@ static u32 tcpm_get_current_limit(struct tcpm_port *port)
 		limit = 3000;
 		break;
 	case TYPEC_CC_RP_DEF:
-	default:
 		if (port->tcpc->get_current_limit)
 			limit = port->tcpc->get_current_limit(port->tcpc);
 		else
 			limit = 0;
+		break;
+	default:
+		limit = 0;
 		break;
 	}
 
