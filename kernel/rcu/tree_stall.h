@@ -19,6 +19,20 @@
 /* panic() on RCU Stall sysctl. */
 static int sysctl_panic_on_rcu_stall __read_mostly;
 static int sysctl_max_rcu_stall_to_panic __read_mostly;
+static unsigned long sysctl_rcu_stall_panic_count;
+
+/* Reset the RCU stall panic count when written to. */
+static int proc_do_rcu_stall_panic_count(const struct ctl_table *table, int write,
+					 void *buffer, size_t *lenp, loff_t *ppos)
+{
+	if (!write)
+		return proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
+
+	WRITE_ONCE(sysctl_rcu_stall_panic_count, 0);
+	*ppos += *lenp;
+
+	return 0;
+}
 
 static const struct ctl_table rcu_stall_sysctl_table[] = {
 	{
@@ -38,6 +52,13 @@ static const struct ctl_table rcu_stall_sysctl_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ONE,
 		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "rcu_stall_panic_count",
+		.data		= &sysctl_rcu_stall_panic_count,
+		.maxlen		= sizeof(sysctl_rcu_stall_panic_count),
+		.mode		= 0644,
+		.proc_handler	= proc_do_rcu_stall_panic_count,
 	},
 };
 
@@ -161,7 +182,7 @@ early_initcall(check_cpu_stall_init);
 /* If so specified via sysctl, panic, yielding cleaner stall-warning output. */
 static void panic_on_rcu_stall(const struct cpumask *stalled_mask)
 {
-	static int cpu_stall;
+	unsigned long count;
 
 	/*
 	 * Attempt to kick out the BPF scheduler if it's installed and defer
@@ -170,7 +191,10 @@ static void panic_on_rcu_stall(const struct cpumask *stalled_mask)
 	if (scx_rcu_cpu_stall(stalled_mask))
 		return;
 
-	if (++cpu_stall < sysctl_max_rcu_stall_to_panic)
+	/* A lost RMW update only delays the panic by one stall. */
+	count = READ_ONCE(sysctl_rcu_stall_panic_count) + 1;
+	WRITE_ONCE(sysctl_rcu_stall_panic_count, count);
+	if (count < (unsigned long)READ_ONCE(sysctl_max_rcu_stall_to_panic))
 		return;
 
 	if (sysctl_panic_on_rcu_stall)

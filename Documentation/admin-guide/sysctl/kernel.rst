@@ -959,7 +959,20 @@ max_rcu_stall_to_panic
 When ``panic_on_rcu_stall`` is set to 1, this value determines the
 number of times that RCU can stall before panic() is called.
 
-When ``panic_on_rcu_stall`` is set to 0, this value is has no effect.
+When ``panic_on_rcu_stall`` is set to 0, this value has no effect.
+
+rcu_stall_panic_count
+=====================
+
+Indicates the number of RCU CPU stalls that have been counted since
+system boot or since the counter was reset. When ``panic_on_rcu_stall``
+is set to 1, this count is compared against ``max_rcu_stall_to_panic``
+to decide whether panic() should be called.
+
+Writing 0 to this file resets the counter to zero, which restarts the
+``max_rcu_stall_to_panic`` window of stalls. This allows system
+administrators to clear the cumulative stall count after an incident
+has been resolved, without requiring a system restart.
 
 perf_cpu_time_max_percent
 =========================
