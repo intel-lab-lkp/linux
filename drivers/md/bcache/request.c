@@ -285,9 +285,8 @@ err:
 	}
 }
 
-/**
+/*
  * bch_data_insert - stick some data in the cache
- * @cl: closure pointer.
  *
  * This is the starting point for any data to end up in a cache device; it could
  * be from a normal write, or a writeback write, or a write to a flash only
