@@ -208,10 +208,27 @@ static void drxk_i2c_unlock(struct drxk_state *state)
 static int drxk_i2c_transfer(struct drxk_state *state, struct i2c_msg *msgs,
 			     unsigned len)
 {
+	int status;
+
+	/* Don't touch the bus once the device is known to be gone */
+	if (state->m_drxk_state == DRXK_NO_DEV)
+		return -ENODEV;
+
 	if (state->drxk_i2c_exclusive_lock)
-		return __i2c_transfer(state->i2c, msgs, len);
+		status = __i2c_transfer(state->i2c, msgs, len);
 	else
-		return i2c_transfer(state->i2c, msgs, len);
+		status = i2c_transfer(state->i2c, msgs, len);
+
+	/*
+	 * -ENODEV from the I2C adapter means that the device is gone for
+	 * good, e.g. an unplugged USB bridge. Stop accessing it from now on.
+	 */
+	if (status == -ENODEV) {
+		state->m_drxk_state = DRXK_NO_DEV;
+		pr_warn("device is gone, stopping all I2C access\n");
+	}
+
+	return status;
 }
 
 static int i2c_read1(struct drxk_state *state, u8 adr, u8 *val)
@@ -6319,6 +6336,10 @@ static int drxk_set_parameters(struct dvb_frontend *fe)
 	if (fe->ops.i2c_gate_ctrl)
 		fe->ops.i2c_gate_ctrl(fe, 0);
 
+	/* The device may have disappeared while the tuner was programmed */
+	if (state->m_drxk_state == DRXK_NO_DEV)
+		return -ENODEV;
+
 	old_delsys = state->props.delivery_system;
 	state->props = *p;
 
@@ -6487,7 +6508,9 @@ static int drxk_get_stats(struct dvb_frontend *fe)
 
 	/* get status */
 	state->fe_status = 0;
-	get_lock_status(state, &stat);
+	status = get_lock_status(state, &stat);
+	if (status == -ENODEV)
+		return status;
 	if (stat == MPEG_LOCK)
 		state->fe_status |= 0x1f;
 	if (stat == FEC_LOCK)
