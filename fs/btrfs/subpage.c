@@ -365,6 +365,55 @@ static void btrfs_folio_mark_dirty(struct folio *folio)
 }
 
 /*
+ * Find the first contig range that covers @start in the uptodate-bitmap.
+ *
+ * @start:		The file offset to start the search.
+ * @len_ret:		The length in bytes of the found range.
+ *
+ * Return true if the range is uptodate, otherwise return false.
+ *
+ * This interface is a little weird, normally we should just locate the
+ * non-uptodate range to read, but the read path needs to unlock the uptodate
+ * range too, so we need to return every contig range in the uptodate sub-bitmap.
+ */
+bool btrfs_folio_find_next_read_range(struct btrfs_fs_info *fs_info,
+				      struct folio *folio,
+				      u64 start, u32 *len_ret)
+{
+	const u64 fpos = folio_pos(folio);
+	const u64 fnext = folio_next_pos(folio);
+	const u32 fsize = folio_size(folio);
+	const u32 blocks_per_folio = btrfs_blocks_per_folio(fs_info, folio);
+	const unsigned int bitmap_end = blocks_per_folio * (btrfs_bitmap_nr_uptodate + 1);
+	struct btrfs_folio_state *bfs = folio_get_private(folio);
+	unsigned long flags;
+	unsigned int start_bit;
+	unsigned int next_bit;
+	bool ret;
+
+	ASSERT(IS_ALIGNED(start, fs_info->sectorsize));
+	/* Search start should be inside the folio. */
+	ASSERT(start >= fpos && start < fnext);
+
+	if (blocks_per_folio == 1) {
+		*len_ret = fsize;
+		return folio_test_uptodate(folio);
+	}
+	ASSERT(bfs);
+	start_bit = subpage_calc_start_bit(fs_info, folio, uptodate,
+					   start, fs_info->sectorsize);
+	spin_lock_irqsave(&bfs->lock, flags);
+	ret = test_bit(start_bit, bfs->bitmaps);
+	if (ret)
+		next_bit = find_next_zero_bit(bfs->bitmaps, bitmap_end, start_bit);
+	else
+		next_bit = find_next_bit(bfs->bitmaps, bitmap_end, start_bit);
+	spin_unlock_irqrestore(&bfs->lock, flags);
+	*len_ret = (next_bit - start_bit) << fs_info->sectorsize_bits;
+	return ret;
+}
+
+/*
  * The set helper of the dirty ops, so it only runs for folios without a
  * fixup bitmap: for those the folio flag is the whole fixup state, and this
  * reserving write covers the block, so retire it.  Metadata never has the
