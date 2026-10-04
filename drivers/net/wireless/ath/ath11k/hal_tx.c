@@ -11,26 +11,26 @@
 
 #define DSCP_TID_MAP_TBL_ENTRY_SIZE 64
 
-/* dscp_tid_map - Default DSCP-TID mapping
+/* dscp_tid_map - Default DSCP-TID mapping, the one cfg80211_classify8021d()
+ * uses without a QoS map: the DSCP's class selector bits, except where RFC 8325
+ * section 4 maps the DiffServ service class differently.
  *
- * DSCP        TID
- * 000000      0
- * 001000      1
- * 010000      2
- * 011000      3
- * 100000      4
- * 101000      5
- * 110000      6
- * 111000      7
+ * DSCP              TID
+ * AF11-13, CS2      0
+ * AF21-23           3
+ * CS3, AF31-33      4
+ * VA, EF            6
+ * CS6               7
+ * any other         DSCP >> 3
  */
 static const u8 dscp_tid_map[DSCP_TID_MAP_TBL_ENTRY_SIZE] = {
 	0, 0, 0, 0, 0, 0, 0, 0,
-	1, 1, 1, 1, 1, 1, 1, 1,
-	2, 2, 2, 2, 2, 2, 2, 2,
-	3, 3, 3, 3, 3, 3, 3, 3,
+	1, 1, 0, 1, 0, 1, 0, 1,
+	0, 2, 3, 2, 3, 2, 3, 2,
+	4, 3, 4, 3, 4, 3, 4, 3,
 	4, 4, 4, 4, 4, 4, 4, 4,
-	5, 5, 5, 5, 5, 5, 5, 5,
-	6, 6, 6, 6, 6, 6, 6, 6,
+	5, 5, 5, 5, 6, 5, 6, 5,
+	7, 6, 6, 6, 6, 6, 6, 6,
 	7, 7, 7, 7, 7, 7, 7, 7,
 };
 
