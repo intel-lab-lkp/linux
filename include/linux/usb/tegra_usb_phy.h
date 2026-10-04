@@ -87,6 +87,7 @@ struct tegra_usb_phy {
 	bool wakeup_enabled;
 	bool pad_wakeup;
 	bool powered_on;
+	bool has_extcon;
 };
 
 #endif /* __TEGRA_USB_PHY_H */

@@ -16,6 +16,7 @@
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/resource.h>
@@ -68,9 +69,18 @@
 #define   UHSIC_PHY_ENABLE			BIT(19)
 
 #define USB_PHY_VBUS_SENSORS			0x404
+#define   B_SESS_VLD_SW_EN			BIT(11)
+#define   B_SESS_VLD_SW_VALUE			BIT(12)
 #define   B_SESS_VLD_WAKEUP_EN			BIT(14)
+#define   A_SESS_VLD_SW_EN			BIT(19)
+#define   A_SESS_VLD_SW_VALUE			BIT(20)
 #define   A_SESS_VLD_WAKEUP_EN			BIT(22)
+#define   A_VBUS_VLD_SW_EN			BIT(27)
+#define   A_VBUS_VLD_SW_VALUE			BIT(28)
 #define   A_VBUS_VLD_WAKEUP_EN			BIT(30)
+#define VBUS_SENSORS_SW_OVERRIDE		(B_SESS_VLD_SW_EN | B_SESS_VLD_SW_VALUE | \
+						 A_SESS_VLD_SW_EN | A_SESS_VLD_SW_VALUE | \
+						 A_VBUS_VLD_SW_EN | A_VBUS_VLD_SW_VALUE)
 
 #define USB_PHY_VBUS_WAKEUP_ID			0x408
 #define   ID_INT_EN				BIT(0)
@@ -621,6 +631,10 @@ static int utmi_phy_power_on(struct tegra_usb_phy *phy)
 		val = readl_relaxed(base + USB_PHY_VBUS_SENSORS);
 		val &= ~(A_VBUS_VLD_WAKEUP_EN | A_SESS_VLD_WAKEUP_EN);
 		val &= ~(B_SESS_VLD_WAKEUP_EN);
+
+		if (phy->has_extcon)
+			val |= VBUS_SENSORS_SW_OVERRIDE;
+
 		writel_relaxed(val, base + USB_PHY_VBUS_SENSORS);
 
 		val = readl_relaxed(base + UTMIP_BAT_CHRG_CFG0);
@@ -726,6 +740,12 @@ static int utmi_phy_power_off(struct tegra_usb_phy *phy)
 		readl_relaxed_poll_timeout(base + USB_PHY_VBUS_WAKEUP_ID,
 					   val, !(val & VBUS_WAKEUP_STS),
 					   5000, 100000);
+
+	if (phy->has_extcon) {
+		val = readl_relaxed(base + USB_PHY_VBUS_SENSORS);
+		val &= ~VBUS_SENSORS_SW_OVERRIDE;
+		writel_relaxed(val, base + USB_PHY_VBUS_SENSORS);
+	}
 
 	utmi_phy_clk_disable(phy);
 
@@ -1456,6 +1476,34 @@ static int tegra_usb_phy_parse_pmc(struct device *dev,
 	return 0;
 }
 
+static int tegra_usb_phy_parse_controller(struct device *dev,
+					  struct tegra_usb_phy *phy)
+{
+	struct device_node *usb_node;
+	char *node_path;
+	u64 addr;
+	int ret;
+
+	ret = of_property_read_reg(dev->of_node, 0, &addr, NULL);
+	if (ret) {
+		dev_err(dev, "Failed to read reg entry 0: %d\n", ret);
+		return ret;
+	}
+
+	node_path = devm_kasprintf(dev, GFP_KERNEL, "/usb@%08llx", addr);
+	if (!node_path)
+		return -ENOMEM;
+
+	usb_node = of_find_node_by_path(node_path);
+	if (!usb_node)
+		return -ENODEV;
+
+	phy->has_extcon = of_property_present(usb_node, "extcon");
+	of_node_put(usb_node);
+
+	return 0;
+}
+
 static const struct tegra_phy_soc_config tegra20_soc_config = {
 	.utmi_pll_config_in_car_module = false,
 	.has_hostpc = false,
@@ -1550,6 +1598,13 @@ static int tegra_usb_phy_probe(struct platform_device *pdev)
 	if (err) {
 		dev_err_probe(&pdev->dev, err, "Failed to get PMC regmap\n");
 		return err;
+	}
+
+	if (tegra_phy->mode == USB_DR_MODE_OTG) {
+		err = tegra_usb_phy_parse_controller(&pdev->dev, tegra_phy);
+		if (err)
+			return dev_err_probe(&pdev->dev, err,
+					     "Failed to get controller\n");
 	}
 
 	tegra_phy->phy_type = of_usb_get_phy_mode(np);
