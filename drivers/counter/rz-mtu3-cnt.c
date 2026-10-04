@@ -67,11 +67,13 @@
  * @ch: HW channels for the counters
  * @count_is_enabled: Enabled state of Counter value channel
  * @ceiling: Cache for ceiling values
+ * @count: Cache for count values
  */
 struct rz_mtu3_cnt {
 	struct mutex lock;
 	struct rz_mtu3_channel *ch;
 	u32 ceiling[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
+	u32 count[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
 	bool count_is_enabled[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
 };
 
@@ -157,6 +159,23 @@ static void rz_mtu3_set_ceiling(struct rz_mtu3_channel *const ch, int id,
 	rz_mtu3_8bit_ch_write(ch, RZ_MTU3_TCR, RZ_MTU3_TCR_CCLR_TGRA);
 }
 
+static u32 rz_mtu3_get_count(struct rz_mtu3_channel *const ch, int id)
+{
+	if (id == RZ_MTU3_32_BIT_CH)
+		return rz_mtu3_32bit_ch_read(ch, RZ_MTU3_TCNTLW);
+	else
+		return rz_mtu3_16bit_ch_read(ch, RZ_MTU3_TCNT);
+}
+
+static void rz_mtu3_set_count(struct rz_mtu3_channel *const ch, int id,
+			      u32 count)
+{
+	if (id == RZ_MTU3_32_BIT_CH)
+		rz_mtu3_32bit_ch_write(ch, RZ_MTU3_TCNTLW, count);
+	else
+		rz_mtu3_16bit_ch_write(ch, RZ_MTU3_TCNT, count);
+}
+
 static int rz_mtu3_count_read(struct counter_device *counter,
 			      struct counter_count *count, u64 *val)
 {
@@ -168,12 +187,9 @@ static int rz_mtu3_count_read(struct counter_device *counter,
 	if (ret)
 		return ret;
 
-	pm_runtime_get_sync(counter->parent);
-	if (count->id == RZ_MTU3_32_BIT_CH)
-		*val = rz_mtu3_32bit_ch_read(ch, RZ_MTU3_TCNTLW);
-	else
-		*val = rz_mtu3_16bit_ch_read(ch, RZ_MTU3_TCNT);
-	pm_runtime_put(counter->parent);
+	if (priv->count_is_enabled[count->id])
+		priv->count[count->id] = rz_mtu3_get_count(ch, count->id);
+	*val = priv->count[count->id];
 	mutex_unlock(&priv->lock);
 
 	return 0;
@@ -184,18 +200,19 @@ static int rz_mtu3_count_write(struct counter_device *counter,
 {
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, count->id);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
+	u32 count_val = val;
 	int ret;
+
+	if (count->id != RZ_MTU3_32_BIT_CH)
+		count_val &= U16_MAX;
 
 	ret = rz_mtu3_lock_if_counter_is_valid(counter, ch, priv, count->id);
 	if (ret)
 		return ret;
 
-	pm_runtime_get_sync(counter->parent);
-	if (count->id == RZ_MTU3_32_BIT_CH)
-		rz_mtu3_32bit_ch_write(ch, RZ_MTU3_TCNTLW, val);
-	else
-		rz_mtu3_16bit_ch_write(ch, RZ_MTU3_TCNT, val);
-	pm_runtime_put(counter->parent);
+	if (priv->count_is_enabled[count->id])
+		rz_mtu3_set_count(ch, count->id, count_val);
+	priv->count[count->id] = count_val;
 	mutex_unlock(&priv->lock);
 
 	return 0;
@@ -382,6 +399,8 @@ static void rz_mtu3_32bit_cnt_setting(struct counter_device *counter)
 
 	rz_mtu3_set_ceiling(ch1, RZ_MTU3_32_BIT_CH,
 			    priv->ceiling[RZ_MTU3_32_BIT_CH]);
+	rz_mtu3_set_count(ch1, RZ_MTU3_32_BIT_CH,
+			  priv->count[RZ_MTU3_32_BIT_CH]);
 
 	rz_mtu3_8bit_ch_write(ch1, RZ_MTU3_TIOR, RZ_MTU3_TIOR_IC_BOTH);
 
@@ -398,6 +417,7 @@ static void rz_mtu3_16bit_cnt_setting(struct counter_device *counter, int id)
 	rz_mtu3_8bit_ch_write(ch, RZ_MTU3_TMDR1, RZ_MTU3_TMDR1_PH_CNT_MODE_1);
 
 	rz_mtu3_set_ceiling(ch, id, priv->ceiling[id]);
+	rz_mtu3_set_count(ch, id, priv->count[id]);
 
 	rz_mtu3_8bit_ch_write(ch, RZ_MTU3_TIOR, RZ_MTU3_TIOR_NO_OUTPUT);
 	rz_mtu3_enable(ch);
@@ -443,6 +463,9 @@ static void rz_mtu3_terminate_counter(struct counter_device *counter, int id)
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, id);
 	struct rz_mtu3_channel *const ch1 = rz_mtu3_get_ch(counter, 0);
 	struct rz_mtu3_channel *const ch2 = rz_mtu3_get_ch(counter, 1);
+	struct rz_mtu3_cnt *const priv = counter_priv(counter);
+
+	priv->count[id] = rz_mtu3_get_count(ch, id);
 
 	if (id == RZ_MTU3_32_BIT_CH) {
 		rz_mtu3_disable(ch2);
