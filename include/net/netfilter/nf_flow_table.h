@@ -106,6 +106,8 @@ enum flow_offload_xmit_type {
 };
 
 #define NF_FLOW_TABLE_ENCAP_MAX		2
+/* Devices above the flowtable device in a forward path. */
+#define NF_FLOW_TABLE_UPPER_MAX		(NET_DEVICE_PATH_STACK_MAX - 1)
 
 struct flow_offload_tunnel {
 	union {
@@ -153,7 +155,8 @@ struct flow_offload_tuple {
 					encap_num:2,
 					needs_gso_segment:1,
 					tun_num:2,
-					in_vlan_ingress:2;
+					in_vlan_ingress:2,
+					num_uppers:3;
 	u16				mtu;
 	u32				dst_cookie;
 	struct dst_entry		*dst_cache;
@@ -171,6 +174,7 @@ struct flow_offload_tuple {
 			u32		iifidx;
 		} tc;
 	};
+	u32				upper_ifidx[NF_FLOW_TABLE_UPPER_MAX];
 };
 
 struct flow_offload_tuple_rhash {
@@ -228,6 +232,8 @@ struct nf_flow_route {
 			u8			num_encaps:2,
 						num_tuns:2,
 						ingress_vlans:2;
+			u32			upper_ifidx[NF_FLOW_TABLE_UPPER_MAX];
+			u8			num_uppers;
 		} in;
 		struct {
 			u32			ifindex;

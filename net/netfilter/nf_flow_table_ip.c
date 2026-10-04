@@ -453,6 +453,49 @@ static void nf_flow_encap_pop(struct nf_flowtable_ctx *ctx,
 		nf_flow_ip_tunnel_pop(ctx, skb);
 }
 
+/* The fast path bypasses the devices above the flowtable device. */
+static void nf_flow_upper_stats_add(struct net *net,
+				    const struct flow_offload_tuple *tuple,
+				    bool rx, unsigned int len)
+{
+	unsigned int n, vlan_hlen = 0;
+	struct net_device *dev;
+	int i;
+
+	for (i = 0; i < tuple->num_uppers; i++) {
+		dev = dev_get_by_index_rcu(net, tuple->upper_ifidx[i]);
+		if (!dev)
+			continue;
+
+		n = len;
+		if (!rx && dev->type == ARPHRD_ETHER)
+			n += ETH_HLEN;
+
+		if (is_vlan_dev(dev)) {
+			/* Q-in-Q: the outer VLAN device counts the inner tag. */
+			n += vlan_hlen;
+			if (rx)
+				vlan_dev_sw_netstats_rx_add(dev, n);
+			else
+				vlan_dev_sw_netstats_tx_add(dev, 1, n);
+			vlan_hlen += VLAN_HLEN;
+		} else if (dev->pcpu_stat_type == NETDEV_PCPU_STAT_TSTATS) {
+			if (rx)
+				dev_sw_netstats_rx_add(dev, n);
+			else
+				dev_sw_netstats_tx_add(dev, 1, n);
+		}
+
+		/* The devices below also count this device's header. */
+		if (dev->type == ARPHRD_PPP)
+			len += PPPOE_SES_HLEN;
+		else if (dev->type == ARPHRD_TUNNEL)
+			len += sizeof(struct iphdr);
+		else if (dev->type == ARPHRD_TUNNEL6)
+			len += sizeof(struct ipv6hdr);
+	}
+}
+
 static struct flow_offload_tuple_rhash *
 nf_flow_offload_lookup(struct nf_flowtable_ctx *ctx,
 		       struct nf_flowtable *flow_table, struct sk_buff *skb)
@@ -511,6 +554,11 @@ static int nf_flow_offload_forward(struct nf_flowtable_ctx *ctx,
 
 	if (flow_table->flags & NF_FLOWTABLE_COUNTER)
 		nf_ct_acct_update(flow->ct, tuplehash->tuple.dir, skb->len);
+
+	nf_flow_upper_stats_add(dev_net(ctx->in), &tuplehash->tuple, true,
+				skb->len);
+	nf_flow_upper_stats_add(dev_net(ctx->in), &flow->tuplehash[!dir].tuple,
+				false, skb->len);
 
 	return 1;
 }
@@ -1106,6 +1154,11 @@ static int nf_flow_offload_ipv6_forward(struct nf_flowtable_ctx *ctx,
 
 	if (flow_table->flags & NF_FLOWTABLE_COUNTER)
 		nf_ct_acct_update(flow->ct, tuplehash->tuple.dir, skb->len);
+
+	nf_flow_upper_stats_add(dev_net(ctx->in), &tuplehash->tuple, true,
+				skb->len);
+	nf_flow_upper_stats_add(dev_net(ctx->in), &flow->tuplehash[!dir].tuple,
+				false, skb->len);
 
 	return 1;
 }
