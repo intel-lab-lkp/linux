@@ -656,14 +656,39 @@ static ssize_t ntfs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 				&ntfs_iomap_folio_ops, NULL);
 out:
 	if (ret < 0 && ret != -EIOCBQUEUED) {
+		int undo_err = 0;
+
 		if (ni->initialized_size != old_init_size) {
+			int init_err;
+
 			mutex_lock(&ni->mrec_lock);
-			ntfs_attr_set_initialized_size(ni, old_init_size);
+			init_err = ntfs_attr_set_initialized_size(ni,
+					old_init_size);
 			mutex_unlock(&ni->mrec_lock);
+			if (init_err && !undo_err)
+				undo_err = init_err;
 		}
 		if (ni->data_size != old_data_size) {
+			int data_err;
+
 			truncate_setsize(vi, old_data_size);
-			ntfs_attr_truncate(ni, old_data_size);
+			data_err = ntfs_attr_truncate(ni, old_data_size);
+			if (data_err && !undo_err)
+				undo_err = data_err;
+		}
+		if (undo_err) {
+			/*
+			 * The extension is recorded in the dirty MFT
+			 * record already, so a failed rollback leaves the
+			 * new sizes on disk while the VFS inode keeps
+			 * reporting the old ones.  Record the error: the
+			 * next persistence point persists it as
+			 * VOLUME_IS_DIRTY.  Run chkdsk.
+			 */
+			NVolSetErrors(vol);
+			ntfs_error(vi->i_sb,
+				   "Failed to roll back the size update: %d",
+				   undo_err);
 		}
 	}
 out_lock:
