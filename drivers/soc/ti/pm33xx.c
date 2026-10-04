@@ -174,7 +174,13 @@ static struct wkup_m3_wakeup_src rtc_wake_src(void)
 
 static int am33xx_rtc_only_idle(unsigned long wfi_flags)
 {
-	omap_rtc_power_off_program();
+	int ret;
+
+	/* A non-zero return makes cpu_suspend() abort the suspend. */
+	ret = omap_rtc_power_off_program();
+	if (ret)
+		return ret;
+
 	am33xx_do_wfi_sram(wfi_flags);
 	return 0;
 }

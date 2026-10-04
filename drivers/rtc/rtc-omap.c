@@ -407,6 +407,9 @@ static struct omap_rtc *omap_rtc_power_off_rtc;
  * omap_rtc_power_off_program: Set the pmic power off sequence. The RTC
  * generates pmic_pwr_enable control, which can be used to control an external
  * PMIC.
+ *
+ * Return: 0 on success, or -ENODEV if no RTC was registered as the system
+ * power controller.
  */
 int omap_rtc_power_off_program(void)
 {
@@ -415,6 +418,14 @@ int omap_rtc_power_off_program(void)
 	unsigned long now;
 	int seconds;
 	u32 val;
+
+	/*
+	 * Only set when an RTC with "system-power-controller" took over
+	 * pm_power_off. pm33xx calls this for rtc-only suspend whenever an
+	 * rtc0 exists, which does not guarantee that.
+	 */
+	if (!rtc)
+		return -ENODEV;
 
 	rtc->type->unlock(rtc);
 	/* enable pmic_power_en control */
