@@ -3282,6 +3282,7 @@ static int tegra_dc_init_opp_table(struct tegra_dc *dc)
 static int tegra_dc_probe(struct platform_device *pdev)
 {
 	u64 dma_mask = dma_get_mask(pdev->dev.parent);
+	struct device_node *dbi_np;
 	struct tegra_dc *dc;
 	int err;
 
@@ -3382,6 +3383,23 @@ static int tegra_dc_probe(struct platform_device *pdev)
 		}
 	}
 
+	dbi_np = of_get_available_child_by_name(pdev->dev.of_node, "dbi");
+	if (dbi_np) {
+		struct platform_device_info dbi_info = {
+			.parent = &pdev->dev,
+			.name = "tegra-dbi",
+			.id = PLATFORM_DEVID_AUTO,
+			.fwnode = of_fwnode_handle(dbi_np),
+			.of_node_reused = true,
+		};
+
+		dc->dbi = platform_device_register_full(&dbi_info);
+		of_node_put(dbi_np);
+		if (IS_ERR(dc->dbi))
+			return dev_err_probe(&pdev->dev, PTR_ERR(dc->dbi),
+					     "Failed to create DBI device\n");
+	}
+
 	err = tegra_dc_rgb_probe(dc);
 	if (err < 0 && err != -ENODEV)
 		return dev_err_probe(&pdev->dev, err,
@@ -3417,6 +3435,9 @@ static void tegra_dc_remove(struct platform_device *pdev)
 	host1x_client_unregister(&dc->client);
 
 	tegra_dc_rgb_remove(dc);
+
+	if (dc->dbi)
+		platform_device_unregister(dc->dbi);
 
 	pm_runtime_disable(&pdev->dev);
 }
