@@ -54,7 +54,17 @@ static int ip_metrics_convert(struct nlattr *fc_mx,
 			NL_SET_ERR_MSG(extack, "Unknown flag set in feature mask in metrics attribute");
 			return -EINVAL;
 		}
+		if ((type == RTAX_CWND || type == RTAX_INITCWND) && !val) {
+			NL_SET_ERR_MSG(extack, "CWND metric must be greater than zero");
+			return -EINVAL;
+		}
 		metrics[type - 1] = val;
+	}
+
+	if ((metrics[RTAX_LOCK - 1] & (1U << RTAX_CWND)) &&
+	    !metrics[RTAX_CWND - 1]) {
+		NL_SET_ERR_MSG(extack, "Locked CWND metric requires a value");
+		return -EINVAL;
 	}
 
 	if (ecn_ca)
