@@ -552,7 +552,7 @@
 			label = "power::white";
 			gpios = <&gpio TEGRA_GPIO(R, 3) GPIO_ACTIVE_HIGH>;
 
-			linux,default-trigger = "battery-charging";
+			linux,default-trigger = "max8971-charger-online";
 
 			color = <LED_COLOR_ID_WHITE>;
 			function = LED_FUNCTION_CHARGING;
