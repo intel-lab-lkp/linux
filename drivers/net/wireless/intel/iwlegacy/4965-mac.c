@@ -6500,6 +6500,7 @@ il4965_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	D_INFO("*** LOAD DRIVER ***\n");
 	il->cfg = cfg;
+	il->wd_timeout = cfg->wd_timeout;
 	il->ops = &il4965_ops;
 #ifdef CONFIG_IWLEGACY_DEBUGFS
 	il->debugfs_ops = &il4965_debugfs_ops;

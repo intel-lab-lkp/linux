@@ -4774,7 +4774,7 @@ il_check_stuck_queue(struct il_priv *il, int cnt)
 
 	timeout =
 	    txq->time_stamp +
-	    msecs_to_jiffies(il->cfg->wd_timeout);
+	    msecs_to_jiffies(READ_ONCE(il->wd_timeout));
 
 	if (time_after(now, timeout)) {
 		IL_ERR("Queue %d stuck for %u ms.\n", q->id,
@@ -4806,7 +4806,7 @@ il_bg_watchdog(struct timer_list *t)
 	if (test_bit(S_EXIT_PENDING, &il->status))
 		return;
 
-	timeout = il->cfg->wd_timeout;
+	timeout = READ_ONCE(il->wd_timeout);
 	if (timeout == 0)
 		return;
 
@@ -4831,7 +4831,7 @@ EXPORT_SYMBOL(il_bg_watchdog);
 void
 il_setup_watchdog(struct il_priv *il)
 {
-	unsigned int timeout = il->cfg->wd_timeout;
+	unsigned int timeout = READ_ONCE(il->wd_timeout);
 
 	if (timeout)
 		mod_timer(&il->watchdog,

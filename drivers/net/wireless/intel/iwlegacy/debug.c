@@ -1284,8 +1284,12 @@ il_dbgfs_wd_timeout_write(struct file *file, const char __user *user_buf,
 	if (timeout < 0 || timeout > IL_MAX_WD_TIMEOUT)
 		timeout = IL_DEF_WD_TIMEOUT;
 
-	il->cfg->wd_timeout = timeout;
-	il_setup_watchdog(il);
+	mutex_lock(&il->mutex);
+	WRITE_ONCE(il->wd_timeout, timeout);
+	if (il->txq)
+		il_setup_watchdog(il);
+	mutex_unlock(&il->mutex);
+
 	return count;
 }
 

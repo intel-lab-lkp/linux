@@ -1129,6 +1129,7 @@ struct il_priv {
 	struct ieee80211_rate *ieee_rates;
 
 	struct il_cfg *cfg;
+	unsigned int wd_timeout;
 	const struct il_ops *ops;
 #ifdef CONFIG_IWLEGACY_DEBUGFS
 	const struct il_debugfs_ops *debugfs_ops;
