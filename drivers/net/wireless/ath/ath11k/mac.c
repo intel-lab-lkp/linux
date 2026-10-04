@@ -3373,7 +3373,8 @@ static int ath11k_mac_config_obss_pd(struct ath11k *ar,
 
 	/* Set and enable SRG/non-SRG OBSS PD Threshold */
 	param_id = WMI_PDEV_PARAM_SET_CMD_OBSS_PD_THRESHOLD;
-	if (test_bit(ATH11K_FLAG_MONITOR_STARTED, &ar->monitor_flags)) {
+	if (test_bit(ATH11K_FLAG_MONITOR_STARTED, &ar->monitor_flags) ||
+	    !he_obss_pd->enable) {
 		ret = ath11k_wmi_pdev_set_param(ar, param_id, 0, pdev_id);
 		if (ret)
 			ath11k_warn(ar->ab,
