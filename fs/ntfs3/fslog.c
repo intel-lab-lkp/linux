@@ -3731,7 +3731,13 @@ move_data:
 		if (!check_lsn(&ib->rhdr, rlsn))
 			goto out;
 		if (!check_index_buffer(ib, bytes) ||
-		    !check_if_alloc_index(hdr, aoff)) {
+		    !check_if_alloc_index(hdr, aoff) || roff > bytes ||
+		    aoff > bytes - roff ||
+		    sizeof(*e) + offsetof(struct ATTR_FILE_NAME, dup) +
+			    sizeof(fname->dup) > bytes - roff - aoff ||
+		    le16_to_cpu(e->size) <
+			    sizeof(*e) + offsetof(struct ATTR_FILE_NAME, dup) +
+				    sizeof(fname->dup)) {
 			goto dirty_vol;
 		}
 
