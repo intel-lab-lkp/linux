@@ -1633,6 +1633,25 @@ static inline void drv_sta_set_decap_offload(struct ieee80211_local *local,
 	trace_drv_return_void(local);
 }
 
+static inline void drv_sta_set_airtime_weight(struct ieee80211_local *local,
+					      struct ieee80211_sub_if_data *sdata,
+					      struct ieee80211_sta *sta,
+					      u16 weight)
+{
+	sdata = get_bss_sdata(sdata);
+
+	might_sleep();
+	lockdep_assert_wiphy(local->hw.wiphy);
+	if (!check_sdata_in_driver(sdata))
+		return;
+
+	trace_drv_sta_set_airtime_weight(local, sdata, sta, weight);
+	if (local->ops->sta_set_airtime_weight)
+		local->ops->sta_set_airtime_weight(&local->hw, &sdata->vif, sta,
+						   weight);
+	trace_drv_return_void(local);
+}
+
 static inline void drv_add_twt_setup(struct ieee80211_local *local,
 				     struct ieee80211_sub_if_data *sdata,
 				     struct ieee80211_sta *sta,
