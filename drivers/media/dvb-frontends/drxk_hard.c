@@ -467,9 +467,9 @@ static int power_up_device(struct drxk_state *state)
 				continue;
 			status = i2c_read1(state, state->demod_address,
 					   &data);
-		} while (status < 0 &&
+		} while (status < 0 && status != -ENODEV &&
 			 (retry_count < DRXK_MAX_RETRIES_POWERUP));
-		if (status < 0 && retry_count >= DRXK_MAX_RETRIES_POWERUP)
+		if (status < 0)
 			goto error;
 	}
 
@@ -992,7 +992,8 @@ static int hi_command(struct drxk_state *state, u16 cmd, u16 *p_result)
 			retry_count += 1;
 			status = read16(state, SIO_HI_RA_RAM_CMD__A,
 					  &wait_cmd);
-		} while ((status < 0 || wait_cmd) && (retry_count < DRXK_MAX_RETRIES));
+		} while ((status < 0 || wait_cmd) && status != -ENODEV &&
+			 (retry_count < DRXK_MAX_RETRIES));
 		if (status < 0)
 			goto error;
 		status = read16(state, SIO_HI_RA_RAM_RES__A, p_result);
@@ -3199,8 +3200,10 @@ static int dvbt_sc_command(struct drxk_state *state,
 		usleep_range(1000, 2000);
 		status = read16(state, OFDM_SC_RA_RAM_CMD__A, &cur_cmd);
 		retry_cnt++;
-	} while ((cur_cmd != 0) && (retry_cnt < DRXK_MAX_RETRIES));
-	if (retry_cnt >= DRXK_MAX_RETRIES && (status < 0))
+	} while ((cur_cmd != 0) && status != -ENODEV &&
+		 (retry_cnt < DRXK_MAX_RETRIES));
+	if (status == -ENODEV ||
+	    (retry_cnt >= DRXK_MAX_RETRIES && status < 0))
 		goto error;
 
 	/* Write sub-command */
@@ -3252,8 +3255,10 @@ static int dvbt_sc_command(struct drxk_state *state,
 		usleep_range(1000, 2000);
 		status = read16(state, OFDM_SC_RA_RAM_CMD__A, &cur_cmd);
 		retry_cnt++;
-	} while ((cur_cmd != 0) && (retry_cnt < DRXK_MAX_RETRIES));
-	if (retry_cnt >= DRXK_MAX_RETRIES && (status < 0))
+	} while ((cur_cmd != 0) && status != -ENODEV &&
+		 (retry_cnt < DRXK_MAX_RETRIES));
+	if (status == -ENODEV ||
+	    (retry_cnt >= DRXK_MAX_RETRIES && status < 0))
 		goto error;
 
 	/* Check for illegal cmd */
