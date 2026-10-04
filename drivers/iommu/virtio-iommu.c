@@ -131,6 +131,19 @@ static bool viommu_device_live(struct viommu_dev *viommu)
 	return !viommu->removed;
 }
 
+/* Does the device hold this domain for at least one endpoint? */
+static bool viommu_domain_has_endpoint(struct viommu_domain *vdomain)
+{
+	unsigned long flags;
+	bool has;
+
+	spin_lock_irqsave(&vdomain->mappings_lock, flags);
+	has = vdomain->nr_endpoints != 0;
+	spin_unlock_irqrestore(&vdomain->mappings_lock, flags);
+
+	return has;
+}
+
 static int viommu_get_req_errno(void *buf, size_t len)
 {
 	struct virtio_iommu_req_tail *tail = buf + len - sizeof(*tail);
@@ -1273,8 +1286,10 @@ static int viommu_iotlb_sync_map(struct iommu_domain *domain,
 	 * May be called before the viommu is initialized including
 	 * while creating direct mapping
 	 */
-	if (!vdomain->nr_endpoints)
+	if (!viommu_domain_has_endpoint(vdomain))
 		return 0;
+
+	/* Wait for this batch's MAPs, whose outcome nobody looks at */
 	return viommu_sync_req(vdomain->viommu);
 }
 
@@ -1286,7 +1301,7 @@ static void viommu_flush_iotlb_all(struct iommu_domain *domain)
 	 * May be called before the viommu is initialized including
 	 * while creating direct mapping
 	 */
-	if (!vdomain->nr_endpoints)
+	if (!viommu_domain_has_endpoint(vdomain))
 		return;
 	viommu_sync_req(vdomain->viommu);
 }
