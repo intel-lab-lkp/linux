@@ -8,9 +8,18 @@
 #include <linux/bio.h>
 #include <linux/buffer_head.h>
 #include <linux/filelock.h>
+#include <linux/hash.h>
+#include <linux/log2.h>
+#include <linux/stringhash.h>
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
+
+struct exfat_name_filter {
+	u32 nr_set_bits;
+	u8 order;
+	unsigned long bitmap[];
+};
 
 static int exfat_extract_uni_name(struct exfat_dentry *ep,
 		unsigned short *uniname)
@@ -63,6 +72,178 @@ static int exfat_get_uniname_from_ext_entry(struct super_block *sb,
 
 	exfat_put_dentry_set(&es, false);
 	return 0;
+}
+
+static u32 exfat_name_filter_hash(struct super_block *sb,
+				  const struct exfat_uni_name *name)
+{
+	unsigned long hash = init_name_hash(NULL);
+	int i;
+
+	for (i = 0; i < name->name_len; i++)
+		hash = partial_name_hash(exfat_toupper(sb, name->name[i]), hash);
+
+	return end_name_hash(hash);
+}
+
+static void exfat_name_filter_indexes(struct super_block *sb,
+				      const struct exfat_uni_name *name,
+				      u8 order,
+				      unsigned int indexes[3])
+{
+	u32 hash = exfat_name_filter_hash(sb, name);
+
+	indexes[0] = hash_32(hash, order);
+	indexes[1] = hash_32(hash ^ 0x9e3779b9U, order);
+	indexes[2] = hash_32(rol32(hash, 16) ^ 0x85ebca6bU,
+			     order);
+}
+
+static u8 exfat_name_filter_order(struct inode *inode)
+{
+	u64 dentries = exfat_bytes_to_dentries(i_size_read(inode));
+	u64 bits;
+
+	dentries = clamp_t(u64, dentries,
+			   EXFAT_NAME_FILTER_MIN_DENTRIES,
+			   MAX_EXFAT_DENTRIES);
+	bits = dentries * EXFAT_NAME_FILTER_BITS_PER_DENTRY;
+
+	return clamp_t(unsigned int, fls64(bits - 1),
+			EXFAT_NAME_FILTER_MIN_ORDER,
+			EXFAT_NAME_FILTER_MAX_ORDER);
+}
+
+static bool exfat_name_filter_set(struct exfat_name_filter *filter,
+				  const unsigned int indexes[3])
+{
+	unsigned long nr_bits = BIT(filter->order);
+	int i;
+
+	for (i = 0; i < 3; i++)
+		if (!__test_and_set_bit(indexes[i], filter->bitmap))
+			filter->nr_set_bits++;
+
+	return filter->nr_set_bits >= nr_bits / 3;
+}
+
+void exfat_name_filter_free(struct inode *inode)
+{
+	struct exfat_inode_info *ei = EXFAT_I(inode);
+
+	kvfree(ei->name_filter);
+	ei->name_filter = NULL;
+}
+
+bool exfat_name_filter_maybe_contains(struct inode *inode,
+				      const struct exfat_uni_name *name)
+{
+	struct exfat_inode_info *ei = EXFAT_I(inode);
+	struct exfat_name_filter *filter = ei->name_filter;
+	unsigned int indexes[3];
+
+	if (!filter)
+		return true;
+
+	exfat_name_filter_indexes(inode->i_sb, name, filter->order, indexes);
+	return test_bit(indexes[0], filter->bitmap) &&
+	       test_bit(indexes[1], filter->bitmap) &&
+	       test_bit(indexes[2], filter->bitmap);
+}
+
+void exfat_name_filter_add(struct inode *inode,
+			   const struct exfat_uni_name *name)
+{
+	struct exfat_inode_info *ei = EXFAT_I(inode);
+	struct exfat_name_filter *filter = ei->name_filter;
+	unsigned int indexes[3];
+
+	if (!filter)
+		return;
+
+	if (exfat_name_filter_order(inode) > filter->order) {
+		exfat_name_filter_free(inode);
+		return;
+	}
+
+	exfat_name_filter_indexes(inode->i_sb, name, filter->order, indexes);
+	if (exfat_name_filter_set(filter, indexes))
+		exfat_name_filter_free(inode);
+}
+
+/*
+ * Build a complete filter only after a directory becomes large enough for
+ * repeated negative linear lookups to matter. A filter hit is never trusted:
+ * it only allows definite misses to skip the on-disk scan.
+ */
+static void exfat_build_name_filter(struct super_block *sb,
+				    struct exfat_inode_info *ei,
+				    struct exfat_chain *p_dir)
+{
+	struct exfat_name_filter *filter;
+	struct exfat_chain clu;
+	unsigned int clu_count = 0;
+	struct inode *inode = &ei->vfs_inode;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	u8 order;
+	int i;
+
+	if (ei->name_filter ||
+	    exfat_bytes_to_dentries(i_size_read(inode)) <
+					EXFAT_NAME_FILTER_MIN_DENTRIES)
+		return;
+
+	order = exfat_name_filter_order(inode);
+	filter = kvzalloc(struct_size(filter, bitmap,
+				      BITS_TO_LONGS(BIT(order))), GFP_NOFS);
+	if (!filter)
+		return;
+	filter->order = order;
+
+	exfat_chain_dup(&clu, p_dir);
+	while (clu.dir != EXFAT_EOF_CLUSTER) {
+		for (i = 0; i < sbi->dentries_per_clu; i++) {
+			struct exfat_uni_name name = { };
+			struct exfat_dentry *ep;
+			struct buffer_head *bh;
+			unsigned int type;
+			unsigned int indexes[3];
+			int len;
+
+			ep = exfat_get_dentry(sb, &clu, i, &bh);
+			if (!ep)
+				goto abort;
+
+			type = exfat_get_entry_type(ep);
+			brelse(bh);
+			if (type == TYPE_UNUSED)
+				goto complete;
+			if (type != TYPE_FILE && type != TYPE_DIR)
+				continue;
+
+			if (exfat_get_uniname_from_ext_entry(sb, &clu, i, name.name))
+				goto abort;
+			for (len = 0; len <= MAX_NAME_LENGTH && name.name[len]; len++)
+				;
+			if (!len || len > MAX_NAME_LENGTH)
+				goto abort;
+			name.name_len = len;
+			exfat_name_filter_indexes(sb, &name, order, indexes);
+			if (exfat_name_filter_set(filter, indexes))
+				goto abort;
+		}
+
+		if (exfat_chain_advance(sb, &clu, 1))
+			goto abort;
+		if (unlikely(++clu_count > EXFAT_DATA_CLUSTER_COUNT(sbi)))
+			goto abort;
+	}
+
+complete:
+	ei->name_filter = filter;
+	return;
+abort:
+	kvfree(filter);
 }
 
 /* read a directory entry from the opened directory */
@@ -1035,6 +1216,8 @@ int exfat_find_dir_entry(struct super_block *sb, struct exfat_inode_info *ei,
 
 	if (num_entries < 0)
 		return num_entries;
+	if (!exfat_name_filter_maybe_contains(&ei->vfs_inode, p_uniname))
+		return -ENOENT;
 
 	dentries_per_clu = sbi->dentries_per_clu;
 
@@ -1195,6 +1378,8 @@ not_found:
 		ei->hint_femp.eidx = p_dir->size * dentries_per_clu;
 		ei->hint_femp.count = 0;
 	}
+
+	exfat_build_name_filter(sb, ei, p_dir);
 
 	/* initialized hint_stat */
 	hint_stat->clu = p_dir->dir;

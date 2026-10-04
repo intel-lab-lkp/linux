@@ -120,6 +120,11 @@ enum {
 #define DIR_CACHE_SIZE		\
 	(DIV_ROUND_UP(ES_MAX_ENTRY_NUM << DENTRY_SIZE_BITS, SECTOR_SIZE) + 1)
 
+#define EXFAT_NAME_FILTER_MIN_DENTRIES	1024
+#define EXFAT_NAME_FILTER_BITS_PER_DENTRY	4
+#define EXFAT_NAME_FILTER_MIN_ORDER	12
+#define EXFAT_NAME_FILTER_MAX_ORDER	25
+
 /* Superblock flags */
 #define EXFAT_FLAGS_SHUTDOWN	1
 
@@ -135,6 +140,8 @@ struct exfat_uni_name {
 	u16 name_hash;
 	unsigned char name_len;
 };
+
+struct exfat_name_filter;
 
 /* directory structure */
 struct exfat_chain {
@@ -285,6 +292,8 @@ struct exfat_inode_info {
 	struct exfat_hint hint_stat;
 	/* hint for first empty entry */
 	struct exfat_hint_femp hint_femp;
+	/* Complete, in-memory Bloom filter of directory names */
+	struct exfat_name_filter *name_filter;
 
 	spinlock_t cache_lru_lock;
 	struct list_head cache_lru;
@@ -619,6 +628,12 @@ int exfat_read_volume_label(struct super_block *sb,
 			    struct exfat_uni_name *label_out);
 int exfat_write_volume_label(struct super_block *sb,
 			     struct exfat_uni_name *label);
+
+bool exfat_name_filter_maybe_contains(struct inode *inode,
+				      const struct exfat_uni_name *name);
+void exfat_name_filter_add(struct inode *inode,
+			   const struct exfat_uni_name *name);
+void exfat_name_filter_free(struct inode *inode);
 
 static inline int exfat_chain_advance(struct super_block *sb,
 		struct exfat_chain *chain, unsigned int step)
