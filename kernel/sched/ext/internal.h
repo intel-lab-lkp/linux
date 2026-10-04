@@ -243,6 +243,19 @@ enum scx_ops_flags {
 	 */
 	SCX_OPS_ENQ_BLOCKED		= 1LLU << 10,
 
+	/*
+	 * If set, drive automatic NUMA hinting-fault scans for tasks owned by
+	 * this scheduler. The faults maintain the tasks' NUMA statistics and
+	 * preferred node, which can be queried with scx_bpf_task_numa_nid(),
+	 * and migrate the memory a task accesses toward the node it runs on, as
+	 * NUMA balancing does for fair tasks. Tasks themselves are never
+	 * migrated: the BPF scheduler remains responsible for placing them.
+	 *
+	 * If clear, sched_ext does not initiate NUMA hinting-fault scans for the
+	 * scheduler's tasks.
+	 */
+	SCX_OPS_NUMA_BALANCING		= 1LLU << 11,
+
 	SCX_OPS_ALL_FLAGS		= SCX_OPS_KEEP_BUILTIN_IDLE |
 					  SCX_OPS_ENQ_LAST |
 					  SCX_OPS_ENQ_EXITING |
@@ -253,7 +266,8 @@ enum scx_ops_flags {
 					  SCX_OPS_ALWAYS_ENQ_IMMED |
 					  SCX_OPS_TID_TO_TASK |
 					  SCX_OPS_LAZY_RESCHED |
-					  SCX_OPS_ENQ_BLOCKED,
+					  SCX_OPS_ENQ_BLOCKED |
+					  SCX_OPS_NUMA_BALANCING,
 
 	/* high 8 bits are internal, don't include in SCX_OPS_ALL_FLAGS */
 	__SCX_OPS_INTERNAL_MASK		= 0xffLLU << 56,
