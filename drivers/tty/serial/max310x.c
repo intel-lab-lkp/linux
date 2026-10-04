@@ -302,6 +302,7 @@ struct max310x_one {
 	struct work_struct	md_work;
 	struct work_struct	rs_work;
 	struct regmap		*regmap;
+	unsigned int		char_time_us;
 	unsigned int		baud;
 	bool			tx_break;	/* break_ctl() owns the transceiver */
 
@@ -1012,6 +1013,7 @@ static void max310x_set_termios(struct uart_port *port,
 				struct ktermios *termios,
 				const struct ktermios *old)
 {
+	unsigned int frame_bits = tty_get_frame_size(termios->c_cflag);
 	unsigned int lcr = 0, flow = 0;
 	int baud;
 
@@ -1124,10 +1126,13 @@ static void max310x_set_termios(struct uart_port *port,
 	uart_update_timeout(port, termios->c_cflag, baud);
 
 	/*
-	 * Cache the new baud rate and reprogram the RS485 RTS delays, whose
-	 * millisecond-to-bit-time conversion depends on it.
+	 * Cache the new baud rate and the time it takes to clock out one
+	 * character before reprogramming the RS485 RTS delays: the
+	 * millisecond-to-bit-time conversion divides by the baud rate.
 	 */
 	to_max310x_port(port)->baud = baud;
+	to_max310x_port(port)->char_time_us =
+		DIV_ROUND_UP(USEC_PER_SEC * frame_bits, baud);
 	max310x_set_rts_ctl_params(to_max310x_port(port));
 }
 
@@ -1223,6 +1228,22 @@ static int max310x_startup(struct uart_port *port)
 
 static void max310x_shutdown(struct uart_port *port)
 {
+	struct max310x_one *one = to_max310x_port(port);
+	unsigned int tries = port->fifosize + 1;
+
+	/*
+	 * The tty layer's wait-until-sent is bounded by closing_wait, which
+	 * can be configured to none, and a hangup reaches here with no wait
+	 * at all, so the FIFO may still hold anything up to its full size.
+	 * tx_empty() also only reflects the chip TX FIFO - the last character
+	 * may still be in the transmit shift register. Let the FIFO drain and
+	 * the final character clock out before the port is powered down,
+	 * otherwise the transfer is truncated on the wire.
+	 */
+	while (!max310x_tx_empty(port) && tries-- > 0)
+		fsleep(one->char_time_us);
+	fsleep(one->char_time_us);
+
 	/* Disable all interrupts */
 	max310x_port_write(port, MAX310X_IRQEN_REG, 0);
 
