@@ -663,14 +663,23 @@ static void x86_vector_debug_show(struct seq_file *m, struct irq_domain *d,
 
 int x86_fwspec_is_ioapic(struct irq_fwspec *fwspec)
 {
+	const char *fwname;
+	unsigned int val;
+
 	if (fwspec->param_count != 1)
 		return 0;
 
 	if (is_fwnode_irqchip(fwspec->fwnode)) {
-		const char *fwname = fwnode_get_name(fwspec->fwnode);
-		return fwname && !strncmp(fwname, "IO-APIC-", 8) &&
-			simple_strtol(fwname+8, NULL, 10) == fwspec->param[0];
+		fwname = fwnode_get_name(fwspec->fwnode);
+
+		if (fwname && !strncmp(fwname, "IO-APIC-", 8) &&
+		    kstrtouint(fwname + 8, 10, &val) == 0 &&
+		    val == fwspec->param[0]) {
+			return 1;
+		}
+		return 0;
 	}
+
 	return to_of_node(fwspec->fwnode) &&
 		of_device_is_compatible(to_of_node(fwspec->fwnode),
 					"intel,ce4100-ioapic");
