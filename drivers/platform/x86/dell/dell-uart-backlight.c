@@ -51,7 +51,7 @@
 #define MAX_RESP_LEN			80
 
 struct dell_uart_backlight {
-	struct mutex mutex;
+	struct mutex mutex; /* Protects command + response state below */
 	wait_queue_head_t wait_queue;
 	struct device *dev;
 	struct backlight_device *bl;
@@ -60,6 +60,7 @@ struct dell_uart_backlight {
 	u8 resp_len;
 	u8 resp_max_len;
 	u8 pending_cmd;
+	bool resync_used;
 	int status;
 	int power;
 };
@@ -91,6 +92,7 @@ static int dell_uart_bl_command(struct dell_uart_backlight *dell_bl,
 	dell_bl->resp_len = -1; /* Invalid / unset */
 	dell_bl->resp_max_len = resp_max_len;
 	dell_bl->pending_cmd = cmd[1];
+	dell_bl->resync_used = false;
 
 	/* The TTY buffer should be big enough to take the entire cmd in one go */
 	ret = serdev_device_write_buf(to_serdev_device(dell_bl->dev), cmd, cmd_len);
@@ -208,8 +210,10 @@ static const struct backlight_ops dell_uart_backlight_ops = {
 static size_t dell_uart_bl_receive(struct serdev_device *serdev, const u8 *data, size_t len)
 {
 	struct dell_uart_backlight *dell_bl = serdev_device_get_drvdata(serdev);
+	const int max_passes = 2;
 	size_t i;
 	u8 csum;
+	int pass;
 
 	dev_dbg(dell_bl->dev, "Recv: %*ph\n", (int)len, data);
 
@@ -220,42 +224,70 @@ static size_t dell_uart_bl_receive(struct serdev_device *serdev, const u8 *data,
 	}
 
 	i = 0;
-	while (i < len && dell_bl->resp_idx != dell_bl->resp_len) {
-		dell_bl->resp[dell_bl->resp_idx] = data[i++];
+	for (pass = 0; pass < max_passes; pass++) {
+		while (i < len && dell_bl->resp_idx != dell_bl->resp_len) {
+			dell_bl->resp[dell_bl->resp_idx] = data[i++];
 
-		switch (dell_bl->resp_idx) {
-		case RESP_LEN: /* Length byte */
-			dell_bl->resp_len = dell_bl->resp[RESP_LEN];
-			if (dell_bl->resp_len < MIN_RESP_LEN ||
-			    dell_bl->resp_len > dell_bl->resp_max_len) {
-				dev_err(dell_bl->dev, "Response length %d out if range %d - %d\n",
-					dell_bl->resp_len, MIN_RESP_LEN, dell_bl->resp_max_len);
-				dell_bl->status = -EIO;
-				goto wakeup;
+			switch (dell_bl->resp_idx) {
+			case RESP_LEN: /* Length byte */
+				dell_bl->resp_len = dell_bl->resp[RESP_LEN];
+				if (dell_bl->resp_len < MIN_RESP_LEN ||
+				    dell_bl->resp_len > dell_bl->resp_max_len) {
+					dev_err(dell_bl->dev,
+						"Response length %d out if range %d - %d\n",
+						dell_bl->resp_len, MIN_RESP_LEN,
+						dell_bl->resp_max_len);
+					dell_bl->status = -EIO;
+					goto wakeup;
+				}
+				break;
+			case RESP_CMD: /* CMD byte */
+				if (dell_bl->resp[RESP_CMD] != dell_bl->pending_cmd) {
+					dev_err(dell_bl->dev, "Response cmd 0x%02x != pending 0x%02x\n",
+						dell_bl->resp[RESP_CMD], dell_bl->pending_cmd);
+					dell_bl->status = -EIO;
+					goto wakeup;
+				}
+				break;
 			}
-			break;
-		case RESP_CMD: /* CMD byte */
-			if (dell_bl->resp[RESP_CMD] != dell_bl->pending_cmd) {
-				dev_err(dell_bl->dev, "Response cmd 0x%02x != pending 0x%02x\n",
-					dell_bl->resp[RESP_CMD], dell_bl->pending_cmd);
-				dell_bl->status = -EIO;
-				goto wakeup;
-			}
-			break;
+			dell_bl->resp_idx++;
 		}
-		dell_bl->resp_idx++;
-	}
 
-	if (dell_bl->resp_idx != dell_bl->resp_len)
-		return len; /* Response not complete yet */
+		if (dell_bl->resp_idx != dell_bl->resp_len)
+			return i; /* Response not complete yet, wait for more data */
 
-	csum = dell_uart_checksum(dell_bl->resp, dell_bl->resp_len - 1);
-	if (dell_bl->resp[dell_bl->resp_len - 1] == csum) {
-		dell_bl->status = 0; /* Success */
-	} else {
+		csum = dell_uart_checksum(dell_bl->resp, dell_bl->resp_len - 1);
+		if (dell_bl->resp[dell_bl->resp_len - 1] == csum) {
+			dell_bl->status = 0; /* Success */
+			dev_dbg(dell_bl->dev,
+				"Response OK for cmd 0x%02x, len %d: %*ph\n",
+				dell_bl->pending_cmd, dell_bl->resp_len,
+				dell_bl->resp_len, dell_bl->resp);
+			goto wakeup;
+		}
+
+		/*
+		 * Some EC firmware inserts a stray byte right after the cmd-echo
+		 * byte. Try once to drop it and re-fetch the checksum byte from the wire.
+		 */
+		if (!dell_bl->resync_used && dell_bl->resp_len > MIN_RESP_LEN) {
+			dell_bl->resync_used = true;
+
+			dev_warn(dell_bl->dev,
+				 "Checksum mismatch got 0x%02x expected 0x%02x, dropping stray byte 0x%02x at offset %d\n",
+				 dell_bl->resp[dell_bl->resp_len - 1], csum,
+				 dell_bl->resp[RESP_DATA], RESP_DATA);
+
+			memmove(&dell_bl->resp[RESP_DATA], &dell_bl->resp[RESP_DATA + 1],
+				dell_bl->resp_len - RESP_DATA - 1);
+			dell_bl->resp_idx = dell_bl->resp_len - 1;
+			continue; /* re-fetch the last (checksum) byte and re-validate */
+		}
+
 		dev_err(dell_bl->dev, "Checksum mismatch got 0x%02x expected 0x%02x\n",
 			dell_bl->resp[dell_bl->resp_len - 1], csum);
 		dell_bl->status = -EIO;
+		goto wakeup;
 	}
 wakeup:
 	wake_up(&dell_bl->wait_queue);
