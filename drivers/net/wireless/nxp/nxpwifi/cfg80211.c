@@ -10,6 +10,7 @@
 #include "cmdevt.h"
 #include "11n.h"
 #include "wmm.h"
+#include "vendor.h"
 
 static const struct ieee80211_iface_limit nxpwifi_ap_sta_limits[] = {
 	{
@@ -91,7 +92,7 @@ u8 nxpwifi_get_chan_type(struct nxpwifi_private *priv)
 }
 
 /* Retrieve the driver private data from the wiphy */
-static void *nxpwifi_cfg80211_get_adapter(struct wiphy *wiphy)
+void *nxpwifi_cfg80211_get_adapter(struct wiphy *wiphy)
 {
 	return (void *)(*(unsigned long *)wiphy_priv(wiphy));
 }
@@ -3833,6 +3834,8 @@ int nxpwifi_register_cfg80211(struct nxpwifi_adapter *adapter)
 	/* Initialize cipher suits */
 	wiphy->cipher_suites = nxpwifi_cipher_suites;
 	wiphy->n_cipher_suites = ARRAY_SIZE(nxpwifi_cipher_suites);
+
+	nxpwifi_set_vendor_commands(wiphy);
 
 	if (adapter->regd) {
 		wiphy->regulatory_flags |= REGULATORY_CUSTOM_REG |
