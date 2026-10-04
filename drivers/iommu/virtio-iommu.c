@@ -54,10 +54,18 @@ struct viommu_dev {
 	u32				probe_size;
 };
 
+struct viommu_request;
+
 struct viommu_mapping {
 	phys_addr_t			paddr;
 	struct interval_tree_node	iova;
 	u32				flags;
+	/*
+	 * The request that will carry this mapping's UNMAP, allocated with the
+	 * mapping: the unmap path must not allocate, since the caller may free
+	 * the memory as soon as it returns (see iommu_unmap_nofail()).
+	 */
+	struct viommu_request		*unmap_req;
 };
 
 struct viommu_domain {
@@ -296,6 +304,29 @@ static int viommu_add_req(struct viommu_dev *viommu, void *buf, size_t len)
 	return ret;
 }
 
+/* Queue a request whose object was allocated earlier (the unmap path) */
+static int viommu_queue_prealloc_req(struct viommu_dev *viommu,
+				     struct viommu_request *req, void *buf,
+				     size_t len)
+{
+	off_t write_offset;
+	unsigned long flags;
+	int ret;
+
+	write_offset = viommu_get_write_desc_offset(viommu, buf, len);
+	if (write_offset <= 0)
+		return -EINVAL;
+
+	spin_lock_irqsave(&viommu->request_lock, flags);
+	req->len = len;
+	req->writeback = NULL;
+	memcpy(req->buf, buf, write_offset);
+	ret = __viommu_queue_req(viommu, req, write_offset);
+	spin_unlock_irqrestore(&viommu->request_lock, flags);
+
+	return ret;
+}
+
 /*
  * Send a request and wait for it to complete. Return the request status (as an
  * errno)
@@ -360,6 +391,19 @@ static int viommu_add_mapping(struct viommu_domain *vdomain, u64 iova, u64 end,
 	if (!mapping)
 		return -ENOMEM;
 
+	/*
+	 * The UNMAP request object, allocated here: the unmap path may not
+	 * allocate (iommu_unmap_nofail()), so the failure is paid for by the
+	 * caller that is mapping, which is allowed to fail.
+	 */
+	mapping->unmap_req = kzalloc_flex(*mapping->unmap_req, buf,
+					  sizeof(struct virtio_iommu_req_unmap),
+					  GFP_ATOMIC);
+	if (!mapping->unmap_req) {
+		kfree(mapping);
+		return -ENOMEM;
+	}
+
 	mapping->paddr		= paddr;
 	mapping->iova.start	= iova;
 	mapping->iova.last	= end;
@@ -387,6 +431,7 @@ static int viommu_add_mapping(struct viommu_domain *vdomain, u64 iova, u64 end,
 		if (ret) {
 			interval_tree_remove(&mapping->iova, &vdomain->mappings);
 			spin_unlock_irqrestore(&vdomain->mappings_lock, irqflags);
+			kfree(mapping->unmap_req);
 			kfree(mapping);
 			return ret;
 		}
@@ -414,7 +459,7 @@ static size_t viommu_del_mappings(struct viommu_domain *vdomain,
 {
 	size_t unmapped = 0;
 	unsigned long flags;
-	bool spanning = false;
+	struct viommu_request *span_req = NULL;
 	u64 span_start = 0, span_end = 0;
 	struct interval_tree_node *node, *next;
 
@@ -445,48 +490,72 @@ static size_t viommu_del_mappings(struct viommu_domain *vdomain,
 		 * range is the mappings' own: the caller's requested range can
 		 * begin or end inside another mapping and would then invalidate
 		 * nothing at all, and a range spanning a gap would drop a
-		 * mapping that is not being removed.
+		 * mapping that is not being removed.  The request object was
+		 * allocated with the first mapping of the run, so this cannot
+		 * fail for lack of memory.
 		 */
 		if (queue_unmap && vdomain->nr_endpoints) {
-			if (spanning && mapping->iova.start == span_end + 1) {
+			if (span_req && mapping->iova.start == span_end + 1) {
 				span_end = mapping->iova.last;
+				/* this mapping's object is not needed */
+				kfree(mapping->unmap_req);
+				mapping->unmap_req = NULL;
 			} else {
-				if (spanning) {
-					struct virtio_iommu_req_unmap unmap = {
-						.head.type	= VIRTIO_IOMMU_T_UNMAP,
-						.domain		= cpu_to_le32(vdomain->id),
-						.virt_start	= cpu_to_le64(span_start),
-						.virt_end	= cpu_to_le64(span_end),
-					};
+				struct virtio_iommu_req_unmap unmap = {
+					.head.type	= VIRTIO_IOMMU_T_UNMAP,
+					.domain		= cpu_to_le32(vdomain->id),
+					.virt_start	= cpu_to_le64(span_start),
+					.virt_end	= cpu_to_le64(span_end),
+				};
 
-					if (viommu_add_req(vdomain->viommu, &unmap,
-							   sizeof(unmap))) {
+				if (span_req) {
+					struct viommu_request *req = span_req;
+
+					span_req = NULL;
+					if (viommu_queue_prealloc_req(vdomain->viommu,
+								      req, &unmap,
+								      sizeof(unmap))) {
+						/*
+						 * The request object was
+						 * already there, so this is
+						 * not an allocation failure:
+						 * the run is not unmapped on
+						 * the device, and the caller
+						 * is told so.
+						 */
+						kfree(req);
 						unmapped -= span_end - span_start + 1;
 						dev_warn_ratelimited(vdomain->viommu->dev,
 								     "could not queue an unmap\n");
 						goto out;
 					}
 				}
-				spanning = true;
+				span_req = mapping->unmap_req;
 				span_start = mapping->iova.start;
 				span_end = mapping->iova.last;
+				mapping->unmap_req = NULL;
 			}
 		}
 
 		interval_tree_remove(node, &vdomain->mappings);
+		kfree(mapping->unmap_req);
 		kfree(mapping);
 		unmapped += size;
 	}
 
-	if (spanning) {
+	if (span_req) {
 		struct virtio_iommu_req_unmap unmap = {
 			.head.type	= VIRTIO_IOMMU_T_UNMAP,
 			.domain		= cpu_to_le32(vdomain->id),
 			.virt_start	= cpu_to_le64(span_start),
 			.virt_end	= cpu_to_le64(span_end),
 		};
+		struct viommu_request *req = span_req;
 
-		if (viommu_add_req(vdomain->viommu, &unmap, sizeof(unmap))) {
+		span_req = NULL;
+		if (viommu_queue_prealloc_req(vdomain->viommu, req, &unmap,
+					      sizeof(unmap))) {
+			kfree(req);
 			unmapped -= span_end - span_start + 1;
 			dev_warn_ratelimited(vdomain->viommu->dev,
 					     "could not queue an unmap\n");
