@@ -3644,6 +3644,14 @@ static void numa_migrate_preferred(struct task_struct *p)
 	if (task_node(p) == p->numa_preferred_nid)
 		return;
 
+	/*
+	 * A task under a BPF scheduler is placed by that scheduler. Keep the
+	 * statistics coming, which is what makes p->numa_preferred_nid worth
+	 * reading, but leave the placement alone.
+	 */
+	if (task_on_scx(p))
+		return;
+
 	/* Otherwise, try migrate to a CPU on the preferred node */
 	task_numa_migrate(p);
 }
