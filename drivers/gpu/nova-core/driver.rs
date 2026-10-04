@@ -24,10 +24,7 @@ use kernel::{
 
 use crate::{
     api::NovaCoreApi,
-    gpu::{
-        Gpu,
-        Spec, //
-    }, //
+    gpu::Gpu, //
 };
 
 /// Counter for generating unique auxiliary device IDs.
@@ -121,7 +118,7 @@ impl pci::Driver for NovaCoreDriver {
             // Run self-tests that do not depend on the `Gpu` instance.
             #[cfg(CONFIG_NOVA_CORE_SELFTESTS)]
             _: {
-                let spec = Spec::new(pdev.as_ref(), bar)?;
+                let spec = crate::gpu::Spec::new(pdev.as_ref(), bar)?;
 
                 // We must wait for GFW_BOOT completion before doing any significant setup on
                 // the GPU.
