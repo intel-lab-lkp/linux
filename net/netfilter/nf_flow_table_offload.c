@@ -984,7 +984,7 @@ static void flow_offload_work_add(struct flow_offload_work *offload)
 		goto out;
 
 	set_bit(IPS_HW_OFFLOAD_BIT, &offload->flow->ct->status);
-
+	set_bit(NF_FLOW_HW, &offload->flow->flags);
 out:
 	nf_flow_offload_destroy(flow_rule);
 }
@@ -1129,7 +1129,6 @@ void nf_flow_offload_add(struct nf_flowtable *flowtable,
 	if (nf_flow_offload_unsupported(flow))
 		return;
 
-	set_bit(NF_FLOW_HW, &flow->flags);
 	nf_flow_offload_refresh(flowtable, flow);
 }
 
