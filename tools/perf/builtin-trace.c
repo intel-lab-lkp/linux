@@ -4857,6 +4857,72 @@ out_errno:
 	goto out_put_evlist;
 }
 
+#if defined(HAVE_LIBTRACEEVENT) && \
+	defined(LIBTRACEEVENT_VERSION) && \
+	(MAKE_LIBTRACEEVENT_VERSION(1, 7, 0) <= LIBTRACEEVENT_VERSION)
+static void tep_print_arg__set_bitmask_list(struct tep_print_arg *arg)
+{
+	for (; arg; arg = arg->next) {
+		switch ((int)arg->type) {
+		case TEP_PRINT_BITMASK:
+			arg->type = TEP_PRINT_CPUMASK;
+			break;
+		case TEP_PRINT_OP:
+			tep_print_arg__set_bitmask_list(arg->op.left);
+			tep_print_arg__set_bitmask_list(arg->op.right);
+			break;
+		case TEP_PRINT_FUNC:
+			tep_print_arg__set_bitmask_list(arg->func.args);
+			break;
+		case TEP_PRINT_FLAGS:
+			tep_print_arg__set_bitmask_list(arg->flags.field);
+			break;
+		case TEP_PRINT_SYMBOL:
+			tep_print_arg__set_bitmask_list(arg->symbol.field);
+			break;
+		case TEP_PRINT_HEX:
+		case TEP_PRINT_HEX_STR:
+			tep_print_arg__set_bitmask_list(arg->hex.field);
+			tep_print_arg__set_bitmask_list(arg->hex.size);
+			break;
+		case TEP_PRINT_INT_ARRAY:
+			tep_print_arg__set_bitmask_list(arg->int_array.field);
+			tep_print_arg__set_bitmask_list(arg->int_array.count);
+			tep_print_arg__set_bitmask_list(arg->int_array.el_size);
+			break;
+		case TEP_PRINT_TYPE:
+			tep_print_arg__set_bitmask_list(arg->typecast.item);
+			break;
+		case TEP_PRINT_DYNAMIC_ARRAY:
+			tep_print_arg__set_bitmask_list(arg->dynarray.index);
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+static void trace__init_tp_bitmask_list(struct trace *trace, struct evlist *evlist)
+{
+	struct evsel *evsel;
+
+	if (!trace->libtraceevent_print || !trace->bitmask_list)
+		return;
+
+	evlist__for_each_entry(evlist, evsel) {
+		struct tep_event *tp_format = evsel__tp_format(evsel);
+
+		if (tp_format)
+			tep_print_arg__set_bitmask_list(tp_format->print_fmt.args);
+	}
+}
+#else
+static void trace__init_tp_bitmask_list(struct trace *trace __maybe_unused,
+					struct evlist *evlist __maybe_unused)
+{
+}
+#endif
+
 static int trace__replay(struct trace *trace)
 {
 	const struct evsel_str_handler handlers[] = {
@@ -4907,6 +4973,8 @@ static int trace__replay(struct trace *trace)
 	err = perf_session__set_tracepoints_handlers(session, handlers);
 	if (err)
 		goto out;
+
+	trace__init_tp_bitmask_list(trace, session->evlist);
 
 	evsel = evlist__find_tracepoint_by_name(session->evlist, "raw_syscalls:sys_enter");
 	trace->syscalls.events.sys_enter = evsel;
@@ -5814,6 +5882,8 @@ skip_augmentation:
 
 		if (use_btf)
 			trace__load_vmlinux_btf(&trace);
+
+		trace__init_tp_bitmask_list(&trace, trace.evlist);
 	}
 
 	/*
