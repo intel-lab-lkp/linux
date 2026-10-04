@@ -706,7 +706,8 @@ static void tipc_topsrv_stop(struct net *net)
 		if (con) {
 			conn_get(con);
 			spin_unlock_bh(&srv->idr_lock);
-			tipc_conn_close(con);
+			if (con->sock)
+				tipc_conn_close(con);
 			conn_put(con);
 			spin_lock_bh(&srv->idr_lock);
 		}
