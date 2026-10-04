@@ -143,6 +143,9 @@ struct ssp_sensorhub_info {
  * @spi:		spi device
  * @sensorhub_info:	info about sensorhub board specific features
  * @wdt_timer:		watchdog timer
+ * @wdt_lock:		lock protecting watchdog timer state
+ * @wdt_enabled:		watchdog timer is allowed to rearm
+ * @wdt_suspended:	watchdog timer is stopped for system suspend
  * @work_wdt:		watchdog work
  * @work_firmware:	firmware upgrade work queue
  * @work_refresh:	refresh work queue for reset request from MCU
@@ -180,6 +183,9 @@ struct ssp_data {
 	struct spi_device *spi;
 	const struct ssp_sensorhub_info *sensorhub_info;
 	struct timer_list wdt_timer;
+	struct mutex wdt_lock; /* protects watchdog timer state */
+	bool wdt_enabled;
+	bool wdt_suspended;
 	struct work_struct work_wdt;
 	struct delayed_work work_refresh;
 

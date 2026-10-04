@@ -179,17 +179,53 @@ static void ssp_wdt_timer_func(struct timer_list *t)
 	    data->com_fail_cnt > SSP_LIMIT_RESET_CNT)
 		queue_work(system_power_efficient_wq, &data->work_wdt);
 _mod:
+	if (READ_ONCE(data->wdt_enabled))
+		mod_timer(&data->wdt_timer,
+			  jiffies + msecs_to_jiffies(SSP_WDT_TIME));
+}
+
+static void __ssp_enable_wdt_timer(struct ssp_data *data)
+{
+	if (data->wdt_suspended)
+		return;
+
+	WRITE_ONCE(data->wdt_enabled, true);
 	mod_timer(&data->wdt_timer, jiffies + msecs_to_jiffies(SSP_WDT_TIME));
 }
 
-static void ssp_enable_wdt_timer(struct ssp_data *data)
+static void __ssp_stop_wdt_timer(struct ssp_data *data, bool shutdown)
 {
-	mod_timer(&data->wdt_timer, jiffies + msecs_to_jiffies(SSP_WDT_TIME));
+	WRITE_ONCE(data->wdt_enabled, false);
+	if (shutdown)
+		timer_shutdown_sync(&data->wdt_timer);
+	else
+		timer_delete_sync(&data->wdt_timer);
 }
 
-static void ssp_disable_wdt_timer(struct ssp_data *data)
+static void ssp_suspend_wdt_timer(struct ssp_data *data)
 {
-	timer_delete_sync(&data->wdt_timer);
+	mutex_lock(&data->wdt_lock);
+	data->wdt_suspended = true;
+	__ssp_stop_wdt_timer(data, false);
+	mutex_unlock(&data->wdt_lock);
+	cancel_work_sync(&data->work_wdt);
+}
+
+static void ssp_resume_wdt_timer(struct ssp_data *data)
+{
+	mutex_lock(&data->wdt_lock);
+	data->wdt_suspended = false;
+	if (atomic_read(&data->enable_refcount) > 0)
+		__ssp_enable_wdt_timer(data);
+	mutex_unlock(&data->wdt_lock);
+}
+
+static void ssp_shutdown_wdt_timer(struct ssp_data *data)
+{
+	mutex_lock(&data->wdt_lock);
+	data->wdt_suspended = true;
+	__ssp_stop_wdt_timer(data, true);
+	mutex_unlock(&data->wdt_lock);
 	cancel_work_sync(&data->work_wdt);
 }
 
@@ -258,8 +294,10 @@ int ssp_enable_sensor(struct ssp_data *data, enum ssp_sensor_type type,
 
 	data->delay_buf[type] = delay;
 
+	mutex_lock(&data->wdt_lock);
 	if (atomic_inc_return(&data->enable_refcount) == 1)
-		ssp_enable_wdt_timer(data);
+		__ssp_enable_wdt_timer(data);
+	mutex_unlock(&data->wdt_lock);
 
 	return 0;
 
@@ -310,6 +348,7 @@ EXPORT_SYMBOL_NS(ssp_change_delay, "IIO_SSP_SENSORS");
 int ssp_disable_sensor(struct ssp_data *data, enum ssp_sensor_type type)
 {
 	int ret;
+	bool stop_wdt = false;
 	__le32 command;
 
 	if (data->sensor_enable & BIT(type)) {
@@ -329,8 +368,14 @@ int ssp_disable_sensor(struct ssp_data *data, enum ssp_sensor_type type)
 
 	data->check_status[type] = SSP_ADD_SENSOR_STATE;
 
+	mutex_lock(&data->wdt_lock);
 	if (atomic_dec_and_test(&data->enable_refcount))
-		ssp_disable_wdt_timer(data);
+		stop_wdt = true;
+	if (stop_wdt)
+		__ssp_stop_wdt_timer(data, false);
+	mutex_unlock(&data->wdt_lock);
+	if (stop_wdt)
+		cancel_work_sync(&data->work_wdt);
 
 	return 0;
 }
@@ -510,6 +555,7 @@ static int ssp_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, data);
 
 	mutex_init(&data->comm_lock);
+	mutex_init(&data->wdt_lock);
 
 	for (i = 0; i < SSP_SENSOR_MAX; ++i) {
 		data->delay_buf[i] = SSP_DEFAULT_POLLING_DELAY;
@@ -566,6 +612,7 @@ err_read_reg:
 	free_irq(data->spi->irq, data);
 err_setup_irq:
 	mutex_destroy(&data->pending_lock);
+	mutex_destroy(&data->wdt_lock);
 	mutex_destroy(&data->comm_lock);
 err_setup_spi:
 	mfd_remove_devices(&spi->dev);
@@ -584,20 +631,18 @@ static void ssp_remove(struct spi_device *spi)
 			"SSP_MSG2SSP_AP_STATUS_SHUTDOWN failed\n");
 
 	ssp_enable_mcu(data, false);
-	ssp_disable_wdt_timer(data);
+	ssp_shutdown_wdt_timer(data);
 
 	ssp_clean_pending_list(data);
 
 	free_irq(data->spi->irq, data);
 	cancel_delayed_work_sync(&data->work_refresh);
 
-	timer_delete_sync(&data->wdt_timer);
-	cancel_work_sync(&data->work_wdt);
+	mfd_remove_devices(&spi->dev);
 
 	mutex_destroy(&data->comm_lock);
+	mutex_destroy(&data->wdt_lock);
 	mutex_destroy(&data->pending_lock);
-
-	mfd_remove_devices(&spi->dev);
 }
 
 static int ssp_suspend(struct device *dev)
@@ -607,15 +652,14 @@ static int ssp_suspend(struct device *dev)
 
 	data->last_resume_state = SSP_MSG2SSP_AP_STATUS_SUSPEND;
 
-	if (atomic_read(&data->enable_refcount) > 0)
-		ssp_disable_wdt_timer(data);
+	ssp_suspend_wdt_timer(data);
 
 	ret = ssp_command(data, SSP_MSG2SSP_AP_STATUS_SUSPEND, 0);
 	if (ret < 0) {
 		dev_err(&data->spi->dev,
 			"%s SSP_MSG2SSP_AP_STATUS_SUSPEND failed\n", __func__);
 
-		ssp_enable_wdt_timer(data);
+		ssp_resume_wdt_timer(data);
 		return ret;
 	}
 
@@ -632,16 +676,14 @@ static int ssp_resume(struct device *dev)
 
 	enable_irq(data->spi->irq);
 
-	if (atomic_read(&data->enable_refcount) > 0)
-		ssp_enable_wdt_timer(data);
-
 	ret = ssp_command(data, SSP_MSG2SSP_AP_STATUS_RESUME, 0);
 	if (ret < 0) {
 		dev_err(&data->spi->dev,
 			"%s SSP_MSG2SSP_AP_STATUS_RESUME failed\n", __func__);
-		ssp_disable_wdt_timer(data);
 		return ret;
 	}
+
+	ssp_resume_wdt_timer(data);
 
 	/* timesyncing is set by MCU */
 	data->last_resume_state = SSP_MSG2SSP_AP_STATUS_RESUME;
