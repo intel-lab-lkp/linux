@@ -104,6 +104,7 @@ modules.order
 #
 # pacman files (make pacman-pkg)
 #
+/*.pkg.*.sig
 /PKGBUILD
 /pacman/
 
