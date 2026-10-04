@@ -1163,6 +1163,22 @@ config SCSI_LPFC_DEBUG_FS
 	  This makes debugging information from the lpfc driver
 	  available via the debugfs filesystem.
 
+config LPFC_MBOX_KUNIT_TEST
+	bool "KUnit tests for LPFC mailbox ownership" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y && SCSI_LPFC=y
+	default KUNIT_ALL_TESTS
+	help
+	  Build KUnit tests for synchronous LPFC mailbox wait and completion
+	  ownership, including the SFP page dump. The tests use a fake issue
+	  callback and a one-element memory pool, so they do not require an
+	  LPFC adapter. They are built into LPFC to exercise its non-exported
+	  mailbox callbacks.
+
+	  For more information on KUnit and unit tests in general, please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 source "drivers/scsi/elx/Kconfig"
 
 config SCSI_SIM710
