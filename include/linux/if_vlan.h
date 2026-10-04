@@ -231,6 +231,31 @@ vlan_dev_get_egress_qos_mask(struct net_device *dev, u32 skprio)
 	return vlan_qos;
 }
 
+static inline void vlan_dev_sw_netstats_rx_add(struct net_device *dev,
+					       unsigned int len)
+{
+	struct vlan_pcpu_stats *stats;
+
+	stats = this_cpu_ptr(vlan_dev_priv(dev)->vlan_pcpu_stats);
+	u64_stats_update_begin(&stats->syncp);
+	u64_stats_inc(&stats->rx_packets);
+	u64_stats_add(&stats->rx_bytes, len);
+	u64_stats_update_end(&stats->syncp);
+}
+
+static inline void vlan_dev_sw_netstats_tx_add(struct net_device *dev,
+					       unsigned int packets,
+					       unsigned int len)
+{
+	struct vlan_pcpu_stats *stats;
+
+	stats = this_cpu_ptr(vlan_dev_priv(dev)->vlan_pcpu_stats);
+	u64_stats_update_begin(&stats->syncp);
+	u64_stats_add(&stats->tx_packets, packets);
+	u64_stats_add(&stats->tx_bytes, len);
+	u64_stats_update_end(&stats->syncp);
+}
+
 extern bool vlan_do_receive(struct sk_buff **skb);
 
 extern int vlan_vid_add(struct net_device *dev, __be16 proto, u16 vid);
@@ -247,6 +272,17 @@ extern bool vlan_uses_dev(const struct net_device *dev);
 static inline bool is_vlan_dev(const struct net_device *dev)
 {
 	return false;
+}
+
+static inline void vlan_dev_sw_netstats_rx_add(struct net_device *dev,
+					       unsigned int len)
+{
+}
+
+static inline void vlan_dev_sw_netstats_tx_add(struct net_device *dev,
+					       unsigned int packets,
+					       unsigned int len)
+{
 }
 
 static inline struct net_device *
