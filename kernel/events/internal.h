@@ -48,6 +48,12 @@ struct perf_buffer {
 	int				aux_nr_pages;
 	int				aux_overwrite;
 	refcount_t			aux_mmap_count;
+	/*
+	 * In-kernel AUX owner reference, set by perf_event_setup_aux():
+	 * admits writers and ties the AUX teardown to
+	 * perf_event_release_aux() when no userspace mmap holds the buffer.
+	 */
+	refcount_t			aux_kernel_count;
 	unsigned long			aux_mmap_locked;
 	void				(*free_aux)(void *);
 	refcount_t			aux_refcount;
