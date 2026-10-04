@@ -307,30 +307,9 @@ static int mpc5121_rtc_probe(struct platform_device *op)
 
 	platform_set_drvdata(op, rtc);
 
-	rtc->irq = irq_of_parse_and_map(op->dev.of_node, 1);
-	err = devm_request_irq(&op->dev, rtc->irq, mpc5121_rtc_handler, 0,
-			       "mpc5121-rtc", &op->dev);
-	if (err) {
-		dev_err(&op->dev, "%s: could not request irq: %i\n",
-							__func__, rtc->irq);
-		goto out_dispose;
-	}
-
-	rtc->irq_periodic = irq_of_parse_and_map(op->dev.of_node, 0);
-	err = devm_request_irq(&op->dev, rtc->irq_periodic,
-			       mpc5121_rtc_handler_upd, 0, "mpc5121-rtc_upd",
-			       &op->dev);
-	if (err) {
-		dev_err(&op->dev, "%s: could not request irq: %i\n",
-						__func__, rtc->irq_periodic);
-		goto out_dispose2;
-	}
-
 	rtc->rtc = devm_rtc_allocate_device(&op->dev);
-	if (IS_ERR(rtc->rtc)) {
-		err = PTR_ERR(rtc->rtc);
-		goto out_dispose2;
-	}
+	if (IS_ERR(rtc->rtc))
+		return PTR_ERR(rtc->rtc);
 
 	rtc->rtc->ops = &mpc5200_rtc_ops;
 	set_bit(RTC_FEATURE_ALARM_RES_MINUTE, rtc->rtc->features);
@@ -354,6 +333,29 @@ static int mpc5121_rtc_probe(struct platform_device *op)
 		 */
 		rtc->rtc->range_min = 0;
 		rtc->rtc->range_max = U32_MAX;
+	}
+
+	/*
+	 * Request the IRQs after allocating the RTC device, so devres frees
+	 * them, and waits for running handlers, before releasing it.
+	 */
+	rtc->irq = irq_of_parse_and_map(op->dev.of_node, 1);
+	err = devm_request_irq(&op->dev, rtc->irq, mpc5121_rtc_handler, 0,
+			       "mpc5121-rtc", &op->dev);
+	if (err) {
+		dev_err(&op->dev, "%s: could not request irq: %i\n",
+							__func__, rtc->irq);
+		goto out_dispose;
+	}
+
+	rtc->irq_periodic = irq_of_parse_and_map(op->dev.of_node, 0);
+	err = devm_request_irq(&op->dev, rtc->irq_periodic,
+			       mpc5121_rtc_handler_upd, 0, "mpc5121-rtc_upd",
+			       &op->dev);
+	if (err) {
+		dev_err(&op->dev, "%s: could not request irq: %i\n",
+						__func__, rtc->irq_periodic);
+		goto out_dispose2;
 	}
 
 	err = devm_rtc_register_device(rtc->rtc);
