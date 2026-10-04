@@ -4132,7 +4132,7 @@ static void ixgbe_set_rx_drop_en(struct ixgbe_adapter *adapter)
 			ixgbe_disable_rx_drop(adapter, adapter->rx_ring[i]);
 	}
 
-	if (hw->mac.ops.enable_mdd)
+	if (adapter->num_vfs && hw->mac.ops.enable_mdd)
 		hw->mac.ops.enable_mdd(hw);
 }
 
