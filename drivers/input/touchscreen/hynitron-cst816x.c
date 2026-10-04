@@ -11,6 +11,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
+#include <linux/input/touchscreen.h>
 #include <linux/unaligned.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
@@ -31,6 +32,7 @@ struct cst816x_priv {
 	struct input_dev *input;
 	unsigned int keycode[CST816X_NUM_KEYS];
 	unsigned int keycodemax;
+	struct touchscreen_properties prop;
 };
 
 static int cst816x_parse_keycodes(struct device *dev, struct cst816x_priv *priv)
@@ -142,6 +144,7 @@ static int cst816x_register_input(struct cst816x_priv *priv)
 	input_set_abs_params(priv->input, ABS_X, 0, 240, 0, 0);
 	input_set_abs_params(priv->input, ABS_Y, 0, 240, 0, 0);
 	input_set_capability(priv->input, EV_KEY, BTN_TOUCH);
+	touchscreen_parse_properties(priv->input, false, &priv->prop);
 
 	priv->input->keycode = priv->keycode;
 	priv->input->keycodesize = sizeof(priv->keycode[0]);
@@ -173,8 +176,8 @@ static irqreturn_t cst816x_irq_cb(int irq, void *cookie)
 	if (!cst816x_process_touch(priv, &tch))
 		return IRQ_HANDLED;
 
-	input_report_abs(priv->input, ABS_X, tch.abs_x);
-	input_report_abs(priv->input, ABS_Y, tch.abs_y);
+	touchscreen_report_pos(priv->input, &priv->prop,
+			       tch.abs_x, tch.abs_y, false);
 
 	if (tch.gest)
 		input_report_key(priv->input,
