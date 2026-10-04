@@ -1747,3 +1747,67 @@ out_put:
 	iommufd_put_object(ucmd->ictx, &idev->obj);
 	return rc;
 }
+
+int iommufd_device_get_pci_mmio_windows(struct iommufd_ucmd *ucmd)
+{
+	struct iommu_pci_mmio_window __user *windows;
+	struct iommu_pci_mmio_windows *cmd = ucmd->cmd;
+	struct iommu_resv_region *resv, *next;
+	struct iommufd_device *idev;
+	LIST_HEAD(resv_windows);
+	u32 max_windows;
+	int rc;
+
+	if (cmd->flags)
+		return -EOPNOTSUPP;
+
+	idev = iommufd_get_device(ucmd, cmd->dev_id);
+	if (IS_ERR(idev))
+		return PTR_ERR(idev);
+
+	if (!dev_is_pci(idev->dev)) {
+		rc = -EOPNOTSUPP;
+		goto out_put;
+	}
+
+	rc = iommu_get_pci_resv_windows(to_pci_dev(idev->dev), &resv_windows);
+	if (rc)
+		goto out_put;
+
+	max_windows = cmd->num_windows;
+	windows = u64_to_user_ptr(cmd->windows);
+	cmd->num_windows = 0;
+	list_for_each_entry(resv, &resv_windows, list) {
+		if (!resv->length)
+			continue;
+
+		if (cmd->num_windows < max_windows) {
+			struct iommu_pci_mmio_window elm = {
+				.start = resv->start,
+				.last = resv->start + resv->length - 1,
+			};
+
+			if (copy_to_user(&windows[cmd->num_windows], &elm,
+					 sizeof(elm))) {
+				rc = -EFAULT;
+				goto out_free;
+			}
+		}
+		cmd->num_windows++;
+	}
+
+	rc = iommufd_ucmd_respond(ucmd, sizeof(*cmd));
+	if (rc)
+		goto out_free;
+	if (cmd->num_windows > max_windows)
+		rc = -EMSGSIZE;
+
+out_free:
+	list_for_each_entry_safe(resv, next, &resv_windows, list) {
+		list_del(&resv->list);
+		kfree(resv);
+	}
+out_put:
+	iommufd_put_object(ucmd->ictx, &idev->obj);
+	return rc;
+}

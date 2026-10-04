@@ -535,6 +535,7 @@ iommufd_device_get_iommu_dev(struct iommufd_device *idev)
 void iommufd_device_pre_destroy(struct iommufd_object *obj);
 void iommufd_device_destroy(struct iommufd_object *obj);
 int iommufd_get_hw_info(struct iommufd_ucmd *ucmd);
+int iommufd_device_get_pci_mmio_windows(struct iommufd_ucmd *ucmd);
 
 struct device *iommufd_global_device(void);
 

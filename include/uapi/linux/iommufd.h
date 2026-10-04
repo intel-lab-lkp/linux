@@ -58,6 +58,7 @@ enum {
 	IOMMUFD_CMD_VEVENTQ_ALLOC = 0x93,
 	IOMMUFD_CMD_HW_QUEUE_ALLOC = 0x94,
 	IOMMUFD_CMD_IOAS_NOIOMMU_GET_PA = 0x95,
+	IOMMUFD_CMD_GET_PCI_MMIO_WINDOWS = 0x96,
 };
 
 /**
@@ -1390,4 +1391,58 @@ struct iommu_hw_queue_alloc {
 	__aligned_u64 length;
 };
 #define IOMMU_HW_QUEUE_ALLOC _IO(IOMMUFD_TYPE, IOMMUFD_CMD_HW_QUEUE_ALLOC)
+
+/**
+ * struct iommu_pci_mmio_window - a PCI host bridge MMIO window
+ * @start: First PCI bus address of the window
+ * @last: Inclusive last PCI bus address of the window
+ *
+ * A memory window claimed by the PCI host bridge that a device sits
+ * behind.  Addresses are PCI bus addresses (i.e. what appears in the
+ * TLP), which differ from CPU physical addresses on platforms where the
+ * host bridge applies an address translation offset.  For a device
+ * using an identity (1:1) IOVA layout the IOVA equals the bus address,
+ * so these are the IOVAs that a PCIe switch could misinterpret as
+ * peer-to-peer DMA and route to the wrong device instead of memory.
+ */
+struct iommu_pci_mmio_window {
+	__aligned_u64 start;
+	__aligned_u64 last;
+};
+
+/**
+ * struct iommu_pci_mmio_windows - ioctl(IOMMU_GET_PCI_MMIO_WINDOWS)
+ * @size: sizeof(struct iommu_pci_mmio_windows)
+ * @flags: Must be 0
+ * @dev_id: The device bound to iommufd to query
+ * @num_windows: Input/output number of MMIO windows
+ * @windows: Pointer to the output array of struct iommu_pci_mmio_window
+ *
+ * Query the memory windows of the PCI host bridge that @dev_id sits
+ * behind.  This is advisory: the kernel does not reserve these ranges, it
+ * only reports them so userspace can choose to keep its IOVA allocations
+ * away from them and avoid accidental peer-to-peer DMA routing.  The
+ * reported windows are pessimistic (the whole host bridge window, not the
+ * precise BAR ranges that may actually conflict).  If a IOAS has devices
+ * behind multiple host bridges, query each device and take the union.
+ *
+ * On input num_windows is the length of the windows array.  On output it
+ * is the total number of windows.  The ioctl will return -EMSGSIZE and set
+ * num_windows to the required value if num_windows is too small.  In this
+ * case the caller should allocate a larger output array and re-issue the
+ * ioctl.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if @dev_id is not a PCI device,
+ * -ENOENT if @dev_id is invalid, -EMSGSIZE if the output array is too
+ * small.
+ */
+struct iommu_pci_mmio_windows {
+	__u32 size;
+	__u32 flags;
+	__u32 dev_id;
+	__u32 num_windows;
+	__aligned_u64 windows;
+};
+#define IOMMU_GET_PCI_MMIO_WINDOWS \
+	_IO(IOMMUFD_TYPE, IOMMUFD_CMD_GET_PCI_MMIO_WINDOWS)
 #endif
