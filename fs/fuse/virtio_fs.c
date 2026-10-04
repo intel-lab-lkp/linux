@@ -4,6 +4,8 @@
  * Copyright (C) 2018 Red Hat, Inc.
  */
 
+#include "fuse_i.h"
+
 #include <linux/fs.h>
 #include <linux/dax.h>
 #include <linux/pci.h>
@@ -20,7 +22,6 @@
 #include <linux/cleanup.h>
 #include <linux/uio.h>
 #include "dev.h"
-#include "fuse_i.h"
 #include "fuse_dev_i.h"
 
 /* Used to help calculate the FUSE connection's max_pages limit for a request's
@@ -730,6 +731,10 @@ static void copy_args_from_argbuf(struct fuse_args *args, struct fuse_req *req)
 	unsigned int num_out;
 	unsigned int i;
 
+	/* Error replies contain only the output header. */
+	if (req->out.h.error)
+		goto out;
+
 	remaining = req->out.h.len - sizeof(req->out.h);
 	num_in = args->in_numargs - args->in_pages;
 	num_out = args->out_numargs - args->out_pages;
@@ -755,6 +760,7 @@ static void copy_args_from_argbuf(struct fuse_args *args, struct fuse_req *req)
 	if (args->out_argvar)
 		args->out_args[args->out_numargs - 1].size = remaining;
 
+out:
 	kfree(req->argbuf);
 	req->argbuf = NULL;
 }
@@ -762,19 +768,46 @@ static void copy_args_from_argbuf(struct fuse_args *args, struct fuse_req *req)
 /* Verify that the server properly follows the FUSE protocol */
 static bool virtio_fs_verify_response(struct fuse_req *req, unsigned int len)
 {
+	struct fuse_args *args = req->args;
 	struct fuse_out_header *oh = &req->out.h;
+	unsigned int expected;
 
 	if (len < sizeof(*oh)) {
-		pr_warn("virtio-fs: response too short (%u)\n", len);
+		pr_warn_ratelimited("response too short (%u)\n", len);
 		return false;
 	}
 	if (oh->len != len) {
-		pr_warn("virtio-fs: oh.len mismatch (%u != %u)\n", oh->len, len);
+		pr_warn_ratelimited("oh.len mismatch (%u != %u)\n",
+				    oh->len, len);
 		return false;
 	}
 	if (oh->unique != req->in.h.unique) {
-		pr_warn("virtio-fs: oh.unique mismatch (%llu != %llu)\n",
-			oh->unique, req->in.h.unique);
+		pr_warn_ratelimited("oh.unique mismatch (%llu != %llu)\n",
+				    oh->unique, req->in.h.unique);
+		return false;
+	}
+	if (oh->error <= -ERESTARTSYS || oh->error > 0) {
+		pr_warn_ratelimited("invalid error value (%d)\n", oh->error);
+		return false;
+	}
+
+	if (oh->error) {
+		if (len != sizeof(*oh)) {
+			pr_warn_ratelimited("error response too long (%u)\n",
+					    len);
+			return false;
+		}
+		return true;
+	}
+
+	expected = sizeof(*oh) +
+		   fuse_len_args(args->out_numargs, args->out_args);
+	if (len > expected ||
+	    (len < expected &&
+	     (!args->out_argvar ||
+	      expected - len > args->out_args[args->out_numargs - 1].size))) {
+		pr_warn_ratelimited("invalid response length (%u, expected %u)\n",
+				    len, expected);
 		return false;
 	}
 	return true;
