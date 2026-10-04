@@ -1303,8 +1303,9 @@ static ssize_t amdgpu_debugfs_gpr_read(struct file *f, char __user *buf,
 		value = data[result >> 2];
 		r = put_user(value, (uint32_t *)buf);
 		if (r) {
+			kfree(data);
 			amdgpu_virt_disable_access_debugfs(adev);
-			goto err;
+			return r;
 		}
 
 		result += 4;
