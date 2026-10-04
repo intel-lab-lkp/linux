@@ -58,7 +58,6 @@
 #define SIGNAL_C_ID	(2)
 #define SIGNAL_D_ID	(3)
 
-#define RZ_MTU3_MAX_HW_CNTR_CHANNELS	(2)
 #define RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS	(3)
 
 /**
@@ -67,17 +66,13 @@
  * @lock: Lock to prevent concurrent access for ceiling and count
  * @ch: HW channels for the counters
  * @count_is_enabled: Enabled state of Counter value channel
- * @mtu_16bit_max: Cache for 16-bit counters
- * @mtu_32bit_max: Cache for 32-bit counters
+ * @ceiling: Cache for ceiling values
  */
 struct rz_mtu3_cnt {
 	struct mutex lock;
 	struct rz_mtu3_channel *ch;
+	u32 ceiling[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
 	bool count_is_enabled[RZ_MTU3_MAX_LOGICAL_CNTR_CHANNELS];
-	union {
-		u16 mtu_16bit_max[RZ_MTU3_MAX_HW_CNTR_CHANNELS];
-		u32 mtu_32bit_max;
-	};
 };
 
 static const enum counter_function rz_mtu3_count_functions[] = {
@@ -314,27 +309,13 @@ static int rz_mtu3_count_ceiling_read(struct counter_device *counter,
 {
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, count->id);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	const size_t ch_id = rz_mtu3_get_hw_ch(count->id);
 	int ret;
 
 	ret = rz_mtu3_lock_if_counter_is_valid(counter, ch, priv, count->id);
 	if (ret)
 		return ret;
 
-	switch (count->id) {
-	case RZ_MTU3_16_BIT_MTU1_CH:
-	case RZ_MTU3_16_BIT_MTU2_CH:
-		*ceiling = priv->mtu_16bit_max[ch_id];
-		break;
-	case RZ_MTU3_32_BIT_CH:
-		*ceiling = priv->mtu_32bit_max;
-		break;
-	default:
-		/* should never reach this path */
-		mutex_unlock(&priv->lock);
-		return -EINVAL;
-	}
-
+	*ceiling = priv->ceiling[count->id];
 	mutex_unlock(&priv->lock);
 	return 0;
 }
@@ -345,7 +326,6 @@ static int rz_mtu3_count_ceiling_write(struct counter_device *counter,
 {
 	struct rz_mtu3_channel *const ch = rz_mtu3_get_ch(counter, count->id);
 	struct rz_mtu3_cnt *const priv = counter_priv(counter);
-	const size_t ch_id = rz_mtu3_get_hw_ch(count->id);
 	int ret;
 
 	ret = rz_mtu3_lock_if_counter_is_valid(counter, ch, priv, count->id);
@@ -359,14 +339,12 @@ static int rz_mtu3_count_ceiling_write(struct counter_device *counter,
 			mutex_unlock(&priv->lock);
 			return -ERANGE;
 		}
-		priv->mtu_16bit_max[ch_id] = ceiling;
 		break;
 	case RZ_MTU3_32_BIT_CH:
 		if (ceiling > U32_MAX) {
 			mutex_unlock(&priv->lock);
 			return -ERANGE;
 		}
-		priv->mtu_32bit_max = ceiling;
 		break;
 	default:
 		/* should never reach this path */
@@ -381,6 +359,7 @@ static int rz_mtu3_count_ceiling_write(struct counter_device *counter,
 		rz_mtu3_16bit_ch_write(ch, RZ_MTU3_TGRA, ceiling);
 
 	rz_mtu3_8bit_ch_write(ch, RZ_MTU3_TCR, RZ_MTU3_TCR_CCLR_TGRA);
+	priv->ceiling[count->id] = ceiling;
 	pm_runtime_put(counter->parent);
 	mutex_unlock(&priv->lock);
 
@@ -800,7 +779,6 @@ static int rz_mtu3_cnt_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct counter_device *counter;
 	struct rz_mtu3_cnt *priv;
-	unsigned int i;
 	int ret;
 
 	counter = devm_counter_alloc(dev, sizeof(*priv));
@@ -808,10 +786,10 @@ static int rz_mtu3_cnt_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv = counter_priv(counter);
-	priv->mtu_32bit_max = U32_MAX;
+	priv->ceiling[RZ_MTU3_16_BIT_MTU1_CH] = U16_MAX;
+	priv->ceiling[RZ_MTU3_16_BIT_MTU2_CH] = U16_MAX;
+	priv->ceiling[RZ_MTU3_32_BIT_CH] = U32_MAX;
 	priv->ch = &ddata->channels[RZ_MTU3_CHAN_1];
-	for (i = 0; i < RZ_MTU3_MAX_HW_CNTR_CHANNELS; i++)
-		priv->mtu_16bit_max[i] = U16_MAX;
 
 	mutex_init(&priv->lock);
 
