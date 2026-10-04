@@ -3455,6 +3455,21 @@ static void spi_nor_restore(struct spi_nor *nor)
 {
 	int ret;
 
+	/*
+	 * The MTD device is still registered here, so another thread may
+	 * have an operation in flight. Wait for it rather than cut in:
+	 * while the chip is busy the address mode exit below is typically
+	 * ignored, which silently loses the restore, and the soft reset is
+	 * typically accepted, which aborts an erase part way through.
+	 */
+	ret = spi_nor_prep_and_lock(nor);
+	if (ret) {
+		dev_warn(nor->dev,
+			 "Failed to lock flash, skipping restore, err = %d\n",
+			 ret);
+		return;
+	}
+
 	/* restore the addressing mode */
 	if (nor->addr_nbytes == 4 && !(nor->flags & SNOR_F_4B_OPCODES) &&
 	    nor->flags & SNOR_F_BROKEN_RESET) {
@@ -3470,6 +3485,8 @@ static void spi_nor_restore(struct spi_nor *nor)
 
 	if (nor->flags & SNOR_F_SOFT_RESET)
 		spi_nor_soft_reset(nor);
+
+	spi_nor_unlock_and_unprep(nor);
 }
 
 static const struct flash_info *spi_nor_match_name(struct spi_nor *nor,
