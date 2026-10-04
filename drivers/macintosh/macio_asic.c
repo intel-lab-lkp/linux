@@ -349,11 +349,15 @@ static void macio_setup_resources(struct macio_dev *dev,
 /**
  * macio_add_one_device - Add one device from OF node to the device tree
  * @chip: pointer to the macio_chip holding the device
+ * @parent: device to register the new device under
  * @np: pointer to the device node in the OF tree
- * @in_bay: set to 1 if device is part of a media-bay
+ * @in_bay: media-bay device this one sits in, or NULL
+ * @parent_res: resource to insert the device's resources under
  *
  * When media-bay is changed to hotswap drivers, this function will
  * be exposed to the bay driver some way...
+ *
+ * Return: the new macio_dev, or NULL on failure.
  */
 static struct macio_dev * macio_add_one_device(struct macio_chip *chip,
 					       struct device *parent,
