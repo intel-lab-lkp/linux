@@ -5967,7 +5967,7 @@ static int ext4_journal_bmap(journal_t *journal, sector_t *block)
 			 "journal bmap failed: block %llu ret %d\n",
 			 *block, ret);
 		jbd2_journal_abort(journal, ret ? ret : -EFSCORRUPTED);
-		return ret;
+		return ret ? ret : -EFSCORRUPTED;
 	}
 	*block = map.m_pblk;
 	return 0;
