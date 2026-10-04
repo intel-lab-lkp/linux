@@ -190,6 +190,22 @@ static void dwc3_ep_inc_deq(struct dwc3_ep *dep)
 	dwc3_ep_inc_trb(&dep->trb_dequeue);
 }
 
+static void dwc3_gadget_restore_sg_trb_cache_buf(struct dwc3_request *req)
+{
+	if (!req->sg_trb_cache_bounced)
+		return;
+
+	req->request.buf = req->sg_trb_cache_orig_buf;
+	req->request.sg = req->sg_trb_cache_sg;
+	req->request.num_sgs = req->sg_trb_cache_num_sgs;
+	kfree(req->sg_trb_cache_buf);
+	req->sg_trb_cache_buf = NULL;
+	req->sg_trb_cache_sg = NULL;
+	req->sg_trb_cache_num_sgs = 0;
+	req->sg_trb_cache_orig_buf = NULL;
+	req->sg_trb_cache_bounced = false;
+}
+
 static void dwc3_gadget_del_and_unmap_request(struct dwc3_ep *dep,
 		struct dwc3_request *req, int status)
 {
@@ -205,6 +221,8 @@ static void dwc3_gadget_del_and_unmap_request(struct dwc3_ep *dep,
 	if (req->trb)
 		usb_gadget_unmap_request_by_dev(dwc->sysdev,
 				&req->request, req->direction);
+
+	dwc3_gadget_restore_sg_trb_cache_buf(req);
 
 	req->trb = NULL;
 	trace_dwc3_gadget_giveback(req);
@@ -1474,6 +1492,110 @@ static int dwc3_prepare_last_sg(struct dwc3_ep *dep,
 	return num_trbs;
 }
 
+/*
+ * Each scatter-gather entry is queued as one TRB, so an IN request backed by
+ * entries smaller than MaxPacketSize can need more chained TRBs to construct a
+ * single packet than the controller is able to cache. Databook 4.2.3.3 limits
+ * the chained TRBs a single packet may be built from to
+ * (DWC_USB3_CACHE_TRBS_PER_TRANSFER - 1), where the -1 accounts for the single
+ * Link TRB the controller walks as part of the chain when a transfer wraps the
+ * TRB ring. The cache itself never holds more than DWC3_TRB_CACHE_MAX TRBs, so
+ * clamp the limit for cores built with a larger parameter.
+ *
+ * Walk the scatter-gather list counting the TRBs each packet would be built
+ * from, and report the requests that exceed that budget.
+ */
+static bool dwc3_gadget_sg_trb_cache_limit(struct dwc3_ep *dep,
+		struct dwc3_request *req)
+{
+	struct dwc3 *dwc = dep->dwc;
+	struct scatterlist *sg;
+	unsigned int cache_depth;
+	unsigned int max_trbs;
+	unsigned int maxp;
+	unsigned int fill = 0;
+	unsigned int trbs = 0;
+	int i;
+
+	if (!req->direction || !req->request.num_sgs)
+		return false;
+
+	if (req->request.sg_was_mapped || req->request.length == 0)
+		return false;
+
+	cache_depth = DWC3_GHWPARAMS4_CACHE_TRBS_PER_TRANSFER(dwc->hwparams.hwparams4);
+	if (cache_depth < 2)
+		return false;
+
+	max_trbs = min_t(unsigned int, cache_depth - 1, DWC3_TRB_CACHE_MAX);
+
+	/*
+	 * A list no longer than the budget cannot exceed it, whatever the
+	 * individual entry sizes are.
+	 */
+	if (req->request.num_sgs <= max_trbs)
+		return false;
+
+	maxp = usb_endpoint_maxp(dep->endpoint.desc);
+
+	for_each_sg(req->request.sg, sg, req->request.num_sgs, i) {
+		unsigned int len = sg->length;
+
+		trbs++;
+
+		while (fill + len >= maxp) {
+			len -= maxp - fill;
+			if (trbs > max_trbs)
+				return true;
+
+			fill = 0;
+			trbs = len ? 1 : 0;
+		}
+
+		fill += len;
+	}
+
+	/* The transfer may end with a short packet. */
+	return fill && trbs > max_trbs;
+}
+
+static int dwc3_gadget_linearize_sg_request(struct dwc3_ep *dep,
+		struct dwc3_request *req)
+{
+	void *buf;
+	size_t copied;
+
+	if (!dwc3_gadget_sg_trb_cache_limit(dep, req))
+		return 0;
+
+	buf = kmalloc(req->request.length, GFP_ATOMIC);
+	if (!buf)
+		return -ENOMEM;
+
+	copied = sg_pcopy_to_buffer(req->request.sg, req->request.num_sgs,
+			buf, req->request.length, 0);
+	if (copied != req->request.length) {
+		kfree(buf);
+		return -EINVAL;
+	}
+
+	dev_dbg(dep->dwc->dev,
+		"%s: linearize SG request len=%u num_sgs=%u exceeding TRB cache\n",
+		dep->name, req->request.length, req->request.num_sgs);
+
+	req->sg_trb_cache_buf = buf;
+	req->sg_trb_cache_sg = req->request.sg;
+	req->sg_trb_cache_num_sgs = req->request.num_sgs;
+	req->sg_trb_cache_orig_buf = req->request.buf;
+	req->sg_trb_cache_bounced = true;
+
+	req->request.buf = buf;
+	req->request.sg = NULL;
+	req->request.num_sgs = 0;
+
+	return 0;
+}
+
 static int dwc3_prepare_trbs_sg(struct dwc3_ep *dep,
 		struct dwc3_request *req)
 {
@@ -1630,10 +1752,16 @@ static int dwc3_prepare_trbs(struct dwc3_ep *dep)
 	list_for_each_entry_safe(req, n, &dep->pending_list, list) {
 		struct dwc3	*dwc = dep->dwc;
 
-		ret = usb_gadget_map_request_by_dev(dwc->sysdev, &req->request,
-						    dep->direction);
+		ret = dwc3_gadget_linearize_sg_request(dep, req);
 		if (ret)
 			return ret;
+
+		ret = usb_gadget_map_request_by_dev(dwc->sysdev, &req->request,
+						    dep->direction);
+		if (ret) {
+			dwc3_gadget_restore_sg_trb_cache_buf(req);
+			return ret;
+		}
 
 		req->start_sg		= req->request.sg;
 		req->num_pending_sgs	= req->request.num_mapped_sgs;

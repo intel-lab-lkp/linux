@@ -386,6 +386,7 @@
 #define DWC3_GHWPARAMS3_FSPHY_IFC_ENA		1
 
 /* Global HWPARAMS4 Register */
+#define DWC3_GHWPARAMS4_CACHE_TRBS_PER_TRANSFER(n)	((n) & GENMASK(5, 0))
 #define DWC3_GHWPARAMS4_HIBER_SCRATCHBUFS(n)	(((n) & (0x0f << 13)) >> 13)
 #define DWC3_MAX_HIBER_SCRATCHBUFS		15
 
@@ -714,6 +715,7 @@ struct dwc3_event_buffer {
 #define DWC3_EP_DIRECTION_RX	false
 
 #define DWC3_TRB_NUM		256
+#define DWC3_TRB_CACHE_MAX	15
 
 /**
  * struct dwc3_ep - device side endpoint representation
@@ -951,8 +953,15 @@ struct dwc3_hwparams {
  * @trb: pointer to struct dwc3_trb
  * @trb_dma: DMA address of @trb
  * @num_trbs: number of TRBs used by this request
+ * @sg_trb_cache_buf: temporary linear buffer the scatter-gather list is
+ *			copied into when it exceeds the TRB cache budget
+ * @sg_trb_cache_sg: scatter-gather list replaced by @sg_trb_cache_buf
+ * @sg_trb_cache_num_sgs: number of entries in @sg_trb_cache_sg
+ * @sg_trb_cache_orig_buf: request buffer replaced by @sg_trb_cache_buf
  * @direction: IN or OUT direction flag
  * @mapped: true when request has been dma-mapped
+ * @sg_trb_cache_bounced: true while this request is queued through
+ *			@sg_trb_cache_buf instead of its scatter-gather list
  */
 struct dwc3_request {
 	struct usb_request	request;
@@ -978,8 +987,14 @@ struct dwc3_request {
 
 	unsigned int		num_trbs;
 
+	void			*sg_trb_cache_buf;
+	struct scatterlist	*sg_trb_cache_sg;
+	unsigned int		sg_trb_cache_num_sgs;
+	void			*sg_trb_cache_orig_buf;
+
 	unsigned int		direction:1;
 	unsigned int		mapped:1;
+	unsigned int		sg_trb_cache_bounced:1;
 };
 
 /*
