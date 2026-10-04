@@ -795,8 +795,12 @@ static int br_nf_push_frag_xmit(struct net *net, struct sock *sk, struct sk_buff
 		return 0;
 	}
 
-	if (data->vlan_proto)
+	if (data->vlan_proto) {
 		__vlan_hwaccel_put_tag(skb, data->vlan_proto, data->vlan_tci);
+	} else if (skb_vlan_tag_present(skb)) {
+		/* Fragments reused from frag_list keep their ingress tag. */
+		__vlan_hwaccel_clear_tag(skb);
+	}
 
 	skb_copy_to_linear_data_offset(skb, -data->size, data->mac, data->size);
 	__skb_push(skb, data->encap_size);
