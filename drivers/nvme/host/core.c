@@ -694,6 +694,7 @@ static void nvme_free_ns_head(struct kref *ref)
 	cleanup_srcu_struct(&head->srcu);
 	nvme_put_subsystem(head->subsys);
 	kfree(head->plids);
+	kfree(head->effects);
 	kfree(head);
 }
 
@@ -4012,6 +4013,7 @@ static struct nvme_ns_head *nvme_alloc_ns_head(struct nvme_ns *ns,
 	__must_hold(&ns->ctrl->subsys->lock)
 {
 	struct nvme_ctrl *ctrl = ns->ctrl;
+	struct nvme_effects_log *effects;
 	struct nvme_ns_head *head;
 	size_t size = sizeof(*head);
 	int ret = -ENOMEM;
@@ -4042,11 +4044,22 @@ static struct nvme_ns_head *nvme_alloc_ns_head(struct nvme_ns *ns,
 	ns->head = head;
 
 	if (head->ids.csi) {
-		ret = nvme_get_effects_log(ctrl, head->ids.csi, &head->effects);
+		ret = nvme_get_effects_log(ctrl, head->ids.csi, &effects);
 		if (ret)
 			goto out_cleanup_srcu;
 	} else
-		head->effects = ctrl->effects;
+		effects = ctrl->effects;
+
+	/*
+	 * The effects log belongs to the controller and is freed with it, but
+	 * the head can outlive this controller and be shared with others, so
+	 * keep a private copy.
+	 */
+	head->effects = kmemdup(effects, sizeof(*effects), GFP_KERNEL);
+	if (!head->effects) {
+		ret = -ENOMEM;
+		goto out_cleanup_srcu;
+	}
 
 	if (ctrl->ctratt & NVME_CTRL_ATTR_FDPS) {
 		ret = nvme_query_fdp_info(ns, info);
@@ -4066,6 +4079,7 @@ static struct nvme_ns_head *nvme_alloc_ns_head(struct nvme_ns *ns,
 out_cleanup_fdp:
 	kfree(head->plids);
 out_cleanup_srcu:
+	kfree(head->effects);
 	cleanup_srcu_struct(&head->srcu);
 out_ida_remove:
 	ida_free(&ctrl->subsys->ns_ida, head->instance);
