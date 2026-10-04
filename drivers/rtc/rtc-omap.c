@@ -426,6 +426,7 @@ again:
 	rtc_writel(rtc, OMAP_RTC_STATUS_REG, OMAP_RTC_STATUS_ALARM2);
 
 	/* set alarm one second from now */
+	rtc_wait_not_busy(rtc);
 	omap_rtc_read_time_raw(rtc, &tm);
 	seconds = tm.tm_sec;
 	bcd2tm(&tm);
