@@ -50,6 +50,10 @@ bpf_xdp_flow_tuple_lookup(struct net_device *dev,
 
 	nf_flow = container_of(tuplehash, struct flow_offload,
 			       tuplehash[tuplehash->tuple.dir]);
+	if (tuplehash->tuple.dir == FLOW_OFFLOAD_DIR_REPLY &&
+	    !test_bit(NF_FLOW_HW_BIDIRECTIONAL, &nf_flow->flags))
+		return ERR_PTR(-ENOENT);
+
 	flow_offload_refresh(nf_flow_table, nf_flow, false);
 
 	return tuplehash;
