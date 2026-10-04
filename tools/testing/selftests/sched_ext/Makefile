@@ -186,6 +186,7 @@ auto-test-targets :=			\
 	non_scx_kfunc_deny		\
 	nohz_tick			\
 	numa				\
+	numa_nid			\
 	allowed_cpus			\
 	peek_dsq			\
 	prog_run			\
