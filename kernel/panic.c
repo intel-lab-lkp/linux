@@ -1050,7 +1050,7 @@ void oops_enter(void)
 
 static void print_oops_end_marker(void)
 {
-	pr_warn("---[ end trace %016llx ]---\n", 0ULL);
+	pr_warn("---[ end trace ]---\n");
 }
 
 /*
