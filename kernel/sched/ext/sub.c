@@ -28,6 +28,57 @@
  */
 DEFINE_STATIC_KEY_FALSE(__scx_has_subs);
 
+/*
+ * Reset rq->scx.cpuperf_target back to the neutral SCX_CPUPERF_ONE base
+ * when a sub-scheduler that wrote targets loses SCX_CAP_PERF or dies. The
+ * reset runs from an irq_work on the target CPU so it can take the target
+ * rq's lock without imposing any rq lock ordering on the callers:
+ * scx_bpf_sub_revoke() runs with IRQs disabled under pshard locks and may
+ * be reached from BPF with another rq already locked.
+ */
+static DEFINE_PER_CPU(struct irq_work, scx_cpuperf_reset_iw);
+
+static void scx_cpuperf_reset_fn(struct irq_work *iw)
+{
+	struct rq_flags rf;
+	struct rq *rq;
+
+	if (!scx_enabled())
+		return;
+
+	rq = cpu_rq(smp_processor_id());
+	rq_lock_irqsave(rq, &rf);
+	update_rq_clock(rq);
+	if (rq->scx.cpuperf_target != SCX_CPUPERF_ONE) {
+		rq->scx.cpuperf_target = SCX_CPUPERF_ONE;
+		cpufreq_update_util(rq, 0);
+	}
+	rq_unlock_irqrestore(rq, &rf);
+}
+
+/*
+ * Queue a reset of @cpu's cpuperf target. Idempotent: the work is always a
+ * plain restore of the neutral base, so concurrent queues collapse into one
+ * run; CPUs that never had a sub-scheduler target no-op.
+ */
+static void scx_cpuperf_queue_reset(s32 cpu)
+{
+	if (cpu < 0 || cpu >= nr_cpu_ids || !cpu_online(cpu))
+		return;
+	irq_work_queue_on(&per_cpu(scx_cpuperf_reset_iw, cpu), cpu);
+}
+
+static int __init scx_cpuperf_reset_init(void)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		init_irq_work(per_cpu_ptr(&scx_cpuperf_reset_iw, cpu),
+			      scx_cpuperf_reset_fn);
+	return 0;
+}
+subsys_initcall(scx_cpuperf_reset_init);
+
 /* latched at root enable before any rescue runs */
 static s32 scx_rescue_bw_1024;
 static s64 scx_rescue_quantum_ns;
@@ -1503,6 +1554,39 @@ static inline s32 scx_cgroup_claim_subtree(struct scx_sched *sch) { return 0; }
 static inline void scx_cgroup_return_subtree(struct scx_sched *sch) {}
 #endif
 
+/*
+ * Queue cpuperf resets for the CPUs backing the cids in @delta, the set
+ * SCX_CAP_PERF was just revoked on.
+ */
+static void scx_cpuperf_revoke_cids(const struct scx_cmask *delta)
+{
+	s32 cid;
+
+	scx_cmask_for_each_cid(cid, delta)
+		scx_cpuperf_queue_reset(__scx_cid_to_cpu(cid));
+}
+
+/*
+ * Restore the neutral cpuperf base on every CPU @sch holds SCX_CAP_PERF on.
+ * Over-resetting is safe: any scheduler still holding the cap rewrites its
+ * own target on its next update. Must be called after @sch is unlinked and
+ * drained so nothing can race the pshard caps[] reads.
+ */
+static void scx_sub_reset_cpuperf(struct scx_sched *sch)
+{
+	s32 si, cid;
+
+	if (!READ_ONCE(sch->pshard))
+		return;
+
+	for (si = 0; si < sch->nr_pshards; si++) {
+		struct scx_cmask *cm = &sch->pshard[si]->caps[__SCX_CAP_PERF].cmask;
+
+		scx_cmask_for_each_cid(cid, cm)
+			scx_cpuperf_queue_reset(__scx_cid_to_cpu(cid));
+	}
+}
+
 void scx_sub_disable(struct scx_sched *sch)
 {
 	struct scx_sched *parent = scx_parent(sch);
@@ -1630,6 +1714,13 @@ dump:
 	scx_unlink_sched(sch);
 
 	mutex_unlock(&scx_enable_mutex);
+
+	/*
+	 * @sch can no longer receive grants or writes: queue a cpuperf reset
+	 * for every CPU it held SCX_CAP_PERF on so schedutil doesn't keep
+	 * consuming the targets it left behind.
+	 */
+	scx_sub_reset_cpuperf(sch);
 
 	/*
 	 * @sch is now unlinked from the parent's children list. Notify and call
@@ -2486,6 +2577,18 @@ __bpf_kfunc void scx_bpf_sub_revoke(u64 cgroup_id, u64 caps,
 					scx_cmask_andnot(cm, delta);
 					scx_cmask_or(changed_cids, delta);
 					revoked_caps |= BIT_U64(cap_bit);
+
+					/*
+					 * A lost SCX_CAP_PERF also invalidates
+					 * the cpuperf targets @pos may have
+					 * written on the revoked cids. Queue
+					 * the reset; this runs with IRQs
+					 * disabled under pshard locks, so the
+					 * rq locks are taken on the target
+					 * CPUs from irq_work instead.
+					 */
+					if (cap_bit == __SCX_CAP_PERF)
+						scx_cpuperf_revoke_cids(delta);
 				}
 
 				if (revoked_caps) {
