@@ -478,6 +478,16 @@ static inline void scx_bpf_task_set_dsq_vtime(struct task_struct *p, u64 vtime)
 		p->scx.dsq_vtime = vtime;
 }
 
+/* v7.4: Add scx_bpf_task_numa_nid(). */
+s32 scx_bpf_task_numa_nid___new(const struct task_struct *p) __ksym __weak;
+
+static inline s32 scx_bpf_task_numa_nid(const struct task_struct *p)
+{
+	if (bpf_ksym_exists(scx_bpf_task_numa_nid___new))
+		return scx_bpf_task_numa_nid___new(p);
+	return NUMA_NO_NODE;
+}
+
 /* v7.4: Add scx_bpf_task_set_lazy_resched(). */
 bool scx_bpf_task_set_lazy_resched___new(struct task_struct *p, bool lazy) __ksym __weak;
 
