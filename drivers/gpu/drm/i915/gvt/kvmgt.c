@@ -1626,19 +1626,15 @@ int intel_gvt_dma_map_guest_page(struct intel_vgpu *vgpu, unsigned long gfn,
 		ret = __gvt_cache_add(vgpu, gfn, *dma_addr, size);
 		if (ret)
 			goto err_unmap;
-	} else if (entry->size != size) {
-		/* the same gfn with different size: unmap and re-map */
-		gvt_dma_unmap_page(vgpu, gfn, entry->dma_addr, entry->size);
-		__gvt_cache_remove_entry(vgpu, entry);
-
-		ret = gvt_dma_map_page(vgpu, gfn, dma_addr, size);
-		if (ret)
-			goto err_unlock;
-
-		ret = __gvt_cache_add(vgpu, gfn, *dma_addr, size);
-		if (ret)
-			goto err_unmap;
+	} else if (entry->size < size) {
+		/*
+		 * The smaller mapping may still be in use, so don't replace
+		 * it. Fail and let the caller map the range in smaller pages.
+		 */
+		ret = -EBUSY;
+		goto err_unlock;
 	} else {
+		/* A mapping of the same or a larger size covers the request */
 		kref_get(&entry->ref);
 		*dma_addr = entry->dma_addr;
 	}
