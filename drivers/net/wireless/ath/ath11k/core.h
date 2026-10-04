@@ -395,6 +395,8 @@ struct ath11k_vif {
 
 	bool is_started;
 	bool is_up;
+	/* CSA countdown value the firmware is expected to report next */
+	u8 current_cntdown_counter;
 	bool ftm_responder;
 	bool spectral_enabled;
 	bool ps;

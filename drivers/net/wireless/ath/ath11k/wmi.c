@@ -1806,6 +1806,9 @@ int ath11k_wmi_bcn_tmpl(struct ath11k *ar, u32 vdev_id,
 	if (vif->bss_conf.csa_active) {
 		cmd->csa_switch_count_offset = offs->cntdwn_counter_offs[0];
 		cmd->ext_csa_switch_count_offset = offs->cntdwn_counter_offs[1];
+		/* a switch count event for every count, not just the last */
+		cmd->csa_event_bitmap = 0xffffffff;
+		arvif->current_cntdown_counter = bcn->data[offs->cntdwn_counter_offs[0]];
 	}
 
 	cmd->buf_len = bcn->len;
@@ -8385,10 +8388,6 @@ ath11k_wmi_process_csa_switch_count_event(struct ath11k_base *ab,
 	struct ath11k_vif *arvif;
 	int i;
 
-	/* Finish CSA once the switch count becomes NULL */
-	if (ev->current_switch_count)
-		return;
-
 	if (num_vdevs > vdev_ids_len / sizeof(*vdev_ids)) {
 		ath11k_warn(ab, "csa switch count num_vdevs %u exceeds tlv array length %u\n",
 			    num_vdevs, vdev_ids_len);
@@ -8405,8 +8404,22 @@ ath11k_wmi_process_csa_switch_count_event(struct ath11k_base *ab,
 			continue;
 		}
 
-		if (arvif->is_up && arvif->vif->bss_conf.csa_active)
+		if (!arvif->is_up || !arvif->vif->bss_conf.csa_active)
+			continue;
+
+		if (!ev->current_switch_count) {
 			ieee80211_csa_finish(arvif->vif, 0);
+			arvif->current_cntdown_counter = 0;
+		} else if (ev->current_switch_count > 1) {
+			/* A beacon that failed to go out repeats the previous
+			 * count; mac80211 counts down once per beacon sent.
+			 */
+			if (ev->current_switch_count != arvif->current_cntdown_counter)
+				continue;
+
+			arvif->current_cntdown_counter =
+				ieee80211_beacon_update_cntdwn(arvif->vif, 0);
+		}
 	}
 	rcu_read_unlock();
 }
