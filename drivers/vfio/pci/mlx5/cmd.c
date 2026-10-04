@@ -1644,8 +1644,8 @@ set_report_output(u32 size, int index, struct mlx5_vhca_qp *qp,
 	int i;
 
 	buf_offset = index * qp->max_msg_size;
-	if (WARN_ON(buf_offset + size >= qp->recv_buf.npages * PAGE_SIZE ||
-		    (nent > qp->max_msg_size / entry_size)))
+	if (WARN_ON(buf_offset + size > qp->recv_buf.npages * PAGE_SIZE ||
+		    size > qp->max_msg_size))
 		return;
 
 	do {
