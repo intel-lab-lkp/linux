@@ -57,6 +57,10 @@ properties:
   clocks:
     maxItems: 1
 
+  pinctrl-0: true
+
+  pinctrl-names: true
+
 patternProperties:
   '^i2c@[0-9ab]$':
     $ref: /schemas/i2c/i2c-controller.yaml
@@ -94,8 +98,9 @@ allOf:
             const: realtek,rtl9607-i2c
     then:
       required:
-        - realtek,scl
         - clocks
+        - pinctrl-0
+        - pinctrl-names
 
 required:
   - compatible
