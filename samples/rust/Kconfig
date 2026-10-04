@@ -128,6 +128,18 @@ config SAMPLE_RUST_DRIVER_PLATFORM
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_DRIVER_SRIOV
+	tristate "SR-IOV PF and VF Drivers"
+	depends on PCI_IOV
+	help
+	  This option builds the Rust SR-IOV PF and VF driver samples.
+
+	  To compile these as modules, choose M here:
+	  the modules will be called rust_driver_sriov_pf and rust_driver_sriov_vf.
+	  The VF module depends on the PF module.
+
+	  If unsure, say N.
+
 config SAMPLE_RUST_DRIVER_USB
 	tristate "USB Driver"
 	depends on USB = y
