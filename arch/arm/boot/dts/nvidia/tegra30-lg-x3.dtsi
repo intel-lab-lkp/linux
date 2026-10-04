@@ -1215,6 +1215,11 @@
 					reg = <0>;
 					remote-endpoint = <&charger_input>;
 				};
+
+				muic_to_usb: endpoint@1 {
+					reg = <1>;
+					remote-endpoint = <&usb_input>;
+				};
 			};
 		};
 
@@ -1788,7 +1793,19 @@
 		compatible = "nvidia,tegra30-udc";
 		status = "okay";
 		dr_mode = "otg";
-		extcon = <&max14526>, <&max14526>;
+
+		hnp-disable;
+		srp-disable;
+		adp-disable;
+
+		usb-role-switch;
+		extcon = <&max14526>, <&max14526>; /* vbus, id */
+
+		port {
+			usb_input: endpoint {
+				remote-endpoint = <&muic_to_usb>;
+			};
+		};
 	};
 
 	usb-phy@7d000000 {
