@@ -51,6 +51,8 @@ pub use self::io::{
     Extended,
     Normal, //
 };
+#[cfg(CONFIG_PCI_IOV)]
+pub use self::iov::VfRegistration;
 pub use self::irq::{
     IrqType,
     IrqTypes,
