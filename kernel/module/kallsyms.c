@@ -247,6 +247,18 @@ static const char *kallsyms_symbol_name(struct mod_kallsyms *kallsyms, unsigned 
 }
 
 /*
+ * Whether find_kallsyms_symbol() may resolve an address to symbol @symnum.
+ * Unnamed symbols are ignored: they're uninformative and inserted at a whim.
+ */
+static bool is_lookup_symbol(struct mod_kallsyms *kallsyms, unsigned int symnum)
+{
+	const char *name = kallsyms_symbol_name(kallsyms, symnum);
+
+	return kallsyms->symtab[symnum].st_shndx != SHN_UNDEF &&
+	       *name != '\0' && !is_mapping_symbol(name);
+}
+
+/*
  * Given a module and address, find the corresponding symbol and return its name
  * while providing its size and offset if needed.
  */
@@ -286,15 +298,7 @@ static const char *find_kallsyms_symbol(struct module *mod,
 		const Elf_Sym *sym = &kallsyms->symtab[i];
 		unsigned long thisval = kallsyms_symbol_value(sym);
 
-		if (sym->st_shndx == SHN_UNDEF)
-			continue;
-
-		/*
-		 * We ignore unnamed symbols: they're uninformative
-		 * and inserted at a whim.
-		 */
-		if (*kallsyms_symbol_name(kallsyms, i) == '\0' ||
-		    is_mapping_symbol(kallsyms_symbol_name(kallsyms, i)))
+		if (!is_lookup_symbol(kallsyms, i))
 			continue;
 
 		if (thisval <= addr && thisval > bestval) {
@@ -456,6 +460,28 @@ unsigned long find_kallsyms_symbol_value(struct module *mod, const char *name)
 {
 	guard(rcu)();
 	return __find_kallsyms_symbol_value(mod, name);
+}
+
+/*
+ * Call @fn with the address of each symbol of @mod that find_kallsyms_symbol()
+ * may resolve an address to. Unlike module_kallsyms_on_each_symbol(), this
+ * also works while @mod is still being loaded.
+ */
+void module_kallsyms_on_each_addr(struct module *mod,
+				  void (*fn)(void *, unsigned long),
+				  void *data)
+{
+	struct mod_kallsyms *kallsyms;
+	unsigned int i;
+
+	guard(rcu)();
+	kallsyms = rcu_dereference(mod->kallsyms);
+
+	/* ELF starts real symbols at 1. */
+	for (i = 1; i < kallsyms->num_symtab; i++) {
+		if (is_lookup_symbol(kallsyms, i))
+			fn(data, kallsyms_symbol_value(&kallsyms->symtab[i]));
+	}
 }
 
 int module_kallsyms_on_each_symbol(const char *modname,
