@@ -2814,9 +2814,9 @@ lpfc_sli_chk_mbx_command(uint8_t mbxCommand)
  *
  * This is completion handler function for mailbox commands issued from
  * lpfc_sli_issue_mbox_wait function. This function is called by the
- * mailbox event handler function with no lock held. This function
- * will wake up thread waiting on the wait queue pointed by context1
- * of the mailbox.
+ * mailbox event handler function with no lock held. If the waiter is
+ * still attached, wake it; otherwise the caller timed out and the
+ * callback owns the mailbox resources.
  **/
 void
 lpfc_sli_wake_mbox_wait(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmboxq)
@@ -2824,17 +2824,18 @@ lpfc_sli_wake_mbox_wait(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmboxq)
 	unsigned long drvr_flag;
 	struct completion *pmbox_done;
 
-	/*
-	 * If pmbox_done is empty, the driver thread gave up waiting and
-	 * continued running.
-	 */
-	pmboxq->mbox_flag |= LPFC_MBX_WAKE;
+	/* Decide who owns the mailbox under the same lock as waiter detach. */
 	spin_lock_irqsave(&phba->hbalock, drvr_flag);
 	pmbox_done = pmboxq->ctx_u.mbox_wait;
-	if (pmbox_done)
-		complete(pmbox_done);
+	if (!pmbox_done) {
+		spin_unlock_irqrestore(&phba->hbalock, drvr_flag);
+		lpfc_sli_def_mbox_cmpl(phba, pmboxq);
+		return;
+	}
+
+	pmboxq->mbox_flag |= LPFC_MBX_WAKE;
+	complete(pmbox_done);
 	spin_unlock_irqrestore(&phba->hbalock, drvr_flag);
-	return;
 }
 
 /**
@@ -13313,15 +13314,11 @@ lpfc_sli_issue_mbox_wait(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmboxq,
 
 		spin_lock_irqsave(&phba->hbalock, flag);
 		pmboxq->ctx_u.mbox_wait = NULL;
-		/*
-		 * if LPFC_MBX_WAKE flag is set the mailbox is completed
-		 * else do not free the resources.
-		 */
+		/* The callback owns cleanup if it has not woken the waiter. */
 		if (pmboxq->mbox_flag & LPFC_MBX_WAKE) {
 			retval = MBX_SUCCESS;
 		} else {
 			retval = MBX_TIMEOUT;
-			pmboxq->mbox_cmpl = lpfc_sli_def_mbox_cmpl;
 		}
 		spin_unlock_irqrestore(&phba->hbalock, flag);
 	}
