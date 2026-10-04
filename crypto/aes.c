@@ -702,17 +702,12 @@ static struct skcipher_alg skcipher_algs[] = {
 		.decrypt = crypto_aes_xctr_crypt,
 	},
 #endif
-	/*
-	 * Don't register library-based "xts(aes)" on architectures where it
-	 * might block a "better" implementation from being instantiated via the
-	 * "xts" template.  This exclusion is temporary and will go away when
-	 * the library AES-XTS is optimized for SPARC.
-	 */
-#if IS_ENABLED(CONFIG_CRYPTO_XTS) && !IS_ENABLED(CONFIG_SPARC)
+#if IS_ENABLED(CONFIG_CRYPTO_XTS)
 	{
 		.base.cra_name = "xts(aes)",
 		.base.cra_driver_name = "xts-aes-lib",
 		.base.cra_priority = (IS_ENABLED(CONFIG_RISCV) ||
+				      IS_ENABLED(CONFIG_SPARC) ||
 				      IS_ENABLED(CONFIG_X86)) ? 500 : 110,
 		.base.cra_blocksize = AES_BLOCK_SIZE,
 		.base.cra_ctxsize = sizeof(struct aes_xts_key),
