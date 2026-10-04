@@ -1812,7 +1812,14 @@ static void disk_zone_wplug_unplug_bio(struct gendisk *disk,
 	else if (!bio_list_empty(&zwplug->bio_list))
 		disk_zone_wplug_schedule_work(disk, zwplug);
 
-	if (!zwplug->wp_offset || disk_zone_wplug_is_full(disk, zwplug))
+	/*
+	 * The issuer of the write was told about its completion before we got
+	 * here. It may already have reset the zone and started to write it
+	 * again, in which case the zone is empty but has BIOs plugged. The plug
+	 * must stay alive to track them.
+	 */
+	if ((!zwplug->wp_offset && bio_list_empty(&zwplug->bio_list)) ||
+	    disk_zone_wplug_is_full(disk, zwplug))
 		disk_mark_zone_wplug_dead(zwplug);
 
 	spin_unlock_irqrestore(&zwplug->lock, flags);
