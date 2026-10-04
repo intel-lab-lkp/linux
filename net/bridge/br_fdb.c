@@ -995,8 +995,17 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 				fdb_modified = __fdb_mark_active(fdb);
 			}
 
-			/* fastpath: update of existing entry */
-			if (unlikely(source != READ_ONCE(fdb->dst) &&
+			if (likely(!fdb_modified &&
+				   (source == READ_ONCE(fdb->dst) ||
+				    test_bit(BR_FDB_STICKY, &fdb->flags)) &&
+				   !test_bit(BR_FDB_ADDED_BY_USER, &flags)))
+				return;
+
+			/* keep a roam and its two switchdev notifications
+			 * atomic against a roam on another CPU
+			 */
+			spin_lock(&br->hash_lock);
+			if (unlikely(source != fdb->dst &&
 				     !test_bit(BR_FDB_STICKY, &fdb->flags))) {
 				br_switchdev_fdb_notify(br, fdb, RTM_DELNEIGH);
 				WRITE_ONCE(fdb->dst, source);
@@ -1023,6 +1032,7 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 				trace_br_fdb_update(br, source, addr, vid, flags);
 				fdb_notify(br, fdb, RTM_NEWNEIGH, true);
 			}
+			spin_unlock(&br->hash_lock);
 		}
 	} else {
 		spin_lock(&br->hash_lock);
