@@ -3515,13 +3515,14 @@ static int ath11k_mac_config_obss_pd(struct ath11k *ar,
 	return 0;
 }
 
-static bool ath11k_mac_supports_station_tpc(struct ath11k *ar,
-					    struct ath11k_vif *arvif,
-					    const struct cfg80211_chan_def *chandef)
+static bool ath11k_mac_supports_tpc(struct ath11k *ar,
+				    struct ath11k_vif *arvif,
+				    const struct cfg80211_chan_def *chandef)
 {
 	return ath11k_wmi_supports_6ghz_cc_ext(ar) &&
 		test_bit(WMI_TLV_SERVICE_EXT_TPC_REG_SUPPORT, ar->ab->wmi_ab.svc_map) &&
-		arvif->vdev_type == WMI_VDEV_TYPE_STA &&
+		(arvif->vdev_type == WMI_VDEV_TYPE_STA ||
+		 arvif->vdev_type == WMI_VDEV_TYPE_AP) &&
 		arvif->vdev_subtype == WMI_VDEV_SUBTYPE_NONE &&
 		chandef->chan &&
 		chandef->chan->band == NL80211_BAND_6GHZ;
@@ -7655,8 +7656,8 @@ ath11k_mac_vdev_start_restart(struct ath11k_vif *arvif,
 	/* TODO: For now we only set TPC power here. However when
 	 * channel changes, say CSA, it should be updated again.
 	 */
-	if (ath11k_mac_supports_station_tpc(ar, arvif, chandef)) {
-		ath11k_mac_fill_reg_tpc_info(ar, arvif->vif, &arvif->chanctx);
+	if (ath11k_mac_supports_tpc(ar, arvif, chandef)) {
+		ath11k_mac_fill_reg_tpc_info(ar, arvif->vif, ctx);
 		ath11k_wmi_send_vdev_set_tpc_power(ar, arvif->vdev_id,
 						   &arvif->reg_tpc_info);
 	}
@@ -8168,7 +8169,11 @@ void ath11k_mac_fill_reg_tpc_info(struct ath11k *ar,
 	start_freq = ath11k_mac_get_6ghz_start_frequency(&ctx->def);
 	pwr_reduction = bss_conf->pwr_reduction;
 
-	if (arvif->reg_tpc_info.num_pwr_levels) {
+	/* Only a station takes power levels from its AP's TPE; an AP's own
+	 * levels from an earlier start are not a TPE.
+	 */
+	if (arvif->vdev_type == WMI_VDEV_TYPE_STA &&
+	    arvif->reg_tpc_info.num_pwr_levels) {
 		is_tpe_present = true;
 		num_pwr_levels = arvif->reg_tpc_info.num_pwr_levels;
 	} else {
@@ -8319,8 +8324,13 @@ void ath11k_mac_fill_reg_tpc_info(struct ath11k *ar,
 	reg_tpc_info->num_pwr_levels = num_pwr_levels;
 	reg_tpc_info->is_psd_power = is_psd_power;
 	reg_tpc_info->eirp_power = eirp_power;
-	reg_tpc_info->ap_power_type =
-		ath11k_reg_ap_pwr_convert(vif->bss_conf.power_type);
+	if (arvif->vdev_type == WMI_VDEV_TYPE_STA)
+		reg_tpc_info->ap_power_type =
+			ath11k_reg_ap_pwr_convert(vif->bss_conf.power_type);
+	else
+		/* LPI is the only AP power mode supported for now */
+		reg_tpc_info->ap_power_type =
+			ath11k_reg_ap_pwr_convert(IEEE80211_REG_LPI_AP);
 }
 
 static void ath11k_mac_parse_tx_pwr_env(struct ath11k *ar,
