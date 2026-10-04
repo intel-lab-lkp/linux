@@ -549,12 +549,12 @@ static int wdt_probe(struct platform_device *pdev)
 		}
 
 		if (ret)
-			return ret;
+			return dev_err_probe(dev, ret, "failed to set watchdog timeout\n");
 	}
 
 	ret = devm_watchdog_register_device(dev, wdd);
 	if (ret)
-		return ret;
+		return dev_err_probe(dev, ret, "failed to register watchdog\n");
 
 	dev_info(dev, "initialized. timeout=%d sec (nowayout=%d)\n",
 		 wdd->timeout, nowayout);
