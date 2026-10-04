@@ -851,6 +851,18 @@ static const struct file_operations fops_sram_dump = {
 	.llseek = default_llseek,
 };
 
+static int ath11k_wmi_services_show(struct seq_file *m, void *v)
+{
+	struct ath11k_base *ab = m->private;
+	unsigned int i;
+
+	for_each_set_bit(i, ab->wmi_ab.svc_map, WMI_MAX_EXT2_SERVICE)
+		seq_printf(m, "%u\n", i);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(ath11k_wmi_services);
+
 int ath11k_debugfs_pdev_create(struct ath11k_base *ab)
 {
 	if (test_bit(ATH11K_FLAG_REGISTERED, &ab->dev_flags))
@@ -861,6 +873,9 @@ int ath11k_debugfs_pdev_create(struct ath11k_base *ab)
 
 	debugfs_create_file("soc_dp_stats", 0400, ab->debugfs_soc, ab,
 			    &fops_soc_dp_stats);
+
+	debugfs_create_file("wmi_services", 0400, ab->debugfs_soc, ab,
+			    &ath11k_wmi_services_fops);
 
 	if (ab->hw_params.sram_dump.start != 0)
 		debugfs_create_file("sram", 0400, ab->debugfs_soc, ab,
