@@ -119,6 +119,9 @@
 	phy-reset-duration = <25>;
 	phy-handle = <&ethphy0>;
 
+	/delete-property/ nvmem-cells;
+	/delete-property/ nvmem-cell-names;
+
 	mdio {
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -137,6 +140,11 @@
 			smsc,disable-energy-detect;
 		};
 	};
+};
+
+&fec2 {
+	/delete-property/ nvmem-cells;
+	/delete-property/ nvmem-cell-names;
 };
 
 &gpio1 {
