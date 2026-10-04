@@ -2068,13 +2068,16 @@ static void icm_unplug_children(struct tb_switch *sw)
 	}
 }
 
-static int complete_rpm(struct device *dev, void *data)
+static void complete_rpm(struct tb_switch *sw)
 {
-	struct tb_switch *sw = tb_to_switch(dev);
+	struct tb_port *port;
 
-	if (sw)
-		complete(&sw->rpm_complete);
-	return 0;
+	complete(&sw->rpm_complete);
+
+	tb_switch_for_each_port(sw, port) {
+		if (tb_port_has_remote(port))
+			complete_rpm(port->remote->sw);
+	}
 }
 
 static void remove_unplugged_switch(struct tb_switch *sw)
@@ -2088,8 +2091,7 @@ static void remove_unplugged_switch(struct tb_switch *sw)
 	 * tb_switch_remove() calls pm_runtime_get_sync() that then waits
 	 * for it.
 	 */
-	complete_rpm(&sw->dev, NULL);
-	bus_for_each_dev(&tb_bus_type, &sw->dev, NULL, complete_rpm);
+	complete_rpm(sw);
 	tb_switch_remove(sw);
 
 	pm_runtime_mark_last_busy(parent);
