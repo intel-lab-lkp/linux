@@ -1621,7 +1621,11 @@ static netdev_tx_t igc_xmit_frame_ring(struct sk_buff *skb,
 						&skb_shinfo(skb)->frags[f]));
 
 	if (igc_maybe_stop_tx(tx_ring, count + 5)) {
-		/* this is a hard error */
+		/* This is a hard error. Write the tail for packets deferred
+		 * by xmit_more before returning busy, otherwise the stopped
+		 * queue may never get enough completions to be woken.
+		 */
+		igc_flush_tx_descriptors(tx_ring);
 		return NETDEV_TX_BUSY;
 	}
 
