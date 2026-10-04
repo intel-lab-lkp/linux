@@ -224,6 +224,11 @@ static void flow_offload_fixup_ct(struct flow_offload *flow)
 			tcp_state = READ_ONCE(ct->proto.tcp.state);
 			flow_offload_fixup_tcp(ct, tcp_state);
 			timeout = READ_ONCE(tn->timeouts[tcp_state]);
+			if (nf_conntrack_tcp_unreplied(ct)) {
+				u32 unack = READ_ONCE(tn->timeouts[TCP_CONNTRACK_UNACK]);
+
+				timeout = min_t(s32, timeout, unack);
+			}
 			expired = nf_flow_has_expired(flow);
 		}
 		offload_timeout = READ_ONCE(tn->offload_timeout);
