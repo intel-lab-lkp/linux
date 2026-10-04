@@ -370,6 +370,10 @@ static int ea_read(struct inode *ip, struct jfs_ea_list *ealist)
 		jfs_error(sb, "nbytes is 0\n");
 		return -EIO;
 	}
+	if ((u64)nbytes > (u64)lengthDXD(&ji->ea) << sb->s_blocksize_bits) {
+		jfs_error(sb, "EA size exceeds extent capacity\n");
+		return -EIO;
+	}
 
 	/*
 	 * Figure out how many blocks were allocated when this EA list was
