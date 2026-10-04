@@ -1811,99 +1811,60 @@ static struct btrfs_ordered_extent *get_oe_from_bbio(const struct btrfs_bio *bbi
 	return oe;
 }
 
-/*
- * Return 0 if we have submitted or queued the sector for submission.
- * Return <0 for critical errors, and the involved sector will be cleaned up.
- *
- * Caller should make sure filepos < i_size and handle filepos >= i_size case.
- */
-static int submit_write_sector(struct btrfs_inode *inode,
-			       struct folio *folio,
-			       u64 filepos, struct btrfs_bio_ctrl *bio_ctrl,
-			       loff_t i_size)
+static void truncate_ordered_extents_beyond_eof(struct btrfs_inode *inode,
+						u64 file_offset, u32 len)
 {
-	struct btrfs_fs_info *fs_info = inode->root->fs_info;
-	struct btrfs_ordered_extent *oe;
-	u64 block_start;
-	u64 disk_bytenr;
-	u64 extent_offset;
-	const u32 sectorsize = fs_info->sectorsize;
-	int ret;
+	u64 cur = file_offset;
+	const u64 next_off = file_offset + len;
 
-	ASSERT(IS_ALIGNED(filepos, sectorsize));
+	while (cur < next_off) {
+		struct btrfs_ordered_extent *ordered;
 
-	/* @filepos >= i_size case should be handled by the caller. */
-	ASSERT(filepos < i_size);
-
-	/* Try to reuse the existing OE from bbio first. */
-	oe = get_oe_from_bbio(bio_ctrl->bbio, filepos);
-	if (!oe)
-		oe = btrfs_lookup_ordered_extent(inode, filepos);
-	if (unlikely(!oe)) {
-		/*
-		 * bio_ctrl may contain a bio crossing several folios.
-		 * Submit it immediately so that the bio has a chance
-		 * to finish normally, other than marked as error.
-		 */
-		submit_one_bio(bio_ctrl);
+		ordered = btrfs_lookup_first_ordered_range(inode, cur, next_off - cur);
+		if (!ordered)
+			break;
 
 		/*
-		 * When submission failed, we should still clear the folio dirty.
-		 * Or the folio will be written back again but without any
-		 * ordered extent.
+		 * The whole range [file_offset, file_offset + len) should all have
+		 * OE coverage.
+		 * Thus every found OE must cover @cur, there should be no gap.
 		 */
-		btrfs_folio_clear_dirty(fs_info, folio, filepos, sectorsize);
-		btrfs_folio_set_writeback(fs_info, folio, filepos, sectorsize);
-		btrfs_folio_clear_writeback(fs_info, folio, filepos, sectorsize);
-
-		/*
-		 * Since there is no bio submitted to finish the ordered
-		 * extent, we have to manually finish this sector.
-		 */
-		btrfs_mark_ordered_io_finished(inode, filepos, fs_info->sectorsize,
-					       false);
-		btrfs_err_rl(fs_info,
-		"no ordered extent for root %lld ino %llu filepos %llu",
-			     btrfs_root_id(inode->root), btrfs_ino(inode),
-			     filepos);
-		return -EUCLEAN;
+		ASSERT(in_range(cur, ordered->file_offset, ordered->num_bytes));
+		spin_lock(&inode->ordered_tree_lock);
+		set_bit(BTRFS_ORDERED_TRUNCATED, &ordered->flags);
+		ordered->truncated_len = min(ordered->truncated_len,
+					     cur - ordered->file_offset);
+		cur = ordered->file_offset + ordered->num_bytes;
+		spin_unlock(&inode->ordered_tree_lock);
+		btrfs_put_ordered_extent(ordered);
 	}
+}
 
-	extent_offset = filepos - oe->file_offset;
-	ASSERT(filepos < oe->file_offset + oe->num_bytes);
-	ASSERT(IS_ALIGNED(oe->file_offset, sectorsize));
-	ASSERT(IS_ALIGNED(oe->num_bytes, sectorsize));
-	ASSERT(oe->compress_type == BTRFS_COMPRESS_NONE);
-	ASSERT(!test_bit(BTRFS_ORDERED_COMPRESSED, &oe->flags));
+static bool find_next_write_range(struct btrfs_fs_info *fs_info,
+				  struct folio *folio,
+				  unsigned long *submit_bitmap,
+				  u64 start, u32 *len_ret)
+{
+	const u64 fpos = folio_pos(folio);
+	const u64 fnext = folio_next_pos(folio);
+	const u32 blocks_per_folio = btrfs_blocks_per_folio(fs_info, folio);
+	unsigned int start_bit = (start - fpos) >> fs_info->sectorsize_bits;
+	unsigned int next_bit;
+	bool ret;
 
-	block_start = oe->disk_bytenr + oe->offset;
-	disk_bytenr = block_start + extent_offset;
+	ASSERT(IS_ALIGNED(start, fs_info->sectorsize));
+	/* Search start should be inside the folio. */
+	ASSERT(start >= fpos && start < fnext);
 
-	btrfs_put_ordered_extent(oe);
-
-	btrfs_folio_clear_dirty(fs_info, folio, filepos, sectorsize);
-	btrfs_folio_set_writeback(fs_info, folio, filepos, sectorsize);
-	/*
-	 * Above call should set the whole folio with writeback flag, even
-	 * just for a single subpage sector.
-	 * As long as the folio is properly locked and the range is correct,
-	 * we should always get the folio with writeback flag.
-	 */
-	ASSERT(folio_test_writeback(folio));
-
-	ret = submit_folio_blocks(bio_ctrl, disk_bytenr, folio,
-				  offset_in_folio(folio, filepos), sectorsize, 0);
-	if (unlikely(ret < 0)) {
-		btrfs_folio_clear_writeback(fs_info, folio, filepos, sectorsize);
-		btrfs_mark_ordered_io_finished(inode, filepos, fs_info->sectorsize,
-					       false);
-		btrfs_err_rl(fs_info,
-		"failed to queue sector for root %lld ino %llu filepos %llu: %pe",
-			     btrfs_root_id(inode->root),
-			     btrfs_ino(inode), filepos, ERR_PTR(ret));
-		return ret;
-	}
-	return 0;
+	ret = test_bit(start_bit, submit_bitmap);
+	if (ret)
+		next_bit = find_next_zero_bit(submit_bitmap, blocks_per_folio,
+					      start_bit);
+	else
+		next_bit = find_next_bit(submit_bitmap, blocks_per_folio,
+					 start_bit);
+	*len_ret = (next_bit - start_bit) << fs_info->sectorsize_bits;
+	return ret;
 }
 
 /*
@@ -1923,12 +1884,12 @@ static noinline_for_stack int extent_writepage_io(struct btrfs_inode *inode,
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	bool submitted_io = false;
 	int found_error = 0;
+	const u32 blocksize = fs_info->sectorsize;
 	const u64 end = start + len;
 	const u64 folio_start = folio_pos(folio);
 	const u64 folio_end = folio_start + folio_size(folio);
-	const unsigned int blocks_per_folio = btrfs_blocks_per_folio(fs_info, folio);
+	const u64 rounded_isize = round_up(i_size, blocksize);
 	u64 cur;
-	int bit;
 	int ret = 0;
 
 	ASSERT(start >= folio_start, "start=%llu folio_start=%llu", start, folio_start);
@@ -1954,27 +1915,28 @@ static noinline_for_stack int extent_writepage_io(struct btrfs_inode *inode,
 
 	bio_ctrl->end_io_func = end_bbio_data_write;
 
-	for_each_set_bit(bit, bio_ctrl->submit_bitmap, blocks_per_folio) {
-		cur = folio_pos(folio) + (bit << fs_info->sectorsize_bits);
+	cur = start;
+	while (cur < end) {
+		struct btrfs_ordered_extent *oe;
+		u64 block_start;
+		u64 disk_bytenr;
+		u64 extent_offset;
+		u32 cur_len;
+		u32 cur_bio_size = bio_ctrl->bbio ?
+				   bio_ctrl->bbio->bio.bi_iter.bi_size : 0;
+		bool dirty;
 
-		if (cur >= i_size) {
-			struct btrfs_ordered_extent *ordered;
+		dirty = find_next_write_range(fs_info, folio, bio_ctrl->submit_bitmap,
+					      cur, &cur_len);
+		if (!dirty) {
+			cur += cur_len;
+			continue;
+		}
 
-			ordered = btrfs_lookup_first_ordered_range(inode, cur,
-								   fs_info->sectorsize);
-			/*
-			 * We have just run delalloc before getting here, so
-			 * there must be an ordered extent.
-			 */
-			ASSERT(ordered != NULL);
-			spin_lock(&inode->ordered_tree_lock);
-			set_bit(BTRFS_ORDERED_TRUNCATED, &ordered->flags);
-			ordered->truncated_len = min(ordered->truncated_len,
-						     cur - ordered->file_offset);
-			spin_unlock(&inode->ordered_tree_lock);
-			btrfs_put_ordered_extent(ordered);
-
-			btrfs_mark_ordered_io_finished(inode, cur, fs_info->sectorsize, true);
+		/* Beyond EOF, no need to submit IO. */
+		if (cur >= rounded_isize) {
+			truncate_ordered_extents_beyond_eof(inode, cur, cur_len);
+			btrfs_mark_ordered_io_finished(inode, cur, cur_len, true);
 			/*
 			 * This range is beyond i_size, thus we don't need to
 			 * bother writing back.
@@ -1983,15 +1945,104 @@ static noinline_for_stack int extent_writepage_io(struct btrfs_inode *inode,
 			 * writeback the sectors with subpage dirty bits,
 			 * causing writeback without ordered extent.
 			 */
-			btrfs_folio_clear_dirty(fs_info, folio, cur, fs_info->sectorsize);
+			btrfs_folio_clear_dirty(fs_info, folio, cur, cur_len);
+			cur += cur_len;
 			continue;
 		}
-		ret = submit_write_sector(inode, folio, cur, bio_ctrl, i_size);
+
+		/*
+		 * The range covers the last byte. Limit the range to the
+		 * rounded_isize, and submit the range inside rounded_isize first.
+		 */
+		if (cur + cur_len > rounded_isize && cur < rounded_isize)
+			cur_len = min_t(u64, cur_len, rounded_isize - cur);
+
+		/* @cur >= i_size case should be handled. */
+		ASSERT(cur < i_size);
+
+		/* Try to reuse the existing OE from bbio first. */
+		oe = get_oe_from_bbio(bio_ctrl->bbio, cur);
+		if (!oe)
+			oe = btrfs_lookup_ordered_extent(inode, cur);
+		if (unlikely(!oe)) {
+			/* The next block may have valid OE, so only skip one block. */
+			cur_len = blocksize;
+			/*
+			 * bio_ctrl may contain a bio crossing several folios.
+			 * Submit it immediately so that the bio has a chance
+			 * to finish normally, rather than being marked as error.
+			 */
+			submit_one_bio(bio_ctrl);
+
+			/*
+			 * When submission failed, we should still clear the
+			 * folio dirty. Or the folio will be written back again
+			 * but without any ordered extent.
+			 */
+			btrfs_folio_clear_dirty(fs_info, folio, cur, cur_len);
+			btrfs_folio_set_writeback(fs_info, folio, cur, cur_len);
+			btrfs_folio_clear_writeback(fs_info, folio, cur, cur_len);
+
+			/*
+			 * Since there is no bio submitted to finish the ordered
+			 * extent, we have to manually finish this sector.
+			 */
+			btrfs_mark_ordered_io_finished(inode, cur, cur_len, false);
+			btrfs_err_rl(fs_info,
+			"no ordered extent for root %lld ino %llu filepos %llu",
+				     btrfs_root_id(inode->root), btrfs_ino(inode), cur);
+			if (!found_error)
+				found_error = -EUCLEAN;
+			cur += cur_len;
+			continue;
+		}
+
+		extent_offset = cur - oe->file_offset;
+		ASSERT(cur < oe->file_offset + oe->num_bytes);
+		ASSERT(IS_ALIGNED(oe->file_offset, blocksize));
+		ASSERT(IS_ALIGNED(oe->num_bytes, blocksize));
+		ASSERT(oe->compress_type == BTRFS_COMPRESS_NONE);
+		ASSERT(!test_bit(BTRFS_ORDERED_COMPRESSED, &oe->flags));
+
+		block_start = oe->disk_bytenr + oe->offset;
+		disk_bytenr = block_start + extent_offset;
+
+		cur_len = min_t(u64, oe->file_offset + oe->num_bytes - cur,
+				cur_len);
+
+		if (bio_ctrl->bbio && !btrfs_bio_is_contig(bio_ctrl, disk_bytenr, cur))
+			cur_bio_size = 0;
+		/* Also limit cur_len according to writeback_bio_size. */
+		cur_len = min(round_down(fs_info->writeback_bio_size - cur_bio_size,
+					 blocksize), cur_len);
+		btrfs_put_ordered_extent(oe);
+
+		btrfs_folio_clear_dirty(fs_info, folio, cur, cur_len);
+		btrfs_folio_set_writeback(fs_info, folio, cur, cur_len);
+		/*
+		 * Above call should set the whole folio with writeback flag, even
+		 * just for a single subpage sector.
+		 * As long as the folio is properly locked and the range is correct,
+		 * we should always get the folio with writeback flag.
+		 */
+		ASSERT(folio_test_writeback(folio));
+
+		ret = submit_folio_blocks(bio_ctrl, disk_bytenr, folio,
+					  offset_in_folio(folio, cur),
+					  cur_len, 0);
 		if (unlikely(ret < 0)) {
+			btrfs_folio_clear_writeback(fs_info, folio, cur, cur_len);
+			btrfs_mark_ordered_io_finished(inode, cur, cur_len, false);
+			btrfs_err_rl(fs_info,
+			"failed to queue sector for root %lld ino %llu filepos %llu: %pe",
+				     btrfs_root_id(inode->root),
+				     btrfs_ino(inode), cur, ERR_PTR(ret));
 			if (!found_error)
 				found_error = ret;
+			cur += cur_len;
 			continue;
 		}
+		cur += cur_len;
 		submitted_io = true;
 	}
 
