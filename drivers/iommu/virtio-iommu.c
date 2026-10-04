@@ -402,20 +402,28 @@ static int viommu_add_mapping(struct viommu_domain *vdomain, u64 iova, u64 end,
  * @vdomain: the domain
  * @iova: start of the range
  * @end: end of the range
+ * @queue_unmap: queue an UNMAP for each run of removed mappings; false when
+ *               the device has already dropped the mappings
  *
- * On success, returns the number of unmapped bytes
+ * Returns the number of bytes unmapped, i.e. the mappings removed from the
+ * tree.  A run whose UNMAP could not be queued is not counted, and the walk
+ * stops there: later mappings stay in the tree.
  */
 static size_t viommu_del_mappings(struct viommu_domain *vdomain,
-				  u64 iova, u64 end)
+				  u64 iova, u64 end, bool queue_unmap)
 {
 	size_t unmapped = 0;
 	unsigned long flags;
-	struct viommu_mapping *mapping = NULL;
+	bool spanning = false;
+	u64 span_start = 0, span_end = 0;
 	struct interval_tree_node *node, *next;
 
 	spin_lock_irqsave(&vdomain->mappings_lock, flags);
 	next = interval_tree_iter_first(&vdomain->mappings, iova, end);
 	while (next) {
+		struct viommu_mapping *mapping;
+		size_t size;
+
 		node = next;
 		mapping = container_of(node, struct viommu_mapping, iova);
 		next = interval_tree_iter_next(node, iova, end);
@@ -428,13 +436,69 @@ static size_t viommu_del_mappings(struct viommu_domain *vdomain,
 		 * Virtio-iommu doesn't allow UNMAP to split a mapping created
 		 * with a single MAP request, so remove the full mapping.
 		 */
-		unmapped += mapping->iova.last - mapping->iova.start + 1;
+		size = mapping->iova.last - mapping->iova.start + 1;
+
+		/*
+		 * Queue one UNMAP per contiguous run of removed mappings, in the
+		 * same critical section that removes them, so that a concurrent
+		 * map of the same range cannot put its MAP in front of it.  The
+		 * range is the mappings' own: the caller's requested range can
+		 * begin or end inside another mapping and would then invalidate
+		 * nothing at all, and a range spanning a gap would drop a
+		 * mapping that is not being removed.
+		 */
+		if (queue_unmap && vdomain->nr_endpoints) {
+			if (spanning && mapping->iova.start == span_end + 1) {
+				span_end = mapping->iova.last;
+			} else {
+				if (spanning) {
+					struct virtio_iommu_req_unmap unmap = {
+						.head.type	= VIRTIO_IOMMU_T_UNMAP,
+						.domain		= cpu_to_le32(vdomain->id),
+						.virt_start	= cpu_to_le64(span_start),
+						.virt_end	= cpu_to_le64(span_end),
+					};
+
+					if (viommu_add_req(vdomain->viommu, &unmap,
+							   sizeof(unmap))) {
+						unmapped -= span_end - span_start + 1;
+						dev_warn_ratelimited(vdomain->viommu->dev,
+								     "could not queue an unmap\n");
+						goto out;
+					}
+				}
+				spanning = true;
+				span_start = mapping->iova.start;
+				span_end = mapping->iova.last;
+			}
+		}
 
 		interval_tree_remove(node, &vdomain->mappings);
 		kfree(mapping);
+		unmapped += size;
 	}
+
+	if (spanning) {
+		struct virtio_iommu_req_unmap unmap = {
+			.head.type	= VIRTIO_IOMMU_T_UNMAP,
+			.domain		= cpu_to_le32(vdomain->id),
+			.virt_start	= cpu_to_le64(span_start),
+			.virt_end	= cpu_to_le64(span_end),
+		};
+
+		if (viommu_add_req(vdomain->viommu, &unmap, sizeof(unmap))) {
+			unmapped -= span_end - span_start + 1;
+			dev_warn_ratelimited(vdomain->viommu->dev,
+					     "could not queue an unmap\n");
+		}
+	}
+out:
 	spin_unlock_irqrestore(&vdomain->mappings_lock, flags);
 
+	/*
+	 * What was really unmapped: a run whose UNMAP could not be queued is not
+	 * reported as one.
+	 */
 	return unmapped;
 }
 
@@ -483,7 +547,7 @@ static int viommu_domain_map_identity(struct viommu_endpoint *vdev,
 	return 0;
 
 err_unmap:
-	viommu_del_mappings(vdomain, 0, iova);
+	viommu_del_mappings(vdomain, 0, iova, false);
 	return ret;
 }
 
@@ -757,7 +821,7 @@ static void viommu_domain_free(struct iommu_domain *domain)
 	struct viommu_domain *vdomain = to_viommu_domain(domain);
 
 	/* Free all remaining mappings */
-	viommu_del_mappings(vdomain, 0, ULLONG_MAX);
+	viommu_del_mappings(vdomain, 0, ULLONG_MAX, false);
 
 	if (vdomain->viommu)
 		ida_free(&vdomain->viommu->domain_ids, vdomain->id);
@@ -1075,29 +1139,10 @@ static size_t viommu_unmap_pages(struct iommu_domain *domain, unsigned long iova
 				 size_t pgsize, size_t pgcount,
 				 struct iommu_iotlb_gather *gather)
 {
-	int ret = 0;
-	size_t unmapped;
-	struct virtio_iommu_req_unmap unmap;
 	struct viommu_domain *vdomain = to_viommu_domain(domain);
 	size_t size = pgsize * pgcount;
 
-	unmapped = viommu_del_mappings(vdomain, iova, iova + size - 1);
-	if (unmapped < size)
-		return 0;
-
-	/* Device already removed all mappings after detach. */
-	if (!vdomain->nr_endpoints)
-		return unmapped;
-
-	unmap = (struct virtio_iommu_req_unmap) {
-		.head.type	= VIRTIO_IOMMU_T_UNMAP,
-		.domain		= cpu_to_le32(vdomain->id),
-		.virt_start	= cpu_to_le64(iova),
-		.virt_end	= cpu_to_le64(iova + unmapped - 1),
-	};
-
-	ret = viommu_add_req(vdomain->viommu, &unmap, sizeof(unmap));
-	return ret ? 0 : unmapped;
+	return viommu_del_mappings(vdomain, iova, iova + size - 1, true);
 }
 
 static phys_addr_t viommu_iova_to_phys(struct iommu_domain *domain,
