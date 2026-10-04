@@ -4,6 +4,7 @@
 #include <linux/module.h>
 #include <linux/netfilter.h>
 #include <linux/rhashtable.h>
+#include <linux/etherdevice.h>
 #include <linux/netdevice.h>
 #include <net/ip.h>
 #include <net/ip6_route.h>
@@ -139,6 +140,9 @@ static int flow_offload_fill_route(struct flow_offload *flow,
 		memcpy(flow_tuple->out.h_source, route->tuple[dir].out.h_source,
 		       ETH_ALEN);
 		flow_tuple->out.ifidx = route->tuple[dir].out.ifindex;
+		flow_tuple->out.path_ifidx = route->tuple[dir].out.path_ifindex;
+		flow_tuple->out.bridge_ifidx =
+			route->tuple[dir].out.bridge_ifindex;
 		break;
 	case FLOW_OFFLOAD_XMIT_XFRM:
 	case FLOW_OFFLOAD_XMIT_NEIGH:
@@ -565,15 +569,55 @@ static void nf_flow_table_extend_ct_timeout(struct nf_conn *ct)
 	nf_ct_put(ct);
 }
 
+/* A direct xmit flow through a bridge is stale once the bridge resolves
+ * its destination to another port. An fdb entry that aged out is not a
+ * move: offloaded packets do not pass the bridge to refresh it.
+ */
+static bool nf_flow_bridge_port_stale(struct net *net,
+				      const struct flow_offload_tuple *tuple)
+{
+	struct net_device_path_ctx ctx = {
+		.ether_type = tuple->l3proto == NFPROTO_IPV4 ?
+			      htons(ETH_P_IP) : htons(ETH_P_IPV6),
+	};
+	struct net_device_path_stack stack;
+	bool stale = false;
+	int i, port = 0;
+
+	if (tuple->xmit_type != FLOW_OFFLOAD_XMIT_DIRECT ||
+	    !tuple->out.bridge_ifidx)
+		return false;
+
+	ether_addr_copy(ctx.daddr, tuple->out.h_dest);
+
+	rcu_read_lock();
+	ctx.dev = dev_get_by_index_rcu(net, tuple->out.path_ifidx);
+	if (ctx.dev && !dev_fill_forward_path(&ctx, &stack)) {
+		/* The last bridge, as in nft_dev_path_info() */
+		for (i = 0; i < stack.num_paths - 1; i++) {
+			if (stack.path[i].type == DEV_PATH_BRIDGE)
+				port = stack.path[i + 1].dev->ifindex;
+		}
+		stale = port && port != tuple->out.bridge_ifidx;
+		dev_fill_forward_path_release(&stack);
+	}
+	rcu_read_unlock();
+
+	return stale;
+}
+
 static void nf_flow_offload_gc_step(struct nf_flowtable *flow_table,
 				    struct flow_offload *flow, void *data)
 {
+	struct net *net = read_pnet(&flow_table->net);
 	bool teardown = test_bit(NF_FLOW_TEARDOWN, &flow->flags);
 
 	if (nf_flow_has_expired(flow) ||
 	    nf_ct_is_dying(flow->ct) ||
 	    !nf_flow_dst_check(&flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].tuple) ||
 	    !nf_flow_dst_check(&flow->tuplehash[FLOW_OFFLOAD_DIR_REPLY].tuple) ||
+	    nf_flow_bridge_port_stale(net, &flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].tuple) ||
+	    nf_flow_bridge_port_stale(net, &flow->tuplehash[FLOW_OFFLOAD_DIR_REPLY].tuple) ||
 	    nf_flow_custom_gc(flow_table, flow)) {
 		flow_offload_teardown(flow);
 		teardown = true;
