@@ -272,6 +272,43 @@ check_counters()
 	fi
 }
 
+dev_bytes()
+{
+	local ns=$1
+	local dev=$2
+
+	ip -net "$ns" -s link show dev "$dev" | \
+		awk '/RX:/ { getline; rx = $1 } /TX:/ { getline; tx = $1 } END { print rx, tx }'
+}
+
+# Fails if the fast path does not update the device counters.
+check_dev_bytes()
+{
+	local what=$1
+	local ns=$2
+	local dev=$3
+	local rx0=$4
+	local tx0=$5
+	local n=${6:-2}
+	local min=$((filesize * n))
+	local max=$((filesize * (n + 1)))
+	local rx tx
+
+	read -r rx tx < <(dev_bytes "$ns" "$dev")
+	rx=$((rx - rx0))
+	tx=$((tx - tx0))
+
+	if [ "$rx" -lt "$min" ] || [ "$tx" -lt "$min" ] ||
+	   [ "$rx" -gt "$max" ] || [ "$tx" -gt "$max" ]; then
+		echo "FAIL: $what: $dev counted rx $rx tx $tx bytes," \
+		     "expected $min to $max" 1>&2
+		ret=1
+		return
+	fi
+
+	echo "PASS: $what"
+}
+
 check_dscp()
 {
 	local what=$1
@@ -626,11 +663,17 @@ ip netns exec "$nsr1" nft -a insert rule inet filter forward 'meta oif tun6 acce
 ip netns exec "$nsr1" nft -a insert rule inet filter forward \
 	'meta oif "veth0" tcp sport 12345 ct mark set 1 flow add @f1 counter name routed_repl accept'
 
+read -r tun_rx tun_tx < <(dev_bytes "$nsr1" tun0)
+
 if ! test_tcp_forwarding_nat "$ns1" "$ns2" 1 "IPIP tunnel"; then
 	echo "FAIL: flow offload for ns1/ns2 with IPIP tunnel" 1>&2
 	ip netns exec "$nsr1" nft list ruleset
 	ret=1
 fi
+
+check_dev_bytes "IPIP tunnel counters" "$nsr1" tun0 "$tun_rx" "$tun_tx"
+
+read -r tun_rx tun_tx < <(dev_bytes "$nsr1" tun6)
 
 if test_tcp_forwarding "$ns1" "$ns2" 1 6 "[dead:2::99]" 12345; then
 	check_counters "flow offload for ns1/ns2 IP6IP6 tunnel"
@@ -639,6 +682,8 @@ else
 	ip netns exec "$nsr1" nft list ruleset
 	ret=1
 fi
+
+check_dev_bytes "IP6IP6 tunnel counters" "$nsr1" tun6 "$tun_rx" "$tun_tx" 1
 
 # Create vlan tagged devices for IPIP traffic.
 ip -net "$nsr1" link add link veth1 name veth1.10 type vlan id 10
@@ -686,11 +731,20 @@ ip -net "$nsr2" addr add fee1:5::2/64 dev tun6.10 nodad
 ip -6 -net "$nsr2" route delete default
 ip -6 -net "$nsr2" route add default via fee1:5::1
 
+read -r tun_rx tun_tx < <(dev_bytes "$nsr1" tun0.10)
+read -r vlan_rx vlan_tx < <(dev_bytes "$nsr1" veth1.10)
+
 if ! test_tcp_forwarding_nat "$ns1" "$ns2" 1 "IPIP tunnel over vlan"; then
 	echo "FAIL: flow offload for ns1/ns2 with IPIP tunnel over vlan" 1>&2
 	ip netns exec "$nsr1" nft list ruleset
 	ret=1
 fi
+
+check_dev_bytes "IPIP tunnel counters over VLAN" "$nsr1" tun0.10 "$tun_rx" "$tun_tx"
+check_dev_bytes "VLAN counters under IPIP tunnel" "$nsr1" veth1.10 "$vlan_rx" "$vlan_tx"
+
+read -r tun_rx tun_tx < <(dev_bytes "$nsr1" tun6.10)
+read -r vlan_rx vlan_tx < <(dev_bytes "$nsr1" veth1.10)
 
 if test_tcp_forwarding "$ns1" "$ns2" 1 6 "[dead:2::99]" 12345; then
 	check_counters "flow offload for ns1/ns2 IP6IP6 tunnel over vlan"
@@ -699,6 +753,9 @@ else
 	ip netns exec "$nsr1" nft list ruleset
 	ret=1
 fi
+
+check_dev_bytes "IP6IP6 tunnel counters over VLAN" "$nsr1" tun6.10 "$tun_rx" "$tun_tx" 1
+check_dev_bytes "VLAN counters under IP6IP6 tunnel" "$nsr1" veth1.10 "$vlan_rx" "$vlan_tx" 1
 
 # Restore the previous configuration
 ip -net "$nsr1" route change default via 192.168.10.2
@@ -740,11 +797,15 @@ table ip nat {
 }
 EOF
 
+read -r br_rx br_tx < <(dev_bytes "$nsr1" br0)
+
 if ! test_tcp_forwarding_nat "$ns1" "$ns2" 1 "on bridge"; then
 	echo "FAIL: flow offload for ns1/ns2 with bridge NAT" 1>&2
 	ip netns exec "$nsr1" nft list ruleset
 	ret=1
 fi
+
+check_dev_bytes "bridge counters" "$nsr1" br0 "$br_rx" "$br_tx"
 
 if ip -net "$nsr1" link show tun0 > /dev/null 2>&1 &&
    ip -net "$nsr2" link show tun0 > /dev/null 2>&1; then
@@ -819,11 +880,17 @@ ip -net "$ns1" addr add 10.0.1.99/24 dev eth0.10
 ip -net "$ns1" route add default via 10.0.1.1
 ip -net "$ns1" addr add dead:1::99/64 dev eth0.10 nodad
 
+read -r br_rx br_tx < <(dev_bytes "$nsr1" br0)
+read -r vlan_rx vlan_tx < <(dev_bytes "$nsr1" veth0.10)
+
 if ! test_tcp_forwarding_nat "$ns1" "$ns2" 1 "bridge and VLAN"; then
 	echo "FAIL: flow offload for ns1/ns2 with bridge NAT and VLAN" 1>&2
 	ip netns exec "$nsr1" nft list ruleset
 	ret=1
 fi
+
+check_dev_bytes "bridge counters with VLAN" "$nsr1" br0 "$br_rx" "$br_tx"
+check_dev_bytes "VLAN counters under bridge" "$nsr1" veth0.10 "$vlan_rx" "$vlan_tx"
 
 # restore test topology (remove bridge and VLAN)
 ip -net "$nsr1" link set veth0 nomaster
