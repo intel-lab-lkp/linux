@@ -27,12 +27,12 @@
 	((riscv_has_extension_unlikely(RISCV_ISA_EXT_SVRSW60T59B)) ?	\
 	 (1UL << 59) : 0)
 /*
- * Bit 3 is always zero for swap entry computation, so we
- * can borrow it for swap page soft-dirty tracking.
+ * Bit 12 is reserved for swap soft-dirty tracking. The swap offset
+ * starts at bit 13 when CONFIG_MEM_SOFT_DIRTY is enabled.
  */
 #define _PAGE_SWP_SOFT_DIRTY						\
 	((riscv_has_extension_unlikely(RISCV_ISA_EXT_SVRSW60T59B)) ?	\
-	 _PAGE_EXEC : 0)
+	 (1UL << 12) : 0)
 #else
 #define _PAGE_SOFT_DIRTY	0
 #define _PAGE_SWP_SOFT_DIRTY	0
