@@ -764,6 +764,7 @@ struct wacom_hdev_data {
 
 static LIST_HEAD(wacom_udev_list);
 static DEFINE_MUTEX(wacom_udev_list_lock);
+static DEFINE_MUTEX(wacom_mode_change_lock);
 
 static bool wacom_are_sibling(struct hid_device *hdev,
 		struct hid_device *sibling)
@@ -2783,22 +2784,32 @@ static void wacom_remote_work(struct work_struct *work)
 static void wacom_mode_change_work(struct work_struct *work)
 {
 	struct wacom *wacom = container_of(work, struct wacom, mode_change_work);
-	struct wacom_shared *shared = wacom->wacom_wac.shared;
+	struct wacom_shared *shared;
+	struct hid_device *pen;
+	struct hid_device *touch;
 	struct wacom *wacom1 = NULL;
 	struct wacom *wacom2 = NULL;
-	bool is_direct = wacom->wacom_wac.is_direct_mode;
+	bool is_direct;
 	int error = 0;
 
-	if (shared->pen) {
-		wacom1 = hid_get_drvdata(shared->pen);
+	mutex_lock(&wacom_mode_change_lock);
+	shared = wacom->wacom_wac.shared;
+	if (!shared)
+		goto out;
+	pen = shared->pen;
+	touch = shared->touch;
+	is_direct = wacom->wacom_wac.is_direct_mode;
+
+	if (pen) {
+		wacom1 = hid_get_drvdata(pen);
 		wacom_release_resources(wacom1);
 		hid_hw_stop(wacom1->hdev);
 		wacom1->wacom_wac.has_mode_change = true;
 		wacom1->wacom_wac.is_direct_mode = is_direct;
 	}
 
-	if (shared->touch) {
-		wacom2 = hid_get_drvdata(shared->touch);
+	if (touch) {
+		wacom2 = hid_get_drvdata(touch);
 		wacom_release_resources(wacom2);
 		hid_hw_stop(wacom2->hdev);
 		wacom2->wacom_wac.has_mode_change = true;
@@ -2808,16 +2819,17 @@ static void wacom_mode_change_work(struct work_struct *work)
 	if (wacom1) {
 		error = wacom_parse_and_register(wacom1, false);
 		if (error)
-			return;
+			goto out;
 	}
 
 	if (wacom2) {
 		error = wacom_parse_and_register(wacom2, false);
 		if (error)
-			return;
+			goto out;
 	}
 
-	return;
+out:
+	mutex_unlock(&wacom_mode_change_lock);
 }
 
 static int wacom_probe(struct hid_device *hdev,
@@ -2916,6 +2928,10 @@ static void wacom_remove(struct hid_device *hdev)
 	cancel_work_sync(&wacom->battery_work);
 	cancel_work_sync(&wacom->remote_work);
 	cancel_work_sync(&wacom->mode_change_work);
+
+	/* A sibling's mode-change work can also access this device. */
+	mutex_lock(&wacom_mode_change_lock);
+
 	timer_delete_sync(&wacom->idleprox_timer);
 	if (hdev->bus == BUS_BLUETOOTH)
 		device_remove_file(&hdev->dev, &dev_attr_speed);
@@ -2925,6 +2941,8 @@ static void wacom_remove(struct hid_device *hdev)
 
 	if (wacom->wacom_wac.features.type != REMOTE)
 		wacom_release_resources(wacom);
+
+	mutex_unlock(&wacom_mode_change_lock);
 }
 
 static int wacom_resume(struct hid_device *hdev)
