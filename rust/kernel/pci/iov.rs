@@ -2,12 +2,19 @@
 
 //! Abstractions for PCI Single Root I/O Virtualization (SR-IOV) drivers.
 
-use super::Device;
+use super::{
+    Adapter,
+    Device,
+    Driver, //
+};
 
 use crate::{
     bindings,
     device,
-    error::to_result,
+    error::{
+        from_result,
+        to_result, //
+    },
     prelude::*,
     types::{
         CovariantForLt,
@@ -71,7 +78,7 @@ impl Device<device::CoreInternal<'_>> {
     }
 }
 
-/// Permission to enable VFs during a driver's `sriov_enable()` callback.
+/// Permission to enable VFs during a driver's [`Driver::sriov_enable()`] callback.
 ///
 /// The PCI adapter creates this token for the PF being configured. It cannot be cloned or sent
 /// to another thread, and its lifetime is restricted to the callback. Enabling VFs consumes it.
@@ -100,7 +107,7 @@ impl<'a> SriovEnable<'a> {
     ///
     /// VF drivers can probe before this method returns, so the PF resources they access must
     /// already be initialized. The returned guard disables the VFs if subsequent setup fails.
-    /// Return it from `sriov_enable()` to leave the VFs enabled on callback success.
+    /// Return it from [`Driver::sriov_enable()`] to leave the VFs enabled on callback success.
     pub fn enable(self, num_vfs: u16) -> Result<SriovEnabled<'a>> {
         if num_vfs == 0 || num_vfs > self.num_vfs {
             return Err(EINVAL);
@@ -120,14 +127,13 @@ impl<'a> SriovEnable<'a> {
     }
 }
 
-/// Enabled VFs awaiting successful completion of `sriov_enable()`.
+/// Enabled VFs awaiting successful completion of [`Driver::sriov_enable()`].
 pub struct SriovEnabled<'a> {
     pdev: &'a Device<device::CoreInternal<'a>>,
     num_vfs: u16,
 }
 
 impl SriovEnabled<'_> {
-    #[expect(dead_code)]
     fn disarm(self) -> u16 {
         ManuallyDrop::new(self).num_vfs
     }
@@ -139,7 +145,7 @@ impl Drop for SriovEnabled<'_> {
     }
 }
 
-/// Permission to disable VFs during a driver's `sriov_disable()` callback.
+/// Permission to disable VFs during a driver's [`Driver::sriov_disable()`] callback.
 ///
 /// The PCI adapter creates this token for the PF being configured. It cannot be cloned or sent
 /// to another thread, and its lifetime is restricted to the callback. Dropping the token does
@@ -154,6 +160,37 @@ impl SriovDisable<'_> {
     /// The PF resources used by VF drivers must remain available until this method returns.
     pub fn disable(self) {
         self.pdev.disable_sriov();
+    }
+}
+
+impl<T: Driver> Adapter<T> {
+    pub(super) extern "C" fn sriov_configure_callback(
+        pdev: *mut bindings::pci_dev,
+        nr_virtfn: c_int,
+    ) -> c_int {
+        // SAFETY: The PCI core calls this through the PF-only `sriov_numvfs` sysfs attribute,
+        // with a valid `struct pci_dev` and while holding the device lock.
+        //
+        // INVARIANT: `pdev` is valid for the duration of `sriov_configure_callback()`.
+        let pdev = unsafe { &*pdev.cast::<Device<device::CoreInternal<'_>>>() };
+
+        // SAFETY: `sriov_configure` is called only after a successful probe and before unbind, so
+        // the stored pointer has type `T::Data<'_>` and remains valid throughout this callback.
+        let data = unsafe { pdev.as_ref().drvdata_borrow::<T::Data<'_>>() };
+
+        from_result(|| {
+            if nr_virtfn == 0 {
+                T::sriov_disable(pdev, data, SriovDisable { pdev })?;
+                if pdev.num_vf() != 0 {
+                    return Err(EBUSY);
+                }
+                Ok(0)
+            } else {
+                let num_vfs = u16::try_from(nr_virtfn).map_err(|_| EINVAL)?;
+                let enabled = T::sriov_enable(pdev, data, SriovEnable { pdev, num_vfs })?;
+                Ok(enabled.disarm().into())
+            }
+        })
     }
 }
 
