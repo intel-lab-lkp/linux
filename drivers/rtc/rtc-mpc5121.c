@@ -87,15 +87,15 @@ struct mpc5121_rtc_data {
 static void mpc5121_rtc_update_smh(struct mpc5121_rtc_regs __iomem *regs,
 				   struct rtc_time *tm)
 {
-	out_8(&regs->second_set, tm->tm_sec);
-	out_8(&regs->minute_set, tm->tm_min);
-	out_8(&regs->hour_set, tm->tm_hour);
+	iowrite8(tm->tm_sec, &regs->second_set);
+	iowrite8(tm->tm_min, &regs->minute_set);
+	iowrite8(tm->tm_hour, &regs->hour_set);
 
 	/* set time sequence */
-	out_8(&regs->set_time, 0x1);
-	out_8(&regs->set_time, 0x3);
-	out_8(&regs->set_time, 0x1);
-	out_8(&regs->set_time, 0x0);
+	iowrite8(0x1, &regs->set_time);
+	iowrite8(0x3, &regs->set_time);
+	iowrite8(0x1, &regs->set_time);
+	iowrite8(0x0, &regs->set_time);
 }
 
 static int mpc5121_rtc_read_time(struct device *dev, struct rtc_time *tm)
@@ -107,7 +107,7 @@ static int mpc5121_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	/*
 	 * linux time is actual_time plus the offset saved in target_time
 	 */
-	now = in_be32(&regs->actual_time) + in_be32(&regs->target_time);
+	now = ioread32be(&regs->actual_time) + ioread32be(&regs->target_time);
 
 	rtc_time64_to_tm(now, tm);
 
@@ -131,7 +131,7 @@ static int mpc5121_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	 * between it and linux time to the target_time register.
 	 */
 	now = rtc_tm_to_time64(tm);
-	out_be32(&regs->target_time, now - in_be32(&regs->actual_time));
+	iowrite32be(now - ioread32be(&regs->actual_time), &regs->target_time);
 
 	/*
 	 * update second minute hour registers
@@ -148,20 +148,20 @@ static int mpc5200_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	struct mpc5121_rtc_regs __iomem *regs = rtc->regs;
 	int tmp;
 
-	tm->tm_sec = in_8(&regs->second);
-	tm->tm_min = in_8(&regs->minute);
+	tm->tm_sec = ioread8(&regs->second);
+	tm->tm_min = ioread8(&regs->minute);
 
 	/* 12 hour format? */
-	if (in_8(&regs->hour) & 0x20)
-		tm->tm_hour = (in_8(&regs->hour) >> 1) +
-			(in_8(&regs->hour) & 1 ? 12 : 0);
+	if (ioread8(&regs->hour) & 0x20)
+		tm->tm_hour = (ioread8(&regs->hour) >> 1) +
+			(ioread8(&regs->hour) & 1 ? 12 : 0);
 	else
-		tm->tm_hour = in_8(&regs->hour);
+		tm->tm_hour = ioread8(&regs->hour);
 
-	tmp = in_8(&regs->wday_mday);
+	tmp = ioread8(&regs->wday_mday);
 	tm->tm_mday = tmp & 0x1f;
-	tm->tm_mon = in_8(&regs->month) - 1;
-	tm->tm_year = in_be16(&regs->year) - 1900;
+	tm->tm_mon = ioread8(&regs->month) - 1;
+	tm->tm_year = ioread16be(&regs->year) - 1900;
 	tm->tm_wday = (tmp >> 5) % 7;
 	tm->tm_yday = rtc_year_days(tm->tm_mday, tm->tm_mon, tm->tm_year);
 	tm->tm_isdst = 0;
@@ -177,16 +177,16 @@ static int mpc5200_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	mpc5121_rtc_update_smh(regs, tm);
 
 	/* date */
-	out_8(&regs->month_set, tm->tm_mon + 1);
-	out_8(&regs->weekday_set, tm->tm_wday ? tm->tm_wday : 7);
-	out_8(&regs->date_set, tm->tm_mday);
-	out_be16(&regs->year_set, tm->tm_year + 1900);
+	iowrite8(tm->tm_mon + 1, &regs->month_set);
+	iowrite8(tm->tm_wday ? tm->tm_wday : 7, &regs->weekday_set);
+	iowrite8(tm->tm_mday, &regs->date_set);
+	iowrite16be(tm->tm_year + 1900, &regs->year_set);
 
 	/* set date sequence */
-	out_8(&regs->set_date, 0x1);
-	out_8(&regs->set_date, 0x3);
-	out_8(&regs->set_date, 0x1);
-	out_8(&regs->set_date, 0x0);
+	iowrite8(0x1, &regs->set_date);
+	iowrite8(0x3, &regs->set_date);
+	iowrite8(0x1, &regs->set_date);
+	iowrite8(0x0, &regs->set_date);
 
 	return 0;
 }
@@ -198,7 +198,7 @@ static int mpc5121_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alarm)
 
 	*alarm = rtc->wkalarm;
 
-	alarm->pending = in_8(&regs->alm_status);
+	alarm->pending = ioread8(&regs->alm_status);
 
 	return 0;
 }
@@ -212,10 +212,10 @@ static int mpc5121_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alarm)
 	alarm->time.tm_mon = -1;
 	alarm->time.tm_year = -1;
 
-	out_8(&regs->alm_min_set, alarm->time.tm_min);
-	out_8(&regs->alm_hour_set, alarm->time.tm_hour);
+	iowrite8(alarm->time.tm_min, &regs->alm_min_set);
+	iowrite8(alarm->time.tm_hour, &regs->alm_hour_set);
 
-	out_8(&regs->alm_enable, alarm->enabled);
+	iowrite8(alarm->enabled, &regs->alm_enable);
 
 	rtc->wkalarm = *alarm;
 	return 0;
@@ -226,10 +226,10 @@ static irqreturn_t mpc5121_rtc_handler(int irq, void *dev)
 	struct mpc5121_rtc_data *rtc = dev_get_drvdata((struct device *)dev);
 	struct mpc5121_rtc_regs __iomem *regs = rtc->regs;
 
-	if (in_8(&regs->int_alm)) {
+	if (ioread8(&regs->int_alm)) {
 		/* acknowledge and clear status */
-		out_8(&regs->int_alm, 1);
-		out_8(&regs->alm_status, 1);
+		iowrite8(1, &regs->int_alm);
+		iowrite8(1, &regs->alm_status);
 
 		rtc_update_irq(rtc->rtc, 1, RTC_IRQF | RTC_AF);
 		return IRQ_HANDLED;
@@ -243,9 +243,9 @@ static irqreturn_t mpc5121_rtc_handler_upd(int irq, void *dev)
 	struct mpc5121_rtc_data *rtc = dev_get_drvdata((struct device *)dev);
 	struct mpc5121_rtc_regs __iomem *regs = rtc->regs;
 
-	if (in_8(&regs->int_sec) && (in_8(&regs->int_enable) & 0x1)) {
+	if (ioread8(&regs->int_sec) && (ioread8(&regs->int_enable) & 0x1)) {
 		/* acknowledge */
-		out_8(&regs->int_sec, 1);
+		iowrite8(1, &regs->int_sec);
 
 		rtc_update_irq(rtc->rtc, 1, RTC_IRQF | RTC_UF);
 		return IRQ_HANDLED;
@@ -266,7 +266,7 @@ static int mpc5121_rtc_alarm_irq_enable(struct device *dev,
 	else
 		val = 0;
 
-	out_8(&regs->alm_enable, val);
+	iowrite8(val, &regs->alm_enable);
 	rtc->wkalarm.enabled = val;
 
 	return 0;
@@ -340,11 +340,11 @@ static int mpc5121_rtc_probe(struct platform_device *op)
 
 	if (of_device_is_compatible(op->dev.of_node, "fsl,mpc5121-rtc")) {
 		u32 ka;
-		ka = in_be32(&rtc->regs->keep_alive);
+		ka = ioread32be(&rtc->regs->keep_alive);
 		if (ka & 0x02) {
 			dev_warn(&op->dev,
 				"mpc5121-rtc: Battery or oscillator failure!\n");
-			out_be32(&rtc->regs->keep_alive, ka);
+			iowrite32be(ka, &rtc->regs->keep_alive);
 		}
 		rtc->rtc->ops = &mpc5121_rtc_ops;
 		/*
@@ -376,8 +376,8 @@ static void mpc5121_rtc_remove(struct platform_device *op)
 	struct mpc5121_rtc_regs __iomem *regs = rtc->regs;
 
 	/* disable interrupt, so there are no nasty surprises */
-	out_8(&regs->alm_enable, 0);
-	out_8(&regs->int_enable, in_8(&regs->int_enable) & ~0x1);
+	iowrite8(0, &regs->alm_enable);
+	iowrite8(ioread8(&regs->int_enable) & ~0x1, &regs->int_enable);
 
 	irq_dispose_mapping(rtc->irq);
 	irq_dispose_mapping(rtc->irq_periodic);
