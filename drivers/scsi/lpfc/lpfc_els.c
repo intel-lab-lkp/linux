@@ -7410,12 +7410,12 @@ int lpfc_get_sfp_info_wait(struct lpfc_hba *phba,
 	}
 	mbox->vport = phba->pport;
 	rc = lpfc_sli_issue_mbox_wait(phba, mbox, LPFC_MBOX_SLI4_CONFIG_TMO);
-	if (rc == MBX_NOT_FINISHED) {
+	if (rc == MBX_TIMEOUT)
+		goto error;
+	if (rc != MBX_SUCCESS) {
 		rc = 1;
 		goto error;
 	}
-	if (rc == MBX_TIMEOUT)
-		goto error;
 	if (phba->sli_rev == LPFC_SLI_REV4)
 		mp = mbox->ctx_buf;
 	else
@@ -7472,6 +7472,10 @@ int lpfc_get_sfp_info_wait(struct lpfc_hba *phba,
 
 	if (rc == MBX_TIMEOUT)
 		goto error;
+	if (rc != MBX_SUCCESS) {
+		rc = 1;
+		goto error;
+	}
 	if (bf_get(lpfc_mqe_status, &mbox->u.mqe)) {
 		rc = 1;
 		goto error;
@@ -7482,7 +7486,7 @@ int lpfc_get_sfp_info_wait(struct lpfc_hba *phba,
 			     DMP_SFF_PAGE_A2_SIZE);
 
 error:
-	if (mbox->mbox_flag & LPFC_MBX_WAKE) {
+	if (rc != MBX_TIMEOUT) {
 		mbox->ctx_buf = mpsave;
 		lpfc_mbox_rsrc_cleanup(phba, mbox, MBOX_THD_UNLOCKED);
 	}
