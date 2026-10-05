@@ -15,6 +15,12 @@
 #define DRIVER_DESC "NCI NFC driver for ST_NCI"
 
 #define ST_NCI1_X_PROPRIETARY_ISO15693 0x83
+/*
+ * Proprietary RF protocol the controller reports for MIFARE Classic.
+ * Not an NFC Forum protocol, so it must be mapped here or
+ * nci_add_new_protocol drops the tag.
+ */
+#define ST_NCI1_X_PROPRIETARY_MIFARE 0x90
 
 static int st_nci_init(struct nci_dev *ndev)
 {
@@ -76,8 +82,14 @@ static int st_nci_send(struct nci_dev *ndev, struct sk_buff *skb)
 static __u32 st_nci_get_rfprotocol(struct nci_dev *ndev,
 					 __u8 rf_protocol)
 {
-	return rf_protocol == ST_NCI1_X_PROPRIETARY_ISO15693 ?
-		NFC_PROTO_ISO15693_MASK : 0;
+	switch (rf_protocol) {
+	case ST_NCI1_X_PROPRIETARY_ISO15693:
+		return NFC_PROTO_ISO15693_MASK;
+	case ST_NCI1_X_PROPRIETARY_MIFARE:
+		return NFC_PROTO_MIFARE_MASK;
+	default:
+		return 0;
+	}
 }
 
 static int st_nci_prop_rsp_packet(struct nci_dev *ndev,
