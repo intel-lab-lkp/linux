@@ -90,6 +90,36 @@ static int br_get_num_vlan_infos(struct net_bridge_vlan_group *vg,
 	return num_vlans;
 }
 
+static size_t br_cfm_config_info_size(u32 num_meps, u32 num_peer_meps)
+{
+	size_t mep_sz, peer_sz;
+
+	/* IFLA_BRIDGE_CFM_MEP_CREATE_INFO: instance, domain, direction,
+	 * ifindex
+	 */
+	mep_sz = nla_total_size(4 * nla_total_size(sizeof(u32)));
+	/* IFLA_BRIDGE_CFM_MEP_CONFIG_INFO: instance, unicast mac, mdlevel,
+	 * mepid
+	 */
+	mep_sz += nla_total_size(3 * nla_total_size(sizeof(u32)) +
+				 nla_total_size(ETH_ALEN));
+	/* IFLA_BRIDGE_CFM_CC_CONFIG_INFO: instance, enable, interval, maid */
+	mep_sz += nla_total_size(3 * nla_total_size(sizeof(u32)) +
+				 nla_total_size(CFM_MAID_LENGTH));
+	/* IFLA_BRIDGE_CFM_CC_RDI_INFO: instance, rdi */
+	mep_sz += nla_total_size(2 * nla_total_size(sizeof(u32)));
+	/* IFLA_BRIDGE_CFM_CC_CCM_TX_INFO: instance, dmac, seq no update,
+	 * period, if tlv, if tlv value, port tlv, port tlv value
+	 */
+	mep_sz += nla_total_size(5 * nla_total_size(sizeof(u32)) +
+				 nla_total_size(ETH_ALEN) +
+				 2 * nla_total_size(sizeof(u8)));
+	/* IFLA_BRIDGE_CFM_CC_PEER_MEP_INFO: instance, peer mepid */
+	peer_sz = nla_total_size(2 * nla_total_size(sizeof(u32)));
+
+	return num_meps * mep_sz + num_peer_meps * peer_sz;
+}
+
 static size_t br_get_link_af_size_filtered(const struct net_device *dev,
 					   u32 filter_mask)
 {
@@ -122,17 +152,25 @@ static size_t br_get_link_af_size_filtered(const struct net_device *dev,
 	if (p && vg && (filter_mask & RTEXT_FILTER_MST))
 		vinfo_sz += br_mst_info_size(vg);
 
-	if (!(filter_mask & RTEXT_FILTER_CFM_STATUS))
+	if (!(filter_mask & (RTEXT_FILTER_CFM_CONFIG | RTEXT_FILTER_CFM_STATUS)))
 		return vinfo_sz;
 
 	if (!br)
 		return vinfo_sz;
 
-	/* CFM status info must be added */
 	br_cfm_mep_count(br, &num_cfm_mep_infos);
 	br_cfm_peer_mep_count(br, &num_cfm_peer_mep_infos);
 
 	vinfo_sz += nla_total_size(0);	/* IFLA_BRIDGE_CFM */
+
+	if (filter_mask & RTEXT_FILTER_CFM_CONFIG)
+		vinfo_sz += br_cfm_config_info_size(num_cfm_mep_infos,
+						    num_cfm_peer_mep_infos);
+
+	if (!(filter_mask & RTEXT_FILTER_CFM_STATUS))
+		return vinfo_sz;
+
+	/* CFM status info must be added */
 	/* For each status struct the MEP instance (u32) is added */
 	/* MEP instance (u32) + br_cfm_mep_status */
 	vinfo_sz += num_cfm_mep_infos *
