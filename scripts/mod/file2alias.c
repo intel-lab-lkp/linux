@@ -573,8 +573,9 @@ static void do_pnp_device_entry(struct module *mod, void *symval)
 	/* fix broken pnp bus lowercasing */
 	for (unsigned int i = 0; i < sizeof(acpi_id); i++)
 		acpi_id[i] = toupper((*id)[i]);
-	module_alias_printf(mod, false, "pnp:d%s*", *id);
-	module_alias_printf(mod, false, "acpi*:%s:*", acpi_id);
+	module_alias_printf(mod, false, "pnp:d%.*s*", (int)sizeof(*id), *id);
+	module_alias_printf(mod, false, "acpi*:%.*s:*",
+			    (int)sizeof(acpi_id), acpi_id);
 }
 
 /* looks like: "pnp:dD" for every device of the card */
@@ -594,8 +595,9 @@ static void do_pnp_card_entry(struct module *mod, void *symval)
 			acpi_id[j] = toupper(id[j]);
 
 		/* add an individual alias for every device entry */
-		module_alias_printf(mod, false, "pnp:d%s*", id);
-		module_alias_printf(mod, false, "acpi*:%s:*", acpi_id);
+		module_alias_printf(mod, false, "pnp:d%.*s*", PNP_ID_LEN, id);
+		module_alias_printf(mod, false, "acpi*:%.*s:*",
+				    PNP_ID_LEN, acpi_id);
 	}
 }
 
