@@ -1546,6 +1546,7 @@ Kernel parameters
 			earlyprintk=serial[,ttySn[,baudrate]]
 			earlyprintk=serial[,0x...[,baudrate]]
 			earlyprintk=ttySn[,baudrate]
+			earlyprintk=tdx
 			earlyprintk=dbgp[debugController#]
 			earlyprintk=mmio32,membase[,{nocfg|baudrate}]
 			earlyprintk=pciserial[,force],bus:device.function[,{nocfg|baudrate}]
@@ -1558,6 +1559,13 @@ Kernel parameters
 
 			Use "nocfg" to skip UART configuration, assume
 			BIOS/firmware has configured UART correctly.
+
+			On x86, "tdx" is a fixed COM1 console, and takes no
+			options. In a TDX guest the port is driven with
+			TDVMCALLs rather than port I/O instructions, avoiding
+			the #VE exception that would otherwise be taken to
+			emulate every access. Outside a TDX guest it falls back
+			to port I/O, behaving like "earlyprintk=serial".
 
 			Append ",keep" to not disable it when the real console
 			takes over.

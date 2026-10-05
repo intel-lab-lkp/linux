@@ -194,6 +194,35 @@ u64 tdx_hcall_get_quote(u8 *buf, size_t size)
 }
 EXPORT_SYMBOL_GPL(tdx_hcall_get_quote);
 
+/*
+ * early_printk accessors for a TDX guest. Ask the VMM to do the port I/O with
+ * TDG.VP.VMCALL<Instruction.IO> instead of executing IN/OUT and having the
+ * resulting #VE emulate it.
+ */
+__noendbr unsigned int tdx_serial_in(unsigned long addr, int offset)
+{
+	struct tdx_module_args args = {
+		.r10 = TDX_HYPERCALL_STANDARD,
+		.r11 = hcall_func(EXIT_REASON_IO_INSTRUCTION),
+		.r12 = 1,
+		.r13 = TDVMCALL_PORT_READ,
+		.r14 = addr + offset,
+	};
+
+	if (__tdx_hypercall(&args))
+		return 0xFF;
+
+	return args.r11;
+}
+ANNOTATE_NOENDBR_SYM(tdx_serial_in);
+
+__noendbr void tdx_serial_out(unsigned long addr, int offset, int value)
+{
+	_tdx_hypercall(hcall_func(EXIT_REASON_IO_INSTRUCTION), 1,
+		       TDVMCALL_PORT_WRITE, addr + offset, value);
+}
+ANNOTATE_NOENDBR_SYM(tdx_serial_out);
+
 static void __noreturn tdx_panic(const char *msg)
 {
 	struct tdx_module_args args = {

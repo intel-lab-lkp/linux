@@ -21,6 +21,7 @@
 #include <linux/usb/xhci-dbgp.h>
 #include <asm/pci_x86.h>
 #include <linux/static_call.h>
+#include <asm/tdx.h>
 
 /* Simple VGA output */
 #define VGABASE		(__ISA_IO_base + 0xb8000)
@@ -194,6 +195,20 @@ static __init void early_serial_init(char *s)
 
 	/* Set up the HW */
 	early_serial_hw_init(divisor);
+}
+
+/*
+ * Use early_serial_base (COM1) and same default baud rate as
+ * "earlyprintk=serial"
+ */
+static __init void early_serial_tdx_init(void)
+{
+	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST)) {
+		static_call_update(serial_in, tdx_serial_in);
+		static_call_update(serial_out, tdx_serial_out);
+	}
+
+	early_serial_hw_init(115200 / DEFAULT_BAUD);
 }
 
 static __noendbr void mem32_serial_out(unsigned long addr, int offset, int value)
@@ -413,6 +428,11 @@ static int __init setup_early_printk(char *buf)
 		if (!strncmp(buf, "ttyS", 4)) {
 			early_serial_init(buf + 4);
 			early_console_register(&early_serial_console, keep);
+		}
+		if (!strncmp(buf, "tdx", 3)) {
+			early_serial_tdx_init();
+			early_console_register(&early_serial_console, keep);
+			break;
 		}
 #ifdef CONFIG_PCI
 		if (!strncmp(buf, "pciserial", 9)) {
