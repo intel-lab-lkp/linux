@@ -362,6 +362,17 @@ config DRM_THINE_THC63LVD1024
 	help
 	  Thine THC63LVD1024 LVDS/parallel converter driver.
 
+config DRM_THINE_THC63LVD827
+	tristate "THine THC63LVD827 DPI/LVDS bridge"
+	depends on OF
+	select DRM_KMS_HELPER
+	help
+	  Enable support for the THine THC63LVD827 DPI to LVDS bridge.
+
+	  The device converts a parallel RGB display interface to an LVDS
+	  output for connection to LVDS display panels.
+	  The bridge supports configurable JEIDA and VESA LVDS data mapping.
+
 config DRM_THEAD_TH1520_DW_HDMI
 	tristate "T-Head TH1520 DesignWare HDMI bridge"
 	depends on OF

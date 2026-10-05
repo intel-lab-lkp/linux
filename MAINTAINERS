@@ -8702,6 +8702,7 @@ DRM DRIVER FOR THINE THC63LVD827 DPI TO LVDS BRIDGE
 M:	Francesco Dolcini <francesco@dolcini.it>
 S:	Maintained
 F:	Documentation/devicetree/bindings/display/bridge/thine,thc63lvd827.yaml
+F:	drivers/gpu/drm/bridge/thc63lvd827.c
 
 DRM DRIVER FOR TI DLPC3433 MIPI DSI TO DMD BRIDGE
 M:	Jagan Teki <jagan@amarulasolutions.com>
