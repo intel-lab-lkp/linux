@@ -30,6 +30,11 @@ properties:
   reg:
     maxItems: 1
 
+  interrupts:
+    description: |
+      Interrupt line connected to the ALERT output of the sensor.
+    maxItems: 1
+
   vcc-supply:
     description: provide VCC power to the sensor.
 
@@ -45,6 +50,8 @@ additionalProperties: false
 
 examples:
   - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
     i2c {
         #address-cells = <1>;
         #size-cells = <0>;
@@ -52,6 +59,8 @@ examples:
         tmp117@48 {
             compatible = "ti,tmp117";
             reg = <0x48>;
+            interrupt-parent = <&gpio0>;
+            interrupts = <5 IRQ_TYPE_LEVEL_LOW>;
             vcc-supply = <&pmic_reg_3v3>;
         };
     };
