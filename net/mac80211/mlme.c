@@ -10099,13 +10099,28 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 
 	if (ifmgd->associated) {
 		u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+		bool tx;
+
+		/*
+		 * When a non-AP MLD leaves its AP MLD for another AP without
+		 * using FT, tell the old AP MLD that we are gone instead of
+		 * silently dropping the association. Some AP MLD
+		 * implementations keep the MFP-protected MLD-level entry of
+		 * the non-AP MLD around and then ignore, or temporarily
+		 * reject (status 30), every (re)association attempt of the
+		 * same non-AP MLD on their other co-located BSSs until that
+		 * stale entry expires minutes later.
+		 */
+		tx = ieee80211_vif_is_mld(&sdata->vif) &&
+		     req->auth_type != NL80211_AUTHTYPE_FT;
 
 		sdata_info(sdata,
-			   "disconnect from AP %pM for new auth to %pM\n",
-			   sdata->vif.cfg.ap_addr, auth_data->ap_addr);
+			   "disconnect from AP %pM for new auth to %pM%s\n",
+			   sdata->vif.cfg.ap_addr, auth_data->ap_addr,
+			   tx ? " (sending deauth)" : "");
 		ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH,
 				       WLAN_REASON_UNSPECIFIED,
-				       false, frame_buf);
+				       tx, frame_buf);
 
 		ieee80211_report_disconnect(sdata, frame_buf,
 					    sizeof(frame_buf), true,
