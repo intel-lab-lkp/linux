@@ -402,15 +402,19 @@ void __init mtrr_build_map(void)
 void __init mtrr_copy_map(void)
 {
 	unsigned int new_size = get_cache_map_size();
+	struct cache_map *new_map;
 
 	if (!mtrr_state.enabled || !new_size) {
 		cache_map = NULL;
 		return;
 	}
 
+	/* Allocate before taking mtrr_mutex, the allocation may reclaim. */
+	new_map = kzalloc_objs(*new_map, new_size);
+
 	mutex_lock(&mtrr_mutex);
 
-	cache_map = kzalloc_objs(*cache_map, new_size);
+	cache_map = new_map;
 	if (cache_map) {
 		memmove(cache_map, init_cache_map,
 			cache_map_n * sizeof(*cache_map));
