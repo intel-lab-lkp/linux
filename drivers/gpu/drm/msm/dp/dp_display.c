@@ -754,8 +754,10 @@ enum drm_mode_status msm_dp_display_mode_valid(struct msm_dp *dp,
 {
 	const u32 num_components = 3, default_bpp = 24;
 	struct msm_dp_display_private *msm_dp_display;
+	const struct msm_dp_link_info *trained;
 	struct msm_dp_link_info *link_info;
 	u32 mode_rate_khz = 0, supported_rate_khz = 0, mode_bpp = 0;
+	unsigned int num_lanes, rate;
 	int mode_pclk_khz = mode->clock;
 	int link_pclk_khz;
 	bool is_yuv_420;
@@ -793,10 +795,42 @@ enum drm_mode_status msm_dp_display_mode_valid(struct msm_dp *dp,
 			mode_bpp, link_pclk_khz);
 
 	mode_rate_khz = link_pclk_khz * mode_bpp;
-	supported_rate_khz = link_info->num_lanes * link_info->rate * 8;
 
-	if (mode_rate_khz > supported_rate_khz)
+	/*
+	 * link_info is what the sink advertises in DPCD, which is not
+	 * necessarily what we managed to train. msm_dp_ctrl_on_link() walks
+	 * the rate down HBR3 -> HBR2 -> HBR -> RBR and then halves the lane
+	 * count until training succeeds, so a cable with two unusable lanes
+	 * ends up carrying half the bandwidth the sink claims.
+	 *
+	 * Sizing modes against the sink's maximum then advertises modes the
+	 * link cannot carry: training "succeeds" at the reduced parameters,
+	 * the mode does not fit in them, and the sink shows a black screen
+	 * with nothing in the log to say why.
+	 *
+	 * link->link_params holds the trained values, and is reset to the
+	 * sink's maximum at the top of every msm_dp_ctrl_on_link(), so taking
+	 * the lower of the two is accurate after a fallback and a no-op
+	 * before the first training.
+	 */
+	num_lanes = link_info->num_lanes;
+	rate = link_info->rate;
+
+	trained = &msm_dp_display->link->link_params;
+	if (trained->num_lanes && trained->num_lanes < num_lanes)
+		num_lanes = trained->num_lanes;
+	if (trained->rate && trained->rate < rate)
+		rate = trained->rate;
+
+	supported_rate_khz = num_lanes * rate * 8;
+
+	if (mode_rate_khz > supported_rate_khz) {
+		drm_dbg_dp(dp->drm_dev,
+			   "mode %s rejected: needs %u kHz, link carries %u kHz (%u lanes @ %u)\n",
+			   mode->name, mode_rate_khz, supported_rate_khz,
+			   num_lanes, rate);
 		return MODE_BAD;
+	}
 
 	return MODE_OK;
 }
