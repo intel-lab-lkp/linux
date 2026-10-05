@@ -84,8 +84,7 @@ intel_dkl_phy_write(struct intel_display *display, struct intel_dkl_phy_reg reg,
  * @clear: mask to clear
  * @set: mask to set
  *
- * Read the @reg Dekel PHY register, clearing then setting the @clear/@set bits in it, and writing
- * this value back to the register if the value differs from the read one.
+ * Read @reg, clear @clear, set @set, and write the result back.
  */
 void
 intel_dkl_phy_rmw(struct intel_display *display, struct intel_dkl_phy_reg reg, u32 clear, u32 set)
