@@ -21,17 +21,15 @@ use kernel::{
         poll,
         Io, //
     },
-    new_mutex,
     of,
     platform,
+    pm,
+    pm::*,
     prelude::*,
     regulator,
     regulator::Regulator,
     sizes::SZ_2M,
-    sync::{
-        Arc,
-        Mutex, //
-    },
+    sync::Arc,
     time, //
 };
 
@@ -57,6 +55,10 @@ pub(crate) struct TyrPlatformDriver;
 #[pin_data(PinnedDrop)]
 pub(crate) struct TyrPlatformDriverData<'bound> {
     _reg: drm::Registration<'bound, TyrDrmDriver>,
+    // This needs to be dropped after drm::Registration as that one
+    // borrows PMContext.
+    pub(crate) pm:
+        pm::Registration<'bound, TyrPlatformDriver>,
 }
 
 /// Data owned by the DRM [`Registration`].
@@ -71,11 +73,8 @@ pub(crate) struct TyrDrmRegistrationData<'drm> {
     /// Firmware sections.
     pub(crate) fw: Firmware<'drm>,
 
-    #[pin]
-    clks: Mutex<Clocks>,
-
-    #[pin]
-    regulators: Mutex<Regulators>,
+    /// Runtime PM context owned by the PM Registration
+    pub(crate) pm: PMContext<'drm, TyrPlatformDriver>,
 
     /// GPU MMIO register mapping.
     pub(crate) iomem: Arc<IoMem<'drm>>,
@@ -112,6 +111,10 @@ impl platform::Driver for TyrPlatformDriver {
     type Data<'bound> = TyrPlatformDriverData<'bound>;
     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = Some(&OF_TABLE);
 
+    fn dev_pm_ops() -> Option<pm::DevPMOpsRef<'static, platform::Adapter<Self>>> {
+        Some(TYR_PM_OPS.pm_ops())
+    }
+
     fn probe<'bound>(
         pdev: &'bound platform::Device<Core<'_>>,
         _info: Option<&'bound Self::IdInfo>,
@@ -126,6 +129,32 @@ impl platform::Driver for TyrPlatformDriver {
 
         let mali_regulator = Regulator::<regulator::Enabled>::get(pdev.as_ref(), c"mali")?;
         let sram_regulator = Regulator::<regulator::Enabled>::get(pdev.as_ref(), c"sram")?;
+
+        let runtime_payload = TyrRuntimePMPayload {
+            clks: Clocks {
+                core: core_clk,
+                stacks: stacks_clk,
+                coregroup: coregroup_clk,
+            },
+            _regulators: Regulators {
+                _mali: mali_regulator,
+                _sram: sram_regulator,
+            },
+        };
+
+        let mut pm_configs = KVec::<PMConfig>::with_capacity(2, GFP_KERNEL)?;
+        pm_configs.push(PMConfig::AutoSuspend(true), GFP_KERNEL)?;
+        pm_configs.push(PMConfig::AutoSuspendDelay(300), GFP_KERNEL)?;
+
+        let pm_registration = pm::Registration::new(
+            pdev.as_ref(),
+            &TYR_PM_OPS,
+            None,
+            Some(pm_configs),
+            runtime_payload,
+        )?;
+
+        let pm_context = pm_registration.ctx().clone();
 
         let request = pdev.io_request_by_index(0).ok_or(ENODEV)?;
 
@@ -160,27 +189,23 @@ impl platform::Driver for TyrPlatformDriver {
         firmware.boot()?;
 
         let reg_data = pin_init!(TyrDrmRegistrationData {
-                pdev,
-                fw: firmware,
-                clks <- new_mutex!(Clocks {
-                    core: core_clk,
-                    stacks: stacks_clk,
-                    coregroup: coregroup_clk,
-                }),
-                regulators <- new_mutex!(Regulators {
-                    _mali: mali_regulator,
-                    _sram: sram_regulator,
-                }),
-                iomem,
-                gpu_info,
+            pdev,
+            fw: firmware,
+            pm: pm_context,
+            iomem,
+            gpu_info,
         });
 
         // SAFETY: `reg` is stored in `TyrPlatformDriverData` and dropped when the driver is
         // unbound; it is never forgotten.
         let reg = unsafe { drm::Registration::new(pdev.as_ref(), unreg_dev, reg_data, 0)? };
 
-        let driver = TyrPlatformDriverData { _reg: reg };
+        let driver = TyrPlatformDriverData {
+            _reg: reg,
+            pm: pm_registration,
+        };
 
+        driver.pm.ctx().enable(RuntimePMState::Resumed)?;
         dev_dbg!(pdev, "Tyr initialized correctly.");
         Ok(driver)
     }
@@ -234,4 +259,51 @@ impl Drop for Clocks {
 struct Regulators {
     _mali: Regulator<regulator::Enabled>,
     _sram: Regulator<regulator::Enabled>,
+}
+
+pub(crate) struct TyrRuntimePMPayload {
+    clks: Clocks,
+    _regulators: Regulators,
+}
+
+static TYR_PM_OPS: pm::DevPMOps<TyrPlatformDriver> = pm::DevPMOps::new();
+
+#[vtable]
+impl PMOps for TyrPlatformDriver {
+    type Adapter = platform::Adapter<TyrPlatformDriver>;
+    type DeviceType = platform::Device<kernel::device::Bound>;
+    type RuntimePayloadType = TyrRuntimePMPayload;
+
+    fn runtime_suspend<'a>(
+        _dev: &'a Self::DeviceType,
+        payload: TyrRuntimePMPayload,
+    ) -> Result<TyrRuntimePMPayload, (TyrRuntimePMPayload, Error)> {
+
+        payload.clks.coregroup.disable_unprepare();
+        payload.clks.stacks.disable_unprepare();
+        payload.clks.core.disable_unprepare();
+        Ok(payload)
+    }
+    fn runtime_resume<'a>(
+        _dev: &'a Self::DeviceType,
+        payload: TyrRuntimePMPayload,
+    ) -> Result<TyrRuntimePMPayload, (TyrRuntimePMPayload, Error)> {
+
+        if let Err(e) = payload.clks.core.prepare_enable() {
+            return Err((payload, e));
+        }
+
+        if let Err(e) = payload.clks.stacks.prepare_enable() {
+            payload.clks.core.disable_unprepare();
+            return Err((payload, e));
+        }
+
+        if let Err(e) = payload.clks.coregroup.prepare_enable() {
+            payload.clks.stacks.disable_unprepare();
+            payload.clks.core.disable_unprepare();
+            return Err((payload, e));
+        }
+
+        Ok(payload)
+    }
 }
