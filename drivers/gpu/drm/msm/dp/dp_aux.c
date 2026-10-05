@@ -458,7 +458,14 @@ irqreturn_t msm_dp_aux_isr(struct drm_dp_aux *msm_dp_aux, u32 isr)
 	aux = container_of(msm_dp_aux, struct msm_dp_aux_private, msm_dp_aux);
 
 	if (!aux->cmd_busy) {
-		DRM_ERROR("Unexpected DP AUX IRQ %#010x when not busy\n", isr);
+		/*
+		 * Not ours: the AUX block shares its interrupt, and sinks
+		 * raise AUX status asynchronously around hotplug. Returning
+		 * IRQ_NONE is the whole of the correct response, so this is
+		 * a trace point and not a fault.
+		 */
+		drm_dbg_dp(msm_dp_aux->drm_dev,
+			   "Unexpected DP AUX IRQ %#010x when not busy\n", isr);
 		return IRQ_NONE;
 	}
 
