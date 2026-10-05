@@ -6,6 +6,7 @@
 #include <linux/aperture.h>
 #include <linux/clk.h>
 #include <linux/component.h>
+#include <linux/dma-mapping.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
@@ -100,6 +101,8 @@ static int armada_drm_bind(struct device *dev)
 	}
 
 	dev_set_drvdata(dev, &priv->drm);
+
+	dma_set_max_seg_size(dev, UINT_MAX);
 
 	/* Mode setting support */
 	drm_mode_config_init(&priv->drm);
