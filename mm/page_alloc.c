@@ -90,7 +90,10 @@ typedef int __bitwise fpi_t;
  */
 #define FPI_TO_TAIL		((__force fpi_t)BIT(1))
 
-/* Free the page without taking locks. Rely on trylock only. */
+/*
+ * Request the no-lock free path. Use trylocks and skip optional operations
+ * which can take other locks or queue work.
+ */
 #define FPI_NOLOCK		((__force fpi_t)BIT(2))
 
 /* free_pages_prepare() has already been called for page(s) being freed. */
@@ -996,7 +999,7 @@ done_merging:
 
 	if (fpi_flags & FPI_TO_TAIL)
 		to_tail = true;
-	else if (is_shuffle_order(order))
+	else if (!(fpi_flags & FPI_NOLOCK) && is_shuffle_order(order))
 		to_tail = shuffle_pick_tail();
 	else
 		to_tail = buddy_merge_likely(pfn, buddy_pfn, page, order);
@@ -1004,7 +1007,7 @@ done_merging:
 	__add_to_free_list(page, zone, order, migratetype, to_tail);
 
 	/* Notify page reporting subsystem of freed page */
-	if (!(fpi_flags & FPI_SKIP_REPORT_NOTIFY))
+	if (!(fpi_flags & (FPI_SKIP_REPORT_NOTIFY | FPI_NOLOCK)))
 		page_reporting_notify_free(order);
 }
 
