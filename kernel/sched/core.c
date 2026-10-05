@@ -1440,9 +1440,33 @@ bool sched_can_stop_tick(struct rq *rq)
 {
 	int fifo_nr_running;
 
-	/* Deadline tasks, even if single, need the tick */
+	/*
+	 * Deadline tasks, even if single, need the tick. This includes the
+	 * fair server while it is enqueued and serving CFS: its runtime is
+	 * enforced from the tick.
+	 */
 	if (rq->dl.dl_nr_running)
 		return false;
+
+	/*
+	 * RT and CFS coexist: make sure the fair server is armed, so CFS gets
+	 * its reserved bandwidth even though the tick is about to be stopped.
+	 * While the server is only deferred (throttled, waiting for its timer)
+	 * it is not on the dl_rq and needs no tick; once the timer enqueues it,
+	 * inc_dl_tasks() re-evaluates the dependency.
+	 *
+	 * dl_server_start() is a no-op for an already active server, and the
+	 * server is never stopped from here: its start/stop pair carries the
+	 * running_bw bandwidth accounting of rq->dl.running_bw, which must not
+	 * be cycled at enqueue/dequeue rate.
+	 */
+	if (rq->rt.rt_nr_running && rq->cfs.h_nr_queued &&
+	    rq->fair_server.dl_runtime) {
+		dl_server_start(&rq->fair_server);
+		/* A non-deferred start enqueues the server right away. */
+		if (rq->dl.dl_nr_running)
+			return false;
+	}
 
 	/*
 	 * If there are more than one RR tasks, we need the tick to affect the
