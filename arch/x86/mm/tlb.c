@@ -1373,6 +1373,12 @@ void flush_tlb_multi(const struct cpumask *cpumask,
  */
 unsigned long tlb_single_page_flush_ceiling __read_mostly = 33;
 
+static bool tlb_range_exceeds_ceiling(unsigned long start, unsigned long end,
+				      unsigned int stride_shift)
+{
+	return ((end - start) >> stride_shift) > tlb_single_page_flush_ceiling;
+}
+
 static void init_flush_tlb_info(struct flush_tlb_info *info,
 				struct mm_struct *mm,
 				unsigned long start, unsigned long end,
@@ -1383,7 +1389,7 @@ static void init_flush_tlb_info(struct flush_tlb_info *info,
 	 * If the number of flushes is so large that a full flush
 	 * would be faster, do a full flush.
 	 */
-	if ((end - start) >> stride_shift > tlb_single_page_flush_ceiling) {
+	if (tlb_range_exceeds_ceiling(start, end, stride_shift)) {
 		start	= 0;
 		end	= TLB_FLUSH_ALL;
 	}
