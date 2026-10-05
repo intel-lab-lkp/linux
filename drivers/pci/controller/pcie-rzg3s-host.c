@@ -2272,6 +2272,14 @@ port_refclk_put:
 static int rzg3s_pcie_suspend_noirq(struct device *dev)
 {
 	struct rzg3s_pcie_host *host = dev_get_drvdata(dev);
+	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(host);
+	bool pme_capable;
+
+	if (!pm_suspend_via_firmware() &&
+	    !pci_host_common_d3cold_possible(bridge, &pme_capable)) {
+		device_set_awake_path(dev);
+		return 0;
+	}
 
 	return rzg3s_pcie_host_stop(host);
 }
