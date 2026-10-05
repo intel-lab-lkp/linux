@@ -93,6 +93,8 @@ static const struct ipu_sensor_config ipu_supported_sensors[] = {
 	IPU_SENSOR_CONFIG("OVTIDB10", 1, 560000000),
 	/* Omnivision OV2680 */
 	IPU_SENSOR_CONFIG("OVTI2680", 1, 331200000),
+	/* Omnivision OV32C4 */
+	IPU_SENSOR_CONFIG("OVTI32C4", 1, 400000000),
 	/* Omnivision OV5675 */
 	IPU_SENSOR_CONFIG("OVTI5675", 1, 450000000),
 	/* Omnivision OV8856 */
@@ -216,6 +218,28 @@ static const char * const ipu_vcm_types[] = {
 	"lc898122xa",
 	"lc898212axb",
 };
+
+/*
+ * Sensors whose second I2C resource is not a lens driver, whatever the SSDB
+ * calls it. The OV32C4 keeps a register block of its own at that address,
+ * part of the sensor and owned by its driver; a VCM client there would take
+ * the address away and leave the notifier waiting for a lens subdev that
+ * never appears.
+ */
+static const char * const ipu_no_vcm_hids[] = {
+	"OVTI32C4",
+};
+
+static bool ipu_bridge_sensor_has_no_vcm(struct acpi_device *adev)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(ipu_no_vcm_hids); i++)
+		if (acpi_dev_hid_match(adev, ipu_no_vcm_hids[i]))
+			return true;
+
+	return false;
+}
 
 /*
  * Used to figure out IVSC acpi device by ipu_bridge_get_ivsc_acpi_dev()
@@ -435,7 +459,7 @@ int ipu_bridge_parse_ssdb(struct acpi_device *adev, struct ipu_sensor *sensor)
 	sensor->rotation = ipu_bridge_parse_rotation(adev, &ssdb);
 	sensor->orientation = ipu_bridge_parse_orientation(adev);
 
-	if (ssdb.vcmtype)
+	if (ssdb.vcmtype && !ipu_bridge_sensor_has_no_vcm(adev))
 		sensor->vcm_type = ipu_vcm_types[ssdb.vcmtype - 1];
 
 	return 0;
