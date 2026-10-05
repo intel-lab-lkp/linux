@@ -343,6 +343,15 @@ include::itrace.txt[]
 
         Default: 127
 
+--lazy-load-symbols::
+	Resolve symbols lazily instead of eagerly loading the full
+	symbol table of every DSO that appears in a sample. This sharply
+	reduces memory (and usually time) for profiles of large binaries
+	where only a small fraction of the symbol table is referenced. This
+	applies only to userspace ELF DSOs; kernel DSOs, modules, PPC64 DSOs
+	with an .opd section and DSOs whose symbols come from .gnu_debugdata
+	always load eagerly.
+
 --ns::
 	Use 9 decimal places when displaying time (i.e. show the nanoseconds)
 

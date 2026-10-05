@@ -283,6 +283,64 @@ struct dso_bpf_prog {
 	struct perf_env	*env;
 };
 
+struct sym_idx {
+	u64	start;
+	u64	end;
+	u32	name_off;
+	u8	binding;
+	u8	type;
+	u8	flags;
+};
+
+#define SYM_IDX_FLAG_IFUNC_ALIAS	(1 << 0)
+#define SYM_IDX_FLAG_MATERIALIZED	(1 << 1)
+#define SYM_IDX_FLAG_DYNSTR		(1 << 2)
+
+#define SYM_IDX_NONE			UINT32_MAX
+
+struct sym_idx_strtab {
+	u64	offset;
+	u64	size;
+};
+
+/**
+ * struct dso_ondemand - per-DSO state for lazy symbol loading.
+ *
+ * Holds the compact address index and the data-cache handle used to read
+ * symbol names. It stays attached to the parent DSO until name sorting
+ * materializes every symbol and detaches it, or until the DSO is deleted.
+ * The parent DSO lock protects the attachment, the index and @nr_readers.
+ * To read a name, a lookup increments @nr_readers, drops the DSO lock and
+ * reads under @read_lock. It then retakes the DSO lock to insert the symbol
+ * and decrement @nr_readers. The last reader frees a detached index.
+ */
+struct dso_ondemand {
+	/** @data_dso: Data-cache handle for the exact ELF symbol source. */
+	struct dso		*data_dso;
+	/**
+	 * @strtab: .strtab and .dynstr file offsets and sizes, indexed by
+	 * whether SYM_IDX_FLAG_DYNSTR is set.
+	 */
+	struct sym_idx_strtab	strtab[2];
+	/** @sorted: Compact address-sorted lazy index. */
+	struct sym_idx		*sorted;
+	/**
+	 * @outer: Links used to resolve nested ranges, allocated only when
+	 * some ranges overlap. For each entry, the nearest earlier entry that
+	 * ends after it, or SYM_IDX_NONE.
+	 */
+	u32			*outer;
+	/** @nr_sorted: Number of entries in @sorted. */
+	u32			nr_sorted;
+	/** @nr_readers: Lookups reading a name without the DSO lock. */
+	u32			nr_readers;
+	/**
+	 * @read_lock: Serializes data-cache page and symbol-name reads. The
+	 * data cache looks up pages without a lock.
+	 */
+	struct mutex		read_lock;
+};
+
 struct auxtrace_cache;
 
 DECLARE_RC_STRUCT(dso) {
@@ -314,6 +372,7 @@ DECLARE_RC_STRUCT(dso) {
 	char		 *symsrc_filename;
 	struct nsinfo	*nsinfo;
 	struct auxtrace_cache *auxtrace_cache;
+	struct dso_ondemand *ondemand;
 	union { /* Tool specific area */
 		void	 *priv;
 		u64	 db_id;
@@ -471,6 +530,16 @@ static inline struct auxtrace_cache *dso__auxtrace_cache(struct dso *dso)
 static inline void dso__set_auxtrace_cache(struct dso *dso, struct auxtrace_cache *cache)
 {
 	RC_CHK_ACCESS(dso)->auxtrace_cache = cache;
+}
+
+static inline struct dso_ondemand *dso__ondemand(struct dso *dso)
+{
+	return RC_CHK_ACCESS(dso)->ondemand;
+}
+
+static inline void dso__set_ondemand(struct dso *dso, struct dso_ondemand *od)
+{
+	RC_CHK_ACCESS(dso)->ondemand = od;
 }
 
 static inline struct dso_bpf_prog *dso__bpf_prog(struct dso *dso)
@@ -849,6 +918,17 @@ char *dso__get_filename(struct dso *dso, const char *root_dir, bool *decomp,
 void dso__put_filename(struct dso *dso, char *filename, bool decomp);
 bool is_kernel_module(const char *pathname, int cpumode);
 bool dso__needs_decompress(struct dso *dso);
+struct symbol *dso__find_symbol_ondemand(struct dso *dso, u64 addr)
+	LOCKS_EXCLUDED(dso__lock(dso));
+void dso__materialize_symbols_ondemand(struct dso *dso)
+	LOCKS_EXCLUDED(dso__lock(dso));
+const char *dso__read_ondemand_symbol_name(struct dso *data_dso,
+					   u64 strtab_offset, u64 strtab_size,
+					   u64 name_off, char *buf,
+					   size_t buflen, char **to_free,
+					   unsigned int *nr_reads);
+struct dso_ondemand *dso_ondemand__new(void);
+void dso_ondemand__free(struct dso_ondemand *od);
 int dso__decompress_kmodule_fd(struct dso *dso, const char *name);
 int dso__decompress_kmodule_path(struct dso *dso, const char *name,
 				 char *pathname, size_t len);

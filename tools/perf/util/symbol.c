@@ -634,7 +634,7 @@ void dso__delete_symbol(struct dso *dso, struct symbol *sym)
 	dso__reset_find_symbol_cache(dso);
 }
 
-struct symbol *dso__find_symbol(struct dso *dso, u64 addr)
+struct symbol *dso__find_symbol_cached(struct dso *dso, u64 addr)
 {
 	if (dso__last_find_result_addr(dso) != addr || dso__last_find_result_symbol(dso) == NULL) {
 		dso__set_last_find_result_addr(dso, addr);
@@ -642,6 +642,13 @@ struct symbol *dso__find_symbol(struct dso *dso, u64 addr)
 	}
 
 	return dso__last_find_result_symbol(dso);
+}
+
+struct symbol *dso__find_symbol(struct dso *dso, u64 addr)
+{
+	if (symbol_conf.lazy_load_symbols)
+		return dso__find_symbol_ondemand(dso, addr);
+	return dso__find_symbol_cached(dso, addr);
 }
 
 struct symbol *dso__find_symbol_nocache(struct dso *dso, u64 addr)
@@ -690,6 +697,7 @@ struct symbol *dso__find_symbol_by_name(struct dso *dso, const char *name, size_
 
 void dso__sort_by_name(struct dso *dso)
 {
+	dso__materialize_symbols_ondemand(dso);
 	mutex_lock(dso__lock(dso));
 	if (!dso__sorted_by_name(dso)) {
 		size_t len = 0;
@@ -1940,11 +1948,19 @@ int dso__load(struct dso *dso, struct map *map)
 		}
 
 #ifdef HAVE_LIBBFD_SUPPORT
+#ifdef HAVE_LIBELF_SUPPORT
+		if (is_reg && !symbol_conf.lazy_load_symbols)
+#else
 		if (is_reg)
+#endif
 			bfdrc = dso__load_bfd_symbols(dso, name);
 #endif
 		if (is_reg && bfdrc < 0)
 			sirc = symsrc__init(ss, dso, name, symtab_type);
+#if defined(HAVE_LIBBFD_SUPPORT) && defined(HAVE_LIBELF_SUPPORT)
+		if (is_reg && symbol_conf.lazy_load_symbols && sirc < 0)
+			bfdrc = dso__load_bfd_symbols(dso, name);
+#endif
 
 		if (nsexit)
 			nsinfo__mountns_enter(dso__nsinfo(dso), &nsc);

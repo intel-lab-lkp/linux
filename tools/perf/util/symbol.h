@@ -200,6 +200,7 @@ void dso__insert_symbol(struct dso *dso,
 void dso__delete_symbol(struct dso *dso,
 			struct symbol *sym);
 
+struct symbol *dso__find_symbol_cached(struct dso *dso, u64 addr);
 struct symbol *dso__find_symbol(struct dso *dso, u64 addr);
 struct symbol *dso__find_symbol_nocache(struct dso *dso, u64 addr);
 
