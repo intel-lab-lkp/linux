@@ -94,7 +94,7 @@ static void get_symbol_from_map(Elf_Ehdr *hdr, FILE *f, char *name,
 				struct sym *s)
 {
 	char l[LINE_SIZE];
-	char *w, *p, *n;
+	char *w, *p, *n = NULL;
 
 	s->size = 0;
 	s->address = 0;
