@@ -157,6 +157,36 @@ static int al_fic_irq_retrigger(struct irq_data *data)
 	return 1;
 }
 
+/*
+ * The FIC aggregates up to 32 child interrupts into a single parent GIC SPI.
+ * It has no hardware affinity control - all children inherit the parent's
+ * CPU routing. Affinity requests cannot be forwarded to the parent, because
+ * a parent GIC SPI may be shared by multiple FIC instances and changing its
+ * affinity for one child would silently move all the others.
+ *
+ * Return IRQ_SET_MASK_OK_DONE unconditionally so that callers using
+ * irq_set_affinity() do not fail with -EINVAL for lack of this callback.
+ */
+static int al_fic_irq_set_affinity(struct irq_data *data,
+				   const struct cpumask *mask, bool force)
+{
+	struct irq_chip_generic *gc = irq_data_get_irq_chip_data(data);
+	const struct cpumask *parent_affinity;
+	struct al_fic *fic = gc->private;
+	struct irq_data *parent_data;
+
+	parent_data = irq_get_irq_data(fic->parent_irq);
+	if (!parent_data)
+		return -EINVAL;
+
+	parent_affinity = irq_data_get_affinity_mask(parent_data);
+	if (!cpumask_equal(mask, parent_affinity))
+		pr_warn_once("%pOF: affinity change requested but FIC is fixed to parent IRQ %u CPU routing\n",
+			     fic->node, fic->parent_irq);
+
+	return IRQ_SET_MASK_OK_DONE;
+}
+
 static int al_fic_register(struct device_node *node,
 			   struct al_fic *fic,
 			   enum al_fic_id fic_id,
@@ -216,6 +246,7 @@ static int al_fic_register(struct device_node *node,
 	gc->chip_types->chip.irq_ack = irq_gc_ack_clr_bit;
 	gc->chip_types->chip.irq_set_type = al_fic_irq_set_type;
 	gc->chip_types->chip.irq_retrigger = al_fic_irq_retrigger;
+	gc->chip_types->chip.irq_set_affinity = al_fic_irq_set_affinity;
 	gc->chip_types->chip.flags = IRQCHIP_SKIP_SET_WAKE;
 	gc->private = fic;
 
