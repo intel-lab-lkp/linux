@@ -375,6 +375,18 @@ extern const struct obs_kernel_param __setup_start[], __setup_end[];
 /* Relies on boot_command_line being set */
 void __init parse_early_param(void);
 void __init parse_early_options(char *cmdline);
+
+/*
+ * Parameters consumed before the main kernel started - by the boot stub, the
+ * decompressor or the EFI stub. They cannot be matched against the
+ * __setup()/early_param() tables in the main kernel, so architectures list
+ * them in an override of boot_param_consumed() to keep them from being
+ * reported as unknown and handed to init.
+ *
+ * @param is the parameter as it appeared on the command line, including
+ * "=value" for parameters that had one.
+ */
+bool boot_param_consumed(const char *param);
 #endif /* __ASSEMBLY__ */
 
 #else /* MODULE */

@@ -507,6 +507,18 @@ static int __init set_init_arg(char *param, char *val,
 }
 
 /*
+ * Did the boot stub, the decompressor or the EFI stub consume this parameter
+ * before the main kernel started? Such parameters are not in any parameter
+ * table here, so nothing else can tell that they were eaten - without this
+ * they are reported as unknown and handed to init. Architectures override
+ * this to list them; see also boot_param_consumed().
+ */
+bool __init __weak boot_param_consumed(const char *param)
+{
+	return false;
+}
+
+/*
  * Unknown boot options get handed to init, unless they look like
  * unused parameters (modprobe will find them in /proc/cmdline).
  */
@@ -526,6 +538,10 @@ static int __init unknown_bootoption(char *param, char *val,
 		return 0;
 
 	repair_env_string(param, val);
+
+	/* Eaten by the boot stub/decompressor before the main kernel ran? */
+	if (boot_param_consumed(param))
+		return 0;
 
 	/* Handle bootloader identifier */
 	for (int i = 0; bootloader[i]; i++) {
