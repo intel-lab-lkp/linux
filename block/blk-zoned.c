@@ -19,6 +19,7 @@
 #include <linux/kthread.h>
 #include <linux/freezer.h>
 #include <linux/delay.h>
+#include <linux/uaccess.h>
 
 #include <trace/events/block.h>
 
@@ -2794,6 +2795,69 @@ int bdev_report_storage_elements(struct block_device *bdev,
 }
 EXPORT_SYMBOL_GPL(bdev_report_storage_elements);
 
+static int blkdev_get_nr_storage_elements_ioctl(struct block_device *bdev,
+						void __user *argp)
+{
+	unsigned int nr_elements = 0;
+	int ret;
+
+	ret = bdev_report_storage_elements(bdev, &nr_elements, NULL);
+	if (ret)
+		return ret;
+
+	if (put_user(nr_elements, (unsigned int __user *)argp))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int blkdev_report_storage_elements_ioctl(struct block_device *bdev,
+						void __user *argp)
+{
+	struct blk_storage_elements_report rep;
+	struct blk_storage_element *elements;
+	unsigned int nr_elements;
+	unsigned long retc;
+	int ret;
+
+	if (!argp)
+		return -EINVAL;
+
+	if (copy_from_user(&rep, argp,
+			   sizeof(struct blk_storage_elements_report)))
+		return -EFAULT;
+
+	if (!rep.nr_elements)
+		return -EINVAL;
+
+	nr_elements = rep.nr_elements;
+	elements = kzalloc_objs(struct blk_storage_element, nr_elements);
+	if (!elements)
+		return -ENOMEM;
+
+	ret = bdev_report_storage_elements(bdev, &nr_elements, elements);
+	if (ret)
+		goto free_elements;
+
+	retc = copy_to_user(argp + sizeof(struct blk_storage_elements_report),
+			    elements,
+			    sizeof(struct blk_storage_element) * nr_elements);
+	if (retc) {
+		ret = -EFAULT;
+		goto free_elements;
+	}
+
+	rep.nr_elements = nr_elements;
+	retc = copy_to_user(argp, &rep,
+			    sizeof(struct blk_storage_elements_report));
+	if (retc)
+		ret = -EFAULT;
+
+free_elements:
+	kfree(elements);
+	return ret;
+}
+
 /**
  * bdev_remove_storage_element - Remove (depopulate) a storage element of a
  *				 block device
@@ -2847,6 +2911,22 @@ int bdev_remove_storage_element(struct block_device *bdev,
 }
 EXPORT_SYMBOL_GPL(bdev_remove_storage_element);
 
+static int blkdev_remove_storage_element_ioctl(struct block_device *bdev,
+					blk_mode_t mode, void __user *argp)
+{
+	unsigned int element_id;
+
+	if (!(mode & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (bdev_read_only(bdev))
+		return -EPERM;
+
+	if (get_user(element_id, (unsigned int __user *)argp))
+		return -EFAULT;
+
+	return bdev_remove_storage_element(bdev, element_id);
+}
+
 /**
  * bdev_restore_storage_elements - Restore all depopulated storage elements of a
  *				   block device
@@ -2886,3 +2966,37 @@ int bdev_restore_storage_elements(struct block_device *bdev)
 	return blk_revalidate_disk_zones(disk);
 }
 EXPORT_SYMBOL_GPL(bdev_restore_storage_elements);
+
+static int blkdev_restore_storage_elements_ioctl(struct block_device *bdev,
+						 blk_mode_t mode)
+{
+	if (!(mode & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (bdev_read_only(bdev))
+		return -EPERM;
+
+	return bdev_restore_storage_elements(bdev);
+}
+
+int blkdev_zone_storage_elements_ioctl(struct block_device *bdev,
+				       blk_mode_t mode, unsigned int cmd,
+				       void __user *argp)
+{
+	if (!bdev_is_zoned(bdev) || !bdev->bd_disk->fops->se_ops)
+		return -ENOTTY;
+
+	switch (cmd) {
+	case BLKGETNRSTORELEMS:
+		return blkdev_get_nr_storage_elements_ioctl(bdev, argp);
+	case BLKREPORTSTORELEMS:
+		return blkdev_report_storage_elements_ioctl(bdev, argp);
+	case BLKREMOVESTORELEM:
+		return blkdev_remove_storage_element_ioctl(bdev, mode, argp);
+	case BLKRESTORESTORELEMS:
+		return blkdev_restore_storage_elements_ioctl(bdev, mode);
+	default:
+		break;
+	}
+
+	return -ENOTTY;
+}
