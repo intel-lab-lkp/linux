@@ -2184,6 +2184,14 @@ struct drm_connector_hdmi_audio {
 	 * The port in DT that is used for the Codec DAI.
 	 */
 	int dai_port;
+
+	/**
+	 * @prepare_early:
+	 *
+	 * Call @funcs->prepare from the ASoC hw_params callback instead of
+	 * from prepare. See &drm_bridge.hdmi_audio_prepare_early.
+	 */
+	bool prepare_early;
 };
 
 /*

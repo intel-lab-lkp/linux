@@ -1107,6 +1107,9 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 						    bridge->hdmi_audio_dai_port);
 		if (ret)
 			return ERR_PTR(ret);
+
+		connector->hdmi_audio.prepare_early =
+			bridge->hdmi_audio_prepare_early;
 	}
 
 	if (bridge_connector->bridge_hdmi_cec &&
