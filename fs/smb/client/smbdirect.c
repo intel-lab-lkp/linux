@@ -361,17 +361,61 @@ socket_init_failed:
 	return NULL;
 }
 
+/*
+ * server->smbd_conn can be destroyed by cifs_abort_connection()
+ * at any time, so we take a reference on its socket while we use
+ * it. server->smbd_conn is changed under server->srv_lock,
+ * see smbd_set_connection() and smbd_destroy().
+ *
+ * Once the connection is destroyed, the socket is no longer
+ * connected, so the smbdirect functions fail gracefully.
+ *
+ * smbd_put_socket() may free the socket, so this
+ * can only be used in process context.
+ */
+static struct smbdirect_socket *smbd_get_socket(struct TCP_Server_Info *server)
+{
+	struct smbdirect_socket *sc = NULL;
+
+	spin_lock(&server->srv_lock);
+	if (server->smbd_conn && server->smbd_conn->socket) {
+		sc = server->smbd_conn->socket;
+		smbdirect_socket_get(sc);
+	}
+	spin_unlock(&server->srv_lock);
+
+	return sc;
+}
+
+static void smbd_put_socket(struct smbdirect_socket *sc)
+{
+	if (sc)
+		smbdirect_socket_put(sc);
+}
+
+/*
+ * We can't return a pointer into the socket, as it may
+ * be destroyed at any time, so we copy the parameters
+ * into server->smbd_params and return a pointer to that.
+ *
+ * The copy is done under server->srv_lock, which also
+ * prevents server->smbd_conn from being destroyed,
+ * see smbd_destroy().
+ *
+ * If there's no connection (anymore), we fill server->smbd_params
+ * with zeros.
+ */
 const struct smbdirect_socket_parameters *smbd_get_parameters(struct TCP_Server_Info *server)
 {
-	struct smbd_connection *conn = server->smbd_conn;
+	spin_lock(&server->srv_lock);
+	if (server->smbd_conn && server->smbd_conn->socket)
+		server->smbd_params =
+			*smbdirect_socket_get_current_parameters(server->smbd_conn->socket);
+	else
+		memset(&server->smbd_params, 0, sizeof(server->smbd_params));
+	spin_unlock(&server->srv_lock);
 
-	if (unlikely(!conn->socket)) {
-		static const struct smbdirect_socket_parameters zero_params;
-
-		return &zero_params;
-	}
-
-	return smbdirect_socket_get_current_parameters(conn->socket);
+	return &server->smbd_params;
 }
 
 struct smbd_connection *smbd_get_connection(
@@ -392,6 +436,9 @@ try_again:
 	if (!ret)
 		return NULL;
 
+	/*
+	 * ret is not published in server->smbd_conn yet
+	 */
 	sp = smbdirect_socket_get_current_parameters(ret->socket);
 
 	server->rdma_readwrite_threshold =
@@ -437,7 +484,13 @@ int smbd_send(struct TCP_Server_Info *server,
 {
 	struct smbd_connection *info = server->smbd_conn;
 	struct smbdirect_socket *sc = info->socket;
-	const struct smbdirect_socket_parameters *sp = smbd_get_parameters(server);
+	/*
+	 * We're called under cifs_server_lock(), so
+	 * server->smbd_conn can't be destroyed while
+	 * we use it.
+	 */
+	const struct smbdirect_socket_parameters *sp =
+		smbdirect_socket_get_current_parameters(sc);
 	struct smb_rqst *rqst;
 	struct iov_iter iter;
 	struct smbdirect_send_batch_storage bstorage;
@@ -541,13 +594,19 @@ struct smbdirect_mr_io *smbd_register_mr(struct TCP_Server_Info *server,
 				 struct iov_iter *iter,
 				 bool writing, bool need_invalidate)
 {
-	struct smbd_connection *info = server->smbd_conn;
-	struct smbdirect_socket *sc = info->socket;
+	struct smbdirect_socket *sc = smbd_get_socket(server);
+	struct smbdirect_mr_io *mr = NULL;
 
-	if (!smbdirect_connection_is_connected(sc))
-		return NULL;
+	/*
+	 * The mr has its own reference counting
+	 * and doesn't need the socket reference
+	 * once registered.
+	 */
+	if (sc && smbdirect_connection_is_connected(sc))
+		mr = smbdirect_connection_register_mr_io(sc, iter, writing, need_invalidate);
+	smbd_put_socket(sc);
 
-	return smbdirect_connection_register_mr_io(sc, iter, writing, need_invalidate);
+	return mr;
 }
 
 void smbd_mr_fill_buffer_descriptor(struct smbdirect_mr_io *mr,
@@ -572,7 +631,15 @@ void smbd_debug_proc_show(struct TCP_Server_Info *server, struct seq_file *m)
 	if (!server->rdma)
 		return;
 
+	/*
+	 * We're called with cifs_tcp_ses_lock held, so we
+	 * can't use smbd_get_socket(), but holding
+	 * server->srv_lock prevents server->smbd_conn
+	 * from being destroyed, see smbd_destroy().
+	 */
+	spin_lock(&server->srv_lock);
 	if (!server->smbd_conn) {
+		spin_unlock(&server->srv_lock);
 		seq_puts(m, "\nSMBDirect transport not available");
 		return;
 	}
@@ -580,6 +647,7 @@ void smbd_debug_proc_show(struct TCP_Server_Info *server, struct seq_file *m)
 	smbdirect_connection_legacy_debug_proc_show(server->smbd_conn->socket,
 						    server->rdma_readwrite_threshold,
 						    m);
+	spin_unlock(&server->srv_lock);
 }
 
 MODULE_IMPORT_NS("SMBDIRECT");

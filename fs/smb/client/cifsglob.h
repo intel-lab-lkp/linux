@@ -30,6 +30,9 @@
 #include "smb2pdu.h"
 #include "smb1pdu.h"
 #include <linux/filelock.h>
+#ifdef CONFIG_CIFS_SMB_DIRECT
+#include <linux/smbdirect.h>
+#endif
 
 #define SMB_PATH_MAX 260
 #define CIFS_PORT 445
@@ -761,6 +764,15 @@ struct TCP_Server_Info {
 	bool	rdma;
 	/* point to the SMBD connection if RDMA is used instead of socket */
 	struct smbd_connection *smbd_conn;
+#ifdef CONFIG_CIFS_SMB_DIRECT
+	/*
+	 * A copy of the current smbdirect socket parameters,
+	 * updated by smbd_get_parameters(). smbd_conn and
+	 * its socket can be destroyed at any time, so callers
+	 * can't get a pointer into it.
+	 */
+	struct smbdirect_socket_parameters smbd_params;
+#endif
 	struct delayed_work	echo; /* echo ping workqueue job */
 	char	*smallbuf;	/* pointer to current "small" buffer */
 	char	*bigbuf;	/* pointer to current "big" buffer */
