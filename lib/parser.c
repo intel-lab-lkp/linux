@@ -137,22 +137,19 @@ EXPORT_SYMBOL(match_token);
  */
 static int match_number(substring_t *s, int *result, int base)
 {
-	char *endp;
 	char buf[NUMBER_BUF_LEN];
 	int ret;
 	long val;
 
 	if (match_strlcpy(buf, s, NUMBER_BUF_LEN) >= NUMBER_BUF_LEN)
 		return -ERANGE;
-	ret = 0;
-	val = simple_strtol(buf, &endp, base);
-	if (endp == buf)
-		ret = -EINVAL;
-	else if (val < (long)INT_MIN || val > (long)INT_MAX)
-		ret = -ERANGE;
-	else
-		*result = (int) val;
-	return ret;
+	ret = kstrtol(buf, base, &val);
+	if (ret)
+		return ret;
+	if (val < (long)INT_MIN || val > (long)INT_MAX)
+		return -ERANGE;
+	*result = (int) val;
+	return 0;
 }
 
 /**
