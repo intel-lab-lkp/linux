@@ -3172,7 +3172,7 @@ int mt76_connac2_load_ram(struct mt76_dev *dev, const char *fw_wm,
 
 	ret = mt76_connac_mcu_send_ram_firmware(dev, hdr, fw->data, false);
 	if (ret) {
-		dev_err(dev->dev, "Failed to start WM firmware\n");
+		dev_err(dev->dev, "Failed to start WM firmware %d\n", ret);
 		goto out;
 	}
 
@@ -3343,7 +3343,7 @@ int mt76_connac2_load_patch(struct mt76_dev *dev, const char *fw_name)
 
 	ret = mt76_connac_mcu_start_patch(dev);
 	if (ret)
-		dev_err(dev->dev, "Failed to start patch\n");
+		dev_err(dev->dev, "Failed to start patch %d\n", ret);
 
 out:
 	sem = mt76_connac_mcu_patch_sem_ctrl(dev, false);
@@ -3465,7 +3465,7 @@ int mt76_connac3_load_cb_patch(struct mt76_dev *dev, const char *fw_name)
 
 	ret = mt76_connac_cb_mcu_start_patch(dev);
 	if (ret)
-		dev_err(dev->dev, "Failed to start cb patch\n");
+		dev_err(dev->dev, "Failed to start cb patch %d\n", ret);
 
 out:
 	sem = mt76_connac_cb_mcu_patch_sem_ctrl(dev, false);
