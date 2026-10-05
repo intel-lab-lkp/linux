@@ -146,7 +146,7 @@ static int pca995x_probe(struct i2c_client *client)
 		if (ret)
 			return ret;
 
-		if (reg < 0 || reg >= PCA995X_MAX_OUTPUTS || led_fwnodes[reg])
+		if (reg < 0 || reg >= chipdef->num_leds || led_fwnodes[reg])
 			return -EINVAL;
 
 		led = &chip->leds[reg];
@@ -157,7 +157,7 @@ static int pca995x_probe(struct i2c_client *client)
 		led->ldev.max_brightness = 255;
 	}
 
-	for (i = 0; i < PCA995X_MAX_OUTPUTS; i++) {
+	for (i = 0; i < chipdef->num_leds; i++) {
 		struct led_init_data init_data = {};
 
 		if (!led_fwnodes[i])
@@ -169,7 +169,7 @@ static int pca995x_probe(struct i2c_client *client)
 						     &chip->leds[i].ldev,
 						     &init_data);
 		if (ret < 0) {
-			for (j = i; j < PCA995X_MAX_OUTPUTS; j++)
+			for (j = i; j < chipdef->num_leds; j++)
 				fwnode_handle_put(led_fwnodes[j]);
 			return dev_err_probe(dev, ret,
 					     "Could not register LED %s\n",
