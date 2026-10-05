@@ -326,6 +326,7 @@ void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event);
 void kvm_inject_realmode_interrupt(struct kvm_vcpu *vcpu, int irq, int inc_eip);
 
 u64 get_kvmclock_ns(struct kvm *kvm);
+void kvm_set_clock_and_tsc(struct kvm *kvm, u64 ns, u64 guest_tsc);
 uint64_t kvm_get_wall_clock_epoch(struct kvm *kvm);
 bool kvm_get_monotonic_and_clockread(s64 *kernel_ns, u64 *tsc_timestamp);
 int kvm_guest_time_update(struct kvm_vcpu *v);

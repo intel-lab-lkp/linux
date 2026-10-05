@@ -127,6 +127,7 @@
 	KVM_ARCH_REQ_FLAGS(33, KVM_REQUEST_WAIT | KVM_REQUEST_NO_WAKEUP)
 #define KVM_REQ_UPDATE_PROTECTED_GUEST_STATE \
 	KVM_ARCH_REQ_FLAGS(34, KVM_REQUEST_WAIT)
+#define KVM_REQ_WRITE_TSC_OFFSET	KVM_ARCH_REQ(35)
 
 #define INVALID_PAGE (~(hpa_t)0)
 #define VALID_PAGE(x) ((x) != INVALID_PAGE)
@@ -1246,6 +1247,10 @@ struct kvm_arch {
 	u64 cur_tsc_offset;
 	u64 cur_tsc_generation;
 	int nr_vcpus_matched_tsc;
+	/* TSC step requested by the guest; each vCPU applies it. */
+	u64 restore_host_tsc;
+	u64 restore_guest_tsc;
+	u64 restore_tsc_nsec;
 
 	u32 default_tsc_khz;
 	bool user_set_tsc;

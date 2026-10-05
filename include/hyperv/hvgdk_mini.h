@@ -343,6 +343,8 @@ union hv_hypervisor_version_info {
 #define HV_X64_EX_PROCESSOR_MASKS_RECOMMENDED		BIT(11)
 #define HV_X64_HYPERV_NESTED				BIT(12)
 #define HV_X64_ENLIGHTENED_VMCS_RECOMMENDED		BIT(14)
+/* Reserved in the TLFS; from Microsoft's hvdef. */
+#define HV_X64_RESTORE_TIME_ON_RESUME			BIT(20)
 #define HV_X64_USE_MMIO_HYPERCALLS			BIT(21)
 
 /*
@@ -499,6 +501,7 @@ union hv_vp_assist_msr_contents {	 /* HV_REGISTER_VP_ASSIST_PAGE */
 #define HVCALL_SET_VP_STATE				0x00e4
 #define HVCALL_GET_VP_CPUID_VALUES			0x00f4
 #define HVCALL_GET_PARTITION_PROPERTY_EX		0x0101
+#define HVCALL_RESTORE_PARTITION_TIME			0x0103
 #define HVCALL_MMIO_READ				0x0106
 #define HVCALL_MMIO_WRITE				0x0107
 #define HVCALL_DISABLE_HYP_EX                           0x010f
@@ -1513,6 +1516,15 @@ union hv_intercept_parameters {
 #endif
 	/* N.B. Other intercept types do not have any parameters. */
 };
+
+/* HVCALL_RESTORE_PARTITION_TIME input. Layout from Microsoft's hvdef. */
+struct hv_input_restore_partition_time {
+	u64 partition_id;
+	u32 tsc_sequence;
+	u32 reserved;
+	u64 reference_time_in_100ns;
+	u64 tsc;
+} __packed;
 
 /* Data structures for HVCALL_MMIO_READ and HVCALL_MMIO_WRITE */
 #define HV_HYPERCALL_MMIO_MAX_DATA_LENGTH 64

@@ -2538,6 +2538,9 @@ static bool hv_check_hypercall_access(struct kvm_vcpu_hv *hv_vcpu, u16 code)
 	case HVCALL_SEND_IPI:
 		return hv_vcpu->cpuid_cache.enlightenments_eax &
 			HV_X64_CLUSTER_IPI_RECOMMENDED;
+	case HVCALL_RESTORE_PARTITION_TIME:
+		return hv_vcpu->cpuid_cache.enlightenments_eax &
+			HV_X64_RESTORE_TIME_ON_RESUME;
 	case HV_EXT_CALL_QUERY_CAPABILITIES ... HV_EXT_CALL_MAX:
 		return hv_vcpu->cpuid_cache.features_ebx &
 			HV_ENABLE_EXTENDED_HYPERCALLS;
@@ -2546,6 +2549,31 @@ static bool hv_check_hypercall_access(struct kvm_vcpu_hv *hv_vcpu, u16 code)
 	}
 
 	return true;
+}
+
+static u64 kvm_hv_restore_partition_time(struct kvm_vcpu *vcpu,
+					 struct kvm_hv_hcall *hc)
+{
+	struct kvm_hv *hv = to_kvm_hv(vcpu->kvm);
+	struct hv_input_restore_partition_time in;
+
+	BUILD_BUG_ON(sizeof(in) != 32);
+
+	if (kvm_vcpu_read_guest(vcpu, hc->ingpa, &in, sizeof(in)))
+		return HV_STATUS_INVALID_HYPERCALL_INPUT;
+	if (in.reserved)
+		return HV_STATUS_INVALID_HYPERCALL_INPUT;
+	if (in.partition_id != HV_PARTITION_ID_SELF)
+		return HV_STATUS_INVALID_PARTITION_ID;
+
+	/* The guest asked for the step; recompute the TSC page as for its own write. */
+	mutex_lock(&hv->hv_lock);
+	if (hv->hv_tsc_page & HV_X64_MSR_TSC_REFERENCE_ENABLE)
+		hv->hv_tsc_page_status = HV_TSC_PAGE_GUEST_CHANGED;
+	mutex_unlock(&hv->hv_lock);
+
+	kvm_set_clock_and_tsc(vcpu->kvm, in.reference_time_in_100ns * 100, in.tsc);
+	return HV_STATUS_SUCCESS;
 }
 
 int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
@@ -2669,6 +2697,13 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 			break;
 		}
 		ret = kvm_hv_send_ipi(vcpu, &hc);
+		break;
+	case HVCALL_RESTORE_PARTITION_TIME:
+		if (unlikely(hc.fast || hc.rep || hc.var_cnt)) {
+			ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
+			break;
+		}
+		ret = kvm_hv_restore_partition_time(vcpu, &hc);
 		break;
 	case HVCALL_POST_DEBUG_DATA:
 	case HVCALL_RETRIEVE_DEBUG_DATA:
@@ -2889,6 +2924,7 @@ int kvm_get_hv_cpuid(struct kvm_vcpu *vcpu, struct kvm_cpuid2 *cpuid,
 				ent->eax |= HV_X64_NO_NONARCH_CORESHARING;
 
 			ent->eax |= HV_DEPRECATING_AEOI_RECOMMENDED;
+			ent->eax |= HV_X64_RESTORE_TIME_ON_RESUME;
 			/*
 			 * Default number of spinlock retry attempts, matches
 			 * HyperV 2016.

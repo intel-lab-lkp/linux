@@ -4354,13 +4354,85 @@ static int kvm_vm_ioctl_get_clock(struct kvm *kvm, void __user *argp)
 	return 0;
 }
 
-static void __kvm_set_clock(struct kvm *kvm, struct kvm_clock_data *data)
+/* Must precede pvclock_update_vm_gtod_copy(), which reads the matched count. */
+static void kvm_open_tsc_generation(struct kvm *kvm, u64 guest_tsc)
 {
 	struct kvm_arch *ka = &kvm->arch;
-	u64 now_raw_ns;
+	struct kvm_vcpu *vcpu;
+	unsigned long i;
+
+	lockdep_assert_held(&ka->tsc_write_lock);
+
+	ka->cur_tsc_generation++;
+	ka->cur_tsc_write = guest_tsc;
+	ka->last_tsc_write = guest_tsc;
+	ka->nr_vcpus_matched_tsc = atomic_read(&kvm->online_vcpus) - 1;
+
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		if (vcpu->arch.guest_tsc_protected)
+			continue;
+		ka->last_tsc_khz = vcpu->arch.virtual_tsc_khz;
+		ka->last_tsc_scaling_ratio = vcpu->arch.l1_tsc_scaling_ratio;
+		break;
+	}
+}
+
+/* Every vCPU reads @guest_tsc at host TSC @host_tsc. */
+static void kvm_set_tsc_generation(struct kvm *kvm, u64 host_tsc,
+				   u64 guest_tsc, u64 ns)
+{
+	struct kvm_arch *ka = &kvm->arch;
+	struct kvm_vcpu *vcpu;
+	unsigned long i;
+
+	lockdep_assert_held(&ka->tsc_write_lock);
+
+	ka->cur_tsc_nsec = ns;
+	ka->last_tsc_nsec = ns;
+	ka->restore_host_tsc = host_tsc;
+	ka->restore_guest_tsc = guest_tsc;
+	ka->restore_tsc_nsec = ns;
+
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		if (vcpu->arch.guest_tsc_protected)
+			continue;
+
+		ka->cur_tsc_offset = kvm_compute_l1_tsc_offset(vcpu, host_tsc,
+							       guest_tsc);
+		ka->last_tsc_offset = ka->cur_tsc_offset;
+		kvm_make_request(KVM_REQ_WRITE_TSC_OFFSET, vcpu);
+	}
+}
+
+/* Runs on the vCPU; only the owner writes its TSC offset. */
+static void kvm_vcpu_apply_tsc_generation(struct kvm_vcpu *vcpu)
+{
+	struct kvm_arch *ka = &vcpu->kvm->arch;
+	unsigned long flags;
+	u64 offset;
+
+	raw_spin_lock_irqsave(&ka->tsc_write_lock, flags);
+	offset = kvm_compute_l1_tsc_offset(vcpu, ka->restore_host_tsc,
+					   ka->restore_guest_tsc);
+	vcpu->arch.last_guest_tsc = ka->restore_guest_tsc;
+	vcpu->arch.this_tsc_generation = ka->cur_tsc_generation;
+	vcpu->arch.this_tsc_nsec = ka->restore_tsc_nsec;
+	vcpu->arch.this_tsc_write = ka->restore_guest_tsc;
+	raw_spin_unlock_irqrestore(&ka->tsc_write_lock, flags);
+
+	kvm_vcpu_write_tsc_offset(vcpu, offset);
+}
+
+static void __kvm_set_clock(struct kvm *kvm, struct kvm_clock_data *data,
+			    const u64 *guest_tsc)
+{
+	struct kvm_arch *ka = &kvm->arch;
+	u64 host_tsc, now_raw_ns;
 
 	kvm_hv_request_tsc_page_update(kvm);
 	kvm_start_pvclock_update(kvm);
+	if (guest_tsc)
+		kvm_open_tsc_generation(kvm, *guest_tsc);
 	pvclock_update_vm_gtod_copy(kvm);
 
 	/*
@@ -4380,12 +4452,27 @@ static void __kvm_set_clock(struct kvm *kvm, struct kvm_clock_data *data)
 			data->clock += now_real_ns - data->realtime;
 	}
 
-	if (ka->use_master_clock)
+	if (ka->use_master_clock) {
 		now_raw_ns = ka->master_kernel_ns;
-	else
+		host_tsc = ka->master_cycle_now;
+	} else {
+		host_tsc = rdtsc();
 		now_raw_ns = get_kvmclock_base_ns();
+	}
 	ka->kvmclock_offset = data->clock - now_raw_ns;
+
+	if (guest_tsc)
+		kvm_set_tsc_generation(kvm, host_tsc, *guest_tsc, now_raw_ns);
+
 	kvm_end_pvclock_update(kvm);
+}
+
+/* Step kvmclock to @ns and the guest TSC on every vCPU to @guest_tsc. */
+void kvm_set_clock_and_tsc(struct kvm *kvm, u64 ns, u64 guest_tsc)
+{
+	struct kvm_clock_data data = { .clock = ns };
+
+	__kvm_set_clock(kvm, &data, &guest_tsc);
 }
 
 static int kvm_vm_ioctl_set_clock(struct kvm *kvm, void __user *argp)
@@ -4402,7 +4489,7 @@ static int kvm_vm_ioctl_set_clock(struct kvm *kvm, void __user *argp)
 	if (data.flags & ~KVM_CLOCK_VALID_FLAGS)
 		return -EINVAL;
 
-	__kvm_set_clock(kvm, &data);
+	__kvm_set_clock(kvm, &data, NULL);
 	return 0;
 }
 
@@ -8168,6 +8255,8 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 			kvm_update_masterclock(vcpu->kvm);
 		if (kvm_check_request(KVM_REQ_GLOBAL_CLOCK_UPDATE, vcpu))
 			kvm_gen_kvmclock_update(vcpu);
+		if (kvm_check_request(KVM_REQ_WRITE_TSC_OFFSET, vcpu))
+			kvm_vcpu_apply_tsc_generation(vcpu);
 		if (kvm_check_request(KVM_REQ_CLOCK_UPDATE, vcpu)) {
 			r = kvm_guest_time_update(vcpu);
 			if (unlikely(r))
