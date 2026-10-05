@@ -1615,6 +1615,7 @@ static irqreturn_t mcp251xfd_irq(int irq, void *dev_id)
 			}
 		}
 
+		can_rx_offload_threaded_irq_flush(&priv->offload);
 		handled = IRQ_HANDLED;
 	} while (1);
 
