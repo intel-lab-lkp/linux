@@ -286,6 +286,37 @@ static int mt7925_chip_reset(void *data, u64 val)
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_reset, NULL, mt7925_chip_reset, "%lld\n");
 
+/* send one perf_ind carrying the written value in every tx/rx byte field */
+static int mt7925_perf_ind_set(void *data, u64 val)
+{
+	struct mt792x_dev *dev = data;
+
+	return mt792x_perf_ind_trigger(dev, val);
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_perf_ind, NULL, mt7925_perf_ind_set, "%lld\n");
+
+static int mt7925_perf_ind_enable_get(void *data, u64 *val)
+{
+	struct mt792x_dev *dev = data;
+
+	*val = dev->perf.enabled;
+
+	return 0;
+}
+
+static int mt7925_perf_ind_enable_set(void *data, u64 val)
+{
+	struct mt792x_dev *dev = data;
+
+	dev->perf.enabled = !!val;
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_perf_ind_enable, mt7925_perf_ind_enable_get,
+			 mt7925_perf_ind_enable_set, "%lld\n");
+
 int mt7925_init_debugfs(struct mt792x_dev *dev)
 {
 	struct dentry *dir;
@@ -312,6 +343,20 @@ int mt7925_init_debugfs(struct mt792x_dev *dev)
 	debugfs_create_devm_seqfile(dev->mt76.dev, "runtime_pm_stats", dir,
 				    mt792x_pm_stats);
 	debugfs_create_file("deep-sleep", 0600, dir, dev, &fops_ds);
+
+	/* PERF_IND is supported on MT7928 only within this family */
+	if (is_mt7928(&dev->mt76)) {
+		debugfs_create_file("enable_perf_ind", 0600, dir, dev,
+				    &fops_perf_ind_enable);
+		debugfs_create_file("perf_ind", 0200, dir, dev, &fops_perf_ind);
+	}
+
+	/* PERF_IND is supported on MT7928 only within this family */
+	if (is_mt7928(&dev->mt76)) {
+		debugfs_create_file("enable_perf_ind", 0600, dir, dev,
+				    &fops_perf_ind_enable);
+		debugfs_create_file("perf_ind", 0200, dir, dev, &fops_perf_ind);
+	}
 
 	return 0;
 }

@@ -51,6 +51,7 @@ static void mt7921e_unregister_device(struct mt792x_dev *dev)
 		wiphy_rfkill_stop_polling(hw->wiphy);
 
 	cancel_work_sync(&dev->init_work);
+	cancel_delayed_work_sync(&dev->perf.work);
 	mt76_unregister_device(&dev->mt76);
 	mt76_for_each_q_rx(&dev->mt76, i)
 		napi_disable(&dev->mt76.napi[i]);
@@ -435,6 +436,9 @@ static int mt7921_pci_probe(struct pci_dev *pdev,
 	if (ret)
 		goto err_free_irq;
 
+	/* the periodic performance indication is started on association */
+	mt792x_perf_ind_init(dev);
+
 	if (of_property_read_bool(dev->mt76.dev->of_node, "wakeup-source"))
 		device_init_wakeup(dev->mt76.dev, true);
 
@@ -475,6 +479,7 @@ static int mt7921_pci_suspend(struct device *device)
 
 	pm->suspended = true;
 	flush_work(&dev->reset_work);
+	cancel_delayed_work_sync(&dev->perf.work);
 	cancel_delayed_work_sync(&pm->ps_work);
 	cancel_work_sync(&pm->wake_work);
 
@@ -598,6 +603,9 @@ static int mt7921_pci_resume(struct device *device)
 
 	mt7921_mcu_regd_update(dev, mdev->alpha2, dev->country_ie_env);
 	err = mt7921_mcu_radio_led_ctrl(dev, EXT_CMD_RADIO_ON_LED);
+
+	/* re-arm the periodic performance indication if any bss is connected */
+	mt792x_perf_ind_resched(dev);
 failed:
 	pm->suspended = false;
 

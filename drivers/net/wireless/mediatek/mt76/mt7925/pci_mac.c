@@ -22,6 +22,8 @@ int mt7925e_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 	if (unlikely(tx_info->skb->len <= ETH_HLEN))
 		return -EINVAL;
 
+	mt792x_perf_account_tx(dev, info->control.vif, tx_info->skb->len);
+
 	if (!wcid)
 		wcid = &dev->mt76.global_wcid;
 
