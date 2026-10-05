@@ -1,0 +1,127 @@
+[
+  {
+    "EventName": "L1_ICACHE_ACCESS",
+    "EventCode": "0x00000001",
+    "BriefDescription": "L1-icache Access"
+  },
+  {
+    "EventName": "L1_ICACHE_MISS",
+    "EventCode": "0x00000002",
+    "BriefDescription": "L1-icache Miss"
+  },
+  {
+    "EventName": "ITLB_MISS",
+    "EventCode": "0x00000003",
+    "BriefDescription": "iTLB Miss"
+  },
+  {
+    "EventName": "JTLB_MISS",
+    "EventCode": "0x00000005",
+    "BriefDescription": "jTLB Miss"
+  },
+  {
+    "EventName": "L1_DCACHE_READ_ACCESS",
+    "EventCode": "0x0000000c",
+    "BriefDescription": "L1-dcache load access"
+  },
+  {
+    "EventName": "L1_DCACHE_READ_MISS",
+    "EventCode": "0x0000000d",
+    "BriefDescription": "L1-dcache load miss"
+  },
+  {
+    "EventName": "L1_DCACHE_WRITE_ACCESS",
+    "EventCode": "0x0000000e",
+    "BriefDescription": "L1-dcache store access"
+  },
+  {
+    "EventName": "L1_DCACHE_WRITE_MISS",
+    "EventCode": "0x0000000f",
+    "BriefDescription": "L1-dcache store miss"
+  },
+  {
+    "EventName": "IF_REFILL_STALL",
+    "EventCode": "0x00000051",
+    "BriefDescription": "IF Refill Stall"
+  },
+  {
+    "EventName": "L1_DCACHE_ACCESS",
+    "EventCode": "0x0000009b",
+    "BriefDescription": "L1 Dcache Access"
+  },
+  {
+    "EventName": "L1_DCACHE_MISS",
+    "EventCode": "0x0000009c",
+    "BriefDescription": "L1 Dcache Miss"
+  },
+  {
+    "EventName": "L1_DCACHE_EXCLUSIVE_EVICTION",
+    "EventCode": "0x0000009d",
+    "BriefDescription": "L1 Dcache Exclusive Eviction"
+  },
+  {
+    "EventName": "ICACHE_PREFETCH",
+    "EventCode": "0x0000009e",
+    "BriefDescription": "Icache Prefetch"
+  },
+  {
+    "EventName": "DCACHE_AMR_ACTIVE",
+    "EventCode": "0x0000009f",
+    "BriefDescription": "Dcache Amr Active"
+  },
+  {
+    "EventName": "ICACHE_PREFETCH_MISS",
+    "EventCode": "0x000000a0",
+    "BriefDescription": "Icache Prefetch Miss"
+  },
+  {
+    "EventName": "DCACHE_REFILL_CAUSED_BY_PREFETCH",
+    "EventCode": "0x000000a1",
+    "BriefDescription": "Dcache Refill Caused by Prefetch"
+  },
+  {
+    "EventName": "DCACHE_HIT_CAUSED_BY_PREFETCH",
+    "EventCode": "0x000000a2",
+    "BriefDescription": "Dcache Hit Caused by Prefetch"
+  },
+  {
+    "EventName": "STORE_DTLB_MISS",
+    "EventCode": "0x000000a3",
+    "BriefDescription": "Store Dtlb Miss"
+  },
+  {
+    "EventName": "LOAD_DTLB_MISS",
+    "EventCode": "0x000000a4",
+    "BriefDescription": "Load Dtlb Miss"
+  },
+  {
+    "EventName": "L2_ACCESS",
+    "EventCode": "0x000000a5",
+    "BriefDescription": "L2 Access"
+  },
+  {
+    "EventName": "L2_MISS",
+    "EventCode": "0x000000a6",
+    "BriefDescription": "L2 Miss"
+  },
+  {
+    "EventName": "SNB_READ_CREATE_VLD",
+    "EventCode": "0x000000a7",
+    "BriefDescription": "Snb Read Create Vld"
+  },
+  {
+    "EventName": "SNB_READ_CREATE_STALL",
+    "EventCode": "0x000000a8",
+    "BriefDescription": "Snb Read Create Stall"
+  },
+  {
+    "EventName": "SNB_WRITE_CREATE_VLD",
+    "EventCode": "0x000000a9",
+    "BriefDescription": "Snb Write Create Vld"
+  },
+  {
+    "EventName": "SNB_WRITE_CREATE_STALL",
+    "EventCode": "0x000000aa",
+    "BriefDescription": "Snb Write Create Stall"
+  }
+]

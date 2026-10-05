@@ -1,0 +1,512 @@
+[
+  {
+    "EventName": "IFU_BRANCH_TARGET_MISPRED",
+    "EventCode": "0x0000001b",
+    "BriefDescription": "IFU Branch Target Mispred"
+  },
+  {
+    "EventName": "IFU_BRANCH_TARGET_INSTRUCTION",
+    "EventCode": "0x0000001c",
+    "BriefDescription": "IFU Branch Target Instruction"
+  },
+  {
+    "EventName": "INTERRUPT_NUMBER",
+    "EventCode": "0x00000023",
+    "BriefDescription": "Interrupt Number"
+  },
+  {
+    "EventName": "IFU_STALLED_CYCLE",
+    "EventCode": "0x00000027",
+    "BriefDescription": "Stalled Cycles Frontend"
+  },
+  {
+    "EventName": "IDU_STALLED_CYCLE",
+    "EventCode": "0x00000028",
+    "BriefDescription": "Stalled Cycles Backend"
+  },
+  {
+    "EventName": "SYNC_STALL",
+    "EventCode": "0x00000029",
+    "BriefDescription": "SYNC Stall"
+  },
+  {
+    "EventName": "M_MODE_CYCLES",
+    "EventCode": "0x0000002b",
+    "BriefDescription": "M Mode Cycles"
+  },
+  {
+    "EventName": "S_MODE_CYCLES",
+    "EventCode": "0x0000002c",
+    "BriefDescription": "S Mode Cycles"
+  },
+  {
+    "EventName": "U_MODE_CYCLES",
+    "EventCode": "0x0000002d",
+    "BriefDescription": "U Mode Cycles"
+  },
+  {
+    "EventName": "EXCEPTION_NUMBER",
+    "EventCode": "0x0000002e",
+    "BriefDescription": "Exception Number"
+  },
+  {
+    "EventName": "FLUSH_NUMBER",
+    "EventCode": "0x0000002f",
+    "BriefDescription": "Flush Number"
+  },
+  {
+    "EventName": "MULT_INNER_FORWARD",
+    "EventCode": "0x00000034",
+    "BriefDescription": "Mult Inner Forward"
+  },
+  {
+    "EventName": "DIV_BUFFER_HIT",
+    "EventCode": "0x00000035",
+    "BriefDescription": "DIV Buffer Hit"
+  },
+  {
+    "EventName": "BUS_BARRIER",
+    "EventCode": "0x00000044",
+    "BriefDescription": "Bus Barrier"
+  },
+  {
+    "EventName": "ECC_INTERRUPT",
+    "EventCode": "0x0000004c",
+    "BriefDescription": "ECC Interrupt"
+  },
+  {
+    "EventName": "ASYNC_ABORT_INTERRUPT",
+    "EventCode": "0x0000004d",
+    "BriefDescription": "Async Abort Interrupt"
+  },
+  {
+    "EventName": "IF_STALL",
+    "EventCode": "0x0000004e",
+    "BriefDescription": "IF Stall"
+  },
+  {
+    "EventName": "IP_STALL",
+    "EventCode": "0x0000004f",
+    "BriefDescription": "IP Stall"
+  },
+  {
+    "EventName": "IB_STALL",
+    "EventCode": "0x00000050",
+    "BriefDescription": "IB Stall"
+  },
+  {
+    "EventName": "IF_MMU_STALL",
+    "EventCode": "0x00000052",
+    "BriefDescription": "IF Mmu Stall"
+  },
+  {
+    "EventName": "IB_MISPRED_STALL",
+    "EventCode": "0x00000053",
+    "BriefDescription": "IB Mispred Stall"
+  },
+  {
+    "EventName": "IB_FIFO_STALL",
+    "EventCode": "0x00000054",
+    "BriefDescription": "IB Fifo Stall"
+  },
+  {
+    "EventName": "IB_IND_BTB_RD_STALL",
+    "EventCode": "0x00000055",
+    "BriefDescription": "IB Ind Btb Rd Stall"
+  },
+  {
+    "EventName": "IB_VSETVL_STALL",
+    "EventCode": "0x00000056",
+    "BriefDescription": "IB Vsetvl Stall"
+  },
+  {
+    "EventName": "ID_STALL",
+    "EventCode": "0x00000057",
+    "BriefDescription": "ID Stall"
+  },
+  {
+    "EventName": "RF_STALL",
+    "EventCode": "0x00000058",
+    "BriefDescription": "RF Stall"
+  },
+  {
+    "EventName": "EU_STALL",
+    "EventCode": "0x00000059",
+    "BriefDescription": "EU Stall"
+  },
+  {
+    "EventName": "ID_INST_PIPEDOWN",
+    "EventCode": "0x0000005a",
+    "BriefDescription": "ID Inst Pipedown"
+  },
+  {
+    "EventName": "RF_INST_PIPEDOWN",
+    "EventCode": "0x0000005b",
+    "BriefDescription": "RF Inst Pipedown"
+  },
+  {
+    "EventName": "ID_ONE_INST_PIPEDOWN",
+    "EventCode": "0x0000005c",
+    "BriefDescription": "ID One Inst Pipedown"
+  },
+  {
+    "EventName": "ID_CSR_BEFORE_FENCE_STALL",
+    "EventCode": "0x0000005d",
+    "BriefDescription": "ID CSR Before Fence Stall"
+  },
+  {
+    "EventName": "ID_VSETVL_FOF_STALL",
+    "EventCode": "0x0000005e",
+    "BriefDescription": "ID VSETVL Fof Stall"
+  },
+  {
+    "EventName": "ID_FLUSH_STALL",
+    "EventCode": "0x0000005f",
+    "BriefDescription": "ID Flush Stall"
+  },
+  {
+    "EventName": "ID_MISPREDICTION_STALL",
+    "EventCode": "0x00000060",
+    "BriefDescription": "ID Misprediction Stall"
+  },
+  {
+    "EventName": "ID_IID_NOT_VLD_STALL",
+    "EventCode": "0x00000061",
+    "BriefDescription": "ID IID Not Vld Stall"
+  },
+  {
+    "EventName": "RF_ONE_INST_PIPEDOWN",
+    "EventCode": "0x00000062",
+    "BriefDescription": "RF One Inst Pipedown"
+  },
+  {
+    "EventName": "RF_RAW_STALL",
+    "EventCode": "0x00000063",
+    "BriefDescription": "RF RAW Stall"
+  },
+  {
+    "EventName": "RF_WAW_STALL",
+    "EventCode": "0x00000064",
+    "BriefDescription": "RF WAW Stall"
+  },
+  {
+    "EventName": "RF_STRUCTURE_STALL",
+    "EventCode": "0x00000065",
+    "BriefDescription": "RF Structure Stall"
+  },
+  {
+    "EventName": "RF_CSR_AFTER_FENCE_STALL",
+    "EventCode": "0x00000066",
+    "BriefDescription": "RF CSR After Fence Stall"
+  },
+  {
+    "EventName": "EU_IU_FULL",
+    "EventCode": "0x00000067",
+    "BriefDescription": "EU IU Full"
+  },
+  {
+    "EventName": "EU_IU_CONTROL_FULL",
+    "EventCode": "0x00000068",
+    "BriefDescription": "EU IU Control Full"
+  },
+  {
+    "EventName": "EU_CP0_FULL",
+    "EventCode": "0x00000069",
+    "BriefDescription": "EU CP0 Full"
+  },
+  {
+    "EventName": "EU_LSU_LOAD_FULL",
+    "EventCode": "0x0000006a",
+    "BriefDescription": "EU LSU LOAD Full"
+  },
+  {
+    "EventName": "EU_LSU_STORE_FULL",
+    "EventCode": "0x0000006b",
+    "BriefDescription": "EU LSU STORE Full"
+  },
+  {
+    "EventName": "EU_VFPU_FULL",
+    "EventCode": "0x0000006c",
+    "BriefDescription": "EU VFPU Full"
+  },
+  {
+    "EventName": "EU_BJU_FULL",
+    "EventCode": "0x0000006d",
+    "BriefDescription": "EU BJU Full"
+  },
+  {
+    "EventName": "IU_DP_STALL_PIPE0",
+    "EventCode": "0x0000006e",
+    "BriefDescription": "IU Dp Stall Pipe0"
+  },
+  {
+    "EventName": "IU_MULT_STALL_PIPE0",
+    "EventCode": "0x0000006f",
+    "BriefDescription": "IU MULT Stall Pipe0"
+  },
+  {
+    "EventName": "IU_DIV_EX1_STALL_PIPE0",
+    "EventCode": "0x00000070",
+    "BriefDescription": "IU DIV EX1 Stall Pipe0"
+  },
+  {
+    "EventName": "IU_DP_STALL_PIPE1",
+    "EventCode": "0x00000071",
+    "BriefDescription": "IU Dp Stall Pipe1"
+  },
+  {
+    "EventName": "IU_MULT_STALL_PIPE1",
+    "EventCode": "0x00000072",
+    "BriefDescription": "IU MULT Stall Pipe1"
+  },
+  {
+    "EventName": "IU_DIV_EX1_STALL_PIPE1",
+    "EventCode": "0x00000073",
+    "BriefDescription": "IU DIV EX1 Stall Pipe1"
+  },
+  {
+    "EventName": "IU_DP_WB_CONFLICT_PIPE0",
+    "EventCode": "0x00000074",
+    "BriefDescription": "IU DP Wb Conflict Pipe0"
+  },
+  {
+    "EventName": "IU_DP_WAW_STALL_PIPE0",
+    "EventCode": "0x00000075",
+    "BriefDescription": "IU DP WAW Stall Pipe0"
+  },
+  {
+    "EventName": "IU_DP_UNCOMMIT_PIPE0",
+    "EventCode": "0x00000076",
+    "BriefDescription": "IU DP Uncommit Pipe0"
+  },
+  {
+    "EventName": "IU_DP_WB_CONFLICT_PIPE1",
+    "EventCode": "0x00000077",
+    "BriefDescription": "IU DP Wb Conflict Pipe1"
+  },
+  {
+    "EventName": "IU_DP_WAW_STALL_PIPE1",
+    "EventCode": "0x00000078",
+    "BriefDescription": "IU DP WAW Stall Pipe1"
+  },
+  {
+    "EventName": "IU_DP_UNCOMMIT_PIPE1",
+    "EventCode": "0x00000079",
+    "BriefDescription": "IU DP Uncommit Pipe1"
+  },
+  {
+    "EventName": "IU_MULT_UNCOMMIT",
+    "EventCode": "0x0000007a",
+    "BriefDescription": "IU MULT Uncommit"
+  },
+  {
+    "EventName": "IU_MULT_WB_STALL",
+    "EventCode": "0x0000007b",
+    "BriefDescription": "IU MULT Wb Stall"
+  },
+  {
+    "EventName": "IU_DIV_UNCOMMIT",
+    "EventCode": "0x0000007c",
+    "BriefDescription": "IU DIV Uncommit"
+  },
+  {
+    "EventName": "IU_DIV_WB_STALL",
+    "EventCode": "0x0000007d",
+    "BriefDescription": "IU DIV Wb Stall"
+  },
+  {
+    "EventName": "LSU_LOAD_WAW_STALL",
+    "EventCode": "0x0000007e",
+    "BriefDescription": "LSU LOAD WAW Stall"
+  },
+  {
+    "EventName": "LSU_LOAD_COMMIT_STALL",
+    "EventCode": "0x0000007f",
+    "BriefDescription": "LSU LOAD Commit Stall"
+  },
+  {
+    "EventName": "LSU_LOAD_RAW_STALL",
+    "EventCode": "0x00000080",
+    "BriefDescription": "LSU LOAD RAW Stall"
+  },
+  {
+    "EventName": "LSU_STORE_COMMIT_STALL",
+    "EventCode": "0x00000081",
+    "BriefDescription": "LSU STORE Commit Stall"
+  },
+  {
+    "EventName": "VIDU_RF_NO_PIPEDOWN",
+    "EventCode": "0x00000082",
+    "BriefDescription": "Vidu Rf No Pipedown"
+  },
+  {
+    "EventName": "VPU_STALL_PIPE0",
+    "EventCode": "0x00000083",
+    "BriefDescription": "VPU Stall Pipe0"
+  },
+  {
+    "EventName": "VPU_STALL_PIPE1",
+    "EventCode": "0x00000084",
+    "BriefDescription": "VPU Stall Pipe1"
+  },
+  {
+    "EventName": "VPU_STRUCT_HAZARD_STALL_PIPE0",
+    "EventCode": "0x00000085",
+    "BriefDescription": "VPU Struct Hazard Stall Pipe0"
+  },
+  {
+    "EventName": "VPU_UNCOMMIT_STALL_PIPE0",
+    "EventCode": "0x00000086",
+    "BriefDescription": "VPU Uncommit Stall Pipe0"
+  },
+  {
+    "EventName": "VPU_VLSU_STALL_PIPE0",
+    "EventCode": "0x00000087",
+    "BriefDescription": "VPU VLSU Stall Pipe0"
+  },
+  {
+    "EventName": "VPU_STRUCT_HAZARD_STALL_PIPE1",
+    "EventCode": "0x00000088",
+    "BriefDescription": "VPU Struct Hazard Stall Pipe1"
+  },
+  {
+    "EventName": "VPU_UNCOMMIT_STALL_PIPE1",
+    "EventCode": "0x00000089",
+    "BriefDescription": "VPU Uncommit Stall Pipe1"
+  },
+  {
+    "EventName": "VPU_VLSU_STALL_PIPE1",
+    "EventCode": "0x0000008a",
+    "BriefDescription": "VPU VLSU Stall Pipe1"
+  },
+  {
+    "EventName": "VFPU_FDIV_VDIV_BUSY",
+    "EventCode": "0x0000008b",
+    "BriefDescription": "VFPU FDIV/VDIV Busy"
+  },
+  {
+    "EventName": "BJU_CP0_STALL",
+    "EventCode": "0x0000008c",
+    "BriefDescription": "BJU CP0 Stall"
+  },
+  {
+    "EventName": "BJU_IBUF_STALL",
+    "EventCode": "0x0000008d",
+    "BriefDescription": "BJU IBUF Stall"
+  },
+  {
+    "EventName": "BJU_WB_STALL",
+    "EventCode": "0x0000008e",
+    "BriefDescription": "BJU Wb Stall"
+  },
+  {
+    "EventName": "BJU_PIPEDOWN_STALL",
+    "EventCode": "0x0000008f",
+    "BriefDescription": "BJU Pipedown Stall"
+  },
+  {
+    "EventName": "RTU_FLUSH",
+    "EventCode": "0x00000090",
+    "BriefDescription": "RTU Flush"
+  },
+  {
+    "EventName": "RTU_IU_NOT_NO_OP",
+    "EventCode": "0x00000091",
+    "BriefDescription": "RTU IU Not No OP"
+  },
+  {
+    "EventName": "RTU_BJU_NOT_NO_OP",
+    "EventCode": "0x00000092",
+    "BriefDescription": "RTU BJU Not No OP"
+  },
+  {
+    "EventName": "RTU_LSU_NOT_NO_OP",
+    "EventCode": "0x00000093",
+    "BriefDescription": "RTU LSU Not No OP"
+  },
+  {
+    "EventName": "RTU_CP0_NOT_NO_OP",
+    "EventCode": "0x00000094",
+    "BriefDescription": "RTU CP0 Not No OP"
+  },
+  {
+    "EventName": "RTU_VFPU_NOT_NO_OP",
+    "EventCode": "0x00000095",
+    "BriefDescription": "RTU VFPU Not No OP"
+  },
+  {
+    "EventName": "RTU_ONLY_IU_NOT_NO_OP",
+    "EventCode": "0x00000096",
+    "BriefDescription": "RTU Only IU Not No OP"
+  },
+  {
+    "EventName": "RTU_ONLY_BJU_NOT_NO_OP",
+    "EventCode": "0x00000097",
+    "BriefDescription": "RTU Only BJU Not No OP"
+  },
+  {
+    "EventName": "RTU_ONLY_LSU_NOT_NO_OP",
+    "EventCode": "0x00000098",
+    "BriefDescription": "RTU Only LSU Not No OP"
+  },
+  {
+    "EventName": "RTU_ONLY_CP0_NOT_NO_OP",
+    "EventCode": "0x00000099",
+    "BriefDescription": "RTU Only CP0 Not No OP"
+  },
+  {
+    "EventName": "RTU_ONLY_VFPU_NOT_NO_OP",
+    "EventCode": "0x0000009a",
+    "BriefDescription": "RTU Only VFPU Not No OP"
+  },
+  {
+    "EventName": "IQ_FULL",
+    "EventCode": "0x000000ab",
+    "BriefDescription": "Iq Full"
+  },
+  {
+    "EventName": "VIDU_VEC0_STALL",
+    "EventCode": "0x000000ac",
+    "BriefDescription": "Vidu Vec0 Stall"
+  },
+  {
+    "EventName": "VIDU_VEC1_STALL",
+    "EventCode": "0x000000ad",
+    "BriefDescription": "Vidu Vec1 Stall"
+  },
+  {
+    "EventName": "VIDU_VEC0_DEPEND_STALL",
+    "EventCode": "0x000000ae",
+    "BriefDescription": "Vidu Vec0 Depend Stall"
+  },
+  {
+    "EventName": "VIDU_VEC0_STRUCT_HAZARD_STALL",
+    "EventCode": "0x000000af",
+    "BriefDescription": "Vidu Vec0 Struct Hazard Stall"
+  },
+  {
+    "EventName": "VIDU_VEC1_DEPEND_STALL",
+    "EventCode": "0x000000b0",
+    "BriefDescription": "Vidu Vec1 Depend Stall"
+  },
+  {
+    "EventName": "VIDU_VEC1_STRUCT_HAZARD_STALL",
+    "EventCode": "0x000000b1",
+    "BriefDescription": "Vidu Vec1 Struct Hazard Stall"
+  },
+  {
+    "EventName": "VIDU_TOTAL_CYCLE",
+    "EventCode": "0x000000b2",
+    "BriefDescription": "Vidu Total Cycle"
+  },
+  {
+    "EventName": "VIDU_VEC0_CYCLE",
+    "EventCode": "0x000000b3",
+    "BriefDescription": "Vidu Vec0 Cycle"
+  },
+  {
+    "EventName": "VIDU_VEC1_CYCLE",
+    "EventCode": "0x000000b4",
+    "BriefDescription": "Vidu Vec1 Cycle"
+  }
+]
