@@ -130,21 +130,6 @@ static inline int xadc_write_adc_reg(struct xadc *xadc, unsigned int reg, u16 va
 #define XADC_REG_VCCO_DDR	0x0f
 #define XADC_REG_VAUX(x)	(0x10 + (x))
 
-#define XADC_REG_MAX_TEMP	0x20
-#define XADC_REG_MAX_VCCINT	0x21
-#define XADC_REG_MAX_VCCAUX	0x22
-#define XADC_REG_MAX_VCCBRAM	0x23
-#define XADC_REG_MIN_TEMP	0x24
-#define XADC_REG_MIN_VCCINT	0x25
-#define XADC_REG_MIN_VCCAUX	0x26
-#define XADC_REG_MIN_VCCBRAM	0x27
-#define XADC_REG_MAX_VCCPINT	0x28
-#define XADC_REG_MAX_VCCPAUX	0x29
-#define XADC_REG_MAX_VCCO_DDR	0x2a
-#define XADC_REG_MIN_VCCPINT	0x2c
-#define XADC_REG_MIN_VCCPAUX	0x2d
-#define XADC_REG_MIN_VCCO_DDR	0x2e
-
 #define XADC_REG_CONF0		0x40
 #define XADC_REG_CONF1		0x41
 #define XADC_REG_CONF2		0x42
@@ -152,18 +137,13 @@ static inline int xadc_write_adc_reg(struct xadc *xadc, unsigned int reg, u16 va
 #define XADC_REG_INPUT_MODE(x)	(0x4c + (x))
 #define XADC_REG_THRESHOLD(x)	(0x50 + (x))
 
-#define XADC_REG_FLAG		0x3f
-
 #define XADC_CONF0_EC			BIT(9)
-#define XADC_CONF0_ACQ			BIT(8)
 #define XADC_CONF0_MUX			BIT(11)
 #define XADC_CONF0_CHAN(x)		(x)
 
 #define XADC_CONF1_SEQ_MASK		(0xf << 12)
 #define XADC_CONF1_SEQ_DEFAULT		(0 << 12)
-#define XADC_CONF1_SEQ_SINGLE_PASS	(1 << 12)
 #define XADC_CONF1_SEQ_CONTINUOUS	(2 << 12)
-#define XADC_CONF1_SEQ_SINGLE_CHANNEL	(3 << 12)
 #define XADC_CONF1_SEQ_SIMULTANEOUS	(4 << 12)
 #define XADC_CONF1_SEQ_INDEPENDENT	(8 << 12)
 #define XADC_CONF1_ALARM_MASK		0x0f0f
@@ -176,7 +156,6 @@ static inline int xadc_write_adc_reg(struct xadc *xadc, unsigned int reg, u16 va
 #define XADC_CONF2_PD_ADC_B	(0x2 << 4)
 #define XADC_CONF2_PD_BOTH	(0x3 << 4)
 
-#define XADC_ALARM_TEMP_MASK		BIT(0)
 #define XADC_ALARM_VCCINT_MASK		BIT(1)
 #define XADC_ALARM_VCCAUX_MASK		BIT(2)
 #define XADC_ALARM_OT_MASK		BIT(3)
@@ -189,17 +168,5 @@ static inline int xadc_write_adc_reg(struct xadc *xadc, unsigned int reg, u16 va
 #define XADC_THRESHOLD_VCCINT_MAX	0x1
 #define XADC_THRESHOLD_VCCAUX_MAX	0x2
 #define XADC_THRESHOLD_OT_MAX		0x3
-#define XADC_THRESHOLD_TEMP_MIN		0x4
-#define XADC_THRESHOLD_VCCINT_MIN	0x5
-#define XADC_THRESHOLD_VCCAUX_MIN	0x6
-#define XADC_THRESHOLD_OT_MIN		0x7
-#define XADC_THRESHOLD_VCCBRAM_MAX	0x8
-#define XADC_THRESHOLD_VCCPINT_MAX	0x9
-#define XADC_THRESHOLD_VCCPAUX_MAX	0xa
-#define XADC_THRESHOLD_VCCODDR_MAX	0xb
-#define XADC_THRESHOLD_VCCBRAM_MIN	0xc
-#define XADC_THRESHOLD_VCCPINT_MIN	0xd
-#define XADC_THRESHOLD_VCCPAUX_MIN	0xe
-#define XADC_THRESHOLD_VCCODDR_MIN	0xf
 
 #endif
