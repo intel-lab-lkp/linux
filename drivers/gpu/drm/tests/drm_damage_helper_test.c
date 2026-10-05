@@ -17,10 +17,10 @@ struct drm_damage_mock {
 	struct drm_device device;
 	struct drm_object_properties obj_props;
 	struct drm_plane plane;
-	struct drm_property prop;
 	struct drm_framebuffer fb;
 	struct drm_plane_state state;
 	struct drm_plane_state old_state;
+	struct drm_property prop;	/* has a flexible array, must be last */
 };
 
 static int drm_damage_helper_init(struct kunit *test)
