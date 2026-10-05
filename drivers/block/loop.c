@@ -1138,10 +1138,64 @@ out_putf:
 
 static void __loop_clr_fd(struct loop_device *lo)
 {
+	struct gendisk *disk = lo->lo_disk;
 	struct queue_limits lim;
 	struct file *filp;
 	gfp_t gfp = lo->old_gfp_mask;
 	int err;
+
+	/*
+	 * lo->lo_state must be Lo_rundown before we release disk->open_mutex
+	 * to ensure that lo_open() fails while disk->open_mutex is unlocked.
+	 */
+	WARN_ON_ONCE(lo->lo_state != Lo_rundown);
+
+	/*
+	 * Unlock disk->open_mutex to prevent circular locking. Without the
+	 * mutex_unlock() call below, circular locking would be triggered as
+	 * follows when an autoclearing loop device is closed by its last opener:
+	 * 1. open_mutex → Workqueue Completion / Queue Freeze: Waiting for
+	 *    pending I/O requires draining the loop device's execution
+	 *    workqueue (flush_workqueue(lo->workqueue)) and/or freezing the
+	 *    request queue (blk_mq_freeze_queue()). Draining the workqueue
+	 *    acquires its completion lockdep tracking context
+	 *    ((wq_completion)loopX). If called while disk->open_mutex is held,
+	 *    lockdep records the lock acquisition ordering: disk->open_mutex ⟶
+	 *    (wq_completion)loopX
+	 * 2. Workqueue Completion → Subsystem/VFS Locks: In-flight work items
+	 *    executed by worker threads on lo->workqueue (loop_process_work()→
+	 *    lo_rw_aio()) perform file operations on the underlying backing
+	 *    file. These operations acquire VFS and filesystem locks (such as
+	 *    inode locks, file-specific locks, kernfs mutexes like &of->mutex,
+	 *    or seq_file locks).
+	 * 3. Subsystem/VFS Locks → open_mutex: Other code paths in the kernel
+	 *    (for instance, partition scanners, power management/hibernation
+	 *    resume routines such as resume_store() → swsusp_check(), or sysfs
+	 *    operations) acquire subsystem/filesystem locks first and then call
+	 *    bdev_open(), which acquires disk->open_mutex.
+	 *
+	 * This creates a circular locking dependency: disk->open_mutex ⟶
+	 * (wq_completion)loopX ⟶ VFS / Subsystem Locks ⟶ disk->open_mutex
+	 *
+	 * Syzbot caught this exact circular locking scenario. See also
+	 * https://syzkaller.appspot.com/bug?extid=2f62807dc3239b8f584e.
+	 */
+	mutex_unlock(&disk->open_mutex);
+
+	/* Wait for all outstanding I/O requests to finish. */
+	blk_mq_unfreeze_queue(lo->lo_queue, blk_mq_freeze_queue(lo->lo_queue));
+	/*
+	 * Wait until all ongoing loop_queue_rq() calls have finished. Freezing
+	 * the request queue may finish before loop_queue_rq() has finished.
+	 */
+	blk_mq_quiesce_queue(lo->lo_queue);
+	blk_mq_unquiesce_queue(lo->lo_queue);
+	/* Wait for ongoing loop_handle_cmd() calls to finish. */
+	flush_workqueue(lo->workqueue);
+
+	/* Reacquire disk->open_mutex and clear *lo. */
+	mutex_lock(&disk->open_mutex);
+	WARN_ON_ONCE(lo->lo_state != Lo_rundown);
 
 	spin_lock_irq(&lo->lo_lock);
 	filp = lo->lo_backing_file;
@@ -1153,16 +1207,16 @@ static void __loop_clr_fd(struct loop_device *lo)
 	lo->lo_sizelimit = 0;
 	memset(lo->lo_file_name, 0, LO_NAME_SIZE);
 
-	/*
-	 * Reset the block size to the default.
-	 *
-	 * No queue freezing needed because this is called from the final
-	 * ->release call only, so there can't be any outstanding I/O.
-	 */
+	/* Reset the block size to the default. */
 	lim = queue_limits_start_update(lo->lo_queue);
 	lim.logical_block_size = SECTOR_SIZE;
 	lim.physical_block_size = SECTOR_SIZE;
 	lim.io_min = SECTOR_SIZE;
+	/*
+	 * No queue freeze around the queue limits update below because any I/O
+	 * that races with this update fails in loop_queue_rq(), so a
+	 * transiently inconsistent view of the limits is harmless.
+	 */
 	queue_limits_commit_update(lo->lo_queue, &lim);
 
 	invalidate_disk(lo->lo_disk);
@@ -1202,9 +1256,9 @@ static void __loop_clr_fd(struct loop_device *lo)
 	mutex_unlock(&lo->lo_mutex);
 
 	/*
-	 * Need not hold lo_mutex to fput backing file. Calling fput holding
-	 * lo_mutex triggers a circular lock dependency possibility warning as
-	 * fput can take open_mutex which is usually taken before lo_mutex.
+	 * fput() calls file->f_op->release() asynchronously. Hence, calling
+	 * fput() while holding disk->open_mutex won't trigger recursive locking
+	 * for disk->open_mutex in case of stacked loop devices.
 	 */
 	fput(filp);
 }
