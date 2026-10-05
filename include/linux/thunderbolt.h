@@ -515,6 +515,21 @@ void tb_service_properties_changed(struct tb_service *svc);
  *		    MSI-X is used.
  * @hop_count: Number of rings (end point hops) supported by NHI.
  * @quirks: NHI specific quirks if any
+ * @dma_hops_used: Bitmap of the TX and RX DMA HopIDs programmed after the
+ *		   last host interface reset. Only with
+ *		   %QUIRK_RESET_DMA_ON_REUSE.
+ * @resetting: The host interface reset is in progress. Only with
+ *	       %QUIRK_RESET_DMA_ON_REUSE.
+ * @removing: The domain this host interface belongs to is being removed.
+ *            Set before releasing the domain lock so
+ *            reset_work does not restart the control channel while the
+ *            domain is tearing down. Only with %QUIRK_RESET_DMA_ON_REUSE.
+ * @suspended: The domain's control channel is stopped for system or runtime PM.
+ *             Set before the control channel is stopped so reset_work
+ *             does not restart it while the NHI is about to be powered
+ *             down. Only with %QUIRK_RESET_DMA_ON_REUSE.
+ * @reset_work: Work that runs the host interface reset once all the DMA
+ *		rings are idle. Only with %QUIRK_RESET_DMA_ON_REUSE.
  * @domain_released: Completed when domain has been fully released
  * @host_reset: Host router was reset on driver load, or forced on system
  *		shutdown/reboot. When set, tb_stop() asserts DPR on connected
@@ -535,6 +550,11 @@ struct tb_nhi {
 	struct work_struct interrupt_work;
 	u32 hop_count;
 	unsigned long quirks;
+	unsigned long *dma_hops_used;
+	bool resetting;
+	bool removing;
+	bool suspended;
+	struct delayed_work reset_work;
 	struct completion domain_released;
 	bool host_reset;
 };

@@ -779,6 +779,19 @@ void tb_ctl_stop(struct tb_ctl *ctl)
 	tb_ctl_dbg(ctl, "control channel stopped\n");
 }
 
+/* Close the enqueue gate only after all existing requests have drained. */
+bool tb_ctl_stop_if_idle(struct tb_ctl *ctl)
+{
+	scoped_guard(mutex, &ctl->request_queue_lock) {
+		if (!ctl->running || !list_empty(&ctl->request_queue))
+			return false;
+		ctl->running = false;
+	}
+
+	tb_ctl_stop(ctl);
+	return true;
+}
+
 /* public interface, commands */
 
 /**

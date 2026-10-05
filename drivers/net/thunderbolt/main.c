@@ -160,6 +160,9 @@ struct tbnet_ring {
  * @login_sent: ThunderboltIP login message successfully sent
  * @login_received: ThunderboltIP login message received from the remote
  *		    host
+ * @stopping: Administrative teardown blocks all connection work
+ * @disconnecting: Peer logout blocks login until teardown completes
+ * @connected: DMA rings and paths were successfully enabled
  * @local_transmit_path: HopID we are using to send out packets
  * @remote_transmit_path: HopID the other end is using to send packets to us
  * @connection_lock: Lock serializing access to @login_sent,
@@ -190,6 +193,9 @@ struct tbnet {
 	atomic_t command_id;
 	bool login_sent;
 	bool login_received;
+	bool stopping;
+	bool disconnecting;
+	bool connected;
 	int local_transmit_path;
 	int remote_transmit_path;
 	struct mutex connection_lock;
@@ -311,17 +317,21 @@ static void start_login(struct tbnet *net)
 {
 	netdev_dbg(net->dev, "login started\n");
 
-	mutex_lock(&net->connection_lock);
+	guard(mutex)(&net->connection_lock);
 	net->login_sent = false;
 	net->login_received = false;
-	mutex_unlock(&net->connection_lock);
-
+	net->stopping = false;
+	net->disconnecting = false;
 	queue_delayed_work(system_long_wq, &net->login_work,
 			   msecs_to_jiffies(1000));
 }
 
 static void stop_login(struct tbnet *net)
 {
+	scoped_guard(mutex, &net->connection_lock)
+		net->stopping = true;
+
+	cancel_work_sync(&net->disconnect_work);
 	cancel_delayed_work_sync(&net->login_work);
 	cancel_work_sync(&net->connected_work);
 
@@ -371,11 +381,7 @@ static void tbnet_tear_down(struct tbnet *net, bool send_logout)
 	netif_carrier_off(net->dev);
 	netif_stop_queue(net->dev);
 
-	stop_login(net);
-
-	mutex_lock(&net->connection_lock);
-
-	if (net->login_sent && net->login_received) {
+	if (net->connected) {
 		int ret, retries = TBNET_LOGOUT_RETRIES;
 
 		while (send_logout && retries-- > 0) {
@@ -413,13 +419,13 @@ static void tbnet_tear_down(struct tbnet *net, bool send_logout)
 		net->remote_transmit_path = 0;
 	}
 
+	guard(mutex)(&net->connection_lock);
+	net->connected = false;
 	net->login_retries = 0;
 	net->login_sent = false;
 	net->login_received = false;
 
 	netdev_dbg(net->dev, "network traffic stopped\n");
-
-	mutex_unlock(&net->connection_lock);
 }
 
 static int tbnet_handle_packet(const void *buf, size_t size, void *data)
@@ -459,7 +465,11 @@ static int tbnet_handle_packet(const void *buf, size_t size, void *data)
 		if (!ret) {
 			netdev_dbg(net->dev, "remote login response sent\n");
 
-			mutex_lock(&net->connection_lock);
+			guard(mutex)(&net->connection_lock);
+			if (net->stopping || net->disconnecting ||
+			    (net->login_received &&
+			     net->remote_transmit_path != pkg->transmit_path))
+				break;
 			net->login_received = true;
 			net->remote_transmit_path = pkg->transmit_path;
 
@@ -473,8 +483,6 @@ static int tbnet_handle_packet(const void *buf, size_t size, void *data)
 				queue_delayed_work(system_long_wq,
 						   &net->login_work, 0);
 			}
-			mutex_unlock(&net->connection_lock);
-
 			queue_work(system_long_wq, &net->connected_work);
 		}
 		break;
@@ -484,7 +492,12 @@ static int tbnet_handle_packet(const void *buf, size_t size, void *data)
 		ret = tbnet_logout_response(net, route, sequence, command_id);
 		if (!ret) {
 			netdev_dbg(net->dev, "remote logout response sent\n");
-			queue_work(system_long_wq, &net->disconnect_work);
+			guard(mutex)(&net->connection_lock);
+			if (netif_running(net->dev) && !net->stopping &&
+			    !net->disconnecting) {
+				net->disconnecting = true;
+				queue_work(system_long_wq, &net->disconnect_work);
+			}
 		}
 		break;
 
@@ -644,9 +657,9 @@ static void tbnet_connected_work(struct work_struct *work)
 	if (netif_carrier_ok(net->dev))
 		return;
 
-	mutex_lock(&net->connection_lock);
-	connected = net->login_sent && net->login_received;
-	mutex_unlock(&net->connection_lock);
+	scoped_guard(mutex, &net->connection_lock)
+		connected = !net->stopping && !net->disconnecting &&
+			    net->login_sent && net->login_received;
 
 	if (!connected)
 		return;
@@ -697,8 +710,13 @@ static void tbnet_connected_work(struct work_struct *work)
 		goto err_free_tx_buffers;
 	}
 
-	netif_carrier_on(net->dev);
-	netif_start_queue(net->dev);
+	scoped_guard(mutex, &net->connection_lock) {
+		net->connected = true;
+		if (!net->stopping && !net->disconnecting) {
+			netif_carrier_on(net->dev);
+			netif_start_queue(net->dev);
+		}
+	}
 
 	netdev_dbg(net->dev, "network traffic started\n");
 	return;
@@ -714,24 +732,34 @@ err_stop_tx:
 err_release_hopid:
 	tb_xdomain_release_in_hopid(net->xd, net->remote_transmit_path);
 	tbnet_connect_failed(net);
+	if (ret == -EAGAIN) {
+		guard(mutex)(&net->connection_lock);
+		if (!net->stopping && !net->disconnecting)
+			queue_delayed_work(system_long_wq, &net->login_work,
+					   msecs_to_jiffies(TBNET_LOGIN_DELAY));
+	}
 }
 
 static void tbnet_login_work(struct work_struct *work)
 {
 	struct tbnet *net = container_of(work, typeof(*net), login_work.work);
 	unsigned long delay = msecs_to_jiffies(TBNET_LOGIN_DELAY);
-	int ret;
+	int ret, retries;
 
-	if (netif_carrier_ok(net->dev))
-		return;
+	scoped_guard(mutex, &net->connection_lock) {
+		if (net->stopping || net->disconnecting || net->connected)
+			return;
+		retries = net->login_retries;
+	}
 
-	netdev_dbg(net->dev, "sending login request, retries=%u\n",
-		   net->login_retries);
-
-	ret = tbnet_login_request(net, net->login_retries % 4);
+	netdev_dbg(net->dev, "sending login request, retries=%u\n", retries);
+	ret = tbnet_login_request(net, retries % 4);
 	if (ret) {
 		netdev_dbg(net->dev, "sending login request failed, ret=%d\n",
 			   ret);
+		guard(mutex)(&net->connection_lock);
+		if (net->stopping || net->disconnecting)
+			return;
 		if (net->login_retries++ < TBNET_LOGIN_RETRIES) {
 			queue_delayed_work(system_long_wq, &net->login_work,
 					   delay);
@@ -741,13 +769,12 @@ static void tbnet_login_work(struct work_struct *work)
 	} else {
 		netdev_dbg(net->dev, "received login reply\n");
 
-		net->login_retries = 0;
-
-		mutex_lock(&net->connection_lock);
-		net->login_sent = true;
-		mutex_unlock(&net->connection_lock);
-
-		queue_work(system_long_wq, &net->connected_work);
+		guard(mutex)(&net->connection_lock);
+		if (!net->stopping && !net->disconnecting) {
+			net->login_retries = 0;
+			net->login_sent = true;
+			queue_work(system_long_wq, &net->connected_work);
+		}
 	}
 }
 
@@ -755,7 +782,11 @@ static void tbnet_disconnect_work(struct work_struct *work)
 {
 	struct tbnet *net = container_of(work, typeof(*net), disconnect_work);
 
+	cancel_delayed_work_sync(&net->login_work);
+	cancel_work_sync(&net->connected_work);
 	tbnet_tear_down(net, false);
+	guard(mutex)(&net->connection_lock);
+	net->disconnecting = false;
 }
 
 static bool tbnet_check_frame(struct tbnet *net, const struct tbnet_frame *tf,
@@ -1008,9 +1039,8 @@ static int tbnet_stop(struct net_device *dev)
 {
 	struct tbnet *net = netdev_priv(dev);
 
+	stop_login(net);
 	napi_disable(&net->napi);
-
-	cancel_work_sync(&net->disconnect_work);
 	tbnet_tear_down(net, true);
 
 	tb_ring_free(net->rx_ring.ring);
@@ -1397,6 +1427,7 @@ static int tbnet_probe(struct tb_service *svc)
 	net->svc = svc;
 	net->dev = dev;
 	net->xd = xd;
+	net->stopping = true;
 
 	tbnet_generate_mac(dev);
 
@@ -1456,7 +1487,10 @@ static void tbnet_remove(struct tb_service *svc)
 
 static void tbnet_shutdown(struct tb_service *svc)
 {
-	tbnet_tear_down(tb_service_get_drvdata(svc), true);
+	struct tbnet *net = tb_service_get_drvdata(svc);
+
+	stop_login(net);
+	tbnet_tear_down(net, true);
 }
 
 static int tbnet_suspend(struct device *dev)

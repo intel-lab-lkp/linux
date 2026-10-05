@@ -410,6 +410,12 @@ transfer data::
   host2 # cat /dev/tbstream0
   host1 # dmesg > /dev/tbstream0
 
+On affected host interfaces a DMA HopID cannot be reused until the host
+interface has been reset. Opening a stream or starting a DMA test can return
+``EAGAIN`` until all other DMA tunnels stop and the reset completes. Retry
+the complete operation; it does not interrupt an active networking tunnel.
+If stream resume fails, close and reopen the stream to retry setup.
+
 Once you are done with the stream you can remove them::
 
   host2 # cd /sys/kernel/config/thunderbolt/stream
