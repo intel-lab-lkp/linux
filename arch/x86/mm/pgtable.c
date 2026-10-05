@@ -727,7 +727,16 @@ int pud_free_pmd_page(pud_t *pud, unsigned long addr)
 	 * via normal page walks. Make them unreachable
 	 * in cached mid-level walks too:
 	 */
-	flush_tlb_kernel_range(addr, addr + PAGE_SIZE-1);
+	if (boot_cpu_has(X86_FEATURE_TCE)) {
+		/*
+		 * With TCE enabled, a single-address flush does not invalidate
+		 * cached PMD entries for the rest of the PUD range.
+		 */
+		flush_tlb_all();
+	} else {
+		/* INVLPG to clear all paging-structure caches */
+		flush_tlb_kernel_range(addr, addr + PAGE_SIZE-1);
+	}
 
 	for (i = 0; i < PTRS_PER_PMD; i++) {
 		if (!pmd_none(pmd[i])) {
