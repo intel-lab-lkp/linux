@@ -621,6 +621,9 @@ int st_nci_discover_se(struct nci_dev *ndev)
 	int se_count = 0;
 	struct st_nci_info *info = nci_get_drvdata(ndev);
 
+	if (info->ndlc->raw_nci)
+		return 0;
+
 	r = st_nci_hci_network_init(ndev);
 	if (r != 0)
 		return r;

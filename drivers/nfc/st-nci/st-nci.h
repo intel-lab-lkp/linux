@@ -15,6 +15,8 @@
 
 #define ST_NCI_CORE_PROP                0x01
 #define ST_NCI_SET_NFC_MODE             0x02
+/* ST21NFCD proprietary RF activity / poll-trace notification (GID 0xf) */
+#define ST_NCI_PROP_RF_NTF		0x02
 
 /*
  * ref ISO7816-3 chap 8.1. the initial character TS is followed by a

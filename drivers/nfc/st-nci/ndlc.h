@@ -39,6 +39,8 @@ struct llt_ndlc {
 	 */
 	int hard_fault;
 	int powered;
+	/* ST21NFCD: raw NCI on the wire, no NDLC PCB / ACK timers */
+	bool raw_nci;
 };
 
 int ndlc_open(struct llt_ndlc *ndlc);
@@ -47,6 +49,7 @@ int ndlc_send(struct llt_ndlc *ndlc, struct sk_buff *skb);
 void ndlc_recv(struct llt_ndlc *ndlc, struct sk_buff *skb);
 int ndlc_probe(void *phy_id, const struct nfc_phy_ops *phy_ops,
 	       struct device *dev, int phy_headroom, int phy_tailroom,
-	       struct llt_ndlc **ndlc_id, struct st_nci_se_status *se_status);
+	       struct llt_ndlc **ndlc_id, struct st_nci_se_status *se_status,
+	       bool raw_nci);
 void ndlc_remove(struct llt_ndlc *ndlc);
 #endif /* __LOCAL_NDLC_H__ */
