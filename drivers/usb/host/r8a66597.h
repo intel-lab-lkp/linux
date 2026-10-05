@@ -179,8 +179,15 @@ static inline void r8a66597_read_fifo(struct r8a66597 *r8a66597,
 			       len & 0x03);
 		}
 	} else {
-		len = (len + 1) / 2;
-		ioread16_rep(fifoaddr, buf, len);
+		ioread16_rep(fifoaddr, buf, len / 2);
+
+		if (len & 1) {
+			u16 tmp;
+
+			/* Keep the byte order of the string read above. */
+			ioread16_rep(fifoaddr, &tmp, 1);
+			((u8 *)buf)[len - 1] = *(u8 *)&tmp;
+		}
 	}
 }
 
