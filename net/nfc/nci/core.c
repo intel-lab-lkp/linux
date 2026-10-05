@@ -1329,8 +1329,13 @@ void nci_unregister_device(struct nci_dev *ndev)
 
 	nci_close_device(ndev);
 
-	destroy_workqueue(ndev->cmd_wq);
+	/* cmd_work and tx_work re-arm these, and they queue cmd/rx work */
+	timer_shutdown_sync(&ndev->cmd_timer);
+	timer_shutdown_sync(&ndev->data_timer);
+
+	/* rx_work queues cmd_work and tx_work, so drain rx_wq first */
 	destroy_workqueue(ndev->rx_wq);
+	destroy_workqueue(ndev->cmd_wq);
 	destroy_workqueue(ndev->tx_wq);
 
 	list_for_each_entry_safe(conn_info, n, &ndev->conn_info_list, list) {
