@@ -1878,6 +1878,12 @@ endmenu
 menu "PCI GPIO expanders"
 	depends on PCI
 
+config GPIO_AMDPTPCI
+	tristate "AMD Promontory PCI GPIO support"
+	depends on X86
+	help
+	  Driver for Promontory IOHub PCI GPIO functionality.
+
 config GPIO_AMD8111
 	tristate "AMD 8111 GPIO driver"
 	depends on X86 || COMPILE_TEST
