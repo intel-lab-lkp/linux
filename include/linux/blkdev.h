@@ -1574,6 +1574,21 @@ enum blk_unique_id {
 	BLK_UID_NAA	= 3,
 };
 
+struct blk_storage_elements_ops {
+	int (*report_elements)(struct gendisk *disk,
+			       unsigned int *nr_elements,
+			       struct blk_storage_element *elements);
+	int (*remove_element)(struct gendisk *disk, unsigned int element_id);
+	int (*restore_elements)(struct gendisk *disk);
+};
+
+int bdev_report_storage_elements(struct block_device *bdev,
+				 unsigned int *nr_elements,
+				 struct blk_storage_element *elements);
+int bdev_remove_storage_element(struct block_device *bdev,
+				unsigned int element_id);
+int bdev_restore_storage_elements(struct block_device *bdev);
+
 struct block_device_operations {
 	void (*submit_bio)(struct bio *bio);
 	int (*poll_bio)(struct bio *bio, struct io_comp_batch *iob,
@@ -1601,6 +1616,7 @@ struct block_device_operations {
 			enum blk_unique_id id_type);
 	struct module *owner;
 	const struct pr_ops *pr_ops;
+	const struct blk_storage_elements_ops	*se_ops;
 
 	/*
 	 * Special callback for probing GPT entry at a given sector.

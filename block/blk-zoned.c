@@ -18,6 +18,7 @@
 #include <linux/mempool.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
+#include <linux/delay.h>
 
 #include <trace/events/block.h>
 
@@ -2718,5 +2719,170 @@ int queue_zone_wplugs_show(void *data, struct seq_file *m)
 
 	return 0;
 }
-
 #endif
+
+static void disk_wait_for_se_mgmt_completion(struct gendisk *disk)
+{
+	struct blk_storage_element *elements, *e;
+	unsigned int i, nr_se, nr_elements = 0;
+	int ret;
+
+	ret = (disk->fops->se_ops->report_elements)(disk, &nr_elements, NULL);
+	if (ret) {
+		pr_err("Failed to get number of storage elements\n");
+		return;
+	}
+
+	elements = kzalloc_objs(struct blk_storage_element, nr_elements);
+	if (!elements)
+		return;
+
+	while (1) {
+		/*
+		 * Check if we have storage elements being removed or restored.
+		 */
+		nr_se = nr_elements;
+		ret = (disk->fops->se_ops->report_elements)(disk,
+						&nr_elements, elements);
+		if (ret) {
+			pr_err("Failed to get storage elements\n");
+			break;
+		}
+
+		e = elements;
+		for (i = 0; i < nr_se; i++, e++) {
+			if (e->status == BLK_SE_STS_REMOVE_IN_PROGRESS ||
+			    e->status == BLK_SE_STS_RESTORE_IN_PROGRESS)
+				break;
+		}
+		if (i >= nr_se)
+			break;
+
+		/* Not done yet: wait and retry. */
+		msleep(500);
+	}
+
+	kfree(elements);
+}
+
+/**
+ * bdev_report_storage_elements - report the storage elements of a block device
+ *
+ * Fill at most @nr_elements storage element descriptors in the array @elements.
+ * The number of storage elements filled in the array is returned using
+ * @nr_elements. If @elements is NULL, only @nr_elements is returned.
+ *
+ * Returns 0 on success and a negative error code on failure.
+ */
+int bdev_report_storage_elements(struct block_device *bdev,
+				 unsigned int *nr_elements,
+				 struct blk_storage_element *elements)
+{
+	struct gendisk *disk = bdev->bd_disk;
+
+	if (!bdev_is_zoned(bdev) || !disk->fops->se_ops)
+		return -EOPNOTSUPP;
+
+	if (!nr_elements)
+		return -EINVAL;
+
+	if (*nr_elements && !elements)
+		return -EINVAL;
+
+	return (disk->fops->se_ops->report_elements)(disk, nr_elements,
+						     elements);
+}
+EXPORT_SYMBOL_GPL(bdev_report_storage_elements);
+
+/**
+ * bdev_remove_storage_element - Remove (depopulate) a storage element of a
+ *				 block device
+ *
+ * Remove (depopulate) the storage element identified by @element_id from the
+ * block device @bdev.
+ *
+ * Returns 0 on success and a negative error code on failure.
+ */
+int bdev_remove_storage_element(struct block_device *bdev,
+				unsigned int element_id)
+{
+	struct gendisk *disk = bdev->bd_disk;
+	unsigned int memflags;
+	int ret;
+
+	if (!bdev_is_zoned(bdev) || !disk->fops->se_ops)
+		return -EOPNOTSUPP;
+
+	/* Zero is not a valid storage element ID. */
+	if (!element_id)
+		return -EINVAL;
+
+	/*
+	 * Freeze and unfreeze the queue to flush any outstanding command.
+	 * The caller is responsible for not queuing up more I/Os by higher
+	 * level means.
+	 */
+	memflags = blk_mq_freeze_queue(disk->queue);
+	blk_mq_unfreeze_queue(disk->queue, memflags);
+
+	/*
+	 * Flush the volatile write cache if there is any. Note that this may
+	 * lead to errors if degraded storage elements are used. So ignore
+	 * errors here.
+	 */
+	blkdev_issue_flush(disk->part0);
+
+	/* Invalidate all cached data. */
+	invalidate_inode_pages2_range(bdev->bd_mapping, 0,
+				      get_capacity(disk) << SECTOR_SHIFT);
+
+	ret = (disk->fops->se_ops->remove_element)(disk, element_id);
+	if (ret)
+		return ret;
+
+	/* Revalidate the device zones once the opration completes. */
+	disk_wait_for_se_mgmt_completion(disk);
+
+	return blk_revalidate_disk_zones(disk);
+}
+EXPORT_SYMBOL_GPL(bdev_remove_storage_element);
+
+/**
+ * bdev_restore_storage_elements - Restore all depopulated storage elements of a
+ *				   block device
+ *
+ * Restore all storage elements of @bdev that have been depopulated. Not all
+ * elements may be restored by this operation.
+ *
+ * Returns 0 on success and a negative error code on failure.
+ */
+int bdev_restore_storage_elements(struct block_device *bdev)
+{
+	struct gendisk *disk = bdev->bd_disk;
+	unsigned int memflags;
+	int ret;
+
+	if (!bdev_is_zoned(bdev) || !disk->fops->se_ops)
+		return -EOPNOTSUPP;
+
+	/*
+	 * Freeze and unfreeze the queue to flush any outstanding commands.
+	 * The caller is responsible for not queuing up more I/O by higher
+	 * level means.
+	 */
+	memflags = blk_mq_freeze_queue(disk->queue);
+	blk_mq_unfreeze_queue(disk->queue, memflags);
+
+	/* Invalidate all cached data. */
+	invalidate_inode_pages2_range(bdev->bd_mapping, 0,
+				      get_capacity(disk) << SECTOR_SHIFT);
+
+	ret = (disk->fops->se_ops->restore_elements)(disk);
+	if (ret)
+		return ret;
+
+	disk_wait_for_se_mgmt_completion(disk);
+
+	return blk_revalidate_disk_zones(disk);
+}
+EXPORT_SYMBOL_GPL(bdev_restore_storage_elements);
