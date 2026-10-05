@@ -20,7 +20,11 @@ void machine_kexec_mask_interrupts(void)
 		if (!chip || !irqd_is_started(&desc->irq_data))
 			continue;
 
-		if (IS_ENABLED(CONFIG_GENERIC_IRQ_KEXEC_CLEAR_VM_FORWARD)) {
+		/*
+		 * irq_set_irqchip_state() takes the bus lock, and a chip that
+		 * has one may sleep or talk to its bus when the lock is dropped.
+		 */
+		if (IS_ENABLED(CONFIG_GENERIC_IRQ_KEXEC_CLEAR_VM_FORWARD) && !chip->irq_bus_lock) {
 			/*
 			 * First try to remove the active state from an interrupt which is forwarded
 			 * to a VM. If the interrupt is not forwarded, try to EOI the interrupt.
