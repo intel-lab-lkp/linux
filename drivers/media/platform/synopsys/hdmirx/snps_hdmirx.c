@@ -125,6 +125,7 @@ struct snps_hdmirx_dev {
 	struct hdmirx_stream stream;
 	struct v4l2_device v4l2_dev;
 	struct media_device mdev;
+	struct media_pad pad;
 	struct v4l2_ctrl_handler hdl;
 	struct v4l2_ctrl *detect_tx_5v_ctrl;
 	struct v4l2_ctrl *rgb_range;
@@ -2761,15 +2762,29 @@ static int hdmirx_probe(struct platform_device *pdev)
 
 	stream = &hdmirx_dev->stream;
 	stream->hdmirx_dev = hdmirx_dev;
+
+	hdmirx_dev->pad.flags = MEDIA_PAD_FL_SINK;
+	ret = media_entity_pads_init(&stream->vdev.entity, 1, &hdmirx_dev->pad);
+	if (ret) {
+		dev_err_probe(dev, ret, "media entity pads initialization failed\n");
+		goto err_unreg_v4l2_dev;
+	}
+
 	ret = hdmirx_register_stream_vdev(stream);
 	if (ret < 0) {
 		dev_err_probe(dev, ret, "video device registration failed\n");
-		goto err_unreg_v4l2_dev;
+		goto err_cleanup_entity;
+	}
+
+	ret = media_device_register(&hdmirx_dev->mdev);
+	if (ret) {
+		dev_err_probe(dev, ret, "media device registration failed\n");
+		goto err_unreg_video_dev;
 	}
 
 	ret = hdmirx_register_cec(hdmirx_dev, pdev);
 	if (ret)
-		goto err_unreg_video_dev;
+		goto err_unreg_media;
 
 	hdmirx_load_default_edid(hdmirx_dev);
 
@@ -2784,8 +2799,12 @@ static int hdmirx_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_unreg_media:
+	media_device_unregister(&hdmirx_dev->mdev);
 err_unreg_video_dev:
 	vb2_video_unregister_device(&hdmirx_dev->stream.vdev);
+err_cleanup_entity:
+	media_entity_cleanup(&hdmirx_dev->stream.vdev.entity);
 err_unreg_v4l2_dev:
 	v4l2_device_unregister(&hdmirx_dev->v4l2_dev);
 	hdmirx_disable(dev);
@@ -2814,7 +2833,10 @@ static void hdmirx_remove(struct platform_device *pdev)
 
 	hdmirx_disable_irq(dev);
 
+	media_device_unregister(&hdmirx_dev->mdev);
+
 	vb2_video_unregister_device(&hdmirx_dev->stream.vdev);
+	media_entity_cleanup(&hdmirx_dev->stream.vdev.entity);
 	v4l2_device_unregister(&hdmirx_dev->v4l2_dev);
 
 	hdmirx_disable(dev);
