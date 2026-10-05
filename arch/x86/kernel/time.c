@@ -10,13 +10,14 @@
  *
  */
 
+#include <linux/acpi.h>
 #include <linux/clocksource.h>
 #include <linux/clockchips.h>
+#include <linux/export.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/i8253.h>
 #include <linux/time.h>
-#include <linux/export.h>
 
 #include <asm/vsyscall.h>
 #include <asm/x86_init.h>
@@ -71,6 +72,25 @@ static __init void x86_late_time_init(void)
 	 * to make the decision whether PIT should be initialized correct.
 	 */
 	x86_init.irqs.intr_mode_select();
+
+	/*
+	 * ACPI hardware-reduced mode unconditionally stubs .timer_init() to
+	 * a noop, on the assumption that no legacy timer exists. Some such
+	 * platforms do provide a real HPET, so let "hpet=force" give it a
+	 * chance to come up. Only hpet_enable() is wanted here, not
+	 * hpet_time_init(): its PIT fallback and legacy timer interrupt have
+	 * no hardware behind them on such platforms, and registering a PIT
+	 * clockevent whose interrupt can never be delivered also fails the
+	 * local APIC timer's calibration cross-check, disabling that too.
+	 *
+	 * This also covers hardware-reduced platforms that install their own
+	 * .timer_init() rather than being stubbed (e.g. Intel MID, which
+	 * sets up the local APIC timer only). None of them enable the HPET
+	 * themselves, so it cannot end up registered twice.
+	 */
+	if (IS_ENABLED(CONFIG_HPET_TIMER) && acpi_reduced_hardware() &&
+	    hpet_force_user)
+		hpet_enable();
 
 	/* Setup the legacy timers */
 	x86_init.timers.timer_init();

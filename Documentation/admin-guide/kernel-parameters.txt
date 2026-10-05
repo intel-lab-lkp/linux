@@ -2036,12 +2036,16 @@ Kernel parameters
 			not exceed the maximum allowed hostname length (usually
 			64 characters) and will be truncated otherwise.
 
-	hpet=		[X86-32,HPET] option to control HPET usage
+	hpet=		[X86,HPET] option to control HPET usage
 			Format: { enable (default) | disable | force |
 				verbose }
 			disable: disable HPET and use PIT instead
 			force: allow force enabled of undocumented chips (ICH4,
-				VIA, nVidia)
+				VIA, nVidia). Also attempts HPET initialization
+				on ACPI hardware-reduced platforms, which
+				otherwise skip legacy timer init entirely. The
+				legacy PIT is never used as a fallback there,
+				since such platforms do not provide one.
 			verbose: show contents of HPET registers during setup
 
 	hpet_mmap=	[X86, HPET_MMAP] Allow userspace to mmap HPET

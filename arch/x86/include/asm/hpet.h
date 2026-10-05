@@ -97,6 +97,7 @@ static inline int hpet_enable(void) { return 0; }
 static inline int is_hpet_enabled(void) { return 0; }
 #define hpet_readl(a) 0
 #define default_setup_hpet_msi	NULL
+#define hpet_force_user		false
 
 #endif
 #endif /* _ASM_X86_HPET_H */
