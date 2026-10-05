@@ -9361,14 +9361,15 @@ static int add_ext_adv_params(struct sock *sk, struct hci_dev *hdev,
 				       data, data_len);
 		if (!cmd) {
 			err = -ENOMEM;
-			hci_remove_adv_instance(hdev, cp->instance);
-			goto unlock;
+			goto remove;
 		}
 
 		err = hci_cmd_sync_queue(hdev, add_ext_adv_params_sync, cmd,
 					 add_ext_adv_params_complete);
-		if (err < 0)
+		if (err < 0) {
 			mgmt_pending_free(cmd);
+			goto remove;
+		}
 	} else {
 		rp.instance = cp->instance;
 		rp.tx_power = HCI_ADV_TX_POWER_NO_PREFERENCE;
@@ -9378,6 +9379,13 @@ static int add_ext_adv_params(struct sock *sk, struct hci_dev *hdev,
 					MGMT_OP_ADD_EXT_ADV_PARAMS,
 					MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
 	}
+
+	goto unlock;
+
+remove:
+	/* Only remove the instance if it has just been added */
+	if (adv->pending)
+		hci_remove_adv_instance(hdev, cp->instance);
 
 unlock:
 	hci_dev_unlock(hdev);
