@@ -2932,6 +2932,18 @@ config CMDLINE_KUNIT_TEST
 
 	  If unsure, say N.
 
+config PARSER_KUNIT_TEST
+	tristate "KUnit test for parser number helpers" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds the unit test for the number parsing helpers in
+	  lib/parser.c (match_int(), match_octal(), match_hex()).
+	  For more information on KUnit and unit tests in general please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 config BASE64_KUNIT
 	tristate "KUnit test for base64 decoding and encoding" if !KUNIT_ALL_TESTS
 	depends on KUNIT
