@@ -32,6 +32,9 @@ properties:
     items:
       - const: xo
 
+  interconnects:
+    maxItems: 1
+
   memory-region:
     minItems: 1
     maxItems: 2
@@ -92,10 +95,14 @@ required:
   - compatible
   - reg
   - memory-region
+  - clocks
+  - clock-names
+  - interrupts
+  - interrupt-names
+  - qcom,smem-states
+  - qcom,smem-state-names
 
 allOf:
-  - $ref: /schemas/remoteproc/qcom,pas-common.yaml#
-
   - if:
       properties:
         compatible:
@@ -111,6 +118,8 @@ allOf:
         memory-region:
           maxItems: 1
         firmware-name:
+          maxItems: 1
+        iommus:
           maxItems: 1
         power-domains:
           items:
@@ -134,6 +143,8 @@ allOf:
           minItems: 2
         firmware-name:
           minItems: 2
+        iommus:
+          maxItems: 3
         power-domains: false
         power-domain-names: false
 
