@@ -111,6 +111,9 @@ void smbdirect_socket_shutdown(struct smbdirect_socket *sc);
 
 void smbdirect_socket_release(struct smbdirect_socket *sc);
 
+void smbdirect_socket_get(struct smbdirect_socket *sc);
+void smbdirect_socket_put(struct smbdirect_socket *sc);
+
 int smbdirect_connection_send_batch_flush(struct smbdirect_socket *sc,
 					  struct smbdirect_send_batch *batch,
 					  bool is_last);

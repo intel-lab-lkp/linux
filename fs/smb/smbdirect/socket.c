@@ -762,6 +762,33 @@ void smbdirect_socket_release(struct smbdirect_socket *sc)
 }
 EXPORT_SYMBOL_GPL(smbdirect_socket_release);
 
+/*
+ * smbdirect_socket_get() and smbdirect_socket_put() only keep
+ * the memory of the socket alive, they don't prevent
+ * smbdirect_socket_release() from disconnecting and destroying
+ * it, after that the socket is no longer connected and
+ * all functions fail gracefully.
+ *
+ * This allows a caller to use the socket, e.g. for
+ * smbdirect_connection_register_mr_io(), while another
+ * thread may call smbdirect_socket_release() at the same time.
+ *
+ * smbdirect_socket_put() may free the socket,
+ * so it must be called from process context.
+ */
+void smbdirect_socket_get(struct smbdirect_socket *sc)
+{
+	kref_get(&sc->refs.destroy);
+}
+EXPORT_SYMBOL_GPL(smbdirect_socket_get);
+
+void smbdirect_socket_put(struct smbdirect_socket *sc)
+{
+	might_sleep();
+	kref_put(&sc->refs.destroy, smbdirect_socket_release_destroy);
+}
+EXPORT_SYMBOL_GPL(smbdirect_socket_put);
+
 int smbdirect_socket_wait_for_credits(struct smbdirect_socket *sc,
 				      enum smbdirect_socket_status expected_status,
 				      int unexpected_errno,
