@@ -685,14 +685,7 @@ static int stmmac_hwtstamp_set(struct net_device *dev,
 	u32 snap_type_sel = 0;
 	u32 ts_master_en = 0;
 	u32 ts_event_en = 0;
-
-	if (!(priv->dma_cap.time_stamp || priv->adv_ts)) {
-		NL_SET_ERR_MSG_MOD(extack, "No support for HW time stamping");
-		priv->hwts_tx_en = 0;
-		priv->hwts_rx_en = 0;
-
-		return -EOPNOTSUPP;
-	}
+	int ret = 0;
 
 	if (!netif_running(dev)) {
 		NL_SET_ERR_MSG_MOD(extack,
@@ -700,12 +693,22 @@ static int stmmac_hwtstamp_set(struct net_device *dev,
 		return -ENODEV;
 	}
 
-	netdev_dbg(priv->dev, "%s config flags:0x%x, tx_type:0x%x, rx_filter:0x%x\n",
-		   __func__, config->flags, config->tx_type, config->rx_filter);
-
 	if (config->tx_type != HWTSTAMP_TX_OFF &&
 	    config->tx_type != HWTSTAMP_TX_ON)
 		return -ERANGE;
+
+	netdev_dbg(priv->dev, "%s config flags:0x%x, tx_type:0x%x, rx_filter:0x%x\n",
+		   __func__, config->flags, config->tx_type, config->rx_filter);
+
+	mutex_lock(&priv->lock);
+
+	if (!(priv->dma_cap.time_stamp || priv->adv_ts)) {
+		NL_SET_ERR_MSG_MOD(extack, "No support for HW time stamping");
+		priv->hwts_tx_en = 0;
+		priv->hwts_rx_en = 0;
+		ret = -EOPNOTSUPP;
+		goto unlock;
+	}
 
 	if (priv->adv_ts) {
 		switch (config->rx_filter) {
@@ -829,7 +832,8 @@ static int stmmac_hwtstamp_set(struct net_device *dev,
 			break;
 
 		default:
-			return -ERANGE;
+			ret = -ERANGE;
+			goto unlock;
 		}
 	} else {
 		switch (config->rx_filter) {
@@ -859,8 +863,10 @@ static int stmmac_hwtstamp_set(struct net_device *dev,
 	stmmac_config_hw_tstamping(priv, priv->ptpaddr, priv->systime_flags);
 
 	priv->tstamp_config = *config;
+unlock:
+	mutex_unlock(&priv->lock);
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -7753,9 +7759,12 @@ static int stmmac_dl_ts_coarse_set(struct devlink *dl, u32 id,
 {
 	struct stmmac_devlink_priv *dl_priv = devlink_priv(dl);
 	struct stmmac_priv *priv = dl_priv->stmmac_priv;
-	u32 systime_flags = priv->systime_flags;
+	u32 systime_flags;
 	int ret;
 
+	mutex_lock(&priv->lock);
+
+	systime_flags = priv->systime_flags;
 	if (ctx->val.vbool)
 		systime_flags &= ~PTP_TCR_TSCFUPDT;
 	else
@@ -7768,13 +7777,15 @@ static int stmmac_dl_ts_coarse_set(struct devlink *dl, u32 id,
 	if (ret) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "failed to reconfigure PTP adjustment");
-		return ret;
+		goto unlock;
 	}
 
 	priv->tsfupdt_coarse = ctx->val.vbool;
 	priv->systime_flags = systime_flags;
+unlock:
+	mutex_unlock(&priv->lock);
 
-	return 0;
+	return ret;
 }
 
 static int stmmac_dl_ts_coarse_get(struct devlink *dl, u32 id,
