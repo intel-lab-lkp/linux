@@ -1424,7 +1424,6 @@ static int hackrf_probe(struct usb_interface *intf,
 	dev->rx_bandwidth = v4l2_ctrl_new_std(&dev->rx_ctrl_handler,
 		&hackrf_ctrl_ops_rx, V4L2_CID_RF_TUNER_BANDWIDTH,
 		1750000, 28000000, 50000, 1750000);
-	v4l2_ctrl_auto_cluster(2, &dev->rx_bandwidth_auto, 0, false);
 	dev->rx_rf_gain = v4l2_ctrl_new_std(&dev->rx_ctrl_handler,
 		&hackrf_ctrl_ops_rx, V4L2_CID_RF_TUNER_RF_GAIN, 0, 12, 12, 0);
 	dev->rx_lna_gain = v4l2_ctrl_new_std(&dev->rx_ctrl_handler,
@@ -1436,6 +1435,7 @@ static int hackrf_probe(struct usb_interface *intf,
 		dev_err(dev->dev, "Could not initialize controls\n");
 		goto err_v4l2_ctrl_handler_free_rx;
 	}
+	v4l2_ctrl_auto_cluster(2, &dev->rx_bandwidth_auto, 0, false);
 	v4l2_ctrl_grab(dev->rx_rf_gain, !hackrf_enable_rf_gain_ctrl);
 	v4l2_ctrl_handler_setup(&dev->rx_ctrl_handler);
 
@@ -1447,7 +1447,6 @@ static int hackrf_probe(struct usb_interface *intf,
 	dev->tx_bandwidth = v4l2_ctrl_new_std(&dev->tx_ctrl_handler,
 		&hackrf_ctrl_ops_tx, V4L2_CID_RF_TUNER_BANDWIDTH,
 		1750000, 28000000, 50000, 1750000);
-	v4l2_ctrl_auto_cluster(2, &dev->tx_bandwidth_auto, 0, false);
 	dev->tx_lna_gain = v4l2_ctrl_new_std(&dev->tx_ctrl_handler,
 		&hackrf_ctrl_ops_tx, V4L2_CID_RF_TUNER_LNA_GAIN, 0, 47, 1, 0);
 	dev->tx_rf_gain = v4l2_ctrl_new_std(&dev->tx_ctrl_handler,
@@ -1457,6 +1456,7 @@ static int hackrf_probe(struct usb_interface *intf,
 		dev_err(dev->dev, "Could not initialize controls\n");
 		goto err_v4l2_ctrl_handler_free_tx;
 	}
+	v4l2_ctrl_auto_cluster(2, &dev->tx_bandwidth_auto, 0, false);
 	v4l2_ctrl_grab(dev->tx_rf_gain, !hackrf_enable_rf_gain_ctrl);
 	v4l2_ctrl_handler_setup(&dev->tx_ctrl_handler);
 
