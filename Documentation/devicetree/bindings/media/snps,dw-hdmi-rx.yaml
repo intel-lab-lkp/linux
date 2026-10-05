@@ -63,8 +63,20 @@ properties:
     maxItems: 1
 
   hpd-gpios:
-    description: GPIO specifier for HPD.
+    description:
+      The +5V line of the HDMI connector, which the source drives to announce
+      itself. Despite the name this is an input to the receiver; the hot plug
+      detect line the receiver drives back at the source is handled inside the
+      controller. Absent when the connector belongs to a bridge in front of
+      this receiver rather than to the receiver itself.
     maxItems: 1
+
+  port:
+    $ref: /schemas/graph.yaml#/properties/port
+    description:
+      Connection to the HDMI source. Present when an HDMI bridge sits in
+      front of this receiver instead of the connector being wired straight
+      to it.
 
   rockchip,grf:
     $ref: /schemas/types.yaml#/definitions/phandle
@@ -88,7 +100,12 @@ required:
   - power-domains
   - resets
   - pinctrl-0
-  - hpd-gpios
+
+oneOf:
+  - required:
+      - hpd-gpios
+  - required:
+      - port
 
 additionalProperties: false
 
