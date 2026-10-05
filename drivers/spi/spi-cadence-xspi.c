@@ -374,7 +374,7 @@ static bool cdns_xspi_is_stig_ready(struct cdns_xspi_dev *cdns_xspi, bool sleep)
 		ctrl_stat,
 		((ctrl_stat & BIT(3)) == 0),
 		sleep ? MRVL_XSPI_POLL_DELAY_US : 0,
-		sleep ? MRVL_XSPI_POLL_TIMEOUT_US : 0);
+		MRVL_XSPI_POLL_TIMEOUT_US);
 }
 
 static bool cdns_xspi_is_sdma_ready(struct cdns_xspi_dev *cdns_xspi, bool sleep)
@@ -386,7 +386,7 @@ static bool cdns_xspi_is_sdma_ready(struct cdns_xspi_dev *cdns_xspi, bool sleep)
 		ctrl_stat,
 		(ctrl_stat & CDNS_XSPI_SDMA_TRIGGER),
 		sleep ? MRVL_XSPI_POLL_DELAY_US : 0,
-		sleep ? MRVL_XSPI_POLL_TIMEOUT_US : 0);
+		MRVL_XSPI_POLL_TIMEOUT_US);
 }
 
 static void cdns_xspi_trigger_command(struct cdns_xspi_dev *cdns_xspi,
