@@ -8,6 +8,7 @@
  * Copyright 2023 Marek Vasut
  */
 
+#include <linux/bits.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
@@ -24,6 +25,9 @@
 /* Auto-increment disabled. Normal mode */
 #define PCA995X_MODE1_CFG		0x00
 
+#define PCA995X_MODE2_CLRERR		BIT(4)
+#define PCA995X_MODE2_ERROR		BIT(6)
+
 /* LED select registers determine the source that drives LED outputs */
 #define PCA995X_LED_OFF			0x0
 #define PCA995X_LED_ON			0x1
@@ -37,19 +41,37 @@
 #define PCA995X_IREFALL_FULL_CFG	0xFF
 #define PCA995X_IREFALL_HALF_CFG	(PCA995X_IREFALL_FULL_CFG / 2)
 
+#define PCA995X_EFLAG_UNSUPPORTED	U8_MAX
+
+#define PCA995X_EFLAG_BITS		2
+#define PCA995X_EFLAG_MASK		GENMASK(1, 0)
+
 #define ldev_to_led(c)	container_of(c, struct pca995x_led, ldev)
 
 struct pca995x_chipdef {
 	unsigned int num_leds;
 	u8 pwm_base;
 	u8 irefall;
+	u8 eflag_base;
 	u8 mode2_cfg;
+	const struct attribute_group **attr_groups;
 };
+
+static ssize_t status_show(struct device *dev, struct device_attribute *attr, char *buf);
+
+static DEVICE_ATTR_RO(status);
+
+static struct attribute *pca995x_led_error_attrs[] = {
+	&dev_attr_status.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(pca995x_led_error);
 
 static const struct pca995x_chipdef pca9952_chipdef = {
 	.num_leds	= 16,
 	.pwm_base	= 0x0a,
 	.irefall	= 0x43,
+	.eflag_base	= PCA995X_EFLAG_UNSUPPORTED,
 	/* Reset default */
 	.mode2_cfg	= 0x05,
 };
@@ -58,16 +80,20 @@ static const struct pca995x_chipdef pca9955b_chipdef = {
 	.num_leds	= 16,
 	.pwm_base	= 0x08,
 	.irefall	= 0x45,
-	/* Reset default */
-	.mode2_cfg	= 0x01,
+	.eflag_base	= 0x46,
+	/* Reset default + clear errors on probe */
+	.mode2_cfg	= 0x01 | PCA995X_MODE2_CLRERR,
+	.attr_groups	= pca995x_led_error_groups,
 };
 
 static const struct pca995x_chipdef pca9956b_chipdef = {
 	.num_leds	= 24,
 	.pwm_base	= 0x0a,
 	.irefall	= 0x40,
-	/* Reset default */
-	.mode2_cfg	= 0x05,
+	.eflag_base	= 0x41,
+	/* Reset default + clear errors on probe */
+	.mode2_cfg	= 0x05 | PCA995X_MODE2_CLRERR,
+	.attr_groups	= pca995x_led_error_groups,
 };
 
 struct pca995x_led {
@@ -118,6 +144,77 @@ static int pca995x_brightness_set(struct led_classdev *led_cdev,
 					  PCA995X_LED_PWM_MODE << shift);
 	}
 }
+
+static ssize_t status_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct pca995x_led *led = ldev_to_led(led_cdev);
+	struct pca995x_chip *chip = led->chip;
+	const struct pca995x_chipdef *chipdef = chip->chipdef;
+	const char *status = "unknown";
+	unsigned int val;
+	int shift, ret;
+	u8 reg;
+
+	reg = chipdef->eflag_base + (led->led_no / PCA995X_OUTPUTS_PER_REG);
+	shift = PCA995X_EFLAG_BITS * (led->led_no % PCA995X_OUTPUTS_PER_REG);
+
+	ret = regmap_read(chip->regmap, reg, &val);
+	if (ret)
+		return ret;
+
+	switch ((val >> shift) & PCA995X_EFLAG_MASK) {
+	case 0:
+		status = "okay";
+		break;
+	case 1:
+		status = "short-circuit";
+		break;
+	case 2:
+		status = "open-circuit";
+	}
+
+	return sysfs_emit(buf, "%s\n", status);
+}
+
+static ssize_t has_errors_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct pca995x_chip *chip = dev_get_drvdata(dev);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(chip->regmap, PCA995X_MODE2, &val);
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "%d\n", !!(val & PCA995X_MODE2_ERROR));
+}
+
+static ssize_t has_errors_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct pca995x_chip *chip = dev_get_drvdata(dev);
+	int ret;
+
+	if (!sysfs_streq(buf, "clear"))
+		return -EINVAL;
+
+	ret = regmap_update_bits(chip->regmap, PCA995X_MODE2,
+				 PCA995X_MODE2_CLRERR, PCA995X_MODE2_CLRERR);
+
+	return ret ?: count;
+}
+
+static DEVICE_ATTR_RW(has_errors);
+
+static struct attribute *pca995x_error_attrs[] = {
+	&dev_attr_has_errors.attr,
+	NULL,
+};
+
+static const struct attribute_group pca995x_error_group = {
+	.attrs = pca995x_error_attrs,
+};
 
 static const struct regmap_config pca995x_regmap = {
 	.reg_bits = 8,
@@ -185,6 +282,7 @@ static int pca995x_probe(struct i2c_client *client)
 		led->led_no = reg;
 		led->ldev.brightness_set_blocking = pca995x_brightness_set;
 		led->ldev.max_brightness = 255;
+		led->ldev.groups = chipdef->attr_groups;
 	}
 
 	/* Disable LED all-call address and set normal mode */
@@ -201,6 +299,12 @@ static int pca995x_probe(struct i2c_client *client)
 	ret = regmap_write(chip->regmap, chipdef->irefall, iref);
 	if (ret)
 		goto err_put_nodes;
+
+	if (chipdef->eflag_base != PCA995X_EFLAG_UNSUPPORTED) {
+		ret = devm_device_add_group(dev, &pca995x_error_group);
+		if (ret)
+			goto err_put_nodes;
+	}
 
 	for (i = 0; i < chipdef->num_leds; i++) {
 		struct led_init_data init_data = {};
