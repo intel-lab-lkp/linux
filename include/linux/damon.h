@@ -17,8 +17,18 @@
 #define DAMON_MIN_REGION_SZ	PAGE_SIZE
 /* Maximum number of monitoring probes. */
 #define DAMON_MAX_PROBES	(4)
+/*
+ * Sentinel value for damon_access_report.probe_idx: 0 means no probe
+ * attribution (matches zero-init of struct damon_access_report on the stack).
+ * Perf-event probe indices start at 1.
+ */
+#define DAMON_PROBE_IDX_NONE	0
 /* Max priority score for DAMON-based operation schemes */
 #define DAMOS_MAX_SCORE		(99)
+
+/* Per-CPU SPSC ring: size must be a power of two. */
+#define DAMON_REPORT_RING_SIZE	256
+#define DAMON_REPORT_RING_MASK	(DAMON_REPORT_RING_SIZE - 1)
 
 /**
  * struct damon_addr_range - Represents an address region of [@start, @end).
@@ -74,7 +84,9 @@ struct damon_region {
 	/* for age calculation. */
 	unsigned int last_nr_accesses;
 	unsigned char last_probe_hits[DAMON_MAX_PROBES];
-	bool access_reported;
+	/* probes already credited in sampling interval probes_reported_sis */
+	unsigned long probes_reported_sis;
+	unsigned char probes_reported;
 };
 
 /**
@@ -110,7 +122,18 @@ struct damon_target {
  * @size:		The size of the accessed address range.
  * @cpu:		The id of the CPU that made the access.
  * @tid:		The task id of the task that made the access.
+ * @tgid:		The thread group id of the task that made the access, in
+ *			the initial pid namespace.  A monitoring target created
+ *			for a process is matched against it.
  * @is_write:		Whether the access is write.
+ * @probe_idx:		1-based index of the reporting probe; the drain credits
+ *			probe_hits[@probe_idx - 1].  Set by the reporting
+ *			source, so the drain needs no list walk.
+ *			0 is reserved (no probe attribution; matches zero-init);
+ *			perf-event probe indices start at 1.
+ * @ctx:		Context whose report ring receives the report; set by
+ *			the reporting source.  A report with no context is
+ *			dropped by damon_report_access().
  *
  * Any DAMON API callers that notified access events can report the information
  * to DAMON using damon_report_access().  This struct contains the reporting
@@ -122,9 +145,47 @@ struct damon_access_report {
 	unsigned long size;
 	unsigned int cpu;
 	pid_t tid;
+	pid_t tgid;
 	bool is_write;
+	int probe_idx;
+	struct damon_ctx *ctx;
 /* private: */
 	unsigned long report_jiffies;	/* when this report is made */
+};
+
+/**
+ * struct damon_report_ring - Per-CPU SPSC ring for NMI-safe access reports.
+ *
+ * @head:	Write index; updated by the NMI producer.
+ * @tail:	Read index; updated by the kdamond consumer.
+ * @entries:	Ring buffer entries.
+ *
+ * One ring per CPU, per context with a perf-event probe.  The producer
+ * (NMI overflow handler) writes to @head; the consumer (kdamond) reads
+ * from @tail.  Both indices are unsigned and wrap modulo
+ * DAMON_REPORT_RING_SIZE.
+ */
+struct damon_report_ring {
+	unsigned int head;	/* written by producer (NMI) */
+	unsigned int tail	/* written by consumer (kdamond) */
+		____cacheline_aligned_in_smp;
+	struct damon_access_report entries[DAMON_REPORT_RING_SIZE]
+		____cacheline_aligned_in_smp;
+};
+
+/*
+ * struct damon_target_lookup - Cached, sorted region snapshot for one target.
+ * @regions:	Array of region pointers, sorted by ar.start (address order).
+ * @nr_regions:	Number of entries in @regions.
+ * @tgid:	Thread group id of a pid target's task; 0 if it has none.
+ *
+ * Built once per drain by damon_build_target_lookup() so the ring drain can
+ * binary-search a target's regions instead of walking the list.
+ */
+struct damon_target_lookup {
+	struct damon_region **regions;
+	unsigned int nr_regions;
+	pid_t tgid;
 };
 
 /**
@@ -871,9 +932,12 @@ struct damon_filter {
  * struct damon_probe - Data region attribute probe.
  *
  * @weight:	Relative priority of the attribute for this probe.
+ * @event_driven:	Whether the probe's hits arrive through the report ring
+ *		drain rather than the apply_probes callback.
  */
 struct damon_probe {
 	unsigned int weight;
+	bool event_driven;
 /* private: */
 	/* Preparation actions to apply to each probing memory. */
 	struct list_head preps;
@@ -1091,6 +1155,29 @@ struct damon_ctx {
 
 	/* @rnd_state:	Per-ctx PRNG state for damon_rand(). */
 	struct rnd_state rnd_state;
+
+	/* Reusable drain-loop snapshot buffer (avoids per-tick kmalloc). */
+	struct {
+		struct damon_target_lookup *lookups;
+		unsigned int nr_lookups;
+		struct damon_region **region_buf;
+		unsigned int region_buf_cap;
+	} drain_snapshot;
+
+	/*
+	 * Per-context perf-event report ring.  A perf overflow handler carries
+	 * a pointer to the ctx that armed it (damon_access_report.ctx), so its
+	 * reports route to this ring and two perf-driven ctxs never share one.
+	 *
+	 * A source allocates it with damon_ctx_alloc_perf_ring() before it
+	 * arms the first perf event of the ctx, and damon_destroy_ctx() frees
+	 * it after the events are released, so no in-flight NMI can reach
+	 * freed storage.
+	 * While perf_rings is NULL, every perf report for the ctx is dropped.
+	 */
+	struct damon_report_ring __percpu *perf_rings;
+	int __percpu *perf_ring_busy;
+	cpumask_t perf_pending;
 };
 
 /* Get a random number in [@l, @r) using @ctx's lockless PRNG. */
@@ -1209,6 +1296,7 @@ void damon_destroy_filter(struct damon_filter *f);
 
 struct damon_probe *damon_new_probe(void);
 void damon_add_probe(struct damon_ctx *ctx, struct damon_probe *probe);
+bool damon_has_event_driven_probes(struct damon_ctx *ctx);
 
 struct damon_region *damon_new_region(unsigned long start, unsigned long end);
 unsigned int damon_nr_accesses_mvsum(struct damon_region *r,
@@ -1298,12 +1386,19 @@ int damon_kdamond_pid(struct damon_ctx *ctx);
 int damon_call(struct damon_ctx *ctx, struct damon_call_control *control);
 int damos_walk(struct damon_ctx *ctx, struct damos_walk_control *control);
 
-void damon_report_access(struct damon_access_report *report);
+bool damon_report_access(struct damon_access_report *report);
+int damon_ctx_alloc_perf_ring(struct damon_ctx *ctx);
 
 int damon_set_region_system_rams_default(struct damon_target *t,
 				unsigned long *start, unsigned long *end,
 				unsigned long addr_unit,
 				unsigned long min_region_sz);
+
+unsigned long damon_get_report_overflow(void);
+unsigned long damon_get_report_ring_full(void);
+unsigned long damon_get_report_busy_drop(void);
+unsigned long damon_get_samples_drained(void);
+unsigned long damon_get_samples_no_region(void);
 
 #ifdef CONFIG_ACMA
 
@@ -1313,8 +1408,9 @@ unsigned long damon_alloced_bytes(void);
 
 #else	/* CONFIG_DAMON */
 
-static inline void damon_report_access(struct damon_access_report *report)
+static inline bool damon_report_access(struct damon_access_report *report)
 {
+	return false;
 }
 
 #endif	/* CONFIG_DAMON */
