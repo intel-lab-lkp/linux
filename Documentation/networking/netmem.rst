@@ -19,6 +19,52 @@ Benefits of Netmem :
 * Simplified Development: Drivers interact with a consistent API,
   regardless of the underlying memory implementation.
 
+Design Principles
+=================
+
+Memory providers (or the default ``page_pool`` allocator) allocate underlying
+memory (``struct net_iov`` or ``struct page``), cast it to ``netmem_ref``, and
+supply it to ``page_pool``. The ``page_pool``, drivers, and networking stack
+operate on ``netmem_ref`` as the abstract type. Existing ``page_pool`` APIs
+that allocate or free ``struct page`` are legacy compatibility wrappers for
+drivers that do not yet support ``netmem_ref``. Code that is not yet
+``netmem``-aware should be converted to ``netmem_ref`` unless it will never
+need to support ``netmem``.
+
+1. **Operate on netmem_ref, do not downcast**: ``page_pool``, drivers, and the
+   core networking stack should deal with ``netmem_ref`` rather than
+   ``struct net_iov`` or ``struct page``. Downcasting ``netmem_ref`` to
+   ``struct net_iov`` or ``struct page`` is not allowed unless a code path
+   strictly cannot function without knowing the underlying memory type (for
+   example, ``kmap_local_page()``). In those cases, to keep call sites simple,
+   add a ``netmem`` helper that performs the operation on behalf of the caller,
+   cleanly handles all ``net_iov`` and ``page`` cases, and returns an error if
+   the ``netmem`` type cannot support the requested operation.
+
+2. **Decouple memory providers from net_iov**: Memory providers are not limited
+   to ``struct net_iov``. A memory provider that returns ``struct page``-backed
+   ``netmem_ref``\ s to upper layers is allowed. Code must not assume that using
+   a memory provider implies ``net_iov`` memory.
+
+3. **Decouple net_iov from unreadability**: ``struct net_iov`` is flexible and
+   has no inherent restrictions. While current ``net_iov`` implementations are
+   unreadable by the CPU, future readable ``net_iov`` implementations are
+   allowed. Code must not assume ``net_iov`` is unreadable; check readability
+   via ``netmem_address()`` or ``skb_frags_readable()`` instead.
+
+4. **Delegate complexity to the lowest layer**: Each layer must respect its
+   abstraction boundary. ``page_pool`` must not implement per-memory-provider
+   custom logic in its main code; instead, it delegates provider-specific
+   handling to ``struct memory_provider_ops``. Similarly, core networking code
+   should avoid per-``netmem``-type branching and instead delegate operations
+   to ``netmem`` helpers that handle the underlying memory type.
+
+5. **Homogeneous skb fragment memory types**: An ``sk_buff``'s ``frags[]`` are
+   always backed by ``netmem_ref``\ s of the same memory type. Mixing fragments
+   from different memory types within a single ``sk_buff`` is not allowed,
+   keeping ``sk_buff`` handling simple. Consequently, coalescing ``sk_buff``\ s
+   with different fragment memory types must not happen.
+
 Driver RX Requirements
 ======================
 
