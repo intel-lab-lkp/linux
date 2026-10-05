@@ -777,7 +777,7 @@ static const struct camss_subdev_resources vfe_res_2290[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_340,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 
@@ -797,7 +797,7 @@ static const struct camss_subdev_resources vfe_res_2290[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_340,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 };
@@ -1207,7 +1207,7 @@ static const struct camss_subdev_resources vfe_res_670[] = {
 			.pd_name = "ife0",
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 
@@ -1229,7 +1229,7 @@ static const struct camss_subdev_resources vfe_res_670[] = {
 			.pd_name = "ife1",
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 
@@ -1249,7 +1249,7 @@ static const struct camss_subdev_resources vfe_res_670[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	}
 };
@@ -1460,7 +1460,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
 			.has_pd = true,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 
@@ -1488,7 +1488,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
 			.has_pd = true,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 
@@ -1514,7 +1514,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	}
 };
@@ -1642,7 +1642,7 @@ static const struct camss_subdev_resources vfe_res_sm6150[] = {
 			.pd_name = "ife0",
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE1 */
@@ -1665,7 +1665,7 @@ static const struct camss_subdev_resources vfe_res_sm6150[] = {
 			.pd_name = "ife1",
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE2 */
@@ -1685,7 +1685,7 @@ static const struct camss_subdev_resources vfe_res_sm6150[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 };
@@ -2150,7 +2150,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
 			.pd_name = "ife0",
 			.hw_ops = &vfe_ops_480,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE1 */
@@ -2176,7 +2176,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
 			.pd_name = "ife1",
 			.hw_ops = &vfe_ops_480,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE2 (lite) */
@@ -2200,7 +2200,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_480,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE3 (lite) */
@@ -2224,7 +2224,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_480,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 };
@@ -2467,7 +2467,7 @@ static const struct camss_subdev_resources vfe_res_7280[] = {
 			.pd_name = "ife0",
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE1 */
@@ -2493,7 +2493,7 @@ static const struct camss_subdev_resources vfe_res_7280[] = {
 			.pd_name = "ife1",
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE2 */
@@ -2519,7 +2519,7 @@ static const struct camss_subdev_resources vfe_res_7280[] = {
 			.has_pd = true,
 			.pd_name = "ife2",
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE3 (lite) */
@@ -2541,7 +2541,7 @@ static const struct camss_subdev_resources vfe_res_7280[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE4 (lite) */
@@ -2563,7 +2563,7 @@ static const struct camss_subdev_resources vfe_res_7280[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 };
@@ -2813,7 +2813,7 @@ static const struct camss_subdev_resources vfe_res_sc8280xp[] = {
 			.pd_name = "ife0",
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE1 */
@@ -2833,7 +2833,7 @@ static const struct camss_subdev_resources vfe_res_sc8280xp[] = {
 			.pd_name = "ife1",
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE2 */
@@ -2853,7 +2853,7 @@ static const struct camss_subdev_resources vfe_res_sc8280xp[] = {
 			.pd_name = "ife2",
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE3 */
@@ -2873,7 +2873,7 @@ static const struct camss_subdev_resources vfe_res_sc8280xp[] = {
 			.pd_name = "ife3",
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE_LITE_0 */
@@ -2892,7 +2892,7 @@ static const struct camss_subdev_resources vfe_res_sc8280xp[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE_LITE_1 */
@@ -2911,7 +2911,7 @@ static const struct camss_subdev_resources vfe_res_sc8280xp[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE_LITE_2 */
@@ -2930,7 +2930,7 @@ static const struct camss_subdev_resources vfe_res_sc8280xp[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE_LITE_3 */
@@ -2949,7 +2949,7 @@ static const struct camss_subdev_resources vfe_res_sc8280xp[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_170,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 };
@@ -3220,7 +3220,7 @@ static const struct camss_subdev_resources vfe_res_8550[] = {
 			.pd_name = "ife0",
 			.hw_ops = &vfe_ops_780,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE1 */
@@ -3244,7 +3244,7 @@ static const struct camss_subdev_resources vfe_res_8550[] = {
 			.pd_name = "ife1",
 			.hw_ops = &vfe_ops_780,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE2 */
@@ -3268,7 +3268,7 @@ static const struct camss_subdev_resources vfe_res_8550[] = {
 			.pd_name = "ife2",
 			.hw_ops = &vfe_ops_780,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE3 lite */
@@ -3289,7 +3289,7 @@ static const struct camss_subdev_resources vfe_res_8550[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_780,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE4 lite */
@@ -3310,7 +3310,7 @@ static const struct camss_subdev_resources vfe_res_8550[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_780,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 };
@@ -3535,7 +3535,7 @@ static const struct camss_subdev_resources vfe_res_sm8650[] = {
 			.pd_name = "ife0",
 			.hw_ops = &vfe_ops_780,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		},
 	},
 	/* VFE1 */
@@ -3562,7 +3562,7 @@ static const struct camss_subdev_resources vfe_res_sm8650[] = {
 			.pd_name = "ife1",
 			.hw_ops = &vfe_ops_780,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		},
 	},
 	/* VFE2 */
@@ -3589,7 +3589,7 @@ static const struct camss_subdev_resources vfe_res_sm8650[] = {
 			.pd_name = "ife2",
 			.hw_ops = &vfe_ops_780,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		},
 	},
 	/* VFE3 lite */
@@ -3614,7 +3614,7 @@ static const struct camss_subdev_resources vfe_res_sm8650[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_780,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		},
 	},
 	/* VFE4 lite */
@@ -3639,7 +3639,7 @@ static const struct camss_subdev_resources vfe_res_sm8650[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_780,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		},
 	},
 };
@@ -4003,7 +4003,7 @@ static const struct camss_subdev_resources vfe_res_8775p[] = {
 			.pd_name = NULL,
 			.hw_ops = &vfe_ops_690,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE1 */
@@ -4031,7 +4031,7 @@ static const struct camss_subdev_resources vfe_res_8775p[] = {
 			.pd_name = NULL,
 			.hw_ops = &vfe_ops_690,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE2 (lite) */
@@ -4056,7 +4056,7 @@ static const struct camss_subdev_resources vfe_res_8775p[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_690,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE3 (lite) */
@@ -4081,7 +4081,7 @@ static const struct camss_subdev_resources vfe_res_8775p[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_690,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE4 (lite) */
@@ -4106,7 +4106,7 @@ static const struct camss_subdev_resources vfe_res_8775p[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_690,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE5 (lite) */
@@ -4131,7 +4131,7 @@ static const struct camss_subdev_resources vfe_res_8775p[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_690,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 	/* VFE6 (lite) */
@@ -4156,7 +4156,7 @@ static const struct camss_subdev_resources vfe_res_8775p[] = {
 			.is_lite = true,
 			.hw_ops = &vfe_ops_690,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		}
 	},
 };
@@ -4434,7 +4434,7 @@ static const struct camss_subdev_resources vfe_res_x1e80100[] = {
 			.pd_name = "ife0",
 			.hw_ops = &vfe_ops_680,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		},
 	},
 	/* IFE1 */
@@ -4458,7 +4458,7 @@ static const struct camss_subdev_resources vfe_res_x1e80100[] = {
 			.pd_name = "ife1",
 			.hw_ops = &vfe_ops_680,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		},
 	},
 	/* IFE_LITE_0 */
@@ -4481,7 +4481,7 @@ static const struct camss_subdev_resources vfe_res_x1e80100[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_680,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		},
 	},
 	/* IFE_LITE_1 */
@@ -4504,7 +4504,7 @@ static const struct camss_subdev_resources vfe_res_x1e80100[] = {
 			.line_num = 4,
 			.hw_ops = &vfe_ops_680,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_pix_845
+			.formats_pix = &vfe_formats_rdi_845
 		},
 	},
 };
