@@ -2378,11 +2378,21 @@ int msm_dp_ctrl_on_link(struct msm_dp_ctrl *msm_dp_ctrl,
 			/* training completed successfully */
 			break;
 		} else if (training_step == DP_TRAINING_1) {
-			/* link train_1 failed */
-			if (!msm_dp_aux_is_link_connected(ctrl->aux))
+			/*
+			 * link train_1 failed
+			 *
+			 * Use the DPCD read itself to decide whether the sink
+			 * is still there. msm_dp_aux_is_link_connected() reads
+			 * the DP controller's own HPD block, which is only
+			 * meaningful when that block sees a real HPD signal --
+			 * on a Type-C port HPD arrives out of band through a
+			 * drm_dp_hpd_bridge and the register reads
+			 * DISCONNECTED the whole time the sink is attached.
+			 * Gating the retry on it therefore skipped the entire
+			 * rate/lane fallback on those boards.
+			 */
+			if (drm_dp_dpcd_read_link_status(ctrl->aux, link_status) < 0)
 				break;
-
-			drm_dp_dpcd_read_link_status(ctrl->aux, link_status);
 
 			rc = msm_dp_ctrl_link_rate_down_shift(ctrl);
 			if (rc < 0) { /* already in RBR = 1.6G */
@@ -2403,11 +2413,9 @@ int msm_dp_ctrl_on_link(struct msm_dp_ctrl *msm_dp_ctrl,
 				}
 			}
 		} else if (training_step == DP_TRAINING_2) {
-			/* link train_2 failed */
-			if (!msm_dp_aux_is_link_connected(ctrl->aux))
+			/* link train_2 failed; same reasoning as above */
+			if (drm_dp_dpcd_read_link_status(ctrl->aux, link_status) < 0)
 				break;
-
-			drm_dp_dpcd_read_link_status(ctrl->aux, link_status);
 
 			if (!drm_dp_clock_recovery_ok(link_status,
 					ctrl->link->link_params.num_lanes))
