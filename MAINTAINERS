@@ -11110,6 +11110,7 @@ M:	Serv Pol <servpol@tuta.io>
 L:	linux-pm@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/power/supply/glinet,gl-e750-mcu.yaml
+F:	drivers/power/supply/gl-e750-mcu.c
 
 GNSS SUBSYSTEM
 M:	Johan Hovold <johan@kernel.org>

@@ -1203,4 +1203,17 @@ config MACSMC_POWER
 
 	  Say Y or M here if you have an Apple Silicon based Mac.
 
+config BATTERY_GL_E750_MCU
+	tristate "GL.iNet GL-E750 status MCU battery driver"
+	depends on SERIAL_DEV_BUS
+	depends on OF || COMPILE_TEST
+	help
+	  Say Y or M here to enable the battery driver for the status
+	  microcontroller of the GL.iNet GL-E750 (Mudi) travel router.
+	  It reports the battery state and shuts the system down when
+	  the power switch is turned off.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called gl-e750-mcu.
+
 endif # POWER_SUPPLY
