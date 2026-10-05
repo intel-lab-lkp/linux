@@ -48,7 +48,7 @@ void __timer_enable_traps(struct kvm_vcpu *vcpu)
 	 * or running a protected VM (we don't offset anything in this case).
 	 */
 	clr = CNTHCTL_EL1PCEN;
-	if (vcpu_is_protected(vcpu) ||
+	if (vcpu_is_protected_pkvm(vcpu) ||
 	    !timer_get_offset(vcpu_ptimer(vcpu)))
 		set |= CNTHCTL_EL1PCTEN;
 	else

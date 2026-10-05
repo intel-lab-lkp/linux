@@ -57,7 +57,7 @@ pkvm_hyp_vcpu_to_hyp_vm(struct pkvm_hyp_vcpu *hyp_vcpu)
 
 static inline bool pkvm_hyp_vcpu_is_protected(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
-	return vcpu_is_protected(&hyp_vcpu->vcpu);
+	return vcpu_is_protected_pkvm(&hyp_vcpu->vcpu);
 }
 
 static inline bool pkvm_hyp_vm_is_protected(struct pkvm_hyp_vm *hyp_vm)
