@@ -1259,6 +1259,9 @@ int wiphy_register(struct wiphy *wiphy)
 	}
 
 	cfg80211_debugfs_rdev_add(rdev);
+
+	rdev->wiphy.registered = true;
+
 	nl80211_notify_wiphy(rdev, NL80211_CMD_NEW_WIPHY);
 	wiphy_unlock(&rdev->wiphy);
 
@@ -1305,8 +1308,6 @@ int wiphy_register(struct wiphy *wiphy)
 				break;
 		}
 	}
-
-	rdev->wiphy.registered = true;
 	rtnl_unlock();
 
 	res = rfkill_register(rdev->wiphy.rfkill);
