@@ -39,27 +39,39 @@ static int cst816x_parse_keycodes(struct device *dev, struct cst816x_priv *priv)
 {
 	int count;
 	int error;
+	int i;
 
-	if (device_property_present(dev, "linux,keycodes")) {
-		count = device_property_count_u32(dev, "linux,keycodes");
-		if (count < 0) {
-			error = count;
-			dev_err(dev, "failed to count keys: %d\n", error);
-			return error;
-		} else if (count > ARRAY_SIZE(priv->keycode)) {
-			dev_err(dev, "too many keys defined: %d\n", count);
-			return -EINVAL;
-		}
-		priv->keycodemax = count;
+	if (!device_property_present(dev, "linux,keycodes"))
+		return 0;
 
-		error = device_property_read_u32_array(dev, "linux,keycodes",
-						       priv->keycode,
-						       priv->keycodemax);
-		if (error) {
-			dev_err(dev, "failed to read keycodes: %d\n", error);
-			return error;
-		}
+	count = device_property_count_u32(dev, "linux,keycodes");
+	if (count < 0) {
+		error = count;
+		dev_err(dev, "failed to count keys: %d\n", error);
+		return error;
 	}
+
+	if (count > ARRAY_SIZE(priv->keycode)) {
+		dev_err(dev, "too many keys defined: %d\n", count);
+		return -EINVAL;
+	}
+
+	error = device_property_read_u32_array(dev, "linux,keycodes",
+					       priv->keycode, count);
+	if (error) {
+		dev_err(dev, "failed to read keycodes: %d\n", error);
+		return error;
+	}
+
+	for (i = 0; i < count; i++) {
+		if (priv->keycode[i] <= KEY_MAX)
+			continue;
+
+		dev_err(dev, "keycode %u out of range\n", priv->keycode[i]);
+		return -EINVAL;
+	}
+
+	priv->keycodemax = count;
 
 	return 0;
 }
@@ -94,24 +106,19 @@ static int cst816x_i2c_read_register(struct cst816x_priv *priv, u8 reg,
 	return 0;
 }
 
-static u8 cst816x_gest_idx(u8 gest)
+static unsigned int cst816x_gest_keycode(struct cst816x_priv *priv, u8 gest)
 {
-	u8 index;
-
 	switch (gest) {
 	case 0x01: /* Slide up gesture */
 	case 0x02: /* Slide down gesture */
 	case 0x03: /* Slide left gesture */
 	case 0x04: /* Slide right gesture */
-		index = gest;
-		break;
+		return priv->keycode[gest - 1];
 	case 0x0c: /* Long press gesture */
+		return priv->keycode[CST816X_NUM_KEYS - 1];
 	default:
-		index = CST816X_NUM_KEYS;
-		break;
+		return KEY_RESERVED;
 	}
-
-	return index - 1;
 }
 
 static bool cst816x_process_touch(struct cst816x_priv *priv,
@@ -168,10 +175,25 @@ static void cst816x_reset(struct cst816x_priv *priv)
 	msleep(100);
 }
 
+static void cst816x_release_keys(struct cst816x_priv *priv)
+{
+	unsigned int key;
+	unsigned int i;
+
+	for (i = 0; i < priv->keycodemax; i++) {
+		key = priv->keycode[i];
+		if (!test_bit(key, priv->input->key))
+			continue;
+
+		input_report_key(priv->input, key, 0);
+	}
+}
+
 static irqreturn_t cst816x_irq_cb(int irq, void *cookie)
 {
 	struct cst816x_priv *priv = cookie;
 	struct cst816x_touch tch;
+	unsigned int key;
 
 	if (!cst816x_process_touch(priv, &tch))
 		return IRQ_HANDLED;
@@ -179,10 +201,11 @@ static irqreturn_t cst816x_irq_cb(int irq, void *cookie)
 	touchscreen_report_pos(priv->input, &priv->prop,
 			       tch.abs_x, tch.abs_y, false);
 
-	if (tch.gest)
-		input_report_key(priv->input,
-				 priv->keycode[cst816x_gest_idx(tch.gest)],
-				 tch.active);
+	key = cst816x_gest_keycode(priv, tch.gest);
+	if (key != KEY_RESERVED)
+		input_report_key(priv->input, key, 1);
+	else
+		cst816x_release_keys(priv);
 
 	input_report_key(priv->input, BTN_TOUCH, tch.active);
 
