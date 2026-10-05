@@ -988,7 +988,8 @@ xmit_error_drop_skb:
  * @napi:	Pointer to NAPI structure.
  * @budget:	Max number of TX packets to process.
  *
- * Return: Number of TX packets processed.
+ * Return: Number of TX packets processed, or @budget to continue polling
+ * after a post-clear completion recheck.
  *
  * This function is invoked from the NAPI processing to notify the completion
  * of transmit operation. It clears fields in the corresponding Tx BDs and
@@ -1018,6 +1019,17 @@ static int axienet_tx_poll(struct napi_struct *napi, int budget)
 
 		if (!axienet_check_tx_bd_space(lp, MAX_SKB_FRAGS + 1))
 			netif_wake_queue(ndev);
+	}
+
+	/* Clear stale IOC/DELAY bits, flush the clear, and re-check for
+	 * race-window completions. Skipped on budget exhaustion.
+	 */
+	if (packets < budget) {
+		axienet_dma_out32(lp, XAXIDMA_TX_SR_OFFSET,
+				  XAXIDMA_IRQ_IOC_MASK | XAXIDMA_IRQ_DELAY_MASK);
+		axienet_dma_in32(lp, XAXIDMA_TX_SR_OFFSET);
+		if (lp->tx_bd_v[lp->tx_bd_ci].status & XAXIDMA_BD_STS_COMPLETE_MASK)
+			return budget;
 	}
 
 	if (packets < budget && napi_complete_done(napi, packets)) {
@@ -1206,7 +1218,8 @@ rx_submit:
  * @napi:	Pointer to NAPI structure.
  * @budget:	Max number of RX packets to process.
  *
- * Return: Number of RX packets processed.
+ * Return: Number of RX packets processed, or @budget to continue polling
+ * after a post-clear completion recheck.
  */
 static int axienet_rx_poll(struct napi_struct *napi, int budget)
 {
@@ -1302,6 +1315,18 @@ static int axienet_rx_poll(struct napi_struct *napi, int budget)
 
 	if (tail_p)
 		axienet_dma_out_addr(lp, XAXIDMA_RX_TDESC_OFFSET, tail_p);
+
+	/* Clear stale IOC/DELAY bits, flush the clear, and re-check for
+	 * race-window completions. Skipped on budget exhaustion and on
+	 * refill failure (cur_p->skb == NULL).
+	 */
+	if (packets < budget && cur_p->skb) {
+		axienet_dma_out32(lp, XAXIDMA_RX_SR_OFFSET,
+				  XAXIDMA_IRQ_IOC_MASK | XAXIDMA_IRQ_DELAY_MASK);
+		axienet_dma_in32(lp, XAXIDMA_RX_SR_OFFSET);
+		if (cur_p->status & XAXIDMA_BD_STS_COMPLETE_MASK)
+			return budget;
+	}
 
 	if (packets < budget && napi_complete_done(napi, packets)) {
 		if (READ_ONCE(lp->rx_dim_enabled)) {
