@@ -41,7 +41,10 @@ required:
   - reg
   - interrupts
 
-additionalProperties: false
+unevaluatedProperties: false
+
+allOf:
+  - $ref: touchscreen.yaml#
 
 examples:
   - |
@@ -59,6 +62,7 @@ examples:
             reset-gpios = <&gpio 17 GPIO_ACTIVE_LOW>;
             linux,keycodes = <KEY_UP>, <KEY_DOWN>, <KEY_LEFT>, <KEY_RIGHT>,
                              <BTN_TOOL_TRIPLETAP>;
+            touchscreen-swapped-x-y;
         };
     };
 
