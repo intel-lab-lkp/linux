@@ -560,6 +560,19 @@ static int _test_cmd_destroy_access_pages(int fd, unsigned int access_id,
 	EXPECT_ERRNO(_errno, _test_cmd_destroy_access_pages(              \
 				     self->fd, access_id, access_pages_id))
 
+#define test_cmd_md_check_mmio(_hwpt_id, _iova, _length)                     \
+	({                                                                   \
+		struct iommu_test_cmd check_cmd = {                          \
+			.size = sizeof(check_cmd),                           \
+			.op = IOMMU_TEST_OP_MD_CHECK_MMIO,                   \
+			.id = _hwpt_id,                                      \
+			.check_mmio = { .iova = _iova, .length = _length },  \
+		};                                                           \
+		ASSERT_EQ(0, ioctl(self->fd,                                 \
+				   _IOMMU_TEST_CMD(IOMMU_TEST_OP_MD_CHECK_MMIO), \
+				   &check_cmd));                             \
+	})
+
 static int _test_cmd_get_dmabuf(int fd, size_t len, int *out_fd)
 {
 	struct iommu_test_cmd cmd = {

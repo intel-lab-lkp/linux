@@ -120,6 +120,10 @@ struct mock_iommu_domain {
 		struct pt_iommu_amdv1 amdv1;
 	};
 	unsigned long flags;
+	/* map_range/unmap_range wrappers record IOMMU_MMIO pages */
+	const struct pt_iommu_ops *pt_ops;
+	struct pt_iommu_ops rec_ops;
+	struct xarray mmio_pages;
 };
 PT_IOMMU_CHECK_DOMAIN(struct mock_iommu_domain, iommu, domain);
 PT_IOMMU_CHECK_DOMAIN(struct mock_iommu_domain, amdv1.iommu, domain);
@@ -392,6 +396,7 @@ static void mock_domain_free(struct iommu_domain *domain)
 	struct mock_iommu_domain *mock = to_mock_domain(domain);
 
 	pt_iommu_deinit(&mock->iommu);
+	xa_destroy(&mock->mmio_pages);
 	kfree(mock);
 }
 
@@ -423,6 +428,51 @@ static const struct iommu_dirty_ops amdv1_mock_dirty_ops = {
 	.set_dirty_tracking = mock_domain_set_dirty_tracking,
 };
 
+static int mock_map_range(struct pt_iommu *iommu_table, dma_addr_t iova,
+			  phys_addr_t paddr, dma_addr_t len, unsigned int prot,
+			  gfp_t gfp, size_t *mapped)
+{
+	struct mock_iommu_domain *mock =
+		container_of(iommu_table, struct mock_iommu_domain, iommu);
+	unsigned long index;
+	int rc;
+
+	rc = mock->pt_ops->map_range(iommu_table, iova, paddr, len, prot, gfp,
+				     mapped);
+	if (rc || !(prot & IOMMU_MMIO))
+		return rc;
+
+	for (index = iova / MOCK_PAGE_SIZE;
+	     index <= (iova + len - 1) / MOCK_PAGE_SIZE; index++) {
+		rc = xa_err(xa_store(&mock->mmio_pages, index, xa_mk_value(1),
+				     gfp));
+		if (rc)
+			return rc;
+	}
+	return 0;
+}
+
+static size_t mock_unmap_range(struct pt_iommu *iommu_table, dma_addr_t iova,
+			       dma_addr_t len,
+			       struct iommu_iotlb_gather *iotlb_gather)
+{
+	struct mock_iommu_domain *mock =
+		container_of(iommu_table, struct mock_iommu_domain, iommu);
+	unsigned long index;
+	size_t unmapped;
+	void *entry;
+
+	unmapped = mock->pt_ops->unmap_range(iommu_table, iova, len,
+					     iotlb_gather);
+	if (!unmapped)
+		return 0;
+
+	xa_for_each_range(&mock->mmio_pages, index, entry, iova / MOCK_PAGE_SIZE,
+			  (iova + unmapped - 1) / MOCK_PAGE_SIZE)
+		xa_erase(&mock->mmio_pages, index);
+	return unmapped;
+}
+
 static struct mock_iommu_domain *
 mock_domain_alloc_pgtable(struct device *dev,
 			  const struct iommu_hwpt_selftest *user_cfg, u32 flags)
@@ -434,6 +484,7 @@ mock_domain_alloc_pgtable(struct device *dev,
 	if (!mock)
 		return ERR_PTR(-ENOMEM);
 	mock->domain.type = IOMMU_DOMAIN_UNMANAGED;
+	xa_init(&mock->mmio_pages);
 
 	mock->amdv1.iommu.nid = NUMA_NO_NODE;
 
@@ -453,6 +504,12 @@ mock_domain_alloc_pgtable(struct device *dev,
 		rc = pt_iommu_amdv1_mock_init(&mock->amdv1, &cfg, GFP_KERNEL);
 		if (rc)
 			goto err_free;
+
+		mock->pt_ops = mock->iommu.ops;
+		mock->rec_ops = *mock->pt_ops;
+		mock->rec_ops.map_range = mock_map_range;
+		mock->rec_ops.unmap_range = mock_unmap_range;
+		mock->iommu.ops = &mock->rec_ops;
 
 		/*
 		 * In huge mode userspace should only provide huge pages, we
@@ -1180,6 +1237,35 @@ static int iommufd_test_add_reserved(struct iommufd_ucmd *ucmd,
 	rc = iopt_reserve_iova(&ioas->iopt, start, last, NULL);
 	up_write(&ioas->iopt.iova_rwsem);
 	iommufd_put_object(ucmd->ictx, &ioas->obj);
+	return rc;
+}
+
+/* Check that every page in [iova, iova + length) was mapped with IOMMU_MMIO */
+static int iommufd_test_md_check_mmio(struct iommufd_ucmd *ucmd,
+				      unsigned int mockpt_id,
+				      unsigned long iova, size_t length)
+{
+	struct iommufd_hw_pagetable *hwpt;
+	struct mock_iommu_domain *mock;
+	unsigned long index;
+	int rc = 0;
+
+	if (!length || iova % MOCK_PAGE_SIZE || length % MOCK_PAGE_SIZE)
+		return -EINVAL;
+
+	hwpt = get_md_pagetable(ucmd, mockpt_id, &mock);
+	if (IS_ERR(hwpt))
+		return PTR_ERR(hwpt);
+
+	for (index = iova / MOCK_PAGE_SIZE;
+	     index <= (iova + length - 1) / MOCK_PAGE_SIZE; index++) {
+		if (!xa_load(&mock->mmio_pages, index)) {
+			rc = -EINVAL;
+			break;
+		}
+	}
+
+	iommufd_put_object(ucmd->ictx, &hwpt->obj);
 	return rc;
 }
 
@@ -2110,6 +2196,10 @@ int iommufd_test(struct iommufd_ucmd *ucmd)
 	case IOMMU_TEST_OP_MOCK_DOMAIN_REPLACE:
 		return iommufd_test_mock_domain_replace(
 			ucmd, cmd->id, cmd->mock_domain_replace.pt_id, cmd);
+	case IOMMU_TEST_OP_MD_CHECK_MMIO:
+		return iommufd_test_md_check_mmio(ucmd, cmd->id,
+						  cmd->check_mmio.iova,
+						  cmd->check_mmio.length);
 	case IOMMU_TEST_OP_MD_CHECK_MAP:
 		return iommufd_test_md_check_pa(
 			ucmd, cmd->id, cmd->check_map.iova,

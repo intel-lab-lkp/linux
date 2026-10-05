@@ -31,6 +31,7 @@ enum {
 	IOMMU_TEST_OP_PASID_CHECK_HWPT,
 	IOMMU_TEST_OP_DMABUF_GET,
 	IOMMU_TEST_OP_DMABUF_REVOKE,
+	IOMMU_TEST_OP_MD_CHECK_MMIO,
 };
 
 enum {
@@ -109,6 +110,10 @@ struct iommu_test_cmd {
 			__aligned_u64 length;
 			__aligned_u64 uptr;
 		} check_map;
+		struct {
+			__aligned_u64 iova;
+			__aligned_u64 length;
+		} check_mmio;
 		struct {
 			__aligned_u64 length;
 			__aligned_u64 uptr;
