@@ -6,6 +6,8 @@
 #define SELFTEST_KVM_PROCESSOR_H
 
 #include <linux/compiler.h>
+#include <unistd.h>
+
 #include "ppc_asm.h"
 #include "kvm_util_types.h"
 
@@ -34,6 +36,11 @@ void vm_install_exception_handler(struct kvm_vm *vm, int vector,
 static inline void cpu_relax(void)
 {
 	asm volatile("" ::: "memory");
+}
+
+static inline bool is_pseries_lpar(void)
+{
+	return !access("/proc/device-tree/rtas/ibm,hypertas-functions", F_OK);
 }
 
 #endif
