@@ -358,6 +358,10 @@ struct sk_buff;
  */
 #define GSO_BY_FRAGS	0xFFFF
 
+/* All fragments in an skb (skb_shinfo(skb)->frags[]) must be backed by
+ * netmems of the same memory type. Mixing fragments of different memory types
+ * within a single skb (including via skb coalescing) is not allowed.
+ */
 typedef struct skb_frag {
 	netmem_ref netmem;
 	unsigned int len;

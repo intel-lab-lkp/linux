@@ -6206,6 +6206,9 @@ bool skb_try_coalesce(struct sk_buff *to, struct sk_buff *from,
 	if (to->pp_recycle != from->pp_recycle)
 		return false;
 
+	/* All frags in an skb must have the same backing netmem memory type;
+	 * do not coalesce skbs with different frag memory types.
+	 */
 	if (skb_frags_readable(from) != skb_frags_readable(to))
 		return false;
 

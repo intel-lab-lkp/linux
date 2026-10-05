@@ -9,6 +9,14 @@ struct netdev_rx_queue;
 struct netlink_ext_ack;
 struct sk_buff;
 
+/* Memory providers allocate underlying memory (struct net_iov or struct page),
+ * cast it to netmem_ref, and supply it to page_pool. Memory providers are not
+ * limited to net_iov; a provider returning page-backed netmems is allowed, so
+ * callers must not assume a memory provider implies net_iov.
+ *
+ * Per-provider custom logic must be delegated to memory_provider_ops rather
+ * than handled directly in page_pool core code.
+ */
 struct memory_provider_ops {
 	netmem_ref (*alloc_netmems)(struct page_pool *pool, gfp_t gfp);
 	bool (*release_netmem)(struct page_pool *pool, netmem_ref netmem);
