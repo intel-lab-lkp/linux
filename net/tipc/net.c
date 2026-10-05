@@ -125,9 +125,11 @@ int tipc_net_init(struct net *net, u8 *node_id, u32 addr)
 
 static void tipc_net_finalize(struct net *net, u32 addr)
 {
-	struct tipc_net *tn = tipc_net(net);
 	struct tipc_socket_addr sk = {0, addr};
+	struct tipc_net *tn = tipc_net(net);
+	struct sk_buff *skb = NULL;
 	struct tipc_uaddr ua;
+	u32 rc_dests;
 
 	tipc_uaddr(&ua, TIPC_SERVICE_RANGE, TIPC_CLUSTER_SCOPE,
 		   TIPC_NODE_STATE, addr, addr);
@@ -138,7 +140,9 @@ static void tipc_net_finalize(struct net *net, u32 addr)
 	tipc_named_reinit(net);
 	tipc_sk_reinit(net);
 	tipc_mon_reinit_self(net);
-	tipc_nametbl_publish(net, &ua, &sk, addr);
+	tipc_nametbl_publish(net, &ua, &sk, addr, &skb, &rc_dests);
+	if (skb)
+		tipc_node_broadcast(net, skb, rc_dests);
 }
 
 void tipc_net_finalize_work(struct work_struct *work)

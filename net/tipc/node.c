@@ -397,44 +397,50 @@ static void tipc_node_write_unlock(struct tipc_node *n)
 	__releases(n->lock)
 {
 	struct tipc_socket_addr sk;
+	struct sk_buff *skb = NULL;
+	struct sk_buff_head xmitq;
 	struct net *net = n->net;
-	u32 flags = n->action_flags;
-	struct list_head *publ_list;
 	struct tipc_uaddr ua;
 	u32 bearer_id, node;
+	u32 rc_dests;
 
-	if (likely(!flags)) {
+	if (likely(!n->action_flags)) {
 		write_unlock_bh(&n->lock);
 		return;
 	}
 
+	__skb_queue_head_init(&xmitq);
 	tipc_uaddr(&ua, TIPC_SERVICE_RANGE, TIPC_NODE_SCOPE,
 		   TIPC_LINK_STATE, n->addr, n->addr);
 	sk.ref = n->link_id;
 	sk.node = tipc_own_addr(net);
 	node = n->addr;
 	bearer_id = n->link_id & 0xffff;
-	publ_list = &n->publ_list;
+
+	if (n->action_flags & TIPC_NOTIFY_NODE_DOWN)
+		tipc_publ_notify(net, &n->publ_list, n->capabilities);
+
+	if (n->action_flags & TIPC_NOTIFY_NODE_UP)
+		tipc_named_node_up(net, node, n->capabilities, &xmitq);
+
+	if (n->action_flags & TIPC_NOTIFY_LINK_UP) {
+		tipc_mon_peer_up(net, node, bearer_id);
+		tipc_nametbl_publish(net, &ua, &sk, sk.ref, &skb, &rc_dests);
+	}
+	if (n->action_flags & TIPC_NOTIFY_LINK_DOWN) {
+		tipc_mon_peer_down(net, node, bearer_id);
+		tipc_nametbl_withdraw(net, &ua, &sk, sk.ref, &skb, &rc_dests);
+	}
 
 	n->action_flags &= ~(TIPC_NOTIFY_NODE_DOWN | TIPC_NOTIFY_NODE_UP |
 			     TIPC_NOTIFY_LINK_DOWN | TIPC_NOTIFY_LINK_UP);
-
 	write_unlock_bh(&n->lock);
 
-	if (flags & TIPC_NOTIFY_NODE_DOWN)
-		tipc_publ_notify(net, publ_list, node, n->capabilities);
+	if (!skb_queue_empty(&xmitq))
+		tipc_node_xmit(net, &xmitq, node, 0);
 
-	if (flags & TIPC_NOTIFY_NODE_UP)
-		tipc_named_node_up(net, node, n->capabilities);
-
-	if (flags & TIPC_NOTIFY_LINK_UP) {
-		tipc_mon_peer_up(net, node, bearer_id);
-		tipc_nametbl_publish(net, &ua, &sk, sk.ref);
-	}
-	if (flags & TIPC_NOTIFY_LINK_DOWN) {
-		tipc_mon_peer_down(net, node, bearer_id);
-		tipc_nametbl_withdraw(net, &ua, &sk, sk.ref);
-	}
+	if (skb)
+		tipc_node_broadcast(net, skb, rc_dests);
 }
 
 static void tipc_node_assign_peer_net(struct tipc_node *n, u32 hash_mixes)
@@ -653,40 +659,14 @@ void tipc_node_stop(struct net *net)
 	spin_unlock_bh(&tn->node_list_lock);
 }
 
-void tipc_node_subscribe(struct net *net, struct list_head *subscr, u32 addr)
+void tipc_node_subscribe(struct list_head *subscr, struct list_head *publ_list)
 {
-	struct tipc_node *n;
-
-	if (in_own_node(net, addr))
-		return;
-
-	n = tipc_node_find(net, addr);
-	if (!n) {
-		pr_warn("Node subscribe rejected, unknown node 0x%x\n", addr);
-		return;
-	}
-	tipc_node_write_lock(n);
-	list_add_tail(subscr, &n->publ_list);
-	tipc_node_write_unlock_fast(n);
-	tipc_node_put(n);
+	list_add_tail(subscr, publ_list);
 }
 
-void tipc_node_unsubscribe(struct net *net, struct list_head *subscr, u32 addr)
+void tipc_node_unsubscribe(struct list_head *subscr)
 {
-	struct tipc_node *n;
-
-	if (in_own_node(net, addr))
-		return;
-
-	n = tipc_node_find(net, addr);
-	if (!n) {
-		pr_warn("Node unsubscribe rejected, unknown node 0x%x\n", addr);
-		return;
-	}
-	tipc_node_write_lock(n);
 	list_del_init(subscr);
-	tipc_node_write_unlock_fast(n);
-	tipc_node_put(n);
 }
 
 int tipc_node_add_conn(struct net *net, u32 dnode, u32 port, u32 peer_port)
@@ -1917,10 +1897,14 @@ static void tipc_node_bc_rcv(struct net *net, struct sk_buff *skb, int bearer_id
 		tipc_node_mcast_rcv(n);
 
 	/* Handle NAME_DISTRIBUTOR messages sent from 1.7 nodes */
-	if (!skb_queue_empty(&n->bc_entry.namedq))
+	if (!skb_queue_empty(&n->bc_entry.namedq)) {
+		tipc_node_write_lock(n);
 		tipc_named_rcv(net, &n->bc_entry.namedq,
+			       &n->publ_list,
 			       &n->bc_entry.named_rcv_nxt,
 			       &n->bc_entry.named_open);
+		tipc_node_write_unlock_fast(n);
+	}
 
 	/* If reassembly or retransmission failure => reset all links to peer */
 	if (rc & TIPC_LINK_DOWN_EVT)
@@ -2198,10 +2182,14 @@ rcv:
 	if (unlikely(rc & TIPC_LINK_DOWN_EVT))
 		tipc_node_link_down(n, bearer_id, false);
 
-	if (unlikely(!skb_queue_empty(&n->bc_entry.namedq)))
+	if (unlikely(!skb_queue_empty(&n->bc_entry.namedq))) {
+		tipc_node_write_lock(n);
 		tipc_named_rcv(net, &n->bc_entry.namedq,
+			       &n->publ_list,
 			       &n->bc_entry.named_rcv_nxt,
 			       &n->bc_entry.named_open);
+		tipc_node_write_unlock_fast(n);
+	}
 
 	if (unlikely(!skb_queue_empty(&n->bc_entry.inputq1)))
 		tipc_node_mcast_rcv(n);

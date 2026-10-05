@@ -202,8 +202,10 @@ static void named_distribute(struct net *net, struct sk_buff_head *list,
  * @net: the associated network namespace
  * @dnode: destination node
  * @capabilities: peer node's capabilities
+ * @xmitq: list of skbs need to be sent
  */
-void tipc_named_node_up(struct net *net, u32 dnode, u16 capabilities)
+void tipc_named_node_up(struct net *net, u32 dnode, u16 capabilities,
+			struct sk_buff_head *xmitq)
 {
 	struct name_table *nt = tipc_name_table(net);
 	struct tipc_net *tn = tipc_net(net);
@@ -218,8 +220,7 @@ void tipc_named_node_up(struct net *net, u32 dnode, u16 capabilities)
 	spin_unlock_bh(&tn->nametbl_lock);
 
 	read_lock_bh(&nt->cluster_scope_lock);
-	named_distribute(net, &head, dnode, &nt->cluster_scope, seqno);
-	tipc_node_xmit(net, &head, dnode, 0);
+	named_distribute(net, xmitq, dnode, &nt->cluster_scope, seqno);
 	read_unlock_bh(&nt->cluster_scope_lock);
 }
 
@@ -227,12 +228,11 @@ void tipc_named_node_up(struct net *net, u32 dnode, u16 capabilities)
  * tipc_publ_purge - remove publication associated with a failed node
  * @net: the associated network namespace
  * @p: the publication to remove
- * @addr: failed node's address
  *
  * Invoked for each publication issued by a newly failed node.
  * Removes publication structure from name table & deletes it.
  */
-static void tipc_publ_purge(struct net *net, struct publication *p, u32 addr)
+static void tipc_publ_purge(struct net *net, struct publication *p)
 {
 	struct tipc_net *tn = tipc_net(net);
 	struct publication *_p;
@@ -243,14 +243,14 @@ static void tipc_publ_purge(struct net *net, struct publication *p, u32 addr)
 	spin_lock_bh(&tn->nametbl_lock);
 	_p = tipc_nametbl_remove_publ(net, &ua, &p->sk, p->key);
 	if (_p)
-		tipc_node_unsubscribe(net, &_p->binding_node, addr);
+		tipc_node_unsubscribe(&_p->binding_node);
 	spin_unlock_bh(&tn->nametbl_lock);
 	if (_p)
 		kfree_rcu(_p, rcu);
 }
 
 void tipc_publ_notify(struct net *net, struct list_head *nsub_list,
-		      u32 addr, u16 capabilities)
+		      u16 capabilities)
 {
 	struct name_table *nt = tipc_name_table(net);
 	struct tipc_net *tn = tipc_net(net);
@@ -258,7 +258,7 @@ void tipc_publ_notify(struct net *net, struct list_head *nsub_list,
 	struct publication *publ, *tmp;
 
 	list_for_each_entry_safe(publ, tmp, nsub_list, binding_node)
-		tipc_publ_purge(net, publ, addr);
+		tipc_publ_purge(net, publ);
 	spin_lock_bh(&tn->nametbl_lock);
 	if (!(capabilities & TIPC_NAMED_BCAST))
 		nt->rc_dests--;
@@ -277,7 +277,8 @@ void tipc_publ_notify(struct net *net, struct list_head *nsub_list,
  * Return: the publication item if successful, otherwise NULL.
  */
 static bool tipc_update_nametbl(struct net *net, struct distr_item *i,
-				u32 node, u32 dtype)
+				u32 node, u32 dtype,
+				struct list_head *publ_list)
 {
 	struct publication *p = NULL;
 	u32 lower = ntohl(i->lower);
@@ -301,13 +302,13 @@ static bool tipc_update_nametbl(struct net *net, struct distr_item *i,
 	if (dtype == PUBLICATION) {
 		p = tipc_nametbl_insert_publ(net, &ua, &sk, key);
 		if (p) {
-			tipc_node_subscribe(net, &p->binding_node, node);
+			tipc_node_subscribe(&p->binding_node, publ_list);
 			return true;
 		}
 	} else if (dtype == WITHDRAWAL) {
 		p = tipc_nametbl_remove_publ(net, &ua, &sk, key);
 		if (p) {
-			tipc_node_unsubscribe(net, &p->binding_node, node);
+			tipc_node_unsubscribe(&p->binding_node);
 			kfree_rcu(p, rcu);
 			return true;
 		}
@@ -371,7 +372,7 @@ static struct sk_buff *tipc_named_dequeue(struct sk_buff_head *namedq,
  * @open: last bulk msg was received (FIXME)
  */
 void tipc_named_rcv(struct net *net, struct sk_buff_head *namedq,
-		    u16 *rcv_nxt, bool *open)
+		    struct list_head *publ_list, u16 *rcv_nxt, bool *open)
 {
 	struct tipc_net *tn = tipc_net(net);
 	struct distr_item *item;
@@ -386,7 +387,8 @@ void tipc_named_rcv(struct net *net, struct sk_buff_head *namedq,
 		item = (struct distr_item *)msg_data(hdr);
 		count = msg_data_sz(hdr) / ITEM_SIZE;
 		while (count--) {
-			tipc_update_nametbl(net, item, node, msg_type(hdr));
+			tipc_update_nametbl(net, item, node,
+					    msg_type(hdr), publ_list);
 			item++;
 		}
 		kfree_skb(skb);
