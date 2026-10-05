@@ -4354,11 +4354,43 @@ static int kvm_vm_ioctl_get_clock(struct kvm *kvm, void __user *argp)
 	return 0;
 }
 
-static int kvm_vm_ioctl_set_clock(struct kvm *kvm, void __user *argp)
+static void __kvm_set_clock(struct kvm *kvm, struct kvm_clock_data *data)
 {
 	struct kvm_arch *ka = &kvm->arch;
-	struct kvm_clock_data data;
 	u64 now_raw_ns;
+
+	kvm_hv_request_tsc_page_update(kvm);
+	kvm_start_pvclock_update(kvm);
+	pvclock_update_vm_gtod_copy(kvm);
+
+	/*
+	 * This pairs with kvm_guest_time_update(): when masterclock is
+	 * in use, we use master_kernel_ns + kvmclock_offset to set
+	 * unsigned 'system_time' so if we use get_kvmclock_ns() (which
+	 * is slightly ahead) here we risk going negative on unsigned
+	 * 'system_time' when 'data->clock' is very small.
+	 */
+	if (data->flags & KVM_CLOCK_REALTIME) {
+		u64 now_real_ns = ktime_get_real_ns();
+
+		/*
+		 * Avoid stepping the kvmclock backwards.
+		 */
+		if (now_real_ns > data->realtime)
+			data->clock += now_real_ns - data->realtime;
+	}
+
+	if (ka->use_master_clock)
+		now_raw_ns = ka->master_kernel_ns;
+	else
+		now_raw_ns = get_kvmclock_base_ns();
+	ka->kvmclock_offset = data->clock - now_raw_ns;
+	kvm_end_pvclock_update(kvm);
+}
+
+static int kvm_vm_ioctl_set_clock(struct kvm *kvm, void __user *argp)
+{
+	struct kvm_clock_data data;
 
 	if (copy_from_user(&data, argp, sizeof(data)))
 		return -EFAULT;
@@ -4370,33 +4402,7 @@ static int kvm_vm_ioctl_set_clock(struct kvm *kvm, void __user *argp)
 	if (data.flags & ~KVM_CLOCK_VALID_FLAGS)
 		return -EINVAL;
 
-	kvm_hv_request_tsc_page_update(kvm);
-	kvm_start_pvclock_update(kvm);
-	pvclock_update_vm_gtod_copy(kvm);
-
-	/*
-	 * This pairs with kvm_guest_time_update(): when masterclock is
-	 * in use, we use master_kernel_ns + kvmclock_offset to set
-	 * unsigned 'system_time' so if we use get_kvmclock_ns() (which
-	 * is slightly ahead) here we risk going negative on unsigned
-	 * 'system_time' when 'data.clock' is very small.
-	 */
-	if (data.flags & KVM_CLOCK_REALTIME) {
-		u64 now_real_ns = ktime_get_real_ns();
-
-		/*
-		 * Avoid stepping the kvmclock backwards.
-		 */
-		if (now_real_ns > data.realtime)
-			data.clock += now_real_ns - data.realtime;
-	}
-
-	if (ka->use_master_clock)
-		now_raw_ns = ka->master_kernel_ns;
-	else
-		now_raw_ns = get_kvmclock_base_ns();
-	ka->kvmclock_offset = data.clock - now_raw_ns;
-	kvm_end_pvclock_update(kvm);
+	__kvm_set_clock(kvm, &data);
 	return 0;
 }
 
