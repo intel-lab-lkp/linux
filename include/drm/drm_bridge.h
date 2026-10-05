@@ -1178,6 +1178,23 @@ struct drm_bridge {
 	unsigned int hdmi_audio_spdif_playback : 1;
 
 	/**
+	 * @hdmi_audio_prepare_early: configure the sink's audio path from the
+	 * ASoC hw_params callback rather than from prepare.
+	 *
+	 * Both callbacks receive identical parameters, so for most bridges it
+	 * makes no difference and the default (prepare) is right. It matters
+	 * when the CPU side of the DAI link cannot start until the sink's
+	 * audio clock is already running: ASoC walks CPU DAIs before codec
+	 * DAIs and stops at the first error, so a CPU DAI that fails waiting
+	 * for that clock aborts the loop before this bridge's prepare is ever
+	 * reached. Qualcomm's LPASS/ADSP is one such CPU side.
+	 *
+	 * Setting this moves the configuration to hw_params, which runs for
+	 * every DAI in the link before any of them is prepared.
+	 */
+	unsigned int hdmi_audio_prepare_early : 1;
+
+	/**
 	 * @hdmi_audio_dai_port: sound DAI port for either of
 	 * @DRM_BRIDGE_OP_HDMI_AUDIO and @DRM_BRIDGE_OP_DP_AUDIO, -1 if it is
 	 * not used.

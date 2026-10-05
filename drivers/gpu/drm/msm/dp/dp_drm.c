@@ -327,6 +327,14 @@ int msm_dp_bridge_init(struct msm_dp *msm_dp_display, struct drm_device *dev,
 		bridge->hdmi_audio_dev = &msm_dp_display->pdev->dev;
 		bridge->hdmi_audio_max_i2s_playback_channels = 8;
 		bridge->hdmi_audio_dai_port = -1;
+		/*
+		 * The LPASS/ADSP side of the DAI link will not start its AFE
+		 * port until this controller's audio clock is running, and
+		 * ASoC prepares CPU DAIs before codec DAIs, so configuring
+		 * from prepare() is too late -- the CPU DAI times out and
+		 * aborts the link before we are called at all.
+		 */
+		bridge->hdmi_audio_prepare_early = 1;
 	}
 
 	rc = devm_drm_bridge_add(dev->dev, bridge);

@@ -2184,6 +2184,26 @@ struct drm_connector_hdmi_audio {
 	 * The port in DT that is used for the Codec DAI.
 	 */
 	int dai_port;
+
+	/**
+	 * @prepare_early:
+	 *
+	 * Call @funcs->prepare from the ASoC hw_params callback instead of
+	 * from prepare. See &drm_bridge.hdmi_audio_prepare_early.
+	 */
+	bool prepare_early;
+
+	/**
+	 * @prepare_done_in_hw_params:
+	 *
+	 * Private state for the @prepare_early helper implementation. Not to
+	 * be set by drivers. Tracks whether hw_params already ran
+	 * @funcs->prepare for the prepare call immediately ahead, so that
+	 * call can be skipped without skipping any other prepare -- ASoC
+	 * calls .prepare without a preceding .hw_params on XRUN recovery and
+	 * on resume from suspend, and @funcs->prepare must still run then.
+	 */
+	bool prepare_done_in_hw_params;
 };
 
 /*

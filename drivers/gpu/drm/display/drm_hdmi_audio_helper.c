@@ -34,7 +34,45 @@ static int drm_connector_hdmi_audio_prepare(struct device *dev, void *data,
 	const struct drm_connector_hdmi_audio_funcs *funcs =
 		connector->hdmi_audio.funcs;
 
+	/*
+	 * Only skip the specific prepare that hw_params already did the work
+	 * for. ASoC also reaches .prepare with no .hw_params call ahead of it
+	 * on XRUN recovery and on resume from suspend; prepare_done_in_hw_params
+	 * is clear in both cases, so the call below still runs and configures
+	 * the sink here instead of leaving it unconfigured.
+	 */
+	if (connector->hdmi_audio.prepare_early &&
+	    connector->hdmi_audio.prepare_done_in_hw_params) {
+		connector->hdmi_audio.prepare_done_in_hw_params = false;
+		return 0;
+	}
+
 	return funcs->prepare(connector, fmt, hparms);
+}
+
+/*
+ * Only used by connectors that asked for it; everyone else keeps being
+ * configured from prepare() and this returns without doing anything. See
+ * &drm_bridge.hdmi_audio_prepare_early for why a connector would want it.
+ */
+static int drm_connector_hdmi_audio_hw_params(struct device *dev, void *data,
+					      struct hdmi_codec_daifmt *fmt,
+					      struct hdmi_codec_params *hparms)
+{
+	struct drm_connector *connector = data;
+	const struct drm_connector_hdmi_audio_funcs *funcs =
+		connector->hdmi_audio.funcs;
+	int ret;
+
+	if (!connector->hdmi_audio.prepare_early)
+		return 0;
+
+	ret = funcs->prepare(connector, fmt, hparms);
+	if (ret)
+		return ret;
+
+	connector->hdmi_audio.prepare_done_in_hw_params = true;
+	return 0;
 }
 
 static void drm_connector_hdmi_audio_shutdown(struct device *dev, void *data)
@@ -130,6 +168,7 @@ EXPORT_SYMBOL(drm_connector_hdmi_audio_plugged_notify);
 
 static const struct hdmi_codec_ops drm_connector_hdmi_audio_ops = {
 	.audio_startup = drm_connector_hdmi_audio_startup,
+	.hw_params = drm_connector_hdmi_audio_hw_params,
 	.prepare = drm_connector_hdmi_audio_prepare,
 	.audio_shutdown = drm_connector_hdmi_audio_shutdown,
 	.mute_stream = drm_connector_hdmi_audio_mute_stream,
