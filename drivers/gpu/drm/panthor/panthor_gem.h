@@ -207,7 +207,7 @@ struct panthor_gem_object {
 		 */
 		const char *str;
 
-		/** @lock.str: Protects access to the @label.str field. */
+		/** @label.lock: Protects access to the @label.str field. */
 		struct mutex lock;
 	} label;
 

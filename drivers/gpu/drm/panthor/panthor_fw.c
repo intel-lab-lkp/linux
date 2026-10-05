@@ -126,19 +126,19 @@ struct panthor_fw_binary_section_entry_hdr {
 
 	/** @va: MCU virtual range to map this binary section to. */
 	struct {
-		/** @start: Start address. */
+		/** @va.start: Start address. */
 		u32 start;
 
-		/** @end: End address. */
+		/** @va.end: End address. */
 		u32 end;
 	} va;
 
 	/** @data: Data to initialize the FW section with. */
 	struct {
-		/** @start: Start offset in the FW binary. */
+		/** @data.start: Start offset in the FW binary. */
 		u32 start;
 
-		/** @end: End offset in the FW binary. */
+		/** @data.end: End offset in the FW binary. */
 		u32 end;
 	} data;
 };
@@ -192,10 +192,10 @@ struct panthor_fw_section {
 	 * We keep data around so we can reload sections after a reset.
 	 */
 	struct {
-		/** @buf: Buffed used to store init data. */
+		/** @data.buf: Buffer used to store init data. */
 		const void *buf;
 
-		/** @size: Size of @buf in bytes. */
+		/** @data.size: Size of @data.buf in bytes. */
 		size_t size;
 	} data;
 };
@@ -251,7 +251,7 @@ struct panthor_fw {
 
 	/** @watchdog: Collection of fields relating to the FW watchdog. */
 	struct {
-		/** @ping_work: Delayed work used to ping the FW. */
+		/** @watchdog.ping_work: Delayed work used to ping the FW. */
 		struct delayed_work ping_work;
 	} watchdog;
 

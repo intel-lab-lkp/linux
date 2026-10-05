@@ -146,13 +146,13 @@ struct panthor_device {
 
 	/** @clks: GPU clocks. */
 	struct {
-		/** @core: Core clock. */
+		/** @clks.core: Core clock. */
 		struct clk *core;
 
-		/** @stacks: Stacks clock. This clock is optional. */
+		/** @clks.stacks: Stacks clock. This clock is optional. */
 		struct clk *stacks;
 
-		/** @coregroup: Core group clock. This clock is optional. */
+		/** @clks.coregroup: Core group clock. This clock is optional. */
 		struct clk *coregroup;
 	} clks;
 
@@ -260,11 +260,11 @@ struct panthor_device {
 
 	/** @unplug: Device unplug related fields. */
 	struct {
-		/** @lock: Lock used to serialize unplug operations. */
+		/** @unplug.lock: Lock used to serialize unplug operations. */
 		struct mutex lock;
 
 		/**
-		 * @done: Completion object signaled when the unplug
+		 * @unplug.done: Completion object signaled when the unplug
 		 * operation is done.
 		 */
 		struct completion done;
@@ -272,17 +272,17 @@ struct panthor_device {
 
 	/** @reset: Reset related fields. */
 	struct {
-		/** @wq: Ordered worqueud used to schedule reset operations. */
+		/** @reset.wq: Ordered worqueud used to schedule reset operations. */
 		struct workqueue_struct *wq;
 
-		/** @work: Reset work. */
+		/** @reset.work: Reset work. */
 		struct work_struct work;
 
-		/** @pending: Set to true if a reset is pending. */
+		/** @reset.pending: Set to true if a reset is pending. */
 		atomic_t pending;
 
 		/**
-		 * @fast: True if the post_reset logic can proceed with a fast reset.
+		 * @reset.fast: True if the post_reset logic can proceed with a fast reset.
 		 *
 		 * A fast reset is just a reset where the driver doesn't reload the FW sections.
 		 *
@@ -295,11 +295,11 @@ struct panthor_device {
 
 	/** @pm: Power management related data. */
 	struct {
-		/** @state: Power state. */
+		/** @pm.state: Power state. */
 		atomic_t state;
 
 		/**
-		 * @mmio_lock: Lock protecting MMIO userspace CPU mappings.
+		 * @pm.mmio_lock: Lock protecting MMIO userspace CPU mappings.
 		 *
 		 * This is needed to ensure we map the dummy IO pages when
 		 * the device is being suspended, and the real IO pages when
@@ -309,14 +309,14 @@ struct panthor_device {
 		struct mutex mmio_lock;
 
 		/**
-		 * @dummy_latest_flush: Dummy LATEST_FLUSH page.
+		 * @pm.dummy_latest_flush: Dummy LATEST_FLUSH page.
 		 *
 		 * Used to replace the real LATEST_FLUSH page when the GPU
 		 * is suspended.
 		 */
 		struct page *dummy_latest_flush;
 
-		/** @recovery_needed: True when a resume attempt failed. */
+		/** @pm.recovery_needed: True when a resume attempt failed. */
 		atomic_t recovery_needed;
 	} pm;
 
@@ -332,7 +332,7 @@ struct panthor_device {
 		/** @gems.lock: Protects the device-wide list of GEM objects. */
 		struct mutex lock;
 
-		/** @node: Used to keep track of all the device's DRM objects */
+		/** @gems.node: Used to keep track of all the device's DRM objects */
 		struct list_head node;
 	} gems;
 #endif
@@ -353,7 +353,7 @@ struct panthor_file {
 	/** @user_mmio: User MMIO related fields. */
 	struct {
 		/**
-		 * @offset: Offset used for user MMIO mappings.
+		 * @user_mmio.offset: Offset used for user MMIO mappings.
 		 *
 		 * This offset should not be used to check the type of mapping
 		 * except in panthor_mmap(). After that point, MMIO mapping
