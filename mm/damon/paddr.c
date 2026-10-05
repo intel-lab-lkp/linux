@@ -118,6 +118,10 @@ static void damon_pa_prep_probes_region(struct damon_region *r,
 {
 	struct damon_prep *p;
 
+	/* event-driven probes have no software prep */
+	if (probe->event_driven)
+		return;
+
 	damon_for_each_prep(p, probe) {
 		switch (p->action) {
 		case DAMON_PREP_SET_PGIDLE:
@@ -193,6 +197,7 @@ static unsigned int damon_pa_apply_probes(struct damon_ctx *ctx,
 	struct damon_region *r;
 	struct damon_probe *p;
 	unsigned int max_wsum = 0;
+	bool sampling = damon_has_sampling_probes(ctx);
 
 	damon_for_each_target(t, ctx) {
 		damon_for_each_region(r, t) {
@@ -203,16 +208,24 @@ static unsigned int damon_pa_apply_probes(struct damon_ctx *ctx,
 			if (set_samples)
 				r->sampling_addr = damon_rand(ctx, r->ar.start,
 						r->ar.end);
+			if (!sampling)
+				goto wsum;
 			pa = damon_pa_phys_addr(r->sampling_addr,
 					ctx->addr_unit);
 			folio = damon_get_folio(PHYS_PFN(pa));
 			damon_for_each_probe(p, ctx) {
-				if (damon_pa_filter_pass(folio, p))
+				/*
+				 * Event-driven probes are credited by the ring
+				 * drain; only sampling-based probes are here.
+				 */
+				if (!p->event_driven &&
+				    damon_pa_filter_pass(folio, p))
 					r->probe_hits[i]++;
 				i++;
 			}
 			if (folio)
 				folio_put(folio);
+wsum:
 			if (return_max_wsum)
 				max_wsum = max(damon_probe_hits_wsum(r, false,
 							false, ctx), max_wsum);

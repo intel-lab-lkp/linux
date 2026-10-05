@@ -490,6 +490,10 @@ static void damon_va_prep_probe_region(struct damon_ctx *ctx,
 {
 	struct damon_prep *p;
 
+	/* event-driven probes have no software prep */
+	if (probe->event_driven)
+		return;
+
 	damon_for_each_prep(p, probe) {
 		switch (p->action) {
 		case DAMON_PREP_SET_PGIDLE:
@@ -594,7 +598,12 @@ static void damon_va_probe_folio(struct damon_ctx *ctx,
 	int i = 0;
 
 	damon_for_each_probe(probe, ctx) {
-		if (damon_va_filter_pass(folio, probe, pte, pmd, mm,
+		/*
+		 * Event-driven probes are credited by the ring drain; only
+		 * sampling-based probes are here.
+		 */
+		if (!probe->event_driven &&
+		    damon_va_filter_pass(folio, probe, pte, pmd, mm,
 					r->sampling_addr))
 			r->probe_hits[i]++;
 		i++;
@@ -703,6 +712,7 @@ static unsigned int damon_va_apply_probes(struct damon_ctx *ctx,
 	struct mm_struct *mm;
 	struct damon_region *r;
 	unsigned int max_wsum = 0;
+	bool sampling = damon_has_sampling_probes(ctx);
 
 	damon_for_each_target(t, ctx) {
 		mm = damon_get_mm(t);
@@ -710,7 +720,8 @@ static unsigned int damon_va_apply_probes(struct damon_ctx *ctx,
 			if (set_samples)
 				r->sampling_addr = damon_rand(ctx, r->ar.start,
 						r->ar.end);
-			__damon_va_apply_probes(ctx, mm, r);
+			if (sampling)
+				__damon_va_apply_probes(ctx, mm, r);
 			if (return_max_wsum)
 				max_wsum = max(damon_probe_hits_wsum(r, false,
 							false, ctx), max_wsum);

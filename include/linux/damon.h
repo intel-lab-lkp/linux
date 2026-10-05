@@ -1297,6 +1297,7 @@ void damon_destroy_filter(struct damon_filter *f);
 struct damon_probe *damon_new_probe(void);
 void damon_add_probe(struct damon_ctx *ctx, struct damon_probe *probe);
 bool damon_has_event_driven_probes(struct damon_ctx *ctx);
+bool damon_has_sampling_probes(struct damon_ctx *ctx);
 
 struct damon_region *damon_new_region(unsigned long start, unsigned long end);
 unsigned int damon_nr_accesses_mvsum(struct damon_region *r,

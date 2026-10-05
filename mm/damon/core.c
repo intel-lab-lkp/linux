@@ -364,6 +364,24 @@ bool damon_has_event_driven_probes(struct damon_ctx *ctx)
 	return false;
 }
 
+/**
+ * damon_has_sampling_probes() - return true if @ctx has a probe that DAMON
+ * samples itself, that is, one that is not event-driven.
+ * @ctx: the DAMON context whose probes are inspected.
+ *
+ * Return: true if @ctx has a probe that is not event-driven.
+ */
+bool damon_has_sampling_probes(struct damon_ctx *ctx)
+{
+	struct damon_probe *p;
+
+	damon_for_each_probe(p, ctx) {
+		if (!p->event_driven)
+			return true;
+	}
+	return false;
+}
+
 /* Does @ctx drain a perf report ring? */
 static bool damon_drains_ring_perf(struct damon_ctx *ctx)
 {
