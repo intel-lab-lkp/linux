@@ -243,6 +243,8 @@ unsigned int sd_zbc_complete(struct scsi_cmnd *cmd, unsigned int good_bytes,
 int sd_zbc_report_zones(struct gendisk *disk, sector_t sector,
 		unsigned int nr_zones, struct blk_report_zones_args *args);
 
+extern const struct blk_storage_elements_ops sd_zbc_se_ops;
+
 #else /* CONFIG_BLK_DEV_ZONED */
 
 static inline int sd_zbc_read_zones(struct scsi_disk *sdkp,
@@ -270,6 +272,8 @@ static inline unsigned int sd_zbc_complete(struct scsi_cmnd *cmd,
 }
 
 #define sd_zbc_report_zones NULL
+
+#define sd_zbc_se_ops	NULL
 
 #endif /* CONFIG_BLK_DEV_ZONED */
 
