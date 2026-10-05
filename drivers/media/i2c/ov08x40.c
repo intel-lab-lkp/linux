@@ -1582,10 +1582,24 @@ static int ov08x40_write_reg_list(struct ov08x40 *ov08x,
 	return ov08x40_write_regs(ov08x, r_list->regs, r_list->num_of_regs);
 }
 
+/* Largest mode supported by the configured number of CSI-2 data lanes */
+static const struct ov08x40_mode *
+ov08x40_default_mode(const struct ov08x40 *ov08x)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(supported_modes); i++) {
+		if (supported_modes[i].lanes == ov08x->mipi_lanes)
+			return &supported_modes[i];
+	}
+
+	return &supported_modes[0];
+}
+
 static int ov08x40_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
-	const struct ov08x40_mode *default_mode = &supported_modes[0];
 	struct ov08x40 *ov08x = to_ov08x40(sd);
+	const struct ov08x40_mode *default_mode = ov08x40_default_mode(ov08x);
 	struct v4l2_mbus_framefmt *try_fmt =
 		v4l2_subdev_state_get_format(fh->state, 0);
 
@@ -2394,7 +2408,7 @@ static int ov08x40_probe(struct i2c_client *client)
 	}
 
 	/* Set default mode to max resolution */
-	ov08x->cur_mode = &supported_modes[0];
+	ov08x->cur_mode = ov08x40_default_mode(ov08x);
 
 	ret = ov08x40_init_controls(ov08x);
 	if (ret)
