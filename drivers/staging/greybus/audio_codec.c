@@ -396,6 +396,7 @@ static int gbcodec_hw_params(struct snd_pcm_substream *substream,
 	u8 sig_bits, channels;
 	u32 format, rate;
 	struct gbaudio_module_info *module;
+	struct gbaudio_module_info *allocated_module = NULL;
 	struct gbaudio_data_connection *data;
 	struct gb_bundle *bundle;
 	struct gbaudio_codec_info *codec = dev_get_drvdata(dai->dev);
@@ -439,8 +440,10 @@ static int gbcodec_hw_params(struct snd_pcm_substream *substream,
 	/* find the data connection */
 	list_for_each_entry(module, &codec->module_list, list) {
 		data = find_data(module, dai->id);
-		if (data)
+		if (data) {
+			allocated_module = module;
 			break;
+		}
 	}
 
 	if (!data) {
@@ -456,7 +459,7 @@ static int gbcodec_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	bundle = to_gb_bundle(module->dev);
+	bundle = to_gb_bundle(allocated_module->dev);
 	ret = gb_pm_runtime_get_sync(bundle);
 	if (ret) {
 		mutex_unlock(&codec->lock);
