@@ -1169,7 +1169,9 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 			zc = MSG_SPLICE_PAGES;
 	}
 
-	if (!sockc_err && sockc.dmabuf_id && (zc != MSG_ZEROCOPY || !binding)) {
+	if (!sockc_err && sockc.dmabuf_id &&
+	    (zc != MSG_ZEROCOPY || !binding || tp->repair ||
+	     (flags & MSG_FASTOPEN) || inet_test_bit(DEFER_CONNECT, sk))) {
 		err = -EINVAL;
 		goto out_err;
 	}
