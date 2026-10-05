@@ -1570,6 +1570,12 @@ int fixup_user_fault(struct mm_struct *mm,
 
 	address = untagged_addr_remote(mm, address);
 
+	/*
+	 * If the caller passes 'unlocked' as NULL, FAULT_FLAG_ALLOW_RETRY is omitted.
+	 * This guarantees handle_mm_fault() will never drop the lock or
+	 * return VM_FAULT_COMPLETED / VM_FAULT_RETRY, making subsequent
+	 * dereferences of 'unlocked' unreachable when NULL.
+	 */
 	if (unlocked)
 		fault_flags |= FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
 
