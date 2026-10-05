@@ -378,6 +378,21 @@ retry_walk:
 	    KVM_BUG_ON(walker->max_level > PT_MAX_FULL_LEVELS, vcpu->kvm))
 		goto error;
 
+#if PTTYPE == PTTYPE_EPT
+	/*
+	 * EPT translates 48-bit guest-physical addresses with 4-level tables
+	 * and 57-bit ones with 5-level tables; hardware raises an EPT
+	 * violation for an address with bits above that width without
+	 * consulting the tables.  PT_INDEX() drops those bits, so walking
+	 * would resolve the aliased address and the shadow mapping built for
+	 * it can never satisfy the CPU.  Fail the walk the way hardware does.
+	 */
+	if (unlikely(addr >> (PAGE_SHIFT + walker->level * PT_LEVEL_BITS))) {
+		pte_access = 0;
+		goto error;
+	}
+#endif
+
 	++walker->level;
 
 	do {
