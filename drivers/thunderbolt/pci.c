@@ -77,11 +77,11 @@ static void nhi_pci_check_quirks(struct tb_nhi_pci *nhi_pci)
 		case PCI_DEVICE_ID_AMD_1AH_M70H_NHI0:
 		case PCI_DEVICE_ID_AMD_1AH_M70H_NHI1:
 			/*
-			 * These AMD hosts may hang the Tx ring when the
-			 * DMA paths are torn down so they need the host
-			 * interface reset after each teardown.
+			 * These hosts may hang the Tx ring if its HopID is
+			 * programmed again without a host interface reset
+			 * in between.
 			 */
-			nhi->quirks |= QUIRK_RESET_DMA_ON_TEARDOWN;
+			nhi->quirks |= QUIRK_RESET_DMA_ON_REUSE;
 			break;
 		}
 	}
