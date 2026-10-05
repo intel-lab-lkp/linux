@@ -58,3 +58,10 @@ config INT_CONDITIONAL_DEFAULT
 	int
 	range 1 2
 	default 3 if USE_DEFAULT
+
+# Default outside of the range of a symbol with a prompt
+
+config INT_PROMPT_DEFAULT_ABOVE_RANGE
+	int "int with prompt"
+	range 1 4
+	default 8
