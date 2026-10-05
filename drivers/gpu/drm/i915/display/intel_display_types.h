@@ -1891,6 +1891,8 @@ struct intel_dp {
 	struct drm_dp_desc desc;
 	struct drm_dp_aux aux;
 	u32 aux_busy_last_status;
+	/* we left the AUX engine busy and are waiting for it to recover */
+	bool aux_left_busy;
 	u8 train_set[4];
 
 	struct intel_pps pps;

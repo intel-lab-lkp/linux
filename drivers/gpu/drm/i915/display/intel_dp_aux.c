@@ -359,7 +359,16 @@ intel_dp_aux_xfer(struct intel_dp *intel_dp,
 	if (try == 3) {
 		const u32 status = intel_de_read(display, ch_ctl);
 
-		if (status != intel_dp->aux_busy_last_status) {
+		/*
+		 * If we left the engine busy ourselves, this is expected
+		 * while it recovers.  Otherwise someone else is using the
+		 * channel or the engine is hung.
+		 */
+		if (intel_dp->aux_left_busy) {
+			drm_dbg_kms(display->drm,
+				    "%s: not started, still waiting for the AUX engine to recover (status 0x%08x)\n",
+				    intel_dp->aux.name, status);
+		} else if (status != intel_dp->aux_busy_last_status) {
 			drm_err(display->drm,
 				"%s: not started (status 0x%08x)\n",
 				intel_dp->aux.name, status);
@@ -369,6 +378,8 @@ intel_dp_aux_xfer(struct intel_dp *intel_dp,
 		ret = -EBUSY;
 		goto out;
 	}
+
+	intel_dp->aux_left_busy = false;
 
 	/* Only 5 data registers! */
 	if (drm_WARN_ON(display->drm, send_bytes > 20 || recv_size > 20)) {
@@ -402,6 +413,7 @@ intel_dp_aux_xfer(struct intel_dp *intel_dp,
 			 * alone, the caller will retry the transaction later.
 			 */
 			if (status & DP_AUX_CH_CTL_SEND_BUSY) {
+				intel_dp->aux_left_busy = true;
 				ret = -EBUSY;
 				goto out;
 			}
