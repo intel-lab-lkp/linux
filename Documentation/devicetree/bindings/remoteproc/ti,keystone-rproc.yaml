@@ -1,0 +1,140 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/ti,keystone-rproc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI Keystone DSP devices
+
+maintainers:
+  - Suman Anna <s-anna@ti.com>
+
+description: >
+  The TI Keystone 2 family of SoCs usually have one or more (up to 8) TI DSP
+  Core sub-systems that are used to offload some of the processor-intensive
+  tasks or algorithms, for achieving various system level goals.
+
+  These processor sub-systems usually contain additional sub-modules like L1
+  and/or L2 caches/SRAMs, an Interrupt Controller, an external memory
+  controller, a dedicated local power/sleep controller etc. The DSP processor
+  core in Keystone 2 SoCs is usually a TMS320C66x CorePac processor.
+
+  Each DSP Core sub-system is represented as a single DT node, and should also
+  have an alias with the stem 'rproc' defined. Each node has a number of
+  required or optional properties that enable the OS running on the host
+  processor (ARM CorePac) to perform the device management of the remote
+  processor and to communicate with the remote processor.
+
+properties:
+  compatible:
+    enum:
+      - ti,k2hk-dsp
+      - ti,k2l-dsp
+      - ti,k2e-dsp
+      - ti,k2g-dsp
+
+  reg:
+    minItems: 3
+    maxItems: 3
+
+  reg-names:
+    items:
+      - const: l2sram
+      - const: l1pram
+      - const: l1dram
+
+  interrupts:
+    minItems: 2
+    maxItems: 2
+
+  interrupt-names:
+    items:
+      - const: vring
+      - const: exception
+
+  ti,syscon-dev:
+    description: Phandle and offset to syscon device
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    items:
+      - items:
+          - description: Phandle to Keystone Device State Control node
+          - description: offset of the DSP boot address register
+
+  resets:
+    maxItems: 1
+    description:
+      refer to either of the following reset bindings for the reset argument
+      specifier as per SoC,
+      Documentation/devicetree/bindings/reset/ti-syscon-reset.txt for
+      66AK2HK/66AK2L/66AK2E SoCs or,
+      Documentation/devicetree/bindings/reset/ti,sci-reset.yaml for 66AK2G SoCs
+
+  kick-gpios:
+    maxItems: 1
+    description:
+      GPIO used by the virtio IPC stack to interrupt the remote processor. See
+      Documentation/devicetree/bindings/gpio/ti,keystone-dsp-gpio.yaml
+
+  memory-region:
+    maxItems: 1
+    description:
+      Reserved memory node can be CMA memory node, and should be defined as per
+      Documentation/devicetree/bindings/reserved-memory/reserved-memory.txt
+
+  clocks:
+    maxItems: 1
+    description:
+      Input clock (66AK2HK/66AK2L/66AK2E only), see
+      Documentation/devicetree/bindings/clock/ti,keystone,psc-clock.yaml
+
+  power-domains:
+    maxItems: 1
+    description:
+      PM domain provider phandle and DSP device id (66AK2G only), see
+      Documentation/devicetree/bindings/soc/ti/sci-pm-domain.yaml
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts
+  - interrupt-names
+  - ti,syscon-dev
+  - resets
+  - kick-gpios
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: ti,k2g-dsp
+    then:
+      properties:
+        clocks: false
+      required:
+        - power-domains
+    else:
+      properties:
+        power-domains: false
+      required:
+        - clocks
+
+additionalProperties: false
+
+examples:
+  - |
+    dsp@10800000 {
+      compatible = "ti,k2g-dsp";
+      reg = <0x10800000 0x00100000>,
+            <0x10e00000 0x00008000>,
+            <0x10f00000 0x00008000>;
+      reg-names = "l2sram", "l1pram", "l1dram";
+      power-domains = <&k2g_pds 0x0046>;
+      ti,syscon-dev = <&devctrl 0x844>;
+      resets = <&k2g_reset 0x0046 0x1>;
+      interrupts = <0>, <8>;
+      interrupt-names = "vring", "exception";
+      kick-gpios = <&dspgpio0 27 0>;
+      memory-region = <&dsp_common_memory>;
+    };
