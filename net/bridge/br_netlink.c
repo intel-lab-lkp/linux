@@ -603,7 +603,10 @@ static int br_fill_ifinfo(struct sk_buff *skb,
 		struct nlattr *cfm_nest = NULL;
 		int err;
 
-		if (!br_cfm_created(br) || port)
+		/* A bridge with no MEPs gets an empty IFLA_BRIDGE_CFM, so a
+		 * listener can tell that the last MEP is gone.
+		 */
+		if (!IS_ENABLED(CONFIG_BRIDGE_CFM) || port)
 			goto done;
 
 		cfm_nest = nla_nest_start(skb, IFLA_BRIDGE_CFM);
