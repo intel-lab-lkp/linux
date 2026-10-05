@@ -110,14 +110,14 @@ struct btrfs_bio_ctrl {
 	 * make the decision when submitting the bio.
 	 *
 	 * The pattern between do_readpage(), submit_one_bio() and
-	 * submit_one_block() is quite subtle, so tracking this is tricky.
+	 * submit_folio_blocks() is quite subtle, so tracking this is tricky.
 	 *
 	 * As we process extent E, we might submit a bio with existing built up
 	 * extents before adding E to a new bio, or we might just add E to the
 	 * bio. As a result, E's generation could apply to the current bio or
 	 * to the next one, so we need to be careful to update the bio_ctrl's
 	 * generation with E's only when we are sure E is added to bio_ctrl->bbio
-	 * in submit_one_block().
+	 * in submit_folio_blocks().
 	 *
 	 * See the comment in btrfs_lookup_bio_sums() for more detail on the
 	 * need for this optimization.
@@ -800,6 +800,7 @@ static int alloc_new_bio(struct btrfs_inode *inode,
  * @disk_bytenr: logical bytenr where the read/write will be
  * @folio:	 the folio the block belongs to
  * @pg_offset:	 the offset inside the folio
+ * @len:	 the length of the range.
  * @read_em_generation: generation of the extent_map we are submitting
  *			(only used for read)
  *
@@ -811,16 +812,15 @@ static int alloc_new_bio(struct btrfs_inode *inode,
  * Return 0 if the block is queued or submitted.
  * Return <0 for error.
  */
-static int submit_one_block(struct btrfs_bio_ctrl *bio_ctrl,
-			    u64 disk_bytenr, struct folio *folio,
-			    unsigned long pg_offset, u64 read_em_generation)
+static int submit_folio_blocks(struct btrfs_bio_ctrl *bio_ctrl,
+			       u64 disk_bytenr, struct folio *folio,
+			       size_t pg_offset, size_t len, u64 read_em_generation)
 {
 	struct btrfs_inode *inode = folio_to_inode(folio);
 	const struct btrfs_fs_info *fs_info = inode->root->fs_info;
-	const u32 blocksize = fs_info->sectorsize;
 	loff_t file_offset = folio_pos(folio) + pg_offset;
 
-	ASSERT(pg_offset + blocksize <= folio_size(folio));
+	ASSERT(pg_offset + len <= folio_size(folio));
 	ASSERT(bio_ctrl->end_io_func);
 
 	if (bio_ctrl->bbio &&
@@ -837,7 +837,7 @@ again:
 			return ret;
 	}
 
-	if (!bio_add_folio(&bio_ctrl->bbio->bio, folio, blocksize, pg_offset)) {
+	if (!bio_add_folio(&bio_ctrl->bbio->bio, folio, len, pg_offset)) {
 		/* bio full: move on to a new one */
 		submit_one_bio(bio_ctrl);
 		goto again;
@@ -848,10 +848,10 @@ again:
 	 * generation in the max generation calculation.
 	 */
 	bio_ctrl->generation = max(bio_ctrl->generation, read_em_generation);
-	bio_ctrl->next_file_offset += blocksize;
+	bio_ctrl->next_file_offset += len;
 
 	if (bio_ctrl->wbc)
-		wbc_account_cgroup_owner(bio_ctrl->wbc, folio, blocksize);
+		wbc_account_cgroup_owner(bio_ctrl->wbc, folio, len);
 
 	/*
 	 * len_to_oe_boundary defaults to U32_MAX, which isn't folio or sector
@@ -863,7 +863,7 @@ again:
 	 * extent size (128MiB).
 	 *
 	 * When len_to_oe_boundary is U32_MAX, decreasing the length by
-	 * blocksize will never make it reach 0, thus skipping the later
+	 * @len will never make it reach 0, thus skipping the later
 	 * submit_one_bio() call.  So if len_to_oe_boundary() is not tracking
 	 * an OE, do not decrease it.
 	 *
@@ -872,7 +872,7 @@ again:
 	 * extents.
 	 */
 	if (bio_ctrl->len_to_oe_boundary != U32_MAX)
-		bio_ctrl->len_to_oe_boundary -= blocksize;
+		bio_ctrl->len_to_oe_boundary -= len;
 
 	/* Ordered extent boundary: move on to a new bio. */
 	if (bio_ctrl->len_to_oe_boundary == 0)
@@ -1035,12 +1035,13 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 	struct btrfs_fs_info *fs_info = inode_to_fs_info(inode);
 	u64 start = folio_pos(folio);
 	const u64 end = start + folio_size(folio) - 1;
+	const u64 fnext = folio_next_pos(folio);
+	u64 cur = start;
 	u64 extent_offset;
 	u64 locked_end;
 	u64 last_byte = i_size_read(inode);
 	struct extent_map *em;
 	int ret = 0;
-	const size_t blocksize = fs_info->sectorsize;
 
 	if (bio_ctrl->ractl)
 		locked_end = readahead_pos(bio_ctrl->ractl) + readahead_length(bio_ctrl->ractl) - 1;
@@ -1062,24 +1063,29 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 	}
 	bio_ctrl->end_io_func = end_bbio_data_read;
 	begin_folio_read(fs_info, folio);
-	for (u64 cur = start; cur <= end; cur += blocksize) {
+	while (cur < fnext) {
 		enum btrfs_compression_type compress_type = BTRFS_COMPRESS_NONE;
-		unsigned long pg_offset = offset_in_folio(folio, cur);
 		bool force_bio_submit = false;
+		bool uptodate;
+		u32 cur_len;
+		unsigned int pg_offset;
 		u64 disk_bytenr;
 		u64 block_start;
 		u64 em_gen;
 
-		ASSERT(IS_ALIGNED(cur, fs_info->sectorsize));
 		if (cur >= last_byte) {
-			folio_zero_range(folio, pg_offset, end - cur + 1);
+			folio_zero_range(folio, offset_in_folio(folio, cur), end - cur + 1);
 			end_folio_read(vi, folio, true, cur, end - cur + 1);
 			break;
 		}
-		if (btrfs_folio_test_uptodate(fs_info, folio, cur, blocksize)) {
-			end_folio_read(vi, folio, true, cur, blocksize);
+		uptodate = btrfs_folio_find_next_read_range(fs_info, folio, cur, &cur_len);
+		if (uptodate) {
+			end_folio_read(vi, folio, true, cur, cur_len);
+			cur += cur_len;
 			continue;
 		}
+		pg_offset = offset_in_folio(folio, cur);
+
 		/*
 		 * Search extent map for the whole locked range.
 		 * This will allow btrfs_get_extent() to return a larger hole
@@ -1160,18 +1166,22 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 		bio_ctrl->last_em_start = em->start;
 
 		em_gen = em->generation;
+		cur_len = min_t(u64, btrfs_extent_map_end(em) - cur, cur_len);
 		btrfs_free_extent_map(em);
 		em = NULL;
 
 		/* we've found a hole, just zero and go on */
 		if (block_start == EXTENT_MAP_HOLE) {
-			folio_zero_range(folio, pg_offset, blocksize);
-			end_folio_read(vi, folio, true, cur, blocksize);
+			folio_zero_range(folio, pg_offset, cur_len);
+			end_folio_read(vi, folio, true, cur, cur_len);
+			cur += cur_len;
 			continue;
 		}
 		/* the get_extent function already copied into the folio */
 		if (block_start == EXTENT_MAP_INLINE) {
-			end_folio_read(vi, folio, true, cur, blocksize);
+			ASSERT(cur_len == fs_info->sectorsize);
+			end_folio_read(vi, folio, true, cur, cur_len);
+			cur += cur_len;
 			continue;
 		}
 
@@ -1182,9 +1192,11 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 
 		if (force_bio_submit)
 			submit_one_bio(bio_ctrl);
-		ret = submit_one_block(bio_ctrl, disk_bytenr, folio, pg_offset, em_gen);
+		ret = submit_folio_blocks(bio_ctrl, disk_bytenr, folio,
+					  pg_offset, cur_len, em_gen);
 		/* Read submission should not fail. */
 		ASSERT(ret == 0);
+		cur += cur_len;
 	}
 	return 0;
 }
@@ -1879,8 +1891,8 @@ static int submit_write_sector(struct btrfs_inode *inode,
 	 */
 	ASSERT(folio_test_writeback(folio));
 
-	ret = submit_one_block(bio_ctrl, disk_bytenr, folio,
-			       offset_in_folio(folio, filepos), 0);
+	ret = submit_folio_blocks(bio_ctrl, disk_bytenr, folio,
+				  offset_in_folio(folio, filepos), sectorsize, 0);
 	if (unlikely(ret < 0)) {
 		btrfs_folio_clear_writeback(fs_info, folio, filepos, sectorsize);
 		btrfs_mark_ordered_io_finished(inode, filepos, fs_info->sectorsize,
