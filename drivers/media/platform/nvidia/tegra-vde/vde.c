@@ -238,6 +238,8 @@ static int tegra_vde_probe(struct platform_device *pdev)
 	vde->soc = of_device_get_match_data(&pdev->dev);
 	vde->dev = dev;
 
+	dma_set_max_seg_size(dev, UINT_MAX);
+
 	vde->sxe = devm_platform_ioremap_resource_byname(pdev, "sxe");
 	if (IS_ERR(vde->sxe))
 		return PTR_ERR(vde->sxe);
