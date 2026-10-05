@@ -6979,11 +6979,8 @@ static void set_carrier(struct r8152 *tp)
 {
 	struct net_device *netdev = tp->netdev;
 	struct napi_struct *napi = &tp->napi;
-	u16 speed;
 
-	speed = rtl8152_get_speed(tp);
-
-	if (speed & LINK_STATUS) {
+	if (r8152_mdio_read(tp, MII_BMSR) & BMSR_LSTATUS) {
 		if (!netif_carrier_ok(netdev)) {
 			tp->rtl_ops.enable(tp);
 			netif_stop_queue(netdev);
@@ -8653,7 +8650,7 @@ static int rtl8152_runtime_resume(struct r8152 *tp)
 		set_bit(WORK_ENABLE, &tp->flags);
 
 		if (netif_carrier_ok(netdev)) {
-			if (rtl8152_get_speed(tp) & LINK_STATUS) {
+			if (r8152_mdio_read(tp, MII_BMSR) & BMSR_LSTATUS) {
 				rtl_start_rx(tp);
 			} else {
 				netif_carrier_off(netdev);
