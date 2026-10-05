@@ -10,9 +10,16 @@
 #include <linux/ioctl.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/srcu.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ctrls.h>
+
+/*
+ * Subdevs notify from their own context, unsynchronized with the bridge
+ * unregistering them. Readers hold this while calling into the bridge.
+ */
+DEFINE_STATIC_SRCU(v4l2_subdev_notify_srcu);
 
 int v4l2_device_register(struct device *dev, struct v4l2_device *v4l2_dev)
 {
@@ -108,6 +115,16 @@ void v4l2_device_unregister(struct v4l2_device *v4l2_dev)
 }
 EXPORT_SYMBOL_GPL(v4l2_device_unregister);
 
+/*
+ * Stop notifications to sd->v4l2_dev and wait for those in progress.
+ * Callbacks read sd->v4l2_dev, so it must stay set until this returns.
+ */
+static void v4l2_subdev_disable_notify(struct v4l2_subdev *sd)
+{
+	WRITE_ONCE(sd->notify_enabled, false);
+	synchronize_srcu(&v4l2_subdev_notify_srcu);
+}
+
 int __v4l2_device_register_subdev(struct v4l2_device *v4l2_dev,
 				  struct v4l2_subdev *sd, struct module *module)
 {
@@ -131,6 +148,8 @@ int __v4l2_device_register_subdev(struct v4l2_device *v4l2_dev,
 		return -ENODEV;
 
 	sd->v4l2_dev = v4l2_dev;
+	/* Pairs with smp_load_acquire() in v4l2_subdev_notify() */
+	smp_store_release(&sd->notify_enabled, true);
 	/* This just returns 0 if either of the two args is NULL */
 	err = v4l2_ctrl_add_handler(v4l2_dev->ctrl_handler, sd->ctrl_handler,
 				    NULL, true);
@@ -165,6 +184,7 @@ error_unregister:
 	media_device_unregister_entity(&sd->entity);
 #endif
 error_module:
+	v4l2_subdev_disable_notify(sd);
 	if (!sd->owner_v4l2_dev)
 		module_put(sd->owner);
 	sd->v4l2_dev = NULL;
@@ -274,6 +294,8 @@ void v4l2_device_unregister_subdev(struct v4l2_subdev *sd)
 	list_del(&sd->list);
 	spin_unlock(&v4l2_dev->lock);
 
+	v4l2_subdev_disable_notify(sd);
+
 	if (sd->internal_ops && sd->internal_ops->unregistered)
 		sd->internal_ops->unregistered(sd);
 	sd->v4l2_dev = NULL;
@@ -293,3 +315,23 @@ void v4l2_device_unregister_subdev(struct v4l2_subdev *sd)
 		v4l2_subdev_release(sd);
 }
 EXPORT_SYMBOL_GPL(v4l2_device_unregister_subdev);
+
+void v4l2_subdev_notify(struct v4l2_subdev *sd, unsigned int notification,
+			void *arg)
+{
+	struct v4l2_device *v4l2_dev;
+	int idx;
+
+	if (!sd)
+		return;
+
+	idx = srcu_read_lock(&v4l2_subdev_notify_srcu);
+	/* Pairs with smp_store_release() in __v4l2_device_register_subdev() */
+	if (smp_load_acquire(&sd->notify_enabled)) {
+		v4l2_dev = sd->v4l2_dev;
+		if (v4l2_dev->notify)
+			v4l2_dev->notify(sd, notification, arg);
+	}
+	srcu_read_unlock(&v4l2_subdev_notify_srcu, idx);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_notify);

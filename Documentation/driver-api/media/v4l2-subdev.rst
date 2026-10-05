@@ -345,9 +345,11 @@ e.g. AUDIO_CONTROLLER and specify that as the group ID value when calling
 that needs it.
 
 If the sub-device needs to notify its v4l2_device parent of an event, then
-it can call ``v4l2_subdev_notify(sd, notification, arg)``. This macro checks
-whether there is a ``notify()`` callback defined and returns ``-ENODEV`` if not.
-Otherwise the result of the ``notify()`` call is returned.
+it can call ``v4l2_subdev_notify(sd, notification, arg)``. This calls the
+``notify()`` callback of the v4l2_device the sub-device is registered with, if
+there is one, and does nothing otherwise. Once
+``v4l2_device_unregister_subdev()`` returns, the callback is no longer running
+for that sub-device and will not be called for it again.
 
 V4L2 sub-device userspace API
 -----------------------------

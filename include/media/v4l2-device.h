@@ -234,13 +234,16 @@ v4l2_device_register_ro_subdev_nodes(struct v4l2_device *v4l2_dev)
  *	type is driver-specific.
  * @arg: arguments for the notification. Those are specific to each
  *	notification type.
+ *
+ * May be called from any context, including hard interrupts; the
+ * &v4l2_device.notify callback has to cope with the caller's context.
+ * Unregistering @sd waits for callbacks already running. The callback must
+ * therefore not wait for anything the unregistering thread may hold, such
+ * as a mutex held by the caller of v4l2_device_unregister_subdev() or the
+ * v4l2-async notifier lock.
  */
-static inline void v4l2_subdev_notify(struct v4l2_subdev *sd,
-				      unsigned int notification, void *arg)
-{
-	if (sd && sd->v4l2_dev && sd->v4l2_dev->notify)
-		sd->v4l2_dev->notify(sd, notification, arg);
-}
+void v4l2_subdev_notify(struct v4l2_subdev *sd, unsigned int notification,
+			void *arg);
 
 /**
  * v4l2_device_supports_requests - Test if requests are supported.

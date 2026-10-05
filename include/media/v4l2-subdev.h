@@ -997,6 +997,9 @@ struct v4l2_subdev_platform_data {
  * @owner: The owner is the same as the driver's &struct device owner.
  * @owner_v4l2_dev: true if the &sd->owner matches the owner of @v4l2_dev->dev
  *	owner. Initialized by v4l2_device_register_subdev().
+ * @notify_enabled: v4l2_subdev_notify() reaches @v4l2_dev. Set on
+ *	registration and cleared before @v4l2_dev is, see
+ *	v4l2_device_unregister_subdev().
  * @flags: subdev flags. Can be:
  *   %V4L2_SUBDEV_FL_IS_I2C - Set this flag if this subdev is a i2c device;
  *   %V4L2_SUBDEV_FL_IS_SPI - Set this flag if this subdev is a spi device;
@@ -1054,6 +1057,7 @@ struct v4l2_subdev {
 	struct list_head list;
 	struct module *owner;
 	bool owner_v4l2_dev;
+	bool notify_enabled;
 	u32 flags;
 	struct v4l2_device *v4l2_dev;
 	const struct v4l2_subdev_ops *ops;
