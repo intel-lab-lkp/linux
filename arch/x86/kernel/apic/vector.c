@@ -685,14 +685,21 @@ int x86_fwspec_is_ioapic(struct irq_fwspec *fwspec)
 
 int x86_fwspec_is_hpet(struct irq_fwspec *fwspec)
 {
+	const char *fwname;
+	unsigned int val;
+
 	if (fwspec->param_count != 1)
 		return 0;
 
-	if (is_fwnode_irqchip(fwspec->fwnode)) {
-		const char *fwname = fwnode_get_name(fwspec->fwnode);
-		return fwname && !strncmp(fwname, "HPET-MSI-", 9) &&
-			simple_strtol(fwname+9, NULL, 10) == fwspec->param[0];
-	}
+	if (!is_fwnode_irqchip(fwspec->fwnode))
+		return 0;
+
+	fwname = fwnode_get_name(fwspec->fwnode);
+
+	if (fwname && sscanf(fwname, "HPET-MSI-%u", &val) == 1 &&
+	    val == fwspec->param)
+		return 1;
+
 	return 0;
 }
 
