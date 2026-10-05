@@ -895,8 +895,8 @@ static void rcar_gen3_phy_usb2_vbus_disable_action(void *data)
 	regulator_disable(vbus);
 }
 
-static int rcar_gen3_phy_usb2_vbus_regulator_get_exclusive_enable(struct rcar_gen3_chan *channel,
-								  bool enable)
+static int rcar_gen3_phy_usb2_vbus_regulator_get_exclusive(struct rcar_gen3_chan *channel,
+							   bool acquire)
 {
 	struct device *dev = channel->dev;
 	int ret;
@@ -914,15 +914,27 @@ static int rcar_gen3_phy_usb2_vbus_regulator_get_exclusive_enable(struct rcar_ge
 		return 0;
 	}
 
-	if (enable) {
+	if (acquire) {
 		ret = regulator_enable(channel->vbus);
 		if (ret)
 			return ret;
 	}
 
-	if (regulator_is_enabled(channel->vbus))
+	if (regulator_is_enabled(channel->vbus)) {
+		/*
+		 * The internal regulator is enabled above only so that the regulator
+		 * core holds a reference to it. Do not drive VBUS until the port's
+		 * role is known; rcar_gen3_enable_vbus_ctrl() switches it from then on.
+		 */
+		ret = regulator_hardware_enable(channel->vbus, false);
+		if (ret) {
+			regulator_disable(channel->vbus);
+			return ret;
+		}
+
 		return devm_add_action_or_reset(dev, rcar_gen3_phy_usb2_vbus_disable_action,
 						channel->vbus);
+	}
 
 	return 0;
 }
@@ -932,7 +944,7 @@ static int rcar_gen3_phy_usb2_vbus_regulator_register(struct rcar_gen3_chan *cha
 	struct device *dev = channel->dev;
 	struct regulator_config rcfg = { .dev = dev, };
 	struct regulator_dev *rdev;
-	bool enable = false;
+	bool acquire = false;
 
 	rcfg.of_node = of_get_available_child_by_name(dev->of_node,
 						      "vbus-regulator");
@@ -946,10 +958,10 @@ static int rcar_gen3_phy_usb2_vbus_regulator_register(struct rcar_gen3_chan *cha
 					     "Failed to create vbus-regulator\n");
 
 		channel->otg_internal_reg = true;
-		enable = true;
+		acquire = true;
 	}
 
-	return rcar_gen3_phy_usb2_vbus_regulator_get_exclusive_enable(channel, enable);
+	return rcar_gen3_phy_usb2_vbus_regulator_get_exclusive(channel, acquire);
 }
 
 static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
