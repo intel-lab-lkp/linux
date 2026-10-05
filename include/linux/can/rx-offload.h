@@ -23,6 +23,9 @@ struct can_rx_offload {
 	struct sk_buff_head skb_irq_queue;
 	u32 skb_queue_len_max;
 
+	struct sk_buff *flush_skb;
+	u32 flush_len;
+
 	unsigned int mb_first;
 	unsigned int mb_last;
 
@@ -54,6 +57,7 @@ unsigned int can_rx_offload_get_echo_skb_queue_tail(struct can_rx_offload *offlo
 						    unsigned int *frame_len_ptr);
 void can_rx_offload_irq_finish(struct can_rx_offload *offload);
 void can_rx_offload_threaded_irq_finish(struct can_rx_offload *offload);
+void can_rx_offload_threaded_irq_flush(struct can_rx_offload *offload);
 void can_rx_offload_del(struct can_rx_offload *offload);
 void can_rx_offload_enable(struct can_rx_offload *offload);
 

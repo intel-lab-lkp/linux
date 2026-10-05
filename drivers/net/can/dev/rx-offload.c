@@ -338,6 +338,8 @@ void can_rx_offload_threaded_irq_finish(struct can_rx_offload *offload)
 	skb_queue_splice_tail_init(&offload->skb_irq_queue, &offload->skb_queue);
 	spin_unlock_irqrestore(&offload->skb_queue.lock, flags);
 
+	offload->flush_skb = NULL;
+
 	queue_len = skb_queue_len(&offload->skb_queue);
 	if (queue_len > offload->skb_queue_len_max / 8)
 		netdev_dbg(offload->dev, "%s: queue_len=%d\n",
@@ -348,6 +350,90 @@ void can_rx_offload_threaded_irq_finish(struct can_rx_offload *offload)
 	local_bh_enable();
 }
 EXPORT_SYMBOL_GPL(can_rx_offload_threaded_irq_finish);
+
+/**
+ * __skb_cut_position - cut a skb list into two
+ * @list: a new list to add all removed entries
+ * @head: a list with entries
+ * @entry: an entry within head, could be the head itself
+ *	and if so we won't cut the list
+ * @qlen: length up to @entry in @head
+ *
+ * This helper moves the initial part of @head, up to and including
+ * @entry, from @head to @list. You should pass on @entry an element
+ * you know is on @head and @qlen being the position of that element
+ * on @head. @list should be an empty list or a list you do not care
+ * about losing its data.
+ *
+ */
+static inline void __skb_cut_position(struct sk_buff_head *list,
+				      struct sk_buff_head *head,
+				      struct sk_buff *entry,
+				      __u32 qlen)
+{
+	struct sk_buff *new_first = entry->next;
+	struct sk_buff *first = head->next;
+
+	WRITE_ONCE(list->next, first);
+	WRITE_ONCE(list->next->prev, (struct sk_buff *)list);
+	WRITE_ONCE(list->prev, entry);
+	WRITE_ONCE(entry->next, (struct sk_buff *)list);
+	list->qlen = qlen;
+
+	WRITE_ONCE(head->next, new_first);
+	WRITE_ONCE(new_first->prev, (struct sk_buff *)head);
+	head->qlen -= qlen;
+}
+
+/**
+ * can_rx_offload_threaded_irq_flush() - partially flush the rx_offload queue
+ * @offload: pointer to rx_offload context
+ *
+ * If can_rx_offload->skb_irq_queue exceeds 3/4 of the maximal queue
+ * length (can_rx_offload->skb_queue_len_max) flush about 1/2 of the
+ * maximal queue length to NAPI.
+ *
+ * This function is intended to be called within the loop of threaded
+ * IRQ handlers, which run until all IRQs have been served.
+ *
+ */
+void can_rx_offload_threaded_irq_flush(struct can_rx_offload *offload)
+{
+	struct sk_buff_head tmp_queue;
+	unsigned long flags;
+	u32 irq_queue_len, queue_len;
+
+	irq_queue_len = skb_queue_len(&offload->skb_irq_queue);
+	if (irq_queue_len < offload->skb_queue_len_max / 2)
+		return;
+
+	if (!offload->flush_skb) {
+		offload->flush_skb = skb_peek_tail(&offload->skb_irq_queue);
+		offload->flush_len = irq_queue_len;
+	}
+
+	if (irq_queue_len < offload->skb_queue_len_max * 3 / 4)
+		return;
+
+	__skb_cut_position(&tmp_queue, &offload->skb_irq_queue,
+			   offload->flush_skb, offload->flush_len);
+
+	spin_lock_irqsave(&offload->skb_queue.lock, flags);
+	skb_queue_splice_tail_init(&tmp_queue, &offload->skb_queue);
+	spin_unlock_irqrestore(&offload->skb_queue.lock, flags);
+
+	offload->flush_skb = NULL;
+
+	queue_len = skb_queue_len(&offload->skb_queue);
+	if (queue_len > offload->skb_queue_len_max / 8)
+		netdev_dbg(offload->dev, "%s: queue_len=%d\n",
+			   __func__, queue_len);
+
+	local_bh_disable();
+	napi_schedule(&offload->napi);
+	local_bh_enable();
+}
+EXPORT_SYMBOL_GPL(can_rx_offload_threaded_irq_flush);
 
 static int can_rx_offload_init_queue(struct net_device *dev,
 				     struct can_rx_offload *offload,
@@ -360,6 +446,8 @@ static int can_rx_offload_init_queue(struct net_device *dev,
 	offload->skb_queue_len_max *= 4;
 	skb_queue_head_init(&offload->skb_queue);
 	__skb_queue_head_init(&offload->skb_irq_queue);
+	offload->flush_skb = NULL;
+	offload->flush_len = 0;
 
 	netif_napi_add_weight(dev, &offload->napi, can_rx_offload_napi_poll,
 			      weight);
