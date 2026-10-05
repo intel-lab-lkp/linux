@@ -546,7 +546,7 @@ void sym_calc_value(struct symbol *sym)
 			if (ds) {
 				sym->flags |= SYMBOL_WRITE;
 				sym_calc_value(ds);
-				newval.val = ds->curr.val;
+				newval.val = (char *)sym_get_string_value(ds);
 			}
 		}
 		break;
@@ -887,7 +887,7 @@ const char *sym_get_string_default(struct symbol *sym)
 			ds = prop_get_symbol(prop);
 			if (ds != NULL) {
 				sym_calc_value(ds);
-				str = (const char *)ds->curr.val;
+				str = sym_get_string_value(ds);
 			}
 		}
 	}
