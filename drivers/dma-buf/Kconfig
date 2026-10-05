@@ -49,6 +49,29 @@ config DMABUF_DEBUG
 	  exporters. Specifically it validates that importers do not peek at the
 	  underlying struct page when they import a buffer.
 
+config DMABUF_DEBUG_WARN
+	bool "Warn instead of hiding the pages from DMA-BUF importers"
+	depends on DMABUF_DEBUG
+	select NEED_SG_DMA_FLAGS
+	help
+	  DMABUF_DEBUG normally hands importers a copy of the exporter's
+	  sg_table without the struct page pointers, so that an importer which
+	  uses them fails early.
+
+	  With this option the copy keeps the pages, offsets and lengths and is
+	  only marked. sg_page() and the helpers built on it, sg_nents_for_len()
+	  and sg_split() then print a rate limited message with a stack trace
+	  when they are used on such a table. The access itself continues
+	  instead of failing because the fields were cleared. The message is
+	  not a WARN(): it does not taint the kernel or trigger panic_on_warn.
+
+	  Importers that read sg->offset or sg->length directly are not
+	  noticed. The option adds a test to every sg_page() call. It selects
+	  NEED_SG_DMA_FLAGS, which adds dma_flags and may increase the size of
+	  struct scatterlist.
+
+	  If unsure, say N.
+
 config DMABUF_KUNIT_TEST
 	tristate "KUnit tests for DMA-BUF" if !KUNIT_ALL_TESTS
 	depends on KUNIT

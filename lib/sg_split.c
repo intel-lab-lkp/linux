@@ -33,6 +33,8 @@ static int sg_calculate_split(struct scatterlist *in, int nents, int nb_splits,
 	}
 
 	for_each_sg(in, sg, nents, i) {
+		if (!mapped)
+			sg_dmabuf_cpu_access_check(sg);
 		sglen = mapped ? sg_dma_len(sg) : sg->length;
 		if (skip > sglen) {
 			skip -= sglen;

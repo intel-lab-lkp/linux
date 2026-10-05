@@ -57,6 +57,7 @@
 struct dma_buf_sg_table_wrapper {
 	struct sg_table *original;
 	struct sg_table wrapper;
+	unsigned int alloc_nents;
 };
 
 static inline int is_dma_buf_file(struct file *);
@@ -874,11 +875,42 @@ void dma_buf_put(struct dma_buf *dmabuf)
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_put, "DMA_BUF");
 
+#ifdef CONFIG_DMABUF_DEBUG_WARN
+/*
+ * Warn mode: the importer also gets the CPU side of the exporter's table,
+ * marked so that sg_page() and friends can report who uses it.
+ */
+static void dma_buf_wrap_cpu_side(struct sg_table *to, struct sg_table *from)
+{
+	struct scatterlist *to_sg, *from_sg;
+	int i;
+
+	for_each_sgtable_sg(to, to_sg, i)
+		to_sg->dma_flags |= SG_DMA_DMABUF_DEBUG;
+
+	to_sg = to->sgl;
+	for_each_sgtable_sg(from, from_sg, i) {
+		sg_assign_page(to_sg, sg_page(from_sg));
+		to_sg->offset = from_sg->offset;
+		to_sg->length = from_sg->length;
+		to_sg = sg_next(to_sg);
+	}
+
+	to->nents = from->nents;
+	to->orig_nents = from->orig_nents;
+}
+#else
+static void dma_buf_wrap_cpu_side(struct sg_table *to, struct sg_table *from)
+{
+}
+#endif
+
 static int dma_buf_wrap_sg_table(struct sg_table **sg_table)
 {
 	struct scatterlist *to_sg, *from_sg;
 	struct sg_table *from = *sg_table;
 	struct dma_buf_sg_table_wrapper *to;
+	unsigned int nents = from->nents;
 	int i, ret;
 
 	if (!IS_ENABLED(CONFIG_DMABUF_DEBUG))
@@ -888,14 +920,21 @@ static int dma_buf_wrap_sg_table(struct sg_table **sg_table)
 	 * To catch abuse of the underlying struct page by importers copy the
 	 * sg_table without copying the page_link and give only the copy back to
 	 * the importer.
+	 *
+	 * With DMABUF_DEBUG_WARN the copy keeps the CPU side, which can have
+	 * more entries than the DMA side.
 	 */
 	to = kzalloc_obj(*to);
 	if (!to)
 		return -ENOMEM;
 
-	ret = sg_alloc_table(&to->wrapper, from->nents, GFP_KERNEL);
+	if (IS_ENABLED(CONFIG_DMABUF_DEBUG_WARN))
+		nents = max(nents, from->orig_nents);
+
+	ret = sg_alloc_table(&to->wrapper, nents, GFP_KERNEL);
 	if (ret)
 		goto free_to;
+	to->alloc_nents = nents;
 
 	to_sg = to->wrapper.sgl;
 	for_each_sgtable_dma_sg(from, from_sg, i) {
@@ -910,6 +949,7 @@ static int dma_buf_wrap_sg_table(struct sg_table **sg_table)
 #endif
 		to_sg = sg_next(to_sg);
 	}
+	dma_buf_wrap_cpu_side(&to->wrapper, from);
 
 	to->original = from;
 	*sg_table = &to->wrapper;
@@ -929,6 +969,8 @@ static void dma_buf_unwrap_sg_table(struct sg_table **sg_table)
 
 	copy = container_of(*sg_table, typeof(*copy), wrapper);
 	*sg_table = copy->original;
+	/* sg_free_table() needs the number of allocated entries */
+	copy->wrapper.orig_nents = copy->alloc_nents;
 	sg_free_table(&copy->wrapper);
 	kfree(copy);
 }

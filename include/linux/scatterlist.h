@@ -21,6 +21,13 @@ struct scatterlist {
 #endif
 };
 
+/* Bits in dma_flags, see below. sg_page() needs SG_DMA_DMABUF_DEBUG. */
+#ifdef CONFIG_NEED_SG_DMA_FLAGS
+#define SG_DMA_BUS_ADDRESS	(1 << 0)
+#define SG_DMA_SWIOTLB		(1 << 1)
+#define SG_DMA_DMABUF_DEBUG	(1 << 2)
+#endif
+
 /*
  * These macros should be used after a dma_map_sg call has been done
  * to get bus addresses of each of the SG entries and their lengths.
@@ -188,11 +195,27 @@ static inline void sg_set_folio(struct scatterlist *sg, struct folio *folio,
 	sg->length = len;
 }
 
+#ifdef CONFIG_DMABUF_DEBUG_WARN
+void sg_dmabuf_cpu_access_warn(void);
+
+/* Report use of the CPU side of a table that a DMA-BUF importer was given */
+static inline void sg_dmabuf_cpu_access_check(struct scatterlist *sg)
+{
+	if (unlikely(sg->dma_flags & SG_DMA_DMABUF_DEBUG))
+		sg_dmabuf_cpu_access_warn();
+}
+#else
+static inline void sg_dmabuf_cpu_access_check(struct scatterlist *sg)
+{
+}
+#endif
+
 static inline struct page *sg_page(struct scatterlist *sg)
 {
 #ifdef CONFIG_DEBUG_SG
 	BUG_ON(sg_is_chain(sg));
 #endif
+	sg_dmabuf_cpu_access_check(sg);
 	return (struct page *)((sg)->page_link & ~SG_PAGE_LINK_MASK);
 }
 
@@ -302,9 +325,6 @@ static inline void sg_unmark_end(struct scatterlist *sg)
  * buffer may have been bounced via SWIOTLB.
  */
 #ifdef CONFIG_NEED_SG_DMA_FLAGS
-
-#define SG_DMA_BUS_ADDRESS	(1 << 0)
-#define SG_DMA_SWIOTLB		(1 << 1)
 
 /**
  * sg_dma_is_bus_address - Return whether a given segment was marked

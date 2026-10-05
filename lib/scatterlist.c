@@ -12,6 +12,27 @@
 #include <linux/bvec.h>
 #include <linux/uio.h>
 #include <linux/folio_queue.h>
+#include <linux/printk.h>
+#include <linux/ratelimit.h>
+
+#ifdef CONFIG_DMABUF_DEBUG_WARN
+/*
+ * Not a WARN(): a wrong importer must not taint the kernel or trigger
+ * panic_on_warn. sg_page() is mostly reached through DMA or scatterlist
+ * helpers, so the stack trace is what identifies the importer.
+ */
+void sg_dmabuf_cpu_access_warn(void)
+{
+	static DEFINE_RATELIMIT_STATE(rs, DEFAULT_RATELIMIT_INTERVAL, 1);
+
+	if (!__ratelimit(&rs))
+		return;
+
+	pr_warn("DMA-BUF: importer used the CPU side of an exporter's sg_table\n");
+	dump_stack_lvl(KERN_WARNING);
+}
+EXPORT_SYMBOL(sg_dmabuf_cpu_access_warn);
+#endif
 
 /**
  * sg_nents - return total count of entries in scatterlist
@@ -54,6 +75,7 @@ int sg_nents_for_len(struct scatterlist *sg, u64 len)
 		return 0;
 
 	for (nents = 0, total = 0; sg; sg = sg_next(sg)) {
+		sg_dmabuf_cpu_access_check(sg);
 		nents++;
 		total += sg->length;
 		if (total >= len)
