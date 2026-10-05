@@ -402,20 +402,25 @@ void __init mtrr_build_map(void)
 void __init mtrr_copy_map(void)
 {
 	unsigned int new_size = get_cache_map_size();
+	struct cache_map *new_map;
 
 	if (!mtrr_state.enabled || !new_size) {
 		cache_map = NULL;
 		return;
 	}
 
+	/* Allocate before taking mtrr_mutex, the allocation may reclaim. */
+	new_map = kzalloc_objs(*new_map, new_size);
+
 	mutex_lock(&mtrr_mutex);
 
-	cache_map = kzalloc_objs(*cache_map, new_size);
-	if (cache_map) {
-		memmove(cache_map, init_cache_map,
-			cache_map_n * sizeof(*cache_map));
+	if (new_map) {
+		memmove(new_map, init_cache_map,
+			cache_map_n * sizeof(*new_map));
+		cache_map = new_map;
 		cache_map_size = new_size;
 	} else {
+		cache_map = NULL;
 		mtrr_state.enabled = 0;
 		pr_err("MTRRs disabled due to allocation failure for lookup map.\n");
 	}
