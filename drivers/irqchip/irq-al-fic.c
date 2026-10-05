@@ -36,7 +36,7 @@ enum al_fic_state {
 struct al_fic {
 	void __iomem *base;
 	struct irq_domain *domain;
-	const char *name;
+	struct device_node *node;
 	unsigned int parent_irq;
 	enum al_fic_state state;
 };
@@ -89,7 +89,7 @@ static int al_fic_irq_set_type(struct irq_data *data, unsigned int flow_type)
 	if (fic->state == AL_FIC_UNCONFIGURED) {
 		al_fic_set_trigger(fic, gc, new_state);
 	} else if (fic->state != new_state) {
-		pr_debug("fic %s state already configured to %d\n", fic->name, fic->state);
+		pr_debug("fic %pOF state already configured to %d\n", fic->node, fic->state);
 		return -EINVAL;
 	}
 	return 0;
@@ -142,7 +142,7 @@ static int al_fic_register(struct device_node *node,
 
 	ret = irq_alloc_domain_generic_chips(fic->domain,
 					     NR_FIC_IRQS,
-					     1, fic->name,
+					     1, of_node_full_name(fic->node),
 					     handle_level_irq,
 					     0, 0, IRQ_GC_INIT_MASK_CACHE);
 	if (ret) {
@@ -175,9 +175,8 @@ err_domain_remove:
 
 /*
  * al_fic_wire_init() - initialize and configure fic in wire mode
- * @of_node: optional pointer to interrupt controller's device tree node.
+ * @node: pointer to the interrupt controller's device tree node
  * @base: mmio to fic register
- * @name: name of the fic
  * @parent_irq: interrupt of parent
  *
  * This API will configure the fic hardware to work in wire mode.
@@ -187,7 +186,6 @@ err_domain_remove:
  */
 static struct al_fic *al_fic_wire_init(struct device_node *node,
 				       void __iomem *base,
-				       const char *name,
 				       unsigned int parent_irq)
 {
 	struct al_fic *fic;
@@ -200,7 +198,7 @@ static struct al_fic *al_fic_wire_init(struct device_node *node,
 
 	fic->base = base;
 	fic->parent_irq = parent_irq;
-	fic->name = name;
+	fic->node = node;
 
 	/* mask out all interrupts */
 	writel_relaxed(0xFFFFFFFF, fic->base + AL_FIC_MASK);
@@ -254,7 +252,6 @@ static int __init al_fic_init_dt(struct device_node *node,
 
 	fic = al_fic_wire_init(node,
 			       base,
-			       node->name,
 			       parent_irq);
 	if (IS_ERR(fic)) {
 		pr_err("%pOF: fail to initialize irqchip (%lu)\n",
