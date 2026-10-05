@@ -1554,7 +1554,9 @@ static loff_t ntfs_llseek(struct file *file, loff_t offset, int whence)
 	loff_t maxbytes = ntfs_get_maxbytes(ni);
 	loff_t ret;
 
-	if (whence != SEEK_DATA && whence != SEEK_HOLE) {
+	if ((whence != SEEK_DATA && whence != SEEK_HOLE) ||
+	    /* Data of WOF and dedup files is not in the unnamed stream. */
+	    (ni->ni_flags & (NI_FLAG_COMPRESSED_MASK | NI_FLAG_DEDUPLICATED))) {
 		ret = generic_file_llseek_size(file, offset, whence, maxbytes,
 					       i_size_read(inode));
 	} else if ((unsigned long long)offset >= i_size_read(inode)) {
