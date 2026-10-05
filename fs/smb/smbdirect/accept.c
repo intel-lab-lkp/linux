@@ -302,6 +302,7 @@ static void smbdirect_accept_negotiate_recv_work(struct work_struct *work)
 	struct smbdirect_socket *sc =
 		container_of(work, struct smbdirect_socket, connect.work);
 	struct smbdirect_socket_parameters *sp = &sc->parameters;
+	struct smbdirect_socket *lsc;
 	struct smbdirect_recv_io *recv_io;
 	struct smbdirect_negotiate_req *nreq;
 	unsigned long flags;
@@ -464,29 +465,55 @@ static void smbdirect_accept_negotiate_recv_work(struct work_struct *work)
 	 */
 	sp->max_fragmented_send_size = max_fragmented_size;
 
-	if (sc->accept.listener) {
-		struct smbdirect_socket *lsc = sc->accept.listener;
-		unsigned long flags;
-
-		spin_lock_irqsave(&lsc->listen.lock, flags);
-		list_del(&sc->accept.list);
-		list_add_tail(&sc->accept.list, &lsc->listen.ready);
-		wake_up(&lsc->listen.wait_queue);
-		spin_unlock_irqrestore(&lsc->listen.lock, flags);
-
-		/*
-		 * smbdirect_socket_accept() will call
-		 * smbdirect_accept_negotiate_finish(nsc, 0);
-		 *
-		 * So that we don't send the negotiation
-		 * response that grants credits to the peer
-		 * before the socket is accepted by the
-		 * application.
-		 */
+	/*
+	 * Every accepting socket was created by
+	 * smbdirect_listen_connect_request() and has a
+	 * listener. If it's already cleared, the listener
+	 * (or its purge_orphaned_work) is responsible for
+	 * releasing us, so we must not send a negotiate
+	 * response.
+	 *
+	 * The memory of the listener is freed via kfree_rcu(),
+	 * see smbdirect_listen_orphan_socket().
+	 */
+	rcu_read_lock();
+	lsc = READ_ONCE(sc->accept.listener);
+	if (!lsc) {
+		rcu_read_unlock();
 		return;
 	}
 
-	ntstatus = le32_to_cpu(STATUS_SUCCESS);
+	spin_lock_irqsave(&lsc->listen.lock, flags);
+	/*
+	 * The listener (or its purge_orphaned_work)
+	 * may have cleared sc->accept.listener in the
+	 * meantime and is responsible for releasing us.
+	 *
+	 * If we already failed, we're either
+	 * already on the orphaned list or
+	 * smbdirect_socket_cleanup_work() will
+	 * move us there.
+	 *
+	 * In both cases we must not move us
+	 * to the ready list.
+	 */
+	if (sc->accept.listener == lsc && !READ_ONCE(sc->first_error)) {
+		list_move_tail(&sc->accept.list, &lsc->listen.ready);
+		wake_up(&lsc->listen.wait_queue);
+	}
+	spin_unlock_irqrestore(&lsc->listen.lock, flags);
+	rcu_read_unlock();
+
+	/*
+	 * smbdirect_socket_accept() will call
+	 * smbdirect_accept_negotiate_finish(nsc, 0);
+	 *
+	 * So that we don't send the negotiation
+	 * response that grants credits to the peer
+	 * before the socket is accepted by the
+	 * application.
+	 */
+	return;
 
 not_supported:
 	smbdirect_accept_negotiate_finish(sc, ntstatus);
@@ -839,7 +866,7 @@ struct smbdirect_socket *smbdirect_socket_accept(struct smbdirect_socket *lsc,
 				       struct smbdirect_socket,
 				       accept.list);
 	if (nsc) {
-		nsc->accept.listener = NULL;
+		WRITE_ONCE(nsc->accept.listener, NULL);
 		list_del_init_careful(&nsc->accept.list);
 		arg->is_empty = list_empty_careful(&lsc->listen.ready);
 	}
