@@ -85,6 +85,12 @@
 #define TDVMCALL_STATUS_SUBFUNC_UNSUPPORTED	0x8000000000000003ULL
 
 /*
+ * TDG.VP.VMCALL<Instruction.IO> direction (passed in R13)
+ */
+#define TDVMCALL_PORT_READ		0
+#define TDVMCALL_PORT_WRITE		1
+
+/*
  * Bitmasks of exposed registers (with VMM).
  */
 #define TDX_RDX		BIT(2)
