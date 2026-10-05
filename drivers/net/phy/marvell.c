@@ -55,6 +55,11 @@
 #define MII_M1011_IMASK			0x12
 #define MII_M1011_IMASK_INIT		0x6400
 #define MII_M1011_IMASK_CLEAR		0x0000
+/* Bits updated by config_intr. The WoL interrupt enable is owned by
+ * set_wol, so the config_intr call from phy_init_hw() on resume does not
+ * silently disarm Wake-on-LAN.
+ */
+#define MII_M1011_IMASK_CONFIG_MASK	(U16_MAX & ~MII_88E1318S_PHY_CSIER_WOL_EIE)
 
 #define MII_M1011_PHY_SCR			0x10
 #define MII_M1011_PHY_SCR_DOWNSHIFT_EN		BIT(11)
@@ -393,11 +398,13 @@ static int marvell_config_intr(struct phy_device *phydev)
 		if (err)
 			return err;
 
-		err = phy_write(phydev, MII_M1011_IMASK,
-				MII_M1011_IMASK_INIT);
+		err = phy_modify(phydev, MII_M1011_IMASK,
+				 MII_M1011_IMASK_CONFIG_MASK,
+				 MII_M1011_IMASK_INIT);
 	} else {
-		err = phy_write(phydev, MII_M1011_IMASK,
-				MII_M1011_IMASK_CLEAR);
+		err = phy_modify(phydev, MII_M1011_IMASK,
+				 MII_M1011_IMASK_CONFIG_MASK,
+				 MII_M1011_IMASK_CLEAR);
 		if (err)
 			return err;
 
@@ -417,7 +424,8 @@ static irqreturn_t marvell_handle_interrupt(struct phy_device *phydev)
 		return IRQ_NONE;
 	}
 
-	if (!(irq_status & MII_M1011_IMASK_INIT))
+	if (!(irq_status & (MII_M1011_IMASK_INIT |
+			    MII_88E1318S_PHY_CSIER_WOL_EIE)))
 		return IRQ_NONE;
 
 	phy_trigger_machine(phydev);
@@ -2070,6 +2078,18 @@ static int m88e1318_set_wol(struct phy_device *phydev,
 		err = __phy_modify(phydev, MII_88E1318S_PHY_WOL_CTRL,
 				   MII_88E1318S_PHY_WOL_CTRL_LINK_UP_ENABLE,
 				   MII_88E1318S_PHY_WOL_CTRL_CLEAR_WOL_STATUS);
+		if (err < 0)
+			goto error;
+	}
+
+	if (!(wol->wolopts & (WAKE_MAGIC | WAKE_PHY))) {
+		err = marvell_write_page(phydev, MII_MARVELL_COPPER_PAGE);
+		if (err < 0)
+			goto error;
+
+		/* Disable the WOL interrupt, config_intr leaves it alone */
+		err = __phy_clear_bits(phydev, MII_M1011_IMASK,
+				       MII_88E1318S_PHY_CSIER_WOL_EIE);
 		if (err < 0)
 			goto error;
 	}
