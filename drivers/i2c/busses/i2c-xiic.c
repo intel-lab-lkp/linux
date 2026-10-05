@@ -755,6 +755,7 @@ static irqreturn_t xiic_process(int irq, void *dev_id)
 	int wakeup_req = 0;
 	enum xilinx_i2c_state wakeup_code = STATE_DONE;
 	int ret;
+	bool rx_done_no_rx_full = false;
 
 	/* Get the interrupt Status from the IPIF. There is no clearing of
 	 * interrupts in the IPIF. Interrupts must be cleared at the source.
@@ -787,6 +788,27 @@ static irqreturn_t xiic_process(int irq, void *dev_id)
 
 		dev_dbg(i2c->adap.dev.parent, "%s error\n", __func__);
 
+		/*
+		 * For a master receiver TX_ERROR also means "transfer complete" and
+		 * can be seen before RX_FULL. If the FIFO already holds the rest of
+		 * the message, finish the read instead of resetting the core.
+		 */
+		if (i2c->rx_msg && !(pend & XIIC_INTR_ARB_LOST_MASK) &&
+		    !(xiic_getreg8(i2c, XIIC_SR_REG_OFFSET) &
+		      XIIC_SR_RX_FIFO_EMPTY_MASK)) {
+			unsigned int in_fifo =
+				xiic_getreg8(i2c, XIIC_RFO_REG_OFFSET) + 1;
+			unsigned int space = xiic_rx_space(i2c);
+
+			if (space && in_fifo >= space) {
+				rx_done_no_rx_full =
+					!(isr & XIIC_INTR_RX_FULL_MASK);
+				pend |= XIIC_INTR_RX_FULL_MASK;
+				clr |= XIIC_INTR_TX_ERROR_MASK;
+				goto rx_complete;
+			}
+		}
+
 		/* dynamic mode seem to suffer from problems if we just flushes
 		 * fifos and the next message is a TX with len 0 (only addr)
 		 * reset the IP instead of just flush fifos
@@ -806,6 +828,7 @@ static irqreturn_t xiic_process(int irq, void *dev_id)
 		/* don't try to handle other events */
 		goto out;
 	}
+rx_complete:
 	if (pend & XIIC_INTR_RX_FULL_MASK) {
 		/* Receive register/FIFO is full */
 
@@ -911,6 +934,9 @@ static irqreturn_t xiic_process(int irq, void *dev_id)
 out:
 	dev_dbg(i2c->adap.dev.parent, "%s clr: 0x%x\n", __func__, clr);
 
+	/* IISR is toggle-on-write: don't toggle an RX_FULL bit that wasn't set */
+	if (rx_done_no_rx_full)
+		clr &= ~XIIC_INTR_RX_FULL_MASK;
 	xiic_setreg32(i2c, XIIC_IISR_OFFSET, clr);
 	if (xfer_more)
 		__xiic_start_xfer(i2c);
