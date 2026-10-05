@@ -567,13 +567,14 @@ EXPORT_SYMBOL(truncate_inode_pages_final);
  * @mapping: the address_space which holds the folios to invalidate
  * @start: the offset 'from' which to invalidate
  * @end: the offset 'to' which to invalidate (inclusive)
- * @nr_failed: How many folio invalidations failed
+ * @need_drain: Optional flag, set if a remote LRU drain may help eviction
  *
- * This function is similar to invalidate_mapping_pages(), except that it
- * returns the number of folios which could not be evicted in @nr_failed.
+ * This function is similar to invalidate_mapping_pages(), except that it can
+ * indicate whether a remote LRU drain may allow a failed eviction to succeed.
+ * Callers using @need_drain must initialize it to false before the first call.
  */
 unsigned long mapping_try_invalidate(struct address_space *mapping,
-		pgoff_t start, pgoff_t end, unsigned long *nr_failed)
+		pgoff_t start, pgoff_t end, bool *need_drain)
 {
 	pgoff_t indices[FOLIO_BATCH_SIZE];
 	struct folio_batch fbatch;
@@ -599,17 +600,20 @@ unsigned long mapping_try_invalidate(struct address_space *mapping,
 			}
 
 			ret = mapping_evict_folio(mapping, folio);
+			/*
+			 * Draining LRU batches cannot unmap a folio or clean it.
+			 * Other failures may be due to remote batch references.
+			 */
+			if (!ret && need_drain && !folio_mapped(folio) &&
+			    !folio_test_dirty(folio) && !folio_test_writeback(folio))
+				*need_drain = true;
 			folio_unlock(folio);
 			/*
 			 * Invalidation is a hint that the folio is no longer
 			 * of interest and try to speed up its reclaim.
 			 */
-			if (!ret) {
+			if (!ret)
 				deactivate_file_folio(folio);
-				/* Likely in the lru cache of a remote CPU */
-				if (nr_failed)
-					(*nr_failed)++;
-			}
 			count += ret;
 		}
 

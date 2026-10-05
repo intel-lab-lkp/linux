@@ -141,7 +141,7 @@ int generic_fadvise(struct file *file, loff_t offset, loff_t len, int advice)
 		}
 
 		if (end_index >= start_index) {
-			unsigned long nr_failed = 0;
+			bool need_drain = false;
 
 			/*
 			 * It's common to FADV_DONTNEED right after
@@ -155,14 +155,14 @@ int generic_fadvise(struct file *file, loff_t offset, loff_t len, int advice)
 			lru_add_drain();
 
 			mapping_try_invalidate(mapping, start_index, end_index,
-					&nr_failed);
+					&need_drain);
 
 			/*
-			 * The failures may be due to the folio being
-			 * in the LRU cache of a remote CPU. Drain all
-			 * caches and try again.
+			 * Clean, unmapped folios may still have references in
+			 * remote LRU batches. Drain and retry only if a failure
+			 * might be resolved by dropping those references.
 			 */
-			if (nr_failed) {
+			if (need_drain) {
 				lru_add_drain_all();
 				invalidate_mapping_pages(mapping, start_index,
 						end_index);
