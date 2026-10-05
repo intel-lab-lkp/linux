@@ -31,6 +31,7 @@
 #include <linux/workqueue.h>
 
 #include <media/cec.h>
+#include <media/media-device.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -123,6 +124,7 @@ struct snps_hdmirx_dev {
 	struct device *dev;
 	struct hdmirx_stream stream;
 	struct v4l2_device v4l2_dev;
+	struct media_device mdev;
 	struct v4l2_ctrl_handler hdl;
 	struct v4l2_ctrl *detect_tx_5v_ctrl;
 	struct v4l2_ctrl *rgb_range;
@@ -2649,6 +2651,7 @@ static void hdmirx_v4l2_release(struct v4l2_device *v4l2_dev)
 		container_of(v4l2_dev, struct snps_hdmirx_dev, v4l2_dev);
 
 	v4l2_ctrl_handler_free(&hdmirx_dev->hdl);
+	media_device_cleanup(&hdmirx_dev->mdev);
 	kfree(hdmirx_dev);
 }
 
@@ -2750,6 +2753,11 @@ static int hdmirx_probe(struct platform_device *pdev)
 		dev_err_probe(dev, ret, "v4l2 device registration failed\n");
 		goto err_pm;
 	}
+
+	hdmirx_dev->mdev.dev = dev;
+	strscpy(hdmirx_dev->mdev.model, "snps-hdmirx", sizeof(hdmirx_dev->mdev.model));
+	media_device_init(&hdmirx_dev->mdev);
+	hdmirx_dev->v4l2_dev.mdev = &hdmirx_dev->mdev;
 
 	stream = &hdmirx_dev->stream;
 	stream->hdmirx_dev = hdmirx_dev;
