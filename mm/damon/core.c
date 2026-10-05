@@ -3610,15 +3610,41 @@ static unsigned long damos_get_node_memcg_used_bp(
 
 #ifdef CONFIG_DAMON_PADDR
 /*
+ * Whether @r passes the probe_hits_wsum filters of @s, decided as the core
+ * filters of a scheme are, with the other filter types left out: the first
+ * matching filter decides, and if none matches, @r passes unless the last of
+ * them is an allow filter and @s has no ops filters.  These filters select
+ * regions by their data attributes, so they are part of what makes memory
+ * eligible for the scheme, unlike its address and target filters.
+ */
+static bool damos_probe_filters_pass(struct damon_ctx *c,
+		struct damon_target *t, struct damon_region *r, struct damos *s)
+{
+	struct damos_filter *filter;
+	bool pass = true;
+
+	damos_for_each_core_filter(filter, s) {
+		if (filter->type != DAMOS_FILTER_TYPE_PROBE_HITS_WSUM)
+			continue;
+		if (damos_filter_match(c, t, r, filter, c->min_region_sz))
+			return filter->allow;
+		pass = !filter->allow;
+	}
+	/* as damos_set_filters_default_reject(): ops filters decide the rest */
+	return pass || !list_empty(&s->ops_filters);
+}
+
+/*
  * damos_calc_eligible_bytes() - Calculate raw eligible bytes per node.
  * @c:		The DAMON context.
  * @s:		The scheme.
  * @nid:	The target NUMA node id.
  * @total:	Output for total eligible bytes across all nodes.
  *
- * Iterates through each folio in eligible regions to accurately determine
- * which node the memory resides on. Returns eligible bytes on the specified
- * node and sets *total to the sum across all nodes.
+ * A region is eligible if it matches the access pattern of @s and passes its
+ * probe_hits_wsum filters.  Iterates through each folio in eligible regions to
+ * accurately determine which node the memory resides on. Returns eligible bytes
+ * on the specified node and sets *total to the sum across all nodes.
  *
  * Note: This function requires damon_get_folio() from ops-common.c, which is
  * only available when CONFIG_DAMON_PADDR is enabled. It also requires the
@@ -3637,6 +3663,8 @@ static phys_addr_t damos_calc_eligible_bytes(struct damon_ctx *c,
 			phys_addr_t addr, end_addr;
 
 			if (!__damos_valid_target(r, s, c))
+				continue;
+			if (!damos_probe_filters_pass(c, t, r, s))
 				continue;
 
 			/* Convert from core address units to physical bytes */
