@@ -1325,3 +1325,43 @@ bool arch_cpu_is_hotpluggable(int cpu)
 	return cpu > 0;
 }
 #endif /* CONFIG_HOTPLUG_CPU */
+
+/*
+ * Parameters that the boot code consumes before the main kernel is running.
+ * They are deliberately not registered with early_param()/__setup() here:
+ * what they configure has already been decided by the time this code runs,
+ * and the decompressor (a separate program, arch/x86/boot/compressed/) does
+ * not contribute to any section in this image.
+ *
+ * Without being claimed, they are treated as unknown parameters and handed
+ * to init - valueless ones as arguments, "key=value" ones as environment
+ * variables. openrc-init, for instance, reads the runlevel from argv[1] and
+ * then complains that "nokaslr is an invalid runlevel"; a shell used as init
+ * treats the argument as a script name and exits, which panics the kernel.
+ *
+ * Keep this in sync with the cmdline_find_option*() calls in
+ * arch/x86/boot/ and drivers/firmware/efi/libstub/.
+ */
+static const char * const boot_consumed_params[] __initconst = {
+	"nokaslr",		/* arch/x86/boot/compressed/kaslr.c */
+	"no5lvl",		/* arch/x86/boot/compressed/pgtable_64.c */
+	"mem_encrypt",		/* arch/x86/boot/compressed/misc.c */
+	"edd",			/* arch/x86/boot/edd.c */
+	"forcepae",		/* 32-bit only: __setup() is compiled out on x86-64 */
+};
+
+bool __init boot_param_consumed(const char *param)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(boot_consumed_params); i++) {
+		const char *name = boot_consumed_params[i];
+		size_t len = strlen(name);
+
+		if (!strncmp(param, name, len) &&
+		    (param[len] == '\0' || param[len] == '='))
+			return true;
+	}
+
+	return false;
+}
