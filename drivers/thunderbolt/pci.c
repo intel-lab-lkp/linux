@@ -63,6 +63,27 @@ static void nhi_pci_check_quirks(struct tb_nhi_pci *nhi_pci)
 			nhi->quirks |= QUIRK_E2E;
 			break;
 		}
+	} else if (pdev->vendor == PCI_VENDOR_ID_AMD) {
+		switch (pdev->device) {
+		case PCI_DEVICE_ID_AMD_1AH_M60H_NHI0:
+		case PCI_DEVICE_ID_AMD_1AH_M60H_NHI1:
+		case PCI_DEVICE_ID_AMD_1AH_M68H_NHI0:
+		case PCI_DEVICE_ID_AMD_1AH_M68H_NHI1:
+		case PCI_DEVICE_ID_AMD_1AH_M80H_NHI0:
+		case PCI_DEVICE_ID_AMD_1AH_M80H_NHI1:
+		case PCI_DEVICE_ID_AMD_1AH_M80H_NHI2:
+		case PCI_DEVICE_ID_AMD_1AH_M24H_NHI0:
+		case PCI_DEVICE_ID_AMD_1AH_M24H_NHI1:
+		case PCI_DEVICE_ID_AMD_1AH_M70H_NHI0:
+		case PCI_DEVICE_ID_AMD_1AH_M70H_NHI1:
+			/*
+			 * These hosts may hang the Tx ring if its HopID is
+			 * programmed again without a host interface reset
+			 * in between.
+			 */
+			nhi->quirks |= QUIRK_RESET_DMA_ON_REUSE;
+			break;
+		}
 	}
 }
 
