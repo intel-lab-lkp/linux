@@ -1363,6 +1363,8 @@ again:
 	ret = btrfs_insert_fs_root(fs_info, root);
 	if (ret) {
 		if (ret == -EEXIST) {
+			if (anon_dev && *anon_dev)
+				root->anon_dev = 0;
 			btrfs_put_root(root);
 			goto again;
 		}
