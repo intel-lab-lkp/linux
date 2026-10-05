@@ -15,9 +15,12 @@
 #include <linux/unaligned.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/spinlock.h>
+#include <linux/timer.h>
 
 #define CST816X_RD_REG		0x01
 #define CST816X_NUM_KEYS	5
+#define CST816X_GEST_HOLD_MS	40
 
 struct cst816x_touch {
 	u8 gest;
@@ -32,6 +35,9 @@ struct cst816x_priv {
 	struct input_dev *input;
 	unsigned int keycode[CST816X_NUM_KEYS];
 	unsigned int keycodemax;
+	struct timer_list release_timer;
+	/* lock keeps the timeout out of the middle of a report */
+	spinlock_t lock;
 	struct touchscreen_properties prop;
 };
 
@@ -175,8 +181,9 @@ static void cst816x_reset(struct cst816x_priv *priv)
 	msleep(100);
 }
 
-static void cst816x_release_keys(struct cst816x_priv *priv)
+static bool cst816x_release_keys(struct cst816x_priv *priv)
 {
+	bool released = false;
 	unsigned int key;
 	unsigned int i;
 
@@ -186,32 +193,65 @@ static void cst816x_release_keys(struct cst816x_priv *priv)
 			continue;
 
 		input_report_key(priv->input, key, 0);
+		released = true;
 	}
+
+	return released;
+}
+
+static void cst816x_release_timeout(struct timer_list *t)
+{
+	struct cst816x_priv *priv = timer_container_of(priv, t, release_timer);
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->lock, flags);
+
+	/* a re-arm while this waited for the lock supersedes the timeout */
+	if (!timer_pending(&priv->release_timer) && cst816x_release_keys(priv))
+		input_sync(priv->input);
+
+	spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 static irqreturn_t cst816x_irq_cb(int irq, void *cookie)
 {
 	struct cst816x_priv *priv = cookie;
 	struct cst816x_touch tch;
+	unsigned long flags;
 	unsigned int key;
 
 	if (!cst816x_process_touch(priv, &tch))
 		return IRQ_HANDLED;
 
+	spin_lock_irqsave(&priv->lock, flags);
+
 	touchscreen_report_pos(priv->input, &priv->prop,
 			       tch.abs_x, tch.abs_y, false);
 
 	key = cst816x_gest_keycode(priv, tch.gest);
-	if (key != KEY_RESERVED)
+	if (key != KEY_RESERVED) {
 		input_report_key(priv->input, key, 1);
-	else
+		mod_timer(&priv->release_timer,
+			  jiffies + msecs_to_jiffies(CST816X_GEST_HOLD_MS));
+	} else {
+		timer_delete(&priv->release_timer);
 		cst816x_release_keys(priv);
+	}
 
 	input_report_key(priv->input, BTN_TOUCH, tch.active);
 
 	input_sync(priv->input);
 
+	spin_unlock_irqrestore(&priv->lock, flags);
+
 	return IRQ_HANDLED;
+}
+
+static void cst816x_timer_stop(void *data)
+{
+	struct cst816x_priv *priv = data;
+
+	timer_shutdown_sync(&priv->release_timer);
 }
 
 static int cst816x_probe(struct i2c_client *client)
@@ -225,6 +265,8 @@ static int cst816x_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	priv->client = client;
+	spin_lock_init(&priv->lock);
+	timer_setup(&priv->release_timer, cst816x_release_timeout, 0);
 
 	priv->reset = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(priv->reset))
@@ -241,6 +283,10 @@ static int cst816x_probe(struct i2c_client *client)
 	error = cst816x_register_input(priv);
 	if (error)
 		return dev_err_probe(dev, error, "input register failed\n");
+
+	error = devm_add_action_or_reset(dev, cst816x_timer_stop, priv);
+	if (error)
+		return error;
 
 	error = devm_request_threaded_irq(dev, client->irq,
 					  NULL, cst816x_irq_cb, IRQF_ONESHOT,
