@@ -203,12 +203,36 @@ static int dma_test_start_rings(struct dma_test *dt)
 		return ret;
 	}
 
-	if (dt->tx_ring)
-		tb_ring_start(dt->tx_ring);
-	if (dt->rx_ring)
-		tb_ring_start(dt->rx_ring);
+	if (dt->tx_ring) {
+		ret = tb_ring_start(dt->tx_ring);
+		if (ret)
+			goto err_disable_paths;
+	}
+	if (dt->rx_ring) {
+		ret = tb_ring_start(dt->rx_ring);
+		if (ret)
+			goto err_stop_tx;
+	}
 
 	return 0;
+
+err_stop_tx:
+	tb_xdomain_disable_paths(dt->xd, dt->tx_hopid,
+				 dt->tx_ring ? dt->tx_ring->hop : -1,
+				 dt->rx_hopid,
+				 dt->rx_ring ? dt->rx_ring->hop : -1);
+	if (dt->tx_ring)
+		tb_ring_stop(dt->tx_ring);
+	goto err_free;
+err_disable_paths:
+	tb_xdomain_disable_paths(dt->xd, dt->tx_hopid,
+				 dt->tx_ring ? dt->tx_ring->hop : -1,
+				 dt->rx_hopid,
+				 dt->rx_ring ? dt->rx_ring->hop : -1);
+err_free:
+	dma_test_free_rings(dt);
+
+	return ret;
 }
 
 static void dma_test_stop_rings(struct dma_test *dt)

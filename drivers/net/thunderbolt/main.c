@@ -669,8 +669,16 @@ static void tbnet_connected_work(struct work_struct *work)
 	 * the Rx ring before any incoming packets are allowed to
 	 * arrive.
 	 */
-	tb_ring_start(net->tx_ring.ring);
-	tb_ring_start(net->rx_ring.ring);
+	ret = tb_ring_start(net->tx_ring.ring);
+	if (ret) {
+		netdev_dbg(net->dev, "failed to start Tx ring, ret=%d\n", ret);
+		goto err_release_hopid;
+	}
+	ret = tb_ring_start(net->rx_ring.ring);
+	if (ret) {
+		netdev_dbg(net->dev, "failed to start Rx ring, ret=%d\n", ret);
+		goto err_stop_tx;
+	}
 
 	ret = tbnet_alloc_rx_buffers(net, TBNET_RING_SIZE);
 	if (ret)
@@ -701,7 +709,9 @@ err_free_rx_buffers:
 	tbnet_free_buffers(&net->rx_ring);
 err_stop_rings:
 	tb_ring_stop(net->rx_ring.ring);
+err_stop_tx:
 	tb_ring_stop(net->tx_ring.ring);
+err_release_hopid:
 	tb_xdomain_release_in_hopid(net->xd, net->remote_transmit_path);
 	tbnet_connect_failed(net);
 }

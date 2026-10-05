@@ -669,7 +669,7 @@ struct tb_ring *tb_ring_alloc_rx(struct tb_nhi *nhi, int hop, int size,
 				 unsigned int flags, int e2e_tx_hop,
 				 u16 sof_mask, u16 eof_mask,
 				 void (*start_poll)(void *), void *poll_data);
-void tb_ring_start(struct tb_ring *ring);
+int tb_ring_start(struct tb_ring *ring);
 bool tb_ring_flush(struct tb_ring *ring, unsigned int timeout_msec);
 void tb_ring_stop(struct tb_ring *ring);
 void tb_ring_free(struct tb_ring *ring);
