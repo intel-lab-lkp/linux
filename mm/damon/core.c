@@ -2087,7 +2087,9 @@ static int damon_commit_sample_filters(struct damon_sample_control *dst,
 static bool damon_primitives_enabled_invalid(
 		struct damon_primitives_enabled *config)
 {
-	return config->page_table == config->page_fault;
+	if (config->page_fault)
+		return true;
+	return !config->page_table;
 }
 
 static int damon_commit_sample_control(
@@ -2543,26 +2545,6 @@ void damon_report_access(struct damon_access_report *report)
 	dst->report_jiffies = jiffies;
 	mutex_unlock(&damon_access_reports_lock);
 }
-
-#ifdef CONFIG_MMU
-void damon_report_page_fault(struct vm_fault *vmf, bool huge_pmd)
-{
-	struct damon_access_report access_report = {
-		.vaddr = vmf->address,
-		.size = 1,	/* todo: set appripriately */
-		.cpu = smp_processor_id(),
-		.tid = task_pid_vnr(current),
-		.is_write = vmf->flags & FAULT_FLAG_WRITE,
-	};
-
-	if (huge_pmd)
-		access_report.paddr = PFN_PHYS(pmd_pfn(vmf->orig_pmd));
-	else
-		access_report.paddr = PFN_PHYS(pte_pfn(vmf->orig_pte));
-
-	damon_report_access(&access_report);
-}
-#endif
 
 /*
  * Reset the aggregated monitoring results ('nr_accesses' of each region).

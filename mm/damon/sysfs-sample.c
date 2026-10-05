@@ -421,7 +421,9 @@ static ssize_t page_fault_store(struct kobject *kobj,
 
 	if (err)
 		return err;
-	primitives->page_fault = enable;
+	if (enable)
+		return -EOPNOTSUPP;
+	primitives->page_fault = false;
 	return count;
 }
 
@@ -590,8 +592,7 @@ int damon_sysfs_set_sample_control(
 {
 	control->primitives_enabled.page_table =
 		sysfs_sample->primitives->page_table;
-	control->primitives_enabled.page_fault =
-		sysfs_sample->primitives->page_fault;
+	control->primitives_enabled.page_fault = false;
 
 	return damon_sysfs_set_sample_filters(control,
 			sysfs_sample->filters);
