@@ -209,16 +209,18 @@ void dw8250_setup_port(struct uart_port *p)
 	}
 	up->capabilities |= UART_CAP_NOTEMT;
 
-	/* Preserve value written by firmware or bootloader  */
-	old_dlf = dw8250_readl_ext(p, DW_UART_DLF);
-	dw8250_writel_ext(p, DW_UART_DLF, ~0U);
-	reg = dw8250_readl_ext(p, DW_UART_DLF);
-	dw8250_writel_ext(p, DW_UART_DLF, old_dlf);
+	if (!pd->no_dlf) {
+		/* Preserve value written by firmware or bootloader  */
+		old_dlf = dw8250_readl_ext(p, DW_UART_DLF);
+		dw8250_writel_ext(p, DW_UART_DLF, ~0U);
+		reg = dw8250_readl_ext(p, DW_UART_DLF);
+		dw8250_writel_ext(p, DW_UART_DLF, old_dlf);
 
-	if (reg) {
-		pd->dlf_size = fls(reg);
-		p->get_divisor = dw8250_get_divisor;
-		p->set_divisor = dw8250_set_divisor;
+		if (reg) {
+			pd->dlf_size = fls(reg);
+			p->get_divisor = dw8250_get_divisor;
+			p->set_divisor = dw8250_set_divisor;
+		}
 	}
 
 	reg = dw8250_readl_ext(p, DW_UART_UCV);

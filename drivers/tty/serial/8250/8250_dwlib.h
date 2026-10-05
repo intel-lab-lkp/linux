@@ -88,6 +88,7 @@ struct dw8250_port_data {
 	/* Hardware configuration */
 	u32			cpr_value;
 	u8			dlf_size;
+	bool			no_dlf;		/* Offset 0xc0 is not DLF */
 
 	/* RS485 variables */
 	bool			hw_rs485_support;
