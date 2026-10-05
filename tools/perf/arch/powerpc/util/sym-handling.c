@@ -10,10 +10,10 @@
 #include "probe-event.h"
 #include "probe-file.h"
 
-int arch__choose_best_symbol(struct symbol *syma,
-			     struct symbol *symb __maybe_unused)
+int arch__choose_best_symbol(const struct symbol_candidate *syma,
+			     const struct symbol_candidate *symb __maybe_unused)
 {
-	char *sym = syma->name;
+	const char *sym = syma->name;
 
 #if !defined(_CALL_ELF) || _CALL_ELF != 2
 	/* Skip over any initial dot */
