@@ -174,7 +174,8 @@ static void ring_interrupt_active(struct tb_ring *ring, bool active)
 /*
  * nhi_disable_interrupts() - disable interrupts for all rings
  *
- * Use only during init and shutdown.
+ * During runtime reset the caller must hold nhi->lock.
+ * Init and shutdown callers must exclude concurrent ring operations.
  */
 void nhi_disable_interrupts(struct tb_nhi *nhi)
 {
@@ -512,7 +513,8 @@ void tb_ring_poll_complete(struct tb_ring *ring)
 
 	spin_lock_irqsave(&ring->nhi->lock, flags);
 	spin_lock(&ring->lock);
-	if (ring->start_poll)
+	if (ring->start_poll && ring->running && !ring->nhi->resetting &&
+	    !ring->nhi->going_away)
 		__ring_interrupt_mask(ring, false);
 	spin_unlock(&ring->lock);
 	spin_unlock_irqrestore(&ring->nhi->lock, flags);
@@ -548,6 +550,84 @@ irqreturn_t ring_msix(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static bool ring_is_dma(const struct tb_ring *ring)
+{
+	return ring->hop >= RING_FIRST_USABLE_HOPID;
+}
+
+/* TX and RX HopIDs are tracked separately */
+static unsigned int nhi_dma_hops_bits(const struct tb_nhi *nhi)
+{
+	return 2 * nhi->hop_count;
+}
+
+static unsigned int nhi_hop_bit(const struct tb_nhi *nhi, bool is_tx,
+				unsigned int hop)
+{
+	return is_tx ? hop : nhi->hop_count + hop;
+}
+
+/* Returns %true if a DMA HopID has been programmed since the last reset */
+static bool nhi_dma_hops_dirty(const struct tb_nhi *nhi)
+{
+	return nhi->dma_hops_used &&
+	       !bitmap_empty(nhi->dma_hops_used, nhi_dma_hops_bits(nhi));
+}
+
+/* Returns %true if the HopID of @ring cannot be programmed again yet */
+static bool ring_needs_reset(const struct tb_ring *ring)
+{
+	const struct tb_nhi *nhi = ring->nhi;
+
+	lockdep_assert_held(&nhi->lock);
+
+	if (!nhi->dma_hops_used || !ring_is_dma(ring))
+		return false;
+
+	return test_bit(nhi_hop_bit(nhi, ring->is_tx, ring->hop),
+			nhi->dma_hops_used);
+}
+
+static bool nhi_dma_rings_running(const struct tb_nhi *nhi)
+{
+	unsigned int i;
+
+	lockdep_assert_held(&nhi->lock);
+
+	/* ring->running is only updated under nhi->lock */
+	for (i = RING_FIRST_USABLE_HOPID; i < nhi->hop_count; i++) {
+		if (nhi->tx_rings[i] && nhi->tx_rings[i]->running)
+			return true;
+		if (nhi->rx_rings[i] && nhi->rx_rings[i]->running)
+			return true;
+	}
+
+	return false;
+}
+
+static int nhi_find_hop(const struct tb_nhi *nhi, const struct tb_ring *ring,
+			unsigned int start_hop, bool skip_used)
+{
+	unsigned int i;
+
+	lockdep_assert_held(&nhi->lock);
+
+	for (i = start_hop; i < nhi->hop_count; i++) {
+		if (skip_used && test_bit(nhi_hop_bit(nhi, ring->is_tx, i),
+					  nhi->dma_hops_used))
+			continue;
+		if (ring->is_tx) {
+			if (!nhi->tx_rings[i])
+				return i;
+		} else {
+			if (!nhi->rx_rings[i])
+				return i;
+		}
+	}
+
+	return -EBUSY;
+}
+
 static int nhi_alloc_hop(struct tb_nhi *nhi, struct tb_ring *ring)
 {
 	unsigned int start_hop = RING_FIRST_USABLE_HOPID;
@@ -565,25 +645,20 @@ static int nhi_alloc_hop(struct tb_nhi *nhi, struct tb_ring *ring)
 	spin_lock_irq(&nhi->lock);
 
 	if (ring->hop < 0) {
-		unsigned int i;
+		int hop;
 
 		/*
 		 * Automatically allocate HopID from the non-reserved
-		 * range 1 .. hop_count - 1.
+		 * range 1 .. hop_count - 1, preferring the ones that do
+		 * not need a host interface reset first.
 		 */
-		for (i = start_hop; i < nhi->hop_count; i++) {
-			if (ring->is_tx) {
-				if (!nhi->tx_rings[i]) {
-					ring->hop = i;
-					break;
-				}
-			} else {
-				if (!nhi->rx_rings[i]) {
-					ring->hop = i;
-					break;
-				}
-			}
-		}
+		hop = -EBUSY;
+		if (nhi->dma_hops_used)
+			hop = nhi_find_hop(nhi, ring, start_hop, true);
+		if (hop < 0)
+			hop = nhi_find_hop(nhi, ring, start_hop, false);
+		if (hop >= 0)
+			ring->hop = hop;
 	}
 
 	if (ring->hop > 0 && ring->hop < start_hop) {
@@ -732,6 +807,47 @@ struct tb_ring *tb_ring_alloc_rx(struct tb_nhi *nhi, int hop, int size,
 }
 EXPORT_SYMBOL_GPL(tb_ring_alloc_rx);
 
+/* Cancel only through tb_domain_cancel_nhi_reset(), outside tb->lock. */
+static void nhi_reset_work(struct work_struct *work)
+{
+	struct tb_nhi *nhi = container_of(to_delayed_work(work), struct tb_nhi,
+					  reset_work);
+	struct tb *tb = dev_get_drvdata(nhi->dev);
+
+	/* The connection manager must be blocked over the reset */
+	guard(mutex)(&tb->lock);
+
+	scoped_guard(spinlock_irq, &nhi->lock) {
+		if (nhi->going_away || nhi->removing || nhi->suspended)
+			return;
+		if (bitmap_empty(nhi->dma_hops_used, nhi_dma_hops_bits(nhi)))
+			return;
+		if (nhi_dma_rings_running(nhi))
+			return;
+
+		/* Keep the DMA rings from starting over the reset */
+		nhi->resetting = true;
+	}
+
+	if (!tb_ctl_stop_if_idle(tb->ctl)) {
+		scoped_guard(spinlock_irq, &nhi->lock) {
+			nhi->resetting = false;
+			queue_delayed_work(system_long_wq, &nhi->reset_work,
+					   msecs_to_jiffies(100));
+		}
+		return;
+	}
+	nhi->ops->reset_interface(nhi);
+	scoped_guard(spinlock_irqsave, &nhi->lock)
+		nhi_disable_interrupts(nhi);
+	tb_ctl_start(tb->ctl);
+
+	scoped_guard(spinlock_irq, &nhi->lock) {
+		bitmap_zero(nhi->dma_hops_used, nhi_dma_hops_bits(nhi));
+		nhi->resetting = false;
+	}
+}
+
 /**
  * tb_ring_start() - enable a ring
  * @ring: Ring to start
@@ -748,13 +864,23 @@ int tb_ring_start(struct tb_ring *ring)
 
 	spin_lock_irq(&ring->nhi->lock);
 	spin_lock(&ring->lock);
-	if (ring->nhi->going_away) {
+	if (ring->nhi->going_away || ring->nhi->removing) {
 		ret = -ENODEV;
 		goto err;
 	}
 	if (ring->running) {
 		dev_WARN(ring->nhi->dev, "ring already started\n");
 		ret = -EBUSY;
+		goto err;
+	}
+	if (ring->nhi->dma_hops_used && ring_is_dma(ring) &&
+	    (ring->nhi->suspended || ring->nhi->resetting ||
+	     ring_needs_reset(ring))) {
+		ret = -EAGAIN;
+		if (!ring->nhi->suspended && !ring->nhi->resetting &&
+		    !nhi_dma_rings_running(ring->nhi))
+			queue_delayed_work(system_long_wq,
+					   &ring->nhi->reset_work, 0);
 		goto err;
 	}
 	dev_dbg(ring->nhi->dev, "starting %s %d\n",
@@ -809,6 +935,9 @@ int tb_ring_start(struct tb_ring *ring)
 	if (!(ring->flags & RING_FLAG_NO_INTERRUPT))
 		ring_interrupt_active(ring, true);
 	ring->running = true;
+	if (ring->nhi->dma_hops_used && ring_is_dma(ring))
+		__set_bit(nhi_hop_bit(ring->nhi, ring->is_tx, ring->hop),
+			  ring->nhi->dma_hops_used);
 err:
 	spin_unlock(&ring->lock);
 	spin_unlock_irq(&ring->nhi->lock);
@@ -880,6 +1009,11 @@ void tb_ring_stop(struct tb_ring *ring)
 	ring->tail = 0;
 	ring->notify_pending = false;
 	ring->running = false;
+
+	if (ring->nhi->dma_hops_used && ring_is_dma(ring) &&
+	    !ring->nhi->removing && !ring->nhi->suspended &&
+	    !nhi_dma_rings_running(ring->nhi))
+		queue_delayed_work(system_long_wq, &ring->nhi->reset_work, 0);
 
 err:
 	spin_unlock(&ring->lock);
@@ -1113,10 +1247,30 @@ static int nhi_freeze_noirq(struct device *dev)
 	return tb_domain_freeze_noirq(tb);
 }
 
+static void nhi_reset_if_idle(struct tb_nhi *nhi)
+{
+	scoped_guard(spinlock_irq, &nhi->lock) {
+		if (nhi->going_away || nhi->removing ||
+		    !nhi_dma_hops_dirty(nhi) || nhi_dma_rings_running(nhi))
+			return;
+		nhi->resetting = true;
+	}
+
+	nhi->ops->reset_interface(nhi);
+	scoped_guard(spinlock_irqsave, &nhi->lock)
+		nhi_disable_interrupts(nhi);
+	scoped_guard(spinlock_irq, &nhi->lock) {
+		bitmap_zero(nhi->dma_hops_used, nhi_dma_hops_bits(nhi));
+		nhi->resetting = false;
+	}
+}
+
 static int nhi_thaw_noirq(struct device *dev)
 {
 	struct tb *tb = dev_get_drvdata(dev);
 
+	/* Freeze can preserve live DMA rings. */
+	nhi_reset_if_idle(tb->nhi);
 	return tb_domain_thaw_noirq(tb);
 }
 
@@ -1160,6 +1314,8 @@ static int nhi_resume_noirq(struct device *dev)
 		if (ret)
 			return ret;
 	}
+
+	nhi_reset_if_idle(nhi);
 
 	return tb_domain_resume_noirq(tb);
 }
@@ -1215,6 +1371,8 @@ static int nhi_runtime_resume(struct device *dev)
 		if (ret)
 			return ret;
 	}
+
+	nhi_reset_if_idle(nhi);
 
 	return tb_domain_runtime_resume(tb);
 }
@@ -1339,6 +1497,7 @@ int nhi_probe(struct tb_nhi *nhi)
 {
 	struct device *dev = nhi->dev;
 	struct tb *tb;
+	u32 caps;
 	int res;
 
 	if (!nhi->ops)
@@ -1347,7 +1506,8 @@ int nhi_probe(struct tb_nhi *nhi)
 	if (!nhi->ops->init_interrupts)
 		return dev_err_probe(dev, -EINVAL, "missing required NHI ops\n");
 
-	nhi->hop_count = ioread32(nhi->iobase + REG_CAPS) & 0x3ff;
+	caps = ioread32(nhi->iobase + REG_CAPS);
+	nhi->hop_count = caps & 0x3ff;
 	dev_dbg(dev, "total paths: %d\n", nhi->hop_count);
 
 	nhi->tx_rings = devm_kcalloc(dev, nhi->hop_count,
@@ -1359,6 +1519,23 @@ int nhi_probe(struct tb_nhi *nhi)
 					   GFP_KERNEL);
 	if (!nhi->tx_rings || !nhi->rx_rings || !nhi->interrupt_mask)
 		return -ENOMEM;
+
+	INIT_DELAYED_WORK(&nhi->reset_work, nhi_reset_work);
+
+	if ((nhi->quirks & QUIRK_RESET_DMA_ON_REUSE) &&
+	    nhi->ops->reset_interface) {
+		/* Only v1 host interfaces implement the reset */
+		if (FIELD_GET(REG_CAPS_VERSION_MASK, caps) < REG_CAPS_VERSION_2) {
+			nhi->dma_hops_used = devm_bitmap_zalloc(dev,
+								nhi_dma_hops_bits(nhi),
+								GFP_KERNEL);
+			if (!nhi->dma_hops_used)
+				return -ENOMEM;
+		} else {
+			dev_warn(dev,
+				 "reset-on-reuse quirk requires a v1 host interface, disabling\n");
+		}
+	}
 
 	nhi_reset(nhi);
 

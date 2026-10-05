@@ -314,11 +314,20 @@ const struct bus_type tb_bus_type = {
 	.shutdown = tb_service_shutdown,
 };
 
+/* Reset work needs tb->lock to finish. */
+static void tb_domain_cancel_nhi_reset(struct tb *tb)
+{
+	lockdep_assert_not_held(&tb->lock);
+	cancel_delayed_work_sync(&tb->nhi->reset_work);
+}
+
 static void tb_domain_release(struct device *dev)
 {
 	struct tb *tb = container_of(dev, struct tb, dev);
 	struct tb_nhi *nhi = tb->nhi;
 
+	/* The host interface reset runs against this domain */
+	tb_domain_cancel_nhi_reset(tb);
 	tb_ctl_free(tb->ctl);
 	destroy_workqueue(tb->wq);
 	ida_free(&tb_domain_ida, tb->index);
@@ -505,8 +514,14 @@ void tb_domain_remove(struct tb *tb)
 		tb->cm_ops->stop(tb);
 	/* Stop the domain control traffic */
 	tb_ctl_stop(tb->ctl);
+	/* Keep reset_work from restarting it again below */
+	scoped_guard(spinlock_irq, &tb->nhi->lock) {
+		if (tb->nhi->dma_hops_used)
+			tb->nhi->removing = true;
+	}
 	mutex_unlock(&tb->lock);
 
+	tb_domain_cancel_nhi_reset(tb);
 	flush_workqueue(tb->wq);
 
 	if (tb->cm_ops->deinit)
@@ -535,9 +550,23 @@ int tb_domain_suspend_noirq(struct tb *tb)
 	mutex_lock(&tb->lock);
 	if (tb->cm_ops->suspend_noirq)
 		ret = tb->cm_ops->suspend_noirq(tb);
-	if (!ret)
+	if (!ret) {
+		/* Keep reset_work from restarting the control channel below */
+		scoped_guard(spinlock_irq, &tb->nhi->lock) {
+			if (tb->nhi->dma_hops_used)
+				tb->nhi->suspended = true;
+		}
 		tb_ctl_stop(tb->ctl);
+	}
 	mutex_unlock(&tb->lock);
+
+	/*
+	 * Make sure a host interface reset queued by cm_ops->suspend_noirq()
+	 * tearing down a DMA tunnel above either finishes or is cancelled
+	 * outright before the NHI is powered down below - either outcome
+	 * is fine since a dirty bitmap is handled again on resume.
+	 */
+	tb_domain_cancel_nhi_reset(tb);
 
 	return ret;
 }
@@ -556,6 +585,10 @@ int tb_domain_resume_noirq(struct tb *tb)
 	int ret = 0;
 
 	mutex_lock(&tb->lock);
+	scoped_guard(spinlock_irq, &tb->nhi->lock) {
+		if (tb->nhi->dma_hops_used)
+			tb->nhi->suspended = false;
+	}
 	tb_ctl_start(tb->ctl);
 	if (tb->cm_ops->resume_noirq)
 		ret = tb->cm_ops->resume_noirq(tb);
@@ -576,9 +609,17 @@ int tb_domain_freeze_noirq(struct tb *tb)
 	mutex_lock(&tb->lock);
 	if (tb->cm_ops->freeze_noirq)
 		ret = tb->cm_ops->freeze_noirq(tb);
-	if (!ret)
+	if (!ret) {
+		/* Keep reset_work from restarting the control channel below */
+		scoped_guard(spinlock_irq, &tb->nhi->lock) {
+			if (tb->nhi->dma_hops_used)
+				tb->nhi->suspended = true;
+		}
 		tb_ctl_stop(tb->ctl);
+	}
 	mutex_unlock(&tb->lock);
+
+	tb_domain_cancel_nhi_reset(tb);
 
 	return ret;
 }
@@ -588,6 +629,10 @@ int tb_domain_thaw_noirq(struct tb *tb)
 	int ret = 0;
 
 	mutex_lock(&tb->lock);
+	scoped_guard(spinlock_irq, &tb->nhi->lock) {
+		if (tb->nhi->dma_hops_used)
+			tb->nhi->suspended = false;
+	}
 	tb_ctl_start(tb->ctl);
 	if (tb->cm_ops->thaw_noirq)
 		ret = tb->cm_ops->thaw_noirq(tb);
@@ -609,13 +654,30 @@ int tb_domain_runtime_suspend(struct tb *tb)
 		if (ret)
 			return ret;
 	}
+
+	/* Keep reset_work from restarting the control channel below */
+	mutex_lock(&tb->lock);
+	scoped_guard(spinlock_irq, &tb->nhi->lock) {
+		if (tb->nhi->dma_hops_used)
+			tb->nhi->suspended = true;
+	}
 	tb_ctl_stop(tb->ctl);
+	mutex_unlock(&tb->lock);
+
+	tb_domain_cancel_nhi_reset(tb);
+
 	return 0;
 }
 
 int tb_domain_runtime_resume(struct tb *tb)
 {
+	mutex_lock(&tb->lock);
+	scoped_guard(spinlock_irq, &tb->nhi->lock) {
+		if (tb->nhi->dma_hops_used)
+			tb->nhi->suspended = false;
+	}
 	tb_ctl_start(tb->ctl);
+	mutex_unlock(&tb->lock);
 	if (tb->cm_ops->runtime_resume) {
 		int ret = tb->cm_ops->runtime_resume(tb);
 		if (ret)
@@ -788,21 +850,6 @@ int tb_domain_approve_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,
 			transmit_ring, receive_path, receive_ring);
 }
 
-static void tb_domain_reset_interface(struct tb *tb)
-{
-	struct tb_nhi *nhi = tb->nhi;
-
-	if (!nhi->ops->reset_interface)
-		return;
-
-	guard(mutex)(&tb->lock);
-
-	/* The reset clears the ring state so stop the control channel */
-	tb_ctl_stop(tb->ctl);
-	nhi->ops->reset_interface(nhi);
-	tb_ctl_start(tb->ctl);
-}
-
 /**
  * tb_domain_disconnect_xdomain_paths() - Disable DMA paths for XDomain
  * @tb: Domain disabling the DMA paths
@@ -834,9 +881,6 @@ int tb_domain_disconnect_xdomain_paths(struct tb *tb, struct tb_xdomain *xd,
 			transmit_ring, receive_path, receive_ring);
 	if (ret)
 		return ret;
-
-	if (tb->nhi->quirks & QUIRK_RESET_DMA_ON_TEARDOWN)
-		tb_domain_reset_interface(tb);
 
 	return 0;
 }
