@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/supply/glinet,gl-e750-mcu.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: GL.iNet GL-E750 status MCU
+
+maintainers:
+  - Serv Pol <servpol@tuta.io>
+
+description:
+  The GL.iNet GL-E750 (Mudi) travel router has a microcontroller connected
+  to the SoC UART. It drives the OLED status screen, monitors the battery
+  and reports when the power switch is turned off, a few seconds before it
+  cuts the power.
+
+allOf:
+  - $ref: power-supply.yaml#
+  - $ref: /schemas/serial/serial-peripheral-props.yaml#
+
+properties:
+  compatible:
+    const: glinet,gl-e750-mcu
+
+required:
+  - compatible
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    serial {
+        mcu {
+            compatible = "glinet,gl-e750-mcu";
+        };
+    };
