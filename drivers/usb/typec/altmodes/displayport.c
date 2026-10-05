@@ -766,9 +766,21 @@ int dp_altmode_probe(struct typec_altmode *alt)
 	struct dp_altmode *dp;
 	u32 cap = DP_CAP_CAPABILITY(alt->vdo);
 
-	/* Port can only be DFP_U. */
-	if (typec_altmode_get_data_role(alt) != TYPEC_HOST)
-		return -EPROTO;
+	/*
+	 * Port can only be DFP_U.
+	 *
+	 * Defer rather than reject: on a dock the partner registers its
+	 * altmodes while the port is still UFP, so a hard -EPROTO here drops
+	 * the DisplayPort altmode permanently and nothing retries it --
+	 * binding then depends on the altmode happening to be re-registered
+	 * after the data-role swap. -EPROBE_DEFER makes the driver core retry
+	 * once the role settles, which is deterministic and stops logging a
+	 * failure for an ordinary ordering race.
+	 */
+	if (typec_altmode_get_data_role(alt) != TYPEC_HOST) {
+		typec_altmode_put_plug(plug);
+		return -EPROBE_DEFER;
+	}
 
 	/* Make sure we have compatible pin configurations */
 	if (!(DP_CAP_PIN_ASSIGN_DFP_D(port->vdo) &
