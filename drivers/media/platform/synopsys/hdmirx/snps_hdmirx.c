@@ -2129,13 +2129,25 @@ static irqreturn_t hdmirx_dma_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+/*
+ * Wait for the HDMI signal to lock: TMDS clock detection and ratio
+ * configuration, then PHY and CMU lock, then DMA lock.
+ *
+ * The wait used to be bounded by a count of 300 iterations. What that came
+ * to in wall clock time was decided by the debounce inside
+ * tx_5v_power_present(), which is called once per iteration and sleeps
+ * about 7ms of it, so the real timeout was an accident of how 5V happens to
+ * be sensed. Poll on a fixed interval against an explicit deadline instead.
+ */
 static int hdmirx_wait_signal_lock(struct snps_hdmirx_dev *hdmirx_dev)
 {
 	struct v4l2_device *v4l2_dev = &hdmirx_dev->v4l2_dev;
 	u32 mu_status, scdc_status, dma_st10, cmu_st;
-	u32 i;
+	unsigned long timeout;
 
-	for (i = 0; i < 300; i++) {
+	timeout = jiffies + msecs_to_jiffies(3000);
+
+	for (;;) {
 		mu_status = hdmirx_readl(hdmirx_dev, MAINUNIT_STATUS);
 		scdc_status = hdmirx_readl(hdmirx_dev, SCDC_REGBANK_STATUS3);
 		dma_st10 = hdmirx_readl(hdmirx_dev, DMA_STATUS10);
@@ -2149,21 +2161,25 @@ static int hdmirx_wait_signal_lock(struct snps_hdmirx_dev *hdmirx_dev)
 		if (!tx_5v_power_present(hdmirx_dev)) {
 			v4l2_dbg(1, debug, v4l2_dev,
 				 "%s: HDMI pull out, return\n", __func__);
-			return -1;
+			return -ENOLINK;
+		}
+
+		if (time_after(jiffies, timeout)) {
+			v4l2_err(v4l2_dev,
+				 "%s: signal not lock, tmds_clk_ratio:%d\n",
+				 __func__, hdmirx_dev->tmds_clk_ratio);
+			v4l2_err(v4l2_dev,
+				 "%s: mu_st:%#x, scdc_st:%#x, dma_st10:%#x, cmu_st:%#x\n",
+				 __func__, mu_status, scdc_status, dma_st10,
+				 cmu_st);
+			return -ETIMEDOUT;
 		}
 
 		hdmirx_tmds_clk_ratio_config(hdmirx_dev);
+		usleep_range(10000, 11000);
 	}
 
-	if (i == 300) {
-		v4l2_err(v4l2_dev, "%s: signal not lock, tmds_clk_ratio:%d\n",
-			 __func__, hdmirx_dev->tmds_clk_ratio);
-		v4l2_err(v4l2_dev, "%s: mu_st:%#x, scdc_st:%#x, dma_st10:%#x\n",
-			 __func__, mu_status, scdc_status, dma_st10);
-		return -1;
-	}
-
-	v4l2_dbg(1, debug, v4l2_dev, "%s: signal lock ok, i:%d\n", __func__, i);
+	v4l2_dbg(1, debug, v4l2_dev, "%s: signal lock ok\n", __func__);
 	hdmirx_writel(hdmirx_dev, GLOBAL_SWRESET_REQUEST, DATAPATH_SWRESETREQ);
 
 	reinit_completion(&hdmirx_dev->avi_pkt_rcv);
