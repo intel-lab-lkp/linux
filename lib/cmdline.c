@@ -125,8 +125,11 @@ char *get_options(const char *str, int nints, int *ints)
 			/*
 			 * Decrement the result by one to leave out the
 			 * last number in the range.  The next iteration
-			 * will handle the upper number in the range
+			 * will handle the upper number in the range.
+			 * Stop if that would overflow @i.
 			 */
+			if (range_nums > INT_MAX - 1 - i)
+				break;
 			i += (range_nums - 1);
 		}
 		i++;

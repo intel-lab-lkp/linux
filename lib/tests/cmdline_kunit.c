@@ -252,12 +252,31 @@ static void cmdline_test_memparse(struct kunit *test)
 				    "    when parsing '%s'", e->input);
 	}
 }
+static void cmdline_test_range_overflow(struct kunit *test)
+{
+	int r[16];
+
+	/*
+	 * A range spanning (almost) the whole int space must not overflow
+	 * the number of parsed integers; such a range is not counted.
+	 * Only the validation mode is used, as it never writes beyond r[0].
+	 */
+	r[0] = -1;
+	get_options("0-2147483647", 0, r);
+	KUNIT_EXPECT_EQ(test, r[0], 0);
+
+	r[0] = -1;
+	get_options("1,0-2147483647", 0, r);
+	KUNIT_EXPECT_EQ(test, r[0], 1);
+}
+
 
 static struct kunit_case cmdline_test_cases[] = {
 	KUNIT_CASE(cmdline_test_noint),
 	KUNIT_CASE(cmdline_test_lead_int),
 	KUNIT_CASE(cmdline_test_tail_int),
 	KUNIT_CASE(cmdline_test_range),
+	KUNIT_CASE(cmdline_test_range_overflow),
 	KUNIT_CASE(cmdline_test_next_arg_quoted_value),
 	KUNIT_CASE(cmdline_test_next_arg_bare_quote_regression),
 	KUNIT_CASE(cmdline_test_next_arg_mixed_tokens),
