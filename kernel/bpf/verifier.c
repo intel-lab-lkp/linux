@@ -9597,6 +9597,27 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 arg, u32 slot, u32 p
 			}
 		}
 
+		/* A __arg_trusted argument requires a referenced or trusted
+		 * pointer. btf_ptr_types also matches a bare PTR_TO_BTF_ID and
+		 * an MEM_RCU one, but neither is referenced or trusted, so the
+		 * callee would be verified with PTR_TRUSTED while the caller
+		 * passed something that is not. PTR_MAYBE_NULL is not counted
+		 * as unsafe when __arg_nullable declares it, because
+		 * bpf_type_has_unsafe_modifiers() treats that flag as unsafe.
+		 */
+		if ((arg_type & PTR_TRUSTED) && base_type(reg->type) == PTR_TO_BTF_ID &&
+		    !reg_is_referenced(env, reg)) {
+			u32 flags = type_flag(reg->type);
+
+			if (!(flags & BPF_REG_TRUSTED_MODIFIERS) ||
+			    (flags & ~(BPF_REG_TRUSTED_MODIFIERS |
+				       (arg_type & PTR_MAYBE_NULL)))) {
+				verbose(env, "%s must be referenced or trusted\n",
+					reg_arg_name(env, argno));
+				return -EINVAL;
+			}
+		}
+
 		if (is_kfunc(meta) && (!is_trusted_reg(env, reg) ||
 				       bpf_type_has_unsafe_modifiers(reg->type))) {
 			if (!(arg_type & MEM_RCU)) {
