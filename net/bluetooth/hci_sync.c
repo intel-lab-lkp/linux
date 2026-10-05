@@ -1413,6 +1413,21 @@ int hci_setup_ext_adv_instance_sync(struct hci_dev *hdev, u8 instance)
 		if (err)
 			return err;
 
+		/* Disable any instance sharing the advertising set of
+		 * instance 0 since it is going to be overridden.
+		 */
+		list_for_each_entry(adv, &hdev->adv_instances, list) {
+			if (adv->handle || !adv->enabled)
+				continue;
+
+			err = hci_disable_ext_adv_instance_sync(hdev,
+								adv->instance);
+			if (err)
+				return err;
+
+			break;
+		}
+
 		adv = NULL;
 	}
 
@@ -1675,6 +1690,12 @@ int hci_enable_ext_advertising_sync(struct hci_dev *hdev, u8 instance)
 		/* Time = N * 10 ms */
 		set->duration = cpu_to_le16(duration / 10);
 	}
+
+	/* Track which instance owns the advertising set since the handle
+	 * alone is ambiguous when instances share handle 0x00, see
+	 * hci_cc_le_set_ext_adv_enable.
+	 */
+	hdev->cur_adv_instance = instance;
 
 	return __hci_cmd_sync_status(hdev, HCI_OP_LE_SET_EXT_ADV_ENABLE,
 				     sizeof(*cp) +
