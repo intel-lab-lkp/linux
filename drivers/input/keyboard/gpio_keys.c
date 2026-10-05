@@ -28,6 +28,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/spinlock.h>
+#include <linux/pinctrl/consumer.h>
 #include <dt-bindings/input/gpio-keys.h>
 
 struct gpio_button_data {
@@ -60,6 +61,8 @@ struct gpio_keys_drvdata {
 	struct input_dev *input;
 	struct mutex disable_lock;
 	unsigned short *keymap;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pinctrl_wakeup;
 	struct gpio_button_data data[];
 };
 
@@ -884,6 +887,17 @@ static int gpio_keys_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, ddata);
 	input_set_drvdata(input, ddata);
 
+	ddata->pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR(ddata->pinctrl)) {
+		error = PTR_ERR(ddata->pinctrl);
+		ddata->pinctrl = NULL;
+
+		if (error != -ENODEV)
+			return dev_err_probe(dev, error, "Failed to get pinctrl\n");
+	} else if (ddata->pinctrl) {
+		ddata->pinctrl_wakeup = pinctrl_lookup_state(ddata->pinctrl, "wakeup");
+	}
+
 	input->name = pdata->name ? : pdev->name;
 	input->phys = "gpio-keys/input0";
 	input->dev.parent = dev;
@@ -1010,6 +1024,12 @@ gpio_keys_enable_wakeup(struct gpio_keys_drvdata *ddata)
 	int error;
 	int i;
 
+	if (!IS_ERR_OR_NULL(ddata->pinctrl_wakeup)) {
+		error = pinctrl_select_state(ddata->pinctrl, ddata->pinctrl_wakeup);
+		if (error)
+			return error;
+	}
+
 	for (i = 0; i < ddata->pdata->nbuttons; i++) {
 		bdata = &ddata->data[i];
 		if (bdata->button->wakeup) {
@@ -1023,6 +1043,9 @@ gpio_keys_enable_wakeup(struct gpio_keys_drvdata *ddata)
 	return 0;
 
 err_out:
+	if (!IS_ERR_OR_NULL(ddata->pinctrl_wakeup))
+		pinctrl_pm_select_default_state(ddata->input->dev.parent);
+
 	while (i--) {
 		bdata = &ddata->data[i];
 		if (bdata->button->wakeup)
@@ -1038,6 +1061,9 @@ gpio_keys_disable_wakeup(struct gpio_keys_drvdata *ddata)
 {
 	struct gpio_button_data *bdata;
 	int i;
+
+	if (!IS_ERR_OR_NULL(ddata->pinctrl_wakeup))
+		pinctrl_pm_select_default_state(ddata->input->dev.parent);
 
 	for (i = 0; i < ddata->pdata->nbuttons; i++) {
 		bdata = &ddata->data[i];
