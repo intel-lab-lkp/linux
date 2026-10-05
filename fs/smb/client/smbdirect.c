@@ -201,7 +201,17 @@ static int smbd_post_send_full_iter(struct smbdirect_socket *sc,
  */
 void smbd_destroy(struct TCP_Server_Info *server)
 {
-	struct smbd_connection *info = server->smbd_conn;
+	struct smbd_connection *info;
+
+	/*
+	 * server->smbd_conn is changed under server->srv_lock,
+	 * so that readers which don't hold cifs_server_lock()
+	 * can use it under server->srv_lock.
+	 */
+	spin_lock(&server->srv_lock);
+	info = server->smbd_conn;
+	server->smbd_conn = NULL;
+	spin_unlock(&server->srv_lock);
 
 	if (!info) {
 		log_rdma_event(INFO, "rdma session already destroyed\n");
@@ -211,7 +221,17 @@ void smbd_destroy(struct TCP_Server_Info *server)
 	smbdirect_socket_release(info->socket);
 
 	kfree(info);
-	server->smbd_conn = NULL;
+}
+
+/*
+ * Publish a new connection, see smbd_destroy()
+ */
+void smbd_set_connection(struct TCP_Server_Info *server,
+			 struct smbd_connection *info)
+{
+	spin_lock(&server->srv_lock);
+	server->smbd_conn = info;
+	spin_unlock(&server->srv_lock);
 }
 
 /*
@@ -236,8 +256,9 @@ int smbd_reconnect(struct TCP_Server_Info *server)
 
 create_conn:
 	log_rdma_event(INFO, "creating rdma session\n");
-	server->smbd_conn = smbd_get_connection(
-		server, (struct sockaddr *) &server->dstaddr);
+	smbd_set_connection(server,
+			    smbd_get_connection(server,
+						(struct sockaddr *) &server->dstaddr));
 
 	if (server->smbd_conn) {
 		cifs_dbg(VFS, "RDMA transport re-established\n");

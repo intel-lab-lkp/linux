@@ -1858,8 +1858,9 @@ cifs_get_tcp_session(struct smb3_fs_context *ctx,
 		rc = -ENOENT;
 		goto out_err_crypto_release;
 #endif
-		tcp_ses->smbd_conn = smbd_get_connection(
-			tcp_ses, (struct sockaddr *)&ctx->dstaddr);
+		smbd_set_connection(tcp_ses,
+				    smbd_get_connection(tcp_ses,
+							(struct sockaddr *)&ctx->dstaddr));
 		if (tcp_ses->smbd_conn) {
 			cifs_dbg(VFS, "RDMA transport established\n");
 			rc = 0;
@@ -1934,7 +1935,12 @@ out_err:
 		kfree(tcp_ses->leaf_fullpath);
 		if (tcp_ses->ssocket)
 			sock_release(tcp_ses->ssocket);
-		smbd_destroy(tcp_ses);
+		/*
+		 * srv_lock is not initialized yet for
+		 * the early gotos, but smbd_conn is NULL then.
+		 */
+		if (tcp_ses->smbd_conn)
+			smbd_destroy(tcp_ses);
 		kfree(tcp_ses);
 	}
 	return ERR_PTR(rc);
