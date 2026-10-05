@@ -3631,8 +3631,8 @@ static void prio_changed_dl(struct rq *rq, struct task_struct *p, u64 old_deadli
 		 *
 		 * Otherwise, if p was given an earlier deadline, reschedule.
 		 */
-		if (!dl_task(rq->curr) ||
-		    dl_time_before(p->dl.deadline, rq->curr->dl.deadline))
+		if (!dl_task(rq->donor) ||
+		    dl_time_before(p->dl.deadline, rq->donor->dl.deadline))
 			resched_curr(rq);
 	}
 }
