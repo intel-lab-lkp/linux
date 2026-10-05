@@ -83,6 +83,25 @@ static struct buffer_head *ext4_append(handle_t *handle,
 	bh = ext4_bread(handle, inode, *block, EXT4_GET_BLOCKS_CREATE);
 	if (IS_ERR(bh))
 		return bh;
+
+	for (map.m_lblk = 0; map.m_lblk < *block; map.m_lblk += map.m_len) {
+		map.m_len = *block - map.m_lblk;
+		err = ext4_map_blocks(NULL, inode, &map, 0);
+		if (err < 0)
+			goto out;
+		if (err == 0) {
+			map.m_len = 1;
+			continue;
+		}
+		if (unlikely(map.m_pblk == bh->b_blocknr)) {
+			EXT4_ERROR_INODE(inode,
+					 "new block %llu already mapped",
+					 (unsigned long long)bh->b_blocknr);
+			err = -EFSCORRUPTED;
+			goto out;
+		}
+	}
+
 	inode->i_size += inode->i_sb->s_blocksize;
 	EXT4_I(inode)->i_disksize = inode->i_size;
 	err = ext4_mark_inode_dirty(handle, inode);
