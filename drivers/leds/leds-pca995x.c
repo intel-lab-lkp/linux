@@ -43,24 +43,31 @@ struct pca995x_chipdef {
 	unsigned int num_leds;
 	u8 pwm_base;
 	u8 irefall;
+	u8 mode2_cfg;
 };
 
 static const struct pca995x_chipdef pca9952_chipdef = {
 	.num_leds	= 16,
 	.pwm_base	= 0x0a,
 	.irefall	= 0x43,
+	/* Reset default */
+	.mode2_cfg	= 0x05,
 };
 
 static const struct pca995x_chipdef pca9955b_chipdef = {
 	.num_leds	= 16,
 	.pwm_base	= 0x08,
 	.irefall	= 0x45,
+	/* Reset default */
+	.mode2_cfg	= 0x01,
 };
 
 static const struct pca995x_chipdef pca9956b_chipdef = {
 	.num_leds	= 24,
 	.pwm_base	= 0x0a,
 	.irefall	= 0x40,
+	/* Reset default */
+	.mode2_cfg	= 0x05,
 };
 
 struct pca995x_led {
@@ -182,6 +189,11 @@ static int pca995x_probe(struct i2c_client *client)
 
 	/* Disable LED all-call address and set normal mode */
 	ret = regmap_write(chip->regmap, PCA995X_MODE1, PCA995X_MODE1_CFG);
+	if (ret)
+		goto err_put_nodes;
+
+	/* Clear errors on probe */
+	ret = regmap_write(chip->regmap, PCA995X_MODE2, chipdef->mode2_cfg);
 	if (ret)
 		goto err_put_nodes;
 
