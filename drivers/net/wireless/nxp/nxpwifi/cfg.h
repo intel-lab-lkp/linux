@@ -755,6 +755,17 @@ struct nxpwifi_ds_coalesce_cfg {
 	struct nxpwifi_coalesce_rule rule[NXPWIFI_COALESCE_MAX_RULES];
 };
 
+/* Host-side helper for the channel TRPC command. */
+struct nxpwifi_ds_chan_trpc_cfg {
+	u32 len;
+	u16 action;
+	u16 subband;
+	u8 tlvbuffer[];
+};
+
+/* Upper bound on the TRPC TLV table exchanged with the firmware. */
+#define NXPWIFI_MAX_TRPC_BUF (4 * 1024)
+
 struct nxpwifi_11ax_he_cap_cfg {
 	u16 id;
 	u16 len;

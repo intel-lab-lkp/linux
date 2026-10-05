@@ -1175,3 +1175,11 @@ int nxpwifi_get_chan_info(struct nxpwifi_private *priv,
 				HOST_ACT_GEN_GET, 0, channel_band,
 				NXPWIFI_SYNC_CMD);
 }
+
+int nxpwifi_chan_trpc_cfg(struct nxpwifi_private *priv, int cmd_type,
+			  struct nxpwifi_ds_chan_trpc_cfg *ch_trpc)
+{
+	return nxpwifi_send_cmd(priv, HOST_CMD_CHAN_TRPC_CONFIG,
+				ch_trpc->action, 0, ch_trpc,
+				cmd_type == NXPWIFI_SYNC_CMD);
+}

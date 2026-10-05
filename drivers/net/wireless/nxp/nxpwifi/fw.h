@@ -386,6 +386,7 @@ enum NXPWIFI_802_11_PRIVACY_FILTER {
 #define HOST_CMD_CAU_REG_ACCESS                    0x00ed
 #define HOST_CMD_SET_BSS_MODE                      0x00f7
 #define HOST_CMD_PCIE_DESC_DETAILS                 0x00fa
+#define HOST_CMD_CHAN_TRPC_CONFIG                  0x00fb
 #define HOST_CMD_802_11_NET_MONITOR                0x0102
 #define HOST_CMD_802_11_SCAN_EXT                   0x0107
 #define HOST_CMD_COALESCE_CFG                      0x010a
@@ -2373,6 +2374,12 @@ struct host_cmd_twt_cfg {
 	u8 val[];
 } __packed;
 
+struct host_cmd_chan_trpc_cfg {
+	__le16 action;
+	__le16 subband;
+	u8 tlvbuffer[];
+} __packed;
+
 struct host_cmd_ds_command {
 	__le16 command;
 	__le16 size;
@@ -2447,6 +2454,7 @@ struct host_cmd_ds_command {
 		struct host_cmd_11ax_cmd ax_cmd;
 		struct host_cmd_ds_802_11_net_monitor net_mon;
 		struct host_cmd_twt_cfg twt_cfg;
+		struct host_cmd_chan_trpc_cfg ch_trpc_cfg;
 	} params;
 } __packed;
 

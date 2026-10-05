@@ -3033,6 +3033,70 @@ nxpwifi_ret_sta_twt_cfg(struct nxpwifi_private *priv,
 	return nxpwifi_ret_twt_cfg(priv, resp, data_buf);
 }
 
+static int nxpwifi_cmd_chan_trpc_cfg(struct nxpwifi_private *priv,
+				     struct host_cmd_ds_command *cmd,
+				     u16 cmd_no, void *data_buf, u16 cmd_action,
+				     u32 cmd_type)
+{
+	struct host_cmd_chan_trpc_cfg *chan_trpc_cfg = &cmd->params.ch_trpc_cfg;
+	struct nxpwifi_ds_chan_trpc_cfg *usr_chan_trpc_cfg =
+		(struct nxpwifi_ds_chan_trpc_cfg *)data_buf;
+	u32 hdr_len = sizeof(chan_trpc_cfg->action) +
+		      sizeof(chan_trpc_cfg->subband);
+
+	/* usr_chan_trpc_cfg->len covers action, subband, and TRPC data.
+	 * Reject lengths outside the supported command payload range.
+	 */
+	if (usr_chan_trpc_cfg->len < hdr_len ||
+	    usr_chan_trpc_cfg->len > hdr_len + NXPWIFI_MAX_TRPC_BUF)
+		return -EINVAL;
+
+	cmd->command = cpu_to_le16(cmd_no);
+	cmd->size = cpu_to_le16(S_DS_GEN + usr_chan_trpc_cfg->len);
+
+	memcpy(chan_trpc_cfg, &usr_chan_trpc_cfg->action,
+	       usr_chan_trpc_cfg->len);
+
+	return 0;
+}
+
+static int nxpwifi_ret_chan_trpc_cfg(struct nxpwifi_private *priv,
+				     struct host_cmd_ds_command *resp,
+				     u16 cmdresp_no, void *data_buf)
+{
+	struct host_cmd_chan_trpc_cfg *chan_trpc_cfg =
+		&resp->params.ch_trpc_cfg;
+	struct nxpwifi_ds_chan_trpc_cfg *usr_chan_trpc_cfg =
+		(struct nxpwifi_ds_chan_trpc_cfg *)data_buf;
+
+	if (chan_trpc_cfg->action == HOST_ACT_GEN_GET) {
+		u16 resp_size = le16_to_cpu(resp->size);
+		u16 resp_len;
+
+		if (resp_size < S_DS_GEN)
+			return -EIO;
+
+		resp_len = resp_size - S_DS_GEN;
+		/* The firmware response contains action, subband, and TRPC
+		 * data. Validate that the payload length is within bounds.
+		 */
+		if (resp_len < sizeof(chan_trpc_cfg->action) +
+			       sizeof(chan_trpc_cfg->subband) ||
+		    resp_len > sizeof(chan_trpc_cfg->action) +
+			       sizeof(chan_trpc_cfg->subband) +
+			       NXPWIFI_MAX_TRPC_BUF) {
+			nxpwifi_dbg(priv->adapter, ERROR,
+				    "chan_trpc bad resp len: %u\n", resp_len);
+			return -EIO;
+		}
+
+		usr_chan_trpc_cfg->len = resp_len;
+		memcpy(&usr_chan_trpc_cfg->action, chan_trpc_cfg, resp_len);
+	}
+
+	return 0;
+}
+
 static const struct nxpwifi_cmd_entry cmd_table_sta[] = {
 	{.cmd_no = HOST_CMD_GET_HW_SPEC,
 	.prepare_cmd = nxpwifi_cmd_sta_get_hw_spec,
@@ -3217,6 +3281,9 @@ static const struct nxpwifi_cmd_entry cmd_table_sta[] = {
 	{.cmd_no = HOST_CMD_TWT_CFG,
 	.prepare_cmd = nxpwifi_cmd_sta_twt_cfg,
 	.cmd_resp = nxpwifi_ret_sta_twt_cfg},
+	{.cmd_no = HOST_CMD_CHAN_TRPC_CONFIG,
+	.prepare_cmd = nxpwifi_cmd_chan_trpc_cfg,
+	.cmd_resp = nxpwifi_ret_chan_trpc_cfg},
 };
 
 /*
