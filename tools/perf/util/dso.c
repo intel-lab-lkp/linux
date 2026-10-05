@@ -547,8 +547,6 @@ static void dso__list_add(struct dso *dso) EXCLUSIVE_LOCKS_REQUIRED(_dso__data_o
 #ifdef REFCNT_CHECKING
 	dso__data(dso)->dso = dso__get(dso);
 #endif
-	/* Assume the dso is part of dsos, hence the optional reference count above. */
-	assert(dso__dsos(dso));
 	dso__data_open_cnt++;
 }
 
@@ -678,8 +676,11 @@ static int __open_dso(struct dso *dso, struct machine *machine)
 
 	mutex_lock(dso__lock(dso));
 
-	name = dso__get_filename(dso, machine ? machine->root_dir : "", &decomp,
-				 dso__binary_type(dso));
+	if (dso__data(dso)->path)
+		name = strdup(dso__data(dso)->path);
+	else
+		name = dso__get_filename(dso, machine ? machine->root_dir : "",
+					 &decomp, dso__binary_type(dso));
 	if (name) {
 		fd = do_open(name);
 	} else {
@@ -831,6 +832,26 @@ void dso__data_close(struct dso *dso)
 	mutex_lock(dso__data_open_lock());
 	close_dso(dso);
 	mutex_unlock(dso__data_open_lock());
+}
+
+/**
+ * dso__data_set_path - Read @dso's data from an explicit file
+ * @dso: dso object
+ * @path: file to open instead of the path derived from the binary type
+ *
+ * Used when the data must come from one specific file, such as the separate
+ * debuginfo file that a symbol table was read from. Must be called before any
+ * data is read, as already cached data is not invalidated.
+ */
+int dso__data_set_path(struct dso *dso, const char *path)
+{
+	char *new_path = strdup(path);
+
+	if (!new_path)
+		return -ENOMEM;
+	free(dso__data(dso)->path);
+	dso__data(dso)->path = new_path;
+	return 0;
 }
 
 static void try_to_open_dso(struct dso *dso, struct machine *machine)
@@ -1783,6 +1804,7 @@ void dso__delete(struct dso *dso)
 	dso__data_close(dso);
 	auxtrace_cache__free(RC_CHK_ACCESS(dso)->auxtrace_cache);
 	dso_cache__free(dso);
+	zfree(&RC_CHK_ACCESS(dso)->data.path);
 	dso__free_a2l(dso);
 	dso__free_a2l_libbfd(dso);
 	dso__free_libdw(dso);
