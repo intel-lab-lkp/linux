@@ -98,7 +98,7 @@ retry:
 #ifdef CONFIG_CIFS_SMB_DIRECT
 	if (server->smbd_conn) {
 		const struct smbdirect_socket_parameters *sp =
-			smbd_get_parameters(server->smbd_conn);
+			smbd_get_parameters(server);
 
 		stream->sreq_max_segs = sp->max_frmr_depth;
 	}
@@ -192,7 +192,7 @@ static int cifs_prepare_read(struct netfs_io_subrequest *subreq)
 #ifdef CONFIG_CIFS_SMB_DIRECT
 	if (server->smbd_conn) {
 		const struct smbdirect_socket_parameters *sp =
-			smbd_get_parameters(server->smbd_conn);
+			smbd_get_parameters(server);
 
 		rreq->io_streams[0].sreq_max_segs = sp->max_frmr_depth;
 	}

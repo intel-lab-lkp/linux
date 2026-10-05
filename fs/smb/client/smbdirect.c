@@ -361,8 +361,10 @@ socket_init_failed:
 	return NULL;
 }
 
-const struct smbdirect_socket_parameters *smbd_get_parameters(struct smbd_connection *conn)
+const struct smbdirect_socket_parameters *smbd_get_parameters(struct TCP_Server_Info *server)
 {
+	struct smbd_connection *conn = server->smbd_conn;
+
 	if (unlikely(!conn->socket)) {
 		static const struct smbdirect_socket_parameters zero_params;
 
@@ -390,7 +392,7 @@ try_again:
 	if (!ret)
 		return NULL;
 
-	sp = smbd_get_parameters(ret);
+	sp = smbdirect_socket_get_current_parameters(ret->socket);
 
 	server->rdma_readwrite_threshold =
 		rdma_readwrite_threshold > sp->max_fragmented_send_size ?
@@ -435,7 +437,7 @@ int smbd_send(struct TCP_Server_Info *server,
 {
 	struct smbd_connection *info = server->smbd_conn;
 	struct smbdirect_socket *sc = info->socket;
-	const struct smbdirect_socket_parameters *sp = smbd_get_parameters(info);
+	const struct smbdirect_socket_parameters *sp = smbd_get_parameters(server);
 	struct smb_rqst *rqst;
 	struct iov_iter iter;
 	struct smbdirect_send_batch_storage bstorage;

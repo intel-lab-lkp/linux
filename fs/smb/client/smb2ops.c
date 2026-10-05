@@ -516,7 +516,7 @@ smb3_negotiate_wsize(struct cifs_tcon *tcon, struct smb3_fs_context *ctx)
 #ifdef CONFIG_CIFS_SMB_DIRECT
 	if (server->rdma) {
 		const struct smbdirect_socket_parameters *sp =
-			smbd_get_parameters(server->smbd_conn);
+			smbd_get_parameters(server);
 
 		if (server->sign)
 			/*
@@ -567,7 +567,7 @@ smb3_negotiate_rsize(struct cifs_tcon *tcon, struct smb3_fs_context *ctx)
 #ifdef CONFIG_CIFS_SMB_DIRECT
 	if (server->rdma) {
 		const struct smbdirect_socket_parameters *sp =
-			smbd_get_parameters(server->smbd_conn);
+			smbd_get_parameters(server);
 
 		if (server->sign)
 			/*

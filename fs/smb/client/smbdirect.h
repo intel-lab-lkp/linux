@@ -33,7 +33,7 @@ struct smbd_connection *smbd_get_connection(
 void smbd_set_connection(struct TCP_Server_Info *server,
 			 struct smbd_connection *info);
 
-const struct smbdirect_socket_parameters *smbd_get_parameters(struct smbd_connection *conn);
+const struct smbdirect_socket_parameters *smbd_get_parameters(struct TCP_Server_Info *server);
 
 /* Reconnect SMBDirect session */
 int smbd_reconnect(struct TCP_Server_Info *server);
