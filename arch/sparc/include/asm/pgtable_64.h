@@ -860,8 +860,7 @@ static inline pmd_t *pud_pgtable(pud_t pud)
 #define p4d_present(p4d)		(p4d_val(p4d) != 0U)
 #define p4d_clear(p4dp)			(p4d_val(*(p4dp)) = 0UL)
 
-/* only used by the stubbed out hugetlb gup code, should never be called */
-#define p4d_page(p4d)			NULL
+#define p4d_page(p4d)			virt_to_page((void *)p4d_pgtable(p4d))
 
 #define pud_leaf pud_leaf
 static inline bool pud_leaf(pud_t pud)
