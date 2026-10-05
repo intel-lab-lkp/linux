@@ -44,6 +44,7 @@ enum al_fic_state {
 enum al_fic_version {
 	AL_FIC_VERSION_V1,
 	AL_FIC_VERSION_V2,
+	AL_FIC_VERSION_V3,
 };
 
 enum al_fic_id {
@@ -174,8 +175,8 @@ static int al_fic_register(struct device_node *node,
 	 * register. Suppress the seeding there and set mask_cache below to
 	 * match what al_fic_wire_init() programmed.
 	 *
-	 * The info mask register is not affected, so the info output keeps the
-	 * register-seeded mask_cache.
+	 * The info mask register is not affected, and the erratum is fixed
+	 * from v3 onwards, so those paths keep the register-seeded mask_cache.
 	 */
 	if (version == AL_FIC_VERSION_V2 &&
 	    (fic_id == AL_FIC_ID_ERROR || fic_id == AL_FIC_ID_FATAL))
