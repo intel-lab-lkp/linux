@@ -741,18 +741,24 @@ EXPORT_SYMBOL_GPL(tb_ring_alloc_rx);
  * @ring: Ring to start
  *
  * Must not be invoked in parallel with tb_ring_stop().
+ *
+ * Returns %0 on success and negative errno in case of failure.
  */
-void tb_ring_start(struct tb_ring *ring)
+int tb_ring_start(struct tb_ring *ring)
 {
 	u16 frame_size;
+	int ret = 0;
 	u32 flags;
 
 	spin_lock_irq(&ring->nhi->lock);
 	spin_lock(&ring->lock);
-	if (ring->nhi->going_away)
+	if (ring->nhi->going_away) {
+		ret = -ENODEV;
 		goto err;
+	}
 	if (ring->running) {
 		dev_WARN(ring->nhi->dev, "ring already started\n");
+		ret = -EBUSY;
 		goto err;
 	}
 	dev_dbg(ring->nhi->dev, "starting %s %d\n",
@@ -810,6 +816,8 @@ void tb_ring_start(struct tb_ring *ring)
 err:
 	spin_unlock(&ring->lock);
 	spin_unlock_irq(&ring->nhi->lock);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(tb_ring_start);
 

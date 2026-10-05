@@ -728,10 +728,27 @@ void tb_ctl_free(struct tb_ctl *ctl)
  */
 void tb_ctl_start(struct tb_ctl *ctl)
 {
-	int i;
+	int i, ret;
 	tb_ctl_dbg(ctl, "control channel starting...\n");
-	tb_ring_start(ctl->tx); /* is used to ack hotplug packets, start first */
-	tb_ring_start(ctl->rx);
+
+	/*
+	 * TX is used to ack hotplug packets so start it first. -ENODEV
+	 * means the host controller itself is already gone (expected on
+	 * an unplug-during-suspend resume), so do not warn about that.
+	 */
+	ret = tb_ring_start(ctl->tx);
+	if (ret) {
+		if (ret != -ENODEV)
+			tb_ctl_WARN(ctl, "failed to start TX ring\n");
+		return;
+	}
+	ret = tb_ring_start(ctl->rx);
+	if (ret) {
+		if (ret != -ENODEV)
+			tb_ctl_WARN(ctl, "failed to start RX ring\n");
+		tb_ring_stop(ctl->tx);
+		return;
+	}
 	for (i = 0; i < TB_CTL_RX_PKG_COUNT; i++)
 		tb_ctl_rx_submit(ctl->rx_packets[i]);
 
