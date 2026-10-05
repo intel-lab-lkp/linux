@@ -2094,8 +2094,10 @@ static int ftgmac100_probe(struct platform_device *pdev)
 
 err:
 	ftgmac100_phy_disconnect(netdev);
-	if (priv->ndev)
+	if (priv->ndev) {
 		ncsi_unregister_dev(priv->ndev);
+		priv->ndev = NULL;
+	}
 	return err;
 }
 
@@ -2107,9 +2109,11 @@ static void ftgmac100_remove(struct platform_device *pdev)
 	netdev = platform_get_drvdata(pdev);
 	priv = netdev_priv(netdev);
 
-	if (priv->ndev)
-		ncsi_unregister_dev(priv->ndev);
 	unregister_netdev(netdev);
+	if (priv->ndev) {
+		ncsi_unregister_dev(priv->ndev);
+		priv->ndev = NULL;
+	}
 
 	/* There's a small chance the reset task will have been re-queued,
 	 * during stop, make sure it's gone before we free the structure.

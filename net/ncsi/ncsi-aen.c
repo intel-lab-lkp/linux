@@ -93,8 +93,16 @@ static int ncsi_aen_handler_lsc(struct ncsi_dev_priv *ndp,
 		if (had_link) {
 			ndp->flags |= NCSI_DEV_RESHUFFLE;
 			ncsi_stop_channel_monitor(nc);
+			spin_lock_irqsave(&nc->lock, flags);
+			if (nc->state != NCSI_CHANNEL_ACTIVE) {
+				spin_unlock_irqrestore(&nc->lock, flags);
+				return 0;
+			}
+			nc->state = NCSI_CHANNEL_INACTIVE;
+			spin_unlock_irqrestore(&nc->lock, flags);
 			spin_lock_irqsave(&ndp->lock, flags);
-			list_add_tail_rcu(&nc->link, &ndp->channel_queue);
+			if (list_empty(&nc->link))
+				list_add_tail_rcu(&nc->link, &ndp->channel_queue);
 			spin_unlock_irqrestore(&ndp->lock, flags);
 			return ncsi_process_next_channel(ndp);
 		}
@@ -158,12 +166,15 @@ static int ncsi_aen_handler_cr(struct ncsi_dev_priv *ndp,
 
 	ncsi_stop_channel_monitor(nc);
 	spin_lock_irqsave(&nc->lock, flags);
-	nc->state = NCSI_CHANNEL_INVISIBLE;
-	spin_unlock_irqrestore(&nc->lock, flags);
-
-	spin_lock_irqsave(&ndp->lock, flags);
+	if (nc->state != NCSI_CHANNEL_ACTIVE) {
+		spin_unlock_irqrestore(&nc->lock, flags);
+		return 0;
+	}
 	nc->state = NCSI_CHANNEL_INACTIVE;
-	list_add_tail_rcu(&nc->link, &ndp->channel_queue);
+	spin_unlock_irqrestore(&nc->lock, flags);
+	spin_lock_irqsave(&ndp->lock, flags);
+	if (list_empty(&nc->link))
+		list_add_tail_rcu(&nc->link, &ndp->channel_queue);
 	spin_unlock_irqrestore(&ndp->lock, flags);
 	nc->modes[NCSI_MODE_TX_ENABLE].enable = 0;
 
