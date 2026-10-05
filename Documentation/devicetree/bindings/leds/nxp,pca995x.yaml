@@ -39,6 +39,14 @@ properties:
   reset-gpios:
     maxItems: 1
 
+  nxp,output-gain:
+    description:
+      Set the output gain controlling the LED current as described in the
+      PCA995x datasheets.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 127
+    maximum: 255
+
 patternProperties:
   "^led@[0-9a-f]+$":
     type: object
