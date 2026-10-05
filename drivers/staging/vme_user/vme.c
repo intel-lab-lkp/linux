@@ -264,17 +264,11 @@ struct vme_resource *vme_slave_request(struct vme_dev *vdev, u32 address,
 
 	/* Loop through slave resources */
 	list_for_each_entry(slave_image, &bridge->slave_resources, list) {
-		if (!slave_image) {
-			dev_err(bridge->parent,
-				"Registered NULL Slave resource\n");
-			continue;
-		}
-
 		/* Find an unlocked and compatible image */
 		mutex_lock(&slave_image->mtx);
 		if (((slave_image->address_attr & address) == address) &&
-		    ((slave_image->cycle_attr & cycle) == cycle) &&
-		    !slave_image->locked) {
+			((slave_image->cycle_attr & cycle) == cycle) &&
+			!slave_image->locked) {
 			slave_image->locked = 1;
 			mutex_unlock(&slave_image->mtx);
 			allocated_image = slave_image;
@@ -298,9 +292,9 @@ struct vme_resource *vme_slave_request(struct vme_dev *vdev, u32 address,
 
 err_alloc:
 	/* Unlock image */
-	mutex_lock(&slave_image->mtx);
-	slave_image->locked = 0;
-	mutex_unlock(&slave_image->mtx);
+	mutex_lock(&allocated_image->mtx);
+	allocated_image->locked = 0;
+	mutex_unlock(&allocated_image->mtx);
 err_image:
 err_bus:
 	return NULL;
@@ -458,18 +452,12 @@ struct vme_resource *vme_master_request(struct vme_dev *vdev, u32 address,
 
 	/* Loop through master resources */
 	list_for_each_entry(master_image, &bridge->master_resources, list) {
-		if (!master_image) {
-			dev_warn(bridge->parent,
-				 "Registered NULL master resource\n");
-			continue;
-		}
-
 		/* Find an unlocked and compatible image */
 		spin_lock(&master_image->lock);
 		if (((master_image->address_attr & address) == address) &&
-		    ((master_image->cycle_attr & cycle) == cycle) &&
-		    ((master_image->width_attr & dwidth) == dwidth) &&
-		    !master_image->locked) {
+			((master_image->cycle_attr & cycle) == cycle) &&
+			((master_image->width_attr & dwidth) == dwidth) &&
+			!master_image->locked) {
 			master_image->locked = 1;
 			spin_unlock(&master_image->lock);
 			allocated_image = master_image;
@@ -494,10 +482,10 @@ struct vme_resource *vme_master_request(struct vme_dev *vdev, u32 address,
 	return resource;
 
 err_alloc:
-	/* Unlock image */
-	spin_lock(&master_image->lock);
-	master_image->locked = 0;
-	spin_unlock(&master_image->lock);
+	/* Unlock image using the valid tracking pointer reference */
+	spin_lock(&allocated_image->lock);
+	allocated_image->locked = 0;
+	spin_unlock(&allocated_image->lock);
 err_image:
 err_bus:
 	return NULL;
@@ -821,9 +809,6 @@ struct vme_resource *vme_dma_request(struct vme_dev *vdev, u32 route)
 	struct vme_dma_resource *dma_ctrlr;
 	struct vme_resource *resource = NULL;
 
-	/* XXX Not checking resource attributes */
-	dev_err(&vdev->dev, "No VME resource Attribute tests done\n");
-
 	bridge = vdev->bridge;
 	if (!bridge) {
 		dev_err(&vdev->dev, "Can't find VME bus\n");
@@ -832,16 +817,10 @@ struct vme_resource *vme_dma_request(struct vme_dev *vdev, u32 route)
 
 	/* Loop through DMA resources */
 	list_for_each_entry(dma_ctrlr, &bridge->dma_resources, list) {
-		if (!dma_ctrlr) {
-			dev_err(bridge->parent,
-				"Registered NULL DMA resource\n");
-			continue;
-		}
-
 		/* Find an unlocked and compatible controller */
 		mutex_lock(&dma_ctrlr->mtx);
 		if (((dma_ctrlr->route_attr & route) == route) &&
-		    !dma_ctrlr->locked) {
+			!dma_ctrlr->locked) {
 			dma_ctrlr->locked = 1;
 			mutex_unlock(&dma_ctrlr->mtx);
 			allocated_ctrlr = dma_ctrlr;
@@ -864,10 +843,10 @@ struct vme_resource *vme_dma_request(struct vme_dev *vdev, u32 route)
 	return resource;
 
 err_alloc:
-	/* Unlock image */
-	mutex_lock(&dma_ctrlr->mtx);
-	dma_ctrlr->locked = 0;
-	mutex_unlock(&dma_ctrlr->mtx);
+	/* Unlock image using the valid allocated pointer tracking reference */
+	mutex_lock(&allocated_ctrlr->mtx);
+	allocated_ctrlr->locked = 0;
+	mutex_unlock(&allocated_ctrlr->mtx);
 err_ctrlr:
 err_bus:
 	return NULL;
@@ -1437,12 +1416,6 @@ struct vme_resource *vme_lm_request(struct vme_dev *vdev)
 
 	/* Loop through LM resources */
 	list_for_each_entry(lm, &bridge->lm_resources, list) {
-		if (!lm) {
-			dev_err(bridge->parent,
-				"Registered NULL Location Monitor resource\n");
-			continue;
-		}
-
 		/* Find an unlocked controller */
 		mutex_lock(&lm->mtx);
 		if (!lm->locked) {
@@ -1468,10 +1441,10 @@ struct vme_resource *vme_lm_request(struct vme_dev *vdev)
 	return resource;
 
 err_alloc:
-	/* Unlock image */
-	mutex_lock(&lm->mtx);
-	lm->locked = 0;
-	mutex_unlock(&lm->mtx);
+	/* Unlock image using the valid tracking pointer */
+	mutex_lock(&allocated_lm->mtx);
+	allocated_lm->locked = 0;
+	mutex_unlock(&allocated_lm->mtx);
 err_lm:
 err_bus:
 	return NULL;
