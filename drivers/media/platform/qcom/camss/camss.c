@@ -4434,7 +4434,7 @@ static const struct camss_subdev_resources vfe_res_x1e80100[] = {
 			.pd_name = "ife0",
 			.hw_ops = &vfe_ops_680,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_rdi_845
+			.formats_pix = &vfe_formats_pix_845
 		},
 	},
 	/* IFE1 */
@@ -4458,7 +4458,7 @@ static const struct camss_subdev_resources vfe_res_x1e80100[] = {
 			.pd_name = "ife1",
 			.hw_ops = &vfe_ops_680,
 			.formats_rdi = &vfe_formats_rdi_845,
-			.formats_pix = &vfe_formats_rdi_845
+			.formats_pix = &vfe_formats_pix_845
 		},
 	},
 	/* IFE_LITE_0 */
