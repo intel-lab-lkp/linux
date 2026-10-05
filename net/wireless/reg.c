@@ -129,20 +129,18 @@ static void reg_process_hint(struct regulatory_request *reg_request);
 static const struct ieee80211_regdomain *get_cfg80211_regdom(void)
 {
 	return rcu_dereference_check(cfg80211_regdomain,
-				     lockdep_is_held(&cfg80211_mutex) ||
-				     lockdep_rtnl_is_held());
+				     lockdep_is_held(&cfg80211_mutex));
 }
 
 /*
  * Returns the regulatory domain associated with the wiphy.
  *
- * Requires any of RTNL, wiphy mutex or RCU protection.
+ * Requires the wiphy mutex or RCU protection.
  */
 const struct ieee80211_regdomain *get_wiphy_regdom(struct wiphy *wiphy)
 {
 	return rcu_dereference_check(wiphy->regd,
-				     lockdep_is_held(&wiphy->mtx) ||
-				     lockdep_rtnl_is_held());
+				     lockdep_is_held(&wiphy->mtx));
 }
 EXPORT_SYMBOL(get_wiphy_regdom);
 
@@ -207,8 +205,7 @@ static void rcu_free_regdom(const struct ieee80211_regdomain *r)
 static struct regulatory_request *get_last_request(void)
 {
 	return rcu_dereference_check(last_request,
-				     lockdep_is_held(&cfg80211_mutex) ||
-				     lockdep_rtnl_is_held());
+				     lockdep_is_held(&cfg80211_mutex));
 }
 
 /* Used to queue up regulatory hints */
@@ -479,7 +476,6 @@ static void reg_regdb_apply(struct work_struct *work)
 {
 	struct reg_regdb_apply_request *request;
 
-	rtnl_lock();
 	mutex_lock(&cfg80211_mutex);
 
 	mutex_lock(&reg_regdb_apply_mutex);
@@ -495,7 +491,6 @@ static void reg_regdb_apply(struct work_struct *work)
 	mutex_unlock(&reg_regdb_apply_mutex);
 
 	mutex_unlock(&cfg80211_mutex);
-	rtnl_unlock();
 }
 
 static DECLARE_WORK(reg_regdb_work, reg_regdb_apply);
@@ -532,12 +527,10 @@ static DECLARE_DELAYED_WORK(crda_timeout, crda_timeout_work);
 static void crda_timeout_work(struct work_struct *work)
 {
 	pr_debug("Timeout while waiting for CRDA to reply, restoring regulatory settings\n");
-	rtnl_lock();
 	mutex_lock(&cfg80211_mutex);
 	reg_crda_timeouts++;
 	restore_regulatory_settings(true, false);
 	mutex_unlock(&cfg80211_mutex);
-	rtnl_unlock();
 }
 
 static void cancel_crda_timeout(void)
@@ -1010,7 +1003,6 @@ static void regdb_fw_cb(const struct firmware *fw, void *context)
 		set_error = -EINVAL;
 	}
 
-	rtnl_lock();
 	mutex_lock(&cfg80211_mutex);
 	if (regdb && !IS_ERR(regdb)) {
 		/* negative case - a bug
@@ -1035,7 +1027,6 @@ static void regdb_fw_cb(const struct firmware *fw, void *context)
 		restore_regulatory_settings(true, false);
 
 	mutex_unlock(&cfg80211_mutex);
-	rtnl_unlock();
 
 	kfree(context);
 
@@ -1089,7 +1080,6 @@ int reg_reload_regdb(void)
 		goto out;
 	}
 
-	rtnl_lock();
 	mutex_lock(&cfg80211_mutex);
 	if (!IS_ERR_OR_NULL(regdb))
 		kfree(regdb);
@@ -1114,7 +1104,6 @@ int reg_reload_regdb(void)
 
 out_unlock:
 	mutex_unlock(&cfg80211_mutex);
-	rtnl_unlock();
  out:
 	release_firmware(fw);
 	return err;
@@ -2698,13 +2687,11 @@ void wiphy_apply_custom_regulatory(struct wiphy *wiphy,
 	if (IS_ERR(new_regd))
 		return;
 
-	rtnl_lock();
 	scoped_guard(wiphy, wiphy) {
 		tmp = get_wiphy_regdom(wiphy);
 		rcu_assign_pointer(wiphy->regd, new_regd);
 		rcu_free_regdom(tmp);
 	}
-	rtnl_unlock();
 }
 EXPORT_SYMBOL(wiphy_apply_custom_regulatory);
 
@@ -3217,7 +3204,6 @@ static void reg_process_self_managed_hint(struct wiphy *wiphy)
 	enum nl80211_band band;
 	struct regulatory_request request = {};
 
-	ASSERT_RTNL();
 	lockdep_assert_wiphy(wiphy);
 
 	spin_lock(&reg_requests_lock);
@@ -3265,13 +3251,11 @@ static void reg_process_self_managed_hints(void)
 
 static void reg_todo(struct work_struct *work)
 {
-	rtnl_lock();
-	mutex_lock(&cfg80211_mutex);
+	guard(mutex)(&cfg80211_mutex);
+
 	reg_process_pending_hints();
 	reg_process_pending_beacon_hints();
 	reg_process_self_managed_hints();
-	mutex_unlock(&cfg80211_mutex);
-	rtnl_unlock();
 }
 
 static void queue_regulatory_request(struct regulatory_request *request)
@@ -4141,7 +4125,7 @@ int regulatory_set_wiphy_regd_sync(struct wiphy *wiphy,
 {
 	int ret;
 
-	ASSERT_RTNL();
+	lockdep_assert_wiphy(wiphy);
 
 	ret = __regulatory_set_wiphy_regd(wiphy, rd);
 	if (ret)
@@ -4435,11 +4419,8 @@ void regulatory_exit(void)
 	cancel_delayed_work_sync(&reg_check_chans);
 
 	/* Lock to suppress warnings */
-	rtnl_lock();
-	mutex_lock(&cfg80211_mutex);
-	reset_regdomains(true, NULL);
-	mutex_unlock(&cfg80211_mutex);
-	rtnl_unlock();
+	scoped_guard(mutex, &cfg80211_mutex)
+		reset_regdomains(true, NULL);
 
 	dev_set_uevent_suppress(&reg_fdev->dev, true);
 
