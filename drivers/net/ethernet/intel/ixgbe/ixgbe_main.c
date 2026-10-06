@@ -7360,6 +7360,25 @@ static void ixgbe_free_all_rx_resources(struct ixgbe_adapter *adapter)
 			ixgbe_free_rx_resources(adapter->rx_ring[i]);
 }
 
+static bool ixgbe_ring_resources_allocated(struct ixgbe_adapter *adapter)
+{
+	int i;
+
+	for (i = 0; i < adapter->num_tx_queues; i++)
+		if (adapter->tx_ring[i] && adapter->tx_ring[i]->desc)
+			return true;
+
+	for (i = 0; i < adapter->num_xdp_queues; i++)
+		if (adapter->xdp_ring[i] && adapter->xdp_ring[i]->desc)
+			return true;
+
+	for (i = 0; i < adapter->num_rx_queues; i++)
+		if (adapter->rx_ring[i] && adapter->rx_ring[i]->desc)
+			return true;
+
+	return false;
+}
+
 /**
  * ixgbe_max_xdp_frame_size - returns the maximum allowed frame size for XDP
  * @adapter: device handle, pointer to adapter
@@ -9920,6 +9939,7 @@ int ixgbe_setup_tc(struct net_device *dev, u8 tc)
 {
 	struct ixgbe_adapter *adapter = ixgbe_from_netdev(dev);
 	struct ixgbe_hw *hw = &adapter->hw;
+	bool running;
 
 	/* Hardware supports up to 8 traffic classes */
 	if (tc > adapter->dcb_cfg.num_tcs.pg_tcs)
@@ -9932,7 +9952,17 @@ int ixgbe_setup_tc(struct net_device *dev, u8 tc)
 	 * match packet buffer alignment. Unfortunately, the
 	 * hardware is not flexible enough to do this dynamically.
 	 */
-	if (netif_running(dev))
+	if (!netif_device_present(dev))
+		return -ENETDOWN;
+
+	running = netif_running(dev);
+
+	/* If a previous ixgbe_open() failed, the netdev can still be
+	 * administratively up after IRQs and ring resources have already been
+	 * released. Skip ixgbe_close() only in that state; ixgbe_down() leaves
+	 * resources for ixgbe_close() to release.
+	 */
+	if (running && ixgbe_ring_resources_allocated(adapter))
 		ixgbe_close(dev);
 	else
 		ixgbe_reset(adapter);
@@ -10971,8 +11001,14 @@ static int ixgbe_xdp_setup(struct net_device *dev, struct bpf_prog *prog)
 			synchronize_rcu();
 		err = ixgbe_setup_tc(dev, adapter->hw_tcs);
 
-		if (err)
+		if (err) {
+			xchg(&adapter->xdp_prog, old_prog);
+			err = ixgbe_setup_tc(dev, adapter->hw_tcs);
+			/* An ndo_bpf error leaves old_prog attached in the core. */
+			if (err)
+				return err;
 			return -EINVAL;
+		}
 		if (!prog)
 			xdp_features_clear_redirect_target(dev);
 	} else {
