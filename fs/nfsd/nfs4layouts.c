@@ -727,6 +727,7 @@ nfsd4_cb_layout_prepare(struct nfsd4_callback *cb)
 	mutex_lock(&ls->ls_mutex);
 	nfs4_inc_and_copy_stateid(&ls->ls_recall_sid, &ls->ls_stid);
 	mutex_unlock(&ls->ls_mutex);
+	ls->ls_recall_accepted = false;
 	return true;
 }
 
@@ -742,13 +743,35 @@ nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 
 	trace_nfsd_cb_layout_done(&ls->ls_stid.sc_stateid, task);
 	switch (task->tk_status) {
-	case 0:
-	case -NFS4ERR_DELAY:
 	case -NFS4ERR_OLD_STATEID:
+		/*
+		 * The client is at or past the seqid of the request.  Unless
+		 * it has answered NFS4_OK to this recall and is returning
+		 * layouts, it has not taken the recall up, for instance
+		 * because a LAYOUTRETURN moved it past the seqid.  Poll with a
+		 * new seqid then (RFC 8881 section 12.5.3), which such a
+		 * client answers afresh.
+		 *
+		 * ->done runs in rpciod and does not take ls_mutex, which
+		 * could block it.  While the recall is out, only a
+		 * LAYOUTRETURN changes the seqid besides, and the check of the
+		 * seqid a client presents only asks whether it is above the
+		 * current one.
+		 */
+		if (!ls->ls_recall_accepted) {
+			nfs4_inc_and_copy_stateid(&ls->ls_recall_sid,
+						  &ls->ls_stid);
+			trace_nfsd_layout_recall_new_seqid(&ls->ls_recall_sid);
+		}
+		fallthrough;
+	case -NFS4ERR_DELAY:
+	case 0:
+		if (!task->tk_status)
+			ls->ls_recall_accepted = true;
 		/*
 		 * RFC 8881 section 12.5.3 wants a new seqid in each
 		 * CB_LAYOUTRECALL request.  The poll below sends the request
-		 * again with the seqid of the first one.  A client that has
+		 * again with the seqid it last had.  A client that has
 		 * processed that one is at its seqid or past it, and the
 		 * Linux client answers the repeat with NFS4ERR_OLD_STATEID
 		 * while it is returning the layouts.
