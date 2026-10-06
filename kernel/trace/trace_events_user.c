@@ -754,6 +754,20 @@ static struct user_event_mm *user_event_mm_alloc(struct task_struct *t)
 	return user_mm;
 }
 
+static struct user_event_mm *
+user_event_mm_find_locked(struct mm_struct *mm)
+{
+	struct user_event_mm *user_mm;
+
+	lockdep_assert_held(&user_event_mms_lock);
+
+	list_for_each_entry(user_mm, &user_event_mms, mms_link)
+		if (user_mm->mm == mm)
+			return user_mm;
+
+	return NULL;
+}
+
 static void user_event_mm_attach(struct user_event_mm *user_mm, struct task_struct *t)
 {
 	unsigned long flags;
@@ -817,14 +831,18 @@ void user_event_mm_remove(struct task_struct *t)
 	might_sleep();
 
 	mm = t->user_event_mm;
+
+	spin_lock_irqsave(&user_event_mms_lock, flags);
+
 	t->user_event_mm = NULL;
 
-	/* Clone will increment the tasks, only remove if last clone */
-	if (!refcount_dec_and_test(&mm->tasks))
+	/* Clones and attached tasks increment this count. */
+	if (!refcount_dec_and_test(&mm->tasks)) {
+		spin_unlock_irqrestore(&user_event_mms_lock, flags);
 		return;
+	}
 
-	/* Remove the mm from the list, so it can no longer be enabled */
-	spin_lock_irqsave(&user_event_mms_lock, flags);
+	/* Prevent new tasks from attaching after the last-task transition. */
 	list_del_rcu(&mm->mms_link);
 	spin_unlock_irqrestore(&user_event_mms_lock, flags);
 
@@ -894,10 +912,24 @@ static bool
 current_user_event_enabler_exists(struct user_event_group *group,
 				  unsigned long uaddr, unsigned char bit)
 {
-	struct user_event_mm *user_mm = current_user_event_mm();
+	struct user_event_mm *user_mm = current->user_event_mm;
+	unsigned long flags;
 	bool exists;
 
 	lockdep_assert_held(&group->reg_mutex);
+
+	if (!user_mm) {
+		spin_lock_irqsave(&user_event_mms_lock, flags);
+
+		user_mm = user_event_mm_find_locked(current->mm);
+
+		if (user_mm) {
+			refcount_inc(&user_mm->tasks);
+			current->user_event_mm = user_mm;
+		}
+
+		spin_unlock_irqrestore(&user_event_mms_lock, flags);
+	}
 
 	if (!user_mm)
 		return false;
@@ -905,8 +937,6 @@ current_user_event_enabler_exists(struct user_event_group *group,
 	mutex_lock(&event_mutex);
 	exists = user_event_enabler_exists(user_mm, uaddr, bit);
 	mutex_unlock(&event_mutex);
-
-	user_event_mm_put(user_mm);
 
 	return exists;
 }
