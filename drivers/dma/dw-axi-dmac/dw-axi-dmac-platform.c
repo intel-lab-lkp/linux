@@ -1084,6 +1084,13 @@ static noinline void axi_chan_handle_err(struct axi_dma_chan *chan, u32 status)
 		axi_chan_name(chan), vd->tx.cookie, status);
 	axi_chan_list_dump_lli(chan, vd_to_axi_desc(vd));
 
+	if (status & (DWAXIDMAC_IRQ_SRC_DEC_ERR | DWAXIDMAC_IRQ_SRC_SLV_ERR))
+		vd->tx_result.result = DMA_TRANS_READ_FAILED;
+	else if (status & (DWAXIDMAC_IRQ_DST_DEC_ERR | DWAXIDMAC_IRQ_DST_SLV_ERR))
+		vd->tx_result.result = DMA_TRANS_WRITE_FAILED;
+	else
+		vd->tx_result.result = DMA_TRANS_ABORTED;
+
 	vchan_cookie_complete(vd);
 
 	/* Try to restart the controller */
