@@ -31,6 +31,9 @@
 #define OPTEE_MSG_ATTR_TYPE_FMEM_INPUT		OPTEE_MSG_ATTR_TYPE_RMEM_INPUT
 #define OPTEE_MSG_ATTR_TYPE_FMEM_OUTPUT		OPTEE_MSG_ATTR_TYPE_RMEM_OUTPUT
 #define OPTEE_MSG_ATTR_TYPE_FMEM_INOUT		OPTEE_MSG_ATTR_TYPE_RMEM_INOUT
+#define OPTEE_MSG_ATTR_TYPE_PMEM_INPUT		OPTEE_MSG_ATTR_TYPE_RMEM_INPUT
+#define OPTEE_MSG_ATTR_TYPE_PMEM_OUTPUT		OPTEE_MSG_ATTR_TYPE_RMEM_OUTPUT
+#define OPTEE_MSG_ATTR_TYPE_PMEM_INOUT		OPTEE_MSG_ATTR_TYPE_RMEM_INOUT
 #define OPTEE_MSG_ATTR_TYPE_TMEM_INPUT		0x9
 #define OPTEE_MSG_ATTR_TYPE_TMEM_OUTPUT		0xa
 #define OPTEE_MSG_ATTR_TYPE_TMEM_INOUT		0xb
@@ -150,6 +153,23 @@ struct optee_msg_param_fmem {
 };
 
 /**
+ * struct optee_msg_param_pmem - RPMI parcel memory reference
+ * @offs: full-width byte offset from the parcel's first byte
+ * @size: logical reference size, or required size for a short-buffer response
+ * @parcel_id: firmware-assigned parcel identifier
+ * @nonce: nonzero REE nonce supplied when sharing the parcel
+ *
+ * A zero parcel ID and nonce encode a NULL reference. Its offset must be zero;
+ * its size is preserved. Parcel ID zero remains valid with a nonzero nonce.
+ */
+struct optee_msg_param_pmem {
+	u64 offs;
+	u64 size;
+	u32 parcel_id;
+	u32 nonce;
+};
+
+/**
  * struct optee_msg_param_value - opaque value parameter
  * @a: first opaque value
  * @b: second opaque value
@@ -166,18 +186,19 @@ struct optee_msg_param_value {
 /**
  * struct optee_msg_param - parameter used together with struct optee_msg_arg
  * @attr:	attributes
- * @tmem:	parameter by temporary memory reference
- * @rmem:	parameter by registered memory reference
- * @fmem:	parameter by FF-A registered memory reference
- * @value:	parameter by opaque value
- * @octets:	parameter by octet string
+ * @u.tmem:	parameter by temporary memory reference
+ * @u.rmem:	parameter by registered memory reference
+ * @u.fmem:	parameter by FF-A registered memory reference
+ * @u.pmem:	parameter by RPMI parcel memory reference
+ * @u.value:	parameter by opaque value
+ * @u.octets:	parameter by octet string
  * @u:		union holding OP-TEE msg parameter
  *
  * @attr & OPTEE_MSG_ATTR_TYPE_MASK indicates if tmem, rmem or value is used in
  * the union. OPTEE_MSG_ATTR_TYPE_VALUE_* indicates value or octets,
- * OPTEE_MSG_ATTR_TYPE_TMEM_* indicates @tmem and
- * OPTEE_MSG_ATTR_TYPE_RMEM_* or the alias PTEE_MSG_ATTR_TYPE_FMEM_* indicates
- * @rmem or @fmem depending on the conduit.
+ * OPTEE_MSG_ATTR_TYPE_TMEM_* indicates @u.tmem. OPTEE_MSG_ATTR_TYPE_RMEM_*
+ * and its FMEM/PMEM aliases indicate @u.rmem, @u.fmem or @u.pmem depending
+ * on the conduit.
  * OPTEE_MSG_ATTR_TYPE_NONE indicates that none of the members are used.
  */
 struct optee_msg_param {
@@ -186,6 +207,7 @@ struct optee_msg_param {
 		struct optee_msg_param_tmem tmem;
 		struct optee_msg_param_rmem rmem;
 		struct optee_msg_param_fmem fmem;
+		struct optee_msg_param_pmem pmem;
 		struct optee_msg_param_value value;
 		u8 octets[24];
 	} u;
