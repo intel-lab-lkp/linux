@@ -6,15 +6,24 @@
 #ifndef _ASM_VENDOR_EXTENSIONS_H
 #define _ASM_VENDOR_EXTENSIONS_H
 
-#include <asm/cpufeature.h>
-
-#include <linux/array_size.h>
-#include <linux/types.h>
-
 /*
  * The extension keys of each vendor must be strictly less than this value.
  */
 #define RISCV_ISA_VENDOR_EXT_MAX 32
+
+/*
+ * The alternatives need some way of distinguishing between vendor extensions
+ * and errata. Incrementing all of the vendor extension keys so they are at
+ * least 0x8000 accomplishes that.
+ */
+#define RISCV_VENDOR_EXT_ALTERNATIVES_BASE	0x8000
+
+#ifndef __ASSEMBLY__
+
+#include <asm/cpufeature.h>
+
+#include <linux/array_size.h>
+#include <linux/types.h>
 
 struct riscv_isavendorinfo {
 	DECLARE_BITMAP(isa, RISCV_ISA_VENDOR_EXT_MAX);
@@ -31,13 +40,6 @@ struct riscv_isa_vendor_ext_data_list {
 extern struct riscv_isa_vendor_ext_data_list *riscv_isa_vendor_ext_list[];
 
 extern const size_t riscv_isa_vendor_ext_list_size;
-
-/*
- * The alternatives need some way of distinguishing between vendor extensions
- * and errata. Incrementing all of the vendor extension keys so they are at
- * least 0x8000 accomplishes that.
- */
-#define RISCV_VENDOR_EXT_ALTERNATIVES_BASE	0x8000
 
 #define VENDOR_EXT_ALL_CPUS			-1
 
@@ -100,5 +102,7 @@ static __always_inline bool riscv_cpu_has_vendor_extension_unlikely(const unsign
 
 	return __riscv_isa_vendor_extension_available(cpu, vendor, ext);
 }
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_VENDOR_EXTENSIONS_H */

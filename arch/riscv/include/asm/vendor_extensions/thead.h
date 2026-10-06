@@ -4,12 +4,14 @@
 
 #include <asm/vendor_extensions.h>
 
-#include <linux/types.h>
-
 /*
  * Extension keys must be strictly less than RISCV_ISA_VENDOR_EXT_MAX.
  */
 #define RISCV_ISA_VENDOR_EXT_XTHEADVECTOR		0
+
+#ifndef __ASSEMBLY__
+
+#include <linux/types.h>
 
 extern struct riscv_isa_vendor_ext_data_list riscv_isa_vendor_ext_list_thead;
 
@@ -18,6 +20,8 @@ void disable_xtheadvector(void);
 #else
 static inline void disable_xtheadvector(void) { }
 #endif
+
+#endif /* __ASSEMBLY__ */
 
 /* Extension specific helpers */
 
