@@ -1521,6 +1521,46 @@ void sbc_dif_copy_prot(struct se_cmd *cmd, unsigned int sectors, bool read,
 }
 EXPORT_SYMBOL(sbc_dif_copy_prot);
 
+/*
+ * Drop @len bytes of the data sg.  An escaped PI tuple still covers one
+ * logical block, which may cross more than one sg entry.
+ */
+static bool
+sbc_dif_consume(struct scatterlist **dsgp, void **daddrp, int *offp,
+		unsigned int len)
+{
+	struct scatterlist *dsg = *dsgp;
+	void *daddr = *daddrp;
+	int off = *offp;
+
+	while (len) {
+		unsigned int take;
+
+		if (off >= dsg->length) {
+			kunmap_local(daddr - dsg->offset);
+			dsg = sg_next(dsg);
+			if (!dsg)
+				return false;
+
+			daddr = kmap_local_page(sg_page(dsg)) + dsg->offset;
+			off = 0;
+			if (!dsg->length) {
+				kunmap_local(daddr - dsg->offset);
+				return false;
+			}
+		}
+
+		take = min_t(unsigned int, len, dsg->length - off);
+		off += take;
+		len -= take;
+	}
+
+	*dsgp = dsg;
+	*daddrp = daddr;
+	*offp = off;
+	return true;
+}
+
 sense_reason_t
 sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 	       unsigned int ei_lba, struct scatterlist *psg, int psg_off)
@@ -1559,7 +1599,11 @@ sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 			 sdt.app_tag, be32_to_cpu(sdt.ref_tag));
 
 		if (sdt.app_tag == T10_PI_APP_ESCAPE) {
-			dsg_off += block_size;
+			if (!sbc_dif_consume(&dsg, &daddr, &dsg_off,
+					     block_size)) {
+				kunmap_local(paddr - psg->offset);
+				return 0;
+			}
 			goto next;
 		}
 
