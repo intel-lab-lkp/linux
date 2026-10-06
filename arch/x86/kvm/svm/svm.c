@@ -4340,12 +4340,34 @@ static void svm_complete_interrupts(struct kvm_vcpu *vcpu)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	u8 vector;
 	int type;
+	struct vmcb_control_area *control = &svm->vmcb->control;
 	u32 exitintinfo = svm->vmcb->control.exit_int_info;
 	bool nmi_l1_to_l2 = svm->nmi_l1_to_l2;
 	bool soft_int_injected = svm->soft_int_injected;
 
 	svm->nmi_l1_to_l2 = false;
 	svm->soft_int_injected = false;
+
+	/*
+	 * Hardware clears EVENTINJ field when it injects an event.
+	 * A non-empty EVENTINJ on #VMEXIT means the vCPU never entered guest
+	 * mode, and thus that the event was never delivered.  Migrate the event
+	 * to EXITINTINFO so that it's requeued instead of being dropped.
+	 *
+	 * An undelivered event doesn't imply a fatal VMEXIT_INVALID. With
+	 * Enhanced SMT Protection, VMRUN may exit with an ordinary #VMEXIT
+	 * without having injected that event into the guest.
+	 *
+	 * Clobbering EXITINTINFO is safe precisely because the vCPU never
+	 * entered guest mode.
+	 */
+	if (control->event_inj) {
+		control->exit_int_info = control->event_inj;
+		control->exit_int_info_err = control->event_inj_err;
+		control->event_inj = 0;
+
+		exitintinfo = control->exit_int_info;
+	}
 
 	/*
 	 * If we've made progress since setting awaiting_iret_completion, we've
@@ -4410,11 +4432,14 @@ static void svm_complete_interrupts(struct kvm_vcpu *vcpu)
 static void svm_cancel_injection(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
-	struct vmcb_control_area *control = &svm->vmcb->control;
 
-	control->exit_int_info = control->event_inj;
-	control->exit_int_info_err = control->event_inj_err;
-	control->event_inj = 0;
+	/*
+	 * EXITINTINFO is stale as it holds the event from the previous #VMEXIT
+	 * (or from the last time the current VMCB was run).  Invalidate it so
+	 * that svm_complete_interrupts() requeues if and only if KVM staged an
+	 * event in EVENTINJ.
+	 */
+	svm->vmcb->control.exit_int_info = 0;
 	svm_complete_interrupts(vcpu);
 }
 
