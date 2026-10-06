@@ -830,14 +830,19 @@ static void ixgbe_fcoe_ddp_disable(struct ixgbe_adapter *adapter)
  *
  * Turns on FCoE offload feature in 82599.
  *
- * Returns : 0 indicates success or -EINVAL on failure
+ * Returns: 0 on success or a negative error code on failure
  */
 int ixgbe_fcoe_enable(struct net_device *netdev)
 {
 	struct ixgbe_adapter *adapter = ixgbe_from_netdev(netdev);
 	struct ixgbe_fcoe *fcoe = &adapter->fcoe;
+	bool running;
 
+	/* libfcoe calls ndo_fcoe_disable() even when this callback fails. */
 	atomic_inc(&fcoe->refcnt);
+
+	if (!netif_device_present(netdev))
+		return -ENETDOWN;
 
 	if (!(adapter->flags & IXGBE_FLAG_FCOE_CAPABLE))
 		return -EINVAL;
@@ -845,12 +850,14 @@ int ixgbe_fcoe_enable(struct net_device *netdev)
 	if (adapter->flags & IXGBE_FLAG_FCOE_ENABLED)
 		return -EINVAL;
 
+	running = netif_running(netdev);
+
 	e_info(drv, "Enabling FCoE offload features.\n");
 
 	if (adapter->flags & IXGBE_FLAG_SRIOV_ENABLED)
 		e_warn(probe, "Enabling FCoE on PF will disable legacy VFs\n");
 
-	if (netif_running(netdev))
+	if (running)
 		netdev->netdev_ops->ndo_stop(netdev);
 
 	/* Allocate per CPU memory to track DDP pools */
@@ -864,8 +871,9 @@ int ixgbe_fcoe_enable(struct net_device *netdev)
 	/* release existing queues and reallocate them */
 	ixgbe_clear_interrupt_scheme(adapter);
 	ixgbe_init_interrupt_scheme(adapter);
+	adapter->fcoe.reinit_pending = false;
 
-	if (netif_running(netdev))
+	if (running)
 		netdev->netdev_ops->ndo_open(netdev);
 
 	return 0;
@@ -882,6 +890,7 @@ int ixgbe_fcoe_enable(struct net_device *netdev)
 int ixgbe_fcoe_disable(struct net_device *netdev)
 {
 	struct ixgbe_adapter *adapter = ixgbe_from_netdev(netdev);
+	bool running;
 
 	if (!atomic_dec_and_test(&adapter->fcoe.refcnt))
 		return -EINVAL;
@@ -889,8 +898,10 @@ int ixgbe_fcoe_disable(struct net_device *netdev)
 	if (!(adapter->flags & IXGBE_FLAG_FCOE_ENABLED))
 		return -EINVAL;
 
+	running = ixgbe_netif_running(netdev);
+
 	e_info(drv, "Disabling FCoE offload features.\n");
-	if (netif_running(netdev))
+	if (running)
 		netdev->netdev_ops->ndo_stop(netdev);
 
 	/* Free per CPU memory to track DDP pools */
@@ -903,10 +914,14 @@ int ixgbe_fcoe_disable(struct net_device *netdev)
 	netdev_features_change(netdev);
 
 	/* release existing queues and reallocate them */
-	ixgbe_clear_interrupt_scheme(adapter);
-	ixgbe_init_interrupt_scheme(adapter);
+	if (netif_device_present(netdev)) {
+		ixgbe_clear_interrupt_scheme(adapter);
+		ixgbe_init_interrupt_scheme(adapter);
+	} else {
+		adapter->fcoe.reinit_pending = true;
+	}
 
-	if (netif_running(netdev))
+	if (running)
 		netdev->netdev_ops->ndo_open(netdev);
 
 	return 0;
