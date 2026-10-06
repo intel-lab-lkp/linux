@@ -891,8 +891,9 @@ EXPORT_SYMBOL_IF_KUNIT(uid_gid_map_sort);
  * @new_map: requested idmap
  *
  * If a process requests mapping parent uid 0 into the new ns, verify that the
- * process writing the map had the CAP_SETFCAP capability as the target process
- * will be able to write fscaps that are valid in ancestor user namespaces.
+ * process that opened the map file and the process writing the map had the
+ * CAP_SETFCAP capability as the target process will be able to write fscaps
+ * that are valid in ancestor user namespaces.
  *
  * Return: true if the mapping is allowed, false if not.
  */
@@ -928,19 +929,28 @@ static bool verify_root_map(const struct file *file,
 		 * when it unshared, and that the opener, which may have come
 		 * in later with setns(), had it as well when it entered.
 		 */
-		if (!file_ns->parent_could_setfcap)
+		if (!file_ns->parent_could_setfcap ||
+		    file->f_cred->setfcap_level > level)
 			return false;
-		return file->f_cred->setfcap_level <= level;
+	} else {
+		/* Process p1 is writing to uid_map of p2, who is in a child
+		 * user namespace to p1's.  Verify that the opener of the map
+		 * file has CAP_SETFCAP against the parent of the new map
+		 * namespace, and not just because it entered that.
+		 */
+		if (!file_ns_capable(file, map_ns->parent, CAP_SETFCAP) ||
+		    cap_setfcap_level(file->f_cred, map_ns->parent) > level)
+			return false;
 	}
 
-	/* Process p1 is writing to uid_map of p2, who is in a child
-	 * user namespace to p1's.  Verify that the opener of the map
-	 * file has CAP_SETFCAP against the parent of the new map
-	 * namespace, and not just because it entered that.
+	/* The file may have been handed to someone else since it was opened,
+	 * so the same goes for the process that is doing the write.
 	 */
-	if (!file_ns_capable(file, map_ns->parent, CAP_SETFCAP))
-		return false;
-	return cap_setfcap_level(file->f_cred, map_ns->parent) <= level;
+	if (map_ns == current_user_ns())
+		return current_cred()->setfcap_level <= level;
+
+	return ns_capable(map_ns->parent, CAP_SETFCAP) &&
+	       cap_setfcap_level(current_cred(), map_ns->parent) <= level;
 }
 
 static ssize_t map_write(struct file *file, const char __user *buf,
