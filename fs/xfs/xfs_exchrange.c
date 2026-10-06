@@ -296,11 +296,13 @@ retry:
 	 * the mappings, and updated the ondisk sizes.
 	 */
 	if (fxr->flags & XFS_EXCHANGE_RANGE_TO_EOF) {
-		loff_t	temp;
+		loff_t	old_ip1_size = i_size_read(VFS_I(ip1));
+		loff_t	old_ip2_size = i_size_read(VFS_I(ip2));
 
-		temp = i_size_read(VFS_I(ip2));
-		i_size_write(VFS_I(ip2), i_size_read(VFS_I(ip1)));
-		i_size_write(VFS_I(ip1), temp);
+		i_size_write(VFS_I(ip2), fxr->file2_offset +
+				(old_ip1_size - fxr->file1_offset));
+		i_size_write(VFS_I(ip1), fxr->file1_offset +
+				(old_ip2_size - fxr->file2_offset));
 	}
 
 out_unlock:
