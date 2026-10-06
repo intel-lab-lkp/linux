@@ -16,7 +16,7 @@
  *
  * Return: lookup count based on TC flower input for a switch filter.
  */
-static int ice_tc_count_lkups(u32 flags, struct ice_tc_flower_fltr *fltr)
+static int ice_tc_count_lkups(u64 flags, struct ice_tc_flower_fltr *fltr)
 {
 	int lkups_cnt = 1; /* 0th lookup is metadata */
 
@@ -182,7 +182,7 @@ static u16 ice_check_supported_vlan_tpid(u16 vlan_tpid)
 }
 
 static int
-ice_tc_fill_tunnel_outer(u32 flags, struct ice_tc_flower_fltr *fltr,
+ice_tc_fill_tunnel_outer(u64 flags, struct ice_tc_flower_fltr *fltr,
 			 struct ice_adv_lkup_elem *list, int i)
 {
 	struct ice_tc_flower_lyr_2_4_hdrs *hdr = &fltr->outer_headers;
@@ -369,7 +369,7 @@ ice_tc_fill_tunnel_outer(u32 flags, struct ice_tc_flower_fltr *fltr,
  * advance filter in hardware.
  */
 static int
-ice_tc_fill_rules(struct ice_hw *hw, u32 flags,
+ice_tc_fill_rules(struct ice_hw *hw, u64 flags,
 		  struct ice_tc_flower_fltr *tc_fltr,
 		  struct ice_adv_lkup_elem *list,
 		  struct ice_adv_rule_info *rule_info,
@@ -932,7 +932,7 @@ ice_eswitch_add_tc_fltr(struct ice_vsi *vsi, struct ice_tc_flower_fltr *fltr)
 	struct ice_rule_query_data rule_added;
 	struct ice_hw *hw = &vsi->back->hw;
 	struct ice_adv_lkup_elem *list;
-	u32 flags = fltr->flags;
+	u64 flags = fltr->flags;
 	int lkups_cnt;
 	int ret;
 	int i;
@@ -1161,7 +1161,7 @@ ice_add_tc_flower_adv_fltr(struct ice_vsi *vsi,
 	struct ice_adv_lkup_elem *list;
 	struct ice_pf *pf = vsi->back;
 	struct ice_hw *hw = &pf->hw;
-	u32 flags = tc_fltr->flags;
+	u64 flags = tc_fltr->flags;
 	struct ice_vsi *dest_vsi;
 	struct device *dev;
 	u16 lkups_cnt = 0;
@@ -1279,19 +1279,19 @@ ice_add_tc_flower_adv_fltr(struct ice_vsi *vsi,
 	}
 	switch (tc_fltr->action.fltr_act) {
 	case ICE_FWD_TO_VSI:
-		dev_dbg(dev, "added switch rule (lkups_cnt %u, flags 0x%x), action is forward to TC %u, rid %u, rule_id %u, vsi_idx %u\n",
+		dev_dbg(dev, "added switch rule (lkups_cnt %u, flags 0x%llx), action is forward to TC %u, rid %u, rule_id %u, vsi_idx %u\n",
 			lkups_cnt, flags,
 			tc_fltr->action.fwd.tc.tc_class, rule_added.rid,
 			rule_added.rule_id, rule_added.vsi_handle);
 		break;
 	case ICE_FWD_TO_Q:
-		dev_dbg(dev, "added switch rule (lkups_cnt %u, flags 0x%x), action is forward to queue: %u (HW queue %u)     , rid %u, rule_id %u\n",
+		dev_dbg(dev, "added switch rule (lkups_cnt %u, flags 0x%llx), action is forward to queue: %u (HW queue %u)     , rid %u, rule_id %u\n",
 			lkups_cnt, flags, tc_fltr->action.fwd.q.queue,
 			tc_fltr->action.fwd.q.hw_queue, rule_added.rid,
 			rule_added.rule_id);
 		break;
 	case ICE_DROP_PACKET:
-		dev_dbg(dev, "added switch rule (lkups_cnt %u, flags 0x%x), action is drop, rid %u, rule_id %u\n",
+		dev_dbg(dev, "added switch rule (lkups_cnt %u, flags 0x%llx), action is drop, rid %u, rule_id %u\n",
 			lkups_cnt, flags, rule_added.rid, rule_added.rule_id);
 		break;
 	default:

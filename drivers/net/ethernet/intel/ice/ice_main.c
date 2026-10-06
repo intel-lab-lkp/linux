@@ -8973,7 +8973,7 @@ static void ice_rem_all_chnl_fltrs(struct ice_pf *pf)
 		} else if (fltr->dest_vsi) {
 			/* update advanced switch filter count */
 			if (fltr->dest_vsi->type == ICE_VSI_CHNL) {
-				u32 flags = fltr->flags;
+				u64 flags = fltr->flags;
 
 				fltr->dest_vsi->num_chnl_fltr--;
 				if (flags & (ICE_TC_FLWR_FIELD_DST_MAC |
