@@ -1579,6 +1579,15 @@ xprt_request_transmit(struct rpc_rqst *req, struct rpc_task *snd_task)
 	if (status != 0) {
 		req->rq_ntrans--;
 		trace_xprt_transmit(req, status);
+		if (status == -EREMOTEIO) {
+			/*
+			 * This transport will never send req. Fail only
+			 * its task, and let the caller keep draining.
+			 */
+			xprt_request_dequeue_transmit(task);
+			rpc_task_try_cancel(task, status);
+			return 0;
+		}
 		return status;
 	}
 
