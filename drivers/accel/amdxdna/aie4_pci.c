@@ -1082,6 +1082,7 @@ const struct amdxdna_dev_ops aie4_vf_ops = {
 	.hwctx_fini		= aie4_hwctx_fini,
 	.cmd_submit		= aie4_cmd_submit,
 	.cmd_wait		= aie4_cmd_wait,
+	.hmm_invalidate		= aie_hmm_invalidate,
 	.get_aie_info		= aie4_get_info,
 	.set_aie_state		= aie4_set_state,
 };
@@ -1095,6 +1096,7 @@ const struct amdxdna_dev_ops aie4_classic_ops = {
 	.hwctx_fini		= aie4_hwctx_fini,
 	.cmd_submit		= aie4_cmd_submit,
 	.cmd_wait		= aie4_cmd_wait,
+	.hmm_invalidate		= aie_hmm_invalidate,
 	.get_aie_info		= aie4_get_info,
 	.set_aie_state		= aie4_set_state,
 };

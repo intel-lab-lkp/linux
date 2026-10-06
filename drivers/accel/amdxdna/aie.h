@@ -14,6 +14,7 @@
 
 struct psp_device;
 struct smu_device;
+struct amdxdna_gem_obj;
 
 struct aie_device {
 	struct amdxdna_dev *xdna;
@@ -141,6 +142,7 @@ void *amdxdna_alloc_msg_buffer(struct amdxdna_dev *xdna, u32 *size,
 			       dma_addr_t *dma_addr);
 void amdxdna_free_msg_buffer(struct amdxdna_dev *xdna, size_t size,
 			     void *cpu_addr, dma_addr_t dma_addr);
+void aie_hmm_invalidate(struct amdxdna_gem_obj *abo, unsigned long cur_seq);
 int amdxdna_get_aie_version(struct amdxdna_client *client,
 			    struct amdxdna_drm_get_info *args,
 			    struct amdxdna_drm_query_aie_version *version);
