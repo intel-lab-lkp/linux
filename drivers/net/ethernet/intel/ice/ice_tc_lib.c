@@ -24,6 +24,7 @@ static int ice_tc_count_lkups(u64 flags, struct ice_tc_flower_fltr *fltr)
 	 * - Direction flag (always present)
 	 * - ICE_TC_FLWR_FIELD_VLAN_TPID (present if specified)
 	 * - Tunnel flag (present if tunnel)
+	 * - ICE_TC_FLWR_FIELD_NOFRAG (present if specified)
 	 */
 	if (fltr->direction == ICE_ESWITCH_FLTR_EGRESS)
 		lkups_cnt++;
@@ -384,6 +385,9 @@ ice_tc_fill_rules(struct ice_hw *hw, u64 flags,
 
 	/* Always add direction metadata */
 	ice_rule_add_direction_metadata(&list[ICE_TC_METADATA_LKUP_IDX]);
+
+	if (flags & ICE_TC_FLWR_FIELD_NOFRAG)
+		ice_rule_add_nofrag_metadata(&list[ICE_TC_METADATA_LKUP_IDX]);
 
 	if (tc_fltr->direction == ICE_ESWITCH_FLTR_EGRESS) {
 		ice_rule_add_src_vsi_metadata(&list[i]);
@@ -1876,9 +1880,36 @@ ice_parse_cls_flower(struct net_device *filter_dev, struct ice_vsi *vsi,
 
 		addr_type = match.key->addr_type;
 
-		if (flow_rule_has_control_flags(match.mask->flags,
-						fltr->extack))
+		if (!flow_rule_is_supp_control_flags(FLOW_DIS_IS_FRAGMENT,
+						     match.mask->flags,
+						     fltr->extack))
 			return -EOPNOTSUPP;
+
+		if (match.mask->flags & FLOW_DIS_IS_FRAGMENT) {
+			/* HW can only match on the "not fragmented" metadata
+			 * flag, there is no way to match fragments.
+			 */
+			if (match.key->flags & FLOW_DIS_IS_FRAGMENT) {
+				NL_SET_ERR_MSG_MOD(fltr->extack,
+						   "Match on fragmented packets is not supported");
+				return -EOPNOTSUPP;
+			}
+
+			/* The metadata flag is set for a fragment in either
+			 * the outer or the inner header, without a way to
+			 * tell which one. Allow the match only when there is
+			 * one IP header and one ip_flags, so the meaning is
+			 * unambiguous. PFCP is considered non-tunneled.
+			 */
+			if (fltr->tunnel_type != TNL_LAST &&
+			    fltr->tunnel_type != TNL_PFCP) {
+				NL_SET_ERR_MSG_MOD(fltr->extack,
+						   "Match on fragmentation of tunneled packets is not supported");
+				return -EOPNOTSUPP;
+			}
+
+			fltr->flags |= ICE_TC_FLWR_FIELD_NOFRAG;
+		}
 	}
 
 	if (addr_type == FLOW_DISSECTOR_KEY_IPV4_ADDRS) {

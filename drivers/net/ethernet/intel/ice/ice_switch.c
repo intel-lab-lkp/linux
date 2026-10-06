@@ -6018,6 +6018,13 @@ void ice_rule_add_direction_metadata(struct ice_adv_lkup_elem *lkup)
 		cpu_to_be16(ICE_PKT_FROM_NETWORK);
 }
 
+void ice_rule_add_nofrag_metadata(struct ice_adv_lkup_elem *lkup)
+{
+	lkup->type = ICE_HW_METADATA;
+	lkup->m_u.metadata.flags[ICE_PKT_FLAGS_MDID21] |=
+		cpu_to_be16(ICE_PKT_IS_FRAG);
+}
+
 void ice_rule_add_vlan_metadata(struct ice_adv_lkup_elem *lkup)
 {
 	lkup->type = ICE_HW_METADATA;

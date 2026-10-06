@@ -356,6 +356,7 @@ struct ice_nvgre_hdr {
 #define ICE_PKT_TUNNEL_MAC	BIT(6)
 #define ICE_PKT_TUNNEL_VLAN	BIT(7)
 #define ICE_PKT_TUNNEL_MASK	(ICE_PKT_TUNNEL_MAC | ICE_PKT_TUNNEL_VLAN)
+#define ICE_PKT_IS_FRAG		BIT(8)
 
 /* MDID 22
  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
