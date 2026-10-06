@@ -43,7 +43,6 @@ static void pm_runtime_already_suspended_test(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, 1, pm_runtime_suspend(dev));
 	KUNIT_EXPECT_EQ(test, 1, pm_runtime_autosuspend(dev));
-	KUNIT_EXPECT_EQ(test, 1, pm_request_autosuspend(dev));
 
 	pm_runtime_get_noresume(dev);
 	KUNIT_EXPECT_EQ(test, 1, pm_runtime_put_sync_autosuspend(dev));
@@ -81,7 +80,6 @@ static void pm_runtime_idle_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, 0, pm_runtime_idle(dev));
 	KUNIT_EXPECT_TRUE(test, pm_runtime_suspended(dev));
 	KUNIT_EXPECT_EQ(test, -EAGAIN, pm_runtime_idle(dev));
-	KUNIT_EXPECT_EQ(test, -EAGAIN, pm_request_idle(dev));
 }
 
 static void pm_runtime_disabled_test(struct kunit *test)
@@ -112,9 +110,7 @@ static void pm_runtime_disabled_test(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, -EACCES, pm_runtime_resume_and_get(dev));
 	KUNIT_EXPECT_EQ(test, -EACCES, pm_runtime_idle(dev));
-	KUNIT_EXPECT_EQ(test, -EACCES, pm_request_idle(dev));
 	KUNIT_EXPECT_EQ(test, -EACCES, pm_request_resume(dev));
-	KUNIT_EXPECT_EQ(test, -EACCES, pm_request_autosuspend(dev));
 	KUNIT_EXPECT_EQ(test, -EACCES, pm_runtime_suspend(dev));
 	KUNIT_EXPECT_EQ(test, -EACCES, pm_runtime_resume(dev));
 	KUNIT_EXPECT_EQ(test, -EACCES, pm_runtime_autosuspend(dev));
@@ -154,9 +150,7 @@ static void pm_runtime_error_test(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, -EINVAL, pm_runtime_resume_and_get(dev));
 	KUNIT_EXPECT_EQ(test, -EINVAL, pm_runtime_idle(dev));
-	KUNIT_EXPECT_EQ(test, -EINVAL, pm_request_idle(dev));
 	KUNIT_EXPECT_EQ(test, -EINVAL, pm_request_resume(dev));
-	KUNIT_EXPECT_EQ(test, -EINVAL, pm_request_autosuspend(dev));
 	KUNIT_EXPECT_EQ(test, -EINVAL, pm_runtime_suspend(dev));
 	KUNIT_EXPECT_EQ(test, -EINVAL, pm_runtime_resume(dev));
 	KUNIT_EXPECT_EQ(test, -EINVAL, pm_runtime_autosuspend(dev));
@@ -189,9 +183,7 @@ static void pm_runtime_error_test(struct kunit *test)
 	 * (already resumed).
 	 */
 	KUNIT_EXPECT_EQ(test, -EAGAIN, pm_runtime_idle(dev));
-	KUNIT_EXPECT_EQ(test, -EAGAIN, pm_request_idle(dev));
 	KUNIT_EXPECT_EQ(test, 1, pm_request_resume(dev));
-	KUNIT_EXPECT_EQ(test, -EAGAIN, pm_request_autosuspend(dev));
 	KUNIT_EXPECT_EQ(test, -EAGAIN, pm_runtime_suspend(dev));
 	KUNIT_EXPECT_EQ(test, 1, pm_runtime_resume(dev));
 	KUNIT_EXPECT_EQ(test, -EAGAIN, pm_runtime_autosuspend(dev));

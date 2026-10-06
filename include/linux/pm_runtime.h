@@ -447,21 +447,10 @@ static inline int pm_runtime_resume(struct device *dev)
  *
  * Asynchronously request the PM core to evaluate whether @dev can be idled
  * or suspended, invoking its ->runtime_idle() callback if provided.
- *
- * Return:
- * * %0: Success.
- * * %-EINVAL: Runtime PM error.
- * * %-EACCES: Runtime PM disabled.
- * * %-EAGAIN: Runtime PM usage counter non-zero, Runtime PM status change
- *   ongoing or device not in %RPM_ACTIVE state.
- * * %-EBUSY: Runtime PM child_count non-zero.
- * * %-EPERM: Device PM QoS resume latency 0.
- * * %-EINPROGRESS: Suspend already in progress.
- * * %-ENOSYS: %CONFIG_PM not enabled.
  */
-static inline int pm_request_idle(struct device *dev)
+static inline void pm_request_idle(struct device *dev)
 {
-	return __pm_runtime_idle(dev, RPM_ASYNC);
+	__pm_runtime_idle(dev, RPM_ASYNC);
 }
 
 /**
@@ -487,23 +476,11 @@ static inline int pm_request_resume(struct device *dev)
  *
  * Update the last access time of @dev and asynchronously request the PM core
  * to suspend it after the autosuspend delay has elapsed.
- *
- * Return:
- * * %1: Success; device was already suspended.
- * * %0: Success.
- * * %-EINVAL: Runtime PM error.
- * * %-EACCES: Runtime PM disabled.
- * * %-EAGAIN: Runtime PM usage counter non-zero or Runtime PM status change
- *   ongoing.
- * * %-EBUSY: Runtime PM child_count non-zero.
- * * %-EPERM: Device PM QoS resume latency 0.
- * * %-EINPROGRESS: Suspend already in progress.
- * * %-ENOSYS: %CONFIG_PM not enabled.
  */
-static inline int pm_request_autosuspend(struct device *dev)
+static inline void pm_request_autosuspend(struct device *dev)
 {
 	pm_runtime_mark_last_busy(dev);
-	return __pm_runtime_suspend(dev, RPM_ASYNC | RPM_AUTO);
+	__pm_runtime_suspend(dev, RPM_ASYNC | RPM_AUTO);
 }
 
 /**
