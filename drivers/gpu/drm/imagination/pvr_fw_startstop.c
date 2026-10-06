@@ -110,9 +110,11 @@ rogue_slc_init(struct pvr_device *pvr_dev)
 int
 pvr_fw_start(struct pvr_device *pvr_dev)
 {
-	bool has_reset2 = PVR_HAS_FEATURE(pvr_dev, xe_tpu2);
 	u64 soft_reset_mask;
 	int err;
+
+	/* No Rogue cores should have this feature which requires additional reset steps. */
+	WARN_ON_ONCE(PVR_HAS_FEATURE(pvr_dev, s7_top_infrastructure));
 
 	if (PVR_HAS_FEATURE(pvr_dev, pbe2_in_xe))
 		soft_reset_mask = ROGUE_CR_SOFT_RESET__PBE2_XE__MASKFULL;
@@ -133,32 +135,20 @@ pvr_fw_start(struct pvr_device *pvr_dev)
 
 	/* Set Rogue in soft-reset. */
 	pvr_cr_write64(pvr_dev, ROGUE_CR_SOFT_RESET, soft_reset_mask);
-	if (has_reset2)
-		pvr_cr_write64(pvr_dev, ROGUE_CR_SOFT_RESET2, ROGUE_CR_SOFT_RESET2_MASKFULL);
 
 	/* Read soft-reset to fence previous write in order to clear the SOCIF pipeline. */
 	(void)pvr_cr_read64(pvr_dev, ROGUE_CR_SOFT_RESET);
-	if (has_reset2)
-		(void)pvr_cr_read64(pvr_dev, ROGUE_CR_SOFT_RESET2);
 
 	/* Take Rascal and Dust out of reset. */
 	pvr_cr_write64(pvr_dev, ROGUE_CR_SOFT_RESET,
 		       soft_reset_mask ^ ROGUE_CR_SOFT_RESET_RASCALDUSTS_EN);
-	if (has_reset2)
-		pvr_cr_write64(pvr_dev, ROGUE_CR_SOFT_RESET2, 0);
 
 	(void)pvr_cr_read64(pvr_dev, ROGUE_CR_SOFT_RESET);
-	if (has_reset2)
-		(void)pvr_cr_read64(pvr_dev, ROGUE_CR_SOFT_RESET2);
 
 	/* Take everything out of reset but the FW processor. */
 	pvr_cr_write64(pvr_dev, ROGUE_CR_SOFT_RESET, ROGUE_CR_SOFT_RESET_GARTEN_EN);
-	if (has_reset2)
-		pvr_cr_write64(pvr_dev, ROGUE_CR_SOFT_RESET2, 0);
 
 	(void)pvr_cr_read64(pvr_dev, ROGUE_CR_SOFT_RESET);
-	if (has_reset2)
-		(void)pvr_cr_read64(pvr_dev, ROGUE_CR_SOFT_RESET2);
 
 	err = rogue_slc_init(pvr_dev);
 	if (err)
