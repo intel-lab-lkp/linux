@@ -22,10 +22,13 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/nsproxy.h>
 #include <linux/mutex.h>
 #include <linux/phy.h>
 #include <linux/rtnetlink.h>
+#include <linux/string.h>
 #include <linux/timer.h>
+#include <net/net_namespace.h>
 #include <net/netdev_lock.h>
 #include "../leds.h"
 
@@ -64,6 +67,8 @@ struct led_netdev_data {
 	struct led_classdev *led_cdev;
 	struct net_device *net_dev;
 
+	/* net namespace cookie associated with device_name */
+	u64 net_cookie;
 	char device_name[IFNAMSIZ];
 	atomic_t interval;
 	unsigned int last_activity;
@@ -274,7 +279,7 @@ static ssize_t device_name_show(struct device *dev,
 }
 
 static int set_device_name(struct led_netdev_data *trigger_data,
-			   const char *name, size_t size)
+			   struct net *net, const char *name, size_t size)
 {
 	struct net_device *new_dev = NULL;
 	char device_name[IFNAMSIZ];
@@ -294,9 +299,12 @@ static int set_device_name(struct led_netdev_data *trigger_data,
 	 */
 	rtnl_lock();
 	if (device_name[0]) {
-		new_dev = dev_get_by_name(&init_net, device_name);
+		trigger_data->net_cookie = net->net_cookie;
+		new_dev = dev_get_by_name(net, device_name);
 		if (new_dev)
 			netdev_lock_ops(new_dev);
+	} else {
+		trigger_data->net_cookie = 0;
 	}
 	mutex_lock(&trigger_data->lock);
 
@@ -331,7 +339,8 @@ static ssize_t device_name_store(struct device *dev,
 	struct led_netdev_data *trigger_data = led_trigger_get_drvdata(dev);
 	int ret;
 
-	ret = set_device_name(trigger_data, buf, size);
+	ret = set_device_name(trigger_data, current->nsproxy->net_ns, buf,
+			      size);
 
 	if (ret < 0)
 		return ret;
@@ -616,15 +625,24 @@ static int netdev_trig_notify(struct notifier_block *nb,
 		container_of(nb, struct led_netdev_data, notifier);
 	struct led_classdev *led_cdev = trigger_data->led_cdev;
 
-	if (evt != NETDEV_UP && evt != NETDEV_DOWN && evt != NETDEV_CHANGE
-	    && evt != NETDEV_REGISTER && evt != NETDEV_UNREGISTER
-	    && evt != NETDEV_CHANGENAME)
+	if (evt != NETDEV_UP && evt != NETDEV_DOWN && evt != NETDEV_CHANGE &&
+	    evt != NETDEV_REGISTER && evt != NETDEV_UNREGISTER &&
+	    evt != NETDEV_CHANGENAME)
 		return NOTIFY_DONE;
 
-	if (!(dev == trigger_data->net_dev ||
-	      (evt == NETDEV_CHANGENAME && !strcmp(dev->name, trigger_data->device_name)) ||
-	      (evt == NETDEV_REGISTER && !strcmp(dev->name, trigger_data->device_name))))
-		return NOTIFY_DONE;
+	if (trigger_data->net_dev) {
+		if (dev != trigger_data->net_dev)
+			return NOTIFY_DONE;
+		/* Ignore namespace transfers */
+		if (evt == NETDEV_UNREGISTER &&
+		    dev->reg_state != NETREG_UNREGISTERING)
+			return NOTIFY_DONE;
+	} else {
+		if ((evt != NETDEV_REGISTER && evt != NETDEV_CHANGENAME) ||
+		    dev_net(dev)->net_cookie != trigger_data->net_cookie ||
+		    strcmp(dev->name, trigger_data->device_name) != 0)
+			return NOTIFY_DONE;
+	}
 
 	cancel_delayed_work_sync(&trigger_data->work);
 
@@ -636,9 +654,12 @@ static int netdev_trig_notify(struct notifier_block *nb,
 	switch (evt) {
 	case NETDEV_CHANGENAME:
 	case NETDEV_REGISTER:
-		dev_put(trigger_data->net_dev);
-		dev_hold(dev);
-		trigger_data->net_dev = dev;
+		if (!trigger_data->net_dev) {
+			dev_hold(dev);
+			trigger_data->net_dev = dev;
+		}
+		trigger_data->net_cookie = dev_net(dev)->net_cookie;
+		strscpy(trigger_data->device_name, dev->name, IFNAMSIZ);
 		if (evt == NETDEV_CHANGENAME)
 			get_device_state(trigger_data);
 		break;
@@ -765,7 +786,8 @@ static int netdev_trig_activate(struct led_classdev *led_cdev)
 			const char *name = dev_name(dev);
 
 			trigger_data->hw_control = true;
-			set_device_name(trigger_data, name, strlen(name));
+			set_device_name(trigger_data, dev_net(to_net_dev(dev)),
+					name, strlen(name));
 
 			rc = led_cdev->hw_control_get(led_cdev, &mode);
 			if (!rc)
