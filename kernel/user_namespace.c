@@ -44,6 +44,9 @@ static void dec_user_namespaces(struct ucounts *ucounts)
 
 static void set_cred_user_ns(struct cred *cred, struct user_namespace *user_ns)
 {
+	/* The last chance to see what we can do outside of the new namespace. */
+	cred->setfcap_level = cap_setfcap_level(cred, user_ns->parent);
+
 	/* Start with the same capabilities as init but useless for doing
 	 * anything as the capabilities are bound to the new user namespace.
 	 */

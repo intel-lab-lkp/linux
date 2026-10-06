@@ -939,6 +939,7 @@ void key_change_session_keyring(struct callback_head *twork)
 	new->group_info	= get_group_info(old->group_info);
 
 	new->securebits	= old->securebits;
+	new->setfcap_level	= old->setfcap_level;
 	new->cap_inheritable	= old->cap_inheritable;
 	new->cap_permitted	= old->cap_permitted;
 	new->cap_effective	= old->cap_effective;
