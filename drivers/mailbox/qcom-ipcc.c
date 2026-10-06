@@ -336,8 +336,6 @@ static int qcom_ipcc_probe(struct platform_device *pdev)
 	return 0;
 
 err_req_irq:
-	if (ipcc->num_chans)
-		mbox_controller_unregister(&ipcc->mbox);
 err_mbox:
 	irq_domain_remove(ipcc->irq_domain);
 
