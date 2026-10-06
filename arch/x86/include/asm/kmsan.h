@@ -69,13 +69,44 @@ static inline bool kmsan_phys_addr_valid(unsigned long addr)
 }
 
 /*
+ * Same as pfn_valid(), but without rcu_read_lock_sched(). That one calls into
+ * instrumented code: preempt_count_add() with CONFIG_DEBUG_PREEMPT or
+ * CONFIG_TRACE_PREEMPT_TOGGLE, lock_acquire() with CONFIG_DEBUG_LOCK_ALLOC.
+ * Instrumented code looks up metadata itself, so calling it from the metadata
+ * lookup can recurse; with CONFIG_DEBUG_PREEMPT it does, until the stack
+ * overflows.
+ *
+ * Disabling preemption still makes this an RCU-sched read-side critical
+ * section. Preemption is re-enabled without a reschedule, as before, to
+ * avoid entering the scheduler from the metadata lookup.
+ */
+static inline bool kmsan_pfn_valid(unsigned long pfn)
+{
+	struct mem_section *ms;
+	bool ret;
+
+	if (PHYS_PFN(PFN_PHYS(pfn)) != pfn)
+		return false;
+
+	if (pfn_to_section_nr(pfn) >= NR_MEM_SECTIONS)
+		return false;
+	ms = __pfn_to_section(pfn);
+
+	preempt_disable_notrace();
+	ret = valid_section(ms) &&
+	      (early_section(ms) || pfn_section_valid(ms, pfn));
+	preempt_enable_no_resched_notrace();
+
+	return ret;
+}
+
+/*
  * Taken from arch/x86/mm/physaddr.c to avoid using an instrumented version.
  */
 static inline bool kmsan_virt_addr_valid(void *addr)
 {
 	unsigned long x = (unsigned long)addr;
 	unsigned long y = x - __START_KERNEL_map;
-	bool ret;
 
 	/* use the carry flag to determine if x was < __START_KERNEL_map */
 	if (unlikely(x > y)) {
@@ -91,21 +122,7 @@ static inline bool kmsan_virt_addr_valid(void *addr)
 			return false;
 	}
 
-	/*
-	 * pfn_valid() relies on RCU, and may call into the scheduler on exiting
-	 * the critical section. However, this would result in recursion with
-	 * KMSAN. Therefore, disable preemption here, and re-enable preemption
-	 * below while suppressing reschedules to avoid recursion.
-	 *
-	 * Note, this sacrifices occasionally breaking scheduling guarantees.
-	 * Although, a kernel compiled with KMSAN has already given up on any
-	 * performance guarantees due to being heavily instrumented.
-	 */
-	preempt_disable();
-	ret = pfn_valid(x >> PAGE_SHIFT);
-	preempt_enable_no_resched();
-
-	return ret;
+	return kmsan_pfn_valid(x >> PAGE_SHIFT);
 }
 
 #endif /* !MODULE */
