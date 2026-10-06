@@ -48,6 +48,8 @@ typedef struct scsi_cd {
 	bool ignore_get_event:1;	/* GET_EVENT is unreliable, use TUR */
 
 	struct cdrom_device_info cdi;
+	/* Protected by disk->open_mutex after probe. */
+	bool needs_revalidate;
 	struct mutex lock;
 	struct gendisk *disk;
 } Scsi_CD;
