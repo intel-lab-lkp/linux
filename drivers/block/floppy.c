@@ -2872,7 +2872,7 @@ static blk_status_t floppy_queue_rq(struct blk_mq_hw_ctx *hctx,
 	spin_unlock_irq(&floppy_lock);
 
 	command_status = FD_COMMAND_NONE;
-	__reschedule_timeout(MAXTIMEOUT, "fd_request");
+	reschedule_timeout(MAXTIMEOUT, "fd_request");
 	set_fdc(0);
 	process_fd_request();
 	is_alive(__func__, "");
