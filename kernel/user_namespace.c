@@ -900,7 +900,7 @@ static bool verify_root_map(const struct file *file,
 			    struct user_namespace *map_ns,
 			    struct uid_gid_map *new_map)
 {
-	int idx;
+	int idx, level;
 	const struct user_namespace *file_ns = file->f_cred->user_ns;
 	struct uid_gid_extent *extent0 = NULL;
 
@@ -918,24 +918,29 @@ static bool verify_root_map(const struct file *file,
 	if (!extent0)
 		return true;
 
+	/* The parent may in turn share its root user with its ancestors. */
+	level = cap_root_level(make_kuid(map_ns->parent, 0), map_ns->parent);
+
 	if (map_ns == file_ns) {
-		/* The process unshared its ns and is writing to its own
+		/* The process is in the new ns and is writing to its own
 		 * /proc/self/uid_map.  User already has full capabilites in
-		 * the new namespace.  Verify that the parent had CAP_SETFCAP
-		 * when it unshared.
-		 * */
+		 * the new namespace.  Verify that the creator had CAP_SETFCAP
+		 * when it unshared, and that the opener, which may have come
+		 * in later with setns(), had it as well when it entered.
+		 */
 		if (!file_ns->parent_could_setfcap)
 			return false;
-	} else {
-		/* Process p1 is writing to uid_map of p2, who is in a child
-		 * user namespace to p1's.  Verify that the opener of the map
-		 * file has CAP_SETFCAP against the parent of the new map
-		 * namespace */
-		if (!file_ns_capable(file, map_ns->parent, CAP_SETFCAP))
-			return false;
+		return file->f_cred->setfcap_level <= level;
 	}
 
-	return true;
+	/* Process p1 is writing to uid_map of p2, who is in a child
+	 * user namespace to p1's.  Verify that the opener of the map
+	 * file has CAP_SETFCAP against the parent of the new map
+	 * namespace, and not just because it entered that.
+	 */
+	if (!file_ns_capable(file, map_ns->parent, CAP_SETFCAP))
+		return false;
+	return cap_setfcap_level(file->f_cred, map_ns->parent) <= level;
 }
 
 static ssize_t map_write(struct file *file, const char __user *buf,
