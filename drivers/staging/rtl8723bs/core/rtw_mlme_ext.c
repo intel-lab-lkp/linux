@@ -499,7 +499,7 @@ unsigned int OnProbeReq(struct adapter *padapter, union recv_frame *precv_frame)
 	struct mlme_ext_info *pmlmeinfo = &pmlmeext->mlmext_info;
 	struct wlan_bssid_ex	*cur = &pmlmeinfo->network;
 	u8 *pframe = precv_frame->u.hdr.rx_data;
-	uint len = precv_frame->u.hdr.len;
+	unsigned int len = precv_frame->u.hdr.len;
 	u8 is_valid_p2p_probereq = false;
 
 	if (check_fwstate(pmlmepriv, WIFI_STATION_STATE))
@@ -554,7 +554,7 @@ unsigned int OnBeacon(struct adapter *padapter, union recv_frame *precv_frame)
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 	struct sta_priv *pstapriv = &padapter->stapriv;
 	u8 *pframe = precv_frame->u.hdr.rx_data;
-	uint len = precv_frame->u.hdr.len;
+	unsigned int len = precv_frame->u.hdr.len;
 	struct wlan_bssid_ex *pbss;
 	int ret = _SUCCESS;
 	u8 *p = NULL;
@@ -673,7 +673,7 @@ unsigned int OnAuth(struct adapter *padapter, union recv_frame *precv_frame)
 	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 	struct mlme_ext_info *pmlmeinfo = &pmlmeext->mlmext_info;
 	u8 *pframe = precv_frame->u.hdr.rx_data;
-	uint len = precv_frame->u.hdr.len;
+	unsigned int len = precv_frame->u.hdr.len;
 	u8 offset = 0;
 
 	if ((pmlmeinfo->state & 0x03) != WIFI_FW_AP_STATE)
@@ -845,7 +845,7 @@ unsigned int OnAuthClient(struct adapter *padapter, union recv_frame *precv_fram
 	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 	struct mlme_ext_info *pmlmeinfo = &pmlmeext->mlmext_info;
 	u8 *pframe = precv_frame->u.hdr.rx_data;
-	uint pkt_len = precv_frame->u.hdr.len;
+	unsigned int pkt_len = precv_frame->u.hdr.len;
 
 	/* check A1 matches or not */
 	if (memcmp(myid(&(padapter->eeprompriv)), get_da(pframe), ETH_ALEN))
@@ -930,7 +930,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 	struct wlan_bssid_ex	*cur = &(pmlmeinfo->network);
 	struct sta_priv *pstapriv = &padapter->stapriv;
 	u8 *pframe = precv_frame->u.hdr.rx_data;
-	uint pkt_len = precv_frame->u.hdr.len;
+	unsigned int pkt_len = precv_frame->u.hdr.len;
 
 	if ((pmlmeinfo->state & 0x03) != WIFI_FW_AP_STATE)
 		return _FAIL;
@@ -1319,7 +1319,7 @@ OnAssocReqFail:
 
 unsigned int OnAssocRsp(struct adapter *padapter, union recv_frame *precv_frame)
 {
-	uint i;
+	unsigned int i;
 	int res;
 	unsigned short	status;
 	struct ndis_80211_var_ie *pIE;
@@ -1327,7 +1327,7 @@ unsigned int OnAssocRsp(struct adapter *padapter, union recv_frame *precv_frame)
 	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 	struct mlme_ext_info *pmlmeinfo = &pmlmeext->mlmext_info;
 	u8 *pframe = precv_frame->u.hdr.rx_data;
-	uint pkt_len = precv_frame->u.hdr.len;
+	unsigned int pkt_len = precv_frame->u.hdr.len;
 
 	/* check A1 matches or not */
 	if (memcmp(myid(&(padapter->eeprompriv)), get_da(pframe), ETH_ALEN))
@@ -1718,7 +1718,7 @@ static unsigned int on_action_public_default(union recv_frame *precv_frame, u8 a
 {
 	unsigned int ret = _FAIL;
 	u8 *pframe = precv_frame->u.hdr.rx_data;
-	uint frame_len = precv_frame->u.hdr.len;
+	unsigned int frame_len = precv_frame->u.hdr.len;
 	u8 *frame_body = pframe + sizeof(struct ieee80211_hdr_3addr);
 	u8 token;
 	struct adapter *adapter = precv_frame->u.hdr.adapter;
@@ -2089,7 +2089,7 @@ void issue_beacon(struct adapter *padapter, int timeout_ms)
 
 		{
 			u8 *wps_ie;
-			uint wps_ielen;
+			unsigned int wps_ielen;
 			u8 sr = 0;
 
 			wps_ie = rtw_get_wps_ie(pmgntframe->buf_addr + TXDESC_OFFSET +
@@ -2188,7 +2188,7 @@ void issue_probersp(struct adapter *padapter, unsigned char *da, u8 is_valid_p2p
 	struct xmit_priv *pxmitpriv = &(padapter->xmitpriv);
 
 	u8 *pwps_ie;
-	uint wps_ielen;
+	unsigned int wps_ielen;
 	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 	struct mlme_ext_priv *pmlmeext = &(padapter->mlmeextpriv);
 	struct mlme_ext_info *pmlmeinfo = &pmlmeext->mlmext_info;
@@ -2241,10 +2241,10 @@ void issue_probersp(struct adapter *padapter, unsigned char *da, u8 is_valid_p2p
 
 		/* inerset & update wps_probe_resp_ie */
 		if (pmlmepriv->wps_probe_resp_ie && pwps_ie && wps_ielen > 0) {
-			uint wps_offset, remainder_ielen;
+			unsigned int wps_offset, remainder_ielen;
 			u8 *premainder_ie;
 
-			wps_offset = (uint)(pwps_ie - cur_network->ies);
+			wps_offset = (unsigned int)(pwps_ie - cur_network->ies);
 
 			premainder_ie = pwps_ie + wps_ielen;
 
@@ -2254,7 +2254,7 @@ void issue_probersp(struct adapter *padapter, unsigned char *da, u8 is_valid_p2p
 			pframe += wps_offset;
 			pattrib->pktlen += wps_offset;
 
-			wps_ielen = (uint)pmlmepriv->wps_probe_resp_ie[1];/* to get ie data len */
+			wps_ielen = (unsigned int)pmlmepriv->wps_probe_resp_ie[1];/* to get ie data len */
 			if ((wps_offset + wps_ielen + 2) <= MAX_IE_SZ) {
 				memcpy(pframe, pmlmepriv->wps_probe_resp_ie, wps_ielen + 2);
 				pframe += wps_ielen + 2;
@@ -2294,7 +2294,7 @@ void issue_probersp(struct adapter *padapter, unsigned char *da, u8 is_valid_p2p
 			ssid_ielen_diff = cur_network->ssid.ssid_length - ssid_ielen;
 
 			if (ssid_ie &&  cur_network->ssid.ssid_length) {
-				uint remainder_ielen;
+				unsigned int remainder_ielen;
 				u8 *remainder_ie;
 
 				remainder_ie = ssid_ie + 2;
@@ -2647,7 +2647,7 @@ void issue_asocrsp(struct adapter *padapter, unsigned short status, struct sta_i
 	}
 
 	if ((pstat->flags & WLAN_STA_HT) && (pmlmepriv->htpriv.ht_option)) {
-		uint ie_len = 0;
+		unsigned int ie_len = 0;
 
 		/* FILL HT CAP INFO IE */
 		pbuf = rtw_get_ie(ie + _BEACON_IE_OFFSET_, WLAN_EID_HT_CAPABILITY, &ie_len, (pnetwork->ie_length - _BEACON_IE_OFFSET_));
@@ -2668,7 +2668,7 @@ void issue_asocrsp(struct adapter *padapter, unsigned short status, struct sta_i
 
 	/* FILL WMM IE */
 	if ((pstat->flags & WLAN_STA_WME) && (pmlmepriv->qospriv.qos_option)) {
-		uint ie_len = 0;
+		unsigned int ie_len = 0;
 		unsigned char WMM_PARA_IE[] = {0x00, 0x50, 0xf2, 0x02, 0x01, 0x01};
 
 		for (pbuf = ie + _BEACON_IE_OFFSET_; ; pbuf += (ie_len + 2)) {
@@ -5558,14 +5558,14 @@ u8 mlme_evt_hdl(struct adapter *padapter, unsigned char *pbuf)
 {
 	u8 evt_code;
 	u16 evt_sz;
-	uint	*peventbuf;
+	unsigned int	*peventbuf;
 	void (*event_callback)(struct adapter *dev, u8 *pbuf);
 	struct evt_priv *pevt_priv = &(padapter->evtpriv);
 
 	if (!pbuf)
 		goto _abort_event_;
 
-	peventbuf = (uint *)pbuf;
+	peventbuf = (unsigned int *)pbuf;
 	evt_sz = (u16)(*peventbuf & 0xffff);
 	evt_code = (u8)((*peventbuf >> 16) & 0xff);
 

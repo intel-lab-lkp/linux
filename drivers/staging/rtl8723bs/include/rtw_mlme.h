@@ -86,7 +86,7 @@ enum {
 
 struct sitesurvey_ctrl {
 	u64	last_tx_pkts;
-	uint	last_rx_pkts;
+	unsigned int	last_rx_pkts;
 	signed int	traffic_busy;
 	struct timer_list	sitesurvey_ctrl_timer;
 };
@@ -144,14 +144,14 @@ struct mlme_priv {
 	struct wlan_network	cur_network;
 	struct wlan_network *cur_network_scanned;
 
-	/* uint wireless_mode; no used, remove it */
+	/* unsigned int wireless_mode; no used, remove it */
 
 	u32 auto_scan_int_ms;
 
 	struct timer_list assoc_timer;
 
-	uint assoc_by_bssid;
-	uint assoc_by_rssi;
+	unsigned int assoc_by_bssid;
+	unsigned int assoc_by_rssi;
 
 	struct timer_list scan_to_timer; /*  driver itself handles scan_timeout status. */
 	unsigned long scan_start_time; /*  used to evaluate the time spent in scanning */
@@ -323,8 +323,8 @@ void rtw_indicate_connect(struct adapter *adapter);
 void rtw_indicate_scan_done(struct adapter *padapter, bool aborted);
 void rtw_scan_abort(struct adapter *adapter);
 
-int rtw_restruct_sec_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, uint in_len);
-int rtw_restruct_wmm_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, uint in_len, uint initial_out_len);
+int rtw_restruct_sec_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, unsigned int in_len);
+int rtw_restruct_wmm_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, unsigned int in_len, unsigned int initial_out_len);
 void rtw_init_registrypriv_dev_network(struct adapter *adapter);
 
 void rtw_update_registrypriv_dev_network(struct adapter *adapter);
@@ -361,11 +361,11 @@ u8 *rtw_get_beacon_interval_from_ie(u8 *ie);
 void rtw_joinbss_reset(struct adapter *padapter);
 
 void rtw_ht_use_default_setting(struct adapter *padapter);
-void rtw_build_wmm_ie_ht(struct adapter *padapter, u8 *out_ie, uint *pout_len);
-unsigned int rtw_restructure_ht_ie(struct adapter *padapter, u8 *in_ie, u8 *out_ie, uint in_len, uint *pout_len, u8 channel);
-void rtw_update_ht_cap(struct adapter *padapter, u8 *pie, uint ie_len, u8 channel);
+void rtw_build_wmm_ie_ht(struct adapter *padapter, u8 *out_ie, unsigned int *pout_len);
+unsigned int rtw_restructure_ht_ie(struct adapter *padapter, u8 *in_ie, u8 *out_ie, unsigned int in_len, unsigned int *pout_len, u8 channel);
+void rtw_update_ht_cap(struct adapter *padapter, u8 *pie, unsigned int ie_len, u8 channel);
 void rtw_issue_addbareq_cmd(struct adapter *padapter, struct xmit_frame *pxmitframe);
-void rtw_append_exented_cap(struct adapter *padapter, u8 *out_ie, uint *pout_len);
+void rtw_append_exented_cap(struct adapter *padapter, u8 *out_ie, unsigned int *pout_len);
 
 bool rtw_is_same_ibss(struct adapter *adapter, struct wlan_network *pnetwork);
 int is_same_network(struct wlan_bssid_ex *src, struct wlan_bssid_ex *dst, u8 feature);

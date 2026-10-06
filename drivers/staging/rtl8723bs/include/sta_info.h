@@ -80,14 +80,14 @@ struct sta_info {
 	struct __queue sleep_q;
 	unsigned int sleepq_len;
 
-	uint state;
-	uint aid;
-	uint mac_id;
-	uint qos_option;
+	unsigned int state;
+	unsigned int aid;
+	unsigned int mac_id;
+	unsigned int qos_option;
 	u8 hwaddr[ETH_ALEN];
 
 	bool ieee8021x_blocked;
-	uint dot118021_x_privacy; /* aes, tkip... */
+	unsigned int dot118021_x_privacy; /* aes, tkip... */
 	union Keytype dot11tkiptxmickey;
 	union Keytype dot11tkiprxmickey;
 	union Keytype dot118021x_UncstKey;

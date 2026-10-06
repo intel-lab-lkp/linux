@@ -1376,9 +1376,9 @@ s32 rtw_put_snap(u8 *data, u16 h_proto)
 	return SNAP_SIZE + sizeof(u16);
 }
 
-void rtw_update_protection(struct adapter *padapter, u8 *ie, uint ie_len)
+void rtw_update_protection(struct adapter *padapter, u8 *ie, unsigned int ie_len)
 {
-	uint	protection;
+	unsigned int	protection;
 	u8 *perp;
 	signed int	 erp_len;
 	struct	xmit_priv *pxmitpriv = &padapter->xmitpriv;

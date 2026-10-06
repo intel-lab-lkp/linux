@@ -474,7 +474,7 @@ int is_client_associated_to_ap(struct adapter *padapter);
 int is_client_associated_to_ibss(struct adapter *padapter);
 int is_IBSS_empty(struct adapter *padapter);
 
-unsigned char check_assoc_AP(u8 *pframe, uint len);
+unsigned char check_assoc_AP(u8 *pframe, unsigned int len);
 
 int WMM_param_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE);
 void WMMOnAssocRsp(struct adapter *padapter);
@@ -487,13 +487,13 @@ void ERP_IE_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE);
 void VCS_update(struct adapter *padapter, struct sta_info *psta);
 void update_ldpc_stbc_cap(struct sta_info *psta);
 
-void update_beacon_info(struct adapter *padapter, u8 *pframe, uint len, struct sta_info *psta);
+void update_beacon_info(struct adapter *padapter, u8 *pframe, unsigned int len, struct sta_info *psta);
 int rtw_check_bcn_info(struct adapter *Adapter, u8 *pframe, u32 packet_len);
 void update_IOT_info(struct adapter *padapter);
 void update_capinfo(struct adapter *Adapter, u16 updateCap);
 void update_wireless_mode(struct adapter *padapter);
 void update_sta_basic_rate(struct sta_info *psta, u8 wireless_mode);
-int update_sta_support_rate(struct adapter *padapter, u8 *pvar_ie, uint var_ie_len, int cam_idx);
+int update_sta_support_rate(struct adapter *padapter, u8 *pvar_ie, unsigned int var_ie_len, int cam_idx);
 
 /* for sta/adhoc mode */
 void update_sta_info(struct adapter *padapter, struct sta_info *psta);
@@ -598,15 +598,15 @@ void sa_query_timer_hdl(struct timer_list *t);
 
 void process_addba_req(struct adapter *padapter, u8 *paddba_req, u8 *addr);
 
-void update_TSF(struct mlme_ext_priv *pmlmeext, u8 *pframe, uint len);
+void update_TSF(struct mlme_ext_priv *pmlmeext, u8 *pframe, unsigned int len);
 void correct_TSF(struct adapter *padapter, struct mlme_ext_priv *pmlmeext);
-void adaptive_early_32k(struct mlme_ext_priv *pmlmeext, u8 *pframe, uint len);
+void adaptive_early_32k(struct mlme_ext_priv *pmlmeext, u8 *pframe, unsigned int len);
 bool traffic_status_watchdog(struct adapter *padapter, bool from_timer);
 
 int rtw_chk_start_clnt_join(struct adapter *padapter, u8 *ch, u8 *bw, u8 *offset);
 
 struct cmd_hdl {
-	uint	parmsize;
+	unsigned int	parmsize;
 	u8 (*h2cfuns)(struct adapter *padapter, u8 *pbuf);
 };
 

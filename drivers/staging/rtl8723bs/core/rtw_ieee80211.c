@@ -115,9 +115,9 @@ u8 *rtw_set_fixed_ie(unsigned char *pbuf, unsigned int len, unsigned char *sourc
 /*  rtw_set_ie will update frame length */
 u8 *rtw_set_ie(u8 *pbuf,
 	       signed int index,
-	       uint len,
+	       unsigned int len,
 	       u8 *source,
-	       uint *frlen) /* frame length */
+	       unsigned int *frlen) /* frame length */
 {
 	*pbuf = (u8)index;
 
@@ -171,9 +171,9 @@ u8 *rtw_get_ie(u8 *pbuf, signed int index, signed int *len, signed int limit)
  *
  * Returns: The address of the specific IE found, or NULL
  */
-u8 *rtw_get_ie_ex(u8 *in_ie, uint in_len, u8 eid, u8 *oui, u8 oui_len, u8 *ie, uint *ielen)
+u8 *rtw_get_ie_ex(u8 *in_ie, unsigned int in_len, u8 eid, u8 *oui, u8 oui_len, u8 *ie, unsigned int *ielen)
 {
-	uint cnt;
+	unsigned int cnt;
 	u8 *target_ie = NULL;
 
 	if (ielen)
@@ -219,13 +219,13 @@ u8 *rtw_get_ie_ex(u8 *in_ie, uint in_len, u8 eid, u8 *oui, u8 oui_len, u8 *ie, u
  *
  * Returns: _SUCCESS: ies is updated, _FAIL: not updated
  */
-int rtw_ies_remove_ie(u8 *ies, uint *ies_len, uint offset, u8 eid, u8 *oui, u8 oui_len)
+int rtw_ies_remove_ie(u8 *ies, unsigned int *ies_len, unsigned int offset, u8 eid, u8 *oui, u8 oui_len)
 {
 	int ret = _FAIL;
 	u8 *target_ie;
 	u32 target_ielen;
 	u8 *start;
-	uint search_len;
+	unsigned int search_len;
 
 	if (!ies || !ies_len || *ies_len <= offset)
 		goto exit;
@@ -237,7 +237,7 @@ int rtw_ies_remove_ie(u8 *ies, uint *ies_len, uint offset, u8 eid, u8 *oui, u8 o
 		target_ie = rtw_get_ie_ex(start, search_len, eid, oui, oui_len, NULL, &target_ielen);
 		if (target_ie && target_ielen) {
 			u8 *remain_ies = target_ie + target_ielen;
-			uint remain_len = search_len - (remain_ies - start);
+			unsigned int remain_len = search_len - (remain_ies - start);
 
 			memcpy(target_ie, remain_ies, remain_len);
 			*ies_len = *ies_len - target_ielen;
@@ -253,7 +253,7 @@ exit:
 	return ret;
 }
 
-void rtw_set_supported_rate(u8 *supported_rates, uint mode)
+void rtw_set_supported_rate(u8 *supported_rates, unsigned int mode)
 {
 	memset(supported_rates, 0, NDIS_802_11_LENGTH_RATES_EX);
 
@@ -276,9 +276,9 @@ void rtw_set_supported_rate(u8 *supported_rates, uint mode)
 	}
 }
 
-uint rtw_get_rateset_len(u8 *rateset)
+unsigned int rtw_get_rateset_len(u8 *rateset)
 {
-	uint i;
+	unsigned int i;
 
 	for (i = 0; i < 13; i++)
 		if (rateset[i] == 0)
@@ -564,11 +564,11 @@ int rtw_parse_wpa2_ie(u8 *rsn_ie, int rsn_ie_len, int *group_cipher, int *pairwi
 	return ret;
 }
 
-int rtw_get_wapi_ie(u8 *in_ie, uint in_len, u8 *wapi_ie, u16 *wapi_len)
+int rtw_get_wapi_ie(u8 *in_ie, unsigned int in_len, u8 *wapi_ie, u16 *wapi_len)
 {
 	int len = 0;
 	u8 authmode;
-	uint	cnt;
+	unsigned int	cnt;
 	u8 wapi_oui1[4] = {0x0, 0x14, 0x72, 0x01};
 	u8 wapi_oui2[4] = {0x0, 0x14, 0x72, 0x02};
 
@@ -607,11 +607,11 @@ int rtw_get_wapi_ie(u8 *in_ie, uint in_len, u8 *wapi_ie, u16 *wapi_len)
 	return len;
 }
 
-void rtw_get_sec_ie(u8 *in_ie, uint in_len, u8 *rsn_ie, u16 *rsn_len, u8 *wpa_ie, u16 *wpa_len)
+void rtw_get_sec_ie(u8 *in_ie, unsigned int in_len, u8 *rsn_ie, u16 *rsn_len, u8 *wpa_ie, u16 *wpa_len)
 {
 	u8 authmode;
 	u8 wpa_oui[4] = {0x0, 0x50, 0xf2, 0x01};
-	uint	cnt;
+	unsigned int	cnt;
 
 	/* Search required WPA or WPA2 IE and copy to sec_ie[ ] */
 
@@ -651,9 +651,9 @@ void rtw_get_sec_ie(u8 *in_ie, uint in_len, u8 *rsn_ie, u16 *rsn_len, u8 *wpa_ie
  *
  * Returns: The address of the WPS IE found, or NULL
  */
-u8 *rtw_get_wps_ie(u8 *in_ie, uint in_len, u8 *wps_ie, uint *wps_ielen)
+u8 *rtw_get_wps_ie(u8 *in_ie, unsigned int in_len, u8 *wps_ie, unsigned int *wps_ielen)
 {
-	uint cnt;
+	unsigned int cnt;
 	u8 *wpsie_ptr = NULL;
 	u8 eid, wps_oui[4] = {0x0, 0x50, 0xf2, 0x04};
 
@@ -704,7 +704,7 @@ u8 *rtw_get_wps_ie(u8 *in_ie, uint in_len, u8 *wps_ie, uint *wps_ielen)
  *
  * Returns: the address of the specific WPS attribute found, or NULL
  */
-u8 *rtw_get_wps_attr(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 *buf_attr, u32 *len_attr)
+u8 *rtw_get_wps_attr(u8 *wps_ie, unsigned int wps_ielen, u16 target_attr_id, u8 *buf_attr, u32 *len_attr)
 {
 	u8 *attr_ptr = NULL;
 	u8 *target_attr_ptr = NULL;
@@ -763,7 +763,7 @@ u8 *rtw_get_wps_attr(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 *buf_att
  *
  * Returns: the address of the specific WPS attribute content found, or NULL
  */
-u8 *rtw_get_wps_attr_content(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 *buf_content, uint *len_content)
+u8 *rtw_get_wps_attr_content(u8 *wps_ie, unsigned int wps_ielen, u16 target_attr_id, u8 *buf_content, unsigned int *len_content)
 {
 	u8 *attr_ptr;
 	u32 attr_len;
@@ -786,7 +786,7 @@ u8 *rtw_get_wps_attr_content(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 
 	return NULL;
 }
 
-static int rtw_ieee802_11_parse_vendor_specific(u8 *pos, uint elen,
+static int rtw_ieee802_11_parse_vendor_specific(u8 *pos, unsigned int elen,
 					    struct rtw_ieee802_11_elems *elems,
 					    int show_errors)
 {
@@ -870,11 +870,11 @@ static int rtw_ieee802_11_parse_vendor_specific(u8 *pos, uint elen,
  * @show_errors: Whether to show parsing errors in debug log
  * Returns: Parsing result
  */
-enum parse_result rtw_ieee802_11_parse_elems(u8 *start, uint len,
+enum parse_result rtw_ieee802_11_parse_elems(u8 *start, unsigned int len,
 					     struct rtw_ieee802_11_elems *elems,
 					     int show_errors)
 {
-	uint left = len;
+	unsigned int left = len;
 	u8 *pos = start;
 	int unknown = 0;
 

@@ -176,16 +176,16 @@ struct recv_priv {
 	struct __queue uc_swdec_pending_queue;
 	u8 *pallocated_frame_buf;
 	u8 *precv_frame_buf;
-	uint free_recvframe_cnt;
+	unsigned int free_recvframe_cnt;
 	struct adapter *adapter;
 	u32 bIsAnyNonBEPkts;
 	u64 rx_bytes;
 	u64 rx_pkts;
 	u64 rx_drop;
-	uint rx_icv_err;
-	uint rx_largepacket_crcerr;
-	uint rx_smallpacket_crcerr;
-	uint rx_middlepacket_crcerr;
+	unsigned int rx_icv_err;
+	unsigned int rx_largepacket_crcerr;
+	unsigned int rx_smallpacket_crcerr;
+	unsigned int rx_middlepacket_crcerr;
 
 	struct tasklet_struct irq_prepare_beacon_tasklet;
 	struct tasklet_struct recv_tasklet;
@@ -277,7 +277,7 @@ struct recv_frame_hdr {
 
 	struct rx_pkt_attrib attrib;
 
-	uint len;
+	unsigned int len;
 	u8 *rx_head;
 	u8 *rx_data;
 	u8 *rx_tail;
@@ -295,7 +295,7 @@ union recv_frame {
 	union{
 		struct list_head list;
 		struct recv_frame_hdr hdr;
-		uint mem[RECVFRAME_HDR_ALIGN>>2];
+		unsigned int mem[RECVFRAME_HDR_ALIGN>>2];
 	} u;
 };
 

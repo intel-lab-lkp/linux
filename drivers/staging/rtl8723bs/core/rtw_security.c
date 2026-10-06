@@ -631,9 +631,9 @@ static void construct_mic_iv(u8 *mic_iv,
 			     signed int qc_exists,
 			     signed int a4_exists,
 			     u8 *mpdu,
-			     uint payload_length,
+			     unsigned int payload_length,
 			     u8 *pn_vector,
-			     uint frtype)
+			     unsigned int frtype)
 {
 		signed int i;
 
@@ -669,7 +669,7 @@ static void construct_mic_iv(u8 *mic_iv,
 static void construct_mic_header1(u8 *mic_header1,
 				  signed int header_length,
 				  u8 *mpdu,
-				  uint frtype)
+				  unsigned int frtype)
 {
 		mic_header1[0] = (u8)((header_length - 2) / 256);
 		mic_header1[1] = (u8)((header_length - 2) % 256);
@@ -752,7 +752,7 @@ static void construct_ctr_preload(u8 *ctr_preload,
 				  u8 *mpdu,
 				  u8 *pn_vector,
 				  signed int c,
-				  uint frtype)
+				  unsigned int frtype)
 {
 	signed int i = 0;
 
@@ -780,10 +780,10 @@ static void construct_ctr_preload(u8 *ctr_preload,
 	ctr_preload[15] = (unsigned char)(c % 256);
 }
 
-static signed int aes_cipher(u8 *key, uint hdrlen,
-			     u8 *pframe, uint plen)
+static signed int aes_cipher(u8 *key, unsigned int hdrlen,
+			     u8 *pframe, unsigned int plen)
 {
-	uint	qc_exists, a4_exists, i, j, payload_remainder,
+	unsigned int	qc_exists, a4_exists, i, j, payload_remainder,
 		num_blocks, payload_index;
 
 	u8 pn_vector[6];
@@ -797,8 +797,8 @@ static signed int aes_cipher(u8 *key, uint hdrlen,
 	u8 aes_out[16] = {};
 	u8 padded_buffer[16] = {};
 	u8 mic[8];
-	uint	frtype  = GetFrameType(pframe);
-	uint	frsubtype  = GetFrameSubType(pframe);
+	unsigned int	frtype  = GetFrameType(pframe);
+	unsigned int	frsubtype  = GetFrameSubType(pframe);
 
 	frsubtype = frsubtype >> 4;
 
@@ -980,11 +980,11 @@ u32 rtw_aes_encrypt(struct adapter *padapter, u8 *pxmitframe)
 	return res;
 }
 
-static signed int aes_decipher(u8 *key, uint hdrlen,
-			       u8 *pframe, uint plen)
+static signed int aes_decipher(u8 *key, unsigned int hdrlen,
+			       u8 *pframe, unsigned int plen)
 {
 	static u8 message[MAX_MSG_SIZE];
-	uint qc_exists, a4_exists, i, j, payload_remainder,
+	unsigned int qc_exists, a4_exists, i, j, payload_remainder,
 			num_blocks, payload_index;
 	signed int res = _SUCCESS;
 	u8 pn_vector[6];
@@ -999,8 +999,8 @@ static signed int aes_decipher(u8 *key, uint hdrlen,
 	u8 padded_buffer[16] = {};
 	u8 mic[8];
 
-	uint frtype  = GetFrameType(pframe);
-	uint frsubtype  = GetFrameSubType(pframe);
+	unsigned int frtype  = GetFrameType(pframe);
+	unsigned int frsubtype  = GetFrameSubType(pframe);
 
 	frsubtype = frsubtype >> 4;
 
@@ -1266,7 +1266,7 @@ u32 rtw_BIP_verify(struct adapter *padapter, u8 *precvframe)
 	u8 *pframe;
 	u8 *BIP_AAD, *p;
 	u32 res = _FAIL;
-	uint len, ori_len;
+	unsigned int len, ori_len;
 	struct ieee80211_hdr *pwlanhdr;
 	u8 mic[16];
 	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;

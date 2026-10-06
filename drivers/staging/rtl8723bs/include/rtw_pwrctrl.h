@@ -145,8 +145,8 @@ struct pwrctrl_priv {
 	u32 cur_ps_level;
 	u32 reg_rfps_level;
 
-	uint	ips_enter_cnts;
-	uint	ips_leave_cnts;
+	unsigned int	ips_enter_cnts;
+	unsigned int	ips_leave_cnts;
 
 	u8 ips_mode;
 	u8 ips_org_mode;

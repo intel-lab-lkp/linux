@@ -138,7 +138,7 @@ module_param(rtw_antdiv_type, int, 0644);
 
 module_param(rtw_hw_wps_pbc, int, 0644);
 
-static uint rtw_max_roaming_times = 2;
+static unsigned int rtw_max_roaming_times = 2;
 module_param(rtw_max_roaming_times, uint, 0644);
 MODULE_PARM_DESC(rtw_max_roaming_times, "The max roaming times to try");
 
@@ -147,13 +147,13 @@ module_param(rtw_mc2u_disable, int, 0644);
 module_param(rtw_80211d, int, 0644);
 MODULE_PARM_DESC(rtw_80211d, "Enable 802.11d mechanism");
 
-static uint rtw_notch_filter;
+static unsigned int rtw_notch_filter;
 module_param(rtw_notch_filter, uint, 0644);
 MODULE_PARM_DESC(rtw_notch_filter, "0:Disable, 1:Enable, 2:Enable only for P2P");
 
 #define CONFIG_RTW_HIQ_FILTER 1
 
-static uint rtw_hiq_filter = CONFIG_RTW_HIQ_FILTER;
+static unsigned int rtw_hiq_filter = CONFIG_RTW_HIQ_FILTER;
 module_param(rtw_hiq_filter, uint, 0644);
 MODULE_PARM_DESC(rtw_hiq_filter, "0:allow all, 1:allow special, 2:deny all");
 

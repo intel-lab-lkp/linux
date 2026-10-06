@@ -293,8 +293,8 @@ struct	hw_txqueue	{
 	volatile signed int	free_sz;	/* in units of 64 bytes */
 	volatile signed int      free_cmdsz;
 	volatile signed int	 txsz[8];
-	uint	ff_hwaddr;
-	uint	cmd_hwaddr;
+	unsigned int	ff_hwaddr;
+	unsigned int	cmd_hwaddr;
 	signed int	ac_tag;
 };
 
@@ -319,15 +319,15 @@ struct	xmit_priv {
 
 	u8 *pallocated_frame_buf;
 	u8 *pxmit_frame_buf;
-	uint free_xmitframe_cnt;
+	unsigned int free_xmitframe_cnt;
 	struct __queue	free_xmit_queue;
 
 	u8 *xframe_ext_alloc_addr;
 	u8 *xframe_ext;
-	uint free_xframe_ext_cnt;
+	unsigned int free_xframe_ext_cnt;
 	struct __queue free_xframe_ext_queue;
 
-	uint	frag_len;
+	unsigned int	frag_len;
 
 	struct adapter	*adapter;
 
@@ -353,12 +353,12 @@ struct	xmit_priv {
 	struct __queue pending_xmitbuf_queue;
 	u8 *pallocated_xmitbuf;
 	u8 *pxmitbuf;
-	uint free_xmitbuf_cnt;
+	unsigned int free_xmitbuf_cnt;
 
 	struct __queue free_xmit_extbuf_queue;
 	u8 *pallocated_xmit_extbuf;
 	u8 *pxmit_extbuf;
-	uint free_xmit_extbuf_cnt;
+	unsigned int free_xmit_extbuf_cnt;
 
 	struct xmit_buf	pcmd_xmitbuf[CMDBUF_MAX];
 
@@ -383,7 +383,7 @@ struct xmit_buf *rtw_alloc_xmitbuf(struct xmit_priv *pxmitpriv);
 void rtw_free_xmitbuf(struct xmit_priv *pxmitpriv, struct xmit_buf *pxmitbuf);
 
 void rtw_count_tx_stats(struct adapter *padapter, struct xmit_frame *pxmitframe, int sz);
-void rtw_update_protection(struct adapter *padapter, u8 *ie, uint ie_len);
+void rtw_update_protection(struct adapter *padapter, u8 *ie, unsigned int ie_len);
 int rtw_make_wlanhdr(struct adapter *padapter, u8 *hdr, struct pkt_attrib *pattrib);
 s32 rtw_put_snap(u8 *data, u16 h_proto);
 

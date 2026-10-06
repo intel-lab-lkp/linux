@@ -588,7 +588,7 @@ static bool rtw_is_desired_network(struct adapter *adapter, struct wlan_network 
 	struct mlme_priv *mlme_priv = &adapter->mlmepriv;
 	u32 desired_encmode;
 	u32 privacy;
-	uint wps_ielen;
+	unsigned int wps_ielen;
 	bool bselected = true;
 
 	desired_encmode = psecuritypriv->ndisencryptstatus;
@@ -605,7 +605,7 @@ static bool rtw_is_desired_network(struct adapter *adapter, struct wlan_network 
 
 	if (adapter->registrypriv.wifi_spec == 1) { /* for  correct flow of 8021X  to do.... */
 		u8 *p = NULL;
-		uint ie_len = 0;
+		unsigned int ie_len = 0;
 
 		if ((desired_encmode == Ndis802_11EncryptionDisabled) && (privacy != 0))
 			bselected = false;
@@ -1328,7 +1328,7 @@ void rtw_stassoc_event_callback(struct adapter *adapter, u8 *buf)
 
 	/* to do : init sta_info variable */
 	psta->qos_option = 0;
-	psta->mac_id = (uint)pstassoc->cam_id;
+	psta->mac_id = (unsigned int)pstassoc->cam_id;
 
 	/* for ad-hoc mode */
 	rtw_hal_set_odm_var(adapter, HAL_ODM_STA_INFO, psta, true);
@@ -1949,7 +1949,7 @@ exit:
 }
 
 /* adjust ies for rtw_joinbss_cmd in WMM */
-int rtw_restruct_wmm_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, uint in_len, uint initial_out_len)
+int rtw_restruct_wmm_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, unsigned int in_len, unsigned int initial_out_len)
 {
 	unsigned int ielength = 0;
 	unsigned int i, j;
@@ -2010,7 +2010,7 @@ static int SecIsInPMKIDList(struct adapter *Adapter, u8 *bssid)
 /*  12th element in the array is the IE */
 /*  13th element in the array is the IE length */
 
-static int rtw_append_pmkid(struct adapter *Adapter, int pmkid_idx, u8 *ie, uint ie_len)
+static int rtw_append_pmkid(struct adapter *Adapter, int pmkid_idx, u8 *ie, unsigned int ie_len)
 {
 	struct security_priv *psecuritypriv = &Adapter->securitypriv;
 
@@ -2029,7 +2029,7 @@ static int rtw_append_pmkid(struct adapter *Adapter, int pmkid_idx, u8 *ie, uint
 
 static void rtw_report_sec_ie(struct adapter *adapter, u8 authmode, u8 *sec_ie)
 {
-	uint len;
+	unsigned int len;
 	u8 *buff, *p;
 	union iwreq_data wrqu;
 
@@ -2060,15 +2060,15 @@ static void rtw_report_sec_ie(struct adapter *adapter, u8 authmode, u8 *sec_ie)
 	}
 }
 
-signed int rtw_restruct_sec_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, uint in_len)
+signed int rtw_restruct_sec_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, unsigned int in_len)
 {
 	u8 authmode = 0x0;
-	uint ielength;
+	unsigned int ielength;
 	int pmkid_idx;
 
 	struct mlme_priv *mlme_priv = &adapter->mlmepriv;
 	struct security_priv *psecuritypriv = &adapter->securitypriv;
-	uint ndisauthmode = psecuritypriv->ndisauthtype;
+	unsigned int ndisauthmode = psecuritypriv->ndisauthtype;
 
 	/* copy fixed ie only */
 	memcpy(out_ie, in_ie, 12);
@@ -2230,7 +2230,7 @@ void rtw_ht_use_default_setting(struct adapter *adapter)
 		SET_FLAG(ht_priv->beamform_cap, BEAMFORMING_HT_BEAMFORMEE_ENABLE);
 }
 
-void rtw_build_wmm_ie_ht(struct adapter *adapter, u8 *out_ie, uint *pout_len)
+void rtw_build_wmm_ie_ht(struct adapter *adapter, u8 *out_ie, unsigned int *pout_len)
 {
 	unsigned char WMM_IE[] = {0x00, 0x50, 0xf2, 0x02, 0x00, 0x01, 0x00};
 	int out_len;
@@ -2245,7 +2245,7 @@ void rtw_build_wmm_ie_ht(struct adapter *adapter, u8 *out_ie, uint *pout_len)
 }
 
 /* the function is >= passive_level */
-unsigned int rtw_restructure_ht_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, uint in_len, uint *pout_len, u8 channel)
+unsigned int rtw_restructure_ht_ie(struct adapter *adapter, u8 *in_ie, u8 *out_ie, unsigned int in_len, unsigned int *pout_len, u8 channel)
 {
 	u32 ielen, out_len;
 	enum ieee80211_max_ampdu_length_exp max_rx_ampdu_factor;
@@ -2369,7 +2369,7 @@ unsigned int rtw_restructure_ht_ie(struct adapter *adapter, u8 *in_ie, u8 *out_i
 }
 
 /* the function is > passive_level (in critical_section) */
-void rtw_update_ht_cap(struct adapter *adapter, u8 *pie, uint ie_len, u8 channel)
+void rtw_update_ht_cap(struct adapter *adapter, u8 *pie, unsigned int ie_len, u8 channel)
 {
 	u8 *p, max_ampdu_sz;
 	int len;
@@ -2487,7 +2487,7 @@ void rtw_issue_addbareq_cmd(struct adapter *adapter, struct xmit_frame *pxmitfra
 	}
 }
 
-void rtw_append_exented_cap(struct adapter *adapter, u8 *out_ie, uint *pout_len)
+void rtw_append_exented_cap(struct adapter *adapter, u8 *out_ie, unsigned int *pout_len)
 {
 	struct mlme_priv *mlme_priv = &adapter->mlmepriv;
 	struct ht_priv *ht_priv = &mlme_priv->htpriv;

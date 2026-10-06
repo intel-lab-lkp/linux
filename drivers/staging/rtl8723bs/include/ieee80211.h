@@ -675,32 +675,32 @@ enum parse_result {
 	PARSE_FAILED = -1
 };
 
-enum parse_result rtw_ieee802_11_parse_elems(u8 *start, uint len,
+enum parse_result rtw_ieee802_11_parse_elems(u8 *start, unsigned int len,
 					     struct rtw_ieee802_11_elems *elems,
 					     int show_errors);
 
 u8 *rtw_set_fixed_ie(unsigned char *pbuf, unsigned int len, unsigned char *source, unsigned int *frlen);
-u8 *rtw_set_ie(u8 *pbuf, signed int index, uint len, u8 *source, uint *frlen);
+u8 *rtw_set_ie(u8 *pbuf, signed int index, unsigned int len, u8 *source, unsigned int *frlen);
 
 u8 *rtw_get_ie(u8 *pbuf, signed int index, signed int *len, signed int limit);
-u8 *rtw_get_ie_ex(u8 *in_ie, uint in_len, u8 eid, u8 *oui, u8 oui_len, u8 *ie, uint *ielen);
-int rtw_ies_remove_ie(u8 *ies, uint *ies_len, uint offset, u8 eid, u8 *oui, u8 oui_len);
+u8 *rtw_get_ie_ex(u8 *in_ie, unsigned int in_len, u8 eid, u8 *oui, u8 oui_len, u8 *ie, unsigned int *ielen);
+int rtw_ies_remove_ie(u8 *ies, unsigned int *ies_len, unsigned int offset, u8 eid, u8 *oui, u8 oui_len);
 
-void rtw_set_supported_rate(u8 *SupportedRates, uint mode);
+void rtw_set_supported_rate(u8 *SupportedRates, unsigned int mode);
 
 unsigned char *rtw_get_wpa_ie(unsigned char *pie, int *wpa_ie_len, int limit);
 unsigned char *rtw_get_wpa2_ie(unsigned char *pie, int *rsn_ie_len, int limit);
 int rtw_get_wpa_cipher_suite(u8 *s);
 int rtw_get_wpa2_cipher_suite(u8 *s);
-int rtw_get_wapi_ie(u8 *in_ie, uint in_len, u8 *wapi_ie, u16 *wapi_len);
+int rtw_get_wapi_ie(u8 *in_ie, unsigned int in_len, u8 *wapi_ie, u16 *wapi_len);
 int rtw_parse_wpa_ie(u8 *wpa_ie, int wpa_ie_len, int *group_cipher, int *pairwise_cipher, int *is_8021x);
 int rtw_parse_wpa2_ie(u8 *wpa_ie, int wpa_ie_len, int *group_cipher, int *pairwise_cipher, int *is_8021x);
 
-void rtw_get_sec_ie(u8 *in_ie, uint in_len, u8 *rsn_ie, u16 *rsn_len, u8 *wpa_ie, u16 *wpa_len);
+void rtw_get_sec_ie(u8 *in_ie, unsigned int in_len, u8 *rsn_ie, u16 *rsn_len, u8 *wpa_ie, u16 *wpa_len);
 
-u8 *rtw_get_wps_ie(u8 *in_ie, uint in_len, u8 *wps_ie, uint *wps_ielen);
-u8 *rtw_get_wps_attr(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 *buf_attr, u32 *len_attr);
-u8 *rtw_get_wps_attr_content(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 *buf_content, uint *len_content);
+u8 *rtw_get_wps_ie(u8 *in_ie, unsigned int in_len, u8 *wps_ie, unsigned int *wps_ielen);
+u8 *rtw_get_wps_attr(u8 *wps_ie, unsigned int wps_ielen, u16 target_attr_id, u8 *buf_attr, u32 *len_attr);
+u8 *rtw_get_wps_attr_content(u8 *wps_ie, unsigned int wps_ielen, u16 target_attr_id, u8 *buf_content, unsigned int *len_content);
 
 /**
  * for_each_ie - iterate over continuous IEs
@@ -712,7 +712,7 @@ u8 *rtw_get_wps_attr_content(u8 *wps_ie, uint wps_ielen, u16 target_attr_id, u8 
 	for (ie = (void *)buf; (((u8 *)ie) - ((u8 *)buf) + 1) < buf_len; \
 		ie = (void *)(((u8 *)ie) + *(((u8 *)ie) + 1) + 2))
 
-uint	rtw_get_rateset_len(u8 *rateset);
+unsigned int	rtw_get_rateset_len(u8 *rateset);
 
 struct registry_priv;
 int rtw_generate_ie(struct registry_priv *pregistrypriv);

@@ -1248,7 +1248,7 @@ _mismatch:
 	return _SUCCESS;
 }
 
-void update_beacon_info(struct adapter *padapter, u8 *pframe, uint pkt_len, struct sta_info *psta)
+void update_beacon_info(struct adapter *padapter, u8 *pframe, unsigned int pkt_len, struct sta_info *psta)
 {
 	unsigned int i;
 	unsigned int len;
@@ -1401,7 +1401,7 @@ static u32 get_realtek_assoc_AP_vender(struct ndis_80211_var_ie *pIE)
 	return Vender;
 }
 
-unsigned char check_assoc_AP(u8 *pframe, uint len)
+unsigned char check_assoc_AP(u8 *pframe, unsigned int len)
 {
 	unsigned int	i;
 	struct ndis_80211_var_ie *pIE;
@@ -1565,7 +1565,7 @@ void update_sta_basic_rate(struct sta_info *psta, u8 wireless_mode)
 	}
 }
 
-int update_sta_support_rate(struct adapter *padapter, u8 *pvar_ie, uint var_ie_len, int cam_idx)
+int update_sta_support_rate(struct adapter *padapter, u8 *pvar_ie, unsigned int var_ie_len, int cam_idx)
 {
 	unsigned int	ie_len;
 	struct ndis_80211_var_ie *pIE;
@@ -1613,7 +1613,7 @@ void process_addba_req(struct adapter *padapter, u8 *paddba_req, u8 *addr)
 	}
 }
 
-void update_TSF(struct mlme_ext_priv *pmlmeext, u8 *pframe, uint len)
+void update_TSF(struct mlme_ext_priv *pmlmeext, u8 *pframe, unsigned int len)
 {
 	u8 *pIE;
 	__le32 *pbuf;
@@ -1633,7 +1633,7 @@ void correct_TSF(struct adapter *padapter, struct mlme_ext_priv *pmlmeext)
 	rtw_hal_set_hwreg(padapter, HW_VAR_CORRECT_TSF, NULL);
 }
 
-void adaptive_early_32k(struct mlme_ext_priv *pmlmeext, u8 *pframe, uint len)
+void adaptive_early_32k(struct mlme_ext_priv *pmlmeext, u8 *pframe, unsigned int len)
 {
 	int i;
 	u8 *pIE;
