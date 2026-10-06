@@ -649,6 +649,15 @@ static void nft_ct_get_destroy(const struct nft_ctx *ctx,
 	nf_ct_netns_put(ctx->net, ctx->family);
 }
 
+static int nft_ct_validate(const struct nft_ctx *ctx,
+			   const struct nft_expr *expr)
+{
+	if (ctx->family != NFPROTO_NETDEV)
+		return 0;
+
+	return nft_chain_validate_hooks(ctx->chain, 1 << NF_NETDEV_EGRESS);
+}
+
 static void nft_ct_set_destroy(const struct nft_ctx *ctx,
 			       const struct nft_expr *expr)
 {
@@ -732,6 +741,7 @@ static const struct nft_expr_ops nft_ct_get_ops = {
 	.init		= nft_ct_get_init,
 	.destroy	= nft_ct_get_destroy,
 	.dump		= nft_ct_get_dump,
+	.validate	= nft_ct_validate,
 };
 
 #ifdef CONFIG_MITIGATION_RETPOLINE
@@ -742,6 +752,7 @@ static const struct nft_expr_ops nft_ct_get_fast_ops = {
 	.init		= nft_ct_get_init,
 	.destroy	= nft_ct_get_destroy,
 	.dump		= nft_ct_get_dump,
+	.validate	= nft_ct_validate,
 };
 #endif
 
@@ -752,9 +763,19 @@ static const struct nft_expr_ops nft_ct_set_ops = {
 	.init		= nft_ct_set_init,
 	.destroy	= nft_ct_set_destroy,
 	.dump		= nft_ct_set_dump,
+	.validate	= nft_ct_validate,
 };
 
 #ifdef CONFIG_NF_CONNTRACK_ZONES
+static int nft_ct_set_zone_validate(const struct nft_ctx *ctx,
+				    const struct nft_expr *expr)
+{
+	if (ctx->family == NFPROTO_NETDEV)
+		return -EOPNOTSUPP;
+
+	return 0;
+}
+
 static const struct nft_expr_ops nft_ct_set_zone_ops = {
 	.type		= &nft_ct_type,
 	.size		= NFT_EXPR_SIZE(sizeof(struct nft_ct)),
@@ -762,6 +783,7 @@ static const struct nft_expr_ops nft_ct_set_zone_ops = {
 	.init		= nft_ct_set_init,
 	.destroy	= nft_ct_set_destroy,
 	.dump		= nft_ct_set_dump,
+	.validate	= nft_ct_set_zone_validate,
 };
 #endif
 

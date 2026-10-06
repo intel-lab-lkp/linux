@@ -587,10 +587,35 @@ err1:
 int nf_ct_netns_get(struct net *net, u8 nfproto)
 {
 	int err;
+	bool bridge_acquired = false;
 
 	switch (nfproto) {
 	case NFPROTO_INET:
 		err = nf_ct_netns_inet_get(net);
+		break;
+	case NFPROTO_NETDEV:
+		err = nf_ct_netns_do_get(net, NFPROTO_BRIDGE);
+		if (err < 0) {
+			mutex_lock(&nf_ct_proto_mutex);
+			if (nf_ct_bridge_info) {
+				/* Module present but hook registration failed.*/
+				mutex_unlock(&nf_ct_proto_mutex);
+				return err;
+			}
+			mutex_unlock(&nf_ct_proto_mutex);
+			/* Bridge module absent, netdev egress handles routed
+			 * traffic too, bridge conntrack is only needed for
+			 * bridged frames.
+			 */
+		} else {
+			bridge_acquired = true;
+		}
+		err = nf_ct_netns_inet_get(net);
+		if (err < 0) {
+			if (bridge_acquired)
+				nf_ct_netns_put(net, NFPROTO_BRIDGE);
+			return err;
+		}
 		break;
 	case NFPROTO_BRIDGE:
 		err = nf_ct_netns_do_get(net, NFPROTO_BRIDGE);
@@ -615,6 +640,7 @@ void nf_ct_netns_put(struct net *net, uint8_t nfproto)
 {
 	switch (nfproto) {
 	case NFPROTO_BRIDGE:
+	case NFPROTO_NETDEV:
 		nf_ct_netns_do_put(net, NFPROTO_BRIDGE);
 		fallthrough;
 	case NFPROTO_INET:
