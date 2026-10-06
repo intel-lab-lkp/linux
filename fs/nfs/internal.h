@@ -476,6 +476,7 @@ extern struct nfsd_file *nfs_local_open_fh(struct nfs_client *,
 					   struct nfs_fh *,
 					   struct nfs_file_localio *,
 					   const fmode_t);
+struct nfsd_file *nfs_local_p2pdma_check(struct nfsd_file *localio);
 extern int nfs_local_doio(struct nfs_client *,
 			  struct nfsd_file *,
 			  struct nfs_pgio_header *,
@@ -495,6 +496,13 @@ nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 {
 	return NULL;
 }
+
+static inline struct nfsd_file *
+nfs_local_p2pdma_check(struct nfsd_file *localio)
+{
+	return NULL;
+}
+
 static inline int nfs_local_doio(struct nfs_client *clp,
 				 struct nfsd_file *localio,
 				 struct nfs_pgio_header *hdr,

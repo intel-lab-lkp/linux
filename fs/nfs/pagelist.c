@@ -1023,6 +1023,9 @@ static int nfs_generic_pg_pgios(struct nfs_pageio_descriptor *desc)
 					  &hdr->args.context->nfl,
 					  hdr->args.context->mode);
 
+		if (localio && hdr->args.p2pdma)
+			localio = nfs_local_p2pdma_check(localio);
+
 		if (NFS_SERVER(hdr->inode)->nfs_client->cl_minorversion)
 			task_flags = RPC_TASK_MOVEABLE;
 		ret = nfs_initiate_pgio(NFS_CLIENT(hdr->inode),

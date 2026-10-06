@@ -19,6 +19,7 @@
 #include <linux/nfs_common.h>
 #include <linux/nfslocalio.h>
 #include <linux/bvec.h>
+#include <linux/blkdev.h>
 
 #include <linux/nfs.h>
 #include <linux/nfs_fs.h>
@@ -291,6 +292,22 @@ nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 EXPORT_SYMBOL_GPL(nfs_local_open_fh);
 
 /*
+ * LOCALIO moves P2PDMA pages only by DMA to and from the local disk.
+ * If that disk cannot do P2PDMA, put @localio and return NULL so the
+ * I/O is sent as a regular RPC instead.
+ */
+struct nfsd_file *nfs_local_p2pdma_check(struct nfsd_file *localio)
+{
+	struct file *file = nfs_to->nfsd_file_file(localio);
+	struct block_device *bdev = file_inode(file)->i_sb->s_bdev;
+
+	if (bdev && blk_queue_pci_p2pdma(bdev_get_queue(bdev)))
+		return localio;
+	nfs_local_file_put(localio);
+	return NULL;
+}
+
+/*
  * Ensure all page cache allocations are done from GFP_NOFS context to
  * prevent direct reclaim recursion back into NFS via nfs_writepages.
  */
@@ -509,6 +526,17 @@ nfs_local_iters_init(struct nfs_local_kiocb *iocb, int rw)
 
 	/* Use buffered IO */
 	iov_iter_bvec(&iocb->iters[0], rw, iocb->bvec, v, len);
+}
+
+/*
+ * P2PDMA payloads move only by DMA, never through the page cache, so the
+ * whole I/O must be a single DIO-aligned segment.
+ */
+static bool nfs_local_p2pdma_misaligned(struct nfs_local_kiocb *iocb)
+{
+	return iocb->hdr->args.p2pdma &&
+	       (atomic_read(&iocb->n_iters) != 1 ||
+		!iocb->iter_is_dio_aligned[0]);
 }
 
 static void
@@ -732,6 +760,12 @@ static void nfs_local_do_read(struct nfs_local_kiocb *iocb,
 	nfs_local_pgio_init(hdr, call_ops);
 	hdr->res.eof = false;
 
+	if (nfs_local_p2pdma_misaligned(iocb)) {
+		nfs_local_pgio_done(iocb, -EINVAL);
+		nfs_local_pgio_release(iocb);
+		return;
+	}
+
 	INIT_WORK(&iocb->work, nfs_local_call_read);
 	if (nfs_local_defer_io())
 		queue_work(nfslocaliod_workqueue, &iocb->work);
@@ -952,6 +986,12 @@ static void nfs_local_do_write(struct nfs_local_kiocb *iocb,
 	nfs_local_pgio_init(hdr, call_ops);
 
 	nfs_set_local_verifier(hdr->inode, hdr->res.verf, hdr->args.stable);
+
+	if (nfs_local_p2pdma_misaligned(iocb)) {
+		nfs_local_pgio_done(iocb, -EINVAL);
+		nfs_local_pgio_release(iocb);
+		return;
+	}
 
 	INIT_WORK(&iocb->work, nfs_local_call_write);
 	if (nfs_local_defer_io())
