@@ -18,6 +18,7 @@
 #define __NCI_CORE_H
 
 #include <linux/interrupt.h>
+#include <linux/percpu-rwsem.h>
 #include <linux/skbuff.h>
 #include <linux/tty.h>
 
@@ -455,6 +456,7 @@ struct nci_uart {
 	struct work_struct	write_work;
 	struct tty_struct	*tty;
 	unsigned long		tx_state;
+	struct percpu_rw_semaphore tx_lock;
 	struct sk_buff_head	tx_q;
 	struct sk_buff		*tx_skb;
 	struct sk_buff		*rx_skb;

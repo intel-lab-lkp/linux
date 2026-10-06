@@ -33,6 +33,7 @@
 /* TX states  */
 #define NCI_UART_SENDING	1
 #define NCI_UART_TX_WAKEUP	2
+#define NCI_UART_READY		3
 
 static struct nci_uart *nci_uart_drivers[NCI_UART_DRIVER_MAX];
 
@@ -58,12 +59,27 @@ static inline int nci_uart_queue_empty(struct nci_uart *nu)
 
 static int nci_uart_tx_wakeup(struct nci_uart *nu)
 {
+	/* This may be called in an IRQ context, so we can't sleep.  Therefore
+	 * we try to acquire the read lock only, and if that fails we assume
+	 * the tty is being closed, because that is the only time the write
+	 * lock is taken (nci_uart_tty_close()).  If the write lock is ever
+	 * taken elsewhere, this must be revisited.
+	 */
+	if (!percpu_down_read_trylock(&nu->tx_lock))
+		return 0;
+
+	if (!test_bit(NCI_UART_READY, &nu->tx_state))
+		goto out;
+
 	if (test_and_set_bit(NCI_UART_SENDING, &nu->tx_state)) {
 		set_bit(NCI_UART_TX_WAKEUP, &nu->tx_state);
-		return 0;
+		goto out;
 	}
 
 	schedule_work(&nu->write_work);
+
+out:
+	percpu_up_read(&nu->tx_lock);
 
 	return 0;
 }
@@ -123,18 +139,46 @@ static int nci_uart_set_driver(struct tty_struct *tty, unsigned int driver)
 	INIT_WORK(&nu->write_work, nci_uart_write_work);
 	spin_lock_init(&nu->rx_lock);
 
-	ret = nu->ops.open(nu);
-	if (ret) {
-		kfree(nu);
-		return ret;
-	} else if (!try_module_get(nu->owner)) {
-		nu->ops.close(nu);
-		kfree(nu);
-		return -ENOENT;
+	ret = percpu_init_rwsem(&nu->tx_lock);
+	if (ret)
+		goto err_free;
+
+	/* Take the module reference and enable the write worker before the
+	 * device is registered: ops.open() may already transmit (e.g. download
+	 * firmware), and user space can use the interface as soon as it is
+	 * registered.
+	 */
+	if (!try_module_get(nu->owner)) {
+		ret = -ENOENT;
+		goto err_rwsem;
 	}
+
+	set_bit(NCI_UART_READY, &nu->tx_state);
+
+	ret = nu->ops.open(nu);
+	if (ret)
+		goto err_ready;
+
 	tty->disc_data = nu;
 
 	return 0;
+
+err_ready:
+	/* ops.open() may already have scheduled write_work; stop it before
+	 * freeing, the same way nci_uart_tty_close() does.
+	 */
+	percpu_down_write(&nu->tx_lock);
+	clear_bit(NCI_UART_READY, &nu->tx_state);
+	percpu_up_write(&nu->tx_lock);
+	cancel_work_sync(&nu->write_work);
+	kfree_skb(nu->tx_skb);
+	skb_queue_purge(&nu->tx_q);
+	module_put(nu->owner);
+err_rwsem:
+	percpu_free_rwsem(&nu->tx_lock);
+err_free:
+	kfree(nu);
+	return ret;
 }
 
 /* ------ LDISC part ------ */
@@ -180,16 +224,24 @@ static void nci_uart_tty_close(struct tty_struct *tty)
 	if (!nu)
 		return;
 
-	kfree_skb(nu->tx_skb);
-	kfree_skb(nu->rx_skb);
+	/* Drain in-flight tx_wakeups and block new ones, so write_work cannot
+	 * be requeued once it is cancelled below.
+	 */
+	percpu_down_write(&nu->tx_lock);
+	clear_bit(NCI_UART_READY, &nu->tx_state);
+	percpu_up_write(&nu->tx_lock);
 
-	skb_queue_purge(&nu->tx_q);
+	cancel_work_sync(&nu->write_work);
 
 	nu->ops.close(nu);
 	nu->tty = NULL;
-	module_put(nu->owner);
 
-	cancel_work_sync(&nu->write_work);
+	kfree_skb(nu->tx_skb);
+	kfree_skb(nu->rx_skb);
+	skb_queue_purge(&nu->tx_q);
+
+	module_put(nu->owner);
+	percpu_free_rwsem(&nu->tx_lock);
 
 	kfree(nu);
 }
