@@ -458,9 +458,8 @@ static void __ath12k_pci_ext_irq_disable(struct ath12k_base *ab)
 	for (i = 0; i < ATH12K_EXT_IRQ_GRP_NUM_MAX; i++) {
 		struct ath12k_ext_irq_grp *irq_grp = &ab->ext_irq_grp[i];
 
-		ath12k_pci_ext_grp_disable(irq_grp);
-
 		if (irq_grp->napi_enabled) {
+			ath12k_pci_ext_grp_disable(irq_grp);
 			napi_synchronize(&irq_grp->napi);
 			napi_disable(&irq_grp->napi);
 			irq_grp->napi_enabled = false;
@@ -1108,9 +1107,8 @@ void ath12k_pci_ext_irq_enable(struct ath12k_base *ab)
 		if (!irq_grp->napi_enabled) {
 			napi_enable(&irq_grp->napi);
 			irq_grp->napi_enabled = true;
+			ath12k_pci_ext_grp_enable(irq_grp);
 		}
-
-		ath12k_pci_ext_grp_enable(irq_grp);
 	}
 
 	set_bit(ATH12K_FLAG_EXT_IRQ_ENABLED, &ab->dev_flags);
