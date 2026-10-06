@@ -2260,7 +2260,8 @@ static int it6625_probe(struct i2c_client *client)
 	if (it6625->reset_gpio) {
 		usleep_range(1000, 2000);
 		gpiod_set_value_cansleep(it6625->reset_gpio, 0);
-		usleep_range(10000, 11000);
+		/* the MCU needs at least 700 ms to boot after reset release */
+		msleep(700);
 	}
 
 	err = it6625_regmap_i2c_init(client, it6625);
