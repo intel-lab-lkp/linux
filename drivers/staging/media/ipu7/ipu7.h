@@ -114,7 +114,7 @@ struct ipu7_device {
 #define IPU_UAO_PLANE_MAX_NUM		64U
 
 /*
- * To maximize the IOSF utlization, IPU need to send requests in bursts.
+ * To maximize the IOSF utilization, IPU need to send requests in bursts.
  * At the DMA interface with the buttress, there are CDC FIFOs with burst
  * collection capability. CDC FIFO burst collectors have a configurable
  * threshold and is configured based on the outcome of performance measurements.
