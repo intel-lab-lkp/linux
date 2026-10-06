@@ -16,6 +16,8 @@
 #include <asm/thread_info.h>
 #include <asm/asm-offsets.h>
 #include <asm/errata_list.h>
+#include <asm/vendor_extensions.h>
+#include <asm/vendor_extensions/thead.h>
 #include <linux/sizes.h>
 
 	.section .irqentry.text, "ax"
@@ -176,9 +178,14 @@ SYM_CODE_START(handle_exception)
 	 * actual user copy routines.
 	 *
 	 * Disable the FPU/Vector to detect illegal usage of floating point
-	 * or vector in kernel space.
+	 * or vector in kernel space. xtheadvector keeps its vector status in
+	 * a different sstatus field; those bits are reserved elsewhere.
 	 */
-	li t0, SR_SUM | SR_FS_VS
+	ALTERNATIVE(__stringify(li t0, SR_SUM | SR_FS_VS),
+		    __stringify(li t0, SR_SUM | SR_FS_VS | SR_VS_THEAD),
+		    THEAD_VENDOR_ID,
+		    RISCV_VENDOR_EXT_ALTERNATIVES_BASE + RISCV_ISA_VENDOR_EXT_XTHEADVECTOR,
+		    CONFIG_RISCV_ISA_XTHEADVECTOR)
 #ifdef CONFIG_64BIT
 	li t1, SR_ELP
 	or t0, t0, t1
