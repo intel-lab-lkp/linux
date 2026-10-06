@@ -623,7 +623,6 @@ static int aie2_init(struct amdxdna_dev *xdna)
 	release_firmware(fw);
 	aie2_msg_init(ndev);
 	amdxdna_vbnv_init(xdna);
-	amdxdna_pm_init(xdna);
 	return 0;
 
 stop_hw:
@@ -638,7 +637,6 @@ free_hwctx_sched:
 
 static void aie2_fini(struct amdxdna_dev *xdna)
 {
-	amdxdna_pm_fini(xdna);
 	aie2_hw_stop(xdna);
 	aie2_hwctx_sched_fini(xdna->dev_handle);
 }
