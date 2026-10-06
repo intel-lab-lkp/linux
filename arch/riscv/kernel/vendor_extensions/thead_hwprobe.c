@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <asm/switch_to.h>
+#include <asm/vector.h>
 #include <asm/vendor_extensions/thead.h>
 #include <asm/vendor_extensions/thead_hwprobe.h>
 #include <asm/vendor_extensions/vendor_hwprobe.h>
@@ -14,6 +16,7 @@ void hwprobe_isa_vendor_ext_thead_0(struct riscv_hwprobe *pair, const struct cpu
 {
 	VENDOR_EXTENSION_SUPPORTED(pair, cpus,
 				   riscv_isa_vendor_ext_list_thead.per_hart_isa_bitmap, {
-		VENDOR_EXT_KEY(XTHEADVECTOR);
+		if (has_xtheadvector() && has_fpu())
+			VENDOR_EXT_KEY(XTHEADVECTOR);
 	});
 }
