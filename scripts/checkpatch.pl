@@ -2968,6 +2968,25 @@ sub process {
 		my $herecurr = "$here\n$rawline\n";
 		my $hereprev = "$here\n$prevrawline\n$rawline\n";
 
+# Check for blank line at end of file
+		if ($rawline =~ /^\+[ \t]*$/ &&
+		    (!defined $rawlines[$linenr] ||
+		     $rawlines[$linenr] =~ /^diff --git / ||
+		     $rawlines[$linenr] =~ /^-- $/)) {
+			my $context = $rawline;
+
+			for (my $i = $linenr - 2; $i >= 0; $i--) {
+				last if ($rawlines[$i] !~ /^\+/);
+
+				$context = $rawlines[$i] . "\n" . $context;
+
+				last if ($rawlines[$i] !~ /^\+[ \t]*$/);
+			}
+
+			WARN("BLANK_AT_EOF",
+			      "blank line at end of file\n" . $here . "\n" . $context . "\n");
+		}
+
 		$cnt_lines++ if ($realcnt != 0);
 
 # Verify the existence of a commit log if appropriate
