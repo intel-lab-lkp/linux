@@ -617,6 +617,13 @@ int setup_arg_pages(struct linux_binprm *bprm,
 	struct mmu_gather tlb;
 	struct vma_iterator vmi;
 
+	/*
+	 * The temporary stack can be expanded by a remote memory access.
+	 * Hold the mmap_lock from the bounds checks through the relocation.
+	 */
+	if (mmap_write_lock_killable(mm))
+		return -EINTR;
+
 #ifdef CONFIG_STACK_GROWSUP
 	/* Limit stack size */
 	stack_base = bprm->rlim_stack.rlim_max;
@@ -628,8 +635,10 @@ int setup_arg_pages(struct linux_binprm *bprm,
 		stack_base += (STACK_RND_MASK << PAGE_SHIFT);
 
 	/* Make sure we didn't let the argument array grow too large. */
-	if (vma->vm_end - vma->vm_start > stack_base)
-		return -ENOMEM;
+	if (vma->vm_end - vma->vm_start > stack_base) {
+		ret = -ENOMEM;
+		goto out_unlock;
+	}
 
 	stack_base = PAGE_ALIGN(stack_top - stack_base);
 
@@ -641,8 +650,10 @@ int setup_arg_pages(struct linux_binprm *bprm,
 	stack_top = PAGE_ALIGN(stack_top);
 
 	if (unlikely(stack_top < mmap_min_addr) ||
-	    unlikely(vma->vm_end - vma->vm_start >= stack_top - mmap_min_addr))
-		return -ENOMEM;
+	    unlikely(vma->vm_end - vma->vm_start >= stack_top - mmap_min_addr)) {
+		ret = -ENOMEM;
+		goto out_unlock;
+	}
 
 	stack_shift = vma->vm_end - stack_top;
 
@@ -651,9 +662,6 @@ int setup_arg_pages(struct linux_binprm *bprm,
 #endif
 
 	bprm->exec -= stack_shift;
-
-	if (mmap_write_lock_killable(mm))
-		return -EINTR;
 
 	vm_flags = VM_STACK_FLAGS;
 
