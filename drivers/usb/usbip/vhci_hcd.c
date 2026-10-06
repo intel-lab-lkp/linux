@@ -20,6 +20,15 @@
 #define DRIVER_DESC "USB/IP 'Virtual' Host Controller (VHCI) Driver"
 
 /*
+ * How long to wait for RET_UNLINK after sending CMD_UNLINK.  A peer that
+ * cannot answer an unlink request within a control-transfer timeout
+ * (USB_CTRL_GET_TIMEOUT) worth of time is considered stuck, and the
+ * connection is torn down so that URBs waiting for their unlink reply can
+ * be given back instead of hanging their owners forever.
+ */
+#define VHCI_UNLINK_TIMEOUT_MS	5000
+
+/*
  * TODO
  *	- update root hub emulation
  *	- move the emulation code to userland ?
@@ -847,6 +856,67 @@ no_need_unlink:
 }
 
 /*
+ * Is any queued unlink request past its own deadline?  Each request
+ * carries the time by which the peer must have answered it, and the
+ * timer may have been re-armed by a newer request before that, so the
+ * callback decides by walking the lists rather than by the timer's own
+ * expiry.
+ */
+static bool vhci_unlink_expired(struct vhci_device *vdev, unsigned long now)
+{
+	struct vhci_unlink *unlink;
+
+	list_for_each_entry(unlink, &vdev->unlink_tx, list)
+		if (time_after_eq(now, unlink->expires))
+			return true;
+	list_for_each_entry(unlink, &vdev->unlink_rx, list)
+		if (time_after_eq(now, unlink->expires))
+			return true;
+
+	return false;
+}
+
+static void vhci_unlink_timeout(struct timer_list *t)
+{
+	struct vhci_device *vdev = timer_container_of(vdev, t, unlink_timer);
+	unsigned long flags;
+	bool expired;
+
+	spin_lock_irqsave(&vdev->priv_lock, flags);
+	expired = vhci_unlink_expired(vdev, jiffies);
+	spin_unlock_irqrestore(&vdev->priv_lock, flags);
+
+	if (!expired)
+		return;
+
+	dev_info(hcd_dev(vhci_hcd_to_hcd(vdev_to_vhci_hcd(vdev))),
+		 "peer did not reply to an unlink request within %d msecs\n",
+		 VHCI_UNLINK_TIMEOUT_MS);
+
+	/*
+	 * Reuses the teardown path taken on other peer failures, which
+	 * gives back all URBs waiting for their unlink reply.
+	 */
+	usbip_event_add(&vdev->ud, VDEV_EVENT_ERROR_TCP);
+}
+
+/*
+ * Stop the unlink watchdog once every queued unlink request is answered
+ * or given back.  Safe from any context: a concurrent watchdog expiry
+ * re-checks the per-request deadlines under vdev->priv_lock and becomes
+ * a no-op.
+ */
+void vhci_stop_unlink_timer(struct vhci_device *vdev)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&vdev->priv_lock, flags);
+	if (list_empty(&vdev->unlink_tx) && list_empty(&vdev->unlink_rx))
+		timer_delete(&vdev->unlink_timer);
+	spin_unlock_irqrestore(&vdev->priv_lock, flags);
+}
+
+/*
  * vhci_rx gives back the urb after receiving the reply of the urb.  If an
  * unlink pdu is sent or not, vhci_rx receives a normal return pdu and gives
  * back its urb. For the driver unlinking the urb, the content of the urb is
@@ -968,6 +1038,14 @@ static int vhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 		/* send cmd_unlink and try to cancel the pending URB in the
 		 * peer */
 		list_add_tail(&unlink->list, &vdev->unlink_tx);
+
+		/* if the peer does not answer this request within the
+		 * timeout, tear the connection down
+		 */
+		unlink->expires =
+			jiffies + msecs_to_jiffies(VHCI_UNLINK_TIMEOUT_MS);
+		mod_timer(&vdev->unlink_timer, unlink->expires);
+
 		wake_up(&vdev->waitq_tx);
 
 		spin_unlock(&vdev->priv_lock);
@@ -1029,6 +1107,8 @@ static void vhci_device_unlink_cleanup(struct vhci_device *vdev)
 
 	/* give back URB of unanswered unlink request */
 	vhci_cleanup_unlink_list(vdev, &vdev->unlink_rx);
+
+	vhci_stop_unlink_timer(vdev);
 }
 
 /*
@@ -1142,6 +1222,8 @@ static void vhci_device_init(struct vhci_device *vdev)
 	spin_lock_init(&vdev->priv_lock);
 
 	init_waitqueue_head(&vdev->waitq_tx);
+
+	timer_setup(&vdev->unlink_timer, vhci_unlink_timeout, 0);
 
 	vdev->ud.eh_ops.shutdown = vhci_shutdown_connection;
 	vdev->ud.eh_ops.reset = vhci_device_reset;
@@ -1269,6 +1351,7 @@ static void vhci_stop(struct usb_hcd *hcd)
 
 		usbip_event_add(&vdev->ud, VDEV_EVENT_REMOVED);
 		usbip_stop_eh(&vdev->ud);
+		timer_shutdown_sync(&vdev->unlink_timer);
 	}
 }
 
