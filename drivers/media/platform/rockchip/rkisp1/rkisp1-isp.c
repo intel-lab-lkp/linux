@@ -264,6 +264,11 @@ static int rkisp1_config_isp(struct rkisp1_isp *isp,
 
 		switch (sink_fmt->bus_width) {
 		case 8:
+		case 16:
+			/*
+			 * 16-bit width YUV formats use 8 bits per component,
+			 * so they can be handled by the ISP same as 8-bit.
+			 */
 			acq_prop |= RKISP1_CIF_ISP_ACQ_PROP_IN_SEL_8B_ZERO;
 			break;
 		case 10:
