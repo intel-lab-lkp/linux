@@ -2738,6 +2738,7 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 	int jfs_dirents;
 	int overflow, fix_page, page_fixed = 0;
 	static int unique_pos = 2;	/* If we can't fix broken index */
+	char *buf_end;
 
 	if (ctx->pos == DIREND)
 		return 0;
@@ -2892,6 +2893,7 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 		return -ENOMEM;
 	}
 
+	buf_end = (char *)dirent_buf + PAGE_SIZE;
 	while (1) {
 		jfs_dirent = dirent_buf;
 		jfs_dirents = 0;
@@ -2910,7 +2912,7 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 
 			d = (struct ldtentry *) & p->slot[stbl[i]];
 
-			if (((long) jfs_dirent + d->namlen + 1) >
+			if (((long) jfs_dirent + (long)d->namlen * NLS_MAX_CHARSET_SIZE + 1) >
 			    ((long)dirent_buf + PAGE_SIZE)) {
 				/* DBCS codepages could overrun dirent_buf */
 				index = i;
@@ -2961,7 +2963,7 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 			}
 
 			/* copy the name of head/only segment */
-			outlen = jfs_strfromUCS_le(name_ptr, d->name, len,
+			outlen = jfs_strfromUCS_le(name_ptr, buf_end - name_ptr, d->name, len,
 						   codepage);
 			jfs_dirent->name_len = outlen;
 
@@ -2981,7 +2983,7 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 					goto skip_one;
 				}
 				len = min(d_namleft, DTSLOTDATALEN);
-				outlen = jfs_strfromUCS_le(name_ptr, t->name,
+				outlen = jfs_strfromUCS_le(name_ptr, buf_end - name_ptr, t->name,
 							   len, codepage);
 				jfs_dirent->name_len += outlen;
 

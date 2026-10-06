@@ -16,27 +16,36 @@
  * FUNCTION:	Convert little-endian unicode string to character string
  *
  */
-int jfs_strfromUCS_le(char *to, const __le16 * from,
+int jfs_strfromUCS_le(char *to, int tolen, const __le16 *from,
 		      int len, struct nls_table *codepage)
 {
-	int i;
+	int i, room;
 	int outlen = 0;
 	static int warn_again = 5;	/* Only warn up to 5 times total */
 	int warn = !!warn_again;	/* once per string */
 
+	if (tolen <= 0)
+		return 0;
+
 	if (codepage) {
 		for (i = 0; (i < len) && from[i]; i++) {
 			int charlen;
+			room = tolen - outlen - 1;
+			if (room <= 0)
+				break;
 			charlen =
 			    codepage->uni2char(le16_to_cpu(from[i]),
 					       &to[outlen],
-					       NLS_MAX_CHARSET_SIZE);
+					       room);
 			if (charlen > 0)
 				outlen += charlen;
 			else
 				to[outlen++] = '?';
 		}
 	} else {
+		if (len > tolen - 1)
+			len = tolen - 1;
+
 		for (i = 0; (i < len) && from[i]; i++) {
 			if (unlikely(le16_to_cpu(from[i]) & 0xff00)) {
 				to[i] = '?';
