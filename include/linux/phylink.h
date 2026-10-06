@@ -147,6 +147,10 @@ enum phylink_op_type {
  * @default_an_inband: if true, defaults to MLO_AN_INBAND rather than
  *		       MLO_AN_PHY. A fixed-link specification will override.
  * @eee_rx_clk_stop_enable: if true, PHY can stop the receive clock during LPI
+ * @phy_may_probe_late: if true, a connect in PHY mode to a PHY marked
+ *			needs-host-firmware whose driver has not bound yet is
+ *			deferred until that driver binds; see
+ *			phylink_fwnode_phy_connect().
  * @get_fixed_state: callback to execute to determine the fixed link state,
  *		     if MAC link is at %MLO_AN_FIXED mode.
  * @supported_interfaces: bitmap describing which PHY_INTERFACE_MODE_xxx
@@ -169,6 +173,7 @@ struct phylink_config {
 	bool mac_requires_rxc;
 	bool default_an_inband;
 	bool eee_rx_clk_stop_enable;
+	bool phy_may_probe_late;
 	void (*get_fixed_state)(struct phylink_config *config,
 				struct phylink_link_state *state);
 	DECLARE_PHY_INTERFACE_MASK(supported_interfaces);
