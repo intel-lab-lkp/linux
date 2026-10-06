@@ -4559,6 +4559,11 @@ recv_bm_rle_bits(struct drbd_peer_device *peer_device,
 		have += bits;
 	}
 
+	if (s > c->bm_bits) {
+		drbd_err(peer_device, "bitmap overflow (s:%lu) while decoding bm RLE packet\n", s);
+		return -EIO;
+	}
+
 	c->bit_offset = s;
 	bm_xfer_ctx_bit_to_word_offset(c);
 
