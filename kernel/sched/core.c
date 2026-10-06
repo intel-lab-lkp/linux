@@ -6409,6 +6409,8 @@ restart:
 	max = NULL;
 	for_each_cpu_wrap(i, smt_mask, cpu) {
 		rq_i = cpu_rq(i);
+		if (!sched_core_sibling(rq, rq_i))
+			continue;
 
 		/*
 		 * Current cpu always has its clock updated on entrance to
@@ -6442,6 +6444,9 @@ restart:
 	 */
 	for_each_cpu(i, smt_mask) {
 		rq_i = cpu_rq(i);
+		if (!sched_core_sibling(rq, rq_i))
+			continue;
+
 		p = rq_i->core_pick;
 
 		if (!cookie_equals(p, cookie)) {
@@ -6487,6 +6492,8 @@ restart:
 	 */
 	for_each_cpu(i, smt_mask) {
 		rq_i = cpu_rq(i);
+		if (!sched_core_sibling(rq, rq_i))
+			continue;
 
 		/*
 		 * An online sibling might have gone offline before a task
