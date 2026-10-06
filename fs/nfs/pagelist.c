@@ -970,6 +970,8 @@ int nfs_generic_pgio(struct nfs_pageio_descriptor *desc,
 				if (pageused > pagecount)
 					goto full;
 				*pages++ = last_page = page;
+				if (is_pci_p2pdma_page(page))
+					hdr->args.p2pdma = true;
 			}
 		}
 	}

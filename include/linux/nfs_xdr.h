@@ -685,6 +685,7 @@ struct nfs_pgio_args {
 	__u32			count;
 	unsigned int		pgbase;
 	struct page **		pages;
+	bool			p2pdma;		/* pages include P2PDMA memory */
 	union {
 		unsigned int		replen;			/* used by read */
 		struct {

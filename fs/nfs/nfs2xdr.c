@@ -628,6 +628,8 @@ static void nfs2_xdr_enc_readargs(struct rpc_rqst *req,
 	rpc_prepare_reply_pages(req, args->pages, args->pgbase, args->count,
 				NFS_readres_sz - NFS_pagepad_sz);
 	req->rq_rcv_buf.flags |= XDRBUF_READ;
+	if (args->p2pdma)
+		req->rq_rcv_buf.flags |= XDRBUF_P2PDMA;
 }
 
 /*
@@ -668,6 +670,8 @@ static void nfs2_xdr_enc_writeargs(struct rpc_rqst *req,
 
 	encode_writeargs(xdr, args);
 	xdr->buf->flags |= XDRBUF_WRITE;
+	if (args->p2pdma)
+		xdr->buf->flags |= XDRBUF_P2PDMA;
 }
 
 /*

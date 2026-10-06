@@ -946,6 +946,8 @@ static void nfs3_xdr_enc_read3args(struct rpc_rqst *req,
 	rpc_prepare_reply_pages(req, args->pages, args->pgbase,
 				args->count, replen);
 	req->rq_rcv_buf.flags |= XDRBUF_READ;
+	if (args->p2pdma)
+		req->rq_rcv_buf.flags |= XDRBUF_P2PDMA;
 }
 
 /*
@@ -988,6 +990,8 @@ static void nfs3_xdr_enc_write3args(struct rpc_rqst *req,
 
 	encode_write3args(xdr, args);
 	xdr->buf->flags |= XDRBUF_WRITE;
+	if (args->p2pdma)
+		xdr->buf->flags |= XDRBUF_P2PDMA;
 }
 
 /*
