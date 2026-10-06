@@ -155,7 +155,7 @@ SYM_TYPED_FUNC_START(arm926_flush_user_cache_range)
 	mov	ip, #0
 	sub	r3, r1, r0			@ calculate total size
 	cmp	r3, #CACHE_DLIMIT
-	bgt	__flush_whole_cache
+	bhi	__flush_whole_cache
 1:	tst	r2, #VM_EXEC
 #ifdef CONFIG_CPU_DCACHE_WRITETHROUGH
 	mcr	p15, 0, r0, c7, c6, 1		@ invalidate D entry
