@@ -3,7 +3,7 @@ VERSION = 7
 PATCHLEVEL = 3
 SUBLEVEL = 0
 EXTRAVERSION = -rc6
-NAME = Baby Opossum Posse
+NAME = Free-Range Attack Penguin
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
