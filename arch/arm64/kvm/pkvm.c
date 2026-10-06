@@ -191,12 +191,18 @@ static int __pkvm_create_hyp_vcpu(struct kvm_vcpu *vcpu)
 	/*
 	 * Mirror EL2's seeding of power_state from mp_state. The hyp vCPU is
 	 * published, so take mp_state_lock against kvm_psci_vcpu_on().
+	 *
+	 * EL2 never reads the VMM's PSTATE or SCTLR2_EL1: undo any unmasking
+	 * so that a host SError is pended through HCR_EL2.VSE.
 	 */
 	if (vcpu_is_protected(vcpu)) {
 		spin_lock(&vcpu->arch.mp_state_lock);
 		if (kvm_arm_vcpu_stopped(vcpu))
 			WRITE_ONCE(vcpu->arch.mp_state.mp_state, KVM_MP_STATE_UNINITIALIZED);
 		spin_unlock(&vcpu->arch.mp_state_lock);
+
+		*vcpu_cpsr(vcpu) |= PSR_A_BIT;
+		__vcpu_rmw_sys_reg(vcpu, SCTLR2_EL1, &=, ~SCTLR2_EL1_NMEA);
 	}
 
 	vcpu_set_flag(vcpu, VCPU_PKVM_FINALIZED);
