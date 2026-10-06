@@ -1383,6 +1383,7 @@ static void free_ctx(struct rcu_head *head)
 
 static void put_ctx(struct perf_event_context *ctx)
 {
+	rcu_read_lock();
 	if (refcount_dec_and_test(&ctx->refcount)) {
 		if (ctx->parent_ctx)
 			put_ctx(ctx->parent_ctx);
@@ -1394,6 +1395,7 @@ static void put_ctx(struct perf_event_context *ctx)
 		if (ctx->task == TASK_TOMBSTONE)
 			wake_up_var(&ctx->refcount);
 	}
+	rcu_read_unlock();
 }
 
 /*
