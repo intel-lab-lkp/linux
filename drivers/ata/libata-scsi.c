@@ -26,6 +26,7 @@
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_tcq.h>
 #include <scsi/scsi_transport.h>
+#include <scsi/scsi_devinfo.h>
 #include <linux/libata.h>
 #include <linux/hdreg.h>
 #include <linux/uaccess.h>
@@ -5340,13 +5341,25 @@ void ata_scsi_scan_host(struct ata_port *ap, int sync)
 
 			sdev = __scsi_add_device(ap->scsi_host, channel, id, 0,
 						 NULL);
-			if (!IS_ERR(sdev)) {
-				dev->sdev[0] = sdev;
-				ata_scsi_assign_ofnode(sdev, dev, ap);
-				scsi_device_put(sdev);
-			} else {
+			if (IS_ERR(sdev)) {
 				dev->sdev[0] = NULL;
+				continue;
 			}
+
+			/*
+			 * For multi-LUN ATAPI (BLIST_FORCELUN), trigger a
+			 * sequential scan for this target.  pdt_1f_for_no_lun,
+			 * set during LUN 0 configure, ensures non-responding
+			 * LUNs are silently skipped; dev->sdev[] is populated
+			 * by ata_scsi_dev_config() during the scan.
+			 */
+			if (dev->class == ATA_DEV_ATAPI &&
+			    sdev->sdev_bflags & BLIST_FORCELUN)
+				scsi_scan_target(&ap->scsi_host->shost_gendev,
+						 channel, id, SCAN_WILD_CARD,
+						 SCSI_SCAN_RESCAN);
+			ata_scsi_assign_ofnode(sdev, dev, ap);
+			scsi_device_put(sdev);
 		}
 	}
 
@@ -5554,7 +5567,7 @@ void ata_scsi_hotplug(struct work_struct *work)
  *	@lun: LUN to scan
  *
  *	This function is called when user explicitly requests bus
- *	scan.  Set probe pending flag and invoke EH.
+ *	scan.  Set probe pending flag and invoke EH, then scan ATAPI LUNs.
  *
  *	LOCKING:
  *	SCSI layer (we don't care)
@@ -5569,7 +5582,7 @@ int ata_scsi_user_scan(struct Scsi_Host *shost, unsigned int channel,
 	unsigned long flags;
 	int devno, rc = 0;
 
-	if (lun != SCAN_WILD_CARD && lun)
+	if (lun != SCAN_WILD_CARD && lun >= shost->max_lun)
 		return -EINVAL;
 
 	if (!sata_pmp_attached(ap)) {
@@ -5609,6 +5622,36 @@ int ata_scsi_user_scan(struct Scsi_Host *shost, unsigned int channel,
 		ata_port_wait_eh(ap);
 	} else
 		spin_unlock_irqrestore(ap->lock, flags);
+
+	if (!rc) {
+		struct ata_link *link;
+		struct ata_device *dev;
+
+		/* EH does not scan missing LUNs on an already attached target. */
+		mutex_lock(&ap->scsi_scan_mutex);
+		ata_for_each_link(link, ap, EDGE) {
+			ata_for_each_dev(dev, link, ENABLED) {
+				unsigned int scan_channel = 0, scan_id = 0;
+
+				if (dev->class != ATA_DEV_ATAPI)
+					continue;
+				if (ata_is_host_link(link))
+					scan_id = dev->devno;
+				else
+					scan_channel = link->pmp;
+				if (channel != SCAN_WILD_CARD &&
+				    channel != scan_channel)
+					continue;
+				if (id != SCAN_WILD_CARD && id != scan_id)
+					continue;
+
+				scsi_scan_target(&shost->shost_gendev,
+						 scan_channel, scan_id, lun,
+						 SCSI_SCAN_MANUAL);
+			}
+		}
+		mutex_unlock(&ap->scsi_scan_mutex);
+	}
 
 	return rc;
 }
