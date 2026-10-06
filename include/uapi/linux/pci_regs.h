@@ -711,6 +711,8 @@
 #define  PCI_EXP_LNKCTL2_TX_MARGIN	0x0380 /* Transmit Margin */
 #define  PCI_EXP_LNKCTL2_HASD		0x0020 /* HW Autonomous Speed Disable */
 #define PCI_EXP_LNKSTA2		0x32	/* Link Status 2 */
+#define  PCI_EXP_LNKSTA2_RETIMER	0x0040 /* Retimer Presence Detected */
+#define  PCI_EXP_LNKSTA2_2RETIMERS	0x0080 /* Two Retimers Presence Detected */
 #define  PCI_EXP_LNKSTA2_FLIT		0x0400 /* Flit Mode Status */
 #define PCI_CAP_EXP_ENDPOINT_SIZEOF_V2	0x34	/* end of v2 EPs w/ link */
 #define PCI_EXP_SLTCAP2		0x34	/* Slot Capabilities 2 */
@@ -757,6 +759,7 @@
 #define PCI_EXT_CAP_ID_VF_REBAR 0x24	/* VF Resizable BAR */
 #define PCI_EXT_CAP_ID_DLF	0x25	/* Data Link Feature */
 #define PCI_EXT_CAP_ID_PL_16GT	0x26	/* Physical Layer 16.0 GT/s */
+#define PCI_EXT_CAP_ID_LMR	0x27	/* Lane Margining at the Receiver */
 #define PCI_EXT_CAP_ID_NPEM	0x29	/* Native PCIe Enclosure Management */
 #define PCI_EXT_CAP_ID_PL_32GT  0x2A    /* Physical Layer 32.0 GT/s */
 #define PCI_EXT_CAP_ID_DOE	0x2E	/* Data Object Exchange */
@@ -1180,6 +1183,21 @@
 #define  PCI_PL_16GT_LE_CTRL_DSP_TX_PRESET_MASK		0x0000000F
 #define  PCI_PL_16GT_LE_CTRL_USP_TX_PRESET_MASK		0x000000F0
 #define  PCI_PL_16GT_LE_CTRL_USP_TX_PRESET_SHIFT	4
+
+/* Lane Margining at the Receiver */
+#define PCI_LMR_PORT_CAP		0x04	/* Port Capabilities */
+#define  PCI_LMR_PORT_CAP_USES_SW_READY	0x0001	/* Uses Driver Software */
+#define PCI_LMR_PORT_STS		0x06	/* Port Status */
+#define  PCI_LMR_PORT_STS_MARGIN_READY	0x0001	/* Margining Ready */
+#define  PCI_LMR_PORT_STS_SW_READY	0x0002	/* Margining Software Ready */
+#define PCI_LMR_LANE_CTRL		0x08	/* Lane Control, lane 0 */
+#define PCI_LMR_LANE_STS		0x0a	/* Lane Status, lane 0 */
+#define PCI_LMR_LANE_STRIDE		4	/* Lane N at +4*N */
+/* Fields of both Margining Lane Control and Margining Lane Status */
+#define  PCI_LMR_LANE_RX		0x0007	/* Receiver Number */
+#define  PCI_LMR_LANE_TYPE		0x0038	/* Margin Type */
+#define  PCI_LMR_LANE_USAGE		0x0040	/* Usage Model */
+#define  PCI_LMR_LANE_PAYLOAD		0xff00	/* Margin Payload */
 
 /* Physical Layer 32.0 GT/s */
 #define PCI_PL_32GT_LE_CTRL	0x20	/* Lane Equalization Control Register */

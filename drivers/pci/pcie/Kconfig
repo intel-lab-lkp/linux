@@ -146,3 +146,14 @@ config PCIE_EDR
 	  the PCI Firmware Specification r3.2.  Enable this if you want to
 	  support hybrid DPC model which uses both firmware and OS to
 	  implement DPC.
+
+config PCIE_LMR
+	bool "PCI Express Lane Margining at the Receiver support"
+	depends on PCIEASPM && DEBUG_FS
+	help
+	  This option exposes the Lane Margining at the Receiver Extended
+	  Capability in debugfs (see Documentation/PCI/pcie-lmr.rst), so
+	  that user space can measure the timing and voltage margin of
+	  links running at 16.0 GT/s or faster.
+
+	  If unsure, say N.
