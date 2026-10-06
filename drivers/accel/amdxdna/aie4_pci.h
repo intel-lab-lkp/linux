@@ -11,6 +11,7 @@
 #include <linux/pci.h>
 
 #include "aie.h"
+#include "aie4_msg_priv.h"
 #include "amdxdna_mailbox.h"
 
 struct cert_comp {
@@ -40,6 +41,9 @@ struct amdxdna_dev_priv {
 
 	struct aie_bar_off_pair	psp_regs_off[PSP_MAX_REGS];
 	struct aie_bar_off_pair	smu_regs_off[SMU_MAX_REGS];
+
+	const struct dpm_clk_freq	*dpm_clk_tbl;
+	const struct aie_hw_ops		*hw_ops;
 };
 
 struct amdxdna_dev_hdl {
@@ -50,6 +54,11 @@ struct amdxdna_dev_hdl {
 
 	struct mailbox			*mbox;
 	u32				partition_id;
+	u32				total_col;
+	u32				max_aieclk_level;
+	u32				max_npuhclk_level;
+
+	struct dpm_clk_freq		dpm_clk_tbl[AIE4_MAX_DPM_LEVEL_COUNT];
 
 	struct xarray                   cert_comp_xa; /* device level indexed by msix id */
 	struct mutex                    cert_comp_lock; /* protects cert_comp operations*/
@@ -79,6 +88,9 @@ int aie4_query_npu_firmware_version(struct amdxdna_dev_hdl *ndev,
 				    struct amdxdna_drm_query_firmware_version *fw_version);
 int aie4_query_cert_firmware_version(struct amdxdna_dev_hdl *ndev,
 				     struct amdxdna_drm_query_firmware_version *cert_version);
+int aie4_init_dpm_freq_table(struct amdxdna_dev_hdl *ndev);
+int aie4_query_dpm_level(struct amdxdna_dev_hdl *ndev,
+			 u32 *aieclk_dpm_level, u32 *npuhclk_dpm_level);
 int aie4_msg_set_power_mode(struct amdxdna_dev_hdl *ndev, u8 power_mode);
 u32 aie4_msg_pasid(struct amdxdna_client *client);
 

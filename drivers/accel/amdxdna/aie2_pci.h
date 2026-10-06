@@ -40,8 +40,8 @@
 	pci_resource_len(NDEV2PDEV(_ndev), (_ndev)->aie.xdna->dev_info->mbox_bar); \
 })
 
+#define AIE2_GET_PMF_NPU_METRICS(metrics) AIE_GET_PMF_NPU_METRICS(metrics)
 #if IS_ENABLED(CONFIG_AMD_PMF)
-#define AIE2_GET_PMF_NPU_METRICS(metrics) amd_pmf_get_npu_data(metrics)
 #define AIE2_GET_PMF_NPU_DATA(field, val)				\
 ({									\
 	struct amd_pmf_npu_metrics _npu_metrics;			\
@@ -52,13 +52,6 @@
 	(_ret);								\
 })
 #else
-#define AIE2_GET_PMF_NPU_METRICS(metrics)				\
-({									\
-	typeof(metrics) _m = metrics;					\
-	memset(_m, 0xff, sizeof(*_m));					\
-	(-EOPNOTSUPP);							\
-})
-
 #define SENSOR_DEFAULT_npu_power	U32_MAX
 #define AIE2_GET_PMF_NPU_DATA(field, val)				\
 ({									\
@@ -89,11 +82,6 @@ struct rt_config {
 	u32	value;
 	u32	category;
 	unsigned long feature_mask;
-};
-
-struct dpm_clk_freq {
-	u32	npuclk;
-	u32	hclk;
 };
 
 /*
@@ -158,11 +146,6 @@ struct amdxdna_dev_hdl {
 	u32				dpm_level;
 	u32				dft_dpm_level;
 	u32				max_dpm_level;
-	u32				clk_gating;
-	u32				npuclk_freq;
-	u32				hclk_freq;
-	u32				max_tops;
-	u32				curr_tops;
 	u32				force_preempt_enabled;
 	u32				frame_boundary_preempt;
 
@@ -176,18 +159,6 @@ struct amdxdna_dev_hdl {
 	struct amdxdna_async_error	last_async_err;
 	unsigned long			last_signal_ts;
 };
-
-struct aie2_hw_ops {
-	int (*set_dpm)(struct amdxdna_dev_hdl *ndev, u32 dpm_level);
-	int (*update_counters)(struct amdxdna_dev_hdl *ndev);
-};
-
-#define aie2_update_counters(ndev)				\
-({								\
-	typeof(ndev) _ndev = ndev;				\
-	if (_ndev->priv->hw_ops->update_counters)		\
-		_ndev->priv->hw_ops->update_counters(_ndev);	\
-})
 
 enum aie2_fw_feature {
 	AIE2_NPU_COMMAND,
@@ -219,7 +190,7 @@ struct amdxdna_dev_priv {
 	struct aie_bar_off_pair		sram_offs[SRAM_MAX_INDEX];
 	struct aie_bar_off_pair		psp_regs_off[PSP_MAX_REGS];
 	struct aie_bar_off_pair		smu_regs_off[SMU_MAX_REGS];
-	const struct aie2_hw_ops	*hw_ops;
+	const struct aie_hw_ops		*hw_ops;
 };
 
 extern const struct amdxdna_dev_ops aie2_ops;
@@ -234,7 +205,7 @@ extern const struct rt_config npu1_default_rt_cfg[];
 extern const struct rt_config npu4_default_rt_cfg[];
 extern const struct amdxdna_fw_feature_tbl npu4_fw_feature_table[];
 extern const struct amdxdna_rev_vbnv npu4_rev_vbnv_tbl[];
-extern const struct aie2_hw_ops npu4_hw_ops;
+extern const struct aie_hw_ops npu4_hw_ops;
 
 /* aie2_pm.c */
 int aie2_pm_init(struct amdxdna_dev_hdl *ndev);
