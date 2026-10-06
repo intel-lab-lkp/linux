@@ -2201,7 +2201,11 @@ struct sk_buff *skb_copy(const struct sk_buff *skb, gfp_t gfp_mask)
 	/* Set the tail pointer and length */
 	skb_put(n, skb->len);
 
-	BUG_ON(skb_copy_bits(skb, -headerlen, n->head, headerlen + skb->len));
+	if (WARN_ON_ONCE(skb_copy_bits(skb, -headerlen, n->head,
+				       headerlen + skb->len))) {
+		kfree_skb(n);
+		return NULL;
+	}
 
 	skb_copy_header(n, skb);
 	return n;
@@ -2541,8 +2545,12 @@ struct sk_buff *skb_copy_expand(const struct sk_buff *skb,
 		head_copy_off = newheadroom - head_copy_len;
 
 	/* Copy the linear header and data. */
-	BUG_ON(skb_copy_bits(skb, -head_copy_len, n->head + head_copy_off,
-			     skb->len + head_copy_len));
+	if (WARN_ON_ONCE(skb_copy_bits(skb, -head_copy_len,
+				       n->head + head_copy_off,
+				       skb->len + head_copy_len))) {
+		kfree_skb(n);
+		return NULL;
+	}
 
 	skb_copy_header(n, skb);
 
@@ -6229,8 +6237,13 @@ bool skb_try_coalesce(struct sk_buff *to, struct sk_buff *from,
 		return false;
 
 	if (len <= skb_tailroom(to) && skb_frags_readable(from)) {
-		if (len)
-			BUG_ON(skb_copy_bits(from, 0, skb_put(to, len), len));
+		if (len) {
+			if (WARN_ON_ONCE(skb_copy_bits(from, 0,
+						       skb_tail_pointer(to),
+						       len)))
+				return false;
+			skb_put(to, len);
+		}
 		*delta_truesize = 0;
 		return true;
 	}
