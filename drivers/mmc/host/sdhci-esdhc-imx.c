@@ -1142,6 +1142,14 @@ static void esdhc_reset_tuning(struct sdhci_host *host)
 	}
 }
 
+static void sdhci_esdhc_imx_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
+{
+	if (ios->drv_type > MMC_SET_DRIVER_TYPE_D)
+		ios->drv_type = MMC_SET_DRIVER_TYPE_B;
+
+	sdhci_set_ios(mmc, ios);
+}
+
 static void usdhc_init_card(struct mmc_host *mmc, struct mmc_card *card)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
@@ -1948,6 +1956,11 @@ static int sdhci_esdhc_imx_probe(struct platform_device *pdev)
 		 * to distinguish the card type.
 		 */
 		host->mmc_host_ops.init_card = usdhc_init_card;
+
+		/*
+		 * Validate host driver type.
+		 */
+		host->mmc_host_ops.set_ios = sdhci_esdhc_imx_set_ios;
 
 		host->max_timeout_count = 0xF;
 	}
