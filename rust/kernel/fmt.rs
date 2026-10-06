@@ -64,6 +64,9 @@ pub trait Pointer {
 /// By default, `%p` prints a hashed representation of the pointer address to prevent kernel address
 /// leaks. When the `no_hash_pointers` kernel command-line parameter is enabled, the real address is
 /// printed instead (for debugging purposes).
+///
+/// The output matches that of `%p` in C: zero-padded to the width of a pointer and, unlike
+/// [`core::fmt::Pointer`], without a `0x` prefix.
 pub struct HashedPtr<T: ?Sized>(pub *const T);
 
 impl<T: ?Sized> Pointer for HashedPtr<T> {
@@ -72,33 +75,32 @@ impl<T: ?Sized> Pointer for HashedPtr<T> {
 
         let mut buf = [0u8; 32];
 
-        // Use `%#0*p` for the `0x` prefix and zero-padding; `+2` compensates for
-        // the prefix counting toward the field width.
-        let default_width = (2 * size_of::<usize>() + 2) as c_int;
+        // Like `%p`, zero-pad to the width of a pointer and do not add a `0x` prefix.
+        let default_width = (2 * size_of::<usize>()) as c_int;
         let width = match (f.sign_aware_zero_pad(), f.width()) {
             (true, Some(w)) if w > 0 => w.min(buf.len() - 1) as c_int,
             _ => default_width,
         };
 
         // SAFETY: `buf` is a valid, writable 32-byte buffer, sufficient for
-        // all architectures (max 19 bytes for 64-bit under the default width).
+        // all architectures (max 17 bytes for 64-bit under the default width).
         // The format string is null-terminated; `width` (c_int) and pointer
         // match the `%*` and `%p` specifiers.
         let len = unsafe {
             crate::bindings::scnprintf(
                 buf.as_mut_ptr().cast(),
                 buf.len(),
-                c"%#0*p".as_char_ptr(),
+                c"%0*p".as_char_ptr(),
                 width,
                 self.0.cast::<c_void>(),
             )
         };
 
-        // SAFETY: `%#0*p` produces only ASCII, which is valid UTF-8.
+        // SAFETY: `%0*p` produces only ASCII, which is valid UTF-8.
         let s = unsafe { core::str::from_utf8_unchecked(&buf[..len as usize]) };
 
         if f.sign_aware_zero_pad() {
-            // `scnprintf` already applied the width and zero-padding via `%#0*p`.
+            // `scnprintf` already applied the width and zero-padding via `%0*p`.
             f.write_str(s)
         } else {
             f.pad(s)
@@ -224,26 +226,26 @@ mod tests {
     mod expected {
         pub(super) const PTR_VALUE: usize = 0xffffffffdeadbeef;
         pub(super) const PTR_VAL_NO_CRNG: &str = "(____ptrval____)";
-        pub(super) const HASHED_PREFIX: &str = "0x00000000";
-        pub(super) const RAW_POINTER: &str = "0xffffffffdeadbeef";
-        pub(super) const PADDED_RIGHT: &str = "      0xffffffffdeadbeef";
-        pub(super) const ZERO_PADDED: &str = "0x000000ffffffffdeadbeef";
-        pub(super) const HASHED_PADDED_RIGHT_PREFIX: &str = "      ";
-        pub(super) const HASHED_ZERO_PADDED_PREFIX: &str = "0x00000000000000";
-        pub(super) const CLAMPED: &str = "0x0000000000000ffffffffdeadbeef";
+        pub(super) const HASHED_PREFIX: &str = "00000000";
+        pub(super) const RAW_POINTER: &str = "ffffffffdeadbeef";
+        pub(super) const PADDED_RIGHT: &str = "        ffffffffdeadbeef";
+        pub(super) const ZERO_PADDED: &str = "00000000ffffffffdeadbeef";
+        pub(super) const HASHED_PADDED_RIGHT_PREFIX: &str = "        ";
+        pub(super) const HASHED_ZERO_PADDED_PREFIX: &str = "0000000000000000";
+        pub(super) const CLAMPED: &str = "000000000000000ffffffffdeadbeef";
     }
 
     #[cfg(not(CONFIG_64BIT))]
     mod expected {
         pub(super) const PTR_VALUE: usize = 0xdeadbeef;
         pub(super) const PTR_VAL_NO_CRNG: &str = "(ptrval)";
-        pub(super) const HASHED_PREFIX: &str = "0x";
-        pub(super) const RAW_POINTER: &str = "0xdeadbeef";
-        pub(super) const PADDED_RIGHT: &str = "              0xdeadbeef";
-        pub(super) const ZERO_PADDED: &str = "0x00000000000000deadbeef";
-        pub(super) const HASHED_PADDED_RIGHT_PREFIX: &str = "              ";
-        pub(super) const HASHED_ZERO_PADDED_PREFIX: &str = "0x00000000000000";
-        pub(super) const CLAMPED: &str = "0x0000000000000000000000deadbeef";
+        pub(super) const HASHED_PREFIX: &str = "";
+        pub(super) const RAW_POINTER: &str = "deadbeef";
+        pub(super) const PADDED_RIGHT: &str = "                deadbeef";
+        pub(super) const ZERO_PADDED: &str = "0000000000000000deadbeef";
+        pub(super) const HASHED_PADDED_RIGHT_PREFIX: &str = "                ";
+        pub(super) const HASHED_ZERO_PADDED_PREFIX: &str = "0000000000000000";
+        pub(super) const CLAMPED: &str = "00000000000000000000000deadbeef";
     }
 
     #[test]
@@ -289,8 +291,8 @@ mod tests {
 
             let cstr = CString::try_from_fmt(fmt!("{:0100p}", ptr))?;
             let output = cstr.to_str()?;
-            assert!(output.starts_with("0x"));
-            assert!(!output[2..].chars().all(|c| c == '0'));
+            assert_eq!(output.len(), expected::CLAMPED.len());
+            assert!(!output.chars().all(|c| c == '0'));
         }
 
         Ok(())
