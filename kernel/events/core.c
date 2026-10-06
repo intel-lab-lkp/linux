@@ -13967,8 +13967,13 @@ SYSCALL_DEFINE5(perf_event_open,
 			return -EINVAL;
 	}
 
-	/* Only privileged users can get physical addresses */
-	if ((attr.sample_type & PERF_SAMPLE_PHYS_ADDR)) {
+	/*
+	 * Address translation can disclose kernel mappings even when the
+	 * sampled registers are from user mode.
+	 */
+	if (attr.sample_type & (PERF_SAMPLE_PHYS_ADDR |
+				PERF_SAMPLE_DATA_PAGE_SIZE |
+				PERF_SAMPLE_CODE_PAGE_SIZE)) {
 		err = perf_allow_kernel();
 		if (err)
 			return err;
