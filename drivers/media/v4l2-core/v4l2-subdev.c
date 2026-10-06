@@ -798,8 +798,13 @@ static long subdev_do_ioctl(struct file *file, unsigned int cmd, void *arg,
 	case VIDIOC_SUBDEV_G_FMT: {
 		struct v4l2_subdev_format *format = arg;
 
-		if (!client_supports_streams)
+		if (!client_supports_streams) {
+			if (format->pad < sd->entity.num_pads &&
+			    sd->entity.pads[format->pad].flags & MEDIA_PAD_FL_INTERNAL)
+				return -EINVAL;
+
 			format->stream = 0;
+		}
 
 		memset(format->reserved, 0, sizeof(format->reserved));
 		memset(format->format.reserved, 0, sizeof(format->format.reserved));
