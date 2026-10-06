@@ -577,6 +577,10 @@ static void mali_c55_cap_dev_format_configure(struct mali_c55_cap_dev *cap_dev)
 				MALI_C55_REG_CS_CONV_CONFIG,
 				MALI_C55_CS_CONV_FILTER_MASK,
 				MALI_C55_CS_CONV_FILTER_ENABLE);
+	} else {
+		/* Don't inherit the conversion set up by a previous YUV stream. */
+		mali_c55_cap_dev_write(cap_dev, MALI_C55_REG_CS_CONV_CONFIG,
+				       0);
 	}
 }
 
