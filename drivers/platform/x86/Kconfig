@@ -820,6 +820,7 @@ config PANASONIC_LAPTOP
 	depends on ACPI_VIDEO=n || ACPI_VIDEO
 	depends on SERIO_I8042 || SERIO_I8042 = n
 	select INPUT_SPARSEKMAP
+	select ACPI_PLATFORM_PROFILE
 	help
 	  This driver adds support for access to backlight control and hotkeys
 	  on Panasonic Let's Note laptops.

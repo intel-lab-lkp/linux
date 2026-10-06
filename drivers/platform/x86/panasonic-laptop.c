@@ -120,9 +120,13 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/array_size.h>
 #include <linux/backlight.h>
 #include <linux/bits.h>
 #include <linux/ctype.h>
+#include <linux/dmi.h>
+#include <linux/err.h>
+#include <linux/errno.h>
 #include <linux/i8042.h>
 #include <linux/init.h>
 #include <linux/input.h>
@@ -130,9 +134,12 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/platform_profile.h>
+#include <linux/printk.h>
 #include <linux/seq_file.h>
 #include <linux/serio.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <acpi/video.h>
@@ -158,9 +165,36 @@ MODULE_LICENSE("GPL");
 #define ECO_MODE_OFF		0x00
 #define ECO_MODE_ON		0x80
 
+#define PCC_ACPI_FAN_ACTIVE_MODE	0x00
+#define PCC_ACPI_FAN_PASSIVE_MODE	0x01
+#define PCC_ACPI_TDP_LIMIT_ON		0x01
+#define PCC_ACPI_TDP_LIMIT_OFF		0x00
+
 #define ACPI_PCC_DRIVER_NAME	"Panasonic Laptop Support"
+#define PROFILE_PCC_DRIVER_NAME	"panasonic-platform-profile"
 
 #define ACPI_PCC_INPUT_PHYS	"panasonic/hkey0"
+
+enum pcc_profile_fan_mode {
+	PCC_FAN_MODE_UNSET = 0,
+	PCC_FAN_MODE_ACTIVE,
+	PCC_FAN_MODE_PASSIVE,
+};
+
+enum pcc_profile_tdp_mode {
+	PCC_TDP_MODE_UNSET = 0,
+	PCC_TDP_MODE_LOCKED,
+	PCC_TDP_MODE_UNLOCKED,
+};
+
+struct pcc_platform_profile {
+	enum pcc_profile_fan_mode fan_mode;
+	enum pcc_profile_tdp_mode tdp_mode;
+};
+
+struct pcc_profile_quirk {
+	struct pcc_platform_profile platform_profiles[PLATFORM_PROFILE_LAST];
+};
 
 /* LCD_TYPEs: 0 = Normal, 1 = Semi-transparent
    ECO_MODEs: 0x03 = off, 0x83 = on
@@ -249,6 +283,104 @@ struct pcc_acpi {
 	struct backlight_device	*backlight;
 	struct platform_device	*platform;
 	u32			sinf[] __counted_by(num_sifr);
+};
+
+struct pcc_profile {
+	acpi_handle			ec_handle;
+	const struct pcc_profile_quirk	*quirks;
+	struct device			*platform_profile_dev;
+};
+
+static struct pcc_profile_quirk quirk_cf_sr4 = {
+	.platform_profiles = {
+		[PLATFORM_PROFILE_QUIET] = {
+			.fan_mode = PCC_FAN_MODE_PASSIVE,
+			.tdp_mode = PCC_TDP_MODE_LOCKED,
+		},
+		[PLATFORM_PROFILE_COOL] = {
+			.fan_mode = PCC_FAN_MODE_ACTIVE,
+			.tdp_mode = PCC_TDP_MODE_LOCKED,
+		},
+		[PLATFORM_PROFILE_PERFORMANCE] = {
+			.fan_mode = PCC_FAN_MODE_ACTIVE,
+			.tdp_mode = PCC_TDP_MODE_UNLOCKED,
+		},
+	},
+};
+
+static struct pcc_profile_quirk quirk_cf_qv9 = {
+	.platform_profiles = {
+		[PLATFORM_PROFILE_BALANCED] = {
+			.fan_mode = PCC_FAN_MODE_ACTIVE,
+			.tdp_mode = PCC_TDP_MODE_LOCKED,
+		},
+		[PLATFORM_PROFILE_PERFORMANCE] = {
+			.fan_mode = PCC_FAN_MODE_ACTIVE,
+			.tdp_mode = PCC_TDP_MODE_UNLOCKED,
+		},
+	},
+};
+
+static struct pcc_profile_quirk quirk_cf_sv8 = {
+	.platform_profiles = {
+		[PLATFORM_PROFILE_BALANCED] = {
+			.fan_mode = PCC_FAN_MODE_ACTIVE,
+			.tdp_mode = PCC_TDP_MODE_LOCKED,
+		},
+		[PLATFORM_PROFILE_PERFORMANCE] = {
+			.fan_mode = PCC_FAN_MODE_ACTIVE,
+			.tdp_mode = PCC_TDP_MODE_UNLOCKED,
+		},
+	},
+};
+
+static struct pcc_profile_quirk quirk_cf_rz6 = {
+	.platform_profiles = {
+		[PLATFORM_PROFILE_BALANCED] = {
+			.fan_mode = PCC_FAN_MODE_ACTIVE,
+			.tdp_mode = PCC_TDP_MODE_LOCKED,
+		},
+		[PLATFORM_PROFILE_PERFORMANCE] = {
+			.fan_mode = PCC_FAN_MODE_ACTIVE,
+			.tdp_mode = PCC_TDP_MODE_UNLOCKED,
+		},
+	},
+};
+
+static const struct dmi_system_id pcc_profile_quirks[] = {
+	{
+		.ident = "Panasonic Connect Co., Ltd. CFSR4-1",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Panasonic Connect Co., Ltd."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "CFSR4-1"),
+		},
+		.driver_data = &quirk_cf_sr4,
+	},
+	{
+		.ident = "Panasonic Corporation CFQV9-1",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Panasonic Corporation"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "CFQV9-1"),
+		},
+		.driver_data = &quirk_cf_qv9,
+	},
+	{
+		.ident = "Panasonic Corporation CFSV8-2",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Panasonic Corporation"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "CFSV8-2"),
+		},
+		.driver_data = &quirk_cf_sv8,
+	},
+	{
+		.ident = "Panasonic Corporation CFRZ6-2",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Panasonic Corporation"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "CFRZ6-2"),
+		},
+		.driver_data = &quirk_cf_rz6,
+	},
+	{},
 };
 
 /*
@@ -1143,4 +1275,268 @@ static void acpi_pcc_hotkey_remove(struct platform_device *pdev)
 	kfree(pcc);
 }
 
-module_platform_driver(acpi_pcc_driver);
+static int pcc_profile_fan_mode_get(struct pcc_profile *pcc, enum pcc_profile_fan_mode *fan_mode)
+{
+	unsigned long long state;
+	acpi_status status;
+
+	status = acpi_evaluate_integer(pcc->ec_handle, "CEFM", NULL, &state);
+	if (ACPI_FAILURE(status)) {
+		pr_err("cannot get fan mode via CEFM\n");
+		return -EIO;
+	}
+
+	if (state == PCC_ACPI_FAN_ACTIVE_MODE)
+		*fan_mode = PCC_FAN_MODE_ACTIVE;
+	else if (state == PCC_ACPI_FAN_PASSIVE_MODE)
+		*fan_mode = PCC_FAN_MODE_PASSIVE;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+static int pcc_profile_tdp_mode_get(struct pcc_profile *pcc, enum pcc_profile_tdp_mode *tdp_mode)
+{
+	unsigned long long state;
+	acpi_status status;
+
+	status = acpi_evaluate_integer(pcc->ec_handle, "EPLE", NULL,
+				       &state);
+	if (ACPI_FAILURE(status)) {
+		pr_err("cannot read power limit using EPLE\n");
+		return -EIO;
+	}
+
+	if (state == PCC_ACPI_TDP_LIMIT_ON)
+		*tdp_mode = PCC_TDP_MODE_LOCKED;
+	else if (state == PCC_ACPI_TDP_LIMIT_OFF)
+		*tdp_mode = PCC_TDP_MODE_UNLOCKED;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+static int pcc_profile_ec_execute(struct pcc_profile *pcc, char *method, u64 arg)
+{
+	acpi_status status;
+
+	status = acpi_execute_simple_method(pcc->ec_handle, method, arg);
+	if (ACPI_FAILURE(status)) {
+		pr_err("failed to execute EC method %s\n", method);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int pcc_profile_fan_mode_set(struct pcc_profile *pcc, enum pcc_profile_fan_mode fan_mode)
+{
+	switch (fan_mode) {
+	case PCC_FAN_MODE_ACTIVE:
+		return pcc_profile_ec_execute(pcc, "SEFM", PCC_ACPI_FAN_ACTIVE_MODE);
+	case PCC_FAN_MODE_PASSIVE:
+		return pcc_profile_ec_execute(pcc, "SEFM", PCC_ACPI_FAN_PASSIVE_MODE);
+	default:
+		return -EINVAL;
+	}
+}
+
+static int pcc_profile_tdp_mode_set(struct pcc_profile *pcc, enum pcc_profile_tdp_mode tdp_mode)
+{
+	switch (tdp_mode) {
+	case PCC_TDP_MODE_LOCKED:
+		return pcc_profile_ec_execute(pcc, "SEPL", PCC_ACPI_TDP_LIMIT_ON);
+	case PCC_TDP_MODE_UNLOCKED:
+		return pcc_profile_ec_execute(pcc, "SEPL", PCC_ACPI_TDP_LIMIT_OFF);
+	default:
+		return -EINVAL;
+	}
+}
+
+static int pcc_profile_platform_profile_get(struct device *dev,
+					    enum platform_profile_option *profile)
+{
+	struct pcc_profile *pcc = dev_get_drvdata(dev);
+	enum platform_profile_option pp_opt;
+	enum pcc_profile_fan_mode fan_mode;
+	enum pcc_profile_tdp_mode tdp_mode;
+	int err;
+
+	err = pcc_profile_fan_mode_get(pcc, &fan_mode);
+	if (err)
+		return err;
+
+	err = pcc_profile_tdp_mode_get(pcc, &tdp_mode);
+	if (err)
+		return err;
+
+	for (pp_opt = 0; pp_opt < ARRAY_SIZE(pcc->quirks->platform_profiles); pp_opt++) {
+		const struct pcc_platform_profile *pcc_profile =
+			&pcc->quirks->platform_profiles[pp_opt];
+
+		if (tdp_mode == pcc_profile->tdp_mode &&
+		    fan_mode == pcc_profile->fan_mode) {
+			*profile = pp_opt;
+			return 0;
+		}
+	}
+
+	*profile = PLATFORM_PROFILE_CUSTOM;
+	return 0;
+}
+
+static int pcc_profile_platform_profile_set_profile(struct pcc_profile *pcc,
+						    enum pcc_profile_fan_mode fan_mode,
+						    enum pcc_profile_tdp_mode tdp_mode)
+{
+	int err;
+
+	switch (tdp_mode) {
+	case PCC_TDP_MODE_UNLOCKED:
+		err = pcc_profile_fan_mode_set(pcc, fan_mode);
+		if (err)
+			return err;
+
+		return pcc_profile_tdp_mode_set(pcc, tdp_mode);
+	case PCC_TDP_MODE_LOCKED:
+		err = pcc_profile_tdp_mode_set(pcc, tdp_mode);
+		if (err)
+			return err;
+
+		return pcc_profile_fan_mode_set(pcc, fan_mode);
+	default:
+		return -EINVAL;
+	}
+}
+
+static int pcc_profile_platform_profile_set(struct device *dev,
+					    enum platform_profile_option profile)
+{
+	struct pcc_profile *pcc = dev_get_drvdata(dev);
+	const struct pcc_platform_profile *pcc_profile = &pcc->quirks->platform_profiles[profile];
+
+	return pcc_profile_platform_profile_set_profile(pcc,
+						pcc_profile->fan_mode,
+						pcc_profile->tdp_mode);
+}
+
+static int pcc_profile_platform_profile_probe(void *drvdata, unsigned long *choices)
+{
+	enum platform_profile_option pp_opt;
+	struct pcc_profile *pcc = drvdata;
+
+	for (pp_opt = 0; pp_opt < ARRAY_SIZE(pcc->quirks->platform_profiles); pp_opt++) {
+		const struct pcc_platform_profile *profile =
+			&pcc->quirks->platform_profiles[pp_opt];
+
+		if (profile->fan_mode != PCC_FAN_MODE_UNSET &&
+		    profile->tdp_mode != PCC_TDP_MODE_UNSET) {
+			set_bit(pp_opt, choices);
+		} else if (WARN_ON(profile->fan_mode != PCC_FAN_MODE_UNSET ||
+				   profile->tdp_mode != PCC_TDP_MODE_UNSET)) {
+			/* Both TDP and fan mode should be set */
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static const struct platform_profile_ops pcc_platform_profile_ops = {
+	.probe = pcc_profile_platform_profile_probe,
+	.profile_get = pcc_profile_platform_profile_get,
+	.profile_set = pcc_profile_platform_profile_set,
+};
+
+static int pcc_profile_driver_probe(struct platform_device *pdev)
+{
+	const struct dmi_system_id *dmi_id;
+	struct acpi_device *ec_adev;
+	struct pcc_profile *pcc;
+
+	dmi_id = dmi_first_match(pcc_profile_quirks);
+	if (!dmi_id)
+		return -ENODEV;
+
+	pcc = devm_kzalloc(&pdev->dev, sizeof(*pcc), GFP_KERNEL);
+	if (!pcc)
+		return -ENOMEM;
+
+	ec_adev = acpi_dev_get_first_match_dev("PNP0C09", NULL, -1);
+	if (!ec_adev)
+		return -ENODEV;
+
+	pcc->ec_handle = ec_adev->handle;
+	acpi_dev_put(ec_adev);
+
+	pcc->quirks = dmi_id->driver_data;
+
+	pcc->platform_profile_dev =
+		devm_platform_profile_register(&pdev->dev,
+					       PROFILE_PCC_DRIVER_NAME,
+					       pcc,
+					       &pcc_platform_profile_ops);
+	if (IS_ERR(pcc->platform_profile_dev)) {
+		return dev_err_probe(&pdev->dev,
+				     PTR_ERR(pcc->platform_profile_dev),
+				     "failed to register platform profiles\n");
+	}
+
+	return 0;
+}
+
+static struct platform_driver profile_pcc_driver = {
+	.probe = pcc_profile_driver_probe,
+	.driver = {
+		.name = PROFILE_PCC_DRIVER_NAME,
+	},
+};
+
+static struct platform_device *profile_pdev;
+
+static int __init panasonic_module_init(void)
+{
+	int err;
+
+	err = platform_driver_register(&acpi_pcc_driver);
+	if (err)
+		return err;
+
+	if (!dmi_check_system(pcc_profile_quirks))
+		return 0;
+
+	err = platform_driver_register(&profile_pcc_driver);
+	if (err) {
+		pr_warn("failed to register profile driver: %d\n", err);
+		return 0;
+	}
+
+	profile_pdev = platform_device_register_simple(PROFILE_PCC_DRIVER_NAME,
+						       PLATFORM_DEVID_NONE,
+						       NULL, 0);
+	if (IS_ERR(profile_pdev)) {
+		err = PTR_ERR(profile_pdev);
+		pr_warn("failed to register profile device: %d\n", err);
+
+		profile_pdev = NULL;
+		platform_driver_unregister(&profile_pcc_driver);
+		return 0;
+	}
+
+	return 0;
+}
+
+static void __exit panasonic_module_exit(void)
+{
+	if (profile_pdev) {
+		platform_device_unregister(profile_pdev);
+		platform_driver_unregister(&profile_pcc_driver);
+	}
+
+	platform_driver_unregister(&acpi_pcc_driver);
+}
+
+module_init(panasonic_module_init);
+module_exit(panasonic_module_exit);
