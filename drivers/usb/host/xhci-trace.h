@@ -392,7 +392,7 @@ DECLARE_EVENT_CLASS(xhci_log_slot_ctx,
 	TP_fast_assign(
 		__entry->info = le32_to_cpu(ctx->dev_info);
 		__entry->info2 = le32_to_cpu(ctx->dev_info2);
-		__entry->tt_info = le64_to_cpu(ctx->tt_info);
+		__entry->tt_info = le32_to_cpu(ctx->tt_info);
 		__entry->state = le32_to_cpu(ctx->dev_state);
 	),
 	TP_printk("%s", xhci_decode_slot_context(__get_buf(XHCI_MSG_MAX),
