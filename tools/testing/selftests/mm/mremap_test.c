@@ -364,8 +364,7 @@ static void mremap_move_within_range(unsigned int pattern_seed, char *rand_addr)
 	}
 
 out:
-	if (munmap(ptr, size) == -1)
-		perror("munmap");
+	munmap(ptr, size);
 
 	if (success)
 		ksft_test_result_pass("%s\n", test_name);
@@ -510,10 +509,8 @@ static void mremap_move_multiple_vmas(unsigned int pattern_seed,
 	}
 
 out_unmap:
-	if (munmap(tgt_ptr, 2 * size))
-		perror("munmap tgt");
-	if (munmap(ptr, size))
-		perror("munmap src");
+	munmap(tgt_ptr, 2 * size);
+	munmap(ptr, size);
 
 out:
 	if (success)
@@ -590,10 +587,8 @@ static void mremap_shrink_multiple_vmas(unsigned long page_size,
 	}
 
 out_unmap:
-	if (munmap(tgt_ptr, size))
-		perror("munmap tgt");
-	if (munmap(ptr, size))
-		perror("munmap src");
+	munmap(tgt_ptr, size);
+	munmap(ptr, size);
 out:
 	if (success)
 		ksft_test_result_pass("%s%s\n", test_name,
@@ -713,10 +708,8 @@ static void mremap_move_multiple_vmas_split(unsigned int pattern_seed,
 	}
 
 out_unmap:
-	if (munmap(tgt_ptr, size))
-		perror("munmap tgt");
-	if (munmap(ptr, size))
-		perror("munmap src");
+	munmap(tgt_ptr, size);
+	munmap(ptr, size);
 out:
 	if (success)
 		ksft_test_result_pass("%s%s\n", test_name,
@@ -948,10 +941,8 @@ static void mremap_move_multi_invalid_vmas(FILE *maps_fp,
 	}
 
 out_unmap:
-	if (munmap(tgt_ptr, size))
-		perror("munmap tgt");
-	if (munmap(ptr, size))
-		perror("munmap src");
+	munmap(tgt_ptr, size);
+	munmap(ptr, size);
 out_close_uffd:
 	close(uffd);
 out:
@@ -1144,11 +1135,11 @@ static void mremap_move_1mb_from_start(unsigned int pattern_seed,
 	}
 
 out:
-	if (src && munmap(src, c.region_size) == -1)
-		perror("munmap src");
+	if (src)
+		munmap(src, c.region_size);
 
-	if (dest && munmap(dest, c.region_size) == -1)
-		perror("munmap dest");
+	if (dest)
+		munmap(dest, c.region_size);
 
 	if (success)
 		ksft_test_result_pass("%s\n", test_name);
