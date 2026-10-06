@@ -1739,6 +1739,16 @@ static void vub300_cmndwork_thread(struct work_struct *work)
 	struct vub300_mmc_host *vub300 =
 		container_of(work, struct vub300_mmc_host, cmndwork);
 	if (!vub300->interface) {
+		struct mmc_request *req = vub300->req;
+
+		/* the core waits for this request, so finish it */
+		if (req) {
+			vub300->req = NULL;
+			vub300->cmd = NULL;
+			vub300->data = NULL;
+			req->cmd->error = -ESHUTDOWN;
+			mmc_request_done(vub300->mmc, req);
+		}
 		kref_put(&vub300->kref, vub300_delete);
 		return;
 	} else {
