@@ -42,7 +42,9 @@
 #include <linux/pagemap.h>
 #include <linux/plist.h>
 #include <linux/prctl.h>
+#include <linux/random.h>
 #include <linux/rseq.h>
+#include <linux/siphash.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/kmemleak.h>
@@ -58,6 +60,7 @@
 static u32 __futex_mask __ro_after_init;
 static u32 __futex_shift __ro_after_init;
 static struct futex_hash_bucket **__futex_queues __ro_after_init;
+static siphash_key_t futex_hash_key __ro_after_init;
 
 static __always_inline struct futex_hash_bucket **futex_queues(void)
 {
@@ -386,8 +389,12 @@ __futex_hash(union futex_key *key, struct futex_private_hash *fph, struct futex_
 	}
 #endif
 
-	hash = jhash2((u32 *)key, offsetof(typeof(*key), both.offset) / sizeof(u32),
-		      key->both.offset);
+	/*
+	 * Global bucket collisions are observable through futex operations.
+	 * Use a keyed hash so they do not disclose the mm pointer in the key.
+	 */
+	hash = siphash_3u64(key->both.ptr, key->both.word, key->both.offset,
+			    &futex_hash_key);
 
 	if (node == FUTEX_NO_NODE) {
 		/*
@@ -2089,6 +2096,8 @@ static int __init futex_init(void)
 	unsigned long hashsize, i;
 	unsigned int order, n;
 	unsigned long size;
+
+	get_random_bytes(&futex_hash_key, sizeof(futex_hash_key));
 
 #ifdef CONFIG_BASE_SMALL
 	hashsize = 16;
