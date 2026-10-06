@@ -139,10 +139,8 @@ impl<'a> FwsecFirmwareWithBl<'a> {
                 .align_up(Alignment::new::<{ falcon::MEM_BLOCK_ALIGNMENT }>())
                 .ok_or(EINVAL)?;
 
-            let mut ucode = KVec::with_capacity(aligned_code_size, GFP_KERNEL)?;
-            ucode.extend_from_slice(code, GFP_KERNEL)?;
-            ucode.resize(aligned_code_size, 0, GFP_KERNEL)?;
-
+            let mut ucode = KVec::zeroed(aligned_code_size, GFP_KERNEL)?;
+            ucode[..code.len()].copy_from_slice(code);
             ucode
         };
 
@@ -164,8 +162,7 @@ impl<'a> FwsecFirmwareWithBl<'a> {
                     .ok_or(EOVERFLOW)?
             };
 
-            let mut firmware_obj = KVVec::new();
-            firmware_obj.extend_with(align_padding, 0u8, GFP_KERNEL)?;
+            let mut firmware_obj = KVVec::zeroed(align_padding, GFP_KERNEL)?;
             firmware_obj.extend_from_slice(firmware.ucode.0.as_slice(), GFP_KERNEL)?;
 
             (
