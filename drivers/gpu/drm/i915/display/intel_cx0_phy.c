@@ -54,6 +54,35 @@ bool intel_encoder_is_c10phy(struct intel_encoder *encoder)
 	return false;
 }
 
+/*
+ * On PTL, port B is driven by a C20 PHY inside the Type-C subsystem, but
+ * port B is not a TC port, so the TC PHY code never requests TCSS power
+ * for it. Unless the firmware has done so while lighting a display on the
+ * port at boot, the PHY then never acknowledges its refclk and PLL
+ * requests.
+ */
+static bool intel_cx0_needs_tcss_power(struct intel_encoder *encoder)
+{
+	struct intel_display *display = to_intel_display(encoder);
+
+	return display->platform.pantherlake &&
+	       !intel_encoder_is_c10phy(encoder) &&
+	       !intel_encoder_is_tc(encoder);
+}
+
+static void intel_cx0_request_tcss_power(struct intel_encoder *encoder, bool enable)
+{
+	struct intel_display *display = to_intel_display(encoder);
+
+	intel_tc_request_tcss_power(encoder, enable);
+
+	if (enable &&
+	    intel_de_wait_for_set_ms(display, XELPDP_PORT_BUF_CTL1(display, encoder->port),
+				     XELPDP_TCSS_POWER_STATE, 5))
+		drm_warn(display->drm, "Port %c: TCSS power request not acknowledged\n",
+			 port_name(encoder->port));
+}
+
 static int lane_mask_to_lane(u8 lane_mask)
 {
 	if (WARN_ON((lane_mask & ~INTEL_CX0_BOTH_LANES) ||
@@ -3191,6 +3220,10 @@ static void intel_cx0pll_enable(struct intel_encoder *encoder,
 	 */
 	drm_WARN_ON(display->drm, lane_reversal && intel_tc_port_in_dp_alt_mode(dig_port));
 
+	/* The PHY must be powered before its clocks are requested. */
+	if (intel_cx0_needs_tcss_power(encoder))
+		intel_cx0_request_tcss_power(encoder, true);
+
 	/*
 	 * 1. Program PORT_CLOCK_CTL REGISTER to configure
 	 * clock muxes, gating and SSC
@@ -3535,6 +3568,9 @@ static void intel_cx0pll_disable(struct intel_encoder *encoder)
 		     XELPDP_DDI_CLOCK_SELECT_MASK(display), 0);
 	intel_de_rmw(display, XELPDP_PORT_CLOCK_CTL(display, encoder->port),
 		     XELPDP_FORWARD_CLOCK_UNGATE, 0);
+
+	if (intel_cx0_needs_tcss_power(encoder))
+		intel_cx0_request_tcss_power(encoder, false);
 
 	intel_cx0_phy_transaction_end(encoder, wakeref);
 }

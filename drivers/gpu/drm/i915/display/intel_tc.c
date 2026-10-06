@@ -1090,6 +1090,29 @@ static void xelpdp_tc_power_request_wa(struct intel_display *display, bool enabl
 	}
 }
 
+/**
+ * intel_tc_request_tcss_power - request TCSS power for a non-TC port's PHY
+ * @encoder: encoder of a non-TC port whose PHY sits in the Type-C subsystem
+ * @enable: request or release the power
+ *
+ * TC ports get TCSS power from the TC PHY code. This is for a non-TC port
+ * whose PHY nevertheless needs it, like port B's C20 PHY on PTL.
+ */
+void intel_tc_request_tcss_power(struct intel_encoder *encoder, bool enable)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	intel_reg_t reg = XELPDP_PORT_BUF_CTL1(display, encoder->port);
+
+	if (!!(intel_de_read(display, reg) & XELPDP_TCSS_POWER_REQUEST) == enable)
+		return;
+
+	if (DISPLAY_VER(display) == 30)
+		xelpdp_tc_power_request_wa(display, enable);
+
+	intel_de_rmw(display, reg, XELPDP_TCSS_POWER_REQUEST,
+		     enable ? XELPDP_TCSS_POWER_REQUEST : 0);
+}
+
 static void __xelpdp_tc_phy_enable_tcss_power(struct intel_tc_port *tc, bool enable)
 {
 	struct intel_display *display = to_intel_display(tc->dig_port);
