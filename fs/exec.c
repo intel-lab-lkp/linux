@@ -1279,19 +1279,16 @@ int begin_new_exec(struct linux_binprm * bprm)
 	 */
 	if (bprm->comm_from_dentry) {
 		struct file *comm_file = bprm_identity_file(bprm);
+		struct name_snapshot name;
 
 		/*
-		 * Hold RCU lock to keep the name from being freed behind our back.
-		 * Use acquire semantics to make sure the terminating NUL from
-		 * __d_alloc() is seen.
-		 *
-		 * Note, we're deliberately sloppy here. We don't need to care about
-		 * detecting a concurrent rename and just want a terminated name.
+		 * __set_task_comm() measures the name before copying it. Keep
+		 * a rename from shortening the name and exposing stale bytes
+		 * in the inline name buffer.
 		 */
-		rcu_read_lock();
-		__set_task_comm(me, smp_load_acquire(&comm_file->f_path.dentry->d_name.name),
-				true);
-		rcu_read_unlock();
+		take_dentry_name_snapshot(&name, comm_file->f_path.dentry);
+		__set_task_comm(me, name.name.name, true);
+		release_dentry_name_snapshot(&name);
 	} else {
 		__set_task_comm(me, kbasename(bprm->filename), true);
 	}
