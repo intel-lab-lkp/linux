@@ -117,6 +117,18 @@
 		#sound-dai-cells = <0>;
 	};
 
+	hdmi-connector {
+		compatible = "hdmi-connector";
+		label = "hdmi";
+		type = "a";
+
+		port {
+			hdmi_connector_in: endpoint {
+				remote-endpoint = <&it6263_out>;
+			};
+		};
+	};
+
 	m2_connector: m2-connector {
 		compatible = "pcie-m2-e-connector";
 		vpcie3v3-supply = <&reg_m2_pwr>;
@@ -148,11 +160,29 @@
 		};
 	};
 
+	reg_1p8v_ext: regulator-1p8v-ext {
+		compatible = "regulator-fixed";
+		regulator-name = "+V1.8_EXT";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
 	reg_3p3v: regulator-3p3v {
 		compatible = "regulator-fixed";
 		regulator-max-microvolt = <3300000>;
 		regulator-min-microvolt = <3300000>;
 		regulator-name = "+V3.3_SW";
+	};
+
+	reg_3p3v_ext: regulator-3p3v-ext {
+		compatible = "regulator-fixed";
+		regulator-name = "+V3.3_EXT";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
+		regulator-always-on;
 	};
 
 	reg_m2_pwr: regulator-m2-pwr {
@@ -401,6 +431,10 @@
 	};
 };
 
+&dcif {
+	status = "okay";
+};
+
 &enetc1 {
 	clocks = <&scmi_clk IMX94_CLK_MAC4>;
 	clock-names = "ref";
@@ -437,6 +471,21 @@
 	pinctrl-0 = <&pinctrl_flexcan4>;
 	pinctrl-names = "default";
 	status = "okay";
+};
+
+&ldb {
+	assigned-clocks = <&scmi_clk IMX94_CLK_LDBPLL_VCO>,
+			  <&scmi_clk IMX94_CLK_LDBPLL>;
+	assigned-clock-rates = <4158000000>, <1039500000>;
+	status = "okay";
+
+	ports {
+		port@1 {
+			lvds_out: endpoint {
+				remote-endpoint = <&it6263_in>;
+			};
+		};
+	};
 };
 
 &lpi2c3 {
@@ -522,6 +571,43 @@
 			reg = <3>;
 			#address-cells = <1>;
 			#size-cells = <0>;
+
+			hdmi@4c {
+				compatible = "ite,it6263";
+				reg = <0x4c>;
+				data-mapping = "jeida-24";
+				reset-gpios = <&pcal6416_i2c3_u171 8 GPIO_ACTIVE_LOW>;
+				ivdd-supply = <&reg_1p8v_ext>;
+				ovdd-supply = <&reg_3p3v_ext>;
+				txavcc18-supply = <&reg_1p8v_ext>;
+				txavcc33-supply = <&reg_3p3v_ext>;
+				pvcc1-supply = <&reg_1p8v_ext>;
+				pvcc2-supply = <&reg_1p8v_ext>;
+				avcc-supply = <&reg_3p3v_ext>;
+				anvdd-supply = <&reg_1p8v_ext>;
+				apvdd-supply = <&reg_1p8v_ext>;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@0 {
+						reg = <0>;
+
+						it6263_in: endpoint {
+							remote-endpoint = <&lvds_out>;
+						};
+					};
+
+					port@2 {
+						reg = <2>;
+
+						it6263_out: endpoint {
+							remote-endpoint = <&hdmi_connector_in>;
+						};
+					};
+				};
+			};
 		};
 
 		i2c@4 {
