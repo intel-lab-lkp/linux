@@ -10,6 +10,7 @@
 #define XILINX_AXIENET_H
 
 #include <linux/dim.h>
+#include <linux/ethtool.h>
 #include <linux/netdevice.h>
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
@@ -801,5 +802,8 @@ static inline void axienet_dma_out_addr(struct axienet_local *lp, off_t reg,
 /* Function prototypes visible in xilinx_axienet_mdio.c for other files */
 int axienet_mdio_setup(struct axienet_local *lp);
 void axienet_mdio_teardown(struct axienet_local *lp);
+
+/* RMON histogram ranges shared by all MAC types */
+extern const struct ethtool_rmon_hist_range axienet_rmon_ranges[];
 
 #endif /* XILINX_AXI_ENET_H */
