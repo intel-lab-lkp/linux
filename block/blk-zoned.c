@@ -19,6 +19,7 @@
 #include <linux/kthread.h>
 #include <linux/freezer.h>
 #include <linux/delay.h>
+#include <linux/uaccess.h>
 
 #include <trace/events/block.h>
 
@@ -2795,6 +2796,73 @@ int bdev_report_storage_elements(struct block_device *bdev,
 }
 EXPORT_SYMBOL_GPL(bdev_report_storage_elements);
 
+static int blkdev_get_nr_storage_elements_ioctl(struct block_device *bdev,
+						void __user *argp)
+{
+	unsigned int nr_elements = 0;
+	int ret;
+
+	ret = bdev_report_storage_elements(bdev, NULL, &nr_elements);
+	if (ret)
+		return ret;
+
+	if (put_user(nr_elements, (unsigned int __user *)argp))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int blkdev_report_storage_elements_ioctl(struct block_device *bdev,
+						void __user *argp)
+{
+	struct blk_storage_elements_report rep;
+	struct blk_storage_element *elements;
+	unsigned int nr_elements = 0;
+	unsigned long retc;
+	int ret;
+
+	if (!argp)
+		return -EINVAL;
+
+	if (copy_from_user(&rep, argp,
+			   sizeof(struct blk_storage_elements_report)))
+		return -EFAULT;
+
+	ret = bdev_report_storage_elements(bdev, NULL, &nr_elements);
+	if (ret)
+		return ret;
+
+	nr_elements = min(rep.nr_elements, nr_elements);
+	if (!nr_elements)
+		return -EINVAL;
+
+	elements = kzalloc_objs(struct blk_storage_element, nr_elements);
+	if (!elements)
+		return -ENOMEM;
+
+	ret = bdev_report_storage_elements(bdev, elements, &nr_elements);
+	if (ret)
+		goto free_elements;
+
+	retc = copy_to_user(argp + sizeof(struct blk_storage_elements_report),
+			    elements,
+			    sizeof(struct blk_storage_element) * nr_elements);
+	if (retc) {
+		ret = -EFAULT;
+		goto free_elements;
+	}
+
+	rep.nr_elements = nr_elements;
+	retc = copy_to_user(argp, &rep,
+			    sizeof(struct blk_storage_elements_report));
+	if (retc)
+		ret = -EFAULT;
+
+free_elements:
+	kfree(elements);
+	return ret;
+}
+
 /**
  * bdev_remove_storage_element - Remove (depopulate) a storage element of a
  *				 block device
@@ -2841,6 +2909,45 @@ int bdev_remove_storage_element(struct block_device *bdev,
 }
 EXPORT_SYMBOL_GPL(bdev_remove_storage_element);
 
+static int blkdev_remove_storage_element_ioctl(struct block_device *bdev,
+					blk_mode_t mode, void __user *argp)
+{
+	unsigned int element_id;
+	int ret;
+
+	if (!(mode & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (bdev_read_only(bdev))
+		return -EPERM;
+
+	if (get_user(element_id, (unsigned int __user *)argp))
+		return -EFAULT;
+
+	/*
+	 * Flush the device volatile write cache and invalidate all cached data
+	 * so that reads do not return old data for zones that went offline.
+	 */
+	inode_lock(bdev->bd_mapping->host);
+	filemap_invalidate_lock(bdev->bd_mapping);
+
+	ret = blkdev_issue_flush(bdev->bd_disk->part0);
+	if (ret)
+		goto out_unlock;
+
+	ret = truncate_bdev_range(bdev, mode, 0,
+			(get_capacity(bdev->bd_disk) << SECTOR_SHIFT) - 1);
+	if (ret)
+		goto out_unlock;
+
+	ret = bdev_remove_storage_element(bdev, element_id);
+
+out_unlock:
+	filemap_invalidate_unlock(bdev->bd_mapping);
+	inode_unlock(bdev->bd_mapping->host);
+
+	return ret;
+}
+
 /**
  * bdev_restore_storage_elements - Restore all depopulated storage elements of a
  *				   block device
@@ -2878,3 +2985,61 @@ int bdev_restore_storage_elements(struct block_device *bdev)
 	return blk_revalidate_disk_zones(disk);
 }
 EXPORT_SYMBOL_GPL(bdev_restore_storage_elements);
+
+static int blkdev_restore_storage_elements_ioctl(struct block_device *bdev,
+						 blk_mode_t mode)
+{
+	int ret;
+
+	if (!(mode & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (bdev_read_only(bdev))
+		return -EPERM;
+
+	/*
+	 * Flush the device volatile write cache and invalidate all cached data
+	 * so that reads do not return old data for zones that went offline.
+	 */
+	inode_lock(bdev->bd_mapping->host);
+	filemap_invalidate_lock(bdev->bd_mapping);
+
+	ret = blkdev_issue_flush(bdev->bd_disk->part0);
+	if (ret)
+		goto out_unlock;
+
+	ret = truncate_bdev_range(bdev, mode, 0,
+			(get_capacity(bdev->bd_disk) << SECTOR_SHIFT) - 1);
+	if (ret)
+		goto out_unlock;
+
+	ret = bdev_restore_storage_elements(bdev);
+
+out_unlock:
+	filemap_invalidate_unlock(bdev->bd_mapping);
+	inode_unlock(bdev->bd_mapping->host);
+
+	return ret;
+}
+
+int blkdev_zone_storage_elements_ioctl(struct block_device *bdev,
+				       blk_mode_t mode, unsigned int cmd,
+				       void __user *argp)
+{
+	if (!bdev_is_zoned(bdev) || !bdev->bd_disk->fops->se_ops)
+		return -ENOTTY;
+
+	switch (cmd) {
+	case BLKGETNRSTORELEMS:
+		return blkdev_get_nr_storage_elements_ioctl(bdev, argp);
+	case BLKREPORTSTORELEMS:
+		return blkdev_report_storage_elements_ioctl(bdev, argp);
+	case BLKREMOVESTORELEM:
+		return blkdev_remove_storage_element_ioctl(bdev, mode, argp);
+	case BLKRESTORESTORELEMS:
+		return blkdev_restore_storage_elements_ioctl(bdev, mode);
+	default:
+		break;
+	}
+
+	return -ENOTTY;
+}
