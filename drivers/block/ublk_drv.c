@@ -90,7 +90,8 @@
 		| UBLK_F_BATCH_IO \
 		| UBLK_F_NO_AUTO_PART_SCAN \
 		| UBLK_F_SHMEM_ZC \
-		| UBLK_F_IO_DESC_SIZE)
+		| UBLK_F_IO_DESC_SIZE \
+		| UBLK_F_SUPPORT_RQ_AFFINITY)
 
 #define UBLK_F_ALL_RECOVERY_FLAGS (UBLK_F_USER_RECOVERY \
 		| UBLK_F_USER_RECOVERY_REISSUE \
@@ -450,6 +451,11 @@ static inline bool ublk_dev_support_auto_buf_reg(const struct ublk_device *ub)
 static inline bool ublk_support_user_copy(const struct ublk_queue *ubq)
 {
 	return ubq->flags & UBLK_F_USER_COPY;
+}
+
+static inline bool ublk_support_rq_affinity(const struct ublk_queue *ubq)
+{
+	return ubq->flags & UBLK_F_SUPPORT_RQ_AFFINITY;
 }
 
 static inline bool ublk_dev_support_user_copy(const struct ublk_device *ub)
@@ -1468,6 +1474,14 @@ static inline bool ublk_need_unmap_req(const struct request *req)
 	       (req_op(req) == REQ_OP_READ || req_op(req) == REQ_OP_DRV_IN);
 }
 
+/* Whether __ublk_complete_rq() takes the copy-back/partial-completion path */
+static inline bool ublk_rq_need_unmap(const struct ublk_queue *ubq,
+				      struct request *req)
+{
+	return ublk_need_map_io(ubq) && ublk_need_unmap_req(req) &&
+	       !ublk_iod_is_shmem_zc(ubq, req->tag);
+}
+
 static unsigned int ublk_map_io(const struct request *req,
 				const struct ublk_io *io)
 {
@@ -1549,13 +1563,62 @@ static void ublk_end_request(struct request *req, blk_status_t error)
 	local_bh_enable();
 }
 
+/*
+ * Update @req with its result and requeue it if it was only partially
+ * completed. Returns true if @req was requeued, in which case the caller
+ * must not touch it any further.
+ *
+ * Run bio->bi_end_io() with softirqs disabled. If the final fput happens
+ * off this path, then that will prevent ublk's blkdev_release() from
+ * being called on current's task work, see fput() implementation.
+ *
+ * This matters for the caller completing @req locally on the ublk
+ * server's own thread: it may already be holding disk->open_mutex, e.g.
+ * reading the partition table from bdev_open(), and an fput() running
+ * inline there could deadlock on it. Preferably we would not be doing
+ * IO with a mutex held that is also used for release, but this
+ * work-around will suffice for now. A caller reached instead via
+ * blk_mq_complete_request_remote()'s softirq/IPI redirect never runs on
+ * that thread, so it isn't exposed to this hazard, but disabling
+ * softirqs here is harmless for it too.
+ */
+static inline bool ublk_update_and_requeue(struct request *req,
+					   struct ublk_io *io)
+{
+	bool requeue;
+
+	local_bh_disable();
+	requeue = blk_update_request(req, BLK_STS_OK, io->res);
+	local_bh_enable();
+	if (requeue)
+		blk_mq_requeue_request(req, true);
+	return requeue;
+}
+
+static void ublk_end_rq(struct request *req)
+{
+	struct ublk_queue *ubq = req->mq_hctx->driver_data;
+	struct ublk_io *io = &ubq->ios[req->tag];
+
+	/* matches the two outcomes __ublk_complete_rq() may have redirected */
+	if (io->res >= 0 && ublk_rq_need_unmap(ubq, req)) {
+		if (!ublk_update_and_requeue(req, io) &&
+		    likely(!blk_should_fake_timeout(req->q)))
+			__blk_mq_end_request(req, BLK_STS_OK);
+		return;
+	}
+
+	ublk_end_request(req, io->res < 0 ? errno_to_blk_status(io->res) :
+					    BLK_STS_OK);
+}
+
 /* todo: handle partial completion */
 static inline void __ublk_complete_rq(struct request *req, struct ublk_io *io,
 				      bool need_map, struct io_comp_batch *iob)
 {
+	struct ublk_queue *ubq = req->mq_hctx->driver_data;
 	unsigned int unmapped_bytes;
 	blk_status_t res = BLK_STS_OK;
-	bool requeue;
 
 	/* failed read IO if nothing is read */
 	if (!io->res && req_op(req) == REQ_OP_READ)
@@ -1568,7 +1631,7 @@ static inline void __ublk_complete_rq(struct request *req, struct ublk_io *io,
 
 	/* shmem zero copy: no data to unmap, pages already shared */
 	if (!need_map || !ublk_need_unmap_req(req) ||
-	    ublk_iod_is_shmem_zc(req->mq_hctx->driver_data, req->tag))
+	    ublk_iod_is_shmem_zc(ubq, req->tag))
 		goto exit;
 
 	/* for READ request, writing data in iod->addr to rq buffers */
@@ -1582,31 +1645,18 @@ static inline void __ublk_complete_rq(struct request *req, struct ublk_io *io,
 	if (unlikely(unmapped_bytes < io->res)) {
 		if (unlikely(!unmapped_bytes)) {
 			res = BLK_STS_IOERR;
+			io->res = -EIO;
 			goto exit;
 		}
 
 		io->res = unmapped_bytes;
 	}
 
-	/*
-	 * Run bio->bi_end_io() with softirqs disabled. If the final fput
-	 * happens off this path, then that will prevent ublk's blkdev_release()
-	 * from being called on current's task work, see fput() implementation.
-	 *
-	 * Otherwise, ublk server may not provide forward progress in case of
-	 * reading the partition table from bdev_open() with disk->open_mutex
-	 * held, and causes dead lock as we could already be holding
-	 * disk->open_mutex here.
-	 *
-	 * Preferably we would not be doing IO with a mutex held that is also
-	 * used for release, but this work-around will suffice for now.
-	 */
-	local_bh_disable();
-	requeue = blk_update_request(req, BLK_STS_OK, io->res);
-	local_bh_enable();
-	if (requeue)
-		blk_mq_requeue_request(req, true);
-	else if (likely(!blk_should_fake_timeout(req->q))) {
+	if (ublk_support_rq_affinity(ubq) && blk_mq_complete_request_remote(req))
+		return;
+
+	if (!ublk_update_and_requeue(req, io) &&
+	    likely(!blk_should_fake_timeout(req->q))) {
 		if (blk_mq_add_to_batch(req, iob, false, blk_mq_end_request_batch))
 			return;
 		__blk_mq_end_request(req, BLK_STS_OK);
@@ -1614,6 +1664,8 @@ static inline void __ublk_complete_rq(struct request *req, struct ublk_io *io,
 
 	return;
 exit:
+	if (ublk_support_rq_affinity(ubq) && blk_mq_complete_request_remote(req))
+		return;
 	ublk_end_request(req, res);
 }
 
@@ -2347,6 +2399,7 @@ static const struct blk_mq_ops ublk_mq_ops = {
 	.queue_rqs      = ublk_queue_rqs,
 	.init_hctx	= ublk_init_hctx,
 	.timeout	= ublk_timeout,
+	.complete	= ublk_end_rq,
 };
 
 static const struct blk_mq_ops ublk_batch_mq_ops = {
@@ -2355,6 +2408,7 @@ static const struct blk_mq_ops ublk_batch_mq_ops = {
 	.queue_rqs      = ublk_batch_queue_rqs,
 	.init_hctx	= ublk_init_hctx,
 	.timeout	= ublk_timeout,
+	.complete	= ublk_end_rq,
 };
 
 static void ublk_queue_reinit(struct ublk_device *ub, struct ublk_queue *ubq)

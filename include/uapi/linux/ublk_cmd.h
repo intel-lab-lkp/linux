@@ -420,6 +420,14 @@ struct ublk_shmem_buf_reg {
 /* ublksrv_io_desc size is specified by ublksrv_ctrl_dev_info's io_desc_size */
 #define UBLK_F_IO_DESC_SIZE (1ULL << 20)
 
+/*
+ * Request completion honors the block device's rq_affinity setting
+ * (/sys/block/ublkbN/queue/rq_affinity): the submitting CPU's completion
+ * work can run there instead of always on the ublk server's CPU. Without
+ * this feature, rq_affinity has no effect on ublk devices.
+ */
+#define UBLK_F_SUPPORT_RQ_AFFINITY (1ULL << 21)
+
 /* device state */
 #define UBLK_S_DEV_DEAD	0
 #define UBLK_S_DEV_LIVE	1
