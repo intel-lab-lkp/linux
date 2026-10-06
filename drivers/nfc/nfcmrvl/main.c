@@ -96,6 +96,7 @@ struct nfcmrvl_private *nfcmrvl_nci_register_dev(enum nfcmrvl_phy phy,
 				const struct nfcmrvl_platform_data *pdata)
 {
 	struct nfcmrvl_private *priv;
+	struct nci_uart *nu = NULL;
 	int rc;
 	int headroom;
 	int tailroom;
@@ -109,6 +110,9 @@ struct nfcmrvl_private *nfcmrvl_nci_register_dev(enum nfcmrvl_phy phy,
 	priv->if_ops = ops;
 	priv->dev = dev;
 	priv->phy = phy;
+
+	if (phy == NFCMRVL_PHY_UART)
+		nu = drv_data;
 
 	memcpy(&priv->config, pdata, sizeof(*pdata));
 
@@ -154,9 +158,22 @@ struct nfcmrvl_private *nfcmrvl_nci_register_dev(enum nfcmrvl_phy phy,
 
 	nci_set_drvdata(priv->ndev, priv);
 
+	/* For the UART phy the transmit path reaches the driver through
+	 * nu->drv_data; publish it before nci_register_device() so a transmit
+	 * triggered during registration does not dereference a NULL pointer.
+	 */
+	if (nu) {
+		nu->drv_data = priv;
+		nu->ndev = priv->ndev;
+	}
+
 	rc = nci_register_device(priv->ndev);
 	if (rc) {
 		nfc_err(dev, "nci_register_device failed %d\n", rc);
+		if (nu) {
+			nu->drv_data = NULL;
+			nu->ndev = NULL;
+		}
 		goto error_fw_dnld_deinit;
 	}
 

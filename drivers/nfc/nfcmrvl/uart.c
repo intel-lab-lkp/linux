@@ -138,9 +138,6 @@ static int nfcmrvl_nci_uart_open(struct nci_uart *nu)
 
 	priv->support_fw_dnld = true;
 
-	nu->drv_data = priv;
-	nu->ndev = priv->ndev;
-
 	return 0;
 }
 
