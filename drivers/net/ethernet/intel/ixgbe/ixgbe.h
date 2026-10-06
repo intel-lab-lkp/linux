@@ -955,6 +955,11 @@ extern char ixgbe_driver_name[];
 extern char ixgbe_default_device_descr[];
 #endif /* IXGBE_FCOE */
 
+static inline bool ixgbe_netif_running(struct net_device *netdev)
+{
+	return netif_running(netdev) && netif_device_present(netdev);
+}
+
 int ixgbe_open(struct net_device *netdev);
 int ixgbe_close(struct net_device *netdev);
 void ixgbe_up(struct ixgbe_adapter *adapter);
