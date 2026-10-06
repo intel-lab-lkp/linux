@@ -1384,94 +1384,94 @@ static int loopback_open(struct snd_pcm_substream *substream)
 	int err = 0;
 	int dev = get_cable_index(substream);
 
-	guard(mutex)(&loopback->cable_lock);
-	dpcm = kzalloc_obj(*dpcm);
-	if (!dpcm)
-		return -ENOMEM;
-	dpcm->loopback = loopback;
-	dpcm->substream = substream;
+	scoped_guard(mutex, &loopback->cable_lock) {
+		dpcm = kzalloc_obj(*dpcm);
+		if (!dpcm)
+			return -ENOMEM;
+		dpcm->loopback = loopback;
+		dpcm->substream = substream;
 
-	cable = loopback->cables[substream->number][dev];
-	if (!cable) {
-		cable = kzalloc_obj(*cable);
+		cable = loopback->cables[substream->number][dev];
 		if (!cable) {
-			err = -ENOMEM;
-			goto unlock;
-		}
-		spin_lock_init(&cable->lock);
-		snd_refcount_init(&cable->stop_count);
-		cable->hw = loopback_pcm_hardware;
+			cable = kzalloc_obj(*cable);
+			if (!cable) {
+				err = -ENOMEM;
+				break;
+			}
+			spin_lock_init(&cable->lock);
+			snd_refcount_init(&cable->stop_count);
+			cable->hw = loopback_pcm_hardware;
 #ifdef CONFIG_HIGH_RES_TIMERS
-		if (loopback->timer_source && !strcmp(loopback->timer_source, "hrtimer"))
-			cable->ops = &loopback_hrtimer_ops;
-		else
+			if (loopback->timer_source && !strcmp(loopback->timer_source, "hrtimer"))
+				cable->ops = &loopback_hrtimer_ops;
+			else
 #endif
-		if (loopback->timer_source && loopback->timer_source[0])
-			cable->ops = &loopback_snd_timer_ops;
-		else
-			cable->ops = &loopback_jiffies_timer_ops;
-		loopback->cables[substream->number][dev] = cable;
-	}
-	dpcm->cable = cable;
-	runtime->private_data = dpcm;
+				if (loopback->timer_source && loopback->timer_source[0])
+					cable->ops = &loopback_snd_timer_ops;
+				else
+					cable->ops = &loopback_jiffies_timer_ops;
+			loopback->cables[substream->number][dev] = cable;
+		}
+		dpcm->cable = cable;
+		runtime->private_data = dpcm;
 
-	if (cable->ops->open) {
-		err = cable->ops->open(dpcm);
-		if (err < 0)
-			goto unlock;
-	}
+		if (cable->ops->open) {
+			err = cable->ops->open(dpcm);
+			if (err < 0)
+				break;
+		}
 
-	snd_pcm_hw_constraint_integer(runtime, SNDRV_PCM_HW_PARAM_PERIODS);
+		snd_pcm_hw_constraint_integer(runtime, SNDRV_PCM_HW_PARAM_PERIODS);
 
-	/* use dynamic rules based on actual runtime->hw values */
-	/* note that the default rules created in the PCM midlevel code */
-	/* are cached -> they do not reflect the actual state */
-	err = snd_pcm_hw_rule_add(runtime, 0,
-				  SNDRV_PCM_HW_PARAM_FORMAT,
-				  rule_format, dpcm,
-				  SNDRV_PCM_HW_PARAM_FORMAT, -1);
-	if (err < 0)
-		goto unlock;
-	err = snd_pcm_hw_rule_add(runtime, 0,
-				  SNDRV_PCM_HW_PARAM_RATE,
-				  rule_rate, dpcm,
-				  SNDRV_PCM_HW_PARAM_RATE, -1);
-	if (err < 0)
-		goto unlock;
-	err = snd_pcm_hw_rule_add(runtime, 0,
-				  SNDRV_PCM_HW_PARAM_CHANNELS,
-				  rule_channels, dpcm,
-				  SNDRV_PCM_HW_PARAM_CHANNELS, -1);
-	if (err < 0)
-		goto unlock;
-
-	/* In case of sound timer the period time of both devices of the same
-	 * loop has to be the same.
-	 * This rule only takes effect if a sound timer was chosen
-	 */
-	if (cable->snd_timer.instance) {
+		/* use dynamic rules based on actual runtime->hw values */
+		/* note that the default rules created in the PCM midlevel code */
+		/* are cached -> they do not reflect the actual state */
 		err = snd_pcm_hw_rule_add(runtime, 0,
-					  SNDRV_PCM_HW_PARAM_PERIOD_BYTES,
-					  rule_period_bytes, dpcm,
-					  SNDRV_PCM_HW_PARAM_PERIOD_BYTES, -1);
+					  SNDRV_PCM_HW_PARAM_FORMAT,
+					  rule_format, dpcm,
+					  SNDRV_PCM_HW_PARAM_FORMAT, -1);
 		if (err < 0)
-			goto unlock;
+			break;
+		err = snd_pcm_hw_rule_add(runtime, 0,
+					  SNDRV_PCM_HW_PARAM_RATE,
+					  rule_rate, dpcm,
+					  SNDRV_PCM_HW_PARAM_RATE, -1);
+		if (err < 0)
+			break;
+		err = snd_pcm_hw_rule_add(runtime, 0,
+					  SNDRV_PCM_HW_PARAM_CHANNELS,
+					  rule_channels, dpcm,
+					  SNDRV_PCM_HW_PARAM_CHANNELS, -1);
+		if (err < 0)
+			break;
+
+		/* In case of sound timer the period time of both devices of the same
+		 * loop has to be the same.
+		 * This rule only takes effect if a sound timer was chosen
+		 */
+		if (cable->snd_timer.instance) {
+			err = snd_pcm_hw_rule_add(runtime, 0,
+						  SNDRV_PCM_HW_PARAM_PERIOD_BYTES,
+						  rule_period_bytes, dpcm,
+						  SNDRV_PCM_HW_PARAM_PERIOD_BYTES, -1);
+			if (err < 0)
+				break;
+		}
+
+		/* loopback_runtime_free() has not to be called if kfree(dpcm) was
+		 * already called here. Otherwise it will end up with a double free.
+		 */
+		runtime->private_free = loopback_runtime_free;
+		if (get_notify(dpcm))
+			runtime->hw = loopback_pcm_hardware;
+		else
+			runtime->hw = cable->hw;
+
+		scoped_guard(spinlock_irq, &cable->lock) {
+			cable->streams[substream->stream] = dpcm;
+		}
 	}
 
-	/* loopback_runtime_free() has not to be called if kfree(dpcm) was
-	 * already called here. Otherwise it will end up with a double free.
-	 */
-	runtime->private_free = loopback_runtime_free;
-	if (get_notify(dpcm))
-		runtime->hw = loopback_pcm_hardware;
-	else
-		runtime->hw = cable->hw;
-
-	scoped_guard(spinlock_irq, &cable->lock) {
-		cable->streams[substream->stream] = dpcm;
-	}
-
- unlock:
 	if (err < 0) {
 		free_cable(substream);
 		kfree(dpcm);
