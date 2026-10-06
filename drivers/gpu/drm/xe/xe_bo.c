@@ -1980,6 +1980,11 @@ static void xe_ttm_bo_destroy(struct ttm_buffer_object *ttm_bo)
 	if (bo->parent_obj)
 		xe_bo_put(bo->parent_obj);
 
+	spin_lock(&xe->pinned.lock);
+	if (WARN_ON_ONCE(!list_empty(&bo->pinned_link)))
+		list_del_init(&bo->pinned_link);
+	spin_unlock(&xe->pinned.lock);
+
 	mutex_lock(&xe->mem_access.vram_userfault.lock);
 	if (!list_empty(&bo->vram_userfault_link))
 		list_del(&bo->vram_userfault_link);
