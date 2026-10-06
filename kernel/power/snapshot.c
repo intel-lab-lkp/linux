@@ -1256,14 +1256,14 @@ static void mark_free_pages(struct zone *zone)
 
 	max_zone_pfn = zone_end_pfn(zone);
 	for_each_valid_pfn(pfn, zone->zone_start_pfn, max_zone_pfn) {
-		page = pfn_to_page(pfn);
-
 		if (!--page_count) {
 			touch_nmi_watchdog();
 			page_count = WD_PAGE_COUNT;
 		}
 
-		if (page_zone(page) != zone)
+		/* the memmap of offline memory is not initialised */
+		page = pfn_to_online_page(pfn);
+		if (!page || page_zone(page) != zone)
 			continue;
 
 		if (!swsusp_page_is_forbidden(page))
