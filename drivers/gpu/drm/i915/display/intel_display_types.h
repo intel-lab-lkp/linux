@@ -1816,6 +1816,9 @@ struct intel_psr {
 	bool dc3co_allowed;
 	/* DC3CO disable work */
 	struct delayed_work dc3co_work;
+	/* AS SDP in PR Active follows vblank enable */
+	bool pr_as_sdp_follow_vblank;
+	bool vblank_enabled;
 	u16 su_w_granularity;
 	u16 su_y_granularity;
 	bool source_panel_replay_support;

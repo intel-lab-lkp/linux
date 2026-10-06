@@ -2166,6 +2166,29 @@ no_err:
 	return true;
 }
 
+/*
+ * Sinks that support async video timing in PR get the AS SDP suspended in PR
+ * Active. Some then drift out of phase with the source and judder while
+ * frames are being updated. Send the AS SDP in PR Active while vblank
+ * interrupts are enabled: Panel Replay holds DC_OFF then anyway, so this
+ * costs no DC5/DC6 residency. Suspend it again when vblank interrupts are
+ * disabled, before DC_OFF is dropped.
+ */
+static void intel_psr_pr_as_sdp_update(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	lockdep_assert_held(&intel_dp->psr.lock);
+
+	if (!intel_dp->psr.enabled || !intel_dp->psr.pr_as_sdp_follow_vblank)
+		return;
+
+	intel_de_rmw(display, PR_ALPM_CTL(display, intel_dp->psr.transcoder),
+		     PR_ALPM_CTL_AS_SDP_TRANSMISSION_IN_ACTIVE_DISABLE,
+		     intel_dp->psr.vblank_enabled ? 0 :
+		     PR_ALPM_CTL_AS_SDP_TRANSMISSION_IN_ACTIVE_DISABLE);
+}
+
 static void intel_psr_enable_locked(struct intel_dp *intel_dp,
 				    const struct intel_crtc_state *crtc_state)
 {
@@ -2224,6 +2247,12 @@ static void intel_psr_enable_locked(struct intel_dp *intel_dp,
 	intel_psr_enable_source(intel_dp, crtc_state);
 	intel_dp->psr.enabled = true;
 	intel_dp->psr.pause_counter = 0;
+
+	intel_dp->psr.pr_as_sdp_follow_vblank = crtc_state->has_panel_replay &&
+		crtc_state->disable_as_sdp_when_pr_active &&
+		intel_dp->as_sdp_supported && intel_dp_is_edp(intel_dp) &&
+		!intel_alpm_pr_as_sdp_skip_frames_enabled(intel_dp, crtc_state);
+	intel_psr_pr_as_sdp_update(intel_dp);
 
 	/*
 	 * Link_ok is sticky and set here on PSR enable. We can assume link
@@ -2400,6 +2429,7 @@ static void intel_psr_disable_locked(struct intel_dp *intel_dp)
 	intel_dp->psr.pkg_c_latency_used = 0;
 	cancel_delayed_work(&intel_dp->psr.dc3co_work);
 	intel_dp->psr.dc3co_allowed = false;
+	intel_dp->psr.pr_as_sdp_follow_vblank = false;
 }
 
 /**
@@ -4163,7 +4193,11 @@ void intel_psr_notify_vblank_enable_disable(struct intel_display *display,
 				intel_dp->psr.vblank_wakeref =
 					intel_display_power_get(display,
 								POWER_DOMAIN_DC_OFF);
-			else
+
+			intel_dp->psr.vblank_enabled = enable;
+			intel_psr_pr_as_sdp_update(intel_dp);
+
+			if (!enable)
 				intel_display_power_put(display, POWER_DOMAIN_DC_OFF,
 							intel_dp->psr.vblank_wakeref);
 		}
