@@ -1881,6 +1881,7 @@ enum netdev_reg_state {
  *				disabled together with the latter.
  *
  *	@ifindex:	interface index
+ *	@neigh_hash_mix: Immutable per-device random salt for neighbour table hashing
  *	@group:		The group the device belongs to
  *
  *	@stats:		Statistics struct, which was left as a legacy, use
@@ -2212,6 +2213,7 @@ struct net_device {
 	enum netdev_stat_type	pcpu_stat_type:8;
 	netdev_features_t	features;
 	struct inet6_dev __rcu	*ip6_ptr;
+	u32			neigh_hash_mix;
 	__cacheline_group_end(net_device_read_txrx);
 
 	/* RX read-mostly hotpath */

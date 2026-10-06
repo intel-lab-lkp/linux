@@ -30,6 +30,7 @@ xdp_features_t                      xdp_features
 struct net_device_ops*              netdev_ops                  read_mostly                             netdev_core_pick_tx,netdev_start_xmit(tx)
 struct xdp_metadata_ops*            xdp_metadata_ops
 int                                 ifindex                                         read_mostly         ip6_rcv_core
+u32                                 neigh_hash_mix              read_mostly         read_mostly         arp_hashfn,ndisc_hashfn(tx/rx)
 unsigned_short                      gflags
 unsigned_short                      hard_header_len             read_mostly         read_mostly         ip6_xmit(tx);gro_list_prepare(rx)
 unsigned_int                        mtu                         read_mostly                             ip_finish_output2
