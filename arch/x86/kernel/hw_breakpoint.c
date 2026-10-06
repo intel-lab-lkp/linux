@@ -15,6 +15,7 @@
  * using the CPU's debug registers.
  */
 
+#include <linux/capability.h>
 #include <linux/perf_event.h>
 #include <linux/hw_breakpoint.h>
 #include <linux/irqflags.h>
@@ -332,13 +333,34 @@ static int arch_build_bp_info(struct perf_event *bp,
 		return -EINVAL;
 
 	/*
-	 * Prevent any breakpoint of any type that overlaps the CPU
-	 * entry area and data.  This protects the IST stacks and also
-	 * reduces the chance that we ever find out what happens if
-	 * there's a data breakpoint on the GDT, IDT, or TSS.
+	 * Instruction breakpoints match only the address, but their ABI
+	 * requires a length of sizeof(long). Reject other lengths before
+	 * checking the address range.
 	 */
-	if (within_cpu_entry(attr->bp_addr, bp_end))
+	if (attr->bp_type == HW_BREAKPOINT_X && attr->bp_len != sizeof(long))
 		return -EINVAL;
+
+	/*
+	 * Check permissions before consulting the private kernel address
+	 * ranges below. Otherwise their errors disclose the kernel layout,
+	 * including for unsupported range-breakpoint lengths.
+	 */
+	if (attr->bp_addr >= TASK_SIZE_MAX ||
+	    (attr->bp_type != HW_BREAKPOINT_X && bp_end >= TASK_SIZE_MAX)) {
+		if (attr->exclude_kernel)
+			return -EINVAL;
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+
+		/*
+		 * Prevent any breakpoint of any type that overlaps the CPU
+		 * entry area and data. This protects the IST stacks and also
+		 * reduces the chance that we ever find out what happens if
+		 * there's a data breakpoint on the GDT, IDT, or TSS.
+		 */
+		if (within_cpu_entry(attr->bp_addr, bp_end))
+			return -EINVAL;
+	}
 
 	hw->address = attr->bp_addr;
 	hw->mask = 0;
@@ -363,16 +385,8 @@ static int arch_build_bp_info(struct perf_event *bp,
 		}
 
 		hw->type = X86_BREAKPOINT_EXECUTE;
-		/*
-		 * x86 inst breakpoints need to have a specific undefined len.
-		 * But we still need to check userspace is not trying to setup
-		 * an unsupported length, to get a range breakpoint for example.
-		 */
-		if (attr->bp_len == sizeof(long)) {
-			hw->len = X86_BREAKPOINT_LEN_X;
-			return 0;
-		}
-		fallthrough;
+		hw->len = X86_BREAKPOINT_LEN_X;
+		return 0;
 	default:
 		return -EINVAL;
 	}

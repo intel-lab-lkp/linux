@@ -765,10 +765,6 @@ modify_user_hw_breakpoint_check(struct perf_event *bp, struct perf_event_attr *a
 	struct arch_hw_breakpoint hw = { };
 	int err;
 
-	err = hw_breakpoint_parse(bp, attr, &hw);
-	if (err)
-		return err;
-
 	if (check) {
 		struct perf_event_attr old_attr;
 
@@ -777,6 +773,10 @@ modify_user_hw_breakpoint_check(struct perf_event *bp, struct perf_event_attr *a
 		if (memcmp(&old_attr, attr, sizeof(*attr)))
 			return -EINVAL;
 	}
+
+	err = hw_breakpoint_parse(bp, attr, &hw);
+	if (err)
+		return err;
 
 	if (bp->attr.bp_type != attr->bp_type) {
 		err = modify_bp_slot(bp, bp->attr.bp_type, attr->bp_type);
