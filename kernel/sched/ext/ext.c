@@ -10884,7 +10884,9 @@ static s32 scx_cpuperf_set(struct scx_sched *sch, s32 cpu, u32 perf)
 	/*
 	 * ecaps updates are folded under the rq lock, making this test
 	 * authoritative: a write can never land after a revoke has taken
-	 * effect on @cpu.
+	 * effect on @cpu. The fold in scx_process_sync_ecaps() also restores
+	 * the neutral target when SCX_CAP_PERF is lost, so a revoke can't
+	 * leave a stale value behind the just-closed gate.
 	 */
 	if (likely(!scx_missing_caps(sch, cpu, SCX_CAP_PERF))) {
 		rq->scx.cpuperf_target = perf;
@@ -10940,8 +10942,8 @@ __bpf_kfunc void scx_bpf_cpuperf_set(s32 cpu, u32 perf, const struct bpf_prog_au
  *
  * cid-addressed equivalent of scx_bpf_cpuperf_set(). A sub-sched needs
  * SCX_CAP_PERF on @cid. Returns 0 if the target was applied, -%EACCES if
- * the write was denied for missing caps, other -errnos if @cid didn't
- * resolve.
+ * the write was denied for missing caps or because the scheduler is dying,
+ * other -errnos if @cid didn't resolve.
  */
 __bpf_kfunc s32 scx_bpf_cidperf_set(s32 cid, u32 perf,
 				    const struct bpf_prog_aux *aux)
@@ -10957,6 +10959,15 @@ __bpf_kfunc s32 scx_bpf_cidperf_set(s32 cid, u32 perf,
 
 	if (!scx_kf_allowed_ctx(sch))
 		return -EDEADLK;
+
+	/*
+	 * Reject writes from a dying scheduler. Its targets have been or
+	 * will be swept back to the neutral base, but ops.exit() and any
+	 * late stragglers still run after that sweep - a write there would
+	 * land after the final reset with nothing left to clean it up.
+	 */
+	if (unlikely(atomic_read(&sch->exit_kind) != SCX_EXIT_NONE))
+		return -EACCES;
 
 	cpu = scx_cid_to_cpu(sch, cid);
 	if (cpu < 0)

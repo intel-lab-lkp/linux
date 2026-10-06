@@ -28,6 +28,63 @@
  */
 DEFINE_STATIC_KEY_FALSE(__scx_has_subs);
 
+/*
+ * Reset rq->scx.cpuperf_target back to the neutral SCX_CPUPERF_ONE base
+ * when a sub-scheduler that wrote targets loses SCX_CAP_PERF or dies. The
+ * reset runs from an irq_work on the target CPU so it can take the target
+ * rq's lock without imposing any rq lock ordering on the callers:
+ * scx_bpf_sub_revoke() runs with IRQs disabled under pshard locks and may
+ * be reached from BPF with another rq already locked.
+ */
+static DEFINE_PER_CPU(struct irq_work, scx_cpuperf_reset_iw);
+
+static void scx_cpuperf_reset_fn(struct irq_work *iw)
+{
+	struct rq_flags rf;
+	struct rq *rq;
+
+	if (!scx_enabled())
+		return;
+
+	rq = cpu_rq(smp_processor_id());
+	rq_lock_irqsave(rq, &rf);
+	update_rq_clock(rq);
+	if (rq->scx.cpuperf_target != SCX_CPUPERF_ONE) {
+		rq->scx.cpuperf_target = SCX_CPUPERF_ONE;
+		cpufreq_update_util(rq, 0);
+	}
+	rq_unlock_irqrestore(rq, &rf);
+}
+
+/*
+ * Queue a reset of @cpu's cpuperf target. Idempotent: the work is always a
+ * plain restore of the neutral base, so concurrent queues collapse into one
+ * run; CPUs that never had a sub-scheduler target no-op.
+ *
+ * The pshard sweep calls in with cpus_read_lock() held, so @cpu can't go
+ * offline across the cpu_online() test. The revoke path can't pin hotplug -
+ * it runs from BPF with IRQs disabled under pshard locks - so an offline
+ * loss there trips irq_work_queue_on()'s WARN_ON_ONCE once and delivery
+ * waits for the flush at re-online; either order ends at the neutral base.
+ */
+static void scx_cpuperf_queue_reset(s32 cpu)
+{
+	if (cpu < 0 || cpu >= nr_cpu_ids || !cpu_online(cpu))
+		return;
+	irq_work_queue_on(&per_cpu(scx_cpuperf_reset_iw, cpu), cpu);
+}
+
+static int __init scx_cpuperf_reset_init(void)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		init_irq_work(per_cpu_ptr(&scx_cpuperf_reset_iw, cpu),
+			      scx_cpuperf_reset_fn);
+	return 0;
+}
+subsys_initcall(scx_cpuperf_reset_init);
+
 /* latched at root enable before any rescue runs */
 static s32 scx_rescue_bw_1024;
 static s64 scx_rescue_quantum_ns;
@@ -959,6 +1016,20 @@ void __scx_process_sync_ecaps(struct rq *rq, struct task_struct *prev)
 		lost_all |= lost;
 
 		/*
+		 * Losing SCX_CAP_PERF closes this scheduler's write gate on
+		 * @cpu - fold the target back to the neutral base right
+		 * here, ordered against the writes racing the revoke.
+		 */
+		if ((lost & SCX_CAP_PERF) &&
+		    rq->scx.cpuperf_target != SCX_CPUPERF_ONE) {
+			/* an op callback may have dropped the rq lock */
+			if (rq->clock_update_flags < RQCF_UPDATED)
+				update_rq_clock(rq);
+			rq->scx.cpuperf_target = SCX_CPUPERF_ONE;
+			cpufreq_update_util(rq, 0);
+		}
+
+		/*
 		 * Tell the sched its effective caps on this cid changed. The
 		 * invocation is equivalent to the dispatch path and may drop
 		 * and re-acquire the rq lock temporarily while the rest of
@@ -1044,6 +1115,15 @@ void scx_unbypass_replay_ecaps(struct rq *rq, struct scx_sched *sch)
  * A cpu came back. Re-seed each sub-sched's ecaps on the cpu's cid. The sync
  * recomputes effective caps from the pshard and fires ops.sub_ecaps_updated()
  * only on a real change since offline.
+ *
+ * Also restore the neutral cpuperf base. The cpu may be coming back with a
+ * target written before it went down: the rq persists across hotplug, the
+ * reset skips offline CPUs and no sub-scheduler rewrites the target while
+ * the cpu is down, so without this the stale value would resume pinning the
+ * cpu as soon as schedutil starts consuming it again. Over-resetting is
+ * deliberate: any scheduler still holding SCX_CAP_PERF rewrites its own
+ * target on its next update, which on an idle cpu may take a while - the
+ * neutral base is the safe state to sit on until then.
  */
 void scx_online_ecaps(struct rq *rq)
 {
@@ -1060,6 +1140,13 @@ void scx_online_ecaps(struct rq *rq)
 		return;
 
 	guard(rq_lock_irqsave)(rq);
+
+	if (rq->scx.cpuperf_target != SCX_CPUPERF_ONE) {
+		/* the hotplug path doesn't guarantee an updated rq clock */
+		update_rq_clock(rq);
+		rq->scx.cpuperf_target = SCX_CPUPERF_ONE;
+		cpufreq_update_util(rq, 0);
+	}
 
 	root = scx_root_protected();
 	cid = __scx_cpu_to_cid(cpu_of(rq));
@@ -1457,6 +1544,50 @@ static inline s32 scx_cgroup_claim_subtree(struct scx_sched *sch) { return 0; }
 static inline void scx_cgroup_return_subtree(struct scx_sched *sch) {}
 #endif
 
+/*
+ * Queue cpuperf resets for the CPUs backing the cids in @delta, the set
+ * SCX_CAP_PERF was just revoked on.
+ */
+static void scx_cpuperf_revoke_cids(const struct scx_cmask *delta)
+{
+	s32 cid;
+
+	scx_cmask_for_each_cid(cid, delta)
+		scx_cpuperf_queue_reset(__scx_cid_to_cpu(cid));
+}
+
+/*
+ * Restore the neutral cpuperf base on every CPU @sch holds SCX_CAP_PERF on.
+ * Over-resetting is deliberate: a scheduler still sharing the cap rewrites
+ * its own target on its next update - a writer that never writes again
+ * leaves the cpu at the neutral base, which is the safe direction.
+ * Must be called after @sch is unlinked and drained with scx_enable_mutex
+ * and cpus_read_lock() held: the mutex excludes scx_cid_retire_tables() on
+ * a concurrent root disable - the cid table dereference below is not
+ * otherwise protected and drain_descendants() only guarantees that every
+ * descendant reached unlinking - and cpus_read_lock() keeps @cpu online
+ * across the cpu_online() tests in the queueing. The table is
+ * __rcu-annotated and the caller may be preemptible, so take the RCU read
+ * side around the sweep; it also keeps the dereferences safe against a
+ * later retirement even if the surrounding locking ever changes.
+ */
+static void scx_sub_reset_cpuperf(struct scx_sched *sch)
+{
+	s32 si, cid;
+
+	if (!READ_ONCE(sch->pshard))
+		return;
+
+	rcu_read_lock();
+	for (si = 0; si < sch->nr_pshards; si++) {
+		struct scx_cmask *cm = &sch->pshard[si]->caps[__SCX_CAP_PERF].cmask;
+
+		scx_cmask_for_each_cid(cid, cm)
+			scx_cpuperf_queue_reset(__scx_cid_to_cpu(cid));
+	}
+	rcu_read_unlock();
+}
+
 void scx_sub_disable(struct scx_sched *sch)
 {
 	struct scx_sched *parent = scx_parent(sch);
@@ -1582,6 +1713,23 @@ dump:
 	scx_disable_bypass_dsp(sch);
 
 	scx_unlink_sched(sch);
+
+	/*
+	 * @sch is being torn down: from unlinking on, its cpuperf writes are
+	 * rejected by the dying gate in scx_bpf_cidperf_set(). Queue a reset
+	 * for every CPU it held SCX_CAP_PERF on so schedutil doesn't keep
+	 * consuming the targets it left behind - ops.exit() and stragglers
+	 * still run after this point but can no longer write. Queue them
+	 * while still inside scx_enable_mutex so that a root disable can't
+	 * retire the cid tables while the sweep dereferences them -
+	 * drain_descendants() only waited for @sch to unlink, so
+	 * scx_root_disable() is free to run to scx_cid_retire_tables()
+	 * concurrently otherwise. CPUs held down by cpus_read_lock() can't go
+	 * offline across the cpu_online() tests either.
+	 */
+	cpus_read_lock();
+	scx_sub_reset_cpuperf(sch);
+	cpus_read_unlock();
 
 	mutex_unlock(&scx_enable_mutex);
 
@@ -2447,6 +2595,18 @@ __bpf_kfunc void scx_bpf_sub_revoke(u64 cgroup_id, u64 caps,
 					scx_cmask_andnot(cm, delta);
 					scx_cmask_or(changed_cids, delta);
 					revoked_caps |= BIT_U64(cap_bit);
+
+					/*
+					 * A lost SCX_CAP_PERF also invalidates
+					 * the cpuperf targets @pos may have
+					 * written on the revoked cids. Queue
+					 * the reset; this runs with IRQs
+					 * disabled under pshard locks, so the
+					 * rq locks are taken on the target
+					 * CPUs from irq_work instead.
+					 */
+					if (cap_bit == __SCX_CAP_PERF)
+						scx_cpuperf_revoke_cids(delta);
 				}
 
 				if (revoked_caps) {
