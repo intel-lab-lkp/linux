@@ -25,7 +25,6 @@
 struct amdxdna_fence {
 	struct dma_fence	base;
 	spinlock_t		lock; /* for base */
-	struct amdxdna_hwctx	*hwctx;
 };
 
 static const char *amdxdna_fence_get_driver_name(struct dma_fence *fence)
@@ -35,11 +34,8 @@ static const char *amdxdna_fence_get_driver_name(struct dma_fence *fence)
 
 static const char *amdxdna_fence_get_timeline_name(struct dma_fence *fence)
 {
-	struct amdxdna_fence *xdna_fence;
-
-	xdna_fence = container_of(fence, struct amdxdna_fence, base);
-
-	return xdna_fence->hwctx->name;
+	/* Constant string ensures name remains valid if fence outlives device. */
+	return KBUILD_MODNAME;
 }
 
 static const struct dma_fence_ops fence_ops = {
@@ -55,9 +51,9 @@ static struct dma_fence *amdxdna_fence_create(struct amdxdna_hwctx *hwctx)
 	if (!fence)
 		return NULL;
 
-	fence->hwctx = hwctx;
 	spin_lock_init(&fence->lock);
-	dma_fence_init(&fence->base, &fence_ops, &fence->lock, hwctx->id, 0);
+	/* Unique timeline context prevents eviction from shared BO reservation. */
+	dma_fence_init(&fence->base, &fence_ops, &fence->lock, dma_fence_context_alloc(1), 0);
 	return &fence->base;
 }
 
@@ -83,6 +79,9 @@ static void amdxdna_hwctx_destroy_rcu(struct amdxdna_hwctx *hwctx,
 {
 	struct amdxdna_client *client = hwctx->client;
 	struct amdxdna_dev *xdna = client->xdna;
+
+	if (xdna->dev_info->ops->hwctx_stop)
+		xdna->dev_info->ops->hwctx_stop(hwctx);
 
 	synchronize_srcu(ss);
 
@@ -206,11 +205,17 @@ int amdxdna_cmd_set_error(struct amdxdna_gem_obj *abo,
  */
 void amdxdna_hwctx_remove_all(struct amdxdna_client *client)
 {
+	struct amdxdna_dev *xdna = client->xdna;
 	struct amdxdna_hwctx *hwctx;
 	unsigned long hwctx_id;
 
+	if (xdna->dev_info->ops->hwctx_stop) {
+		amdxdna_for_each_hwctx(client, hwctx_id, hwctx)
+			xdna->dev_info->ops->hwctx_stop(hwctx);
+	}
+
 	amdxdna_for_each_hwctx(client, hwctx_id, hwctx) {
-		XDNA_DBG(client->xdna, "PID %d close HW context %d",
+		XDNA_DBG(xdna, "PID %d close HW context %d",
 			 client->pid, hwctx->id);
 		xa_erase(&client->hwctx_xa, hwctx->id);
 		amdxdna_hwctx_destroy_rcu(hwctx, &client->hwctx_srcu);
@@ -289,6 +294,8 @@ int amdxdna_drm_create_hwctx_ioctl(struct drm_device *dev, void *data, struct dr
 free_name:
 	kfree(hwctx->name);
 fini_hwctx:
+	if (xdna->dev_info->ops->hwctx_stop)
+		xdna->dev_info->ops->hwctx_stop(hwctx);
 	xdna->dev_info->ops->hwctx_fini(hwctx);
 release_expanded_heap:
 	amdxdna_hwctx_release_expanded_heap(hwctx);

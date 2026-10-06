@@ -157,6 +157,8 @@ union amdxdna_job_priv {
 	struct {
 		struct list_head	list;
 		u32			state;
+		u32			cmd_bo_cnt;
+		struct amdxdna_gem_obj	**cmd_bos;
 	} aie4;
 };
 
@@ -179,9 +181,11 @@ struct amdxdna_sched_job {
 	struct drm_gem_object	*bos[] __counted_by(bo_cnt);
 };
 
-#define aie2_job_health priv.aie2_health
+#define aie2_job_health	priv.aie2_health
 #define aie4_job_list	priv.aie4.list
 #define aie4_job_state	priv.aie4.state
+#define aie4_cmd_bo_cnt	priv.aie4.cmd_bo_cnt
+#define aie4_cmd_bos	priv.aie4.cmd_bos
 
 static inline u32
 amdxdna_cmd_get_op(struct amdxdna_gem_obj *abo)
