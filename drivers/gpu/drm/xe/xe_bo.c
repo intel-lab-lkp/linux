@@ -3253,7 +3253,14 @@ int xe_bo_pin_external(struct xe_bo *bo, bool in_place, struct drm_exec *exec)
 		}
 
 		spin_lock(&xe->pinned.lock);
-		list_add_tail(&bo->pinned_link, &xe->pinned.late.external);
+		if (list_empty(&bo->pinned_link)) {
+			list_add_tail(&bo->pinned_link,
+				      &xe->pinned.late.external);
+		} else {
+			WARN_ONCE(true,
+				  "pinned_link already added to a list, bo->ttm.pin_count: %d\n",
+				  bo->ttm.pin_count);
+		}
 		spin_unlock(&xe->pinned.lock);
 	}
 
