@@ -3906,7 +3906,8 @@ skb_zerocopy(struct sk_buff *to, struct sk_buff *from, int len, int hlen)
 	struct page *page;
 	unsigned int offset;
 
-	BUG_ON(!from->head_frag && !hlen);
+	if (WARN_ON_ONCE(!from->head_frag && !hlen))
+		return -EFAULT;
 
 	/* dont bother with small payloads */
 	if (len <= skb_tailroom(to))
