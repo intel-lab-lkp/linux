@@ -1,0 +1,50 @@
+The persistent_keyring_expiry selftest verifies that a failed link from
+KEYCTL_GET_PERSISTENT still gives a newly created persistent keyring its
+configured expiry. It requires CONFIG_KEYS, CONFIG_PERSISTENT_KEYRINGS,
+CONFIG_PROC_FS, procfs, and root privileges. The test temporarily changes
+/proc/sys/kernel/keys/persistent_keyring_expiry and restores its original value.
+
+Build and run it against a kernel containing the fix with:
+
+    make -C tools/testing/selftests/keys
+    sudo tools/testing/selftests/keys/persistent_keyring_expiry
+
+The QEMU/GDB instructions assume a configured Linux source tree with an
+existing `.config` and the standard kernel build toolchain. The QEMU runner
+requires `cpio`, `qemu-system-x86_64`, `busybox`, and `ldd`; GDB is required
+for the interactive debugging steps.
+
+For a QEMU/GDB run, build an x86 kernel with debug symbols and
+CONFIG_PERSISTENT_KEYRINGS=y. Starting from an existing `.config`, enable
+the required options and build `bzImage` and `vmlinux`:
+
+    scripts/config --enable KEYS --enable PERSISTENT_KEYRINGS \
+        --enable PROC_FS --enable DEVTMPFS --enable DEVTMPFS_MOUNT \
+        --disable DEBUG_INFO_NONE --enable DEBUG_INFO \
+        --enable DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
+        --enable GDB_SCRIPTS --enable FRAME_POINTER
+    make olddefconfig
+    make -j2 bzImage
+
+Then run:
+
+    tools/testing/selftests/keys/run_qemu.sh path/to/bzImage path/to/vmlinux
+
+In another terminal, attach GDB and continue the paused guest:
+
+    gdb path/to/vmlinux
+    (gdb) target remote localhost:1234
+    (gdb) break key_get_persistent
+    (gdb) break key_set_timeout
+    (gdb) continue
+
+At `key_get_persistent`, inspect `uid` with `info args`. Continue until
+`key_set_timeout` is hit, check `timeout` with `print timeout` (300 seconds),
+then continue to let the test finish. The result is printed on the QEMU serial
+console.
+
+To reproduce the bug, run this test against a kernel built from the parent of
+commit 25bf14f81716. It reports a permanent ("perm") expiry. With the fix, the
+restricted link returns -EPERM and the new keyring has a finite expiry.
+The pre-fix bug can leave a permanent keyring in the test's user namespace
+until that namespace is torn down, so run this reproduction in a disposable VM.
