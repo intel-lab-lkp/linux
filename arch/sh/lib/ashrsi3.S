@@ -62,8 +62,9 @@ __ashrsi3_r0:
 	mova	ashrsi3_table,r0
 	mov.b	@(r0,r4),r4
 	add	r4,r0
+	mov.l	@r15+,r4
 	jmp	@r0
-	mov.l	@r15+,r0
+	mov	r4,r0
 
 	.align	2
 ashrsi3_table:
