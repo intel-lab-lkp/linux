@@ -293,7 +293,8 @@ int frwr_map(struct rpcrdma_xprt *r_xprt,
 	bool sg_gaps = ep->re_mrtype == IB_MR_TYPE_SG_GAPS;
 	unsigned int max_depth = ep->re_max_fr_depth;
 	struct ib_reg_wr *reg_wr;
-	int i, n, dma_nents;
+	struct sg_table sgt;
+	int i, n, dma_nents, ret;
 	struct ib_mr *ibmr;
 	u8 key;
 
@@ -381,10 +382,13 @@ finish:
 	mr->mr_dir = rpcrdma_data_dir(writing);
 	mr->mr_nents = i;
 
-	dma_nents = ib_dma_map_sg(ep->re_id->device, mr->mr_sg, mr->mr_nents,
-				  mr->mr_dir);
-	if (!dma_nents)
+	/* Unlike ib_dma_map_sg(), this reports why a mapping failed */
+	sgt.sgl = mr->mr_sg;
+	sgt.orig_nents = mr->mr_nents;
+	ret = ib_dma_map_sgtable_attrs(ep->re_id->device, &sgt, mr->mr_dir, 0);
+	if (ret || !sgt.nents)
 		goto out_dmamap_err;
+	dma_nents = sgt.nents;
 	mr->mr_device = ep->re_id->device;
 
 	ibmr = mr->mr_ibmr;
@@ -413,7 +417,8 @@ finish:
 
 out_dmamap_err:
 	trace_xprtrdma_frwr_sgerr(mr, i);
-	return -EIO;
+	/* Return -EREMOTEIO if the device cannot reach the P2PDMA memory */
+	return ret == -EREMOTEIO ? ret : -EIO;
 
 out_mapmr_err:
 	trace_xprtrdma_frwr_maperr(mr, n);
