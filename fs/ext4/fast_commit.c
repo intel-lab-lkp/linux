@@ -2428,6 +2428,26 @@ static bool ext4_fc_value_len_isvalid(struct ext4_sb_info *sbi,
 }
 
 /*
+ * The fast commit area ends with an invalid tag or a tail that does not
+ * match.  This is how a fast commit that was only partially written before
+ * a crash looks like: its tail is written last and fsync() only returns
+ * after the tail write has completed, so nobody was told that this fast
+ * commit is durable and it can simply be dropped, the same way jbd2 drops
+ * a transaction without a valid commit block.  Everything up to the last
+ * valid tail is still replayed.
+ */
+static int ext4_fc_replay_scan_end(struct super_block *sb,
+				   struct ext4_fc_replay_state *state,
+				   int off, const char *reason)
+{
+	if (!state->fc_replay_num_tags)
+		ext4_msg(sb, KERN_WARNING,
+			 "ignoring incomplete fast commit at block %d: %s",
+			 off, reason);
+	return JBD2_FC_REPLAY_STOP;
+}
+
+/*
  * Recovery Scan phase handler
  *
  * This function is called during the scan phase and is responsible
@@ -2440,7 +2460,9 @@ static bool ext4_fc_value_len_isvalid(struct ext4_sb_info *sbi,
  * This function returns JBD2_FC_REPLAY_CONTINUE to indicate that SCAN is
  * incomplete and JBD2 should send more blocks. It returns JBD2_FC_REPLAY_STOP
  * to indicate that scan has finished and JBD2 can now start replay phase.
- * It returns a negative error to indicate that there was an error. At the end
+ * It returns a negative error to indicate that there was an error. An invalid
+ * or incomplete fast commit at the end of the area is not an error, see
+ * ext4_fc_replay_scan_end(). At the end
  * of a successful scan phase, sbi->s_fc_replay_state.fc_replay_num_tags is set
  * to indicate the number of tags that need to replayed during the replay phase.
  */
@@ -2489,8 +2511,8 @@ static int ext4_fc_replay_scan(journal_t *journal,
 		val = cur + EXT4_FC_TAG_BASE_LEN;
 		if (tl.fc_len > end - val ||
 		    !ext4_fc_value_len_isvalid(sbi, tl.fc_tag, tl.fc_len)) {
-			ret = state->fc_replay_num_tags ?
-				JBD2_FC_REPLAY_STOP : -ECANCELED;
+			ret = ext4_fc_replay_scan_end(sb, state, off,
+						      "invalid tag length");
 			goto out_err;
 		}
 		ext4_debug("Scan phase, tag:%s, blk %lld\n",
@@ -2530,8 +2552,8 @@ static int ext4_fc_replay_scan(journal_t *journal,
 				state->fc_regions_valid =
 					state->fc_regions_used;
 			} else {
-				ret = state->fc_replay_num_tags ?
-					JBD2_FC_REPLAY_STOP : -EFSBADCRC;
+				ret = ext4_fc_replay_scan_end(sb, state, off,
+							      "invalid tail");
 			}
 			state->fc_crc = 0;
 			break;
@@ -2551,8 +2573,8 @@ static int ext4_fc_replay_scan(journal_t *journal,
 				EXT4_FC_TAG_BASE_LEN + tl.fc_len);
 			break;
 		default:
-			ret = state->fc_replay_num_tags ?
-				JBD2_FC_REPLAY_STOP : -ECANCELED;
+			ret = ext4_fc_replay_scan_end(sb, state, off,
+						      "unknown tag");
 		}
 		if (ret < 0 || ret == JBD2_FC_REPLAY_STOP)
 			break;
