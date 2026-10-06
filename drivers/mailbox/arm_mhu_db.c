@@ -315,12 +315,10 @@ static int mhu_db_probe(struct amba_device *adev, const struct amba_id *id)
 		mhu->mlink[i].tx_reg = mhu->mlink[i].rx_reg + TX_REG_OFFSET;
 
 		err = devm_request_threaded_irq(dev, irq, NULL,
-						mhu_db_mbox_rx_handler,
-						IRQF_ONESHOT, "mhu_db_link", mhu);
-		if (err) {
-			mbox_controller_unregister(&mhu->mbox);
+					mhu_db_mbox_rx_handler,
+					IRQF_ONESHOT, "mhu_db_link", mhu);
+		if (err)
 			return err;
-		}
 	}
 
 	dev_info(dev, "ARM MHU Doorbell mailbox registered\n");
