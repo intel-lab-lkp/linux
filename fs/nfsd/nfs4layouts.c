@@ -707,7 +707,15 @@ nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 	switch (task->tk_status) {
 	case 0:
 	case -NFS4ERR_DELAY:
+	case -NFS4ERR_OLD_STATEID:
 		/*
+		 * RFC 8881 section 12.5.3 wants a new seqid in each
+		 * CB_LAYOUTRECALL request.  The poll below sends the request
+		 * again with the seqid of the first one.  A client that has
+		 * processed that one is at its seqid or past it, and the
+		 * Linux client answers the repeat with NFS4ERR_OLD_STATEID
+		 * while it is returning the layouts.
+		 *
 		 * Anything left? If not, then call it done. Note that we don't
 		 * take the spinlock since this is an optimization and nothing
 		 * should get added until the cb counter goes to zero.
