@@ -107,6 +107,7 @@ static int _skcipher_recvmsg(struct socket *sock, struct msghdr *msg,
 	struct alg_sock *pask = alg_sk(psk);
 	struct af_alg_ctx *ctx = ask->private;
 	struct crypto_skcipher *tfm = pask->private;
+	struct iov_iter saved_iter = msg->msg_iter;
 	unsigned int bs = crypto_skcipher_chunksize(tfm);
 	struct af_alg_async_req *areq;
 	unsigned cflags = 0;
@@ -192,6 +193,11 @@ static int _skcipher_recvmsg(struct socket *sock, struct msghdr *msg,
 
 free:
 	af_alg_free_resources(areq);
+
+	/* The RX SGL may be longer than the request actually processed. */
+	msg->msg_iter = saved_iter;
+	if (!err)
+		iov_iter_advance(&msg->msg_iter, len);
 
 	return err ? err : len;
 }
