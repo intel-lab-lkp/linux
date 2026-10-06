@@ -69,9 +69,15 @@ void vivaldi_feature_mapping(struct hid_device *hdev,
 	ret = hid_hw_raw_request(hdev, report->id, report_data,
 				 report_len, HID_FEATURE_REPORT,
 				 HID_REQ_GET_REPORT);
-	if (ret < 0) {
+	if (ret <= 0) {
 		dev_warn(&hdev->dev, "failed to fetch feature %d\n",
 			 field->report->id);
+		goto out;
+	}
+
+	if (report->id && report_data[0] != report->id) {
+		dev_warn(&hdev->dev, "report ID mismatch: expected %d got %d\n",
+			 report->id, report_data[0]);
 		goto out;
 	}
 
@@ -82,10 +88,11 @@ void vivaldi_feature_mapping(struct hid_device *hdev,
 		 */
 		report_data++;
 		report_len--;
+		ret--;
 	}
 
 	ret = hid_report_raw_event(hdev, HID_FEATURE_REPORT, report_data,
-				   report_len, report_len, 0);
+				   report_len, ret, 0);
 	if (ret) {
 		dev_warn(&hdev->dev, "failed to report feature %d\n",
 			 field->report->id);
