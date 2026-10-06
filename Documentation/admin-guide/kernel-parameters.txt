@@ -3240,6 +3240,25 @@ Kernel parameters
 			max_snp_asid == min_sev_asid-1, will effectively make
 			SEV-ES unusable.
 
+	kvm-amd.esmtp_timeout_ns=
+			[KVM,AMD] Enhanced SMT Protection (ESMTP) VMRUN
+			timeout, in nanoseconds, for SEV-SNP guests that enable
+			ESMTP.  When an ESMTP vCPU executes VMRUN, hardware
+			waits for every sibling thread to either be idle or
+			run a legal sibling vCPU of the same guest before
+			entering guest mode.  If the wait exceeds this timeout,
+			VMRUN exits with VMEXIT_ESMTP_TIMEOUT and KVM retries
+			the VMRUN.
+
+			The value is converted to TSC cycles and programmed
+			into the VMCB when a vCPU is initialized, so changing
+			it at runtime only affects vCPUs that are created or
+			reset afterwards.
+
+			Default is 0, which disables the timeout, i.e. VMRUN
+			waits until the sibling condition is met or a physical
+			interrupt arrives.
+
 	kvm-arm.mode=
 			[KVM,ARM,EARLY] Select one of KVM/arm64's modes of
 			operation.

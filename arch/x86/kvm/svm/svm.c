@@ -591,6 +591,8 @@ static int svm_enable_virtualization_cpu(void)
 		__svm_write_tsc_multiplier(SVM_TSC_RATIO_DEFAULT);
 	}
 
+	sev_esmtp_enable_wakeup_icr();
+
 	svm_init_os_visible_workarounds();
 
 	svm_init_erratum_383();
@@ -3741,6 +3743,12 @@ static int svm_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		kvm_run->fail_entry.cpu = vcpu->arch.last_vmentry_cpu;
 		dump_vmcb(vcpu);
 		return 0;
+	}
+
+	if (svm->vmcb->control.exit_code == SVM_EXIT_ESMTP_RETRY ||
+	    svm->vmcb->control.exit_code == SVM_EXIT_ESMTP_ILLSIB ||
+	    svm->vmcb->control.exit_code == SVM_EXIT_ESMTP_TIMEOUT) {
+		return 1;
 	}
 
 	if (exit_fastpath != EXIT_FASTPATH_NONE)
