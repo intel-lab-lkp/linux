@@ -126,9 +126,11 @@ bool tipc_nametbl_lookup_group(struct net *net, struct tipc_uaddr *ua,
 void tipc_nametbl_build_group(struct net *net, struct tipc_group *grp,
 			      struct tipc_uaddr *ua);
 struct publication *tipc_nametbl_publish(struct net *net, struct tipc_uaddr *ua,
-					 struct tipc_socket_addr *sk, u32 key);
+					 struct tipc_socket_addr *sk, u32 key,
+					 struct sk_buff **skb, u32 *rc_dests);
 void tipc_nametbl_withdraw(struct net *net, struct tipc_uaddr *ua,
-			   struct tipc_socket_addr *sk, u32 key);
+			   struct tipc_socket_addr *sk, u32 key,
+			   struct sk_buff **skb, u32 *rc_dests);
 struct publication *tipc_nametbl_insert_publ(struct net *net,
 					     struct tipc_uaddr *ua,
 					     struct tipc_socket_addr *sk,

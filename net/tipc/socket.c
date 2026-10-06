@@ -2906,22 +2906,26 @@ static void tipc_sk_timeout(struct timer_list *t)
 
 static int tipc_sk_publish(struct tipc_sock *tsk, struct tipc_uaddr *ua)
 {
-	struct sock *sk = &tsk->sk;
-	struct net *net = sock_net(sk);
+	struct net *net = sock_net(&tsk->sk);
 	struct tipc_socket_addr skaddr;
+	struct sk_buff *skb = NULL;
 	struct publication *p;
+	u32 rc_dests;
 	u32 key;
 
-	if (tipc_sk_connected(sk))
+	if (tipc_sk_connected(&tsk->sk))
 		return -EINVAL;
 	key = tsk->portid + tsk->pub_count + 1;
 	if (key == tsk->portid)
 		return -EADDRINUSE;
 	skaddr.ref = tsk->portid;
 	skaddr.node = tipc_own_addr(net);
-	p = tipc_nametbl_publish(net, ua, &skaddr, key);
+	p = tipc_nametbl_publish(net, ua, &skaddr, key, &skb, &rc_dests);
 	if (unlikely(!p))
 		return -EINVAL;
+
+	if (skb)
+		tipc_node_broadcast(net, skb, rc_dests);
 
 	list_add(&p->binding_sock, &tsk->publications);
 	tsk->pub_count++;
@@ -2934,13 +2938,19 @@ static int tipc_sk_withdraw(struct tipc_sock *tsk, struct tipc_uaddr *ua)
 	struct net *net = sock_net(&tsk->sk);
 	struct publication *safe, *p;
 	struct tipc_uaddr _ua;
+	struct sk_buff *skb;
 	int rc = -EINVAL;
+	u32 rc_dests;
 
 	list_for_each_entry_safe(p, safe, &tsk->publications, binding_sock) {
+		skb = NULL;
 		if (!ua) {
 			tipc_uaddr(&_ua, TIPC_SERVICE_RANGE, p->scope,
 				   p->sr.type, p->sr.lower, p->sr.upper);
-			tipc_nametbl_withdraw(net, &_ua, &p->sk, p->key);
+			tipc_nametbl_withdraw(net, &_ua, &p->sk, p->key,
+					      &skb, &rc_dests);
+			if (skb)
+				tipc_node_broadcast(net, skb, rc_dests);
 			continue;
 		}
 		/* Unbind specific publication */
@@ -2952,7 +2962,9 @@ static int tipc_sk_withdraw(struct tipc_sock *tsk, struct tipc_uaddr *ua)
 			continue;
 		if (p->sr.upper != ua->sr.upper)
 			break;
-		tipc_nametbl_withdraw(net, ua, &p->sk, p->key);
+		tipc_nametbl_withdraw(net, ua, &p->sk, p->key, &skb, &rc_dests);
+		if (skb)
+			tipc_node_broadcast(net, skb, rc_dests);
 		rc = 0;
 		break;
 	}

@@ -760,15 +760,14 @@ exit:
 /* tipc_nametbl_publish - add service binding to name table
  */
 struct publication *tipc_nametbl_publish(struct net *net, struct tipc_uaddr *ua,
-					 struct tipc_socket_addr *sk, u32 key)
+					 struct tipc_socket_addr *sk, u32 key,
+					 struct sk_buff **skb, u32 *rc_dests)
 {
 	struct name_table *nt = tipc_name_table(net);
 	u32 max_user_pub = TIPC_MAX_PUBL - 1;
 	struct tipc_net *tn = tipc_net(net);
 	struct publication *p = NULL;
-	struct sk_buff *skb = NULL;
 	bool protocol_type = false;
-	u32 rc_dests;
 
 	if (ua->sr.type == TIPC_NODE_STATE || ua->sr.type == TIPC_LINK_STATE ||
 	    ua->sr.type == TIPC_TOP_SRV)
@@ -797,14 +796,12 @@ insert:
 		 */
 		if (!protocol_type)
 			nt->local_publ_count++;
-		skb = tipc_named_publish(net, p);
+		*skb = tipc_named_publish(net, p);
 	}
-	rc_dests = nt->rc_dests;
+	*rc_dests = nt->rc_dests;
 exit:
 	spin_unlock_bh(&tn->nametbl_lock);
 
-	if (skb)
-		tipc_node_broadcast(net, skb, rc_dests);
 	return p;
 
 }
@@ -815,15 +812,16 @@ exit:
  * @ua: service address/range being unbound
  * @sk: address of the socket being unbound from
  * @key: target publication key
+ * @skb: name distribution message needs to be sent
+ * @rc_dests: the number of replicast destinations
  */
 void tipc_nametbl_withdraw(struct net *net, struct tipc_uaddr *ua,
-			   struct tipc_socket_addr *sk, u32 key)
+			   struct tipc_socket_addr *sk, u32 key,
+			   struct sk_buff **skb, u32 *rc_dests)
 {
 	struct name_table *nt = tipc_name_table(net);
 	struct tipc_net *tn = tipc_net(net);
-	struct sk_buff *skb = NULL;
 	struct publication *p;
-	u32 rc_dests;
 
 	spin_lock_bh(&tn->nametbl_lock);
 
@@ -833,15 +831,12 @@ void tipc_nametbl_withdraw(struct net *net, struct tipc_uaddr *ua,
 		    p->sr.type != TIPC_LINK_STATE &&
 		    p->sr.type != TIPC_TOP_SRV)
 			nt->local_publ_count--;
-		skb = tipc_named_withdraw(net, p);
+		*skb = tipc_named_withdraw(net, p);
 		list_del_init(&p->binding_sock);
 		kfree_rcu(p, rcu);
 	}
-	rc_dests = nt->rc_dests;
+	*rc_dests = nt->rc_dests;
 	spin_unlock_bh(&tn->nametbl_lock);
-
-	if (skb)
-		tipc_node_broadcast(net, skb, rc_dests);
 }
 
 /**
