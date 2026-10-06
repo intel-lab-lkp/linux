@@ -539,7 +539,8 @@ static int cctrng_probe(struct platform_device *pdev)
 	rc = devm_hwrng_register(dev, &drvdata->rng);
 	if (rc) {
 		dev_err(dev, "Could not register hwrng device.\n");
-		goto post_pm_err;
+		cc_trng_pm_fini(drvdata);
+		return rc;
 	}
 
 	/* trigger HW to start generate data */
@@ -552,11 +553,6 @@ static int cctrng_probe(struct platform_device *pdev)
 	dev_info(dev, "ARM cctrng device initialized\n");
 
 	return 0;
-
-post_pm_err:
-	cc_trng_pm_fini(drvdata);
-
-	return rc;
 }
 
 static void cctrng_remove(struct platform_device *pdev)
