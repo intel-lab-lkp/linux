@@ -128,7 +128,9 @@ static __always_inline void riscv_v_disable(void)
 
 static __always_inline bool riscv_v_is_on(void)
 {
-	return !!(csr_read(CSR_SSTATUS) & SR_VS);
+	unsigned long mask = has_xtheadvector() ? SR_VS_THEAD : SR_VS;
+
+	return !!(csr_read(CSR_SSTATUS) & mask);
 }
 
 static __always_inline void __vstate_csr_save(struct __riscv_v_ext_state *dest)
