@@ -99,6 +99,11 @@ When a power limitation is applied to a node, then it is distributed along the c
    |
    `-- pd2 (w=486) --> power_limit = 1519mW
 
+As the weights are based on the maximum power only, the share of a node
+can be lower than its minimum power. In this case, the node gets its
+minimum power and the difference is taken from its siblings,
+proportionally to their headroom above their own minimum power.
+
 
 Flat description
 ----------------

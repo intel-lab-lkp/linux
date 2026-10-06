@@ -196,6 +196,28 @@ static int get_power_limit_uw(struct powercap_zone *pcz,
 }
 
 /*
+ * Compute the share of the power limit of a node given to one of its
+ * children, based on the weight of the child.
+ */
+static u64 __dtpm_child_share(struct dtpm *dtpm, struct dtpm *child,
+			      u64 power_limit)
+{
+	/*
+	 * Integer division rounding will inevitably lead to a different
+	 * min or max value when set several times. In order to restore
+	 * the initial value, we force the child's min or max power every
+	 * time if the constraint is at the boundaries.
+	 */
+	if (power_limit == dtpm->power_max)
+		return child->power_max;
+
+	if (power_limit == dtpm->power_min)
+		return child->power_min;
+
+	return DIV_ROUND_CLOSEST_ULL(power_limit * child->weight, 1024);
+}
+
+/*
  * Set the power limit on the nodes, the power limit is distributed
  * given the weight of the children.
  *
@@ -226,26 +248,42 @@ static int __set_power_limit_uw(struct dtpm *dtpm, int cid, u64 power_limit)
 	if (dtpm->ops) {
 		dtpm->power_limit = dtpm->ops->set_power_uw(dtpm, power_limit);
 	} else {
+		u64 deficit = 0, headroom = 0;
+
+		/*
+		 * The weights are based on the maximum power only, so the
+		 * share of a child can be lower than its minimum power. In
+		 * this case, the child gets its minimum power and the
+		 * difference is taken from the siblings, proportionally to
+		 * their headroom above their own minimum power.
+		 */
+		list_for_each_entry(child, &dtpm->children, sibling) {
+			power = __dtpm_child_share(dtpm, child, power_limit);
+			if (power < child->power_min)
+				deficit += child->power_min - power;
+			else
+				headroom += power - child->power_min;
+		}
+
+		/*
+		 * The power limit of a node is never lower than the sum of
+		 * the minimum power of its children, so the headroom covers
+		 * the deficit except for rounding errors.
+		 */
+		deficit = min(deficit, headroom);
+
 		dtpm->power_limit = 0;
 
 		list_for_each_entry(child, &dtpm->children, sibling) {
 
-			/*
-			 * Integer division rounding will inevitably
-			 * lead to a different min or max value when
-			 * set several times. In order to restore the
-			 * initial value, we force the child's min or
-			 * max power every time if the constraint is
-			 * at the boundaries.
-			 */
-			if (power_limit == dtpm->power_max) {
-				power = child->power_max;
-			} else if (power_limit == dtpm->power_min) {
+			power = __dtpm_child_share(dtpm, child, power_limit);
+
+			if (power < child->power_min)
 				power = child->power_min;
-			} else {
-				power = DIV_ROUND_CLOSEST_ULL(
-					power_limit * child->weight, 1024);
-			}
+			else if (deficit)
+				power -= DIV64_U64_ROUND_UP(deficit *
+						(power - child->power_min),
+						headroom);
 
 			pr_debug("Setting power limit for '%s': %llu uW\n",
 				 child->zone.name, power);
