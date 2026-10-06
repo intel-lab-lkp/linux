@@ -1188,49 +1188,9 @@ static void run_mremap_test_case(struct test test_case, int *failures,
 	}
 }
 
-static void usage(const char *cmd)
-{
-	fprintf(stderr,
-		"Usage: %s [[-t <threshold_mb>] [-p <pattern_seed>]]\n"
-		"-t\t only validate threshold_mb of the remapped region\n"
-		"  \t if 0 is supplied no threshold is used; all tests\n"
-		"  \t are run and remapped regions validated fully.\n"
-		"  \t The default threshold used is 4MB.\n"
-		"-p\t provide a seed to generate the random pattern for\n"
-		"  \t validating the remapped region.\n", cmd);
-}
-
-static int parse_args(int argc, char **argv, unsigned int *threshold_mb,
-		      unsigned int *pattern_seed)
-{
-	const char *optstr = "t:p:";
-	int opt;
-
-	while ((opt = getopt(argc, argv, optstr)) != -1) {
-		switch (opt) {
-		case 't':
-			*threshold_mb = atoi(optarg);
-			break;
-		case 'p':
-			*pattern_seed = atoi(optarg);
-			break;
-		default:
-			usage(argv[0]);
-			return -1;
-		}
-	}
-
-	if (optind < argc) {
-		usage(argv[0]);
-		return -1;
-	}
-
-	return 0;
-}
-
 #define MAX_TEST 15
 #define MAX_PERF_TEST 3
-int main(int argc, char **argv)
+int main(void)
 {
 	int failures = 0;
 	unsigned int i;
@@ -1258,9 +1218,6 @@ int main(int argc, char **argv)
 	get_mmap_min_addr();
 
 	pattern_seed = (unsigned int) time(&t);
-
-	if (parse_args(argc, argv, &threshold_mb, &pattern_seed) < 0)
-		exit(EXIT_FAILURE);
 
 	ksft_print_msg("Test configs:\n");
 	ksft_print_msg("threshold_mb=%u\n", threshold_mb);
