@@ -65,6 +65,7 @@ struct xdr_buf {
 #define XDRBUF_READ		0x01		/* target of file read */
 #define XDRBUF_WRITE		0x02		/* source of file write */
 #define XDRBUF_SPARSE_PAGES	0x04		/* Page array is sparse */
+#define XDRBUF_P2PDMA		0x08		/* Pages are P2PDMA memory */
 
 	unsigned int	buflen,		/* Total length of storage buffer */
 			len;		/* Length of XDR encoded message */

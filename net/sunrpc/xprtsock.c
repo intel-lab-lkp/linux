@@ -961,6 +961,10 @@ static int xs_local_send_request(struct rpc_rqst *req)
 	unsigned int sent;
 	int status;
 
+	/* Sockets move data via CPU accesses, so refuse P2PDMA pages */
+	if (xprt_rqst_has_p2pdma(req))
+		return -EREMOTEIO;
+
 	/* Close the stream if the previous transmission was incomplete */
 	if (xs_send_request_was_aborted(transport, req)) {
 		xprt_force_disconnect(xprt);
@@ -1029,6 +1033,10 @@ static int xs_udp_send_request(struct rpc_rqst *req)
 	};
 	unsigned int sent;
 	int status;
+
+	/* Sockets move data via CPU accesses, so refuse P2PDMA pages */
+	if (xprt_rqst_has_p2pdma(req))
+		return -EREMOTEIO;
 
 	xs_pktdump("packet data:",
 				req->rq_svec->iov_base,
@@ -1116,6 +1124,10 @@ static int xs_tcp_send_request(struct rpc_rqst *req)
 	bool vm_wait;
 	unsigned int sent;
 	int status;
+
+	/* Sockets move data via CPU accesses, so refuse P2PDMA pages */
+	if (xprt_rqst_has_p2pdma(req))
+		return -EREMOTEIO;
 
 	/* Close the stream if the previous transmission was incomplete */
 	if (xs_send_request_was_aborted(transport, req)) {

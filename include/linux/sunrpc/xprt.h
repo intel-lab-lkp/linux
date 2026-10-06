@@ -134,6 +134,11 @@ static inline int xprt_rqst_add_seqno(struct rpc_rqst *req, u32 seqno)
 	return 0;
 }
 
+static inline bool xprt_rqst_has_p2pdma(const struct rpc_rqst *req)
+{
+	return (req->rq_snd_buf.flags | req->rq_rcv_buf.flags) & XDRBUF_P2PDMA;
+}
+
 /* RPC transport layer security policies */
 enum xprtsec_policies {
 	RPC_XPRTSEC_NONE = 0,
