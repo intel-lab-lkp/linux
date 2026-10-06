@@ -1535,6 +1535,7 @@ static bool ata_eh_request_sense(struct ata_queued_cmd *qc)
 /**
  *	atapi_eh_request_sense - perform ATAPI REQUEST_SENSE
  *	@dev: device to perform REQUEST_SENSE to
+ *	@lun: logical unit to request sense from
  *	@sense_buf: result sense data buffer (SCSI_SENSE_BUFFERSIZE bytes long)
  *	@dfl_sense_key: default sense key to use
  *
@@ -1547,13 +1548,15 @@ static bool ata_eh_request_sense(struct ata_queued_cmd *qc)
  *	RETURNS:
  *	0 on success, AC_ERR_* mask on failure
  */
-unsigned int atapi_eh_request_sense(struct ata_device *dev,
-					   u8 *sense_buf, u8 dfl_sense_key)
+unsigned int atapi_eh_request_sense(struct ata_device *dev, u8 lun,
+				    u8 *sense_buf, u8 dfl_sense_key)
 {
 	u8 cdb[ATAPI_CDB_LEN] =
 		{ REQUEST_SENSE, 0, 0, 0, SCSI_SENSE_BUFFERSIZE, 0 };
 	struct ata_port *ap = dev->link->ap;
 	struct ata_taskfile tf;
+
+	cdb[1] = lun << 5;
 
 	memset(sense_buf, 0, SCSI_SENSE_BUFFERSIZE);
 
@@ -1700,6 +1703,7 @@ static unsigned int ata_eh_analyze_tf(struct ata_queued_cmd *qc)
 	case ATA_DEV_ATAPI:
 		if (!ata_port_is_frozen(qc->ap)) {
 			tmp = atapi_eh_request_sense(qc->dev,
+						qc->scsicmd->device->lun,
 						qc->scsicmd->sense_buffer,
 						qc->result_tf.error >> 4);
 			if (!tmp)
@@ -3531,7 +3535,7 @@ static int atapi_eh_clear_ua(struct ata_device *dev)
 		if (!err_mask || sense_key != UNIT_ATTENTION)
 			return 0;
 
-		err_mask = atapi_eh_request_sense(dev, sense_buffer, sense_key);
+		err_mask = atapi_eh_request_sense(dev, 0, sense_buffer, sense_key);
 		if (err_mask) {
 			ata_dev_warn(dev, "failed to clear "
 				"UNIT ATTENTION (err_mask=0x%x)\n", err_mask);

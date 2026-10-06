@@ -216,8 +216,8 @@ extern int ata_ering_map(struct ata_ering *ering,
 			 void *arg);
 enum scsi_disposition ata_eh_decide_disposition(struct ata_queued_cmd *qc);
 extern unsigned int atapi_eh_tur(struct ata_device *dev, u8 *r_sense_key);
-extern unsigned int atapi_eh_request_sense(struct ata_device *dev,
-					   u8 *sense_buf, u8 dfl_sense_key);
+unsigned int atapi_eh_request_sense(struct ata_device *dev, u8 lun,
+				    u8 *sense_buf, u8 dfl_sense_key);
 
 /* libata-pmp.c */
 #ifdef CONFIG_SATA_PMP

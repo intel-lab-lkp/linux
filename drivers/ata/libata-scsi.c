@@ -3112,6 +3112,21 @@ static unsigned int atapi_xlat(struct ata_queued_cmd *qc)
 	memset(qc->cdb, 0, dev->cdb_len);
 	memcpy(qc->cdb, scmd->cmnd, scmd->cmd_len);
 
+	/*
+	 * SCSI-2 CDB LUN encoding: bits 7:5 of byte 1 (3-bit field).
+	 * Byte 1 is left untouched for LUN 0, since commands which use
+	 * the full byte (e.g. MMC SECURITY PROTOCOL IN/OUT, where it is
+	 * the 8-bit security protocol) must pass through unmodified.
+	 */
+	if (unlikely(scmd->device->lun)) {
+		if (scmd->device->lun >= ATAPI_MAX_LUN) {
+			scmd->result = DID_ERROR << 16;
+			return 1;
+		}
+		qc->cdb[1] = (qc->cdb[1] & 0x1f) |
+			     ((u8)scmd->device->lun << 5);
+	}
+
 	qc->complete_fn = atapi_qc_complete;
 
 	qc->tf.flags |= ATA_TFLAG_ISADDR | ATA_TFLAG_DEVICE;
@@ -3222,13 +3237,13 @@ static struct ata_device *__ata_scsi_find_dev(struct ata_port *ap,
 {
 	int devno;
 
-	/* skip commands not addressed to targets we simulate */
+	/* Teardown must still find devices whose class was changed by EH. */
 	if (!sata_pmp_attached(ap)) {
-		if (unlikely(scsidev->channel || scsidev->lun))
+		if (unlikely(scsidev->channel))
 			return NULL;
 		devno = scsidev->id;
 	} else {
-		if (unlikely(scsidev->id || scsidev->lun))
+		if (unlikely(scsidev->id))
 			return NULL;
 		devno = scsidev->channel;
 	}
@@ -3261,6 +3276,10 @@ ata_scsi_find_dev(struct ata_port *ap, const struct scsi_device *scsidev)
 		return NULL;
 
 	if (unlikely(!dev || !ata_dev_enabled(dev)))
+		return NULL;
+
+	/* Only ATAPI devices can route commands to nonzero LUNs. */
+	if (scsidev->lun && dev->class != ATA_DEV_ATAPI)
 		return NULL;
 
 	return dev;

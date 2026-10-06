@@ -113,7 +113,7 @@ static bool zpready(struct ata_device *dev)
 		return false;
 
 	sense_buf = dev->sector_buf;
-	ret = atapi_eh_request_sense(dev, sense_buf, sense_key);
+	ret = atapi_eh_request_sense(dev, 0, sense_buf, sense_key);
 	if (ret)
 		return false;
 
