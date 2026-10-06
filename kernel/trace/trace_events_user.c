@@ -890,16 +890,21 @@ error:
 	user_event_mm_destroy(mm);
 }
 
-static bool current_user_event_enabler_exists(unsigned long uaddr,
-					      unsigned char bit)
+static bool
+current_user_event_enabler_exists(struct user_event_group *group,
+				  unsigned long uaddr, unsigned char bit)
 {
 	struct user_event_mm *user_mm = current_user_event_mm();
 	bool exists;
 
+	lockdep_assert_held(&group->reg_mutex);
+
 	if (!user_mm)
 		return false;
 
+	mutex_lock(&event_mutex);
 	exists = user_event_enabler_exists(user_mm, uaddr, bit);
+	mutex_unlock(&event_mutex);
 
 	user_event_mm_put(user_mm);
 
@@ -2510,7 +2515,8 @@ static long user_events_ioctl_reg(struct user_event_file_info *info,
 	 * for user processes that is far easier to debug if this is explicitly
 	 * an error upon registering.
 	 */
-	if (current_user_event_enabler_exists((unsigned long)reg.enable_addr,
+	if (current_user_event_enabler_exists(info->group,
+					      (unsigned long)reg.enable_addr,
 					      reg.enable_bit))
 		return -EADDRINUSE;
 
