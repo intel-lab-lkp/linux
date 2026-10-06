@@ -2712,6 +2712,8 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 {
 	struct inode *ip = file_inode(file);
 	struct nls_table *codepage = JFS_SBI(ip->i_sb)->nls_tab;
+	/* most bytes one on-disk character can turn into in jfs_dirent */
+	int max_charlen = codepage ? NLS_MAX_CHARSET_SIZE : 1;
 	int rc = 0;
 	loff_t dtpos;	/* legacy OS/2 style position */
 	struct dtoffset {
@@ -2910,9 +2912,10 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 
 			d = (struct ldtentry *) & p->slot[stbl[i]];
 
-			if (((long) jfs_dirent + d->namlen + 1) >
+			if (((long)jfs_dirent->name +
+			     d->namlen * max_charlen + 1) >
 			    ((long)dirent_buf + PAGE_SIZE)) {
-				/* DBCS codepages could overrun dirent_buf */
+				/* the converted name might not fit */
 				index = i;
 				overflow = 1;
 				break;
