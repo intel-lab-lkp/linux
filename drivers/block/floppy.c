@@ -4052,8 +4052,12 @@ static int floppy_open(struct gendisk *disk, blk_mode_t mode)
 			drive_state[drive].last_checked = 0;
 			clear_bit(FD_OPEN_SHOULD_FAIL_BIT,
 				  &drive_state[drive].flags);
-			if (disk_check_media_change(disk))
-				floppy_revalidate(disk);
+			if (disk_check_media_change(disk)) {
+				res = floppy_revalidate(disk);
+				if (res)
+					goto out;
+			}
+			res = -ENXIO;
 			if (test_bit(FD_DISK_CHANGED_BIT, &drive_state[drive].flags))
 				goto out;
 			if (test_bit(FD_OPEN_SHOULD_FAIL_BIT, &drive_state[drive].flags))
