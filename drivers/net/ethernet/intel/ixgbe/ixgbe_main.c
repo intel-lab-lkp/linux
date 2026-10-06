@@ -182,6 +182,7 @@ EXPORT_SYMBOL(ixgbe_xdp_locking_key);
 static struct workqueue_struct *ixgbe_wq;
 
 static bool ixgbe_check_cfg_remove(struct ixgbe_hw *hw, struct pci_dev *pdev);
+static int ixgbe_rebuild_fcoe_queues(struct ixgbe_adapter *adapter);
 static void ixgbe_watchdog_link_is_down(struct ixgbe_adapter *);
 static void ixgbe_watchdog_link_is_up(struct ixgbe_adapter *);
 static void ixgbe_watchdog_update_link(struct ixgbe_adapter *);
@@ -7435,6 +7436,10 @@ int ixgbe_open(struct net_device *netdev)
 	if (test_bit(__IXGBE_TESTING, &adapter->state))
 		return -EBUSY;
 
+	err = ixgbe_rebuild_fcoe_queues(adapter);
+	if (err)
+		return err;
+
 	netif_carrier_off(netdev);
 
 	/* allocate transmit descriptors */
@@ -12347,6 +12352,24 @@ static pci_ers_result_t ixgbe_io_slot_reset(struct pci_dev *pdev)
 	return result;
 }
 
+static int ixgbe_rebuild_fcoe_queues(struct ixgbe_adapter *adapter)
+{
+#ifdef IXGBE_FCOE
+	int err;
+
+	if (!adapter->fcoe.reinit_pending)
+		return 0;
+
+	ixgbe_clear_interrupt_scheme(adapter);
+	err = ixgbe_init_interrupt_scheme(adapter);
+	if (err)
+		return err;
+
+	adapter->fcoe.reinit_pending = false;
+#endif
+	return 0;
+}
+
 /**
  * ixgbe_io_resume - called when traffic can start flowing again.
  * @pdev: Pointer to PCI device
@@ -12358,6 +12381,8 @@ static void ixgbe_io_resume(struct pci_dev *pdev)
 {
 	struct ixgbe_adapter *adapter = pci_get_drvdata(pdev);
 	struct net_device *netdev = adapter->netdev;
+	bool running;
+	int err;
 
 #ifdef CONFIG_PCI_IOV
 	if (adapter->vferr_refcount) {
@@ -12368,8 +12393,19 @@ static void ixgbe_io_resume(struct pci_dev *pdev)
 
 #endif
 	rtnl_lock();
-	if (netif_running(netdev))
-		ixgbe_open(netdev);
+	running = netif_running(netdev);
+	err = ixgbe_rebuild_fcoe_queues(adapter);
+	if (err)
+		e_dev_err("Cannot rebuild queue layout after PCI error recovery: %d\n",
+			  err);
+	if (running && !err) {
+		err = ixgbe_open(netdev);
+		if (err)
+			e_dev_err("Cannot re-open netdev after PCI error recovery: %d\n",
+				  err);
+	}
+	if (err && running)
+		dev_close(netdev);
 
 	netif_device_attach(netdev);
 	rtnl_unlock();
