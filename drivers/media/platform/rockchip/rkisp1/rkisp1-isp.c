@@ -240,13 +240,18 @@ static int rkisp1_config_isp(struct rkisp1_isp *isp,
 		}
 	} else if (sink_fmt->pixel_enc == V4L2_PIXEL_ENC_YUV) {
 		acq_mult = 2;
+		/*
+		 * The datasheet specifies using ITU601 mode for YUV,
+		 * however that results in a garbled image, data mode
+		 * does not exhibit this.
+		 */
 		if (mbus_type == V4L2_MBUS_CSI2_DPHY) {
-			isp_ctrl = RKISP1_CIF_ISP_CTRL_ISP_MODE_ITU601;
+			isp_ctrl = RKISP1_CIF_ISP_CTRL_ISP_MODE_DATA_MODE;
 		} else {
 			if (mbus_type == V4L2_MBUS_BT656)
 				isp_ctrl = RKISP1_CIF_ISP_CTRL_ISP_MODE_ITU656;
 			else
-				isp_ctrl = RKISP1_CIF_ISP_CTRL_ISP_MODE_ITU601;
+				isp_ctrl = RKISP1_CIF_ISP_CTRL_ISP_MODE_DATA_MODE;
 		}
 
 		irq_mask |= RKISP1_CIF_ISP_DATA_LOSS;
