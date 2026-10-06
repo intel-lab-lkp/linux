@@ -75,7 +75,7 @@ static struct sunxi_desc_pin *init_pins_table(struct device *dev,
 					      struct sunxi_pinctrl_desc *desc)
 {
 	struct sunxi_desc_pin *pins, *cur_pin;
-	int name_size = 0;
+	int name_size = 0, npins = 0;
 	int port_base = desc->pin_base / PINS_PER_BANK;
 	char *pin_names, *cur_name;
 	int i, j;
@@ -85,7 +85,7 @@ static struct sunxi_desc_pin *init_pins_table(struct device *dev,
 	 * Also work out how much memory we need to store all the pin names.
 	 */
 	for (i = 0; i < SUNXI_PINCTRL_MAX_BANKS; i++) {
-		desc->npins += pins_per_bank[i];
+		npins += pins_per_bank[i];
 		if (pins_per_bank[i] < 10) {
 			/* 4 bytes for "PXy\0" */
 			name_size += pins_per_bank[i] * 4;
@@ -98,12 +98,14 @@ static struct sunxi_desc_pin *init_pins_table(struct device *dev,
 		}
 	}
 
-	if (desc->npins == 0) {
+	if (npins == 0) {
 		dev_err(dev, "no ports defined\n");
 		return ERR_PTR(-EINVAL);
 	}
 
-	pins = devm_kcalloc(dev, desc->npins, sizeof(*pins), GFP_KERNEL);
+	desc->npins = npins;
+
+	pins = devm_kcalloc(dev, npins, sizeof(*pins), GFP_KERNEL);
 	if (!pins)
 		return ERR_PTR(-ENOMEM);
 
