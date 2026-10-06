@@ -188,6 +188,8 @@ struct rpmi_tee_device;
  * @rdev: owning RPMI service device
  * @shm_rht_lock: protects parcel lookup, insertion, removal and publication
  * @shm_rht: lookup by the host-endian parcel ID and nonce pair
+ * @sec_caps: negotiated optional OPTEE_RPMI_CAP_* features
+ * @notification_count: negotiated nonzero number of logical notification keys
  *
  * Callers keep their tee_shm alive while using its registration. Lookup
  * returns a raw pointer; the mutex does not protect its lifetime after
@@ -199,6 +201,8 @@ struct optee_rpmi {
 	/* Protects parcel lookup, insertion, removal and publication. */
 	struct mutex shm_rht_lock;
 	struct rhashtable shm_rht;
+	u32 sec_caps;
+	u32 notification_count;
 };
 #endif
 
@@ -211,8 +215,8 @@ struct optee;
  * @os_build_id:	OP-TEE OS build identifier (0 if unspecified)
  *
  * Values come from OPTEE_SMC_CALL_GET_OS_REVISION (SMC ABI) or
- * OPTEE_FFA_GET_OS_VERSION (FF-A ABI); this is the trusted OS revision, not an
- * FF-A ABI version.
+ * OPTEE_FFA_GET_OS_VERSION (FF-A ABI) or OPTEE_RPMI_GET_OS_VERSION (RPMI ABI).
+ * This is the trusted OS revision, not a transport ABI version.
  */
 struct optee_revision {
 	u32 os_major;
@@ -490,5 +494,18 @@ static inline void optee_ffa_abi_unregister(void)
 }
 #endif
 
+#if IS_REACHABLE(CONFIG_RISCV_RPMI_TEE_TRANSPORT)
+int optee_rpmi_abi_register(void);
+void optee_rpmi_abi_unregister(void);
+#else
+static inline int optee_rpmi_abi_register(void)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void optee_rpmi_abi_unregister(void)
+{
+}
+#endif
 
 #endif /*OPTEE_PRIVATE_H*/
