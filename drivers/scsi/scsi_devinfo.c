@@ -289,14 +289,9 @@ static void scsi_strcpy_devinfo(char *name, char *to, size_t to_length,
 
 	from_length = strlen(from);
 
-	/*
-	 * null pad and null terminate if compatible
-	 * otherwise space pad
-	 */
-	if (compatible)
-		strscpy_pad(to, from, to_length);
-	else
-		memcpy_and_pad(to, to_length, from, from_length, ' ');
+	/* Full-width identifiers need all bytes; shorter ones are padded. */
+	memcpy_and_pad(to, to_length, from, from_length,
+		       compatible ? '\0' : ' ');
 
 	if (from_length > to_length)
 		 printk(KERN_WARNING "%s: %s string '%s' is too long\n",
