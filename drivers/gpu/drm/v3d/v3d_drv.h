@@ -669,9 +669,9 @@ static __always_inline int v3d_pm_runtime_get(struct v3d_dev *v3d)
 	return pm_runtime_resume_and_get(v3d->drm.dev);
 }
 
-static __always_inline int v3d_pm_runtime_put(struct v3d_dev *v3d)
+static __always_inline void v3d_pm_runtime_put(struct v3d_dev *v3d)
 {
-	return pm_runtime_put_autosuspend(v3d->drm.dev);
+	pm_runtime_put_autosuspend(v3d->drm.dev);
 }
 
 /* v3d_sched.c */
