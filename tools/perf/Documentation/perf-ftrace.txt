@@ -127,7 +127,7 @@ OPTIONS for 'perf ftrace trace'
 	  - retval       - Show function return value.
 	  - retval-hex   - Show function return value in hexadecimal format.
 	  - retaddr      - Show function return address.
-	  - filter-retaddr - Filter out function return address comments from output.
+	  - filter-retaddr - Filter out function return address comments (enabled by default with --inline).
 	  - nosleep-time - Measure on-CPU time only for function_graph tracer.
 	  - noirqs       - Ignore functions that happen inside interrupt.
 	  - verbose      - Show process names, PIDs, timestamps, etc.
@@ -135,9 +135,24 @@ OPTIONS for 'perf ftrace trace'
 	  - depth=<n>    - Set max depth for function graph tracer to follow.
 	  - tail         - Print function name at the end.
 
+--inline::
+	Show inlined functions in function_graph tracer. This requires
+	kernel support for the funcgraph-retaddr option and a vmlinux with
+	debug symbols. Inlined functions are displayed in the call graph
+	hierarchy, and their inlined status is indicated with `/* (inline) */`
+	on entry and exit, e.g. `func() { /* (inline) */` and `} /* func (inline) */`.
+	By default, raw return address comments (`/* <-caller+offset */`)
+	are hidden in the output; specify `--graph-opts retaddr` to show them.
+
 --filter-retaddr::
 	Filter out function return address comments (`/* <-caller+offset */`)
-	from function_graph output.
+	from function_graph output. This is enabled by default when `--inline`
+	is used; use `--no-filter-retaddr` to disable it.
+
+-k::
+--vmlinux=::
+	Path to the vmlinux file containing debug symbols for resolving
+	inlined functions.
 
 
 OPTIONS for 'perf ftrace latency'
