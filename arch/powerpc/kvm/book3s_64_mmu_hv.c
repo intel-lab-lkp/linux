@@ -810,9 +810,11 @@ static void kvm_unmap_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 
 	rmapp = &memslot->arch.rmap[gfn - memslot->base_gfn];
 	for (;;) {
+		preempt_disable();
 		lock_rmap(rmapp);
 		if (!(*rmapp & KVMPPC_RMAP_PRESENT)) {
 			unlock_rmap(rmapp);
+			preempt_enable();
 			break;
 		}
 
@@ -826,6 +828,7 @@ static void kvm_unmap_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 		if (!try_lock_hpte(hptep, HPTE_V_HVLOCK)) {
 			/* unlock rmap before spinning on the HPTE lock */
 			unlock_rmap(rmapp);
+			preempt_enable();
 			while (be64_to_cpu(hptep[0]) & HPTE_V_HVLOCK)
 				cpu_relax();
 			continue;
@@ -834,6 +837,7 @@ static void kvm_unmap_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 		kvmppc_unmap_hpte(kvm, i, memslot, rmapp, gfn);
 		unlock_rmap(rmapp);
 		__unlock_hpte(hptep, be64_to_cpu(hptep[0]));
+		preempt_enable();
 	}
 }
 
@@ -890,6 +894,7 @@ static bool kvm_age_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 
 	rmapp = &memslot->arch.rmap[gfn - memslot->base_gfn];
  retry:
+	preempt_disable();
 	lock_rmap(rmapp);
 	if (*rmapp & KVMPPC_RMAP_REFERENCED) {
 		*rmapp &= ~KVMPPC_RMAP_REFERENCED;
@@ -897,6 +902,7 @@ static bool kvm_age_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 	}
 	if (!(*rmapp & KVMPPC_RMAP_PRESENT)) {
 		unlock_rmap(rmapp);
+		preempt_enable();
 		return ret;
 	}
 
@@ -912,6 +918,7 @@ static bool kvm_age_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 		if (!try_lock_hpte(hptep, HPTE_V_HVLOCK)) {
 			/* unlock rmap before spinning on the HPTE lock */
 			unlock_rmap(rmapp);
+			preempt_enable();
 			while (be64_to_cpu(hptep[0]) & HPTE_V_HVLOCK)
 				cpu_relax();
 			goto retry;
@@ -931,6 +938,7 @@ static bool kvm_age_rmapp(struct kvm *kvm, struct kvm_memory_slot *memslot,
 	} while ((i = j) != head);
 
 	unlock_rmap(rmapp);
+	preempt_enable();
 	return ret;
 }
 
@@ -1219,6 +1227,7 @@ static unsigned long resize_hpt_rehash_hpte(struct kvm_resize_hpt *resize,
 	if (!(vpte & HPTE_V_VALID) && !(vpte & HPTE_V_ABSENT))
 		return 0; /* nothing to do */
 
+	preempt_disable();
 	while (!try_lock_hpte(hptep, HPTE_V_HVLOCK))
 		cpu_relax();
 
@@ -1346,6 +1355,7 @@ static unsigned long resize_hpt_rehash_hpte(struct kvm_resize_hpt *resize,
 
 out:
 	unlock_hpte(hptep, vpte);
+	preempt_enable();
 	return ret;
 }
 
