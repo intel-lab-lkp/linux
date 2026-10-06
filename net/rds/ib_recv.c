@@ -949,6 +949,15 @@ static void rds_ib_process_recv(struct rds_connection *conn,
 		}
 	}
 
+	if (data_len != min_t(u32, ic->i_recv_data_rem, RDS_FRAG_SIZE)) {
+		rds_ib_conn_error(conn,
+				  "incoming fragment payload length %u, expected %u; "
+				  "disconnecting and reconnecting\n",
+				  data_len,
+				  min_t(u32, ic->i_recv_data_rem, RDS_FRAG_SIZE));
+		goto done;
+	}
+
 	list_add_tail(&recv->r_frag->f_item, &ibinc->ii_frags);
 	recv->r_frag = NULL;
 
