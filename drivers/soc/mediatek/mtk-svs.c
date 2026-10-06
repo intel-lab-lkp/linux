@@ -16,6 +16,7 @@
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -1439,6 +1440,7 @@ static int svs_init01(struct svs_platform *svsp)
 	bool search_done;
 	int ret = 0, r;
 	u32 opp_freq, opp_vboot, buck_volt, idx, i;
+	unsigned long skipped = 0;
 
 	if (!svs_mode_available(svsp, SVSB_MODE_INIT01))
 		return 0;
@@ -1542,13 +1544,20 @@ static int svs_init01(struct svs_platform *svsp)
 						      bdata->volt_step,
 						      bdata->volt_base);
 
-		buck_volt = regulator_get_voltage(svsb->buck);
-		if (buck_volt != opp_vboot) {
-			dev_err(svsb->dev,
-				"buck voltage: %uuV, expected vboot: %uuV\n",
-				buck_volt, opp_vboot);
-			ret = -EPERM;
-			goto svs_init01_finish;
+		/*
+		 * The consumer's DVFS (e.g. GPU devfreq while the GPU is idle)
+		 * may not have moved to the vboot OPP yet. Give it a moment,
+		 * then calibrate the remaining banks without this one instead
+		 * of failing the whole SVS probe.
+		 */
+		if (read_poll_timeout(regulator_get_voltage, buck_volt,
+				      buck_volt == opp_vboot, 10000, 500000,
+				      false, svsb->buck)) {
+			dev_warn(svsb->dev,
+				 "buck voltage: %uuV, expected vboot: %uuV, skipping bank\n",
+				 buck_volt, opp_vboot);
+			__set_bit(idx, &skipped);
+			continue;
 		}
 
 		spin_lock_irqsave(&svs_lock, flags);
@@ -1578,6 +1587,14 @@ svs_init01_finish:
 			if (r)
 				dev_err(svsb->dev, "opp %uHz enable fail: %d\n",
 					svsb->opp_dfreq[i], r);
+
+			/* A skipped bank keeps its default OPP voltages */
+			if (test_bit(idx, &skipped))
+				dev_pm_opp_adjust_voltage(svsb->opp_dev,
+							  svsb->opp_dfreq[i],
+							  svsb->opp_dvolt[i],
+							  svsb->opp_dvolt[i],
+							  svsb->opp_dvolt[i]);
 		}
 
 		if (svsb->volt_flags & SVSB_INIT01_PD_REQ) {
@@ -1599,6 +1616,9 @@ svs_init01_finish:
 		if (r)
 			dev_err(svsb->dev, "%s disable fail: %d\n",
 				bdata->buck_name, r);
+
+		if (test_bit(idx, &skipped))
+			svsb->mode_support = SVSB_MODE_ALL_DISABLE;
 	}
 
 svs_init01_resume_cpuidle:
