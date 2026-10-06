@@ -619,6 +619,7 @@ static void sr_release(struct cdrom_device_info *cdi)
 static int sr_probe(struct scsi_device *sdev)
 {
 	struct device *dev = &sdev->sdev_gendev;
+	struct queue_limits lim;
 	struct gendisk *disk;
 	struct scsi_cd *cd;
 	int minor, error;
@@ -700,6 +701,16 @@ static int sr_probe(struct scsi_device *sdev)
 	error = sr_revalidate_disk(cd);
 	if (error)
 		goto unregister_cdrom;
+
+	/* If no medium was ready, match the queue to the driver's guess. */
+	if (queue_logical_block_size(sdev->request_queue) != sdev->sector_size) {
+		lim = queue_limits_start_update(sdev->request_queue);
+		lim.logical_block_size = sdev->sector_size;
+		error = queue_limits_commit_update_frozen(sdev->request_queue,
+							  &lim);
+		if (error)
+			goto unregister_cdrom;
+	}
 
 	error = device_add_disk(&sdev->sdev_gendev, disk, NULL);
 	if (error)
