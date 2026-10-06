@@ -26,6 +26,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/device.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/init.h>
@@ -6388,10 +6389,15 @@ static void ata_port_detach(struct ata_port *ap)
 	ata_for_each_link(link, ap, HOST_FIRST) {
 		ata_for_each_dev(dev, link, ALL) {
 			if (dev->sdev) {
-				spin_unlock_irqrestore(ap->lock, flags);
-				scsi_remove_device(dev->sdev);
-				spin_lock_irqsave(ap->lock, flags);
+				struct scsi_device *sdev = dev->sdev;
+
+				/* The host driver may already be unloading. */
+				get_device(&sdev->sdev_gendev);
 				dev->sdev = NULL;
+				spin_unlock_irqrestore(ap->lock, flags);
+				scsi_remove_device(sdev);
+				put_device(&sdev->sdev_gendev);
+				spin_lock_irqsave(ap->lock, flags);
 			}
 		}
 	}
