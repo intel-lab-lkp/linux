@@ -1694,22 +1694,23 @@ static int __alloc_contig_try_harder(struct gpu_buddy *mm,
 {
 	u64 rhs_offset, lhs_offset, filled, aligned;
 	struct gpu_buddy_block *block;
+	unsigned int min_order, order;
 	struct rb_root *root;
 	struct rb_node *iter;
 	unsigned long pages;
-	unsigned int order;
 	u64 modify_size;
 	int err;
+
+	min_order = ilog2(min_block_size) - ilog2(mm->chunk_size);
 
 	modify_size = rounddown_pow_of_two(size);
 	pages = modify_size >> ilog2(mm->chunk_size);
 	order = fls(pages) - 1;
-	if (order == 0)
-		return -ENOSPC;
 
+retry_order:
 	root = &mm->free_tree[order];
 	if (RB_EMPTY_ROOT(root))
-		return -ENOSPC;
+		goto next_order;
 
 	iter = rb_last(root);
 	while (iter) {
@@ -1773,6 +1774,12 @@ static int __alloc_contig_try_harder(struct gpu_buddy *mm,
 next:
 		gpu_buddy_free_list_internal(mm, blocks);
 		iter = rb_prev(iter);
+	}
+
+next_order:
+	if (order > min_order) {
+		order--;
+		goto retry_order;
 	}
 
 	return -ENOSPC;
