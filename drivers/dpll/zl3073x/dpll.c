@@ -1007,15 +1007,28 @@ zl3073x_dpll_output_pin_frequency_set(const struct dpll_pin *dpll_pin,
 
 	if (zl3073x_dpll_is_p_pin(pin)) {
 		/* We are going to change output frequency for P-pin but
-		 * if the requested frequency is less than current N-pin
-		 * frequency then indicate a failure as we are not able
+		 * if the requested frequency is less or equal than current
+		 * N-pin frequency then indicate a failure as we are not able
 		 * to compute N-pin divisor to keep its frequency unchanged.
 		 *
 		 * Update divisor for N-pin to keep N-pin frequency.
 		 */
-		out.esync_n_period = (out.esync_n_period * out.div) / new_div;
-		if (!out.esync_n_period)
+		u64 prod = mul_u32_u32(out.esync_n_period, out.div);
+		u32 rem;
+
+		out.esync_n_period = div_u64_rem(prod, new_div, &rem);
+		if (rem != 0) {
+			NL_SET_ERR_MSG_FMT(extack,
+					   "OUT%uN freq must divide OUT%uP freq",
+					   out_id, out_id);
 			return -EINVAL;
+		}
+		if (out.esync_n_period < 2) {
+			NL_SET_ERR_MSG_FMT(extack,
+					   "OUT%uN freq must be less than OUT%uP freq",
+					   out_id, out_id);
+			return -EINVAL;
+		}
 
 		/* Update the output divisor */
 		out.div = new_div;
@@ -1030,9 +1043,21 @@ zl3073x_dpll_output_pin_frequency_set(const struct dpll_pin *dpll_pin,
 		 *
 		 * Update divisor for N-pin
 		 */
-		out.esync_n_period = div64_u64(synth_freq, frequency * out.div);
-		if (!out.esync_n_period)
+		u64 rem, prod = frequency * out.div;
+
+		out.esync_n_period = div64_u64_rem(synth_freq, prod, &rem);
+		if (rem != 0) {
+			NL_SET_ERR_MSG_FMT(extack,
+					   "OUT%uN freq must divide OUT%uP freq",
+					   out_id, out_id);
 			return -EINVAL;
+		}
+		if (out.esync_n_period < 2) {
+			NL_SET_ERR_MSG_FMT(extack,
+					   "OUT%uN freq must be less than OUT%uP freq",
+					   out_id, out_id);
+			return -EINVAL;
+		}
 	}
 
 	/* For 50/50 duty cycle the divisor is equal to width */
