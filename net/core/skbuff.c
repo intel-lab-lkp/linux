@@ -4321,7 +4321,8 @@ int skb_shift(struct sk_buff *tgt, struct sk_buff *skb, int shiftlen)
 	int from, to, merge, todo;
 	skb_frag_t *fragfrom, *fragto;
 
-	BUG_ON(shiftlen > skb->len);
+	if (WARN_ON_ONCE(shiftlen > skb->len))
+		return 0;
 
 	if (skb_headlen(skb))
 		return 0;
@@ -4401,6 +4402,12 @@ int skb_shift(struct sk_buff *tgt, struct sk_buff *skb, int shiftlen)
 		}
 	}
 
+	/* The frags ran out before shiftlen did.  Nothing has been committed
+	 * yet, so back out.
+	 */
+	if (WARN_ON_ONCE(todo > 0))
+		return 0;
+
 	/* Ready to "commit" this state change to tgt */
 	skb_shinfo(tgt)->nr_frags = to;
 
@@ -4417,8 +4424,6 @@ int skb_shift(struct sk_buff *tgt, struct sk_buff *skb, int shiftlen)
 	while (from < skb_shinfo(skb)->nr_frags)
 		skb_shinfo(skb)->frags[to++] = skb_shinfo(skb)->frags[from++];
 	skb_shinfo(skb)->nr_frags = to;
-
-	BUG_ON(todo > 0 && !skb_shinfo(skb)->nr_frags);
 
 onlymerged:
 	/* Most likely the tgt won't ever need its checksum anymore, skb on
