@@ -870,7 +870,6 @@ void xhci_free_virt_device(struct xhci_hcd *xhci, struct xhci_virt_device *dev,
 		int slot_id)
 {
 	int i;
-	int old_active_eps = 0;
 
 	/* Slot ID 0 is reserved */
 	if (slot_id == 0 || !dev)
@@ -882,9 +881,6 @@ void xhci_free_virt_device(struct xhci_hcd *xhci, struct xhci_virt_device *dev,
 		xhci->dcbaa.ctx_array[slot_id] = 0;
 
 	trace_xhci_free_virt_device(dev);
-
-	if (dev->tt_info)
-		old_active_eps = dev->tt_info->active_eps;
 
 	for (i = 0; i < 31; i++) {
 		if (dev->eps[i].ring)
@@ -908,8 +904,6 @@ void xhci_free_virt_device(struct xhci_hcd *xhci, struct xhci_virt_device *dev,
 	}
 	/* If this is a hub, free the TT(s) from the TT list */
 	xhci_free_tt_info(xhci, dev, slot_id);
-	/* If necessary, update the number of active TTs on this root port */
-	xhci_update_tt_active_eps(xhci, dev, old_active_eps);
 
 	if (dev->in_ctx)
 		xhci_free_container_ctx(xhci, dev->in_ctx);
