@@ -4,6 +4,7 @@
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
+#include <linux/page_frag_cache.h>
 #include "core.h"
 #include "dp_tx.h"
 #include "hif.h"
@@ -1019,6 +1020,8 @@ static void ath12k_dp_cc_cleanup(struct ath12k_base *ab)
 	}
 
 	spin_unlock_bh(&dp->rx_desc_lock);
+
+	page_frag_cache_drain(&dp->rx_refill_buf_ring.frag_cache);
 
 	/* TX Descriptor cleanup */
 	for (i = 0; i < ATH12K_HW_MAX_QUEUES; i++) {

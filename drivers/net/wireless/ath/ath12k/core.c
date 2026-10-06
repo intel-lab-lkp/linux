@@ -1390,6 +1390,9 @@ static int ath12k_core_reconfigure_on_crash(struct ath12k_base *ab)
 {
 	int ret, total_vdev;
 
+	if (!ab->is_reset)
+		ath12k_hif_irq_disable(ab);
+
 	mutex_lock(&ab->core_lock);
 	ath12k_link_sta_rhash_tbl_destroy(ab);
 	ath12k_thermal_unregister(ab);
