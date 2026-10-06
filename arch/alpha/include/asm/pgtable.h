@@ -65,6 +65,8 @@ struct vm_area_struct;
 #define _PAGE_FOW	0x0004	/* used for page protection (fault on write) */
 #define _PAGE_FOE	0x0008	/* used for page protection (fault on exec) */
 #define _PAGE_ASM	0x0010
+#define _PAGE_GH_MASK	0x0060	/* granularity hint, PTE<6:5> */
+#define _PAGE_GH_SHIFT	5
 /*
  * The Alpha AXP ARM defines 8 protection bits in PTE[15:8]: KRE, ERE, SRE,
  * URE, KWE, EWE, SWE, UWE (Kernel/Executive/Supervisor/User Read/Write
@@ -103,7 +105,36 @@ struct vm_area_struct;
 #define _PFN_MASK	0xFFFFFFFF00000000UL
 
 #define _PAGE_TABLE	(_PAGE_VALID | __DIRTY_BITS | __ACCESS_BITS)
-#define _PAGE_CHG_MASK	(_PFN_MASK | __DIRTY_BITS | __ACCESS_BITS | _PAGE_SPECIAL)
+/*
+ * pte_modify() must preserve the granularity hint, or
+ * hugetlb_change_protection() would turn a block into single-page PTEs.
+ */
+#define _PAGE_CHG_MASK	(_PFN_MASK | __DIRTY_BITS | __ACCESS_BITS | \
+			 _PAGE_GH_MASK | _PAGE_SPECIAL)
+
+/*
+ * Granularity hints. A PTE with hint order N is one of a block of 8^N
+ * physically contiguous pages, naturally aligned both virtually and
+ * physically, that the TB may map with a single entry. With 8KB pages the
+ * four encodings give 8KB, 64KB, 512KB and 4MB.
+ *
+ * Every PTE of a block must still carry the PFN of its own page, and all of
+ * them must agree in bits <15:0>: the protection, fault, hint and valid bits.
+ * __ACCESS_BITS and __DIRTY_BITS reach into that range, so young and dirty
+ * updates have to be applied to the whole block too.
+ *
+ * The hint is advisory: an implementation that ignores it still translates
+ * correctly through the individual PTEs, so it is safe to set on any Alpha.
+ */
+#define GH_ORDER_MAX	4			/* hint orders 0..3 */
+
+#define gh_cont_shift(order)	(PAGE_SHIFT + 3 * (order))
+#define gh_cont_size(order)	(1UL << gh_cont_shift(order))
+#define gh_cont_mask(order)	(~(gh_cont_size(order) - 1))
+#define gh_pte_num(order)	(1UL << (3 * (order)))
+
+#define for_each_gh_order(order) \
+	for ((order) = 1; (order) < GH_ORDER_MAX; (order)++)
 
 /*
  * All the normal masks have the "page accessed" bits on, as any time they are used,
@@ -268,6 +299,24 @@ extern inline pte_t pte_mkdirty(pte_t pte)	{ pte_val(pte) |= __DIRTY_BITS; retur
 extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= __ACCESS_BITS; return pte; }
 extern inline int pte_special(pte_t pte)	{ return pte_val(pte) & _PAGE_SPECIAL; }
 extern inline pte_t pte_mkspecial(pte_t pte)	{ pte_val(pte) |= _PAGE_SPECIAL; return pte; }
+
+extern inline unsigned int pte_gh_order(pte_t pte)
+{
+	return (pte_val(pte) & _PAGE_GH_MASK) >> _PAGE_GH_SHIFT;
+}
+
+extern inline pte_t pte_mkgh(pte_t pte, unsigned int order)
+{
+	pte_val(pte) &= ~_PAGE_GH_MASK;
+	pte_val(pte) |= (unsigned long)order << _PAGE_GH_SHIFT;
+	return pte;
+}
+
+/*
+ * Swap PTEs leave bits <31:0> clear, so this is false for every swap,
+ * migration and marker entry, not just for ordinary small pages.
+ */
+extern inline int pte_huge(pte_t pte)		{ return pte_val(pte) & _PAGE_GH_MASK; }
 
 /*
  * The smp_rmb() in the following functions are required to order the load of
