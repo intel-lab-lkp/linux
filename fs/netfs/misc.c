@@ -6,103 +6,8 @@
  */
 
 #include <linux/swap.h>
+#include <linux/rmap.h>
 #include "internal.h"
-
-/**
- * netfs_alloc_folioq_buffer - Allocate buffer space into a folio queue
- * @mapping: Address space to set on the folio (or NULL).
- * @_buffer: Pointer to the folio queue to add to (may point to a NULL; updated).
- * @_cur_size: Current size of the buffer (updated).
- * @size: Target size of the buffer.
- * @gfp: The allocation constraints.
- */
-int netfs_alloc_folioq_buffer(struct address_space *mapping,
-			      struct folio_queue **_buffer,
-			      size_t *_cur_size, ssize_t size, gfp_t gfp)
-{
-	struct folio_queue *tail = *_buffer, *p;
-
-	size = round_up(size, PAGE_SIZE);
-	if (*_cur_size >= size)
-		return 0;
-
-	if (tail)
-		while (tail->next)
-			tail = tail->next;
-
-	do {
-		struct folio *folio;
-		int order = 0, slot;
-
-		if (!tail || folioq_full(tail)) {
-			p = netfs_folioq_alloc(0, GFP_NOFS, netfs_trace_folioq_alloc_buffer);
-			if (!p)
-				return -ENOMEM;
-			if (tail) {
-				tail->next = p;
-				p->prev = tail;
-			} else {
-				*_buffer = p;
-			}
-			tail = p;
-		}
-
-		if (size - *_cur_size > PAGE_SIZE)
-			order = umin(ilog2(size - *_cur_size) - PAGE_SHIFT,
-				     MAX_PAGECACHE_ORDER);
-
-		folio = folio_alloc(gfp, order);
-		if (!folio && order > 0)
-			folio = folio_alloc(gfp, 0);
-		if (!folio)
-			return -ENOMEM;
-
-		folio->mapping = mapping;
-		folio->index = *_cur_size / PAGE_SIZE;
-		trace_netfs_folio(folio, netfs_folio_trace_alloc_buffer);
-		slot = folioq_append_mark(tail, folio);
-		*_cur_size += folioq_folio_size(tail, slot);
-	} while (*_cur_size < size);
-
-	return 0;
-}
-EXPORT_SYMBOL(netfs_alloc_folioq_buffer);
-
-/**
- * netfs_free_folioq_buffer - Free a folio queue.
- * @fq: The start of the folio queue to free
- *
- * Free up a chain of folio_queues and, if marked, the marked folios they point
- * to.
- */
-void netfs_free_folioq_buffer(struct folio_queue *fq)
-{
-	struct folio_queue *next;
-	struct folio_batch fbatch;
-
-	folio_batch_init(&fbatch);
-
-	for (; fq; fq = next) {
-		for (int slot = 0; slot < folioq_count(fq); slot++) {
-			struct folio *folio = folioq_folio(fq, slot);
-
-			if (!folio ||
-			    !folioq_is_marked(fq, slot))
-				continue;
-
-			trace_netfs_folio(folio, netfs_folio_trace_put);
-			if (folio_batch_add(&fbatch, folio))
-				folio_batch_release(&fbatch);
-		}
-
-		netfs_stat_d(&netfs_n_folioq);
-		next = fq->next;
-		kfree(fq);
-	}
-
-	folio_batch_release(&fbatch);
-}
-EXPORT_SYMBOL(netfs_free_folioq_buffer);
 
 /*
  * Reset the subrequest iterator to refer just to the region remaining to be
@@ -193,7 +98,7 @@ void netfs_clear_inode_writeback(struct inode *inode, const void *aux)
 	struct fscache_cookie *cookie = netfs_i_cookie(netfs_inode(inode));
 
 	if (inode_state_read_once(inode) & I_PINNING_NETFS_WB) {
-		loff_t i_size = i_size_read(inode);
+		uoff_t i_size = i_size_read(inode);
 		fscache_unuse_cookie(cookie, aux, &i_size);
 	}
 }
@@ -218,8 +123,8 @@ void netfs_invalidate_folio(struct folio *folio, size_t offset, size_t length)
 	_enter("{%lx},%zx,%zx", folio->index, offset, length);
 
 	if (offset == 0 && length == flen) {
-		unsigned long long i_size, remote_i_size, zero_point;
-		unsigned long long fpos = folio_pos(folio), end;
+		uoff_t i_size, remote_i_size, zero_point;
+		uoff_t fpos = folio_pos(folio), end;
 
 		netfs_read_sizes(inode, &i_size, &remote_i_size, &zero_point);
 		end = umin(fpos + flen, i_size);
@@ -305,7 +210,7 @@ bool netfs_release_folio(struct folio *folio, gfp_t gfp)
 {
 	struct inode *inode = folio_inode(folio);
 	struct netfs_inode *ctx = netfs_inode(inode);
-	unsigned long long i_size, remote_i_size, zero_point, end;
+	uoff_t i_size, remote_i_size, zero_point, end;
 
 	if (folio_test_dirty(folio))
 		return false;
@@ -424,7 +329,7 @@ static int netfs_collect_in_app(struct netfs_io_request *rreq,
 			need_collect = true;
 			break;
 		}
-		if (subreq || !test_bit(NETFS_RREQ_ALL_QUEUED, &rreq->flags))
+		if (subreq || !netfs_are_all_subreqs_queued(rreq))
 			done = false;
 	}
 
@@ -582,3 +487,101 @@ void netfs_wait_for_put_ra_refs(struct netfs_io_request *rreq)
 	trace_netfs_rreq(rreq, netfs_rreq_trace_waited_put_ra_refs);
 	finish_wait(&rreq->waitq, &myself);
 }
+
+/**
+ * netfs_clear_stale_isize - Clear stale pagecache in a to-be-created hole
+ * @inode: The inode to act upon.
+ * @from: The base of the hole to be made.
+ * @to: The top of the hole to be made.
+ * @nowait: True to return -EAGAIN rather than block.
+ * @exclusive: True if the caller holds i_rwsem exclusively for the resize.
+ *
+ * Zero any data left in the pagecache within the [@from, @to) hole by a
+ * write through an mmap so that it isn't exposed as file content once the
+ * file is extended.  Only the uptodate folio straddling @from can hold such
+ * data as pages wholly beyond the EOF can't be faulted in, so the zeroing
+ * is limited to that folio.  The folio is zeroed rather than dropped so
+ * that a concurrent extending write can't lose data.
+ *
+ * If @exclusive is false, @from is re-read from i_size and used to clamp
+ * the zeroed range, for callers that may race with another writer also
+ * extending the file (eg. multiple buffered writes extending the same file
+ * under a shared i_rwsem).  If @exclusive is true, for callers that hold
+ * i_rwsem exclusively across the whole resize and have already updated
+ * i_size to @to, staleness is decided from the folio's dirty state instead:
+ * since no genuine concurrent buffered writer can be racing, a lockless
+ * stat() adopting a server-confirmed size mid-resize has no data behind it
+ * and never dirties the folio, so it can't fool this check into skipping
+ * the zeroing the way it could fool the @exclusive false clamp.
+ *
+ * pagecache_isize_extended() can't be reused here: it is keyed on a
+ * sub-page block size (a no-op when the block size is >= PAGE_SIZE, as on
+ * network filesystems), runs after i_size is updated, can't honour
+ * @nowait, and doesn't wait for writeback.  Keep the two in sync if either
+ * is changed.
+ *
+ * Return: 0 on success, or -EAGAIN if @nowait is set and the folio is
+ * mapped or under writeback and so can't be cleaned without blocking.
+ */
+static int netfs_clear_stale_isize(struct inode *inode, uoff_t from,
+				   uoff_t to, bool nowait, bool exclusive)
+{
+	struct address_space *mapping = inode->i_mapping;
+	fgf_t fgp = FGP_LOCK;
+	struct folio *folio;
+	int ret;
+
+	if (from >= to)
+		return 0;
+
+	if (nowait)
+		fgp |= FGP_NOWAIT;
+
+	folio = __filemap_get_folio(mapping, from >> PAGE_SHIFT, fgp, 0);
+	if (IS_ERR(folio))
+		return PTR_ERR(folio) == -EAGAIN ? -EAGAIN : 0;
+
+	ret = 0;
+	if (nowait && (folio_mapped(folio) || folio_test_writeback(folio))) {
+		ret = -EAGAIN;
+		goto out;
+	}
+
+	folio_wait_writeback(folio);
+
+	if (folio_mkclean(folio))
+		folio_mark_dirty(folio);
+
+	if (folio_test_uptodate(folio) &&
+	    (!exclusive || folio_test_dirty(folio))) {
+		uoff_t fpos = folio_pos(folio);
+
+		if (!exclusive)
+			from = umax(from, i_size_read(inode));
+		if (from < to && from < fpos + folio_size(folio)) {
+			size_t end = umin(to - fpos, folio_size(folio));
+			size_t offset = from - fpos;
+
+			folio_zero_segment(folio, offset, end);
+		}
+	}
+out:
+	folio_unlock(folio);
+	folio_put(folio);
+	return ret;
+}
+
+/* Clear stale pagecache before an extending buffered/DIO write. */
+int netfs_clear_stale_pre_isize(struct inode *inode, uoff_t from,
+				uoff_t to, bool nowait)
+{
+	return netfs_clear_stale_isize(inode, from, to, nowait, false);
+}
+
+/* Clear stale pagecache when extending a file under an exclusive resize. */
+void netfs_clear_stale_post_isize(struct inode *inode, uoff_t from,
+				  uoff_t to)
+{
+	netfs_clear_stale_isize(inode, from, to, false, true);
+}
+EXPORT_SYMBOL(netfs_clear_stale_post_isize);
