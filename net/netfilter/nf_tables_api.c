@@ -123,6 +123,12 @@ static void nft_validate_state_update(struct nft_table *table, u8 new_validate_s
 	table->validate_state = new_validate_state;
 }
 
+static bool nft_chain_vstate_valid_prio(const struct nft_chain_validate_state *v,
+					s32 priority)
+{
+	return v->prio_min <= priority && priority <= v->prio_max;
+}
+
 static bool nft_chain_vstate_valid(const struct nft_ctx *ctx,
 				   const struct nft_chain *chain)
 {
@@ -137,9 +143,10 @@ static bool nft_chain_vstate_valid(const struct nft_ctx *ctx,
 	hooknum = base_chain->ops.hooknum;
 	type = base_chain->type->type;
 
-	/* chain is already validated for this call depth */
+	/* chain is already validated for this call depth and priority */
 	if (chain->vstate.depth >= ctx->level &&
-	    chain->vstate.hook_mask[type] & BIT(hooknum))
+	    chain->vstate.hook_mask[type] & BIT(hooknum) &&
+	    nft_chain_vstate_valid_prio(&chain->vstate, base_chain->ops.priority))
 		return true;
 
 	return false;
@@ -2750,6 +2757,25 @@ int nft_chain_add(struct nft_table *table, struct nft_chain *chain)
 
 static u64 chain_id;
 
+static void nft_chain_vstate_init(struct nft_chain_validate_state *v)
+{
+	memset(v, 0, sizeof(*v));
+
+	/* Inverted.  A chain at priority P can skip valiation
+	 * if min <= P <= max.
+	 *
+	 * The inverted start fails the test for all values of P.
+	 * nft_chain_vstate_update() will shrink prio_min to P
+	 * and grow prio_max to P, so that after first run:
+	 * prio_min == prio_max == P.  A subsequent validation
+	 * request will only skip if P1 == P2 amd revalidate
+	 * otherwise, including an update of either prio_min or
+	 * prio_max.
+	 */
+	v->prio_min = INT_MAX;
+	v->prio_max = INT_MIN;
+}
+
 static int nf_tables_addchain(struct nft_ctx *ctx, u8 family, u8 policy,
 			      u32 flags, struct netlink_ext_ack *extack)
 {
@@ -2818,6 +2844,7 @@ static int nf_tables_addchain(struct nft_ctx *ctx, u8 family, u8 policy,
 	}
 	ctx->chain = chain;
 
+	nft_chain_vstate_init(&chain->vstate);
 	INIT_LIST_HEAD(&chain->rules);
 	chain->handle = nf_tables_alloc_handle(table);
 	chain->table = table;
@@ -4149,15 +4176,21 @@ static void nf_tables_rule_release(const struct nft_ctx *ctx, struct nft_rule *r
 	nf_tables_rule_destroy(ctx, rule);
 }
 
+static void nft_chain_vstate_reinit(struct nft_chain_validate_state *v)
+{
+	nft_chain_vstate_init(v);
+}
+
 static void nft_chain_vstate_update(const struct nft_ctx *ctx, struct nft_chain *chain)
 {
 	const struct nft_base_chain *base_chain;
 	enum nft_chain_types type;
 	u8 hooknum;
+	s32 prio;
 
 	/* ctx->chain must hold the calling base chain. */
 	if (WARN_ON_ONCE(!nft_is_base_chain(ctx->chain))) {
-		memset(&chain->vstate, 0, sizeof(chain->vstate));
+		nft_chain_vstate_reinit(&chain->vstate);
 		return;
 	}
 
@@ -4170,6 +4203,13 @@ static void nft_chain_vstate_update(const struct nft_ctx *ctx, struct nft_chain 
 	chain->vstate.hook_mask[type] |= BIT(hooknum);
 	if (chain->vstate.depth < ctx->level)
 		chain->vstate.depth = ctx->level;
+
+	prio = base_chain->ops.priority;
+	if (prio < chain->vstate.prio_min)
+		chain->vstate.prio_min = prio;
+	if (prio > chain->vstate.prio_max)
+		chain->vstate.prio_max = prio;
+
 }
 
 /** nft_chain_validate - loop detection and hook validation
@@ -4248,7 +4288,7 @@ static int nft_table_validate(struct net *net, const struct nft_table *table)
 
 err:
 	list_for_each_entry(chain, &table->chains, list)
-		memset(&chain->vstate, 0, sizeof(chain->vstate));
+		nft_chain_vstate_reinit(&chain->vstate);
 
 	return err;
 }

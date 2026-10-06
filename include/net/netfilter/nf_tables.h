@@ -1106,10 +1106,14 @@ enum nft_chain_types {
  *
  *	@hook_mask: the hook numbers and locations the chain is linked to
  *	@depth: the deepest call chain level the chain is linked to
+ *	@prio_min: lowest priority the chain was validated with
+ *	@prio_max: highest priority the chain was validated with
  */
 struct nft_chain_validate_state {
 	u8			hook_mask[NFT_CHAIN_T_MAX];
 	u8			depth;
+	s32			prio_min;
+	s32			prio_max;
 };
 
 /**

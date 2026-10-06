@@ -1198,6 +1198,11 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL)
 		return NF_ACCEPT;
 
+	if (unlikely(nf_ct_is_template(ct))) {
+		DEBUG_NET_WARN_ON_ONCE(1);
+		return NF_ACCEPT;
+	}
+
 	zone = nf_ct_zone(ct);
 	local_bh_disable();
 

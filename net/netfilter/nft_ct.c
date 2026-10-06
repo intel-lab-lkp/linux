@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/netlink.h>
 #include <linux/netfilter.h>
+#include <linux/netfilter_ipv4.h>
 #include <linux/netfilter/nf_tables.h>
 #include <net/netfilter/nf_tables_core.h>
 #include <net/netfilter/nf_conntrack.h>
@@ -755,6 +756,46 @@ static const struct nft_expr_ops nft_ct_set_ops = {
 };
 
 #ifdef CONFIG_NF_CONNTRACK_ZONES
+static int nft_ct_set_zone_validate(const struct nft_ctx *ctx,
+				    const struct nft_expr *expr)
+{
+	unsigned int hooks;
+	int err;
+
+	/* Setting the zone template only makes sense before conntrack has
+	 * assigned a zone to the packet, i.e. in prerouting and output,
+	 * and only if this rule runs before the conntrack hook itself.
+	 * Locally originated bridge traffic is conntrack'd by the IP stack,
+	 * not on the bridge, so only prerouting applies there.
+	 */
+	switch (ctx->family) {
+	case NFPROTO_IPV4:
+	case NFPROTO_IPV6:
+	case NFPROTO_INET:
+		hooks = (1 << NF_INET_PRE_ROUTING) | (1 << NF_INET_LOCAL_OUT);
+		break;
+	case NFPROTO_BRIDGE:
+		hooks = (1 << NF_INET_PRE_ROUTING);
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	err = nft_chain_validate_hooks(ctx->chain, hooks);
+	if (err)
+		return err;
+
+	if (nft_is_base_chain(ctx->chain)) {
+		const struct nft_base_chain *basechain = nft_base_chain(ctx->chain);
+
+		if (basechain->type->type == NFT_CHAIN_T_NAT ||
+		    basechain->ops.priority >= NF_IP_PRI_CONNTRACK)
+			return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 static const struct nft_expr_ops nft_ct_set_zone_ops = {
 	.type		= &nft_ct_type,
 	.size		= NFT_EXPR_SIZE(sizeof(struct nft_ct)),
@@ -762,6 +803,7 @@ static const struct nft_expr_ops nft_ct_set_zone_ops = {
 	.init		= nft_ct_set_init,
 	.destroy	= nft_ct_set_destroy,
 	.dump		= nft_ct_set_dump,
+	.validate	= nft_ct_set_zone_validate,
 };
 #endif
 
