@@ -497,6 +497,8 @@ static int verify_blob(struct virtio_gpu_device *vgdev,
 	params->blob_hints = rc_blob->blob_hints;
 
 	if (vgdev->has_blob_alignment &&
+	    (vfpriv->context_init & VIRTIO_GPU_CONTEXT_INIT_CAPSET_ID_MASK) !=
+	    VIRTIO_GPU_CAPSET_CROSS_DOMAIN &&
 	    !IS_ALIGNED(params->size, vgdev->blob_alignment))
 		return -EINVAL;
 
