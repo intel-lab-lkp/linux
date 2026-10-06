@@ -179,11 +179,11 @@ type=4
 config=17039629
 optional=1
 
-# PERF_TYPE_RAW / CPU_CLK_UNHALTED.THREAD
+# PERF_TYPE_RAW / cpu-cycles (core PMU sysfs event; Intel 0x3c, AMD 0x76)
 [event22:base-stat]
 fd=22
 type=4
-config=60
+config=60|118
 optional=1
 
 # PERF_TYPE_RAW / INT_MISC.RECOVERY_CYCLES_ANY
@@ -233,4 +233,32 @@ optional=1
 fd=29
 type=4
 config=4269
+optional=1
+
+# PERF_TYPE_RAW / instructions (core PMU sysfs event)
+[event30:base-stat]
+fd=30
+type=4
+config=192
+optional=1
+
+# PERF_TYPE_RAW / branch-misses (core PMU sysfs event; Intel 0xc5, AMD 0xc3)
+[event31:base-stat]
+fd=31
+type=4
+config=197|195
+optional=1
+
+# PERF_TYPE_RAW / stalled-cycles-frontend (core PMU sysfs event; AMD 0xd0/0x287/0xa9)
+[event32:base-stat]
+fd=32
+type=4
+config=208|647|169
+optional=1
+
+# PERF_TYPE_RAW / stalled-cycles-backend (core PMU sysfs event; AMD 0xd1/0x187)
+[event33:base-stat]
+fd=33
+type=4
+config=209|391
 optional=1
