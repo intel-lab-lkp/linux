@@ -1359,6 +1359,30 @@ config SERIAL_CONEXANT_DIGICOLOR_CONSOLE
 	  If you have enabled the USART serial port on Conexant Digicolor
 	  SoCs, you can make it the console by answering Y to this option.
 
+config SERIAL_CORTINA
+	tristate "Cortina UART support"
+	depends on ARCH_CORTINA_ACCESS || COMPILE_TEST
+	depends on OF
+	select SERIAL_CORE
+	help
+	  Support for the on-chip UART of Cortina Systems CS75xx
+	  (Goldengate G2) SoCs such as the CS7542. Cortina Access SoCs use
+	  the same UART. The ports are named ttyCS0 to ttyCS3.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called cortina-uart.
+
+config SERIAL_CORTINA_CONSOLE
+	bool "Console on Cortina UART"
+	depends on SERIAL_CORTINA=y
+	select SERIAL_CORE_CONSOLE
+	select SERIAL_EARLYCON
+	help
+	  Say Y here to use a Cortina UART as the system
+	  console. This also enables the early console, which can be
+	  selected with "earlycon" on the kernel command line when the
+	  device tree chosen node has a stdout-path pointing at the UART.
+
 config SERIAL_ST_ASC
 	tristate "ST ASC serial port support"
 	select SERIAL_CORE
