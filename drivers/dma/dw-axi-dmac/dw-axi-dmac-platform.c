@@ -1059,6 +1059,36 @@ static void axi_chan_list_dump_lli(struct axi_dma_chan *chan,
 		axi_chan_dump_lli(chan, &desc_head->hw_desc[i]);
 }
 
+#define AXI_DMA_DATA_ERR	(DWAXIDMAC_IRQ_SRC_DEC_ERR | \
+			 DWAXIDMAC_IRQ_SRC_SLV_ERR | \
+			 DWAXIDMAC_IRQ_DST_DEC_ERR | \
+			 DWAXIDMAC_IRQ_DST_SLV_ERR)
+
+static const char *axi_chan_err_str(u32 status)
+{
+	if (status & DWAXIDMAC_IRQ_SRC_DEC_ERR)
+		return "source decode error";
+	if (status & DWAXIDMAC_IRQ_SRC_SLV_ERR)
+		return "source slave error";
+	if (status & DWAXIDMAC_IRQ_DST_DEC_ERR)
+		return "destination decode error";
+	if (status & DWAXIDMAC_IRQ_DST_SLV_ERR)
+		return "destination slave error";
+	if (status & DWAXIDMAC_IRQ_LLI_RD_DEC_ERR)
+		return "LLI read decode error";
+	if (status & DWAXIDMAC_IRQ_LLI_RD_SLV_ERR)
+		return "LLI read slave error";
+	if (status & DWAXIDMAC_IRQ_LLI_WR_DEC_ERR)
+		return "LLI write-back decode error";
+	if (status & DWAXIDMAC_IRQ_LLI_WR_SLV_ERR)
+		return "LLI write-back slave error";
+	if (status & DWAXIDMAC_IRQ_INVALID_ERR)
+		return "invalid LLI or shadow register";
+	if (status & DWAXIDMAC_IRQ_MULTIBLKTYPE_ERR)
+		return "invalid multi-block transfer type";
+	return "slave interface error";
+}
+
 static noinline void axi_chan_handle_err(struct axi_dma_chan *chan, u32 status)
 {
 	struct virt_dma_desc *vd;
@@ -1078,11 +1108,19 @@ static noinline void axi_chan_handle_err(struct axi_dma_chan *chan, u32 status)
 	/* Remove the completed descriptor from issued list */
 	list_del(&vd->node);
 
-	/* WARN about bad descriptor */
+	/*
+	 * SAR and DAR advance as each burst is issued, so with bursts still
+	 * outstanding they can be a little past the one that failed.
+	 */
 	dev_err(chan2dev(chan),
-		"Bad descriptor submitted for %s, cookie: %d, irq: 0x%08x\n",
-		axi_chan_name(chan), vd->tx.cookie, status);
-	axi_chan_list_dump_lli(chan, vd_to_axi_desc(vd));
+		"%s for %s, cookie: %d, irq: 0x%08x, SAR: 0x%llx DAR: 0x%llx LLP: 0x%llx\n",
+		axi_chan_err_str(status), axi_chan_name(chan), vd->tx.cookie,
+		status, lo_hi_readq(chan->chan_regs + CH_SAR),
+		lo_hi_readq(chan->chan_regs + CH_DAR),
+		lo_hi_readq(chan->chan_regs + CH_LLP));
+	/* Only dump LLIs on non-data errors */
+	if (status & (DWAXIDMAC_IRQ_ALL_ERR & ~AXI_DMA_DATA_ERR))
+		axi_chan_list_dump_lli(chan, vd_to_axi_desc(vd));
 
 	if (status & (DWAXIDMAC_IRQ_SRC_DEC_ERR | DWAXIDMAC_IRQ_SRC_SLV_ERR))
 		vd->tx_result.result = DMA_TRANS_READ_FAILED;
