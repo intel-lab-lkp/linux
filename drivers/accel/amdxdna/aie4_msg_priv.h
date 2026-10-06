@@ -12,6 +12,7 @@
 enum aie4_msg_opcode {
 	AIE4_MSG_OP_IDENTIFY                         = 0x10002,
 	AIE4_MSG_OP_SUSPEND                          = 0x10003,
+	AIE4_MSG_OP_SET_RUNTIME_CONFIG               = 0x10007,
 	AIE4_MSG_OP_QUERY_CERT_FIRMWARE_VERSION      = 0x1000F,
 
 	AIE4_MSG_OP_CREATE_VFS                       = 0x20001,
@@ -63,6 +64,29 @@ struct aie4_msg_suspend_req {
 
 struct aie4_msg_suspend_resp {
 	enum aie4_msg_status status;
+} __packed;
+
+/* Type selector for AIE4_MSG_OP_SET_RUNTIME_CONFIG. */
+enum aie4_msg_runtime_config_type {
+	AIE4_RUNTIME_CONFIG_CTX_SWITCH_HYSTERESIS	= 0xD,
+	AIE4_MAX_RUNTIME_CONFIG
+};
+
+struct aie4_msg_set_runtime_cfg_req {
+	__u32 type;
+	__u8 data[4];
+} __packed;
+
+struct aie4_msg_set_runtime_cfg_resp {
+	enum aie4_msg_status status;
+} __packed;
+
+/* Maximum payload for runtime config firmware message. */
+#define AIE4_RUNTIME_CFG_MAX_DATA_SIZE 16
+
+/* Context switch hysteresis timeout in microseconds (0 disables). */
+struct aie4_msg_runtime_config_ctx_switch_hysteresis {
+	__u32 timeout_us;
 } __packed;
 
 struct aie4_msg_create_vfs_req {
