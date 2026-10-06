@@ -1899,12 +1899,6 @@ static int indx_insert_into_buffer(struct ntfs_index *indx,
 		return -EINVAL;
 
 	sp_size = le16_to_cpu(sp->size);
-	up_e = kmalloc(sp_size + sizeof(u64), GFP_NOFS);
-	if (!up_e)
-		return -ENOMEM;
-	memcpy(up_e, sp, sp_size);
-
-	/* Make a copy for undo. */
 	used1 = le32_to_cpu(hdr1->used);
 
 	/*
@@ -1913,13 +1907,19 @@ static int indx_insert_into_buffer(struct ntfs_index *indx,
 	 * that (PtrOffset(hdr1, sp) + sp_size) exceeds used1. Without this
 	 * guard the u32 'used = used1 - to_copy - sp_size' underflows and
 	 * the subsequent memmove count becomes a near-4-GiB value,
-	 * triggering an out-of-bounds kernel write.
+	 * triggering an out-of-bounds kernel write. The memcpy below also
+	 * reads sp_size bytes starting at sp, so the check has to happen
+	 * before it.
 	 */
-	if (PtrOffset(hdr1, sp) + sp_size > used1) {
-		err = -EINVAL;
-		goto out;
-	}
+	if (PtrOffset(hdr1, sp) + sp_size > used1)
+		return -EINVAL;
 
+	up_e = kmalloc(sp_size + sizeof(u64), GFP_NOFS);
+	if (!up_e)
+		return -ENOMEM;
+	memcpy(up_e, sp, sp_size);
+
+	/* Make a copy for undo. */
 	hdr1_saved = kmemdup(hdr1, used1, GFP_NOFS);
 	if (!hdr1_saved) {
 		err = -ENOMEM;
