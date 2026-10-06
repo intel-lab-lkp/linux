@@ -727,7 +727,7 @@ static void mremap_move_multi_invalid_vmas(FILE *maps_fp,
 	const size_t size = 10 * page_size;
 	bool success = true;
 	char *ptr, *tgt_ptr;
-	int uffd, err, i;
+	int uffd, i;
 	void *res;
 	struct uffdio_api api = {
 		.api = UFFD_API,
@@ -736,12 +736,11 @@ static void mremap_move_multi_invalid_vmas(FILE *maps_fp,
 
 	uffd = syscall(__NR_userfaultfd, O_NONBLOCK);
 	if (uffd == -1) {
-		err = errno;
-		perror("userfaultfd");
-		if (err == EPERM) {
+		if (errno == EPERM) {
 			ksft_test_result_skip("%s - missing uffd", test_name);
 			return;
 		}
+		perror("userfaultfd");
 		success = false;
 		goto out;
 	}
@@ -810,14 +809,12 @@ static void mremap_move_multi_invalid_vmas(FILE *maps_fp,
 	 * time.
 	 */
 	res = mremap(ptr, size, size, MREMAP_MAYMOVE | MREMAP_FIXED, tgt_ptr);
-	err = errno;
 	if (res != MAP_FAILED) {
 		fprintf(stderr, "mremap() succeeded for multi VMA uffd armed\n");
 		success = false;
 		goto out_unmap;
 	}
-	if (err != EFAULT) {
-		errno = err;
+	if (errno != EFAULT) {
 		perror("mremap() unexpected error");
 		success = false;
 		goto out_unmap;
@@ -863,14 +860,12 @@ static void mremap_move_multi_invalid_vmas(FILE *maps_fp,
 	 * first VMA, but no others, and report a failure.
 	 */
 	res = mremap(ptr, size, size, MREMAP_MAYMOVE | MREMAP_FIXED, tgt_ptr);
-	err = errno;
 	if (res != MAP_FAILED) {
 		fprintf(stderr, "mremap() succeeded for multi VMA uffd armed\n");
 		success = false;
 		goto out_unmap;
 	}
-	if (err != EFAULT) {
-		errno = err;
+	if (errno != EFAULT) {
 		perror("mremap() unexpected error");
 		success = false;
 		goto out_unmap;
@@ -912,14 +907,12 @@ static void mremap_move_multi_invalid_vmas(FILE *maps_fp,
 	 * the last VMA, and report a failure.
 	 */
 	res = mremap(ptr, size, size, MREMAP_MAYMOVE | MREMAP_FIXED, tgt_ptr);
-	err = errno;
 	if (res != MAP_FAILED) {
 		fprintf(stderr, "mremap() succeeded for multi VMA uffd armed\n");
 		success = false;
 		goto out_unmap;
 	}
-	if (err != EFAULT) {
-		errno = err;
+	if (errno != EFAULT) {
 		perror("mremap() unexpected error");
 		success = false;
 		goto out_unmap;
