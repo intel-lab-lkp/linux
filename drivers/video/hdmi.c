@@ -1429,6 +1429,29 @@ static void hdmi_audio_infoframe_log(const char *level,
 			frame->downmix_inhibit ? "Yes" : "No");
 }
 
+/**
+ * hdmi_eotf_get_name() - get the name of an electro-optical transfer function
+ * @eotf: electro-optical transfer function
+ *
+ * Returns: a human readable name for @eotf, or "Invalid" if @eotf is not a
+ * transfer function defined by CTA-861.
+ */
+const char *hdmi_eotf_get_name(enum hdmi_eotf eotf)
+{
+	switch (eotf) {
+	case HDMI_EOTF_TRADITIONAL_GAMMA_SDR:
+		return "Traditional gamma SDR";
+	case HDMI_EOTF_TRADITIONAL_GAMMA_HDR:
+		return "Traditional gamma HDR";
+	case HDMI_EOTF_SMPTE_ST2084:
+		return "SMPTE ST2084";
+	case HDMI_EOTF_BT_2100_HLG:
+		return "BT.2100 HLG";
+	}
+	return "Invalid";
+}
+EXPORT_SYMBOL(hdmi_eotf_get_name);
+
 static void hdmi_drm_infoframe_log(const char *level,
 				   struct device *dev,
 				   const struct hdmi_drm_infoframe *frame)

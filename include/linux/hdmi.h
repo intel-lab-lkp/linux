@@ -468,4 +468,6 @@ int hdmi_infoframe_unpack(union hdmi_infoframe *frame,
 void hdmi_infoframe_log(const char *level, struct device *dev,
 			const union hdmi_infoframe *frame);
 
+const char *hdmi_eotf_get_name(enum hdmi_eotf eotf);
+
 #endif /* _DRM_HDMI_H */
