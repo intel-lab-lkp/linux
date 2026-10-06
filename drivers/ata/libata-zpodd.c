@@ -173,6 +173,22 @@ bool zpodd_zpready(struct ata_device *dev)
 	return zpodd->zp_ready;
 }
 
+/* Return a referenced SCSI device; the caller must drop it outside ap->lock. */
+static struct scsi_device *zpodd_get_sdev(struct ata_device *dev)
+{
+	struct ata_port *ap = dev->link->ap;
+	struct scsi_device *sdev;
+	unsigned long flags;
+
+	spin_lock_irqsave(ap->lock, flags);
+	sdev = dev->sdev;
+	if (sdev && scsi_device_get(sdev))
+		sdev = NULL;
+	spin_unlock_irqrestore(ap->lock, flags);
+
+	return sdev;
+}
+
 /*
  * Enable runtime wake capability through ACPI and set the powered_off flag,
  * this flag will be used during resume to decide what operations are needed
@@ -184,8 +200,12 @@ bool zpodd_zpready(struct ata_device *dev)
 void zpodd_enable_run_wake(struct ata_device *dev)
 {
 	struct zpodd *zpodd = dev->zpodd;
+	struct scsi_device *sdev = zpodd_get_sdev(dev);
 
-	sdev_disable_disk_events(dev->sdev);
+	if (sdev) {
+		sdev_disable_disk_events(sdev);
+		scsi_device_put(sdev);
+	}
 
 	zpodd->powered_off = true;
 	acpi_pm_set_device_wakeup(&dev->tdev, true);
@@ -218,6 +238,7 @@ void zpodd_disable_run_wake(struct ata_device *dev)
 void zpodd_post_poweron(struct ata_device *dev)
 {
 	struct zpodd *zpodd = dev->zpodd;
+	struct scsi_device *sdev;
 
 	if (!zpodd->powered_off)
 		return;
@@ -233,19 +254,29 @@ void zpodd_post_poweron(struct ata_device *dev)
 	zpodd->zp_sampled = false;
 	zpodd->zp_ready = false;
 
-	sdev_enable_disk_events(dev->sdev);
+	sdev = zpodd_get_sdev(dev);
+	if (sdev) {
+		sdev_enable_disk_events(sdev);
+		scsi_device_put(sdev);
+	}
 }
 
 static void zpodd_wake_dev(acpi_handle handle, u32 event, void *context)
 {
 	struct ata_device *ata_dev = context;
 	struct zpodd *zpodd = ata_dev->zpodd;
-	struct device *dev = &ata_dev->sdev->sdev_gendev;
+	struct scsi_device *sdev;
 
-	if (event == ACPI_NOTIFY_DEVICE_WAKE && pm_runtime_suspended(dev)) {
+	if (event != ACPI_NOTIFY_DEVICE_WAKE)
+		return;
+	sdev = zpodd_get_sdev(ata_dev);
+	if (!sdev)
+		return;
+	if (pm_runtime_suspended(&sdev->sdev_gendev)) {
 		zpodd->from_notify = true;
-		pm_runtime_resume(dev);
+		pm_runtime_resume(&sdev->sdev_gendev);
 	}
+	scsi_device_put(sdev);
 }
 
 static void ata_acpi_add_pm_notifier(struct ata_device *dev)
