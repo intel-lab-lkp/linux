@@ -1322,12 +1322,6 @@ struct xhci_td {
  */
 #define XHCI_CMD_DEFAULT_TIMEOUT	5000
 
-/* command descriptor */
-struct xhci_cd {
-	struct xhci_command	*command;
-	union xhci_trb		*cmd_trb;
-};
-
 enum xhci_ring_type {
 	TYPE_CTRL = 0,
 	TYPE_ISOC,
@@ -1422,12 +1416,6 @@ struct s3_save {
 	u32	dev_nt;
 	u64	dcbaa_ptr;
 	u32	config_reg;
-};
-
-/* Use for lpm */
-struct dev_info {
-	u32			dev_id;
-	struct	list_head	list;
 };
 
 struct xhci_bus_state {
