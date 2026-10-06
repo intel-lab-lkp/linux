@@ -838,15 +838,21 @@ int ixgbe_fcoe_enable(struct net_device *netdev)
 	struct ixgbe_fcoe *fcoe = &adapter->fcoe;
 	bool running;
 
+	/* Unsupported adapters do not take a reference */
+	if (!(adapter->flags & IXGBE_FLAG_FCOE_CAPABLE))
+		return -EINVAL;
+
 	/* libfcoe calls ndo_fcoe_disable() even when this callback fails. */
 	atomic_inc(&fcoe->refcnt);
 
 	if (!netif_device_present(netdev))
 		return -ENETDOWN;
 
-	if (!(adapter->flags & IXGBE_FLAG_FCOE_CAPABLE))
-		return -EINVAL;
-
+	/* If offload is enabled, only skip HW init, but keep the reference.
+	 * ixgbe_fcoe_disable() decreases the refcount for this case and only
+	 * disables the offload when the refcount reaches 0. This handles the case
+	 * where multiple offload interfaces are enabled on the same PF (e.g. VLANs)
+	 */
 	if (adapter->flags & IXGBE_FLAG_FCOE_ENABLED)
 		return -EINVAL;
 
@@ -891,6 +897,9 @@ int ixgbe_fcoe_disable(struct net_device *netdev)
 {
 	struct ixgbe_adapter *adapter = ixgbe_from_netdev(netdev);
 	bool running;
+
+	if (!(adapter->flags & IXGBE_FLAG_FCOE_CAPABLE))
+		return -EINVAL;
 
 	if (!atomic_dec_and_test(&adapter->fcoe.refcnt))
 		return -EINVAL;
