@@ -340,7 +340,7 @@ static void mremap_move_within_range(unsigned int pattern_seed, char *rand_addr)
 	if (new_ptr == MAP_FAILED) {
 		ksft_perror("mremap");
 		success = 0;
-		goto out;
+		goto out_unmap;
 	}
 
 	/* Verify byte pattern after remapping */
@@ -357,9 +357,9 @@ static void mremap_move_within_range(unsigned int pattern_seed, char *rand_addr)
 		}
 	}
 
-out:
+out_unmap:
 	munmap(ptr, size);
-
+out:
 	ksft_test_result(success, "%s\n", test_name);
 }
 
@@ -415,7 +415,7 @@ static void mremap_move_multiple_vmas(unsigned int pattern_seed,
 	if (tgt_ptr == MAP_FAILED) {
 		ksft_perror("mmap");
 		success = false;
-		goto out;
+		goto out_unmap_src;
 	}
 	if (munmap(tgt_ptr, 2 * size)) {
 		ksft_perror("munmap");
@@ -501,6 +501,7 @@ static void mremap_move_multiple_vmas(unsigned int pattern_seed,
 
 out_unmap:
 	munmap(tgt_ptr, 2 * size);
+out_unmap_src:
 	munmap(ptr, size);
 out:
 	ksft_test_result(success, "%s%s\n", test_name, dont_unmap ? " [dontunmap]" : "");
@@ -529,7 +530,7 @@ static void mremap_shrink_multiple_vmas(unsigned long page_size,
 	if (tgt_ptr == MAP_FAILED) {
 		ksft_perror("mmap");
 		success = false;
-		goto out;
+		goto out_unmap_src;
 	}
 	if (munmap(tgt_ptr, size)) {
 		ksft_perror("munmap");
@@ -573,6 +574,7 @@ static void mremap_shrink_multiple_vmas(unsigned long page_size,
 
 out_unmap:
 	munmap(tgt_ptr, size);
+out_unmap_src:
 	munmap(ptr, size);
 out:
 	ksft_test_result(success, "%s%s\n", test_name, inplace ? " [inplace]" : "");
@@ -605,7 +607,7 @@ static void mremap_move_multiple_vmas_split(unsigned int pattern_seed,
 	if (tgt_ptr == MAP_FAILED) {
 		ksft_perror("mmap");
 		success = false;
-		goto out;
+		goto out_unmap_src;
 	}
 	if (munmap(tgt_ptr, size)) {
 		ksft_perror("munmap");
@@ -690,6 +692,7 @@ static void mremap_move_multiple_vmas_split(unsigned int pattern_seed,
 
 out_unmap:
 	munmap(tgt_ptr, size);
+out_unmap_src:
 	munmap(ptr, size);
 out:
 	ksft_test_result(success, "%s%s\n", test_name, dont_unmap ? " [dontunmap]" : "");
@@ -738,7 +741,7 @@ static void mremap_move_multi_invalid_vmas(FILE *maps_fp,
 	if (tgt_ptr == MAP_FAILED) {
 		ksft_perror("mmap");
 		success = false;
-		goto out_close_uffd;
+		goto out_unmap_src;
 	}
 	if (munmap(tgt_ptr, size)) {
 		ksft_perror("munmap");
@@ -910,6 +913,7 @@ static void mremap_move_multi_invalid_vmas(FILE *maps_fp,
 
 out_unmap:
 	munmap(tgt_ptr, size);
+out_unmap_src:
 	munmap(ptr, size);
 out_close_uffd:
 	close(uffd);
