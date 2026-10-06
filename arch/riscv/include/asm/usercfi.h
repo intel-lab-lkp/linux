@@ -48,6 +48,8 @@ bool is_indir_lp_enabled(struct task_struct *task);
 bool is_indir_lp_locked(struct task_struct *task);
 void set_indir_lp_status(struct task_struct *task, bool enable);
 void set_indir_lp_lock(struct task_struct *task, bool lock);
+bool is_user_shstk_enabled(void);
+bool is_user_lpad_enabled(void);
 
 #define PR_SHADOW_STACK_SUPPORTED_STATUS_MASK (PR_SHADOW_STACK_ENABLE)
 #define PR_CFI_SUPPORTED_STATUS_MASK (PR_CFI_ENABLE | PR_CFI_DISABLE | PR_CFI_LOCK)
@@ -88,10 +90,11 @@ void set_indir_lp_lock(struct task_struct *task, bool lock);
 
 #define get_active_shstk(task) 0UL
 
-#endif /* CONFIG_RISCV_USER_CFI */
+static __always_inline bool is_user_shstk_enabled(void) { return false; }
 
-bool is_user_shstk_enabled(void);
-bool is_user_lpad_enabled(void);
+static __always_inline bool is_user_lpad_enabled(void) { return false; }
+
+#endif /* CONFIG_RISCV_USER_CFI */
 
 #endif /* __ASSEMBLER__ */
 
