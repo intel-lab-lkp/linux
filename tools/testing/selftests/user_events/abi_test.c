@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <linux/user_events.h>
 #include <stdio.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -256,6 +257,130 @@ FIXTURE_SETUP(user) {
 
 FIXTURE_TEARDOWN(user) {
 	USER_EVENT_FIXTURE_TEARDOWN(self->umount);
+}
+
+struct thread_registration {
+	pthread_mutex_t lock;
+	pthread_cond_t cond;
+	__u32 enable;
+	bool start;
+	bool first_done;
+	bool second_done;
+	int first_ret;
+	int first_errno;
+	int first_unreg_ret;
+	int second_ret;
+	int second_errno;
+};
+
+static int reg_enable_name(void *enable, const char *name, int *saved_errno)
+{
+	struct user_reg reg = {0};
+	int fd = open(data_file, O_RDWR);
+	int ret;
+
+	if (fd < 0) {
+		*saved_errno = errno;
+		return -1;
+	}
+
+	reg.size = sizeof(reg);
+	reg.name_args = (__u64)name;
+	reg.enable_bit = 0;
+	reg.enable_addr = (__u64)enable;
+	reg.enable_size = sizeof(__u32);
+
+	errno = 0;
+	ret = ioctl(fd, DIAG_IOCSREG, &reg);
+	*saved_errno = errno;
+
+	close(fd);
+
+	return ret;
+}
+
+static void *register_first(void *arg)
+{
+	struct thread_registration *registration = arg;
+
+	pthread_mutex_lock(&registration->lock);
+	while (!registration->start)
+		pthread_cond_wait(&registration->cond, &registration->lock);
+	pthread_mutex_unlock(&registration->lock);
+
+	registration->first_ret = reg_enable_name(&registration->enable,
+						  "__abi_event_thread_a",
+						  &registration->first_errno);
+
+	pthread_mutex_lock(&registration->lock);
+	registration->first_done = true;
+	pthread_cond_broadcast(&registration->cond);
+
+	while (!registration->second_done)
+		pthread_cond_wait(&registration->cond, &registration->lock);
+	pthread_mutex_unlock(&registration->lock);
+
+	if (!registration->first_ret)
+		registration->first_unreg_ret =
+			reg_disable(&registration->enable, 0);
+
+	return NULL;
+}
+
+static void *register_second(void *arg)
+{
+	struct thread_registration *registration = arg;
+
+	pthread_mutex_lock(&registration->lock);
+	while (!registration->start)
+		pthread_cond_wait(&registration->cond, &registration->lock);
+	while (!registration->first_done)
+		pthread_cond_wait(&registration->cond, &registration->lock);
+	pthread_mutex_unlock(&registration->lock);
+
+	registration->second_ret = reg_enable_name(&registration->enable,
+						   "__abi_event_thread_b",
+						   &registration->second_errno);
+
+	pthread_mutex_lock(&registration->lock);
+	registration->second_done = true;
+	pthread_cond_broadcast(&registration->cond);
+	pthread_mutex_unlock(&registration->lock);
+
+	if (!registration->second_ret)
+		reg_disable(&registration->enable, 0);
+
+	return NULL;
+}
+
+TEST_F(user, preexisting_threads_same_address) {
+	struct thread_registration registration = {
+		.lock = PTHREAD_MUTEX_INITIALIZER,
+		.cond = PTHREAD_COND_INITIALIZER,
+	};
+	pthread_t first;
+	pthread_t second;
+
+	ASSERT_EQ(0, pthread_create(&first, NULL, register_first, &registration));
+	ASSERT_EQ(0, pthread_create(&second, NULL, register_second, &registration));
+
+	pthread_mutex_lock(&registration.lock);
+	registration.start = true;
+	pthread_cond_broadcast(&registration.cond);
+	pthread_mutex_unlock(&registration.lock);
+
+	ASSERT_EQ(0, pthread_join(first, NULL));
+	ASSERT_EQ(0, pthread_join(second, NULL));
+
+	pthread_cond_destroy(&registration.cond);
+	pthread_mutex_destroy(&registration.lock);
+
+	ASSERT_EQ(0, registration.first_ret);
+	ASSERT_EQ(0, registration.first_errno);
+	ASSERT_EQ(0, registration.first_unreg_ret);
+
+	ASSERT_EQ(-1, registration.second_ret);
+	ASSERT_EQ(EADDRINUSE, registration.second_errno);
 }
 
 TEST_F(user, enablement) {
