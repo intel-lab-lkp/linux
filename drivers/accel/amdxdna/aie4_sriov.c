@@ -6,6 +6,7 @@
 #include <drm/amdxdna_accel.h>
 #include <drm/drm_print.h>
 #include <linux/pci.h>
+#include <linux/pm_runtime.h>
 
 #include "aie.h"
 #include "aie4_msg_priv.h"
@@ -117,6 +118,46 @@ static int aie4_link_vf(struct amdxdna_dev *xdna, struct pci_dev *pdev_vf)
 
 	XDNA_DBG(xdna, "Linked VF %s", pci_name(pdev_vf));
 	return 0;
+}
+
+/* Check if a VF is actively running workloads or in passthrough. */
+static int aie4_check_vf_alive(struct amdxdna_dev *xdna, struct pci_dev *pdev_vf)
+{
+	struct device *pf_dev = xdna->ddev.dev;
+	struct device_driver *drv;
+	bool busy = false;
+
+	if (!device_trylock(&pdev_vf->dev)) {
+		XDNA_WARN(xdna, "VF:%s is busy (locked)", pci_name(pdev_vf));
+		return -EBUSY;
+	}
+
+	drv = pdev_vf->dev.driver;
+	if (!drv) {
+		device_unlock(&pdev_vf->dev);
+		return 0;
+	}
+
+	/* VF bound to a driver other than the PF's (amdxdna) is passthrough. */
+	if (drv != pf_dev->driver) {
+		XDNA_WARN(xdna, "VF:%s is in passthrough", pci_name(pdev_vf));
+		busy = true;
+	} else if (!pm_runtime_suspended(&pdev_vf->dev)) {
+		XDNA_WARN(xdna, "VF:%s is busy", pci_name(pdev_vf));
+		busy = true;
+	}
+
+	device_unlock(&pdev_vf->dev);
+	return busy ? -EBUSY : 0;
+}
+
+int aie4_vfs_alive(struct amdxdna_dev *xdna)
+{
+	if (pci_vfs_assigned(to_pci_dev(xdna->ddev.dev))) {
+		XDNA_WARN(xdna, "VF devices are being used in VMs, cannot suspend");
+		return -EBUSY;
+	}
+	return aie4_for_each_vfs(xdna, aie4_check_vf_alive);
 }
 
 static int aie4_link_vfs(struct amdxdna_dev *xdna)
