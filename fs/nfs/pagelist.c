@@ -771,6 +771,14 @@ static void nfs_pgio_prepare(struct rpc_task *task, void *calldata)
 {
 	struct nfs_pgio_header *hdr = calldata;
 	int err;
+
+	/* P2PDMA payloads move only by DMA */
+	if (hdr->args.p2pdma &&
+	    test_bit(RPCAUTH_AUTH_DATATOUCH,
+		     &task->tk_client->cl_auth->au_flags)) {
+		rpc_exit(task, -EREMOTEIO);
+		return;
+	}
 	err = NFS_PROTO(hdr->inode)->pgio_rpc_prepare(task, hdr);
 	if (err)
 		rpc_exit(task, err);
