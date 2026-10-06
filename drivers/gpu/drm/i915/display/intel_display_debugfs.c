@@ -4,6 +4,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/hdmi.h>
 #include <linux/string_choices.h>
 #include <linux/string_helpers.h>
 
@@ -243,6 +244,93 @@ static void intel_hdmi_info(struct seq_file *m,
 	seq_printf(m, "\taudio support: %s\n", str_yes_no(has_audio));
 }
 
+static void intel_hdr_sink_info(struct drm_printer *p,
+				struct drm_connector *connector)
+{
+	const struct hdr_static_metadata *hdr =
+		&connector->display_info.hdr_sink_metadata.hdmi_type1;
+	const struct drm_luminance_range_info *lum =
+		&connector->display_info.luminance_range;
+	int i;
+
+	/*
+	 * Any transfer function other than the mandatory traditional gamma
+	 * SDR one means the sink is declaring HDR support.
+	 */
+	drm_printf_indent(p, 1, "HDR sink capable: %s\n",
+			  str_yes_no(hdr->eotf &
+				     ~BIT(HDMI_EOTF_TRADITIONAL_GAMMA_SDR)));
+	if (!hdr->eotf)
+		return;
+
+	drm_printf_indent(p, 2, "supported EOTFs:\n");
+	for (i = HDMI_EOTF_TRADITIONAL_GAMMA_SDR; i <= HDMI_EOTF_BT_2100_HLG; i++)
+		if (hdr->eotf & BIT(i))
+			drm_printf_indent(p, 3, "%s\n", hdmi_eotf_get_name(i));
+
+	drm_printf_indent(p, 2, "static metadata type1: %s\n",
+			  str_yes_no(hdr->metadata_type &
+				     BIT(HDMI_STATIC_METADATA_TYPE1)));
+
+	/*
+	 * The luminance fields are optional, and an EDID that omits them is
+	 * indistinguishable from one declaring zero. luminance_range is only
+	 * populated when they are actually present.
+	 */
+	if (!lum->max_luminance) {
+		drm_printf_indent(p, 2, "luminance range: not specified\n");
+		return;
+	}
+
+	drm_printf_indent(p, 2, "luminance range: %u-%u nits\n",
+			  lum->min_luminance, lum->max_luminance);
+	drm_printf_indent(p, 2, "EDID max_cll: %u, max_fall: %u, min_cll: %u\n",
+			  hdr->max_cll, hdr->max_fall, hdr->min_cll);
+}
+
+static void intel_hdr_output_info(struct drm_printer *p,
+				  struct drm_connector *connector)
+{
+	const struct drm_connector_state *conn_state = connector->state;
+	const struct intel_crtc_state *crtc_state;
+	const struct hdmi_drm_infoframe *frame;
+
+	if (!conn_state || !conn_state->crtc)
+		return;
+
+	crtc_state = to_intel_crtc_state(conn_state->crtc->state);
+
+	drm_printf_indent(p, 1, "HDR output metadata blob: %s\n",
+			  str_yes_no(conn_state->hdr_output_metadata));
+
+	/*
+	 * Both HDMI and DP fill in infoframes.drm, but HDMI transmits it as a
+	 * DRM InfoFrame and DP as a gamut metadata SDP, each with its own
+	 * enable bit.
+	 */
+	if (!(crtc_state->infoframes.enable &
+	      (intel_hdmi_infoframe_enable(HDMI_INFOFRAME_TYPE_DRM) |
+	       intel_hdmi_infoframe_enable(HDMI_PACKET_TYPE_GAMUT_METADATA)))) {
+		drm_printf_indent(p, 1, "HDR output: off\n");
+		return;
+	}
+
+	frame = &crtc_state->infoframes.drm.drm;
+
+	drm_printf_indent(p, 1, "HDR output: on, EOTF: %s, metadata type: %d\n",
+			  hdmi_eotf_get_name(frame->eotf), frame->metadata_type);
+	drm_printf_indent(p, 2, "primaries: r(%u,%u) g(%u,%u) b(%u,%u) wp(%u,%u)\n",
+			  frame->display_primaries[0].x, frame->display_primaries[0].y,
+			  frame->display_primaries[1].x, frame->display_primaries[1].y,
+			  frame->display_primaries[2].x, frame->display_primaries[2].y,
+			  frame->white_point.x, frame->white_point.y);
+	drm_printf_indent(p, 2, "mastering luminance: max %u nits, min %u (0.0001 nits)\n",
+			  frame->max_display_mastering_luminance,
+			  frame->min_display_mastering_luminance);
+	drm_printf_indent(p, 2, "max_cll: %u nits, max_fall: %u nits\n",
+			  frame->max_cll, frame->max_fall);
+}
+
 static void intel_connector_info(struct seq_file *m,
 				 struct drm_connector *connector)
 {
@@ -264,6 +352,7 @@ static void intel_connector_info(struct seq_file *m,
 	seq_printf(m, "\tsubpixel order: %s\n",
 		   drm_get_subpixel_order_name(connector->display_info.subpixel_order));
 	seq_printf(m, "\tCEA rev: %d\n", connector->display_info.cea_rev);
+	intel_hdr_sink_info(&p, connector);
 
 	switch (connector->connector_type) {
 	case DRM_MODE_CONNECTOR_DisplayPort:
@@ -288,6 +377,7 @@ static void intel_connector_info(struct seq_file *m,
 	intel_hdcp_info(m, intel_connector);
 
 	seq_printf(m, "\tmax bpc: %u\n", connector->display_info.bpc);
+	intel_hdr_output_info(&p, connector);
 
 	intel_panel_info(m, intel_connector);
 
