@@ -24,6 +24,7 @@
 #include <linux/suspend.h>
 #include <linux/t10-pi.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/io-64-nonatomic-hi-lo.h>
 #include <linux/sed-opal.h>
@@ -277,6 +278,11 @@ static bool noacpi;
 module_param(noacpi, bool, 0444);
 MODULE_PARM_DESC(noacpi, "disable acpi bios quirks");
 
+static bool force_bounce_swiotlb_wq;
+module_param(force_bounce_swiotlb_wq, bool, 0644);
+MODULE_PARM_DESC(force_bounce_swiotlb_wq,
+		 "Defer NVMe completion batch to swiotlb_wq");
+
 struct nvme_dev;
 struct nvme_queue;
 
@@ -395,6 +401,7 @@ struct nvme_queue {
 	__le32 *dbbuf_sq_ei;
 	__le32 *dbbuf_cq_ei;
 	struct completion delete_done;
+	struct workqueue_struct *swiotlb_wq;
 };
 
 /* bits for iod->flags */
@@ -1541,6 +1548,35 @@ static void nvme_pci_complete_batch(struct io_comp_batch *iob)
 	nvme_complete_batch(iob, nvme_pci_unmap_rq);
 }
 
+struct nvme_pci_complete_batch_work {
+	struct work_struct work;
+	struct io_comp_batch iob;
+};
+
+static void nvme_pci_complete_batch_work_fn(struct work_struct *work)
+{
+	struct nvme_pci_complete_batch_work *w =
+		container_of(work, struct nvme_pci_complete_batch_work, work);
+
+	nvme_pci_complete_batch(&w->iob);
+	kfree(w);
+}
+
+static void nvme_pci_complete_batch_deferred(struct nvme_queue *nvmeq,
+					     struct io_comp_batch iob)
+{
+	struct nvme_pci_complete_batch_work *w;
+
+	w = kmalloc_obj(*w, GFP_ATOMIC);
+	if (w) {
+		INIT_WORK(&w->work, nvme_pci_complete_batch_work_fn);
+		w->iob = iob;
+		queue_work(nvmeq->swiotlb_wq, &w->work);
+	} else {
+		nvme_pci_complete_batch(&iob);
+	}
+}
+
 /* We read the CQE phase first to check if the rest of the entry is valid */
 static inline bool nvme_cqe_pending(struct nvme_queue *nvmeq)
 {
@@ -1644,8 +1680,12 @@ static irqreturn_t nvme_irq(int irq, void *data)
 	DEFINE_IO_COMP_BATCH(iob);
 
 	if (nvme_poll_cq(nvmeq, &iob)) {
-		if (!rq_list_empty(&iob.req_list))
-			nvme_pci_complete_batch(&iob);
+		if (!rq_list_empty(&iob.req_list)) {
+			if (force_bounce_swiotlb_wq && nvmeq->swiotlb_wq)
+				nvme_pci_complete_batch_deferred(nvmeq, iob);
+			else
+				nvme_pci_complete_batch(&iob);
+		}
 		return IRQ_HANDLED;
 	}
 	return IRQ_NONE;
@@ -2026,6 +2066,10 @@ disable:
 static void nvme_free_queue(struct nvme_queue *nvmeq)
 	__context_unsafe(/* frees queue which is no longer in use */)
 {
+	if (nvmeq->swiotlb_wq) {
+		destroy_workqueue(nvmeq->swiotlb_wq);
+		nvmeq->swiotlb_wq = NULL;
+	}
 	dma_free_coherent(nvmeq->dev->dev, CQ_SIZE(nvmeq),
 				(void *)nvmeq->cqes, nvmeq->cq_dma_addr);
 	if (!nvmeq->sq_cmds)
@@ -2065,6 +2109,8 @@ static void nvme_suspend_queue(struct nvme_dev *dev, unsigned int qid)
 		nvme_quiesce_admin_queue(&nvmeq->dev->ctrl);
 	if (!test_and_clear_bit(NVMEQ_POLLED, &nvmeq->flags))
 		pci_free_irq(to_pci_dev(dev->dev), nvmeq->cq_vector, nvmeq);
+	if (nvmeq->swiotlb_wq)
+		flush_workqueue(nvmeq->swiotlb_wq);
 }
 
 static void nvme_suspend_io_queues(struct nvme_dev *dev)
@@ -2158,8 +2204,14 @@ static int nvme_alloc_queue(struct nvme_dev *dev, int qid, int depth)
 	if (!nvmeq->cqes)
 		goto free_nvmeq;
 
-	if (nvme_alloc_sq_cmds(dev, nvmeq, qid))
+	nvmeq->swiotlb_wq = alloc_workqueue("nvme%dq%d-swiotlb-wq",
+					    WQ_HIGHPRI | WQ_UNBOUND, 0,
+					    dev->ctrl.instance, qid);
+	if (!nvmeq->swiotlb_wq)
 		goto free_cqdma;
+
+	if (nvme_alloc_sq_cmds(dev, nvmeq, qid))
+		goto free_wq;
 
 	nvmeq->dev = dev;
 	spin_lock_init(&nvmeq->sq_lock);
@@ -2172,6 +2224,9 @@ static int nvme_alloc_queue(struct nvme_dev *dev, int qid, int depth)
 
 	return 0;
 
+ free_wq:
+	destroy_workqueue(nvmeq->swiotlb_wq);
+	nvmeq->swiotlb_wq = NULL;
  free_cqdma:
 	dma_free_coherent(dev->dev, CQ_SIZE(nvmeq), (void *)nvmeq->cqes,
 			  nvmeq->cq_dma_addr);
