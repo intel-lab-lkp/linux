@@ -522,9 +522,19 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 	pktlen	= payload_size(pkt);
 
 	if (rkey_is_mw(rkey)) {
+		u64 mw_start;
+
 		mw = rxe_lookup_mw(qp, access, rkey);
 		if (!mw) {
 			rxe_dbg_qp(qp, "no MW matches rkey %#x\n", rkey);
+			state = get_rkey_violation_state(pkt);
+			goto err;
+		}
+
+		mw_start = (mw->access & IB_ZERO_BASED) ? 0 : mw->addr;
+		if (unlikely(va < mw_start || resid > mw->length ||
+			     va - mw_start > mw->length - resid)) {
+			rxe_dbg_qp(qp, "request outside MW range\n");
 			state = get_rkey_violation_state(pkt);
 			goto err;
 		}
