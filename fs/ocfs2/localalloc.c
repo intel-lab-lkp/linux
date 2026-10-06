@@ -505,6 +505,14 @@ int ocfs2_begin_local_alloc_recovery(struct ocfs2_super *osb,
 		goto bail;
 	}
 
+	alloc = (struct ocfs2_dinode *)alloc_bh->b_data;
+	if (!(le32_to_cpu(alloc->i_flags) & OCFS2_LOCAL_ALLOC_FL)) {
+		mlog(ML_ERROR, "Invalid local alloc inode, %llu\n",
+		     (unsigned long long)OCFS2_I(inode)->ip_blkno);
+		status = -EINVAL;
+		goto bail;
+	}
+
 	*alloc_copy = kmalloc(alloc_bh->b_size, GFP_KERNEL);
 	if (!(*alloc_copy)) {
 		status = -ENOMEM;
@@ -512,7 +520,6 @@ int ocfs2_begin_local_alloc_recovery(struct ocfs2_super *osb,
 	}
 	memcpy((*alloc_copy), alloc_bh->b_data, alloc_bh->b_size);
 
-	alloc = (struct ocfs2_dinode *) alloc_bh->b_data;
 	ocfs2_clear_local_alloc(alloc);
 
 	ocfs2_compute_meta_ecc(osb->sb, alloc_bh->b_data, &alloc->i_check);

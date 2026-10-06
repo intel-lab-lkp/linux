@@ -1555,6 +1555,8 @@ skip_recovery:
 			     status, node_num,
 			     MAJOR(osb->sb->s_dev), MINOR(osb->sb->s_dev));
 			mlog(ML_ERROR, "Volume requires unmount.\n");
+			ocfs2_super_unlock(osb, 1);
+			goto bail;
 		}
 
 		spin_lock(&osb->osb_lock);

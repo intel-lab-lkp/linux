@@ -1748,6 +1748,19 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		}
 	}
 
+	if (le32_to_cpu(di->i_flags) & OCFS2_LOCAL_ALLOC_FL) {
+		struct ocfs2_local_alloc *la = &di->id2.i_lab;
+
+		if (la->la_size == 0 ||
+		    le16_to_cpu(la->la_size) > ocfs2_local_alloc_size(sb)) {
+			rc = ocfs2_error(sb,
+					 "Invalid dinode #%llu: invalid la_size %u\n",
+					 (unsigned long long)bh->b_blocknr,
+					 le16_to_cpu(la->la_size));
+			goto bail;
+		}
+	}
+
 	rc = 0;
 
 bail:
