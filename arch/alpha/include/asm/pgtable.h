@@ -65,10 +65,18 @@ struct vm_area_struct;
 #define _PAGE_FOW	0x0004	/* used for page protection (fault on write) */
 #define _PAGE_FOE	0x0008	/* used for page protection (fault on exec) */
 #define _PAGE_ASM	0x0010
-#define _PAGE_KRE	0x0100	/* xxx - see below on the "accessed" bit */
-#define _PAGE_URE	0x0200	/* xxx */
-#define _PAGE_KWE	0x1000	/* used to do the dirty bit in software */
-#define _PAGE_UWE	0x2000	/* used to do the dirty bit in software */
+/*
+ * The Alpha AXP ARM defines 8 protection bits in PTE[15:8]: KRE, ERE, SRE,
+ * URE, KWE, EWE, SWE, UWE (Kernel/Executive/Supervisor/User Read/Write
+ * Enable). Linux only uses two privilege modes: kernel (mode 0) and user.
+ * User processes run in Executive mode (mode 1), so _PAGE_URE and _PAGE_UWE
+ * correspond to the architecture's ERE (bit 9) and EWE (bit 13) bits. The
+ * true User Read/Write Enable bits (bits 11 and 15) are unused.
+ */
+#define _PAGE_KRE	0x0100	/* Kernel Read Enable (bit 8) */
+#define _PAGE_URE	0x0200	/* Executive Read Enable (bit 9); "user" in Linux */
+#define _PAGE_KWE	0x1000	/* Kernel Write Enable (bit 12) */
+#define _PAGE_UWE	0x2000	/* Executive Write Enable (bit 13); "user" in Linux */
 
 /* .. and these are ours ... */
 #define _PAGE_DIRTY	0x20000
