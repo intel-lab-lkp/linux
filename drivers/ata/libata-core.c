@@ -6393,12 +6393,15 @@ static void ata_port_detach(struct ata_port *ap)
 	/* Remove scsi devices */
 	ata_for_each_link(link, ap, HOST_FIRST) {
 		ata_for_each_dev(dev, link, ALL) {
-			if (dev->sdev) {
-				struct scsi_device *sdev = dev->sdev;
+			int lun;
 
-				/* The host driver may already be unloading. */
+			for (lun = ATAPI_MAX_LUN - 1; lun >= 0; lun--) {
+				struct scsi_device *sdev = dev->sdev[lun];
+
+				if (!sdev)
+					continue;
 				get_device(&sdev->sdev_gendev);
-				dev->sdev = NULL;
+				dev->sdev[lun] = NULL;
 				spin_unlock_irqrestore(ap->lock, flags);
 				scsi_remove_device(sdev);
 				put_device(&sdev->sdev_gendev);

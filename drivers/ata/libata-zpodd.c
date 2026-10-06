@@ -174,14 +174,14 @@ bool zpodd_zpready(struct ata_device *dev)
 }
 
 /* Return a referenced SCSI device; the caller must drop it outside ap->lock. */
-static struct scsi_device *zpodd_get_sdev(struct ata_device *dev)
+static struct scsi_device *zpodd_get_sdev(struct ata_device *dev, unsigned int lun)
 {
 	struct ata_port *ap = dev->link->ap;
 	struct scsi_device *sdev;
 	unsigned long flags;
 
 	spin_lock_irqsave(ap->lock, flags);
-	sdev = dev->sdev;
+	sdev = dev->sdev[lun];
 	if (sdev && scsi_device_get(sdev))
 		sdev = NULL;
 	spin_unlock_irqrestore(ap->lock, flags);
@@ -200,11 +200,15 @@ static struct scsi_device *zpodd_get_sdev(struct ata_device *dev)
 void zpodd_enable_run_wake(struct ata_device *dev)
 {
 	struct zpodd *zpodd = dev->zpodd;
-	struct scsi_device *sdev = zpodd_get_sdev(dev);
+	int lun;
 
-	if (sdev) {
-		sdev_disable_disk_events(sdev);
-		scsi_device_put(sdev);
+	for (lun = 0; lun < ATAPI_MAX_LUN; lun++) {
+		struct scsi_device *sdev = zpodd_get_sdev(dev, lun);
+
+		if (sdev) {
+			sdev_disable_disk_events(sdev);
+			scsi_device_put(sdev);
+		}
 	}
 
 	zpodd->powered_off = true;
@@ -238,7 +242,7 @@ void zpodd_disable_run_wake(struct ata_device *dev)
 void zpodd_post_poweron(struct ata_device *dev)
 {
 	struct zpodd *zpodd = dev->zpodd;
-	struct scsi_device *sdev;
+	int lun;
 
 	if (!zpodd->powered_off)
 		return;
@@ -254,10 +258,13 @@ void zpodd_post_poweron(struct ata_device *dev)
 	zpodd->zp_sampled = false;
 	zpodd->zp_ready = false;
 
-	sdev = zpodd_get_sdev(dev);
-	if (sdev) {
-		sdev_enable_disk_events(sdev);
-		scsi_device_put(sdev);
+	for (lun = 0; lun < ATAPI_MAX_LUN; lun++) {
+		struct scsi_device *sdev = zpodd_get_sdev(dev, lun);
+
+		if (sdev) {
+			sdev_enable_disk_events(sdev);
+			scsi_device_put(sdev);
+		}
 	}
 }
 
@@ -265,18 +272,21 @@ static void zpodd_wake_dev(acpi_handle handle, u32 event, void *context)
 {
 	struct ata_device *ata_dev = context;
 	struct zpodd *zpodd = ata_dev->zpodd;
-	struct scsi_device *sdev;
+	int lun;
 
 	if (event != ACPI_NOTIFY_DEVICE_WAKE)
 		return;
-	sdev = zpodd_get_sdev(ata_dev);
-	if (!sdev)
-		return;
-	if (pm_runtime_suspended(&sdev->sdev_gendev)) {
-		zpodd->from_notify = true;
-		pm_runtime_resume(&sdev->sdev_gendev);
+	for (lun = 0; lun < ATAPI_MAX_LUN; lun++) {
+		struct scsi_device *sdev = zpodd_get_sdev(ata_dev, lun);
+
+		if (!sdev)
+			continue;
+		if (pm_runtime_suspended(&sdev->sdev_gendev)) {
+			zpodd->from_notify = true;
+			pm_runtime_resume(&sdev->sdev_gendev);
+		}
+		scsi_device_put(sdev);
 	}
-	scsi_device_put(sdev);
 }
 
 static void ata_acpi_add_pm_notifier(struct ata_device *dev)
