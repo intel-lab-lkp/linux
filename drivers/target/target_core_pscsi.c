@@ -21,6 +21,7 @@
 #include <linux/ratelimit.h>
 #include <linux/module.h>
 #include <linux/unaligned.h>
+#include <linux/highmem.h>
 
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
@@ -585,6 +586,51 @@ static void pscsi_destroy_device(struct se_device *dev)
 	}
 }
 
+/*
+ * Copy @len bytes at data-buffer offset @off.  @to_sg writes @buf into
+ * the sg.  Stop when the command buffer or an sg runs out.
+ */
+static bool
+pscsi_copy_buf(struct se_cmd *cmd, unsigned int off, void *buf,
+	       unsigned int len, bool to_sg)
+{
+	struct scatterlist *sg;
+	unsigned int i, skip = off;
+	u8 *p = buf;
+
+	if (!len)
+		return true;
+	if (!cmd->t_data_nents || !cmd->t_data_sg || off >= cmd->data_length ||
+	    len > cmd->data_length - off)
+		return false;
+
+	for_each_sg(cmd->t_data_sg, sg, cmd->t_data_nents, i) {
+		unsigned int take;
+		void *addr;
+
+		if (!len)
+			return true;
+		if (skip >= sg->length) {
+			skip -= sg->length;
+			continue;
+		}
+
+		take = min_t(unsigned int, len, sg->length - skip);
+		addr = kmap_local_page(sg_page(sg));
+		addr += sg->offset + skip;
+		if (to_sg)
+			memcpy(addr, p, take);
+		else
+			memcpy(p, addr, take);
+		kunmap_local(addr);
+		p += take;
+		len -= take;
+		skip = 0;
+	}
+
+	return !len;
+}
+
 static void pscsi_complete_cmd(struct se_cmd *cmd, u8 scsi_status,
 			       unsigned char *req_sense, int valid_data)
 {
@@ -610,21 +656,13 @@ static void pscsi_complete_cmd(struct se_cmd *cmd, u8 scsi_status,
 		bool read_only = target_lun_is_rdonly(cmd);
 
 		if (read_only) {
-			unsigned char *buf;
+			unsigned char wp;
+			unsigned int wp_off = (cdb[0] == MODE_SENSE_10) ? 3 : 2;
 
-			buf = transport_kmap_data_sg(cmd);
-			if (!buf) {
-				; /* XXX: TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE */
-			} else {
-				if (cdb[0] == MODE_SENSE_10) {
-					if (!(buf[3] & 0x80))
-						buf[3] |= 0x80;
-				} else {
-					if (!(buf[2] & 0x80))
-						buf[2] |= 0x80;
-				}
-
-				transport_kunmap_data_sg(cmd);
+			if (pscsi_copy_buf(cmd, wp_off, &wp, 1, false) &&
+			    !(wp & 0x80)) {
+				wp |= 0x80;
+				pscsi_copy_buf(cmd, wp_off, &wp, 1, true);
 			}
 		}
 	}
@@ -643,28 +681,32 @@ after_mode_sense:
 	 */
 	if (((cdb[0] == MODE_SELECT) || (cdb[0] == MODE_SELECT_10)) &&
 	     scsi_status == SAM_STAT_GOOD) {
-		unsigned char *buf;
+		unsigned char bdl_buf[2];
+		unsigned char bl[3];
 		u16 bdl;
 		u32 blocksize;
 
-		buf = sg_virt(&cmd->t_data_sg[0]);
-		if (!buf) {
-			pr_err("Unable to get buf for scatterlist\n");
-			goto after_mode_select;
+		if (cdb[0] == MODE_SELECT) {
+			if (!pscsi_copy_buf(cmd, 3, bdl_buf, 1, false))
+				goto after_mode_select;
+			bdl = bdl_buf[0];
+		} else {
+			if (!pscsi_copy_buf(cmd, 6, bdl_buf, 2, false))
+				goto after_mode_select;
+			bdl = get_unaligned_be16(bdl_buf);
 		}
-
-		if (cdb[0] == MODE_SELECT)
-			bdl = buf[3];
-		else
-			bdl = get_unaligned_be16(&buf[6]);
 
 		if (!bdl)
 			goto after_mode_select;
 
-		if (cdb[0] == MODE_SELECT)
-			blocksize = get_unaligned_be24(&buf[9]);
-		else
-			blocksize = get_unaligned_be24(&buf[13]);
+		if (cdb[0] == MODE_SELECT) {
+			if (!pscsi_copy_buf(cmd, 9, bl, 3, false))
+				goto after_mode_select;
+		} else {
+			if (!pscsi_copy_buf(cmd, 13, bl, 3, false))
+				goto after_mode_select;
+		}
+		blocksize = get_unaligned_be24(bl);
 
 		sd->sector_size = blocksize;
 	}
