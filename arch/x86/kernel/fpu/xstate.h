@@ -7,6 +7,8 @@
 #include <asm/fpu/xcr.h>
 #include <asm/msr.h>
 
+#include "internal.h"
+
 #ifdef CONFIG_X86_64
 DECLARE_PER_CPU(u64, xfd_state);
 #endif
@@ -240,6 +242,7 @@ static inline void os_xrstor(struct fpstate *fpstate, u64 mask)
 	u32 hmask = mask >> 32;
 
 	xfd_validate_state(fpstate, mask, true);
+	fpregs_restore_prepare(mask);
 	XSTATE_XRESTORE(&fpstate->regs.xsave, lmask, hmask);
 }
 
@@ -334,6 +337,7 @@ static inline int xrstor_from_user_sigframe(struct xregs_state __user *buf, u64 
 	int err;
 
 	xfd_validate_state(x86_task_fpu(current)->fpstate, mask, true);
+	fpregs_restore_prepare(mask);
 
 	stac();
 	XSTATE_OP(XRSTOR, xstate, lmask, hmask, err);
@@ -355,6 +359,7 @@ static inline int os_xrstor_safe(struct fpstate *fpstate, u64 mask)
 
 	/* Ensure that XFD is up to date */
 	xfd_update_state(fpstate);
+	fpregs_restore_prepare(mask);
 
 	if (cpu_feature_enabled(X86_FEATURE_XSAVES))
 		XSTATE_OP(XRSTORS, xstate, lmask, hmask, err);

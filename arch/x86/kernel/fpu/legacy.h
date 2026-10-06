@@ -4,6 +4,8 @@
 
 #include <asm/fpu/types.h>
 
+#include "internal.h"
+
 extern unsigned int mxcsr_feature_mask;
 
 static inline void ldmxcsr(u32 mxcsr)
@@ -63,6 +65,8 @@ static inline int fxsave_to_user_sigframe(struct fxregs_state __user *fx)
 
 static inline void fxrstor(struct fxregs_state *fx)
 {
+	fpregs_restore_prepare(XFEATURE_MASK_FP);
+
 	if (IS_ENABLED(CONFIG_X86_32))
 		kernel_insn(fxrstor %[fx], "=m" (*fx), [fx] "m" (*fx));
 	else
@@ -71,6 +75,8 @@ static inline void fxrstor(struct fxregs_state *fx)
 
 static inline int fxrstor_safe(struct fxregs_state *fx)
 {
+	fpregs_restore_prepare(XFEATURE_MASK_FP);
+
 	if (IS_ENABLED(CONFIG_X86_32))
 		return kernel_insn_err(fxrstor %[fx], "=m" (*fx), [fx] "m" (*fx));
 	else
@@ -79,6 +85,8 @@ static inline int fxrstor_safe(struct fxregs_state *fx)
 
 static inline int fxrstor_from_user_sigframe(struct fxregs_state __user *fx)
 {
+	fpregs_restore_prepare(XFEATURE_MASK_FP);
+
 	if (IS_ENABLED(CONFIG_X86_32))
 		return user_insn(fxrstor %[fx], "=m" (*fx), [fx] "m" (*fx));
 	else
@@ -87,16 +95,22 @@ static inline int fxrstor_from_user_sigframe(struct fxregs_state __user *fx)
 
 static inline void frstor(struct fregs_state *fx)
 {
+	fpregs_restore_prepare(XFEATURE_MASK_FP);
+
 	kernel_insn(frstor %[fx], "=m" (*fx), [fx] "m" (*fx));
 }
 
 static inline int frstor_safe(struct fregs_state *fx)
 {
+	fpregs_restore_prepare(XFEATURE_MASK_FP);
+
 	return kernel_insn_err(frstor %[fx], "=m" (*fx), [fx] "m" (*fx));
 }
 
 static inline int frstor_from_user_sigframe(struct fregs_state __user *fx)
 {
+	fpregs_restore_prepare(XFEATURE_MASK_FP);
+
 	return user_insn(frstor %[fx], "=m" (*fx), [fx] "m" (*fx));
 }
 

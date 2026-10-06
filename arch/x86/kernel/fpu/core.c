@@ -161,20 +161,6 @@ void save_fpregs_to_fpstate(struct fpu *fpu)
 
 void restore_fpregs_from_fpstate(struct fpstate *fpstate, u64 mask)
 {
-	/*
-	 * AMD K7/K8 and later CPUs up to Zen don't save/restore
-	 * FDP/FIP/FOP unless an exception is pending. Clear the x87 state
-	 * here by setting it to fixed values.  "m" is a random variable
-	 * that should be in L1.
-	 */
-	if (unlikely(static_cpu_has_bug(X86_BUG_FXSAVE_LEAK))) {
-		asm volatile(
-			"fnclex\n\t"
-			"emms\n\t"
-			"fildl %[addr]"	/* set F?P to defined value */
-			: : [addr] "m" (*fpstate));
-	}
-
 	if (use_xsave()) {
 		/*
 		 * Dynamically enabled features are enabled in XCR0, but
