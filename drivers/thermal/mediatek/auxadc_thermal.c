@@ -308,6 +308,13 @@ struct mtk_thermal_bank {
 	int id;
 };
 
+/* A single sensor, exposed as its own thermal zone (DT sensor id = sensor + 1) */
+struct mtk_thermal_sensor {
+	struct mtk_thermal *mt;
+	int bank;
+	int index;
+};
+
 struct mtk_thermal_data {
 	s32 num_banks;
 	s32 num_sensors;
@@ -870,6 +877,77 @@ static const struct thermal_zone_device_ops mtk_thermal_ops = {
 	.get_temp = mtk_read_temp,
 };
 
+static int mtk_read_sensor_temp(struct thermal_zone_device *tz, int *temperature)
+{
+	struct mtk_thermal_sensor *sensor = thermal_zone_device_priv(tz);
+	struct mtk_thermal *mt = sensor->mt;
+	const struct mtk_thermal_data *conf = mt->conf;
+	struct mtk_thermal_bank *bank = &mt->banks[sensor->bank];
+	int temp;
+	u32 raw;
+
+	mtk_thermal_get_bank(bank);
+	raw = readl(mt->thermal_base + conf->msr[sensor->index]);
+	temp = mt->raw_to_mcelsius(mt, conf->bank_data[sensor->bank].sensors[sensor->index],
+				   raw);
+	mtk_thermal_put_bank(bank);
+
+	if (!mtk_thermal_temp_is_valid(temp))
+		return -EAGAIN;
+
+	*temperature = temp;
+
+	return 0;
+}
+
+static const struct thermal_zone_device_ops mtk_thermal_sensor_ops = {
+	.get_temp = mtk_read_sensor_temp,
+};
+
+/*
+ * Zone 0 reports the hottest sensor. Also register every individual sensor
+ * the devicetree describes (sensor id = sensor number + 1): MT8183 SVS looks
+ * up its GPU bank temperature through the "gpu-thermal" zone and cannot
+ * probe without it. Sensors without a devicetree zone are skipped.
+ */
+static int mtk_thermal_register_sensors(struct mtk_thermal *mt)
+{
+	const struct mtk_thermal_data *conf = mt->conf;
+	struct thermal_zone_device *tzdev;
+	struct mtk_thermal_sensor *sensor;
+	int id, b, i;
+
+	for (id = 1; id <= conf->num_sensors; id++) {
+		sensor = NULL;
+		for (b = 0; b < conf->num_banks && !sensor; b++) {
+			for (i = 0; i < conf->bank_data[b].num_sensors; i++) {
+				if (conf->bank_data[b].sensors[i] != id - 1)
+					continue;
+				sensor = devm_kzalloc(mt->dev, sizeof(*sensor), GFP_KERNEL);
+				if (!sensor)
+					return -ENOMEM;
+				sensor->mt = mt;
+				sensor->bank = b;
+				sensor->index = i;
+				break;
+			}
+		}
+		if (!sensor)
+			continue;
+
+		tzdev = devm_thermal_of_zone_register(mt->dev, id, sensor,
+						      &mtk_thermal_sensor_ops);
+		if (IS_ERR(tzdev)) {
+			if (PTR_ERR(tzdev) == -ENODEV)
+				continue;
+			return dev_err_probe(mt->dev, PTR_ERR(tzdev),
+					     "failed to register sensor %d\n", id);
+		}
+	}
+
+	return 0;
+}
+
 static void mtk_thermal_init_bank(struct mtk_thermal *mt, int num,
 				  u32 apmixed_phys_base, u32 auxadc_phys_base,
 				  int ctrl_id)
@@ -1294,7 +1372,7 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 	if (ret)
 		dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs");
 
-	return 0;
+	return mtk_thermal_register_sensors(mt);
 }
 
 static struct platform_driver mtk_thermal_driver = {
