@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <asm/switch_to.h>
+#include <asm/vector.h>
 #include <asm/vendor_extensions/sifive.h>
 #include <asm/vendor_extensions/sifive_hwprobe.h>
 #include <asm/vendor_extensions/vendor_hwprobe.h>
@@ -14,9 +16,13 @@ void hwprobe_isa_vendor_ext_sifive_0(struct riscv_hwprobe *pair, const struct cp
 {
 	VENDOR_EXTENSION_SUPPORTED(pair, cpus,
 				   riscv_isa_vendor_ext_list_sifive.per_hart_isa_bitmap, {
-		VENDOR_EXT_KEY(XSFVQMACCDOD);
-		VENDOR_EXT_KEY(XSFVQMACCQOQ);
-		VENDOR_EXT_KEY(XSFVFNRCLIPXFQF);
-		VENDOR_EXT_KEY(XSFVFWMACCQQQ);
+		if (has_vector()) {
+			VENDOR_EXT_KEY(XSFVQMACCDOD);
+			VENDOR_EXT_KEY(XSFVQMACCQOQ);
+			if (has_fpu()) {
+				VENDOR_EXT_KEY(XSFVFNRCLIPXFQF);
+				VENDOR_EXT_KEY(XSFVFWMACCQQQ);
+			}
+		}
 	});
 }
