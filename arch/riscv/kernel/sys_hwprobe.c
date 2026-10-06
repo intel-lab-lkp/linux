@@ -91,6 +91,12 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 	if (has_vector() && riscv_isa_extension_available(NULL, V))
 		pair->value |= RISCV_HWPROBE_IMA_V;
 
+	if (riscv_isa_extension_available(NULL, ZICBOM))
+		pair->value |= RISCV_HWPROBE_EXT_ZICBOM;
+
+	if (riscv_isa_extension_available(NULL, ZICBOZ))
+		pair->value |= RISCV_HWPROBE_EXT_ZICBOZ;
+
 	/*
 	 * Loop through and record extensions that 1) anyone has, and 2) anyone
 	 * doesn't have.
@@ -120,9 +126,7 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 		EXT_KEY(isainfo->isa, ZCB, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZCLSD, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZCMOP, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZICBOM, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZICBOP, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZICBOZ, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZICFILP, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZICNTR, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZICOND, pair->value, missing);
