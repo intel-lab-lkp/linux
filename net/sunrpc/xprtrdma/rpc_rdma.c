@@ -175,6 +175,22 @@ rpcrdma_nonpayload_inline(const struct rpcrdma_xprt *r_xprt,
 		r_xprt->rx_ep->re_max_inline_recv;
 }
 
+/* A P2PDMA payload moves only by DMA between the NIC and device
+ * memory, in its own Read or Write chunk. That requires a NIC that
+ * can DMA to PCI peer-to-peer memory and, for a READ, a Reply whose
+ * non-payload part fits inline.
+ */
+static bool
+rpcrdma_p2pdma_allowed(const struct rpcrdma_xprt *r_xprt,
+		       const struct rpc_rqst *rqst)
+{
+	if (!ib_dma_pci_p2p_dma_supported(r_xprt->rx_ep->re_id->device))
+		return false;
+	if (rqst->rq_rcv_buf.flags & XDRBUF_P2PDMA)
+		return rpcrdma_nonpayload_inline(r_xprt, rqst);
+	return true;
+}
+
 /* ACL likes to be lazy in allocating pages. For TCP, these
  * pages can be allocated during receive processing. Not true
  * for RDMA, which must always provision receive buffers
@@ -815,6 +831,7 @@ out_nosc:
  *	%-EAGAIN if the caller should call again with the same arguments,
  *	%-ENOBUFS if the caller should call again after a delay,
  *	%-EMSGSIZE if the transport header is too small,
+ *	%-EREMOTEIO if the device cannot move the request's P2PDMA pages,
  *	%-EIO if a permanent problem occurred while marshaling.
  */
 int
@@ -854,16 +871,25 @@ rpcrdma_marshal_req(struct rpcrdma_xprt *r_xprt, struct rpc_rqst *rqst)
 	ddp_allowed = !test_bit(RPCAUTH_AUTH_DATATOUCH,
 				&rqst->rq_cred->cr_auth->au_flags);
 
+	if (xprt_rqst_has_p2pdma(rqst) &&
+	    (!ddp_allowed || !rpcrdma_p2pdma_allowed(r_xprt, rqst))) {
+		ret = -EREMOTEIO;
+		goto out_err;
+	}
+
 	/*
 	 * Chunks needed for results?
 	 *
+	 * o A P2PDMA read payload always returns in a write chunk.
 	 * o If the expected result is under the inline threshold, all ops
 	 *   return as inline.
 	 * o Large read ops return data as write chunk(s), header as
 	 *   inline.
 	 * o Large non-read ops return as a single reply chunk.
 	 */
-	if (rpcrdma_results_inline(r_xprt, rqst))
+	if (rqst->rq_rcv_buf.flags & XDRBUF_P2PDMA)
+		wtype = rpcrdma_writech;
+	else if (rpcrdma_results_inline(r_xprt, rqst))
 		wtype = rpcrdma_noch;
 	else if ((ddp_allowed && rqst->rq_rcv_buf.flags & XDRBUF_READ) &&
 		 rpcrdma_nonpayload_inline(r_xprt, rqst))
@@ -874,6 +900,7 @@ rpcrdma_marshal_req(struct rpcrdma_xprt *r_xprt, struct rpc_rqst *rqst)
 	/*
 	 * Chunks needed for arguments?
 	 *
+	 * o A P2PDMA write payload is always sent as a read chunk.
 	 * o If the total request is under the inline threshold, all ops
 	 *   are sent as inline.
 	 * o Large write ops transmit data as read chunk(s), header as
@@ -885,7 +912,10 @@ rpcrdma_marshal_req(struct rpcrdma_xprt *r_xprt, struct rpc_rqst *rqst)
 	 * that both has a data payload, and whose non-data arguments
 	 * by themselves are larger than the inline threshold.
 	 */
-	if (rpcrdma_args_inline(r_xprt, rqst)) {
+	if (buf->flags & XDRBUF_P2PDMA) {
+		*p++ = rdma_msg;
+		rtype = rpcrdma_readch;
+	} else if (rpcrdma_args_inline(r_xprt, rqst)) {
 		*p++ = rdma_msg;
 		rtype = buf->len < rdmab_length(req->rl_sendbuf) ?
 			rpcrdma_noch_pullup : rpcrdma_noch_mapped;
@@ -1244,6 +1274,12 @@ rpcrdma_decode_msg(struct rpcrdma_xprt *r_xprt, struct rpcrdma_rep *rep,
 	/* Build the RPC reply's Payload stream in rqst->rq_rcv_buf */
 	base = (char *)xdr_inline_decode(xdr, 0);
 	rpclen = xdr_stream_remaining(xdr);
+
+	/* Never copy inline reply data into P2PDMA pages */
+	if (unlikely(rqst->rq_rcv_buf.flags & XDRBUF_P2PDMA &&
+		     rpclen > rqst->rq_rcv_buf.head[0].iov_len))
+		return -EREMOTEIO;
+
 	r_xprt->rx_stats.fixup_copy_count +=
 		rpcrdma_inline_fixup(rqst, base, rpclen, writelist & 3);
 
