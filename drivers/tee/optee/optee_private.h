@@ -180,6 +180,28 @@ struct optee_ffa {
 };
 #endif
 
+#if IS_REACHABLE(CONFIG_RISCV_RPMI_TEE_TRANSPORT)
+struct rpmi_tee_device;
+
+/**
+ * struct optee_rpmi - RPMI shared-memory identity state
+ * @rdev: owning RPMI service device
+ * @shm_rht_lock: protects parcel lookup, insertion, removal and publication
+ * @shm_rht: lookup by the host-endian parcel ID and nonce pair
+ *
+ * Callers keep their tee_shm alive while using its registration. Lookup
+ * returns a raw pointer; the mutex does not protect its lifetime after
+ * unlocking. Never hold @shm_rht_lock across a transport operation, RPC or
+ * thread-availability wait.
+ */
+struct optee_rpmi {
+	struct rpmi_tee_device *rdev;
+	/* Protects parcel lookup, insertion, removal and publication. */
+	struct mutex shm_rht_lock;
+	struct rhashtable shm_rht;
+};
+#endif
+
 struct optee;
 
 /**
@@ -240,6 +262,7 @@ struct optee_ops {
  * @ctx:			driver internal TEE context
  * @smc:			specific to SMC ABI
  * @ffa:			specific to FF-A ABI
+ * @rpmi:			specific to RPMI ABI
  * @shm_arg_cache:		shared memory cache argument
  * @call_queue:			queue of threads waiting to call @invoke_fn
  * @notif:			notification synchronization struct
@@ -271,6 +294,9 @@ struct optee {
 #endif
 #if IS_REACHABLE(CONFIG_ARM_FFA_TRANSPORT)
 		struct optee_ffa ffa;
+#endif
+#if IS_REACHABLE(CONFIG_RISCV_RPMI_TEE_TRANSPORT)
+		struct optee_rpmi rpmi;
 #endif
 	};
 	struct optee_shm_arg_cache shm_arg_cache;
@@ -463,5 +489,6 @@ static inline void optee_ffa_abi_unregister(void)
 {
 }
 #endif
+
 
 #endif /*OPTEE_PRIVATE_H*/
