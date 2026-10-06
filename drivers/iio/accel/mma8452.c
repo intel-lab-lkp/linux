@@ -224,15 +224,14 @@ static int mma8452_set_runtime_pm_state(struct i2c_client *client, bool on)
 #ifdef CONFIG_PM
 	int ret;
 
-	if (on)
+	if (on) {
 		ret = pm_runtime_resume_and_get(&client->dev);
-	else
-		ret = pm_runtime_put_autosuspend(&client->dev);
-	if (ret < 0) {
-		dev_err(&client->dev,
-			"failed to change power state to %d\n", on);
-
-		return ret;
+		if (ret < 0) {
+			dev_err(&client->dev, "failed to resume: %d\n", ret);
+			return ret;
+		}
+	} else {
+		pm_runtime_put_autosuspend(&client->dev);
 	}
 #endif
 

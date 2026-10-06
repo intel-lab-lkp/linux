@@ -395,9 +395,7 @@ static int isl29028_write_raw(struct iio_dev *indio_dev,
 	if (ret < 0)
 		return ret;
 
-	ret = pm_runtime_put_autosuspend(dev);
-	if (ret < 0)
-		return ret;
+	pm_runtime_put_autosuspend(dev);
 
 	return 0;
 }
@@ -408,7 +406,7 @@ static int isl29028_read_raw(struct iio_dev *indio_dev,
 {
 	struct isl29028_chip *chip = iio_priv(indio_dev);
 	struct device *dev = regmap_get_device(chip->regmap);
-	int ret, pm_ret;
+	int ret;
 
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0)
@@ -464,14 +462,7 @@ static int isl29028_read_raw(struct iio_dev *indio_dev,
 	if (ret < 0)
 		return ret;
 
-	/**
-	 * Preserve the ret variable if the call to
-	 * pm_runtime_put_autosuspend() is successful so the reading
-	 * (if applicable) is returned to user space.
-	 */
-	pm_ret = pm_runtime_put_autosuspend(dev);
-	if (pm_ret < 0)
-		return pm_ret;
+	pm_runtime_put_autosuspend(dev);
 
 	return ret;
 }

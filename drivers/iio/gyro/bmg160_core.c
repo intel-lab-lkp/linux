@@ -319,18 +319,15 @@ static int bmg160_set_power_state(struct bmg160_data *data, bool on)
 	struct device *dev = regmap_get_device(data->regmap);
 	int ret;
 
-	if (on)
+	if (on) {
 		ret = pm_runtime_get_sync(dev);
-	else
-		ret = pm_runtime_put_autosuspend(dev);
-
-	if (ret < 0) {
-		dev_err(dev, "Failed: bmg160_set_power_state for %d\n", on);
-
-		if (on)
+		if (ret < 0) {
+			dev_err(dev, "%s: failed to resume: %d\n", __func__, ret);
 			pm_runtime_put_noidle(dev);
-
-		return ret;
+			return ret;
+		}
+	} else {
+		pm_runtime_put_autosuspend(dev);
 	}
 #endif
 

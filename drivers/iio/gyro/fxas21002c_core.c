@@ -369,11 +369,11 @@ static int  fxas21002c_pm_get(struct fxas21002c_data *data)
 	return pm_runtime_resume_and_get(regmap_get_device(data->regmap));
 }
 
-static int  fxas21002c_pm_put(struct fxas21002c_data *data)
+static void fxas21002c_pm_put(struct fxas21002c_data *data)
 {
 	struct device *dev = regmap_get_device(data->regmap);
 
-	return pm_runtime_put_autosuspend(dev);
+	pm_runtime_put_autosuspend(dev);
 }
 
 static int fxas21002c_temp_get(struct fxas21002c_data *data, int *val)
@@ -396,9 +396,7 @@ static int fxas21002c_temp_get(struct fxas21002c_data *data, int *val)
 
 	*val = sign_extend32(temp, 7);
 
-	ret = fxas21002c_pm_put(data);
-	if (ret < 0)
-		goto data_unlock;
+	fxas21002c_pm_put(data);
 
 	ret = IIO_VAL_INT;
 
@@ -430,9 +428,7 @@ static int fxas21002c_axis_get(struct fxas21002c_data *data,
 
 	*val = sign_extend32(be16_to_cpu(axis_be), 15);
 
-	ret = fxas21002c_pm_put(data);
-	if (ret < 0)
-		goto data_unlock;
+	fxas21002c_pm_put(data);
 
 	ret = IIO_VAL_INT;
 

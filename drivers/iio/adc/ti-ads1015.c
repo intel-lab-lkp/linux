@@ -370,15 +370,13 @@ static const struct iio_chan_spec tla2024_channels[] = {
 #ifdef CONFIG_PM
 static int ads1015_set_power_state(struct ads1015_data *data, bool on)
 {
-	int ret;
 	struct device *dev = regmap_get_device(data->regmap);
 
 	if (on)
-		ret = pm_runtime_resume_and_get(dev);
-	else
-		ret = pm_runtime_put_autosuspend(dev);
+		return pm_runtime_resume_and_get(dev);
 
-	return ret < 0 ? ret : 0;
+	pm_runtime_put_autosuspend(dev);
+	return 0;
 }
 
 #else /* !CONFIG_PM */

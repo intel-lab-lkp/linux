@@ -216,16 +216,11 @@ static int fxls8962af_power_on(struct fxls8962af_data *data)
 	return ret;
 }
 
-static int fxls8962af_power_off(struct fxls8962af_data *data)
+static void fxls8962af_power_off(struct fxls8962af_data *data)
 {
 	struct device *dev = regmap_get_device(data->regmap);
-	int ret;
 
-	ret = pm_runtime_put_autosuspend(dev);
-	if (ret)
-		dev_err(dev, "failed to power off\n");
-
-	return ret;
+	pm_runtime_put_autosuspend(dev);
 }
 
 static int fxls8962af_standby(struct fxls8962af_data *data)
@@ -692,7 +687,7 @@ fxls8962af_write_event_config(struct iio_dev *indio_dev,
 			return -EBUSY;
 
 		/* Not in buffered mode so disable power */
-		ret = fxls8962af_power_off(data);
+		fxls8962af_power_off(data);
 
 		iio_device_release_direct(indio_dev);
 	}
