@@ -593,22 +593,10 @@ static inline void pm_runtime_put(struct device *dev)
  *
  * Decrement the runtime PM usage counter of @dev and if it turns out to be
  * equal to 0, queue up a work item for @dev like in pm_request_autosuspend().
- *
- * Return:
- * * %1: Success. Usage counter dropped to zero, but device was already suspended.
- * * %0: Success.
- * * %-EINVAL: Runtime PM error.
- * * %-EACCES: Runtime PM disabled.
- * * %-EAGAIN: Runtime PM usage counter became non-zero or Runtime PM status
- *   change ongoing.
- * * %-EBUSY: Runtime PM child_count non-zero.
- * * %-EPERM: Device PM QoS resume latency 0.
- * * %-EINPROGRESS: Suspend already in progress.
- * * %-ENOSYS: %CONFIG_PM not enabled.
  */
-static inline int __pm_runtime_put_autosuspend(struct device *dev)
+static inline void __pm_runtime_put_autosuspend(struct device *dev)
 {
-	return __pm_runtime_suspend(dev, RPM_GET_PUT | RPM_ASYNC | RPM_AUTO);
+	__pm_runtime_suspend(dev, RPM_GET_PUT | RPM_ASYNC | RPM_AUTO);
 }
 
 /**
@@ -619,23 +607,11 @@ static inline int __pm_runtime_put_autosuspend(struct device *dev)
  * Update the last access time of @dev and decrement its runtime PM usage
  * counter. If the counter drops to zero, asynchronously request the PM core to
  * suspend the device once its autosuspend delay has elapsed.
- *
- * Return:
- * * %1: Success. Usage counter dropped to zero, but device was already suspended.
- * * %0: Success.
- * * %-EINVAL: Runtime PM error.
- * * %-EACCES: Runtime PM disabled.
- * * %-EAGAIN: Runtime PM usage counter became non-zero or Runtime PM status
- *   change ongoing.
- * * %-EBUSY: Runtime PM child_count non-zero.
- * * %-EPERM: Device PM QoS resume latency 0.
- * * %-EINPROGRESS: Suspend already in progress.
- * * %-ENOSYS: %CONFIG_PM not enabled.
  */
-static inline int pm_runtime_put_autosuspend(struct device *dev)
+static inline void pm_runtime_put_autosuspend(struct device *dev)
 {
 	pm_runtime_mark_last_busy(dev);
-	return __pm_runtime_put_autosuspend(dev);
+	__pm_runtime_put_autosuspend(dev);
 }
 
 DEFINE_GUARD(pm_runtime_noresume, struct device *,
