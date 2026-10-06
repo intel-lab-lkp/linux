@@ -146,15 +146,8 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 		if (has_vector()) {
 			EXT_KEY(isainfo->isa, ZVBB, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVBC, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVE32F, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVE32X, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVE64D, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVE64F, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVE64X, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVFBFMIN, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVFBFWMA, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVFH, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVFHMIN, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVKB, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVKG, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVKNED, pair->value, missing);
@@ -163,14 +156,26 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 			EXT_KEY(isainfo->isa, ZVKSED, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVKSH, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVKT, pair->value, missing);
+
+			if (has_fpu()) {
+				EXT_KEY(isainfo->isa, ZVE32F, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVE64D, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVE64F, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVFBFMIN, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVFBFWMA, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVFH, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVFHMIN, pair->value, missing);
+			}
 		}
 
-		EXT_KEY(isainfo->isa, ZCD, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZCF, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZFA, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZFBFMIN, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZFH, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZFHMIN, pair->value, missing);
+		if (has_fpu()) {
+			EXT_KEY(isainfo->isa, ZCD, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZCF, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZFA, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZFBFMIN, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZFH, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZFHMIN, pair->value, missing);
+		}
 
 		if (IS_ENABLED(CONFIG_RISCV_ISA_SUPM))
 			EXT_KEY(isainfo->isa, SUPM, pair->value, missing);
