@@ -130,19 +130,30 @@ on_exit() {
 trap on_exit EXIT
 
 FN=.config
+
+if [ -n "$KBUILD_OUTPUT" ]; then
+	if [ ! -d "$KBUILD_OUTPUT" ]; then
+		echo "KBUILD_OUTPUT is set but does not exist or is not a " >&2
+		echo "directory. Create it before running $myname." >&2
+		exit 1
+	fi
+	FN=$(realpath -- "$KBUILD_OUTPUT")/"$FN"
+fi
+
 CMDS=()
 while [[ $# -gt 0 ]]; do
 	if [ "$1" = "--file" ]; then
 		if [ "$2" = "" ]; then
 			usage
 		fi
-		FN="$2"
+		FN=$(realpath -q -- "$2" || printf -- "%s\n" "$2")
 		shift 2
 	else
 		CMDS+=("$1")
 		shift
 	fi
 done
+
 
 set -- "${CMDS[@]}"
 if [ "$1" = "" ] ; then
@@ -200,7 +211,7 @@ while [ "$1" != "" ] ; do
 		;;
 
 	--state|-s)
-		if grep -q "# ${CONFIG_}$ARG is not set" $FN ; then
+		if grep -q "# ${CONFIG_}$ARG is not set" "$FN" ; then
 			echo n
 		else
 			V="$(grep "^${CONFIG_}$ARG=" $FN)"
@@ -229,7 +240,7 @@ while [ "$1" != "" ] ; do
 		;;
 
 	--refresh)
-		yes "" | make oldconfig KCONFIG_CONFIG=$FN
+		yes "" | make oldconfig KCONFIG_CONFIG="$FN"
 		;;
 
 	*)
