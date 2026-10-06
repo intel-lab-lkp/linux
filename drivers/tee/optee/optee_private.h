@@ -190,6 +190,9 @@ struct rpmi_tee_device;
  * @shm_rht: lookup by the host-endian parcel ID and nonce pair
  * @sec_caps: negotiated optional OPTEE_RPMI_CAP_* features
  * @notification_count: negotiated nonzero number of logical notification keys
+ * @signal: allocated TEE-to-REE doorbell, independent of logical keys
+ * @notif_wq: private bottom-half workqueue, NULL when notifications are inactive
+ * @notif_work: processes bottom halves requested by the RPMI signal
  *
  * Callers keep their tee_shm alive while using its registration. Lookup
  * returns a raw pointer; the mutex does not protect its lifetime after
@@ -203,6 +206,9 @@ struct optee_rpmi {
 	struct rhashtable shm_rht;
 	u32 sec_caps;
 	u32 notification_count;
+	u32 signal;
+	struct workqueue_struct *notif_wq;
+	struct work_struct notif_work;
 };
 #endif
 
