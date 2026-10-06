@@ -157,14 +157,22 @@ static ssize_t nfs_direct_extract_pages(struct nfs_direct_req *dreq,
 					size_t size, loff_t *pos,
 					struct list_head *list)
 {
+	struct nfs_server *server = NFS_SERVER(dreq->inode);
 	bool pinned = iov_iter_extract_will_pin(iter);
+	iov_iter_extraction_t flags = 0;
 	struct page **pagevec = NULL;
 	ssize_t result, bytes = 0;
 	int err = 0;
 	unsigned int npages, i;
 	size_t pgbase;
 
-	result = iov_iter_extract_pages(iter, &pagevec, size, ~0U, 0, &pgbase);
+	/* Allow P2PDMA pages only on RDMA mounts that do not use pNFS */
+	if (server->nfs_client->cl_proto == XPRT_TRANSPORT_RDMA &&
+	    !pnfs_enabled_sb(server))
+		flags = ITER_ALLOW_P2PDMA;
+
+	result = iov_iter_extract_pages(iter, &pagevec, size, ~0U, flags,
+					&pgbase);
 	if (result <= 0)
 		return result;
 
