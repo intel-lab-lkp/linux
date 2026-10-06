@@ -709,7 +709,7 @@ static int ivpu_pci_init(struct ivpu_device *vdev)
 	}
 
 	if (ivpu_hw_ip_gen(vdev) >= IVPU_HW_IP_40XX)
-		dma_bits = 48;
+		dma_bits = 42;
 	else
 		dma_bits = 38;
 
