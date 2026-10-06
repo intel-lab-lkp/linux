@@ -58,6 +58,7 @@ struct ixgbe_fcoe {
 	dma_addr_t extra_ddp_buffer_dma;
 	unsigned long mode;
 	u8 up;
+	bool reinit_pending;
 };
 
 #endif /* _IXGBE_FCOE_H */
