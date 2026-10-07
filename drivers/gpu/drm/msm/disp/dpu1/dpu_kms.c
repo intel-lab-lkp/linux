@@ -1006,6 +1006,20 @@ static void dpu_kms_mdp_snapshot(struct msm_disp_state *disp_state, struct msm_k
 						    base + cat->sspp[i].sblk->csc_blk.base,
 						    "%s_%s", cat->sspp[i].name,
 						    cat->sspp[i].sblk->csc_blk.name);
+
+		if (cat->sspp[i].sblk && cat->sspp[i].sblk->sspp_rec0_blk.len > 0)
+			msm_disp_snapshot_add_block(disp_state,
+						    cat->sspp[i].sblk->sspp_rec0_blk.len,
+						    base + cat->sspp[i].sblk->sspp_rec0_blk.base,
+						    "%s_%s", cat->sspp[i].name,
+						    cat->sspp[i].sblk->sspp_rec0_blk.name);
+
+		if (cat->sspp[i].sblk && cat->sspp[i].sblk->sspp_rec1_blk.len > 0)
+			msm_disp_snapshot_add_block(disp_state,
+						    cat->sspp[i].sblk->sspp_rec1_blk.len,
+						    base + cat->sspp[i].sblk->sspp_rec1_blk.base,
+						    "%s_%s", cat->sspp[i].name,
+						    cat->sspp[i].sblk->sspp_rec1_blk.name);
 	}
 
 	/* dump LM sub-blocks HW regs info */
