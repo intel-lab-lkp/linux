@@ -10,7 +10,7 @@
 
 / {
 	model = "TP-Link Archer AX55 v1";
-	compatible = "tplink,archer-ax55-v1", "qcom,ipq5018";
+	compatible = "tplink,archer-ax55-v1", "qcom,ipq0518", "qcom,ipq5018";
 
 	aliases {
 		serial0 = &blsp1_uart1;
