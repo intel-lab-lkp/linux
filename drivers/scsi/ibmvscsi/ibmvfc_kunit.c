@@ -3,6 +3,7 @@
 #include <kunit/visibility.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_transport_fc.h>
+#include <scsi/fc/fc_els.h>
 #include <linux/list.h>
 #include <linux/delay.h>
 #include "ibmvfc.h"
@@ -282,9 +283,153 @@ static void ibmvfc_full_fpin_test(struct kunit *test)
 	scsi_host_put(vhost->host);
 }
 
+#define IBMVFC_TEST_FPIN_EXT_TARGET(fs, ev, stat) do {				\
+	struct ibmvfc_async_crq_event ae = { .type = IBMVFC_ASYNC_CRQ_SUB };	\
+	memset(&crq, 0, sizeof(crq));						\
+	crq.valid = 0x80;							\
+	crq.flags = IBMVFC_ASYNC_IS_FPIN_EXT;					\
+	crq.link_state = IBMVFC_AE_LS_LINK_UP;					\
+	crq.fpin_status = (fs);							\
+	crq.event = cpu_to_be16(IBMVFC_AE_FPIN);				\
+	crq.wwpn = cpu_to_be64(tgt->wwpn);					\
+	crq.fpin_data.flags = IBMVFC_FPIN_EVENT_TYPE_VALID;			\
+	crq.fpin_data.event_type = cpu_to_be16((ev));				\
+	ae.subq = *(struct ibmvfc_async_sub_crq *)&crq;				\
+	pre = READ_ONCE(rport->fpin_stats.stat);				\
+	spin_lock_irqsave(&vhost->host->host_lock, flags);			\
+	ibmvfc_handle_async(&ae, vhost);					\
+	spin_unlock_irqrestore(&vhost->host->host_lock, flags);			\
+	flush_workqueue(vhost->fpin_workq);					\
+	post = READ_ONCE(rport->fpin_stats.stat);				\
+	KUNIT_EXPECT_GT(test, post, pre);					\
+} while (0)
+
+#define IBMVFC_TEST_FPIN_EXT_HOST(fs, ev, stat) do {				\
+	struct ibmvfc_async_crq_event ae = { .type = IBMVFC_ASYNC_CRQ_SUB };	\
+	memset(&crq, 0, sizeof(crq));						\
+	crq.valid = 0x80;							\
+	crq.flags = IBMVFC_ASYNC_IS_FPIN_EXT;					\
+	crq.link_state = IBMVFC_AE_LS_LINK_UP;					\
+	crq.fpin_status = (fs);							\
+	crq.event = cpu_to_be16(IBMVFC_AE_FPIN);				\
+	crq.wwpn = cpu_to_be64(tgt->wwpn);					\
+	crq.fpin_data.flags = IBMVFC_FPIN_EVENT_TYPE_VALID;			\
+	crq.fpin_data.event_type = cpu_to_be16((ev));				\
+	ae.subq = *(struct ibmvfc_async_sub_crq *)&crq;				\
+	pre = READ_ONCE(fc_host->fpin_stats.stat);				\
+	spin_lock_irqsave(&vhost->host->host_lock, flags);			\
+	ibmvfc_handle_async(&ae, vhost);					\
+	spin_unlock_irqrestore(&vhost->host->host_lock, flags);			\
+	flush_workqueue(vhost->fpin_workq);					\
+	post = READ_ONCE(fc_host->fpin_stats.stat);				\
+	KUNIT_EXPECT_GT(test, post, pre);					\
+} while (0)
+
+/**
+ * ibmvfc_extended_fpin_test - unit test for extended FPIN events
+ * @test: pointer to kunit structure
+ *
+ * Return: void
+ */
+static void ibmvfc_extended_fpin_test(struct kunit *test)
+{
+	enum ibmvfc_ae_fpin_status fs;
+	struct ibmvfc_async_subq_fpin crq;
+	struct ibmvfc_target *tgt;
+	struct ibmvfc_host *vhost;
+	struct fc_host_attrs *fc_host;
+	struct fc_rport *rport;
+	LIST_HEAD(evt_doneq);
+	unsigned long flags;
+	u64 pre, post;
+
+	vhost = ibmvfc_get_first_vhost();
+	if (!vhost)
+		kunit_skip(test, "No ibmvfc devices available");
+
+	if (!ibmvfc_check_caps(vhost, IBMVFC_SUPPORT_FPIN_EXT)) {
+		scsi_host_put(vhost->host);
+		kunit_skip(test, "Extended FPIN not supported");
+	}
+
+	spin_lock_irqsave(&vhost->host->host_lock, flags);
+	if (vhost->scsi_scrqs.num_targets < 1) {
+		spin_unlock_irqrestore(&vhost->host->host_lock, flags);
+		scsi_host_put(vhost->host);
+		kunit_skip(test, "No targets");
+	}
+	tgt = NULL;
+	rport = NULL;
+	list_for_each_entry(tgt, &vhost->scsi_scrqs.targets, queue) {
+		if (tgt->rport &&
+		    tgt->rport->port_state == FC_PORTSTATE_ONLINE &&
+		    (tgt->rport->roles & (FC_PORT_ROLE_FCP_TARGET | FC_PORT_ROLE_NVME_TARGET))) {
+			rport = tgt->rport;
+			get_device(&rport->dev);
+			kref_get(&tgt->kref);
+			break;
+		}
+	}
+	if (!rport) {
+		spin_unlock_irqrestore(&vhost->host->host_lock, flags);
+		scsi_host_put(vhost->host);
+		kunit_skip(test, "No suitable online target rport found");
+	}
+	spin_unlock_irqrestore(&vhost->host->host_lock, flags);
+
+	fc_host = shost_to_fc_host(vhost->host);
+
+	for (fs = IBMVFC_AE_FPIN_LINK_CONGESTED; fs <= IBMVFC_AE_FPIN_CONGESTION_CLEARED; fs++) {
+		switch (fs) {
+		case IBMVFC_AE_FPIN_LINK_CONGESTED:
+			IBMVFC_TEST_FPIN_EXT_HOST(fs, FPIN_CONGN_CLEAR, cn_clear);
+			IBMVFC_TEST_FPIN_EXT_HOST(fs, FPIN_CONGN_LOST_CREDIT, cn_lost_credit);
+			IBMVFC_TEST_FPIN_EXT_HOST(fs, FPIN_CONGN_CREDIT_STALL, cn_credit_stall);
+			IBMVFC_TEST_FPIN_EXT_HOST(fs, FPIN_CONGN_OVERSUBSCRIPTION,
+						  cn_oversubscription);
+			IBMVFC_TEST_FPIN_EXT_HOST(fs, FPIN_CONGN_DEVICE_SPEC, cn_device_specific);
+			break;
+		case IBMVFC_AE_FPIN_PORT_CONGESTED:
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_CONGN_CLEAR, cn_clear);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_CONGN_LOST_CREDIT, cn_lost_credit);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_CONGN_CREDIT_STALL, cn_credit_stall);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_CONGN_OVERSUBSCRIPTION,
+						    cn_oversubscription);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_CONGN_DEVICE_SPEC, cn_device_specific);
+			break;
+		case IBMVFC_AE_FPIN_PORT_CLEARED:
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_CONGN_CLEAR, cn_clear);
+			break;
+		case IBMVFC_AE_FPIN_CONGESTION_CLEARED:
+			IBMVFC_TEST_FPIN_EXT_HOST(fs, FPIN_CONGN_CLEAR, cn_clear);
+			break;
+		case IBMVFC_AE_FPIN_PORT_DEGRADED:
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_LI_UNKNOWN, li_failure_unknown);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_LI_LINK_FAILURE,
+						    li_link_failure_count);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_LI_LOSS_OF_SYNC,
+						    li_loss_of_sync_count);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_LI_LOSS_OF_SIG,
+						    li_loss_of_signals_count);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_LI_PRIM_SEQ_ERR,
+						    li_prim_seq_err_count);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_LI_INVALID_TX_WD,
+						    li_invalid_tx_word_count);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_LI_INVALID_CRC, li_invalid_crc_count);
+			IBMVFC_TEST_FPIN_EXT_TARGET(fs, FPIN_LI_DEVICE_SPEC, li_device_specific);
+			break;
+		}
+	}
+
+	put_device(&rport->dev);
+	kref_put(&tgt->kref, ibmvfc_release_tgt);
+	scsi_host_put(vhost->host);
+}
+
 static struct kunit_case ibmvfc_fpin_test_cases[] = {
 	KUNIT_CASE(ibmvfc_async_fpin_test),
 	KUNIT_CASE(ibmvfc_full_fpin_test),
+	KUNIT_CASE(ibmvfc_extended_fpin_test),
 	{},
 };
 
