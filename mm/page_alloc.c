@@ -2423,8 +2423,10 @@ __rmqueue_claim(struct zone *zone, int order, int start_migratetype,
 }
 
 /*
- * Try to steal a single page from some fallback migratetype. Leave the rest of
- * the block as its current migratetype, potentially causing fragmentation.
+ * Try to steal one page from a fallback type, leaving the rest of the block
+ * unchanged and possibly fragmented. A non-movable allocation must not steal
+ * from a movable block: without converting its type, the steal would leave
+ * non-movable content under a movable type.
  */
 static __always_inline struct page *
 __rmqueue_steal(struct zone *zone, int order, int start_migratetype)
@@ -2444,6 +2446,19 @@ __rmqueue_steal(struct zone *zone, int order, int start_migratetype)
 			continue;
 
 		page = get_page_from_free_area(area, fallback_mt);
+
+		/*
+		 * Do not allow non-movable allocations in movable
+		 * pageblocks; that could break compaction.
+		 * Non-movable allocations should claim pageblocks, instead.
+		 */
+		if (!is_migrate_movable(start_migratetype) &&
+		    is_migrate_movable(fallback_mt) &&
+		    !page_group_by_mobility_disabled &&
+		    zone_spans_pageblock(zone, page_to_pfn(page))) {
+			continue;
+		}
+
 		page_del_and_expand(zone, page, order, current_order, fallback_mt);
 		trace_mm_page_alloc_extfrag(page, order, current_order,
 					    start_migratetype, fallback_mt);
