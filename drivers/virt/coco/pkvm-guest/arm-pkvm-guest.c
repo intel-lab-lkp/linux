@@ -12,6 +12,8 @@
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/mem_encrypt.h>
+#include <linux/memblock.h>
+#include <linux/memory.h>
 #include <linux/mm.h>
 #include <linux/pgtable.h>
 
@@ -70,17 +72,50 @@ static int mmio_guard_ioremap_hook(phys_addr_t phys, size_t size,
 	if (protval != PROT_DEVICE_nGnRE && protval != PROT_DEVICE_nGnRnE)
 		return 0;
 
-	end = PAGE_ALIGN(phys + size);
-	phys = PAGE_ALIGN_DOWN(phys);
+	/*
+	 * It is fine to overshoot MMIO_GUARD requests. Its sole purpose is to
+	 * indicate to the hypervisor where the MMIO regions are and we have
+	 * validated the alignment of the memory regions beforehand.
+	 */
+	end = ALIGN(phys + size, max(pkvm_granule, PAGE_SIZE));
+	phys = ALIGN_DOWN(phys, max(pkvm_granule, PAGE_SIZE));
 
-	while (phys < end) {
-		const int func_id = ARM_SMCCC_VENDOR_HYP_KVM_MMIO_GUARD_FUNC_ID;
+	WARN_ON_ONCE(arm_smccc_do_range(ARM_SMCCC_VENDOR_HYP_KVM_MMIO_GUARD_FUNC_ID,
+					phys, end - phys));
+	return 0;
+}
 
-		WARN_ON_ONCE(arm_smccc_do_range(func_id, phys, PAGE_SIZE));
-		phys += PAGE_SIZE;
+/*
+ * Return true if the MMIO_GUARD service is available and if overshooting is
+ * safe, which it is if the memory regions are aligned with pkvm_granule.
+ */
+static bool __init mmio_guard_available(void)
+{
+	struct memblock_region *region;
+	phys_addr_t prev_end = 0;
+
+	if (!kvm_arm_hyp_service_available(ARM_SMCCC_KVM_FUNC_MMIO_GUARD))
+		return false;
+
+	if (pkvm_granule <= PAGE_SIZE)
+		return true;
+
+	if (IS_ENABLED(CONFIG_MEMORY_HOTPLUG) &&
+	    pkvm_granule > memory_block_size_bytes())
+		return false;
+
+	for_each_mem_region(region) {
+		if (prev_end == region->base)
+			goto contiguous;
+
+		if (!IS_ALIGNED(prev_end | region->base, pkvm_granule))
+			return false;
+
+contiguous:
+		prev_end = region->base + region->size;
 	}
 
-	return 0;
+	return IS_ALIGNED(prev_end, pkvm_granule);
 }
 
 void __init pkvm_init_hyp_services(void)
@@ -108,7 +143,7 @@ void __init pkvm_init_hyp_services(void)
 		pr_info("pKVM: sharing memory in %zu-byte granules\n", pkvm_granule);
 	arm64_mem_crypt_ops_register(&pkvm_crypt_ops);
 
-	if (kvm_arm_hyp_service_available(ARM_SMCCC_KVM_FUNC_MMIO_GUARD))
+	if (mmio_guard_available())
 		arm64_ioremap_prot_hook_register(&mmio_guard_ioremap_hook);
 
 	static_branch_enable(&pkvm_guest);
