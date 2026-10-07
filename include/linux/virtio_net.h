@@ -48,6 +48,52 @@ static inline int virtio_net_hdr_set_proto(struct sk_buff *skb,
 	return 0;
 }
 
+static inline bool virtio_net_hdr_thoff_valid(const struct sk_buff *skb,
+					      unsigned int nh_min_len)
+{
+	int thoff = skb_transport_offset(skb);
+	const struct iphdr *iph;
+	__be16 proto = 0;
+	int nhoff;
+
+	DEBUG_NET_WARN_ON_ONCE(skb->mac_len);
+
+	if (skb->dev->type == ARPHRD_ETHER) {
+		if (unlikely(thoff < ETH_HLEN))
+			return false;
+		nhoff = ETH_HLEN;
+		proto = eth_hdr(skb)->h_proto;
+		if (eth_type_vlan(proto)) {
+			proto = __vlan_get_protocol(skb, proto, &nhoff);
+			if (!proto)
+				return false;
+		}
+	} else {
+		nhoff = skb_network_offset(skb);
+	}
+
+	if (unlikely(thoff < nhoff + nh_min_len))
+		return false;
+
+	iph = (const void *)(skb->data + nhoff);
+	if (!proto) {
+		if (iph->version == 4)
+			proto = htons(ETH_P_IP);
+		else if (iph->version == 6)
+			proto = htons(ETH_P_IPV6);
+	}
+
+	if (proto == htons(ETH_P_IP) || skb->protocol == htons(ETH_P_IP)) {
+		if (unlikely(iph->ihl < 5))
+			return false;
+		nh_min_len = max_t(u32, iph->ihl * 4, nh_min_len);
+	}
+	if (proto == htons(ETH_P_IPV6) || skb->protocol == htons(ETH_P_IPV6))
+		nh_min_len = max_t(u32, sizeof(struct ipv6hdr), nh_min_len);
+
+	return thoff >= nhoff + nh_min_len;
+}
+
 static inline int __virtio_net_hdr_to_skb(struct sk_buff *skb,
 					  const struct virtio_net_hdr *hdr,
 					  bool little_endian, u8 hdr_gso_type)
@@ -104,7 +150,7 @@ static inline int __virtio_net_hdr_to_skb(struct sk_buff *skb,
 
 		if (!skb_partial_csum_set(skb, start, off))
 			return -EINVAL;
-		if (skb_transport_offset(skb) < nh_min_len)
+		if (!virtio_net_hdr_thoff_valid(skb, nh_min_len))
 			return -EINVAL;
 
 		nh_min_len = skb_transport_offset(skb);
