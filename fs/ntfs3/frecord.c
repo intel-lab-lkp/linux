@@ -3430,6 +3430,10 @@ ssize_t ni_query_ads(struct ntfs_inode *ni, loff_t *pos, struct iov_iter *iter)
 			break;
 		}
 
+		/* copy_to_iter() below may have copied nothing. */
+		if (*pos < vbo)
+			break;
+
 		if (vbo + err > *pos) {
 			size_t off = *pos - vbo;
 			used = err - off;
