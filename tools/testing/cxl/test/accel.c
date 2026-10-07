@@ -20,6 +20,7 @@ static int cxl_mock_accel_probe(struct platform_device *pdev)
 	struct cxl_dev_state *cxlds;
 	struct cxl_memdev *cxlmd;
 	struct range mock_range;
+	u64 region_size = pdev->id == 0 ? SZ_512M : SZ_256M;
 	int rc;
 
 	cxl_accel = devm_cxl_dev_state_create(&pdev->dev, CXL_DEVTYPE_DEVMEM,
@@ -35,9 +36,34 @@ static int cxl_mock_accel_probe(struct platform_device *pdev)
 	if (rc)
 		return rc;
 
-	cxlmd = devm_cxl_probe_mem(cxlds, &mock_range);
+	/* Keep the firmware-configured accelerator on the legacy API. */
+	if (pdev->id == 0)
+		cxlmd = devm_cxl_probe_mem(cxlds, &mock_range);
+	else
+		cxlmd = devm_cxl_register_mem(cxlds);
 	if (IS_ERR(cxlmd))
 		return PTR_ERR(cxlmd);
+
+	if (pdev->id != 0) {
+		rc = devm_cxl_attach_mem_region(cxlmd, &mock_range);
+		if (rc == -ENXIO) {
+			/* The provider chooses to map half its volatile capacity. */
+			rc = devm_cxl_create_ram_region(cxlmd, region_size);
+			if (rc)
+				return rc;
+			rc = devm_cxl_attach_mem_region(cxlmd, &mock_range);
+		}
+		if (rc)
+			return rc;
+	}
+
+	if (mock_range.start > mock_range.end ||
+	    range_len(&mock_range) != region_size) {
+		dev_err(dev,
+			"accelerator%d returned invalid HPA range %pra (expected %llu bytes)\n",
+			pdev->id, &mock_range, region_size);
+		return -ERANGE;
+	}
 	cxl_accel->cxlmd = cxlmd;
 
 	dev_dbg(dev, "Probed mock accelerator with range %pra\n", &mock_range);

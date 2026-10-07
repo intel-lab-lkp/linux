@@ -29,7 +29,7 @@ static bool mock_zero_size_decoders;
 #define NR_CXL_SWITCH_PORTS 2
 #define NR_CXL_PORT_DECODERS 8
 #define NR_BRIDGES (NR_CXL_HOST_BRIDGES + NR_CXL_SINGLE_HOST + NR_CXL_RCH)
-#define NR_CXL_TYPE2_ACCEL 1
+#define NR_CXL_TYPE2_ACCEL 2
 
 #define MOCK_AUTO_REGION_SIZE_DEFAULT SZ_512M
 static int mock_auto_region_size = MOCK_AUTO_REGION_SIZE_DEFAULT;
@@ -494,7 +494,17 @@ static void cfmws_elc_update(struct acpi_cedt_cfmws *window, int index)
 
 static void update_type2_cfmws(void)
 {
+	struct acpi_cedt_cfmws *window = &mock_cedt.cfmws1.cfmws;
+
 	memcpy(&mock_cedt.cfmws0.cfmws, &type2_cfmws0, sizeof(type2_cfmws0));
+
+	/* Give the unconfigured accelerator its own single-target window. */
+	window->header.length = sizeof(*window) +
+				sizeof(mock_cedt.cfmws1.target[0]);
+	window->interleave_ways = 0;
+	window->restrictions = ACPI_CEDT_CFMWS_RESTRICT_DEVMEM |
+			       ACPI_CEDT_CFMWS_RESTRICT_VOLATILE;
+	mock_cedt.cfmws1.target[0] = 1;
 }
 
 static int populate_cedt(void)
@@ -1122,6 +1132,7 @@ enum cxld_init_type {
 	MOCK_DECODER_INIT_SAVED,
 	MOCK_DECODER_INIT_TYPE3_AUTO,
 	MOCK_DECODER_INIT_TYPE2_AUTO,
+	MOCK_DECODER_INIT_TYPE2_MANUAL,
 };
 
 static enum cxld_init_type get_decoder_init_type(struct cxl_decoder *cxld,
@@ -1131,12 +1142,13 @@ static enum cxld_init_type get_decoder_init_type(struct cxl_decoder *cxld,
 {
 	struct cxl_test_decoder *found_td = cxld_registry_find(cxld);
 
-	if (found_td) {
-		*td = found_td;
-		return MOCK_DECODER_INIT_SAVED;
-	}
+	*td = found_td;
+	if (type2_test && is_endpoint_decoder(&cxld->dev) && pdev->id == 1 &&
+	    cxld->id == 0)
+		return MOCK_DECODER_INIT_TYPE2_MANUAL;
 
-	*td = NULL;
+	if (found_td)
+		return MOCK_DECODER_INIT_SAVED;
 
 	/*
 	 * The first decoder on the first 2 devices on the first switch
@@ -1167,6 +1179,27 @@ static bool mock_decoder_handle_saved(struct cxl_decoder *cxld, struct cxl_test_
 		return !cxld_registry_restore(cxld, td);
 
 	init_disabled_mock_decoder(cxld);
+	return false;
+}
+
+static bool mock_init_hdm_type2_manual(struct cxl_endpoint_decoder *cxled,
+				       struct cxl_test_decoder *td)
+{
+	struct cxl_decoder *cxld = &cxled->cxld;
+
+	if (td) {
+		if (mock_decoder_handle_saved(cxld, td))
+			return true;
+	} else {
+		init_disabled_mock_decoder(cxld);
+	}
+
+	/* Preserve DEVMEM on disabled replay and failed saved-state restore. */
+	cxld->target_type = CXL_DECODER_DEVMEM;
+	cxld->interleave_granularity = CXL_DECODER_MIN_GRANULARITY;
+	if (!td)
+		WARN_ON_ONCE(!cxld_registry_new(cxld));
+
 	return false;
 }
 
@@ -1445,6 +1478,8 @@ static bool mock_init_hdm_decoder(struct cxl_decoder *cxld)
 	case MOCK_DECODER_INIT_TYPE2_AUTO:
 		mock_init_hdm_type2_cxled(cxled, port);
 		return false;
+	case MOCK_DECODER_INIT_TYPE2_MANUAL:
+		return mock_init_hdm_type2_manual(cxled, td);
 	default:
 		return false;
 	}
