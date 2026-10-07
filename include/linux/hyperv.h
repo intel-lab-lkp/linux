@@ -784,13 +784,18 @@ struct vmbus_gpadl {
 	bool leak;
 };
 
+struct vmbus_buffer_retained;
+
 struct vmbus_buffer {
 	void *addr;
 	struct page **chunks;
 	struct page **pages;
 	u32 chunk_cnt;
+	u32 page_cnt;
+	u32 size;
 	struct vmbus_gpadl gpadl;
 	bool leak;
+	struct vmbus_buffer_retained *owner;
 };
 
 struct vmbus_channel {
@@ -811,6 +816,7 @@ struct vmbus_channel {
 	bool rescind; /* got rescind msg */
 	bool rescind_from_host; /* host revocation, not local channel removal */
 	bool rescind_ref; /* got rescind msg, got channel reference */
+	u64 lifetime_id;
 	struct completion rescind_event;
 
 	/* Allocated memory for ring buffer */
@@ -1228,6 +1234,18 @@ extern void *vmbus_alloc_buffer(struct vmbus_channel *channel,
 				u32 *chunk_cnt_out);
 
 extern void vmbus_free_buffer(void *addr, struct page **chunks, u32 chunk_cnt);
+
+int vmbus_establish_gpadl_owned(struct vmbus_channel *channel,
+				struct vmbus_buffer *buffer);
+
+int vmbus_teardown_gpadl_owned(struct vmbus_channel *channel,
+			       struct vmbus_buffer *buffer);
+
+int vmbus_alloc_buffer_owned(struct vmbus_channel *channel,
+			     u32 size,
+			     bool confidential,
+			     struct vmbus_buffer *buffer);
+
 void vmbus_release_buffer(struct vmbus_buffer *buffer);
 
 void vmbus_reset_channel_cb(struct vmbus_channel *channel);

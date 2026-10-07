@@ -354,6 +354,7 @@ struct vmbus_channel_message_table_entry {
 extern const struct vmbus_channel_message_table_entry
 	channel_message_table[CHANNELMSG_COUNT];
 
+void vmbus_buffer_reclaimer_shutdown(void);
 
 /* General vmbus interface */
 
@@ -552,6 +553,31 @@ int hv_create_ring_sysfs(struct vmbus_channel *channel,
 int hv_remove_ring_sysfs(struct vmbus_channel *channel);
 
 /*
+ * Retained buffer owner. One per channel-keyed allocation; freed only
+ * after GPADL, page-state and mapping-reference gates all clear.
+ */
+struct vmbus_buffer_retained {
+	struct list_head list;
+	struct delayed_work reclaim_work;
+	u64 channel_id;
+	u64 owner_id;
+	void *addr;
+	struct page **chunks;
+	struct page **pages;
+	u32 chunk_cnt;
+	u32 page_cnt;
+	u32 size;
+	bool released;
+	bool host_may_own;
+	bool needs_encrypt;
+	bool raw_decrypted;
+	bool encryption_unknown;
+	bool permanent_leak;
+	bool work_active;
+	bool reclaiming;
+};
+
+/*
  * vmbus buffer sizing, order-descent and free-decision helpers.
  *
  * These are shared with vmbus_buffer_test.c, which is built into the
@@ -579,6 +605,20 @@ struct page *vmbus_alloc_pages_with_fallback(int nid, gfp_t gfp,
 					     void *context);
 
 /*
+ * Owner lifetime and reclaim-gate helpers, shared with
+ * vmbus_buffer_test.c for the same reason as the sizing helpers.
+ * Defined in channel.c, unexported.
+ */
+bool vmbus_buffer_owner_can_reclaim(const struct vmbus_buffer_retained *owner);
+bool vmbus_buffer_owner_should_schedule(const struct vmbus_buffer_retained *owner,
+					bool stopping, bool queue_live);
+bool vmbus_buffer_pages_busy(struct vmbus_buffer_retained *owner);
+void vmbus_buffer_owner_drain(struct vmbus_buffer_retained *owner,
+			      struct workqueue_struct *wq);
+struct vmbus_buffer_retained *
+vmbus_buffer_owner_alloc(struct vmbus_channel *channel);
+
+/*
  * GPADL post and response helpers, also shared with vmbus_buffer_test.c.
  * Same deal as the sizing helpers above: defined in channel.c, built into
  * the hv_vmbus object, never exported.
@@ -596,5 +636,16 @@ int vmbus_post_gpadl_teardown(u32 child_relid,
 			      u32 gpadl,
 			      vmbus_gpadl_post_fn post_msg,
 			      void *context);
+typedef struct vmbus_channel_msginfo *(*vmbus_gpadl_info_alloc_fn)(void);
+typedef int (*vmbus_gpadl_teardown_post_fn)(struct vmbus_connection *connection,
+					 struct vmbus_channel_msginfo *info);
+int vmbus_gpadl_teardown_request(struct vmbus_channel *channel,
+				 struct vmbus_buffer *buffer,
+				 vmbus_gpadl_info_alloc_fn alloc_info,
+				 struct vmbus_connection *connection,
+				 vmbus_gpadl_teardown_post_fn post,
+				 unsigned long timeout);
+void vmbus_complete_gpadl_teardown(struct vmbus_connection *connection,
+				   struct vmbus_channel_gpadl_torndown *response);
 
 #endif /* _HYPERV_VMBUS_H */

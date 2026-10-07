@@ -8,6 +8,30 @@
 
 #include <linux/tracepoint.h>
 
+/* Opaque allocation identities; never expose a kernel pointer. */
+TRACE_EVENT(vmbus_buffer_owner,
+	    TP_PROTO(u64 owner_id, u64 channel_id, const char *action,
+		     u32 size, u32 pages, u8 state),
+	    TP_ARGS(owner_id, channel_id, action, size, pages, state),
+	    TP_STRUCT__entry(__field(u64, owner_id)
+		__field(u64, channel_id)
+		__string(action, action)
+		__field(u32, size)
+		__field(u32, pages)
+		__field(u8, state)
+	),
+	    TP_fast_assign(__entry->owner_id = owner_id;
+		__entry->channel_id = channel_id;
+		__assign_str(action);
+		__entry->size = size;
+		__entry->pages = pages;
+		__entry->state = state;
+	),
+	    TP_printk("owner_id=%llu channel_id=%llu action=%s size=%u pages=%u state=%u",
+		      __entry->owner_id, __entry->channel_id, __get_str(action),
+		      __entry->size, __entry->pages, __entry->state)
+);
+
 DECLARE_EVENT_CLASS(vmbus_hdr_msg,
 	TP_PROTO(const struct vmbus_channel_message_header *hdr),
 	TP_ARGS(hdr),

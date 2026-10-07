@@ -3075,6 +3075,7 @@ static void __exit vmbus_exit(void)
 					&hyperv_panic_vmbus_unload_block);
 
 	bus_unregister(&hv_bus);
+	vmbus_buffer_reclaimer_shutdown();
 
 	cpuhp_remove_state(hyperv_cpuhp_online);
 	hv_synic_free();
