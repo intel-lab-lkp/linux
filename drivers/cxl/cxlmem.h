@@ -97,6 +97,13 @@ static inline bool is_cxl_endpoint(struct cxl_port *port)
 	return is_cxl_memdev(port->uport_dev);
 }
 
+/**
+ * struct cxl_memdev_attach - provider ownership and CXL link requirements
+ * @probe: optional region probe callback, called with the memdev locked
+ *
+ * A non-NULL descriptor requires successful synchronous endpoint setup and
+ * preserves provider ownership even when no region probe is requested.
+ */
 struct cxl_memdev_attach {
 	int (*probe)(struct cxl_memdev *cxlmd);
 };
@@ -107,8 +114,8 @@ struct cxl_memdev_attach {
  * @hpa_range: physical address range of the region
  *
  * For the common simple case of a CXL device with private (non-general purpose
- * / "accelerator") memory, enumerate firmware instantiated region, or
- * instantiate a region for the device's capacity. Destroy the region on detach.
+ * / "accelerator") memory, enumerate a firmware-instantiated region and
+ * report its range. Destroy the region on detach.
  */
 struct cxl_attach_region {
 	struct cxl_memdev_attach attach;
@@ -116,11 +123,18 @@ struct cxl_attach_region {
 };
 
 #ifdef CONFIG_CXL_REGION
-int cxl_memdev_attach_region(struct cxl_memdev *cxlmd);
+int cxl_memdev_attach_region(struct cxl_memdev *cxlmd, struct range *hpa_range);
+int cxl_memdev_setup_region_cleanup(struct cxl_memdev *cxlmd);
 #else
-static inline int cxl_memdev_attach_region(struct cxl_memdev *cxlmd)
+static inline int cxl_memdev_attach_region(struct cxl_memdev *cxlmd,
+					   struct range *hpa_range)
 {
 	return -EOPNOTSUPP;
+}
+
+static inline int cxl_memdev_setup_region_cleanup(struct cxl_memdev *cxlmd)
+{
+	return 0;
 }
 #endif
 

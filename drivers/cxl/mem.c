@@ -172,7 +172,10 @@ static int cxl_mem_probe(struct device *dev)
 	}
 
 	if (cxlmd->attach) {
-		rc = cxlmd->attach->probe(cxlmd);
+		if (cxlmd->attach->probe)
+			rc = cxlmd->attach->probe(cxlmd);
+		else
+			rc = cxl_memdev_setup_region_cleanup(cxlmd);
 		if (rc)
 			return rc;
 	}
@@ -216,6 +219,68 @@ struct cxl_memdev *devm_cxl_add_classdev(struct cxl_dev_state *cxlds)
 EXPORT_SYMBOL_NS_GPL(devm_cxl_add_classdev, "CXL");
 
 /**
+ * devm_cxl_register_mem - Register a provider-owned CXL memory device
+ * @cxlds: CXL device state to associate with the memdev
+ *
+ * Establish the CXL port topology and endpoint synchronously, without requiring
+ * a committed region. The provider retains ownership of its memory, including
+ * any firmware-discovered regions, and must detach if the CXL link is lost.
+ *
+ * The parent of the resulting device and the devm context for allocations is
+ * @cxlds->dev. Returns the registered memdev or an ERR_PTR() on failure.
+ */
+struct cxl_memdev *devm_cxl_register_mem(struct cxl_dev_state *cxlds)
+{
+	struct cxl_memdev_attach *attach;
+
+	attach = devm_kzalloc(cxlds->dev, sizeof(*attach), GFP_KERNEL);
+	if (!attach)
+		return ERR_PTR(-ENOMEM);
+
+	return __devm_cxl_add_memdev(cxlds, attach);
+}
+EXPORT_SYMBOL_NS_GPL(devm_cxl_register_mem, "CXL");
+
+/**
+ * devm_cxl_attach_mem_region - Attach a registered memdev to its region
+ * @cxlmd: provider-owned memdev returned by devm_cxl_register_mem()
+ * @hpa_range: CXL.mem physical address range result
+ *
+ * Attach to an existing committed, single-target region. This does not create
+ * or program a region. Repeated attachment to the same region returns the same
+ * range without adding another cleanup action. Failure leaves the memdev
+ * registered so that the provider can decide how to proceed.
+ *
+ * The region is removed when the endpoint detaches. Returns zero on success or
+ * a negative errno; @hpa_range is empty on failure.
+ */
+int devm_cxl_attach_mem_region(struct cxl_memdev *cxlmd,
+			       struct range *hpa_range)
+{
+	if (!hpa_range)
+		return -EINVAL;
+	*hpa_range = DEFINE_RANGE(0, -1);
+
+	if (!cxlmd->attach)
+		return -EINVAL;
+
+	guard(device)(&cxlmd->dev);
+	if (!cxlmd->dev.driver || !cxlmd->cxlds)
+		return -ENXIO;
+
+	return cxl_memdev_attach_region(cxlmd, hpa_range);
+}
+EXPORT_SYMBOL_NS_GPL(devm_cxl_attach_mem_region, "CXL");
+
+static int cxl_probe_mem_region(struct cxl_memdev *cxlmd)
+{
+	struct cxl_attach_region *attach =
+		container_of(cxlmd->attach, typeof(*attach), attach);
+
+	return cxl_memdev_attach_region(cxlmd, &attach->hpa_range);
+}
+
+/**
  * devm_cxl_probe_mem - Add a CXL memory device and probe its region
  * @cxlds: CXL device state to associate with the memdev
  * @hpa_range: CXL.mem physical address range result
@@ -242,7 +307,7 @@ struct cxl_memdev *devm_cxl_probe_mem(struct cxl_dev_state *cxlds,
 
 	*attach = (struct cxl_attach_region) {
 		.attach = {
-			   .probe = cxl_memdev_attach_region,
+			   .probe = cxl_probe_mem_region,
 		},
 		.hpa_range = { 0, -1 },
 	};
