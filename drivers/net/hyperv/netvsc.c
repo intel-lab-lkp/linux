@@ -764,20 +764,45 @@ static inline void netvsc_free_send_slot(struct netvsc_device *net_device,
 	sync_change_bit(index, net_device->send_section_map);
 }
 
-static void netvsc_send_tx_complete(struct net_device *ndev,
-				    struct netvsc_device *net_device,
-				    struct vmbus_channel *channel,
-				    const struct vmpacket_descriptor *desc,
-				    int budget)
+void netvsc_send_acct(struct net_device *ndev,
+		      struct netvsc_device *net_device,
+		      struct vmbus_channel *channel,
+		      u16 q_idx)
+{
+	struct net_device_context *ndev_ctx = netdev_priv(ndev);
+	int queue_sends;
+
+	queue_sends =
+		atomic_dec_return(&net_device->chan_table[q_idx].queue_sends);
+
+	if (unlikely(net_device->destroy)) {
+		if (queue_sends == 0)
+			wake_up(&net_device->wait_drain);
+	} else {
+		struct netdev_queue *txq = netdev_get_tx_queue(ndev, q_idx);
+
+		if (netif_tx_queue_stopped(txq) && !net_device->tx_disable &&
+		    (hv_get_avail_to_write_percent(&channel->outbound) >
+		     RING_AVAIL_PERCENT_HIWATER || queue_sends < 1)) {
+			netif_tx_wake_queue(txq);
+			ndev_ctx->eth_stats.wake_queue++;
+		}
+	}
+}
+
+void netvsc_send_tx_complete(struct net_device *ndev,
+			     struct netvsc_device *net_device,
+			     struct vmbus_channel *channel,
+			     const struct vmpacket_descriptor *desc,
+			     int budget)
 {
 	struct net_device_context *ndev_ctx = netdev_priv(ndev);
 	struct sk_buff *skb;
 	u16 q_idx = 0;
-	int queue_sends;
 	u64 cmd_rqst;
 
 	cmd_rqst = channel->request_addr_callback(channel, desc->trans_id);
-	if (cmd_rqst == VMBUS_RQST_ERROR) {
+	if (cmd_rqst == VMBUS_RQST_ERROR || cmd_rqst == VMBUS_NO_RQSTOR) {
 		netdev_err(ndev, "Invalid transaction ID %llx\n", desc->trans_id);
 		return;
 	}
@@ -806,29 +831,14 @@ static void netvsc_send_tx_complete(struct net_device *ndev,
 		napi_consume_skb(skb, budget);
 	}
 
-	queue_sends =
-		atomic_dec_return(&net_device->chan_table[q_idx].queue_sends);
-
-	if (unlikely(net_device->destroy)) {
-		if (queue_sends == 0)
-			wake_up(&net_device->wait_drain);
-	} else {
-		struct netdev_queue *txq = netdev_get_tx_queue(ndev, q_idx);
-
-		if (netif_tx_queue_stopped(txq) && !net_device->tx_disable &&
-		    (hv_get_avail_to_write_percent(&channel->outbound) >
-		     RING_AVAIL_PERCENT_HIWATER || queue_sends < 1)) {
-			netif_tx_wake_queue(txq);
-			ndev_ctx->eth_stats.wake_queue++;
-		}
-	}
+	netvsc_send_acct(ndev, net_device, channel, q_idx);
 }
 
-static void netvsc_send_completion(struct net_device *ndev,
-				   struct netvsc_device *net_device,
-				   struct vmbus_channel *incoming_channel,
-				   const struct vmpacket_descriptor *desc,
-				   int budget)
+void netvsc_send_completion(struct net_device *ndev,
+			    struct netvsc_device *net_device,
+			    struct vmbus_channel *incoming_channel,
+			    const struct vmpacket_descriptor *desc,
+			    int budget)
 {
 	const struct nvsp_message *nvsp_packet;
 	u32 msglen = hv_pkt_datalen(desc);
@@ -840,8 +850,21 @@ static void netvsc_send_completion(struct net_device *ndev,
 	if (!msglen) {
 		cmd_rqst = incoming_channel->request_addr_callback(incoming_channel,
 								   desc->trans_id);
-		if (cmd_rqst == VMBUS_RQST_ERROR) {
+		if (cmd_rqst == VMBUS_RQST_ERROR || cmd_rqst == VMBUS_NO_RQSTOR) {
 			netdev_err(ndev, "Invalid transaction ID %llx\n", desc->trans_id);
+			return;
+		}
+
+		/*
+		 * netvsc_send_pkt() registers (ulong)skb as the request
+		 * address. Control RNDIS sends carry no skb, so the
+		 * registered address is NULL and there is no nvsp_message
+		 * to inspect. The request id is consumed above, so this
+		 * completion owns the send accounting -- the same thing
+		 * netvsc_send_tx_complete() does when it sees a NULL skb.
+		 */
+		if (!cmd_rqst) {
+			netvsc_send_acct(ndev, net_device, incoming_channel, 0);
 			return;
 		}
 

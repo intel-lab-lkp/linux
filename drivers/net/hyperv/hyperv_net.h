@@ -229,6 +229,21 @@ int rndis_build_page_buffers(const void *data, u32 len,
 			     struct hv_page_buffer *page_bufs,
 			     u32 *page_buf_cnt);
 
+void netvsc_send_acct(struct net_device *ndev,
+		      struct netvsc_device *net_device,
+		      struct vmbus_channel *channel,
+		      u16 q_idx);
+void netvsc_send_tx_complete(struct net_device *ndev,
+			     struct netvsc_device *net_device,
+			     struct vmbus_channel *channel,
+			     const struct vmpacket_descriptor *desc,
+			     int budget);
+void netvsc_send_completion(struct net_device *ndev,
+			    struct netvsc_device *net_device,
+			    struct vmbus_channel *incoming_channel,
+			    const struct vmpacket_descriptor *desc,
+			    int budget);
+
 extern u32 netvsc_ring_bytes;
 
 int netvsc_workqueue_init(void);
