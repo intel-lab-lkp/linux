@@ -251,11 +251,13 @@ static u32 get_reserved(struct intel_gmbus *bus)
 	struct intel_display *display = bus->display;
 	u32 preserve_bits = 0;
 
-	if (display->platform.i830 || display->platform.i845g)
-		return 0;
-
-	/* On most chips, these bits must be preserved in software. */
-	preserve_bits |= GPIO_DATA_PULLUP_DISABLE | GPIO_CLOCK_PULLUP_DISABLE;
+	/*
+	 * On gen2/3 these are either internal pullup disables, or
+	 * documented as reserved bits that need to be preserved.
+	 */
+	if (DISPLAY_VER(display) < 4)
+		preserve_bits |= GPIO_DATA_PULLUP_DISABLE |
+			GPIO_CLOCK_PULLUP_DISABLE;
 
 	/* Wa_16025573575: the masks bits need to be preserved through out */
 	if (intel_display_wa(display, INTEL_DISPLAY_WA_16025573575))
