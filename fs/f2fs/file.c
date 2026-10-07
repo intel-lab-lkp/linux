@@ -351,8 +351,15 @@ static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 
 	trace_f2fs_sync_file_enter(inode);
 
-	if (S_ISDIR(inode->i_mode))
+	if (S_ISDIR(inode->i_mode)) {
+		/*
+		 * Checkpoint writes only the inodes on the dirty meta list.
+		 * Timestamp updates of a directory, e.g. by unlinking a file
+		 * in it, do not put it on the list, so write it here.
+		 */
+		f2fs_write_inode(inode, NULL);
 		goto go_write;
+	}
 
 	/* if fdatasync is triggered, let's do in-place-update */
 	if (datasync || get_dirty_pages(inode) <= SM_I(sbi)->min_fsync_blocks)
