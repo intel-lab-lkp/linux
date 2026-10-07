@@ -48,6 +48,7 @@ tcp_fastopen_backup_key
 tcp_inq
 tcp_mmap
 tcp_port_share
+tcp_rmem_min
 tfo
 timestamping
 tls

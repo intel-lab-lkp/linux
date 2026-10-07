@@ -198,6 +198,7 @@ TEST_GEN_PROGS := \
 	so_incoming_cpu \
 	tap \
 	tcp_port_share \
+	tcp_rmem_min \
 	tls \
 	udp_splice_checksum \
 # end of TEST_GEN_PROGS
