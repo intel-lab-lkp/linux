@@ -123,9 +123,16 @@ struct cxl_attach_region {
 };
 
 #ifdef CONFIG_CXL_REGION
+int cxl_memdev_create_ram_region(struct cxl_memdev *cxlmd, u64 size);
 int cxl_memdev_attach_region(struct cxl_memdev *cxlmd, struct range *hpa_range);
 int cxl_memdev_setup_region_cleanup(struct cxl_memdev *cxlmd);
 #else
+static inline int cxl_memdev_create_ram_region(struct cxl_memdev *cxlmd,
+					       u64 size)
+{
+	return -EOPNOTSUPP;
+}
+
 static inline int cxl_memdev_attach_region(struct cxl_memdev *cxlmd,
 					   struct range *hpa_range)
 {

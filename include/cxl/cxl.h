@@ -225,6 +225,7 @@ struct cxl_dev_state *_devm_cxl_dev_state_create(struct device *dev,
 	})
 
 struct cxl_memdev *devm_cxl_register_mem(struct cxl_dev_state *cxlds);
+int devm_cxl_create_ram_region(struct cxl_memdev *cxlmd, u64 size);
 int devm_cxl_attach_mem_region(struct cxl_memdev *cxlmd, struct range *hpa_range);
 struct cxl_memdev *devm_cxl_probe_mem(struct cxl_dev_state *cxlds,
 				      struct range *range);

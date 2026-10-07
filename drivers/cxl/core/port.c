@@ -235,6 +235,9 @@ static ssize_t mode_store(struct device *dev, struct device_attribute *attr,
 	else
 		return -EINVAL;
 
+	/* Serialize partition selection with kernel region provisioning. */
+	guard(rwsem_write)(&cxl_rwsem.region);
+
 	rc = cxl_dpa_set_part(cxled, mode);
 	if (rc)
 		return rc;
@@ -275,6 +278,9 @@ static ssize_t dpa_size_store(struct device *dev, struct device_attribute *attr,
 
 	if (!IS_ALIGNED(size, SZ_256M))
 		return -EINVAL;
+
+	/* Keep the free/allocate sequence atomic against region setup. */
+	guard(rwsem_write)(&cxl_rwsem.region);
 
 	rc = cxl_dpa_free(cxled);
 	if (rc)

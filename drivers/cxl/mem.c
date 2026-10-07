@@ -242,6 +242,37 @@ struct cxl_memdev *devm_cxl_register_mem(struct cxl_dev_state *cxlds)
 EXPORT_SYMBOL_NS_GPL(devm_cxl_register_mem, "CXL");
 
 /**
+ * devm_cxl_create_ram_region - Create a provider-owned RAM region
+ * @cxlmd: provider-owned memdev returned by devm_cxl_register_mem()
+ * @size: requested region size in bytes, a nonzero multiple of 256 MiB
+ *
+ * Reserve @size bytes of volatile DPA and HPA, establish a single-target
+ * decoder path, and commit it. The caller chooses the size; this helper does
+ * not consume the device's entire capacity or replace an existing region.
+ * Obtain the resulting HPA range separately with devm_cxl_attach_mem_region().
+ *
+ * Requires an unused programmable endpoint decoder and a compatible
+ * non-interleaved root window without normalized addressing or an extended
+ * linear cache. Persistent memory provisioning is outside this helper.
+ *
+ * The region is removed and its software-programmed decoders are reset when
+ * the endpoint detaches. Failure unwinds the new allocations and leaves the
+ * memdev registered. Returns zero on success or a negative errno.
+ */
+int devm_cxl_create_ram_region(struct cxl_memdev *cxlmd, u64 size)
+{
+	if (!cxlmd->attach || !size)
+		return -EINVAL;
+
+	guard(device)(&cxlmd->dev);
+	if (!cxlmd->dev.driver || !cxlmd->cxlds)
+		return -ENXIO;
+
+	return cxl_memdev_create_ram_region(cxlmd, size);
+}
+EXPORT_SYMBOL_NS_GPL(devm_cxl_create_ram_region, "CXL");
+
+/**
  * devm_cxl_attach_mem_region - Attach a registered memdev to its region
  * @cxlmd: provider-owned memdev returned by devm_cxl_register_mem()
  * @hpa_range: CXL.mem physical address range result
