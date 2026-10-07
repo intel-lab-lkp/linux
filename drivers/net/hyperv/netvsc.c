@@ -144,7 +144,7 @@ static void __free_netvsc_device(struct netvsc_device *nvdev)
 		vfree(nvdev->chan_table[i].mrc.slots);
 	}
 
-	kfree(nvdev);
+	kvfree(nvdev);
 }
 
 static void free_netvsc_device(struct work_struct *w)
@@ -171,7 +171,7 @@ static struct netvsc_device *alloc_net_device(void)
 {
 	struct netvsc_device *net_device;
 
-	net_device = kzalloc_obj(struct netvsc_device);
+	net_device = kvzalloc_obj(struct netvsc_device);
 	if (!net_device)
 		return NULL;
 
