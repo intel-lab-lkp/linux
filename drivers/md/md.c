@@ -64,6 +64,7 @@
 #include <linux/slab.h>
 #include <linux/percpu-refcount.h>
 #include <linux/part_stat.h>
+#include <linux/miscdevice.h>
 
 #include "md.h"
 #include "md-bitmap.h"
@@ -366,6 +367,8 @@ EXPORT_SYMBOL_GPL(md_new_event);
  */
 static LIST_HEAD(all_mddevs);
 static DEFINE_SPINLOCK(all_mddevs_lock);
+
+static DEFINE_MUTEX(disks_mutex);
 
 static bool is_md_suspended(struct mddev *mddev)
 {
@@ -6319,7 +6322,6 @@ struct mddev *md_alloc(dev_t dev, char *name)
 	 * If "name" is not NULL, the device is being created by
 	 * writing to /sys/module/md_mod/parameters/new_array.
 	 */
-	static DEFINE_MUTEX(disks_mutex);
 	struct mddev *mddev;
 	struct gendisk *disk;
 	int partitioned;
@@ -6386,8 +6388,10 @@ struct mddev *md_alloc(dev_t dev, char *name)
 	disk->events |= DISK_EVENT_MEDIA_CHANGE;
 	mddev->gendisk = disk;
 	error = add_disk(disk);
-	if (error)
+	if (error) {
+		mddev->gendisk = NULL;
 		goto out_put_disk;
+	}
 
 	kobject_init(&mddev->kobj, &md_ktype);
 	error = kobject_add(&mddev->kobj, &disk_to_dev(disk)->kobj, "%s", "md");
@@ -8375,7 +8379,7 @@ static int __md_set_array_info(struct mddev *mddev, void __user *argp)
 }
 
 static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
-			unsigned int cmd, unsigned long arg)
+		    unsigned int cmd, unsigned long arg)
 {
 	int err = 0;
 	unsigned int noio_flags = 0;
@@ -8386,6 +8390,8 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 	err = md_ioctl_valid(cmd);
 	if (err)
 		return err;
+
+	pr_warn_once("md: ioctl is deprecated and will be removed in future, please upgrade to mdadm-4.6+\n");
 
 	/*
 	 * Commands dealing with the RAID driver but not any
@@ -8601,6 +8607,626 @@ static int md_compat_ioctl(struct block_device *bdev, blk_mode_t mode,
 	return md_ioctl(bdev, mode, cmd, arg);
 }
 #endif /* CONFIG_COMPAT */
+
+static struct mddev *mdctl_get_mddev_dev(dev_t dev)
+{
+	struct mddev *mddev, *ret = ERR_PTR(-EINVAL);
+
+	if (MINOR(dev) >= (1 << MINORBITS))
+		return ret;
+
+	if (MAJOR(dev) != MD_MAJOR)
+		dev &= ~((1 << MdpMinorShift) - 1);
+
+	ret = ERR_PTR(-ENODEV);
+	spin_lock(&all_mddevs_lock);
+	list_for_each_entry(mddev, &all_mddevs, all_mddevs) {
+		if (mddev->unit == dev) {
+			ret = mddev_get(mddev);
+			if (!ret)
+				ret = ERR_PTR(-ENODEV);
+			break;
+		}
+	}
+	spin_unlock(&all_mddevs_lock);
+
+	return ret;
+}
+
+static struct mddev *mdctl_get_mddev_name(const char *name)
+{
+	unsigned long minor;
+	struct mddev *mddev, *ret = ERR_PTR(-EINVAL);
+
+	if (strnlen(name, MD_NAME_LEN) == MD_NAME_LEN || strncmp(name, "md", 2))
+		return ret;
+
+	if (name[2] != '_' && (!isdigit(name[2]) ||
+			       kstrtoul(&name[2], 10, &minor) ||
+			       minor > MINORMASK))
+		return ret;
+
+	ret = ERR_PTR(-ENODEV);
+	spin_lock(&all_mddevs_lock);
+	list_for_each_entry(mddev, &all_mddevs, all_mddevs) {
+		if (mddev->gendisk &&
+		    strcmp(mddev->gendisk->disk_name, name) == 0) {
+			ret = mddev_get(mddev);
+			if (!ret)
+				ret = ERR_PTR(-ENODEV);
+			break;
+		}
+	}
+	spin_unlock(&all_mddevs_lock);
+
+	return ret;
+}
+
+static struct mddev *mdctl_get_mddev_uuid(const char *uuid)
+{
+	struct mddev *mddev, *ret = ERR_PTR(-ENODEV);
+
+	spin_lock(&all_mddevs_lock);
+	list_for_each_entry(mddev, &all_mddevs, all_mddevs) {
+		if (memcmp(mddev->uuid, uuid, sizeof(mddev->uuid)) == 0) {
+			ret = mddev_get(mddev);
+			if (!ret)
+				ret = ERR_PTR(-ENODEV);
+			break;
+		}
+	}
+	spin_unlock(&all_mddevs_lock);
+
+	return ret;
+}
+
+static struct mddev *mdctl_find_mddev(struct mdu_ioctl *md_ctl)
+{
+	struct mddev *ret = ERR_PTR(-EINVAL);
+
+	/*
+	 * md_alloc() adds a new mddev to all_mddevs before it creates the
+	 * gendisk. If creation fails. it frees the mddev directly, without
+	 * looking at ->active. All of this happens under disks_mutex.
+	 * Holding disks_mutex for the lookup means we only see mddevs that
+	 * md_alloc() has finished, so taking a reference is safe and every
+	 * mddev we find has a gendisk.
+	 */
+	mutex_lock(&disks_mutex);
+
+	if (memchr_inv(md_ctl->uuid, 0, MD_UUID_LEN)) {
+		if (*md_ctl->name || md_ctl->dev) {
+			pr_err_ratelimited("md: only supply one of name, uuid or dev number\n");
+			goto out;
+		}
+		ret = mdctl_get_mddev_uuid(md_ctl->uuid);
+	} else if (*md_ctl->name) {
+		if (md_ctl->dev) {
+			pr_err_ratelimited("md: only supply one of name, uuid or dev number\n");
+			goto out;
+		}
+		ret = mdctl_get_mddev_name(md_ctl->name);
+	} else if (md_ctl->dev) {
+		ret = mdctl_get_mddev_dev(new_decode_dev(md_ctl->dev));
+	}
+
+out:
+	mutex_unlock(&disks_mutex);
+	return ret;
+}
+
+static int mdctl_get_raid_version(struct mdu_version64 __user *user)
+{
+	struct mdu_version64 v = {0};
+
+	v.major = MD_MAJOR_VERSION;
+	v.minor = MD_MINOR_VERSION;
+	v.patchlevel = MD_PATCHLEVEL_VERSION;
+
+	if (copy_to_user(user, &v, sizeof(v)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int mdctl_get_array_info(struct mddev *mddev, void __user *arg)
+{
+	struct mdu_array_info64 info = {0};
+	int nr, working, insync, failed, spare, journal;
+	struct md_rdev *rdev;
+
+	nr = working = insync = failed = spare = journal = 0;
+	rcu_read_lock();
+	rdev_for_each_rcu(rdev, mddev) {
+		nr++;
+		if (test_bit(Faulty, &rdev->flags)) {
+			failed++;
+		} else {
+			working++;
+			if (test_bit(In_sync, &rdev->flags))
+				insync++;
+			else if (test_bit(Journal, &rdev->flags))
+				journal++;
+			else
+				spare++;
+		}
+	}
+	rcu_read_unlock();
+
+	info.major_version = mddev->major_version;
+	info.minor_version = mddev->minor_version;
+	info.patch_version = MD_PATCHLEVEL_VERSION;
+	info.ctime         = mddev->ctime;
+	info.level         = mddev->level;
+	info.size          = mddev->dev_sectors / 2;
+	info.nr_disks      = nr;
+	info.raid_disks    = mddev->raid_disks;
+	info.md_minor      = mddev->md_minor;
+	info.not_persistent = !mddev->persistent;
+
+	info.utime         = mddev->utime;
+	info.state         = 0;
+	if (mddev->in_sync)
+		info.state = (1 << MD_SB_CLEAN);
+	if (mddev->bitmap && mddev->bitmap_info.offset)
+		info.state |= (1 << MD_SB_BITMAP_PRESENT);
+	if (mddev_is_clustered(mddev))
+		info.state |= (1 << MD_SB_CLUSTERED);
+	info.active_disks  = insync;
+	info.working_disks = working;
+	info.failed_disks  = failed;
+	info.spare_disks   = spare;
+	info.journal_disks = journal;
+
+	info.layout        = mddev->layout;
+	info.chunk_size    = mddev->chunk_sectors << 9;
+
+	if (copy_to_user(arg, &info, sizeof(info)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int mdctl_get_disk_info(struct mddev *mddev, void __user *arg)
+{
+	struct mdu_disk_info64 info = {0};
+	struct md_rdev *rdev;
+
+	if (copy_from_user(&info, arg, sizeof(info)))
+		return -EFAULT;
+
+	rcu_read_lock();
+	rdev = md_find_rdev_nr_rcu(mddev, info.number);
+	if (rdev) {
+		info.major = MAJOR(rdev->bdev->bd_dev);
+		info.minor = MINOR(rdev->bdev->bd_dev);
+		info.raid_disk = rdev->raid_disk;
+		info.state = 0;
+		if (test_bit(Faulty, &rdev->flags))
+			info.state |= (1 << MD_DISK_FAULTY);
+		else if (test_bit(In_sync, &rdev->flags)) {
+			info.state |= (1 << MD_DISK_ACTIVE);
+			info.state |= (1 << MD_DISK_SYNC);
+		}
+		if (test_bit(Journal, &rdev->flags))
+			info.state |= (1 << MD_DISK_JOURNAL);
+		if (test_bit(WriteMostly, &rdev->flags))
+			info.state |= (1 << MD_DISK_WRITEMOSTLY);
+		if (test_bit(FailFast, &rdev->flags))
+			info.state |= (1 << MD_DISK_FAILFAST);
+	} else {
+		info.major = info.minor = 0;
+		info.raid_disk = -1;
+		info.state = (1 << MD_DISK_REMOVED);
+	}
+	rcu_read_unlock();
+
+	if (copy_to_user(arg, &info, sizeof(info)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int mdctl_get_bitmap_file(struct mddev *mddev, void __user *arg)
+{
+	struct mdu_bitmap_file64 *file; /* too big for stack allocation */
+	char *ptr;
+	int err;
+
+	file = kzalloc_obj(*file, GFP_NOIO);
+	if (!file)
+		return -ENOMEM;
+
+	err = 0;
+	spin_lock(&mddev->lock);
+	/* bitmap enabled */
+	if (mddev->bitmap_info.file) {
+		ptr = file_path(mddev->bitmap_info.file, file->pathname,
+				sizeof(file->pathname));
+		if (IS_ERR(ptr))
+			err = PTR_ERR(ptr);
+		else
+			memmove(file->pathname, ptr,
+				sizeof(file->pathname)-(ptr-file->pathname));
+	}
+	spin_unlock(&mddev->lock);
+
+	if (err == 0 &&
+	    copy_to_user(arg, file, sizeof(*file)))
+		err = -EFAULT;
+
+	kfree(file);
+	return err;
+}
+
+static int mdctl_set_array_info(struct mddev *mddev,
+				struct mdu_array_info64 __user *user)
+{
+	struct mdu_array_info64 info;
+	int err;
+
+	if (!user)
+		memset(&info, 0, sizeof(info));
+	else if (copy_from_user(&info, user, sizeof(info)))
+		return -EFAULT;
+
+	if (mddev->pers) {
+		err = update_array_info(mddev, &info);
+		if (err)
+			pr_warn("md: couldn't update array info. %d\n", err);
+		return err;
+	}
+
+	if (!list_empty(&mddev->disks)) {
+		pr_warn("md: array %s already has disks!\n", mdname(mddev));
+		return -EBUSY;
+	}
+
+	if (mddev->raid_disks) {
+		pr_warn("md: array %s already initialised!\n", mdname(mddev));
+		return -EBUSY;
+	}
+
+	err = md_set_array_info(mddev, &info);
+	if (err)
+		pr_warn("md: couldn't set array info. %d\n", err);
+
+	return err;
+}
+
+/*
+ * Return true if @cmd needs a configured array, false otherwise.
+ */
+static bool mdctl_ioctl_need_config(unsigned int cmd, u32 flags)
+{
+	switch (cmd) {
+	case MD_RAID_AUTORUN:
+	case MD_HOT_ADD_DISK:
+	case MD_HOT_REMOVE_DISK:
+	case MD_RESTART_ARRAY_RW:
+	case MD_CLUSTERED_DISK_NACK:
+		return true;
+
+	case MD_STOP_ARRAY:
+		/* switching to read-only needs an array, a full stop does not */
+		return !!(flags & MD_RO_FLAG);
+
+	default:
+		return false;
+	}
+}
+
+static bool mdctl_ioctl_need_suspend(unsigned int cmd)
+{
+	switch (cmd) {
+	case MD_ADD_NEW_DISK:
+	case MD_HOT_ADD_DISK:
+	case MD_HOT_REMOVE_DISK:
+	case MD_SET_BITMAP_FILE:
+	case MD_SET_ARRAY_INFO:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static int mdctl_ioctl_valid(unsigned int cmd)
+{
+	switch (cmd) {
+	case MD_GET_ARRAY_INFO:
+	case MD_GET_DISK_INFO:
+	case MD_RAID_VERSION:
+		return 0;
+
+	case MD_RAID_AUTORUN:
+	case MD_SET_DISK_FAULTY:
+	case MD_GET_BITMAP_FILE:
+	case MD_ADD_NEW_DISK:
+	case MD_HOT_ADD_DISK:
+	case MD_HOT_REMOVE_DISK:
+	case MD_RESTART_ARRAY_RW:
+	case MD_RUN_ARRAY:
+	case MD_SET_ARRAY_INFO:
+	case MD_SET_BITMAP_FILE:
+	case MD_STOP_ARRAY:
+	case MD_CLUSTERED_DISK_NACK:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EACCES;
+		return 0;
+	default:
+		return -ENOTTY;
+	}
+}
+
+static int mdctl_flags_valid(unsigned int cmd, u32 flags)
+{
+	switch (cmd) {
+	case MD_GET_ARRAY_INFO:
+	case MD_GET_DISK_INFO:
+	case MD_RAID_VERSION:
+	case MD_RAID_AUTORUN:
+	case MD_GET_BITMAP_FILE:
+	case MD_ADD_NEW_DISK:
+	case MD_HOT_ADD_DISK:
+	case MD_HOT_REMOVE_DISK:
+	case MD_RESTART_ARRAY_RW:
+	case MD_RUN_ARRAY:
+	case MD_SET_ARRAY_INFO:
+	case MD_SET_BITMAP_FILE:
+	case MD_SET_DISK_FAULTY:
+	case MD_CLUSTERED_DISK_NACK:
+		if (flags)
+			return -ENOTTY;
+		return 0;
+	case MD_STOP_ARRAY:
+		if (flags && flags != MD_RO_FLAG)
+			return -ENOTTY;
+		return 0;
+	default:
+		return -ENOTTY;
+	}
+}
+
+static long mdctl_ioctl(struct file *filp, uint cmd, ulong u)
+{
+	int err;
+	unsigned int noio_flags = 0;
+	struct mddev *mddev;
+	void __user *arg;
+	struct mdu_ioctl md_ctl;
+	bool suspend;
+	u32 flags;
+
+	err = mdctl_ioctl_valid(cmd);
+	if (err)
+		return err;
+
+	/*
+	 * Commands dealing with the RAID driver but not any
+	 * particular array:
+	 */
+	if (cmd == MD_RAID_VERSION)
+		return mdctl_get_raid_version((struct mdu_version64 __user *)u);
+
+	if (copy_from_user(&md_ctl, (void __user *)u, sizeof(md_ctl)))
+		return -EFAULT;
+
+	flags = md_ctl.flags;
+
+	/*
+	 * for now, Only MD_STOP_ARRAY takes flags; other commands need
+	 * flags == 0.
+	 */
+	err = mdctl_flags_valid(cmd, flags);
+	if (err)
+		return err;
+
+	mddev = mdctl_find_mddev(&md_ctl);
+	if (IS_ERR(mddev))
+		return PTR_ERR(mddev);
+
+	arg = u64_to_user_ptr(md_ctl.arg);
+
+	/* These commands do not need reconfig_mutex. */
+	err = -ENODEV;
+	switch (cmd) {
+	case MD_GET_ARRAY_INFO:
+		if (mddev_configured(mddev))
+			err = mdctl_get_array_info(mddev, arg);
+		goto out;
+
+	case MD_GET_DISK_INFO:
+		if (mddev_configured(mddev))
+			err = mdctl_get_disk_info(mddev, arg);
+		goto out;
+
+	case MD_GET_BITMAP_FILE:
+		err = mdctl_get_bitmap_file(mddev, arg);
+		goto out;
+
+	case MD_SET_DISK_FAULTY:
+		err = set_disk_faulty(mddev, new_decode_dev(md_ctl.arg));
+		goto out;
+	}
+
+	if (cmd == MD_STOP_ARRAY) {
+		/* Need to flush page cache, and ensure no openers */
+		err = mddev_set_closing_and_sync_blockdev(mddev, 0);
+		if (err)
+			goto out;
+	}
+
+	if (!md_is_rdwr(mddev))
+		flush_work(&mddev->sync_work);
+
+	suspend = mdctl_ioctl_need_suspend(cmd);
+	err = suspend ? mddev_suspend_and_lock(mddev) : mddev_lock(mddev);
+	if (err) {
+		pr_debug("md: ioctl lock interrupted, reason %d, cmd %d\n",
+			 err, cmd);
+		goto out;
+	}
+	if (suspend)
+		noio_flags = memalloc_noio_save();
+
+	/*
+	 * Commands querying/configuring an existing array.
+	 *
+	 * If the array is not initialised yet, check of the command requires
+	 * the array to be initialised.
+	 */
+	if (!mddev_configured(mddev) && mdctl_ioctl_need_config(cmd, flags)) {
+		err = -ENODEV;
+		goto unlock;
+	}
+
+	/*
+	 * Commands even a read-only array can execute:
+	 */
+	switch (cmd) {
+	case MD_SET_ARRAY_INFO:
+		err = mdctl_set_array_info(mddev, arg);
+		goto unlock;
+
+	case MD_RESTART_ARRAY_RW:
+		err = restart_array(mddev);
+		goto unlock;
+
+	case MD_STOP_ARRAY:
+		err = -EINVAL;
+		if (!flags)
+			err = do_md_stop(mddev, 0);
+		else if (flags == MD_RO_FLAG && mddev->pers)
+			err = md_set_readonly(mddev);
+		goto unlock;
+
+	case MD_HOT_REMOVE_DISK:
+		err = hot_remove_disk(mddev, new_decode_dev(md_ctl.arg));
+		goto unlock;
+
+	case MD_ADD_NEW_DISK:
+		/* We can support ADD_NEW_DISK on read-only arrays
+		 * only if we are re-adding a preexisting device.
+		 * So require mddev->pers and MD_DISK_SYNC.
+		 */
+		if (mddev->pers) {
+			struct mdu_disk_info64 info;
+
+			if (copy_from_user(&info, arg, sizeof(info)))
+				err = -EFAULT;
+			else if (!(info.state & (1 << MD_DISK_SYNC)))
+				/* Need to clear read-only for this */
+				break;
+			else
+				err = md_add_new_disk(mddev, &info);
+			goto unlock;
+		}
+		break;
+	}
+
+	/*
+	 * The remaining ioctls are changing the state of the
+	 * superblock, so we do not allow them on read-only arrays.
+	 */
+	if (!md_is_rdwr(mddev) && mddev->pers) {
+		if (mddev->ro != MD_AUTO_READ) {
+			err = -EROFS;
+			goto unlock;
+		}
+		mddev->ro = MD_RDWR;
+		sysfs_notify_dirent_safe(mddev->sysfs_state);
+		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
+		/* mddev_unlock will wake thread */
+		/* If a device failed while we were read-only, we
+		 * need to make sure the metadata is updated now.
+		 */
+		if (test_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags)) {
+			mddev_unlock(mddev);
+			wait_event(mddev->sb_wait,
+				   !test_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags) &&
+				   !test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags));
+			mddev_lock_nointr(mddev);
+		}
+	}
+
+	switch (cmd) {
+	case MD_ADD_NEW_DISK:
+	{
+		struct mdu_disk_info64 info;
+
+		if (copy_from_user(&info, arg, sizeof(info)))
+			err = -EFAULT;
+		else
+			err = md_add_new_disk(mddev, &info);
+
+		goto unlock;
+	}
+
+	case MD_CLUSTERED_DISK_NACK:
+		if (mddev_is_clustered(mddev))
+			mddev->cluster_ops->new_disk_ack(mddev, false);
+		else
+			err = -EINVAL;
+		goto unlock;
+
+	case MD_HOT_ADD_DISK:
+		err = hot_add_disk(mddev, new_decode_dev(md_ctl.arg));
+		goto unlock;
+
+	case MD_RUN_ARRAY:
+		err = do_md_run(mddev);
+		goto unlock;
+
+	case MD_SET_BITMAP_FILE:
+		err = set_bitmap_file(mddev, md_ctl.arg);
+		goto unlock;
+
+	default:
+		err = -EINVAL;
+		goto unlock;
+	}
+
+unlock:
+	if (!err && mddev->hold_active == UNTIL_IOCTL)
+		mddev->hold_active = 0;
+
+	if (suspend) {
+		memalloc_noio_restore(noio_flags);
+		mddev_unlock_and_resume(mddev);
+	} else {
+		mddev_unlock(mddev);
+	}
+out:
+	if (cmd == MD_STOP_ARRAY)
+		clear_bit(MD_CLOSING, &mddev->flags);
+
+	mddev_put(mddev);
+	return err;
+}
+
+static const struct file_operations mdctl_file_ops = {
+	.open = nonseekable_open,
+	.unlocked_ioctl = mdctl_ioctl,
+	.compat_ioctl = compat_ptr_ioctl,
+	.owner = THIS_MODULE,
+	.llseek  = noop_llseek,
+};
+
+static struct miscdevice mdctl_misc = {
+	.name = MD_CTL_NODE,
+	.minor = MISC_DYNAMIC_MINOR,
+	.fops = &mdctl_file_ops,
+};
+
+static int __init mdctl_init(void)
+{
+	return misc_register(&mdctl_misc);
+}
+
+static void __exit mdctl_exit(void)
+{
+	misc_deregister(&mdctl_misc);
+}
 
 static int md_set_read_only(struct block_device *bdev, bool ro)
 {
@@ -10815,12 +11441,19 @@ static int __init md_init(void)
 		goto err_mdp;
 	mdp_major = ret;
 
+	ret = mdctl_init();
+	if (ret < 0)
+		goto err_ctl;
+
 	register_reboot_notifier(&md_notifier);
 	raid_table_header = register_sysctl("dev/raid", raid_table);
 
 	md_geninit();
 	return 0;
 
+err_ctl:
+	unregister_blkdev(mdp_major, "mdp");
+	mdp_major = 0;
 err_mdp:
 	unregister_blkdev(MD_MAJOR, "md");
 err_md:
@@ -11098,6 +11731,7 @@ static __exit void md_exit(void)
 	struct mddev *mddev;
 	int delay = 1;
 
+	mdctl_exit();
 	unregister_blkdev(MD_MAJOR,"md");
 	unregister_blkdev(mdp_major, "mdp");
 	unregister_reboot_notifier(&md_notifier);
