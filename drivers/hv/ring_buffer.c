@@ -184,8 +184,8 @@ void hv_ringbuffer_pre_init(struct vmbus_channel *channel)
 
 /* Initialize the ring buffer. */
 int hv_ringbuffer_init(struct hv_ring_buffer_info *ring_info,
-		       struct page *pages, u32 page_cnt, u32 max_pkt_size,
-			   bool confidential)
+		       void *addr, u32 page_cnt, u32 max_pkt_size,
+		       bool confidential)
 {
 	struct page **pages_wraparound;
 	int i;
@@ -200,10 +200,11 @@ int hv_ringbuffer_init(struct hv_ring_buffer_info *ring_info,
 	if (!pages_wraparound)
 		return -ENOMEM;
 
-	pages_wraparound[0] = pages;
+	pages_wraparound[0] = vmalloc_to_page(addr);
 	for (i = 0; i < 2 * (page_cnt - 1); i++)
 		pages_wraparound[i + 1] =
-			&pages[i % (page_cnt - 1) + 1];
+			vmalloc_to_page(addr +
+				((i % (page_cnt - 1) + 1) << PAGE_SHIFT));
 
 	ring_info->ring_buffer = (struct hv_ring_buffer *)
 		vmap(pages_wraparound, page_cnt * 2 - 1, VM_MAP,
