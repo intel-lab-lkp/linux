@@ -8354,6 +8354,8 @@ static int __init setup_slub_min_order(const char *str, const struct kernel_para
 	if (ret)
 		return ret;
 
+	slub_min_order = min_t(unsigned int, slub_min_order, MAX_PAGE_ORDER);
+
 	if (slub_min_order > slub_max_order)
 		slub_max_order = slub_min_order;
 
