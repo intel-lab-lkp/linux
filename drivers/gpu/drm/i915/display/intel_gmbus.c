@@ -339,10 +339,10 @@ intel_gpio_pre_xfer(struct i2c_adapter *adapter)
 	struct intel_gmbus *bus = to_intel_gmbus(adapter);
 	struct intel_display *display = bus->display;
 
-	intel_gmbus_reset(display);
-
 	if (display->platform.pineview)
 		pnv_gmbus_clock_gating(display, false);
+
+	intel_gmbus_reset(display);
 
 	if (intel_display_wa(display, INTEL_DISPLAY_WA_16025573575))
 		ptl_handle_mask_bits(bus, true);
@@ -362,11 +362,11 @@ intel_gpio_post_xfer(struct i2c_adapter *adapter)
 	set_data(bus, 1);
 	set_clock(bus, 1);
 
-	if (display->platform.pineview)
-		pnv_gmbus_clock_gating(display, true);
-
 	if (intel_display_wa(display, INTEL_DISPLAY_WA_16025573575))
 		ptl_handle_mask_bits(bus, false);
+
+	if (display->platform.pineview)
+		pnv_gmbus_clock_gating(display, true);
 }
 
 static void
