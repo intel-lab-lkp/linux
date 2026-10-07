@@ -5456,9 +5456,9 @@ void qla24xx_create_new_sess(struct scsi_qla_host *vha, struct qla_work_evt *e)
 {
 	unsigned long flags;
 	fc_port_t *fcport =  NULL, *tfcp;
+	fc_port_t *conflict_fcport = NULL;
 	struct qlt_plogi_ack_t *pla =
 	    (struct qlt_plogi_ack_t *)e->u.new_sess.pla;
-	uint8_t free_fcport = 0;
 
 	ql_dbg(ql_dbg_disc, vha, 0xffff,
 	    "%s %d %8phC enter\n",
@@ -5529,7 +5529,9 @@ void qla24xx_create_new_sess(struct scsi_qla_host *vha, struct qla_work_evt *e)
 			    __func__, tfcp->port_name, tfcp->disc_state,
 			    tfcp->fw_login_state);
 
-			free_fcport = 1;
+			conflict_fcport = fcport;
+			fcport = tfcp;
+
 		} else {
 			list_add_tail(&fcport->list, &vha->vp_fcports);
 
@@ -5541,6 +5543,9 @@ void qla24xx_create_new_sess(struct scsi_qla_host *vha, struct qla_work_evt *e)
 		}
 	}
 	spin_unlock_irqrestore(&vha->hw->tgt.sess_lock, flags);
+
+	if (conflict_fcport)
+		qla2x00_free_fcport(conflict_fcport);
 
 	if (fcport) {
 		fcport->id_changed = 1;
@@ -5618,14 +5623,6 @@ void qla24xx_create_new_sess(struct scsi_qla_host *vha, struct qla_work_evt *e)
 			} else {
 				qla24xx_fcport_handle_login(vha, fcport);
 			}
-		}
-	}
-
-	if (free_fcport) {
-		qla2x00_free_fcport(fcport);
-		if (pla) {
-			list_del(&pla->list);
-			kmem_cache_free(qla_tgt_plogi_cachep, pla);
 		}
 	}
 }
