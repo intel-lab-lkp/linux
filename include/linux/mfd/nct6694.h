@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2025 Nuvoton Technology Corp.
  *
- * Nuvoton NCT6694 core definitions shared by the transport driver
+ * Nuvoton NCT6694 core definitions shared by the transport drivers
  * and the sub-device drivers.
  */
 
