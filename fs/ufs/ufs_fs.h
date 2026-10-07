@@ -571,7 +571,7 @@ struct	ufs_cylinder_group {
 		} cg_u2;
 		__fs32	cg_sparecon[16];	/* reserved for future use */
 	} cg_u;
-	__u8	cg_space[1];		/* space for cylinder group maps */
+	__u8	cg_space[];		/* space for cylinder group maps */
 /* actually longer */
 };
 
@@ -593,7 +593,7 @@ struct ufs_old_cylinder_group {
 	__fs16	cg_b[32][8];		/* positions of free blocks */
 	__u8	cg_iused[256];		/* used inode map */
 	__fs32	cg_magic;		/* magic number */
-	__u8	cg_free[1];		/* free block map */
+	__u8	cg_free[];		/* free block map */
 /* actually longer */
 };
 
@@ -952,7 +952,7 @@ struct ufs_super_block_third {
 	__fs32	fs_postbloff;
 	__fs32	fs_rotbloff;
 	__fs32	fs_magic;
-	__u8	fs_space[1];
+	__u8	fs_space[];
 };
 
 #endif /* __LINUX_UFS_FS_H */
