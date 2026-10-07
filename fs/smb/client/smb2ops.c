@@ -5305,6 +5305,7 @@ static void smb2_decrypt_offload(struct work_struct *work)
 free_pages:
 	netfs_free_folioq_buffer(dw->buffer);
 	cifs_small_buf_release(dw->buf);
+	cifs_put_tcp_session(dw->server, false);
 	kfree(dw);
 }
 
@@ -5384,6 +5385,9 @@ receive_encrypted_read(struct TCP_Server_Info *server, struct mid_q_entry **mid,
 		dw->buf = server->smallbuf;
 		server->smallbuf = (char *)cifs_small_buf_get();
 
+		spin_lock(&cifs_tcp_ses_lock);
+		server->srv_count++;
+		spin_unlock(&cifs_tcp_ses_lock);
 		queue_work(decrypt_wq, &dw->decrypt);
 		*num_mids = 0; /* worker thread takes care of finding mid */
 		return -1;
