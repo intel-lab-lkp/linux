@@ -171,7 +171,7 @@ alternative_else_nop_endif
 #endif
 	.endm
 
-	.macro mte_set_kernel_gcr, tmp, tmp2
+	.macro mte_set_kernel_gcr, tmp
 #ifdef CONFIG_KASAN_HW_TAGS
 alternative_cb	ARM64_ALWAYS_SYSTEM, kasan_hw_tags_enable
 	b	1f
@@ -269,7 +269,7 @@ alternative_else_nop_endif
 
 	apply_ssbd 1, x22, x23
 
-	mte_set_kernel_gcr x22, x23
+	mte_set_kernel_gcr x22
 
 	/*
 	 * Any non-self-synchronizing system register updates required for
