@@ -564,6 +564,19 @@ bool vmbus_buffer_lower_order(unsigned int *order);
 bool vmbus_buffer_should_free(const struct vmbus_buffer *buffer);
 
 /*
+ * Order-descent allocation, shared with vmbus_buffer_test.c so the
+ * cases can inject per-order failures. Defined in channel.c, built
+ * into the hv_vmbus object, never exported.
+ */
+typedef struct page *(*vmbus_alloc_pages_fn)(void *context, int nid,
+					     gfp_t gfp,
+					     unsigned int order);
+struct page *vmbus_alloc_pages_with_fallback(int nid, gfp_t gfp,
+					     unsigned int *order,
+					     vmbus_alloc_pages_fn alloc,
+					     void *context);
+
+/*
  * GPADL post and response helpers, also shared with vmbus_buffer_test.c.
  * Same deal as the sizing helpers above: defined in channel.c, built into
  * the hv_vmbus object, never exported.

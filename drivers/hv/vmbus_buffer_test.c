@@ -257,12 +257,70 @@ static void vmbus_gpadl_teardown_post_failure_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, context.call_count, 1U);
 }
 
+struct vmbus_buffer_page_alloc_test_context {
+	struct kunit *test;
+	unsigned int attempts;
+	unsigned int expected_order;
+	bool fail_order_zero;
+};
+
+static struct page *vmbus_buffer_test_alloc_page(void *context, int nid,
+						 gfp_t gfp,
+						 unsigned int order)
+{
+	struct vmbus_buffer_page_alloc_test_context *test_context = context;
+
+	(void)nid;
+	KUNIT_EXPECT_EQ(test_context->test, order,
+			test_context->expected_order);
+	test_context->attempts++;
+	if (test_context->expected_order)
+		test_context->expected_order--;
+
+	if (order)
+		return NULL;
+	if (test_context->fail_order_zero)
+		return NULL;
+
+	return alloc_pages(gfp, 0);
+}
+
+static void vmbus_buffer_order_zero_allocation_test(struct kunit *test)
+{
+	struct vmbus_buffer_page_alloc_test_context context = {
+		.test = test,
+		.expected_order = MAX_PAGE_ORDER,
+	};
+	struct page *page;
+	unsigned int order = MAX_PAGE_ORDER;
+
+	page = vmbus_alloc_pages_with_fallback(0, GFP_KERNEL, &order,
+					       vmbus_buffer_test_alloc_page, &context);
+	KUNIT_ASSERT_NOT_NULL(test, page);
+	KUNIT_EXPECT_EQ(test, order, 0U);
+	KUNIT_EXPECT_EQ(test, context.expected_order, 0U);
+	KUNIT_EXPECT_EQ(test, context.attempts, (unsigned int)MAX_PAGE_ORDER + 1);
+	__free_pages(page, 0);
+
+	context.attempts = 0;
+	context.expected_order = MAX_PAGE_ORDER;
+	context.fail_order_zero = true;
+	order = MAX_PAGE_ORDER;
+	page = vmbus_alloc_pages_with_fallback(0, GFP_KERNEL, &order,
+					       vmbus_buffer_test_alloc_page, &context);
+	KUNIT_EXPECT_PTR_EQ(test, page, NULL);
+	KUNIT_EXPECT_EQ(test, order, 0U);
+	KUNIT_EXPECT_EQ(test, context.expected_order, 0U);
+	KUNIT_EXPECT_EQ(test, context.attempts, (unsigned int)MAX_PAGE_ORDER + 1);
+}
+
 static struct kunit_case vmbus_buffer_test_cases[] = {
 	KUNIT_CASE(vmbus_buffer_size_rounding_test),
 	KUNIT_CASE(vmbus_buffer_size_overflow_test),
 	KUNIT_CASE(vmbus_ring_fallback_order_zero_test),
 	KUNIT_CASE(vmbus_buffer_failed_teardown_leaks_test),
 	KUNIT_CASE(vmbus_buffer_partial_allocation_cleanup_test),
+	KUNIT_CASE(vmbus_buffer_order_zero_allocation_test),
 	KUNIT_CASE(vmbus_gpadl_post_failure_test),
 	KUNIT_CASE(vmbus_gpadl_post_success_test),
 	KUNIT_CASE(vmbus_gpadl_response_state_test),

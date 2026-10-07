@@ -60,6 +60,31 @@ bool vmbus_buffer_lower_order(unsigned int *order)
 	return true;
 }
 
+struct page *vmbus_alloc_pages_with_fallback(int nid, gfp_t gfp,
+					     unsigned int *order,
+					     vmbus_alloc_pages_fn alloc,
+					     void *context)
+{
+	struct page *page;
+
+	do {
+		gfp_t try_gfp = gfp;
+
+		/*
+		 * Use __GFP_NORETRY | __GFP_NOWARN to avoid OOM-killing,
+		 * but try harder at order 0 since that is the final
+		 * fallback.
+		 * __GFP_COMP stores order information in the page folio.
+		 */
+		if (*order)
+			try_gfp |= __GFP_COMP | __GFP_NORETRY | __GFP_NOWARN;
+
+		page = alloc(context, nid, try_gfp, *order);
+		if (page || !vmbus_buffer_lower_order(order))
+			return page;
+	} while (true);
+}
+
 bool vmbus_buffer_should_free(const struct vmbus_buffer *buffer)
 {
 	return !buffer->leak && !buffer->gpadl.leak &&
@@ -774,6 +799,14 @@ void vmbus_release_buffer(struct vmbus_buffer *buffer)
 }
 EXPORT_SYMBOL_GPL(vmbus_release_buffer);
 
+static struct page *vmbus_alloc_pages_node(void *context, int nid,
+					   gfp_t gfp,
+					   unsigned int order)
+{
+	(void)context;
+	return alloc_pages_node(nid, gfp, order);
+}
+
 /**
  * __vmbus_alloc_buffer - allocate host-visible, virtually-contiguous backing.
  *
@@ -837,26 +870,17 @@ static void *__vmbus_alloc_buffer(struct vmbus_channel *channel,
 	while (remaining) {
 		struct page *page;
 		gfp_t gfp;
+		int nid;
 
 		order = vmbus_buffer_order(remaining, order);
 
-		/*
-		 * Use __GFP_NORETRY | __GFP_NOWARN to avoid OOM-killing,
-		 * but try harder at order 0 since that is the final
-		 * fallback.
-		 * __GFP_COMP stores order information in the page folio.
-		 */
 		gfp = GFP_KERNEL | __GFP_ZERO;
-		if (order)
-			gfp |= __GFP_COMP | __GFP_NORETRY | __GFP_NOWARN;
 
-		page = alloc_pages_node(cpu_to_node(channel->target_cpu),
-					gfp, order);
-		if (!page) {
-			if (!vmbus_buffer_lower_order(&order))
-				goto err;
-			continue;
-		}
+		nid = cpu_to_node(channel->target_cpu);
+		page = vmbus_alloc_pages_with_fallback(nid, gfp, &order,
+						       vmbus_alloc_pages_node, NULL);
+		if (!page)
+			goto err;
 
 		ret = set_memory_decrypted((unsigned long)page_address(page),
 					   1U << order);
