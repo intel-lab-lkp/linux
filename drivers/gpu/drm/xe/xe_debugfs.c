@@ -822,8 +822,6 @@ void xe_debugfs_register(struct xe_device *xe)
 	if (man)
 		ttm_resource_manager_create_debugfs(man, root, "stolen_mm");
 
-	xe_ttm_vram_debugfs_init(xe, root);
-
 	for_each_tile(tile, xe, tile_id)
 		xe_tile_debugfs_register(tile);
 
