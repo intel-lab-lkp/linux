@@ -7,6 +7,8 @@
  * based on arch/mips/kernel/time.c timer driver
  */
 
+#include <linux/atomic.h>
+#include <linux/auxiliary_bus.h>
 #include <linux/clk.h>
 #include <linux/clockchips.h>
 #include <linux/clocksource.h>
@@ -476,6 +478,121 @@ static int ttc_init_common(struct platform_device *pdev,
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_PWM_CADENCE)
+
+/* Auxiliary-bus device wrapper */
+struct ttc_auxdev {
+	struct auxiliary_device adev;
+	struct ttc_shared_data sd;
+};
+
+static void ttc_auxdev_release(struct device *dev)
+{
+	struct auxiliary_device *adev = to_auxiliary_dev(dev);
+	struct ttc_auxdev *ta = container_of(adev, struct ttc_auxdev, adev);
+
+	of_node_put(dev->of_node);
+	kfree(ta);
+}
+
+static atomic_t ttc_auxdev_id;
+
+static void ttc_auxdev_teardown(void *data)
+{
+	struct auxiliary_device *adev = data;
+
+	auxiliary_device_delete(adev);
+	auxiliary_device_uninit(adev);
+}
+
+static int ttc_create_aux(struct device *parent, const char *name,
+			  const struct ttc_shared_data *sd)
+{
+	struct ttc_auxdev *ta;
+	int ret;
+
+	ta = kzalloc_obj(*ta);
+	if (!ta)
+		return -ENOMEM;
+
+	ta->sd = *sd;
+	ta->adev.name = name;
+	ta->adev.id = atomic_fetch_inc(&ttc_auxdev_id);
+	ta->adev.dev.parent = parent;
+	ta->adev.dev.release = ttc_auxdev_release;
+	ta->adev.dev.platform_data = &ta->sd;
+	device_set_of_node_from_dev(&ta->adev.dev, parent);
+
+	ret = auxiliary_device_init(&ta->adev);
+	if (ret) {
+		of_node_put(ta->adev.dev.of_node);
+		kfree(ta);
+		return ret;
+	}
+
+	ret = auxiliary_device_add(&ta->adev);
+	if (ret) {
+		auxiliary_device_uninit(&ta->adev);
+		return ret;
+	}
+
+	return devm_add_action_or_reset(parent, ttc_auxdev_teardown,
+					&ta->adev);
+}
+
+static int ttc_probe_auxbus(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct ttc_shared_data sd;
+	struct clk *clk;
+	int i, ret;
+	u32 val;
+
+	ret = ttc_init_common(pdev, &sd.base, &sd.timer_width);
+	if (ret)
+		return ret;
+
+	if (sd.timer_width == 0 || sd.timer_width > TTC_MAX_TIMER_WIDTH)
+		return dev_err_probe(dev, -EINVAL,
+				     "invalid timer-width value\n");
+
+	/*
+	 * PWM support is limited to the shared internal/reference clock on
+	 * all channels. Supporting the alternate external clock source
+	 * would require per-channel clock and rate handling.
+	 */
+	for (i = 0; i < TTC_NUM_CHANNELS; i++) {
+		val = ttc_ch_readl(&sd, i, TTC_CLK_CNTRL_OFFSET);
+		if (val & TTC_CLK_CNTRL_CSRC_MASK)
+			return dev_err_probe(dev, -EINVAL,
+					     "external clock source not supported for PWM\n");
+	}
+
+	clk = devm_clk_get_enabled(dev, NULL);
+	if (IS_ERR(clk))
+		return dev_err_probe(dev, PTR_ERR(clk),
+				     "failed to get timer input clock\n");
+
+	sd.clk = clk;
+	sd.rate = clk_get_rate(clk);
+	if (!sd.rate)
+		return dev_err_probe(dev, -EINVAL,
+				     "failed to get clock rate\n");
+
+	ret = ttc_create_aux(dev, "pwm", &sd);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "failed to create PWM aux device\n");
+
+	return 0;
+}
+#else
+static inline int ttc_probe_auxbus(struct platform_device *pdev)
+{
+	return 0;
+}
+#endif
+
 static int ttc_timer_probe(struct platform_device *pdev)
 {
 	struct device_node *timer = pdev->dev.of_node;
@@ -485,6 +602,13 @@ static int ttc_timer_probe(struct platform_device *pdev)
 	unsigned int irq;
 	u32 timer_width;
 	int clksel, ret;
+
+	/*
+	 * If #pwm-cells is present, this TTC is used for PWM.
+	 * Create an auxiliary-bus child device for the PWM driver.
+	 */
+	if (device_property_present(&pdev->dev, "#pwm-cells"))
+		return ttc_probe_auxbus(pdev);
 
 	if (initialized)
 		return 0;

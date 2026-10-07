@@ -201,8 +201,13 @@ config NPCM7XX_TIMER
 config CADENCE_TTC_TIMER
 	bool "Cadence TTC timer driver" if COMPILE_TEST
 	depends on COMMON_CLK
+	select AUXILIARY_BUS
 	help
 	  Enables support for the Cadence TTC driver.
+
+	  When a TTC device-tree node contains #pwm-cells, this
+	  driver creates an auxiliary-bus device that is bound by
+	  the Cadence TTC PWM driver.
 
 config ASM9260_TIMER
 	bool "ASM9260 timer driver" if COMPILE_TEST

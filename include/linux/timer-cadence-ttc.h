@@ -16,6 +16,7 @@
 struct clk;
 
 #define TTC_DEFAULT_TIMER_WIDTH		16
+#define TTC_MAX_TIMER_WIDTH		32
 
 /* Per-channel register offset stride */
 #define TTC_CH_OFFSET			0x04
