@@ -781,6 +781,15 @@ struct vpu_instance_ops {
 	void (*finish_process)(struct vpu_instance *inst);
 };
 
+#define MAX_TIMESTAMP_CIR_BUF	30
+
+/* OUTPUT timestamps in decode order, one per consumed source buffer */
+struct timestamp_circ_buf {
+	u64 buf[MAX_TIMESTAMP_CIR_BUF];
+	int head;
+	int tail;
+};
+
 struct vpu_instance {
 	struct list_head list;
 	struct v4l2_fh v4l2_fh;
@@ -817,6 +826,7 @@ struct vpu_instance {
 	struct list_head avail_dst_bufs;
 	struct v4l2_rect conf_win;
 	u64 timestamp;
+	struct timestamp_circ_buf time_stamp;
 	enum frame_buffer_format output_format;
 	bool cbcr_interleave;
 	bool nv21;
