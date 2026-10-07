@@ -2489,9 +2489,10 @@ int smb2_check_durable_oplock(struct ksmbd_conn *conn,
 		if (opinfo->level != SMB2_OPLOCK_LEVEL_BATCH) {
 			pr_err("oplock level is not equal to SMB2_OPLOCK_LEVEL_BATCH\n");
 			ret = -EBADF;
+			goto out;
 		}
 
-		goto out;
+		goto validate_name;
 	}
 
 	if (memcmp(conn->ClientGUID, fp->client_guid,
@@ -2528,6 +2529,7 @@ int smb2_check_durable_oplock(struct ksmbd_conn *conn,
 		goto out;
 	}
 
+validate_name:
 	if (!ksmbd_inode_pending_delete(fp))
 		ret = ksmbd_validate_name_reconnect(share, fp, name);
 out:
