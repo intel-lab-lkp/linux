@@ -9,6 +9,7 @@
 
 #include <linux/arm-smccc.h>
 #include <linux/array_size.h>
+#include <linux/init.h>
 #include <linux/io.h>
 #include <linux/mem_encrypt.h>
 #include <linux/mm.h>
@@ -96,7 +97,7 @@ static int mmio_guard_ioremap_hook(phys_addr_t phys, size_t size,
 	return 0;
 }
 
-void pkvm_init_hyp_services(void)
+void __init pkvm_init_hyp_services(void)
 {
 	int i;
 	struct arm_smccc_res res;
