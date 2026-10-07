@@ -3985,6 +3985,7 @@ static int em28xx_duplicate_dev(struct em28xx *dev)
 	} while (test_and_set_bit(nr, em28xx_devused));
 	sec_dev->devno = nr;
 	snprintf(sec_dev->name, 28, "em28xx #%d", nr);
+	INIT_LIST_HEAD(&sec_dev->devlist);
 	sec_dev->dev_next = NULL;
 	dev->dev_next = sec_dev;
 	return 0;
