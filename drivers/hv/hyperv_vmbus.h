@@ -563,4 +563,23 @@ unsigned int vmbus_buffer_order(unsigned long remaining,
 bool vmbus_buffer_lower_order(unsigned int *order);
 bool vmbus_buffer_should_free(const struct vmbus_buffer *buffer);
 
+/*
+ * GPADL post and response helpers, also shared with vmbus_buffer_test.c.
+ * Same deal as the sizing helpers above: defined in channel.c, built into
+ * the hv_vmbus object, never exported.
+ */
+typedef int (*vmbus_gpadl_post_fn)(void *context, void *buffer,
+				   size_t buflen, bool can_sleep);
+int vmbus_post_gpadl_messages(struct vmbus_channel_msginfo *msginfo,
+			      u32 gpadl, bool *posted,
+			      vmbus_gpadl_post_fn post_msg,
+			      void *context);
+int vmbus_gpadl_response_status(u32 creation_status, bool rescind,
+				bool *posted);
+int vmbus_post_gpadl_teardown(u32 child_relid,
+			      struct vmbus_channel_gpadl_teardown *msg,
+			      u32 gpadl,
+			      vmbus_gpadl_post_fn post_msg,
+			      void *context);
+
 #endif /* _HYPERV_VMBUS_H */

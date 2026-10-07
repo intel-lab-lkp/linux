@@ -488,6 +488,84 @@ static void vmbus_free_channel_msginfo(struct vmbus_channel_msginfo *msginfo)
  *              should be 0 for BUFFER type gpadl
  * @gpadl_handle: some funky thing
  */
+static int vmbus_gpadl_post_real(void *context, void *buffer,
+				 size_t buflen, bool can_sleep)
+{
+	(void)context;
+	return vmbus_post_msg(buffer, buflen, can_sleep);
+}
+
+int vmbus_post_gpadl_messages(struct vmbus_channel_msginfo *msginfo,
+			      u32 gpadl, bool *posted,
+			      vmbus_gpadl_post_fn post_msg,
+			      void *context)
+{
+	struct vmbus_channel_gpadl_header *gpadl_header;
+	struct vmbus_channel_msginfo *submsginfo;
+	struct list_head *curr;
+	int ret;
+
+	gpadl_header = (struct vmbus_channel_gpadl_header *)msginfo->msg;
+	gpadl_header->header.msgtype = CHANNELMSG_GPADL_HEADER;
+	gpadl_header->gpadl = gpadl;
+
+	/* A failed post may still have reached the host. */
+	*posted = true;
+	ret = post_msg(context, gpadl_header,
+		       msginfo->msgsize - sizeof(*msginfo), true);
+	trace_vmbus_establish_gpadl_header(gpadl_header, ret);
+	if (ret)
+		return ret;
+
+	list_for_each(curr, &msginfo->submsglist) {
+		struct vmbus_channel_gpadl_body *gpadl_body;
+
+		submsginfo = list_entry(curr, struct vmbus_channel_msginfo,
+					msglistentry);
+		gpadl_body = (struct vmbus_channel_gpadl_body *)submsginfo->msg;
+		gpadl_body->header.msgtype = CHANNELMSG_GPADL_BODY;
+		gpadl_body->gpadl = gpadl;
+
+		ret = post_msg(context, gpadl_body,
+			       submsginfo->msgsize - sizeof(*submsginfo), true);
+		trace_vmbus_establish_gpadl_body(gpadl_body, ret);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+int vmbus_gpadl_response_status(u32 creation_status, bool rescind,
+				bool *posted)
+{
+	*posted = false;
+	if (creation_status)
+		return -EDQUOT;
+	if (rescind)
+		return -ENODEV;
+
+	return 0;
+}
+
+int vmbus_post_gpadl_teardown(u32 child_relid,
+			      struct vmbus_channel_gpadl_teardown *msg,
+			      u32 gpadl,
+			      vmbus_gpadl_post_fn post_msg,
+			      void *context)
+{
+	int ret;
+
+	msg->header.msgtype = CHANNELMSG_GPADL_TEARDOWN;
+	msg->child_relid = child_relid;
+	msg->gpadl = gpadl;
+
+	ret = post_msg(context, msg, sizeof(*msg), true);
+	trace_vmbus_teardown_gpadl(msg, ret);
+
+	return ret;
+}
+
 static int __vmbus_establish_gpadl(struct vmbus_channel *channel,
 				   enum hv_gpadl_type type, void *kbuffer,
 				   u32 size, u32 send_offset, bool memory_prepared,
@@ -495,11 +573,9 @@ static int __vmbus_establish_gpadl(struct vmbus_channel *channel,
 				   struct vmbus_gpadl *gpadl)
 {
 	struct vmbus_channel_gpadl_header *gpadlmsg;
-	struct vmbus_channel_gpadl_body *gpadl_body;
 	struct vmbus_channel_msginfo *msginfo = NULL;
-	struct vmbus_channel_msginfo *submsginfo;
-	struct list_head *curr;
 	u32 next_gpadl_handle;
+	u32 creation_status;
 	unsigned long flags;
 	bool posted = false;
 	int ret = 0;
@@ -558,49 +634,20 @@ static int __vmbus_establish_gpadl(struct vmbus_channel *channel,
 		goto cleanup;
 	}
 
-	/* A failed post may still have reached the host. */
-	posted = true;
-	ret = vmbus_post_msg(gpadlmsg, msginfo->msgsize -
-			     sizeof(*msginfo), true);
-
-	trace_vmbus_establish_gpadl_header(gpadlmsg, ret);
-
-	if (ret != 0)
+	ret = vmbus_post_gpadl_messages(msginfo, next_gpadl_handle, &posted,
+					vmbus_gpadl_post_real, NULL);
+	if (ret)
 		goto cleanup;
 
-	list_for_each(curr, &msginfo->submsglist) {
-		submsginfo = (struct vmbus_channel_msginfo *)curr;
-		gpadl_body =
-			(struct vmbus_channel_gpadl_body *)submsginfo->msg;
-
-		gpadl_body->header.msgtype =
-			CHANNELMSG_GPADL_BODY;
-		gpadl_body->gpadl = next_gpadl_handle;
-
-		ret = vmbus_post_msg(gpadl_body,
-				     submsginfo->msgsize - sizeof(*submsginfo),
-				     true);
-
-		trace_vmbus_establish_gpadl_body(gpadl_body, ret);
-
-		if (ret != 0)
-			goto cleanup;
-
-	}
 	wait_for_completion(&msginfo->waitevent);
 
-	if (msginfo->response.gpadl_created.creation_status != 0) {
-		posted = false;
-		pr_err("Failed to establish GPADL: err = 0x%x\n",
-		       msginfo->response.gpadl_created.creation_status);
-
-		ret = -EDQUOT;
-		goto cleanup;
-	}
-
-	if (channel->rescind) {
-		posted = false;
-		ret = -ENODEV;
+	creation_status = msginfo->response.gpadl_created.creation_status;
+	ret = vmbus_gpadl_response_status(creation_status, channel->rescind,
+					  &posted);
+	if (ret) {
+		if (creation_status)
+			pr_err("Failed to establish GPADL: err = 0x%x\n",
+			       creation_status);
 		goto cleanup;
 	}
 
@@ -608,8 +655,6 @@ static int __vmbus_establish_gpadl(struct vmbus_channel *channel,
 	gpadl->gpadl_handle = gpadlmsg->gpadl;
 	gpadl->buffer = kbuffer;
 	gpadl->size = size;
-	posted = false;
-
 
 cleanup:
 	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
@@ -1118,9 +1163,6 @@ int vmbus_teardown_gpadl(struct vmbus_channel *channel, struct vmbus_gpadl *gpad
 
 	msg = (struct vmbus_channel_gpadl_teardown *)info->msg;
 
-	msg->header.msgtype = CHANNELMSG_GPADL_TEARDOWN;
-	msg->child_relid = channel->offermsg.child_relid;
-	msg->gpadl = gpadl->gpadl_handle;
 
 	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
 	list_add_tail(&info->msglistentry,
@@ -1130,10 +1172,8 @@ int vmbus_teardown_gpadl(struct vmbus_channel *channel, struct vmbus_gpadl *gpad
 	if (channel->rescind)
 		goto post_msg_err;
 
-	ret = vmbus_post_msg(msg, sizeof(struct vmbus_channel_gpadl_teardown),
-			     true);
-
-	trace_vmbus_teardown_gpadl(msg, ret);
+	ret = vmbus_post_gpadl_teardown(channel->offermsg.child_relid, msg, gpadl->gpadl_handle,
+					vmbus_gpadl_post_real, NULL);
 
 	if (ret)
 		goto post_msg_err;
