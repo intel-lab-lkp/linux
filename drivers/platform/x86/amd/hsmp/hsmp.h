@@ -80,6 +80,7 @@ int hsmp_create_sensor(struct device *dev, u16 sock_ind);
 static inline int hsmp_create_sensor(struct device *dev, u16 sock_ind) { return 0; }
 #endif
 int hsmp_msg_get_nargs(u16 sock_ind, u32 msg_id, u32 *data, u8 num_args);
+extern const struct attribute_group *hsmp_sock_groups[];
 
 /*
  * Gates the HSMP data plane: hsmp_send_message() takes it for read; probe and
