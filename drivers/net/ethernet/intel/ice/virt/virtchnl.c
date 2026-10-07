@@ -2485,7 +2485,10 @@ static int ice_vc_get_phc_time(struct ice_vf *vf)
 
 	len = sizeof(*phc_time);
 
-	phc_time->time = ice_ptp_read_src_clk_reg(pf, NULL);
+	if (ice_ptp_read_src_clk_reg(pf, NULL, &phc_time->time)) {
+		v_ret = VIRTCHNL_STATUS_ERR_NOT_SUPPORTED;
+		len = 0;
+	}
 
 err:
 	/* send the response back to the VF */

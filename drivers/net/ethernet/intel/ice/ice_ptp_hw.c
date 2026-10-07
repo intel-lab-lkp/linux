@@ -355,8 +355,11 @@ void ice_ptp_src_cmd(struct ice_hw *hw, enum ice_ptp_tmr_cmd cmd)
 
 	guard(rcu)();
 
-	if (!ice_is_primary(hw))
+	if (!ice_is_primary(hw)) {
 		hw = ice_get_primary_hw(pf);
+		if (!hw)
+			return;
+	}
 
 	wr32(hw, GLTSYN_CMD, cmd_val);
 }
@@ -375,8 +378,11 @@ static void ice_ptp_exec_tmr_cmd(struct ice_hw *hw)
 
 	guard(rcu)();
 
-	if (!ice_is_primary(hw))
+	if (!ice_is_primary(hw)) {
 		hw = ice_get_primary_hw(pf);
+		if (!hw)
+			return;
+	}
 
 	guard(spinlock)(&pf->adapter->ptp_gltsyn_time_lock);
 	wr32(hw, GLTSYN_CMD_SYNC, SYNC_EXEC_CMD);
@@ -2039,6 +2045,8 @@ static int ice_read_phy_and_phc_time_eth56g(struct ice_hw *hw, u8 port,
 		guard(rcu)();
 
 		pri_hw = ice_get_primary_hw(pf);
+		if (!pri_hw)
+			return -ENODEV;
 
 		zo = rd32(pri_hw, GLTSYN_SHTIME_0(tmr_idx));
 		lo = rd32(pri_hw, GLTSYN_SHTIME_L(tmr_idx));
@@ -2222,6 +2230,11 @@ int ice_start_phy_timer_eth56g(struct ice_hw *hw, u8 port)
 		 */
 		rcu_read_lock();
 		pri_hw = ice_get_primary_hw(pf);
+		if (!pri_hw) {
+			rcu_read_unlock();
+			err = -ENODEV;
+			goto err_ptp_unlock;
+		}
 
 		lo = rd32(pri_hw, GLTSYN_INCVAL_L(tmr_idx));
 		hi = rd32(pri_hw, GLTSYN_INCVAL_H(tmr_idx));
@@ -5367,8 +5380,13 @@ bool ice_ptp_lock(struct ice_hw *hw)
 
 	down_read(&pf->adapter->ctrl_pf_lock);
 
-	if (!ice_is_primary(hw))
+	if (!ice_is_primary(hw)) {
 		hw = ice_get_primary_hw(pf);
+		if (!hw) {
+			up_read(&pf->adapter->ctrl_pf_lock);
+			return false;
+		}
+	}
 
 #define MAX_TRIES 15
 
