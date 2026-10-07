@@ -17,7 +17,7 @@
 
 #include <asm/hypervisor.h>
 
-static size_t pkvm_granule;
+static size_t __ro_after_init pkvm_granule;
 DEFINE_STATIC_KEY_FALSE_RO(pkvm_guest);
 
 static int arm_smccc_do_one_page(u32 func_id, phys_addr_t phys)
