@@ -665,9 +665,15 @@ static int ov2732_probe(struct i2c_client *client)
 	ov2732->powerdown_gpio = devm_gpiod_get_optional(ov2732->dev,
 							 "powerdown",
 							 GPIOD_OUT_HIGH);
+	if (IS_ERR(ov2732->powerdown_gpio))
+		return dev_err_probe(ov2732->dev, PTR_ERR(ov2732->powerdown_gpio),
+				     "failed to get powerdown GPIO\n");
 
 	ov2732->reset_gpio = devm_gpiod_get_optional(ov2732->dev, "reset",
 						     GPIOD_OUT_HIGH);
+	if (IS_ERR(ov2732->reset_gpio))
+		return dev_err_probe(ov2732->dev, PTR_ERR(ov2732->reset_gpio),
+				     "failed to get reset GPIO\n");
 
 	ov2732->regmap = devm_cci_regmap_init_i2c(client, 16);
 	if (IS_ERR(ov2732->regmap))
