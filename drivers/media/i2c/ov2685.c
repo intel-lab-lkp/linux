@@ -793,10 +793,9 @@ static int ov2685_probe(struct i2c_client *client)
 		dev_warn(dev, "xvclk mismatched, modes are based on 24MHz\n");
 
 	ov2685->reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
-	if (IS_ERR(ov2685->reset_gpio)) {
-		dev_err(dev, "Failed to get reset-gpios\n");
-		return -EINVAL;
-	}
+	if (IS_ERR(ov2685->reset_gpio))
+		return dev_err_probe(dev, PTR_ERR(ov2685->reset_gpio),
+				     "Failed to get reset-gpios\n");
 
 	ret = ov2685_configure_regulators(ov2685);
 	if (ret) {
