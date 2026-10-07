@@ -36,6 +36,7 @@
 
 
 static struct regmap *aspeed_regmap;
+static int aspeed_irq;
 
 
 static int regmap_reg_write(void *context, unsigned int reg, unsigned int val)
@@ -212,10 +213,11 @@ static int config_irq(void *ctx, struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	rc = devm_request_irq(&pdev->dev, irq, mcr_isr, IRQF_TRIGGER_HIGH,
-			      DRV_NAME, ctx);
+	rc = request_irq(irq, mcr_isr, IRQF_TRIGGER_HIGH, DRV_NAME, ctx);
 	if (rc)
 		return rc;
+
+	aspeed_irq = irq;
 
 	/* enable interrupts */
 	regmap_update_bits(aspeed_regmap, ASPEED_MCR_INTR_CTRL,
@@ -363,6 +365,8 @@ static void aspeed_remove(struct platform_device *pdev)
 	/* disable interrupts */
 	regmap_update_bits(aspeed_regmap, ASPEED_MCR_INTR_CTRL,
 			   ASPEED_MCR_INTR_CTRL_ENABLE, 0);
+
+	free_irq(aspeed_irq, platform_get_drvdata(pdev));
 
 	/* free resources */
 	mci = edac_mc_del_mc(&pdev->dev);
