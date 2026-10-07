@@ -648,4 +648,15 @@ int vmbus_gpadl_teardown_request(struct vmbus_channel *channel,
 void vmbus_complete_gpadl_teardown(struct vmbus_connection *connection,
 				   struct vmbus_channel_gpadl_torndown *response);
 
+/*
+ * Requestor array lifetime helpers, shared with vmbus_buffer_test.c for
+ * the same reason as the sizing helpers. Defined in channel.c, unexported.
+ * request_arr_init() returns a vmalloc-backed array the caller must vfree();
+ * vmbus_alloc_requestor() owns both vmalloc-backed objects on success, and
+ * vmbus_free_requestor() releases them.
+ */
+u64 *request_arr_init(u32 size);
+int vmbus_alloc_requestor(struct vmbus_requestor *rqstor, u32 size);
+void vmbus_free_requestor(struct vmbus_requestor *rqstor);
+
 #endif /* _HYPERV_VMBUS_H */

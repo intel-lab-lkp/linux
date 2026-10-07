@@ -10,6 +10,7 @@
 #include <linux/completion.h>
 #include <linux/hyperv.h>
 #include <linux/mm.h>
+#include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 
@@ -776,6 +777,160 @@ static void vmbus_buffer_order_zero_allocation_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, context.attempts, (unsigned int)MAX_PAGE_ORDER + 1);
 }
 
+/*
+ * Requestor metadata must use vmalloc backing because both the array and its
+ * bitmap can require multiple pages. The requestor is guest-private
+ * bookkeeping: the host never sees the slot values, so this mapping has no
+ * Confidential Computing implication and needs no set_memory_decrypted().
+ * Cover a typical 8 KiB array, a requestor whose bitmap exceeds one page,
+ * and a size beyond KMALLOC_MAX_SIZE without memory pressure.
+ */
+static void vmbus_requestor_alloc_free_test(struct kunit *test)
+{
+	struct vmbus_requestor rqstor = {};
+
+	KUNIT_ASSERT_EQ(test, vmbus_alloc_requestor(&rqstor, 4), 0);
+	KUNIT_EXPECT_EQ(test, rqstor.size, 4U);
+	KUNIT_EXPECT_EQ(test, rqstor.next_request_id, 0U);
+	KUNIT_EXPECT_NOT_NULL(test, rqstor.req_arr);
+	KUNIT_EXPECT_NOT_NULL(test, rqstor.req_bitmap);
+
+	/* The free list links 0->1->2->3 and terminates in U64_MAX. */
+	KUNIT_EXPECT_EQ(test, rqstor.req_arr[0], 1U);
+	KUNIT_EXPECT_EQ(test, rqstor.req_arr[1], 2U);
+	KUNIT_EXPECT_EQ(test, rqstor.req_arr[2], 3U);
+	KUNIT_EXPECT_EQ(test, rqstor.req_arr[3], U64_MAX);
+
+	vmbus_free_requestor(&rqstor);
+}
+
+static void vmbus_requestor_vmalloc_backing_test(struct kunit *test)
+{
+	/*
+	 * Cover the small array, a requestor whose bitmap exceeds one page,
+	 * and a size beyond KMALLOC_MAX_SIZE. All requestor metadata must use
+	 * vmalloc backing regardless of size or allocator pressure.
+	 */
+	u32 small_size = 1024;
+	u32 bitmap_size = (PAGE_SIZE / sizeof(unsigned long)) * BITS_PER_LONG + 1;
+	u32 size = (KMALLOC_MAX_SIZE / sizeof(u64)) + 1;
+	struct vmbus_requestor rqstor = {};
+	u64 *req_arr;
+
+	KUNIT_EXPECT_PTR_EQ(test, request_arr_init(0), NULL);
+
+	req_arr = request_arr_init(small_size);
+	KUNIT_ASSERT_NOT_NULL(test, req_arr);
+	KUNIT_EXPECT_TRUE(test, is_vmalloc_addr(req_arr));
+	KUNIT_EXPECT_EQ(test, req_arr[0], 1U);
+	KUNIT_EXPECT_EQ(test, req_arr[small_size - 1], U64_MAX);
+	vfree(req_arr);
+
+	req_arr = request_arr_init(size);
+	KUNIT_ASSERT_NOT_NULL(test, req_arr);
+	KUNIT_EXPECT_TRUE(test, is_vmalloc_addr(req_arr));
+	KUNIT_EXPECT_EQ(test, req_arr[0], 1U);
+	KUNIT_EXPECT_EQ(test, req_arr[size - 1], U64_MAX);
+	vfree(req_arr);
+
+	KUNIT_ASSERT_EQ(test, vmbus_alloc_requestor(&rqstor, bitmap_size), 0);
+	KUNIT_EXPECT_TRUE(test, is_vmalloc_addr(rqstor.req_arr));
+	KUNIT_EXPECT_TRUE(test, is_vmalloc_addr(rqstor.req_bitmap));
+	vmbus_free_requestor(&rqstor);
+}
+
+static void vmbus_requestor_id_lifecycle_test(struct kunit *test)
+{
+	struct vmbus_channel channel = { .rqstor_size = 4 };
+	struct vmbus_requestor *rqstor = &channel.requestor;
+	u64 id0, id1, id2, id3, addr;
+
+	KUNIT_ASSERT_EQ(test, vmbus_alloc_requestor(rqstor, 4), 0);
+
+	/* IDs are 1-based; 0 is reserved for unsolicited host messages. */
+	id0 = vmbus_next_request_id(&channel, 0x1000);
+	KUNIT_EXPECT_EQ(test, id0, 1U);
+	id1 = vmbus_next_request_id(&channel, 0x2000);
+	KUNIT_EXPECT_EQ(test, id1, 2U);
+
+	/* Consumption returns the registered address and frees the slot. */
+	addr = vmbus_request_addr_match(&channel, id0, VMBUS_RQST_ADDR_ANY);
+	KUNIT_EXPECT_EQ(test, addr, 0x1000U);
+	addr = vmbus_request_addr_match(&channel, id1, 0x2000);
+	KUNIT_EXPECT_EQ(test, addr, 0x2000U);
+
+	/*
+	 * Consumed slots are reusable. The free list is LIFO -- each
+	 * consume pushes its slot onto the head -- so the slot freed last
+	 * is the one handed out first. Freeing id0 then id1 leaves slot 1
+	 * at the head, and the next ID is therefore id1 again, not id0.
+	 */
+	id2 = vmbus_next_request_id(&channel, 0x3000);
+	KUNIT_EXPECT_EQ(test, id2, id1);
+	id3 = vmbus_next_request_id(&channel, 0x4000);
+	KUNIT_EXPECT_EQ(test, id3, id0);
+
+	vmbus_free_requestor(rqstor);
+}
+
+static void vmbus_requestor_invalid_ids_test(struct kunit *test)
+{
+	struct vmbus_channel channel = { .rqstor_size = 4 };
+	struct vmbus_requestor *rqstor = &channel.requestor;
+	u64 id, addr;
+
+	KUNIT_ASSERT_EQ(test, vmbus_alloc_requestor(rqstor, 4), 0);
+
+	/* ID 0 is the unsolicited-message sentinel and is never in the set. */
+	KUNIT_EXPECT_EQ(test, vmbus_request_addr_match(&channel, 0, 0),
+			VMBUS_RQST_ERROR);
+
+	/* Out-of-range IDs are refused, not wrapped. */
+	KUNIT_EXPECT_EQ(test, vmbus_request_addr_match(&channel, 5, 0),
+			VMBUS_RQST_ERROR);
+	KUNIT_EXPECT_EQ(test, vmbus_request_addr_match(&channel, U64_MAX, 0),
+			VMBUS_RQST_ERROR);
+
+	id = vmbus_next_request_id(&channel, 0xABCD);
+	KUNIT_ASSERT_EQ(test, id, 1U);
+
+	/* A wrong expected address does not consume the slot. */
+	addr = vmbus_request_addr_match(&channel, id, 0x9999);
+	KUNIT_EXPECT_EQ(test, addr, 0xABCDU);
+
+	/* The slot is still live and a matching lookup consumes it once. */
+	addr = vmbus_request_addr_match(&channel, id, 0xABCD);
+	KUNIT_EXPECT_EQ(test, addr, 0xABCDU);
+
+	/* Replay: the slot is gone. */
+	addr = vmbus_request_addr_match(&channel, id, VMBUS_RQST_ADDR_ANY);
+	KUNIT_EXPECT_EQ(test, addr, VMBUS_RQST_ERROR);
+
+	vmbus_free_requestor(rqstor);
+}
+
+static void vmbus_requestor_exhaustion_test(struct kunit *test)
+{
+	struct vmbus_channel channel = { .rqstor_size = 2 };
+	struct vmbus_requestor *rqstor = &channel.requestor;
+
+	KUNIT_ASSERT_EQ(test, vmbus_alloc_requestor(rqstor, 2), 0);
+
+	KUNIT_EXPECT_EQ(test, vmbus_next_request_id(&channel, 0x1), 1U);
+	KUNIT_EXPECT_EQ(test, vmbus_next_request_id(&channel, 0x2), 2U);
+
+	/* Both slots taken: the free list is empty and the API says so. */
+	KUNIT_EXPECT_EQ(test, vmbus_next_request_id(&channel, 0x3),
+			VMBUS_RQST_ERROR);
+
+	/* An uninitialized requestor is not a full one. */
+	channel.rqstor_size = 0;
+	KUNIT_EXPECT_EQ(test, vmbus_next_request_id(&channel, 0x4),
+			VMBUS_NO_RQSTOR);
+
+	vmbus_free_requestor(rqstor);
+}
+
 static struct kunit_case vmbus_buffer_test_cases[] = {
 	KUNIT_CASE(vmbus_buffer_size_rounding_test),
 	KUNIT_CASE(vmbus_buffer_size_overflow_test),
@@ -805,6 +960,11 @@ static struct kunit_case vmbus_buffer_test_cases[] = {
 	KUNIT_CASE(vmbus_gpadl_post_success_test),
 	KUNIT_CASE(vmbus_gpadl_response_state_test),
 	KUNIT_CASE(vmbus_gpadl_teardown_post_failure_test),
+	KUNIT_CASE(vmbus_requestor_alloc_free_test),
+	KUNIT_CASE(vmbus_requestor_vmalloc_backing_test),
+	KUNIT_CASE(vmbus_requestor_id_lifecycle_test),
+	KUNIT_CASE(vmbus_requestor_invalid_ids_test),
+	KUNIT_CASE(vmbus_requestor_exhaustion_test),
 	{}
 };
 
