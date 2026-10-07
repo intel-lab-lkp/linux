@@ -1839,6 +1839,19 @@ void btrfs_put_root(struct btrfs_root *root)
 		return;
 
 	if (refcount_dec_and_test(&root->refs)) {
+		/*
+		 * root->dirty_list can be linked into either
+		 * fs_info->dirty_cowonly_roots or, during a transaction
+		 * commit, cur_trans->switch_commits.
+		 *
+		 * All callers removing a root from the fs should hold a
+		 * trans handle, so no transaction can be committing and the
+		 * root can only be on fs_info->dirty_cowonly_roots.
+		 */
+		spin_lock(&root->fs_info->trans_lock);
+		list_del_init(&root->dirty_list);
+		spin_unlock(&root->fs_info->trans_lock);
+
 		if (WARN_ON(!xa_empty(&root->inodes)))
 			xa_destroy(&root->inodes);
 		if (WARN_ON(!xa_empty(&root->delayed_nodes)))
