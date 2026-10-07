@@ -168,10 +168,12 @@ struct hwc_wq {
 
 struct hwc_caller_ctx {
 	struct completion comp_event;
+	/* Protects the output buffer and response state from timeout. */
+	spinlock_t lock;
 	void *output_buf;
 	u32 output_buflen;
 
-	u32 error; /* Linux error code */
+	int error; /* Linux error code */
 	u32 status_code;
 };
 
@@ -200,6 +202,9 @@ struct hw_channel_context {
 	u32 dest_vrq_id;
 	u32 dest_vrcq_id;
 	u32 hwc_timeout;
+
+	/* Prevents message ID reuse after a timeout; protected by the map lock. */
+	bool hwc_timed_out;
 
 	/* The PF may own the HWC queues while this is true. */
 	bool setup_active;
