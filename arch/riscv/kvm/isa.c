@@ -9,7 +9,6 @@
 #include <linux/nospec.h>
 #include <linux/pgtable.h>
 #include <asm/kvm_isa.h>
-#include <asm/vector.h>
 
 #define KVM_ISA_EXT_ARR(ext)		\
 [KVM_RISCV_ISA_EXT_##ext] = RISCV_ISA_EXT_##ext
@@ -159,8 +158,6 @@ bool kvm_riscv_isa_enable_allowed(unsigned long ext)
 		 * Guest OS can use Svadu only when host OS enable Svadu.
 		 */
 		return arch_has_hw_pte_young();
-	case KVM_RISCV_ISA_EXT_V:
-		return riscv_v_vstate_ctrl_user_allowed();
 	default:
 		break;
 	}
