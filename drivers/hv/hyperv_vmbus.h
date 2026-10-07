@@ -551,4 +551,16 @@ int hv_create_ring_sysfs(struct vmbus_channel *channel,
 							    struct vm_area_desc *desc));
 int hv_remove_ring_sysfs(struct vmbus_channel *channel);
 
+/*
+ * vmbus buffer sizing, order-descent and free-decision helpers.
+ *
+ * These are shared with vmbus_buffer_test.c, which is built into the
+ * hv_vmbus object alongside channel.c. They stay unexported.
+ */
+int vmbus_buffer_round_size(u32 size, u32 *rounded_size);
+unsigned int vmbus_buffer_order(unsigned long remaining,
+				unsigned int max_order);
+bool vmbus_buffer_lower_order(unsigned int *order);
+bool vmbus_buffer_should_free(const struct vmbus_buffer *buffer);
+
 #endif /* _HYPERV_VMBUS_H */

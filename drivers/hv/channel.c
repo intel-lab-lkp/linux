@@ -28,6 +28,44 @@
 
 #include "hyperv_vmbus.h"
 
+/*
+ * vmbus_buffer_round_size() and the order-descent helpers are also called
+ * from vmbus_buffer_test.c, which is built into this same object. They are
+ * therefore not static; nothing outside hv_vmbus links against them.
+ */
+int vmbus_buffer_round_size(u32 size, u32 *rounded_size)
+{
+	if (!size)
+		return -EINVAL;
+
+	if (size > U32_MAX - (u32)PAGE_SIZE + 1)
+		return -EOVERFLOW;
+
+	*rounded_size = round_up(size, (u32)PAGE_SIZE);
+	return 0;
+}
+
+unsigned int vmbus_buffer_order(unsigned long remaining,
+				unsigned int max_order)
+{
+	return min_t(unsigned int, max_order, ilog2(remaining));
+}
+
+bool vmbus_buffer_lower_order(unsigned int *order)
+{
+	if (!*order)
+		return false;
+
+	(*order)--;
+	return true;
+}
+
+bool vmbus_buffer_should_free(const struct vmbus_buffer *buffer)
+{
+	return !buffer->leak && !buffer->gpadl.leak &&
+	       !buffer->gpadl.gpadl_handle;
+}
+
 static void *__vmbus_alloc_buffer(struct vmbus_channel *channel,
 				  u32 size,
 				  bool confidential,
@@ -661,7 +699,8 @@ void vmbus_free_buffer(void *addr, struct page **chunks, u32 chunk_cnt)
 		return;
 	}
 
-	vunmap(addr);
+	if (addr)
+		vunmap(addr);
 
 	for (i = 0; i < chunk_cnt; i++) {
 		unsigned long vaddr =
@@ -683,8 +722,7 @@ void vmbus_release_buffer(struct vmbus_buffer *buffer)
 		return;
 
 	kvfree(buffer->pages);
-	if (!buffer->leak && !buffer->gpadl.leak &&
-	    !buffer->gpadl.gpadl_handle)
+	if (vmbus_buffer_should_free(buffer))
 		vmbus_free_buffer(buffer->addr, buffer->chunks,
 				  buffer->chunk_cnt);
 	memset(buffer, 0, sizeof(*buffer));
@@ -717,12 +755,13 @@ static void *__vmbus_alloc_buffer(struct vmbus_channel *channel,
 				  struct page ***chunks_out,
 				  u32 *chunk_cnt_out)
 {
-	unsigned long nr_pages = PFN_UP(size);
-	unsigned long remaining = nr_pages;
+	u32 rounded_size;
+	unsigned long nr_pages;
+	unsigned long remaining;
 	unsigned long page_idx = 0;
 	struct page **chunks = NULL;
 	struct page **pages = NULL;
-	int order = MAX_PAGE_ORDER;
+	unsigned int order = MAX_PAGE_ORDER;
 	u32 chunk_cnt = 0;
 	void *addr;
 	u32 i;
@@ -731,13 +770,15 @@ static void *__vmbus_alloc_buffer(struct vmbus_channel *channel,
 	*chunks_out = NULL;
 	*chunk_cnt_out = 0;
 
-	if (!nr_pages)
+	if (vmbus_buffer_round_size(size, &rounded_size))
 		return NULL;
+	nr_pages = rounded_size >> PAGE_SHIFT;
+	remaining = nr_pages;
 
 	/* If the buffer does not need to be decrypted, just use vzalloc() */
 	if ((!hv_is_isolation_supported() &&
 	     !cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT)) || confidential)
-		return vzalloc(nr_pages << PAGE_SHIFT);
+		return vzalloc(rounded_size);
 
 	/* Worst case: every chunk is a single page. */
 	chunks = kvmalloc_objs(*chunks, nr_pages, GFP_KERNEL | __GFP_ZERO);
@@ -752,7 +793,7 @@ static void *__vmbus_alloc_buffer(struct vmbus_channel *channel,
 		struct page *page;
 		gfp_t gfp;
 
-		order = min(order, ilog2(remaining));
+		order = vmbus_buffer_order(remaining, order);
 
 		/*
 		 * Use __GFP_NORETRY | __GFP_NOWARN to avoid OOM-killing,
@@ -767,7 +808,7 @@ static void *__vmbus_alloc_buffer(struct vmbus_channel *channel,
 		page = alloc_pages_node(cpu_to_node(channel->target_cpu),
 					gfp, order);
 		if (!page) {
-			if (!order--)
+			if (!vmbus_buffer_lower_order(&order))
 				goto err;
 			continue;
 		}
@@ -794,7 +835,7 @@ static void *__vmbus_alloc_buffer(struct vmbus_channel *channel,
 	if (!addr)
 		goto err;
 
-	memset(addr, 0, nr_pages << PAGE_SHIFT);
+	memset(addr, 0, rounded_size);
 
 	kvfree(pages);
 	*chunks_out = chunks;
@@ -1067,8 +1108,10 @@ int vmbus_teardown_gpadl(struct vmbus_channel *channel, struct vmbus_gpadl *gpad
 
 	info = kzalloc(sizeof(*info) +
 		       sizeof(struct vmbus_channel_gpadl_teardown), GFP_KERNEL);
-	if (!info)
+	if (!info) {
+		gpadl->leak = true;
 		return -ENOMEM;
+	}
 
 	init_completion(&info->waitevent);
 	info->waiting_channel = channel;
