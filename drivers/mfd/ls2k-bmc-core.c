@@ -268,18 +268,18 @@ static int ls2k_bmc_recover_pci_data(void *data)
 	}
 
 	if (i == 0)
-		return false;
+		return -ETIMEDOUT;
 
 	ls2k_bmc_restore_bridge_pci_data(parent, ddata);
 
 	/* Check if PCI-E is connected */
 	if (!ls2k_bmc_pcie_is_connected(parent, ddata))
-		return false;
+		return -EINVAL;
 
 	/* Waiting for U-Boot and DDR ready */
 	mdelay(LS2K_BMC_RESET_WAIT_TIME);
 	if (!ls2k_bmc_bar0_addr_is_set(parent))
-		return false;
+		return -EINVAL;
 
 	/* Restore LS2K BMC PCI-E config data */
 	pci_write_config_dword(pdev, PCI_COMMAND, ddata->bmc_pci_data.pci_command);
