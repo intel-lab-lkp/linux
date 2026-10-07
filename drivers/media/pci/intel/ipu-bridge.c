@@ -144,6 +144,16 @@ static struct upside_down_match_info ov02e10_match = {
 	.ids = { "OVTI02E1" },
 };
 
+static const struct upside_down_match_info ov08x40_match = {
+	.type = UPSIDE_DOWN_MATCH_HID,
+	.ids = { "OVTI08F4" },
+};
+
+static const struct upside_down_match_info pa14260_match = {
+	.type = UPSIDE_DOWN_MATCH_DSM,
+	.ids = { "CJFOE90_B", "BBG809N3A_B" },
+};
+
 /*
  * DMI matches for laptops which have their sensor mounted upside-down
  * without reporting a rotation of 180° in neither the SSDB nor the _PLD.
@@ -183,6 +193,20 @@ static const struct dmi_system_id upside_down_sensor_dmi_ids[] = {
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "XPS 16 (Dell 16 Premium) DA16250"),
 		},
 		.driver_data = &ov02c10_match,
+	},
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "XPS 14 DA14260"),
+		},
+		.driver_data = (void *)&ov08x40_match,
+	},
+	{
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Dell Pro 14 Premium PA14260"),
+		},
+		.driver_data = (void *)&pa14260_match,
 	},
 	/*
 	 * The first four characters of DMI_BOARD_NAME identify the Lenovo
