@@ -993,6 +993,11 @@ static inline void __free_one_page(struct page *page,
 			account_freepages(zone, 1 << order, migratetype);
 		} else {
 			__del_page_from_free_list(buddy, zone, order, buddy_mt);
+			/* The buddy's free pages join the merged block's type. */
+			if (unlikely(buddy_mt != migratetype)) {
+				account_freepages(zone, -(1 << order), buddy_mt);
+				account_freepages(zone, 1 << order, migratetype);
+			}
 		}
 
 		if (unlikely(buddy_mt != migratetype)) {
