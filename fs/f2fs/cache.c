@@ -81,6 +81,7 @@ bool f2fs_mark_cache_dirty(struct f2fs_cached_block *entry)
 		f2fs_cache_update_tag(entry, F2FS_CACHE_TAG_NONE,
 						F2FS_CACHE_TAG_DIRTY);
 		inc_cache_count(cache->sbi, type);
+		f2fs_wake_up_cache_wb(cache->sbi);
 		return true;
 	}
 
@@ -681,6 +682,39 @@ unsigned long f2fs_shrink_node_cache(struct f2fs_sb_info *sbi,
 	return f2fs_do_shrink_cache(NODE_CACHE(sbi), nr_to_scan);
 }
 
+static inline unsigned long f2fs_total_cached_entries(struct f2fs_sb_info *sbi)
+{
+	unsigned long total = META_CACHE(sbi)->num_entries +
+			      NODE_CACHE(sbi)->num_entries;
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	if (test_opt(sbi, COMPRESS_CACHE))
+		total += COMPRESS_CACHE(sbi)->num_entries;
+#endif
+	return total;
+}
+
+static inline bool f2fs_should_wake_up_cache_wb(struct f2fs_sb_info *sbi)
+{
+	struct f2fs_cache_kthread *cache_thread = &sbi->cache_thread;
+	s64 nr_dirty;
+
+	if (!cache_thread->cache_wb_task)
+		return false;
+
+	if (cache_thread->cache_wb_total_threshold &&
+	    f2fs_total_cached_entries(sbi) < cache_thread->cache_wb_total_threshold)
+		return false;
+
+	nr_dirty = get_nr_caches(sbi, F2FS_DIRTY_META) +
+		   get_nr_caches(sbi, F2FS_DIRTY_NODES);
+
+	if (cache_thread->cache_wb_dirty_threshold &&
+	    nr_dirty < cache_thread->cache_wb_dirty_threshold)
+		return false;
+
+	return true;
+}
+
 static int f2fs_cache_writeback_kthread(void *data)
 {
 	struct f2fs_sb_info *sbi = data;
@@ -693,7 +727,8 @@ static int f2fs_cache_writeback_kthread(void *data)
 		unsigned int interval = cache_thread->cache_wb_interval;
 
 		wait_event_freezable_timeout(*wq,
-				kthread_should_stop(),
+				kthread_should_stop() ||
+				f2fs_should_wake_up_cache_wb(sbi),
 				msecs_to_jiffies(interval));
 
 		if (kthread_should_stop())
@@ -719,6 +754,17 @@ static int f2fs_cache_writeback_kthread(void *data)
 	return 0;
 }
 
+void f2fs_wake_up_cache_wb(struct f2fs_sb_info *sbi)
+{
+	struct f2fs_cache_kthread *cache_thread = &sbi->cache_thread;
+
+	if (!f2fs_should_wake_up_cache_wb(sbi))
+		return;
+
+	if (wq_has_sleeper(&cache_thread->cache_wb_wq))
+		wake_up(&cache_thread->cache_wb_wq);
+}
+
 int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_cache_kthread *cache_thread = &sbi->cache_thread;
@@ -731,6 +777,8 @@ int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi)
 
 	init_waitqueue_head(&cache_thread->cache_wb_wq);
 	cache_thread->cache_wb_interval = DEF_DIRTY_CACHE_TIMEOUT;
+	cache_thread->cache_wb_dirty_threshold = DEF_CACHE_WB_DIRTY_THRESH;
+	cache_thread->cache_wb_total_threshold = 0;
 	snprintf(name, sizeof(name), "f2fs_writeback-%u:%u",
 			MAJOR(dev), MINOR(dev));
 
