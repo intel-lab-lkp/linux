@@ -552,6 +552,9 @@ static int sharp_memory_probe(struct spi_device *spi)
 		return dev_err_probe(dev, ret, "Failed to initialize drm config\n");
 
 	smd->enable_gpio = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_HIGH);
+	if (IS_ERR(smd->enable_gpio))
+		return dev_err_probe(dev, PTR_ERR(smd->enable_gpio),
+				     "Failed to get enable gpio\n");
 	if (!smd->enable_gpio)
 		dev_warn(dev, "Enable gpio not defined\n");
 
