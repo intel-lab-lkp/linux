@@ -92,6 +92,8 @@ struct meson8b_dwmac {
 	struct clk			*rgmii_tx_clk;
 	u32				tx_delay_ns;
 	u32				rx_delay_ps;
+	bool				mac_tx_delay;
+	bool				mac_rx_delay;
 	struct clk			*timing_adj_clk;
 };
 
@@ -299,6 +301,22 @@ static int meson8b_init_rgmii_delays(struct meson8b_dwmac *dwmac)
 		delay_config = rx_adj_config;
 		break;
 	case PHY_INTERFACE_MODE_RGMII_ID:
+		/*
+		 * "rgmii-id" only says the delays are internal, not which
+		 * side applies them. The *-internal-delay-ps properties say
+		 * it is this controller, so leave ours switched on.
+		 */
+		if (dwmac->mac_tx_delay || dwmac->mac_rx_delay) {
+			delay_config = 0;
+			if (dwmac->mac_tx_delay)
+				delay_config |= tx_dly_config;
+			if (dwmac->mac_rx_delay)
+				delay_config |= rx_adj_config;
+			else
+				cfg_rxclk_dly = 0;
+			break;
+		}
+		fallthrough;
 	case PHY_INTERFACE_MODE_RMII:
 		delay_config = 0;
 		cfg_rxclk_dly = 0;
@@ -384,6 +402,7 @@ static int meson8b_dwmac_probe(struct platform_device *pdev)
 	struct plat_stmmacenet_data *plat_dat;
 	struct stmmac_resources stmmac_res;
 	struct meson8b_dwmac *dwmac;
+	u32 tx_delay_ps;
 	int ret;
 
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
@@ -409,9 +428,13 @@ static int meson8b_dwmac_probe(struct platform_device *pdev)
 	dwmac->dev = &pdev->dev;
 	dwmac->phy_mode = plat_dat->phy_interface;
 
+	/* the generic property is preferred over the vendor one */
+	if (!of_property_read_u32(pdev->dev.of_node, "tx-internal-delay-ps",
+				  &tx_delay_ps))
+		dwmac->tx_delay_ns = tx_delay_ps / 1000;
 	/* use 2ns as fallback since this value was previously hardcoded */
-	if (of_property_read_u32(pdev->dev.of_node, "amlogic,tx-delay-ns",
-				 &dwmac->tx_delay_ns))
+	else if (of_property_read_u32(pdev->dev.of_node, "amlogic,tx-delay-ns",
+				      &dwmac->tx_delay_ns))
 		dwmac->tx_delay_ns = 2;
 
 	/* RX delay defaults to 0ps since this is what many boards use */
@@ -422,6 +445,25 @@ static int meson8b_dwmac_probe(struct platform_device *pdev)
 					  &dwmac->rx_delay_ps))
 			/* convert ns to ps */
 			dwmac->rx_delay_ps *= 1000;
+	}
+
+	/*
+	 * Each property names one clock this controller delays itself. The
+	 * PHY must be asked for whatever is left, or the two would delay the
+	 * same clock and push it past the window.
+	 */
+	dwmac->mac_tx_delay = of_property_present(pdev->dev.of_node,
+						  "tx-internal-delay-ps");
+	dwmac->mac_rx_delay = of_property_present(pdev->dev.of_node,
+						  "rx-internal-delay-ps");
+
+	if (dwmac->phy_mode == PHY_INTERFACE_MODE_RGMII_ID) {
+		if (dwmac->mac_tx_delay && dwmac->mac_rx_delay)
+			plat_dat->phy_interface = PHY_INTERFACE_MODE_RGMII;
+		else if (dwmac->mac_tx_delay)
+			plat_dat->phy_interface = PHY_INTERFACE_MODE_RGMII_RXID;
+		else if (dwmac->mac_rx_delay)
+			plat_dat->phy_interface = PHY_INTERFACE_MODE_RGMII_TXID;
 	}
 
 	if (dwmac->data->has_prg_eth1_rgmii_rx_delay) {
