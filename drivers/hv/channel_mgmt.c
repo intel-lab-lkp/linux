@@ -170,14 +170,17 @@ static const struct {
  * The rescinded channel may be blocked waiting for a response from the host;
  * take care of that.
  */
-static void vmbus_rescind_cleanup(struct vmbus_channel *channel)
+static void vmbus_rescind_cleanup(struct vmbus_channel *channel,
+				  bool host_generated)
 {
 	struct vmbus_channel_msginfo *msginfo;
 	unsigned long flags;
 
 
 	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
-	channel->rescind = true;
+	if (host_generated)
+		WRITE_ONCE(channel->rescind_from_host, true);
+	WRITE_ONCE(channel->rescind, true);
 	list_for_each_entry(msginfo, &vmbus_connection.chn_msg_list,
 				msglistentry) {
 
@@ -955,6 +958,9 @@ EXPORT_SYMBOL_GPL(vmbus_initiate_unload);
 static void vmbus_setup_channel_state(struct vmbus_channel *channel,
 				      struct vmbus_channel_offer_channel *offer)
 {
+	WRITE_ONCE(channel->rescind, false);
+	WRITE_ONCE(channel->rescind_from_host, false);
+
 	/*
 	 * Setup state for signalling the host.
 	 */
@@ -1159,7 +1165,8 @@ static void check_ready_for_suspend_event(void)
  *
  * We queue a work item to process this offer synchronously
  */
-static void vmbus_onoffer_rescind(struct vmbus_channel_message_header *hdr)
+static void vmbus_onoffer_rescind(struct vmbus_channel_message_header *hdr,
+				  bool host_generated)
 {
 	struct vmbus_channel_rescind_offer *rescind;
 	struct vmbus_channel *channel;
@@ -1238,7 +1245,7 @@ static void vmbus_onoffer_rescind(struct vmbus_channel_message_header *hdr)
 	/*
 	 * Now wait for offer handling to complete.
 	 */
-	vmbus_rescind_cleanup(channel);
+	vmbus_rescind_cleanup(channel, host_generated);
 	while (READ_ONCE(channel->probe_done) == false) {
 		/*
 		 * We wait here until any channel offer is currently
@@ -1555,12 +1562,18 @@ static void vmbus_onversion_response(
 }
 
 /* Channel message dispatch table */
+static void
+vmbus_onoffer_rescind_from_table(struct vmbus_channel_message_header *hdr)
+{
+	vmbus_onoffer_rescind(hdr, true);
+}
+
 const struct vmbus_channel_message_table_entry
 channel_message_table[CHANNELMSG_COUNT] = {
 	{ CHANNELMSG_INVALID,			0, NULL, 0},
 	{ CHANNELMSG_OFFERCHANNEL,		0, vmbus_onoffer,
 		sizeof(struct vmbus_channel_offer_channel)},
-	{ CHANNELMSG_RESCIND_CHANNELOFFER,	0, vmbus_onoffer_rescind,
+	{ CHANNELMSG_RESCIND_CHANNELOFFER,	0, vmbus_onoffer_rescind_from_table,
 		sizeof(struct vmbus_channel_rescind_offer) },
 	{ CHANNELMSG_REQUESTOFFERS,		0, NULL, 0},
 	{ CHANNELMSG_ALLOFFERS_DELIVERED,	1, vmbus_onoffers_delivered, 0},
@@ -1596,7 +1609,8 @@ channel_message_table[CHANNELMSG_COUNT] = {
  *
  * This is invoked in the vmbus worker thread context.
  */
-void vmbus_onmessage(struct vmbus_channel_message_header *hdr)
+void vmbus_onmessage(struct vmbus_channel_message_header *hdr,
+		     bool host_generated)
 {
 	trace_vmbus_on_message(hdr);
 
@@ -1604,6 +1618,11 @@ void vmbus_onmessage(struct vmbus_channel_message_header *hdr)
 	 * vmbus_on_msg_dpc() makes sure the hdr->msgtype here can not go
 	 * out of bound and the message_handler pointer can not be NULL.
 	 */
+	if (hdr->msgtype == CHANNELMSG_RESCIND_CHANNELOFFER) {
+		vmbus_onoffer_rescind(hdr, host_generated);
+		return;
+	}
+
 	channel_message_table[hdr->msgtype].message_handler(hdr);
 }
 

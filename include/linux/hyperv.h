@@ -809,6 +809,7 @@ struct vmbus_channel {
 	u8 monitor_bit;
 
 	bool rescind; /* got rescind msg */
+	bool rescind_from_host; /* host revocation, not local channel removal */
 	bool rescind_ref; /* got rescind msg, got channel reference */
 	struct completion rescind_event;
 
@@ -1117,7 +1118,8 @@ static inline void set_channel_pending_send_size(struct vmbus_channel *c,
 	c->outbound.ring_buffer->pending_send_sz = size;
 }
 
-void vmbus_onmessage(struct vmbus_channel_message_header *hdr);
+void vmbus_onmessage(struct vmbus_channel_message_header *hdr,
+		     bool host_generated);
 
 int vmbus_request_offers(void);
 

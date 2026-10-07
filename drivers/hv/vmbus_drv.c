@@ -1022,6 +1022,7 @@ static const struct bus_type  hv_bus = {
 
 struct onmessage_work_context {
 	struct work_struct work;
+	bool host_generated;
 	struct {
 		struct hv_message_header header;
 		u8 payload[];
@@ -1032,14 +1033,14 @@ static void vmbus_onmessage_work(struct work_struct *work)
 {
 	struct onmessage_work_context *ctx;
 
+	ctx = container_of(work, struct onmessage_work_context, work);
 	/* Do not process messages if we're in DISCONNECTED state */
-	if (vmbus_connection.conn_state == DISCONNECTED)
+	if (vmbus_connection.conn_state == DISCONNECTED) {
+		kfree(ctx);
 		return;
-
-	ctx = container_of(work, struct onmessage_work_context,
-			   work);
+	}
 	vmbus_onmessage((struct vmbus_channel_message_header *)
-			&ctx->msg.payload);
+			&ctx->msg.payload, ctx->host_generated);
 	kfree(ctx);
 }
 
@@ -1109,6 +1110,7 @@ static void __vmbus_on_msg_dpc(void *message_page_addr)
 			return;
 
 		INIT_WORK(&ctx->work, vmbus_onmessage_work);
+		ctx->host_generated = true;
 		ctx->msg.header = msg_copy.header;
 		memcpy(&ctx->msg.payload, msg_copy.u.payload, payload_size);
 
@@ -1222,6 +1224,7 @@ static void vmbus_force_channel_rescinded(struct vmbus_channel *channel)
 	rescind->child_relid = channel->offermsg.child_relid;
 
 	INIT_WORK(&ctx->work, vmbus_onmessage_work);
+	ctx->host_generated = false;
 
 	queue_work(vmbus_connection.work_queue, &ctx->work);
 }
