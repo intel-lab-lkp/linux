@@ -2746,11 +2746,20 @@ int amdgpu_vm_make_compute(struct amdgpu_device *adev, struct amdgpu_vm *vm)
 		  "CPU update of VM recommended only for large BAR system\n");
 
 	if (vm->use_cpu_for_update) {
-		/* Sync with last SDMA update/clear before switching to CPU */
-		r = amdgpu_bo_sync_wait(vm->root.bo,
-					AMDGPU_FENCE_OWNER_UNDEFINED, true);
-		if (r)
+		/*
+		 * Sync with the last SDMA update/clear before switching to CPU
+		 * updates. The VM's own page table updates are tracked with
+		 * DMA_RESV_USAGE_BOOKKEEP on the root PD, which
+		 * amdgpu_bo_sync_wait() does not wait for: a clear of a PD still
+		 * pending here lands after the CPU has written its entries.
+		 */
+		long t = dma_resv_wait_timeout(vm->root.bo->tbo.base.resv,
+					       DMA_RESV_USAGE_BOOKKEEP, true,
+					       MAX_SCHEDULE_TIMEOUT);
+		if (t < 0) {
+			r = t;
 			goto unreserve_bo;
+		}
 
 		vm->update_funcs = &amdgpu_vm_cpu_funcs;
 		r = amdgpu_vm_pt_map_tables(adev, vm);
