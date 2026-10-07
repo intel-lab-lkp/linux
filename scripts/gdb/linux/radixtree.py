@@ -55,24 +55,15 @@ def lookup(root, index):
     if (index > maxindex):
         return None
 
-    shift = node['shift'] + constants.LX_RADIX_TREE_MAP_SHIFT
-
     while True:
         offset = (index >> node['shift']) & constants.LX_RADIX_TREE_MAP_MASK
         slot = node['slots'][offset]
 
         if slot == 0:
             return None
-
-        node = slot.cast(node.type.pointer()).dereference()
-        if node == 0:
-            return None
-
-        shift -= constants.LX_RADIX_TREE_MAP_SHIFT
-        if (shift <= 0):
-            break
-
-    return node
+        if not is_internal_node(slot):
+            return slot
+        node = entry_to_node(slot)
 
 def descend(parent, index):
     offset = (index >> int(parent["shift"])) & constants.LX_RADIX_TREE_MAP_MASK
