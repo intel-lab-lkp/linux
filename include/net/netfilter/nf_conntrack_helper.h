@@ -29,6 +29,8 @@ enum nf_ct_helper_flags {
 
 #define NF_CT_HELPER_NAME_LEN	16
 
+#define NF_CT_MAX_EXPECT_CHAIN_LEN	2
+
 /* Must be kept in sync with the classes defined by helpers */
 #define NF_CT_MAX_EXPECT_CLASSES	4
 
@@ -157,6 +159,19 @@ static inline void nf_ct_help_put(const struct nf_conn *ct)
 	helper = rcu_dereference(help->helper);
 	if (helper && refcount_dec_and_test(&helper->ct_refcnt))
 		kfree_rcu(helper, rcu);
+}
+
+static inline bool nf_ct_master_acceptable(const struct nf_conn *m)
+{
+	unsigned int depth = 0;
+
+	while (m->master) {
+		if (++depth >= NF_CT_MAX_EXPECT_CHAIN_LEN)
+			return false;
+		m = m->master;
+	}
+
+	return true;
 }
 
 int nf_conntrack_helper_init(void);

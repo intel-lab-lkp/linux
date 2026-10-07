@@ -2232,6 +2232,26 @@ ctnetlink_change_conntrack(struct nf_conn *ct,
 }
 
 static struct nf_conn *
+ctnetlink_find_get_master(struct net *net, const struct nf_conntrack_zone *zone,
+			  const struct nf_conntrack_tuple *tuple)
+{
+	struct nf_conntrack_tuple_hash *master_h;
+	struct nf_conn *master_ct;
+
+	master_h = nf_conntrack_find_get(net, zone, tuple);
+	if (!master_h)
+		return ERR_PTR(-ENOENT);
+
+	master_ct = nf_ct_tuplehash_to_ctrack(master_h);
+	if (!nf_ct_master_acceptable(master_ct)) {
+		nf_ct_put(master_ct);
+		return ERR_PTR(-EMLINK);
+	}
+
+	return master_ct;
+}
+
+static struct nf_conn *
 ctnetlink_create_conntrack(struct net *net,
 			   const struct nf_conntrack_zone *zone,
 			   const struct nlattr * const cda[],
@@ -2356,7 +2376,6 @@ ctnetlink_create_conntrack(struct net *net,
 	/* setup master conntrack: this is a confirmed expectation */
 	if (cda[CTA_TUPLE_MASTER]) {
 		struct nf_conntrack_tuple master;
-		struct nf_conntrack_tuple_hash *master_h;
 		struct nf_conn *master_ct;
 
 		err = ctnetlink_parse_tuple(cda, &master, CTA_TUPLE_MASTER,
@@ -2364,12 +2383,11 @@ ctnetlink_create_conntrack(struct net *net,
 		if (err < 0)
 			goto err2;
 
-		master_h = nf_conntrack_find_get(net, zone, &master);
-		if (master_h == NULL) {
-			err = -ENOENT;
+		master_ct = ctnetlink_find_get_master(net, zone, &master);
+		if (IS_ERR(master_ct)) {
+			err = PTR_ERR(master_ct);
 			goto err2;
 		}
-		master_ct = nf_ct_tuplehash_to_ctrack(master_h);
 		__set_bit(IPS_EXPECTED_BIT, &ct->status);
 		ct->master = master_ct;
 	}
@@ -3613,7 +3631,6 @@ ctnetlink_create_expect(struct net *net,
 			u_int8_t u3, u32 portid, int report)
 {
 	struct nf_conntrack_tuple tuple, mask, master_tuple;
-	struct nf_conntrack_tuple_hash *h = NULL;
 	struct nf_conntrack_expect *exp;
 	struct nf_conn *ct;
 	int err;
@@ -3633,10 +3650,9 @@ ctnetlink_create_expect(struct net *net,
 		return err;
 
 	/* Look for master conntrack of this expectation */
-	h = nf_conntrack_find_get(net, zone, &master_tuple);
-	if (!h)
-		return -ENOENT;
-	ct = nf_ct_tuplehash_to_ctrack(h);
+	ct = ctnetlink_find_get_master(net, zone, &master_tuple);
+	if (IS_ERR(ct))
+		return PTR_ERR(ct);
 
 	rcu_read_lock();
 	exp = ctnetlink_alloc_expect(cda, ct, NULL, &tuple, &mask);
