@@ -2571,6 +2571,7 @@ static void rtw89_core_cancel_6ghz_probe_tx(struct rtw89_dev *rtwdev,
 	struct ieee80211_mgmt *mgmt = (struct ieee80211_mgmt *)skb->data;
 	struct list_head *pkt_list = rtwdev->scan_info.pkt_list;
 	struct rtw89_pktofld_info *info;
+	size_t hdr_len = offsetof(struct ieee80211_mgmt, u.beacon.variable);
 	const u8 *ies = mgmt->u.beacon.variable, *ssid_ie;
 	bool queue_work = false;
 
@@ -2582,7 +2583,10 @@ static void rtw89_core_cancel_6ghz_probe_tx(struct rtw89_dev *rtwdev,
 		return;
 	}
 
-	ssid_ie = cfg80211_find_ie(WLAN_EID_SSID, ies, skb->len);
+	if (skb->len < hdr_len)
+		return;
+
+	ssid_ie = cfg80211_find_ie(WLAN_EID_SSID, ies, skb->len - hdr_len);
 
 	list_for_each_entry(info, &pkt_list[NL80211_BAND_6GHZ], list) {
 		if (ether_addr_equal(info->bssid, mgmt->bssid)) {
