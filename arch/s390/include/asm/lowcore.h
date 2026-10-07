@@ -175,7 +175,8 @@ struct lowcore {
 
 	__u32	return_lpswe;			/* 0x0400 */
 	__u32	return_mcck_lpswe;		/* 0x0404 */
-	__u8	pad_0x040a[0x0e00-0x0408];	/* 0x0408 */
+	__u8	lazy_mmu_count;			/* 0x0408 */
+	__u8	pad_0x0409[0x0e00-0x0409];	/* 0x0409 */
 
 	/*
 	 * 0xe00 contains the address of the IPL Parameter Information
