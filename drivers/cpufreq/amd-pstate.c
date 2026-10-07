@@ -145,6 +145,11 @@ static struct quirk_entry quirk_amd_7k62 = {
 	.lowest_freq = 550,
 };
 
+static struct quirk_entry quirk_amd_ryzen_threadripper_3000_24c = {
+	.nominal_freq = 3800,
+	.lowest_freq = 550,
+};
+
 static inline u8 freq_to_perf(union perf_cached perf, u32 nominal_freq, unsigned int freq_val)
 {
 	u32 perf_val = DIV_ROUND_UP_ULL((u64)freq_val * perf.nominal_perf, nominal_freq);
@@ -174,6 +179,22 @@ static int __init dmi_matched_7k62_bios_bug(const struct dmi_system_id *dmi)
 	return 0;
 }
 
+static int __init dmi_matched_trx40_bios_bug(const struct dmi_system_id *dmi)
+{
+	/**
+	 * Match the Ryzen Threadripper 3000 series, 24-core SKU, sTRX4 socket / TRX40 chipset.
+	 */
+	if (boot_cpu_data.x86 == 0x17 &&
+	    boot_cpu_data.x86_model >= 0x30 && boot_cpu_data.x86_model <= 0x3F &&
+	    topology_num_cores_per_package() == 24) {
+		quirks = dmi->driver_data;
+		pr_info("Overriding nominal and lowest frequencies for %s\n", dmi->ident);
+		return 1;
+	}
+
+	return 0;
+}
+
 static const struct dmi_system_id amd_pstate_quirks_table[] __initconst = {
 	{
 		.callback = dmi_matched_7k62_bios_bug,
@@ -183,6 +204,16 @@ static const struct dmi_system_id amd_pstate_quirks_table[] __initconst = {
 			DMI_MATCH(DMI_BIOS_RELEASE, "12/12/2019"),
 		},
 		.driver_data = &quirk_amd_7k62,
+	},
+	{
+		.callback = dmi_matched_trx40_bios_bug,
+		.ident = "AMD Ryzen Threadripper 3000",
+		.matches = {
+			DMI_MATCH(DMI_BIOS_VENDOR,  "American Megatrends International"),
+			DMI_MATCH(DMI_BIOS_VERSION, "2.80"),
+			DMI_MATCH(DMI_BIOS_DATE,    "05/17/2022"),
+		},
+		.driver_data = &quirk_amd_ryzen_threadripper_3000_24c,
 	},
 	{}
 };
