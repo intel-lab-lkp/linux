@@ -312,8 +312,8 @@ static int ttc_rate_change_clocksource_cb(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
-static int __init ttc_setup_clocksource(struct clk *clk, void __iomem *base,
-					 u32 timer_width)
+static int ttc_setup_clocksource(struct clk *clk, void __iomem *base,
+				 u32 timer_width)
 {
 	struct ttc_timer_clocksource *ttccs;
 	int err;
@@ -395,8 +395,8 @@ static int ttc_rate_change_clockevent_cb(struct notifier_block *nb,
 	}
 }
 
-static int __init ttc_setup_clockevent(struct clk *clk,
-				       void __iomem *base, u32 irq)
+static int ttc_setup_clockevent(struct clk *clk,
+				void __iomem *base, u32 irq)
 {
 	struct ttc_timer_clockevent *ttcce;
 	int err;
@@ -463,7 +463,7 @@ out_kfree:
 	return err;
 }
 
-static int __init ttc_timer_probe(struct platform_device *pdev)
+static int ttc_timer_probe(struct platform_device *pdev)
 {
 	unsigned int irq;
 	void __iomem *timer_baseaddr;
@@ -475,8 +475,6 @@ static int __init ttc_timer_probe(struct platform_device *pdev)
 
 	if (initialized)
 		return 0;
-
-	initialized = 1;
 
 	/*
 	 * Get the 1st Triple Timer Counter (TTC) block from the device tree
@@ -522,6 +520,8 @@ static int __init ttc_timer_probe(struct platform_device *pdev)
 	if (ret)
 		goto put_clk_ce;
 
+	initialized = 1;
+
 	pr_info("%pOFn #0 at %p, irq=%d\n", timer, timer_baseaddr, irq);
 
 	return 0;
@@ -541,9 +541,10 @@ static const struct of_device_id ttc_timer_of_match[] = {
 MODULE_DEVICE_TABLE(of, ttc_timer_of_match);
 
 static struct platform_driver ttc_timer_driver = {
+	.probe = ttc_timer_probe,
 	.driver = {
 		.name	= "cdns_ttc_timer",
 		.of_match_table = ttc_timer_of_match,
 	},
 };
-builtin_platform_driver_probe(ttc_timer_driver, ttc_timer_probe);
+builtin_platform_driver(ttc_timer_driver);
