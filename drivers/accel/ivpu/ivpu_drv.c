@@ -540,6 +540,9 @@ int ivpu_boot(struct ivpu_device *vdev)
 	ivpu_ipc_enable(vdev);
 
 	if (!ivpu_fw_is_warm_boot(vdev)) {
+		if (ivpu_test_mode & IVPU_TEST_MODE_FW_TEST)
+			return 0;
+
 		ret = ivpu_pm_dct_init(vdev);
 		if (ret)
 			goto err_disable_ipc;
