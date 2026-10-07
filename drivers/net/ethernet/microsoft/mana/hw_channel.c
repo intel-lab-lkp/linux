@@ -134,7 +134,7 @@ static void mana_hwc_init_event_handler(void *ctx, struct gdma_queue *q_self,
 
 		switch (type) {
 		case HWC_INIT_DATA_CQID:
-			hwc->cq->gdma_cq->id = val;
+			WRITE_ONCE(hwc->hwc_init_cq_id, val);
 			break;
 
 		case HWC_INIT_DATA_RQID:
@@ -158,7 +158,11 @@ static void mana_hwc_init_event_handler(void *ctx, struct gdma_queue *q_self,
 			break;
 
 		case HWC_INIT_DATA_MAX_NUM_CQS:
-			gd->gdma_context->max_num_cqs = val;
+			/* Store only; establish_channel() commits it to
+			 * max_num_cqs once, so a later event cannot grow the
+			 * bound past the allocation.  Pairs with its READ_ONCE().
+			 */
+			WRITE_ONCE(hwc->hwc_init_max_num_cqs, val);
 			break;
 
 		case HWC_INIT_DATA_PDID:
@@ -382,16 +386,49 @@ static void mana_hwc_comp_event(void *ctx, struct gdma_queue *q_self)
 	mana_gd_ring_cq(q_self, SET_ARM_BIT);
 }
 
+static int mana_hwc_publish_cq(struct gdma_context *gc,
+			       struct gdma_queue *cq)
+{
+	struct gdma_queue **cq_table = READ_ONCE(gc->cq_table);
+	u32 id = READ_ONCE(cq->id);
+
+	if (!cq_table || id >= READ_ONCE(gc->max_num_cqs) ||
+	    READ_ONCE(cq_table[id]))
+		return -EINVAL;
+
+	WRITE_ONCE(cq_table[id], cq);
+
+	return 0;
+}
+
+static void mana_hwc_unpublish_cq(struct gdma_context *gc,
+				  struct gdma_queue *cq)
+{
+	struct gdma_queue **cq_table = READ_ONCE(gc->cq_table);
+	u32 id;
+
+	if (!cq_table || !cq)
+		return;
+
+	id = READ_ONCE(cq->id);
+	if (id < READ_ONCE(gc->max_num_cqs) &&
+	    READ_ONCE(cq_table[id]) == cq)
+		WRITE_ONCE(cq_table[id], NULL);
+}
+
 static void mana_hwc_destroy_cq(struct gdma_context *gc, struct hwc_cq *hwc_cq)
 {
-	kfree(hwc_cq->comp_buf);
-
-	if (hwc_cq->gdma_cq)
-		mana_gd_destroy_queue(gc, hwc_cq->gdma_cq);
-
+	/* Destroy the EQ first: it deregisters the IRQ and drains in-flight
+	 * handlers, so none can touch the CQ after it is freed.
+	 */
 	if (hwc_cq->gdma_eq)
 		mana_gd_destroy_queue(gc, hwc_cq->gdma_eq);
 
+	/* Safe to free now that the EQ handler is fenced. */
+	if (hwc_cq->gdma_cq)
+		mana_gd_destroy_queue(gc, hwc_cq->gdma_cq);
+
+	kfree(hwc_cq->comp_buf);
 	kfree(hwc_cq);
 }
 
@@ -674,6 +711,9 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 	struct gdma_queue *sq = hwc->txq->gdma_wq;
 	struct gdma_queue *eq = hwc->cq->gdma_eq;
 	struct gdma_queue *cq = hwc->cq->gdma_cq;
+	struct gdma_queue **cq_table;
+	u32 num_cqs;
+	u32 cq_id;
 	int err;
 
 	init_completion(&hwc->hwc_init_eqe_comp);
@@ -683,7 +723,7 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 				 cq->mem_info.dma_handle,
 				 rq->mem_info.dma_handle,
 				 sq->mem_info.dma_handle,
-				 eq->eq.msix_index);
+				 eq->eq.msix_index, &hwc->setup_active);
 	if (err)
 		return err;
 
@@ -694,15 +734,45 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 	*max_req_msg_size = hwc->hwc_init_max_req_msg_size;
 	*max_resp_msg_size = hwc->hwc_init_max_resp_msg_size;
 
-	/* Both were set in mana_hwc_init_event_handler(). */
-	if (WARN_ON(cq->id >= gc->max_num_cqs))
-		return -EPROTO;
+	/* Snapshot the device-reported count and id once, so the same value
+	 * sizes, bounds and indexes cq_table even across the sleeping
+	 * vcalloc() and a concurrent init event.
+	 */
+	num_cqs = READ_ONCE(hwc->hwc_init_max_num_cqs);
+	cq_id = READ_ONCE(hwc->hwc_init_cq_id);
 
-	gc->cq_table = vcalloc(gc->max_num_cqs, sizeof(struct gdma_queue *));
-	if (!gc->cq_table)
+	/* Both operands come from untrusted HWC bootstrap events; a missing
+	 * MAX_NUM_CQS leaves num_cqs at 0.  Reject rather than WARN_ON() so a
+	 * malformed device response cannot panic a panic_on_warn guest.
+	 */
+	if (cq_id >= num_cqs) {
+		dev_err_ratelimited(hwc->dev,
+				    "HWC: bad CQ id %u >= max %u\n",
+				    cq_id, num_cqs);
+		return -EPROTO;
+	}
+
+	/* Init events remain enabled, so commit the validated CQ ID once. */
+	WRITE_ONCE(cq->id, cq_id);
+
+	cq_table = vcalloc(num_cqs, sizeof(*cq_table));
+	if (!cq_table)
 		return -ENOMEM;
 
-	gc->cq_table[cq->id] = cq;
+	/* Publish the bound and the initialised table together; the release
+	 * pairs with smp_load_acquire() in mana_gd_process_eqe().
+	 */
+	WRITE_ONCE(gc->max_num_cqs, num_cqs);
+	/* Pairs with smp_load_acquire() in mana_gd_process_eqe(). */
+	smp_store_release(&gc->cq_table, cq_table);
+
+	err = mana_hwc_publish_cq(gc, cq);
+	if (err) {
+		dev_err_ratelimited(hwc->dev,
+				    "HWC: failed to publish CQ %u: %d\n",
+				    cq_id, err);
+		return err;
+	}
 
 	return 0;
 }
@@ -759,6 +829,13 @@ int mana_hwc_create_channel(struct gdma_context *gc)
 	u16 q_depth_max;
 	int err;
 
+	/* Retry a retained context before assigning queues to the PF again. */
+	if (gd->driver_data) {
+		mana_hwc_destroy_channel(gc);
+		if (gd->driver_data)
+			return -ETIMEDOUT;
+	}
+
 	hwc = kzalloc_obj(*hwc);
 	if (!hwc)
 		return -ENOMEM;
@@ -808,29 +885,55 @@ out:
 	return err;
 }
 
+static void mana_hwc_fence_channel(struct gdma_context *gc,
+				   struct hw_channel_context *hwc)
+{
+	if (!hwc->cq)
+		return;
+
+	if (hwc->cq->gdma_eq)
+		mana_gd_fence_eq(gc, hwc->cq->gdma_eq);
+
+	if (hwc->cq->gdma_cq)
+		mana_hwc_unpublish_cq(gc, hwc->cq->gdma_cq);
+}
+
 void mana_hwc_destroy_channel(struct gdma_context *gc)
 {
 	struct hw_channel_context *hwc = gc->hwc.driver_data;
+	struct gdma_queue **old_cq_table;
+	int err;
 
 	if (!hwc)
 		return;
 
-	/* gc->max_num_cqs is set in mana_hwc_init_event_handler(). If it's
-	 * non-zero, the HWC worked and we should tear down the HWC here.
+	/* An unacknowledged destroy leaves the PF's mappings live.  Fence
+	 * software dispatch, but retain every PF-visible allocation.
 	 */
-	if (gc->max_num_cqs > 0) {
-		mana_smc_teardown_hwc(&gc->shm_channel, false);
-		gc->max_num_cqs = 0;
+	err = mana_smc_teardown_hwc(&gc->shm_channel, false,
+				    &hwc->setup_active);
+	if (err) {
+		dev_err(hwc->dev,
+			"HWC teardown failed: %d, retaining PF-visible resources\n",
+			err);
+		mana_hwc_fence_channel(gc, hwc);
+		return;
 	}
+
+	/* Fence the EQ before releasing any state its handlers can reach. */
+	if (hwc->cq)
+		mana_hwc_destroy_cq(hwc->gdma_dev->gdma_context, hwc->cq);
+
+	/* Reset only after mana_hwc_destroy_cq() has cleared the CQ table
+	 * slot, so it is not left dangling.
+	 */
+	WRITE_ONCE(gc->max_num_cqs, 0);
 
 	if (hwc->txq)
 		mana_hwc_destroy_wq(hwc, hwc->txq);
 
 	if (hwc->rxq)
 		mana_hwc_destroy_wq(hwc, hwc->rxq);
-
-	if (hwc->cq)
-		mana_hwc_destroy_cq(hwc->gdma_dev->gdma_context, hwc->cq);
 
 	kfree(hwc->caller_ctx);
 	hwc->caller_ctx = NULL;
@@ -848,8 +951,11 @@ void mana_hwc_destroy_channel(struct gdma_context *gc)
 	gc->hwc.driver_data = NULL;
 	gc->hwc.gdma_context = NULL;
 
-	vfree(gc->cq_table);
-	gc->cq_table = NULL;
+	old_cq_table = READ_ONCE(gc->cq_table);
+	/* Stop new table readers before waiting for existing IRQ readers. */
+	smp_store_release(&gc->cq_table, NULL);
+	synchronize_rcu();
+	vfree(old_cq_table);
 }
 
 int mana_hwc_send_request(struct hw_channel_context *hwc, u32 req_len,
