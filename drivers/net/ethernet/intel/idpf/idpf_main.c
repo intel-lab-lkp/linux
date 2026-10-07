@@ -196,6 +196,13 @@ static void idpf_shutdown(struct pci_dev *pdev)
 
 	cancel_delayed_work_sync(&adapter->serv_task);
 	cancel_delayed_work_sync(&adapter->vc_event_task);
+
+	/* Destroy the vports while the mailbox is still up, so that the
+	 * device stops its queues before the next kernel reuses their memory.
+	 * A reset does not clear them on every device.
+	 */
+	set_bit(IDPF_SHUTDOWN_IN_PROG, adapter->flags);
+	set_bit(IDPF_REMOVE_IN_PROG, adapter->flags);
 	idpf_vc_core_deinit(adapter);
 	idpf_deinit_dflt_mbx(adapter);
 

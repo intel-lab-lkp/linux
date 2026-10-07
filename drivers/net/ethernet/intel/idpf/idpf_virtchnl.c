@@ -190,21 +190,37 @@ static void idpf_prepare_ptp_mb_msg(struct idpf_adapter *adapter, u32 op,
  * Cleanup the mailbox queue entries of the previously sent message to
  * unmap and release the buffer.
  *
+ * During shutdown each transaction gets a short timeout, and once one of
+ * them times out the rest fail at once, so that an unresponsive control
+ * plane cannot hold up a reboot.
+ *
  * Return: 0 if the request was successful, -%EBUSY if reset is detected
- *	   or Tx control queue is full, other negative error code on failure.
+ *	   or Tx control queue is full, -%ETIMEDOUT if a transaction already
+ *	   timed out during shutdown, other negative error code on failure.
  */
 int idpf_send_mb_msg(struct idpf_adapter *adapter,
 		     struct libie_ctlq_xn_send_params *xn_params,
 		     void *send_buf, size_t send_buf_size)
 {
+	bool shutdown = test_bit(IDPF_SHUTDOWN_IN_PROG, adapter->flags);
 	struct libie_ctlq_msg ctlq_msg = {};
+	int err = 0;
 
-	if (idpf_is_reset_detected(adapter)) {
+	if (idpf_is_reset_detected(adapter))
+		err = -EBUSY;
+	else if (shutdown && test_bit(IDPF_SHUTDOWN_XN_TIMEOUT, adapter->flags))
+		err = -ETIMEDOUT;
+
+	if (err) {
 		if (!libie_cp_can_send_onstack(send_buf_size))
 			kfree(send_buf);
 
-		return -EBUSY;
+		return err;
 	}
+
+	if (shutdown)
+		xn_params->timeout_ms = min_t(u64, xn_params->timeout_ms,
+					      IDPF_VC_XN_SHUTDOWN_TIMEOUT_MSEC);
 
 	idpf_prepare_ptp_mb_msg(adapter, xn_params->chnl_opcode, &ctlq_msg);
 	xn_params->ctlq_msg = ctlq_msg.opcode ? &ctlq_msg : NULL;
@@ -217,7 +233,11 @@ int idpf_send_mb_msg(struct idpf_adapter *adapter,
 
 	idpf_mb_clean(xn_params->ctlq, false);
 
-	return libie_ctlq_xn_send(xn_params);
+	err = libie_ctlq_xn_send(xn_params);
+	if (err == -ETIMEDOUT && shutdown)
+		set_bit(IDPF_SHUTDOWN_XN_TIMEOUT, adapter->flags);
+
+	return err;
 }
 
 /**

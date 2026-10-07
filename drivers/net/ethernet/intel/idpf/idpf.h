@@ -88,6 +88,8 @@ enum idpf_state {
  * @IDPF_REMOVE_IN_PROG: Driver remove in progress
  * @IDPF_MB_INTR_MODE: Mailbox in interrupt mode
  * @IDPF_VC_CORE_INIT: virtchnl core has been init
+ * @IDPF_SHUTDOWN_IN_PROG: Driver shutdown in progress
+ * @IDPF_SHUTDOWN_XN_TIMEOUT: A mailbox transaction timed out during shutdown
  * @IDPF_FLAGS_NBITS: Must be last
  */
 enum idpf_flags {
@@ -97,6 +99,8 @@ enum idpf_flags {
 	IDPF_REMOVE_IN_PROG,
 	IDPF_MB_INTR_MODE,
 	IDPF_VC_CORE_INIT,
+	IDPF_SHUTDOWN_IN_PROG,
+	IDPF_SHUTDOWN_XN_TIMEOUT,
 	IDPF_FLAGS_NBITS,
 };
 
