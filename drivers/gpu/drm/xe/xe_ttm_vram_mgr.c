@@ -15,6 +15,8 @@
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_range_manager.h>
 
+#include <uapi/drm/drm_ras.h>
+
 #include "regs/xe_regs.h"
 #include "xe_bo.h"
 #include "xe_configfs.h"
@@ -622,6 +624,123 @@ u64 xe_ttm_vram_get_avail(struct ttm_resource_manager *man)
 	mutex_unlock(&mgr->lock);
 
 	return avail;
+}
+
+/**
+ * xe_ttm_vram_get_retired_page - Fetch the next retired VRAM page by address
+ * @xe: xe device instance
+ * @min_addr: inclusive lower bound; return the page with the smallest DPA >=
+ *            this value
+ * @addr: output, device physical address (DPA) of the page
+ * @size: output, size of the page in bytes
+ * @status: output, retirement status (enum drm_ras_retired_resource_status)
+ *
+ * Scans the offlined and queued page lists across all tiles and returns the
+ * entry with the smallest DPA that is >= @min_addr. Because retired pages have
+ * unique addresses, iterating with @min_addr = previous_addr + 1 walks every
+ * entry in a stable address order, which is robust against concurrent
+ * insertion or removal between calls. Intended to back the drm-ras
+ * retired-resources node enumeration.
+ *
+ * Return: 0 on success, -ENOENT when no page has a DPA >= @min_addr.
+ */
+int xe_ttm_vram_get_retired_page(struct xe_device *xe, u64 min_addr,
+				 u64 *addr, u64 *size, u32 *status)
+{
+	struct xe_ttm_vram_offline_resource *pos;
+	struct ttm_resource_manager *man;
+	struct gpu_buddy_block *block;
+	struct xe_ttm_vram_mgr *mgr;
+	u64 best_addr = 0, best_size = 0;
+	struct xe_tile *tile;
+	u32 best_status = 0;
+	bool found = false;
+	u8 id;
+
+	for_each_tile(tile, xe, id) {
+		struct xe_vram_region *vr = tile->mem.vram;
+		u64 a, s;
+
+		man = ttm_manager_type(&xe->ttm, XE_PL_VRAM0 + id);
+		if (!man || !vr)
+			continue;
+		mgr = to_xe_ttm_vram_mgr(man);
+
+		rcu_read_lock();
+
+		list_for_each_entry_rcu(pos, &mgr->offlined_pages, offlined_link) {
+			block = list_first_entry_or_null(&pos->blocks,
+							 struct gpu_buddy_block, link);
+			if (block) {
+				a = gpu_buddy_block_offset(block) + vr->dpa_base;
+				s = gpu_buddy_block_size(&mgr->mm, block);
+			} else {
+				a = pos->addr + vr->dpa_base;
+				s = SZ_4K;
+			}
+
+			if (a >= min_addr && (!found || a < best_addr)) {
+				best_addr = a;
+				best_size = s;
+				best_status = DRM_RAS_RETIRED_RESOURCE_STATUS_RETIRED;
+				found = true;
+			}
+		}
+
+		list_for_each_entry_rcu(pos, &mgr->queued_pages, queued_link) {
+			block = list_first_entry_or_null(&pos->blocks,
+							 struct gpu_buddy_block, link);
+			if (block) {
+				a = gpu_buddy_block_offset(block) + vr->dpa_base;
+				s = gpu_buddy_block_size(&mgr->mm, block);
+			} else {
+				a = pos->addr + vr->dpa_base;
+				s = SZ_4K;
+			}
+
+			if (a >= min_addr && (!found || a < best_addr)) {
+				best_addr = a;
+				best_size = s;
+				best_status = pos->status == XE_PAGE_RESERVE_FAIL ?
+					      DRM_RAS_RETIRED_RESOURCE_STATUS_FAILED :
+					      DRM_RAS_RETIRED_RESOURCE_STATUS_PENDING;
+				found = true;
+			}
+		}
+
+		rcu_read_unlock();
+	}
+
+	if (!found)
+		return -ENOENT;
+
+	*addr = best_addr;
+	*size = best_size;
+	*status = best_status;
+
+	return 0;
+}
+
+/**
+ * xe_ttm_vram_get_max_bad_pages - Fetch the FW-provided max offline page count
+ * @xe: xe device instance
+ *
+ * Returns the static maximum number of VRAM pages that can be offlined, as
+ * provided by FW at init. Intended to back the drm-ras retired-resources
+ * capacity summary. Read from the root (VRAM0) manager; the value is a static
+ * device-wide count.
+ *
+ * Return: max offline page count, or 0 if VRAM is not present.
+ */
+u32 xe_ttm_vram_get_max_bad_pages(struct xe_device *xe)
+{
+	struct ttm_resource_manager *man;
+
+	man = ttm_manager_type(&xe->ttm, XE_PL_VRAM0);
+	if (!man)
+		return 0;
+
+	return to_xe_ttm_vram_mgr(man)->max_pages;
 }
 
 static int xe_ttm_vram_purge_page(struct xe_device *xe, struct xe_bo *bo)

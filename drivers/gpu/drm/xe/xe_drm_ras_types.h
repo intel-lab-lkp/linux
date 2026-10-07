@@ -41,6 +41,9 @@ struct xe_drm_ras {
 	/** @node: DRM RAS node */
 	struct drm_ras_node *node;
 
+	/** @retired_node: DRM RAS retired-resources node for VRAM bad pages */
+	struct drm_ras_node *retired_node;
+
 	/** @info: info array for all types of errors */
 	struct xe_drm_ras_counter *info[DRM_XE_RAS_ERR_SEV_MAX];
 

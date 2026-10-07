@@ -12,6 +12,7 @@
 #include "xe_device_types.h"
 #include "xe_drm_ras.h"
 #include "xe_ras.h"
+#include "xe_ttm_vram_mgr.h"
 
 static const char * const error_components[] = DRM_XE_RAS_ERROR_COMPONENT_NAMES;
 static const char * const error_severity[] = DRM_XE_RAS_ERROR_SEVERITY_NAMES;
@@ -188,6 +189,75 @@ static void cleanup_node(struct drm_device *drm, void *node)
 	cleanup_node_param(node);
 }
 
+static int query_retired_resource(struct drm_ras_node *node, u64 cursor,
+				  struct drm_ras_retired_resource *res)
+{
+	struct xe_device *xe = node->priv;
+	int ret;
+
+	ret = xe_ttm_vram_get_retired_page(xe, cursor, &res->vram_page.address,
+					   &res->vram_page.size, &res->status);
+	if (ret)
+		return ret;
+
+	res->type = DRM_RAS_RETIRED_RESOURCE_TYPE_VRAM_PAGE;
+	res->key = res->vram_page.address;
+
+	return 0;
+}
+
+static int query_retired_summary(struct drm_ras_node *node,
+				 struct drm_ras_retired_resource *res)
+{
+	struct xe_device *xe = node->priv;
+
+	res->type = DRM_RAS_RETIRED_RESOURCE_TYPE_VRAM_PAGE;
+	res->is_summary = 1;
+	res->vram_page.max_pages = xe_ttm_vram_get_max_bad_pages(xe);
+
+	return 0;
+}
+
+static int register_retired_node(struct xe_device *xe)
+{
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+	struct xe_drm_ras *ras = &xe->ras;
+	struct drm_ras_node *node;
+	const char *device_name;
+	int ret;
+
+	/* Retired VRAM pages are only tracked on platforms with page offline */
+	if (xe->info.platform != XE_CRESCENTISLAND)
+		return 0;
+
+	node = drmm_kzalloc(&xe->drm, sizeof(*node), GFP_KERNEL);
+	if (!node)
+		return -ENOMEM;
+
+	device_name = kasprintf(GFP_KERNEL, "%04x:%02x:%02x.%d",
+				pci_domain_nr(pdev->bus), pdev->bus->number,
+				PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn));
+	if (!device_name)
+		return -ENOMEM;
+
+	node->device_name = device_name;
+	node->node_name = "vram-retired-pages";
+	node->type = DRM_RAS_NODE_TYPE_RETIRED_RESOURCES;
+	node->query_retired_resource = query_retired_resource;
+	node->query_retired_summary = query_retired_summary;
+	node->priv = xe;
+
+	ret = drm_ras_node_register(node);
+	if (ret) {
+		cleanup_node_param(node);
+		return ret;
+	}
+
+	ras->retired_node = node;
+
+	return drmm_add_action_or_reset(&xe->drm, cleanup_node, node);
+}
+
 static int register_nodes(struct xe_device *xe)
 {
 	struct xe_drm_ras *ras = &xe->ras;
@@ -276,6 +346,13 @@ int xe_drm_ras_init(struct xe_device *xe)
 	err = register_nodes(xe);
 	if (err) {
 		drm_err(&xe->drm, "Failed to register DRM RAS nodes (%pe)\n", ERR_PTR(err));
+		return err;
+	}
+
+	err = register_retired_node(xe);
+	if (err) {
+		drm_err(&xe->drm, "Failed to register DRM RAS retired node (%pe)\n",
+			ERR_PTR(err));
 		return err;
 	}
 

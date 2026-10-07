@@ -24,6 +24,8 @@ int drm_ras_nl_get_error_threshold_doit(struct sk_buff *skb,
 					struct genl_info *info);
 int drm_ras_nl_set_error_threshold_doit(struct sk_buff *skb,
 					struct genl_info *info);
+int drm_ras_nl_get_retired_resources_dumpit(struct sk_buff *skb,
+					    struct netlink_callback *cb);
 
 enum {
 	DRM_RAS_NLGRP_ERROR_REPORT,

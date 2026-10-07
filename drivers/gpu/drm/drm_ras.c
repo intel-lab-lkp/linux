@@ -63,7 +63,6 @@
  * Node type:
  *
  * - ERROR_COUNTER:
- *     + Currently, only error counters are supported.
  *     + The driver must implement the query_error_counter() callback to provide
  *       the name and the value of the error counter.
  *     + The driver must provide a error_counter_range.last value informing the
@@ -81,6 +80,13 @@
  *       that are raised by the hardware.
  *     + The driver is responsible for error threshold bounds checking.
  *
+ * - RETIRED_RESOURCES:
+ *     + Enumerates hardware resources (e.g. VRAM pages) permanently taken out
+ *       of service.
+ *     + The driver must implement the query_retired_resource() callback, which
+ *       is called with an incrementing index and returns -ENOENT once the last
+ *       entry has been reported.
+ *
  * Netlink handlers:
  *
  * - drm_ras_nl_list_nodes_dumpit(): Implements the LIST_NODES
@@ -95,6 +101,9 @@
  *   operation, fetching the error threshold of a specific counter.
  * - drm_ras_nl_set_error_threshold_doit(): Implements the SET_ERROR_THRESHOLD doit
  *   operation, setting the error threshold of a specific counter.
+ * - drm_ras_nl_get_retired_resources_dumpit(): Implements the
+ *   GET_RETIRED_RESOURCES dumpit operation, enumerating retired resources of a
+ *   specific node.
  */
 
 static DEFINE_XARRAY_ALLOC(drm_ras_xa);
@@ -105,6 +114,10 @@ static DEFINE_XARRAY_ALLOC(drm_ras_xa);
 struct drm_ras_ctx {
 	/* Which xarray id to restart the dump from */
 	unsigned long restart;
+	/* Ordering-key cursor for retired-resource dumps (inclusive lower bound) */
+	u64 cursor;
+	/* Whether the leading retired-resource summary has been emitted */
+	bool summary_sent;
 };
 
 /**
@@ -564,6 +577,148 @@ int drm_ras_nl_clear_error_counter_doit(struct sk_buff *skb,
 	return node->clear_error_counter(node, error_id);
 }
 
+static int msg_put_retired_resource(struct sk_buff *skb, u32 node_id,
+				    const struct drm_ras_retired_resource *res)
+{
+	struct nlattr *nest;
+
+	if (nla_put_u32(skb, DRM_RAS_A_RETIRED_RESOURCE_ATTRS_NODE_ID, node_id))
+		return -EMSGSIZE;
+
+	/* Type is implied by the node (its node_name); it selects the nest. */
+	switch (res->type) {
+	case DRM_RAS_RETIRED_RESOURCE_TYPE_VRAM_PAGE:
+		nest = nla_nest_start(skb,
+				      DRM_RAS_A_RETIRED_RESOURCE_ATTRS_VRAM_PAGE);
+		if (!nest)
+			return -EMSGSIZE;
+
+		if (res->is_summary) {
+			/* Leading capacity summary: max retirable pages. */
+			if (nla_put_u32(skb, DRM_RAS_A_VRAM_PAGE_ATTRS_MAX_PAGES,
+					res->vram_page.max_pages)) {
+				nla_nest_cancel(skb, nest);
+				return -EMSGSIZE;
+			}
+		} else if (nla_put_u64_64bit(skb, DRM_RAS_A_VRAM_PAGE_ATTRS_ADDRESS,
+					     res->vram_page.address,
+					     DRM_RAS_A_VRAM_PAGE_ATTRS_PAD) ||
+			   nla_put_u64_64bit(skb, DRM_RAS_A_VRAM_PAGE_ATTRS_SIZE,
+					     res->vram_page.size,
+					     DRM_RAS_A_VRAM_PAGE_ATTRS_PAD) ||
+			   nla_put_u32(skb, DRM_RAS_A_VRAM_PAGE_ATTRS_STATUS,
+				       res->status)) {
+			nla_nest_cancel(skb, nest);
+			return -EMSGSIZE;
+		}
+
+		nla_nest_end(skb, nest);
+		break;
+	default:
+		/* Unknown type: only the common node-id is reported. */
+		break;
+	}
+
+	return 0;
+}
+
+/**
+ * drm_ras_nl_get_retired_resources_dumpit() - Dump retired resources of a node
+ * @skb: Netlink message buffer
+ * @cb: Callback context for multi-part dumps
+ *
+ * Iterates over all retired resources of a %DRM_RAS_NODE_TYPE_RETIRED_RESOURCES
+ * node and appends their attributes to the given netlink message buffer. The
+ * dump opens with an optional leading type-specific capacity summary (e.g. the
+ * maximum retirable page count), followed by one entry per retired resource;
+ * each resource entry carries a status plus one type-specific nested attribute
+ * selected by the node's type. Uses @cb->ctx to store an ordering-key cursor
+ * so multi-part dumps resume by key rather than position, staying correct if
+ * the list changes concurrently between message parts.
+ *
+ * Return: 0 if all entries fit in @skb, number of bytes added to @skb if
+ *          the buffer filled up (requires multi-part continuation), or
+ *          a negative error code on failure.
+ */
+int drm_ras_nl_get_retired_resources_dumpit(struct sk_buff *skb,
+					    struct netlink_callback *cb)
+{
+	const struct genl_info *info = genl_info_dump(cb);
+	struct drm_ras_ctx *ctx = (void *)cb->ctx;
+	struct drm_ras_retired_resource res;
+	struct drm_ras_node *node;
+	struct nlattr *hdr;
+	u32 node_id;
+	u64 cursor;
+	int ret = 0;
+
+	if (!info->attrs ||
+	    GENL_REQ_ATTR_CHECK(info, DRM_RAS_A_RETIRED_RESOURCE_ATTRS_NODE_ID))
+		return -EINVAL;
+
+	node_id = nla_get_u32(info->attrs[DRM_RAS_A_RETIRED_RESOURCE_ATTRS_NODE_ID]);
+
+	node = xa_load(&drm_ras_xa, node_id);
+	if (!node || node->type != DRM_RAS_NODE_TYPE_RETIRED_RESOURCES ||
+	    !node->query_retired_resource)
+		return -ENOENT;
+
+	/* Leading type-specific capacity summary (e.g. max pages), emitted once. */
+	if (!ctx->summary_sent && node->query_retired_summary) {
+		memset(&res, 0, sizeof(res));
+		ret = node->query_retired_summary(node, &res);
+		if (ret == 0) {
+			hdr = genlmsg_iput(skb, info);
+			if (!hdr)
+				return -EMSGSIZE;   /* retry summary next part */
+			ret = msg_put_retired_resource(skb, node_id, &res);
+			if (ret) {
+				genlmsg_cancel(skb, hdr);
+				return ret;
+			}
+			genlmsg_end(skb, hdr);
+		} else if (ret != -ENOENT) {
+			return ret;
+		}
+		ctx->summary_sent = true;
+	}
+
+	cursor = ctx->cursor;
+	for (;;) {
+		memset(&res, 0, sizeof(res));
+		ret = node->query_retired_resource(node, cursor, &res);
+		/* -ENOENT marks the end of the list. */
+		if (ret == -ENOENT) {
+			ret = 0;
+			break;
+		}
+		if (ret)
+			return ret;
+
+		hdr = genlmsg_iput(skb, info);
+		if (!hdr) {
+			ret = -EMSGSIZE;
+			break;
+		}
+
+		ret = msg_put_retired_resource(skb, node_id, &res);
+		if (ret) {
+			genlmsg_cancel(skb, hdr);
+			break;
+		}
+
+		genlmsg_end(skb, hdr);
+		/* Advance past this entry; keys are unique. */
+		cursor = res.key + 1;
+	}
+
+	/* On buffer-full the current entry was not emitted; resume at it. */
+	if (ret == -EMSGSIZE)
+		ctx->cursor = cursor;
+
+	return ret;
+}
+
 /**
  * drm_ras_nl_get_error_threshold_doit() - Query error threshold of a counter
  * @skb: Netlink message buffer
@@ -631,14 +786,23 @@ int drm_ras_node_register(struct drm_ras_node *node)
 	if (!node->device_name || !node->node_name)
 		return -EINVAL;
 
-	/* Currently, only Error Counter Endpoints are supported */
-	if (node->type != DRM_RAS_NODE_TYPE_ERROR_COUNTER)
-		return -EINVAL;
-
 	/* Mandatory entries for Error Counter Node */
 	if (node->type == DRM_RAS_NODE_TYPE_ERROR_COUNTER &&
 	    (!node->error_counter_range.last || !node->query_error_counter))
 		return -EINVAL;
+
+	/* Mandatory entries for Retired Resources Node */
+	if (node->type == DRM_RAS_NODE_TYPE_RETIRED_RESOURCES &&
+	    !node->query_retired_resource)
+		return -EINVAL;
+
+	switch (node->type) {
+	case DRM_RAS_NODE_TYPE_ERROR_COUNTER:
+	case DRM_RAS_NODE_TYPE_RETIRED_RESOURCES:
+		break;
+	default:
+		return -EINVAL;
+	}
 
 	return xa_alloc(&drm_ras_xa, &node->id, node, xa_limit_32b, GFP_KERNEL);
 }
