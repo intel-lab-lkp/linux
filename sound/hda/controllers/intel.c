@@ -1211,8 +1211,14 @@ static void azx_vs_set_state(struct pci_dev *pci,
 		if (!disabled) {
 			dev_info(chip->card->dev,
 				 "Start delayed initialization\n");
-			if (azx_probe_continue(chip) < 0)
-				dev_err(chip->card->dev, "initialization error\n");
+			if (azx_probe_continue(chip) < 0) {
+				/* since the HD-audio driver got unbound /
+				 * released upon error, we can't use card device
+				 * any longer, so use pci device directly
+				 */
+				dev_err(&pci->dev, "%s: initialization error\n",
+					__func__);
+			}
 		}
 	} else {
 		dev_info(chip->card->dev, "%s via vga_switcheroo\n",
