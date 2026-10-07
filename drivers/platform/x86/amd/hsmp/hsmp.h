@@ -28,6 +28,7 @@
 
 #define HSMP_CDEV_NAME		"hsmp_cdev"
 #define HSMP_DEVNODE_NAME	"hsmp"
+#define HSMP_ROOT_DEV_NAME	"amd_hsmp"
 #define ACPI_HSMP_DEVICE_HID    "AMDI0097"
 
 #define DRIVER_VERSION		"2.6"
@@ -47,6 +48,7 @@ struct hsmp_socket {
 	/* Size of the region mapped at @metric_tbl_addr, as reported by SMU */
 	size_t metric_tbl_size;
 	void __iomem *virt_base_addr;
+	struct device *sysfs_dev;
 	struct semaphore hsmp_sem;
 	/* Serializes HSMP_GET_METRIC_TABLE fill-and-copy for this socket */
 	struct mutex metric_read_lock;
@@ -80,6 +82,9 @@ int hsmp_create_sensor(struct device *dev, u16 sock_ind);
 static inline int hsmp_create_sensor(struct device *dev, u16 sock_ind) { return 0; }
 #endif
 int hsmp_msg_get_nargs(u16 sock_ind, u32 msg_id, u32 *data, u8 num_args);
+int hsmp_sock_dev_register(struct hsmp_socket *sock);
+void hsmp_sock_dev_unregister(struct hsmp_socket *sock);
+
 extern const struct attribute_group *hsmp_sock_groups[];
 
 /*

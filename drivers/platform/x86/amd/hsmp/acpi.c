@@ -441,12 +441,18 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 		dev_dbg(&pdev->dev, "AMD HSMP ACPI misc device registered\n");
 	}
 
+	ret = hsmp_sock_dev_register(dev_get_drvdata(&pdev->dev));
+	if (ret)
+		dev_warn(&pdev->dev, "Failed to register HSMP socket device: %d\n", ret);
+
 	return 0;
 }
 
 static void hsmp_acpi_remove(struct platform_device *pdev)
 {
 	struct hsmp_socket *sock = dev_get_drvdata(&pdev->dev);
+
+	hsmp_sock_dev_unregister(sock);
 
 	/*
 	 * Serialize the kref_put() and any release it triggers against a

@@ -4,7 +4,8 @@
  * Copyright (c) 2024, AMD.
  * All Rights Reserved.
  *
- * This file provides the per-socket sysfs attributes of the HSMP interface.
+ * This file provides the per-socket sysfs attributes of the HSMP interface
+ * and the /sys/devices/amd_hsmp/socket%u devices carrying them.
  */
 
 #include <asm/amd/hsmp.h>
@@ -12,7 +13,12 @@
 #include <linux/array_size.h>
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/cleanup.h>
 #include <linux/device.h>
+#include <linux/err.h>
+#include <linux/lockdep.h>
+#include <linux/mutex.h>
+#include <linux/slab.h>
 #include <linux/sysfs.h>
 
 #include "hsmp.h"
@@ -336,3 +342,107 @@ const struct attribute_group *hsmp_sock_groups[] = {
 	NULL
 };
 EXPORT_SYMBOL_NS_GPL(hsmp_sock_groups, "AMD_HSMP");
+
+/*
+ * /sys/devices/amd_hsmp is created when the first socket device is registered
+ * and removed with the last one. hsmp_root_lock serializes that against the
+ * per-socket register/unregister calls.
+ */
+static DEFINE_MUTEX(hsmp_root_lock);
+static struct device *hsmp_root_dev;
+static unsigned int hsmp_root_users;
+
+static void hsmp_sock_dev_release(struct device *dev)
+{
+	kfree(dev);
+}
+
+/**
+ * hsmp_sock_dev_register() - Create /sys/devices/amd_hsmp/socket%u for @sock.
+ * @sock: fully probed HSMP socket.
+ *
+ * The device carries hsmp_sock_groups with @sock as its drvdata, so @sock must
+ * stay valid until hsmp_sock_dev_unregister() returns.
+ *
+ * Return: 0 on success, a negative error code otherwise.
+ */
+int hsmp_sock_dev_register(struct hsmp_socket *sock)
+{
+	struct device *dev;
+	int ret;
+
+	guard(mutex)(&hsmp_root_lock);
+
+	if (!hsmp_root_users) {
+		hsmp_root_dev = root_device_register(HSMP_ROOT_DEV_NAME);
+		if (IS_ERR(hsmp_root_dev)) {
+			ret = PTR_ERR(hsmp_root_dev);
+			hsmp_root_dev = NULL;
+			return ret;
+		}
+	}
+
+	/*
+	 * Built by hand rather than with device_create_with_groups(), which
+	 * rejects a NULL class: these devices belong to no class or bus.
+	 */
+	dev = kzalloc_obj(*dev);
+	if (!dev) {
+		ret = -ENOMEM;
+		goto err_root;
+	}
+
+	device_initialize(dev);
+	dev->parent = hsmp_root_dev;
+	dev->groups = hsmp_sock_groups;
+	dev->release = hsmp_sock_dev_release;
+	dev_set_drvdata(dev, sock);
+
+	ret = dev_set_name(dev, "socket%u", sock->sock_ind);
+	if (!ret)
+		ret = device_add(dev);
+	if (ret) {
+		put_device(dev);
+		goto err_root;
+	}
+
+	sock->sysfs_dev = dev;
+	hsmp_root_users++;
+
+	return 0;
+
+err_root:
+	if (!hsmp_root_users) {
+		root_device_unregister(hsmp_root_dev);
+		hsmp_root_dev = NULL;
+	}
+	return ret;
+}
+EXPORT_SYMBOL_NS_GPL(hsmp_sock_dev_register, "AMD_HSMP");
+
+/**
+ * hsmp_sock_dev_unregister() - Remove /sys/devices/amd_hsmp/socket%u for @sock.
+ * @sock: HSMP socket; a no-op if its device was never registered.
+ *
+ * device_unregister() waits for in-flight show/read handlers, which take
+ * hsmp_sock_rwsem for read. The caller must therefore not hold it, or a
+ * concurrent sysfs read would deadlock the teardown.
+ */
+void hsmp_sock_dev_unregister(struct hsmp_socket *sock)
+{
+	lockdep_assert_not_held(&hsmp_sock_rwsem);
+
+	guard(mutex)(&hsmp_root_lock);
+
+	if (!sock->sysfs_dev)
+		return;
+
+	device_unregister(sock->sysfs_dev);
+	sock->sysfs_dev = NULL;
+
+	if (!--hsmp_root_users) {
+		root_device_unregister(hsmp_root_dev);
+		hsmp_root_dev = NULL;
+	}
+}
+EXPORT_SYMBOL_NS_GPL(hsmp_sock_dev_unregister, "AMD_HSMP");

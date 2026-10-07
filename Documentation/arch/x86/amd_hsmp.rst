@@ -57,6 +57,12 @@ In-kernel integration:
 HSMP sysfs interface
 ====================
 
+The ACPI driver exposes its per socket sysfs files in a per socket
+directory created at /sys/devices/amd_hsmp/socket%d/.
+
+For backward compatibility, the files are also available under
+/sys/devices/platform/AMDI0097:0X/.
+
 1. Metrics table binary sysfs
 
 AMD MI300A MCM provides GET_METRICS_TABLE message to retrieve
@@ -80,7 +86,7 @@ The same is defined in the amd_hsmp.h header.
 
 2. HSMP telemetry sysfs files
 
-Following sysfs files are available at /sys/devices/platform/AMDI0097:0X/.
+Following sysfs files are available at /sys/devices/amd_hsmp/socket%d/.
 
 * c0_residency_input: Percentage of cores in C0 state.
 * prochot_status: Reports 1 if the processor is at thermal threshold value,
