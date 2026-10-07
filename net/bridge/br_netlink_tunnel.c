@@ -35,39 +35,25 @@ bool vlan_tunid_inrange(const struct net_bridge_vlan *v_curr,
 	return (be32_to_cpu(tunid_curr) - be32_to_cpu(tunid_last)) == 1;
 }
 
-static int __get_num_vlan_tunnel_infos(struct net_bridge_vlan_group *vg)
+/* Upper bound of the number of IFLA_BRIDGE_VLAN_TUNNEL_INFO attributes that
+ * br_fill_vlan_tunnel_info() can emit for @vg.
+ *
+ * br_info_notify() is also called without RTNL (e.g. from the STP timers), so
+ * the set of VLANs that have a tunnel mapping can change between the size
+ * calculation done by br_nlmsg_size() and the actual fill.  Account for the
+ * maximum instead of the currently used mappings: consecutive VIDs with
+ * consecutive tunnel IDs are compressed into two attributes, so the fill never
+ * emits more attributes than there are usable VLANs in the group.
+ */
+static int __get_max_num_vlan_tunnel_infos(struct net_bridge_vlan_group *vg)
 {
-	struct net_bridge_vlan *v, *vtbegin = NULL, *vtend = NULL;
+	struct net_bridge_vlan *v;
 	int num_tinfos = 0;
 
-	/* Count number of vlan infos */
 	list_for_each_entry_rcu(v, &vg->vlan_list, vlist) {
 		/* only a context, bridge vlan not activated */
-		if (!br_vlan_should_use(v) || !v->tinfo.tunnel_id)
-			continue;
-
-		if (!vtbegin) {
-			goto initvars;
-		} else if ((v->vid - vtend->vid) == 1 &&
-			   vlan_tunid_inrange(v, vtend)) {
-			vtend = v;
-			continue;
-		} else {
-			if ((vtend->vid - vtbegin->vid) > 0)
-				num_tinfos += 2;
-			else
-				num_tinfos += 1;
-		}
-initvars:
-		vtbegin = v;
-		vtend = v;
-	}
-
-	if (vtbegin && vtend) {
-		if ((vtend->vid - vtbegin->vid) > 0)
-			num_tinfos += 2;
-		else
-			num_tinfos += 1;
+		if (br_vlan_should_use(v))
+			num_tinfos++;
 	}
 
 	return num_tinfos;
@@ -81,7 +67,7 @@ int br_get_vlan_tunnel_info_size(struct net_bridge_vlan_group *vg)
 		return 0;
 
 	rcu_read_lock();
-	num_tinfos = __get_num_vlan_tunnel_infos(vg);
+	num_tinfos = __get_max_num_vlan_tunnel_infos(vg);
 	rcu_read_unlock();
 
 	return num_tinfos * __get_vlan_tinfo_size();
