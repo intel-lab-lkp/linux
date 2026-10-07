@@ -52,17 +52,6 @@ void intel_display_wa_apply(struct intel_display *display)
 }
 
 /*
- * Wa_16025573575:
- * Fixes: Issue with bitbashing on Xe3 based platforms.
- * Workaround: Set masks bits in GPIO CTL and preserve it during bitbashing sequence.
- */
-static bool intel_display_needs_wa_16025573575(struct intel_display *display)
-{
-	return DISPLAY_VERx100(display) == 3000 || DISPLAY_VERx100(display) == 3002 ||
-		DISPLAY_VERx100(display) == 3500;
-}
-
-/*
  * Wa_14011503117:
  * Fixes: Before enabling the scaler DE fatal error is masked
  * Workaround: Unmask the DE fatal error register after enabling the scaler
@@ -134,8 +123,6 @@ bool __intel_display_wa(struct intel_display *display, enum intel_display_wa wa,
 	case INTEL_DISPLAY_WA_16023588340:
 		/* This is a GT workaround. */
 		return display->parent->wa && display->parent->wa->wa_16023588340(display->drm);
-	case INTEL_DISPLAY_WA_16025573575:
-		return intel_display_needs_wa_16025573575(display);
 	case INTEL_DISPLAY_WA_16025596647:
 		return DISPLAY_VER(display) == 20 &&
 			IS_DISPLAY_VERx100_STEP(display, 3000,
