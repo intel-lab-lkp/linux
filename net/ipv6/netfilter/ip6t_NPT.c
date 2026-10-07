@@ -77,28 +77,33 @@ static bool ip6t_npt_map_pfx(const struct ip6t_npt_tginfo *npt,
 	return true;
 }
 
-static struct ipv6hdr *icmpv6_bounced_ipv6hdr(struct sk_buff *skb,
-					      struct ipv6hdr *_bounced_hdr)
+static struct ipv6hdr *icmpv6_bounced_ipv6hdr(struct sk_buff *skb)
 {
+	unsigned int offset;
+
 	if (ipv6_hdr(skb)->nexthdr != IPPROTO_ICMPV6)
 		return NULL;
 
 	if (!icmpv6_is_err(icmp6_hdr(skb)->icmp6_type))
 		return NULL;
 
-	return skb_header_pointer(skb,
-				  skb_transport_offset(skb) + sizeof(struct icmp6hdr),
-				  sizeof(struct ipv6hdr),
-				  _bounced_hdr);
+	offset = skb_transport_offset(skb) + sizeof(struct icmp6hdr);
+	if (skb_ensure_writable(skb, offset + sizeof(struct ipv6hdr)))
+		return NULL;
+
+	return (struct ipv6hdr *)(skb_transport_header(skb) +
+				  sizeof(struct icmp6hdr));
 }
 
 static unsigned int
 ip6t_snpt_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct ip6t_npt_tginfo *npt = par->targinfo;
-	struct ipv6hdr _bounced_hdr;
 	struct ipv6hdr *bounced_hdr;
 	struct in6_addr bounced_pfx;
+
+	if (skb_ensure_writable(skb, sizeof(struct ipv6hdr)))
+		return NF_DROP;
 
 	if (!ip6t_npt_map_pfx(npt, &ipv6_hdr(skb)->saddr)) {
 		icmpv6_send(skb, ICMPV6_PARAMPROB, ICMPV6_HDR_FIELD,
@@ -107,7 +112,7 @@ ip6t_snpt_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	}
 
 	/* rewrite dst addr of bounced packet which was sent to dst range */
-	bounced_hdr = icmpv6_bounced_ipv6hdr(skb, &_bounced_hdr);
+	bounced_hdr = icmpv6_bounced_ipv6hdr(skb);
 	if (bounced_hdr) {
 		ipv6_addr_prefix(&bounced_pfx, &bounced_hdr->daddr, npt->src_pfx_len);
 		if (ipv6_addr_cmp(&bounced_pfx, &npt->src_pfx.in6) == 0)
@@ -121,9 +126,11 @@ static unsigned int
 ip6t_dnpt_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct ip6t_npt_tginfo *npt = par->targinfo;
-	struct ipv6hdr _bounced_hdr;
 	struct ipv6hdr *bounced_hdr;
 	struct in6_addr bounced_pfx;
+
+	if (skb_ensure_writable(skb, sizeof(struct ipv6hdr)))
+		return NF_DROP;
 
 	if (!ip6t_npt_map_pfx(npt, &ipv6_hdr(skb)->daddr)) {
 		icmpv6_send(skb, ICMPV6_PARAMPROB, ICMPV6_HDR_FIELD,
@@ -132,7 +139,7 @@ ip6t_dnpt_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	}
 
 	/* rewrite src addr of bounced packet which was sent from dst range */
-	bounced_hdr = icmpv6_bounced_ipv6hdr(skb, &_bounced_hdr);
+	bounced_hdr = icmpv6_bounced_ipv6hdr(skb);
 	if (bounced_hdr) {
 		ipv6_addr_prefix(&bounced_pfx, &bounced_hdr->saddr, npt->src_pfx_len);
 		if (ipv6_addr_cmp(&bounced_pfx, &npt->src_pfx.in6) == 0)
