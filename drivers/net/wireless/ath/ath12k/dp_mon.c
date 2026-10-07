@@ -5,6 +5,7 @@
  */
 
 #include "dp_mon.h"
+#include "dp_rx.h"
 #include "debug.h"
 #include "dp_tx.h"
 #include "peer.h"
@@ -44,15 +45,17 @@ struct sk_buff
 	struct sk_buff *skb;
 	dma_addr_t paddr;
 
-	skb = dev_alloc_skb(RX_MON_STATUS_BUF_SIZE);
+	skb = ath12k_dp_rx_alloc_skb(&rx_ring->frag_cache,
+				     RX_MON_STATUS_BUF_SIZE +
+				     RX_MON_STATUS_BUF_ALIGN);
 
 	if (!skb)
 		goto fail_alloc_skb;
 
 	if (!IS_ALIGNED((unsigned long)skb->data,
 			RX_MON_STATUS_BUF_ALIGN)) {
-		skb_pull(skb, PTR_ALIGN(skb->data, RX_MON_STATUS_BUF_ALIGN) -
-			 skb->data);
+		skb_reserve(skb, PTR_ALIGN(skb->data, RX_MON_STATUS_BUF_ALIGN) -
+			    skb->data);
 	}
 
 	paddr = dma_map_single(ab->dev, skb->data,
@@ -598,14 +601,16 @@ int ath12k_dp_mon_buf_replenish(struct ath12k_base *ab,
 	ath12k_hal_srng_access_begin(ab, srng);
 
 	while (req_entries > 0) {
-		skb = dev_alloc_skb(DP_RX_BUFFER_SIZE + DP_RX_BUFFER_ALIGN_SIZE);
+		skb = ath12k_dp_rx_alloc_skb(&buf_ring->frag_cache,
+					     DP_RX_BUFFER_SIZE +
+					     DP_RX_BUFFER_ALIGN_SIZE);
 		if (unlikely(!skb))
 			goto fail_alloc_skb;
 
 		if (!IS_ALIGNED((unsigned long)skb->data, DP_RX_BUFFER_ALIGN_SIZE)) {
-			skb_pull(skb,
-				 PTR_ALIGN(skb->data, DP_RX_BUFFER_ALIGN_SIZE) -
-				 skb->data);
+			skb_reserve(skb,
+				    PTR_ALIGN(skb->data, DP_RX_BUFFER_ALIGN_SIZE) -
+				    skb->data);
 		}
 
 		paddr = dma_map_single(ab->dev, skb->data,
@@ -687,15 +692,17 @@ int ath12k_dp_mon_status_bufs_replenish(struct ath12k_base *ab,
 	num_remain = req_entries;
 
 	while (num_remain > 0) {
-		skb = dev_alloc_skb(RX_MON_STATUS_BUF_SIZE);
+		skb = ath12k_dp_rx_alloc_skb(&rx_ring->frag_cache,
+					     RX_MON_STATUS_BUF_SIZE +
+					     RX_MON_STATUS_BUF_ALIGN);
 		if (!skb)
 			break;
 
 		if (!IS_ALIGNED((unsigned long)skb->data,
 				RX_MON_STATUS_BUF_ALIGN)) {
-			skb_pull(skb,
-				 PTR_ALIGN(skb->data, RX_MON_STATUS_BUF_ALIGN) -
-				 skb->data);
+			skb_reserve(skb,
+				    PTR_ALIGN(skb->data, RX_MON_STATUS_BUF_ALIGN) -
+				    skb->data);
 		}
 
 		paddr = dma_map_single(ab->dev, skb->data,

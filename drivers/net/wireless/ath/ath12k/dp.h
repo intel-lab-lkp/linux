@@ -11,6 +11,7 @@
 #include "hw.h"
 #include "dp_htt.h"
 #include "dp_cmn.h"
+#include <linux/mm_types.h>
 #include <linux/rhashtable.h>
 
 #define MAX_RXDMA_PER_PDEV     2
@@ -51,6 +52,7 @@ struct dp_srng {
 
 struct dp_rxdma_mon_ring {
 	struct dp_srng refill_buf_ring;
+	struct page_frag_cache frag_cache;
 	struct idr bufs_idr;
 	/* Protects bufs_idr */
 	spinlock_t idr_lock;
@@ -59,6 +61,7 @@ struct dp_rxdma_mon_ring {
 
 struct dp_rxdma_ring {
 	struct dp_srng refill_buf_ring;
+	struct page_frag_cache frag_cache;
 	int bufs_max;
 };
 
