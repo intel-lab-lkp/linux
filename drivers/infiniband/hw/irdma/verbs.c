@@ -4279,11 +4279,14 @@ static int irdma_post_send(struct ib_qp *ibqp,
 			stag_info.addr_type = IRDMA_ADDR_TYPE_VA_BASED;
 			stag_info.va = (void *)(uintptr_t)iwmr->ibmr.iova;
 			stag_info.total_len = iwmr->ibmr.length;
-			stag_info.reg_addr_pa = *palloc->level1.addr;
-			stag_info.first_pm_pbl_index = palloc->level1.idx;
-			stag_info.local_fence = true;
-			if (iwmr->npages > IRDMA_MIN_PAGES_PER_FMR)
+			if (palloc->level == PBLE_LEVEL_2) {
+				stag_info.chunk_size = 3;
+				stag_info.first_pm_pbl_index = palloc->level2.root.idx;
+			} else {
 				stag_info.chunk_size = 1;
+				stag_info.first_pm_pbl_index = palloc->level1.idx;
+			}
+			stag_info.local_fence = true;
 			err = irdma_sc_mr_fast_register(&iwqp->sc_qp, &stag_info,
 							true);
 			break;
