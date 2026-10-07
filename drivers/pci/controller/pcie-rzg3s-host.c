@@ -1193,8 +1193,27 @@ static void rzg3s_pcie_link_event(struct rzg3s_pcie_host *host, bool bounced)
 	u32 val;
 	int ret;
 
+	/*
+	 * A latched DL_UpDown means at least one real link transition took
+	 * place since the last enumeration. If devices are enumerated
+	 * recover the Root Port first.
+	 */
+	if (bounced && !list_empty(&bus->devices)) {
+		struct pci_dev *port __free(pci_dev_put) =
+			pci_get_slot(bus, PCI_DEVFN(0, 0));
+
+		if (port && pci_pcie_type(port) == PCI_EXP_TYPE_ROOT_PORT)
+			pci_host_handle_link_down(port);
+	}
+
 	pci_lock_rescan_remove();
 
+	/*
+	 * Read the link state after the recovery: the .reset_root_port()
+	 * retrains the link, so a device that is still present comes back
+	 * up here and is re-enumerated right away instead of waiting for
+	 * the next DL_UpDown event.
+	 */
 	val = readl_relaxed(host->axi + RZG3S_PCI_PCSTAT1);
 	if (val & RZG3S_PCI_PCSTAT1_DL_DOWN_STS) {
 		if (!list_empty(&bus->devices)) {
@@ -1997,7 +2016,7 @@ refclk_restore:
 	return ret;
 }
 
-static int rzg3s_pcie_host_start(struct rzg3s_pcie_host *host)
+static int rzg3s_pcie_host_start(struct rzg3s_pcie_host *host, bool set_started)
 {
 	const struct rzg3s_pcie_soc_data *data = host->data;
 	struct rzg3s_sysc *sysc = host->sysc;
@@ -2038,7 +2057,8 @@ static int rzg3s_pcie_host_start(struct rzg3s_pcie_host *host)
 	if (ret)
 		goto assert_power_resets;
 
-	host->started = true;
+	if (set_started)
+		host->started = true;
 
 	return 0;
 
@@ -2050,6 +2070,77 @@ assert_power_resets:
 	reset_control_bulk_assert(data->num_power_resets, host->power_resets);
 assert_rst_rsm_b:
 	rzg3s_sysc_config_func(sysc, RZG3S_SYSC_FUNC_ID_RST_RSM_B, 0);
+	return ret;
+}
+
+static int rzg3s_pcie_host_reset_root_port(struct pci_host_bridge *bridge,
+					   struct pci_dev *pdev)
+{
+	struct rzg3s_pcie_host *host = pci_host_bridge_priv(bridge);
+	unsigned long flags;
+	u32 irqs, link_irqs;
+	int ret;
+
+	/* Mask link up/down interrupts. */
+	link_irqs = readl_relaxed(host->axi + RZG3S_PCI_PEIE0);
+	writel_relaxed(0, host->axi + RZG3S_PCI_PEIE0);
+
+	/* Mask INTx and MSI interrupts. */
+	raw_spin_lock_irqsave(&host->hw_lock, flags);
+	irqs = readl_relaxed(host->axi + RZG3S_PCI_PINTRCVIE);
+	writel_relaxed(0, host->axi + RZG3S_PCI_PINTRCVIE);
+	raw_spin_unlock_irqrestore(&host->hw_lock, flags);
+
+	/* Flush IRQ masks. */
+	readl_relaxed(host->axi + RZG3S_PCI_PEIE0);
+	readl_relaxed(host->axi + RZG3S_PCI_PINTRCVIE);
+
+	/*
+	 * Make sure the next operations are not disturbed by any pending
+	 * IRQs.
+	 */
+	if (IS_ENABLED(CONFIG_PCI_MSI))
+		synchronize_irq(host->msi.irq);
+	for (unsigned int i = 0; i < PCI_NUM_INTX; i++)
+		synchronize_irq(host->intx_irqs[i]);
+
+	ret = rzg3s_pcie_host_stop(host);
+	if (ret) {
+		dev_err(host->dev, "Failed to stop the host!\n");
+		goto unmask_irqs;
+	}
+
+	ret = rzg3s_pcie_host_start(host, false);
+	if (ret) {
+		dev_err(host->dev, "Failed to start the host!\n");
+
+		/*
+		 * Don't unmask IRQs. We are in a bad state here and we
+		 * can recover only through a suspend/resume cycle. Just
+		 * return and preserve the stop state.
+		 */
+		return ret;
+	}
+
+unmask_irqs:
+	/* Unmask INTx and MSI interrupts. */
+	raw_spin_lock_irqsave(&host->hw_lock, flags);
+	writel_relaxed(irqs, host->axi + RZG3S_PCI_PINTRCVIE);
+	raw_spin_unlock_irqrestore(&host->hw_lock, flags);
+
+	/*
+	 * rzg3s_pcie_host_start() retrains the link. If the link comes
+	 * back up, DL_UpDown gets latched in PEIS0. Clear the latch.
+	 * The link state is evaluated after this function returns, so
+	 * the event is not lost. For the same reason there is no need
+	 * to set host->link_rescan.
+	 */
+	writel_relaxed(RZG3S_PCI_PEIS0_DL_UPDOWN, host->axi + RZG3S_PCI_PEIS0);
+	/* Unmask link up/down interrupts. */
+	writel_relaxed(link_irqs, host->axi + RZG3S_PCI_PEIE0);
+
+	host->started = true;
+
 	return ret;
 }
 
@@ -2133,6 +2224,8 @@ static int rzg3s_pcie_pm_notifier(struct notifier_block *nb,
 	case PM_SUSPEND_PREPARE:
 		/* Disable link up/down interrupts. */
 		disable_irq(host->event_irq);
+		if (host->started)
+			writel_relaxed(0, host->axi + RZG3S_PCI_PEIE0);
 		break;
 
 	case PM_POST_SUSPEND:
@@ -2259,6 +2352,7 @@ static int rzg3s_pcie_probe(struct platform_device *pdev)
 	bridge->sysdata = host;
 	bridge->ops = &rzg3s_pcie_root_ops;
 	bridge->child_ops = &rzg3s_pcie_child_ops;
+	bridge->reset_root_port = rzg3s_pcie_host_reset_root_port;
 	ret = pci_host_probe(bridge);
 	if (ret)
 		goto pm_notifier_unregister;
@@ -2317,7 +2411,7 @@ static int rzg3s_pcie_resume_noirq(struct device *dev)
 	struct rzg3s_pcie_host *host = dev_get_drvdata(dev);
 	int ret;
 
-	ret = rzg3s_pcie_host_start(host);
+	ret = rzg3s_pcie_host_start(host, true);
 	if (ret)
 		return ret;
 
