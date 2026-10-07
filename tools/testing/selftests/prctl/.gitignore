@@ -4,3 +4,4 @@ disable-tsc-on-off-stress-test
 disable-tsc-test
 set-anon-vma-name-test
 set-process-name
+pr_set_mm_auxv
