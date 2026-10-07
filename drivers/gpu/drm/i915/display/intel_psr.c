@@ -1694,8 +1694,11 @@ static inline bool compute_link_off_after_as_sdp_when_pr_active(struct intel_con
 
 static inline bool compute_disable_as_sdp_when_pr_active(struct intel_connector *connector)
 {
-	return !(connector->dp.panel_replay_caps.dpcd[INTEL_PR_DPCD_INDEX(DP_PANEL_REPLAY_CAP_CAPABILITY)] &
-		 DP_PANEL_REPLAY_ASYNC_VIDEO_TIMING_NOT_SUPPORTED_IN_PR);
+	struct intel_dp *intel_dp = intel_attached_dp(connector);
+
+	return intel_dp_is_edp(intel_dp) ? false :
+		!(connector->dp.panel_replay_caps.dpcd[INTEL_PR_DPCD_INDEX(DP_PANEL_REPLAY_CAP_CAPABILITY)] &
+		  DP_PANEL_REPLAY_ASYNC_VIDEO_TIMING_NOT_SUPPORTED_IN_PR);
 }
 
 static bool _panel_replay_compute_config(struct intel_crtc_state *crtc_state,
