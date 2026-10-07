@@ -210,13 +210,24 @@ struct rndis_device {
 	u8 rss_key[NETVSC_HASH_KEYLEN];
 };
 
+#define RNDIS_EXT_LEN HV_HYP_PAGE_SIZE
+
+/* Full definitions are below, after the RNDIS message format. */
+struct rndis_request;
+struct rndis_message;
 
 /* Interface */
-struct rndis_message;
 struct ndis_offload_params;
 struct netvsc_device;
 struct netvsc_channel;
 struct net_device_context;
+
+struct rndis_request *get_rndis_request(struct rndis_device *dev,
+					u32 msg_type, u32 msg_len);
+void put_rndis_request(struct rndis_device *dev, struct rndis_request *req);
+int rndis_build_page_buffers(const void *data, u32 len,
+			     struct hv_page_buffer *page_bufs,
+			     u32 *page_buf_cnt);
 
 extern u32 netvsc_ring_bytes;
 
@@ -1777,6 +1788,36 @@ struct rndis_message {
 
 	/* Actual message */
 	union rndis_message_container msg;
+};
+
+/*
+ * RNDIS request descriptor. Declared here so the KUnit cases can reach
+ * the layout the response-copy bound in rndis_filter_receive_resp()
+ * relies on. The two RNDIS_EXT_LEN tails are what make the object
+ * larger than KMALLOC_MAX_CACHE_SIZE.
+ */
+struct rndis_request {
+	struct list_head list_ent;
+	struct completion  wait_event;
+
+	struct rndis_message response_msg;
+	/*
+	 * The buffer for extended info after the RNDIS response message. It's
+	 * referenced based on the data offset in the RNDIS message. Its size
+	 * is enough for current needs, and should be sufficient for the near
+	 * future.
+	 */
+	u8 response_ext[RNDIS_EXT_LEN];
+
+	/* Simplify allocation by having a netvsc packet inline */
+	struct hv_netvsc_packet	pkt;
+
+	struct rndis_message request_msg;
+	/*
+	 * The buffer for the extended info after the RNDIS request message.
+	 * It is referenced and sized in a similar way as response_ext.
+	 */
+	u8 request_ext[RNDIS_EXT_LEN];
 };
 
 

@@ -6,3 +6,15 @@ config HYPERV_NET
 	select NLS
 	help
 	  Select this option to enable the Hyper-V virtual network driver.
+
+config HYPERV_NET_KUNIT_TEST
+	bool "Build Hyper-V netvsc KUnit tests"
+	depends on HYPERV_NET && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Build the netvsc KUnit test suites into the hv_netvsc object.
+	  Built into the module rather than as a separate one so the
+	  cases can reach the internal helpers declared in hyperv_net.h
+	  without exporting them.
+
+	  If unsure, say N.

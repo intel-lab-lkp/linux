@@ -16,6 +16,7 @@
 #include <linux/if_ether.h>
 #include <linux/netdevice.h>
 #include <linux/if_vlan.h>
+#include <linux/mm.h>
 #include <linux/nls.h>
 #include <linux/vmalloc.h>
 #include <linux/rtnetlink.h>
@@ -26,31 +27,6 @@
 #include "netvsc_trace.h"
 
 static void rndis_set_multicast(struct work_struct *w);
-
-#define RNDIS_EXT_LEN HV_HYP_PAGE_SIZE
-struct rndis_request {
-	struct list_head list_ent;
-	struct completion  wait_event;
-
-	struct rndis_message response_msg;
-	/*
-	 * The buffer for extended info after the RNDIS response message. It's
-	 * referenced based on the data offset in the RNDIS message. Its size
-	 * is enough for current needs, and should be sufficient for the near
-	 * future.
-	 */
-	u8 response_ext[RNDIS_EXT_LEN];
-
-	/* Simplify allocation by having a netvsc packet inline */
-	struct hv_netvsc_packet	pkt;
-
-	struct rndis_message request_msg;
-	/*
-	 * The buffer for the extended info after the RNDIS request message.
-	 * It is referenced and sized in a similar way as response_ext.
-	 */
-	u8 request_ext[RNDIS_EXT_LEN];
-};
 
 static const u8 netvsc_hash_key[NETVSC_HASH_KEYLEN] = {
 	0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
@@ -78,16 +54,27 @@ static struct rndis_device *get_rndis_device(void)
 	return device;
 }
 
-static struct rndis_request *get_rndis_request(struct rndis_device *dev,
-					     u32 msg_type,
-					     u32 msg_len)
+struct rndis_request *get_rndis_request(struct rndis_device *dev,
+					u32 msg_type,
+					u32 msg_len)
 {
 	struct rndis_request *request;
 	struct rndis_message *rndis_msg;
 	struct rndis_set_request *set;
 	unsigned long flags;
 
-	request = kzalloc_obj(struct rndis_request);
+	/*
+	 * struct rndis_request embeds two RNDIS_EXT_LEN (4 KiB) protocol
+	 * tails and is larger than KMALLOC_MAX_CACHE_SIZE, so
+	 * kzalloc_obj() needs an order-2 compound page. That high-order
+	 * allocation can fail under buddy fragmentation. kvzalloc_obj()
+	 * keeps the zeroing semantics while allowing vmalloc backing when
+	 * a suitable kmalloc allocation is unavailable. The request payload
+	 * is sent as GPADL-direct page buffers, so rndis_filter_send_request()
+	 * must describe each backing page instead of assuming virt_to_phys()
+	 * yields one contiguous physical range.
+	 */
+	request = kvzalloc_obj(struct rndis_request);
 	if (!request)
 		return NULL;
 
@@ -115,8 +102,8 @@ static struct rndis_request *get_rndis_request(struct rndis_device *dev,
 	return request;
 }
 
-static void put_rndis_request(struct rndis_device *dev,
-			    struct rndis_request *req)
+void put_rndis_request(struct rndis_device *dev,
+		       struct rndis_request *req)
 {
 	unsigned long flags;
 
@@ -124,7 +111,8 @@ static void put_rndis_request(struct rndis_device *dev,
 	list_del(&req->list_ent);
 	spin_unlock_irqrestore(&dev->request_lock, flags);
 
-	kfree(req);
+	/* Paired with the kvzalloc_obj() in get_rndis_request(). */
+	kvfree(req);
 }
 
 static void dump_rndis_message(struct net_device *netdev,
@@ -221,27 +209,78 @@ static void dump_rndis_message(struct net_device *netdev,
 	}
 }
 
+int rndis_build_page_buffers(const void *data, u32 len,
+			     struct hv_page_buffer *page_bufs,
+			     u32 *page_buf_cnt)
+{
+	const u8 *addr = data;
+	u32 count = 0;
+
+	if (!data || !len || !page_bufs || !page_buf_cnt)
+		return -EINVAL;
+
+	*page_buf_cnt = 0;
+
+	while (len) {
+		struct page *page;
+		phys_addr_t phys;
+		u32 offset, chunk;
+		unsigned long page_offset = offset_in_page(addr);
+
+		if (count == MAX_PAGE_BUFFER_COUNT)
+			return -E2BIG;
+
+		if (is_vmalloc_addr(addr))
+			page = vmalloc_to_page(addr);
+		else if (virt_addr_valid(addr))
+			page = virt_to_page(addr);
+		else
+			return -EFAULT;
+
+		if (!page)
+			return -EFAULT;
+
+		phys = page_to_phys(page) + page_offset;
+		offset = offset_in_hvpage(phys);
+		chunk = min_t(u32, len, PAGE_SIZE - page_offset);
+		chunk = min_t(u32, chunk, HV_HYP_PAGE_SIZE - offset);
+
+		page_bufs[count].pfn = phys >> HV_HYP_PAGE_SHIFT;
+		page_bufs[count].offset = offset;
+		page_bufs[count].len = chunk;
+
+		addr += chunk;
+		len -= chunk;
+		count++;
+	}
+
+	*page_buf_cnt = count;
+	return 0;
+}
+
 static int rndis_filter_send_request(struct rndis_device *dev,
 				  struct rndis_request *req)
 {
 	struct hv_netvsc_packet *packet;
-	struct hv_page_buffer pb;
+	struct hv_page_buffer page_bufs[MAX_PAGE_BUFFER_COUNT];
+	u32 page_buf_cnt;
 	int ret;
 
 	/* Setup the packet to send it */
 	packet = &req->pkt;
 
 	packet->total_data_buflen = req->request_msg.msg_len;
-	packet->page_buf_cnt = 1;
-
-	pb.pfn = virt_to_phys(&req->request_msg) >> HV_HYP_PAGE_SHIFT;
-	pb.len = req->request_msg.msg_len;
-	pb.offset = offset_in_hvpage(&req->request_msg);
+	ret = rndis_build_page_buffers(&req->request_msg,
+				       req->request_msg.msg_len,
+				       page_bufs, &page_buf_cnt);
+	if (ret)
+		return ret;
+	packet->page_buf_cnt = page_buf_cnt;
 
 	trace_rndis_send(dev->ndev, 0, &req->request_msg);
 
 	rcu_read_lock_bh();
-	ret = netvsc_send(dev->ndev, packet, NULL, &pb, NULL, false);
+	ret = netvsc_send(dev->ndev, packet, NULL, page_bufs, NULL, false);
 	rcu_read_unlock_bh();
 
 	return ret;
