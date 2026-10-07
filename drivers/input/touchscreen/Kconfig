@@ -1276,9 +1276,10 @@ config TOUCHSCREEN_SUN4I
 
 config TOUCHSCREEN_SUR40
 	tristate "Samsung SUR40 (Surface 2.0/PixelSense) touchscreen"
-	depends on USB && MEDIA_USB_SUPPORT && HAS_DMA
+	depends on USB && MEDIA_USB_SUPPORT
 	depends on VIDEO_DEV
-	select VIDEOBUF2_DMA_SG
+	select SGL_ALLOC
+	select VIDEOBUF2_VMALLOC
 	help
 	  Say Y here if you want support for the Samsung SUR40 touchscreen
 	  (also known as Microsoft Surface 2.0 or Microsoft PixelSense).

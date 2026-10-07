@@ -20,6 +20,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
+#include <linux/dma-buf.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/module.h>
@@ -36,7 +37,7 @@
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-ctrls.h>
 #include <media/videobuf2-v4l2.h>
-#include <media/videobuf2-dma-sg.h>
+#include <media/videobuf2-vmalloc.h>
 
 /* read 512 bytes from endpoint 0x86 -> get header + blobs */
 struct sur40_header {
@@ -221,6 +222,8 @@ struct sur40_state {
 
 	struct sur40_data *bulk_in_buffer;
 	size_t bulk_in_size;
+	struct scatterlist *video_sgl;
+	unsigned int video_nents;
 	u8 bulk_in_epaddr;
 	u8 vsvideo;
 
@@ -531,8 +534,10 @@ static void sur40_process_video(struct sur40_state *sur40)
 	struct sur40_image_header *img = (void *)(sur40->bulk_in_buffer);
 	struct sur40_buffer *new_buf;
 	struct usb_sg_request sgr;
-	struct sg_table *sgt;
+	unsigned int size = sur40->pix_fmt.sizeimage;
+	struct dma_buf *dbuf = NULL;
 	int result, bulk_read;
+	void *vaddr;
 
 	if (!vb2_start_streaming_called(&sur40->queue))
 		return;
@@ -579,11 +584,17 @@ static void sur40_process_video(struct sur40_state *sur40)
 
 	dev_dbg(sur40->dev, "header acquired\n");
 
-	sgt = vb2_dma_sg_plane_desc(&new_buf->vb.vb2_buf, 0);
+	vaddr = vb2_plane_vaddr(&new_buf->vb.vb2_buf, 0);
+	if (!vaddr)
+		goto err_poll;
 
+	/*
+	 * vb2_plane_vaddr() may return a vmalloc or vmap address. Receive
+	 * into page-backed memory so the USB core can map it for DMA.
+	 */
 	result = usb_sg_init(&sgr, sur40->usbdev,
 		usb_rcvbulkpipe(sur40->usbdev, VIDEO_ENDPOINT), 0,
-		sgt->sgl, sgt->nents, sur40->pix_fmt.sizeimage, 0);
+		sur40->video_sgl, sur40->video_nents, size, 0);
 	if (result < 0) {
 		dev_err(sur40->dev, "error %d in usb_sg_init\n", result);
 		goto err_poll;
@@ -593,6 +604,39 @@ static void sur40_process_video(struct sur40_state *sur40)
 	if (sgr.status < 0) {
 		dev_err(sur40->dev, "error %d in usb_sg_wait\n", sgr.status);
 		goto err_poll;
+	}
+
+	if (sgr.bytes != size) {
+		dev_err(sur40->dev, "short image (%zu of %u bytes)\n",
+			sgr.bytes, size);
+		goto err_poll;
+	}
+
+	/*
+	 * vb2_vmalloc does not synchronize CPU access to imported dma-bufs,
+	 * so bracket the copy into one here.
+	 */
+	if (new_buf->vb.vb2_buf.memory == VB2_MEMORY_DMABUF)
+		dbuf = new_buf->vb.vb2_buf.planes[0].dbuf;
+
+	if (dbuf) {
+		result = dma_buf_begin_cpu_access(dbuf, DMA_TO_DEVICE);
+		if (result) {
+			dev_err(sur40->dev, "error %d in begin_cpu_access\n",
+				result);
+			goto err_poll;
+		}
+	}
+
+	sg_copy_to_buffer(sur40->video_sgl, sur40->video_nents, vaddr, size);
+
+	if (dbuf) {
+		result = dma_buf_end_cpu_access(dbuf, DMA_TO_DEVICE);
+		if (result) {
+			dev_err(sur40->dev, "error %d in end_cpu_access\n",
+				result);
+			goto err_poll;
+		}
 	}
 
 	dev_dbg(sur40->dev, "image acquired\n");
@@ -725,6 +769,13 @@ static int sur40_probe(struct usb_interface *interface,
 		goto err_free_input;
 	}
 
+	sur40->video_sgl = sgl_alloc(sur40_pix_format[0].sizeimage, GFP_KERNEL,
+				     &sur40->video_nents);
+	if (!sur40->video_sgl) {
+		error = -ENOMEM;
+		goto err_free_buffer;
+	}
+
 	/* register the video master device */
 	snprintf(sur40->v4l2.name, sizeof(sur40->v4l2.name), "%s", DRIVER_LONG);
 	error = v4l2_device_register(sur40->dev, &sur40->v4l2);
@@ -811,6 +862,7 @@ err_free_ctrl:
 err_unreg_v4l2:
 	v4l2_device_unregister(&sur40->v4l2);
 err_free_buffer:
+	sgl_free(sur40->video_sgl);
 	kfree(sur40->bulk_in_buffer);
 err_free_input:
 	input_free_device(input);
@@ -831,6 +883,7 @@ static void sur40_disconnect(struct usb_interface *interface)
 	video_unregister_device(&sur40->vdev);
 	v4l2_device_unregister(&sur40->v4l2);
 
+	sgl_free(sur40->video_sgl);
 	kfree(sur40->bulk_in_buffer);
 	kfree(sur40);
 
@@ -1114,15 +1167,10 @@ static const struct vb2_ops sur40_queue_ops = {
 
 static const struct vb2_queue sur40_queue = {
 	.type = V4L2_BUF_TYPE_VIDEO_CAPTURE,
-	/*
-	 * VB2_USERPTR in currently not enabled: passing a user pointer to
-	 * dma-sg will result in segment sizes that are not a multiple of
-	 * 512 bytes, which is required by the host controller.
-	*/
 	.io_modes = VB2_MMAP | VB2_READ | VB2_DMABUF,
 	.buf_struct_size = sizeof(struct sur40_buffer),
 	.ops = &sur40_queue_ops,
-	.mem_ops = &vb2_dma_sg_memops,
+	.mem_ops = &vb2_vmalloc_memops,
 	.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC,
 	.min_queued_buffers = 3,
 };
