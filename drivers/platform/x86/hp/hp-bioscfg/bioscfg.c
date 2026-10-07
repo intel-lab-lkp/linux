@@ -162,6 +162,8 @@ int hp_enforce_single_line_input(char *buf, size_t count)
 {
 	char *p;
 
+	/* buf is a string, ignore anything after its first NUL */
+	count = strnlen(buf, count);
 	p = memchr(buf, '\n', count);
 
 	if (p == buf + count - 1)
