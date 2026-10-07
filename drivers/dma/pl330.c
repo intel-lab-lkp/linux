@@ -1805,16 +1805,32 @@ static inline void _free_event(struct pl330_thread *thrd, int ev)
 
 static void pl330_release_channel(struct pl330_thread *thrd)
 {
+	struct pl330_dmac *pl330;
+	unsigned long flags;
+
 	if (!thrd || thrd->free)
 		return;
 
-	_stop(thrd);
+	pl330 = thrd->dmac;
 
+	spin_lock_irqsave(&pl330->lock, flags);
+	_stop(thrd);
+	spin_unlock_irqrestore(&pl330->lock, flags);
+
+	/*
+	 * dma_pl330_rqcb() takes the channel lock, which is acquired before
+	 * pl330->lock on the terminate/pause/tx_status paths.  Calling it with
+	 * pl330->lock held would invert the lock order, so keep it outside the
+	 * critical section - the same convention pl330_dotask() and
+	 * pl330_update() already follow.
+	 */
 	dma_pl330_rqcb(thrd->req[1 - thrd->lstenq].desc, PL330_ERR_ABORT);
 	dma_pl330_rqcb(thrd->req[thrd->lstenq].desc, PL330_ERR_ABORT);
 
+	spin_lock_irqsave(&pl330->lock, flags);
 	_free_event(thrd, thrd->ev);
 	thrd->free = true;
+	spin_unlock_irqrestore(&pl330->lock, flags);
 }
 
 /* Initialize the structure for PL330 configuration, that can be used
@@ -2358,9 +2374,15 @@ static void pl330_free_chan_resources(struct dma_chan *chan)
 	tasklet_kill(&pch->task);
 
 	pm_runtime_get_sync(pch->dmac->ddma.dev);
-	spin_lock_irqsave(&pl330->lock, flags);
 
+	/*
+	 * pl330_release_channel() takes pl330->lock itself and calls
+	 * dma_pl330_rqcb(), which takes the channel lock.  It must therefore
+	 * not be called with pl330->lock held (see the comment there).
+	 */
 	pl330_release_channel(pch->thread);
+
+	spin_lock_irqsave(&pl330->lock, flags);
 	pch->thread = NULL;
 
 	if (pch->cyclic)
