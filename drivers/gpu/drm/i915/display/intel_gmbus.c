@@ -269,10 +269,6 @@ static int get_clock(void *data)
 {
 	struct intel_gmbus *bus = data;
 	struct intel_display *display = bus->display;
-	u32 reserved = get_reserved(bus);
-
-	intel_de_write_fw(display, bus->gpio_reg, reserved | GPIO_CLOCK_DIR_MASK);
-	intel_de_write_fw(display, bus->gpio_reg, reserved);
 
 	return (intel_de_read_fw(display, bus->gpio_reg) & GPIO_CLOCK_VAL_IN) != 0;
 }
@@ -281,10 +277,6 @@ static int get_data(void *data)
 {
 	struct intel_gmbus *bus = data;
 	struct intel_display *display = bus->display;
-	u32 reserved = get_reserved(bus);
-
-	intel_de_write_fw(display, bus->gpio_reg, reserved | GPIO_DATA_DIR_MASK);
-	intel_de_write_fw(display, bus->gpio_reg, reserved);
 
 	return (intel_de_read_fw(display, bus->gpio_reg) & GPIO_DATA_VAL_IN) != 0;
 }
