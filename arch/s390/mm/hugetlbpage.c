@@ -136,7 +136,7 @@ static inline pte_t __rste_to_pte(unsigned long rste)
 }
 
 void __set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
-		     pte_t *ptep, pte_t pte)
+		     hw_pte_t *ptep, pte_t pte)
 {
 	unsigned long rste;
 
@@ -156,18 +156,18 @@ void __set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
 }
 
 void set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
-		     pte_t *ptep, pte_t pte, unsigned long sz)
+		     hw_pte_t *ptep, pte_t pte, unsigned long sz)
 {
 	__set_huge_pte_at(mm, addr, ptep, pte);
 }
 
-pte_t huge_ptep_get(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
+pte_t huge_ptep_get(struct mm_struct *mm, unsigned long addr, hw_pte_t *ptep)
 {
 	return __rste_to_pte(pte_val(ptep_get(ptep)));
 }
 
 pte_t __huge_ptep_get_and_clear(struct mm_struct *mm,
-				unsigned long addr, pte_t *ptep)
+				unsigned long addr, hw_pte_t *ptep)
 {
 	pte_t pte = huge_ptep_get(mm, addr, ptep);
 	pmd_t *pmdp = (pmd_t *) ptep;
@@ -180,7 +180,7 @@ pte_t __huge_ptep_get_and_clear(struct mm_struct *mm,
 	return pte;
 }
 
-pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
+hw_pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
 			unsigned long addr, unsigned long sz)
 {
 	pgd_t *pgdp;
@@ -194,15 +194,15 @@ pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
 		pudp = pud_alloc(mm, p4dp, addr);
 		if (pudp) {
 			if (sz == PUD_SIZE)
-				return (pte_t *) pudp;
+				return (hw_pte_t *) pudp;
 			else if (sz == PMD_SIZE)
 				pmdp = pmd_alloc(mm, pudp, addr);
 		}
 	}
-	return (pte_t *) pmdp;
+	return (hw_pte_t *) pmdp;
 }
 
-pte_t *huge_pte_offset(struct mm_struct *mm,
+hw_pte_t *huge_pte_offset(struct mm_struct *mm,
 		       unsigned long addr, unsigned long sz)
 {
 	pgd_t *pgdp;
@@ -216,12 +216,12 @@ pte_t *huge_pte_offset(struct mm_struct *mm,
 		if (p4d_present(p4dp_get(p4dp))) {
 			pudp = pud_offset(p4dp, addr);
 			if (sz == PUD_SIZE)
-				return (pte_t *)pudp;
+				return (hw_pte_t *)pudp;
 			if (pud_present(pudp_get(pudp)))
 				pmdp = pmd_offset(pudp, addr);
 		}
 	}
-	return (pte_t *) pmdp;
+	return (hw_pte_t *) pmdp;
 }
 
 bool __init arch_hugetlb_valid_size(unsigned long size)

@@ -22,7 +22,7 @@
 #include <asm/ctlreg.h>
 
 unsigned long __bootdata_preserved(__memcpy_real_area);
-pte_t *__bootdata_preserved(memcpy_real_ptep);
+hw_pte_t *__bootdata_preserved(memcpy_real_ptep);
 static DEFINE_MUTEX(memcpy_real_mutex);
 
 static notrace long s390_kernel_write_odd(void *dst, const void *src, size_t size)

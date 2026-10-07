@@ -106,7 +106,7 @@ static void _kvm_s390_pv_make_secure(struct guest_fault *f)
 	struct pv_make_secure *priv = f->priv;
 	struct folio *folio;
 	spinlock_t *ptl;	/* pte lock from try_get_locked_pte() */
-	pte_t *ptep;
+	hw_pte_t *ptep;
 
 	folio = pfn_folio(f->pfn);
 	priv->rc = -EAGAIN;

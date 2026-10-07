@@ -210,7 +210,7 @@ int uv_convert_from_secure_pte(pte_t pte)
 	return uv_convert_from_secure_folio(pfn_folio(pte_pfn(pte)));
 }
 
-static int uv_free_range_cb(pte_t *ptep, unsigned long addr, void *data)
+static int uv_free_range_cb(hw_pte_t *ptep, unsigned long addr, void *data)
 {
 	pte_t pte = ptep_get(ptep);
 
@@ -242,7 +242,7 @@ void uv_free_stor_var(void *stor_var)
 }
 EXPORT_SYMBOL_FOR_MODULES(uv_free_stor_var, "kvm");
 
-static int uv_alloc_range_cb(pte_t *ptep, unsigned long addr, void *data)
+static int uv_alloc_range_cb(hw_pte_t *ptep, unsigned long addr, void *data)
 {
 	struct page *page;
 	pte_t pte;

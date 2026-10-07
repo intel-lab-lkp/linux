@@ -113,7 +113,8 @@ DEFINE_PGVAL_FUNC(pud)
 DEFINE_PGVAL_FUNC(p4d)
 DEFINE_PGVAL_FUNC(pgd)
 
-typedef pte_t *pgtable_t;
+struct __hw_pte_t;
+typedef struct __hw_pte_t *pgtable_t;
 
 #define __pgprot(x)	((pgprot_t) { (x) } )
 #define __pte(x)        ((pte_t) { (x) } )

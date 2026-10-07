@@ -978,17 +978,19 @@ static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 	WRITE_ONCE(*pmdp, pmd);
 }
 
-static inline void set_pte(pte_t *ptep, pte_t pte)
+static inline void set_pte(hw_pte_t *ptep, pte_t pte)
 {
+	hw_pte_t hwpte = (hw_pte_t) { (pte) };
+
 	if (pte_present(pte))
 		pte = clear_pte_bit(pte, __pgprot(_PAGE_UNUSED));
-	WRITE_ONCE(*ptep, pte);
+	WRITE_ONCE(*ptep, hwpte);
 }
 
 #define ptep_get ptep_get
-static inline pte_t ptep_get(pte_t *ptep)
+static inline pte_t ptep_get(hw_pte_t *ptep)
 {
-	return READ_ONCE(*ptep);
+	return __pte_from_hw(READ_ONCE(*ptep));
 }
 
 #define pmdp_get pmdp_get
@@ -1015,7 +1017,7 @@ static inline pgd_t pgdp_get(pgd_t *pgdp)
 	return READ_ONCE(*pgdp);
 }
 
-static inline void pte_clear(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
+static inline void pte_clear(struct mm_struct *mm, unsigned long addr, hw_pte_t *ptep)
 {
 	set_pte(ptep, __pte(_PAGE_INVALID));
 }
@@ -1133,7 +1135,7 @@ static inline unsigned long sske_frame(unsigned long addr, unsigned char skey)
 #define IPTE_NODAT	0x400
 #define IPTE_GUEST_ASCE	0x800
 
-static __always_inline void __ptep_rdp(unsigned long addr, pte_t *ptep, int local)
+static __always_inline void __ptep_rdp(unsigned long addr, hw_pte_t *ptep, int local)
 {
 	unsigned long pto;
 
@@ -1144,7 +1146,7 @@ static __always_inline void __ptep_rdp(unsigned long addr, pte_t *ptep, int loca
 		       [m4] "i" (local));
 }
 
-static __always_inline void __ptep_ipte(unsigned long address, pte_t *ptep,
+static __always_inline void __ptep_ipte(unsigned long address, hw_pte_t *ptep,
 					unsigned long opt, unsigned long asce,
 					int local)
 {
@@ -1168,7 +1170,7 @@ static __always_inline void __ptep_ipte(unsigned long address, pte_t *ptep,
 }
 
 static __always_inline void __ptep_ipte_range(unsigned long address, int nr,
-					      pte_t *ptep, int local)
+					      hw_pte_t *ptep, int local)
 {
 	unsigned long pto = __pa(ptep);
 
@@ -1194,12 +1196,12 @@ static __always_inline void __ptep_ipte_range(unsigned long address, int nr,
  * have ptep_get_and_clear do the tlb flush. In exchange flush_tlb_range
  * is a nop.
  */
-pte_t ptep_xchg_direct(struct mm_struct *, unsigned long, pte_t *, pte_t);
-pte_t ptep_xchg_lazy(struct mm_struct *, unsigned long, pte_t *, pte_t);
+pte_t ptep_xchg_direct(struct mm_struct *, unsigned long, hw_pte_t *, pte_t);
+pte_t ptep_xchg_lazy(struct mm_struct *, unsigned long, hw_pte_t *, pte_t);
 
 #define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
 static inline bool ptep_test_and_clear_young(struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep)
+		unsigned long addr, hw_pte_t *ptep)
 {
 	pte_t pte = ptep_get(ptep);
 
@@ -1209,14 +1211,14 @@ static inline bool ptep_test_and_clear_young(struct vm_area_struct *vma,
 
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
 static inline bool ptep_clear_flush_young(struct vm_area_struct *vma,
-		unsigned long address, pte_t *ptep)
+		unsigned long address, hw_pte_t *ptep)
 {
 	return ptep_test_and_clear_young(vma, address, ptep);
 }
 
 #define __HAVE_ARCH_PTEP_GET_AND_CLEAR
 static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
-				       unsigned long addr, pte_t *ptep)
+				       unsigned long addr, hw_pte_t *ptep)
 {
 	pte_t res;
 
@@ -1229,13 +1231,13 @@ static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 }
 
 #define __HAVE_ARCH_PTEP_MODIFY_PROT_TRANSACTION
-pte_t ptep_modify_prot_start(struct vm_area_struct *, unsigned long, pte_t *);
+pte_t ptep_modify_prot_start(struct vm_area_struct *, unsigned long, hw_pte_t *);
 void ptep_modify_prot_commit(struct vm_area_struct *, unsigned long,
-			     pte_t *, pte_t, pte_t);
+			     hw_pte_t *, pte_t, pte_t);
 
 #define __HAVE_ARCH_PTEP_CLEAR_FLUSH
 static inline pte_t ptep_clear_flush(struct vm_area_struct *vma,
-				     unsigned long addr, pte_t *ptep)
+				     unsigned long addr, hw_pte_t *ptep)
 {
 	pte_t res;
 
@@ -1257,7 +1259,7 @@ static inline pte_t ptep_clear_flush(struct vm_area_struct *vma,
 #define __HAVE_ARCH_PTEP_GET_AND_CLEAR_FULL
 static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
 					    unsigned long addr,
-					    pte_t *ptep, int full)
+					    hw_pte_t *ptep, int full)
 {
 	pte_t res;
 
@@ -1289,7 +1291,7 @@ static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
 
 #define __HAVE_ARCH_PTEP_SET_WRPROTECT
 static inline void ptep_set_wrprotect(struct mm_struct *mm,
-				      unsigned long addr, pte_t *ptep)
+				      unsigned long addr, hw_pte_t *ptep)
 {
 	pte_t pte = ptep_get(ptep);
 
@@ -1315,7 +1317,7 @@ static inline int pte_allow_rdp(pte_t old, pte_t new)
 
 static inline void flush_tlb_fix_spurious_fault(struct vm_area_struct *vma,
 						unsigned long address,
-						pte_t *ptep)
+						hw_pte_t *ptep)
 {
 	/*
 	 * RDP might not have propagated the PTE protection reset to all CPUs,
@@ -1332,17 +1334,19 @@ static inline void flush_tlb_fix_spurious_fault(struct vm_area_struct *vma,
 }
 #define flush_tlb_fix_spurious_fault flush_tlb_fix_spurious_fault
 
-void ptep_reset_dat_prot(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
+void ptep_reset_dat_prot(struct mm_struct *mm, unsigned long addr, hw_pte_t *ptep,
 			 pte_t new);
 
 #define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
 static inline int ptep_set_access_flags(struct vm_area_struct *vma,
-					unsigned long addr, pte_t *ptep,
+					unsigned long addr, hw_pte_t *ptep,
 					pte_t entry, int dirty)
 {
-	if (pte_same(*ptep, entry))
+	pte_t pte = ptep_get(ptep);
+
+	if (pte_same(pte, entry))
 		return 0;
-	if (cpu_has_rdp() && pte_allow_rdp(*ptep, entry))
+	if (cpu_has_rdp() && pte_allow_rdp(pte, entry))
 		ptep_reset_dat_prot(vma->vm_mm, addr, ptep, entry);
 	else
 		ptep_xchg_direct(vma->vm_mm, addr, ptep, entry);
@@ -1359,7 +1363,7 @@ pgprot_t pgprot_writecombine(pgprot_t prot);
  * are within the same folio, PMD and VMA.
  */
 static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
-			      pte_t *ptep, pte_t entry, unsigned int nr)
+		hw_pte_t *ptep, pte_t entry, unsigned int nr)
 {
 	page_table_check_ptes_set(mm, addr, ptep, entry, nr);
 	for (;;) {
@@ -1997,7 +2001,7 @@ extern void vmem_remove_mapping(unsigned long start, unsigned long size);
 extern int __vmem_map_4k_page(unsigned long addr, unsigned long phys, pgprot_t prot, bool alloc);
 extern int vmem_map_4k_page(unsigned long addr, unsigned long phys, pgprot_t prot);
 extern void vmem_unmap_4k_page(unsigned long addr);
-extern pte_t *vmem_get_alloc_pte(unsigned long addr, bool alloc);
+extern hw_pte_t *vmem_get_alloc_pte(unsigned long addr, bool alloc);
 
 /* s390 has a private copy of get unmapped area to deal with cache synonyms */
 #define HAVE_ARCH_UNMAPPED_AREA

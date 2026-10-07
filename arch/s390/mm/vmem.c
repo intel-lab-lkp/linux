@@ -66,14 +66,14 @@ void *vmem_crst_alloc(unsigned long val)
 	return table;
 }
 
-pte_t __ref *vmem_pte_alloc(void)
+hw_pte_t __ref *vmem_pte_alloc(void)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	if (slab_is_available())
-		pte = (pte_t *)page_table_alloc(&init_mm);
+		pte = (hw_pte_t *)page_table_alloc(&init_mm);
 	else
-		pte = (pte_t *)memblock_alloc(PAGE_SIZE, PAGE_SIZE);
+		pte = (hw_pte_t *)memblock_alloc(PAGE_SIZE, PAGE_SIZE);
 	if (!pte)
 		return NULL;
 	memset64((u64 *)pte, _PAGE_INVALID, PTRS_PER_PTE);
@@ -168,7 +168,8 @@ static int __ref modify_pte_table(pmd_t *pmd, unsigned long addr,
 {
 	unsigned long prot, pages = 0;
 	int ret = -ENOMEM;
-	pte_t *pte, entry;
+	hw_pte_t *pte;
+	pte_t entry;
 
 	prot = pgprot_val(PAGE_KERNEL);
 	pte = pte_offset_kernel(pmd, addr);
@@ -204,7 +205,7 @@ out:
 
 static void try_free_pte_table(pmd_t *pmd, unsigned long start)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 	int i;
 
 	/* We can safely assume this is fully in 1:1 mapping & vmemmap area */
@@ -226,7 +227,7 @@ static int __ref modify_pmd_table(pud_t *pud, unsigned long addr,
 	int ret = -ENOMEM;
 	pmd_t entry;
 	pmd_t *pmd;
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	prot = pgprot_val(SEGMENT_KERNEL);
 	pmd = pmd_offset(pud, addr);
@@ -575,16 +576,16 @@ int vmem_add_mapping(unsigned long start, unsigned long size)
  * while traversing is an error, since the function is expected to be
  * called against virtual regions reserved for 4KB mappings only.
  */
-pte_t *vmem_get_alloc_pte(unsigned long addr, bool alloc)
+hw_pte_t *vmem_get_alloc_pte(unsigned long addr, bool alloc)
 {
-	pte_t *ptep = NULL;
+	hw_pte_t *ptep = NULL;
 	pud_t pud_entry;
 	pmd_t pmd_entry;
 	pgd_t *pgd;
 	p4d_t *p4d;
 	pud_t *pud;
 	pmd_t *pmd;
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	pgd = pgd_offset_k(addr);
 	if (pgd_none(pgdp_get(pgd))) {
@@ -635,7 +636,8 @@ out:
 
 int __vmem_map_4k_page(unsigned long addr, unsigned long phys, pgprot_t prot, bool alloc)
 {
-	pte_t *ptep, pte;
+	hw_pte_t *ptep;
+	pte_t pte;
 
 	if (!IS_ALIGNED(addr, PAGE_SIZE))
 		return -EINVAL;
@@ -660,7 +662,7 @@ int vmem_map_4k_page(unsigned long addr, unsigned long phys, pgprot_t prot)
 
 void vmem_unmap_4k_page(unsigned long addr)
 {
-	pte_t *ptep;
+	hw_pte_t *ptep;
 
 	mutex_lock(&vmem_mutex);
 	ptep = virt_to_kpte(addr);

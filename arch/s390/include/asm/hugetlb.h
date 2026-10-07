@@ -19,19 +19,19 @@
 
 #define __HAVE_ARCH_HUGE_SET_HUGE_PTE_AT
 void set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
-		     pte_t *ptep, pte_t pte, unsigned long sz);
+		     hw_pte_t *ptep, pte_t pte, unsigned long sz);
 void __set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
-		       pte_t *ptep, pte_t pte);
+		       hw_pte_t *ptep, pte_t pte);
 
 #define __HAVE_ARCH_HUGE_PTEP_GET
-pte_t huge_ptep_get(struct mm_struct *mm, unsigned long addr, pte_t *ptep);
+pte_t huge_ptep_get(struct mm_struct *mm, unsigned long addr, hw_pte_t *ptep);
 
 pte_t __huge_ptep_get_and_clear(struct mm_struct *mm, unsigned long addr,
-				pte_t *ptep);
+				hw_pte_t *ptep);
 
 #define __HAVE_ARCH_HUGE_PTEP_GET_AND_CLEAR
 static inline pte_t huge_ptep_get_and_clear(struct mm_struct *mm,
-					    unsigned long addr, pte_t *ptep,
+					    unsigned long addr, hw_pte_t *ptep,
 					    unsigned long sz)
 {
 	return __huge_ptep_get_and_clear(mm, addr, ptep);
@@ -39,7 +39,7 @@ static inline pte_t huge_ptep_get_and_clear(struct mm_struct *mm,
 
 #define __HAVE_ARCH_HUGE_PTE_CLEAR
 static inline void huge_pte_clear(struct mm_struct *mm, unsigned long addr,
-				  pte_t *ptep, unsigned long sz)
+				  hw_pte_t *ptep, unsigned long sz)
 {
 	if ((pte_val(ptep_get(ptep)) & _REGION_ENTRY_TYPE_MASK) == _REGION_ENTRY_TYPE_R3)
 		set_pud((pud_t *)ptep, __pud(_REGION3_ENTRY_EMPTY));
@@ -49,14 +49,14 @@ static inline void huge_pte_clear(struct mm_struct *mm, unsigned long addr,
 
 #define __HAVE_ARCH_HUGE_PTEP_CLEAR_FLUSH
 static inline pte_t huge_ptep_clear_flush(struct vm_area_struct *vma,
-					  unsigned long address, pte_t *ptep)
+					  unsigned long address, hw_pte_t *ptep)
 {
 	return __huge_ptep_get_and_clear(vma->vm_mm, address, ptep);
 }
 
 #define  __HAVE_ARCH_HUGE_PTEP_SET_ACCESS_FLAGS
 static inline int huge_ptep_set_access_flags(struct vm_area_struct *vma,
-					     unsigned long addr, pte_t *ptep,
+					     unsigned long addr, hw_pte_t *ptep,
 					     pte_t pte, int dirty)
 {
 	int changed = !pte_same(huge_ptep_get(vma->vm_mm, addr, ptep), pte);
@@ -70,7 +70,7 @@ static inline int huge_ptep_set_access_flags(struct vm_area_struct *vma,
 
 #define __HAVE_ARCH_HUGE_PTEP_SET_WRPROTECT
 static inline void huge_ptep_set_wrprotect(struct mm_struct *mm,
-					   unsigned long addr, pte_t *ptep)
+					   unsigned long addr, hw_pte_t *ptep)
 {
 	pte_t pte = __huge_ptep_get_and_clear(mm, addr, ptep);
 

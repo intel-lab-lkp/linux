@@ -37,7 +37,7 @@ pgprot_t pgprot_writecombine(pgprot_t prot)
 EXPORT_SYMBOL_GPL(pgprot_writecombine);
 
 static inline void ptep_ipte_local(struct mm_struct *mm, unsigned long addr,
-				   pte_t *ptep, int nodat)
+				   hw_pte_t *ptep, int nodat)
 {
 	unsigned long opt, asce;
 
@@ -57,7 +57,7 @@ static inline void ptep_ipte_local(struct mm_struct *mm, unsigned long addr,
 }
 
 static inline void ptep_ipte_global(struct mm_struct *mm, unsigned long addr,
-				    pte_t *ptep, int nodat)
+				    hw_pte_t *ptep, int nodat)
 {
 	unsigned long opt, asce;
 
@@ -77,12 +77,12 @@ static inline void ptep_ipte_global(struct mm_struct *mm, unsigned long addr,
 }
 
 static inline pte_t ptep_flush_direct(struct mm_struct *mm,
-				      unsigned long addr, pte_t *ptep,
+				      unsigned long addr, hw_pte_t *ptep,
 				      int nodat)
 {
 	pte_t old;
 
-	old = *ptep;
+	old = ptep_get(ptep);
 	if (unlikely(pte_val(old) & _PAGE_INVALID))
 		return old;
 	atomic_inc(&mm->context.flush_count);
@@ -96,12 +96,12 @@ static inline pte_t ptep_flush_direct(struct mm_struct *mm,
 }
 
 static inline pte_t ptep_flush_lazy(struct mm_struct *mm,
-				    unsigned long addr, pte_t *ptep,
+				    unsigned long addr, hw_pte_t *ptep,
 				    int nodat)
 {
 	pte_t old;
 
-	old = *ptep;
+	old = ptep_get(ptep);
 	if (unlikely(pte_val(old) & _PAGE_INVALID))
 		return old;
 	atomic_inc(&mm->context.flush_count);
@@ -116,7 +116,7 @@ static inline pte_t ptep_flush_lazy(struct mm_struct *mm,
 }
 
 pte_t ptep_xchg_direct(struct mm_struct *mm, unsigned long addr,
-		       pte_t *ptep, pte_t new)
+		       hw_pte_t *ptep, pte_t new)
 {
 	pte_t old;
 
@@ -132,7 +132,7 @@ EXPORT_SYMBOL(ptep_xchg_direct);
  * Caller must check that new PTE only differs in _PAGE_PROTECT HW bit, so that
  * RDP can be used instead of IPTE. See also comments at pte_allow_rdp().
  */
-void ptep_reset_dat_prot(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
+void ptep_reset_dat_prot(struct mm_struct *mm, unsigned long addr, hw_pte_t *ptep,
 			 pte_t new)
 {
 	preempt_disable();
@@ -154,7 +154,7 @@ void ptep_reset_dat_prot(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
 EXPORT_SYMBOL(ptep_reset_dat_prot);
 
 pte_t ptep_xchg_lazy(struct mm_struct *mm, unsigned long addr,
-		     pte_t *ptep, pte_t new)
+		     hw_pte_t *ptep, pte_t new)
 {
 	pte_t old;
 
@@ -167,13 +167,13 @@ pte_t ptep_xchg_lazy(struct mm_struct *mm, unsigned long addr,
 EXPORT_SYMBOL(ptep_xchg_lazy);
 
 pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr,
-			     pte_t *ptep)
+			     hw_pte_t *ptep)
 {
 	return ptep_flush_lazy(vma->vm_mm, addr, ptep, 1);
 }
 
 void ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr,
-			     pte_t *ptep, pte_t old_pte, pte_t pte)
+			     hw_pte_t *ptep, pte_t old_pte, pte_t pte)
 {
 	set_pte(ptep, pte);
 }
@@ -333,7 +333,7 @@ pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp)
 {
 	struct list_head *lh;
 	pgtable_t pgtable;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 
 	assert_spin_locked(pmd_lockptr(mm, pmdp));
 
@@ -346,7 +346,7 @@ pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp)
 		pmd_huge_pte(mm, pmdp) = (pgtable_t) lh->next;
 		list_del(lh);
 	}
-	ptep = (pte_t *) pgtable;
+	ptep = (hw_pte_t *) pgtable;
 	set_pte(ptep, __pte(_PAGE_INVALID));
 	ptep++;
 	set_pte(ptep, __pte(_PAGE_INVALID));

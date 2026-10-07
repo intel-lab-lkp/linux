@@ -39,14 +39,14 @@
  * * the pointer to the pte corresponding to @addr in @mm, if it can be reached
  *   and locked.
  */
-pte_t *try_get_locked_pte(struct mm_struct *mm, unsigned long vmaddr, spinlock_t **ptl)
+hw_pte_t *try_get_locked_pte(struct mm_struct *mm, unsigned long vmaddr, spinlock_t **ptl)
 __context_unsafe(/* Returns nonnull if lock taken or not taken */)
 {
 	pmd_t *pmdp, pmd, pmdval;
 	pud_t *pudp, pud;
 	p4d_t *p4dp, p4d;
 	pgd_t *pgdp, pgd;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 
 	pgdp = pgd_offset(mm, vmaddr);
 	pgd = pgdp_get(pgdp);
@@ -96,7 +96,7 @@ __context_unsafe(/* pte_unmap_unlock() not instrumented */)
 	struct vm_area_struct *vma;
 	spinlock_t *ptl;	/* Lock for the host (userspace) page table */
 	softleaf_t sl;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 
 	mmap_assert_locked(mm);
 
@@ -109,8 +109,8 @@ __context_unsafe(/* pte_unmap_unlock() not instrumented */)
 	ptep = try_get_locked_pte(mm, vmaddr, &ptl);
 	if (IS_ERR_OR_NULL(ptep))
 		return;
-	sl = softleaf_from_pte(*ptep);
-	if (pte_swap(*ptep) && softleaf_is_swap(sl)) {
+	sl = softleaf_from_pte(ptep_get(ptep));
+	if (pte_swap(ptep_get(ptep)) && softleaf_is_swap(sl)) {
 		dec_mm_counter(mm, MM_SWAPENTS);
 		swap_put_entries_direct(sl, 1);
 		pte_clear(mm, vmaddr, ptep);
@@ -166,7 +166,7 @@ void gmap_helper_try_set_pte_unused(struct mm_struct *mm, unsigned long vmaddr)
 __context_unsafe(/* pte_unmap_unlock() not instrumented */)
 {
 	spinlock_t *ptl;	/* Lock for the host (userspace) page table */
-	pte_t *ptep;
+	hw_pte_t *ptep;
 
 	/*
 	 * Several paths exists that takes the ptl lock and then call the
@@ -184,19 +184,19 @@ __context_unsafe(/* pte_unmap_unlock() not instrumented */)
 	if (IS_ERR_OR_NULL(ptep))
 		return;
 
-	if (pte_present(*ptep))
+	if (pte_present(ptep_get(ptep)))
 		__atomic64_or(_PAGE_UNUSED, (long *)ptep);
 	pte_unmap_unlock(ptep, ptl);
 }
 EXPORT_SYMBOL_GPL(gmap_helper_try_set_pte_unused);
 
-static int find_zeropage_pte_entry(pte_t *pte, unsigned long addr,
+static int find_zeropage_pte_entry(hw_pte_t *pte, unsigned long addr,
 				   unsigned long end, struct mm_walk *walk)
 {
 	unsigned long *found_addr = walk->private;
 
 	/* Return 1 of the page is a zeropage. */
-	if (is_zero_pfn(pte_pfn(*pte))) {
+	if (is_zero_pfn(pte_pfn(ptep_get(pte)))) {
 		/*
 		 * Shared zeropage in e.g., a FS DAX mapping? We cannot do the
 		 * right thing and likely don't care: FAULT_FLAG_UNSHARE

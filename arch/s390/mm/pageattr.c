@@ -79,7 +79,8 @@ static void pgt_set(unsigned long *old, unsigned long new, unsigned long addr,
 static int walk_pte_level(pmd_t *pmdp, unsigned long addr, unsigned long end,
 			  unsigned long flags)
 {
-	pte_t *ptep, new;
+	hw_pte_t *ptep;
+	pte_t new;
 
 	if (flags == SET_MEMORY_4K)
 		return 0;
@@ -112,7 +113,7 @@ static int walk_pte_level(pmd_t *pmdp, unsigned long addr, unsigned long end,
 static int split_pmd_page(pmd_t *pmdp, unsigned long addr)
 {
 	unsigned long pte_addr, prot;
-	pte_t *pt_dir, *ptep;
+	hw_pte_t *pt_dir, *ptep;
 	pmd_t new, pmd;
 	int i, ro, nx;
 
@@ -421,7 +422,7 @@ bool kernel_page_present(struct page *page)
 
 #if defined(CONFIG_DEBUG_PAGEALLOC) || defined(CONFIG_KFENCE)
 
-static void ipte_range(pte_t *pte, unsigned long address, int nr)
+static void ipte_range(hw_pte_t *pte, unsigned long address, int nr)
 {
 	int i;
 
@@ -439,7 +440,8 @@ static void ipte_range(pte_t *pte, unsigned long address, int nr)
 void __kernel_map_pages(struct page *page, int numpages, int enable)
 {
 	unsigned long address;
-	pte_t *ptep, pte;
+	hw_pte_t *ptep;
+	pte_t pte;
 	int nr, i, j;
 
 	for (i = 0; i < numpages;) {

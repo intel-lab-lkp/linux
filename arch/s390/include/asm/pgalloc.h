@@ -159,8 +159,8 @@ static inline void pmd_populate(struct mm_struct *mm,
 /*
  * page table entry allocation/free routines.
  */
-#define pte_alloc_one_kernel(mm) ((pte_t *)page_table_alloc(mm))
-#define pte_alloc_one(mm) ((pte_t *)page_table_alloc(mm))
+#define pte_alloc_one_kernel(mm) ((hw_pte_t *)page_table_alloc(mm))
+#define pte_alloc_one(mm) ((hw_pte_t *)page_table_alloc(mm))
 
 #define pte_free_kernel(mm, pte) page_table_free(mm, (unsigned long *) pte)
 #define pte_free(mm, pte) page_table_free(mm, (unsigned long *) pte)
@@ -171,7 +171,7 @@ void pte_free_defer(struct mm_struct *mm, pgtable_t pgtable);
 
 void vmem_map_init(void);
 void *vmem_crst_alloc(unsigned long val);
-pte_t *vmem_pte_alloc(void);
+hw_pte_t *vmem_pte_alloc(void);
 
 unsigned long base_asce_alloc(unsigned long addr, unsigned long num_pages);
 void base_asce_free(unsigned long asce);

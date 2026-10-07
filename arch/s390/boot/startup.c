@@ -30,7 +30,7 @@
 struct vm_layout __bootdata_preserved(vm_layout);
 unsigned long __bootdata_preserved(__abs_lowcore);
 unsigned long __bootdata_preserved(__memcpy_real_area);
-pte_t *__bootdata_preserved(memcpy_real_ptep);
+hw_pte_t *__bootdata_preserved(memcpy_real_ptep);
 unsigned long __bootdata_preserved(VMALLOC_START);
 unsigned long __bootdata_preserved(VMALLOC_END);
 struct page *__bootdata_preserved(vmemmap);

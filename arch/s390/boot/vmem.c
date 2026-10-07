@@ -75,7 +75,7 @@ static void pgtable_populate(unsigned long addr, unsigned long end, enum populat
 #ifdef CONFIG_KASAN
 
 #define kasan_early_shadow_page	vmlinux.kasan_early_shadow_page_off
-#define kasan_early_shadow_pte	((pte_t *)vmlinux.kasan_early_shadow_pte_off)
+#define kasan_early_shadow_pte	((hw_pte_t *)vmlinux.kasan_early_shadow_pte_off)
 #define kasan_early_shadow_pmd	((pmd_t *)vmlinux.kasan_early_shadow_pmd_off)
 #define kasan_early_shadow_pud	((pud_t *)vmlinux.kasan_early_shadow_pud_off)
 #define kasan_early_shadow_p4d	((p4d_t *)vmlinux.kasan_early_shadow_p4d_off)
@@ -178,7 +178,7 @@ static bool kasan_pmd_populate_zero_shadow(pmd_t *pmd, unsigned long addr,
 	return false;
 }
 
-static bool kasan_pte_populate_zero_shadow(pte_t *pte, enum populate_mode mode)
+static bool kasan_pte_populate_zero_shadow(hw_pte_t *pte, enum populate_mode mode)
 {
 	if (mode == POPULATE_KASAN_ZERO_SHADOW) {
 		set_pte(pte, pte_z);
@@ -216,7 +216,7 @@ static inline bool kasan_pmd_populate_zero_shadow(pmd_t *pmd, unsigned long addr
 	return false;
 }
 
-static bool kasan_pte_populate_zero_shadow(pte_t *pte, enum populate_mode mode)
+static bool kasan_pte_populate_zero_shadow(hw_pte_t *pte, enum populate_mode mode)
 {
 	return false;
 }
@@ -226,7 +226,7 @@ static bool kasan_pte_populate_zero_shadow(pte_t *pte, enum populate_mode mode)
 /*
  * Mimic virt_to_kpte() in lack of init_mm symbol. Skip pmd NULL check though.
  */
-static inline pte_t *__virt_to_kpte(unsigned long va)
+static inline hw_pte_t *__virt_to_kpte(unsigned long va)
 {
 	return pte_offset_kernel(pmd_offset(pud_offset(p4d_offset(pgd_offset_k(va), va), va), va), va);
 }
@@ -242,9 +242,9 @@ static void *boot_crst_alloc(unsigned long val)
 	return table;
 }
 
-static pte_t *boot_pte_alloc(void)
+static hw_pte_t *boot_pte_alloc(void)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	pte = (void *)physmem_alloc_or_die(RR_VMEM, PAGE_SIZE, PAGE_SIZE);
 	__arch_set_page_dat(pte, 1);
@@ -334,7 +334,8 @@ static void pgtable_pte_populate(pmd_t *pmd, unsigned long addr, unsigned long e
 				 enum populate_mode mode)
 {
 	unsigned long pages = 0;
-	pte_t *pte, entry;
+	hw_pte_t *pte;
+	pte_t entry;
 
 	pte = pte_offset_kernel(pmd, addr);
 	for (; addr < end; addr += PAGE_SIZE, pte++) {
@@ -356,7 +357,7 @@ static void pgtable_pmd_populate(pud_t *pud, unsigned long addr, unsigned long e
 {
 	unsigned long pa, next, pages = 0;
 	pmd_t *pmd, entry, large_entry;
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	pmd = pmd_offset(pud, addr);
 	for (; addr < end; addr = next, pmd++) {
