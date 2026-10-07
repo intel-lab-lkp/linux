@@ -3887,6 +3887,25 @@ sub process {
 			     "It's generally not useful to have the filename in the file\n" . $herecurr);
 		}
 
+# check for blank line at end of file
+		if ($rawline =~ /^\+[ \t]*$/ &&
+		    (!defined $rawlines[$linenr] ||
+		     $rawlines[$linenr] =~ /^diff --git / ||
+		     $rawlines[$linenr] =~ /^-- $/)) {
+			my $context = $rawline;
+
+			for (my $i = $linenr - 2; $i >= 0; $i--) {
+				last if ($rawlines[$i] !~ /^\+/);
+
+				$context = $rawlines[$i] . "\n" . $context;
+
+				last if ($rawlines[$i] !~ /^\+[ \t]*$/);
+			}
+
+			WARN("BLANK_AT_EOF",
+			     "blank line at end of file\n" . $here . "\n" . $context . "\n");
+		}
+
 # check we are in a valid source file if not then ignore this hunk
 		next if ($realfile !~ /\.(h|c|rs|s|S|sh|dtsi|dts)$/);
 
