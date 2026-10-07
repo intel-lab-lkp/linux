@@ -433,7 +433,16 @@ static int __init tagged_addr_init(void)
 	 */
 	csr_clear(CSR_ENVCFG, ENVCFG_PMM);
 	have_user_pmlen_7 = try_to_set_pmm(ENVCFG_PMM_PMLEN_7);
-	have_user_pmlen_16 = try_to_set_pmm(ENVCFG_PMM_PMLEN_16);
+	/*
+	 * PMLEN=16 masks bits [63:48].  On Sv57 that overlaps the canonical VA
+	 * sign bit (bit 56), so a tagged user pointer whose untagged form
+	 * passes access_ok() can still name a canonical kernel VA when
+	 * dereferenced raw (the futex and unsafe_*() accessors do exactly
+	 * that).  Only offer a PMLEN whose tag bits stay above the sign bit,
+	 * i.e. PMLEN <= 64 - VA_BITS; this refuses only Sv57 + PMLEN=16.
+	 */
+	have_user_pmlen_16 = try_to_set_pmm(ENVCFG_PMM_PMLEN_16) &&
+			     VA_BITS <= 64 - PMLEN_16;
 
 	if (!register_sysctl("abi", tagged_addr_sysctl_table))
 		return -EINVAL;
