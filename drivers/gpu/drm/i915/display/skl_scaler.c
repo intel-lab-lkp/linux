@@ -145,7 +145,7 @@ skl_scaler_mode_valid(struct intel_display *display,
 
 	if (num_joined_pipes < 2 && output_format == INTEL_OUTPUT_FORMAT_YCBCR420) {
 		skl_scaler_max_src_size(display, &max_w, &max_h);
-		if (mode->hdisplay > max_h)
+		if (mode->hdisplay > max_w)
 			return MODE_NO_420;
 	}
 
