@@ -57,6 +57,17 @@ static int rtw_ops_start(struct ieee80211_hw *hw)
 
 	mutex_lock(&rtwdev->mutex);
 	ret = rtw_core_start(rtwdev);
+
+	/* The chip is reset by power_off()/power_on(), but mac80211 only calls
+	 * ieee80211_ops::config() when its own channel state changes. After a
+	 * stop/start cycle the channel is unchanged from mac80211's point of
+	 * view, so the radio would never be reprogrammed and the device would
+	 * receive nothing. Program it here, like rtw_ips_pwr_up() already does
+	 * when leaving IPS.
+	 */
+	if (!ret && hw->conf.chandef.chan)
+		rtw_set_channel(rtwdev);
+
 	mutex_unlock(&rtwdev->mutex);
 
 	return ret;
