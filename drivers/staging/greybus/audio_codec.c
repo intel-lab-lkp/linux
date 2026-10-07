@@ -395,7 +395,7 @@ static int gbcodec_hw_params(struct snd_pcm_substream *substream,
 	int ret;
 	u8 sig_bits, channels;
 	u32 format, rate;
-	struct gbaudio_module_info *module;
+	struct gbaudio_module_info *module = NULL, *iter;
 	struct gbaudio_data_connection *data;
 	struct gb_bundle *bundle;
 	struct gbaudio_codec_info *codec = dev_get_drvdata(dai->dev);
@@ -437,10 +437,12 @@ static int gbcodec_hw_params(struct snd_pcm_substream *substream,
 	format = GB_AUDIO_PCM_FMT_S16_LE;
 
 	/* find the data connection */
-	list_for_each_entry(module, &codec->module_list, list) {
-		data = find_data(module, dai->id);
-		if (data)
+	list_for_each_entry(iter, &codec->module_list, list) {
+		data = find_data(iter, dai->id);
+		if (data) {
+			module = iter;
 			break;
+		}
 	}
 
 	if (!data) {
