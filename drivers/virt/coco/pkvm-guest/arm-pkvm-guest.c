@@ -20,35 +20,19 @@
 static size_t __ro_after_init pkvm_granule;
 DEFINE_STATIC_KEY_FALSE_RO(pkvm_guest);
 
-static int arm_smccc_do_one_page(u32 func_id, phys_addr_t phys)
+static int arm_smccc_do_range(u32 func_id, phys_addr_t phys, size_t size)
 {
-	phys_addr_t end = phys + PAGE_SIZE;
+	phys_addr_t end = phys + size;
 
-	while (phys < end) {
+	if (!IS_ALIGNED(phys | size, pkvm_granule))
+		return -EINVAL;
+
+	for (; phys < end; phys += pkvm_granule) {
 		struct arm_smccc_res res;
 
 		arm_smccc_1_1_invoke(func_id, phys, 0, 0, &res);
 		if (res.a0 != SMCCC_RET_SUCCESS)
 			return -EPERM;
-
-		phys += pkvm_granule;
-	}
-
-	return 0;
-}
-
-static int __set_memory_range(u32 func_id, unsigned long start, int numpages)
-{
-	void *addr = (void *)start, *end = addr + numpages * PAGE_SIZE;
-
-	while (addr < end) {
-		int err;
-
-		err = arm_smccc_do_one_page(func_id, virt_to_phys(addr));
-		if (err)
-			return err;
-
-		addr += PAGE_SIZE;
 	}
 
 	return 0;
@@ -56,14 +40,16 @@ static int __set_memory_range(u32 func_id, unsigned long start, int numpages)
 
 static int pkvm_set_memory_encrypted(unsigned long addr, int numpages)
 {
-	return __set_memory_range(ARM_SMCCC_VENDOR_HYP_KVM_MEM_UNSHARE_FUNC_ID,
-				  addr, numpages);
+	return arm_smccc_do_range(ARM_SMCCC_VENDOR_HYP_KVM_MEM_UNSHARE_FUNC_ID,
+				  virt_to_phys((void *)addr),
+				  numpages * PAGE_SIZE);
 }
 
 static int pkvm_set_memory_decrypted(unsigned long addr, int numpages)
 {
-	return __set_memory_range(ARM_SMCCC_VENDOR_HYP_KVM_MEM_SHARE_FUNC_ID,
-				  addr, numpages);
+	return arm_smccc_do_range(ARM_SMCCC_VENDOR_HYP_KVM_MEM_SHARE_FUNC_ID,
+				  virt_to_phys((void *)addr),
+				  numpages * PAGE_SIZE);
 }
 
 static const struct arm64_mem_crypt_ops pkvm_crypt_ops = {
@@ -90,7 +76,7 @@ static int mmio_guard_ioremap_hook(phys_addr_t phys, size_t size,
 	while (phys < end) {
 		const int func_id = ARM_SMCCC_VENDOR_HYP_KVM_MMIO_GUARD_FUNC_ID;
 
-		WARN_ON_ONCE(arm_smccc_do_one_page(func_id, phys));
+		WARN_ON_ONCE(arm_smccc_do_range(func_id, phys, PAGE_SIZE));
 		phys += PAGE_SIZE;
 	}
 
@@ -118,6 +104,8 @@ void __init pkvm_init_hyp_services(void)
 		return;
 
 	pkvm_granule = res.a0;
+	if (pkvm_granule > PAGE_SIZE)
+		pr_info("pKVM: sharing memory in %zu-byte granules\n", pkvm_granule);
 	arm64_mem_crypt_ops_register(&pkvm_crypt_ops);
 
 	if (kvm_arm_hyp_service_available(ARM_SMCCC_KVM_FUNC_MMIO_GUARD))
