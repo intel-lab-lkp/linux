@@ -56,12 +56,10 @@ struct hv_uio_private_data {
 	struct hv_device *device;
 	atomic_t refcnt;
 
-	void	*recv_buf;
-	struct vmbus_gpadl recv_gpadl;
+	struct vmbus_buffer recv_buffer;
 	char	recv_name[32];	/* "recv_4294967295" */
 
-	void	*send_buf;
-	struct vmbus_gpadl send_gpadl;
+	struct vmbus_buffer send_buffer;
 	char	send_name[32];
 };
 
@@ -197,19 +195,13 @@ hv_uio_new_channel(struct vmbus_channel *new_sc)
 static void
 hv_uio_cleanup(struct hv_device *dev, struct hv_uio_private_data *pdata)
 {
-	if (pdata->send_gpadl.gpadl_handle) {
-		if (vmbus_teardown_gpadl(dev->channel, &pdata->send_gpadl))
-			pdata->send_gpadl.leak = true;
-		if (!pdata->send_gpadl.leak && !pdata->send_gpadl.decrypted)
-			vfree(pdata->send_buf);
-	}
+	if (pdata->send_buffer.gpadl.gpadl_handle)
+		vmbus_teardown_gpadl(dev->channel, &pdata->send_buffer.gpadl);
+	vmbus_release_buffer(&pdata->send_buffer);
 
-	if (pdata->recv_gpadl.gpadl_handle) {
-		if (vmbus_teardown_gpadl(dev->channel, &pdata->recv_gpadl))
-			pdata->recv_gpadl.leak = true;
-		if (!pdata->recv_gpadl.leak && !pdata->recv_gpadl.decrypted)
-			vfree(pdata->recv_buf);
-	}
+	if (pdata->recv_buffer.gpadl.gpadl_handle)
+		vmbus_teardown_gpadl(dev->channel, &pdata->recv_buffer.gpadl);
+	vmbus_release_buffer(&pdata->recv_buffer);
 }
 
 /* VMBus primary channel is opened on first use */
@@ -306,48 +298,50 @@ hv_uio_probe(struct hv_device *dev,
 	pdata->info.mem[MON_PAGE_MAP].memtype = UIO_MEM_LOGICAL;
 
 	if (channel->device_id == HV_NIC) {
-		pdata->recv_buf = vzalloc(RECV_BUFFER_SIZE);
-		if (!pdata->recv_buf) {
+		pdata->recv_buffer.addr =
+			vzalloc(RECV_BUFFER_SIZE);
+		if (!pdata->recv_buffer.addr) {
 			ret = -ENOMEM;
 			goto fail_free_ring;
 		}
 
-		ret = vmbus_establish_gpadl(channel, pdata->recv_buf,
-					    RECV_BUFFER_SIZE, &pdata->recv_gpadl);
-		if (ret) {
-			if (!pdata->recv_gpadl.leak &&
-			    !pdata->recv_gpadl.decrypted)
-				vfree(pdata->recv_buf);
+		ret = vmbus_establish_gpadl(channel,
+					    pdata->recv_buffer.addr,
+					    RECV_BUFFER_SIZE,
+					    &pdata->recv_buffer.gpadl);
+		pdata->recv_buffer.leak |= pdata->recv_buffer.gpadl.leak;
+		if (ret)
 			goto fail_close;
-		}
 
 		/* put Global Physical Address Label in name */
 		snprintf(pdata->recv_name, sizeof(pdata->recv_name),
-			 "recv:%u", pdata->recv_gpadl.gpadl_handle);
+			 "recv:%u", pdata->recv_buffer.gpadl.gpadl_handle);
 		pdata->info.mem[RECV_BUF_MAP].name = pdata->recv_name;
-		pdata->info.mem[RECV_BUF_MAP].addr = (uintptr_t)pdata->recv_buf;
+		pdata->info.mem[RECV_BUF_MAP].addr =
+			(uintptr_t)pdata->recv_buffer.addr;
 		pdata->info.mem[RECV_BUF_MAP].size = RECV_BUFFER_SIZE;
 		pdata->info.mem[RECV_BUF_MAP].memtype = UIO_MEM_VIRTUAL;
 
-		pdata->send_buf = vzalloc(SEND_BUFFER_SIZE);
-		if (!pdata->send_buf) {
+		pdata->send_buffer.addr =
+			vzalloc(SEND_BUFFER_SIZE);
+		if (!pdata->send_buffer.addr) {
 			ret = -ENOMEM;
 			goto fail_close;
 		}
 
-		ret = vmbus_establish_gpadl(channel, pdata->send_buf,
-					    SEND_BUFFER_SIZE, &pdata->send_gpadl);
-		if (ret) {
-			if (!pdata->send_gpadl.leak &&
-			    !pdata->send_gpadl.decrypted)
-				vfree(pdata->send_buf);
+		ret = vmbus_establish_gpadl(channel,
+					    pdata->send_buffer.addr,
+					    SEND_BUFFER_SIZE,
+					    &pdata->send_buffer.gpadl);
+		pdata->send_buffer.leak |= pdata->send_buffer.gpadl.leak;
+		if (ret)
 			goto fail_close;
-		}
 
 		snprintf(pdata->send_name, sizeof(pdata->send_name),
-			 "send:%u", pdata->send_gpadl.gpadl_handle);
+			 "send:%u", pdata->send_buffer.gpadl.gpadl_handle);
 		pdata->info.mem[SEND_BUF_MAP].name = pdata->send_name;
-		pdata->info.mem[SEND_BUF_MAP].addr = (uintptr_t)pdata->send_buf;
+		pdata->info.mem[SEND_BUF_MAP].addr =
+			(uintptr_t)pdata->send_buffer.addr;
 		pdata->info.mem[SEND_BUF_MAP].size = SEND_BUFFER_SIZE;
 		pdata->info.mem[SEND_BUF_MAP].memtype = UIO_MEM_VIRTUAL;
 	}
