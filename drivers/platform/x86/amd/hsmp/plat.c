@@ -222,9 +222,18 @@ static void hsmp_pltdrv_release(void *data)
 	hsmp_pdev->sock = NULL;
 }
 
+static void hsmp_pltdrv_sock_devs_release(void *data)
+{
+	u16 i;
+
+	for (i = 0; i < hsmp_pdev->num_sockets; i++)
+		hsmp_sock_dev_unregister(&hsmp_pdev->sock[i]);
+}
+
 static int hsmp_pltdrv_probe(struct platform_device *pdev)
 {
 	int ret;
+	u16 i;
 
 	hsmp_pdev->sock = devm_kcalloc(&pdev->dev, hsmp_pdev->num_sockets,
 				       sizeof(*hsmp_pdev->sock),
@@ -251,6 +260,17 @@ static int hsmp_pltdrv_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to init HSMP mailbox\n");
 		return ret;
+	}
+
+	ret = devm_add_action_or_reset(&pdev->dev, hsmp_pltdrv_sock_devs_release, NULL);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < hsmp_pdev->num_sockets; i++) {
+		ret = hsmp_sock_dev_register(&hsmp_pdev->sock[i]);
+		if (ret)
+			dev_warn(&pdev->dev, "Failed to register HSMP socket%u device: %d\n",
+				 i, ret);
 	}
 
 	ret = hsmp_misc_register(&pdev->dev);

@@ -57,11 +57,16 @@ In-kernel integration:
 HSMP sysfs interface
 ====================
 
-The ACPI driver exposes its per socket sysfs files in a per socket
-directory created at /sys/devices/amd_hsmp/socket%d/.
+Both the ACPI and plat drivers expose the same set of per socket sysfs
+files in a per socket directory created at /sys/devices/amd_hsmp/socket%d/.
 
-For backward compatibility, the files are also available under
-/sys/devices/platform/AMDI0097:0X/.
+For backward compatibility, the files are also available at their
+historical locations:
+
+* ACPI driver: all the files of this section under
+  /sys/devices/platform/AMDI0097:0X/.
+* plat driver: metrics_bin only, under
+  /sys/devices/platform/amd_hsmp/socket%d/.
 
 1. Metrics table binary sysfs
 
@@ -69,8 +74,7 @@ AMD MI300A MCM provides GET_METRICS_TABLE message to retrieve
 most of the system management information from SMU in one go.
 
 The metrics table is made available as hexadecimal sysfs binary file
-under per socket sysfs directory created at
-/sys/devices/platform/amd_hsmp/socket%d/metrics_bin
+/sys/devices/amd_hsmp/socket%d/metrics_bin
 
 Note: lseek() is not supported as entire metrics table is read.
 
