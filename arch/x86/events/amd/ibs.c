@@ -580,8 +580,15 @@ static void perf_ibs_start(struct perf_event *event, int flags)
 	 * Doing so prevents a race condition in which an NMI due to other
 	 * source might accidentally activate the event before we enable
 	 * it ourselves.
+	 *
+	 * With IBS_CAPS_DIS, perf_ibs_disable_event() only sets CTL2[Dis]
+	 * and leaves the previous sample in CTL, so clear CTL explicitly.
+	 * Anything in CTL is stale, so it does not matter if this write
+	 * discards a late Val.
 	 */
 	perf_ibs_disable_event(perf_ibs, hwc, 0);
+	if (ibs_caps & IBS_CAPS_DIS)
+		wrmsrq(hwc->config_base, 0);
 
 	/*
 	 * Set STARTED before enabling the hardware, such that a subsequent NMI
