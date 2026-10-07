@@ -121,7 +121,9 @@ struct thread_struct {
 	unsigned long envcfg;
 	unsigned long sum;
 	u32 riscv_v_flags;
+#ifdef CONFIG_RISCV_ISA_V_VSTATE_CTRL
 	u32 vstate_ctrl;
+#endif
 	struct __riscv_v_ext_state vstate;
 	unsigned long align_ctl;
 	struct __riscv_v_ext_state kernel_vstate;
@@ -202,7 +204,7 @@ extern int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src
 
 extern unsigned long signal_minsigstksz __ro_after_init;
 
-#ifdef CONFIG_RISCV_ISA_V
+#ifdef CONFIG_RISCV_ISA_V_VSTATE_CTRL
 /* Userspace interface for PR_RISCV_V_{SET,GET}_VS prctl()s: */
 #define RISCV_V_SET_CONTROL(arg)	riscv_v_vstate_ctrl_set_current(arg)
 #define RISCV_V_GET_CONTROL()		riscv_v_vstate_ctrl_get_current()

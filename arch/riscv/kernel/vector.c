@@ -20,7 +20,9 @@
 #include <asm/ptrace.h>
 #include <asm/bug.h>
 
+#ifdef CONFIG_RISCV_ISA_V_VSTATE_CTRL
 static bool riscv_v_implicit_uacc = true;
+#endif
 static struct kmem_cache *riscv_v_user_cachep;
 #ifdef CONFIG_RISCV_ISA_V_PREEMPTIVE
 static struct kmem_cache *riscv_v_kernel_cachep;
@@ -144,6 +146,8 @@ void riscv_v_thread_free(struct task_struct *tsk)
 #endif
 }
 
+#ifdef CONFIG_RISCV_ISA_V_VSTATE_CTRL
+
 #define VSTATE_CTRL_GET_CUR(x) ((x) & PR_RISCV_V_VSTATE_CTRL_CUR_MASK)
 #define VSTATE_CTRL_GET_NEXT(x) (((x) & PR_RISCV_V_VSTATE_CTRL_NEXT_MASK) >> 2)
 #define VSTATE_CTRL_MAKE_NEXT(x) (((x) << 2) & PR_RISCV_V_VSTATE_CTRL_NEXT_MASK)
@@ -181,6 +185,8 @@ bool riscv_v_vstate_ctrl_user_allowed(void)
 	return riscv_v_ctrl_get_cur(current) == PR_RISCV_V_VSTATE_CTRL_ON;
 }
 EXPORT_SYMBOL_GPL(riscv_v_vstate_ctrl_user_allowed);
+
+#endif
 
 bool riscv_v_first_use_handler(struct pt_regs *regs)
 {
@@ -226,6 +232,8 @@ bool riscv_v_first_use_handler(struct pt_regs *regs)
 
 	return true;
 }
+
+#ifdef CONFIG_RISCV_ISA_V_VSTATE_CTRL
 
 void riscv_v_vstate_ctrl_init(struct task_struct *tsk)
 {
@@ -330,3 +338,5 @@ static int __init riscv_v_init(void)
 	return riscv_v_sysctl_init();
 }
 core_initcall(riscv_v_init);
+
+#endif

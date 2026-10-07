@@ -404,9 +404,6 @@ static inline void __switch_to_vector(struct task_struct *prev,
 	}
 }
 
-void riscv_v_vstate_ctrl_init(struct task_struct *tsk);
-bool riscv_v_vstate_ctrl_user_allowed(void);
-
 #else /* ! CONFIG_RISCV_ISA_V  */
 
 struct pt_regs;
@@ -418,7 +415,6 @@ static __always_inline bool has_xtheadvector_no_alternatives(void) { return fals
 static __always_inline bool has_xtheadvector(void) { return false; }
 static inline bool riscv_v_first_use_handler(struct pt_regs *regs) { return false; }
 static inline bool riscv_v_vstate_query(struct pt_regs *regs) { return false; }
-static inline bool riscv_v_vstate_ctrl_user_allowed(void) { return false; }
 #define riscv_v_vsize (0)
 #define riscv_v_vstate_discard(regs)		do {} while (0)
 #define riscv_v_vstate_save(vstate, regs)	do {} while (0)
@@ -434,6 +430,18 @@ static inline bool riscv_v_vstate_ctrl_user_allowed(void) { return false; }
 #define riscv_v_vstate_set_restore(task, regs)	do {} while (0)
 
 #endif /* CONFIG_RISCV_ISA_V */
+
+#ifdef CONFIG_RISCV_ISA_V_VSTATE_CTRL
+
+void riscv_v_vstate_ctrl_init(struct task_struct *tsk);
+bool riscv_v_vstate_ctrl_user_allowed(void);
+
+#else
+
+static inline void riscv_v_vstate_ctrl_init(struct task_struct *tsk) {}
+static inline bool riscv_v_vstate_ctrl_user_allowed(void) { return true; }
+
+#endif /* CONFIG_RISCV_ISA_V_VSTATE_CTRL */
 
 /*
  * Return the implementation's vlen value.
