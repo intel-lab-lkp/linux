@@ -59,6 +59,42 @@ void f2fs_cache_update_tag(struct f2fs_cached_block *entry,
 	spin_unlock_irqrestore(&cache->tree_lock, flags);
 }
 
+/*
+ * While checkpoint is disabled, checkpoint does not write back dirty node and
+ * meta caches, and the writeback thread is the only one that writes them. Tell
+ * whether there are as many dirty caches as f2fs_write_node_caches() and
+ * f2fs_write_meta_caches() collect before writing, so that the thread should
+ * write them now instead of every cache_wb_interval.
+ */
+static bool f2fs_cache_wb_needed(struct f2fs_sb_info *sbi)
+{
+	if (likely(!is_sbi_flag_set(sbi, SBI_CP_DISABLED)))
+		return false;
+
+	return get_nr_caches(sbi, F2FS_DIRTY_NODES) >=
+				nr_caches_to_collect(sbi, NODE) ||
+		get_nr_caches(sbi, F2FS_DIRTY_META) >=
+				nr_caches_to_collect(sbi, META);
+}
+
+static void f2fs_wake_cache_wb_thread(struct f2fs_sb_info *sbi)
+{
+	struct f2fs_cache_kthread *cache_thread = &sbi->cache_thread;
+
+	if (!f2fs_cache_wb_needed(sbi))
+		return;
+
+	/* pairs with smp_store_release() in f2fs_start_cache_wb_thread() */
+	if (!smp_load_acquire(&cache_thread->cache_wb_task))
+		return;
+
+	if (READ_ONCE(cache_thread->cache_wb_urgent))
+		return;
+
+	WRITE_ONCE(cache_thread->cache_wb_urgent, true);
+	wake_up(&cache_thread->cache_wb_wq);
+}
+
 bool f2fs_mark_cache_dirty(struct f2fs_cached_block *entry)
 {
 	struct f2fs_cached_block_list *cache = entry->cache;
@@ -79,6 +115,7 @@ bool f2fs_mark_cache_dirty(struct f2fs_cached_block *entry)
 		f2fs_cache_update_tag(entry, F2FS_CACHE_TAG_NONE,
 						F2FS_CACHE_TAG_DIRTY);
 		inc_cache_count(cache->sbi, type);
+		f2fs_wake_cache_wb_thread(cache->sbi);
 		return true;
 	}
 
@@ -657,10 +694,13 @@ static int f2fs_cache_writeback_kthread(void *data)
 
 	while (!kthread_should_stop()) {
 		unsigned int interval = cache_thread->cache_wb_interval;
+		s64 nr_dirty;
 
 		wait_event_freezable_timeout(*wq,
-				kthread_should_stop(),
+				kthread_should_stop() ||
+				READ_ONCE(cache_thread->cache_wb_urgent),
 				msecs_to_jiffies(interval));
+		WRITE_ONCE(cache_thread->cache_wb_urgent, false);
 
 		if (kthread_should_stop())
 			break;
@@ -677,10 +717,23 @@ static int f2fs_cache_writeback_kthread(void *data)
 		if (!sb_start_write_trylock(sbi->sb))
 			continue;
 
+		nr_dirty = get_nr_caches(sbi, F2FS_DIRTY_NODES) +
+				get_nr_caches(sbi, F2FS_DIRTY_META);
+
 		f2fs_write_meta_caches(sbi);
 		f2fs_write_node_caches(sbi);
 
 		sb_end_write(sbi->sb);
+
+		/*
+		 * Each round writes a limited number of caches. Go on without
+		 * waiting while there are still many dirty caches, as long as
+		 * this round wrote some of them.
+		 */
+		if (f2fs_cache_wb_needed(sbi) &&
+			get_nr_caches(sbi, F2FS_DIRTY_NODES) +
+			get_nr_caches(sbi, F2FS_DIRTY_META) < nr_dirty)
+			WRITE_ONCE(cache_thread->cache_wb_urgent, true);
 	}
 	return 0;
 }
@@ -697,6 +750,7 @@ int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi)
 
 	init_waitqueue_head(&cache_thread->cache_wb_wq);
 	cache_thread->cache_wb_interval = DEF_DIRTY_CACHE_TIMEOUT;
+	cache_thread->cache_wb_urgent = false;
 	snprintf(name, sizeof(name), "f2fs_writeback-%u:%u",
 			MAJOR(dev), MINOR(dev));
 
@@ -704,7 +758,8 @@ int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi)
 	if (IS_ERR(task))
 		return PTR_ERR(task);
 
-	cache_thread->cache_wb_task = task;
+	/* pairs with smp_load_acquire() in f2fs_wake_cache_wb_thread() */
+	smp_store_release(&cache_thread->cache_wb_task, task);
 	return 0;
 }
 

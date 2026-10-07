@@ -983,11 +983,8 @@ static inline bool sec_usage_check(struct f2fs_sb_info *sbi, unsigned int secno)
  * 512 blocks (2MB) * 8 for nodes, and
  * 256 blocks * 8 for meta are set.
  */
-static inline int nr_caches_to_skip(struct f2fs_sb_info *sbi, int type)
+static inline int nr_caches_to_collect(struct f2fs_sb_info *sbi, int type)
 {
-	if (bdi_wb_dirty_exceeded(sbi->sb->s_bdi))
-		return 0;
-
 	if (type == DATA)
 		return BLKS_PER_SEG(sbi);
 	else if (type == NODE)
@@ -996,6 +993,14 @@ static inline int nr_caches_to_skip(struct f2fs_sb_info *sbi, int type)
 		return 8 * BIO_MAX_VECS;
 	else
 		return 0;
+}
+
+static inline int nr_caches_to_skip(struct f2fs_sb_info *sbi, int type)
+{
+	if (bdi_wb_dirty_exceeded(sbi->sb->s_bdi))
+		return 0;
+
+	return nr_caches_to_collect(sbi, type);
 }
 
 /*

@@ -232,6 +232,7 @@ struct f2fs_cache_kthread {
 	struct task_struct *cache_wb_task;
 	wait_queue_head_t cache_wb_wq;
 	unsigned int cache_wb_interval;
+	bool cache_wb_urgent;		/* write back without waiting */
 };
 
 int f2fs_start_cache_wb_thread(struct f2fs_sb_info *sbi);
