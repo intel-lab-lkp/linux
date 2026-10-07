@@ -557,6 +557,8 @@ int hv_remove_ring_sysfs(struct vmbus_channel *channel);
  * These are shared with vmbus_buffer_test.c, which is built into the
  * hv_vmbus object alongside channel.c. They stay unexported.
  */
+bool vmbus_needs_shared_pages(bool hv_isolation, bool guest_mem_encrypted,
+			      bool confidential);
 int vmbus_buffer_round_size(u32 size, u32 *rounded_size);
 unsigned int vmbus_buffer_order(unsigned long remaining,
 				unsigned int max_order);

@@ -45,6 +45,13 @@ int vmbus_buffer_round_size(u32 size, u32 *rounded_size)
 	return 0;
 }
 
+bool
+vmbus_needs_shared_pages(bool hv_isolation, bool guest_mem_encrypted,
+			 bool confidential)
+{
+	return !confidential && (hv_isolation || guest_mem_encrypted);
+}
+
 unsigned int vmbus_buffer_order(unsigned long remaining,
 				unsigned int max_order)
 {
@@ -837,6 +844,8 @@ static void *__vmbus_alloc_buffer(struct vmbus_channel *channel,
 	unsigned long nr_pages;
 	unsigned long remaining;
 	unsigned long page_idx = 0;
+	bool hv_isolation;
+	bool guest_mem_encrypted;
 	struct page **chunks = NULL;
 	struct page **pages = NULL;
 	unsigned int order = MAX_PAGE_ORDER;
@@ -853,9 +862,12 @@ static void *__vmbus_alloc_buffer(struct vmbus_channel *channel,
 	nr_pages = rounded_size >> PAGE_SHIFT;
 	remaining = nr_pages;
 
+	hv_isolation = hv_is_isolation_supported();
+	guest_mem_encrypted = cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT);
+
 	/* If the buffer does not need to be decrypted, just use vzalloc() */
-	if ((!hv_is_isolation_supported() &&
-	     !cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT)) || confidential)
+	if (!vmbus_needs_shared_pages(hv_isolation, guest_mem_encrypted,
+				      confidential))
 		return vzalloc(rounded_size);
 
 	/* Worst case: every chunk is a single page. */

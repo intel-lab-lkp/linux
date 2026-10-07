@@ -38,6 +38,34 @@ static void vmbus_buffer_size_overflow_test(struct kunit *test)
 			(u32)(U32_MAX - PAGE_SIZE + 1));
 }
 
+static void vmbus_buffer_private_shared_selection_test(struct kunit *test)
+{
+	static const struct {
+		bool isolation;
+		bool encrypted;
+		bool confidential;
+		bool shared;
+	} cases[] = {
+		{ false, false, false, false },
+		{ false, false, true, false },
+		{ false, true, false, true },
+		{ false, true, true, false },
+		{ true, false, false, true },
+		{ true, false, true, false },
+		{ true, true, false, true },
+		{ true, true, true, false },
+	};
+	unsigned int i;
+
+	/* Either platform signal requires visibility; confidential stays private. */
+	for (i = 0; i < ARRAY_SIZE(cases); i++)
+		KUNIT_EXPECT_EQ(test,
+				vmbus_needs_shared_pages(cases[i].isolation,
+							 cases[i].encrypted,
+							 cases[i].confidential),
+				cases[i].shared);
+}
+
 static void vmbus_ring_fallback_order_zero_test(struct kunit *test)
 {
 	unsigned int order;
@@ -317,6 +345,7 @@ static void vmbus_buffer_order_zero_allocation_test(struct kunit *test)
 static struct kunit_case vmbus_buffer_test_cases[] = {
 	KUNIT_CASE(vmbus_buffer_size_rounding_test),
 	KUNIT_CASE(vmbus_buffer_size_overflow_test),
+	KUNIT_CASE(vmbus_buffer_private_shared_selection_test),
 	KUNIT_CASE(vmbus_ring_fallback_order_zero_test),
 	KUNIT_CASE(vmbus_buffer_failed_teardown_leaks_test),
 	KUNIT_CASE(vmbus_buffer_partial_allocation_cleanup_test),
