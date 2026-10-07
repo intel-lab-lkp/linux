@@ -3149,7 +3149,8 @@ void ext4_ext_release(struct super_block *sb)
 #endif
 }
 
-static void ext4_zeroout_es(struct inode *inode, struct ext4_extent *ex)
+static void ext4_zeroout_es(handle_t *handle, struct inode *inode,
+			    struct ext4_extent *ex)
 {
 	ext4_lblk_t  ee_block;
 	ext4_fsblk_t ee_pblock;
@@ -3164,6 +3165,12 @@ static void ext4_zeroout_es(struct inode *inode, struct ext4_extent *ex)
 
 	ext4_es_insert_extent(inode, ee_block, ee_len, ee_pblock,
 			      EXTENT_STATUS_WRITTEN, false);
+	/*
+	 * The zeroed out blocks became written together with the mapped
+	 * range, but ext4_map_blocks() reports only the mapped range to fast
+	 * commit.
+	 */
+	ext4_fc_track_range(handle, inode, ee_block, ee_block + ee_len - 1);
 }
 
 /* FIXME!! we need to try to merge to left or right after zero-out  */
@@ -3399,6 +3406,14 @@ static int ext4_split_extent_zeroout(handle_t *handle, struct inode *inode,
 	err = ext4_ext_dirty(handle, inode, path + depth);
 	if (err)
 		return err;
+
+	/*
+	 * The whole extent is written now, not only the range in @map that
+	 * ext4_map_blocks() reports to fast commit.
+	 */
+	if (flags & EXT4_GET_BLOCKS_CONVERT)
+		ext4_fc_track_range(handle, inode, ee_block,
+				    ee_block + ee_len - 1);
 
 	return 0;
 }
@@ -3790,8 +3805,8 @@ fallback:
 		return path;
 out:
 	/* If we have gotten a failure, don't zero out status tree */
-	ext4_zeroout_es(inode, &zero_ex1);
-	ext4_zeroout_es(inode, &zero_ex2);
+	ext4_zeroout_es(handle, inode, &zero_ex1);
+	ext4_zeroout_es(handle, inode, &zero_ex2);
 	return path;
 
 errout:
