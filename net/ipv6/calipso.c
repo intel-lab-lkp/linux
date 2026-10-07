@@ -1428,6 +1428,9 @@ static int calipso_skbuff_delattr(struct sk_buff *skb)
 		skb_pull(skb, delta);
 		memmove((char *)ip6_hdr + delta, ip6_hdr, size);
 		skb_reset_network_header(skb);
+		ip6_hdr = ipv6_hdr(skb);
+		ip6_hdr->payload_len =
+			htons(ntohs(ip6_hdr->payload_len) - delta);
 	}
 
 	return 0;
