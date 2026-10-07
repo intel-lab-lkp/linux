@@ -397,6 +397,62 @@ void iscsi_tcp_hdr_recv_prep(struct iscsi_tcp_conn *tcp_conn)
 }
 EXPORT_SYMBOL_GPL(iscsi_tcp_hdr_recv_prep);
 
+/**
+ * iscsi_tcp_check_data_in - verify a read received the data the target claimed
+ * @task: scsi command task
+ * @status: SCSI status of the PDU carrying the status
+ * @flags: flags of the PDU carrying the status
+ * @residual: residual count of that PDU
+ * @sense: sense data segment of that PDU, if it has one
+ * @senselen: length of @sense
+ *
+ * Check the payload only for a completion that reports the whole buffer as
+ * transferred.  That is SAM_STAT_GOOD, and also CHECK_CONDITION with a sense
+ * key of RECOVERED_ERROR, which sd_done() counts as fully transferred.  Any
+ * other status means the command failed and the data may legitimately be
+ * absent.
+ *
+ * ISCSI_FLAG_CMD_UNDERFLOW and ISCSI_FLAG_DATA_UNDERFLOW share a value, so the
+ * Data-In and SCSI Response paths both use this.
+ */
+static int iscsi_tcp_check_data_in(struct iscsi_task *task, u8 status,
+				   u32 flags, u32 residual,
+				   const void *sense, u32 senselen)
+{
+	struct iscsi_tcp_task *tcp_task = task->dd_data;
+	struct scsi_cmnd *sc = task->sc;
+	unsigned int expected;
+
+	if (!sc || sc->sc_data_direction == DMA_TO_DEVICE)
+		return 0;
+
+	if (status != SAM_STAT_GOOD) {
+		struct scsi_sense_hdr sshdr;
+		const u8 *s = sense;
+		u16 len;
+
+		if (status != SAM_STAT_CHECK_CONDITION || !s || senselen < 2)
+			return 0;
+		len = get_unaligned_be16(s);
+		if (len + 2U > senselen)
+			return 0;
+		if (!scsi_normalize_sense(s + 2, len, &sshdr) ||
+		    sshdr.sense_key != RECOVERED_ERROR)
+			return 0;
+	}
+
+	expected = sc->sdb.length;
+	if (flags & ISCSI_FLAG_DATA_UNDERFLOW) {
+		if (residual > expected)
+			return 0;
+		expected -= residual;
+	}
+	if (tcp_task->data_in_bytes == expected)
+		return 0;
+
+	return ISCSI_ERR_DATALEN;
+}
+
 /*
  * Handle incoming reply to any other type of command
  */
@@ -410,8 +466,30 @@ iscsi_tcp_data_recv_done(struct iscsi_tcp_conn *tcp_conn,
 	if (!iscsi_tcp_dgst_verify(tcp_conn, segment))
 		return ISCSI_ERR_DATA_DGST;
 
-	rc = iscsi_complete_pdu(conn, tcp_conn->in.hdr,
-			conn->data, tcp_conn->in.datalen);
+	if ((tcp_conn->in.hdr->opcode & ISCSI_OPCODE_MASK) ==
+	    ISCSI_OP_SCSI_CMD_RSP) {
+		struct iscsi_scsi_rsp *rsp =
+			(struct iscsi_scsi_rsp *)tcp_conn->in.hdr;
+		struct iscsi_task *task;
+
+		spin_lock(&conn->session->back_lock);
+		task = iscsi_itt_to_ctask(conn, rsp->itt);
+		if (!task) {
+			spin_unlock(&conn->session->back_lock);
+			return ISCSI_ERR_BAD_ITT;
+		}
+		rc = iscsi_tcp_check_data_in(task, rsp->cmd_status, rsp->flags,
+					     be32_to_cpu(rsp->residual_count),
+					     conn->data, tcp_conn->in.datalen);
+		if (!rc)
+			rc = __iscsi_complete_pdu(conn, tcp_conn->in.hdr,
+						  conn->data,
+						  tcp_conn->in.datalen);
+		spin_unlock(&conn->session->back_lock);
+	} else {
+		rc = iscsi_complete_pdu(conn, tcp_conn->in.hdr, conn->data,
+					tcp_conn->in.datalen);
+	}
 	if (rc)
 		return rc;
 
@@ -491,7 +569,7 @@ static int iscsi_tcp_data_in(struct iscsi_conn *conn, struct iscsi_task *task)
 		iscsi_update_cmdsn(conn->session, (struct iscsi_nopin*)rhdr);
 
 	if (tcp_conn->in.datalen == 0)
-		return 0;
+		goto status;
 
 	if (tcp_task->exp_datasn != datasn) {
 		ISCSI_DBG_TCP(conn, "task->exp_datasn(%d) != rhdr->datasn(%d)"
@@ -509,7 +587,19 @@ static int iscsi_tcp_data_in(struct iscsi_conn *conn, struct iscsi_task *task)
 		return ISCSI_ERR_DATA_OFFSET;
 	}
 
+	if (tcp_task->data_offset != tcp_task->data_in_bytes)
+		return ISCSI_ERR_DATA_OFFSET;
+
+	tcp_task->data_in_bytes += tcp_conn->in.datalen;
+
 	conn->datain_pdus_cnt++;
+
+status:
+	if (rhdr->flags & ISCSI_FLAG_DATA_STATUS)
+		return iscsi_tcp_check_data_in(task, rhdr->cmd_status,
+					       rhdr->flags,
+					       be32_to_cpu(rhdr->residual_count),
+					       NULL, 0);
 	return 0;
 }
 
@@ -783,6 +873,37 @@ iscsi_tcp_hdr_dissect(struct iscsi_conn *conn, struct iscsi_hdr *hdr)
 			break;
 		}
 
+		if (opcode == ISCSI_OP_SCSI_CMD_RSP) {
+			struct iscsi_scsi_rsp *rsp = (struct iscsi_scsi_rsp *)hdr;
+
+			spin_lock(&conn->session->back_lock);
+			task = iscsi_itt_to_ctask(conn, hdr->itt);
+			if (!task) {
+				spin_unlock(&conn->session->back_lock);
+				return ISCSI_ERR_BAD_ITT;
+			}
+			if (tcp_conn->in.datalen) {
+				/*
+				 * The sense is in the data segment, so the
+				 * check has to wait for it.
+				 */
+				spin_unlock(&conn->session->back_lock);
+				iscsi_tcp_data_recv_prep(tcp_conn);
+				return 0;
+			}
+			rc = iscsi_tcp_check_data_in(task, rsp->cmd_status,
+						     rsp->flags,
+						     be32_to_cpu(rsp->residual_count),
+						     NULL, 0);
+			if (rc) {
+				spin_unlock(&conn->session->back_lock);
+				return rc;
+			}
+			rc = __iscsi_complete_pdu(conn, hdr, NULL, 0);
+			spin_unlock(&conn->session->back_lock);
+			break;
+		}
+
 		/* If there's data coming in with the response,
 		 * receive it to the connection's buffer.
 		 */
@@ -995,6 +1116,7 @@ int iscsi_tcp_task_init(struct iscsi_task *task)
 
 	BUG_ON(kfifo_len(&tcp_task->r2tqueue));
 	tcp_task->exp_datasn = 0;
+	tcp_task->data_in_bytes = 0;
 
 	/* Prepare PDU, optionally w/ immediate data */
 	ISCSI_DBG_TCP(conn, "task deq [itt 0x%x imm %d unsol %d]\n",
