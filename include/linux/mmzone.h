@@ -1227,6 +1227,19 @@ static inline bool zone_spans_pfn(const struct zone *zone, unsigned long pfn)
 	return zone->zone_start_pfn <= pfn && pfn < zone_end_pfn(zone);
 }
 
+/*
+ * Whether the pageblock holding @pfn lies wholly inside @zone. Zone
+ * spans are not pageblock-aligned, so the edge pageblocks of a zone
+ * can straddle into the next zone; those never change type.
+ */
+static inline bool zone_spans_pageblock(const struct zone *zone, unsigned long pfn)
+{
+	unsigned long start = pageblock_start_pfn(pfn);
+
+	return zone->zone_start_pfn <= start &&
+	       start + pageblock_nr_pages <= zone_end_pfn(zone);
+}
+
 static inline bool zone_is_initialized(const struct zone *zone)
 {
 	return zone->initialized;
