@@ -8361,7 +8361,15 @@ int stmmac_resume(struct device *dev)
 	stmmac_free_tx_skbufs(priv);
 	stmmac_clear_descriptors(priv, &priv->dma_conf);
 
+	/* On dwmac1000 the MAC reset unmasks every core interrupt until the
+	 * mask is written again; we keep a pending status bit from storming.
+	 */
+	disable_irq(ndev->irq);
 	ret = stmmac_hw_setup(ndev);
+	/* A failed setup can stop before it writes the mask. */
+	if (ret < 0)
+		stmmac_mac_irq_modify(priv, ~0U, 0);
+	enable_irq(ndev->irq);
 	if (ret < 0) {
 		netdev_err(priv->dev, "%s: Hw setup failed\n", __func__);
 		stmmac_legacy_serdes_power_down(priv);
