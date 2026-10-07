@@ -463,9 +463,6 @@ static int ivpu_wait_for_ready(struct ivpu_device *vdev)
 	unsigned long timeout;
 	int ret;
 
-	if (ivpu_test_mode & IVPU_TEST_MODE_FW_TEST)
-		return 0;
-
 	ivpu_ipc_consumer_add(vdev, &cons, IVPU_IPC_CHAN_BOOT_MSG, NULL);
 
 	timeout = jiffies + msecs_to_jiffies(vdev->timeout.boot);
@@ -528,6 +525,9 @@ int ivpu_boot(struct ivpu_device *vdev)
 		ivpu_err(vdev, "Failed to start the firmware: %d\n", ret);
 		return ret;
 	}
+
+	if (ivpu_test_mode & IVPU_TEST_MODE_FW_TEST)
+		return 0;
 
 	ret = ivpu_wait_for_ready(vdev);
 	if (ret) {
