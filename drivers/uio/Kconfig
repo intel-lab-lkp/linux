@@ -148,6 +148,17 @@ config UIO_HV_GENERIC
 
 	  If you compile this as a module, it will be called uio_hv_generic.
 
+config UIO_HV_GENERIC_KUNIT_TEST
+	bool "Tests for the UIO Hyper-V generic mmap" if !KUNIT_ALL_TESTS
+	depends on UIO_HV_GENERIC && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit tests for the UIO Hyper-V generic mmap paths.
+	  The tests are included from uio_hv_generic.c so they can
+	  reach the static page-selection helpers. Select this option
+	  only if you will boot the kernel for the purpose of running
+	  unit tests (e.g. under UML or qemu). If unsure, say N.
+
 config UIO_DFL
 	tristate "Generic driver for DFL (Device Feature List) bus"
 	depends on FPGA_DFL

@@ -1929,6 +1929,7 @@ static int hv_mmap_ring_buffer_wrapper(struct file *filp, struct kobject *kobj,
 {
 	struct vmbus_channel *channel = container_of(kobj, struct vmbus_channel, kobj);
 	struct vm_area_desc desc;
+	struct vmbus_buffer_pin *pin;
 	int err;
 
 	/*
@@ -1940,8 +1941,54 @@ static int hv_mmap_ring_buffer_wrapper(struct file *filp, struct kobject *kobj,
 	if (err)
 		return err;
 
-	return __compat_vma_mmap(&desc, vma);
+	/*
+	 * This is a kernfs bin attribute. kernfs_fop_mmap() rejects a VMA
+	 * whose vm_ops carry .close, because kernfs has to replace the set
+	 * with its own and cannot wrap close. So the prepare callback has
+	 * to pick one of two ownership contracts, and this wrapper honors
+	 * whichever it installed. Each contract has exactly one release
+	 * site, reached on every outcome.
+	 *
+	 * With vm_ops, the callback handed the per-VMA state to an abandon
+	 * path in vm_ops->close and typically to vm_ops->mapped. Install
+	 * both before __compat_vma_mmap() so a failure in
+	 * mmap_action_prepare() still reaches close(): that path never runs
+	 * compat_set_vma_from_desc(), and the legacy .mmap error path frees
+	 * the VMA without calling close() on its own. __compat_vma_mmap()
+	 * installs the same values again on its way to the action. Note
+	 * that such a set is rejected by kernfs after this returns, so a
+	 * prepare callback that wants a successful mapping must not choose
+	 * this contract.
+	 *
+	 * Without vm_ops, desc.private_data is a plain struct
+	 * vmbus_buffer_pin and this wrapper is its only owner. Release it
+	 * when __compat_vma_mmap() returns: on success insert_pages() has
+	 * already taken a folio reference for every page the VMA maps, and
+	 * on failure the attempt is over. Clear vma->vm_private_data first
+	 * so the freed pin is never reachable from the VMA that outlives
+	 * this call.
+	 */
+	if (desc.vm_ops) {
+		vma->vm_ops = desc.vm_ops;
+		vma->vm_private_data = desc.private_data;
+
+		err = __compat_vma_mmap(&desc, vma);
+		if (err && vma->vm_ops && vma->vm_ops->close)
+			vma->vm_ops->close(vma);
+		return err;
+	}
+
+	pin = desc.private_data;
+	err = __compat_vma_mmap(&desc, vma);
+	vma->vm_private_data = NULL;
+	vmbus_buffer_unpin_pages(pin);
+	kfree(pin);
+	return err;
 }
+
+#if IS_ENABLED(CONFIG_HYPERV_VMBUS_KUNIT_TEST)
+#include "vmbus_mmap_test.c"
+#endif
 
 static struct bin_attribute chan_attr_ring_buffer = {
 	.attr = {

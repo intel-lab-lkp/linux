@@ -857,7 +857,27 @@ static int uio_mmap(struct file *filep, struct vm_area_struct *vma)
 		ret = idev->info->mmap_prepare(idev->info, &desc);
 		if (ret)
 			goto out;
+
+		/*
+		 * Install the per-VMA state before __compat_vma_mmap() so a
+		 * failure in mmap_action_prepare() still reaches close(). That
+		 * path never runs compat_set_vma_from_desc(), and the legacy
+		 * .mmap error path frees the VMA without calling close() on
+		 * its own. __compat_vma_mmap() installs the same values again
+		 * on its way to the action.
+		 *
+		 * close() must be safe to call without a prior mapped() when
+		 * it tears down state mmap_prepare() installed. Drivers that
+		 * leave vm_ops alone have nothing to tear down here.
+		 */
+		if (desc.vm_ops) {
+			vma->vm_ops = desc.vm_ops;
+			vma->vm_private_data = desc.private_data;
+		}
+
 		ret = __compat_vma_mmap(&desc, vma);
+		if (ret && vma->vm_ops && vma->vm_ops->close)
+			vma->vm_ops->close(vma);
 		goto out;
 	}
 

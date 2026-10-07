@@ -1248,6 +1248,30 @@ int vmbus_alloc_buffer_owned(struct vmbus_channel *channel,
 
 void vmbus_release_buffer(struct vmbus_buffer *buffer);
 
+/**
+ * struct vmbus_buffer_pin - locked snapshot of a buffer's mappable pages
+ * @pages: page array owned by the buffer
+ * @page_count: number of pages in @pages
+ * @decrypted: backing pages are in the decrypted (host-shared) state
+ *
+ * vmbus_buffer_pin_pages() fills every field under
+ * vmbus_buffer_owners_lock. A mapper reads only this snapshot and must
+ * not re-read the buffer descriptor afterwards: vmbus_release_buffer()
+ * clears the descriptor under that same lock while the pin still holds
+ * the pages alive, so a later descriptor read describes the cleared
+ * descriptor rather than the pages this mapper holds.
+ */
+struct vmbus_buffer_pin {
+	struct page **pages;
+	unsigned long page_count;
+	bool decrypted;
+};
+
+int vmbus_buffer_pin_pages(struct vmbus_buffer *buffer,
+			   struct vmbus_buffer_pin *pin);
+
+void vmbus_buffer_unpin_pages(struct vmbus_buffer_pin *pin);
+
 void vmbus_reset_channel_cb(struct vmbus_channel *channel);
 
 extern int vmbus_recvpacket(struct vmbus_channel *channel,

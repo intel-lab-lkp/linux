@@ -1145,6 +1145,98 @@ void vmbus_release_buffer(struct vmbus_buffer *buffer)
 }
 EXPORT_SYMBOL_GPL(vmbus_release_buffer);
 
+/**
+ * vmbus_buffer_pin_pages - snapshot a buffer's pages and hold references
+ * @buffer: buffer whose pages the caller is about to map
+ * @pin: out parameter filled entirely under the owners lock
+ *
+ * Take a reference on every page of @buffer and fill @pin with the page
+ * array, the page count and the mapping-protection state that describe
+ * them. The references close the window between the snapshot and the
+ * point where a new mapping holds its own: the reclaim worker refuses to
+ * free pages whose folio reference count is above one, and refuses to
+ * start at all once it has begun reclaiming. Call
+ * vmbus_buffer_unpin_pages() after the mapping holds its own references.
+ *
+ * Every field of @pin is read under vmbus_buffer_owners_lock so the
+ * caller never has to look at @buffer again. In particular @pin->decrypted
+ * is the protection state of the pages being pinned, not of whatever
+ * @buffer looks like after a concurrent vmbus_release_buffer() has
+ * cleared it.
+ *
+ * Return: 0 on success, -ENODEV if the pages are gone or reclaim
+ * has already taken ownership of them.
+ */
+int vmbus_buffer_pin_pages(struct vmbus_buffer *buffer,
+			   struct vmbus_buffer_pin *pin)
+{
+	struct vmbus_buffer_retained *owner;
+	u32 i;
+
+	/*
+	 * The owner and page array are published and cleared under
+	 * vmbus_buffer_owners_lock (see vmbus_release_buffer()). Reading
+	 * either outside that lock lets a concurrent release free the array
+	 * while this loop still walks it.
+	 */
+	mutex_lock(&vmbus_buffer_owners_lock);
+	owner = buffer->owner;
+	if (!buffer->pages || !buffer->page_cnt) {
+		mutex_unlock(&vmbus_buffer_owners_lock);
+		return -ENODEV;
+	}
+
+	if (owner && (owner->reclaiming || owner->permanent_leak)) {
+		mutex_unlock(&vmbus_buffer_owners_lock);
+		return -ENODEV;
+	}
+
+	for (i = 0; i < buffer->page_cnt; i++) {
+		if (WARN_ON_ONCE(!buffer->pages[i])) {
+			while (i--)
+				put_page(buffer->pages[i]);
+			mutex_unlock(&vmbus_buffer_owners_lock);
+			return -ENODEV;
+		}
+		get_page(buffer->pages[i]);
+	}
+
+	pin->pages = buffer->pages;
+	pin->page_count = buffer->page_cnt;
+	/*
+	 * Only the shared-page path populates the chunk array, and that is
+	 * the path that decrypts each chunk before mapping it. Read it here
+	 * so the protection state cannot disagree with the pages pinned.
+	 */
+	pin->decrypted = !!buffer->chunks;
+	mutex_unlock(&vmbus_buffer_owners_lock);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vmbus_buffer_pin_pages);
+
+/**
+ * vmbus_buffer_unpin_pages - drop references taken by vmbus_buffer_pin_pages
+ * @pin: pin filled by vmbus_buffer_pin_pages(), or NULL
+ *
+ * Idempotent: a pin that has already been released, or a NULL pin, is a
+ * no-op. Release is one-shot because a VMA can be established and then
+ * torn down, and the abandon path must not put the same pages twice.
+ */
+void vmbus_buffer_unpin_pages(struct vmbus_buffer_pin *pin)
+{
+	unsigned long i;
+
+	if (!pin || !pin->pages)
+		return;
+
+	for (i = 0; i < pin->page_count; i++)
+		put_page(pin->pages[i]);
+	pin->pages = NULL;
+	pin->page_count = 0;
+}
+EXPORT_SYMBOL_GPL(vmbus_buffer_unpin_pages);
+
 static struct page *vmbus_alloc_pages_node(void *context, int nid,
 					   gfp_t gfp,
 					   unsigned int order)

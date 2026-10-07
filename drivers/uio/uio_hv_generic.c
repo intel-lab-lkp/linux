@@ -25,6 +25,7 @@
 #include <linux/uio_driver.h>
 #include <linux/netdevice.h>
 #include <linux/if_ether.h>
+#include <linux/mm.h>
 #include <linux/skbuff.h>
 #include <linux/hyperv.h>
 #include <linux/vmalloc.h>
@@ -55,6 +56,8 @@ struct hv_uio_private_data {
 	struct uio_info info;
 	struct hv_device *device;
 	atomic_t refcnt;
+	struct page *int_pages[1];
+	struct page *monitor_pages[1];
 
 	struct vmbus_buffer recv_buffer;
 	char	recv_name[32];	/* "recv_4294967295" */
@@ -121,50 +124,309 @@ static void hv_uio_channel_cb(void *context)
 	uio_event_notify(&pdata->info);
 }
 
-/*
- * Callback from vmbus_event when channel is rescinded.
- * It is meant for rescind of primary channels only.
- */
-static void hv_uio_rescind(struct vmbus_channel *channel)
+/* Function used for mmap of the ring buffer sysfs interface. */
+static bool hv_uio_mmap_range_valid(unsigned long map_pages,
+				    pgoff_t offset,
+				    unsigned long pages)
 {
-	struct hv_device *hv_dev = channel->device_obj;
-	struct hv_uio_private_data *pdata = hv_get_drvdata(hv_dev);
-
-	/*
-	 * Turn off the interrupt file handle
-	 * Next read for event will return -EIO
-	 */
-	pdata->info.irq = 0;
-
-	/* Wake up reader */
-	uio_event_notify(&pdata->info);
-
-	/*
-	 * With rescind callback registered, rescind path will not unregister the device
-	 * from vmbus when the primary channel is rescinded.
-	 * Without it, rescind handling is incomplete and next onoffer msg does not come.
-	 * Unregister the device from vmbus here.
-	 */
-	vmbus_device_unregister(channel->device_obj);
+	return pages && offset < map_pages && pages <= map_pages - offset;
 }
 
-/* Function used for mmap of the ring buffer sysfs interface. */
-static int
-hv_uio_ring_mmap_prepare(struct vmbus_channel *channel, struct vm_area_desc *desc)
+struct hv_uio_mmap_region {
+	struct page **pages;
+	unsigned long page_count;
+	struct vmbus_buffer *buffer;
+	bool decrypted;
+};
+
+static int hv_uio_mmap_get_region(struct hv_uio_private_data *pdata,
+				  unsigned int map_index,
+				  struct hv_uio_mmap_region *region)
 {
-	unsigned long pages = vma_desc_pages(desc);
+	struct hv_device *dev = pdata->device;
+	struct vmbus_channel *channel = dev->channel;
+
+	if (map_index >= MAX_UIO_MAPS || !pdata->info.mem[map_index].size)
+		return -EINVAL;
+
+	/*
+	 * Buffer-backed regions are not described here. Their page array
+	 * and protection state are only meaningful as the locked snapshot
+	 * from vmbus_buffer_pin_pages(): reading the descriptor outside
+	 * that lock can describe a buffer a concurrent release has already
+	 * cleared. Only the owning buffer is selected at this stage.
+	 */
+	region->buffer = NULL;
+	region->pages = NULL;
+	region->page_count = 0;
+	region->decrypted = false;
+
+	switch (map_index) {
+	case TXRX_RING_MAP:
+		if (channel->state != CHANNEL_OPENED_STATE)
+			return -ENODEV;
+		region->buffer = &channel->ringbuffer;
+		return 0;
+	case INT_PAGE_MAP:
+		region->pages = pdata->int_pages;
+		region->page_count = ARRAY_SIZE(pdata->int_pages);
+		region->decrypted = false;
+		break;
+	case MON_PAGE_MAP:
+		region->pages = pdata->monitor_pages;
+		region->page_count = ARRAY_SIZE(pdata->monitor_pages);
+		region->decrypted = true;
+		break;
+	case RECV_BUF_MAP:
+		region->buffer = &pdata->recv_buffer;
+		return 0;
+	case SEND_BUF_MAP:
+		region->buffer = &pdata->send_buffer;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+
+	if (!region->pages || !region->page_count)
+		return -EINVAL;
+
+	return 0;
+}
+
+static int hv_uio_mmap_prepare_pages(struct vm_area_desc *desc,
+				     struct page **pages,
+				     unsigned long page_count,
+				     pgoff_t offset,
+				     bool decrypted)
+{
+	unsigned long nr_pages = vma_desc_pages(desc);
+
+	if (!vma_desc_test(desc, VMA_SHARED_BIT))
+		return -EINVAL;
+
+	if (!pages || !hv_uio_mmap_range_valid(page_count, offset, nr_pages))
+		return -EINVAL;
+
+	vma_desc_set_flags(desc, VMA_DONTEXPAND_BIT, VMA_DONTDUMP_BIT);
+	if (decrypted)
+		desc->page_prot = pgprot_decrypted(desc->page_prot);
+
+	mmap_action_map_kernel_pages(desc, desc->start, pages + offset,
+				     nr_pages);
+	return 0;
+}
+
+/*
+ * mmap_action_map_kernel_pages() only stores the page-array pointer. The
+ * mapping takes its own folio references inside insert_pages(), which runs
+ * after the prepare callback has returned. Dropping the pin therefore has
+ * to wait for the VMA to be established (mapped) or for the attempt to be
+ * abandoned. Release is one-shot: the establish and abandon paths can both
+ * be reached for the same attempt.
+ *
+ * Two surfaces, two ownership contracts. /dev/uioN is a character device,
+ * so kernfs is not in the path and vm_ops->close is a legal abandon path.
+ * The sysfs "ring" bin attribute is kernfs: fs/kernfs/file.c rejects any
+ * VMA whose vm_ops carry .close, because kernfs has to wrap the operations
+ * and cannot wrap close. That surface installs no vm_ops at all and its
+ * synchronous legacy .mmap wrapper owns the pin for the whole window.
+ */
+#define HV_UIO_PIN_MAGIC 0x48565049UL /* "HVPI" */
+
+struct hv_uio_pin {
+	unsigned long magic;
+	struct vmbus_buffer_pin snap;
+};
+
+static void hv_uio_pin_release(void *data)
+{
+	struct hv_uio_pin *pin = data;
+
+	if (!pin)
+		return;
+	/*
+	 * close() can be reached with a private_data that this driver did
+	 * not install. A foreign pointer must not be freed or unpinned.
+	 */
+	if (pin->magic != HV_UIO_PIN_MAGIC)
+		return;
+	pin->magic = 0;
+	vmbus_buffer_unpin_pages(&pin->snap);
+	kfree(pin);
+}
+
+static int hv_uio_pin_vma_mapped(unsigned long start, unsigned long end,
+				 pgoff_t pgoff, const struct file *file,
+				 void **vm_private_data)
+{
+	/*
+	 * insert_pages() has taken a folio reference for every page the
+	 * VMA now maps, so the reclaim worker can no longer free them
+	 * under the mapping. The bridge pin is done.
+	 */
+	hv_uio_pin_release(*vm_private_data);
+	*vm_private_data = NULL;
+	return 0;
+}
+
+static void hv_uio_pin_vma_close(struct vm_area_struct *vma)
+{
+	/*
+	 * Reached with the pin still held when the VMA is torn down before
+	 * mapped() ran (an insert_pages() failure, or a merge that never
+	 * calls mapped), and with nothing left to do when it already ran.
+	 */
+	hv_uio_pin_release(vma->vm_private_data);
+	vma->vm_private_data = NULL;
+}
+
+/*
+ * Character-device surface only. The sysfs ring must never adopt this set:
+ * see the kernfs contract above.
+ */
+static const struct vm_operations_struct hv_uio_pin_vm_ops = {
+	.mapped = hv_uio_pin_vma_mapped,
+	.close = hv_uio_pin_vma_close,
+};
+
+/*
+ * Install @snap as the VMA's per-mapping state under @ops. Consumes @snap:
+ * returns 0 with the pin owned by @desc and @snap cleared, or -ENOMEM with
+ * the references dropped here. The caller must not drop the references on
+ * the success path: mapped() and close() own them from here.
+ */
+static int hv_uio_pin_install(struct vm_area_desc *desc,
+			      const struct vm_operations_struct *ops,
+			      struct vmbus_buffer_pin *snap)
+{
+	struct hv_uio_pin *pin;
+
+	pin = kzalloc_obj(*pin);
+	if (!pin) {
+		vmbus_buffer_unpin_pages(snap);
+		return -ENOMEM;
+	}
+	pin->magic = HV_UIO_PIN_MAGIC;
+	pin->snap = *snap;
+	snap->pages = NULL;
+	snap->page_count = 0;
+
+	desc->vm_ops = ops;
+	desc->private_data = pin;
+	return 0;
+}
+
+static int hv_uio_mmap_prepare(struct uio_info *info,
+			       struct vm_area_desc *desc)
+{
+	struct hv_uio_private_data *pdata = info->priv;
+	struct hv_uio_mmap_region region;
+	struct vmbus_buffer_pin pin = {};
+	struct page **pages;
+	unsigned long page_count;
+	bool decrypted;
+	int ret;
+
+	/* UIO encodes the map index in pgoff; mmap offsets start at the map. */
+	if (desc->pgoff >= MAX_UIO_MAPS)
+		return -EINVAL;
+
+	ret = hv_uio_mmap_get_region(pdata, desc->pgoff, &region);
+	if (ret)
+		return ret;
+
+	/*
+	 * Buffer-backed maps race with the reclaim worker: the page
+	 * array and the pages themselves can be freed between the
+	 * selection above and the mapping below. Hold references until
+	 * the VMA holds its own. The pin is also the only safe source of
+	 * the protection state: it is taken in the same critical section
+	 * that reads the page array.
+	 */
+	if (region.buffer) {
+		ret = vmbus_buffer_pin_pages(region.buffer, &pin);
+		if (ret)
+			return ret;
+		pages = pin.pages;
+		page_count = pin.page_count;
+		decrypted = pin.decrypted;
+	} else {
+		pages = region.pages;
+		page_count = region.page_count;
+		decrypted = region.decrypted;
+	}
+
+	ret = hv_uio_mmap_prepare_pages(desc, pages, page_count, 0, decrypted);
+	if (ret) {
+		if (region.buffer)
+			vmbus_buffer_unpin_pages(&pin);
+		return ret;
+	}
+
+	if (!region.buffer)
+		return 0;
+
+	return hv_uio_pin_install(desc, &hv_uio_pin_vm_ops, &pin);
+}
+
+static int
+hv_uio_ring_mmap_prepare(struct vmbus_channel *channel,
+			 struct vm_area_desc *desc)
+{
+	struct vmbus_buffer *buffer = &channel->ringbuffer;
+	struct vmbus_buffer_pin *pin;
 	pgoff_t offset = desc->pgoff;
+	int ret;
 
 	if (channel->state != CHANNEL_OPENED_STATE)
 		return -ENODEV;
-	if (offset >= channel->ringbuffer_pagecount ||
-	    pages > channel->ringbuffer_pagecount - offset)
-		return -EINVAL;
 
-	mmap_action_map_kernel_pages(desc, desc->start,
-				     channel->ringbuffer.pages + offset, pages);
+	pin = kzalloc_obj(*pin);
+	if (!pin)
+		return -ENOMEM;
+
+	ret = vmbus_buffer_pin_pages(buffer, pin);
+	if (ret) {
+		kfree(pin);
+		return ret;
+	}
+
+	ret = hv_uio_mmap_prepare_pages(desc, pin->pages, pin->page_count,
+					offset, pin->decrypted);
+	if (ret) {
+		vmbus_buffer_unpin_pages(pin);
+		kfree(pin);
+		return ret;
+	}
+
+	/*
+	 * Install no vm_ops. kernfs_fop_mmap() returns -EINVAL for a VMA
+	 * whose vm_ops carry .close, and a successful mapping still has to
+	 * survive that check, so this surface cannot carry an abandon path
+	 * in vm_ops at all. The caller is hv_mmap_ring_buffer_wrapper(),
+	 * a synchronous legacy .mmap: it holds @pin across
+	 * __compat_vma_mmap() and frees it when that returns, exactly once,
+	 * on every outcome. desc->private_data is a plain
+	 * struct vmbus_buffer_pin for that wrapper to release.
+	 */
+	desc->vm_ops = NULL;
+	desc->private_data = pin;
 	return 0;
 }
+
+/* Caller has withdrawn UIO callbacks before removing its backing memory. */
+static int hv_uio_disconnect_if_open(struct vmbus_channel *channel,
+				     int (*disconnect)(struct vmbus_channel *))
+{
+	if (channel->state != CHANNEL_OPENED_STATE)
+		return 0;
+
+	return disconnect(channel);
+}
+
+#if defined(CONFIG_UIO_HV_GENERIC_KUNIT_TEST)
+#include "uio_hv_generic_mmap_test.c"
+#endif
 
 /* Callback from VMBUS subsystem when new channel created. */
 static void
@@ -216,7 +478,6 @@ hv_uio_open(struct uio_info *info, struct inode *inode)
 	if (atomic_inc_return(&pdata->refcnt) != 1)
 		return 0;
 
-	vmbus_set_chn_rescind_callback(dev->channel, hv_uio_rescind);
 	vmbus_set_sc_create_callback(dev->channel, hv_uio_new_channel);
 
 	ret = vmbus_connect_ring(dev->channel,
@@ -272,6 +533,7 @@ hv_uio_probe(struct hv_device *dev,
 	pdata->info.name = "uio_hv_generic";
 	pdata->info.version = DRIVER_VERSION;
 	pdata->info.irqcontrol = hv_uio_irqcontrol;
+	pdata->info.mmap_prepare = hv_uio_mmap_prepare;
 	pdata->info.open = hv_uio_open;
 	pdata->info.release = hv_uio_release;
 	pdata->info.irq = UIO_IRQ_CUSTOM;
@@ -290,12 +552,15 @@ hv_uio_probe(struct hv_device *dev,
 		= (uintptr_t)vmbus_connection.int_page;
 	pdata->info.mem[INT_PAGE_MAP].size = HV_HYP_PAGE_SIZE;
 	pdata->info.mem[INT_PAGE_MAP].memtype = UIO_MEM_LOGICAL;
+	pdata->int_pages[0] = virt_to_page(vmbus_connection.int_page);
 
 	pdata->info.mem[MON_PAGE_MAP].name = "monitor_page";
 	pdata->info.mem[MON_PAGE_MAP].addr
 		= (uintptr_t)vmbus_connection.monitor_pages[1];
 	pdata->info.mem[MON_PAGE_MAP].size = HV_HYP_PAGE_SIZE;
 	pdata->info.mem[MON_PAGE_MAP].memtype = UIO_MEM_LOGICAL;
+	pdata->monitor_pages[0] =
+		virt_to_page(vmbus_connection.monitor_pages[1]);
 
 	if (channel->device_id == HV_NIC) {
 		ret = vmbus_alloc_buffer_owned(channel, RECV_BUFFER_SIZE, false,
@@ -372,12 +637,20 @@ static void
 hv_uio_remove(struct hv_device *dev)
 {
 	struct hv_uio_private_data *pdata = hv_get_drvdata(dev);
+	int ret;
 
 	if (!pdata)
 		return;
 
 	hv_remove_ring_sysfs(dev->channel);
+	/* Keep event notification alive until channel callbacks are stopped. */
+	get_device(&pdata->info.uio_dev->dev);
 	uio_unregister_device(&pdata->info);
+	/* unregister prevents the eventual fd close from calling .release. */
+	ret = hv_uio_disconnect_if_open(dev->channel, vmbus_disconnect_ring);
+	if (ret)
+		dev_err(&dev->device, "channel disconnect failed: %d\n", ret);
+	put_device(&pdata->info.uio_dev->dev);
 	hv_uio_cleanup(dev, pdata);
 
 	vmbus_free_ring(dev->channel);
