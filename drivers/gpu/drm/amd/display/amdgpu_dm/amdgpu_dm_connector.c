@@ -3813,8 +3813,8 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 		  (sink->sink_signal == SIGNAL_TYPE_HDMI_TYPE_A ||
 		   sink->sink_signal == SIGNAL_TYPE_HDMI_FRL)) {
 		has_vsdb = get_amd_vsdb(amdgpu_dm_connector, &vsdb_info);
+		amdgpu_dm_connector->vsdb_info = vsdb_info;
 		if (has_vsdb) {
-			amdgpu_dm_connector->vsdb_info = vsdb_info;
 			sink->edid_caps.freesync_vcp_code = vsdb_info.freesync_mccs_vcp_code;
 
 			if (vsdb_info.freesync_supported) {
