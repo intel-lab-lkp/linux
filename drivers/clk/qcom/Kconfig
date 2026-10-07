@@ -599,6 +599,15 @@ config IPQ_APSS_6018
 	  Say Y if you want to support CPU frequency scaling on
 	  ipq based devices.
 
+config IPQ_APSS_9650
+	tristate "IPQ9650 APSS Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	default y if IPQ_GCC_9650
+	help
+	  Support for APSS Clock controller on Qualcomm IPQ9650 platform.
+	  Say Y if you want to support CPU frequency scaling on IPQ9650 based
+	  devices.
+
 config IPQ_CMN_PLL
 	tristate "IPQ CMN PLL Clock Controller"
 	depends on ARM64 || COMPILE_TEST
