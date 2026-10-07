@@ -8,16 +8,16 @@
  */
 
 #include <linux/clk.h>
-#include <linux/interrupt.h>
 #include <linux/clockchips.h>
 #include <linux/clocksource.h>
-#include <linux/of_address.h>
-#include <linux/of_irq.h>
-#include <linux/platform_device.h>
-#include <linux/slab.h>
-#include <linux/sched_clock.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/of_irq.h>
 #include <linux/of_platform.h>
+#include <linux/platform_device.h>
+#include <linux/property.h>
+#include <linux/sched_clock.h>
+#include <linux/slab.h>
 #include <linux/timer-cadence-ttc.h>
 
 /*
@@ -463,37 +463,42 @@ out_kfree:
 	return err;
 }
 
+static int ttc_init_common(struct platform_device *pdev,
+			   void __iomem **base, u32 *timer_width)
+{
+	*base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(*base))
+		return PTR_ERR(*base);
+
+	*timer_width = TTC_DEFAULT_TIMER_WIDTH;
+	device_property_read_u32(&pdev->dev, "timer-width", timer_width);
+
+	return 0;
+}
+
 static int ttc_timer_probe(struct platform_device *pdev)
 {
-	unsigned int irq;
+	struct device_node *timer = pdev->dev.of_node;
 	void __iomem *timer_baseaddr;
 	struct clk *clk_cs, *clk_ce;
 	static int initialized;
+	unsigned int irq;
+	u32 timer_width;
 	int clksel, ret;
-	u32 timer_width = 16;
-	struct device_node *timer = pdev->dev.of_node;
 
 	if (initialized)
 		return 0;
 
-	/*
-	 * Get the 1st Triple Timer Counter (TTC) block from the device tree
-	 * and use it. Note that the event timer uses the interrupt and it's the
-	 * 2nd TTC hence the irq_of_parse_and_map(,1)
-	 */
-	timer_baseaddr = devm_of_iomap(&pdev->dev, timer, 0, NULL);
-	if (IS_ERR(timer_baseaddr)) {
-		pr_err("ERROR: invalid timer base address\n");
-		return PTR_ERR(timer_baseaddr);
-	}
+	ret = ttc_init_common(pdev, &timer_baseaddr, &timer_width);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "failed to map timer registers\n");
 
 	irq = irq_of_parse_and_map(timer, 1);
 	if (irq <= 0) {
 		pr_err("ERROR: invalid interrupt number\n");
 		return -EINVAL;
 	}
-
-	of_property_read_u32(timer, "timer-width", &timer_width);
 
 	clksel = readl_relaxed(timer_baseaddr + TTC_CLK_CNTRL_OFFSET);
 	clksel = !!(clksel & TTC_CLK_CNTRL_CSRC_MASK);
@@ -503,7 +508,7 @@ static int ttc_timer_probe(struct platform_device *pdev)
 		return PTR_ERR(clk_cs);
 	}
 
-	clksel = readl_relaxed(timer_baseaddr + 4 + TTC_CLK_CNTRL_OFFSET);
+	clksel = readl_relaxed(timer_baseaddr + TTC_CH_OFFSET + TTC_CLK_CNTRL_OFFSET);
 	clksel = !!(clksel & TTC_CLK_CNTRL_CSRC_MASK);
 	clk_ce = of_clk_get(timer, clksel);
 	if (IS_ERR(clk_ce)) {
@@ -516,7 +521,7 @@ static int ttc_timer_probe(struct platform_device *pdev)
 	if (ret)
 		goto put_clk_ce;
 
-	ret = ttc_setup_clockevent(clk_ce, timer_baseaddr + 4, irq);
+	ret = ttc_setup_clockevent(clk_ce, timer_baseaddr + TTC_CH_OFFSET, irq);
 	if (ret)
 		goto put_clk_ce;
 

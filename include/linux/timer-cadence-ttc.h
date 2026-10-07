@@ -11,6 +11,11 @@
 
 #include <linux/bits.h>
 
+#define TTC_DEFAULT_TIMER_WIDTH		16
+
+/* Per-channel register offset stride */
+#define TTC_CH_OFFSET			0x04
+
 /* Timer Register Offset Definitions of Timer 1 */
 #define TTC_CLK_CNTRL_OFFSET		0x00 /* Clock Control Reg, RW */
 #define TTC_CNT_CNTRL_OFFSET		0x0C /* Counter Control Reg, RW */
