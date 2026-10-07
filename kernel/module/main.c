@@ -655,6 +655,7 @@ static int module_unload_init(struct module *mod)
 	 * refcnt == 0 means module is going.
 	 */
 	atomic_set(&mod->refcnt, MODULE_REF_BASE);
+	init_completion(&mod->refs_gone);
 
 	INIT_LIST_HEAD(&mod->source_list);
 	INIT_LIST_HEAD(&mod->target_list);
@@ -956,6 +957,14 @@ void module_put(struct module *module)
 		ret = atomic_dec_if_positive(&module->refcnt);
 		WARN_ON(ret < 0);	/* Failed to put refcount */
 		trace_module_put(module, _RET_IP_);
+		/*
+		 * If refcnt just dropped to MODULE_REF_BASE and the module is going
+		 * away due to an init failure, all external references are gone. Wake
+		 * any thread waiting in the init-failure drain path.
+		 */
+		if (ret == MODULE_REF_BASE &&
+		    module->state == MODULE_STATE_GOING)
+			complete(&module->refs_gone);
 	}
 }
 EXPORT_SYMBOL(module_put);
@@ -3206,16 +3215,36 @@ static noinline int do_init_module(struct module *mod)
 fail_free_freeinit:
 	kfree(freeinit);
 fail:
-	/* Try to protect us from buggy refcounters. */
 	mod->state = MODULE_STATE_GOING;
 	synchronize_rcu();
+
+	/*
+	 * Unblock concurrent loaders waiting in module_patient_check_exists() on
+	 * module_wq. finished_loading() returns true once state is GOING, so they
+	 * can now proceed. Do this before the drain below so a failed init delays
+	 * only this task, not every other loader that raced to load the same
+	 * module.
+	 */
+	wake_up_all(&module_wq);
+
+	/* Drop the loader's own reference taken in module_unload_init(). */
 	module_put(mod);
+
+#ifdef CONFIG_MODULE_UNLOAD
+	/*
+	 * Wait for all external references taken before MODULE_STATE_GOING became
+	 * visible to be released. module_put() completes refs_gone when refcnt
+	 * drops to MODULE_REF_BASE. The hung-task detector will catch any module
+	 * whose error path leaks a reference.
+	 */
+	wait_for_completion(&mod->refs_gone);
+#endif
+
 	blocking_notifier_call_chain(&module_notify_list,
 				     MODULE_STATE_GOING, mod);
 	klp_module_going(mod);
 	ftrace_release_mod(mod);
 	free_module(mod);
-	wake_up_all(&module_wq);
 
 	return ret;
 }

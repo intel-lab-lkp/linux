@@ -562,6 +562,8 @@ struct module {
 	void (*exit)(void);
 
 	atomic_t refcnt;
+	/* Completed when refcnt drops to MODULE_REF_BASE on init failure. */
+	struct completion refs_gone;
 #endif
 
 #ifdef CONFIG_CONSTRUCTORS
