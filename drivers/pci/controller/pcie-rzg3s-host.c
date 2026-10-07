@@ -33,6 +33,7 @@
 #include <linux/reset.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/units.h>
 
 #include "pci-host-common.h"
@@ -86,6 +87,7 @@
 #define RZG3S_PCI_MSGRCVIS_MRI			BIT(24)
 
 #define RZG3S_PCI_PEIE0				0x200
+#define RZG3S_PCI_PEIE0_DL_UPDOWN		BIT(9)
 
 #define RZG3S_PCI_PEIS0				0x204
 #define RZG3S_PCI_PEIS0_RX_DLLP_PM_ENTER	BIT(12)
@@ -323,9 +325,16 @@ struct rzg3s_pcie_port {
  * @msi: MSI data structure
  * @port: PCIe Root Port
  * @hw_lock: lock for access to the HW resources
+ * @pm_nb: PM notifier block (for link events)
+ * @con_dev_dsn: Device Serial Number for the connected device, used to
+ * determine whether a hotplugged device was replaced with a different one
+ * during system sleep
+ * @event_irq: PCIe event interrupt for DL_UpDown detection
  * @intx_irqs: INTx interrupts
  * @max_link_speed: maximum supported link speed
  * @controller_id: PCIe controller identifier, used for System Controller access
+ * @link_rescan: The PCIe link rescan state
+ * @started: The PCIe controller state (started or not)
  * @num_lanes: The number of lanes
  */
 struct rzg3s_pcie_host {
@@ -340,9 +349,14 @@ struct rzg3s_pcie_host {
 	struct rzg3s_pcie_msi msi;
 	struct rzg3s_pcie_port port;
 	raw_spinlock_t hw_lock;
+	struct notifier_block pm_nb;
+	u64 con_dev_dsn;
+	int event_irq;
 	int intx_irqs[PCI_NUM_INTX];
 	int max_link_speed;
 	enum rzg3s_pcie_controller_id controller_id;
+	bool link_rescan;
+	bool started;
 	u8 num_lanes;
 };
 
@@ -1105,11 +1119,187 @@ static int rzg3s_pcie_wait_for_link_up(struct rzg3s_pcie_host *host)
 				 PCIE_LINK_WAIT_SLEEP_MS * MILLI,
 				 PCIE_LINK_WAIT_SLEEP_MS * MILLI *
 				 PCIE_LINK_WAIT_MAX_RETRIES);
-	if (ret)
-		return ret;
+	if (ret) {
+		dev_info(host->dev,
+			 "PCIe link down, waiting for DL_UpDown\n");
+	}
 
 	val = readl_relaxed(host->axi + RZG3S_PCI_PCSTAT2);
 	dev_info(host->dev, "PCIe link status [0x%x]\n", val);
+
+	return ret;
+}
+
+static struct pci_dev
+*rzg3s_pcie_get_connected_dev(struct rzg3s_pcie_host *host)
+{
+	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(host);
+	struct pci_dev *port __free(pci_dev_put) =
+		pci_get_slot(bridge->bus, PCI_DEVFN(0, 0));
+
+	if (!port || !port->subordinate)
+		return NULL;
+
+	return pci_get_slot(port->subordinate, PCI_DEVFN(0, 0));
+}
+
+static void rzg3s_pcie_cache_connected_dev_id(struct rzg3s_pcie_host *host)
+{
+	struct pci_dev *con_dev __free(pci_dev_put) =
+		rzg3s_pcie_get_connected_dev(host);
+
+	host->con_dev_dsn = con_dev ? pci_get_dsn(con_dev) : 0;
+}
+
+static bool rzg3s_pcie_device_replaced(struct rzg3s_pcie_host *host)
+{
+	struct pci_dev *con_dev __free(pci_dev_put) =
+		rzg3s_pcie_get_connected_dev(host);
+	u32 reg;
+
+	if (!con_dev)
+		return true;
+
+	if (pci_read_config_dword(con_dev, PCI_VENDOR_ID, &reg) ||
+	    reg != (con_dev->vendor | (con_dev->device << 16)) ||
+	    pci_read_config_dword(con_dev, PCI_CLASS_REVISION, &reg) ||
+	    reg != (con_dev->revision | (con_dev->class << 8)))
+		return true;
+
+	if (con_dev->hdr_type == PCI_HEADER_TYPE_NORMAL &&
+	    (pci_read_config_dword(con_dev, PCI_SUBSYSTEM_VENDOR_ID, &reg) ||
+	     reg != (con_dev->subsystem_vendor |
+		     (con_dev->subsystem_device << 16))))
+		return true;
+
+	if (pci_get_dsn(con_dev) != host->con_dev_dsn)
+		return true;
+
+	return false;
+}
+
+static void rzg3s_pcie_remove_devices(struct pci_bus *bus)
+{
+	struct pci_dev *dev, *tmp;
+
+	list_for_each_entry_safe_reverse(dev, tmp, &bus->devices, bus_list)
+		pci_stop_and_remove_bus_device(dev);
+}
+
+static void rzg3s_pcie_link_event(struct rzg3s_pcie_host *host, bool bounced)
+{
+	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(host);
+	struct pci_bus *bus = bridge->bus, *child;
+	u32 val;
+	int ret;
+
+	pci_lock_rescan_remove();
+
+	val = readl_relaxed(host->axi + RZG3S_PCI_PCSTAT1);
+	if (val & RZG3S_PCI_PCSTAT1_DL_DOWN_STS) {
+		if (!list_empty(&bus->devices)) {
+			dev_info(host->dev,
+				 "PCIe link down, removing devices\n");
+			rzg3s_pcie_remove_devices(bus);
+		}
+		goto unlock;
+	}
+
+	if (!list_empty(&bus->devices)) {
+		bool replaced = rzg3s_pcie_device_replaced(host);
+
+		/*
+		 * If bounced = false it means link rescanning (after probe
+		 * or system resume), no link transition was recorded. The
+		 * enumerated devices are intact, so remove them only if the
+		 * connected device was replaced while link events were not
+		 * delivered.
+		 *
+		 * If bounced = true it means at least one real link down/up
+		 * cycle occurred.
+		 */
+		if (!bounced && !replaced)
+			goto unlock;
+
+		if (replaced) {
+			struct pci_dev *port __free(pci_dev_put) =
+				pci_get_slot(bus, PCI_DEVFN(0, 0));
+
+			if (port && port->subordinate)
+				pci_walk_bus(port->subordinate,
+					     pci_dev_set_disconnected, NULL);
+		}
+
+		rzg3s_pcie_remove_devices(bus);
+	}
+
+	dev_info(host->dev, "PCIe link up, rescanning bus\n");
+
+	ret = rzg3s_pcie_set_max_link_speed(host);
+	if (ret)
+		dev_info(host->dev, "Failed to set max link speed\n");
+
+	pci_host_common_link_train_delay(host->max_link_speed);
+
+	pm_runtime_get_sync(&bridge->dev);
+
+	pci_scan_child_bus(bus);
+	pci_assign_unassigned_bus_resources(bus);
+	list_for_each_entry(child, &bus->children, node)
+		pcie_bus_configure_settings(child);
+	pci_bus_add_devices(bus);
+
+	rzg3s_pcie_cache_connected_dev_id(host);
+
+	pm_runtime_put_sync(&bridge->dev);
+unlock:
+	pci_unlock_rescan_remove();
+}
+
+static irqreturn_t rzg3s_pcie_event_irq_thread(int irq, void *data)
+{
+	struct rzg3s_pcie_host *host = data;
+	bool bounced;
+	u32 status;
+
+	status = readl_relaxed(host->axi + RZG3S_PCI_PEIS0);
+	bounced = status & RZG3S_PCI_PEIS0_DL_UPDOWN;
+
+	if (!bounced && !READ_ONCE(host->link_rescan))
+		return IRQ_NONE;
+
+	/* Clear the DL_UpDown status (W1C) */
+	if (bounced)
+		writel_relaxed(RZG3S_PCI_PEIS0_DL_UPDOWN, host->axi + RZG3S_PCI_PEIS0);
+	WRITE_ONCE(host->link_rescan, false);
+
+	rzg3s_pcie_link_event(host, bounced);
+
+	return IRQ_HANDLED;
+}
+
+static int rzg3s_pcie_request_event_irq(struct rzg3s_pcie_host *host)
+{
+	struct device *dev = host->dev;
+	struct platform_device *pdev = to_platform_device(dev);
+	const char *evt_name;
+	int ret, irq;
+
+	evt_name = devm_kasprintf(dev, GFP_KERNEL, "%s-evt", dev_name(dev));
+	if (!evt_name)
+		return -ENOMEM;
+
+	irq = platform_get_irq_byname(pdev, "pcie_evt");
+	if (irq < 0)
+		return irq;
+
+	ret = request_threaded_irq(irq, NULL, rzg3s_pcie_event_irq_thread,
+				   IRQF_ONESHOT, evt_name, host);
+	if (ret) {
+		return dev_err_probe(dev, ret,
+				     "Failed to request pcie_evt IRQ\n");
+	}
+	host->event_irq = irq;
 
 	return 0;
 }
@@ -1123,6 +1313,17 @@ static void rzg3s_pcie_teardown_intx(struct rzg3s_pcie_host *host, int count)
 
 	if (host->intx_domain)
 		irq_domain_remove(host->intx_domain);
+}
+
+static void rzg3s_pcie_teardown_irqdomain(struct rzg3s_pcie_host *host)
+{
+	if (host->event_irq > 0)
+		free_irq(host->event_irq, host);
+
+	if (IS_ENABLED(CONFIG_PCI_MSI))
+		rzg3s_pcie_teardown_msi(host);
+
+	rzg3s_pcie_teardown_intx(host, PCI_NUM_INTX);
 }
 
 static int rzg3s_pcie_init_irqdomain(struct rzg3s_pcie_host *host)
@@ -1171,20 +1372,19 @@ static int rzg3s_pcie_init_irqdomain(struct rzg3s_pcie_host *host)
 			goto teardown_intx;
 	}
 
+	ret = rzg3s_pcie_request_event_irq(host);
+	if (ret)
+		goto teardown_msi;
+
 	return 0;
 
+teardown_msi:
+	if (IS_ENABLED(CONFIG_PCI_MSI))
+		rzg3s_pcie_teardown_msi(host);
 teardown_intx:
 	rzg3s_pcie_teardown_intx(host, i);
 
 	return ret;
-}
-
-static void rzg3s_pcie_teardown_irqdomain(struct rzg3s_pcie_host *host)
-{
-	if (IS_ENABLED(CONFIG_PCI_MSI))
-		rzg3s_pcie_teardown_msi(host);
-
-	rzg3s_pcie_teardown_intx(host, PCI_NUM_INTX);
 }
 
 static int rzg3s_pcie_config_init(struct rzg3s_pcie_host *host)
@@ -1662,7 +1862,6 @@ refclk_disable:
 
 static int rzg3s_pcie_host_init(struct rzg3s_pcie_host *host)
 {
-	u32 val;
 	int ret;
 
 	/* SoC-specific pre-configuration */
@@ -1692,14 +1891,8 @@ static int rzg3s_pcie_host_init(struct rzg3s_pcie_host *host)
 	if (ret)
 		goto config_deinit_and_refclk;
 
-	ret = rzg3s_pcie_wait_for_link_up(host);
-	if (ret)
-		goto config_deinit_post;
-
 	return 0;
 
-config_deinit_post:
-	host->data->config_deinit(host);
 config_deinit_and_refclk:
 	clk_disable_unprepare(host->port.refclk);
 config_deinit:
@@ -1738,6 +1931,10 @@ rzg3s_pcie_host_setup(struct rzg3s_pcie_host *host,
 		goto teardown_irqdomain;
 	}
 
+	ret = rzg3s_pcie_wait_for_link_up(host);
+	if (ret)
+		return 0;
+
 	ret = rzg3s_pcie_set_max_link_speed(host);
 	if (ret)
 		dev_info(dev, "Failed to set max link speed\n");
@@ -1758,6 +1955,9 @@ static int rzg3s_pcie_host_stop(struct rzg3s_pcie_host *host)
 	struct rzg3s_pcie_port *port = &host->port;
 	struct rzg3s_sysc *sysc = host->sysc;
 	int ret;
+
+	if (!host->started)
+		return 0;
 
 	clk_disable_unprepare(port->refclk);
 
@@ -1780,6 +1980,8 @@ static int rzg3s_pcie_host_stop(struct rzg3s_pcie_host *host)
 	if (ret)
 		goto power_resets_restore;
 
+	host->started = false;
+
 	return 0;
 
 	/* Restore the previous state if any error happens */
@@ -1800,6 +2002,9 @@ static int rzg3s_pcie_host_start(struct rzg3s_pcie_host *host)
 	const struct rzg3s_pcie_soc_data *data = host->data;
 	struct rzg3s_sysc *sysc = host->sysc;
 	int ret;
+
+	if (host->started)
+		return 0;
 
 	ret = rzg3s_sysc_config_func(sysc, RZG3S_SYSC_FUNC_ID_MODE, 1);
 	if (ret)
@@ -1832,6 +2037,8 @@ static int rzg3s_pcie_host_start(struct rzg3s_pcie_host *host)
 				    rzg3s_pcie_msi_hw_teardown);
 	if (ret)
 		goto assert_power_resets;
+
+	host->started = true;
 
 	return 0;
 
@@ -1914,6 +2121,41 @@ static void rzv2h_pcie_release_lanes(void *data)
 
 	guard(spinlock)(&rzv2h_lane_lock);
 	rzv2h_num_total_lanes -= host->num_lanes;
+}
+
+static int rzg3s_pcie_pm_notifier(struct notifier_block *nb,
+				  unsigned long action, void *data)
+{
+	struct rzg3s_pcie_host *host = container_of(nb, struct rzg3s_pcie_host,
+						    pm_nb);
+
+	switch (action) {
+	case PM_SUSPEND_PREPARE:
+		/* Disable link up/down interrupts. */
+		disable_irq(host->event_irq);
+		break;
+
+	case PM_POST_SUSPEND:
+		/* Enable link up/down interrupts and force link re-scan. */
+		if (host->started) {
+			/*
+			 * The link re-train in resume triggers the link up IRQ
+			 * if there are connected devices. Clear the DL_UpDown
+			 * status and trigger link_rescan to avoid
+			 * re-enumerating the already connected devices.
+			 */
+			writel_relaxed(RZG3S_PCI_PEIS0_DL_UPDOWN,
+				       host->axi + RZG3S_PCI_PEIS0);
+			WRITE_ONCE(host->link_rescan, true);
+			writel_relaxed(RZG3S_PCI_PEIE0_DL_UPDOWN,
+				       host->axi + RZG3S_PCI_PEIE0);
+			irq_wake_thread(host->event_irq, host);
+		}
+		enable_irq(host->event_irq);
+		break;
+	}
+
+	return NOTIFY_DONE;
 }
 
 static int rzg3s_pcie_probe(struct platform_device *pdev)
@@ -2008,15 +2250,38 @@ static int rzg3s_pcie_probe(struct platform_device *pdev)
 	if (ret)
 		goto power_resets_assert;
 
+	host->started = true;
+	host->pm_nb.notifier_call = rzg3s_pcie_pm_notifier;
+	ret = register_pm_notifier(&host->pm_nb);
+	if (ret)
+		goto host_probe_teardown;
+
 	bridge->sysdata = host;
 	bridge->ops = &rzg3s_pcie_root_ops;
 	bridge->child_ops = &rzg3s_pcie_child_ops;
 	ret = pci_host_probe(bridge);
 	if (ret)
-		goto host_probe_teardown;
+		goto pm_notifier_unregister;
+
+	pci_lock_rescan_remove();
+	rzg3s_pcie_cache_connected_dev_id(host);
+	pci_unlock_rescan_remove();
+
+	/*
+	 * The link re-train triggers the link up IRQ if there are connected
+	 * devices. Clear DL_UpDown status and trigger link_rescan to avoid
+	 * re-enumerating the devices detected while pci_host_probe() and loose
+	 * any potential event.
+	 */
+	writel_relaxed(RZG3S_PCI_PEIS0_DL_UPDOWN, host->axi + RZG3S_PCI_PEIS0);
+	WRITE_ONCE(host->link_rescan, true);
+	irq_wake_thread(host->event_irq, host);
+	writel_relaxed(RZG3S_PCI_PEIE0_DL_UPDOWN, host->axi + RZG3S_PCI_PEIE0);
 
 	return 0;
 
+pm_notifier_unregister:
+	unregister_pm_notifier(&host->pm_nb);
 host_probe_teardown:
 	clk_disable_unprepare(host->port.refclk);
 	rzg3s_pcie_teardown_irqdomain(host);
@@ -2050,8 +2315,25 @@ static int rzg3s_pcie_suspend_noirq(struct device *dev)
 static int rzg3s_pcie_resume_noirq(struct device *dev)
 {
 	struct rzg3s_pcie_host *host = dev_get_drvdata(dev);
+	int ret;
 
-	return rzg3s_pcie_host_start(host);
+	ret = rzg3s_pcie_host_start(host);
+	if (ret)
+		return ret;
+
+	if (rzg3s_pcie_device_replaced(host)) {
+		struct pci_host_bridge *bridge =
+			pci_host_bridge_from_priv(host);
+		struct pci_dev *port __free(pci_dev_put) =
+			pci_get_slot(bridge->bus, PCI_DEVFN(0, 0));
+
+		if (port && port->subordinate) {
+			pci_walk_bus(port->subordinate,
+				     pci_dev_set_disconnected, NULL);
+		}
+	}
+
+	return 0;
 }
 
 static const struct dev_pm_ops rzg3s_pcie_pm_ops = {
