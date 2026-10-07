@@ -43,9 +43,6 @@
 #define AAT1290_FLASH_TM_NUM_LEVELS	16
 #define AAT1290_MM_CURRENT_SCALE_SIZE	15
 
-#define AAT1290_NAME			"aat1290"
-
-
 struct aat1290_led_config_data {
 	/* maximum LED current in movie mode */
 	u32 max_mm_current;
@@ -57,6 +54,13 @@ struct aat1290_led_config_data {
 	bool has_external_strobe;
 	/* max LED brightness level */
 	enum led_brightness max_brightness;
+};
+
+struct aat1290_led_chip_info {
+	/* led controller name */
+	const char *name;
+	/* Advanced Simple Serial Control support */
+	bool as2c;
 };
 
 struct aat1290_led {
@@ -74,6 +78,10 @@ struct aat1290_led {
 	struct gpio_desc *gpio_fl_en;
 	/* EN|SET pin  */
 	struct gpio_desc *gpio_en_set;
+
+	/* led controller description */
+	const struct aat1290_led_chip_info *info;
+
 	/* movie mode current scale */
 	int *mm_current_scale;
 	/* device mode */
@@ -101,15 +109,17 @@ static void aat1290_as2cwire_write(struct aat1290_led *led, int addr, int value)
 
 	udelay(AAT1290_FLEN_OFF_DELAY_TIME_US);
 
-	/* write address */
-	for (i = 0; i < addr; ++i) {
-		udelay(AAT1290_EN_SET_TICK_TIME_US);
-		gpiod_direction_output(led->gpio_en_set, 0);
-		udelay(AAT1290_EN_SET_TICK_TIME_US);
-		gpiod_direction_output(led->gpio_en_set, 1);
-	}
+	if (led->info->as2c) {
+		/* write address */
+		for (i = 0; i < addr; ++i) {
+			udelay(AAT1290_EN_SET_TICK_TIME_US);
+			gpiod_direction_output(led->gpio_en_set, 0);
+			udelay(AAT1290_EN_SET_TICK_TIME_US);
+			gpiod_direction_output(led->gpio_en_set, 1);
+		}
 
-	usleep_range(AAT1290_LATCH_TIME_MIN_US, AAT1290_LATCH_TIME_MAX_US);
+		usleep_range(AAT1290_LATCH_TIME_MIN_US, AAT1290_LATCH_TIME_MAX_US);
+	}
 
 	/* write data */
 	for (i = 0; i < value; ++i) {
@@ -150,16 +160,18 @@ static int aat1290_led_brightness_set(struct led_classdev *led_cdev,
 		led->movie_mode = false;
 	} else {
 		if (!led->movie_mode) {
-			aat1290_as2cwire_write(led,
-				AAT1290_MM_CURRENT_RATIO_ADDR,
-				AAT1290_MM_TO_FL_1_92);
+			if (led->info->as2c)
+				aat1290_as2cwire_write(led,
+					AAT1290_MM_CURRENT_RATIO_ADDR,
+					AAT1290_MM_TO_FL_1_92);
 			led->movie_mode = true;
 		}
 
 		aat1290_as2cwire_write(led, AAT1290_MOVIE_MODE_CURRENT_ADDR,
 				AAT1290_MAX_MM_CURR_PERCENT_0 - brightness);
-		aat1290_as2cwire_write(led, AAT1290_MOVIE_MODE_CONFIG_ADDR,
-				AAT1290_MOVIE_MODE_ON);
+		if (led->info->as2c)
+			aat1290_as2cwire_write(led, AAT1290_MOVIE_MODE_CONFIG_ADDR,
+					       AAT1290_MOVIE_MODE_ON);
 	}
 
 	mutex_unlock(&led->lock);
@@ -178,7 +190,8 @@ static int aat1290_led_flash_strobe_set(struct led_classdev_flash *fled_cdev,
 	mutex_lock(&led->lock);
 
 	if (state) {
-		aat1290_set_flash_safety_timer(led, timeout->val);
+		if (led->info->as2c)
+			aat1290_set_flash_safety_timer(led, timeout->val);
 		gpiod_direction_output(led->gpio_fl_en, 1);
 	} else {
 		gpiod_direction_output(led->gpio_fl_en, 0);
@@ -476,6 +489,10 @@ static int aat1290_led_probe(struct platform_device *pdev)
 	fled_cdev->ops = &flash_ops;
 	led_cdev = &fled_cdev->led_cdev;
 
+	led->info = device_get_match_data(dev);
+	if (!led->info)
+		return -ENODEV;
+
 	ret = aat1290_led_get_configuration(led, &led_cfg, &sub_node);
 	if (ret < 0)
 		return ret;
@@ -490,7 +507,7 @@ static int aat1290_led_probe(struct platform_device *pdev)
 	aat1290_init_flash_timeout(led, &led_cfg);
 
 	init_data.fwnode = of_fwnode_handle(sub_node);
-	init_data.devicename = AAT1290_NAME;
+	init_data.devicename = led->info->name;
 
 	/* Register LED Flash class device */
 	ret = led_classdev_flash_register_ext(&pdev->dev, fled_cdev,
@@ -529,8 +546,19 @@ static void aat1290_led_remove(struct platform_device *pdev)
 	mutex_destroy(&led->lock);
 }
 
+static const struct aat1290_led_chip_info aat1290_info = {
+	.name = "aat1290",
+	.as2c = true,
+};
+
+static const struct aat1290_led_chip_info aat1270_info = {
+	.name = "aat1270",
+	.as2c = false,
+};
+
 static const struct of_device_id aat1290_led_dt_match[] = {
-	{ .compatible = "skyworks,aat1290" },
+	{ .compatible = "skyworks,aat1290", .data = &aat1290_info },
+	{ .compatible = "skyworks,aat1270", .data = &aat1270_info },
 	{},
 };
 MODULE_DEVICE_TABLE(of, aat1290_led_dt_match);
