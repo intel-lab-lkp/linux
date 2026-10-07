@@ -577,6 +577,17 @@ enum gpio_result dal_ddc_open(
 		goto failure;
 	}
 
+	/*
+	 * dal_gpio_service_open() installs gpio->pin, and close clears it.
+	 * MST bring-up can AUX-read for DSC while HPD teardown closes the
+	 * same DDC. pin is NULL again in that window; do not dereference it.
+	 */
+	if (!ddc->pin_data->pin || !ddc->pin_clock->pin) {
+		dal_gpio_close(ddc->pin_clock);
+		dal_gpio_close(ddc->pin_data);
+		return GPIO_RESULT_NULL_HANDLE;
+	}
+
 	/* DDC clock and data pins should belong
 	 * to the same DDC block id,
 	 * we use the data pin to set the pad mode. */
