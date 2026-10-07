@@ -71,10 +71,7 @@ MODULE_PARM_DESC(echo, "Echo sent frames (for testing). Default: 0 (Off)");
 
 static void vcan_rx(struct sk_buff *skb, struct net_device *dev)
 {
-	struct net_device_stats *stats = &dev->stats;
-
-	stats->rx_packets++;
-	stats->rx_bytes += can_skb_get_data_len(skb);
+	dev_dstats_rx_add(dev, can_skb_get_data_len(skb));
 
 	skb->pkt_type  = PACKET_BROADCAST;
 	skb->dev       = dev;
@@ -85,7 +82,6 @@ static void vcan_rx(struct sk_buff *skb, struct net_device *dev)
 
 static netdev_tx_t vcan_tx(struct sk_buff *skb, struct net_device *dev)
 {
-	struct net_device_stats *stats = &dev->stats;
 	unsigned int len;
 	int loop;
 
@@ -93,8 +89,7 @@ static netdev_tx_t vcan_tx(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_OK;
 
 	len = can_skb_get_data_len(skb);
-	stats->tx_packets++;
-	stats->tx_bytes += len;
+	dev_dstats_tx_add(dev, len);
 
 	/* set flag whether this packet has to be looped back */
 	loop = skb->pkt_type == PACKET_LOOPBACK;
@@ -107,8 +102,7 @@ static netdev_tx_t vcan_tx(struct sk_buff *skb, struct net_device *dev)
 			/* only count the packets here, because the
 			 * CAN core already did the echo for us
 			 */
-			stats->rx_packets++;
-			stats->rx_bytes += len;
+			dev_dstats_rx_add(dev, len);
 		}
 		consume_skb(skb);
 		return NETDEV_TX_OK;
@@ -185,6 +179,7 @@ static void vcan_setup(struct net_device *dev)
 	dev->netdev_ops		= &vcan_netdev_ops;
 	dev->ethtool_ops	= &vcan_ethtool_ops;
 	dev->needs_free_netdev	= true;
+	dev->pcpu_stat_type	= NETDEV_PCPU_STAT_DSTATS;
 }
 
 static struct rtnl_link_ops vcan_link_ops __read_mostly = {
