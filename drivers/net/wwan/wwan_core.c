@@ -655,6 +655,10 @@ struct wwan_port *wwan_create_port(struct device *parent,
 	init_waitqueue_head(&port->waitqueue);
 	mutex_init(&port->data_lock);
 
+	/* AT ports hang up on last close by default, as a TTY does */
+	if (type == WWAN_PORT_AT)
+		port->at_data.termios.c_cflag = HUPCL;
+
 	port->dev.parent = &wwandev->dev;
 	port->dev.type = &wwan_port_dev_type;
 	dev_set_drvdata(&port->dev, drvdata);
@@ -679,12 +683,52 @@ error_wwandev_remove:
 }
 EXPORT_SYMBOL_GPL(wwan_create_port);
 
+/* Raise DTR/RTS on first open of an AT port, as a TTY does. Called with
+ * ops_lock held.
+ */
+static void wwan_port_raise_dtr_rts(struct wwan_port *port)
+{
+	unsigned int bits;
+
+	if (port->type != WWAN_PORT_AT || !port->ops->dtr_rts)
+		return;
+
+	scoped_guard(mutex, &port->data_lock) {
+		port->at_data.mdmbits |= TIOCM_DTR | TIOCM_RTS;
+		bits = port->at_data.mdmbits;
+	}
+
+	port->ops->dtr_rts(port, bits);
+}
+
+/* Drop DTR/RTS on an AT port. Called with ops_lock held. On last close
+ * the lines are only dropped if HUPCL is set, as for a TTY, on port
+ * removal they are always dropped.
+ */
+static void wwan_port_drop_dtr_rts(struct wwan_port *port, bool hupcl_only)
+{
+	unsigned int bits;
+
+	if (port->type != WWAN_PORT_AT || !port->ops->dtr_rts)
+		return;
+
+	scoped_guard(mutex, &port->data_lock) {
+		if (hupcl_only && !(port->at_data.termios.c_cflag & HUPCL))
+			return;
+		port->at_data.mdmbits &= ~(TIOCM_DTR | TIOCM_RTS);
+		bits = port->at_data.mdmbits;
+	}
+
+	port->ops->dtr_rts(port, bits);
+}
+
 void wwan_remove_port(struct wwan_port *port)
 {
 	struct wwan_device *wwandev = to_wwan_dev(port->dev.parent);
 
 	mutex_lock(&port->ops_lock);
 	if (port->start_count) {
+		wwan_port_drop_dtr_rts(port, false);
 		port->ops->stop(port);
 		port->start_count = 0;
 	}
@@ -759,8 +803,11 @@ static int wwan_port_op_start(struct wwan_port *port)
 	if (!port->start_count)
 		ret = port->ops->start(port);
 
-	if (!ret)
+	if (!ret) {
 		port->start_count++;
+		if (port->start_count == 1)
+			wwan_port_raise_dtr_rts(port);
+	}
 
 out_unlock:
 	mutex_unlock(&port->ops_lock);
@@ -773,8 +820,10 @@ static void wwan_port_op_stop(struct wwan_port *port)
 	mutex_lock(&port->ops_lock);
 	port->start_count--;
 	if (!port->start_count) {
-		if (port->ops)
+		if (port->ops) {
+			wwan_port_drop_dtr_rts(port, true);
 			port->ops->stop(port);
+		}
 		skb_queue_purge(&port->rxq);
 		clear_bit(WWAN_PORT_EXCLUSIVE, &port->flags);
 	}
@@ -980,6 +1029,7 @@ static long wwan_port_fops_at_ioctl(struct wwan_port *port, unsigned int cmd,
 				    unsigned long arg)
 {
 	int ret = 0;
+	bool call_dtr_rts = false;
 
 	mutex_lock(&port->data_lock);
 
@@ -1036,6 +1086,8 @@ static long wwan_port_fops_at_ioctl(struct wwan_port *port, unsigned int cmd,
 			port->at_data.mdmbits |= mdmbits;
 		else
 			port->at_data.mdmbits = mdmbits;
+		if (port->type == WWAN_PORT_AT)
+			call_dtr_rts = true;
 		break;
 	}
 
@@ -1060,6 +1112,19 @@ static long wwan_port_fops_at_ioctl(struct wwan_port *port, unsigned int cmd,
 	}
 
 	mutex_unlock(&port->data_lock);
+
+	if (call_dtr_rts) {
+		unsigned int bits;
+
+		mutex_lock(&port->ops_lock);
+		if (port->ops && port->ops->dtr_rts) {
+			mutex_lock(&port->data_lock);
+			bits = port->at_data.mdmbits;
+			mutex_unlock(&port->data_lock);
+			port->ops->dtr_rts(port, bits);
+		}
+		mutex_unlock(&port->ops_lock);
+	}
 
 	return ret;
 }
