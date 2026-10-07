@@ -1528,6 +1528,14 @@ int rtw_core_start(struct rtw_dev *rtwdev)
 	/* rcr reset after powered on */
 	rtw_write32(rtwdev, REG_RCR, rtwdev->hal.rcr);
 
+	/* REG_RXFLTMAP1 is reset by the chip's mac_init() during power_on(),
+	 * and mac80211 only calls ieee80211_ops::configure_filter() when its
+	 * own filter flags change.  After a stop/start cycle the flags are
+	 * unchanged, so restore the value configure_filter() last asked for.
+	 */
+	if (rtwdev->hal.rxfltmap1_cur)
+		rtw_write16(rtwdev, REG_RXFLTMAP1, rtwdev->hal.rxfltmap1_cur);
+
 	ieee80211_queue_delayed_work(rtwdev->hw, &rtwdev->watch_dog_work,
 				     RTW_WATCH_DOG_DELAY_TIME);
 
