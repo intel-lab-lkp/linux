@@ -196,6 +196,19 @@ config PWM_BRCMSTB
 	  To compile this driver as a module, choose M Here: the module
 	  will be called pwm-brcmstb.c.
 
+config PWM_CADENCE
+	tristate "Cadence TTC PWM support"
+	depends on CADENCE_TTC_TIMER
+	help
+	  PWM framework driver for the Cadence TTC IP found on Xilinx
+	  Zynq/ZynqMP/Versal SoCs. Binds to auxiliary-bus devices
+	  created by the TTC clocksource driver when a TTC node
+	  contains the #pwm-cells property. Each TTC provides up to
+	  3 PWM channels.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called pwm-cadence.
+
 config PWM_CLK
 	tristate "Clock based PWM support"
 	depends on HAVE_CLK || COMPILE_TEST
