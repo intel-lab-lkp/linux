@@ -96,6 +96,12 @@ properties:
 
       - items:
           - enum:
+              - tplink,archer-ax55-v1
+          - const: qcom,ipq0518
+          - const: qcom,ipq5018
+
+      - items:
+          - enum:
               - 8dev,jalapeno
               - alfa-network,ap120c-ac
           - const: qcom,ipq4018
@@ -112,7 +118,6 @@ properties:
       - items:
           - enum:
               - qcom,ipq5018-rdp432-c2
-              - tplink,archer-ax55-v1
           - const: qcom,ipq5018
 
       - items:
