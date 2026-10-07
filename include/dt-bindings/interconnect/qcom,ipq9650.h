@@ -25,4 +25,8 @@
 #define MASTER_SNOC_USB			20
 #define SLAVE_SNOC_USB			21
 
+#define MASTER_CPU_SILVER		0
+#define SLAVE_L3			1
+#define MASTER_CPU_GOLD			2
+
 #endif /* INTERCONNECT_QCOM_IPQ9650_H */

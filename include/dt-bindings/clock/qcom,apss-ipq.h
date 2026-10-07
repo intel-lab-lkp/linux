@@ -15,4 +15,9 @@
 #define L3_CLK_SRC				6
 #define L3_CORE_CLK				7
 
+/* IPQ9650 Gold cluster clock indices */
+#define APSS_GOLD_PLL				8
+#define APSS_GOLD_PLL_POSTDIV			9
+#define APSS_GOLD_CORE_CLK			10
+
 #endif
