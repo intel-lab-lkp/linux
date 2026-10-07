@@ -109,6 +109,10 @@ Following sysfs files are available at /sys/devices/amd_hsmp/socket%d/.
   in MHz.
 * pwr_current_active_freq_limit_source: Source of current active frequency
   limit.
+* pwr_current_active_freq_limit_source_raw: Source of current active
+  frequency limit, as a hexadecimal bitmask. Bits 0 to 7 are, in order:
+  cHTC-Active, PROCHOT, TDC limit, PPT Limit, OPN Max, Reliability Limit,
+  APML Agent, HSMP Agent.
 
 ACPI device object format
 =========================
