@@ -167,6 +167,48 @@ int zpci_unregister_ioat(struct zpci_dev *zdev, u8 dmaas)
 /* Modify PCI: Set PCI function measurement parameters */
 int zpci_fmb_enable_device(struct zpci_dev *zdev)
 {
+	lockdep_assert_held(&zdev->fmb_lock);
+
+	if (zdev->fmb_requested || sizeof(*zdev->fmb) < zdev->fmb_length)
+		return -EINVAL;
+
+	zdev->fmb_requested = true;
+	return zpci_fmb_reenable_device(zdev);
+}
+
+/* Modify PCI: Disable PCI function measurement */
+int zpci_fmb_disable_device(struct zpci_dev *zdev)
+{
+	u64 req = ZPCI_CREATE_REQ(zdev->fh, 0, ZPCI_MOD_FC_SET_MEASURE);
+	struct zpci_fib fib = {0};
+	u8 cc, status;
+
+	lockdep_assert_held(&zdev->fmb_lock);
+
+	if (!zdev->fmb_requested)
+		return -EINVAL;
+
+	zdev->fmb_requested = false;
+	fib.gd = zdev->gisa;
+
+	/* Function measurement is disabled if fmb address is zero */
+	cc = zpci_mod_fc(req, &fib, &status);
+	if (cc == 3) /* Function already gone. */
+		cc = 0;
+	if (cc)
+		return -EIO;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(zpci_fmb_disable_device);
+
+/* Re-enable PCI function measurement: clear the software IOMMU counters
+ * and (re-)enable the FMB. This function is used to restore the desired
+ * FMB enablement state when measurement may be implicitly disabled by
+ * firmware (i.e., via CLP in zpci_disable_device())
+ */
+int zpci_fmb_reenable_device(struct zpci_dev *zdev)
+{
 	u64 req = ZPCI_CREATE_REQ(zdev->fh, 0, ZPCI_MOD_FC_SET_MEASURE);
 	struct zpci_iommu_ctrs *ctrs;
 	struct zpci_fib fib = {0};
@@ -175,13 +217,14 @@ int zpci_fmb_enable_device(struct zpci_dev *zdev)
 
 	lockdep_assert_held(&zdev->fmb_lock);
 
-	if (zdev->fmb || sizeof(*zdev->fmb) < zdev->fmb_length)
-		return -EINVAL;
-
-	zdev->fmb = kmem_cache_zalloc(zdev_fmb_cache, GFP_KERNEL);
-	if (!zdev->fmb)
-		return -ENOMEM;
-	WARN_ON((u64) zdev->fmb & 0xf);
+	if (!zdev->fmb) {
+		zdev->fmb = kmem_cache_zalloc(zdev_fmb_cache, GFP_KERNEL);
+		if (!zdev->fmb)
+			return -ENOMEM;
+	} else {
+		/* reuse the same FMB buffer for as long the zdev lives */
+		memset(zdev->fmb, 0, sizeof(*zdev->fmb));
+	}
 
 	/* reset software counters */
 	spin_lock_irqsave(&zdev->dom_lock, flags);
@@ -195,42 +238,15 @@ int zpci_fmb_enable_device(struct zpci_dev *zdev)
 	}
 	spin_unlock_irqrestore(&zdev->dom_lock, flags);
 
-
 	fib.fmb_addr = virt_to_phys(zdev->fmb);
 	fib.gd = zdev->gisa;
 	cc = zpci_mod_fc(req, &fib, &status);
-	if (cc) {
-		kmem_cache_free(zdev_fmb_cache, zdev->fmb);
-		zdev->fmb = NULL;
-	}
-	return cc ? -EIO : 0;
+	if (cc)
+		return -EIO;
+
+	return 0;
 }
-
-/* Modify PCI: Disable PCI function measurement */
-int zpci_fmb_disable_device(struct zpci_dev *zdev)
-{
-	u64 req = ZPCI_CREATE_REQ(zdev->fh, 0, ZPCI_MOD_FC_SET_MEASURE);
-	struct zpci_fib fib = {0};
-	u8 cc, status;
-
-	lockdep_assert_held(&zdev->fmb_lock);
-
-	if (!zdev->fmb)
-		return -EINVAL;
-
-	fib.gd = zdev->gisa;
-
-	/* Function measurement is disabled if fmb address is zero */
-	cc = zpci_mod_fc(req, &fib, &status);
-	if (cc == 3) /* Function already gone. */
-		cc = 0;
-
-	if (!cc) {
-		kmem_cache_free(zdev_fmb_cache, zdev->fmb);
-		zdev->fmb = NULL;
-	}
-	return cc ? -EIO : 0;
-}
+EXPORT_SYMBOL_GPL(zpci_fmb_reenable_device);
 
 static int zpci_cfg_load(struct zpci_dev *zdev, int offset, u32 *val, u8 len)
 {
@@ -737,8 +753,14 @@ int zpci_reenable_device(struct zpci_dev *zdev)
 	}
 
 	rc = zpci_iommu_register_ioat(zdev, &status);
-	if (rc)
+	if (rc) {
 		zpci_disable_device(zdev);
+		return rc;
+	}
+
+	guard(mutex)(&zdev->fmb_lock);
+	if (zdev->fmb_requested)
+		zpci_fmb_reenable_device(zdev);
 
 	return rc;
 }
@@ -1002,6 +1024,12 @@ void zpci_release_device(struct kref *kref)
 
 	if (zdev->has_resources)
 		zpci_cleanup_bus_resources(zdev);
+
+	if (zdev->fmb) {
+		zdev->fmb_requested = false;
+		kmem_cache_free(zdev_fmb_cache, zdev->fmb);
+		zdev->fmb = NULL;
+	}
 
 	zpci_bus_device_unregister(zdev);
 	zpci_destroy_iommu(zdev);
