@@ -240,7 +240,7 @@ static inline unsigned long pte_to_hmm_pfn_flags(struct hmm_range *range,
 }
 
 static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
-			      unsigned long end, pmd_t *pmdp, pte_t *ptep,
+			      unsigned long end, pmd_t *pmdp, hw_pte_t *ptep,
 			      unsigned long *hmm_pfn)
 {
 	struct hmm_vma_walk *hmm_vma_walk = walk->private;
@@ -411,7 +411,7 @@ static int hmm_vma_walk_pmd(pmd_t *pmdp,
 		&range->hmm_pfns[(start - range->start) >> PAGE_SHIFT];
 	unsigned long npages = (end - start) >> PAGE_SHIFT;
 	unsigned long addr = start;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 	pmd_t pmd;
 
 again:
@@ -547,7 +547,7 @@ out_unlock:
 #endif
 
 #ifdef CONFIG_HUGETLB_PAGE
-static int hmm_vma_walk_hugetlb_entry(pte_t *pte, unsigned long hmask,
+static int hmm_vma_walk_hugetlb_entry(hw_pte_t *pte, unsigned long hmask,
 				      unsigned long start, unsigned long end,
 				      struct mm_walk *walk)
 {

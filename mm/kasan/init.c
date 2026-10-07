@@ -92,7 +92,7 @@ static __init void *early_alloc(size_t size, int node)
 static void __ref zero_pte_populate(pmd_t *pmd, unsigned long addr,
 				unsigned long end)
 {
-	pte_t *pte = pte_offset_kernel(pmd, addr);
+	hw_pte_t *pte = pte_offset_kernel(pmd, addr);
 	pte_t zero_pte;
 
 	zero_pte = pfn_pte(PFN_DOWN(__pa_symbol(kasan_early_shadow_page)),
@@ -122,7 +122,7 @@ static int __ref zero_pmd_populate(pud_t *pud, unsigned long addr,
 		}
 
 		if (pmd_none(*pmd)) {
-			pte_t *p;
+			hw_pte_t *p;
 
 			if (slab_is_available())
 				p = pte_alloc_one_kernel(&init_mm);
@@ -281,9 +281,9 @@ int __ref kasan_populate_early_shadow(const void *shadow_start,
 	return 0;
 }
 
-static void kasan_free_pte(pte_t *pte_start, pmd_t *pmd)
+static void kasan_free_pte(hw_pte_t *pte_start, pmd_t *pmd)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 	int i;
 
 	for (i = 0; i < PTRS_PER_PTE; i++) {
@@ -341,7 +341,7 @@ static void kasan_free_p4d(p4d_t *p4d_start, pgd_t *pgd)
 	pgd_clear(pgd);
 }
 
-static void kasan_remove_pte_table(pte_t *pte, unsigned long addr,
+static void kasan_remove_pte_table(hw_pte_t *pte, unsigned long addr,
 				unsigned long end)
 {
 	unsigned long next;
@@ -369,7 +369,7 @@ static void kasan_remove_pmd_table(pmd_t *pmd, unsigned long addr,
 	unsigned long next;
 
 	for (; addr < end; addr = next, pmd++) {
-		pte_t *pte;
+		hw_pte_t *pte;
 
 		next = pmd_addr_end(addr, end);
 

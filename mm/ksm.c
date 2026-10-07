@@ -618,7 +618,7 @@ static int break_ksm_pmd_entry(pmd_t *pmdp, unsigned long addr, unsigned long en
 {
 	unsigned long *found_addr = (unsigned long *) walk->private;
 	struct mm_struct *mm = walk->mm;
-	pte_t *start_ptep, *ptep;
+	hw_pte_t *start_ptep, *ptep;
 	spinlock_t *ptl;
 	int found = 0;
 
@@ -1398,7 +1398,7 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
 	struct folio *folio = page_folio(page);
 	pmd_t *pmd;
 	pmd_t pmde;
-	pte_t *ptep;
+	hw_pte_t *ptep;
 	pte_t newpte;
 	spinlock_t *ptl;
 	unsigned long addr;
@@ -2529,7 +2529,8 @@ static int ksm_next_page_pmd_entry(pmd_t *pmdp, unsigned long addr, unsigned lon
 {
 	struct ksm_next_page_arg *private = walk->private;
 	struct vm_area_struct *vma = walk->vma;
-	pte_t *start_ptep = NULL, *ptep, pte;
+	hw_pte_t *start_ptep = NULL, *ptep;
+	pte_t pte;
 	struct mm_struct *mm = walk->mm;
 	struct folio *folio;
 	struct page *page;

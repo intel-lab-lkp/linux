@@ -8,7 +8,7 @@
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/llist.h>
-#include <asm/page.h>		/* pgprot_t */
+#include <linux/pgtable_types.h>	/* pgprot_t, hw_pte_t */
 #include <linux/rbtree.h>
 #include <linux/overflow.h>
 
@@ -120,7 +120,7 @@ static inline unsigned long arch_vmap_pte_range_map_size(unsigned long addr, uns
 
 #ifndef arch_vmap_pte_range_unmap_size
 static inline unsigned long arch_vmap_pte_range_unmap_size(unsigned long addr,
-							   pte_t *ptep)
+							   hw_pte_t *ptep)
 {
 	return PAGE_SIZE;
 }

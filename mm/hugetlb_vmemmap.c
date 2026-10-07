@@ -33,7 +33,7 @@
  *			operations.
  */
 struct vmemmap_remap_walk {
-	void			(*remap_pte)(pte_t *pte, unsigned long addr,
+	void			(*remap_pte)(hw_pte_t *pte, unsigned long addr,
 					     struct vmemmap_remap_walk *walk);
 
 	unsigned long		nr_walked;
@@ -55,7 +55,7 @@ static int vmemmap_split_pmd(pmd_t *pmd, struct page *head, unsigned long start,
 	pmd_t __pmd;
 	int i;
 	unsigned long addr = start;
-	pte_t *pgtable;
+	hw_pte_t *pgtable;
 
 	pgtable = pte_alloc_one_kernel(&init_mm);
 	if (!pgtable)
@@ -64,7 +64,8 @@ static int vmemmap_split_pmd(pmd_t *pmd, struct page *head, unsigned long start,
 	pmd_populate_kernel(&init_mm, &__pmd, pgtable);
 
 	for (i = 0; i < PTRS_PER_PTE; i++, addr += PAGE_SIZE) {
-		pte_t entry, *pte;
+		pte_t entry;
+		hw_pte_t *pte;
 		pgprot_t pgprot = PAGE_KERNEL;
 
 		entry = mk_pte(head + i, pgprot);
@@ -136,7 +137,7 @@ static int vmemmap_pmd_entry(pmd_t *pmd, unsigned long addr,
 	return vmemmap_split_pmd(pmd, head, addr & PMD_MASK, vmemmap_walk);
 }
 
-static int vmemmap_pte_entry(pte_t *pte, unsigned long addr,
+static int vmemmap_pte_entry(hw_pte_t *pte, unsigned long addr,
 			     unsigned long next, struct mm_walk *walk)
 {
 	struct vmemmap_remap_walk *vmemmap_walk = walk->private;
@@ -198,7 +199,7 @@ static void free_vmemmap_page_list(struct list_head *list)
 		free_vmemmap_page(page);
 }
 
-static void vmemmap_remap_pte(pte_t *pte, unsigned long addr,
+static void vmemmap_remap_pte(hw_pte_t *pte, unsigned long addr,
 			      struct vmemmap_remap_walk *walk)
 {
 	struct page *page = pte_page(ptep_get(pte));
@@ -232,7 +233,7 @@ static void vmemmap_remap_pte(pte_t *pte, unsigned long addr,
 	set_pte_at(&init_mm, addr, pte, entry);
 }
 
-static void vmemmap_restore_pte(pte_t *pte, unsigned long addr,
+static void vmemmap_restore_pte(hw_pte_t *pte, unsigned long addr,
 				struct vmemmap_remap_walk *walk)
 {
 	struct page *src = pte_page(ptep_get(pte)), *dst;

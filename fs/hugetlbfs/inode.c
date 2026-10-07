@@ -328,7 +328,8 @@ static void hugetlb_delete_from_page_cache(struct folio *folio)
 static bool hugetlb_vma_maps_pfn(struct vm_area_struct *vma,
 				unsigned long addr, unsigned long pfn)
 {
-	pte_t *ptep, pte;
+	hw_pte_t *ptep;
+	pte_t pte;
 
 	ptep = hugetlb_walk(vma, addr, huge_page_size(hstate_vma(vma)));
 	if (!ptep)

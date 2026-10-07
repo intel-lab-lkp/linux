@@ -68,7 +68,7 @@ void pmd_clear_bad(pmd_t *pmd)
  * force that call on sun4c so we changed this macro slightly
  */
 int ptep_set_access_flags(struct vm_area_struct *vma,
-			  unsigned long address, pte_t *ptep,
+			  unsigned long address, hw_pte_t *ptep,
 			  pte_t entry, int dirty)
 {
 	int changed = !pte_same(ptep_get(ptep), entry);
@@ -82,7 +82,7 @@ int ptep_set_access_flags(struct vm_area_struct *vma,
 
 #ifndef __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
 bool ptep_clear_flush_young(struct vm_area_struct *vma,
-		unsigned long address, pte_t *ptep)
+		unsigned long address, hw_pte_t *ptep)
 {
 	bool young;
 
@@ -95,7 +95,7 @@ bool ptep_clear_flush_young(struct vm_area_struct *vma,
 
 #ifndef __HAVE_ARCH_PTEP_CLEAR_FLUSH
 pte_t ptep_clear_flush(struct vm_area_struct *vma, unsigned long address,
-		       pte_t *ptep)
+		       hw_pte_t *ptep)
 {
 	struct mm_struct *mm = (vma)->vm_mm;
 	pte_t pte;
@@ -282,7 +282,7 @@ static unsigned long pmdp_get_lockless_start(void) { return 0; }
 static void pmdp_get_lockless_end(unsigned long irqflags) { }
 #endif
 
-pte_t *__pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp)
+hw_pte_t *__pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp)
 {
 	unsigned long irqflags;
 	pmd_t pmdval;
@@ -308,11 +308,11 @@ nomap:
 	return NULL;
 }
 
-pte_t *pte_offset_map_ro_nolock(struct mm_struct *mm, pmd_t *pmd,
+hw_pte_t *pte_offset_map_ro_nolock(struct mm_struct *mm, pmd_t *pmd,
 				unsigned long addr, spinlock_t **ptlp)
 {
 	pmd_t pmdval;
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	pte = __pte_offset_map(pmd, addr, &pmdval);
 	if (likely(pte))
@@ -320,11 +320,11 @@ pte_t *pte_offset_map_ro_nolock(struct mm_struct *mm, pmd_t *pmd,
 	return pte;
 }
 
-pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
+hw_pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
 				unsigned long addr, pmd_t *pmdvalp,
 				spinlock_t **ptlp)
 {
-	pte_t *pte;
+	hw_pte_t *pte;
 
 	VM_WARN_ON_ONCE(!pmdvalp);
 	pte = __pte_offset_map(pmd, addr, pmdvalp);
@@ -390,12 +390,12 @@ pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
  * table, and may not use RCU at all: "outsiders" like khugepaged should avoid
  * pte_offset_map() and co once the vma is detached from mm or mm_users is zero.
  */
-pte_t *pte_offset_map_lock(struct mm_struct *mm, pmd_t *pmd,
+hw_pte_t *pte_offset_map_lock(struct mm_struct *mm, pmd_t *pmd,
 			   unsigned long addr, spinlock_t **ptlp)
 {
 	spinlock_t *ptl;
 	pmd_t pmdval;
-	pte_t *pte;
+	hw_pte_t *pte;
 again:
 	pte = __pte_offset_map(pmd, addr, &pmdval);
 	if (unlikely(!pte))

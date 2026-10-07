@@ -868,7 +868,7 @@ struct page_vma_mapped_walk {
 	struct vm_area_struct *vma;
 	unsigned long address;
 	pmd_t *pmd;
-	pte_t *pte;
+	hw_pte_t *pte;
 	spinlock_t *ptl;
 	unsigned int flags;
 	bool pgoff_is_anon : 1;

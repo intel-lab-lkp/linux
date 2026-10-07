@@ -141,7 +141,7 @@ unsigned long hugetlb_total_pages(void);
 vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 			unsigned long address, unsigned int flags);
 #ifdef CONFIG_USERFAULTFD
-int hugetlb_mfill_atomic_pte(pte_t *dst_pte,
+int hugetlb_mfill_atomic_pte(hw_pte_t *dst_pte,
 			     struct vm_area_struct *dst_vma,
 			     unsigned long dst_addr,
 			     unsigned long src_addr,
@@ -161,7 +161,7 @@ void hugetlb_fix_reserve_counts(struct inode *inode);
 extern struct mutex *hugetlb_fault_mutex_table;
 u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t idx);
 
-pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
+hw_pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
 		      unsigned long addr, pud_t *pud);
 bool hugetlbfs_pagecache_present(struct hstate *h,
 				 struct vm_area_struct *vma,
@@ -186,22 +186,22 @@ void hugetlb_bootmem_set_nodes(void);
  * which may go down to the lowest PTE level in their huge_pte_offset() and
  * huge_pte_alloc(): to avoid reliance on pte_offset_map() without pte_unmap().
  */
-static inline pte_t *pte_offset_huge(pmd_t *pmd, unsigned long address)
+static inline hw_pte_t *pte_offset_huge(pmd_t *pmd, unsigned long address)
 {
 	return pte_offset_kernel(pmd, address);
 }
-static inline pte_t *pte_alloc_huge(struct mm_struct *mm, pmd_t *pmd,
+static inline hw_pte_t *pte_alloc_huge(struct mm_struct *mm, pmd_t *pmd,
 				    unsigned long address)
 {
 	return pte_alloc(mm, pmd) ? NULL : pte_offset_huge(pmd, address);
 }
 #endif
 
-pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
+hw_pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
 			unsigned long addr, unsigned long sz);
 /*
  * huge_pte_offset(): Walk the hugetlb pgtable until the last level PTE.
- * Returns the pte_t* if found, or NULL if the address is not mapped.
+ * Returns the hw_pte_t* if found, or NULL if the address is not mapped.
  *
  * IMPORTANT: we should normally not directly call this function, instead
  * this is only a common interface to implement arch-specific
@@ -236,11 +236,11 @@ pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
  * a concurrent pmd unshare, but it makes sure the pgtable page is safe to
  * access.
  */
-pte_t *huge_pte_offset(struct mm_struct *mm,
+hw_pte_t *huge_pte_offset(struct mm_struct *mm,
 		       unsigned long addr, unsigned long sz);
 unsigned long hugetlb_mask_last_page(struct hstate *h);
 int huge_pmd_unshare(struct mmu_gather *tlb, struct vm_area_struct *vma,
-		unsigned long addr, pte_t *ptep);
+		unsigned long addr, hw_pte_t *ptep);
 void huge_pmd_unshare_flush(struct mmu_gather *tlb, struct vm_area_struct *vma);
 void adjust_range_if_pmd_sharing_possible(struct vm_area_struct *vma,
 				unsigned long *start, unsigned long *end);
@@ -302,7 +302,8 @@ static inline struct address_space *hugetlb_folio_mapping_lock_write(
 }
 
 static inline int huge_pmd_unshare(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, unsigned long addr, pte_t *ptep)
+		struct vm_area_struct *vma, unsigned long addr,
+		hw_pte_t *ptep)
 {
 	return 0;
 }
@@ -394,7 +395,7 @@ static inline int is_hugepage_only_range(struct mm_struct *mm,
 }
 
 #ifdef CONFIG_USERFAULTFD
-static inline int hugetlb_mfill_atomic_pte(pte_t *dst_pte,
+static inline int hugetlb_mfill_atomic_pte(hw_pte_t *dst_pte,
 					   struct vm_area_struct *dst_vma,
 					   unsigned long dst_addr,
 					   unsigned long src_addr,
@@ -406,7 +407,7 @@ static inline int hugetlb_mfill_atomic_pte(pte_t *dst_pte,
 }
 #endif /* CONFIG_USERFAULTFD */
 
-static inline pte_t *huge_pte_offset(struct mm_struct *mm, unsigned long addr,
+static inline hw_pte_t *huge_pte_offset(struct mm_struct *mm, unsigned long addr,
 					unsigned long sz)
 {
 	return NULL;
@@ -989,7 +990,8 @@ static inline bool htlb_allow_alloc_fallback(enum migrate_reason reason)
 }
 
 static inline spinlock_t *huge_pte_lockptr(struct hstate *h,
-					   struct mm_struct *mm, pte_t *pte)
+					   struct mm_struct *mm,
+					   hw_pte_t *pte)
 {
 	const unsigned long size = huge_page_size(h);
 
@@ -1053,7 +1055,8 @@ static inline void hugetlb_count_sub(long l, struct mm_struct *mm)
 #ifndef huge_ptep_modify_prot_start
 #define huge_ptep_modify_prot_start huge_ptep_modify_prot_start
 static inline pte_t huge_ptep_modify_prot_start(struct vm_area_struct *vma,
-						unsigned long addr, pte_t *ptep)
+						unsigned long addr,
+						hw_pte_t *ptep)
 {
 	unsigned long psize = huge_page_size(hstate_vma(vma));
 
@@ -1064,7 +1067,8 @@ static inline pte_t huge_ptep_modify_prot_start(struct vm_area_struct *vma,
 #ifndef huge_ptep_modify_prot_commit
 #define huge_ptep_modify_prot_commit huge_ptep_modify_prot_commit
 static inline void huge_ptep_modify_prot_commit(struct vm_area_struct *vma,
-						unsigned long addr, pte_t *ptep,
+						unsigned long addr,
+						hw_pte_t *ptep,
 						pte_t old_pte, pte_t pte)
 {
 	unsigned long psize = huge_page_size(hstate_vma(vma));
@@ -1252,7 +1256,8 @@ static inline bool htlb_allow_alloc_fallback(enum migrate_reason reason)
 }
 
 static inline spinlock_t *huge_pte_lockptr(struct hstate *h,
-					   struct mm_struct *mm, pte_t *pte)
+					   struct mm_struct *mm,
+					   hw_pte_t *pte)
 {
 	return &mm->page_table_lock;
 }
@@ -1269,11 +1274,11 @@ static inline void hugetlb_count_sub(long l, struct mm_struct *mm)
 {
 }
 
-pte_t huge_ptep_get(struct mm_struct *mm, unsigned long addr, pte_t *ptep);
+pte_t huge_ptep_get(struct mm_struct *mm, unsigned long addr, hw_pte_t *ptep);
 unsigned long huge_pte_dirty(pte_t pte);
 
 static inline pte_t huge_ptep_clear_flush(struct vm_area_struct *vma,
-					  unsigned long addr, pte_t *ptep)
+					  unsigned long addr, hw_pte_t *ptep)
 {
 #ifdef CONFIG_MMU
 	return ptep_get(ptep);
@@ -1283,7 +1288,8 @@ static inline pte_t huge_ptep_clear_flush(struct vm_area_struct *vma,
 }
 
 static inline void set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
-				   pte_t *ptep, pte_t pte, unsigned long sz)
+				   hw_pte_t *ptep, pte_t pte,
+				   unsigned long sz)
 {
 }
 
@@ -1311,7 +1317,7 @@ static inline void hugetlb_bootmem_struct_page_init(void)
 #endif	/* CONFIG_HUGETLB_PAGE */
 
 static inline spinlock_t *huge_pte_lock(struct hstate *h,
-					struct mm_struct *mm, pte_t *pte)
+					struct mm_struct *mm, hw_pte_t *pte)
 {
 	spinlock_t *ptl;
 
@@ -1329,12 +1335,12 @@ static inline __init void hugetlb_cma_reserve(void)
 #endif
 
 #ifdef CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING
-static inline bool hugetlb_pmd_shared(pte_t *pte)
+static inline bool hugetlb_pmd_shared(hw_pte_t *pte)
 {
 	return ptdesc_pmd_is_shared(virt_to_ptdesc(pte));
 }
 #else
-static inline bool hugetlb_pmd_shared(pte_t *pte)
+static inline bool hugetlb_pmd_shared(hw_pte_t *pte)
 {
 	return false;
 }
@@ -1361,7 +1367,7 @@ bool __vma_private_lock(struct vm_area_struct *vma);
  * Safe version of huge_pte_offset() to check the locks.  See comments
  * above huge_pte_offset().
  */
-static inline pte_t *
+static inline hw_pte_t *
 hugetlb_walk(struct vm_area_struct *vma, unsigned long addr, unsigned long sz)
 {
 #if defined(CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING) && defined(CONFIG_LOCKDEP)
