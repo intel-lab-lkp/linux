@@ -772,6 +772,9 @@ struct spinand_mem_ops {
  *		suitable to use or not in general with this chip/configuration.
  *		A per-transfer check must of course be done to ensure it is
  *		actually relevant to enable this feature.
+ * @has_cont_read_variants: The chip needs dedicated continuous read from
+ *			    cache operations, which must then be available for
+ *			    the bus interface in use
  * @set_cont_read: Enable/disable the continuous read feature
  * @priv: manufacturer private data
  * @fact_otp: SPI NAND factory OTP info.
@@ -810,6 +813,7 @@ struct spinand_device {
 	int (*configure_chip)(struct spinand_device *spinand,
 			      enum spinand_bus_interface iface);
 	bool cont_read_possible;
+	bool has_cont_read_variants;
 	int (*set_cont_read)(struct spinand_device *spinand,
 			     bool enable);
 	int (*set_randomizer)(struct spinand_device *spinand,
