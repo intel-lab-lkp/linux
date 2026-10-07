@@ -288,8 +288,15 @@ static enum resp_states get_srq_wqe(struct rxe_qp *qp)
 	}
 	size = sizeof(*wqe) + num_sge * sizeof(struct rxe_sge);
 	memcpy(&qp->resp.srq_wqe, wqe, size);
+	wqe = &qp->resp.srq_wqe.wqe;
+	if (unlikely(wqe->dma.num_sge != num_sge ||
+		     (wqe->dma.resid && wqe->dma.cur_sge >= num_sge))) {
+		spin_unlock_irqrestore(&srq->rq.consumer_lock, flags);
+		rxe_dbg_qp(qp, "invalid num_sge/cur_sge in SRQ entry\n");
+		return RESPST_ERR_MALFORMED_WQE;
+	}
 
-	qp->resp.wqe = &qp->resp.srq_wqe.wqe;
+	qp->resp.wqe = wqe;
 	queue_advance_consumer(q, QUEUE_TYPE_FROM_CLIENT);
 	count = queue_count(q, QUEUE_TYPE_FROM_CLIENT);
 
@@ -328,8 +335,14 @@ static enum resp_states rxe_get_recv_wqe(struct rxe_qp *qp)
 	}
 	size = sizeof(*wqe) + num_sge * sizeof(struct rxe_sge);
 	memcpy(&qp->resp.srq_wqe, wqe, size);
+	wqe = &qp->resp.srq_wqe.wqe;
+	if (unlikely(wqe->dma.num_sge != num_sge ||
+		     (wqe->dma.resid && wqe->dma.cur_sge >= num_sge))) {
+		rxe_dbg_qp(qp, "invalid num_sge/cur_sge in recv WQE\n");
+		return RESPST_ERR_MALFORMED_WQE;
+	}
 
-	qp->resp.wqe = &qp->resp.srq_wqe.wqe;
+	qp->resp.wqe = wqe;
 	return RESPST_CHK_LENGTH;
 }
 
