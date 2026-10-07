@@ -196,11 +196,11 @@ static void
 hv_uio_cleanup(struct hv_device *dev, struct hv_uio_private_data *pdata)
 {
 	if (pdata->send_buffer.gpadl.gpadl_handle)
-		vmbus_teardown_gpadl(dev->channel, &pdata->send_buffer.gpadl);
+		vmbus_teardown_gpadl_owned(dev->channel, &pdata->send_buffer);
 	vmbus_release_buffer(&pdata->send_buffer);
 
 	if (pdata->recv_buffer.gpadl.gpadl_handle)
-		vmbus_teardown_gpadl(dev->channel, &pdata->recv_buffer.gpadl);
+		vmbus_teardown_gpadl_owned(dev->channel, &pdata->recv_buffer);
 	vmbus_release_buffer(&pdata->recv_buffer);
 }
 
@@ -298,18 +298,12 @@ hv_uio_probe(struct hv_device *dev,
 	pdata->info.mem[MON_PAGE_MAP].memtype = UIO_MEM_LOGICAL;
 
 	if (channel->device_id == HV_NIC) {
-		pdata->recv_buffer.addr =
-			vzalloc(RECV_BUFFER_SIZE);
-		if (!pdata->recv_buffer.addr) {
-			ret = -ENOMEM;
+		ret = vmbus_alloc_buffer_owned(channel, RECV_BUFFER_SIZE, false,
+					       &pdata->recv_buffer);
+		if (ret)
 			goto fail_free_ring;
-		}
 
-		ret = vmbus_establish_gpadl(channel,
-					    pdata->recv_buffer.addr,
-					    RECV_BUFFER_SIZE,
-					    &pdata->recv_buffer.gpadl);
-		pdata->recv_buffer.leak |= pdata->recv_buffer.gpadl.leak;
+		ret = vmbus_establish_gpadl_owned(channel, &pdata->recv_buffer);
 		if (ret)
 			goto fail_close;
 
@@ -322,18 +316,12 @@ hv_uio_probe(struct hv_device *dev,
 		pdata->info.mem[RECV_BUF_MAP].size = RECV_BUFFER_SIZE;
 		pdata->info.mem[RECV_BUF_MAP].memtype = UIO_MEM_VIRTUAL;
 
-		pdata->send_buffer.addr =
-			vzalloc(SEND_BUFFER_SIZE);
-		if (!pdata->send_buffer.addr) {
-			ret = -ENOMEM;
+		ret = vmbus_alloc_buffer_owned(channel, SEND_BUFFER_SIZE, false,
+					       &pdata->send_buffer);
+		if (ret)
 			goto fail_close;
-		}
 
-		ret = vmbus_establish_gpadl(channel,
-					    pdata->send_buffer.addr,
-					    SEND_BUFFER_SIZE,
-					    &pdata->send_buffer.gpadl);
-		pdata->send_buffer.leak |= pdata->send_buffer.gpadl.leak;
+		ret = vmbus_establish_gpadl_owned(channel, &pdata->send_buffer);
 		if (ret)
 			goto fail_close;
 

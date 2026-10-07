@@ -1035,11 +1035,10 @@ EXPORT_SYMBOL_GPL(vmbus_establish_gpadl);
  * @channel: a channel
  * @kbuffer: from kmalloc or vmalloc; must already be decrypted by the caller
  * @size: page-size multiple
- * @leak: set when a GPADL message may have reached the host but completion is
- *        uncertain; the caller must retain the backing pages
  * @gpadl: output gpadl
  *
  * The caller is responsible for re-encrypting the buffer before freeing it.
+ * Ownership of the backing pages stays with the caller's vmbus_buffer.
  */
 int vmbus_establish_gpadl_caller_decrypted(struct vmbus_channel *channel,
 					  void *kbuffer, u32 size,
@@ -1282,6 +1281,7 @@ err:
 	return -ENOMEM;
 }
 EXPORT_SYMBOL_GPL(vmbus_alloc_buffer_owned);
+
 /*
  * vmbus_alloc_buffer - compatibility allocator for callers managing lifetime.
  * New callers that need retained GPADL and mmap ownership should use

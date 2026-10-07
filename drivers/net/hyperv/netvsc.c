@@ -243,7 +243,6 @@ static void netvsc_revoke_recv_buf(struct hv_device *device,
 		if (ret != 0) {
 			netdev_err(ndev, "unable to send "
 				"revoke receive buffer to netvsp\n");
-			net_device->recv_buffer.leak = true;
 			return;
 		}
 		net_device->recv_section_cnt = 0;
@@ -295,7 +294,6 @@ static void netvsc_revoke_send_buf(struct hv_device *device,
 		if (ret != 0) {
 			netdev_err(ndev, "unable to send "
 				   "revoke send buffer to netvsp\n");
-			net_device->send_buffer.leak = true;
 			return;
 		}
 		net_device->send_section_cnt = 0;
@@ -308,18 +306,14 @@ static void netvsc_teardown_recv_gpadl(struct hv_device *device,
 {
 	int ret;
 
-	if (net_device->recv_buffer.leak)
-		return;
-
 	if (net_device->recv_buffer.gpadl.gpadl_handle) {
-		ret = vmbus_teardown_gpadl(device->channel,
-					   &net_device->recv_buffer.gpadl);
+		ret = vmbus_teardown_gpadl_owned(device->channel,
+						 &net_device->recv_buffer);
 
 		/* If we failed here, we might as well return and have a leak
 		 * rather than continue and a bugchk
 		 */
 		if (ret != 0) {
-			net_device->recv_buffer.leak = true;
 			netdev_err(ndev,
 				   "unable to teardown receive buffer's gpadl\n");
 			return;
@@ -333,18 +327,14 @@ static void netvsc_teardown_send_gpadl(struct hv_device *device,
 {
 	int ret;
 
-	if (net_device->send_buffer.leak)
-		return;
-
 	if (net_device->send_buffer.gpadl.gpadl_handle) {
-		ret = vmbus_teardown_gpadl(device->channel,
-					   &net_device->send_buffer.gpadl);
+		ret = vmbus_teardown_gpadl_owned(device->channel,
+						 &net_device->send_buffer);
 
 		/* If we failed here, we might as well return and have a leak
 		 * rather than continue and a bugchk
 		 */
 		if (ret != 0) {
-			net_device->send_buffer.leak = true;
 			netdev_err(ndev,
 				   "unable to teardown send buffer's gpadl\n");
 			return;
@@ -385,15 +375,13 @@ static int netvsc_init_buf(struct hv_device *device,
 		buf_size = min_t(unsigned int, buf_size,
 				 NETVSC_RECEIVE_BUFFER_SIZE_LEGACY);
 
-	net_device->recv_buffer.addr =
-		vmbus_alloc_buffer(device->channel, buf_size,
-				   &net_device->recv_buffer.chunks,
-				   &net_device->recv_buffer.chunk_cnt);
-	if (!net_device->recv_buffer.addr) {
+	ret = vmbus_alloc_buffer_owned(device->channel, buf_size,
+				       device->channel->co_external_memory,
+				       &net_device->recv_buffer);
+	if (ret) {
 		netdev_err(ndev,
 			   "unable to allocate receive buffer of size %u\n",
 			   buf_size);
-		ret = -ENOMEM;
 		goto cleanup;
 	}
 
@@ -404,11 +392,8 @@ static int netvsc_init_buf(struct hv_device *device,
 	 * channel.  Note: This call uses the vmbus connection rather
 	 * than the channel to establish the gpadl handle.
 	 */
-	ret = vmbus_establish_gpadl_caller_decrypted(device->channel,
-						     net_device->recv_buffer.addr,
-						     buf_size,
-						     &net_device->recv_buffer.gpadl);
-	net_device->recv_buffer.leak |= net_device->recv_buffer.gpadl.leak;
+	ret = vmbus_establish_gpadl_owned(device->channel,
+					  &net_device->recv_buffer);
 	if (ret != 0) {
 		netdev_err(ndev,
 			"unable to establish receive buffer's gpadl\n");
@@ -496,14 +481,12 @@ static int netvsc_init_buf(struct hv_device *device,
 	buf_size = device_info->send_sections * device_info->send_section_size;
 	buf_size = round_up(buf_size, PAGE_SIZE);
 
-	net_device->send_buffer.addr =
-		vmbus_alloc_buffer(device->channel, buf_size,
-				   &net_device->send_buffer.chunks,
-				   &net_device->send_buffer.chunk_cnt);
-	if (!net_device->send_buffer.addr) {
+	ret = vmbus_alloc_buffer_owned(device->channel, buf_size,
+				       device->channel->co_external_memory,
+				       &net_device->send_buffer);
+	if (ret) {
 		netdev_err(ndev, "unable to allocate send buffer of size %u\n",
 			   buf_size);
-		ret = -ENOMEM;
 		goto cleanup;
 	}
 	net_device->send_buf_size = buf_size;
@@ -512,11 +495,8 @@ static int netvsc_init_buf(struct hv_device *device,
 	 * channel.  Note: This call uses the vmbus connection rather
 	 * than the channel to establish the gpadl handle.
 	 */
-	ret = vmbus_establish_gpadl_caller_decrypted(device->channel,
-						     net_device->send_buffer.addr,
-						     buf_size,
-						     &net_device->send_buffer.gpadl);
-	net_device->send_buffer.leak |= net_device->send_buffer.gpadl.leak;
+	ret = vmbus_establish_gpadl_owned(device->channel,
+					  &net_device->send_buffer);
 	if (ret != 0) {
 		netdev_err(ndev,
 			   "unable to establish send buffer's gpadl\n");

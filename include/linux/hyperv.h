@@ -1216,9 +1216,9 @@ extern int vmbus_sendpacket_mpb_desc(struct vmbus_channel *channel,
 				     u64 requestid);
 
 extern int vmbus_establish_gpadl(struct vmbus_channel *channel,
-				      void *kbuffer,
-				      u32 size,
-				      struct vmbus_gpadl *gpadl);
+				 void *kbuffer,
+				 u32 size,
+				 struct vmbus_gpadl *gpadl);
 
 extern int vmbus_establish_gpadl_caller_decrypted(struct vmbus_channel *channel,
 						  void *kbuffer,
@@ -1226,7 +1226,7 @@ extern int vmbus_establish_gpadl_caller_decrypted(struct vmbus_channel *channel,
 						  struct vmbus_gpadl *gpadl);
 
 extern int vmbus_teardown_gpadl(struct vmbus_channel *channel,
-				     struct vmbus_gpadl *gpadl);
+				struct vmbus_gpadl *gpadl);
 
 extern void *vmbus_alloc_buffer(struct vmbus_channel *channel,
 				u32 size,
