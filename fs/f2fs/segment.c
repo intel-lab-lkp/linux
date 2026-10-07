@@ -510,6 +510,14 @@ void f2fs_balance_fs_bg(struct f2fs_sb_info *sbi, bool from_bg)
 		f2fs_shrink_age_extent_tree(sbi,
 				AGE_EXTENT_CACHE_SHRINK_NUMBER);
 
+	/* try to shrink meta cache when there is no enough memory */
+	if (!f2fs_available_free_memory(sbi, META_BLOCK))
+		f2fs_shrink_meta_cache(sbi, METADATA_CACHE_SHRINK_NUMBER);
+
+	/* try to shrink node cache when there is no enough memory */
+	if (!f2fs_available_free_memory(sbi, NODE_BLOCK))
+		f2fs_shrink_node_cache(sbi, METADATA_CACHE_SHRINK_NUMBER);
+
 	/* check the # of cached NAT entries */
 	if (!f2fs_available_free_memory(sbi, NAT_ENTRIES))
 		f2fs_try_to_free_nats(sbi, NAT_ENTRY_PER_BLOCK(sbi));

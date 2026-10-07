@@ -669,6 +669,18 @@ unsigned long f2fs_shrink_cache(struct f2fs_sb_info *sbi,
 	return freed;
 }
 
+unsigned long f2fs_shrink_meta_cache(struct f2fs_sb_info *sbi,
+					unsigned long nr_to_scan)
+{
+	return f2fs_do_shrink_cache(META_CACHE(sbi), nr_to_scan);
+}
+
+unsigned long f2fs_shrink_node_cache(struct f2fs_sb_info *sbi,
+					unsigned long nr_to_scan)
+{
+	return f2fs_do_shrink_cache(NODE_CACHE(sbi), nr_to_scan);
+}
+
 static int f2fs_cache_writeback_kthread(void *data)
 {
 	struct f2fs_sb_info *sbi = data;

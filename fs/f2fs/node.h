@@ -158,6 +158,8 @@ enum mem_type {
 	AGE_EXTENT_CACHE,	/* indicates age extent cache */
 	DISCARD_CACHE,	/* indicates memory of cached discard cmds */
 	COMPRESS_BLOCK,	/* indicates memory of cached compressed blocks */
+	META_BLOCK,	/* indicates memory of cached meta blocks */
+	NODE_BLOCK,	/* indicates memory of cached node blocks */
 	BASE_CHECK,	/* check kernel status */
 };
 

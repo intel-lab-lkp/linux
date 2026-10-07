@@ -123,6 +123,16 @@ bool f2fs_available_free_memory(struct f2fs_sb_info *sbi, int type)
 #else
 		res = false;
 #endif
+	} else if (type == META_BLOCK) {
+		mem_size = (META_CACHE(sbi)->num_entries *
+				(sizeof(struct f2fs_cached_block) +
+				F2FS_BLKSIZE(sbi))) >> PAGE_SHIFT;
+		res = mem_size < ((avail_ram * nm_i->ram_thresh / 100) >> 1);
+	} else if (type == NODE_BLOCK) {
+		mem_size = (NODE_CACHE(sbi)->num_entries *
+				(sizeof(struct f2fs_cached_block) +
+				F2FS_BLKSIZE(sbi))) >> PAGE_SHIFT;
+		res = mem_size < ((avail_ram * nm_i->ram_thresh / 100) >> 1);
 	} else {
 		if (!bdi_wb_dirty_exceeded(sbi->sb->s_bdi))
 			return true;

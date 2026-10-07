@@ -84,6 +84,8 @@ enum f2fs_cache_request_flag {
 
 #define F2FS_ONSTACK_CACHES		(32)
 
+#define METADATA_CACHE_SHRINK_NUMBER	(128)
+
 #define F2FS_CACHE_FLAG_TEST_FUNC(name, flagname)			\
 static inline bool f2fs_cache_test_##name(				\
 			const struct f2fs_cached_block *entry)		\
@@ -222,6 +224,10 @@ void f2fs_drop_cache_range(struct f2fs_cached_block_list *cache,
 	f2fs_drop_cache_range(NODE_CACHE(sbi), start, len, true)
 
 unsigned long f2fs_shrink_cache(struct f2fs_sb_info *sbi,
+				unsigned long nr_to_scan);
+unsigned long f2fs_shrink_meta_cache(struct f2fs_sb_info *sbi,
+				unsigned long nr_to_scan);
+unsigned long f2fs_shrink_node_cache(struct f2fs_sb_info *sbi,
 				unsigned long nr_to_scan);
 
 #define DEF_DIRTY_CACHE_TIMEOUT 5000
