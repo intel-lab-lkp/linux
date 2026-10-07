@@ -1063,6 +1063,12 @@ static inline void set_pte(hw_pte_t *ptep, pte_t pte)
 		__set_pte(ptep, pte);
 }
 
+#define ptep_get_lockless ptep_get_lockless
+static inline __no_sanitize_address pte_t ptep_get_lockless(hw_pte_t *ptep)
+{
+	return __pte_from_hw(READ_ONCE(*ptep));
+}
+
 static inline pte_t __ptep_get(hw_pte_t *ptep)
 {
 	return __pte_from_hw(READ_ONCE(*ptep));

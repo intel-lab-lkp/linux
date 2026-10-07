@@ -65,10 +65,13 @@ static int invalidate_pte_range(struct mm_struct *mm, unsigned long addr,
 }
 
 static void set_pte_range(struct mm_struct *mm, unsigned long addr,
-			  hw_pte_t *ptep, hw_pte_t *end, pte_t *cache)
+			  hw_pte_t *start, hw_pte_t *end, pte_t *cache)
 {
-	int i, nr_ptes;
+	int nr_ptes, nr_total = end - start;
+	hw_pte_t *ptep = start;
+	int i;
 
+	kasan_unpoison_pte(start, nr_total);
 	while (ptep < end) {
 		nr_ptes = invalidate_pte_range(mm, addr, ptep, end);
 
@@ -79,6 +82,7 @@ static void set_pte_range(struct mm_struct *mm, unsigned long addr,
 
 		addr += nr_ptes * PAGE_SIZE;
 	}
+	kasan_poison_pte(start, nr_total);
 }
 
 static void enter_ipte_norange(void)
@@ -98,6 +102,7 @@ static void enter_ipte_range(struct mm_struct *mm,
 			     unsigned long addr, unsigned long end, hw_pte_t *pte)
 {
 	struct ipte_range *range;
+	unsigned int nr_ptes;
 
 	if (!static_branch_likely(&lazy_mmu_enabled))
 		return;
@@ -116,6 +121,9 @@ static void enter_ipte_range(struct mm_struct *mm,
 	range->base_end = end;
 	range->base_pte = pte;
 
+	nr_ptes = (range->base_end - range->base_addr) / PAGE_SIZE;
+	kasan_poison_pte(range->base_pte, nr_ptes);
+
 	local_bh_enable();
 }
 
@@ -125,6 +133,7 @@ static void leave_ipte_range(void)
 	pte_t *start_cache, *cache;
 	hw_pte_t *ptep, *start;
 	struct ipte_range *range;
+	unsigned int nr_ptes;
 	int start_idx;
 
 	if (!static_branch_likely(&lazy_mmu_enabled))
@@ -163,6 +172,9 @@ static void leave_ipte_range(void)
 	range->end_pte = NULL;
 
 done:
+	nr_ptes = (range->base_end - range->base_addr) / PAGE_SIZE;
+	kasan_unpoison_pte(range->base_pte, nr_ptes);
+
 	range->mm = NULL;
 	range->base_addr = 0;
 	range->base_end = 0;
@@ -244,10 +256,17 @@ static void __ipte_range_set_pte(struct ipte_range *range, hw_pte_t *ptep, pte_t
 static pte_t __ipte_range_ptep_get(struct ipte_range *range, hw_pte_t *ptep)
 {
 	unsigned int idx = ptep - range->base_pte;
+	pte_t pte;
 
 	lockdep_assert_preemption_disabled();
-	if (pte_val(range->cache[idx]) == PTE_POISON)
-		return __ptep_get(ptep);
+	if (pte_val(range->cache[idx]) == PTE_POISON) {
+		kasan_unpoison_pte(ptep, 1);
+		pte = __ptep_get(ptep);
+		kasan_poison_pte(ptep, 1);
+
+		return pte;
+	}
+
 	return range->cache[idx];
 }
 
