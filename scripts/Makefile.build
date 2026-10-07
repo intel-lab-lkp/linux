@@ -38,6 +38,13 @@ include $(srctree)/scripts/Makefile.compiler
 include $(kbuild-file)
 include $(srctree)/scripts/Makefile.lib
 
+# Make DT directory targets reachable for architectures with a DTS tree.
+ifeq ($(obj),arch/$(SRCARCH))
+ifneq ($(wildcard $(src)/boot/dts/),)
+subdir-y += boot/dts
+endif
+endif
+
 # flags that take effect in current and sub directories
 KBUILD_AFLAGS += $(subdir-asflags-y)
 KBUILD_CFLAGS += $(subdir-ccflags-y)

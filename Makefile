@@ -1664,8 +1664,8 @@ dtbindingtree := Documentation/devicetree/bindings
 ifneq ($(dtstree),)
 
 PHONY += dtbs dtbs_prepare dtbs_install dtbs_check
-dtbs: dtbs_prepare
-	$(Q)$(MAKE) $(build)=$(dtstree) need-dtbslist=1
+dtbs:
+	$(Q)$(MAKE) $(dtstree)/
 
 # include/config/kernel.release is actually needed when installing DTBs because
 # INSTALL_DTBS_PATH contains $(KERNELRELEASE). However, we do not want to make
@@ -2216,7 +2216,7 @@ single-goals := $(addprefix $(build-dir)/, $(single-no-ko))
 
 # DT-only targets need host tools, but no architecture-specific preparation.
 ifneq ($(dtstree),)
-single-dt-patterns := $(addprefix $(dtstree)/,%.dtb %.dtbo)
+single-dt-patterns := $(dtstree)/ $(addprefix $(dtstree)/,%.dtb %.dtbo %/)
 ifeq ($(filter-out $(single-dt-patterns),$(single-no-ko)),)
 single-build-prep := dtbs_prepare
 endif
@@ -2234,7 +2234,7 @@ prepare: outputmakefile
 # Error messages still appears in the original language
 PHONY += $(build-dir)
 $(build-dir): $(single-build-prep)
-	$(Q)$(MAKE) $(build)=$@ need-builtin=1 need-modorder=1 $(single-goals)
+	$(Q)$(MAKE) $(build)=$@ need-builtin=1 need-modorder=1 need-dtbslist=1 $(single-goals)
 
 clean-dirs := $(addprefix _clean_, $(clean-dirs))
 PHONY += $(clean-dirs) clean
