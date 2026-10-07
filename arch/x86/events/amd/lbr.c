@@ -141,17 +141,14 @@ static void amd_pmu_lbr_filter(void)
 		return;
 
 	/* Remove all invalid entries */
-	for (i = 0; i < cpuc->lbr_stack.nr; ) {
-		if (!cpuc->lbr_entries[i].from) {
-			j = i;
-			while (++j < cpuc->lbr_stack.nr)
-				cpuc->lbr_entries[j - 1] = cpuc->lbr_entries[j];
-			cpuc->lbr_stack.nr--;
-			if (!cpuc->lbr_entries[i].from)
-				continue;
-		}
-		i++;
+	for (i = 0, j = 0; i < cpuc->lbr_stack.nr; i++) {
+		if (!cpuc->lbr_entries[i].from)
+			continue;
+		if (j != i)
+			cpuc->lbr_entries[j] = cpuc->lbr_entries[i];
+		j++;
 	}
+	cpuc->lbr_stack.nr = j;
 }
 
 static const int lbr_spec_map[PERF_BR_SPEC_MAX] = {
