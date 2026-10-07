@@ -982,16 +982,11 @@ struct ksmbd_file *ksmbd_lookup_fd_app_instance_id(char *app_instance_id)
 	return fp;
 }
 
-int ksmbd_close_fd_app_instance_id(char *app_instance_id)
+int ksmbd_close_fd_app_instance_id(struct ksmbd_file *fp)
 {
 	struct ksmbd_file_table *ft;
-	struct ksmbd_file *fp;
 	struct oplock_info *opinfo;
 	int n_to_drop = 0;
-
-	fp = ksmbd_lookup_fd_app_instance_id(app_instance_id);
-	if (!fp)
-		return 0;
 
 	opinfo = opinfo_get(fp);
 	if (!opinfo)
