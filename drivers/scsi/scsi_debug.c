@@ -4052,42 +4052,43 @@ static inline struct sdeb_store_info *devip2sip(struct sdebug_dev_info *devip,
 
 static inline void
 sdeb_read_lock(rwlock_t *lock)
+	__acquires_shared(lock)
+	__context_unsafe(/*conditional locking*/)
 {
-	if (sdebug_no_rwlock)
-		__acquire(lock);
-	else
+	if (!sdebug_no_rwlock)
 		read_lock(lock);
 }
 
 static inline void
 sdeb_read_unlock(rwlock_t *lock)
+	__releases_shared(lock)
+	__context_unsafe(/*conditional locking*/)
 {
-	if (sdebug_no_rwlock)
-		__release(lock);
-	else
+	if (!sdebug_no_rwlock)
 		read_unlock(lock);
 }
 
 static inline void
 sdeb_write_lock(rwlock_t *lock)
+	__acquires(lock)
+	__context_unsafe(/*conditional locking*/)
 {
-	if (sdebug_no_rwlock)
-		__acquire(lock);
-	else
+	if (!sdebug_no_rwlock)
 		write_lock(lock);
 }
 
 static inline void
 sdeb_write_unlock(rwlock_t *lock)
+	__releases(lock)
+	__context_unsafe(/*conditional locking*/)
 {
-	if (sdebug_no_rwlock)
-		__release(lock);
-	else
+	if (!sdebug_no_rwlock)
 		write_unlock(lock);
 }
 
 static inline void
 sdeb_data_read_lock(struct sdeb_store_info *sip)
+	__acquires_shared(&sip->macc_data_lck)
 {
 	BUG_ON(!sip);
 
@@ -4096,6 +4097,7 @@ sdeb_data_read_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_read_unlock(struct sdeb_store_info *sip)
+	__releases_shared(&sip->macc_data_lck)
 {
 	BUG_ON(!sip);
 
@@ -4104,6 +4106,7 @@ sdeb_data_read_unlock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_write_lock(struct sdeb_store_info *sip)
+	__acquires(&sip->macc_data_lck)
 {
 	BUG_ON(!sip);
 
@@ -4112,6 +4115,7 @@ sdeb_data_write_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_write_unlock(struct sdeb_store_info *sip)
+	__releases(&sip->macc_data_lck)
 {
 	BUG_ON(!sip);
 
@@ -4120,6 +4124,7 @@ sdeb_data_write_unlock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_sector_read_lock(struct sdeb_store_info *sip)
+	__acquires_shared(&sip->macc_sector_lck)
 {
 	BUG_ON(!sip);
 
@@ -4128,6 +4133,7 @@ sdeb_data_sector_read_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_sector_read_unlock(struct sdeb_store_info *sip)
+	__releases_shared(&sip->macc_sector_lck)
 {
 	BUG_ON(!sip);
 
@@ -4136,6 +4142,7 @@ sdeb_data_sector_read_unlock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_sector_write_lock(struct sdeb_store_info *sip)
+	__acquires(&sip->macc_sector_lck)
 {
 	BUG_ON(!sip);
 
@@ -4144,6 +4151,7 @@ sdeb_data_sector_write_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_sector_write_unlock(struct sdeb_store_info *sip)
+	__releases(&sip->macc_sector_lck)
 {
 	BUG_ON(!sip);
 
@@ -4165,6 +4173,8 @@ sdeb_data_sector_write_unlock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_data_lock(struct sdeb_store_info *sip, bool atomic)
+	__acquires(&sip->macc_data_lck)
+	__context_unsafe(/*conditional locking*/)
 {
 	if (atomic)
 		sdeb_data_write_lock(sip);
@@ -4174,6 +4184,8 @@ sdeb_data_lock(struct sdeb_store_info *sip, bool atomic)
 
 static inline void
 sdeb_data_unlock(struct sdeb_store_info *sip, bool atomic)
+	__releases(&sip->macc_data_lck)
+	__context_unsafe(/*conditional locking*/)
 {
 	if (atomic)
 		sdeb_data_write_unlock(sip);
@@ -4184,6 +4196,8 @@ sdeb_data_unlock(struct sdeb_store_info *sip, bool atomic)
 /* Allow many reads but only 1x write per sector */
 static inline void
 sdeb_data_sector_lock(struct sdeb_store_info *sip, bool do_write)
+	__acquires(&sip->macc_sector_lck)
+	__context_unsafe(/*conditional locking*/)
 {
 	if (do_write)
 		sdeb_data_sector_write_lock(sip);
@@ -4193,6 +4207,8 @@ sdeb_data_sector_lock(struct sdeb_store_info *sip, bool do_write)
 
 static inline void
 sdeb_data_sector_unlock(struct sdeb_store_info *sip, bool do_write)
+	__releases(&sip->macc_sector_lck)
+	__context_unsafe(/*conditional locking*/)
 {
 	if (do_write)
 		sdeb_data_sector_write_unlock(sip);
@@ -4202,13 +4218,10 @@ sdeb_data_sector_unlock(struct sdeb_store_info *sip, bool do_write)
 
 static inline void
 sdeb_meta_read_lock(struct sdeb_store_info *sip)
+	__acquires_shared(&sip->macc_meta_lck)
+	__context_unsafe(/*conditional locking*/)
 {
-	if (sdebug_no_rwlock) {
-		if (sip)
-			__acquire(&sip->macc_meta_lck);
-		else
-			__acquire(&sdeb_fake_rw_lck);
-	} else {
+	if (!sdebug_no_rwlock) {
 		if (sip)
 			read_lock(&sip->macc_meta_lck);
 		else
@@ -4218,13 +4231,10 @@ sdeb_meta_read_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_meta_read_unlock(struct sdeb_store_info *sip)
+	__releases_shared(&sip->macc_meta_lck)
+	__context_unsafe(/*conditional locking*/)
 {
-	if (sdebug_no_rwlock) {
-		if (sip)
-			__release(&sip->macc_meta_lck);
-		else
-			__release(&sdeb_fake_rw_lck);
-	} else {
+	if (!sdebug_no_rwlock) {
 		if (sip)
 			read_unlock(&sip->macc_meta_lck);
 		else
@@ -4234,13 +4244,10 @@ sdeb_meta_read_unlock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_meta_write_lock(struct sdeb_store_info *sip)
+	__acquires(&sip->macc_meta_lck)
+	__context_unsafe(/*conditional locking*/)
 {
-	if (sdebug_no_rwlock) {
-		if (sip)
-			__acquire(&sip->macc_meta_lck);
-		else
-			__acquire(&sdeb_fake_rw_lck);
-	} else {
+	if (!sdebug_no_rwlock) {
 		if (sip)
 			write_lock(&sip->macc_meta_lck);
 		else
@@ -4250,13 +4257,10 @@ sdeb_meta_write_lock(struct sdeb_store_info *sip)
 
 static inline void
 sdeb_meta_write_unlock(struct sdeb_store_info *sip)
+	__releases(&sip->macc_meta_lck)
+	__context_unsafe(/*conditional locking*/)
 {
-	if (sdebug_no_rwlock) {
-		if (sip)
-			__release(&sip->macc_meta_lck);
-		else
-			__release(&sdeb_fake_rw_lck);
-	} else {
+	if (!sdebug_no_rwlock) {
 		if (sip)
 			write_unlock(&sip->macc_meta_lck);
 		else
