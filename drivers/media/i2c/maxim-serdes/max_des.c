@@ -137,8 +137,7 @@ static inline unsigned int max_des_phy_to_pad(struct max_des *des,
 
 static inline unsigned int max_des_num_pads(struct max_des *des)
 {
-	return des->info->num_links + des->info->num_phys +
-	       (des->ops->set_tpg ? 1 : 0);
+	return des->info->num_links + des->info->num_phys;
 }
 
 static struct max_des_phy *max_des_pad_to_phy(struct max_des *des, u32 pad)
