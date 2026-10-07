@@ -90,6 +90,26 @@ static int check_region_contains_byte(void *addr, unsigned long size, char byte)
 	return 0;
 }
 
+static int read_vmlck(unsigned long *vmlck)
+{
+	char line[128];
+	FILE *status = fopen("/proc/self/status", "r");
+
+	if (!status)
+		return -1;
+
+	while (fgets(line, sizeof(line), status)) {
+		if (sscanf(line, "VmLck: %lu kB", vmlck) == 1) {
+			fclose(status);
+			return 0;
+		}
+	}
+
+	fclose(status);
+	errno = EINVAL;
+	return -1;
+}
+
 // this test validates that MREMAP_DONTUNMAP moves the pagetables while leaving
 // the source mapping mapped.
 static void mremap_dontunmap_simple()
@@ -123,6 +143,75 @@ static void mremap_dontunmap_simple()
 	BUG_ON(munmap(source_mapping, num_pages * page_size) == -1,
 	       "unable to unmap source mapping");
 	ksft_test_result_pass("%s\n", __func__);
+}
+
+static void mremap_dontunmap_mlock_accounting(void)
+{
+	unsigned long before, after_mlock, after_remap;
+	char message[128];
+	char *source, *dest = MAP_FAILED;
+	int failed = 0;
+	int err;
+
+	source = mmap(NULL, page_size, PROT_READ | PROT_WRITE,
+		      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (source == MAP_FAILED)
+		ksft_exit_fail_perror("mmap");
+	if (read_vmlck(&before))
+		ksft_exit_fail_perror("read VmLck");
+
+	if (mlock(source, page_size)) {
+		err = errno;
+		if (munmap(source, page_size))
+			ksft_exit_fail_perror("munmap");
+		if (err == EPERM || err == ENOMEM) {
+			ksft_test_result_skip("%s: mlock unavailable\n", __func__);
+			return;
+		}
+		errno = err;
+		ksft_exit_fail_perror("mlock");
+	}
+
+	if (read_vmlck(&after_mlock))
+		ksft_exit_fail_perror("read VmLck after mlock");
+	if (after_mlock != before + page_size / 1024) {
+		snprintf(message, sizeof(message),
+			 "mlock changed VmLck from %lu to %lu kB", before,
+			 after_mlock);
+		failed = 1;
+		goto out;
+	}
+
+	dest = mremap(source, page_size, page_size,
+		      MREMAP_DONTUNMAP | MREMAP_MAYMOVE, NULL);
+	if (dest == MAP_FAILED)
+		ksft_exit_fail_perror("mremap");
+	if (read_vmlck(&after_remap))
+		ksft_exit_fail_perror("read VmLck after mremap");
+
+	if (after_remap != after_mlock) {
+		snprintf(message, sizeof(message),
+			 "VmLck changed from %lu to %lu kB", after_mlock,
+			 after_remap);
+		failed = 1;
+	}
+
+out:
+	if (dest != MAP_FAILED) {
+		if (munlock(dest, page_size))
+			ksft_exit_fail_perror("munlock destination");
+		if (munmap(dest, page_size))
+			ksft_exit_fail_perror("munmap destination");
+	}
+	if (munlock(source, page_size))
+		ksft_exit_fail_perror("munlock source");
+	if (munmap(source, page_size))
+		ksft_exit_fail_perror("munmap source");
+
+	if (failed)
+		ksft_test_result_fail("%s\n", message);
+	else
+		ksft_test_result_pass("MREMAP_DONTUNMAP preserves VmLck accounting\n");
 }
 
 // This test validates that MREMAP_DONTUNMAP on a shared mapping works as expected.
@@ -348,7 +437,7 @@ int main(void)
 		ksft_finished();
 	}
 
-	ksft_set_plan(5);
+	ksft_set_plan(6);
 
 	// Keep a page sized buffer around for when we need it.
 	page_buffer =
@@ -361,6 +450,7 @@ int main(void)
 	mremap_dontunmap_simple_fixed();
 	mremap_dontunmap_partial_mapping();
 	mremap_dontunmap_partial_mapping_overwrite();
+	mremap_dontunmap_mlock_accounting();
 
 	BUG_ON(munmap(page_buffer, page_size) == -1,
 	       "unable to unmap page buffer");
