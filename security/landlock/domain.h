@@ -216,37 +216,29 @@ struct landlock_domain {
 		/**
 		 * @work_free: Enables to free a domain within a lockless
 		 * section.  This is only used by landlock_put_domain_deferred()
-		 * when @usage reaches zero.  The fields @usage, @num_layers and
-		 * @handled_masks are then unused.
+		 * when @usage reaches zero.  The field @usage is then unused.
 		 */
 		struct work_struct work_free;
-		struct {
-			/**
-			 * @usage: Number of credentials referencing this
-			 * domain.
-			 */
-			refcount_t usage;
-			/**
-			 * @num_layers: Number of layers that are used in this
-			 * domain.  This enables to check that all the layers
-			 * allow an access request.
-			 */
-			u32 num_layers;
-			/**
-			 * @handled_masks: Contains the subset of filesystem and
-			 * network actions that are restricted by a domain.  A
-			 * domain saves all layers of merged rulesets in a stack
-			 * (FAM), starting from the first layer to the last one.
-			 * These layers are used when merging rulesets, for user
-			 * space backward compatibility (i.e. future-proof), and
-			 * to properly handle merged rulesets without
-			 * overlapping access rights.  These layers are set once
-			 * and never changed for the lifetime of the domain.
-			 */
-			struct access_masks
-				handled_masks[] __counted_by(num_layers);
-		};
+		/**
+		 * @usage: Number of credentials referencing this domain.
+		 */
+		refcount_t usage;
 	};
+	/**
+	 * @num_layers: Number of layers that are used in this domain.  This
+	 * enables to check that all the layers allow an access request.
+	 */
+	u32 num_layers;
+	/**
+	 * @handled_masks: Contains the subset of filesystem and network actions
+	 * that are restricted by a domain.  A domain saves all layers of merged
+	 * rulesets in a stack (FAM), starting from the first layer to the last
+	 * one.  These layers are used when merging rulesets, for user space
+	 * backward compatibility (i.e. future-proof), and to properly handle
+	 * merged rulesets without overlapping access rights.  These layers are
+	 * set once and never changed for the lifetime of the domain.
+	 */
+	struct access_masks handled_masks[] __counted_by(num_layers);
 };
 
 static inline access_mask_t
