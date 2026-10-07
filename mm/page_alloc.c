@@ -728,6 +728,9 @@ static inline struct capture_control *task_capc(struct zone *zone)
 		capc->zone == zone ? capc : NULL;
 }
 
+static void change_pageblock_range(struct page *pageblock_page,
+				   int start_order, int migratetype);
+
 static inline bool
 compaction_capture(struct capture_control *capc, struct page *page,
 		   int order, int migratetype)
@@ -750,6 +753,19 @@ compaction_capture(struct capture_control *capc, struct page *page,
 	if (order < pageblock_order && migratetype == MIGRATE_MOVABLE &&
 	    capc->migratetype != MIGRATE_MOVABLE)
 		return false;
+
+	/*
+	 * A non-movable capture claims a movable block: convert it to
+	 * the request. A movable capture steals: take the pages and
+	 * leave the type alone. Partial movable blocks returned above,
+	 * so reaching here means a whole block.
+	 */
+	if (capc->migratetype != MIGRATE_MOVABLE &&
+	    migratetype == MIGRATE_MOVABLE) {
+		change_pageblock_range(page, order, capc->migratetype);
+		/* Converted whole, so no fragmentation to report below. */
+		migratetype = capc->migratetype;
+	}
 
 	if (migratetype != capc->migratetype)
 		trace_mm_page_alloc_extfrag(page, capc->order, order,
