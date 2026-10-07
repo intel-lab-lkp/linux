@@ -995,7 +995,8 @@ static void spinand_cont_read_init(struct spinand_device *spinand)
 
 		if ((engine_type == NAND_ECC_ENGINE_TYPE_ON_DIE ||
 		     engine_type == NAND_ECC_ENGINE_TYPE_NONE) &&
-		    !spi_mem_controller_is_capable(ctlr, no_cs_assertion))
+		    !spi_mem_controller_is_capable(ctlr, no_cs_assertion) &&
+		    !spinand->cont_read_unsupported)
 			spinand->cont_read_possible = true;
 	}
 }
@@ -1700,11 +1701,11 @@ int spinand_match_and_init(struct spinand_device *spinand,
 				    (read_op->addr.dtr && !op->addr.dtr) ||
 				    read_op->data.buswidth > op->data.buswidth ||
 				    (read_op->data.dtr && !op->data.dtr))
-					spinand->cont_read_possible = false;
+					spinand->cont_read_unsupported = true;
 				else
 					spinand->ssdr_op_templates.cont_read_cache = op;
 			} else {
-				spinand->cont_read_possible = false;
+				spinand->cont_read_unsupported = true;
 			}
 		}
 
@@ -1736,7 +1737,7 @@ int spinand_match_and_init(struct spinand_device *spinand,
 			if (op)
 				spinand->odtr_op_templates.cont_read_cache = op;
 			else
-				spinand->cont_read_possible = false;
+				spinand->cont_read_unsupported = true;
 		}
 
 		return 0;
