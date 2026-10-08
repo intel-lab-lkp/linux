@@ -141,10 +141,41 @@ static void test_poly1305_reduction_edge_cases(struct kunit *test)
 	}
 }
 
+/*
+ * Poly1305 test case which uses r_key=1, s_key=0 and a split update sequence
+ * that exercises a carry while resuming from a base 2^26 accumulator.
+ *
+ * The first update leaves the arm64 NEON implementation in base 2^26. The
+ * second update contains an odd number of blocks, so it converts that
+ * accumulator back to base 2^64 before processing the first block.
+ */
+static void test_poly1305_split_update_carry(struct kunit *test)
+{
+	static const u8 key[POLY1305_KEY_SIZE] = { 1 }; /* r_key=1, s_key=0 */
+	static const u8 expected_mac[POLY1305_DIGEST_SIZE] = { 0x13 };
+	u8 data[304] = {};
+	struct poly1305_desc_ctx ctx;
+	u8 actual_mac[POLY1305_DIGEST_SIZE];
+
+	/* Set the fifth data block to 2**128 - 6. */
+	data[64] = 0xfa;
+	memset(&data[65], 0xff, POLY1305_BLOCK_SIZE - 1);
+
+	poly1305_init(&ctx, key);
+	poly1305_update(&ctx, data, 128);
+	poly1305_update(&ctx, data + 128, 144);
+	poly1305_update(&ctx, data + 272, 32);
+	poly1305_final(&ctx, actual_mac);
+
+	KUNIT_ASSERT_MEMEQ(test, actual_mac, expected_mac,
+			   POLY1305_DIGEST_SIZE);
+}
+
 static struct kunit_case poly1305_test_cases[] = {
 	HASH_KUNIT_CASES,
 	KUNIT_CASE(test_poly1305_allones_keys_and_message),
 	KUNIT_CASE(test_poly1305_reduction_edge_cases),
+	KUNIT_CASE(test_poly1305_split_update_carry),
 	KUNIT_CASE(benchmark_hash),
 	{},
 };
