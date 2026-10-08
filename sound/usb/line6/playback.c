@@ -171,7 +171,7 @@ static int submit_audio_out_urb(struct snd_line6_pcm *line6pcm)
 		    &urb_out->iso_frame_desc[i];
 
 		fsize = line6pcm->prev_fsize;
-		if (fsize == 0) {
+		if (fsize == -1) {
 			int n;
 
 			line6pcm->out.count += frame_increment;
@@ -271,7 +271,7 @@ static int submit_audio_out_urb(struct snd_line6_pcm *line6pcm)
 						   bytes_per_frame);
 		}
 		line6pcm->prev_fbuf = NULL;
-		line6pcm->prev_fsize = 0;
+		line6pcm->prev_fsize = -1;
 	}
 	spin_unlock(&line6pcm->in.lock);
 

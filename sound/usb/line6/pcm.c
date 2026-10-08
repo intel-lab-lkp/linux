@@ -217,7 +217,7 @@ static void line6_stream_stop(struct snd_line6_pcm *line6pcm, int direction,
 	if (direction == SNDRV_PCM_STREAM_CAPTURE) {
 		guard(spinlock_irqsave)(&pstr->lock);
 		line6pcm->prev_fbuf = NULL;
-		line6pcm->prev_fsize = 0;
+		line6pcm->prev_fsize = -1;
 	}
 }
 
@@ -538,6 +538,8 @@ int line6_init_pcm(struct usb_line6 *line6,
 	line6pcm->volume_playback[0] = line6pcm->volume_playback[1] = 255;
 	line6pcm->volume_monitor = 255;
 	line6pcm->line6 = line6;
+	line6pcm->prev_fbuf = NULL;
+	line6pcm->prev_fsize = -1;
 
 	spin_lock_init(&line6pcm->out.lock);
 	spin_lock_init(&line6pcm->in.lock);
