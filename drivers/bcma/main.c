@@ -182,6 +182,7 @@ static unsigned int bcma_of_get_irq(struct device *parent,
 				    struct bcma_device *core, int num)
 {
 	struct of_phandle_args out_irq;
+	unsigned int irq;
 	int ret;
 
 	if (!IS_ENABLED(CONFIG_OF_IRQ) || !parent->of_node)
@@ -194,7 +195,10 @@ static unsigned int bcma_of_get_irq(struct device *parent,
 		return 0;
 	}
 
-	return irq_create_of_mapping(&out_irq);
+	irq = irq_create_of_mapping(&out_irq);
+	of_node_put(out_irq.np);
+
+	return irq;
 }
 
 static void bcma_of_fill_device(struct device *parent,
