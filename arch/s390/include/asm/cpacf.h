@@ -715,12 +715,20 @@ static inline void cpacf_pckmo(long func, void *param)
  * @src_len: length of src operand in bytes
  * @aad: address of additional authenticated data memory area
  * @aad_len: length of aad operand in bytes
+ *
+ * Returns the condition code:
+ *  0 - normal completion
+ *  1 - verification-pattern mismatch
+ *  2 - incomplete processing (see POP for details)
+ * Condition code 3 (partial completion) is handled within the asm code
+ * and never returned.
  */
-static inline void cpacf_kma(unsigned long func, void *param, u8 *dest,
-			     const u8 *src, unsigned long src_len,
-			     const u8 *aad, unsigned long aad_len)
+static inline int cpacf_kma(unsigned long func, void *param, u8 *dest,
+			    const u8 *src, unsigned long src_len,
+			    const u8 *aad, unsigned long aad_len)
 {
 	union register_pair d, s, a;
+	int cc;
 
 	d.even = (unsigned long)dest;
 	s.even = (unsigned long)src;
@@ -731,12 +739,16 @@ static inline void cpacf_kma(unsigned long func, void *param, u8 *dest,
 		"	lgr	0,%[fc]\n"
 		"	lgr	1,%[pba]\n"
 		"0:	.insn	rrf,%[opc] << 16,%[dst],%[src],%[aad],0\n"
-		"	brc	1,0b"	/* handle partial completion */
-		: [dst] "+&d" (d.pair), [src] "+&d" (s.pair),
+		"	brc	1,0b\n"	/* handle partial completion */
+		CC_IPM(cc)
+		: CC_OUT(cc, cc), [dst] "+&d" (d.pair), [src] "+&d" (s.pair),
 		  [aad] "+&d" (a.pair)
 		: [fc] "d" (func), [pba] "d" ((unsigned long)param),
 		  [opc] "i" (CPACF_KMA)
-		: "cc", "memory", "0", "1");
+		: CC_CLOBBER_LIST("memory", "0", "1"));
+
+	kmsan_unpoison_memory(dest, src_len - s.odd);
+	return CC_TRANSFORM(cc);
 }
 
 #endif	/* _ASM_S390_CPACF_H */
