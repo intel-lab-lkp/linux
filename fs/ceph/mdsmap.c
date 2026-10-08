@@ -316,7 +316,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(struct ceph_mds_client *mdsc, void **p,
 	{
 		int num_laggy = 0;
 		ceph_decode_32_safe(p, end, n, bad_ext);
-		ceph_decode_need(p, end, sizeof(u32) * n, bad_ext);
+		ceph_decode_need(p, end, size_mul(sizeof(u32), n), bad_ext);
 
 		for (i = 0; i < n; i++) {
 			s32 mds = ceph_decode_32(p);
