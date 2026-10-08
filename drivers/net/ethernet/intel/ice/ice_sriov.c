@@ -154,9 +154,21 @@ void ice_free_vfs(struct ice_pf *pf)
 	mutex_lock(&vfs->table_lock);
 
 	ice_for_each_vf(pf, bkt, vf) {
+		/* Detach the representor before cfg_lock: it takes the
+		 * devlink instance lock and then RTNL, while
+		 * __ice_set_vf_mac(), ice_set_vf_port_vlan() and the
+		 * representor ethtool reset take cfg_lock under RTNL.
+		 * Take cfg_lock once ahead of it to wait out a reset that
+		 * is already inside the lock; ICE_VF_DIS, raised above,
+		 * keeps later ones out.
+		 */
 		mutex_lock(&vf->cfg_lock);
+		mutex_unlock(&vf->cfg_lock);
 
 		ice_eswitch_detach_vf(pf, vf);
+
+		mutex_lock(&vf->cfg_lock);
+
 		ice_dis_vf_qs(vf);
 		ice_virt_free_irqs(pf, vf->first_vector_idx, vf->num_msix);
 
