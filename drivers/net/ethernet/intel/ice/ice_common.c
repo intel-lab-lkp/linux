@@ -2482,6 +2482,12 @@ ice_parse_common_caps(struct ice_hw *hw, struct ice_hw_common_caps *caps,
 	case LIBIE_AQC_CAPS_TX_SCHED_TOPO_COMP_MODE:
 		caps->tx_sched_topo_comp_mode_en = (number == 1);
 		break;
+	case LIBIE_AQC_CAPS_EXTERNAL_PQC_ROT_PRESENT:
+		caps->external_pqc_rot_present = (number == 1);
+		caps->external_pqc_rot_invalid = (number != 0 && number != 1);
+		ice_debug(hw, ICE_DBG_INIT, "%s: external_pqc_rot = %u\n",
+			  prefix, number);
+		break;
 	default:
 		/* Not one of the recognized common capabilities */
 		found = false;
