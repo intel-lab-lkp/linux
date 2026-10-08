@@ -1599,6 +1599,57 @@ TEST_F(iommufd_ioas, dmabuf_simple)
 	close(dfd);
 }
 
+TEST_F(iommufd_ioas, dmabuf_mmio_new_domain)
+{
+	size_t buf_size = PAGE_SIZE * 4;
+	__u32 hwpt_id;
+	__u64 iova;
+	int dfd;
+
+	if (!variant->mock_domains)
+		SKIP(return, "needs a mock domain");
+
+	test_cmd_get_dmabuf(buf_size, &dfd);
+	test_ioctl_ioas_map_file(dfd, 0, buf_size, &iova);
+	test_cmd_md_check_mmio(self->hwpt_id, iova, buf_size);
+
+	/* A domain added later is filled from the already mapped area */
+	test_cmd_hwpt_alloc(self->device_id, self->ioas_id, 0, &hwpt_id);
+	test_cmd_md_check_mmio(hwpt_id, iova, buf_size);
+
+	test_ioctl_destroy(hwpt_id);
+	close(dfd);
+}
+
+TEST_F(iommufd_ioas, dmabuf_mmio_copy)
+{
+	size_t buf_size = PAGE_SIZE * 4;
+	struct iommu_ioas_copy copy_cmd = {
+		.size = sizeof(copy_cmd),
+		.flags = IOMMU_IOAS_MAP_WRITEABLE | IOMMU_IOAS_MAP_READABLE,
+		.src_ioas_id = self->ioas_id,
+		.length = buf_size,
+	};
+	__u32 stdev_id;
+	__u32 hwpt_id;
+	int dfd;
+
+	if (!variant->mock_domains)
+		SKIP(return, "needs a mock domain");
+
+	test_cmd_get_dmabuf(buf_size, &dfd);
+	test_ioctl_ioas_map_file(dfd, 0, buf_size, &copy_cmd.src_iova);
+
+	/* The copy is filled from the domain of the source IOAS */
+	test_ioctl_ioas_alloc(&copy_cmd.dst_ioas_id);
+	test_cmd_mock_domain(copy_cmd.dst_ioas_id, &stdev_id, &hwpt_id, NULL);
+	ASSERT_EQ(0, ioctl(self->fd, IOMMU_IOAS_COPY, &copy_cmd));
+	test_cmd_md_check_mmio(hwpt_id, copy_cmd.dst_iova, buf_size);
+
+	test_ioctl_destroy(stdev_id);
+	close(dfd);
+}
+
 TEST_F(iommufd_ioas, dmabuf_revoke)
 {
 	size_t buf_size = PAGE_SIZE*4;
