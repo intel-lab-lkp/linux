@@ -96,6 +96,7 @@ Contents:
    phy-port
    pktgen
    plip
+   pon
    ppp_generic
    proc_net_tcp
    pse-pd/index
