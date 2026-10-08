@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/peci/starfive,jhb100-peci.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: StarFive JHB100 PECI Controller
+
+maintainers:
+  - Changhuang Liang <changhuang.liang@starfivetech.com>
+  - Mason Huo <mason.huo@starfivetech.com>
+
+allOf:
+  - $ref: peci-controller.yaml#
+
+properties:
+  compatible:
+    enum:
+      - starfive,jhb100-peci
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  cmd-timeout-ms:
+    minimum: 1
+    maximum: 1000
+    default: 1000
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - resets
+
+additionalProperties: false
+
+examples:
+  - |
+    peci-controller@11c60000 {
+      compatible = "starfive,jhb100-peci";
+      reg = <0x11c60000 0x400>;
+      interrupts = <222>;
+      clocks = <&per3crg 34>;
+      resets = <&per3crg 3>;
+      cmd-timeout-ms = <1000>;
+    };
+...
