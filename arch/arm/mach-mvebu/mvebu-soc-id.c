@@ -85,6 +85,7 @@ static int __init get_soc_id_by_pci(void)
 	ret = clk_prepare_enable(clk);
 	if (ret) {
 		pr_err("cannot enable clock\n");
+		clk_put(clk);
 		goto clk_err;
 	}
 
