@@ -439,7 +439,7 @@ static int mtip_device_reset(struct driver_data *dd)
 	int rv = 0;
 
 	if (mtip_check_surprise_removal(dd))
-		return 0;
+		return -ENODEV;
 
 	if (mtip_hba_reset(dd) < 0)
 		rv = -EFAULT;
