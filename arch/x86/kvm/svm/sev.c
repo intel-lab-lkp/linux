@@ -2043,10 +2043,12 @@ static void sev_vcpu_migrate_asid(struct vcpu_svm *dst_svm,
 	dst_svm->asid = asid;
 
 	/*
-	 * If nested is already initialized on the destination vCPU, also update
-	 * the nested ASID to match the new SEV ASID.
+	 * If nested is already initialized on the destination vCPU, also free
+	 * the previous ASID (in case it was non-SEV) and update the nested ASID
+	 * to match the new SEV ASID.
 	 */
 	if (dst_svm->nested.vmcb02.ptr) {
+		free_asid(dst_svm->nested.asid02);
 		dst_svm->nested.asid02 = asid;
 		dst_svm->nested.vmcb02.ptr->control.asid = asid;
 	}
