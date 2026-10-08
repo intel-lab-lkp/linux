@@ -82,11 +82,10 @@ Following IOMMUFD objects are exposed to userspace:
   * Direct assigned invalidation queues
   * Direct assigned interrupts
 
-  Such a vIOMMU object generally has the access to a nesting parent pagetable
-  to support some HW-accelerated virtualization features. So, a vIOMMU object
-  must be created given a nesting parent HWPT_PAGING object, and then it would
-  encapsulate that HWPT_PAGING object. Therefore, a vIOMMU object can be used
-  to allocate an HWPT_NESTED object in place of the encapsulated HWPT_PAGING.
+  A vIOMMU object may encapsulate a nesting parent HWPT_PAGING object to
+  support HW-accelerated virtualization features. Whether a parent is required
+  is determined by the selected vIOMMU implementation. Only a parent-backed
+  vIOMMU can be used to allocate an HWPT_NESTED object.
 
   .. note::
 
@@ -226,9 +225,9 @@ creating the objects and links::
      flag is set.
 
 4. IOMMUFD_OBJ_HWPT_NESTED can be only manually created via the IOMMU_HWPT_ALLOC
-   uAPI, provided an hwpt_id or a viommu_id of a vIOMMU object encapsulating a
-   nesting parent HWPT_PAGING via @pt_id to associate the new HWPT_NESTED object
-   to the corresponding HWPT_PAGING object. The associating HWPT_PAGING object
+   uAPI, provided an hwpt_id or a viommu_id of a parent-backed vIOMMU object
+   via @pt_id to associate the new HWPT_NESTED object to the corresponding
+   HWPT_PAGING object. The associating HWPT_PAGING object
    must be a nesting parent manually allocated via the same uAPI previously with
    an IOMMU_HWPT_ALLOC_NEST_PARENT flag, otherwise the allocation will fail. The
    allocation will be further validated by the IOMMU driver to ensure that the
@@ -245,25 +244,28 @@ creating the objects and links::
       of the object passed in via the @pt_id field of struct iommufd_hwpt_alloc.
 
 5. IOMMUFD_OBJ_VIOMMU can be only manually created via the IOMMU_VIOMMU_ALLOC
-   uAPI, provided a dev_id (for the device's physical IOMMU to back the vIOMMU)
-   and an hwpt_id (to associate the vIOMMU to a nesting parent HWPT_PAGING). The
-   iommufd core will link the vIOMMU object to the struct iommu_device that the
-   struct device is behind. And an IOMMU driver can implement a viommu_alloc op
-   to allocate its own vIOMMU data structure embedding the core-level structure
-   iommufd_viommu and some driver-specific data. If necessary, the driver can
-   also configure its HW virtualization feature for that vIOMMU (and thus for
-   the VM). Successful completion of this operation sets up the linkages between
-   the vIOMMU object and the HWPT_PAGING, then this vIOMMU object can be used
-   as a nesting parent object to allocate an HWPT_NESTED object described above.
+   uAPI, provided a dev_id identifying the device used to select the vIOMMU
+   implementation and, if the selected implementation requires a nesting
+   parent HWPT_PAGING, an hwpt_id. The hwpt_id must be zero for an
+   implementation that does not use a parent. A physical-IOMMU implementation
+   links the vIOMMU object to the struct iommu_device behind the device. Other
+   implementations, such as a TSM associated with the device, can provide their
+   own backing and device association. An implementation can allocate its own
+   vIOMMU data structure embedding the core-level structure iommufd_viommu and
+   some implementation-specific data. If necessary, it can also configure its
+   virtualization resources for that vIOMMU (and thus for the VM). A
+   parent-backed vIOMMU can be used as a nesting parent object to allocate an
+   HWPT_NESTED object described above.
 
 6. IOMMUFD_OBJ_VDEVICE can be only manually created via the IOMMU_VDEVICE_ALLOC
    uAPI, provided a viommu_id for an iommufd_viommu object and a dev_id for an
    iommufd_device object. The vDEVICE object will be the binding between these
    two parent objects. Another @virt_id will be also set via the uAPI providing
    the iommufd core an index to store the vDEVICE object to a vDEVICE array per
-   vIOMMU. If necessary, the IOMMU driver may choose to implement a vdevce_alloc
-   op to init its HW for virtualization feature related to a vDEVICE. Successful
-   completion of this operation sets up the linkages between vIOMMU and device.
+   vIOMMU. A physical-IOMMU implementation requires the device to be behind the
+   same iommu_device as the vIOMMU. Other implementations validate the device
+   association while initializing the vDEVICE. Successful initialization sets
+   up the linkage between the vIOMMU and device.
 
 A device can only bind to an iommufd due to DMA ownership claim and attach to at
 most one IOAS object (no support of PASID yet).
