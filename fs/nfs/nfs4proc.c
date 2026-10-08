@@ -9867,6 +9867,7 @@ static void nfs4_layoutreturn_done(struct rpc_task *task, void *calldata)
 					&lrp->args.range,
 					lrp->args.inode))
 			goto out_restart;
+		lrp->rpc_status = -EAGAIN;
 		fallthrough;
 	default:
 		task->tk_status = 0;
