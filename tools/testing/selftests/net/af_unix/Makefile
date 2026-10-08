@@ -16,6 +16,7 @@ TEST_GEN_PROGS := \
 	unix_connect \
 	unix_connreset \
 	unix_listen \
+	unix_oob_zero_peek \
 # end of TEST_GEN_PROGS
 
 TEST_GEN_FILES := scm_rights_denial_lsm.bpf.o
