@@ -29,7 +29,7 @@ void mptcp_fastopen_subflow_synack_set_params(struct mptcp_subflow_context *subf
 	if (!skb)
 		return;
 
-	subflow->is_mptfo = 1;
+	subflow->is_mptfo = true;
 
 	/* dequeue the skb from sk receive queue */
 	__skb_unlink(skb, &ssk->sk_receive_queue);
