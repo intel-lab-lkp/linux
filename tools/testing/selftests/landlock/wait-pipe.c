@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
 
 	/* Waits for the parent do its test. */
 	if (read(pipe_parent, &buf, 1) != 1) {
-		perror("Failed to write to the second argument");
+		perror("Failed to read from the second argument");
 		return 1;
 	}
 

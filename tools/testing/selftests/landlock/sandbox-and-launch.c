@@ -25,8 +25,8 @@ int main(int argc, char *argv[])
 	char buf;
 
 	/*
-	 * The first argument must be the file descriptor number of a pipe.
-	 * The second argument must be the program to execute.
+	 * The first argument must be the program to execute.  The second and
+	 * third arguments must be the file descriptor numbers of two pipes.
 	 */
 	if (argc != 4) {
 		fprintf(stderr, "Wrong number of arguments (not three)\n");
@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
 
 	/* Waits for the parent to try to umount. */
 	if (read(pipe_parent, &buf, 1) != 1) {
-		perror("Failed to write to the third argument");
+		perror("Failed to read from the third argument");
 		return 1;
 	}
 

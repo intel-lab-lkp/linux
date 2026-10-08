@@ -31,7 +31,7 @@ static int sync_with(int pipe_child, int pipe_parent)
 
 	/* Waits for the parent do its test. */
 	if (read(pipe_parent, &buf, 1) != 1) {
-		perror("Failed to write to the second argument");
+		perror("Failed to read from the second argument");
 		return 1;
 	}
 
@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
 
 	/* Tries to send a signal, denied by layer1. */
 	if (!kill(getppid(), 0)) {
-		fprintf(stderr, "Successfully sent a signal to the parent");
+		fprintf(stderr, "Successfully sent a signal to the parent\n");
 		return 1;
 	}
 
@@ -88,13 +88,13 @@ int main(int argc, char *argv[])
 
 	/* Tries to send a signal, denied by layer1. */
 	if (!kill(getppid(), 0)) {
-		fprintf(stderr, "Successfully sent a signal to the parent");
+		fprintf(stderr, "Successfully sent a signal to the parent\n");
 		return 1;
 	}
 
-	/* Tries to open ., denied by layer2. */
+	/* Tries to open /, denied by layer2. */
 	if (open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC) >= 0) {
-		fprintf(stderr, "Successfully opened /");
+		fprintf(stderr, "Successfully opened /\n");
 		return 1;
 	}
 
@@ -115,15 +115,15 @@ int main(int argc, char *argv[])
 	}
 	close(ruleset_fd);
 
-	/* Tries to open ., denied by layer2. */
+	/* Tries to open /, denied by layer2. */
 	if (open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC) >= 0) {
-		fprintf(stderr, "Successfully opened /");
+		fprintf(stderr, "Successfully opened /\n");
 		return 1;
 	}
 
 	/* Tries to send a signal, denied by layer3. */
 	if (!kill(getppid(), 0)) {
-		fprintf(stderr, "Successfully sent a signal to the parent");
+		fprintf(stderr, "Successfully sent a signal to the parent\n");
 		return 1;
 	}
 
