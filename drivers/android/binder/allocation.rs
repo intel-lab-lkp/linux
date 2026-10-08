@@ -298,17 +298,13 @@ impl Drop for Allocation {
 /// A wrapper around `Allocation` that is being created.
 ///
 /// If the allocation is destroyed while wrapped in this wrapper, then the allocation will be
-/// considered to be part of a failed transaction. Successful transactions avoid that by calling
-/// `success`, which skips the destructor.
-#[repr(transparent)]
+/// considered to be part of a failed transaction. Successful transactions call `success` and
+/// store the returned `Allocation` in the new transaction.
 pub(crate) struct NewAllocation(pub(crate) Allocation);
 
 impl NewAllocation {
     pub(crate) fn success(self) -> Allocation {
-        // This skips the destructor.
-        //
-        // SAFETY: This type is `#[repr(transparent)]`, so the layout matches.
-        unsafe { core::mem::transmute(self) }
+        self.0
     }
 }
 
