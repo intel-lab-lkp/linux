@@ -1382,11 +1382,6 @@ struct drm_bridge_state {
 	struct drm_private_state base;
 
 	/**
-	 * @bridge: the bridge this state refers to
-	 */
-	struct drm_bridge *bridge;
-
-	/**
 	 * @input_bus_cfg: input bus configuration
 	 */
 	struct drm_bus_cfg input_bus_cfg;

@@ -759,7 +759,6 @@ void __drm_atomic_helper_bridge_duplicate_state(struct drm_bridge *bridge,
 {
 	__drm_atomic_helper_private_obj_duplicate_state(&bridge->base,
 							&state->base);
-	state->bridge = bridge;
 }
 EXPORT_SYMBOL(__drm_atomic_helper_bridge_duplicate_state);
 
@@ -822,7 +821,6 @@ void __drm_atomic_helper_bridge_state_init(struct drm_bridge_state *state,
 					   struct drm_bridge *bridge)
 {
 	__drm_atomic_helper_private_obj_create_state(&bridge->base, &state->base);
-	state->bridge = bridge;
 }
 EXPORT_SYMBOL(__drm_atomic_helper_bridge_state_init);
 
