@@ -1086,19 +1086,22 @@ static int tegra_nand_chips_init(struct device *dev,
 	nsels = of_property_count_elems_of_size(np_nand, "reg", sizeof(u32));
 	if (nsels != 1) {
 		dev_err(dev, "Missing/invalid reg property\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_put_node;
 	}
 
 	/* Retrieve CS id, currently only single die NAND supported */
 	ret = of_property_read_u32(np_nand, "reg", &cs);
 	if (ret) {
 		dev_err(dev, "could not retrieve reg property: %d\n", ret);
-		return ret;
+		goto err_put_node;
 	}
 
 	nand = devm_kzalloc(dev, sizeof(*nand), GFP_KERNEL);
-	if (!nand)
-		return -ENOMEM;
+	if (!nand) {
+		ret = -ENOMEM;
+		goto err_put_node;
+	}
 
 	nand->cs[0] = cs;
 
@@ -1107,7 +1110,7 @@ static int tegra_nand_chips_init(struct device *dev,
 	if (IS_ERR(nand->wp_gpio)) {
 		ret = PTR_ERR(nand->wp_gpio);
 		dev_err(dev, "Failed to request WP GPIO: %d\n", ret);
-		return ret;
+		goto err_put_node;
 	}
 
 	chip = &nand->chip;
@@ -1119,6 +1122,7 @@ static int tegra_nand_chips_init(struct device *dev,
 	mtd->owner = THIS_MODULE;
 
 	nand_set_flash_node(chip, np_nand);
+	of_node_put(np_nand);
 
 	if (!mtd->name)
 		mtd->name = "tegra_nand";
@@ -1141,6 +1145,11 @@ static int tegra_nand_chips_init(struct device *dev,
 	ctrl->chip = chip;
 
 	return 0;
+
+err_put_node:
+	of_node_put(np_nand);
+
+	return ret;
 }
 
 static int tegra_nand_probe(struct platform_device *pdev)
