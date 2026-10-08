@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/unaligned.h>
 #include "tpm.h"
+#include "tpm2-rsp.h"
 
 /*
  * Restricted signing key whose private part never leaves the TPM.  NO_DA
@@ -36,96 +37,10 @@
 static const u8 tpm2_kernel_ak_seed[EC_PT_SZ] =
 	"Linux kernel attestation key v1";
 
-/* Bounds-checked reader for TPM response data */
-struct tpm2_rsp {
-	const u8 *data;
-	u32 len;
-	u32 off;
-	bool err;
-};
-
-static const u8 *tpm2_rsp_bytes(struct tpm2_rsp *r, u32 count)
-{
-	const u8 *p;
-
-	if (r->err || r->len - r->off < count) {
-		r->err = true;
-		return NULL;
-	}
-
-	p = &r->data[r->off];
-	r->off += count;
-	return p;
-}
-
-static u16 tpm2_rsp_u16(struct tpm2_rsp *r)
-{
-	const u8 *p = tpm2_rsp_bytes(r, sizeof(u16));
-
-	return p ? get_unaligned_be16(p) : 0;
-}
-
-static u32 tpm2_rsp_u32(struct tpm2_rsp *r)
-{
-	const u8 *p = tpm2_rsp_bytes(r, sizeof(u32));
-
-	return p ? get_unaligned_be32(p) : 0;
-}
-
-/* Initialise a reader over the response held in @buf */
-static void tpm2_rsp_init(struct tpm2_rsp *r, struct tpm_buf *buf)
-{
-	struct tpm_header *head = (struct tpm_header *)buf->data;
-
-	r->data = buf->data;
-	r->len = min_t(u32, be32_to_cpu(head->length), TPM_BUFSIZE);
-	r->off = TPM_HEADER_SIZE;
-	r->err = r->len < TPM_HEADER_SIZE;
-}
-
-/* Read a TPM2B_ECC_PARAMETER, left-padding it to EC_PT_SZ bytes */
-static void tpm2_rsp_ecc_param(struct tpm2_rsp *r, u8 *out)
-{
-	u16 len = tpm2_rsp_u16(r);
-	const u8 *p;
-
-	if (len > EC_PT_SZ) {
-		r->err = true;
-		return;
-	}
-
-	p = tpm2_rsp_bytes(r, len);
-	if (!p)
-		return;
-
-	memset(out, 0, EC_PT_SZ - len);
-	memcpy(out + EC_PT_SZ - len, p, len);
-}
-
 /* Parse and validate the TPM2B_PUBLIC of the kernel AK */
 static int tpm2_parse_kernel_ak_public(struct tpm2_rsp *r, u8 *x, u8 *y)
 {
-	u16 size = tpm2_rsp_u16(r);
-	u32 end = r->off + size;
-
-	if (tpm2_rsp_u16(r) != TPM_ALG_ECC ||
-	    tpm2_rsp_u16(r) != TPM_ALG_SHA256 ||
-	    tpm2_rsp_u32(r) != TPM2_OA_KERNEL_AK ||
-	    tpm2_rsp_u16(r) != 0 ||			/* authPolicy */
-	    tpm2_rsp_u16(r) != TPM_ALG_NULL ||		/* symmetric */
-	    tpm2_rsp_u16(r) != TPM_ALG_ECDSA ||		/* scheme */
-	    tpm2_rsp_u16(r) != TPM_ALG_SHA256 ||	/* scheme hash */
-	    tpm2_rsp_u16(r) != TPM2_ECC_NIST_P256 ||
-	    tpm2_rsp_u16(r) != TPM_ALG_NULL)		/* kdf */
-		return -EINVAL;
-
-	tpm2_rsp_ecc_param(r, x);
-	tpm2_rsp_ecc_param(r, y);
-
-	if (r->err || r->off != end)
-		return -EINVAL;
-
-	return 0;
+	return tpm2_rsp_ecdsa_public(r, TPM2_OA_KERNEL_AK, x, y);
 }
 
 /**
