@@ -136,6 +136,7 @@ struct macsec_rx_sa {
 	};
 	refcount_t refcnt;
 	bool active;
+	bool exhausted;
 	struct macsec_rx_sa_stats __percpu *stats;
 	struct macsec_rx_sc *sc;
 	struct rcu_work destroy_work;

@@ -750,8 +750,10 @@ static bool macsec_post_decrypt(struct sk_buff *skb, struct macsec_secy *secy, u
 	/* Now perform replay protection check again
 	 * (see IEEE 802.1AE-2006 figure 10-5)
 	 */
-	if (secy->replay_protect && pn < lowest_pn &&
-	    (!secy->xpn || pn_same_half(pn, lowest_pn))) {
+	if (secy->replay_protect &&
+	    (rx_sa->exhausted ||
+	     (pn < lowest_pn &&
+	      (!secy->xpn || pn_same_half(pn, lowest_pn))))) {
 		spin_unlock(&rx_sa->lock);
 		u64_stats_update_begin(&rxsc_stats->syncp);
 		rxsc_stats->stats.InPktsLate++;
@@ -813,6 +815,8 @@ static bool macsec_post_decrypt(struct sk_buff *skb, struct macsec_secy *secy, u
 			rx_sa->next_pn_halves.upper++;
 			rx_sa->next_pn_halves.lower = pn + 1;
 		}
+		if (secy->replay_protect && !secy->xpn && pn == U32_MAX)
+			rx_sa->exhausted = true;
 
 		spin_unlock(&rx_sa->lock);
 	}
@@ -1252,8 +1256,9 @@ static rx_handler_result_t macsec_handle_frame(struct sk_buff **pskb)
 		bool late;
 
 		spin_lock(&rx_sa->lock);
-		late = rx_sa->next_pn_halves.lower >= secy->replay_window &&
-		       hdr_pn < (rx_sa->next_pn_halves.lower - secy->replay_window);
+		late = rx_sa->exhausted ||
+		       (rx_sa->next_pn_halves.lower >= secy->replay_window &&
+			hdr_pn < (rx_sa->next_pn_halves.lower - secy->replay_window));
 
 		if (secy->xpn)
 			late = late && pn_same_half(rx_sa->next_pn_halves.lower, hdr_pn);
@@ -1409,6 +1414,7 @@ static int init_rx_sa(struct macsec_rx_sa *rx_sa, char *sak, int key_len,
 
 	rx_sa->ssci = MACSEC_UNDEF_SSCI;
 	rx_sa->active = false;
+	rx_sa->exhausted = false;
 	rx_sa->next_pn = 1;
 	refcount_set(&rx_sa->refcnt, 1);
 	spin_lock_init(&rx_sa->lock);
@@ -2388,6 +2394,7 @@ static int macsec_upd_rxsa(struct sk_buff *skb, struct genl_info *info)
 	struct nlattr *tb_rxsc[MACSEC_RXSC_ATTR_MAX + 1];
 	struct nlattr *tb_sa[MACSEC_SA_ATTR_MAX + 1];
 	bool was_active;
+	bool was_exhausted;
 	pn_t prev_pn;
 	int ret = 0;
 
@@ -2426,7 +2433,9 @@ static int macsec_upd_rxsa(struct sk_buff *skb, struct genl_info *info)
 
 		spin_lock_bh(&rx_sa->lock);
 		prev_pn = rx_sa->next_pn_halves;
+		was_exhausted = rx_sa->exhausted;
 		rx_sa->next_pn = nla_get_uint(tb_sa[MACSEC_SA_ATTR_PN]);
+		rx_sa->exhausted = false;
 		spin_unlock_bh(&rx_sa->lock);
 	}
 
@@ -2462,6 +2471,7 @@ cleanup:
 	if (tb_sa[MACSEC_SA_ATTR_PN]) {
 		spin_lock_bh(&rx_sa->lock);
 		rx_sa->next_pn_halves = prev_pn;
+		rx_sa->exhausted = was_exhausted;
 		spin_unlock_bh(&rx_sa->lock);
 	}
 	rx_sa->active = was_active;
