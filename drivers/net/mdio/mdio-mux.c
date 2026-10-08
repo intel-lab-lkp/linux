@@ -240,6 +240,7 @@ int mdio_mux_init(struct device *dev,
 	}
 	if (pb->children) {
 		*mux_handle = pb;
+		of_node_put(parent_bus_node);
 		return 0;
 	}
 
