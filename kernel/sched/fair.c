@@ -15086,12 +15086,13 @@ static inline void task_tick_core(struct rq *rq, struct task_struct *curr) {}
  *
  * NOTE: This function can be called remotely by the tick offload that
  * goes along full dynticks. Therefore no local assumption can be made
- * and everything must be accessed through the @rq and @curr passed in
+ * and everything must be accessed through the @rq and @donor passed in
  * parameters.
  */
-static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
+static void task_tick_fair(struct rq *rq, struct task_struct *donor, int queued)
 {
-	struct sched_entity *se = &curr->se;
+	struct sched_entity *se = &donor->se;
+	struct task_struct *curr = rq->curr;
 
 	if (se->on_rq) {
 		unsigned long weight = NICE_0_LOAD;
@@ -15104,22 +15105,29 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 			weight = __calc_prop_weight(cfs_rq, se, weight);
 		}
 
-		se = &curr->se;
+		se = &donor->se;
 		reweight_eevdf(cfs_rq, se, weight, se->on_rq);
 	}
 
 	if (queued)
 		return;
 
-	if (static_branch_unlikely(&sched_numa_balancing))
-		task_tick_numa(rq, curr);
+	/*
+	 * NUMA and cache work follow the execution context: update_se()
+	 * charges runtime to rq->curr, and TWA_RESUME must run on that
+	 * task. Under proxy-exec rq->curr may be of another class.
+	 */
+	if (curr->sched_class == &fair_sched_class) {
+		if (static_branch_unlikely(&sched_numa_balancing))
+			task_tick_numa(rq, curr);
 
-	task_tick_cache(rq, curr);
+		task_tick_cache(rq, curr);
+	}
 
-	update_misfit_status(curr, rq);
-	check_update_overutilized_status(task_rq(curr));
+	update_misfit_status(donor, rq);
+	check_update_overutilized_status(task_rq(donor));
 
-	task_tick_core(rq, curr);
+	task_tick_core(rq, donor);
 }
 
 /*
