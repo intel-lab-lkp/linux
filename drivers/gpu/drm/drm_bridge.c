@@ -571,6 +571,9 @@ drm_bridge_atomic_print_priv_state(struct drm_printer *p,
 	drm_printf_indent(p, 1, "output bus configuration:\n");
 	drm_printf_indent(p, 2, "code: %04x\n", state->output_bus_cfg.format);
 	drm_printf_indent(p, 2, "flags: %08x\n", state->output_bus_cfg.flags);
+
+	if (bridge->funcs->atomic_print_state)
+		bridge->funcs->atomic_print_state(p, state);
 }
 
 static const struct drm_private_state_funcs drm_bridge_priv_state_funcs = {

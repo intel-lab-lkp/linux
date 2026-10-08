@@ -313,6 +313,15 @@ struct drm_bridge_funcs {
 				     struct drm_bridge_state *state);
 
 	/**
+	 * @atomic_print_state:
+	 *
+	 * If driver subclasses &struct drm_bridge_state, it should implement
+	 * this optional hook for printing additional driver specific state.
+	 */
+	void (*atomic_print_state)(struct drm_printer *p,
+				   const struct drm_bridge_state *state);
+
+	/**
 	 * @atomic_get_output_bus_fmts:
 	 *
 	 * Return the supported bus formats on the output end of a bridge.
