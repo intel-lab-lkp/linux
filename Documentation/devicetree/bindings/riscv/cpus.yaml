@@ -144,6 +144,9 @@ properties:
       DMIPS/MHz, relative to highest capacity-dmips-mhz
       in the system.
 
+  performance-domains:
+    maxItems: 1
+
 anyOf:
   - required:
       - riscv,isa
