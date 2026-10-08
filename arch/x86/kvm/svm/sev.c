@@ -3623,9 +3623,6 @@ int pre_sev_run(struct vcpu_svm *svm, int cpu)
 	if (!cpumask_test_cpu(cpu, to_kvm_sev_info(kvm)->have_run_cpus))
 		cpumask_set_cpu(cpu, to_kvm_sev_info(kvm)->have_run_cpus);
 
-	/* Assign the asid allocated with this SEV guest */
-	svm->asid = asid;
-
 	/*
 	 * Flush guest TLB:
 	 *
@@ -4888,6 +4885,10 @@ void sev_init_vmcb(struct vcpu_svm *svm, bool init_event)
 
 	svm->vmcb->control.misc_ctl |= SVM_MISC_ENABLE_SEV;
 	clr_exception_intercept(svm, UD_VECTOR);
+
+	svm->asid = sev_get_asid(vcpu->kvm);
+	svm->vmcb->control.asid = svm->asid;
+	vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
 
 	/*
 	 * Don't intercept #GP for SEV guests, e.g. for the VMware backdoor, as
