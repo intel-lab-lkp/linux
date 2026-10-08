@@ -10648,6 +10648,16 @@ static int __ath11k_mac_register(struct ath11k *ar)
 	    ab->hw_params.bios_sar_capa)
 		ar->hw->wiphy->sar_capa = ab->hw_params.bios_sar_capa;
 
+	/* Apply the regd received during initialization. Do it before
+	 * registering so that cfg80211 installs it while registering the
+	 * wiphy, before userspace can query a self-managed wiphy without one.
+	 */
+	ret = ath11k_regd_update(ar);
+	if (ret) {
+		ath11k_err(ar->ab, "ath11k regd update failed: %d\n", ret);
+		goto err_free_if_combs;
+	}
+
 	ret = ieee80211_register_hw(ar->hw);
 	if (ret) {
 		ath11k_err(ar->ab, "ieee80211 registration failed: %d\n", ret);
@@ -10661,13 +10671,6 @@ static int __ath11k_mac_register(struct ath11k *ar)
 		 * a difference in real life.
 		 */
 		ar->hw->wiphy->interface_modes &= ~BIT(NL80211_IFTYPE_MONITOR);
-
-	/* Apply the regd received during initialization */
-	ret = ath11k_regd_update(ar);
-	if (ret) {
-		ath11k_err(ar->ab, "ath11k regd update failed: %d\n", ret);
-		goto err_unregister_hw;
-	}
 
 	if (ab->hw_params.current_cc_support && ab->new_alpha2[0]) {
 		memcpy(&ar->alpha2, ab->new_alpha2, 2);
