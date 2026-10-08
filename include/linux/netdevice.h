@@ -72,6 +72,7 @@ struct wireless_dev;
 /* 802.15.4 specific */
 struct wpan_dev;
 struct mpls_dev;
+struct pon_dev;
 /* UDP Tunnel offloads */
 struct udp_tunnel_info;
 struct udp_tunnel_nic_info;
@@ -1974,6 +1975,8 @@ enum netdev_reg_state {
  *	@mpls_ptr:	mpls_dev struct pointer
  *	@mctp_ptr:	MCTP specific data
  *	@psp_dev:	PSP crypto device registered for this netdev
+ *	@pon_dev:	PON device that uses this netdev as conduit, data
+ *			interface or GEM network device
  *
  *	@dev_addr:	Hw address (before bcast,
  *			because most packets are unicast)
@@ -2389,6 +2392,9 @@ struct net_device {
 #endif
 #if IS_ENABLED(CONFIG_INET_PSP)
 	struct psp_dev __rcu	*psp_dev;
+#endif
+#if IS_ENABLED(CONFIG_PON)
+	struct pon_dev __rcu	*pon_dev;
 #endif
 
 /*
