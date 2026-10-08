@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/netlink.h>
+#include <linux/user_namespace.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter/nf_tables.h>
 #include <net/netfilter/nf_tables.h>
@@ -36,6 +37,9 @@ static int nft_dup_ipv4_init(const struct nft_ctx *ctx,
 {
 	struct nft_dup_ipv4 *priv = nft_expr_priv(expr);
 	int err;
+
+	if (ctx->net->user_ns != &init_user_ns)
+		return -EPERM;
 
 	if (tb[NFTA_DUP_SREG_ADDR] == NULL)
 		return -EINVAL;
