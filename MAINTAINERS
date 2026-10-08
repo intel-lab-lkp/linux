@@ -20774,6 +20774,17 @@ F:	include/linux/parman.h
 F:	lib/parman.c
 F:	lib/test_parman.c
 
+PASSIVE OPTICAL NETWORK (PON) SUBSYSTEM
+M:	John Crispin <john@phrozen.org>
+L:	netdev@vger.kernel.org
+S:	Maintained
+F:	Documentation/netlink/specs/pon.yaml
+F:	Documentation/networking/pon.rst
+F:	include/net/pon.h
+F:	include/net/pon/
+F:	include/uapi/linux/pon.h
+F:	net/pon/
+
 PC ENGINES APU BOARD DRIVER
 M:	Enrico Weigelt, metux IT consult <info@metux.net>
 S:	Maintained
