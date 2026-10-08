@@ -26,7 +26,7 @@ TEST(ruleset_with_unknown_scope)
 
 		ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr,
 						      sizeof(ruleset_attr), 0));
-		ASSERT_EQ(EINVAL, errno);
+		EXPECT_EQ(EINVAL, errno);
 	}
 }
 

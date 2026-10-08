@@ -33,40 +33,40 @@ TEST(inconsistent_attr)
 	/* Checks copy_from_user(). */
 	ASSERT_EQ(-1, landlock_create_ruleset(ruleset_attr, 0, 0));
 	/* The size if less than sizeof(struct landlock_attr_enforce). */
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 	ASSERT_EQ(-1, landlock_create_ruleset(ruleset_attr, 1, 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 	ASSERT_EQ(-1, landlock_create_ruleset(ruleset_attr, 7, 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(NULL, 1, 0));
 	/* The size if less than sizeof(struct landlock_attr_enforce). */
-	ASSERT_EQ(EFAULT, errno);
+	EXPECT_EQ(EFAULT, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(
 			      NULL, sizeof(struct landlock_ruleset_attr), 0));
-	ASSERT_EQ(EFAULT, errno);
+	EXPECT_EQ(EFAULT, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(ruleset_attr, page_size + 1, 0));
-	ASSERT_EQ(E2BIG, errno);
+	EXPECT_EQ(E2BIG, errno);
 
 	/* Checks minimal valid attribute size. */
 	ASSERT_EQ(-1, landlock_create_ruleset(ruleset_attr, 8, 0));
-	ASSERT_EQ(ENOMSG, errno);
+	EXPECT_EQ(ENOMSG, errno);
 	ASSERT_EQ(-1, landlock_create_ruleset(
 			      ruleset_attr,
 			      sizeof(struct landlock_ruleset_attr), 0));
-	ASSERT_EQ(ENOMSG, errno);
+	EXPECT_EQ(ENOMSG, errno);
 	ASSERT_EQ(-1, landlock_create_ruleset(ruleset_attr, page_size, 0));
-	ASSERT_EQ(ENOMSG, errno);
+	EXPECT_EQ(ENOMSG, errno);
 
 	/* Checks non-zero value. */
 	buf[page_size - 2] = '.';
 	ASSERT_EQ(-1, landlock_create_ruleset(ruleset_attr, page_size, 0));
-	ASSERT_EQ(E2BIG, errno);
+	EXPECT_EQ(E2BIG, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(ruleset_attr, page_size + 1, 0));
-	ASSERT_EQ(E2BIG, errno);
+	EXPECT_EQ(E2BIG, errno);
 
 	free(buf);
 }
@@ -81,21 +81,21 @@ TEST(abi_version)
 
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr, 0,
 					      LANDLOCK_CREATE_RULESET_VERSION));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(NULL, sizeof(ruleset_attr),
 					      LANDLOCK_CREATE_RULESET_VERSION));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1,
 		  landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr),
 					  LANDLOCK_CREATE_RULESET_VERSION));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(NULL, 0,
 					      LANDLOCK_CREATE_RULESET_VERSION |
 						      1 << 31));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 }
 
 /*
@@ -121,16 +121,16 @@ TEST(errata)
 
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr, 0,
 					      LANDLOCK_CREATE_RULESET_ERRATA));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(NULL, sizeof(ruleset_attr),
 					      LANDLOCK_CREATE_RULESET_ERRATA));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1,
 		  landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr),
 					  LANDLOCK_CREATE_RULESET_ERRATA));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(
 			      NULL, 0,
@@ -141,7 +141,7 @@ TEST(errata)
 	ASSERT_EQ(-1, landlock_create_ruleset(NULL, 0,
 					      LANDLOCK_CREATE_RULESET_ERRATA |
 						      1 << 31));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 }
 
 /* Tests ordering of syscall argument checks. */
@@ -156,29 +156,29 @@ TEST(create_ruleset_checks_ordering)
 
 	/* Checks priority for invalid flags. */
 	ASSERT_EQ(-1, landlock_create_ruleset(NULL, 0, invalid_flag));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr, 0, invalid_flag));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(NULL, sizeof(ruleset_attr),
 					      invalid_flag));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1,
 		  landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr),
 					  invalid_flag));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	/* Checks too big ruleset_attr size. */
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr, -1, 0));
-	ASSERT_EQ(E2BIG, errno);
+	EXPECT_EQ(E2BIG, errno);
 
 	/* Checks too small ruleset_attr size. */
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr, 0, 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr, 1, 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	/* Checks valid call. */
 	ruleset_fd =
@@ -204,25 +204,25 @@ TEST(add_rule_checks_ordering)
 
 	/* Checks invalid flags. */
 	ASSERT_EQ(-1, landlock_add_rule(-1, 0, NULL, 100));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	/* Checks invalid ruleset FD. */
 	ASSERT_EQ(-1, landlock_add_rule(-1, 0, NULL, 0));
-	ASSERT_EQ(EBADF, errno);
+	EXPECT_EQ(EBADF, errno);
 
 	/* Checks invalid rule type. */
 	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, 0, NULL, 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	/* Checks invalid rule attr. */
 	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 					NULL, 0));
-	ASSERT_EQ(EFAULT, errno);
+	EXPECT_EQ(EFAULT, errno);
 
 	/* Checks invalid path_beneath.parent_fd. */
 	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 					&path_beneath_attr, 0));
-	ASSERT_EQ(EBADF, errno);
+	EXPECT_EQ(EBADF, errno);
 
 	/* Checks valid call. */
 	path_beneath_attr.parent_fd =
@@ -262,11 +262,11 @@ TEST(restrict_self_checks_ordering)
 	 * CAP_SYS_ADMIN requirement.
 	 */
 	ASSERT_EQ(-1, landlock_restrict_self(-1, -1));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 	ASSERT_EQ(-1, landlock_restrict_self(-1, 0));
-	ASSERT_EQ(EPERM, errno);
+	EXPECT_EQ(EPERM, errno);
 	ASSERT_EQ(-1, landlock_restrict_self(ruleset_fd, 0));
-	ASSERT_EQ(EPERM, errno);
+	EXPECT_EQ(EPERM, errno);
 	/*
 	 * LANDLOCK_RESTRICT_SELF_NO_NEW_PRIVS fulfills the no_new_privs /
 	 * CAP_SYS_ADMIN requirement but requires a ruleset, so the FD is
@@ -274,17 +274,17 @@ TEST(restrict_self_checks_ordering)
 	 */
 	ASSERT_EQ(-1, landlock_restrict_self(
 			      -1, LANDLOCK_RESTRICT_SELF_NO_NEW_PRIVS));
-	ASSERT_EQ(EBADF, errno);
+	EXPECT_EQ(EBADF, errno);
 
 	ASSERT_EQ(0, prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0));
 
 	/* Checks invalid flags. */
 	ASSERT_EQ(-1, landlock_restrict_self(-1, -1));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	/* Checks invalid ruleset FD. */
 	ASSERT_EQ(-1, landlock_restrict_self(-1, 0));
-	ASSERT_EQ(EBADF, errno);
+	EXPECT_EQ(EBADF, errno);
 
 	/* Checks valid call. */
 	ASSERT_EQ(0, landlock_restrict_self(ruleset_fd, 0));
@@ -319,7 +319,7 @@ TEST(restrict_self_max_layers)
 	drop_caps(_metadata);
 	ASSERT_EQ(-1, landlock_restrict_self(
 			      ruleset_fd, LANDLOCK_RESTRICT_SELF_NO_NEW_PRIVS));
-	ASSERT_EQ(E2BIG, errno);
+	EXPECT_EQ(E2BIG, errno);
 
 	/* Checks that the failed call did not set no_new_privs. */
 	ASSERT_EQ(0, prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0));
@@ -473,9 +473,9 @@ TEST(ruleset_fd_io)
 	ASSERT_LE(0, ruleset_fd);
 
 	ASSERT_EQ(-1, write(ruleset_fd, ".", 1));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 	ASSERT_EQ(-1, read(ruleset_fd, &buf, 1));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	EXPECT_EQ(0, close(ruleset_fd));
 }
@@ -530,7 +530,7 @@ TEST(ruleset_fd_transfer)
 
 		/* Checks that the ruleset enforcement. */
 		ASSERT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
-		ASSERT_EQ(EACCES, errno);
+		EXPECT_EQ(EACCES, errno);
 		dir_fd = open("/tmp", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 		ASSERT_LE(0, dir_fd);
 		EXPECT_EQ(0, close(dir_fd));
@@ -550,7 +550,7 @@ TEST(ruleset_fd_transfer)
 
 	ASSERT_EQ(child, waitpid(child, &status, 0));
 	ASSERT_EQ(1, WIFEXITED(status));
-	ASSERT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
+	EXPECT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
 }
 
 TEST(cred_transfer)
@@ -648,7 +648,7 @@ TEST(useless_quiet_rule_fs)
 	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 					&path_beneath_attr,
 					LANDLOCK_ADD_RULE_QUIET));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	/* Check that the rule had not been added. */
 	EXPECT_EQ(0, close(root_fd));
@@ -656,7 +656,7 @@ TEST(useless_quiet_rule_fs)
 	EXPECT_EQ(0, close(ruleset_fd));
 
 	ASSERT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
-	ASSERT_EQ(EACCES, errno);
+	EXPECT_EQ(EACCES, errno);
 }
 
 TEST(useless_quiet_rule_net)
@@ -679,7 +679,7 @@ TEST(useless_quiet_rule_net)
 	ASSERT_EQ(-1,
 		  landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 				    &net_port_attr, LANDLOCK_ADD_RULE_QUIET));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	EXPECT_EQ(0, close(ruleset_fd));
 }
@@ -702,15 +702,15 @@ TEST(invalid_quiet_bits_1)
 	/* Quiet bit set but not part of the handled mask. */
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr_fs,
 					      sizeof(ruleset_attr_fs), 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr_net,
 					      sizeof(ruleset_attr_net), 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr_scoped,
 					      sizeof(ruleset_attr_scoped), 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 }
 
 TEST(invalid_quiet_bits_2)
@@ -731,15 +731,15 @@ TEST(invalid_quiet_bits_2)
 	/* Quiet bit outside of the valid access range. */
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr_fs,
 					      sizeof(ruleset_attr_fs), 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr_net,
 					      sizeof(ruleset_attr_net), 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr_scoped,
 					      sizeof(ruleset_attr_scoped), 0));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 }
 
 TEST_HARNESS_MAIN

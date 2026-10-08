@@ -124,7 +124,7 @@ TEST_F(scoping_signals, send_sig_to_parent)
 		 */
 		err = kill(parent, variant->sig);
 		ASSERT_EQ(-1, err);
-		ASSERT_EQ(EPERM, errno);
+		EXPECT_EQ(EPERM, errno);
 
 		/*
 		 * No matter of the domain, a process should be able to
@@ -216,7 +216,7 @@ TEST_F(scoped_domains, check_access_signal)
 			ASSERT_EQ(0, err);
 		} else {
 			ASSERT_EQ(-1, err);
-			ASSERT_EQ(EPERM, errno);
+			EXPECT_EQ(EPERM, errno);
 		}
 		/*
 		 * No matter of the domain, a process should be able to
@@ -241,7 +241,7 @@ TEST_F(scoped_domains, check_access_signal)
 		ASSERT_EQ(0, err);
 	} else {
 		ASSERT_EQ(-1, err);
-		ASSERT_EQ(EPERM, errno);
+		EXPECT_EQ(EPERM, errno);
 	}
 	ASSERT_EQ(0, raise(0));
 

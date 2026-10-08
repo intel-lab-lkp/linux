@@ -1114,7 +1114,7 @@ TEST(datagram_sockets)
 		ASSERT_EQ(-1, sendto(client_unconn_socket, ".", 1, 0,
 				     &non_connected_addr.unix_addr,
 				     non_connected_addr.unix_addr_len));
-		ASSERT_EQ(EPERM, errno);
+		EXPECT_EQ(EPERM, errno);
 		ASSERT_EQ(1, write(pipe_child[1], ".", 1));
 
 		EXPECT_EQ(0, close(client_conn_socket));
@@ -1196,17 +1196,17 @@ TEST(self_connect)
 		ASSERT_EQ(-1,
 			  connect(connected_socket, &connected_addr.unix_addr,
 				  connected_addr.unix_addr_len));
-		ASSERT_EQ(EPERM, errno);
+		EXPECT_EQ(EPERM, errno);
 
 		ASSERT_EQ(-1, sendto(connected_socket, ".", 1, 0,
 				     &connected_addr.unix_addr,
 				     connected_addr.unix_addr_len));
-		ASSERT_EQ(EPERM, errno);
+		EXPECT_EQ(EPERM, errno);
 
 		ASSERT_EQ(-1, sendto(non_connected_socket, ".", 1, 0,
 				     &non_connected_addr.unix_addr,
 				     non_connected_addr.unix_addr_len));
-		ASSERT_EQ(EPERM, errno);
+		EXPECT_EQ(EPERM, errno);
 
 		EXPECT_EQ(0, close(connected_socket));
 		EXPECT_EQ(0, close(non_connected_socket));

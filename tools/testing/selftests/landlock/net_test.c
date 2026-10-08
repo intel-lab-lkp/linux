@@ -3720,7 +3720,7 @@ TEST_F(trace_net_address, deny_access_net)
 
 	ASSERT_EQ(child, waitpid(child, &status, 0));
 	ASSERT_TRUE(WIFEXITED(status));
-	ASSERT_EQ(0, WEXITSTATUS(status));
+	EXPECT_EQ(0, WEXITSTATUS(status));
 
 	buf = tracefs_read_buf();
 	ASSERT_NE(NULL, buf);

@@ -315,14 +315,14 @@ TEST_F(audit, log_subdomains_off_fork)
 	if (child == 0) {
 		ASSERT_EQ(0, landlock_restrict_self(ruleset_fd, 0));
 		ASSERT_EQ(-1, kill(getppid(), 0));
-		ASSERT_EQ(EPERM, errno);
+		EXPECT_EQ(EPERM, errno);
 		_exit(_metadata->exit_code);
 		return;
 	}
 
 	ASSERT_EQ(child, waitpid(child, &status, 0));
 	ASSERT_EQ(true, WIFEXITED(status));
-	ASSERT_EQ(0, WEXITSTATUS(status));
+	EXPECT_EQ(0, WEXITSTATUS(status));
 
 	/* The denial must be logged (baseline). */
 	EXPECT_EQ(0, matches_log_signal(_metadata, self->audit_fd, getpid(),
@@ -348,14 +348,14 @@ TEST_F(audit, log_subdomains_off_fork)
 	if (child == 0) {
 		ASSERT_EQ(0, landlock_restrict_self(ruleset_fd, 0));
 		ASSERT_EQ(-1, kill(getppid(), 0));
-		ASSERT_EQ(EPERM, errno);
+		EXPECT_EQ(EPERM, errno);
 		_exit(_metadata->exit_code);
 		return;
 	}
 
 	ASSERT_EQ(child, waitpid(child, &status, 0));
 	ASSERT_EQ(true, WIFEXITED(status));
-	ASSERT_EQ(0, WEXITSTATUS(status));
+	EXPECT_EQ(0, WEXITSTATUS(status));
 
 	/* No denial record should appear. */
 	EXPECT_EQ(-EAGAIN, matches_log_signal(_metadata, self->audit_fd,
@@ -981,7 +981,7 @@ TEST_F(audit_exec, signal_and_open)
 	EXPECT_EQ(0, close(pipe_child[0]));
 	ASSERT_EQ(child, waitpid(child, &status, 0));
 	ASSERT_EQ(1, WIFEXITED(status));
-	ASSERT_EQ(0, WEXITSTATUS(status));
+	EXPECT_EQ(0, WEXITSTATUS(status));
 
 	/* Tests that the audit record only matches the child. */
 	if (!(variant->restrict_flags &
