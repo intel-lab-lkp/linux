@@ -465,7 +465,7 @@ static void amdxdna_remove(struct pci_dev *pdev)
 
 static const struct dev_pm_ops amdxdna_pm_ops = {
 	SYSTEM_SLEEP_PM_OPS(amdxdna_pm_suspend, amdxdna_pm_resume)
-	RUNTIME_PM_OPS(amdxdna_pm_suspend, amdxdna_pm_resume, NULL)
+	RUNTIME_PM_OPS(amdxdna_pm_runtime_suspend, amdxdna_pm_runtime_resume, NULL)
 };
 
 static int amdxdna_sriov_configure(struct pci_dev *pdev, int num_vfs)
@@ -484,7 +484,7 @@ static struct pci_driver amdxdna_pci_driver = {
 	.id_table = pci_ids,
 	.probe = amdxdna_probe,
 	.remove = amdxdna_remove,
-	.driver.pm = &amdxdna_pm_ops,
+	.driver.pm = pm_ptr(&amdxdna_pm_ops),
 	.sriov_configure = amdxdna_sriov_configure,
 };
 
