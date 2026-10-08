@@ -192,7 +192,7 @@ done:
 	return 0;
 }
 
-int io_create_region(struct io_ring_ctx *ctx, struct io_mapped_region *mr,
+int io_create_region(struct user_struct *user, struct io_mapped_region *mr,
 		     struct io_uring_region_desc *reg,
 		     unsigned long mmap_offset)
 {
@@ -223,9 +223,10 @@ int io_create_region(struct io_ring_ctx *ctx, struct io_mapped_region *mr,
 	/*
 	 * Only pinned user memory counts against RLIMIT_MEMLOCK, kernel
 	 * allocated regions are memcg accounted through GFP_KERNEL_ACCOUNT.
+	 * The SQ/CQ rings are never charged, their callers pass a NULL user.
 	 */
 	if (reg->flags & IORING_MEM_REGION_TYPE_USER)
-		ret = io_region_pin_pages(mr, reg, ctx->user);
+		ret = io_region_pin_pages(mr, reg, user);
 	else
 		ret = io_region_allocate_pages(mr, reg, mmap_offset);
 	if (ret)
@@ -236,7 +237,7 @@ int io_create_region(struct io_ring_ctx *ctx, struct io_mapped_region *mr,
 		goto out_free;
 	return 0;
 out_free:
-	io_free_region(ctx->user, mr);
+	io_free_region(user, mr);
 	return ret;
 }
 
