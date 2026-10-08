@@ -5,8 +5,8 @@
 #include <linux/pci.h>
 
 struct pci_tsm;
+struct pci_tsm_context;
 struct tsm_dev;
-struct kvm;
 
 /*
  * struct pci_tsm_ops - manage confidential links and security state
@@ -30,16 +30,12 @@ struct pci_tsm_ops {
 	 * @connect: establish / validate a secure connection (e.g. IDE)
 	 *	     with the device
 	 * @disconnect: teardown the secure link
-	 * @bind: bind a TDI in preparation for it to be accepted by a TVM
-	 * @unbind: remove a TDI from secure operation with a TVM
 	 *
 	 * Context: @probe, @remove, @connect, and @disconnect run under
 	 * pci_tsm_rwsem held for write to sync with TSM unregistration and
 	 * mutual exclusion of @connect and @disconnect. @connect and
 	 * @disconnect additionally run under the DSM lock (struct
 	 * pci_tsm_pf0::lock) as well as @probe and @remove of the subfunctions.
-	 * @bind and @unbind run under pci_tsm_rwsem held for read
-	 * and the DSM lock.
 	 */
 	struct_group_tagged(pci_tsm_link_ops, link_ops,
 		struct pci_tsm *(*probe)(struct tsm_dev *tsm_dev,
@@ -47,9 +43,6 @@ struct pci_tsm_ops {
 		void (*remove)(struct pci_tsm *tsm);
 		int (*connect)(struct pci_dev *pdev);
 		void (*disconnect)(struct pci_dev *pdev);
-		struct pci_tdi *(*bind)(struct pci_dev *pdev,
-					struct kvm *kvm, u32 tdi_id);
-		void (*unbind)(struct pci_tdi *tdi);
 	);
 
 	/*
@@ -70,24 +63,11 @@ struct pci_tsm_ops {
 };
 
 /**
- * struct pci_tdi - Core TEE I/O Device Interface (TDI) context
- * @pdev: host side representation of guest-side TDI
- * @kvm: TEE VM context of bound TDI
- * @tdi_id: Identifier (virtual BDF) for the TDI as referenced by the TSM and DSM
- */
-struct pci_tdi {
-	struct pci_dev *pdev;
-	struct kvm *kvm;
-	u32 tdi_id;
-};
-
-/**
  * struct pci_tsm - Core TSM context for a given PCIe endpoint
  * @pdev: Back ref to device function, distinguishes type of pci_tsm context
  * @dsm_dev: PCI Device Security Manager for link operations on @pdev
  * @tsm_dev: PCI TEE Security Manager device for Link Confidentiality or Device
  *	     Function Security operations
- * @tdi: TDI context established by the @bind link operation
  *
  * This structure is wrapped by low level TSM driver data and returned by
  * probe()/lock(), it is freed by the corresponding remove()/unlock().
@@ -103,18 +83,20 @@ struct pci_tsm {
 	struct pci_dev *pdev;
 	struct pci_dev *dsm_dev;
 	struct tsm_dev *tsm_dev;
-	struct pci_tdi *tdi;
 };
 
 /**
  * struct pci_tsm_pf0 - Physical Function 0 TDISP link context
  * @base_tsm: generic core "tsm" context
  * @lock: mutual exclustion for pci_tsm_ops invocation
+ * @context_users: live per-function contexts on this PF0; a nonzero count
+ *	blocks link disconnect
  * @doe_mb: PCIe Data Object Exchange mailbox
  */
 struct pci_tsm_pf0 {
 	struct pci_tsm base_tsm;
 	struct mutex lock;
+	unsigned int context_users;
 	struct pci_doe_mb *doe_mb;
 };
 
@@ -161,10 +143,14 @@ int pci_tsm_pf0_constructor(struct pci_dev *pdev, struct pci_tsm_pf0 *tsm,
 void pci_tsm_pf0_destructor(struct pci_tsm_pf0 *tsm);
 int pci_tsm_doe_transfer(struct pci_dev *pdev, u8 type, const void *req,
 			 size_t req_sz, void *resp, size_t resp_sz);
-int pci_tsm_bind(struct pci_dev *pdev, struct kvm *kvm, u32 tdi_id);
-void pci_tsm_unbind(struct pci_dev *pdev);
-void pci_tsm_tdi_constructor(struct pci_dev *pdev, struct pci_tdi *tdi,
-			     struct kvm *kvm, u32 tdi_id);
+bool pci_tsm_is_configured(struct pci_dev *pdev);
+struct pci_tsm_context *pci_tsm_context_get(struct pci_dev *pdev,
+					    struct tsm_dev *viommu_tsm_dev);
+void pci_tsm_context_put(struct pci_tsm_context *context);
+struct pci_tsm_pf0 *pci_tsm_context_pf0(struct pci_tsm_context *context);
+struct pci_dev *pci_tsm_context_dsm_dev(struct pci_tsm_context *context);
+bool pci_tsm_context_match_device(struct pci_tsm_context *context,
+				  struct pci_dev *pdev);
 #else
 static inline int pci_tsm_register(struct tsm_dev *tsm_dev)
 {
@@ -173,12 +159,39 @@ static inline int pci_tsm_register(struct tsm_dev *tsm_dev)
 static inline void pci_tsm_unregister(struct tsm_dev *tsm_dev)
 {
 }
-static inline int pci_tsm_bind(struct pci_dev *pdev, struct kvm *kvm, u64 tdi_id)
+
+static inline bool pci_tsm_is_configured(struct pci_dev *pdev)
 {
-	return -ENXIO;
+	return false;
 }
-static inline void pci_tsm_unbind(struct pci_dev *pdev)
+
+static inline struct pci_tsm_context *
+pci_tsm_context_get(struct pci_dev *pdev, struct tsm_dev *viommu_tsm_dev)
 {
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline void pci_tsm_context_put(struct pci_tsm_context *context)
+{
+}
+
+static inline struct pci_tsm_pf0 *
+pci_tsm_context_pf0(struct pci_tsm_context *context)
+{
+	return NULL;
+}
+
+static inline struct pci_dev *
+pci_tsm_context_dsm_dev(struct pci_tsm_context *context)
+{
+	return NULL;
+}
+
+static inline bool
+pci_tsm_context_match_device(struct pci_tsm_context *context,
+			     struct pci_dev *pdev)
+{
+	return false;
 }
 #endif
 #endif /*__PCI_TSM_H */
