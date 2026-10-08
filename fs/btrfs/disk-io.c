@@ -1839,6 +1839,12 @@ void btrfs_put_root(struct btrfs_root *root)
 		return;
 
 	if (refcount_dec_and_test(&root->refs)) {
+		struct btrfs_fs_info *fs_info = root->fs_info;
+
+		spin_lock(&fs_info->trans_lock);
+		list_del_init(&root->dirty_list);
+		spin_unlock(&fs_info->trans_lock);
+
 		if (WARN_ON(!xa_empty(&root->inodes)))
 			xa_destroy(&root->inodes);
 		if (WARN_ON(!xa_empty(&root->delayed_nodes)))
@@ -1848,9 +1854,9 @@ void btrfs_put_root(struct btrfs_root *root)
 			free_anon_bdev(root->anon_dev);
 		free_root_extent_buffers(root);
 #ifdef CONFIG_BTRFS_DEBUG
-		spin_lock(&root->fs_info->fs_roots_radix_lock);
+		spin_lock(&fs_info->fs_roots_radix_lock);
 		list_del_init(&root->leak_list);
-		spin_unlock(&root->fs_info->fs_roots_radix_lock);
+		spin_unlock(&fs_info->fs_roots_radix_lock);
 #endif
 		kfree(root);
 	}
