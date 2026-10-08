@@ -24,6 +24,8 @@ struct nft_exthdr {
 	u8			dreg;
 	u8			sreg;
 	u8			flags;
+	u8			inner_type;
+	bool			has_inner;
 };
 
 static unsigned int optlen(const u8 *opt, unsigned int offset)
@@ -207,7 +209,15 @@ static void nft_exthdr_tcp_eval(const struct nft_expr *expr,
 		if (priv->type != opt[i])
 			continue;
 
-		if (i + optl > tcphdr_len || priv->len + priv->offset > optl)
+		if (i + optl > tcphdr_len)
+			goto err;
+
+		if (priv->has_inner && priv->type == TCPOPT_MPTCP) {
+			if (!(optl >= 3 && (opt[i + 2] >> 4) == priv->inner_type))
+				continue;
+		}
+
+		if (priv->len + priv->offset > optl)
 			goto err;
 
 		offset = i + priv->offset;
@@ -493,14 +503,15 @@ static const struct nla_policy nft_exthdr_policy[NFTA_EXTHDR_MAX + 1] = {
 	[NFTA_EXTHDR_FLAGS]		= NLA_POLICY_MASK(NLA_BE32, NFT_EXTHDR_F_PRESENT),
 	[NFTA_EXTHDR_OP]		= NLA_POLICY_MAX(NLA_BE32, 255),
 	[NFTA_EXTHDR_SREG]		= NLA_POLICY_MAX(NLA_BE32, NFT_REG32_MAX),
+	[NFTA_EXTHDR_INNER_TYPE]	= NLA_POLICY_MAX(NLA_BE32, 255),
 };
 
 static int nft_exthdr_init(const struct nft_ctx *ctx,
 			   const struct nft_expr *expr,
 			   const struct nlattr * const tb[])
 {
+	u32 offset, len, inner_type, flags = 0, op = NFT_EXTHDR_OP_IPV6;
 	struct nft_exthdr *priv = nft_expr_priv(expr);
-	u32 offset, len, flags = 0, op = NFT_EXTHDR_OP_IPV6;
 	int err;
 
 	if (!tb[NFTA_EXTHDR_DREG] ||
@@ -532,14 +543,27 @@ static int nft_exthdr_init(const struct nft_ctx *ctx,
 			return err;
 	}
 
+	if (tb[NFTA_EXTHDR_INNER_TYPE]) {
+		if (op != NFT_EXTHDR_OP_TCPOPT)
+			return -EOPNOTSUPP;
+
+		err = nft_parse_u32_check(tb[NFTA_EXTHDR_INNER_TYPE],
+					  U8_MAX, &inner_type);
+		if (err < 0)
+			return err;
+
+		priv->has_inner = true;
+	}
+
 	if ((flags & NFT_EXTHDR_F_PRESENT) && len != 1)
 		return -EINVAL;
 
-	priv->type   = nla_get_u8(tb[NFTA_EXTHDR_TYPE]);
-	priv->offset = offset;
-	priv->len    = len;
-	priv->flags  = flags;
-	priv->op     = op;
+	priv->type		= nla_get_u8(tb[NFTA_EXTHDR_TYPE]);
+	priv->offset		= offset;
+	priv->len		= len;
+	priv->flags		= flags;
+	priv->op		= op;
+	priv->inner_type	= inner_type;
 
 	return nft_parse_register_store(ctx, tb[NFTA_EXTHDR_DREG],
 					&priv->dreg, NULL, NFT_DATA_VALUE,
@@ -560,7 +584,9 @@ static int nft_exthdr_tcp_set_init(const struct nft_ctx *ctx,
 	    !tb[NFTA_EXTHDR_LEN])
 		return -EINVAL;
 
-	if (tb[NFTA_EXTHDR_DREG] || tb[NFTA_EXTHDR_FLAGS])
+	if (tb[NFTA_EXTHDR_DREG] ||
+	    tb[NFTA_EXTHDR_FLAGS] ||
+	    tb[NFTA_EXTHDR_INNER_TYPE])
 		return -EINVAL;
 
 	err = nft_parse_u32_check(tb[NFTA_EXTHDR_OFFSET], U8_MAX, &offset);
@@ -605,7 +631,8 @@ static int nft_exthdr_tcp_strip_init(const struct nft_ctx *ctx,
 	    tb[NFTA_EXTHDR_DREG] ||
 	    tb[NFTA_EXTHDR_FLAGS] ||
 	    tb[NFTA_EXTHDR_OFFSET] ||
-	    tb[NFTA_EXTHDR_LEN])
+	    tb[NFTA_EXTHDR_LEN] ||
+	    tb[NFTA_EXTHDR_INNER_TYPE])
 		return -EINVAL;
 
 	if (!tb[NFTA_EXTHDR_TYPE])
@@ -669,6 +696,11 @@ static int nft_exthdr_dump_common(struct sk_buff *skb, const struct nft_exthdr *
 		goto nla_put_failure;
 	if (nla_put_be32(skb, NFTA_EXTHDR_OP, htonl(priv->op)))
 		goto nla_put_failure;
+	if (priv->has_inner) {
+		if (nla_put_be32(skb, NFTA_EXTHDR_INNER_TYPE,  htonl(priv->inner_type)))
+			goto nla_put_failure;
+	}
+
 	return 0;
 
 nla_put_failure:

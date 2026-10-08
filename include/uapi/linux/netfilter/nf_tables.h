@@ -910,6 +910,7 @@ enum nft_exthdr_op {
  * @NFTA_EXTHDR_FLAGS: extension header flags (NLA_U32)
  * @NFTA_EXTHDR_OP: option match type (NLA_U32)
  * @NFTA_EXTHDR_SREG: source register (NLA_U32: nft_registers)
+ * @NFTA_EXTHDR_INNER_TYPE: header inner type (NLA_U32)
  */
 enum nft_exthdr_attributes {
 	NFTA_EXTHDR_UNSPEC,
@@ -920,6 +921,7 @@ enum nft_exthdr_attributes {
 	NFTA_EXTHDR_FLAGS,
 	NFTA_EXTHDR_OP,
 	NFTA_EXTHDR_SREG,
+	NFTA_EXTHDR_INNER_TYPE,
 	__NFTA_EXTHDR_MAX
 };
 #define NFTA_EXTHDR_MAX		(__NFTA_EXTHDR_MAX - 1)
