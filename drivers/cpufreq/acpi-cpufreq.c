@@ -110,7 +110,7 @@ static int boost_set_msr(bool enable)
 		return -EINVAL;
 	}
 
-	rdmsrq(msr_addr, val);
+	val = rdmsrq(msr_addr);
 
 	if (enable)
 		val &= ~msr_mask;
@@ -248,7 +248,7 @@ static u32 cpu_freq_read_intel(struct acpi_pct_register *not_used)
 {
 	u64 val;
 
-	rdmsrq(MSR_IA32_PERF_CTL, val);
+	val = rdmsrq(MSR_IA32_PERF_CTL);
 	return (u32)val;
 }
 
@@ -256,7 +256,7 @@ static void cpu_freq_write_intel(struct acpi_pct_register *not_used, u32 val)
 {
 	u64 msrval;
 
-	rdmsrq(MSR_IA32_PERF_CTL, msrval);
+	msrval = rdmsrq(MSR_IA32_PERF_CTL);
 	msrval = (msrval & ~(u64)INTEL_MSR_RANGE) | (val & INTEL_MSR_RANGE);
 	wrmsrq(MSR_IA32_PERF_CTL, msrval);
 }
@@ -265,7 +265,7 @@ static u32 cpu_freq_read_amd(struct acpi_pct_register *not_used)
 {
 	u64 val;
 
-	rdmsrq(MSR_AMD_PERF_CTL, val);
+	val = rdmsrq(MSR_AMD_PERF_CTL);
 	return (u32)val;
 }
 
