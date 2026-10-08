@@ -6,6 +6,7 @@
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/sched.h>
@@ -28,6 +29,7 @@ struct apm_graph_mgmt_cmd {
 #define APM_GRAPH_MGMT_PSIZE(p, n) ALIGN(struct_size(p, sub_graph_id_list, n), 8)
 
 static struct q6apm *g_apm;
+static DEFINE_MUTEX(g_apm_lock);
 
 int q6apm_send_cmd_sync(struct q6apm *apm, struct gpr_pkt *pkt,
 			uint32_t rsp_opcode)
@@ -149,17 +151,19 @@ static int q6apm_get_apm_state(struct q6apm *apm)
 	if (IS_ERR(pkt))
 		return PTR_ERR(pkt);
 
-	q6apm_send_cmd_sync(apm, pkt, APM_CMD_RSP_GET_SPF_STATE);
-
-	return apm->state;
+	return q6apm_send_cmd_sync(apm, pkt, APM_CMD_RSP_GET_SPF_STATE);
 }
 
 bool q6apm_is_adsp_ready(void)
 {
-	if (g_apm)
-		return q6apm_get_apm_state(g_apm);
+	bool ready = false;
 
-	return false;
+	mutex_lock(&g_apm_lock);
+	if (g_apm)
+		ready = !q6apm_get_apm_state(g_apm) && g_apm->state == 1;
+	mutex_unlock(&g_apm_lock);
+
+	return ready;
 }
 EXPORT_SYMBOL_GPL(q6apm_is_adsp_ready);
 
@@ -862,6 +866,14 @@ static const struct snd_soc_component_driver q6apm_audio_component = {
 	.remove_order   = SND_SOC_COMP_ORDER_LAST,
 };
 
+static void q6apm_clear_global(struct q6apm *apm)
+{
+	mutex_lock(&g_apm_lock);
+	if (g_apm == apm)
+		g_apm = NULL;
+	mutex_unlock(&g_apm_lock);
+}
+
 static int apm_probe(gpr_device_t *gdev)
 {
 	struct device *dev = &gdev->dev;
@@ -887,26 +899,31 @@ static int apm_probe(gpr_device_t *gdev)
 
 	idr_init(&apm->modules_idr);
 
-	g_apm = apm;
-
 	q6apm_get_apm_state(apm);
+
+	mutex_lock(&g_apm_lock);
+	g_apm = apm;
+	mutex_unlock(&g_apm_lock);
 
 	ret = snd_soc_register_component(dev, &q6apm_audio_component, NULL, 0);
 	if (ret < 0) {
 		dev_err(dev, "failed to register q6apm: %d\n", ret);
+		q6apm_clear_global(apm);
 		return ret;
 	}
 
 	ret = of_platform_populate(dev->of_node, NULL, NULL, dev);
-	if (ret)
+	if (ret) {
+		q6apm_clear_global(apm);
 		snd_soc_unregister_component(dev);
+	}
 
 	return ret;
 }
 
 static void apm_remove(gpr_device_t *gdev)
 {
-	g_apm = NULL;
+	q6apm_clear_global(dev_get_drvdata(&gdev->dev));
 	of_platform_depopulate(&gdev->dev);
 	snd_soc_unregister_component(&gdev->dev);
 }
