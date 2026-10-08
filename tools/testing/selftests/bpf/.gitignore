@@ -37,7 +37,6 @@ test_cpp
 /uprobe_multi
 *.ko
 *.tmp
-xskxceiver
 xdp_redirect_multi
 xdp_synproxy
 xdp_hw_metadata

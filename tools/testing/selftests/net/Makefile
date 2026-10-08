@@ -118,6 +118,7 @@ TEST_PROGS := \
 	test_vxlan_under_vrf.sh \
 	test_vxlan_vnifilter_notify.sh \
 	test_vxlan_vnifiltering.sh \
+	test_xsk.sh \
 	tfo_passive.sh \
 	traceroute.sh \
 	txtimestamp.sh \
@@ -209,6 +210,7 @@ TEST_FILES := \
 	in_netns.sh \
 	lib.sh \
 	settings \
+	xsk_prereqs.sh \
 # end of TEST_FILES
 
 # YNL files, must be before "include ..lib.mk"
