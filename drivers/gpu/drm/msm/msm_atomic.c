@@ -91,9 +91,8 @@ static void msm_atomic_async_commit(struct msm_kms *kms, int crtc_idx)
 	kms->funcs->wait_flush(kms, crtc_mask);
 	trace_msm_atomic_wait_flush_finish(crtc_mask);
 
-	vblank_put(kms, crtc_mask);
-
 	kms->funcs->complete_commit(kms, crtc_mask);
+	vblank_put(kms, crtc_mask);
 	unlock_crtcs(kms, crtc_mask);
 	kms->funcs->disable_commit(kms);
 
@@ -310,10 +309,9 @@ fallback:
 	kms->funcs->wait_flush(kms, crtc_mask);
 	trace_msm_atomic_wait_flush_finish(crtc_mask);
 
-	vblank_put(kms, crtc_mask);
-
 	lock_crtcs(kms, crtc_mask);
 	kms->funcs->complete_commit(kms, crtc_mask);
+	vblank_put(kms, crtc_mask);
 	unlock_crtcs(kms, crtc_mask);
 	kms->funcs->disable_commit(kms);
 
