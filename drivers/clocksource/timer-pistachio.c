@@ -163,38 +163,41 @@ static int __init pistachio_clksrc_of_init(struct device_node *node)
 	if (IS_ERR(periph_regs)) {
 		pr_err("cannot get peripheral regmap (%ld)\n",
 		       PTR_ERR(periph_regs));
-		return PTR_ERR(periph_regs);
+		ret = PTR_ERR(periph_regs);
+		goto err_unmap;
 	}
 
 	/* Switch to using the fast counter clock */
 	ret = regmap_update_bits(periph_regs, PERIP_TIMER_CONTROL,
 				 0xf, 0x0);
 	if (ret)
-		return ret;
+		goto err_unmap;
 
 	sys_clk = of_clk_get_by_name(node, "sys");
 	if (IS_ERR(sys_clk)) {
 		pr_err("clock get failed (%ld)\n", PTR_ERR(sys_clk));
-		return PTR_ERR(sys_clk);
+		ret = PTR_ERR(sys_clk);
+		goto err_unmap;
 	}
 
 	fast_clk = of_clk_get_by_name(node, "fast");
 	if (IS_ERR(fast_clk)) {
 		pr_err("clock get failed (%lu)\n", PTR_ERR(fast_clk));
-		return PTR_ERR(fast_clk);
+		ret = PTR_ERR(fast_clk);
+		goto err_unmap;
 	}
 
 	ret = clk_prepare_enable(sys_clk);
 	if (ret < 0) {
 		pr_err("failed to enable clock (%d)\n", ret);
-		return ret;
+		goto err_unmap;
 	}
 
 	ret = clk_prepare_enable(fast_clk);
 	if (ret < 0) {
 		pr_err("failed to enable clock (%d)\n", ret);
 		clk_disable_unprepare(sys_clk);
-		return ret;
+		goto err_unmap;
 	}
 
 	rate = clk_get_rate(fast_clk);
@@ -211,6 +214,11 @@ static int __init pistachio_clksrc_of_init(struct device_node *node)
 	raw_spin_lock_init(&pcs_gpt.lock);
 	sched_clock_register(pistachio_read_sched_clock, 32, rate);
 	return clocksource_register_hz(&pcs_gpt.cs, rate);
+
+err_unmap:
+	iounmap(pcs_gpt.base);
+	pcs_gpt.base = NULL;
+	return ret;
 }
 TIMER_OF_DECLARE(pistachio_gptimer, "img,pistachio-gptimer",
 		       pistachio_clksrc_of_init);
