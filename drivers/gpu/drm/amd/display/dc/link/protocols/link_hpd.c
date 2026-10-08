@@ -82,8 +82,12 @@ bool program_hpd_filter(const struct dc_link *link)
 	case SIGNAL_TYPE_HDMI_TYPE_A:
 	case SIGNAL_TYPE_HDMI_FRL:
 		/* Program hpd filter */
+		/* Some HDMI/DVI sinks drive HPD low for a few hundred ms while
+		 * they reconfigure; 100ms is not enough to hide that bounce,
+		 * which is then reported as a fake unplug/plug pair.
+		 */
 		delay_on_connect_in_ms = 500;
-		delay_on_disconnect_in_ms = 100;
+		delay_on_disconnect_in_ms = 800;
 		break;
 	case SIGNAL_TYPE_DISPLAY_PORT:
 	case SIGNAL_TYPE_DISPLAY_PORT_MST:
