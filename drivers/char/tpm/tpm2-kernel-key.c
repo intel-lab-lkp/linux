@@ -31,6 +31,8 @@
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/unaligned.h>
+#include <crypto/sha2.h>
+#include <crypto/sig.h>
 #include "tpm.h"
 #include "tpm2-rsp.h"
 
@@ -57,6 +59,16 @@ static const u8 tpm2_kkey_pcr5_select[] = {
 	0x00, 0x0b,			/* TPM_ALG_SHA256 */
 	0x03,				/* sizeofSelect */
 	0x20, 0x00, 0x00,		/* PCR 5 */
+};
+
+static const u8 tpm2_kkey_pcr5_bitmap[] = { 0x20, 0x00, 0x00 };
+
+static const struct {
+	u16 alg;
+	u16 size;
+} tpm2_kkey_pcr5_banks[] = {
+	{ TPM_ALG_SHA1,         SHA1_DIGEST_SIZE },
+	{ TPM_ALG_SHA256,       SHA256_DIGEST_SIZE },
 };
 
 /* The parameters of a response, as covered by the logged rpHash */
@@ -500,3 +512,363 @@ void tpm2_kernel_key_destroy(struct tpm_chip *chip,
 	memzero_explicit(key, sizeof(*key));
 }
 EXPORT_SYMBOL_GPL(tpm2_kernel_key_destroy);
+
+/**
+ * tpm2_kernel_key_verify_signature() - verify an ECDSA P-256 signature
+ * @x:		X coordinate of the public key
+ * @y:		Y coordinate of the public key
+ * @digest:	the SHA-256 digest that was signed
+ * @r:		R component of the signature
+ * @s:		S component of the signature
+ *
+ * Return: 0 if the signature is valid, -EKEYREJECTED if it is not, or
+ * another -errno on failure.
+ */
+int tpm2_kernel_key_verify_signature(const u8 x[EC_PT_SZ],
+				     const u8 y[EC_PT_SZ],
+				     const u8 digest[SHA256_DIGEST_SIZE],
+				     const u8 r[EC_PT_SZ],
+				     const u8 s[EC_PT_SZ])
+{
+	u8 pub[1 + 2 * EC_PT_SZ], sig[2 * EC_PT_SZ];
+	struct crypto_sig *tfm;
+	int rc;
+
+	tfm = crypto_alloc_sig("p1363(ecdsa-nist-p256)", 0, 0);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+
+	/* uncompressed point */
+	pub[0] = 0x04;
+	memcpy(&pub[1], x, EC_PT_SZ);
+	memcpy(&pub[1 + EC_PT_SZ], y, EC_PT_SZ);
+	memcpy(sig, r, EC_PT_SZ);
+	memcpy(&sig[EC_PT_SZ], s, EC_PT_SZ);
+
+	rc = crypto_sig_set_pubkey(tfm, pub, sizeof(pub));
+	if (!rc)
+		rc = crypto_sig_verify(tfm, sig, sizeof(sig), digest,
+				       SHA256_DIGEST_SIZE);
+
+	crypto_free_sig(tfm);
+	return rc == -EBADMSG ? -EKEYREJECTED : rc;
+}
+EXPORT_SYMBOL_GPL(tpm2_kernel_key_verify_signature);
+
+/* A logged command, parsed from the serialized provenance */
+struct tpm2_kkey_entry {
+	u32 cc;
+	const u8 *cphash;
+	const u8 *rphash;
+	const u8 *params;
+	u16 len;
+};
+
+static const u32 tpm2_kkey_expected_cc[TPM2_KKEY_NR_CMDS] = {
+	TPM2_CC_PCR_READ,
+	TPM2_CC_NV_READ,
+	TPM2_CC_CREATE_LOADED,
+};
+
+/* Check that the attestation is a session audit, and find its digest */
+static const u8 *tpm2_kkey_attest_digest(const u8 *attest, u16 len)
+{
+	struct tpm2_rsp r;
+	const u8 *digest;
+	u16 size;
+
+	tpm2_rsp_init_data(&r, attest, len);
+	if (tpm2_rsp_u32(&r) != TPM2_GENERATED_VALUE ||
+	    tpm2_rsp_u16(&r) != TPM2_ST_ATTEST_SESSION_AUDIT)
+		return NULL;
+
+	/* qualifiedSigner, extraData */
+	tpm2_rsp_tpm2b(&r, &size);
+	tpm2_rsp_tpm2b(&r, &size);
+	/* clockInfo (clock, resetCount, restartCount, safe), firmwareVersion */
+	tpm2_rsp_bytes(&r, 8 + 4 + 4 + 1);
+	tpm2_rsp_bytes(&r, 8);
+	/* exclusiveSession */
+	tpm2_rsp_u8(&r);
+	digest = tpm2_rsp_tpm2b(&r, &size);
+
+	if (r.err || r.off != r.len || size != SHA256_DIGEST_SIZE)
+		return NULL;
+
+	return digest;
+}
+
+static bool tpm2_kkey_bank_allocated(struct tpm_chip *chip, u16 alg)
+{
+	int i;
+
+	for (i = 0; i < chip->nr_allocated_banks; i++)
+		if (chip->allocated_banks[i].alg_id == alg)
+			return true;
+
+	return false;
+}
+
+/*
+ * Check a PCR_Read of PCR 5 against its current values.  Every bank that
+ * was read must hold the same value now, and the banks read must be
+ * exactly the SHA-1 and SHA-256 banks that are allocated.  A TPM leaves
+ * an unallocated bank out of the response or returns it with an empty
+ * selection, and since the response is covered by the attested audit
+ * digest, the set of banks read cannot be altered.
+ */
+static int tpm2_kkey_check_pcr5(struct tpm_chip *chip,
+				const struct tpm2_kkey_entry *e)
+{
+	bool read[ARRAY_SIZE(tpm2_kkey_pcr5_banks)] = { };
+	u8 cphash[SHA256_DIGEST_SIZE];
+	__be32 cc = cpu_to_be32(e->cc);
+	unsigned int nr_read = 0;
+	struct sha256_ctx ctx;
+	struct tpm2_rsp r;
+	int i, j, prev = -1, rc;
+	u32 count;
+
+	sha256_init(&ctx);
+	sha256_update(&ctx, (u8 *)&cc, sizeof(cc));
+	sha256_update(&ctx, tpm2_kkey_pcr5_select,
+		      sizeof(tpm2_kkey_pcr5_select));
+	sha256_final(&ctx, cphash);
+	if (memcmp(cphash, e->cphash, sizeof(cphash)))
+		return -EKEYREJECTED;
+
+	tpm2_rsp_init_data(&r, e->params, e->len);
+	/* pcrUpdateCounter */
+	tpm2_rsp_u32(&r);
+
+	/* pcrSelectionOut: which banks were actually read, in order */
+	count = tpm2_rsp_u32(&r);
+	if (count > ARRAY_SIZE(tpm2_kkey_pcr5_banks))
+		return -EKEYREJECTED;
+
+	for (i = 0; i < count; i++) {
+		u16 alg = tpm2_rsp_u16(&r);
+		const u8 *bitmap;
+
+		if (tpm2_rsp_u8(&r) != sizeof(tpm2_kkey_pcr5_bitmap))
+			return -EKEYREJECTED;
+		bitmap = tpm2_rsp_bytes(&r, sizeof(tpm2_kkey_pcr5_bitmap));
+		if (!bitmap)
+			return -EKEYREJECTED;
+
+		for (j = 0; j < ARRAY_SIZE(tpm2_kkey_pcr5_banks); j++)
+			if (tpm2_kkey_pcr5_banks[j].alg == alg)
+				break;
+		/* banks must be distinct and in the order requested */
+		if (j == ARRAY_SIZE(tpm2_kkey_pcr5_banks) || j <= prev)
+			return -EKEYREJECTED;
+		prev = j;
+
+		if (!memcmp(bitmap, tpm2_kkey_pcr5_bitmap,
+			    sizeof(tpm2_kkey_pcr5_bitmap))) {
+			read[j] = true;
+			nr_read++;
+		} else if (memchr_inv(bitmap, 0, sizeof(tpm2_kkey_pcr5_bitmap))) {
+			return -EKEYREJECTED;
+		}
+	}
+
+	if (!nr_read)
+		return -EKEYREJECTED;
+
+	/* TPML_DIGEST, one digest per bank read, in the same order */
+	if (tpm2_rsp_u32(&r) != nr_read)
+		return -EKEYREJECTED;
+
+	for (j = 0; j < ARRAY_SIZE(tpm2_kkey_pcr5_banks); j++) {
+		struct tpm_digest pcr = { .alg_id = tpm2_kkey_pcr5_banks[j].alg };
+		const u8 *digest;
+		u16 size;
+
+		/* every allocated bank must have been read */
+		if (!read[j]) {
+			if (tpm2_kkey_bank_allocated(chip, pcr.alg_id))
+				return -EKEYREJECTED;
+			continue;
+		}
+
+		digest = tpm2_rsp_tpm2b(&r, &size);
+		if (!digest || size != tpm2_kkey_pcr5_banks[j].size)
+			return -EKEYREJECTED;
+
+		rc = tpm2_pcr_read(chip, 5, &pcr, NULL);
+		if (rc)
+			return rc;
+
+		if (memcmp(digest, pcr.digest, size))
+			return -EKEYREJECTED;
+	}
+
+	return r.err || r.off != r.len ? -EKEYREJECTED : 0;
+}
+
+/* Check an NV_Read of the kernel index, and that it returned the magic */
+static int tpm2_kkey_check_nv_read(const struct tpm2_kkey_entry *e)
+{
+	u8 name[TPM2_NULL_NAME_SIZE], cphash[SHA256_DIGEST_SIZE];
+	struct sha256_ctx ctx;
+	__be32 cc = cpu_to_be32(e->cc);
+	__be16 size = cpu_to_be16(TPM2_KERNEL_NV_SIZE), offset = 0;
+
+	/* authHandle and nvIndex are both the index, as last written */
+	tpm2_kernel_nv_name(true, name);
+	sha256_init(&ctx);
+	sha256_update(&ctx, (u8 *)&cc, sizeof(cc));
+	sha256_update(&ctx, name, sizeof(name));
+	sha256_update(&ctx, name, sizeof(name));
+	sha256_update(&ctx, (u8 *)&size, sizeof(size));
+	sha256_update(&ctx, (u8 *)&offset, sizeof(offset));
+	sha256_final(&ctx, cphash);
+
+	if (memcmp(cphash, e->cphash, sizeof(cphash)))
+		return -EKEYREJECTED;
+
+	if (e->len != sizeof(u16) + TPM2_KERNEL_NV_SIZE ||
+	    get_unaligned_be16(e->params) != TPM2_KERNEL_NV_SIZE ||
+	    memcmp(e->params + sizeof(u16), tpm2_kernel_nv_magic,
+		   TPM2_KERNEL_NV_SIZE))
+		return -EKEYREJECTED;
+
+	return 0;
+}
+
+/* Extract the public key from a CreateLoaded response */
+static int tpm2_kkey_check_create(const struct tpm2_kkey_entry *e,
+				  u8 x[EC_PT_SZ], u8 y[EC_PT_SZ])
+{
+	struct tpm2_rsp r;
+	u16 size;
+
+	tpm2_rsp_init_data(&r, e->params, e->len);
+	/* outPrivate */
+	tpm2_rsp_tpm2b(&r, &size);
+	if (tpm2_rsp_ecdsa_public(&r, TPM2_OA_KERNEL_KEY, x, y))
+		return -EKEYREJECTED;
+	/* name */
+	tpm2_rsp_tpm2b(&r, &size);
+
+	return r.err || r.off != r.len ? -EKEYREJECTED : 0;
+}
+
+/**
+ * tpm2_kernel_key_verify() - verify the provenance of a kernel signing key
+ * @chip:	the TPM chip
+ * @prov:	provenance returned by tpm2_kernel_key_create()
+ * @x:		filled with the X coordinate of the key's public key
+ * @y:		filled with the Y coordinate of the key's public key
+ *
+ * Checks that @prov shows the key was created by the kernel:
+ *
+ * - the attestation is signed by this TPM's kernel AK;
+ * - the logged commands reproduce the attested audit digest;
+ * - the logged responses match the recorded response parameters, and the
+ *   commands were PCR_Read, NV_Read, and CreateLoaded, in order;
+ * - PCR 5 was read and held the same value as it does now;
+ * - the kernel NV index was read, and returned the magic value;
+ * - the key created has the attributes of a kernel signing key.
+ *
+ * The caller must hold the chip's ops lock.
+ *
+ * Return: 0 if the provenance is valid, -EKEYREJECTED if it is not, or
+ * another -errno or a TPM error code on failure.
+ */
+int tpm2_kernel_key_verify(struct tpm_chip *chip,
+			   const struct tpm2_key_provenance *prov,
+			   u8 x[EC_PT_SZ], u8 y[EC_PT_SZ])
+{
+	struct tpm2_kkey_entry e[TPM2_KKEY_NR_CMDS];
+	u8 ak_x[EC_PT_SZ], ak_y[EC_PT_SZ];
+	u8 digest[SHA256_DIGEST_SIZE];
+	const u8 *attest, *sig_r, *sig_s, *session_digest;
+	struct sha256_ctx ctx;
+	struct tpm2_rsp r;
+	u16 attest_len;
+	u32 ak;
+	int i, rc;
+
+	if (prov->len > sizeof(prov->data))
+		return -EKEYREJECTED;
+
+	tpm2_rsp_init_data(&r, prov->data, prov->len);
+	if (tpm2_rsp_u32(&r) != TPM2_KKEY_PROV_MAGIC ||
+	    tpm2_rsp_u16(&r) != TPM2_KKEY_PROV_VERSION)
+		return -EKEYREJECTED;
+
+	attest = tpm2_rsp_tpm2b(&r, &attest_len);
+	sig_r = tpm2_rsp_bytes(&r, EC_PT_SZ);
+	sig_s = tpm2_rsp_bytes(&r, EC_PT_SZ);
+	if (tpm2_rsp_u8(&r) != TPM2_KKEY_NR_CMDS)
+		return -EKEYREJECTED;
+
+	for (i = 0; i < TPM2_KKEY_NR_CMDS; i++) {
+		e[i].cc = tpm2_rsp_u32(&r);
+		e[i].cphash = tpm2_rsp_bytes(&r, SHA256_DIGEST_SIZE);
+		e[i].rphash = tpm2_rsp_bytes(&r, SHA256_DIGEST_SIZE);
+		e[i].params = tpm2_rsp_tpm2b(&r, &e[i].len);
+		if (e[i].cc != tpm2_kkey_expected_cc[i])
+			return -EKEYREJECTED;
+	}
+
+	if (r.err || r.off != r.len)
+		return -EKEYREJECTED;
+
+	/* the attestation must be signed by this TPM's kernel AK */
+	rc = tpm2_create_kernel_ak(chip, &ak, ak_x, ak_y);
+	if (rc)
+		return rc;
+	tpm2_flush_context(chip, ak);
+
+	sha256(attest, attest_len, digest);
+	rc = tpm2_kernel_key_verify_signature(ak_x, ak_y, digest, sig_r,
+					      sig_s);
+	if (rc)
+		return rc;
+
+	session_digest = tpm2_kkey_attest_digest(attest, attest_len);
+	if (!session_digest)
+		return -EKEYREJECTED;
+
+	/* replay the log from the initial zero digest */
+	memset(digest, 0, sizeof(digest));
+	for (i = 0; i < TPM2_KKEY_NR_CMDS; i++) {
+		u8 rphash[SHA256_DIGEST_SIZE];
+		__be32 cc = cpu_to_be32(e[i].cc);
+		__be32 rc_success = 0;
+
+		/* the response must match the recorded parameters */
+		sha256_init(&ctx);
+		sha256_update(&ctx, (u8 *)&rc_success, sizeof(rc_success));
+		sha256_update(&ctx, (u8 *)&cc, sizeof(cc));
+		sha256_update(&ctx, e[i].params, e[i].len);
+		sha256_final(&ctx, rphash);
+		if (memcmp(rphash, e[i].rphash, sizeof(rphash)))
+			return -EKEYREJECTED;
+
+		sha256_init(&ctx);
+		sha256_update(&ctx, digest, sizeof(digest));
+		sha256_update(&ctx, e[i].cphash, SHA256_DIGEST_SIZE);
+		sha256_update(&ctx, e[i].rphash, SHA256_DIGEST_SIZE);
+		sha256_final(&ctx, digest);
+	}
+
+	if (memcmp(digest, session_digest, sizeof(digest)))
+		return -EKEYREJECTED;
+
+	/* PCR 5 must hold the same value now */
+	rc = tpm2_kkey_check_pcr5(chip, &e[0]);
+	if (rc)
+		return rc;
+
+	/* the key was created after a read of the magic value */
+	rc = tpm2_kkey_check_nv_read(&e[1]);
+	if (!rc)
+		rc = tpm2_kkey_check_create(&e[2], x, y);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(tpm2_kernel_key_verify);

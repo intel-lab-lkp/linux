@@ -45,6 +45,7 @@ config TCG_TPM2_HMAC
 config TCG_TPM2_KERNEL_KEY
 	bool "Kernel-generated TPM signing keys with provenance"
 	depends on TCG_TPM2_HMAC
+	select CRYPTO_ECDSA
 	help
 	  Allow the kernel to create TPM signing keys along with evidence,
 	  signed by the kernel attestation key, that the key was created

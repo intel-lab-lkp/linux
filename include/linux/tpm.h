@@ -393,6 +393,14 @@ int tpm2_kernel_key_sign(struct tpm_chip *chip, struct tpm2_kernel_key *key,
 			 u8 r[EC_PT_SZ], u8 s[EC_PT_SZ]);
 void tpm2_kernel_key_destroy(struct tpm_chip *chip,
 			     struct tpm2_kernel_key *key);
+int tpm2_kernel_key_verify(struct tpm_chip *chip,
+			   const struct tpm2_key_provenance *prov,
+			   u8 x[EC_PT_SZ], u8 y[EC_PT_SZ]);
+int tpm2_kernel_key_verify_signature(const u8 x[EC_PT_SZ],
+				     const u8 y[EC_PT_SZ],
+				     const u8 digest[SHA256_DIGEST_SIZE],
+				     const u8 r[EC_PT_SZ],
+				     const u8 s[EC_PT_SZ]);
 #else
 static inline int tpm2_kernel_key_create(struct tpm_chip *chip,
 					 struct tpm2_kernel_key *key,
@@ -410,6 +418,19 @@ static inline int tpm2_kernel_key_sign(struct tpm_chip *chip,
 static inline void tpm2_kernel_key_destroy(struct tpm_chip *chip,
 					   struct tpm2_kernel_key *key)
 {
+}
+static inline int tpm2_kernel_key_verify(struct tpm_chip *chip,
+					 const struct tpm2_key_provenance *prov,
+					 u8 x[EC_PT_SZ], u8 y[EC_PT_SZ])
+{
+	return -EOPNOTSUPP;
+}
+static inline int
+tpm2_kernel_key_verify_signature(const u8 x[EC_PT_SZ], const u8 y[EC_PT_SZ],
+				 const u8 digest[SHA256_DIGEST_SIZE],
+				 const u8 r[EC_PT_SZ], const u8 s[EC_PT_SZ])
+{
+	return -EOPNOTSUPP;
 }
 #endif
 
