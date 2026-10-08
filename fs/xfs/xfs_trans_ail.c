@@ -392,6 +392,8 @@ xfsaild_push_item(
 	 */
 	if (!lip->li_ops->iop_push)
 		return XFS_ITEM_PINNED;
+	if (test_bit(XFS_LI_FLUSHING, &lip->li_flags))
+		return XFS_ITEM_FLUSHING;
 	if (test_bit(XFS_LI_FAILED, &lip->li_flags))
 		return xfsaild_resubmit_item(lip, &ailp->ail_buf_list);
 	return lip->li_ops->iop_push(lip, &ailp->ail_buf_list);
@@ -581,9 +583,6 @@ xfsaild_push(
 	lsn = lip->li_lsn;
 	while ((XFS_LSN_CMP(lip->li_lsn, ailp->ail_target) <= 0)) {
 
-		if (test_bit(XFS_LI_FLUSHING, &lip->li_flags))
-			goto next_item;
-
 		xfsaild_process_logitem(ailp, lip, &stuck, &flushing);
 		count++;
 
@@ -603,11 +602,8 @@ xfsaild_push(
 		if (stuck > 100)
 			break;
 
-next_item:
 		lip = xfs_trans_ail_cursor_next(ailp, &cur);
 		if (lip == NULL)
-			break;
-		if (lip->li_lsn != lsn && count > 1000)
 			break;
 		lsn = lip->li_lsn;
 	}
@@ -645,7 +641,7 @@ out_done:
 		/*
 		 * Assume we have more work to do in a short while.
 		 */
-		tout = 0;
+		tout = 10;
 	}
 
 	return tout;
