@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# PON subsystem configuration
+#
+config PON
+	tristate "Passive Optical Network (PON) device support"
+	depends on NET
+	help
+	  Enable kernel support for PON (GPON / XG(S)-PON) ONU devices: the
+	  netlink configuration family (which also carries the OMCI
+	  management channel to a userspace OMCI stack) and per GEM port
+	  virtual devices.
+
+	  To compile this as a module, choose M here: the module will be
+	  called pon.
+
+	  If unsure, say N.
