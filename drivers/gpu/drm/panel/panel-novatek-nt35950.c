@@ -11,12 +11,15 @@
 #include <linux/of.h>
 #include <linux/of_graph.h>
 #include <linux/regulator/consumer.h>
+#include <linux/slab.h>
 
+#include <drm/drm_atomic.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_print.h>
 
 #define MCS_CMD_MAUCCTR			0xf0 /* Manufacturer command enable */
 #define MCS_PARAM_SCALER_FUNCTION	0x58 /* Scale-up function */
@@ -51,14 +54,17 @@
 
 struct nt35950 {
 	struct drm_panel panel;
-	struct drm_connector *connector;
 	struct mipi_dsi_device *dsi[2];
 	struct regulator_bulk_data vregs[NT35950_VREG_MAX];
 	struct gpio_desc *reset_gpio;
 	const struct nt35950_panel_desc *desc;
 
-	int cur_mode;
 	u8 last_page;
+};
+
+struct nt35950_state {
+	struct drm_panel_state base;
+	const struct nt35950_panel_mode *mode_data;
 };
 
 struct nt35950_panel_mode {
@@ -87,6 +93,9 @@ static inline struct nt35950 *to_nt35950(struct drm_panel *panel)
 {
 	return container_of(panel, struct nt35950, panel);
 }
+
+#define to_nt35950_state(panel_state) \
+	container_of_const(panel_state, struct nt35950_state, base)
 
 static void nt35950_reset(struct nt35950 *nt)
 {
@@ -212,61 +221,37 @@ static void nt35950_inject_black_image(struct mipi_dsi_multi_context *dsi_ctx)
 
 /*
  * nt35950_set_dispout - Set Display Output register parameters
- * @nt:    Main driver structure
  * @dsi_ctx: context for mipi_dsi functions
+ * @mode_data: Parameters of the mode being set
  */
 static void nt35950_set_dispout(struct mipi_dsi_multi_context *dsi_ctx,
-				struct nt35950 *nt)
+				const struct nt35950_panel_mode *mode_data)
 {
 	u8 cmd_dispout[] = { MCS_PARAM_DISP_OUTPUT_CTRL, 0x00 };
-	const struct nt35950_panel_mode *mode_data = nt->desc->mode_data;
 
-	if (mode_data[nt->cur_mode].is_video_mode)
+	if (mode_data->is_video_mode)
 		cmd_dispout[1] |= MCS_DISP_OUT_VIDEO_MODE;
-	if (mode_data[nt->cur_mode].enable_sram)
+	if (mode_data->enable_sram)
 		cmd_dispout[1] |= MCS_DISP_OUT_SRAM_EN;
 
 	mipi_dsi_dcs_write_buffer_multi(dsi_ctx, cmd_dispout,
 					ARRAY_SIZE(cmd_dispout));
 }
 
-static int nt35950_get_current_mode(struct nt35950 *nt)
+static int nt35950_on(struct nt35950 *nt,
+		      const struct nt35950_panel_mode *mode_data)
 {
-	struct drm_connector *connector = nt->connector;
-	struct drm_crtc_state *crtc_state;
-	int i;
-
-	/* Return the default (first) mode if no info available yet */
-	if (!connector->state || !connector->state->crtc)
-		return 0;
-
-	crtc_state = connector->state->crtc->state;
-
-	for (i = 0; i < nt->desc->num_modes; i++) {
-		if (drm_mode_match(&crtc_state->mode,
-				   &nt->desc->mode_data[i].mode,
-				   DRM_MODE_MATCH_TIMINGS | DRM_MODE_MATCH_CLOCK))
-			return i;
-	}
-
-	return 0;
-}
-
-static int nt35950_on(struct nt35950 *nt)
-{
-	const struct nt35950_panel_mode *mode_data = nt->desc->mode_data;
 	struct mipi_dsi_device *dsi = nt->dsi[0];
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
 
-	nt->cur_mode = nt35950_get_current_mode(nt);
 	nt->dsi[0]->mode_flags |= MIPI_DSI_MODE_LPM;
 	nt->dsi[1]->mode_flags |= MIPI_DSI_MODE_LPM;
 
 	nt35950_set_cmd2_page(&dsi_ctx, nt, 0);
-	nt35950_set_data_compression(&dsi_ctx, nt, mode_data[nt->cur_mode].compression);
-	nt35950_set_scale_mode(&dsi_ctx, mode_data[nt->cur_mode].scaler_mode);
-	nt35950_set_scaler(&dsi_ctx, mode_data[nt->cur_mode].scaler_on);
-	nt35950_set_dispout(&dsi_ctx, nt);
+	nt35950_set_data_compression(&dsi_ctx, nt, mode_data->compression);
+	nt35950_set_scale_mode(&dsi_ctx, mode_data->scaler_mode);
+	nt35950_set_scaler(&dsi_ctx, mode_data->scaler_on);
+	nt35950_set_dispout(&dsi_ctx, mode_data);
 
 	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
 	mipi_dsi_dcs_set_tear_scanline_multi(&dsi_ctx, 0);
@@ -354,10 +339,42 @@ static int nt35950_sharp_init_vregs(struct nt35950 *nt, struct device *dev)
 	return 0;
 }
 
-static int nt35950_prepare(struct drm_panel *panel)
+static int nt35950_atomic_check(struct drm_panel *panel,
+				struct drm_atomic_commit *commit)
 {
 	struct nt35950 *nt = to_nt35950(panel);
+	struct drm_panel_state *panel_state;
+	struct drm_crtc_state *crtc_state;
+	int i;
+
+	panel_state = drm_atomic_get_new_panel_state(commit, panel);
+	crtc_state = drm_atomic_get_new_crtc_state_for_panel(commit, panel);
+	if (!panel_state || !crtc_state)
+		return -EINVAL;
+
+	for (i = 0; i < nt->desc->num_modes; i++) {
+		if (drm_mode_match(&crtc_state->mode,
+				   &nt->desc->mode_data[i].mode,
+				   DRM_MODE_MATCH_TIMINGS | DRM_MODE_MATCH_CLOCK)) {
+			to_nt35950_state(panel_state)->mode_data =
+				&nt->desc->mode_data[i];
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
+static int nt35950_atomic_prepare(struct drm_panel *panel,
+				  struct drm_atomic_commit *commit)
+{
+	struct nt35950 *nt = to_nt35950(panel);
+	struct drm_panel_state *panel_state;
 	int ret;
+
+	panel_state = drm_atomic_get_new_panel_state(commit, panel);
+	if (!panel_state || !to_nt35950_state(panel_state)->mode_data)
+		return -EINVAL;
 
 	ret = regulator_enable(nt->vregs[0].consumer);
 	if (ret)
@@ -380,7 +397,7 @@ static int nt35950_prepare(struct drm_panel *panel)
 
 	nt35950_reset(nt);
 
-	ret = nt35950_on(nt);
+	ret = nt35950_on(nt, to_nt35950_state(panel_state)->mode_data);
 
 end:
 	if (ret < 0) {
@@ -391,7 +408,8 @@ end:
 	return 0;
 }
 
-static int nt35950_unprepare(struct drm_panel *panel)
+static int nt35950_atomic_unprepare(struct drm_panel *panel,
+				    struct drm_atomic_commit *commit)
 {
 	struct nt35950 *nt = to_nt35950(panel);
 
@@ -429,15 +447,72 @@ static int nt35950_get_modes(struct drm_panel *panel,
 	connector->display_info.bpc = 8;
 	connector->display_info.height_mm = nt->desc->mode_data[0].mode.height_mm;
 	connector->display_info.width_mm = nt->desc->mode_data[0].mode.width_mm;
-	nt->connector = connector;
 
 	return nt->desc->num_modes;
 }
 
+static struct drm_panel_state *
+nt35950_atomic_create_state(struct drm_panel *panel)
+{
+	struct nt35950_state *state;
+
+	state = kzalloc_obj(*state);
+	if (!state)
+		return ERR_PTR(-ENOMEM);
+
+	__drm_atomic_helper_panel_state_init(&state->base, panel);
+
+	return &state->base;
+}
+
+static struct drm_panel_state *
+nt35950_atomic_duplicate_state(struct drm_panel *panel)
+{
+	struct drm_panel_state *old_state = drm_panel_get_current_state(panel);
+	struct nt35950_state *state;
+
+	if (!old_state)
+		return NULL;
+
+	state = kzalloc_obj(*state);
+	if (!state)
+		return NULL;
+
+	__drm_atomic_helper_panel_duplicate_state(panel, &state->base);
+	state->mode_data = to_nt35950_state(old_state)->mode_data;
+
+	return &state->base;
+}
+
+static void nt35950_atomic_destroy_state(struct drm_panel *panel,
+					 struct drm_panel_state *state)
+{
+	kfree(to_nt35950_state(state));
+}
+
+static void nt35950_atomic_print_state(struct drm_printer *p,
+				       const struct drm_panel_state *state)
+{
+	const struct nt35950_panel_mode *mode_data =
+		to_nt35950_state(state)->mode_data;
+
+	if (!mode_data)
+		return;
+
+	drm_printf_indent(p, 1, "compression: %02x\n", mode_data->compression);
+	drm_printf_indent(p, 1, "scaler: %u, mode %02x\n",
+			  mode_data->scaler_on, mode_data->scaler_mode);
+}
+
 static const struct drm_panel_funcs nt35950_panel_funcs = {
-	.prepare = nt35950_prepare,
-	.unprepare = nt35950_unprepare,
+	.atomic_check = nt35950_atomic_check,
+	.atomic_prepare = nt35950_atomic_prepare,
+	.atomic_unprepare = nt35950_atomic_unprepare,
 	.get_modes = nt35950_get_modes,
+	.atomic_create_state = nt35950_atomic_create_state,
+	.atomic_duplicate_state = nt35950_atomic_duplicate_state,
+	.atomic_destroy_state = nt35950_atomic_destroy_state,
+	.atomic_print_state = nt35950_atomic_print_state,
 };
 
 static int nt35950_probe(struct mipi_dsi_device *dsi)
