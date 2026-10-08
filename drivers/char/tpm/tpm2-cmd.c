@@ -323,6 +323,112 @@ int tpm2_get_random(struct tpm_chip *chip, u8 *dest, size_t max)
 	return total ? total : -EIO;
 }
 
+/* Minimum MAX_NV_BUFFER_SIZE required by the PC Client TPM profile */
+#define TPM2_NV_BUFFER_MIN	512
+
+/**
+ * tpm2_nv_read() - read data from an NV index
+ * @chip:	TPM chip to use
+ * @nv_index:	the NV index to read
+ * @auth_handle: the handle authorizing the read, which must have an empty
+ *		auth value
+ * @offset:	offset within the NV index to start reading at
+ * @data:	buffer to receive the data
+ * @len:	number of bytes to read
+ *
+ * Reads are split into chunks no larger than the TPM's NV buffer.  When
+ * HMAC sessions are enabled the read is integrity protected and the
+ * response encrypted.  If an audit session is active it is used, so the
+ * reads are recorded in its log.
+ *
+ * Return: same as with tpm_transmit_cmd()
+ */
+int tpm2_nv_read(struct tpm_chip *chip, u32 nv_index, u32 auth_handle,
+		 u16 offset, u8 *data, u16 len)
+{
+	struct tpm_buf *buf __free(kfree) = NULL;
+	u32 chunk_max;
+	off_t off;
+	int rc;
+
+	if ((u32)offset + len > U16_MAX + 1)
+		return -EINVAL;
+
+	if (tpm2_get_tpm_pt(chip, TPM2_PT_NV_BUFFER_MAX, &chunk_max, NULL) ||
+	    !chunk_max)
+		chunk_max = TPM2_NV_BUFFER_MIN;
+
+	rc = tpm2_start_auth_session(chip, false);
+	/* -EBUSY means an audit session is active, which we can use */
+	if (rc && rc != -EBUSY)
+		return rc;
+
+	buf = kzalloc(TPM_BUFSIZE, GFP_KERNEL);
+	if (!buf) {
+		tpm2_end_auth_session(chip);
+		return -ENOMEM;
+	}
+
+	tpm_buf_init(buf, TPM_BUFSIZE);
+
+	while (len) {
+		u16 chunk = min_t(u32, len, chunk_max);
+		u16 size;
+
+		tpm_buf_reset(buf, TPM2_ST_SESSIONS, TPM2_CC_NV_READ);
+
+		/* these end the session on failure */
+		rc = tpm_buf_append_name(chip, buf, auth_handle, NULL);
+		if (rc)
+			return rc;
+		rc = tpm_buf_append_name(chip, buf, nv_index, NULL);
+		if (rc)
+			return rc;
+
+		tpm_buf_append_hmac_session(chip, buf, TPM2_SA_ENCRYPT |
+					    TPM2_SA_CONTINUE_SESSION, NULL, 0);
+		tpm_buf_append_u16(buf, chunk);
+		tpm_buf_append_u16(buf, offset);
+
+		rc = tpm_buf_fill_hmac_session(chip, buf);
+		if (rc)
+			return rc;
+
+		rc = tpm_transmit_cmd(chip, buf, 0, "attempting to read NV index");
+		rc = tpm_buf_check_hmac_response(chip, buf, rc);
+		if (rc) {
+			/*
+			 * A TPM error such as a missing index leaves the
+			 * session usable, so only end it on a system error.
+			 */
+			if (rc < 0)
+				tpm2_end_auth_session(chip);
+			return rc;
+		}
+
+		/* skip the parameter size */
+		off = TPM_HEADER_SIZE + sizeof(u32);
+		if (tpm_buf_length(buf) < off + sizeof(u16))
+			goto err_short;
+		size = get_unaligned_be16(&buf->data[off]);
+		off += sizeof(u16);
+		if (size != chunk || tpm_buf_length(buf) < off + size)
+			goto err_short;
+
+		memcpy(data, &buf->data[off], size);
+		data += size;
+		offset += size;
+		len -= size;
+	}
+
+	return 0;
+
+err_short:
+	/* the response passed the HMAC check, so the session is still valid */
+	dev_err(&chip->dev, "short NV read response\n");
+	return -EIO;
+}
+
 /**
  * tpm2_flush_context() - execute a TPM2_FlushContext command
  * @chip:	TPM chip to use

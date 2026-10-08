@@ -257,6 +257,8 @@ extern int tpm_pcr_read(struct tpm_chip *chip, u32 pcr_idx,
 extern int tpm_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 			  struct tpm_digest *digests);
 extern int tpm_get_random(struct tpm_chip *chip, u8 *data, size_t max);
+extern int tpm_nv_read(struct tpm_chip *chip, u32 nv_index, u32 auth_handle,
+		       u16 offset, u8 *data, u16 len);
 extern struct tpm_chip *tpm_default_chip(void);
 void tpm2_flush_context(struct tpm_chip *chip, u32 handle);
 int tpm2_find_hash_alg(unsigned int crypto_id);
@@ -288,6 +290,12 @@ static inline int tpm_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 }
 
 static inline int tpm_get_random(struct tpm_chip *chip, u8 *data, size_t max)
+{
+	return -ENODEV;
+}
+
+static inline int tpm_nv_read(struct tpm_chip *chip, u32 nv_index,
+			      u32 auth_handle, u16 offset, u8 *data, u16 len)
 {
 	return -ENODEV;
 }

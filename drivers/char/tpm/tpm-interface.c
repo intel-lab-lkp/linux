@@ -359,6 +359,42 @@ int tpm_pcr_read(struct tpm_chip *chip, u32 pcr_idx,
 EXPORT_SYMBOL_GPL(tpm_pcr_read);
 
 /**
+ * tpm_nv_read - read data from a TPM 2.0 NV index
+ * @chip:	a &struct tpm_chip instance
+ * @nv_index:	the NV index to read
+ * @auth_handle: the handle authorizing the read: @nv_index itself, or
+ *		the owner or platform hierarchy, depending on the index's
+ *		attributes.  Its auth value must be empty.
+ * @offset:	offset within the NV index to start reading at
+ * @data:	buffer to receive the data
+ * @len:	number of bytes to read
+ *
+ * Return: same as with tpm_transmit_cmd()
+ */
+int tpm_nv_read(struct tpm_chip *chip, u32 nv_index, u32 auth_handle,
+		u16 offset, u8 *data, u16 len)
+{
+	int rc;
+
+	if (!chip)
+		return -ENODEV;
+
+	rc = tpm_try_get_ops(chip);
+	if (rc)
+		return rc;
+
+	if (chip->flags & TPM_CHIP_FLAG_TPM2)
+		rc = tpm2_nv_read(chip, nv_index, auth_handle, offset, data,
+				  len);
+	else
+		rc = -EOPNOTSUPP;
+
+	tpm_put_ops(chip);
+	return rc;
+}
+EXPORT_SYMBOL_GPL(tpm_nv_read);
+
+/**
  * tpm_pcr_extend - extend a PCR value in SHA1 bank.
  * @chip:	a &struct tpm_chip instance, %NULL for the default chip
  * @pcr_idx:	the PCR to be retrieved
