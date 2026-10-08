@@ -677,12 +677,13 @@ static int bcm7xxx_28nm_ephy_write_mmd(struct phy_device *phydev,
 		goto reset_shadow_mode;
 
 	/* Write the desired value in the shadow register */
-	__phy_write(phydev, MII_BCM7XXX_SHD_2_CTRL_STAT, val);
+	ret = __phy_write(phydev, MII_BCM7XXX_SHD_2_CTRL_STAT, val);
 
 reset_shadow_mode:
 	/* reset shadow mode 2 */
-	return __phy_set_clr_bits(phydev, MII_BCM7XXX_TEST, 0,
-				  MII_BCM7XXX_SHD_MODE_2);
+	__phy_set_clr_bits(phydev, MII_BCM7XXX_TEST, 0,
+			   MII_BCM7XXX_SHD_MODE_2);
+	return ret;
 }
 
 static int bcm7xxx_28nm_ephy_resume(struct phy_device *phydev)
