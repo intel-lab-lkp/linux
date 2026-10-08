@@ -1314,6 +1314,7 @@ static int cifs_precopy_set_eof(struct inode *src_inode, struct cifsInodeInfo *s
 				unsigned int xid, loff_t src_end)
 {
 	struct cifsFileInfo *writeable_srcfile;
+	uoff_t old_size = i_size_read(src_inode);
 	int rc = -EINVAL;
 
 	writeable_srcfile = find_writable_file(src_cifsi, FIND_FSUID_ONLY);
@@ -1332,7 +1333,7 @@ static int cifs_precopy_set_eof(struct inode *src_inode, struct cifsInodeInfo *s
 		goto set_failed;
 
 	netfs_resize_file(&src_cifsi->netfs, src_end, true);
-	fscache_resize_cookie(cifs_inode_cookie(src_inode), src_end);
+	fscache_resize_cookie(cifs_inode_cookie(src_inode), src_end, src_end < old_size);
 	return 0;
 
 set_failed:
@@ -1538,6 +1539,7 @@ ssize_t cifs_file_copychunk_range(unsigned int xid,
 	struct cifs_tcon *src_tcon;
 	struct cifs_tcon *target_tcon;
 	ssize_t rc;
+	uoff_t old_size, new_size;
 
 	if (len == 0)
 		return 0;
@@ -1621,14 +1623,15 @@ ssize_t cifs_file_copychunk_range(unsigned int xid,
 
 	rc = file_modified(dst_file);
 	if (!rc) {
+		old_size = netfs_read_remote_i_size(target_inode);
 		rc = target_tcon->ses->server->ops->copychunk_range(xid,
 			smb_file_src, smb_file_target, off, len, destoff);
 		if (rc > 0 && destoff + rc > i_size_read(target_inode)) {
 			truncate_setsize(target_inode, destoff + rc);
-			netfs_resize_file(&target_cifsi->netfs,
-					  i_size_read(target_inode), true);
+			new_size = i_size_read(target_inode);
+			netfs_resize_file(&target_cifsi->netfs, new_size, true);
 			fscache_resize_cookie(cifs_inode_cookie(target_inode),
-					      i_size_read(target_inode));
+					      new_size, new_size < old_size);
 		}
 		if (rc > 0) {
 			spin_lock(&target_inode->i_lock);
