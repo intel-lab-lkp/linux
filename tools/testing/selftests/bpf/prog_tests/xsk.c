@@ -53,10 +53,6 @@ int configure_ifobj(struct ifobject *tx, struct ifobject *rx)
 	if (!ASSERT_OK_FD(tx->ifindex, "get TX ifindex"))
 		return -1;
 
-	tx->shared_umem = false;
-	rx->shared_umem = false;
-
-
 	return 0;
 }
 

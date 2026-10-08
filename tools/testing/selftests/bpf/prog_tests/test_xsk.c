@@ -101,10 +101,6 @@ int xsk_configure_umem(struct ifobject *ifobj, struct xsk_umem_info *umem, void 
 		return ret;
 
 	umem->buffer = buffer;
-	if (ifobj->shared_umem && ifobj->rx_on) {
-		umem->base_addr = umem_size(umem);
-		umem->next_buffer = umem_size(umem);
-	}
 
 	return 0;
 }
@@ -115,8 +111,8 @@ static u64 umem_alloc_buffer(struct xsk_umem_info *umem)
 
 	addr = umem->next_buffer;
 	umem->next_buffer += umem->frame_size;
-	if (umem->next_buffer >= umem->base_addr + umem_size(umem))
-		umem->next_buffer = umem->base_addr;
+	if (umem->next_buffer >= umem_size(umem))
+		umem->next_buffer = 0;
 
 	return addr;
 }
@@ -207,7 +203,7 @@ static void __test_spec_init(struct test_spec *test, struct ifobject *ifobj_tx,
 
 	for (i = 0; i < MAX_INTERFACES; i++) {
 		struct ifobject *ifobj = i ? ifobj_rx : ifobj_tx;
-		struct xsk_umem_info *umem_real;
+		struct xsk_umem_info *umem;
 
 		ifobj->xsk = &ifobj->xsk_arr[0];
 		ifobj->use_poll = false;
@@ -224,16 +220,14 @@ static void __test_spec_init(struct test_spec *test, struct ifobject *ifobj_tx,
 			ifobj->tx_on = false;
 		}
 
-		umem_real = ifobj->xsk_arr[0].umem_real;
-		memset(umem_real, 0, sizeof(*umem_real));
+		umem = ifobj->xsk_arr[0].umem;
+		memset(umem, 0, sizeof(*umem));
 		for (j = 0; j < MAX_SOCKETS; j++) {
 			struct xsk_socket_info *xsk = &ifobj->xsk_arr[j];
 
 			memset(xsk, 0, sizeof(*xsk));
 			xsk->rxqsize = XSK_RING_CONS__DEFAULT_NUM_DESCS;
-			if (j == 0)
-				xsk->umem_real = umem_real;
-			xsk->umem = umem_real;
+			xsk->umem = umem;
 			xsk->batch_size = DEFAULT_BATCH_SIZE;
 			if (i == 0)
 				xsk->pkt_stream = test->tx_pkt_stream_default;
@@ -825,8 +819,6 @@ static bool is_frag_valid(struct xsk_umem_info *umem, u64 addr, u32 len, u32 exp
 	void *data = xsk_umem__get_data(umem->buffer, addr);
 	u64 umem_sz = umem_size(umem);
 
-	addr -= umem->base_addr;
-
 	if (addr >= umem_sz || addr + len > umem_sz) {
 		ksft_print_msg("Frag invalid addr: %llx len: %u\n",
 			       (unsigned long long)addr, len);
@@ -1164,7 +1156,7 @@ static int __send_pkts(struct ifobject *ifobject, struct xsk_socket_info *xsk,
 		       bool test_timeout)
 {
 	u32 i, idx = 0, valid_pkts = 0, valid_frags = 0, buffer_len;
-	struct xsk_umem_info *umem = ifobject->xsk_arr[0].umem_real;
+	struct xsk_umem_info *umem = ifobject->xsk_arr[0].umem;
 	struct pkt_stream *pkt_stream = xsk->pkt_stream;
 	bool use_poll = ifobject->use_poll;
 	struct pollfd fds = { };
@@ -1468,12 +1460,12 @@ static int validate_tx_invalid_descs(struct ifobject *ifobject)
 }
 
 static int xsk_configure(struct test_spec *test, struct ifobject *ifobject,
-			  struct xsk_umem_info *umem, bool tx)
+			  struct xsk_umem_info *umem)
 {
 	int i, ret;
 
 	for (i = 0; i < test->nb_sockets; i++) {
-		bool shared = (ifobject->shared_umem && tx) ? true : !!i;
+		bool shared = !!i;
 		u32 ctr = 0;
 
 		while (ctr++ < SOCK_RECONF_CTR) {
@@ -1493,31 +1485,6 @@ static int xsk_configure(struct test_spec *test, struct ifobject *ifobject,
 				return ret;
 		}
 	}
-
-	return 0;
-}
-
-static int thread_common_ops_tx(struct test_spec *test, struct ifobject *ifobject)
-{
-	struct xsk_umem_info *umem_rx, *umem_tx;
-	int ret;
-
-	if (!test->ifobj_rx || !test->ifobj_rx->xsk_arr[0].umem->umem) {
-		ksft_print_msg("Error: RX UMEM is not initialized before shared-UMEM TX setup\n");
-		return -EINVAL;
-	}
-
-	umem_rx = test->ifobj_rx->xsk_arr[0].umem;
-	umem_tx = ifobject->xsk_arr[0].umem_real;
-	memcpy(umem_tx, umem_rx, sizeof(*umem_tx));
-	umem_tx->base_addr = 0;
-	umem_tx->next_buffer = 0;
-
-	ret = xsk_configure(test, ifobject, umem_rx, true);
-	if (ret)
-		return ret;
-	ifobject->xsk = &ifobject->xsk_arr[0];
-	ifobject->xskmap = test->ifobj_rx->xskmap;
 
 	return 0;
 }
@@ -1547,7 +1514,7 @@ static int xsk_populate_fill_ring(struct xsk_umem_info *umem, struct pkt_stream 
 			if (!pkt) {
 				if (!fill_up)
 					break;
-				addr = filled * umem->frame_size + umem->base_addr;
+				addr = filled * umem->frame_size;
 			} else if (pkt->offset >= 0) {
 				addr = pkt->offset % umem->frame_size + umem_alloc_buffer(umem);
 			} else {
@@ -1584,9 +1551,6 @@ static int thread_common_ops(struct test_spec *test, struct ifobject *ifobject)
 	if (umem->unaligned_mode)
 		mmap_flags |= MAP_HUGETLB | MAP_HUGE_2MB;
 
-	if (ifobject->shared_umem)
-		umem_sz *= 2;
-
 	mmap_sz = umem->unaligned_mode ?
 		ceil_u64(umem_sz, HUGEPAGE_SIZE) * HUGEPAGE_SIZE : umem_sz;
 
@@ -1600,7 +1564,7 @@ static int thread_common_ops(struct test_spec *test, struct ifobject *ifobject)
 	if (ret)
 		return ret;
 
-	ret = xsk_configure(test, ifobject, umem, false);
+	ret = xsk_configure(test, ifobject, umem);
 	if (ret)
 		return ret;
 
@@ -1629,10 +1593,7 @@ static int testapp_validate_tx_endpoint(struct test_spec *test,
 	int err;
 
 	if (test->current_step == 1) {
-		if (!ifobject->shared_umem)
-			err = thread_common_ops(test, ifobject);
-		else
-			err = thread_common_ops_tx(test, ifobject);
+		err = thread_common_ops(test, ifobject);
 		if (err)
 			return err;
 	}
@@ -1779,7 +1740,7 @@ static int xsk_attach_xdp_progs(struct test_spec *test, struct ifobject *ifobj_r
 			return err;
 	}
 
-	if (!ifobj_tx || ifobj_tx->shared_umem)
+	if (!ifobj_tx)
 		return 0;
 
 	if (xdp_prog_changed_tx(test))
@@ -1805,7 +1766,7 @@ static void clean_umem(struct test_spec *test, struct ifobject *ifobj1, struct i
 		return;
 
 	testapp_clean_xsk_umem(ifobj1);
-	if (ifobj2 && !ifobj2->shared_umem)
+	if (ifobj2)
 		testapp_clean_xsk_umem(ifobj2);
 }
 
@@ -2184,12 +2145,6 @@ int testapp_invalid_desc(struct test_spec *test)
 		pkts[8].valid = false;
 	}
 
-	if (test->ifobj_tx->shared_umem) {
-		pkts[4].offset += umem_sz;
-		pkts[5].offset += umem_sz;
-		pkts[6].offset += umem_sz;
-	}
-
 	if (pkt_stream_generate_custom(test, pkts, ARRAY_SIZE(pkts)))
 		return TEST_FAILURE;
 	return testapp_validate_traffic(test);
@@ -2248,28 +2203,14 @@ int testapp_xdp_shared_umem(struct test_spec *test)
 
 int testapp_poll_txq_tmout(struct test_spec *test)
 {
-	bool shared_umem = test->ifobj_tx->shared_umem;
-	int ret;
-
 	test->poll_tmout = true;
-	/*
-	 * POLL_TXQ_FULL exercises TX timeout setup in isolation.
-	 * Keep TX out of shared-UMEM mode here so TX setup does not require
-	 * RX UMEM to be initialized first.
-	 */
-	test->ifobj_tx->shared_umem = false;
 	test->ifobj_tx->use_poll = true;
 	/* create invalid frame by set umem frame_size and pkt length equal to 2048 */
 	test->ifobj_tx->xsk->umem->frame_size = 2048;
-	if (pkt_stream_replace(test, 2 * DEFAULT_PKT_CNT, 2048)) {
-		test->ifobj_tx->shared_umem = shared_umem;
+	if (pkt_stream_replace(test, 2 * DEFAULT_PKT_CNT, 2048))
 		return TEST_FAILURE;
-	}
 
-	ret = testapp_validate_traffic_single_thread(test, test->ifobj_tx);
-	test->ifobj_tx->shared_umem = shared_umem;
-
-	return ret;
+	return testapp_validate_traffic_single_thread(test, test->ifobj_tx);
 }
 
 int testapp_poll_rxq_tmout(struct test_spec *test)
@@ -2653,8 +2594,8 @@ struct ifobject *ifobject_create(void)
 	if (!ifobj->xsk_arr)
 		goto out_xsk_arr;
 
-	ifobj->xsk_arr[0].umem_real = calloc(1, sizeof(struct xsk_umem_info));
-	if (!ifobj->xsk_arr[0].umem_real)
+	ifobj->xsk_arr[0].umem = calloc(1, sizeof(struct xsk_umem_info));
+	if (!ifobj->xsk_arr[0].umem)
 		goto out_umem;
 
 	return ifobj;
@@ -2669,7 +2610,7 @@ out_xsk_arr:
 void ifobject_delete(struct ifobject *ifobj)
 {
 	if (ifobj->xsk_arr)
-		free(ifobj->xsk_arr[0].umem_real);
+		free(ifobj->xsk_arr[0].umem);
 
 	free(ifobj->xsk_arr);
 	free(ifobj);
