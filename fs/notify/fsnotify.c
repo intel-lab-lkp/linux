@@ -341,7 +341,8 @@ static int send_to_group(__u32 mask, const void *data, int data_type,
 	__u32 marks_ignore_mask = 0;
 	bool is_dir = mask & FS_ISDIR;
 	struct fsnotify_mark *mark;
-	int type;
+	int type, ret;
+	bool pin_events;
 
 	if (!iter_info->report_mask)
 		return 0;
@@ -375,8 +376,16 @@ static int send_to_group(__u32 mask, const void *data, int data_type,
 						file_name, cookie, iter_info);
 	}
 
-	return fsnotify_handle_event(group, mask, data, data_type, dir,
-				     file_name, cookie, iter_info);
+	pin_events = group->flags & FSNOTIFY_GROUP_PIN_EVENTS;
+	if (pin_events && !fsnotify_prepare_inode_event(iter_info))
+		return 0;
+
+	ret = fsnotify_handle_event(group, mask, data, data_type, dir,
+				    file_name, cookie, iter_info);
+
+	if (pin_events)
+		fsnotify_finish_user_wait(iter_info);
+	return ret;
 }
 
 static struct fsnotify_mark *fsnotify_first_mark(struct fsnotify_mark_connector *const *connp)

@@ -553,7 +553,8 @@ static void fsnotify_put_mark_wake(struct fsnotify_mark *mark)
 	}
 }
 
-bool fsnotify_prepare_user_wait(struct fsnotify_iter_info *iter_info)
+static bool fsnotify_prepare_wait(struct fsnotify_iter_info *iter_info,
+				  bool report_partial)
 	__releases(&fsnotify_mark_srcu)
 {
 	int type;
@@ -564,14 +565,18 @@ bool fsnotify_prepare_user_wait(struct fsnotify_iter_info *iter_info)
 		/* This can fail if mark is being removed */
 		while (mark && !fsnotify_get_mark_safe(mark)) {
 			if (mark->group == iter_info->current_group) {
-				__release(&fsnotify_mark_srcu);
-				goto fail;
+				if (!report_partial)
+					goto fail;
+				/* The next cursor may belong to another group. */
+				iter_info->report_mask &= ~(1U << type);
 			}
-			/* This is a mark in an unrelated group, skip */
 			mark = fsnotify_next_mark(mark);
 			iter_info->marks[type] = mark;
 		}
 	}
+
+	if (report_partial && !iter_info->report_mask)
+		goto fail;
 
 	/*
 	 * Now that all marks are pinned by refcount in the inode / vfsmount / etc
@@ -583,9 +588,22 @@ bool fsnotify_prepare_user_wait(struct fsnotify_iter_info *iter_info)
 	return true;
 
 fail:
+	__release(&fsnotify_mark_srcu);
 	for (type--; type >= 0; type--)
 		fsnotify_put_mark_wake(iter_info->marks[type]);
 	return false;
+}
+
+bool fsnotify_prepare_user_wait(struct fsnotify_iter_info *iter_info)
+	__releases(&fsnotify_mark_srcu)
+{
+	return fsnotify_prepare_wait(iter_info, false);
+}
+
+bool fsnotify_prepare_inode_event(struct fsnotify_iter_info *iter_info)
+	__releases(&fsnotify_mark_srcu)
+{
+	return fsnotify_prepare_wait(iter_info, true);
 }
 
 void fsnotify_finish_user_wait(struct fsnotify_iter_info *iter_info)
