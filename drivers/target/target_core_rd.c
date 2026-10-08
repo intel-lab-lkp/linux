@@ -14,6 +14,7 @@
 #include <linux/string.h>
 #include <linux/parser.h>
 #include <linux/highmem.h>
+#include <linux/mm.h>
 #include <linux/timer.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
@@ -187,6 +188,12 @@ static int rd_build_device_space(struct rd_dev *rd_dev)
 	/* Don't need backing pages for NULLIO */
 	if (rd_dev->rd_flags & RDF_NULLIO)
 		return 0;
+
+	if (rd_dev->rd_page_count > totalram_pages()) {
+		pr_err("Page count: %u exceeds total RAM pages: %lu for Ramdisk device\n",
+		       rd_dev->rd_page_count, totalram_pages());
+		return -EINVAL;
+	}
 
 	total_sg_needed = rd_dev->rd_page_count;
 
