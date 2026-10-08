@@ -1060,6 +1060,11 @@ retry:
 	if (IS_ERR(ds)) {
 		if (!ff_layout_no_fallback_to_mds(pgio->pg_lseg))
 			goto out_mds;
+		if (PTR_ERR(ds) == -EPROTONOSUPPORT) {
+			pgio->pg_error = -EIO;
+			pnfs_generic_pg_cleanup(pgio);
+			return;
+		}
 		pnfs_generic_pg_cleanup(pgio);
 		/* Sleep for 1 second before retrying */
 		ssleep(1);
@@ -1139,6 +1144,11 @@ retry:
 		if (IS_ERR(ds)) {
 			if (!ff_layout_no_fallback_to_mds(pgio->pg_lseg))
 				goto out_mds;
+			if (PTR_ERR(ds) == -EPROTONOSUPPORT) {
+				pgio->pg_error = -EIO;
+				pnfs_generic_pg_cleanup(pgio);
+				return;
+			}
 			pnfs_generic_pg_cleanup(pgio);
 			/* Sleep for 1 second before retrying */
 			ssleep(1);
