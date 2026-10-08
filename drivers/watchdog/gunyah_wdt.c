@@ -214,7 +214,7 @@ static int gunyah_wdt_suspend(struct device *dev)
 	struct watchdog_device *wdd = dev_get_drvdata(dev);
 
 	if (watchdog_active(wdd))
-		gunyah_wdt_stop(wdd);
+		return gunyah_wdt_stop(wdd);
 
 	return 0;
 }
@@ -224,7 +224,7 @@ static int gunyah_wdt_resume(struct device *dev)
 	struct watchdog_device *wdd = dev_get_drvdata(dev);
 
 	if (watchdog_active(wdd))
-		gunyah_wdt_start(wdd);
+		return gunyah_wdt_start(wdd);
 
 	return 0;
 }
