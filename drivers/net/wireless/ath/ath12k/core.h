@@ -149,6 +149,7 @@ struct ath12k_skb_rxcb {
 	u8 tid;
 	u16 peer_id;
 	bool is_end_of_ppdu;
+	bool reinjected;
 };
 
 enum ath12k_hw_rev {
