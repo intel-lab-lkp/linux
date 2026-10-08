@@ -44,6 +44,7 @@ TEST_PROGS := \
 	fin_ack_lat.sh \
 	fou_mcast_encap.sh \
 	fq_band_pktlimit.sh \
+	gtp.py \
 	gre_gso.sh \
 	gre_ipv6_lladdr.sh \
 	icmp.sh \
