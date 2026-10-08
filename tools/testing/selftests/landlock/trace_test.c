@@ -175,19 +175,19 @@ TEST_F(trace, create_ruleset)
 	}
 
 	/* Verify handled_fs matches what we requested. */
-	EXPECT_EQ(0,
+	ASSERT_EQ(0,
 		  tracefs_extract_field(buf, REGEX_CREATE_RULESET(TRACE_TASK),
 					"handled_fs", field, sizeof(field)));
 	EXPECT_STREQ("read_file", field);
 
 	/* Verify handled_net matches. */
-	EXPECT_EQ(0,
+	ASSERT_EQ(0,
 		  tracefs_extract_field(buf, REGEX_CREATE_RULESET(TRACE_TASK),
 					"handled_net", field, sizeof(field)));
 	EXPECT_STREQ("bind_tcp", field);
 
 	/* Verify version is 0 at creation (no rules added yet). */
-	EXPECT_EQ(0,
+	ASSERT_EQ(0,
 		  tracefs_extract_field(buf, REGEX_CREATE_RULESET(TRACE_TASK),
 					"ruleset", field, sizeof(field)));
 	/* Format is <hex>.<dec>; version is after the dot. */
@@ -357,7 +357,7 @@ TEST_F(trace, create_domain)
 	}
 
 	/* Extract the domain ID from create_domain. */
-	EXPECT_EQ(0, tracefs_extract_field(buf, REGEX_CREATE_DOMAIN(TRACE_TASK),
+	ASSERT_EQ(0, tracefs_extract_field(buf, REGEX_CREATE_DOMAIN(TRACE_TASK),
 					   "domain", domain_id,
 					   sizeof(domain_id)));
 
@@ -365,7 +365,7 @@ TEST_F(trace, create_domain)
 	EXPECT_NE(0, strcmp(domain_id, "0"));
 
 	/* Verify parent=0 (first restriction, no prior domain). */
-	EXPECT_EQ(0, tracefs_extract_field(buf, REGEX_CREATE_DOMAIN(TRACE_TASK),
+	ASSERT_EQ(0, tracefs_extract_field(buf, REGEX_CREATE_DOMAIN(TRACE_TASK),
 					   "parent", parent_id,
 					   sizeof(parent_id)));
 	EXPECT_STREQ("0", parent_id);
@@ -381,7 +381,7 @@ TEST_F(trace, create_domain)
 		TH_LOG("Expected check_rule_inode events\n%s", buf);
 	}
 
-	EXPECT_EQ(0, tracefs_extract_field(buf, REGEX_CHECK_RULE_FS(TRACE_TASK),
+	ASSERT_EQ(0, tracefs_extract_field(buf, REGEX_CHECK_RULE_FS(TRACE_TASK),
 					   "domain", check_domain,
 					   sizeof(check_domain)));
 	EXPECT_STREQ(domain_id, check_domain);
@@ -615,7 +615,7 @@ TEST_F(trace, free_domain)
 	}
 
 	/* Verify denials count matches the single denial we triggered. */
-	EXPECT_EQ(0, tracefs_extract_field(buf, REGEX_FREE_DOMAIN(KWORKER_TASK),
+	ASSERT_EQ(0, tracefs_extract_field(buf, REGEX_FREE_DOMAIN(KWORKER_TASK),
 					   "denials", denials_field,
 					   sizeof(denials_field)));
 	EXPECT_STREQ("1", denials_field);
@@ -900,7 +900,7 @@ TEST_F(trace, non_audit_visible_denial_counting)
 	{
 		TH_LOG("free_domain event not found after 10 retries");
 	}
-	EXPECT_EQ(0, tracefs_extract_field(buf, REGEX_FREE_DOMAIN(KWORKER_TASK),
+	ASSERT_EQ(0, tracefs_extract_field(buf, REGEX_FREE_DOMAIN(KWORKER_TASK),
 					   "denials", denials_field,
 					   sizeof(denials_field)));
 	EXPECT_STREQ("1", denials_field);
@@ -949,7 +949,7 @@ TEST_F(trace, add_rule_net_port_fields)
 	 * (landlock_net_port_attr.port).  On little-endian, htons(8080) is
 	 * 36895, so this comparison catches byte-order bugs.
 	 */
-	EXPECT_EQ(0, tracefs_extract_field(buf,
+	ASSERT_EQ(0, tracefs_extract_field(buf,
 					   REGEX_ADD_RULE_NET_PORT(TRACE_TASK),
 					   "port", field, sizeof(field)));
 	EXPECT_STREQ("8080", field);
@@ -959,7 +959,7 @@ TEST_F(trace, add_rule_net_port_fields)
 	 * net access bits are unhandled because the ruleset only handles
 	 * BIND_TCP).
 	 */
-	EXPECT_EQ(0, tracefs_extract_field(
+	ASSERT_EQ(0, tracefs_extract_field(
 			     buf, REGEX_ADD_RULE_NET_PORT(TRACE_TASK),
 			     "access_rights", field, sizeof(field)));
 	EXPECT_STREQ("bind_tcp|connect_tcp|bind_udp|connect_send_udp", field);
