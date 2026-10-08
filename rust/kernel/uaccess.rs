@@ -422,9 +422,7 @@ impl UserSliceReader {
             // This means that we filled the buffer exactly. In this case, we add a NUL-terminator
             // and return it. Unlike the `len < dst.len()` branch, don't modify `len` because it
             // already represents the length including the NUL-terminator.
-            //
-            // SAFETY: Due to the check at the beginning, the buffer is not empty.
-            unsafe { *buf.last_mut().unwrap_unchecked() = 0 };
+            *buf.last_mut().ok_or(EINVAL)? = 0;
         }
 
         // This method consumes `self`, so it can only be called once, thus we do not need to
