@@ -96,6 +96,7 @@ struct q6apm_dai_rtd {
 	struct q6apm_graph *graph;
 	spinlock_t lock;
 	bool notify_on_drain;
+	bool data_error;
 };
 
 struct q6apm_dai_data {
@@ -240,6 +241,7 @@ static void event_handler(uint32_t opcode, uint32_t token, void *payload, void *
 {
 	struct q6apm_dai_rtd *prtd = priv;
 	struct snd_pcm_substream *substream = prtd->substream;
+	snd_pcm_state_t state;
 
 	switch (opcode) {
 	case APM_CLIENT_EVENT_WATERMARK_EVENT:
@@ -249,14 +251,29 @@ static void event_handler(uint32_t opcode, uint32_t token, void *payload, void *
 		prtd->state = Q6APM_STREAM_STOPPED;
 		break;
 	case APM_CLIENT_EVENT_DATA_WRITE_DONE:
+		if (READ_ONCE(prtd->data_error))
+			break;
 		snd_pcm_period_elapsed(substream);
 
 		break;
 	case APM_CLIENT_EVENT_DATA_READ_DONE:
+		if (READ_ONCE(prtd->data_error))
+			break;
 		snd_pcm_period_elapsed(substream);
 		if (prtd->state == Q6APM_STREAM_RUNNING)
 			q6apm_read(prtd->graph);
 
+		break;
+	case APM_CLIENT_EVENT_DATA_ERROR:
+		WRITE_ONCE(prtd->data_error, true);
+		WRITE_ONCE(prtd->state, Q6APM_STREAM_STOPPED);
+		state = READ_ONCE(substream->runtime->state);
+		if (state == SNDRV_PCM_STATE_RUNNING ||
+		    (state == SNDRV_PCM_STATE_DRAINING &&
+		     substream->stream == SNDRV_PCM_STREAM_PLAYBACK))
+			snd_pcm_stop_xrun(substream);
+		else
+			wake_up(&substream->runtime->sleep);
 		break;
 	default:
 		break;
@@ -355,6 +372,7 @@ static int q6apm_dai_prepare(struct snd_soc_component *component,
 
 	prtd->last_pos_index = 0;
 	prtd->pcm_count = snd_pcm_lib_period_bytes(substream);
+	WRITE_ONCE(prtd->data_error, false);
 	if (q6apm_is_graph_in_push_pull_mode(prtd->graph)) {
 		if (prtd->pcm_size != prtd->push_pull_size) {
 			ret = q6apm_push_pull_config(prtd->graph, prtd->phys, prtd->pos_phys,
@@ -416,6 +434,9 @@ static int q6apm_dai_prepare(struct snd_soc_component *component,
 		}
 	}
 
+	if (READ_ONCE(prtd->data_error))
+		return -EPIPE;
+
 	/* Now that graph as been prepared and started update the internal state accordingly */
 	prtd->state = Q6APM_STREAM_RUNNING;
 
@@ -427,6 +448,9 @@ static int q6apm_dai_ack(struct snd_soc_component *component, struct snd_pcm_sub
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct q6apm_dai_rtd *prtd = runtime->private_data;
 	int i, ret = 0, avail_periods;
+
+	if (READ_ONCE(prtd->data_error))
+		return -EPIPE;
 
 	if (q6apm_is_graph_in_push_pull_mode(prtd->graph))
 		return 0;
@@ -457,6 +481,8 @@ static int q6apm_dai_trigger(struct snd_soc_component *component,
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		if (READ_ONCE(prtd->data_error))
+			return -EPIPE;
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 		/* TODO support be handled via SoftPause Module */
@@ -506,6 +532,7 @@ static int q6apm_dai_open(struct snd_soc_component *component,
 		ret = PTR_ERR(prtd->graph);
 		goto err;
 	}
+	WRITE_ONCE(prtd->graph->pcm_data_error, true);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		runtime->hw = q6apm_dai_hardware_playback;
@@ -595,6 +622,9 @@ static snd_pcm_uframes_t q6apm_dai_pointer(struct snd_soc_component *component,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct q6apm_dai_rtd *prtd = runtime->private_data;
 	snd_pcm_uframes_t ptr;
+
+	if (READ_ONCE(prtd->data_error))
+		return SNDRV_PCM_POS_XRUN;
 
 	if (q6apm_is_graph_in_push_pull_mode(prtd->graph)) {
 		int retries = 10;

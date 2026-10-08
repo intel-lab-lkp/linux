@@ -42,6 +42,7 @@
 #define APM_CLIENT_EVENT_DATA_WRITE_DONE	0x1009
 #define APM_CLIENT_EVENT_DATA_READ_DONE		0x100a
 #define APM_CLIENT_EVENT_WATERMARK_EVENT	0x100b
+#define APM_CLIENT_EVENT_DATA_ERROR		0x100c
 #define APM_WRITE_TOKEN_MASK                   GENMASK(15, 0)
 #define APM_WRITE_TOKEN_LEN_MASK               GENMASK(31, 16)
 #define APM_WRITE_TOKEN_LEN_SHIFT              16
@@ -98,6 +99,7 @@ typedef void (*q6apm_cb) (uint32_t opcode, uint32_t token,
 struct q6apm_graph {
 	void *priv;
 	q6apm_cb cb;
+	bool pcm_data_error;
 	uint32_t id;
 	uint32_t shm_iid;
 	struct device *dev;

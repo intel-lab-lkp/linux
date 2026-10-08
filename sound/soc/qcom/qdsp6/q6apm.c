@@ -574,9 +574,7 @@ static int graph_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 	struct device *dev = graph->dev;
 	uint32_t client_event;
 	phys_addr_t phys;
-	int token;
-
-	result = data->payload;
+	u32 token;
 
 	switch (hdr->opcode) {
 	case APM_EVENT_MODULE_TO_CLIENT:
@@ -592,6 +590,10 @@ static int graph_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 	case DATA_CMD_RSP_WR_SH_MEM_EP_DATA_BUFFER_DONE_V2:
 		if (!graph->ar_graph)
 			break;
+		if (data->payload_size < (int)sizeof(*done) || !data->payload) {
+			dev_err(dev, "WR BUFF Invalid payload size %d\n", data->payload_size);
+			break;
+		}
 		client_event = APM_CLIENT_EVENT_DATA_WRITE_DONE;
 		mutex_lock(&graph->lock);
 		token = hdr->token & APM_WRITE_TOKEN_MASK;
@@ -601,14 +603,33 @@ static int graph_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 			mutex_unlock(&graph->lock);
 			break;
 		}
+		if (token >= graph->rx_data.num_periods) {
+			mutex_unlock(&graph->lock);
+			dev_err(dev, "WR BUFF Invalid token %u\n", token);
+			break;
+		}
 		phys = graph->rx_data.buf[token].phys;
 		mutex_unlock(&graph->lock);
-		/* token numbering starts at 0 */
-		atomic_set(&graph->rx_data.hw_ptr, token + 1);
 		if (lower_32_bits(phys) == done->buf_addr_lsw &&
 		    upper_32_bits(phys) == done->buf_addr_msw) {
+			if (done->mem_map_handle != graph->info->mem_map_handle) {
+				dev_err(dev, "WR BUFF Unexpected handle %08x expected %08x\n",
+					done->mem_map_handle, graph->info->mem_map_handle);
+				break;
+			}
 			graph->result.opcode = hdr->opcode;
 			graph->result.status = done->status;
+			if (done->status) {
+				dev_err(dev, "WR BUFF DSP status %08x metadata %08x token %08x\n",
+					done->status, done->md_status, hdr->token);
+				if (READ_ONCE(graph->pcm_data_error)) {
+					if (graph->cb)
+						graph->cb(APM_CLIENT_EVENT_DATA_ERROR, hdr->token,
+							  data->payload, graph->priv);
+					break;
+				}
+			}
+			atomic_set(&graph->rx_data.hw_ptr, token + 1);
 			if (graph->cb)
 				graph->cb(client_event, hdr->token, data->payload, graph->priv);
 		} else {
@@ -620,6 +641,10 @@ static int graph_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 	case DATA_CMD_RSP_RD_SH_MEM_EP_DATA_BUFFER_V2:
 		if (!graph->ar_graph)
 			break;
+		if (data->payload_size < (int)sizeof(*rd_done) || !data->payload) {
+			dev_err(dev, "RD BUFF Invalid payload size %d\n", data->payload_size);
+			break;
+		}
 		client_event = APM_CLIENT_EVENT_DATA_READ_DONE;
 		mutex_lock(&graph->lock);
 		rd_done = data->payload;
@@ -627,15 +652,34 @@ static int graph_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 			mutex_unlock(&graph->lock);
 			break;
 		}
+		if (hdr->token >= graph->tx_data.num_periods) {
+			mutex_unlock(&graph->lock);
+			dev_err(dev, "RD BUFF Invalid token %u\n", hdr->token);
+			break;
+		}
 		phys = graph->tx_data.buf[hdr->token].phys;
 		mutex_unlock(&graph->lock);
-		/* token numbering starts at 0 */
-		atomic_set(&graph->tx_data.hw_ptr, hdr->token + 1);
 
 		if (upper_32_bits(phys) == rd_done->buf_addr_msw &&
 		    lower_32_bits(phys) == rd_done->buf_addr_lsw) {
+			if (rd_done->mem_map_handle != graph->info->mem_map_handle) {
+				dev_err(dev, "RD BUFF Unexpected handle %08x expected %08x\n",
+					rd_done->mem_map_handle, graph->info->mem_map_handle);
+				break;
+			}
 			graph->result.opcode = hdr->opcode;
 			graph->result.status = rd_done->status;
+			if (rd_done->status) {
+				dev_err(dev, "RD BUFF DSP status %08x metadata %08x token %08x\n",
+					rd_done->status, rd_done->md_status, hdr->token);
+				if (READ_ONCE(graph->pcm_data_error)) {
+					if (graph->cb)
+						graph->cb(APM_CLIENT_EVENT_DATA_ERROR, hdr->token,
+							  data->payload, graph->priv);
+					break;
+				}
+			}
+			atomic_set(&graph->tx_data.hw_ptr, hdr->token + 1);
 			if (graph->cb)
 				graph->cb(client_event, hdr->token, data->payload, graph->priv);
 		} else {
@@ -649,6 +693,7 @@ static int graph_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 			graph->cb(client_event, hdr->token, data->payload, graph->priv);
 		break;
 	case GPR_BASIC_RSP_RESULT:
+		result = data->payload;
 		switch (result->opcode) {
 		case APM_CMD_SHARED_MEM_MAP_REGIONS:
 		case DATA_CMD_WR_SH_MEM_EP_MEDIA_FORMAT:
