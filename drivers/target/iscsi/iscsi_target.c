@@ -1098,6 +1098,12 @@ int iscsit_setup_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 					     ISCSI_REASON_BOOKMARK_INVALID, buf);
 	}
 
+	if (payload_length && !(hdr->flags & ISCSI_FLAG_CMD_WRITE)) {
+		pr_err("Immediate data for non-WRITE command\n");
+		return iscsit_add_reject_cmd(cmd,
+					     ISCSI_REASON_PROTOCOL_ERROR, buf);
+	}
+
 	cdb = hdr->cdb;
 
 	if (hdr->hlength) {
