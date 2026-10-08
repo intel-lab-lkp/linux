@@ -1149,7 +1149,17 @@ void device_initial_probe(struct device *dev)
 	if (!sp)
 		return;
 
-	if (sp->drivers_autoprobe)
+	/*
+	 * The drivers_autoprobe flag only suppresses matching the device
+	 * against the bus drivers.  If a driver has already been assigned
+	 * to the device (e.g. usb_driver_claim_interface() pre-setting
+	 * dev->driver for an unregistered interface, expecting device_add()
+	 * to complete the bind), the bind must be finished regardless of
+	 * autoprobe: otherwise the device ends up registered with
+	 * dev->driver set but never bound, and teardown oopses removing
+	 * the never-attached knode_driver from the driver klist.
+	 */
+	if (sp->drivers_autoprobe || dev->driver)
 		__device_attach(dev, true);
 
 	subsys_put(sp);
