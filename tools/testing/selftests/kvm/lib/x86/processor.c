@@ -554,6 +554,42 @@ void tdp_identity_map_1g(struct kvm_vm *vm, u64 addr, u64 size)
 	__tdp_map(vm, addr, addr, size, PG_LEVEL_1G);
 }
 
+static gpa_t __virt_copy_page_tables(struct kvm_vm *vm, struct kvm_mmu *mmu,
+				     gpa_t table_gpa, int level)
+{
+	gpa_t copy_gpa = vm_alloc_page_table(vm);
+	u64 *copy = addr_gpa2hva(vm, copy_gpa);
+	gpa_t pa;
+	int i;
+
+	memcpy(copy, addr_gpa2hva(vm, table_gpa), vm->page_size);
+	if (level == PG_LEVEL_4K)
+		return copy_gpa;
+
+	for (i = 0; i < vm->page_size / sizeof(u64); i++) {
+		if (!is_present_pte(mmu, &copy[i]) || is_huge_pte(mmu, &copy[i]))
+			continue;
+
+		/* Clear only the address bits, preserving C/S bits and flags */
+		pa = vm_untag_gpa(vm, PTE_GET_PA(copy[i]));
+		copy[i] &= ~pa;
+		copy[i] |= __virt_copy_page_tables(vm, mmu, pa, level - 1);
+	}
+	return copy_gpa;
+}
+
+/*
+ * Deep copy all levels of the TDP page tables, such that no page table pages
+ * are shared with the original.  Returns the GPA of the new root.
+ */
+gpa_t tdp_copy_page_tables(struct kvm_vm *vm)
+{
+	struct kvm_mmu *mmu = &vm->stage2_mmu;
+
+	TEST_ASSERT(mmu->pgd_created, "TDP page tables not created");
+	return __virt_copy_page_tables(vm, mmu, mmu->pgd, mmu->pgtable_levels);
+}
+
 /*
  * Set Unusable Segment
  *
