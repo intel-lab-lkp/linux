@@ -1185,7 +1185,7 @@ static int audioreach_pcm_set_media_format(struct q6apm_graph *graph,
 	int payload_size;
 	int i, j;
 
-	if (num_channels > 4) {
+	if (!num_channels || num_channels > 4) {
 		dev_err(graph->dev, "Error: Invalid channels (%d)!\n", num_channels);
 		return -EINVAL;
 	}
@@ -1203,11 +1203,11 @@ static int audioreach_pcm_set_media_format(struct q6apm_graph *graph,
 	param_data->module_instance_id = module->instance_id;
 	param_data->error_code = 0;
 	param_data->param_id = PARAM_ID_PCM_OUTPUT_FORMAT_CFG;
-	param_data->param_size = payload_size - APM_MODULE_PARAM_DATA_SIZE;
+	param_data->param_size = sizeof(cfg->header) + sizeof(*media_cfg) + num_channels;
 
 	cfg->header.data_format = DATA_FORMAT_FIXED_POINT;
 	cfg->header.fmt_id = MEDIA_FMT_ID_PCM;
-	cfg->header.payload_size = APM_PCM_OUT_FMT_CFG_PSIZE(media_cfg, num_channels);
+	cfg->header.payload_size = sizeof(*media_cfg) + num_channels;
 
 	media_cfg = &cfg->media_cfg;
 	media_cfg->alignment = PCM_LSB_ALIGNED;
@@ -1275,7 +1275,7 @@ static int audioreach_shmem_set_media_format(struct q6apm_graph *graph,
 	int i, j;
 	void *p;
 
-	if (num_channels > 4) {
+	if (!num_channels || num_channels > 4) {
 		dev_err(graph->dev, "Error: Invalid channels (%d)!\n", num_channels);
 		return -EINVAL;
 	}
@@ -1301,7 +1301,8 @@ static int audioreach_shmem_set_media_format(struct q6apm_graph *graph,
 	if (mcfg->fmt == SND_AUDIOCODEC_PCM) {
 		header->data_format = DATA_FORMAT_FIXED_POINT;
 		header->fmt_id =  MEDIA_FMT_ID_PCM;
-		header->payload_size = payload_size - sizeof(*header);
+		header->payload_size = sizeof(*cfg) + num_channels;
+		param_data->param_size = sizeof(*header) + header->payload_size;
 
 		p = p + sizeof(*header);
 		cfg = p;
