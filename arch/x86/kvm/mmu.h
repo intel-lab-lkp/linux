@@ -410,4 +410,12 @@ static inline bool kvm_is_gfn_alias(struct kvm *kvm, gfn_t gfn)
 {
 	return gfn & kvm_gfn_direct_bits(kvm);
 }
+
+typedef unsigned int kvm_tlb_tag_t;
+
+int kvm_init_tlb_tags(unsigned int nr);
+void kvm_destroy_tlb_tags(void);
+kvm_tlb_tag_t kvm_alloc_tlb_tag(void);
+void kvm_free_tlb_tag(kvm_tlb_tag_t tag);
+
 #endif
