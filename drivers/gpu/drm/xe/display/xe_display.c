@@ -6,31 +6,23 @@
 #include "xe_display.h"
 #include "regs/xe_irq_regs.h"
 
-#include <linux/fb.h>
+#include <linux/acpi.h>
 
-#include <drm/drm_client.h>
-#include <drm/drm_client_event.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_managed.h>
-#include <drm/drm_probe_helper.h>
 #include <drm/intel/display_member.h>
 #include <drm/intel/display_parent_interface.h>
-#include <uapi/drm/xe_drm.h>
 
-#include "intel_acpi.h"
 #include "intel_display.h"
 #include "intel_display_core.h"
 #include "intel_display_device.h"
 #include "intel_display_driver.h"
 #include "intel_display_irq.h"
-#include "intel_display_types.h"
 #include "intel_dmc.h"
 #include "intel_dmc_wl.h"
-#include "intel_dp.h"
 #include "intel_fbdev.h"
 #include "intel_hotplug.h"
 #include "intel_opregion.h"
-#include "skl_watermark.h"
 #include "xe_device.h"
 #include "xe_display_bo.h"
 #include "xe_display_pcode.h"
@@ -178,8 +170,6 @@ void xe_display_shutdown(struct xe_device *xe)
 	intel_display_driver_shutdown(display);
 
 	intel_opregion_suspend(display, PCI_D3cold);
-
-	intel_dmc_suspend(display);
 }
 
 void xe_display_shutdown_late(struct xe_device *xe)
@@ -256,8 +246,6 @@ void xe_display_pm_suspend(struct xe_device *xe)
 	intel_display_driver_pm_suspend(display);
 
 	intel_opregion_suspend(display, s2idle ? PCI_D1 : PCI_D3cold);
-
-	intel_dmc_suspend(display);
 }
 
 void xe_display_pm_suspend_late(struct xe_device *xe)

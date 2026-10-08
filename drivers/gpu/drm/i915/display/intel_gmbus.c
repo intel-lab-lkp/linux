@@ -218,8 +218,8 @@ to_intel_gmbus(struct i2c_adapter *i2c)
 void
 intel_gmbus_reset(struct intel_display *display)
 {
-	intel_de_write(display, GMBUS0(display), 0);
-	intel_de_write(display, GMBUS4(display), 0);
+	intel_de_write_fw(display, GMBUS0(display), 0);
+	intel_de_write_fw(display, GMBUS4(display), 0);
 }
 
 static void pnv_gmbus_clock_gating(struct intel_display *display,
@@ -262,7 +262,7 @@ static u32 get_reserved(struct intel_gmbus *bus)
 		preserve_bits |= GPIO_CLOCK_DIR_MASK | GPIO_CLOCK_VAL_MASK |
 				 GPIO_DATA_DIR_MASK | GPIO_DATA_VAL_MASK;
 
-	return intel_de_read_notrace(display, bus->gpio_reg) & preserve_bits;
+	return intel_de_read_fw(display, bus->gpio_reg) & preserve_bits;
 }
 
 static int get_clock(void *data)
@@ -271,10 +271,10 @@ static int get_clock(void *data)
 	struct intel_display *display = bus->display;
 	u32 reserved = get_reserved(bus);
 
-	intel_de_write_notrace(display, bus->gpio_reg, reserved | GPIO_CLOCK_DIR_MASK);
-	intel_de_write_notrace(display, bus->gpio_reg, reserved);
+	intel_de_write_fw(display, bus->gpio_reg, reserved | GPIO_CLOCK_DIR_MASK);
+	intel_de_write_fw(display, bus->gpio_reg, reserved);
 
-	return (intel_de_read_notrace(display, bus->gpio_reg) & GPIO_CLOCK_VAL_IN) != 0;
+	return (intel_de_read_fw(display, bus->gpio_reg) & GPIO_CLOCK_VAL_IN) != 0;
 }
 
 static int get_data(void *data)
@@ -283,10 +283,10 @@ static int get_data(void *data)
 	struct intel_display *display = bus->display;
 	u32 reserved = get_reserved(bus);
 
-	intel_de_write_notrace(display, bus->gpio_reg, reserved | GPIO_DATA_DIR_MASK);
-	intel_de_write_notrace(display, bus->gpio_reg, reserved);
+	intel_de_write_fw(display, bus->gpio_reg, reserved | GPIO_DATA_DIR_MASK);
+	intel_de_write_fw(display, bus->gpio_reg, reserved);
 
-	return (intel_de_read_notrace(display, bus->gpio_reg) & GPIO_DATA_VAL_IN) != 0;
+	return (intel_de_read_fw(display, bus->gpio_reg) & GPIO_DATA_VAL_IN) != 0;
 }
 
 static void set_clock(void *data, int state_high)
@@ -302,8 +302,8 @@ static void set_clock(void *data, int state_high)
 		clock_bits = GPIO_CLOCK_DIR_OUT | GPIO_CLOCK_DIR_MASK |
 			     GPIO_CLOCK_VAL_MASK;
 
-	intel_de_write_notrace(display, bus->gpio_reg, reserved | clock_bits);
-	intel_de_posting_read(display, bus->gpio_reg);
+	intel_de_write_fw(display, bus->gpio_reg, reserved | clock_bits);
+	intel_de_posting_read_fw(display, bus->gpio_reg);
 }
 
 static void set_data(void *data, int state_high)
@@ -319,15 +319,15 @@ static void set_data(void *data, int state_high)
 		data_bits = GPIO_DATA_DIR_OUT | GPIO_DATA_DIR_MASK |
 			GPIO_DATA_VAL_MASK;
 
-	intel_de_write_notrace(display, bus->gpio_reg, reserved | data_bits);
-	intel_de_posting_read(display, bus->gpio_reg);
+	intel_de_write_fw(display, bus->gpio_reg, reserved | data_bits);
+	intel_de_posting_read_fw(display, bus->gpio_reg);
 }
 
 static void
 ptl_handle_mask_bits(struct intel_gmbus *bus, bool set)
 {
 	struct intel_display *display = bus->display;
-	u32 reg_val = intel_de_read_notrace(display, bus->gpio_reg);
+	u32 reg_val = intel_de_read_fw(display, bus->gpio_reg);
 	u32 mask_bits = GPIO_CLOCK_DIR_MASK | GPIO_CLOCK_VAL_MASK |
 			GPIO_DATA_DIR_MASK | GPIO_DATA_VAL_MASK;
 	if (set)
@@ -335,8 +335,8 @@ ptl_handle_mask_bits(struct intel_gmbus *bus, bool set)
 	else
 		reg_val &= ~mask_bits;
 
-	intel_de_write_notrace(display, bus->gpio_reg, reg_val);
-	intel_de_posting_read(display, bus->gpio_reg);
+	intel_de_write_fw(display, bus->gpio_reg, reg_val);
+	intel_de_posting_read_fw(display, bus->gpio_reg);
 }
 
 static int
