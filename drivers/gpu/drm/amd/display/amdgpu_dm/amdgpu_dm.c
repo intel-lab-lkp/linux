@@ -3703,10 +3703,21 @@ static void amdgpu_dm_enable_self_refresh(struct amdgpu_display_manager *dm,
 					  const struct dm_crtc_state *acrtc_state,
 					  const u64 current_ts)
 {
-	struct psr_settings *psr = &acrtc_state->stream->link->psr_settings;
-	struct replay_settings *pr = &acrtc_state->stream->link->replay_settings;
-	struct amdgpu_dm_connector *aconn =
-		(struct amdgpu_dm_connector *)acrtc_state->stream->dm_stream_context;
+	struct dc_stream_state *stream = acrtc_state->stream;
+	struct psr_settings *psr;
+	struct replay_settings *pr;
+	struct amdgpu_dm_connector *aconn;
+
+	/*
+	 * The stream can be cleared concurrently by the system suspend/resume
+	 * path, so make sure the snapshot we are about to dereference is valid.
+	 */
+	if (!stream || !stream->link)
+		return;
+
+	psr = &stream->link->psr_settings;
+	pr = &stream->link->replay_settings;
+	aconn = (struct amdgpu_dm_connector *)stream->dm_stream_context;
 
 	/* Decrement skip count when SR is enabled and we're doing fast updates. */
 	if (acrtc_state->update_type == UPDATE_TYPE_FAST &&
@@ -3727,10 +3738,10 @@ static void amdgpu_dm_enable_self_refresh(struct amdgpu_display_manager *dm,
 		 */
 		if (acrtc_attach->dm_irq_params.allow_sr_entry &&
 			(current_ts - psr->psr_dirty_rects_change_timestamp_ns) > 500000000) {
-			amdgpu_dm_psr_set_event(dm, acrtc_state->stream, false,
+			amdgpu_dm_psr_set_event(dm, stream, false,
 				psr_event_hw_programming, false);
 
-			amdgpu_dm_replay_set_event(dm, acrtc_state->stream, false,
+			amdgpu_dm_replay_set_event(dm, stream, false,
 				replay_event_hw_programming, false);
 		}
 	} else {
@@ -3806,6 +3817,15 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 	struct dm_crtc_state *acrtc_state = to_dm_crtc_state(new_pcrtc_state);
 	struct dm_crtc_state *dm_old_crtc_state =
 			to_dm_crtc_state(drm_atomic_get_old_crtc_state(state, pcrtc));
+	/*
+	 * Take a single snapshot of the stream pointer and use it everywhere
+	 * below. dm_crtc_state->stream can be cleared concurrently, e.g. by the
+	 * system suspend/resume path (dm_destroy_cached_state()), so re-reading
+	 * the member after a NULL check can observe NULL and crash while writing
+	 * dc_stream_state members (see the NULL write at
+	 * offsetof(struct dc_stream_state, abm_level)).
+	 */
+	struct dc_stream_state *stream = acrtc_state->stream;
 	int planes_count = 0, vpos, hpos;
 	unsigned long flags;
 	u32 target_vblank, last_flip_vblank;
@@ -3843,12 +3863,12 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 	    dm_old_crtc_state->cursor_mode == DM_CURSOR_NATIVE_MODE) {
 		struct dc_cursor_position cursor_position = {0};
 
-		if (!dc_stream_set_cursor_position(acrtc_state->stream,
+		if (!dc_stream_set_cursor_position(stream,
 						   &cursor_position))
 			drm_err(dev, "DC failed to disable native cursor\n");
 
 		bundle->stream_update.cursor_position =
-				&acrtc_state->stream->cursor_position;
+				&stream->cursor_position;
 	}
 
 	if (acrtc_state->active_planes == 0 &&
@@ -3926,12 +3946,12 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 		bundle->surface_updates[planes_count].plane_info =
 			&bundle->plane_infos[planes_count];
 
-		if (acrtc_state->stream->link->psr_settings.psr_feature_enabled ||
-		    acrtc_state->stream->link->replay_settings.replay_feature_enabled) {
+		if (stream->link->psr_settings.psr_feature_enabled ||
+		    stream->link->replay_settings.replay_feature_enabled) {
 			fill_dc_dirty_rects(plane, old_plane_state,
 					    new_plane_state, new_crtc_state,
 					    &bundle->flip_addrs[planes_count],
-					    acrtc_state->stream->link->psr_settings.psr_version ==
+					    stream->link->psr_settings.psr_version ==
 					    DC_PSR_VERSION_SU_1,
 					    &dirty_rects_changed);
 
@@ -3942,14 +3962,14 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 			 * amdgpu_dm_crtc_vblank_control_worker() if user
 			 * pause the video during the PSR-SU was disabled.
 			 */
-			if (acrtc_state->stream->link->psr_settings.psr_version >= DC_PSR_VERSION_SU_1 &&
+			if (stream->link->psr_settings.psr_version >= DC_PSR_VERSION_SU_1 &&
 			    acrtc_attach->dm_irq_params.allow_sr_entry &&
 			    dirty_rects_changed) {
 				mutex_lock(&dm->dc_lock);
-				acrtc_state->stream->link->psr_settings.psr_dirty_rects_change_timestamp_ns =
+				stream->link->psr_settings.psr_dirty_rects_change_timestamp_ns =
 				timestamp_ns;
 				dc_exit_ips_for_hw_access(dm->dc);
-				amdgpu_dm_psr_set_event(dm, acrtc_state->stream, true,
+				amdgpu_dm_psr_set_event(dm, stream, true,
 					psr_event_hw_programming, true);
 				mutex_unlock(&dm->dc_lock);
 			}
@@ -3992,7 +4012,7 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 			amdgpu_dm_update_freesync_state_on_stream(
 				dm,
 				acrtc_state,
-				acrtc_state->stream,
+				stream,
 				dc_plane,
 				bundle->flip_addrs[planes_count].flip_timestamp_in_us);
 
@@ -4045,10 +4065,10 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 			usleep_range(1000, 1100);
 		}
 
-		if (acrtc_state->stream) {
+		if (stream) {
 			if (acrtc_state->freesync_vrr_info_changed)
 				bundle->stream_update.vrr_infopacket =
-					&acrtc_state->stream->vrr_infopacket;
+					&stream->vrr_infopacket;
 		}
 	}
 
@@ -4070,7 +4090,7 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 
 	/* Update the planes if changed or disable if we don't have any. */
 	if ((planes_count || acrtc_state->active_planes == 0) &&
-		acrtc_state->stream) {
+		stream) {
 		/*
 		 * If PSR or idle optimizations are enabled then flush out
 		 * any pending work before hardware programming.
@@ -4078,10 +4098,10 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 		if (dm->vblank_control_workqueue)
 			flush_workqueue(dm->vblank_control_workqueue);
 
-		bundle->stream_update.stream = acrtc_state->stream;
+		bundle->stream_update.stream = stream;
 		if (new_pcrtc_state->mode_changed) {
-			bundle->stream_update.src = acrtc_state->stream->src;
-			bundle->stream_update.dst = acrtc_state->stream->dst;
+			bundle->stream_update.src = stream->src;
+			bundle->stream_update.dst = stream->dst;
 		}
 
 		if (new_pcrtc_state->color_mgmt_changed) {
@@ -4090,18 +4110,18 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 			 * already modified the stream in place.
 			 */
 			bundle->stream_update.gamut_remap =
-				&acrtc_state->stream->gamut_remap_matrix;
+				&stream->gamut_remap_matrix;
 			bundle->stream_update.output_csc_transform =
-				&acrtc_state->stream->csc_color_matrix;
+				&stream->csc_color_matrix;
 			bundle->stream_update.out_transfer_func =
-				&acrtc_state->stream->out_transfer_func;
+				&stream->out_transfer_func;
 			bundle->stream_update.lut3d_func =
-				(struct dc_3dlut *) acrtc_state->stream->lut3d_func;
+				(struct dc_3dlut *) stream->lut3d_func;
 			bundle->stream_update.func_shaper =
-				(struct dc_transfer_func *) acrtc_state->stream->func_shaper;
+				(struct dc_transfer_func *) stream->func_shaper;
 		}
 
-		acrtc_state->stream->abm_level = acrtc_state->abm_level;
+		stream->abm_level = acrtc_state->abm_level;
 		if (acrtc_state->abm_level != dm_old_crtc_state->abm_level)
 			bundle->stream_update.abm_level = &acrtc_state->abm_level;
 
@@ -4113,7 +4133,7 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 		if (amdgpu_dm_is_dc_timing_adjust_needed(dm_old_crtc_state, acrtc_state)) {
 			spin_lock_irqsave(&pcrtc->dev->event_lock, flags);
 			dc_stream_adjust_vmin_vmax(
-				dm->dc, acrtc_state->stream,
+				dm->dc, stream,
 				&acrtc_attach->dm_irq_params.vrr_params.adjust);
 			spin_unlock_irqrestore(&pcrtc->dev->event_lock, flags);
 		}
@@ -4121,7 +4141,7 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_commit *state,
 		update_planes_and_stream_adapter(dm->dc,
 					 acrtc_state->update_type,
 					 planes_count,
-					 acrtc_state->stream,
+					 stream,
 					 &bundle->stream_update,
 					 bundle->surface_updates);
 		updated_planes_and_streams = true;
@@ -5052,6 +5072,7 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state)
 		struct dc_stream_update stream_update;
 		struct dc_info_packet hdr_packet;
 		struct dc_stream_status *status = NULL;
+		struct dc_stream_state *stream = NULL;
 		bool abm_changed, hdr_changed, scaling_changed, output_color_space_changed = false;
 
 		memset(&stream_update, 0, sizeof(stream_update));
@@ -5072,6 +5093,7 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state)
 							     dm_old_con_state);
 
 		if ((new_con_state->hdmi.broadcast_rgb != old_con_state->hdmi.broadcast_rgb) &&
+			dm_old_crtc_state->stream && dm_new_crtc_state->stream &&
 			(dm_old_crtc_state->stream->output_color_space !=
 				amdgpu_dm_get_output_color_space(&dm_new_crtc_state->stream->timing, new_con_state)))
 			output_color_space_changed = true;
@@ -5085,24 +5107,36 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state)
 		if (!scaling_changed && !abm_changed && !hdr_changed && !output_color_space_changed)
 			continue;
 
-		stream_update.stream = dm_new_crtc_state->stream;
+		/*
+		 * Take a snapshot of the stream pointer once. The member can be
+		 * cleared concurrently by the system suspend/resume path
+		 * (dm_destroy_cached_state()), so re-reading it after this point
+		 * can observe NULL and crash.
+		 */
+		stream = dm_new_crtc_state->stream;
+		if (!stream) {
+			drm_dbg_state(dev, "No stream attached to CRTC, skipping stream update\n");
+			continue;
+		}
+
+		stream_update.stream = stream;
 		if (scaling_changed) {
 			amdgpu_dm_update_stream_scaling_settings(dev, &dm_new_con_state->base.crtc->mode,
-					dm_new_con_state, dm_new_crtc_state->stream);
+					dm_new_con_state, stream);
 
-			stream_update.src = dm_new_crtc_state->stream->src;
-			stream_update.dst = dm_new_crtc_state->stream->dst;
+			stream_update.src = stream->src;
+			stream_update.dst = stream->dst;
 		}
 
 		if (output_color_space_changed) {
-			dm_new_crtc_state->stream->output_color_space
-				= amdgpu_dm_get_output_color_space(&dm_new_crtc_state->stream->timing, new_con_state);
+			stream->output_color_space
+				= amdgpu_dm_get_output_color_space(&stream->timing, new_con_state);
 
-			stream_update.output_color_space = &dm_new_crtc_state->stream->output_color_space;
+			stream_update.output_color_space = &stream->output_color_space;
 		}
 
 		if (abm_changed) {
-			dm_new_crtc_state->stream->abm_level = dm_new_crtc_state->abm_level;
+			stream->abm_level = dm_new_crtc_state->abm_level;
 
 			stream_update.abm_level = &dm_new_crtc_state->abm_level;
 		}
@@ -5112,7 +5146,7 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state)
 			stream_update.hdr_static_metadata = &hdr_packet;
 		}
 
-		status = dc_stream_get_status(dm_new_crtc_state->stream);
+		status = dc_stream_get_status(stream);
 
 		if (WARN_ON(!status))
 			continue;
@@ -5140,7 +5174,7 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state)
 		dc_update_planes_and_stream(dm->dc,
 					    dummy_updates,
 					    status->plane_count,
-					    dm_new_crtc_state->stream,
+					    stream,
 					    &stream_update);
 		mutex_unlock(&dm->dc_lock);
 		kfree(dummy_updates);
