@@ -13,11 +13,15 @@
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
+#include <linux/nvmem-provider.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/time64.h>
+#include <linux/unaligned.h>
+#include <linux/vmalloc.h>
 #include <linux/workqueue.h>
 
 #include <media/ipu-bridge.h>
@@ -25,9 +29,18 @@
 
 #include "icvs.h"
 
-/* Command timeouts determined experimentally */
-#define CMD_TIMEOUT (5 * HZ)
-#define FW_READY_DELAY_MS 100
+/*
+ * FW_LOADER_END has to wait for the device to actually finish writing the
+ * image to flash and exit ICVS_DEV_STATE_DOWNLOAD. Measured completion time
+ * on reference hardware is well under a second, but this is given extra
+ * margin over the generic ICVS_CMD_TIMEOUT since flash commit time can
+ * vary with image size and flash part across supported devices.
+ */
+#define FW_END_TIMEOUT		(10 * HZ)
+#define FW_READY_DELAY_MS	100
+
+#define ICVS_NVM_MIN_SIZE	SZ_4K
+#define ICVS_NVM_MAX_SIZE	SZ_4M
 
 #define PCI_DEVICE_ID_INTEL_IPU7		0x645d	/* MTL / LNL */
 #define PCI_DEVICE_ID_INTEL_IPU7P5		0xb05d	/* ARL / PTL */
@@ -436,6 +449,9 @@ static void cvs_reset(struct icvs *ctx)
  * @work: Embedded delayed_work member
  *
  * Re-reads device state; if device_busy remains set, re-schedules itself.
+ * When ctx->nvm.wait_dl_clear is set (FW_LOADER_END completion), also keeps
+ * re-scheduling while ICVS_DEV_STATE_DOWNLOAD remains set, since the
+ * device can clear BUSY slightly before it exits download mode.
  * Otherwise stores state into wq_resp and completes the command.
  */
 static void cvs_recv(struct work_struct *work)
@@ -450,7 +466,8 @@ static void cvs_recv(struct work_struct *work)
 		return;
 	}
 
-	if (state & ICVS_DEV_STATE_BUSY) {
+	if ((state & ICVS_DEV_STATE_BUSY) ||
+	    (ctx->nvm.wait_dl_clear && (state & ICVS_DEV_STATE_DOWNLOAD))) {
 		dev_dbg(cvs_dev(ctx), "device busy, reschedule\n");
 		schedule_delayed_work(&ctx->work,
 				      msecs_to_jiffies(FW_READY_DELAY_MS));
@@ -466,6 +483,8 @@ static void cvs_recv(struct work_struct *work)
  * @ctx: CVS device context
  * @cmd: Command buffer (icvs_cmd) with cmd_id and param populated
  * @len: Buffer length
+ * @timeout: Timeout (jiffies) to wait for command completion; unused for
+ *	     the GPIO-only ICVS_HOST_SENSOR_OWNER command
  *
  * Dispatches a set of supported commands:
  * - ICVS_SET_DEV_HOST_ID,
@@ -480,10 +499,12 @@ static void cvs_recv(struct work_struct *work)
  * Caller must hold ctx->lock when invoking this function and check for i2c
  * bus availability.
  *
- * Return: 0 on success, negative errno, -EINVAL for unsupported command
- * or status from device in ctx->wq_resp.
+ * Return: 0 on success or negative errno; -EINVAL for an unsupported command
+ * or for an error state reported by the device. Never returns a positive
+ * value.
  */
-int cvs_send(struct icvs *ctx, struct icvs_cmd *cmd, size_t len)
+int cvs_send(struct icvs *ctx, struct icvs_cmd *cmd, size_t len,
+	     unsigned long timeout)
 {
 	int ret, status = 0;
 
@@ -500,8 +521,7 @@ int cvs_send(struct icvs *ctx, struct icvs_cmd *cmd, size_t len)
 		if (ret < 0)
 			break;
 
-		ret = cvs_schedule_and_wait(ctx, FW_READY_DELAY_MS,
-					    CMD_TIMEOUT);
+		ret = cvs_schedule_and_wait(ctx, FW_READY_DELAY_MS, timeout);
 		if (ret < 0)
 			break;
 
@@ -521,8 +541,7 @@ int cvs_send(struct icvs *ctx, struct icvs_cmd *cmd, size_t len)
 		if (ret < 0)
 			break;
 
-		ret = cvs_schedule_and_wait(ctx, FW_READY_DELAY_MS,
-					    CMD_TIMEOUT);
+		ret = cvs_schedule_and_wait(ctx, FW_READY_DELAY_MS, timeout);
 		status = (ctx->wq_resp.resp.state &
 			  ICVS_DEV_STATE_ERROR) ? -EINVAL : 0;
 		break;
@@ -532,13 +551,11 @@ int cvs_send(struct icvs *ctx, struct icvs_cmd *cmd, size_t len)
 		if (ret < 0)
 			break;
 
-		ret = cvs_wait_wake_or_sleep(ctx, CMD_TIMEOUT,
-					     FW_READY_DELAY_MS);
+		ret = cvs_wait_wake_or_sleep(ctx, timeout, FW_READY_DELAY_MS);
 		if (ret)
 			break;
 
-		ret = cvs_schedule_and_wait(ctx, FW_READY_DELAY_MS,
-					    CMD_TIMEOUT);
+		ret = cvs_schedule_and_wait(ctx, FW_READY_DELAY_MS, timeout);
 		status = (ctx->wq_resp.resp.state &
 			  ICVS_DEV_STATE_DOWNLOAD) ? 0 : -EINVAL;
 		break;
@@ -561,8 +578,7 @@ int cvs_send(struct icvs *ctx, struct icvs_cmd *cmd, size_t len)
 		if (ret)
 			break;
 
-		ret = cvs_schedule_and_wait(ctx, FW_READY_DELAY_MS,
-					    CMD_TIMEOUT);
+		ret = cvs_schedule_and_wait(ctx, FW_READY_DELAY_MS, timeout);
 		status = ctx->wq_resp.resp.state &
 			  ICVS_DEV_STATE_ERROR ? -EINVAL : 0;
 		break;
@@ -572,13 +588,13 @@ int cvs_send(struct icvs *ctx, struct icvs_cmd *cmd, size_t len)
 		if (ret < 0)
 			break;
 
-		ret = cvs_wait_wake_or_sleep(ctx, CMD_TIMEOUT,
-					     FW_READY_DELAY_MS);
+		ret = cvs_wait_wake_or_sleep(ctx, timeout, FW_READY_DELAY_MS);
 		if (ret)
 			break;
 
-		ret = cvs_schedule_and_wait(ctx, FW_READY_DELAY_MS,
-					    CMD_TIMEOUT);
+		ctx->nvm.wait_dl_clear = true;
+		ret = cvs_schedule_and_wait(ctx, FW_READY_DELAY_MS, timeout);
+		ctx->nvm.wait_dl_clear = false;
 		status = !(ctx->wq_resp.resp.state &
 			   ICVS_DEV_STATE_DOWNLOAD) ? 0 : -EINVAL;
 		break;
@@ -612,7 +628,7 @@ int cvs_set_link_owner(struct icvs *ctx, enum icvs_csi_link_owner owner)
 	size_t cmd_size = sizeof(cmd.cmd_id) + sizeof(cmd.param.param);
 
 	guard(mutex)(&ctx->lock);
-	return cvs_send(ctx, &cmd, cmd_size);
+	return cvs_send(ctx, &cmd, cmd_size, ICVS_CMD_TIMEOUT);
 }
 
 /**
@@ -641,8 +657,441 @@ static int cvs_configure_dev_caps(struct icvs *ctx)
 		cmd.param.host_id |= ICVS_HOST_ID_RGBCAMERA_PWRUP;
 
 	guard(mutex)(&ctx->lock);
-	return cvs_send(ctx, &cmd, sz);
+	return cvs_send(ctx, &cmd, sz, ICVS_CMD_TIMEOUT);
 }
+
+/**
+ * enum icvs_nvm_auth_mode - nvm_authenticate sysfs write values
+ * @ICVS_NVM_AUTH_CLEAR: Clear the staged update state
+ * @ICVS_NVM_AUTH_WRITE_AND_AUTH: Validate image, stream, and request reset
+ * @ICVS_NVM_AUTH_WRITE_ONLY: Validate and stream image without reset request
+ * @ICVS_NVM_AUTH_AUTH_ONLY: Request reset for previously streamed image
+ */
+enum icvs_nvm_auth_mode {
+	ICVS_NVM_AUTH_CLEAR		= 0,
+	ICVS_NVM_AUTH_WRITE_AND_AUTH	= 1,
+	ICVS_NVM_AUTH_WRITE_ONLY	= 2,
+	ICVS_NVM_AUTH_AUTH_ONLY		= 3,
+};
+
+/**
+ * cvs_nvm_validate - Locate the payload within the staged firmware image
+ * @ctx: CVS device context
+ *
+ * Only the staged image size is checked here. Signature verification and
+ * anti-rollback enforcement are performed by the CVS device firmware, which
+ * rejects images that fail either check.
+ *
+ * Return: 0 on success, -ENODATA when no usable image is staged.
+ */
+static int cvs_nvm_validate(struct icvs *ctx)
+{
+	struct icvs_nvm *nvm = &ctx->nvm;
+	unsigned int header_size = SZ_1K;
+
+	if (ctx->quirks & ICVS_FW_HEADER_SIZE_256)
+		header_size = SZ_256;
+
+	if (!nvm->buf || nvm->buf_total_size < ICVS_NVM_MIN_SIZE)
+		return -ENODATA;
+
+	/* The ICVS_NVM_MIN_SIZE check above keeps this from underflowing */
+	nvm->buf_data_start = nvm->buf + header_size;
+	nvm->buf_data_size = nvm->buf_total_size - header_size;
+
+	return 0;
+}
+
+/**
+ * cvs_do_fw_download - Stream firmware payload to the device over I2C
+ * @ctx: CVS device context (ctx->lock held by caller)
+ * @buf: Firmware payload (header already removed)
+ * @size: Payload size in bytes
+ *
+ * Sends FW_LOADER_START, streams @buf in FW_LOADER_DATA chunks, then
+ * FW_LOADER_END. cvs_send() already waits for and confirms actual flash
+ * completion for FW_LOADER_END (via the BUSY/DOWNLOAD state polling in
+ * cvs_recv()), so its return value is the final result here.
+ *
+ * Return: 0 on success or negative errno.
+ */
+static int cvs_do_fw_download(struct icvs *ctx, const u8 *buf, size_t size)
+{
+	struct icvs_cmd cmd = { };
+	size_t chunk_max, chunk, pos;
+	int ret, end_ret;
+
+	if (ctx->quirks & ICVS_FW_BUF_SIZE_256)
+		chunk_max = SZ_256;
+	else
+		chunk_max = SZ_1K;
+
+	void *fw_buf __free(kfree) =
+		kmalloc(chunk_max + sizeof(__be16), GFP_KERNEL);
+	if (!fw_buf)
+		return -ENOMEM;
+
+	cmd.cmd_id = cpu_to_be16(ICVS_FW_LOADER_START);
+	ret = cvs_send(ctx, &cmd, sizeof(cmd.cmd_id), ICVS_CMD_TIMEOUT);
+	if (ret)
+		return ret;
+
+	for (pos = 0; pos < size; pos += chunk) {
+		chunk = min(chunk_max, size - pos);
+		put_unaligned_be16(ICVS_FW_LOADER_DATA, fw_buf);
+		memcpy(fw_buf + sizeof(__be16), buf + pos, chunk);
+
+		ret = cvs_send(ctx, fw_buf, sizeof(__be16) + chunk,
+			       ICVS_CMD_TIMEOUT);
+		if (ret) {
+			dev_err(cvs_dev(ctx),
+				"FW data chunk send failed: %d\n", ret);
+			break;
+		}
+	}
+
+	/* Always send FW_LOADER_END, but keep any earlier DATA error. */
+	cmd.cmd_id = cpu_to_be16(ICVS_FW_LOADER_END);
+	end_ret = cvs_send(ctx, &cmd, sizeof(cmd.cmd_id), FW_END_TIMEOUT);
+
+	return ret ? : end_ret;
+}
+
+/* cvs_nvm_active_read - NVMem read callback for active firmware region */
+static int cvs_nvm_active_read(void *priv, unsigned int offset,
+			       void *val, size_t bytes)
+{
+	__be16 op = cpu_to_be16(ICVS_GET_DEV_FW_VERSION);
+	struct icvs_fw_version fw_ver = { };
+	struct icvs *ctx = priv;
+	struct device *dev = cvs_dev(ctx);
+	size_t avail = sizeof(fw_ver);
+	size_t len;
+	int ret;
+
+	if (offset >= avail)
+		return -EINVAL;
+
+	PM_RUNTIME_ACQUIRE_IF_ENABLED_AUTOSUSPEND(dev, pm);
+	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+	if (ret)
+		return ret;
+
+	guard(mutex)(&ctx->lock);
+
+	ret = cvs_read_i2c(ctx, op, &fw_ver, sizeof(fw_ver));
+	if (ret)
+		return ret;
+
+	len = min(bytes, avail - offset);
+	memcpy(val, (void *)&fw_ver + offset, len);
+
+	return 0;
+}
+
+/*
+ * cvs_nvm_write_buf - NVMem write callback for non-active firmware staging
+ *
+ * Serialized against nvm_authenticate_store() via ctx->lock, since both
+ * read and mutate the shared staging buffer and its size/flushed state.
+ *
+ * offset + bytes is always used as the new total size (rather than only
+ * growing it) so that staging a new, smaller image after a larger one
+ * does not leave stale trailing bytes from the previous image in the
+ * buffer that would otherwise be sent to the device.
+ */
+static int cvs_nvm_write_buf(void *priv, unsigned int offset,
+			     void *val, size_t bytes)
+{
+	struct icvs *ctx = priv;
+	struct icvs_nvm *nvm = &ctx->nvm;
+
+	guard(mutex)(&ctx->lock);
+
+	if (!nvm->buf)
+		nvm->buf = vmalloc(ICVS_NVM_MAX_SIZE);
+	if (!nvm->buf)
+		return -ENOMEM;
+
+	memcpy(nvm->buf + offset, val, bytes);
+	nvm->buf_total_size = offset + bytes;
+	nvm->flushed = false;
+
+	return 0;
+}
+
+/**
+ * cvs_nvm_add_active - Register read-only NVMem device for active FW version
+ * @ctx: CVS device context
+ *
+ * Registers an NVMem device named "nvm_active" whose read callback queries
+ * the device for its currently running firmware version.
+ *
+ * Return: 0 on success or negative errno.
+ */
+static int cvs_nvm_add_active(struct icvs *ctx)
+{
+	struct nvmem_config config = {
+		.name = "nvm_active",
+		.id = NVMEM_DEVID_NONE,
+		.dev = cvs_dev(ctx),
+		.owner = THIS_MODULE,
+		.read_only = true,
+		.reg_read = cvs_nvm_active_read,
+		.priv = ctx,
+		.stride = 4,
+		.word_size = 4,
+		.size = sizeof(struct icvs_fw_version),
+	};
+	struct nvmem_device *nvmem;
+
+	nvmem = nvmem_register(&config);
+	if (IS_ERR(nvmem))
+		return PTR_ERR(nvmem);
+
+	ctx->nvm.active = nvmem;
+
+	return 0;
+}
+
+/**
+ * cvs_nvm_add_non_active - Register write-only NVMem device for FW staging
+ * @ctx: CVS device context
+ *
+ * Registers an NVMem device named "nvm_non_active" that accepts an incoming
+ * firmware image written by userspace (e.g. fwupd via dd). The image is
+ * buffered in memory until nvm_authenticate triggers the actual download.
+ * Access is restricted to root.
+ *
+ * Return: 0 on success or negative errno.
+ */
+static int cvs_nvm_add_non_active(struct icvs *ctx)
+{
+	struct nvmem_config config = {
+		.name = "nvm_non_active",
+		.id = NVMEM_DEVID_NONE,
+		.dev = cvs_dev(ctx),
+		.owner = THIS_MODULE,
+		.root_only = true,
+		.reg_write = cvs_nvm_write_buf,
+		.priv = ctx,
+		.stride = 4,
+		.word_size = 4,
+		.size = ICVS_NVM_MAX_SIZE,
+	};
+	struct nvmem_device *nvmem;
+
+	nvmem = nvmem_register(&config);
+	if (IS_ERR(nvmem))
+		return PTR_ERR(nvmem);
+
+	ctx->nvm.non_active = nvmem;
+
+	return 0;
+}
+
+/**
+ * cvs_nvm_release_buf - Free the firmware staging buffer
+ * @nvm: NVM state to release the buffer from
+ *
+ * Frees the vmalloc'd staging buffer once it is no longer needed, either
+ * right after a successful download or during teardown. Does not touch
+ * @nvm->flushed, since a successfully streamed image must stay reflected
+ * there even after the buffer backing it has been released.
+ */
+static void cvs_nvm_release_buf(struct icvs_nvm *nvm)
+{
+	vfree(nvm->buf);
+	nvm->buf = NULL;
+	nvm->buf_total_size = 0;
+	nvm->buf_data_start = NULL;
+	nvm->buf_data_size = 0;
+}
+
+/**
+ * cvs_nvm_free - Release firmware staging buffer
+ * @ctx: CVS device context
+ *
+ * Frees the vmalloc'd buffer used to stage the incoming firmware image
+ * and resets all associated NVM state fields.
+ */
+static void cvs_nvm_free(struct icvs *ctx)
+{
+	nvmem_unregister(ctx->nvm.non_active);
+	ctx->nvm.non_active = NULL;
+	nvmem_unregister(ctx->nvm.active);
+	ctx->nvm.active = NULL;
+	cvs_nvm_release_buf(&ctx->nvm);
+	ctx->nvm.flushed = false;
+}
+
+static ssize_t nvm_version_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	__be16 op = cpu_to_be16(ICVS_GET_DEV_FW_VERSION);
+	struct icvs *ctx = dev_get_drvdata(dev);
+	struct icvs_fw_version fw_ver = { };
+	int ret;
+
+	PM_RUNTIME_ACQUIRE_IF_ENABLED_AUTOSUSPEND(dev, pm);
+	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+	if (ret)
+		return ret;
+
+	guard(mutex)(&ctx->lock);
+
+	ret = cvs_read_i2c(ctx, op, &fw_ver, sizeof(fw_ver));
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "%u.%u\n", fw_ver.major, fw_ver.minor);
+}
+static DEVICE_ATTR_RO(nvm_version);
+
+static ssize_t nvm_authenticate_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct icvs *ctx = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%#x\n", ctx->nvm.auth_status);
+}
+
+/**
+ * cvs_nvm_authenticate - Perform an nvm_authenticate operation
+ * @ctx: CVS device context
+ * @val: Requested operation, see enum icvs_nvm_auth_mode
+ *
+ * Runs the whole operation under ctx->lock and records the outcome in
+ * nvm->auth_status for nvm_authenticate_show().
+ *
+ * Return: 0 on success or negative errno.
+ */
+static int cvs_nvm_authenticate(struct icvs *ctx, unsigned int val)
+{
+	struct icvs_nvm *nvm = &ctx->nvm;
+	int ret = 0;
+
+	guard(mutex)(&ctx->lock);
+
+	switch (val) {
+	case ICVS_NVM_AUTH_CLEAR:
+		nvm->flushed = false;
+		break;
+
+	case ICVS_NVM_AUTH_WRITE_ONLY:
+	case ICVS_NVM_AUTH_WRITE_AND_AUTH:
+		ret = cvs_nvm_validate(ctx);
+		if (!ret)
+			ret = cvs_do_fw_download(ctx, nvm->buf_data_start,
+						 nvm->buf_data_size);
+		if (ret)
+			break;
+
+		nvm->flushed = true;
+		cvs_nvm_release_buf(nvm);
+
+		if (val == ICVS_NVM_AUTH_WRITE_ONLY)
+			break;
+
+		fallthrough;
+
+	case ICVS_NVM_AUTH_AUTH_ONLY:
+		if (!nvm->flushed)
+			ret = -ENODATA;
+		break;
+	}
+
+	nvm->auth_status = -ret;
+
+	return ret;
+}
+
+static ssize_t nvm_authenticate_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct icvs *ctx = dev_get_drvdata(dev);
+	unsigned int val;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &val);
+	if (ret)
+		return ret;
+	if (val > ICVS_NVM_AUTH_AUTH_ONLY)
+		return -EINVAL;
+
+	PM_RUNTIME_ACQUIRE_IF_ENABLED_AUTOSUSPEND(dev, pm);
+	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+	if (ret)
+		return ret;
+
+	ret = cvs_nvm_authenticate(ctx, val);
+	if (ret)
+		return ret;
+
+	/* Emitted outside ctx->lock; consumers read back sysfs attributes */
+	if (val == ICVS_NVM_AUTH_WRITE_AND_AUTH ||
+	    val == ICVS_NVM_AUTH_AUTH_ONLY)
+		kobject_uevent(&dev->kobj, KOBJ_CHANGE);
+
+	return count;
+}
+static DEVICE_ATTR_RW(nvm_authenticate);
+
+static ssize_t device_id_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct icvs *ctx = dev_get_drvdata(dev);
+	struct icvs_resp n = { };
+	int ret;
+
+	PM_RUNTIME_ACQUIRE_IF_ENABLED_AUTOSUSPEND(dev, pm);
+	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+	if (ret)
+		return ret;
+
+	n.cmd_id = cpu_to_be16(ICVS_GET_DEV_VID_PID);
+
+	guard(mutex)(&ctx->lock);
+
+	ret = cvs_read_i2c(ctx, n.cmd_id, &n.resp.vid_pid,
+			   sizeof(n.resp.vid_pid));
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "%04x:%04x\n",
+			  n.resp.vid_pid.v_id, n.resp.vid_pid.p_id);
+}
+static DEVICE_ATTR_RO(device_id);
+
+static umode_t cvs_fw_attr_visible(struct kobject *kobj,
+				   const struct attribute *attr, int n)
+{
+	struct icvs *ctx = dev_get_drvdata(kobj_to_dev(kobj));
+
+	/* Every attribute in this group needs the I2C transport */
+	if (!ctx->i2c_client)
+		return 0;
+
+	if ((ctx->quirks & ICVS_NO_FW_UPDATE) &&
+	    attr == &dev_attr_nvm_authenticate.attr)
+		return 0;
+
+	return attr->mode;
+}
+
+static const struct attribute *const cvs_fw_attrs[] = {
+	&dev_attr_nvm_version.attr,
+	&dev_attr_nvm_authenticate.attr,
+	&dev_attr_device_id.attr,
+	NULL
+};
+
+static const struct attribute_group cvs_fw_group = {
+	.attrs_const = cvs_fw_attrs,
+	.is_visible_const = cvs_fw_attr_visible,
+};
+__ATTRIBUTE_GROUPS(cvs_fw);
 
 /**
  * cvs_core_probe - Shared probe path for I2C & platform instantiation
@@ -806,11 +1255,28 @@ fail_i2c:
 	pm_runtime_enable(dev);
 	pm_runtime_idle(dev);
 
+	if (ctx->i2c_client) {
+		ret = cvs_nvm_add_active(ctx);
+		if (ret) {
+			dev_err_probe(dev, ret, "NVM active register failed\n");
+			goto err_csi_remove;
+		}
+
+		ret = cvs_nvm_add_non_active(ctx);
+		if (ret) {
+			dev_err_probe(dev, ret,
+				      "NVM non-active register failed\n");
+			goto err_csi_remove;
+		}
+	}
+
 	/*
 	 * Create a PM runtime device link with IPU as consumer and CVS as
 	 * supplier. When the IPU runtime-resumes to start streaming, the PM
 	 * framework automatically resumes CVS first, triggering
 	 * cvs_runtime_resume() which hands CSI-2 link ownership to the host.
+	 * Kept as the last probe step so it is only established once the
+	 * device is otherwise fully initialized.
 	 */
 	ctx->ipu_link = device_link_add(&ipu->dev, dev,
 					DL_FLAG_PM_RUNTIME |
@@ -830,6 +1296,7 @@ fail_i2c:
 	return 0;
 
 err_csi_remove:
+	cvs_nvm_free(ctx);
 	if (ctx->ipu_link)
 		device_link_del(ctx->ipu_link);
 	cvs_csi_remove(ctx);
@@ -864,6 +1331,7 @@ static void cvs_core_remove(struct device *dev)
 
 	cancel_delayed_work_sync(&ctx->work);
 	cvs_csi_remove(ctx);
+	cvs_nvm_free(ctx);
 
 	if (ctx->ipu_link)
 		device_link_del(ctx->ipu_link);
@@ -973,6 +1441,7 @@ static struct i2c_driver cvs_driver = {
 	.driver = {
 		.name = "intel_cvs",
 		.acpi_match_table = intel_cvs_acpi_match,
+		.dev_groups = cvs_fw_groups,
 		.pm = pm_ptr(&cvs_pm_ops),
 	},
 	.probe = cvs_probe,
@@ -1000,6 +1469,7 @@ static struct platform_driver cvs_platform_driver = {
 	.driver = {
 		.name = "cvs_platform",
 		.acpi_match_table = intel_cvs_acpi_match,
+		.dev_groups = cvs_fw_groups,
 		.pm = pm_ptr(&cvs_pm_ops),
 	},
 	.probe = cvs_platform_probe,

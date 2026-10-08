@@ -13034,6 +13034,7 @@ INTEL COMPUTER VISION SENSING (CVS) DRIVER
 M:	Miguel Vadillo <miguel.vadillo@intel.com>
 L:	linux-media@vger.kernel.org
 S:	Maintained
+F:	Documentation/ABI/testing/sysfs-bus-i2c-devices-cvs
 F:	drivers/media/i2c/cvs/
 
 INTEL CPU family model numbers

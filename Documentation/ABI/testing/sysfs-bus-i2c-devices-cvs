@@ -1,0 +1,53 @@
+What:		/sys/bus/i2c/devices/<dev>/nvm_version
+Date:		January 2027
+KernelVersion:	7.4
+Contact:	Miguel Vadillo <miguel.vadillo@intel.com>
+Description:	Returns the active firmware version of the Intel CVS device
+		in "<major>.<minor>" decimal format. This reflects the firmware
+		version currently running on the device.
+
+		This file is read-only and is only present when the CVS device
+		is accessible over I2C.
+
+What:		/sys/bus/i2c/devices/<dev>/nvm_authenticate
+Date:		January 2027
+KernelVersion:	7.4
+Contact:	Miguel Vadillo <miguel.vadillo@intel.com>
+Description:	Reading returns the authentication status of the last firmware
+		update attempt as a hex value. 0x0 indicates success; any
+		non-zero value is an errno from the failed operation.
+
+		Writing triggers a firmware update operation using the image
+		previously staged via the nvm_non_active NVMem region. Accepted
+		values:
+
+		* 0 - Clear the staged update state
+		* 1 - Validate staged image, stream to device, and request reset
+		* 2 - Validate and stream image only (no reset request)
+		* 3 - Request device reset for a previously streamed image
+
+		After a successful write of 1 or 3, a KOBJ_CHANGE uevent is
+		emitted. The new firmware only takes effect once the device
+		has been reset.
+
+		The kernel does not inspect the image contents. Signature
+		verification and anti-rollback enforcement are performed by the
+		CVS device firmware, which rejects images that fail either
+		check.
+
+		This file is only present when the CVS device is accessible
+		over I2C and supports firmware update.
+
+What:		/sys/bus/i2c/devices/<dev>/device_id
+Date:		January 2027
+KernelVersion:	7.4
+Contact:	Miguel Vadillo <miguel.vadillo@intel.com>
+Description:	Returns the device vendor and product identifier in
+		"<vid>:<pid>" lowercase hexadecimal format
+		(e.g. "06cb:0701"). Note this identifies the CVS device
+		make and model, not the individual device instance, and
+		is not necessarily unique when multiple identical devices
+		share the same bus.
+
+		This file is read-only and is only present when the CVS device
+		is accessible over I2C.

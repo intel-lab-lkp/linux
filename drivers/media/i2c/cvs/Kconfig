@@ -5,6 +5,7 @@ config VIDEO_INTEL_CVS
 	depends on I2C && ACPI && VIDEO_DEV
 	depends on IPU_BRIDGE || !IPU_BRIDGE
 	select MEDIA_CONTROLLER
+	select NVMEM
 	select VIDEO_V4L2_SUBDEV_API
 	select V4L2_FWNODE
 	help
