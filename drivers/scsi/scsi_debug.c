@@ -6352,13 +6352,13 @@ static int resp_atomic_write(struct scsi_cmnd *scp,
 	if (scsi_bufflen(scp) < len * sdebug_sector_size)
 		return DID_ERROR << 16;
 
-	if (lbp)
-		sdeb_meta_write_lock(sip);
-
-	ret = do_device_access(sip, scp, 0, lba, len, 0, true, true);
 	if (lbp) {
+		sdeb_meta_write_lock(sip);
+		ret = do_device_access(sip, scp, 0, lba, len, 0, true, true);
 		map_region(sip, lba, len);
 		sdeb_meta_write_unlock(sip);
+	} else {
+		ret = do_device_access(sip, scp, 0, lba, len, 0, true, true);
 	}
 
 	if (unlikely(ret == -1))
