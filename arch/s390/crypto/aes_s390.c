@@ -889,10 +889,13 @@ static int gcm_aes_crypt(struct aead_request *req, unsigned int flags)
 		if (aad_bytes > 0)
 			memcpy(gw_out.ptr, gw_in.ptr, aad_bytes);
 
-		cpacf_kma(ctx->fc | flags, &param,
-			  gw_out.ptr + aad_bytes,
-			  gw_in.ptr + aad_bytes, pc_bytes,
-			  gw_in.ptr, aad_bytes);
+		if (cpacf_kma(ctx->fc | flags, &param,
+			      gw_out.ptr + aad_bytes,
+			      gw_in.ptr + aad_bytes, pc_bytes,
+			      gw_in.ptr, aad_bytes)) {
+			ret = -EIO;
+			goto out;
+		}
 
 		n = aad_bytes + pc_bytes;
 		if (gcm_in_walk_done(&gw_in, n) != n)
