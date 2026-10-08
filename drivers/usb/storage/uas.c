@@ -983,10 +983,12 @@ static int uas_configure_endpoints(struct uas_dev_info *devinfo)
 		devinfo->qdepth = 32;
 		devinfo->use_streams = 0;
 	} else {
-		devinfo->qdepth = usb_alloc_streams(devinfo->intf, eps + 1,
+		r = usb_alloc_streams(devinfo->intf, eps + 1,
 						    3, MAX_CMNDS, GFP_NOIO);
-		if (devinfo->qdepth < 0)
-			return devinfo->qdepth;
+		if (r < 0)
+			return r;
+
+		devinfo->qdepth = r;
 		devinfo->use_streams = 1;
 	}
 
