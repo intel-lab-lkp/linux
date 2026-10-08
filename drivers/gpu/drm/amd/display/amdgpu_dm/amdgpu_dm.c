@@ -1972,7 +1972,12 @@ static int dm_resume(struct amdgpu_ip_block *ip_block)
 		commit_params.streams = dc_state->streams;
 		commit_params.stream_count = dc_state->stream_count;
 		dc_exit_ips_for_hw_access(dm->dc);
-		WARN_ON(!dc_commit_streams(dm->dc, &commit_params));
+		if (dc_commit_streams(dm->dc, &commit_params) != DC_OK) {
+			drm_err(adev_to_drm(adev),
+				"DC failed to commit %u stream(s) during reset recovery\n",
+				(unsigned int)commit_params.stream_count);
+			WARN_ON_ONCE(1);
+		}
 
 		dm_gpureset_commit_state(dm->cached_dc_state, dm);
 
@@ -4724,7 +4729,18 @@ static void amdgpu_dm_commit_streams(struct drm_atomic_commit *state,
 	dm_enable_per_frame_crtc_master_sync(dc_state);
 	mutex_lock(&dm->dc_lock);
 	dc_exit_ips_for_hw_access(dm->dc);
-	WARN_ON(!dc_commit_streams(dm->dc, &params));
+	if (dc_commit_streams(dm->dc, &params) != DC_OK) {
+		mutex_unlock(&dm->dc_lock);
+		/*
+		 * DC refused the stream list, so the hardware and the DC state
+		 * no longer agree. Bail out instead of programming more
+		 * stream/plane state for a half committed stream list (this
+		 * used to be a silently ignored WARN_ON()).
+		 */
+		drm_err(dev, "DC failed to commit %u stream(s)\n",
+			(unsigned int)params.stream_count);
+		return;
+	}
 
 	bool frl_stream_found = false;
 
