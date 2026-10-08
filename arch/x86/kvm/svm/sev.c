@@ -2035,6 +2035,11 @@ static void sev_unlock_two_vms(struct kvm *dst_kvm, struct kvm *src_kvm)
 static void sev_vcpu_migrate_asid(struct vcpu_svm *dst_svm,
 				  unsigned int asid)
 {
+	/*
+	 * Free the (potentially non-SEV) ASID on the destination vCPU before
+	 * setting the new SEV ASID.
+	 */
+	free_asid(dst_svm->asid);
 	dst_svm->asid = asid;
 }
 
@@ -4888,7 +4893,7 @@ void sev_init_vmcb(struct vcpu_svm *svm, bool init_event)
 	svm->vmcb->control.misc_ctl |= SVM_MISC_ENABLE_SEV;
 	clr_exception_intercept(svm, UD_VECTOR);
 
-	svm->asid = sev_get_asid(vcpu->kvm);
+	WARN_ON_ONCE(svm->asid != sev_get_asid(vcpu->kvm));
 	svm->vmcb->control.asid = svm->asid;
 	vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
 
