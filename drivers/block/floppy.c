@@ -566,8 +566,6 @@ static int floppy_revalidate(struct gendisk *disk);
 #define NEED_1_RECAL	-2
 #define NEED_2_RECAL	-3
 
-static atomic_t usage_count = ATOMIC_INIT(0);
-
 /* buffer related variables */
 static int buffer_track = -1;
 static int buffer_drive = -1;
@@ -883,10 +881,6 @@ static void set_fdc(int drive)
  */
 static int lock_fdc(int drive)
 {
-	if (WARN(atomic_read(&usage_count) == 0,
-		 "Trying to lock fdc while usage count=0\n"))
-		return -1;
-
 	if (wait_event_interruptible(fdc_wait, !test_and_set_bit(0, &fdc_busy)))
 		return -EINTR;
 
@@ -2854,12 +2848,6 @@ static blk_status_t floppy_queue_rq(struct blk_mq_hw_ctx *hctx,
 		 "VFS: %s called on non-open device\n", __func__))
 		return BLK_STS_IOERR;
 
-	if (WARN(atomic_read(&usage_count) == 0,
-		 "warning: usage count=0, current_req=%p sect=%ld flags=%llx\n",
-		 current_req, (long)blk_rq_pos(current_req),
-		 (__force unsigned long long) current_req->cmd_flags))
-		return BLK_STS_IOERR;
-
 	if (test_and_set_bit(0, &fdc_busy)) {
 		/* fdc busy, this new request will be treated when the
 		   current one is done */
@@ -4178,10 +4166,6 @@ static int floppy_revalidate(struct gendisk *disk)
 	    test_bit(FD_VERIFY_BIT, &drive_state[drive].flags) ||
 	    test_bit(drive, &fake_change) ||
 	    drive_no_geom(drive)) {
-		if (WARN(atomic_read(&usage_count) == 0,
-			 "VFS: revalidate called on non-open device.\n"))
-			return -EFAULT;
-
 		res = lock_fdc(drive);
 		if (res)
 			return res;
@@ -4744,8 +4728,7 @@ out_remove_drives:
 		}
 	}
 out_release_dma:
-	if (atomic_read(&usage_count))
-		floppy_release_irq_and_dma();
+	floppy_release_irq_and_dma();
 out_unreg_driver:
 	platform_driver_unregister(&floppy_driver);
 out_unreg_blkdev:
@@ -4825,9 +4808,6 @@ static int floppy_grab_irq_and_dma(void)
 {
 	int fdc;
 
-	if (atomic_inc_return(&usage_count) > 1)
-		return 0;
-
 	/*
 	 * We might have scheduled a free_irq(), wait it to
 	 * drain first:
@@ -4837,7 +4817,6 @@ static int floppy_grab_irq_and_dma(void)
 	if (fd_request_irq()) {
 		DPRINT("Unable to grab IRQ%d for the floppy driver\n",
 		       FLOPPY_IRQ);
-		atomic_dec(&usage_count);
 		return -1;
 	}
 	if (fd_request_dma()) {
@@ -4847,7 +4826,6 @@ static int floppy_grab_irq_and_dma(void)
 			use_virtual_dma = can_use_virtual_dma = 1;
 		if (!(can_use_virtual_dma & 1)) {
 			fd_free_irq();
-			atomic_dec(&usage_count);
 			return -1;
 		}
 	}
@@ -4883,7 +4861,6 @@ cleanup:
 	while (--fdc >= 0)
 		floppy_release_regions(fdc);
 	current_fdc = 0;
-	atomic_dec(&usage_count);
 	return -1;
 }
 
@@ -4895,9 +4872,6 @@ static void floppy_release_irq_and_dma(void)
 #endif
 	long tmpsize;
 	unsigned long tmpaddr;
-
-	if (!atomic_dec_and_test(&usage_count))
-		return;
 
 	if (irqdma_allocated) {
 		fd_disable_dma();
@@ -4994,8 +4968,7 @@ static void __exit floppy_module_exit(void)
 	cancel_delayed_work_sync(&fd_timeout);
 	cancel_delayed_work_sync(&fd_timer);
 
-	if (atomic_read(&usage_count))
-		floppy_release_irq_and_dma();
+	floppy_release_irq_and_dma();
 
 	/* eject disk, if any */
 	fd_eject(0);
