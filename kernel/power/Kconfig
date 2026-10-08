@@ -134,6 +134,18 @@ config HIBERNATION_TPM_SIGNATURE
 
 	  If unsure, say N.
 
+config TPM_HIBERNATE_INSECURE
+	bool "Allow resume using a virtual TPM (INSECURE)"
+	depends on HIBERNATION_TPM_SIGNATURE
+	help
+	  By default, hibernation images are not restored if the TPM used
+	  to verify them is a virtual TPM, such as one provided by
+	  userspace through /dev/vtpmx, since such a TPM can be made to
+	  accept a forged image. Say Y to allow it anyway, for example for
+	  testing. This has no effect while the kernel is locked down.
+
+	  If unsure, say N.
+
 config PM_STD_PARTITION
 	string "Default resume partition"
 	depends on HIBERNATION

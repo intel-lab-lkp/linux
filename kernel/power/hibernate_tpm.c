@@ -19,6 +19,7 @@
 
 #include <linux/efi.h>
 #include <linux/init.h>
+#include <linux/security.h>
 #include <linux/tpm.h>
 
 #include "power.h"
@@ -162,6 +163,19 @@ static int hib_tpm_check_header(const void *data, size_t size)
 	if (!chip) {
 		pr_err("Cannot verify image: no TPM\n");
 		return -ENODEV;
+	}
+
+	/*
+	 * A virtual TPM, such as one provided by userspace through
+	 * /dev/vtpmx, can answer verification with anything it likes.  Only
+	 * allow one if explicitly configured to, and never under lockdown.
+	 */
+	if ((chip->flags & TPM_CHIP_FLAG_VIRTUAL) &&
+	    (!IS_ENABLED(CONFIG_TPM_HIBERNATE_INSECURE) ||
+	     security_locked_down(LOCKDOWN_HIBERNATION))) {
+		hib_tpm_put_chip(chip);
+		pr_err("Cannot verify image: TPM is virtual\n");
+		return -EKEYREJECTED;
 	}
 
 	rc = tpm2_kernel_key_verify(chip, prov, hib_tpm_x, hib_tpm_y);
