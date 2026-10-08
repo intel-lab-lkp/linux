@@ -127,7 +127,7 @@ struct dbc_port {
 	struct list_head		read_pool;
 	struct list_head		read_queue;
 	unsigned int			n_read;
-	struct tasklet_struct		push;
+	struct work_struct		push;
 
 	struct list_head		write_pool;
 	unsigned int			tx_boundary;
