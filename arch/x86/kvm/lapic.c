@@ -1987,6 +1987,9 @@ static inline void adjust_lapic_timer_advance(struct kvm_vcpu *vcpu,
 	    abs(advance_expire_delta) < LAPIC_TIMER_ADVANCE_ADJUST_MIN)
 		return;
 
+	if (unlikely(!vcpu->arch.virtual_tsc_khz))
+		return;
+
 	/* too early */
 	if (advance_expire_delta < 0) {
 		ns = -advance_expire_delta * 1000000ULL;
