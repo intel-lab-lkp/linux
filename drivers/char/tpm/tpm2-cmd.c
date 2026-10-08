@@ -178,7 +178,7 @@ int tpm2_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 	int i;
 
 	if (!disable_pcr_integrity) {
-		rc = tpm2_start_auth_session(chip);
+		rc = tpm2_start_auth_session(chip, false);
 		if (rc)
 			return rc;
 	}
@@ -254,7 +254,7 @@ int tpm2_get_random(struct tpm_chip *chip, u8 *dest, size_t max)
 	if (!num_bytes || max > TPM_MAX_RNG_DATA)
 		return -EINVAL;
 
-	err = tpm2_start_auth_session(chip);
+	err = tpm2_start_auth_session(chip, false);
 	if (err)
 		return err;
 

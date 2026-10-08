@@ -129,6 +129,8 @@ struct tpm2_auth {
 	struct aes_enckey aes_key;
 	/* saved session attributes: */
 	u8 attrs;
+	/* set TPM2_SA_AUDIT on every command using this session */
+	bool audit;
 	__be32 ordinal;
 
 	/*
@@ -376,6 +378,10 @@ void tpm_buf_append_hmac_session(struct tpm_chip *chip, struct tpm_buf *buf,
 	/* The first write to /dev/tpm{rm0} will flush the session. */
 	attributes |= TPM2_SA_CONTINUE_SESSION;
 
+	auth = chip->auth;
+	if (auth->audit)
+		attributes |= TPM2_SA_AUDIT;
+
 	/*
 	 * The Architecture Guide requires us to strip trailing zeros
 	 * before computing the HMAC
@@ -383,7 +389,6 @@ void tpm_buf_append_hmac_session(struct tpm_chip *chip, struct tpm_buf *buf,
 	while (passphrase && passphrase_len > 0 && passphrase[passphrase_len - 1] == '\0')
 		passphrase_len--;
 
-	auth = chip->auth;
 	auth->attrs = attributes;
 	auth->passphrase_len = passphrase_len;
 	if (passphrase_len)
@@ -777,6 +782,7 @@ int tpm_buf_check_hmac_response(struct tpm_chip *chip, struct tpm_buf *buf,
 	off_t offset_s, offset_p;
 	u8 rphash[SHA256_DIGEST_SIZE];
 	u32 attrs, cc;
+	u8 rsp_attrs;
 	struct sha256_ctx sctx;
 	struct hmac_sha256_ctx hctx;
 	u16 tag = be16_to_cpu(head->tag);
@@ -828,7 +834,7 @@ int tpm_buf_check_hmac_response(struct tpm_chip *chip, struct tpm_buf *buf,
 		goto out;
 	memcpy(auth->tpm_nonce, &buf->data[offset_s], len);
 	offset_s += len;
-	attrs = tpm_buf_read_u8(buf, &offset_s);
+	rsp_attrs = tpm_buf_read_u8(buf, &offset_s);
 	len = tpm_buf_read_u16(buf, &offset_s);
 	if (offset_s + len != tpm_buf_length(buf))
 		goto out;
@@ -854,7 +860,12 @@ int tpm_buf_check_hmac_response(struct tpm_chip *chip, struct tpm_buf *buf,
 	hmac_sha256_update(&hctx, rphash, sizeof(rphash));
 	hmac_sha256_update(&hctx, auth->tpm_nonce, sizeof(auth->tpm_nonce));
 	hmac_sha256_update(&hctx, auth->our_nonce, sizeof(auth->our_nonce));
-	hmac_sha256_update(&hctx, &auth->attrs, 1);
+	/*
+	 * The response HMAC covers the response's session attributes, which
+	 * can differ from the command's - the TPM sets auditExclusive in the
+	 * response to an exclusive audit session.
+	 */
+	hmac_sha256_update(&hctx, &rsp_attrs, 1);
 	/* we're done with the rphash, so put our idea of the hmac there */
 	hmac_sha256_final(&hctx, rphash);
 	if (crypto_memneq(rphash, &buf->data[offset_s], SHA256_DIGEST_SIZE)) {
@@ -988,13 +999,17 @@ err:
 /**
  * tpm2_start_auth_session() - Create an a HMAC authentication session
  * @chip:	A TPM chip
+ * @audit:	Set TPM2_SA_AUDIT on every command using the session
  *
  * Loads the ephemeral key (null seed), and starts an HMAC authenticated
- * session. The null seed is flushed before the return.
+ * session. The null seed is flushed before the return. If @audit is
+ * true, the session is used as an audit session and the TPM will
+ * extend the session digest with each command and response.
  *
- * Returns zero on success, or a POSIX error code.
+ * Returns zero on success, -EBUSY if a session with a different audit
+ * setting is already active, or a POSIX error code.
  */
-int tpm2_start_auth_session(struct tpm_chip *chip)
+int tpm2_start_auth_session(struct tpm_chip *chip, bool audit)
 {
 	struct tpm_buf *buf __free(kfree) = NULL;
 	struct tpm2_auth *auth;
@@ -1002,6 +1017,8 @@ int tpm2_start_auth_session(struct tpm_chip *chip)
 	int rc;
 
 	if (chip->auth) {
+		if (chip->auth->audit != audit)
+			return -EBUSY;
 		dev_dbg_once(&chip->dev, "auth session is active\n");
 		return 0;
 	}
@@ -1009,6 +1026,7 @@ int tpm2_start_auth_session(struct tpm_chip *chip)
 	auth = kzalloc_obj(*auth);
 	if (!auth)
 		return -ENOMEM;
+	auth->audit = audit;
 
 	rc = tpm2_load_null(chip, &null_key);
 	if (rc) {
