@@ -2548,11 +2548,17 @@ out_err:
 	return iommu_dev;
 }
 
+static struct protection_domain identity_domain;
+
 static void amd_iommu_release_device(struct device *dev)
 {
 	struct iommu_dev_data *dev_data = dev_iommu_priv_get(dev);
 
-	WARN_ON(dev_data->domain);
+	/*
+	 * Devices with direct mapped regions are attached to the
+	 * identity_domain as their release_domain.
+	 */
+	WARN_ON(dev_data->domain && dev_data->domain != &identity_domain);
 
 	/*
 	 * We keep dev_data around for unplugged devices and reuse it when the
@@ -2952,8 +2958,6 @@ static struct iommu_domain blocked_domain = {
 		.set_dev_pasid  = blocked_domain_set_dev_pasid,
 	}
 };
-
-static struct protection_domain identity_domain;
 
 static int amd_iommu_identity_attach(struct iommu_domain *dom, struct device *dev,
 				     struct iommu_domain *old)
