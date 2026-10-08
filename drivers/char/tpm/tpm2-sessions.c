@@ -1023,6 +1023,21 @@ int tpm2_get_audit_log(struct tpm_chip *chip,
 }
 EXPORT_SYMBOL(tpm2_get_audit_log);
 
+/*
+ * Return the handle of the active audit session, or -EINVAL if there is
+ * no active audit session.
+ */
+int tpm2_audit_session_handle(struct tpm_chip *chip, u32 *handle)
+{
+	struct tpm2_auth *auth = chip->auth;
+
+	if (!auth || !auth->audit)
+		return -EINVAL;
+
+	*handle = auth->handle;
+	return 0;
+}
+
 static int tpm2_parse_start_auth_session(struct tpm2_auth *auth,
 					 struct tpm_buf *buf)
 {

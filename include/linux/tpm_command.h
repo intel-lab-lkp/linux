@@ -189,6 +189,7 @@ enum tpm2_timeouts {
 enum tpm2_structures {
 	TPM2_ST_NO_SESSIONS	= 0x8001,
 	TPM2_ST_SESSIONS	= 0x8002,
+	TPM2_ST_ATTEST_SESSION_AUDIT = 0x8016,
 	TPM2_ST_CREATION	= 0x8021,
 };
 
@@ -230,6 +231,7 @@ enum tpm2_command_codes {
 	TPM2_CC_SELF_TEST		= 0x0143,
 	TPM2_CC_STARTUP			= 0x0144,
 	TPM2_CC_SHUTDOWN		= 0x0145,
+	TPM2_CC_GET_SESSION_AUDIT_DIGEST = 0x014D,
 	TPM2_CC_NV_READ			= 0x014E,
 	TPM2_CC_NV_READ_LOCK		= 0x014F,
 	TPM2_CC_CREATE			= 0x0153,
@@ -275,9 +277,14 @@ enum tpm2_cc_attrs {
 };
 
 enum tpm2_permanent_handles {
+	TPM2_RH_OWNER		= 0x40000001,
 	TPM2_RH_NULL		= 0x40000007,
 	TPM2_RS_PW		= 0x40000009,
+	TPM2_RH_ENDORSEMENT	= 0x4000000B,
 };
+
+/* TPMS_ATTEST.magic */
+#define TPM2_GENERATED_VALUE	0xff544347
 
 /* Most Significant Octet for key types  */
 enum tpm2_mso_type {
@@ -479,6 +486,7 @@ enum tpm_algorithms {
 	TPM_ALG_SHA512		= 0x000D,
 	TPM_ALG_NULL		= 0x0010,
 	TPM_ALG_SM3_256		= 0x0012,
+	TPM_ALG_ECDSA		= 0x0018,
 	TPM_ALG_ECC		= 0x0023,
 	TPM_ALG_CFB		= 0x0043,
 };

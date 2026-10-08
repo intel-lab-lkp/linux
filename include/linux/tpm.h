@@ -329,11 +329,35 @@ struct tpm2_audit_entry {
 	u8 rphash[SHA256_DIGEST_SIZE];
 };
 
+/**
+ * struct tpm2_signed_audit - a session audit digest signed by the kernel AK
+ * @ak_x:	X coordinate of the AK's P-256 public key
+ * @ak_y:	Y coordinate of the AK's P-256 public key
+ * @attest:	the signed TPMS_ATTEST structure, containing the audit digest
+ * @attest_len:	length of @attest
+ * @sig_r:	R component of the ECDSA-SHA256 signature over @attest
+ * @sig_s:	S component of the ECDSA-SHA256 signature over @attest
+ */
+struct tpm2_signed_audit {
+	u8 ak_x[EC_PT_SZ];
+	u8 ak_y[EC_PT_SZ];
+	u8 *attest;
+	u16 attest_len;
+	u8 sig_r[EC_PT_SZ];
+	u8 sig_s[EC_PT_SZ];
+};
+
 #ifdef CONFIG_TCG_TPM2_HMAC
 
 int tpm2_start_auth_session(struct tpm_chip *chip, bool audit);
 int tpm2_get_audit_log(struct tpm_chip *chip,
 		       const struct tpm2_audit_entry **log);
+int tpm2_create_kernel_ak(struct tpm_chip *chip, u32 *handle,
+			  u8 *x, u8 *y);
+int tpm2_get_signed_audit_digest(struct tpm_chip *chip, const u8 *nonce,
+				 u16 nonce_len,
+				 struct tpm2_signed_audit *audit);
+void tpm2_free_signed_audit(struct tpm2_signed_audit *audit);
 int tpm_buf_fill_hmac_session(struct tpm_chip *chip, struct tpm_buf *buf);
 int tpm_buf_check_hmac_response(struct tpm_chip *chip, struct tpm_buf *buf,
 				int rc);
@@ -353,6 +377,20 @@ static inline int tpm2_get_audit_log(struct tpm_chip *chip,
 				     const struct tpm2_audit_entry **log)
 {
 	return -EOPNOTSUPP;
+}
+static inline int tpm2_create_kernel_ak(struct tpm_chip *chip, u32 *handle,
+					u8 *x, u8 *y)
+{
+	return -EOPNOTSUPP;
+}
+static inline int
+tpm2_get_signed_audit_digest(struct tpm_chip *chip, const u8 *nonce,
+			     u16 nonce_len, struct tpm2_signed_audit *audit)
+{
+	return -EOPNOTSUPP;
+}
+static inline void tpm2_free_signed_audit(struct tpm2_signed_audit *audit)
+{
 }
 
 static inline int tpm_buf_fill_hmac_session(struct tpm_chip *chip,

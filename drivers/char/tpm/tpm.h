@@ -145,6 +145,7 @@ void tpm_dev_common_exit(void);
 #ifdef CONFIG_TCG_TPM2_HMAC
 int tpm2_sessions_init(struct tpm_chip *chip);
 void tpm2_free_auth(struct tpm2_auth *auth);
+int tpm2_audit_session_handle(struct tpm_chip *chip, u32 *handle);
 #else
 static inline int tpm2_sessions_init(struct tpm_chip *chip)
 {
