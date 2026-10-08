@@ -29,7 +29,14 @@
 
 #include <xalloc.h>
 
-#include "../kernel/kallsyms_internal.h"
+/*
+ * These constants determine the size of the marker array filled here,
+ * and they're duplicated in kernel/kallsyms.c, where they're used in
+ * get_symbol_offset().  They must be kept in agreement.
+ */
+#define KALLSYMS_MARKER_SHIFT 4
+#define KALLSYMS_MARKER_SIZE  (1U << KALLSYMS_MARKER_SHIFT)
+#define KALLSYMS_MARKER_MASK  (KALLSYMS_MARKER_SIZE - 1U)
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
