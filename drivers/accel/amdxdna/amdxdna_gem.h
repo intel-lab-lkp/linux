@@ -103,6 +103,7 @@ static inline u64 amdxdna_obj_dma_addr(struct amdxdna_gem_obj *abo)
 }
 
 void amdxdna_umap_put(struct amdxdna_umap *mapp);
+int amdxdna_populate_range(struct amdxdna_gem_obj *abo);
 void amdxdna_gem_heap_free(struct amdxdna_client *client, struct amdxdna_gem_obj *abo);
 
 struct drm_gem_object *
