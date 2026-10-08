@@ -17,6 +17,7 @@
 #define RPMI_TEE_SRV_PROBE_SYSTEM	0x03
 #define RPMI_TEE_SRV_PROBE_DOMAIN	0x04
 #define RPMI_TEE_SRV_PROBE_ENDPOINT	0x05
+#define RPMI_TEE_SRV_CALL		0x18
 
 struct rpmi_tee_mbox {
 	struct mbox_client client;
@@ -24,10 +25,22 @@ struct rpmi_tee_mbox {
 	u32 max_msg_data_size;
 };
 
+/**
+ * struct rpmi_tee_transport - State for one RPMI TEE transport instance
+ * @dev: Parent platform device.
+ * @mbox: RPMI mailbox transport state.
+ * @max_call_req_size: Maximum TEE_CALL request payload size in bytes.
+ * @max_call_resp_size: Maximum TEE_CALL response payload size in bytes.
+ * @self_id: Local REE physical endpoint identifier.
+ * @devices: List of registered TEE service devices.
+ */
 struct rpmi_tee_transport {
 	struct device *dev;
 	struct rpmi_tee_mbox mbox;
+	size_t max_call_req_size;
+	size_t max_call_resp_size;
 	u32 self_id;
+	struct list_head devices;
 };
 
 /* Report local transport errors separately from the returned RPMI status. */
