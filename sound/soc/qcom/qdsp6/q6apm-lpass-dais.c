@@ -234,7 +234,9 @@ static int q6apm_lpass_dai_prepare(struct snd_pcm_substream *substream, struct s
 	int rc;
 
 	if (dai_data->is_port_started[dai->id]) {
-		q6apm_graph_stop(dai_data->graph[dai->id]);
+		rc = q6apm_graph_stop(dai_data->graph[dai->id]);
+		if (rc)
+			return rc;
 		dai_data->is_port_started[dai->id] = false;
 
 	}

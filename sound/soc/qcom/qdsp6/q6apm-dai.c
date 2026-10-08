@@ -347,7 +347,9 @@ static int q6apm_dai_prepare(struct snd_soc_component *component,
 	audioreach_set_default_channel_mapping(cfg.channel_map, runtime->channels);
 	if (prtd->state) {
 		/* clear the previous setup if any  */
-		q6apm_graph_stop(prtd->graph);
+		ret = q6apm_graph_stop(prtd->graph);
+		if (ret)
+			return ret;
 		q6apm_free_fragments(prtd->graph, substream->stream);
 	}
 
