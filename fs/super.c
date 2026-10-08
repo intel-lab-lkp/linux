@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <linux/blkdev.h>
 #include <linux/memcontrol.h>
+#include <linux/pagemap.h>
 #include <linux/rhashtable.h>
 #include <linux/mount.h>
 #include <linux/security.h>
@@ -1644,6 +1645,55 @@ static struct super_dev *super_dev_lookup(dev_t dev, struct super_block *sb)
 	return NULL;
 }
 
+/*
+ * Filesystem metadata is shared across users and should be accounted to the
+ * root cgroup. Charging it to individual cgroups can trigger foreign writeback
+ * of the bdev inode's entire owner wb, including unrelated file data. For
+ * buffered overwrites, premature writeback reduces write coalescing and
+ * competes with foreground I/O, particularly on bandwidth-limited devices.
+ * This foreign writeback problem primarily affects filesystems such as
+ * ext4 that cache metadata in the bdev mapping using buffer heads.
+ *
+ * Raw buffered I/O also uses kernel-file accounting while a filesystem uses
+ * the device. This is independent of CONFIG_BLK_DEV_WRITE_MOUNTED: writes to
+ * a mounted device are dangerous administrative operations, and charging
+ * their cache to the root cgroup is acceptable.
+ */
+static void fs_bdev_set_kernel_file(struct block_device *bdev, bool enable)
+{
+	struct address_space *mapping = bdev->bd_mapping;
+	struct inode *inode = mapping->host;
+
+	inode_lock(inode);
+	/*
+	 * Multiple superblocks can share an extra device, as in EROFS.
+	 * Switch accounting only for the first user and the last release.
+	 * Raw openers may outlive all filesystem users, so bd_openers cannot
+	 * determine when to restore ordinary page-cache accounting.
+	 * Count at registration/unregistration: btrfs can unregister a device
+	 * and close it separately, bypassing fs_bdev_file_release().
+	 */
+	if (enable) {
+		if (bdev->bd_fs_users++)
+			goto out;
+	} else {
+		if (--bdev->bd_fs_users)
+			goto out;
+	}
+
+	filemap_invalidate_lock(mapping);
+	/* Folio removal must use the same accounting mode as insertion. */
+	sync_blockdev(bdev);
+	kill_bdev(bdev);
+	if (enable)
+		set_bit(AS_KERNEL_FILE, &mapping->flags);
+	else
+		clear_bit(AS_KERNEL_FILE, &mapping->flags);
+	filemap_invalidate_unlock(mapping);
+out:
+	inode_unlock(inode);
+}
+
 static int fs_bdev_register(struct file *bdev_file, struct super_block *sb)
 {
 	struct super_dev *sb_dev __free(kfree) = NULL;
@@ -1654,7 +1704,7 @@ static int fs_bdev_register(struct file *bdev_file, struct super_block *sb)
 		sb_dev = super_dev_lookup(dev, sb);
 		if (sb_dev && refcount_inc_not_zero(&sb_dev->sd_ref)) {
 			retain_and_null_ptr(sb_dev);
-			return 0;
+			goto registered;
 		}
 	}
 
@@ -1674,7 +1724,11 @@ static int fs_bdev_register(struct file *bdev_file, struct super_block *sb)
 	}
 
 	retain_and_null_ptr(sb_dev);
-	return err;
+	if (err)
+		return err;
+registered:
+	fs_bdev_set_kernel_file(file_bdev(bdev_file), true);
+	return 0;
 }
 
 /**
@@ -1765,6 +1819,7 @@ void fs_bdev_unregister(struct file *bdev_file, struct super_block *sb)
 	sb_dev = super_dev_lookup(dev, sb);
 	rcu_read_unlock();
 	super_dev_put(sb_dev);
+	fs_bdev_set_kernel_file(file_bdev(bdev_file), false);
 }
 EXPORT_SYMBOL_GPL(fs_bdev_unregister);
 
