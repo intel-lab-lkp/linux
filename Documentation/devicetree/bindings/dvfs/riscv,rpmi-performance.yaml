@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/dvfs/riscv,rpmi-performance.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: RISC-V RPMI performance service group
+
+maintainers:
+  - Joshua Yeong <joshua.yeong@starfivetech.com>
+
+description: |
+  The RISC-V Platform Management Interface (RPMI) [1] defines a modular and
+  extensible messaging protocol for platform management functions. The supervisor
+  software can send and receive RPMI messages via SBI MPXY extension [2]
+  or via a dedicated supervisor-mode RPMI transport.
+
+  The RPMI specification [1] defines performance service group (performance
+  domain) for accessing and controlling platform-managed performance-related
+  resources, as implemented by a platform microcontroller. Supervisor software
+  can interact with the RPMI performance service group through an SBI MPXY
+  channel or through a dedicated supervisor-mode RPMI transport.
+
+  The node is a performance domain provider. A CPU references its domain
+  through the generic "performance-domains" property described in
+  dvfs/performance-domain.yaml.
+
+  The node can also be a power domain provider, with one power domain for each
+  performance domain. Any other device that runs in one of the domains
+  references it through "power-domains", and each level the domain advertises
+  is a performance state of that power domain.
+
+  For example, with the provider labelled "performance", a CPU that runs in
+  domain 0 and a device that runs in domain 1 reference their domains as:
+
+    cpu@0 {
+        ...
+        performance-domains = <&performance 0>;
+    };
+
+    gpu@40000000 {
+        ...
+        power-domains = <&performance 1>;
+    };
+
+  ===========================================
+  References
+  ===========================================
+
+  [1] RISC-V Platform Management Interface (RPMI) v1.0 (or higher)
+      https://github.com/riscv-non-isa/riscv-rpmi/releases
+
+  [2] RISC-V Supervisor Binary Interface (SBI) v3.0 (or higher)
+      https://github.com/riscv-non-isa/riscv-sbi-doc/releases
+
+properties:
+  compatible:
+    description:
+      Intended for use by the supervisor software.
+    const: riscv,rpmi-performance
+
+  mboxes:
+    maxItems: 1
+    description:
+      Mailbox channel of the underlying RPMI transport or SBI message proxy channel.
+
+  "#performance-domain-cells":
+    const: 1
+
+  "#power-domain-cells":
+    const: 1
+
+required:
+  - compatible
+  - mboxes
+  - "#performance-domain-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    rpmi-performance {
+        compatible = "riscv,rpmi-performance";
+        mboxes = <&mpxy_mbox 0x1003 0x0>;
+        #performance-domain-cells = <0x01>;
+        #power-domain-cells = <0x01>;
+    };
+...
