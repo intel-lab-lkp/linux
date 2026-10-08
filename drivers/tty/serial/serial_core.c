@@ -3240,6 +3240,18 @@ static void serial_core_remove_one_port(struct uart_driver *drv,
 		unregister_console(uport->cons);
 
 	/*
+	 * A console port is not shut down on last close (see
+	 * tty_port_shutdown()), and the hangup above only shuts down a port
+	 * that has a tty attached. A console that was opened and closed is
+	 * therefore still running here; shut it down before its resources are
+	 * released.
+	 */
+	mutex_lock(&port->mutex);
+	if (tty_port_initialized(port))
+		uart_shutdown(NULL, state);
+	mutex_unlock(&port->mutex);
+
+	/*
 	 * Free the port IO and memory resources, if any.
 	 */
 	if (uport->type != PORT_UNKNOWN && uport->ops->release_port)
