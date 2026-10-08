@@ -35,6 +35,7 @@
 #include <linux/slab.h>
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
+#include <linux/highmem.h>
 #include <rdma/rdma_cm.h>
 
 #include "rds_single_path.h"
@@ -947,6 +948,19 @@ static void rds_ib_process_recv(struct rds_connection *conn,
 				"fragment header mismatch; forcing reconnect\n");
 			goto done;
 		}
+	}
+
+	/* The device wrote only data_len bytes into this recycled fragment
+	 * page.  Zero the unwritten tail so a later rds_ib_inc_copy_to_user(),
+	 * which copies up to the peer-declared h_len, cannot hand stale page
+	 * contents to userspace.
+	 */
+	if (data_len < RDS_FRAG_SIZE) {
+		void *frag = kmap_local_page(sg_page(&recv->r_frag->f_sg));
+
+		memset(frag + recv->r_frag->f_sg.offset + data_len, 0,
+		       RDS_FRAG_SIZE - data_len);
+		kunmap_local(frag);
 	}
 
 	list_add_tail(&recv->r_frag->f_item, &ibinc->ii_frags);
