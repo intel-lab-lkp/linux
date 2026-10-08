@@ -178,6 +178,11 @@ static void free_rd_atomic_resources(struct rxe_qp *qp)
 
 void free_rd_atomic_resource(struct resp_res *res)
 {
+	if (res->type == RXE_READ_MASK && res->read.mr) {
+		rxe_put(res->read.mr);
+		res->read.mr = NULL;
+	}
+
 	res->type = 0;
 }
 

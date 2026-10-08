@@ -291,10 +291,17 @@ err:
 	return ret;
 }
 
-struct rxe_mw *rxe_lookup_mw(struct rxe_qp *qp, int access, u32 rkey)
+/*
+ * Validate an MW and take a reference on its backing MR while holding the
+ * MW lock.  This keeps the binding fields coherent with the MR reference if
+ * an invalidate or rebind is running concurrently.
+ */
+struct rxe_mr *rxe_lookup_mw(struct rxe_qp *qp, int access, u32 rkey,
+			     u64 *addr, u64 *length, int *mw_access)
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
 	struct rxe_pd *pd = to_rpd(qp->ibqp.pd);
+	struct rxe_mr *mr = NULL;
 	struct rxe_mw *mw;
 	int index = rkey >> 8;
 
@@ -302,15 +309,29 @@ struct rxe_mw *rxe_lookup_mw(struct rxe_qp *qp, int access, u32 rkey)
 	if (!mw)
 		return NULL;
 
+	spin_lock_bh(&mw->lock);
 	if (unlikely((mw->rkey != rkey) || rxe_mw_pd(mw) != pd ||
 		     (mw->ibmw.type == IB_MW_TYPE_2 && mw->qp != qp) ||
 		     (mw->length == 0) || ((access & mw->access) != access) ||
-		     mw->state != RXE_MW_STATE_VALID)) {
-		rxe_put(mw);
-		return NULL;
+		     mw->state != RXE_MW_STATE_VALID || !mw->mr ||
+		     mw->mr->state != RXE_MR_STATE_VALID)) {
+		goto out_unlock;
 	}
 
-	return mw;
+	mr = mw->mr;
+	if (!rxe_get(mr)) {
+		mr = NULL;
+		goto out_unlock;
+	}
+
+	*addr = mw->addr;
+	*length = mw->length;
+	*mw_access = mw->access;
+
+out_unlock:
+	spin_unlock_bh(&mw->lock);
+	rxe_put(mw);
+	return mr;
 }
 
 void rxe_mw_cleanup(struct rxe_pool_elem *elem)

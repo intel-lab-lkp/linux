@@ -470,7 +470,9 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 				   struct rxe_pkt_info *pkt)
 {
 	struct rxe_mr *mr = NULL;
-	struct rxe_mw *mw = NULL;
+	u64 mw_addr = 0;
+	u64 mw_length = 0;
+	int mw_access = 0;
 	u64 va;
 	u32 rkey;
 	u32 resid;
@@ -522,26 +524,32 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 	pktlen	= payload_size(pkt);
 
 	if (rkey_is_mw(rkey)) {
-		mw = rxe_lookup_mw(qp, access, rkey);
-		if (!mw) {
+		u64 mw_start;
+
+		mr = rxe_lookup_mw(qp, access, rkey, &mw_addr, &mw_length,
+				   &mw_access);
+		if (!mr) {
 			rxe_dbg_qp(qp, "no MW matches rkey %#x\n", rkey);
 			state = get_rkey_violation_state(pkt);
 			goto err;
 		}
 
-		mr = mw->mr;
-		if (!mr) {
-			rxe_dbg_qp(qp, "MW doesn't have an MR\n");
-			state = get_rkey_violation_state(pkt);
-			goto err;
+		if (mw_access & IB_ZERO_BASED)
+			qp->resp.offset = mw_addr;
+
+		/* FLUSH MR applies to the whole backing MR and its RETH fields
+		 * are not required to describe an MW-relative range.
+		 */
+		if (!(pkt->mask & RXE_FLUSH_MASK) ||
+		    feth_sel(pkt) != IB_FLUSH_MR) {
+			mw_start = (mw_access & IB_ZERO_BASED) ? 0 : mw_addr;
+			if (unlikely(va < mw_start || resid > mw_length ||
+				     va - mw_start > mw_length - resid)) {
+				rxe_dbg_qp(qp, "request outside MW range\n");
+				state = get_rkey_violation_state(pkt);
+				goto err;
+			}
 		}
-
-		if (mw->access & IB_ZERO_BASED)
-			qp->resp.offset = mw->addr;
-
-		rxe_get(mr);
-		rxe_put(mw);
-		mw = NULL;
 	} else {
 		mr = lookup_mr(qp->pd, access, rkey, RXE_LOOKUP_REMOTE);
 		if (!mr) {
@@ -607,8 +615,6 @@ err:
 	qp->resp.mr = NULL;
 	if (mr)
 		rxe_put(mr);
-	if (mw)
-		rxe_put(mw);
 
 	return state;
 }
@@ -664,6 +670,8 @@ static struct resp_res *rxe_prepare_res(struct rxe_qp *qp,
 
 	switch (type) {
 	case RXE_READ_MASK:
+		res->read.mr = qp->resp.mr;
+		qp->resp.mr = NULL;
 		res->read.va = qp->resp.va + qp->resp.offset;
 		res->read.va_org = qp->resp.va + qp->resp.offset;
 		res->read.resid = qp->resp.resid;
@@ -878,7 +886,7 @@ static struct sk_buff *prepare_ack_packet(struct rxe_qp *qp,
 /**
  * rxe_recheck_mr - revalidate MR from rkey and get a reference
  * @qp: the qp
- * @rkey: the rkey
+ * @res: the responder resource holding the original authorized range
  *
  * This code allows the MR to be invalidated or deregistered or
  * the MW if one was used to be invalidated or deallocated.
@@ -892,26 +900,32 @@ static struct sk_buff *prepare_ack_packet(struct rxe_qp *qp,
  *
  * Return: mr on success else NULL
  */
-static struct rxe_mr *rxe_recheck_mr(struct rxe_qp *qp, u32 rkey)
+static struct rxe_mr *rxe_recheck_mr(struct rxe_qp *qp,
+				     const struct resp_res *res)
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
+	u32 rkey = res->read.rkey;
 	struct rxe_mr *mr;
-	struct rxe_mw *mw;
 
 	if (rkey_is_mw(rkey)) {
-		mw = rxe_pool_get_index(&rxe->mw_pool, rkey >> 8);
-		if (!mw)
+		u64 addr, length;
+		int access;
+
+		mr = rxe_lookup_mw(qp, IB_ACCESS_REMOTE_READ, rkey,
+				   &addr, &length, &access);
+		if (!mr)
 			return NULL;
 
-		mr = mw->mr;
-		if (mw->rkey != rkey || mw->state != RXE_MW_STATE_VALID ||
-		    !mr || mr->state != RXE_MR_STATE_VALID) {
-			rxe_put(mw);
+		/* A replay or a later response packet must still refer to the
+		 * same backing MR and the entire originally authorized interval.
+		 * This catches invalidate/rebind even when the object survives.
+		 */
+		if (mr != res->read.mr || res->read.va_org < addr ||
+		    res->read.length > length ||
+		    res->read.va_org - addr > length - res->read.length) {
+			rxe_put(mr);
 			return NULL;
 		}
-
-		rxe_get(mr);
-		rxe_put(mw);
 
 		return mr;
 	}
@@ -920,7 +934,8 @@ static struct rxe_mr *rxe_recheck_mr(struct rxe_qp *qp, u32 rkey)
 	if (!mr)
 		return NULL;
 
-	if (mr->rkey != rkey || mr->state != RXE_MR_STATE_VALID) {
+	if (mr->rkey != rkey || mr->state != RXE_MR_STATE_VALID ||
+	    (res->read.mr && mr != res->read.mr)) {
 		rxe_put(mr);
 		return NULL;
 	}
@@ -951,14 +966,11 @@ static enum resp_states read_reply(struct rxe_qp *qp,
 
 	if (res->state == rdatm_res_state_new) {
 		if (!res->replay || qp->resp.length == 0) {
-			/* if length == 0 mr will be NULL (is ok)
-			 * otherwise qp->resp.mr holds a ref on mr
-			 * which we transfer to mr and drop below.
-			 */
-			mr = qp->resp.mr;
-			qp->resp.mr = NULL;
+			mr = res->read.mr;
+			if (mr)
+				rxe_get(mr);
 		} else {
-			mr = rxe_recheck_mr(qp, res->read.rkey);
+			mr = rxe_recheck_mr(qp, res);
 			if (!mr)
 				return RESPST_ERR_RKEY_VIOLATION;
 		}
@@ -968,11 +980,11 @@ static enum resp_states read_reply(struct rxe_qp *qp,
 		else
 			opcode = IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST;
 	} else {
-		/* re-lookup mr from rkey on all later packets.
-		 * length will be non-zero. This can fail if someone
-		 * modifies or destroys the mr since the first packet.
+		/* The permanent resource reference keeps the original backing MR
+		 * alive; this lookup also verifies that the MW still names that MR
+		 * and still covers the original request after invalidate/rebind.
 		 */
-		mr = rxe_recheck_mr(qp, res->read.rkey);
+		mr = rxe_recheck_mr(qp, res);
 		if (!mr)
 			return RESPST_ERR_RKEY_VIOLATION;
 
@@ -1021,6 +1033,10 @@ static enum resp_states read_reply(struct rxe_qp *qp,
 	if (res->read.resid > 0) {
 		state = RESPST_DONE;
 	} else {
+		if (res->read.mr) {
+			rxe_put(res->read.mr);
+			res->read.mr = NULL;
+		}
 		qp->resp.res = NULL;
 		if (!res->replay)
 			qp->resp.opcode = -1;

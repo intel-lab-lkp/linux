@@ -188,6 +188,7 @@ struct resp_res {
 			u32		length;
 			u64		va;
 			u32		resid;
+			struct rxe_mr	*mr;
 		} read;
 		struct {
 			u32		length;
