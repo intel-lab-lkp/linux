@@ -204,7 +204,7 @@ static bool cachefiles_shorten_object(struct cachefiles_object *object,
  * Resize the backing object.
  */
 static void cachefiles_resize_cookie(struct netfs_cache_resources *cres,
-				     uoff_t new_size)
+				     uoff_t old_size, uoff_t new_size)
 {
 	struct cachefiles_object *object = cachefiles_cres_object(cres);
 	struct cachefiles_cache *cache = object->volume->cache;
@@ -218,7 +218,7 @@ static void cachefiles_resize_cookie(struct netfs_cache_resources *cres,
 	/* If the file is being shrunk, we need to downsize the backing file
 	 * and clear the end of the final block.
 	 */
-	if (new_size < object->object_size) {
+	if (new_size < old_size) {
 		if (new_size >= i_size)
 			goto out;
 		cachefiles_begin_secure(cache, &saved_cred);

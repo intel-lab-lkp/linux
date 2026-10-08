@@ -1314,6 +1314,7 @@ static int cifs_precopy_set_eof(struct inode *src_inode, struct cifsInodeInfo *s
 				unsigned int xid, loff_t src_end)
 {
 	struct cifsFileInfo *writeable_srcfile;
+	uoff_t old_size = i_size_read(src_inode);
 	int rc = -EINVAL;
 
 	writeable_srcfile = find_writable_file(src_cifsi, FIND_FSUID_ONLY);
@@ -1332,7 +1333,7 @@ static int cifs_precopy_set_eof(struct inode *src_inode, struct cifsInodeInfo *s
 		goto set_failed;
 
 	netfs_resize_file(&src_cifsi->netfs, src_end, true);
-	fscache_resize_cookie(cifs_inode_cookie(src_inode), src_end);
+	fscache_resize_cookie(cifs_inode_cookie(src_inode), old_size, src_end);
 	return 0;
 
 set_failed:
@@ -1538,6 +1539,7 @@ ssize_t cifs_file_copychunk_range(unsigned int xid,
 	struct cifs_tcon *src_tcon;
 	struct cifs_tcon *target_tcon;
 	ssize_t rc;
+	uoff_t old_size;
 
 	if (len == 0)
 		return 0;
@@ -1584,7 +1586,8 @@ ssize_t cifs_file_copychunk_range(unsigned int xid,
 	 * Advance the EOF marker after the flush above to the end of the range
 	 * if it's short of that.
 	 */
-	if (netfs_read_remote_i_size(src_inode) < off + len) {
+	old_size = netfs_read_remote_i_size(src_inode);
+	if (old_size < off + len) {
 		rc = cifs_precopy_set_eof(src_inode, src_cifsi, src_tcon, xid, off + len);
 		if (rc < 0)
 			goto unlock;
@@ -1628,7 +1631,7 @@ ssize_t cifs_file_copychunk_range(unsigned int xid,
 			netfs_resize_file(&target_cifsi->netfs,
 					  i_size_read(target_inode), true);
 			fscache_resize_cookie(cifs_inode_cookie(target_inode),
-					      i_size_read(target_inode));
+					      old_size, i_size_read(target_inode));
 		}
 		if (rc > 0) {
 			spin_lock(&target_inode->i_lock);

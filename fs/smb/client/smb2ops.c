@@ -3545,7 +3545,7 @@ static long smb3_zero_range(struct file *file, struct cifs_tcon *tcon,
 	struct inode *inode = file_inode(file);
 	struct cifsInodeInfo *cifsi = CIFS_I(inode);
 	struct cifsFileInfo *cfile = file->private_data;
-	unsigned long long i_size, new_size, remote_i_size, zero_point;
+	unsigned long long i_size, old_size, new_size, remote_i_size, zero_point;
 	long rc;
 	unsigned int xid;
 
@@ -3554,8 +3554,9 @@ static long smb3_zero_range(struct file *file, struct cifs_tcon *tcon,
 	trace_smb3_zero_enter(xid, cfile->fid.persistent_fid, tcon->tid,
 			      ses->Suid, offset, len);
 
+	old_size = i_size_read(inode);
 	new_size = offset + len;
-	if (!keep_size && i_size_read(inode) < new_size) {
+	if (!keep_size && old_size < new_size) {
 		rc = inode_newsize_ok(inode, new_size);
 		if (rc)
 			goto out;
@@ -3611,7 +3612,7 @@ static long smb3_zero_range(struct file *file, struct cifs_tcon *tcon,
 			if (offset < cifsi->netfs._zero_point)
 				netfs_write_zero_point(inode, offset);
 			spin_unlock(&inode->i_lock);
-			fscache_resize_cookie(cifs_inode_cookie(inode), new_size);
+			fscache_resize_cookie(cifs_inode_cookie(inode), old_size, new_size);
 		}
 	}
 
@@ -4146,7 +4147,7 @@ static long smb3_collapse_range(struct file *file, struct cifs_tcon *tcon,
 	netfs_resize_file(&cifsi->netfs, new_eof, true);
 	netfs_write_zero_point(inode, new_eof);
 	spin_unlock(&inode->i_lock);
-	fscache_resize_cookie(cifs_inode_cookie(inode), new_eof);
+	fscache_resize_cookie(cifs_inode_cookie(inode), old_eof, new_eof);
 out_2:
 	filemap_invalidate_unlock(inode->i_mapping);
 out:
@@ -4208,7 +4209,7 @@ static long smb3_insert_range(struct file *file, struct cifs_tcon *tcon,
 	spin_lock(&inode->i_lock);
 	netfs_resize_file(&cifsi->netfs, i_size_read(inode), true);
 	spin_unlock(&inode->i_lock);
-	fscache_resize_cookie(cifs_inode_cookie(inode), i_size_read(inode));
+	fscache_resize_cookie(cifs_inode_cookie(inode), old_eof, i_size_read(inode));
 
 	/*
 	 * Move [off, old_eof) right by len. The helper copies backwards if the

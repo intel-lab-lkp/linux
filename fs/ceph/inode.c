@@ -2303,10 +2303,11 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 {
 	struct ceph_client *cl = ceph_inode_to_client(inode);
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	u64 to;
+	uoff_t old_size, to;
 	int wrbuffer_refs, finish = 0;
 
 	mutex_lock(&ci->i_truncate_mutex);
+	old_size = i_size_read(inode);
 retry:
 	spin_lock(&ci->i_ceph_lock);
 	if (ci->i_truncate_pending == 0) {
@@ -2339,7 +2340,7 @@ retry:
 	      ci->i_truncate_pending, to);
 	spin_unlock(&ci->i_ceph_lock);
 
-	ceph_fscache_resize(inode, to);
+	ceph_fscache_resize(inode, old_size, to);
 	truncate_pagecache(inode, to);
 
 	spin_lock(&ci->i_ceph_lock);

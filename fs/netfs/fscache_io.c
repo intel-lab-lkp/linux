@@ -267,7 +267,7 @@ EXPORT_SYMBOL(__fscache_write_to_cache);
 /*
  * Change the size of a backing object.
  */
-void __fscache_resize_cookie(struct fscache_cookie *cookie, uoff_t new_size)
+void __fscache_resize_cookie(struct fscache_cookie *cookie, uoff_t old_size, uoff_t new_size)
 {
 	struct netfs_cache_resources cres;
 
@@ -281,7 +281,7 @@ void __fscache_resize_cookie(struct fscache_cookie *cookie, uoff_t new_size)
 		 * netfs's inode lock so that we're serialised with respect to
 		 * writes.
 		 */
-		cookie->volume->cache->ops->resize_cookie(&cres, new_size);
+		cookie->volume->cache->ops->resize_cookie(&cres, old_size, new_size);
 		fscache_end_operation(&cres);
 	} else {
 		fscache_stat(&fscache_n_resizes_null);
