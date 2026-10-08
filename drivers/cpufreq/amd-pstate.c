@@ -585,6 +585,7 @@ static int shmem_init_perf(struct amd_cpudata *cpudata)
 	union perf_cached perf = READ_ONCE(cpudata->perf);
 	u64 numerator;
 	bool auto_sel;
+	bool want;
 
 	int ret = cppc_get_perf_caps(cpudata->cpu, &cppc_perf);
 	if (ret)
@@ -603,14 +604,23 @@ static int shmem_init_perf(struct amd_cpudata *cpudata)
 	WRITE_ONCE(cpudata->perf, perf);
 	WRITE_ONCE(cpudata->prefcore_ranking, cppc_perf.highest_perf);
 
+	want = (cppc_state != AMD_PSTATE_PASSIVE);
+
 	ret = cppc_get_auto_sel(cpudata->cpu, &auto_sel);
 	if (ret) {
 		pr_warn("failed to get auto_sel, ret: %d\n", ret);
 		return 0;
 	}
 
-	ret = cppc_set_auto_sel(cpudata->cpu,
-			(cppc_state == AMD_PSTATE_PASSIVE) ? 0 : 1);
+	ret = cppc_set_auto_sel(cpudata->cpu, want);
+
+	/*
+	 * Firmware may expose Autonomous Selection Enable as a read-only
+	 * constant. If it already matches what active mode needs, the
+	 * failed write is harmless.
+	 */
+	if (ret == -EOPNOTSUPP && want && auto_sel)
+		return 0;
 
 	if (ret)
 		pr_warn("failed to set auto_sel, ret: %d\n", ret);
