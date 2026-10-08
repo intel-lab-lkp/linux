@@ -102,6 +102,10 @@ void amdgpu_umc_handle_bad_pages(struct amdgpu_device *adev,
 	int ret = 0;
 	unsigned long err_count;
 
+	/* RAS is disabled, nothing to retire. */
+	if (!con)
+		return;
+
 	amdgpu_ras_get_error_query_mode(adev, &error_query_mode);
 
 	err_data->err_addr =
@@ -216,6 +220,9 @@ static int amdgpu_umc_do_page_retirement(struct amdgpu_device *adev,
 
 	kgd2kfd_set_sram_ecc_flag(adev->kfd.dev);
 	amdgpu_umc_handle_bad_pages(adev, ras_error_status);
+
+	if (!con)
+		return AMDGPU_RAS_SUCCESS;
 
 	if ((err_data->ue_count || err_data->de_count) &&
 	    (reset || amdgpu_ras_is_rma(adev))) {
