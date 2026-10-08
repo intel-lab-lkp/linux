@@ -1046,6 +1046,28 @@ static int rpmi_perf_cpufreq_register(struct device *dev, struct rpmi_perf *perf
 	return devm_add_action_or_reset(dev, rpmi_perf_frontend_unregister, pdev);
 }
 
+/*
+ * A device that is not a CPU names its domain through "power-domains", which
+ * the power domain front-end serves on this node. Create the device it binds
+ * to, but only when the node is a power domain provider at all.
+ */
+static int rpmi_perf_genpd_register(struct device *dev, struct rpmi_perf *perf)
+{
+	struct platform_device *pdev;
+
+	if (!IS_ENABLED(CONFIG_RISCV_RPMI_PERF_DOMAIN) ||
+	    !of_property_present(dev_of_node(dev), "#power-domain-cells"))
+		return 0;
+
+	pdev = platform_device_register_data(dev, "riscv-rpmi-perf-domain",
+					     PLATFORM_DEVID_AUTO, &perf,
+					     sizeof(perf));
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
+	return devm_add_action_or_reset(dev, rpmi_perf_frontend_unregister, pdev);
+}
+
 static int rpmi_perf_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1132,6 +1154,10 @@ static int rpmi_perf_probe(struct platform_device *pdev)
 	ret = rpmi_perf_cpufreq_register(dev, mpxy_perf);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to register cpufreq device\n");
+
+	ret = rpmi_perf_genpd_register(dev, mpxy_perf);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to register power domain device\n");
 
 	dev_info(dev, "%d MPXY performance domains registered\n", num_domains);
 

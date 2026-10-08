@@ -13,3 +13,19 @@ config RISCV_RPMI_DEVICE_POWER
 	  specification. The power domains advertised by the platform
 	  microcontroller are registered as generic power domains, so that
 	  devices can reference them through the "power-domains" property.
+
+config RISCV_RPMI_PERF_DOMAIN
+	tristate "RISC-V RPMI performance domains as power domains"
+	depends on RISCV_RPMI_PERFORMANCE
+	depends on PM
+	default RISCV
+	select PM_GENERIC_DOMAINS
+	help
+	  Register the performance domains of the RISC-V platform management
+	  interface (RPMI) performance service group as generic power domains,
+	  with a performance state for each level the platform microcontroller
+	  advertises. A device that is not a CPU references its domain through
+	  the "power-domains" property and drives it through the OPP library.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called riscv-rpmi-perf-domain.
