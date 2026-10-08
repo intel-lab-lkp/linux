@@ -95,6 +95,7 @@
 #include <linux/netdevice.h>
 #include <linux/slab.h>
 #include <linux/sock_diag.h>
+#include <linux/freezer.h>
 #include <net/tcp_states.h>
 #include <linux/skbuff.h>
 #include <linux/proc_fs.h>
@@ -2424,6 +2425,10 @@ static int udp_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 		encap_rcv = READ_ONCE(up->encap_rcv);
 		if (encap_rcv) {
 			int ret;
+
+			/* Drop if we're hibernating */
+			if (unlikely(pm_freezing))
+				goto drop;
 
 			/* Verify checksum before giving to encap */
 			if (udp_lib_checksum_complete(skb))

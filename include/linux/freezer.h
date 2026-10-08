@@ -76,6 +76,7 @@ static inline bool cgroup1_freezing(struct task_struct *task)
 #endif /* !CONFIG_CGROUP_FREEZER */
 
 #else /* !CONFIG_FREEZER */
+#define pm_freezing (false)
 static inline bool frozen(struct task_struct *p) { return false; }
 static inline bool freezing(struct task_struct *p) { return false; }
 static inline void __thaw_task(struct task_struct *t) {}

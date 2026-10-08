@@ -3,6 +3,7 @@
 #include <linux/errno.h>
 #include <linux/socket.h>
 #include <linux/kernel.h>
+#include <linux/freezer.h>
 #include <net/dst_metadata.h>
 #include <net/flow.h>
 #include <net/udp.h>
@@ -171,6 +172,10 @@ void udp_tunnel_xmit_skb(struct rtable *rt, struct sock *sk, struct sk_buff *skb
 			 bool xnet, bool nocheck, u16 ipcb_flags)
 {
 	struct udphdr *uh;
+
+	/* Drop if we're hibernating */
+	if (unlikely(pm_freezing))
+		return;
 
 	__skb_push(skb, sizeof(*uh));
 	skb_reset_transport_header(skb);

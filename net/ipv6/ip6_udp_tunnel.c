@@ -7,6 +7,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/in6.h>
+#include <linux/freezer.h>
 #include <net/udp.h>
 #include <net/udp_tunnel.h>
 #include <net/net_namespace.h>
@@ -85,6 +86,10 @@ void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
 {
 	struct udphdr *uh;
 	struct ipv6hdr *ip6h;
+
+	/* Drop if we're hibernating */
+	if (unlikely(pm_freezing))
+		return;
 
 	__skb_push(skb, sizeof(*uh));
 	skb_reset_transport_header(skb);

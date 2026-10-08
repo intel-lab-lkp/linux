@@ -34,6 +34,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/indirect_call_wrapper.h>
+#include <linux/freezer.h>
 #include <trace/events/udp.h>
 
 #include <net/addrconf.h>
@@ -847,6 +848,10 @@ static int udpv6_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 		encap_rcv = READ_ONCE(up->encap_rcv);
 		if (encap_rcv) {
 			int ret;
+
+			/* Drop if we're hibernating */
+			if (unlikely(pm_freezing))
+				goto drop;
 
 			/* Verify checksum before giving to encap */
 			if (udp_lib_checksum_complete(skb))
