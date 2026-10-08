@@ -170,6 +170,13 @@ void kvm_mmu_unload(struct kvm_vcpu *vcpu);
 void kvm_mmu_free_obsolete_roots(struct kvm_vcpu *vcpu);
 void kvm_mmu_sync_roots(struct kvm_vcpu *vcpu);
 void kvm_mmu_sync_prev_roots(struct kvm_vcpu *vcpu);
+
+static inline void kvm_mmu_sync_all_roots(struct kvm_vcpu *vcpu)
+{
+	kvm_mmu_sync_roots(vcpu);
+	kvm_mmu_sync_prev_roots(vcpu);
+}
+
 void kvm_mmu_track_write(struct kvm_vcpu *vcpu, gpa_t gpa, const u8 *new,
 			 int bytes);
 

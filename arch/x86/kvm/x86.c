@@ -2020,8 +2020,7 @@ static void kvm_vcpu_flush_tlb_guest(struct kvm_vcpu *vcpu)
 		 * a forced sync of the shadow page tables.  Ensure all the
 		 * roots are synced and the guest TLB in hardware is clean.
 		 */
-		kvm_mmu_sync_roots(vcpu);
-		kvm_mmu_sync_prev_roots(vcpu);
+		kvm_mmu_sync_all_roots(vcpu);
 	}
 
 	kvm_x86_call(flush_tlb_guest)(vcpu);
@@ -8167,8 +8166,14 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 			if (unlikely(r))
 				goto out;
 		}
-		if (kvm_check_request(KVM_REQ_MMU_SYNC, vcpu))
+
+		if (kvm_check_request(KVM_REQ_MMU_SYNC_ALL_ROOTS, vcpu)) {
+			kvm_mmu_sync_all_roots(vcpu);
+			kvm_clear_request(KVM_REQ_MMU_SYNC, vcpu);
+		} else if (kvm_check_request(KVM_REQ_MMU_SYNC, vcpu)) {
 			kvm_mmu_sync_roots(vcpu);
+		}
+
 		if (kvm_check_request(KVM_REQ_LOAD_MMU_PGD, vcpu))
 			kvm_mmu_load_pgd(vcpu);
 
