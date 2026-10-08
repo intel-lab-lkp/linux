@@ -7,15 +7,6 @@
  * Copyright (C) 2026 Variscite Ltd.
  */
 
-/ {
-	rmii_ref_clk: rmii-ref-clk {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <25000000>;
-		clock-output-names = "rmii-ref";
-	};
-};
-
 &fec2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_enet2>, <&pinctrl_enet2_gpio>, <&pinctrl_enet2_mdio>;
@@ -33,9 +24,10 @@
 			clocks = <&rmii_ref_clk>;
 			clock-names = "rmii-ref";
 			reset-gpios = <&gpio5 0 GPIO_ACTIVE_LOW>;
-			reset-assert-us = <100000>;
+			reset-assert-us = <10000>;
+			reset-deassert-us = <100000>;
 			micrel,led-mode = <1>;
-			micrel,rmii-reference-clock-select-25-mhz;
+			micrel,rmii-reference-clock-select-25-mhz = <1>;
 		};
 
 		ethphy1: ethernet-phy@3 {
@@ -44,9 +36,10 @@
 			clocks = <&rmii_ref_clk>;
 			clock-names = "rmii-ref";
 			reset-gpios = <&gpio5 5 GPIO_ACTIVE_LOW>;
-			reset-assert-us = <100000>;
+			reset-assert-us = <10000>;
+			reset-deassert-us = <100000>;
 			micrel,led-mode = <0>;
-			micrel,rmii-reference-clock-select-25-mhz;
+			micrel,rmii-reference-clock-select-25-mhz = <1>;
 		};
 	};
 };

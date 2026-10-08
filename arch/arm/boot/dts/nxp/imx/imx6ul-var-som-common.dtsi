@@ -20,6 +20,14 @@
 		reg = <0x80000000 0x20000000>;
 	};
 
+	/* ref_clk for micrel ethernet phy */
+	rmii_ref_clk: rmii-ref-clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <25000000>;
+		clock-output-names = "rmii-ref";
+	};
+
 	reg_3p3v: regulator-3p3v {
 		compatible = "regulator-fixed";
 		regulator-name = "3P3V";
