@@ -225,15 +225,22 @@ static int tpm2_read_public(struct tpm_chip *chip, u32 handle, void *name)
 	if (!buf)
 		return -ENOMEM;
 
+	/*
+	 * NV indices have their own command, whose response has the same
+	 * layout: a public area followed by the name.
+	 */
 	tpm_buf_init(buf, TPM_BUFSIZE);
-	tpm_buf_reset(buf, TPM2_ST_NO_SESSIONS, TPM2_CC_READ_PUBLIC);
+	if (mso == TPM2_MSO_NVRAM)
+		tpm_buf_reset(buf, TPM2_ST_NO_SESSIONS, TPM2_CC_NV_READ_PUBLIC);
+	else
+		tpm_buf_reset(buf, TPM2_ST_NO_SESSIONS, TPM2_CC_READ_PUBLIC);
 	tpm_buf_append_u32(buf, handle);
 
 	rc = tpm_transmit_cmd(chip, buf, 0, "TPM2_ReadPublic");
 	if (rc)
 		return tpm_ret_to_err(rc);
 
-	/* Skip TPMT_PUBLIC: */
+	/* Skip TPMT_PUBLIC or TPMS_NV_PUBLIC: */
 	offset += tpm_buf_read_u16(buf, &offset);
 
 	/*
