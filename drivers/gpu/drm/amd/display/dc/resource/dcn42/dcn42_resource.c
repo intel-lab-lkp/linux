@@ -2468,6 +2468,8 @@ static bool dcn42_resource_construct(
 
 	dc->dml2_options.pmo.force_mandatory_uclk_pstate_support = true;
 
+	dc->dml2_options.pmo.relax_stutter_constraint_for_drr = true;
+
 	/* SPL */
 	dc->caps.scl_caps.sharpener_support = true;
 
