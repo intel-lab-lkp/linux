@@ -735,6 +735,110 @@ int test_32bit(void)
 	return !segv_triggered;
 }
 
+/*
+ * Fork and sigreturn with a crafted signal frame.
+ * Returns the child's exit code, or 0x100+signal if it was killed.
+ */
+static int crafted_sigreturn(unsigned long sp, bool ia32, bool shstk)
+{
+	int status;
+	pid_t pid;
+
+	pid = fork();
+	if (!pid) {
+		signal(SIGSEGV, SIG_DFL);
+		if (ARCH_PRCTL(shstk ? ARCH_SHSTK_ENABLE : ARCH_SHSTK_DISABLE,
+			       ARCH_SHSTK_SHSTK))
+			_exit(1);
+		if (ia32) /* ia32 rt_sigreturn */
+			asm volatile("movq %0, %%rsp; int $0x80; ud2"
+				     : : "r" (sp), "a" (173));
+		else /* rt_sigreturn */
+			asm volatile("movq %0, %%rsp; syscall; ud2"
+				     : : "r" (sp), "a" (__NR_rt_sigreturn));
+		__builtin_unreachable();
+	}
+
+	if (pid < 0 || waitpid(pid, &status, 0) != pid)
+		return -1;
+	return WIFSIGNALED(status) ? 0x100 + WTERMSIG(status) : WEXITSTATUS(status);
+}
+
+struct rt_sigframe_ia32 {
+	uint32_t pretcode, sig, pinfo, puc;
+	uint8_t info[128];
+	uint32_t uc_flags, uc_link, ss_sp, ss_flags, ss_size;
+	uint16_t gs, __gsh, fs, __fsh, es, __esh, ds, __dsh;
+	uint32_t di, si, bp, sp, bx, dx, cx, ax, trapno, err, ip;
+	uint16_t cs, __csh;
+	uint32_t flags, sp_at_signal;
+	uint16_t ss, __ssh;
+	uint32_t fpstate, oldmask, cr2;
+	uint32_t uc_sigmask[2];
+	uint8_t retcode[8];
+};
+
+_Static_assert(sizeof(struct rt_sigframe_ia32) == 268, "ia32 rt_sigframe layout");
+
+/* This tests whether shadow stack protects sigreturn */
+int test_sigreturn(void)
+{
+	static const uint8_t target_routine[] = {
+		0xbf, 0x2a, 0x00, 0x00, 0x00,	/* mov $42, %edi */
+		0xb8, 0xe7, 0x00, 0x00, 0x00,	/* mov $231, %eax (exit_group) */
+		0x0f, 0x05,			/* syscall */
+	};
+
+	struct { uint64_t pretcode; ucontext_t uc; } *f64;
+	struct rt_sigframe_ia32 *f32;
+	void *retsite;
+	int ret = 1;
+
+	/* ia32 sigreturn truncates RIP and RSP to 32 bits */
+	retsite = mmap(0, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC,
+		       MAP_32BIT | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (retsite == MAP_FAILED)
+		return 1;
+	memcpy(retsite, target_routine, sizeof(target_routine));
+
+	f64 = retsite + 0x100;
+	f64->uc.uc_mcontext.gregs[REG_RIP] = (unsigned long)retsite;
+	f64->uc.uc_mcontext.gregs[REG_RSP] = (unsigned long)retsite + PAGE_SIZE;
+	f64->uc.uc_mcontext.gregs[REG_CSGSFS] = 0x33; /* __USER_CS */
+
+	f32 = retsite + 0x800;
+	f32->ip = (unsigned long)retsite;
+	f32->sp = (unsigned long)retsite + PAGE_SIZE;
+	f32->cs = 0x33; /* __USER_CS (64-bit) */
+	f32->ss = 0x2b; /* __USER_DS */
+
+	if (crafted_sigreturn((unsigned long)f64 + 8, false, false) != 42) {
+		printf("[FAIL]\trt_sigreturn protection (hijack failed without shadow stack)\n");
+		goto out;
+	}
+	if (crafted_sigreturn((unsigned long)f64 + 8, false, true) != 0x100 + SIGSEGV) {
+		printf("[FAIL]\trt_sigreturn protection\n");
+		goto out;
+	}
+	printf("[OK]\trt_sigreturn protection\n");
+
+	if (crafted_sigreturn((unsigned long)f32 + 4, true, false) != 42) {
+		printf("[SKIP]\tia32 rt_sigreturn protection (int $0x80 unavailable)\n");
+		ret = 0;
+		goto out;
+	}
+	if (crafted_sigreturn((unsigned long)f32 + 4, true, true) != 0x100 + SIGSEGV) {
+		printf("[FAIL]\tia32 rt_sigreturn protection\n");
+		goto out;
+	}
+	printf("[OK]\tia32 rt_sigreturn protection\n");
+	ret = 0;
+
+out:
+	munmap(retsite, PAGE_SIZE);
+	return ret;
+}
+
 static int parse_uint_from_file(const char *file, const char *fmt)
 {
 	int err, ret;
@@ -1142,6 +1246,12 @@ int main(int argc, char *argv[])
 	if (test_32bit()) {
 		ret = 1;
 		printf("[FAIL]\t32 bit test\n");
+		goto out;
+	}
+
+	if (test_sigreturn()) {
+		ret = 1;
+		printf("[FAIL]\tsigreturn test\n");
 		goto out;
 	}
 
