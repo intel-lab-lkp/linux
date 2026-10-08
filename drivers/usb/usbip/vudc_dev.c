@@ -250,6 +250,7 @@ static int vep_enable(struct usb_ep *_ep,
 	_ep->maxpacket = maxp;
 	ep->desc = desc;
 	ep->type = usb_endpoint_type(desc);
+	ep->generation++;
 	ep->halted = ep->wedged = 0;
 
 	spin_unlock_irqrestore(&udc->lock, flags);
@@ -270,6 +271,7 @@ static int vep_disable(struct usb_ep *_ep)
 
 	spin_lock_irqsave(&udc->lock, flags);
 	ep->desc = NULL;
+	ep->generation++;
 	nuke(udc, ep);
 	spin_unlock_irqrestore(&udc->lock, flags);
 

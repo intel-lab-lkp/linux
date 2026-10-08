@@ -28,6 +28,7 @@ struct vep {
 	char name[8];	/* space for ep name */
 
 	const struct usb_endpoint_descriptor *desc;
+	u64 generation;
 	struct usb_gadget *gadget;
 	struct list_head req_queue; /* Request queue */
 	unsigned halted:1;
@@ -44,6 +45,8 @@ struct vrequest {
 struct urbp {
 	struct urb *urb;
 	struct vep *ep;
+	u64 ep_generation;
+	unsigned int ep_maxp;
 	struct list_head urb_entry; /* urb queue */
 	unsigned long seqnum;
 	unsigned type:2; /* for tx, since ep type can change after */

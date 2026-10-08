@@ -115,17 +115,21 @@ static int v_recv_cmd_submit(struct vudc *udc,
 		goto free_urbp;
 	}
 	urb_p->type = urb_p->ep->type;
+	urb_p->ep_generation = urb_p->ep->generation;
+	if (urb_p->type == USB_ENDPOINT_XFER_ISOC) {
+		urb_p->ep_maxp = usb_endpoint_maxp(urb_p->ep->desc);
+		urb_p->ep_maxp *= usb_endpoint_maxp_mult(urb_p->ep->desc);
+	}
 	spin_unlock_irqrestore(&udc->lock, flags);
 
 	urb_p->new = 1;
 	urb_p->seqnum = pdu->base.seqnum;
 
-	if (urb_p->ep->type == USB_ENDPOINT_XFER_ISOC) {
+	if (urb_p->type == USB_ENDPOINT_XFER_ISOC) {
 		/* validate packet size and number of packets */
 		unsigned int maxp, packets, bytes;
 
-		maxp = usb_endpoint_maxp(urb_p->ep->desc);
-		maxp *= usb_endpoint_maxp_mult(urb_p->ep->desc);
+		maxp = urb_p->ep_maxp;
 		bytes = pdu->u.cmd_submit.transfer_buffer_length;
 		packets = DIV_ROUND_UP(bytes, maxp);
 
@@ -139,7 +143,7 @@ static int v_recv_cmd_submit(struct vudc *udc,
 		}
 	}
 
-	ret = alloc_urb_from_cmd(&urb_p->urb, pdu, urb_p->ep->type);
+	ret = alloc_urb_from_cmd(&urb_p->urb, pdu, urb_p->type);
 	if (ret) {
 		usbip_event_add(&udc->ud, VUDC_EVENT_ERROR_MALLOC);
 		ret = -ENOMEM;
@@ -152,7 +156,7 @@ static int v_recv_cmd_submit(struct vudc *udc,
 	BUILD_BUG_ON_MSG(PIPE_BULK != 3, "PIPE_* doesn't range from 0 to 3");
 
 	urb_p->urb->pipe &= ~(PIPE_BULK << 30);
-	switch (urb_p->ep->type) {
+	switch (urb_p->type) {
 	case USB_ENDPOINT_XFER_BULK:
 		urb_p->urb->pipe |= (PIPE_BULK << 30);
 		break;
@@ -175,6 +179,13 @@ static int v_recv_cmd_submit(struct vudc *udc,
 		goto free_urbp;
 
 	spin_lock_irqsave(&udc->lock, flags);
+	if (urb_p->ep != &udc->ep[0] &&
+	    (!urb_p->ep->desc ||
+	     urb_p->ep->generation != urb_p->ep_generation)) {
+		spin_unlock_irqrestore(&udc->lock, flags);
+		ret = -ESHUTDOWN;
+		goto free_urbp;
+	}
 	v_kick_timer(udc, jiffies);
 	list_add_tail(&urb_p->urb_entry, &udc->urb_queue);
 	spin_unlock_irqrestore(&udc->lock, flags);
