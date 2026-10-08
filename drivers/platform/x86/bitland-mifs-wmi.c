@@ -155,6 +155,7 @@ struct bitland_fan_notify_data {
 struct bitland_mifs_wmi_data {
 	struct wmi_device *wdev;
 	struct mutex lock;		/* Protects WMI calls */
+	bool has_kb_mode;
 	struct led_classdev kbd_led;
 	struct notifier_block notifier;
 	struct input_dev *input_dev;
@@ -520,25 +521,37 @@ static const char *const kb_mode_strings[] = {
 	"custom",	/* 3 */
 };
 
-static ssize_t kb_mode_show(struct device *dev, struct device_attribute *attr,
-			    char *buf)
+static int bitland_kb_mode_get(struct bitland_mifs_wmi_data *data, u8 *mode)
 {
-	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
 	struct bitland_mifs_input input = {
 		.operation = cpu_to_le16(WMI_METHOD_GET),
 		.function = cpu_to_le16(WMI_FN_RGB_KB_MODE),
 	};
 	struct bitland_mifs_output res;
-	u8 mode_val;
 	int ret;
 
 	ret = bitland_mifs_wmi_call(data, &input, &res);
 	if (ret)
 		return ret;
 
-	mode_val = res.data[0];
-	if (mode_val >= ARRAY_SIZE(kb_mode_strings))
+	if (res.data[0] >= ARRAY_SIZE(kb_mode_strings))
 		return -EPROTO;
+
+	*mode = res.data[0];
+
+	return 0;
+}
+
+static ssize_t kb_mode_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(dev);
+	u8 mode_val;
+	int ret;
+
+	ret = bitland_kb_mode_get(data, &mode_val);
+	if (ret)
+		return ret;
 
 	return sysfs_emit(buf, "%s\n", kb_mode_strings[mode_val]);
 }
@@ -604,7 +617,23 @@ static const struct attribute *const laptop_attrs[] = {
 	&dev_attr_fan_boost.attr,
 	NULL,
 };
-ATTRIBUTE_GROUPS(laptop);
+
+static umode_t laptop_attr_is_visible(struct kobject *kobj,
+				      const struct attribute *attr, int n)
+{
+	struct bitland_mifs_wmi_data *data = dev_get_drvdata(kobj_to_dev(kobj));
+
+	if (attr == &dev_attr_kb_mode.attr && !data->has_kb_mode)
+		return 0;
+
+	return attr->mode;
+}
+
+static const struct attribute_group laptop_group = {
+	.attrs_const = laptop_attrs,
+	.is_visible_const = laptop_attr_is_visible,
+};
+__ATTRIBUTE_GROUPS(laptop);
 
 static const struct key_entry bitland_mifs_wmi_keymap[] = {
 	{ KE_KEY, WMI_EVENT_OPEN_APP, { KEY_PROG1 } },
@@ -666,6 +695,7 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 		.default_label = ":" LED_FUNCTION_KBD_BACKLIGHT,
 		.devname_mandatory = true,
 	};
+	u8 kb_mode;
 	int ret;
 
 	drv_data = devm_kzalloc(&wdev->dev, sizeof(*drv_data), GFP_KERNEL);
@@ -698,6 +728,19 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 
 		return input_register_device(drv_data->input_dev);
 	}
+
+	/*
+	 * WMI_FN_RGB_KB_MODE is the RGB keyboard mode on the machines this
+	 * driver was written for, but some firmware uses the function for
+	 * something else and does not answer this GET. On some Xiaomi models
+	 * it is the battery interface, where the SET that kb_mode_store()
+	 * sends for "fixed" turns the charge limit off. Only expose kb_mode
+	 * when its GET works.
+	 */
+	ret = bitland_kb_mode_get(drv_data, &kb_mode);
+	if (ret)
+		dev_dbg(&wdev->dev, "kb_mode not supported (%d), hiding it\n", ret);
+	drv_data->has_kb_mode = !ret;
 
 	/* Register platform profile */
 	drv_data->pp_dev = devm_platform_profile_register(&wdev->dev, DRV_NAME, drv_data,
