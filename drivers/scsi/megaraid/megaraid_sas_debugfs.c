@@ -102,8 +102,6 @@ static const struct file_operations megasas_debugfs_raidmap_fops = {
 void megasas_init_debugfs(void)
 {
 	megasas_debugfs_root = debugfs_create_dir("megaraid_sas", NULL);
-	if (!megasas_debugfs_root)
-		pr_info("Cannot create debugfs root\n");
 }
 
 /*
@@ -129,27 +127,14 @@ megasas_setup_debugfs(struct megasas_instance *instance)
 	if (fusion) {
 		snprintf(name, sizeof(name),
 			 "scsi_host%d", instance->host->host_no);
-		if (!instance->debugfs_root) {
-			instance->debugfs_root =
-				debugfs_create_dir(name, megasas_debugfs_root);
-			if (!instance->debugfs_root) {
-				dev_err(&instance->pdev->dev,
-					"Cannot create per adapter debugfs directory\n");
-				return;
-			}
-		}
+		instance->debugfs_root =
+			debugfs_create_dir(name, megasas_debugfs_root);
 
 		snprintf(name, sizeof(name), "raidmap_dump");
 		instance->raidmap_dump =
 			debugfs_create_file(name, S_IRUGO,
 					    instance->debugfs_root, instance,
 					    &megasas_debugfs_raidmap_fops);
-		if (!instance->raidmap_dump) {
-			dev_err(&instance->pdev->dev,
-				"Cannot create raidmap debugfs file\n");
-			debugfs_remove(instance->debugfs_root);
-			return;
-		}
 	}
 
 }
