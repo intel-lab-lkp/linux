@@ -341,8 +341,10 @@ static void ttm_pool_type_give(struct ttm_pool_type *pt, struct page *p)
 	rcu_read_unlock();
 
 	atomic_long_add(num_pages, &allocated_pages[nid]);
-	mod_lruvec_page_state(p, NR_GPU_ACTIVE, -num_pages);
-	mod_lruvec_page_state(p, NR_GPU_RECLAIM, num_pages);
+	if (!pt->pool || !ttm_pool_uses_dma_alloc(pt->pool)) {
+		mod_lruvec_page_state(p, NR_GPU_ACTIVE, -num_pages);
+		mod_lruvec_page_state(p, NR_GPU_RECLAIM, num_pages);
+	}
 }
 
 static enum lru_status take_one_from_lru(struct list_head *item,
@@ -367,8 +369,10 @@ static struct page *ttm_pool_type_take(struct ttm_pool_type *pt, int nid)
 	ret = list_lru_walk_node(&pt->pages, nid, take_one_from_lru, (void *)&p, &nr_to_walk);
 	if (ret == 1 && p) {
 		atomic_long_sub(1 << pt->order, &allocated_pages[nid]);
-		mod_lruvec_page_state(p, NR_GPU_ACTIVE, (1 << pt->order));
-		mod_lruvec_page_state(p, NR_GPU_RECLAIM, -(1 << pt->order));
+		if (!pt->pool || !ttm_pool_uses_dma_alloc(pt->pool)) {
+			mod_lruvec_page_state(p, NR_GPU_ACTIVE, (1 << pt->order));
+			mod_lruvec_page_state(p, NR_GPU_RECLAIM, -(1 << pt->order));
+		}
 	}
 	return p;
 }
