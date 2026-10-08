@@ -75,6 +75,8 @@ static int clk_composite_determine_rate(struct clk_hw *hw,
 			struct clk_rate_request tmp_req;
 
 			parent = clk_hw_get_parent(mux_hw);
+			if (!parent)
+				return -EINVAL;
 
 			clk_hw_forward_rate_request(hw, req, parent, &tmp_req, req->rate);
 			ret = clk_composite_determine_rate_for_parent(rate_hw,
