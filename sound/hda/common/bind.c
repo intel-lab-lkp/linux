@@ -147,6 +147,8 @@ static int hda_codec_driver_probe(struct device *dev)
 	module_put(owner);
 
  error:
+	snd_hdac_device_disable_unsol(&codec->core);
+	cancel_delayed_work_sync(&codec->jackpoll_work);
 	snd_hda_codec_cleanup_for_unbind(codec);
 	codec->preset = NULL;
 	return err;
