@@ -347,6 +347,9 @@ static int goodix_berlin_parse_ic_info(struct goodix_berlin_core *cd,
 	ADVANCE_LE16_PARAMS(); /* stylus_freq_num */
 #undef ADVANCE_LE16_PARAMS
 
+	if (offset + sizeof(*misc) > length)
+		goto invalid_offset;
+
 	misc = (struct goodix_berlin_ic_info_misc *)&data[offset];
 	cd->touch_data_addr = le32_to_cpu(misc->touch_data_addr);
 
