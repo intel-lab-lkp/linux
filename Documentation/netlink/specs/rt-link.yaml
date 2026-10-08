@@ -2368,6 +2368,17 @@ attribute-sets:
         name: mode
         type: u8
         enum: ovpn-mode
+  -
+    name: linkinfo-gem-attrs
+    name-prefix: ifla-gem-
+    attributes:
+      -
+        name: id
+        doc: GEM port ID of the PON device the GEM network device rides.
+        type: u32
+        checks:
+          min: 1021
+          max: 65534
 
 sub-messages:
   -
@@ -2427,6 +2438,9 @@ sub-messages:
       -
         value: ovpn
         attribute-set: linkinfo-ovpn-attrs
+      -
+        value: gem
+        attribute-set: linkinfo-gem-attrs
   -
     name: linkinfo-member-data-msg
     formats:

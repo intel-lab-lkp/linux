@@ -2075,4 +2075,14 @@ enum {
 
 #define IFLA_OVPN_MAX	(__IFLA_OVPN_MAX - 1)
 
+/* GEM section */
+
+enum {
+	IFLA_GEM_UNSPEC,
+	IFLA_GEM_ID,
+	__IFLA_GEM_MAX,
+};
+
+#define IFLA_GEM_MAX	(__IFLA_GEM_MAX - 1)
+
 #endif /* _UAPI_LINUX_IF_LINK_H */
