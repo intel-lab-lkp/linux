@@ -11,11 +11,13 @@
 
 #include <linux/cleanup.h>
 #include <linux/interrupt.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
+#include <linux/reboot.h>
 #include <linux/slab.h>
 #include <linux/suspend.h>
 
@@ -109,8 +111,10 @@ static irqreturn_t cros_ec_irq_handler(int irq, void *data)
  */
 static bool cros_ec_handle_event(struct cros_ec_device *ec_dev)
 {
+	static const char * const panic_env[] = { "ERROR=PANIC", NULL };
 	bool wake_event;
 	bool ec_has_more_events;
+	u32 host_event;
 	int ret;
 
 	ret = cros_ec_get_next_event(ec_dev, &wake_event, &ec_has_more_events);
@@ -123,9 +127,21 @@ static bool cros_ec_handle_event(struct cros_ec_device *ec_dev)
 	if (wake_event && device_may_wakeup(ec_dev->dev))
 		pm_wakeup_event(ec_dev->dev, 0);
 
-	if (ret > 0)
+	if (ret > 0) {
+		if (ec_dev->event_data.event_type == EC_MKBP_EVENT_HOST_EVENT) {
+			host_event = cros_ec_get_host_event(ec_dev);
+			if (host_event & EC_HOST_EVENT_MASK(EC_HOST_EVENT_PANIC)) {
+				dev_emerg(ec_dev->dev, "CrOS EC Panic Reported (%s). Reboot is imminent!\n",
+					  dev_name(ec_dev->dev));
+				blocking_notifier_call_chain(&ec_dev->panic_notifier, 0, ec_dev);
+				kobject_uevent_env(&ec_dev->dev->kobj, KOBJ_CHANGE,
+						   (char **)panic_env);
+				kernel_restart("CrOS EC Panic");
+			}
+		}
 		blocking_notifier_call_chain(&ec_dev->event_notifier,
 					     0, ec_dev);
+	}
 
 	return ec_has_more_events;
 }
