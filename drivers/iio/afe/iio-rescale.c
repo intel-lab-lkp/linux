@@ -517,12 +517,28 @@ static const struct of_device_id rescale_match[] = {
 };
 MODULE_DEVICE_TABLE(of, rescale_match);
 
+static const struct platform_device_id rescale_platform_ids[] = {
+	{ .name = "current-sense-amplifier",
+	  .driver_data = CURRENT_SENSE_AMPLIFIER, },
+	{ .name = "current-sense-shunt",
+	  .driver_data = CURRENT_SENSE_SHUNT, },
+	{ .name = "voltage-divider",
+	  .driver_data = VOLTAGE_DIVIDER, },
+	{ .name = "temperature-sense-rtd",
+	  .driver_data = TEMP_SENSE_RTD, },
+	{ .name = "temperature-transducer",
+	  .driver_data = TEMP_TRANSDUCER, },
+	{ }
+};
+MODULE_DEVICE_TABLE(platform, rescale_platform_ids);
+
 static int rescale_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct iio_dev *indio_dev;
 	struct iio_channel *source;
 	struct rescale *rescale;
+	const struct platform_device_id *id;
 	int sizeof_ext_info;
 	int sizeof_priv;
 	int i;
@@ -548,6 +564,15 @@ static int rescale_probe(struct platform_device *pdev)
 	rescale = iio_priv(indio_dev);
 
 	rescale->cfg = device_get_match_data(dev);
+	if (!rescale->cfg) {
+		id = platform_get_device_id(pdev);
+		if (!id)
+			return dev_err_probe(dev,
+					     -EINVAL,
+					     "missing or invalid device configuration");
+
+		rescale->cfg = &rescale_cfg[id->driver_data];
+	}
 	rescale->numerator = 1;
 	rescale->denominator = 1;
 	rescale->offset = 0;
@@ -602,6 +627,7 @@ static struct platform_driver rescale_driver = {
 		.name = "iio-rescale",
 		.of_match_table = rescale_match,
 	},
+	.id_table = rescale_platform_ids,
 };
 module_platform_driver(rescale_driver);
 
