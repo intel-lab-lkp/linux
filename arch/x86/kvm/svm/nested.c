@@ -1044,6 +1044,20 @@ static void nested_svm_copy_common_state(struct vmcb *from_vmcb, struct vmcb *to
 	to_vmcb->save.spec_ctrl = from_vmcb->save.spec_ctrl;
 }
 
+static void nested_svm_service_local_tlb_flushes(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+
+	/*
+	 * TLB flushes are applied to the VMCB, so apply any pending TLB flushes
+	 * on the outgoing VMCB before switching to a new one. A TLB flush could
+	 * purge the relevant HV TLB flush FIFO depending on guest_mode, so make
+	 * sure the VMCB and guest_mode context is consistent.
+	 */
+	WARN_ON_ONCE(is_guest_mode(vcpu) != (svm->vmcb == svm->nested.vmcb02.ptr));
+	kvm_service_local_tlb_flush_requests(vcpu);
+}
+
 int enter_svm_guest_mode(struct kvm_vcpu *vcpu, u64 vmcb12_gpa, bool from_vmrun)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -1074,6 +1088,8 @@ int enter_svm_guest_mode(struct kvm_vcpu *vcpu, u64 vmcb12_gpa, bool from_vmrun)
 	WARN_ON(svm->vmcb == svm->nested.vmcb02.ptr);
 
 	nested_svm_copy_common_state(svm->vmcb01.ptr, svm->nested.vmcb02.ptr);
+
+	nested_svm_service_local_tlb_flushes(vcpu);
 
 	svm_switch_vmcb(svm, &svm->nested.vmcb02);
 	nested_vmcb02_prepare_control(svm);
@@ -1337,6 +1353,8 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 	if (nested_svm_vmexit_update_vmcb12(vcpu))
 		kvm_make_request(KVM_REQ_TRIPLE_FAULT, vcpu);
 
+	nested_svm_service_local_tlb_flushes(vcpu);
+
 	svm_switch_vmcb(svm, &svm->vmcb01);
 	leave_guest_mode(vcpu);
 	svm_pmu_handle_nested_transition(svm);
@@ -1548,6 +1566,8 @@ void svm_leave_nested(struct kvm_vcpu *vcpu)
 	if (is_guest_mode(vcpu)) {
 		vcpu->arch.nested_run_pending = 0;
 		svm->nested.vmcb12_gpa = INVALID_GPA;
+
+		nested_svm_service_local_tlb_flushes(vcpu);
 
 		svm_switch_vmcb(svm, &svm->vmcb01);
 		leave_guest_mode(vcpu);
@@ -2088,6 +2108,8 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 
 	svm_copy_vmrun_state(vcpu, &svm->vmcb01.ptr->save, save);
 	nested_copy_vmcb_control_to_cache(svm, ctl);
+
+	nested_svm_service_local_tlb_flushes(vcpu);
 
 	svm_switch_vmcb(svm, &svm->nested.vmcb02);
 
