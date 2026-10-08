@@ -178,6 +178,12 @@ static inline enum tpm2_mso_type tpm2_handle_mso(u32 handle)
 	return handle >> 24;
 }
 
+/*
+ * NV index reserved for use by the kernel. Userspace is not permitted to
+ * undefine or modify it.
+ */
+#define TPM2_KERNEL_NV_INDEX	0x014c4853
+
 #define TPM_VID_INTEL    0x8086
 #define TPM_VID_WINBOND  0x1050
 #define TPM_VID_STM      0x104A

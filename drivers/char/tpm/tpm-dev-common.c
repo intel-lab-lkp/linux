@@ -15,17 +15,84 @@
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/unaligned.h>
 #include <linux/workqueue.h>
 #include "tpm.h"
 #include "tpm-dev.h"
 
 static struct workqueue_struct *tpm_dev_wq;
 
+#ifdef CONFIG_TCG_TPM_KERNEL_NVINDEX
+/*
+ * Commands that undefine or modify an NV index, and the position of the
+ * NV index in the command's handle area.
+ */
+static const struct {
+	u32 cc;
+	unsigned int handle;
+} tpm2_nv_modify_cmds[] = {
+	{ TPM2_CC_NV_UNDEFINE_SPACE_SPECIAL,	0 },
+	{ TPM2_CC_NV_UNDEFINE_SPACE,		1 },
+	{ TPM2_CC_NV_INCREMENT,			1 },
+	{ TPM2_CC_NV_SET_BITS,			1 },
+	{ TPM2_CC_NV_EXTEND,			1 },
+	{ TPM2_CC_NV_WRITE,			1 },
+	{ TPM2_CC_NV_WRITE_LOCK,		1 },
+	{ TPM2_CC_NV_CHANGE_AUTH,		0 },
+	{ TPM2_CC_NV_READ_LOCK,			1 },
+};
+
+/*
+ * Returns true if a command from userspace attempts to define, undefine
+ * or modify the kernel-owned NV index.
+ */
+static bool tpm2_dev_cmd_is_blocked(const u8 *buf, size_t bufsiz)
+{
+	const struct tpm_header *header = (const void *)buf;
+	size_t len = min_t(size_t, be32_to_cpu(header->length), bufsiz);
+	u32 cc;
+	int i, index;
+
+	if (len < TPM_HEADER_SIZE)
+		return false;
+
+	cc = be32_to_cpu(header->ordinal);
+
+	for (i = 0; i < ARRAY_SIZE(tpm2_nv_modify_cmds); i++) {
+		size_t offset;
+
+		if (tpm2_nv_modify_cmds[i].cc != cc)
+			continue;
+
+		offset = TPM_HEADER_SIZE +
+			 tpm2_nv_modify_cmds[i].handle * sizeof(u32);
+		if (len < offset + sizeof(u32))
+			return false;
+
+		index = get_unaligned_be32(&buf[offset]);
+
+		if (index == TPM2_KERNEL_NV_INDEX)
+			return true;
+	}
+
+	return false;
+}
+#else
+static inline bool tpm2_dev_cmd_is_blocked(const u8 *buf, size_t bufsiz)
+{
+	return false;
+}
+#endif
+
 static ssize_t tpm_dev_transmit(struct tpm_chip *chip, struct tpm_space *space,
 				u8 *buf, size_t bufsiz)
 {
 	struct tpm_header *header = (void *)buf;
 	ssize_t ret, len;
+
+	if ((chip->flags & TPM_CHIP_FLAG_TPM2) &&
+	    tpm2_dev_cmd_is_blocked(buf, bufsiz))
+		return -EPERM;
 
 	if (chip->flags & TPM_CHIP_FLAG_TPM2)
 		tpm2_end_auth_session(chip);

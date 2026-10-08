@@ -253,5 +253,13 @@ config TCG_SVSM
 	  level (usually VMPL0).  To compile this driver as a module, choose M
 	  here; the module will be called tpm_svsm.
 
+config TCG_TPM_KERNEL_NVINDEX
+	bool "Kernel-only NV index"
+	help
+	  Allocate a TPM NV index and block userland from modifying it. This
+	  allows the kernel to develop a unique state that distinguishes it
+	  from userspace, making it possible to prove that a TPM object
+	  was created by the kernel.
+
 source "drivers/char/tpm/st33zp24/Kconfig"
 endif # TCG_TPM
