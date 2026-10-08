@@ -416,6 +416,7 @@ xrep_quota_data_fork(
 	xfs_fsblock_t		fsbno;
 	bool			truncate = false;
 	bool			joined = false;
+	bool			need_quotacheck = false;
 	int			error = 0;
 
 	error = xrep_metadata_inode_forks(sc);
@@ -449,7 +450,8 @@ xrep_quota_data_fork(
 
 			error = xfs_bmapi_write(sc->tp, sc->ip,
 					irec.br_startoff, irec.br_blockcount,
-					XFS_BMAPI_CONVERT, 0, &nrec, &nmap);
+					XFS_BMAPI_CONVERT | XFS_BMAPI_ZERO, 0,
+					&nrec, &nmap);
 			if (error)
 				goto out;
 			ASSERT(nrec.br_startoff == irec.br_startoff);
@@ -458,9 +460,23 @@ xrep_quota_data_fork(
 			error = xfs_defer_finish(&sc->tp);
 			if (error)
 				goto out;
+
+			need_quotacheck = true;
+
+			/*
+			 * Reset cursor to the end of the extent we just
+			 * converted because bmapi write could have merged
+			 * records.
+			 */
+			if (!xfs_iext_lookup_extent(sc->ip, ifp,
+					irec.br_startoff + irec.br_blockcount - 1,
+					&icur, &irec))
+				break;
 		}
 	}
 
+	if (need_quotacheck)
+		xrep_force_quotacheck(sc, dqtype);
 	if (!joined) {
 		xfs_trans_ijoin(sc->tp, sc->ip, 0);
 		joined = true;
