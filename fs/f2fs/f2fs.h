@@ -1779,6 +1779,7 @@ struct f2fs_bio {
 	struct work_struct work;
 	struct f2fs_cached_block *entry;
 	unsigned int entry_cnt;
+	unsigned int submitted_size;
 	struct bio bio;
 };
 
