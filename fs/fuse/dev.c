@@ -466,6 +466,8 @@ static bool fuse_dev_install_with_pq(struct fuse_dev *fud, struct fuse_chan *fch
 	struct fuse_chan *old_fch;
 
 	guard(spinlock)(&fch->lock);
+	/* Serialize processing table setup with I/O. */
+	guard(spinlock)(&fud->pq.lock);
 	/*
 	 * Pairs with:
 	 *  - xchg() in fuse_dev_release()
