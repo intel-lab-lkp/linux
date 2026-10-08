@@ -349,10 +349,10 @@ static void tokenise(char *buffer, char *end)
 	char *line, *nl, *start, *p, *q;
 	unsigned tix, lineno;
 
-	/* Assume we're going to have half as many tokens as we have
-	 * characters
+	/* Every token consumes at least one character, so we can't have
+	 * more tokens than we have characters
 	 */
-	token_list = tokens = calloc((end - buffer) / 2, sizeof(struct token));
+	token_list = tokens = calloc(end - buffer + 1, sizeof(struct token));
 	if (!tokens) {
 		perror(NULL);
 		exit(1);
@@ -749,7 +749,7 @@ static void build_type_list(void)
 	unsigned nr, t, n;
 
 	nr = 0;
-	for (n = 0; n < nr_tokens - 1; n++)
+	for (n = 0; n + 1 < nr_tokens; n++)
 		if (token_list[n + 0].token_type == TOKEN_TYPE_NAME &&
 		    token_list[n + 1].token_type == TOKEN_ASSIGNMENT)
 			nr++;
@@ -773,7 +773,7 @@ static void build_type_list(void)
 
 	t = 0;
 	types[t].flags |= TYPE_BEGIN;
-	for (n = 0; n < nr_tokens - 1; n++) {
+	for (n = 0; n + 1 < nr_tokens; n++) {
 		if (token_list[n + 0].token_type == TOKEN_TYPE_NAME &&
 		    token_list[n + 1].token_type == TOKEN_ASSIGNMENT) {
 			types[t].name = &token_list[n];
