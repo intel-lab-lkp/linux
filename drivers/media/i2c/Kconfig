@@ -578,6 +578,16 @@ config VIDEO_OV2740
 	  To compile this driver as a module, choose M here: the
 	  module will be called ov2740.
 
+config VIDEO_OV3660
+	tristate "OmniVision OV3660 sensor support"
+	select V4L2_CCI_I2C
+	help
+	  This is a Video4Linux2 sensor driver for the OmniVision
+	  OV3660 3 megapixel camera with a parallel (DVP) interface.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ov3660.
+
 config VIDEO_OV4689
 	tristate "OmniVision OV4689 sensor support"
 	depends on GPIOLIB
