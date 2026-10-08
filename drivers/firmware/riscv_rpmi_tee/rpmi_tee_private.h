@@ -14,15 +14,26 @@
 /* TEE service group and the services used by this module. */
 #define RPMI_SRVGRP_TEE		0x10
 
+#define RPMI_TEE_SRV_PROBE_FEATURES	0x02
 #define RPMI_TEE_SRV_PROBE_SYSTEM	0x03
 #define RPMI_TEE_SRV_PROBE_DOMAIN	0x04
 #define RPMI_TEE_SRV_PROBE_ENDPOINT	0x05
 #define RPMI_TEE_SRV_CALL		0x18
 
+struct rpmi_tee_notif_state {
+	u32 feature;
+};
+
 struct rpmi_tee_mbox {
 	struct mbox_client client;
 	struct mbox_chan *chan;
 	u32 max_msg_data_size;
+};
+
+struct rpmi_tee_mem_state {
+	u32 multisegment_max;
+	bool lend_ok;
+	bool share_ok;
 };
 
 /**
@@ -33,6 +44,8 @@ struct rpmi_tee_mbox {
  * @max_call_resp_size: Maximum TEE_CALL response payload size in bytes.
  * @self_id: Local REE physical endpoint identifier.
  * @devices: List of registered TEE service devices.
+ * @mem: Memory parcel operation state.
+ * @notif: Signal notification state.
  */
 struct rpmi_tee_transport {
 	struct device *dev;
@@ -41,6 +54,8 @@ struct rpmi_tee_transport {
 	size_t max_call_resp_size;
 	u32 self_id;
 	struct list_head devices;
+	struct rpmi_tee_mem_state mem;
+	struct rpmi_tee_notif_state notif;
 };
 
 /* Report local transport errors separately from the returned RPMI status. */
