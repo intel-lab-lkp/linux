@@ -417,20 +417,29 @@ out:
 	return ret;
 }
 
+static size_t arm_vsmmu_get_size(struct device *dev,
+				 enum iommu_viommu_type viommu_type)
+{
+	return VIOMMU_STRUCT_SIZE(struct arm_vsmmu, core);
+}
+
 static const struct iommufd_viommu_ops arm_vsmmu_ops = {
+	.get_viommu_size = arm_vsmmu_get_size,
+	.viommu_init = arm_vsmmu_init,
 	.alloc_domain_nested = arm_vsmmu_alloc_domain_nested,
 	.cache_invalidate = arm_vsmmu_cache_invalidate,
 	.vdevice_init = arm_vsmmu_vdevice_init,
 };
 
-size_t arm_smmu_get_viommu_size(struct device *dev,
-				enum iommu_viommu_type viommu_type)
+const struct iommufd_viommu_ops *
+arm_smmu_get_viommu_ops(struct device *dev,
+		enum iommu_viommu_type viommu_type)
 {
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
 	struct arm_smmu_device *smmu = master->smmu;
 
 	if (!(smmu->features & ARM_SMMU_FEAT_NESTING))
-		return 0;
+		return NULL;
 
 	/*
 	 * FORCE_SYNC is not set with FEAT_NESTING. Some study of the exact HW
@@ -438,7 +447,7 @@ size_t arm_smmu_get_viommu_size(struct device *dev,
 	 * any change to remove this.
 	 */
 	if (WARN_ON(smmu->options & ARM_SMMU_OPT_CMDQ_FORCE_SYNC))
-		return 0;
+		return NULL;
 
 	/*
 	 * Must support some way to prevent the VM from bypassing the cache
@@ -450,19 +459,19 @@ size_t arm_smmu_get_viommu_size(struct device *dev,
 	 */
 	if (!arm_smmu_master_canwbs(master) &&
 	    !(smmu->features & ARM_SMMU_FEAT_S2FWB))
-		return 0;
+		return NULL;
 
 	if (viommu_type == IOMMU_VIOMMU_TYPE_ARM_SMMUV3)
-		return VIOMMU_STRUCT_SIZE(struct arm_vsmmu, core);
+		return &arm_vsmmu_ops;
 
-	if (!smmu->impl_ops || !smmu->impl_ops->get_viommu_size)
-		return 0;
-	return smmu->impl_ops->get_viommu_size(viommu_type);
+	if (!smmu->impl_ops || !smmu->impl_ops->get_viommu_ops)
+		return NULL;
+	return smmu->impl_ops->get_viommu_ops(viommu_type);
 }
 
-int arm_vsmmu_init(struct iommufd_viommu *viommu,
-		   struct iommu_domain *parent_domain,
-		   const struct iommu_user_data *user_data)
+int arm_vsmmu_init(struct iommufd_viommu *viommu, struct device *dev,
+		struct iommu_domain *parent_domain,
+		const struct iommu_user_data *user_data)
 {
 	struct arm_vsmmu *vsmmu = container_of(viommu, struct arm_vsmmu, core);
 	struct arm_smmu_device *smmu =
@@ -477,10 +486,8 @@ int arm_vsmmu_init(struct iommufd_viommu *viommu,
 	/* FIXME Move VMID allocation from the S2 domain allocation to here */
 	vsmmu->vmid = s2_parent->s2_cfg.vmid;
 
-	if (viommu->type == IOMMU_VIOMMU_TYPE_ARM_SMMUV3) {
-		viommu->ops = &arm_vsmmu_ops;
+	if (viommu->type == IOMMU_VIOMMU_TYPE_ARM_SMMUV3)
 		return 0;
-	}
 
 	return smmu->impl_ops->vsmmu_init(vsmmu, user_data);
 }

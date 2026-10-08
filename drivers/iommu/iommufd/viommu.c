@@ -32,7 +32,7 @@ int iommufd_viommu_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	struct iommufd_viommu *viommu;
 	struct iommufd_device *idev;
 	struct iommu_device *iommu_dev;
-	const struct iommu_ops *ops;
+	const struct iommufd_viommu_ops *ops;
 	size_t viommu_size;
 	int rc;
 
@@ -48,23 +48,25 @@ int iommufd_viommu_alloc_ioctl(struct iommufd_ucmd *ucmd)
 		rc = -EOPNOTSUPP;
 		goto out_put_idev;
 	}
-	ops = iommu_dev->ops;
-	if (!ops->get_viommu_size || !ops->viommu_init) {
+	if (!iommu_dev->ops->get_viommu_ops) {
 		rc = -EOPNOTSUPP;
 		goto out_put_idev;
 	}
-
-	viommu_size = ops->get_viommu_size(idev->dev, cmd->type);
-	if (!viommu_size) {
+	ops = iommu_dev->ops->get_viommu_ops(idev->dev, cmd->type);
+	if (!ops) {
 		rc = -EOPNOTSUPP;
 		goto out_put_idev;
 	}
-
 	/*
-	 * It is a driver bug for providing a viommu_size smaller than the core
-	 * vIOMMU structure size
+	 * It is a driver bug to omit the required operations or provide a size
+	 * smaller than the core vIOMMU structure.
 	 */
-	if (WARN_ON_ONCE(viommu_size < sizeof(*viommu))) {
+	if (WARN_ON_ONCE(!ops->get_viommu_size || !ops->viommu_init)) {
+		rc = -EOPNOTSUPP;
+		goto out_put_idev;
+	}
+	viommu_size = ops->get_viommu_size(idev->dev, cmd->type);
+	if (!viommu_size || WARN_ON_ONCE(viommu_size < sizeof(*viommu))) {
 		rc = -EOPNOTSUPP;
 		goto out_put_idev;
 	}
@@ -103,16 +105,12 @@ int iommufd_viommu_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	 */
 	viommu->iommu_dev = iommu_dev;
 
-	rc = ops->viommu_init(viommu, hwpt_paging->common.domain,
+	rc = ops->viommu_init(viommu, idev->dev,
+			      hwpt_paging->common.domain,
 			      user_data.len ? &user_data : NULL);
 	if (rc)
 		goto out_put_hwpt;
-
-	/* It is a driver bug that viommu->ops isn't filled */
-	if (WARN_ON_ONCE(!viommu->ops)) {
-		rc = -EOPNOTSUPP;
-		goto out_put_hwpt;
-	}
+	viommu->ops = ops;
 
 	cmd->out_viommu_id = viommu->obj.id;
 	rc = iommufd_ucmd_respond(ucmd, sizeof(*cmd));

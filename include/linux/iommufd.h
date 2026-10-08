@@ -150,6 +150,15 @@ struct iommufd_hw_queue {
 
 /**
  * struct iommufd_viommu_ops - vIOMMU specific operations
+ * @get_viommu_size: Get the size of a driver-level vIOMMU structure for a given
+ *                   @dev corresponding to @viommu_type. Driver should return 0
+ *                   if vIOMMU isn't supported accordingly. It is required for
+ *                   driver to use the VIOMMU_STRUCT_SIZE macro to sanitize the
+ *                   driver-level vIOMMU structure related to the core one
+ * @viommu_init: Init the driver-level struct of an iommufd_viommu on a physical
+ *               IOMMU instance @viommu->iommu_dev, as the set of virtualization
+ *               resources shared/passed to user space IOMMU instance. Associate
+ *               it with a nesting @parent_domain.
  * @destroy: Clean up all driver-specific parts of an iommufd_viommu. The memory
  *           of the vIOMMU will be free-ed by iommufd core after calling this op
  * @alloc_domain_nested: Allocate a IOMMU_DOMAIN_NESTED on a vIOMMU that holds a
@@ -191,6 +200,11 @@ struct iommufd_hw_queue {
  *                      does, it should set it to the @hw_queue->destroy pointer
  */
 struct iommufd_viommu_ops {
+	size_t (*get_viommu_size)(struct device *dev,
+		enum iommu_viommu_type type);
+	int (*viommu_init)(struct iommufd_viommu *viommu, struct device *dev,
+		struct iommu_domain *parent_domain,
+		const struct iommu_user_data *user_data);
 	void (*destroy)(struct iommufd_viommu *viommu);
 	struct iommu_domain *(*alloc_domain_nested)(
 		struct iommufd_viommu *viommu, u32 flags,

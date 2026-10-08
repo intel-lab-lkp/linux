@@ -46,6 +46,7 @@ struct iommu_dma_msi_cookie;
 struct iommu_fault_param;
 struct iommufd_ctx;
 struct iommufd_viommu;
+struct iommufd_viommu_ops;
 struct msi_desc;
 struct msi_msg;
 
@@ -669,16 +670,8 @@ __iommu_copy_struct_to_user(const struct iommu_user_data *dst_data,
  *		- IOMMU_DOMAIN_DMA: must use a dma domain
  *		- 0: use the default setting
  * @default_domain_ops: the default ops for domains
- * @get_viommu_size: Get the size of a driver-level vIOMMU structure for a given
- *                   @dev corresponding to @viommu_type. Driver should return 0
- *                   if vIOMMU isn't supported accordingly. It is required for
- *                   driver to use the VIOMMU_STRUCT_SIZE macro to sanitize the
- *                   driver-level vIOMMU structure related to the core one
- * @viommu_init: Init the driver-level struct of an iommufd_viommu on a physical
- *               IOMMU instance @viommu->iommu_dev, as the set of virtualization
- *               resources shared/passed to user space IOMMU instance. Associate
- *               it with a nesting @parent_domain. It is required for driver to
- *               set @viommu->ops pointing to its own viommu_ops
+ * @get_viommu_ops: Return the vIOMMU operations supported by @dev for a type.
+ *                  Return NULL if the type is unsupported.
  * @owner: Driver module providing these ops
  * @identity_domain: An always available, always attachable identity
  *                   translation.
@@ -729,11 +722,8 @@ struct iommu_ops {
 
 	int (*def_domain_type)(struct device *dev);
 
-	size_t (*get_viommu_size)(struct device *dev,
-				  enum iommu_viommu_type viommu_type);
-	int (*viommu_init)(struct iommufd_viommu *viommu,
-			   struct iommu_domain *parent_domain,
-			   const struct iommu_user_data *user_data);
+	const struct iommufd_viommu_ops *(*get_viommu_ops)(
+		struct device *dev, enum iommu_viommu_type viommu_type);
 
 	const struct iommu_domain_ops *default_domain_ops;
 	struct module *owner;

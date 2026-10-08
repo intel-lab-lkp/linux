@@ -3211,8 +3211,7 @@ const struct iommu_ops amd_iommu_ops = {
 	.is_attach_deferred = amd_iommu_is_attach_deferred,
 	.def_domain_type = amd_iommu_def_domain_type,
 	.page_response = amd_iommu_page_response,
-	.get_viommu_size = amd_iommufd_get_viommu_size,
-	.viommu_init = amd_iommufd_viommu_init,
+	.get_viommu_ops = amd_iommufd_get_viommu_ops,
 };
 
 #ifdef CONFIG_IRQ_REMAP

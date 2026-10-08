@@ -774,7 +774,19 @@ unlock:
 	return rc;
 }
 
-static struct iommufd_viommu_ops mock_viommu_ops = {
+static int mock_viommu_init(struct iommufd_viommu *viommu, struct device *dev,
+		struct iommu_domain *parent_domain,
+		const struct iommu_user_data *user_data);
+
+static size_t mock_get_viommu_size(struct device *dev,
+				   enum iommu_viommu_type viommu_type)
+{
+	return VIOMMU_STRUCT_SIZE(struct mock_viommu, core);
+}
+
+static const struct iommufd_viommu_ops mock_viommu_ops = {
+	.get_viommu_size = mock_get_viommu_size,
+	.viommu_init = mock_viommu_init,
 	.destroy = mock_viommu_destroy,
 	.alloc_domain_nested = mock_viommu_alloc_domain_nested,
 	.cache_invalidate = mock_viommu_cache_invalidate,
@@ -782,17 +794,18 @@ static struct iommufd_viommu_ops mock_viommu_ops = {
 	.hw_queue_init_phys = mock_hw_queue_init_phys,
 };
 
-static size_t mock_get_viommu_size(struct device *dev,
-				   enum iommu_viommu_type viommu_type)
+static const struct iommufd_viommu_ops *
+mock_get_viommu_ops(struct device *dev,
+		enum iommu_viommu_type viommu_type)
 {
 	if (viommu_type != IOMMU_VIOMMU_TYPE_SELFTEST)
-		return 0;
-	return VIOMMU_STRUCT_SIZE(struct mock_viommu, core);
+		return NULL;
+	return &mock_viommu_ops;
 }
 
 static int mock_viommu_init(struct iommufd_viommu *viommu,
-			    struct iommu_domain *parent_domain,
-			    const struct iommu_user_data *user_data)
+		struct device *dev, struct iommu_domain *parent_domain,
+		const struct iommu_user_data *user_data)
 {
 	struct mock_iommu_device *mock_iommu = container_of(
 		viommu->iommu_dev, struct mock_iommu_device, iommu_dev);
@@ -834,7 +847,6 @@ static int mock_viommu_init(struct iommufd_viommu *viommu,
 	mutex_init(&mock_viommu->queue_mutex);
 	mock_viommu->s2_parent = to_mock_domain(parent_domain);
 
-	viommu->ops = &mock_viommu_ops;
 	return 0;
 
 err_destroy_mmap:
@@ -861,8 +873,7 @@ static const struct iommu_ops mock_ops = {
 	.probe_device = mock_probe_device,
 	.page_response = mock_domain_page_response,
 	.user_pasid_table = true,
-	.get_viommu_size = mock_get_viommu_size,
-	.viommu_init = mock_viommu_init,
+	.get_viommu_ops = mock_get_viommu_ops,
 };
 
 static void mock_domain_free_nested(struct iommu_domain *domain)
