@@ -1556,10 +1556,10 @@ static int __init xfd_update_static_branch(void)
 }
 arch_initcall(xfd_update_static_branch)
 
-void fpstate_free(struct fpu *fpu)
+void fpstate_free(struct fpstate *fpstate)
 {
-	if (fpu->fpstate && fpu->fpstate != &fpu->__fpstate)
-		vfree(fpu->fpstate);
+	if (fpstate && fpstate->is_valloc)
+		vfree(fpstate);
 }
 
 /**
@@ -1640,9 +1640,7 @@ static int fpstate_realloc(u64 xfeatures, unsigned int ksize,
 		xfd_update_state(fpu->fpstate);
 	fpregs_unlock();
 
-	/* Only free valloc'ed state */
-	if (curfps && curfps->is_valloc)
-		vfree(curfps);
+	fpstate_free(curfps);
 
 	return 0;
 }

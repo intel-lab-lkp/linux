@@ -118,7 +118,7 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 void arch_release_task_struct(struct task_struct *tsk)
 {
 	if (fpu_state_size_dynamic() && !(tsk->flags & (PF_KTHREAD | PF_USER_WORKER)))
-		fpstate_free(x86_task_fpu(tsk));
+		fpstate_free(x86_task_fpu(tsk)->fpstate);
 }
 #endif
 

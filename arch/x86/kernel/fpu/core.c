@@ -594,6 +594,8 @@ static void __fpstate_reset(struct fpstate *fpstate)
 
 void fpstate_reset(struct fpu *fpu)
 {
+	struct fpstate *oldfpstate = fpu->fpstate;
+
 	/* Set the fpstate pointer to the default fpstate */
 	fpu->fpstate = &fpu->__fpstate;
 	__fpstate_reset(fpu->fpstate);
@@ -610,6 +612,8 @@ void fpstate_reset(struct fpu *fpu)
 	 * guest FPUs, which allows for common guest and userspace ABI.
 	 */
 	fpu->guest_perm.__user_state_size = fpu_user_cfg.default_size;
+
+	fpstate_free(oldfpstate);
 }
 
 static inline void fpu_inherit_perms(struct fpu *dst_fpu)
@@ -670,6 +674,7 @@ int fpu_clone(struct task_struct *dst, u64 clone_flags, bool minimal,
 	/* The new task's FPU state cannot be valid in the hardware. */
 	dst_fpu->last_cpu = -1;
 
+	dst_fpu->fpstate = NULL;
 	fpstate_reset(dst_fpu);
 
 	if (!cpu_feature_enabled(X86_FEATURE_FPU))

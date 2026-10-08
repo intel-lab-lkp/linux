@@ -123,11 +123,11 @@ extern void fpu__resume_cpu(void);
 DECLARE_PER_CPU(bool, kernel_fpu_allowed);
 DECLARE_PER_CPU(struct fpu *, fpu_fpregs_owner_ctx);
 
-/* Process cleanup */
+/* Dynamic fpstate cleanup */
 #ifdef CONFIG_X86_64
-extern void fpstate_free(struct fpu *fpu);
+extern void fpstate_free(struct fpstate *fpstate);
 #else
-static inline void fpstate_free(struct fpu *fpu) { }
+static inline void fpstate_free(struct fpstate *fpstate) { }
 #endif
 
 /* fpstate-related functions which are exported to KVM */
