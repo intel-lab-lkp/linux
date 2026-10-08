@@ -6236,6 +6236,18 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 
 		cond_resched_tasks_rcu_qs();
 
+		/*
+		 * For high-order allocations, nr_to_reclaim may be smaller
+		 * than what is needed to make a block of the requested order
+		 * available for compaction. When memory is plentiful, keep
+		 * reclaiming until at least compact_gap() pages have been
+		 * freed so the target order can actually be satisfied.
+		 */
+		if (!cgroup_reclaim(sc) &&
+		    sc->nr_reclaimed + nr_reclaimed >=
+		    max(nr_to_reclaim, compact_gap(sc->order)))
+			break;
+
 		if (nr_reclaimed < nr_to_reclaim || proportional_reclaim)
 			continue;
 
@@ -6345,6 +6357,16 @@ static inline bool should_continue_reclaim(struct pglist_data *pgdat,
 	if (!nr_reclaimed)
 		return false;
 
+	/*
+	 * Stop once the overall reclaim goal is met, using the same
+	 * max(nr_to_reclaim, compact_gap()) threshold as the early exits
+	 * in shrink_lruvec() and shrink_node_memcgs(), so the retry
+	 * decision here stays consistent with where reclaim actually
+	 * stops.
+	 */
+	if (sc->nr_reclaimed >= max(sc->nr_to_reclaim, compact_gap(sc->order)))
+		return false;
+
 	/* If compaction would go ahead or the allocation would succeed, stop */
 	for_each_managed_zone_pgdat(zone, pgdat, z, sc->reclaim_idx) {
 		unsigned long watermark = min_wmark_pages(zone);
@@ -6442,8 +6464,17 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 				   sc->nr_scanned - scanned,
 				   sc->nr_reclaimed - reclaimed);
 
-		/* If partial walks are allowed, bail once goal is reached */
-		if (partial && sc->nr_reclaimed >= sc->nr_to_reclaim) {
+		/*
+		 * Break loop once the overall reclaim goal is met. For
+		 * high-order allocations nr_to_reclaim may be too small to
+		 * free a block of the requested order, so when memory is
+		 * plentiful keep going until at least compact_gap() pages
+		 * have been reclaimed. This applies to both partial and full
+		 * walks: a full walk is only a means to reach the goal, not a
+		 * requirement to visit every memcg.
+		 */
+		if (sc->nr_reclaimed >= max(sc->nr_to_reclaim,
+					    compact_gap(sc->order))) {
 			mem_cgroup_iter_break(target_memcg, memcg);
 			break;
 		}
