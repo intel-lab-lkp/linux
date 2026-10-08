@@ -159,15 +159,16 @@ governor uses that information depends on what algorithm is implemented by it
 and that is the primary reason for having more than one governor in the
 ``CPUIdle`` subsystem.
 
-There are four ``CPUIdle`` governors available, ``menu``, `TEO <teo-gov_>`_,
-``ladder`` and ``haltpoll``.  Which of them is used by default depends on the
-configuration of the kernel and in particular on whether or not the scheduler
-tick can be `stopped by the idle loop <idle-cpus-and-tick_>`_.  Available
-governors can be read from the :file:`available_governors`, and the governor
-can be changed at runtime.  The name of the ``CPUIdle`` governor currently
-used by the kernel can be read from the :file:`current_governor_ro` or
-:file:`current_governor` file under :file:`/sys/devices/system/cpu/cpuidle/`
-in ``sysfs``.
+There are six ``CPUIdle`` governors available, ``menu``, `TEO <teo-gov_>`_,
+``ladder``, ``haltpoll``, `shallow <shallow-gov_>`_ and
+`shallow_nopoll <shallow-gov_>`_.  Which of them is used by default depends on
+the configuration of the kernel and in particular on whether or not the
+scheduler tick can be `stopped by the idle loop <idle-cpus-and-tick_>`_.
+Available governors can be read from the
+:file:`available_governors`, and the governor can be changed at runtime.  The
+name of the ``CPUIdle`` governor currently used by the kernel can be read from
+the :file:`current_governor_ro` or :file:`current_governor` file under
+:file:`/sys/devices/system/cpu/cpuidle/` in ``sysfs``.
 
 Which ``CPUIdle`` driver is used, on the other hand, usually depends on the
 platform the kernel is running on, but there are platforms with more than one
@@ -344,6 +345,40 @@ given conditions.  However, it applies a different approach to that problem.
 
 .. kernel-doc:: drivers/cpuidle/governors/teo.c
    :doc: teo-description
+
+.. _shallow-gov:
+
+The Shallow Governors
+=====================
+
+The ``shallow`` governor always selects the shallowest enabled idle state and
+leaves the scheduler tick running.  Unlike the governors described above, it
+makes no attempt to save energy at all; its purpose is to keep the CPU wakeup
+latency, and in particular the latency of inter-processor interrupts, at the
+minimum offered by the platform.
+
+The ``shallow_nopoll`` governor does the same, except that it skips polling
+idle states and selects the shallowest enabled idle state that is not a polling
+one.  That avoids the side effects of idle CPUs spinning, which are described
+for ``idle=poll`` below, at the cost of a higher wakeup latency.  If the exit
+latency of that state is above the `PM QoS <cpu-pm-qos_>`_ limit in effect for
+the CPU, or if all of the non-polling states are disabled, ``shallow_nopoll``
+selects the state that ``shallow`` would select.
+
+Neither of them is used by default, regardless of the configuration of the
+kernel, and they have to be requested explicitly.  That can be done either by
+passing ``cpuidle.governor=shallow`` or ``cpuidle.governor=shallow_nopoll`` in
+the kernel command line, or by writing the governor name to the
+:file:`current_governor` file described `above <idle-loop_>`_.  A governor
+requested in the kernel command line is not replaced by a higher-rated one
+registering later, so it holds for the entire boot and user space can hand the
+deep idle states back at any later point by switching to a different governor.
+
+Note that the shallowest idle state is not necessarily a polling loop.  On the
+platforms whose ``CPUIdle`` driver does not register the generic polling state,
+it is the idle instruction of the CPU architecture (for instance, ``WFI`` on
+arm64), so ``shallow`` is not a substitute for ``idle=poll``.  If the driver
+registers no polling states at all, the two governors select the same states.
 
 .. _idle-states-representation:
 

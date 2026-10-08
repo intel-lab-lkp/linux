@@ -44,6 +44,26 @@ config CPU_IDLE_GOV_HALTPOLL
 
 	  Some virtualized workloads benefit from using it.
 
+config CPU_IDLE_GOV_SHALLOW
+	bool "Shallow governors (for latency-sensitive systems)"
+	help
+	  The shallow governor always selects the shallowest enabled idle
+	  state, which keeps the CPU wakeup latency at the minimum offered by
+	  the platform at the cost of giving up idle energy savings.  The
+	  shallow_nopoll governor selects the shallowest enabled idle state
+	  that is not a polling one instead, unless PM QoS requires a lower
+	  latency than that state offers.
+
+	  They are never used by default and have to be requested explicitly,
+	  either by passing cpuidle.governor=shallow or
+	  cpuidle.governor=shallow_nopoll in the kernel command line, or by
+	  writing the governor name to the current_governor attribute in
+	  sysfs.  That makes it possible to keep the CPUs out of deep idle
+	  states while booting or while running a latency-sensitive workload
+	  and to switch to an energy-efficient governor afterwards.
+
+	  If unsure, say N.
+
 config DT_IDLE_STATES
 	bool
 
