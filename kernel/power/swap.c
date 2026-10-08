@@ -1116,7 +1116,8 @@ static int load_image(struct swap_map_handle *handle,
 		ret = swap_read_page(handle, data_of(*snapshot), &hb);
 		if (ret)
 			break;
-		if (snapshot->sync_read)
+		/* each page must be complete before it is hashed */
+		if (snapshot->sync_read || snapshot_image_signed())
 			ret = hib_wait_io(&hb);
 		if (ret)
 			break;

@@ -568,6 +568,12 @@ int hibernation_restore(int platform_mode)
 {
 	int error;
 
+	error = snapshot_image_verify();
+	if (error) {
+		pr_err("Image signature verification failed: %d\n", error);
+		return error;
+	}
+
 	pm_prepare_console();
 	console_suspend_all();
 	error = dpm_suspend_start(PMSG_QUIESCE);

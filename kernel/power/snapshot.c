@@ -36,6 +36,7 @@
 #include <asm/mmu_context.h>
 #include <asm/tlbflush.h>
 #include <asm/io.h>
+#include <crypto/sha2.h>
 
 #include "power.h"
 
@@ -167,6 +168,37 @@ static struct linked_page *safe_pages_list;
 
 /* Pointer to an auxiliary buffer (1 page) */
 static void *buffer;
+
+/*
+ * Image signing.  When signing is enabled, the SHA-256 digest of every page
+ * of the image is signed, and the signature is stored in an extra page at
+ * the end of the image.
+ */
+static const struct hib_sig_ops *hib_sig;
+static unsigned long nr_sig_pages;
+static struct sha256_ctx hib_sig_ctx;
+static u8 hib_sig_digest[SHA256_DIGEST_SIZE];
+/*
+ * restore: the signature page is read here, as the image buffer is freed
+ * by prepare_image() on systems without highmem
+ */
+static u8 hib_sig_page[PAGE_SIZE] __aligned(PAGE_SIZE);
+/* restore: the page handed out last must be hashed when it is filled */
+static bool hib_sig_hash_pending;
+/* the signature page has been handed out, or (restore) received */
+static bool hib_sig_trailer_out;
+static bool hib_sig_trailer_in;
+
+static const char hib_sig_domain[] = "Linux hibernation image v1";
+
+static void hib_sig_start(void)
+{
+	sha256_init(&hib_sig_ctx);
+	sha256_update(&hib_sig_ctx, hib_sig_domain, sizeof(hib_sig_domain));
+	hib_sig_hash_pending = false;
+	hib_sig_trailer_out = false;
+	hib_sig_trailer_in = false;
+}
 
 #define PG_ANY		0
 #define PG_SAFE		1
@@ -1591,6 +1623,9 @@ void swsusp_free(void)
 {
 	unsigned long fb_pfn, fr_pfn;
 
+	if (hib_sig && hib_sig->end)
+		hib_sig->end();
+
 	if (!forbidden_pages_map || !free_pages_map)
 		goto out;
 
@@ -2141,6 +2176,7 @@ asmlinkage __visible int swsusp_save(void)
 	/* We don't actually copy the zero pages */
 	nr_zero_pages = nr_pages - nr_copy_pages;
 	nr_meta_pages = DIV_ROUND_UP(nr_pages * sizeof(long), PAGE_SIZE);
+	nr_sig_pages = hib_sig ? 1 : 0;
 
 	pm_deferred_pr_dbg("Image created (%d pages copied, %d zero pages)\n",
 			   nr_copy_pages, nr_zero_pages);
@@ -2174,17 +2210,26 @@ static const char *check_image_kernel(struct swsusp_info *info)
 
 unsigned long snapshot_get_image_size(void)
 {
-	return nr_copy_pages + nr_meta_pages + 1;
+	return nr_copy_pages + nr_meta_pages + nr_sig_pages + 1;
 }
 
 static int init_header(struct swsusp_info *info)
 {
+	int error;
+
 	memset(info, 0, sizeof(struct swsusp_info));
 	info->num_physpages = get_num_physpages();
 	info->image_pages = nr_copy_pages;
 	info->pages = snapshot_get_image_size();
 	info->size = info->pages;
 	info->size <<= PAGE_SHIFT;
+	info->sig_pages = nr_sig_pages;
+	if (nr_sig_pages) {
+		error = hib_sig->begin(info->sig_header,
+				       sizeof(info->sig_header));
+		if (error)
+			return error;
+	}
 	return init_header_complete(info);
 }
 
@@ -2234,7 +2279,7 @@ static inline void pack_pfns(unsigned long *buf, struct memory_bitmap *bm,
  */
 int snapshot_read_next(struct snapshot_handle *handle)
 {
-	if (handle->cur > nr_meta_pages + nr_copy_pages)
+	if (handle->cur > nr_meta_pages + nr_copy_pages + nr_sig_pages)
 		return 0;
 
 	if (!buffer) {
@@ -2246,6 +2291,7 @@ int snapshot_read_next(struct snapshot_handle *handle)
 	if (!handle->cur) {
 		int error;
 
+		hib_sig_start();
 		error = init_header((struct swsusp_info *)buffer);
 		if (error)
 			return error;
@@ -2255,6 +2301,19 @@ int snapshot_read_next(struct snapshot_handle *handle)
 	} else if (handle->cur <= nr_meta_pages) {
 		clear_page(buffer);
 		pack_pfns(buffer, &orig_bm, &zero_bm);
+	} else if (handle->cur > nr_meta_pages + nr_copy_pages) {
+		int error;
+
+		/* the signature page, covering every page before it */
+		sha256_final(&hib_sig_ctx, hib_sig_digest);
+		clear_page(buffer);
+		error = hib_sig->sign(hib_sig_digest, buffer,
+				      HIB_SIG_TRAILER_SIZE);
+		if (error)
+			return error;
+		handle->buffer = buffer;
+		handle->cur++;
+		return PAGE_SIZE;
 	} else {
 		struct page *page;
 
@@ -2275,6 +2334,8 @@ int snapshot_read_next(struct snapshot_handle *handle)
 			handle->buffer = page_address(page);
 		}
 	}
+	if (nr_sig_pages)
+		sha256_update(&hib_sig_ctx, handle->buffer, PAGE_SIZE);
 	handle->cur++;
 	return PAGE_SIZE;
 }
@@ -2339,11 +2400,32 @@ static int load_header(struct swsusp_info *info)
 
 	restore_pblist = NULL;
 	error = check_header(info);
-	if (!error) {
-		nr_copy_pages = info->image_pages;
-		nr_meta_pages = info->pages - info->image_pages - 1;
+	if (error)
+		return error;
+
+	if (info->sig_pages > 1)
+		return -EINVAL;
+
+	nr_copy_pages = info->image_pages;
+	nr_sig_pages = info->sig_pages;
+	nr_meta_pages = info->pages - info->image_pages - nr_sig_pages - 1;
+
+	/* without signing enabled, a signature page is ignored */
+	if (!hib_sig)
+		return 0;
+
+	if (!nr_sig_pages) {
+		pr_err("Image is not signed\n");
+		return -EKEYREJECTED;
 	}
-	return error;
+
+	error = hib_sig->check_header(info->sig_header,
+				      sizeof(info->sig_header));
+	if (error)
+		return error;
+
+	sha256_update(&hib_sig_ctx, (u8 *)info, PAGE_SIZE);
+	return 0;
 }
 
 /**
@@ -2771,10 +2853,38 @@ int snapshot_write_next(struct snapshot_handle *handle)
 	static struct chain_allocator ca;
 	int error;
 
+	if (!handle->cur) {
+		/* A new load: discard any state left by an abandoned one. */
+		hib_sig_start();
+		nr_sig_pages = 0;
+	} else if (hib_sig_hash_pending) {
+		/* The caller has filled the page handed out last time. */
+		hib_sig_hash_pending = false;
+		if (hib_sig_trailer_out)
+			hib_sig_trailer_in = true;
+		else
+			sha256_update(&hib_sig_ctx, handle->buffer, PAGE_SIZE);
+	}
+
 next:
 	/* Check if we have already loaded the entire image */
-	if (handle->cur > 1 && handle->cur > nr_meta_pages + nr_copy_pages + nr_zero_pages)
-		return 0;
+	if (handle->cur > 1 && handle->cur > nr_meta_pages + nr_copy_pages + nr_zero_pages) {
+		if (!nr_sig_pages || hib_sig_trailer_out)
+			return 0;
+
+		/* Hand out the signature page, which is not restored. */
+		copy_last_highmem_page();
+		error = hibernate_restore_protect_page(handle->buffer);
+		if (error)
+			return error;
+		sha256_final(&hib_sig_ctx, hib_sig_digest);
+		handle->buffer = hib_sig_page;
+		handle->sync_read = true;
+		hib_sig_trailer_out = true;
+		hib_sig_hash_pending = true;
+		handle->cur++;
+		return PAGE_SIZE;
+	}
 
 	if (!handle->cur) {
 		if (!buffer)
@@ -2841,6 +2951,8 @@ next:
 		goto next;
 	}
 
+	/* The header is hashed by load_header() once it is known to be signed */
+	hib_sig_hash_pending = handle->cur > 1 && nr_sig_pages && hib_sig;
 	return PAGE_SIZE;
 }
 
@@ -2868,7 +2980,9 @@ int snapshot_write_finalize(struct snapshot_handle *handle)
 			return error > 0 ? -ENODATA : error;
 	}
 	copy_last_highmem_page();
-	error = hibernate_restore_protect_page(handle->buffer);
+	/* The last image page was protected when the signature page was handed out */
+	error = hib_sig_trailer_out ? 0 :
+		hibernate_restore_protect_page(handle->buffer);
 	/* Do that only if we have loaded the image entirely */
 	if (handle->cur > 1 && handle->cur > nr_meta_pages + nr_copy_pages + nr_zero_pages) {
 		memory_bm_recycle(&orig_bm);
@@ -2880,7 +2994,34 @@ int snapshot_write_finalize(struct snapshot_handle *handle)
 int snapshot_image_loaded(struct snapshot_handle *handle)
 {
 	return !(!nr_copy_pages || !last_highmem_page_copied() ||
-			handle->cur <= nr_meta_pages + nr_copy_pages + nr_zero_pages);
+			handle->cur <= nr_meta_pages + nr_copy_pages + nr_zero_pages ||
+			(nr_sig_pages && !hib_sig_trailer_in));
+}
+
+/**
+ * snapshot_image_signed - Check if the image being loaded is signed.
+ */
+bool snapshot_image_signed(void)
+{
+	return nr_sig_pages && hib_sig;
+}
+
+/**
+ * snapshot_image_verify - Verify the signature of a loaded image.
+ *
+ * Return: 0 if signing is disabled or the image has a valid signature, or
+ * a negative error code otherwise.
+ */
+int snapshot_image_verify(void)
+{
+	if (!hib_sig)
+		return 0;
+
+	if (!nr_sig_pages || !hib_sig_trailer_in)
+		return -EKEYREJECTED;
+
+	return hib_sig->verify(hib_sig_digest, hib_sig_page,
+			       HIB_SIG_TRAILER_SIZE);
 }
 
 #ifdef CONFIG_HIGHMEM

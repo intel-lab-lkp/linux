@@ -8,6 +8,9 @@
 #include <linux/cpuidle.h>
 #include <linux/crypto.h>
 
+#define HIB_SIG_HEADER_SIZE	2560
+#define HIB_SIG_TRAILER_SIZE	256
+
 struct swsusp_info {
 	struct new_utsname	uts;
 	u32			version_code;
@@ -16,7 +19,35 @@ struct swsusp_info {
 	unsigned long		image_pages;
 	unsigned long		pages;
 	unsigned long		size;
+	/* number of signature pages at the end of the image (0 or 1) */
+	unsigned long		sig_pages;
+	/* data needed to verify the signature, stored by hib_sig_ops.begin */
+	u8			sig_header[HIB_SIG_HEADER_SIZE];
 } __aligned(PAGE_SIZE);
+
+/**
+ * struct hib_sig_ops - hibernation image signing
+ * @begin:	Called when the image header is built.  May store up to
+ *		@size bytes needed to verify the signature in @data.
+ * @sign:	Sign @digest, the SHA-256 digest of every page of the image
+ *		before the signature page, storing the signature in @trailer.
+ * @end:	Release any resources held for signing, after signing or when
+ *		hibernation is aborted.  May be called more than once.
+ * @check_header: Check the data stored by @begin when the image header is
+ *		loaded, before the rest of the image is read.
+ * @verify:	Verify the signature in @trailer over @digest before the
+ *		image is restored.
+ *
+ * If signing is enabled, every image is signed and images without a valid
+ * signature are not restored.
+ */
+struct hib_sig_ops {
+	int (*begin)(void *data, size_t size);
+	int (*sign)(const u8 *digest, void *trailer, size_t size);
+	void (*end)(void);
+	int (*check_header)(const void *data, size_t size);
+	int (*verify)(const u8 *digest, const void *trailer, size_t size);
+};
 
 #if defined(CONFIG_SUSPEND) || defined(CONFIG_HIBERNATION)
 extern int pm_sleep_fs_sync(void);
@@ -164,6 +195,9 @@ extern int snapshot_read_next(struct snapshot_handle *handle);
 extern int snapshot_write_next(struct snapshot_handle *handle);
 int snapshot_write_finalize(struct snapshot_handle *handle);
 extern int snapshot_image_loaded(struct snapshot_handle *handle);
+extern bool snapshot_image_signed(void);
+extern int snapshot_image_verify(void);
+extern void hibernate_set_sig_ops(const struct hib_sig_ops *ops);
 
 extern bool hibernate_acquire(void);
 extern void hibernate_release(void);

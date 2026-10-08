@@ -43,6 +43,7 @@ config HIBERNATION
 	select CRYPTO
 	select CRYPTO_LZO
 	select CRYPTO_LZ4
+	select CRYPTO_LIB_SHA256
 	help
 	  Enable the suspend to disk (STD) functionality, which is usually
 	  called "hibernation" in user interfaces.  STD checkpoints the
