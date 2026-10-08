@@ -683,8 +683,9 @@ int usbip_recv_iso(struct usbip_device *ud, struct urb *urb)
 		return 0;
 
 	if (np <= 0 || np > USBIP_MAX_ISO_PACKETS) {
-		dev_err(&urb->dev->dev,
-			"recv iso: invalid number_of_packets %d\n", np);
+		if (urb->dev)
+			dev_err(&urb->dev->dev,
+				"recv iso: invalid number_of_packets %d\n", np);
 		/*
 		 * usbip_pack_ret_submit() already set urb->number_of_packets
 		 * from the wire.  Zero it so processcompl() does not iterate
@@ -702,8 +703,9 @@ int usbip_recv_iso(struct usbip_device *ud, struct urb *urb)
 
 	ret = usbip_recv(ud->tcp_socket, buff, size);
 	if (ret != size) {
-		dev_err(&urb->dev->dev, "recv iso_frame_descriptor, %d\n",
-			ret);
+		if (urb->dev)
+			dev_err(&urb->dev->dev,
+				"recv iso_frame_descriptor, %d\n", ret);
 		kfree(buff);
 
 		if (ud->side == USBIP_STUB || ud->side == USBIP_VUDC)
@@ -720,10 +722,11 @@ int usbip_recv_iso(struct usbip_device *ud, struct urb *urb)
 		usbip_pack_iso(&iso[i], &urb->iso_frame_desc[i], 0);
 		if (urb->iso_frame_desc[i].actual_length >
 				(unsigned int)urb->transfer_buffer_length) {
-			dev_err(&urb->dev->dev,
-				"recv iso: frame actual_length %u exceeds buffer %d\n",
-				urb->iso_frame_desc[i].actual_length,
-				urb->transfer_buffer_length);
+			if (urb->dev)
+				dev_err(&urb->dev->dev,
+					"recv iso: frame actual_length %u exceeds buffer %d\n",
+					urb->iso_frame_desc[i].actual_length,
+					urb->transfer_buffer_length);
 			kfree(buff);
 			return -EPROTO;
 		}
@@ -733,9 +736,10 @@ int usbip_recv_iso(struct usbip_device *ud, struct urb *urb)
 	kfree(buff);
 
 	if (total_length != (u32)urb->actual_length) {
-		dev_err(&urb->dev->dev,
-			"total length of iso packets %u not equal to actual length of buffer %d\n",
-			total_length, urb->actual_length);
+		if (urb->dev)
+			dev_err(&urb->dev->dev,
+				"total length of iso packets %u not equal to actual length of buffer %d\n",
+				total_length, urb->actual_length);
 
 		if (ud->side == USBIP_STUB || ud->side == USBIP_VUDC)
 			usbip_event_add(ud, SDEV_EVENT_ERROR_TCP);
@@ -793,11 +797,12 @@ void usbip_pad_iso(struct usbip_device *ud, struct urb *urb)
 		    urb->iso_frame_desc[i].actual_length >
 				(unsigned int)urb->transfer_buffer_length -
 				(unsigned int)actualoffset) {
-			dev_err(&urb->dev->dev,
-				"pad_iso: bad src off=%d len=%u bufsz=%d\n",
-				actualoffset,
-				urb->iso_frame_desc[i].actual_length,
-				urb->transfer_buffer_length);
+			if (urb->dev)
+				dev_err(&urb->dev->dev,
+					"pad_iso: bad src off=%d len=%u bufsz=%d\n",
+					actualoffset,
+					urb->iso_frame_desc[i].actual_length,
+					urb->transfer_buffer_length);
 			return;
 		}
 
@@ -810,11 +815,12 @@ void usbip_pad_iso(struct usbip_device *ud, struct urb *urb)
 		    urb->iso_frame_desc[i].actual_length >
 				(unsigned int)urb->transfer_buffer_length -
 				urb->iso_frame_desc[i].offset) {
-			dev_err(&urb->dev->dev,
-				"pad_iso: bad dst off=%u len=%u bufsz=%d\n",
-				urb->iso_frame_desc[i].offset,
-				urb->iso_frame_desc[i].actual_length,
-				urb->transfer_buffer_length);
+			if (urb->dev)
+				dev_err(&urb->dev->dev,
+					"pad_iso: bad dst off=%u len=%u bufsz=%d\n",
+					urb->iso_frame_desc[i].offset,
+					urb->iso_frame_desc[i].actual_length,
+					urb->transfer_buffer_length);
 			return;
 		}
 
@@ -891,7 +897,9 @@ int usbip_recv_xbuff(struct usbip_device *ud, struct urb *urb)
 	return ret;
 
 error:
-	dev_err(&urb->dev->dev, "recv xbuf, %d\n", ret);
+	/* VUDC creates synthetic URBs without a struct usb_device. */
+	if (urb->dev)
+		dev_err(&urb->dev->dev, "recv xbuf, %d\n", ret);
 	if (ud->side == USBIP_STUB || ud->side == USBIP_VUDC)
 		usbip_event_add(ud, SDEV_EVENT_ERROR_TCP);
 	else
