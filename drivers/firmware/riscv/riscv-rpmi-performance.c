@@ -19,6 +19,7 @@
 #include <linux/mailbox/riscv-rpmi-message.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
 #include <linux/slab.h>
@@ -995,6 +996,56 @@ static void rpmi_perf_mbox_chan_release(void *data)
 	mbox_free_channel((struct mbox_chan *)data);
 }
 
+/*
+ * cpufreq has no device tree node of its own: a CPU names its domain through
+ * "performance-domains" on the CPU node. Create the device it binds to, but
+ * only when some CPU actually points back here.
+ */
+static bool rpmi_perf_cpus_present(struct device *dev)
+{
+	struct device_node *cpu_np;
+	struct of_phandle_args args;
+	int ret;
+
+	for_each_of_cpu_node(cpu_np) {
+		ret = of_parse_phandle_with_args(cpu_np, "performance-domains",
+						 "#performance-domain-cells", 0,
+						 &args);
+		if (ret)
+			continue;
+
+		if (args.np == dev_of_node(dev)) {
+			of_node_put(args.np);
+			of_node_put(cpu_np);
+			return true;
+		}
+		of_node_put(args.np);
+	}
+
+	return false;
+}
+
+static void rpmi_perf_frontend_unregister(void *data)
+{
+	platform_device_unregister((struct platform_device *)data);
+}
+
+static int rpmi_perf_cpufreq_register(struct device *dev, struct rpmi_perf *perf)
+{
+	struct platform_device *pdev;
+
+	if (!IS_ENABLED(CONFIG_RISCV_RPMI_CPUFREQ) || !rpmi_perf_cpus_present(dev))
+		return 0;
+
+	pdev = platform_device_register_data(dev, "riscv-rpmi-cpufreq",
+					     PLATFORM_DEVID_AUTO, &perf,
+					     sizeof(perf));
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
+	return devm_add_action_or_reset(dev, rpmi_perf_frontend_unregister, pdev);
+}
+
 static int rpmi_perf_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1077,6 +1128,10 @@ static int rpmi_perf_probe(struct platform_device *pdev)
 	}
 
 	dev_set_drvdata(dev, mpxy_perf);
+
+	ret = rpmi_perf_cpufreq_register(dev, mpxy_perf);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to register cpufreq device\n");
 
 	dev_info(dev, "%d MPXY performance domains registered\n", num_domains);
 
