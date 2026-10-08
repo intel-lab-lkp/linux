@@ -5,7 +5,11 @@
 #include <bpf/bpf_helpers.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
+#include <linux/udp.h>
+#include <linux/in.h>
 #include <linux/errno.h>
+#include <bpf/bpf_endian.h>
+#include <stdbool.h>
 #include "xsk_xdp_common.h"
 
 struct {
@@ -18,9 +22,34 @@ struct {
 static unsigned int idx;
 int adjust_value = 0;
 int count = 0;
+/* UDP port of the hardware test flow, 0 redirects every packet */
+__u16 hw_port;
+
+static __always_inline bool is_test_packet(struct xdp_md *xdp)
+{
+	void *data_end = (void *)(long)xdp->data_end;
+	void *data = (void *)(long)xdp->data;
+	struct ethhdr *eth = data;
+	struct udphdr *udp;
+	struct iphdr *ip;
+
+	if (!hw_port)
+		return true;
+	if ((void *)(eth + 1) > data_end ||
+	    eth->h_proto != bpf_htons(ETH_P_IP))
+		return false;
+	ip = (void *)(eth + 1);
+	if ((void *)(ip + 1) > data_end || ip->ihl != 5 ||
+	    ip->protocol != IPPROTO_UDP)
+		return false;
+	udp = (void *)(ip + 1);
+	return (void *)(udp + 1) <= data_end && udp->dest == bpf_htons(hw_port);
+}
 
 SEC("xdp.frags") int xsk_def_prog(struct xdp_md *xdp)
 {
+	if (!is_test_packet(xdp))
+		return XDP_PASS;
 	return bpf_redirect_map(&xsk, 0, XDP_DROP);
 }
 
@@ -28,6 +57,8 @@ SEC("xdp.frags") int xsk_xdp_drop(struct xdp_md *xdp)
 {
 	static unsigned int drop_idx;
 
+	if (!is_test_packet(xdp))
+		return XDP_PASS;
 	/* Drop every other packet */
 	if (drop_idx++ % 2)
 		return XDP_DROP;
@@ -40,6 +71,9 @@ SEC("xdp.frags") int xsk_xdp_populate_metadata(struct xdp_md *xdp)
 	void *data, *data_meta;
 	struct xdp_info *meta;
 	int err;
+
+	if (!is_test_packet(xdp))
+		return XDP_PASS;
 
 	/* Reserve enough for all custom metadata. */
 	err = bpf_xdp_adjust_meta(xdp, -(int)sizeof(struct xdp_info));
@@ -64,6 +98,8 @@ SEC("xdp") int xsk_xdp_shared_umem(struct xdp_md *xdp)
 	void *data_end = (void *)(long)xdp->data_end;
 	struct ethhdr *eth = data;
 
+	if (!is_test_packet(xdp))
+		return XDP_PASS;
 	if (eth + 1 > data_end)
 		return XDP_DROP;
 
@@ -79,6 +115,9 @@ SEC("xdp.frags") int xsk_xdp_adjust_tail(struct xdp_md *xdp)
 {
 	__u32 buff_len, curr_buff_len;
 	int ret;
+
+	if (!is_test_packet(xdp))
+		return XDP_PASS;
 
 	buff_len = bpf_xdp_get_buff_len(xdp);
 	if (buff_len == 0)
