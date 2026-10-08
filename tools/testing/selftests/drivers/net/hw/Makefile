@@ -52,6 +52,7 @@ TEST_PROGS = \
 	uso.py \
 	vlan.py \
 	xdp_metadata.py \
+	xsk.py \
 	xsk_reconfig.py \
 	#
 
