@@ -3638,7 +3638,9 @@ int ice_add_mac(struct ice_hw *hw, struct list_head *m_list)
 
 		m_list_itr->status = ice_add_rule_internal(hw, ICE_SW_LKUP_MAC,
 							   m_list_itr);
-		if (m_list_itr->status)
+		if (m_list_itr->status == -EEXIST)
+			status = -EEXIST;
+		else if (m_list_itr->status)
 			return m_list_itr->status;
 	}
 
