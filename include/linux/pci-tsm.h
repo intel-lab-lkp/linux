@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __PCI_TSM_H
 #define __PCI_TSM_H
+#include <linux/completion.h>
 #include <linux/mutex.h>
 #include <linux/pci.h>
 
@@ -107,12 +108,16 @@ struct pci_tsm {
  * @lock: mutual exclustion for pci_tsm_ops invocation
  * @context_users: live per-function contexts on this PF0; a nonzero count
  *	blocks link disconnect
+ * @contexts_drained: completed when the last context is released
+ * @removing: reject new contexts while the DSM is being removed
  * @doe_mb: PCIe Data Object Exchange mailbox
  */
 struct pci_tsm_pf0 {
 	struct pci_tsm base_tsm;
 	struct mutex lock;
 	unsigned int context_users;
+	struct completion contexts_drained;
+	bool removing;
 	struct pci_doe_mb *doe_mb;
 };
 

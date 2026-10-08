@@ -10,10 +10,13 @@
 
 #include <linux/bitfield.h>
 #include <linux/iommufd.h>
+#include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
 #include <linux/pci-tsm.h>
+#include <linux/pid.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/tsm.h>
@@ -354,6 +357,12 @@ struct pci_tsm_context *pci_tsm_context_get(struct pci_dev *pdev,
 		return ERR_PTR(-ENOMEM);
 
 	guard(mutex)(&pf0->lock);
+	if (pf0->removing) {
+		kfree(context);
+		return ERR_PTR(-ENODEV);
+	}
+	if (!pf0->context_users)
+		reinit_completion(&pf0->contexts_drained);
 	pf0->context_users++;
 	context->pf0 = pf0;
 	context->pdev = pci_dev_get(pdev);
@@ -368,8 +377,11 @@ void pci_tsm_context_put(struct pci_tsm_context *context)
 
 	down_read(&pci_tsm_rwsem);
 	mutex_lock(&pf0->lock);
-	if (!WARN_ON(!pf0->context_users))
-		pf0->context_users--;
+	if (WARN_ON(!pf0->context_users))
+		goto out_unlock;
+	if (!--pf0->context_users)
+		complete_all(&pf0->contexts_drained);
+out_unlock:
 	mutex_unlock(&pf0->lock);
 	up_read(&pci_tsm_rwsem);
 
@@ -452,6 +464,9 @@ static ssize_t disconnect_store(struct device *dev,
 	tsm_dev = pdev->tsm->tsm_dev;
 	if (!sysfs_streq(buf, dev_name(&tsm_dev->dev)))
 		return -EINVAL;
+	if (is_link_tsm(tsm_dev) && is_pci_tsm_pf0(pdev) &&
+	    to_pci_tsm_pf0(pdev->tsm)->removing)
+		return -ENODEV;
 
 	rc = pci_tsm_disconnect(pdev);
 	if (rc)
@@ -663,6 +678,9 @@ int pci_tsm_pf0_constructor(struct pci_dev *pdev, struct pci_tsm_pf0 *tsm,
 			    struct tsm_dev *tsm_dev)
 {
 	mutex_init(&tsm->lock);
+	init_completion(&tsm->contexts_drained);
+	tsm->context_users = 0;
+	tsm->removing = false;
 	tsm->doe_mb = pci_find_doe_mailbox(pdev, PCI_VENDOR_ID_PCI_SIG,
 					   PCI_DOE_FEATURE_CMA);
 	if (!tsm->doe_mb) {
@@ -751,8 +769,44 @@ static void __pci_tsm_destroy(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
 
 void pci_tsm_destroy(struct pci_dev *pdev)
 {
-	guard(rwsem_write)(&pci_tsm_rwsem);
+	struct pci_tsm_pf0 *pf0 = NULL;
+	struct completion *drained;
+	bool interrupted = false;
+	long rc;
+
+	down_write(&pci_tsm_rwsem);
+	if (pdev->tsm && is_link_tsm(pdev->tsm->tsm_dev) &&
+	    is_pci_tsm_pf0(pdev)) {
+		pf0 = to_pci_tsm_pf0(pdev->tsm);
+		drained = &pf0->contexts_drained;
+		mutex_lock(&pf0->lock);
+		pf0->removing = true;
+		mutex_unlock(&pf0->lock);
+
+		/* An unused DSM may never have completed contexts_drained. */
+		rc = pf0->context_users ?
+			try_wait_for_completion(drained) : 1;
+		/* Context release needs the read side of pci_tsm_rwsem. */
+		up_write(&pci_tsm_rwsem);
+		while (rc <= 0) {
+			if (interrupted) {
+				rc = wait_for_completion_timeout(drained, HZ * 10);
+			} else {
+				rc = wait_for_completion_interruptible_timeout(drained,
+									       HZ * 10);
+				if (rc < 0) {
+					interrupted = true;
+					pci_warn(pdev, "Task \"%s\" (%d) blocked until vdevices are released\n",
+						 current->comm, task_pid_nr(current));
+				}
+			}
+			if (!rc)
+				pci_warn(pdev, "TSM connection is in use, waiting for vdevices\n");
+		}
+		down_write(&pci_tsm_rwsem);
+	}
 	__pci_tsm_destroy(pdev, NULL);
+	up_write(&pci_tsm_rwsem);
 }
 
 void pci_tsm_init(struct pci_dev *pdev)
@@ -778,6 +832,9 @@ void pci_tsm_init(struct pci_dev *pdev)
 		 * device is via connect().
 		 */
 		if (!dsm->tsm)
+			return;
+		if (is_link_tsm(dsm->tsm->tsm_dev) &&
+		    to_pci_tsm_pf0(dsm->tsm)->removing)
 			return;
 
 		probe_fn(pdev, dsm);
