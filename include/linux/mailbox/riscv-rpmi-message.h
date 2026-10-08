@@ -94,6 +94,7 @@ static inline int rpmi_to_linux_error(int rpmi_error)
 #define RPMI_SRVGRP_SYSTEM_MSI		0x00002
 #define RPMI_SRVGRP_CLOCK		0x00008
 #define RPMI_SRVGRP_DEVICE_POWER	0x00009
+#define RPMI_SRVGRP_PERFORMANCE		0x0000A
 
 /* RPMI clock service IDs */
 enum rpmi_clock_service_id {
@@ -128,6 +129,21 @@ enum rpmi_device_power_service_id {
 	RPMI_DP_SRV_SET_STATE = 0x04,
 	RPMI_DP_SRV_GET_STATE = 0x05,
 	RPMI_DP_SRV_ID_MAX_COUNT,
+};
+
+/* RPMI performances service IDs */
+enum rpmi_perf_service_id {
+	RPMI_PERF_SRV_ENABLE_NOTIFICATION = 0x01,
+	RPMI_PERF_SRV_GET_NUM_DOMAINS = 0x02,
+	RPMI_PERF_SRV_GET_ATTRIBUTES = 0x03,
+	RPMI_PERF_SRV_GET_SUPPORTED_LEVELS = 0x04,
+	RPMI_PERF_SRV_GET_LEVEL = 0x05,
+	RPMI_PERF_SRV_SET_LEVEL = 0x06,
+	RPMI_PERF_SRV_GET_LIMIT = 0x07,
+	RPMI_PERF_SRV_SET_LIMIT = 0x08,
+	RPMI_PERF_SRV_GET_FAST_CHANNEL_REGION = 0x09,
+	RPMI_PERF_SRV_GET_FAST_CHANNEL_ATTRS = 0x0a,
+	RPMI_PERF_SRV_ID_MAX_COUNT,
 };
 
 /* RPMI Linux mailbox attribute IDs */

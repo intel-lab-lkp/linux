@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+menu "RISC-V Firmware Drivers"
+	depends on RISCV || COMPILE_TEST
+
+config RISCV_RPMI_PERFORMANCE
+	tristate "RISC-V RPMI performance service group"
+	depends on RISCV || COMPILE_TEST
+	depends on MAILBOX
+	default RISCV
+	select PM_OPP
+	help
+	  Support for the performance service group defined by the RISC-V
+	  platform management interface (RPMI) specification. The performance
+	  domains advertised by the platform microcontroller are enumerated
+	  here and made available to the front-end drivers that control them.
+
+endmenu
