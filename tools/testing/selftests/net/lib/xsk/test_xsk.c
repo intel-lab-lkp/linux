@@ -244,7 +244,7 @@ static void __test_spec_init(struct test_spec *test, struct ifobject *ifobj_tx,
 		ifobj->xsk->umem->frame_size = XSK_UMEM__DEFAULT_FRAME_SIZE;
 	}
 
-	if (ifobj_tx->hw_ring_size_supp)
+	if (ifobj_has_cap(ifobj_tx, XSK_CAP_HW_RING))
 		hw_ring_size_reset(ifobj_tx);
 
 	test->ifobj_tx = ifobj_tx;
@@ -1774,20 +1774,24 @@ static int __testapp_validate_traffic(struct test_spec *test, struct ifobject *i
 				      struct ifobject *ifobj2)
 {
 	pthread_t t0, t1;
+	u32 mbuf_cap;
 	int err;
 
-	if (test->mtu > MAX_ETH_PKT_SIZE) {
-		if (test->mode == TEST_MODE_ZC && (!ifobj1->multi_buff_zc_supp ||
-						   (ifobj2 && !ifobj2->multi_buff_zc_supp))) {
-			ksft_print_msg("Multi buffer for zero-copy not supported.\n");
-			return TEST_SKIP;
-		}
-		if (test->mode != TEST_MODE_ZC && (!ifobj1->multi_buff_supp ||
-						   (ifobj2 && !ifobj2->multi_buff_supp))) {
-			ksft_print_msg("Multi buffer not supported.\n");
-			return TEST_SKIP;
-		}
+	if (test->mtu <= MAX_ETH_PKT_SIZE)
+		goto skip_mbuf_check;
+
+	mbuf_cap = test->mode == TEST_MODE_ZC ? XSK_CAP_MBUF_ZC :
+						XSK_CAP_MBUF;
+
+	if (!ifobj_has_cap(ifobj1, mbuf_cap) ||
+	    (ifobj2 && !ifobj_has_cap(ifobj2, mbuf_cap))) {
+		ksft_print_msg("Multi buffer%s not supported.\n",
+			       mbuf_cap == XSK_CAP_MBUF_ZC ?
+			       " for zero-copy" : "");
+		return TEST_SKIP;
 	}
+
+skip_mbuf_check:
 	err = test_spec_set_mtu(test, test->mtu);
 	if (err) {
 		ksft_print_msg("Error, could not set mtu.\n");
@@ -1852,14 +1856,14 @@ static int testapp_validate_traffic(struct test_spec *test)
 	struct ifobject *ifobj_rx = test->ifobj_rx;
 	struct ifobject *ifobj_tx = test->ifobj_tx;
 
-	if ((ifobj_rx->xsk->umem->unaligned_mode && !ifobj_rx->unaligned_supp) ||
-	    (ifobj_tx->xsk->umem->unaligned_mode && !ifobj_tx->unaligned_supp)) {
+	if (ifobj_rx->xsk->umem->unaligned_mode &&
+	    !ifobj_has_cap(ifobj_rx, XSK_CAP_UNALIGNED)) {
 		ksft_print_msg("No huge pages present.\n");
 		return TEST_SKIP;
 	}
 
 	if (test->set_ring) {
-		if (ifobj_tx->hw_ring_size_supp) {
+		if (ifobj_has_cap(ifobj_tx, XSK_CAP_HW_RING)) {
 			if (set_ring_size(ifobj_tx)) {
 				ksft_print_msg("Failed to change HW ring size.\n");
 				return TEST_FAILURE;
@@ -1965,7 +1969,7 @@ int testapp_headroom(struct test_spec *test)
 int testapp_stats_rx_dropped(struct test_spec *test)
 {
 	struct xsk_umem_info *umem = test->ifobj_rx->xsk->umem;
-	u32 umem_tr = test->ifobj_tx->umem_tailroom;
+	u32 umem_tr = xsk_get_cap(test, umem_tailroom);
 
 	if (test->mode == TEST_MODE_ZC) {
 		ksft_print_msg("Can not run RX_DROPPED test for ZC mode\n");
@@ -2227,9 +2231,9 @@ int testapp_too_many_frags(struct test_spec *test)
 	int ret = TEST_FAILURE;
 
 	if (test->mode == TEST_MODE_ZC) {
-		max_frags = test->ifobj_tx->xdp_zc_max_segs;
+		max_frags = xsk_get_cap(test, xdp_zc_max_segs);
 	} else {
-		max_frags = test->ifobj_tx->max_skb_frags;
+		max_frags = xsk_get_cap(test, max_skb_frags);
 		max_frags += 1;
 	}
 
@@ -2289,7 +2293,6 @@ static int xsk_load_xdp_programs(struct ifobject *ifobj)
 	return 0;
 }
 
-/* Simple test */
 static bool hugepages_present(void)
 {
 	size_t mmap_sz = 2 * DEFAULT_UMEM_BUFFERS * XSK_UMEM__DEFAULT_FRAME_SIZE;
@@ -2305,9 +2308,35 @@ static bool hugepages_present(void)
 	return true;
 }
 
-int init_iface(struct ifobject *ifobj, thread_func_t func_ptr)
+static int detect_ifobj_caps(struct ifobject *ifobj)
 {
 	LIBBPF_OPTS(bpf_xdp_query_opts, query_opts);
+	int err;
+
+	if (hugepages_present())
+		ifobj_set_cap(ifobj, XSK_CAP_UNALIGNED);
+
+	err = bpf_xdp_query(ifobj->ifindex, XDP_FLAGS_DRV_MODE, &query_opts);
+	if (err) {
+		ksft_print_msg("Error querying XDP capabilities\n");
+		return err;
+	}
+	if (query_opts.feature_flags & NETDEV_XDP_ACT_RX_SG)
+		ifobj_set_cap(ifobj, XSK_CAP_MBUF);
+	if (query_opts.feature_flags & NETDEV_XDP_ACT_XSK_ZEROCOPY) {
+		if (query_opts.xdp_zc_max_segs > 1) {
+			ifobj_set_cap(ifobj, XSK_CAP_MBUF_ZC);
+			ifobj->caps.xdp_zc_max_segs = query_opts.xdp_zc_max_segs;
+		} else {
+			ifobj->caps.xdp_zc_max_segs = 0;
+		}
+	}
+
+	return 0;
+}
+
+int init_iface(struct ifobject *ifobj, thread_func_t func_ptr)
+{
 	int err;
 
 	ifobj->func_ptr = func_ptr;
@@ -2318,26 +2347,7 @@ int init_iface(struct ifobject *ifobj, thread_func_t func_ptr)
 		return err;
 	}
 
-	if (hugepages_present())
-		ifobj->unaligned_supp = true;
-
-	err = bpf_xdp_query(ifobj->ifindex, XDP_FLAGS_DRV_MODE, &query_opts);
-	if (err) {
-		ksft_print_msg("Error querying XDP capabilities\n");
-		return err;
-	}
-	if (query_opts.feature_flags & NETDEV_XDP_ACT_RX_SG)
-		ifobj->multi_buff_supp = true;
-	if (query_opts.feature_flags & NETDEV_XDP_ACT_XSK_ZEROCOPY) {
-		if (query_opts.xdp_zc_max_segs > 1) {
-			ifobj->multi_buff_zc_supp = true;
-			ifobj->xdp_zc_max_segs = query_opts.xdp_zc_max_segs;
-		} else {
-			ifobj->xdp_zc_max_segs = 0;
-		}
-	}
-
-	return 0;
+	return detect_ifobj_caps(ifobj);
 }
 
 int testapp_send_receive(struct test_spec *test)
@@ -2449,7 +2459,7 @@ int testapp_hw_sw_max_ring_size(struct test_spec *test)
 
 	test->set_ring = true;
 	test->total_steps = 2;
-	test->ifobj_tx->ring.tx_pending = test->ifobj_tx->ring.tx_max_pending;
+	test->ifobj_tx->ring.tx_pending = xsk_get_cap(test, tx_max_pending);
 	test->ifobj_tx->ring.rx_pending  = test->ifobj_tx->ring.rx_max_pending;
 	test->ifobj_rx->xsk->umem->num_frames = max_descs;
 	test->ifobj_rx->xsk->umem->fill_size = max_descs;
@@ -2464,8 +2474,8 @@ int testapp_hw_sw_max_ring_size(struct test_spec *test)
 	/* Set batch_size to 8152 for testing, as the ice HW ignores the 3 lowest bits when
 	 * updating the Rx HW tail register.
 	 */
-	test->ifobj_tx->xsk->batch_size = test->ifobj_tx->ring.tx_max_pending - 8;
-	test->ifobj_rx->xsk->batch_size = test->ifobj_tx->ring.tx_max_pending - 8;
+	test->ifobj_tx->xsk->batch_size = xsk_get_cap(test, tx_max_pending) - 8;
+	test->ifobj_rx->xsk->batch_size = xsk_get_cap(test, tx_max_pending) - 8;
 	if (pkt_stream_replace(test, max_descs, MIN_PKT_SIZE)) {
 		clean_sockets(test, test->ifobj_tx);
 		clean_sockets(test, test->ifobj_rx);
@@ -2558,7 +2568,7 @@ int testapp_adjust_tail_grow_mb(struct test_spec *test)
 	grow_size = XSK_UMEM__MAX_FRAME_SIZE -
 		    XSK_UMEM__LARGE_FRAME_SIZE -
 		    XDP_PACKET_HEADROOM -
-		    test->ifobj_tx->umem_tailroom;
+		    xsk_get_cap(test, umem_tailroom);
 	test->mtu = MAX_ETH_JUMBO_SIZE;
 
 	return testapp_adjust_tail(test, grow_size, XSK_UMEM__LARGE_FRAME_SIZE * 2);
