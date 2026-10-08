@@ -6,6 +6,7 @@
 #ifndef ATH12K_DP_RX_H
 #define ATH12K_DP_RX_H
 
+#include <net/page_pool/helpers.h>
 #include "core.h"
 #include "debug.h"
 
@@ -187,15 +188,32 @@ void ath12k_dp_extract_rx_desc_data(struct ath12k_hal *hal,
 	hal->ops->extract_rx_desc_data(rx_info, rx_desc, ldesc);
 }
 
-static inline void ath12k_dp_unmap_rx_buf(struct ath12k_dp *dp,
-					  struct sk_buff *skb)
+static inline bool ath12k_skb_from_page_pool(struct sk_buff *skb)
 {
-	struct ath12k_skb_rxcb *rxcb = ATH12K_SKB_RXCB(skb);
-	enum dma_data_direction dir;
+	if (!skb->head_frag || !skb->pp_recycle)
+		return false;
 
-	dir = rxcb->reinjected ? DMA_BIDIRECTIONAL : DMA_FROM_DEVICE;
-	dma_unmap_single(dp->dev, rxcb->paddr, skb->len + skb_tailroom(skb),
-			 dir);
+	return page_pool_page_is_pp(virt_to_head_page(skb->head));
+}
+
+static inline void ath12k_dp_unmap_rx_buf(struct ath12k_dp *dp, struct sk_buff *skb)
+{
+	if (likely(ath12k_skb_from_page_pool(skb))) {
+		struct dp_rxdma_ring *rx_ring = &dp->rx_refill_buf_ring;
+		struct page *page = virt_to_head_page(skb->data);
+		int offset = (void *)skb->data - page_address(page);
+
+		page_pool_dma_sync_for_cpu(rx_ring->page_pool, page,
+					   offset,
+					   skb->len + skb_tailroom(skb));
+	} else {
+		struct ath12k_skb_rxcb *rxcb = ATH12K_SKB_RXCB(skb);
+		enum dma_data_direction dir;
+
+		dir = rxcb->reinjected ? DMA_BIDIRECTIONAL : DMA_FROM_DEVICE;
+		dma_unmap_single(dp->dev, rxcb->paddr,
+				 skb->len + skb_tailroom(skb), dir);
+	}
 }
 
 void ath12k_dp_rx_h_undecap(struct ath12k_pdev_dp *dp_pdev, struct sk_buff *msdu,

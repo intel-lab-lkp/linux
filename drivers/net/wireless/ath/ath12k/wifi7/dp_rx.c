@@ -902,14 +902,26 @@ static int ath12k_wifi7_dp_rx_h_defrag_reo_reinject(struct ath12k_dp *dp,
 	/* change msdu len in hal rx desc */
 	ath12k_dp_rxdesc_set_msdu_len(hal, rx_desc, defrag_skb->len - hal_rx_desc_sz);
 
-	buf_paddr = dma_map_single(dp->dev, defrag_skb->data,
-				   defrag_skb->len + skb_tailroom(defrag_skb),
-				   DMA_BIDIRECTIONAL);
-	if (dma_mapping_error(dp->dev, buf_paddr))
-		return -ENOMEM;
+	if (ath12k_skb_from_page_pool(defrag_skb)) {
+		struct dp_rxdma_ring *rx_ring;
 
+		rx_ring = &dp->rx_refill_buf_ring;
+		dma_sync_single_for_device(dp->dev,
+					   ATH12K_SKB_RXCB(defrag_skb)->paddr,
+					   defrag_skb->len +
+					   skb_tailroom(defrag_skb),
+					   rx_ring->page_pool->p.dma_dir);
+	} else {
+		buf_paddr = dma_map_single(dp->dev, defrag_skb->data,
+					   defrag_skb->len +
+					   skb_tailroom(defrag_skb),
+					   DMA_BIDIRECTIONAL);
+		if (dma_mapping_error(dp->dev, buf_paddr))
+			return -ENOMEM;
+
+		rxcb->paddr = buf_paddr;
+	}
 	rxcb->reinjected = true;
-	rxcb->paddr = buf_paddr;
 
 	spin_lock_bh(&dp->rx_desc_lock);
 	desc_info = list_first_entry_or_null(&dp->rx_desc_free_list,
@@ -928,8 +940,8 @@ static int ath12k_wifi7_dp_rx_h_defrag_reo_reinject(struct ath12k_dp *dp,
 	list_del(&desc_info->list);
 	spin_unlock_bh(&dp->rx_desc_lock);
 
-	ath12k_wifi7_hal_rx_buf_addr_info_set(&msdu0->buf_addr_info, buf_paddr,
-					      desc_info->cookie,
+	ath12k_wifi7_hal_rx_buf_addr_info_set(&msdu0->buf_addr_info,
+					      rxcb->paddr, desc_info->cookie,
 					      HAL_RX_BUF_RBM_SW3_BM);
 
 	/* Fill mpdu details into reo entrance ring */
@@ -994,8 +1006,10 @@ err_free_desc:
 	list_add_tail(&desc_info->list, &dp->rx_desc_free_list);
 	spin_unlock_bh(&dp->rx_desc_lock);
 err_unmap_dma:
-	dma_unmap_single(dp->dev, buf_paddr, defrag_skb->len + skb_tailroom(defrag_skb),
-			 DMA_BIDIRECTIONAL);
+	if (!ath12k_skb_from_page_pool(defrag_skb))
+		dma_unmap_single(dp->dev, ATH12K_SKB_RXCB(defrag_skb)->paddr,
+				 defrag_skb->len + skb_tailroom(defrag_skb),
+				 DMA_BIDIRECTIONAL);
 	return ret;
 }
 

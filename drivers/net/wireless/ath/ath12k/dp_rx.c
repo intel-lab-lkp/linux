@@ -68,6 +68,31 @@ static void ath12k_dp_rx_enqueue_free(struct ath12k_dp *dp,
 	spin_unlock_bh(&dp->rx_desc_lock);
 }
 
+static struct sk_buff *ath12k_dp_rx_build_skb(struct ath12k_dp *dp,
+					      struct dp_rxdma_ring *rx_ring)
+{
+	struct sk_buff *skb;
+	struct page *page;
+
+	if (!rx_ring->page_pool)
+		return NULL;
+
+	page = page_pool_dev_alloc_pages(rx_ring->page_pool);
+	if (!page)
+		return NULL;
+
+	skb = build_skb(page_address(page), PAGE_SIZE);
+	if (!skb) {
+		page_pool_put_full_page(rx_ring->page_pool, page, false);
+		return NULL;
+	}
+
+	ATH12K_SKB_RXCB(skb)->paddr = page_pool_get_dma_addr(page);
+	skb_mark_for_recycle(skb);
+
+	return skb;
+}
+
 /* Returns number of Rx buffers replenished */
 int ath12k_dp_rx_bufs_replenish(struct ath12k_dp *dp,
 				struct dp_rxdma_ring *rx_ring,
@@ -81,7 +106,6 @@ int ath12k_dp_rx_bufs_replenish(struct ath12k_dp *dp,
 	int num_free;
 	int num_remain;
 	u32 cookie;
-	dma_addr_t paddr;
 	struct ath12k_rx_desc_info *rx_desc;
 	enum hal_rx_buf_return_buf_manager mgr = dp->hal->hal_params->rx_buf_rbm;
 
@@ -114,51 +138,33 @@ int ath12k_dp_rx_bufs_replenish(struct ath12k_dp *dp,
 	}
 
 	while (num_remain > 0) {
-		skb = dev_alloc_skb(DP_RX_BUFFER_SIZE +
-				    DP_RX_BUFFER_ALIGN_SIZE);
+		skb = ath12k_dp_rx_build_skb(dp, rx_ring);
 		if (!skb)
 			break;
-
-		if (!IS_ALIGNED((unsigned long)skb->data,
-				DP_RX_BUFFER_ALIGN_SIZE)) {
-			skb_pull(skb,
-				 PTR_ALIGN(skb->data, DP_RX_BUFFER_ALIGN_SIZE) -
-				 skb->data);
-		}
-
-		paddr = dma_map_single(dp->dev, skb->data,
-				       skb->len + skb_tailroom(skb),
-				       DMA_FROM_DEVICE);
-		if (dma_mapping_error(dp->dev, paddr))
-			goto fail_free_skb;
 
 		rx_desc = list_first_entry_or_null(used_list,
 						   struct ath12k_rx_desc_info,
 						   list);
 		if (!rx_desc)
-			goto fail_dma_unmap;
+			goto fail_free_skb;
+
+		desc = ath12k_hal_srng_src_get_next_entry(ab, srng);
+		if (!desc)
+			goto fail_free_skb;
 
 		rx_desc->skb = skb;
 		cookie = rx_desc->cookie;
 
-		desc = ath12k_hal_srng_src_get_next_entry(ab, srng);
-		if (!desc)
-			goto fail_dma_unmap;
-
 		list_del(&rx_desc->list);
-		ATH12K_SKB_RXCB(skb)->paddr = paddr;
-
 		num_remain--;
 
-		ath12k_hal_rx_buf_addr_info_set(dp->hal, desc, paddr, cookie,
-						mgr);
+		ath12k_hal_rx_buf_addr_info_set(dp->hal, desc,
+						ATH12K_SKB_RXCB(skb)->paddr,
+						cookie, mgr);
 	}
 
 	goto out;
 
-fail_dma_unmap:
-	dma_unmap_single(dp->dev, paddr, skb->len + skb_tailroom(skb),
-			 DMA_FROM_DEVICE);
 fail_free_skb:
 	dev_kfree_skb_any(skb);
 out:
@@ -196,12 +202,21 @@ static int ath12k_dp_rxdma_mon_buf_ring_free(struct ath12k_base *ab,
 	return 0;
 }
 
+static void ath12k_dp_rxdma_ring_buf_cleanup(struct dp_rxdma_ring *rx_ring)
+{
+	if (rx_ring->page_pool) {
+		page_pool_destroy(rx_ring->page_pool);
+		rx_ring->page_pool = NULL;
+	}
+}
+
 static int ath12k_dp_rxdma_buf_free(struct ath12k_base *ab)
 {
 	struct ath12k_dp *dp = ath12k_ab_to_dp(ab);
 	int i;
 
 	ath12k_dp_rxdma_mon_buf_ring_free(ab, &dp->rxdma_mon_buf_ring);
+	ath12k_dp_rxdma_ring_buf_cleanup(&dp->rx_refill_buf_ring);
 
 	if (ab->hw_params->rxdma1_enable)
 		return 0;
@@ -236,10 +251,27 @@ static int ath12k_dp_rxdma_mon_ring_buf_setup(struct ath12k_base *ab,
 static int ath12k_dp_rxdma_ring_buf_setup(struct ath12k_base *ab,
 					  struct dp_rxdma_ring *rx_ring)
 {
+	struct page_pool_params pp_params = {
+		.order = 0,
+		.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV,
+		.nid = NUMA_NO_NODE,
+		.dma_dir = DMA_BIDIRECTIONAL,
+		.max_len = PAGE_SIZE,
+		.dev = ab->dev,
+		.offset = 0,
+	};
 	LIST_HEAD(list);
 
 	rx_ring->bufs_max = rx_ring->refill_buf_ring.size /
 			ath12k_hal_srng_get_entrysize(ab, HAL_RXDMA_BUF);
+
+	rx_ring->page_pool = page_pool_create(&pp_params);
+	if (IS_ERR(rx_ring->page_pool)) {
+		int err = PTR_ERR(rx_ring->page_pool);
+
+		rx_ring->page_pool = NULL;
+		return err;
+	}
 
 	ath12k_dp_rx_bufs_replenish(ath12k_ab_to_dp(ab), rx_ring, &list, 0);
 
@@ -263,10 +295,13 @@ static int ath12k_dp_rxdma_buf_setup(struct ath12k_base *ab)
 		ret = ath12k_dp_rxdma_mon_ring_buf_setup(ab,
 							 &dp->rxdma_mon_buf_ring,
 							 HAL_RXDMA_MONITOR_BUF);
-		if (ret)
+		if (ret) {
 			ath12k_warn(ab,
 				    "failed to setup HAL_RXDMA_MONITOR_BUF\n");
-		return ret;
+			goto error;
+		}
+
+		return 0;
 	}
 
 	for (i = 0; i < ab->hw_params->num_rxdma_per_pdev; i++) {
@@ -276,11 +311,15 @@ static int ath12k_dp_rxdma_buf_setup(struct ath12k_base *ab)
 		if (ret) {
 			ath12k_warn(ab,
 				    "failed to setup HAL_RXDMA_MONITOR_STATUS\n");
-			return ret;
+			goto error;
 		}
 	}
 
 	return 0;
+error:
+	ath12k_dp_rxdma_ring_buf_cleanup(&dp->rx_refill_buf_ring);
+
+	return ret;
 }
 
 static void ath12k_dp_rx_pdev_srng_free(struct ath12k *ar)
