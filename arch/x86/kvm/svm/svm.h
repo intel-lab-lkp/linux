@@ -234,6 +234,8 @@ struct svm_nested_state {
 	 */
 	struct vmcb_save_area_cached save;
 
+	kvm_tlb_tag_t asid02;
+
 	/*
 	 * Indicates whether MSR bitmap for L2 needs to be rebuilt due to
 	 * changes in MSR bitmap for L1 or switching to a different L2. Note,
