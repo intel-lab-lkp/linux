@@ -3,8 +3,10 @@
 #define _GNU_SOURCE
 #include <err.h>
 #include <errno.h>
+#include <limits.h>
 #include <setjmp.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -29,6 +31,9 @@
 #define XFEATURE_MASK_XTILECFG	(1 << XFEATURE_XTILECFG)
 #define XFEATURE_MASK_XTILEDATA	(1 << XFEATURE_XTILEDATA)
 #define XFEATURE_MASK_XTILE	(XFEATURE_MASK_XTILECFG | XFEATURE_MASK_XTILEDATA)
+
+#define EXEC_TEST_ARG		"--exec-test"
+#define EXEC_TEST_ITERS		10
 
 struct xstate_info xtiledata;
 
@@ -478,10 +483,143 @@ static void test_fork(void)
 	_exit(0);
 }
 
-int main(void)
+static int count_dynamic_fpstates(void)
+{
+	char *line = NULL;
+	size_t line_size = 0;
+	FILE *fp;
+	int count = 0;
+
+	fp = fopen("/proc/vmallocinfo", "r");
+	if (!fp)
+		return -errno;
+
+	while (getline(&line, &line_size, fp) >= 0) {
+		if (strstr(line, "__xfd_enable_feature") ||
+		    strstr(line, "fpstate_realloc"))
+			count++;
+	}
+
+	if (ferror(fp))
+		count = -EIO;
+
+	free(line);
+	fclose(fp);
+	return count;
+}
+
+static int parse_exec_arg(const char *arg)
+{
+	char *end;
+	long value;
+
+	errno = 0;
+	value = strtol(arg, &end, 10);
+	if (errno || *end || value < 0 || value > INT_MAX)
+		fatal_error("invalid exec test argument: %s", arg);
+
+	return value;
+}
+
+static int run_exec_test(int iterations, int baseline)
+{
+	char iterations_arg[16];
+	char baseline_arg[16];
+	int allocated;
+
+	if (!iterations)
+		return 0;
+
+	req_xtiledata_perm();
+	if (!load_rand_tiledata(stashed_xsave))
+		fatal_error("failed to load tiledata before exec()");
+
+	if (iterations == EXEC_TEST_ITERS) {
+		allocated = count_dynamic_fpstates();
+		if (allocated != baseline + 1)
+			return KSFT_SKIP;
+	}
+
+	snprintf(iterations_arg, sizeof(iterations_arg), "%d", iterations - 1);
+	snprintf(baseline_arg, sizeof(baseline_arg), "%d", baseline);
+	execl("/proc/self/exe", "amx", EXEC_TEST_ARG, iterations_arg,
+	      baseline_arg, NULL);
+	fatal_error("exec");
+}
+
+static void test_exec(void)
+{
+	char iterations_arg[16];
+	char baseline_arg[16];
+	int before, after, delta;
+	pid_t child;
+	int status;
+
+	printf("[RUN]\tCheck dynamic fpstate cleanup across exec().\n");
+
+	before = count_dynamic_fpstates();
+	if (before < 0) {
+		printf("[SKIP]\tCannot read /proc/vmallocinfo: %s\n",
+		       strerror(-before));
+		return;
+	}
+
+	child = fork();
+	if (child < 0)
+		fatal_error("fork");
+	if (!child) {
+		snprintf(iterations_arg, sizeof(iterations_arg), "%d",
+			 EXEC_TEST_ITERS);
+		snprintf(baseline_arg, sizeof(baseline_arg), "%d", before);
+		execl("/proc/self/exe", "amx", EXEC_TEST_ARG, iterations_arg,
+		      baseline_arg, NULL);
+		fatal_error("exec");
+	}
+
+	if (waitpid(child, &status, 0) != child)
+		fatal_error("waitpid");
+	if (WIFEXITED(status) && WEXITSTATUS(status) == KSFT_SKIP) {
+		printf("[SKIP]\tDynamic fpstate allocation was not isolated.\n");
+		return;
+	}
+	if (!WIFEXITED(status) || WEXITSTATUS(status))
+		fatal_error("exec test child");
+
+	after = count_dynamic_fpstates();
+	if (after < 0) {
+		printf("[SKIP]\tCannot read /proc/vmallocinfo after exec(): %s\n",
+		       strerror(-after));
+		return;
+	}
+
+	delta = after - before;
+	if (!delta) {
+		printf("[OK]\tDynamic fpstate allocations were freed across exec().\n");
+		return;
+	}
+
+	if (delta == EXEC_TEST_ITERS)
+		errx(1, "[FAIL]\texec() leaked %d dynamic fpstate allocations",
+		     delta);
+
+	printf("[SKIP]\tDynamic fpstate vmalloc usage changed concurrently.\n");
+}
+
+int main(int argc, char **argv)
 {
 	unsigned long features;
+	int iterations = 0;
+	int baseline = 0;
+	bool exec_test;
 	long rc;
+
+	exec_test = argc == 4 && !strcmp(argv[1], EXEC_TEST_ARG);
+	if (exec_test) {
+		iterations = parse_exec_arg(argv[2]);
+		baseline = parse_exec_arg(argv[3]);
+		if (!iterations)
+			return 0;
+	}
 
 	rc = syscall(SYS_arch_prctl, ARCH_GET_XCOMP_SUPP, &features);
 	if (rc || (features & XFEATURE_MASK_XTILE) != XFEATURE_MASK_XTILE) {
@@ -498,6 +636,10 @@ int main(void)
 	init_stashed_xsave();
 	sethandler(SIGILL, handle_noperm, 0);
 
+	if (exec_test)
+		return run_exec_test(iterations, baseline);
+
+	test_exec();
 	test_dynamic_state();
 
 	/* Request permission for the following tests */
