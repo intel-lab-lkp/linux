@@ -1877,7 +1877,12 @@ static int dsi_host_parse_lane_data(struct msm_dsi_host *msm_host,
 
 static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc_config *dsc)
 {
+	enum drm_dsc_params_type rc_params_type = DRM_DSC_1_1_PRE_SCR;
 	int ret;
+
+	/* This DSI path configures RGB, not native subsampled YCbCr. */
+	if (dsc->native_420 || dsc->native_422)
+		return -EOPNOTSUPP;
 
 	if (dsc->bits_per_pixel & 0xf) {
 		DRM_DEV_ERROR(&msm_host->pdev->dev, "DSI does not support fractional bits_per_pixel\n");
@@ -1908,8 +1913,10 @@ static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc
 	drm_dsc_set_const_params(dsc);
 	drm_dsc_set_rc_buf_thresh(dsc);
 
-	/* DPU supports only pre-SCR panels */
-	ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
+	if (dsc->dsc_version_major == 1 && dsc->dsc_version_minor == 2)
+		rc_params_type = DRM_DSC_1_2_444;
+
+	ret = drm_dsc_setup_rc_params(dsc, rc_params_type);
 	if (ret) {
 		DRM_DEV_ERROR(&msm_host->pdev->dev, "could not find DSC RC parameters\n");
 		return ret;
