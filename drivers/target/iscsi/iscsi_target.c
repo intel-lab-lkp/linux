@@ -1098,6 +1098,12 @@ int iscsit_setup_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 					     ISCSI_REASON_BOOKMARK_INVALID, buf);
 	}
 
+	if (payload_length && !(hdr->flags & ISCSI_FLAG_CMD_WRITE)) {
+		pr_err("Immediate data for non-WRITE command\n");
+		return iscsit_add_reject_cmd(cmd,
+					     ISCSI_REASON_PROTOCOL_ERROR, buf);
+	}
+
 	cdb = hdr->cdb;
 
 	if (hdr->hlength) {
@@ -1384,8 +1390,16 @@ iscsit_handle_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 	bool dump_payload = false;
 
 	rc = iscsit_setup_scsi_cmd(conn, cmd, buf);
-	if (rc < 0)
+	if (rc < 0) {
+		/*
+		 * setup may queue a Reject before the data segment has been
+		 * consumed.  Do not let the receive loop treat those bytes as a
+		 * new BHS.  Closing is the bounded ERL=0 recovery policy.
+		 */
+		if (ntoh24(hdr->dlength))
+			return -1;
 		return 0;
+	}
 	/*
 	 * Allocation iovecs needed for struct socket operations for
 	 * traditional iSCSI block I/O.
