@@ -2241,10 +2241,20 @@ DECLARE_PER_CPU(struct sched_domain __rcu *, sd_asym_cpucapacity);
 
 extern struct static_key_false sched_asym_cpucapacity;
 extern struct static_key_false sched_cluster_active;
+DECLARE_STATIC_KEY_FALSE(sched_idle_smt_prio);
 
 static __always_inline bool sched_asym_cpucap_active(void)
 {
 	return static_branch_unlikely(&sched_asym_cpucapacity);
+}
+
+static __always_inline bool sched_idle_smt_prio_active(void)
+{
+#ifdef CONFIG_SCHED_IDLE_SMT_PRIO
+	return static_branch_unlikely(&sched_idle_smt_prio);
+#else
+	return false;
+#endif
 }
 
 struct sched_group_capacity {

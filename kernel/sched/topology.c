@@ -684,6 +684,7 @@ DEFINE_PER_CPU(struct sched_domain __rcu *, sd_asym_cpucapacity);
 
 DEFINE_STATIC_KEY_FALSE(sched_asym_cpucapacity);
 DEFINE_STATIC_KEY_FALSE(sched_cluster_active);
+DEFINE_STATIC_KEY_FALSE(sched_idle_smt_prio);
 
 static void update_top_cache_domain(int cpu)
 {
@@ -1559,6 +1560,21 @@ build_sched_groups(struct sched_domain *sd, int cpu)
 	return 0;
 }
 
+#ifdef CONFIG_SCHED_IDLE_SMT_PRIO
+static void sched_set_idle_smt_prio(int asym_detected)
+{
+	bool smt_prio;
+
+	smt_prio = arch_needs_idle_smt_prio() && asym_detected;
+	if (smt_prio && !sched_idle_smt_prio_active())
+		static_branch_enable_cpuslocked(&sched_idle_smt_prio);
+	else if (!smt_prio && sched_idle_smt_prio_active())
+		static_branch_disable_cpuslocked(&sched_idle_smt_prio);
+}
+#else
+static void sched_set_idle_smt_prio(int asym_detected) {}
+#endif
+
 /*
  * Initialize sched groups cpu_capacity.
  *
@@ -1769,6 +1785,7 @@ static void asym_cpu_capacity_scan(void)
 		}
 	}
 
+	sched_set_idle_smt_prio(!list_is_singular(&asym_cap_list));
 	/*
 	 * Only one capacity value has been detected i.e. this system is symmetric.
 	 * No need to keep this data around.

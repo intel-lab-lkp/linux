@@ -47,6 +47,9 @@ config ARCH_SUPPORTS_SCHED_SMT
 config ARCH_SUPPORTS_SCHED_CLUSTER
 	bool
 
+config ARCH_SUPPORTS_SCHED_IDLE_SMT_PRIO
+	bool
+
 config ARCH_SUPPORTS_SCHED_MC
 	bool
 
@@ -78,6 +81,17 @@ config SCHED_MC
 	  Multi-core scheduler support improves the CPU scheduler's decision
 	  making when dealing with multi-core CPU chips at a cost of slightly
 	  increased overhead in some places. If unsure say N here.
+
+config SCHED_IDLE_SMT_PRIO
+	bool "Idle SMT priority support in presence of asymmetric capacities"
+	depends on SCHED_SMT
+	depends on ARCH_SUPPORTS_SCHED_IDLE_SMT_PRIO
+	default y
+	help
+	  On asymmetric CPU capacity systems, an idle SMT sibling of a
+	  busy high-capacity core can outperform a fully idle low-capacity
+	  core. Allows architectures to override the schedulers default
+	  idle core preference accordingly.
 
 # Selected by HOTPLUG_CORE_SYNC_DEAD or HOTPLUG_CORE_SYNC_FULL
 config HOTPLUG_CORE_SYNC

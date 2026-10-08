@@ -275,6 +275,15 @@ unsigned int arch_scale_freq_ref(int cpu)
 }
 #endif
 
+#ifdef CONFIG_SCHED_IDLE_SMT_PRIO
+#ifndef arch_needs_idle_smt_prio
+static __always_inline bool arch_needs_idle_smt_prio(void)
+{
+	return true;
+}
+#endif
+#endif
+
 static inline int task_node(const struct task_struct *p)
 {
 	return cpu_to_node(task_cpu(p));

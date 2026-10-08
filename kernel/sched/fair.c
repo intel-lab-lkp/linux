@@ -8813,11 +8813,14 @@ static int
 select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
 {
 	/*
-	 * On !SMT systems, has_idle_core is always false and preferred_core
-	 * is always true (CPU == core), so the SMT preference logic below
-	 * collapses to the plain capacity scan.
+	 * On !SMT systems or when idle SMT thread priority is active,
+	 * has_idle_core is always false and preferred_core is always true
+	 * (CPU == core), so the SMT preference logic below collapses to the
+	 * plain capacity scan.
 	 */
-	bool has_idle_core = sched_smt_active() && test_idle_cores(target);
+	bool has_idle_core = sched_smt_active() &&
+			     !sched_idle_smt_prio_active() &&
+			     test_idle_cores(target);
 	unsigned long task_util, util_min, util_max, best_cap = 0;
 	int fits, best_fits = ASYM_IDLE_THREAD_MISFIT;
 	int cpu, best_cpu = -1;
@@ -8860,8 +8863,8 @@ select_idle_capacity(struct task_struct *p, struct sched_domain *sd, int target)
 
 		/*
 		 * Perfect fit: capacity satisfies util + uclamp and the CPU
-		 * sits on a fully-idle SMT core, this is a !SMT system, or
-		 * there is no idle core to find.
+		 * sits on a fully-idle SMT core, this is a !SMT system, idle
+		 * smt priority is active, or there is no idle core to find.
 		 * Short-circuit the rank-based selection and return
 		 * immediately.
 		 */
@@ -8936,15 +8939,17 @@ static inline bool asym_fits_cpu(unsigned long util,
 		 * Return true only if the cpu fully fits the task requirements
 		 * which include the utilization and the performance hints.
 		 *
-		 * When SMT is active, also require that the core has no busy
-		 * siblings.
+		 * When SMT is active or idle SMT priority is disabled, also
+		 * require that the core has no busy siblings.
 		 *
 		 * Note: gating on is_core_idle() also makes the early-bailout
 		 * candidates in select_idle_sibling() (target, prev,
 		 * recent_used_cpu) idle-core-aware on ASYM+SMT, which the
 		 * NO_ASYM path does not do.
 		 */
-		return (!sched_smt_active() || is_core_idle(cpu)) &&
+		return (!sched_smt_active() ||
+		       sched_idle_smt_prio_active() ||
+		       is_core_idle(cpu)) &&
 		       (util_fits_cpu(util, util_min, util_max, cpu) > 0);
 	}
 
@@ -11793,6 +11798,12 @@ static inline bool smt_balance(struct lb_env *env, struct sg_lb_stats *sgs,
 	if (!env->idle)
 		return false;
 
+	/* Skip group_smt_balance case when idle SMT priority is active */
+	if (sched_idle_smt_prio_active()) {
+		if (env->sd->flags & SD_ASYM_CPUCAPACITY)
+			return false;
+	}
+
 	/*
 	 * For SMT source group, it is better to move a task
 	 * to a CPU that doesn't have multiple tasks sharing its CPU capacity.
@@ -12121,10 +12132,10 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 	 * CPUs in the group should either be possible to resolve
 	 * internally or be covered by avg_load imbalance (eventually).
 	 *
-	 * When SMT is active, only pull a misfit to dst_cpu if it is on a
-	 * fully idle core; otherwise the effective capacity of the core is
-	 * reduced and we may not actually provide more capacity than the
-	 * source.
+	 * When SMT is active or idle smt priority disabled, only pull a misfit
+	 * to dst_cpu if it is on a fully idle core; otherwise the effective
+	 * capacity of the core is reduced and we may not actually provide more
+	 * capacity than the source.
 	 */
 	if ((env->sd->flags & SD_ASYM_CPUCAPACITY) &&
 	    (sgs->group_type == group_misfit_task) &&
@@ -12429,6 +12440,17 @@ static bool update_pick_idlest(struct sched_group *idlest,
 		break;
 
 	case group_has_spare:
+		/*
+		 * Select group with higher max capacity to prioritize groups
+		 * with high capacity SMT siblings
+		 */
+		if (sched_idle_smt_prio_active()) {
+			if (idlest->sgc->max_capacity > group->sgc->max_capacity)
+				return false;
+			if (idlest->sgc->max_capacity < group->sgc->max_capacity)
+				break;
+		}
+
 		/* Select group with most idle CPUs */
 		if (idlest_sgs->idle_cpus > sgs->idle_cpus)
 			return false;
@@ -12699,7 +12721,9 @@ static inline void update_sd_lb_stats(struct lb_env *env, struct sd_lb_stats *sd
 	unsigned long sum_util = 0;
 	bool sg_overloaded = 0, sg_overutilized = 0;
 
-	env->dst_core_idle = !sched_smt_active() || is_core_idle(env->dst_cpu);
+	env->dst_core_idle = !sched_smt_active() ||
+			     is_core_idle(env->dst_cpu) ||
+			     sched_idle_smt_prio_active();
 
 	do {
 		struct sg_lb_stats *sgs = &tmp_sgs;
@@ -13171,11 +13195,14 @@ static struct rq *sched_balance_find_src_rq(struct lb_env *env,
 			bool cluster_equal_cap = static_branch_unlikely(&sched_cluster_active) &&
 						 (get_actual_cpu_capacity(env->dst_cpu) ==
 						  get_actual_cpu_capacity(i));
-			bool smt_degraded_cap = sched_smt_active() && !is_core_idle(i);
+			bool smt_degraded_cap = sched_smt_active() &&
+						!is_core_idle(i) &&
+						!sched_idle_smt_prio_active();
 
 			/*
-			 * Busy SMT siblings reduce the capacity of CPU @i. Do
-			 * not skip it in this case.
+			 * Busy SMT siblings reduce the capacity of CPU @i
+			 * unless idle SMT priority is active. Do not skip it
+			 * in this case.
 			 *
 			 * CONFIG_SCHED_CLUSTER requires balancing load across
 			 * clusters of identical capacity, accounting for
@@ -13394,6 +13421,10 @@ static int should_we_balance(struct lb_env *env)
 	for_each_cpu_and(cpu, swb_cpus, env->cpus) {
 		if (!idle_cpu(cpu))
 			continue;
+		if (sched_idle_smt_prio_active()) {
+			if (env->sd->flags & SD_ASYM_CPUCAPACITY)
+				return cpu == env->dst_cpu;
+		}
 
 		/*
 		 * Don't balance to idle SMT in busy core right away when
