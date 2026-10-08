@@ -398,8 +398,9 @@ static void __init at91sam9x5_sckc_register(struct device_node *np,
 
 		xtal_name = of_clk_get_parent_name(child, 0);
 		bypass = of_property_read_bool(child, "atmel,osc-bypass");
+		of_node_put(child);
 
-		child =  of_get_compatible_child(np, "atmel,at91sam9x5-clk-slow");
+		child = of_get_compatible_child(np, "atmel,at91sam9x5-clk-slow");
 	} else {
 		bypass = of_property_read_bool(np, "atmel,osc-bypass");
 	}
@@ -431,6 +432,7 @@ static void __init at91sam9x5_sckc_register(struct device_node *np,
 	if (WARN_ON(ret))
 		goto unregister_slowck;
 
+	of_node_put(child);
 	return;
 
 unregister_slowck:
@@ -439,6 +441,7 @@ unregister_slow_osc:
 	at91_clk_unregister_slow_osc(slow_osc);
 unregister_slow_rc:
 	at91_clk_unregister_slow_rc_osc(slow_rc);
+	of_node_put(child);
 }
 
 static const struct clk_slow_bits at91sam9x5_bits = {
