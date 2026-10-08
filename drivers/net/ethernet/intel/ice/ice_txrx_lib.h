@@ -70,25 +70,32 @@ ice_build_tstamp_desc(u16 tx_desc, u32 tstamp)
 /**
  * ice_get_vlan_tci - get VLAN TCI from Rx flex descriptor
  * @rx_desc: Rx 32b flex descriptor with RXDID=2
+ * @vlan_tci: VLAN TCI stripped by hardware
  *
  * The OS and current PF implementation only support stripping a single VLAN tag
- * at a time, so there should only ever be 0 or 1 tags in the l2tag* fields. If
- * one is found return the tag, else return 0 to mean no VLAN tag was found.
+ * at a time, so there should only ever be 0 or 1 tags in the l2tag* fields.
+ *
+ * Return: true if a VLAN tag was stripped and stored in @vlan_tci, false
+ * otherwise.
  */
-static inline u16
-ice_get_vlan_tci(const union ice_32b_rx_flex_desc *rx_desc)
+static inline bool
+ice_get_vlan_tci(const union ice_32b_rx_flex_desc *rx_desc, u16 *vlan_tci)
 {
 	u16 stat_err_bits;
 
 	stat_err_bits = BIT(ICE_RX_FLEX_DESC_STATUS0_L2TAG1P_S);
-	if (ice_test_staterr(rx_desc->wb.status_error0, stat_err_bits))
-		return le16_to_cpu(rx_desc->wb.l2tag1);
+	if (ice_test_staterr(rx_desc->wb.status_error0, stat_err_bits)) {
+		*vlan_tci = le16_to_cpu(rx_desc->wb.l2tag1);
+		return true;
+	}
 
 	stat_err_bits = BIT(ICE_RX_FLEX_DESC_STATUS1_L2TAG2P_S);
-	if (ice_test_staterr(rx_desc->wb.status_error1, stat_err_bits))
-		return le16_to_cpu(rx_desc->wb.l2tag2_2nd);
+	if (ice_test_staterr(rx_desc->wb.status_error1, stat_err_bits)) {
+		*vlan_tci = le16_to_cpu(rx_desc->wb.l2tag2_2nd);
+		return true;
+	}
 
-	return 0;
+	return false;
 }
 
 /**
@@ -132,7 +139,5 @@ void
 ice_process_skb_fields(struct ice_rx_ring *rx_ring,
 		       union ice_32b_rx_flex_desc *rx_desc,
 		       struct sk_buff *skb);
-void
-ice_receive_skb(struct ice_rx_ring *rx_ring, struct sk_buff *skb, u16 vlan_tci);
 
 #endif /* !_ICE_TXRX_LIB_H_ */

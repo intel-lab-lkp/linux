@@ -218,6 +218,7 @@ ice_process_skb_fields(struct ice_rx_ring *rx_ring,
 		       struct sk_buff *skb)
 {
 	u16 ptype = ice_get_ptype(rx_desc);
+	u16 vlan_tci;
 
 	ice_rx_hash_to_skb(rx_ring, rx_desc, skb, ptype);
 
@@ -238,27 +239,11 @@ ice_process_skb_fields(struct ice_rx_ring *rx_ring,
 
 	ice_rx_csum(rx_ring, skb, rx_desc, ptype);
 
+	if (rx_ring->vlan_proto && ice_get_vlan_tci(rx_desc, &vlan_tci))
+		__vlan_hwaccel_put_tag(skb, rx_ring->vlan_proto, vlan_tci);
+
 	if (rx_ring->ptp_rx)
 		ice_ptp_rx_hwts_to_skb(rx_ring, rx_desc, skb);
-}
-
-/**
- * ice_receive_skb - Send a completed packet up the stack
- * @rx_ring: Rx ring in play
- * @skb: packet to send up
- * @vlan_tci: VLAN TCI for packet
- *
- * This function sends the completed packet (via. skb) up the stack using
- * gro receive functions (with/without VLAN tag)
- */
-void
-ice_receive_skb(struct ice_rx_ring *rx_ring, struct sk_buff *skb, u16 vlan_tci)
-{
-	if ((vlan_tci & VLAN_VID_MASK) && rx_ring->vlan_proto)
-		__vlan_hwaccel_put_tag(skb, rx_ring->vlan_proto,
-				       vlan_tci);
-
-	napi_gro_receive(&rx_ring->q_vector->napi, skb);
 }
 
 /**
@@ -587,8 +572,7 @@ static int ice_xdp_rx_vlan_tag(const struct xdp_md *ctx, __be16 *vlan_proto,
 	if (!*vlan_proto)
 		return -ENODATA;
 
-	*vlan_tci = ice_get_vlan_tci(xdp_ext->desc);
-	if (!*vlan_tci)
+	if (!ice_get_vlan_tci(xdp_ext->desc, vlan_tci))
 		return -ENODATA;
 
 	return 0;
