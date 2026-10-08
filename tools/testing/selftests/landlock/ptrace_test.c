@@ -343,7 +343,7 @@ TEST_F(audit, trace)
 	struct audit_records records;
 
 	/* Makes sure there is no superfluous logged records. */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 
@@ -381,7 +381,7 @@ TEST_F(audit, trace)
 		EXPECT_EQ(0, matches_log_ptrace(_metadata, self->audit_fd,
 						getpid()));
 
-		EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+		ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 		EXPECT_EQ(0, records.access);
 		/* Checks for a domain creation. */
 		EXPECT_EQ(1, records.domain);
@@ -428,7 +428,7 @@ TEST_F(audit, trace)
 		_metadata->exit_code = KSFT_FAIL;
 
 	/* Makes sure there is no superfluous logged records. */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 }

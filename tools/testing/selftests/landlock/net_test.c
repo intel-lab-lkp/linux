@@ -3004,7 +3004,7 @@ TEST_F(audit, bind)
 	EXPECT_EQ(0, matches_auditlog(self->audit_fd, audit_evt, "saddr",
 				      variant->addr, "src", self->srv0.port));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 
@@ -3015,7 +3015,7 @@ TEST_F(audit, bind)
 	ASSERT_LE(0, sock_fd);
 	EXPECT_EQ(-EACCES, bind_variant(sock_fd, &self->srv2));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 
@@ -3065,7 +3065,7 @@ TEST_F(audit, connect)
 	EXPECT_EQ(0, matches_auditlog(self->audit_fd, audit_evt, "daddr",
 				      variant->addr, "dest", self->srv0.port));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 
@@ -3075,7 +3075,7 @@ TEST_F(audit, connect)
 
 		EXPECT_EQ(0, matches_auditlog(self->audit_fd, "net\\.bind_udp",
 					      NULL, NULL, NULL, 0));
-		EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+		ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 		EXPECT_EQ(0, records.access);
 		EXPECT_EQ(0, records.domain);
 	}
@@ -3087,7 +3087,7 @@ TEST_F(audit, connect)
 	ASSERT_LE(0, sock_fd);
 	EXPECT_EQ(-EACCES, connect_variant(sock_fd, &self->srv2));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 
@@ -3136,7 +3136,7 @@ TEST_F(audit, connect_quiet_bind)
 	EXPECT_EQ(0, matches_auditlog(self->audit_fd, audit_evt, "daddr",
 				      variant->addr, "dest", self->srv2.port));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 
 	EXPECT_EQ(0, close(sock_fd));
@@ -3155,7 +3155,7 @@ TEST_F(audit, connect_quiet_bind)
 	EXPECT_EQ(-EACCES, connect_variant(sock_fd, &self->srv2));
 
 	/* Quieted - no logs expected. */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 
 	EXPECT_EQ(0, close(sock_fd));
@@ -3226,7 +3226,7 @@ TEST_F(audit, connect_bound)
 					       variant->addr, self->srv0.port,
 					       srv_remote.port));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 
@@ -3266,7 +3266,7 @@ TEST_F(audit, sendmsg)
 				      "daddr", variant->addr, "dest",
 				      self->srv0.port));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 
@@ -3274,7 +3274,7 @@ TEST_F(audit, sendmsg)
 	EXPECT_EQ(-EACCES, sendto_variant(sock_fd, &self->srv1, "A", 1, 0));
 	EXPECT_EQ(0, matches_auditlog(self->audit_fd, "net\\.bind_udp", NULL,
 				      NULL, NULL, 0));
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 
@@ -3282,7 +3282,7 @@ TEST_F(audit, sendmsg)
 		  sendto_variant(sock_fd, &self->unspec_srv0, "B", 1, 0));
 	EXPECT_EQ(0, matches_auditlog(self->audit_fd, "net\\.connect_send_udp",
 				      "daddr", NULL, "dest", 0));
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 

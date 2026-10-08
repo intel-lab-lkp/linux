@@ -329,7 +329,7 @@ TEST_F(audit, log_subdomains_off_fork)
 					NULL));
 
 	/* Drains any remaining records (e.g. domain allocation). */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 
 	/*
 	 * Mutes subdomain logs without creating a domain.  The parent's
@@ -361,7 +361,7 @@ TEST_F(audit, log_subdomains_off_fork)
 	EXPECT_EQ(-EAGAIN, matches_log_signal(_metadata, self->audit_fd,
 					      getpid(), NULL));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 
 	EXPECT_EQ(0, close(ruleset_fd));
@@ -487,7 +487,7 @@ TEST_F(audit, log_subdomains_off_tsync)
 					child_data.parent_pid, NULL));
 
 	/* Drains any remaining records (e.g. domain allocation). */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 
 	/*
 	 * Mutes subdomain logs and propagates to the sibling thread via TSYNC,
@@ -509,7 +509,7 @@ TEST_F(audit, log_subdomains_off_tsync)
 	EXPECT_EQ(-EAGAIN, matches_log_signal(_metadata, self->audit_fd,
 					      child_data.parent_pid, NULL));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 
 	EXPECT_EQ(0, close(pipe_child[0]));
@@ -571,7 +571,7 @@ TEST_F(audit, tsync_override_log_subdomains_off)
 					      child_data.parent_pid, NULL));
 
 	/* Drains any remaining records. */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 
 	/*
@@ -740,7 +740,7 @@ TEST_F(audit_flags, signal)
 		EXPECT_EQ(EPERM, errno);
 
 		/* Makes sure there is no superfluous logged records. */
-		EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+		ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 		if (!expect_audit) {
 			EXPECT_EQ(0, records.access);
 		} else {
@@ -929,7 +929,7 @@ TEST_F(audit_exec, signal_and_open)
 	EXPECT_EQ(1, read(pipe_child[0], &buf_parent, 1));
 
 	/* Tests that there was no denial until now. */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 
@@ -948,7 +948,7 @@ TEST_F(audit_exec, signal_and_open)
 	}
 
 	/* Checks that we didn't miss anything. */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 
 	/*
@@ -972,7 +972,7 @@ TEST_F(audit_exec, signal_and_open)
 	}
 
 	/* Checks that we didn't miss anything. */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 
 	/* Waits for the child to terminate. */
@@ -995,7 +995,7 @@ TEST_F(audit_exec, signal_and_open)
 	}
 
 	/* Checks that we didn't miss anything. */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 }
 

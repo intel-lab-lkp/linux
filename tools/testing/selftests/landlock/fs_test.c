@@ -7538,7 +7538,7 @@ TEST_F(audit_layout1, execute_make)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.execute",
 				    file1_s1d1));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 }
@@ -7569,7 +7569,7 @@ TEST_F(audit_layout1, execute_read)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.execute,fs\\.read_file", file1_s1d1));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 }
@@ -7584,7 +7584,7 @@ TEST_F(audit_layout1, write_file)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.write_file", file1_s1d1));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7599,7 +7599,7 @@ TEST_F(audit_layout1, read_file)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.read_file",
 				    file1_s1d1));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7614,7 +7614,7 @@ TEST_F(audit_layout1, read_dir)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.read_dir",
 				    dir_s1d1));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7638,7 +7638,7 @@ TEST_F(audit_layout1, remove_dir)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.remove_dir", dir_s1d2));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 }
@@ -7654,7 +7654,7 @@ TEST_F(audit_layout1, remove_file)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.remove_file", dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7672,7 +7672,7 @@ TEST_F(audit_layout1, make_char)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_char",
 				    dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7691,7 +7691,7 @@ TEST_F(audit_layout1, make_whiteout)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_reg",
 				    dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7709,7 +7709,7 @@ TEST_F(audit_layout1, make_dir)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_dir",
 				    dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7727,7 +7727,7 @@ TEST_F(audit_layout1, make_reg)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_reg",
 				    dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7745,7 +7745,7 @@ TEST_F(audit_layout1, make_sock)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_sock",
 				    dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7763,7 +7763,7 @@ TEST_F(audit_layout1, make_fifo)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_fifo",
 				    dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7781,7 +7781,7 @@ TEST_F(audit_layout1, make_block)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.make_block", dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7799,7 +7799,7 @@ TEST_F(audit_layout1, make_sym)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_sym",
 				    dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7821,7 +7821,7 @@ TEST_F(audit_layout1, refer_handled)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.refer",
 				    dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 }
@@ -7843,7 +7843,7 @@ TEST_F(audit_layout1, refer_make)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.make_reg,fs\\.refer", dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 }
@@ -7863,7 +7863,7 @@ TEST_F(audit_layout1, refer_rename)
 				    "fs\\.remove_file,fs\\.make_reg,fs\\.refer",
 				    dir_s2d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 }
@@ -7888,7 +7888,7 @@ TEST_F(audit_layout1, refer_exchange)
 				    "fs\\.remove_file,fs\\.make_reg,fs\\.refer",
 				    dir_s2d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(0, records.domain);
 }
@@ -7922,7 +7922,7 @@ TEST_F(audit_layout1, refer_rename_half)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.refer",
 				    dir_s1d1));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7938,7 +7938,7 @@ TEST_F(audit_layout1, truncate)
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.truncate",
 				    file1_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7957,7 +7957,7 @@ TEST_F(audit_layout1, ioctl_dev)
 					  "fs\\.ioctl_dev", "/dev/null",
 					  " ioctlcmd=0x541b"));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -7992,7 +7992,7 @@ TEST_F(audit_layout1, resolve_unix)
 	EXPECT_EQ(0, matches_log_fs_extra(_metadata, self->audit_fd,
 					  "fs\\.resolve_unix", path, NULL));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 
@@ -8011,7 +8011,7 @@ TEST_F(audit_layout1, mount)
 	clear_cap(_metadata, CAP_SYS_ADMIN);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.change_topology", dir_s3d2));
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	EXPECT_EQ(0, records.access);
 	EXPECT_EQ(1, records.domain);
 }
@@ -8253,7 +8253,7 @@ void audit_quiet_layout1_test_body(struct __test_metadata *const _metadata,
 						    blocker, target->target));
 
 		/* Check that we see no (other) logs. */
-		EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+		ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 		ASSERT_EQ(0, records.access);
 
 		if (target->expect_open_success && fd >= 0) {
@@ -8297,7 +8297,7 @@ void audit_quiet_layout1_test_body(struct __test_metadata *const _metadata,
 						     " ioctlcmd=0x541b\\+"));
 
 			/* Check that we see no other logs. */
-			EXPECT_EQ(0, audit_count_records(self->audit_fd,
+			ASSERT_EQ(0, audit_count_records(self->audit_fd,
 							 &records));
 			ASSERT_EQ(0, records.access);
 			ASSERT_EQ(0, close(fd));
@@ -9698,7 +9698,7 @@ static void simple_quiet_rename(struct __test_metadata *const _metadata,
 	 * No other logs. records.domain not checked per reasoning in
 	 * audit_quiet_layout1_test_body.
 	 */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -9817,7 +9817,7 @@ TEST_F(audit_quiet_rename, handle_all_deny_quiet_refer)
 	ASSERT_EQ(EXDEV, errno);
 
 	/* No logs */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -9858,7 +9858,7 @@ TEST_F(audit_quiet_rename, handle_all_deny_not_quiet_refer)
 				    dir_s2d1));
 
 	/* No other logs */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -9897,7 +9897,7 @@ TEST_F(audit_quiet_rename, handle_all_deny_refer_quiet_source_not_quiet_dest)
 				    dir_s2d1));
 
 	/* No other logs */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -9924,7 +9924,7 @@ TEST_F(audit_quiet_rename, quiet_same_dir)
 	ASSERT_EQ(-1, renameat(AT_FDCWD, file1_s1d1, AT_FDCWD, file2_s1d1));
 	ASSERT_EQ(EACCES, errno);
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -9964,7 +9964,7 @@ TEST_F(audit_quiet_rename, quiet_flag_on_file_ignored)
 				    dir_s2d1));
 
 	/* No other logs */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10001,7 +10001,7 @@ TEST_F(audit_quiet_rename, quiet_flag_on_file_ignored_same_dir)
 				 "fs\\.remove_file,fs\\.make_reg", dir_s1d1));
 
 	/* No other logs */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10059,7 +10059,7 @@ TEST_F(audit_quiet_rename, two_layers_different_quiet1)
 	ASSERT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.remove_file,fs\\.refer", dir_s1d1));
 	/* No other logs */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10114,7 +10114,7 @@ TEST_F(audit_quiet_rename, two_layers_different_quiet2)
 	 * The youngest denial will be layer 2, but refer is quieted (and that
 	 * layer does not handle any other accesses).
 	 */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10168,7 +10168,7 @@ TEST_F(audit_quiet_rename, two_layers_different_quiet3)
 	/*
 	 * The youngest denial will be layer 2, in which everything is quieted.
 	 */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10214,7 +10214,7 @@ TEST_F(audit_quiet_rename,
 	ASSERT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.make_reg,fs\\.refer", dir_s2d1));
 	/* No other logs. */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10265,7 +10265,7 @@ TEST_F(audit_quiet_rename,
 	ASSERT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.make_reg,fs\\.refer", dir_s2d1));
 	/* No other logs. */
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10298,7 +10298,7 @@ TEST_F(audit_quiet_rename, rename_xchg)
 				RENAME_EXCHANGE));
 	ASSERT_EQ(EACCES, errno);
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10327,7 +10327,7 @@ TEST_F(audit_quiet_rename, quiet_on_parent_mount)
 			       bind_file2_s1d3));
 	ASSERT_EQ(EACCES, errno);
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10359,7 +10359,7 @@ TEST_F(audit_quiet_rename, quiet_behind_mountpoint_ignored)
 				    "fs\\.remove_file,fs\\.make_reg",
 				    bind_dir_s1d3));
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10397,7 +10397,7 @@ TEST_F(audit_quiet_rename, quiet_on_parent_mount_disconnected)
 		  renameat(bind_s1d3_fd, file1_name, bind_s1d3_fd, file2_name));
 	ASSERT_EQ(EACCES, errno);
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
@@ -10435,7 +10435,7 @@ TEST_F(audit_quiet_rename, quiet_behind_mountpoint_disconnected)
 		  renameat(bind_s1d3_fd, file1_name, bind_s1d3_fd, file2_name));
 	ASSERT_EQ(EACCES, errno);
 
-	EXPECT_EQ(0, audit_count_records(self->audit_fd, &records));
+	ASSERT_EQ(0, audit_count_records(self->audit_fd, &records));
 	ASSERT_EQ(0, records.access);
 }
 
