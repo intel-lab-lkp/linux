@@ -952,8 +952,11 @@ static int test_uretprobe(void)
 
 	fd = syscall(__NR_perf_event_open, &attr, 0 /* pid */, -1 /* cpu */,
 		     -1 /* group_fd */, PERF_FLAG_FD_CLOEXEC);
-	if (fd < 0)
+	if (fd < 0) {
+		printf("[SKIP]\tUretprobe test, perf_event_open() failed: %m\n");
+		err = 0;
 		goto out;
+	}
 
 	if (sigsetjmp(jmp_buffer, 1))
 		goto out;
@@ -1031,8 +1034,11 @@ static int test_uprobe_call(void)
 
 	fd = syscall(__NR_perf_event_open, &attr, 0 /* pid */, -1 /* cpu */,
 		     -1 /* group_fd */, PERF_FLAG_FD_CLOEXEC);
-	if (fd < 0)
+	if (fd < 0) {
+		printf("[SKIP]\tUprobe on CALL test, perf_event_open() failed: %m\n");
+		err = 0;
 		goto out;
+	}
 
 	if (sigsetjmp(jmp_buffer, 1))
 		goto out;
