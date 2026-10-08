@@ -252,6 +252,7 @@ static int __init nmdk_timer_of_init(struct device_node *node)
 	struct clk *clk;
 	void __iomem *base;
 	int irq;
+	int ret;
 
 	base = of_iomap(node, 0);
 	if (!base) {
@@ -262,22 +263,33 @@ static int __init nmdk_timer_of_init(struct device_node *node)
 	pclk = of_clk_get_by_name(node, "apb_pclk");
 	if (IS_ERR(pclk)) {
 		pr_err("could not get apb_pclk\n");
-		return PTR_ERR(pclk);
+		ret = PTR_ERR(pclk);
+		goto out_iounmap;
 	}
 
 	clk = of_clk_get_by_name(node, "timclk");
 	if (IS_ERR(clk)) {
 		pr_err("could not get timclk\n");
-		return PTR_ERR(clk);
+		ret = PTR_ERR(clk);
+		goto out_clk_put_pclk;
 	}
 
 	irq = irq_of_parse_and_map(node, 0);
 	if (irq <= 0) {
 		pr_err("Can't parse IRQ\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_clk_put;
 	}
 
 	return nmdk_timer_init(base, irq, pclk, clk);
+
+out_clk_put:
+	clk_put(clk);
+out_clk_put_pclk:
+	clk_put(pclk);
+out_iounmap:
+	iounmap(base);
+	return ret;
 }
 TIMER_OF_DECLARE(nomadik_mtu, "st,nomadik-mtu",
 		       nmdk_timer_of_init);
