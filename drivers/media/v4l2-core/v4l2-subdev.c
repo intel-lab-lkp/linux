@@ -96,6 +96,7 @@ static int subdev_open(struct file *file)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct v4l2_subdev *sd = vdev_to_v4l2_subdev(vdev);
+	struct media_device *mdev = vdev->v4l2_dev->mdev;
 	struct v4l2_subdev_fh *subdev_fh;
 	int ret;
 
@@ -112,10 +113,17 @@ static int subdev_open(struct file *file)
 	v4l2_fh_init(&subdev_fh->vfh, vdev);
 	v4l2_fh_add(&subdev_fh->vfh, file);
 
-	if (sd->v4l2_dev->mdev && sd->entity.graph_obj.mdev->dev) {
+	if (mdev && mdev->dev) {
+		struct device_driver *drv = READ_ONCE(mdev->dev->driver);
 		struct module *owner;
 
-		owner = sd->entity.graph_obj.mdev->dev->driver->owner;
+		/* The media device's driver has been unbound meanwhile. */
+		if (!drv) {
+			ret = -ENODEV;
+			goto err;
+		}
+
+		owner = drv->owner;
 		if (!try_module_get(owner)) {
 			ret = -EBUSY;
 			goto err;
