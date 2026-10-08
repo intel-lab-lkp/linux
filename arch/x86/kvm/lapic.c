@@ -2520,6 +2520,14 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 			val |= APIC_LVT_MASKED;
 		val &= apic_lvt_mask[index];
 		kvm_lapic_set_reg(apic, reg, val);
+
+		/*
+		 * Enabling ExtINT can make an already-asserted PIC interrupt
+		 * deliverable without another transition on the PIC output.
+		 */
+		if (reg == APIC_LVT0 && kvm_apic_accept_pic_intr(apic->vcpu))
+			kvm_make_request(KVM_REQ_EVENT, apic->vcpu);
+
 		break;
 	}
 

@@ -1509,7 +1509,7 @@ static void apic_clear_isr(void)
 static void setup_local_APIC(void)
 {
 	int cpu = smp_processor_id();
-	unsigned int value;
+	unsigned int value, i;
 
 	if (apic_is_disabled) {
 		disable_ioapic_support();
@@ -1526,6 +1526,9 @@ static void setup_local_APIC(void)
 	value = apic_read(APIC_SPIV);
 	value &= ~APIC_SPIV_APIC_ENABLED;
 	apic_write(APIC_SPIV, value);
+
+	for (i = 0; i < 10000000UL; i++)
+		cpu_relax();
 
 #ifdef CONFIG_X86_32
 	/* Pound the ESR really hard over the head with a big hammer - mbligh */
