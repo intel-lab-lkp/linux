@@ -43,13 +43,19 @@ static int hdmi_pll_enable(struct dss_pll *dsspll)
 	int r;
 
 	r = pm_runtime_get_sync(&pll->pdev->dev);
-	WARN_ON(r < 0);
+	if (WARN_ON(r < 0)) {
+		pm_runtime_put_noidle(&pll->pdev->dev);
+		return r;
+	}
 
 	dss_ctrl_pll_enable(dsspll, true);
 
 	r = hdmi_wp_set_pll_pwr(wp, HDMI_PLLPWRCMD_BOTHON_ALLCLKS);
-	if (r)
+	if (r) {
+		dss_ctrl_pll_enable(dsspll, false);
+		pm_runtime_put_sync(&pll->pdev->dev);
 		return r;
+	}
 
 	return 0;
 }
