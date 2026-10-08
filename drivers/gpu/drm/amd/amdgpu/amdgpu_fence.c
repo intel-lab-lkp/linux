@@ -988,7 +988,7 @@ static int gpu_recover_get(void *data, u64 *val)
 	r = pm_runtime_get_sync(dev->dev);
 	if (r < 0) {
 		pm_runtime_put_autosuspend(dev->dev);
-		return 0;
+		return r;
 	}
 
 	if (amdgpu_reset_domain_schedule(adev->reset_domain, &adev->reset_work))
