@@ -355,10 +355,19 @@ int __adis_reset(struct adis *adis)
 }
 EXPORT_SYMBOL_NS_GPL(__adis_reset, "IIO_ADIS_LIB");
 
+static const struct adis_ops adis_default_ops = {
+	.read = __adis_read_reg,
+	.write = __adis_write_reg,
+	.reset = __adis_reset,
+};
+
 static int adis_self_test(struct adis *adis)
 {
 	int ret;
 	const struct adis_timeout *timeouts = adis->data->timeouts;
+
+	if (adis->data->self_test)
+		return adis->data->self_test(adis);
 
 	ret = __adis_write_reg_16(adis, adis->data->self_test_reg,
 				  adis->data->self_test_mask);
@@ -413,7 +422,20 @@ int __adis_initial_startup(struct adis *adis)
 		gpiod_set_value_cansleep(gpio, 0);
 		msleep(timeouts->reset_ms);
 	} else {
-		ret = __adis_reset(adis);
+		ret = adis->ops->reset(adis);
+		if (ret)
+			return ret;
+		/*
+		 * The default reset op (__adis_reset()) already sleeps the
+		 * settle time internally. Custom reset ops are documented
+		 * (struct adis_ops::reset) not to, so sleep here for them.
+		 */
+		if (adis->ops != &adis_default_ops)
+			msleep(timeouts->sw_reset_ms);
+	}
+
+	if (adis->data->post_reset_setup) {
+		ret = adis->data->post_reset_setup(adis);
 		if (ret)
 			return ret;
 	}
@@ -490,12 +512,6 @@ int adis_single_conversion(struct iio_dev *indio_dev,
 	return IIO_VAL_INT;
 }
 EXPORT_SYMBOL_NS_GPL(adis_single_conversion, "IIO_ADISLIB");
-
-static const struct adis_ops adis_default_ops = {
-	.read = __adis_read_reg,
-	.write = __adis_write_reg,
-	.reset = __adis_reset,
-};
 
 /**
  * adis_init() - Initialize adis device structure
