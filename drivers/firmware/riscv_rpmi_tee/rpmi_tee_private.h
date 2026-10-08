@@ -11,6 +11,7 @@
 #include <linux/mutex.h>
 #include <linux/types.h>
 #include <linux/uuid.h>
+#include <linux/workqueue.h>
 
 /* TEE service group and the services used by this module. */
 #define RPMI_SRVGRP_TEE		0x10
@@ -20,12 +21,37 @@
 #define RPMI_TEE_SRV_PROBE_DOMAIN	0x04
 #define RPMI_TEE_SRV_PROBE_ENDPOINT	0x05
 #define RPMI_TEE_SRV_CALL		0x18
+#define RPMI_TEE_SRV_SIGNAL_BUS_SETUP		0x0a
+#define RPMI_TEE_SRV_SIGNAL_BUS_TEARDOWN	0x0b
+#define RPMI_TEE_SRV_SIGNAL_RAISE		0x0c
+#define RPMI_TEE_SRV_SIGNAL_RETRIEVE		0x0d
 #define RPMI_TEE_SRV_MEMORY_PARCEL_CREATE	0x0e
 #define RPMI_TEE_SRV_MEMORY_PARCEL_RECLAIM	0x11
 #define RPMI_TEE_SRV_MEMORY_SEGMENT_SEND	0x12
 
+/**
+ * struct rpmi_tee_notif_state - Signal notification state
+ * @buses: List of signal buses established for TEE endpoints.
+ * @work: Retrieves and dispatches pending TEE-to-REE signals.
+ * @wq: Workqueue used for @work.
+ * @ops_lock: Serializes public notification operations with signal-bus
+ *	    teardown. It prevents new operations after @shutting_down is set and
+ *	    serializes rpmi_tee_op_notify_relinquish() with the empty
+ *	    SIGNAL_RETRIEVE release barrier.
+ * @feature: SIGNAL feature value reported by the transport.
+ * @irq: Linux IRQ assigned to the signal notification interrupt.
+ * @irq_requested: Whether @irq has been requested.
+ * @shutting_down: Prevents public notification operations during teardown.
+ */
 struct rpmi_tee_notif_state {
+	struct list_head buses;
+	struct work_struct work;
+	struct workqueue_struct *wq;
+	struct mutex ops_lock;
 	u32 feature;
+	int irq;
+	bool irq_requested;
+	bool shutting_down;
 };
 
 struct rpmi_tee_mbox {

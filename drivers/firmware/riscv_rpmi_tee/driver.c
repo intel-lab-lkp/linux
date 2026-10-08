@@ -8,14 +8,20 @@
 #include <linux/mailbox_client.h>
 #include <linux/mailbox/riscv-rpmi-message.h>
 #include <linux/cleanup.h>
+#include <linux/bitfield.h>
+#include <linux/interrupt.h>
+#include <linux/irqdomain.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/rpmi_tee.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/unaligned.h>
+#include <linux/workqueue.h>
+#include <linux/xarray.h>
 
 #include "rpmi_tee_private.h"
 
@@ -42,6 +48,15 @@
 
 /* TEE_MEMORY_SEGMENT_SEND flags. */
 #define RPMI_TEE_SEGMENT_LAST		BIT(31)
+
+/* TEE_SIGNAL_BUS_SETUP feature value and TEE_SIGNAL_RETRIEVE flags. */
+#define RPMI_TEE_SIGNAL_MODE_MASK	GENMASK(1, 0)
+#define RPMI_TEE_SIGNAL_WIDTH_MASK	GENMASK(11, 2)
+#define RPMI_TEE_SIGNAL_INDEX_MASK	GENMASK(31, 12)
+
+#define RPMI_TEE_SIGNAL_MODE_SYSTEM_MSI	1
+#define RPMI_TEE_SIGNAL_MORE_AVAILABLE	BIT(31)
+
 /**
  * struct rpmi_tee_probe_features_req - TEE_PROBE_FEATURES request
  * @feature_id: TEE feature identifier to query.
@@ -179,6 +194,87 @@ struct rpmi_tee_parcel_reclaim_resp {
 	__le32 status;
 	__le32 flags;
 } __packed;
+
+/**
+ * struct rpmi_tee_signal_bus_setup_req - SIGNAL_BUS_SETUP request
+ * @target_id: TEE endpoint identifier that owns the signal bus.
+ * @bus_width: Total number of signal IDs in the bus.
+ * @sender_signals: Number of signal IDs reserved for the endpoint sender.
+ */
+struct rpmi_tee_signal_bus_setup_req {
+	__le32 target_id;
+	__le32 bus_width;
+	__le32 sender_signals;
+} __packed;
+
+/**
+ * struct rpmi_tee_signal_bus_teardown_req - SIGNAL_BUS_TEARDOWN request
+ * @target_id: TEE endpoint identifier that owns the signal bus.
+ */
+struct rpmi_tee_signal_bus_teardown_req {
+	__le32 target_id;
+} __packed;
+
+/**
+ * struct rpmi_tee_signal_raise_req - SIGNAL_RAISE request prefix
+ * @target_id: TEE endpoint identifier that owns the signal bus.
+ * @signal_count: Number of signal IDs in @signals.
+ * @signals: Signal IDs to raise.
+ */
+struct rpmi_tee_signal_raise_req {
+	__le32 target_id;
+	__le32 signal_count;
+	__le32 signals[];
+} __packed;
+
+/**
+ * struct rpmi_tee_signal_raise_one_req - Single-signal SIGNAL_RAISE request
+ * @target_id: TEE endpoint identifier that owns the signal bus.
+ * @signal_count: Must be one.
+ * @signal: Signal ID to raise.
+ */
+struct rpmi_tee_signal_raise_one_req {
+	__le32 target_id;
+	__le32 signal_count;
+	__le32 signal;
+} __packed;
+
+/**
+ * struct rpmi_tee_signal_retrieve_resp - SIGNAL_RETRIEVE response prefix
+ * @status: RPMI completion status.
+ * @flags: Response flags.
+ * @target_id: TEE endpoint identifier that owns the signal bus.
+ * @signal_count: Number of signal IDs in @signals.
+ * @signals: Retrieved signal IDs.
+ */
+struct rpmi_tee_signal_retrieve_resp {
+	__le32 status;
+	__le32 flags;
+	__le32 target_id;
+	__le32 signal_count;
+	__le32 signals[];
+} __packed;
+
+enum rpmi_tee_signal_state {
+	RPMI_TEE_SIGNAL_ACTIVE,
+	RPMI_TEE_SIGNAL_RELEASING,
+};
+
+struct rpmi_tee_signal_reservation {
+	struct rpmi_tee_device *rdev;
+	rpmi_tee_notifier_cb cb;
+	void *cb_data;
+	enum rpmi_tee_signal_state state;
+};
+
+struct rpmi_tee_signal_bus {
+	struct list_head node;	/* Link in the notification signal-bus list. */
+	struct mutex lock;	/* Serializes reservation state and lifetime. */
+	struct xarray reservations;
+	u32 endpoint_id;
+	u32 width;
+	u32 tee_to_ree_count;
+};
 
 struct rpmi_tee_child {
 	struct list_head node;
@@ -795,6 +891,280 @@ static int rpmi_tee_op_memory_share(struct rpmi_tee_device *rdev,
 	return rpmi_tee_op_parcel_create(rdev, args, false);
 }
 
+static struct rpmi_tee_signal_bus *
+__rpmi_tee_find_signal_bus(struct rpmi_tee_transport *priv, u32 endpoint_id)
+{
+	struct rpmi_tee_signal_bus *bus;
+
+	list_for_each_entry(bus, &priv->notif.buses, node) {
+		if (bus->endpoint_id == endpoint_id)
+			return bus;
+	}
+
+	return NULL;
+}
+
+static struct rpmi_tee_signal_bus *
+rpmi_tee_find_signal_bus(struct rpmi_tee_transport *priv, u32 endpoint_id)
+{
+	lockdep_assert_held(&priv->notif.ops_lock);
+	/* Do not access signal buses after notification shutdown starts. */
+	if (priv->notif.shutting_down)
+		return NULL;
+
+	return __rpmi_tee_find_signal_bus(priv, endpoint_id);
+}
+
+/* Invoke an active signal callback without holding the bus lock. */
+static int rpmi_tee_dispatch_signal(struct rpmi_tee_signal_bus *bus,
+				    u32 signal)
+{
+	struct rpmi_tee_signal_reservation *resv;
+	rpmi_tee_notifier_cb cb = NULL;
+	struct rpmi_tee_device *rdev = NULL;
+	void *cb_data = NULL;
+
+	if (signal >= bus->tee_to_ree_count)
+		return -EPROTO;
+
+	scoped_guard(mutex, &bus->lock) {
+		resv = xa_load(&bus->reservations, signal);
+		if (resv && resv->state == RPMI_TEE_SIGNAL_ACTIVE) {
+			cb = resv->cb;
+			cb_data = resv->cb_data;
+			rdev = resv->rdev;
+		}
+	}
+
+	if (cb)
+		cb(rdev, signal, cb_data);
+
+	return 0;
+}
+
+/* Release signal IDs that have passed the empty-retrieval barrier. */
+static void rpmi_tee_signal_bus_drop_releasing(struct rpmi_tee_signal_bus *bus)
+{
+	struct rpmi_tee_signal_reservation *resv;
+	unsigned long index;
+
+	guard(mutex)(&bus->lock);
+	xa_for_each(&bus->reservations, index, resv) {
+		if (resv->state != RPMI_TEE_SIGNAL_RELEASING)
+			continue;
+
+		xa_erase(&bus->reservations, index);
+		kfree(resv);
+	}
+}
+
+/**
+ * rpmi_tee_retrieve_signals() - Drain pending TEE-to-REE signals
+ * @priv: RPMI TEE transport
+ *
+ * Retrieve and dispatch signals until the firmware reports no pending data.
+ * Return relinquished signal IDs to their buses only after that empty
+ * retrieval.
+ *
+ * Return: 0 on success, or a negative error code.
+ */
+static int rpmi_tee_retrieve_signals(struct rpmi_tee_transport *priv)
+{
+	size_t resp_len = priv->mbox.max_msg_data_size;
+	u32 flags, endpoint_id, signal_count, i;
+	struct rpmi_tee_signal_bus *bus;
+	s32 status;
+	int ret;
+
+	struct rpmi_tee_signal_retrieve_resp *resp __free(kfree) =
+		kzalloc(resp_len, GFP_KERNEL);
+	if (!resp)
+		return -ENOMEM;
+
+	for (;;) {
+		scoped_guard(mutex, &priv->notif.ops_lock) {
+			/* Stop retrieving so shutdown can drain the worker. */
+			if (priv->notif.shutting_down)
+				return 0;
+
+			resp_len = priv->mbox.max_msg_data_size;
+			ret = rpmi_tee_send_with_status(priv,
+					RPMI_TEE_SRV_SIGNAL_RETRIEVE,
+					NULL, 0, resp, &resp_len, &status);
+			/*
+			 * A signal may be raised after a clear MORE_AVAILABLE
+			 * response and before relinquish. Reusing the ID could
+			 * deliver it to the wrong client.
+			 * Reuse relinquished IDs only after an empty retrieve.
+			 */
+			if (!ret && status == RPMI_ERR_NO_DATA) {
+				struct rpmi_tee_signal_bus *bus;
+
+				list_for_each_entry(bus, &priv->notif.buses, node)
+					rpmi_tee_signal_bus_drop_releasing(bus);
+			}
+		}
+
+		if (ret)
+			return ret;
+		/* The firmware has no more pending signals. */
+		if (status == RPMI_ERR_NO_DATA)
+			return 0;
+		if (status)
+			return rpmi_to_linux_error(status);
+		if (resp_len < sizeof(*resp))
+			return -EPROTO;
+
+		flags = get_unaligned_le32(&resp->flags);
+		endpoint_id = get_unaligned_le32(&resp->target_id);
+		signal_count = get_unaligned_le32(&resp->signal_count);
+
+		/* Validate the response flags and its variable-length signal array. */
+		if ((flags & ~RPMI_TEE_SIGNAL_MORE_AVAILABLE) || !signal_count ||
+		    signal_count != (resp_len - sizeof(*resp)) / sizeof(__le32))
+			return -EPROTO;
+
+		bus = __rpmi_tee_find_signal_bus(priv, endpoint_id);
+		if (!bus || signal_count > bus->tee_to_ree_count)
+			return -EPROTO;
+
+		for (i = 0; i < signal_count; i++) {
+			u32 signal = get_unaligned_le32(&resp->signals[i]);
+
+			ret = rpmi_tee_dispatch_signal(bus, signal);
+			if (ret)
+				return ret;
+		}
+	}
+}
+
+static void rpmi_tee_notif_work(struct work_struct *work)
+{
+	struct rpmi_tee_notif_state *notif =
+		container_of(work, struct rpmi_tee_notif_state, work);
+	struct rpmi_tee_transport *priv =
+		container_of(notif, struct rpmi_tee_transport, notif);
+	int ret;
+
+	ret = rpmi_tee_retrieve_signals(priv);
+	if (ret)
+		dev_warn(priv->dev, "failed to retrieve signals: %d\n", ret);
+}
+
+static irqreturn_t rpmi_tee_notif_irq_handler(int irq, void *data)
+{
+	struct rpmi_tee_transport *priv = data;
+
+	queue_work(priv->notif.wq, &priv->notif.work);
+	return IRQ_HANDLED;
+}
+
+/* Reserve a TEE-to-REE signal for a notification consumer. */
+static int rpmi_tee_op_notify_request(struct rpmi_tee_device *rdev,
+				      rpmi_tee_notifier_cb cb, void *cb_data,
+				      u32 *signal)
+{
+	struct rpmi_tee_transport *priv = rpmi_tee_device_to_transport(rdev);
+	struct rpmi_tee_signal_bus *bus;
+	u32 id;
+
+	if (!cb || !signal)
+		return -EINVAL;
+
+	guard(mutex)(&priv->notif.ops_lock);
+	bus = rpmi_tee_find_signal_bus(priv, rdev->endpoint_id);
+	if (!bus)
+		return -EOPNOTSUPP;
+
+	struct rpmi_tee_signal_reservation *resv __free(kfree) =
+		kzalloc_obj(*resv, GFP_KERNEL);
+	if (!resv)
+		return -ENOMEM;
+
+	resv->rdev = rdev;
+	resv->cb = cb;
+	resv->cb_data = cb_data;
+	scoped_guard(mutex, &bus->lock) {
+		int ret;
+
+		ret = xa_alloc(&bus->reservations, &id, resv,
+			       XA_LIMIT(0, bus->tee_to_ree_count - 1),
+			       GFP_KERNEL);
+		if (ret)
+			return ret == -EBUSY ? -ENOSPC : ret;
+	}
+
+	*signal = id;
+	/* xa_alloc owns resv. */
+	retain_and_null_ptr(resv);
+
+	return 0;
+}
+
+/* Relinquish a previously reserved TEE-to-REE signal. */
+static int rpmi_tee_op_notify_relinquish(struct rpmi_tee_device *rdev,
+					 u32 signal)
+{
+	struct rpmi_tee_transport *priv = rpmi_tee_device_to_transport(rdev);
+	struct rpmi_tee_signal_bus *bus;
+
+	guard(mutex)(&priv->notif.ops_lock);
+	bus = rpmi_tee_find_signal_bus(priv, rdev->endpoint_id);
+	if (!bus)
+		return -EOPNOTSUPP;
+
+	if (signal >= bus->tee_to_ree_count)
+		return -EINVAL;
+
+	scoped_guard(mutex, &bus->lock) {
+		struct rpmi_tee_signal_reservation *resv;
+
+		resv = xa_load(&bus->reservations, signal);
+		if (!resv)
+			return -ENOENT;
+		/* Release only if @signal belongs to @rdev. */
+		if (resv->rdev != rdev)
+			return -EPERM;
+		if (resv->state == RPMI_TEE_SIGNAL_RELEASING)
+			return -EALREADY;
+
+		resv->state = RPMI_TEE_SIGNAL_RELEASING;
+	}
+
+	queue_work(priv->notif.wq, &priv->notif.work);
+
+	return 0;
+}
+
+/* Raise an REE-to-TEE signal. */
+static int rpmi_tee_op_signal_raise(struct rpmi_tee_device *rdev, u32 signal)
+{
+	struct rpmi_tee_transport *priv = rpmi_tee_device_to_transport(rdev);
+	struct rpmi_tee_signal_raise_one_req req = {
+		.target_id = cpu_to_le32(rdev->endpoint_id),
+		.signal_count = cpu_to_le32(1),
+		.signal = cpu_to_le32(signal),
+	};
+	struct rpmi_tee_signal_bus *bus;
+
+	guard(mutex)(&priv->notif.ops_lock);
+	bus = rpmi_tee_find_signal_bus(priv, rdev->endpoint_id);
+	if (!bus)
+		return -EOPNOTSUPP;
+
+	if (signal < bus->tee_to_ree_count || signal >= bus->width)
+		return -EINVAL;
+
+	return rpmi_tee_send(priv, RPMI_TEE_SRV_SIGNAL_RAISE, &req,
+			     sizeof(req), NULL, NULL);
+}
+
+static const struct rpmi_tee_notifier_ops rpmi_tee_notifier_ops = {
+	.notify_request = rpmi_tee_op_notify_request,
+	.notify_relinquish = rpmi_tee_op_notify_relinquish,
+	.signal_raise = rpmi_tee_op_signal_raise,
+};
+
 static const struct rpmi_tee_info_ops rpmi_tee_info_ops = {
 	.msg_limits_get = rpmi_tee_op_msg_limits_get,
 };
@@ -813,6 +1183,7 @@ static const struct rpmi_tee_ops rpmi_tee_ops = {
 	.info_ops = &rpmi_tee_info_ops,
 	.msg_ops = &rpmi_tee_msg_ops,
 	.mem_ops = &rpmi_tee_mem_ops,
+	.notifier_ops = &rpmi_tee_notifier_ops,
 };
 
 static void rpmi_tee_unregister_devices(struct rpmi_tee_transport *priv)
@@ -824,6 +1195,212 @@ static void rpmi_tee_unregister_devices(struct rpmi_tee_transport *priv)
 		rpmi_tee_device_unregister(child->rdev);
 		kfree(child);
 	}
+}
+
+static void rpmi_tee_signal_bus_destroy_resvs(struct rpmi_tee_signal_bus *bus)
+{
+	struct rpmi_tee_signal_reservation *resv;
+	unsigned long index;
+
+	xa_for_each(&bus->reservations, index, resv) {
+		xa_erase(&bus->reservations, index);
+		kfree(resv);
+	}
+
+	xa_destroy(&bus->reservations);
+}
+
+static void rpmi_tee_teardown_signal_buses(struct rpmi_tee_transport *priv)
+{
+	struct rpmi_tee_signal_bus *bus, *tmp;
+
+	list_for_each_entry_safe(bus, tmp, &priv->notif.buses, node) {
+		struct rpmi_tee_signal_bus_teardown_req req = {
+			.target_id = cpu_to_le32(bus->endpoint_id),
+		};
+		int ret;
+
+		/* Completion includes the target TEE's teardown acknowledgment. */
+		ret = rpmi_tee_send(priv, RPMI_TEE_SRV_SIGNAL_BUS_TEARDOWN, &req,
+				    sizeof(req), NULL, NULL);
+		if (ret)
+			dev_warn(priv->dev, "failed to tear down signal bus for %#x: %d\n",
+				 bus->endpoint_id, ret);
+
+		rpmi_tee_signal_bus_destroy_resvs(bus);
+		list_del(&bus->node);
+		kfree(bus);
+	}
+}
+
+/* Drain callbacks, remove clients, then tear down notification resources. */
+static void rpmi_tee_teardown_endpoints(struct rpmi_tee_transport *priv)
+{
+	/* Initiate a notification shutdown. */
+	scoped_guard(mutex, &priv->notif.ops_lock)
+		priv->notif.shutting_down = true;
+
+	if (priv->notif.irq_requested) {
+		free_irq(priv->notif.irq, priv);
+		priv->notif.irq_requested = false;
+	}
+
+	if (priv->notif.wq) {
+		destroy_workqueue(priv->notif.wq);
+		priv->notif.wq = NULL;
+	}
+
+	/* Clients can still send final TEE_CALLs while signal buses exist. */
+	rpmi_tee_unregister_devices(priv);
+
+	/* Public notification operations and callbacks have stopped. */
+	rpmi_tee_teardown_signal_buses(priv);
+
+	if (priv->notif.irq) {
+		irq_dispose_mapping(priv->notif.irq);
+		priv->notif.irq = 0;
+	}
+}
+
+/* Set up an RPMI signal bus for one @endpoint_id TEE endpoint. */
+static int rpmi_tee_setup_ep_signal_bus(struct rpmi_tee_transport *priv,
+					u32 endpoint_id)
+{
+	struct rpmi_tee_signal_bus_setup_req req;
+	u32 max_width, width, tee_to_ree_count;
+
+	/* Avoid duplicate signal bus for endpoint. */
+	if (__rpmi_tee_find_signal_bus(priv, endpoint_id))
+		return 0;
+
+	if (priv->mbox.max_msg_data_size <
+	    sizeof(struct rpmi_tee_signal_retrieve_resp))
+		return -EMSGSIZE;
+
+	max_width = FIELD_GET(RPMI_TEE_SIGNAL_WIDTH_MASK,
+			      priv->notif.feature);
+	width = min(max_width,
+		    2 * ((priv->mbox.max_msg_data_size -
+			  sizeof(struct rpmi_tee_signal_retrieve_resp)) /
+			 sizeof(__le32)) + 1);
+	if (width < 2)
+		return -EMSGSIZE;
+
+	/* Use half available signals for TEE-to-REE range. */
+	tee_to_ree_count = width / 2;
+
+	struct rpmi_tee_signal_bus *bus __free(kfree) =
+		kzalloc_obj(*bus, GFP_KERNEL);
+	if (!bus)
+		return -ENOMEM;
+
+	mutex_init(&bus->lock);
+	xa_init_flags(&bus->reservations, XA_FLAGS_ALLOC);
+	bus->endpoint_id = endpoint_id;
+	bus->width = width;
+	bus->tee_to_ree_count = tee_to_ree_count;
+
+	req.target_id = cpu_to_le32(endpoint_id);
+	req.bus_width = cpu_to_le32(width);
+	req.sender_signals = cpu_to_le32(tee_to_ree_count);
+	/* Publish the local bus only after the target TEE accepts setup. */
+	if (rpmi_tee_send(priv, RPMI_TEE_SRV_SIGNAL_BUS_SETUP, &req,
+			  sizeof(req), NULL, NULL))
+		return -EOPNOTSUPP;
+
+	list_add_tail(&no_free_ptr(bus)->node, &priv->notif.buses);
+
+	return 0;
+}
+
+static int rpmi_tee_map_signal_irq(struct rpmi_tee_transport *priv)
+{
+	struct device_node *np;
+	struct of_phandle_args oirq = {};
+	u32 mode, index;
+	int irq;
+
+	mode = FIELD_GET(RPMI_TEE_SIGNAL_MODE_MASK, priv->notif.feature);
+	if (mode != RPMI_TEE_SIGNAL_MODE_SYSTEM_MSI)
+		return 0;
+
+	for_each_compatible_node(np, NULL, "riscv,rpmi-system-msi") {
+		if (of_device_is_available(np))
+			break;
+	}
+
+	if (!np)
+		return 0;
+	if (!irq_find_host(np)) {
+		of_node_put(np);
+		return -EPROBE_DEFER;
+	}
+
+	index = FIELD_GET(RPMI_TEE_SIGNAL_INDEX_MASK, priv->notif.feature);
+	oirq.np = np;
+	oirq.args_count = 1;
+	oirq.args[0] = index;
+	irq = irq_create_of_mapping(&oirq);
+
+	of_node_put(np);
+
+	return irq;
+}
+
+/**
+ * rpmi_tee_setup_signal_bus() - Set up signal notification delivery
+ * @priv: RPMI TEE transport
+ * @system: Discovered TEE endpoints that may own signal buses
+ *
+ * Map the signal interrupt, then set up a bus for each endpoint. Endpoint
+ * setup failures are nonfatal, allowing notifications for the remaining
+ * endpoints. Register the interrupt handler only when at least one bus is
+ * available.
+ *
+ * Return: 0 on completion, or -EPROBE_DEFER when the System MSI IRQ domain
+ * is not ready.
+ */
+static int
+rpmi_tee_setup_signal_bus(struct rpmi_tee_transport *priv,
+			 const struct rpmi_tee_discovery *system)
+{
+	struct rpmi_tee_discovered_endpoint *ep;
+	int ret;
+
+	priv->notif.irq = rpmi_tee_map_signal_irq(priv);
+	if (priv->notif.irq < 0)
+		return priv->notif.irq;
+	if (!priv->notif.irq)
+		return 0;
+
+	list_for_each_entry(ep, &system->eps, node) {
+		ret = rpmi_tee_setup_ep_signal_bus(priv, ep->ep_id);
+		if (ret)
+			dev_warn(priv->dev, "failed to set up signal bus for %#x: %d\n",
+				 ep->ep_id, ret);
+	}
+
+	if (list_empty(&priv->notif.buses))
+		goto out_failed;
+
+	ret = request_irq(priv->notif.irq, rpmi_tee_notif_irq_handler, 0,
+			  dev_name(priv->dev), priv);
+	if (ret) {
+		dev_warn(priv->dev, "failed to request signal IRQ: %d\n", ret);
+		rpmi_tee_teardown_signal_buses(priv);
+		goto out_failed;
+	}
+
+	priv->notif.irq_requested = true;
+
+	return 0;
+
+out_failed:
+	/* Failures are nonfatal; only disable notification. */
+	irq_dispose_mapping(priv->notif.irq);
+	priv->notif.irq = 0;
+
+	return 0;
 }
 
 static struct rpmi_tee_device *
@@ -881,14 +1458,19 @@ static int rpmi_tee_setup_endpoints(struct rpmi_tee_transport *priv)
 	if (ret)
 		return ret;
 
+	ret = rpmi_tee_setup_signal_bus(priv, &system);
+	if (ret)
+		goto out_failed;
+
 	list_for_each_entry(ep, &system.eps, node) {
 		ret = rpmi_tee_register_devices(priv, ep);
 		if (ret) {
-			rpmi_tee_unregister_devices(priv);
+			rpmi_tee_teardown_endpoints(priv);
 			break;
 		}
 	}
 
+out_failed:
 	rpmi_tee_free_discovery(&system);
 
 	return ret;
@@ -907,7 +1489,11 @@ static int rpmi_tee_transport_probe(struct platform_device *pdev)
 	priv->dev = &pdev->dev;
 	platform_set_drvdata(pdev, priv);
 	INIT_LIST_HEAD(&priv->devices);
+	INIT_LIST_HEAD(&priv->notif.buses);
 	mutex_init(&priv->mem.lock);
+	mutex_init(&priv->notif.ops_lock);
+	INIT_WORK(&priv->notif.work, rpmi_tee_notif_work);
+
 	priv->mbox.client.dev = &pdev->dev;
 	priv->mbox.client.tx_sync = true;
 	priv->mbox.chan = mbox_request_channel(&priv->mbox.client, 0);
@@ -915,6 +1501,7 @@ static int rpmi_tee_transport_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(priv->mbox.chan),
 				     "failed to request mailbox channel\n");
 
+	/* Validate the RPMI mailbox transport. */
 	ret = rpmi_tee_check_transport(priv);
 	if (ret) {
 		dev_err_probe(&pdev->dev, ret,
@@ -944,6 +1531,12 @@ static int rpmi_tee_transport_probe(struct platform_device *pdev)
 	if (ret)
 		goto out_failed;
 
+	priv->notif.wq = alloc_workqueue("rpmi_tee_notif", WQ_UNBOUND, 0);
+	if (!priv->notif.wq) {
+		ret = -ENOMEM;
+		goto out_failed;
+	}
+
 	ret = rpmi_tee_setup_endpoints(priv);
 	if (ret) {
 		dev_err_probe(&pdev->dev, ret,
@@ -954,6 +1547,8 @@ static int rpmi_tee_transport_probe(struct platform_device *pdev)
 	return 0;
 
 out_failed:
+	if (priv->notif.wq)
+		destroy_workqueue(priv->notif.wq);
 	mbox_free_channel(priv->mbox.chan);
 
 	return ret;
@@ -963,7 +1558,7 @@ static void rpmi_tee_transport_remove(struct platform_device *pdev)
 {
 	struct rpmi_tee_transport *priv = platform_get_drvdata(pdev);
 
-	rpmi_tee_unregister_devices(priv);
+	rpmi_tee_teardown_endpoints(priv);
 	mbox_free_channel(priv->mbox.chan);
 }
 
