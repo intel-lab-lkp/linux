@@ -2032,6 +2032,12 @@ static void sev_unlock_two_vms(struct kvm *dst_kvm, struct kvm *src_kvm)
 	atomic_set_release(&src_sev->migration_in_progress, 0);
 }
 
+static void sev_vcpu_migrate_asid(struct vcpu_svm *dst_svm,
+				  unsigned int asid)
+{
+	dst_svm->asid = asid;
+}
+
 static void sev_migrate_from(struct kvm *dst_kvm, struct kvm *src_kvm)
 {
 	struct kvm_sev_info *dst = to_kvm_sev_info(dst_kvm);
@@ -2096,6 +2102,7 @@ static void sev_migrate_from(struct kvm *dst_kvm, struct kvm *src_kvm)
 	kvm_for_each_vcpu(i, dst_vcpu, dst_kvm) {
 		dst_svm = to_svm(dst_vcpu);
 
+		sev_vcpu_migrate_asid(dst_svm, dst->asid);
 		sev_init_vmcb(dst_svm, false);
 
 		if (!dst->es_active)
