@@ -458,8 +458,10 @@ static int ice_init_vf_vsi_res(struct ice_vf *vf)
 		return -ENOMEM;
 
 	vsi = ice_vf_vsi_setup(vf);
-	if (!vsi)
-		return -ENOMEM;
+	if (!vsi) {
+		err = -ENOMEM;
+		goto free_irqs;
+	}
 
 	err = ice_vf_init_host_cfg(vf, vsi);
 	if (err)
@@ -469,6 +471,8 @@ static int ice_init_vf_vsi_res(struct ice_vf *vf)
 
 release_vsi:
 	ice_vf_vsi_release(vf);
+free_irqs:
+	ice_virt_free_irqs(pf, vf->first_vector_idx, vf->num_msix);
 	return err;
 }
 
@@ -501,6 +505,8 @@ static int ice_start_vfs(struct ice_pf *pf)
 			if (retval) {
 				dev_err(ice_pf_to_dev(pf), "Failed to attach VF %d to eswitch, error %d",
 					vf->vf_id, retval);
+				ice_virt_free_irqs(pf, vf->first_vector_idx,
+						   vf->num_msix);
 				ice_vf_vsi_release(vf);
 				goto teardown;
 			}
@@ -537,6 +543,7 @@ teardown:
 		ice_eswitch_detach_vf(pf, vf);
 
 		mutex_lock(&vf->cfg_lock);
+		ice_virt_free_irqs(pf, vf->first_vector_idx, vf->num_msix);
 		ice_dis_vf_mappings(vf);
 		ice_vf_vsi_release(vf);
 		mutex_unlock(&vf->cfg_lock);
