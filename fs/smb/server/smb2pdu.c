@@ -5204,6 +5204,52 @@ int smb2_open(struct ksmbd_work *work)
 	rsp->CreateContextsLength = 0;
 	iov_len = offsetof(struct smb2_create_rsp, Buffer);
 
+	/*
+	 * The create contexts below are appended back-to-back with no
+	 * length check, while a non-compound CREATE only gets the 448-byte
+	 * small response buffer; a client stacking lease+mxac+disk_id+
+	 * durable+posix+AAPL contexts overruns it (the AAPL response alone
+	 * memsets 128 fixed bytes).  Compute the worst-case total and grow
+	 * the buffer before writing any context.  Note that response_buf
+	 * also carries the 4-byte rfc1002 length word before the SMB2
+	 * header.
+	 */
+	{
+		size_t ctx_max = 0;
+		size_t need;
+		void *nbuf;
+
+		if (opinfo && opinfo->is_lease)
+			ctx_max += conn->vals->create_lease_size;
+		if (maximal_access_ctxt)
+			ctx_max += conn->vals->create_mxac_size;
+		if (query_disk_id)
+			ctx_max += conn->vals->create_disk_id_size;
+		if (durable_rsp && dh_info.type == DURABLE_REQ_V2)
+			ctx_max += conn->vals->create_durable_v2_size;
+		else if (durable_rsp && dh_info.type == DURABLE_REQ)
+			ctx_max += conn->vals->create_durable_size;
+		if (posix_ctxt)
+			ctx_max += conn->vals->create_posix_size;
+		if (aapl_ctxt)
+			ctx_max += conn->vals->create_aapl_size;
+
+		need = 4 + offsetof(struct smb2_create_rsp, Buffer) + ctx_max;
+		if (need > work->response_sz) {
+			nbuf = kvzalloc(need, KSMBD_DEFAULT_GFP);
+			if (!nbuf) {
+				rc = -ENOMEM;
+				goto err_out;
+			}
+			memcpy(nbuf, work->response_buf,
+			       4 + offsetof(struct smb2_create_rsp, Buffer));
+			kvfree(work->response_buf);
+			work->response_buf = nbuf;
+			work->response_sz = need;
+			rsp = smb_get_msg(work->response_buf);
+		}
+	}
+
 	/* If lease is request send lease context response */
 	if (opinfo && opinfo->is_lease) {
 		struct create_context *lease_ccontext;
