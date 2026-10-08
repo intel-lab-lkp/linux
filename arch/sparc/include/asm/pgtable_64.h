@@ -861,7 +861,7 @@ static inline pmd_t *pud_pgtable(pud_t pud)
 #define p4d_clear(p4dp)			(p4d_val(*(p4dp)) = 0UL)
 
 /* only used by the stubbed out hugetlb gup code, should never be called */
-#define p4d_page(p4d)			NULL
+#define p4d_page(p4d)			static inline struct page *p4d_page(p4d_t p4d) { return NULL; }
 
 #define pud_leaf pud_leaf
 static inline bool pud_leaf(pud_t pud)
