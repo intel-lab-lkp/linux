@@ -230,11 +230,14 @@ __setup("noautogroup", setup_autogroup);
 
 #ifdef CONFIG_PROC_FS
 
+static DEFINE_SPINLOCK(autogroup_nice_lock);
+
 int proc_sched_autogroup_set_nice(struct task_struct *p, int nice)
 {
 	static unsigned long next = INITIAL_JIFFIES;
 	struct autogroup *ag;
 	unsigned long shares;
+	bool admin;
 	int err, idx;
 
 	if (nice < MIN_NICE || nice > MAX_NICE)
@@ -247,11 +250,17 @@ int proc_sched_autogroup_set_nice(struct task_struct *p, int nice)
 	if (nice < 0 && !can_nice(current, nice))
 		return -EPERM;
 
-	/* This is a heavy operation, taking global locks.. */
-	if (!capable(CAP_SYS_ADMIN) && time_before(jiffies, next))
+	admin = capable(CAP_SYS_ADMIN);
+
+	/* Rate-limit this heavy operation, which takes global locks. */
+	spin_lock(&autogroup_nice_lock);
+	if (!admin && time_before(jiffies, next)) {
+		spin_unlock(&autogroup_nice_lock);
 		return -EAGAIN;
+	}
 
 	next = HZ / 10 + jiffies;
+	spin_unlock(&autogroup_nice_lock);
 	ag = autogroup_task_get(p);
 
 	idx = array_index_nospec(nice + 20, 40);
