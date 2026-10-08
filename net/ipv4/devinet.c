@@ -2948,7 +2948,7 @@ static const struct rtnl_msg_handler devinet_rtnl_msg_handlers[] __initconst = {
 	 .flags = RTNL_FLAG_DUMP_UNLOCKED | RTNL_FLAG_DUMP_SPLIT_NLM_DONE},
 	{.protocol = PF_INET, .msgtype = RTM_GETNETCONF,
 	 .doit = inet_netconf_get_devconf, .dumpit = inet_netconf_dump_devconf,
-	 .flags = RTNL_FLAG_DOIT_UNLOCKED | RTNL_FLAG_DUMP_UNLOCKED},
+	 .flags = RTNL_FLAG_DUMP_UNLOCKED},
 	{.owner = THIS_MODULE, .protocol = PF_INET, .msgtype = RTM_GETMULTICAST,
 	 .dumpit = inet_dump_ifmcaddr, .flags = RTNL_FLAG_DUMP_UNLOCKED},
 };
