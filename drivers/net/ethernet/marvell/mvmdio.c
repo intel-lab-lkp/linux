@@ -286,6 +286,7 @@ static int orion_mdio_probe(struct platform_device *pdev)
 	struct resource *r;
 	struct mii_bus *bus;
 	struct orion_mdio_dev *dev;
+	struct clk *clk;
 	int i, ret;
 
 	type = (uintptr_t)device_get_match_data(&pdev->dev);
@@ -338,11 +339,13 @@ static int orion_mdio_probe(struct platform_device *pdev)
 			clk_prepare_enable(dev->clk[i]);
 		}
 
-		if (!IS_ERR(of_clk_get(pdev->dev.of_node,
-				       ARRAY_SIZE(dev->clk))))
+		clk = of_clk_get(pdev->dev.of_node, ARRAY_SIZE(dev->clk));
+		if (!IS_ERR(clk)) {
 			dev_warn(&pdev->dev,
 				 "unsupported number of clocks, limiting to the first "
 				 __stringify(ARRAY_SIZE(dev->clk)) "\n");
+			clk_put(clk);
+		}
 
 		if (type == BUS_TYPE_XSMI)
 			orion_mdio_xsmi_set_mdc_freq(bus);
