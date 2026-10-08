@@ -5579,6 +5579,35 @@ s32 scx_init_dsq(struct scx_dispatch_q *dsq, u64 dsq_id, struct scx_sched *sch)
 	return 0;
 }
 
+/*
+ * Synchronize DSQ destruction against deferred reenqueues.
+ *
+ * Taking each rq lock with its deferred lock removes requests not yet
+ * detached and closes the detach-to-cursor window. A reenq_user() cursor
+ * stays linked on @dsq->list until its final DSQ access.
+ */
+static bool drain_dsq_reenq_users(struct scx_dispatch_q *dsq)
+{
+	s32 cpu;
+
+	/* The first RCU grace period has drained producers which found @dsq. */
+	for_each_possible_cpu(cpu) {
+		struct scx_dsq_pcpu *pcpu = per_cpu_ptr(dsq->pcpu_user, cpu);
+		struct scx_deferred_reenq_user *dru = &pcpu->deferred_reenq_user;
+		struct rq *rq = cpu_rq(cpu);
+
+		scoped_guard (rq_lock_irqsave, rq) {
+			guard(raw_spinlock)(&rq->scx.deferred_reenq_lock);
+
+			if (!list_empty(&dru->node))
+				list_del_init(&dru->node);
+		}
+	}
+
+	guard(raw_spinlock_irqsave)(&dsq->lock);
+	return list_empty(&dsq->list);
+}
+
 static void exit_dsq(struct scx_dispatch_q *dsq)
 {
 	s32 cpu;
@@ -5607,6 +5636,12 @@ static void exit_dsq(struct scx_dispatch_q *dsq)
 static void free_dsq_rcufn(struct rcu_head *rcu)
 {
 	struct scx_dispatch_q *dsq = container_of(rcu, struct scx_dispatch_q, rcu);
+
+	/* An active reenq_user() cursor still references @dsq. */
+	if (!drain_dsq_reenq_users(dsq)) {
+		call_rcu(&dsq->rcu, free_dsq_rcufn);
+		return;
+	}
 
 	exit_dsq(dsq);
 	kfree(dsq);
