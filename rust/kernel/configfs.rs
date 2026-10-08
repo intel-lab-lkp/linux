@@ -559,6 +559,11 @@ where
         // the conditions for this call.
         let data: &Data = unsafe { get_group_data(c_group) };
 
+        // SAFETY: The callback's page is writable for PAGE_SIZE bytes.
+        unsafe {
+            core::ptr::write(page.cast::<[u8; PAGE_SIZE]>(), [0u8; PAGE_SIZE]);
+        }
+
         // SAFETY: By function safety requirements, `page` is writable for `PAGE_SIZE`.
         let ret = O::show(data, unsafe { &mut *(page.cast::<[u8; PAGE_SIZE]>()) });
 
