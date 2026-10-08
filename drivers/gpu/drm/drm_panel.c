@@ -56,7 +56,10 @@ static LIST_HEAD(panel_list);
  * drm_atomic_helper_panel_create_state(),
  * drm_atomic_helper_panel_duplicate_state() and
  * drm_atomic_helper_panel_destroy_state() helpers or with their own functions
- * if they subclass the state.
+ * if they subclass the state. The state is computed and validated
+ * in &drm_panel_funcs.atomic_check and applied in
+ * &drm_panel_funcs.atomic_prepare, &drm_panel_funcs.atomic_enable,
+ * &drm_panel_funcs.atomic_disable and &drm_panel_funcs.atomic_unprepare.
  *
  * The panel state is the state of the &drm_bridge embedded in the panel. It
  * only exists once that bridge has been attached to an encoder, so the panels
@@ -221,6 +224,112 @@ static void panel_bridge_detach(struct drm_bridge *bridge)
 		drm_connector_cleanup(connector);
 }
 
+static void drm_panel_atomic_prepare(struct drm_panel *panel,
+				     struct drm_atomic_commit *commit)
+{
+	const struct drm_panel_funcs *funcs = panel->funcs;
+	int ret = 0;
+
+	if (panel->prepared) {
+		dev_warn(panel->dev, "Skipping prepare of already prepared panel\n");
+		return;
+	}
+
+	guard(mutex)(&panel->follower_lock);
+
+	if (funcs->atomic_prepare)
+		ret = funcs->atomic_prepare(panel, commit);
+	else if (funcs->prepare)
+		ret = funcs->prepare(panel);
+	if (ret < 0)
+		return;
+	panel->prepared = true;
+
+	drm_panel_followers_prepared(panel);
+}
+
+static void drm_panel_atomic_unprepare(struct drm_panel *panel,
+				       struct drm_atomic_commit *commit)
+{
+	const struct drm_panel_funcs *funcs = panel->funcs;
+	int ret = 0;
+
+	if (!panel->prepared) {
+		dev_warn(panel->dev, "Skipping unprepare of already unprepared panel\n");
+		return;
+	}
+
+	guard(mutex)(&panel->follower_lock);
+
+	drm_panel_followers_unpreparing(panel);
+
+	if (funcs->atomic_unprepare)
+		ret = funcs->atomic_unprepare(panel, commit);
+	else if (funcs->unprepare)
+		ret = funcs->unprepare(panel);
+	if (ret < 0)
+		return;
+	panel->prepared = false;
+}
+
+static void drm_panel_atomic_enable(struct drm_panel *panel,
+				    struct drm_atomic_commit *commit)
+{
+	const struct drm_panel_funcs *funcs = panel->funcs;
+	int ret = 0;
+
+	if (panel->enabled) {
+		dev_warn(panel->dev, "Skipping enable of already enabled panel\n");
+		return;
+	}
+
+	guard(mutex)(&panel->follower_lock);
+
+	if (funcs->atomic_enable)
+		ret = funcs->atomic_enable(panel, commit);
+	else if (funcs->enable)
+		ret = funcs->enable(panel);
+	if (ret < 0)
+		return;
+	panel->enabled = true;
+
+	ret = backlight_enable(panel->backlight);
+	if (ret < 0)
+		DRM_DEV_INFO(panel->dev, "failed to enable backlight: %d\n",
+			     ret);
+
+	drm_panel_followers_enabled(panel);
+}
+
+static void drm_panel_atomic_disable(struct drm_panel *panel,
+				     struct drm_atomic_commit *commit)
+{
+	const struct drm_panel_funcs *funcs = panel->funcs;
+	int ret = 0;
+
+	if (!panel->enabled) {
+		dev_warn(panel->dev, "Skipping disable of already disabled panel\n");
+		return;
+	}
+
+	guard(mutex)(&panel->follower_lock);
+
+	drm_panel_followers_disabling(panel);
+
+	ret = backlight_disable(panel->backlight);
+	if (ret < 0)
+		DRM_DEV_INFO(panel->dev, "failed to disable backlight: %d\n",
+			     ret);
+
+	if (funcs->atomic_disable)
+		ret = funcs->atomic_disable(panel, commit);
+	else if (funcs->disable)
+		ret = funcs->disable(panel);
+	if (ret < 0)
+		return;
+	panel->enabled = false;
+}
+
 static void panel_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 					   struct drm_atomic_commit *atomic_state)
 {
@@ -237,7 +346,7 @@ static void panel_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	if (old_crtc_state && old_crtc_state->self_refresh_active)
 		return;
 
-	drm_panel_prepare(panel);
+	drm_panel_atomic_prepare(panel, atomic_state);
 }
 
 static void panel_bridge_atomic_enable(struct drm_bridge *bridge,
@@ -256,7 +365,7 @@ static void panel_bridge_atomic_enable(struct drm_bridge *bridge,
 	if (old_crtc_state && old_crtc_state->self_refresh_active)
 		return;
 
-	drm_panel_enable(panel);
+	drm_panel_atomic_enable(panel, atomic_state);
 }
 
 static void panel_bridge_atomic_disable(struct drm_bridge *bridge,
@@ -275,7 +384,7 @@ static void panel_bridge_atomic_disable(struct drm_bridge *bridge,
 	if (new_crtc_state && new_crtc_state->self_refresh_active)
 		return;
 
-	drm_panel_disable(panel);
+	drm_panel_atomic_disable(panel, atomic_state);
 }
 
 static void panel_bridge_atomic_post_disable(struct drm_bridge *bridge,
@@ -294,7 +403,7 @@ static void panel_bridge_atomic_post_disable(struct drm_bridge *bridge,
 	if (new_crtc_state && new_crtc_state->self_refresh_active)
 		return;
 
-	drm_panel_unprepare(panel);
+	drm_panel_atomic_unprepare(panel, atomic_state);
 }
 
 static int panel_bridge_get_modes(struct drm_bridge *bridge,
@@ -740,7 +849,11 @@ static void drm_panel_init(struct drm_panel *panel, struct device *dev,
 		      !funcs->atomic_create_state != !funcs->atomic_destroy_state,
 		      "Panel state callbacks have to be implemented together\n");
 
-	dev_WARN_ONCE(dev, !funcs->atomic_create_state && funcs->atomic_check,
+	dev_WARN_ONCE(dev,
+		      !funcs->atomic_create_state &&
+		      (funcs->atomic_check || funcs->atomic_prepare ||
+		       funcs->atomic_enable || funcs->atomic_disable ||
+		       funcs->atomic_unprepare),
 		      "Atomic callbacks require the panel state callbacks\n");
 
 	INIT_LIST_HEAD(&panel->list);

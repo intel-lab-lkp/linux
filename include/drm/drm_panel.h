@@ -193,6 +193,60 @@ struct drm_panel_funcs {
 			    struct drm_atomic_commit *commit);
 
 	/**
+	 * @atomic_prepare:
+	 *
+	 * Atomic variant of @prepare, used instead of it if implemented. The
+	 * new panel state can be retrieved from @commit with
+	 * drm_atomic_get_new_panel_state().
+	 *
+	 * Panels using atomic state can only be used through the bridge
+	 * embedded in the panel, drm_panel_prepare() and its counterparts
+	 * will refuse to handle them.
+	 *
+	 * This function is optional. It can only be implemented together with
+	 * @atomic_create_state.
+	 */
+	int (*atomic_prepare)(struct drm_panel *panel,
+			      struct drm_atomic_commit *commit);
+
+	/**
+	 * @atomic_enable:
+	 *
+	 * Atomic variant of @enable, used instead of it if implemented. See
+	 * @atomic_prepare for details.
+	 *
+	 * This function is optional.
+	 */
+	int (*atomic_enable)(struct drm_panel *panel,
+			     struct drm_atomic_commit *commit);
+
+	/**
+	 * @atomic_disable:
+	 *
+	 * Atomic variant of @disable, used instead of it if implemented. See
+	 * @atomic_prepare for details.
+	 *
+	 * The panel might not be routed to a connector or driven by a CRTC
+	 * anymore in @commit, the state the panel has been enabled with can
+	 * be retrieved with drm_atomic_get_old_panel_state().
+	 *
+	 * This function is optional.
+	 */
+	int (*atomic_disable)(struct drm_panel *panel,
+			      struct drm_atomic_commit *commit);
+
+	/**
+	 * @atomic_unprepare:
+	 *
+	 * Atomic variant of @unprepare, used instead of it if implemented.
+	 * See @atomic_prepare and @atomic_disable for details.
+	 *
+	 * This function is optional.
+	 */
+	int (*atomic_unprepare)(struct drm_panel *panel,
+				struct drm_atomic_commit *commit);
+
+	/**
 	 * @atomic_create_state:
 	 *
 	 * Allocate a pristine, initialized, state for the panel and return
