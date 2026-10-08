@@ -481,6 +481,11 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 		av->vdev.name, ipu6_isys_get_frame_width(av),
 		ipu6_isys_get_frame_height(av), pfmt->css_pixelformat);
 
+	scoped_guard(mutex, &av->isys->mutex) {
+		if (av->isys->need_reset)
+			return -EIO;
+	}
+
 	remote_pad = media_pad_remote_pad_unique(&av->pad);
 	if (IS_ERR(remote_pad)) {
 		dev_dbg(dev, "failed to get remote pad\n");
