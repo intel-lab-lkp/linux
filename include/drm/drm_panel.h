@@ -43,6 +43,7 @@ struct drm_crtc_state;
 struct drm_device;
 struct drm_panel_follower;
 struct drm_panel;
+struct drm_printer;
 struct display_timing;
 
 enum drm_panel_orientation;
@@ -301,6 +302,16 @@ struct drm_panel_funcs {
 	 */
 	void (*atomic_destroy_state)(struct drm_panel *panel,
 				     struct drm_panel_state *state);
+
+	/**
+	 * @atomic_print_state:
+	 *
+	 * If driver subclasses &struct drm_panel_state, it should implement
+	 * this optional hook for printing additional driver specific state.
+	 * It can only be implemented together with @atomic_create_state.
+	 */
+	void (*atomic_print_state)(struct drm_printer *p,
+				   const struct drm_panel_state *state);
 };
 
 struct drm_panel_follower_funcs {

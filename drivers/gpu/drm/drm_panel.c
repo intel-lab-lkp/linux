@@ -483,6 +483,17 @@ static void panel_bridge_atomic_destroy_state(struct drm_bridge *bridge,
 					   drm_bridge_state_to_panel_state(bridge_state));
 }
 
+static void panel_bridge_atomic_print_state(struct drm_printer *p,
+					    const struct drm_bridge_state *bridge_state)
+{
+	struct drm_bridge *bridge = drm_priv_to_bridge(bridge_state->base.obj);
+	struct drm_panel *panel = drm_bridge_to_panel(bridge);
+
+	if (panel->funcs->atomic_print_state)
+		panel->funcs->atomic_print_state(p,
+						 drm_bridge_state_to_panel_state(bridge_state));
+}
+
 static const struct drm_bridge_funcs panel_bridge_bridge_funcs = {
 	.attach = panel_bridge_attach,
 	.detach = panel_bridge_detach,
@@ -495,6 +506,7 @@ static const struct drm_bridge_funcs panel_bridge_bridge_funcs = {
 	.atomic_create_state = panel_bridge_atomic_create_state,
 	.atomic_duplicate_state = panel_bridge_atomic_duplicate_state,
 	.atomic_destroy_state = panel_bridge_atomic_destroy_state,
+	.atomic_print_state = panel_bridge_atomic_print_state,
 	.atomic_get_input_bus_fmts = drm_atomic_helper_bridge_propagate_bus_fmt,
 	.debugfs_init = panel_bridge_debugfs_init,
 };
@@ -853,7 +865,7 @@ static void drm_panel_init(struct drm_panel *panel, struct device *dev,
 		      !funcs->atomic_create_state &&
 		      (funcs->atomic_check || funcs->atomic_prepare ||
 		       funcs->atomic_enable || funcs->atomic_disable ||
-		       funcs->atomic_unprepare),
+		       funcs->atomic_unprepare || funcs->atomic_print_state),
 		      "Atomic callbacks require the panel state callbacks\n");
 
 	INIT_LIST_HEAD(&panel->list);
