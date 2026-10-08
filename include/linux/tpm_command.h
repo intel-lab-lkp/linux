@@ -191,6 +191,7 @@ enum tpm2_structures {
 	TPM2_ST_SESSIONS	= 0x8002,
 	TPM2_ST_ATTEST_SESSION_AUDIT = 0x8016,
 	TPM2_ST_CREATION	= 0x8021,
+	TPM2_ST_HASHCHECK	= 0x8024,
 };
 
 /* Indicates from what layer of the software stack the error comes from */
@@ -238,6 +239,7 @@ enum tpm2_command_codes {
 	TPM2_CC_CREATE			= 0x0153,
 	TPM2_CC_LOAD			= 0x0157,
 	TPM2_CC_SEQUENCE_UPDATE		= 0x015C,
+	TPM2_CC_SIGN			= 0x015D,
 	TPM2_CC_UNSEAL			= 0x015E,
 	TPM2_CC_CONTEXT_LOAD		= 0x0161,
 	TPM2_CC_CONTEXT_SAVE		= 0x0162,

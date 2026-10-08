@@ -402,3 +402,101 @@ out:
 	return rc;
 }
 EXPORT_SYMBOL_GPL(tpm2_kernel_key_create);
+
+/**
+ * tpm2_kernel_key_sign() - sign a digest with a kernel signing key
+ * @chip:	the TPM chip
+ * @key:	a key created by tpm2_kernel_key_create()
+ * @digest:	the SHA-256 digest to sign
+ * @r:		filled with the R component of the ECDSA signature
+ * @s:		filled with the S component of the ECDSA signature
+ *
+ * The key is authorized with its auth value through an HMAC session, so
+ * the auth value is never sent to the TPM in the clear.  The caller must
+ * hold the chip's ops lock.
+ *
+ * Return:
+ * * 0		- OK
+ * * -errno	- A system error
+ * * TPM_RC	- A TPM error
+ */
+int tpm2_kernel_key_sign(struct tpm_chip *chip, struct tpm2_kernel_key *key,
+			 const u8 digest[SHA256_DIGEST_SIZE],
+			 u8 r[EC_PT_SZ], u8 s[EC_PT_SZ])
+{
+	struct tpm_buf *buf __free(kfree) = NULL;
+	struct tpm2_rsp rsp;
+	int rc;
+
+	rc = tpm2_start_auth_session(chip, false);
+	if (rc && rc != -EBUSY)
+		return rc;
+
+	buf = kzalloc(TPM_BUFSIZE, GFP_KERNEL);
+	if (!buf) {
+		tpm2_end_auth_session(chip);
+		return -ENOMEM;
+	}
+
+	tpm_buf_init(buf, TPM_BUFSIZE);
+	tpm_buf_reset(buf, TPM2_ST_SESSIONS, TPM2_CC_SIGN);
+
+	rc = tpm_buf_append_name(chip, buf, key->handle, NULL);
+	if (rc)
+		return rc;
+
+	tpm_buf_append_hmac_session(chip, buf, TPM2_SA_CONTINUE_SESSION,
+				    key->auth, sizeof(key->auth));
+
+	/* digest */
+	tpm_buf_append_u16(buf, SHA256_DIGEST_SIZE);
+	tpm_buf_append(buf, digest, SHA256_DIGEST_SIZE);
+	/* inScheme: use the key's scheme */
+	tpm_buf_append_u16(buf, TPM_ALG_NULL);
+	/* validation: a NULL ticket, as the key is not restricted */
+	tpm_buf_append_u16(buf, TPM2_ST_HASHCHECK);
+	tpm_buf_append_u32(buf, TPM2_RH_NULL);
+	tpm_buf_append_u16(buf, 0);
+
+	rc = tpm_buf_fill_hmac_session(chip, buf);
+	if (rc)
+		return rc;
+
+	rc = tpm_transmit_cmd(chip, buf, 0, "signing with kernel key");
+	rc = tpm_buf_check_hmac_response(chip, buf, rc);
+	if (rc) {
+		if (rc < 0)
+			tpm2_end_auth_session(chip);
+		return rc;
+	}
+
+	tpm2_rsp_init(&rsp, buf);
+	/* parameterSize */
+	tpm2_rsp_u32(&rsp);
+	if (tpm2_rsp_u16(&rsp) != TPM_ALG_ECDSA ||
+	    tpm2_rsp_u16(&rsp) != TPM_ALG_SHA256)
+		return -EIO;
+	tpm2_rsp_ecc_param(&rsp, r);
+	tpm2_rsp_ecc_param(&rsp, s);
+
+	return rsp.err ? -EIO : 0;
+}
+EXPORT_SYMBOL_GPL(tpm2_kernel_key_sign);
+
+/**
+ * tpm2_kernel_key_destroy() - unload a kernel signing key
+ * @chip:	the TPM chip
+ * @key:	a key created by tpm2_kernel_key_create()
+ *
+ * Flushes the key from the TPM and erases its auth value.  The caller must
+ * hold the chip's ops lock.
+ */
+void tpm2_kernel_key_destroy(struct tpm_chip *chip,
+			     struct tpm2_kernel_key *key)
+{
+	if (key->handle)
+		tpm2_flush_context(chip, key->handle);
+
+	memzero_explicit(key, sizeof(*key));
+}
+EXPORT_SYMBOL_GPL(tpm2_kernel_key_destroy);

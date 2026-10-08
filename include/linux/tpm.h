@@ -388,12 +388,28 @@ struct tpm2_key_provenance {
 #ifdef CONFIG_TCG_TPM2_KERNEL_KEY
 int tpm2_kernel_key_create(struct tpm_chip *chip, struct tpm2_kernel_key *key,
 			   struct tpm2_key_provenance *prov);
+int tpm2_kernel_key_sign(struct tpm_chip *chip, struct tpm2_kernel_key *key,
+			 const u8 digest[SHA256_DIGEST_SIZE],
+			 u8 r[EC_PT_SZ], u8 s[EC_PT_SZ]);
+void tpm2_kernel_key_destroy(struct tpm_chip *chip,
+			     struct tpm2_kernel_key *key);
 #else
 static inline int tpm2_kernel_key_create(struct tpm_chip *chip,
 					 struct tpm2_kernel_key *key,
 					 struct tpm2_key_provenance *prov)
 {
 	return -EOPNOTSUPP;
+}
+static inline int tpm2_kernel_key_sign(struct tpm_chip *chip,
+				       struct tpm2_kernel_key *key,
+				       const u8 digest[SHA256_DIGEST_SIZE],
+				       u8 r[EC_PT_SZ], u8 s[EC_PT_SZ])
+{
+	return -EOPNOTSUPP;
+}
+static inline void tpm2_kernel_key_destroy(struct tpm_chip *chip,
+					   struct tpm2_kernel_key *key)
+{
 }
 #endif
 
