@@ -398,6 +398,75 @@ void iscsi_tcp_hdr_recv_prep(struct iscsi_tcp_conn *tcp_conn)
 EXPORT_SYMBOL_GPL(iscsi_tcp_hdr_recv_prep);
 
 /*
+ * An offloading transport places read data itself and does not hand every
+ * Data-In PDU to this layer, so the payload cannot be accounted here.
+ */
+static inline bool iscsi_tcp_data_path_offloaded(struct iscsi_conn *conn)
+{
+	return conn->session->tt->caps &
+		(CAP_DIGEST_OFFLOAD | CAP_PADDING_OFFLOAD);
+}
+
+/**
+ * iscsi_tcp_zero_unread - zero the part of a read buffer the target never sent
+ * @task: scsi command task
+ *
+ * A target can end a read without sending all of the data, in any of the ways
+ * a completion can be reported.  Rather than predict from the status, the
+ * sense and the residual whether the buffer was promised in full, zero the
+ * bytes that did not arrive.  Whatever the midlayer then reports as
+ * transferred, the caller sees zeroes and not the previous contents of those
+ * pages.
+ *
+ * The continuity check in iscsi_tcp_data_in() means the bytes that did not
+ * arrive are exactly the tail, so one range covers them.
+ */
+static void iscsi_tcp_zero_unread(struct iscsi_task *task)
+{
+	struct iscsi_tcp_task *tcp_task = task->dd_data;
+	struct scsi_cmnd *sc = task->sc;
+
+	if (!sc || sc->sc_data_direction != DMA_FROM_DEVICE ||
+	    iscsi_tcp_data_path_offloaded(task->conn) ||
+	    tcp_task->data_in_bytes >= sc->sdb.length)
+		return;
+
+	sg_zero_buffer(sc->sdb.table.sgl, sc->sdb.table.nents,
+		       sc->sdb.length - tcp_task->data_in_bytes,
+		       tcp_task->data_in_bytes);
+}
+
+/**
+ * iscsi_tcp_complete_cmd - zero any unread tail, then complete the command
+ * @conn: iscsi connection
+ * @hdr: the PDU carrying the status
+ * @data: data segment of that PDU, if it has one
+ * @datalen: length of @data
+ *
+ * back_lock is taken once for the lookup, the fill and the completion.
+ */
+static int iscsi_tcp_complete_cmd(struct iscsi_conn *conn, struct iscsi_hdr *hdr,
+				  char *data, int datalen)
+{
+	struct iscsi_task *task;
+	int rc;
+
+	if (iscsi_tcp_data_path_offloaded(conn))
+		return iscsi_complete_pdu(conn, hdr, data, datalen);
+
+	spin_lock(&conn->session->back_lock);
+	task = iscsi_itt_to_ctask(conn, hdr->itt);
+	if (!task) {
+		spin_unlock(&conn->session->back_lock);
+		return ISCSI_ERR_BAD_ITT;
+	}
+	iscsi_tcp_zero_unread(task);
+	rc = __iscsi_complete_pdu(conn, hdr, data, datalen);
+	spin_unlock(&conn->session->back_lock);
+	return rc;
+}
+
+/*
  * Handle incoming reply to any other type of command
  */
 static int
@@ -410,8 +479,13 @@ iscsi_tcp_data_recv_done(struct iscsi_tcp_conn *tcp_conn,
 	if (!iscsi_tcp_dgst_verify(tcp_conn, segment))
 		return ISCSI_ERR_DATA_DGST;
 
-	rc = iscsi_complete_pdu(conn, tcp_conn->in.hdr,
-			conn->data, tcp_conn->in.datalen);
+	if ((tcp_conn->in.hdr->opcode & ISCSI_OPCODE_MASK) ==
+	    ISCSI_OP_SCSI_CMD_RSP)
+		rc = iscsi_tcp_complete_cmd(conn, tcp_conn->in.hdr, conn->data,
+					    tcp_conn->in.datalen);
+	else
+		rc = iscsi_complete_pdu(conn, tcp_conn->in.hdr, conn->data,
+					tcp_conn->in.datalen);
 	if (rc)
 		return rc;
 
@@ -507,6 +581,13 @@ static int iscsi_tcp_data_in(struct iscsi_conn *conn, struct iscsi_task *task)
 			      "total_length_in(%d)\n", tcp_task->data_offset,
 			      tcp_conn->in.datalen, total_in_length);
 		return ISCSI_ERR_DATA_OFFSET;
+	}
+
+	if (!iscsi_tcp_data_path_offloaded(conn)) {
+		if (tcp_task->data_offset != tcp_task->data_in_bytes)
+			return ISCSI_ERR_DATA_OFFSET;
+
+		tcp_task->data_in_bytes += tcp_conn->in.datalen;
 	}
 
 	conn->datain_pdus_cnt++;
@@ -658,7 +739,7 @@ iscsi_tcp_process_data_in(struct iscsi_tcp_conn *tcp_conn,
 
 	/* check for non-exceptional status */
 	if (hdr->flags & ISCSI_FLAG_DATA_STATUS) {
-		rc = iscsi_complete_pdu(conn, tcp_conn->in.hdr, NULL, 0);
+		rc = iscsi_tcp_complete_cmd(conn, tcp_conn->in.hdr, NULL, 0);
 		if (rc)
 			return rc;
 	}
@@ -752,6 +833,14 @@ iscsi_tcp_hdr_dissect(struct iscsi_conn *conn, struct iscsi_hdr *hdr)
 			spin_unlock(&conn->session->back_lock);
 			return rc;
 		}
+		/*
+		 * A Data-In with no data segment can still carry the status,
+		 * and it completes the command here rather than from
+		 * iscsi_tcp_process_data_in(), so fill the tail on this path
+		 * too.
+		 */
+		if (hdr->flags & ISCSI_FLAG_DATA_STATUS)
+			iscsi_tcp_zero_unread(task);
 		rc = __iscsi_complete_pdu(conn, hdr, NULL, 0);
 		spin_unlock(&conn->session->back_lock);
 		break;
@@ -780,6 +869,11 @@ iscsi_tcp_hdr_dissect(struct iscsi_conn *conn, struct iscsi_hdr *hdr)
 					  tcp_conn->in.datalen,
 					  ISCSI_DEF_MAX_RECV_SEG_LEN, opcode);
 			rc = ISCSI_ERR_PROTO;
+			break;
+		}
+
+		if (opcode == ISCSI_OP_SCSI_CMD_RSP && !tcp_conn->in.datalen) {
+			rc = iscsi_tcp_complete_cmd(conn, hdr, NULL, 0);
 			break;
 		}
 
@@ -995,6 +1089,7 @@ int iscsi_tcp_task_init(struct iscsi_task *task)
 
 	BUG_ON(kfifo_len(&tcp_task->r2tqueue));
 	tcp_task->exp_datasn = 0;
+	tcp_task->data_in_bytes = 0;
 
 	/* Prepare PDU, optionally w/ immediate data */
 	ISCSI_DBG_TCP(conn, "task deq [itt 0x%x imm %d unsol %d]\n",
