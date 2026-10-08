@@ -183,6 +183,7 @@ static inline enum tpm2_mso_type tpm2_handle_mso(u32 handle)
  * undefine or modify it.
  */
 #define TPM2_KERNEL_NV_INDEX	0x014c4853
+#define TPM2_KERNEL_NV_SIZE	8
 
 #define TPM_VID_INTEL    0x8086
 #define TPM_VID_WINBOND  0x1050
@@ -203,6 +204,8 @@ enum tpm_chip_flags {
 	TPM_CHIP_FLAG_HWRNG_DISABLED		= BIT(9),
 	TPM_CHIP_FLAG_DISABLE			= BIT(10),
 	TPM_CHIP_FLAG_SYNC			= BIT(11),
+	/* the kernel NV index may hold the magic value */
+	TPM_CHIP_FLAG_KERNEL_NV_DIRTY		= BIT(12),
 };
 
 #define to_tpm_chip(d) container_of(d, struct tpm_chip, dev)

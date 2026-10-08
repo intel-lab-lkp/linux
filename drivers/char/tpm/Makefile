@@ -18,6 +18,7 @@ tpm-y += eventlog/tpm2.o
 tpm-y += tpm-buf.o
 tpm-y += tpm2-sessions.o
 tpm-$(CONFIG_TCG_TPM2_HMAC) += tpm2-ak.o
+tpm-$(CONFIG_TCG_TPM2_HMAC) += tpm2-kernel-nv.o
 
 tpm-$(CONFIG_ACPI) += tpm_ppi.o eventlog/acpi.o
 tpm-$(CONFIG_EFI) += eventlog/efi.o

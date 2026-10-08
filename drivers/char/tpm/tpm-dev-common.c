@@ -94,6 +94,16 @@ static ssize_t tpm_dev_transmit(struct tpm_chip *chip, struct tpm_space *space,
 	    tpm2_dev_cmd_is_blocked(buf, bufsiz))
 		return -EPERM;
 
+	/*
+	 * Never give userspace access while the kernel NV index may hold
+	 * the magic value.
+	 */
+	if (chip->flags & TPM_CHIP_FLAG_KERNEL_NV_DIRTY) {
+		tpm2_kernel_nv_clear(chip);
+		if (chip->flags & TPM_CHIP_FLAG_KERNEL_NV_DIRTY)
+			return -EPERM;
+	}
+
 	if (chip->flags & TPM_CHIP_FLAG_TPM2)
 		tpm2_end_auth_session(chip);
 

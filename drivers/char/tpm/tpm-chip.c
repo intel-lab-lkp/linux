@@ -584,6 +584,34 @@ EXPORT_SYMBOL_GPL(tpm_chip_bootstrap);
  * This function should be only called after the chip initialization is
  * complete.
  */
+/*
+ * Make sure the kernel NV index is defined and does not hold the magic
+ * value before userspace is given access to the TPM.
+ */
+static void tpm_chip_provision_kernel_nv(struct tpm_chip *chip)
+{
+	int rc;
+
+	if (!IS_ENABLED(CONFIG_TCG_TPM2_HMAC) ||
+	    !(chip->flags & TPM_CHIP_FLAG_TPM2))
+		return;
+
+	/*
+	 * A crash while the magic value was set leaves it in the index, so
+	 * assume the worst until provisioning shows otherwise.
+	 */
+	chip->flags |= TPM_CHIP_FLAG_KERNEL_NV_DIRTY;
+
+	if (tpm_try_get_ops(chip))
+		return;
+
+	rc = tpm2_kernel_nv_provision(chip);
+	tpm_put_ops(chip);
+
+	if (rc)
+		dev_warn(&chip->dev, "kernel NV index unavailable: %d\n", rc);
+}
+
 int tpm_chip_register(struct tpm_chip *chip)
 {
 	int rc;
@@ -601,6 +629,8 @@ int tpm_chip_register(struct tpm_chip *chip)
 	rc = tpm_add_hwrng(chip);
 	if (rc)
 		goto out_ppi;
+
+	tpm_chip_provision_kernel_nv(chip);
 
 	rc = tpm_add_char_device(chip);
 	if (rc)

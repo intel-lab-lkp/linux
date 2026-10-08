@@ -152,8 +152,22 @@ void tpm_dev_common_exit(void);
 int tpm2_sessions_init(struct tpm_chip *chip);
 void tpm2_free_auth(struct tpm2_auth *auth);
 int tpm2_audit_session_handle(struct tpm_chip *chip, u32 *handle);
+
+extern const u8 tpm2_kernel_nv_magic[TPM2_KERNEL_NV_SIZE];
+void tpm2_kernel_nv_name(bool written, u8 name[TPM2_NULL_NAME_SIZE]);
+int tpm2_kernel_nv_provision(struct tpm_chip *chip);
+int tpm2_kernel_nv_set_magic(struct tpm_chip *chip);
+int tpm2_kernel_nv_clear(struct tpm_chip *chip);
 #else
 static inline int tpm2_sessions_init(struct tpm_chip *chip)
+{
+	return 0;
+}
+static inline int tpm2_kernel_nv_provision(struct tpm_chip *chip)
+{
+	return 0;
+}
+static inline int tpm2_kernel_nv_clear(struct tpm_chip *chip)
 {
 	return 0;
 }
