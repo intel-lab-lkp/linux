@@ -8,22 +8,20 @@
 #
 # Topology:
 # ---------
-#                 -----------
-#               _ | Process | _
-#              /  -----------  \
-#             /        |        \
-#            /         |         \
-#      -----------     |     -----------
-#      | Thread1 |     |     | Thread2 |
-#      -----------     |     -----------
-#           |          |          |
-#      -----------     |     -----------
-#      |  xskX   |     |     |  xskY   |
-#      -----------     |     -----------
-#           |          |          |
-#      -----------     |     ----------
-#      |  vethX  | --------- |  vethY |
-#      -----------   peer    ----------
+#      -----------   control    -----------
+#      | TX proc | ------------ | RX proc |
+#      -----------  (TCP, lo)   -----------
+#           |                        |
+#      -----------              -----------
+#      |  xskX   |              |  xskY   |
+#      -----------              -----------
+#           |                        |
+#      -----------              ----------
+#      |  vethX  | ------------ |  vethY |
+#      -----------     peer     ----------
+#
+# The two xskxceiver processes each drive one veth and synchronize over a
+# TCP control connection on 127.0.0.1.
 #
 # AF_XDP is an address family optimized for high performance packet processing,
 # it is XDP’s user-space interface.
@@ -71,6 +69,9 @@
 # Set up veth interfaces and leave them up so xskxceiver can be launched in a debugger:
 #   sudo ./test_xsk.sh -d
 #
+# Use a specific TCP port for the control connection (random by default)
+#   sudo ./test_xsk.sh -p PORT
+#
 # Run test suite in a specific mode only [skb,drv]
 #   sudo ./test_xsk.sh -m MODE
 #
@@ -90,11 +91,15 @@ if [ ! -x "./${XSKOBJ}" ]; then
 	exit $ksft_skip
 fi
 
-while getopts "vdm:lt:h" flag
+PEER_HOST=127.0.0.1
+PEER_PORT=
+
+while getopts "vdm:lt:p:h" flag
 do
 	case "${flag}" in
 		v) verbose=1;;
 		d) debug=1;;
+		p) PEER_PORT=${OPTARG};;
 		m) MODE=${OPTARG};;
 		l) list=1;;
 		t) TEST=${OPTARG};;
@@ -181,6 +186,13 @@ if [ ${#CASES[@]} -eq 0 ]; then
 	exit 1
 fi
 
+if [ -z "$PEER_PORT" ]; then
+	PEER_PORT=$(random_port) || {
+		echo "Could not find an unused TCP port" >&2
+		exit 1
+	}
+fi
+
 validate_root_exec
 validate_veth_support ${VETH0}
 validate_ip_utility
@@ -225,7 +237,8 @@ RUN_VARIANT=SOFTIRQ
 
 if [[ $debug -eq 1 ]]; then
     ARGS="${BASE_ARGS} -m ${MODES[0]} -t ${CASES[0]}"
-    echo "./${XSKOBJ} -i ${VETH0} -i ${VETH1} ${ARGS}"
+    echo "./${XSKOBJ} -i ${VETH0} -e tx -p ${PEER_HOST} -P ${PEER_PORT} ${ARGS}"
+    echo "./${XSKOBJ} -i ${VETH1} -e rx -p ${PEER_HOST} -P ${PEER_PORT} ${ARGS}"
     exit
 fi
 
