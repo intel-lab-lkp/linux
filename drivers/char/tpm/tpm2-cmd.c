@@ -326,6 +326,212 @@ int tpm2_get_random(struct tpm_chip *chip, u8 *dest, size_t max)
 /* Minimum MAX_NV_BUFFER_SIZE required by the PC Client TPM profile */
 #define TPM2_NV_BUFFER_MIN	512
 
+static u32 tpm2_nv_buffer_max(struct tpm_chip *chip)
+{
+	u32 val;
+
+	if (tpm2_get_tpm_pt(chip, TPM2_PT_NV_BUFFER_MAX, &val, NULL) || !val)
+		return TPM2_NV_BUFFER_MIN;
+
+	return val;
+}
+
+/*
+ * Start an HMAC session for an NV command.  -EBUSY means an audit session
+ * is already active, which is used instead so the command is audited.
+ */
+static int tpm2_nv_session_begin(struct tpm_chip *chip)
+{
+	int rc = tpm2_start_auth_session(chip, false);
+
+	return rc == -EBUSY ? 0 : rc;
+}
+
+/*
+ * Send a command built with HMAC sessions and check the response.  A TPM
+ * error such as a missing index leaves the session usable, so it is only
+ * ended on a system error.
+ */
+static int tpm2_nv_transmit(struct tpm_chip *chip, struct tpm_buf *buf,
+			    const char *desc)
+{
+	int rc;
+
+	rc = tpm_buf_fill_hmac_session(chip, buf);
+	if (rc)
+		return rc;
+
+	rc = tpm_transmit_cmd(chip, buf, 0, desc);
+	rc = tpm_buf_check_hmac_response(chip, buf, rc);
+	if (rc < 0)
+		tpm2_end_auth_session(chip);
+
+	return rc;
+}
+
+/**
+ * tpm2_nv_define() - define an ordinary NV index in the owner hierarchy
+ * @chip:	TPM chip to use
+ * @nv_index:	the NV index to define
+ * @attrs:	TPMA_NV attributes of the index
+ * @size:	size of the index in bytes
+ *
+ * The index is given an empty auth value and no policy.  The owner
+ * hierarchy must have an empty auth value.
+ *
+ * Return: same as with tpm_transmit_cmd()
+ */
+int tpm2_nv_define(struct tpm_chip *chip, u32 nv_index, u32 attrs, u16 size)
+{
+	struct tpm_buf *buf __free(kfree) = NULL;
+	int rc;
+
+	rc = tpm2_nv_session_begin(chip);
+	if (rc)
+		return rc;
+
+	buf = kzalloc(TPM_BUFSIZE, GFP_KERNEL);
+	if (!buf) {
+		tpm2_end_auth_session(chip);
+		return -ENOMEM;
+	}
+
+	tpm_buf_init(buf, TPM_BUFSIZE);
+	tpm_buf_reset(buf, TPM2_ST_SESSIONS, TPM2_CC_NV_DEFINE_SPACE);
+
+	rc = tpm_buf_append_name(chip, buf, TPM2_RH_OWNER, NULL);
+	if (rc)
+		return rc;
+
+	tpm_buf_append_hmac_session(chip, buf, TPM2_SA_CONTINUE_SESSION,
+				    NULL, 0);
+
+	/* auth (empty) */
+	tpm_buf_append_u16(buf, 0);
+
+	/* publicInfo: TPM2B_NV_PUBLIC */
+	tpm_buf_append_u16(buf, sizeof(u32) + sizeof(u16) + sizeof(u32) +
+			   sizeof(u16) + sizeof(u16));
+	tpm_buf_append_u32(buf, nv_index);
+	tpm_buf_append_u16(buf, TPM_ALG_SHA256);
+	tpm_buf_append_u32(buf, attrs);
+	/* authPolicy (empty) */
+	tpm_buf_append_u16(buf, 0);
+	tpm_buf_append_u16(buf, size);
+
+	return tpm2_nv_transmit(chip, buf, "attempting to define NV index");
+}
+
+/**
+ * tpm2_nv_undefine() - undefine an NV index in the owner hierarchy
+ * @chip:	TPM chip to use
+ * @nv_index:	the NV index to undefine
+ *
+ * The owner hierarchy must have an empty auth value.
+ *
+ * Return: same as with tpm_transmit_cmd()
+ */
+int tpm2_nv_undefine(struct tpm_chip *chip, u32 nv_index)
+{
+	struct tpm_buf *buf __free(kfree) = NULL;
+	int rc;
+
+	rc = tpm2_nv_session_begin(chip);
+	if (rc)
+		return rc;
+
+	buf = kzalloc(TPM_BUFSIZE, GFP_KERNEL);
+	if (!buf) {
+		tpm2_end_auth_session(chip);
+		return -ENOMEM;
+	}
+
+	tpm_buf_init(buf, TPM_BUFSIZE);
+	tpm_buf_reset(buf, TPM2_ST_SESSIONS, TPM2_CC_NV_UNDEFINE_SPACE);
+
+	rc = tpm_buf_append_name(chip, buf, TPM2_RH_OWNER, NULL);
+	if (rc)
+		return rc;
+	rc = tpm_buf_append_name(chip, buf, nv_index, NULL);
+	if (rc)
+		return rc;
+
+	tpm_buf_append_hmac_session(chip, buf, TPM2_SA_CONTINUE_SESSION,
+				    NULL, 0);
+
+	return tpm2_nv_transmit(chip, buf, "attempting to undefine NV index");
+}
+
+/**
+ * tpm2_nv_write() - write data to an NV index
+ * @chip:	TPM chip to use
+ * @nv_index:	the NV index to write
+ * @auth_handle: the handle authorizing the write, which must have an empty
+ *		auth value
+ * @offset:	offset within the NV index to start writing at
+ * @data:	data to write
+ * @len:	number of bytes to write
+ *
+ * Writes are split into chunks no larger than the TPM's NV buffer.  When
+ * HMAC sessions are enabled the write is integrity protected and the data
+ * encrypted.
+ *
+ * Return: same as with tpm_transmit_cmd()
+ */
+int tpm2_nv_write(struct tpm_chip *chip, u32 nv_index, u32 auth_handle,
+		  u16 offset, const u8 *data, u16 len)
+{
+	struct tpm_buf *buf __free(kfree) = NULL;
+	u32 chunk_max;
+	int rc;
+
+	if ((u32)offset + len > U16_MAX + 1)
+		return -EINVAL;
+
+	chunk_max = tpm2_nv_buffer_max(chip);
+
+	rc = tpm2_nv_session_begin(chip);
+	if (rc)
+		return rc;
+
+	buf = kzalloc(TPM_BUFSIZE, GFP_KERNEL);
+	if (!buf) {
+		tpm2_end_auth_session(chip);
+		return -ENOMEM;
+	}
+
+	tpm_buf_init(buf, TPM_BUFSIZE);
+
+	while (len) {
+		u16 chunk = min_t(u32, len, chunk_max);
+
+		tpm_buf_reset(buf, TPM2_ST_SESSIONS, TPM2_CC_NV_WRITE);
+
+		rc = tpm_buf_append_name(chip, buf, auth_handle, NULL);
+		if (rc)
+			return rc;
+		rc = tpm_buf_append_name(chip, buf, nv_index, NULL);
+		if (rc)
+			return rc;
+
+		tpm_buf_append_hmac_session(chip, buf, TPM2_SA_DECRYPT |
+					    TPM2_SA_CONTINUE_SESSION, NULL, 0);
+		tpm_buf_append_u16(buf, chunk);
+		tpm_buf_append(buf, data, chunk);
+		tpm_buf_append_u16(buf, offset);
+
+		rc = tpm2_nv_transmit(chip, buf, "attempting to write NV index");
+		if (rc)
+			return rc;
+
+		data += chunk;
+		offset += chunk;
+		len -= chunk;
+	}
+
+	return 0;
+}
+
 /**
  * tpm2_nv_read() - read data from an NV index
  * @chip:	TPM chip to use
@@ -354,13 +560,10 @@ int tpm2_nv_read(struct tpm_chip *chip, u32 nv_index, u32 auth_handle,
 	if ((u32)offset + len > U16_MAX + 1)
 		return -EINVAL;
 
-	if (tpm2_get_tpm_pt(chip, TPM2_PT_NV_BUFFER_MAX, &chunk_max, NULL) ||
-	    !chunk_max)
-		chunk_max = TPM2_NV_BUFFER_MIN;
+	chunk_max = tpm2_nv_buffer_max(chip);
 
-	rc = tpm2_start_auth_session(chip, false);
-	/* -EBUSY means an audit session is active, which we can use */
-	if (rc && rc != -EBUSY)
+	rc = tpm2_nv_session_begin(chip);
+	if (rc)
 		return rc;
 
 	buf = kzalloc(TPM_BUFSIZE, GFP_KERNEL);
@@ -390,21 +593,9 @@ int tpm2_nv_read(struct tpm_chip *chip, u32 nv_index, u32 auth_handle,
 		tpm_buf_append_u16(buf, chunk);
 		tpm_buf_append_u16(buf, offset);
 
-		rc = tpm_buf_fill_hmac_session(chip, buf);
+		rc = tpm2_nv_transmit(chip, buf, "attempting to read NV index");
 		if (rc)
 			return rc;
-
-		rc = tpm_transmit_cmd(chip, buf, 0, "attempting to read NV index");
-		rc = tpm_buf_check_hmac_response(chip, buf, rc);
-		if (rc) {
-			/*
-			 * A TPM error such as a missing index leaves the
-			 * session usable, so only end it on a system error.
-			 */
-			if (rc < 0)
-				tpm2_end_auth_session(chip);
-			return rc;
-		}
 
 		/* skip the parameter size */
 		off = TPM_HEADER_SIZE + sizeof(u32);

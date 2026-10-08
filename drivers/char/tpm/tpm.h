@@ -115,6 +115,10 @@ int tpm2_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 int tpm2_get_random(struct tpm_chip *chip, u8 *dest, size_t max);
 int tpm2_nv_read(struct tpm_chip *chip, u32 nv_index, u32 auth_handle,
 		 u16 offset, u8 *data, u16 len);
+int tpm2_nv_write(struct tpm_chip *chip, u32 nv_index, u32 auth_handle,
+		  u16 offset, const u8 *data, u16 len);
+int tpm2_nv_define(struct tpm_chip *chip, u32 nv_index, u32 attrs, u16 size);
+int tpm2_nv_undefine(struct tpm_chip *chip, u32 nv_index);
 ssize_t tpm2_get_tpm_pt(struct tpm_chip *chip, u32 property_id,
 			u32 *value, const char *desc);
 

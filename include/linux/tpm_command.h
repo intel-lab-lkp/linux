@@ -284,6 +284,14 @@ enum tpm2_permanent_handles {
 	TPM2_RH_ENDORSEMENT	= 0x4000000B,
 };
 
+/* TPMA_NV, for an ordinary NV index (TPM_NT_ORDINARY in bits 4-7) */
+enum tpm2_nv_attributes {
+	TPM2_NV_AUTHWRITE	= BIT(2),
+	TPM2_NV_AUTHREAD	= BIT(18),
+	TPM2_NV_NO_DA		= BIT(25),
+	TPM2_NV_WRITTEN		= BIT(29),
+};
+
 /* TPMS_ATTEST.magic */
 #define TPM2_GENERATED_VALUE	0xff544347
 
