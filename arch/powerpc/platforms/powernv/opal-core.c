@@ -455,6 +455,7 @@ static void __init opalcore_config_init(void)
 
 	if (!of_device_is_compatible(np, "ibm,opal-dump")) {
 		pr_warn("Support missing for this f/w version!\n");
+		of_node_put(np);
 		return;
 	}
 
