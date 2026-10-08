@@ -535,6 +535,9 @@ static struct mux_chip *of_find_mux_chip_by_node(struct device_node *np)
  * @optional: Whether to return NULL and silence errors when mux doesn't exist.
  * @node: the device nodes, use dev->of_node if it is NULL.
  *
+ * When a mux-control is found, it is the caller's responsibility to call
+ * mux_control_put() on it when it is no longer needed.
+ *
  * Return: Pointer to the mux-control on success, an ERR_PTR with a negative
  * errno on error, or NULL if optional is true and mux doesn't exist.
  */
@@ -584,9 +587,10 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 	}
 
 	mux_chip = of_find_mux_chip_by_node(args.np);
-	of_node_put(args.np);
-	if (!mux_chip)
-		return ERR_PTR(-EPROBE_DEFER);
+	if (!mux_chip) {
+		ret = -EPROBE_DEFER;
+		goto end;
+	}
 
 	controller = 0;
 	if (state) {
@@ -594,8 +598,8 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 		    (args.args_count < 2 && mux_chip->controllers > 1)) {
 			dev_err(dev, "%pOF: wrong #mux-state-cells for %pOF\n",
 				np, args.np);
-			put_device(&mux_chip->dev);
-			return ERR_PTR(-EINVAL);
+			ret = -EINVAL;
+			goto end;
 		}
 
 		if (args.args_count == 2) {
@@ -610,8 +614,8 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 		    (!args.args_count && mux_chip->controllers > 1)) {
 			dev_err(dev, "%pOF: wrong #mux-control-cells for %pOF\n",
 				np, args.np);
-			put_device(&mux_chip->dev);
-			return ERR_PTR(-EINVAL);
+			ret = -EINVAL;
+			goto end;
 		}
 
 		if (args.args_count)
@@ -621,8 +625,16 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 	if (controller >= mux_chip->controllers) {
 		dev_err(dev, "%pOF: bad mux controller %u specified in %pOF\n",
 			np, controller, args.np);
-		put_device(&mux_chip->dev);
-		return ERR_PTR(-EINVAL);
+		ret = -EINVAL;
+		goto end;
+	}
+
+end:
+	of_node_put(args.np);
+	if (ret < 0) {
+		if (mux_chip)
+			put_device(&mux_chip->dev);
+		return ERR_PTR(ret);
 	}
 
 	return &mux_chip->mux[controller];
