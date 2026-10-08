@@ -11,6 +11,7 @@
 #include <linux/export.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/slab.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
@@ -36,6 +37,32 @@ static LIST_HEAD(panel_list);
  *
  * For easy integration into drivers using the &drm_bridge infrastructure please
  * take look at drm_panel_bridge_add() and devm_drm_panel_bridge_add().
+ */
+
+/**
+ * DOC: drm panel atomic state
+ *
+ * Panels that only support a single configuration can be fully described by
+ * the &drm_panel_funcs.prepare, &drm_panel_funcs.enable,
+ * &drm_panel_funcs.disable and &drm_panel_funcs.unprepare callbacks.
+ *
+ * Panels whose programming depends on the configuration being applied, for
+ * example panels supporting several modes, should track that configuration in
+ * the atomic state instead of the driver data. Such panels get a
+ * &struct drm_panel_state by implementing
+ * &drm_panel_funcs.atomic_create_state,
+ * &drm_panel_funcs.atomic_duplicate_state and
+ * &drm_panel_funcs.atomic_destroy_state, either with the
+ * drm_atomic_helper_panel_create_state(),
+ * drm_atomic_helper_panel_duplicate_state() and
+ * drm_atomic_helper_panel_destroy_state() helpers or with their own functions
+ * if they subclass the state.
+ *
+ * The panel state is the state of the &drm_bridge embedded in the panel. It
+ * only exists once that bridge has been attached to an encoder, so the panels
+ * using atomic state can only be used by display drivers going through the
+ * bridge. Such panel drivers must not call drm_panel_disable() or
+ * drm_panel_unprepare() from their remove or shutdown callbacks either.
  */
 
 static inline struct drm_panel *
@@ -216,6 +243,52 @@ static void panel_bridge_debugfs_init(struct drm_bridge *bridge,
 		panel->funcs->debugfs_init(panel, root);
 }
 
+static struct drm_bridge_state *
+panel_bridge_atomic_create_state(struct drm_bridge *bridge)
+{
+	struct drm_panel *panel = drm_bridge_to_panel(bridge);
+	struct drm_panel_state *panel_state;
+
+	if (!panel->funcs->atomic_create_state)
+		return drm_atomic_helper_bridge_create_state(bridge);
+
+	panel_state = panel->funcs->atomic_create_state(panel);
+	if (IS_ERR(panel_state))
+		return ERR_CAST(panel_state);
+
+	return &panel_state->base;
+}
+
+static struct drm_bridge_state *
+panel_bridge_atomic_duplicate_state(struct drm_bridge *bridge)
+{
+	struct drm_panel *panel = drm_bridge_to_panel(bridge);
+	struct drm_panel_state *panel_state;
+
+	if (!panel->funcs->atomic_duplicate_state)
+		return drm_atomic_helper_bridge_duplicate_state(bridge);
+
+	panel_state = panel->funcs->atomic_duplicate_state(panel);
+	if (!panel_state)
+		return NULL;
+
+	return &panel_state->base;
+}
+
+static void panel_bridge_atomic_destroy_state(struct drm_bridge *bridge,
+					      struct drm_bridge_state *bridge_state)
+{
+	struct drm_panel *panel = drm_bridge_to_panel(bridge);
+
+	if (!panel->funcs->atomic_destroy_state) {
+		drm_atomic_helper_bridge_destroy_state(bridge, bridge_state);
+		return;
+	}
+
+	panel->funcs->atomic_destroy_state(panel,
+					   drm_bridge_state_to_panel_state(bridge_state));
+}
+
 static const struct drm_bridge_funcs panel_bridge_bridge_funcs = {
 	.attach = panel_bridge_attach,
 	.detach = panel_bridge_detach,
@@ -224,9 +297,9 @@ static const struct drm_bridge_funcs panel_bridge_bridge_funcs = {
 	.atomic_disable = panel_bridge_atomic_disable,
 	.atomic_post_disable = panel_bridge_atomic_post_disable,
 	.get_modes = panel_bridge_get_modes,
-	.atomic_create_state = drm_atomic_helper_bridge_create_state,
-	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_create_state = panel_bridge_atomic_create_state,
+	.atomic_duplicate_state = panel_bridge_atomic_duplicate_state,
+	.atomic_destroy_state = panel_bridge_atomic_destroy_state,
 	.atomic_get_input_bus_fmts = drm_atomic_helper_bridge_propagate_bus_fmt,
 	.debugfs_init = panel_bridge_debugfs_init,
 };
@@ -576,6 +649,11 @@ static void drm_panel_init(struct drm_panel *panel, struct device *dev,
 	if (connector_type == DRM_MODE_CONNECTOR_Unknown)
 		DRM_WARN("%s: %s: a valid connector type is required!\n", __func__, dev_name(dev));
 
+	dev_WARN_ONCE(dev,
+		      !funcs->atomic_create_state != !funcs->atomic_duplicate_state ||
+		      !funcs->atomic_create_state != !funcs->atomic_destroy_state,
+		      "Panel state callbacks have to be implemented together\n");
+
 	INIT_LIST_HEAD(&panel->list);
 	INIT_LIST_HEAD(&panel->followers);
 	mutex_init(&panel->follower_lock);
@@ -657,6 +735,9 @@ EXPORT_SYMBOL(devm_drm_panel_add);
  * integrated circuitry via a command bus. This function cannot fail (as it is
  * called from the pre_enable call chain). There will always be a call to
  * drm_panel_disable() afterwards.
+ *
+ * This function can not be used with the panels using atomic state, those are
+ * only supported through the bridge embedded in the panel.
  */
 void drm_panel_prepare(struct drm_panel *panel)
 {
@@ -664,6 +745,10 @@ void drm_panel_prepare(struct drm_panel *panel)
 	int ret;
 
 	if (!panel)
+		return;
+
+	if (dev_WARN_ONCE(panel->dev, panel->funcs->atomic_create_state,
+			  "Atomic panels have to be driven through the bridge\n"))
 		return;
 
 	if (panel->prepared) {
@@ -703,6 +788,9 @@ EXPORT_SYMBOL(drm_panel_prepare);
  * reset, turn off power supplies, ...). After this function has completed, it
  * is usually no longer possible to communicate with the panel until another
  * call to drm_panel_prepare().
+ *
+ * This function can not be used with the panels using atomic state, those are
+ * only supported through the bridge embedded in the panel.
  */
 void drm_panel_unprepare(struct drm_panel *panel)
 {
@@ -710,6 +798,10 @@ void drm_panel_unprepare(struct drm_panel *panel)
 	int ret;
 
 	if (!panel)
+		return;
+
+	if (dev_WARN_ONCE(panel->dev, panel->funcs->atomic_create_state,
+			  "Atomic panels have to be driven through the bridge\n"))
 		return;
 
 	/*
@@ -759,6 +851,9 @@ EXPORT_SYMBOL(drm_panel_unprepare);
  * this call completes. This function cannot fail (as it is called from the
  * enable call chain). There will always be a call to drm_panel_disable()
  * afterwards.
+ *
+ * This function can not be used with the panels using atomic state, those are
+ * only supported through the bridge embedded in the panel.
  */
 void drm_panel_enable(struct drm_panel *panel)
 {
@@ -766,6 +861,10 @@ void drm_panel_enable(struct drm_panel *panel)
 	int ret;
 
 	if (!panel)
+		return;
+
+	if (dev_WARN_ONCE(panel->dev, panel->funcs->atomic_create_state,
+			  "Atomic panels have to be driven through the bridge\n"))
 		return;
 
 	if (panel->enabled) {
@@ -809,6 +908,9 @@ EXPORT_SYMBOL(drm_panel_enable);
  * This will typically turn off the panel's backlight or disable the display
  * drivers. For smart panels it should still be possible to communicate with
  * the integrated circuitry via any command bus after this call.
+ *
+ * This function can not be used with the panels using atomic state, those are
+ * only supported through the bridge embedded in the panel.
  */
 void drm_panel_disable(struct drm_panel *panel)
 {
@@ -816,6 +918,10 @@ void drm_panel_disable(struct drm_panel *panel)
 	int ret;
 
 	if (!panel)
+		return;
+
+	if (dev_WARN_ONCE(panel->dev, panel->funcs->atomic_create_state,
+			  "Atomic panels have to be driven through the bridge\n"))
 		return;
 
 	/*
@@ -889,6 +995,195 @@ int drm_panel_get_modes(struct drm_panel *panel,
 	return 0;
 }
 EXPORT_SYMBOL(drm_panel_get_modes);
+
+/**
+ * __drm_atomic_helper_panel_state_init() - Initialize a panel state to its
+ *					     default
+ * @state: panel state to initialize
+ * @panel: the panel this state refers to
+ *
+ * @state is assumed to be zeroed.
+ *
+ * Initializes the panel state to default values. This is meant to be called
+ * by the panel &drm_panel_funcs.atomic_create_state hook for panels that
+ * subclass the panel state.
+ */
+void __drm_atomic_helper_panel_state_init(struct drm_panel_state *state,
+					  struct drm_panel *panel)
+{
+	__drm_atomic_helper_bridge_state_init(&state->base, &panel->bridge);
+}
+EXPORT_SYMBOL(__drm_atomic_helper_panel_state_init);
+
+/**
+ * __drm_atomic_helper_panel_duplicate_state() - Copy atomic panel state
+ * @panel: panel object
+ * @state: atomic panel state
+ *
+ * Copies atomic state from a panel's current state. This is meant to be
+ * called by the panel &drm_panel_funcs.atomic_duplicate_state hook for panels
+ * that subclass the panel state.
+ */
+void __drm_atomic_helper_panel_duplicate_state(struct drm_panel *panel,
+					       struct drm_panel_state *state)
+{
+	__drm_atomic_helper_bridge_duplicate_state(&panel->bridge, &state->base);
+}
+EXPORT_SYMBOL(__drm_atomic_helper_panel_duplicate_state);
+
+/**
+ * drm_atomic_helper_panel_create_state() - default
+ *		&drm_panel_funcs.atomic_create_state hook for panels
+ * @panel: panel object
+ *
+ * Allocates and initializes a pristine &drm_panel_state. This is meant to be
+ * used by panels that don't subclass the panel state.
+ *
+ * Return:
+ *
+ * Pointer to the new panel state, or an error pointer on failure.
+ */
+struct drm_panel_state *
+drm_atomic_helper_panel_create_state(struct drm_panel *panel)
+{
+	struct drm_panel_state *state;
+
+	state = kzalloc_obj(*state);
+	if (!state)
+		return ERR_PTR(-ENOMEM);
+
+	__drm_atomic_helper_panel_state_init(state, panel);
+
+	return state;
+}
+EXPORT_SYMBOL(drm_atomic_helper_panel_create_state);
+
+/**
+ * drm_atomic_helper_panel_duplicate_state() - default
+ *		&drm_panel_funcs.atomic_duplicate_state hook for panels
+ * @panel: panel object
+ *
+ * Allocates a new panel state and initializes it with the current panel state
+ * values. This is meant to be used by panels that don't subclass the panel
+ * state.
+ *
+ * Return:
+ *
+ * Pointer to the new panel state, or NULL on failure.
+ */
+struct drm_panel_state *
+drm_atomic_helper_panel_duplicate_state(struct drm_panel *panel)
+{
+	struct drm_panel_state *state;
+
+	if (drm_WARN_ON(panel->bridge.dev, !panel->bridge.base.state))
+		return NULL;
+
+	state = kzalloc_obj(*state);
+	if (state)
+		__drm_atomic_helper_panel_duplicate_state(panel, state);
+
+	return state;
+}
+EXPORT_SYMBOL(drm_atomic_helper_panel_duplicate_state);
+
+/**
+ * drm_atomic_helper_panel_destroy_state() - default
+ *		&drm_panel_funcs.atomic_destroy_state hook for panels
+ * @panel: panel object
+ * @state: panel state to destroy
+ *
+ * Destroys a panel state previously created by
+ * drm_atomic_helper_panel_create_state() or
+ * drm_atomic_helper_panel_duplicate_state(). This is meant to be used by panels
+ * that don't subclass the panel state.
+ */
+void drm_atomic_helper_panel_destroy_state(struct drm_panel *panel,
+					   struct drm_panel_state *state)
+{
+	kfree(state);
+}
+EXPORT_SYMBOL(drm_atomic_helper_panel_destroy_state);
+
+/**
+ * drm_atomic_get_old_panel_state() - get old panel state, if it exists
+ * @commit: global atomic state object
+ * @panel: panel to grab
+ *
+ * Return:
+ *
+ * The old panel state for the given panel, or NULL if the panel is not part of
+ * the global atomic state or does not implement the panel state callbacks.
+ */
+struct drm_panel_state *
+drm_atomic_get_old_panel_state(const struct drm_atomic_commit *commit,
+			       struct drm_panel *panel)
+{
+	struct drm_bridge_state *bridge_state;
+
+	if (!panel->funcs->atomic_create_state)
+		return NULL;
+
+	bridge_state = drm_atomic_get_old_bridge_state(commit, &panel->bridge);
+	if (!bridge_state)
+		return NULL;
+
+	return drm_bridge_state_to_panel_state(bridge_state);
+}
+EXPORT_SYMBOL(drm_atomic_get_old_panel_state);
+
+/**
+ * drm_atomic_get_new_panel_state() - get new panel state, if it exists
+ * @commit: global atomic state object
+ * @panel: panel to grab
+ *
+ * Return:
+ *
+ * The new panel state for the given panel, or NULL if the panel is not part of
+ * the global atomic state or does not implement the panel state callbacks.
+ */
+struct drm_panel_state *
+drm_atomic_get_new_panel_state(const struct drm_atomic_commit *commit,
+			       struct drm_panel *panel)
+{
+	struct drm_bridge_state *bridge_state;
+
+	if (!panel->funcs->atomic_create_state)
+		return NULL;
+
+	bridge_state = drm_atomic_get_new_bridge_state(commit, &panel->bridge);
+	if (!bridge_state)
+		return NULL;
+
+	return drm_bridge_state_to_panel_state(bridge_state);
+}
+EXPORT_SYMBOL(drm_atomic_get_new_panel_state);
+
+/**
+ * drm_panel_get_current_state() - get the current panel state
+ * @panel: panel object
+ *
+ * This function must be called with the modeset lock held.
+ *
+ * Return:
+ *
+ * The current panel state, or NULL if there is none or if the panel does not
+ * implement the panel state callbacks.
+ */
+struct drm_panel_state *drm_panel_get_current_state(struct drm_panel *panel)
+{
+	struct drm_bridge_state *bridge_state;
+
+	if (!panel || !panel->funcs->atomic_create_state)
+		return NULL;
+
+	bridge_state = drm_bridge_get_current_state(&panel->bridge);
+	if (!bridge_state)
+		return NULL;
+
+	return drm_bridge_state_to_panel_state(bridge_state);
+}
+EXPORT_SYMBOL(drm_panel_get_current_state);
 
 /**
  * drm_panel_get - Acquire a panel reference

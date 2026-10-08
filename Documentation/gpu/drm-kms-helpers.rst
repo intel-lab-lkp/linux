@@ -229,6 +229,9 @@ Panel Helper Reference
 .. kernel-doc:: drivers/gpu/drm/drm_panel.c
    :doc: drm panel
 
+.. kernel-doc:: drivers/gpu/drm/drm_panel.c
+   :doc: drm panel atomic state
+
 .. kernel-doc:: include/drm/drm_panel.h
    :internal:
 
