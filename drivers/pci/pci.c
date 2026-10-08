@@ -3181,10 +3181,13 @@ void pci_d3cold_disable(struct pci_dev *dev)
 }
 EXPORT_SYMBOL_GPL(pci_d3cold_disable);
 
-void pci_pm_power_up_and_verify_state(struct pci_dev *pci_dev)
+/* Return 1 if the BARs have to be restored, 0 or a negative errno otherwise */
+int pci_pm_power_up_and_verify_state(struct pci_dev *pci_dev)
 {
-	pci_power_up(pci_dev);
+	int ret = pci_power_up(pci_dev);
+
 	pci_update_current_state(pci_dev, PCI_D0);
+	return ret;
 }
 
 /**
@@ -3255,7 +3258,12 @@ void pci_pm_init(struct pci_dev *dev)
 	}
 
 poweron:
-	pci_pm_power_up_and_verify_state(dev);
+	/* The restore decision in pci_power_up() needs the actual state. */
+	pci_update_current_state(dev, dev->current_state);
+	/* Enumeration has no saved config space to restore afterwards. */
+	if (pci_pm_power_up_and_verify_state(dev) > 0 &&
+	    dev->current_state == PCI_D0)
+		pci_restore_bars(dev);
 	pm_runtime_forbid(&dev->dev);
 
 	/*

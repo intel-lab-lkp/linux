@@ -277,7 +277,7 @@ void pci_dev_adjust_pme(struct pci_dev *dev);
 void pci_dev_complete_resume(struct pci_dev *pci_dev);
 void pci_config_pm_runtime_get(struct pci_dev *dev);
 void pci_config_pm_runtime_put(struct pci_dev *dev);
-void pci_pm_power_up_and_verify_state(struct pci_dev *pci_dev);
+int pci_pm_power_up_and_verify_state(struct pci_dev *pci_dev);
 void pci_pm_init(struct pci_dev *dev);
 void pci_ea_init(struct pci_dev *dev);
 bool pci_ea_fixed_busnrs(struct pci_dev *dev, u8 *sec, u8 *sub);
