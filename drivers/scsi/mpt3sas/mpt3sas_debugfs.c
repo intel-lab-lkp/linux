@@ -99,8 +99,6 @@ static const struct file_operations mpt3sas_debugfs_iocdump_fops = {
 void mpt3sas_init_debugfs(void)
 {
 	mpt3sas_debugfs_root = debugfs_create_dir("mpt3sas", NULL);
-	if (!mpt3sas_debugfs_root)
-		pr_info("mpt3sas: Cannot create debugfs root\n");
 }
 
 /*
@@ -121,25 +119,12 @@ mpt3sas_setup_debugfs(struct MPT3SAS_ADAPTER *ioc)
 	char name[64];
 
 	snprintf(name, sizeof(name), "scsi_host%d", ioc->shost->host_no);
-	if (!ioc->debugfs_root) {
-		ioc->debugfs_root =
-		    debugfs_create_dir(name, mpt3sas_debugfs_root);
-		if (!ioc->debugfs_root) {
-			dev_err(&ioc->pdev->dev,
-			    "Cannot create per adapter debugfs directory\n");
-			return;
-		}
-	}
+	ioc->debugfs_root =
+		debugfs_create_dir(name, mpt3sas_debugfs_root);
 
 	snprintf(name, sizeof(name), "ioc_dump");
 	ioc->ioc_dump =	debugfs_create_file(name, 0444,
 	    ioc->debugfs_root, ioc, &mpt3sas_debugfs_iocdump_fops);
-	if (!ioc->ioc_dump) {
-		dev_err(&ioc->pdev->dev,
-		    "Cannot create ioc_dump debugfs file\n");
-		debugfs_remove(ioc->debugfs_root);
-		return;
-	}
 
 	snprintf(name, sizeof(name), "host_recovery");
 	debugfs_create_u8(name, 0444, ioc->debugfs_root, &ioc->shost_recovery);
