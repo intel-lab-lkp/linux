@@ -199,7 +199,7 @@ struct cake_tin_data {
 }; /* number of tins is small, so size of this struct doesn't matter much */
 
 struct cake_sched_config {
-	u64		rate_bps;
+	atomic64_t	rate_bps;
 	u64		interval;
 	u64		target;
 	u64		sync_time;
@@ -1906,7 +1906,8 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			if (ktime_after(now,
 					ktime_add_ms(q->last_reconfig_time,
 						     250))) {
-				q->config->rate_bps = (q->avg_peak_bandwidth * 15) >> 4;
+				atomic64_set(&q->config->rate_bps,
+					     (q->avg_peak_bandwidth * 15) >> 4);
 				q->last_reconfig_time = now;
 				cake_reconfigure(sch);
 			}
@@ -2021,7 +2022,7 @@ static struct sk_buff *cake_dequeue(struct Qdisc *sch)
 	    now - q->last_checked_active >= q->config->sync_time) {
 		struct net_device *dev = qdisc_dev(sch);
 		struct cake_sched_data *other_priv;
-		u64 new_rate = q->config->rate_bps;
+		u64 new_rate = atomic64_read(&q->config->rate_bps);
 		u64 other_qlen, other_last_active;
 		struct Qdisc *other_sch;
 		u32 num_active_qs = 1;
@@ -2042,7 +2043,7 @@ static struct sk_buff *cake_dequeue(struct Qdisc *sch)
 		}
 
 		if (num_active_qs > 1)
-			new_rate = div64_u64(q->config->rate_bps, num_active_qs);
+			new_rate = div64_u64(atomic64_read(&q->config->rate_bps), num_active_qs);
 
 		cake_configure_rates(sch, new_rate, true);
 		q->last_checked_active = now;
@@ -2626,12 +2627,12 @@ static void cake_reconfigure(struct Qdisc *sch)
 	struct cake_sched_config *q = qd->config;
 	u32 buffer_limit;
 
-	cake_configure_rates(sch, qd->config->rate_bps, false);
+	cake_configure_rates(sch, atomic64_read(&qd->config->rate_bps), false);
 
 	if (q->buffer_config_limit) {
 		buffer_limit = q->buffer_config_limit;
-	} else if (q->rate_bps) {
-		u64 t = q->rate_bps * q->interval;
+	} else if (atomic64_read(&q->rate_bps)) {
+		u64 t = atomic64_read(&q->rate_bps) * q->interval;
 
 		do_div(t, USEC_PER_SEC / 4);
 		buffer_limit = max_t(u32, t, 4U << 20);
@@ -2686,8 +2687,8 @@ static int cake_config_change(struct cake_sched_config *q, struct nlattr *opt,
 	}
 
 	if (tb[TCA_CAKE_BASE_RATE64])
-		WRITE_ONCE(q->rate_bps,
-			   nla_get_u64(tb[TCA_CAKE_BASE_RATE64]));
+		atomic64_set(&q->rate_bps,
+			     nla_get_u64(tb[TCA_CAKE_BASE_RATE64]));
 
 	if (tb[TCA_CAKE_DIFFSERV_MODE])
 		WRITE_ONCE(q->tin_mode,
@@ -2784,9 +2785,16 @@ static int cake_change(struct Qdisc *sch, struct nlattr *opt,
 		return -EOPNOTSUPP;
 	}
 
+	/* Once the qdisc is live, commit and reconfigure under the lock that
+	 * serializes the datapath, so a concurrent 'tc qdisc change' and the
+	 * autorate update cannot lose the configured rate.
+	 */
+	if (qd->tins)
+		sch_tree_lock(sch);
+
 	ret = cake_config_change(q, opt, extack, &overhead_changed);
 	if (ret)
-		return ret;
+		goto unlock;
 
 	if (overhead_changed) {
 		WRITE_ONCE(qd->max_netlen, 0);
@@ -2795,13 +2803,13 @@ static int cake_change(struct Qdisc *sch, struct nlattr *opt,
 		WRITE_ONCE(qd->min_adjlen, ~0);
 	}
 
-	if (qd->tins) {
-		sch_tree_lock(sch);
+	if (qd->tins)
 		cake_reconfigure(sch);
+unlock:
+	if (qd->tins)
 		sch_tree_unlock(sch);
-	}
 
-	return 0;
+	return ret;
 }
 
 static void cake_destroy(struct Qdisc *sch)
@@ -2818,7 +2826,7 @@ static void cake_config_init(struct cake_sched_config *q, bool is_shared)
 	q->tin_mode = CAKE_DIFFSERV_DIFFSERV3;
 	q->flow_mode  = CAKE_FLOW_TRIPLE;
 
-	q->rate_bps = 0; /* unlimited by default */
+	atomic64_set(&q->rate_bps, 0); /* unlimited by default */
 
 	q->interval = 100000; /* 100ms default */
 	q->target   =   5000; /* 5ms: codel RFC argues
@@ -2889,7 +2897,7 @@ static int cake_init(struct Qdisc *sch, struct nlattr *opt,
 	}
 
 	cake_reconfigure(sch);
-	qd->avg_peak_bandwidth = q->rate_bps;
+	qd->avg_peak_bandwidth = atomic64_read(&q->rate_bps);
 	qd->min_netlen = ~0;
 	qd->min_adjlen = ~0;
 	qd->active_queues = 0;
@@ -2917,7 +2925,7 @@ static int cake_config_dump(struct cake_sched_config *q, struct sk_buff *skb)
 		goto nla_put_failure;
 
 	if (nla_put_u64_64bit(skb, TCA_CAKE_BASE_RATE64,
-			      READ_ONCE(q->rate_bps), TCA_CAKE_PAD))
+			      atomic64_read(&q->rate_bps), TCA_CAKE_PAD))
 		goto nla_put_failure;
 
 	flow_mode = READ_ONCE(q->flow_mode);
