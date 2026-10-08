@@ -263,8 +263,10 @@ static int rd_build_prot_space(struct rd_dev *rd_dev, int prot_length, int block
 	rd_dev->sg_prot_count = sg_tables;
 
 	rc = rd_allocate_sgl_table(rd_dev, sg_table, total_sg_needed, 0xff);
-	if (rc)
+	if (rc) {
+		rd_release_prot_space(rd_dev);
 		return rc;
+	}
 
 	pr_debug("CORE_RD[%u] - Built Ramdisk Device ID: %u prot space of"
 		 " %u pages in %u tables\n", rd_dev->rd_host->rd_host_id,
