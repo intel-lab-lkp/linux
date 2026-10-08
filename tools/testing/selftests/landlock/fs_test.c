@@ -678,7 +678,7 @@ TEST_F_FORK(layout0, rule_with_unknown_access)
 
 	for (access = 1ULL << 63; access != ACCESS_LAST; access >>= 1) {
 		path_beneath.allowed_access = access;
-		EXPECT_EQ(-1, landlock_add_rule(ruleset_fd,
+		ASSERT_EQ(-1, landlock_add_rule(ruleset_fd,
 						LANDLOCK_RULE_PATH_BENEATH,
 						&path_beneath, 0));
 		EXPECT_EQ(EINVAL, errno);
@@ -712,7 +712,7 @@ TEST_F_FORK(layout1, rule_with_unhandled_access)
 		if (access == ruleset_attr.handled_access_fs) {
 			EXPECT_EQ(0, err);
 		} else {
-			EXPECT_EQ(-1, err);
+			ASSERT_EQ(-1, err);
 			EXPECT_EQ(EINVAL, errno);
 		}
 	}
@@ -2069,7 +2069,7 @@ TEST_F_FORK(layout1, umount_sandboxer)
 
 	/* Tests that the sandboxer is tied to its mount point. */
 	set_cap(_metadata, CAP_SYS_ADMIN);
-	EXPECT_EQ(-1, umount(dir_s3d2));
+	ASSERT_EQ(-1, umount(dir_s3d2));
 	EXPECT_EQ(EBUSY, errno);
 	clear_cap(_metadata, CAP_SYS_ADMIN);
 
@@ -2264,7 +2264,7 @@ TEST_F_FORK(layout1, rename_whiteout_denied)
 	 * file1_s3d3 is in dir_s3d2 (tmpfs), so it supports RENAME_WHITEOUT.
 	 * Denied, because whiteout creation is guarded with MAKE_REG.
 	 */
-	EXPECT_EQ(-1, renameat2(AT_FDCWD, file1_s3d3, AT_FDCWD,
+	ASSERT_EQ(-1, renameat2(AT_FDCWD, file1_s3d3, AT_FDCWD,
 				TMP_DIR "/s3d1/s3d2/s3d3/f2", RENAME_WHITEOUT));
 	EXPECT_EQ(EACCES, errno);
 }
@@ -2354,7 +2354,7 @@ TEST_F_FORK(layout1, rename_whiteout_reparenting)
 	 * there, even though it is granted in the destination directory
 	 * dir_s3d3.
 	 */
-	EXPECT_EQ(-1, renameat2(AT_FDCWD, file1_s3d4, AT_FDCWD,
+	ASSERT_EQ(-1, renameat2(AT_FDCWD, file1_s3d4, AT_FDCWD,
 				TMP_DIR "/s3d1/s3d2/s3d3/f2", RENAME_WHITEOUT));
 	EXPECT_EQ(EACCES, errno);
 
@@ -2404,7 +2404,7 @@ TEST_F_FORK(layout1, rename_whiteout_exchange)
 	 * dir_s3d4, even though it is granted in the whiteout object's own
 	 * directory dir_s3d3.
 	 */
-	EXPECT_EQ(-1, renameat2(AT_FDCWD, file1_s3d4, AT_FDCWD, whiteout_s3d3,
+	ASSERT_EQ(-1, renameat2(AT_FDCWD, file1_s3d4, AT_FDCWD, whiteout_s3d3,
 				RENAME_EXCHANGE));
 	EXPECT_EQ(EACCES, errno);
 
@@ -2637,11 +2637,11 @@ TEST_F_FORK(layout1, refer_mount_root_deny)
 	enforce_fs(_metadata, LANDLOCK_ACCESS_FS_MAKE_DIR, NULL);
 
 	/* Link denied by Landlock: EACCES. */
-	EXPECT_EQ(-1, linkat(root_fd, ".", root_fd, "does_not_exist", 0));
+	ASSERT_EQ(-1, linkat(root_fd, ".", root_fd, "does_not_exist", 0));
 	EXPECT_EQ(EACCES, errno);
 
 	/* renameat2() always returns EBUSY. */
-	EXPECT_EQ(-1, renameat2(root_fd, ".", root_fd, "does_not_exist", 0));
+	ASSERT_EQ(-1, renameat2(root_fd, ".", root_fd, "does_not_exist", 0));
 	EXPECT_EQ(EBUSY, errno);
 
 	EXPECT_EQ(0, close(root_fd));
@@ -5398,14 +5398,14 @@ TEST_F_FORK(layout1_bind, path_disconnected_rename)
 		 * Tests that access widening checks indeed prevents us from renaming it
 		 * back.
 		 */
-		EXPECT_EQ(-1, rename(dir_s4d2, dir_s1d3));
+		ASSERT_EQ(-1, rename(dir_s4d2, dir_s1d3));
 		EXPECT_EQ(EXDEV, errno);
 
 		/*
 		 * Including through the now disconnected fd (but it should return
 		 * EXDEV).
 		 */
-		EXPECT_EQ(-1, renameat(bind_s1d3_fd, file1_name, AT_FDCWD,
+		ASSERT_EQ(-1, renameat(bind_s1d3_fd, file1_name, AT_FDCWD,
 				       file1_s2d2));
 		EXPECT_EQ(EXDEV, errno);
 		_exit(_metadata->exit_code);
@@ -7630,12 +7630,12 @@ TEST_F(audit_layout1, remove_dir)
 
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
-	EXPECT_EQ(-1, rmdir(dir_s1d3));
+	ASSERT_EQ(-1, rmdir(dir_s1d3));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.remove_dir", dir_s1d2));
 
-	EXPECT_EQ(-1, unlinkat(AT_FDCWD, dir_s1d3, AT_REMOVEDIR));
+	ASSERT_EQ(-1, unlinkat(AT_FDCWD, dir_s1d3, AT_REMOVEDIR));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.remove_dir", dir_s1d2));
@@ -7651,7 +7651,7 @@ TEST_F(audit_layout1, remove_file)
 
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
-	EXPECT_EQ(-1, unlink(file1_s1d3));
+	ASSERT_EQ(-1, unlink(file1_s1d3));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.remove_file", dir_s1d3));
@@ -7669,7 +7669,7 @@ TEST_F(audit_layout1, make_char)
 
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
-	EXPECT_EQ(-1, mknod(file1_s1d3, S_IFCHR | 0644, makedev(7, 0)));
+	ASSERT_EQ(-1, mknod(file1_s1d3, S_IFCHR | 0644, makedev(7, 0)));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_char",
 				    dir_s1d3));
@@ -7688,7 +7688,7 @@ TEST_F(audit_layout1, make_whiteout)
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
 	/* Whiteout creation is denied and logged as fs.make_reg. */
-	EXPECT_EQ(-1, mknod(file1_s1d3, S_IFCHR | 0644, makedev(0, 0)));
+	ASSERT_EQ(-1, mknod(file1_s1d3, S_IFCHR | 0644, makedev(0, 0)));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_reg",
 				    dir_s1d3));
@@ -7706,7 +7706,7 @@ TEST_F(audit_layout1, make_dir)
 
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
-	EXPECT_EQ(-1, mkdir(file1_s1d3, 0755));
+	ASSERT_EQ(-1, mkdir(file1_s1d3, 0755));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_dir",
 				    dir_s1d3));
@@ -7724,7 +7724,7 @@ TEST_F(audit_layout1, make_reg)
 
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
-	EXPECT_EQ(-1, mknod(file1_s1d3, S_IFREG | 0644, 0));
+	ASSERT_EQ(-1, mknod(file1_s1d3, S_IFREG | 0644, 0));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_reg",
 				    dir_s1d3));
@@ -7742,7 +7742,7 @@ TEST_F(audit_layout1, make_sock)
 
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
-	EXPECT_EQ(-1, mknod(file1_s1d3, S_IFSOCK | 0644, 0));
+	ASSERT_EQ(-1, mknod(file1_s1d3, S_IFSOCK | 0644, 0));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_sock",
 				    dir_s1d3));
@@ -7760,7 +7760,7 @@ TEST_F(audit_layout1, make_fifo)
 
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
-	EXPECT_EQ(-1, mknod(file1_s1d3, S_IFIFO | 0644, 0));
+	ASSERT_EQ(-1, mknod(file1_s1d3, S_IFIFO | 0644, 0));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_fifo",
 				    dir_s1d3));
@@ -7778,7 +7778,7 @@ TEST_F(audit_layout1, make_block)
 
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
-	EXPECT_EQ(-1, mknod(file1_s1d3, S_IFBLK | 0644, 0));
+	ASSERT_EQ(-1, mknod(file1_s1d3, S_IFBLK | 0644, 0));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,
 				    "fs\\.make_block", dir_s1d3));
@@ -7796,7 +7796,7 @@ TEST_F(audit_layout1, make_sym)
 
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
-	EXPECT_EQ(-1, symlink("target", file1_s1d3));
+	ASSERT_EQ(-1, symlink("target", file1_s1d3));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.make_sym",
 				    dir_s1d3));
@@ -7814,7 +7814,7 @@ TEST_F(audit_layout1, refer_handled)
 
 	enforce_fs(_metadata, LANDLOCK_ACCESS_FS_REFER, NULL);
 
-	EXPECT_EQ(-1, link(file1_s1d1, file1_s1d3));
+	ASSERT_EQ(-1, link(file1_s1d1, file1_s1d3));
 	EXPECT_EQ(EXDEV, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.refer",
 				    dir_s1d1));
@@ -7838,7 +7838,7 @@ TEST_F(audit_layout1, refer_make)
 		   LANDLOCK_ACCESS_FS_MAKE_REG | LANDLOCK_ACCESS_FS_REFER,
 		   NULL);
 
-	EXPECT_EQ(-1, link(file1_s1d1, file1_s1d3));
+	ASSERT_EQ(-1, link(file1_s1d1, file1_s1d3));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.refer",
 				    dir_s1d1));
@@ -7935,7 +7935,7 @@ TEST_F(audit_layout1, truncate)
 
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
 
-	EXPECT_EQ(-1, truncate(file1_s1d3, 0));
+	ASSERT_EQ(-1, truncate(file1_s1d3, 0));
 	EXPECT_EQ(EACCES, errno);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd, "fs\\.truncate",
 				    file1_s1d3));
@@ -8008,7 +8008,7 @@ TEST_F(audit_layout1, mount)
 	enforce_fs(_metadata, LANDLOCK_ACCESS_FS_EXECUTE, NULL);
 
 	set_cap(_metadata, CAP_SYS_ADMIN);
-	EXPECT_EQ(-1, mount(NULL, dir_s3d2, NULL, MS_RDONLY, NULL));
+	ASSERT_EQ(-1, mount(NULL, dir_s3d2, NULL, MS_RDONLY, NULL));
 	EXPECT_EQ(EPERM, errno);
 	clear_cap(_metadata, CAP_SYS_ADMIN);
 	EXPECT_EQ(0, matches_log_fs(_metadata, self->audit_fd,

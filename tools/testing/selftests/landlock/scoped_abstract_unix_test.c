@@ -122,7 +122,7 @@ TEST_F(scoped_domains, connect_to_parent)
 		if (can_connect_to_parent) {
 			EXPECT_EQ(0, err);
 		} else {
-			EXPECT_EQ(-1, err);
+			ASSERT_EQ(-1, err);
 			EXPECT_EQ(EPERM, errno);
 		}
 		EXPECT_EQ(0, close(stream_client));
@@ -132,7 +132,7 @@ TEST_F(scoped_domains, connect_to_parent)
 		if (can_connect_to_parent) {
 			EXPECT_EQ(0, err);
 		} else {
-			EXPECT_EQ(-1, err);
+			ASSERT_EQ(-1, err);
 			EXPECT_EQ(EPERM, errno);
 		}
 		EXPECT_EQ(0, close(dgram_client));
@@ -417,7 +417,7 @@ TEST_F(scoped_audit, connect_to_child)
 	ASSERT_EQ(1, read(pipe_child[0], &buf, 1));
 	err_dgram = connect(dgram_client, &self->dgram_address.unix_addr,
 			    self->dgram_address.unix_addr_len);
-	EXPECT_EQ(-1, err_dgram);
+	ASSERT_EQ(-1, err_dgram);
 	EXPECT_EQ(EPERM, errno);
 
 	if (should_audit) {
@@ -762,7 +762,7 @@ TEST_F(outside_socket, socket_with_different_domain)
 		if (variant->child_socket) {
 			EXPECT_EQ(0, err);
 		} else {
-			EXPECT_EQ(-1, err);
+			ASSERT_EQ(-1, err);
 			EXPECT_EQ(EPERM, errno);
 		}
 		EXPECT_EQ(0, close(client_socket));
@@ -939,7 +939,7 @@ TEST_F(various_address_sockets, scoped_pathname_sockets)
 			      &stream_abstract_addr.unix_addr,
 			      stream_abstract_addr.unix_addr_len);
 		if (variant->domain == SCOPE_SANDBOX) {
-			EXPECT_EQ(-1, err);
+			ASSERT_EQ(-1, err);
 			EXPECT_EQ(EPERM, errno);
 		} else {
 			EXPECT_EQ(0, err);
@@ -954,7 +954,7 @@ TEST_F(various_address_sockets, scoped_pathname_sockets)
 			     &dgram_abstract_addr.unix_addr,
 			     dgram_abstract_addr.unix_addr_len);
 		if (variant->domain == SCOPE_SANDBOX) {
-			EXPECT_EQ(-1, err);
+			ASSERT_EQ(-1, err);
 			EXPECT_EQ(EPERM, errno);
 		} else {
 			EXPECT_EQ(1, err);
@@ -965,7 +965,7 @@ TEST_F(various_address_sockets, scoped_pathname_sockets)
 			      &dgram_abstract_addr.unix_addr,
 			      dgram_abstract_addr.unix_addr_len);
 		if (variant->domain == SCOPE_SANDBOX) {
-			EXPECT_EQ(-1, err);
+			ASSERT_EQ(-1, err);
 			EXPECT_EQ(EPERM, errno);
 		} else {
 			EXPECT_EQ(0, err);

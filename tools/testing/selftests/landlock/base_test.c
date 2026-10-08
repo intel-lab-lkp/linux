@@ -136,7 +136,7 @@ TEST(errata)
 			      NULL, 0,
 			      LANDLOCK_CREATE_RULESET_VERSION |
 				      LANDLOCK_CREATE_RULESET_ERRATA));
-	ASSERT_EQ(EINVAL, errno);
+	EXPECT_EQ(EINVAL, errno);
 
 	ASSERT_EQ(-1, landlock_create_ruleset(NULL, 0,
 					      LANDLOCK_CREATE_RULESET_ERRATA |
@@ -333,7 +333,7 @@ TEST(restrict_self_fd)
 	fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
 	ASSERT_LE(0, fd);
 
-	EXPECT_EQ(-1, landlock_restrict_self(fd, 0));
+	ASSERT_EQ(-1, landlock_restrict_self(fd, 0));
 	EXPECT_EQ(EBADFD, errno);
 
 	EXPECT_EQ(0, close(fd));
@@ -350,12 +350,12 @@ TEST(restrict_self_fd_flags)
 	 * LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF accepts -1 but not any file
 	 * descriptor.
 	 */
-	EXPECT_EQ(-1, landlock_restrict_self(
+	ASSERT_EQ(-1, landlock_restrict_self(
 			      fd, LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF));
 	EXPECT_EQ(EBADFD, errno);
 
 	/* LANDLOCK_RESTRICT_SELF_NO_NEW_PRIVS requires a ruleset FD. */
-	EXPECT_EQ(-1, landlock_restrict_self(
+	ASSERT_EQ(-1, landlock_restrict_self(
 			      fd, LANDLOCK_RESTRICT_SELF_NO_NEW_PRIVS));
 	EXPECT_EQ(EBADFD, errno);
 
@@ -368,40 +368,40 @@ TEST(restrict_self_flags)
 
 	/* Tests invalid flag combinations. */
 
-	EXPECT_EQ(-1, landlock_restrict_self(-1, last_flag << 1));
+	ASSERT_EQ(-1, landlock_restrict_self(-1, last_flag << 1));
 	EXPECT_EQ(EINVAL, errno);
 
-	EXPECT_EQ(-1, landlock_restrict_self(-1, -1));
+	ASSERT_EQ(-1, landlock_restrict_self(-1, -1));
 	EXPECT_EQ(EINVAL, errno);
 
 	/* Tests valid flag combinations. */
 
-	EXPECT_EQ(-1, landlock_restrict_self(-1, 0));
+	ASSERT_EQ(-1, landlock_restrict_self(-1, 0));
 	EXPECT_EQ(EBADF, errno);
 
-	EXPECT_EQ(-1, landlock_restrict_self(
+	ASSERT_EQ(-1, landlock_restrict_self(
 			      -1, LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF));
 	EXPECT_EQ(EBADF, errno);
 
-	EXPECT_EQ(-1,
+	ASSERT_EQ(-1,
 		  landlock_restrict_self(
 			  -1,
 			  LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF |
 				  LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF));
 	EXPECT_EQ(EBADF, errno);
 
-	EXPECT_EQ(-1,
+	ASSERT_EQ(-1,
 		  landlock_restrict_self(
 			  -1,
 			  LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON |
 				  LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF));
 	EXPECT_EQ(EBADF, errno);
 
-	EXPECT_EQ(-1, landlock_restrict_self(
+	ASSERT_EQ(-1, landlock_restrict_self(
 			      -1, LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON));
 	EXPECT_EQ(EBADF, errno);
 
-	EXPECT_EQ(-1,
+	ASSERT_EQ(-1,
 		  landlock_restrict_self(
 			  -1, LANDLOCK_RESTRICT_SELF_LOG_SAME_EXEC_OFF |
 				      LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON));
@@ -409,18 +409,18 @@ TEST(restrict_self_flags)
 
 	/* LANDLOCK_RESTRICT_SELF_NO_NEW_PRIVS requires a ruleset FD. */
 
-	EXPECT_EQ(-1, landlock_restrict_self(
+	ASSERT_EQ(-1, landlock_restrict_self(
 			      -1, LANDLOCK_RESTRICT_SELF_NO_NEW_PRIVS));
 	EXPECT_EQ(EBADF, errno);
 
-	EXPECT_EQ(-1, landlock_restrict_self(
+	ASSERT_EQ(-1, landlock_restrict_self(
 			      -1, LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF |
 					  LANDLOCK_RESTRICT_SELF_NO_NEW_PRIVS));
 	EXPECT_EQ(EBADF, errno);
 
 	/* Tests with an invalid ruleset_fd. */
 
-	EXPECT_EQ(-1, landlock_restrict_self(
+	ASSERT_EQ(-1, landlock_restrict_self(
 			      -2, LANDLOCK_RESTRICT_SELF_LOG_SUBDOMAINS_OFF));
 	EXPECT_EQ(EBADF, errno);
 
@@ -446,7 +446,7 @@ TEST(restrict_self_no_new_privs)
 	ASSERT_EQ(0, prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0));
 
 	/* Checks that a failed call does not set no_new_privs. */
-	EXPECT_EQ(-1, landlock_restrict_self(
+	ASSERT_EQ(-1, landlock_restrict_self(
 			      -1, LANDLOCK_RESTRICT_SELF_NO_NEW_PRIVS));
 	EXPECT_EQ(EBADF, errno);
 	EXPECT_EQ(0, prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0));
@@ -577,7 +577,7 @@ TEST(cred_transfer)
 	EXPECT_EQ(0, close(ruleset_fd));
 
 	/* Checks ruleset enforcement. */
-	EXPECT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
+	ASSERT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
 	EXPECT_EQ(EACCES, errno);
 
 	/* Needed for KEYCTL_SESSION_TO_PARENT permission checks */
@@ -591,7 +591,7 @@ TEST(cred_transfer)
 	ASSERT_LE(0, child);
 	if (child == 0) {
 		/* Checks ruleset enforcement. */
-		EXPECT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
+		ASSERT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
 		EXPECT_EQ(EACCES, errno);
 
 		/*
@@ -610,7 +610,7 @@ TEST(cred_transfer)
 				     0, 0, 0));
 
 		/* Re-checks ruleset enforcement. */
-		EXPECT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
+		ASSERT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
 		EXPECT_EQ(EACCES, errno);
 
 		_exit(_metadata->exit_code);
@@ -622,7 +622,7 @@ TEST(cred_transfer)
 	EXPECT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
 
 	/* Re-checks ruleset enforcement. */
-	EXPECT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
+	ASSERT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
 	EXPECT_EQ(EACCES, errno);
 }
 

@@ -1361,11 +1361,11 @@ TEST_F(protocol, tcp_fastopen)
 	}
 
 	if (restricted) {
-		EXPECT_EQ(-1, read(client_fd, &buf, 1));
+		ASSERT_EQ(-1, read(client_fd, &buf, 1));
 		EXPECT_EQ(ENOTCONN, errno);
 	} else if (self->srv0.protocol.domain == AF_UNIX &&
 		   self->srv0.protocol.type == SOCK_STREAM) {
-		EXPECT_EQ(-1, read(client_fd, &buf, 1));
+		ASSERT_EQ(-1, read(client_fd, &buf, 1));
 		EXPECT_EQ(EINVAL, errno);
 	} else {
 		EXPECT_EQ(1, read(client_fd, &buf, 1));
@@ -2261,7 +2261,7 @@ TEST_F(mini, ruleset_with_unknown_access)
 			.handled_access_net = access_mask,
 		};
 
-		EXPECT_EQ(-1, landlock_create_ruleset(&ruleset_attr,
+		ASSERT_EQ(-1, landlock_create_ruleset(&ruleset_attr,
 						      sizeof(ruleset_attr), 0));
 		EXPECT_EQ(EINVAL, errno);
 	}
@@ -2284,7 +2284,7 @@ TEST_F(mini, rule_with_unknown_access)
 
 	for (access = 1ULL << 63; access != ACCESS_LAST; access >>= 1) {
 		net_port.allowed_access = access;
-		EXPECT_EQ(-1,
+		ASSERT_EQ(-1,
 			  landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 					    &net_port, 0));
 		EXPECT_EQ(EINVAL, errno);
@@ -2316,7 +2316,7 @@ TEST_F(mini, rule_with_unhandled_access)
 		if (access == ruleset_attr.handled_access_net) {
 			EXPECT_EQ(0, err);
 		} else {
-			EXPECT_EQ(-1, err);
+			ASSERT_EQ(-1, err);
 			EXPECT_EQ(EINVAL, errno);
 		}
 	}
@@ -2349,12 +2349,12 @@ TEST_F(mini, inval)
 	ASSERT_LE(0, ruleset_fd);
 
 	/* Checks unhandled allowed_access. */
-	EXPECT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 					&tcp_bind_connect, 0));
 	EXPECT_EQ(EINVAL, errno);
 
 	/* Checks zero access value. */
-	EXPECT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 					&tcp_denied, 0));
 	EXPECT_EQ(ENOMSG, errno);
 
@@ -2414,15 +2414,15 @@ TEST_F(mini, tcp_port_overflow)
 	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 				       &port_max_bind, 0));
 
-	EXPECT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 					&port_overflow1, 0));
 	EXPECT_EQ(EINVAL, errno);
 
-	EXPECT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 					&port_overflow2, 0));
 	EXPECT_EQ(EINVAL, errno);
 
-	EXPECT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 					&port_overflow3, 0));
 	EXPECT_EQ(EINVAL, errno);
 
@@ -2430,7 +2430,7 @@ TEST_F(mini, tcp_port_overflow)
 	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 				       &port_max_connect, 0));
 
-	EXPECT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 					&port_overflow4, 0));
 	EXPECT_EQ(EINVAL, errno);
 
@@ -2549,7 +2549,7 @@ TEST_F(ipv4_tcp, with_fs)
 	EXPECT_EQ(0, close(dir_fd));
 
 	dir_fd = open("/", O_RDONLY);
-	EXPECT_EQ(-1, dir_fd);
+	ASSERT_EQ(-1, dir_fd);
 	EXPECT_EQ(EACCES, errno);
 
 	/* Tests port binding. */

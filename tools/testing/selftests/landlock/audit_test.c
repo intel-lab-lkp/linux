@@ -100,7 +100,7 @@ TEST_F(audit, layers)
 			EXPECT_EQ(0, landlock_restrict_self(ruleset_fd, 0));
 
 			/* Creates a denial to get the domain ID. */
-			EXPECT_EQ(-1, kill(getppid(), 0));
+			ASSERT_EQ(-1, kill(getppid(), 0));
 			EXPECT_EQ(EPERM, errno);
 			EXPECT_EQ(0,
 				  matches_log_signal(_metadata, self->audit_fd,
@@ -119,7 +119,7 @@ TEST_F(audit, layers)
 		}
 
 		/* Checks that we reached the maximum number of layers. */
-		EXPECT_EQ(-1, landlock_restrict_self(ruleset_fd, 0));
+		ASSERT_EQ(-1, landlock_restrict_self(ruleset_fd, 0));
 		EXPECT_EQ(E2BIG, errno);
 
 		/* Updates filter rules to match the drop record. */
@@ -711,7 +711,7 @@ TEST_F(audit_flags, signal)
 		EXPECT_EQ(0, close(ruleset_fd));
 
 		/* First signal checks to test log entries. */
-		EXPECT_EQ(-1, kill(getppid(), 0));
+		ASSERT_EQ(-1, kill(getppid(), 0));
 		EXPECT_EQ(EPERM, errno);
 
 		if (!expect_audit) {
@@ -736,7 +736,7 @@ TEST_F(audit_flags, signal)
 		}
 
 		/* Second signal checks to test audit_count_records(). */
-		EXPECT_EQ(-1, kill(getppid(), 0));
+		ASSERT_EQ(-1, kill(getppid(), 0));
 		EXPECT_EQ(EPERM, errno);
 
 		/* Makes sure there is no superfluous logged records. */

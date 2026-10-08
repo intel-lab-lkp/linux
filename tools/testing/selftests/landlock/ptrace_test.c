@@ -204,7 +204,7 @@ TEST_F(scoped_domains, trace)
 		if (can_trace_parent) {
 			EXPECT_EQ(0, ret);
 		} else {
-			EXPECT_EQ(-1, ret);
+			ASSERT_EQ(-1, ret);
 			EXPECT_EQ(EPERM, errno);
 		}
 		if (ret == 0) {
@@ -218,7 +218,7 @@ TEST_F(scoped_domains, trace)
 		if (can_trace_child) {
 			EXPECT_EQ(0, ret);
 		} else {
-			EXPECT_EQ(-1, ret);
+			ASSERT_EQ(-1, ret);
 			EXPECT_EQ(EPERM, errno);
 		}
 
@@ -259,7 +259,7 @@ TEST_F(scoped_domains, trace)
 		ASSERT_EQ(0, ptrace(PTRACE_DETACH, child, NULL, 0));
 	} else {
 		/* The child should not be traced by the parent. */
-		EXPECT_EQ(-1, ptrace(PTRACE_DETACH, child, NULL, 0));
+		ASSERT_EQ(-1, ptrace(PTRACE_DETACH, child, NULL, 0));
 		EXPECT_EQ(ESRCH, errno);
 	}
 
@@ -276,7 +276,7 @@ TEST_F(scoped_domains, trace)
 	if (can_trace_child) {
 		EXPECT_EQ(0, ret);
 	} else {
-		EXPECT_EQ(-1, ret);
+		ASSERT_EQ(-1, ret);
 		EXPECT_EQ(EPERM, errno);
 	}
 
@@ -377,7 +377,7 @@ TEST_F(audit, trace)
 		ASSERT_EQ(1, read(pipe_parent[0], &buf_child, 1));
 
 		/* Tests child PTRACE_TRACEME. */
-		EXPECT_EQ(-1, ptrace(PTRACE_TRACEME));
+		ASSERT_EQ(-1, ptrace(PTRACE_TRACEME));
 		EXPECT_EQ(EPERM, errno);
 		/* We should see the child process. */
 		EXPECT_EQ(0, matches_log_ptrace(_metadata, self->audit_fd,
@@ -414,11 +414,11 @@ TEST_F(audit, trace)
 	ASSERT_EQ(1, read(pipe_child[0], &buf_parent, 1));
 
 	/* The child should not be traced by the parent. */
-	EXPECT_EQ(-1, ptrace(PTRACE_DETACH, child, NULL, 0));
+	ASSERT_EQ(-1, ptrace(PTRACE_DETACH, child, NULL, 0));
 	EXPECT_EQ(ESRCH, errno);
 
 	/* Tests PTRACE_ATTACH on the child. */
-	EXPECT_EQ(-1, ptrace(PTRACE_ATTACH, child, NULL, 0));
+	ASSERT_EQ(-1, ptrace(PTRACE_ATTACH, child, NULL, 0));
 	EXPECT_EQ(EPERM, errno);
 	EXPECT_EQ(0, matches_log_ptrace(_metadata, self->audit_fd, child));
 
