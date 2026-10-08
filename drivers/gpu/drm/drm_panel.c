@@ -84,6 +84,78 @@ struct panel_bridge {
 	u32 connector_type;
 };
 
+static void drm_panel_followers_prepared(struct drm_panel *panel)
+{
+	struct drm_panel_follower *follower;
+	int ret;
+
+	lockdep_assert_held(&panel->follower_lock);
+
+	list_for_each_entry(follower, &panel->followers, list) {
+		if (!follower->funcs->panel_prepared)
+			continue;
+
+		ret = follower->funcs->panel_prepared(follower);
+		if (ret < 0)
+			dev_info(panel->dev, "%ps failed: %d\n",
+				 follower->funcs->panel_prepared, ret);
+	}
+}
+
+static void drm_panel_followers_unpreparing(struct drm_panel *panel)
+{
+	struct drm_panel_follower *follower;
+	int ret;
+
+	lockdep_assert_held(&panel->follower_lock);
+
+	list_for_each_entry(follower, &panel->followers, list) {
+		if (!follower->funcs->panel_unpreparing)
+			continue;
+
+		ret = follower->funcs->panel_unpreparing(follower);
+		if (ret < 0)
+			dev_info(panel->dev, "%ps failed: %d\n",
+				 follower->funcs->panel_unpreparing, ret);
+	}
+}
+
+static void drm_panel_followers_enabled(struct drm_panel *panel)
+{
+	struct drm_panel_follower *follower;
+	int ret;
+
+	lockdep_assert_held(&panel->follower_lock);
+
+	list_for_each_entry(follower, &panel->followers, list) {
+		if (!follower->funcs->panel_enabled)
+			continue;
+
+		ret = follower->funcs->panel_enabled(follower);
+		if (ret < 0)
+			dev_info(panel->dev, "%ps failed: %d\n",
+				 follower->funcs->panel_enabled, ret);
+	}
+}
+
+static void drm_panel_followers_disabling(struct drm_panel *panel)
+{
+	struct drm_panel_follower *follower;
+	int ret;
+
+	lockdep_assert_held(&panel->follower_lock);
+
+	list_for_each_entry(follower, &panel->followers, list) {
+		if (!follower->funcs->panel_disabling)
+			continue;
+
+		ret = follower->funcs->panel_disabling(follower);
+		if (ret < 0)
+			dev_info(panel->dev, "%ps failed: %d\n",
+				 follower->funcs->panel_disabling, ret);
+	}
+}
+
 static int panel_bridge_connector_get_modes(struct drm_connector *connector)
 {
 	struct drm_panel *panel = drm_connector_to_panel(connector);
@@ -758,7 +830,6 @@ EXPORT_SYMBOL(devm_drm_panel_add);
  */
 void drm_panel_prepare(struct drm_panel *panel)
 {
-	struct drm_panel_follower *follower;
 	int ret;
 
 	if (!panel)
@@ -782,15 +853,7 @@ void drm_panel_prepare(struct drm_panel *panel)
 	}
 	panel->prepared = true;
 
-	list_for_each_entry(follower, &panel->followers, list) {
-		if (!follower->funcs->panel_prepared)
-			continue;
-
-		ret = follower->funcs->panel_prepared(follower);
-		if (ret < 0)
-			dev_info(panel->dev, "%ps failed: %d\n",
-				 follower->funcs->panel_prepared, ret);
-	}
+	drm_panel_followers_prepared(panel);
 
 exit:
 	mutex_unlock(&panel->follower_lock);
@@ -811,7 +874,6 @@ EXPORT_SYMBOL(drm_panel_prepare);
  */
 void drm_panel_unprepare(struct drm_panel *panel)
 {
-	struct drm_panel_follower *follower;
 	int ret;
 
 	if (!panel)
@@ -837,15 +899,7 @@ void drm_panel_unprepare(struct drm_panel *panel)
 
 	mutex_lock(&panel->follower_lock);
 
-	list_for_each_entry(follower, &panel->followers, list) {
-		if (!follower->funcs->panel_unpreparing)
-			continue;
-
-		ret = follower->funcs->panel_unpreparing(follower);
-		if (ret < 0)
-			dev_info(panel->dev, "%ps failed: %d\n",
-				 follower->funcs->panel_unpreparing, ret);
-	}
+	drm_panel_followers_unpreparing(panel);
 
 	if (panel->funcs && panel->funcs->unprepare) {
 		ret = panel->funcs->unprepare(panel);
@@ -874,7 +928,6 @@ EXPORT_SYMBOL(drm_panel_unprepare);
  */
 void drm_panel_enable(struct drm_panel *panel)
 {
-	struct drm_panel_follower *follower;
 	int ret;
 
 	if (!panel)
@@ -903,15 +956,7 @@ void drm_panel_enable(struct drm_panel *panel)
 		DRM_DEV_INFO(panel->dev, "failed to enable backlight: %d\n",
 			     ret);
 
-	list_for_each_entry(follower, &panel->followers, list) {
-		if (!follower->funcs->panel_enabled)
-			continue;
-
-		ret = follower->funcs->panel_enabled(follower);
-		if (ret < 0)
-			dev_info(panel->dev, "%ps failed: %d\n",
-				 follower->funcs->panel_enabled, ret);
-	}
+	drm_panel_followers_enabled(panel);
 
 exit:
 	mutex_unlock(&panel->follower_lock);
@@ -931,7 +976,6 @@ EXPORT_SYMBOL(drm_panel_enable);
  */
 void drm_panel_disable(struct drm_panel *panel)
 {
-	struct drm_panel_follower *follower;
 	int ret;
 
 	if (!panel)
@@ -957,15 +1001,7 @@ void drm_panel_disable(struct drm_panel *panel)
 
 	mutex_lock(&panel->follower_lock);
 
-	list_for_each_entry(follower, &panel->followers, list) {
-		if (!follower->funcs->panel_disabling)
-			continue;
-
-		ret = follower->funcs->panel_disabling(follower);
-		if (ret < 0)
-			dev_info(panel->dev, "%ps failed: %d\n",
-				 follower->funcs->panel_disabling, ret);
-	}
+	drm_panel_followers_disabling(panel);
 
 	ret = backlight_disable(panel->backlight);
 	if (ret < 0)
