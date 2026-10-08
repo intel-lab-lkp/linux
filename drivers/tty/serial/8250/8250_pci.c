@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/math.h>
 #include <linux/slab.h>
+#include <linux/sizes.h>
 #include <linux/delay.h>
 #include <linux/tty.h>
 #include <linux/serial_reg.h>
@@ -72,6 +73,7 @@
 #define PCI_DEVICE_ID_AGESTAR_9375	0x6872
 #define PCI_DEVICE_ID_BROADCOM_TRUMANAGE 0x160a
 #define PCI_DEVICE_ID_AMCC_ADDIDATA_APCI7800 0x818e
+#define PCI_DEVICE_ID_ASPEED_BMC_DEV	0x2402
 
 #define PCI_DEVICE_ID_WCHIC_CH384_4S	0x3470
 #define PCI_DEVICE_ID_WCHIC_CH384_8S	0x3853
@@ -1597,6 +1599,93 @@ pci_brcm_trumanage_setup(struct serial_private *priv,
 	return ret;
 }
 
+/*
+ * The PCIe BMC device function of ASPEED BMCs can expose two VUARTs to the
+ * host. Their registers are in BAR1 at the VUART's LPC I/O address shifted
+ * left by two, one 32-bit register per 4 bytes. A VUART that the BMC firmware
+ * has not enabled reads back as all ones; skip those so that the ports that
+ * are present are numbered contiguously.
+ */
+#define PCI_ASPEED_VUART_BAR		1
+#define PCI_ASPEED_VUART_REGSHIFT	2
+
+static const u16 pci_aspeed_vuart_io[] = { 0x3f8, 0x2f8 };
+
+static unsigned int pci_aspeed_vuart_offset(unsigned int i)
+{
+	return pci_aspeed_vuart_io[i] << PCI_ASPEED_VUART_REGSHIFT;
+}
+
+/*
+ * A live 16550 can read LSR as 0xff, but never IIR, whose bits 4-5 are
+ * reserved. Only read IIR when LSR looks absent: reading IIR clears a
+ * pending THRI, and this also runs on resume while the port may be in use.
+ */
+static bool pci_aspeed_vuart_present(void __iomem *base, unsigned int offset)
+{
+	void __iomem *regs = base + offset;
+
+	return readl(regs + (UART_LSR << PCI_ASPEED_VUART_REGSHIFT)) != ~0U ||
+	       readl(regs + (UART_IIR << PCI_ASPEED_VUART_REGSHIFT)) != ~0U;
+}
+
+static int pci_aspeed_vuart_init(struct pci_dev *dev)
+{
+	void __iomem *base;
+	int i, n = 0;
+
+	if (!(pci_resource_flags(dev, PCI_ASPEED_VUART_BAR) & IORESOURCE_MEM) ||
+	    pci_resource_len(dev, PCI_ASPEED_VUART_BAR) < SZ_4K)
+		return -ENODEV;
+
+	base = pci_iomap_range(dev, PCI_ASPEED_VUART_BAR, 0, SZ_4K);
+	if (!base)
+		return -ENOMEM;
+
+	for (i = 0; i < ARRAY_SIZE(pci_aspeed_vuart_io); i++)
+		if (pci_aspeed_vuart_present(base, pci_aspeed_vuart_offset(i)))
+			n++;
+
+	pci_iounmap(dev, base);
+
+	/* Leave the function to other drivers if the BMC exposes no VUART. */
+	return n ?: -ENODEV;
+}
+
+static int
+pci_aspeed_vuart_setup(struct serial_private *priv,
+		       const struct pciserial_board *board,
+		       struct uart_8250_port *port, int idx)
+{
+	unsigned int offset;
+	int i, ret;
+
+	ret = setup_port(priv, port, PCI_ASPEED_VUART_BAR, 0,
+			 PCI_ASPEED_VUART_REGSHIFT);
+	if (ret)
+		return ret;
+
+	/* Use the idx-th VUART that is present. */
+	for (i = 0; i < ARRAY_SIZE(pci_aspeed_vuart_io); i++) {
+		offset = pci_aspeed_vuart_offset(i);
+		if (!pci_aspeed_vuart_present(port->port.membase, offset))
+			continue;
+		if (idx == 0)
+			break;
+		idx--;
+	}
+	if (i == ARRAY_SIZE(pci_aspeed_vuart_io))
+		return 1;
+
+	port->port.mapbase += offset;
+	port->port.membase += offset;
+	port->port.iotype = UPIO_MEM32;
+	port->port.type = PORT_16550A;
+	port->port.flags |= UPF_FIXED_PORT | UPF_FIXED_TYPE;
+
+	return 0;
+}
+
 /* RTS will control by MCR if this bit is 0 */
 #define FINTEK_RTS_CONTROL_BY_HW	BIT(4)
 /* only worked with FINTEK_RTS_CONTROL_BY_HW on */
@@ -2041,6 +2130,17 @@ static struct pci_serial_quirk pci_serial_quirks[] = {
 		.subvendor	= PCI_ANY_ID,
 		.subdevice	= PCI_ANY_ID,
 		.setup		= afavlab_setup,
+	},
+	/*
+	 * ASPEED BMC VUARTs over PCIe
+	 */
+	{
+		.vendor		= PCI_VENDOR_ID_ASPEED,
+		.device		= PCI_DEVICE_ID_ASPEED_BMC_DEV,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.init		= pci_aspeed_vuart_init,
+		.setup		= pci_aspeed_vuart_setup,
 	},
 	/*
 	 * HP Diva
@@ -3045,6 +3145,7 @@ enum pci_board_num_t {
 	pbn_omegapci,
 	pbn_NETMOS9900_2s_115200,
 	pbn_brcm_trumanage,
+	pbn_aspeed_vuart,
 	pbn_fintek_4,
 	pbn_fintek_8,
 	pbn_fintek_12,
@@ -3731,6 +3832,12 @@ static struct pciserial_board pci_boards[] = {
 		.flags		= FL_BASE0,
 		.num_ports	= 1,
 		.reg_shift	= 2,
+		.base_baud	= 115200,
+	},
+	/* MSI is not delivered on at least the ASUS Pro WS W680-ACE IPMI. */
+	[pbn_aspeed_vuart] = {
+		.flags		= FL_NOIRQ,
+		.num_ports	= 2,
 		.base_baud	= 115200,
 	},
 	[pbn_fintek_4] = {
@@ -5920,6 +6027,14 @@ static const struct pci_device_id serial_pci_tbl[] = {
 	{
 		PCI_VDEVICE(BROADCOM, PCI_DEVICE_ID_BROADCOM_TRUMANAGE),
 		.driver_data = pbn_brcm_trumanage,
+	},
+
+	/*
+	 * ASPEED BMC VUARTs over PCIe
+	 */
+	{
+		PCI_VDEVICE(ASPEED, PCI_DEVICE_ID_ASPEED_BMC_DEV),
+		.driver_data = pbn_aspeed_vuart,
 	},
 
 	/*
