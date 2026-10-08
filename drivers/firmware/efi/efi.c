@@ -649,6 +649,9 @@ static const efi_config_table_type_t common_tables[] __initconst = {
 #ifdef CONFIG_EFI_GENERIC_STUB
 	{LINUX_EFI_PRIMARY_DISPLAY_TABLE_GUID,	&primary_display_table			},
 #endif
+#ifdef CONFIG_KERNEL_TPM_SECURITY
+	{LINUX_EFI_PCR5_LOG_GUID,		&efi_pcr5_log,		"PCR5"		},
+#endif
 	{},
 };
 

@@ -435,6 +435,12 @@ efi_status_t efi_exit_boot_services(void *handle, void *priv,
 	if (efi_disable_pci_dma)
 		efi_pci_disable_bridge_busmaster();
 
+	/*
+	 * This installs a configuration table, so must happen before the
+	 * final memory map is retrieved.
+	 */
+	efi_tpm_record_pcr5();
+
 	status = efi_get_memory_map(&map, true);
 	if (status != EFI_SUCCESS)
 		return status;

@@ -862,6 +862,7 @@ typedef u32 efi_tcg2_event_log_format;
 #define INITRD_EVENT_TAG_ID 0x8F3B22ECU
 #define LOAD_OPTIONS_EVENT_TAG_ID 0x8F3B22EDU
 #define EV_EVENT_TAG 0x00000006U
+#define EV_EFI_ACTION 0x80000007U
 #define EFI_TCG2_EVENT_HEADER_VERSION	0x1
 
 struct efi_tcg2_event {
@@ -898,7 +899,8 @@ union efi_tcg2_protocol {
 							       efi_physical_addr_t,
 							       u64,
 							       const efi_tcg2_event_t *);
-		void *submit_command;
+		efi_status_t (__efiapi *submit_command)(efi_tcg2_protocol_t *,
+							u32, u8 *, u32, u8 *);
 		void *get_active_pcr_banks;
 		void *set_active_pcr_banks;
 		void *get_result_of_set_active_pcr_banks;
@@ -1168,6 +1170,12 @@ efi_enable_reset_attack_mitigation(void) { }
 #endif
 
 void efi_retrieve_eventlog(void);
+
+#ifdef CONFIG_KERNEL_TPM_SECURITY
+void efi_tpm_record_pcr5(void);
+#else
+static inline void efi_tpm_record_pcr5(void) { }
+#endif
 
 struct sysfb_display_info *alloc_primary_display(void);
 struct sysfb_display_info *__alloc_primary_display(void);

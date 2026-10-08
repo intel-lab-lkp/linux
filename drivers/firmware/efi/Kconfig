@@ -180,6 +180,21 @@ config RESET_ATTACK_MITIGATION
 	  have been evicted, since otherwise it will trigger even on clean
 	  reboots.
 
+config KERNEL_TPM_SECURITY
+	bool "Prove that the kernel supported certain security features"
+	depends on EFI_STUB && TCG_TPM_KERNEL_NVINDEX=y
+	help
+	  Have the EFI stub extend a fixed value into TPM PCR 5 in order to
+	  indicate that the kernel implements specific security
+	  functionality. This depends on the firmware extending PCR 5 when
+	  ExitBootServices is called - a failure to do this by the firmware
+	  will be logged.
+
+	  At present, this feature proves that the kernel implements kernel
+	  NV index reservation.
+
+	  If unsure, say N.
+
 config EFI_RCI2_TABLE
 	bool "EFI Runtime Configuration Interface Table Version 2 Support"
 	depends on X86 || COMPILE_TEST

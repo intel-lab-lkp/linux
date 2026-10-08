@@ -23,6 +23,7 @@
 #include <linux/pstore.h>
 #include <linux/range.h>
 #include <linux/reboot.h>
+#include <linux/tpm_command.h>
 #include <linux/uuid.h>
 
 #include <asm/page.h>
@@ -422,6 +423,7 @@ void efi_native_runtime_setup(void);
 #define LINUX_EFI_COCO_SECRET_AREA_GUID		EFI_GUID(0xadf956ad, 0xe98c, 0x484c,  0xae, 0x11, 0xb5, 0x1c, 0x7d, 0x33, 0x64, 0x47)
 #define LINUX_EFI_BOOT_MEMMAP_GUID		EFI_GUID(0x800f683f, 0xd08b, 0x423a,  0xa2, 0x93, 0x96, 0x5c, 0x3c, 0x6f, 0xe2, 0xb4)
 #define LINUX_EFI_UNACCEPTED_MEM_TABLE_GUID	EFI_GUID(0xd5d1de3c, 0x105c, 0x44f9,  0x9e, 0xa9, 0xbc, 0xef, 0x98, 0x12, 0x00, 0x31)
+#define LINUX_EFI_PCR5_LOG_GUID			EFI_GUID(0xb38f9ff0, 0xb8ef, 0xe28f,  0x80, 0x8d, 0xe2, 0x9a, 0xa7, 0xef, 0xb8, 0x8f)
 
 #define RISCV_EFI_BOOT_PROTOCOL_GUID		EFI_GUID(0xccd15fec, 0x6f73, 0x4eec,  0x83, 0x95, 0x3e, 0x69, 0xe4, 0xb9, 0x40, 0xbf)
 
@@ -630,6 +632,28 @@ typedef struct {
 } efi_cert_x509_sha256_t;
 
 extern unsigned long __ro_after_init efi_rng_seed;		/* RNG Seed table */
+
+/*
+ * The value of PCR 5 as read by the EFI stub immediately before calling
+ * ExitBootServices(), published via the LINUX_EFI_PCR5_LOG_GUID
+ * configuration table.  There is one entry for each supported PCR bank
+ * that was active.
+ */
+struct linux_efi_pcr5_digest {
+	u16	hash_alg;	/* TPM_ALG_* of the PCR bank */
+	u16	digest_size;
+	u8	digest[TPM2_MAX_DIGEST_SIZE];
+};
+
+struct linux_efi_pcr5_log {
+	u32				count;
+	struct linux_efi_pcr5_digest	digests[];
+};
+
+#ifdef CONFIG_KERNEL_TPM_SECURITY
+extern unsigned long efi_pcr5_log;
+extern bool kernel_tpm_security_available;
+#endif
 
 /*
  * All runtime access to EFI goes through this structure:
