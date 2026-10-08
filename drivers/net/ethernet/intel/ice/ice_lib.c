@@ -3265,6 +3265,12 @@ void ice_vsi_cfg_netdev_tc(struct ice_vsi *vsi, u8 ena_tc)
 	if (vsi->type == ICE_VSI_CHNL)
 		return;
 
+	if (vsi->tx_rings)
+		ice_for_each_txq(vsi, i)
+			if (vsi->tx_rings[i])
+				clear_bit(ICE_TX_XPS_INIT_DONE,
+					  vsi->tx_rings[i]->xps_state);
+
 	if (!ena_tc) {
 		netdev_reset_tc(netdev);
 		return;
