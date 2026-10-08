@@ -60,7 +60,7 @@ Users:
 		PowerTOP <powertop@lists.01.org>
 		https://01.org/powertop/
 
-What:		/sys/bus/usb/devices/<busnum>-<port[.port]>...:<config num>-<interface num>/supports_autosuspend
+What:		/sys/bus/usb/devices/<busnum>-<port[.port]>...:<config num>.<interface num>/supports_autosuspend
 Date:		January 2008
 KernelVersion:	2.6.27
 Contact:	Sarah Sharp <sarah.a.sharp@intel.com>
