@@ -41,6 +41,8 @@
 #include "xfs_rtgroup.h"
 #include "xfs_rtrmap_btree.h"
 #include "xfs_rtrefcount_btree.h"
+#include "xfs_dquot_item.h"
+#include "xfs_dquot.h"
 #include "scrub/xfs_scrub.h"
 #include "scrub/scrub.h"
 #include "scrub/common.h"
@@ -1746,6 +1748,31 @@ xrep_inode_blockcounts(
 	return 0;
 }
 
+static void
+xrep_inode_switch_dquot(
+	struct xfs_scrub	*sc,
+	xfs_dqtype_t		type,
+	struct xfs_dquot	**dqp)
+{
+#ifdef CONFIG_XFS_QUOTA
+	/*
+	 * We changed one of the file IDs, so we must detach the dquots to
+	 * prevent further changes from being accounted to them, and try to
+	 * attach the dquot for the new id to absorb any other block usage
+	 * changes.  Schedule a quotacheck so the accounting discrepancies will
+	 * get fixed eventually.
+	 */
+	xrep_force_quotacheck(sc, type);
+
+	if (*dqp != NULL) {
+		xfs_qm_dqrele(*dqp);
+		*dqp = NULL;
+	}
+
+	xfs_qm_dqget_inode(sc->ip, type, false, dqp);
+#endif
+}
+
 /* Check for invalid uid/gid/prid. */
 STATIC void
 xrep_inode_ids(
@@ -1759,21 +1786,24 @@ xrep_inode_ids(
 		i_uid_write(VFS_I(sc->ip), 0);
 		dirty = true;
 		if (XFS_IS_UQUOTA_ON(sc->mp))
-			xrep_force_quotacheck(sc, XFS_DQTYPE_USER);
+			xrep_inode_switch_dquot(sc, XFS_DQTYPE_USER,
+					&sc->ip->i_udquot);
 	}
 
 	if (!gid_valid(VFS_I(sc->ip)->i_gid)) {
 		i_gid_write(VFS_I(sc->ip), 0);
 		dirty = true;
 		if (XFS_IS_GQUOTA_ON(sc->mp))
-			xrep_force_quotacheck(sc, XFS_DQTYPE_GROUP);
+			xrep_inode_switch_dquot(sc, XFS_DQTYPE_GROUP,
+					&sc->ip->i_gdquot);
 	}
 
 	if (sc->ip->i_projid == -1U) {
 		sc->ip->i_projid = 0;
 		dirty = true;
 		if (XFS_IS_PQUOTA_ON(sc->mp))
-			xrep_force_quotacheck(sc, XFS_DQTYPE_PROJ);
+			xrep_inode_switch_dquot(sc, XFS_DQTYPE_PROJ,
+					&sc->ip->i_pdquot);
 	}
 
 	/* strip setuid/setgid if we touched any of the ids */
