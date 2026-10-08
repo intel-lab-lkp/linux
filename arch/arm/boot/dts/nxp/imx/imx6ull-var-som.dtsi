@@ -4,6 +4,7 @@
  *
  * Copyright 2019-2024 Variscite Ltd.
  * Copyright 2026 Dimonoff
+ * Copyright (C) 2026 Variscite Ltd.
  */
 
 #include "imx6ull.dtsi"
@@ -14,7 +15,12 @@
 	compatible = "variscite,var-som-imx6ull", "fsl,imx6ull";
 };
 
-&iomuxc {
+&adc1 {
+	vref-supply = <&touch_3v3_regulator>;
+	status = "okay";
+};
+
+&iomuxc_snvs {
 	pinctrl_brcm_bt: brcm-bt-grp {
 		fsl,pins = <
 			MX6ULL_PAD_SNVS_TAMPER4__GPIO5_IO04	0x1b0b0	/* BT_REG_ON (BT_EN) */
@@ -31,6 +37,13 @@
 	pinctrl_enet1_gpio: enet1-gpiogrp {
 		fsl,pins = <
 			MX6ULL_PAD_SNVS_TAMPER0__GPIO5_IO00	0x1b0b0 /* fec1 reset */
+		>;
+	};
+
+	pinctrl_wifi: wifi-grp {
+		fsl,pins = <
+			MX6ULL_PAD_SNVS_TAMPER2__GPIO5_IO02	0x1b0b0
+			MX6ULL_PAD_SNVS_TAMPER6__GPIO5_IO06	0x03029
 		>;
 	};
 };
