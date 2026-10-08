@@ -205,6 +205,27 @@ The ``ice`` driver implements support for flash update using the
 combined flash image that contains the ``fw.mgmt``, ``fw.undi``, and
 ``fw.netlist`` components.
 
+When firmware reports an external Root of Trust (eRoT) as present, the
+image must also contain the ``fw.pqc_manifest`` component, and all four
+components must be updated together. Images missing any of them, or
+containing a component more than once, are rejected before any flash bank
+is erased. An empty applicable component list is rejected before
+activation. Updating a single component (``component fw.mgmt``) is not
+supported when eRoT presence is reported. ``fw.pqc_manifest`` is accepted
+only when firmware reports eRoT presence. These checks do not authenticate
+the image contents or make the update atomic.
+
+Before each flash attempt, the driver reads device capabilities from
+firmware. An omitted eRoT capability is treated as absent, preserving
+legacy full-image and ``component fw.mgmt`` updates. Older eRoT hardware
+whose firmware omits the capability is not protected by the early
+completeness checks. An explicitly reported value other than 0 (absent)
+or 1 (present), or failure to read capabilities, blocks the update before
+any pending update is canceled or a flash write lock is acquired. This
+policy also applies in recovery mode, which only bypasses the separate
+unified-update capability check. Pending-update cancellation already
+requires capability discovery, including in recovery mode.
+
 .. list-table:: List of supported overwrite modes
    :widths: 5 95
 
