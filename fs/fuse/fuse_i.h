@@ -257,6 +257,8 @@ enum {
 	 * or the fuse server has an exclusive "lease" on distributed fs
 	 */
 	FUSE_I_EXCLUSIVE,
+	/* Server does not need OPEN/OPENDIR for this inode */
+	FUSE_I_NO_OPEN,
 };
 
 struct fuse_conn;
@@ -322,6 +324,9 @@ struct fuse_file {
 
 	/** @flock: Has flock been performed on this file? */
 	bool flock:1;
+
+	/** @no_open: Open was served locally without an OPEN/OPENDIR request */
+	bool no_open:1;
 };
 
 struct fuse_release_args {
@@ -555,6 +560,9 @@ struct fuse_conn {
 
 	/** @no_opendir: Is opendir/releasedir not implemented by fs? */
 	unsigned no_opendir:1;
+
+	/** @per_inode_no_open: Honor FUSE_ATTR_NO_OPEN */
+	unsigned per_inode_no_open:1;
 
 	/** @no_fsync: Is fsync not implemented by fs? */
 	unsigned no_fsync:1;
@@ -831,6 +839,13 @@ static inline struct fuse_conn *get_fuse_conn(struct inode *inode)
 static inline struct fuse_inode *get_fuse_inode(const struct inode *inode)
 {
 	return container_of(inode, struct fuse_inode, inode);
+}
+
+static inline bool fuse_inode_no_open(struct fuse_conn *fc, struct inode *inode)
+{
+	/* CUSE uses a non-FUSE inode and cannot negotiate this capability. */
+	return fc->per_inode_no_open &&
+		test_bit(FUSE_I_NO_OPEN, &get_fuse_inode(inode)->state);
 }
 
 static inline u64 get_node_id(struct inode *inode)
@@ -1261,7 +1276,7 @@ void fuse_file_io_release(struct fuse_file *ff, struct inode *inode);
 
 /* file.c */
 struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
-				 unsigned int open_flags, bool isdir);
+				 unsigned int open_flags, bool isdir, bool no_open);
 void fuse_file_release(struct inode *inode, struct fuse_file *ff,
 		       unsigned int open_flags, fl_owner_t id, bool isdir);
 

@@ -108,8 +108,9 @@ static void fuse_file_put(struct fuse_file *ff, bool sync)
 			fuse_file_io_release(ff, ra->inode);
 
 		if (!args) {
-			/* Do nothing when server does not implement 'opendir' */
-		} else if (args->opcode == FUSE_RELEASE && ff->fm->fc->no_open) {
+			/* No release needed when OPENDIR was skipped. */
+		} else if (args->opcode == FUSE_RELEASE &&
+			   (ff->fm->fc->no_open || (ff->no_open && !ff->flock))) {
 			fuse_release_end(args, 0);
 		} else if (sync) {
 			fuse_simple_request(ff->fm, args);
@@ -130,13 +131,26 @@ static void fuse_file_put(struct fuse_file *ff, bool sync)
 	}
 }
 
+static bool fuse_open_needed(struct fuse_conn *fc, unsigned int open_flags,
+			     bool isdir, bool no_open)
+{
+	if (isdir ? fc->no_opendir : fc->no_open)
+		return false;
+
+	/* Atomic truncation must still be performed by the server's OPEN. */
+	if ((open_flags & O_TRUNC) && fc->atomic_o_trunc)
+		return true;
+
+	return !no_open;
+}
+
 struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
-				 unsigned int open_flags, bool isdir)
+				 unsigned int open_flags, bool isdir, bool no_open)
 {
 	struct fuse_conn *fc = fm->fc;
 	struct fuse_file *ff;
 	int opcode = isdir ? FUSE_OPENDIR : FUSE_OPEN;
-	bool open = isdir ? !fc->no_opendir : !fc->no_open;
+	bool open = fuse_open_needed(fc, open_flags, isdir, no_open);
 	bool release = !isdir || open;
 
 	/*
@@ -152,6 +166,7 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 		return ERR_PTR(-ENOMEM);
 
 	ff->fh = 0;
+	ff->no_open = !open;
 	/* Default for no-open */
 	ff->open_flags = FOPEN_KEEP_CACHE | (isdir ? FOPEN_CACHE_DIR : 0);
 	if (open) {
@@ -189,7 +204,8 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 int fuse_do_open(struct fuse_mount *fm, u64 nodeid, struct file *file,
 		 bool isdir)
 {
-	struct fuse_file *ff = fuse_file_open(fm, nodeid, file->f_flags, isdir);
+	struct fuse_file *ff = fuse_file_open(fm, nodeid, file->f_flags, isdir,
+					    fuse_inode_no_open(fm->fc, file_inode(file)));
 
 	if (!IS_ERR(ff))
 		file->private_data = ff;

@@ -299,6 +299,11 @@ void fuse_change_attributes_common(struct inode *inode, struct fuse_attr *attr,
 	 * anyway. Its less efficient but should be safe.
 	 */
 	inode->i_flags &= ~S_NOSEC;
+
+	/* STATX replies do not carry fuse_attr.flags. */
+	if (fc->per_inode_no_open && !sx)
+		assign_bit(FUSE_I_NO_OPEN, &fi->state,
+			   attr->flags & FUSE_ATTR_NO_OPEN);
 }
 
 u32 fuse_get_cache_mask(struct inode *inode)
@@ -1432,6 +1437,8 @@ static void process_init_reply(struct fuse_args *args, int error)
 
 			if (fuse_syncfs_enable(fc, flags))
 				fc->sync_fs = 1;
+			if (flags & FUSE_PER_INODE_NO_OPEN)
+				fc->per_inode_no_open = 1;
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
 			fc->no_lock = 1;
@@ -1509,6 +1516,8 @@ static struct fuse_init_args *fuse_new_init(struct fuse_mount *fm)
 
 	if (fuse_uring_enabled())
 		flags |= FUSE_OVER_IO_URING | FUSE_HAS_IO_URING_BUFPOOL;
+
+	flags |= FUSE_PER_INODE_NO_OPEN;
 
 	ia->in.flags = flags;
 	ia->in.flags2 = flags >> 32;
