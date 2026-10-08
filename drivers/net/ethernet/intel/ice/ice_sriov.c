@@ -520,8 +520,27 @@ teardown:
 		if (it_cnt == 0)
 			break;
 
+		/* Mark the VF disabled before its representor and its VSI go
+		 * away, the way ice_free_vfs() does, and take cfg_lock
+		 * around it to wait out an ice_reset_vf() already in
+		 * progress. pf->state has no ICE_VF_DIS on this path and the
+		 * loop leaves ICE_VF_STATE_INIT set, so without the bit a
+		 * concurrent ice_reset_vf() would pass ice_is_vf_disabled()
+		 * and reach ice_eswitch_update_repr() on a destroyed
+		 * representor, or trip WARN_ON(!vsi) in ice_dis_vf_mappings().
+		 */
+		mutex_lock(&vf->cfg_lock);
+		set_bit(ICE_VF_STATE_DIS, vf->vf_states);
+		mutex_unlock(&vf->cfg_lock);
+
+		/* detach outside of cfg_lock, see ice_free_vfs() */
+		ice_eswitch_detach_vf(pf, vf);
+
+		mutex_lock(&vf->cfg_lock);
 		ice_dis_vf_mappings(vf);
 		ice_vf_vsi_release(vf);
+		mutex_unlock(&vf->cfg_lock);
+
 		it_cnt--;
 	}
 
