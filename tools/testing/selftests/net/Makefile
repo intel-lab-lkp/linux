@@ -184,6 +184,7 @@ TEST_GEN_PROGS := \
 	icmp_rfc4884 \
 	ipv6_flowlabel_mgr \
 	ipv6_fragmentation \
+	netlink_policy_dump_opid \
 	proc_net_pktgen \
 	reuseaddr_conflict \
 	reuseport_bpf \

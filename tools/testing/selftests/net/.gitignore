@@ -20,6 +20,7 @@ ipv6_fragmentation
 log.txt
 msg_zerocopy
 netlink-dumps
+netlink_policy_dump_opid
 nettest
 proc_net_pktgen
 psock_fanout
