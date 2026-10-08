@@ -358,6 +358,45 @@ struct tpm2_signed_audit {
 	u8 sig_s[EC_PT_SZ];
 };
 
+/**
+ * struct tpm2_kernel_key - a signing key created by the kernel
+ * @handle:	transient handle of the loaded key
+ * @auth:	the key's random auth value, which never leaves the kernel
+ * @x:		X coordinate of the P-256 public key
+ * @y:		Y coordinate of the P-256 public key
+ */
+struct tpm2_kernel_key {
+	u32 handle;
+	u8 auth[SHA256_DIGEST_SIZE];
+	u8 x[EC_PT_SZ];
+	u8 y[EC_PT_SZ];
+};
+
+#define TPM2_KEY_PROVENANCE_MAX	2048
+
+/**
+ * struct tpm2_key_provenance - evidence that a key was created by the kernel
+ * @len:	length of @data
+ * @data:	serialized AK-signed audit session attestation and log, in a
+ *		format private to the TPM driver
+ */
+struct tpm2_key_provenance {
+	u16 len;
+	u8 data[TPM2_KEY_PROVENANCE_MAX];
+};
+
+#ifdef CONFIG_TCG_TPM2_KERNEL_KEY
+int tpm2_kernel_key_create(struct tpm_chip *chip, struct tpm2_kernel_key *key,
+			   struct tpm2_key_provenance *prov);
+#else
+static inline int tpm2_kernel_key_create(struct tpm_chip *chip,
+					 struct tpm2_kernel_key *key,
+					 struct tpm2_key_provenance *prov)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
 #ifdef CONFIG_TCG_TPM2_HMAC
 
 int tpm2_start_auth_session(struct tpm_chip *chip, bool audit);

@@ -1073,7 +1073,7 @@ static int tpm2_parse_start_auth_session(struct tpm2_auth *auth,
 	return 0;
 }
 
-static int tpm2_load_null(struct tpm_chip *chip, u32 *null_key)
+int tpm2_load_null(struct tpm_chip *chip, u32 *null_key)
 {
 	unsigned int offset = 0; /* dummy offset for null seed context */
 	u8 name[SHA256_DIGEST_SIZE + 2];
