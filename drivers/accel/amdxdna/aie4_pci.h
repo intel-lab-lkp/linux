@@ -8,7 +8,10 @@
 
 #include <linux/device.h>
 #include <linux/iopoll.h>
+#include <linux/list.h>
 #include <linux/pci.h>
+#include <linux/wait.h>
+#include <linux/workqueue.h>
 
 #include "aie.h"
 #include "aie4_msg_priv.h"
@@ -25,7 +28,20 @@ struct cert_comp {
 	wait_queue_head_t               waitq;
 };
 
+/*
+ * aie4 kernel-submission job states (stored in amdxdna_sched_job priv.aie4.state).
+ * Anonymous enum - the aie4_job_state identifier is already a field-access macro.
+ */
+enum {
+	AIE4_JOB_STATE_INIT,
+	AIE4_JOB_STATE_PENDING,
+	AIE4_JOB_STATE_SUBMITTING,
+	AIE4_JOB_STATE_SUBMITTED,
+	AIE4_JOB_STATE_DONE,
+};
+
 struct amdxdna_hwctx_priv {
+	struct amdxdna_hwctx		*hwctx;
 	struct amdxdna_gem_obj          *umq_bo;
 	u64                             *umq_read_index;
 	u64                             *umq_write_index;
@@ -33,7 +49,22 @@ struct amdxdna_hwctx_priv {
 	struct cert_comp                *cert_comp;
 	u32                             hw_ctx_id;
 
+	/* Direct and indirect packet storage aliasing umq_bo. */
+	u64                             write_index;
+	struct host_queue_packet        *umq_pkts;
+	struct host_indirect_packet_data *umq_indirect_pkts;
+	u64                             umq_indirect_pkts_dev_addr;
+	/* Transport doorbell target set by aie4_doorbell_setup(). */
 	void                    __iomem *doorbell_addr;
+
+	struct mutex                    io_lock; /* serialize submit, protect job lists */
+	struct list_head                pending_job_list;
+	/* Head of pending_job_list, read locklessly by wait conditions. */
+	struct amdxdna_sched_job        *pending_head;
+	struct list_head                running_job_list;
+	wait_queue_head_t               job_list_wq;
+	struct work_struct              job_work;
+	struct workqueue_struct         *job_work_q;
 };
 
 struct amdxdna_dev_priv {
@@ -107,9 +138,18 @@ int aie4_set_ctx_hysteresis(struct amdxdna_dev_hdl *ndev, u32 timeout_us);
 u32 aie4_msg_pasid(struct amdxdna_client *client);
 
 /* aie4_ctx.c */
+enum aie4_hwctx_flags {
+	AIE4_HWCTX_NORMAL = 0,
+	AIE4_HWCTX_GRACEFUL,
+	AIE4_HWCTX_DISCONNECT, /* sets has_error, do not destroy context */
+	AIE4_HWCTX_ERROR, /* sets has_error, destroy context */
+};
+
 int aie4_hwctx_init(struct amdxdna_hwctx *hwctx);
 void aie4_hwctx_fini(struct amdxdna_hwctx *hwctx);
 int aie4_cmd_wait(struct amdxdna_hwctx *hwctx, u64 seq, u32 timeout);
+int aie4_hwctx_create(struct amdxdna_hwctx *hwctx);
+void aie4_hwctx_destroy(struct amdxdna_hwctx *hwctx, enum aie4_hwctx_flags);
 
 /* aie4_pci.c */
 int aie4_restore_power_mode(struct amdxdna_dev_hdl *ndev);
