@@ -413,7 +413,7 @@ static inline bool kvm_is_gfn_alias(struct kvm *kvm, gfn_t gfn)
 
 typedef unsigned int kvm_tlb_tag_t;
 
-int kvm_init_tlb_tags(unsigned int nr);
+int kvm_init_tlb_tags(unsigned int nr_total, unsigned int nr_reserved);
 void kvm_destroy_tlb_tags(void);
 kvm_tlb_tag_t kvm_alloc_tlb_tag(void);
 void kvm_free_tlb_tag(kvm_tlb_tag_t tag);
