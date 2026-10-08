@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/regulator/hisilicon,histb-volt.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: HiSilicon STB voltage regulator
+
+maintainers:
+  - David Yang <mmyangfl@gmail.com>
+
+description: |
+  HiSilicon STB SoCs provide PWM outputs in the PMOC block which drive an
+  external converter. The signal is filtered into a DC level between 0 V and
+  3.3 V which is summed into the feedback input of the converter, so a rail
+  follows the average level of the PWM signal and its voltage is set by the duty
+  cycle.
+
+  Where the duty cycle maps to in volts is a property of the board, not of the
+  SoC: the endpoints come from the resistors of the filter and from the
+  reference voltage of the converter. The datasheets therefore tabulate a
+  different pair of endpoints for each converter of their reference designs
+  (0.65 V to 1.15 V for the Hi3798cv200, 0.7 V to 1.25 V for the Hi3798mv200),
+  and a board built to its own schematic has to describe its own.
+  regulator-min-microvolt and regulator-max-microvolt are those endpoints of
+  the linear range, and the regulator has no other source of calibration.
+
+properties:
+  compatible:
+    enum:
+      - hisilicon,hi3798cv200-volt
+      - hisilicon,hi3798mv100-volt
+      - hisilicon,hi3798mv200-volt
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - regulator-min-microvolt
+  - regulator-max-microvolt
+
+allOf:
+  - $ref: regulator.yaml#
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    vddcpu: regulator@8a23018 {
+        compatible = "hisilicon,hi3798mv200-volt";
+        reg = <0x8a23018 0x4>;
+        regulator-name = "vdd-cpu";
+        regulator-min-microvolt = <700000>;
+        regulator-max-microvolt = <1250000>;
+        regulator-always-on;
+    };
