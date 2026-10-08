@@ -8,6 +8,7 @@
 
 #include <linux/list.h>
 #include <linux/mailbox_client.h>
+#include <linux/mutex.h>
 #include <linux/types.h>
 #include <linux/uuid.h>
 
@@ -19,6 +20,9 @@
 #define RPMI_TEE_SRV_PROBE_DOMAIN	0x04
 #define RPMI_TEE_SRV_PROBE_ENDPOINT	0x05
 #define RPMI_TEE_SRV_CALL		0x18
+#define RPMI_TEE_SRV_MEMORY_PARCEL_CREATE	0x0e
+#define RPMI_TEE_SRV_MEMORY_PARCEL_RECLAIM	0x11
+#define RPMI_TEE_SRV_MEMORY_SEGMENT_SEND	0x12
 
 struct rpmi_tee_notif_state {
 	u32 feature;
@@ -31,7 +35,9 @@ struct rpmi_tee_mbox {
 };
 
 struct rpmi_tee_mem_state {
+	struct mutex lock;
 	u32 multisegment_max;
+	u32 multisegment_active;
 	bool lend_ok;
 	bool share_ok;
 };
