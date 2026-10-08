@@ -132,6 +132,11 @@ config HIBERNATION_TPM_SIGNATURE
 	  ExitBootServices() is called. If these requirements are not met,
 	  hibernation is unavailable.
 
+	  As only signed images are restored, hibernation remains available
+	  when the kernel is locked down for integrity. Images are not
+	  encrypted, so it is unavailable when the kernel is locked down for
+	  confidentiality.
+
 	  If unsure, say N.
 
 config TPM_HIBERNATE_INSECURE

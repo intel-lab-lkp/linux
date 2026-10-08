@@ -71,6 +71,7 @@ const char *const lockdown_reasons[LOCKDOWN_CONFIDENTIALITY_MAX + 1] = {
 	[LOCKDOWN_TRACEFS] = "use of tracefs",
 	[LOCKDOWN_XMON_RW] = "xmon read and write access",
 	[LOCKDOWN_XFRM_SECRET] = "xfrm SA secret",
+	[LOCKDOWN_HIBERNATION_IMAGE] = "hibernation with signed images",
 	[LOCKDOWN_CONFIDENTIALITY_MAX] = "confidentiality",
 };
 
