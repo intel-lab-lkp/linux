@@ -920,7 +920,8 @@ probe_error_v4l2_ctrl_handler_free:
 	v4l2_ctrl_handler_free(ov05c10->sd.ctrl_handler);
 
 probe_error_power_off:
-	ov05c10_power_off(&client->dev);
+	if (full_power)
+		ov05c10_power_off(&client->dev);
 
 	return ret;
 }
@@ -934,6 +935,7 @@ static void ov05c10_remove(struct i2c_client *client)
 	v4l2_subdev_cleanup(sd);
 	media_entity_cleanup(&ov05c10->sd.entity);
 	v4l2_ctrl_handler_free(&ov05c10->ctrl_handler);
+	pm_runtime_dont_use_autosuspend(&client->dev);
 	pm_runtime_disable(&client->dev);
 
 	if (!pm_runtime_status_suspended(&client->dev)) {
