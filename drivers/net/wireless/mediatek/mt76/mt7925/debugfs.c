@@ -286,6 +286,88 @@ static int mt7925_chip_reset(void *data, u64 val)
 
 DEFINE_DEBUGFS_ATTRIBUTE(fops_reset, NULL, mt7925_chip_reset, "%lld\n");
 
+static int
+mt7925_roc_info(struct seq_file *s, void *data)
+{
+	struct mt792x_dev *dev = dev_get_drvdata(s->private);
+	struct mt7925_roc_ch_info_tlv *ch_tlv;
+	struct mt7925_roc_bss_info_tlv *bss_tlv;
+	struct mt7925_roc_channel_info *ch_info;
+	struct mt7925_roc_bss_info *bss_info;
+	struct sk_buff *skb;
+	bool dbdc_shown = false;
+	u8 *pos, *end;
+	int i, ret;
+
+	mt792x_mutex_acquire(dev);
+	ret = mt7925_mcu_get_roc_info(dev, &skb);
+	mt792x_mutex_release(dev);
+	if (ret)
+		return ret;
+
+	/* skb->data: 4-byte UNI event fixed header + TLVs */
+	pos = skb->data + 4;
+	end = skb->data + skb->len;
+
+	seq_puts(s, "\n[ROC Info]\n");
+
+	while (pos + sizeof(struct tlv) <= end) {
+		struct tlv *tlv = (struct tlv *)pos;
+		u16 tag = le16_to_cpu(tlv->tag);
+		u16 len = le16_to_cpu(tlv->len);
+
+		if (!len || pos + len > end)
+			break;
+
+		switch (tag) {
+		case UNI_EVENT_ROC_GET_CH_INFO:
+			if (len < sizeof(*ch_tlv))
+				break;
+			ch_tlv = (struct mt7925_roc_ch_info_tlv *)pos;
+			if (!dbdc_shown) {
+				seq_printf(s, "MBMC Mode : %s\n\n",
+					   ch_tlv->dbdc_enable ? "Enable" : "Disable");
+				dbdc_shown = true;
+			}
+			ch_info = (struct mt7925_roc_channel_info *)ch_tlv->ch_info;
+			seq_printf(s, "Band %u OPCH %u [", ch_tlv->dbdc_band,
+				   ch_tlv->op_ch_num);
+			for (i = 0; i < ch_tlv->op_ch_num; i++)
+				seq_printf(s, "%u%s", ch_info[i].pri_ch,
+					   i + 1 < ch_tlv->op_ch_num ? ", " : "");
+			seq_puts(s, "]\n");
+			break;
+
+		case UNI_EVENT_ROC_GET_BSS_INFO:
+			if (len < sizeof(*bss_tlv))
+				break;
+			bss_tlv = (struct mt7925_roc_bss_info_tlv *)pos;
+			bss_info = (struct mt7925_roc_bss_info *)bss_tlv->bss_info;
+			seq_puts(s, "\n");
+			for (i = 0; i < bss_tlv->bss_num; i++) {
+				if (!bss_info[i].inuse)
+					continue;
+				seq_printf(s, "BSS%d Inuse%u Act%u ConnStat%u [CH%3u][Band%u][TxNSS%u][RxNSS%u][LinkIdx%u]\n",
+					   i,
+					   bss_info[i].inuse,
+					   bss_info[i].active,
+					   bss_info[i].conn_state,
+					   bss_info[i].pri_ch,
+					   bss_info[i].dbdc_band,
+					   bss_info[i].op_tx_nss,
+					   bss_info[i].op_rx_nss,
+					   bss_info[i].link_idx);
+			}
+			break;
+		}
+
+		pos += len;
+	}
+
+	dev_kfree_skb(skb);
+	return 0;
+}
+
 int mt7925_init_debugfs(struct mt792x_dev *dev)
 {
 	struct dentry *dir;
@@ -309,6 +391,8 @@ int mt7925_init_debugfs(struct mt792x_dev *dev)
 	debugfs_create_file("idle-timeout", 0600, dir, dev,
 			    &fops_pm_idle_timeout);
 	debugfs_create_file("chip_reset", 0600, dir, dev, &fops_reset);
+	debugfs_create_devm_seqfile(dev->mt76.dev, "roc_info", dir,
+				    mt7925_roc_info);
 	debugfs_create_devm_seqfile(dev->mt76.dev, "runtime_pm_stats", dir,
 				    mt792x_pm_stats);
 	debugfs_create_file("deep-sleep", 0600, dir, dev, &fops_ds);

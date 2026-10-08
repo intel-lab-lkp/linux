@@ -51,6 +51,7 @@ struct mt7925_mcu_hif_ctrl_basic_tlv {
 enum {
 	UNI_ROC_ACQUIRE,
 	UNI_ROC_ABORT,
+	UNI_ROC_GET_INFO = 2,
 	UNI_ROC_SUB_LINK = 3,
 	UNI_ROC_NUM
 };
@@ -66,6 +67,8 @@ enum mt7925_roc_req {
 
 enum {
 	UNI_EVENT_ROC_GRANT = 0,
+	UNI_EVENT_ROC_GET_CH_INFO = 1,
+	UNI_EVENT_ROC_GET_BSS_INFO = 2,
 	UNI_EVENT_ROC_GRANT_SUB_LINK = 4,
 	UNI_EVENT_ROC_TAG_NUM
 };
@@ -393,6 +396,7 @@ int mt7925_mcu_set_roc(struct mt792x_phy *phy, struct mt792x_bss_conf *mconf,
 		       enum mt7925_roc_req type, u8 token_id);
 int mt7925_mcu_abort_roc(struct mt792x_phy *phy, struct mt792x_bss_conf *mconf,
 			 u8 token_id);
+int mt7925_mcu_get_roc_info(struct mt792x_dev *dev, struct sk_buff **skb);
 void mt7925_roc_abort_sync(struct mt792x_dev *dev);
 int mt7925_mcu_fill_message(struct mt76_dev *mdev, struct sk_buff *skb,
 			    int cmd, int *wait_seq);

@@ -72,6 +72,50 @@ struct mt7925_txpwr_req {
 	u8 _rsv1;
 } __packed;
 
+/* ROC GET_INFO event structures (response to UNI_ROC_GET_INFO command) */
+struct mt7925_roc_ch_info_tlv {
+	__le16 tag;
+	__le16 len;
+	u8 dbdc_band;
+	u8 cnm_timeline_en;
+	u8 op_ch_num;
+	u8 dbdc_enable;
+	u8 ch_info[];
+} __packed;
+
+struct mt7925_roc_channel_info {
+	u8 pri_ch;
+	u8 ch_bw;
+	u8 ch_sco;
+	u8 ch_s1;
+	u8 ch_s2;
+	u8 bss_num;
+	__le16 bss_bitmap;
+} __packed;
+
+struct mt7925_roc_bss_info_tlv {
+	__le16 tag;
+	__le16 len;
+	u8 bss_num;
+	u8 rsv[3];
+	u8 bss_info[];
+} __packed;
+
+struct mt7925_roc_bss_info {
+	u8 bss_type;
+	u8 inuse;
+	u8 active;
+	u8 conn_state;
+	u8 pri_ch;
+	u8 dbdc_band;
+	u8 omac_idx;
+	u8 omac_dbdc_band;
+	u8 op_tx_nss;
+	u8 op_rx_nss;
+	u8 link_idx;
+	u8 rsv;
+} __packed;
+
 struct mt7925_txpwr_event {
 	u8 rsv[4];
 	__le16 tag;

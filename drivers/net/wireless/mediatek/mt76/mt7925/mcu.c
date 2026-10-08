@@ -1608,6 +1608,27 @@ int mt7925_mcu_abort_roc(struct mt792x_phy *phy, struct mt792x_bss_conf *mconf,
 				 &req, sizeof(req), true);
 }
 
+int mt7925_mcu_get_roc_info(struct mt792x_dev *dev, struct sk_buff **skb)
+{
+	struct {
+		struct {
+			u8 rsv[4];
+		} __packed hdr;
+		struct {
+			__le16 tag;
+			__le16 len;
+		} __packed get_info;
+	} __packed req = {
+		.get_info = {
+			.tag = cpu_to_le16(UNI_ROC_GET_INFO),
+			.len = cpu_to_le16(sizeof(req.get_info)),
+		},
+	};
+
+	return mt76_mcu_send_and_get_msg(&dev->mt76, MCU_UNI_CMD(ROC),
+					 &req, sizeof(req), true, skb);
+}
+
 int mt7925_mcu_set_eeprom(struct mt792x_dev *dev)
 {
 	struct {
