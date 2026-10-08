@@ -38,6 +38,8 @@ struct device_node;
 struct drm_atomic_commit;
 struct drm_bridge;
 struct drm_connector;
+struct drm_connector_state;
+struct drm_crtc_state;
 struct drm_device;
 struct drm_panel_follower;
 struct drm_panel;
@@ -167,6 +169,28 @@ struct drm_panel_funcs {
 	 * Allows panels to create panels-specific debugfs files.
 	 */
 	void (*debugfs_init)(struct drm_panel *panel, struct dentry *root);
+
+	/**
+	 * @atomic_check:
+	 *
+	 * Check that the configuration requested in @commit can be handled by
+	 * the panel and compute the new panel state. The new panel state can
+	 * be retrieved with drm_atomic_get_new_panel_state(), the CRTC and
+	 * connector states with drm_atomic_get_new_crtc_state_for_panel() and
+	 * drm_atomic_get_new_connector_state_for_panel().
+	 *
+	 * This function is called in the check phase of an atomic update, it
+	 * must not touch the hardware or any persistent driver data.
+	 *
+	 * This function is optional. It can only be implemented together with
+	 * @atomic_create_state.
+	 *
+	 * Return:
+	 *
+	 * Zero if the check passed, a negative error code otherwise.
+	 */
+	int (*atomic_check)(struct drm_panel *panel,
+			    struct drm_atomic_commit *commit);
 
 	/**
 	 * @atomic_create_state:
@@ -438,6 +462,12 @@ drm_atomic_get_old_panel_state(const struct drm_atomic_commit *commit,
 struct drm_panel_state *
 drm_atomic_get_new_panel_state(const struct drm_atomic_commit *commit,
 			       struct drm_panel *panel);
+struct drm_crtc_state *
+drm_atomic_get_new_crtc_state_for_panel(struct drm_atomic_commit *commit,
+					struct drm_panel *panel);
+struct drm_connector_state *
+drm_atomic_get_new_connector_state_for_panel(const struct drm_atomic_commit *commit,
+					     struct drm_panel *panel);
 
 #if defined(CONFIG_OF) && IS_ENABLED(CONFIG_DRM_PANEL)
 struct drm_panel *of_drm_find_panel(const struct device_node *np);

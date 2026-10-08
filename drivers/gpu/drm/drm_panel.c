@@ -243,6 +243,19 @@ static void panel_bridge_debugfs_init(struct drm_bridge *bridge,
 		panel->funcs->debugfs_init(panel, root);
 }
 
+static int panel_bridge_atomic_check(struct drm_bridge *bridge,
+				     struct drm_bridge_state *bridge_state,
+				     struct drm_crtc_state *crtc_state,
+				     struct drm_connector_state *conn_state)
+{
+	struct drm_panel *panel = drm_bridge_to_panel(bridge);
+
+	if (!panel->funcs->atomic_check)
+		return 0;
+
+	return panel->funcs->atomic_check(panel, crtc_state->state);
+}
+
 static struct drm_bridge_state *
 panel_bridge_atomic_create_state(struct drm_bridge *bridge)
 {
@@ -297,6 +310,7 @@ static const struct drm_bridge_funcs panel_bridge_bridge_funcs = {
 	.atomic_disable = panel_bridge_atomic_disable,
 	.atomic_post_disable = panel_bridge_atomic_post_disable,
 	.get_modes = panel_bridge_get_modes,
+	.atomic_check = panel_bridge_atomic_check,
 	.atomic_create_state = panel_bridge_atomic_create_state,
 	.atomic_duplicate_state = panel_bridge_atomic_duplicate_state,
 	.atomic_destroy_state = panel_bridge_atomic_destroy_state,
@@ -653,6 +667,9 @@ static void drm_panel_init(struct drm_panel *panel, struct device *dev,
 		      !funcs->atomic_create_state != !funcs->atomic_duplicate_state ||
 		      !funcs->atomic_create_state != !funcs->atomic_destroy_state,
 		      "Panel state callbacks have to be implemented together\n");
+
+	dev_WARN_ONCE(dev, !funcs->atomic_create_state && funcs->atomic_check,
+		      "Atomic callbacks require the panel state callbacks\n");
 
 	INIT_LIST_HEAD(&panel->list);
 	INIT_LIST_HEAD(&panel->followers);
@@ -1184,6 +1201,73 @@ struct drm_panel_state *drm_panel_get_current_state(struct drm_panel *panel)
 	return drm_bridge_state_to_panel_state(bridge_state);
 }
 EXPORT_SYMBOL(drm_panel_get_current_state);
+
+/**
+ * drm_atomic_get_new_crtc_state_for_panel() - get new CRTC state for a panel
+ * @commit: global atomic state object
+ * @panel: panel to get the CRTC state for
+ *
+ * This function returns the new state of the CRTC that drives @panel as of
+ * @commit. It is meant to be used from &drm_panel_funcs.atomic_check and the
+ * enable path. In the disable path the panel might not be driven by any CRTC
+ * anymore.
+ *
+ * Return:
+ *
+ * The new CRTC state, or NULL if the panel is not driven by a CRTC that is
+ * part of the global atomic state.
+ */
+struct drm_crtc_state *
+drm_atomic_get_new_crtc_state_for_panel(struct drm_atomic_commit *commit,
+					struct drm_panel *panel)
+{
+	struct drm_encoder *encoder = panel->bridge.encoder;
+	struct drm_crtc *crtc;
+
+	if (!encoder)
+		return NULL;
+
+	crtc = drm_atomic_get_new_crtc_for_encoder(commit, encoder);
+	if (!crtc)
+		return NULL;
+
+	return drm_atomic_get_new_crtc_state(commit, crtc);
+}
+EXPORT_SYMBOL(drm_atomic_get_new_crtc_state_for_panel);
+
+/**
+ * drm_atomic_get_new_connector_state_for_panel() - get new connector state for
+ *						     a panel
+ * @commit: global atomic state object
+ * @panel: panel to get the connector state for
+ *
+ * This function returns the new state of the connector that @panel is routed
+ * to as of @commit. It is meant to be used from &drm_panel_funcs.atomic_check
+ * and the enable path. In the disable path the panel might not be routed to
+ * any connector anymore.
+ *
+ * Return:
+ *
+ * The new connector state, or NULL if the panel is not routed to a connector
+ * that is part of the global atomic state.
+ */
+struct drm_connector_state *
+drm_atomic_get_new_connector_state_for_panel(const struct drm_atomic_commit *commit,
+					     struct drm_panel *panel)
+{
+	struct drm_encoder *encoder = panel->bridge.encoder;
+	struct drm_connector *connector;
+
+	if (!encoder)
+		return NULL;
+
+	connector = drm_atomic_get_new_connector_for_encoder(commit, encoder);
+	if (!connector)
+		return NULL;
+
+	return drm_atomic_get_new_connector_state(commit, connector);
+}
+EXPORT_SYMBOL(drm_atomic_get_new_connector_state_for_panel);
 
 /**
  * drm_panel_get - Acquire a panel reference
