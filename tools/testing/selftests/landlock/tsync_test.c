@@ -152,10 +152,10 @@ TEST_F(multi_threaded, restrict)
 	EXPECT_EQ(variant->expected_no_new_privs,
 		  prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0));
 
-	ASSERT_EQ(0, pthread_cancel(t1));
-	ASSERT_EQ(0, pthread_cancel(t2));
-	ASSERT_EQ(0, pthread_join(t1, NULL));
-	ASSERT_EQ(0, pthread_join(t2, NULL));
+	EXPECT_EQ(0, pthread_cancel(t1));
+	EXPECT_EQ(0, pthread_cancel(t2));
+	EXPECT_EQ(0, pthread_join(t1, NULL));
+	EXPECT_EQ(0, pthread_join(t2, NULL));
 
 	/* Checks the no_new_privs state of the sibling threads. */
 	EXPECT_EQ(variant->expected_no_new_privs, no_new_privs1);
@@ -184,10 +184,10 @@ TEST(multi_threaded_success_despite_diverging_domains)
 	EXPECT_EQ(0, landlock_restrict_self(ruleset_fd,
 					    LANDLOCK_RESTRICT_SELF_TSYNC));
 
-	ASSERT_EQ(0, pthread_cancel(t1));
-	ASSERT_EQ(0, pthread_cancel(t2));
-	ASSERT_EQ(0, pthread_join(t1, NULL));
-	ASSERT_EQ(0, pthread_join(t2, NULL));
+	EXPECT_EQ(0, pthread_cancel(t1));
+	EXPECT_EQ(0, pthread_cancel(t2));
+	EXPECT_EQ(0, pthread_join(t1, NULL));
+	EXPECT_EQ(0, pthread_join(t2, NULL));
 	EXPECT_EQ(0, close(ruleset_fd));
 }
 
@@ -309,11 +309,11 @@ TEST(tsync_interrupt)
 					    LANDLOCK_RESTRICT_SELF_TSYNC));
 
 	sd.stop = true;
-	ASSERT_EQ(0, pthread_join(signaler, NULL));
+	EXPECT_EQ(0, pthread_join(signaler, NULL));
 
 	for (i = 0; i < NUM_IDLE_THREADS; i++) {
-		ASSERT_EQ(0, pthread_cancel(threads[i]));
-		ASSERT_EQ(0, pthread_join(threads[i], NULL));
+		EXPECT_EQ(0, pthread_cancel(threads[i]));
+		EXPECT_EQ(0, pthread_join(threads[i], NULL));
 	}
 
 	EXPECT_EQ(0, close(ruleset_fd));

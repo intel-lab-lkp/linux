@@ -163,7 +163,7 @@ TEST_F(trace, create_ruleset)
 	ruleset_fd =
 		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
 	ASSERT_LE(0, ruleset_fd);
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 
 	buf = tracefs_read_buf();
 	ASSERT_NE(NULL, buf);
@@ -508,7 +508,7 @@ TEST_F(trace, add_rule_invalid_fd)
 	/* Invalid ruleset fd (-1). */
 	ASSERT_EQ(-1, landlock_add_rule(-1, LANDLOCK_RULE_PATH_BENEATH,
 					&path_beneath, 0));
-	ASSERT_EQ(0, close(path_beneath.parent_fd));
+	EXPECT_EQ(0, close(path_beneath.parent_fd));
 
 	buf = tracefs_read_buf();
 	ASSERT_NE(NULL, buf);
@@ -544,7 +544,7 @@ TEST_F(trace, create_domain_invalid)
 	/* Unknown flags. */
 	ASSERT_EQ(-1, landlock_restrict_self(ruleset_fd, -1));
 
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 
 	buf = tracefs_read_buf();
 	ASSERT_NE(NULL, buf);

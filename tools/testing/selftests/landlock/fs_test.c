@@ -499,7 +499,7 @@ TEST_F_FORK(layout1, inval)
 					&path_beneath, 0));
 	/* Returns EBADF because ruleset_fd is not a landlock-ruleset FD. */
 	ASSERT_EQ(EBADF, errno);
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 
 	ruleset_fd = open(dir_s1d1, O_DIRECTORY | O_CLOEXEC);
 	ASSERT_LE(0, ruleset_fd);
@@ -507,7 +507,7 @@ TEST_F_FORK(layout1, inval)
 					&path_beneath, 0));
 	/* Returns EBADFD because ruleset_fd is not a valid ruleset. */
 	ASSERT_EQ(EBADFD, errno);
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 
 	/* Gets a real ruleset. */
 	ruleset_fd =
@@ -515,14 +515,14 @@ TEST_F_FORK(layout1, inval)
 	ASSERT_LE(0, ruleset_fd);
 	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 				       &path_beneath, 0));
-	ASSERT_EQ(0, close(path_beneath.parent_fd));
+	EXPECT_EQ(0, close(path_beneath.parent_fd));
 
 	/* Tests without O_PATH. */
 	path_beneath.parent_fd = open(dir_s1d2, O_DIRECTORY | O_CLOEXEC);
 	ASSERT_LE(0, path_beneath.parent_fd);
 	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 				       &path_beneath, 0));
-	ASSERT_EQ(0, close(path_beneath.parent_fd));
+	EXPECT_EQ(0, close(path_beneath.parent_fd));
 
 	/* Tests with a ruleset FD. */
 	path_beneath.parent_fd = ruleset_fd;
@@ -563,13 +563,13 @@ TEST_F_FORK(layout1, inval)
 	ASSERT_EQ(ENOMSG, errno);
 	path_beneath.allowed_access &= ~(1ULL << 60);
 
-	ASSERT_EQ(0, close(path_beneath.parent_fd));
+	EXPECT_EQ(0, close(path_beneath.parent_fd));
 
 	/* Enforces the ruleset. */
 	ASSERT_EQ(0, prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0));
 	ASSERT_EQ(0, landlock_restrict_self(ruleset_fd, 0));
 
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 /* clang-format off */
@@ -639,9 +639,9 @@ TEST_F_FORK(layout1, file_and_dir_access_rights)
 			ASSERT_EQ(EINVAL, errno);
 		}
 	}
-	ASSERT_EQ(0, close(path_beneath_file.parent_fd));
-	ASSERT_EQ(0, close(path_beneath_dir.parent_fd));
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(path_beneath_file.parent_fd));
+	EXPECT_EQ(0, close(path_beneath_dir.parent_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 TEST_F_FORK(layout0, ruleset_with_unknown_access)
@@ -683,8 +683,8 @@ TEST_F_FORK(layout0, rule_with_unknown_access)
 						&path_beneath, 0));
 		EXPECT_EQ(EINVAL, errno);
 	}
-	ASSERT_EQ(0, close(path_beneath.parent_fd));
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(path_beneath.parent_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 TEST_F_FORK(layout1, rule_with_unhandled_access)
@@ -741,7 +741,7 @@ static void add_path_beneath(struct __test_metadata *const _metadata,
 		TH_LOG("Failed to update the ruleset with \"%s\": %s", path,
 		       strerror(errno));
 	}
-	ASSERT_EQ(0, close(path_beneath.parent_fd));
+	EXPECT_EQ(0, close(path_beneath.parent_fd));
 }
 
 struct rule {
@@ -843,7 +843,7 @@ TEST_F_FORK(layout0, proc_nsfs)
 	ASSERT_EQ(-1, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 					&path_beneath, 0));
 	ASSERT_EQ(EBADFD, errno);
-	ASSERT_EQ(0, close(path_beneath.parent_fd));
+	EXPECT_EQ(0, close(path_beneath.parent_fd));
 }
 
 TEST_F_FORK(layout0, unpriv)
@@ -866,7 +866,7 @@ TEST_F_FORK(layout0, unpriv)
 
 	/* enforce_ruleset() calls prctl(no_new_privs). */
 	enforce_ruleset(_metadata, ruleset_fd);
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 TEST_F_FORK(layout1, effective_access)
@@ -914,14 +914,14 @@ TEST_F_FORK(layout1, effective_access)
 	ASSERT_LE(0, lseek(reg_fd, 0, SEEK_SET));
 	ASSERT_EQ(1, read(reg_fd, &buf, 1));
 	ASSERT_EQ('.', buf);
-	ASSERT_EQ(0, close(reg_fd));
+	EXPECT_EQ(0, close(reg_fd));
 
 	/* Just in case, double-checks effective actions. */
 	reg_fd = open(file1_s2d2, O_RDONLY | O_CLOEXEC);
 	ASSERT_LE(0, reg_fd);
 	ASSERT_EQ(-1, write(reg_fd, &buf, 1));
 	ASSERT_EQ(EBADF, errno);
-	ASSERT_EQ(0, close(reg_fd));
+	EXPECT_EQ(0, close(reg_fd));
 }
 
 TEST_F_FORK(layout1, unhandled_access)
@@ -1370,7 +1370,7 @@ TEST_F_FORK(layout1, inherit_subset)
 	add_path_beneath(_metadata, ruleset_fd, LANDLOCK_ACCESS_FS_WRITE_FILE,
 			 dir_s1d3, 0);
 	enforce_ruleset(_metadata, ruleset_fd);
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 
 	/*
 	 * Same tests and results as above, except for open(dir_s1d3) which is
@@ -1481,7 +1481,7 @@ TEST_F_FORK(layout1, empty_or_same_ruleset)
 
 	/* Enforces a second time with the same ruleset. */
 	enforce_ruleset(_metadata, ruleset_fd);
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 TEST_F_FORK(layout1, rule_on_mountpoint)
@@ -1770,7 +1770,7 @@ TEST_F_FORK(layout1, covered_rule)
 	ASSERT_EQ(0, test_open(dir_s3d2, O_RDONLY));
 
 	enforce_ruleset(_metadata, ruleset_fd);
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 
 	/* Checks that access to the new mount point is denied. */
 	ASSERT_EQ(EACCES, test_open(dir_s3d2, O_RDONLY));
@@ -1893,8 +1893,8 @@ static void test_relative_path(struct __test_metadata *const _metadata,
 	}
 
 	if (rel == REL_OPEN)
-		ASSERT_EQ(0, close(dirfd));
-	ASSERT_EQ(0, close(ruleset_fd));
+		EXPECT_EQ(0, close(dirfd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 TEST_F_FORK(layout1, relative_open)
@@ -1936,8 +1936,8 @@ static void copy_file(struct __test_metadata *const _metadata,
 	ASSERT_EQ(0, fstat(src_fd, &statbuf));
 	ASSERT_EQ(statbuf.st_size,
 		  sendfile(dst_fd, src_fd, 0, statbuf.st_size));
-	ASSERT_EQ(0, close(src_fd));
-	ASSERT_EQ(0, close(dst_fd));
+	EXPECT_EQ(0, close(src_fd));
+	EXPECT_EQ(0, close(dst_fd));
 }
 
 static void test_execute(struct __test_metadata *const _metadata, const int err,
@@ -3582,7 +3582,7 @@ TEST_F_FORK(layout1, proc_unlinked_file)
 
 	proc_fd = open_proc_fd(_metadata, reg_fd, O_RDONLY | O_CLOEXEC);
 	ASSERT_LE(0, proc_fd);
-	ASSERT_EQ(0, close(proc_fd));
+	EXPECT_EQ(0, close(proc_fd));
 
 	proc_fd = open_proc_fd(_metadata, reg_fd, O_RDWR | O_CLOEXEC);
 	ASSERT_EQ(-1, proc_fd)
@@ -3592,7 +3592,7 @@ TEST_F_FORK(layout1, proc_unlinked_file)
 	}
 	ASSERT_EQ(EACCES, errno);
 
-	ASSERT_EQ(0, close(reg_fd));
+	EXPECT_EQ(0, close(reg_fd));
 }
 
 TEST_F_FORK(layout1, proc_pipe)
@@ -3633,7 +3633,7 @@ TEST_F_FORK(layout1, proc_pipe)
 		TH_LOG("Failed to write through /proc/self/fd/%d: %s",
 		       pipe_fds[1], strerror(errno));
 	}
-	ASSERT_EQ(0, close(proc_fd));
+	EXPECT_EQ(0, close(proc_fd));
 
 	/* Checks read access to pipe through /proc/self/fd . */
 	proc_fd = open_proc_fd(_metadata, pipe_fds[0], O_RDONLY | O_CLOEXEC);
@@ -3644,10 +3644,10 @@ TEST_F_FORK(layout1, proc_pipe)
 		TH_LOG("Failed to read through /proc/self/fd/%d: %s",
 		       pipe_fds[1], strerror(errno));
 	}
-	ASSERT_EQ(0, close(proc_fd));
+	EXPECT_EQ(0, close(proc_fd));
 
-	ASSERT_EQ(0, close(pipe_fds[0]));
-	ASSERT_EQ(0, close(pipe_fds[1]));
+	EXPECT_EQ(0, close(pipe_fds[0]));
+	EXPECT_EQ(0, close(pipe_fds[1]));
 }
 
 /* Invokes truncate(2) and returns its errno or 0. */
@@ -3908,10 +3908,10 @@ TEST_F_FORK(layout1, ftruncate)
 	EXPECT_EQ(0, test_ftruncate(fd_layer2));
 	EXPECT_EQ(EACCES, test_ftruncate(fd_layer3));
 
-	ASSERT_EQ(0, close(fd_layer0));
-	ASSERT_EQ(0, close(fd_layer1));
-	ASSERT_EQ(0, close(fd_layer2));
-	ASSERT_EQ(0, close(fd_layer3));
+	EXPECT_EQ(0, close(fd_layer0));
+	EXPECT_EQ(0, close(fd_layer1));
+	EXPECT_EQ(0, close(fd_layer2));
+	EXPECT_EQ(0, close(fd_layer3));
 }
 
 /* clang-format off */
@@ -4002,7 +4002,7 @@ TEST_F_FORK(ftruncate, open_and_ftruncate)
 	if (fd >= 0) {
 		EXPECT_EQ(variant->expected_ftruncate_result,
 			  test_ftruncate(fd));
-		ASSERT_EQ(0, close(fd));
+		EXPECT_EQ(0, close(fd));
 	}
 }
 
@@ -4039,10 +4039,10 @@ TEST_F_FORK(ftruncate, open_and_ftruncate_in_different_processes)
 
 		if (fd >= 0) {
 			ASSERT_EQ(0, send_fd(socket_fds[0], fd));
-			ASSERT_EQ(0, close(fd));
+			EXPECT_EQ(0, close(fd));
 		}
 
-		ASSERT_EQ(0, close(socket_fds[0]));
+		EXPECT_EQ(0, close(socket_fds[0]));
 
 		_exit(_metadata->exit_code);
 		return;
@@ -4054,15 +4054,15 @@ TEST_F_FORK(ftruncate, open_and_ftruncate_in_different_processes)
 
 		EXPECT_EQ(variant->expected_ftruncate_result,
 			  test_ftruncate(fd));
-		ASSERT_EQ(0, close(fd));
+		EXPECT_EQ(0, close(fd));
 	}
 
 	ASSERT_EQ(child, waitpid(child, &status, 0));
 	ASSERT_EQ(1, WIFEXITED(status));
 	ASSERT_EQ(EXIT_SUCCESS, WEXITSTATUS(status));
 
-	ASSERT_EQ(0, close(socket_fds[0]));
-	ASSERT_EQ(0, close(socket_fds[1]));
+	EXPECT_EQ(0, close(socket_fds[0]));
+	EXPECT_EQ(0, close(socket_fds[1]));
 }
 
 /* Invokes the FS_IOC_GETFLAGS IOCTL and returns its errno or 0. */
@@ -4096,7 +4096,7 @@ TEST(memfd_ftruncate_and_ioctl)
 		EXPECT_EQ(0, test_ftruncate(fd));
 		EXPECT_EQ(0, test_fs_ioc_getflags_ioctl(fd));
 
-		ASSERT_EQ(0, close(fd));
+		EXPECT_EQ(0, close(fd));
 
 		/* Enables Landlock. */
 		enforce_fs(_metadata, ACCESS_ALL, NULL);
@@ -4127,7 +4127,7 @@ TEST_F_FORK(layout1, o_path_ftruncate_and_ioctl)
 	EXPECT_EQ(EBADF, test_ftruncate(fd));
 	EXPECT_EQ(EBADF, test_fs_ioc_getflags_ioctl(fd));
 
-	ASSERT_EQ(0, close(fd));
+	EXPECT_EQ(0, close(fd));
 
 	/* Enables Landlock. */
 	enforce_fs(_metadata, ACCESS_ALL, NULL);
@@ -4143,7 +4143,7 @@ TEST_F_FORK(layout1, o_path_ftruncate_and_ioctl)
 	EXPECT_EQ(EBADF, test_ftruncate(fd));
 	EXPECT_EQ(EBADF, test_fs_ioc_getflags_ioctl(fd));
 
-	ASSERT_EQ(0, close(fd));
+	EXPECT_EQ(0, close(fd));
 }
 
 /*
@@ -4175,7 +4175,7 @@ static int ioctl_error(struct __test_metadata *const _metadata, int fd,
 
 	/* Restores the old FD 0 and closes the backup FD. */
 	ASSERT_EQ(0, dup2(stdinbak_fd, 0));
-	ASSERT_EQ(0, close(stdinbak_fd));
+	EXPECT_EQ(0, close(stdinbak_fd));
 
 	if (res < 0)
 		return err;
@@ -4251,7 +4251,7 @@ TEST_F_FORK(layout1, blanket_permitted_ioctls)
 	/* Default case is also blocked. */
 	EXPECT_EQ(EACCES, ioctl_error(_metadata, fd, 0xc00ffeee));
 
-	ASSERT_EQ(0, close(fd));
+	EXPECT_EQ(0, close(fd));
 }
 
 /*
@@ -4285,10 +4285,10 @@ TEST_F_FORK(layout1, named_pipe_ioctl)
 	/* FIONREAD is implemented by pipefifo_fops. */
 	EXPECT_EQ(0, test_fionread_ioctl(fd));
 
-	ASSERT_EQ(0, close(fd));
-	ASSERT_EQ(0, unlink(path));
+	EXPECT_EQ(0, close(fd));
+	EXPECT_EQ(0, unlink(path));
 
-	ASSERT_EQ(child_pid, waitpid(child_pid, NULL, 0));
+	EXPECT_EQ(child_pid, waitpid(child_pid, NULL, 0));
 }
 
 /*
@@ -4441,7 +4441,7 @@ TEST_F_FORK(ioctl, handle_dir_access_file)
 	EXPECT_EQ(0, ioctl(fd, FIOASYNC, &flag));
 	EXPECT_EQ(0, ioctl(fd, FIGETBSZ, &flag));
 
-	ASSERT_EQ(0, close(fd));
+	EXPECT_EQ(0, close(fd));
 }
 
 TEST_F_FORK(ioctl, handle_dir_access_dir)
@@ -4483,7 +4483,7 @@ TEST_F_FORK(ioctl, handle_dir_access_dir)
 	EXPECT_EQ(0, ioctl(dir_fd, FIOASYNC, &flag));
 	EXPECT_EQ(0, ioctl(dir_fd, FIGETBSZ, &flag));
 
-	ASSERT_EQ(0, close(dir_fd));
+	EXPECT_EQ(0, close(dir_fd));
 }
 
 TEST_F_FORK(ioctl, handle_file_access_file)
@@ -4517,7 +4517,7 @@ TEST_F_FORK(ioctl, handle_file_access_file)
 	EXPECT_EQ(0, ioctl(fd, FIOASYNC, &flag));
 	EXPECT_EQ(0, ioctl(fd, FIGETBSZ, &flag));
 
-	ASSERT_EQ(0, close(fd));
+	EXPECT_EQ(0, close(fd));
 }
 
 /*
@@ -7435,7 +7435,7 @@ TEST_F_FORK(layout3_fs, release_inodes)
 	clear_cap(_metadata, CAP_SYS_ADMIN);
 
 	enforce_ruleset(_metadata, ruleset_fd);
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 
 	/* Checks that access to the new mount point is denied. */
 	ASSERT_EQ(EACCES, test_open(TMP_DIR, O_RDONLY));
@@ -8167,7 +8167,7 @@ static int apply_a_layer(struct __test_metadata *const _metadata,
 	{
 		TH_LOG("Failed to enforce ruleset: %s", strerror(errno));
 	}
-	ASSERT_EQ(0, close(rs_fd));
+	EXPECT_EQ(0, close(rs_fd));
 
 	if (debug_quiet_tests) {
 		sprint_access_bits(handled_access_s, sizeof(handled_access_s),
@@ -8302,7 +8302,7 @@ void audit_quiet_layout1_test_body(struct __test_metadata *const _metadata,
 			ASSERT_EQ(0, audit_count_records(self->audit_fd,
 							 &records));
 			ASSERT_EQ(0, records.access);
-			ASSERT_EQ(0, close(fd));
+			EXPECT_EQ(0, close(fd));
 		}
 	}
 }

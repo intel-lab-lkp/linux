@@ -210,8 +210,8 @@ TEST_F(trace_fs, add_rule_path_beneath)
 
 	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 				       &path_beneath, 0));
-	ASSERT_EQ(0, close(path_beneath.parent_fd));
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(path_beneath.parent_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 
 	buf = tracefs_read_buf();
 	ASSERT_NE(NULL, buf);
@@ -274,8 +274,8 @@ TEST_F(trace_fs, add_rule_path_beneath_escaped_path_overflow)
 
 	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 				       &path_beneath, 0));
-	ASSERT_EQ(0, close(path_beneath.parent_fd));
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(path_beneath.parent_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 
 	buf = tracefs_read_buf();
 	ASSERT_NE(NULL, buf);

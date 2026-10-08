@@ -183,8 +183,8 @@ TEST_F(scoped_domains, trace)
 	if (child == 0) {
 		char buf_child;
 
-		ASSERT_EQ(0, close(pipe_parent[1]));
-		ASSERT_EQ(0, close(pipe_child[0]));
+		EXPECT_EQ(0, close(pipe_parent[1]));
+		EXPECT_EQ(0, close(pipe_child[0]));
 		if (variant->domain_child)
 			create_domain(_metadata);
 
@@ -238,8 +238,8 @@ TEST_F(scoped_domains, trace)
 		return;
 	}
 
-	ASSERT_EQ(0, close(pipe_child[1]));
-	ASSERT_EQ(0, close(pipe_parent[0]));
+	EXPECT_EQ(0, close(pipe_child[1]));
+	EXPECT_EQ(0, close(pipe_parent[0]));
 	if (variant->domain_parent)
 		create_domain(_metadata);
 
@@ -370,8 +370,8 @@ TEST_F(audit, trace)
 	if (child == 0) {
 		char buf_child;
 
-		ASSERT_EQ(0, close(pipe_parent[1]));
-		ASSERT_EQ(0, close(pipe_child[0]));
+		EXPECT_EQ(0, close(pipe_parent[1]));
+		EXPECT_EQ(0, close(pipe_child[0]));
 
 		/* Waits for the parent to be in a domain, if any. */
 		ASSERT_EQ(1, read(pipe_parent[0], &buf_child, 1));
@@ -400,8 +400,8 @@ TEST_F(audit, trace)
 		return;
 	}
 
-	ASSERT_EQ(0, close(pipe_child[1]));
-	ASSERT_EQ(0, close(pipe_parent[0]));
+	EXPECT_EQ(0, close(pipe_child[1]));
+	EXPECT_EQ(0, close(pipe_parent[0]));
 	create_domain(_metadata);
 
 	/* Signals that the parent is in a domain. */

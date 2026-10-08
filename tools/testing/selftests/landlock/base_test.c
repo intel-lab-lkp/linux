@@ -184,7 +184,7 @@ TEST(create_ruleset_checks_ordering)
 	ruleset_fd =
 		landlock_create_ruleset(&ruleset_attr, sizeof(ruleset_attr), 0);
 	ASSERT_LE(0, ruleset_fd);
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 /* Tests ordering of syscall argument checks. */
@@ -230,8 +230,8 @@ TEST(add_rule_checks_ordering)
 	ASSERT_LE(0, path_beneath_attr.parent_fd);
 	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 				       &path_beneath_attr, 0));
-	ASSERT_EQ(0, close(path_beneath_attr.parent_fd));
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(path_beneath_attr.parent_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 /* Tests ordering of syscall argument and permission checks. */
@@ -253,7 +253,7 @@ TEST(restrict_self_checks_ordering)
 	ASSERT_LE(0, path_beneath_attr.parent_fd);
 	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 				       &path_beneath_attr, 0));
-	ASSERT_EQ(0, close(path_beneath_attr.parent_fd));
+	EXPECT_EQ(0, close(path_beneath_attr.parent_fd));
 
 	/* Checks unprivileged enforcement without no_new_privs. */
 	drop_caps(_metadata);
@@ -288,7 +288,7 @@ TEST(restrict_self_checks_ordering)
 
 	/* Checks valid call. */
 	ASSERT_EQ(0, landlock_restrict_self(ruleset_fd, 0));
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 TEST(restrict_self_max_layers)
@@ -309,7 +309,7 @@ TEST(restrict_self_max_layers)
 	ASSERT_LE(0, path_beneath_attr.parent_fd);
 	ASSERT_EQ(0, landlock_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH,
 				       &path_beneath_attr, 0));
-	ASSERT_EQ(0, close(path_beneath_attr.parent_fd));
+	EXPECT_EQ(0, close(path_beneath_attr.parent_fd));
 
 	/* Enforces the maximum number of allowed layers. */
 	for (int i = 0; i < LANDLOCK_MAX_NUM_LAYERS; i++)
@@ -323,7 +323,7 @@ TEST(restrict_self_max_layers)
 
 	/* Checks that the failed call did not set no_new_privs. */
 	ASSERT_EQ(0, prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0));
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 TEST(restrict_self_fd)
@@ -477,7 +477,7 @@ TEST(ruleset_fd_io)
 	ASSERT_EQ(-1, read(ruleset_fd, &buf, 1));
 	ASSERT_EQ(EINVAL, errno);
 
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 /* Tests enforcement of a ruleset FD transferred through a UNIX socket. */
@@ -506,14 +506,14 @@ TEST(ruleset_fd_transfer)
 	ASSERT_EQ(0,
 		  landlock_add_rule(ruleset_fd_tx, LANDLOCK_RULE_PATH_BENEATH,
 				    &path_beneath_attr, 0));
-	ASSERT_EQ(0, close(path_beneath_attr.parent_fd));
+	EXPECT_EQ(0, close(path_beneath_attr.parent_fd));
 
 	/* Sends the ruleset FD over a socketpair and then close it. */
 	ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0,
 				socket_fds));
 	ASSERT_EQ(0, send_fd(socket_fds[0], ruleset_fd_tx));
-	ASSERT_EQ(0, close(socket_fds[0]));
-	ASSERT_EQ(0, close(ruleset_fd_tx));
+	EXPECT_EQ(0, close(socket_fds[0]));
+	EXPECT_EQ(0, close(ruleset_fd_tx));
 
 	child = fork();
 	ASSERT_LE(0, child);
@@ -521,32 +521,32 @@ TEST(ruleset_fd_transfer)
 		const int ruleset_fd_rx = recv_fd(socket_fds[1]);
 
 		ASSERT_LE(0, ruleset_fd_rx);
-		ASSERT_EQ(0, close(socket_fds[1]));
+		EXPECT_EQ(0, close(socket_fds[1]));
 
 		/* Enforces the received ruleset on the child. */
 		ASSERT_EQ(0, prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0));
 		ASSERT_EQ(0, landlock_restrict_self(ruleset_fd_rx, 0));
-		ASSERT_EQ(0, close(ruleset_fd_rx));
+		EXPECT_EQ(0, close(ruleset_fd_rx));
 
 		/* Checks that the ruleset enforcement. */
 		ASSERT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
 		ASSERT_EQ(EACCES, errno);
 		dir_fd = open("/tmp", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 		ASSERT_LE(0, dir_fd);
-		ASSERT_EQ(0, close(dir_fd));
+		EXPECT_EQ(0, close(dir_fd));
 		_exit(_metadata->exit_code);
 		return;
 	}
 
-	ASSERT_EQ(0, close(socket_fds[1]));
+	EXPECT_EQ(0, close(socket_fds[1]));
 
 	/* Checks that the parent is unrestricted. */
 	dir_fd = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	ASSERT_LE(0, dir_fd);
-	ASSERT_EQ(0, close(dir_fd));
+	EXPECT_EQ(0, close(dir_fd));
 	dir_fd = open("/tmp", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 	ASSERT_LE(0, dir_fd);
-	ASSERT_EQ(0, close(dir_fd));
+	EXPECT_EQ(0, close(dir_fd));
 
 	ASSERT_EQ(child, waitpid(child, &status, 0));
 	ASSERT_EQ(1, WIFEXITED(status));
@@ -651,9 +651,9 @@ TEST(useless_quiet_rule_fs)
 	ASSERT_EQ(EINVAL, errno);
 
 	/* Check that the rule had not been added. */
-	ASSERT_EQ(0, close(root_fd));
+	EXPECT_EQ(0, close(root_fd));
 	enforce_ruleset(_metadata, ruleset_fd);
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 
 	ASSERT_EQ(-1, open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
 	ASSERT_EQ(EACCES, errno);
@@ -681,7 +681,7 @@ TEST(useless_quiet_rule_net)
 				    &net_port_attr, LANDLOCK_ADD_RULE_QUIET));
 	ASSERT_EQ(EINVAL, errno);
 
-	ASSERT_EQ(0, close(ruleset_fd));
+	EXPECT_EQ(0, close(ruleset_fd));
 }
 
 TEST(invalid_quiet_bits_1)
