@@ -72,7 +72,8 @@ static int ftrtc010_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	days = readl(rtc->rtc_base + FTRTC010_RTC_DAYS);
 	offset = readl(rtc->rtc_base + FTRTC010_RTC_RECORD);
 
-	time = (timeu64_t)(offset + days * 86400 + hour * 3600 + min * 60 + sec);
+	time = (timeu64_t)(s32)offset + (timeu64_t)days * 86400 +
+	       (timeu64_t)hour * 3600 + (timeu64_t)min * 60 + (timeu64_t)sec;
 
 	rtc_time64_to_tm(time, tm);
 
