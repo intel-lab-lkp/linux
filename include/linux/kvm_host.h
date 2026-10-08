@@ -1087,7 +1087,6 @@ void kvm_exit(void);
 void kvm_get_kvm(struct kvm *kvm);
 bool kvm_get_kvm_safe(struct kvm *kvm);
 void kvm_put_kvm(struct kvm *kvm);
-bool file_is_kvm(struct file *file);
 
 /*
  * Architectures define kvm_file_to_kvm_arch to <arch>
