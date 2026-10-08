@@ -69,13 +69,6 @@
 };
 
 &iomuxc {
-	pinctrl_i2c1: i2c1grp {
-		fsl,pins = <
-			MX6UL_PAD_CSI_PIXCLK__I2C1_SCL		0x4001b8b0
-			MX6UL_PAD_CSI_MCLK__I2C1_SDA		0x4001b8b0
-		>;
-	};
-
 	pinctrl_i2c2: i2c2-grp {
 		fsl,pins = <
 			MX6UL_PAD_CSI_HSYNC__I2C2_SCL		0x4001b8b0

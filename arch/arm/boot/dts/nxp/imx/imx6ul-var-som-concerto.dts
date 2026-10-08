@@ -11,11 +11,11 @@
 
 #include "imx6ul-var-som.dtsi"
 #include "imx6ul-imx6ull-var-emmc.dtsi"
-#include "imx6ul-var-som-concerto-common.dtsi"
-#include "imx6ul-var-som-sd.dtsi"
-#include "imx6ul-var-som-enet2.dtsi"
 #include "imx6ul-imx6ull-var-wm8904.dtsi"
+#include "imx6ul-var-som-concerto-board.dtsi"
+#include "imx6ul-var-som-enet2.dtsi"
 #include "imx6ul-var-som-lvds-panel.dtsi"
+#include "imx6ul-var-som-sd.dtsi"
 
 / {
 	model = "Variscite VAR-SOM-6UL Concerto Board (6UL CPU)";

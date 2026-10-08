@@ -10,11 +10,11 @@
 
 #include "imx6ul-var-som.dtsi"
 #include "imx6ul-imx6ull-var-emmc.dtsi"
-#include "imx6ul-var-som-concerto-common.dtsi"
 #include "imx6ul-var-som-wifi-brcm.dtsi"
+#include "imx6ul-imx6ull-var-wm8904.dtsi"
+#include "imx6ul-var-som-concerto-board.dtsi"
 #include "imx6ul-var-som-enet2.dtsi"
 #include "imx6ul-var-som-enet1.dtsi"
-#include "imx6ul-imx6ull-var-wm8904.dtsi"
 #include "imx6ul-var-som-lvds-panel.dtsi"
 
 / {
