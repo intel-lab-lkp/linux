@@ -280,7 +280,7 @@ static void parse_dep_file(char *p, const char *target)
 				 * escaped newlines continue the comment across
 				 * multiple lines.
 				 */
-				if (*p == '\\')
+				if (*p == '\\' && *(p + 1) != '\0')
 					p++;
 				p++;
 			}
