@@ -564,6 +564,7 @@ config NODES_SHIFT
 config SCHED_TOPOLOGY
 	def_bool y
 	prompt "Topology scheduler support"
+	select ARCH_SUPPORTS_SCHED_IDLE_SMT_PRIO
 	select ARCH_SUPPORTS_SCHED_SMT
 	select ARCH_SUPPORTS_SCHED_MC
 	select SCHED_SMT

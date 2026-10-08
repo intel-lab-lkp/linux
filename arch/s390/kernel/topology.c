@@ -344,6 +344,15 @@ int arch_update_cpu_topology(void)
 	return rc;
 }
 
+#ifdef CONFIG_SCHED_IDLE_SMT_PRIO
+bool arch_needs_idle_smt_prio(void)
+{
+	if (topology_mode != TOPOLOGY_MODE_HW)
+		return false;
+	return true;
+}
+#endif
+
 static void topology_work_fn(struct work_struct *work)
 {
 	rebuild_sched_domains();

@@ -49,6 +49,11 @@ void update_cpu_masks(void);
 void topology_expect_change(void);
 const struct cpumask *cpu_coregroup_mask(int cpu);
 
+#ifdef CONFIG_SCHED_IDLE_SMT_PRIO
+#define arch_needs_idle_smt_prio arch_needs_idle_smt_prio
+bool arch_needs_idle_smt_prio(void);
+#endif
+
 #else /* CONFIG_SCHED_TOPOLOGY */
 
 static inline void topology_init_early(void) { }
