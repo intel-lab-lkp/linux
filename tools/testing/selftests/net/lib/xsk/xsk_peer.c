@@ -4,6 +4,7 @@
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -199,6 +200,9 @@ static int accept_tmout(int lfd)
  * The launcher starts the listener and waits for its port before starting
  * the connector, so connect() needs no retry. accept() is bounded in case
  * the connector exits before it gets that far.
+ *
+ * The listener also says on stderr when it listens, so that a launcher can
+ * wait for that line instead of polling for the port over SSH.
  */
 static int peer_open_tcp(const char *host, const char *port, bool listen_side)
 {
@@ -219,6 +223,7 @@ static int peer_open_tcp(const char *host, const char *port, bool listen_side)
 			continue;
 		setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
 		if (!bind(lfd, ai->ai_addr, ai->ai_addrlen) && !listen(lfd, 1)) {
+			fprintf(stderr, "Listening for XSK peer on port %s\n", port);
 			fd = accept_tmout(lfd);
 			saved = errno;
 			close(lfd);

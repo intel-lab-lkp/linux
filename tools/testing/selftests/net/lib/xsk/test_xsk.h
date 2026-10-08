@@ -82,7 +82,9 @@ typedef int (*test_func_t)(struct test_spec *test);
 struct xsk_peer;
 
 /* The control channel to the other endpoint. */
-void xsk_set_endpoint(struct xsk_peer *peer);
+void xsk_set_endpoint(struct xsk_peer *peer, bool hw_test);
+int xsk_set_udp_packet_format(const char *src_ip, const char *dst_ip, u16 port);
+void xsk_set_max_frags(u32 max_frags);
 
 struct xsk_socket_info {
 	struct xsk_ring_cons rx;
@@ -129,6 +131,7 @@ int hw_ring_size_reset(struct ifobject *ifobj);
 #define XSK_CAP_HW_RING          (1U << 3)
 #define XSK_CAP_DRV              (1U << 4)
 #define XSK_CAP_ZC               (1U << 5)
+#define XSK_CAP_ZC_ADVERTISED    (1U << 6)
 
 struct xsk_caps {
 	u32 flags;
@@ -136,6 +139,7 @@ struct xsk_caps {
 	u32 max_skb_frags;
 	u32 umem_tailroom;
 	u32 tx_max_pending;
+	u8 mac[ETH_ALEN];
 };
 
 struct ifobject {
@@ -152,7 +156,11 @@ struct ifobject {
 	struct set_hw_ring set_ring;
 	enum test_mode mode;
 	int ifindex;
+	u32 queue_id;
 	int mtu;
+	/* Above mtu when a hardware SKB-mode endpoint keeps a larger MTU. */
+	int dev_mtu;
+	int orig_mtu;
 	u32 bind_flags;
 	bool tx_on;
 	bool rx_on;
