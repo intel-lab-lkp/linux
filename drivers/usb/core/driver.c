@@ -636,10 +636,11 @@ void usb_driver_release_interface(struct usb_driver *driver,
 		return;
 	iface->condition = USB_INTERFACE_UNBINDING;
 
-	/* Release via the driver core only if the interface
-	 * has already been registered
+	/* Release via the driver core only if the interface has been
+	 * bound by it.  A claimed interface is not bound if it was
+	 * registered with drivers_autoprobe disabled.
 	 */
-	if (device_is_registered(dev)) {
+	if (device_is_bound(dev)) {
 		device_release_driver(dev);
 	} else {
 		device_lock(dev);
