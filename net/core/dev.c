@@ -4268,6 +4268,14 @@ static enum skb_drop_reason qdisc_pkt_len_segs_init(struct sk_buff *skb)
 		qdisc_skb_cb(skb)->pkt_segs = gso_segs;
 	}
 	qdisc_skb_cb(skb)->pkt_len += (gso_segs - 1) * hdr_len;
+	/* (gso_segs - 1) * hdr_len can exceed QDISC_PKT_LEN_MAX for a dodgy
+	 * GSO skb, so clamp the producer the same way a size table is
+	 * clamped (__qdisc_calculate_pkt_len()). The accounted backlog stays
+	 * within one stab-clamped packet of U32_MAX and cannot wrap.
+	 */
+	qdisc_skb_cb(skb)->pkt_len = min_t(unsigned int,
+					   qdisc_skb_cb(skb)->pkt_len,
+					   QDISC_PKT_LEN_MAX);
 	return SKB_NOT_DROPPED_YET;
 }
 
