@@ -1649,6 +1649,20 @@ static bool nfs_stateid_is_sequential(struct nfs4_state *state,
 		}
 		/* The server returned a new stateid */
 	}
+	/*
+	 * If a full CLOSE failed after clearing OPEN while retaining the
+	 * cached stateid, a racing OPEN reply carrying that stateid's
+	 * immediate successor is the server's continuation of the same state,
+	 * and the existing 5*HZ timeout path would install it anyway. Accept
+	 * it now instead of stalling. seqid 0 is never a valid successor.
+	 */
+	if (!test_bit(NFS_OPEN_STATE, &state->flags) &&
+	    test_bit(NFS_CLOSE_REJECTED, &state->flags) &&
+	    stateid->type == NFS4_OPEN_STATEID_TYPE &&
+	    stateid->seqid != cpu_to_be32(0) &&
+	    nfs4_stateid_match_other(stateid, &state->open_stateid) &&
+	    nfs4_stateid_is_next(&state->open_stateid, stateid))
+		return true;
 	/* This is the first OPEN in this generation */
 	if (stateid->seqid == cpu_to_be32(1))
 		return true;
@@ -1706,8 +1720,17 @@ static void nfs_clear_open_stateid(struct nfs4_state *state,
 {
 	write_seqlock(&state->seqlock);
 	/* Ignore, if the CLOSE argment doesn't match the current stateid */
-	if (nfs4_state_match_open_stateid_other(state, arg_stateid))
+	if (nfs4_state_match_open_stateid_other(state, arg_stateid)) {
+		/*
+		 * A failed full CLOSE clears OPEN but leaves open_stateid
+		 * cached. Remember that, so that a racing OPEN reply carrying
+		 * its immediate successor is not made to wait.
+		 */
+		if (!stateid && fmode == 0 &&
+		    !nfs4_stateid_is_newer(&state->open_stateid, arg_stateid))
+			set_bit(NFS_CLOSE_REJECTED, &state->flags);
 		nfs_clear_open_stateid_locked(state, stateid, fmode);
+	}
 	write_sequnlock(&state->seqlock);
 	if (test_bit(NFS_STATE_RECLAIM_NOGRACE, &state->flags))
 		nfs4_schedule_state_manager(state->owner->so_server->nfs_client);
@@ -1777,6 +1800,8 @@ static void nfs_set_open_stateid_locked(struct nfs4_state *state,
 	if (test_bit(NFS_DELEGATED_STATE, &state->flags) == 0)
 		nfs4_stateid_copy(&state->stateid, stateid);
 	nfs4_stateid_copy(&state->open_stateid, stateid);
+	/* A new open stateid consumes the rejected-CLOSE flag */
+	clear_bit(NFS_CLOSE_REJECTED, &state->flags);
 	trace_nfs4_open_stateid_update(state->inode, stateid, status);
 	nfs_state_log_update_open_stateid(state);
 }
@@ -1812,6 +1837,8 @@ void nfs_state_clear_open_state_flags(struct nfs4_state *state)
 	clear_bit(NFS_O_WRONLY_STATE, &state->flags);
 	clear_bit(NFS_O_RDONLY_STATE, &state->flags);
 	clear_bit(NFS_OPEN_STATE, &state->flags);
+	/* Recovery supersedes any rejected-CLOSE state */
+	clear_bit(NFS_CLOSE_REJECTED, &state->flags);
 }
 
 static void nfs_state_set_delegation(struct nfs4_state *state,

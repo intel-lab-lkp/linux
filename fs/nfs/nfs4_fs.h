@@ -179,6 +179,7 @@ enum {
 	NFS_CLNT_DST_SSC_COPY_STATE,    /* dst server open state on client*/
 	NFS_CLNT_SRC_SSC_COPY_STATE,    /* src server open state on client*/
 	NFS_SRV_SSC_COPY_STATE,		/* ssc state on the dst server */
+	NFS_CLOSE_REJECTED,		/* Full CLOSE failed; open stateid retained */
 };
 
 struct nfs4_state {
