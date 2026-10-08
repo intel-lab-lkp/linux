@@ -50,7 +50,9 @@ mux_pinmux_dt_node_to_map(struct pinctrl_dev *pctldev,
 	if (!group_names)
 		return -ENOMEM;
 
-	function->mux_state = devm_mux_state_get_from_np(pctldev->dev, NULL, np_config);
+	function->mux_state = devm_mux_state_get_from_fwnode(pctldev->dev,
+							     NULL,
+							     of_fwnode_handle(np_config));
 	if (IS_ERR(function->mux_state))
 		return PTR_ERR(function->mux_state);
 
