@@ -639,7 +639,7 @@ static int netdev_open(struct net_device *dev)
 
 	i = alloc_ringdesc(dev);
 	if (i)
-		goto out_err;
+		goto out_err_free_irq;
 
 	spin_lock_irq(&np->lock);
 	netif_device_attach(dev);
@@ -655,6 +655,8 @@ static int netdev_open(struct net_device *dev)
 	np->timer.expires = jiffies + 1*HZ;
 	add_timer(&np->timer);
 	return 0;
+out_err_free_irq:
+	free_irq(irq, dev);
 out_err:
 	netif_device_attach(dev);
 	return i;
