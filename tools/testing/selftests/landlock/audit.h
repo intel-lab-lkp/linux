@@ -41,7 +41,11 @@ struct audit_message {
 		struct audit_features features;
 		struct audit_rule_data rule;
 		struct nlmsgerr err;
-		char data[PATH_MAX + 200];
+		/*
+		 * Large enough for an audit_rule_data followed by a PATH_MAX
+		 * string (see audit_filter_exe()), and for received records.
+		 */
+		char data[sizeof(struct audit_rule_data) + PATH_MAX];
 	};
 };
 
@@ -170,6 +174,9 @@ static int audit_filter_exe(const int audit_fd,
 
 	if (filter->record_type != AUDIT_EXE)
 		return -EINVAL;
+
+	if (msg.header.nlmsg_len > sizeof(msg))
+		return -E2BIG;
 
 	memcpy(msg.rule.buf, filter->exe, filter->exe_len);
 	return audit_request(audit_fd, &msg, NULL);
