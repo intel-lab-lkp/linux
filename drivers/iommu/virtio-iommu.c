@@ -489,6 +489,9 @@ static int viommu_add_resv_mem(struct viommu_endpoint *vdev,
 	struct iommu_resv_region *region = NULL, *next;
 	unsigned long prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
 
+	if (len < sizeof(*mem))
+		return -EINVAL;
+
 	start = start64 = le64_to_cpu(mem->start);
 	end = end64 = le64_to_cpu(mem->end);
 	size = end64 - start64 + 1;
@@ -496,9 +499,6 @@ static int viommu_add_resv_mem(struct viommu_endpoint *vdev,
 	/* Catch any overflow, including the unlikely end64 - start64 + 1 = 0 */
 	if (start != start64 || end != end64 || size < end64 - start64)
 		return -EOVERFLOW;
-
-	if (len < sizeof(*mem))
-		return -EINVAL;
 
 	switch (mem->subtype) {
 	default:
@@ -531,7 +531,8 @@ static int viommu_add_resv_mem(struct viommu_endpoint *vdev,
 static int viommu_probe_endpoint(struct viommu_dev *viommu, struct device *dev)
 {
 	int ret;
-	u16 type, len;
+	u16 type;
+	unsigned int len;
 	size_t cur = 0;
 	size_t probe_len;
 	struct virtio_iommu_req_probe *probe;
@@ -563,8 +564,10 @@ static int viommu_probe_endpoint(struct viommu_dev *viommu, struct device *dev)
 	type = le16_to_cpu(prop->type) & VIRTIO_IOMMU_PROBE_T_MASK;
 
 	while (type != VIRTIO_IOMMU_PROBE_T_NONE &&
-	       cur < viommu->probe_size) {
+	       cur + sizeof(*prop) <= viommu->probe_size) {
 		len = le16_to_cpu(prop->length) + sizeof(*prop);
+		if (len > viommu->probe_size - cur)
+			break;
 
 		switch (type) {
 		case VIRTIO_IOMMU_PROBE_T_RESV_MEM:
