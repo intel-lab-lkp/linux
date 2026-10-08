@@ -444,7 +444,8 @@ tegra_plane_use_vertical_filtering(struct tegra_plane *plane,
 }
 
 static void tegra_dc_setup_window(struct tegra_plane *plane,
-				  const struct tegra_dc_window *window)
+				  const struct tegra_dc_window *window,
+				  struct tegra_plane_state *tegra_plane_state)
 {
 	unsigned h_offset, v_offset, h_size, v_size, h_dda, v_dda, bpp;
 	struct tegra_dc *dc = plane->dc;
@@ -510,10 +511,13 @@ static void tegra_dc_setup_window(struct tegra_plane *plane,
 	tegra_plane_writel(plane, window->base[0], DC_WINBUF_START_ADDR);
 
 	if (yuv && planes > 1) {
-		tegra_plane_writel(plane, window->base[1], DC_WINBUF_START_ADDR_U);
+		uint8_t u = tegra_plane_state->swap_uv ? 2 : 1;
+		uint8_t v = tegra_plane_state->swap_uv ? 1 : 2;
+
+		tegra_plane_writel(plane, window->base[u], DC_WINBUF_START_ADDR_U);
 
 		if (planes > 2)
-			tegra_plane_writel(plane, window->base[2], DC_WINBUF_START_ADDR_V);
+			tegra_plane_writel(plane, window->base[v], DC_WINBUF_START_ADDR_V);
 
 		value = window->stride[1] << 16 | window->stride[0];
 		tegra_plane_writel(plane, value, DC_WIN_LINE_STRIDE);
@@ -740,7 +744,8 @@ static int tegra_plane_atomic_check(struct drm_plane *plane,
 
 	err = tegra_plane_format(new_plane_state->fb->format->format,
 				 &plane_state->format,
-				 &plane_state->swap);
+				 &plane_state->swap,
+				 &plane_state->swap_uv);
 	if (err < 0)
 		return err;
 
@@ -871,8 +876,10 @@ static void tegra_plane_atomic_update(struct drm_plane *plane,
 		if (i < 2)
 			window.stride[i] = fb->pitches[i];
 	}
+	if (tegra_plane_state->swap_uv)
+		window.stride[1] = fb->pitches[2];
 
-	tegra_dc_setup_window(p, &window);
+	tegra_dc_setup_window(p, &window, tegra_plane_state);
 }
 
 static const struct drm_plane_helper_funcs tegra_plane_helper_funcs = {
