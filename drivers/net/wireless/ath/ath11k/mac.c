@@ -10738,12 +10738,11 @@ int ath11k_mac_register(struct ath11k_base *ab)
 
 		idr_init(&ar->txmgmt_idr);
 		spin_lock_init(&ar->txmgmt_idr_lock);
+		init_waitqueue_head(&ar->txmgmt_empty_waitq);
 
 		ret = __ath11k_mac_register(ar);
 		if (ret)
 			goto err_cleanup;
-
-		init_waitqueue_head(&ar->txmgmt_empty_waitq);
 	}
 
 	return 0;
