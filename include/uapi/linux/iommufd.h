@@ -58,6 +58,7 @@ enum {
 	IOMMUFD_CMD_VEVENTQ_ALLOC = 0x93,
 	IOMMUFD_CMD_HW_QUEUE_ALLOC = 0x94,
 	IOMMUFD_CMD_IOAS_NOIOMMU_GET_PA = 0x95,
+	IOMMUFD_CMD_VDEVICE_TSM_REQ = 0x96,
 };
 
 /**
@@ -1390,4 +1391,85 @@ struct iommu_hw_queue_alloc {
 	__aligned_u64 length;
 };
 #define IOMMU_HW_QUEUE_ALLOC _IO(IOMMUFD_TYPE, IOMMUFD_CMD_HW_QUEUE_ALLOC)
+
+/**
+ * enum iommu_vdevice_tsm_guest_tvm_arch - guest TVM architecture
+ * @IOMMU_VDEVICE_TSM_TVM_ARCH_CCA: Arm CCA TVM
+ * @IOMMU_VDEVICE_TSM_TVM_ARCH_SEV: AMD SEV TVM
+ * @IOMMU_VDEVICE_TSM_TVM_ARCH_TDX: Intel TDX TVM
+ */
+enum iommu_vdevice_tsm_guest_tvm_arch {
+	IOMMU_VDEVICE_TSM_TVM_ARCH_CCA = 1,
+	IOMMU_VDEVICE_TSM_TVM_ARCH_SEV,
+	IOMMU_VDEVICE_TSM_TVM_ARCH_TDX,
+};
+
+/**
+ * enum iommu_vdevice_tsm_guest_req_op - Guest TSM request operations
+ * @TSM_REQ_VALIDATE_MMIO: Validate and map a guest MMIO range for the trusted
+ *                         device.
+ * @TSM_REQ_SET_TDI_STATE: Transition the trusted device to the unlocked,
+ *                         locked, or running state.
+ * @TSM_REQ_SEV_ENABLE_DMA: Enable DMA for an SEV device.
+ * @TSM_REQ_SEV_DISABLE_DMA: Disable DMA for an SEV device.
+ * @TSM_REQ_READ_OBJECT: Read bytes from a device object, such as a certificate,
+ *                       measurement, or interface report.
+ * @TSM_REQ_REGEN_OBJECT: Regenerate a device object, such as a measurement or
+ *                        interface report.
+ * @TSM_REQ_OBJECT_INFO: Query the size of a device object.
+ * @TSM_REQ_MAX: One past the last request operation; not a command.
+ *
+ * The request payload and response format depend on the TVM architecture.
+ */
+enum iommu_vdevice_tsm_guest_req_op {
+	TSM_REQ_VALIDATE_MMIO = 1,
+	TSM_REQ_SET_TDI_STATE,
+	TSM_REQ_SEV_ENABLE_DMA,
+	TSM_REQ_SEV_DISABLE_DMA,
+	TSM_REQ_READ_OBJECT,
+	TSM_REQ_REGEN_OBJECT,
+	TSM_REQ_OBJECT_INFO,
+	TSM_REQ_MAX,
+};
+
+/**
+ * struct iommu_vdevice_tsm_req - ioctl(IOMMU_VDEVICE_TSM_REQ)
+ * @size: sizeof(struct iommu_vdevice_tsm_req)
+ * @vdevice_id: vDevice ID the guest request is for
+ * @op: One of enum iommu_vdevice_tsm_guest_req_op, excluding TSM_REQ_MAX
+ * @tvm_arch: One of enum iommu_vdevice_tsm_guest_tvm_arch
+ * @req_len: Size in bytes of the input payload at @req_uptr, at most INT_MAX
+ * @resp_len: Size in bytes of the output buffer at @resp_uptr, at most INT_MAX
+ * @req_uptr: Userspace pointer to the guest-provided request payload
+ * @resp_uptr: Userspace pointer to the guest response buffer
+ * @out_tsm_code: TSM-specific result code returned by the TSM implementation
+ *
+ * Forward a TSM request to the TSM bound vDevice. This is intended for
+ * guest TSM/TDISP message transport where the host kernel only marshals
+ * bytes between userspace and the TSM implementation.
+ *
+ * The request operation is guest initiated. The vDEVICE implementation
+ * declares the TVM architecture and operations it accepts; iommufd checks
+ * both before forwarding the request.
+ *
+ * The request payload is read from @req_uptr/@req_len. If a response is
+ * expected, userspace provides @resp_uptr/@resp_len as writable storage for
+ * response bytes returned by the TSM path.
+ *
+ * The ioctl is only suitable for commands and results that the host kernel
+ * has no use, the host is only facilitating guest to TSM communication.
+ */
+struct iommu_vdevice_tsm_req {
+	__u32 size;
+	__u32 vdevice_id;
+	__u32 op;
+	__u32 tvm_arch;
+	__u32 req_len;
+	__u32 resp_len;
+	__aligned_u64 req_uptr;
+	__aligned_u64 resp_uptr;
+	__aligned_u64 out_tsm_code;
+};
+
+#define IOMMU_VDEVICE_TSM_REQ _IO(IOMMUFD_TYPE, IOMMUFD_CMD_VDEVICE_TSM_REQ)
 #endif
