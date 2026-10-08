@@ -370,11 +370,10 @@ static struct console early_serial_console = {
 	.index =	-1,
 };
 
-static void early_console_register(struct console *con, int keep_early)
+static void early_console_register(struct console *con, bool keep_early)
 {
 	if (con->index != -1) {
-		printk(KERN_CRIT "ERROR: earlyprintk= %s already used\n",
-		       con->name);
+		pr_crit("ERROR: earlyprintk= %s already used\n", con->name);
 		return;
 	}
 	early_console = con;
@@ -387,7 +386,7 @@ static void early_console_register(struct console *con, int keep_early)
 
 static int __init setup_early_printk(char *buf)
 {
-	int keep;
+	bool keep;
 
 	if (!buf)
 		return 0;
