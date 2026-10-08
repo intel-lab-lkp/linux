@@ -283,6 +283,10 @@ static bool dpu_crtc_get_scanout_position(struct drm_crtc *crtc,
 		return false;
 	}
 
+	/* The command-mode counter follows TE, not the video porch timing. */
+	if (dpu_encoder_get_intf_mode(encoder) == INTF_MODE_CMD)
+		return false;
+
 	vsw = mode->crtc_vsync_end - mode->crtc_vsync_start;
 	vbp = mode->crtc_vtotal - mode->crtc_vsync_end;
 
