@@ -131,6 +131,13 @@ struct tpm2_auth {
 	u8 attrs;
 	/* set TPM2_SA_AUDIT on every command using this session */
 	bool audit;
+	/*
+	 * Log of every successfully executed command in an audit
+	 * session.
+	 */
+	struct tpm2_audit_entry *audit_log;
+	unsigned int audit_log_len;
+	unsigned int audit_log_size;
 	__be32 ordinal;
 
 	/*
@@ -143,6 +150,42 @@ struct tpm2_auth {
 };
 
 #ifdef CONFIG_TCG_TPM2_HMAC
+void tpm2_free_auth(struct tpm2_auth *auth)
+{
+	if (!auth)
+		return;
+
+	kfree(auth->audit_log);
+	kfree_sensitive(auth);
+}
+
+/*
+ * Make room for the entry describing the command about to be sent.
+ */
+static int tpm2_audit_log_reserve(struct tpm2_auth *auth)
+{
+	struct tpm2_audit_entry *log;
+	unsigned int size;
+
+	if (auth->audit_log_len < auth->audit_log_size)
+		return 0;
+
+	size = auth->audit_log_size ? auth->audit_log_size * 2 : 8;
+	log = kcalloc(size, sizeof(*log), GFP_KERNEL);
+	if (!log)
+		return -ENOMEM;
+
+	if (auth->audit_log) {
+		memcpy(log, auth->audit_log,
+		       auth->audit_log_len * sizeof(*log));
+		kfree_sensitive(auth->audit_log);
+	}
+	auth->audit_log = log;
+	auth->audit_log_size = size;
+
+	return 0;
+}
+
 /*
  * Name Size based on TPM algorithm (assumes no hash bigger than 255)
  */
@@ -730,6 +773,15 @@ int tpm_buf_fill_hmac_session(struct tpm_chip *chip, struct tpm_buf *buf)
 			      tpm_buf_length(buf) - offset_s);
 	sha256_final(&sctx, cphash);
 
+	if (auth->audit) {
+		ret = tpm2_audit_log_reserve(auth);
+		if (ret)
+			goto err;
+
+		memcpy(auth->audit_log[auth->audit_log_len].cphash, cphash,
+		       sizeof(cphash));
+	}
+
 	/* now calculate the hmac */
 	hmac_sha256_init_usingrawkey(&hctx, auth->session_key,
 				     sizeof(auth->session_key) +
@@ -853,6 +905,18 @@ int tpm_buf_check_hmac_response(struct tpm_chip *chip, struct tpm_buf *buf,
 	sha256_update(&sctx, &buf->data[offset_p], parm_len);
 	sha256_final(&sctx, rphash);
 
+	/*
+	 * The TPM extends the audit digest for every successful
+	 * command, so log it even if the HMAC check below fails: a
+	 * tampered response will then show up as an audit digest
+	 * mismatch.
+	 */
+	if (auth->audit) {
+		memcpy(auth->audit_log[auth->audit_log_len].rphash, rphash,
+		       sizeof(rphash));
+		auth->audit_log_len++;
+	}
+
 	/* now calculate the hmac */
 	hmac_sha256_init_usingrawkey(&hctx, auth->session_key,
 				     sizeof(auth->session_key) +
@@ -895,7 +959,7 @@ int tpm_buf_check_hmac_response(struct tpm_chip *chip, struct tpm_buf *buf,
 			/* manually close the session if it wasn't consumed */
 			tpm2_flush_context(chip, auth->handle);
 
-		kfree_sensitive(auth);
+		tpm2_free_auth(auth);
 		chip->auth = NULL;
 	} else {
 		/* reset for next use  */
@@ -924,10 +988,40 @@ void tpm2_end_auth_session(struct tpm_chip *chip)
 		return;
 
 	tpm2_flush_context(chip, auth->handle);
-	kfree_sensitive(auth);
+	tpm2_free_auth(auth);
 	chip->auth = NULL;
 }
 EXPORT_SYMBOL(tpm2_end_auth_session);
+
+/**
+ * tpm2_get_audit_log() - retrieve the log of an audit session
+ * @chip: the TPM chip structure
+ * @log: set to the array of log entries
+ *
+ * Each entry holds the cpHash and rpHash of one successfully executed
+ * command, in the order in which they were executed.  This is the
+ * information needed to recompute the session audit digest:
+ *
+ *	digest_new := SHA256(digest_old || cpHash || rpHash)
+ *
+ * The log is owned by the session and is only valid until the session
+ * is ended or another command is sent using it.
+ *
+ * Returns: the number of entries in the log, or -EINVAL if there is no
+ * active audit session.
+ */
+int tpm2_get_audit_log(struct tpm_chip *chip,
+		       const struct tpm2_audit_entry **log)
+{
+	struct tpm2_auth *auth = chip->auth;
+
+	if (!auth || !auth->audit)
+		return -EINVAL;
+
+	*log = auth->audit_log;
+	return auth->audit_log_len;
+}
+EXPORT_SYMBOL(tpm2_get_audit_log);
 
 static int tpm2_parse_start_auth_session(struct tpm2_auth *auth,
 					 struct tpm_buf *buf)

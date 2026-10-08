@@ -319,9 +319,21 @@ void tpm_buf_append_hmac_session(struct tpm_chip *chip, struct tpm_buf *buf,
 void tpm_buf_append_auth(struct tpm_chip *chip, struct tpm_buf *buf,
 			 u8 *passphrase, int passphraselen);
 
+/**
+ * struct tpm2_audit_entry - a command executed in an audit session
+ * @cphash: SHA256 command parameter hash (cpHash)
+ * @rphash: SHA256 response parameter hash (rpHash)
+ */
+struct tpm2_audit_entry {
+	u8 cphash[SHA256_DIGEST_SIZE];
+	u8 rphash[SHA256_DIGEST_SIZE];
+};
+
 #ifdef CONFIG_TCG_TPM2_HMAC
 
 int tpm2_start_auth_session(struct tpm_chip *chip, bool audit);
+int tpm2_get_audit_log(struct tpm_chip *chip,
+		       const struct tpm2_audit_entry **log);
 int tpm_buf_fill_hmac_session(struct tpm_chip *chip, struct tpm_buf *buf);
 int tpm_buf_check_hmac_response(struct tpm_chip *chip, struct tpm_buf *buf,
 				int rc);
@@ -336,6 +348,11 @@ static inline int tpm2_start_auth_session(struct tpm_chip *chip,
 }
 static inline void tpm2_end_auth_session(struct tpm_chip *chip)
 {
+}
+static inline int tpm2_get_audit_log(struct tpm_chip *chip,
+				     const struct tpm2_audit_entry **log)
+{
+	return -EOPNOTSUPP;
 }
 
 static inline int tpm_buf_fill_hmac_session(struct tpm_chip *chip,
