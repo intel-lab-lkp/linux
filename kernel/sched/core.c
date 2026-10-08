@@ -1480,9 +1480,11 @@ bool sched_can_stop_tick(struct rq *rq)
 	 * This check prevents clearing the bit if a newly enqueued task here is
 	 * dequeued by migrating while the constrained task continues to run.
 	 * E.g. going from 2->1 without going through pick_next_task().
+	 *
+	 * Test the donor, as sched_fair_update_stop_tick() does.
 	 */
-	if (__need_bw_check(rq, rq->curr)) {
-		if (cfs_task_bw_constrained(rq->curr))
+	if (__need_bw_check(rq, rq->donor)) {
+		if (cfs_task_bw_constrained(rq->donor))
 			return false;
 	}
 
