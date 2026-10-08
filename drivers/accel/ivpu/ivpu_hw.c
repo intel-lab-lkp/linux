@@ -94,7 +94,7 @@ static void wa_init(struct ivpu_device *vdev)
 
 static void timeouts_init(struct ivpu_device *vdev)
 {
-	if (ivpu_test_mode & IVPU_TEST_MODE_DISABLE_TIMEOUTS) {
+	if (ivpu_test_mode & (IVPU_TEST_MODE_DISABLE_TIMEOUTS | IVPU_TEST_MODE_FW_TEST)) {
 		/* in milliseconds, negative value disables the timeout */
 		vdev->timeout.boot = -1;
 		vdev->timeout.jsm = -1;
