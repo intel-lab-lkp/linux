@@ -32,6 +32,7 @@
 #include <asm/sighandling.h>
 #include <asm/smap.h>
 #include <asm/gsseg.h>
+#include <asm/shstk.h>
 
 /*
  * The first GDT descriptor is reserved as 'NULL descriptor'.  As bits 0
@@ -108,6 +109,9 @@ static bool ia32_restore_sigcontext(struct pt_regs *regs,
 				    struct sigcontext_32 __user *usc)
 {
 	struct sigcontext_32 sc;
+
+	if (shstk_is_enabled())
+		return false;
 
 	/* Always make any pending restarted system calls return -EINTR */
 	current->restart_block.fn = do_no_restart_syscall;
