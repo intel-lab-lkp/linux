@@ -174,7 +174,16 @@ static void *buffer;
  * of the image is signed, and the signature is stored in an extra page at
  * the end of the image.
  */
-static const struct hib_sig_ops *hib_sig;
+#ifdef CONFIG_HIBERNATION_TPM_SIGNATURE
+/*
+ * Fixed at build time rather than registered at runtime, so that signature
+ * enforcement cannot be avoided by preventing registration, for example
+ * with initcall_blacklist=.
+ */
+static const struct hib_sig_ops *const hib_sig = &hib_tpm_sig_ops;
+#else
+static const struct hib_sig_ops *const hib_sig;
+#endif
 static unsigned long nr_sig_pages;
 static struct sha256_ctx hib_sig_ctx;
 static u8 hib_sig_digest[SHA256_DIGEST_SIZE];

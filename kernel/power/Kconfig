@@ -116,6 +116,24 @@ config HIBERNATION_DEF_COMP
 	help
 	  Default compressor to be used for hibernation.
 
+config HIBERNATION_TPM_SIGNATURE
+	bool "Sign hibernation images with a kernel-generated TPM key"
+	depends on HIBERNATION && KERNEL_TPM_SECURITY && TCG_TPM2_KERNEL_KEY
+	help
+	  Sign every hibernation image with a TPM key created by the kernel
+	  while the image is written, and refuse to restore images that are
+	  unsigned, modified, or signed by a key that cannot be shown to have
+	  been created by the kernel. This detects images that have been
+	  tampered with or written by something other than the kernel, such
+	  as userspace.
+
+	  The TPM must be a TPM 2.0 whose owner and endorsement hierarchies
+	  have empty auth values, and the firmware must extend PCR 5 when
+	  ExitBootServices() is called. If these requirements are not met,
+	  hibernation is unavailable.
+
+	  If unsure, say N.
+
 config PM_STD_PARTITION
 	string "Default resume partition"
 	depends on HIBERNATION

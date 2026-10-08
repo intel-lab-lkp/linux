@@ -197,7 +197,12 @@ int snapshot_write_finalize(struct snapshot_handle *handle);
 extern int snapshot_image_loaded(struct snapshot_handle *handle);
 extern bool snapshot_image_signed(void);
 extern int snapshot_image_verify(void);
-extern void hibernate_set_sig_ops(const struct hib_sig_ops *ops);
+#ifdef CONFIG_HIBERNATION_TPM_SIGNATURE
+extern const struct hib_sig_ops hib_tpm_sig_ops;
+extern bool hibernate_tpm_available(void);
+#else
+static inline bool hibernate_tpm_available(void) { return false; }
+#endif
 
 extern bool hibernate_acquire(void);
 extern void hibernate_release(void);
