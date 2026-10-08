@@ -138,7 +138,7 @@ static int io_uring_cmd_timestamp(struct socket *sock,
 		if (!skb)
 			break;
 		ret = io_process_timestamp_skb(cmd, sk, skb, issue_flags);
-		if (ret)
+		if (ret == -ENOBUFS)
 			break;
 		__skb_dequeue(&list);
 		consume_skb(skb);
