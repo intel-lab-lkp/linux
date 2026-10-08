@@ -545,7 +545,7 @@ fail:
 	return ret;
 }
 
-struct ttm_device_funcs vmw_bo_driver = {
+const struct ttm_device_funcs vmw_bo_driver = {
 	.ttm_tt_create = &vmw_ttm_tt_create,
 	.ttm_tt_populate = &vmw_ttm_populate,
 	.ttm_tt_unpopulate = &vmw_ttm_unpopulate,
