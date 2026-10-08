@@ -294,10 +294,13 @@ long watch_queue_set_size(struct pipe_inode_info *pipe, unsigned int nr_notes)
 		goto error_p;
 
 	bitmap_fill(bitmap, nr_notes);
+	/* Use lock since watches may already be attached. */
+	spin_lock_bh(&wqueue->lock);
 	wqueue->notes = pages;
 	wqueue->notes_bitmap = bitmap;
 	wqueue->nr_pages = nr_pages;
 	wqueue->nr_notes = nr_notes;
+	spin_unlock_bh(&wqueue->lock);
 	return 0;
 
 error_p:
