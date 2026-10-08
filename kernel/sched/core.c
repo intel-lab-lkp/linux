@@ -5758,14 +5758,18 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 
 	rq = task_rq_lock(p, &rf);
 	/*
-	 * Must be ->curr _and_ ->on_rq.  If dequeued, we would
-	 * project cycles that may never be accounted to this
+	 * Must be the execution context _and_ ->on_rq.  If dequeued, we
+	 * would project cycles that may never be accounted to this
 	 * thread, breaking clock_gettime().
+	 *
+	 * Pending time is charged to rq->curr by update_se(), not the
+	 * donor.  Under proxy execution those can differ; flush via the
+	 * donor's update_curr() so the delta lands on p.
 	 */
-	if (task_current_donor(rq, p) && task_on_rq_queued(p)) {
+	if (task_current(rq, p) && task_on_rq_queued(p)) {
 		prefetch_curr_exec_start(p);
 		update_rq_clock(rq);
-		p->sched_class->update_curr(rq);
+		rq->donor->sched_class->update_curr(rq);
 	}
 	ns = p->se.sum_exec_runtime;
 	task_rq_unlock(rq, p, &rf);
