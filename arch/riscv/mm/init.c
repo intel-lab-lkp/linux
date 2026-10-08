@@ -844,6 +844,14 @@ static __init void set_satp_mode(uintptr_t dtb_pa)
 
 	kernel_map.page_offset = PAGE_OFFSET_L5;
 
+	/* Fall back to SV48 if RISCV_ISA_SV57 isn't enabled */
+	if (!IS_ENABLED(CONFIG_RISCV_ISA_SV57) && satp_mode_limit == 0)
+		satp_mode_limit = SATP_MODE_48;
+
+	/* Fall back to SV39 if RISCV_ISA_SV48 isn't enabled */
+	if (!IS_ENABLED(CONFIG_RISCV_ISA_SV48) && satp_mode_limit == SATP_MODE_48)
+		satp_mode_limit = SATP_MODE_39;
+
 	if (satp_mode_limit == SATP_MODE_48) {
 		disable_pgtable_l5();
 	} else if (satp_mode_limit == SATP_MODE_39) {
