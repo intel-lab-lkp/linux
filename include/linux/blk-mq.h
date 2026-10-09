@@ -517,6 +517,10 @@ enum hctx_type {
  *		   tag set.
  * @tags:	   Tag sets. One tag set per hardware queue. Has @nr_hw_queues
  *		   elements.
+ * @mapped_tags_bitmap: Bitmap of hardware queue indices referenced by active
+ *		   CPU maps. Rebuilt before publication or with update_nr_hwq_lock
+ *		   held for writing. Tags for index 0 are retained as a fallback
+ *		   even when its bit is clear.
  * @shared_tags:
  *		   Shared set of tags. Has @nr_hw_queues elements. If set,
  *		   shared by all @tags.
@@ -545,6 +549,7 @@ struct blk_mq_tag_set {
 	void			*driver_data;
 
 	struct blk_mq_tags	**tags;
+	unsigned long		*mapped_tags_bitmap;
 
 	struct blk_mq_tags	*shared_tags;
 
