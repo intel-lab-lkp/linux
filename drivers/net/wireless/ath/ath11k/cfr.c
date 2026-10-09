@@ -956,6 +956,9 @@ int ath11k_cfr_init(struct ath11k_base *ab)
 	struct ath11k *ar;
 	int i, ret;
 
+	for (i = 0; i < ab->num_radios; i++)
+		spin_lock_init(&ab->pdevs[i].ar->cfr.lock);
+
 	if (!test_bit(WMI_TLV_SERVICE_CFR_CAPTURE_SUPPORT, ab->wmi_ab.svc_map) ||
 	    !ab->hw_params.cfr_support)
 		return 0;
@@ -971,7 +974,6 @@ int ath11k_cfr_init(struct ath11k_base *ab)
 
 		idr_init(&cfr->rx_ring.bufs_idr);
 		spin_lock_init(&cfr->rx_ring.idr_lock);
-		spin_lock_init(&cfr->lock);
 		spin_lock_init(&cfr->lut_lock);
 
 		num_lut_entries = min_t(u32, CFR_MAX_LUT_ENTRIES, db_cap.min_elem);
