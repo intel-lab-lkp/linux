@@ -1170,17 +1170,17 @@ static int st95hf_probe(struct spi_device *nfc_spi_dev)
 	st95context->nfcdev = st95context->ddev->nfc_dev;
 	nfc_digital_set_parent_dev(st95context->ddev, &nfc_spi_dev->dev);
 
-	ret =  nfc_digital_register_device(st95context->ddev);
-	if (ret) {
-		dev_err(&st95context->nfcdev->dev, "st95hf registration failed\n");
-		goto err_free_digital_device;
-	}
-
 	/* store st95context in nfc device object */
 	nfc_digital_set_drvdata(st95context->ddev, st95context);
 
 	sema_init(&st95context->exchange_lock, 1);
 	mutex_init(&st95context->rm_lock);
+
+	ret =  nfc_digital_register_device(st95context->ddev);
+	if (ret) {
+		dev_err(&st95context->nfcdev->dev, "st95hf registration failed\n");
+		goto err_free_digital_device;
+	}
 
 	return ret;
 
