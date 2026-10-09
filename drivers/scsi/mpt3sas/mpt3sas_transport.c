@@ -1179,9 +1179,9 @@ mpt3sas_transport_update_links(struct MPT3SAS_ADAPTER *ioc,
 	mpt3sas_phy = &sas_node->phy[phy_number];
 	mpt3sas_phy->attached_handle = handle;
 	spin_unlock_irqrestore(&ioc->sas_node_lock, flags);
-	if (handle && (link_rate >= MPI2_SAS_NEG_LINK_RATE_1_5)) {
-		_transport_set_identify(ioc, handle,
-		    &mpt3sas_phy->remote_identify);
+	if (handle && link_rate >= MPI2_SAS_NEG_LINK_RATE_1_5 &&
+	    !_transport_set_identify(ioc, handle,
+				    &mpt3sas_phy->remote_identify)) {
 		if ((sas_node->handle <= ioc->sas_hba.num_phys) &&
 		    (ioc->multipath_on_hba)) {
 			list_for_each_entry(hba_port,
