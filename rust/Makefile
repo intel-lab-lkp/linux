@@ -789,6 +789,7 @@ $(obj)/uapi.o: $(src)/uapi/lib.rs \
     $(obj)/uapi/uapi_generated.rs FORCE
 	+$(call if_changed_rule,rustc_library)
 
+$(obj)/kernel.o: private rustc_objcopy = -w -W '__rust__*'
 $(obj)/kernel.o: private rustc_target_flags = --extern ffi --extern pin_init \
     --extern build_error --extern macros --extern bindings --extern uapi \
     --extern zerocopy --extern zerocopy_derive
