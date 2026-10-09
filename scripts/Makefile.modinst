@@ -101,12 +101,21 @@ endif
 #
 ifeq ($(filter pkcs11:%, $(CONFIG_MODULE_SIG_KEY)),)
 sig-key := $(if $(wildcard $(CONFIG_MODULE_SIG_KEY)),,$(objtree)/)$(CONFIG_MODULE_SIG_KEY)
+sign-bulk :=
 else
 sig-key := $(CONFIG_MODULE_SIG_KEY)
+# Signing via a PKCS#11 URI is much faster in bulk mode, as the
+# per-invocation initialization cost of the token is high.
+sign-bulk := 1
 endif
+
 quiet_cmd_sign = SIGN    $@
       cmd_sign = $(objtree)/scripts/sign-file $(CONFIG_MODULE_SIG_HASH) "$(sig-key)" $(objtree)/certs/signing_key.x509 $@ \
                  $(if $(KBUILD_EXTMOD),|| true)
+
+quiet_cmd_bulk_sign = BULK SIGN
+      cmd_bulk_sign = $(objtree)/scripts/sign-file -b $(CONFIG_MODULE_SIG_HASH) "$(sig-key)" $(objtree)/certs/signing_key.x509 $(modules) \
+                     $(if $(KBUILD_EXTMOD),|| true)
 
 ifeq ($(sign-only),)
 
@@ -114,21 +123,41 @@ ifeq ($(sign-only),)
 ifndef CONFIG_MODULE_SIG_ALL
 quiet_cmd_sign :=
       cmd_sign := :
+quiet_cmd_bulk_sign :=
+      cmd_bulk_sign := :
 endif
 
 # Create necessary directories
 $(foreach dir, $(sort $(dir $(install-y))), $(shell mkdir -p $(dir)))
+
+ifeq ($(sign-bulk),)
 
 $(dst)/%.ko: %.ko FORCE
 	$(call cmd,install)
 	$(call cmd,strip)
 	$(call cmd,sign)
 
+else
+
+$(dst)/%.ko: %.ko FORCE
+	$(call cmd,install)
+	$(call cmd,strip)
+
+PHONY += bulk-sign-modules
+bulk-sign-modules: $(install-y)
+	$(call cmd,bulk_sign)
+
+__modinst: bulk-sign-modules
+
+BULK_SIGN_DEP := bulk-sign-modules
+
+endif
+
 ifdef CONFIG_MODULES
 __modinst: depmod
 
 PHONY += depmod
-depmod: $(install-y)
+depmod: $(install-y) $(BULK_SIGN_DEP)
 	$(call cmd,depmod)
 
 quiet_cmd_depmod = DEPMOD  $(MODLIB)
@@ -137,8 +166,20 @@ endif
 
 else
 
+ifeq ($(sign-bulk),)
+
 $(dst)/%.ko: FORCE
 	$(call cmd,sign)
+
+else
+
+PHONY += bulk-sign-modules
+bulk-sign-modules: $(install-y)
+	$(call cmd,bulk_sign)
+
+__modinst: bulk-sign-modules
+
+endif
 
 endif
 
