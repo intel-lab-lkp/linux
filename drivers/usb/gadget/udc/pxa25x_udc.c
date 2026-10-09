@@ -1563,7 +1563,6 @@ static void udc_watchdog(struct timer_list *t)
 {
 	struct pxa25x_udc	*dev = timer_container_of(dev, t, timer);
 
-	local_irq_disable();
 	if (dev->ep0state == EP0_STALL
 			&& (udc_ep0_get_UDCCS(dev) & UDCCS0_FST) == 0
 			&& (udc_ep0_get_UDCCS(dev) & UDCCS0_SST) == 0) {
@@ -1571,7 +1570,6 @@ static void udc_watchdog(struct timer_list *t)
 		DBG(DBG_VERBOSE, "ep0 re-stall\n");
 		start_watchdog(dev);
 	}
-	local_irq_enable();
 }
 
 static void handle_ep0 (struct pxa25x_udc *dev)
@@ -2343,7 +2341,7 @@ static int pxa25x_udc_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	timer_setup(&dev->timer, udc_watchdog, 0);
+	timer_setup(&dev->timer, udc_watchdog, TIMER_IRQSAFE);
 
 	the_controller = dev;
 	platform_set_drvdata(pdev, dev);
