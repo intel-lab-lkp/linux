@@ -4,14 +4,21 @@
 
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
+#include <linux/clk.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-mapping.h>
 #include <linux/io.h>
+#include <linux/mfd/syscon.h>
 #include <linux/of.h>
 #include <linux/of_dma.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/module.h>
 #include <linux/overflow.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
+#include <linux/property.h>
+#include <linux/regmap.h>
+#include <linux/reset.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 
@@ -158,6 +165,9 @@
 
 #define D350_SLAVE_CMD_WORDS	14
 
+#define SKY1_DMA350_CRU_DMAC_AP_IRQ	0x54
+#define SKY1_DMA350_IRQ_ROUTE_MASK	0xff
+
 enum ch_ctrl_donetype {
 	CH_CTRL_DONETYPE_NONE = 0,
 	CH_CTRL_DONETYPE_CMD = 1,
@@ -222,6 +232,13 @@ struct d350_chan_map {
 	bool needs_unmap;
 };
 
+struct d350;
+
+struct d350_data {
+	u32 irq_route_reg;
+	u32 irq_route_mask;
+};
+
 struct d350_chan {
 	struct virt_dma_chan vc;
 	struct d350_desc *desc;
@@ -241,6 +258,8 @@ struct d350_chan {
 
 struct d350 {
 	struct dma_device dma;
+	const struct d350_data *data;
+	struct regmap *irq_router;
 	int nchan;
 	int nreq;
 	struct d350_chan channels[] __counted_by(nchan);
@@ -254,6 +273,16 @@ static inline struct d350_chan *to_d350_chan(struct dma_chan *chan)
 static inline struct d350_desc *to_d350_desc(struct virt_dma_desc *vd)
 {
 	return container_of(vd, struct d350_desc, vd);
+}
+
+static int d350_route_irqs(struct d350 *dmac)
+{
+	if (!dmac->irq_router)
+		return 0;
+
+	return regmap_update_bits(dmac->irq_router, dmac->data->irq_route_reg,
+				  dmac->data->irq_route_mask,
+				  dmac->data->irq_route_mask);
 }
 
 static void d350_free_cmds(struct device *dev, struct d350_desc *desc)
@@ -1089,11 +1118,39 @@ static void d350_free_chan_resources(struct dma_chan *chan)
 static int d350_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	const struct d350_data *data = device_get_match_data(dev);
+	struct reset_control *reset;
+	struct regmap *irq_router = NULL;
+	struct clk *clk;
 	struct d350 *dmac;
 	void __iomem *base;
 	u32 reg;
 	int ret, nchan, dw, aw, r, p;
 	bool coherent, memset;
+
+	clk = devm_clk_get_optional_enabled(dev, NULL);
+	if (IS_ERR(clk))
+		return dev_err_probe(dev, PTR_ERR(clk),
+				     "failed to enable clock\n");
+
+	reset = devm_reset_control_get_optional_exclusive(dev, NULL);
+	if (IS_ERR(reset))
+		return dev_err_probe(dev, PTR_ERR(reset),
+				     "failed to get reset\n");
+
+	if (data && data->irq_route_mask &&
+	    of_property_present(dev->of_node, "cix,irq-router")) {
+		irq_router =
+			syscon_regmap_lookup_by_phandle(dev->of_node,
+							"cix,irq-router");
+		if (IS_ERR(irq_router))
+			return dev_err_probe(dev, PTR_ERR(irq_router),
+					     "failed to get IRQ router\n");
+	}
+
+	ret = reset_control_reset(reset);
+	if (ret)
+		return ret;
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
@@ -1118,7 +1175,13 @@ static int d350_probe(struct platform_device *pdev)
 	if (!dmac)
 		return -ENOMEM;
 
+	dmac->data = data;
+	dmac->irq_router = irq_router;
 	dmac->nchan = nchan;
+
+	ret = d350_route_irqs(dmac);
+	if (ret)
+		return ret;
 
 	reg = readl_relaxed(base + DMAINFO + DMA_BUILDCFG1);
 	dmac->nreq = FIELD_GET(DMA_CFG_NUM_TRIGGER_IN, reg);
@@ -1201,6 +1264,13 @@ static int d350_probe(struct platform_device *pdev)
 		dmac->dma.device_prep_dma_memset = d350_prep_memset;
 	}
 
+	if (of_property_present(dev->of_node, "memory-region")) {
+		ret = of_reserved_mem_device_init(dev);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "failed to attach reserved memory\n");
+	}
+
 	platform_set_drvdata(pdev, dmac);
 
 	ret = dma_async_device_register(&dmac->dma);
@@ -1223,9 +1293,30 @@ static void d350_remove(struct platform_device *pdev)
 
 	of_dma_controller_free(pdev->dev.of_node);
 	dma_async_device_unregister(&dmac->dma);
+	of_reserved_mem_device_release(&pdev->dev);
 }
 
+static int __maybe_unused d350_resume_noirq(struct device *dev)
+{
+	struct d350 *dmac = dev_get_drvdata(dev);
+
+	if (!dmac)
+		return 0;
+
+	return d350_route_irqs(dmac);
+}
+
+static const struct dev_pm_ops d350_pm = {
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(NULL, d350_resume_noirq)
+};
+
+static const struct d350_data d350_sky1_data = {
+	.irq_route_reg = SKY1_DMA350_CRU_DMAC_AP_IRQ,
+	.irq_route_mask = SKY1_DMA350_IRQ_ROUTE_MASK,
+};
+
 static const struct of_device_id d350_of_match[] __maybe_unused = {
+	{ .compatible = "cix,sky1-dma350", .data = &d350_sky1_data },
 	{ .compatible = "arm,dma-350" },
 	{}
 };
@@ -1235,6 +1326,7 @@ static struct platform_driver d350_driver = {
 	.driver = {
 		.name = "arm-dma350",
 		.of_match_table = of_match_ptr(d350_of_match),
+		.pm = pm_sleep_ptr(&d350_pm),
 	},
 	.probe = d350_probe,
 	.remove = d350_remove,

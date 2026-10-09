@@ -97,8 +97,12 @@ config ARM_DMA350
 	depends on ARM || ARM64 || COMPILE_TEST
 	select DMA_ENGINE
 	select DMA_VIRTUAL_CHANNELS
+	select MFD_SYSCON
 	help
 	  Enable support for the Arm DMA-350 controller.
+
+	  Some integrations need to poke a syscon to route the channel
+	  interrupts, so MFD_SYSCON is selected here.
 
 config AT_HDMAC
 	tristate "Atmel AHB DMA support"
