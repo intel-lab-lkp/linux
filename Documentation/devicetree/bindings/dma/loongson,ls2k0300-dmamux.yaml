@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/dma/loongson,ls2k0300-dmamux.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Loongson-2 APB DMA MUX (DMA request router)
+
+maintainers:
+  - Binbin Zhou <zhoubinbin@loongson.cn>
+
+allOf:
+  - $ref: /schemas/dma/dma-router.yaml#
+
+properties:
+  compatible:
+    const: loongson,ls2k0300-dmamux
+
+  reg:
+    maxItems: 1
+
+  '#dma-cells':
+    const: 3
+    description: |
+      Each cell represents the following:
+      1. Peripheral request ID: This describes the corresponding bit field
+         for that peripheral in the configuration register; see (
+         include/dt-bindings/dma/loongson,ls2k-dmamux.h) for details.
+      2. Physical DMA channel (0-7): This not only represents the DMA
+         channel used by the peripheral but is also converted into a value for
+         the corresponding bit field in the configuration register, indicating
+         the legitimacy of that peripheral using that channel.
+         Specifically:
+         - I2S/SPI/UART/I2C: Require adjacent channels in pairs; valid
+            values are 0/1, 2/3, 4/5, 6/7;
+         - SM3/SM4/DES/AES: Single channel; valid values are limited to 0/1;
+         - CAN/ADC: Single channel; valid values range from 0 to 7.
+      3. DMA Channel Configuration: A 32-bit mask used to specify
+         device-specific DMA channel configurations.
+         - Bit 6: Peripheral Address Increment Mode
+            0x0: Disabled
+            0x1: Enabled
+         - Bit 7: Memory Address Increment Mode
+            0x0: Disabled
+            0x1: Enabled
+         - Bits 12-13: Priority
+            0x0: Low
+            0x1: Medium
+            0x2: High
+            0x3: Very High
+
+  dma-requests:
+    const: 22
+
+required:
+  - compatible
+  - reg
+  - dma-requests
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/dma/loongson,ls2k-dmamux.h>
+    dma-router@16000134 {
+        compatible = "loongson,ls2k0300-dmamux";
+        reg = <0x16000134 0xc>;
+        #dma-cells = <3>;
+        dma-masters = <&dma>;
+        dma-requests = <22>;
+    };
+...
