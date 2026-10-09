@@ -5247,7 +5247,10 @@ void intel_dpll_power_save_wa(struct intel_display *display)
 		if (intel_encoder_to_phy(encoder) != PHY_A)
 			continue;
 
-		intel_cx0_pll_power_save_wa(encoder);
+		if (HAS_LT_PHY(display))
+			intel_lt_phy_pll_power_save_wa(encoder);
+		else
+			intel_cx0_pll_power_save_wa(encoder);
 	}
 }
 

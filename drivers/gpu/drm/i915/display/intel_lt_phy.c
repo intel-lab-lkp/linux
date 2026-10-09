@@ -2313,6 +2313,35 @@ void intel_xe3plpd_pll_disable(struct intel_encoder *encoder)
 
 }
 
+/*
+ * WA 14022081154
+ * LT PHY part of the sequence, see intel_dpll_power_save_wa().
+ */
+void intel_lt_phy_pll_power_save_wa(struct intel_encoder *encoder)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_dpll_hw_state hw_state = {};
+	int port_clock = 162000;
+	int lane_count = 4;
+	int err;
+
+	if (intel_lt_phy_pll_is_enabled(encoder))
+		return;
+
+	err = intel_lt_phy_pll_calc_state_from_table(encoder, xe3plpd_lt_edp_tables,
+						     true, true, port_clock, lane_count,
+						     &hw_state.ltpll);
+	if (drm_WARN_ON(display->drm, err))
+		return;
+
+	drm_dbg_kms(display->drm,
+		    "[ENCODER:%d:%s] Applying power saving workaround on disabled PLL\n",
+		    encoder->base.base.id, encoder->base.name);
+
+	intel_lt_phy_pll_enable(encoder, &hw_state);
+	intel_lt_phy_pll_disable(encoder);
+}
+
 static void intel_lt_phy_pll_verify_clock(struct intel_display *display,
 					  int precomputed_clock,
 					  const char *pll_state_name,
