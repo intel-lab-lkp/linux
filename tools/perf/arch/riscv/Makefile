@@ -1,2 +1,3 @@
 # SPDX-License-Identifier: GPL-2.0
 PERF_HAVE_JITDUMP := 1
+PERF_HAVE_RDTSC := $(IS_64_BIT)
