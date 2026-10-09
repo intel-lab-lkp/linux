@@ -3699,54 +3699,34 @@ int intel_cx0pll_calc_port_clock(struct intel_encoder *encoder,
 
 /*
  * WA 14022081154
- * The dedicated display PHYs reset to a power state that blocks S0ix, increasing idle
- * system power. After a system reset (cold boot, S3/4/5, warm reset) if a dedicated
- * PHY is not being brought up shortly, use these steps to move the PHY to the lowest
- * power state to save power. For PTL the workaround is needed only for port A. Port B
- * is not connected.
- *
- * 1. Follow the PLL Enable Sequence, using any valid frequency such as DP 1.62 GHz.
- *    This brings lanes out of reset and enables the PLL to allow powerdown to be moved
- *    to the Disable state.
- * 2. Follow PLL Disable Sequence. This moves powerdown to the Disable state and disables the PLL.
+ * C10 PHY part of the sequence, see intel_dpll_power_save_wa().
  */
-void intel_cx0_pll_power_save_wa(struct intel_display *display)
+void intel_cx0_pll_power_save_wa(struct intel_encoder *encoder)
 {
-	struct intel_encoder *encoder;
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_cx0pll_state pll_state = {};
+	int port_clock = 162000;
+	int lane_count = 4;
+	int err;
 
-	if (DISPLAY_VER(display) != 30)
+	if (!intel_encoder_is_c10phy(encoder))
 		return;
 
-	for_each_intel_encoder(display->drm, encoder) {
-		struct intel_cx0pll_state pll_state = {};
-		int port_clock = 162000;
-		int lane_count = 4;
+	if (intel_cx0_pll_is_enabled(encoder))
+		return;
 
-		if (!intel_encoder_is_dig_port(encoder))
-			continue;
+	err = intel_c10pll_calc_state_from_table(encoder, mtl_c10_edp_tables,
+						 true, port_clock, lane_count,
+						 &pll_state);
+	if (drm_WARN_ON(display->drm, err))
+		return;
 
-		if (!intel_encoder_is_c10phy(encoder))
-			continue;
+	drm_dbg_kms(display->drm,
+		    "[ENCODER:%d:%s] Applying power saving workaround on disabled PLL\n",
+		    encoder->base.base.id, encoder->base.name);
 
-		if (intel_cx0_pll_is_enabled(encoder))
-			continue;
-
-		if (intel_c10pll_calc_state_from_table(encoder,
-						       mtl_c10_edp_tables,
-						       true, port_clock, lane_count,
-						       &pll_state) < 0) {
-			drm_WARN_ON(display->drm,
-				    "Unable to calc C10 state from the tables\n");
-			continue;
-		}
-
-		drm_dbg_kms(display->drm,
-			    "[ENCODER:%d:%s] Applying power saving workaround on disabled PLL\n",
-			    encoder->base.base.id, encoder->base.name);
-
-		intel_cx0pll_enable(encoder, &pll_state);
-		intel_cx0pll_disable(encoder);
-	}
+	intel_cx0pll_enable(encoder, &pll_state);
+	intel_cx0pll_disable(encoder);
 }
 
 static void intel_c10pll_verify_clock(struct intel_display *display,

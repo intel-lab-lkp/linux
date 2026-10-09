@@ -461,6 +461,7 @@ void intel_dpll_swap_state(struct intel_atomic_state *state);
 void intel_dpll_init(struct intel_display *display);
 void intel_dpll_update_ref_clks(struct intel_display *display);
 void intel_dpll_readout_hw_state(struct intel_display *display);
+void intel_dpll_power_save_wa(struct intel_display *display);
 void intel_dpll_sanitize_state(struct intel_display *display);
 
 void intel_dpll_dump_hw_state(struct intel_display *display,

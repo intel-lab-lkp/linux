@@ -33,6 +33,7 @@
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
+#include "intel_display_wa.h"
 #include "intel_dkl_phy.h"
 #include "intel_dkl_phy_regs.h"
 #include "intel_dpio_phy.h"
@@ -5220,12 +5221,40 @@ static void sanitize_dpll_state(struct intel_display *display,
 	_intel_disable_shared_dpll(display, pll);
 }
 
+/*
+ * WA 14022081154
+ * The dedicated display PHYs reset to a power state that blocks S0ix, increasing idle
+ * system power. After a system reset (cold boot, S3/4/5, warm reset) if a dedicated
+ * PHY is not being brought up shortly, use these steps to move the PHY to the lowest
+ * power state to save power. For PTL the workaround is needed only for port A. Port B
+ * is not connected.
+ *
+ * 1. Follow the PLL Enable Sequence, using any valid frequency such as DP 1.62 GHz.
+ *    This brings lanes out of reset and enables the PLL to allow powerdown to be moved
+ *    to the Disable state.
+ * 2. Follow PLL Disable Sequence. This moves powerdown to the Disable state and disables the PLL.
+ */
+void intel_dpll_power_save_wa(struct intel_display *display)
+{
+	struct intel_encoder *encoder;
+
+	if (!intel_display_wa(display, INTEL_DISPLAY_WA_14022081154))
+		return;
+
+	for_each_intel_encoder(display->drm, encoder) {
+		if (!intel_encoder_is_dig_port(encoder))
+			continue;
+
+		intel_cx0_pll_power_save_wa(encoder);
+	}
+}
+
 void intel_dpll_sanitize_state(struct intel_display *display)
 {
 	struct intel_dpll *pll;
 	int i;
 
-	intel_cx0_pll_power_save_wa(display);
+	intel_dpll_power_save_wa(display);
 
 	for_each_dpll(display, pll, i)
 		sanitize_dpll_state(display, pll);

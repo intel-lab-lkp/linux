@@ -9,12 +9,12 @@
 #include <drm/drm_print.h>
 
 #include "intel_clock_gating.h"
-#include "intel_cx0_phy.h"
 #include "intel_display_core.h"
 #include "intel_display_driver.h"
 #include "intel_display_reset.h"
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
+#include "intel_dpll_mgr.h"
 #include "intel_hotplug.h"
 #include "intel_pps.h"
 
@@ -100,7 +100,7 @@ void intel_display_reset_finish(struct intel_display *display, bool test_only)
 		intel_pps_unlock_regs_wa(display);
 		intel_display_driver_init_hw(display);
 		intel_clock_gating_init(display->drm);
-		intel_cx0_pll_power_save_wa(display);
+		intel_dpll_power_save_wa(display);
 		intel_hpd_init(display);
 
 		ret = __intel_display_driver_resume(display, state, ctx);
