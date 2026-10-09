@@ -1656,11 +1656,11 @@ int mm_init_sched(struct mm_struct *mm,
 	int i;
 
 	grp = kzalloc_obj(*grp);
-	if (!grp) {
-		free_percpu(_pcpu_sched);
-		mm->sched_cache_grp = NULL;
-		return -ENOMEM;
-	}
+	if (!grp)
+		goto err_free_pcpu;
+
+	if (!zalloc_cpumask_var(&grp->visited_cpus, GFP_KERNEL))
+		goto err_free_grp;
 
 	for_each_possible_cpu(i) {
 		struct sched_cache_time *pcpu_sched = per_cpu_ptr(_pcpu_sched, i);
@@ -1669,6 +1669,7 @@ int mm_init_sched(struct mm_struct *mm,
 		pcpu_sched->runtime = 0;
 		/* a slightly stale cpu epoch is acceptible */
 		pcpu_sched->epoch = rq->cpu_epoch;
+		pcpu_sched->epoch_last_visit = rq->cpu_epoch;
 		epoch = rq->cpu_epoch;
 	}
 
@@ -1694,6 +1695,14 @@ int mm_init_sched(struct mm_struct *mm,
 	 */
 	smp_store_release(&mm->sched_cache_grp, grp);
 	return 0;
+
+err_free_grp:
+	kfree(grp);
+
+err_free_pcpu:
+	free_percpu(_pcpu_sched);
+	mm->sched_cache_grp = NULL;
+	return -ENOMEM;
 }
 
 static void sched_cache_group_free_rcu(struct rcu_head *rcu)
@@ -1702,6 +1711,7 @@ static void sched_cache_group_free_rcu(struct rcu_head *rcu)
 		container_of(rcu, struct sched_cache_group, rcu);
 
 	free_percpu(grp->pcpu_sched);
+	free_cpumask_var(grp->visited_cpus);
 	kfree(grp);
 }
 
@@ -1842,12 +1852,22 @@ static inline void __update_mm_sched(struct rq *rq,
 	}
 }
 
-static unsigned long fraction_mm_sched(struct rq *rq,
-				       struct sched_cache_time *pcpu_sched)
+static unsigned long fraction_mm_sched(int cpu,
+				       struct sched_cache_group *grp)
 {
+	struct sched_cache_time *pcpu_sched =
+		per_cpu_ptr(grp->pcpu_sched, cpu);
+	struct rq *rq = cpu_rq(cpu);
+
 	guard(raw_spinlock_irqsave)(&rq->cpu_epoch_lock);
 
 	__update_mm_sched(rq, pcpu_sched);
+
+	/* Skip the rq that has not been hit for a long time */
+	if ((rq->cpu_epoch - pcpu_sched->epoch_last_visit) > llc_epoch_affinity_timeout) {
+		cpumask_clear_cpu(cpu, grp->visited_cpus);
+		return 0;
+	}
 
 	/*
 	 * Runtime is a geometric series (r=0.5) and as such will sum to twice
@@ -1924,6 +1944,9 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 		pcpu_sched->runtime += delta_exec;
 		rq->cpu_runtime += delta_exec;
 		epoch = rq->cpu_epoch;
+		pcpu_sched->epoch_last_visit = epoch;
+		if (!cpumask_test_cpu(cpu_of(rq), grp->visited_cpus))
+			cpumask_set_cpu(cpu_of(rq), grp->visited_cpus);
 	}
 
 	/*
@@ -1974,52 +1997,6 @@ static void task_tick_cache(struct rq *rq, struct task_struct *p)
 	}
 }
 
-static void get_scan_cpumasks(cpumask_var_t cpus, struct task_struct *p,
-			      struct sched_cache_group *grp)
-{
-#ifdef CONFIG_NUMA_BALANCING
-	int cpu, curr_cpu, nid, pref_nid;
-
-	if (!static_branch_likely(&sched_numa_balancing))
-		goto out;
-
-	cpu = READ_ONCE(grp->cpu);
-	if (cpu != -1)
-		nid = cpu_to_node(cpu);
-	curr_cpu = task_cpu(p);
-
-	/*
-	 * Scanning in the preferred NUMA node is ideal. However, the NUMA
-	 * preferred node is per-task rather than per-process. It is possible
-	 * for different threads of the process to have distinct preferred
-	 * nodes; consequently, the process-wide preferred LLC may bounce
-	 * between different nodes. As a workaround, maintain the scan
-	 * CPU mask to also cover the process's current preferred LLC and the
-	 * current running node to mitigate the bouncing risk.
-	 * TBD: numa_group should be considered during task aggregation.
-	 */
-	pref_nid = p->numa_preferred_nid;
-	/* honor the task's preferred node */
-	if (pref_nid == NUMA_NO_NODE)
-		goto out;
-
-	cpumask_or(cpus, cpus, cpumask_of_node(pref_nid));
-
-	/* honor the task's preferred LLC CPU */
-	if (cpu != -1 && !cpumask_test_cpu(cpu, cpus) && nid != NUMA_NO_NODE)
-		cpumask_or(cpus, cpus, cpumask_of_node(nid));
-
-	/* make sure the task's current running node is included */
-	if (!cpumask_test_cpu(curr_cpu, cpus))
-		cpumask_or(cpus, cpus, cpumask_of_node(cpu_to_node(curr_cpu)));
-
-	return;
-
-out:
-#endif
-	cpumask_copy(cpus, cpu_online_mask);
-}
-
 static inline void update_avg_scale(u64 *avg, u64 sample)
 {
 	int factor = per_cpu(sd_llc_size, raw_smp_processor_id());
@@ -2068,7 +2045,7 @@ static void task_cache_work(struct callback_head *work)
 	if (time_before(now, next_scan))
 		return;
 
-	/* only 1 thread is allowed to scan */
+	/* elect a single scanner per epoch */
 	if (!try_cmpxchg(&grp->next_scan, &next_scan,
 			 now + max_t(unsigned long,
 				     READ_ONCE(llc_epoch_period), 1)))
@@ -2089,7 +2066,18 @@ static void task_cache_work(struct callback_head *work)
 	scoped_guard (cpus_read_lock) {
 		guard(rcu)();
 
-		get_scan_cpumasks(cpus, p, grp);
+		/*
+		 * Data race: While evaluating the visited_cpus without
+		 * a lock, a CPU could be concurrently set by
+		 * account_mm_sched(), meaning the scan might skip the newly
+		 * visited CPU if the bit changes during the scan. This is
+		 * a deliberate trade-off between accuracy and efficiency:
+		 * locking would prevent this race but incur extra overhead.
+		 * The missed runtime contribution is negligible because it
+		 * implies this process hasn't run on that CPU for a long
+		 * time, and will be captured in the next cycle.
+		 */
+		cpumask_and(cpus, cpu_online_mask, grp->visited_cpus);
 
 		for_each_cpu(cpu, cpus) {
 			/* XXX sched_cluster_active */
@@ -2100,15 +2088,7 @@ static void task_cache_work(struct callback_head *work)
 			if (!sd)
 				continue;
 
-			for_each_cpu(i, sched_domain_span(sd)) {
-				occ = fraction_mm_sched(cpu_rq(i),
-							per_cpu_ptr(grp->pcpu_sched, i));
-				a_occ += occ;
-				if (occ > m_occ) {
-					m_occ = occ;
-					m_cpu = i;
-				}
-
+			for_each_cpu_and(i, sched_domain_span(sd), cpus) {
 				/*
 				 * rcu_access_pointer() is used because the
 				 * pointer is only compared, never dereferenced.
@@ -2117,6 +2097,15 @@ static void task_cache_work(struct callback_head *work)
 				if (cur && !(cur->flags & (PF_EXITING | PF_KTHREAD)) &&
 				    rcu_access_pointer(cur->sched_cache_grp) == grp)
 					nr_running++;
+
+				occ = fraction_mm_sched(i, grp);
+				if (occ == 0)
+					continue;
+				a_occ += occ;
+				if (occ > m_occ) {
+					m_occ = occ;
+					m_cpu = i;
+				}
 			}
 
 			/*
