@@ -41,7 +41,8 @@ EXPORT_SYMBOL(cpu_khz);
 unsigned int __read_mostly tsc_khz;
 EXPORT_SYMBOL(tsc_khz);
 
-#define KHZ	1000
+#define HZ_PER_KHZ	1000
+#define KHZ_PER_MHZ	1000
 
 /*
  * TSC can be unstable due to cpufreq or due to unsynced TSCs
@@ -393,7 +394,7 @@ static unsigned long calc_pmtimer_ref(u64 deltatsc, u64 pm1, u64 pm2)
 	if (pm2 < pm1)
 		pm2 += (u64)ACPI_PM_OVRRUN;
 	pm2 -= pm1;
-	tmp = pm2 * 1000000000LL;
+	tmp = pm2 * 1000000LL * HZ_PER_KHZ;
 	do_div(tmp, PMTMR_TICKS_PER_SEC);
 	do_div(deltatsc, tmp);
 
@@ -640,7 +641,7 @@ success:
 	 * kHz = ((t2 - t1) * PIT_TICK_RATE) / (I * 256 * 1000)
 	 */
 	delta *= PIT_TICK_RATE;
-	do_div(delta, i*256*1000);
+	do_div(delta, i*256*HZ_PER_KHZ);
 	pr_info("Fast TSC calibration using PIT\n");
 	return delta;
 }
@@ -668,7 +669,7 @@ unsigned long native_calibrate_tsc(void)
 	if (ebx_numerator == 0 || eax_denominator == 0)
 		return 0;
 
-	crystal_khz = ecx_hz / 1000;
+	crystal_khz = ecx_hz / HZ_PER_KHZ;
 
 	/*
 	 * Denverton SoCs don't report crystal clock, and also don't support
@@ -696,7 +697,7 @@ unsigned long native_calibrate_tsc(void)
 		unsigned int eax_base_mhz, ebx, ecx, edx;
 
 		cpuid(CPUID_LEAF_FREQ, &eax_base_mhz, &ebx, &ecx, &edx);
-		crystal_khz = eax_base_mhz * 1000 *
+		crystal_khz = eax_base_mhz * KHZ_PER_MHZ *
 			eax_denominator / ebx_numerator;
 	}
 
@@ -717,7 +718,7 @@ unsigned long native_calibrate_tsc(void)
 	 * lapic_timer_period here to avoid having to calibrate the APIC
 	 * timer later.
 	 */
-	lapic_timer_period = crystal_khz * 1000 / HZ;
+	lapic_timer_period = crystal_khz * HZ_PER_KHZ / HZ;
 #endif
 
 	return crystal_khz * ebx_numerator / eax_denominator;
@@ -737,7 +738,7 @@ static unsigned long cpu_khz_from_cpuid(void)
 
 	cpuid(CPUID_LEAF_FREQ, &eax_base_mhz, &ebx_max_mhz, &ecx_bus_mhz, &edx);
 
-	return eax_base_mhz * 1000;
+	return eax_base_mhz * KHZ_PER_MHZ;
 }
 
 /*
@@ -1084,7 +1085,7 @@ static void __init detect_art(void)
 	cpuid(CPUID_LEAF_TSC, &art_base_clk.denominator,
 	      &art_base_clk.numerator, &art_base_clk.freq_khz, &unused);
 
-	art_base_clk.freq_khz /= KHZ;
+	art_base_clk.freq_khz /= HZ_PER_KHZ;
 	if (art_base_clk.denominator < ART_MIN_DENOMINATOR)
 		return;
 
@@ -1348,14 +1349,14 @@ restart:
 		if (abs(tsc_khz - freq) > (tsc_khz >> 11)) {
 			pr_warn("Warning: TSC freq calibrated by CPUID/MSR differs from what is calibrated by HW timer, please check with vendor!!\n");
 			pr_info("Previous calibrated TSC freq:\t %lu.%03lu MHz\n",
-				(unsigned long)tsc_khz / 1000,
-				(unsigned long)tsc_khz % 1000);
+				(unsigned long)tsc_khz / KHZ_PER_MHZ,
+				(unsigned long)tsc_khz % KHZ_PER_MHZ);
 		}
 
 		pr_info("TSC freq recalibrated by [%s]:\t %lu.%03lu MHz\n",
 			hpet ? "HPET" : "PM_TIMER",
-			(unsigned long)freq / 1000,
-			(unsigned long)freq % 1000);
+			(unsigned long)freq / KHZ_PER_MHZ,
+			(unsigned long)freq % KHZ_PER_MHZ);
 
 		return;
 	}
@@ -1366,8 +1367,8 @@ restart:
 
 	tsc_khz = freq;
 	pr_info("Refined TSC clocksource calibration: %lu.%03lu MHz\n",
-		(unsigned long)tsc_khz / 1000,
-		(unsigned long)tsc_khz % 1000);
+		(unsigned long)tsc_khz / KHZ_PER_MHZ,
+		(unsigned long)tsc_khz % KHZ_PER_MHZ);
 
 	clocksource_tsc.flags |= CLOCK_SOURCE_CALIBRATED;
 
@@ -1470,20 +1471,20 @@ static bool __init determine_cpu_tsc_frequencies(bool early)
 		return false;
 
 	pr_info("Detected %lu.%03lu MHz processor\n",
-		(unsigned long)cpu_khz / KHZ,
-		(unsigned long)cpu_khz % KHZ);
+		(unsigned long)cpu_khz / KHZ_PER_MHZ,
+		(unsigned long)cpu_khz % KHZ_PER_MHZ);
 
 	if (cpu_khz != tsc_khz) {
 		pr_info("Detected %lu.%03lu MHz TSC",
-			(unsigned long)tsc_khz / KHZ,
-			(unsigned long)tsc_khz % KHZ);
+			(unsigned long)tsc_khz / KHZ_PER_MHZ,
+			(unsigned long)tsc_khz % KHZ_PER_MHZ);
 	}
 	return true;
 }
 
 static unsigned long __init get_loops_per_jiffy(void)
 {
-	u64 lpj = (u64)tsc_khz * KHZ;
+	u64 lpj = (u64)tsc_khz * HZ_PER_KHZ;
 
 	do_div(lpj, HZ);
 	return lpj;
