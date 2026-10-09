@@ -156,7 +156,7 @@ static void ata_acpi_uevent(struct ata_port *ap, struct ata_device *dev,
 
 	if (dev) {
 		spin_lock_irqsave(ap->lock, flags);
-		sdev = dev->sdev;
+		sdev = ata_dev_scsi_device(dev, 0);
 		if (sdev && scsi_device_get(sdev))
 			sdev = NULL;
 		spin_unlock_irqrestore(ap->lock, flags);

@@ -114,7 +114,7 @@ static bool zpready(struct ata_device *dev)
 		return false;
 
 	sense_buf = dev->sector_buf;
-	ret = atapi_eh_request_sense(dev, sense_buf, sense_key);
+	ret = atapi_eh_request_sense(dev, 0, sense_buf, sense_key);
 	if (ret)
 		return false;
 
@@ -175,14 +175,14 @@ bool zpodd_zpready(struct ata_device *dev)
 }
 
 /* Return a referenced SCSI device; the caller must drop it outside ap->lock. */
-static struct scsi_device *zpodd_get_sdev(struct ata_device *dev)
+static struct scsi_device *zpodd_get_sdev(struct ata_device *dev, unsigned int lun)
 {
 	struct ata_port *ap = dev->link->ap;
 	struct scsi_device *sdev;
 	unsigned long flags;
 
 	spin_lock_irqsave(ap->lock, flags);
-	sdev = dev->sdev;
+	sdev = dev->sdev[lun];
 	if (sdev && scsi_device_get(sdev))
 		sdev = NULL;
 	spin_unlock_irqrestore(ap->lock, flags);
@@ -203,11 +203,15 @@ void zpodd_enable_run_wake(struct ata_device *dev)
 	struct ata_port *ap = dev->link->ap;
 	struct zpodd *zpodd = dev->zpodd;
 	unsigned long flags;
-	struct scsi_device *sdev = zpodd_get_sdev(dev);
+	int lun;
 
-	if (sdev) {
-		sdev_disable_disk_events(sdev);
-		scsi_device_put(sdev);
+	for (lun = 0; lun < ATAPI_MAX_LUN; lun++) {
+		struct scsi_device *sdev = zpodd_get_sdev(dev, lun);
+
+		if (sdev) {
+			sdev_disable_disk_events(sdev);
+			scsi_device_put(sdev);
+		}
 	}
 
 	spin_lock_irqsave(ap->lock, flags);
@@ -253,7 +257,7 @@ void zpodd_post_poweron(struct ata_device *dev)
 	struct zpodd *zpodd = dev->zpodd;
 	unsigned long flags;
 	bool from_notify;
-	struct scsi_device *sdev;
+	int lun;
 
 	spin_lock_irqsave(ap->lock, flags);
 	if (!zpodd->powered_off) {
@@ -271,10 +275,13 @@ void zpodd_post_poweron(struct ata_device *dev)
 	zpodd->zp_sampled = false;
 	zpodd->zp_ready = false;
 
-	sdev = zpodd_get_sdev(dev);
-	if (sdev) {
-		sdev_enable_disk_events(sdev);
-		scsi_device_put(sdev);
+	for (lun = 0; lun < ATAPI_MAX_LUN; lun++) {
+		struct scsi_device *sdev = zpodd_get_sdev(dev, lun);
+
+		if (sdev) {
+			sdev_enable_disk_events(sdev);
+			scsi_device_put(sdev);
+		}
 	}
 }
 
@@ -283,8 +290,8 @@ static void zpodd_wake_dev(acpi_handle handle, u32 event, void *context)
 	struct ata_device *ata_dev = context;
 	struct ata_port *ap = ata_dev->link->ap;
 	struct zpodd *zpodd = ata_dev->zpodd;
-	struct scsi_device *sdev;
 	unsigned long flags;
+	int lun;
 
 	if (event != ACPI_NOTIFY_DEVICE_WAKE)
 		return;
@@ -296,11 +303,14 @@ static void zpodd_wake_dev(acpi_handle handle, u32 event, void *context)
 		zpodd->from_notify = true;
 	spin_unlock_irqrestore(ap->lock, flags);
 
-	sdev = zpodd_get_sdev(ata_dev);
-	if (sdev) {
-		/* The PM core handles an already active or resuming device. */
-		pm_runtime_resume(&sdev->sdev_gendev);
-		scsi_device_put(sdev);
+	for (lun = 0; lun < ATAPI_MAX_LUN; lun++) {
+		struct scsi_device *sdev = zpodd_get_sdev(ata_dev, lun);
+
+		if (sdev) {
+			/* PM handles an already active or resuming device. */
+			pm_runtime_resume(&sdev->sdev_gendev);
+			scsi_device_put(sdev);
+		}
 	}
 
 	/* Do not discard attribution while another wake callback is active. */

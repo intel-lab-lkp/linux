@@ -5490,7 +5490,7 @@ static void ata_port_suspend(struct ata_port *ap, pm_message_t mesg,
 	 * The next resume will schedule the rescan again. So cancel any rescan
 	 * that is not done yet.
 	 */
-	cancel_delayed_work_sync(&ap->scsi_rescan_task);
+	ata_scsi_cancel_rescan(ap);
 
 	/*
 	 * On some hardware, device fails to respond after spun down for
@@ -5675,6 +5675,9 @@ void ata_dev_init(struct ata_device *dev)
 	spin_lock_irqsave(ap->lock, flags);
 	dev->flags &= ~ATA_DFLAG_INIT_MASK;
 	dev->quirks = 0;
+	for (unsigned int lun = 0; lun < ATAPI_MAX_LUN; lun++)
+		ata_scsi_clear_pending(dev, lun);
+	dev->scsi_rescan_seq++;
 	spin_unlock_irqrestore(ap->lock, flags);
 
 	memset((void *)dev + ATA_DEVICE_CLEAR_BEGIN, 0,
@@ -6393,12 +6396,16 @@ static void ata_port_detach(struct ata_port *ap)
 	/* Remove scsi devices */
 	ata_for_each_link(link, ap, HOST_FIRST) {
 		ata_for_each_dev(dev, link, ALL) {
-			if (dev->sdev) {
-				struct scsi_device *sdev = dev->sdev;
+			int lun;
 
-				/* The host driver may already be unloading. */
+			for (lun = ATAPI_MAX_LUN - 1; lun >= 0; lun--) {
+				struct scsi_device *sdev = dev->sdev[lun];
+
+				if (!sdev)
+					continue;
 				get_device(&sdev->sdev_gendev);
-				dev->sdev = NULL;
+				ata_scsi_clear_pending(dev, lun);
+				dev->sdev[lun] = NULL;
 				spin_unlock_irqrestore(ap->lock, flags);
 				scsi_remove_device(sdev);
 				put_device(&sdev->sdev_gendev);

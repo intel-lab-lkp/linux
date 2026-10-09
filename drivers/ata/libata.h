@@ -171,6 +171,9 @@ extern void ata_scsi_set_sense(struct ata_device *dev,
 extern void ata_scsi_media_change_notify(struct ata_device *dev);
 extern void ata_scsi_hotplug(struct work_struct *work);
 extern void ata_scsi_dev_rescan(struct work_struct *work);
+void ata_scsi_schedule_rescan(struct ata_device *dev);
+void ata_scsi_clear_pending(struct ata_device *dev, unsigned int lun);
+void ata_scsi_cancel_rescan(struct ata_port *ap);
 extern int ata_scsi_user_scan(struct Scsi_Host *shost, unsigned int channel,
 			      unsigned int id, u64 lun);
 void ata_scsi_sdev_config(struct scsi_device *sdev);

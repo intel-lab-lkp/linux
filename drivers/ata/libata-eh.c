@@ -504,9 +504,18 @@ void ata_eh_release(struct ata_port *ap)
 
 static void ata_eh_dev_disable(struct ata_device *dev)
 {
+	struct ata_port *ap = dev->link->ap;
+	unsigned long flags;
+	int lun;
+
 	ata_acpi_on_disable(dev);
 	ata_down_xfermask_limit(dev, ATA_DNXFER_FORCE_PIO0 | ATA_DNXFER_QUIET);
+	spin_lock_irqsave(ap->lock, flags);
 	dev->class++;
+	for (lun = 0; lun < ATAPI_MAX_LUN; lun++)
+		ata_scsi_clear_pending(dev, lun);
+	dev->scsi_rescan_seq++;
+	spin_unlock_irqrestore(ap->lock, flags);
 
 	/*
 	 * From now till the next successful probe, ering is used to
@@ -3360,7 +3369,7 @@ static int ata_eh_revalidate_and_attach(struct ata_link *link,
 			ehc->i.flags |= ATA_EHI_SETMODE;
 
 			/* schedule the scsi_rescan_device() here */
-			schedule_delayed_work(&ap->scsi_rescan_task, 0);
+			ata_scsi_schedule_rescan(dev);
 		} else if (dev->class == ATA_DEV_UNKNOWN &&
 			   ehc->tries[dev->devno] &&
 			   ata_class_enabled(ehc->classes[dev->devno])) {
