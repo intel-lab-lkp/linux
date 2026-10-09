@@ -15,7 +15,7 @@
 
 typedef u32 kprobe_opcode_t;
 
-#define MAX_INSN_SIZE 2
+#define MAX_INSN_SIZE 3
 
 #define kretprobe_blacklist_size 0
 
@@ -25,6 +25,7 @@ void arch_remove_kprobe(struct kprobe *p);
 #define flush_insn_slot(p)		\
 do { 	flushi(&(p)->ainsn.insn[0]);	\
 	flushi(&(p)->ainsn.insn[1]);	\
+	flushi(&(p)->ainsn.insn[2]);	\
 } while (0)
 
 void __kretprobe_trampoline(void);

@@ -21,7 +21,8 @@
  *
  * In the kprobe->ainsn.insn[] array we store the original
  * instruction at index zero and a break instruction at
- * index one.
+ * index one, and another at index two for a branch that
+ * annuls its delay slot.
  *
  * When we hit a kprobe we:
  * - Run the pre-handler
@@ -47,10 +48,33 @@ DEFINE_PER_CPU(struct kprobe_ctlblk, kprobe_ctlblk);
 
 struct kretprobe_blackpoint kretprobe_blacklist[] = {{NULL, NULL}};
 
+/* cbcond has no delay slot and ba,a annuls it, so when taken the
+ * single-stepped copy branches away without reaching a break instruction.
+ */
+static bool __kprobes kprobe_insn_rejected(u32 insn)
+{
+	if (insn & 0xc0000000)
+		return false;
+
+	switch ((insn >> 22) & 0x7) {
+	case 1:		/* BPcc */
+	case 2:		/* Bicc */
+	case 5:		/* FBPfcc */
+	case 6:		/* FBfcc */
+		return (insn & 0x3e000000) == 0x30000000;
+	case 3:		/* BPr, cbcond */
+		return insn & 0x10000000;
+	}
+	return false;
+}
+
 int __kprobes arch_prepare_kprobe(struct kprobe *p)
 {
 	if ((unsigned long) p->addr & 0x3UL)
 		return -EILSEQ;
+
+	if (kprobe_insn_rejected(*p->addr))
+		return -EINVAL;
 
 	p->ainsn.insn = get_insn_slot();
 	if (!p->ainsn.insn)
@@ -61,6 +85,9 @@ int __kprobes arch_prepare_kprobe(struct kprobe *p)
 
 	p->ainsn.insn[1] = BREAKPOINT_INSTRUCTION_2;
 	flushi(&p->ainsn.insn[1]);
+
+	p->ainsn.insn[2] = BREAKPOINT_INSTRUCTION_2;
+	flushi(&p->ainsn.insn[2]);
 
 	p->opcode = *p->addr;
 	return 0;
@@ -295,12 +322,18 @@ static void __kprobes resume_execution(struct kprobe *p,
 {
 	u32 insn = p->ainsn.insn[0];
 
-	regs->tnpc = relbranch_fixup(insn, p, regs, kcb);
+	if (regs->tpc == (unsigned long) &p->ainsn.insn[2]) {
+		/* An untaken branch annulled its delay slot. */
+		regs->tpc = kcb->kprobe_orig_tnpc + 0x4UL;
+		regs->tnpc = kcb->kprobe_orig_tnpc + 0x8UL;
+	} else {
+		regs->tnpc = relbranch_fixup(insn, p, regs, kcb);
 
-	/* This assignment must occur after relbranch_fixup() */
-	regs->tpc = kcb->kprobe_orig_tnpc;
+		/* This assignment must occur after relbranch_fixup() */
+		regs->tpc = kcb->kprobe_orig_tnpc;
 
-	retpc_fixup(regs, insn, (unsigned long) p->addr);
+		retpc_fixup(regs, insn, (unsigned long) p->addr);
+	}
 
 	regs->tstate = ((regs->tstate & ~TSTATE_PIL) |
 			kcb->kprobe_orig_tstate_pil);
