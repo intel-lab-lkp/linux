@@ -1437,7 +1437,7 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 				  struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
-	int parent_iw, parent_ig, ig, iw, rc, pos = cxled->pos;
+	int parent_iw, parent_ig, child_iw, child_ig, rc, pos = cxled->pos;
 	struct cxl_port *parent_port = to_cxl_port(port->dev.parent);
 	struct cxl_region_ref *cxl_rr = cxl_rr_load(port, cxlr);
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
@@ -1531,10 +1531,10 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		return -EINVAL;
 	}
 
-	iw = cxl_rr->nr_targets;
-	if (!ways_valid(iw)) {
+	child_iw = cxl_rr->nr_targets;
+	if (!ways_valid(child_iw)) {
 		dev_dbg(&cxlr->dev, "%s:%s: invalid port interleave: %d\n",
-			dev_name(port->uport_dev), dev_name(&port->dev), iw);
+			dev_name(port->uport_dev), dev_name(&port->dev), child_iw);
 		return -EINVAL;
 	}
 
@@ -1542,32 +1542,32 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	 * Interleave granularity is a multiple of @parent_port granularity.
 	 * Multiplier is the parent port interleave ways.
 	 */
-	ig = parent_ig * parent_iw;
+	child_ig = parent_ig * parent_iw;
 
-	if (!granularity_valid(ig)) {
+	if (!granularity_valid(child_ig)) {
 		dev_dbg(&cxlr->dev,
 			"%s: invalid granularity calculation (%d * %d)\n",
 			dev_name(&parent_port->dev), parent_ig, parent_iw);
 		return -EINVAL;
 	}
 
-	if (iw > 8 || iw > cxlsd->nr_targets) {
+	if (child_iw > 8 || child_iw > cxlsd->nr_targets) {
 		dev_dbg(&cxlr->dev,
 			"%s:%s:%s: ways: %d overflows targets: %d\n",
 			dev_name(port->uport_dev), dev_name(&port->dev),
-			dev_name(&cxld->dev), iw, cxlsd->nr_targets);
+			dev_name(&cxld->dev), child_iw, cxlsd->nr_targets);
 		return -ENXIO;
 	}
 
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
-		if (cxld->interleave_ways != iw ||
-		    (iw > 1 && cxld->interleave_granularity != ig) ||
+		if (cxld->interleave_ways != child_iw ||
+		    (child_iw > 1 && cxld->interleave_granularity != child_ig) ||
 		    !spa_maps_hpa(p, &cxld->hpa_range) ||
 		    ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)) {
 			dev_err(&cxlr->dev,
 				"%s:%s %s expected iw: %d ig: %d %pr\n",
 				dev_name(port->uport_dev), dev_name(&port->dev),
-				__func__, iw, ig, p->res);
+				__func__, child_iw, child_ig, p->res);
 			dev_err(&cxlr->dev,
 				"%s:%s %s got iw: %d ig: %d state: %s %#llx:%#llx\n",
 				dev_name(port->uport_dev), dev_name(&port->dev),
@@ -1578,24 +1578,24 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 			return -ENXIO;
 		}
 	} else {
-		rc = check_interleave_cap(cxld, iw, ig);
+		rc = check_interleave_cap(cxld, child_iw, child_ig);
 		if (rc) {
 			dev_dbg(&cxlr->dev,
 				"%s:%s iw: %d ig: %d is not supported\n",
 				dev_name(port->uport_dev),
-				dev_name(&port->dev), iw, ig);
+				dev_name(&port->dev), child_iw, child_ig);
 			return rc;
 		}
 
-		cxld->interleave_ways = iw;
-		cxld->interleave_granularity = ig;
+		cxld->interleave_ways = child_iw;
+		cxld->interleave_granularity = child_ig;
 		cxld->hpa_range = (struct range) {
 			.start = p->res->start,
 			.end = p->res->end,
 		};
 	}
 	dev_dbg(&cxlr->dev, "%s:%s iw: %d ig: %d\n", dev_name(port->uport_dev),
-		dev_name(&port->dev), iw, ig);
+		dev_name(&port->dev), child_iw, child_ig);
 add_target:
 	if (cxl_rr->nr_targets_set == cxl_rr->nr_targets) {
 		dev_dbg(&cxlr->dev,
