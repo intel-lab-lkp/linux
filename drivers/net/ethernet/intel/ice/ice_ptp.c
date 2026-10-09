@@ -2820,6 +2820,9 @@ s8 ice_ptp_request_ts(struct ice_ptp_tx *tx, struct sk_buff *skb)
 
 void ice_ptp_process_ts(struct ice_pf *pf)
 {
+	if (pf->ptp.state != ICE_PTP_READY)
+		return;
+
 	switch (pf->ptp.tx_interrupt_mode) {
 	case ICE_PTP_TX_INTERRUPT_NONE:
 		/* This device has the clock owner handle timestamps for it */
@@ -2949,6 +2952,9 @@ irqreturn_t ice_ptp_ts_irq(struct ice_pf *pf)
 		return IRQ_WAKE_THREAD;
 	case ICE_MAC_E830:
 		/* E830 can read timestamps in the top half using rd32() */
+		if (pf->ptp.state != ICE_PTP_READY)
+			return IRQ_HANDLED;
+
 		ice_ptp_process_ts(pf);
 
 		if (ice_ptp_tx_tstamps_pending(pf, true)) {
