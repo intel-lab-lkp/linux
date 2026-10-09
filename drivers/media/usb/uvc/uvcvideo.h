@@ -317,6 +317,7 @@ struct uvc_buffer {
 
 	enum uvc_buffer_state state;
 	unsigned int error;
+	bool cancelled;
 
 	void *mem;
 	unsigned int length;
