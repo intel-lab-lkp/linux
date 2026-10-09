@@ -5245,6 +5245,20 @@ struct smb2_decrypt_work {
 	unsigned int len;
 };
 
+static bool smb2_try_get_server_ref(struct TCP_Server_Info *server)
+{
+	bool acquired = false;
+
+	spin_lock(&cifs_tcp_ses_lock);
+	if (server->srv_count) {
+		server->srv_count++;
+		acquired = true;
+	}
+	spin_unlock(&cifs_tcp_ses_lock);
+
+	return acquired;
+}
+
 
 static void smb2_decrypt_offload(struct work_struct *work)
 {
@@ -5305,6 +5319,7 @@ static void smb2_decrypt_offload(struct work_struct *work)
 free_pages:
 	netfs_free_folioq_buffer(dw->buffer);
 	cifs_small_buf_release(dw->buf);
+	cifs_put_tcp_session(dw->server, false);
 	kfree(dw);
 }
 
@@ -5381,10 +5396,20 @@ receive_encrypted_read(struct TCP_Server_Info *server, struct mid_q_entry **mid,
 
 	if ((server->min_offload) && (server->in_flight > 1) &&
 	    (server->pdu_size >= server->min_offload)) {
+		if (!smb2_try_get_server_ref(server)) {
+			rc = -ESHUTDOWN;
+			goto free_pages;
+		}
+
 		dw->buf = server->smallbuf;
 		server->smallbuf = (char *)cifs_small_buf_get();
 
-		queue_work(decrypt_wq, &dw->decrypt);
+		if (!queue_work(decrypt_wq, &dw->decrypt)) {
+			cifs_small_buf_release(dw->buf);
+			cifs_put_tcp_session(server, false);
+			rc = -EIO;
+			goto free_pages;
+		}
 		*num_mids = 0; /* worker thread takes care of finding mid */
 		return -1;
 	}
