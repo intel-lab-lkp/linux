@@ -7,6 +7,7 @@
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/blkdev.h>
+#include <linux/blk-crypto.h>
 #include <linux/blk-integrity.h>
 #include <linux/buffer_head.h>
 #include <linux/mpage.h>
@@ -485,11 +486,17 @@ static int blkdev_writepages(struct address_space *mapping,
 {
 	struct folio *folio = NULL;
 	struct blk_plug plug;
+	struct bio *bio = NULL;
 	int err;
 
 	blk_start_plug(&plug);
 	while ((folio = writeback_iter(mapping, wbc, folio, &err)))
-		err = block_write_full_folio(folio, wbc, blkdev_get_block);
+		err = block_write_full_folio_bio(folio, wbc, blkdev_get_block,
+				&bio, BIO_MAX_VECS);
+	if (bio) {
+		guard_bio_eod(bio);
+		blk_crypto_submit_bio(bio);
+	}
 	blk_finish_plug(&plug);
 
 	return err;

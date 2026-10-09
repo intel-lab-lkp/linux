@@ -252,6 +252,9 @@ void __bh_read_batch(int nr, struct buffer_head *bhs[],
 void block_invalidate_folio(struct folio *folio, size_t offset, size_t length);
 int block_write_full_folio(struct folio *folio, struct writeback_control *wbc,
 		void *get_block);
+int block_write_full_folio_bio(struct folio *folio,
+		struct writeback_control *wbc, void *get_block,
+		struct bio **biop, unsigned short nr_vecs);
 int __block_write_full_folio(struct inode *inode, struct folio *folio,
 		get_block_t *get_block, struct writeback_control *wbc);
 int block_read_full_folio(struct folio *, get_block_t *);
