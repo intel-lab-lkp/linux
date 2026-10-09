@@ -3729,6 +3729,9 @@ struct cap_extra_info {
 	u8 *fscrypt_auth;
 	u32 fscrypt_auth_len;
 	u64 fscrypt_file_size;
+	/* MClientCaps v14 oserrno; valid only when oserrno_valid is set */
+	s32 oserrno;
+	bool oserrno_valid;
 };
 
 /*
@@ -3755,6 +3758,38 @@ static int parse_inline_data(void **p, void *end,
 	return 0;
 bad:
 	return -EIO;
+}
+
+/*
+ * Record quarantine state carried by an MClientCaps oserrno.
+ * Caller holds i_ceph_lock. Returns true when waiters should be woken
+ * because the inode entered or left quarantine.
+ *
+ * Matches the userspace client: -EQUARANTINED sets the sticky flag,
+ * a later grant of more than PIN with errno 0 clears it, and a PIN-only
+ * update may zero qtine_errno while leaving the flag set.
+ */
+static bool ceph_apply_quarantine(struct ceph_inode_info *ci, int newcaps,
+				  int oserrno)
+{
+	bool was, now;
+
+	was = READ_ONCE(ci->i_qtine_errno) == -CEPH_EQUARANTINED ||
+	      test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags);
+
+	if (newcaps != CEPH_CAP_PIN && was && oserrno == 0)
+		clear_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags);
+
+	if (oserrno == -CEPH_EQUARANTINED)
+		set_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags);
+
+	if (newcaps || was ||
+	    test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags))
+		WRITE_ONCE(ci->i_qtine_errno, oserrno);
+
+	now = READ_ONCE(ci->i_qtine_errno) == -CEPH_EQUARANTINED ||
+	      test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags);
+	return was || now;
 }
 
 /*
@@ -4126,6 +4161,14 @@ static void handle_cap_grant(struct inode *inode,
 		if (extra_info->inline_version != CEPH_INLINE_NONE &&
 		    (newcaps & (CEPH_CAP_FILE_CACHE|CEPH_CAP_FILE_LAZYIO)))
 			fill_inline = true;
+	}
+
+	if (extra_info->oserrno_valid &&
+	    ceph_apply_quarantine(ci, newcaps, extra_info->oserrno)) {
+		boutc(cl, "quarantine oserrno %d caps %s %llx.%llx\n",
+		      extra_info->oserrno, ceph_cap_string(newcaps),
+		      ceph_vinop(inode));
+		wake = true;
 	}
 
 	if (le32_to_cpu(grant->op) == CEPH_CAP_OP_IMPORT) {
@@ -4826,6 +4869,20 @@ void ceph_handle_caps(struct ceph_mds_session *session,
 			goto bad;
 	}
 
+	if (msg_version >= 13) {
+		/* v13: subvolume_id. The inode id is learned from replies. */
+		ceph_decode_skip_64(&p, end, bad);
+	}
+
+	if (msg_version >= 14) {
+		u32 raw_errno;
+
+		/* v14: signed oserrno, -CEPH_EQUARANTINED when quarantined */
+		ceph_decode_32_safe(&p, end, raw_errno, bad);
+		extra_info.oserrno = (s32)raw_errno;
+		extra_info.oserrno_valid = true;
+	}
+
 	/* lookup ino */
 	inode = ceph_find_inode(mdsc->fsc->sb, vino);
 	boutc(cl, " caps mds%d op %s ino %llx.%llx inode %p seq %u iseq %u mseq %u\n",
@@ -4979,6 +5036,47 @@ bad:
 	pr_err_client(cl, "corrupt message\n");
 	ceph_msg_dump(msg);
 	goto out;
+}
+
+void ceph_handle_quarantine_disable(struct ceph_mds_client *mdsc,
+				    struct ceph_mds_session *session,
+				    struct ceph_msg *msg)
+{
+	struct super_block *sb = mdsc->fsc->sb;
+	struct ceph_client *cl = mdsc->fsc->client;
+	struct ceph_mds_quarantine_disable *h = msg->front.iov_base;
+	struct ceph_vino vino;
+	struct inode *inode;
+	struct ceph_inode_info *ci;
+
+	if (!ceph_inc_mds_stopping_blocker(mdsc, session))
+		return;
+
+	if (msg->front.iov_len < sizeof(*h)) {
+		pr_err_client(cl, "corrupt quarantine_disable mds%d len %d\n",
+			      session->s_mds, (int)msg->front.iov_len);
+		ceph_msg_dump(msg);
+		goto out;
+	}
+
+	vino.ino = le64_to_cpu(h->ino);
+	vino.snap = CEPH_NOSNAP;
+	inode = ceph_find_inode(sb, vino);
+	if (!inode) {
+		doutc(cl, "quarantine disable ino %llx not cached\n", vino.ino);
+		goto out;
+	}
+
+	ci = ceph_inode(inode);
+	spin_lock(&ci->i_ceph_lock);
+	WRITE_ONCE(ci->i_qtine_errno, 0);
+	clear_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags);
+	spin_unlock(&ci->i_ceph_lock);
+	wake_up_all(&ci->i_cap_wq);
+	doutc(cl, "quarantine disable ino %llx\n", vino.ino);
+	iput(inode);
+out:
+	ceph_dec_mds_stopping_blocker(mdsc);
 }
 
 /*

@@ -444,6 +444,14 @@ struct ceph_inode_info {
 #define CEPH_SUBVOLUME_ID_NONE 0
 	u64 i_subvolume_id;
 
+	/*
+	 * Cap oserrno from the MDS. -CEPH_EQUARANTINED means this inode
+	 * was revoked because its subvolume is quarantined. Paired with
+	 * CEPH_I_QUARANTINE, which stays set when a later PIN-only update
+	 * clears the errno.
+	 */
+	int i_qtine_errno;
+
 	s32 i_dir_pin;
 
 	int i_fragtree_nsplits;
@@ -773,6 +781,7 @@ static inline u64 ceph_get_truncate_pagecache_size(const struct ceph_inode_info 
 					      * the deferred work completes
 					      */
 #define CEPH_I_EVICT_ON_FINAL_IPUT_BIT	(16) /* evict at the final iput() */
+#define CEPH_I_QUARANTINE_BIT		(17) /* subvolume quarantine opt set */
 
 #define CEPH_I_DIR_ORDERED		(1 << CEPH_I_DIR_ORDERED_BIT)
 #define CEPH_I_FLUSH			(1 << CEPH_I_FLUSH_BIT)
@@ -1258,6 +1267,11 @@ extern int ceph_getattr(struct mnt_idmap *idmap,
 			const struct path *path, struct kstat *stat,
 			u32 request_mask, unsigned int flags);
 void ceph_inode_shutdown(struct inode *inode);
+
+bool ceph_inode_is_under_quarantine(struct inode *inode);
+void ceph_handle_quarantine_disable(struct ceph_mds_client *mdsc,
+				    struct ceph_mds_session *session,
+				    struct ceph_msg *msg);
 
 static inline bool ceph_inode_is_shutdown(const struct inode *inode)
 {

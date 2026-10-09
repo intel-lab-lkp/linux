@@ -648,6 +648,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_max_bytes = 0;
 	ci->i_max_files = 0;
 	ci->i_subvolume_id = CEPH_SUBVOLUME_ID_NONE;
+	ci->i_qtine_errno = 0;
 
 	memset(&ci->i_dir_layout, 0, sizeof(ci->i_dir_layout));
 	memset(&ci->i_cached_layout, 0, sizeof(ci->i_cached_layout));
@@ -728,6 +729,55 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->fscrypt_auth_len = 0;
 #endif
 	return &ci->netfs.inode;
+}
+
+/*
+ * True when this inode or an ancestor was marked quarantined by an MDS
+ * cap update. Ancestors cover children that have not yet received their
+ * own cap message. The walk stops at the mount root.
+ */
+bool ceph_inode_is_under_quarantine(struct inode *inode)
+{
+	struct inode *cur;
+	unsigned int depth = 0;
+
+	if (!inode)
+		return false;
+
+	cur = igrab(inode);
+	while (cur && depth++ < 256) {
+		struct ceph_inode_info *ci = ceph_inode(cur);
+		struct dentry *alias, *parent_dn;
+		struct inode *parent_inode;
+
+		if (READ_ONCE(ci->i_qtine_errno) == -CEPH_EQUARANTINED ||
+		    test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags)) {
+			iput(cur);
+			return true;
+		}
+
+		alias = d_find_any_alias(cur);
+		if (!alias || IS_ROOT(alias)) {
+			dput(alias);
+			iput(cur);
+			return false;
+		}
+
+		parent_dn = dget_parent(alias);
+		dput(alias);
+		parent_inode = d_inode(parent_dn) ? igrab(d_inode(parent_dn))
+						  : NULL;
+		dput(parent_dn);
+		if (!parent_inode || parent_inode == cur) {
+			iput(parent_inode);
+			iput(cur);
+			return false;
+		}
+		iput(cur);
+		cur = parent_inode;
+	}
+	iput(cur);
+	return false;
 }
 
 void ceph_free_inode(struct inode *inode)

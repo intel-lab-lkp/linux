@@ -7364,6 +7364,9 @@ static void mds_dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 	case CEPH_MSG_CLIENT_QUOTA:
 		ceph_handle_quota(mdsc, s, msg);
 		break;
+	case CEPH_MSG_CLIENT_QUARANTINE_DISABLE:
+		ceph_handle_quarantine_disable(mdsc, s, msg);
+		break;
 
 	default:
 		pr_err_client(cl, "received unknown message type %d %s\n",
