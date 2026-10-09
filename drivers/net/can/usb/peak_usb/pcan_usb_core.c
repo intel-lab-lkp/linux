@@ -1038,7 +1038,17 @@ static void peak_usb_disconnect(struct usb_interface *intf)
 	struct peak_usb_device *dev;
 	struct peak_usb_device *dev_prev_siblings;
 
-	/* unregister as many netdev devices as siblings */
+	/* First, kill all pending RX URBs. usb_kill_anchored_urbs() waits
+	 * until all completion handlers have completed, ensuring that no
+	 * decode_buf() callback can access usb_if->dev[] after this point.
+	 */
+	for (dev = usb_get_intfdata(intf); dev; dev = dev->prev_siblings)
+		usb_kill_anchored_urbs(&dev->rx_submitted);
+
+	/* All RX URBs have been drained before reaching this point. No
+	 * decode_buf() callback can access usb_if->dev[] anymore, making it
+	 * safe to unregister and free the associated netdevs.
+	 */
 	for (dev = usb_get_intfdata(intf); dev; dev = dev_prev_siblings) {
 		struct net_device *netdev = dev->netdev;
 		char name[IFNAMSIZ];

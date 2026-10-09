@@ -60,6 +60,7 @@ struct __packed pcan_ufd_fw_info {
 
 /* handle device specific info used by the netdevices */
 struct pcan_usb_fd_if {
+	const struct peak_usb_adapter *adapter;
 	struct peak_usb_device	*dev[PCAN_USB_MAX_CHANNEL];
 	struct pcan_ufd_fw_info	fw_info;
 	struct peak_time_ref	time_ref;
@@ -536,10 +537,19 @@ static int pcan_usb_fd_decode_canmsg(struct pcan_usb_fd_if *usb_if,
 	struct sk_buff *skb;
 	const u16 rx_msg_flags = le16_to_cpu(rm->flags);
 
-	if (pucan_msg_get_channel(rm) >= ARRAY_SIZE(usb_if->dev))
-		return -ENOMEM;
+	/* Reject invalid channel numbers reported by the firmware */
+	if (pucan_msg_get_channel(rm) >= usb_if->adapter->ctrl_count)
+		return -EINVAL;
 
 	dev = usb_if->dev[pucan_msg_get_channel(rm)];
+
+	/* This should never happen during normal operation. However, do not
+	 * trust the device and reject records targeting a valid channel
+	 * without an associated netdev.
+	 */
+	if (!dev)
+		return -EINVAL;
+
 	netdev = dev->netdev;
 
 	if (rx_msg_flags & PUCAN_MSG_EXT_DATA_LEN) {
@@ -605,10 +615,19 @@ static int pcan_usb_fd_decode_status(struct pcan_usb_fd_if *usb_if,
 	struct can_frame *cf;
 	struct sk_buff *skb;
 
-	if (pucan_stmsg_get_channel(sm) >= ARRAY_SIZE(usb_if->dev))
-		return -ENOMEM;
+	/* Reject invalid channel numbers reported by the firmware */
+	if (pucan_stmsg_get_channel(sm) >= usb_if->adapter->ctrl_count)
+		return -EINVAL;
 
 	dev = usb_if->dev[pucan_stmsg_get_channel(sm)];
+
+	/* This should never happen during normal operation. However, do not
+	 * trust the device and reject records targeting a valid channel
+	 * without an associated netdev.
+	 */
+	if (!dev)
+		return -EINVAL;
+
 	pdev = container_of(dev, struct pcan_usb_fd_device, dev);
 	netdev = dev->netdev;
 
@@ -662,10 +681,19 @@ static int pcan_usb_fd_decode_error(struct pcan_usb_fd_if *usb_if,
 	struct pcan_usb_fd_device *pdev;
 	struct peak_usb_device *dev;
 
-	if (pucan_ermsg_get_channel(er) >= ARRAY_SIZE(usb_if->dev))
+	/* Reject invalid channel numbers reported by the firmware */
+	if (pucan_ermsg_get_channel(er) >= usb_if->adapter->ctrl_count)
 		return -EINVAL;
 
 	dev = usb_if->dev[pucan_ermsg_get_channel(er)];
+
+	/* This should never happen during normal operation. However, do not
+	 * trust the device and reject records targeting a valid channel
+	 * without an associated netdev.
+	 */
+	if (!dev)
+		return -EINVAL;
+
 	pdev = container_of(dev, struct pcan_usb_fd_device, dev);
 
 	/* keep a trace of tx and rx error counters for later use */
@@ -685,10 +713,19 @@ static int pcan_usb_fd_decode_overrun(struct pcan_usb_fd_if *usb_if,
 	struct can_frame *cf;
 	struct sk_buff *skb;
 
-	if (pufd_omsg_get_channel(ov) >= ARRAY_SIZE(usb_if->dev))
+	/* Reject invalid channel numbers reported by the firmware */
+	if (pufd_omsg_get_channel(ov) >= usb_if->adapter->ctrl_count)
 		return -EINVAL;
 
 	dev = usb_if->dev[pufd_omsg_get_channel(ov)];
+
+	/* This should never happen during normal operation. However, do not
+	 * trust the device and reject records targeting a valid channel
+	 * without an associated netdev.
+	 */
+	if (!dev)
+		return -EINVAL;
+
 	netdev = dev->netdev;
 
 	/* allocate an skb to store the error frame */
@@ -986,6 +1023,9 @@ static int pcan_usb_fd_init(struct peak_usb_device *dev)
 						GFP_KERNEL);
 		if (!pdev->cmd_buffer_addr)
 			goto err_out_1;
+
+		/* keep reference to the adapter device */
+		pdev->usb_if->adapter = dev->adapter;
 
 		/* number of ts msgs to ignore before taking one into account */
 		pdev->usb_if->cm_ignore_count = 5;
