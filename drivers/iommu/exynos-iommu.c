@@ -1403,7 +1403,7 @@ static phys_addr_t exynos_iommu_iova_to_phys(struct iommu_domain *iommu_domain,
 static struct iommu_device *exynos_iommu_probe_device(struct device *dev)
 {
 	struct exynos_iommu_owner *owner = dev_iommu_priv_get(dev);
-	struct sysmmu_drvdata *data;
+	struct sysmmu_drvdata *data, *tmp;
 
 	if (!has_sysmmu(dev))
 		return ERR_PTR(-ENODEV);
@@ -1417,6 +1417,11 @@ static struct iommu_device *exynos_iommu_probe_device(struct device *dev)
 		data->link = device_link_add(dev, data->sysmmu,
 					     DL_FLAG_STATELESS |
 					     DL_FLAG_PM_RUNTIME);
+		if (!data->link) {
+			dev_err(dev, "Unable to link %s\n",
+				dev_name(data->sysmmu));
+			goto err_unlink;
+		}
 	}
 
 	/* There is always at least one entry, see exynos_iommu_of_xlate() */
@@ -1424,6 +1429,13 @@ static struct iommu_device *exynos_iommu_probe_device(struct device *dev)
 				struct sysmmu_drvdata, owner_node);
 
 	return &data->iommu;
+
+err_unlink:
+	list_for_each_entry_continue_reverse(tmp, &owner->controllers,
+					     owner_node)
+		device_link_del(tmp->link);
+
+	return ERR_PTR(-ENODEV);
 }
 
 static void exynos_iommu_release_device(struct device *dev)
