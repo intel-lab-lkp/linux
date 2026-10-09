@@ -45,24 +45,19 @@
 #define LS2K2000_TEMP_DIV		(0x4000)
 #define LS2K2000_TEMP_OFFSET		(311)
 
-/*
- * This flag is used to indicate the temperature reading
- * method of the Loongson-2K2000
- */
-#define LS2K2000_THSENS_OUT_FLAG	BIT(0)
-
 struct loongson2_thermal_data;
 
 struct loongson2_thermal_chip_data {
 	unsigned int thermal_sensor_sel;
-	unsigned int flags;
+	const struct thermal_zone_device_ops *thermal_ops;
 	void (*set_trips_regs)(struct loongson2_thermal_data *data,
 			       int temp, bool low, bool enable);
+	int (*hw_init)(struct platform_device *pdev, struct loongson2_thermal_data *data);
 };
 
 struct loongson2_thermal_data {
 	void __iomem *ctrl_reg;
-	void __iomem *temp_reg;
+	void __iomem *extend_reg;
 	const struct loongson2_thermal_chip_data *chip_data;
 };
 
@@ -114,12 +109,21 @@ static void ls2k1000_thermal_set_trips_regs(struct loongson2_thermal_data *data,
 	writew(val, data->ctrl_reg + ctrl_reg + sel * 2);
 }
 
+static int ls2k1000_thermal_hw_init(struct platform_device *pdev,
+				    struct loongson2_thermal_data *data)
+{
+	writeb(LOONGSON2_THSENS_INT_EN, data->ctrl_reg + LOONGSON2_THSENS_STATUS_REG);
+	loongson2_thermal_set_trip_temp(data, 0, 0, false);
+
+	return 0;
+}
+
 static int ls2k2000_thermal_get_temp(struct thermal_zone_device *tz, int *temp)
 {
 	struct loongson2_thermal_data *data = thermal_zone_device_priv(tz);
 	int val;
 
-	val = FIELD_GET(LOONGSON2_THSENS_OUT_16B_MASK, readl(data->temp_reg));
+	val = FIELD_GET(LOONGSON2_THSENS_OUT_16B_MASK, readl(data->extend_reg));
 	*temp = (val * LS2K2000_TEMP_MUL / LS2K2000_TEMP_DIV - LS2K2000_TEMP_OFFSET) * KILO;
 
 	return 0;
@@ -146,6 +150,20 @@ static void ls2k2000_thermal_set_trips_regs(struct loongson2_thermal_data *data,
 	writeb(val, data->ctrl_reg + hi_reg + sel);
 }
 
+static int ls2k2000_thermal_hw_init(struct platform_device *pdev,
+				    struct loongson2_thermal_data *data)
+{
+	/* The temperature output register is separate for Loongson-2K2000 */
+	data->extend_reg = devm_platform_ioremap_resource(pdev, 1);
+	if (IS_ERR(data->extend_reg))
+		return PTR_ERR(data->extend_reg);
+
+	writeb(LOONGSON2_THSENS_INT_EN, data->ctrl_reg + LOONGSON2_THSENS_STATUS_REG);
+	loongson2_thermal_set_trip_temp(data, 0, 0, false);
+
+	return 0;
+}
+
 static const struct thermal_zone_device_ops ls2k1000_thermal_zone_ops = {
 	.get_temp = ls2k1000_thermal_get_temp,
 	.set_trips = loongson2_thermal_set_trips,
@@ -158,14 +176,16 @@ static const struct thermal_zone_device_ops ls2k2000_thermal_zone_ops = {
 
 static const struct loongson2_thermal_chip_data ls2k1000_thermal_chip_data = {
 	.thermal_sensor_sel = 0,
-	.flags = 0,
+	.thermal_ops = &ls2k1000_thermal_zone_ops,
 	.set_trips_regs = ls2k1000_thermal_set_trips_regs,
+	.hw_init = ls2k1000_thermal_hw_init,
 };
 
 static const struct loongson2_thermal_chip_data ls2k2000_thermal_chip_data = {
 	.thermal_sensor_sel = 0,
-	.flags = LS2K2000_THSENS_OUT_FLAG,
+	.thermal_ops = &ls2k2000_thermal_zone_ops,
 	.set_trips_regs = ls2k2000_thermal_set_trips_regs,
+	.hw_init = ls2k2000_thermal_hw_init,
 };
 
 static irqreturn_t loongson2_thermal_irq_thread(int irq, void *dev)
@@ -182,9 +202,8 @@ static irqreturn_t loongson2_thermal_irq_thread(int irq, void *dev)
 
 static int loongson2_thermal_probe(struct platform_device *pdev)
 {
-	const struct thermal_zone_device_ops *thermal_ops;
-	struct device *dev = &pdev->dev;
 	struct loongson2_thermal_data *data;
+	struct device *dev = &pdev->dev;
 	struct thermal_zone_device *tzd;
 	int ret, irq;
 
@@ -193,31 +212,22 @@ static int loongson2_thermal_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	data->chip_data = device_get_match_data(dev);
+	if (!data->chip_data)
+		return -EINVAL;
 
 	data->ctrl_reg = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(data->ctrl_reg))
 		return PTR_ERR(data->ctrl_reg);
 
-	/* The temperature output register is separate for Loongson-2K2000 */
-	if (data->chip_data->flags & LS2K2000_THSENS_OUT_FLAG) {
-		data->temp_reg = devm_platform_ioremap_resource(pdev, 1);
-		if (IS_ERR(data->temp_reg))
-			return PTR_ERR(data->temp_reg);
-
-		thermal_ops = &ls2k2000_thermal_zone_ops;
-	} else {
-		thermal_ops = &ls2k1000_thermal_zone_ops;
-	}
-
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
 		return irq;
 
-	writeb(LOONGSON2_THSENS_INT_EN, data->ctrl_reg + LOONGSON2_THSENS_STATUS_REG);
+	ret = data->chip_data->hw_init(pdev, data);
+	if (ret)
+		return ret;
 
-	loongson2_thermal_set_trip_temp(data, 0, 0, false);
-
-	tzd = devm_thermal_of_zone_register(dev, 0, data, thermal_ops);
+	tzd = devm_thermal_of_zone_register(dev, 0, data, data->chip_data->thermal_ops);
 	if (IS_ERR(tzd))
 		return dev_err_probe(dev, PTR_ERR(tzd), "failed to register sensor");
 
