@@ -346,6 +346,13 @@ static void __init ic_close_devs(void)
 		kfree(d);
 	}
 	rtnl_unlock();
+
+	/* The whole ic_device list was just kfree()'d above; clear the
+	 * static pointers so retry rounds (e.g. dynamic retry after an
+	 * OFFER without ACK) don't dereference them (use-after-free).
+	 */
+	ic_first_dev = NULL;
+	ic_dev = NULL;
 }
 
 /*
