@@ -46,9 +46,11 @@ static __attribute__((noreturn))
 void format(void)
 {
 	fprintf(stderr,
-		"Usage: scripts/sign-file [-dp] <hash algo> <key> <x509> <module> [<dest>]\n");
+		"Usage: scripts/sign-file [-dpk] <hash algo> <key> <x509> <module> [<dest>]\n");
 	fprintf(stderr,
 		"       scripts/sign-file -s <raw sig> <hash algo> <x509> <module> [<dest>]\n");
+	fprintf(stderr,
+		"       scripts/sign-file -b [-dpk] <hash algo> <key> <x509> <module> [<module> ...]\n");
 	exit(2);
 }
 
@@ -183,76 +185,25 @@ static X509 *read_x509(const char *x509_name)
 	return x509;
 }
 
-int main(int argc, char **argv)
+static void sign_single_file(const char *hash_algo, const char *module_name,
+			     const char *dest_name, bool replace_orig,
+			     bool save_sig, bool sign_only, bool raw_sig,
+			     const char *raw_sig_name, unsigned int use_keyid,
+			     EVP_PKEY *private_key, X509 *x509)
 {
 	struct module_signature sig_info = { .id_type = MODULE_SIGNATURE_TYPE_PKCS7 };
-	char *hash_algo = NULL;
-	char *private_key_name = NULL, *raw_sig_name = NULL;
-	char *x509_name, *module_name, *dest_name;
-	bool save_sig = false, replace_orig;
-	bool sign_only = false;
-	bool raw_sig = false;
 	unsigned char buf[4096];
 	unsigned long module_size, sig_size;
 	const EVP_MD *digest_algo;
-	EVP_PKEY *private_key;
 	CMS_ContentInfo *cms = NULL;
-	unsigned int use_keyid = 0;
-	X509 *x509;
 	BIO *bd, *bm;
-	int opt, n;
-	OpenSSL_add_all_algorithms();
-	ERR_load_crypto_strings();
-	ERR_clear_error();
-
-	key_pass = getenv("KBUILD_SIGN_PIN");
-
-	do {
-		opt = getopt(argc, argv, "sdpk");
-		switch (opt) {
-		case 's': raw_sig = true; break;
-		case 'p': save_sig = true; break;
-		case 'd': sign_only = true; save_sig = true; break;
-		case 'k': use_keyid = CMS_USE_KEYID; break;
-		case -1: break;
-		default: format();
-		}
-	} while (opt != -1);
-
-	argc -= optind;
-	argv += optind;
-	if (argc < 4 || argc > 5)
-		format();
-
-	if (raw_sig) {
-		raw_sig_name = argv[0];
-		hash_algo = argv[1];
-	} else {
-		hash_algo = argv[0];
-		private_key_name = argv[1];
-	}
-	x509_name = argv[2];
-	module_name = argv[3];
-	if (argc == 5 && strcmp(argv[3], argv[4]) != 0) {
-		dest_name = argv[4];
-		replace_orig = false;
-	} else {
-		ERR(asprintf(&dest_name, "%s.~signed~", module_name) < 0,
-		    "asprintf");
-		replace_orig = true;
-	}
+	int n;
 
 	/* Open the module file */
 	bm = BIO_new_file(module_name, "rb");
 	ERR(!bm, "%s", module_name);
 
 	if (!raw_sig) {
-		/* Read the private key and the X.509 cert the PKCS#7 message
-		 * will point to.
-		 */
-		private_key = read_private_key(private_key_name);
-		x509 = read_x509(x509_name);
-
 		/* Digest the module data. */
 		OpenSSL_add_all_digests();
 		drain_openssl_errors(__LINE__, 0);
@@ -307,7 +258,8 @@ int main(int argc, char **argv)
 
 		if (sign_only) {
 			BIO_free(bm);
-			return 0;
+			CMS_ContentInfo_free(cms);
+			return;
 		}
 	}
 
@@ -354,5 +306,94 @@ int main(int argc, char **argv)
 	if (replace_orig)
 		ERR(rename(dest_name, module_name) < 0, "%s", dest_name);
 
+	CMS_ContentInfo_free(cms);
+}
+
+int main(int argc, char **argv)
+{
+	char *hash_algo = NULL;
+	char *private_key_name = NULL, *raw_sig_name = NULL;
+	char *x509_name, *module_name, *dest_name;
+	bool save_sig = false, replace_orig;
+	bool sign_only = false;
+	bool raw_sig = false, bulk = false;
+	EVP_PKEY *private_key = NULL;
+	X509 *x509 = NULL;
+	unsigned int use_keyid = 0;
+	int opt, i, nmodules;
+
+	OpenSSL_add_all_algorithms();
+	ERR_load_crypto_strings();
+	ERR_clear_error();
+
+	key_pass = getenv("KBUILD_SIGN_PIN");
+
+	do {
+		opt = getopt(argc, argv, "sdpkb");
+		switch (opt) {
+		case 's': raw_sig = true; break;
+		case 'p': save_sig = true; break;
+		case 'd': sign_only = true; save_sig = true; break;
+		case 'k': use_keyid = CMS_USE_KEYID; break;
+		case 'b': bulk = true; break;
+		case -1: break;
+		default: format();
+		}
+	} while (opt != -1);
+
+	argc -= optind;
+	argv += optind;
+
+	if (raw_sig && bulk)
+		format();
+
+	if (bulk) {
+		if (argc < 4)
+			format();
+	} else if (argc < 4 || argc > 5) {
+		format();
+	}
+
+	if (raw_sig) {
+		raw_sig_name = argv[0];
+		hash_algo = argv[1];
+	} else {
+		hash_algo = argv[0];
+		private_key_name = argv[1];
+	}
+	x509_name = argv[2];
+
+	if (!raw_sig) {
+		private_key = read_private_key(private_key_name);
+		x509 = read_x509(x509_name);
+	}
+
+	/* In bulk mode all remaining arguments are module names.  In the
+	 * normal mode there is exactly one module name.
+	 */
+	nmodules = bulk ? argc - 3 : 1;
+	for (i = 0; i < nmodules; i++) {
+		module_name = argv[3 + i];
+		dest_name = NULL;
+		replace_orig = true;
+
+		if (!bulk && argc == 5 && strcmp(argv[3], argv[4]) != 0) {
+			dest_name = argv[4];
+			replace_orig = false;
+		} else {
+			ERR(asprintf(&dest_name, "%s.~signed~", module_name) < 0,
+			    "asprintf");
+		}
+
+		sign_single_file(hash_algo, module_name, dest_name, replace_orig,
+				 save_sig, sign_only, raw_sig, raw_sig_name, use_keyid,
+				 private_key, x509);
+
+		if (replace_orig)
+			free(dest_name);
+	}
+
+	EVP_PKEY_free(private_key);
+	X509_free(x509);
 	return 0;
 }
