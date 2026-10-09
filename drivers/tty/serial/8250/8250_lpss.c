@@ -183,12 +183,8 @@ static int ehl_serial_setup(struct lpss8250 *lpss, struct uart_port *port)
 
 static void ehl_serial_exit(struct lpss8250 *lpss)
 {
-	if (lpss->data.line < 0)
-		return;
-
-	struct uart_8250_port *up = serial8250_get_port(lpss->data.line);
-
-	up->dma = NULL;
+	if (lpss->data.uport)
+		lpss->data.uport->dma = NULL;
 }
 
 #ifdef CONFIG_SERIAL_8250_DMA
@@ -332,8 +328,6 @@ static int lpss8250_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return ret;
 
 	lpss->board = (struct lpss8250_board *)id->driver_data;
-	/* for tests in lpss->board->exit() */
-	lpss->data.line = -1;
 
 	memset(&uart, 0, sizeof(struct uart_8250_port));
 
@@ -361,11 +355,12 @@ static int lpss8250_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (ret)
 		goto err_exit;
 
-	ret = serial8250_register_8250_port(&uart);
-	if (ret < 0)
+	struct uart_8250_port *uport = serial8250_register_8250_port(&uart);
+	if (IS_ERR(uport)) {
+		ret = PTR_ERR(uport);
 		goto err_exit;
-
-	lpss->data.line = ret;
+	}
+	lpss->data.uport = uport;
 
 	pci_set_drvdata(pdev, lpss);
 	return 0;
@@ -380,7 +375,7 @@ static void lpss8250_remove(struct pci_dev *pdev)
 {
 	struct lpss8250 *lpss = pci_get_drvdata(pdev);
 
-	serial8250_unregister_port(lpss->data.line);
+	serial8250_unregister_port(lpss->data.uport);
 
 	lpss->board->exit(lpss);
 	pci_free_irq_vectors(pdev);

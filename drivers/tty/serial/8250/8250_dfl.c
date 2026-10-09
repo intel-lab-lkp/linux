@@ -27,10 +27,6 @@
 #define DFHv1_PARAM_REG_LAYOUT_WIDTH	GENMASK_ULL(63, 32)
 #define DFHv1_PARAM_REG_LAYOUT_SHIFT	GENMASK_ULL(31, 0)
 
-struct dfl_uart {
-	int line;
-};
-
 static int dfh_get_u64_param_val(struct dfl_device *dfl_dev, int param_id, u64 *pval)
 {
 	size_t psize;
@@ -109,7 +105,6 @@ static int dfl_uart_probe(struct dfl_device *dfl_dev)
 {
 	struct device *dev = &dfl_dev->dev;
 	struct uart_8250_port uart = { };
-	struct dfl_uart *dfluart;
 	int ret;
 
 	uart.port.flags = UPF_IOREMAP;
@@ -123,24 +118,20 @@ static int dfl_uart_probe(struct dfl_device *dfl_dev)
 	if (dfl_dev->num_irqs == 1)
 		uart.port.irq = dfl_dev->irqs[0];
 
-	dfluart = devm_kzalloc(dev, sizeof(*dfluart), GFP_KERNEL);
-	if (!dfluart)
-		return -ENOMEM;
+	struct uart_8250_port *uport = serial8250_register_8250_port(&uart);
+	if (IS_ERR(uport))
+		return dev_err_probe(dev, PTR_ERR(uport), "unable to register 8250 port.\n");
 
-	dfluart->line = serial8250_register_8250_port(&uart);
-	if (dfluart->line < 0)
-		return dev_err_probe(dev, dfluart->line, "unable to register 8250 port.\n");
-
-	dev_set_drvdata(dev, dfluart);
+	dev_set_drvdata(dev, uport);
 
 	return 0;
 }
 
 static void dfl_uart_remove(struct dfl_device *dfl_dev)
 {
-	struct dfl_uart *dfluart = dev_get_drvdata(&dfl_dev->dev);
+	struct uart_8250_port *uport = dev_get_drvdata(&dfl_dev->dev);
 
-	serial8250_unregister_port(dfluart->line);
+	serial8250_unregister_port(uport);
 }
 
 #define FME_FEATURE_ID_UART 0x24

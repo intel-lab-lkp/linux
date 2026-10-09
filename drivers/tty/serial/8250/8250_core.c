@@ -333,7 +333,6 @@ struct uart_8250_port *serial8250_get_port(int line)
 {
 	return &serial8250_ports[line];
 }
-EXPORT_SYMBOL_GPL(serial8250_get_port);
 
 static inline void serial8250_apply_quirks(struct uart_8250_port *up)
 {
@@ -600,13 +599,12 @@ int __init early_serial_setup(struct uart_port *port)
 
 /**
  *	serial8250_suspend_port - suspend one serial port
- *	@line:  serial line number
+ *	@up: serial port
  *
  *	Suspend one serial port.
  */
-void serial8250_suspend_port(int line)
+void serial8250_suspend_port(struct uart_8250_port *up)
 {
-	struct uart_8250_port *up = &serial8250_ports[line];
 	struct uart_port *port = &up->port;
 
 	if (uart_console(port)) {
@@ -630,13 +628,12 @@ EXPORT_SYMBOL(serial8250_suspend_port);
 
 /**
  *	serial8250_resume_port - resume one serial port
- *	@line:  serial line number
+ *	@up: serial port
  *
  *	Resume one serial port.
  */
-void serial8250_resume_port(int line)
+void serial8250_resume_port(struct uart_8250_port *up)
 {
-	struct uart_8250_port *up = &serial8250_ports[line];
 	struct uart_port *port = &up->port;
 
 	up->canary = 0;
@@ -754,16 +751,16 @@ static void serial_8250_overrun_backoff_work(struct work_struct *work)
  *	The port is then probed and if necessary the IRQ is autodetected
  *	If this fails an error is returned.
  *
- *	On success the port is ready to use and the line number is returned.
+ *	On success, the port is returned as ready to use.
  */
-int serial8250_register_8250_port(const struct uart_8250_port *up)
+struct uart_8250_port *serial8250_register_8250_port(const struct uart_8250_port *up)
 {
 	struct uart_8250_port *uart;
 	bool cons_flow;
 	int ret;
 
 	if (up->port.uartclk == 0)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	guard(mutex)(&serial_mutex);
 
@@ -775,13 +772,13 @@ int serial8250_register_8250_port(const struct uart_8250_port *up)
 		 */
 		uart = serial8250_setup_port(nr_uarts);
 		if (!uart)
-			return -ENOSPC;
+			return ERR_PTR(-ENOSPC);
 		nr_uarts++;
 	}
 
 	/* Check if it is CIR already. We check this below again, see there why. */
 	if (uart->port.type == PORT_8250_CIR)
-		return -ENODEV;
+		return ERR_PTR(-ENODEV);
 
 	/* Preserve specified console flow control. */
 	cons_flow = uart_cons_flow_enabled(&uart->port);
@@ -901,16 +898,12 @@ int serial8250_register_8250_port(const struct uart_8250_port *up)
 					&uart->port);
 		if (ret)
 			goto err;
-
-		ret = uart->port.line;
 	} else {
 		dev_info(uart->port.dev,
 			"skipping CIR port at 0x%lx / 0x%llx, IRQ %d\n",
 			uart->port.iobase,
 			(unsigned long long)uart->port.mapbase,
 			uart->port.irq);
-
-		ret = 0;
 	}
 
 	if (!uart->lsr_save_mask)
@@ -926,25 +919,23 @@ int serial8250_register_8250_port(const struct uart_8250_port *up)
 		uart->overrun_backoff_time_ms = 0;
 	}
 
-	return ret;
+	return uart;
 
 err:
 	uart->port.dev = NULL;
-	return ret;
+	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL(serial8250_register_8250_port);
 
 /**
  *	serial8250_unregister_port - remove a 16x50 serial port at runtime
- *	@line: serial line number
+ *	@uart: port
  *
  *	Remove one serial port.  This may not be called from interrupt
  *	context.  We hand the port back to the our control.
  */
-void serial8250_unregister_port(int line)
+void serial8250_unregister_port(struct uart_8250_port *uart)
 {
-	struct uart_8250_port *uart = &serial8250_ports[line];
-
 	guard(mutex)(&serial_mutex);
 
 	if (uart->em485) {
@@ -957,7 +948,7 @@ void serial8250_unregister_port(int line)
 		uart->port.flags &= ~UPF_BOOT_AUTOCONF;
 		uart->port.type = PORT_UNKNOWN;
 		uart->port.dev = &serial8250_isa_devs->dev;
-		uart->port.port_id = line;
+		uart->port.port_id = uart->port.line;
 		uart->capabilities = 0;
 		serial8250_init_port(uart);
 		serial8250_apply_quirks(uart);
