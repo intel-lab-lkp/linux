@@ -1036,9 +1036,9 @@ static void queue_sync_ecaps(struct scx_sched *sch, s32 cid)
 	struct scx_sched_pcpu *pcpu = per_cpu_ptr(sch->pcpu, cpu);
 
 	/*
-	 * Pairs with smp_mb() in __scx_process_sync_ecaps(). Either the check
-	 * below sees the node off the list and queues it, or the in-flight sync
-	 * sees the caps[] update made before this call.
+	 * Pairs with smp_mb() in sync_pcpu_ecaps(). Either the check below sees
+	 * the node off the list and queues it, or the in-flight sync sees the
+	 * caps[] update made before this call.
 	 */
 	smp_mb();
 
@@ -1061,9 +1061,13 @@ static void discard_queued_syncs(struct rq *rq)
 }
 
 /**
- * __scx_process_sync_ecaps - Sync this cpu's ecaps to pshard->caps[]
- * @rq: the cid's cpu rq
+ * sync_pcpu_ecaps - Sync @pcpu's ecaps to its pshard caps on @rq's cid
+ * @rq: the cid's cpu rq, locked and active
+ * @pcpu: the sched's per-cpu state on @rq's cpu
+ * @cid: @rq's cid
+ * @shard: @cid's pshard index
  * @prev: @rq's previous task from the in-progress dispatch
+ * @report: whether a change is reported to the sched
  *
  * pshard->caps[] is the target configuration. pcpu->ecaps is the effective
  * transposed copy owned by the cid's cpu and written only here under @rq's
@@ -1072,6 +1076,67 @@ static void discard_queued_syncs(struct rq *rq)
  * A sched that newly gains baseline access here is owed an update_idle() so it
  * learns the cid's idle state. Such a gain arms the per-rq
  * %SCX_RQ_SUB_IDLE_RENOTIFY gate so the next idle pick delivers it.
+ *
+ * Return the caps lost.
+ */
+static u64 sync_pcpu_ecaps(struct rq *rq, struct scx_sched_pcpu *pcpu, s32 cid, s32 shard,
+			   struct task_struct *prev, bool report)
+{
+	struct scx_pshard *ps = pcpu->sch->pshard[shard];
+	u64 old, ecaps, lost, gained;
+
+	/* pairs with smp_mb() in queue_sync_ecaps(), see there */
+	smp_mb();
+
+	old = READ_ONCE(pcpu->ecaps);
+	ecaps = calc_effective_caps(ps, cid);
+	WRITE_ONCE(pcpu->ecaps, ecaps);
+
+	lost = old & ~ecaps;
+	gained = ecaps & ~old;
+
+	/*
+	 * Tell the sched its effective caps on this cid changed. The invocation
+	 * is equivalent to the dispatch path and may drop and re-acquire the rq
+	 * lock temporarily while the caller still holds other queued syncs
+	 * privately, see scx_discard_ecaps_to_sync(). The dispatch kfuncs
+	 * resolve their context on the executing cpu, which under core
+	 * scheduling can differ from @rq's cpu, so the context is set up there.
+	 * The rq recorded in it keeps the dispatches targeting @rq.
+	 */
+	if (ecaps != pcpu->reported_ecaps &&
+	    SCX_HAS_OP(pcpu->sch, sub_ecaps_updated) && report) {
+		struct scx_dsp_ctx *dspc = &this_cpu_ptr(pcpu->sch->pcpu)->dsp_ctx;
+
+		dspc->rq = rq;
+		/* stash @prev so nested dispatches can access it */
+		rq->scx.sub_dispatch_prev = prev;
+		SCX_CALL_OP(pcpu->sch, sub_ecaps_updated, rq, scx_cpu_arg(cpu_of(rq)),
+			    pcpu->reported_ecaps, ecaps);
+		rq->scx.sub_dispatch_prev = NULL;
+		scx_flush_dispatch_buf(pcpu->sch, rq);
+		pcpu->reported_ecaps = ecaps;
+	}
+
+	/*
+	 * Gaining baseline access owes an update_idle() so the sched learns the
+	 * cpu's idle state. Arm the per-rq gate so the next idle pick flushes
+	 * it. Losing access drops any pending notify.
+	 */
+	if (gained & SCX_CAP_BASE) {
+		pcpu->idle_renotify = true;
+		rq->scx.flags |= SCX_RQ_SUB_IDLE_RENOTIFY;
+	} else if (lost & SCX_CAP_BASE) {
+		pcpu->idle_renotify = false;
+	}
+
+	return lost;
+}
+
+/**
+ * __scx_process_sync_ecaps - Sync this cpu's ecaps to pshard->caps[]
+ * @rq: the cid's cpu rq
+ * @prev: @rq's previous task from the in-progress dispatch
  */
 void __scx_process_sync_ecaps(struct rq *rq, struct task_struct *prev)
 {
@@ -1104,58 +1169,10 @@ void __scx_process_sync_ecaps(struct rq *rq, struct task_struct *prev)
 	llist_for_each_safe(pos, tmp, batch) {
 		struct scx_sched_pcpu *pcpu =
 			container_of(pos, struct scx_sched_pcpu, ecaps_to_sync_node);
-		struct scx_pshard *ps = pcpu->sch->pshard[shard];
-		u64 old, ecaps, lost, gained;
 
 		init_llist_node(pos);
-
-		/* pairs with smp_mb() in queue_sync_ecaps(), see there */
-		smp_mb();
-
-		old = READ_ONCE(pcpu->ecaps);
-		ecaps = calc_effective_caps(ps, cid);
-		WRITE_ONCE(pcpu->ecaps, ecaps);
-
-		lost = old & ~ecaps;
-		gained = ecaps & ~old;
-		lost_all |= lost;
-
-		/*
-		 * Tell the sched its effective caps on this cid changed. The
-		 * invocation is equivalent to the dispatch path and may drop
-		 * and re-acquire the rq lock temporarily while the rest of
-		 * @batch is held privately, see scx_discard_ecaps_to_sync().
-		 * The dispatch kfuncs resolve their context on the executing
-		 * cpu, which under core scheduling can differ from @rq's cpu,
-		 * so the context is set up there. The rq recorded in it keeps
-		 * the dispatches targeting @rq.
-		 */
-		if (ecaps != pcpu->reported_ecaps &&
-		    SCX_HAS_OP(pcpu->sch, sub_ecaps_updated) &&
-		    !scx_bypassing(pcpu->sch, cpu)) {
-			struct scx_dsp_ctx *dspc = &this_cpu_ptr(pcpu->sch->pcpu)->dsp_ctx;
-
-			dspc->rq = rq;
-			/* stash @prev so nested dispatches can access it */
-			rq->scx.sub_dispatch_prev = prev;
-			SCX_CALL_OP(pcpu->sch, sub_ecaps_updated, rq, scx_cpu_arg(cpu),
-				    pcpu->reported_ecaps, ecaps);
-			rq->scx.sub_dispatch_prev = NULL;
-			scx_flush_dispatch_buf(pcpu->sch, rq);
-			pcpu->reported_ecaps = ecaps;
-		}
-
-		/*
-		 * Gaining baseline access owes an update_idle() so the sched
-		 * learns the cpu's idle state. Arm the per-rq gate so the next
-		 * idle pick flushes it. Losing access drops any pending notify.
-		 */
-		if (gained & SCX_CAP_BASE) {
-			pcpu->idle_renotify = true;
-			rq->scx.flags |= SCX_RQ_SUB_IDLE_RENOTIFY;
-		} else if (lost & SCX_CAP_BASE) {
-			pcpu->idle_renotify = false;
-		}
+		lost_all |= sync_pcpu_ecaps(rq, pcpu, cid, shard, prev,
+					    !scx_bypassing(pcpu->sch, cpu));
 	}
 
 	/*
