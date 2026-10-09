@@ -1103,15 +1103,43 @@ static void amt_req_work(struct work_struct *work)
 				 msecs_to_jiffies(100));
 }
 
+/* RFC 7450 s5.3.3.6: Multicast Data must not be fragmented over IPv6, so
+ * a payload above the tunnel MTU is dropped, and an IPv6 source is sent a
+ * Packet Too Big of at least IPV6_MIN_MTU, as it ignores less. icmp_send()
+ * never answers an IPv4 multicast datagram. A GSO skb is judged by its
+ * segments, so @skb must not be marked as a tunnel packet yet:
+ * skb->encapsulation would leave the inner UDP header out of their size.
+ */
+static bool amt_tmtu_exceeded(struct sk_buff *skb,
+			      const struct dst_entry *dst)
+{
+	int off = skb_network_offset(skb);
+	u32 mtu;
+
+	mtu = dst_mtu(dst) - sizeof(struct ipv6hdr) - sizeof(struct udphdr) -
+	      off;
+	if (skb_is_gso(skb) ? skb_gso_validate_network_len(skb, mtu) :
+			      skb->len - off <= mtu)
+		return false;
+
+	if (skb->protocol == htons(ETH_P_IPV6))
+		icmpv6_ndo_send(skb, ICMPV6_PKT_TOOBIG, 0,
+				max_t(u32, mtu, IPV6_MIN_MTU));
+	return true;
+}
+
 /* Route an AMT-encapsulated skb to @daddr and send it over the device's
- * outer family. The caller has already pushed the AMT header.
+ * outer family. The caller has already pushed the AMT header. @data marks
+ * Multicast Data, which may be a GSO skb: it gets the IPv6 tunnel MTU
+ * check, then the UDP tunnel offload marking.
  */
 static int amt_udp_xmit(struct amt_dev *amt, struct sock *sk,
 			struct sk_buff *skb, const union amt_addr *daddr,
-			__be16 sport, __be16 dport)
+			__be16 sport, __be16 dport, bool data)
 {
 	struct rtable *rt;
 	struct flowi4 fl4;
+	int err;
 
 	if (amt_v6(amt)) {
 		struct dst_entry *dst;
@@ -1122,6 +1150,14 @@ static int amt_udp_xmit(struct amt_dev *amt, struct sock *sk,
 			netdev_dbg(amt->dev, "no route to %pI6c\n",
 				   &daddr->ip6);
 			return PTR_ERR(dst);
+		}
+		if (data) {
+			err = amt_tmtu_exceeded(skb, dst) ? -EMSGSIZE :
+			      udp_tunnel_handle_offloads(skb, true);
+			if (err) {
+				dst_release(dst);
+				return err;
+			}
 		}
 		/* iptunnel_xmit() scrubs the IPv4 tunnel skb, but
 		 * udp_tunnel6_xmit_skb() does not, so drop the inner
@@ -1136,11 +1172,17 @@ static int amt_udp_xmit(struct amt_dev *amt, struct sock *sk,
 		return 0;
 	}
 
+	if (data) {
+		err = udp_tunnel_handle_offloads(skb, true);
+		if (err)
+			return err;
+	}
+
 	memset(&fl4, 0, sizeof(struct flowi4));
 	fl4.flowi4_oif         = amt->stream_dev->ifindex;
 	fl4.daddr              = daddr->ip4;
 	fl4.saddr              = amt->local_ip;
-	fl4.flowi4_dscp        = inet_dsfield_to_dscp(AMT_TOS);
+	fl4.flowi4_dscp        = data ? 0 : inet_dsfield_to_dscp(AMT_TOS);
 	fl4.flowi4_proto       = IPPROTO_UDP;
 	rt = ip_route_output_key(amt->net, &fl4);
 	if (IS_ERR(rt)) {
@@ -1229,16 +1271,14 @@ static void amt_send_multicast_data(struct amt_dev *amt,
 {
 	struct amt_header_mcast_data *amtmd;
 	struct sk_buff *skb;
-	struct iphdr *iph;
-	struct flowi4 fl4;
-	struct rtable *rt;
 	struct sock *sk;
+	int err;
 
 	sk = rcu_dereference_bh(amt->sk);
 	if (!sk)
 		return;
 
-	skb = skb_copy_expand(oskb, sizeof(*amtmd) + sizeof(*iph) +
+	skb = skb_copy_expand(oskb, sizeof(*amtmd) + amt_ip_hlen(amt) +
 			      sizeof(struct udphdr), 0, GFP_ATOMIC);
 	if (!skb)
 		return;
@@ -1249,22 +1289,6 @@ static void amt_send_multicast_data(struct amt_dev *amt,
 	 */
 	skb_reset_mac_header(skb);
 	skb_reset_inner_headers(skb);
-	if (udp_tunnel_handle_offloads(skb, true)) {
-		kfree_skb(skb);
-		return;
-	}
-
-	memset(&fl4, 0, sizeof(struct flowi4));
-	fl4.flowi4_oif         = amt->stream_dev->ifindex;
-	fl4.daddr              = tunnel->addr.ip4;
-	fl4.saddr              = amt->local_ip;
-	fl4.flowi4_proto       = IPPROTO_UDP;
-	rt = ip_route_output_key(amt->net, &fl4);
-	if (IS_ERR(rt)) {
-		netdev_dbg(amt->dev, "no route to %pI4\n", &tunnel->addr.ip4);
-		kfree_skb(skb);
-		return;
-	}
 
 	amtmd = skb_push(skb, sizeof(*amtmd));
 	amtmd->version = 0;
@@ -1275,17 +1299,16 @@ static void amt_send_multicast_data(struct amt_dev *amt,
 		skb_set_inner_protocol(skb, htons(ETH_P_IP));
 	else
 		skb_set_inner_protocol(skb, htons(ETH_P_IPV6));
-	udp_tunnel_xmit_skb(rt, sk, skb,
-			    fl4.saddr,
-			    fl4.daddr,
-			    AMT_TOS,
-			    ip4_dst_hoplimit(&rt->dst),
-			    0,
-			    amt->relay_port,
-			    tunnel->source_port,
-			    false,
-			    false,
-			    0);
+	err = amt_udp_xmit(amt, sk, skb, &tunnel->addr, amt->relay_port,
+			   tunnel->source_port, true);
+	if (err) {
+		DEV_STATS_INC(amt->dev, tx_dropped);
+		kfree_skb_reason(skb, err == -EMSGSIZE ?
+				      SKB_DROP_REASON_PKT_TOO_BIG :
+				      err == -ENOMEM ?
+				      SKB_DROP_REASON_NOMEM :
+				      SKB_DROP_REASON_IP_OUTNOROUTES);
+	}
 }
 
 static bool amt_send_membership_query(struct amt_dev *amt,
@@ -1321,7 +1344,7 @@ static bool amt_send_membership_query(struct amt_dev *amt,
 	else
 		skb_set_inner_protocol(skb, htons(ETH_P_IPV6));
 	if (amt_udp_xmit(amt, sk, skb, &tunnel->addr, amt->relay_port,
-			 tunnel->source_port))
+			 tunnel->source_port, false))
 		return true;
 	amt_update_relay_status(tunnel, AMT_STATUS_SENT_QUERY, true);
 	return false;
