@@ -39,6 +39,7 @@ struct page_owner_scan {
 };
 
 bool page_owner_next_eligible(struct page_owner_scan *scan);
+int page_owner_get_nid(struct page *page);
 
 /*
  * mm/page_owner_iter.c

@@ -165,4 +165,9 @@ __bpf_kfunc int bpf_page_owner_stack_snprint(depot_stack_handle_t handle,
 	return stack_depot_snprint(handle, buf, buf_size, 0);
 }
 
+__bpf_kfunc int bpf_page_owner_get_nid(struct page_owner_scan *scan)
+{
+	return page_owner_get_nid(scan->page);
+}
+
 __bpf_kfunc_end_defs();
