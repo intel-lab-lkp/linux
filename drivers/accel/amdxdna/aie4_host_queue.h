@@ -10,6 +10,7 @@
 
 #define CTX_MAX_CMDS                    32
 
+/* Host queue header layout. */
 struct host_queue_header {
 	__u64 read_index;
 	struct {
@@ -17,8 +18,10 @@ struct host_queue_header {
 		__u16 minor;
 	} version;
 	__u32 capacity; /* Queue capacity, must be power of two. */
-	__u64 write_index;
+	__u64 padding0[6];
+	__u64 write_index; /* different cacheline from read_index to avoid false sharing */
+	__u64 padding1[6];
 	__u64 data_address; /* The xdna dev addr for payload. */
-};
+} __packed;
 
 #endif /* _AIE4_HOST_QUEUE_H_ */
