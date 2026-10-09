@@ -773,7 +773,7 @@ static int azx_rirb_get_response(struct hdac_bus *bus, unsigned int addr,
 		return 0;
 
 	if (hbus->no_response_fallback)
-		return -EIO;
+		goto error;
 
 	if (!bus->polling_mode) {
 		dev_warn(chip->card->dev,
@@ -789,7 +789,7 @@ static int azx_rirb_get_response(struct hdac_bus *bus, unsigned int addr,
 			 bus->last_cmd[addr]);
 		if (chip->ops->disable_msi_reset_irq &&
 		    chip->ops->disable_msi_reset_irq(chip) < 0)
-			return -EIO;
+			goto error;
 		goto again;
 	}
 
@@ -798,12 +798,12 @@ static int azx_rirb_get_response(struct hdac_bus *bus, unsigned int addr,
 		 * phase, this is likely an access to a non-existing codec
 		 * slot.  Better to return an error and reset the system.
 		 */
-		return -EIO;
+		goto error;
 	}
 
 	/* no fallback mechanism? */
 	if (!chip->fallback_to_single_cmd)
-		return -EIO;
+		goto error;
 
 	/* a fatal communication error; need either to reset or to fallback
 	 * to the single_cmd mode
@@ -822,6 +822,18 @@ static int azx_rirb_get_response(struct hdac_bus *bus, unsigned int addr,
 	chip->single_cmd = 1;
 	hbus->response_reset = 0;
 	snd_hdac_bus_stop_cmd_io(bus);
+	return -EIO;
+
+ error:
+	/*
+	 * The command will not get any response.  Drop its pending count,
+	 * otherwise bus->rirb.cmds[addr] stays non-zero forever and every
+	 * later verb to this codec address keeps timing out, even though its
+	 * own response is delivered normally.
+	 */
+	scoped_guard(spinlock_irq, &bus->reg_lock) {
+		bus->rirb.cmds[addr] = 0;
+	}
 	return -EIO;
 }
 
