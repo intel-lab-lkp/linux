@@ -22,6 +22,7 @@
 #include "amdxdna_mailbox.h"
 #include "amdxdna_mailbox_helper.h"
 #include "amdxdna_pci_drv.h"
+#include "amdxdna_pm.h"
 
 #define CTX_INVALID_ID			(~0U)
 #define CTX_INVALID_DOORBELL		AMDXDNA_INVALID_DOORBELL_OFFSET
@@ -377,9 +378,13 @@ int aie4_hwctx_init(struct amdxdna_hwctx *hwctx)
 	if (ret)
 		goto destroy_lock;
 
-	ret = aie4_hwctx_create(hwctx);
+	ret = amdxdna_pm_resume_get_locked(xdna);
 	if (ret)
 		goto umq_fini;
+
+	ret = aie4_hwctx_create(hwctx);
+	if (ret)
+		goto suspend_put;
 
 	priv->job_work_q = alloc_ordered_workqueue("aie4_job_%d_%d", 0,
 						   client->pid, hwctx->fw_ctx_id);
@@ -388,12 +393,15 @@ int aie4_hwctx_init(struct amdxdna_hwctx *hwctx)
 		ret = -ENOMEM;
 		goto destroy_ctx;
 	}
+	amdxdna_pm_suspend_put(xdna);
 
 	XDNA_DBG(xdna, "hwctx %d.%d init completed", client->pid, hwctx->fw_ctx_id);
 	return 0;
 
 destroy_ctx:
 	aie4_hwctx_destroy(hwctx, AIE4_HWCTX_NORMAL);
+suspend_put:
+	amdxdna_pm_suspend_put(xdna);
 umq_fini:
 	aie4_hwctx_umq_fini(hwctx);
 destroy_lock:

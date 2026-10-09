@@ -761,13 +761,32 @@ int amdxdna_drm_submit_cmd_ioctl(struct drm_device *dev, void *data, struct drm_
 	return -EINVAL;
 }
 
+static int amdxdna_hwctx_wait_cmd(struct amdxdna_client *client,
+				  struct amdxdna_drm_wait_cmd *args)
+{
+	struct amdxdna_dev *xdna = client->xdna;
+	struct amdxdna_hwctx *hwctx;
+	int ret, idx;
+
+	idx = srcu_read_lock(&client->hwctx_srcu);
+	hwctx = xa_load(&client->hwctx_xa, args->hwctx);
+	if (!hwctx) {
+		XDNA_DBG(xdna, "PID %d failed to get ctx %d", client->pid, args->hwctx);
+		ret = -EINVAL;
+	} else {
+		ret = xdna->dev_info->ops->cmd_wait(hwctx, args->seq, args->timeout);
+	}
+	srcu_read_unlock(&client->hwctx_srcu, idx);
+
+	return ret;
+}
+
 int amdxdna_drm_wait_cmd_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 {
 	struct amdxdna_client *client = filp->driver_priv;
 	struct amdxdna_dev *xdna = to_xdna_dev(dev);
 	struct amdxdna_drm_wait_cmd *args = data;
-	struct amdxdna_hwctx *hwctx;
-	int ret, idx;
+	int ret;
 
 	XDNA_DBG(xdna, "PID %d ctx %d timeout set %d ms for cmd %llu",
 		 client->pid, args->hwctx, args->timeout, args->seq);
@@ -775,22 +794,26 @@ int amdxdna_drm_wait_cmd_ioctl(struct drm_device *dev, void *data, struct drm_fi
 	if (!xdna->dev_info->ops->cmd_wait)
 		return -EOPNOTSUPP;
 
-	idx = srcu_read_lock(&client->hwctx_srcu);
-	hwctx = xa_load(&client->hwctx_xa, args->hwctx);
-	if (!hwctx) {
-		XDNA_DBG(xdna, "PID %d failed to get ctx %d", client->pid, args->hwctx);
-		ret = -EINVAL;
-		goto unlock_ctx_srcu;
+	ret = amdxdna_hwctx_wait_cmd(client, args);
+	if (ret == -EAGAIN) {
+		/*
+		 * Suspended by power management before the command completed.
+		 * Resume the device, which reconnects the context, and wait
+		 * again. Take the PM reference outside hwctx_srcu: runtime
+		 * resume takes dev_lock, which hwctx destroy holds across
+		 * synchronize_srcu().
+		 */
+		ret = amdxdna_pm_resume_get(xdna);
+		if (ret)
+			return ret;
+		ret = amdxdna_hwctx_wait_cmd(client, args);
+		amdxdna_pm_suspend_put(xdna);
 	}
-
-	ret = xdna->dev_info->ops->cmd_wait(hwctx, args->seq, args->timeout);
 
 	XDNA_DBG(xdna, "PID %d ctx %d cmd %lld wait finished, ret %d",
 		 client->pid, args->hwctx, args->seq, ret);
 
 	trace_amdxdna_debug_point(current->comm, args->seq, "job returned to user");
 
-unlock_ctx_srcu:
-	srcu_read_unlock(&client->hwctx_srcu, idx);
 	return ret;
 }

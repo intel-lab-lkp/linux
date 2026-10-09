@@ -1041,6 +1041,7 @@ static int aie4_classic_init(struct amdxdna_dev *xdna)
 	if (ret)
 		goto free_work_buf;
 
+	amdxdna_pm_init(xdna);
 	return 0;
 
 free_work_buf:
@@ -1064,6 +1065,7 @@ static void aie4_vf_fini(struct amdxdna_dev *xdna)
 
 static void aie4_classic_fini(struct amdxdna_dev *xdna)
 {
+	amdxdna_pm_fini(xdna);
 	aie4_classic_hw_stop(xdna->dev_handle);
 	aie4_free_fw_log_buffer(xdna->dev_handle);
 	aie4_free_work_buffer(xdna->dev_handle);
@@ -1408,4 +1410,6 @@ const struct amdxdna_dev_ops aie4_classic_ops = {
 	.set_aie_state		= aie4_set_state,
 	.resume			= pm_ptr(aie4_classic_resume),
 	.suspend		= pm_ptr(aie4_classic_suspend),
+	.runtime_resume		= pm_ptr(aie4_classic_resume),
+	.runtime_suspend	= pm_ptr(aie4_classic_suspend),
 };
