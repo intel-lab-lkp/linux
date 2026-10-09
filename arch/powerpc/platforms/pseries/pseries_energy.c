@@ -66,7 +66,7 @@ static u32 cpu_to_drc_index(int cpu)
 
 			of_read_drc_info_cell(&info, &value, &drc);
 			if (strncmp(drc.drc_type, "CPU", 3))
-				goto err;
+				goto err_of_node_put;
 
 			if (thread_index < drc.last_drc_index)
 				break;
@@ -135,7 +135,7 @@ static int drc_index_to_cpu(u32 drc_index)
 
 			of_read_drc_info_cell(&info, &value, &drc);
 			if (strncmp(drc.drc_type, "CPU", 3))
-				goto err;
+				goto err_of_node_put;
 
 			if (drc_index > drc.last_drc_index) {
 				cpu += drc.num_sequential_elems;
