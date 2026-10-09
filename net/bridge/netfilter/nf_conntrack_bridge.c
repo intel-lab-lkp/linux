@@ -295,12 +295,55 @@ static unsigned int nf_ct_bridge_pre(void *priv, struct sk_buff *skb,
 	return nf_conntrack_in(skb, &bridge_state);
 }
 
+static unsigned int
+nf_ct_bridge_refrag(struct sk_buff *skb, const struct nf_hook_state *state,
+		    int (*output)(struct net *, struct sock *sk,
+				  const struct nf_bridge_frag_data *data,
+				  struct sk_buff *));
+static int nf_ct_bridge_refrag_in(struct net *net, struct sock *sk,
+				  const struct nf_bridge_frag_data *data,
+				  struct sk_buff *skb);
+
+/* Prerouting reassembled the packet for tracking. Unless it is for the bridge
+ * itself, an upper device may bridge it again without frag_max_size and drop
+ * it, so pass up the original fragments. Keep the packet whole if
+ * refragmenting would drop it.
+ */
+static bool nf_ct_bridge_refrag_up(const struct sk_buff *skb)
+{
+	u16 frag_max_size = BR_INPUT_SKB_CB(skb)->frag_max_size;
+
+	if (skb->pkt_type == PACKET_HOST || !frag_max_size ||
+	    frag_max_size > skb->dev->mtu)
+		return false;
+
+	/* VLAN ingress may have moved a tag of a foreign protocol into the
+	 * payload since prerouting, so the packet is no longer plain IP.
+	 */
+	switch (skb->protocol) {
+	case htons(ETH_P_IP):
+		return true;
+	case htons(ETH_P_IPV6):
+		return frag_max_size >= IPV6_MIN_MTU;
+	default:
+		return false;
+	}
+}
+
 static unsigned int nf_ct_bridge_in(void *priv, struct sk_buff *skb,
 				    const struct nf_hook_state *state)
 {
 	bool promisc = BR_INPUT_SKB_CB(skb)->promisc;
 	struct nf_conntrack *nfct = skb_nfct(skb);
 	struct nf_conn *ct;
+
+	if (nf_ct_bridge_refrag_up(skb)) {
+		/* Fragments carrying conntrack would make the layer above skip
+		 * reassembly and tracking.
+		 */
+		nf_reset_ct(skb);
+		return nf_ct_bridge_refrag(skb, state, nf_ct_bridge_refrag_in);
+	}
 
 	if (promisc) {
 		nf_reset_ct(skb);
@@ -383,6 +426,29 @@ static int nf_ct_bridge_frag_restore(struct sk_buff *skb,
 
 	skb_copy_to_linear_data_offset(skb, -ETH_HLEN, data->mac, ETH_HLEN);
 	skb_reset_mac_header(skb);
+
+	return 0;
+}
+
+static int nf_ct_bridge_refrag_in(struct net *net, struct sock *sk,
+				  const struct nf_bridge_frag_data *data,
+				  struct sk_buff *skb)
+{
+	int err;
+
+	err = nf_ct_bridge_frag_restore(skb, data);
+	if (err < 0)
+		return err;
+
+	/* The fast path reuses the reassembled head as the first fragment. Its
+	 * ignore_df from defrag would let IPv6 forwarding refragment it.
+	 */
+	skb->ignore_df = 0;
+
+	/* Unlike the transmit path, receive keeps the Ethernet header pulled. */
+	skb_set_mac_header(skb, -ETH_HLEN);
+	br_drop_fake_rtable(skb);
+	netif_receive_skb(skb);
 
 	return 0;
 }
