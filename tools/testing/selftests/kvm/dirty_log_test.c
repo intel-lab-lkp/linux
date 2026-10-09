@@ -291,8 +291,7 @@ static void default_after_vcpu_run(struct kvm_vcpu *vcpu)
 
 static bool dirty_ring_supported(void)
 {
-	return (kvm_has_cap(KVM_CAP_DIRTY_LOG_RING) ||
-		kvm_has_cap(KVM_CAP_DIRTY_LOG_RING_ACQ_REL));
+	return kvm_get_dirty_ring_cap();
 }
 
 static void dirty_ring_create_vm_done(struct kvm_vm *vm)

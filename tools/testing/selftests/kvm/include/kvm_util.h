@@ -307,6 +307,17 @@ static inline bool kvm_has_cap(long cap)
 	return kvm_check_cap(cap);
 }
 
+static inline long kvm_get_dirty_ring_cap(void)
+{
+	if (kvm_has_cap(KVM_CAP_DIRTY_LOG_RING_ACQ_REL))
+		return KVM_CAP_DIRTY_LOG_RING_ACQ_REL;
+
+	if (kvm_has_cap(KVM_CAP_DIRTY_LOG_RING))
+		return KVM_CAP_DIRTY_LOG_RING;
+
+	return 0;
+}
+
 /*
  * Use the "inner", double-underscore macro when reporting errors from within
  * other macros so that the name of ioctl() and not its literal numeric value
