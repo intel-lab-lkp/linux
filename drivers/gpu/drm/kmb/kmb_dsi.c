@@ -184,6 +184,10 @@ void kmb_dsi_host_unregister(struct kmb_dsi *kmb_dsi)
 {
 	kmb_dsi_clk_disable(kmb_dsi);
 	mipi_dsi_host_unregister(kmb_dsi->host);
+
+	/* Release the bridge reference taken in kmb_dsi_host_bridge_init() */
+	drm_bridge_put(adv_bridge);
+	adv_bridge = NULL;
 }
 
 /*
