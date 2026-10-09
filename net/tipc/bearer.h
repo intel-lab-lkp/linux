@@ -60,8 +60,20 @@
 #define TIPC_MEDIA_TYPE_IB	2
 #define TIPC_MEDIA_TYPE_UDP	3
 
-/* Minimum bearer MTU */
-#define TIPC_MIN_BEARER_MTU	(MAX_H_SIZE + INT_H_SIZE)
+/* Minimum bearer MTU
+ *
+ * The link MSS (see tipc_link_mss()) is the MTU minus a tunnel header
+ * (INT_H_SIZE) and, with encryption, minus EMSG_OVERHEAD (32 bytes, checked
+ * in tipc_bearer_min_mtu()).  The MSS must still hold a fragment header
+ * (INT_H_SIZE) followed by the largest message header (MAX_H_SIZE), which is
+ * what tipc_msg_build() puts in the first fragment, and leaves room for at
+ * least one name table item in named_distribute().
+ */
+#ifdef CONFIG_TIPC_CRYPTO
+#define TIPC_MIN_BEARER_MTU	(MAX_H_SIZE + 2 * INT_H_SIZE + 32)
+#else
+#define TIPC_MIN_BEARER_MTU	(MAX_H_SIZE + 2 * INT_H_SIZE)
+#endif
 
 /* Identifiers for distinguishing between broadcast/multicast and replicast
  */

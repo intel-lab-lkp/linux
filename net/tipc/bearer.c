@@ -549,6 +549,10 @@ int tipc_bearer_min_mtu(struct net *net, u32 bearer_id)
 	int mtu = TIPC_MIN_BEARER_MTU;
 	struct tipc_bearer *b;
 
+#ifdef CONFIG_TIPC_CRYPTO
+	BUILD_BUG_ON(TIPC_MIN_BEARER_MTU !=
+		     MAX_H_SIZE + 2 * INT_H_SIZE + EMSG_OVERHEAD);
+#endif
 	rcu_read_lock();
 	b = bearer_get(net, bearer_id);
 	if (b)
