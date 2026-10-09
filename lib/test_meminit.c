@@ -241,6 +241,10 @@ static int __init do_kmem_cache_size(size_t size, bool want_ctor,
 		}
 
 		buf = kmem_cache_alloc(c, alloc_mask);
+		if (!buf) {
+			fail = true;
+			continue;
+		}
 		/* Check that buf is zeroed, if it must be. */
 		fail |= check_buf(buf, size, want_ctor, want_rcu, want_zero);
 		fill_with_garbage_skip(buf, size, want_ctor ? CTOR_BYTES : 0);
