@@ -475,8 +475,6 @@ static struct hstate *kobj_to_node_hstate(struct kobject *kobj, int *nidp)
 	return NULL;
 }
 
-static void hugetlb_register_all_nodes(void) { }
-
 #endif
 
 void __init hugetlb_sysfs_init(void)
@@ -497,6 +495,6 @@ void __init hugetlb_sysfs_init(void)
 
 #ifdef CONFIG_NUMA
 	hugetlb_sysfs_initialized = true;
-#endif
 	hugetlb_register_all_nodes();
+#endif
 }
