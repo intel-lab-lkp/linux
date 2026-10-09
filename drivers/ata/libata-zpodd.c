@@ -311,9 +311,9 @@ void zpodd_init(struct ata_device *dev)
 
 	zpodd->mech_type = mech_type;
 
-	ata_acpi_add_pm_notifier(dev);
 	zpodd->dev = dev;
 	dev->zpodd = zpodd;
+	ata_acpi_add_pm_notifier(dev);
 	dev_pm_qos_expose_flags(&dev->tdev, 0);
 }
 
