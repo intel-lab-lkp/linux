@@ -22,6 +22,8 @@
 #define TRE_TYPE_GO		0x20
 #define TRE_TYPE_CONFIG0	0x22
 
+#define GPI_COMPL_STATUS_CANCELLED	BIT(14)
+
 /* TRE flags */
 #define TRE_FLAGS_CHAIN		BIT(0)
 #define TRE_FLAGS_IEOB		BIT(8)
@@ -1022,7 +1024,15 @@ static void gpi_process_xfer_compl_event(struct gchan *gchan,
 
 	/* only process events on active channel */
 	if (unlikely(gchan->pm_state != ACTIVE_STATE)) {
-		dev_err(gpii->gpi_dev->dev, "skipping processing event because ch @ %s state\n",
+		/*
+		 * A channel cancel may generate a transfer-completion event after
+		 * the channel has left ACTIVE_STATE. Ignore such events to avoid
+		 * reporting a spurious error.
+		 */
+		if (compl_event->status & GPI_COMPL_STATUS_CANCELLED)
+			return;
+
+		dev_err(gpii->gpi_dev->dev, "skipping processing xfer completion event because ch @ %s state\n",
 			TO_GPI_PM_STR(gchan->pm_state));
 		return;
 	}
