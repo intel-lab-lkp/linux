@@ -441,7 +441,7 @@ static int __init mxc_timer_init_dt(struct device_node *np,  enum imx_gpt_type t
 	imxtm->irq = irq_of_parse_and_map(np, 0);
 	if (imxtm->irq <= 0) {
 		ret = -EINVAL;
-		goto err_kfree;
+		goto err_unmap;
 	}
 
 	imxtm->clk_ipg = of_clk_get_by_name(np, "ipg");
@@ -455,12 +455,22 @@ static int __init mxc_timer_init_dt(struct device_node *np,  enum imx_gpt_type t
 
 	ret = _mxc_timer_init(imxtm);
 	if (ret)
-		goto err_kfree;
+		goto err_irq;
 
 	initialized = 1;
 
 	return 0;
 
+err_irq:
+	if (!IS_ERR_OR_NULL(imxtm->clk_per))
+		clk_put(imxtm->clk_per);
+	if (!IS_ERR_OR_NULL(imxtm->clk_ipg))
+		clk_put(imxtm->clk_ipg);
+	irq_dispose_mapping(imxtm->irq);
+	return ret;
+
+err_unmap:
+	iounmap(imxtm->base);
 err_kfree:
 	kfree(imxtm);
 	return ret;
