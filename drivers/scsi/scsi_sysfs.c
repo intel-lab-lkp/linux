@@ -14,6 +14,7 @@
 #include <linux/device.h>
 #include <linux/pm_runtime.h>
 #include <linux/bsg.h>
+#include <linux/of.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_device.h>
@@ -517,6 +518,7 @@ static void scsi_device_dev_release(struct device *dev)
 	if (vpd_pgb7)
 		kfree_rcu(vpd_pgb7, rcu);
 	kfree(sdev->inquiry);
+	of_node_put(dev->of_node);
 	kfree(sdev);
 
 	if (parent)
