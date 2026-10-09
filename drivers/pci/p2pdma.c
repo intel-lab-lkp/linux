@@ -544,7 +544,8 @@ static bool hypervisor_supports_p2pdma(void)
 	/* Hypervisor hides host topology, allow p2pdma on Skylake and newer */
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL &&
 	    boot_cpu_data.x86_vfm >= INTEL_SKYLAKE_X &&
-	    hypervisor_is_type(X86_HYPER_VMWARE))
+	    (hypervisor_is_type(X86_HYPER_VMWARE) ||
+	     hypervisor_is_type(X86_HYPER_MS_HYPERV)))
 		return true;
 #endif
 
