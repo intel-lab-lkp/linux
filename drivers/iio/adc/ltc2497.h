@@ -50,7 +50,7 @@ struct ltc2497_chip_info {
 	u32 resolution;
 	bool has_temp;
 	bool has_speed_mode;	/* SPD bit in the 2nd config byte (LTC2499/LTC2493) */
-	bool has_rejection_mode;	/* FA/FB bits in the 2nd config byte (LTC2499) */
+	bool has_rejection_mode;	/* FA/FB bits in the 2nd config byte (LTC2499/LTC2493) */
 	bool four_channel;	/* 4 inputs (LTC2493) instead of 16 */
 };
 
