@@ -138,6 +138,9 @@ devm_hwmon_device_register_with_info(struct device *dev,
 
 void hwmon_device_unregister(struct device *dev);
 
+bool hwmon_is_valid_attr(enum hwmon_sensor_types type, u32 attr);
+bool hwmon_is_string_attr(enum hwmon_sensor_types type, u32 attr);
+
 int hwmon_notify_event(struct device *dev, enum hwmon_sensor_types type,
 		       u32 attr, int channel);
 

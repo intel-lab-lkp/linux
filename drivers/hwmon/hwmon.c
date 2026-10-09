@@ -502,7 +502,14 @@ static ssize_t hwmon_attr_store(struct device *dev,
 	return count;
 }
 
-static bool is_string_attr(enum hwmon_sensor_types type, u32 attr)
+/**
+ * hwmon_is_string_attr - test whether an attribute returns a string
+ * @type: sensor type
+ * @attr: attribute identifier
+ *
+ * Return: true for string attributes, false otherwise.
+ */
+bool hwmon_is_string_attr(enum hwmon_sensor_types type, u32 attr)
 {
 	return (type == hwmon_temp && attr == hwmon_temp_label) ||
 	       (type == hwmon_in && attr == hwmon_in_label) ||
@@ -513,6 +520,7 @@ static bool is_string_attr(enum hwmon_sensor_types type, u32 attr)
 	       (type == hwmon_humidity && attr == hwmon_humidity_label) ||
 	       (type == hwmon_fan && attr == hwmon_fan_label);
 }
+EXPORT_SYMBOL_GPL(hwmon_is_string_attr);
 
 static const struct attribute *hwmon_genattr(const void *drvdata,
 					     enum hwmon_sensor_types type,
@@ -526,7 +534,7 @@ static const struct attribute *hwmon_genattr(const void *drvdata,
 	struct attribute *a;
 	umode_t mode;
 	const char *name;
-	bool is_string = is_string_attr(type, attr);
+	bool is_string = hwmon_is_string_attr(type, attr);
 
 	mode = hwmon_is_visible(ops, drvdata, type, attr, index);
 	if (!mode)
@@ -776,6 +784,20 @@ static const int __templates_size[] = {
 	[hwmon_intrusion] = ARRAY_SIZE(hwmon_intrusion_attr_templates),
 };
 
+/**
+ * hwmon_is_valid_attr - test whether an attribute has a sysfs template
+ * @type: sensor type
+ * @attr: attribute identifier
+ *
+ * Return: true for supported sysfs attributes, false otherwise.
+ */
+bool hwmon_is_valid_attr(enum hwmon_sensor_types type, u32 attr)
+{
+	return (unsigned int)type < ARRAY_SIZE(__templates) &&
+	       attr < __templates_size[type] && __templates[type][attr];
+}
+EXPORT_SYMBOL_GPL(hwmon_is_valid_attr);
+
 int hwmon_notify_event(struct device *dev, enum hwmon_sensor_types type,
 		       u32 attr, int channel)
 {
@@ -843,14 +865,12 @@ static int hwmon_genattrs(const void *drvdata,
 			  const struct hwmon_channel_info *info)
 {
 	const char * const *templates;
-	int template_size;
 	int i, aindex = 0;
 
 	if (info->type >= ARRAY_SIZE(__templates))
 		return -EINVAL;
 
 	templates = __templates[info->type];
-	template_size = __templates_size[info->type];
 
 	for (i = 0; info->config[i]; i++) {
 		u32 attr_mask = info->config[i];
@@ -861,7 +881,7 @@ static int hwmon_genattrs(const void *drvdata,
 
 			attr = __ffs(attr_mask);
 			attr_mask &= ~BIT(attr);
-			if (attr >= template_size || !templates[attr])
+			if (!hwmon_is_valid_attr(info->type, attr))
 				continue;	/* attribute is invisible */
 			a = hwmon_genattr(drvdata, info->type, attr, i,
 					  templates[attr], ops);
