@@ -149,19 +149,29 @@ static void ata_acpi_uevent(struct ata_port *ap, struct ata_device *dev,
 	u32 event)
 {
 	struct kobject *kobj = NULL;
+	struct scsi_device *sdev = NULL;
+	unsigned long flags;
 	char event_string[20];
 	char *envp[] = { event_string, NULL };
 
 	if (dev) {
-		if (dev->sdev)
-			kobj = &dev->sdev->sdev_gendev.kobj;
-	} else
+		spin_lock_irqsave(ap->lock, flags);
+		sdev = dev->sdev;
+		if (sdev && scsi_device_get(sdev))
+			sdev = NULL;
+		spin_unlock_irqrestore(ap->lock, flags);
+		if (sdev)
+			kobj = &sdev->sdev_gendev.kobj;
+	} else {
 		kobj = &ap->dev->kobj;
+	}
 
 	if (kobj) {
 		snprintf(event_string, 20, "BAY_EVENT=%d", event);
 		kobject_uevent_env(kobj, KOBJ_CHANGE, envp);
 	}
+	if (sdev)
+		scsi_device_put(sdev);
 }
 
 static void ata_acpi_ap_uevent(struct acpi_device *adev, u32 event)
