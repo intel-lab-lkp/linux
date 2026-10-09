@@ -21,6 +21,12 @@
 #include <linux/seq_buf.h>
 #include <linux/xarray.h>
 
+#ifdef CONFIG_X86
+#include <asm/cpu_device_id.h>
+#include <asm/hypervisor.h>
+#include <asm/intel-family.h>
+#endif
+
 struct pci_p2pdma {
 	struct gen_pool *pool;
 	bool p2pmem_published;
@@ -532,6 +538,19 @@ static bool cpu_supports_p2pdma(void)
 	return false;
 }
 
+static bool hypervisor_supports_p2pdma(void)
+{
+#ifdef CONFIG_X86
+	/* Hypervisor hides host topology, allow p2pdma on Skylake and newer */
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL &&
+	    boot_cpu_data.x86_vfm >= INTEL_SKYLAKE_X &&
+	    hypervisor_is_type(X86_HYPER_VMWARE))
+		return true;
+#endif
+
+	return false;
+}
+
 static const struct pci_p2pdma_whitelist_entry {
 	unsigned short vendor;
 	int device;
@@ -781,6 +800,7 @@ check_b_path_acs:
 
 map_through_host_bridge:
 	if (!cpu_supports_p2pdma() &&
+	    !hypervisor_supports_p2pdma() &&
 	    !host_bridge_whitelist(provider, client, acs_redirects)) {
 		if (verbose)
 			pci_warn(client, "cannot be used for peer-to-peer DMA as the client and provider (%s) do not share an upstream bridge or whitelisted host bridge\n",
