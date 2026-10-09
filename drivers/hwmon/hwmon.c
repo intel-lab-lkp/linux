@@ -553,8 +553,12 @@ static const struct attribute *hwmon_genattr(const void *drvdata,
 	if (type == hwmon_chip) {
 		name = template;
 	} else {
-		scnprintf(hattr->name, sizeof(hattr->name), template,
-			  index + hwmon_attr_base(type));
+		if (snprintf(hattr->name, sizeof(hattr->name), template,
+			     index + hwmon_attr_base(type)) >=
+		    sizeof(hattr->name)) {
+			kfree(hattr);
+			return ERR_PTR(-EOVERFLOW);
+		}
 		name = hattr->name;
 	}
 
