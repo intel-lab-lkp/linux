@@ -12,6 +12,7 @@ Hardware Monitoring
    submitting-patches
    sysfs-interface
    userspace-tools
+   uhwmon
 
 Hardware Monitoring Kernel Drivers
 ==================================
