@@ -93,34 +93,31 @@ static inline int op_cpu_kill(unsigned int cpu)
 }
 #endif
 
-
 /*
  * Boot a secondary CPU, and assign it the specified idle task.
  * This also gives us the initial stack to use for this CPU.
  */
-static int boot_secondary(unsigned int cpu, struct task_struct *idle)
-{
-	const struct cpu_operations *ops = get_secondary_cpu_ops();
-
-	if (ops->cpu_boot)
-		return ops->cpu_boot(cpu, 0);
-
-	return -EOPNOTSUPP;
-}
-
 int arch_cpuhp_kick_ap_alive(unsigned int cpu, struct task_struct *idle)
 {
-	int ret;
+	const struct cpu_operations *ops = get_secondary_cpu_ops();
+	int ret = -EOPNOTSUPP;
+	void *arg = NULL;
 
 	/*
 	 * We need to tell the secondary core where to find its stack and the
 	 * page tables.
 	 */
-	secondary_data.task = idle;
+	if (ops->cpu_boot_has_arg && ops->cpu_boot_has_arg())
+		arg = idle;
+	else
+		secondary_data.task = idle;
+
 	update_cpu_boot_status(CPU_MMU_OFF);
 
 	/* Now bring the CPU into our world */
-	ret = boot_secondary(cpu, idle);
+	if (ops->cpu_boot)
+		ret = ops->cpu_boot(cpu, (unsigned long)arg);
+
 	if (ret && ret != -EPERM)
 		pr_err("CPU%u: failed to boot: %d\n", cpu, ret);
 	return ret;
