@@ -3145,6 +3145,11 @@ static void spi_nor_init_default_params(struct spi_nor *nor)
 	}
 }
 
+static bool spi_nor_uses_free_hook(struct spi_nor *nor)
+{
+	return nor->mtd._free;
+}
+
 /**
  * spi_nor_init_params() - Initialize the flash's parameters and settings.
  * @nor:	pointer to a 'struct spi_nor'.
@@ -3186,7 +3191,11 @@ static int spi_nor_init_params(struct spi_nor *nor)
 {
 	int ret;
 
-	nor->params = devm_kzalloc(nor->dev, sizeof(*nor->params), GFP_KERNEL);
+	if (spi_nor_uses_free_hook(nor))
+		nor->params = kzalloc_obj(*nor->params, GFP_KERNEL);
+	else
+		nor->params = devm_kzalloc(nor->dev, sizeof(*nor->params),
+					   GFP_KERNEL);
 	if (!nor->params)
 		return -ENOMEM;
 
@@ -3549,8 +3558,12 @@ static int spi_nor_set_mtd_eraseregions(struct spi_nor *nor)
 	struct mtd_info *mtd = &nor->mtd;
 	u32 erasesize, i;
 
-	mtd_region = devm_kcalloc(nor->dev, map->n_regions, sizeof(*mtd_region),
-				  GFP_KERNEL);
+	if (spi_nor_uses_free_hook(nor))
+		mtd_region = kcalloc(map->n_regions, sizeof(*mtd_region),
+				     GFP_KERNEL);
+	else
+		mtd_region = devm_kcalloc(nor->dev, map->n_regions,
+					  sizeof(*mtd_region), GFP_KERNEL);
 	if (!mtd_region)
 		return -ENOMEM;
 
@@ -3655,8 +3668,11 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 	 * than 1KB) after spi_nor_scan() returns.
 	 */
 	nor->bouncebuf_size = PAGE_SIZE;
-	nor->bouncebuf = devm_kmalloc(dev, nor->bouncebuf_size,
-				      GFP_KERNEL);
+	if (spi_nor_uses_free_hook(nor))
+		nor->bouncebuf = kmalloc(nor->bouncebuf_size, GFP_KERNEL);
+	else
+		nor->bouncebuf = devm_kmalloc(dev, nor->bouncebuf_size,
+					      GFP_KERNEL);
 	if (!nor->bouncebuf)
 		return -ENOMEM;
 
@@ -3770,6 +3786,22 @@ static int spi_nor_create_write_dirmap(struct spi_nor *nor)
 	return PTR_ERR_OR_ZERO(nor->dirmap.wdesc);
 }
 
+/* Free spi_nor and related buffers; safe on partial init (kfree(NULL)). */
+static void spi_nor_free(struct spi_nor *nor)
+{
+	spi_nor_debugfs_unregister(nor);
+	kfree(nor->mtd.eraseregions);
+	kfree(nor->bouncebuf);
+	kfree(nor->params);
+	kfree(nor);
+}
+
+/* MTD core ->_free callback: last reference dropped, release the backing. */
+static void spi_nor_mtd_free(struct mtd_info *mtd)
+{
+	spi_nor_free(mtd_to_spi_nor(mtd));
+}
+
 static int spi_nor_probe(struct spi_mem *spimem)
 {
 	struct spi_device *spi = spimem->spi;
@@ -3788,12 +3820,13 @@ static int spi_nor_probe(struct spi_mem *spimem)
 	if (ret)
 		return ret;
 
-	nor = devm_kzalloc(dev, sizeof(*nor), GFP_KERNEL);
+	nor = kzalloc_obj(*nor, GFP_KERNEL);
 	if (!nor)
 		return -ENOMEM;
 
 	nor->spimem = spimem;
 	nor->dev = dev;
+	nor->mtd._free = spi_nor_mtd_free;
 	spi_nor_set_flash_node(nor, dev->of_node);
 
 	spi_mem_set_drvdata(spimem, nor);
@@ -3819,7 +3852,7 @@ static int spi_nor_probe(struct spi_mem *spimem)
 
 	ret = spi_nor_scan(nor, flash_name, &hwcaps);
 	if (ret)
-		return ret;
+		goto err_free;
 
 	spi_nor_debugfs_register(nor);
 
@@ -3830,28 +3863,55 @@ static int spi_nor_probe(struct spi_mem *spimem)
 	 */
 	if (nor->params->page_size > PAGE_SIZE) {
 		nor->bouncebuf_size = nor->params->page_size;
-		devm_kfree(dev, nor->bouncebuf);
-		nor->bouncebuf = devm_kmalloc(dev, nor->bouncebuf_size,
-					      GFP_KERNEL);
-		if (!nor->bouncebuf)
-			return -ENOMEM;
+		kfree(nor->bouncebuf);
+		nor->bouncebuf = kmalloc(nor->bouncebuf_size, GFP_KERNEL);
+		if (!nor->bouncebuf) {
+			ret = -ENOMEM;
+			goto err_free;
+		}
 	}
 
 	ret = spi_nor_create_read_dirmap(nor);
 	if (ret)
-		return ret;
+		goto err_free;
 
 	ret = spi_nor_create_write_dirmap(nor);
 	if (ret)
-		return ret;
+		goto err_free;
 
-	return mtd_device_register(&nor->mtd, data ? data->parts : NULL,
-				   data ? data->nr_parts : 0);
+	ret = mtd_device_register(&nor->mtd, data ? data->parts : NULL,
+				  data ? data->nr_parts : 0);
+	if (ret)
+		goto err_free;
+
+	return 0;
+
+err_free:
+	spi_nor_free(nor);
+	return ret;
 }
 
 static int spi_nor_remove(struct spi_mem *spimem)
 {
 	struct spi_nor *nor = spi_mem_get_drvdata(spimem);
+
+	/*
+	 * Drain in-flight ops and mark removed so later ops get -ENODEV
+	 * before touching bus resources freed after this returns.
+	 */
+	if (!spi_nor_use_parallel_locking(nor))
+		mutex_lock(&nor->lock);
+	else
+		wait_event(nor->rww.wait, spi_nor_rww_start_exclusive(nor));
+
+	nor->mtd.removed = true;
+
+	if (!spi_nor_use_parallel_locking(nor)) {
+		mutex_unlock(&nor->lock);
+	} else {
+		spi_nor_rww_end_exclusive(nor);
+		wake_up(&nor->rww.wait);
+	}
 
 	spi_nor_restore(nor);
 

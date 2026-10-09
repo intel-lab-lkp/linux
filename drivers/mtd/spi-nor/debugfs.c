@@ -286,10 +286,8 @@ static int spi_nor_capabilities_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(spi_nor_capabilities);
 
-static void spi_nor_debugfs_unregister(void *data)
+void spi_nor_debugfs_unregister(struct spi_nor *nor)
 {
-	struct spi_nor *nor = data;
-
 	debugfs_remove(nor->debugfs_root);
 	nor->debugfs_root = NULL;
 }
@@ -299,14 +297,9 @@ static struct dentry *rootdir;
 void spi_nor_debugfs_register(struct spi_nor *nor)
 {
 	struct dentry *d;
-	int ret;
 
 	if (!rootdir)
 		rootdir = debugfs_create_dir(SPI_NOR_DEBUGFS_ROOT, NULL);
-
-	ret = devm_add_action(nor->dev, spi_nor_debugfs_unregister, nor);
-	if (ret)
-		return;
 
 	d = debugfs_create_dir(dev_name(nor->dev), rootdir);
 	nor->debugfs_root = d;

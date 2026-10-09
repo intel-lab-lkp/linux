@@ -726,9 +726,11 @@ bool spi_nor_is_locked_sr(struct spi_nor *nor, loff_t ofs, u64 len, const u8 *sr
 
 #ifdef CONFIG_DEBUG_FS
 void spi_nor_debugfs_register(struct spi_nor *nor);
+void spi_nor_debugfs_unregister(struct spi_nor *nor);
 void spi_nor_debugfs_shutdown(void);
 #else
 static inline void spi_nor_debugfs_register(struct spi_nor *nor) {}
+static inline void spi_nor_debugfs_unregister(struct spi_nor *nor) {}
 static inline void spi_nor_debugfs_shutdown(void) {}
 #endif
 
