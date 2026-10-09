@@ -11111,6 +11111,16 @@ int __netdev_update_features(struct net_device *dev)
 
 	features = netdev_get_wanted_features(dev);
 
+	/* A direct HSR/PRP port needs per-frame metadata: filter
+	 * software GRO and configurable GRO_HW requests before the
+	 * driver fix runs, keeping the existing driver and core
+	 * feature coupling.
+	 */
+	if (dev->hsr_port) {
+		features &= ~NETIF_F_GRO;
+		features &= ~(dev->hw_features & NETIF_F_GRO_HW);
+	}
+
 	if (dev->netdev_ops->ndo_fix_features)
 		features = dev->netdev_ops->ndo_fix_features(dev, features);
 
