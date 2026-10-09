@@ -155,7 +155,12 @@ static u32 psci_0_1_get_version(void)
 
 static u32 psci_0_2_get_version(void)
 {
-	return invoke_psci_fn(PSCI_0_2_FN_PSCI_VERSION, 0, 0, 0);
+	static u32 version;
+
+	if (unlikely(!version))
+		version = invoke_psci_fn(PSCI_0_2_FN_PSCI_VERSION, 0, 0, 0);
+
+	return version;
 }
 
 int psci_set_osi_mode(bool enable)
