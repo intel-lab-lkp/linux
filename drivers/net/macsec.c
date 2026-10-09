@@ -142,6 +142,7 @@ struct macsec_cb {
 	u8 assoc_num;
 	bool valid;
 	bool has_sci;
+	pn_t xpn_pn;
 };
 
 static struct macsec_rx_sa *macsec_rxsa_get(struct macsec_rx_sa __rcu *ptr)
@@ -744,6 +745,15 @@ static bool macsec_post_decrypt(struct sk_buff *skb, struct macsec_secy *secy, u
 	u32 lowest_pn = 0;
 
 	spin_lock(&rx_sa->lock);
+	if (rx_sa->exhausted) {
+		spin_unlock(&rx_sa->lock);
+		u64_stats_update_begin(&rxsc_stats->syncp);
+		rxsc_stats->stats.InPktsLate++;
+		u64_stats_update_end(&rxsc_stats->syncp);
+		DEV_STATS_INC(secy->netdev, rx_dropped);
+		return false;
+	}
+
 	if (rx_sa->next_pn_halves.lower >= secy->replay_window)
 		lowest_pn = rx_sa->next_pn_halves.lower - secy->replay_window;
 
@@ -804,8 +814,11 @@ static bool macsec_post_decrypt(struct sk_buff *skb, struct macsec_secy *secy, u
 		}
 		u64_stats_update_end(&rxsc_stats->syncp);
 
-		// Instead of "pn >=" - to support pn overflow in xpn
-		if (pn + 1 > rx_sa->next_pn_halves.lower) {
+		if ((!secy->xpn && pn == U32_MAX) ||
+		    (secy->xpn && macsec_skb_cb(skb)->xpn_pn.full64 == U64_MAX)) {
+			rx_sa->exhausted = true;
+		/* Instead of "pn >=" - to support pn overflow in xpn. */
+		} else if (pn + 1 > rx_sa->next_pn_halves.lower) {
 			rx_sa->next_pn_halves.lower = pn + 1;
 		} else if (secy->xpn &&
 			   (pn + 1 == 0 ||
@@ -927,6 +940,7 @@ static struct sk_buff *macsec_decrypt(struct sk_buff *skb,
 
 		macsec_fill_iv_xpn(iv, rx_sa->ssci, recovered_pn.full64,
 				   rx_sa->key.salt);
+		macsec_skb_cb(skb)->xpn_pn = recovered_pn;
 	} else {
 		macsec_fill_iv(iv, sci, hdr_pn);
 	}
@@ -1409,6 +1423,7 @@ static int init_rx_sa(struct macsec_rx_sa *rx_sa, char *sak, int key_len,
 
 	rx_sa->ssci = MACSEC_UNDEF_SSCI;
 	rx_sa->active = false;
+	rx_sa->exhausted = false;
 	rx_sa->next_pn = 1;
 	refcount_set(&rx_sa->refcnt, 1);
 	spin_lock_init(&rx_sa->lock);
@@ -2388,10 +2403,12 @@ static int macsec_upd_rxsa(struct sk_buff *skb, struct genl_info *info)
 	struct nlattr *tb_rxsc[MACSEC_RXSC_ATTR_MAX + 1];
 	struct nlattr *tb_sa[MACSEC_SA_ATTR_MAX + 1];
 	bool was_active;
+	bool was_exhausted;
 	pn_t prev_pn;
 	int ret = 0;
 
 	prev_pn.full64 = 0;
+	was_exhausted = false;
 
 	if (!attrs[MACSEC_ATTR_IFINDEX])
 		return -EINVAL;
@@ -2426,7 +2443,9 @@ static int macsec_upd_rxsa(struct sk_buff *skb, struct genl_info *info)
 
 		spin_lock_bh(&rx_sa->lock);
 		prev_pn = rx_sa->next_pn_halves;
+		was_exhausted = rx_sa->exhausted;
 		rx_sa->next_pn = nla_get_uint(tb_sa[MACSEC_SA_ATTR_PN]);
+		rx_sa->exhausted = false;
 		spin_unlock_bh(&rx_sa->lock);
 	}
 
@@ -2462,6 +2481,7 @@ cleanup:
 	if (tb_sa[MACSEC_SA_ATTR_PN]) {
 		spin_lock_bh(&rx_sa->lock);
 		rx_sa->next_pn_halves = prev_pn;
+		rx_sa->exhausted = was_exhausted;
 		spin_unlock_bh(&rx_sa->lock);
 	}
 	rx_sa->active = was_active;
