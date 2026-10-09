@@ -8870,6 +8870,16 @@ void __init workqueue_init_topology(void)
 	list_for_each_entry(wq, &workqueues, list) {
 		for_each_online_cpu(cpu)
 			unbound_wq_update_pwq(wq, cpu);
+
+		/*
+		 * wq_init_max_active() ran before smp_init() for these, so
+		 * saved_max_active is still their max_active argument. Redo it
+		 * now that all CPUs are online.
+		 */
+		mutex_lock(&wq->mutex);
+		wq_init_max_active(wq, wq->saved_max_active);
+		mutex_unlock(&wq->mutex);
+
 		if (wq->flags & WQ_UNBOUND) {
 			mutex_lock(&wq->mutex);
 			wq_update_node_max_active(wq, -1);
