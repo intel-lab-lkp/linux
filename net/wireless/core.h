@@ -116,6 +116,7 @@ struct cfg80211_registered_device {
 	struct work_struct sched_scan_res_wk;
 	struct wiphy_work reg_check_chans_wk;
 	struct work_struct reg_leave_nan_wk;
+	struct wiphy_work reg_self_managed_wk;
 
 	struct cfg80211_chan_def radar_chandef;
 	struct work_struct propagate_radar_detect_wk;

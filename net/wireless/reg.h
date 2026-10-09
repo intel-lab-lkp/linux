@@ -194,6 +194,13 @@ void reg_leave_invalid_chans_wk(struct wiphy *wiphy, struct wiphy_work *work);
  */
 void reg_leave_invalid_nan_wk(struct work_struct *work);
 
+/**
+ * reg_process_self_managed_hint_wk - process self-managed hint for a wiphy
+ * @wiphy: the wiphy to process
+ * @work: the work struct
+ */
+void reg_process_self_managed_hint_wk(struct wiphy *wiphy, struct wiphy_work *work);
+
 extern const u8 shipped_regdb_certs[];
 extern unsigned int shipped_regdb_certs_len;
 extern const u8 extra_regdb_certs[];

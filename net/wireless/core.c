@@ -671,6 +671,7 @@ use_default_name:
 	INIT_WORK(&rdev->sched_scan_res_wk, cfg80211_sched_scan_results_wk);
 	wiphy_work_init(&rdev->reg_check_chans_wk, reg_leave_invalid_chans_wk);
 	INIT_WORK(&rdev->reg_leave_nan_wk, reg_leave_invalid_nan_wk);
+	wiphy_work_init(&rdev->reg_self_managed_wk, reg_process_self_managed_hint_wk);
 	INIT_WORK(&rdev->propagate_radar_detect_wk,
 		  cfg80211_propagate_radar_detect_wk);
 	INIT_WORK(&rdev->propagate_cac_done_wk, cfg80211_propagate_cac_done_wk);
