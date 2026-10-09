@@ -17,6 +17,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
+#include <linux/cpufeature.h>
 #include <linux/export.h>
 #include <linux/init.h>
 #include <linux/pci.h>
@@ -24,6 +25,7 @@
 #include <linux/processor.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+#include <linux/topology.h>
 
 #include <asm/cpu_device_id.h>
 #include <asm/hygon/node.h>
@@ -481,6 +483,44 @@ static int __init sort_and_classify(struct df_node_cache *cache)
 	return 0;
 }
 
+#define NODE_ID_SOCKET	GENMASK(7, 4)
+#define NODE_ID_LOCAL	GENMASK(3, 0)
+
+/*
+ * Translate a Hygon Fam18h phys_node_id (CPUID 8000001E ECX[7:0]) to a
+ * dense DF CDD index. On supported models, CPUID reports this
+ * encoding:
+ *
+ *   phys_node_id = (socket_id << 4) | local_cdd_index_in_dfid_order
+ *
+ * The CDD region of df_cache.nodes[] is sorted by (socket_id, dfid), so
+ * return the index of the CDD whose socket_id matches and whose
+ * socket-local ordinal is @local.
+ *
+ * Return -ENODEV if the cache is unavailable or no CDD matches.
+ */
+static int phys_nid_to_df_node(unsigned int phys_nid)
+{
+	unsigned int socket, local, ordinal = 0;
+	u16 i;
+
+	socket = FIELD_GET(NODE_ID_SOCKET, phys_nid);
+	local = FIELD_GET(NODE_ID_LOCAL, phys_nid);
+
+	if (!df_cache.nodes)
+		return -ENODEV;
+
+	for (i = 0; i < df_cache.num_cdd; i++) {
+		if (df_cache.nodes[i].socket_id != socket)
+			continue;
+
+		if (ordinal++ == local)
+			return i;
+	}
+
+	return -ENODEV;
+}
+
 static int __init build_cache(void)
 {
 	struct df_node_cache cache = { };
@@ -535,6 +575,21 @@ int hygon_node_get_info(u16 node, struct hygon_node_info *info)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(hygon_node_get_info);
+
+static int __maybe_unused cpu_to_df_node(unsigned int cpu)
+{
+	if (cpu >= nr_cpu_ids)
+		return -EINVAL;
+
+	/*
+	 * The NodeId reported by CPUID in a guest may not describe the
+	 * physical DF topology.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_HYPERVISOR))
+		return -ENODEV;
+
+	return phys_nid_to_df_node(topology_amd_node_id(cpu));
+}
 
 struct pci_dev *hygon_node_get_func(u16 node, u8 func)
 {
