@@ -141,6 +141,94 @@ int aie4_query_cert_firmware_version(struct amdxdna_dev_hdl *ndev,
 	return 0;
 }
 
+int aie4_init_dpm_freq_table(struct amdxdna_dev_hdl *ndev)
+{
+	DECLARE_AIE_MSG(aie4_msg_get_dpm_freq_table, AIE4_MSG_OP_GET_DPM_FREQ_TABLE);
+	struct amdxdna_dev *xdna = ndev->aie.xdna;
+	u32 aie_levels, npu_levels, i;
+	int ret;
+
+	for (i = 0; i < AIE4_MAX_DPM_LEVEL_COUNT && ndev->priv->dpm_clk_tbl &&
+	     ndev->priv->dpm_clk_tbl[i].hclk; i++)
+		ndev->dpm_clk_tbl[i] = ndev->priv->dpm_clk_tbl[i];
+	ndev->max_aieclk_level = i ? i - 1 : 0;
+	ndev->max_npuhclk_level = i ? i - 1 : 0;
+
+	ret = aie_send_mgmt_msg_wait(&ndev->aie, &msg);
+	if (ret) {
+		XDNA_WARN(xdna, "Get DPM freq table failed, ret %d status 0x%x",
+			  ret, resp.status);
+		return ret;
+	}
+
+	aie_levels = resp.aieclk_table.num_levels;
+	npu_levels = resp.npuhclk_table.num_levels;
+
+	if (!aie_levels || !npu_levels ||
+	    aie_levels > AIE4_MAX_DPM_LEVEL_COUNT ||
+	    npu_levels > AIE4_MAX_DPM_LEVEL_COUNT) {
+		XDNA_ERR(xdna, "invalid dpm levels, aieclk: %u, npuhclk: %u",
+			 aie_levels, npu_levels);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < aie_levels; i++) {
+		if (!resp.aieclk_table.values[i]) {
+			XDNA_ERR(xdna, "invalid dpm aieclk frequency 0 at level %u", i);
+			return -EINVAL;
+		}
+	}
+
+	for (i = 0; i < npu_levels; i++) {
+		if (!resp.npuhclk_table.values[i]) {
+			XDNA_ERR(xdna, "invalid dpm npuhclk frequency 0 at level %u", i);
+			return -EINVAL;
+		}
+	}
+
+	memset(ndev->dpm_clk_tbl, 0, sizeof(ndev->dpm_clk_tbl));
+	for (i = 0; i < aie_levels; i++)
+		ndev->dpm_clk_tbl[i].npuclk = resp.aieclk_table.values[i];
+
+	for (i = 0; i < npu_levels; i++)
+		ndev->dpm_clk_tbl[i].hclk = resp.npuhclk_table.values[i];
+
+	ndev->max_aieclk_level = aie_levels - 1;
+	ndev->max_npuhclk_level = npu_levels - 1;
+
+	return 0;
+}
+
+int aie4_query_dpm_level(struct amdxdna_dev_hdl *ndev,
+			 u32 *aieclk_dpm_level, u32 *npuhclk_dpm_level)
+{
+	DECLARE_AIE_MSG(aie4_msg_get_dpm_level, AIE4_MSG_OP_GET_CURRENT_DPM_LEVEL);
+	struct amdxdna_dev *xdna = ndev->aie.xdna;
+	int ret;
+
+	ret = aie_send_mgmt_msg_wait(&ndev->aie, &msg);
+	if (ret)
+		return ret;
+
+	/*
+	 * Validate against ndev->max_aieclk_level and ndev->max_npuhclk_level
+	 * to ensure reported levels index into populated entries in dpm_clk_tbl.
+	 */
+	if (resp.aieclk_dpm_level > ndev->max_aieclk_level ||
+	    resp.npuhclk_dpm_level > ndev->max_npuhclk_level) {
+		XDNA_ERR(xdna,
+			 "invalid dpm level, aie: %u/%u, npu: %u/%u",
+			 resp.aieclk_dpm_level, ndev->max_aieclk_level,
+			 resp.npuhclk_dpm_level, ndev->max_npuhclk_level);
+		return -EINVAL;
+	}
+
+	*aieclk_dpm_level = resp.aieclk_dpm_level;
+	*npuhclk_dpm_level = resp.npuhclk_dpm_level;
+
+	return 0;
+}
+
 int aie4_attach_work_buffer(struct amdxdna_dev_hdl *ndev)
 {
 	DECLARE_AIE_MSG(aie4_msg_attach_work_buffer, AIE4_MSG_OP_ATTACH_WORK_BUFFER);
