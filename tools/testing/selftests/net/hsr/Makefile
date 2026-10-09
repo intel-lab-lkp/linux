@@ -8,8 +8,11 @@ TEST_PROGS := \
 	hsr_redbox.sh \
 	link_faults.sh \
 	prp_ping.sh \
+	hsr_gro_superpacket.sh \
+	hsr_ordered_forwarding.sh \
 # end of TEST_PROGS
 
 TEST_FILES += hsr_common.sh
+TEST_FILES += hsr_gro_superpacket.py
 
 include ../../lib.mk
