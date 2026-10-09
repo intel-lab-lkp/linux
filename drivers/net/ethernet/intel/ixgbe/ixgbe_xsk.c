@@ -39,7 +39,7 @@ static int ixgbe_xsk_pool_enable(struct ixgbe_adapter *adapter,
 	if (err)
 		return err;
 
-	if_running = netif_running(adapter->netdev) &&
+	if_running = ixgbe_netif_running(adapter->netdev) &&
 		     ixgbe_enabled_xdp_adapter(adapter);
 
 	if (if_running)
@@ -71,7 +71,7 @@ static int ixgbe_xsk_pool_disable(struct ixgbe_adapter *adapter, u16 qid)
 	if (!pool)
 		return -EINVAL;
 
-	if_running = netif_running(adapter->netdev) &&
+	if_running = ixgbe_netif_running(adapter->netdev) &&
 		     ixgbe_enabled_xdp_adapter(adapter);
 
 	if (if_running)
