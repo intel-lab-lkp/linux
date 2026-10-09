@@ -67,6 +67,7 @@ struct cpufreq_policy {
 	unsigned int		max;    /* in kHz */
 	unsigned int		cur;    /* in kHz, only needed if cpufreq
 					 * governors are used */
+	unsigned int		max_table_freq; /* max freq in the table */
 	unsigned int		suspend_freq; /* freq to set during suspend */
 
 	unsigned int		policy; /* see above */

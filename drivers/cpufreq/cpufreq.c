@@ -2601,6 +2601,9 @@ static void cpufreq_update_pressure(struct cpufreq_policy *policy)
 	 */
 	if (max_freq <= capped_freq) {
 		pressure = 0;
+	} else if (policy->freq_table && policy->max_table_freq &&
+		   policy->max_table_freq <= capped_freq) {
+		pressure = 0;
 	} else {
 		max_capacity = arch_scale_cpu_capacity(cpu);
 		pressure = max_capacity -
