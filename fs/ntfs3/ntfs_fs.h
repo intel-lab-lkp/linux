@@ -152,7 +152,7 @@ struct wnd_bitmap {
 	size_t nbits;
 
 	size_t total_zeroes; // Total number of free bits.
-	u16 *free_bits; // Free bits in each window.
+	u32 *free_bits; // Free bits in each window.
 	size_t nwnd;
 	u32 bits_last; // Bits in last window.
 
