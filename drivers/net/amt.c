@@ -93,6 +93,16 @@ static unsigned int amt_ip_hlen(const struct amt_dev *amt)
 	return amt_v6(amt) ? sizeof(struct ipv6hdr) : sizeof(struct iphdr);
 }
 
+/* Headroom the device reserves for its outer encapsulation. */
+static unsigned int amt_hlen(const struct amt_dev *amt)
+{
+	unsigned int hlen = amt_ip_hlen(amt) + sizeof(struct udphdr);
+
+	if (amt->mode == AMT_MODE_RELAY)
+		return hlen + sizeof(struct amt_relay_headers);
+	return hlen + sizeof(struct amt_gw_headers);
+}
+
 /* Copy the outer source address of a received message by value, so that
  * the caller may pull the skb afterwards.
  */
@@ -3513,11 +3523,6 @@ static int amt_newlink(struct net_device *dev,
 	if (amt->mode == AMT_MODE_RELAY) {
 		amt->qrv = READ_ONCE(amt->net->ipv4.sysctl_igmp_qrv);
 		amt->qri = 10;
-		dev->needed_headroom = amt->stream_dev->needed_headroom +
-				       AMT_RELAY_HLEN;
-		dev->mtu = amt->stream_dev->mtu - AMT_RELAY_HLEN;
-		dev->max_mtu = dev->mtu;
-		dev->min_mtu = ETH_MIN_MTU + AMT_RELAY_HLEN;
 	} else {
 		if (!data[IFLA_AMT_DISCOVERY_IP]) {
 			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_AMT_DISCOVERY_IP],
@@ -3538,13 +3543,11 @@ static int amt_newlink(struct net_device *dev,
 					    "discovery must be unicast");
 			goto err;
 		}
-
-		dev->needed_headroom = amt->stream_dev->needed_headroom +
-				       AMT_GW_HLEN;
-		dev->mtu = amt->stream_dev->mtu - AMT_GW_HLEN;
-		dev->max_mtu = dev->mtu;
-		dev->min_mtu = ETH_MIN_MTU + AMT_GW_HLEN;
 	}
+	dev->needed_headroom = amt->stream_dev->needed_headroom + amt_hlen(amt);
+	dev->mtu = amt->stream_dev->mtu - amt_hlen(amt);
+	dev->max_mtu = dev->mtu;
+	dev->min_mtu = ETH_MIN_MTU + amt_hlen(amt);
 	amt->qi = AMT_INIT_QUERY_INTERVAL;
 
 	err = register_netdevice(dev);
@@ -3676,11 +3679,7 @@ static int amt_device_event(struct notifier_block *unused,
 		unregister_netdevice_many(&list);
 		break;
 	case NETDEV_CHANGEMTU:
-		if (amt->mode == AMT_MODE_RELAY)
-			new_mtu = dev->mtu - AMT_RELAY_HLEN;
-		else
-			new_mtu = dev->mtu - AMT_GW_HLEN;
-
+		new_mtu = dev->mtu - amt_hlen(amt);
 		dev_set_mtu(amt->dev, new_mtu);
 		break;
 	}

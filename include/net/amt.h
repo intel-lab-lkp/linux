@@ -398,12 +398,6 @@ struct amt_dev {
 #define IANA_AMT_UDP_PORT	2268
 #define AMT_MAX_TUNNELS         128
 #define AMT_MAX_REQS		128
-#define AMT_GW_HLEN (sizeof(struct iphdr) + \
-		     sizeof(struct udphdr) + \
-		     sizeof(struct amt_gw_headers))
-#define AMT_RELAY_HLEN (sizeof(struct iphdr) + \
-		     sizeof(struct udphdr) + \
-		     sizeof(struct amt_relay_headers))
 
 static inline bool netif_is_amt(const struct net_device *dev)
 {
