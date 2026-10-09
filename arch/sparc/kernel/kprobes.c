@@ -211,13 +211,14 @@ no_kprobe:
  * 
  */
 static unsigned long __kprobes relbranch_fixup(u32 insn, struct kprobe *p,
-					       struct pt_regs *regs)
+					       struct pt_regs *regs,
+					       struct kprobe_ctlblk *kcb)
 {
 	unsigned long real_pc = (unsigned long) p->addr;
 
 	/* Branch not taken, no mods necessary.  */
 	if (regs->tnpc == regs->tpc + 0x4UL)
-		return real_pc + 0x8UL;
+		return kcb->kprobe_orig_tnpc + 0x4UL;
 
 	/* The cases are call and the branches BPcc, Bicc, BPr, FBPfcc
 	 * and FBfcc.
@@ -294,7 +295,7 @@ static void __kprobes resume_execution(struct kprobe *p,
 {
 	u32 insn = p->ainsn.insn[0];
 
-	regs->tnpc = relbranch_fixup(insn, p, regs);
+	regs->tnpc = relbranch_fixup(insn, p, regs, kcb);
 
 	/* This assignment must occur after relbranch_fixup() */
 	regs->tpc = kcb->kprobe_orig_tnpc;
