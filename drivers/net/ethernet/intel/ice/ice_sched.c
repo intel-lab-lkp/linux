@@ -2589,25 +2589,17 @@ exit_rm_agg_cfg_tc:
 
 /**
  * ice_save_agg_tc_bitmap - save aggregator TC bitmap
- * @pi: port information structure
- * @agg_id: aggregator ID
+ * @agg_info: aggregator node
  * @tc_bitmap: 8 bits TC bitmap
  *
  * Save aggregator TC bitmap. This function needs to be called with scheduler
  * lock held.
  */
-static int
-ice_save_agg_tc_bitmap(struct ice_port_info *pi, u32 agg_id,
-		       unsigned long *tc_bitmap)
+static void ice_save_agg_tc_bitmap(struct ice_sched_agg_info *agg_info,
+				   unsigned long *tc_bitmap)
 {
-	struct ice_sched_agg_info *agg_info;
-
-	agg_info = xa_load(&pi->hw->agg_nodes, agg_id);
-	if (!agg_info)
-		return -EINVAL;
 	bitmap_copy(agg_info->replay_tc_bitmap, tc_bitmap,
 		    ICE_MAX_TRAFFIC_CLASS);
-	return 0;
 }
 
 /**
@@ -2811,7 +2803,7 @@ ice_cfg_agg(struct ice_port_info *pi, u32 agg_id, enum ice_agg_type agg_type,
 		return PTR_ERR(agg_info);
 	status = ice_sched_cfg_agg(pi, agg_info, &bitmap);
 	if (!status)
-		status = ice_save_agg_tc_bitmap(pi, agg_id, &bitmap);
+		ice_save_agg_tc_bitmap(agg_info, &bitmap);
 	mutex_unlock(&pi->sched_lock);
 	return status;
 }
@@ -2863,24 +2855,19 @@ ice_get_vsi_agg_info(struct ice_hw *hw, u16 vsi_handle)
 
 /**
  * ice_save_agg_vsi_tc_bitmap - save aggregator VSI TC bitmap
- * @pi: port information structure
- * @agg_id: aggregator ID
+ * @agg_info: aggregator node
  * @vsi_handle: software VSI handle
  * @tc_bitmap: TC bitmap of enabled TC(s)
  *
  * Save VSI to aggregator TC bitmap. This function needs to call with scheduler
  * lock held.
  */
-static int
-ice_save_agg_vsi_tc_bitmap(struct ice_port_info *pi, u32 agg_id, u16 vsi_handle,
-			   unsigned long *tc_bitmap)
+static int ice_save_agg_vsi_tc_bitmap(struct ice_sched_agg_info *agg_info,
+				      u16 vsi_handle,
+				      unsigned long *tc_bitmap)
 {
 	struct ice_sched_agg_vsi_info *agg_vsi_info;
-	struct ice_sched_agg_info *agg_info;
 
-	agg_info = xa_load(&pi->hw->agg_nodes, agg_id);
-	if (!agg_info)
-		return -EINVAL;
 	/* check if entry already exist */
 	agg_vsi_info = ice_get_agg_vsi_info(agg_info, vsi_handle);
 	if (!agg_vsi_info)
@@ -2893,7 +2880,7 @@ ice_save_agg_vsi_tc_bitmap(struct ice_port_info *pi, u32 agg_id, u16 vsi_handle,
 /**
  * ice_sched_assoc_vsi_to_agg - associate/move VSI to new/default aggregator
  * @pi: port information structure
- * @agg_id: aggregator ID
+ * @agg_info: aggregator node
  * @vsi_handle: software VSI handle
  * @tc_bitmap: TC bitmap of enabled TC(s)
  *
@@ -2901,20 +2888,17 @@ ice_save_agg_vsi_tc_bitmap(struct ice_port_info *pi, u32 agg_id, u16 vsi_handle,
  * already associated to the aggregator node then no operation is performed on
  * the tree. This function needs to be called with scheduler lock held.
  */
-static int
-ice_sched_assoc_vsi_to_agg(struct ice_port_info *pi, u32 agg_id,
-			   u16 vsi_handle, unsigned long *tc_bitmap)
+static int ice_sched_assoc_vsi_to_agg(struct ice_port_info *pi,
+				      struct ice_sched_agg_info *agg_info,
+				      u16 vsi_handle, unsigned long *tc_bitmap)
 {
 	struct ice_sched_agg_vsi_info *agg_vsi_info, *iter, *old_agg_vsi_info = NULL;
-	struct ice_sched_agg_info *agg_info, *old_agg_info;
+	struct ice_sched_agg_info *old_agg_info;
 	struct ice_hw *hw = pi->hw;
 	int status = 0;
 	u8 tc;
 
-	if (!ice_is_vsi_valid(pi->hw, vsi_handle))
-		return -EINVAL;
-	agg_info = xa_load(&hw->agg_nodes, agg_id);
-	if (!agg_info)
+	if (!ice_is_vsi_valid(hw, vsi_handle))
 		return -EINVAL;
 	/* If the VSI is already part of another aggregator then update
 	 * its VSI info list
@@ -2952,7 +2936,8 @@ ice_sched_assoc_vsi_to_agg(struct ice_port_info *pi, u32 agg_id,
 			continue;
 
 		/* Move VSI to new aggregator */
-		status = ice_sched_move_vsi_to_agg(pi, vsi_handle, agg_id, tc);
+		status = ice_sched_move_vsi_to_agg(pi, vsi_handle,
+						   agg_info->agg_id, tc);
 		if (status)
 			break;
 
@@ -3080,15 +3065,19 @@ int
 ice_move_vsi_to_agg(struct ice_port_info *pi, u32 agg_id, u16 vsi_handle,
 		    u8 tc_bitmap)
 {
+	struct ice_sched_agg_info *agg_info;
 	unsigned long bitmap = tc_bitmap;
 	int status;
 
 	mutex_lock(&pi->sched_lock);
-	status = ice_sched_assoc_vsi_to_agg(pi, agg_id, vsi_handle,
-					    (unsigned long *)&bitmap);
+	agg_info = xa_load(&pi->hw->agg_nodes, agg_id);
+	if (!agg_info)
+		return -EINVAL;
+	status = ice_sched_assoc_vsi_to_agg(pi, agg_info, vsi_handle,
+					    &bitmap);
 	if (!status)
-		status = ice_save_agg_vsi_tc_bitmap(pi, agg_id, vsi_handle,
-						    (unsigned long *)&bitmap);
+		status = ice_save_agg_vsi_tc_bitmap(agg_info, vsi_handle,
+						    &bitmap);
 	mutex_unlock(&pi->sched_lock);
 	return status;
 }
@@ -4420,7 +4409,7 @@ static int ice_sched_replay_vsi_agg(struct ice_hw *hw, u16 vsi_handle)
 	ice_sched_get_ena_tc_bitmap(pi, agg_vsi_info->replay_tc_bitmap,
 				    replay_bitmap);
 	/* Move this VSI (vsi_handle) to above aggregator */
-	return ice_sched_assoc_vsi_to_agg(pi, agg_info->agg_id, vsi_handle,
+	return ice_sched_assoc_vsi_to_agg(pi, agg_info, vsi_handle,
 					  replay_bitmap);
 }
 
