@@ -396,7 +396,7 @@ int ltc2497core_probe(struct device *dev, struct iio_dev *indio_dev)
 			indio_dev->channels = ltc2497core_channel;
 		indio_dev->num_channels = ARRAY_SIZE(ltc2497core_channel);
 	}
-	/* Only the ltc2499 has a temperature channel; it is the last entry. */
+	/* Temperature is the last channel entry; trim it for parts without the sensor. */
 	if (!ddata->chip_info->has_temp)
 		indio_dev->num_channels--;
 
