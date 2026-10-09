@@ -133,6 +133,16 @@ struct amt_header_advertisement {
 	__be32	ip4;
 } __packed;
 
+/* The IPv6 form of the Relay Advertisement (RFC 7450 s5.1.2): the header
+ * and nonce, laid out as in a Discovery, then a 16-byte relay address. A
+ * gateway tells the two forms apart by the UDP datagram length
+ * (s5.1.2.5), not by a field in the message, so it is a type of its own.
+ */
+struct amt_header_advertisement_v6 {
+	struct amt_header_discovery	hdr;
+	struct in6_addr			ip6;
+} __packed;
+
 struct amt_header_request {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	u32	type:4,
