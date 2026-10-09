@@ -31,6 +31,7 @@ tests="
 	dec_ttl					ttl: dec_ttl decrements IP TTL
 	flow_set				flow-set: Flow modify
 	action_set				set: SET action rewrites fields
+	ipv6_later_frag				ipv6-frag: SET on a later IPv6 fragment
 	trunc					trunc: output truncation
 	icmpv6					icmpv6: ICMPv6 echo type match
 	sctp_connect_v4				sctp: SCTP flow key matching
@@ -64,6 +65,11 @@ ovs_wait() {
 	done
 	info "wait failed after $i seconds"
 	return 1
+}
+
+ovs_flow_has_packets() {
+	python3 "$ovs_base/ovs-dpctl.py" dump-flows "$1" |
+		grep -Eq 'packets:[1-9][0-9]*,'
 }
 
 ovs_base=`pwd`
@@ -441,6 +447,43 @@ test_action_set() {
 	info "verify connectivity restored without SET"
 	ovs_sbx "test_action_set" ip netns exec client ping -c 1 -W 2 \
 		10.0.0.2 || return 1
+
+	return 0
+}
+
+test_ipv6_later_frag() {
+	local t="test_ipv6_later_frag"
+	local warning="WARNING:.*set_ipv6_addr"
+	local before after
+
+	if ! dmesg >/dev/null 2>&1; then
+		info "dmesg unavailable - cannot check for kernel warning"
+		return $ksft_skip
+	fi
+
+	before=$(dmesg | grep -c "$warning" || true)
+	if [ "$before" -ne 0 ]; then
+		info "set_ipv6_addr warning already present - skipping"
+		return $ksft_skip
+	fi
+
+	sbx_add "$t" || return 1
+	ovs_add_dp "$t" fragtest || return 1
+	ovs_add_netns_and_veths "$t" fragtest client c0 c1 || return 1
+
+	ovs_add_flow "$t" fragtest \
+		'in_port(1),eth(),eth_type(0x86dd),ipv6(proto=44)' \
+		'set(ipv6(src=2001:db8::99,proto=44)),drop' || return 1
+
+	ip netns exec client python3 "$ovs_base/ovs-ipv6-frag.py" c1 || \
+		return 1
+	ovs_wait ovs_flow_has_packets fragtest || return 1
+
+	after=$(dmesg | grep -c "$warning" || true)
+	if [ "$after" -ne "$before" ]; then
+		info "set_ipv6_addr warning emitted for later IPv6 fragment"
+		return 1
+	fi
 
 	return 0
 }

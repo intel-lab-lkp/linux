@@ -6,7 +6,7 @@ CFLAGS += -Wall -Wl,--no-as-needed -O2 -g -I$(top_srcdir)/usr/include $(KHDR_INC
 
 TEST_PROGS := openvswitch.sh
 
-TEST_FILES := ovs-dpctl.py
+TEST_FILES := ovs-dpctl.py ovs-ipv6-frag.py
 
 EXTRA_CLEAN := test_netlink_checks
 
