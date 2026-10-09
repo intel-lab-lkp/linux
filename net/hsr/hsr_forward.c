@@ -627,11 +627,23 @@ static void check_local_dest(struct hsr_priv *hsr, struct sk_buff *skb,
 	}
 }
 
+/* Local numbering condition, shared with the consumer routing
+ * decision: exactly the master and interlink entries carry locally
+ * generated frames.
+ */
+static bool hsr_needs_local_numbering(const struct hsr_port *port)
+{
+	return port->type == HSR_PT_MASTER ||
+	       port->type == HSR_PT_INTERLINK;
+}
+
 static void handle_std_frame(struct sk_buff *skb,
-			     struct hsr_frame_info *frame)
+			     struct hsr_frame_info *frame,
+			     enum hsr_exec_source source)
 {
 	struct hsr_port *port = frame->port_rcv;
 	struct hsr_priv *hsr = port->hsr;
+	u16 seq;
 
 	frame->skb_hsr = NULL;
 	frame->skb_prp = NULL;
@@ -640,13 +652,20 @@ static void handle_std_frame(struct sk_buff *skb,
 	if (port->type != HSR_PT_MASTER)
 		frame->is_from_san = true;
 
-	if (port->type == HSR_PT_MASTER ||
-	    port->type == HSR_PT_INTERLINK) {
-		/* Sequence nr for the master/interlink node */
-		lockdep_assert_held(&hsr->seqnr_lock);
-		frame->sequence_nr = hsr->sequence_nr;
-		hsr->sequence_nr++;
-	}
+	if (!hsr_needs_local_numbering(port))
+		return;
+
+	/* Sequence nr for the master/interlink node.  Local sequence
+	 * numbers are assigned only by the single consumer; the
+	 * explicit call-chain source proves it, shared ownership state
+	 * does not.
+	 */
+	WARN_ON_ONCE(source == HSR_EXEC_DIRECT_LAN);
+	spin_lock_bh(&hsr->seqnr_lock);
+	seq = hsr->sequence_nr;
+	WRITE_ONCE(hsr->sequence_nr, seq + 1);
+	spin_unlock_bh(&hsr->seqnr_lock);
+	frame->sequence_nr = seq;
 }
 
 int hsr_fill_frame_info(__be16 proto, struct sk_buff *skb,
@@ -670,10 +689,10 @@ int hsr_fill_frame_info(__be16 proto, struct sk_buff *skb,
 		return 0;
 	}
 
-	/* Standard frame or PRP from master port */
-	handle_std_frame(skb, frame);
-
-	return 0;
+	/* Standard frame or PRP from master port: the caller completes
+	 * untagged input with its explicit execution source.
+	 */
+	return HSR_FRAME_PLAIN;
 }
 
 int prp_fill_frame_info(__be16 proto, struct sk_buff *skb,
@@ -690,13 +709,12 @@ int prp_fill_frame_info(__be16 proto, struct sk_buff *skb,
 		frame->sequence_nr = prp_get_skb_sequence_nr(rct);
 		return 0;
 	}
-	handle_std_frame(skb, frame);
-
-	return 0;
+	return HSR_FRAME_PLAIN;
 }
 
 static int fill_frame_info(struct hsr_frame_info *frame,
-			   struct sk_buff *skb, struct hsr_port *port)
+			   struct sk_buff *skb, struct hsr_port *port,
+			   enum hsr_exec_source source)
 {
 	struct hsr_priv *hsr = port->hsr;
 	struct hsr_vlan_ethhdr *vlan_hdr;
@@ -756,7 +774,9 @@ static int fill_frame_info(struct hsr_frame_info *frame,
 	frame->is_from_san = false;
 	frame->port_rcv = port;
 	ret = hsr->proto_ops->fill_frame_info(proto, skb, frame);
-	if (ret)
+	if (ret == HSR_FRAME_PLAIN)
+		handle_std_frame(skb, frame, source);
+	else if (ret)
 		return ret;
 
 	check_local_dest(port->hsr, skb, frame);
@@ -764,13 +784,16 @@ static int fill_frame_info(struct hsr_frame_info *frame,
 	return 0;
 }
 
-/* Must be called holding rcu read lock (because of the port parameter) */
-void hsr_forward_skb(struct sk_buff *skb, struct hsr_port *port)
+/* Per-frame forwarding path.  Must be called holding rcu read lock
+ * (because of the port parameter).
+ */
+void hsr_forward_frame(struct sk_buff *skb, struct hsr_port *port,
+		       enum hsr_exec_source source)
 {
 	struct hsr_frame_info frame;
 
 	rcu_read_lock();
-	if (fill_frame_info(&frame, skb, port) < 0)
+	if (fill_frame_info(&frame, skb, port, source) < 0)
 		goto out_drop;
 
 	hsr_register_frame_in(frame.node_src, port, frame.sequence_nr);
@@ -779,7 +802,7 @@ void hsr_forward_skb(struct sk_buff *skb, struct hsr_port *port)
 	/* Gets called for ingress frames as well as egress from master port.
 	 * So check and increment stats for master port only here.
 	 */
-	if (port->type == HSR_PT_MASTER || port->type == HSR_PT_INTERLINK) {
+	if (hsr_needs_local_numbering(port)) {
 		port->dev->stats.tx_packets++;
 		port->dev->stats.tx_bytes += skb->len;
 	}
@@ -793,4 +816,26 @@ out_drop:
 	rcu_read_unlock();
 	port->dev->stats.tx_dropped++;
 	kfree_skb(skb);
+}
+
+/* Submission entry.  Inputs that need a local sequence number go to
+ * the single consumer before any numbering happens; the synchronous
+ * LAN A/B receive path keeps its original behavior.
+ */
+void hsr_forward_skb(struct sk_buff *skb, struct hsr_port *port)
+{
+	if (hsr_needs_local_numbering(port)) {
+		hsr_queue_submit(skb, port, HSR_JOB_NORMAL);
+		return;
+	}
+	hsr_forward_frame(skb, port, HSR_EXEC_DIRECT_LAN);
+}
+
+/* Internally generated supervision frames always take the common
+ * submit point; their sequence numbers are assigned by the consumer
+ * at execution time.
+ */
+void hsr_forward_sup_skb(struct sk_buff *skb, struct hsr_port *port)
+{
+	hsr_queue_submit(skb, port, HSR_JOB_INTERNAL_SUP);
 }

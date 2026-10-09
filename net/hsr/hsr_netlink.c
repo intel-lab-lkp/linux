@@ -12,6 +12,7 @@
 #include <net/rtnetlink.h>
 #include <net/genetlink.h>
 #include "hsr_main.h"
+#include "hsr_forward.h"
 #include "hsr_device.h"
 #include "hsr_framereg.h"
 
@@ -137,6 +138,7 @@ static void hsr_dellink(struct net_device *dev, struct list_head *head)
 	timer_delete_sync(&hsr->announce_timer);
 	timer_delete_sync(&hsr->announce_proxy_timer);
 
+	hsr_forward_stop(hsr);
 	hsr_debugfs_term(hsr);
 	hsr_del_ports(hsr);
 
@@ -173,7 +175,7 @@ static int hsr_fill_info(struct sk_buff *skb, const struct net_device *dev)
 
 	if (nla_put(skb, IFLA_HSR_SUPERVISION_ADDR, ETH_ALEN,
 		    hsr->sup_multicast_addr) ||
-	    nla_put_u16(skb, IFLA_HSR_SEQ_NR, hsr->sequence_nr))
+	    nla_put_u16(skb, IFLA_HSR_SEQ_NR, READ_ONCE(hsr->sequence_nr)))
 		goto nla_put_failure;
 	if (hsr->prot_version == PRP_V1)
 		proto = HSR_PROTOCOL_PRP;

@@ -232,9 +232,7 @@ static netdev_tx_t hsr_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 		skb->dev = master->dev;
 		skb_reset_mac_header(skb);
 		skb_reset_mac_len(skb);
-		spin_lock_bh(&hsr->seqnr_lock);
 		hsr_forward_skb(skb, master);
-		spin_unlock_bh(&hsr->seqnr_lock);
 	} else {
 		dev_core_stats_tx_dropped_inc(dev);
 		dev_kfree_skb_any(skb);
@@ -290,6 +288,31 @@ out:
 	return NULL;
 }
 
+/* Assign the supervision sequence number at execution time in the
+ * single consumer.  Internally built supervision frames carry
+ * ETH_P_PRP with the supervision tag right after the Ethernet
+ * header.  HSRv0 shares the data counter, later versions use the
+ * dedicated supervision counter.
+ */
+void hsr_assign_sup_seq(struct sk_buff *skb, struct hsr_priv *hsr,
+			enum hsr_exec_source source)
+{
+	struct hsr_sup_tag *hsr_stag;
+
+	WARN_ON_ONCE(source == HSR_EXEC_DIRECT_LAN);
+
+	hsr_stag = (struct hsr_sup_tag *)(skb_mac_header(skb) + ETH_HLEN);
+	spin_lock_bh(&hsr->seqnr_lock);
+	if (hsr->prot_version > 0) {
+		hsr_stag->sequence_nr = htons(hsr->sup_sequence_nr);
+		WRITE_ONCE(hsr->sup_sequence_nr, hsr->sup_sequence_nr + 1);
+	} else {
+		hsr_stag->sequence_nr = htons(hsr->sequence_nr);
+		WRITE_ONCE(hsr->sequence_nr, hsr->sequence_nr + 1);
+	}
+	spin_unlock_bh(&hsr->seqnr_lock);
+}
+
 static void send_hsr_supervision_frame(struct hsr_port *port,
 				       unsigned long *interval,
 				       const unsigned char *addr)
@@ -326,15 +349,10 @@ static void send_hsr_supervision_frame(struct hsr_port *port,
 	set_hsr_stag_path(hsr_stag, (hsr->prot_version ? 0x0 : 0xf));
 	set_hsr_stag_HSR_ver(hsr_stag, hsr->prot_version);
 
-	/* From HSRv1 on we have separate supervision sequence numbers. */
-	spin_lock_bh(&hsr->seqnr_lock);
-	if (hsr->prot_version > 0) {
-		hsr_stag->sequence_nr = htons(hsr->sup_sequence_nr);
-		hsr->sup_sequence_nr++;
-	} else {
-		hsr_stag->sequence_nr = htons(hsr->sequence_nr);
-		hsr->sequence_nr++;
-	}
+	/* The sequence number is assigned by the consumer at execution
+	 * time; zero placeholder until then.
+	 */
+	hsr_stag->sequence_nr = 0;
 
 	hsr_stag->tlv.HSR_TLV_type = type;
 	/* HSRv0 has 6 unused bytes after the MAC */
@@ -356,13 +374,10 @@ static void send_hsr_supervision_frame(struct hsr_port *port,
 		ether_addr_copy(hsr_sp->macaddress_A, hsr->macaddress_redbox);
 	}
 
-	if (skb_put_padto(skb, ETH_ZLEN)) {
-		spin_unlock_bh(&hsr->seqnr_lock);
+	if (skb_put_padto(skb, ETH_ZLEN))
 		return;
-	}
 
-	hsr_forward_skb(skb, port);
-	spin_unlock_bh(&hsr->seqnr_lock);
+	hsr_forward_sup_skb(skb, port);
 	return;
 }
 
@@ -397,10 +412,10 @@ static void send_prp_supervision_frame(struct hsr_port *master,
 	set_hsr_stag_path(hsr_stag, (hsr->prot_version ? 0x0 : 0xf));
 	set_hsr_stag_HSR_ver(hsr_stag, (hsr->prot_version ? 1 : 0));
 
-	/* From HSRv1 on we have separate supervision sequence numbers. */
-	spin_lock_bh(&hsr->seqnr_lock);
-	hsr_stag->sequence_nr = htons(hsr->sup_sequence_nr);
-	hsr->sup_sequence_nr++;
+	/* The sequence number is assigned by the consumer at execution
+	 * time; zero placeholder until then.
+	 */
+	hsr_stag->sequence_nr = 0;
 	hsr_stag->tlv.HSR_TLV_type = PRP_TLV_LIFE_CHECK_DD;
 	hsr_stag->tlv.HSR_TLV_length = sizeof(struct hsr_sup_payload);
 
@@ -424,13 +439,10 @@ static void send_prp_supervision_frame(struct hsr_port *master,
 		hsr_stlv->HSR_TLV_length = 0;
 	}
 
-	if (skb_put_padto(skb, ETH_ZLEN)) {
-		spin_unlock_bh(&hsr->seqnr_lock);
+	if (skb_put_padto(skb, ETH_ZLEN))
 		return;
-	}
 
-	hsr_forward_skb(skb, master);
-	spin_unlock_bh(&hsr->seqnr_lock);
+	hsr_forward_sup_skb(skb, master);
 }
 
 /* Announce (supervision frame) timer function
@@ -778,6 +790,7 @@ int hsr_dev_finalize(struct net_device *hsr_dev, struct net_device *slave[2],
 		return res;
 
 	spin_lock_init(&hsr->seqnr_lock);
+	hsr_forward_init(hsr);
 	/* Overflow soon to find bugs easier: */
 	hsr->sequence_nr = HSR_SEQNR_START;
 	hsr->sup_sequence_nr = HSR_SUP_SEQNR_START;
@@ -851,6 +864,7 @@ int hsr_dev_finalize(struct net_device *hsr_dev, struct net_device *slave[2],
 	return 0;
 
 err_unregister:
+	hsr_forward_stop(hsr);
 	hsr_del_ports(hsr);
 err_add_master:
 	hsr_del_self_node(hsr);

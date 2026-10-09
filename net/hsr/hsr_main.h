@@ -14,6 +14,7 @@
 #include <linux/list.h>
 #include <linux/if_vlan.h>
 #include <linux/if_hsr.h>
+#include <linux/workqueue.h>
 
 /* Time constants as specified in the HSR specification (IEC-62439-3 2010)
  * Table 8.
@@ -24,6 +25,13 @@
 #define HSR_PROXY_NODE_FORGET_TIME	60000 /* ms */
 #define HSR_ANNOUNCE_INTERVAL		  100 /* ms */
 #define HSR_ENTRY_FORGET_TIME		  400 /* ms */
+
+/* Ordered-forwarding queue and work bounds. */
+#define HSR_FWD_JOBS_MAX		1024
+#define HSR_FWD_ORD_JOBS_MAX		960
+#define HSR_FWD_BYTES_MAX		(8 * 1024 * 1024)
+#define HSR_FWD_ORD_BYTES_MAX		(HSR_FWD_BYTES_MAX - 64 * 1024)
+#define HSR_FWD_BUDGET_MAX		64
 
 /* By how much may slave1 and slave2 timestamps of latest received frame from
  * each node differ before we notify of communication problem?
@@ -202,6 +210,16 @@ struct hsr_priv {
 	enum hsr_version prot_version;	/* Indicate if HSRv0, HSRv1 or PRPv1 */
 	spinlock_t seqnr_lock;	/* locking for sequence_nr */
 	spinlock_t list_lock;	/* locking for node list */
+	/* Ordered-forwarding queue (hsr_forward_queue.c) */
+	spinlock_t fwd_lock;
+	struct list_head fwd_queue;
+	struct work_struct fwd_work;
+	unsigned int fwd_jobs;
+	unsigned int fwd_ord_jobs;
+	unsigned int fwd_bytes;
+	unsigned int fwd_ord_bytes;
+	bool fwd_owned;		/* consumer execution ownership */
+	bool fwd_stopped;
 	const struct hsr_proto_ops	*proto_ops;
 #define PRP_LAN_ID	0x5     /* 0x1010 for A and 0x1011 for B. Bit 0 is set
 				 * based on SLAVE_A or SLAVE_B
