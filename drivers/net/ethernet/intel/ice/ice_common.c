@@ -1052,7 +1052,7 @@ int ice_init_hw(struct ice_hw *hw)
 	hw->evb_veb = true;
 
 	xa_init_flags(&hw->sched_node_ids, XA_FLAGS_ALLOC);
-	xa_init(&hw->agg_nodes);
+	xa_init_flags(&hw->agg_nodes, XA_FLAGS_ALLOC);
 
 	/* Query the allocated resources for Tx scheduler */
 	status = ice_sched_query_res_alloc(hw);

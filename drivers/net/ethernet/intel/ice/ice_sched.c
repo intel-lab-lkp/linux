@@ -2694,61 +2694,78 @@ ice_sched_add_agg_cfg(struct ice_port_info *pi, u32 agg_id, u8 tc)
 }
 
 /**
- * ice_sched_cfg_agg - configure aggregator node
- * @pi: port information structure
- * @agg_id: aggregator ID
- * @agg_type: aggregator type queue, VSI, or aggregator group
- * @tc_bitmap: bits TC bitmap
+ * ice_alloc_agg_info - Allocate aggregator info structure
+ * @hw: pointer to the HW structure
+ * @min_id: the minimum ID to allocate
+ * @max_id: the maximum ID to allocate
+ * @agg_type: the aggregator node type
  *
- * It registers a unique aggregator node into scheduler services. It
- * allows a user to register with a unique ID to track it's resources.
- * The aggregator type determines if this is a queue group, VSI group
- * or aggregator group. It then creates the aggregator node(s) for requested
- * TC(s) or removes an existing aggregator node including its configuration
- * if indicated via tc_bitmap. Call ice_rm_agg_cfg to release aggregator
- * resources and remove aggregator ID.
- * This function needs to be called with scheduler lock held.
+ * Allocates a new aggregator info structure with an ID between min_id and
+ * max_id, inserting it into the agg_nodes xarray. If an exact ID is required,
+ * use the same value for both min_id and max_id.
+ *
+ * Context: Must be called while holding the scheduler lock.
+ *
+ * Return: the allocated aggregator info structure pointer, or an ERR_PTR on
+ * failure.
  */
-static int
-ice_sched_cfg_agg(struct ice_port_info *pi, u32 agg_id,
-		  enum ice_agg_type agg_type, unsigned long *tc_bitmap)
+static struct ice_sched_agg_info *
+ice_alloc_agg_info(struct ice_hw *hw, u32 min_id, u32 max_id,
+		   enum ice_agg_type agg_type)
 {
 	struct ice_sched_agg_info *agg_info;
-	struct ice_hw *hw = pi->hw;
-	int status = 0;
+	u32 agg_id;
+	int status;
+
+	/* Create new entry for new aggregator ID */
+	agg_info = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*agg_info),
+				GFP_KERNEL);
+	if (!agg_info)
+		return ERR_PTR(-ENOMEM);
+
+	agg_info->agg_type = agg_type;
+	agg_info->tc_bitmap[0] = 0;
+
+	/* Initialize the aggregator VSI list head */
+	INIT_LIST_HEAD(&agg_info->agg_vsi_list);
+	agg_info->num_vsis = 0;
+
+	status = xa_alloc(&hw->agg_nodes, &agg_id, agg_info,
+			  XA_LIMIT(min_id, max_id), GFP_KERNEL);
+	if (status) {
+		devm_kfree(ice_hw_to_dev(hw), agg_info);
+		return ERR_PTR(status);
+	}
+	agg_info->agg_id = agg_id;
+
+	return agg_info;
+}
+
+/**
+ * ice_sched_cfg_agg - configure aggregator node
+ * @pi: port information structure
+ * @agg_info: pointer to aggregator node to configure
+ * @tc_bitmap: bits TC bitmap
+ *
+ * Configure an aggregator node's traffic classes according to the provided
+ * tc_bitmap.
+ *
+ * Context: Must be called with scheduler lock held.
+ */
+static int ice_sched_cfg_agg(struct ice_port_info *pi,
+			     struct ice_sched_agg_info *agg_info,
+			     unsigned long *tc_bitmap)
+{
+	int status;
 	u8 tc;
 
-	agg_info = xa_load(&hw->agg_nodes, agg_id);
-	if (!agg_info) {
-		/* Create new entry for new aggregator ID */
-		agg_info = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*agg_info),
-					GFP_KERNEL);
-		if (!agg_info)
-			return -ENOMEM;
-
-		agg_info->agg_id = agg_id;
-		agg_info->agg_type = agg_type;
-		agg_info->tc_bitmap[0] = 0;
-
-		/* Initialize the aggregator VSI list head */
-		INIT_LIST_HEAD(&agg_info->agg_vsi_list);
-		agg_info->num_vsis = 0;
-
-		/* Add new entry in aggregator array */
-		status = xa_insert(&hw->agg_nodes, agg_id, agg_info,
-				   GFP_KERNEL);
-		if (status) {
-			devm_kfree(ice_hw_to_dev(hw), agg_info);
-			return status;
-		}
-	}
 	/* Create aggregator node(s) for requested TC(s) */
 	ice_for_each_traffic_class(tc) {
 		if (!ice_is_tc_ena(*tc_bitmap, tc)) {
 			/* Delete aggregator cfg TC if it exists previously */
 			status = ice_rm_agg_cfg_tc(pi, agg_info, tc, false);
 			if (status)
-				break;
+				return status;
 			continue;
 		}
 
@@ -2757,15 +2774,15 @@ ice_sched_cfg_agg(struct ice_port_info *pi, u32 agg_id,
 			continue;
 
 		/* Create new aggregator node for TC */
-		status = ice_sched_add_agg_cfg(pi, agg_id, tc);
+		status = ice_sched_add_agg_cfg(pi, agg_info->agg_id, tc);
 		if (status)
-			break;
+			return status;
 
 		/* Save aggregator node's TC information */
 		set_bit(tc, agg_info->tc_bitmap);
 	}
 
-	return status;
+	return 0;
 }
 
 /**
@@ -2781,11 +2798,18 @@ int
 ice_cfg_agg(struct ice_port_info *pi, u32 agg_id, enum ice_agg_type agg_type,
 	    u8 tc_bitmap)
 {
+	struct ice_sched_agg_info *agg_info;
 	unsigned long bitmap = tc_bitmap;
+	struct ice_hw *hw = pi->hw;
 	int status;
 
 	mutex_lock(&pi->sched_lock);
-	status = ice_sched_cfg_agg(pi, agg_id, agg_type, &bitmap);
+	agg_info = xa_load(&hw->agg_nodes, agg_id);
+	if (!agg_info)
+		agg_info = ice_alloc_agg_info(hw, agg_id, agg_id, agg_type);
+	if (IS_ERR(agg_info))
+		return PTR_ERR(agg_info);
+	status = ice_sched_cfg_agg(pi, agg_info, &bitmap);
 	if (!status)
 		status = ice_save_agg_tc_bitmap(pi, agg_id, &bitmap);
 	mutex_unlock(&pi->sched_lock);
@@ -4321,9 +4345,7 @@ void ice_sched_replay_agg(struct ice_hw *hw)
 						    agg_info->replay_tc_bitmap,
 						    replay_bitmap);
 			status = ice_sched_cfg_agg(hw->port_info,
-						   agg_info->agg_id,
-						   ICE_AGG_TYPE_AGG,
-						   replay_bitmap);
+						   agg_info, replay_bitmap);
 			if (status) {
 				dev_info(ice_hw_to_dev(hw),
 					 "Replay agg id[%d] failed\n",
@@ -4390,8 +4412,7 @@ static int ice_sched_replay_vsi_agg(struct ice_hw *hw, u16 vsi_handle)
 	ice_sched_get_ena_tc_bitmap(pi, agg_info->replay_tc_bitmap,
 				    replay_bitmap);
 	/* Replay aggregator node associated to vsi_handle */
-	status = ice_sched_cfg_agg(hw->port_info, agg_info->agg_id,
-				   ICE_AGG_TYPE_AGG, replay_bitmap);
+	status = ice_sched_cfg_agg(hw->port_info, agg_info, replay_bitmap);
 	if (status)
 		return status;
 
