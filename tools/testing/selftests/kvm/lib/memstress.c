@@ -121,6 +121,27 @@ void memstress_setup_vcpus(struct kvm_vm *vm, int nr_vcpus,
 	}
 }
 
+static struct kvm_vm *memstress_vm_create_with_vcpus(struct memstress_params *params,
+						     u64 extra_mem_pages)
+{
+	struct kvm_vm *vm;
+	int i;
+
+	TEST_ASSERT(params->nr_vcpus > 0, "Invalid number of vCPUs (%d)",
+		    params->nr_vcpus);
+
+	vm = __vm_create(VM_SHAPE(params->mode), params->nr_vcpus, extra_mem_pages);
+
+	if (params->dirty_ring_size)
+		vm_enable_dirty_ring(vm, params->dirty_ring_size);
+
+	for (i = 0; i < params->nr_vcpus; ++i)
+		vcpus[i] = vm_vcpu_add(vm, i, memstress_guest_code);
+
+	kvm_arch_vm_finalize_vcpus(vm);
+	return vm;
+}
+
 struct kvm_vm *memstress_create_vm(struct memstress_params *params)
 {
 	struct memstress_args *args = &memstress_args;
@@ -165,11 +186,7 @@ struct kvm_vm *memstress_create_vm(struct memstress_params *params)
 	 * The memory is also added to memslot 0, but that's a benign side
 	 * effect as KVM allows aliasing HVAs in meslots.
 	 */
-	vm = __vm_create_with_vcpus(VM_SHAPE(params->mode),
-				    params->nr_vcpus,
-				    slot0_pages + guest_num_pages,
-				    memstress_guest_code, vcpus);
-
+	vm = memstress_vm_create_with_vcpus(params, slot0_pages + guest_num_pages);
 	args->vm = vm;
 
 	/* Put the test region at the top guest physical memory. */

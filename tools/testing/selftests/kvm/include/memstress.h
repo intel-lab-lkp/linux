@@ -60,6 +60,7 @@ struct memstress_params {
 	int slots;
 	enum vm_mem_backing_src_type backing_src;
 	bool partition_vcpu_memory_access;
+	u32 dirty_ring_size;
 };
 
 extern struct memstress_args memstress_args;
