@@ -253,7 +253,8 @@ static int rd_build_prot_space(struct rd_dev *rd_dev, int prot_length, int block
 	 * 		   (prot_length/block_size) + pad
 	 * PGSZ canceled each other.
 	 */
-	total_sg_needed = (rd_dev->rd_page_count * prot_length / block_size) + 1;
+	total_sg_needed = div_u64((u64)rd_dev->rd_page_count * prot_length,
+				  block_size) + 1;
 
 	sg_tables = (total_sg_needed / max_sg_per_table) + 1;
 	sg_table = kvzalloc_objs(*sg_table, sg_tables);
