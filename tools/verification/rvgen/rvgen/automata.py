@@ -418,6 +418,13 @@ class Automata:
                 transitions.append(Transition(src, dst, event, reset, rule))
 
         transitions.sort(key=lambda t : (t.src, t.event))
+        previous_key = None
+        for transition in transitions:
+            key = (transition.src, transition.event)
+            if key == previous_key:
+                raise AutomataError(
+                    f"Duplicate transition for event {transition.event} in state {transition.src}")
+            previous_key = key
         return transitions
 
     def __parse_states(self):

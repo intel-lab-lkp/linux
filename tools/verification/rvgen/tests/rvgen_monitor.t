@@ -84,4 +84,14 @@ check "invalid ltl file syntax" \
 	"$RVGEN monitor -c ltl -s tests/specs/test_invalid.ltl -t per_task" 1 \
 	"No terminal matches 'i'" "Traceback (most recent call last)"
 
+# Only one transition per source state/event is representable in rvgen's
+# generated table, even if one of the transitions has a hybrid guard.
+check "reject conflicting deterministic automaton transitions" \
+	"$RVGEN monitor -c da -s tests/specs/test_nondeterministic_da.dot -t per_cpu" 1 \
+	"Duplicate transition for event event_2 in state state_a" "Traceback"
+
+check "reject conflicting guarded hybrid transitions" \
+	"$RVGEN monitor -c ha -s tests/specs/test_nondeterministic_ha.dot -t per_task" 1 \
+	"Duplicate transition for event event2 in state S2" "Traceback"
+
 test_end
