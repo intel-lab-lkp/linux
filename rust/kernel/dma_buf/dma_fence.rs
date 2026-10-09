@@ -806,7 +806,7 @@ impl<'a, T: Send + Sync + FenceContextOps> DriverFence<'a, T> {
     }
 
     /// Signal the fence. This will invoke all registered callbacks.
-    pub fn signal(self, res: Result) {
+    pub fn signal(&self, res: Result) {
         let fence = self.as_fence().lock();
 
         // SAFETY: `fence` is valid because `self` is valid. The lock must be
