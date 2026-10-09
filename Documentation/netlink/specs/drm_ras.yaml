@@ -16,7 +16,7 @@ definitions:
     type: enum
     name: node-type
     value-start: 1
-    entries: [error-counter]
+    entries: [error-counter, telemetry]
     doc: >-
          Type of the node. Currently, only error-counter nodes are
          supported, which expose reliability counters for a hardware/software
@@ -100,6 +100,31 @@ attribute-sets:
         name: error-value
         type: u32
         doc: Current value of the error counter.
+  -
+    name: telemetry-attrs
+    attributes:
+      -
+        name: node-id
+        type: u32
+        doc: >-
+             Unique identifier for the node.
+             Assigned dynamically by the DRM RAS core upon registration.
+      -
+        name: field
+        type: u32
+        doc:  Telemetry field to be read/written, e.g., SoC temp.
+      -
+        name: value
+        type: u64
+        doc: Value of telemetry field that was read/written.
+      -
+        name: status
+        type: s32
+        doc: Status of the telemetry operation.
+      -
+        name: pad
+        type: pad
+        doc: Alignment padding used for 64-bit
 
 operations:
   list:
@@ -198,6 +223,34 @@ operations:
             - node-id
             - error-id
             - error-threshold
+    -
+      name: telemetry-read
+      doc: Perform a read of the specified telemetry field.
+      attribute-set: telemetry-attrs
+      do:
+        pre: drm-ras-nl-pre-telemetry
+        request:
+          attributes:
+            - node-id
+            - field
+        reply:
+          attributes:
+            - value
+            - status
+    -
+      name: telemetry-write
+      doc: Perform a write of the specified telemetry field.
+      attribute-set: telemetry-attrs
+      do:
+        pre: drm-ras-nl-pre-telemetry
+        request:
+          attributes:
+            - node-id
+            - field
+            - value
+        reply:
+          attributes:
+            - status
 
 mcast-groups:
   list:

@@ -41,6 +41,19 @@ static const struct nla_policy drm_ras_set_error_threshold_nl_policy[DRM_RAS_A_E
 	[DRM_RAS_A_ERROR_COUNTER_ATTRS_ERROR_THRESHOLD] = { .type = NLA_U32, },
 };
 
+/* DRM_RAS_CMD_TELEMETRY_READ - do */
+static const struct nla_policy drm_ras_telemetry_read_nl_policy[DRM_RAS_A_TELEMETRY_ATTRS_FIELD + 1] = {
+	[DRM_RAS_A_TELEMETRY_ATTRS_NODE_ID] = { .type = NLA_U32, },
+	[DRM_RAS_A_TELEMETRY_ATTRS_FIELD] = { .type = NLA_U32, },
+};
+
+/* DRM_RAS_CMD_TELEMETRY_WRITE - do */
+static const struct nla_policy drm_ras_telemetry_write_nl_policy[DRM_RAS_A_TELEMETRY_ATTRS_VALUE + 1] = {
+	[DRM_RAS_A_TELEMETRY_ATTRS_NODE_ID] = { .type = NLA_U32, },
+	[DRM_RAS_A_TELEMETRY_ATTRS_FIELD] = { .type = NLA_U32, },
+	[DRM_RAS_A_TELEMETRY_ATTRS_VALUE] = { .type = NLA_U64, },
+};
+
 /* Ops table for drm_ras */
 static const struct genl_split_ops drm_ras_nl_ops[] = {
 	{
@@ -82,6 +95,22 @@ static const struct genl_split_ops drm_ras_nl_ops[] = {
 		.policy		= drm_ras_set_error_threshold_nl_policy,
 		.maxattr	= DRM_RAS_A_ERROR_COUNTER_ATTRS_ERROR_THRESHOLD,
 		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd		= DRM_RAS_CMD_TELEMETRY_READ,
+		.pre_doit	= drm_ras_nl_pre_telemetry,
+		.doit		= drm_ras_nl_telemetry_read_doit,
+		.policy		= drm_ras_telemetry_read_nl_policy,
+		.maxattr	= DRM_RAS_A_TELEMETRY_ATTRS_FIELD,
+		.flags		= GENL_CMD_CAP_DO,
+	},
+	{
+		.cmd		= DRM_RAS_CMD_TELEMETRY_WRITE,
+		.pre_doit	= drm_ras_nl_pre_telemetry,
+		.doit		= drm_ras_nl_telemetry_write_doit,
+		.policy		= drm_ras_telemetry_write_nl_policy,
+		.maxattr	= DRM_RAS_A_TELEMETRY_ATTRS_VALUE,
+		.flags		= GENL_CMD_CAP_DO,
 	},
 };
 

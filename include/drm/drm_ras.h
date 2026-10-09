@@ -100,6 +100,45 @@ struct drm_ras_node {
 	 */
 	int (*set_error_threshold)(struct drm_ras_node *node, u32 error_id, u32 threshold);
 
+	/**
+	 * @telemetry_pre:
+	 *
+	 * This callback is used to enforce any pre_doit conditions necessary
+	 * for telemetry. This is an optional callback for telemetry_node.
+	 *
+	 * Returns 0 on success, negative error code on failure.
+	 */
+	int (*telemetry_pre)(struct drm_ras_node *ep);
+
+	/**
+	 * @telemetry_read:
+	 *
+	 * This callback is used for a drm-ras telemetry node to read a
+	 * telemetry value. This is a mandatory callback for telemetry_node.
+	 *
+	 * The callback will read the desired device-specific field into value
+	 * and update status corresponding to a device-specific error code.
+	 *
+	 * Returns 0 on success, negative error code on failure.
+	 */
+	int (*telemetry_read)(struct drm_ras_node *ep, u32 *field, u64 *value,
+			      s32 *status);
+
+	/**
+	 * @telemetry_write:
+	 *
+	 * This callback is used for a drm-ras telemetry node to write a
+	 * telemetry value. This is a mandatory callback for telemetry_node.
+	 *
+	 * The callback will write the value to the desired device-specific
+	 * field and update status corresponding to a device-specific error
+	 * code.
+	 *
+	 * Returns 0 on success, negative error code on failure.
+	 */
+	int (*telemetry_write)(struct drm_ras_node *ep, u32 *field, u64 *value,
+			       s32 *status);
+
 	/** @priv: Driver private data */
 	void *priv;
 };
