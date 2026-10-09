@@ -2652,8 +2652,11 @@ static struct regmap *aspeed_g5_acquire_regmap(struct aspeed_pinmux_data *ctx,
 		np = of_parse_phandle(ctx->dev->of_node,
 					"aspeed,external-nodes", 1);
 		if (np) {
-			if (!of_device_is_compatible(np->parent, "aspeed,ast2500-lpc-v2"))
+			if (!of_device_is_compatible(np->parent,
+						     "aspeed,ast2500-lpc-v2")) {
+				of_node_put(np);
 				return ERR_PTR(-ENODEV);
+			}
 
 			map = syscon_node_to_regmap(np->parent);
 			of_node_put(np);
