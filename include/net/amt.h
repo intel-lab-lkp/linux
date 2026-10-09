@@ -360,8 +360,13 @@ struct amt_dev {
 	struct in6_addr		local_ipv6;
 	/* Outer remote ip */
 	__be32			remote_ip;
+	/* Outer remote IPv6 address, published under remote_ipv6_lock */
+	struct in6_addr		remote_ipv6;
+	seqlock_t		remote_ipv6_lock;
 	/* Outer discovery ip */
 	__be32			discovery_ip;
+	/* Outer discovery IPv6 address, :: unless an IPv6 gateway */
+	struct in6_addr		discovery_ipv6;
 	/* Only used in gateway mode */
 	__be32			nonce;
 	/* Gateway sent request and received query */
