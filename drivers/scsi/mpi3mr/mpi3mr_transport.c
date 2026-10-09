@@ -1100,9 +1100,9 @@ void mpi3mr_update_links(struct mpi3mr_ioc *mrioc,
 	mr_sas_phy = &mr_sas_node->phy[phy_number];
 	mr_sas_phy->attached_handle = handle;
 	spin_unlock_irqrestore(&mrioc->sas_node_lock, flags);
-	if (handle && (link_rate >= MPI3_SAS_NEG_LINK_RATE_1_5)) {
-		mpi3mr_set_identify(mrioc, handle,
-		    &mr_sas_phy->remote_identify);
+	if (handle && link_rate >= MPI3_SAS_NEG_LINK_RATE_1_5 &&
+	    !mpi3mr_set_identify(mrioc, handle,
+				 &mr_sas_phy->remote_identify)) {
 		mpi3mr_add_phy_to_an_existing_port(mrioc, mr_sas_node,
 		    mr_sas_phy, mr_sas_phy->remote_identify.sas_address,
 		    hba_port);
