@@ -22,14 +22,15 @@ struct zpodd {
 	enum odd_mech_type	mech_type; /* init during probe, RO afterwards */
 	struct ata_device	*dev;
 
+	/* The following fields are protected by the ATA port lock. */
+	unsigned int		notify_count; /* wake callbacks in progress */
+	bool			from_notify; /* power-on requested by notification */
+	bool			powered_off; /* powered off during suspend */
+
 	/* The following fields are synchronized by PM core. */
-	bool			from_notify; /* resumed as a result of
-					      * acpi wake notification */
 	bool			zp_ready; /* ZP ready state */
 	unsigned long		last_ready; /* last ZP ready timestamp */
 	bool			zp_sampled; /* ZP ready state sampled */
-	bool			powered_off; /* ODD is powered off
-					      *	during suspend */
 };
 
 static int eject_tray(struct ata_device *dev)
@@ -199,7 +200,9 @@ static struct scsi_device *zpodd_get_sdev(struct ata_device *dev)
  */
 void zpodd_enable_run_wake(struct ata_device *dev)
 {
+	struct ata_port *ap = dev->link->ap;
 	struct zpodd *zpodd = dev->zpodd;
+	unsigned long flags;
 	struct scsi_device *sdev = zpodd_get_sdev(dev);
 
 	if (sdev) {
@@ -207,16 +210,25 @@ void zpodd_enable_run_wake(struct ata_device *dev)
 		scsi_device_put(sdev);
 	}
 
+	spin_lock_irqsave(ap->lock, flags);
 	zpodd->powered_off = true;
+	zpodd->from_notify = false;
+	spin_unlock_irqrestore(ap->lock, flags);
 	acpi_pm_set_device_wakeup(&dev->tdev, true);
 }
 
 /* Disable runtime wake capability if it is enabled */
 void zpodd_disable_run_wake(struct ata_device *dev)
 {
+	struct ata_port *ap = dev->link->ap;
 	struct zpodd *zpodd = dev->zpodd;
+	unsigned long flags;
+	bool powered_off;
 
-	if (zpodd->powered_off)
+	spin_lock_irqsave(ap->lock, flags);
+	powered_off = zpodd->powered_off;
+	spin_unlock_irqrestore(ap->lock, flags);
+	if (powered_off)
 		acpi_pm_set_device_wakeup(&dev->tdev, false);
 }
 
@@ -237,19 +249,24 @@ void zpodd_disable_run_wake(struct ata_device *dev)
  */
 void zpodd_post_poweron(struct ata_device *dev)
 {
+	struct ata_port *ap = dev->link->ap;
 	struct zpodd *zpodd = dev->zpodd;
+	unsigned long flags;
+	bool from_notify;
 	struct scsi_device *sdev;
 
-	if (!zpodd->powered_off)
+	spin_lock_irqsave(ap->lock, flags);
+	if (!zpodd->powered_off) {
+		spin_unlock_irqrestore(ap->lock, flags);
 		return;
-
-	zpodd->powered_off = false;
-
-	if (zpodd->from_notify) {
-		zpodd->from_notify = false;
-		if (zpodd->mech_type == ODD_MECH_TYPE_DRAWER)
-			eject_tray(dev);
 	}
+	zpodd->powered_off = false;
+	from_notify = zpodd->from_notify;
+	zpodd->from_notify = false;
+	spin_unlock_irqrestore(ap->lock, flags);
+
+	if (from_notify && zpodd->mech_type == ODD_MECH_TYPE_DRAWER)
+		eject_tray(dev);
 
 	zpodd->zp_sampled = false;
 	zpodd->zp_ready = false;
@@ -264,19 +281,33 @@ void zpodd_post_poweron(struct ata_device *dev)
 static void zpodd_wake_dev(acpi_handle handle, u32 event, void *context)
 {
 	struct ata_device *ata_dev = context;
+	struct ata_port *ap = ata_dev->link->ap;
 	struct zpodd *zpodd = ata_dev->zpodd;
 	struct scsi_device *sdev;
+	unsigned long flags;
 
 	if (event != ACPI_NOTIFY_DEVICE_WAKE)
 		return;
-	sdev = zpodd_get_sdev(ata_dev);
-	if (!sdev)
-		return;
-	if (pm_runtime_suspended(&sdev->sdev_gendev)) {
+
+	/* Attribute the notification to the current physical power cycle. */
+	spin_lock_irqsave(ap->lock, flags);
+	zpodd->notify_count++;
+	if (zpodd->powered_off)
 		zpodd->from_notify = true;
+	spin_unlock_irqrestore(ap->lock, flags);
+
+	sdev = zpodd_get_sdev(ata_dev);
+	if (sdev) {
+		/* The PM core handles an already active or resuming device. */
 		pm_runtime_resume(&sdev->sdev_gendev);
+		scsi_device_put(sdev);
 	}
-	scsi_device_put(sdev);
+
+	/* Do not discard attribution while another wake callback is active. */
+	spin_lock_irqsave(ap->lock, flags);
+	if (!--zpodd->notify_count)
+		zpodd->from_notify = false;
+	spin_unlock_irqrestore(ap->lock, flags);
 }
 
 static void ata_acpi_add_pm_notifier(struct ata_device *dev)
