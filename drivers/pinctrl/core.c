@@ -249,6 +249,8 @@ static int pinctrl_register_one_pin(struct pinctrl_dev *pctldev,
 	return 0;
 
 failed:
+	if (pindesc->dynamic_name)
+		kfree(pindesc->name);
 	kfree(pindesc);
 	return error;
 }
