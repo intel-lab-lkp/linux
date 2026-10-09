@@ -590,6 +590,45 @@ unsafe impl AlwaysRefCounted for Fence {
     }
 }
 
+/// An object that can signal an associated [`DriverFence`], independently of
+/// that one's lifetime.
+///
+/// Use with great caucion! Only the producer of a fence should ever be able to
+/// signal it.
+///
+/// This helper is necessary to signal DriverFences that are hidden behind locks
+/// which cannot be taken in certain situations.
+pub struct FenceSignaler {
+    fence: ARef<Fence>,
+}
+
+impl FenceSignaler {
+    /// Signal the associated [`DriverFence`].
+    pub fn signal(&self, res: Result) {
+        let fence = self.fence.lock();
+
+        // SAFETY: `fence` is valid because `self` is valid. The lock must be
+        // held, which we acquired directly above.
+        if !unsafe { bindings::dma_fence_test_signaled_flag(fence.as_raw()) } {
+            if let Err(err) = res {
+                // SAFETY: `fence` is valid because `self` is valid. The fence
+                // must not have been signaled yet, which we check directly above.
+                unsafe { bindings::dma_fence_set_error(fence.as_raw(), err.to_errno()) };
+            }
+            // SAFETY: `fence` is valid because `self` is valid. The lock must
+            // be held, which we acquired above.
+            unsafe { bindings::dma_fence_signal_locked(fence.as_raw()) };
+        }
+
+        // TODO: This should decrement the nr-of-unsignaled-fences tracker in fctx
+    }
+
+    /// Get the associated fence's sequence number.
+    pub fn seqno(&self) -> u64 {
+        self.fence.seqno()
+    }
+}
+
 // Necessary to guarantee that `inner` always comes first and can be freed by C.
 // Also useful for using casts instead of container_of().
 #[repr(C)]
@@ -803,6 +842,16 @@ impl<'a, T: Send + Sync + FenceContextOps> DriverFence<'a, T> {
         // SAFETY: `self` is by definition still valid, and it cannot drop until
         // this new reference is gone.
         unsafe { Fence::from_raw(self.as_raw()) }
+    }
+
+    /// Create a [`FenceSignaler`] associated with this `DriverFence`.
+    ///
+    /// Use with caution! Only the producer of a [`DriverFence`] should be able
+    /// to signal it.
+    pub fn new_signaler(&self) -> FenceSignaler {
+        FenceSignaler {
+            fence: ARef::from(self.as_fence()),
+        }
     }
 
     /// Signal the fence. This will invoke all registered callbacks.
