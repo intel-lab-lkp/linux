@@ -5,6 +5,7 @@
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
 #include <linux/etherdevice.h>
+#include <linux/fips.h>
 #include <linux/skbuff.h>
 #include "iwl-trans.h"
 #include "mvm.h"
@@ -421,14 +422,15 @@ static int iwl_mvm_rx_crypto(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 
 	/*
 	 * Drop UNKNOWN frames in aggregation, unless in monitor mode
-	 * (where we don't have the keys).
+	 * (where we don't have the keys) or FIPS SW-crypto mode.
 	 * We limit this to aggregation because in TKIP this is a valid
 	 * scenario, since we may not have the (correct) TTAK (phase 1
 	 * key) in the firmware.
 	 */
 	if (phy_info & IWL_RX_MPDU_PHY_AMPDU &&
 	    (status & IWL_RX_MPDU_STATUS_SEC_MASK) ==
-	    IWL_RX_MPDU_STATUS_SEC_UNKNOWN && !mvm->monitor_on) {
+	    IWL_RX_MPDU_STATUS_SEC_UNKNOWN && !mvm->monitor_on &&
+	    !fips_allows_exception(FIPS_EXCEPTION_WIFI_MFP)) {
 		IWL_DEBUG_DROP(mvm, "Dropping packets, bad enc status\n");
 		return -1;
 	}
@@ -2357,7 +2359,8 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 		    !WARN_ON(!ieee80211_is_data_qos(hdr->frame_control))) {
 			u8 *qc = ieee80211_get_qos_ctl(hdr);
 
-			*qc &= ~IEEE80211_QOS_CTL_A_MSDU_PRESENT;
+			if (!fips_allows_exception(FIPS_EXCEPTION_WIFI_MFP))
+				*qc &= ~IEEE80211_QOS_CTL_A_MSDU_PRESENT;
 
 			if (mvm->trans->mac_cfg->device_family ==
 			    IWL_DEVICE_FAMILY_9000) {
