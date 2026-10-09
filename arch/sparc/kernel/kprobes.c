@@ -52,6 +52,10 @@ int __kprobes arch_prepare_kprobe(struct kprobe *p)
 	if ((unsigned long) p->addr & 0x3UL)
 		return -EILSEQ;
 
+	p->ainsn.insn = get_insn_slot();
+	if (!p->ainsn.insn)
+		return -ENOMEM;
+
 	p->ainsn.insn[0] = *p->addr;
 	flushi(&p->ainsn.insn[0]);
 
@@ -60,6 +64,14 @@ int __kprobes arch_prepare_kprobe(struct kprobe *p)
 
 	p->opcode = *p->addr;
 	return 0;
+}
+
+void __kprobes arch_remove_kprobe(struct kprobe *p)
+{
+	if (p->ainsn.insn) {
+		free_insn_slot(p->ainsn.insn, 0);
+		p->ainsn.insn = NULL;
+	}
 }
 
 void __kprobes arch_arm_kprobe(struct kprobe *p)

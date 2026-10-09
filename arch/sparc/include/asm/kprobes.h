@@ -11,13 +11,16 @@
 #include <linux/types.h>
 #include <linux/percpu.h>
 
+#define __ARCH_WANT_KPROBES_INSN_SLOT
+
 typedef u32 kprobe_opcode_t;
 
 #define MAX_INSN_SIZE 2
 
 #define kretprobe_blacklist_size 0
 
-#define arch_remove_kprobe(p)	do {} while (0)
+struct kprobe;
+void arch_remove_kprobe(struct kprobe *p);
 
 #define flush_insn_slot(p)		\
 do { 	flushi(&(p)->ainsn.insn[0]);	\
@@ -29,7 +32,7 @@ void __kretprobe_trampoline(void);
 /* Architecture specific copy of original instruction*/
 struct arch_specific_insn {
 	/* copy of the original instruction */
-	kprobe_opcode_t insn[MAX_INSN_SIZE];
+	kprobe_opcode_t *insn;
 };
 
 struct prev_kprobe {
