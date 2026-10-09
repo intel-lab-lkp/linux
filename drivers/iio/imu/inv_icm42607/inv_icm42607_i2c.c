@@ -12,6 +12,12 @@
 
 #include "inv_icm42607.h"
 
+const struct regmap_config inv_icm42607_regmap_config = {
+	.reg_bits = 8,
+	.val_bits = 8,
+};
+EXPORT_SYMBOL_NS_GPL(inv_icm42607_regmap_config, "IIO_ICM42607");
+
 static int inv_icm42607_i2c_bus_setup(struct inv_icm42607_state *st)
 {
 	unsigned int val;
