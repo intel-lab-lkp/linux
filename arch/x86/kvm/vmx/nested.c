@@ -2445,7 +2445,7 @@ static void prepare_vmcs02_early(struct vcpu_vmx *vmx, struct loaded_vmcs *vmcs0
 			 ~PIN_BASED_VMX_PREEMPTION_TIMER);
 
 	/* Posted interrupts setting is only taken from vmcs12.  */
-	vmx->nested.pi_pending = false;
+	WARN_ON_ONCE(vmx->nested.pi_pending);
 	if (nested_cpu_has_posted_intr(vmcs12)) {
 		vmx->nested.posted_intr_nv = vmcs12->posted_intr_nv;
 	} else {
@@ -5161,6 +5161,14 @@ void __nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 	vcpu->arch.nmi_injected = false;
 	kvm_clear_exception_queue(vcpu);
 	kvm_clear_interrupt_queue(vcpu);
+
+	if (lapic_in_kernel(vcpu) && vmx->nested.pi_pending) {
+		vmx->nested.pi_pending = 0;
+		if (!WARN_ON_ONCE(vmx->nested.posted_intr_nv == -1)) {
+			kvm_lapic_set_irr(vmx->nested.posted_intr_nv, vcpu->arch.apic);
+			kvm_make_request(KVM_REQ_EVENT, vcpu);
+		}
+	}
 
 	vmx_switch_vmcs(vcpu, &vmx->vmcs01);
 
