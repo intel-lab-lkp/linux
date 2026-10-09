@@ -15,7 +15,9 @@
 /* Offsets for late (i.e. MMU-enabled) CPU boot reasons */
 /* Fatal system error detected by secondary CPU, crash the system */
 #define CPU_PANIC_KERNEL			(0)
-#define CPU_STATUS_FLAGS_MAX			(1)
+/* The PSCI v0.2+ implementation passed the wrong argument */
+#define CPU_BROKEN_PSCI_ARG			(1)
+#define CPU_STATUS_FLAGS_MAX			(2)
 
 #ifndef __ASSEMBLER__
 
