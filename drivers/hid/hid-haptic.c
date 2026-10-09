@@ -10,6 +10,8 @@
 
 #include "hid-haptic.h"
 
+static DEFINE_MUTEX(haptic_owner_lock);
+
 void hid_haptic_feature_mapping(struct hid_device *hdev,
 				struct hid_haptic_device *haptic,
 				struct hid_field *field, struct hid_usage *usage)
@@ -383,6 +385,12 @@ static void hid_haptic_destroy(struct ff_device *ff)
 	struct hid_device *hdev = haptic->hdev;
 	int r;
 
+	mutex_lock(&haptic_owner_lock);
+	if (haptic->owner)
+		*haptic->owner = NULL;
+	haptic->owner = NULL;
+	mutex_unlock(&haptic_owner_lock);
+
 	if (hdev)
 		put_device(&hdev->dev);
 
@@ -408,6 +416,37 @@ static void hid_haptic_destroy(struct ff_device *ff)
 	module_put(THIS_MODULE);
 }
 
+void hid_haptic_release(struct hid_haptic_device **owner)
+{
+	struct hid_haptic_device *haptic;
+
+	mutex_lock(&haptic_owner_lock);
+	haptic = *owner;
+	if (haptic) {
+		haptic->owner = NULL;
+		*owner = NULL;
+		if (!haptic->ff_owned)
+			kfree(haptic);
+	}
+	mutex_unlock(&haptic_owner_lock);
+}
+EXPORT_SYMBOL_GPL(hid_haptic_release);
+
+bool hid_haptic_detach(struct hid_haptic_device **owner)
+{
+	bool ff_owned = false;
+
+	mutex_lock(&haptic_owner_lock);
+	if (*owner) {
+		(*owner)->owner = NULL;
+		ff_owned = (*owner)->ff_owned;
+	}
+	mutex_unlock(&haptic_owner_lock);
+
+	return ff_owned;
+}
+EXPORT_SYMBOL_GPL(hid_haptic_detach);
+
 int hid_haptic_init(struct hid_device *hdev,
 		    struct hid_haptic_device *haptic,
 		    struct input_dev *dev)
@@ -419,8 +458,6 @@ int hid_haptic_init(struct hid_device *hdev,
 	};
 	const char *prefix = "hid-haptic";
 	char *name;
-	int (*flush)(struct input_dev *dev, struct file *file);
-	int (*event)(struct input_dev *dev, unsigned int type, unsigned int code, int value);
 
 	haptic->hdev = hdev;
 	haptic->max_waveform_id = max(2u, haptic->max_waveform_id);
@@ -501,11 +538,23 @@ int hid_haptic_init(struct hid_device *hdev,
 
 	input_set_capability(dev, EV_FF, FF_HAPTIC);
 
-	flush = dev->flush;
-	event = dev->event;
+	if (!try_module_get(THIS_MODULE)) {
+		dev_err(&hdev->dev, "Failed to increase module count.\n");
+		ret = -ENODEV;
+		goto stop_buffer_free;
+	}
+	if (!get_device(&hdev->dev)) {
+		dev_err(&hdev->dev, "Failed to get hdev device.\n");
+		ret = -ENODEV;
+		module_put(THIS_MODULE);
+		goto stop_buffer_free;
+	}
+
 	ret = input_ff_create(dev, FF_MAX_EFFECTS);
 	if (ret) {
 		dev_err(&hdev->dev, "Failed to create ff device.\n");
+		put_device(&hdev->dev);
+		module_put(THIS_MODULE);
 		goto stop_buffer_free;
 	}
 
@@ -515,23 +564,9 @@ int hid_haptic_init(struct hid_device *hdev,
 	ff->playback = hid_haptic_playback;
 	ff->erase = hid_haptic_erase;
 	ff->destroy = hid_haptic_destroy;
-	if (!try_module_get(THIS_MODULE)) {
-		dev_err(&hdev->dev, "Failed to increase module count.\n");
-		goto input_free;
-	}
-	if (!get_device(&hdev->dev)) {
-		dev_err(&hdev->dev, "Failed to get hdev device.\n");
-		module_put(THIS_MODULE);
-		goto input_free;
-	}
+	haptic->ff_owned = true;
 	return 0;
 
-input_free:
-	input_ff_destroy(dev);
-	/* Restore dev flush and event */
-	dev->flush = flush;
-	dev->event = event;
-	return ret;
 stop_buffer_free:
 	kfree(haptic->stop_effect.report_buf);
 	haptic->stop_effect.report_buf = NULL;

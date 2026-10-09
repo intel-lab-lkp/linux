@@ -6,6 +6,7 @@
  */
 
 #include <linux/hid.h>
+#include <linux/slab.h>
 
 #define HID_HAPTIC_ORDINAL_WAVEFORMNONE 1
 #define HID_HAPTIC_ORDINAL_WAVEFORMSTOP 2
@@ -29,6 +30,8 @@ struct hid_haptic_effect_node {
 struct hid_haptic_device {
 	struct input_dev *input_dev;
 	struct hid_device *hdev;
+	struct hid_haptic_device **owner;
+	bool ff_owned;
 	struct hid_report *auto_trigger_report;
 	struct mutex auto_trigger_mutex;
 	struct workqueue_struct *wq;
@@ -75,6 +78,8 @@ void hid_haptic_handle_press_release(struct hid_haptic_device *haptic);
 void hid_haptic_pressure_reset(struct hid_haptic_device *haptic);
 void hid_haptic_pressure_increase(struct hid_haptic_device *haptic,
 				  __s32 pressure);
+void hid_haptic_release(struct hid_haptic_device **owner);
+bool hid_haptic_detach(struct hid_haptic_device **owner);
 #else
 static inline
 void hid_haptic_feature_mapping(struct hid_device *hdev,
@@ -126,4 +131,13 @@ static inline
 void hid_haptic_pressure_increase(struct hid_haptic_device *haptic,
 				  __s32 pressure)
 {}
+static inline void hid_haptic_release(struct hid_haptic_device **owner)
+{
+	kfree(*owner);
+	*owner = NULL;
+}
+static inline bool hid_haptic_detach(struct hid_haptic_device **owner)
+{
+	return false;
+}
 #endif
