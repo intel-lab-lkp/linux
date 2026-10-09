@@ -632,7 +632,7 @@ static int pxa_gpio_probe(struct platform_device *pdev)
 	} else {
 		irq_base = pxa_gpio_probe_dt(pdev, pchip);
 		if (irq_base < 0)
-			return -EINVAL;
+			return irq_base;
 	}
 
 	if (!pxa_last_gpio)
