@@ -201,7 +201,7 @@
 	};
 
 	/* EEPROM */
-	eeprom@50 {
+	eeprom0: eeprom@50 {
 		compatible = "atmel,24c32";
 		reg = <0x50>;
 		pagesize = <32>;
