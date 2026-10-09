@@ -175,10 +175,22 @@ unsigned int kvm_check_cap(long cap)
 
 void vm_enable_dirty_ring(struct kvm_vm *vm, u32 ring_size)
 {
-	if (vm_check_cap(vm, KVM_CAP_DIRTY_LOG_RING_ACQ_REL))
-		vm_enable_cap(vm, KVM_CAP_DIRTY_LOG_RING_ACQ_REL, ring_size);
-	else
-		vm_enable_cap(vm, KVM_CAP_DIRTY_LOG_RING, ring_size);
+	long cap = kvm_get_dirty_ring_cap();
+	int max_size;
+
+	TEST_ASSERT(cap, "Dirty-ring not supported, check CONFIG_HAVE_KVM_DIRTY_RING");
+
+	TEST_ASSERT(is_power_of_2(ring_size),
+		    "Dirty-ring size '0x%x' must be a power-of-2", ring_size);
+	TEST_ASSERT(ring_size >= getpagesize(),
+		    "Dirty-ring size '0x%x' must be at least one (host) page", ring_size);
+
+	max_size = vm_check_cap(vm, cap);
+	TEST_ASSERT(ring_size <= max_size,
+		    "Dirty-ring size '0x%x' is larger than KVM's limit of '0x%x'",
+		    ring_size, max_size);
+
+	vm_enable_cap(vm, cap, ring_size);
 	vm->dirty_ring_size = ring_size;
 }
 
