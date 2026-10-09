@@ -4782,6 +4782,18 @@ err_linearize:
 }
 EXPORT_SYMBOL_GPL(skb_segment_list);
 
+static bool skb_segment_unreadable(const struct sk_buff *head_skb)
+{
+	const struct sk_buff *iter;
+
+	if (!skb_frags_readable(head_skb))
+		return true;
+	skb_walk_frags(head_skb, iter)
+		if (!skb_frags_readable(iter))
+			return true;
+	return false;
+}
+
 /**
  *	skb_segment - Perform protocol segmentation on skb.
  *	@head_skb: buffer to segment
@@ -4841,6 +4853,14 @@ struct sk_buff *skb_segment(struct sk_buff *head_skb,
 
 	sg = !!(features & NETIF_F_SG);
 	csum = !!can_checksum_protocol(features, proto);
+
+	/* Without SG every segment's payload is copied out of head_skb, which
+	 * can't be done for unreadable frags.
+	 */
+	if (!sg && skb_segment_unreadable(head_skb)) {
+		err = -EINVAL;
+		goto err;
+	}
 
 	if (sg && csum && !gso_by_frags)  {
 		if (!(features & NETIF_F_GSO_PARTIAL)) {
