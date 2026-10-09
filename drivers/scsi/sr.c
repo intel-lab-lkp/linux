@@ -473,16 +473,24 @@ static blk_status_t sr_init_command(struct scsi_cmnd *SCpnt)
 	return BLK_STS_IOERR;
 }
 
-static int sr_revalidate_disk(struct scsi_cd *cd)
+static int sr_revalidate_disk(struct scsi_cd *cd, bool fail_if_becoming_ready)
 {
 	struct request_queue *q = cd->device->request_queue;
-	struct scsi_sense_hdr sshdr;
+	struct scsi_sense_hdr sshdr = {};
 	struct queue_limits lim;
-	int sector_size;
+	int sector_size, ret;
 
-	/* if the unit is not ready, nothing more to do */
-	if (scsi_test_unit_ready(cd->device, SR_TIMEOUT, MAX_RETRIES, &sshdr))
+	/* Keep revalidation pending if the medium is not ready yet. */
+	cd->needs_revalidate = true;
+	ret = scsi_test_unit_ready(cd->device, SR_TIMEOUT, MAX_RETRIES, &sshdr);
+	if (ret) {
+		/* Do not let a later readiness check admit stale geometry. */
+		if (ret > 0 && fail_if_becoming_ready && scsi_sense_valid(&sshdr) &&
+		    sshdr.sense_key == NOT_READY &&
+		    sshdr.asc == 0x04 && sshdr.ascq == 0x01)
+			return -ENOMEDIUM;
 		return 0;
+	}
 	sr_cd_check(&cd->cdi);
 	sector_size = get_sectorsize(cd);
 
@@ -491,7 +499,10 @@ static int sr_revalidate_disk(struct scsi_cd *cd)
 	lim.physical_block_size = sector_size;
 	lim.io_min = sector_size;
 	lim.features |= BLK_FEAT_ROTATIONAL;
-	return queue_limits_commit_update_frozen(q, &lim);
+	ret = queue_limits_commit_update_frozen(q, &lim);
+	if (!ret)
+		cd->needs_revalidate = false;
+	return ret;
 }
 
 static int sr_block_open(struct gendisk *disk, blk_mode_t mode)
@@ -504,8 +515,8 @@ static int sr_block_open(struct gendisk *disk, blk_mode_t mode)
 		return -ENXIO;
 
 	scsi_autopm_get_device(sdev);
-	if (disk_check_media_change(disk)) {
-		ret = sr_revalidate_disk(cd);
+	if (disk_check_media_change(disk) || cd->needs_revalidate) {
+		ret = sr_revalidate_disk(cd, !(mode & BLK_OPEN_NDELAY));
 		if (ret)
 			goto out;
 	}
@@ -700,7 +711,7 @@ static int sr_probe(struct scsi_device *sdev)
 	blk_pm_runtime_init(sdev->request_queue, dev);
 
 	dev_set_drvdata(dev, cd);
-	error = sr_revalidate_disk(cd);
+	error = sr_revalidate_disk(cd, false);
 	if (error)
 		goto unregister_cdrom;
 
