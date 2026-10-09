@@ -601,9 +601,14 @@ restart:
 	/* Wait for withdraw to complete */
 	flush_work(&sdp->sd_withdraw_work);
 
-	if (!sb_rdonly(sb))
+	if (!sb_rdonly(sb)) {
 		gfs2_make_fs_ro(sdp);
-	else {
+		/*
+		 * A journal I/O error during gfs2_make_fs_ro() may queue
+		 * withdraw work.
+		 */
+		flush_work(&sdp->sd_withdraw_work);
+	} else {
 		if (gfs2_withdrawn(sdp))
 			gfs2_destroy_threads(sdp);
 
