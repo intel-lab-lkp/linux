@@ -306,6 +306,21 @@ static int d350_alloc_cmds(struct dma_chan *dchan, struct d350_desc *desc,
 	return 0;
 }
 
+/*
+ * The command words are written after the command list has been mapped, so
+ * make them visible to the device before the descriptor is submitted. This
+ * also refreshes the bounce buffer when the mapping is bounced through the
+ * SWIOTLB. It is a no-op for a DMA coherent device.
+ */
+static void d350_sync_cmds(struct device *dev, struct d350_desc *desc)
+{
+	if (!desc->cmds)
+		return;
+
+	dma_sync_single_for_device(dev, desc->cmds_bus, desc->cmds_size,
+				   DMA_TO_DEVICE);
+}
+
 static void d350_unmap_resource(struct d350_chan *dch)
 {
 	struct device *dev = dch->vc.chan.device->dev;
@@ -599,6 +614,8 @@ d350_prep_slave_sg(struct dma_chan *dchan, struct scatterlist *sgl,
 	if (sg_len > 1)
 		memcpy(desc->command, desc->cmds, cmd_size);
 
+	d350_sync_cmds(dchan->device->dev, desc);
+
 	return vchan_tx_prep(&dch->vc, &desc->vd, flags);
 
 err_free_cmds:
@@ -667,6 +684,8 @@ d350_prep_dma_cyclic(struct dma_chan *dchan, dma_addr_t buf_addr,
 				    maxburst, CH_CTRL_DONETYPE_CMD);
 	}
 	memcpy(desc->command, desc->cmds, cmd_size);
+
+	d350_sync_cmds(dchan->device->dev, desc);
 
 	return vchan_tx_prep(&dch->vc, &desc->vd, flags);
 }
