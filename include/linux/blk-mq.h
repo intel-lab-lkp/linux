@@ -14,6 +14,7 @@
 struct blk_mq_tags;
 struct blk_flush_queue;
 struct io_comp_batch;
+struct dentry;
 
 #define BLKDEV_MIN_RQ	4
 #define BLKDEV_DEFAULT_RQ	128
@@ -534,6 +535,8 @@ enum hctx_type {
  * @update_nr_hwq_lock:
  * 		   Synchronize updating nr_hw_queues with add/del disk &
  * 		   switching elevator.
+ * @debugfs_dir:   Debugfs directory for this tag set.
+ * @debugfs_id:    ID used as part of the debugfs directory name.
  */
 struct blk_mq_tag_set {
 	const struct blk_mq_ops	*ops;
@@ -559,6 +562,11 @@ struct blk_mq_tag_set {
 	struct srcu_struct	tags_srcu;
 
 	struct rw_semaphore	update_nr_hwq_lock;
+
+#ifdef CONFIG_BLK_DEBUG_FS
+	struct dentry		*debugfs_dir;
+	int			debugfs_id;
+#endif
 };
 
 /**

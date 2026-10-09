@@ -7,6 +7,7 @@
 #include <linux/seq_file.h>
 
 struct blk_mq_hw_ctx;
+struct blk_mq_tag_set;
 
 struct blk_mq_debugfs_attr {
 	const char *name;
@@ -34,6 +35,11 @@ void blk_mq_debugfs_register_sched_hctx(struct request_queue *q,
 void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hctx);
 
 void blk_mq_debugfs_register_rq_qos(struct request_queue *q);
+
+void blk_mq_tagset_debugfs_register(struct blk_mq_tag_set *set);
+void blk_mq_tagset_debugfs_unregister(struct blk_mq_tag_set *set);
+void blk_mq_tagset_debugfs_create_tags(struct blk_mq_tag_set *set);
+void blk_mq_tagset_debugfs_remove_tags(struct blk_mq_tag_set *set);
 #else
 static inline void blk_mq_debugfs_register(struct request_queue *q)
 {
@@ -74,6 +80,22 @@ static inline void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hc
 }
 
 static inline void blk_mq_debugfs_register_rq_qos(struct request_queue *q)
+{
+}
+
+static inline void blk_mq_tagset_debugfs_register(struct blk_mq_tag_set *set)
+{
+}
+
+static inline void blk_mq_tagset_debugfs_unregister(struct blk_mq_tag_set *set)
+{
+}
+
+static inline void blk_mq_tagset_debugfs_create_tags(struct blk_mq_tag_set *set)
+{
+}
+
+static inline void blk_mq_tagset_debugfs_remove_tags(struct blk_mq_tag_set *set)
 {
 }
 

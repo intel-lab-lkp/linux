@@ -7,6 +7,7 @@
 #include <linux/blkdev.h>
 #include <linux/build_bug.h>
 #include <linux/debugfs.h>
+#include <linux/idr.h>
 
 #include "blk.h"
 #include "blk-mq.h"
@@ -826,4 +827,293 @@ void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hctx)
 		return;
 	debugfs_remove_recursive(hctx->sched_debugfs_dir);
 	hctx->sched_debugfs_dir = NULL;
+}
+
+/* Tag set debugfs --------------------------------------------------------- */
+
+static DEFINE_IDA(blk_mq_tagset_debugfs_ida);
+static DEFINE_MUTEX(blk_mq_tagset_debugfs_mutex);
+static struct dentry *blk_mq_tagset_debugfs_root;
+
+/* Prevent debugfs allocation reclaim from issuing I/O to frozen queues. */
+static unsigned int __must_check blk_mq_tagset_debugfs_lock(void)
+	__acquires(&blk_mq_tagset_debugfs_mutex)
+{
+	unsigned int memflags = memalloc_noio_save();
+
+	mutex_lock(&blk_mq_tagset_debugfs_mutex);
+	return memflags;
+}
+
+static void blk_mq_tagset_debugfs_unlock(unsigned int memflags)
+	__releases(&blk_mq_tagset_debugfs_mutex)
+{
+	mutex_unlock(&blk_mq_tagset_debugfs_mutex);
+	memalloc_noio_restore(memflags);
+}
+
+#define BLK_MQ_F_NAME(name) \
+	[ilog2(BLK_MQ_F_##name)] = #name
+static const char *const tagset_flag_name[] = {
+	BLK_MQ_F_NAME(TAG_QUEUE_SHARED),
+	BLK_MQ_F_NAME(STACKING),
+	BLK_MQ_F_NAME(TAG_HCTX_SHARED),
+	BLK_MQ_F_NAME(BLOCKING),
+	BLK_MQ_F_NAME(TAG_RR),
+	BLK_MQ_F_NAME(NO_SCHED_BY_DEFAULT),
+};
+
+#undef BLK_MQ_F_NAME
+
+static int blk_mq_tagset_flags_show(struct seq_file *m, void *v)
+{
+	struct blk_mq_tag_set *set = m->private;
+
+	BUILD_BUG_ON(ARRAY_SIZE(tagset_flag_name) != ilog2(BLK_MQ_F_MAX));
+
+	down_read(&set->update_nr_hwq_lock);
+
+	blk_flags_show(m, set->flags, tagset_flag_name,
+		       ARRAY_SIZE(tagset_flag_name));
+	seq_putc(m, '\n');
+
+	up_read(&set->update_nr_hwq_lock);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(blk_mq_tagset_flags);
+
+#define BLK_MQ_TAGSET_VALUE_SHOW(_name, _type, _value, _format) \
+static int blk_mq_tagset_##_name##_show(struct seq_file *m, void *v) \
+{ \
+	struct blk_mq_tag_set *set = m->private; \
+	_type value; \
+\
+	down_read(&set->update_nr_hwq_lock); \
+	value = (_value); \
+	up_read(&set->update_nr_hwq_lock); \
+\
+	seq_printf(m, _format, value); \
+	return 0; \
+} \
+DEFINE_SHOW_ATTRIBUTE(blk_mq_tagset_##_name)
+
+BLK_MQ_TAGSET_VALUE_SHOW(nr_maps, unsigned int, set->nr_maps, "%u\n");
+BLK_MQ_TAGSET_VALUE_SHOW(nr_hw_queues, unsigned int, set->nr_hw_queues, "%u\n");
+BLK_MQ_TAGSET_VALUE_SHOW(queue_depth, unsigned int, set->queue_depth, "%u\n");
+BLK_MQ_TAGSET_VALUE_SHOW(reserved_tags, unsigned int, set->reserved_tags, "%u\n");
+BLK_MQ_TAGSET_VALUE_SHOW(cmd_size, unsigned int, set->cmd_size, "%u\n");
+BLK_MQ_TAGSET_VALUE_SHOW(numa_node, int, set->numa_node, "%d\n");
+BLK_MQ_TAGSET_VALUE_SHOW(timeout, unsigned int, set->timeout, "%u\n");
+
+#undef BLK_MQ_TAGSET_VALUE_SHOW
+
+static int blk_mq_tagset_hctx_tags_shared_show(struct seq_file *m, void *v)
+{
+	struct blk_mq_tag_set *set = m->private;
+	bool shared;
+
+	down_read(&set->update_nr_hwq_lock);
+	shared = blk_mq_is_shared_tags(set->flags);
+	up_read(&set->update_nr_hwq_lock);
+
+	seq_printf(m, "%d\n", shared);
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(blk_mq_tagset_hctx_tags_shared);
+
+static int blk_mq_tagset_map_show(struct seq_file *m, void *v)
+{
+	struct blk_mq_tag_set *set = m->private;
+	unsigned long index = debugfs_get_aux_num(m->file);
+	unsigned int map = index / nr_cpu_ids;
+	unsigned int cpu = index % nr_cpu_ids;
+
+	down_read(&set->update_nr_hwq_lock);
+
+	seq_printf(m, "%u\n", set->map[map].mq_map[cpu]);
+
+	up_read(&set->update_nr_hwq_lock);
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(blk_mq_tagset_map);
+
+static void blk_mq_tagset_debugfs_create_maps(struct blk_mq_tag_set *set)
+{
+	struct dentry *dir, *map_dir;
+	unsigned int cpu, i;
+	char name[20];
+
+	dir = debugfs_create_dir("map", set->debugfs_dir);
+	if (IS_ERR_OR_NULL(dir))
+		return;
+
+	for (i = 0; i < set->nr_maps; i++) {
+		snprintf(name, sizeof(name), "%u", i);
+		map_dir = debugfs_create_dir(name, dir);
+		if (IS_ERR_OR_NULL(map_dir))
+			continue;
+
+		for_each_possible_cpu(cpu) {
+			/* Encode the map and CPU indices in the auxiliary data. */
+			unsigned long index = (unsigned long)i * nr_cpu_ids + cpu;
+
+			snprintf(name, sizeof(name), "cpu%u", cpu);
+			debugfs_create_file_aux_num(name, 0444, map_dir, set,
+						    index, &blk_mq_tagset_map_fops);
+		}
+	}
+}
+
+static ssize_t blk_mq_tagset_tags_read(struct file *file, char __user *user_buf,
+				       size_t count, loff_t *ppos)
+{
+	struct dentry *dentry = file->f_path.dentry;
+	unsigned int nr_tags, nr_reserved_tags, active_queues;
+	struct blk_mq_tags *tags;
+	char buf[128];
+	int ret, len;
+
+	/*
+	 * Tag updates remove these files before freeing the tags. Shared tags
+	 * remain valid until tag set teardown removes the shared_tags file.
+	 */
+	ret = debugfs_file_get(dentry);
+	if (ret)
+		return ret;
+
+	tags = file->private_data;
+	if (!tags) {
+		debugfs_file_put(dentry);
+		return -ENODEV;
+	}
+
+	nr_tags = tags->nr_tags;
+	nr_reserved_tags = tags->nr_reserved_tags;
+	active_queues = READ_ONCE(tags->active_queues);
+	debugfs_file_put(dentry);
+
+	/*
+	 * A fault on the user buffer may need I/O to a frozen queue. Drop the
+	 * active reference first so file removal does not wait for that I/O.
+	 */
+	len = scnprintf(buf, sizeof(buf),
+			".nr_tags=%u\n.nr_reserved_tags=%u\n.active_queues=%u\n",
+			nr_tags, nr_reserved_tags, active_queues);
+	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
+}
+
+static const struct file_operations blk_mq_tagset_tags_fops = {
+	.owner		= THIS_MODULE,
+	.open		= simple_open,
+	.read		= blk_mq_tagset_tags_read,
+	.llseek		= default_llseek,
+};
+
+void blk_mq_tagset_debugfs_remove_tags(struct blk_mq_tag_set *set)
+{
+	if (IS_ERR_OR_NULL(set->debugfs_dir))
+		return;
+
+	debugfs_lookup_and_remove("tags", set->debugfs_dir);
+}
+
+void blk_mq_tagset_debugfs_create_tags(struct blk_mq_tag_set *set)
+{
+	struct dentry *dir;
+	unsigned int i;
+	char name[20];
+
+	if (IS_ERR_OR_NULL(set->debugfs_dir))
+		return;
+
+	dir = debugfs_create_dir("tags", set->debugfs_dir);
+	if (IS_ERR_OR_NULL(dir))
+		return;
+
+	for (i = 0; i < set->nr_hw_queues; i++) {
+		struct blk_mq_tags *tags = set->tags[i];
+
+		snprintf(name, sizeof(name), "%u", i);
+		if (tags && tags == set->shared_tags)
+			debugfs_create_symlink(name, dir, "../shared_tags");
+		else
+			debugfs_create_file_unsafe(name, 0444, dir, tags,
+						   &blk_mq_tagset_tags_fops);
+	}
+}
+
+static void blk_mq_tagset_debugfs_create_files(struct blk_mq_tag_set *set)
+{
+	debugfs_create_file("nr_maps", 0444, set->debugfs_dir, set,
+			    &blk_mq_tagset_nr_maps_fops);
+	debugfs_create_file("nr_hw_queues", 0444, set->debugfs_dir, set,
+			    &blk_mq_tagset_nr_hw_queues_fops);
+	debugfs_create_file("queue_depth", 0444, set->debugfs_dir, set,
+			    &blk_mq_tagset_queue_depth_fops);
+	debugfs_create_file("reserved_tags", 0444, set->debugfs_dir, set,
+			    &blk_mq_tagset_reserved_tags_fops);
+	debugfs_create_file("cmd_size", 0444, set->debugfs_dir, set,
+			    &blk_mq_tagset_cmd_size_fops);
+	debugfs_create_file("numa_node", 0444, set->debugfs_dir, set,
+			    &blk_mq_tagset_numa_node_fops);
+	debugfs_create_file("timeout", 0444, set->debugfs_dir, set,
+			    &blk_mq_tagset_timeout_fops);
+	debugfs_create_file("hctx_tags_shared", 0444, set->debugfs_dir, set,
+			    &blk_mq_tagset_hctx_tags_shared_fops);
+	debugfs_create_file("flags", 0444, set->debugfs_dir, set,
+			    &blk_mq_tagset_flags_fops);
+	blk_mq_tagset_debugfs_create_maps(set);
+	debugfs_create_file_unsafe("shared_tags", 0444, set->debugfs_dir,
+				   set->shared_tags, &blk_mq_tagset_tags_fops);
+	blk_mq_tagset_debugfs_create_tags(set);
+}
+
+void blk_mq_tagset_debugfs_register(struct blk_mq_tag_set *set)
+{
+	struct dentry *dir;
+	unsigned int memflags;
+	char name[24];
+	int id;
+
+	memflags = blk_mq_tagset_debugfs_lock();
+
+	if (IS_ERR_OR_NULL(blk_mq_tagset_debugfs_root))
+		blk_mq_tagset_debugfs_root = debugfs_create_dir("tagset", NULL);
+
+	if (set->debugfs_dir || IS_ERR_OR_NULL(blk_mq_tagset_debugfs_root))
+		goto out_unlock;
+
+	id = ida_alloc(&blk_mq_tagset_debugfs_ida, GFP_KERNEL);
+	if (id < 0)
+		goto out_unlock;
+
+	snprintf(name, sizeof(name), "%d", id);
+	dir = debugfs_create_dir(name, blk_mq_tagset_debugfs_root);
+	if (IS_ERR_OR_NULL(dir)) {
+		ida_free(&blk_mq_tagset_debugfs_ida, id);
+		goto out_unlock;
+	}
+
+	set->debugfs_id = id;
+	set->debugfs_dir = dir;
+	blk_mq_tagset_debugfs_create_files(set);
+
+out_unlock:
+	blk_mq_tagset_debugfs_unlock(memflags);
+}
+
+void blk_mq_tagset_debugfs_unregister(struct blk_mq_tag_set *set)
+{
+	mutex_lock(&blk_mq_tagset_debugfs_mutex);
+
+	debugfs_remove_recursive(set->debugfs_dir);
+	set->debugfs_dir = NULL;
+
+	if (set->debugfs_id >= 0) {
+		ida_free(&blk_mq_tagset_debugfs_ida, set->debugfs_id);
+		set->debugfs_id = -1;
+	}
+
+	mutex_unlock(&blk_mq_tagset_debugfs_mutex);
 }
