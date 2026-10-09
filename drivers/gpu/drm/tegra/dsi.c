@@ -1113,13 +1113,13 @@ static int tegra_dsi_runtime_suspend(struct host1x_client *client)
 	struct device *dev = client->dev;
 	int err;
 
-	if (dsi->rst) {
-		err = reset_control_assert(dsi->rst);
-		if (err < 0) {
-			dev_err(dev, "failed to assert reset: %d\n", err);
-			return err;
-		}
+	err = reset_control_assert(dsi->rst);
+	if (err < 0) {
+		dev_err(dev, "failed to assert reset: %d\n", err);
+		return err;
 	}
+
+	reset_control_release(dsi->rst);
 
 	usleep_range(1000, 2000);
 
@@ -1164,16 +1164,22 @@ static int tegra_dsi_runtime_resume(struct host1x_client *client)
 
 	usleep_range(1000, 2000);
 
-	if (dsi->rst) {
-		err = reset_control_deassert(dsi->rst);
-		if (err < 0) {
-			dev_err(dev, "cannot assert reset: %d\n", err);
-			goto disable_clk_lp;
-		}
+	err = reset_control_acquire(dsi->rst);
+	if (err < 0) {
+		dev_err(dev, "failed to acquire reset: %d\n", err);
+		goto disable_clk_lp;
+	}
+
+	err = reset_control_deassert(dsi->rst);
+	if (err < 0) {
+		dev_err(dev, "cannot deassert reset: %d\n", err);
+		goto release_reset;
 	}
 
 	return 0;
 
+release_reset:
+	reset_control_release(dsi->rst);
 disable_clk_lp:
 	clk_disable_unprepare(dsi->clk_lp);
 disable_clk:
@@ -1623,12 +1629,10 @@ static int tegra_dsi_probe(struct platform_device *pdev)
 	dsi->format = MIPI_DSI_FMT_RGB888;
 	dsi->lanes = 4;
 
-	if (!pdev->dev.pm_domain) {
-		dsi->rst = devm_reset_control_get(&pdev->dev, "dsi");
-		if (IS_ERR(dsi->rst)) {
-			err = PTR_ERR(dsi->rst);
-			goto remove;
-		}
+	dsi->rst = devm_reset_control_get_exclusive_released(&pdev->dev, "dsi");
+	if (IS_ERR(dsi->rst)) {
+		err = PTR_ERR(dsi->rst);
+		goto remove;
 	}
 
 	dsi->clk = devm_clk_get(&pdev->dev, NULL);
