@@ -88,9 +88,17 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	struct test_params *p = arg;
 	struct kvm_vm *vm;
 
-	vm = memstress_create_vm(mode, nr_vcpus, guest_percpu_mem_size, 1,
-				 VM_MEM_SRC_ANONYMOUS,
-				 p->partition_vcpu_memory_access);
+	struct memstress_params ms_par = {
+		.mode = mode,
+		.nr_vcpus = nr_vcpus,
+		.vcpu_memory_bytes = guest_percpu_mem_size,
+		.slots = 1,
+		.backing_src = VM_MEM_SRC_ANONYMOUS,
+		.partition_vcpu_memory_access = p->partition_vcpu_memory_access,
+	};
+
+	vm = memstress_create_vm(&ms_par);
+
 #ifdef __x86_64__
 	if (p->disable_slot_zap_quirk)
 		vm_enable_cap(vm, KVM_CAP_DISABLE_QUIRKS2, KVM_X86_QUIRK_SLOT_ZAP_ALL);

@@ -117,9 +117,16 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	struct timespec clear_dirty_log_total = (struct timespec){0};
 	int i;
 
-	vm = memstress_create_vm(mode, nr_vcpus, guest_percpu_mem_size,
-				 p->slots, p->backing_src,
-				 p->partition_vcpu_memory_access);
+	struct memstress_params ms_par = {
+		.mode = mode,
+		.nr_vcpus = nr_vcpus,
+		.vcpu_memory_bytes = guest_percpu_mem_size,
+		.slots = p->slots,
+		.backing_src = p->backing_src,
+		.partition_vcpu_memory_access = p->partition_vcpu_memory_access,
+	};
+
+	vm = memstress_create_vm(&ms_par);
 
 	memstress_set_write_percent(vm, p->write_percent);
 

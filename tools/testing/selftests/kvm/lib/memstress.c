@@ -121,19 +121,16 @@ void memstress_setup_vcpus(struct kvm_vm *vm, int nr_vcpus,
 	}
 }
 
-struct kvm_vm *memstress_create_vm(enum vm_guest_mode mode, int nr_vcpus,
-				   u64 vcpu_memory_bytes, int slots,
-				   enum vm_mem_backing_src_type backing_src,
-				   bool partition_vcpu_memory_access)
+struct kvm_vm *memstress_create_vm(struct memstress_params *params)
 {
 	struct memstress_args *args = &memstress_args;
 	struct kvm_vm *vm;
 	u64 guest_num_pages, slot0_pages = 0;
-	u64 backing_src_pagesz = get_backing_src_pagesz(backing_src);
+	u64 backing_src_pagesz = get_backing_src_pagesz(params->backing_src);
 	u64 region_end_gfn;
 	int i;
 
-	pr_info("Testing guest mode: %s\n", vm_guest_mode_string(mode));
+	pr_info("Testing guest mode: %s\n", vm_guest_mode_string(params->mode));
 
 	/* By default vCPUs will write to memory. */
 	args->write_percent = 100;
@@ -142,32 +139,34 @@ struct kvm_vm *memstress_create_vm(enum vm_guest_mode mode, int nr_vcpus,
 	 * Snapshot the non-huge page size.  This is used by the guest code to
 	 * access/dirty pages at the logging granularity.
 	 */
-	args->guest_page_size = vm_guest_mode_params[mode].page_size;
+	args->guest_page_size = vm_guest_mode_params[params->mode].page_size;
 
-	guest_num_pages = vm_adjust_num_guest_pages(mode,
-				(nr_vcpus * vcpu_memory_bytes) / args->guest_page_size);
+	guest_num_pages = vm_adjust_num_guest_pages(params->mode,
+				(params->nr_vcpus * params->vcpu_memory_bytes) /
+			 	args->guest_page_size);
 
-	TEST_ASSERT(vcpu_memory_bytes % getpagesize() == 0,
+	TEST_ASSERT(params->vcpu_memory_bytes % getpagesize() == 0,
 		    "Guest memory size is not host page size aligned.");
-	TEST_ASSERT(vcpu_memory_bytes % args->guest_page_size == 0,
+	TEST_ASSERT(params->vcpu_memory_bytes % args->guest_page_size == 0,
 		    "Guest memory size is not guest page size aligned.");
-	TEST_ASSERT(guest_num_pages % slots == 0,
+	TEST_ASSERT(guest_num_pages % params->slots == 0,
 		    "Guest memory cannot be evenly divided into %d slots.",
-		    slots);
+		    params->slots);
 
 	/*
 	 * If using nested, allocate extra pages for the nested page tables and
 	 * in-memory data structures.
 	 */
 	if (args->nested)
-		slot0_pages += memstress_nested_pages(nr_vcpus);
+		slot0_pages += memstress_nested_pages(params->nr_vcpus);
 
 	/*
 	 * Pass guest_num_pages to populate the page tables for test memory.
 	 * The memory is also added to memslot 0, but that's a benign side
 	 * effect as KVM allows aliasing HVAs in meslots.
 	 */
-	vm = __vm_create_with_vcpus(VM_SHAPE(mode), nr_vcpus,
+	vm = __vm_create_with_vcpus(VM_SHAPE(params->mode),
+				    params->nr_vcpus,
 				    slot0_pages + guest_num_pages,
 				    memstress_guest_code, vcpus);
 
@@ -192,7 +191,8 @@ struct kvm_vm *memstress_create_vm(enum vm_guest_mode mode, int nr_vcpus,
 		    "Requested more guest memory than address space allows.\n"
 		    "    guest pages: %" PRIx64 " max gfn: %" PRIx64
 		    " nr_vcpus: %d wss: %" PRIx64 "]",
-		    guest_num_pages, region_end_gfn - 1, nr_vcpus, vcpu_memory_bytes);
+		    guest_num_pages, region_end_gfn - 1, params->nr_vcpus,
+		    params->vcpu_memory_bytes);
 
 	args->gpa = (region_end_gfn - guest_num_pages - 1) * args->guest_page_size;
 	args->gpa = align_down(args->gpa, backing_src_pagesz);
@@ -201,11 +201,11 @@ struct kvm_vm *memstress_create_vm(enum vm_guest_mode mode, int nr_vcpus,
 		args->gpa, args->gpa + args->size);
 
 	/* Add extra memory slots for testing */
-	for (i = 0; i < slots; i++) {
-		u64 region_pages = guest_num_pages / slots;
+	for (i = 0; i < params->slots; i++) {
+		u64 region_pages = guest_num_pages / params->slots;
 		gpa_t region_start = args->gpa + region_pages * args->guest_page_size * i;
 
-		vm_userspace_mem_region_add(vm, backing_src, region_start,
+		vm_userspace_mem_region_add(vm, params->backing_src, region_start,
 					    MEMSTRESS_MEM_SLOT_INDEX + i,
 					    region_pages, 0);
 	}
@@ -213,12 +213,13 @@ struct kvm_vm *memstress_create_vm(enum vm_guest_mode mode, int nr_vcpus,
 	/* Do mapping for the demand paging memory slot */
 	virt_map(vm, guest_test_virt_mem, args->gpa, guest_num_pages);
 
-	memstress_setup_vcpus(vm, nr_vcpus, vcpus, vcpu_memory_bytes,
-			      partition_vcpu_memory_access);
+	memstress_setup_vcpus(vm, params->nr_vcpus, vcpus,
+			      params->vcpu_memory_bytes,
+			      params->partition_vcpu_memory_access);
 
 	if (args->nested) {
 		pr_info("Configuring vCPUs to run in L2 (nested).\n");
-		memstress_setup_nested(vm, nr_vcpus, vcpus);
+		memstress_setup_nested(vm, params->nr_vcpus, vcpus);
 	}
 
 	/* Export the shared variables to the guest. */

@@ -161,8 +161,16 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	struct kvm_vm *vm;
 	int i, num_uffds = 0;
 
-	vm = memstress_create_vm(mode, nr_vcpus, guest_percpu_mem_size, 1,
-				 p->src_type, p->partition_vcpu_memory_access);
+	struct memstress_params ms_par = {
+		.mode = mode,
+		.nr_vcpus = nr_vcpus,
+		.vcpu_memory_bytes = guest_percpu_mem_size,
+		.slots = 1,
+		.backing_src = p->src_type,
+		.partition_vcpu_memory_access = p->partition_vcpu_memory_access,
+	};
+
+	vm = memstress_create_vm(&ms_par);
 
 	demand_paging_size = get_backing_src_pagesz(p->src_type);
 

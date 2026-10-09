@@ -408,8 +408,16 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	struct kvm_vm *vm;
 	int nr_vcpus = params->nr_vcpus;
 
-	vm = memstress_create_vm(mode, nr_vcpus, params->vcpu_memory_bytes, 1,
-				 params->backing_src, !overlap_memory_access);
+	struct memstress_params ms_par = {
+		.mode = mode,
+		.nr_vcpus = nr_vcpus,
+		.vcpu_memory_bytes = params->vcpu_memory_bytes,
+		.slots = 1,
+		.backing_src = params->backing_src,
+		.partition_vcpu_memory_access = !overlap_memory_access,
+	};
+
+	vm = memstress_create_vm(&ms_par);
 
 	/*
 	 * If guest_page_size is larger than the host's page size, the

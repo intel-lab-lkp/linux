@@ -100,8 +100,16 @@ static void run_test(enum vm_guest_mode mode, void *unused)
 	struct kvm_page_stats stats_dirty_logging_disabled;
 	struct kvm_page_stats stats_repopulated;
 
-	vm = memstress_create_vm(mode, VCPUS, guest_percpu_mem_size,
-				 SLOTS, backing_src, false);
+	struct memstress_params ms_par = {
+		.mode = mode,
+		.nr_vcpus = VCPUS,
+		.vcpu_memory_bytes = guest_percpu_mem_size,
+		.slots = SLOTS,
+		.backing_src = backing_src,
+		.partition_vcpu_memory_access = false,
+	};
+
+	vm = memstress_create_vm(&ms_par);
 
 	guest_num_pages = (VCPUS * guest_percpu_mem_size) >> vm->page_shift;
 	guest_num_pages = vm_adjust_num_guest_pages(mode, guest_num_pages);
