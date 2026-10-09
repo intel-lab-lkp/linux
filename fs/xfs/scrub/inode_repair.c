@@ -41,6 +41,8 @@
 #include "xfs_rtgroup.h"
 #include "xfs_rtrmap_btree.h"
 #include "xfs_rtrefcount_btree.h"
+#include "xfs_dquot_item.h"
+#include "xfs_dquot.h"
 #include "scrub/xfs_scrub.h"
 #include "scrub/scrub.h"
 #include "scrub/common.h"
@@ -133,6 +135,9 @@ struct xrep_inode {
 
 	/* Must we remove all access from this file? */
 	bool			zap_acls;
+
+	/* Do we need to reattach the dquots? */
+	bool			reset_dquots;
 
 	/* Inode scanner to see if we can find the ftype from dirents */
 	struct xchk_iscan	ftype_iscan;
@@ -1748,6 +1753,32 @@ xrep_inode_blockcounts(
 	return 0;
 }
 
+static void
+xrep_inode_zap_dquot(
+	struct xfs_scrub	*sc,
+	xfs_dqtype_t		type)
+{
+#ifdef CONFIG_XFS_QUOTA
+	struct xrep_inode	*ri = sc->buf;
+
+	/*
+	 * We changed one of the file IDs, so we must detach the dquots to
+	 * prevent further changes from being accounted to them, and try to
+	 * attach the dquot for the new id to absorb any other block usage
+	 * changes.  We can't do that right now because the existing dquots
+	 * might be attached to the scrub transaction and we're in the middle
+	 * of fixing the inode, so we'll switch the incore dquot pointers
+	 * later.
+	 *
+	 * Schedule a quotacheck so the accounting discrepancies will get fixed
+	 * eventually.  We'll have to repeat this later when we do the actual
+	 * switch.
+	 */
+	xrep_force_quotacheck(sc, type);
+	ri->reset_dquots = true;
+#endif
+}
+
 /* Check for invalid uid/gid/prid. */
 STATIC void
 xrep_inode_ids(
@@ -1761,21 +1792,21 @@ xrep_inode_ids(
 		i_uid_write(VFS_I(sc->ip), 0);
 		dirty = true;
 		if (XFS_IS_UQUOTA_ON(sc->mp))
-			xrep_force_quotacheck(sc, XFS_DQTYPE_USER);
+			xrep_inode_zap_dquot(sc, XFS_DQTYPE_USER);
 	}
 
 	if (!gid_valid(VFS_I(sc->ip)->i_gid)) {
 		i_gid_write(VFS_I(sc->ip), 0);
 		dirty = true;
 		if (XFS_IS_GQUOTA_ON(sc->mp))
-			xrep_force_quotacheck(sc, XFS_DQTYPE_GROUP);
+			xrep_inode_zap_dquot(sc, XFS_DQTYPE_GROUP);
 	}
 
 	if (sc->ip->i_projid == -1U) {
 		sc->ip->i_projid = 0;
 		dirty = true;
 		if (XFS_IS_PQUOTA_ON(sc->mp))
-			xrep_force_quotacheck(sc, XFS_DQTYPE_PROJ);
+			xrep_inode_zap_dquot(sc, XFS_DQTYPE_PROJ);
 	}
 
 	/* strip setuid/setgid if we touched any of the ids */
@@ -2066,22 +2097,100 @@ xrep_inode_unlinked(
 	return 0;
 }
 
+#if CONFIG_XFS_QUOTA
+/* Switch dquot, return dqtype if we need quotacheck */
+static xfs_dqtype_t
+xrep_inode_switch_dquot(
+	struct xfs_scrub	*sc,
+	xfs_dqtype_t		type,
+	struct xfs_dquot	**dqp)
+{
+	xfs_dqtype_t		ret = 0;
+	xfs_dqid_t		id = xfs_qm_id_for_quotatype(sc->ip, type);
+
+	if (*dqp != NULL && (*dqp)->q_id != id) {
+		xfs_qm_dqrele(*dqp);
+		*dqp = NULL;
+	}
+
+	if (!*dqp) {
+		xfs_qm_dqget_inode(sc->ip, type, true, dqp);
+		ret = type;
+	}
+	return ret;
+}
+
+static int
+xrep_inode_reset_dquots(
+	struct xfs_scrub	*sc)
+{
+	xfs_dqtype_t		need = 0;
+	int			error;
+
+	/*
+	 * If we changed the file IDs, then we need to drop the transaction so
+	 * that we can detach the dquots and attach new ones.
+	 *
+	 * Commit the scrub transaction so that there are no dangling
+	 * references to any dquots that might get detached, and retain the
+	 * ILOCK, as required by the dqattach code.
+	 *
+	 * Note that dqattach can cycle the ILOCK when creating a new dquot, so
+	 * this must be the very last thing that the repair function does.
+	 */
+	error = xrep_trans_commit(sc);
+	if (error)
+		return error;
+
+	if (XFS_IS_UQUOTA_ON(sc->mp))
+		need |= xrep_inode_switch_dquot(sc, XFS_DQTYPE_USER,
+				&sc->ip->i_udquot);
+	if (XFS_IS_GQUOTA_ON(sc->mp))
+		need |= xrep_inode_switch_dquot(sc, XFS_DQTYPE_GROUP,
+				&sc->ip->i_gdquot);
+	if (XFS_IS_PQUOTA_ON(sc->mp))
+		need |= xrep_inode_switch_dquot(sc, XFS_DQTYPE_PROJ,
+				&sc->ip->i_pdquot);
+
+	xchk_iunlock(sc, XFS_ILOCK_EXCL);
+
+	/*
+	 * Now that we've updated the dquots, force quotacheck once again.
+	 * In theory we could be racing against a concurrent quotacheck.
+	 * Note that we can't hold the ILOCK when allocating a transaction.
+	 */
+	error = xchk_trans_alloc(sc, 0);
+	if (error)
+		return error;
+
+	if (need & XFS_DQTYPE_USER)
+		xrep_force_quotacheck(sc, XFS_DQTYPE_USER);
+	if (need & XFS_DQTYPE_GROUP)
+		xrep_force_quotacheck(sc, XFS_DQTYPE_GROUP);
+	if (need & XFS_DQTYPE_PROJ)
+		xrep_force_quotacheck(sc, XFS_DQTYPE_PROJ);
+
+	return 0;
+}
+#else
+# define xrep_inode_reset_dquots(sc)	(0)
+#endif
+
 /* Repair an inode's fields. */
 int
 xrep_inode(
 	struct xfs_scrub	*sc)
 {
+	struct xrep_inode	*ri = sc->buf;
 	int			error = 0;
+
+	ASSERT(ri != NULL);
 
 	/*
 	 * No inode?  That means we failed the _iget verifiers.  Repair all
 	 * the things that the inode verifiers care about, then retry _iget.
 	 */
 	if (!sc->ip) {
-		struct xrep_inode	*ri = sc->buf;
-
-		ASSERT(ri != NULL);
-
 		error = xrep_dinode_problems(ri);
 		if (error == -EBUSY) {
 			/*
@@ -2120,5 +2229,16 @@ xrep_inode(
 	if (error)
 		return error;
 
-	return xrep_defer_finish(sc);
+	error = xrep_defer_finish(sc);
+	if (error)
+		return error;
+
+	/* Must come last */
+	if (ri->reset_dquots) {
+		error = xrep_inode_reset_dquots(sc);
+		if (error)
+			return error;
+	}
+
+	return 0;
 }
