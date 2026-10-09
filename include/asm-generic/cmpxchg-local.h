@@ -12,8 +12,9 @@ extern unsigned long wrong_size_cmpxchg(volatile void *ptr)
  * Generic version of __cmpxchg_local (disables interrupts). Takes an unsigned
  * long parameter, supporting various types of architectures.
  */
-static inline unsigned long __generic_cmpxchg_local(volatile void *ptr,
-		unsigned long old, unsigned long new, int size)
+static __always_inline unsigned long
+__generic_cmpxchg_local(volatile void *ptr, unsigned long old,
+			unsigned long new, int size)
 {
 	unsigned long flags, prev;
 
