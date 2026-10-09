@@ -473,12 +473,61 @@ static int acpi_ccel_data_init(void *th, struct acpi_data_attr *data_attr)
 	return sysfs_create_bin_file(tables_data_kobj, &data_attr->attr);
 }
 
+/*
+ * The BDAT table only holds the address of the BIOS data structure. Its
+ * size is in the structure's own header ("BDAT Interface Specification"
+ * v4.0, section 4).
+ */
+struct acpi_bdat_data_header {
+	char signature[8];	/* "BDATHEAD" */
+	u32 size;		/* whole structure, including this header */
+	u16 crc16;
+	u16 reserved;
+	u16 primary_version;
+	u16 secondary_version;
+	u32 oem_offset;
+	u32 reserved1;
+	u32 reserved2;
+} __packed;
+
+static int acpi_bdat_data_init(void *th, struct acpi_data_attr *data_attr)
+{
+	struct acpi_table_bdat *bdat = th;
+	struct acpi_bdat_data_header hdr;
+	void __iomem *base;
+
+	if (bdat->header.length < sizeof(struct acpi_table_bdat) ||
+	    bdat->gas.space_id != ACPI_ADR_SPACE_SYSTEM_MEMORY ||
+	    !bdat->gas.address)
+		goto err;
+
+	base = acpi_os_map_iomem(bdat->gas.address, sizeof(hdr));
+	if (!base)
+		goto err;
+	memcpy_fromio(&hdr, base, sizeof(hdr));
+	acpi_os_unmap_iomem(base, sizeof(hdr));
+
+	if (memcmp(hdr.signature, "BDATHEAD", sizeof(hdr.signature)) ||
+	    hdr.size < sizeof(hdr))
+		goto err;
+
+	data_attr->addr = bdat->gas.address;
+	data_attr->attr.size = hdr.size;
+
+	return sysfs_create_bin_file(tables_data_kobj, &data_attr->attr);
+
+err:
+	kfree(data_attr);
+	return -EINVAL;
+}
+
 static struct acpi_data_obj {
 	char *name;
 	int (*fn)(void *, struct acpi_data_attr *);
 } acpi_data_objs[] = {
 	{ ACPI_SIG_BERT, acpi_bert_data_init },
 	{ ACPI_SIG_CCEL, acpi_ccel_data_init },
+	{ ACPI_SIG_BDAT, acpi_bdat_data_init },
 };
 
 #define NUM_ACPI_DATA_OBJS ARRAY_SIZE(acpi_data_objs)
