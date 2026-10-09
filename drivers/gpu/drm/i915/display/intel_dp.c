@@ -278,6 +278,13 @@ static void intel_dp_set_dpcd_sink_rates(struct intel_dp *intel_dp)
 			}
 		}
 
+		/*
+		 * Intersect with the UHBR rates the cable can actually carry
+		 * (DPCD 0x2217), to avoid training at a rate the cable can't
+		 * support. Unknown/unimplemented leaves the rates untouched.
+		 */
+		uhbr_rates &= drm_dp_128b132b_cable_uhbr_rates(&intel_dp->aux);
+
 		if (uhbr_rates & DP_UHBR10)
 			intel_dp->sink_rates[i++] = 1000000;
 		if (uhbr_rates & DP_UHBR13_5)

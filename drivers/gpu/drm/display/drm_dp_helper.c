@@ -382,6 +382,55 @@ int drm_dp_128b132b_read_aux_rd_interval(struct drm_dp_aux *aux)
 }
 EXPORT_SYMBOL(drm_dp_128b132b_read_aux_rd_interval);
 
+/**
+ * drm_dp_128b132b_cable_uhbr_rates() - read the UHBR rates a cable can carry
+ * @aux: DisplayPort AUX channel
+ *
+ * Read the CABLE_ATTRIBUTES_UPDATED_BY_DPRX register (DPCD 0x2217) and return
+ * the set of 128b/132b (UHBR) link rates the attached cable is capable of
+ * carrying, as a mask of %DP_UHBR10, %DP_UHBR13_5 and %DP_UHBR20.
+ *
+ * A UHBRx-capable DPRX updates this register with the cable's capability (via
+ * the CONFIG2 voltage handshake for a DP receptacle, or by parsing the eMarker
+ * for a USB-C receptacle). A source can intersect the returned mask with the
+ * sink's (and its own) supported UHBR rates to avoid attempting link training
+ * at a rate the cable cannot carry, saving the time otherwise spent failing
+ * and falling back.
+ *
+ * A register value of 0 means the cable capability is unknown, or the sink does
+ * not implement the register. No restriction can be derived in that case, so
+ * all UHBR rates are returned and the caller's normal rate fallback applies.
+ *
+ * Returns a mask of DP_UHBR* rates the cable permits.
+ */
+u8 drm_dp_128b132b_cable_uhbr_rates(struct drm_dp_aux *aux)
+{
+	u8 cable, rates = DP_UHBR10 | DP_UHBR13_5 | DP_UHBR20;
+
+	if (drm_dp_dpcd_read_byte(aux, DP_CABLE_ATTRIBUTES_UPDATED_BY_DPRX, &cable) < 0)
+		return rates;
+
+	/* Unknown / not implemented: impose no restriction. */
+	if (!cable)
+		return rates;
+
+	rates = 0;
+	switch (cable & DP_CABLE_UHBR10_20_CAPABILITY_MASK) {
+	case DP_CABLE_UHBR10_20_CAPABLE:
+		rates |= DP_UHBR20;
+		fallthrough;
+	case DP_CABLE_UHBR10_CAPABLE:
+		rates |= DP_UHBR10;
+		break;
+	}
+
+	if (cable & DP_CABLE_UHBR13_5_CAPABILITY)
+		rates |= DP_UHBR13_5;
+
+	return rates;
+}
+EXPORT_SYMBOL(drm_dp_128b132b_cable_uhbr_rates);
+
 void drm_dp_link_train_clock_recovery_delay(const struct drm_dp_aux *aux,
 					    const u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {

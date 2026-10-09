@@ -59,6 +59,7 @@ void drm_dp_lttpr_link_train_channel_eq_delay(const struct drm_dp_aux *aux,
 					      const u8 caps[DP_LTTPR_PHY_CAP_SIZE]);
 
 int drm_dp_128b132b_read_aux_rd_interval(struct drm_dp_aux *aux);
+u8 drm_dp_128b132b_cable_uhbr_rates(struct drm_dp_aux *aux);
 bool drm_dp_128b132b_lane_channel_eq_done(const u8 link_status[DP_LINK_STATUS_SIZE],
 					  int lane_count);
 bool drm_dp_128b132b_lane_symbol_locked(const u8 link_status[DP_LINK_STATUS_SIZE],
