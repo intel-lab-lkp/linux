@@ -170,4 +170,11 @@ __bpf_kfunc int bpf_page_owner_get_nid(struct page_owner_scan *scan)
 	return page_owner_get_nid(scan->page);
 }
 
+__bpf_kfunc int bpf_page_owner_get_memcg_info(struct page_owner_scan *scan,
+					      struct memcg_info *info,
+					      char *buf, u32 size)
+{
+	return get_page_memcg_info(scan->page, info, buf, size);
+}
+
 __bpf_kfunc_end_defs();
