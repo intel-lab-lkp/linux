@@ -21,6 +21,8 @@ typedef struct {
 	cpumask_t icache_stale_mask;
 	/* Force local icache flush on all migrations. */
 	bool force_icache_flush;
+	/* icache_folio_gen at this mm's last flush in flush_icache_pte(). */
+	u64 icache_gen;
 #endif
 #ifdef CONFIG_BINFMT_ELF_FDPIC
 	unsigned long exec_fdpic_loadmap;

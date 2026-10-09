@@ -97,13 +97,33 @@ void flush_icache_mm(struct mm_struct *mm, bool local)
 #endif /* CONFIG_SMP */
 
 #ifdef CONFIG_MMU
+/*
+ * PG_dcache_clean is folio-wide, but flush_icache_mm() only reaches the
+ * harts of one mm.  Count the flushes that set the bit; an mm whose
+ * generation lags cannot trust a bit set since its own last flush, so it
+ * flushes its harts once before relying on it.
+ */
+static atomic64_t icache_folio_gen = ATOMIC64_INIT(0);
+
 void flush_icache_pte(struct mm_struct *mm, pte_t pte)
 {
 	struct folio *folio = page_folio(pte_page(pte));
+	u64 gen;
 
 	if (!test_bit(PG_dcache_clean, &folio->flags.f)) {
+		gen = atomic64_inc_return(&icache_folio_gen);
 		flush_icache_mm(mm, false);
+		WRITE_ONCE(mm->context.icache_gen, gen);
 		set_bit(PG_dcache_clean, &folio->flags.f);
+		return;
+	}
+
+	/* Pairs with the fully ordered atomic64_inc_return() above. */
+	smp_rmb();
+	gen = atomic64_read(&icache_folio_gen);
+	if (unlikely(READ_ONCE(mm->context.icache_gen) != gen)) {
+		flush_icache_mm(mm, false);
+		WRITE_ONCE(mm->context.icache_gen, gen);
 	}
 }
 #endif /* CONFIG_MMU */
