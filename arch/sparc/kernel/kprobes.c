@@ -219,12 +219,15 @@ static unsigned long __kprobes relbranch_fixup(u32 insn, struct kprobe *p,
 	if (regs->tnpc == regs->tpc + 0x4UL)
 		return real_pc + 0x8UL;
 
-	/* The three cases are call, branch w/prediction,
-	 * and traditional branch.
+	/* The cases are call and the branches BPcc, Bicc, BPr, FBPfcc
+	 * and FBfcc.
 	 */
 	if ((insn & 0xc0000000) == 0x40000000 ||
 	    (insn & 0xc1c00000) == 0x00400000 ||
-	    (insn & 0xc1c00000) == 0x00800000) {
+	    (insn & 0xc1c00000) == 0x00800000 ||
+	    (insn & 0xc1c00000) == 0x00c00000 ||
+	    (insn & 0xc1c00000) == 0x01400000 ||
+	    (insn & 0xc1c00000) == 0x01800000) {
 		unsigned long ainsn_addr;
 
 		ainsn_addr = (unsigned long) &p->ainsn.insn[0];
