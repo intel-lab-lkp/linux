@@ -6,6 +6,8 @@
 #ifndef __NCSI_INTERNAL_H__
 #define __NCSI_INTERNAL_H__
 
+#include <linux/mutex.h>
+
 enum {
 	NCSI_CAP_BASE		= 0,
 	NCSI_CAP_GENERIC	= 0,
@@ -310,12 +312,14 @@ enum {
 
 struct vlan_vid {
 	struct list_head list;
+	struct rcu_head rcu;
 	__be16 proto;
 	u16 vid;
 };
 
 struct ncsi_dev_priv {
 	struct ncsi_dev     ndev;            /* Associated NCSI device     */
+	bool                unregister_prepared;
 	unsigned int        flags;           /* NCSI device flags          */
 #define NCSI_DEV_PROBED		1            /* Finalized NCSI topology    */
 #define NCSI_DEV_HWA		2            /* Enabled HW arbitration     */
@@ -367,6 +371,7 @@ struct ncsi_cmd_arg {
 
 extern struct list_head ncsi_dev_list;
 extern spinlock_t ncsi_dev_lock;
+extern struct mutex ncsi_dev_mutex;
 
 #define TO_NCSI_DEV_PRIV(nd) \
 	container_of(nd, struct ncsi_dev_priv, ndev)

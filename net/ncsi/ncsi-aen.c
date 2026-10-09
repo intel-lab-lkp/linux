@@ -64,7 +64,8 @@ static int ncsi_aen_handler_lsc(struct ncsi_dev_priv *ndp,
 	/* Update the link status */
 	lsc = (struct ncsi_aen_lsc_pkt *)h;
 
-	spin_lock_irqsave(&nc->lock, flags);
+	spin_lock_irqsave(&ndp->lock, flags);
+	spin_lock(&nc->lock);
 	ncm = &nc->modes[NCSI_MODE_LINK];
 	old_data = ncm->data[2];
 	data = ntohl(lsc->status);
@@ -79,7 +80,8 @@ static int ncsi_aen_handler_lsc(struct ncsi_dev_priv *ndp,
 
 	chained = !list_empty(&nc->link);
 	state = nc->state;
-	spin_unlock_irqrestore(&nc->lock, flags);
+	spin_unlock(&nc->lock);
+	spin_unlock_irqrestore(&ndp->lock, flags);
 
 	if (state == NCSI_CHANNEL_INACTIVE)
 		netdev_warn(ndp->ndev.dev,
@@ -94,7 +96,11 @@ static int ncsi_aen_handler_lsc(struct ncsi_dev_priv *ndp,
 			ndp->flags |= NCSI_DEV_RESHUFFLE;
 			ncsi_stop_channel_monitor(nc);
 			spin_lock_irqsave(&ndp->lock, flags);
-			list_add_tail_rcu(&nc->link, &ndp->channel_queue);
+			spin_lock(&nc->lock);
+			if (nc->state == NCSI_CHANNEL_ACTIVE &&
+			    list_empty(&nc->link))
+				list_add_tail_rcu(&nc->link, &ndp->channel_queue);
+			spin_unlock(&nc->lock);
 			spin_unlock_irqrestore(&ndp->lock, flags);
 			return ncsi_process_next_channel(ndp);
 		}
@@ -148,22 +154,28 @@ static int ncsi_aen_handler_cr(struct ncsi_dev_priv *ndp,
 	if (!nc)
 		return -ENODEV;
 
-	spin_lock_irqsave(&nc->lock, flags);
+	spin_lock_irqsave(&ndp->lock, flags);
+	spin_lock(&nc->lock);
 	if (!list_empty(&nc->link) ||
 	    nc->state != NCSI_CHANNEL_ACTIVE) {
-		spin_unlock_irqrestore(&nc->lock, flags);
+		spin_unlock(&nc->lock);
+		spin_unlock_irqrestore(&ndp->lock, flags);
 		return 0;
 	}
-	spin_unlock_irqrestore(&nc->lock, flags);
+	spin_unlock(&nc->lock);
+	spin_unlock_irqrestore(&ndp->lock, flags);
 
 	ncsi_stop_channel_monitor(nc);
-	spin_lock_irqsave(&nc->lock, flags);
-	nc->state = NCSI_CHANNEL_INVISIBLE;
-	spin_unlock_irqrestore(&nc->lock, flags);
-
 	spin_lock_irqsave(&ndp->lock, flags);
+	spin_lock(&nc->lock);
+	if (nc->state != NCSI_CHANNEL_ACTIVE || !list_empty(&nc->link)) {
+		spin_unlock(&nc->lock);
+		spin_unlock_irqrestore(&ndp->lock, flags);
+		return 0;
+	}
 	nc->state = NCSI_CHANNEL_INACTIVE;
 	list_add_tail_rcu(&nc->link, &ndp->channel_queue);
+	spin_unlock(&nc->lock);
 	spin_unlock_irqrestore(&ndp->lock, flags);
 	nc->modes[NCSI_MODE_TX_ENABLE].enable = 0;
 
