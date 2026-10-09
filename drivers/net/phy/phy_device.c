@@ -1065,6 +1065,13 @@ void phy_device_remove(struct phy_device *phydev)
 	unregister_mii_timestamper(phydev->mii_ts);
 	pse_control_put(phydev->psec);
 
+	mutex_lock(&phydev->bind_lock);
+	WRITE_ONCE(phydev->removing, true);
+	mutex_unlock(&phydev->bind_lock);
+	/* Order the store before waking an unbind waiting in phy_remove() */
+	smp_mb();
+	wake_up_var(&phydev->attached);
+
 	device_del(&phydev->mdio.dev);
 
 	/* Assert the reset signal */
@@ -1734,16 +1741,26 @@ static void phy_detach_internal(struct phy_device *phydev, bool notify_bus)
 
 	phydev->phylink = NULL;
 
+	/* Before phy_link_change is cleared, so it cannot land on a new attach */
+	if (phydev->is_genphy_driven)
+		phydev->irq = phydev->mdio.bus->irq[phydev->mdio.addr];
+
 	/* A new attach may pass its "already attached" test as soon as
-	 * phy_link_change is clear, so take the owner in the same section.
+	 * phy_link_change is clear, so take the owner and clear attached in
+	 * the same section.
 	 */
 	mutex_lock(&phydev->bind_lock);
 	phydev->phy_link_change = NULL;
 	drv_owner = phydev->drv_owner;
 	phydev->drv_owner = NULL;
+	WRITE_ONCE(phydev->attached, false);
 	mutex_unlock(&phydev->bind_lock);
 
 	module_put(drv_owner);
+
+	/* Order the store before waking an unbind waiting in phy_remove() */
+	smp_mb();
+	wake_up_var(&phydev->attached);
 
 	/* If the device had no specific driver before (i.e. - it
 	 * was using the generic driver), we unbind the device
@@ -1751,8 +1768,6 @@ static void phy_detach_internal(struct phy_device *phydev, bool notify_bus)
 	 * real driver could be loaded
 	 */
 	if (phydev->is_genphy_driven) {
-		/* The release below lets phy_probe() write this field. */
-		phydev->irq = phydev->mdio.bus->irq[phydev->mdio.addr];
 		device_release_driver(&phydev->mdio.dev);
 		phydev->is_genphy_driven = 0;
 	}
@@ -1954,6 +1969,7 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 
 	phy_resume(phydev);
 
+	WRITE_ONCE(phydev->attached, true);
 	mutex_unlock(&phydev->bind_lock);
 
 	/**
@@ -3858,10 +3874,22 @@ static int phy_probe(struct device *dev)
 static int phy_remove(struct device *dev)
 {
 	struct phy_device *phydev = to_phy_device(dev);
+	bool attached;
 
 	mutex_lock(&phydev->bind_lock);
 	phydev->bound = false;
+	attached = READ_ONCE(phydev->attached) && !phydev->removing;
 	mutex_unlock(&phydev->bind_lock);
+
+	/* The driver core cannot refuse an unbind, and the consumer keeps
+	 * using phydev->drv until it detaches.
+	 */
+	if (attached) {
+		phydev_warn(phydev, "unbind waits for the PHY to be detached\n");
+		wait_var_event(&phydev->attached,
+			       !READ_ONCE(phydev->attached) ||
+			       READ_ONCE(phydev->removing));
+	}
 
 	cancel_delayed_work_sync(&phydev->state_queue);
 
