@@ -2537,6 +2537,15 @@ config SENSORS_TSC1641
 	  This driver can also be built as a module. If so, the module
 	  will be called tsc1641.
 
+config SENSORS_UHWMON
+	tristate "Userspace hardware monitoring devices"
+	help
+	  Provide a standard interface for userspace hwmon drivers through
+	  /dev/uhwmon.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called uhwmon.
+
 config SENSORS_VEXPRESS
 	tristate "Versatile Express"
 	depends on VEXPRESS_CONFIG
