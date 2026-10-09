@@ -1150,9 +1150,9 @@ void leapraid_transport_update_links(
 	card_phy->attached_hdl = hdl;
 	spin_unlock_irqrestore(&adapter->dev_topo.topo_node_lock, flags);
 
-	if (hdl && link_rate >= LEAPRAID_SAS_NEG_LINK_RATE_1_5) {
-		leapraid_transport_set_identify(adapter, hdl,
-						&card_phy->remote_identify);
+	if (hdl && link_rate >= LEAPRAID_SAS_NEG_LINK_RATE_1_5 &&
+	    !leapraid_transport_set_identify(adapter, hdl,
+					     &card_phy->remote_identify)) {
 		if (topo_node->hdl <= adapter->dev_topo.card.phys_num &&
 		    adapter->adapter_attr.enable_mp) {
 			list_for_each_entry(card_port,
