@@ -516,9 +516,8 @@ static void xvcu_clk_hw_unregister_leaf(struct clk_hw *hw)
 		return;
 
 	mux = clk_hw_get_parent(divider);
-	clk_hw_unregister_mux(mux);
-	if (!divider)
-		return;
+	if (mux)
+		clk_hw_unregister_mux(mux);
 
 	clk_hw_unregister_divider(divider);
 }
