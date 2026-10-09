@@ -695,8 +695,14 @@ static int ioat_alloc_chan_resources(struct dma_chan *c)
 
 	order = IOAT_MAX_ORDER;
 	ring = ioat_alloc_ring(c, order, GFP_NOWAIT);
-	if (!ring)
+	if (!ring) {
+		dma_pool_free(ioat_chan->ioat_dma->completion_pool,
+			      ioat_chan->completion,
+			      ioat_chan->completion_dma);
+		ioat_chan->completion = NULL;
+		ioat_chan->completion_dma = 0;
 		return -ENOMEM;
+	}
 
 	spin_lock_bh(&ioat_chan->cleanup_lock);
 	spin_lock_bh(&ioat_chan->prep_lock);
