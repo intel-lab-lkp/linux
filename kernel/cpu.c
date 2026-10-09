@@ -395,8 +395,7 @@ void cpuhp_ap_sync_alive(void)
 	cpuhp_ap_update_sync_state(SYNC_STATE_ALIVE);
 
 	/* Wait for the control CPU to release it. */
-	while (atomic_read(st) != SYNC_STATE_SHOULD_ONLINE)
-		cpu_relax();
+	atomic_cond_read_acquire(st, VAL == SYNC_STATE_SHOULD_ONLINE);
 }
 
 static bool cpuhp_can_boot_ap(unsigned int cpu)
