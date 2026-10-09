@@ -11,10 +11,23 @@ maintainers:
 
 allOf:
   - $ref: dma-controller.yaml#
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              const: cix,sky1-dma350
+    then:
+      properties:
+        cix,irq-router: false
 
 properties:
   compatible:
-    const: arm,dma-350
+    oneOf:
+      - const: arm,dma-350
+      - items:
+          - const: cix,sky1-dma350
+          - const: arm,dma-350
 
   reg:
     items:
@@ -35,6 +48,24 @@ properties:
   "#dma-cells":
     const: 1
     description: The cell is the trigger input number
+
+  clocks:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  memory-region:
+    maxItems: 1
+    description:
+      Reserved memory region used for DMA allocations when the controller
+      cannot reach all of system memory.
+
+  cix,irq-router:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Syscon phandle for the CIX Sky1 subsystem register block that routes
+      DMA-350 channel interrupts to the AP interrupt controller.
 
 required:
   - compatible
