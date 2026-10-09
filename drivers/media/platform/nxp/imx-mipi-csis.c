@@ -382,6 +382,11 @@ static const struct csis_pix_format mipi_csis_formats[] = {
 		.output = MEDIA_BUS_FMT_UYVY8_1X16,
 		.data_type = MIPI_CSI2_DT_YUV422_8B,
 		.width = 16,
+	}, {
+		.code = MEDIA_BUS_FMT_YUYV8_1X16,
+		.output = MEDIA_BUS_FMT_YUYV8_1X16,
+		.data_type = MIPI_CSI2_DT_YUV422_8B,
+		.width = 16,
 	},
 	/* RGB formats. */
 	{
