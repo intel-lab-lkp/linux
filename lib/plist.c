@@ -174,11 +174,17 @@ void plist_requeue(struct plist_node *node, struct plist_head *head)
 	/*
 	 * After plist_del(), iter is the replacement of the node.  If the node
 	 * was on prio_list, take shortcut to find node_next instead of looping.
+	 *
+	 * prio_list is a ring of the first nodes of each priority run, without
+	 * a sentinel: if node's run is the last one, iter->prio_list.next wraps
+	 * around to the first run, and node must be appended at the end of the
+	 * list instead of being inserted in front of it.
 	 */
 	if (!list_empty(&iter->prio_list)) {
 		iter = list_entry(iter->prio_list.next, struct plist_node,
 				  prio_list);
-		node_next = &iter->node_list;
+		if (iter->prio > node->prio)
+			node_next = &iter->node_list;
 		goto queue;
 	}
 
@@ -275,6 +281,25 @@ static int  __init plist_test(void)
 		nr_expect--;
 		plist_test_check(nr_expect);
 	}
+
+	/*
+	 * Requeue a node which is the first of the last priority run and has
+	 * a successor of the same priority, with an earlier run present: the
+	 * shortcut in plist_requeue() must append it at the end of the list,
+	 * not in front of the first run.  The random test above never
+	 * exercises this, since it only requeues nodes it has just added,
+	 * which are always the last of their run.
+	 */
+	plist_head_init(&test_head);
+	for (i = 0; i < 3; i++) {
+		plist_node_init(test_node + i, i ? 2 : 1);
+		plist_add(test_node + i, &test_head);
+	}
+	plist_test_requeue(test_node + 1);
+	plist_test_check(3);
+	BUG_ON(plist_last(&test_head) != test_node + 1);
+	for (i = 0; i < 3; i++)
+		plist_del(test_node + i, &test_head);
 
 	printk(KERN_DEBUG "end plist test\n");
 
