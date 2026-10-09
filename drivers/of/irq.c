@@ -647,6 +647,15 @@ struct of_intc_desc {
  *
  * This function scans the device tree for matching interrupt controller nodes,
  * and calls their initialization functions in order with parents first.
+ *
+ * The initialization functions are called while holding a refcount on the
+ * device node corresponding to the device that is being initialized (passed
+ * as the first parameter). If an initialization function is successful, the
+ * device node refcount is *not* dropped (ever); this is intentional and
+ * guarantees that the pointer passed to the initialization function is valid
+ * not only while the function runs, but also for the rest of the kernel
+ * lifetime (i.e. it is safe for a driver to store the device node pointer
+ * and use it *after* the initialization function returns).
  */
 void __init of_irq_init(const struct of_device_id *matches)
 {
