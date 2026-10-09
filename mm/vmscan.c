@@ -7944,7 +7944,8 @@ void kswapd_try_clear_hopeless(struct pglist_data *pgdat,
 
 bool kswapd_test_hopeless(pg_data_t *pgdat)
 {
-	return atomic_read(&pgdat->kswapd_failures) >= MAX_RECLAIM_RETRIES;
+	return atomic_read(&pgdat->kswapd_failures) >=
+		MAX_RECLAIM_RETRIES * READ_ONCE(current_kswapds_per_node);
 }
 
 #ifdef CONFIG_HIBERNATION
