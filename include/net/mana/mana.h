@@ -102,7 +102,7 @@ struct mana_stats_rx {
 	u64 pkt_len0_err;
 	u64 coalesced_cqe[MANA_CQE_COAL_PKTS_8 - 1];
 	struct u64_stats_sync syncp;
-};
+} ____cacheline_aligned_in_smp;
 
 struct mana_stats_tx {
 	u64 packets;
@@ -117,7 +117,7 @@ struct mana_stats_tx {
 	u64 csum_partial;
 	u64 mana_map_err;
 	struct u64_stats_sync syncp;
-};
+} ____cacheline_aligned_in_smp;
 
 struct mana_txq {
 	struct gdma_queue *gdma_sq;
@@ -146,7 +146,7 @@ struct mana_txq {
 	/* Suppress completion wakeups on the replacement's netdev queue. */
 	bool retiring;
 
-	struct mana_stats_tx stats;
+	struct mana_stats_tx *stats;
 };
 
 /* skb data and frags dma mappings */
@@ -408,7 +408,7 @@ struct mana_rxq {
 
 	u32 buf_index;
 
-	struct mana_stats_rx stats;
+	struct mana_stats_rx *stats;
 
 	struct bpf_prog __rcu *bpf_prog;
 	struct xdp_rxq_info xdp_rxq;
@@ -605,6 +605,13 @@ struct mana_port_context {
 	/* Create num_queues EQs, SQs, SQ-CQs, RQs and RQ-CQs, respectively. */
 	unsigned int max_queues;
 	unsigned int num_queues;
+
+	/* Port-lifetime arrays with max_queues slots. Readers sum live and
+	 * retired RX counters.
+	 */
+	struct mana_stats_rx *rxq_stats;
+	struct mana_stats_rx *rxq_stats_ret;
+	struct mana_stats_tx *txq_stats;
 
 	unsigned int rx_queue_size;
 	unsigned int tx_queue_size;
