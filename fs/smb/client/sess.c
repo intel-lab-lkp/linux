@@ -626,12 +626,16 @@ cifs_ses_add_channel(struct cifs_ses *ses,
 
 out:
 	if (rc && chan->server) {
-		cifs_put_tcp_session(chan->server, 0);
-
 		spin_lock(&ses->chan_lock);
 
-		/* we rely on all bits beyond chan_count to be clear */
+		/* Clear the reconnect bitmask BEFORE dropping the server
+		 * reference: cifs_ses_get_chan_index() dereferences
+		 * server->terminate, and cifs_put_tcp_session() may be the
+		 * final put that frees chan->server (use-after-free).
+		 */
 		cifs_chan_clear_need_reconnect(ses, chan->server);
+
+		/* we rely on all bits beyond chan_count to be clear */
 		ses->chan_count--;
 		/*
 		 * chan_count should never reach 0 as at least the primary
@@ -639,6 +643,8 @@ out:
 		 */
 		WARN_ON(ses->chan_count < 1);
 		spin_unlock(&ses->chan_lock);
+
+		cifs_put_tcp_session(chan->server, 0);
 	}
 
 	kfree(ctx->UNC);
