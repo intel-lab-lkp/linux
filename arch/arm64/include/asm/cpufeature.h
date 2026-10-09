@@ -267,6 +267,13 @@ extern struct arm64_ftr_reg arm64_ftr_reg_ctrel0;
 #define SCOPE_ALL				ARM64_CPUCAP_SCOPE_MASK
 
 /*
+ * matches() is called only once, when the capability is detected, and the
+ * result applies to all CPUs. Secondary and late CPUs are not checked for
+ * conflicts but cpu_enable() is still called on each of them. It has no
+ * effect on SCOPE_LOCAL_CPU capabilities.
+ */
+#define ARM64_CPUCAP_PROBE_ONCE			((u16)BIT(3))
+/*
  * Is it permitted for a late CPU to have this capability when system
  * hasn't already enabled it ?
  */
@@ -293,6 +300,13 @@ extern struct arm64_ftr_reg arm64_ftr_reg_ctrel0;
  */
 #define ARM64_CPUCAP_LOCAL_CPU_ERRATUM		\
 	(ARM64_CPUCAP_SCOPE_LOCAL_CPU | ARM64_CPUCAP_OPTIONAL_FOR_LATE_CPU)
+/*
+ * SoC (not CPU) errata workarounds. The erratum is probed once on the boot
+ * CPU, before the secondary CPUs are brought up, and no secondary or late CPU
+ * can conflict with it.
+ */
+#define ARM64_CPUCAP_SOC_ERRATUM			\
+	(ARM64_CPUCAP_SCOPE_BOOT_CPU | ARM64_CPUCAP_PROBE_ONCE)
 /*
  * CPU feature detected at boot time based on system-wide value of a
  * feature. It is safe for a late CPU to have this feature even though
@@ -412,6 +426,12 @@ static inline int cpucap_default_scope(const struct arm64_cpu_capabilities *cap)
 static inline bool cpucap_match_all_early_cpus(const struct arm64_cpu_capabilities *cap)
 {
 	return cap->type & ARM64_CPUCAP_MATCH_ALL_EARLY_CPUS;
+}
+
+static inline bool cpucap_probe_once(const struct arm64_cpu_capabilities *cap)
+{
+	return (cap->type & ARM64_CPUCAP_PROBE_ONCE) &&
+	       !(cap->type & ARM64_CPUCAP_SCOPE_LOCAL_CPU);
 }
 
 /*
