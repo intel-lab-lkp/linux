@@ -83,4 +83,37 @@ struct gpi_i2c_config {
 	bool multi_msg;
 };
 
+/**
+ * struct gpi_serial_config - serial config for peripheral
+ *
+ * @rx_stale_timeout: serial rx stale timeout
+ * @clk_div: source clock divider
+ * @clk_src: serial clock
+ * @stop_bit_len: stop bit length
+ * @char_size: UART character size
+ * @rfr_level: auto rfr level for FIFO threshold
+ * @parity: set parity type
+ * @opcode: go TRE opcode for tx and rx
+ * @hw_flow_ctrl_en: hardware flow control enable when set
+ * @set_tx_config: set tx channel peripheral config
+ * @set_rx_config: set rx channel peripheral config
+ * @packing: set packing config
+ * @loopback_en: serial loopback enable when set
+ */
+struct gpi_serial_config {
+	u32 rx_stale_timeout;
+	u32 clk_div;
+	u32 clk_src;
+	u8 stop_bit_len;
+	u8 char_size;
+	u8 rfr_level;
+	u8 parity;
+	u8 opcode;
+	bool hw_flow_ctrl_en;
+	bool set_tx_config;
+	bool set_rx_config;
+	bool packing;
+	bool loopback_en;
+};
+
 #endif /* QCOM_GPI_DMA_H */

@@ -30,6 +30,21 @@
 #define TRE_FLAGS_LINK		BIT(11)
 #define TRE_FLAGS_TYPE		GENMASK(23, 16)
 
+/* UART CONFIG0 WD0 */
+#define TRE_UART_C0_CHAR_SZ		GENMASK(2, 0)
+#define TRE_UART_C0_STOP_BIT_LEN	GENMASK(4, 3)
+#define TRE_UART_C0_PARITY		GENMASK(7, 5)
+#define TRE_UART_C0_LOOPBACK		BIT(8)
+#define TRE_UART_C0_HW_FLOW_CTRL_EN	BIT(10)
+#define TRE_UART_C0_PACKING		BIT(24)
+
+/* UART CONFIG0 WD1 */
+#define TRE_UART_C0_RX_STALE_TIMEOUT	GENMASK(23, 0)
+#define TRE_UART_C0_RX_RFR_LEVEL	GENMASK(29, 24)
+
+/* UART GO WD0 */
+#define TRE_UART_GO_CMD		GENMASK(4, 0)
+
 /* SPI CONFIG0 WD0 */
 #define TRE_SPI_C0_WORD_SZ	GENMASK(4, 0)
 #define TRE_SPI_C0_LOOPBACK	BIT(8)
@@ -1793,6 +1808,80 @@ static int gpi_create_spi_tre(struct gchan *chan, struct gpi_desc *desc,
 	return tre_idx;
 }
 
+static int
+gpi_create_serial_tre(struct gchan *chan, struct gpi_desc *desc,
+		      struct scatterlist *sgl, enum dma_transfer_direction direction)
+{
+	struct gpi_serial_config *serial = chan->config;
+	struct device *dev = chan->gpii->gpi_dev->dev;
+	struct gpi_tre *tre;
+	dma_addr_t address;
+	unsigned int tre_idx = 0;
+	unsigned int i;
+	bool set_config = (direction == DMA_DEV_TO_MEM) ?
+			   serial->set_rx_config :
+			   serial->set_tx_config;
+
+	/* create config tre if applicable */
+	if (set_config) {
+		tre = &desc->tre[tre_idx];
+		tre_idx++;
+		tre->dword[0] = u32_encode_bits(serial->char_size, TRE_UART_C0_CHAR_SZ);
+		tre->dword[0] |= u32_encode_bits(serial->stop_bit_len, TRE_UART_C0_STOP_BIT_LEN);
+		tre->dword[0] |= u32_encode_bits(serial->parity, TRE_UART_C0_PARITY);
+		tre->dword[0] |= u32_encode_bits(serial->loopback_en, TRE_UART_C0_LOOPBACK);
+		tre->dword[0] |= u32_encode_bits(serial->hw_flow_ctrl_en,
+						 TRE_UART_C0_HW_FLOW_CTRL_EN);
+		tre->dword[0] |= u32_encode_bits(serial->packing, TRE_UART_C0_PACKING);
+		if (direction == DMA_MEM_TO_DEV) {
+			/* No configuration for dword1 of TX channel */
+			tre->dword[1] = 0;
+		} else if (direction == DMA_DEV_TO_MEM) {
+			tre->dword[1] = u32_encode_bits(serial->rx_stale_timeout,
+							TRE_UART_C0_RX_STALE_TIMEOUT);
+			tre->dword[1] |= u32_encode_bits(serial->rfr_level,
+							 TRE_UART_C0_RX_RFR_LEVEL);
+			serial->set_rx_config = false;
+		}
+
+		tre->dword[2] = u32_encode_bits(serial->clk_div, TRE_C0_CLK_DIV);
+		tre->dword[2] |= u32_encode_bits(serial->clk_src, TRE_C0_CLK_SRC);
+
+		tre->dword[3] = u32_encode_bits(TRE_TYPE_CONFIG0, TRE_FLAGS_TYPE);
+		tre->dword[3] |= u32_encode_bits(1, TRE_FLAGS_CHAIN);
+	}
+
+	/* create the GO tre */
+	tre = &desc->tre[tre_idx];
+	tre_idx++;
+
+	tre->dword[0] = u32_encode_bits(serial->opcode, TRE_UART_GO_CMD);
+	tre->dword[1] = 0;
+	tre->dword[2] = 0;
+	tre->dword[3] = u32_encode_bits(TRE_TYPE_GO, TRE_FLAGS_TYPE);
+	tre->dword[3] |= u32_encode_bits(1, TRE_FLAGS_CHAIN);
+
+	/* create the dma tre */
+	tre = &desc->tre[tre_idx];
+	tre_idx++;
+
+	address = sg_dma_address(sgl);
+	tre->dword[0] = lower_32_bits(address);
+	tre->dword[1] = upper_32_bits(address);
+	tre->dword[2] = u32_encode_bits(sg_dma_len(sgl), TRE_DMA_LEN);
+	tre->dword[3] = u32_encode_bits(TRE_TYPE_DMA, TRE_FLAGS_TYPE);
+	if (direction == DMA_MEM_TO_DEV)
+		tre->dword[3] |= u32_encode_bits(1, TRE_FLAGS_IEOT);
+	else if (direction == DMA_DEV_TO_MEM)
+		tre->dword[3] |= u32_encode_bits(1, TRE_FLAGS_IEOB);
+
+	for (i = 0; i < tre_idx; i++)
+		dev_dbg(dev, "TRE:%d %x:%x:%x:%x\n", i, desc->tre[i].dword[0],
+			desc->tre[i].dword[1], desc->tre[i].dword[2], desc->tre[i].dword[3]);
+
+	return tre_idx;
+}
+
 /* copy tre into transfer ring */
 static struct dma_async_tx_descriptor *
 gpi_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
@@ -1841,11 +1930,17 @@ gpi_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 		return NULL;
 
 	/* create TREs for xfer */
-	if (gchan->protocol == QCOM_GPI_SPI) {
+	switch (gchan->protocol) {
+	case QCOM_GPI_SPI:
 		i = gpi_create_spi_tre(gchan, gpi_desc, sgl, direction);
-	} else if (gchan->protocol == QCOM_GPI_I2C) {
+		break;
+	case QCOM_GPI_I2C:
 		i = gpi_create_i2c_tre(gchan, gpi_desc, sgl, direction, flags);
-	} else {
+		break;
+	case QCOM_GPI_UART:
+		i = gpi_create_serial_tre(gchan, gpi_desc, sgl, direction);
+		break;
+	default:
 		dev_err(dev, "invalid peripheral: %d\n", gchan->protocol);
 		kfree(gpi_desc);
 		return NULL;
