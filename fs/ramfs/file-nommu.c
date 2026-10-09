@@ -61,8 +61,8 @@ const struct inode_operations ramfs_file_inode_operations = {
  */
 int ramfs_nommu_expand_for_mapping(struct inode *inode, size_t newsize)
 {
-	unsigned long npages, xpages, loop;
-	struct page *pages;
+	unsigned long npages;
+	struct folio *folio;
 	unsigned order;
 	void *data;
 	int ret;
@@ -82,49 +82,30 @@ int ramfs_nommu_expand_for_mapping(struct inode *inode, size_t newsize)
 
 	i_size_write(inode, newsize);
 
-	/* allocate enough contiguous pages to be able to satisfy the
-	 * request */
-	pages = alloc_pages(gfp, order);
-	if (!pages)
+	folio = folio_alloc(gfp, order);
+	if (!folio)
 		return -ENOMEM;
 
-	/* split the high-order page into an array of single pages */
-	xpages = 1UL << order;
-	npages = (newsize + PAGE_SIZE - 1) >> PAGE_SHIFT;
-
-	split_page(pages, order);
-
-	/* trim off any pages we don't actually require */
-	for (loop = npages; loop < xpages; loop++)
-		__free_page(pages + loop);
+	ret = filemap_add_folio(inode->i_mapping, folio, 0, gfp);
+	if (ret < 0)
+		goto out;
 
 	/* clear the memory we allocated */
+	npages = (newsize + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	newsize = PAGE_SIZE * npages;
-	data = page_address(pages);
+	data = folio_address(folio);
 	memset(data, 0, newsize);
 
-	/* attach all the pages to the inode's address space */
-	for (loop = 0; loop < npages; loop++) {
-		struct page *page = pages + loop;
+	folio_mark_dirty(folio);
+	folio_mark_uptodate(folio);
 
-		ret = add_to_page_cache_lru(page, inode->i_mapping, loop,
-					gfp);
-		if (ret < 0)
-			goto add_error;
+	/* trim off any pages we don't actually require */
+	if (!is_power_of_2(npages))
+		folio_split(folio, 0, folio_page(folio, npages), NULL);
+	folio_unlock(folio);
 
-		/* prevent the page from being discarded on memory pressure */
-		SetPageDirty(page);
-		SetPageUptodate(page);
-
-		unlock_page(page);
-		put_page(page);
-	}
-
-	return 0;
-
-add_error:
-	while (loop < npages)
-		__free_page(pages + loop++);
+out:
+	folio_put(folio);
 	return ret;
 }
 
