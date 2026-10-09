@@ -1918,8 +1918,8 @@ static int rtrs_rdma_conn_established(struct rtrs_clt_con *con,
 		 * Cache the hca_port and hca_name for sysfs
 		 */
 		clt_path->hca_port = con->c.cm_id->port_num;
-		scnprintf(clt_path->hca_name, sizeof(clt_path->hca_name),
-			  clt_path->s.dev->ib_dev->name);
+		strscpy(clt_path->hca_name, clt_path->s.dev->ib_dev->name,
+			sizeof(clt_path->hca_name));
 		clt_path->s.src_addr = con->c.cm_id->route.addr.src_addr;
 		/* set for_new_clt, to allow future reconnect on any path */
 		clt_path->for_new_clt = 1;
