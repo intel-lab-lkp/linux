@@ -362,6 +362,9 @@ struct mtd_info {
 	int (*_get_device) (struct mtd_info *mtd);
 	void (*_put_device) (struct mtd_info *mtd);
 
+	/* Optional free of the embedding object; called from kref release. */
+	void (*_free) (struct mtd_info *mtd);
+
 	/*
 	 * flag indicates a panic write, low level drivers can take appropriate
 	 * action if required to ensure writes go through
@@ -380,6 +383,10 @@ struct mtd_info {
 	struct module *owner;
 	struct device dev;
 	struct kref refcnt;
+
+	/* Set on unbind while refs held; core returns -ENODEV for hw ops. */
+	bool removed;
+
 	struct mtd_debug_info dbg;
 	struct nvmem_device *nvmem;
 	struct nvmem_device *otp_user_nvmem;
@@ -548,6 +555,9 @@ static inline int mtd_suspend(struct mtd_info *mtd)
 	struct mtd_info *master = mtd_get_master(mtd);
 	int ret;
 
+	if (master->removed)
+		return 0;
+
 	if (master->master.suspended)
 		return 0;
 
@@ -562,6 +572,9 @@ static inline int mtd_suspend(struct mtd_info *mtd)
 static inline void mtd_resume(struct mtd_info *mtd)
 {
 	struct mtd_info *master = mtd_get_master(mtd);
+
+	if (master->removed)
+		return;
 
 	if (!master->master.suspended)
 		return;

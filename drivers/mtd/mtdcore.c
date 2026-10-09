@@ -118,6 +118,7 @@ static void mtd_device_release(struct kref *kref)
 {
 	struct mtd_info *mtd = container_of(kref, struct mtd_info, refcnt);
 	bool is_partition = mtd_is_partition(mtd);
+	void (*mtd_free)(struct mtd_info *mtd) = mtd->_free;
 
 	debugfs_remove_recursive(mtd->dbg.dfs_dir);
 
@@ -135,6 +136,9 @@ static void mtd_device_release(struct kref *kref)
 		memset(&mtd->dev, 0, sizeof(mtd->dev));
 
 	module_put(THIS_MODULE);
+
+	if (mtd_free)
+		mtd_free(mtd);
 }
 
 #define MTD_DEVICE_ATTR_RO(name) \
@@ -1332,6 +1336,9 @@ int __get_mtd_device(struct mtd_info *mtd)
 	struct mtd_info *master = mtd_get_master(mtd);
 	int err;
 
+	if (master->removed)
+		return -ENODEV;
+
 	if (master->_get_device) {
 		err = master->_get_device(master);
 		if (err)
@@ -1470,6 +1477,9 @@ int mtd_erase(struct mtd_info *mtd, struct erase_info *instr)
 
 	instr->fail_addr = MTD_FAIL_ADDR_UNKNOWN;
 	adjinstr = *instr;
+
+	if (master->removed)
+		return -ENODEV;
 
 	if (!mtd->erasesize || !master->_erase)
 		return -ENOTSUPP;
@@ -1792,6 +1802,9 @@ int mtd_read_oob(struct mtd_info *mtd, loff_t from, struct mtd_oob_ops *ops)
 
 	ops->retlen = ops->oobretlen = 0;
 
+	if (master->removed)
+		return -ENODEV;
+
 	ret_code = mtd_check_oob_ops(mtd, from, ops);
 	if (ret_code)
 		return ret_code;
@@ -1835,6 +1848,9 @@ int mtd_write_oob(struct mtd_info *mtd, loff_t to,
 	int ret;
 
 	ops->retlen = ops->oobretlen = 0;
+
+	if (master->removed)
+		return -ENODEV;
 
 	if (!(mtd->flags & MTD_WRITEABLE))
 		return -EROFS;
@@ -2331,6 +2347,8 @@ int mtd_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 {
 	struct mtd_info *master = mtd_get_master(mtd);
 
+	if (master->removed)
+		return -ENODEV;
 	if (!master->_lock)
 		return -EOPNOTSUPP;
 	if (ofs < 0 || ofs >= mtd->size || len > mtd->size - ofs)
@@ -2351,6 +2369,8 @@ int mtd_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 {
 	struct mtd_info *master = mtd_get_master(mtd);
 
+	if (master->removed)
+		return -ENODEV;
 	if (!master->_unlock)
 		return -EOPNOTSUPP;
 	if (ofs < 0 || ofs >= mtd->size || len > mtd->size - ofs)
