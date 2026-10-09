@@ -173,6 +173,7 @@ struct asus_drvdata {
 	unsigned long battery_next_query;
 	struct asus_hid_listener listener;
 	bool fn_lock;
+	struct delayed_work reinit_work;
 };
 
 static int asus_report_battery(struct asus_drvdata *, u8 *, int);
@@ -1459,6 +1460,17 @@ static int __maybe_unused asus_reset_resume(struct hid_device *hdev)
 	return 0;
 }
 
+static void asus_reinit_work(struct work_struct *work)
+{
+	struct asus_drvdata *drvdata = container_of(work, struct asus_drvdata,
+						    reinit_work.work);
+	int ret;
+
+	ret = asus_kbd_init(drvdata->hdev, FEATURE_KBD_REPORT_ID);
+	if (ret < 0)
+		hid_warn(drvdata->hdev, "Failed to re-initialize the keyboard: %d\n", ret);
+}
+
 static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct hid_report_enum *rep_enum;
@@ -1555,6 +1567,8 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			is_vendor = true;
 	}
 
+	INIT_DELAYED_WORK(&drvdata->reinit_work, asus_reinit_work);
+
 	ret = asus_worker_create(hdev, drvdata);
 	if (ret) {
 		hid_warn(hdev, "Failed to initialize worker: %d\n", ret);
@@ -1590,6 +1604,16 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		}
 	}
 
+	/*
+	 * When docked, the Zenbook Duo keyboard drops back to F-key mode when
+	 * hid-multitouch configures the touchpad on the sibling USB interface,
+	 * which can happen after the handshake above. Send it again once the
+	 * dust has settled.
+	 */
+	if (is_vendor && (drvdata->quirks & QUIRK_ZENBOOK_DUO_KEYBOARD) &&
+	    hid_is_usb(hdev))
+		schedule_delayed_work(&drvdata->reinit_work, msecs_to_jiffies(2000));
+
 	/* Laptops keyboard backlight is always at 0x5a */
 	if (is_vendor && (drvdata->quirks & QUIRK_USE_KBD_BACKLIGHT) &&
 	    (asus_has_report_id(hdev, FEATURE_KBD_REPORT_ID)) &&
@@ -1624,6 +1648,7 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	return 0;
 err_stop_hw:
+	cancel_delayed_work_sync(&drvdata->reinit_work);
 	if (drvdata->listener.brightness_set)
 		asus_hid_unregister_listener(&drvdata->listener);
 
@@ -1639,6 +1664,7 @@ static void asus_remove(struct hid_device *hdev)
 	if (drvdata->listener.brightness_set)
 		asus_hid_unregister_listener(&drvdata->listener);
 
+	cancel_delayed_work_sync(&drvdata->reinit_work);
 	asus_worker_stop(drvdata->worker);
 	hid_hw_stop(hdev);
 }
