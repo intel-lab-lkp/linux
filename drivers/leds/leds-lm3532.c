@@ -566,7 +566,8 @@ static int lm3532_parse_node(struct lm3532_data *priv)
 	if (priv->enable_gpio) {
 		ret = devm_add_action(&priv->client->dev, gpio_set_low_action, priv);
 		if (ret)
-			return ret;
+			return dev_err_probe(&priv->client->dev, ret,
+					     "failed to add GPIO action\n");
 	}
 
 	priv->regulator = devm_regulator_get(&priv->client->dev, "vin");
@@ -708,10 +709,8 @@ static int lm3532_probe(struct i2c_client *client)
 	i2c_set_clientdata(client, drvdata);
 
 	ret = lm3532_parse_node(drvdata);
-	if (ret) {
-		dev_err(&client->dev, "Failed to parse node\n");
+	if (ret)
 		return ret;
-	}
 
 	return ret;
 }
