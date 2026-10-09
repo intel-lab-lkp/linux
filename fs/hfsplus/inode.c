@@ -18,6 +18,7 @@
 #include <linux/cred.h>
 #include <linux/uio.h>
 #include <linux/fileattr.h>
+#include <kunit/visibility.h>
 
 #include "hfsplus_fs.h"
 #include "hfsplus_raw.h"
@@ -648,6 +649,7 @@ int hfsplus_read_timestamp(struct super_block *sb, u32 cnid,
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(hfsplus_read_timestamp);
 
 static int hfsplus_inode_read_timestamps(struct inode *inode,
 					 struct hfsplus_timestamps *timestamps)

@@ -10,4 +10,4 @@ hfsplus-objs := super.o options.o inode.o ioctl.o extents.o catalog.o dir.o btre
 		attributes.o xattr.o xattr_user.o xattr_security.o xattr_trusted.o
 
 # KUnit tests
-obj-$(CONFIG_HFSPLUS_KUNIT_TEST) += unicode_test.o
+obj-$(CONFIG_HFSPLUS_KUNIT_TEST) += unicode_test.o time_test.o
