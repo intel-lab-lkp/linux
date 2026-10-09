@@ -15,7 +15,7 @@ from contextlib import contextmanager
 
 from lib.py import defer
 from lib.py import ksft_run, ksft_exit, ksft_pr
-from lib.py import ksft_true, ksft_eq, ksft_ne, ksft_gt, ksft_raises
+from lib.py import ksft_true, ksft_eq, ksft_ne, ksft_ge, ksft_gt, ksft_raises
 from lib.py import ksft_not_none
 from lib.py import ksft_variants, KsftNamedVariant
 from lib.py import KsftSkipEx, KsftFailEx
@@ -30,6 +30,8 @@ TCP_ULP = 31
 
 _PSP_MAX_KEY_LEN = 32
 _PSP_ASSOC_MSG = f'!IB3x{_PSP_MAX_KEY_LEN}s'
+_TX_REKEY_ROUNDS = 20
+_TX_KEY_DRAIN_TIMEOUT = 5
 
 
 def _get_outq(s):
@@ -201,6 +203,19 @@ def _require_version(cfg, version):
 
 def _get_stat(cfg, key):
     return cfg.pspnl.get_stats({'dev-id': cfg.psp_dev_id})[key]
+
+
+def _get_tx_key_count(cfg):
+    return cfg.pspnl.get_stats({'dev-id': cfg.psp_dev_id}).get('tx-key-count')
+
+
+def _wait_tx_key_drain(cfg, base):
+    cnt = _get_tx_key_count(cfg)
+    end = time.monotonic() + _TX_KEY_DRAIN_TIMEOUT
+    while cnt > base and time.monotonic() < end:
+        time.sleep(0.1)
+        cnt = _get_tx_key_count(cfg)
+    ksft_ge(base, cnt, comment="tx keys not removed from device after rekey")
 
 #
 # Test case boiler plate
@@ -726,6 +741,27 @@ def rekey_tx_basic(cfg, version):
         data_len = _psp_txrx(cfg, s, 10)
         _remote_key_rotate(cfg)
         _rekey_tx(cfg, s, data_len)
+    finally:
+        _close_psp_conn(cfg, s)
+
+
+def rekey_tx_drain(cfg):
+    """Test that Tx rekeys do not leak keys on the device"""
+    _init_psp_dev(cfg)
+
+    if _get_tx_key_count(cfg) is None:
+        raise KsftSkipEx("Device does not track Tx keys")
+
+    s = _establish_psp_conn(cfg, 0)
+    try:
+        data_len = _psp_txrx(cfg, s, 1)
+        base = _get_tx_key_count(cfg)
+
+        for _ in range(_TX_REKEY_ROUNDS):
+            _remote_key_rotate(cfg)
+            data_len = _rekey_tx(cfg, s, data_len)
+
+        _wait_tx_key_drain(cfg, base)
     finally:
         _close_psp_conn(cfg, s)
 
