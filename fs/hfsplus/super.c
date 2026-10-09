@@ -86,6 +86,7 @@ struct inode *hfsplus_iget(struct super_block *sb, unsigned long ino)
 	mutex_init(&HFSPLUS_I(inode)->extents_lock);
 	HFSPLUS_I(inode)->rsrc_inode = NULL;
 	HFSPLUS_I(inode)->create_date = 0;
+	HFSPLUS_I(inode)->birthdate = 0;
 	HFSPLUS_I(inode)->linkid = 0;
 	HFSPLUS_I(inode)->flags = 0;
 	HFSPLUS_I(inode)->fs_blocks = 0;
@@ -513,6 +514,9 @@ static int hfsplus_fill_super(struct super_block *sb, struct fs_context *fc)
 
 	sb->s_time_gran = NSEC_PER_SEC;
 	sb->s_time_min = HFS_MIN_TIMESTAMP_SECS;
+	/*
+	 * Timestamps after HFS_MAX_TIMESTAMP_SECS are stored in xattrs.
+	 */
 	sb->s_time_max = HFS_MAX_TIMESTAMP_SECS;
 
 	err = -EFBIG;

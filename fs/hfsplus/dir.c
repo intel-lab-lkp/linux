@@ -26,6 +26,43 @@ static inline void hfsplus_instantiate(struct dentry *dentry,
 	d_instantiate(dentry, inode);
 }
 
+/*
+ * Check that creation date of catalog record @cnid is identical to
+ * creation date of @inode. If the creation date is after February 2040,
+ * then the real value is compared by means of internal xattr.
+ */
+static inline bool is_create_date_identical(struct inode *inode,
+					    u32 cnid, __be32 create_date)
+{
+	time64_t timestamp;
+	bool has_xattr;
+	int err;
+
+	if (create_date != HFSPLUS_I(inode)->create_date)
+		return false;
+
+	if (!hfsp_mt_is_ext_timestamp(create_date))
+		return true;
+
+	err = hfsplus_read_timestamp(inode->i_sb, cnid,
+				     XATTR_LINUX_CREATE_DATE_NAME,
+				     create_date, &timestamp, &has_xattr);
+	if (err) {
+		pr_err("timestamp extraction failure: cnid %u, err %d\n",
+			cnid, err);
+		return false;
+	}
+
+	/*
+	 * The record without xattr (for example, created by Mac OS X)
+	 * cannot be distinguished by means of 64-bit timestamp.
+	 */
+	if (!has_xattr)
+		return true;
+
+	return timestamp == HFSPLUS_I(inode)->birthdate;
+}
+
 /* Find the entry inside dir named dentry->d_name */
 static struct dentry *hfsplus_lookup(struct inode *dir, struct dentry *dentry,
 				     unsigned int flags)
@@ -78,12 +115,12 @@ again:
 				entry.file.user_info.fdCreator ==
 				cpu_to_be32(HFSP_HFSPLUS_CREATOR) &&
 				HFSPLUS_SB(sb)->hidden_dir &&
-				(entry.file.create_date ==
-					HFSPLUS_I(HFSPLUS_SB(sb)->hidden_dir)->
-						create_date ||
-				entry.file.create_date ==
-					HFSPLUS_I(d_inode(sb->s_root))->
-						create_date)) {
+				(is_create_date_identical(
+					HFSPLUS_SB(sb)->hidden_dir,
+					cnid, entry.file.create_date) ||
+				is_create_date_identical(
+					d_inode(sb->s_root),
+					cnid, entry.file.create_date))) {
 			struct qstr str;
 			char name[32];
 

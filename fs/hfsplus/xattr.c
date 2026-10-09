@@ -50,6 +50,12 @@ static bool is_known_namespace(const char *name)
 	return true;
 }
 
+static bool is_linux_hfs_internal_xattr(const char *name)
+{
+	return !strncmp(name, XATTR_LINUX_HFS_PREFIX,
+			XATTR_LINUX_HFS_PREFIX_LEN);
+}
+
 static u32 hfsplus_init_header_node(struct inode *attr_file,
 					u32 clump_size,
 					char *buf, u16 node_size)
@@ -319,6 +325,19 @@ check_attr_tree_state_again:
 
 	hfsplus_mark_inode_dirty(attr_file, HFSPLUS_I_ATTR_DIRTY);
 
+	/*
+	 * Store the fork of AttributesFile into the volume header right now.
+	 * The AttributesFile can be created by hfsplus_cat_write_inode()
+	 * (timestamps after 2040 are stored in xattrs) in the middle of
+	 * sync operation. Then, the dirty AttributesFile's inode can be
+	 * skipped by writeback and the volume header will be committed
+	 * without AttributesFile. As a result, the AttributesFile will be
+	 * not opened during the next mount.
+	 */
+	hfsplus_inode_write_fork(attr_file, &sbi->s_vhdr->attr_file);
+	set_bit(HFSPLUS_SB_WRITEBACKUP, &sbi->flags);
+	hfsplus_mark_mdb_dirty(sb);
+
 	sbi->attr_tree = hfs_btree_open(sb, HFSPLUS_ATTR_CNID);
 	if (!sbi->attr_tree)
 		pr_err("failed to load attributes file\n");
@@ -339,8 +358,7 @@ end_attr_file_creation:
 	return err;
 }
 
-static inline
-bool is_xattr_operation_supported(struct inode *inode)
+static inline bool is_xattr_operation_supported(struct inode *inode)
 {
 	if (HFSPLUS_IS_RSRC(inode))
 		return false;
@@ -609,8 +627,9 @@ end_getxattr_finder_info:
 	return res;
 }
 
-ssize_t __hfsplus_getxattr(struct inode *inode, const char *name,
-			 void *value, size_t size)
+static ssize_t __hfsplus_getxattr_nocheck(struct super_block *sb,
+					  u32 cnid, const char *name,
+					  void *value, size_t size)
 {
 	struct hfs_find_data fd;
 	hfsplus_attr_entry *entry;
@@ -619,13 +638,7 @@ ssize_t __hfsplus_getxattr(struct inode *inode, const char *name,
 	u16 record_length = 0;
 	ssize_t res;
 
-	if (!is_xattr_operation_supported(inode))
-		return -EOPNOTSUPP;
-
-	if (!strcmp_xattr_finder_info(name))
-		return hfsplus_getxattr_finder_info(inode, value, size);
-
-	if (!HFSPLUS_SB(inode->i_sb)->attr_tree)
+	if (!HFSPLUS_SB(sb)->attr_tree)
 		return -EOPNOTSUPP;
 
 	entry = hfsplus_alloc_attr_entry();
@@ -634,18 +647,18 @@ ssize_t __hfsplus_getxattr(struct inode *inode, const char *name,
 		return -ENOMEM;
 	}
 
-	res = hfs_find_init(HFSPLUS_SB(inode->i_sb)->attr_tree, &fd);
+	res = hfs_find_init(HFSPLUS_SB(sb)->attr_tree, &fd);
 	if (res) {
 		pr_err("can't init xattr find struct\n");
 		goto failed_getxattr_init;
 	}
 
-	res = hfsplus_find_attr(inode->i_sb, inode->i_ino, name, &fd);
+	res = hfsplus_find_attr(sb, cnid, name, &fd);
 	if (res) {
 		if (res == -ENOENT || res == -ENODATA)
 			res = -ENODATA;
 		else
-			pr_err("xattr search failed\n");
+			pr_err("xattr searching failed\n");
 		goto out;
 	}
 
@@ -693,6 +706,38 @@ failed_getxattr_init:
 	return res;
 }
 
+static inline ssize_t __hfsplus_getxattr(struct inode *inode, const char *name,
+					 void *value, size_t size)
+{
+	if (!is_xattr_operation_supported(inode))
+		return -EOPNOTSUPP;
+
+	if (!strcmp_xattr_finder_info(name))
+		return hfsplus_getxattr_finder_info(inode, value, size);
+
+	return __hfsplus_getxattr_nocheck(inode->i_sb, (u32)inode->i_ino,
+					  name, value, size);
+}
+
+static inline char *hfsplus_build_xattr_name(const char *name,
+					     const char *prefix,
+					     size_t prefixlen)
+{
+	char *xattr_name;
+	size_t len = NLS_MAX_CHARSET_SIZE * HFSPLUS_ATTR_MAX_STRLEN + 1;
+
+	xattr_name = kzalloc(len, GFP_KERNEL);
+	if (!xattr_name)
+		return ERR_PTR(-ENOMEM);
+
+	if (snprintf(xattr_name, len, "%s%s", prefix, name) >= len) {
+		kfree(xattr_name);
+		return ERR_PTR(-ENAMETOOLONG);
+	}
+
+	return xattr_name;
+}
+
 ssize_t hfsplus_getxattr(struct inode *inode, const char *name,
 			 void *value, size_t size,
 			 const char *prefix, size_t prefixlen)
@@ -704,13 +749,9 @@ ssize_t hfsplus_getxattr(struct inode *inode, const char *name,
 		inode->i_ino, name ? name : NULL,
 		prefix ? prefix : NULL);
 
-	xattr_name = kmalloc(NLS_MAX_CHARSET_SIZE * HFSPLUS_ATTR_MAX_STRLEN + 1,
-			     GFP_KERNEL);
-	if (!xattr_name)
-		return -ENOMEM;
-
-	strcpy(xattr_name, prefix);
-	strcpy(xattr_name + prefixlen, name);
+	xattr_name = hfsplus_build_xattr_name(name, prefix, prefixlen);
+	if (IS_ERR(xattr_name))
+		return PTR_ERR(xattr_name);
 
 	res = __hfsplus_getxattr(inode, xattr_name, value, size);
 	kfree(xattr_name);
@@ -718,12 +759,123 @@ ssize_t hfsplus_getxattr(struct inode *inode, const char *name,
 	hfs_dbg("finished: res %d\n", res);
 
 	return res;
+}
 
+static ssize_t hfsplus_getxattr_nocheck(struct super_block *sb, u32 cnid,
+					const char *name,
+					void *value, size_t size,
+					const char *prefix, size_t prefixlen)
+{
+	int res;
+	char *xattr_name;
+
+	hfs_dbg("cnid %u, name %s, prefix %s\n",
+		cnid, name ? name : NULL,
+		prefix ? prefix : NULL);
+
+	xattr_name = hfsplus_build_xattr_name(name, prefix, prefixlen);
+	if (IS_ERR(xattr_name))
+		return PTR_ERR(xattr_name);
+
+	res = __hfsplus_getxattr_nocheck(sb, cnid, xattr_name, value, size);
+	kfree(xattr_name);
+
+	hfs_dbg("finished: res %d\n", res);
+
+	return res;
+}
+
+/*
+ * Get the timestamp stored in the internal xattr @name
+ * of catalog record @cnid. The caller can hold the catalog tree lock.
+ */
+int hfsplus_get_timestamp_xattr(struct super_block *sb, u32 cnid,
+				const char *name, time64_t *ts)
+{
+	__be64 value;
+	ssize_t res;
+
+	res = hfsplus_getxattr_nocheck(sb, cnid, name,
+					&value, sizeof(value),
+					XATTR_LINUX_HFS_PREFIX,
+					XATTR_LINUX_HFS_PREFIX_LEN);
+	if (res < 0)
+		return res;
+
+	if (res != sizeof(value))
+		return -EIO;
+
+	*ts = (time64_t)be64_to_cpu(value);
+	return 0;
+}
+
+/*
+ * Store the timestamp @ts into the internal xattr @name of catalog
+ * record @cnid. The caller must hold the catalog tree lock and it is
+ * caller's responsibility to set HFSPLUS_XATTR_EXISTS flag in
+ * the catalog record.
+ */
+int hfsplus_set_timestamp_xattr(struct inode *inode, u32 cnid,
+				const char *name, time64_t ts)
+{
+	struct super_block *sb = inode->i_sb;
+	char xattr_name[XATTR_LINUX_HFS_NAME_MAX];
+	__be64 value = cpu_to_be64(ts);
+	int err;
+
+	hfs_dbg("ino %llu, cnid %u, name %s, ts %lld\n",
+		inode->i_ino, cnid, name, ts);
+
+	if (!HFSPLUS_SB(sb)->attr_tree) {
+		err = hfsplus_create_attributes_file(sb);
+		if (unlikely(err))
+			return err;
+
+		if (!HFSPLUS_SB(sb)->attr_tree)
+			return -EIO;
+	}
+
+	if (snprintf(xattr_name, sizeof(xattr_name), "%s%s",
+		     XATTR_LINUX_HFS_PREFIX, name) >= sizeof(xattr_name))
+		return -ENAMETOOLONG;
+
+	return hfsplus_set_attr_cnid(inode, cnid, xattr_name,
+				     &value, sizeof(value));
+}
+
+/*
+ * Remove the internal xattr @name of @inode. The caller must hold
+ * the catalog tree lock and it is caller's responsibility to update
+ * HFSPLUS_XATTR_EXISTS flag in the catalog record.
+ */
+int hfsplus_remove_timestamp_xattr(struct inode *inode, const char *name)
+{
+	char xattr_name[XATTR_LINUX_HFS_NAME_MAX];
+	int err;
+
+	hfs_dbg("ino %llu, name %s\n", inode->i_ino, name);
+
+	if (!HFSPLUS_SB(inode->i_sb)->attr_tree)
+		return 0;
+
+	if (snprintf(xattr_name, sizeof(xattr_name), "%s%s",
+		     XATTR_LINUX_HFS_PREFIX, name) >= sizeof(xattr_name))
+		return -ENAMETOOLONG;
+
+	err = hfsplus_delete_attr(inode, xattr_name);
+	if (err == -ENOENT || err == -ENODATA)
+		err = 0;
+
+	return err;
 }
 
 static inline int can_list(const char *xattr_name)
 {
 	if (!xattr_name)
+		return 0;
+
+	/* Internal xattrs of the driver are hidden */
+	if (is_linux_hfs_internal_xattr(xattr_name))
 		return 0;
 
 	return strncmp(xattr_name, XATTR_TRUSTED_PREFIX,
@@ -998,6 +1150,10 @@ static int hfsplus_osx_getxattr(const struct xattr_handler *handler,
 	if (is_known_namespace(name))
 		return -EOPNOTSUPP;
 
+	/* Internal xattrs of the driver are hidden */
+	if (is_linux_hfs_internal_xattr(name))
+		return -EOPNOTSUPP;
+
 	/*
 	 * osx is the namespace we use to indicate an unprefixed
 	 * attribute on the filesystem (like the ones that OS X
@@ -1018,6 +1174,10 @@ static int hfsplus_osx_setxattr(const struct xattr_handler *handler,
 	 * by prepending them with "osx."
 	 */
 	if (is_known_namespace(name))
+		return -EOPNOTSUPP;
+
+	/* Internal xattrs of the driver cannot be changed by user */
+	if (is_linux_hfs_internal_xattr(name))
 		return -EOPNOTSUPP;
 
 	/*

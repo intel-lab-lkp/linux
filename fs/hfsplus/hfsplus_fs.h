@@ -175,6 +175,13 @@ static inline struct hfsplus_sb_info *HFSPLUS_SB(struct super_block *sb)
 	return sb->s_fs_info;
 }
 
+struct hfsplus_timestamps {
+	__be32 create_date;
+	__be32 content_mod_date;
+	__be32 attribute_mod_date;
+	__be32 access_date;
+	__be32 backup_date;
+};
 
 struct hfsplus_inode_info {
 	atomic_t opencnt;
@@ -196,7 +203,8 @@ struct hfsplus_inode_info {
 	 * Immutable data.
 	 */
 	struct inode *rsrc_inode;
-	__be32 create_date;
+	__be32 create_date;	/* on-disk (maybe clamped) creation date */
+	time64_t birthdate;	/* real creation date (seconds since 1970) */
 
 	/*
 	 * Protected by sbi->vh_mutex.
@@ -227,6 +235,9 @@ struct hfsplus_inode_info {
 #define HFSPLUS_I_EXT_DIRTY	2	/* has changes in the extent tree */
 #define HFSPLUS_I_ALLOC_DIRTY	3	/* has changes in the allocation file */
 #define HFSPLUS_I_ATTR_DIRTY	4	/* has changes in the attributes tree */
+#define HFSPLUS_I_ATIME_XATTR	5	/* access date is stored in xattr */
+#define HFSPLUS_I_MTIME_XATTR	6	/* content mod date is stored in xattr */
+#define HFSPLUS_I_CTIME_XATTR	7	/* attribute mod date is stored in xattr */
 
 #define HFSPLUS_IS_RSRC(inode) \
 	test_bit(HFSPLUS_I_RSRC, &HFSPLUS_I(inode)->flags)
@@ -351,6 +362,9 @@ int hfsplus_delete_all_attrs(struct inode *dir, u32 cnid);
 int hfsplus_replace_attr(struct inode *inode,
 			 const char *name,
 			 const void *value, size_t size);
+int hfsplus_set_attr_cnid(struct inode *inode, u32 cnid,
+			  const char *name,
+			  const void *value, size_t size);
 
 /* bitmap.c */
 int hfsplus_block_allocate(struct super_block *sb, u32 size, u32 offset,
@@ -467,6 +481,9 @@ int hfsplus_file_fsync(struct file *file, loff_t start, loff_t end,
 int hfsplus_fileattr_get(struct dentry *dentry, struct file_kattr *fa);
 int hfsplus_fileattr_set(struct mnt_idmap *idmap,
 			 struct dentry *dentry, struct file_kattr *fa);
+int hfsplus_read_timestamp(struct super_block *sb, u32 cnid,
+			   const char *name, __be32 mt,
+			   time64_t *ut, bool *has_xattr);
 
 /* ioctl.c */
 long hfsplus_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
@@ -529,6 +546,21 @@ bool is_hfs_thread_record_type(u16 type)
 
 int hfsplus_brec_read_cat(struct hfs_find_data *fd, hfsplus_cat_entry *entry);
 
+/*
+ * time helpers: convert between 1904-base and 1970-base timestamps
+ *
+ * The on-disk 32-bit timestamps cover the range from
+ * HFS_MIN_TIMESTAMP_SECS (Jan. 1, 1904) till HFS_MAX_TIMESTAMP_SECS
+ * (Feb. 6, 2040). The timestamps out of this range are clamped.
+ * The on-disk value HFSPLUS_EXT_TIMESTAMP_MARK (maximal value) means
+ * that real timestamp could be stored in the internal xattr of
+ * the catalog record. It is Linux specific extension of
+ * HFS+ on-disk layout. It makes possible to support timestamps
+ * till HFSPLUS_MAX_TIMESTAMP_SECS.
+ */
+#define HFSPLUS_EXT_TIMESTAMP_MARK	cpu_to_be32(U32_MAX)
+#define HFSPLUS_MAX_TIMESTAMP_SECS	TIME64_MAX
+
 static inline time64_t __hfsp_mt2ut(__be32 mt)
 {
 	time64_t ut = (time64_t)be32_to_cpu(mt) - HFS_UTC_OFFSET;
@@ -538,10 +570,21 @@ static inline time64_t __hfsp_mt2ut(__be32 mt)
 
 static inline __be32 __hfsp_ut2mt(time64_t ut)
 {
+	ut = clamp_t(time64_t, ut,
+		     HFS_MIN_TIMESTAMP_SECS, HFS_MAX_TIMESTAMP_SECS);
 	ut += HFS_UTC_OFFSET;
 
 	return cpu_to_be32(lower_32_bits(ut));
+}
 
+static inline bool hfsp_ut_needs_xattr(time64_t ut)
+{
+	return ut >= HFS_MAX_TIMESTAMP_SECS;
+}
+
+static inline bool hfsp_mt_is_ext_timestamp(__be32 mt)
+{
+	return mt == HFSPLUS_EXT_TIMESTAMP_MARK;
 }
 
 static inline enum hfsplus_btree_mutex_classes

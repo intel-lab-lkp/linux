@@ -12,6 +12,7 @@
 
 #include "hfsplus_fs.h"
 #include "hfsplus_raw.h"
+#include "xattr.h"
 
 int hfsplus_cat_case_cmp_key(const hfsplus_btree_key *k1,
 			     const hfsplus_btree_key *k2)
@@ -102,10 +103,63 @@ void hfsplus_cat_set_perms(struct inode *inode, struct hfsplus_perm *perms)
 		perms->dev = 0;
 }
 
-static int hfsplus_cat_build_record(hfsplus_cat_entry *entry,
-		u32 cnid, struct inode *inode)
+static void hfsplus_copy_timestamps2folder(struct hfsplus_timestamps *timestamps,
+					    struct hfsplus_cat_folder *folder)
+{
+	folder->create_date = timestamps->create_date;
+	folder->content_mod_date = timestamps->content_mod_date;
+	folder->attribute_mod_date = timestamps->attribute_mod_date;
+	folder->access_date = timestamps->access_date;
+}
+
+static void hfsplus_copy_timestamps2file(struct hfsplus_timestamps *timestamps,
+					  struct hfsplus_cat_file *file)
+{
+	file->create_date = timestamps->create_date;
+	file->content_mod_date = timestamps->content_mod_date;
+	file->attribute_mod_date = timestamps->attribute_mod_date;
+	file->access_date = timestamps->access_date;
+}
+
+/*
+ * Set creation date of new inode. The creation date after February 2040
+ * is stored as HFSPLUS_EXT_TIMESTAMP_MARK in the catalog record. The real
+ * value is saved into internal xattr by hfsplus_create_cat().
+ */
+static void hfsplus_set_create_date(struct inode *inode,
+				     struct hfsplus_timestamps *timestamps)
+{
+	time64_t ut = ktime_get_real_seconds();
+	__be32 create_date = __hfsp_ut2mt(ut);
+
+	HFSPLUS_I(inode)->birthdate = ut;
+	HFSPLUS_I(inode)->create_date = create_date;
+
+	timestamps->create_date = create_date;
+	timestamps->content_mod_date = create_date;
+	timestamps->attribute_mod_date = create_date;
+	timestamps->access_date = create_date;
+}
+
+/*
+ * Real creation date of new catalog record. The hard link record
+ * inherits the creation date of the hidden directory.
+ */
+static time64_t hfsplus_cat_record_birthdate(u32 cnid, struct inode *inode)
 {
 	struct hfsplus_sb_info *sbi = HFSPLUS_SB(inode->i_sb);
+
+	if (!S_ISDIR(inode->i_mode) && cnid != inode->i_ino)
+		return HFSPLUS_I(sbi->hidden_dir)->birthdate;
+
+	return HFSPLUS_I(inode)->birthdate;
+}
+
+static int hfsplus_cat_build_record(hfsplus_cat_entry *entry,
+				    u32 cnid, struct inode *inode)
+{
+	struct hfsplus_sb_info *sbi = HFSPLUS_SB(inode->i_sb);
+	struct hfsplus_timestamps timestamps = {0};
 
 	if (S_ISDIR(inode->i_mode)) {
 		struct hfsplus_cat_folder *folder;
@@ -116,11 +170,12 @@ static int hfsplus_cat_build_record(hfsplus_cat_entry *entry,
 		if (test_bit(HFSPLUS_SB_HFSX, &sbi->flags))
 			folder->flags |= cpu_to_be16(HFSPLUS_HAS_FOLDER_COUNT);
 		folder->id = cpu_to_be32(inode->i_ino);
-		HFSPLUS_I(inode)->create_date =
-			folder->create_date =
-			folder->content_mod_date =
-			folder->attribute_mod_date =
-			folder->access_date = hfsp_now2mt();
+
+		hfsplus_set_create_date(inode, &timestamps);
+		hfsplus_copy_timestamps2folder(&timestamps, folder);
+		if (hfsp_ut_needs_xattr(HFSPLUS_I(inode)->birthdate))
+			folder->flags |= cpu_to_be16(HFSPLUS_XATTR_EXISTS);
+
 		hfsplus_cat_set_perms(inode, &folder->permissions);
 		if (inode == sbi->hidden_dir)
 			/* invisible and namelocked */
@@ -134,11 +189,23 @@ static int hfsplus_cat_build_record(hfsplus_cat_entry *entry,
 		file->type = cpu_to_be16(HFSPLUS_FILE);
 		file->flags = cpu_to_be16(HFSPLUS_FILE_THREAD_EXISTS);
 		file->id = cpu_to_be32(cnid);
-		HFSPLUS_I(inode)->create_date =
-			file->create_date =
-			file->content_mod_date =
-			file->attribute_mod_date =
-			file->access_date = hfsp_now2mt();
+
+		if (cnid == inode->i_ino) {
+			hfsplus_set_create_date(inode, &timestamps);
+		} else {
+			/*
+			 * Hard link record: don't change creation date
+			 * of the linked inode.
+			 */
+			__be32 now = __hfsp_ut2mt(ktime_get_real_seconds());
+
+			timestamps.create_date = now;
+			timestamps.content_mod_date = now;
+			timestamps.attribute_mod_date = now;
+			timestamps.access_date = now;
+		}
+		hfsplus_copy_timestamps2file(&timestamps, file);
+
 		if (cnid == inode->i_ino) {
 			hfsplus_cat_set_perms(inode, &file->permissions);
 			if (S_ISLNK(inode->i_mode)) {
@@ -169,6 +236,10 @@ static int hfsplus_cat_build_record(hfsplus_cat_entry *entry,
 			file->permissions.dev =
 				cpu_to_be32(HFSPLUS_I(inode)->linkid);
 		}
+
+		if (hfsp_ut_needs_xattr(hfsplus_cat_record_birthdate(cnid, inode)))
+			file->flags |= cpu_to_be16(HFSPLUS_XATTR_EXISTS);
+
 		return sizeof(*file);
 	}
 }
@@ -256,6 +327,7 @@ int hfsplus_create_cat(u32 cnid, struct inode *dir,
 	struct super_block *sb = dir->i_sb;
 	struct hfs_find_data fd;
 	hfsplus_cat_entry entry;
+	time64_t birthdate;
 	int entry_size;
 	int err;
 
@@ -308,6 +380,22 @@ int hfsplus_create_cat(u32 cnid, struct inode *dir,
 	err = hfs_brec_insert(&fd, &entry, entry_size);
 	if (err)
 		goto err1;
+
+	birthdate = hfsplus_cat_record_birthdate(cnid, inode);
+	if (hfsp_ut_needs_xattr(birthdate)) {
+		/*
+		 * Failure is not critical: the creation date
+		 * will be read as HFS_MAX_TIMESTAMP_SECS.
+		 */
+		err = hfsplus_set_timestamp_xattr(inode, cnid,
+						  XATTR_LINUX_CREATE_DATE_NAME,
+						  birthdate);
+		if (err) {
+			pr_warn("fail to save creation date: cnid %u, err %d\n",
+				cnid, err);
+			err = 0;
+		}
+	}
 
 	dir->i_size++;
 	if (S_ISDIR(inode->i_mode))

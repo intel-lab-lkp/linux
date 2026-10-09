@@ -206,7 +206,8 @@ attr_not_found:
 }
 
 static
-int hfsplus_create_attr_nolock(struct inode *inode, const char *name,
+int hfsplus_create_attr_nolock(struct inode *inode, u32 cnid,
+				const char *name,
 				const void *value, size_t size,
 				struct hfs_find_data *fd,
 				hfsplus_attr_entry *entry_ptr)
@@ -215,12 +216,12 @@ int hfsplus_create_attr_nolock(struct inode *inode, const char *name,
 	int entry_size;
 	int err;
 
-	hfs_dbg("name %s, ino %llu\n",
-		name ? name : NULL, inode->i_ino);
+	hfs_dbg("name %s, ino %llu, cnid %u\n",
+		name ? name : NULL, inode->i_ino, cnid);
 
 	if (name) {
 		err = hfsplus_attr_build_key(sb, fd->search_key,
-						inode->i_ino, name);
+						cnid, name);
 		if (err)
 			return err;
 	} else
@@ -229,7 +230,7 @@ int hfsplus_create_attr_nolock(struct inode *inode, const char *name,
 	/* Mac OS X supports only inline data attributes. */
 	entry_size = hfsplus_attr_build_record(entry_ptr,
 					HFSPLUS_ATTR_INLINE_DATA,
-					inode->i_ino,
+					cnid,
 					value, size);
 	if (entry_size == HFSPLUS_INVALID_ATTR_RECORD) {
 		if (size > HFSPLUS_MAX_INLINE_DATA_SIZE)
@@ -289,8 +290,8 @@ int hfsplus_create_attr(struct inode *inode,
 	if (err)
 		goto failed_create_attr;
 
-	err = hfsplus_create_attr_nolock(inode, name, value, size,
-					 &fd, entry_ptr);
+	err = hfsplus_create_attr_nolock(inode, (u32)inode->i_ino, name,
+					 value, size, &fd, entry_ptr);
 	if (err)
 		goto failed_create_attr;
 
@@ -347,18 +348,19 @@ static int __hfsplus_delete_attr(struct inode *inode, u32 cnid,
 }
 
 static
-int hfsplus_delete_attr_nolock(struct inode *inode, const char *name,
+int hfsplus_delete_attr_nolock(struct inode *inode, u32 cnid,
+				const char *name,
 				struct hfs_find_data *fd)
 {
 	struct super_block *sb = inode->i_sb;
 	int err;
 
-	hfs_dbg("name %s, ino %llu\n",
-		name ? name : NULL, inode->i_ino);
+	hfs_dbg("name %s, ino %llu, cnid %u\n",
+		name ? name : NULL, inode->i_ino, cnid);
 
 	if (name) {
 		err = hfsplus_attr_build_key(sb, fd->search_key,
-						inode->i_ino, name);
+						cnid, name);
 		if (err)
 			return err;
 	} else {
@@ -373,7 +375,7 @@ int hfsplus_delete_attr_nolock(struct inode *inode, const char *name,
 	} else if (err)
 		return err;
 
-	err = __hfsplus_delete_attr(inode, inode->i_ino, fd);
+	err = __hfsplus_delete_attr(inode, cnid, fd);
 	if (err)
 		return err;
 
@@ -403,7 +405,7 @@ int hfsplus_delete_attr(struct inode *inode, const char *name)
 	if (err)
 		goto out;
 
-	err = hfsplus_delete_attr_nolock(inode, name, &fd);
+	err = hfsplus_delete_attr_nolock(inode, (u32)inode->i_ino, name, &fd);
 	if (err)
 		goto out;
 
@@ -481,12 +483,12 @@ int hfsplus_replace_attr(struct inode *inode,
 	if (err)
 		goto failed_replace_attr;
 
-	err = hfsplus_delete_attr_nolock(inode, name, &fd);
+	err = hfsplus_delete_attr_nolock(inode, (u32)inode->i_ino, name, &fd);
 	if (err)
 		goto failed_replace_attr;
 
-	err = hfsplus_create_attr_nolock(inode, name, value, size,
-					 &fd, entry_ptr);
+	err = hfsplus_create_attr_nolock(inode, (u32)inode->i_ino, name,
+					 value, size, &fd, entry_ptr);
 	if (err)
 		goto failed_replace_attr;
 
@@ -494,6 +496,57 @@ failed_replace_attr:
 	hfs_find_exit(&fd);
 
 failed_init_replace_attr:
+	hfsplus_destroy_attr_entry(entry_ptr);
+	return err;
+}
+
+/*
+ * Create or replace the xattr @name of catalog record @cnid.
+ * The @inode is used only for access to the superblock and for
+ * marking the attributes tree as dirty. It is the caller's
+ * responsibility to set HFSPLUS_XATTR_EXISTS in the catalog record.
+ */
+int hfsplus_set_attr_cnid(struct inode *inode, u32 cnid,
+			  const char *name,
+			  const void *value, size_t size)
+{
+	struct super_block *sb = inode->i_sb;
+	struct hfs_find_data fd;
+	hfsplus_attr_entry *entry_ptr;
+	int err = 0;
+
+	hfs_dbg("name %s, ino %llu, cnid %u\n",
+		name ? name : NULL, inode->i_ino, cnid);
+
+	if (!HFSPLUS_SB(sb)->attr_tree) {
+		pr_err("attributes file doesn't exist\n");
+		return -EINVAL;
+	}
+
+	entry_ptr = hfsplus_alloc_attr_entry();
+	if (!entry_ptr)
+		return -ENOMEM;
+
+	err = hfs_find_init(HFSPLUS_SB(sb)->attr_tree, &fd);
+	if (err)
+		goto failed_init_set_attr;
+
+	/* Fail early and avoid ENOSPC during the btree operation */
+	err = hfs_bmap_reserve(fd.tree, fd.tree->depth + 1);
+	if (err)
+		goto failed_set_attr;
+
+	err = hfsplus_delete_attr_nolock(inode, cnid, name, &fd);
+	if (err && err != -ENOENT && err != -ENODATA)
+		goto failed_set_attr;
+
+	err = hfsplus_create_attr_nolock(inode, cnid, name,
+					 value, size, &fd, entry_ptr);
+
+failed_set_attr:
+	hfs_find_exit(&fd);
+
+failed_init_set_attr:
 	hfsplus_destroy_attr_entry(entry_ptr);
 	return err;
 }

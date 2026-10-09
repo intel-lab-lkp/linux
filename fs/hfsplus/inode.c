@@ -344,7 +344,8 @@ int hfsplus_getattr(struct mnt_idmap *idmap, const struct path *path,
 
 	if (request_mask & STATX_BTIME) {
 		stat->result_mask |= STATX_BTIME;
-		stat->btime = hfsp_mt2ut(hip->create_date);
+		stat->btime.tv_sec = hip->birthdate;
+		stat->btime.tv_nsec = 0;
 	}
 
 	if (inode->i_flags & S_APPEND)
@@ -598,9 +599,138 @@ void hfsplus_inode_write_fork(struct inode *inode,
 	fork->total_blocks = cpu_to_be32(HFSPLUS_I(inode)->alloc_blocks);
 }
 
+/*
+ * hfsplus_read_timestamp - convert on-disk timestamp into 1970-base one
+ * @sb: superblock
+ * @cnid: catalog record ID
+ * @name: name of internal xattr that can keep the real timestamp
+ * @mt: on-disk timestamp
+ * @ut: pointer on converted timestamp [out]
+ * @has_xattr: pointer on flag that xattr exists [out]
+ *
+ * If on-disk timestamp is equal to HFSPLUS_EXT_TIMESTAMP_MARK, then
+ * the real timestamp (after February 2040) could be stored in
+ * the internal xattr. If the xattr is absent (for example, the record
+ * has been created by Mac OS X), then HFS_MAX_TIMESTAMP_SECS is used.
+ */
+int hfsplus_read_timestamp(struct super_block *sb, u32 cnid,
+			   const char *name, __be32 mt,
+			   time64_t *ut, bool *has_xattr)
+{
+	time64_t timestamp;
+	int err;
+
+	*ut = __hfsp_mt2ut(mt);
+	*has_xattr = false;
+
+	if (!hfsp_mt_is_ext_timestamp(mt))
+		return 0;
+
+	err = hfsplus_get_timestamp_xattr(sb, cnid, name, &timestamp);
+	if (err == -ENODATA || err == -EOPNOTSUPP) {
+		/* timestamp is really equal to HFS_MAX_TIMESTAMP_SECS */
+		return 0;
+	} else if (unlikely(err)) {
+		pr_warn("fail to extract timestamp: cnid %u, name %s, err %d\n",
+			cnid, name, err);
+		return err;
+	}
+
+	if (timestamp < HFS_MAX_TIMESTAMP_SECS) {
+		pr_warn("invalid timestamp in xattr: cnid %u, name %s, timestamp %lld\n",
+			cnid, name, timestamp);
+		/* keep xattr to be deleted or overwritten */
+		*has_xattr = true;
+	} else {
+		*ut = timestamp;
+		*has_xattr = true;
+	}
+
+	return 0;
+}
+
+static int hfsplus_inode_read_timestamps(struct inode *inode,
+					 struct hfsplus_timestamps *timestamps)
+{
+	struct super_block *sb = inode->i_sb;
+	struct hfsplus_inode_info *hip = HFSPLUS_I(inode);
+	u32 cnid = inode->i_ino;
+	struct timespec64 ts = {0};
+	bool has_xattr;
+	int res = 0;
+
+	res = hfsplus_read_timestamp(sb, cnid,
+				     XATTR_LINUX_ACCESS_DATE_NAME,
+				     timestamps->access_date,
+				     &ts.tv_sec, &has_xattr);
+	if (res)
+		goto finish_read_timestamps;
+
+	inode_set_atime_to_ts(inode, ts);
+	if (has_xattr)
+		set_bit(HFSPLUS_I_ATIME_XATTR, &hip->flags);
+
+	res = hfsplus_read_timestamp(sb, cnid,
+				     XATTR_LINUX_CONTENT_MOD_DATE_NAME,
+				     timestamps->content_mod_date,
+				     &ts.tv_sec, &has_xattr);
+	if (res)
+		goto finish_read_timestamps;
+
+	inode_set_mtime_to_ts(inode, ts);
+	if (has_xattr)
+		set_bit(HFSPLUS_I_MTIME_XATTR, &hip->flags);
+
+	res = hfsplus_read_timestamp(sb, cnid,
+				     XATTR_LINUX_ATTRIBUTE_MOD_DATE_NAME,
+				     timestamps->attribute_mod_date,
+				     &ts.tv_sec, &has_xattr);
+	if (res)
+		goto finish_read_timestamps;
+
+	inode_set_ctime_to_ts(inode, ts);
+	if (has_xattr)
+		set_bit(HFSPLUS_I_CTIME_XATTR, &hip->flags);
+
+	res = hfsplus_read_timestamp(sb, cnid,
+				     XATTR_LINUX_CREATE_DATE_NAME,
+				     timestamps->create_date,
+				     &hip->birthdate, &has_xattr);
+	if (res)
+		goto finish_read_timestamps;
+
+	hip->create_date = timestamps->create_date;
+
+finish_read_timestamps:
+	return res;
+}
+
+static inline void
+hfsplus_copy_folder2timestamps(struct hfsplus_cat_folder *folder,
+				struct hfsplus_timestamps *timestamps)
+{
+	timestamps->create_date = folder->create_date;
+	timestamps->content_mod_date = folder->content_mod_date;
+	timestamps->attribute_mod_date = folder->attribute_mod_date;
+	timestamps->access_date = folder->access_date;
+	timestamps->backup_date = folder->backup_date;
+}
+
+static inline void
+hfsplus_copy_file2timestamps(struct hfsplus_cat_file *file,
+			     struct hfsplus_timestamps *timestamps)
+{
+	timestamps->create_date = file->create_date;
+	timestamps->content_mod_date = file->content_mod_date;
+	timestamps->attribute_mod_date = file->attribute_mod_date;
+	timestamps->access_date = file->access_date;
+	timestamps->backup_date = file->backup_date;
+}
+
 int hfsplus_cat_read_inode(struct inode *inode, struct hfs_find_data *fd)
 {
 	hfsplus_cat_entry entry;
+	struct hfsplus_timestamps timestamps = {0};
 	int res = 0;
 	u16 type;
 
@@ -622,12 +752,14 @@ int hfsplus_cat_read_inode(struct inode *inode, struct hfs_find_data *fd)
 			goto out;
 		set_nlink(inode, 1);
 		inode->i_size = 2 + be32_to_cpu(folder->valence);
-		inode_set_atime_to_ts(inode, hfsp_mt2ut(folder->access_date));
-		inode_set_mtime_to_ts(inode,
-				      hfsp_mt2ut(folder->content_mod_date));
-		inode_set_ctime_to_ts(inode,
-				      hfsp_mt2ut(folder->attribute_mod_date));
-		HFSPLUS_I(inode)->create_date = folder->create_date;
+
+		hfsplus_copy_folder2timestamps(folder, &timestamps);
+		res = hfsplus_inode_read_timestamps(inode, &timestamps);
+		if (res) {
+			res = -EIO;
+			goto out;
+		}
+
 		HFSPLUS_I(inode)->fs_blocks = 0;
 		if (folder->flags & cpu_to_be16(HFSPLUS_HAS_FOLDER_COUNT)) {
 			HFSPLUS_I(inode)->subfolders =
@@ -668,12 +800,13 @@ int hfsplus_cat_read_inode(struct inode *inode, struct hfs_find_data *fd)
 			init_special_inode(inode, inode->i_mode,
 					   be32_to_cpu(file->permissions.dev));
 		}
-		inode_set_atime_to_ts(inode, hfsp_mt2ut(file->access_date));
-		inode_set_mtime_to_ts(inode,
-				      hfsp_mt2ut(file->content_mod_date));
-		inode_set_ctime_to_ts(inode,
-				      hfsp_mt2ut(file->attribute_mod_date));
-		HFSPLUS_I(inode)->create_date = file->create_date;
+
+		hfsplus_copy_file2timestamps(file, &timestamps);
+		res = hfsplus_inode_read_timestamps(inode, &timestamps);
+		if (res) {
+			res = -EIO;
+			goto out;
+		}
 	} else {
 		pr_err("bad catalog entry used to create inode\n");
 		res = -EIO;
@@ -682,12 +815,126 @@ out:
 	return res;
 }
 
+struct hfsplus_xattr_changes {
+	bool added;
+	bool removed;
+};
+
+/*
+ * Convert @ts into on-disk timestamp. The timestamp after February 2040
+ * is stored as HFSPLUS_EXT_TIMESTAMP_MARK with the real value in
+ * the internal xattr @name. The stale xattr is removed if timestamp
+ * becomes representable by on-disk field.
+ */
+static int hfsplus_inode_save_timestamp(struct inode *inode,
+					const char *name, int xattr_bit,
+					struct timespec64 ts, __be32 *date,
+					struct hfsplus_xattr_changes *xattr)
+{
+	struct hfsplus_inode_info *hip = HFSPLUS_I(inode);
+	time64_t stored;
+	int err;
+
+	*date = __hfsp_ut2mt(ts.tv_sec);
+
+	if (hfsp_ut_needs_xattr(ts.tv_sec)) {
+		/* don't rewrite xattr if nothing has been changed */
+		if (test_bit(xattr_bit, &hip->flags)) {
+			err = hfsplus_get_timestamp_xattr(inode->i_sb,
+							  inode->i_ino,
+							  name,
+							  &stored);
+			if (!err && stored == ts.tv_sec)
+				return 0;
+		}
+
+		err = hfsplus_set_timestamp_xattr(inode, inode->i_ino,
+						  name, ts.tv_sec);
+		if (err) {
+			clear_bit(xattr_bit, &hip->flags);
+			return err;
+		}
+
+		set_bit(xattr_bit, &hip->flags);
+		xattr->added = true;
+	} else if (test_bit(xattr_bit, &hip->flags)) {
+		err = hfsplus_remove_timestamp_xattr(inode, name);
+		if (err)
+			return err;
+
+		clear_bit(xattr_bit, &hip->flags);
+		xattr->removed = true;
+	}
+
+	return 0;
+}
+
+static void hfsplus_inode_save_timestamps(struct inode *inode,
+					  struct hfsplus_timestamps *timestamps,
+					  struct hfsplus_xattr_changes *changes)
+{
+	int res;
+
+	/*
+	 * Failure of xattr operation is not critical. The timestamp
+	 * is clamped by HFS_MAX_TIMESTAMP_SECS in such case.
+	 * But the rest of the catalog record must be saved anyway.
+	 */
+
+	res = hfsplus_inode_save_timestamp(inode,
+					   XATTR_LINUX_ACCESS_DATE_NAME,
+					   HFSPLUS_I_ATIME_XATTR,
+					   inode_get_atime(inode),
+					   &timestamps->access_date,
+					   changes);
+	if (res) {
+		pr_warn_ratelimited("fail to save access date: ino %llu, err %d\n",
+				    inode->i_ino, res);
+	}
+
+	res = hfsplus_inode_save_timestamp(inode,
+					   XATTR_LINUX_CONTENT_MOD_DATE_NAME,
+					   HFSPLUS_I_MTIME_XATTR,
+					   inode_get_mtime(inode),
+					   &timestamps->content_mod_date,
+					   changes);
+	if (res) {
+		pr_warn_ratelimited("fail to save content mod date: ino %llu, err %d\n",
+				    inode->i_ino, res);
+	}
+
+	res = hfsplus_inode_save_timestamp(inode,
+					   XATTR_LINUX_ATTRIBUTE_MOD_DATE_NAME,
+					   HFSPLUS_I_CTIME_XATTR,
+					   inode_get_ctime(inode),
+					   &timestamps->attribute_mod_date,
+					   changes);
+	if (res) {
+		pr_warn_ratelimited("fail to save attribute mod date: ino %llu, err %d\n",
+				    inode->i_ino, res);
+	}
+}
+
+static inline __be16
+hfsplus_update_xattr_exists_flag(struct inode *inode, __be16 flags,
+				 struct hfsplus_xattr_changes *xattr)
+{
+	if (xattr->added)
+		flags |= cpu_to_be16(HFSPLUS_XATTR_EXISTS);
+	else if (xattr->removed && !hfsplus_attr_exists(inode, NULL))
+		flags &= cpu_to_be16(~HFSPLUS_XATTR_EXISTS);
+
+	return flags;
+}
+
 int hfsplus_cat_write_inode(struct inode *inode)
 {
 	struct inode *main_inode = inode;
 	struct hfs_btree *tree = HFSPLUS_SB(inode->i_sb)->cat_tree;
 	struct hfs_find_data fd;
 	hfsplus_cat_entry entry;
+	struct hfsplus_timestamps timestamps = {0};
+	struct hfsplus_xattr_changes changes = {0};
 	int res = 0;
 
 	hfs_dbg("inode->i_ino %llu\n", inode->i_ino);
@@ -718,9 +965,15 @@ int hfsplus_cat_write_inode(struct inode *inode)
 					sizeof(struct hfsplus_cat_folder));
 		/* simple node checks? */
 		hfsplus_cat_set_perms(inode, &folder->permissions);
-		folder->access_date = hfsp_ut2mt(inode_get_atime(inode));
-		folder->content_mod_date = hfsp_ut2mt(inode_get_mtime(inode));
-		folder->attribute_mod_date = hfsp_ut2mt(inode_get_ctime(inode));
+
+		hfsplus_inode_save_timestamps(inode, &timestamps, &changes);
+		folder->access_date = timestamps.access_date;
+		folder->content_mod_date = timestamps.content_mod_date;
+		folder->attribute_mod_date = timestamps.attribute_mod_date;
+		folder->flags = hfsplus_update_xattr_exists_flag(inode,
+								 folder->flags,
+								 &changes);
+
 		folder->valence = cpu_to_be32(inode->i_size - 2);
 		if (folder->flags & cpu_to_be16(HFSPLUS_HAS_FOLDER_COUNT)) {
 			folder->subfolders =
@@ -753,9 +1006,15 @@ int hfsplus_cat_write_inode(struct inode *inode)
 			file->flags |= cpu_to_be16(HFSPLUS_FILE_LOCKED);
 		else
 			file->flags &= cpu_to_be16(~HFSPLUS_FILE_LOCKED);
-		file->access_date = hfsp_ut2mt(inode_get_atime(inode));
-		file->content_mod_date = hfsp_ut2mt(inode_get_mtime(inode));
-		file->attribute_mod_date = hfsp_ut2mt(inode_get_ctime(inode));
+
+		hfsplus_inode_save_timestamps(inode, &timestamps, &changes);
+		file->access_date = timestamps.access_date;
+		file->content_mod_date = timestamps.content_mod_date;
+		file->attribute_mod_date = timestamps.attribute_mod_date;
+		file->flags = hfsplus_update_xattr_exists_flag(inode,
+							       file->flags,
+							       &changes);
+
 		hfs_bnode_write(fd.bnode, &entry, fd.entryoffset,
 					 sizeof(struct hfsplus_cat_file));
 	}
