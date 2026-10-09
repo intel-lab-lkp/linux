@@ -48,6 +48,16 @@ static inline int ihex_validate_fw(const struct firmware *fw)
 {
 	const struct ihex_binrec *end, *rec;
 
+	/*
+	 * The firmware must be large enough to hold at least the mandatory
+	 * zero-length terminating record. Without this check a short (e.g.
+	 * empty) image makes the fw->size - sizeof(*end) subtraction below
+	 * wrap around, yielding a bogus 'end' pointer and an out-of-bounds
+	 * walk over the records.
+	 */
+	if (fw->size < sizeof(*end))
+		return -EINVAL;
+
 	rec = (const void *)fw->data;
 	end = (const void *)&fw->data[fw->size - sizeof(*end)];
 
