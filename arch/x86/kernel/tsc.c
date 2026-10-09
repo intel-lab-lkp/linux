@@ -253,7 +253,7 @@ noinstr u64 native_sched_clock(void)
 	 */
 
 	/* No locking but a rare wrong value is not a big deal: */
-	return (jiffies_64 - INITIAL_JIFFIES) * (1000000000 / HZ);
+	return (jiffies_64 - INITIAL_JIFFIES) * (NSEC_PER_SEC / HZ);
 }
 
 /*
@@ -401,11 +401,11 @@ static unsigned long calc_pmtimer_ref(u64 deltatsc, u64 pm1, u64 pm2)
 }
 
 #define CAL_MS		10
-#define CAL_LATCH	(PIT_TICK_RATE / (1000 / CAL_MS))
+#define CAL_LATCH	(PIT_TICK_RATE / (MSEC_PER_SEC / CAL_MS))
 #define CAL_PIT_LOOPS	1000
 
 #define CAL2_MS		50
-#define CAL2_LATCH	(PIT_TICK_RATE / (1000 / CAL2_MS))
+#define CAL2_LATCH	(PIT_TICK_RATE / (MSEC_PER_SEC / CAL2_MS))
 #define CAL2_PIT_LOOPS	5000
 
 
@@ -552,7 +552,7 @@ static inline int pit_expect_msb(unsigned char val, u64 *tscp, unsigned long *de
  * more than 50ms on it.
  */
 #define MAX_QUICK_PIT_MS 50
-#define MAX_QUICK_PIT_ITERATIONS (MAX_QUICK_PIT_MS * PIT_TICK_RATE / 1000 / 256)
+#define MAX_QUICK_PIT_ITERATIONS (MAX_QUICK_PIT_MS * PIT_TICK_RATE / MSEC_PER_SEC / 256)
 
 static unsigned long quick_pit_calibrate(void)
 {
