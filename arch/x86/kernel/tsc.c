@@ -341,6 +341,7 @@ __setup("tsc=", tsc_setup);
 
 #define MAX_RETRIES		5
 #define TSC_DEFAULT_THRESHOLD	0x20000
+#define TSC_CALIBRATE_MULT	1000000LL
 
 /*
  * Read TSC and the reference counters. Take care of any disturbances
@@ -375,7 +376,7 @@ static unsigned long calc_hpet_ref(u64 deltatsc, u64 hpet1, u64 hpet2)
 		hpet2 += 0x100000000ULL;
 	hpet2 -= hpet1;
 	tmp = ((u64)hpet2 * hpet_readl(HPET_PERIOD));
-	do_div(tmp, 1000000);
+	do_div(tmp, FSEC_PER_SEC / HZ_PER_KHZ / TSC_CALIBRATE_MULT);
 	deltatsc = div64_u64(deltatsc, tmp);
 
 	return (unsigned long) deltatsc;
@@ -394,7 +395,7 @@ static unsigned long calc_pmtimer_ref(u64 deltatsc, u64 pm1, u64 pm2)
 	if (pm2 < pm1)
 		pm2 += (u64)ACPI_PM_OVRRUN;
 	pm2 -= pm1;
-	tmp = pm2 * 1000000LL * HZ_PER_KHZ;
+	tmp = pm2 * TSC_CALIBRATE_MULT * HZ_PER_KHZ;
 	do_div(tmp, PMTMR_TICKS_PER_SEC);
 	do_div(deltatsc, tmp);
 
@@ -808,7 +809,7 @@ static unsigned long pit_hpet_ptimer_calibrate_cpu(void)
 		if (tsc1 == ULLONG_MAX || tsc2 == ULLONG_MAX)
 			continue;
 
-		tsc2 = (tsc2 - tsc1) * 1000000LL;
+		tsc2 = (tsc2 - tsc1) * TSC_CALIBRATE_MULT;
 		if (hpet)
 			tsc2 = calc_hpet_ref(tsc2, ref1, ref2);
 		else
@@ -1336,7 +1337,7 @@ restart:
 		goto restart;
 
 	delta = tsc_stop - tsc_start;
-	delta *= 1000000LL;
+	delta *= TSC_CALIBRATE_MULT;
 	if (hpet)
 		freq = calc_hpet_ref(delta, ref_start, ref_stop);
 	else
