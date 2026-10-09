@@ -1922,10 +1922,14 @@ error:
 	}
 
 	if (hcd) {
-		kfree(max3421_hcd->tx);
-		kfree(max3421_hcd->rx);
+		/*
+		 * The SPI thread uses the tx/rx buffers, so it must be
+		 * stopped before they are freed.
+		 */
 		if (!IS_ERR_OR_NULL(max3421_hcd->spi_thread))
 			kthread_stop(max3421_hcd->spi_thread);
+		kfree(max3421_hcd->tx);
+		kfree(max3421_hcd->rx);
 		usb_put_hcd(hcd);
 	}
 	return retval;
