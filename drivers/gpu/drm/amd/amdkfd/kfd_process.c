@@ -1761,6 +1761,7 @@ err_alloc_id:
 	kfd_process_free_id(process);
 err_register_notifier:
 	hash_del_rcu(&process->kfd_processes);
+	synchronize_srcu(&kfd_processes_srcu);
 	svm_range_list_fini(process);
 err_init_svm_range_list:
 	kfd_process_free_outstanding_kfd_bos(process);
