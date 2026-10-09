@@ -19,6 +19,7 @@
 #include <linux/pci.h>
 #include <linux/pci_regs.h>
 #include <linux/platform_device.h>
+#include <linux/suspend.h>
 
 #include "../pci-host-common.h"
 #include "../../pci.h"
@@ -1231,7 +1232,14 @@ int dw_pcie_suspend_noirq(struct dw_pcie *pci)
 	if (!dw_pcie_link_up(pci))
 		goto stop_link;
 
-	if (!pci_host_common_d3cold_possible(pci->pp.bridge, &pme_capable))
+	/*
+	 * Leaving the controller powered is only safe if it keeps its state
+	 * until resume. A hibernation image is resumed after a power cycle, by
+	 * a kernel that may not have brought this controller up, so only a
+	 * suspend may leave it powered.
+	 */
+	if (pm_suspend_in_progress() &&
+	    !pci_host_common_d3cold_possible(pci->pp.bridge, &pme_capable))
 		return 0;
 
 	if (pci->pp.ops->pme_turn_off) {
