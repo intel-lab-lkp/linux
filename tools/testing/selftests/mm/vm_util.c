@@ -17,7 +17,6 @@
 #define MAX_LINE_LENGTH 500
 #define PAGEMAP_PATH "/proc/self/pagemap"
 #define KPAGEFLAGS_PATH "/proc/kpageflags"
-#define MAX_NR_ORDERS 20
 
 unsigned int __page_size;
 unsigned int __page_shift;
@@ -393,34 +392,72 @@ err_out:
 	return entry;
 }
 
-static bool check_large_folios(int pagemap_fd, int kpageflags_fd,
-		void *addr, size_t len, int nr_hpages,
-		uint64_t hpage_size)
+/**
+ * is_range_backed_by_order() - check that a range is backed by @order folios
+ * @start: start of the range, a multiple of the folio size
+ * @len: length of the range in bytes, a multiple of the folio size
+ * @order: the folio order to check for
+ * @pagemap_fd: open /proc/<pid>/pagemap of the range's owner
+ * @kpageflags_fd: open /proc/kpageflags
+ *
+ * Every folio-sized, folio-aligned part of the range must map one folio of
+ * @order, head to tail, with the head at the start of the part.  A part
+ * backed by several smaller folios fails, and so does a folio mapped off
+ * its natural alignment.
+ *
+ * Returns: true if the whole range is backed that way, false otherwise.
+ */
+bool is_range_backed_by_order(char *start, size_t len, int order,
+			      int pagemap_fd, int kpageflags_fd)
 {
-	int order = 0, pagesize = getpagesize();
-	unsigned int nr_pages = hpage_size / pagesize;
-	int orders[MAX_NR_ORDERS], status;
-	bool ret = false;
+	const unsigned long nr_pages = 1UL << order;
+	const size_t folio_size = nr_pages * psize();
+	char *vaddr;
 
-	if (!nr_pages)
-		ksft_exit_fail_msg("invalid hugepage size\n");
+	if ((uintptr_t)start % folio_size || len % folio_size)
+		return false;
 
-	order = 31 - __builtin_clz(nr_pages);
-	if (!order || order >= MAX_NR_ORDERS)
-		ksft_exit_fail_msg("invalid order\n");
+	for (vaddr = start; vaddr < start + len; vaddr += folio_size) {
+		const unsigned long pfn = pagemap_get_pfn(pagemap_fd, vaddr);
+		unsigned long i;
 
-	memset(orders, 0, sizeof(int) * MAX_NR_ORDERS);
+		/* Not present, or a tail page */
+		if (pfn == -1UL || pfn % nr_pages)
+			return false;
 
-	status = gather_folio_orders(addr, len, pagemap_fd,
-			kpageflags_fd, orders, MAX_NR_ORDERS);
-	if (status)
-		goto out;
+		for (i = 1; i < nr_pages; i++) {
+			char *page = vaddr + i * psize();
 
-	if (orders[order] == nr_hpages)
-		ret = true;
+			if (pagemap_get_pfn(pagemap_fd, page) != pfn + i)
+				return false;
+		}
 
-out:
-	return ret;
+		if (!is_backed_by_folio(vaddr, order, pagemap_fd, kpageflags_fd))
+			return false;
+	}
+
+	return true;
+}
+
+/*
+ * How many hpage_size-aligned windows of the range are one folio of that
+ * size each, with the folio's head at the window start.  A folio mapped off
+ * its alignment or split across two windows counts for neither.
+ */
+static int count_windows_at_order(char *start, size_t len, uint64_t hpage_size,
+				  int pagemap_fd, int kpageflags_fd)
+{
+	const int order = sz2ord(hpage_size, psize());
+	int nr_windows = 0;
+	char *addr;
+
+	for (addr = start; addr + hpage_size <= start + len; addr += hpage_size) {
+		if (is_range_backed_by_order(addr, hpage_size, order,
+					     pagemap_fd, kpageflags_fd))
+			nr_windows++;
+	}
+
+	return nr_windows;
 }
 
 enum check_huge_type {
@@ -467,8 +504,8 @@ static bool __check_huge(void *addr, size_t len, int nr_hpages,
 	kpageflags_fd = kpageflags_fd_get();
 
 	if (!check_pmd_mapping &&
-	    !check_large_folios(pagemap_fd, kpageflags_fd,
-				addr, len, nr_hpages, hpage_size))
+	    nr_hpages != count_windows_at_order(start, len, hpage_size,
+						pagemap_fd, kpageflags_fd))
 		return false;
 
 	for (; start < end; start += scan_mapping_size) {
@@ -604,52 +641,6 @@ fail:
 	ksft_exit_fail_msg("Failed to get folio info\n");
 }
 
-/**
- * is_range_backed_by_order() - check that a range is backed by @order folios
- * @start: start of the range, a multiple of the folio size
- * @len: length of the range in bytes, a multiple of the folio size
- * @order: the folio order to check for
- * @pagemap_fd: open /proc/<pid>/pagemap of the range's owner
- * @kpageflags_fd: open /proc/kpageflags
- *
- * Every folio-sized, folio-aligned part of the range must map one folio of
- * @order, head to tail, with the head at the start of the part.  A part
- * backed by several smaller folios fails, and so does a folio mapped off
- * its natural alignment.
- *
- * Returns: true if the whole range is backed that way, false otherwise.
- */
-bool is_range_backed_by_order(char *start, size_t len, int order,
-			      int pagemap_fd, int kpageflags_fd)
-{
-	const unsigned long nr_pages = 1UL << order;
-	const size_t folio_size = nr_pages * psize();
-	char *vaddr;
-
-	if ((uintptr_t)start % folio_size || len % folio_size)
-		return false;
-
-	for (vaddr = start; vaddr < start + len; vaddr += folio_size) {
-		const unsigned long pfn = pagemap_get_pfn(pagemap_fd, vaddr);
-		unsigned long i;
-
-		/* Not present, or a tail page */
-		if (pfn == -1UL || pfn % nr_pages)
-			return false;
-
-		for (i = 1; i < nr_pages; i++) {
-			char *page = vaddr + i * psize();
-
-			if (pagemap_get_pfn(pagemap_fd, page) != pfn + i)
-				return false;
-		}
-
-		if (!is_backed_by_folio(vaddr, order, pagemap_fd, kpageflags_fd))
-			return false;
-	}
-
-	return true;
-}
 
 #define TRACEFS_ROOT "/sys/kernel/tracing"
 
