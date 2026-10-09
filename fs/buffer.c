@@ -399,17 +399,20 @@ static void bh_complete_write(struct buffer_head *bh, bool success)
 	}
 }
 
-static void bh_complete_folio_write(struct folio *folio, struct buffer_head *bh)
+static void bh_complete_folio_write(struct folio *folio, struct buffer_head *bh,
+				    unsigned nr)
 {
 	struct buffer_head *first = folio_buffers(folio);
-	struct buffer_head *tmp;
+	struct buffer_head *tmp = bh;
 	unsigned long flags;
+	unsigned i;
 
 	spin_lock_irqsave(&first->b_uptodate_lock, flags);
 
-	clear_buffer_async_write(bh);
-	unlock_buffer(bh);
-	tmp = bh->b_this_page;
+	for (i = 0; i < nr; i++, tmp = tmp->b_this_page) {
+		clear_buffer_async_write(tmp);
+		unlock_buffer(tmp);
+	}
 	while (tmp != bh) {
 		if (buffer_async_write(tmp)) {
 			BUG_ON(!buffer_locked(tmp));
@@ -441,7 +444,7 @@ void bh_end_async_write(struct bio *bio)
 	struct folio *folio = bh->b_folio;
 
 	bh_complete_write(bh, success);
-	bh_complete_folio_write(folio, bh);
+	bh_complete_folio_write(folio, bh, 1);
 }
 EXPORT_SYMBOL(bh_end_async_write);
 
@@ -1164,6 +1167,100 @@ void bh_submit(struct buffer_head *bh, blk_opf_t opf, bio_end_io_t end_io)
 }
 EXPORT_SYMBOL(bh_submit);
 
+static void __bh_bio_append(struct bio **biop, struct buffer_head *bh,
+			    blk_opf_t opf, enum rw_hint write_hint,
+			    struct writeback_control *wbc, bio_end_io_t end_bio)
+{
+	const enum req_op op = opf & REQ_OP_MASK;
+	sector_t sector = bh->b_blocknr * (bh->b_size >> 9);
+	struct bio *bio = *biop;
+
+	BUG_ON(!buffer_locked(bh));
+	BUG_ON(!buffer_mapped(bh));
+	BUG_ON(buffer_delay(bh));
+	BUG_ON(buffer_unwritten(bh));
+
+	/*
+	 * Only clear out a write error when rewriting
+	 */
+	if (test_set_buffer_req(bh) && (op == REQ_OP_WRITE))
+		clear_buffer_write_io_error(bh);
+
+	/*
+	 * The open bio can only be extended with a buffer head if it passes
+	 * every check below. If any one of them fails, submit the bio as it
+	 * is and start a new one for this buffer head.
+	 *
+	 * The buffer head does not fit if:
+	 * - it is written to a different block device
+	 * - its REQ_META or REQ_PRIO property differs from the bio's, as
+	 *   these apply to the bio as a whole
+	 * - its write hint differs from the bio's
+	 * - its folio is dropbehind, but the bio would complete in IRQ
+	 *   context instead of task context
+	 * - it does not start on disk right where the bio's data ends, for
+	 *   example because the file is fragmented
+	 * - its fscrypt key differs or its data unit numbers would not
+	 *   continue those of the bio
+	 * - bio_add_folio() cannot take it, for example because the bio is
+	 *   full. This is checked last because it adds the buffer on success.
+	 */
+	if (bio &&
+	    (bio->bi_bdev != bh->b_bdev ||
+	     !!(bio->bi_opf & REQ_META) != buffer_meta(bh) ||
+	     !!(bio->bi_opf & REQ_PRIO) != buffer_prio(bh) ||
+	     bio->bi_write_hint != write_hint ||
+	     (!bio_flagged(bio, BIO_COMPLETE_IN_TASK) &&
+	      folio_test_dropbehind(bh->b_folio)) ||
+	     bio_end_sector(bio) != sector ||
+	     !fscrypt_mergeable_bio(bio, bh->b_folio->mapping->host,
+				    folio_pos(bh->b_folio) + bh_offset(bh)) ||
+	     !bio_add_folio(bio, bh->b_folio, bh->b_size, bh_offset(bh)))) {
+		guard_bio_eod(bio);
+		blk_crypto_submit_bio(bio);
+		bio = NULL;
+	}
+
+	if (!bio) {
+		bio = bh_bio_alloc(bh, opf, write_hint, end_bio);
+		if (wbc)
+			wbc_init_bio(wbc, bio);
+		bio_add_folio_nofail(bio, bh->b_folio, bh->b_size, bh_offset(bh));
+	}
+
+	if (wbc)
+		wbc_account_cgroup_owner(wbc, bh->b_folio, bh->b_size);
+
+	*biop = bio;
+}
+
+static void bh_end_async_write_range(struct bio *bio)
+{
+	bool success = bio->bi_status == BLK_STS_OK;
+	bool quiet = bio_flagged(bio, BIO_QUIET);
+	struct folio_iter fi;
+
+	bio_for_each_folio_all(fi, bio) {
+		struct folio *folio = fi.folio;
+		struct buffer_head *first_bh = folio_buffers(folio);
+		struct buffer_head *bh;
+		unsigned int i, nr;
+
+		while (bh_offset(first_bh) < fi.offset)
+			first_bh = first_bh->b_this_page;
+
+		nr = DIV_ROUND_UP(fi.length, first_bh->b_size);
+		for (i = 0, bh = first_bh; i < nr; i++, bh = bh->b_this_page) {
+			if (quiet)
+				set_bit(BH_Quiet, &bh->b_state);
+			bh_complete_write(bh, success);
+		}
+
+		bh_complete_folio_write(folio, first_bh, nr);
+	}
+	bio_put(bio);
+}
+
 static struct buffer_head *__bread_slow(struct buffer_head *bh)
 {
 	lock_buffer(bh);
@@ -1745,6 +1842,7 @@ int __block_write_full_folio(struct inode *inode, struct folio *folio,
 	size_t blocksize;
 	int nr_underway = 0;
 	blk_opf_t write_flags = wbc_to_write_flags(wbc);
+	struct bio *bio;
 
 	head = folio_create_buffers(folio, inode,
 				    (1 << BH_Dirty) | (1 << BH_Uptodate));
@@ -1828,16 +1926,23 @@ int __block_write_full_folio(struct inode *inode, struct folio *folio,
 	BUG_ON(folio_test_writeback(folio));
 	folio_start_writeback(folio);
 
+	bio = NULL;
 	do {
 		struct buffer_head *next = bh->b_this_page;
 		if (buffer_async_write(bh)) {
-			__bh_submit(bh, REQ_OP_WRITE | write_flags,
+			__bh_bio_append(&bio, bh, REQ_OP_WRITE | write_flags,
 					inode->i_write_hint, wbc,
-					bh_end_async_write);
+					bh_end_async_write_range);
 			nr_underway++;
 		}
 		bh = next;
 	} while (bh != head);
+
+	if (bio) {
+		guard_bio_eod(bio);
+		blk_crypto_submit_bio(bio);
+	}
+
 	folio_unlock(folio);
 
 	err = 0;
