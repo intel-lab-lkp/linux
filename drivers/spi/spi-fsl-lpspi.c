@@ -122,6 +122,7 @@ struct fsl_lpspi_data {
 	void (*rx)(struct fsl_lpspi_data *fsl_lpspi);
 
 	u32 remain;
+	u32 reg_ier;
 	u8 watermark;
 	u8 txfifosize;
 	u8 rxfifosize;
@@ -199,6 +200,7 @@ LPSPI_BUF_TX(u32)
 static void fsl_lpspi_intctrl(struct fsl_lpspi_data *fsl_lpspi,
 			      unsigned int enable)
 {
+	fsl_lpspi->reg_ier = enable;
 	writel(enable, fsl_lpspi->base + IMX7ULP_IER);
 }
 
@@ -525,7 +527,7 @@ static int fsl_lpspi_prepare_message(struct spi_controller *controller,
 	fsl_lpspi_set_cmd(fsl_lpspi);
 
 	/* No IRQs */
-	writel(0, fsl_lpspi->base + IMX7ULP_IER);
+	fsl_lpspi_intctrl(fsl_lpspi, 0);
 
 	/* Controller disable, clear FIFOs, clear status */
 	writel(CR_RRF | CR_RTF, fsl_lpspi->base + IMX7ULP_CR);
@@ -808,7 +810,7 @@ static irqreturn_t fsl_lpspi_isr(int irq, void *dev_id)
 	u32 temp_SR, temp_IER;
 	struct fsl_lpspi_data *fsl_lpspi = dev_id;
 
-	temp_IER = readl(fsl_lpspi->base + IMX7ULP_IER);
+	temp_IER = fsl_lpspi->reg_ier;
 	fsl_lpspi_intctrl(fsl_lpspi, 0);
 	temp_SR = readl(fsl_lpspi->base + IMX7ULP_SR);
 
