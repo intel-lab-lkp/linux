@@ -1673,9 +1673,9 @@ static void nvme_poll_irqdisable(struct nvme_queue *nvmeq)
 
 	irq = pci_irq_vector(pdev, nvmeq->cq_vector);
 	disable_irq(irq);
-	spin_lock(&nvmeq->cq_poll_lock);
+	spin_lock_bh(&nvmeq->cq_poll_lock);
 	nvme_poll_cq(nvmeq, NULL);
-	spin_unlock(&nvmeq->cq_poll_lock);
+	spin_unlock_bh(&nvmeq->cq_poll_lock);
 	enable_irq(irq);
 }
 
@@ -1688,9 +1688,9 @@ static int nvme_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
 	    !nvme_cqe_pending(nvmeq))
 		return 0;
 
-	spin_lock(&nvmeq->cq_poll_lock);
+	spin_lock_bh(&nvmeq->cq_poll_lock);
 	found = nvme_poll_cq(nvmeq, iob);
-	spin_unlock(&nvmeq->cq_poll_lock);
+	spin_unlock_bh(&nvmeq->cq_poll_lock);
 
 	return found;
 }
@@ -2086,9 +2086,9 @@ static void nvme_reap_pending_cqes(struct nvme_dev *dev)
 	int i;
 
 	for (i = dev->ctrl.queue_count - 1; i > 0; i--) {
-		spin_lock(&dev->queues[i].cq_poll_lock);
+		spin_lock_bh(&dev->queues[i].cq_poll_lock);
 		nvme_poll_cq(&dev->queues[i], NULL);
-		spin_unlock(&dev->queues[i].cq_poll_lock);
+		spin_unlock_bh(&dev->queues[i].cq_poll_lock);
 	}
 }
 
