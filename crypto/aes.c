@@ -18,7 +18,10 @@
 #include <crypto/internal/hash.h>
 #include <crypto/internal/skcipher.h>
 #include <crypto/scatterwalk.h>
+#include <crypto/utils.h>
+#include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/string.h>
 
 static_assert(__alignof__(struct aes_key) <= CRYPTO_MINALIGN);
 static_assert(__alignof__(struct aes_enckey) <= CRYPTO_MINALIGN);
@@ -95,6 +98,71 @@ static int __maybe_unused crypto_aes_cmac_digest(struct shash_desc *desc,
 	return 0;
 }
 
+static int crypto_cmac_export_core(struct shash_desc *desc, void *out)
+{
+	struct aes_cmac_ctx *ctx = AES_CMAC_CTX(desc);
+	struct aes_cmac_ctx ctx1;
+	u8 *h = ctx->h;
+
+	if (!ctx->partial_len)
+		;
+	else if (ctx->partial_len != AES_BLOCK_SIZE)
+		return -EINVAL;
+	else {
+		union {
+			long l;
+			char c;
+		} u = {};
+
+		BUILD_BUG_ON(sizeof(u) >= AES_BLOCK_SIZE);
+		ctx1 = *ctx;
+		aes_cmac_update(&ctx1, &u.c, sizeof(u));
+		h = ctx1.h;
+	}
+
+	memcpy(out, h, AES_BLOCK_SIZE);
+	memzero_explicit(&ctx1, sizeof(ctx1));
+	return 0;
+}
+
+static int crypto_cmac_import_core(struct shash_desc *desc, const void *in)
+{
+	struct aes_cmac_ctx *ctx = AES_CMAC_CTX(desc);
+
+	ctx->key = AES_CMAC_KEY(desc->tfm);
+	memcpy(ctx->h, in, AES_BLOCK_SIZE);
+	ctx->partial_len = 0;
+	return 0;
+}
+
+static int crypto_cmac_export(struct shash_desc *desc, void *out)
+{
+	struct aes_cmac_ctx *ctx = AES_CMAC_CTX(desc);
+	unsigned int partial = ctx->partial_len;
+	u8 *p = out;
+
+	memcpy(p, ctx->h, AES_BLOCK_SIZE);
+	memset(p + AES_BLOCK_SIZE, 0, AES_BLOCK_SIZE);
+	p[AES_BLOCK_SIZE * 2] = partial;
+	return 0;
+}
+
+static int crypto_cmac_import(struct shash_desc *desc, const void *in)
+{
+	struct aes_cmac_ctx *ctx = AES_CMAC_CTX(desc);
+	unsigned int partial;
+	const u8 *p = in;
+
+	crypto_cmac_import_core(desc, p);
+	p += AES_BLOCK_SIZE;
+	partial = p[AES_BLOCK_SIZE];
+	if (partial > AES_BLOCK_SIZE)
+		return -EOVERFLOW;
+	crypto_xor(ctx->h, p, partial);
+	ctx->partial_len = partial;
+	return 0;
+}
+
 #define AES_CBCMAC_KEY(tfm) ((struct aes_enckey *)crypto_shash_ctx(tfm))
 #define AES_CBCMAC_CTX(desc) ((struct aes_cbcmac_ctx *)shash_desc_ctx(desc))
 
@@ -136,6 +204,49 @@ static int __maybe_unused crypto_aes_cbcmac_digest(struct shash_desc *desc,
 	return 0;
 }
 
+static int crypto_cbcmac_export_core(struct shash_desc *desc, void *out)
+{
+	memcpy(out, AES_CBCMAC_CTX(desc)->h, AES_BLOCK_SIZE);
+	return 0;
+}
+
+static int crypto_cbcmac_import_core(struct shash_desc *desc, const void *in)
+{
+	struct aes_cbcmac_ctx *ctx = AES_CBCMAC_CTX(desc);
+
+	ctx->key = AES_CBCMAC_KEY(desc->tfm);
+	memcpy(ctx->h, in, AES_BLOCK_SIZE);
+	ctx->partial_len = 0;
+	return 0;
+}
+
+static int crypto_cbcmac_export(struct shash_desc *desc, void *out)
+{
+	struct aes_cbcmac_ctx *ctx = AES_CBCMAC_CTX(desc);
+	unsigned int partial = ctx->partial_len;
+	u8 *p = out;
+
+	memset(p + AES_BLOCK_SIZE, 0, AES_BLOCK_SIZE);
+	p[AES_BLOCK_SIZE * 2] = partial;
+	return crypto_cbcmac_export_core(desc, p);
+}
+
+static int crypto_cbcmac_import(struct shash_desc *desc, const void *in)
+{
+	struct aes_cbcmac_ctx *ctx = AES_CBCMAC_CTX(desc);
+	unsigned int partial;
+	const u8 *p = in;
+
+	crypto_cbcmac_import_core(desc, p);
+	p += AES_BLOCK_SIZE;
+	partial = p[AES_BLOCK_SIZE];
+	if (partial > AES_BLOCK_SIZE)
+		return -EOVERFLOW;
+	crypto_xor(ctx->h, p, partial);
+	ctx->partial_len = partial;
+	return 0;
+}
+
 static struct crypto_alg alg = {
 	.cra_name = "aes",
 	.cra_driver_name = "aes-lib",
@@ -166,7 +277,12 @@ static struct shash_alg mac_algs[] = {
 		.update = crypto_aes_cmac_update,
 		.final = crypto_aes_cmac_final,
 		.digest = crypto_aes_cmac_digest,
+		.export	= crypto_cmac_export,
+		.import = crypto_cmac_import,
+		.export_core = crypto_cmac_export_core,
+		.import_core = crypto_cmac_import_core,
 		.descsize = sizeof(struct aes_cmac_ctx),
+		.statesize = AES_BLOCK_SIZE * 2 + 1,
 	},
 #endif
 #if IS_ENABLED(CONFIG_CRYPTO_XCBC)
@@ -187,7 +303,12 @@ static struct shash_alg mac_algs[] = {
 		.update = crypto_aes_cmac_update,
 		.final = crypto_aes_cmac_final,
 		.digest = crypto_aes_cmac_digest,
+		.export	= crypto_cmac_export,
+		.import = crypto_cmac_import,
+		.export_core = crypto_cmac_export_core,
+		.import_core = crypto_cmac_import_core,
 		.descsize = sizeof(struct aes_cmac_ctx),
+		.statesize = AES_BLOCK_SIZE * 2 + 1,
 	},
 #endif
 #if IS_ENABLED(CONFIG_CRYPTO_CCM)
@@ -204,7 +325,12 @@ static struct shash_alg mac_algs[] = {
 		.update = crypto_aes_cbcmac_update,
 		.final = crypto_aes_cbcmac_final,
 		.digest = crypto_aes_cbcmac_digest,
+		.export	= crypto_cbcmac_export,
+		.import = crypto_cbcmac_import,
+		.export_core = crypto_cbcmac_export_core,
+		.import_core = crypto_cbcmac_import_core,
 		.descsize = sizeof(struct aes_cbcmac_ctx),
+		.statesize = AES_BLOCK_SIZE * 2 + 1,
 	},
 #endif
 };
