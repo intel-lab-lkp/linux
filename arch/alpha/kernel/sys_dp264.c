@@ -516,7 +516,7 @@ clipper_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 static void __init
 dp264_init_pci(void)
 {
-	common_init_pci();
+	tsunami_init_pci();
 	SMC669_Init(0);
 	locate_and_init_vga(NULL);
 }
@@ -524,7 +524,7 @@ dp264_init_pci(void)
 static void __init
 monet_init_pci(void)
 {
-	common_init_pci();
+	tsunami_init_pci();
 	SMC669_Init(1);
 	es1888_init();
 	locate_and_init_vga(NULL);
@@ -533,7 +533,7 @@ monet_init_pci(void)
 static void __init
 clipper_init_pci(void)
 {
-	common_init_pci();
+	tsunami_init_pci();
 	locate_and_init_vga(NULL);
 }
 
@@ -616,7 +616,7 @@ struct alpha_machine_vector webbrick_mv __initmv = {
 	.init_arch		= webbrick_init_arch,
 	.init_irq		= dp264_init_irq,
 	.init_rtc		= common_init_rtc,
-	.init_pci		= common_init_pci,
+	.init_pci		= tsunami_init_pci,
 	.kill_arch		= tsunami_kill_arch,
 	.pci_map_irq		= webbrick_map_irq,
 	.pci_swizzle		= common_swizzle,
@@ -627,7 +627,7 @@ struct alpha_machine_vector clipper_mv __initmv = {
 	DO_EV6_MMU,
 	DO_DEFAULT_RTC,
 	DO_TSUNAMI_IO,
-	.machine_check		= tsunami_machine_check,
+	.machine_check		= clipper_machine_check,
 	.max_isa_dma_address	= ALPHA_MAX_ISA_DMA_ADDRESS,
 	.min_io_address		= DEFAULT_IO_BASE,
 	.min_mem_address	= DEFAULT_MEM_BASE,
@@ -667,7 +667,7 @@ struct alpha_machine_vector shark_mv __initmv = {
 	.init_arch		= tsunami_init_arch,
 	.init_irq		= clipper_init_irq,
 	.init_rtc		= common_init_rtc,
-	.init_pci		= common_init_pci,
+	.init_pci		= tsunami_init_pci,
 	.kill_arch		= tsunami_kill_arch,
 	.pci_map_irq		= clipper_map_irq,
 	.pci_swizzle		= common_swizzle,
