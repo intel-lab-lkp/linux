@@ -24,6 +24,13 @@
 
 DEFINE_RAW_SPINLOCK(scx_sched_lock);
 
+static void scx_block_proxy_donor(struct rq *rq, struct task_struct *p)
+{
+	rq->scx.flags |= SCX_RQ_PROXY_BLOCKING;
+	sched_proxy_block_task(rq, p);
+	rq->scx.flags &= ~SCX_RQ_PROXY_BLOCKING;
+}
+
 bool __scx_allow_proxy_exec(const struct task_struct *p)
 {
 	struct scx_sched *sch;
@@ -47,7 +54,7 @@ void scx_prepare_task_sched_change(struct task_struct *p)
 	lockdep_assert_rq_held(task_rq(p));
 
 	update_rq_clock(task_rq(p));
-	sched_proxy_block_task(task_rq(p), p);
+	scx_block_proxy_donor(task_rq(p), p);
 }
 
 /*
@@ -1574,7 +1581,8 @@ static void dsq_inc_nr(struct scx_dispatch_q *dsq, struct task_struct *p, u64 en
 
 		/*
 		 * If @rq already had other tasks or the current task is not
-		 * done yet, @p can't go on the CPU immediately. Re-enqueue.
+		 * done yet, @p can't go on the CPU immediately. Check whether
+		 * it needs to be reenqueued.
 		 */
 		if (unlikely(dsq->nr > 1 || !rq_is_open(rq, enq_flags)))
 			scx_schedule_reenq_local(rq, 0);
@@ -3324,6 +3332,9 @@ has_tasks:
 	 *
 	 * - A non-IMMED HEAD task can get queued in front of an IMMED task
 	 *   between the IMMED queueing and the subsequent scheduling event.
+	 *
+	 * A blocked IMMED donor may make this scan a no-op. Skipping it does
+	 * not schedule another scan, so avoid separate accounting for it.
 	 */
 	if (unlikely(rq->scx.local_dsq.nr > 1 && rq->scx.nr_immed))
 		scx_schedule_reenq_local(rq, 0);
@@ -3351,6 +3362,11 @@ static void set_next_task_scx(struct rq *rq, struct task_struct *p, enum snt_e t
 {
 	bool first = type == SNT_PICK;
 	bool can_stop_tick;
+
+	rq->scx.flags &= ~SCX_RQ_PROXY_PICK_PENDING;
+	if (sched_proxy_exec() && p->is_blocked &&
+	    (type == SNT_PICK || type == SNT_REPICK))
+		rq->scx.flags |= SCX_RQ_PROXY_PICK_PENDING;
 
 	if (type == SNT_REPICK)
 		return;
@@ -3431,6 +3447,7 @@ void scx_proxy_donor_start(struct rq *rq)
 	struct task_struct *donor = rq->donor;
 
 	lockdep_assert_rq_held(rq);
+	rq->scx.flags &= ~SCX_RQ_PROXY_PICK_PENDING;
 
 	if (donor->sched_class == &ext_sched_class && (donor->scx.flags & SCX_TASK_QUEUED))
 		scx_start_task_running(rq, donor);
@@ -3491,7 +3508,13 @@ static void put_prev_task_scx(struct rq *rq, struct task_struct *p,
 			      struct task_struct *next)
 {
 	struct scx_sched *sch = scx_task_sched(p);
+	bool proxy_put = p->is_blocked && next == rq->idle &&
+			 (rq->scx.flags & SCX_RQ_PROXY_PICK_PENDING);
+	bool proxy_block = p->is_blocked && next == rq->curr &&
+			   (rq->scx.flags & SCX_RQ_PROXY_BLOCKING);
 	bool rescue_keep = false;
+
+	rq->scx.flags &= ~SCX_RQ_PROXY_PICK_PENDING;
 
 	/* see kick_sync_wait_bal_cb() */
 	smp_store_release(&rq->scx.kick_sync, rq->scx.kick_sync + 1);
@@ -3516,45 +3539,36 @@ static void put_prev_task_scx(struct rq *rq, struct task_struct *p,
 	if (next != p && (p->scx.flags & SCX_TASK_QUEUED) &&
 	    (p->scx.flags & SCX_TASK_RUN_TRACKED)) {
 		if (SCX_HAS_OP(sch, stopping))
-			SCX_CALL_OP_TASK(sch, stopping, rq, p, true);
+			SCX_CALL_OP_TASK(sch, stopping, rq, p, !proxy_block);
 
 		p->scx.flags &= ~SCX_TASK_RUN_TRACKED;
 	}
 
 	if (p->scx.flags & SCX_TASK_QUEUED) {
+		if (proxy_block)
+			goto switch_class;
+
 		set_task_runnable(rq, p);
 
-		/* Delegate retained donor admission to its owning BPF scheduler. */
-		if (p->is_blocked) {
-			/*
-			 * If the donor is the same and only the mutex owner
-			 * changes, avoid triggering another ops.enqueue(): the
-			 * BPF scheduler has already admitted the donor, so it
-			 * can continue running.
-			 */
-			if (next == p)
-				goto switch_class;
-
-			if (WARN_ON_ONCE(!sch))
-				goto switch_class;
-			WARN_ON_ONCE(!(sch->ops.flags & SCX_OPS_ENQ_BLOCKED));
-			scx_do_enqueue_task(rq, p, 0, -1);
+		/*
+		 * If the donor is the same and only the mutex owner changes,
+		 * avoid triggering another ops.enqueue(): the BPF scheduler has
+		 * already admitted the donor, so it can continue running.
+		 */
+		if (p->is_blocked && next == p)
 			goto switch_class;
-		}
 
 		/*
-		 * If @p has slice left and is being put, @p is getting
-		 * preempted by a higher priority scheduler class or core-sched
-		 * forcing a different task. Leave it at the head of the local
-		 * DSQ unless it was an IMMED task. IMMED tasks should not
-		 * linger on a busy CPU, reenqueue them to the BPF scheduler.
+		 * If @p has slice left, keep it at the head of the local DSQ.
+		 * An IMMED task instead returns to BPF if it is preempted, but a
+		 * proxy put only drops references before resolving the owner.
 		 *
 		 * An open rescue must keep @p on the local DSQ even if the
 		 * scheduler zeroed the slice in ops.stopping() above.
 		 */
 		if ((p->scx.slice || unlikely(p == scx_rescuee(rq))) &&
 		    !scx_bypassing(sch, cpu_of(rq))) {
-			if (p->scx.flags & SCX_TASK_IMMED) {
+			if ((p->scx.flags & SCX_TASK_IMMED) && !proxy_put) {
 				p->scx.flags |= SCX_TASK_REENQ_PREEMPTED;
 				scx_do_enqueue_task(rq, p, SCX_ENQ_REENQ, -1);
 			} else {
@@ -3571,6 +3585,9 @@ static void put_prev_task_scx(struct rq *rq, struct task_struct *p,
 						enq_flags |= SCX_ENQ_HEAD;
 				} else {
 					enq_flags |= SCX_ENQ_HEAD;
+					/* SCX_ENQ_IMMED uses SCX_CAP_ENQ_IMMED, the base cap. */
+					if (proxy_put && (p->scx.flags & SCX_TASK_IMMED))
+						enq_flags |= SCX_ENQ_IMMED;
 				}
 
 				scx_dispatch_enqueue(sch, rq, &rq->scx.local_dsq, p, 0, 0,
@@ -3761,6 +3778,9 @@ do_pick_task_scx(struct rq *rq, struct rq_flags *rf, bool force_scx)
 	struct task_struct *prev = rq->donor;
 	enum scx_dsp_verdict verdict;
 	struct task_struct *p;
+
+	/* A retry can abandon a provisional blocked-donor pick. */
+	rq->scx.flags &= ~SCX_RQ_PROXY_PICK_PENDING;
 
 	/* see kick_sync_wait_bal_cb() */
 	smp_store_release(&rq->scx.kick_sync, rq->scx.kick_sync + 1);
@@ -4782,7 +4802,7 @@ void scx_prepare_setscheduler(struct task_struct *p, int policy)
 	lockdep_assert_rq_held(task_rq(p));
 
 	if (scx_enabled() && p->policy != policy && policy == SCHED_EXT)
-		sched_proxy_block_task(task_rq(p), p);
+		scx_block_proxy_donor(task_rq(p), p);
 }
 
 static void process_ddsp_deferred_locals(struct rq *rq)
@@ -4829,9 +4849,9 @@ static void process_ddsp_deferred_locals(struct rq *rq)
  *   rq_is_open() is true.
  *
  * An IMMED task is kept (returns %false) only if it's the first task in the DSQ
- * AND the current task is done — i.e. it will execute immediately. All other
- * IMMED tasks are reenqueued. This means if a non-IMMED task sits at the head,
- * every IMMED task behind it gets reenqueued.
+ * AND the current task is done, so it will execute immediately. Other IMMED
+ * tasks are reenqueued. If a non-IMMED task sits at the head, every IMMED task
+ * behind it gets reenqueued.
  *
  * Reenqueued tasks go through ops.enqueue() with %SCX_ENQ_REENQ |
  * %SCX_TASK_REENQ_IMMED. If the BPF scheduler dispatches back to the same local

@@ -1816,14 +1816,14 @@ enum scx_enq_flags {
 	SCX_ENQ_PREEMPT_LAZY	= 1LLU << 35,
 
 	/*
-	 * Only allowed on local DSQs. Guarantees that the task either gets
-	 * on the CPU immediately and stays on it, or gets reenqueued back
-	 * to the BPF scheduler. It will never linger on a local DSQ or be
-	 * silently put back after preemption.
+	 * Only allowed on local DSQs. Guarantees that an unblocked task either
+	 * gets on the CPU immediately and stays on it, or gets reenqueued back
+	 * to the BPF scheduler. A blocked proxy donor can stay on the local DSQ
+	 * with slice left because its progress depends on its mutex owner.
 	 *
 	 * The protection persists until the next fresh enqueue - it
 	 * survives SAVE/RESTORE cycles, slice extensions and preemption.
-	 * If the task can't stay on the CPU for any reason, it gets
+	 * If an unblocked task can't stay on the CPU for any reason, it gets
 	 * reenqueued back to the BPF scheduler.
 	 *
 	 * Exiting and migration-disabled tasks bypass ops.enqueue() and
@@ -1865,6 +1865,12 @@ enum scx_enq_flags {
 	/*
 	 * The task is blocked on a mutex and is being kept runnable as a proxy
 	 * donor. Only passed to ops.enqueue() when %SCX_OPS_ENQ_BLOCKED is set.
+	 *
+	 * Blocking on the mutex does not enqueue the task by itself. A donor put
+	 * with slice left stays at the head of the local DSQ, except when an
+	 * IMMED donor is preempted or cannot stay local. It is passed to
+	 * ops.enqueue() when its slice runs out, the IMMED placement cannot be
+	 * kept, or proxy execution moves it to the owner's CPU.
 	 */
 	SCX_ENQ_BLOCKED		= 1LLU << 42,
 
