@@ -1329,12 +1329,11 @@ intel_lt_phy_pll_tables_get(struct intel_crtc_state *crtc_state,
 }
 
 static bool
-intel_lt_phy_pll_is_ssc_enabled(struct intel_crtc_state *crtc_state,
-				struct intel_encoder *encoder)
+intel_lt_phy_pll_is_ssc_enabled(struct intel_encoder *encoder, bool is_dp)
 {
 	struct intel_display *display = to_intel_display(encoder);
 
-	if (intel_crtc_has_dp_encoder(crtc_state)) {
+	if (is_dp) {
 		if (intel_panel_use_ssc(display)) {
 			struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 
@@ -1740,14 +1739,45 @@ intel_lt_phy_calc_port_clock(struct intel_display *display,
 	return clk;
 }
 
+static int
+intel_lt_phy_pll_calc_state_from_table(struct intel_encoder *encoder,
+				       const struct intel_lt_phy_pll_params *tables,
+				       bool is_dp, bool is_edp,
+				       int port_clock, int lane_count,
+				       struct intel_lt_phy_pll_state *pll_state)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	int i;
+
+	for (i = 0; tables[i].name; i++) {
+		int clock = intel_lt_phy_calc_port_clock(display, tables[i].state);
+
+		drm_WARN_ON(display->drm, !intel_dpll_clock_matches(clock, tables[i].clock_rate));
+		if (intel_dpll_clock_matches(port_clock, clock)) {
+			*pll_state = *tables[i].state;
+
+			if (is_edp)
+				pll_state->config[2] = 1;
+
+			pll_state->ssc_enabled = intel_lt_phy_pll_is_ssc_enabled(encoder, is_dp);
+			pll_state->lane_count = lane_count;
+
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
 int
 intel_lt_phy_pll_calc_state(struct intel_crtc_state *crtc_state,
 			    struct intel_encoder *encoder,
 			    struct intel_dpll_hw_state *hw_state)
 {
-	struct intel_display *display = to_intel_display(crtc_state);
+	bool is_dp = intel_crtc_has_dp_encoder(crtc_state);
+	bool is_edp = intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP);
 	const struct intel_lt_phy_pll_params *tables;
-	int i;
+	int err;
 
 	memset(hw_state, 0, sizeof(*hw_state));
 
@@ -1755,30 +1785,19 @@ intel_lt_phy_pll_calc_state(struct intel_crtc_state *crtc_state,
 	if (!tables)
 		return -EINVAL;
 
-	for (i = 0; tables[i].name; i++) {
-		int clock = intel_lt_phy_calc_port_clock(display, tables[i].state);
+	err = intel_lt_phy_pll_calc_state_from_table(encoder, tables, is_dp, is_edp,
+						     crtc_state->port_clock,
+						     crtc_state->lane_count,
+						     &hw_state->ltpll);
 
-		drm_WARN_ON(display->drm, !intel_dpll_clock_matches(clock, tables[i].clock_rate));
-		if (intel_dpll_clock_matches(crtc_state->port_clock, clock)) {
-			hw_state->ltpll = *tables[i].state;
-			if (intel_crtc_has_dp_encoder(crtc_state)) {
-				if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP))
-					hw_state->ltpll.config[2] = 1;
-			}
-			hw_state->ltpll.ssc_enabled =
-				intel_lt_phy_pll_is_ssc_enabled(crtc_state, encoder);
-			hw_state->ltpll.lane_count = crtc_state->lane_count;
-			return 0;
-		}
-	}
+	if (err == 0 || !intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI))
+		return err;
 
-	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI)) {
-		hw_state->ltpll.lane_count = crtc_state->lane_count;
-		return intel_lt_phy_calculate_hdmi_state(&hw_state->ltpll,
-							 crtc_state->port_clock);
-	}
+	/* For HDMI PLLs use the HDMI algorithm, if there are no precomputed tables */
+	hw_state->ltpll.lane_count = crtc_state->lane_count;
 
-	return -EINVAL;
+	return intel_lt_phy_calculate_hdmi_state(&hw_state->ltpll,
+						 crtc_state->port_clock);
 }
 
 void intel_lt_phy_tbt_pll_calc_state(struct intel_dpll_hw_state *hw_state)
