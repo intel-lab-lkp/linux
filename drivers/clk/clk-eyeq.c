@@ -1249,7 +1249,7 @@ static void __init eqc_early_init(struct device_node *np,
 {
 	struct clk_hw_onecell_data *cells;
 	unsigned int i, clk_count;
-	void __iomem *base;
+	void __iomem *base = NULL;
 	int ret;
 
 	clk_count = early_data->early_clk_count + early_data->late_clk_count;
@@ -1297,6 +1297,9 @@ static void __init eqc_early_init(struct device_node *np,
 		goto err;
 	}
 
+	/* base was only needed to read the early PLL registers. */
+	iounmap(base);
+
 	return;
 
 err:
@@ -1322,6 +1325,9 @@ err:
 
 		kfree(cells);
 	}
+
+	if (base)
+		iounmap(base);
 }
 
 static void __init eqc_eyeq5_early_init(struct device_node *np)
