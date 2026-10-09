@@ -28,18 +28,7 @@ struct hsr_job {
 	unsigned int		charge;	/* immutable skb->truesize */
 };
 
-/* Queue-stage drop: one count per dropped original input on the held
- * entry device.  Ordinary interlink RX is an RX drop; master TX and
- * internally generated supervision frames are TX drops.
- */
-static void hsr_fwd_drop_stat(struct net_device *dev, enum hsr_port_type type,
-			      enum hsr_job_class class)
-{
-	if (class == HSR_JOB_NORMAL && type == HSR_PT_INTERLINK)
-		dev_core_stats_rx_dropped_inc(dev);
-	else
-		dev_core_stats_tx_dropped_inc(dev);
-}
+/* Queue-stage drops share the mapping in hsr_forward.c. */
 
 static void hsr_job_drop(struct hsr_job *job)
 {
@@ -113,6 +102,7 @@ static unsigned int hsr_job_process(struct hsr_priv *hsr, struct hsr_job *job,
 {
 	struct hsr_port *port;
 	unsigned int raised = 0;
+	unsigned int cost;
 
 	rcu_read_lock();
 	port = hsr_job_port(hsr, job);
@@ -129,7 +119,7 @@ static unsigned int hsr_job_process(struct hsr_priv *hsr, struct hsr_job *job,
 
 	if (job->class == HSR_JOB_INTERNAL_SUP)
 		hsr_assign_sup_seq(job->skb, hsr, source);
-	hsr_forward_frame(job->skb, port, source);
+	cost = hsr_forward_input(job->skb, port, job->class, source);
 
 	while (raised) {
 		dev_xmit_recursion_dec();
@@ -140,10 +130,8 @@ static unsigned int hsr_job_process(struct hsr_priv *hsr, struct hsr_job *job,
 	dev_put(job->dev);
 	kfree(job);
 
-	/* One input is one budget unit; GSO per-frame accounting is
-	 * added by the segmentation change.
-	 */
-	return 1;
+	/* Actual per-frame units consumed; a failed aggregate costs 1. */
+	return cost;
 }
 
 static void hsr_queue_owned_release(struct hsr_priv *hsr)

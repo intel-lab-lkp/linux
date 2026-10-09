@@ -12,6 +12,9 @@
 #include <linux/skbuff.h>
 #include <linux/etherdevice.h>
 #include <linux/if_vlan.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
+#include <net/gso.h>
 #include "hsr_main.h"
 #include "hsr_framereg.h"
 
@@ -818,6 +821,149 @@ out_drop:
 	kfree_skb(skb);
 }
 
+/* Shared drop mapping for the new queue and GSO gate stages: one
+ * count per dropped original input.  Ordinary master TX and all
+ * internal supervision (local and proxy) are TX drops on the entry
+ * device; ordinary slave A/B and interlink RX are RX drops.
+ * Internal supervision keeps the TX mapping regardless of its
+ * entry role.
+ */
+void hsr_fwd_drop_stat(struct net_device *dev, enum hsr_port_type type,
+		       enum hsr_job_class class)
+{
+	if (class == HSR_JOB_NORMAL && type != HSR_PT_MASTER)
+		dev_core_stats_rx_dropped_inc(dev);
+	else
+		dev_core_stats_tx_dropped_inc(dev);
+}
+
+/* Return the inner EtherType using the core's bounded 802.1Q/802.1AD
+ * decoder. An accelerated outer tag is metadata, not frame bytes.
+ */
+static __be16 hsr_gso_effective_proto(const struct sk_buff *skb, int *l3off)
+{
+	struct ethhdr eh;
+	const struct ethhdr *eth;
+
+	if (skb_vlan_tag_present(skb) &&
+	    !eth_type_vlan(skb->vlan_proto))
+		return 0;
+
+	eth = skb_header_pointer(skb, 0, sizeof(eh), &eh);
+	if (!eth)
+		return 0;
+
+	return __vlan_get_protocol(skb, eth->h_proto, l3off);
+}
+
+/* Bytes beyond the IP datagram must not become segment payload. Older
+ * PRP senders can append an RCT to a whole GSO skb. Zero IP lengths and
+ * GSO_PARTIAL headers do not provide the full aggregate length here.
+ */
+static bool hsr_gso_trailing_data(const struct sk_buff *skb, __be16 proto,
+				  int l3off)
+{
+	unsigned int l3len;
+
+	if (skb_shinfo(skb)->gso_type & SKB_GSO_PARTIAL)
+		return false;
+
+	if (proto == htons(ETH_P_IP)) {
+		struct iphdr buffer;
+		const struct iphdr *iph;
+
+		iph = skb_header_pointer(skb, l3off, sizeof(buffer), &buffer);
+		if (!iph)
+			return true;
+		l3len = ntohs(iph->tot_len);
+	} else if (proto == htons(ETH_P_IPV6)) {
+		struct ipv6hdr buffer;
+		const struct ipv6hdr *ip6h;
+
+		ip6h = skb_header_pointer(skb, l3off, sizeof(buffer), &buffer);
+		if (!ip6h)
+			return true;
+		l3len = ntohs(ip6h->payload_len);
+		if (l3len)
+			l3len += sizeof(*ip6h);
+	} else {
+		return false;
+	}
+
+	return l3len && l3off + l3len < skb->len;
+}
+
+/* GSO fan-out funnel: unfold super-packets before per-frame
+ * processing so each wire frame gets its own HSR/PRP tag and
+ * sequence number.  Returns the number of per-frame units actually
+ * processed (one for a single-frame input or a failed aggregate).
+ */
+unsigned int hsr_forward_input(struct sk_buff *skb, struct hsr_port *port,
+			       enum hsr_job_class class,
+			       enum hsr_exec_source source)
+{
+	struct sk_buff *segs, *next;
+	unsigned int count = 0;
+	__be16 proto;
+	int l3off;
+
+	if (likely(!skb_is_gso(skb))) {
+		hsr_forward_frame(skb, port, source);
+		return 1;
+	}
+
+	/* Conforming plain-protocol GSO super-packets carry
+	 * trailer-free sender payload and are segmented here: each
+	 * segment is delivered or forwarded as its own wire frame, on
+	 * any ingress role.
+	 *
+	 * The gate is content-based, not port-based.  An aggregate
+	 * whose effective protocol is ETH_P_HSR or ETH_P_PRP cannot be
+	 * safely segmented and is dropped, as is any skb whose headers
+	 * cannot be read or whose fragments are unreadable net_iov
+	 * (device-memory) pages: software segmentation cannot read
+	 * their payload, so each segment would inherit the unreadable
+	 * flag and carry uninitialized data.  Ordinary VLAN GSO
+	 * (802.1Q/802.1AD at any reachable tag depth, accelerated or
+	 * in-band) is classified to its inner protocol through the core
+	 * VLAN decoder and segmented like plain input.  With
+	 * NETIF_F_HW_HSR_TAG_RM the lower has already stripped the tag,
+	 * so such aggregates arrive plain and are segmented.
+	 */
+	if (!skb_frags_readable(skb))
+		goto drop_gso; /* net_iov frags are not host-readable */
+	proto = hsr_gso_effective_proto(skb, &l3off);
+	if (!proto)
+		goto drop_gso; /* classification failure, fail-safe */
+	if (proto == htons(ETH_P_HSR) || proto == htons(ETH_P_PRP))
+		goto drop_gso;
+	if (hsr_gso_trailing_data(skb, proto, l3off))
+		goto drop_gso;
+
+	/* features = 0: request full software segmentation.  tx_path is
+	 * true only for locally generated traffic on the master; ingress
+	 * follows RX checksum semantics.
+	 */
+	segs = __skb_gso_segment(skb, 0, port->type == HSR_PT_MASTER);
+	if (IS_ERR(segs) || unlikely(!segs))
+		goto drop_gso;
+
+	consume_skb(skb);
+	while (segs) {
+		next = segs->next;
+		segs->next = NULL;
+		hsr_forward_frame(segs, port, source);
+		count++;
+		segs = next;
+	}
+	return count;
+
+drop_gso:
+	hsr_fwd_drop_stat(port->dev, port->type, class);
+	kfree_skb(skb);
+	return 1;
+}
+
 /* Submission entry.  Inputs that need a local sequence number go to
  * the single consumer before any numbering happens; the synchronous
  * LAN A/B receive path keeps its original behavior.
@@ -828,7 +974,7 @@ void hsr_forward_skb(struct sk_buff *skb, struct hsr_port *port)
 		hsr_queue_submit(skb, port, HSR_JOB_NORMAL);
 		return;
 	}
-	hsr_forward_frame(skb, port, HSR_EXEC_DIRECT_LAN);
+	hsr_forward_input(skb, port, HSR_JOB_NORMAL, HSR_EXEC_DIRECT_LAN);
 }
 
 /* Internally generated supervision frames always take the common

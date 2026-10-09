@@ -36,6 +36,11 @@ void hsr_forward_skb(struct sk_buff *skb, struct hsr_port *port);
 void hsr_forward_sup_skb(struct sk_buff *skb, struct hsr_port *port);
 void hsr_forward_frame(struct sk_buff *skb, struct hsr_port *port,
 		       enum hsr_exec_source source);
+unsigned int hsr_forward_input(struct sk_buff *skb, struct hsr_port *port,
+			       enum hsr_job_class class,
+			       enum hsr_exec_source source);
+void hsr_fwd_drop_stat(struct net_device *dev, enum hsr_port_type type,
+		       enum hsr_job_class class);
 void hsr_assign_sup_seq(struct sk_buff *skb, struct hsr_priv *hsr,
 			enum hsr_exec_source source);
 
