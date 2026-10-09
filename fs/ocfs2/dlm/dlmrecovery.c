@@ -764,9 +764,12 @@ static void dlm_destroy_recovery_area(struct dlm_ctxt *dlm)
 	struct dlm_reco_node_data *ndata, *next;
 	LIST_HEAD(tmplist);
 
+	/* Serialize list detachment with debug_state_print(). */
+	spin_lock(&dlm->spinlock);
 	spin_lock(&dlm_reco_state_lock);
 	list_splice_init(&dlm->reco.node_data, &tmplist);
 	spin_unlock(&dlm_reco_state_lock);
+	spin_unlock(&dlm->spinlock);
 
 	list_for_each_entry_safe(ndata, next, &tmplist, list) {
 		list_del_init(&ndata->list);
