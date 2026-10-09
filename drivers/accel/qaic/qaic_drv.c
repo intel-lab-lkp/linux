@@ -32,6 +32,7 @@
 #include "qaic_debugfs.h"
 #include "qaic_ras.h"
 #include "qaic_ssr.h"
+#include "qaic_telemetry.h"
 #include "qaic_timesync.h"
 #include "sahara.h"
 
@@ -381,6 +382,7 @@ static void qaic_notify_reset(struct qaic_device *qdev)
 	qdev->dev_state = QAIC_OFFLINE;
 	/* wake up any waiters to avoid waiting for timeouts at sync */
 	wake_all_cntl(qdev);
+	wake_all_telemetry(qdev);
 	for (i = 0; i < qdev->num_dbc; ++i)
 		wakeup_dbc(qdev, i);
 	synchronize_srcu(&qdev->dev_lock);
@@ -433,6 +435,9 @@ static struct qaic_device *create_qdev(struct pci_dev *pdev,
 	ret = drmm_mutex_init(drm, &qdev->bootlog_mutex);
 	if (ret)
 		return NULL;
+	ret = drmm_mutex_init(drm, &qdev->tele_mutex);
+	if (ret)
+		return NULL;
 
 	qdev->cntl_wq = qaicm_wq_init(drm, "qaic_cntl");
 	if (IS_ERR(qdev->cntl_wq))
@@ -442,6 +447,9 @@ static struct qaic_device *create_qdev(struct pci_dev *pdev,
 		return NULL;
 	qdev->ssr_wq = qaicm_wq_init(drm, "qaic_ssr");
 	if (IS_ERR(qdev->ssr_wq))
+		return NULL;
+	qdev->tele_wq = qaicm_wq_init(drm, "qaic_tele");
+	if (IS_ERR(qdev->tele_wq))
 		return NULL;
 
 	ret = qaicm_srcu_init(drm, &qdev->dev_lock);
@@ -458,6 +466,7 @@ static struct qaic_device *create_qdev(struct pci_dev *pdev,
 
 	INIT_LIST_HEAD(&qdev->cntl_xfer_list);
 	INIT_LIST_HEAD(&qdev->bootlog);
+	INIT_LIST_HEAD(&qdev->tele_xfer_list);
 	INIT_LIST_HEAD(&qddev->users);
 
 	for (i = 0; i < qdev->num_dbc; ++i) {
@@ -595,6 +604,10 @@ static int qaic_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (ret)
 		return ret;
 
+	ret = qaic_drm_ras_register_node(qdev);
+	if (ret)
+		return ret;
+
 	qdev->mhi_cntrl = qaic_mhi_register_controller(pdev, qdev->bar_mhi, mhi_irq,
 						       qdev->single_msi, config->family);
 	if (IS_ERR(qdev->mhi_cntrl)) {
@@ -615,6 +628,7 @@ static void qaic_pci_remove(struct pci_dev *pdev)
 
 	qaic_dev_reset_clean_local_state(qdev);
 	qaic_mhi_free_controller(qdev->mhi_cntrl, link_up);
+	qaic_drm_ras_unregister_node(qdev);
 	qaic_destroy_drm_device(qdev, QAIC_NO_PARTITION);
 }
 
@@ -813,6 +827,10 @@ static int __init qaic_init(void)
 		goto free_bootlog;
 	}
 
+	ret = qaic_telemetry_register();
+	if (ret)
+		pr_debug("qaic: qaic_telemetry_register failed %d\n", ret);
+
 	return 0;
 
 free_bootlog:
@@ -842,6 +860,7 @@ static void __exit qaic_exit(void)
 	 * reinitializing the link_up state after the cleanup is done.
 	 */
 	link_up = true;
+	qaic_telemetry_unregister();
 	qaic_ssr_unregister();
 	qaic_ras_unregister();
 	qaic_bootlog_unregister();
