@@ -67,13 +67,6 @@ bool redirty_page_for_writepage(struct writeback_control *wbc,
 }
 EXPORT_SYMBOL(redirty_page_for_writepage);
 
-int add_to_page_cache_lru(struct page *page, struct address_space *mapping,
-		pgoff_t index, gfp_t gfp)
-{
-	return filemap_add_folio(mapping, page_folio(page), index, gfp);
-}
-EXPORT_SYMBOL(add_to_page_cache_lru);
-
 noinline
 struct page *pagecache_get_page(struct address_space *mapping, pgoff_t index,
 		fgf_t fgp_flags, gfp_t gfp)
