@@ -673,6 +673,7 @@ static void siox_master_release(struct device *dev)
 {
 	struct siox_master *smaster = to_siox_master(dev);
 
+	kfree(smaster->buf);
 	kfree(smaster);
 }
 
