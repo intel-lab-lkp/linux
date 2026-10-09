@@ -925,7 +925,8 @@ static void mana_gd_process_eqe(struct gdma_queue *eq)
 		if (WARN_ON_ONCE(cq_id >= gc->max_num_cqs))
 			break;
 
-		cq = gc->cq_table[cq_id];
+		/* Match release publication of the CQ and its callback state. */
+		cq = smp_load_acquire(&gc->cq_table[cq_id]);
 		if (WARN_ON_ONCE(!cq || cq->type != GDMA_CQ || cq->id != cq_id))
 			break;
 
@@ -1187,16 +1188,16 @@ static int mana_gd_create_eq(struct gdma_dev *gd,
 		return -EINVAL;
 	}
 
+	queue->eq.callback = spec->eq.callback;
+	queue->eq.context = spec->eq.context;
+	queue->head |= INITIALIZED_OWNER_BIT(log2_num_entries);
+	queue->eq.log2_throttle_limit = spec->eq.log2_throttle_limit ?: 1;
+
 	err = mana_gd_register_irq(queue, spec);
 	if (err) {
 		dev_err(dev, "Failed to register irq: %d\n", err);
 		return err;
 	}
-
-	queue->eq.callback = spec->eq.callback;
-	queue->eq.context = spec->eq.context;
-	queue->head |= INITIALIZED_OWNER_BIT(log2_num_entries);
-	queue->eq.log2_throttle_limit = spec->eq.log2_throttle_limit ?: 1;
 
 	if (create_hwq) {
 		err = mana_gd_create_hw_eq(gc, queue);
@@ -1232,13 +1233,12 @@ static void mana_gd_destroy_cq(struct gdma_context *gc,
 {
 	u32 id = queue->id;
 
-	if (id >= gc->max_num_cqs)
+	if (id >= gc->max_num_cqs || !gc->cq_table)
 		return;
 
-	if (!gc->cq_table[id])
-		return;
-
-	gc->cq_table[id] = NULL;
+	/* Leave a reused ID alone, but still drain readers of this CQ. */
+	cmpxchg(&gc->cq_table[id], queue, NULL);
+	synchronize_rcu();
 }
 
 int mana_gd_create_hwc_queue(struct gdma_dev *gd,

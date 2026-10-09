@@ -702,7 +702,8 @@ static int mana_hwc_establish_channel(struct gdma_context *gc, u16 *q_depth,
 	if (!gc->cq_table)
 		return -ENOMEM;
 
-	gc->cq_table[cq->id] = cq;
+	/* Pairs with the acquire load in mana_gd_process_eqe(). */
+	smp_store_release(&gc->cq_table[cq->id], cq);
 
 	return 0;
 }

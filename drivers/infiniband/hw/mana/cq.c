@@ -155,7 +155,8 @@ int mana_ib_install_cq_cb(struct mana_ib_dev *mdev, struct mana_ib_cq *cq)
 	gdma_cq->type = GDMA_CQ;
 	gdma_cq->cq.callback = mana_ib_cq_handler;
 	gdma_cq->id = cq->queue.id;
-	gc->cq_table[cq->queue.id] = gdma_cq;
+	/* Pairs with the acquire load in mana_gd_process_eqe(). */
+	smp_store_release(&gc->cq_table[cq->queue.id], gdma_cq);
 	return 0;
 }
 
