@@ -462,7 +462,7 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 		IWL_ERR(mvm,
 			"iwlmvm doesn't allow to disable BT Coex, check bt_coex_active module parameter\n");
 
-	if (!fips_enabled)
+	if (!fips_enabled || fips_allows_exception(FIPS_EXCEPTION_WIFI_MFP))
 		ieee80211_hw_set(hw, MFP_CAPABLE);
 
 	mvm->ciphers[hw->wiphy->n_cipher_suites] = WLAN_CIPHER_SUITE_AES_CMAC;
