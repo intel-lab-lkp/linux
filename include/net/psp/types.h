@@ -6,6 +6,7 @@
 #include <linux/bits.h>
 #include <linux/mutex.h>
 #include <linux/refcount.h>
+#include <linux/workqueue.h>
 #include <net/net_trackers.h>
 
 struct netlink_ext_ack;
@@ -80,6 +81,11 @@ struct psp_assoc_dev {
  * @prev_assocs:	associations which use old (but still usable)
  *			device key
  * @stale_assocs:	associations which use a rotated out key
+ * @tx_del:		deferred TX key deletion state
+ * @tx_del.active:	TX keys to be deleted after the current grace period
+ * @tx_del.next:	TX keys queued for deletion during current grace period
+ * @tx_del.work:	delayed work item for periodic grace period checking
+ * @tx_del.txq_state:	TX queue state for deferred deletion grace periods
  *
  * @stats:	statistics maintained by the core
  * @stats.rotations:	See stats attr key-rotations
@@ -108,6 +114,13 @@ struct psp_dev {
 	struct list_head active_assocs;
 	struct list_head prev_assocs;
 	struct list_head stale_assocs;
+
+	struct {
+		struct list_head active;
+		struct list_head next;
+		struct delayed_work work;
+		struct psp_txq_state *txq_state;
+	} tx_del;
 
 	struct {
 		unsigned long rotations;
@@ -157,9 +170,14 @@ struct psp_key_parsed {
  * enum psp_assoc_flags - flags of struct psp_assoc
  * @PSP_ASSOC_SKIP_TX_KEY_DEL: Do not delete Tx key from psp_dev. It was
  *	copied to a newer psp_assoc during an Rx rekey.
+ * @PSP_ASSOC_DEFER_TX_KEY_DEL: Send Tx key to psp_dev's deferred deletion
+ *	queue. This psp_assoc was detached from its socket during a Tx rekey
+ *	and requires device descriptor state referencing this key to be
+ *	drained.
  */
 enum psp_assoc_flags {
 	PSP_ASSOC_SKIP_TX_KEY_DEL	= BIT(0),
+	PSP_ASSOC_DEFER_TX_KEY_DEL	= BIT(1),
 };
 
 struct psp_assoc {
