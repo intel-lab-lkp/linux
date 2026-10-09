@@ -1882,6 +1882,35 @@ gpi_create_serial_tre(struct gchan *chan, struct gpi_desc *desc,
 	return tre_idx;
 }
 
+/* Calculate the number of TREs required for this transfer. */
+static u32 gpi_get_nr_tre(struct gchan *gchan,
+			  enum dma_transfer_direction direction)
+{
+	const struct gpi_serial_config *serial;
+	u32 nr_tre = MAX_TRE;
+	u8 set_config = true;
+
+	switch (gchan->protocol) {
+	case QCOM_GPI_SPI:
+	case QCOM_GPI_I2C:
+		set_config = *(u32 *)gchan->config;
+
+		if (direction == DMA_DEV_TO_MEM)
+			return 1;
+		break;
+	case QCOM_GPI_UART:
+		serial = gchan->config;
+		set_config = (direction == DMA_DEV_TO_MEM) ?
+					  serial->set_rx_config : serial->set_tx_config;
+		break;
+	}
+
+	if (!set_config)
+		nr_tre -= 1;
+
+	return nr_tre;
+}
+
 /* copy tre into transfer ring */
 static struct dma_async_tx_descriptor *
 gpi_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
@@ -1894,7 +1923,6 @@ gpi_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 	struct gpi_ring *ch_ring = &gchan->ch_ring;
 	struct gpi_desc *gpi_desc;
 	u32 nr, nr_tre = 0;
-	u8 set_config;
 	int i;
 
 	gpii->ieob_set = false;
@@ -1908,12 +1936,10 @@ gpi_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 		return NULL;
 	}
 
-	nr_tre = 3;
-	set_config = *(u32 *)gchan->config;
-	if (!set_config)
-		nr_tre = 2;
-	if (direction == DMA_DEV_TO_MEM) /* rx */
-		nr_tre = 1;
+	if (!gchan->config)
+		return NULL;
+
+	nr_tre = gpi_get_nr_tre(gchan, direction);
 
 	/* calculate # of elements required & available */
 	nr = gpi_ring_num_elements_avail(ch_ring);
