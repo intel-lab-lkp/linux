@@ -12,7 +12,9 @@
 
 #include <linux/clk.h>
 #include <linux/console.h>
+#include <linux/dmaengine.h>
 #include <linux/dma-mapping.h>
+#include <linux/dma/qcom-gpi-dma.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/irq.h>
@@ -69,6 +71,16 @@
 #define PAR_ODD				0x01
 #define PAR_SPACE			0x10
 
+/* UART GPI mode parity flags */
+#define GPI_PAR_EVEN		0x0
+#define GPI_PAR_ODD		0x1
+#define GPI_PAR_SPACE		0x2
+#define GPI_PAR_MARK		0x3
+#define GPI_PAR_NONE		0x4
+
+#define GPI_START_TRANSFER	1
+#define GPI_CHAR_SIZE_OFFSET	5
+
 /* SE_UART_MANUAL_RFR register fields */
 #define UART_MANUAL_RFR_EN		BIT(31)
 #define UART_RFR_NOT_READY		BIT(1)
@@ -106,6 +118,8 @@
 #define BYTES_PER_FIFO_WORD		4U
 
 #define DMA_RX_BUF_SIZE		2048
+#define NUM_GPI_RX_BUFFERS	4
+#define INC_WRAP_RX_INDEX(index) (((index) + 1) % NUM_GPI_RX_BUFFERS)
 
 static DEFINE_IDA(port_ida);
 
@@ -127,6 +141,26 @@ struct qcom_geni_private_data {
 
 	u32 write_cached_bytes;
 	unsigned int write_cached_bytes_cnt;
+};
+
+struct qcom_geni_serial_gpi {
+	struct gpi_serial_config peripheral;
+	struct qcom_geni_serial_port *port;
+	struct work_struct tx_cancel_work;
+	struct work_struct tx_xfer_work;
+	struct work_struct rx_cancel_work;
+	struct work_struct rx_xfer_work;
+	struct workqueue_struct *tx_wq;
+	struct workqueue_struct *rx_wq;
+	struct completion tx_xfer_completion;
+	struct dma_chan *tx_chan;
+	struct dma_chan *rx_chan;
+	dma_addr_t rx_dma_addr[NUM_GPI_RX_BUFFERS];
+	void *rx_buf[NUM_GPI_RX_BUFFERS];
+	u32 xmit_size;
+	u8 rx_done_index;
+	unsigned int baud;
+	bool tx_cancel_pending;
 };
 
 struct qcom_geni_serial_port {
@@ -157,6 +191,9 @@ struct qcom_geni_serial_port {
 	struct qcom_geni_private_data private_data;
 	const struct qcom_geni_device_data *dev_data;
 	struct notifier_block panic_nb;
+
+	struct qcom_geni_serial_gpi *gpi;
+	bool gpi_mode;
 };
 
 static const struct uart_ops qcom_geni_console_pops;
@@ -170,6 +207,8 @@ static void qcom_geni_serial_cancel_tx_cmd(struct uart_port *uport);
 static int qcom_geni_serial_port_setup(struct uart_port *uport);
 static void qcom_geni_serial_start_tx_fifo(struct uart_port *uport);
 static void qcom_geni_serial_resume_tx(struct uart_port *uport);
+static void
+qcom_geni_serial_gpi_rx_callback_result(void *cb, const struct dmaengine_result *result);
 
 static inline struct qcom_geni_serial_port *to_dev_port(struct uart_port *uport)
 {
@@ -789,6 +828,11 @@ static void handle_rx_uart(struct uart_port *uport, u32 bytes)
 
 static unsigned int qcom_geni_serial_tx_empty(struct uart_port *uport)
 {
+	struct qcom_geni_serial_port *port = to_dev_port(uport);
+
+	if (port->gpi_mode)
+		return !port->tx_dma_addr ? TIOCSER_TEMT : 0;
+
 	return !readl(uport->membase + SE_GENI_TX_FIFO_STATUS);
 }
 
@@ -804,6 +848,17 @@ static void qcom_geni_serial_flush_buffer_dma(struct uart_port *uport)
 static void qcom_geni_serial_stop_tx_dma(struct uart_port *uport)
 {
 	struct qcom_geni_serial_port *port = to_dev_port(uport);
+
+	if (port->gpi_mode && port->tx_dma_addr) {
+		/*
+		 * Allow tx_xfer_work to finish. Buffer cleanup is deferred until
+		 * the DMA channel has been terminated.
+		 */
+		port->gpi->tx_cancel_pending = true;
+		complete(&port->gpi->tx_xfer_completion);
+		queue_work(port->gpi->tx_wq, &port->gpi->tx_cancel_work);
+		return;
+	}
 
 	if (qcom_geni_serial_main_active(uport))
 		__qcom_geni_serial_cancel_tx_cmd(uport);
@@ -835,6 +890,11 @@ static void qcom_geni_serial_start_tx_dma(struct uart_port *uport)
 
 	if (kfifo_is_empty(&tport->xmit_fifo))
 		return;
+
+	if (port->gpi_mode) {
+		queue_work(port->gpi->tx_wq, &port->gpi->tx_xfer_work);
+		return;
+	}
 
 	xmit_size = kfifo_out_linear_ptr(&tport->xmit_fifo, &tail,
 			UART_XMIT_SIZE);
@@ -996,6 +1056,11 @@ static void qcom_geni_serial_stop_rx_dma(struct uart_port *uport)
 	if (!qcom_geni_serial_secondary_active(uport))
 		return;
 
+	if (port->gpi_mode) {
+		queue_work(port->gpi->rx_wq, &port->gpi->rx_cancel_work);
+		return;
+	}
+
 	geni_se_cancel_s_cmd(&port->se);
 	done = qcom_geni_serial_poll_bit(uport, SE_DMA_RX_IRQ_STAT,
 			RX_EOT, true);
@@ -1020,6 +1085,11 @@ static void qcom_geni_serial_start_rx_dma(struct uart_port *uport)
 
 	if (qcom_geni_serial_secondary_active(uport))
 		qcom_geni_serial_stop_rx_dma(uport);
+
+	if (port->gpi_mode) {
+		queue_work(port->gpi->rx_wq, &port->gpi->rx_xfer_work);
+		return;
+	}
 
 	geni_se_setup_s_cmd(&port->se, UART_START_READ, UART_PARAM_RFR_OPEN);
 
@@ -1311,6 +1381,16 @@ static void qcom_geni_serial_shutdown(struct uart_port *uport)
 	/* Atomic console output queues tx_kick without taking the port lock. */
 	WRITE_ONCE(port->tx_kick_enabled, false);
 	irq_work_sync(&port->tx_kick);
+
+	if (port->gpi_mode) {
+		qcom_geni_serial_stop_tx_dma(uport);
+		flush_workqueue(port->gpi->tx_wq);
+		flush_workqueue(port->gpi->rx_wq);
+
+		pm_runtime_put_sync(uport->dev);
+		return;
+	}
+
 	disable_irq(uport->irq);
 
 	uart_port_lock_irq(uport);
@@ -1330,6 +1410,379 @@ static void qcom_geni_serial_flush_buffer_fifo(struct uart_port *uport)
 	if (port->tx_dma_addr)
 		port->tx_dma_stale = true;
 	qcom_geni_serial_cancel_tx_cmd(uport);
+}
+
+static void qcom_geni_serial_gpi_tx_unmap(struct qcom_geni_serial_port *port)
+{
+	struct qcom_geni_serial_gpi *gpi = port->gpi;
+
+	if (!port->tx_dma_addr)
+		return;
+
+	dma_unmap_single(port->se.dev->parent, port->tx_dma_addr,
+			 gpi->xmit_size, DMA_TO_DEVICE);
+	port->tx_dma_addr = (dma_addr_t)NULL;
+}
+
+static void qcom_geni_serial_gpi_cancel_tx_work(struct work_struct *work)
+{
+	struct qcom_geni_serial_gpi *gpi = container_of(work, struct qcom_geni_serial_gpi,
+							tx_cancel_work);
+	struct qcom_geni_serial_port *port = gpi->port;
+
+	dmaengine_terminate_sync(gpi->tx_chan);
+	qcom_geni_serial_gpi_tx_unmap(port);
+}
+
+static void qcom_geni_serial_gpi_cancel_rx_work(struct work_struct *work)
+{
+	struct qcom_geni_serial_gpi *gpi = container_of(work, struct qcom_geni_serial_gpi,
+							rx_cancel_work);
+	dmaengine_terminate_sync(gpi->rx_chan);
+}
+
+static void qcom_geni_serial_gpi_rx_queue_dma_tre(struct qcom_geni_serial_port *port, u8 idx)
+{
+	struct qcom_geni_serial_gpi *gpi = port->gpi;
+	struct uart_port *uport = &port->uport;
+	struct dma_async_tx_descriptor *desc;
+	unsigned long flags = DMA_PREP_INTERRUPT | DMA_CTRL_ACK;
+	dma_cookie_t rx_cookie;
+
+	desc = dmaengine_prep_slave_single(gpi->rx_chan, gpi->rx_dma_addr[idx],
+					   UART_XMIT_SIZE, DMA_DEV_TO_MEM, flags);
+	if (!desc) {
+		dev_err(uport->dev, "Error setting up rx desc\n");
+		return;
+	}
+
+	desc->callback_result = qcom_geni_serial_gpi_rx_callback_result;
+	desc->callback_param = port;
+	rx_cookie = dmaengine_submit(desc);
+	if (dma_submit_error(rx_cookie)) {
+		dev_err(uport->dev, "%s: dmaengine_submit failed: %d\n", __func__, rx_cookie);
+		dmaengine_terminate_sync(gpi->rx_chan);
+		return;
+	}
+	dma_async_issue_pending(gpi->rx_chan);
+}
+
+static void
+qcom_geni_serial_gpi_rx_callback_result(void *cb, const struct dmaengine_result *result)
+{
+	struct qcom_geni_serial_port *port = cb;
+	struct uart_port *uport = &port->uport;
+	struct tty_port *tport = &uport->state->port;
+	size_t bytes = UART_XMIT_SIZE - result->residue;
+	u8 idx = port->gpi->rx_done_index;
+	int ret;
+
+	if (result->result != DMA_TRANS_NOERROR) {
+		dev_err(uport->dev, "rx dma xfer failed: %d\n", result->result);
+		qcom_geni_serial_stop_rx_dma(uport);
+		qcom_geni_serial_start_rx_dma(uport);
+		return;
+	}
+
+	if (bytes <= 0) {
+		port->gpi->rx_done_index = INC_WRAP_RX_INDEX(idx);
+		qcom_geni_serial_gpi_rx_queue_dma_tre(port, idx);
+		return;
+	}
+
+	dma_sync_single_for_cpu(port->se.dev->parent,
+				port->gpi->rx_dma_addr[idx],
+				UART_XMIT_SIZE, DMA_FROM_DEVICE);
+
+	ret = tty_insert_flip_string(tport, port->gpi->rx_buf[idx], bytes);
+	if (ret != bytes) {
+		dev_err(uport->dev, "%s: Unable to push data %d_bytes %zu\n",
+			__func__, ret, bytes);
+		WARN_ON_ONCE(1);
+	}
+
+	uport->icount.rx += ret;
+	tty_flip_buffer_push(tport);
+	dma_sync_single_for_device(port->se.dev->parent, port->gpi->rx_dma_addr[idx],
+				   UART_XMIT_SIZE, DMA_FROM_DEVICE);
+
+	port->gpi->rx_done_index = INC_WRAP_RX_INDEX(idx);
+	qcom_geni_serial_gpi_rx_queue_dma_tre(port, idx);
+}
+
+static void qcom_geni_serial_gpi_rx_xfer_work(struct work_struct *work)
+{
+	struct qcom_geni_serial_gpi *gpi = container_of(work, struct qcom_geni_serial_gpi,
+							rx_xfer_work);
+	struct qcom_geni_serial_port *port = gpi->port;
+	struct uart_port *uport = &port->uport;
+	struct dma_slave_config config = {};
+	int ret, i;
+
+	config.peripheral_config = &gpi->peripheral;
+	config.peripheral_size = sizeof(gpi->peripheral);
+
+	ret = dmaengine_slave_config(gpi->rx_chan, &config);
+	if (ret) {
+		dev_err(uport->dev, "rx dma config error: %d\n", ret);
+		return;
+	}
+
+	gpi->rx_done_index = 0;
+	for (i = 0; i < NUM_GPI_RX_BUFFERS; i++)
+		qcom_geni_serial_gpi_rx_queue_dma_tre(port, i);
+}
+
+static void
+qcom_geni_serial_gpi_tx_callback_result(void *cb, const struct dmaengine_result *result)
+{
+	struct qcom_geni_serial_port *port = cb;
+	struct uart_port *uport = &port->uport;
+	struct tty_port *tport = &uport->state->port;
+	unsigned long flags;
+
+	if (result->result != DMA_TRANS_NOERROR) {
+		dev_err(uport->dev, "tx dma xfer failed: %d\n", result->result);
+		qcom_geni_serial_stop_tx_dma(uport);
+		return;
+	}
+
+	uart_port_lock_irqsave(uport, &flags);
+	uart_xmit_advance(uport, port->gpi->xmit_size - result->residue);
+	complete(&port->gpi->tx_xfer_completion);
+
+	if (kfifo_len(&tport->xmit_fifo) < WAKEUP_CHARS)
+		uart_write_wakeup(uport);
+	uart_port_unlock_irqrestore(uport, flags);
+}
+
+#define UART_BITS_PER_BYTE		10	/* 8N1 */
+#define UART_TX_SAFETY_COEFF		10
+#define UART_TX_MIN_TIMEOUT_USEC	20000
+
+static unsigned long qcom_geni_serial_gpi_tx_timeout(struct qcom_geni_serial_gpi *gpi)
+{
+	u64 wire_time_usec;
+	u64 timeout_usec;
+
+	if (!gpi->xmit_size || WARN_ON_ONCE(!gpi->baud))
+		return 0;
+
+	wire_time_usec = mul_u64_u32_div((u64)gpi->xmit_size * UART_BITS_PER_BYTE,
+					 USEC_PER_SEC, gpi->baud);
+	timeout_usec = wire_time_usec * UART_TX_SAFETY_COEFF + UART_TX_MIN_TIMEOUT_USEC;
+
+	return usecs_to_jiffies(min_t(u64, timeout_usec, UINT_MAX));
+}
+
+static void qcom_geni_serial_gpi_tx_xfer_work(struct work_struct *work)
+{
+	struct qcom_geni_serial_gpi *gpi = container_of(work, struct qcom_geni_serial_gpi,
+							tx_xfer_work);
+	struct qcom_geni_serial_port *port = gpi->port;
+	struct uart_port *uport = &port->uport;
+	struct tty_port *tport = &uport->state->port;
+	struct dma_slave_config config = {};
+	struct dma_async_tx_descriptor *desc;
+	unsigned long flags = DMA_PREP_INTERRUPT | DMA_CTRL_ACK;
+	unsigned long time_left;
+	unsigned long timeout;
+	dma_cookie_t tx_cookie;
+	u8 *tail = NULL;
+	int ret;
+
+	gpi->xmit_size = kfifo_out_linear_ptr(&tport->xmit_fifo, &tail,
+					      UART_XMIT_SIZE);
+	if (!gpi->xmit_size)
+		return;
+
+	config.peripheral_config = &gpi->peripheral;
+	config.peripheral_size = sizeof(gpi->peripheral);
+
+	ret = dmaengine_slave_config(gpi->tx_chan, &config);
+	if (ret) {
+		dev_err(uport->dev, "tx dma config error: %d\n", ret);
+		return;
+	}
+
+	port->tx_dma_addr = dma_map_single(port->se.dev->parent, tail,
+					   gpi->xmit_size, DMA_TO_DEVICE);
+	ret = dma_mapping_error(port->se.dev->parent, port->tx_dma_addr);
+	if (ret) {
+		dev_err(uport->dev, "DMA mapping failure: %d\n", ret);
+		port->tx_dma_addr = (dma_addr_t)NULL;
+		return;
+	}
+
+	dma_sync_single_for_cpu(port->se.dev->parent, port->tx_dma_addr,
+				gpi->xmit_size, DMA_TO_DEVICE);
+	desc = dmaengine_prep_slave_single(gpi->tx_chan, port->tx_dma_addr,
+					   gpi->xmit_size, DMA_MEM_TO_DEV, flags);
+	if (!desc) {
+		dev_err(uport->dev, "Error setting up tx desc\n");
+		goto err;
+	}
+
+	desc->callback_result = qcom_geni_serial_gpi_tx_callback_result;
+	desc->callback_param = port;
+	tx_cookie = dmaengine_submit(desc);
+	if (dma_submit_error(tx_cookie)) {
+		dev_err(uport->dev, "%s: dmaengine_submit failed: %d\n", __func__, tx_cookie);
+		dmaengine_terminate_sync(gpi->tx_chan);
+		goto err;
+	}
+	reinit_completion(&port->gpi->tx_xfer_completion);
+	dma_async_issue_pending(gpi->tx_chan);
+
+	gpi->peripheral.set_tx_config = false;
+
+	timeout = qcom_geni_serial_gpi_tx_timeout(gpi);
+
+	time_left = wait_for_completion_timeout(&port->gpi->tx_xfer_completion, timeout);
+	if (!time_left) {
+		dev_err(uport->dev, "Error: gpi tx timedout:%ld\n", timeout);
+		dmaengine_terminate_sync(gpi->tx_chan);
+		goto err;
+	}
+
+	/*
+	 * tx_cancel_work will terminate the channel and release the DMA
+	 * mapping. Return early to avoid racing with that cleanup.
+	 */
+	if (gpi->tx_cancel_pending) {
+		gpi->tx_cancel_pending = false;
+		return;
+	}
+
+err:
+	qcom_geni_serial_gpi_tx_unmap(port);
+}
+
+static void qcom_geni_serial_unprepare_gpi_rx_dma(struct qcom_geni_serial_port *port)
+{
+	struct qcom_geni_serial_gpi *gpi = port->gpi;
+	int i;
+
+	for (i = 0; i < NUM_GPI_RX_BUFFERS; i++) {
+		if (gpi->rx_dma_addr[i]) {
+			dma_unmap_single(port->se.dev->parent, gpi->rx_dma_addr[i],
+					 UART_XMIT_SIZE, DMA_FROM_DEVICE);
+			gpi->rx_dma_addr[i] = (dma_addr_t)NULL;
+		}
+	}
+}
+
+static int qcom_geni_serial_prepare_gpi_rx_dma(struct qcom_geni_serial_port *port)
+{
+	struct qcom_geni_serial_gpi *gpi = port->gpi;
+	struct uart_port *uport = &port->uport;
+	int i, ret;
+
+	for (i = 0; i < NUM_GPI_RX_BUFFERS; i++) {
+		gpi->rx_buf[i] = devm_kzalloc(uport->dev, UART_XMIT_SIZE, GFP_KERNEL);
+		if (!gpi->rx_buf[i])
+			return dev_err_probe(uport->dev, -ENOMEM, "RX buffer %d\n", i);
+
+		gpi->rx_dma_addr[i] = dma_map_single(port->se.dev->parent, gpi->rx_buf[i],
+						     UART_XMIT_SIZE, DMA_FROM_DEVICE);
+		ret = dma_mapping_error(port->se.dev->parent, gpi->rx_dma_addr[i]);
+		if (ret) {
+			dev_err(uport->dev, "Failed to map gpi rx buffer[%d]\n", i);
+			return ret;
+		}
+	}
+	return 0;
+}
+
+static void qcom_geni_serial_release_gpi_dma(struct qcom_geni_serial_port *port)
+{
+	if (port->gpi->rx_chan) {
+		dma_release_channel(port->gpi->rx_chan);
+		port->gpi->rx_chan = NULL;
+	}
+
+	if (port->gpi->tx_chan) {
+		dma_release_channel(port->gpi->tx_chan);
+		port->gpi->tx_chan = NULL;
+	}
+}
+
+static int qcom_geni_serial_setup_gpi_dma(struct qcom_geni_serial_port *port)
+{
+	struct qcom_geni_serial_gpi *gpi = port->gpi;
+	int ret = -EINVAL;
+
+	gpi->tx_chan = dma_request_chan(port->se.dev, "tx");
+	if (IS_ERR(gpi->tx_chan)) {
+		dev_err(port->se.dev, "Failed to get tx DMA ch\n");
+		return ret;
+	}
+
+	gpi->rx_chan = dma_request_chan(port->se.dev, "rx");
+	if (IS_ERR(gpi->rx_chan)) {
+		dev_err(port->se.dev, "Failed to get rx DMA ch\n");
+		dma_release_channel(gpi->tx_chan);
+		gpi->tx_chan = NULL;
+		return ret;
+	}
+
+	return 0;
+}
+
+static int qcom_geni_serial_gpi_init(struct qcom_geni_serial_port *port)
+{
+	struct uart_port *uport = &port->uport;
+	int ret;
+
+	port->gpi = devm_kzalloc(uport->dev, sizeof(*port->gpi), GFP_KERNEL);
+	if (!port->gpi)
+		return -ENOMEM;
+
+	ret = qcom_geni_serial_prepare_gpi_rx_dma(port);
+	if (ret)
+		return ret;
+
+	port->gpi->port = port;
+	ret = qcom_geni_serial_setup_gpi_dma(port);
+	if (ret)
+		goto err_unprepare_gpi_rx_dma;
+	/*
+	 * Defer GPI DMA operations to workqueues as the DMAengine path may
+	 * sleep while waiting on mutexes or timeouts, whereas UART transfer
+	 * operations can be invoked with the port spinlock held.
+	 */
+	port->gpi->tx_wq = alloc_ordered_workqueue("%s_tx_wq", WQ_HIGHPRI,
+						   dev_name(uport->dev));
+	if (!port->gpi->tx_wq) {
+		ret = -ENOMEM;
+		goto err_release_gpi_dma;
+	}
+
+	port->gpi->rx_wq = alloc_ordered_workqueue("%s_rx_wq", WQ_HIGHPRI,
+						   dev_name(uport->dev));
+	if (!port->gpi->rx_wq) {
+		ret = -ENOMEM;
+		goto err_destroy_tx_wq;
+	}
+
+	INIT_WORK(&port->gpi->tx_xfer_work, qcom_geni_serial_gpi_tx_xfer_work);
+	INIT_WORK(&port->gpi->tx_cancel_work, qcom_geni_serial_gpi_cancel_tx_work);
+	INIT_WORK(&port->gpi->rx_xfer_work, qcom_geni_serial_gpi_rx_xfer_work);
+	INIT_WORK(&port->gpi->rx_cancel_work, qcom_geni_serial_gpi_cancel_rx_work);
+	init_completion(&port->gpi->tx_xfer_completion);
+
+	/* Prevent spurious interrupts during data transfers for gpi mode */
+	writel(0, uport->membase + SE_GENI_M_IRQ_EN);
+	writel(0, uport->membase + SE_GENI_S_IRQ_EN);
+	return 0;
+
+err_destroy_tx_wq:
+	destroy_workqueue(port->gpi->tx_wq);
+err_release_gpi_dma:
+	qcom_geni_serial_release_gpi_dma(port);
+err_unprepare_gpi_rx_dma:
+	qcom_geni_serial_unprepare_gpi_rx_dma(port);
+	return ret;
 }
 
 static int qcom_geni_serial_port_setup(struct uart_port *uport)
@@ -1352,13 +1805,26 @@ static int qcom_geni_serial_port_setup(struct uart_port *uport)
 		return -ENXIO;
 	}
 
+	port->gpi_mode = readl(uport->membase + GENI_IF_DISABLE_RO) & FIFO_IF_DISABLE;
+	if (port->gpi_mode) {
+		geni_se_select_mode(&port->se, GENI_GPI_DMA);
+		ret = qcom_geni_serial_gpi_init(port);
+		if (ret)
+			return ret;
+	}
+
 	qcom_geni_serial_stop_rx(uport);
 
 	ret = setup_fifos(port);
 	if (ret)
 		return ret;
 
-	writel(rxstale, uport->membase + SE_UART_RX_STALE_CNT);
+	if (port->gpi_mode) {
+		port->gpi->peripheral.rx_stale_timeout = rxstale;
+		port->gpi->peripheral.rfr_level = port->rx_fifo_depth - 2;
+	} else {
+		writel(rxstale, uport->membase + SE_UART_RX_STALE_CNT);
+	}
 
 	pin_swap = readl(uport->membase + SE_UART_IO_MACRO_CTRL);
 	if (port->rx_tx_swap) {
@@ -1379,10 +1845,12 @@ static int qcom_geni_serial_port_setup(struct uart_port *uport)
 	 */
 	if (uart_console(uport))
 		qcom_geni_serial_poll_tx_done(uport);
-	geni_se_config_packing(&port->se, BITS_PER_BYTE, BYTES_PER_FIFO_WORD,
-			       false, true, true);
-	geni_se_init(&port->se, UART_RX_WM, port->rx_fifo_depth - 2);
-	geni_se_select_mode(&port->se, port->dev_data->mode);
+	if (!port->gpi_mode) {
+		geni_se_config_packing(&port->se, BITS_PER_BYTE, BYTES_PER_FIFO_WORD,
+				       false, true, true);
+		geni_se_init(&port->se, UART_RX_WM, port->rx_fifo_depth - 2);
+		geni_se_select_mode(&port->se, port->dev_data->mode);
+	}
 	port->setup = true;
 
 	return 0;
@@ -1415,11 +1883,23 @@ static int qcom_geni_serial_startup(struct uart_port *uport)
 	if (uart_console(uport))
 		tport->closing_wait = ASYNC_CLOSING_WAIT_NONE;
 
-	uart_port_lock_irq(uport);
-	qcom_geni_serial_start_rx(uport);
-	uart_port_unlock_irq(uport);
+	/*
+	 * FIFO and SE-DMA modes apply UART configuration directly to
+	 * hardware registers, so configuration updates take effect
+	 * without restarting RX.
+	 *
+	 * GPI mode programs UART configuration through a CFG TRE
+	 * submitted with an RX transfer. Defer RX startup until the
+	 * initial configuration can be queued.
+	 */
+	if (!port->gpi_mode) {
+		uart_port_lock_irq(uport);
+		qcom_geni_serial_start_rx(uport);
+		uart_port_unlock_irq(uport);
 
-	enable_irq(uport->irq);
+		enable_irq(uport->irq);
+	}
+
 	WRITE_ONCE(port->tx_kick_enabled, true);
 
 	return 0;
@@ -1461,6 +1941,10 @@ static int geni_serial_set_rate(struct geni_se *se, unsigned long baud)
 
 	uport->uartclk = clk_rate;
 	port->clk_rate = clk_rate;
+	if (port->gpi_mode) {
+		port->gpi->peripheral.clk_div = clk_div;
+		port->gpi->peripheral.clk_src = clk_idx;
+	}
 	dev_pm_opp_set_rate(uport->dev, clk_rate);
 	ser_clk_cfg = SER_CLK_EN;
 	ser_clk_cfg |= clk_div << CLK_DIV_SHFT;
@@ -1473,6 +1957,9 @@ static int geni_serial_set_rate(struct geni_se *se, unsigned long baud)
 	port->se.icc_paths[GENI_TO_CORE].avg_bw = Bps_to_icc(avg_bw_core);
 	port->se.icc_paths[CPU_TO_GENI].avg_bw = Bps_to_icc(baud);
 	geni_icc_set_bw(&port->se);
+
+	if (port->gpi_mode)
+		return 0;
 
 	writel(ser_clk_cfg, uport->membase + GENI_SER_M_CLK_CFG);
 	writel(ser_clk_cfg, uport->membase + GENI_SER_S_CLK_CFG);
@@ -1494,7 +1981,21 @@ static void qcom_geni_serial_set_termios(struct uart_port *uport,
 	u32 rx_trans_cfg;
 	u32 rx_parity_cfg;
 	u32 stop_bit_len;
+	u8 gpi_parity;
 	int ret = 0;
+
+	/*
+	 * Drain pending GPI transfers before updating the UART
+	 * configuration. Unlike FIFO and SE-DMA modes, configuration
+	 * changes are not applied directly to hardware registers in
+	 * GPI mode. Stop the active RX transfer so the next RX request
+	 * can submit an updated CFG TRE.
+	 */
+	if (port->gpi_mode) {
+		flush_workqueue(port->gpi->tx_wq);
+		qcom_geni_serial_stop_rx(uport);
+		flush_workqueue(port->gpi->rx_wq);
+	}
 
 	/* baud rate */
 	baud = uart_get_baud_rate(uport, termios, old, 300, 8000000);
@@ -1516,18 +2017,22 @@ static void qcom_geni_serial_set_termios(struct uart_port *uport,
 		if (termios->c_cflag & PARODD) {
 			tx_parity_cfg |= PAR_ODD;
 			rx_parity_cfg |= PAR_ODD;
+			gpi_parity = GPI_PAR_ODD;
 		} else if (termios->c_cflag & CMSPAR) {
 			tx_parity_cfg |= PAR_SPACE;
 			rx_parity_cfg |= PAR_SPACE;
+			gpi_parity = GPI_PAR_SPACE;
 		} else {
 			tx_parity_cfg |= PAR_EVEN;
 			rx_parity_cfg |= PAR_EVEN;
+			gpi_parity = GPI_PAR_EVEN;
 		}
 	} else {
 		tx_trans_cfg &= ~UART_TX_PAR_EN;
 		rx_trans_cfg &= ~UART_RX_PAR_EN;
 		tx_parity_cfg &= ~PAR_CALC_EN;
 		rx_parity_cfg &= ~PAR_CALC_EN;
+		gpi_parity = GPI_PAR_NONE;
 	}
 
 	/* bits per char */
@@ -1570,16 +2075,41 @@ static void qcom_geni_serial_set_termios(struct uart_port *uport,
 		WRITE_ONCE(port->poll_timeout_us, timeout);
 	}
 
-	if (!uart_console(uport))
-		writel(port->loopback,
-				uport->membase + SE_UART_LOOPBACK_CFG);
-	writel(tx_trans_cfg, uport->membase + SE_UART_TX_TRANS_CFG);
-	writel(tx_parity_cfg, uport->membase + SE_UART_TX_PARITY_CFG);
-	writel(rx_trans_cfg, uport->membase + SE_UART_RX_TRANS_CFG);
-	writel(rx_parity_cfg, uport->membase + SE_UART_RX_PARITY_CFG);
-	writel(bits_per_char, uport->membase + SE_UART_TX_WORD_LEN);
-	writel(bits_per_char, uport->membase + SE_UART_RX_WORD_LEN);
-	writel(stop_bit_len, uport->membase + SE_UART_TX_STOP_BIT_LEN);
+	if (port->gpi_mode) {
+		struct gpi_serial_config *peripheral = &port->gpi->peripheral;
+
+		port->gpi->baud = baud;
+		peripheral->char_size = bits_per_char - GPI_CHAR_SIZE_OFFSET;
+		peripheral->loopback_en = !!port->loopback;
+		peripheral->packing = true;
+		peripheral->stop_bit_len = stop_bit_len;
+		peripheral->opcode = GPI_START_TRANSFER;
+		peripheral->parity = gpi_parity;
+		peripheral->hw_flow_ctrl_en = !(tx_trans_cfg & UART_CTS_MASK);
+		peripheral->set_rx_config = true;
+		peripheral->set_tx_config = true;
+	} else {
+		if (!uart_console(uport))
+			writel(port->loopback, uport->membase + SE_UART_LOOPBACK_CFG);
+		writel(tx_trans_cfg, uport->membase + SE_UART_TX_TRANS_CFG);
+		writel(tx_parity_cfg, uport->membase + SE_UART_TX_PARITY_CFG);
+		writel(rx_trans_cfg, uport->membase + SE_UART_RX_TRANS_CFG);
+		writel(rx_parity_cfg, uport->membase + SE_UART_RX_PARITY_CFG);
+		writel(bits_per_char, uport->membase + SE_UART_TX_WORD_LEN);
+		writel(bits_per_char, uport->membase + SE_UART_RX_WORD_LEN);
+		writel(stop_bit_len, uport->membase + SE_UART_TX_STOP_BIT_LEN);
+	}
+
+	/*
+	 * Re-arm RX to submit the updated CFG TRE. FIFO and SE-DMA
+	 * modes apply configuration changes immediately through
+	 * register updates, whereas GPI mode requires a new RX
+	 * transfer for the updated settings to reach hardware.
+	 */
+	if (port->gpi_mode) {
+		qcom_geni_serial_start_rx(uport);
+		flush_workqueue(port->gpi->rx_wq);
+	}
 
 	trace_geni_serial_set_termios(uport->dev, baud, bits_per_char,
 				      tx_trans_cfg, tx_parity_cfg, rx_trans_cfg,
@@ -2035,6 +2565,14 @@ static void qcom_geni_serial_remove(struct platform_device *pdev)
 
 	WRITE_ONCE(port->tx_kick_enabled, false);
 	irq_work_sync(&port->tx_kick);
+
+	if (port->gpi_mode && port->setup) {
+		destroy_workqueue(port->gpi->tx_wq);
+		destroy_workqueue(port->gpi->rx_wq);
+		qcom_geni_serial_release_gpi_dma(port);
+		qcom_geni_serial_unprepare_gpi_rx_dma(port);
+	}
+
 	dev_pm_clear_wake_irq(&pdev->dev);
 	device_init_wakeup(&pdev->dev, false);
 	if (!port->dev_data->console)

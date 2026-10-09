@@ -1582,10 +1582,6 @@ int geni_load_se_firmware(struct geni_se *se, enum geni_se_protocol_type protoco
 	if (of_property_read_bool(se->dev->of_node, "qcom,enable-gsi-dma"))
 		mode = GENI_GPI_DMA;
 
-	/* GSI mode is not supported by the UART driver; therefore, setting FIFO mode */
-	if (protocol == GENI_SE_UART)
-		mode = GENI_SE_FIFO;
-
 	ret = request_firmware(&fw, fw_name, se->dev);
 	if (ret) {
 		if (ret == -ENOENT)
