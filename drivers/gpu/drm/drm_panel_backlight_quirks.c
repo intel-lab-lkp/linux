@@ -29,6 +29,16 @@ static const struct drm_get_panel_backlight_quirk drm_panel_min_backlight_quirks
 		.ident.panel_id = drm_edid_encode_panel_id('B', 'O', 'E', 0x08df),
 		.quirk = { .force_pwm = true, },
 	},
+	/* MECHREVO Yilong15Pro GM5HG7A with BOE NE153QDM-NZ1 panel */
+	{
+		.dmi_match.field = DMI_SYS_VENDOR,
+		.dmi_match.value = "MECHREVO",
+		.dmi_match_other.field = DMI_PRODUCT_NAME,
+		.dmi_match_other.value = "Yilong15Pro Series GM5HG7A",
+		.ident.panel_id = drm_edid_encode_panel_id('B', 'O', 'E', 0x0c8e),
+		.ident.name = "NE153QDM-NZ1",
+		.quirk = { .min_brightness = 1, },
+	},
 	/* 13 inch matte panel */
 	{
 		.dmi_match.field = DMI_BOARD_VENDOR,
