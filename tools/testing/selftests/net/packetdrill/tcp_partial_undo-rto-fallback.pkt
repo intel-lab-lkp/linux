@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: GPL-2.0
+//
+// Test that a segment that is lost but also previously retransmitted is not
+// added back to the RACK list during partial undo.
+
+`./defaults.sh`
+
+// Establish a connection with a 100 ms RTT and a 1000-byte payload MSS.
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+   +0 bind(3, ..., ...) = 0
+   +0 listen(3, 1) = 0
+
+  .100 < S 0:0(0) win 20000 <mss 1012,sackOK,TS val 1000 ecr 0>
+    +0 > S. 0:0(0) ack 1 <mss 1460,sackOK,TS val 100 ecr 1000>
+  .200 < . 1:1(0) ack 1 win 20000 <nop,nop,TS val 1100 ecr 100>
+    +0 accept(3, ..., ...) = 4
+
+// A is delayed. B, the tail segment, is lost.
+  .210 write(4, ..., 1000) = 1000
+    +0 > P. 1:1001(1000) ack 1 <nop,nop,TS val 210 ecr 1100>
+  .211 write(4, ..., 1000) = 1000
+    +0 > P. 1001:2001(1000) ack 1 <...>
+
+// With no ACKs, the TLP retransmits B at roughly 2*RTT after its send,
+// which adds TCPCB_EVER_RETRANS to B.
+  .400~.430 > P. 1001:2001(1000) ack 1 <...>
+  .435 %{
+assert tcpi_ca_state == TCP_CA_Open, tcpi_ca_state
+assert tcpi_total_retrans == 1, tcpi_total_retrans
+}%
+
+// C is sent and arrives with a 40ms RTT. It is sent after A and B's tail
+// retransmission, and both A and B have remained unack'd for RACK's
+// RTT + reorder window. So RACK marks them as TCPCB_LOST. C's SACK allows A to
+// be retransmitted as A'. Now, A and B are both TCPCB_LOST and
+// TCPCB_EVER_RETRANS.
+  .440 write(4, ..., 1000) = 1000
+    +0 > P. 2001:3001(1000) ack 1 <...>
+  .480 < . 1:1(0) ack 1 win 20000 <TS val 1380 ecr 100,sack 2001:3001>
+    +0 > P. 1:1001(1000) ack 1 <...>
+    +0 %{
+assert tcpi_ca_state == TCP_CA_Recovery, tcpi_ca_state
+assert tcpi_lost == 2, tcpi_lost
+assert tcpi_total_retrans == 2, tcpi_total_retrans
+}%
+
+// The original A arrives. Its timestamp predates A's retransmission,
+// which starts partial undo. B's TCPCB_LOST flag is cleared, but because it
+// is TCPCB_EVER_RETRANS, it is not restored to the RACK list. Only RTO will
+// rescue it.
+  .490 < . 1:1(0) ack 1001 win 20000 <TS val 1390 ecr 210,sack 2001:3001>
+  +.001 %{
+assert tcpi_unacked == 2, tcpi_unacked
+assert tcpi_lost == 0, tcpi_lost
+assert tcpi_retransmits == 0, tcpi_retransmits
+assert tcpi_total_retrans == 2, tcpi_total_retrans
+}%
+
+// No prompt retransmission: the remaining hole is recovered by one RTO.
+  +.100~+1.000 > P. 1001:2001(1000) ack 1 <...>
+    +0 %{
+assert tcpi_retransmits == 1, tcpi_retransmits
+assert tcpi_total_retrans == 3, tcpi_total_retrans
+}%
