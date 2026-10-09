@@ -274,7 +274,7 @@ struct nvkm_gsp {
 static inline bool
 nvkm_gsp_rm(struct nvkm_gsp *gsp)
 {
-	return gsp && (gsp->fws.rm || gsp->fw.img);
+	return gsp && gsp->rm && (gsp->fws.rm || gsp->fw.img);
 }
 
 #include <rm/rm.h>
