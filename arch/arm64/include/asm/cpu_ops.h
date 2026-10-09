@@ -21,6 +21,9 @@
  *		mechanism for doing so, tests whether it is possible to boot
  *		the given CPU.
  * @cpu_boot:	Boots a cpu into the kernel.
+ * @cpu_boot_has_arg: Optionally determines whether @cpu_boot passes its
+ *		      (non-zero) second argument to the booting CPU in
+ *		      register x0.
  * @cpu_postboot: Optionally, perform any post-boot cleanup or necessary
  *		synchronisation. Called from the cpu being booted.
  * @cpu_can_disable: Determines whether a CPU can be disabled based on
@@ -36,7 +39,8 @@ struct cpu_operations {
 	const char	*name;
 	int		(*cpu_init)(unsigned int);
 	int		(*cpu_prepare)(unsigned int);
-	int		(*cpu_boot)(unsigned int);
+	int		(*cpu_boot)(unsigned int, unsigned long);
+	bool		(*cpu_boot_has_arg)(void);
 	void		(*cpu_postboot)(void);
 #ifdef CONFIG_HOTPLUG_CPU
 	bool		(*cpu_can_disable)(unsigned int cpu);

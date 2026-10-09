@@ -104,7 +104,7 @@ static int smp_spin_table_cpu_prepare(unsigned int cpu)
 	return 0;
 }
 
-static int smp_spin_table_cpu_boot(unsigned int cpu)
+static int smp_spin_table_cpu_boot(unsigned int cpu, unsigned long ignored)
 {
 	/*
 	 * Update the pen release flag.

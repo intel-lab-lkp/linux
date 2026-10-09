@@ -36,14 +36,21 @@ static int __init cpu_psci_cpu_prepare(unsigned int cpu)
 	return 0;
 }
 
-static int cpu_psci_cpu_boot(unsigned int cpu)
+static int cpu_psci_cpu_boot(unsigned int cpu, unsigned long context)
 {
 	phys_addr_t pa_secondary_entry = __pa_symbol(secondary_entry);
-	int err = psci_ops.cpu_on(cpu_logical_map(cpu), pa_secondary_entry, 0);
+	int err = psci_ops.cpu_on(cpu_logical_map(cpu), pa_secondary_entry,
+				  context);
 	if (err && err != -EPERM)
 		pr_err("failed to boot CPU%d (%d)\n", cpu, err);
 
 	return err;
+}
+
+static bool cpu_psci_cpu_boot_has_context(void)
+{
+	return psci_ops.get_version &&
+	       psci_ops.get_version() >= PSCI_VERSION(0, 2);
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -114,6 +121,7 @@ const struct cpu_operations cpu_psci_ops = {
 	.cpu_init	= cpu_psci_cpu_init,
 	.cpu_prepare	= cpu_psci_cpu_prepare,
 	.cpu_boot	= cpu_psci_cpu_boot,
+	.cpu_boot_has_arg = cpu_psci_cpu_boot_has_context,
 #ifdef CONFIG_HOTPLUG_CPU
 	.cpu_can_disable = cpu_psci_cpu_can_disable,
 	.cpu_disable	= cpu_psci_cpu_disable,
