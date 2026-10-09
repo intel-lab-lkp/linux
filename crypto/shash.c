@@ -225,6 +225,31 @@ static int __crypto_shash_export(struct shash_desc *desc, void *out,
 
 int crypto_shash_export_core(struct shash_desc *desc, void *out)
 {
+	struct crypto_shash *tfm = desc->tfm;
+
+	if (crypto_shash_block_only(tfm)) {
+		unsigned int descsize = crypto_shash_descsize(tfm);
+		unsigned int bs = crypto_shash_blocksize(tfm);
+		u8 *buf = shash_desc_ctx(desc);
+		unsigned int partial;
+		int err;
+
+		partial = buf[descsize - 1];
+		buf[descsize - 1] = 0;
+
+		if (!partial)
+			;
+		else if (partial != bs)
+			return -EINVAL;
+		else {
+			err = crypto_shash_alg(tfm)->update(
+				desc, buf + descsize - bs - 1, bs);
+
+			if (err)
+				return err;
+		}
+	}
+
 	return __crypto_shash_export(desc, out,
 				     crypto_shash_alg(desc->tfm)->export_core);
 }

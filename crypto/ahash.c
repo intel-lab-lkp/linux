@@ -634,6 +634,43 @@ int crypto_ahash_export_core(struct ahash_request *req, void *out)
 
 	if (likely(tfm->using_shash))
 		return crypto_shash_export_core(ahash_request_ctx(req), out);
+
+	if (crypto_ahash_block_only(tfm)) {
+		unsigned int reqsize = crypto_ahash_reqsize(tfm);
+		unsigned int bs = crypto_ahash_blocksize(tfm);
+		u8 *buf = ahash_request_ctx(req);
+		unsigned int partial;
+		int err;
+
+		buf += reqsize - 1;
+		partial = *buf;
+		*buf = 0;
+
+		if (!partial)
+			;
+		else if (partial != bs)
+			return -EINVAL;
+		else {
+			struct crypto_ahash *fb = crypto_ahash_fb(tfm);
+			u8 state[HASH_MAX_STATESIZE];
+
+			err = crypto_ahash_export(req, state);
+
+			ahash_request_set_tfm(req, fb);
+			err = err ?: crypto_ahash_import(req, state);
+
+			sg_init_one(req->sg_head, buf - bs, bs);
+			req->src = req->sg_head;
+			req->nbytes = bs;
+
+			err = err ?: crypto_ahash_update(req) ?:
+			      crypto_ahash_export_core(req, out);
+
+			ahash_request_set_tfm(req, tfm);
+			return err ?: crypto_ahash_import(req, state);
+		}
+	}
+
 	return crypto_ahash_alg(tfm)->export_core(req, out);
 }
 EXPORT_SYMBOL_GPL(crypto_ahash_export_core);
