@@ -3167,6 +3167,13 @@ int __ceph_do_getattr(struct inode *inode, struct folio *locked_folio,
 		return 0;
 	}
 
+	/*
+	 * Cached caps would otherwise satisfy getattr after the MDS has
+	 * revoked access. Fail before that short-circuit.
+	 */
+	if (ceph_inode_is_under_quarantine(inode))
+		return -EACCES;
+
 	boutc(cl, "inode %p %llx.%llx mask %s mode 0%o\n", inode,
 	      ceph_vinop(inode), ceph_cap_string(mask), inode->i_mode);
 	if (!force && ceph_caps_issued_mask_metric(ceph_inode(inode), mask, 1))

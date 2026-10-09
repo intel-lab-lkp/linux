@@ -3983,11 +3983,52 @@ static void kick_requests(struct ceph_mds_client *mdsc, int mds)
 	}
 }
 
+static bool ceph_request_targets_quarantine(struct ceph_mds_request *req,
+					    struct inode *dir)
+{
+	struct inode *inode;
+
+	if (dir && ceph_inode_is_under_quarantine(dir))
+		return true;
+	if (req->r_inode && ceph_inode_is_under_quarantine(req->r_inode))
+		return true;
+	if (req->r_parent && ceph_inode_is_under_quarantine(req->r_parent))
+		return true;
+	if (req->r_old_inode && ceph_inode_is_under_quarantine(req->r_old_inode))
+		return true;
+	if (req->r_old_dentry_dir &&
+	    ceph_inode_is_under_quarantine(req->r_old_dentry_dir))
+		return true;
+	if (req->r_dentry) {
+		inode = d_inode(req->r_dentry);
+		if (inode && ceph_inode_is_under_quarantine(inode))
+			return true;
+	}
+	if (req->r_old_dentry) {
+		inode = d_inode(req->r_old_dentry);
+		if (inode && ceph_inode_is_under_quarantine(inode))
+			return true;
+	}
+	return false;
+}
+
 int ceph_mdsc_submit_request(struct ceph_mds_client *mdsc, struct inode *dir,
 			      struct ceph_mds_request *req)
 {
 	struct ceph_client *cl = mdsc->fsc->client;
 	int err = 0;
+
+	/*
+	 * Quarantine-aware clients fail metadata immediately. The MDS is
+	 * still the authority for clients that have not seen the cap
+	 * update yet; this covers inodes already marked locally, including
+	 * async create/unlink which would otherwise complete in cache.
+	 */
+	if (ceph_request_targets_quarantine(req, dir)) {
+		doutc(cl, "request %p op %s denied by subvolume quarantine\n",
+		      req, ceph_mds_op_name(req->r_op));
+		return -EACCES;
+	}
 
 	/*
 	 * If a reset is in progress, wait for it to complete.

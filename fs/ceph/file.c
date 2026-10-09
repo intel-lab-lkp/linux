@@ -382,6 +382,12 @@ int ceph_open(struct inode *inode, struct file *file)
 		return 0;
 	}
 
+	/* Existing caps can satisfy open without an MDS round-trip. */
+	if (ceph_inode_is_under_quarantine(inode)) {
+		ceph_blog_exit(&__ji);
+		return -EACCES;
+	}
+
 	/* filter out O_CREAT|O_EXCL; vfs did that already.  yuck. */
 	flags = file->f_flags & ~(O_CREAT|O_EXCL);
 	if (S_ISDIR(inode->i_mode)) {
@@ -829,6 +835,11 @@ int ceph_atomic_open(struct inode *dir, struct dentry *dentry,
 	if (dentry->d_name.len > NAME_MAX) {
 		ceph_blog_exit(&__ji);
 		return -ENAMETOOLONG;
+	}
+
+	if (ceph_inode_is_under_quarantine(dir)) {
+		ceph_blog_exit(&__ji);
+		return -EACCES;
 	}
 
 	err = ceph_wait_on_conflict_unlink(dentry);

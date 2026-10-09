@@ -3263,6 +3263,9 @@ int ceph_try_get_caps(struct inode *inode, int need, int want,
 			return ret;
 	}
 
+	if (ceph_inode_is_under_quarantine(inode))
+		return -EACCES;
+
 	flags = get_used_fmode(need | want);
 	if (nonblock)
 		flags |= NON_BLOCKING;
@@ -3297,6 +3300,9 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 	flags = get_used_fmode(need | want);
 
 	while (true) {
+		if (ceph_inode_is_under_quarantine(inode))
+			return -EACCES;
+
 		flags &= CEPH_FILE_MODE_MASK;
 		if (vfs_inode_has_locks(inode))
 			flags |= CHECK_FILELOCK;
@@ -3331,6 +3337,10 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 							endoff, flags, &_got))) {
 				if (signal_pending(current)) {
 					ret = -ERESTARTSYS;
+					break;
+				}
+				if (ceph_inode_is_under_quarantine(inode)) {
+					ret = -EACCES;
 					break;
 				}
 

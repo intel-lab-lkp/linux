@@ -349,6 +349,11 @@ static int ceph_readdir(struct file *file, struct dir_context *ctx)
 
 	ceph_blog_enter(fsc, &__ji);
 
+	if (ceph_inode_is_under_quarantine(inode)) {
+		ceph_blog_exit(&__ji);
+		return -EACCES;
+	}
+
 	boutc(cl, "%p %llx.%llx file %p pos %llx\n", inode,
 	      ceph_vinop(inode), file, ctx->pos);
 	if (dfi->file_info.flags & CEPH_F_ATEND) {
@@ -886,6 +891,11 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	if (dentry->d_name.len > NAME_MAX) {
 		ceph_blog_exit(&__ji);
 		return ERR_PTR(-ENAMETOOLONG);
+	}
+
+	if (ceph_inode_is_under_quarantine(dir)) {
+		ceph_blog_exit(&__ji);
+		return ERR_PTR(-EACCES);
 	}
 
 	if (IS_ENCRYPTED(dir)) {
