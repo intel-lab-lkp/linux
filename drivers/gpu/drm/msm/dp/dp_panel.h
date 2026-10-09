@@ -42,6 +42,7 @@ struct msm_dp_panel {
 	bool link_caps_valid;
 	/* All capability reads completed; eDP can reuse the full cache. */
 	bool caps_cached;
+	bool sdp_needs_flush;
 	u32 hw_revision;
 
 	u32 max_bw_code;
