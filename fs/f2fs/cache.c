@@ -740,7 +740,8 @@ static inline bool f2fs_should_wake_up_cache_wb(struct f2fs_sb_info *sbi)
 	    nr_dirty < cache_thread->cache_wb_dirty_threshold)
 		return false;
 
-	return true;
+	return cache_thread->cache_wb_total_threshold ||
+		cache_thread->cache_wb_dirty_threshold;
 }
 
 static int f2fs_cache_writeback_kthread(void *data)
