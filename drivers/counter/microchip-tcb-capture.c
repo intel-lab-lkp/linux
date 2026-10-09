@@ -470,7 +470,10 @@ static int mchp_tc_irq_enable(struct counter_device *const counter, int irq)
 
 static void mchp_tc_clk_remove(void *ptr)
 {
-	clk_disable_unprepare((struct clk *)ptr);
+	struct clk *clk = ptr;
+
+	clk_disable_unprepare(clk);
+	clk_put(clk);
 }
 
 static int mchp_tc_probe(struct platform_device *pdev)
@@ -528,8 +531,10 @@ static int mchp_tc_probe(struct platform_device *pdev)
 		}
 
 		ret = clk_prepare_enable(clk[i]);
-		if (ret)
+		if (ret) {
+			clk_put(clk[i]);
 			return ret;
+		}
 
 		ret = devm_add_action_or_reset(&pdev->dev,
 					       mchp_tc_clk_remove,
