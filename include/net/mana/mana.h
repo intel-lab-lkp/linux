@@ -408,7 +408,16 @@ struct mana_rxq {
 
 	u32 buf_index;
 
+	/* Port-owned live slot; use mana_rxq_stats() to select the writer's
+	 * slot.
+	 */
 	struct mana_stats_rx *stats;
+
+	/* Set under RTNL before another queue takes over this index. */
+	bool retiring;
+
+	/* Folded under RTNL after drain-stat writers quiesce. */
+	struct mana_stats_rx drain_stats;
 
 	struct bpf_prog __rcu *bpf_prog;
 	struct xdp_rxq_info xdp_rxq;
@@ -606,8 +615,9 @@ struct mana_port_context {
 	unsigned int max_queues;
 	unsigned int num_queues;
 
-	/* Port-lifetime arrays with max_queues slots. Readers sum live and
-	 * retired RX counters.
+	/* Port-lifetime arrays with max_queues slots. Live RX queues write
+	 * rxq_stats[]; teardown and rollback fold drain_stats into
+	 * rxq_stats_ret[] under RTNL. Readers sum both.
 	 */
 	struct mana_stats_rx *rxq_stats;
 	struct mana_stats_rx *rxq_stats_ret;
@@ -623,11 +633,15 @@ struct mana_port_context {
 	struct mutex vport_mutex;
 	int vport_use_count;
 
-	/* Set by mana_set_channels() under vport_mutex to block RDMA
-	 * from grabbing the vport during the detach/attach window.
-	 * Checked by mana_cfg_vport() when called from the RDMA path.
-	 */
+	/* Exclude RDMA during reconfiguration; protected by vport_mutex. */
 	bool channel_changing;
+
+	/* Caller must close the port after releasing the unpublished set. */
+	bool publish_dead_end;
+
+	/* Hold carrier off after failed rollback until a successful reopen.
+	 */
+	bool carrier_forced_off;
 
 	/* Net shaper handle*/
 	struct net_shaper_handle handle;
@@ -702,10 +716,18 @@ int mana_detach(struct net_device *ndev, bool from_close);
 struct mana_port_context *
 mana_qset_scratch_alloc(struct mana_port_context *apc);
 void mana_qset_scratch_free(struct mana_port_context *scratch);
+static inline struct mana_stats_rx *mana_rxq_stats(struct mana_rxq *rxq)
+{
+	return READ_ONCE(rxq->retiring) ? &rxq->drain_stats : rxq->stats;
+}
+
 int mana_alloc_qset(struct mana_port_context *apc,
 		    struct mana_port_context *scratch, unsigned int num_queues,
 		    unsigned int rx_queue_size, unsigned int tx_queue_size,
 		    u32 priv_flags, struct mana_qset *out);
+int mana_publish_qset(struct mana_port_context *apc, struct mana_qset *newq,
+		      struct mana_qset *out_old);
+void mana_publish_close_if_needed(struct mana_port_context *apc);
 void mana_free_qset(struct mana_port_context *scratch, struct mana_qset *qset);
 
 void mana_dim_change(struct mana_cq *cq, bool enable);
