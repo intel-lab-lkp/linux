@@ -362,6 +362,7 @@ static const struct iio_chan_spec _name[] = {                           \
 }
 
 LTC2493_DEFINE_CHANNELS(ltc2493_channel, 0);
+LTC2493_DEFINE_CHANNELS(ltc2493_channel_samp_freq, BIT(IIO_CHAN_INFO_SAMP_FREQ));
 
 static const struct iio_info ltc2497core_info = {
 	.read_raw = ltc2497core_read_raw,
@@ -387,7 +388,10 @@ int ltc2497core_probe(struct device *dev, struct iio_dev *indio_dev)
 	indio_dev->info = &ltc2497core_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	if (ddata->chip_info->four_channel) {
-		indio_dev->channels = ltc2493_channel;
+		if (ddata->chip_info->has_speed_mode)
+			indio_dev->channels = ltc2493_channel_samp_freq;
+		else
+			indio_dev->channels = ltc2493_channel;
 		indio_dev->num_channels = ARRAY_SIZE(ltc2493_channel);
 	} else {
 		if (ddata->chip_info->has_speed_mode)

@@ -175,6 +175,7 @@ static const struct ltc2497_chip_info ltc2497_info[] = {
 		.resolution = 24,
 		.name = "ltc2493",
 		.has_temp = true,
+		.has_speed_mode = true,
 		.four_channel = true,
 	},
 	[TYPE_LTC2497] = {
