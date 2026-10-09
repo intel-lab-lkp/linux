@@ -160,28 +160,28 @@ static int __init msm_timer_init(u32 dgt_hz, int sched_bits, int irq,
 	msm_evt = alloc_percpu(struct clock_event_device);
 	if (!msm_evt) {
 		pr_err("memory allocation failed for clockevents\n");
-		goto err;
+		return -ENOMEM;
 	}
 
-	if (percpu)
+	if (percpu) {
 		res = request_percpu_irq(irq, msm_timer_interrupt,
 					 "gp_timer", msm_evt);
-
-	if (res) {
-		pr_err("request_percpu_irq failed\n");
-	} else {
-		/* Install and invoke hotplug callbacks */
-		res = cpuhp_setup_state(CPUHP_AP_QCOM_TIMER_STARTING,
-					"clockevents/qcom/timer:starting",
-					msm_local_timer_starting_cpu,
-					msm_local_timer_dying_cpu);
 		if (res) {
-			free_percpu_irq(irq, msm_evt);
-			goto err;
+			pr_err("request_percpu_irq failed\n");
+			goto err_free_evt;
 		}
 	}
 
-err:
+	/* Install and invoke hotplug callbacks */
+	res = cpuhp_setup_state(CPUHP_AP_QCOM_TIMER_STARTING,
+				"clockevents/qcom/timer:starting",
+				msm_local_timer_starting_cpu,
+				msm_local_timer_dying_cpu);
+	if (res) {
+		free_percpu_irq(irq, msm_evt);
+		goto err_free_evt;
+	}
+
 	writel_relaxed(TIMER_ENABLE_EN, source_base + TIMER_ENABLE);
 	res = clocksource_register_hz(cs, dgt_hz);
 	if (res)
@@ -189,6 +189,12 @@ err:
 	sched_clock_register(msm_sched_clock_read, sched_bits, dgt_hz);
 	msm_delay_timer.freq = dgt_hz;
 	register_current_timer_delay(&msm_delay_timer);
+
+	return res;
+
+err_free_evt:
+	free_percpu(msm_evt);
+	msm_evt = NULL;
 
 	return res;
 }
