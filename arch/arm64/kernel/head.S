@@ -392,7 +392,6 @@ SYM_FUNC_START_LOCAL(__secondary_switched)
 	mov	x0, x20
 	bl	finalise_el2
 
-	str_l	xzr, __early_cpu_boot_status, x3
 	adr_l	x5, vectors
 	msr	vbar_el1, x5
 	isb
@@ -439,14 +438,14 @@ SYM_FUNC_END(set_cpu_boot_mode_flag)
  *
  * update_early_cpu_boot_status tmp, status
  *  - Corrupts tmp1, tmp2
- *  - Writes 'status' to __early_cpu_boot_status and makes sure
+ *  - Writes 1 to the 'status' field of __early_cpu_boot_status and makes sure
  *    it is committed to memory.
  */
 
 	.macro	update_early_cpu_boot_status status, tmp1, tmp2
-	mov	\tmp2, #\status
 	adr_l	\tmp1, __early_cpu_boot_status
-	str	\tmp2, [\tmp1]
+	mov	\tmp2, #1
+	strb	w\tmp2, [\tmp1, #\status]
 	dmb	sy
 	dc	ivac, \tmp1			// Invalidate potentially stale cache line
 	.endm
@@ -494,8 +493,7 @@ SYM_FUNC_START(__cpu_secondary_check52bitva)
 	b.ge	2f
 #endif
 
-	update_early_cpu_boot_status \
-		CPU_STUCK_IN_KERNEL | CPU_STUCK_REASON_52_BIT_VA, x0, x1
+	update_early_cpu_boot_status EARLY_CPU_STUCK_REASON_52_BIT_VA, x0, x1
 1:	wfe
 	wfi
 	b	1b
@@ -506,8 +504,7 @@ SYM_FUNC_END(__cpu_secondary_check52bitva)
 
 SYM_FUNC_START_LOCAL(__no_granule_support)
 	/* Indicate that this CPU can't boot and is stuck in the kernel */
-	update_early_cpu_boot_status \
-		CPU_STUCK_IN_KERNEL | CPU_STUCK_REASON_NO_GRAN, x1, x2
+	update_early_cpu_boot_status EARLY_CPU_STUCK_REASON_NO_GRAN, x1, x2
 1:
 	wfe
 	wfi

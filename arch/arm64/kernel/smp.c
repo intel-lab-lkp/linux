@@ -64,7 +64,7 @@
  */
 struct secondary_data secondary_data = {};
 /* Number of CPUs which aren't online, but looping in kernel text. */
-static int cpus_stuck_in_kernel;
+static bool cpus_stuck_in_kernel;
 
 static int ipi_irq_base __ro_after_init;
 static int nr_ipi __ro_after_init = NR_IPI;
@@ -93,6 +93,18 @@ static inline int op_cpu_kill(unsigned int cpu)
 }
 #endif
 
+static bool smp_parallel_bringup;
+
+bool arch_cpuhp_init_parallel_bringup(void)
+{
+	const struct cpu_operations *ops = get_secondary_cpu_ops();
+
+	smp_parallel_bringup = ops &&
+			       ops->cpu_boot_has_arg &&
+			       ops->cpu_boot_has_arg();
+	return smp_parallel_bringup;
+}
+
 /*
  * Boot a secondary CPU, and assign it the specified idle task.
  * This also gives us the initial stack to use for this CPU.
@@ -107,12 +119,10 @@ int arch_cpuhp_kick_ap_alive(unsigned int cpu, struct task_struct *idle)
 	 * We need to tell the secondary core where to find its stack and the
 	 * page tables.
 	 */
-	if (ops->cpu_boot_has_arg && ops->cpu_boot_has_arg())
+	if (smp_parallel_bringup)
 		arg = idle;
 	else
 		secondary_data.task = idle;
-
-	update_cpu_boot_status(CPU_MMU_OFF);
 
 	/* Now bring the CPU into our world */
 	if (ops->cpu_boot)
@@ -125,46 +135,42 @@ int arch_cpuhp_kick_ap_alive(unsigned int cpu, struct task_struct *idle)
 
 void arch_cpuhp_cleanup_kick_cpu(unsigned int cpu, bool is_alive)
 {
-	long status;
+	union secondary_status status;
 
 	if (is_alive)
 		return;
 
-	secondary_data.task = NULL;
-	status = READ_ONCE(secondary_data.status);
-	if (status == CPU_MMU_OFF)
-		status = READ_ONCE(__early_cpu_boot_status);
-
-	if (cpumask_test_and_clear_cpu(cpu, &secondary_data.cpu_died_early_mask))
-		set_cpu_present(cpu, false);
-
 	/* A CPU has failed to boot. Try to figure out what happened. */
-	switch (status & CPU_BOOT_STATUS_MASK) {
-	default:
-		pr_err("CPU%u: failed in unknown state : 0x%lx\n",
-		       cpu, status);
-		cpus_stuck_in_kernel++;
-		break;
-	case CPU_KILL_ME:
+	if (smp_parallel_bringup)
+		pr_warn_once("Parallel CPU bringup failed; consider passing \"cpuhp.parallel=off\" for a more accurate diagnosis.\n");
+	else
+		secondary_data.task = NULL;
+
+	status.val = READ_ONCE(__early_cpu_boot_status);
+	if (status.early_flags[EARLY_CPU_STUCK_REASON_52_BIT_VA]) {
+		pr_crit_once("CPU%u detected lack of support for 52-bit VAs\n",
+			     cpu);
+	}
+
+	if (status.early_flags[EARLY_CPU_STUCK_REASON_NO_GRAN]) {
+		pr_crit_once("CPU%u detected lack of support for %luK granules\n",
+			     cpu, PAGE_SIZE / SZ_1K);
+	}
+
+	status = READ_ONCE(secondary_data.status);
+	if (status.flags[CPU_PANIC_KERNEL])
+		panic("CPU%u detected unsupported configuration\n", cpu);
+
+	if (cpumask_test_and_clear_cpu(cpu, &secondary_data.cpu_died_early_mask)) {
+		set_cpu_present(cpu, false);
 		if (!op_cpu_kill(cpu)) {
 			pr_crit("CPU%u: died during early boot\n", cpu);
-			break;
+			return;
 		}
-		pr_crit("CPU%u: may not have shut down cleanly\n", cpu);
-		fallthrough;
-	case CPU_STUCK_IN_KERNEL:
-		pr_crit("CPU%u: is stuck in kernel\n", cpu);
-		if (status & CPU_STUCK_REASON_52_BIT_VA)
-			pr_crit("CPU%u: does not support 52-bit VAs\n", cpu);
-		if (status & CPU_STUCK_REASON_NO_GRAN) {
-			pr_crit("CPU%u: does not support %luK granule\n",
-				cpu, PAGE_SIZE / SZ_1K);
-		}
-		cpus_stuck_in_kernel++;
-		break;
-	case CPU_PANIC_KERNEL:
-		panic("CPU%u detected unsupported configuration\n", cpu);
 	}
+
+	pr_crit_once("CPUs may be stuck in kernel\n");
+	cpus_stuck_in_kernel = true;
 }
 
 static void init_gic_priority_masking(void)
@@ -409,12 +415,8 @@ void __noreturn cpu_die_early(void)
 
 	cpumask_set_cpu(cpu, &secondary_data.cpu_died_early_mask);
 
-	if (IS_ENABLED(CONFIG_HOTPLUG_CPU)) {
-		update_cpu_boot_status(CPU_KILL_ME);
+	if (IS_ENABLED(CONFIG_HOTPLUG_CPU))
 		__cpu_try_die(cpu);
-	}
-
-	update_cpu_boot_status(CPU_STUCK_IN_KERNEL);
 
 	cpu_park_loop();
 }
