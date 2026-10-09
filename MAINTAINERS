@@ -10881,6 +10881,12 @@ L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	drivers/media/i2c/gc5035.c
 
+GALAXYCORE GC8034 CAMERA SENSOR DRIVER
+M:	Nicola Fiorillo <nicfio@gmail.com>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+F:	drivers/media/i2c/gc8034.c
+
 GATEWORKS SYSTEM CONTROLLER (GSC) DRIVER
 M:	Tim Harvey <tharvey@gateworks.com>
 S:	Maintained
