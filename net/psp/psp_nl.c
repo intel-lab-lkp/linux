@@ -934,6 +934,10 @@ psp_nl_stats_fill(struct psp_dev *psd, struct sk_buff *rsp,
 	    nla_put_uint(rsp, PSP_A_STATS_TX_ERROR, stats.tx_error))
 		goto err_cancel_msg;
 
+	if (psp_dev_has_sadb(psd) &&
+	    nla_put_uint(rsp, PSP_A_STATS_TX_KEY_COUNT, psd->stats.tx_key_cnt))
+		goto err_cancel_msg;
+
 	genlmsg_end(rsp, hdr);
 	return 0;
 

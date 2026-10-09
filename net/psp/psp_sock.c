@@ -94,9 +94,11 @@ static int psp_dev_tx_key_add(struct psp_dev *psd, struct psp_assoc *pas,
 
 	memcpy(&dummy->tx, key, sizeof(*key));
 	err = psd->ops->tx_key_add(psd, dummy, extack);
-	if (!err)
+	if (!err) {
+		psd->stats.tx_key_cnt++;
 		memcpy(pas->drv_data, dummy->drv_data,
 		       psd->caps->assoc_drv_spc);
+	}
 
 	kfree(dummy);
 	return err;
@@ -105,6 +107,8 @@ static int psp_dev_tx_key_add(struct psp_dev *psd, struct psp_assoc *pas,
 void psp_dev_tx_key_del(struct psp_dev *psd, struct psp_assoc *pas)
 {
 	psd->ops->tx_key_del(psd, pas);
+	if (!WARN_ON_ONCE(!psd->stats.tx_key_cnt))
+		psd->stats.tx_key_cnt--;
 }
 
 static void psp_assoc_free(struct work_struct *work)

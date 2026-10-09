@@ -190,6 +190,13 @@ attribute-sets:
         doc: |
           Number of PSP packets for transmission with errors.
           Device statistic (from the PSP spec).
+      -
+        name: tx-key-count
+        type: uint
+        doc: |
+          Current number of Tx keys installed on the device.
+          Only visible if the driver stores keys on device.
+          Kernel statistic.
 
 operations:
   list:
@@ -316,6 +323,7 @@ operations:
             - tx-packets
             - tx-bytes
             - tx-error
+            - tx-key-count
         pre: psp-device-get-locked
         post: psp-device-unlock
       dump:

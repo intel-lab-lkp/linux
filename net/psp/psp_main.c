@@ -169,6 +169,9 @@ void psp_dev_unregister(struct psp_dev *psd)
 		list_del(&pas->assocs_list);
 	}
 
+	WARN(psd->stats.tx_key_cnt, "psp: %s: %lu Tx keys still installed\n",
+	     netdev_name(psd->main_netdev), psd->stats.tx_key_cnt);
+
 	list_for_each_entry_safe(entry, entry_tmp, &psd->assoc_dev_list,
 				 dev_list) {
 		list_del(&entry->dev_list);
