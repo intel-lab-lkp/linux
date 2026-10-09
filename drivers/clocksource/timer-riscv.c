@@ -96,7 +96,8 @@ static struct clocksource riscv_clocksource = {
 	.name		= "riscv_clocksource",
 	.rating		= 400,
 	.mask		= CLOCKSOURCE_MASK(64),
-	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
+	.flags		= CLOCK_SOURCE_IS_CONTINUOUS |
+			  CLOCK_SOURCE_CAN_INLINE_READ,
 	.read		= riscv_clocksource_rdtime,
 	.vdso_clock_mode = VDSO_CLOCKMODE_ARCHTIMER,
 };
