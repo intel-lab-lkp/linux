@@ -4185,11 +4185,7 @@ static void blk_mq_map_swqueue(struct request_queue *q)
 		hctx->dispatch_from = NULL;
 	}
 
-	/*
-	 * Map software to hardware queues.
-	 *
-	 * If the cpu isn't present, the cpu is mapped to first hctx.
-	 */
+	/* Map software to hardware queues. */
 	for_each_possible_cpu(i) {
 
 		ctx = per_cpu_ptr(q->queue_ctx, i);
