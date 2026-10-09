@@ -180,7 +180,7 @@ static __always_inline void * __must_check kasan_init_slab_obj(
 }
 
 bool __kasan_slab_pre_free(struct kmem_cache *s, void *object,
-			unsigned long ip);
+			   unsigned long ip, bool after_rcu_delay);
 /**
  * kasan_slab_pre_free - Check whether freeing a slab object is safe.
  * @object: Object to be freed.
@@ -193,10 +193,12 @@ bool __kasan_slab_pre_free(struct kmem_cache *s, void *object,
  * @Return true if freeing the object is unsafe; false otherwise.
  */
 static __always_inline bool kasan_slab_pre_free(struct kmem_cache *s,
-						void *object)
+						void *object,
+						bool after_rcu_delay)
 {
 	if (kasan_enabled())
-		return __kasan_slab_pre_free(s, object, _RET_IP_);
+		return __kasan_slab_pre_free(s, object, _RET_IP_,
+					     after_rcu_delay);
 	return false;
 }
 
@@ -424,7 +426,8 @@ static inline void *kasan_init_slab_obj(struct kmem_cache *cache,
 	return (void *)object;
 }
 
-static inline bool kasan_slab_pre_free(struct kmem_cache *s, void *object)
+static inline bool kasan_slab_pre_free(struct kmem_cache *s, void *object,
+				       bool after_rcu_delay)
 {
 	return false;
 }
@@ -495,6 +498,7 @@ void kasan_cache_create(struct kmem_cache *cache, unsigned int *size,
 void kasan_cache_shrink(struct kmem_cache *cache);
 void kasan_cache_shutdown(struct kmem_cache *cache);
 void kasan_record_aux_stack(void *ptr);
+void kasan_record_aux_stack_rcu(void *ptr);
 
 #else /* CONFIG_KASAN_GENERIC */
 
@@ -512,6 +516,7 @@ static inline void kasan_cache_create(struct kmem_cache *cache,
 static inline void kasan_cache_shrink(struct kmem_cache *cache) {}
 static inline void kasan_cache_shutdown(struct kmem_cache *cache) {}
 static inline void kasan_record_aux_stack(void *ptr) {}
+static inline void kasan_record_aux_stack_rcu(void *ptr) {}
 
 #endif /* CONFIG_KASAN_GENERIC */
 
