@@ -310,8 +310,15 @@ static void smi_dma_xfer(struct work_struct *t)
 				"DMA CH0 engine complete length mismatched, finish data=%d !\n",
 				finishedData);
 		}
-		dvb_dmx_swfilter_packets(&port->demux,
-			port->cpu_addr[0], (finishedData / 188));
+		/* Reject lengths exceeding the DMA buffer. */
+		if (finishedData > SMI_TS_DMA_BUF_SIZE)
+			dev_warn_ratelimited(&dev->pci_dev->dev,
+					     "DMA CH0 invalid length %u, dropping completion\n",
+					     finishedData);
+		else
+			dvb_dmx_swfilter_packets(&port->demux,
+						 port->cpu_addr[0],
+						 finishedData / 188);
 		/*dvb_dmx_swfilter(&port->demux,
 			port->cpu_addr[0], finishedData);*/
 	}
@@ -333,8 +340,15 @@ static void smi_dma_xfer(struct work_struct *t)
 				"DMA CH1 engine complete length mismatched, finish data=%d !\n",
 				finishedData);
 		}
-		dvb_dmx_swfilter_packets(&port->demux,
-			port->cpu_addr[1], (finishedData / 188));
+		/* Reject lengths exceeding the DMA buffer. */
+		if (finishedData > SMI_TS_DMA_BUF_SIZE)
+			dev_warn_ratelimited(&dev->pci_dev->dev,
+					     "DMA CH1 invalid length %u, dropping completion\n",
+					     finishedData);
+		else
+			dvb_dmx_swfilter_packets(&port->demux,
+						 port->cpu_addr[1],
+						 finishedData / 188);
 		/*dvb_dmx_swfilter(&port->demux,
 			port->cpu_addr[1], finishedData);*/
 	}
@@ -821,9 +835,11 @@ static int smi_start_feed(struct dvb_demux_feed *dvbdmxfeed)
 	if (port->users++ == 0) {
 		dmaManagement = smi_config_DMA(port);
 		smi_port_clearInterrupt(port);
+		/* Clear stale status; let the IRQ queue work. */
+		port->_int_status = 0;
+		enable_work(&port->bh_work);
 		smi_port_enableInterrupt(port);
 		smi_write(port->DMA_MANAGEMENT, dmaManagement);
-		enable_and_queue_work(system_bh_wq, &port->bh_work);
 	}
 	return port->users;
 }
