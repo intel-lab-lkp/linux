@@ -26,4 +26,21 @@ config SOC_ZX297520V3
 	  Please read Documentation/arch/arm/zte/zx297520v3.rst on how to boot
 	  the kernel.
 
+config SOC_ZX279128S
+	bool "zx279128s SoC"
+	default y
+	select ARM_AMBA
+	select ARM_GIC
+	select ARM_GLOBAL_TIMER
+	select CACHE_L2X0
+	select CACHE_L2X0_IO_LOCK
+	select CLKSRC_ARM_GLOBAL_TIMER_SCHED_CLOCK
+	select HAVE_ARM_SCU if SMP
+	select HAVE_ARM_TWD if SMP
+	help
+	  Support for the ZTE (Sanechips) zx279128s SoC, a dual-core
+	  Cortex-A9 with an L2C-310 cache controller, used in home gateways
+	  such as the ZTE ZXHN H3600. The second core is started through
+	  the on-chip SRAM, where the boot loader keeps it waiting.
+
 endif

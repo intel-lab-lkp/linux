@@ -3894,6 +3894,28 @@ F:	drivers/video/fbdev/vt8500lcdfb.*
 F:	drivers/video/fbdev/wm8505fb*
 F:	drivers/video/fbdev/wmt_ge_rops.*
 
+ARM/ZTE ZX279128S SOC SUPPORT
+M:	Navid Ghahremani <ghahramani.navid@gmail.com>
+L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
+S:	Maintained
+F:	Documentation/devicetree/bindings/clock/zte,zx279128s-crm.yaml
+F:	Documentation/devicetree/bindings/gpio/zte,zx279128s-gpio.yaml
+F:	Documentation/devicetree/bindings/net/zte,zx279128s-gmac.yaml
+F:	Documentation/devicetree/bindings/net/zte,zx279128s-mdio.yaml
+F:	Documentation/devicetree/bindings/pci/zte,zx279128s-pcie.yaml
+F:	Documentation/devicetree/bindings/spi/zte,zx279128s-spifc.yaml
+F:	Documentation/devicetree/bindings/usb/zte,zx279128s-dwc3.yaml
+F:	arch/arm/boot/dts/zte/zx279128s*
+F:	arch/arm/mach-zte/*zx279128s*
+F:	drivers/clk/zte/clk-zx279128s.c
+F:	drivers/gpio/gpio-zx279128s.c
+F:	drivers/net/ethernet/zte/
+F:	drivers/net/mdio/mdio-zx279128s.c
+F:	drivers/net/phy/sanechips.c
+F:	drivers/pci/controller/dwc/pcie-zx279128s.c
+F:	drivers/spi/spi-zx279128s-spifc.c
+F:	include/dt-bindings/clock/zte,zx279128s-crm.h
+
 ARM/ZTE ZX29 SOC SUPPORT
 M:	Stefan Dösinger <stefandoesinger@gmail.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
