@@ -3,6 +3,7 @@
 config NVMEM_LAYOUTS
 	bool
 	depends on OF
+	select GENERIC_NET_UTILS
 
 if NVMEM_LAYOUTS
 

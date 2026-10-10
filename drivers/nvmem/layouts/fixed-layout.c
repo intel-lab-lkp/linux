@@ -5,10 +5,53 @@
  * Authors: Mathieu Dubois-Briand <mathieu.dubois-briand@bootlin.com>
  */
 
+#include <linux/etherdevice.h>
+#include <linux/hex.h>
 #include <linux/nvmem-provider.h>
 #include <linux/of.h>
 
 #include "../internals.h"
+
+/* Return the base address plus the offset supplied by the consumer. */
+static int fixed_layout_read_mac_base(void *priv, const char *id, int index,
+				      unsigned int offset, void *buf, size_t bytes)
+{
+	u8 mac[ETH_ALEN];
+	char ascii[3 * ETH_ALEN];
+
+	if (bytes == ETH_ALEN) {
+		ether_addr_copy(mac, buf);
+	} else if (bytes == sizeof(ascii) - 1) {
+		memcpy(ascii, buf, bytes);
+		ascii[bytes] = '\0';
+		if (!mac_pton(ascii, mac))
+			return -EINVAL;
+	} else {
+		return -EINVAL;
+	}
+
+	eth_addr_add(mac, index);
+	ether_addr_copy(buf, mac);
+
+	return 0;
+}
+
+static int fixed_layout_fixup_cell(struct nvmem_cell_info *info)
+{
+	if (!of_device_is_compatible(info->np, "mac-base"))
+		return 0;
+
+	/* The binding permits binary or colon-separated ASCII MAC addresses. */
+	if ((info->bytes != ETH_ALEN && info->bytes != 3 * ETH_ALEN - 1) ||
+	    info->nbits)
+		return -EINVAL;
+
+	info->raw_len = info->bytes;
+	info->bytes = ETH_ALEN;
+	info->read_post_process = fixed_layout_read_mac_base;
+
+	return 0;
+}
 
 static int fixed_layout_add_cells(struct nvmem_layout *layout)
 {
@@ -19,7 +62,7 @@ static int fixed_layout_add_cells(struct nvmem_layout *layout)
 	if (!np)
 		return -ENOENT;
 
-	ret = nvmem_add_cells_from_dt(layout->nvmem, np);
+	ret = nvmem_add_cells_from_dt(layout->nvmem, np, fixed_layout_fixup_cell);
 	of_node_put(np);
 
 	return ret;

@@ -39,7 +39,8 @@ struct nvmem_device {
 	bool			sysfs_cells_populated;
 };
 
-int nvmem_add_cells_from_dt(struct nvmem_device *nvmem, struct device_node *np);
+int nvmem_add_cells_from_dt(struct nvmem_device *nvmem, struct device_node *np,
+			    int (*fixup)(struct nvmem_cell_info *info));
 
 #if IS_ENABLED(CONFIG_OF)
 int nvmem_layout_bus_register(void);

@@ -789,7 +789,8 @@ static int nvmem_validate_keepouts(struct nvmem_device *nvmem)
 	return 0;
 }
 
-int nvmem_add_cells_from_dt(struct nvmem_device *nvmem, struct device_node *np)
+int nvmem_add_cells_from_dt(struct nvmem_device *nvmem, struct device_node *np,
+			    int (*fixup)(struct nvmem_cell_info *info))
 {
 	struct device *dev = &nvmem->dev;
 	const __be32 *addr;
@@ -827,6 +828,15 @@ int nvmem_add_cells_from_dt(struct nvmem_device *nvmem, struct device_node *np)
 		if (nvmem->fixup_dt_cell_info)
 			nvmem->fixup_dt_cell_info(nvmem, &info);
 
+		if (fixup) {
+			ret = fixup(&info);
+			if (ret) {
+				kfree(info.name);
+				of_node_put(info.np);
+				return ret;
+			}
+		}
+
 		ret = nvmem_add_one_cell(nvmem, &info);
 		kfree(info.name);
 		if (ret) {
@@ -841,7 +851,7 @@ EXPORT_SYMBOL_GPL(nvmem_add_cells_from_dt);
 
 static int nvmem_add_cells_from_legacy_of(struct nvmem_device *nvmem)
 {
-	return nvmem_add_cells_from_dt(nvmem, nvmem->dev.of_node);
+	return nvmem_add_cells_from_dt(nvmem, nvmem->dev.of_node, NULL);
 }
 
 int nvmem_layout_register(struct nvmem_layout *layout)
