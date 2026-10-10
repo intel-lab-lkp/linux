@@ -5659,7 +5659,7 @@ void ata_dev_init(struct ata_device *dev)
 
 	/* SATA spd limit is bound to the attached device, reset together */
 	link->sata_spd_limit = link->hw_sata_spd_limit;
-	link->sata_spd = 0;
+	/* link->sata_spd caches last negotiated link speed; not zeroed here */
 
 	/* High bits of dev->flags are used to record warm plug
 	 * requests which occur asynchronously.  Synchronize using
