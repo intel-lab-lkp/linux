@@ -206,7 +206,7 @@ static int __ref zero_p4d_populate(pgd_t *pgd, unsigned long addr,
 			pud_t *p;
 
 			if (slab_is_available()) {
-				p = pud_alloc(&init_mm, p4d, addr);
+				p = pud_alloc_kernel(p4d, addr);
 				if (!p)
 					return -ENOMEM;
 			} else {
@@ -268,7 +268,7 @@ int __ref kasan_populate_early_shadow(const void *shadow_start,
 		if (pgd_none(*pgd)) {
 
 			if (slab_is_available()) {
-				if (!p4d_alloc(&init_mm, pgd, addr))
+				if (!p4d_alloc_kernel(pgd, addr))
 					return -ENOMEM;
 			} else {
 				pgd_populate_kernel(addr, pgd,
@@ -322,6 +322,9 @@ static void kasan_free_pud(pud_t *pud_start, p4d_t *p4d)
 			return;
 	}
 
+	if (ARCH_PAGE_TABLE_SYNC_MASK & PGTBL_P4D_MODIFIED)
+		return;
+
 	pud_free(&init_mm, pud_start);
 	p4d_clear(p4d);
 }
@@ -336,6 +339,9 @@ static void kasan_free_p4d(p4d_t *p4d_start, pgd_t *pgd)
 		if (!p4d_none(*p4d))
 			return;
 	}
+
+	if (ARCH_PAGE_TABLE_SYNC_MASK & PGTBL_PGD_MODIFIED)
+		return;
 
 	p4d_free(&init_mm, p4d_start);
 	pgd_clear(pgd);

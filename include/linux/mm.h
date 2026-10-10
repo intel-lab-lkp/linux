@@ -3855,11 +3855,35 @@ static inline p4d_t *p4d_alloc(struct mm_struct *mm, pgd_t *pgd,
 		NULL : p4d_offset(pgd, address);
 }
 
+static inline p4d_t *p4d_alloc_kernel(pgd_t *pgd, unsigned long address)
+{
+	if (unlikely(pgd_none(*pgd))) {
+		if (__p4d_alloc(&init_mm, pgd, address))
+			return NULL;
+		if (ARCH_PAGE_TABLE_SYNC_MASK & PGTBL_PGD_MODIFIED)
+			arch_sync_kernel_mappings(address, address);
+	}
+
+	return p4d_offset(pgd, address);
+}
+
 static inline pud_t *pud_alloc(struct mm_struct *mm, p4d_t *p4d,
 		unsigned long address)
 {
 	return (unlikely(p4d_none(*p4d)) && __pud_alloc(mm, p4d, address)) ?
 		NULL : pud_offset(p4d, address);
+}
+
+static inline pud_t *pud_alloc_kernel(p4d_t *p4d, unsigned long address)
+{
+	if (unlikely(p4d_none(*p4d))) {
+		if (__pud_alloc(&init_mm, p4d, address))
+			return NULL;
+		if (ARCH_PAGE_TABLE_SYNC_MASK & PGTBL_P4D_MODIFIED)
+			arch_sync_kernel_mappings(address, address);
+	}
+
+	return pud_offset(p4d, address);
 }
 
 static inline pmd_t *pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
