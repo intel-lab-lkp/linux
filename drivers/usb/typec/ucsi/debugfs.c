@@ -92,6 +92,9 @@ static int ucsi_peak_curr_show(struct seq_file *m, void *v)
 {
 	struct ucsi *ucsi = m->private;
 
+	if (!ucsi->connector)
+		return -ENODEV;
+
 	seq_printf(m, "%u mA\n", ucsi->connector->peak_current);
 	return 0;
 }
@@ -101,6 +104,9 @@ static int ucsi_avg_curr_show(struct seq_file *m, void *v)
 {
 	struct ucsi *ucsi = m->private;
 
+	if (!ucsi->connector)
+		return -ENODEV;
+
 	seq_printf(m, "%u mA\n", ucsi->connector->avg_current);
 	return 0;
 }
@@ -109,6 +115,9 @@ DEFINE_SHOW_ATTRIBUTE(ucsi_avg_curr);
 static int ucsi_vbus_volt_show(struct seq_file *m, void *v)
 {
 	struct ucsi *ucsi = m->private;
+
+	if (!ucsi->connector)
+		return -ENODEV;
 
 	seq_printf(m, "%u mV\n", ucsi->connector->vbus_voltage);
 	return 0;
