@@ -623,8 +623,8 @@ static void __ioat_cleanup(struct ioatdma_chan *ioat_chan, dma_addr_t phys_compl
 
 		tx = &desc->txd;
 		if (tx->cookie) {
-			dma_cookie_complete(tx);
 			dma_descriptor_unmap(tx);
+			dma_cookie_complete(tx);
 			dmaengine_desc_get_callback_invoke(tx, NULL);
 			tx->callback = NULL;
 			tx->callback_result = NULL;
@@ -743,8 +743,8 @@ static void ioat_abort_descs(struct ioatdma_chan *ioat_chan)
 		if (tx->cookie) {
 			struct dmaengine_result res;
 
-			dma_cookie_complete(tx);
 			dma_descriptor_unmap(tx);
+			dma_cookie_complete(tx);
 			res.result = DMA_TRANS_ABORTED;
 			dmaengine_desc_get_callback_invoke(tx, &res);
 			tx->callback = NULL;
@@ -846,8 +846,8 @@ static void ioat_eh(struct ioatdma_chan *ioat_chan)
 	/* cleanup the faulty descriptor since we are continuing */
 	tx = &desc->txd;
 	if (tx->cookie) {
-		dma_cookie_complete(tx);
 		dma_descriptor_unmap(tx);
+		dma_cookie_complete(tx);
 		dmaengine_desc_get_callback_invoke(tx, &res);
 		tx->callback = NULL;
 		tx->callback_result = NULL;
