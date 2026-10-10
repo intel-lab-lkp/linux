@@ -97,14 +97,20 @@ governor_race()
 hotplug_with_updates_cpu()
 {
 	local filepath="$CPUROOT/$1/cpufreq"
+	local stop_flag="/tmp/stop_hotplug_$1"
+	rm -f "$stop_flag"
 
 	# switch to ondemand
 	__switch_governor_for_cpu $1 "ondemand"
 
-	for i in `seq 1 5000`
+	while true
 	do
+		if [ -f "$stop_flag" ]; then
+			break
+		fi
 		reboot_cpu $1
 	done &
+	local hotplug_pid=$!
 
 	local freqs=$(cat $filepath/scaling_available_frequencies)
 	local oldfreq=$(cat $filepath/scaling_min_freq)
@@ -116,6 +122,10 @@ hotplug_with_updates_cpu()
 			echo $freq > $filepath/scaling_min_freq
 		done
 	done
+
+	touch "$stop_flag"
+	wait $hotplug_pid
+	rm -f "$stop_flag"
 
 	# restore old freq
 	echo $oldfreq > $filepath/scaling_min_freq
