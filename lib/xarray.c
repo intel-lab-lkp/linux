@@ -382,8 +382,8 @@ static void *xas_alloc(struct xa_state *xas, unsigned int shift)
 		}
 	}
 
+	node->offset = parent ? xas->xa_offset : 0;
 	if (parent) {
-		node->offset = xas->xa_offset;
 		parent->count++;
 		XA_NODE_BUG_ON(node, parent->count > XA_CHUNK_SIZE);
 		xas_update(xas, parent);
