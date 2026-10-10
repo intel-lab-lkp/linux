@@ -2918,42 +2918,6 @@ static bool irdma_check_mem_contiguous(u64 *arr, u32 npages, u32 pg_size)
 }
 
 /**
- * irdma_check_mr_contiguous - check if MR is physically contiguous
- * @palloc: pbl allocation struct
- * @pg_size: page size
- */
-static bool irdma_check_mr_contiguous(struct irdma_pble_alloc *palloc,
-				      u32 pg_size)
-{
-	struct irdma_pble_level2 *lvl2 = &palloc->level2;
-	struct irdma_pble_info *leaf = lvl2->leaf;
-	u64 *arr = NULL;
-	u64 *start_addr = NULL;
-	int i;
-	bool ret;
-
-	if (palloc->level == PBLE_LEVEL_1) {
-		arr = palloc->level1.addr;
-		ret = irdma_check_mem_contiguous(arr, palloc->total_cnt,
-						 pg_size);
-		return ret;
-	}
-
-	start_addr = leaf->addr;
-
-	for (i = 0; i < lvl2->leaf_cnt; i++, leaf++) {
-		arr = leaf->addr;
-		if ((*start_addr + ((u64)i * pg_size * PBLE_PER_PAGE)) != *arr)
-			return false;
-		ret = irdma_check_mem_contiguous(arr, leaf->cnt, pg_size);
-		if (!ret)
-			return false;
-	}
-
-	return true;
-}
-
-/**
  * irdma_setup_pbles - copy user pg address to pble's
  * @rf: RDMA PCI function
  * @iwmr: mr pointer for this memory registration
@@ -3417,21 +3381,12 @@ static int irdma_reg_user_mr_type_mem(struct irdma_mr *iwmr, int access,
 	u8 lvl;
 	int err;
 
-	lvl = iwmr->page_cnt != 1 ? PBLE_LEVEL_1 | PBLE_LEVEL_2 : PBLE_LEVEL_0;
+	lvl = iwmr->is_contig ? PBLE_LEVEL_0 : PBLE_LEVEL_1 | PBLE_LEVEL_2;
 	iwmr->access = access;
 
 	err = irdma_setup_pbles(iwdev->rf, iwmr, lvl);
 	if (err)
 		return err;
-
-	if (lvl) {
-		err = irdma_check_mr_contiguous(&iwpbl->pble_alloc,
-						iwmr->page_size);
-		if (err) {
-			irdma_free_pble(iwdev->rf->pble_rsrc, &iwpbl->pble_alloc);
-			iwpbl->pbl_allocated = false;
-		}
-	}
 
 	if (create_stag) {
 		stag = irdma_create_stag(iwdev);
@@ -3487,6 +3442,8 @@ static struct irdma_mr *irdma_alloc_iwmr(struct ib_umem *region,
 	pgsz_bitmap = (reg_type == IRDMA_MEMREG_TYPE_MEM) ?
 		iwdev->rf->sc_dev.hw_attrs.page_size_cap : SZ_4K;
 
+	iwmr->is_contig = ib_umem_is_contiguous(region);
+	/* Call best_pgsz after is_contiguous to restore correct umem->iova. */
 	iwmr->page_size = ib_umem_find_best_pgsz(region, pgsz_bitmap, virt);
 	if (unlikely(!iwmr->page_size)) {
 		kfree(iwmr);
@@ -3846,6 +3803,7 @@ static int irdma_rereg_mr_trans(struct irdma_mr *iwmr, u64 start, u64 len,
 	iwmr->region = region;
 	iwmr->ibmr.iova = virt;
 	iwmr->ibmr.pd = pd;
+	iwmr->is_contig = ib_umem_is_contiguous(region);
 	iwmr->page_size = ib_umem_find_best_pgsz(region,
 				iwdev->rf->sc_dev.hw_attrs.page_size_cap,
 				virt);
