@@ -3297,18 +3297,6 @@ static enum scx_dsp_verdict dispatch_pick(struct rq *rq, struct rq_flags *rf,
 	rq_unpin_lock(rq, rf);
 	verdict = dispatch_one(rq, prev);
 	rq_repin_lock(rq, rf);
-	maybe_queue_balance_callback(rq);
-
-	/*
-	 * Defer to a balance callback which can drop rq lock and enable IRQs.
-	 * Waiting directly in the pick path would deadlock against CPUs sending
-	 * us IPIs (e.g. TLB flushes) while we wait for them.
-	 */
-	if (unlikely(rq->scx.kick_sync_pending)) {
-		rq->scx.kick_sync_pending = false;
-		queue_balance_callback(rq, &rq->scx.kick_sync_bal_cb,
-				       kick_sync_wait_bal_cb);
-	}
 
 	return verdict;
 }
@@ -3335,16 +3323,8 @@ static enum scx_dsp_verdict dispatch_core_pick(struct rq *rq, struct rq_flags *r
 
 	verdict = dispatch_one(rq, prev);
 
-	if (cpu_of(rq) == smp_processor_id()) {
-		maybe_queue_balance_callback(rq);
-
-		/* see dispatch_pick() */
-		if (unlikely(rq->scx.kick_sync_pending)) {
-			rq->scx.kick_sync_pending = false;
-			queue_balance_callback(rq, &rq->scx.kick_sync_bal_cb,
-					       kick_sync_wait_bal_cb);
-		}
-	} else if (unlikely(rq->scx.flags & SCX_RQ_BAL_CB_PENDING)) {
+	if (cpu_of(rq) != smp_processor_id() &&
+	    unlikely(rq->scx.flags & SCX_RQ_BAL_CB_PENDING)) {
 		/*
 		 * Balance callbacks must run in the context that queued them,
 		 * so they can't be queued on another CPU's rq. Run the deferred
@@ -3370,8 +3350,45 @@ static enum scx_dsp_verdict dispatch_core_pick(struct rq *rq, struct rq_flags *r
 }
 #endif	/* CONFIG_SCHED_CORE */
 
+/*
+ * Queue the balance callbacks requested by the dispatch path. Balance callbacks
+ * must stay queued only until the end of the current rq lock section, so they
+ * can be used only when the pick is @final. Otherwise, the core is going to
+ * retry or continue the pick, which may release the rq lock (e.g.,
+ * prev_balance() or another dispatch) and expose the queued callbacks to
+ * rq_pin_lock() on other CPUs. Punt the deferred work to irq_work in that case.
+ */
+static void pick_queue_balance_callbacks(struct rq *rq, bool final)
+{
+	lockdep_assert_rq_held(rq);
+
+	if (cpu_of(rq) != smp_processor_id())
+		return;
+
+	if (!final) {
+		if (rq->scx.flags & SCX_RQ_BAL_CB_PENDING) {
+			rq->scx.flags &= ~SCX_RQ_BAL_CB_PENDING;
+			schedule_deferred(rq);
+		}
+		return;
+	}
+
+	maybe_queue_balance_callback(rq);
+
+	/*
+	 * Defer to a balance callback which can drop rq lock and enable IRQs.
+	 * Waiting directly in the pick path would deadlock against CPUs sending
+	 * us IPIs (e.g., TLB flushes) while we wait for them.
+	 */
+	if (unlikely(rq->scx.kick_sync_pending)) {
+		rq->scx.kick_sync_pending = false;
+		queue_balance_callback(rq, &rq->scx.kick_sync_bal_cb,
+				       kick_sync_wait_bal_cb);
+	}
+}
+
 static struct task_struct *
-do_pick_task_scx(struct rq *rq, struct rq_flags *rf, bool force_scx)
+__do_pick_task_scx(struct rq *rq, struct rq_flags *rf, bool force_scx)
 {
 	struct task_struct *prev = rq->curr;
 	enum scx_dsp_verdict verdict;
@@ -3429,6 +3446,17 @@ do_pick_task_scx(struct rq *rq, struct rq_flags *rf, bool force_scx)
 			refill_task_slice_dfl(sch, p);
 		}
 	}
+
+	return p;
+}
+
+static struct task_struct *
+do_pick_task_scx(struct rq *rq, struct rq_flags *rf, bool force_scx)
+{
+	struct task_struct *p = __do_pick_task_scx(rq, rf, force_scx);
+
+	/* after a NULL pick from the dl_server the lower classes still pick */
+	pick_queue_balance_callbacks(rq, p != RETRY_TASK && (p || !force_scx));
 
 	return p;
 }
