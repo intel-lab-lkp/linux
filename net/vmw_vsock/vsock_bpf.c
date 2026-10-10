@@ -154,6 +154,7 @@ int vsock_bpf_update_proto(struct sock *sk, struct sk_psock *psock, bool restore
 	if (restore) {
 		sk->sk_write_space = psock->saved_write_space;
 		sock_replace_proto(sk, psock->sk_proto);
+		vsock_rx_callback_kick(sk);
 		return 0;
 	}
 
@@ -166,6 +167,7 @@ int vsock_bpf_update_proto(struct sock *sk, struct sk_psock *psock, bool restore
 
 	vsock_bpf_check_needs_rebuild(psock->sk_proto);
 	sock_replace_proto(sk, &vsock_bpf_prot);
+	vsock_rx_callback_kick(sk);
 	return 0;
 }
 

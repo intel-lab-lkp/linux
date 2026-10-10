@@ -931,6 +931,107 @@ static int __vsock_bind(struct sock *sk, struct sockaddr_vm *addr)
 	return retval;
 }
 
+#define VSOCK_RX_CB_HANDOFF_MAX 64
+
+static void vsock_rx_callback_queue(struct sock *sk, unsigned long delay)
+{
+	struct vsock_sock *vsk = vsock_sk(sk);
+
+	sock_hold(sk);
+	if (!schedule_delayed_work(&vsk->rx_cb_work, delay))
+		sock_put(sk);
+}
+
+void vsock_rx_callback_kick(struct sock *sk)
+{
+	vsock_rx_callback_queue(sk, 0);
+}
+
+/* Caller holds sk_callback_lock. */
+bool vsock_rx_cb_is_native(struct sock *sk)
+{
+	struct vsock_sock *vsk = vsock_sk(sk);
+
+	return READ_ONCE(sk->sk_prot) == sk->sk_prot_creator &&
+	       READ_ONCE(sk->sk_data_ready) == vsk->default_data_ready &&
+	       READ_ONCE(sk->sk_write_space) == vsk->default_write_space;
+}
+EXPORT_SYMBOL_GPL(vsock_rx_cb_is_native);
+
+/* Caller holds lock_sock(). */
+void vsock_rx_callback_handoff(struct sock *sk)
+{
+	struct vsock_sock *vsk = vsock_sk(sk);
+	void (*write_space)(struct sock *sk);
+	void (*data_ready)(struct sock *sk);
+	bool wrote = false;
+	s64 before, after;
+	int i;
+
+	if (sock_flag(sk, SOCK_DEAD) || !vsk->transport)
+		return;
+
+	read_lock_bh(&sk->sk_callback_lock);
+	data_ready = READ_ONCE(sk->sk_data_ready);
+	if (READ_ONCE(sk->sk_prot) != sk->sk_prot_creator &&
+	    data_ready == vsk->default_data_ready) {
+		read_unlock_bh(&sk->sk_callback_lock);
+		/*
+		 * start_verdict publishes sk_data_ready after the proto swap.
+		 * Retry once before treating this as a stable non-RX setup.
+		 */
+		if (!vsk->rx_cb_retried) {
+			vsk->rx_cb_retried = true;
+			vsock_rx_callback_queue(sk, 1);
+			return;
+		}
+		vsk->rx_cb_retried = false;
+		data_ready(sk);
+		return;
+	}
+	read_unlock_bh(&sk->sk_callback_lock);
+	vsk->rx_cb_retried = false;
+
+	for (i = 0; i < VSOCK_RX_CB_HANDOFF_MAX; i++) {
+		read_lock_bh(&sk->sk_callback_lock);
+		data_ready = READ_ONCE(sk->sk_data_ready);
+		write_space = READ_ONCE(sk->sk_write_space);
+		read_unlock_bh(&sk->sk_callback_lock);
+
+		if (!wrote && write_space != vsk->default_write_space) {
+			write_space(sk);
+			wrote = true;
+		}
+		if (data_ready == vsk->default_data_ready) {
+			data_ready(sk);
+			break;
+		}
+		before = vsock_stream_has_data(vsk);
+		if (before <= 0)
+			break;
+		data_ready(sk);
+		after = vsock_stream_has_data(vsk);
+		if (after >= before)
+			break;
+		if (i == VSOCK_RX_CB_HANDOFF_MAX - 1 && after > 0)
+			vsock_rx_callback_queue(sk, 0);
+	}
+}
+EXPORT_SYMBOL_GPL(vsock_rx_callback_handoff);
+
+static void vsock_rx_callback_work(struct work_struct *work)
+{
+	struct vsock_sock *vsk = container_of(work, struct vsock_sock,
+					      rx_cb_work.work);
+	struct sock *sk = sk_vsock(vsk);
+
+	lock_sock(sk);
+	if (!sock_flag(sk, SOCK_DEAD))
+		vsock_rx_callback_handoff(sk);
+	release_sock(sk);
+	sock_put(sk);
+}
+
 static void vsock_connect_timeout(struct work_struct *work);
 
 static struct sock *__vsock_create(struct net *net,
@@ -958,6 +1059,7 @@ static struct sock *__vsock_create(struct net *net,
 		sk->sk_type = type;
 
 	vsk = vsock_sk(sk);
+	vsk->default_data_ready = sk->sk_data_ready;
 	vsk->default_write_space = sk->sk_write_space;
 	vsock_addr_init(&vsk->local_addr, VMADDR_CID_ANY, VMADDR_PORT_ANY);
 	vsock_addr_init(&vsk->remote_addr, VMADDR_CID_ANY, VMADDR_PORT_ANY);
@@ -976,6 +1078,7 @@ static struct sock *__vsock_create(struct net *net,
 	WRITE_ONCE(vsk->peer_shutdown, 0);
 	INIT_DELAYED_WORK(&vsk->connect_work, vsock_connect_timeout);
 	INIT_DELAYED_WORK(&vsk->pending_work, vsock_pending_work);
+	INIT_DELAYED_WORK(&vsk->rx_cb_work, vsock_rx_callback_work);
 
 	psk = parent ? vsock_sk(parent) : NULL;
 	if (parent) {

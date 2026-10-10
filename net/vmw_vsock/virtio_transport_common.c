@@ -1589,10 +1589,12 @@ out:
 
 static int
 virtio_transport_recv_connected(struct sock *sk,
-				struct sk_buff *skb)
+				struct sk_buff *skb,
+				bool *data_ready_pending)
 {
 	struct virtio_vsock_hdr *hdr = virtio_vsock_hdr(skb);
 	struct vsock_sock *vsk = vsock_sk(sk);
+	void (*data_ready)(struct sock *sk);
 	int err = 0;
 
 	switch (le16_to_cpu(hdr->op)) {
@@ -1608,7 +1610,23 @@ virtio_transport_recv_connected(struct sock *sk,
 			vsock_remove_sock(vsk);
 			break;
 		}
-		vsock_data_ready(sk);
+		if (!data_ready_pending) {
+			vsock_data_ready(sk);
+		} else {
+			data_ready = READ_ONCE(sk->sk_data_ready);
+			if (data_ready == vsk->default_data_ready) {
+				if (!*data_ready_pending &&
+				    (vsock_stream_has_data(vsk) >= sk->sk_rcvlowat ||
+				     sock_flag(sk, SOCK_DONE)))
+					*data_ready_pending = true;
+			} else {
+				/* Use the callback seen for this packet. */
+				*data_ready_pending = false;
+				if (vsock_stream_has_data(vsk) >= sk->sk_rcvlowat ||
+				    sock_flag(sk, SOCK_DONE))
+					data_ready(sk);
+			}
+		}
 		return err;
 	case VIRTIO_VSOCK_OP_CREDIT_REQUEST:
 		virtio_transport_send_credit_update(vsk);
@@ -1842,6 +1860,7 @@ struct virtio_transport_rx_pkt_ctx {
 	const struct sockaddr_vm *dst;
 	bool *batchable;
 	struct virtio_transport_rx_batch *batch;
+	bool defer_data_ready;
 };
 
 static bool
@@ -1917,7 +1936,9 @@ virtio_transport_recv_pkt_locked(struct virtio_transport *t,
 		kfree_skb(skb);
 		break;
 	case TCP_ESTABLISHED:
-		virtio_transport_recv_connected(sk, skb);
+		virtio_transport_recv_connected(sk, skb,
+						ctx->defer_data_ready && ctx->batch ?
+						&ctx->batch->data_ready_pending : NULL);
 		break;
 	case TCP_CLOSING:
 		virtio_transport_recv_disconnecting(sk, skb);
@@ -1986,32 +2007,44 @@ EXPORT_SYMBOL_GPL(virtio_transport_recv_pkt);
  * Finish the RX batch.
  * For a non-empty batch, the caller must hold the socket lock acquired with
  * lock_sock(). This function releases the lock and the batch's lookup
- * reference.
- * An empty batch is a no-op.
+ * reference. An empty batch is a no-op.
  */
 void virtio_transport_rx_batch_finish(struct virtio_transport_rx_batch *batch)
 {
 	bool write_space_pending = batch->write_space_pending;
-	void (*write_space)(struct sock *sk);
+	bool data_ready_pending = batch->data_ready_pending;
 	struct sock *sk = batch->sk;
 	struct vsock_sock *vsk;
+	bool native;
 
 	batch->sk = NULL;
 	batch->pkts = 0;
 	batch->bytes = 0;
 	batch->net = NULL;
 	batch->write_space_pending = false;
+	batch->data_ready_pending = false;
 
 	if (!sk)
 		return;
 
-	if (write_space_pending) {
-		vsk = vsock_sk(sk);
+	vsk = vsock_sk(sk);
+	if (write_space_pending)
 		vsk->default_write_space(sk);
-		write_space = READ_ONCE(sk->sk_write_space);
-		if (write_space != vsk->default_write_space)
-			write_space(sk);
+
+	read_lock_bh(&sk->sk_callback_lock);
+	native = vsock_rx_cb_is_native(sk);
+	read_unlock_bh(&sk->sk_callback_lock);
+
+	if (native) {
+		release_sock(sk);
+		if (data_ready_pending)
+			vsk->default_data_ready(sk);
+		sock_put(sk);
+		return;
 	}
+
+	if (write_space_pending || data_ready_pending)
+		vsock_rx_callback_handoff(sk);
 
 	release_sock(sk);
 	sock_put(sk);
@@ -2023,9 +2056,9 @@ void virtio_transport_recv_pkt_batch(struct virtio_transport *t,
 				     struct virtio_transport_rx_batch *batch)
 {
 	struct virtio_vsock_hdr *hdr = virtio_vsock_hdr(skb);
+	bool batchable, defer_data_ready, start_batch;
 	struct virtio_transport_rx_pkt_ctx ctx;
 	struct sockaddr_vm src, dst;
-	bool batchable, start_batch;
 	struct sock *sk;
 	bool free_pkt;
 
@@ -2046,6 +2079,17 @@ void virtio_transport_recv_pkt_batch(struct virtio_transport *t,
 		    vsock_addr_equals_addr(&batch->dst, &dst) &&
 		    virtio_transport_recv_pkt_batchable(t, batch->sk)) {
 			sk = batch->sk;
+			defer_data_ready = READ_ONCE(sk->sk_data_ready) ==
+					   vsock_sk(sk)->default_data_ready;
+			if (unlikely(batch->data_ready_pending && !defer_data_ready)) {
+				/*
+				 * BPF map updates can replace callbacks while lock_sock()
+				 * remains held. Finish the old notification first.
+				 */
+				virtio_transport_rx_batch_finish(batch);
+				goto lookup;
+			}
+
 			if (!skb_set_owner_sk_safe(skb, sk)) {
 				WARN_ONCE(1, "receiving vsock socket has sk_refcnt == 0\n");
 				virtio_transport_rx_batch_finish(batch);
@@ -2059,6 +2103,7 @@ void virtio_transport_recv_pkt_batch(struct virtio_transport *t,
 				.dst = &dst,
 				.batchable = &batchable,
 				.batch = batch,
+				.defer_data_ready = defer_data_ready,
 			};
 			free_pkt = virtio_transport_recv_pkt_locked(t, skb, sk, &ctx);
 
@@ -2072,6 +2117,7 @@ void virtio_transport_recv_pkt_batch(struct virtio_transport *t,
 		virtio_transport_rx_batch_finish(batch);
 	}
 
+lookup:
 	sk = virtio_transport_recv_pkt_find_socket(skb, &src, &dst, net);
 	if (!sk) {
 		virtio_transport_rx_batch_finish(batch);
@@ -2097,6 +2143,8 @@ void virtio_transport_recv_pkt_batch(struct virtio_transport *t,
 
 	if (start_batch)
 		batch->sk = sk;
+	defer_data_ready = start_batch &&
+		READ_ONCE(sk->sk_data_ready) == vsock_sk(sk)->default_data_ready;
 
 	ctx = (struct virtio_transport_rx_pkt_ctx) {
 		.net = net,
@@ -2104,6 +2152,7 @@ void virtio_transport_recv_pkt_batch(struct virtio_transport *t,
 		.dst = &dst,
 		.batchable = start_batch ? &batchable : NULL,
 		.batch = start_batch ? batch : NULL,
+		.defer_data_ready = defer_data_ready,
 	};
 	free_pkt = virtio_transport_recv_pkt_locked(t, skb, sk, &ctx);
 	if (start_batch && batchable) {

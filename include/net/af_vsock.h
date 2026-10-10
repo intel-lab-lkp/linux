@@ -63,8 +63,11 @@ struct vsock_sock {
 	u32 peer_shutdown;
 	bool sent_request;
 	bool ignore_connecting_rst;
-	/* Initial callback, used to identify replacements. */
+	/* Initial callbacks, used to identify replacements. */
+	void (*default_data_ready)(struct sock *sk);
 	void (*default_write_space)(struct sock *sk);
+	struct delayed_work rx_cb_work;
+	bool rx_cb_retried;
 
 	/* Protected by lock_sock(sk) */
 	u64 buffer_size;
@@ -80,6 +83,9 @@ s64 vsock_stream_has_data(struct vsock_sock *vsk);
 s64 vsock_stream_has_space(struct vsock_sock *vsk);
 struct sock *vsock_create_connected(struct sock *parent);
 void vsock_data_ready(struct sock *sk);
+bool vsock_rx_cb_is_native(struct sock *sk);
+void vsock_rx_callback_kick(struct sock *sk);
+void vsock_rx_callback_handoff(struct sock *sk);
 
 /**** TRANSPORT ****/
 
