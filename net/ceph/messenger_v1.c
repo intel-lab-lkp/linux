@@ -1226,8 +1226,13 @@ static int read_partial_message(struct ceph_connection *con)
 
 		/* prepare for data payload, if any */
 
-		if (data_len)
+		if (data_len) {
+			if (!con->in_msg->num_data_items) {
+				con->error_msg = "message carries data but msg has no data items";
+				return -EPROTO;
+			}
 			prepare_message_data(con->in_msg, data_len);
+		}
 	}
 
 	/* front */

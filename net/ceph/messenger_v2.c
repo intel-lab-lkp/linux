@@ -1834,6 +1834,10 @@ static int prepare_read_data(struct ceph_connection *con)
 	struct bio_vec bv;
 
 	con->in_data_crc = -1;
+	if (!con->in_msg->num_data_items) {
+		con->error_msg = "frame carries data but msg has no data items";
+		return -EPROTO;
+	}
 	ceph_msg_data_cursor_init(&con->v2.in_cursor, con->in_msg,
 				  data_len(con->in_msg));
 
