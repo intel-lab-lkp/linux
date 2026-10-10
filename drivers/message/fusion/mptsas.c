@@ -5009,6 +5009,18 @@ mptsas_event_process(MPT_ADAPTER *ioc, EventNotificationReply_t *reply)
 		return 0;
 
 	delay = msecs_to_jiffies(1);
+
+	/* Bound the firmware-chosen MsgLength to the reply frame: too small
+	 * underflows event_data_sz, too large over-reads the copy.
+	 */
+	event_data_sz = ((reply->MsgLength * 4) -
+	    offsetof(EventNotificationReply_t, Data));
+	if (event_data_sz < 0 || reply->MsgLength * 4 > ioc->reply_sz) {
+		printk(MYIOC_s_WARN_FMT "%s: bad MsgLength %u\n",
+		       ioc->name, __func__, reply->MsgLength);
+		return 0;
+	}
+
 	switch (event) {
 	case MPI_EVENT_SAS_BROADCAST_PRIMITIVE:
 	{
@@ -5105,8 +5117,6 @@ mptsas_event_process(MPT_ADAPTER *ioc, EventNotificationReply_t *reply)
 		return 0;
 	}
 
-	event_data_sz = ((reply->MsgLength * 4) -
-	    offsetof(EventNotificationReply_t, Data));
 	fw_event = kzalloc(sizeof(*fw_event) + event_data_sz, GFP_ATOMIC);
 	if (!fw_event) {
 		printk(MYIOC_s_WARN_FMT "%s: failed at (line=%d)\n", ioc->name,
