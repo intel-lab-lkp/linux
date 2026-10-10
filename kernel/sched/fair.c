@@ -1774,26 +1774,14 @@ void sched_cache_fork_cleanup(struct task_struct *p)
 	RCU_INIT_POINTER(p->sched_cache_grp, NULL);
 }
 
-void sched_cache_exec_mmap(struct task_struct *p, struct mm_struct *mm)
+static void sched_cache_footprint_sub(struct sched_cache_group *grp,
+				      struct task_struct *p)
 {
-	struct sched_cache_group *old;
-
-	/*
-	 * Acquire the new reference before publishing the pointer, then drop
-	 * the old one. @p is current and the only writer of its own pointer.
-	 */
-	old = sched_cache_replace_grp(p, sched_cache_group_get(mm->sched_cache_grp));
-	sched_cache_group_put(old);
-}
-
-void sched_cache_exit_mm(struct task_struct *p)
-{
-	struct sched_cache_group *grp = sched_cache_replace_grp(p, NULL);
-
 #ifdef CONFIG_NUMA_BALANCING
 	/*
-	 * Subtract this task's footprint from the group before dropping the
-	 * reference, so the group footprint converges as its threads exit.
+	 * Remove this task's contribution when it leaves the group, either
+	 * through exit or exec. Other thread groups sharing the old mm can
+	 * keep the group alive after exec resets this task's NUMA statistics.
 	 * Unlocked for performance; clamp to avoid underflow.
 	 */
 	if (grp && p->total_numa_faults) {
@@ -1803,6 +1791,30 @@ void sched_cache_exit_mm(struct task_struct *p)
 		WRITE_ONCE(grp->footprint, fp - sub);
 	}
 #endif
+}
+
+void sched_cache_exec_mmap(struct task_struct *p, struct mm_struct *mm)
+{
+	struct sched_cache_group *old;
+
+	/*
+	 * Acquire the new reference before publishing the pointer, then drop
+	 * the old one. @p is current and the only writer of its own pointer.
+	 *
+	 * Footprint subtraction must stay ahead of task_numa_free() in
+	 * bprm_execve(), which clears p->total_numa_faults. Nothing here
+	 * enforces that order.
+	 */
+	old = sched_cache_replace_grp(p, sched_cache_group_get(mm->sched_cache_grp));
+	sched_cache_footprint_sub(old, p);
+	sched_cache_group_put(old);
+}
+
+void sched_cache_exit_mm(struct task_struct *p)
+{
+	struct sched_cache_group *grp = sched_cache_replace_grp(p, NULL);
+
+	sched_cache_footprint_sub(grp, p);
 	sched_cache_group_put(grp);
 }
 
@@ -3981,16 +3993,15 @@ static void task_numa_placement(struct task_struct *p)
 			 * sharing this mm. Acceptable since footprint is a
 			 * heuristic and occasional lost updates are tolerable.
 			 *
-			 * If a task exits, its corresponding footprint must
-			 * be subtracted from p->sched_cache_grp->footprint,
-			 * otherwise the footprint will not converge: the
-			 * exiting thread's footprint remains unchanged/undecayed.
-			 * See exit_mm().
+			 * If a task leaves its cache group through exit or exec,
+			 * its contribution must be subtracted from the old group's
+			 * footprint. Otherwise, that contribution remains
+			 * unchanged/undecayed while other tasks keep the group alive.
+			 * See sched_cache_footprint_sub().
 			 *
-			 * Lost updates and unsynchronized subtraction
-			 * in exit_mm() can cause footprint + diff to
-			 * go negative. Clamp to zero to prevent the
-			 * unsigned footprint from wrapping.
+			 * Lost updates and unsynchronized subtraction on exit or
+			 * exec can cause footprint + diff to go negative. Clamp
+			 * to zero to prevent the unsigned footprint from wrapping.
 			 */
 			scoped_guard(rcu) {
 				grp = rcu_dereference(p->sched_cache_grp);
