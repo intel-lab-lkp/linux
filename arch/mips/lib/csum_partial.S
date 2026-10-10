@@ -190,6 +190,21 @@ EXPORT_SYMBOL(csum_partial)
 	 andi	t2, a1, 0x40
 
 .Lmove_128bytes:
+#ifdef CONFIG_CPU_HAS_PREFETCH
+	/*
+	 * Fetch the block two iterations ahead, but only while it lies
+	 * inside the buffer: on non-coherent systems a line prefetched
+	 * past the end could belong to a buffer the device still owns.
+	 */
+	sltiu	t5, t8, 3
+	bnez	t5, 2f
+	 nop
+	pref	0, 0x100(src)
+	pref	0, 0x120(src)
+	pref	0, 0x140(src)
+	pref	0, 0x160(src)
+2:
+#endif
 	CSUM_BIGCHUNK(src, 0x00, sum, t0, t1, t3, t4)
 	CSUM_BIGCHUNK(src, 0x20, sum, t0, t1, t3, t4)
 	CSUM_BIGCHUNK(src, 0x40, sum, t0, t1, t3, t4)
