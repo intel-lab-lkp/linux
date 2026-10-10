@@ -141,6 +141,33 @@ Description:	Discover cpuidle policy and mechanism
 		Documentation/driver-api/pm/cpuidle.rst for more information.
 
 
+What:		/sys/devices/system/cpu/pm_qos_cpu_latency_us
+Date:		October 2026
+Contact:	Linux power management list <linux-pm@vger.kernel.org>
+Description:
+		(RW) The CPU latency limit requested by user space for all
+		CPUs, in microseconds.  It is a single PM QoS request shared by
+		the entire user space, which stays in effect until it is
+		updated.  The global CPU latency limit is the minimum of this
+		request and of the other ones, made by kernel code and through
+		/dev/cpu_dma_latency, so it may be lower than this value.
+		Reading the file returns the value of this request, not the
+		global limit.
+
+		As for the power/pm_qos_resume_latency_us attributes of CPUs,
+		"0" means no constraint and "n/a" means that no latency is
+		acceptable.  Other values, from 1 to 1999999999, are limits in
+		microseconds.  Writing anything else fails with -EINVAL.
+
+		The initial value can be set with the pm_qos_cpu_latency_us=
+		kernel command line parameter.
+
+		Present if CONFIG_CPU_IDLE is set.
+
+		See Documentation/admin-guide/pm/cpuidle.rst for more
+		information.
+
+
 What:		/sys/devices/system/cpu/cpuX/cpuidle/state<N>/name
 		/sys/devices/system/cpu/cpuX/cpuidle/stateN/latency
 		/sys/devices/system/cpu/cpuX/cpuidle/stateN/power

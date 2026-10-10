@@ -5389,6 +5389,17 @@ Kernel parameters
 			Format: <bool>
 			Default value is set by CONFIG_DPM_WATCHDOG_ENABLED.
 
+	pm_qos_cpu_latency_us=
+			[CPU_IDLE] Initial value of the CPU latency limit
+			requested through
+			/sys/devices/system/cpu/pm_qos_cpu_latency_us, in
+			microseconds.  It stays in effect until user space
+			writes a different value to that attribute.
+			Format: <integer> | n/a
+			"0" means no constraint (the default) and "n/a" means
+			that no latency is acceptable.  Other values, from 1
+			to 1999999999, are limits in microseconds.
+
 	pnp.debug=1	[PNP]
 			Enable PNP debug messages (depends on the
 			CONFIG_PNP_DEBUG_MESSAGES option).  Change at run-time

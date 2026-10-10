@@ -57,11 +57,12 @@ From user space:
 
 The infrastructure exposes two separate device nodes, /dev/cpu_dma_latency for
 the CPU latency QoS and /dev/cpu_wakeup_latency for the CPU system wakeup
-latency QoS.
+latency QoS, and a sysfs file, /sys/devices/system/cpu/pm_qos_cpu_latency_us,
+for the CPU latency QoS.
 
-Only processes can register a PM QoS request.  To provide for automatic
-cleanup of a process, the interface requires the process to register its
-parameter requests as follows.
+Requests made through the device nodes belong to the processes making them.
+To provide for automatic cleanup of a process, the interface requires the
+process to register its parameter requests as follows.
 
 To register the default PM QoS target for the CPU latency QoS, the process must
 open /dev/cpu_dma_latency.  To register a CPU system wakeup QoS limit, the
@@ -76,6 +77,14 @@ using the 10 char long format e.g. "0x12345678".
 
 To remove the user mode request for a target value simply close the device
 node.
+
+The sysfs file is associated with a single CPU latency QoS request that is not
+tied to any process and is shared by the entire user space.  Writing to the
+file updates that request, which stays in effect until the next update.  The
+value is a number of microseconds from 1 to 1999999999, with the same special
+cases as for the per-CPU resume latency: "0" means no constraint and "n/a"
+means that no latency is acceptable.  The initial value of that request can be
+set with the pm_qos_cpu_latency_us= kernel command line parameter.
 
 
 2. PM QoS per-device latency and flags framework

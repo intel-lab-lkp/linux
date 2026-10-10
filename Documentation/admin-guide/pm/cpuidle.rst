@@ -520,13 +520,16 @@ individual CPUs.  Kernel code (e.g. device drivers) can set both of them with
 the help of special internal interfaces provided by the PM QoS framework.  User
 space can modify the former by opening the :file:`cpu_dma_latency` special
 device file under :file:`/dev/` and writing a binary value (interpreted as a
-signed 32-bit integer) to it.  In turn, the resume latency constraint for a CPU
-can be modified from user space by writing a string (representing a signed
-32-bit integer) to the :file:`power/pm_qos_resume_latency_us` file under
+signed 32-bit integer) to it, or by writing a string to the
+:file:`pm_qos_cpu_latency_us` file under :file:`/sys/devices/system/cpu/` in
+``sysfs``.  In turn, the resume latency constraint for a CPU can be modified
+from user space by writing a string (representing a signed 32-bit integer) to
+the :file:`power/pm_qos_resume_latency_us` file under
 :file:`/sys/devices/system/cpu/cpu<N>/` in ``sysfs``, where the CPU number
-``<N>`` is allocated at the system initialization time.  Negative values
-will be rejected in both cases and, also in both cases, the written integer
-number will be interpreted as a requested PM QoS constraint in microseconds.
+``<N>`` is allocated at the system initialization time.  Negative values will
+be rejected in all of these cases and the written integer number will be
+interpreted as a requested PM QoS constraint in microseconds, except that ``0``
+written to the ``sysfs`` files means no constraint (see below).
 
 The requested value is not automatically applied as a new constraint, however,
 as it may be less restrictive (greater in this particular case) than another
@@ -574,6 +577,16 @@ determine the effective value to be set as the resume latency constraint for the
 CPU in question every time the list of requests is updated this way or another
 (there may be other requests coming from kernel code in that list).
 
+Similarly, there is one global CPU latency limit request associated with the
+:file:`pm_qos_cpu_latency_us` file under :file:`/sys/devices/system/cpu/` in
+``sysfs``.  It is shared by the entire user space and is not tied to any file
+descriptor, so it stays in effect until it is updated.  Its initial value can be
+set with the ``pm_qos_cpu_latency_us=`` kernel command line parameter, which
+puts the limit in place before any ``CPUIdle`` driver is registered, and user
+space can lift it later.  As for the :file:`power/pm_qos_resume_latency_us`
+files of CPUs, ``0`` means no constraint and ``n/a`` means that no latency is
+acceptable.  Other values, from 1 to 1999999999, are limits in microseconds.
+
 CPU idle time governors are expected to regard the minimum of the global
 (effective) CPU latency limit and the effective resume latency constraint for
 the given CPU as the upper limit for the exit latency of the idle states that
@@ -614,6 +627,13 @@ the name of an available governor (e.g. ``cpuidle.governor=menu``) and that
 governor will be used instead of the default one.  It is possible to force
 the ``menu`` governor to be used on the systems that use the ``ladder`` governor
 by default this way, for example.
+
+The ``pm_qos_cpu_latency_us=`` kernel command line parameter sets the initial
+value of the global CPU latency limit request associated with the
+:file:`pm_qos_cpu_latency_us` file in ``sysfs`` (see `above <cpu-pm-qos_>`_), so
+it can be used to keep idle states with exit latency beyond the given value from
+being selected from the start, and the limit can be lifted at run time by
+writing to that file.
 
 The other kernel command line parameters controlling CPU idle time management
 described below are only relevant for the *x86* architecture and references

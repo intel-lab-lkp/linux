@@ -21,6 +21,7 @@
 /*#define DEBUG*/
 
 #include <linux/pm_qos.h>
+#include <linux/cpu.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
@@ -334,6 +335,116 @@ void cpu_latency_qos_remove_request(struct pm_qos_request *req)
 	memset(req, 0, sizeof(*req));
 }
 EXPORT_SYMBOL_GPL(cpu_latency_qos_remove_request);
+
+/* User space interface to the CPU latency QoS via sysfs. */
+
+/*
+ * Unlike the requests made through the misc device, this one is shared by the
+ * entire user space and is not tied to an open file, like the resume latency
+ * request of each CPU.  Its initial value can be set in the kernel command
+ * line.
+ */
+static struct pm_qos_request cpu_latency_qos_sysfs_req;
+static s32 cpu_latency_qos_boot_value __initdata = PM_QOS_DEFAULT_VALUE;
+
+/*
+ * Use the format of the power/pm_qos_resume_latency_us attribute of CPUs: "0"
+ * means no constraint and "n/a" means that no latency is acceptable.
+ */
+static int cpu_latency_qos_parse(const char *buf, s32 *value)
+{
+	s32 val;
+
+	if (!kstrtos32(buf, 0, &val)) {
+		/*
+		 * Prevent users from writing negative or "no constraint" values
+		 * directly.
+		 */
+		if (val < 0 || val >= PM_QOS_CPU_LATENCY_DEFAULT_VALUE)
+			return -EINVAL;
+
+		*value = val ? val : PM_QOS_DEFAULT_VALUE;
+	} else if (sysfs_streq(buf, "n/a")) {
+		*value = 0;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int __init cpu_latency_qos_setup(char *str)
+{
+	if (cpu_latency_qos_parse(str, &cpu_latency_qos_boot_value))
+		pr_warn("Invalid pm_qos_cpu_latency_us= value: %s\n", str);
+
+	return 1;
+}
+__setup("pm_qos_cpu_latency_us=", cpu_latency_qos_setup);
+
+static ssize_t pm_qos_cpu_latency_us_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	s32 value = READ_ONCE(cpu_latency_qos_sysfs_req.node.prio);
+
+	if (value == 0)
+		return sysfs_emit(buf, "n/a\n");
+	if (value == PM_QOS_CPU_LATENCY_DEFAULT_VALUE)
+		value = 0;
+
+	return sysfs_emit(buf, "%d\n", value);
+}
+
+static ssize_t pm_qos_cpu_latency_us_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t n)
+{
+	s32 value;
+	int ret;
+
+	ret = cpu_latency_qos_parse(buf, &value);
+	if (ret)
+		return ret;
+
+	cpu_latency_qos_update_request(&cpu_latency_qos_sysfs_req, value);
+
+	return n;
+}
+
+static DEVICE_ATTR_RW(pm_qos_cpu_latency_us);
+
+/*
+ * The cpu subsystem root device is registered before any initcalls run, so
+ * both the request and its attribute can be set up before any cpuidle driver
+ * registers.
+ */
+static int __init cpu_latency_qos_sysfs_init(void)
+{
+	struct device *dev_root;
+	int ret = -ENODEV;
+
+	cpu_latency_qos_add_request(&cpu_latency_qos_sysfs_req,
+				    cpu_latency_qos_boot_value);
+
+	dev_root = bus_get_dev_root(&cpu_subsys);
+	if (dev_root) {
+		ret = device_create_file(dev_root,
+					 &dev_attr_pm_qos_cpu_latency_us);
+		put_device(dev_root);
+	}
+
+	if (ret) {
+		pr_err("%s: %s setup failed\n", __func__,
+		       dev_attr_pm_qos_cpu_latency_us.attr.name);
+		/* Do not leave a limit in place that cannot be lifted. */
+		cpu_latency_qos_update_request(&cpu_latency_qos_sysfs_req,
+					       PM_QOS_DEFAULT_VALUE);
+	}
+
+	return ret;
+}
+core_initcall(cpu_latency_qos_sysfs_init);
 
 /* User space interface to the CPU latency QoS via misc device. */
 
