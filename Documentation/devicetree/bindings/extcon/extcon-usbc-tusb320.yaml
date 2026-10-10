@@ -11,9 +11,13 @@ maintainers:
 
 properties:
   compatible:
-    enum:
-      - ti,tusb320
-      - ti,tusb320l
+    oneOf:
+      - enum:
+          - ti,tusb320
+          - ti,tusb320l
+      - items:
+          - const: sgmicro,sgm7220
+          - const: ti,tusb320
 
   reg:
     maxItems: 1
