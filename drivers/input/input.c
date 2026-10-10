@@ -25,6 +25,7 @@
 #include <linux/device.h>
 #include <linux/kstrtox.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <linux/rcupdate.h>
 #include "input-compat.h"
 #include "input-core-private.h"
@@ -2445,6 +2446,12 @@ int input_register_device(struct input_dev *dev)
 
 	error = -EINTR;
 	scoped_cond_guard(mutex_intr, goto err_device_del, &input_mutex) {
+		/* Keep seeded state, but do not replay pre-registration events. */
+		spin_lock_irq(&dev->event_lock);
+		dev->num_vals = 0;
+		dev->timestamp[INPUT_CLK_MONO] = ktime_set(0, 0);
+		spin_unlock_irq(&dev->event_lock);
+
 		list_add_tail(&dev->node, &input_dev_list);
 
 		list_for_each_entry(handler, &input_handler_list, node)
