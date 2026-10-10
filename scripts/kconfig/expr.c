@@ -1155,21 +1155,28 @@ static void expr_print_gstr_helper(void *data, struct symbol *sym, const char *s
 	if (sym)
 		sym_str = sym_get_string_value(sym);
 
-	if (gs->max_width) {
+	if (gs->max_width && !strchr(str, '\n')) {
 		unsigned extra_length = strlen(str);
 		const char *last_cr = strrchr(gs->s, '\n');
 		unsigned last_line_length;
-
-		if (sym_str)
+		/* Ensure the value annotation stays attached to the symbol on wrap */
+		if (sym_str && sym->type != S_UNKNOWN)
 			extra_length += 4 + strlen(sym_str);
 
-		if (!last_cr)
-			last_cr = gs->s;
+		last_line_length = strlen(last_cr ? last_cr + 1 : gs->s);
 
-		last_line_length = strlen(gs->s) - (last_cr - gs->s);
+		if (last_line_length > gs->indent &&
+		    last_line_length + extra_length > gs->max_width) {
+			/* Ensure '!' stays attached to the symbol on wrap */
+			char *last = gs->s + strlen(gs->s) - 1;
+			bool negated = *last == '!';
 
-		if ((last_line_length + extra_length) > gs->max_width)
-			str_append(gs, "\\\n");
+			if (negated)
+				*last = '\0';
+			str_printf(gs, "\n%*s%s", gs->indent, "",
+					   negated ? "!" : "");
+			str += strspn(str, " ");
+		}
 	}
 
 	str_append(gs, str);
@@ -1209,5 +1216,6 @@ static void expr_print_revdep(struct expr *e,
 void expr_gstr_print_revdep(struct expr *e, struct gstr *gs,
 			    tristate pr_type, const char *title)
 {
+	gs->indent = strlen("  - ");
 	expr_print_revdep(e, expr_print_gstr_helper, gs, pr_type, &title);
 }

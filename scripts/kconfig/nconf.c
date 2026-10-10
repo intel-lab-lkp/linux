@@ -741,7 +741,7 @@ again:
 			.target = NULL,
 		};
 		jump_key_char = 0;
-		res = get_relations_str(sym_arr, &head);
+		res = get_relations_str(sym_arr, &head, 0);
 		dres = show_scroll_win_ext(main_window,
 				"Search Results", str_get(&res),
 				&vscroll, &hscroll,
