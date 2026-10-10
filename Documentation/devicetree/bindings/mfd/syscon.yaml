@@ -132,6 +132,7 @@ properties:
               - ti,j784s4-acspcie-proxy-ctrl
               - ti,j784s4-pcie-ctrl
               - ti,keystone-pllctrl
+              - zte,zx279128s-crm2
           - const: syscon
       - items:
           - enum:
