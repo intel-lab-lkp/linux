@@ -490,6 +490,11 @@ static int verify_blob(struct virtio_gpu_device *vgdev,
 			return -EINVAL;
 	}
 
+	if ((rc_blob->blob_flags & VIRTGPU_BLOB_FLAG_USE_MAPPABLE) &&
+	    rc_blob->blob_mem == VIRTGPU_BLOB_MEM_HOST3D &&
+	    !vgdev->has_host_visible)
+		return -EINVAL;
+
 	params->blob_mem = rc_blob->blob_mem;
 	params->size = rc_blob->size;
 	params->blob = true;
