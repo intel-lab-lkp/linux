@@ -1190,6 +1190,11 @@ static int vd55g1_disable_streams(struct v4l2_subdev *sd,
 
 	/* Retrieve Expo cluster to enable coldstart of AE */
 	ret = vd55g1_read_expo_cluster(sensor);
+	if (ret)
+		dev_warn(sensor->dev, "Failed to save exposure: %d\n", ret);
+
+	/* A failed exposure read must not prevent the stop command. */
+	ret = 0;
 
 	vd55g1_write(sensor, VD55G1_REG_STREAMING, VD55G1_STREAMING_STOP_STREAM,
 		     &ret);
