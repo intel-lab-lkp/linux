@@ -17,4 +17,17 @@ if NET_VENDOR_ZTE
 
 source "drivers/net/ethernet/zte/dinghai/Kconfig"
 
+config ZX279128S_ETH
+	bool "ZTE zx279128s Ethernet switch support"
+	depends on ARCH_ZTE || COMPILE_TEST
+	depends on OF
+	depends on BRIDGE=y || BRIDGE=n
+	select NET_SWITCHDEV
+	select PHYLINK
+	help
+	  This driver supports the five-port gigabit switch of the ZTE
+	  zx279128s SoC and the DMA engine that connects it to the CPU.
+	  Each switch port becomes its own network interface, such as the
+	  four LAN ports and the WAN port of the ZTE ZXHN H3600.
+
 endif # NET_VENDOR_ZTE

@@ -4,3 +4,6 @@
 #
 
 obj-$(CONFIG_DINGHAI) += dinghai/
+
+obj-$(CONFIG_ZX279128S_ETH) += zx279128s-eth.o
+zx279128s-eth-y := zx279128s-main.o zx279128s-ppe.o zx279128s-switch.o
