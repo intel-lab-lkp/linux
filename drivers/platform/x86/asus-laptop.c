@@ -192,6 +192,7 @@ MODULE_PARM_DESC(als_status, "Set the ALS status on boot "
 #define PEGA_WWAN	0x02
 #define PEGA_ALS	0x04
 #define PEGA_ALS_POWER	0x05
+#define PEGA_WIMAX	0x06
 
 #define METHOD_PEGA_READ	"RDLN"
 #define PEGA_READ_ALS_H	0x02
@@ -1454,6 +1455,17 @@ static int pega_rfkill_init(struct asus_laptop *asus)
 
 	ret = pega_rfkill_setup(asus, &asus->wwan, "pega-wwan",
 				PEGA_WWAN, RFKILL_TYPE_WWAN);
+	if (ret)
+		goto exit;
+
+	/*
+	 * The firmware leaves this line asserted at boot. On units fitted
+	 * with an Intel Centrino Advanced-N + WiMAX 6250 combo card it keeps
+	 * the whole card in hardware RF-kill, Wi-Fi included. Registering
+	 * the switch unblocks it by default, which calls ENPR(6).
+	 */
+	ret = pega_rfkill_setup(asus, &asus->wimax, "pega-wimax",
+				PEGA_WIMAX, RFKILL_TYPE_WIMAX);
 
 exit:
 	if (ret)
