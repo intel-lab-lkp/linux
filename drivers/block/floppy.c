@@ -4602,13 +4602,9 @@ static int __init do_floppy_init(void)
 		timer_setup(&motor_off_timer[drive], motor_off_callback, 0);
 	}
 
-	err = __register_blkdev(FLOPPY_MAJOR, "fd", floppy_probe);
-	if (err)
-		goto out_put_disk;
-
 	err = platform_driver_register(&floppy_driver);
 	if (err)
-		goto out_unreg_blkdev;
+		goto out_put_disk;
 
 	for (i = 0; i < 256; i++)
 		if (ITYPE(i))
@@ -4733,6 +4729,14 @@ static int __init do_floppy_init(void)
 			goto out_remove_drives;
 	}
 
+	/*
+	 * Register last: floppy_probe() adds disks for the other formats,
+	 * which the error path below does not remove.
+	 */
+	err = __register_blkdev(FLOPPY_MAJOR, "fd", floppy_probe);
+	if (err)
+		goto out_remove_drives;
+
 	return 0;
 
 out_remove_drives:
@@ -4748,8 +4752,6 @@ out_release_dma:
 		floppy_release_irq_and_dma();
 out_unreg_driver:
 	platform_driver_unregister(&floppy_driver);
-out_unreg_blkdev:
-	unregister_blkdev(FLOPPY_MAJOR, "fd");
 out_put_disk:
 	destroy_workqueue(floppy_wq);
 	for (drive = 0; drive < N_DRIVE; drive++) {
