@@ -117,4 +117,26 @@ static inline void outer_resume(void) { }
 
 #endif
 
+#ifdef CONFIG_CACHE_L2X0_IO_LOCK
+/**
+ * outer_io_lock - serialize a device read with outer cache maintenance
+ *
+ * On some SoCs a device read that is still outstanding while an outer
+ * cache range or sync operation is issued deadlocks the interconnect.
+ * Drivers for devices behind such a bus take this lock around their
+ * register reads.  It is a no-op unless the platform enabled it.
+ *
+ * Returns the saved interrupt flags to pass to outer_io_unlock().
+ */
+unsigned long outer_io_lock(void);
+void outer_io_unlock(unsigned long flags);
+#else
+static inline unsigned long outer_io_lock(void)
+{
+	return 0;
+}
+
+static inline void outer_io_unlock(unsigned long flags) { }
+#endif
+
 #endif	/* __ASM_OUTERCACHE_H */

@@ -1015,6 +1015,20 @@ config CACHE_L2X0
 	help
 	  This option enables the L2x0 PrimeCell.
 
+config CACHE_L2X0_IO_LOCK
+	bool "Serialize device reads with L2C-310 maintenance operations"
+	depends on CACHE_L2X0
+	help
+	  On some SoCs, for example the ZTE/Sanechips ZX279128S, issuing an
+	  L2C-310 range or sync operation while a CPU read from a PCIe
+	  endpoint is still outstanding deadlocks the interconnect.  This
+	  option lets the L2C-310 maintenance operations take a spinlock
+	  that drivers also hold around their device reads, through
+	  outer_io_lock()/outer_io_unlock().  It is only active when the
+	  cache controller node has the "zte,l2c-io-read-lock" property.
+
+	  If unsure, say N.
+
 config CACHE_L2X0_PMU
 	bool "L2x0 performance monitor support" if CACHE_L2X0
 	depends on PERF_EVENTS

@@ -48,6 +48,7 @@ struct l2x0_regs l2x0_saved_regs;
 
 static bool l2x0_bresp_disable;
 static bool l2x0_flz_disable;
+static bool l2x0_io_lock_enable __initdata;
 
 /*
  * Common code for all cache controllers.
@@ -778,6 +779,81 @@ static const struct l2c_init_data l2c310_init_fns __initconst = {
 	},
 };
 
+#ifdef CONFIG_CACHE_L2X0_IO_LOCK
+/*
+ * On some SoCs (e.g. the ZTE/Sanechips ZX279128S) a CPU read from a PCIe
+ * endpoint that is still outstanding when an L2C maintenance or sync
+ * operation is issued deadlocks the interconnect: both CPUs stall and only
+ * a watchdog reset recovers.  The vendor kernel avoids this by holding one
+ * spinlock around the L2C operations and around the drivers' device reads.
+ * Do the same when the cache node asks for it.  Drivers take the lock
+ * around their device reads with outer_io_lock()/outer_io_unlock().
+ */
+static DEFINE_RAW_SPINLOCK(l2x0_io_lock);
+static struct outer_cache_fns l2x0_io_fns __ro_after_init;
+static bool l2x0_io_lock_active __ro_after_init;
+
+unsigned long outer_io_lock(void)
+{
+	unsigned long flags = 0;
+
+	if (l2x0_io_lock_active)
+		raw_spin_lock_irqsave(&l2x0_io_lock, flags);
+	return flags;
+}
+EXPORT_SYMBOL_GPL(outer_io_lock);
+
+void outer_io_unlock(unsigned long flags)
+{
+	if (l2x0_io_lock_active)
+		raw_spin_unlock_irqrestore(&l2x0_io_lock, flags);
+}
+EXPORT_SYMBOL_GPL(outer_io_unlock);
+
+#define L2C_IO_LOCKED_RANGE_OP(op)					\
+static void l2c_io_locked_##op(unsigned long start, unsigned long end)	\
+{									\
+	unsigned long flags;						\
+									\
+	raw_spin_lock_irqsave(&l2x0_io_lock, flags);			\
+	l2x0_io_fns.op(start, end);					\
+	raw_spin_unlock_irqrestore(&l2x0_io_lock, flags);		\
+}
+
+L2C_IO_LOCKED_RANGE_OP(inv_range)
+L2C_IO_LOCKED_RANGE_OP(clean_range)
+L2C_IO_LOCKED_RANGE_OP(flush_range)
+
+static void l2c_io_locked_sync(void)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&l2x0_io_lock, flags);
+	l2x0_io_fns.sync();
+	raw_spin_unlock_irqrestore(&l2x0_io_lock, flags);
+}
+
+static void __init l2c_io_lock_install(struct outer_cache_fns *fns)
+{
+	l2x0_io_fns = *fns;
+	if (fns->inv_range)
+		fns->inv_range = l2c_io_locked_inv_range;
+	if (fns->clean_range)
+		fns->clean_range = l2c_io_locked_clean_range;
+	if (fns->flush_range)
+		fns->flush_range = l2c_io_locked_flush_range;
+	if (fns->sync)
+		fns->sync = l2c_io_locked_sync;
+	l2x0_io_lock_active = true;
+	pr_info("L2C: serializing device reads with maintenance operations\n");
+}
+#else
+static void __init l2c_io_lock_install(struct outer_cache_fns *fns)
+{
+	pr_warn("L2C: io read lock requested but CONFIG_CACHE_L2X0_IO_LOCK is disabled\n");
+}
+#endif
+
 static int __init __l2c_init(const struct l2c_init_data *data,
 			     u32 aux_val, u32 aux_mask, u32 cache_id, bool nosync)
 {
@@ -859,6 +935,8 @@ static int __init __l2c_init(const struct l2c_init_data *data,
 		pr_info("L2C: disabling outer sync\n");
 		fns.sync = NULL;
 	}
+	if (l2x0_io_lock_enable)
+		l2c_io_lock_install(&fns);
 
 	/*
 	 * Check if l2x0 controller is already enabled.  If we are booting
@@ -1197,6 +1275,9 @@ static void __init l2c310_of_parse(const struct device_node *np,
 
 	if (of_property_read_bool(np, "arm,full-line-zero-disable"))
 		l2x0_flz_disable = true;
+
+	if (of_property_read_bool(np, "zte,l2c-io-read-lock"))
+		l2x0_io_lock_enable = true;
 
 	prefetch = l2x0_saved_regs.prefetch_ctrl;
 
