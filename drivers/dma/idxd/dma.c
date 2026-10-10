@@ -45,8 +45,8 @@ void idxd_dma_complete_txd(struct idxd_desc *desc,
 
 	tx = &desc->txd;
 	if (complete && tx->cookie) {
-		dma_cookie_complete(tx);
 		dma_descriptor_unmap(tx);
+		dma_cookie_complete(tx);
 		dmaengine_desc_get_callback_invoke(tx, &res);
 		tx->callback = NULL;
 		tx->callback_result = NULL;
