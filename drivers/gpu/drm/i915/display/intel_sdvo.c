@@ -974,35 +974,7 @@ static bool intel_sdvo_get_hbuf_size(struct intel_sdvo *intel_sdvo,
 	return true;
 }
 
-#if 0
-static void intel_sdvo_dump_hdmi_buf(struct intel_sdvo *intel_sdvo)
-{
-	int i, j;
-	u8 set_buf_index[2];
-	u8 av_split;
-	u8 buf_size;
-	u8 buf[48];
-	u8 *pos;
 
-	intel_sdvo_get_value(encoder, SDVO_CMD_GET_HBUF_AV_SPLIT, &av_split, 1);
-
-	for (i = 0; i <= av_split; i++) {
-		set_buf_index[0] = i; set_buf_index[1] = 0;
-		intel_sdvo_write_cmd(encoder, SDVO_CMD_SET_HBUF_INDEX,
-				     set_buf_index, 2);
-		intel_sdvo_write_cmd(encoder, SDVO_CMD_GET_HBUF_INFO, NULL, 0);
-		intel_sdvo_read_response(encoder, &buf_size, 1);
-
-		pos = buf;
-		for (j = 0; j <= buf_size; j += 8) {
-			intel_sdvo_write_cmd(encoder, SDVO_CMD_GET_HBUF_DATA,
-					     NULL, 0);
-			intel_sdvo_read_response(encoder, pos, 8);
-			pos += 8;
-		}
-	}
-}
-#endif
 
 static bool intel_sdvo_write_infoframe(struct intel_sdvo *intel_sdvo,
 				       unsigned int if_index, u8 tx_rate,
