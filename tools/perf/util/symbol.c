@@ -1931,6 +1931,10 @@ int dso__load(struct dso *dso, struct map *map)
 			nsinfo__mountns_enter(dso__nsinfo(dso), &nsc);
 
 		if (bfdrc > 0) {
+			if (syms_ss) {
+				symsrc__destroy(syms_ss);
+				syms_ss = NULL;
+			}
 			ret = 1;
 			break;
 		}
