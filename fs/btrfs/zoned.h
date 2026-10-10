@@ -432,4 +432,9 @@ static inline bool btrfs_zoned_bg_is_full(const struct btrfs_block_group *bg)
 	return (bg->alloc_offset == bg->zone_capacity);
 }
 
+static inline bool btrfs_zoned_bg_is_conventional(const struct btrfs_block_group *bg)
+{
+	return !test_bit(BLOCK_GROUP_FLAG_SEQUENTIAL_ZONE, &bg->runtime_flags);
+}
+
 #endif

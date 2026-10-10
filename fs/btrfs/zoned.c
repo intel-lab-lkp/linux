@@ -2633,14 +2633,16 @@ static int do_zone_finish(struct btrfs_block_group *block_group, bool fully_writ
 	btrfs_clear_data_reloc_bg(block_group);
 	spin_unlock(&block_group->lock);
 
-	down_read(&dev_replace->rwsem);
-	map = block_group->physical_map;
-	for (i = 0; i < map->num_stripes; i++) {
-		ret = call_zone_finish(block_group, &map->stripes[i]);
-		if (ret)
-			break;
+	if (!btrfs_zoned_bg_is_conventional(block_group)) {
+		down_read(&dev_replace->rwsem);
+		map = block_group->physical_map;
+		for (i = 0; i < map->num_stripes; i++) {
+			ret = call_zone_finish(block_group, &map->stripes[i]);
+			if (ret)
+				break;
+		}
+		up_read(&dev_replace->rwsem);
 	}
-	up_read(&dev_replace->rwsem);
 
 	if (!ret && !fully_written)
 		btrfs_dec_block_group_ro(block_group);
@@ -3099,6 +3101,8 @@ void btrfs_check_active_zone_reservation(struct btrfs_fs_info *fs_info)
 
 		if (!(block_group->flags &
 		      (BTRFS_BLOCK_GROUP_METADATA | BTRFS_BLOCK_GROUP_SYSTEM)))
+			continue;
+		if (btrfs_zoned_bg_is_conventional(block_group))
 			continue;
 
 		for (int i = 0; i < map->num_stripes; i++)
