@@ -1332,6 +1332,7 @@ static void asus_rfkill_terminate(struct asus_rfkill *rfk)
 
 static void asus_rfkill_exit(struct asus_laptop *asus)
 {
+	asus_rfkill_terminate(&asus->wimax);
 	asus_rfkill_terminate(&asus->wwan);
 	asus_rfkill_terminate(&asus->bluetooth);
 	asus_rfkill_terminate(&asus->wlan);
