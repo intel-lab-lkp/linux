@@ -15,6 +15,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <media/v4l2-event.h>
@@ -1602,6 +1603,22 @@ static irqreturn_t mtk_jpeg_enc_done(struct mtk_jpeg_dev *jpeg)
 	return IRQ_HANDLED;
 }
 
+static void mtk_jpeg_set_smmu_sid(struct regmap *smmu_regmap, unsigned int sid)
+{
+	if (sid == JPG_REG_GUSER_ID_DEC_SID)
+		regmap_update_bits(smmu_regmap, JPEG_DEC_SMMU_SID,
+				   JPG_REG_GUSER_ID_MASK <<
+				   JPG_REG_DEC_GUSER_ID_SHIFT,
+				   JPG_REG_GUSER_ID_DEC_SID <<
+				   JPG_REG_DEC_GUSER_ID_SHIFT);
+	else
+		regmap_update_bits(smmu_regmap, JPEG_ENC_SMMU_SID,
+				   JPG_REG_GUSER_ID_MASK <<
+				   JPG_REG_ENC_GUSER_ID_SHIFT,
+				   JPG_REG_GUSER_ID_ENC_SID <<
+				   JPG_REG_ENC_GUSER_ID_SHIFT);
+}
+
 static void mtk_jpegenc_worker(struct work_struct *work)
 {
 	struct mtk_jpegenc_comp_dev *comp_jpeg[MTK_JPEGENC_HW_MAX];
@@ -1663,6 +1680,11 @@ retry_select:
 	jpeg_dst_buf->frame_num = ctx->total_frame_num;
 	ctx->total_frame_num++;
 	mtk_jpeg_enc_reset(comp_jpeg[hw_id]->reg_base);
+
+	if (jpeg->variant->support_smmu && comp_jpeg[hw_id]->smmu_regmap)
+		mtk_jpeg_set_smmu_sid(comp_jpeg[hw_id]->smmu_regmap,
+				      JPG_REG_GUSER_ID_ENC_SID);
+
 	mtk_jpeg_set_enc_dst(ctx,
 			     comp_jpeg[hw_id]->reg_base,
 			     &dst_buf->vb2_buf);
@@ -1772,6 +1794,11 @@ retry_select:
 	jpeg_dst_buf->frame_num = ctx->total_frame_num;
 	ctx->total_frame_num++;
 	mtk_jpeg_dec_reset(comp_jpeg[hw_id]->reg_base);
+
+	if (jpeg->variant->support_smmu && comp_jpeg[hw_id]->smmu_regmap)
+		mtk_jpeg_set_smmu_sid(comp_jpeg[hw_id]->smmu_regmap,
+				      JPG_REG_GUSER_ID_DEC_SID);
+
 	mtk_jpeg_dec_set_config(comp_jpeg[hw_id]->reg_base,
 				jpeg->variant->support_34bit,
 				&jpeg_src_buf->dec_param,
@@ -1931,6 +1958,7 @@ static struct mtk_jpeg_variant mtk8196_jpegenc_drvdata = {
 	.multi_core = true,
 	.jpeg_worker = mtk_jpegenc_worker,
 	.support_34bit = true,
+	.support_smmu = true,
 };
 
 static const struct mtk_jpeg_variant mtk8195_jpegdec_drvdata = {
@@ -1958,6 +1986,7 @@ static const struct mtk_jpeg_variant mtk8196_jpegdec_drvdata = {
 	.multi_core = true,
 	.jpeg_worker = mtk_jpegdec_worker,
 	.support_34bit = true,
+	.support_smmu = true,
 };
 
 static const struct of_device_id mtk_jpeg_match[] = {
