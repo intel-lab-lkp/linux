@@ -354,7 +354,7 @@ static void drop_ref(struct hidraw *hidraw, int exists_bit)
 	if (!hidraw->open) {
 		if (!hidraw->exist) {
 			hidraw_table[hidraw->minor] = NULL;
-			kfree(hidraw);
+			kfree_rcu(hidraw, rcu);
 		} else {
 			/* close device for last reader */
 			hid_hw_close(hidraw->hid);
@@ -569,10 +569,23 @@ static const struct file_operations hidraw_ops = {
 
 int hidraw_report_event(struct hid_device *hid, u8 *data, int len)
 {
-	struct hidraw *dev = hid->hidraw;
 	struct hidraw_list *list;
+	struct hidraw *dev;
 	int ret = 0;
 	unsigned long flags;
+
+	/*
+	 * The object is freed by hidraw_disconnect() with nothing excluding
+	 * this path: hid_hw_stop() carries no quiesce requirement and drivers
+	 * call it from workqueue context.  Hold the RCU read side so the
+	 * object cannot go away between the load and the unlock.
+	 */
+	rcu_read_lock();
+	dev = READ_ONCE(hid->hidraw);
+	if (!dev) {
+		rcu_read_unlock();
+		return 0;
+	}
 
 	spin_lock_irqsave(&dev->list_lock, flags);
 	list_for_each_entry(list, &dev->list, node) {
@@ -592,6 +605,7 @@ int hidraw_report_event(struct hid_device *hid, u8 *data, int len)
 	spin_unlock_irqrestore(&dev->list_lock, flags);
 
 	wake_up_interruptible(&dev->wait);
+	rcu_read_unlock();
 	return ret;
 }
 EXPORT_SYMBOL_GPL(hidraw_report_event);
@@ -644,7 +658,11 @@ int hidraw_connect(struct hid_device *hid)
 	dev->minor = minor;
 
 	dev->exist = 1;
-	hid->hidraw = dev;
+	/*
+	 * Publish with a release so the initialisation above is visible to
+	 * an RCU reader that picks the pointer up without taking any lock.
+	 */
+	smp_store_release(&hid->hidraw, dev);
 
 	up_write(&minors_rwsem);
 out:
@@ -655,10 +673,25 @@ EXPORT_SYMBOL_GPL(hidraw_connect);
 
 void hidraw_disconnect(struct hid_device *hid)
 {
-	struct hidraw *hidraw = hid->hidraw;
+	struct hidraw *hidraw;
 
 	down_write(&minors_rwsem);
 
+	/*
+	 * Claim the object under the lock and detach it before dropping the
+	 * last reference.  Taking it outside lets two concurrent teardowns
+	 * capture the same pointer and both call drop_ref() on it.  Readers
+	 * that have not loaded the pointer yet now see NULL; readers that
+	 * already did are kept safe by the RCU grace period taken by
+	 * kfree_rcu() in drop_ref().
+	 */
+	hidraw = hid->hidraw;
+	if (!hidraw) {
+		up_write(&minors_rwsem);
+		return;
+	}
+
+	WRITE_ONCE(hid->hidraw, NULL);
 	drop_ref(hidraw, 1);
 
 	up_write(&minors_rwsem);

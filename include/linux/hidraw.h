@@ -17,6 +17,7 @@ struct hidraw {
 	struct device *dev;
 	spinlock_t list_lock;
 	struct list_head list;
+	struct rcu_head rcu;
 };
 
 struct hidraw_report {
