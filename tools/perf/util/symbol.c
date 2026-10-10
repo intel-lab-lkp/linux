@@ -1935,6 +1935,7 @@ int dso__load(struct dso *dso, struct map *map)
 				symsrc__destroy(syms_ss);
 				syms_ss = NULL;
 			}
+			dso__set_symtab_type(dso, symtab_type);
 			ret = 1;
 			break;
 		}
