@@ -2445,6 +2445,12 @@ int input_register_device(struct input_dev *dev)
 
 	error = -EINTR;
 	scoped_cond_guard(mutex_intr, goto err_device_del, &input_mutex) {
+		/* Keep seeded state, but do not replay pre-registration events. */
+		scoped_guard(spinlock_irq, &dev->event_lock) {
+			dev->num_vals = 0;
+			dev->timestamp[INPUT_CLK_MONO] = ktime_set(0, 0);
+		}
+
 		list_add_tail(&dev->node, &input_dev_list);
 
 		list_for_each_entry(handler, &input_handler_list, node)
