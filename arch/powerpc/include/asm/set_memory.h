@@ -48,4 +48,13 @@ static inline int __must_check set_memory_rox(unsigned long addr, int numpages)
 }
 #define set_memory_rox set_memory_rox
 
+#ifdef CONFIG_ARCH_HAS_SET_DIRECT_MAP
+bool can_set_direct_map(void);
+#define can_set_direct_map can_set_direct_map
+
+int set_direct_map_invalid_noflush(struct page *page, unsigned int numpages);
+int set_direct_map_default_noflush(struct page *page, unsigned int numpages);
+bool kernel_page_present(struct page *page);
+#endif
+
 #endif
