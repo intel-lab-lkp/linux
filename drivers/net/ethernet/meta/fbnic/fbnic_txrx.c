@@ -882,6 +882,13 @@ static void fbnic_clean_bdq(struct fbnic_ring *ring, unsigned int hw_head,
 {
 	unsigned int head = ring->head;
 
+	/* A head outside the ring cannot name a buffer we posted, and the
+	 * loop below masks head to the ring so it would never reach it.
+	 * Leave the ring alone and wait for a head we can act on.
+	 */
+	if (unlikely(hw_head > ring->size_mask))
+		return;
+
 	if (head == hw_head)
 		return;
 
@@ -985,13 +992,23 @@ static void fbnic_pkt_prepare(struct fbnic_napi_vector *nv, u64 rcd,
 {
 	unsigned int hdr_pg_idx = FIELD_GET(FBNIC_RCD_AL_BUFF_PAGE_MASK, rcd);
 	unsigned int hdr_pg_off = FIELD_GET(FBNIC_RCD_AL_BUFF_OFF_MASK, rcd);
-	struct page *page = fbnic_page_pool_get_head(qt, hdr_pg_idx);
 	unsigned int len = FIELD_GET(FBNIC_RCD_AL_BUFF_LEN_MASK, rcd);
 	unsigned int frame_sz, hdr_pg_start, hdr_pg_end, headroom;
 	unsigned char *hdr_start;
+	struct page *page;
 
 	/* data_hard_start should always be NULL when this is called */
 	WARN_ON_ONCE(pkt->buff.data_hard_start);
+
+	/* A buffer ID the device never got from us cannot name a buffer we
+	 * own, so drop the packet instead of running off the end of rx_buf[].
+	 */
+	if (unlikely(hdr_pg_idx > qt->sub0.size_mask)) {
+		pkt->add_frag_failed = true;
+		return;
+	}
+
+	page = fbnic_page_pool_get_head(qt, hdr_pg_idx);
 
 	/* Short-cut the end calculation if we know page is fully consumed */
 	hdr_pg_end = FIELD_GET(FBNIC_RCD_AL_PAGE_FIN, rcd) ?
@@ -1026,9 +1043,26 @@ static void fbnic_add_rx_frag(struct fbnic_napi_vector *nv, u64 rcd,
 	unsigned int pg_idx = FIELD_GET(FBNIC_RCD_AL_BUFF_PAGE_MASK, rcd);
 	unsigned int pg_off = FIELD_GET(FBNIC_RCD_AL_BUFF_OFF_MASK, rcd);
 	unsigned int len = FIELD_GET(FBNIC_RCD_AL_BUFF_LEN_MASK, rcd);
-	netmem_ref netmem = fbnic_page_pool_get_data(qt, pg_idx);
 	unsigned int truesize;
+	netmem_ref netmem;
 	bool added;
+
+	/* No header completion has set buff up, either because one was
+	 * rejected or because the device sent none, so there is nothing to
+	 * add a fragment to.  Mark the packet so the metadata descriptor
+	 * drops it instead of building an skb on an empty buffer.
+	 */
+	if (unlikely(!pkt->buff.data_hard_start)) {
+		pkt->add_frag_failed = true;
+		return;
+	}
+
+	if (unlikely(pg_idx > qt->sub1.size_mask)) {
+		pkt->add_frag_failed = true;
+		return;
+	}
+
+	netmem = fbnic_page_pool_get_data(qt, pg_idx);
 
 	truesize = FIELD_GET(FBNIC_RCD_AL_PAGE_FIN, rcd) ?
 		   FBNIC_BD_FRAG_SIZE - pg_off : ALIGN(len, 128);
