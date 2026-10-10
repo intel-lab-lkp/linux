@@ -786,7 +786,11 @@ int hibernate(void)
 		goto Unlock;
 	}
 
-	pr_info("hibernation entry\n");
+	pr_info("hibernation entry (%s)\n",
+		hibernation_mode == HIBERNATION_REBOOT ? "reboot" :
+		hibernation_mode == HIBERNATION_PLATFORM ? "platform" :
+		hibernation_mode == HIBERNATION_TEST_RESUME ? "test_resume" :
+		"shutdown");
 	pm_prepare_console();
 	error = pm_notifier_call_chain_robust(PM_HIBERNATION_PREPARE, PM_POST_HIBERNATION);
 	if (error)
