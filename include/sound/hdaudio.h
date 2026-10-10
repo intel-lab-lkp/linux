@@ -400,6 +400,8 @@ void snd_hdac_codec_link_down(struct hdac_device *codec);
 int snd_hdac_bus_send_cmd(struct hdac_bus *bus, unsigned int val);
 int snd_hdac_bus_get_response(struct hdac_bus *bus, unsigned int addr,
 			      unsigned int *res);
+void snd_hdac_bus_reset_response_counter(struct hdac_bus *bus,
+					 unsigned int addr);
 int snd_hdac_bus_parse_capabilities(struct hdac_bus *bus);
 
 bool snd_hdac_bus_init_chip(struct hdac_bus *bus, bool full_reset);
