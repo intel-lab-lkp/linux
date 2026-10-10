@@ -15,11 +15,10 @@
 
 #include "page_alloc.h"
 
-/*
- * TODO: teach PAGE_OWNER_STACK_DEPTH (__dump_page_owner and save_stack)
- * to use off stack temporal storage
- */
-#define PAGE_OWNER_STACK_DEPTH (16)
+#define PAGE_OWNER_STACK_DEPTH_MAX (64)
+
+static unsigned int page_owner_stack_depth = 16;
+module_param_named(stack_depth, page_owner_stack_depth, uint, 0644);
 
 struct page_owner {
 	unsigned short order;
@@ -172,15 +171,17 @@ static inline struct page_owner *get_page_owner(struct page_ext *page_ext)
 
 static noinline depot_stack_handle_t save_stack(gfp_t flags)
 {
-	unsigned long entries[PAGE_OWNER_STACK_DEPTH];
+	unsigned long entries[PAGE_OWNER_STACK_DEPTH_MAX];
 	depot_stack_handle_t handle;
 	unsigned int nr_entries;
+	unsigned int max_entries;
 
 	if (current->in_page_owner)
 		return dummy_handle;
 
 	set_current_in_page_owner();
-	nr_entries = stack_trace_save(entries, ARRAY_SIZE(entries), 2);
+	max_entries = min_t(unsigned int, page_owner_stack_depth, ARRAY_SIZE(entries));
+	nr_entries = stack_trace_save(entries, max_entries, 2);
 	handle = stack_depot_save(entries, nr_entries, flags);
 	if (!handle)
 		handle = failure_handle;
