@@ -339,6 +339,24 @@ additionalProperties: true
 # has added. Failure to remove the delay will result in a
 # non-functioning link.
 #
+# Put together, with the two properties in the MAC node, this is who
+# adds each delay:
+#
+#   phy-mode    tx-internal-delay-ps  rx-internal-delay-ps  TX delay    RX delay
+#   rgmii       -                     -                     PCB trace   PCB trace
+#   rgmii-id    -                     -                     PHY         PHY
+#   rgmii-id    present               -                     MAC         PHY
+#   rgmii-id    -                     present               PHY         MAC
+#   rgmii-id    present               present               MAC         MAC
+#   rgmii-txid  -                     -                     PHY         PCB trace
+#   rgmii-txid  present               -                     MAC         PCB trace
+#   rgmii-rxid  -                     -                     PCB trace   PHY
+#   rgmii-rxid  -                     present               PCB trace   MAC
+#
+# A property for a clock the PCB already delays is not in this table.
+# It is either the fine tuning described next, or a mistake the MAC
+# should report as a fatal error.
+#
 # Sometimes there is a need to fine tune the delays. Often the MAC or
 # PHY can perform this fine tuning. In the MAC node, the Device Tree
 # properties 'rx-internal-delay-ps' and 'tx-internal-delay-ps' should
