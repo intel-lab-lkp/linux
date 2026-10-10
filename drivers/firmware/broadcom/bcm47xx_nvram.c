@@ -112,8 +112,12 @@ found:
 
 int bcm47xx_nvram_init_from_iomem(void __iomem *nvram_start, size_t res_size)
 {
+	/*
+	 * The arch code on MIPS (and the MTD fallback) may have copied the
+	 * NVRAM before the nvmem driver probes. That copy is used.
+	 */
 	if (nvram_len) {
-		pr_warn("nvram already initialized\n");
+		pr_debug("nvram already initialized\n");
 		return -EEXIST;
 	}
 
