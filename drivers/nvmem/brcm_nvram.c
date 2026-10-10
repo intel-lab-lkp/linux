@@ -66,8 +66,10 @@ static int brcm_nvram_read(void *context, unsigned int offset, void *val,
 
 static int brcm_nvram_copy_data(struct brcm_nvram *priv, struct platform_device *pdev)
 {
+	struct brcm_nvram_header header;
 	struct resource *res;
 	void __iomem *base;
+	size_t len;
 
 	base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(base))
@@ -88,6 +90,16 @@ static int brcm_nvram_copy_data(struct brcm_nvram *priv, struct platform_device 
 		dev_err(priv->dev, "NVRAM data too small (%zu)\n", priv->data_len);
 		return -EINVAL;
 	}
+
+	/*
+	 * NVRAM content ends with NUL bytes, so when the padding is 0x00 (as
+	 * written by CFE) the loop above also strips the end of the content.
+	 * Don't cut the data shorter than the length in its header.
+	 */
+	memcpy_fromio(&header, base, sizeof(header));
+	len = le32_to_cpu(header.len);
+	if (len > priv->data_len && len <= priv->nvmem_size)
+		priv->data_len = len;
 
 	priv->data = devm_kzalloc(priv->dev, priv->data_len, GFP_KERNEL);
 	if (!priv->data)
