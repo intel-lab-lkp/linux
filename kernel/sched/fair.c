@@ -11898,6 +11898,13 @@ static void record_sg_llc_stats(struct lb_env *env,
 		return;
 
 	/*
+	 * Affinity retries can remove CPUs from env->cpus. Do not publish
+	 * partial utilization against the capacity of the whole group.
+	 */
+	if (!cpumask_subset(sched_group_span(group), env->cpus))
+		return;
+
+	/*
 	 * At this point we know this group spans a LLC domain.
 	 * Record the statistic of this group in its corresponding
 	 * shared LLC domain.
