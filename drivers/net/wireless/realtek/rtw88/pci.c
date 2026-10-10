@@ -475,7 +475,29 @@ static void rtw_pci_reset_buf_desc(struct rtw_dev *rtwdev)
 
 static void rtw_pci_reset_trx_ring(struct rtw_dev *rtwdev)
 {
+	struct rtw_pci *rtwpci = (struct rtw_pci *)rtwdev->priv;
+	enum rtw_tx_queue_type queue;
+	bool wake = false;
+
 	rtw_pci_reset_buf_desc(rtwdev);
+
+	/*
+	 * The indices are back at zero, so nothing that was in flight can
+	 * complete and reach the wake in rtw_pci_tx_isr(); a queue stopped
+	 * when its ring filled would stay stopped for good. Only wake when
+	 * that happened: the stop reason is shared with the AER and scan
+	 * paths, which wake the queues again themselves.
+	 */
+	for (queue = 0; queue < RTK_MAX_TX_QUEUE_NUM; queue++) {
+		if (!rtwpci->tx_rings[queue].queue_stopped)
+			continue;
+
+		rtwpci->tx_rings[queue].queue_stopped = false;
+		wake = true;
+	}
+
+	if (wake)
+		ieee80211_wake_queues(rtwdev->hw);
 }
 
 static void rtw_pci_enable_interrupt(struct rtw_dev *rtwdev,
