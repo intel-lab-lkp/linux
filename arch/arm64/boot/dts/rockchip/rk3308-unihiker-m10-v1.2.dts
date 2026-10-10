@@ -131,6 +131,11 @@
 	status = "okay";
 };
 
+&i2c2 {
+	clock-frequency = <400000>;
+	status = "okay";
+};
+
 &io_domains {
 	vccio0-supply = <&vcc_io>;
 	vccio1-supply = <&vcc_io>;
