@@ -267,10 +267,43 @@ static const struct serdev_device_ops dell_uart_bl_serdev_ops = {
 	.write_wakeup = serdev_device_write_wakeup,
 };
 
-static int dell_uart_bl_serdev_probe(struct serdev_device *serdev)
+static int dell_uart_bl_init(struct device *dev, struct dell_uart_backlight *dell_bl)
 {
 	u8 get_version[GET_CMD_LEN], resp[MAX_RESP_LEN];
 	struct backlight_properties props = {};
+	int ret;
+
+	get_version[0] = DELL_SOF(GET_CMD_LEN);
+	get_version[1] = CMD_GET_VERSION;
+	get_version[2] = dell_uart_checksum(get_version, 2);
+
+	ret = dell_uart_bl_command(dell_bl, get_version, GET_CMD_LEN, resp, MAX_RESP_LEN);
+	if (ret)
+		return ret;
+
+	dev_dbg(dev, "Firmware version: %.*s\n", resp[RESP_LEN] - 3, resp + RESP_DATA);
+
+	/* Initialize bl_power to a known value */
+	ret = dell_uart_set_bl_power(dell_bl, BACKLIGHT_POWER_ON);
+	if (ret)
+		return ret;
+
+	ret = dell_uart_get_brightness(dell_bl);
+	if (ret < 0)
+		return ret;
+
+	props.type = BACKLIGHT_PLATFORM;
+	props.brightness = ret;
+	props.max_brightness = DELL_BL_MAX_BRIGHTNESS;
+	props.power = dell_bl->power;
+
+	dell_bl->bl = devm_backlight_device_register(dev, "dell_uart_backlight", dev, dell_bl,
+						     &dell_uart_backlight_ops, &props);
+	return PTR_ERR_OR_ZERO(dell_bl->bl);
+}
+
+static int dell_uart_bl_serdev_probe(struct serdev_device *serdev)
+{
 	struct dell_uart_backlight *dell_bl;
 	struct device *dev = &serdev->dev;
 	int ret;
@@ -294,35 +327,7 @@ static int dell_uart_bl_serdev_probe(struct serdev_device *serdev)
 	serdev_device_set_baudrate(serdev, 9600);
 	serdev_device_set_flow_control(serdev, false);
 
-	get_version[0] = DELL_SOF(GET_CMD_LEN);
-	get_version[1] = CMD_GET_VERSION;
-	get_version[2] = dell_uart_checksum(get_version, 2);
-
-	ret = dell_uart_bl_command(dell_bl, get_version, GET_CMD_LEN, resp, MAX_RESP_LEN);
-	if (ret)
-		return dev_err_probe(dev, ret, "getting firmware version\n");
-
-	dev_dbg(dev, "Firmware version: %.*s\n", resp[RESP_LEN] - 3, resp + RESP_DATA);
-
-	/* Initialize bl_power to a known value */
-	ret = dell_uart_set_bl_power(dell_bl, BACKLIGHT_POWER_ON);
-	if (ret)
-		return ret;
-
-	ret = dell_uart_get_brightness(dell_bl);
-	if (ret < 0)
-		return ret;
-
-	props.type = BACKLIGHT_PLATFORM;
-	props.brightness = ret;
-	props.max_brightness = DELL_BL_MAX_BRIGHTNESS;
-	props.power = dell_bl->power;
-
-	dell_bl->bl = devm_backlight_device_register(dev, "dell_uart_backlight",
-						     dev, dell_bl,
-						     &dell_uart_backlight_ops,
-						     &props);
-	return PTR_ERR_OR_ZERO(dell_bl->bl);
+	return dell_uart_bl_init(dev, dell_bl);
 }
 
 static struct serdev_device_driver dell_uart_bl_serdev_driver = {
