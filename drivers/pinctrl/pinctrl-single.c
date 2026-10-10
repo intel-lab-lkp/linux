@@ -265,6 +265,26 @@ static void pcs_writel(unsigned int val, void __iomem *reg)
 	writel(val, reg);
 }
 
+static unsigned int pcs_readw_be(void __iomem *reg)
+{
+	return readw_be(reg);
+}
+
+static unsigned int pcs_readl_be(void __iomem *reg)
+{
+	return readl_be(reg);
+}
+
+static void pcs_writew_be(unsigned int val, void __iomem *reg)
+{
+	writew_be(val, reg);
+}
+
+static void pcs_writel_be(unsigned int val, void __iomem *reg)
+{
+	writel_be(val, reg);
+}
+
 static unsigned int pcs_pin_reg_offset_get(struct pcs_device *pcs,
 					   unsigned int pin)
 {
@@ -1784,6 +1804,7 @@ static int pcs_probe(struct platform_device *pdev)
 	struct resource *res;
 	struct pcs_device *pcs;
 	const struct pcs_soc_data *soc;
+	bool byte_be;
 	int ret;
 
 	soc = of_device_get_match_data(&pdev->dev);
@@ -1859,18 +1880,30 @@ static int pcs_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pcs);
 
+	byte_be = device_is_big_endian(pcs->dev);
+
 	switch (pcs->width) {
 	case 8:
 		pcs->read = pcs_readb;
 		pcs->write = pcs_writeb;
 		break;
 	case 16:
-		pcs->read = pcs_readw;
-		pcs->write = pcs_writew;
+		if (byte_be) {
+			pcs->read = pcs_readw_be;
+			pcs->write = pcs_writew_be;
+		} else {
+			pcs->read = pcs_readw;
+			pcs->write = pcs_writew;
+		}
 		break;
 	case 32:
-		pcs->read = pcs_readl;
-		pcs->write = pcs_writel;
+		if (byte_be) {
+			pcs->read = pcs_readl_be;
+			pcs->write = pcs_writel_be;
+		} else {
+			pcs->read = pcs_readl;
+			pcs->write = pcs_writel;
+		}
 		break;
 	default:
 		break;
