@@ -8,6 +8,7 @@
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
+#include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
@@ -635,11 +636,36 @@ static struct snd_soc_dai_driver ak4497_dai = {
 
 static void ak4458_reset(struct ak4458_priv *ak4458, bool active)
 {
+	int ret, status;
+
 	if (!IS_ERR_OR_NULL(ak4458->reset)) {
-		if (active)
+		if (active) {
 			reset_control_assert(ak4458->reset);
-		else
-			reset_control_deassert(ak4458->reset);
+		} else {
+			ret = reset_control_deassert(ak4458->reset);
+			if (ret) {
+				dev_warn(ak4458->dev,
+					 "failed to deassert reset: %d\n", ret);
+			} else {
+				/*
+				 * On a shared reset line another consumer may
+				 * still be in its hardware .deassert(), which can
+				 * sleep, so the line may not be released yet.
+				 * Poll the status until it reads deasserted (0).
+				 * A negative return means the controller does not
+				 * report status, so stop polling in that case.
+				 */
+				ret = read_poll_timeout(reset_control_status, status,
+							status <= 0, 100, 20000,
+							false, ak4458->reset);
+				if (ret)
+					dev_warn(ak4458->dev,
+						 "reset still asserted after deassert\n");
+				else if (status < 0)
+					dev_dbg(ak4458->dev,
+						"reset status not supported: %d\n", status);
+			}
+		}
 		usleep_range(1000, 2000);
 	}
 }
