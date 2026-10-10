@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config CLK_ZX279128S
+	bool "ZTE zx279128s clock driver"
+	depends on SOC_ZX279128S || COMPILE_TEST
+	depends on OF
+	default SOC_ZX279128S
+	select RESET_CONTROLLER
+	select RESET_SIMPLE
+	help
+	  This driver supports the clocks of the ZTE zx279128s SoC: the
+	  top clock and reset module (CRM) with the PLLs, the CPU, bus and
+	  peripheral group clocks, and the CRPMs of the two groups of low
+	  speed peripherals (UARTs, SPI flash controller, GPIO, MDIO).
+	  Say Y if you build a kernel for a board with this SoC.
