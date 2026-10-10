@@ -97,13 +97,51 @@ void flush_icache_mm(struct mm_struct *mm, bool local)
 #endif /* CONFIG_SMP */
 
 #ifdef CONFIG_MMU
+#ifdef CONFIG_SMP
+/*
+ * PG_dcache_clean is folio-wide, but flush_icache_mm() only reaches the
+ * harts of one mm.  Count the flushes that set the bit; an mm whose
+ * generation lags cannot trust a bit set since its own last flush, so it
+ * flushes its harts once before relying on it.
+ */
+static atomic64_t icache_folio_gen = ATOMIC64_INIT(0);
+
+static u64 icache_gen_bump(void)
+{
+	return atomic64_inc_return(&icache_folio_gen);
+}
+
+static bool icache_gen_stale(struct mm_struct *mm, u64 *gen)
+{
+	/* Pairs with the fully ordered atomic64_inc_return() in icache_gen_bump(). */
+	smp_rmb();
+	*gen = atomic64_read(&icache_folio_gen);
+	return atomic64_read(&mm->context.icache_gen) != *gen;
+}
+
+static void icache_gen_set(struct mm_struct *mm, u64 gen)
+{
+	atomic64_set(&mm->context.icache_gen, gen);
+}
+#else
+static u64 icache_gen_bump(void) { return 0; }
+static bool icache_gen_stale(struct mm_struct *mm, u64 *gen) { return false; }
+static void icache_gen_set(struct mm_struct *mm, u64 gen) { }
+#endif
+
 void flush_icache_pte(struct mm_struct *mm, pte_t pte)
 {
 	struct folio *folio = page_folio(pte_page(pte));
+	u64 gen;
 
 	if (!test_bit(PG_dcache_clean, &folio->flags.f)) {
+		gen = icache_gen_bump();
 		flush_icache_mm(mm, false);
+		icache_gen_set(mm, gen);
 		set_bit(PG_dcache_clean, &folio->flags.f);
+	} else if (unlikely(icache_gen_stale(mm, &gen))) {
+		flush_icache_mm(mm, false);
+		icache_gen_set(mm, gen);
 	}
 }
 #endif /* CONFIG_MMU */
