@@ -2709,6 +2709,14 @@ static void memcg_enforce_high(struct mem_cgroup *memcg, unsigned int nr_pages,
 		!current->mm || !mm_match_cgroup(current->mm, memcg);
 
 	/*
+	 * Reclaim can charge memory, for example when zswap stores a page.
+	 * Don't queue high_work from a reclaiming task, or the
+	 * high_work worker could keep queuing itself.
+	 */
+	if (in_task() && use_worker && (current->flags & PF_MEMALLOC))
+		return;
+
+	/*
 	 * If the hierarchy is above the normal consumption range, schedule
 	 * reclaim on returning to userland.  We can perform reclaim here
 	 * if __GFP_RECLAIM but let's always punt for simplicity and so that
