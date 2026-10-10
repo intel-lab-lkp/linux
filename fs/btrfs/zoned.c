@@ -1950,6 +1950,23 @@ int btrfs_load_block_group_zone_info(struct btrfs_block_group *cache, bool new)
 	if (num_sequential > 0)
 		set_bit(BLOCK_GROUP_FLAG_SEQUENTIAL_ZONE, &cache->runtime_flags);
 
+	if (num_conventional > 0 && num_sequential > 0) {
+		int ref;
+
+		for (ref = 0; ref < map->num_stripes; ref++) {
+			if (zone_info[ref].alloc_offset != WP_CONVENTIONAL &&
+			    zone_info[ref].alloc_offset != WP_MISSING_DEV)
+				break;
+		}
+
+		if (ref < map->num_stripes) {
+			for (i = 0; i < map->num_stripes; i++) {
+				if (zone_info[i].alloc_offset == WP_CONVENTIONAL)
+					assign_bit(i, active, test_bit(ref, active));
+			}
+		}
+	}
+
 	if (num_conventional > 0) {
 		ret = calculate_alloc_pointer(cache, &last_alloc, new);
 		if (ret) {
