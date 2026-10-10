@@ -670,8 +670,12 @@ static long ntfs_fallocate(struct file *file, int mode, loff_t vbo, loff_t len)
 				err = attr_data_get_block(ni, vcn, cend - vcn,
 							  &lcn, &clen, &new,
 							  true, NULL, false);
-				if (err)
+				if (err) {
+					/* Do not leave the file extended. */
+					if (new_size > i_size)
+						ntfs_set_size(inode, i_size);
 					goto out;
+				}
 			}
 		}
 
