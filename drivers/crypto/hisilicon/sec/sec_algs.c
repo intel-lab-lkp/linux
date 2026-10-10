@@ -782,6 +782,15 @@ static int sec_alg_skcipher_crypto(struct skcipher_request *skreq,
 			ret = PTR_ERR(el);
 			goto err_free_elements;
 		}
+		/*
+		 * The element owns the split scatterlists from here on and
+		 * releases them in sec_alg_free_el().  Drop the references
+		 * kept in the temporary pointer arrays so that the error
+		 * cleanup does not kfree() the same memory a second time.
+		 */
+		splits_in[i] = NULL;
+		if (split)
+			splits_out[i] = NULL;
 		el->req.cipher_iv_addr_lo = lower_32_bits(sec_req->dma_iv);
 		el->req.cipher_iv_addr_hi = upper_32_bits(sec_req->dma_iv);
 		el->sec_req = sec_req;
