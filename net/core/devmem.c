@@ -169,6 +169,51 @@ void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 	percpu_ref_kill(&binding->ref);
 }
 
+void net_devmem_dev_unregister(struct net_device *dev)
+{
+	struct net_devmem_dmabuf_binding *binding;
+	unsigned long xa_idx;
+
+	rcu_read_lock();
+	xa_for_each(&net_devmem_dmabuf_bindings, xa_idx, binding) {
+		if (!percpu_ref_tryget(&binding->ref))
+			continue;
+		rcu_read_unlock();
+
+		if (xa_empty(&binding->bound_rxqs)) {
+			if (READ_ONCE(binding->dev) == dev) {
+				xa_erase(&net_devmem_dmabuf_bindings,
+					 binding->id);
+
+				mutex_lock(&binding->lock);
+				WRITE_ONCE(binding->dev, NULL);
+				WRITE_ONCE(binding->vdev, NULL);
+				mutex_unlock(&binding->lock);
+
+				/* Ensure no tx net_devmem_lookup_dmabuf() or
+				 * validate_xmit_unreadable_skb() are in flight
+				 * after detach.
+				 */
+				synchronize_net();
+
+				mutex_lock(&binding->lock);
+				net_devmem_dmabuf_binding_unmap(binding);
+				mutex_unlock(&binding->lock);
+			} else if (READ_ONCE(binding->vdev) == dev) {
+				mutex_lock(&binding->lock);
+				WRITE_ONCE(binding->vdev, NULL);
+				mutex_unlock(&binding->lock);
+
+				synchronize_net();
+			}
+		}
+
+		net_devmem_dmabuf_binding_put(binding);
+		rcu_read_lock();
+	}
+	rcu_read_unlock();
+}
+
 int net_devmem_bind_dmabuf_to_queue(struct net_device *dev, u32 rxq_idx,
 				    struct net_devmem_dmabuf_binding *binding,
 				    struct netlink_ext_ack *extack)
