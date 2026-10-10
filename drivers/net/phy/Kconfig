@@ -416,6 +416,14 @@ config ROCKCHIP_PHY
 	help
 	  Currently supports the integrated Ethernet PHY.
 
+config SANECHIPS_PHY
+	tristate "Sanechips Ethernet PHYs"
+	help
+	  Currently supports the Sanechips ZX5201 PHY, which the ZTE ZXHN
+	  H3600 uses for its WAN port. The driver sets the PHY up so that
+	  its SerDes interface passes traffic; everything else is handled
+	  by the generic PHY code.
+
 config SMSC_PHY
 	tristate "SMSC PHYs"
 	select CRC16
