@@ -4415,18 +4415,15 @@ int pcie_flr(struct pci_dev *dev)
 
 	pcie_capability_set_word(dev, PCI_EXP_DEVCTL, PCI_EXP_DEVCTL_BCR_FLR);
 
-	if (dev->imm_ready)
-		goto done;
-
 	/*
 	 * Per PCIe r4.0, sec 6.6.2, a device must complete an FLR within
 	 * 100ms, but may silently discard requests while the FLR is in
 	 * progress.  Wait 100ms before trying to access the device.
 	 */
-	msleep(100);
+	if (!dev->imm_ready)
+		msleep(100);
 
 	ret = pci_dev_wait(dev, "FLR", PCIE_RESET_READY_POLL_MS);
-done:
 	pci_dev_reset_iommu_done(dev);
 	return ret;
 }
@@ -4492,19 +4489,16 @@ static int pci_af_flr(struct pci_dev *dev, bool probe)
 
 	pci_write_config_byte(dev, pos + PCI_AF_CTRL, PCI_AF_CTRL_FLR);
 
-	if (dev->imm_ready)
-		goto done;
-
 	/*
 	 * Per Advanced Capabilities for Conventional PCI ECN, 13 April 2006,
 	 * updated 27 July 2006; a device must complete an FLR within
 	 * 100ms, but may silently discard requests while the FLR is in
 	 * progress.  Wait 100ms before trying to access the device.
 	 */
-	msleep(100);
+	if (!dev->imm_ready)
+		msleep(100);
 
 	ret = pci_dev_wait(dev, "AF_FLR", PCIE_RESET_READY_POLL_MS);
-done:
 	pci_dev_reset_iommu_done(dev);
 	return ret;
 }
