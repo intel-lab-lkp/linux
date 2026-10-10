@@ -486,8 +486,8 @@ switchtec_dma_cleanup_completed(struct switchtec_dma_chan *swdma_chan)
 		}
 
 		do {
-			dma_cookie_complete(&desc->txd);
 			dma_descriptor_unmap(&desc->txd);
+			dma_cookie_complete(&desc->txd);
 			dmaengine_desc_get_callback_invoke(&desc->txd, &res);
 			desc->txd.callback = NULL;
 			desc->txd.callback_result = NULL;
@@ -529,8 +529,8 @@ switchtec_dma_abort_desc(struct switchtec_dma_chan *swdma_chan, int force)
 		res.residue = desc->orig_size;
 		res.result = DMA_TRANS_ABORTED;
 
-		dma_cookie_complete(&desc->txd);
 		dma_descriptor_unmap(&desc->txd);
+		dma_cookie_complete(&desc->txd);
 		if (!force)
 			dmaengine_desc_get_callback_invoke(&desc->txd, &res);
 		desc->txd.callback = NULL;
