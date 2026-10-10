@@ -379,13 +379,6 @@ static inline bool reclaimable_anon_is_low(struct mem_cgroup *memcg,
 	if (!sc || (sc->gfp_mask & __GFP_IO))
 		return false;
 
-	/*
-	 * FIXME: MGLRU doesn't fully respect can_reclaim_anon_pages() for the
-	 * scanning type, so only apply this to the traditional LRU for now.
-	 */
-	if (lru_gen_enabled())
-		return false;
-
 	if (memcg) {
 		struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
 
@@ -4357,6 +4350,13 @@ static bool lruvec_is_sizable(struct lruvec *lruvec, struct scan_control *sc)
 	unsigned long total;
 	int swappiness = get_swappiness(lruvec, sc);
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
+	int nid = lruvec_pgdat(lruvec)->node_id;
+
+	if (swappiness && !can_reclaim_anon_pages(memcg, nid, sc)) {
+		if (swappiness == SWAPPINESS_ANON_ONLY)
+			return false;
+		swappiness = MIN_SWAPPINESS;
+	}
 
 	total = lruvec_evictable_size(lruvec, swappiness);
 
@@ -5246,8 +5246,14 @@ static bool try_to_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	long nr_batch, nr_to_scan;
 	int swappiness = get_swappiness(lruvec, sc);
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
+	int scan_swappiness = swappiness;
 
-	nr_to_scan = get_nr_to_scan(lruvec, sc, memcg, swappiness);
+	/* Restrict scanning without changing the policy used for aging. */
+	if (swappiness && swappiness != SWAPPINESS_ANON_ONLY &&
+	    !can_reclaim_anon_pages(memcg, lruvec_pgdat(lruvec)->node_id, sc))
+		scan_swappiness = MIN_SWAPPINESS;
+
+	nr_to_scan = get_nr_to_scan(lruvec, sc, memcg, scan_swappiness);
 	while (nr_to_scan > 0) {
 		int delta;
 		DEFINE_MAX_SEQ(lruvec);
@@ -5257,14 +5263,14 @@ static bool try_to_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 			break;
 		}
 
-		if (should_run_aging(lruvec, max_seq, sc, swappiness)) {
+		if (should_run_aging(lruvec, max_seq, sc, scan_swappiness)) {
 			if (try_to_inc_max_seq(lruvec, max_seq, swappiness, false))
 				need_rotate = true;
 			should_age = true;
 		}
 
 		nr_batch = min(nr_to_scan, MIN_LRU_BATCH);
-		delta = evict_folios(nr_batch, lruvec, sc, swappiness);
+		delta = evict_folios(nr_batch, lruvec, sc, scan_swappiness);
 		if (!delta)
 			break;
 
