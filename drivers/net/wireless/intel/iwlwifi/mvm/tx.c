@@ -331,6 +331,14 @@ static u32 iwl_mvm_get_inject_tx_rate(struct iwl_mvm *mvm,
 	} else {
 		int rate_idx = info->control.rates[0].idx;
 
+		/*
+		 * mac80211 indexes the band's bitrates, which start at
+		 * 6 Mbps outside 2.4 GHz; remap to our rate indices as
+		 * iwl_mvm_get_tx_rate() does.
+		 */
+		if (info->band != NL80211_BAND_2GHZ)
+			rate_idx += IWL_FIRST_OFDM_RATE;
+
 		result = iwl_mvm_convert_rate_idx(mvm, info, rate_idx);
 	}
 
