@@ -1320,6 +1320,19 @@ config SPI_XTENSA_XTFPGA
 	  16 bit words in SPI mode 0, automatically asserting CS on transfer
 	  start and deasserting on end.
 
+config SPI_ZX279128S_SPIFC
+	tristate "ZTE zx279128s SPI flash controller"
+	depends on ARCH_ZTE || COMPILE_TEST
+	depends on OF && HAS_IOMEM
+	depends on SPI_MEM
+	help
+	  This enables support for the SPI flash controller of the ZTE
+	  zx279128s SoC, through which it reaches its boot flash (a SPI
+	  NAND on the ZTE ZXHN H3600).
+
+	  This driver does not support generic SPI. It only implements the
+	  spi-mem interface.
+
 config SPI_ZYNQ_QSPI
 	tristate "Xilinx Zynq QSPI controller"
 	depends on ARCH_ZYNQ || COMPILE_TEST
