@@ -421,7 +421,12 @@ int btrfs_fileattr_set(struct mnt_idmap *idmap,
 	if (IS_ERR(trans))
 		return PTR_ERR(trans);
 
-	if (comp) {
+	/*
+	 * An inode with NODATASUM can not be compressed but can still have the
+	 * compress flag, inherited from its parent directory. Setting the
+	 * property fails validation for such an inode, so leave it unset.
+	 */
+	if (comp && btrfs_inode_can_compress(inode)) {
 		ret = btrfs_set_prop(trans, inode, "btrfs.compression",
 				     comp, strlen(comp), 0);
 		if (ret)
