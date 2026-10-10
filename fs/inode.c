@@ -528,10 +528,8 @@ void wait_on_new_inode(struct inode *inode)
 	struct wait_queue_head *wq_head;
 
 	spin_lock(&inode->i_lock);
-	if (!(inode_state_read(inode) & I_NEW)) {
-		spin_unlock(&inode->i_lock);
-		return;
-	}
+	if (!(inode_state_read(inode) & I_NEW))
+		goto unlock;
 
 	wq_head = inode_bit_waitqueue(&wqe, inode, __I_NEW);
 	for (;;) {
@@ -544,6 +542,7 @@ void wait_on_new_inode(struct inode *inode)
 	}
 	finish_wait(wq_head, &wqe.wq_entry);
 	WARN_ON(inode_state_read(inode) & I_NEW);
+unlock:
 	spin_unlock(&inode->i_lock);
 }
 EXPORT_SYMBOL(wait_on_new_inode);
