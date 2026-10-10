@@ -1692,9 +1692,6 @@ static void remote_cpus_update(struct cpuset *cs, struct cpumask *xcpus,
 		else if (cpumask_intersects(tmp->addmask, subpartitions_cpus) ||
 			 cpumask_subset(top_cpuset.effective_cpus, tmp->addmask))
 			WRITE_ONCE(cs->prs_err, PERR_NOCPUS);
-		else if (prstate_housekeeping_conflict(prs, PRS_ROOT,
-						       tmp->addmask, tmp->delmask))
-			WRITE_ONCE(cs->prs_err, PERR_HKEEPING);
 		if (cs->prs_err)
 			goto invalidate;
 	}
@@ -1906,14 +1903,6 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 			deleting = cpumask_and(tmp->delmask, tmp->delmask,
 					       parent->effective_xcpus);
 		}
-
-		/*
-		 * Check for housekeeping conflicts
-		 */
-		if (is_partition_valid(cs) &&
-		    prstate_housekeeping_conflict(old_prs, parent_prs,
-						  tmp->delmask, tmp->addmask))
-			part_error = PERR_HKEEPING;
 
 		/*
 		 * The new CPUs to be removed from parent's effective CPUs
@@ -2398,6 +2387,21 @@ static void partition_cpus_change(struct cpuset *cs, struct cpuset *trialcs,
 		return;
 
 	prs_err = validate_partition(cs, trialcs);
+	if (!prs_err) {
+		int parent_prs = is_remote_partition(cs)
+			       ? PRS_ROOT : parent_cs(cs)->partition_root_state;
+		/*
+		 * Check for housekeeping CPUs conflict assuming that all the
+		 * exclusive CPUs belong to the current cpuset.
+		 */
+		compute_excpus(trialcs, tmp->new_cpus);
+		cpumask_andnot(tmp->addmask, tmp->new_cpus, cs->effective_xcpus);
+		cpumask_andnot(tmp->delmask, cs->effective_xcpus, tmp->new_cpus);
+		if (prstate_housekeeping_conflict(cs->partition_root_state,
+						  parent_prs, tmp->addmask,
+						  tmp->delmask))
+			prs_err = PERR_HKEEPING;
+	}
 	if (prs_err) {
 		WRITE_ONCE(cs->prs_err, prs_err);
 		trialcs->prs_err = prs_err;
@@ -2897,8 +2901,9 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 		 * A change in load balance state only, no change in cpumasks.
 		 * Need to update isolated_cpus.
 		 */
+		compute_excpus(cs, tmpmask.new_cpus);
 		if (prstate_housekeeping_conflict(new_prs, parent_prs,
-						  cs->effective_xcpus, NULL))
+						  tmpmask.new_cpus, NULL))
 			err = PERR_HKEEPING;
 		else
 			isolcpus_updated = true;
