@@ -979,6 +979,24 @@ done:
 	return ret;
 }
 
+/*
+ * Mark the endpoint to be dropped instead of reset, and give back the halted
+ * TD now, as nobody else will.  The endpoint is not restarted before device
+ * reset or drop, so there is no need to move the ring dequeue past the TD.
+ */
+static int xhci_drop_halted_endpoint(struct xhci_hcd *xhci,
+				     struct xhci_virt_ep *ep,
+				     struct xhci_td *td)
+{
+	ep->ep_state |= EP_DROP_PENDING;
+
+	if (td)
+		xhci_td_cleanup(xhci, td, xhci_urb_to_transfer_ring(xhci, td->urb),
+				td->status ?: -EPROTO);
+
+	return -ENODEV;
+}
+
 static int xhci_handle_halted_endpoint(struct xhci_hcd *xhci,
 				struct xhci_virt_ep *ep,
 				struct xhci_td *td,
@@ -993,10 +1011,8 @@ static int xhci_handle_halted_endpoint(struct xhci_hcd *xhci,
 	 * Can cause host hang.
 	 * Device will be reset to recover an inactive link, so don't do anything
 	 */
-	if (rhub_port->link_inactive || !rhub_port->connected) {
-		ep->ep_state |= EP_DROP_PENDING;
-		return -ENODEV;
-	}
+	if (rhub_port->link_inactive || !rhub_port->connected)
+		return xhci_drop_halted_endpoint(xhci, ep, td);
 
 	/* add td to cancelled list and let reset ep handler take care of it */
 	if (reset_type == EP_HARD_RESET) {

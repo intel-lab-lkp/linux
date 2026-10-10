@@ -1691,6 +1691,11 @@ static int xhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 		ret = -EINVAL;
 		goto free_priv;
 	}
+	if (*ep_state & EP_DROP_PENDING) {
+		xhci_dbg(xhci, "Can't queue urb, ep halted after disconnect or link error\n");
+		ret = -ENODEV;
+		goto free_priv;
+	}
 
 	switch (usb_endpoint_type(&urb->ep->desc)) {
 
