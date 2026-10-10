@@ -3563,6 +3563,16 @@ Kernel parameters
 			If there are multiple matching configurations changing
 			the same attribute, the last one is used.
 
+	linear_map_use_base_page[=<bool>]
+			[PPC(Radix), EARLY]
+			Build the kernel linear mapping out of PAGE_SIZE
+			mappings only, instead of using 2M/1G mappings where
+			possible. This allows individual pages to be removed
+			from the linear mapping at runtime, which is required
+			by memfd_secret(2). It costs roughly 3% extra memory for
+			page tables and increases kernel TLB pressure, so it is
+			off by default. debug_pagealloc=on implies this.
+
 	liveupdate=	[KNL,EARLY]
 			Format: <bool>
 			Enable Live Update Orchestrator (LUO).

@@ -48,6 +48,28 @@ static int __init parse_kfence_early_init(char *arg)
 early_param("kfence.sample_interval", parse_kfence_early_init);
 #endif
 
+static bool __ro_after_init linear_map_use_base_page;
+
+static int __init parse_linear_map_use_base_page(char *p)
+{
+	bool val;
+
+	if (!p)
+		val = true;
+	else if (kstrtobool(p, &val))
+		return -EINVAL;
+
+	linear_map_use_base_page = val;
+
+	return 0;
+}
+early_param("linear_map_use_base_page", parse_linear_map_use_base_page);
+
+bool linear_map_uses_base_pagesize(void)
+{
+	return debug_pagealloc_enabled() || linear_map_use_base_page;
+}
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 /*
  * This is called when relaxing access to a hugepage. It's also called in the page

@@ -308,7 +308,7 @@ static int __meminit create_physical_mapping(unsigned long start,
 	if (mapping_sz_limit < max_mapping_size)
 		max_mapping_size = mapping_sz_limit;
 
-	if (debug_pagealloc_enabled())
+	if (linear_map_uses_base_pagesize())
 		max_mapping_size = PAGE_SIZE;
 
 	start = ALIGN(start, PAGE_SIZE);

@@ -73,6 +73,8 @@ extern unsigned int mmu_base_pid;
 
 extern unsigned long __ro_after_init memory_block_size;
 
+bool linear_map_uses_base_pagesize(void);
+
 #define PRTB_SIZE_SHIFT	(mmu_pid_bits + 4)
 #define PRTB_ENTRIES	(1ul << mmu_pid_bits)
 
