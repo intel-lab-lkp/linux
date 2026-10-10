@@ -639,6 +639,15 @@
 	status = "okay";
 };
 
+&u2phy0 {
+	status = "okay";
+
+	host-port {
+		/* phy for &usb_host0_ehci and &usb_host0_ohci, M.2 slot */
+		status = "okay";
+	};
+};
+
 &u2phy1 {
 	status = "okay";
 
@@ -650,6 +659,14 @@
 };
 
 &uart2 {
+	status = "okay";
+};
+
+&usb_host0_ehci {
+	status = "okay";
+};
+
+&usb_host0_ohci {
 	status = "okay";
 };
 
