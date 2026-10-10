@@ -420,6 +420,11 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 			mirror->dss[dss_id].mirror_ds->ds_versions[0].wsize = max_payload;
 		goto out;
 	}
+	/* The connect was interrupted by a signal: this is not a DS error */
+	if (status == -ERESTARTSYS || status == -EINTR) {
+		ds = ERR_PTR(status);
+		goto out;
+	}
 noconnect:
 	ff_layout_track_ds_error(FF_LAYOUT_FROM_HDR(lseg->pls_layout),
 				 mirror, dss_id, lseg->pls_range.offset,
