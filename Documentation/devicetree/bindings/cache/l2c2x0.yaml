@@ -176,6 +176,15 @@ properties:
     description: enable ECC protection on the L2 cache
     type: boolean
 
+  zte,l2c-io-read-lock:
+    description: On the ZTE zx279128s, a CPU read from a PCIe device that is
+      still outstanding when an L2C-310 range or sync operation starts hangs
+      the interconnect. This property makes the L2C-310 maintenance operations
+      take a lock that the drivers of such devices also take around their
+      register reads. Valid only when the arm,pl310-cache compatible string
+      is used.
+    type: boolean
+
   arm,outer-sync-disable:
     description: disable the outer sync operation on the L2 cache.
       Some core tiles, especially ARM PB11MPCore have a faulty L220 cache that
