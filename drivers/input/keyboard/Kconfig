@@ -768,4 +768,17 @@ config KEYBOARD_CYPRESS_SF
 	  To compile this driver as a module, choose M here: the
 	  module will be called cypress-sf.
 
+config KEYBOARD_ONEPLUS_POGO
+	tristate "OnePlus/OPPO Pad pogo-pin keyboard"
+	depends on SERIAL_DEV_BUS && GPIOLIB
+	depends on LEDS_CLASS
+	select INPUT_MT
+	help
+	  Say Y here to enable the magnetic pogo-pin keyboard with touchpad
+	  used by OnePlus Pad 3 Pro / Pad 4 and OPPO Pad 5 Pro.  The keyboard
+	  MCU talks a framed protocol over a half-duplex UART.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called oneplus-pogo-kbd.
+
 endif
