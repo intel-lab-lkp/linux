@@ -14,6 +14,8 @@ typedef struct {
 	unsigned long	end_brk;
 #else
 	atomic_long_t id;
+	/* icache_folio_gen at this mm's last flush in flush_icache_pte(). */
+	u64 icache_gen;
 #endif
 	void *vdso;
 #ifdef CONFIG_SMP
