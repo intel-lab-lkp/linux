@@ -554,6 +554,8 @@ struct ucsi_connector {
 	struct power_supply *psy;
 	struct power_supply_desc psy_desc;
 	u32 rdo;
+	unsigned long pwr_level_change_time;
+	unsigned int pwr_level_unchanged;
 	u32 src_pdos[PDO_MAX_OBJECTS];
 	int num_pdos;
 

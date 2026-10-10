@@ -1254,6 +1254,51 @@ static void ucsi_pwr_opmode_change(struct ucsi_connector *con)
 	}
 }
 
+/*
+ * Some PPMs keep signaling a Negotiated Power Level Change although the power
+ * contract stays the same, and signal it again as soon as it has been
+ * acknowledged, so the PPM and the driver keep each other busy for as long as
+ * the partner stays connected. Stop listening to the notification once the
+ * PPM has signaled it this many times in a row, each within a second of the
+ * previous one, without a new contract.
+ */
+#define UCSI_PWR_LEVEL_UNCHANGED_MAX	10
+
+static void ucsi_pwr_level_change(struct ucsi_connector *con)
+{
+	struct ucsi *ucsi = con->ucsi;
+	u64 ntfy;
+
+	if (UCSI_CONSTAT(con, PWR_OPMODE) != UCSI_CONSTAT_PWR_OPMODE_PD ||
+	    UCSI_CONSTAT(con, RDO) != con->rdo) {
+		con->pwr_level_unchanged = 0;
+		ucsi_pwr_opmode_change(con);
+		return;
+	}
+
+	/* Queued before the notification was disabled */
+	if (!(ucsi->ntfy & UCSI_ENABLE_NTFY_PWR_LEVEL_CHANGE))
+		return;
+
+	if (time_after(jiffies, con->pwr_level_change_time + HZ))
+		con->pwr_level_unchanged = 0;
+	con->pwr_level_change_time = jiffies;
+
+	if (++con->pwr_level_unchanged < UCSI_PWR_LEVEL_UNCHANGED_MAX) {
+		ucsi_pwr_opmode_change(con);
+		return;
+	}
+
+	ntfy = ucsi->ntfy & ~UCSI_ENABLE_NTFY_PWR_LEVEL_CHANGE;
+	if (ucsi_send_command(ucsi, UCSI_SET_NOTIFICATION_ENABLE | ntfy, NULL, 0) < 0)
+		return;
+
+	ucsi->ntfy = ntfy;
+	dev_warn(ucsi->dev,
+		 "con%d: Firmware bug: power level changes without a new contract, disabling the notification\n",
+		 con->num);
+}
+
 static int ucsi_register_partner(struct ucsi_connector *con)
 {
 	u8 pwr_opmode = UCSI_CONSTAT(con, PWR_OPMODE);
@@ -1324,6 +1369,8 @@ static void ucsi_unregister_partner(struct ucsi_connector *con)
 	typec_unregister_partner(con->partner);
 	memset(&con->partner_identity, 0, sizeof(con->partner_identity));
 	con->partner = NULL;
+	con->rdo = 0;
+	con->pwr_level_unchanged = 0;
 }
 
 static void ucsi_partner_change(struct ucsi_connector *con)
@@ -1514,8 +1561,10 @@ static void ucsi_handle_connector_change(struct work_struct *work)
 		}
 	}
 
-	if (change & (UCSI_CONSTAT_POWER_OPMODE_CHANGE | UCSI_CONSTAT_POWER_LEVEL_CHANGE))
+	if (change & UCSI_CONSTAT_POWER_OPMODE_CHANGE)
 		ucsi_pwr_opmode_change(con);
+	else if (change & UCSI_CONSTAT_POWER_LEVEL_CHANGE)
+		ucsi_pwr_level_change(con);
 
 	if (con->partner && (change & UCSI_CONSTAT_PARTNER_CHANGE)) {
 		ucsi_partner_change(con);
