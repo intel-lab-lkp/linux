@@ -54,6 +54,8 @@ isofs_find_entry(struct inode *dir, struct dentry *dentry,
 	unsigned char bufbits = ISOFS_BUFFER_BITS(dir);
 	unsigned long block, f_pos, offset, block_saved, offset_saved;
 	struct buffer_head *bh = NULL;
+	u8 record[256];
+	struct iso_directory_record *tmpde = (void *)record;
 	struct isofs_sb_info *sbi = ISOFS_SB(dir->i_sb);
 
 	if (!ISOFS_I(dir)->i_first_extent)
@@ -93,7 +95,25 @@ isofs_find_entry(struct inode *dir, struct dentry *dentry,
 		offset += de_len;
 		f_pos += de_len;
 
-		if (!isofs_dir_record_valid(de, offset_saved, bufsize)) {
+		/* A record may span blocks within a logical sector. */
+		if (offset > bufsize &&
+		    de_len <= ISOFS_BLOCK_SIZE -
+			      ((f_pos - de_len) & (ISOFS_BLOCK_SIZE - 1))) {
+			unsigned int slop = bufsize - offset_saved;
+
+			memcpy(tmpde, de, slop);
+			offset &= bufsize - 1;
+			block++;
+			brelse(bh);
+			bh = isofs_bread(dir, block);
+			if (!bh)
+				return 0;
+			memcpy((char *)tmpde + slop, bh->b_data, offset);
+			de = tmpde;
+		}
+
+		if (!isofs_dir_record_valid(de, de == tmpde ? 0 : offset_saved,
+					    de == tmpde ? de_len : bufsize)) {
 			printk(KERN_NOTICE "iso9660: Corrupted directory entry"
 			       " in block %lu of inode %llu\n", block,
 			       dir->i_ino);

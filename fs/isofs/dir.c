@@ -95,7 +95,9 @@ static int do_isofs_readdir(struct inode *inode, struct file *file,
 	int map;
 	int first_de = 1;
 	char *p = NULL;		/* Quiet GCC */
+	u8 record[256];
 	struct iso_directory_record *de;
+	struct iso_directory_record *tmpde = (void *)record;
 	struct isofs_sb_info *sbi = ISOFS_SB(inode->i_sb);
 
 	offset = ctx->pos & (bufsize - 1);
@@ -129,7 +131,25 @@ static int do_isofs_readdir(struct inode *inode, struct file *file,
 		offset_saved = offset;
 		offset += de_len;
 
-		if (!isofs_dir_record_valid(de, offset_saved, bufsize)) {
+		/* A record may span blocks within a logical sector. */
+		if (offset > bufsize &&
+		    de_len <= ISOFS_BLOCK_SIZE -
+			      (ctx->pos & (ISOFS_BLOCK_SIZE - 1))) {
+			unsigned int slop = bufsize - offset_saved;
+
+			memcpy(tmpde, de, slop);
+			offset &= bufsize - 1;
+			block++;
+			brelse(bh);
+			bh = isofs_bread(inode, block);
+			if (!bh)
+				return -EIO;
+			memcpy((char *)tmpde + slop, bh->b_data, offset);
+			de = tmpde;
+		}
+
+		if (!isofs_dir_record_valid(de, de == tmpde ? 0 : offset_saved,
+					    de == tmpde ? de_len : bufsize)) {
 			printk(KERN_NOTICE "iso9660: Corrupted directory entry"
 			       " in block %lu of inode %llu\n", block,
 			       inode->i_ino);
