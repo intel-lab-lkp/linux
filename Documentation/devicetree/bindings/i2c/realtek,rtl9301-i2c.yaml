@@ -36,7 +36,11 @@ properties:
       - enum:
           - realtek,rtl9301-i2c
           - realtek,rtl9310-i2c
-          - realtek,rtl9607-i2c
+          - realtek,rtl9607c-i2c
+      - const: realtek,rtl9607-i2c
+        deprecated: true
+        description: >
+          Use 'realtek,rtl9607c-i2c' instead
 
   reg:
     items:
@@ -56,6 +60,10 @@ properties:
 
   clocks:
     maxItems: 1
+
+  pinctrl-0: true
+
+  pinctrl-names: true
 
 patternProperties:
   '^i2c@[0-9ab]$':
@@ -96,6 +104,16 @@ allOf:
       required:
         - realtek,scl
         - clocks
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: realtek,rtl9607c-i2c
+    then:
+      required:
+        - clocks
+        - pinctrl-0
+        - pinctrl-names
 
 required:
   - compatible
