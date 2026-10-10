@@ -599,7 +599,16 @@ static u32 iwl_mld_get_inject_tx_rate(struct iwl_mld *mld,
 		if (u32_get_bits(info->flags, IEEE80211_TX_CTL_STBC))
 			result |= RATE_MCS_STBC_MSK;
 	} else {
-		result = iwl_mld_mac80211_rate_idx_to_fw(mld, info, rate->idx);
+		int rate_idx = rate->idx;
+
+		/*
+		 * mac80211 indexes the band's bitrates, which start at
+		 * 6 Mbps outside 2.4 GHz; remap to our rate indices.
+		 */
+		if (info->band != NL80211_BAND_2GHZ)
+			rate_idx += IWL_FIRST_OFDM_RATE;
+
+		result = iwl_mld_mac80211_rate_idx_to_fw(mld, info, rate_idx);
 	}
 
 	if (info->control.antennas)
