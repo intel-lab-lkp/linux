@@ -201,10 +201,12 @@ static int rtl9607_i2c_config_chan(struct rtl9300_i2c *i2c, struct rtl9300_i2c_c
 	if (ret)
 		return ret;
 
-	drv_data = device_get_match_data(i2c->dev);
-	ret = drv_data->select_scl(i2c, i2c->scl_num);
-	if (ret)
-		return ret;
+	if (device_is_compatible(i2c->dev, "realtek,rtl9607-i2c")) {
+		drv_data = device_get_match_data(i2c->dev);
+		ret = drv_data->select_scl(i2c, i2c->scl_num);
+		if (ret)
+			return ret;
+	}
 
 	i2c->sda_num = chan->sda_num;
 	return 0;
@@ -495,6 +497,10 @@ static int rtl9300_i2c_probe(struct platform_device *pdev)
 		scl_num = 0;
 	i2c->scl_num = (u8)scl_num;
 
+	if (device_is_compatible(i2c->dev, "realtek,rtl9607-i2c"))
+		dev_warn(dev, "Compatible 'realtek,rtl9607-i2c' is deprecated. "
+			      "Use 'realtek,rtl9607c-i2c' instead\n");
+
 	platform_set_drvdata(pdev, i2c);
 
 	drv_data = device_get_match_data(i2c->dev);
@@ -653,6 +659,7 @@ static const struct of_device_id i2c_rtl9300_dt_ids[] = {
 	{ .compatible = "realtek,rtl9312-i2c", .data = (void *) &rtl9310_i2c_drv_data },
 	{ .compatible = "realtek,rtl9313-i2c", .data = (void *) &rtl9310_i2c_drv_data },
 	{ .compatible = "realtek,rtl9607-i2c", .data = (void *) &rtl9607_i2c_drv_data },
+	{ .compatible = "realtek,rtl9607c-i2c", .data = (void *) &rtl9607_i2c_drv_data },
 	{}
 };
 MODULE_DEVICE_TABLE(of, i2c_rtl9300_dt_ids);
