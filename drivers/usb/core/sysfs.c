@@ -120,21 +120,20 @@ static ssize_t devspec_show(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR_RO(devspec);
 #endif
 
-/* String fields */
+/*
+ * String fields. usb_enumerate_device() reads them once, before the device
+ * is added, and they are freed only when it is released, so showing them
+ * needs no lock -- dev_string_attrs_are_visible() reads them unlocked, too.
+ * The device lock would make readers wait while a hub holds it to enumerate
+ * all of its ports.
+ */
 #define usb_string_attr(name)						\
 static ssize_t  name##_show(struct device *dev,				\
 		struct device_attribute *attr, char *buf)		\
 {									\
-	struct usb_device *udev;					\
-	int retval;							\
+	struct usb_device *udev = to_usb_device(dev);			\
 									\
-	udev = to_usb_device(dev);					\
-	retval = usb_lock_device_interruptible(udev);			\
-	if (retval < 0)							\
-		return -EINTR;						\
-	retval = sysfs_emit(buf, "%s\n", udev->name);			\
-	usb_unlock_device(udev);					\
-	return retval;							\
+	return sysfs_emit(buf, "%s\n", udev->name);			\
 }									\
 static DEVICE_ATTR_RO(name)
 
