@@ -2546,10 +2546,14 @@ static int update_exclusive_cpumask(struct cpuset *cs, struct cpuset *trialcs,
 		return -ENOMEM;
 
 	trialcs->prs_err = PERR_NONE;
-	partition_cpus_change(cs, trialcs, &tmp);
 
 	spin_lock_irq(&callback_lock);
 	cpumask_copy(cs->exclusive_cpus, trialcs->exclusive_cpus);
+	spin_unlock_irq(&callback_lock);
+
+	partition_cpus_change(cs, trialcs, &tmp);
+
+	spin_lock_irq(&callback_lock);
 	cpumask_copy(cs->effective_xcpus, trialcs->effective_xcpus);
 	if ((old_prs > 0) && !is_partition_valid(cs))
 		reset_partition_data(cs);
