@@ -496,6 +496,8 @@ struct ucsi {
 
 	/* The latest "Notification Enable" bits (SET_NOTIFICATION_ENABLE) */
 	u64 ntfy;
+	/* Set by ucsi_unregister(), protected by ppm_lock */
+	bool unregistering;
 
 	/* PPM communication flags */
 	unsigned long flags;
@@ -554,6 +556,9 @@ struct ucsi_connector {
 	struct power_supply *psy;
 	struct power_supply_desc psy_desc;
 	u32 rdo;
+	unsigned long pwr_level_change_time;
+	unsigned int pwr_level_unchanged;
+	bool pwr_level_ntfy_disabled;
 	u32 src_pdos[PDO_MAX_OBJECTS];
 	int num_pdos;
 

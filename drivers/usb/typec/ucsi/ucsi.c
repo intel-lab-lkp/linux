@@ -274,6 +274,37 @@ int ucsi_send_command(struct ucsi *ucsi, u64 command,
 }
 EXPORT_SYMBOL_GPL(ucsi_send_command);
 
+/*
+ * Update the notification enable mask and send it to the PPM. Holding ppm_lock
+ * across both keeps ucsi->ntfy the mask that the PPM was sent last. Keep it
+ * even if the command fails, as the PPM may have applied the mask anyway.
+ */
+static int ucsi_update_notifications(struct ucsi *ucsi, u64 clear, u64 set)
+{
+	u64 command;
+	u32 cci;
+	int ret;
+
+	mutex_lock(&ucsi->ppm_lock);
+
+	if (ucsi->unregistering) {
+		ret = -ESHUTDOWN;
+		goto out_unlock;
+	}
+
+	ucsi->ntfy = (ucsi->ntfy & ~clear) | set;
+	command = UCSI_SET_NOTIFICATION_ENABLE | ucsi->ntfy;
+	ret = ucsi_run_command(ucsi, command, &cci, NULL, 0, NULL, 0, false);
+	if (cci & UCSI_CCI_ERROR)
+		ret = ucsi_read_error(ucsi, 0);
+
+	trace_ucsi_run_command(command, ret);
+
+out_unlock:
+	mutex_unlock(&ucsi->ppm_lock);
+	return ret;
+}
+
 int ucsi_write_message_out_command(struct ucsi *ucsi, u64 command,
 				   void *data, size_t size, void *msg_out,
 				   size_t msg_out_size)
@@ -1254,6 +1285,68 @@ static void ucsi_pwr_opmode_change(struct ucsi_connector *con)
 	}
 }
 
+/*
+ * Some PPMs keep signaling a Negotiated Power Level Change although the power
+ * contract stays the same, and signal it again as soon as it has been
+ * acknowledged, so the PPM and the driver keep each other busy for as long as
+ * the partner stays connected. Disable the notification once the PPM has
+ * signaled it this many times in a row, each within a second of the previous
+ * one, without a new contract, and enable it again when the partner is gone.
+ * The notification can only be disabled for all connectors at once. A change
+ * of the source PDOs can come with an unchanged RDO, so it doesn't count.
+ */
+#define UCSI_PWR_LEVEL_UNCHANGED_MAX	10
+
+static void ucsi_pwr_level_change(struct ucsi_connector *con)
+{
+	struct ucsi *ucsi = con->ucsi;
+
+	if (UCSI_CONSTAT(con, PWR_OPMODE) != UCSI_CONSTAT_PWR_OPMODE_PD ||
+	    UCSI_CONSTAT(con, RDO) != con->rdo ||
+	    (UCSI_CONSTAT(con, CHANGE) & UCSI_CONSTAT_PDOS_CHANGE)) {
+		con->pwr_level_unchanged = 0;
+		ucsi_pwr_opmode_change(con);
+		return;
+	}
+
+	if (time_after(jiffies, con->pwr_level_change_time + HZ))
+		con->pwr_level_unchanged = 0;
+	con->pwr_level_change_time = jiffies;
+
+	if (++con->pwr_level_unchanged < UCSI_PWR_LEVEL_UNCHANGED_MAX) {
+		/* Signaled before the notification was disabled, or despite it */
+		if (!con->pwr_level_ntfy_disabled)
+			ucsi_pwr_opmode_change(con);
+		return;
+	}
+
+	/*
+	 * Enable it again when the partner is gone even if the command fails,
+	 * as the PPM may have disabled it anyway.
+	 */
+	if (!con->pwr_level_ntfy_disabled) {
+		con->pwr_level_ntfy_disabled = true;
+		dev_warn(ucsi->dev,
+			 "con%d: Firmware bug: power level changes without a new contract, disabling the notification\n",
+			 con->num);
+	}
+
+	if (ucsi_update_notifications(ucsi, UCSI_ENABLE_NTFY_PWR_LEVEL_CHANGE, 0) >= 0)
+		con->pwr_level_unchanged = 0;
+}
+
+/* The partner that the notification was disabled for is gone */
+static void ucsi_pwr_level_ntfy_restore(struct ucsi_connector *con)
+{
+	if (!con->pwr_level_ntfy_disabled)
+		return;
+
+	if (ucsi_update_notifications(con->ucsi, 0, UCSI_ENABLE_NTFY_PWR_LEVEL_CHANGE) < 0)
+		return;
+
+	con->pwr_level_ntfy_disabled = false;
+}
+
 static int ucsi_register_partner(struct ucsi_connector *con)
 {
 	u8 pwr_opmode = UCSI_CONSTAT(con, PWR_OPMODE);
@@ -1324,6 +1417,8 @@ static void ucsi_unregister_partner(struct ucsi_connector *con)
 	typec_unregister_partner(con->partner);
 	memset(&con->partner_identity, 0, sizeof(con->partner_identity));
 	con->partner = NULL;
+	con->rdo = 0;
+	con->pwr_level_unchanged = 0;
 }
 
 static void ucsi_partner_change(struct ucsi_connector *con)
@@ -1400,6 +1495,7 @@ static int ucsi_check_connection(struct ucsi_connector *con)
 		ucsi_partner_change(con);
 		ucsi_port_psy_changed(con);
 		ucsi_unregister_partner(con);
+		ucsi_pwr_level_ntfy_restore(con);
 	}
 
 	return 0;
@@ -1511,11 +1607,16 @@ static void ucsi_handle_connector_change(struct work_struct *work)
 			}
 		} else {
 			ucsi_unregister_partner(con);
+			ucsi_pwr_level_ntfy_restore(con);
 		}
 	}
 
-	if (change & (UCSI_CONSTAT_POWER_OPMODE_CHANGE | UCSI_CONSTAT_POWER_LEVEL_CHANGE))
+	if (change & UCSI_CONSTAT_POWER_OPMODE_CHANGE) {
+		con->pwr_level_unchanged = 0;
 		ucsi_pwr_opmode_change(con);
+	} else if (change & UCSI_CONSTAT_POWER_LEVEL_CHANGE) {
+		ucsi_pwr_level_change(con);
+	}
 
 	if (con->partner && (change & UCSI_CONSTAT_PARTNER_CHANGE)) {
 		ucsi_partner_change(con);
@@ -1685,13 +1786,10 @@ static int ucsi_role_cmd(struct ucsi_connector *con, u64 command)
 
 	ret = ucsi_send_command(con->ucsi, command, NULL, 0);
 	if (ret == -ETIMEDOUT) {
-		u64 c;
-
 		/* PPM most likely stopped responding. Resetting everything. */
 		ucsi_reset_ppm(con->ucsi);
 
-		c = UCSI_SET_NOTIFICATION_ENABLE | con->ucsi->ntfy;
-		ucsi_send_command(con->ucsi, c, NULL, 0);
+		ucsi_update_notifications(con->ucsi, 0, 0);
 
 		ucsi_reset_connector(con, true);
 	}
@@ -2171,12 +2269,10 @@ static void ucsi_resume_work(struct work_struct *work)
 {
 	struct ucsi *ucsi = container_of(work, struct ucsi, resume_work);
 	struct ucsi_connector *con;
-	u64 command;
 	int ret;
 
 	/* Restore UCSI notification enable mask after system resume */
-	command = UCSI_SET_NOTIFICATION_ENABLE | ucsi->ntfy;
-	ret = ucsi_send_command(ucsi, command, NULL, 0);
+	ret = ucsi_update_notifications(ucsi, 0, 0);
 	if (ret < 0) {
 		dev_err(ucsi->dev, "failed to re-enable notifications (%d)\n", ret);
 		return;
@@ -2347,6 +2443,8 @@ int ucsi_register(struct ucsi *ucsi)
 	if (!ucsi->version)
 		return -ENODEV;
 
+	ucsi->unregistering = false;
+
 	/*
 	 * Version format is JJ.M.N (JJ = Major version, M = Minor version,
 	 * N = sub-minor version).
@@ -2380,7 +2478,10 @@ void ucsi_unregister(struct ucsi *ucsi)
 
 	ucsi_debugfs_unregister(ucsi);
 
-	/* Disable notifications */
+	/* Disable notifications, and keep connector work from enabling them */
+	mutex_lock(&ucsi->ppm_lock);
+	ucsi->unregistering = true;
+	mutex_unlock(&ucsi->ppm_lock);
 	ucsi->ops->async_control(ucsi, cmd);
 
 	if (!ucsi->connector)
