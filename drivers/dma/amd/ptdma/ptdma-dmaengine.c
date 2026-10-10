@@ -224,8 +224,8 @@ static struct pt_dma_desc *pt_handle_active_desc(struct pt_dma_chan *chan,
 				if (desc->status != DMA_ERROR)
 					desc->status = DMA_COMPLETE;
 
-				dma_cookie_complete(tx_desc);
 				dma_descriptor_unmap(tx_desc);
+				dma_cookie_complete(tx_desc);
 				list_del(&desc->vd.node);
 			} else {
 				/* Don't handle it twice */
@@ -362,8 +362,8 @@ static void pt_cmd_callback_work(void *data, int err)
 		if (desc->status != DMA_ERROR)
 			desc->status = DMA_COMPLETE;
 
-		dma_cookie_complete(tx_desc);
 		dma_descriptor_unmap(tx_desc);
+		dma_cookie_complete(tx_desc);
 	} else {
 		tx_desc = NULL;
 	}
