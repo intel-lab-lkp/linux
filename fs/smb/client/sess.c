@@ -626,12 +626,19 @@ cifs_ses_add_channel(struct cifs_ses *ses,
 
 out:
 	if (rc && chan->server) {
-		cifs_put_tcp_session(chan->server, 0);
+		struct TCP_Server_Info *pserver;
 
 		spin_lock(&ses->chan_lock);
 
+		/*
+		 * Cache the server pointer while holding chan_lock: once
+		 * chan_count is decremented below, this slot can be reused
+		 * by a concurrent add_channel and chan->server overwritten.
+		 */
+		pserver = chan->server;
+
 		/* we rely on all bits beyond chan_count to be clear */
-		cifs_chan_clear_need_reconnect(ses, chan->server);
+		cifs_chan_clear_need_reconnect(ses, pserver);
 		ses->chan_count--;
 		/*
 		 * chan_count should never reach 0 as at least the primary
@@ -639,6 +646,8 @@ out:
 		 */
 		WARN_ON(ses->chan_count < 1);
 		spin_unlock(&ses->chan_lock);
+
+		cifs_put_tcp_session(pserver, 0);
 	}
 
 	kfree(ctx->UNC);
