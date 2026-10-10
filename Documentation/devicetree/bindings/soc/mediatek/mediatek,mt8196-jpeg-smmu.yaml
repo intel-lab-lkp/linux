@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/mediatek/mediatek,mt8196-jpeg-smmu.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT8196 JPEG SMMU configuration registers
+
+maintainers:
+  - Kyrie Wu <kyrie.wu@mediatek.corp-partner.google.com>
+
+description:
+  The MT8196 JPEG SMMU configuration register block contains the GUSER_ID
+  fields used by the JPEG decoder and encoder hardware.
+
+properties:
+  compatible:
+    items:
+      - const: mediatek,mt8196-jpeg-smmu
+      - const: syscon
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        jpeg_smmu: syscon@38d0000 {
+            compatible = "mediatek,mt8196-jpeg-smmu", "syscon";
+            reg = <0 0x38d0000 0 0x1000>;
+        };
+    };
