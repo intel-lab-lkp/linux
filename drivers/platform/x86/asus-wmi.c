@@ -1047,6 +1047,10 @@ static DEVICE_ATTR_RW(gpu_mux_mode);
 #endif /* IS_ENABLED(CONFIG_ASUS_WMI_DEPRECATED_ATTRS) */
 
 /* TUF Laptop Keyboard RGB Modes **********************************************/
+
+#define TUF_KBD_RGB_SPEED_SLOW		0xe1
+#define TUF_KBD_RGB_SPEED_NORMAL	0xeb
+#define TUF_KBD_RGB_SPEED_FAST		0xf5
 static ssize_t kbd_rgb_mode_store(struct device *dev,
 				 struct device_attribute *attr,
 				 const char *buf, size_t count)
@@ -1080,16 +1084,16 @@ static ssize_t kbd_rgb_mode_store(struct device *dev,
 
 	switch (speed) {
 	case 0:
-		speed = 0xe1;
+		speed = TUF_KBD_RGB_SPEED_SLOW;
 		break;
 	case 1:
-		speed = 0xeb;
+		speed = TUF_KBD_RGB_SPEED_NORMAL;
 		break;
 	case 2:
-		speed = 0xf5;
+		speed = TUF_KBD_RGB_SPEED_FAST;
 		break;
 	default:
-		speed = 0xeb;
+		speed = TUF_KBD_RGB_SPEED_NORMAL;
 	}
 
 	err = asus_wmi_evaluate_method3(ASUS_WMI_METHODID_DEVS, asus->kbd_rgb_dev,
@@ -1115,6 +1119,11 @@ static const struct attribute_group kbd_rgb_mode_group = {
 };
 
 /* TUF Laptop Keyboard RGB State **********************************************/
+
+#define TUF_KBD_RGB_STATE_BOOT		BIT(1)
+#define TUF_KBD_RGB_STATE_AWAKE		BIT(3)
+#define TUF_KBD_RGB_STATE_SLEEP		BIT(5)
+#define TUF_KBD_RGB_STATE_SHUTDOWN	BIT(7)
 static ssize_t kbd_rgb_state_store(struct device *dev,
 				 struct device_attribute *attr,
 				 const char *buf, size_t count)
@@ -1130,13 +1139,13 @@ static ssize_t kbd_rgb_state_store(struct device *dev,
 
 	flags = 0;
 	if (boot)
-		flags |= BIT(1);
+		flags |= TUF_KBD_RGB_STATE_BOOT;
 	if (awake)
-		flags |= BIT(3);
+		flags |= TUF_KBD_RGB_STATE_AWAKE;
 	if (sleep)
-		flags |= BIT(5);
+		flags |= TUF_KBD_RGB_STATE_SLEEP;
 	if (shutdown)
-		flags |= BIT(7);
+		flags |= TUF_KBD_RGB_STATE_SHUTDOWN;
 
 	/* 0xbd is the required default arg0 for the method. Nothing happens otherwise */
 	err = asus_wmi_evaluate_method3(ASUS_WMI_METHODID_DEVS,
