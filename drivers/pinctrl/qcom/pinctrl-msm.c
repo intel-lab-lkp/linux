@@ -39,6 +39,14 @@
 #define MAX_NR_TILES 4
 #define PS_HOLD_OFFSET 0x820
 
+/* Register values of one pin, kept across a hibernation. */
+struct msm_pin_state {
+	u32 ctl;
+	u32 io;
+	u32 intr_cfg;
+	u32 intr_target;
+};
+
 /**
  * struct msm_pinctrl - state for a pinctrl-msm device
  * @dev:            device handle.
@@ -58,6 +66,7 @@
  * @soc:            Reference to soc_data of platform specific data.
  * @regs:           Base addresses for the TLMM tiles.
  * @phys_base:      Physical base address
+ * @saved:          Pin registers kept while a hibernation image is taken.
  */
 struct msm_pinctrl {
 	struct device *dev;
@@ -80,6 +89,8 @@ struct msm_pinctrl {
 	const struct msm_pinctrl_soc_data *soc;
 	void __iomem *regs[MAX_NR_TILES];
 	u32 phys_base[MAX_NR_TILES];
+
+	struct msm_pin_state *saved;
 };
 
 #define MSM_ACCESSOR(name) \
@@ -1583,9 +1594,93 @@ static __maybe_unused int msm_pinctrl_resume(struct device *dev)
 	return pinctrl_force_default(pctrl->pctrl);
 }
 
-SIMPLE_DEV_PM_OPS(msm_pinctrl_dev_pm_ops, msm_pinctrl_suspend,
-		  msm_pinctrl_resume);
+static bool msm_pin_has_own_intr_target(struct msm_pinctrl *pctrl,
+					const struct msm_pingroup *g)
+{
+	return !pctrl->intr_target_use_scm && g->intr_target_reg &&
+	       g->intr_target_reg != g->intr_cfg_reg;
+}
 
+/* Remember how the pins are set up when a hibernation image is taken. */
+static int msm_pinctrl_freeze_noirq(struct device *dev)
+{
+	struct msm_pinctrl *pctrl = dev_get_drvdata(dev);
+	const struct msm_pingroup *g;
+	struct msm_pin_state *s;
+	unsigned long flags;
+	unsigned int i;
+
+	raw_spin_lock_irqsave(&pctrl->lock, flags);
+	for (i = 0; i < pctrl->chip.ngpio; i++) {
+		if (!gpiochip_line_is_valid(&pctrl->chip, i))
+			continue;
+
+		g = &pctrl->soc->groups[i];
+		s = &pctrl->saved[i];
+		s->ctl = msm_readl_ctl(pctrl, g);
+		s->io = msm_readl_io(pctrl, g);
+		if (!g->intr_cfg_reg)
+			continue;
+
+		s->intr_cfg = msm_readl_intr_cfg(pctrl, g);
+		if (msm_pin_has_own_intr_target(pctrl, g))
+			s->intr_target = msm_readl_intr_target(pctrl, g);
+	}
+	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
+
+	return 0;
+}
+
+/*
+ * The image is restored after a power cycle, when the pins are back at what
+ * the firmware and the kernel that loaded the image made of them. Nothing else
+ * writes the configuration again, so put back what was there.
+ */
+static int msm_pinctrl_restore_noirq(struct device *dev)
+{
+	struct msm_pinctrl *pctrl = dev_get_drvdata(dev);
+	const struct msm_pingroup *g;
+	struct msm_pin_state *s;
+	unsigned long flags;
+	unsigned int i;
+	u32 val;
+
+	raw_spin_lock_irqsave(&pctrl->lock, flags);
+	for (i = 0; i < pctrl->chip.ngpio; i++) {
+		if (!gpiochip_line_is_valid(&pctrl->chip, i))
+			continue;
+
+		g = &pctrl->soc->groups[i];
+		s = &pctrl->saved[i];
+
+		/* Set the level before the pin starts driving it. */
+		val = msm_readl_io(pctrl, g);
+		val &= ~BIT(g->out_bit);
+		val |= s->io & BIT(g->out_bit);
+		msm_writel_io(val, pctrl, g);
+
+		msm_writel_ctl(s->ctl, pctrl, g);
+		if (!g->intr_cfg_reg)
+			continue;
+
+		if (msm_pin_has_own_intr_target(pctrl, g))
+			msm_writel_intr_target(s->intr_target, pctrl, g);
+		msm_writel_intr_cfg(s->intr_cfg, pctrl, g);
+
+		/* Enabling the raw status can latch an interrupt. */
+		if (s->intr_cfg & BIT(g->intr_raw_status_bit))
+			msm_ack_intr_status(pctrl, g);
+	}
+	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
+
+	return 0;
+}
+
+const struct dev_pm_ops msm_pinctrl_dev_pm_ops = {
+	SYSTEM_SLEEP_PM_OPS(msm_pinctrl_suspend, msm_pinctrl_resume)
+	.freeze_noirq = pm_sleep_ptr(msm_pinctrl_freeze_noirq),
+	.restore_noirq = pm_sleep_ptr(msm_pinctrl_restore_noirq),
+};
 EXPORT_SYMBOL(msm_pinctrl_dev_pm_ops);
 
 int msm_pinctrl_probe(struct platform_device *pdev,
@@ -1662,6 +1757,13 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 	ret = msm_gpio_init(pctrl);
 	if (ret)
 		return ret;
+
+	if (IS_ENABLED(CONFIG_HIBERNATION)) {
+		pctrl->saved = devm_kcalloc(&pdev->dev, pctrl->chip.ngpio,
+					    sizeof(*pctrl->saved), GFP_KERNEL);
+		if (!pctrl->saved)
+			return -ENOMEM;
+	}
 
 	platform_set_drvdata(pdev, pctrl);
 
