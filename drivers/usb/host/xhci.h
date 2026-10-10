@@ -1647,6 +1647,13 @@ struct xhci_hcd {
 #define XHCI_CDNS_SCTX_QUIRK	BIT_ULL(48)
 #define XHCI_ETRON_HOST	BIT_ULL(49)
 #define XHCI_LIMIT_ENDPOINT_INTERVAL_9 BIT_ULL(50)
+/*
+ * Controller cannot reset the USB2 split transaction state with a Reset
+ * Endpoint command (TSP=0) as required by xHCI spec 4.6.8.  Recover
+ * transaction errors on devices behind a TT hub by soft retry (TSP=1)
+ * instead of the hard reset path.
+ */
+#define XHCI_TT_SOFT_RETRY	BIT_ULL(51)
 
 	unsigned int		num_active_eps;
 	unsigned int		limit_active_eps;

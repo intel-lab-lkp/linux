@@ -2540,9 +2540,21 @@ static void process_bulk_intr_td(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
 		td->urb->actual_length = sum_trb_lengths(td, ep_trb);
 		goto finish_td;
 	case COMP_USB_TRANSACTION_ERROR:
+		/*
+		 * Devices behind a TT hub normally skip the soft retry: retrying
+		 * a split transaction usually requires clearing the hub TT buffer
+		 * first, so the hard reset path handles the error.  Controllers
+		 * that cannot properly reset the split transaction state with a
+		 * hard reset (XHCI_TT_SOFT_RETRY) recover these transient errors
+		 * by retrying the same transaction in place instead.  The soft
+		 * reset preserves the transfer state and the retry completes,
+		 * while the hard reset path abandons the split, the first new
+		 * split fails again and the low-speed link eventually collapses.
+		 */
 		if (xhci->quirks & XHCI_NO_SOFT_RETRY ||
 		    (ep->err_count++ > MAX_SOFT_RETRY) ||
-		    le32_to_cpu(slot_ctx->tt_info) & TT_SLOT)
+		    (le32_to_cpu(slot_ctx->tt_info) & TT_SLOT &&
+		     !(xhci->quirks & XHCI_TT_SOFT_RETRY)))
 			break;
 
 		td->status = 0;
