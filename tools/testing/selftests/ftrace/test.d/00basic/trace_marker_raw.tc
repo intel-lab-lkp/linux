@@ -67,7 +67,8 @@ test_multiple_writes() {
 	# add a little buffer
 	echo stop > trace_marker
 
-	# Check to make sure the number of entries is the id (rounded up by 4)
+	# Check to make sure the number of entries is the id (rounded up by 4,
+	# or by 8 on architectures forcing 8 byte alignment of ring buffer events)
 	awk '/.*: # [0-9a-f]* / {
 			print;
 			cnt = -1;
@@ -77,9 +78,12 @@ test_multiple_writes() {
 					i++;
 					cnt = strtonum("0x" $i);
 					num = NF - (i + 1);
-					# The number of items is always rounded up by 4
-					cnt2 = int((cnt + 3) / 4) * 4;
-					if (cnt2 != num) {
+					# The number of items is rounded up by 4
+					cnt4 = int((cnt + 3) / 4) * 4;
+					# With forced 8 byte alignment, the id (4 bytes) plus the data
+					# is rounded up to a multiple of 8, and the id is not counted
+					cnt8 = int((cnt + 3) / 8) * 8 + 4;
+					if (num != cnt4 && num != cnt8) {
 						exit 1;
 					}
 					break;
