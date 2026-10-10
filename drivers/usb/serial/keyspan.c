@@ -537,7 +537,7 @@ struct keyspan_serial_private {
 	struct urb	*indat_urb;
 	char		*indat_buf;
 
-	/* XXX this one probably will need a lock */
+	spinlock_t	ctrl_lock;	/* serialises control urb submission */
 	struct urb	*glocont_urb;
 	char		*glocont_buf;
 	char		*ctrl_buf;	/* for EP0 control message */
@@ -2036,6 +2036,7 @@ static int keyspan_usa26_send_setup(struct usb_serial *serial,
 	struct keyspan_port_private 		*p_priv;
 	const struct keyspan_device_details	*d_details;
 	struct urb				*this_urb;
+	unsigned long				flags;
 	int 					device_port, err;
 
 	dev_dbg(&port->dev, "%s reset=%d\n", __func__, reset_port);
@@ -2056,11 +2057,14 @@ static int keyspan_usa26_send_setup(struct usb_serial *serial,
 	dev_dbg(&port->dev, "%s - endpoint %x\n",
 			__func__, usb_pipeendpoint(this_urb->pipe));
 
+	spin_lock_irqsave(&s_priv->ctrl_lock, flags);
+
 	/* Save reset port val for resend.
 	   Don't overwrite resend for open/close condition. */
 	if ((reset_port + 1) > p_priv->resend_cont)
 		p_priv->resend_cont = reset_port + 1;
 	if (this_urb->status == -EINPROGRESS) {
+		spin_unlock_irqrestore(&s_priv->ctrl_lock, flags);
 		/*  dev_dbg(&port->dev, "%s - already writing\n", __func__); */
 		mdelay(5);
 		return -1;
@@ -2169,6 +2173,7 @@ static int keyspan_usa26_send_setup(struct usb_serial *serial,
 	this_urb->transfer_buffer_length = sizeof(msg);
 
 	err = usb_submit_urb(this_urb, GFP_ATOMIC);
+	spin_unlock_irqrestore(&s_priv->ctrl_lock, flags);
 	if (err != 0)
 		dev_dbg(&port->dev, "%s - usb_submit_urb(setup) failed (%d)\n", __func__, err);
 	return 0;
@@ -2183,6 +2188,7 @@ static int keyspan_usa28_send_setup(struct usb_serial *serial,
 	struct keyspan_port_private 		*p_priv;
 	const struct keyspan_device_details	*d_details;
 	struct urb				*this_urb;
+	unsigned long				flags;
 	int 					device_port, err;
 
 	s_priv = usb_get_serial_data(serial);
@@ -2197,11 +2203,14 @@ static int keyspan_usa28_send_setup(struct usb_serial *serial,
 		return -1;
 	}
 
+	spin_lock_irqsave(&s_priv->ctrl_lock, flags);
+
 	/* Save reset port val for resend.
 	   Don't overwrite resend for open/close condition. */
 	if ((reset_port + 1) > p_priv->resend_cont)
 		p_priv->resend_cont = reset_port + 1;
 	if (this_urb->status == -EINPROGRESS) {
+		spin_unlock_irqrestore(&s_priv->ctrl_lock, flags);
 		dev_dbg(&port->dev, "%s already writing\n", __func__);
 		mdelay(5);
 		return -1;
@@ -2287,6 +2296,7 @@ static int keyspan_usa28_send_setup(struct usb_serial *serial,
 	this_urb->transfer_buffer_length = sizeof(msg);
 
 	err = usb_submit_urb(this_urb, GFP_ATOMIC);
+	spin_unlock_irqrestore(&s_priv->ctrl_lock, flags);
 	if (err != 0)
 		dev_dbg(&port->dev, "%s - usb_submit_urb(setup) failed\n", __func__);
 
@@ -2303,6 +2313,7 @@ static int keyspan_usa49_send_setup(struct usb_serial *serial,
 	struct keyspan_port_private 		*p_priv;
 	const struct keyspan_device_details	*d_details;
 	struct urb				*this_urb;
+	unsigned long				flags;
 	int 					err, device_port;
 
 	s_priv = usb_get_serial_data(serial);
@@ -2323,12 +2334,15 @@ static int keyspan_usa49_send_setup(struct usb_serial *serial,
 	dev_dbg(&port->dev, "%s - endpoint %x (%d)\n",
 		__func__, usb_pipeendpoint(this_urb->pipe), device_port);
 
+	spin_lock_irqsave(&s_priv->ctrl_lock, flags);
+
 	/* Save reset port val for resend.
 	   Don't overwrite resend for open/close condition. */
 	if ((reset_port + 1) > p_priv->resend_cont)
 		p_priv->resend_cont = reset_port + 1;
 
 	if (this_urb->status == -EINPROGRESS) {
+		spin_unlock_irqrestore(&s_priv->ctrl_lock, flags);
 		/*  dev_dbg(&port->dev, "%s - already writing\n", __func__); */
 		mdelay(5);
 		return -1;
@@ -2464,6 +2478,7 @@ static int keyspan_usa49_send_setup(struct usb_serial *serial,
 		this_urb->transfer_buffer_length = sizeof(msg);
 	}
 	err = usb_submit_urb(this_urb, GFP_ATOMIC);
+	spin_unlock_irqrestore(&s_priv->ctrl_lock, flags);
 	if (err != 0)
 		dev_dbg(&port->dev, "%s - usb_submit_urb(setup) failed (%d)\n", __func__, err);
 
@@ -2479,6 +2494,7 @@ static int keyspan_usa90_send_setup(struct usb_serial *serial,
 	struct keyspan_port_private 		*p_priv;
 	const struct keyspan_device_details	*d_details;
 	struct urb				*this_urb;
+	unsigned long				flags;
 	int 					err;
 	u8						prescaler;
 
@@ -2493,11 +2509,14 @@ static int keyspan_usa90_send_setup(struct usb_serial *serial,
 		return -1;
 	}
 
+	spin_lock_irqsave(&s_priv->ctrl_lock, flags);
+
 	/* Save reset port val for resend.
 	   Don't overwrite resend for open/close condition. */
 	if ((reset_port + 1) > p_priv->resend_cont)
 		p_priv->resend_cont = reset_port + 1;
 	if (this_urb->status == -EINPROGRESS) {
+		spin_unlock_irqrestore(&s_priv->ctrl_lock, flags);
 		dev_dbg(&port->dev, "%s already writing\n", __func__);
 		mdelay(5);
 		return -1;
@@ -2595,6 +2614,7 @@ static int keyspan_usa90_send_setup(struct usb_serial *serial,
 	this_urb->transfer_buffer_length = sizeof(msg);
 
 	err = usb_submit_urb(this_urb, GFP_ATOMIC);
+	spin_unlock_irqrestore(&s_priv->ctrl_lock, flags);
 	if (err != 0)
 		dev_dbg(&port->dev, "%s - usb_submit_urb(setup) failed (%d)\n", __func__, err);
 	return 0;
@@ -2609,6 +2629,7 @@ static int keyspan_usa67_send_setup(struct usb_serial *serial,
 	struct keyspan_port_private 		*p_priv;
 	const struct keyspan_device_details	*d_details;
 	struct urb				*this_urb;
+	unsigned long				flags;
 	int 					err, device_port;
 
 	s_priv = usb_get_serial_data(serial);
@@ -2626,11 +2647,14 @@ static int keyspan_usa67_send_setup(struct usb_serial *serial,
 		return -1;
 	}
 
+	spin_lock_irqsave(&s_priv->ctrl_lock, flags);
+
 	/* Save reset port val for resend.
 	   Don't overwrite resend for open/close condition. */
 	if ((reset_port + 1) > p_priv->resend_cont)
 		p_priv->resend_cont = reset_port + 1;
 	if (this_urb->status == -EINPROGRESS) {
+		spin_unlock_irqrestore(&s_priv->ctrl_lock, flags);
 		/*  dev_dbg(&port->dev, "%s - already writing\n", __func__); */
 		mdelay(5);
 		return -1;
@@ -2738,6 +2762,7 @@ static int keyspan_usa67_send_setup(struct usb_serial *serial,
 	this_urb->transfer_buffer_length = sizeof(msg);
 
 	err = usb_submit_urb(this_urb, GFP_ATOMIC);
+	spin_unlock_irqrestore(&s_priv->ctrl_lock, flags);
 	if (err != 0)
 		dev_dbg(&port->dev, "%s - usb_submit_urb(setup) failed (%d)\n", __func__, err);
 	return 0;
@@ -2794,6 +2819,8 @@ static int keyspan_startup(struct usb_serial *serial)
 	s_priv = kzalloc_obj(struct keyspan_serial_private);
 	if (!s_priv)
 		return -ENOMEM;
+
+	spin_lock_init(&s_priv->ctrl_lock);
 
 	s_priv->instat_buf = kzalloc(INSTAT_BUFLEN, GFP_KERNEL);
 	if (!s_priv->instat_buf)
