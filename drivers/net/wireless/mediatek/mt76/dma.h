@@ -107,7 +107,7 @@ mt76_dma_handle_write(struct mt76_queue *q, u32 offset, u32 val)
 	u32 _offset = offsetof(struct mt76_queue_regs, _field);		\
 	u32 _val;							\
 	if (!mt76_dma_handle_read(_q, _offset, &_val))			\
-		_val = readl(&(_q)->regs->_field);			\
+		_val = mt76_readl(&(_q)->regs->_field);		\
 	_val;								\
 })
 

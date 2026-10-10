@@ -20,6 +20,29 @@
 #include "util.h"
 #include "testmode.h"
 
+#ifdef CONFIG_CACHE_L2X0_IO_LOCK
+#include <asm/outercache.h>
+#endif
+
+/*
+ * Some SoCs deadlock when an outer cache maintenance operation runs while a
+ * PCIe read is outstanding (see CONFIG_CACHE_L2X0_IO_LOCK).  On those, take
+ * the platform lock around device register reads.
+ */
+static inline u32 mt76_readl(const void __iomem *addr)
+{
+#ifdef CONFIG_CACHE_L2X0_IO_LOCK
+	unsigned long flags = outer_io_lock();
+	u32 val = readl(addr);
+
+	outer_io_unlock(flags);
+
+	return val;
+#else
+	return readl(addr);
+#endif
+}
+
 #define MT_MCU_RING_SIZE	32
 #define MT_RX_BUF_SIZE		2048
 #define MT_SKB_HEAD_LEN		256

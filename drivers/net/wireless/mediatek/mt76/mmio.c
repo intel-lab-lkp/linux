@@ -11,7 +11,7 @@ static u32 mt76_mmio_rr(struct mt76_dev *dev, u32 offset)
 {
 	u32 val;
 
-	val = readl(dev->mmio.regs + offset);
+	val = mt76_readl(dev->mmio.regs + offset);
 	trace_reg_rr(dev, offset, val);
 
 	return val;
@@ -53,13 +53,13 @@ static void mt76_mmio_read_copy(struct mt76_dev *dev, u32 offset,
 	int i;
 
 	for (i = 0; i + 4 <= len; i += 4)
-		put_unaligned_le32(readl(dev->mmio.regs + offset + i),
+		put_unaligned_le32(mt76_readl(dev->mmio.regs + offset + i),
 				   data + i);
 
 	if (i < len) {
 		u8 tmp[4];
 
-		put_unaligned_le32(readl(dev->mmio.regs + offset + i), tmp);
+		put_unaligned_le32(mt76_readl(dev->mmio.regs + offset + i), tmp);
 		memcpy(data + i, tmp, len - i);
 	}
 }
