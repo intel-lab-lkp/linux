@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/phy.h>
 #include <linux/pm_wakeirq.h>
+#include <linux/realtek_phy.h>
 #include <linux/netdevice.h>
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -1706,6 +1707,7 @@ static void rtlgen_decode_physr(struct phy_device *phydev, int val)
 		phydev->speed = SPEED_100;
 		break;
 	case 0x0020:
+	case 0x0030:	/* Giga Lite */
 		phydev->speed = SPEED_1000;
 		break;
 	case 0x0200:
@@ -1733,6 +1735,29 @@ static void rtlgen_decode_physr(struct phy_device *phydev, int val)
 	} else {
 		phydev->master_slave_state = MASTER_SLAVE_STATE_UNSUPPORTED;
 	}
+}
+
+static int rtlgen_config_aneg(struct phy_device *phydev)
+{
+	int ret = 0;
+
+	/* With Giga Lite enabled, the PHY can link in Giga Lite even
+	 * when 1000baseT/Full is not advertised.  Only allow it when
+	 * autonegotiating with 1000baseT/Full advertised, so that a
+	 * lower speed set by the user is respected.
+	 */
+	if (phydev->dev_flags & RTL_PHY_F_GIGA_LITE) {
+		bool en = phydev->autoneg == AUTONEG_ENABLE &&
+			  linkmode_test_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT,
+					    phydev->advertising);
+
+		ret = phy_modify_paged_changed(phydev, 0xa42, 0x14, BIT(9),
+					       en ? BIT(9) : 0);
+		if (ret < 0)
+			return ret;
+	}
+
+	return __genphy_config_aneg(phydev, ret > 0);
 }
 
 static int rtlgen_read_status(struct phy_device *phydev)
@@ -3248,6 +3273,7 @@ static struct phy_driver realtek_drvs[] = {
 	}, {
 		.name		= "Generic FE-GE Realtek PHY",
 		.match_phy_device = rtlgen_match_phy_device,
+		.config_aneg	= rtlgen_config_aneg,
 		.read_status	= rtlgen_read_status,
 		.suspend	= genphy_suspend,
 		.resume		= rtlgen_resume,

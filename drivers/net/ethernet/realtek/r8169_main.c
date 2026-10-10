@@ -28,6 +28,7 @@
 #include <linux/bitfield.h>
 #include <linux/phylink.h>
 #include <linux/prefetch.h>
+#include <linux/realtek_phy.h>
 #include <linux/ipv6.h>
 #include <linux/unaligned.h>
 #include <net/ip6_checksum.h>
@@ -5618,6 +5619,9 @@ static int r8169_mdio_register(struct rtl8169_private *tp)
 			tp->phydev->phy_id);
 		return -EUNATCH;
 	}
+
+	if (tp->mac_version == RTL_GIGA_MAC_VER_51)
+		tp->phydev->dev_flags |= RTL_PHY_F_GIGA_LITE;
 
 	/* Keep EEE off but the version stays EEE-capable so that link-up
 	 * still clears the MAC TX-LPI bits.
