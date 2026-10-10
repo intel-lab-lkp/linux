@@ -82,6 +82,7 @@ struct meson8b_dwmac_data {
 	int (*set_phy_mode)(struct meson8b_dwmac *dwmac);
 	bool has_prg_eth1_rgmii_rx_delay;
 	bool has_pipeline_clk;
+	bool mac_applies_dt_delays;
 };
 
 struct meson8b_dwmac {
@@ -272,6 +273,49 @@ static int meson8b_devm_clk_prepare_enable(struct meson8b_dwmac *dwmac,
 					meson8b_clk_disable_unprepare, clk);
 }
 
+static int meson_dwmac_init_dt_delays(struct meson8b_dwmac *dwmac,
+				      struct plat_stmmacenet_data *plat_dat)
+{
+	struct device_node *np = dwmac->dev->of_node;
+	u32 tx_delay_ps = 0, rx_delay_ps = 0;
+	phy_interface_t phy_mode;
+	bool mac_tx, mac_rx;
+
+	mac_tx = !of_property_read_u32(np, "tx-internal-delay-ps", &tx_delay_ps);
+	mac_rx = !of_property_read_u32(np, "rx-internal-delay-ps", &rx_delay_ps);
+
+	/* one step is a quarter of the RGMII clock period, 2ns at 1Gbit/s */
+	if (tx_delay_ps > 6000 || tx_delay_ps % 2000)
+		return dev_err_probe(dwmac->dev, -EINVAL,
+				     "The RGMII TX delay must be 0, 2000, 4000 or 6000ps\n");
+
+	/* the RX delay line moves in 200ps steps and reaches 3000ps */
+	if (rx_delay_ps > 3000 || rx_delay_ps % 200)
+		return dev_err_probe(dwmac->dev, -EINVAL,
+				     "The RGMII RX delay range is 0..3000ps in 200ps steps\n");
+
+	phy_mode = phy_fix_phy_mode_for_mac_delays(dwmac->phy_mode, mac_tx,
+						   mac_rx);
+	if (phy_mode == PHY_INTERFACE_MODE_NA)
+		return dev_err_probe(dwmac->dev, -EINVAL,
+				     "Cannot provide the delays %s asks for\n",
+				     phy_modes(dwmac->phy_mode));
+
+	plat_dat->phy_interface = phy_mode;
+
+	meson8b_dwmac_mask_bits(dwmac, PRG_ETH0, PRG_ETH0_TXDLY_MASK |
+				PRG_ETH0_ADJ_ENABLE | PRG_ETH0_ADJ_SETUP |
+				PRG_ETH0_ADJ_DELAY | PRG_ETH0_ADJ_SKEW,
+				FIELD_PREP(PRG_ETH0_TXDLY_MASK,
+					   tx_delay_ps / 2000));
+
+	meson8b_dwmac_mask_bits(dwmac, PRG_ETH1, PRG_ETH1_CFG_RXCLK_DLY,
+				FIELD_PREP(PRG_ETH1_CFG_RXCLK_DLY,
+					   rx_delay_ps / 200));
+
+	return 0;
+}
+
 static int meson8b_init_rgmii_delays(struct meson8b_dwmac *dwmac)
 {
 	u32 tx_dly_config, rx_adj_config, cfg_rxclk_dly, delay_config;
@@ -411,32 +455,34 @@ static int meson8b_dwmac_probe(struct platform_device *pdev)
 	dwmac->dev = &pdev->dev;
 	dwmac->phy_mode = plat_dat->phy_interface;
 
-	/* use 2ns as fallback since this value was previously hardcoded */
-	if (of_property_read_u32(pdev->dev.of_node, "amlogic,tx-delay-ns",
-				 &dwmac->tx_delay_ns))
-		dwmac->tx_delay_ns = 2;
+	if (!dwmac->data->mac_applies_dt_delays) {
+		/* use 2ns as fallback since this value was previously hardcoded */
+		if (of_property_read_u32(pdev->dev.of_node, "amlogic,tx-delay-ns",
+					 &dwmac->tx_delay_ns))
+			dwmac->tx_delay_ns = 2;
 
-	/* RX delay defaults to 0ps since this is what many boards use */
-	if (of_property_read_u32(pdev->dev.of_node, "rx-internal-delay-ps",
-				 &dwmac->rx_delay_ps)) {
-		if (!of_property_read_u32(pdev->dev.of_node,
-					  "amlogic,rx-delay-ns",
-					  &dwmac->rx_delay_ps))
-			/* convert ns to ps */
-			dwmac->rx_delay_ps *= 1000;
-	}
-
-	if (dwmac->data->has_prg_eth1_rgmii_rx_delay) {
-		if (dwmac->rx_delay_ps > 3000 || dwmac->rx_delay_ps % 200) {
-			dev_err(dwmac->dev,
-				"The RGMII RX delay range is 0..3000ps in 200ps steps");
-			return -EINVAL;
+		/* RX delay defaults to 0ps since this is what many boards use */
+		if (of_property_read_u32(pdev->dev.of_node, "rx-internal-delay-ps",
+					 &dwmac->rx_delay_ps)) {
+			if (!of_property_read_u32(pdev->dev.of_node,
+						  "amlogic,rx-delay-ns",
+						  &dwmac->rx_delay_ps))
+				/* convert ns to ps */
+				dwmac->rx_delay_ps *= 1000;
 		}
-	} else {
-		if (dwmac->rx_delay_ps != 0 && dwmac->rx_delay_ps != 2000) {
-			dev_err(dwmac->dev,
-				"The only allowed RGMII RX delays values are: 0ps, 2000ps");
-			return -EINVAL;
+
+		if (dwmac->data->has_prg_eth1_rgmii_rx_delay) {
+			if (dwmac->rx_delay_ps > 3000 || dwmac->rx_delay_ps % 200) {
+				dev_err(dwmac->dev,
+					"The RGMII RX delay range is 0..3000ps in 200ps steps");
+				return -EINVAL;
+			}
+		} else {
+			if (dwmac->rx_delay_ps != 0 && dwmac->rx_delay_ps != 2000) {
+				dev_err(dwmac->dev,
+					"The only allowed RGMII RX delays values are: 0ps, 2000ps");
+				return -EINVAL;
+			}
 		}
 	}
 
@@ -452,7 +498,10 @@ static int meson8b_dwmac_probe(struct platform_device *pdev)
 					     "missing pipeline clock\n");
 	}
 
-	ret = meson8b_init_rgmii_delays(dwmac);
+	if (dwmac->data->mac_applies_dt_delays)
+		ret = meson_dwmac_init_dt_delays(dwmac, plat_dat);
+	else
+		ret = meson8b_init_rgmii_delays(dwmac);
 	if (ret)
 		return ret;
 
@@ -490,8 +539,8 @@ static const struct meson8b_dwmac_data meson_g12a_dwmac_data = {
 
 static const struct meson8b_dwmac_data meson_t7_dwmac_data = {
 	.set_phy_mode = meson_axg_set_phy_mode,
-	.has_prg_eth1_rgmii_rx_delay = true,
 	.has_pipeline_clk = true,
+	.mac_applies_dt_delays = true,
 };
 
 static const struct of_device_id meson8b_dwmac_match[] = {
