@@ -156,8 +156,8 @@ static void plx_dma_process_desc(struct plx_dma_dev *plxdev)
 		else
 			res.result = DMA_TRANS_READ_FAILED;
 
-		dma_cookie_complete(&desc->txd);
 		dma_descriptor_unmap(&desc->txd);
+		dma_cookie_complete(&desc->txd);
 		dmaengine_desc_get_callback_invoke(&desc->txd, &res);
 		desc->txd.callback = NULL;
 		desc->txd.callback_result = NULL;
@@ -183,8 +183,8 @@ static void plx_dma_abort_desc(struct plx_dma_dev *plxdev)
 		res.residue = desc->orig_size;
 		res.result = DMA_TRANS_ABORTED;
 
-		dma_cookie_complete(&desc->txd);
 		dma_descriptor_unmap(&desc->txd);
+		dma_cookie_complete(&desc->txd);
 		dmaengine_desc_get_callback_invoke(&desc->txd, &res);
 		desc->txd.callback = NULL;
 		desc->txd.callback_result = NULL;
