@@ -224,8 +224,8 @@ static struct ccp_dma_desc *ccp_handle_active_desc(struct ccp_dma_chan *chan,
 				"%s - tx %d complete, status=%u\n", __func__,
 				desc->tx_desc.cookie, desc->status);
 
-			dma_cookie_complete(tx_desc);
 			dma_descriptor_unmap(tx_desc);
+			dma_cookie_complete(tx_desc);
 		}
 
 		desc = __ccp_next_dma_desc(chan, desc);
