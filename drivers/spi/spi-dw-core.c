@@ -827,6 +827,9 @@ static int dw_spi_exec_mem_op(struct spi_mem *mem, const struct spi_mem_op *op)
 		cfg.tmode = DW_SPI_CTRLR0_TMOD_TO;
 	}
 
+	/* Ensure the data change in dw_spi_init_mem_buf() is visible for all CPUs */
+	smp_mb();
+
 	dw_spi_enable_chip(dws, 0);
 
 	dw_spi_update_config(dws, mem->spi, &cfg, NULL);
