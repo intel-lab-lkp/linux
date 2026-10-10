@@ -250,7 +250,18 @@ cifs_fattr_to_inode(struct inode *inode, struct cifs_fattr *fattr,
 	}
 	spin_unlock(&inode->i_lock);
 
-	if (fattr->cf_flags & CIFS_FATTR_JUNCTION)
+	/*
+	 * With the "noautomount" mount option, do not turn junctions and
+	 * other name-surrogate reparse points into submounts; keep them as
+	 * regular directories instead and let the server resolve the
+	 * reparse target on access.  Scanning a tree that contains many
+	 * junctions (e.g. a package cache) otherwise creates a submount per
+	 * junction and floods the mount table with entries that are useless
+	 * and often not even listable.  Default behavior is unchanged.
+	 * Note that the option also affects DFS referral mounts, so it
+	 * should not be used on DFS shares.
+	 */
+	if (fattr->cf_flags & CIFS_FATTR_JUNCTION && !cifs_sb->ctx->noautomount)
 		inode->i_flags |= S_AUTOMOUNT;
 	if (inode_state_read_once(inode) & I_NEW) {
 		cifs_set_netfs_context(inode);

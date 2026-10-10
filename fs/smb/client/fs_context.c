@@ -90,6 +90,7 @@ const struct fs_parameter_spec smb3_fs_parameters[] = {
 	fsparam_flag("nomapchars", Opt_nomapchars),
 	fsparam_flag_no("sfu", Opt_sfu),
 	fsparam_flag("nodfs", Opt_nodfs),
+	fsparam_flag("noautomount", Opt_noautomount),
 	fsparam_flag_no("posixpaths", Opt_posixpaths),
 	fsparam_flag_no("unix", Opt_unix),
 	fsparam_flag_no("linux", Opt_unix),
@@ -1294,6 +1295,9 @@ static int smb3_fs_context_parse_param(struct fs_context *fc,
 		break;
 	case Opt_nodfs:
 		ctx->nodfs = 1;
+		break;
+	case Opt_noautomount:
+		ctx->noautomount = 1;
 		break;
 	case Opt_hard:
 		if (result.negated) {

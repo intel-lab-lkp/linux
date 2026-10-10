@@ -113,6 +113,7 @@ enum cifs_param {
 	Opt_nomapchars,
 	Opt_sfu,
 	Opt_nodfs,
+	Opt_noautomount,
 	Opt_posixpaths,
 	Opt_unix,
 	Opt_nocase,
@@ -277,6 +278,7 @@ struct smb3_fs_context {
 	bool mand_lock:1;  /* send mandatory not posix byte range lock reqs */
 	bool seal:1;       /* request transport encryption on share */
 	bool nodfs:1;      /* Do not request DFS, even if available */
+	bool noautomount:1; /* Do not automount junctions/reparse points */
 	bool local_lease:1; /* check leases only on local system, not remote */
 	bool noblocksnd:1;
 	bool noautotune:1;

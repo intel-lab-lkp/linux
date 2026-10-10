@@ -613,6 +613,17 @@ A partial list of the supported mount options follows:
 		server claims to support it.  This can help work around
 		a problem with parsing of DFS paths with Samba server
 		versions 3.0.24 and 3.0.25.
+  noautomount
+		Do not turn name-surrogate reparse points (e.g. Windows
+		NTFS junctions) pointing to a directory into submounts
+		on traversal.  Such entries are then exposed as regular
+		directories and the server resolves the reparse target
+		on access.  Without this option a deep scan of a tree
+		containing many junctions creates one CIFS submount per
+		junction, which floods the mount table with entries that
+		are usually useless and often not even listable.  Note
+		that this option also disables automounting of DFS
+		referrals, so it should not be used on DFS mounts.
   remount
 		remount the share (often used to change from ro to rw mounts
 		or vice versa)
