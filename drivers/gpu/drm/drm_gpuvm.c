@@ -1127,12 +1127,12 @@ drm_gpuvm_init(struct drm_gpuvm *gpuvm, const char *name,
 
 	memset(&gpuvm->kernel_alloc_node, 0, sizeof(struct drm_gpuva));
 	if (reserve_range) {
-		gpuvm->kernel_alloc_node.va.addr = reserve_offset;
-		gpuvm->kernel_alloc_node.va.range = reserve_range;
-
 		if (likely(!drm_gpuvm_warn_check_overflow(gpuvm, reserve_offset,
-							  reserve_range)))
+							  reserve_range))) {
+			gpuvm->kernel_alloc_node.va.addr = reserve_offset;
+			gpuvm->kernel_alloc_node.va.range = reserve_range;
 			__drm_gpuva_insert(gpuvm, &gpuvm->kernel_alloc_node);
+		}
 	}
 }
 EXPORT_SYMBOL_GPL(drm_gpuvm_init);
