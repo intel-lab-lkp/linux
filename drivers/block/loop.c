@@ -36,6 +36,7 @@
 #include <linux/blk-mq.h>
 #include <linux/spinlock.h>
 #include <uapi/linux/loop.h>
+#include <linux/stacktrace.h>
 
 /* Possible states of device */
 enum {
@@ -86,6 +87,12 @@ struct loop_cmd {
 	struct bio_vec *bvec;
 	struct cgroup_subsys_state *blkcg_css;
 	struct cgroup_subsys_state *memcg_css;
+#if defined(CONFIG_KCOV) && defined(CONFIG_STACKTRACE)
+	unsigned long stack_entries[30];
+	int stack_nr;
+	pid_t pid;
+	char comm[TASK_COMM_LEN];
+#endif
 };
 
 #define LOOP_IDLE_WORKER_TIMEOUT (60 * HZ)
@@ -1806,6 +1813,13 @@ static blk_status_t loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 #endif
 	}
 #endif
+
+#if defined(CONFIG_KCOV) && defined(CONFIG_STACKTRACE)
+	cmd->stack_nr = stack_trace_save(cmd->stack_entries, ARRAY_SIZE(cmd->stack_entries), 0);
+	cmd->pid = current->pid;
+	get_task_comm(cmd->comm, current);
+#endif
+
 	loop_queue_work(lo, cmd);
 
 	return BLK_STS_OK;
@@ -1821,6 +1835,21 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 	int ret = 0;
 	struct mem_cgroup *old_memcg = NULL;
 
+#if defined(CONFIG_KCOV) && defined(CONFIG_STACKTRACE)
+	/*
+	 * This request was queued after checking lo->lo_state == Lo_bound
+	 * in loop_queue_rq(). The state should remain unchanged unless
+	 * __loop_clr_fd() by error starts before blk_mq_complete_request()
+	 * is called.
+	 */
+	if (unlikely(data_race(READ_ONCE(lo->lo_state)) != Lo_bound &&
+		     disk_openers(lo->lo_disk) == 0)) {
+		pr_err("BUG: found I/O issued by %s/%u but loop%d is no longer bound.\n",
+		       cmd->comm, cmd->pid, lo->lo_number);
+		printk("Call Trace:\n");
+		stack_trace_print(cmd->stack_entries, cmd->stack_nr, 4);
+	}
+#endif
 	if (write && (lo->lo_flags & LO_FLAGS_READ_ONLY)) {
 		ret = -EIO;
 		goto failed;
