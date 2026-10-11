@@ -74,6 +74,8 @@ struct ath11k_pci {
 	unsigned long flags;
 	u16 link_ctl;
 	u64 dma_mask;
+
+	bool vfio_msi_cached;
 };
 
 static inline struct ath11k_pci *ath11k_pci_priv(struct ath11k_base *ab)
