@@ -351,7 +351,7 @@ static inline void ha_reset_clk_ns(struct ha_monitor *ha_mon, enum envs env, u64
 static inline bool ha_check_invariant_ns(struct ha_monitor *ha_mon, enum envs env,
 					 u64 time_ns, u64 expire_ns)
 {
-	return READ_ONCE(ha_mon->env_store[env]) >= time_ns - expire_ns;
+	return READ_ONCE(ha_mon->env_store[env]) + expire_ns >= time_ns;
 }
 /*
  * ha_invariant_passed_ns - prepare the invariant and return the time since reset
@@ -410,6 +410,11 @@ static inline void ha_inv_to_guard(struct ha_monitor *ha_mon, enum envs env,
 	WRITE_ONCE(ha_mon->env_store[env], READ_ONCE(ha_mon->env_store[env]) - value);
 }
 
+static inline u64 ha_time_left(u64 passed, u64 expire)
+{
+	return passed < expire ? expire - passed : 0;
+}
+
 #if HA_TIMER_TYPE == HA_TIMER_WHEEL
 /*
  * Helper functions to handle the monitor timer.
@@ -439,15 +444,17 @@ static inline void ha_start_timer_jiffy(struct ha_monitor *ha_mon, enum envs env
 {
 	u64 passed = ha_invariant_passed_jiffy(ha_mon, env, time_ns);
 
-	mod_timer(&ha_mon->timer, get_jiffies_64() + expire - passed);
+	mod_timer(&ha_mon->timer,
+		  get_jiffies_64() + ha_time_left(passed, expire));
 }
 static inline void ha_start_timer_ns(struct ha_monitor *ha_mon, enum envs env,
 				     u64 expire, u64 time_ns)
 {
 	u64 passed = ha_invariant_passed_ns(ha_mon, env, time_ns);
+	u64 delay = ha_time_left(passed, expire);
 
 	ha_start_timer_jiffy(ha_mon, ENV_MAX_STORED,
-			     nsecs_to_jiffies(expire - passed + TICK_NSEC - 1), time_ns);
+			     nsecs_to_jiffies(delay + TICK_NSEC - 1), time_ns);
 }
 /*
  * ha_cancel_timer - Cancel the timer
@@ -494,7 +501,8 @@ static inline void ha_start_timer_ns(struct ha_monitor *ha_mon, enum envs env,
 
 	if (RV_MON_TYPE == RV_MON_PER_CPU)
 		mode |= HRTIMER_MODE_PINNED;
-	hrtimer_start(&ha_mon->hrtimer, ns_to_ktime(expire - passed), mode);
+	hrtimer_start(&ha_mon->hrtimer,
+		      ns_to_ktime(ha_time_left(passed, expire)), mode);
 }
 static inline void ha_start_timer_jiffy(struct ha_monitor *ha_mon, enum envs env,
 					u64 expire, u64 time_ns)
@@ -502,7 +510,8 @@ static inline void ha_start_timer_jiffy(struct ha_monitor *ha_mon, enum envs env
 	u64 passed = ha_invariant_passed_jiffy(ha_mon, env, time_ns);
 
 	ha_start_timer_ns(ha_mon, ENV_MAX_STORED,
-			  jiffies_to_nsecs(expire - passed), time_ns);
+			  jiffies_to_nsecs(ha_time_left(passed, expire)),
+			  time_ns);
 }
 /*
  * ha_cancel_timer - Cancel the timer
