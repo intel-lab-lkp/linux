@@ -86,7 +86,26 @@ struct loop_cmd {
 	struct bio_vec *bvec;
 	struct cgroup_subsys_state *blkcg_css;
 	struct cgroup_subsys_state *memcg_css;
+#ifdef CONFIG_KCOV
+	unsigned long stack_entries[30];
+	int stack_nr;
+	pid_t pid;
+	char comm[TASK_COMM_LEN];
+#endif
 };
+
+static void loop_check_io_race(struct loop_device *lo, struct loop_cmd *cmd)
+{
+#ifdef CONFIG_KCOV
+	if (unlikely(READ_ONCE(lo->lo_state) == Lo_rundown &&
+		     disk_openers(lo->lo_disk) == 0)) {
+		pr_err("BUG: %s/%u is doing I/O request on loop%d in Lo_rundown state.\n",
+		       cmd->comm, cmd->pid, lo->lo_number);
+		printk("Call Trace:\n");
+		stack_trace_print(cmd->stack_entries, cmd->stack_nr, 4);
+	}
+#endif
+}
 
 #define LOOP_IDLE_WORKER_TIMEOUT (60 * HZ)
 #define LOOP_DEFAULT_HW_Q_DEPTH 128
@@ -1775,10 +1794,18 @@ static blk_status_t loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	struct loop_cmd *cmd = blk_mq_rq_to_pdu(rq);
 	struct loop_device *lo = rq->q->queuedata;
 
+#ifdef CONFIG_KCOV
+	cmd->stack_nr = stack_trace_save(cmd->stack_entries, ARRAY_SIZE(cmd->stack_entries), 0);
+	cmd->pid = current->pid;
+	get_task_comm(cmd->comm, current);
+#endif
+
 	blk_mq_start_request(rq);
 
-	if (data_race(READ_ONCE(lo->lo_state)) != Lo_bound)
+	if (data_race(READ_ONCE(lo->lo_state)) != Lo_bound) {
+		loop_check_io_race(lo, cmd);
 		return BLK_STS_IOERR;
+	}
 
 	switch (req_op(rq)) {
 	case REQ_OP_FLUSH:
@@ -1821,6 +1848,7 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 	int ret = 0;
 	struct mem_cgroup *old_memcg = NULL;
 
+	loop_check_io_race(lo, cmd);
 	if (write && (lo->lo_flags & LO_FLAGS_READ_ONLY)) {
 		ret = -EIO;
 		goto failed;
