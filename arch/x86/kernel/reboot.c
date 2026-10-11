@@ -115,6 +115,13 @@ void __noreturn machine_real_restart(unsigned int type)
 	spin_unlock(&rtc_lock);
 
 	/*
+	 * Disable CET before loading the trampoline page table and jumping
+	 * to the real-mode trampoline. This avoids missing-ENDBR #CP faults
+	 * during the far jump.
+	 */
+	cet_disable();
+
+	/*
 	 * Switch to the trampoline page table.
 	 */
 	load_trampoline_pgtable();
