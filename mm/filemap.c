@@ -144,7 +144,7 @@ static void page_cache_delete(struct address_space *mapping,
 
 	folio->mapping = NULL;
 	/* Leave folio->index set: truncation lookup relies upon it */
-	mapping->nrpages -= nr;
+	WRITE_ONCE(mapping->nrpages, mapping->nrpages - nr);
 }
 
 static void filemap_unaccount_folio(struct address_space *mapping,
@@ -314,7 +314,7 @@ static void page_cache_delete_batch(struct address_space *mapping,
 		xas_store(&xas, NULL);
 		total_pages += folio_nr_pages(folio);
 	}
-	mapping->nrpages -= total_pages;
+	WRITE_ONCE(mapping->nrpages, mapping->nrpages - total_pages);
 }
 
 void delete_from_page_cache_batch(struct address_space *mapping,
@@ -631,7 +631,7 @@ EXPORT_SYMBOL(filemap_fdatawait_keep_errors);
 /* Returns true if writeback might be needed or already in progress. */
 static bool mapping_needs_writeback(struct address_space *mapping)
 {
-	return mapping->nrpages;
+	return READ_ONCE(mapping->nrpages);
 }
 
 bool filemap_range_has_writeback(struct address_space *mapping,
@@ -916,7 +916,7 @@ noinline int __filemap_add_folio(struct address_space *mapping,
 		if (xas_error(&xas))
 			goto unlock;
 
-		mapping->nrpages += nr;
+		WRITE_ONCE(mapping->nrpages, mapping->nrpages + nr);
 
 		/* hugetlb pages do not participate in page cache accounting */
 		if (!huge) {
