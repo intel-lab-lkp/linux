@@ -153,6 +153,18 @@ enum scpsys_mtcmos_type {
 };
 
 /**
+ * struct scpsys_reg_init - register set up after a domain is powered on
+ * @block: The access controller block holding the register.
+ * @ofs: The offset of the register.
+ * @val: The value to write.
+ */
+struct scpsys_reg_init {
+	enum scpsys_bus_prot_block block;
+	u32 ofs;
+	u32 val;
+};
+
+/**
  * struct scpsys_domain_data - scp domain data for power on/off flow
  * @name: The name of the power domain.
  * @sta_mask: The mask for power on/off status bit.
@@ -165,6 +177,7 @@ enum scpsys_mtcmos_type {
  * @caps: The flag for active wake-up action.
  * @rtff_type: The power domain RTFF HW type
  * @bp_cfg: bus protection configuration for any subsystem
+ * @reg_init: register that loses its setting when the domain is powered off
  */
 struct scpsys_domain_data {
 	const char *name;
@@ -180,6 +193,7 @@ struct scpsys_domain_data {
 	const struct scpsys_bus_prot_data bp_cfg[SPM_MAX_BUS_PROT_DATA];
 	int pwr_sta_offs;
 	int pwr_sta2nd_offs;
+	const struct scpsys_reg_init *reg_init;
 };
 
 /**

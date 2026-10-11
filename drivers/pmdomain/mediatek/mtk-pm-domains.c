@@ -72,6 +72,7 @@ struct scpsys_domain {
 	int num_subsys_clks;
 	struct clk_bulk_data *subsys_clks;
 	struct regulator *supply;
+	struct regmap *init_regmap;
 };
 
 struct scpsys {
@@ -79,6 +80,7 @@ struct scpsys {
 	struct regmap *base;
 	const struct scpsys_soc_data *soc_data;
 	u8 bus_prot_index[BUS_PROT_BLOCK_COUNT];
+	unsigned long bus_prot_avail;
 	struct regmap **bus_prot;
 	struct genpd_onecell_data pd_data;
 	struct generic_pm_domain *domains[];
@@ -755,6 +757,13 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	if (ret < 0)
 		goto err_disable_sram;
 
+	if (pd->init_regmap) {
+		ret = regmap_write(pd->init_regmap, pd->data->reg_init->ofs,
+				   pd->data->reg_init->val);
+		if (ret)
+			goto err_enable_bus_protect;
+	}
+
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_STRICT_BUS_PROTECTION)) {
 		ret = clk_bulk_prepare_enable(pd->num_subsys_clks,
 					      pd->subsys_clks);
@@ -899,6 +908,14 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 	pd->data = domain_data;
 	pd->hwv_data = hwv_domain_data;
 	pd->scpsys = scpsys;
+
+	if (domain_data && domain_data->reg_init) {
+		enum scpsys_bus_prot_block block = domain_data->reg_init->block;
+
+		/* Older devicetrees don't describe every block it needs */
+		if (scpsys->bus_prot_avail & BIT(block))
+			pd->init_regmap = scpsys->bus_prot[scpsys->bus_prot_index[block]];
+	}
 
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_DOMAIN_SUPPLY)) {
 		pd->supply = devm_of_regulator_get_optional(scpsys->dev, node, "domain");
@@ -1228,6 +1245,7 @@ static int scpsys_get_bus_protection_legacy(struct device *dev, struct scpsys *s
 
 		bp_type = bp_blocks[i];
 		scpsys->bus_prot_index[bp_type] = j;
+		scpsys->bus_prot_avail |= BIT(bp_type);
 		scpsys->bus_prot[j] = regmap[i];
 
 		j++;
@@ -1268,6 +1286,7 @@ static int scpsys_get_bus_protection(struct device *dev, struct scpsys *scpsys)
 		 */
 		bp_type = soc->bus_prot_blocks[i];
 		scpsys->bus_prot_index[bp_type] = i;
+		scpsys->bus_prot_avail |= BIT(bp_type);
 
 		scpsys->bus_prot[i] = device_node_to_regmap(node);
 		of_node_put(node);
