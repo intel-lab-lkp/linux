@@ -15,62 +15,64 @@
 #include <linux/units.h>
 #include <linux/nvmem-consumer.h>
 
-#include "phy-mtk-io.h"
 #include "phy-mtk-hdmi.h"
 #include "phy-mtk-hdmi-mt8195.h"
+
+/* field @mask shall be constant and continuous */
+#define mtk_phy_update_regmap_field(regmap, reg, mask, val) \
+({ \
+	BUILD_BUG_ON_MSG(!__builtin_constant_p(mask), "mask is not constant"); \
+	regmap_update_bits(regmap, reg, mask, FIELD_PREP(mask, val)); \
+})
 
 static void mtk_hdmi_ana_fifo_en(struct mtk_hdmi_phy *hdmi_phy)
 {
 	/* make data fifo writable for hdmi2.0 */
-	mtk_phy_set_bits(hdmi_phy->regs + HDMI_ANA_CTL, REG_ANA_HDMI20_FIFO_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_ANA_CTL, REG_ANA_HDMI20_FIFO_EN);
 }
 
 static void
 mtk_phy_tmds_clk_ratio(struct mtk_hdmi_phy *hdmi_phy, bool enable)
 {
-	void __iomem *regs = hdmi_phy->regs;
-
 	mtk_hdmi_ana_fifo_en(hdmi_phy);
 
 	/* HDMI 2.0 specification, 3.4Gbps <= TMDS Bit Rate <= 6G,
 	 * clock bit ratio 1:40, under 3.4Gbps, clock bit ratio 1:10
 	 */
 	if (enable)
-		mtk_phy_update_field(regs + HDMI20_CLK_CFG, REG_TXC_DIV, VAL_TXC_DIV4);
+		mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI20_CLK_CFG, REG_TXC_DIV, VAL_TXC_DIV4);
 	else
-		mtk_phy_clear_bits(regs + HDMI20_CLK_CFG, REG_TXC_DIV);
+		regmap_clear_bits(hdmi_phy->regs, HDMI20_CLK_CFG, REG_TXC_DIV);
 }
 
 static void mtk_hdmi_pll_sel_src(struct clk_hw *hw)
 {
 	struct mtk_hdmi_phy *hdmi_phy = to_mtk_hdmi_phy(hw);
-	void __iomem *regs = hdmi_phy->regs;
 
-	mtk_phy_clear_bits(regs + HDMI_CTL_3, REG_HDMITX_REF_XTAL_SEL);
-	mtk_phy_clear_bits(regs + HDMI_CTL_3, REG_HDMITX_REF_RESPLL_SEL);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_CTL_3, REG_HDMITX_REF_XTAL_SEL);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_CTL_3, REG_HDMITX_REF_RESPLL_SEL);
 
 	/* DA_HDMITX21_REF_CK for TXPLL input source */
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_10, RG_HDMITXPLL_REF_CK_SEL);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_10, RG_HDMITXPLL_REF_CK_SEL);
 }
 
 static void mtk_hdmi_pll_perf(struct clk_hw *hw)
 {
 	struct mtk_hdmi_phy *hdmi_phy = to_mtk_hdmi_phy(hw);
-	void __iomem *regs = hdmi_phy->regs;
 
-	mtk_phy_set_bits(regs + HDMI_1_PLL_CFG_0, RG_HDMITXPLL_BP2);
-	mtk_phy_set_bits(regs + HDMI_1_PLL_CFG_2, RG_HDMITXPLL_BC);
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_2, RG_HDMITXPLL_IC, 0x1);
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_2, RG_HDMITXPLL_BR, 0x2);
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_2, RG_HDMITXPLL_IR, 0x2);
-	mtk_phy_set_bits(regs + HDMI_1_PLL_CFG_2, RG_HDMITXPLL_BP);
-	mtk_phy_clear_bits(regs + HDMI_1_PLL_CFG_0, RG_HDMITXPLL_IBAND_FIX_EN);
-	mtk_phy_clear_bits(regs + HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT14);
-	mtk_phy_clear_bits(regs + HDMI_1_PLL_CFG_2, RG_HDMITXPLL_HIKVCO);
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_0, RG_HDMITXPLL_HREN, 0x1);
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_0, RG_HDMITXPLL_LVR_SEL, 0x1);
-	mtk_phy_set_bits(regs + HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT12_11);
-	mtk_phy_set_bits(regs + HDMI_1_PLL_CFG_0, RG_HDMITXPLL_TCL_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_0, RG_HDMITXPLL_BP2);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_2, RG_HDMITXPLL_BC);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_2, RG_HDMITXPLL_IC, 0x1);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_2, RG_HDMITXPLL_BR, 0x2);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_2, RG_HDMITXPLL_IR, 0x2);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_2, RG_HDMITXPLL_BP);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_0, RG_HDMITXPLL_IBAND_FIX_EN);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT14);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_2, RG_HDMITXPLL_HIKVCO);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_0, RG_HDMITXPLL_HREN, 0x1);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_0, RG_HDMITXPLL_LVR_SEL, 0x1);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT12_11);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_0, RG_HDMITXPLL_TCL_EN);
 }
 
 static int mtk_hdmi_pll_set_hw(struct clk_hw *hw, u8 prediv,
@@ -89,26 +91,25 @@ static int mtk_hdmi_pll_set_hw(struct clk_hw *hw, u8 prediv,
 	u8 prediv_value;
 	u8 reserve13_value;
 	struct mtk_hdmi_phy *hdmi_phy = to_mtk_hdmi_phy(hw);
-	void __iomem *regs = hdmi_phy->regs;
 
 	mtk_hdmi_pll_sel_src(hw);
 
 	mtk_hdmi_pll_perf(hw);
 
-	mtk_phy_update_field(regs + HDMI_1_CFG_10, RG_HDMITX21_BIAS_PE_BG_VREF_SEL, 0x2);
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_10, RG_HDMITX21_VREF_SEL);
-	mtk_phy_update_field(regs + HDMI_1_CFG_9, RG_HDMITX21_SLDO_VREF_SEL, 0x2);
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_10, RG_HDMITX21_BIAS_PE_VREF_SELB);
-	mtk_phy_set_bits(regs + HDMI_1_CFG_3, RG_HDMITX21_SLDOLPF_EN);
-	mtk_phy_update_field(regs + HDMI_1_CFG_6, RG_HDMITX21_INTR_CAL, 0x11);
-	mtk_phy_set_bits(regs + HDMI_1_PLL_CFG_2, RG_HDMITXPLL_PWD);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_10, RG_HDMITX21_BIAS_PE_BG_VREF_SEL, 0x2);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_10, RG_HDMITX21_VREF_SEL);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_9, RG_HDMITX21_SLDO_VREF_SEL, 0x2);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_10, RG_HDMITX21_BIAS_PE_VREF_SELB);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_3, RG_HDMITX21_SLDOLPF_EN);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_INTR_CAL, 0x11);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_2, RG_HDMITXPLL_PWD);
 
 	/* TXPOSDIV */
 	txposdiv_value = ilog2(txposdiv);
 
-	mtk_phy_update_field(regs + HDMI_1_CFG_6, RG_HDMITX21_TX_POSDIV, txposdiv_value);
-	mtk_phy_set_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_TX_POSDIV_EN);
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_FRL_EN);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_TX_POSDIV, txposdiv_value);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_TX_POSDIV_EN);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_FRL_EN);
 
 	/* TXPREDIV */
 	switch (txprediv) {
@@ -132,8 +133,8 @@ static int mtk_hdmi_pll_set_hw(struct clk_hw *hw, u8 prediv,
 		return -EINVAL;
 	}
 
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_4, RG_HDMITXPLL_POSDIV_DIV3_CTRL, div3_ctrl_value);
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_4, RG_HDMITXPLL_POSDIV, posdiv_vallue);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_4, RG_HDMITXPLL_POSDIV_DIV3_CTRL, div3_ctrl_value);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_4, RG_HDMITXPLL_POSDIV, posdiv_vallue);
 
 	/* POSDIV1 */
 	switch (posdiv1) {
@@ -153,10 +154,10 @@ static int mtk_hdmi_pll_set_hw(struct clk_hw *hw, u8 prediv,
 		return -EINVAL;
 	}
 
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_4, RG_HDMITXPLL_DIV_CTRL, div_ctrl_value);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_4, RG_HDMITXPLL_DIV_CTRL, div_ctrl_value);
 
 	/* DE add new setting */
-	mtk_phy_clear_bits(regs + HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT14);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT14);
 
 	/* POSDIV2 */
 	switch (posdiv2) {
@@ -176,33 +177,33 @@ static int mtk_hdmi_pll_set_hw(struct clk_hw *hw, u8 prediv,
 		return -EINVAL;
 	}
 
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT3_2, reserve_3_2_value);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT3_2, reserve_3_2_value);
 
 	/* DE add new setting */
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT1_0, 0x2);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT1_0, 0x2);
 
 	/* PREDIV */
 	prediv_value = ilog2(prediv);
 
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_4, RG_HDMITXPLL_PREDIV, prediv_value);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_4, RG_HDMITXPLL_PREDIV, prediv_value);
 
 	/* FBKDIV_HS3 */
 	reserve13_value = ilog2(fbkdiv_hs3);
 
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT13, reserve13_value);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_1, RG_HDMITXPLL_RESERVE_BIT13, reserve13_value);
 
 	/* FBDIV */
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_4, RG_HDMITXPLL_FBKDIV_HIGH, fbkdiv_high);
-	mtk_phy_update_field(regs + HDMI_1_PLL_CFG_3, RG_HDMITXPLL_FBKDIV_LOW, fbkdiv_low);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_4, RG_HDMITXPLL_FBKDIV_HIGH, fbkdiv_high);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_PLL_CFG_3, RG_HDMITXPLL_FBKDIV_LOW, fbkdiv_low);
 
 	/* Digital DIVIDER */
-	mtk_phy_clear_bits(regs + HDMI_CTL_3, REG_PIXEL_CLOCK_SEL);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_CTL_3, REG_PIXEL_CLOCK_SEL);
 
 	if (digital_div == 1) {
-		mtk_phy_clear_bits(regs + HDMI_CTL_3, REG_HDMITX_PIXEL_CLOCK);
+		regmap_clear_bits(hdmi_phy->regs, HDMI_CTL_3, REG_HDMITX_PIXEL_CLOCK);
 	} else {
-		mtk_phy_set_bits(regs + HDMI_CTL_3, REG_HDMITX_PIXEL_CLOCK);
-		mtk_phy_update_field(regs + HDMI_CTL_3, REG_HDMITXPLL_DIV, digital_div - 1);
+		regmap_set_bits(hdmi_phy->regs, HDMI_CTL_3, REG_HDMITX_PIXEL_CLOCK);
+		mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_CTL_3, REG_HDMITXPLL_DIV, digital_div - 1);
 	}
 
 	return 0;
@@ -302,7 +303,6 @@ static int mtk_hdmi_pll_calc(struct mtk_hdmi_phy *hdmi_phy, struct clk_hw *hw,
 static int mtk_hdmi_pll_drv_setting(struct clk_hw *hw)
 {
 	struct mtk_hdmi_phy *hdmi_phy = to_mtk_hdmi_phy(hw);
-	void __iomem *regs = hdmi_phy->regs;
 	u8 data_channel_bias, clk_channel_bias;
 	u8 impedance, impedance_en;
 	u32 tmds_clk;
@@ -341,17 +341,17 @@ static int mtk_hdmi_pll_drv_setting(struct clk_hw *hw)
 	}
 
 	/* bias */
-	mtk_phy_update_field(regs + HDMI_1_CFG_1, RG_HDMITX21_DRV_IBIAS_D0, data_channel_bias);
-	mtk_phy_update_field(regs + HDMI_1_CFG_1, RG_HDMITX21_DRV_IBIAS_D1, data_channel_bias);
-	mtk_phy_update_field(regs + HDMI_1_CFG_1, RG_HDMITX21_DRV_IBIAS_D2, data_channel_bias);
-	mtk_phy_update_field(regs + HDMI_1_CFG_0, RG_HDMITX21_DRV_IBIAS_CLK, clk_channel_bias);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_1, RG_HDMITX21_DRV_IBIAS_D0, data_channel_bias);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_1, RG_HDMITX21_DRV_IBIAS_D1, data_channel_bias);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_1, RG_HDMITX21_DRV_IBIAS_D2, data_channel_bias);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_0, RG_HDMITX21_DRV_IBIAS_CLK, clk_channel_bias);
 
 	/* impedance */
-	mtk_phy_update_field(regs + HDMI_1_CFG_0, RG_HDMITX21_DRV_IMP_EN, impedance_en);
-	mtk_phy_update_field(regs + HDMI_1_CFG_2, RG_HDMITX21_DRV_IMP_D0_EN1, impedance);
-	mtk_phy_update_field(regs + HDMI_1_CFG_2, RG_HDMITX21_DRV_IMP_D1_EN1, impedance);
-	mtk_phy_update_field(regs + HDMI_1_CFG_2, RG_HDMITX21_DRV_IMP_D2_EN1, impedance);
-	mtk_phy_update_field(regs + HDMI_1_CFG_2, RG_HDMITX21_DRV_IMP_CLK_EN1, impedance);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_0, RG_HDMITX21_DRV_IMP_EN, impedance_en);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_2, RG_HDMITX21_DRV_IMP_D0_EN1, impedance);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_2, RG_HDMITX21_DRV_IMP_D1_EN1, impedance);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_2, RG_HDMITX21_DRV_IMP_D2_EN1, impedance);
+	mtk_phy_update_regmap_field(hdmi_phy->regs, HDMI_1_CFG_2, RG_HDMITX21_DRV_IMP_CLK_EN1, impedance);
 
 	return 0;
 }
@@ -359,33 +359,32 @@ static int mtk_hdmi_pll_drv_setting(struct clk_hw *hw)
 static int mtk_hdmi_pll_prepare(struct clk_hw *hw)
 {
 	struct mtk_hdmi_phy *hdmi_phy = to_mtk_hdmi_phy(hw);
-	void __iomem *regs = hdmi_phy->regs;
 
-	mtk_phy_set_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_TX_POSDIV_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_TX_POSDIV_EN);
 
-	mtk_phy_set_bits(regs + HDMI_1_CFG_0, RG_HDMITX21_SER_EN);
-	mtk_phy_set_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_D0_DRV_OP_EN);
-	mtk_phy_set_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_D1_DRV_OP_EN);
-	mtk_phy_set_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_D2_DRV_OP_EN);
-	mtk_phy_set_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_CK_DRV_OP_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_0, RG_HDMITX21_SER_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_D0_DRV_OP_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_D1_DRV_OP_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_D2_DRV_OP_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_CK_DRV_OP_EN);
 
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_FRL_D0_EN);
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_FRL_D1_EN);
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_FRL_D2_EN);
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_FRL_CK_EN);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_FRL_D0_EN);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_FRL_D1_EN);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_FRL_D2_EN);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_FRL_CK_EN);
 
 	mtk_hdmi_pll_drv_setting(hw);
 
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_10, RG_HDMITX21_BG_PWD);
-	mtk_phy_set_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_BIAS_EN);
-	mtk_phy_set_bits(regs + HDMI_1_CFG_3, RG_HDMITX21_CKLDO_EN);
-	mtk_phy_set_bits(regs + HDMI_1_CFG_3, RG_HDMITX21_SLDO_EN);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_10, RG_HDMITX21_BG_PWD);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_BIAS_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_3, RG_HDMITX21_CKLDO_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_3, RG_HDMITX21_SLDO_EN);
 
-	mtk_phy_set_bits(regs + HDMI_1_PLL_CFG_4, DA_HDMITXPLL_PWR_ON);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_4, DA_HDMITXPLL_PWR_ON);
 	usleep_range(5, 10);
-	mtk_phy_clear_bits(regs + HDMI_1_PLL_CFG_4, DA_HDMITXPLL_ISO_EN);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_4, DA_HDMITXPLL_ISO_EN);
 	usleep_range(5, 10);
-	mtk_phy_clear_bits(regs + HDMI_1_PLL_CFG_2, RG_HDMITXPLL_PWD);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_2, RG_HDMITXPLL_PWD);
 	usleep_range(30, 50);
 	return 0;
 }
@@ -393,18 +392,17 @@ static int mtk_hdmi_pll_prepare(struct clk_hw *hw)
 static void mtk_hdmi_pll_unprepare(struct clk_hw *hw)
 {
 	struct mtk_hdmi_phy *hdmi_phy = to_mtk_hdmi_phy(hw);
-	void __iomem *regs = hdmi_phy->regs;
 
-	mtk_phy_set_bits(regs + HDMI_1_CFG_10, RG_HDMITX21_BG_PWD);
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_6, RG_HDMITX21_BIAS_EN);
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_3, RG_HDMITX21_CKLDO_EN);
-	mtk_phy_clear_bits(regs + HDMI_1_CFG_3, RG_HDMITX21_SLDO_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_10, RG_HDMITX21_BG_PWD);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_6, RG_HDMITX21_BIAS_EN);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_3, RG_HDMITX21_CKLDO_EN);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_3, RG_HDMITX21_SLDO_EN);
 
-	mtk_phy_set_bits(regs + HDMI_1_PLL_CFG_2, RG_HDMITXPLL_PWD);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_2, RG_HDMITXPLL_PWD);
 	usleep_range(10, 20);
-	mtk_phy_set_bits(regs + HDMI_1_PLL_CFG_4, DA_HDMITXPLL_ISO_EN);
+	regmap_set_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_4, DA_HDMITXPLL_ISO_EN);
 	usleep_range(10, 20);
-	mtk_phy_clear_bits(regs + HDMI_1_PLL_CFG_4, DA_HDMITXPLL_PWR_ON);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_1_PLL_CFG_4, DA_HDMITXPLL_PWR_ON);
 }
 
 static int mtk_hdmi_pll_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -445,12 +443,10 @@ static const struct clk_ops mtk_hdmi_pll_ops = {
 
 static void vtx_signal_en(struct mtk_hdmi_phy *hdmi_phy, bool on)
 {
-	void __iomem *regs = hdmi_phy->regs;
-
 	if (on)
-		mtk_phy_set_bits(regs + HDMI_1_CFG_0, RG_HDMITX21_DRV_EN);
+		regmap_set_bits(hdmi_phy->regs, HDMI_1_CFG_0, RG_HDMITX21_DRV_EN);
 	else
-		mtk_phy_clear_bits(regs + HDMI_1_CFG_0, RG_HDMITX21_DRV_EN);
+		regmap_clear_bits(hdmi_phy->regs, HDMI_1_CFG_0, RG_HDMITX21_DRV_EN);
 }
 
 static void mtk_hdmi_phy_enable_tmds(struct mtk_hdmi_phy *hdmi_phy)
@@ -484,7 +480,7 @@ static int mtk_hdmi_phy_pwr5v_enable(struct regulator_dev *rdev)
 {
 	struct mtk_hdmi_phy *hdmi_phy = rdev_get_drvdata(rdev);
 
-	mtk_phy_set_bits(hdmi_phy->regs + HDMI_CTL_1, RG_HDMITX_PWR5V_O);
+	regmap_set_bits(hdmi_phy->regs, HDMI_CTL_1, RG_HDMITX_PWR5V_O);
 
 	return 0;
 }
@@ -493,7 +489,7 @@ static int mtk_hdmi_phy_pwr5v_disable(struct regulator_dev *rdev)
 {
 	struct mtk_hdmi_phy *hdmi_phy = rdev_get_drvdata(rdev);
 
-	mtk_phy_clear_bits(hdmi_phy->regs + HDMI_CTL_1, RG_HDMITX_PWR5V_O);
+	regmap_clear_bits(hdmi_phy->regs, HDMI_CTL_1, RG_HDMITX_PWR5V_O);
 
 	return 0;
 }
@@ -501,8 +497,11 @@ static int mtk_hdmi_phy_pwr5v_disable(struct regulator_dev *rdev)
 static int mtk_hdmi_phy_pwr5v_is_enabled(struct regulator_dev *rdev)
 {
 	struct mtk_hdmi_phy *hdmi_phy = rdev_get_drvdata(rdev);
+	u32 tmp;
 
-	return !!(readl(hdmi_phy->regs + HDMI_CTL_1) & RG_HDMITX_PWR5V_O);
+	regmap_read(hdmi_phy->regs, HDMI_CTL_1, &tmp);
+
+	return !!(tmp & RG_HDMITX_PWR5V_O);
 }
 
 static const struct regulator_ops mtk_hdmi_pwr5v_regulator_ops = {
