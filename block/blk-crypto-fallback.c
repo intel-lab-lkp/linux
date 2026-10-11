@@ -83,6 +83,9 @@ static struct workqueue_struct *blk_crypto_wq;
 static mempool_t *blk_crypto_bounce_page_pool;
 static struct bio_set enc_bio_set;
 
+/* Data unit sizes blk-crypto-fallback can en/decrypt. */
+#define BLK_CRYPTO_FALLBACK_DU_MASK	GENMASK(PAGE_SHIFT, SECTOR_SHIFT)
+
 /*
  * This is the key we set when evicting a keyslot. This *should* be the all 0's
  * key, but AES-XTS rejects that key, so we use some random bytes instead.
@@ -561,7 +564,8 @@ static int blk_crypto_fallback_init(void)
 
 	/* All blk-crypto modes have a crypto API fallback. */
 	for (i = 0; i < BLK_ENCRYPTION_MODE_MAX; i++)
-		blk_crypto_fallback_profile->modes_supported[i] = 0xFFFFFFFF;
+		blk_crypto_fallback_profile->modes_supported[i] =
+			BLK_CRYPTO_FALLBACK_DU_MASK;
 	blk_crypto_fallback_profile->modes_supported[BLK_ENCRYPTION_MODE_INVALID] = 0;
 
 	blk_crypto_wq = alloc_workqueue("blk_crypto_wq",
@@ -612,15 +616,23 @@ out:
 }
 
 /*
- * Prepare blk-crypto-fallback for the specified crypto mode.
- * Returns -ENOPKG if the needed crypto API support is missing.
+ * Prepare blk-crypto-fallback for the specified crypto configuration.
+ * Returns -EOPNOTSUPP if the fallback can't handle the data unit size of the
+ * configuration, or -ENOPKG if the needed crypto API support is missing.
  */
-int blk_crypto_fallback_start_using_mode(enum blk_crypto_mode_num mode_num)
+int blk_crypto_fallback_start_using_key(const struct blk_crypto_config *cfg)
 {
+	enum blk_crypto_mode_num mode_num = cfg->crypto_mode;
 	const char *cipher_str = blk_crypto_modes[mode_num].cipher_str;
 	struct blk_crypto_fallback_keyslot *slotp;
 	unsigned int i;
 	int err = 0;
+
+	if (!(BLK_CRYPTO_FALLBACK_DU_MASK & cfg->data_unit_size)) {
+		pr_warn_ratelimited("can't handle data unit size %u\n",
+				    cfg->data_unit_size);
+		return -EOPNOTSUPP;
+	}
 
 	/*
 	 * Fast path
