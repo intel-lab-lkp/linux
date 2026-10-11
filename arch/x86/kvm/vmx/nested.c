@@ -5114,7 +5114,14 @@ void __nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 	if (enable_ept && is_pae_paging(vcpu))
 		vmx_ept_load_pdptrs(vcpu);
 
+
 	leave_guest_mode(vcpu);
+
+	/* pairs with barrier in vmx_deliver_nested_posted_interrupt */
+	smp_wmb();
+
+	if (vmx->nested.pi_pending)
+		vmx_complete_nested_posted_interrupt(vcpu);
 
 	if (nested_cpu_has_preemption_timer(vmcs12))
 		hrtimer_cancel(&to_vmx(vcpu)->nested.preemption_timer);
