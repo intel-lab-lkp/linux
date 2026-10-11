@@ -887,6 +887,7 @@ static unsigned int geth_fill_freeq(struct gemini_ethernet *geth, bool refill)
 
 	rw.bits32 = readl(geth->base + GLOBAL_SWFQ_RWPTR_REG);
 	pn = (refill ? rw.bits.wptr : rw.bits.rptr) >> fpp_order;
+	pn &= m_pn;
 	epn = (rw.bits.rptr >> fpp_order) - 1;
 	epn &= m_pn;
 
@@ -957,6 +958,9 @@ static int geth_setup_freeq(struct gemini_ethernet *geth)
 	for (pn = 0; pn < pages; pn++)
 		if (!geth_freeq_alloc_map_page(geth, pn))
 			goto err_freeq_alloc;
+
+	/* Discard pointer state belonging to the previous queue geometry. */
+	writel(0, geth->base + GLOBAL_SWFQ_RWPTR_REG);
 
 	filled = geth_fill_freeq(geth, false);
 	if (!filled)
