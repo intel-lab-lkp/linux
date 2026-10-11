@@ -810,6 +810,7 @@ Err_dev_attrs:
 Err_escbs:
 	asd_disable_ints(asd_ha);
 	free_irq(dev->irq, asd_ha);
+	tasklet_kill(&asd_ha->seq.dl_tasklet);
 Err_irq:
 	if (use_msi)
 		pci_disable_msi(dev);
@@ -881,6 +882,7 @@ static void asd_pci_remove(struct pci_dev *dev)
 	asd_unregister_sas_ha(asd_ha);
 
 	asd_disable_ints(asd_ha);
+	free_irq(dev->irq, asd_ha);
 
 	/* Ensure all scheduled tasklets complete before freeing resources */
 	tasklet_kill(&asd_ha->seq.dl_tasklet);
@@ -889,7 +891,6 @@ static void asd_pci_remove(struct pci_dev *dev)
 
 	/* XXX more here as needed */
 
-	free_irq(dev->irq, asd_ha);
 	if (use_msi)
 		pci_disable_msi(asd_ha->pcidev);
 	asd_turn_off_leds(asd_ha);
