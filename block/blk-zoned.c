@@ -971,7 +971,7 @@ int blkdev_get_zone_info(struct block_device *bdev, sector_t sector,
 	rcu_read_unlock();
 
 	zone->start = sector;
-	zone->len = zone_sectors;
+	zone->len = min(zone_sectors, get_capacity(disk) - sector);
 
 	/*
 	 * If this is a conventional zone, we do not have a zone write plug and
@@ -979,7 +979,7 @@ int blkdev_get_zone_info(struct block_device *bdev, sector_t sector,
 	 */
 	if (zone->cond == BLK_ZONE_COND_NOT_WP) {
 		zone->type = BLK_ZONE_TYPE_CONVENTIONAL;
-		zone->capacity = zone_sectors;
+		zone->capacity = zone->len;
 		zone->wp = ULLONG_MAX;
 		return 0;
 	}
