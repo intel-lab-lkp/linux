@@ -4,5 +4,6 @@ yt921x-objs := chip.o
 yt921x-$(CONFIG_NET_DSA_YT921X_LEDS) += leds.o
 yt921x-objs += mdio_bus.o
 yt921x-objs += mib.o
+yt921x-objs += pcs-922x.o
 yt921x-objs += pcs-921x.o
 yt921x-objs += smi.o
