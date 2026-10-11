@@ -432,13 +432,21 @@ static int ssi_hw_init(struct hsi_controller *ssi)
 	return 0;
 }
 
+static int ssi_remove_ports(struct device *dev, void *c);
+
 static void ssi_remove_controller(struct hsi_controller *ssi)
 {
 	struct omap_ssi_controller *omap_ssi = hsi_controller_drvdata(ssi);
 	int id = ssi->id;
+
+	disable_irq(omap_ssi->gdd_irq);
 	tasklet_kill(&omap_ssi->gdd_tasklet);
-	hsi_unregister_controller(ssi);
 	clk_notifier_unregister(omap_ssi->fck, &omap_ssi->fck_nb);
+	device_for_each_child(ssi->device.parent, NULL, ssi_remove_ports);
+#ifdef CONFIG_DEBUG_FS
+	ssi_debug_remove_ctrl(ssi);
+#endif
+	hsi_unregister_controller(ssi);
 	ida_free(&platform_omap_ssi_ida, id);
 }
 
@@ -531,10 +539,6 @@ static int ssi_probe(struct platform_device *pd)
 		ssi->id, num_ports);
 	return err;
 out3:
-	device_for_each_child(&pd->dev, NULL, ssi_remove_ports);
-#ifdef CONFIG_DEBUG_FS
-	ssi_debug_remove_ctrl(ssi);
-#endif
 out2:
 	ssi_remove_controller(ssi);
 	pm_runtime_disable(&pd->dev);
@@ -548,12 +552,6 @@ static void ssi_remove(struct platform_device *pd)
 {
 	struct hsi_controller *ssi = platform_get_drvdata(pd);
 
-	/* cleanup of of_platform_populate() call */
-	device_for_each_child(&pd->dev, NULL, ssi_remove_ports);
-
-#ifdef CONFIG_DEBUG_FS
-	ssi_debug_remove_ctrl(ssi);
-#endif
 	ssi_remove_controller(ssi);
 	platform_set_drvdata(pd, NULL);
 
