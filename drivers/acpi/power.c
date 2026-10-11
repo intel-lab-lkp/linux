@@ -1134,6 +1134,20 @@ static const struct dmi_system_id dmi_leave_unused_power_resources_on[] = {
 		}
 
 	},
+	{
+		/*
+		 * THUNDEROBOT 911Pro (board NLCC): same SSDT bug as the
+		 * THUNDEROBOT ZERO above. Power resource 'PXP' is turned off
+		 * as unused during initialization, which makes the NVMe drive
+		 * in the CPU-attached M.2 slot and the NVIDIA dGPU
+		 * inaccessible.
+		 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "THUNDEROBOT"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "911Pro"),
+			DMI_MATCH(DMI_BOARD_NAME, "NLCC"),
+		},
+	},
 	{}
 };
 
