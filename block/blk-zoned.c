@@ -362,6 +362,19 @@ static int blkdev_copy_zone_to_user(struct blk_zone *zone, unsigned int idx,
 }
 
 /*
+ * For devices that natively support zone append operations, we do not use zone
+ * write plugging for zone append writes, which makes the zone condition
+ * tracking invalid once zone append was used.  In that case fall back to a
+ * regular report zones to get correct information.
+ */
+static inline bool blkdev_has_cached_report_zones(struct block_device *bdev)
+{
+	return disk_need_zone_resources(bdev->bd_disk) &&
+		(bdev_emulates_zone_append(bdev) ||
+		 !test_bit(GD_ZONE_APPEND_USED, &bdev->bd_disk->state));
+}
+
+/*
  * Mask of valid input flags for BLKREPORTZONEV2 ioctl.
  */
 #define BLK_ZONE_REPV2_INPUT_FLAGS	BLK_ZONE_REP_CACHED
@@ -400,8 +413,15 @@ int blkdev_report_zones_ioctl(struct block_device *bdev, unsigned int cmd,
 	case BLKREPORTZONEV2:
 		if (rep.flags & ~BLK_ZONE_REPV2_INPUT_FLAGS)
 			return -EINVAL;
-		ret = blkdev_report_zones_cached(bdev, rep.sector, rep.nr_zones,
-					 blkdev_copy_zone_to_user, &args);
+		if ((rep.flags & BLK_ZONE_REP_CACHED) &&
+		    blkdev_has_cached_report_zones(bdev))
+			ret = blkdev_report_zones_cached(bdev, rep.sector,
+					rep.nr_zones,
+					blkdev_copy_zone_to_user, &args);
+		else
+			ret = blkdev_report_zones(bdev, rep.sector,
+					rep.nr_zones,
+					blkdev_copy_zone_to_user, &args);
 		break;
 	default:
 		return -EINVAL;
@@ -903,19 +923,6 @@ static int blkdev_report_zone_fallback(struct block_device *bdev,
 	if (error == 0)
 		return -EIO;
 	return 0;
-}
-
-/*
- * For devices that natively support zone append operations, we do not use zone
- * write plugging for zone append writes, which makes the zone condition
- * tracking invalid once zone append was used.  In that case fall back to a
- * regular report zones to get correct information.
- */
-static inline bool blkdev_has_cached_report_zones(struct block_device *bdev)
-{
-	return disk_need_zone_resources(bdev->bd_disk) &&
-		(bdev_emulates_zone_append(bdev) ||
-		 !test_bit(GD_ZONE_APPEND_USED, &bdev->bd_disk->state));
 }
 
 /**
