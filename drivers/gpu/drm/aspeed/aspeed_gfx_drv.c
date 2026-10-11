@@ -268,7 +268,7 @@ static ssize_t dac_mux_store(struct device *dev, struct device_attribute *attr,
 
 	rc = regmap_update_bits(priv->scu, priv->dac_reg, 0x30000, val << 16);
 	if (rc < 0)
-		return 0;
+		return rc;
 
 	return count;
 }
