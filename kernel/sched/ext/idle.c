@@ -958,6 +958,7 @@ static s32 select_cpu_from_kfunc(struct scx_sched *sch, struct task_struct *p,
 {
 	unsigned long irq_flags;
 	bool we_locked = false;
+	bool migration_disabled;
 	s32 cpu;
 
 	if (!scx_cpu_valid(sch, prev_cpu, NULL))
@@ -995,14 +996,21 @@ static s32 select_cpu_from_kfunc(struct scx_sched *sch, struct task_struct *p,
 	/*
 	 * This may also be called from ops.enqueue(), so we need to handle
 	 * per-CPU tasks as well. For these tasks, we can skip all idle CPU
-	 * selection optimizations and simply check whether the previously
-	 * used CPU is idle and within the allowed cpumask.
+	 * selection optimizations and simply check whether the task's only
+	 * usable CPU is idle and within the allowed cpumask.
 	 */
-	if (p->nr_cpus_allowed == 1 || is_bpf_migration_disabled(p)) {
-		if (cpumask_test_cpu(prev_cpu, allowed ?: p->cpus_ptr) &&
-		    scx_idle_test_and_clear_cpu(prev_cpu))
-			cpu = prev_cpu;
+	migration_disabled = is_bpf_migration_disabled(p);
+
+	if (p->nr_cpus_allowed == 1 || migration_disabled) {
+		if (migration_disabled)
+			cpu = task_cpu(p);
 		else
+			cpu = cpumask_first(p->cpus_ptr);
+
+		if ((migration_disabled &&
+		     !cpumask_test_cpu(cpu, p->cpus_ptr)) ||
+		    (allowed && !cpumask_test_cpu(cpu, allowed)) ||
+		    !scx_idle_test_and_clear_cpu(cpu))
 			cpu = -EBUSY;
 	} else {
 		cpu = scx_select_cpu_dfl(p, prev_cpu, wake_flags,
