@@ -1122,14 +1122,18 @@ static void qla4_83xx_poll_read_list(struct scsi_qla_host *ha,
 						  __func__, i,
 						  ha->reset_tmplt.seq_index));
 			} else {
+				/* array[0] is the rmw sentinel; slots are 1-based */
 				index = ha->reset_tmplt.array_index;
+				if (index == 0)
+					index = 1;
 				qla4_83xx_rd_reg_indirect(ha,
 							  le32_to_cpu(p_entry->dr_addr),
 							  &value);
 				ha->reset_tmplt.array[index++] = value;
 
 				if (index == QLA83XX_MAX_RESET_SEQ_ENTRIES)
-					ha->reset_tmplt.array_index = 1;
+					index = 1;
+				ha->reset_tmplt.array_index = index;
 			}
 		}
 	}
@@ -1256,6 +1260,7 @@ static void qla4_83xx_process_reset_template(struct scsi_qla_host *ha,
 static void qla4_83xx_process_stop_seq(struct scsi_qla_host *ha)
 {
 	ha->reset_tmplt.seq_index = 0;
+	ha->reset_tmplt.array_index = 1;
 	qla4_83xx_process_reset_template(ha, ha->reset_tmplt.stop_offset);
 
 	if (ha->reset_tmplt.seq_end != 1)
