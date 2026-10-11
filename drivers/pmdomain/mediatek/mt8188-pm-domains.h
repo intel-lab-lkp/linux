@@ -14,8 +14,21 @@
  * MT8188 power domain support
  */
 
+#define MT8188_MFG_TIMESTAMP			0x130
+#define MT8188_MFG_TIMESTAMP_EN			GENMASK(1, 0)
+
 static enum scpsys_bus_prot_block scpsys_bus_prot_blocks_mt8188[] = {
-	BUS_PROT_BLOCK_INFRA
+	BUS_PROT_BLOCK_INFRA, BUS_PROT_BLOCK_MFGCFG
+};
+
+/*
+ * The GPU timestamp counter only counts once MFGCFG feeds it the SoC system
+ * timer, which MFGCFG forgets whenever MFG1 is powered off.
+ */
+static const struct scpsys_reg_init mt8188_mfg_timestamp = {
+	.block = BUS_PROT_BLOCK_MFGCFG,
+	.ofs = MT8188_MFG_TIMESTAMP,
+	.val = MT8188_MFG_TIMESTAMP_EN,
 };
 
 static const struct scpsys_domain_data scpsys_domain_data_mt8188[] = {
@@ -70,6 +83,7 @@ static const struct scpsys_domain_data scpsys_domain_data_mt8188[] = {
 				    MT8188_TOP_AXI_PROT_EN_SUB_INFRA_VDNR_STA),
 		},
 		.caps = MTK_SCPD_KEEP_DEFAULT_OFF | MTK_SCPD_DOMAIN_SUPPLY,
+		.reg_init = &mt8188_mfg_timestamp,
 	},
 	[MT8188_POWER_DOMAIN_MFG2] = {
 		.name = "mfg2",
