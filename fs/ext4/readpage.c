@@ -265,6 +265,17 @@ static int ext4_mpage_readpages(struct inode *inode, struct fsverity_info *vi,
 		}
 
 		/*
+		 * A bio's data unit numbers are derived from its first data
+		 * unit, so a folio that covers a data unit number wraparound
+		 * would be encrypted with the wrong IVs.  Only IV_INO_LBLK_32
+		 * can wrap; route such folios to the buffer_head based path,
+		 * which creates a bio per block.
+		 */
+		if (fscrypt_limit_io_blocks(inode, pos >> blkbits,
+					    first_hole) < first_hole)
+			goto confused;
+
+		/*
 		 * This folio will go to BIO.  Do we need to send this
 		 * BIO off first?
 		 */
