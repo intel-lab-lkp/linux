@@ -13,6 +13,7 @@ use crate::{
     fs::file,
     prelude::*,
     ptr::KnownSize,
+    slice::NonEmptySlice,
     transmute::{AsBytes, FromBytes},
 };
 use core::mem::{size_of, MaybeUninit};
@@ -390,13 +391,11 @@ impl UserSliceReader {
     /// copied).
     #[doc(alias = "strncpy_from_user")]
     pub fn strcpy_into_buf<'buf>(self, buf: &'buf mut [u8]) -> Result<&'buf CStr> {
-        if buf.is_empty() {
-            return Err(EINVAL);
-        }
+        let buf = NonEmptySlice::new_mut(buf).ok_or(EINVAL)?;
 
         // SAFETY: The types are compatible and `strncpy_from_user` doesn't write uninitialized
         // bytes to `buf`.
-        let mut dst = unsafe { &mut *(core::ptr::from_mut(buf) as *mut [MaybeUninit<u8>]) };
+        let mut dst = unsafe { &mut *(core::ptr::from_mut(&mut **buf) as *mut [MaybeUninit<u8>]) };
 
         // We never read more than `self.length` bytes.
         if dst.len() > self.length {
@@ -422,9 +421,7 @@ impl UserSliceReader {
             // This means that we filled the buffer exactly. In this case, we add a NUL-terminator
             // and return it. Unlike the `len < dst.len()` branch, don't modify `len` because it
             // already represents the length including the NUL-terminator.
-            //
-            // SAFETY: Due to the check at the beginning, the buffer is not empty.
-            unsafe { *buf.last_mut().unwrap_unchecked() = 0 };
+            *buf.last_mut() = 0;
         }
 
         // This method consumes `self`, so it can only be called once, thus we do not need to
