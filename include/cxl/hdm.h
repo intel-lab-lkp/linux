@@ -3,8 +3,13 @@
 #ifndef __CXL_HDM_H__
 #define __CXL_HDM_H__
 
+#include <linux/list.h>
 #include <linux/types.h>
+
 #include <cxl/cxl.h>
+
+struct device;
+struct resource;
 
 /**
  * struct cxl_endpoint_decoder_settings - endpoint HDM decoder programming
@@ -42,7 +47,6 @@ struct cxl_hdm_info {
 	bool dvsec_ctrl_valid;
 	struct cxl_endpoint_decoder_settings settings[] __counted_by(decoder_count);
 };
-struct device;
 
 int cxl_hdm_decoder_count_mapped(struct device *dev, void __iomem *hdm,
 				 resource_size_t size);
@@ -52,5 +56,46 @@ bool cxl_hdm_cache_present(struct cxl_hdm_info *const *slot);
 void cxl_hdm_cache_publish(struct cxl_hdm_info **slot,
 			   struct cxl_hdm_info *info);
 void cxl_hdm_cache_release(struct cxl_hdm_info **slot);
+bool cxl_hdm_cache_dvsec_decode(struct cxl_hdm_info *const *slot);
+struct cxl_hdm_info *cxl_hdm_cache_snapshot(struct cxl_hdm_info *const *slot);
+
+/*
+ * Region quiesce blocks CXL region commit and teardown, and with them decoder
+ * reprogramming, while reset handling captures or restores HDM decoder state.
+ */
+token_context_lock(cxl_region_quiesce);
+
+/**
+ * struct cxl_hdm_range - HPA range held exclusively across a reset
+ * @list: entry in &cxl_hdm_quiesce.ranges
+ * @dev: device for error messages
+ * @hpa_range: system physical address range decoded by the device
+ * @len: length of @hpa_range
+ * @res: reservation of @hpa_range, once requested
+ */
+struct cxl_hdm_range {
+	struct list_head list;
+	struct device *dev;
+	struct range hpa_range;
+	u64 len;
+	struct resource *res;
+};
+
+/**
+ * struct cxl_hdm_quiesce - HPA ranges held exclusively across a reset
+ * @ranges: list of &struct cxl_hdm_range, see cxl_hdm_quiesce_prepare()
+ */
+struct cxl_hdm_quiesce {
+	struct list_head ranges;
+};
+
+void cxl_region_quiesce_lock(void);
+void cxl_region_quiesce_unlock(void);
+int cxl_hdm_quiesce_prepare(struct device *dev, struct cxl_hdm_quiesce *q,
+			    const struct cxl_hdm_info *snapshot)
+	__must_hold(cxl_region_quiesce);
+int cxl_hdm_quiesce_flush(struct cxl_hdm_quiesce *q)
+	__must_hold(cxl_region_quiesce);
+void cxl_hdm_quiesce_destroy(struct cxl_hdm_quiesce *q);
 
 #endif /* __CXL_HDM_H__ */

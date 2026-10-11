@@ -15,6 +15,7 @@
 #include <linux/iommu.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/memregion.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
 
@@ -392,7 +393,8 @@ static int cxl_clear_memory(struct pci_dev *pdev, int dvsec, bool initiate)
 					      PCI_DVSEC_CXL_RST_MEM_CLR_EN);
 }
 
-static int __cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
+static int __cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap,
+			      struct cxl_hdm_quiesce *q)
 {
 	int rc, rc2;
 
@@ -417,12 +419,18 @@ static int __cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
 		pci_err(pdev, "failed to clear CXL Reset Memory Clear: %d\n", rc2);
 	rc = rc ?: rc2;
 
+	rc2 = cxl_hdm_quiesce_flush(q);
+	rc = rc ?: rc2;
+
 	pci_dev_reset_iommu_done(pdev);
 	return rc;
 }
 
-static int cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
+static int cxl_reset_quiesced(struct pci_dev *pdev, int dvsec, u16 cap)
+	__must_hold(cxl_region_quiesce)
 {
+	struct cxl_hdm_info *snapshot __free(kfree) = NULL;
+	struct cxl_hdm_quiesce q;
 	u16 saved_ctrl2;
 	int rc, rc2;
 
@@ -432,12 +440,37 @@ static int cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
 	if (PCI_POSSIBLE_ERROR(saved_ctrl2))
 		return -ENODEV;
 
+	snapshot = cxl_hdm_cache_snapshot(&pdev->hdm);
+	if (IS_ERR(snapshot)) {
+		pci_err(pdev, "CXL HDM decoder state unavailable: %ld\n",
+			PTR_ERR(snapshot));
+		return PTR_ERR(snapshot);
+	}
+
+	rc = cxl_hdm_quiesce_prepare(&pdev->dev, &q, snapshot);
+	if (rc) {
+		cxl_hdm_quiesce_destroy(&q);
+		return rc;
+	}
+
 	rc = cxl_reset_disable_cache(pdev, dvsec, cap);
 	if (!rc)
-		rc = __cxl_reset_execute(pdev, dvsec, cap);
+		rc = __cxl_reset_execute(pdev, dvsec, cap, &q);
 	/* Restore cache policy after any attempt to disable caching. */
 	rc2 = cxl_reset_restore_cache_policy(pdev, dvsec, saved_ctrl2);
+	cxl_hdm_quiesce_destroy(&q);
 	return rc ?: rc2;
+}
+
+static int cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
+{
+	int rc;
+
+	cxl_region_quiesce_lock();
+	rc = cxl_reset_quiesced(pdev, dvsec, cap);
+	cxl_region_quiesce_unlock();
+
+	return rc;
 }
 
 int cxl_reset_function(struct pci_dev *pdev, bool probe)
@@ -465,6 +498,17 @@ int cxl_reset_function(struct pci_dev *pdev, bool probe)
 
 	if (probe)
 		return 0;
+
+	/* The cache is owned by @pdev and does not require a bound CXL driver. */
+	if (!cxl_hdm_cache_present(&pdev->hdm))
+		return -ENOTTY;
+
+	/* Memory decoded through DVSEC ranges has no HPA ranges to quiesce. */
+	if (cxl_hdm_cache_dvsec_decode(&pdev->hdm))
+		return -ENOTTY;
+
+	if (!cpu_cache_has_invalidate_memregion())
+		return -ENOTTY;
 
 	return cxl_reset_execute(pdev, dvsec, cap);
 }
