@@ -5116,8 +5116,7 @@ static void ext4_set_max_mapping_order(struct super_block *sb)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 
-	if (test_opt(sb, DATA_FLAGS) == EXT4_MOUNT_JOURNAL_DATA ||
-	    ext4_has_feature_encrypt(sb))
+	if (test_opt(sb, DATA_FLAGS) == EXT4_MOUNT_JOURNAL_DATA)
 		sbi->s_max_folio_order = sbi->s_min_folio_order;
 	else
 		sbi->s_max_folio_order = EXT4_MAX_PAGECACHE_ORDER(sb);
