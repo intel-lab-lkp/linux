@@ -31,6 +31,17 @@ config SAMPLE_RUST_MINIMAL
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_MIDI_DEVICE
+	tristate "MIDI device"
+	depends on SND_RAWMIDI
+	help
+	  This option builds the Rust MIDI device.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_midi_device.
+
+	  If unsure, say N.
+
 config SAMPLE_RUST_MISC_DEVICE
 	tristate "Misc device"
 	help
