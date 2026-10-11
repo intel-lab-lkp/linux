@@ -765,12 +765,6 @@ static int rtca3_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to setup the RTC!\n");
 
-	ret = rtca3_request_irqs(pdev, priv);
-	if (ret)
-		return ret;
-
-	device_init_wakeup(&pdev->dev, true);
-
 	priv->rtc_dev = devm_rtc_allocate_device(&pdev->dev);
 	if (IS_ERR(priv->rtc_dev))
 		return PTR_ERR(priv->rtc_dev);
@@ -778,6 +772,12 @@ static int rtca3_probe(struct platform_device *pdev)
 	priv->rtc_dev->ops = &rtca3_ops;
 	priv->rtc_dev->range_min = RTC_TIMESTAMP_BEGIN_2000;
 	priv->rtc_dev->range_max = RTC_TIMESTAMP_END_2099;
+
+	ret = rtca3_request_irqs(pdev, priv);
+	if (ret)
+		return ret;
+
+	device_init_wakeup(&pdev->dev, true);
 
 	return devm_rtc_register_device(priv->rtc_dev);
 }
