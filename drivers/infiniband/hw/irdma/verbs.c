@@ -2028,13 +2028,24 @@ static void irdma_cq_free_rsrc(struct irdma_pci_f *rf, struct irdma_cq *iwcq)
 		if (iwcq->iwpbl) {
 			iwmr = iwcq->iwpbl->iwmr;
 
-			refcount_dec(&iwmr->user_ring_refs);
+			if (iwmr && refcount_dec_and_test(&iwmr->user_ring_refs)) {
+				ib_umem_release(iwmr->region);
+				if (iwcq->iwpbl->pbl_allocated)
+					irdma_free_pble(rf->pble_rsrc, &iwcq->iwpbl->pble_alloc);
+				kfree(iwmr);
+			}
 		}
 
 		if (iwcq->iwpbl_shadow) {
 			iwmr = iwcq->iwpbl_shadow->iwmr;
 
-			refcount_dec(&iwmr->user_ring_refs);
+			if (iwmr && refcount_dec_and_test(&iwmr->user_ring_refs)) {
+				ib_umem_release(iwmr->region);
+				if (iwcq->iwpbl_shadow->pbl_allocated)
+					irdma_free_pble(rf->pble_rsrc,
+							&iwcq->iwpbl_shadow->pble_alloc);
+				kfree(iwmr);
+			}
 		}
 	}
 
@@ -2708,28 +2719,93 @@ static int irdma_create_cq(struct ib_cq *ibcq,
 		if (err_code)
 			goto cq_free_rsrc;
 
-		spin_lock_irqsave(&ucontext->cq_reg_mem_list_lock, flags);
-		iwcq->iwpbl = irdma_get_pbl((unsigned long)req.user_cq_buf,
-					    &ucontext->cq_reg_mem_list);
-		spin_unlock_irqrestore(&ucontext->cq_reg_mem_list_lock, flags);
-		if (!iwcq->iwpbl) {
-			err_code = -EPROTO;
-			goto cq_free_rsrc;
+		if (attrs && uverbs_attr_is_valid(attrs, UVERBS_ATTR_CREATE_CQ_BUF_UMEM)) {
+			struct ib_umem *umem;
+			struct irdma_mem_reg_req cq_req = {};
+			u8 shadow_pgcnt = (rf->sc_dev.hw_attrs.uk_attrs.feature_flags &
+					   IRDMA_FEATURE_CQ_RESIZE) ? 0 : IRDMA_SHADOW_PGCNT;
+			u32 min_size;
+
+			cq_req.cq_pages = DIV_ROUND_UP(ukinfo->cq_size * cqe_size,
+						       IRDMA_HW_PAGE_SIZE);
+			min_size = (cq_req.cq_pages + shadow_pgcnt) << IRDMA_HW_PAGE_SHIFT;
+
+			umem = ib_umem_get_cq_buf(&iwdev->ibdev, attrs, min_size,
+						  IB_ACCESS_LOCAL_WRITE);
+			if (IS_ERR(umem)) {
+				err_code = PTR_ERR(umem);
+				goto cq_free_rsrc;
+			}
+
+			iwcq->iwpbl = irdma_setup_q_pbl_from_umem(iwdev, umem, NULL,
+								  IRDMA_MEMREG_TYPE_CQ, &cq_req);
+			if (IS_ERR(iwcq->iwpbl)) {
+				err_code = PTR_ERR(iwcq->iwpbl);
+				iwcq->iwpbl = NULL;
+				ib_umem_release(umem);
+				goto cq_free_rsrc;
+			}
+		} else {
+			if (!req.user_cq_buf) {
+				err_code = -EINVAL;
+				goto cq_free_rsrc;
+			}
+
+			spin_lock_irqsave(&ucontext->cq_reg_mem_list_lock, flags);
+			iwcq->iwpbl = irdma_get_pbl((unsigned long)req.user_cq_buf,
+						    &ucontext->cq_reg_mem_list);
+			spin_unlock_irqrestore(&ucontext->cq_reg_mem_list_lock, flags);
+
+			if (!iwcq->iwpbl) {
+				err_code = -EPROTO;
+				goto cq_free_rsrc;
+			}
 		}
 
 		cqmr = &iwcq->iwpbl->cq_mr;
 
 		if (rf->sc_dev.hw_attrs.uk_attrs.feature_flags &
 		    IRDMA_FEATURE_CQ_RESIZE) {
-			spin_lock_irqsave(&ucontext->cq_reg_mem_list_lock, flags);
-			iwcq->iwpbl_shadow = irdma_get_pbl(
-					(unsigned long)req.user_shadow_area,
-					&ucontext->cq_reg_mem_list);
-			spin_unlock_irqrestore(&ucontext->cq_reg_mem_list_lock, flags);
+			if (attrs &&
+			    uverbs_attr_is_valid(attrs, IRDMA_IB_ATTR_CREATE_CQ_SHADOW_BUF_UMEM)) {
+				struct ib_umem *shadow_umem;
+				struct irdma_mem_reg_req shadow_req = {
+					.cq_pages = IRDMA_SHADOW_PGCNT,
+				};
+				shadow_umem =
+					ib_umem_get_attr(&iwdev->ibdev, attrs,
+							 IRDMA_IB_ATTR_CREATE_CQ_SHADOW_BUF_UMEM,
+							 IRDMA_SHADOW_AREA_SIZE << 3,
+							 IB_ACCESS_LOCAL_WRITE);
+				if (IS_ERR(shadow_umem)) {
+					err_code = PTR_ERR(shadow_umem);
+					goto cq_free_rsrc;
+				}
+				iwcq->iwpbl_shadow =
+					irdma_setup_q_pbl_from_umem(iwdev, shadow_umem, NULL,
+								    IRDMA_MEMREG_TYPE_CQ,
+								    &shadow_req);
+				if (IS_ERR(iwcq->iwpbl_shadow)) {
+					err_code = PTR_ERR(iwcq->iwpbl_shadow);
+					iwcq->iwpbl_shadow = NULL;
+					ib_umem_release(shadow_umem);
+					goto cq_free_rsrc;
+				}
+			} else {
+				if (!req.user_shadow_area) {
+					err_code = -EINVAL;
+					goto cq_free_rsrc;
+				}
+				spin_lock_irqsave(&ucontext->cq_reg_mem_list_lock, flags);
+				iwcq->iwpbl_shadow =
+					irdma_get_pbl((unsigned long)req.user_shadow_area,
+						      &ucontext->cq_reg_mem_list);
+				spin_unlock_irqrestore(&ucontext->cq_reg_mem_list_lock, flags);
 
-			if (!iwcq->iwpbl_shadow) {
-				err_code = -EPROTO;
-				goto cq_free_rsrc;
+				if (!iwcq->iwpbl_shadow) {
+					err_code = -EPROTO;
+					goto cq_free_rsrc;
+				}
 			}
 			cqmr_shadow = &iwcq->iwpbl_shadow->cq_mr;
 			info.shadow_area_pa = cqmr_shadow->cq_pbl.addr;
