@@ -183,7 +183,7 @@ static void __sha1_final(struct sha1_ctx *ctx, u8 out[SHA1_DIGEST_SIZE])
 		partial = 0;
 	}
 	memset(&ctx->buf[partial], 0, SHA1_BLOCK_SIZE - 8 - partial);
-	*(__be64 *)&ctx->buf[SHA1_BLOCK_SIZE - 8] = cpu_to_be64(bitcount);
+	put_unaligned_be64(bitcount, &ctx->buf[SHA1_BLOCK_SIZE - 8]);
 	sha1_blocks(&ctx->state, ctx->buf, 1);
 
 	for (size_t i = 0; i < SHA1_DIGEST_SIZE; i += 4)
@@ -267,8 +267,8 @@ void hmac_sha1_final(struct hmac_sha1_ctx *ctx, u8 out[SHA1_DIGEST_SIZE])
 	memset(&ctx->sha_ctx.buf[SHA1_DIGEST_SIZE], 0,
 	       SHA1_BLOCK_SIZE - SHA1_DIGEST_SIZE);
 	ctx->sha_ctx.buf[SHA1_DIGEST_SIZE] = 0x80;
-	*(__be32 *)&ctx->sha_ctx.buf[SHA1_BLOCK_SIZE - 4] =
-		cpu_to_be32(8 * (SHA1_BLOCK_SIZE + SHA1_DIGEST_SIZE));
+	put_unaligned_be64((u64)8 * (SHA1_BLOCK_SIZE + SHA1_DIGEST_SIZE),
+			&ctx->sha_ctx.buf[SHA1_BLOCK_SIZE - 8]);
 
 	/* Compute the outer hash, which gives the HMAC value. */
 	sha1_blocks(&ctx->ostate, ctx->sha_ctx.buf, 1);
