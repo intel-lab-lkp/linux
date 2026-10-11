@@ -526,6 +526,19 @@ static int rmi_scan_pdt_page(struct rmi_device *rmi_dev,
 		if (RMI4_END_OF_PDT(pdt_entry.function_number))
 			break;
 
+		/*
+		 * A count of 7 means "more than 6 interrupt sources", which is
+		 * not supported.  Checked after RMI4_END_OF_PDT() because an
+		 * unpopulated (0xff) entry also decodes to 7.
+		 */
+		if (pdt_entry.interrupt_source_count > RMI_FN_MAX_IRQS) {
+			dev_err(&rmi_dev->dev,
+				"F%02X: invalid interrupt source count %u\n",
+				pdt_entry.function_number,
+				pdt_entry.interrupt_source_count);
+			return -EINVAL;
+		}
+
 		retval = callback(rmi_dev, ctx, &pdt_entry);
 		if (retval != RMI_SCAN_CONTINUE)
 			return retval;
