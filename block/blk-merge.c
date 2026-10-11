@@ -308,9 +308,20 @@ static bool bvec_split_segs(const struct queue_limits *lim,
 static unsigned int bio_split_alignment(struct bio *bio,
 		const struct queue_limits *lim)
 {
+	const struct bio_crypt_ctx *bc = bio_crypt_ctx(bio);
+	unsigned int align = lim->logical_block_size;
+
+	/*
+	 * A split advances the remaining bio's data unit number by whole
+	 * data units only (see bio_crypt_advance()), so a split inside a
+	 * data unit would make it use the wrong data unit numbers.
+	 */
+	if (bc)
+		align = max(align, bc->bc_key->crypto_cfg.data_unit_size);
 	if (op_is_write(bio_op(bio)) && lim->zone_write_granularity)
-		return lim->zone_write_granularity;
-	return lim->logical_block_size;
+		align = max(align, lim->zone_write_granularity);
+
+	return align;
 }
 
 static inline unsigned int bvec_seg_gap(struct bio_vec *bvprv,
