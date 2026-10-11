@@ -19,6 +19,7 @@
 #include "pci_impl.h"
 
 #define TSUNAMI_PERROR_ERRMASK	0xdffUL
+#define TSUNAMI_PERROR_FATAL	(perror_m_uecc | perror_m_perr)
 #define TSUNAMI_PERROR_ECCMASK	(perror_m_uecc | perror_m_cre)
 #define TSUNAMI_PERROR_INV	(1UL << 51)
 #define TSUNAMI_MISC_NXM		(1UL << 28)
@@ -215,14 +216,22 @@ tsunami_machine_check(unsigned long vector, unsigned long la_ptr)
 	struct el_TSUNAMI_sysdata_mcheck *frame = NULL;
 	struct tsunami_error_state live;
 	char *saved_err_prefix = err_print_prefix;
+	u64 perror;
+	bool fatal = false;
 
 	/* Synchronize pending accesses before inspecting the chipset. */
 	mb();
 	mb();
 	draina();
 	tsunami_clear_errors(&live);
-	if (vector == SCB_Q_SYSMCHK || vector == SCB_Q_SYSERR)
+	if (vector == SCB_Q_SYSMCHK || vector == SCB_Q_SYSERR) {
 		frame = tsunami_system_frame(header);
+		perror = live.perror[0] | live.perror[1];
+		if (frame)
+			perror |= tsunami_pchip_error(frame, 0) |
+				  tsunami_pchip_error(frame, 1);
+		fatal = perror & TSUNAMI_PERROR_FATAL;
+	}
 
 	err_print_prefix = KERN_CRIT;
 	if (vector == SCB_Q_SYSMCHK || vector == SCB_Q_SYSERR) {
@@ -249,6 +258,8 @@ tsunami_machine_check(unsigned long vector, unsigned long la_ptr)
 		mb();
 	}
 
+	if (fatal)
+		panic("Tsunami: uncorrectable ECC or PCI write parity error");
 }
 
 static const char * const CLIPPER_EnvQW1SMIR[] = {
