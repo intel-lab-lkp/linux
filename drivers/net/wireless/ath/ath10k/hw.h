@@ -481,6 +481,12 @@ enum ath10k_hw_cc_wraparound_type {
 	 * first type.
 	 */
 	ATH10K_HW_CC_WRAP_SHIFTED_EACH = 2,
+
+	/* The Cycle Counter wraps around to 0x7fffffff when it
+	 * overflows, and the Rx Clear Count wraps around to 0
+	 * independently of it.
+	 */
+	ATH10K_HW_CC_WRAP_SHIFTED_CC = 3,
 };
 
 enum ath10k_hw_refclk_speed {
