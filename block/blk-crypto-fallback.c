@@ -356,81 +356,66 @@ static void __blk_crypto_fallback_encrypt_bio(struct bio *src_bio,
 		struct crypto_sync_skcipher *tfm)
 {
 	struct bio_crypt_ctx *bc = src_bio->bi_crypt_context;
-	int data_unit_size = bc->bc_key->crypto_cfg.data_unit_size;
 	SYNC_SKCIPHER_REQUEST_ON_STACK(ciph_req, tfm);
-	u64 curr_dun[BLK_CRYPTO_DUN_ARRAY_SIZE];
-	struct scatterlist src, dst;
-	union blk_crypto_iv iv;
-	unsigned int nr_enc_pages, enc_idx;
+	struct blk_crypto_du_ctx du_ctx;
+	unsigned int nr_enc_pages, enc_idx, nr_new_pages;
 	struct page **enc_pages;
+	struct page *cur_enc_page = NULL;
 	struct bio *enc_bio;
-	unsigned int i;
+	bool reuse_enc_page;
+	unsigned int i, n;
 
 	skcipher_request_set_callback(ciph_req,
 			CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
 			NULL, NULL);
-
-	memcpy(curr_dun, bc->bc_dun, sizeof(curr_dun));
-	sg_init_table(&src, 1);
-	sg_init_table(&dst, 1);
-
-	skcipher_request_set_crypt(ciph_req, &src, &dst, data_unit_size,
-				   iv.bytes);
+	blk_crypto_du_ctx_init(&du_ctx, ciph_req, bc);
 
 	/*
-	 * Encrypt each page in the source bio.  Because the source bio could
-	 * have bio_vecs that span more than a single page, but the encrypted
-	 * bios are limited to a single page per bio_vec, this can generate
-	 * more than a single encrypted bio per source bio.
+	 * Encrypt each data unit in the source bio.  A data unit is described by
+	 * one bio_vec per page.  Because the encrypted bios are limited to a
+	 * single page per bio_vec, this can generate more than a single
+	 * encrypted bio per source bio.
 	 */
 new_bio:
 	nr_enc_pages = min(bio_segments(src_bio), BIO_MAX_VECS);
 	enc_bio = blk_crypto_alloc_enc_bio(src_bio, nr_enc_pages, &enc_pages);
 	enc_idx = 0;
+	reuse_enc_page = false;
 	for (;;) {
 		struct bio_vec src_bv =
 			bio_iter_iovec(src_bio, src_bio->bi_iter);
-		struct page *enc_page = enc_pages[enc_idx];
 
-		if (!IS_ALIGNED(src_bv.bv_len | src_bv.bv_offset,
-				data_unit_size)) {
+		n = blk_crypto_du_bvecs(src_bio, &src_bio->bi_iter, &du_ctx);
+		if (!n) {
 			enc_bio->bi_status = BLK_STS_INVAL;
 			goto out_free_enc_bio;
 		}
 
-		__bio_add_page(enc_bio, enc_page, src_bv.bv_len,
-				src_bv.bv_offset);
-
-		sg_set_page(&src, src_bv.bv_page, data_unit_size,
-			    src_bv.bv_offset);
-		sg_set_page(&dst, enc_page, data_unit_size, src_bv.bv_offset);
+		/*
+		 * The first bio_vec of the data unit reuses the bounce page
+		 * that the previous data unit added for the bio_vec it ended
+		 * in, if any; every other bio_vec needs a bounce page of its
+		 * own.
+		 *
+		 * reuse_enc_page implies nr_new_pages == 0: a data unit that
+		 * reuses a bounce page fits in a single bio_vec, as max_bvecs
+		 * is 1 for data units up to a page (see
+		 * blk_crypto_du_ctx_init()).  A submit therefore only happens
+		 * at a segment boundary and the encrypted bio never extends
+		 * past the encrypted data.
+		 */
+		nr_new_pages = n - reuse_enc_page;
+		WARN_ON_ONCE(reuse_enc_page && nr_new_pages);
 
 		/*
-		 * Increment the index now that the encrypted page is added to
-		 * the bio.  This is important for the error unwind path.
+		 * Is there room for this data unit in the current encrypted bio?
+		 * (There always is in a newly allocated one.)
 		 */
-		enc_idx++;
-
-		/*
-		 * Encrypt each data unit in this page.
-		 */
-		for (i = 0; i < src_bv.bv_len; i += data_unit_size) {
-			blk_crypto_dun_to_iv(curr_dun, &iv);
-			if (crypto_skcipher_encrypt(ciph_req)) {
-				enc_bio->bi_status = BLK_STS_IOERR;
+		if (enc_idx + nr_new_pages > nr_enc_pages) {
+			if (WARN_ON_ONCE(!enc_idx)) {
+				enc_bio->bi_status = BLK_STS_INVAL;
 				goto out_free_enc_bio;
 			}
-			bio_crypt_dun_increment(curr_dun, 1);
-			src.offset += data_unit_size;
-			dst.offset += data_unit_size;
-		}
-
-		bio_advance_iter_single(src_bio, &src_bio->bi_iter,
-				src_bv.bv_len);
-		if (!src_bio->bi_iter.bi_size)
-			break;
-
-		if (enc_idx == nr_enc_pages) {
 			/*
 			 * For each additional encrypted bio submitted,
 			 * increment the source bio's remaining count.  Each
@@ -442,6 +427,60 @@ new_bio:
 			submit_bio(enc_bio);
 			goto new_bio;
 		}
+
+		/*
+		 * Encrypt the data unit, scattering the ciphertext into the
+		 * bounce pages.  The bounce pages mirror the data layout of the
+		 * source bio, so that the encrypted bio can be submitted for the
+		 * same disk location as the source bio.
+		 */
+		sg_init_table(du_ctx.src_sg, n);
+		sg_init_table(du_ctx.dst_sg, n);
+		for (i = 0; i < n; i++) {
+			struct page *enc_page;
+
+			if (!i && reuse_enc_page) {
+				/* Covered by the previous bounce page. */
+				enc_page = cur_enc_page;
+			} else {
+				/*
+				 * A bio_vec that holds more than one data unit
+				 * is added with its whole length; the data
+				 * units that follow it fill in the same bounce
+				 * page before the encrypted bio is submitted.
+				 */
+				enc_page = enc_pages[enc_idx++];
+				__bio_add_page(enc_bio, enc_page, src_bv.bv_len,
+					       src_bv.bv_offset);
+				cur_enc_page = enc_page;
+			}
+
+			sg_set_page(&du_ctx.src_sg[i], du_ctx.bvecs[i].bv_page,
+				    du_ctx.bvecs[i].bv_len,
+				    du_ctx.bvecs[i].bv_offset);
+			sg_set_page(&du_ctx.dst_sg[i], enc_page,
+				    du_ctx.bvecs[i].bv_len,
+				    du_ctx.bvecs[i].bv_offset);
+		}
+
+		/*
+		 * The next data unit starts in the same bio_vec, and thus
+		 * shares the bounce page added above, unless this data unit
+		 * reaches the end of the bio_vec it is in.  A page can be
+		 * covered by several bio_vecs, so the sharing is per bio_vec,
+		 * not per page.
+		 */
+		reuse_enc_page = n == 1 && src_bv.bv_len > du_ctx.du_size;
+
+		if (blk_crypto_crypt_du(&du_ctx, true)) {
+			enc_bio->bi_status = BLK_STS_IOERR;
+			goto out_free_enc_bio;
+		}
+
+		bio_advance_iter_single(src_bio, &src_bio->bi_iter,
+					du_ctx.du_size);
+		if (!src_bio->bi_iter.bi_size)
+			break;
 	}
 
 	submit_bio(enc_bio);
