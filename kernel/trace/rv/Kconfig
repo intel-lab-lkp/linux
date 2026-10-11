@@ -86,6 +86,10 @@ source "kernel/trace/rv/monitors/nomiss/Kconfig"
 
 # Add new monitors here
 
+config RV_UPROBE
+	bool
+	depends on RV && UPROBES
+
 config RV_REACTORS
 	bool "Runtime verification reactors"
 	default y
