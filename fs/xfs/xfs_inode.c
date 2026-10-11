@@ -2677,6 +2677,7 @@ xfs_log_force_inode(
 {
 	struct xfs_inode_log_item *iip = ip->i_itemp;
 	xfs_csn_t		seq = 0;
+	int			error = 0;
 
 	if (!iip)
 		return 0;
@@ -2685,9 +2686,12 @@ xfs_log_force_inode(
 	seq = iip->ili_commit_seq;
 	spin_unlock(&iip->ili_lock);
 
-	if (!seq)
-		return 0;
-	return xfs_log_force_seq(ip->i_mount, seq, XFS_LOG_SYNC, NULL);
+	if (seq)
+		error = xfs_log_force_seq(ip->i_mount, seq, XFS_LOG_SYNC, NULL);
+
+	if (!error && xlog_is_shutdown(ip->i_mount->m_log))
+		error = -EIO;
+	return error;
 }
 
 /*
