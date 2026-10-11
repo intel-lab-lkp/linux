@@ -431,8 +431,14 @@ static int madvise_cold_or_pageout_pte_range(pmd_t *pmd,
 		}
 
 		if (!pageout && pmd_young(orig_pmd)) {
-			pmdp_invalidate(vma, addr, pmd);
-			orig_pmd = pmd_mkold(orig_pmd);
+			/*
+			 * Rebuild from the entry pmdp_invalidate() exchanged
+			 * out, not from orig_pmd: hardware may have set the
+			 * dirty bit since orig_pmd was read, and a MADV_FREE'd
+			 * (lazyfree) THP whose dirty bit is lost is discarded
+			 * by reclaim, silently dropping the store.
+			 */
+			orig_pmd = pmd_mkold(pmdp_invalidate(vma, addr, pmd));
 
 			set_pmd_at(mm, addr, pmd, orig_pmd);
 			tlb_remove_pmd_tlb_entry(tlb, pmd, addr);
