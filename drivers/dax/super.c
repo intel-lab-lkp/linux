@@ -723,7 +723,7 @@ static int __init dax_core_init(void)
 
 	rc = dax_fs_init();
 	if (rc)
-		return rc;
+		goto err_fs;
 
 	rc = alloc_chrdev_region(&dax_devt, 0, MINORMASK+1, "dax");
 	if (rc)
@@ -738,7 +738,8 @@ err_bus:
 	unregister_chrdev_region(dax_devt, MINORMASK+1);
 err_chrdev:
 	dax_fs_exit();
-	return 0;
+err_fs:
+	return rc;
 }
 
 static void __exit dax_core_exit(void)
