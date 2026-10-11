@@ -2068,6 +2068,13 @@ static void sb_freeze_unlock(struct super_block *sb, int level)
 		percpu_up_write(sb->s_writers.rw_sem + level);
 }
 
+static inline void sb_freeze_wake(struct super_block *sb)
+{
+	/* wake_up_var() needs a full barrier after storing s_writers.frozen. */
+	smp_mb();
+	wake_up_var(&sb->s_writers.frozen);
+}
+
 static int wait_for_partially_frozen(struct super_block *sb)
 {
 	int ret = 0;
@@ -2293,7 +2300,7 @@ retry:
 		WARN_ON_ONCE(freeze_inc(sb, who) > 1);
 		sb->s_writers.freeze_owner = freeze_owner;
 		sb->s_writers.frozen = SB_FREEZE_COMPLETE;
-		wake_up_var(&sb->s_writers.frozen);
+		sb_freeze_wake(sb);
 		super_unlock_excl(sb);
 		return 0;
 	}
@@ -2313,7 +2320,7 @@ retry:
 	if (ret) {
 		sb->s_writers.frozen = SB_UNFROZEN;
 		sb_freeze_unlock(sb, SB_FREEZE_PAGEFAULT);
-		wake_up_var(&sb->s_writers.frozen);
+		sb_freeze_wake(sb);
 		deactivate_locked_super(sb);
 		return ret;
 	}
@@ -2329,7 +2336,7 @@ retry:
 				"VFS:Filesystem freeze failed\n");
 			sb->s_writers.frozen = SB_UNFROZEN;
 			sb_freeze_unlock(sb, SB_FREEZE_FS);
-			wake_up_var(&sb->s_writers.frozen);
+			sb_freeze_wake(sb);
 			deactivate_locked_super(sb);
 			return ret;
 		}
@@ -2341,7 +2348,7 @@ retry:
 	WARN_ON_ONCE(freeze_inc(sb, who) > 1);
 	sb->s_writers.freeze_owner = freeze_owner;
 	sb->s_writers.frozen = SB_FREEZE_COMPLETE;
-	wake_up_var(&sb->s_writers.frozen);
+	sb_freeze_wake(sb);
 	lockdep_sb_freeze_release(sb);
 	super_unlock_excl(sb);
 	return 0;
@@ -2378,7 +2385,7 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who,
 	if (sb_rdonly(sb)) {
 		sb->s_writers.frozen = SB_UNFROZEN;
 		sb->s_writers.freeze_owner = NULL;
-		wake_up_var(&sb->s_writers.frozen);
+		sb_freeze_wake(sb);
 		goto out_deactivate;
 	}
 
@@ -2396,7 +2403,7 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who,
 
 	sb->s_writers.frozen = SB_UNFROZEN;
 	sb->s_writers.freeze_owner = NULL;
-	wake_up_var(&sb->s_writers.frozen);
+	sb_freeze_wake(sb);
 	sb_freeze_unlock(sb, SB_FREEZE_FS);
 out_deactivate:
 	deactivate_locked_super(sb);
