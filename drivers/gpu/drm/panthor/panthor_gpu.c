@@ -508,3 +508,8 @@ int panthor_gpu_coherency_init(struct panthor_device *ptdev)
 	drm_err(&ptdev->base, "Coherency not supported by the device");
 	return -ENOTSUPP;
 }
+
+u32 panthor_gpu_get_prfcnt_features(struct panthor_device *ptdev)
+{
+	return gpu_read(ptdev->gpu->iomem, GPU_PRFCNT_FEATURES);
+}
