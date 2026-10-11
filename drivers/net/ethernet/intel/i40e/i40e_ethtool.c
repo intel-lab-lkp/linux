@@ -5300,6 +5300,16 @@ flags_complete:
 	    test_bit(I40E_FLAG_SOURCE_PRUNING_DIS, changed_flags))
 		reset_needed = BIT(__I40E_PF_RESET_REQUESTED);
 
+	/* Re-enabling ATR requires a reset to reprogram fd_ena in the
+	 * TX queue HW context. Skip when FD_SB (ntuple) is already
+	 * enabled, since i40e_configure_tx_ring() sets fd_ena when
+	 * either FD flag is active.
+	 */
+	if (test_bit(I40E_FLAG_FD_ATR_ENA, changed_flags) &&
+	    test_bit(I40E_FLAG_FD_ATR_ENA, new_flags) &&
+	    !test_bit(I40E_FLAG_FD_SB_ENA, new_flags))
+		reset_needed |= BIT(__I40E_PF_RESET_REQUESTED);
+
 	/* Before we finalize any flag changes, we need to perform some
 	 * checks to ensure that the changes are supported and safe.
 	 */
@@ -5431,7 +5441,7 @@ flags_complete:
 				case LIBIE_AQ_RC_EEXIST:
 					dev_warn(&pf->pdev->dev,
 						 "FW LLDP agent is already running\n");
-					reset_needed = 0;
+					reset_needed &= ~I40E_PF_RESET_AND_REBUILD_FLAG;
 					break;
 				case LIBIE_AQ_RC_EPERM:
 					dev_warn(&pf->pdev->dev,
