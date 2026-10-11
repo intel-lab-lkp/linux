@@ -745,7 +745,8 @@ static int qla4_83xx_reset_seq_checksum_test(struct scsi_qla_host *ha)
 {
 	uint32_t sum =  0;
 	uint16_t *buff = (uint16_t *)ha->reset_tmplt.buff;
-	int u16_count =  ha->reset_tmplt.hdr->size / sizeof(uint16_t);
+	int u16_count =  le16_to_cpu(ha->reset_tmplt.hdr->size) /
+			 sizeof(uint16_t);
 	int ret_val;
 
 	while (u16_count-- > 0)
@@ -773,7 +774,7 @@ static int qla4_83xx_reset_seq_checksum_test(struct scsi_qla_host *ha)
 void qla4_83xx_read_reset_template(struct scsi_qla_host *ha)
 {
 	uint8_t *p_buff;
-	uint32_t addr, tmplt_hdr_def_size, tmplt_hdr_size;
+	uint32_t addr, tmplt_hdr_def_size, tmplt_hdr_size, tmplt_size;
 	uint32_t ret_val;
 
 	ha->reset_tmplt.seq_error = 0;
@@ -807,18 +808,36 @@ void qla4_83xx_read_reset_template(struct scsi_qla_host *ha)
 		(struct qla4_83xx_reset_template_hdr *)ha->reset_tmplt.buff;
 
 	/* Validate the template header size and signature */
-	tmplt_hdr_size = ha->reset_tmplt.hdr->hdr_size/sizeof(uint32_t);
+	tmplt_hdr_size = le16_to_cpu(ha->reset_tmplt.hdr->hdr_size) /
+			 sizeof(uint32_t);
 	if ((tmplt_hdr_size != tmplt_hdr_def_size) ||
-	    (ha->reset_tmplt.hdr->signature != RESET_TMPLT_HDR_SIGNATURE)) {
+	    (le16_to_cpu(ha->reset_tmplt.hdr->signature) !=
+	     RESET_TMPLT_HDR_SIGNATURE)) {
 		ql4_printk(KERN_ERR, ha, "%s: Template Header size %d is invalid, tmplt_hdr_def_size %d\n",
 			   __func__, tmplt_hdr_size, tmplt_hdr_def_size);
 		goto exit_read_template_error;
 	}
 
-	addr = QLA83XX_RESET_TEMPLATE_ADDR + ha->reset_tmplt.hdr->hdr_size;
-	p_buff = ha->reset_tmplt.buff + ha->reset_tmplt.hdr->hdr_size;
-	tmplt_hdr_def_size = (ha->reset_tmplt.hdr->size -
-			      ha->reset_tmplt.hdr->hdr_size) / sizeof(uint32_t);
+	/* The template size is chosen by the flash contents and nothing has
+	 * bounded it yet, so a template claiming to be larger than the buffer
+	 * would make the read below store past the end of it.  The integrity
+	 * check runs after the copy and cannot prevent that.
+	 */
+	tmplt_size = le16_to_cpu(ha->reset_tmplt.hdr->size);
+	if (tmplt_size > QLA83XX_RESTART_TEMPLATE_SIZE ||
+	    tmplt_size < le16_to_cpu(ha->reset_tmplt.hdr->hdr_size)) {
+		ql4_printk(KERN_ERR, ha, "%s: Template size %u is invalid\n",
+			   __func__, tmplt_size);
+		goto exit_read_template_error;
+	}
+
+	addr = QLA83XX_RESET_TEMPLATE_ADDR +
+	       le16_to_cpu(ha->reset_tmplt.hdr->hdr_size);
+	p_buff = ha->reset_tmplt.buff +
+		 le16_to_cpu(ha->reset_tmplt.hdr->hdr_size);
+	tmplt_hdr_def_size = (tmplt_size -
+			      le16_to_cpu(ha->reset_tmplt.hdr->hdr_size)) /
+			     sizeof(uint32_t);
 
 	DEBUG2(ql4_printk(KERN_INFO, ha,
 			  "%s: Read rest of the template size %d\n",
@@ -845,17 +864,22 @@ void qla4_83xx_read_reset_template(struct scsi_qla_host *ha)
 
 	/* Get STOP, START, INIT sequence offsets */
 	ha->reset_tmplt.init_offset = ha->reset_tmplt.buff +
-				      ha->reset_tmplt.hdr->init_seq_offset;
+		le16_to_cpu(ha->reset_tmplt.hdr->init_seq_offset);
 	ha->reset_tmplt.start_offset = ha->reset_tmplt.buff +
-				       ha->reset_tmplt.hdr->start_seq_offset;
+		le16_to_cpu(ha->reset_tmplt.hdr->start_seq_offset);
 	ha->reset_tmplt.stop_offset = ha->reset_tmplt.buff +
-				      ha->reset_tmplt.hdr->hdr_size;
+		le16_to_cpu(ha->reset_tmplt.hdr->hdr_size);
 	qla4_83xx_dump_reset_seq_hdr(ha);
 
 	goto exit_read_reset_template;
 
 exit_read_template_error:
 	vfree(ha->reset_tmplt.buff);
+	ha->reset_tmplt.buff = NULL;
+	ha->reset_tmplt.hdr = NULL;
+	ha->reset_tmplt.init_offset = NULL;
+	ha->reset_tmplt.start_offset = NULL;
+	ha->reset_tmplt.stop_offset = NULL;
 
 exit_read_reset_template:
 	return;
@@ -894,6 +918,13 @@ static void qla4_83xx_rmw_crb_reg(struct scsi_qla_host *ha, uint32_t raddr,
 {
 	uint32_t value;
 
+	if (p_rmw_hdr->index_a >= QLA83XX_MAX_RESET_SEQ_ENTRIES) {
+		ql4_printk(KERN_ERR, ha, "%s: Invalid array index %u\n",
+			   __func__, p_rmw_hdr->index_a);
+		ha->reset_tmplt.seq_error++;
+		return;
+	}
+
 	if (p_rmw_hdr->index_a)
 		value = ha->reset_tmplt.array[p_rmw_hdr->index_a];
 	else
@@ -914,12 +945,14 @@ static void qla4_83xx_write_list(struct scsi_qla_host *ha,
 				 struct qla4_83xx_reset_entry_hdr *p_hdr)
 {
 	struct qla4_83xx_entry *p_entry;
+	char *p_end = (char *)p_hdr + le16_to_cpu(p_hdr->size);
 	uint32_t i;
 
 	p_entry = (struct qla4_83xx_entry *)
 		  ((char *)p_hdr + sizeof(struct qla4_83xx_reset_entry_hdr));
 
-	for (i = 0; i < p_hdr->count; i++, p_entry++) {
+	for (i = 0; i < le16_to_cpu(p_hdr->count) &&
+	     (char *)(p_entry + 1) <= p_end; i++, p_entry++) {
 		qla4_83xx_wr_reg_indirect(ha, p_entry->arg1, p_entry->arg2);
 		if (p_hdr->delay)
 			udelay((uint32_t)(p_hdr->delay));
@@ -930,12 +963,14 @@ static void qla4_83xx_read_write_list(struct scsi_qla_host *ha,
 				      struct qla4_83xx_reset_entry_hdr *p_hdr)
 {
 	struct qla4_83xx_entry *p_entry;
+	char *p_end = (char *)p_hdr + le16_to_cpu(p_hdr->size);
 	uint32_t i;
 
 	p_entry = (struct qla4_83xx_entry *)
 		  ((char *)p_hdr + sizeof(struct qla4_83xx_reset_entry_hdr));
 
-	for (i = 0; i < p_hdr->count; i++, p_entry++) {
+	for (i = 0; i < le16_to_cpu(p_hdr->count) &&
+	     (char *)(p_entry + 1) <= p_end; i++, p_entry++) {
 		qla4_83xx_read_write_crb_reg(ha, p_entry->arg1, p_entry->arg2);
 		if (p_hdr->delay)
 			udelay((uint32_t)(p_hdr->delay));
@@ -948,6 +983,7 @@ static void qla4_83xx_poll_list(struct scsi_qla_host *ha,
 	long delay;
 	struct qla4_83xx_entry *p_entry;
 	struct qla4_83xx_poll *p_poll;
+	char *p_end = (char *)p_hdr + le16_to_cpu(p_hdr->size);
 	uint32_t i;
 	uint32_t value;
 
@@ -961,13 +997,15 @@ static void qla4_83xx_poll_list(struct scsi_qla_host *ha,
 
 	delay = (long)p_hdr->delay;
 	if (!delay) {
-		for (i = 0; i < p_hdr->count; i++, p_entry++) {
+		for (i = 0; i < le16_to_cpu(p_hdr->count) &&
+		     (char *)(p_entry + 1) <= p_end; i++, p_entry++) {
 			qla4_83xx_poll_reg(ha, p_entry->arg1, delay,
 					   p_poll->test_mask,
 					   p_poll->test_value);
 		}
 	} else {
-		for (i = 0; i < p_hdr->count; i++, p_entry++) {
+		for (i = 0; i < le16_to_cpu(p_hdr->count) &&
+		     (char *)(p_entry + 1) <= p_end; i++, p_entry++) {
 			if (qla4_83xx_poll_reg(ha, p_entry->arg1, delay,
 					       p_poll->test_mask,
 					       p_poll->test_value)) {
@@ -986,6 +1024,7 @@ static void qla4_83xx_poll_write_list(struct scsi_qla_host *ha,
 	long delay;
 	struct qla4_83xx_quad_entry *p_entry;
 	struct qla4_83xx_poll *p_poll;
+	char *p_end = (char *)p_hdr + le16_to_cpu(p_hdr->size);
 	uint32_t i;
 
 	p_poll = (struct qla4_83xx_poll *)
@@ -994,7 +1033,8 @@ static void qla4_83xx_poll_write_list(struct scsi_qla_host *ha,
 		  ((char *)p_poll + sizeof(struct qla4_83xx_poll));
 	delay = (long)p_hdr->delay;
 
-	for (i = 0; i < p_hdr->count; i++, p_entry++) {
+	for (i = 0; i < le16_to_cpu(p_hdr->count) &&
+	     (char *)(p_entry + 1) <= p_end; i++, p_entry++) {
 		qla4_83xx_wr_reg_indirect(ha, p_entry->dr_addr,
 					  p_entry->dr_value);
 		qla4_83xx_wr_reg_indirect(ha, p_entry->ar_addr,
@@ -1017,6 +1057,7 @@ static void qla4_83xx_read_modify_write(struct scsi_qla_host *ha,
 {
 	struct qla4_83xx_entry *p_entry;
 	struct qla4_83xx_rmw *p_rmw_hdr;
+	char *p_end = (char *)p_hdr + le16_to_cpu(p_hdr->size);
 	uint32_t i;
 
 	p_rmw_hdr = (struct qla4_83xx_rmw *)
@@ -1024,7 +1065,8 @@ static void qla4_83xx_read_modify_write(struct scsi_qla_host *ha,
 	p_entry = (struct qla4_83xx_entry *)
 		  ((char *)p_rmw_hdr + sizeof(struct qla4_83xx_rmw));
 
-	for (i = 0; i < p_hdr->count; i++, p_entry++) {
+	for (i = 0; i < le16_to_cpu(p_hdr->count) &&
+	     (char *)(p_entry + 1) <= p_end; i++, p_entry++) {
 		qla4_83xx_rmw_crb_reg(ha, p_entry->arg1, p_entry->arg2,
 				      p_rmw_hdr);
 		if (p_hdr->delay)
@@ -1046,6 +1088,7 @@ static void qla4_83xx_poll_read_list(struct scsi_qla_host *ha,
 	int index;
 	struct qla4_83xx_quad_entry *p_entry;
 	struct qla4_83xx_poll *p_poll;
+	char *p_end = (char *)p_hdr + le16_to_cpu(p_hdr->size);
 	uint32_t i;
 	uint32_t value;
 
@@ -1055,7 +1098,8 @@ static void qla4_83xx_poll_read_list(struct scsi_qla_host *ha,
 		  ((char *)p_poll + sizeof(struct qla4_83xx_poll));
 	delay = (long)p_hdr->delay;
 
-	for (i = 0; i < p_hdr->count; i++, p_entry++) {
+	for (i = 0; i < le16_to_cpu(p_hdr->count) &&
+	     (char *)(p_entry + 1) <= p_end; i++, p_entry++) {
 		qla4_83xx_wr_reg_indirect(ha, p_entry->ar_addr,
 					  p_entry->ar_value);
 		if (delay) {
@@ -1117,16 +1161,44 @@ static void qla4_83xx_process_reset_template(struct scsi_qla_host *ha,
 	int index, entries;
 	struct qla4_83xx_reset_entry_hdr *p_hdr;
 	char *p_entry = p_buff;
+	char *p_end;
+
+	if (!ha->reset_tmplt.buff || !ha->reset_tmplt.hdr || !p_buff) {
+		ql4_printk(KERN_ERR, ha, "%s: No valid reset template\n",
+			   __func__);
+		return;
+	}
 
 	ha->reset_tmplt.seq_end = 0;
 	ha->reset_tmplt.template_end = 0;
-	entries = ha->reset_tmplt.hdr->entries;
+	entries = le16_to_cpu(ha->reset_tmplt.hdr->entries);
 	index = ha->reset_tmplt.seq_index;
+	p_end = (char *)ha->reset_tmplt.buff +
+		le16_to_cpu(ha->reset_tmplt.hdr->size);
 
 	for (; (!ha->reset_tmplt.seq_end) && (index  < entries); index++) {
 
+		/* Both the entry count and each entry size come from flash,
+		 * so stop rather than walk past the end of the template.
+		 */
+		if (p_entry < (char *)ha->reset_tmplt.buff ||
+		    p_entry + sizeof(*p_hdr) > p_end) {
+			ql4_printk(KERN_ERR, ha, "%s: Entry %d is outside the template\n",
+				   __func__, index);
+			ha->reset_tmplt.seq_error++;
+			break;
+		}
+
 		p_hdr = (struct qla4_83xx_reset_entry_hdr *)p_entry;
-		switch (p_hdr->cmd) {
+		if (le16_to_cpu(p_hdr->size) < sizeof(*p_hdr) ||
+		    p_entry + le16_to_cpu(p_hdr->size) > p_end) {
+			ql4_printk(KERN_ERR, ha, "%s: Entry %d size %u is outside the template\n",
+				   __func__, index, le16_to_cpu(p_hdr->size));
+			ha->reset_tmplt.seq_error++;
+			break;
+		}
+
+		switch (le16_to_cpu(p_hdr->cmd)) {
 		case OPCODE_NOP:
 			break;
 		case OPCODE_WRITE_LIST:
@@ -1163,7 +1235,7 @@ static void qla4_83xx_process_reset_template(struct scsi_qla_host *ha,
 		}
 
 		/* Set pointer to next entry in the sequence. */
-		p_entry += p_hdr->size;
+		p_entry += le16_to_cpu(p_hdr->size);
 	}
 
 	ha->reset_tmplt.seq_index = index;
