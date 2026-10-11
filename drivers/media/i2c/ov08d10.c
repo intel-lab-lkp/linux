@@ -65,6 +65,14 @@
 #define OV08D10_REG_FLIP_OPT			0x32
 #define OV08D10_REG_FLIP_MASK			0x3
 
+/* OV08D10 native and active pixel array size */
+#define OV08D10_NATIVE_WIDTH			3288
+#define OV08D10_NATIVE_HEIGHT			2476
+#define OV08D10_PIXEL_ARRAY_LEFT		4
+#define OV08D10_PIXEL_ARRAY_TOP			8
+#define OV08D10_PIXEL_ARRAY_WIDTH		3280
+#define OV08D10_PIXEL_ARRAY_HEIGHT		2464
+
 #define to_ov08d10(_sd)		container_of(_sd, struct ov08d10, sd)
 
 struct ov08d10_reg {
@@ -110,6 +118,9 @@ struct ov08d10_mode {
 
 	/* Number of data lanes */
 	u8 data_lanes;
+
+	/* Analogue crop rectangle, in native sensor coordinates */
+	struct v4l2_rect crop;
 };
 
 /* 3280x2460, 3264x2448 need 720Mbps/lane, 2 lanes - 19.2 MHz */
@@ -630,6 +641,7 @@ static const struct ov08d10_lane_cfg lane_cfg_2 = {
 		},
 		.link_freq_index = 0,
 		.data_lanes = 2,
+		.crop = { .left =  4, .top =  8, .width = 3280, .height = 2460 },
 	},
 	{
 		.width = 3264,
@@ -643,6 +655,7 @@ static const struct ov08d10_lane_cfg lane_cfg_2 = {
 		},
 		.link_freq_index = 0,
 		.data_lanes = 2,
+		.crop = { .left = 12, .top = 16, .width = 3264, .height = 2448 },
 	},
 	{
 		.width = 1632,
@@ -656,6 +669,7 @@ static const struct ov08d10_lane_cfg lane_cfg_2 = {
 		},
 		.link_freq_index = 1,
 		.data_lanes = 2,
+		.crop = { .left = 12, .top = 16, .width = 3264, .height = 2448 },
 	}}
 };
 
@@ -955,6 +969,36 @@ static int ov08d10_set_ctrl(struct v4l2_ctrl *ctrl)
 	return ret;
 }
 
+static int ov08d10_get_selection(struct v4l2_subdev *sd,
+				 const struct v4l2_subdev_client_info *ci,
+				 struct v4l2_subdev_state *sd_state,
+				 struct v4l2_subdev_selection *sel)
+{
+	switch (sel->target) {
+	case V4L2_SEL_TGT_CROP:
+		sel->r = *v4l2_subdev_state_get_crop(sd_state, 0);
+		return 0;
+
+	case V4L2_SEL_TGT_NATIVE_SIZE:
+		sel->r.left = 0;
+		sel->r.top = 0;
+		sel->r.width = OV08D10_NATIVE_WIDTH;
+		sel->r.height = OV08D10_NATIVE_HEIGHT;
+		return 0;
+
+	case V4L2_SEL_TGT_CROP_DEFAULT:
+	case V4L2_SEL_TGT_CROP_BOUNDS:
+		sel->r.left = OV08D10_PIXEL_ARRAY_LEFT;
+		sel->r.top = OV08D10_PIXEL_ARRAY_TOP;
+		sel->r.width = OV08D10_PIXEL_ARRAY_WIDTH;
+		sel->r.height = OV08D10_PIXEL_ARRAY_HEIGHT;
+		return 0;
+
+	default:
+		return -EINVAL;
+	}
+}
+
 static const struct v4l2_ctrl_ops ov08d10_ctrl_ops = {
 	.s_ctrl = ov08d10_set_ctrl,
 };
@@ -1194,6 +1238,9 @@ static int ov08d10_set_format(struct v4l2_subdev *sd,
 
 	mutex_lock(&ov08d10->mutex);
 	ov08d10_update_pad_format(ov08d10, mode, &fmt->format);
+
+	*v4l2_subdev_state_get_crop(sd_state, fmt->pad) = mode->crop;
+
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
 		*v4l2_subdev_state_get_format(sd_state, fmt->pad) =
 								fmt->format;
@@ -1297,6 +1344,19 @@ static int ov08d10_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 	return 0;
 }
 
+static int ov08d10_init_state(struct v4l2_subdev *sd,
+			      struct v4l2_subdev_state *sd_state)
+{
+	struct ov08d10 *ov08d10 = to_ov08d10(sd);
+	const struct ov08d10_mode *mode = &ov08d10->priv_lane->sp_modes[0];
+
+	*v4l2_subdev_state_get_crop(sd_state, 0) = mode->crop;
+	ov08d10_update_pad_format(ov08d10, mode,
+				  v4l2_subdev_state_get_format(sd_state, 0));
+
+	return 0;
+}
+
 static const struct v4l2_subdev_video_ops ov08d10_video_ops = {
 	.s_stream = ov08d10_set_stream,
 };
@@ -1306,6 +1366,7 @@ static const struct v4l2_subdev_pad_ops ov08d10_pad_ops = {
 	.get_fmt = ov08d10_get_format,
 	.enum_mbus_code = ov08d10_enum_mbus_code,
 	.enum_frame_size = ov08d10_enum_frame_size,
+	.get_selection = ov08d10_get_selection,
 };
 
 static const struct v4l2_subdev_ops ov08d10_subdev_ops = {
@@ -1315,6 +1376,7 @@ static const struct v4l2_subdev_ops ov08d10_subdev_ops = {
 
 static const struct v4l2_subdev_internal_ops ov08d10_internal_ops = {
 	.open = ov08d10_open,
+	.init_state = ov08d10_init_state,
 };
 
 static int ov08d10_power_off(struct device *dev)
@@ -1470,6 +1532,7 @@ static void ov08d10_remove(struct i2c_client *client)
 	struct ov08d10 *ov08d10 = to_ov08d10(sd);
 
 	v4l2_async_unregister_subdev(sd);
+	v4l2_subdev_cleanup(sd);
 	media_entity_cleanup(&sd->entity);
 	v4l2_ctrl_handler_free(sd->ctrl_handler);
 	pm_runtime_disable(ov08d10->dev);
@@ -1565,16 +1628,25 @@ static int ov08d10_probe(struct i2c_client *client)
 	pm_runtime_set_active(ov08d10->dev);
 	pm_runtime_enable(ov08d10->dev);
 
+	ret = v4l2_subdev_init_finalize(&ov08d10->sd);
+	if (ret) {
+		dev_err(ov08d10->dev, "failed to init subdev state: %d\n", ret);
+		goto probe_error_media_entity_cleanup;
+	}
+
 	ret = v4l2_async_register_subdev_sensor(&ov08d10->sd);
 	if (ret < 0) {
 		dev_err(ov08d10->dev, "failed to register V4L2 subdev: %d\n",
 			ret);
-		goto probe_error_media_entity_cleanup;
+		goto probe_error_subdev_cleanup;
 	}
 
 	pm_runtime_idle(ov08d10->dev);
 
 	return 0;
+
+probe_error_subdev_cleanup:
+	v4l2_subdev_cleanup(&ov08d10->sd);
 
 probe_error_media_entity_cleanup:
 	pm_runtime_disable(ov08d10->dev);
