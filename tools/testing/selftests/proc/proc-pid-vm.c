@@ -221,7 +221,7 @@ static int make_exe(const uint8_t *payload, size_t len)
  * 1: vsyscall VMA is --xp		vsyscall=xonly
  * 2: vsyscall VMA is r-xp		vsyscall=emulate
  */
-static volatile int g_vsyscall;
+static volatile int g_vsyscall __maybe_unused;
 static const char *str_vsyscall __maybe_unused;
 
 static const char str_vsyscall_0[] __maybe_unused = "";
