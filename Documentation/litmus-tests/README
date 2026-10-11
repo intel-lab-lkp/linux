@@ -38,6 +38,26 @@ cmpxchg-fail-unordered-2.litmus
     acquire operation.
 
 
+fs (/fs directory)
+------------------
+
+The reference count of a mount is split into per-CPU gets and puts.  A
+walker in __legitimize_mnt() takes a reference during an RCU path walk
+without mount_lock, and mntput_no_expire_slowpath() and do_umount() sum
+the counters under mount_lock with mnt_get_count().  The tests spell
+write_seqlock() out as a spinlock, a seqcount store and smp_wmb(),
+read_seqbegin() and read_seqretry() as READ_ONCE() and smp_rmb(), and
+the per-CPU counters as one variable per CPU.
+
+mnt-slowpath-sum-no-outer-mb.litmus
+    Demonstrates that mntput_no_expire_slowpath() needs no smp_mb()
+    between taking mount_lock and mnt_get_count() to pair with the
+    walker's smp_mb().
+
+mnt-umount-busy-sum-no-outer-mb.litmus
+    The same for the busy check of do_umount().
+
+
 locking (/locking directory)
 ----------------------------
 
