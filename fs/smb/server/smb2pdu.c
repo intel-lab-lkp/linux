@@ -6833,8 +6833,9 @@ static int smb2_get_ea(struct ksmbd_work *work, struct ksmbd_file *fp,
 			continue;
 
 		if (req->InputBufferLength &&
-		    strncmp(&name[XATTR_USER_PREFIX_LEN], ea_req->name,
-			    ea_req->EaNameLength))
+		    (name_len - XATTR_USER_PREFIX_LEN != ea_req->EaNameLength ||
+		     strncmp(&name[XATTR_USER_PREFIX_LEN], ea_req->name,
+			     ea_req->EaNameLength)))
 			continue;
 
 		if (smb2_is_private_ea(&name[XATTR_USER_PREFIX_LEN],
