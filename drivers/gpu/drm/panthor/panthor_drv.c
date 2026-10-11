@@ -184,7 +184,12 @@ panthor_get_uobj_array(const struct drm_panthor_obj_array *in, u32 min_stride,
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_queue_create, ringbuf_size), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_vm_bind_op, syncs), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_bo_sync_op, size), \
-		 PANTHOR_UOBJ_DECL(struct drm_panthor_perf_info, shader_blocks))
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_perf_info, shader_blocks), \
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_perf_session_create, shader_enable_mask), \
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_perf_session_start, user_data), \
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_perf_session_stop, user_data), \
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_perf_session_sample, user_data), \
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_perf_session_destroy, handle))
 
 /**
  * PANTHOR_UOBJ_SET() - Copy a kernel object to a user object.
@@ -1603,6 +1608,103 @@ static int panthor_ioctl_bo_query_info(struct drm_device *ddev, void *data,
 	return 0;
 }
 
+static int panthor_ioctl_perf_session_create(struct drm_device *ddev, void *data,
+					     struct drm_file *file)
+{
+	int ret, cookie;
+	unsigned long sid = 0;
+	struct drm_panthor_perf_session_create *args = data;
+
+	if (!drm_dev_enter(file->minor->dev, &cookie))
+		return -ENODEV;
+
+	if (!mem_is_zero(args->pad, sizeof(args->pad)))
+		return -EINVAL;
+
+	ret = panthor_perf_session_create(file, args, &sid);
+	if (ret)
+		return ret;
+
+	drm_dev_exit(cookie);
+	return sid;
+}
+
+static int panthor_ioctl_perf_session_start(struct drm_device *ddev, void *data,
+					    struct drm_file *file)
+{
+	int cookie, ret;
+	struct panthor_file *pfile = file->driver_priv;
+	struct drm_panthor_perf_session_start *args = data;
+
+	if (!drm_dev_enter(file->minor->dev, &cookie))
+		return -ENODEV;
+
+	if (args->pad0)
+		return -EINVAL;
+
+	ret = panthor_perf_session_start(pfile, args->handle, args->user_data);
+
+	drm_dev_exit(cookie);
+	return ret;
+}
+
+static int panthor_ioctl_perf_session_sample(struct drm_device *ddev, void *data,
+					     struct drm_file *file)
+{
+	int cookie, ret;
+	struct panthor_file *pfile = file->driver_priv;
+	struct drm_panthor_perf_session_sample *args = data;
+
+	if (!drm_dev_enter(file->minor->dev, &cookie))
+		return -ENODEV;
+
+	if (args->pad0)
+		return -EINVAL;
+
+	ret =  panthor_perf_session_sample(pfile, args->handle, args->user_data);
+
+	drm_dev_exit(cookie);
+	return ret;
+}
+
+static int panthor_ioctl_perf_session_stop(struct drm_device *ddev, void *data,
+					   struct drm_file *file)
+{
+	int cookie, ret;
+	struct panthor_file *pfile = file->driver_priv;
+	struct drm_panthor_perf_session_stop *args = data;
+
+	if (!drm_dev_enter(file->minor->dev, &cookie))
+		return -ENODEV;
+
+	if (args->pad0)
+		return -EINVAL;
+
+	ret = panthor_perf_session_stop(pfile, args->handle, args->user_data);
+
+	drm_dev_exit(cookie);
+	return ret;
+}
+
+static int panthor_ioctl_perf_session_destroy(struct drm_device *ddev, void *data,
+					      struct drm_file *file)
+{
+	int cookie, ret;
+	struct panthor_file *pfile = file->driver_priv;
+	struct drm_panthor_perf_session_destroy *args = data;
+
+	if (!drm_dev_enter(file->minor->dev, &cookie))
+		return -ENODEV;
+
+	if (args->pad0)
+		return -EINVAL;
+
+	ret = panthor_perf_session_destroy(pfile, args->handle);
+
+	drm_dev_exit(cookie);
+	return ret;
+}
+
 static int
 panthor_open(struct drm_device *ddev, struct drm_file *file)
 {
@@ -1687,6 +1789,11 @@ static const struct drm_ioctl_desc panthor_drm_driver_ioctls[] = {
 	PANTHOR_IOCTL(SET_USER_MMIO_OFFSET, set_user_mmio_offset, DRM_RENDER_ALLOW),
 	PANTHOR_IOCTL(BO_SYNC, bo_sync, DRM_RENDER_ALLOW),
 	PANTHOR_IOCTL(BO_QUERY_INFO, bo_query_info, DRM_RENDER_ALLOW),
+	PANTHOR_IOCTL(PERF_SESSION_CREATE, perf_session_create, DRM_RENDER_ALLOW),
+	PANTHOR_IOCTL(PERF_SESSION_START, perf_session_start, DRM_RENDER_ALLOW),
+	PANTHOR_IOCTL(PERF_SESSION_SAMPLE, perf_session_sample, DRM_RENDER_ALLOW),
+	PANTHOR_IOCTL(PERF_SESSION_STOP, perf_session_stop, DRM_RENDER_ALLOW),
+	PANTHOR_IOCTL(PERF_SESSION_DESTROY, perf_session_destroy, DRM_RENDER_ALLOW),
 };
 
 static int panthor_mmap(struct file *filp, struct vm_area_struct *vma)
@@ -1807,6 +1914,12 @@ static void panthor_debugfs_init(struct drm_minor *minor)
  * - 1.8 - extends DEV_QUERY_TIMESTAMP_INFO with flags
  * - 1.9 - adds DRM_PANTHOR_DEV_QUERY_MMU_INFO query
  *       - adds DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE flag
+ * - 1.10 - adds DEV_QUERY_PERF_INFO query
+ *        - adds PERF_SESSION_CREATE ioctl
+ *        - adds PERF_SESSION_START ioctl
+ *        - adds PERF_SESSION_SAMPLE ioctl
+ *        - adds PERF_SESSION_STOP ioctl
+ *        - adds PERF_SESSION_DESTROY ioctl
  */
 static const struct drm_driver panthor_drm_driver = {
 	.driver_features = DRIVER_RENDER | DRIVER_GEM | DRIVER_SYNCOBJ |
@@ -1820,7 +1933,7 @@ static const struct drm_driver panthor_drm_driver = {
 	.name = "panthor",
 	.desc = "Panthor DRM driver",
 	.major = 1,
-	.minor = 9,
+	.minor = 10,
 
 	.gem_prime_import_sg_table = panthor_gem_prime_import_sg_table,
 	.gem_prime_import = panthor_gem_prime_import,
