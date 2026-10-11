@@ -15041,6 +15041,18 @@ static int ath12k_mac_hw_register(struct ath12k_hw *ah)
 	for_each_ar(ah, ar, i)
 		complete_all(&ar->regd_update_completed);
 
+	/* Apply the regd received during initialization before registering
+	 * the wiphy. It is self-managed, so userspace may ask for its regd as
+	 * soon as it shows up, and cfg80211 expects one to be there.
+	 */
+	for_each_ar(ah, ar, i) {
+		ret = ath12k_regd_update(ar, true);
+		if (ret) {
+			ath12k_err(ar->ab, "ath12k regd update failed: %d\n", ret);
+			goto err_cleanup_if_combs;
+		}
+	}
+
 	ret = ieee80211_register_hw(hw);
 	if (ret) {
 		ath12k_err(ab, "ieee80211 registration failed: %d\n", ret);
@@ -15057,13 +15069,6 @@ static int ath12k_mac_hw_register(struct ath12k_hw *ah)
 
 	for_each_ar(ah, ar, i) {
 		struct ath12k_base *this_ab = ar->ab;
-
-		/* Apply the regd received during initialization */
-		ret = ath12k_regd_update(ar, true);
-		if (ret) {
-			ath12k_err(this_ab, "ath12k regd update failed: %d\n", ret);
-			goto err_unregister_hw;
-		}
 
 		if (this_ab->hw_params->current_cc_support) {
 			struct wmi_set_current_country_arg current_cc = {};
@@ -15104,12 +15109,6 @@ fw_stats_init:
 	}
 
 	return 0;
-
-err_unregister_hw:
-	for_each_ar(ah, ar, i)
-		ath12k_debugfs_unregister(ar);
-
-	ieee80211_unregister_hw(hw);
 
 err_cleanup_if_combs:
 	ath12k_mac_cleanup_iface_combinations(ah);
