@@ -29,6 +29,8 @@ static inline void ha_monitor_reset_env(struct da_monitor *da_mon);
 static inline void ha_setup_timer(struct ha_monitor *ha_mon);
 static inline bool ha_cancel_timer(struct ha_monitor *ha_mon);
 static inline void ha_cancel_timer_sync(struct ha_monitor *ha_mon);
+static inline bool ha_timer_ready(struct ha_monitor *ha_mon);
+static inline void ha_monitor_free_env(struct da_monitor *da_mon);
 static bool ha_monitor_handle_constraint(struct da_monitor *da_mon,
 					 enum states curr_state,
 					 enum events event,
@@ -38,6 +40,7 @@ static bool ha_monitor_handle_constraint(struct da_monitor *da_mon,
 #define da_monitor_init_hook ha_monitor_init_env
 #define da_monitor_reset_hook ha_monitor_reset_env
 #define da_monitor_sync_hook() synchronize_rcu()
+#define da_monitor_free_hook ha_monitor_free_env
 
 #if !defined(HA_SKIP_AUTO_CLEANUP) && RV_MON_TYPE == RV_MON_PER_TASK
 /*
@@ -467,8 +470,15 @@ static inline bool ha_cancel_timer(struct ha_monitor *ha_mon)
 {
 	return timer_delete(&ha_mon->timer);
 }
+/* timer_setup() sets it; the cancel paths here never clear it. */
+static inline bool ha_timer_ready(struct ha_monitor *ha_mon)
+{
+	return READ_ONCE(ha_mon->timer.function);
+}
 static inline void ha_cancel_timer_sync(struct ha_monitor *ha_mon)
 {
+	if (!ha_timer_ready(ha_mon))
+		return;
 	timer_delete_sync(&ha_mon->timer);
 }
 #elif HA_TIMER_TYPE == HA_TIMER_HRTIMER
@@ -524,8 +534,18 @@ static inline bool ha_cancel_timer(struct ha_monitor *ha_mon)
 {
 	return hrtimer_try_to_cancel(&ha_mon->hrtimer) == 1;
 }
+/*
+ * hrtimer_cancel() reads timer->base before anything else; a zeroed timer
+ * has it NULL and would fault.
+ */
+static inline bool ha_timer_ready(struct ha_monitor *ha_mon)
+{
+	return READ_ONCE(ha_mon->hrtimer.base);
+}
 static inline void ha_cancel_timer_sync(struct ha_monitor *ha_mon)
 {
+	if (!ha_timer_ready(ha_mon))
+		return;
 	hrtimer_cancel(&ha_mon->hrtimer);
 }
 #else /* HA_TIMER_NONE */
@@ -538,8 +558,14 @@ static inline bool ha_cancel_timer(struct ha_monitor *ha_mon)
 {
 	return false;
 }
+static inline bool ha_timer_ready(struct ha_monitor *ha_mon) { return false; }
 static inline void ha_cancel_timer_sync(struct ha_monitor *ha_mon) { }
 #endif
+
+static inline void ha_monitor_free_env(struct da_monitor *da_mon)
+{
+	ha_cancel_timer_sync(to_ha_monitor(da_mon));
+}
 
 #if IS_ENABLED(CONFIG_RV_MONITORS_KUNIT_TEST)
 #ifdef RV_MON_OPS_INIT

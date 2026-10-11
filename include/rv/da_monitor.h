@@ -68,6 +68,17 @@ static struct rv_monitor rv_this;
 #endif
 
 /*
+ * Called on the last reference to a storage, right before it is freed.
+ * Monitors embedding a timer disarm it here: an earlier point races with a
+ * reader that resolved the storage before hash_del_rcu(), and
+ * tracepoint_synchronize_unregister() only covers tracepoint probes.
+ * Default: no-op.
+ */
+#ifndef da_monitor_free_hook
+#define da_monitor_free_hook(da_mon)
+#endif
+
+/*
  * Type for the target id, default to int but can be overridden.
  * A long type can work as hash table key (PER_OBJ) but will be downgraded to
  * int in the event tracepoint.
@@ -543,6 +554,15 @@ static inline monitor_target da_get_target_by_id(da_id_type id)
 	return mon_storage->target;
 }
 
+static void da_kfree_cb(struct rcu_head *head)
+{
+	struct da_monitor_storage *ms =
+		container_of(head, struct da_monitor_storage, rcu);
+
+	da_monitor_free_hook(&ms->rv.da_mon);
+	kfree(ms);
+}
+
 /*
  * da_destroy_storage - destroy the per-object storage
  *
@@ -564,7 +584,7 @@ static inline void da_destroy_storage(da_id_type id)
 		return;
 	da_monitor_reset_hook(&mon_storage->rv.da_mon);
 	hash_del_rcu(&mon_storage->node);
-	kfree_rcu(mon_storage, rcu);
+	call_rcu(&mon_storage->rcu, da_kfree_cb);
 }
 
 static void __da_monitor_reset_all(void (*reset)(struct da_monitor *))
@@ -607,6 +627,7 @@ static inline void da_monitor_destroy(void)
 	 * pending, we can safely assume no concurrent user.
 	 */
 	hash_for_each_safe(da_monitor_ht, bkt, tmp, mon_storage, node) {
+		da_monitor_free_hook(&mon_storage->rv.da_mon);
 		hash_del_rcu(&mon_storage->node);
 		kfree(mon_storage);
 	}
