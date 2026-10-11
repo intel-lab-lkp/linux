@@ -48,6 +48,13 @@ Available options:
     Profile section to use in the config file.  This will override any values
     defined in the ``DEFAULT`` section.
 
+``-R, --registry REGISTRY``
+
+    Container registry name.
+
+    Any registry already included in the image name will be replaced or removed
+    when using this option with no value.
+
 ``-r, --runtime RUNTIME``
 
     Container runtime name.  Supported runtimes: ``podman``, ``docker``.
@@ -274,6 +281,15 @@ Supported options in each section are:
     Name of the container image to use, equivalent to the ``-i`` command line
     option.
 
+``registry``
+
+    Name of the container image registry to use, equivalent to the ``-R``
+    command line option.  This will be used as a prefix before the image name
+    with a ``/`` separator.
+
+    For example, a ``docker.io`` registry and a ``myuser/myimage`` image will
+    result in ``docker.io/myuser/myimage`` as the full image path.
+
 ``runtime``
 
     Name of the container runtime, equivalent to the ``-r`` command line option.
@@ -288,6 +304,7 @@ Here's a sample configuration with an extra ``clang`` profile::
 
   [DEFAULT]
   runtime = "podman"
+  registry = "docker.io"
   image = "tuxmake/korg-gcc"
 
   [clang]
@@ -306,10 +323,18 @@ Using the configuration file, it can now be simplified into this::
 
   scripts/container -p clang -- make defconfig
 
-Then to override the default user, the ``-u`` option can still be used::
+Then to override the default runtime, the ``-r`` option can still be used::
 
-  scripts/container -p clang -u0 -- make defconfig
+  scripts/container -p clang -r docker -- make defconfig
 
-This also illustrates how values take precedence over each other: the runtime
+Likewise, to override the registry name::
+
+  scripts/container -p clang -R my.registry.com -- make defconfig
+
+Or to not use any registry at all but only a local image::
+
+  scripts/container -p clang -R -- make defconfig
+
+This also illustrates how values take precedence over each other: the registry
 is loaded from the ``DEFAULT`` section, the image from the ``clang`` section
-and the user ID from the command line ``-u`` option.
+and the runtime from the command line ``-r`` option.
