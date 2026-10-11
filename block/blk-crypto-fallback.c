@@ -242,6 +242,116 @@ static void blk_crypto_dun_to_iv(const u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
 		iv->dun[i] = cpu_to_le64(dun[i]);
 }
 
+/*
+ * Describes one data unit: the bio_vecs that cover it and the
+ * scatterlists to en/decrypt it with.
+ */
+struct blk_crypto_du_ctx {
+	/* Backing store for bvecs, for the one-bio_vec case. */
+	struct bio_vec		stack_bvec;
+	/* Backing store for src_sg and dst_sg, one entry each. */
+	struct scatterlist	stack_sgs[2];
+
+	/* The data unit size in bytes. */
+	unsigned int		du_size;
+	/* Number of entries available in bvecs. */
+	unsigned int		max_bvecs;
+
+	/* The bio_vecs that cover the data unit. */
+	struct bio_vec		*bvecs;
+	/* The scatterlist for each side of the crypto request. */
+	struct scatterlist	*src_sg;
+	struct scatterlist	*dst_sg;
+
+	/* The crypto request to en/decrypt the data unit with. */
+	struct skcipher_request	*ciph_req;
+	/* The data unit's DUN, advanced on each successful crypt. */
+	u64			curr_dun[BLK_CRYPTO_DUN_ARRAY_SIZE];
+};
+
+static void blk_crypto_du_ctx_init(struct blk_crypto_du_ctx *du_ctx,
+				   struct skcipher_request *ciph_req,
+				   const struct bio_crypt_ctx *bc)
+{
+	du_ctx->ciph_req = ciph_req;
+	du_ctx->du_size = bc->bc_key->crypto_cfg.data_unit_size;
+	memcpy(du_ctx->curr_dun, bc->bc_dun, sizeof(bc->bc_dun));
+
+	du_ctx->max_bvecs = 1;
+	du_ctx->bvecs = &du_ctx->stack_bvec;
+	du_ctx->src_sg = &du_ctx->stack_sgs[0];
+	du_ctx->dst_sg = &du_ctx->stack_sgs[1];
+}
+
+/*
+ * En/decrypt one data unit: run the request over the data unit's
+ * scatterlists with its DUN as the IV, and advance the DUN on success.
+ */
+static int blk_crypto_crypt_du(struct blk_crypto_du_ctx *du_ctx, bool encrypt)
+{
+	union blk_crypto_iv iv;
+	int err;
+
+	blk_crypto_dun_to_iv(du_ctx->curr_dun, &iv);
+	skcipher_request_set_crypt(du_ctx->ciph_req,
+				   du_ctx->src_sg, du_ctx->dst_sg,
+				   du_ctx->du_size, iv.bytes);
+
+	if (encrypt)
+		err = crypto_skcipher_encrypt(du_ctx->ciph_req);
+	else
+		err = crypto_skcipher_decrypt(du_ctx->ciph_req);
+	if (err)
+		return -EIO;
+
+	bio_crypt_dun_increment(du_ctx->curr_dun, 1);
+	return 0;
+}
+
+/**
+ * blk_crypto_du_bvecs() - collect the bio_vecs that make up one data unit
+ * @bio: the bio to collect from
+ * @iter: the position in @bio to collect at.  Not modified.
+ * @du_ctx: the context to collect the data unit into.  Uses
+ *	    @du_ctx->du_size and @du_ctx->max_bvecs, and stores the
+ *	    bio_vecs in @du_ctx->bvecs
+ *
+ * Collect the bio_vecs that cover one data unit starting at @iter.  Each
+ * bio_vec is clamped to its page, so a data unit spans several bio_vecs if it
+ * covers several pages or if a bio_vec boundary splits it.
+ *
+ * Return: the number of bio_vecs collected, or 0 if @bio doesn't have a whole
+ *	   data unit at @iter, the data unit doesn't start at a
+ *	   min(@du_ctx->du_size, PAGE_SIZE) boundary, or the data unit
+ *	   needs more than @du_ctx->max_bvecs bio_vecs.
+ */
+static unsigned int blk_crypto_du_bvecs(struct bio *bio,
+					const struct bvec_iter *iter,
+					struct blk_crypto_du_ctx *du_ctx)
+{
+	const unsigned int align = min(du_ctx->du_size, PAGE_SIZE);
+	struct bvec_iter du_iter = *iter;
+	struct bio_vec bv;
+	unsigned int n = 0;
+
+	if (du_iter.bi_size < du_ctx->du_size)
+		return 0;
+
+	/* Walk a copy of the iterator that ends after one data unit. */
+	du_iter.bi_size = du_ctx->du_size;
+
+	__bio_for_each_segment(bv, bio, du_iter, du_iter) {
+		if (n == du_ctx->max_bvecs)
+			return 0;
+		if (!n && !IS_ALIGNED(bv.bv_offset, align))
+			return 0;
+
+		du_ctx->bvecs[n++] = bv;
+	}
+
+	return n;
+}
+
 static void __blk_crypto_fallback_encrypt_bio(struct bio *src_bio,
 		struct crypto_sync_skcipher *tfm)
 {
@@ -378,42 +488,40 @@ static blk_status_t __blk_crypto_fallback_decrypt_bio(struct bio *bio,
 		struct crypto_sync_skcipher *tfm)
 {
 	SYNC_SKCIPHER_REQUEST_ON_STACK(ciph_req, tfm);
-	u64 curr_dun[BLK_CRYPTO_DUN_ARRAY_SIZE];
-	union blk_crypto_iv iv;
-	struct scatterlist sg;
-	struct bio_vec bv;
-	const int data_unit_size = bc->bc_key->crypto_cfg.data_unit_size;
-	unsigned int i;
+	struct blk_crypto_du_ctx du_ctx;
+	blk_status_t status = BLK_STS_OK;
+	unsigned int i, n;
 
 	skcipher_request_set_callback(ciph_req,
 			CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
 			NULL, NULL);
+	blk_crypto_du_ctx_init(&du_ctx, ciph_req, bc);
+	/* Decrypt in place, so both sides use the same scatterlist. */
+	du_ctx.dst_sg = du_ctx.src_sg;
 
-	memcpy(curr_dun, bc->bc_dun, sizeof(curr_dun));
-	sg_init_table(&sg, 1);
-	skcipher_request_set_crypt(ciph_req, &sg, &sg, data_unit_size,
-				   iv.bytes);
-
-	/* Decrypt each segment in the bio */
-	__bio_for_each_segment(bv, bio, iter, iter) {
-		struct page *page = bv.bv_page;
-
-		if (!IS_ALIGNED(bv.bv_len | bv.bv_offset, data_unit_size))
-			return BLK_STS_INVAL;
-
-		sg_set_page(&sg, page, data_unit_size, bv.bv_offset);
-
-		/* Decrypt each data unit in the segment */
-		for (i = 0; i < bv.bv_len; i += data_unit_size) {
-			blk_crypto_dun_to_iv(curr_dun, &iv);
-			if (crypto_skcipher_decrypt(ciph_req))
-				return BLK_STS_IOERR;
-			bio_crypt_dun_increment(curr_dun, 1);
-			sg.offset += data_unit_size;
+	/* Decrypt each data unit in the bio, in place */
+	while (iter.bi_size) {
+		n = blk_crypto_du_bvecs(bio, &iter, &du_ctx);
+		if (!n) {
+			status = BLK_STS_INVAL;
+			break;
 		}
+
+		sg_init_table(du_ctx.src_sg, n);
+		for (i = 0; i < n; i++)
+			sg_set_page(&du_ctx.src_sg[i], du_ctx.bvecs[i].bv_page,
+				    du_ctx.bvecs[i].bv_len,
+				    du_ctx.bvecs[i].bv_offset);
+
+		if (blk_crypto_crypt_du(&du_ctx, false)) {
+			status = BLK_STS_IOERR;
+			break;
+		}
+
+		bio_advance_iter_single(bio, &iter, du_ctx.du_size);
 	}
 
-	return BLK_STS_OK;
+	return status;
 }
 
 /*
