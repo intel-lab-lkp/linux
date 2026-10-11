@@ -1908,6 +1908,7 @@ err:
 	hw_cfg->gpio1.valid = false;
 	hw_cfg->gpio2.valid = false;
 	acpi_dev_put(cs35l41->dacpi);
+	cs35l41->dacpi = NULL;
 
 	return ret;
 }
@@ -1929,6 +1930,7 @@ static int cs35l41_hda_read_acpi(struct cs35l41_hda *cs35l41, const char *hid, i
 	struct device *physdev __free(put_device) =
 		get_device(acpi_get_first_physical_node(adev));
 	if (!physdev) {
+		cs35l41->dacpi = NULL;
 		acpi_dev_put(adev);
 		return -ENODEV;
 	}
@@ -1986,8 +1988,10 @@ int cs35l41_hda_probe(struct device *dev, const char *device_name, int id, int i
 	dev_set_drvdata(dev, cs35l41);
 
 	ret = cs35l41_hda_read_acpi(cs35l41, device_name, id);
-	if (ret)
-		return dev_err_probe(cs35l41->dev, ret, "Platform not supported\n");
+	if (ret) {
+		dev_err_probe(cs35l41->dev, ret, "Platform not supported\n");
+		goto err_acpi;
+	}
 
 	if (IS_ERR(cs35l41->reset_gpio)) {
 		ret = PTR_ERR(cs35l41->reset_gpio);
@@ -2065,6 +2069,12 @@ int cs35l41_hda_probe(struct device *dev, const char *device_name, int id, int i
 	dev_info(cs35l41->dev, "Cirrus Logic CS35L41 (%x), Revision: %02X\n", regid, reg_revid);
 
 	return 0;
+
+err_acpi:
+	acpi_dev_put(cs35l41->dacpi);
+	kfree(cs35l41->acpi_subsystem_id);
+
+	return ret;
 
 err_pm:
 	pm_runtime_dont_use_autosuspend(cs35l41->dev);
