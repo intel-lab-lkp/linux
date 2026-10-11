@@ -207,14 +207,11 @@ CFLAGS += -I${top_srcdir}/tools/testing/selftests
 CFLAGS += $(USERCFLAGS)
 LDFLAGS += $(USERLDFLAGS)
 
-# When make O= with kselftest target from main level
-# the following aren't defined.
-#
-ifdef building_out_of_srctree
-LINK.c = $(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) $(TARGET_ARCH)
-COMPILE.S = $(CC) $(ASFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
-LINK.S = $(CC) $(ASFLAGS) $(CPPFLAGS) $(LDFLAGS) $(TARGET_ARCH)
-endif
+# Make's built-in variables are not defined when run with -R, which kbuild
+# passes down when a test is built from the main level.
+LINK.c ?= $(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) $(TARGET_ARCH)
+COMPILE.S ?= $(CC) $(ASFLAGS) $(CPPFLAGS) $(TARGET_MACH) -c
+LINK.S ?= $(CC) $(ASFLAGS) $(CPPFLAGS) $(LDFLAGS) $(TARGET_MACH)
 
 # Selftest makefiles can override those targets by setting
 # OVERRIDE_TARGETS = 1.
