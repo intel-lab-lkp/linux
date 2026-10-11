@@ -10,7 +10,7 @@
 #
 OUTPUT=./
 ifeq ("$(origin O)", "command line")
-	OUTPUT := $(O)/
+	OUTPUT := $(O)/$(if $(subdir),$(subdir)/)
 endif
 
 ifneq ($(OUTPUT),)
