@@ -98,6 +98,7 @@
 #include <net/genetlink.h>
 #include <net/netlink.h>
 #include <sound/core.h>
+#include <sound/rawmidi.h>
 #include <trace/events/rust_sample.h>
 
 /*
