@@ -1508,7 +1508,7 @@ static void mhi_pci_remove(struct pci_dev *pdev)
 	pci_disable_sriov(pdev);
 
 	if (!pdev->is_virtfn)
-		timer_delete_sync(&mhi_pdev->health_check_timer);
+		timer_shutdown_sync(&mhi_pdev->health_check_timer);
 	cancel_work_sync(&mhi_pdev->recovery_work);
 
 	if (test_and_clear_bit(MHI_PCI_DEV_STARTED, &mhi_pdev->status)) {
