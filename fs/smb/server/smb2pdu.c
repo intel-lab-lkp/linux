@@ -8628,23 +8628,15 @@ static int set_file_allocation_info(struct ksmbd_work *work,
 	alloc_blks = (alloc_size + 511) >> 9;
 	inode = file_inode(fp->filp);
 
-	if (alloc_blks > stat.blocks) {
-		smb_break_all_levII_oplock(work, fp, 1);
-		rc = vfs_fallocate(fp->filp, FALLOC_FL_KEEP_SIZE, 0,
-				   alloc_blks * 512);
-		if (rc && rc != -EOPNOTSUPP) {
-			pr_err("vfs_fallocate is failed : %d\n", rc);
-			return rc;
-		}
-	} else if (alloc_blks < stat.blocks) {
+	if (alloc_blks * 512 < i_size_read(inode) ||
+	    alloc_blks < stat.blocks) {
 		loff_t size;
 
 		/*
-		 * Allocation size could be smaller than original one
-		 * which means allocated blocks in file should be
-		 * deallocated. use truncate to cut out it, but inode
-		 * size is also updated with truncate offset.
-		 * inode size is retained by backup inode size.
+		 * Truncate before considering allocation when the new size is below
+		 * EOF. This avoids allocating holes in a sparse file just before
+		 * shrinking it. Also release excess blocks if EOF is already
+		 * smaller than the requested allocation size.
 		 */
 		size = i_size_read(inode);
 		rc = ksmbd_vfs_truncate(work, fp, alloc_blks * 512);
@@ -8654,6 +8646,14 @@ static int set_file_allocation_info(struct ksmbd_work *work,
 		}
 		if (size < alloc_blks * 512)
 			i_size_write(inode, size);
+	} else if (alloc_blks > stat.blocks) {
+		smb_break_all_levII_oplock(work, fp, 1);
+		rc = vfs_fallocate(fp->filp, FALLOC_FL_KEEP_SIZE, 0,
+				   alloc_blks * 512);
+		if (rc && rc != -EOPNOTSUPP) {
+			pr_err("vfs_fallocate is failed : %d\n", rc);
+			return rc;
+		}
 	}
 
 	fp->allocation_size = le64_to_cpu(file_alloc_info->AllocationSize);
