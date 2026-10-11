@@ -73,6 +73,26 @@ int cxld_await_commit(void __iomem *hdm, int id)
 }
 EXPORT_SYMBOL_FOR_MODULES(cxld_await_commit, "cxl_core");
 
+static int cxld_await_uncommit(void __iomem *hdm, int id)
+{
+	u32 ctrl;
+	int i;
+
+	for (i = 0; i < COMMIT_TIMEOUT_MS; i++) {
+		ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+		if (FIELD_GET(CXL_HDM_DECODER0_CTRL_COMMIT_ERROR, ctrl)) {
+			ctrl &= ~CXL_HDM_DECODER0_CTRL_COMMIT;
+			writel(ctrl, hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+			return -EIO;
+		}
+		if (!FIELD_GET(CXL_HDM_DECODER0_CTRL_COMMITTED, ctrl))
+			return 0;
+		fsleep(1000);
+	}
+
+	return -ETIMEDOUT;
+}
+
 static u32 cxl_hdm_write_range(void __iomem *hdm,
 			       const struct cxl_decoder_config *config)
 {
@@ -270,6 +290,166 @@ int cxl_hdm_read_state(struct device *dev, void __iomem *hdm,
 			info->decoder_count, count);
 		return -ENXIO;
 	}
+
+	return 0;
+}
+
+static int cxl_hdm_decoder_uncommit(struct device *dev, void __iomem *hdm,
+				    int id, bool *retained)
+{
+	u32 ctrl;
+	int rc;
+
+	*retained = false;
+	ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+	if (ctrl == U32_MAX)
+		return -EIO;
+	if (ctrl & CXL_HDM_DECODER0_CTRL_COMMIT_ERROR) {
+		dev_err(dev, "CXL HDM decoder %d has commit error set\n", id);
+		return -EIO;
+	}
+
+	if (ctrl & CXL_HDM_DECODER0_CTRL_LOCK) {
+		if (ctrl & CXL_HDM_DECODER0_CTRL_COMMITTED) {
+			*retained = true;
+			return 0;
+		}
+
+		dev_err(dev, "CXL HDM decoder %d is locked and uncommitted\n",
+			id);
+		return -EIO;
+	}
+
+	if (!(ctrl & CXL_HDM_DECODER0_CTRL_COMMITTED))
+		return 0;
+
+	ctrl &= ~CXL_HDM_DECODER0_CTRL_COMMIT;
+	writel(ctrl, hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+
+	rc = cxld_await_uncommit(hdm, id);
+	if (rc)
+		dev_err(dev, "CXL HDM decoder %d uncommit failed: %d\n", id, rc);
+
+	return rc;
+}
+
+static bool
+cxl_hdm_decoder_settings_match(const struct cxl_endpoint_decoder_settings *saved,
+			       const struct cxl_endpoint_decoder_settings *active)
+{
+	const struct cxl_decoder_config *a = &saved->config;
+	const struct cxl_decoder_config *b = &active->config;
+
+	return a->id == b->id &&
+	       a->hpa_range.start == b->hpa_range.start &&
+	       a->hpa_range.end == b->hpa_range.end &&
+	       a->interleave_ways == b->interleave_ways &&
+	       a->interleave_granularity == b->interleave_granularity &&
+	       a->target_type == b->target_type &&
+	       (a->flags & CXL_DECODER_F_RESET_MASK) ==
+		(b->flags & CXL_DECODER_F_RESET_MASK) &&
+	       saved->skip == active->skip;
+}
+
+static int
+cxl_hdm_restore_decoder(struct device *dev, void __iomem *hdm,
+			const struct cxl_endpoint_decoder_settings *settings)
+{
+	const struct cxl_decoder_config *config = &settings->config;
+	bool retained;
+	u32 ctrl;
+	int rc;
+
+	rc = cxl_hdm_decoder_uncommit(dev, hdm, config->id, &retained);
+	if (rc)
+		return rc;
+
+	if (retained) {
+		struct cxl_endpoint_decoder_settings active;
+
+		rc = cxl_hdm_read_decoder_settings(dev, &active, hdm, config->id);
+		if (rc) {
+			dev_err(dev,
+				"CXL HDM decoder %d has invalid configuration: %d\n",
+				config->id, rc);
+			return rc;
+		}
+		if (!cxl_hdm_decoder_settings_match(settings, &active)) {
+			dev_err(dev,
+				"CXL HDM decoder %d retained unexpected locked state\n",
+				config->id);
+			return -EIO;
+		}
+		return 0;
+	}
+
+	if (!(config->flags & CXL_DECODER_F_ENABLE))
+		return 0;
+
+	cxl_commit_start_endpoint(settings, hdm);
+	rc = cxld_await_commit(hdm, config->id);
+	if (rc) {
+		dev_err(dev, "CXL HDM decoder %d restore failed: %d\n",
+			config->id, rc);
+		return rc;
+	}
+
+	if (!(config->flags & CXL_DECODER_F_LOCK))
+		return 0;
+
+	ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(config->id));
+	if (ctrl == U32_MAX)
+		return -EIO;
+	ctrl |= CXL_HDM_DECODER0_CTRL_LOCK;
+	writel(ctrl, hdm + CXL_HDM_DECODER0_CTRL_OFFSET(config->id));
+
+	ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(config->id));
+	if (ctrl == U32_MAX ||
+	    !(ctrl & CXL_HDM_DECODER0_CTRL_LOCK)) {
+		dev_err(dev, "CXL HDM decoder %d failed to restore lock\n",
+			config->id);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+/**
+ * cxl_hdm_restore_state() - reprogram endpoint HDM decoders from a snapshot
+ * @dev: device for error messages
+ * @hdm: mapped HDM decoder capability
+ * @snapshot: state from cxl_hdm_cache_snapshot()
+ *
+ * Restore global control, then recommit each enabled decoder in order. Leave
+ * a locked decoder that kept its programming across the reset unchanged,
+ * after checking that it still matches @snapshot.
+ *
+ * Return: 0 on success, or the first failure.
+ */
+int cxl_hdm_restore_state(struct device *dev, void __iomem *hdm,
+			  const struct cxl_hdm_info *snapshot)
+{
+	int count;
+	int rc;
+
+	count = cxl_hdm_decoder_count(readl(hdm + CXL_HDM_DECODER_CAP_OFFSET));
+	if (count != snapshot->decoder_count) {
+		dev_err(dev, "CXL HDM decoder count changed from %d to %d\n",
+			snapshot->decoder_count, count);
+		return -ENXIO;
+	}
+
+	/* Restore global HDM control before committing individual decoders. */
+	writel(snapshot->global_ctrl, hdm + CXL_HDM_DECODER_CTRL_OFFSET);
+
+	for (int i = 0; i < snapshot->decoder_count; i++) {
+		rc = cxl_hdm_restore_decoder(dev, hdm, &snapshot->settings[i]);
+		if (rc)
+			return rc;
+	}
+
+	/* Flush posted HDM writes before restoring protocol enables. */
+	readl(hdm + CXL_HDM_DECODER_CTRL_OFFSET);
 
 	return 0;
 }

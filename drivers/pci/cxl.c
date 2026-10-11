@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2026 NVIDIA Corporation & Affiliates */
 /*
- * CXL reset support in the PCI core. Cache the HDM decoder state of a CXL
- * memory device at enumeration, so it can be restored after a reset without
- * a CXL driver, and implement CXL Device Reset. HDM register formats and
+ * CXL reset support in the PCI core: cache the HDM decoder state of a CXL
+ * memory device at enumeration, implement CXL Device Reset, and restore the
+ * cached state afterwards without a CXL driver. HDM register formats and
  * programming live in drivers/cxl.
  */
 #include <linux/bitfield.h>
@@ -16,6 +16,7 @@
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/memregion.h>
+#include <linux/overflow.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
 
@@ -227,6 +228,150 @@ void pci_cxl_hdm_cache_release(struct pci_dev *pdev)
 	cxl_hdm_cache_release(&pdev->hdm);
 }
 
+static void __iomem *cxl_pci_hdm_ioremap_current(struct pci_dev *pdev,
+						 int bar,
+						 resource_size_t offset,
+						 resource_size_t size)
+{
+	struct resource *res;
+	resource_size_t hdm_start;
+	void __iomem *hdm;
+
+	if (bar < 0 || bar >= PCI_STD_NUM_BARS || !size)
+		return IOMEM_ERR_PTR(-EINVAL);
+	if (!cxl_pci_bar_assigned(pdev, bar))
+		return IOMEM_ERR_PTR(-ENODEV);
+
+	res = &pdev->resource[bar];
+	if (offset > resource_size(res) || size > resource_size(res) - offset)
+		return IOMEM_ERR_PTR(-ENODEV);
+	if (check_add_overflow(res->start, offset, &hdm_start))
+		return IOMEM_ERR_PTR(-EOVERFLOW);
+
+	hdm = ioremap(hdm_start, size);
+	if (!hdm) {
+		pci_err(pdev, "failed to remap CXL HDM decoder registers\n");
+		return IOMEM_ERR_PTR(-ENOMEM);
+	}
+
+	return hdm;
+}
+
+static void cxl_restore_pci_state_for_hdm_restore(struct pci_dev *pdev,
+						  u16 *command)
+{
+	u32 saved_config = pdev->saved_config_space[PCI_COMMAND / 4];
+	u32 restore_config;
+
+	device_lock_assert(&pdev->dev);
+	*command = saved_config & 0xffff;
+
+	/*
+	 * Restore BARs and the related PCI state needed to reach HDM MMIO.
+	 * Temporarily alter the saved command value so that
+	 * pci_restore_state() enables MSE but cannot enable BME or INTx before
+	 * CXL state restoration completes. Preserve the original saved value
+	 * for the outer PCI reset path.
+	 */
+	restore_config = saved_config | PCI_COMMAND_MEMORY |
+			 PCI_COMMAND_INTX_DISABLE;
+	restore_config &= ~PCI_COMMAND_MASTER;
+
+	pdev->saved_config_space[PCI_COMMAND / 4] = restore_config;
+	pci_restore_state(pdev);
+	pdev->saved_config_space[PCI_COMMAND / 4] = saved_config;
+}
+
+static int cxl_restore_dvsec_ctrl(struct pci_dev *pdev,
+				  const struct cxl_hdm_info *snapshot)
+{
+	int rc;
+
+	if (!snapshot->dvsec_ctrl_valid) {
+		pci_err(pdev, "CXL DVSEC control snapshot is invalid\n");
+		return -ENXIO;
+	}
+
+	rc = pci_write_config_word(pdev, snapshot->dvsec + PCI_DVSEC_CXL_CTRL,
+				   snapshot->dvsec_ctrl);
+	if (rc) {
+		rc = pcibios_err_to_errno(rc);
+		pci_err(pdev, "failed to restore CXL DVSEC control: %d\n", rc);
+	}
+
+	return rc;
+}
+
+static int cxl_restore_state(struct pci_dev *pdev,
+			     const struct cxl_hdm_info *snapshot)
+{
+	void __iomem *hdm;
+	int rc;
+
+	hdm = cxl_pci_hdm_ioremap_current(pdev, snapshot->hdm_bar,
+					  snapshot->hdm_offset,
+					  snapshot->hdm_size);
+	if (IS_ERR(hdm)) {
+		pci_err(pdev, "failed to map CXL HDM state for restore: %ld\n",
+			PTR_ERR(hdm));
+		return PTR_ERR(hdm);
+	}
+
+	rc = cxl_hdm_restore_state(&pdev->dev, hdm, snapshot);
+	iounmap(hdm);
+	if (rc)
+		return rc;
+
+	return cxl_restore_dvsec_ctrl(pdev, snapshot);
+}
+
+static void cxl_reset_save_disabled_state(struct pci_dev *pdev)
+{
+	u32 *saved_command = &pdev->saved_config_space[PCI_COMMAND / 4];
+	int rc;
+
+	rc = pci_write_config_word(pdev, PCI_COMMAND, PCI_COMMAND_INTX_DISABLE);
+	if (rc)
+		pci_err(pdev,
+			"failed to disable device after CXL reset failure: %d\n",
+			pcibios_err_to_errno(rc));
+
+	/* Preserve the pre-reset snapshot if PCI state has not been restored. */
+	if (!pdev->state_saved) {
+		rc = pci_save_state(pdev);
+		if (rc)
+			pci_err(pdev,
+				"failed to save disabled state after CXL reset failure: %d\n",
+				rc);
+	}
+
+	/* Ensure the outer PCI restore cannot re-enable MSE or BME. */
+	*saved_command &= GENMASK(31, 16);
+	*saved_command |= PCI_COMMAND_INTX_DISABLE;
+}
+
+static int cxl_reset_save_restored_state(struct pci_dev *pdev, u16 command)
+{
+	int rc;
+
+	rc = pci_write_config_word(pdev, PCI_COMMAND, command);
+	if (rc) {
+		rc = pcibios_err_to_errno(rc);
+		pci_err(pdev, "failed to restore PCI command state: %d\n", rc);
+		cxl_reset_save_disabled_state(pdev);
+		return rc;
+	}
+
+	rc = pci_save_state(pdev);
+	if (rc) {
+		pci_err(pdev, "failed to save restored state after CXL reset: %d\n",
+			rc);
+		cxl_reset_save_disabled_state(pdev);
+	}
+
+	return rc;
+}
+
 /*
  * CXL r4.0 sec 9.7.2 defines the reset completion timeout encodings.
  * Sec 9.7.3 leaves config-space access behavior undefined for 100 ms after
@@ -394,7 +539,9 @@ static int cxl_clear_memory(struct pci_dev *pdev, int dvsec, bool initiate)
 }
 
 static int __cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap,
-			      struct cxl_hdm_quiesce *q)
+			      const struct cxl_hdm_info *snapshot,
+			      struct cxl_hdm_quiesce *q,
+			      u16 *command)
 {
 	int rc, rc2;
 
@@ -419,8 +566,15 @@ static int __cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap,
 		pci_err(pdev, "failed to clear CXL Reset Memory Clear: %d\n", rc2);
 	rc = rc ?: rc2;
 
+	if (!rc) {
+		cxl_restore_pci_state_for_hdm_restore(pdev, command);
+		rc = cxl_restore_state(pdev, snapshot);
+	}
+
 	rc2 = cxl_hdm_quiesce_flush(q);
 	rc = rc ?: rc2;
+	if (rc)
+		cxl_reset_save_disabled_state(pdev);
 
 	pci_dev_reset_iommu_done(pdev);
 	return rc;
@@ -431,7 +585,7 @@ static int cxl_reset_quiesced(struct pci_dev *pdev, int dvsec, u16 cap)
 {
 	struct cxl_hdm_info *snapshot __free(kfree) = NULL;
 	struct cxl_hdm_quiesce q;
-	u16 saved_ctrl2;
+	u16 command, saved_ctrl2;
 	int rc, rc2;
 
 	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CTRL2, &saved_ctrl2);
@@ -455,11 +609,19 @@ static int cxl_reset_quiesced(struct pci_dev *pdev, int dvsec, u16 cap)
 
 	rc = cxl_reset_disable_cache(pdev, dvsec, cap);
 	if (!rc)
-		rc = __cxl_reset_execute(pdev, dvsec, cap, &q);
+		rc = __cxl_reset_execute(pdev, dvsec, cap, snapshot, &q,
+					 &command);
 	/* Restore cache policy after any attempt to disable caching. */
 	rc2 = cxl_reset_restore_cache_policy(pdev, dvsec, saved_ctrl2);
 	cxl_hdm_quiesce_destroy(&q);
-	return rc ?: rc2;
+	if (rc)
+		return rc;
+	if (rc2) {
+		cxl_reset_save_disabled_state(pdev);
+		return rc2;
+	}
+
+	return cxl_reset_save_restored_state(pdev, command);
 }
 
 static int cxl_reset_execute(struct pci_dev *pdev, int dvsec, u16 cap)
