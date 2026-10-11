@@ -902,6 +902,15 @@ static ssize_t ntfs_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 			iov_iter_revert(iter, to_zero);
 			iov_iter_zero(to_zero, iter);
 		}
+
+		/* The block with 'valid' is read as a whole, zero its tail. */
+		valid = min_t(loff_t, ntfs_up_block(inode->i_sb, valid),
+			      vbo + bytes);
+		if (end < valid) {
+			size_t done = iov_iter_zero(valid - end, iter);
+
+			iov_iter_revert(iter, done);
+		}
 	} else if (vbo < i_size) {
 		if (end > i_size)
 			bytes = i_size - vbo;

@@ -1052,8 +1052,18 @@ static int ntfs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 			iomap->type = IOMAP_MAPPED;
 		} else if (offset < ni->i_valid) {
 			iomap->type = IOMAP_MAPPED;
-			if (flags & IOMAP_REPORT)
+			if (flags & IOMAP_REPORT) {
 				iomap->length = ni->i_valid - offset;
+			} else if (!rw && !(flags & IOMAP_ZERO)) {
+				/*
+				 * Read. Stop at the end of the block with
+				 * 'valid', the rest is reported as unwritten.
+				 */
+				loff_t vend = ntfs_up_block(sbi->sb, ni->i_valid);
+
+				if (endbyte > vend)
+					iomap->length = vend - offset;
+			}
 		} else if (rw || (flags & IOMAP_ZERO)) {
 			iomap->type = IOMAP_MAPPED;
 		} else {
