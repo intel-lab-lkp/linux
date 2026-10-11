@@ -267,6 +267,43 @@ static void rv_test_rvtest_underflow(struct kunit *test)
 	ha_cancel_timer_sync(ha_mon);
 }
 
+/*
+ * rv_test_rvtest_arm_after_destroy - a storage outlived by its own timer
+ *
+ * da_destroy_storage() cancels the timer, then unlinks:
+ *
+ *	da_monitor_reset_hook()		cancels
+ *	hash_del_rcu()
+ *	call_rcu()
+ *
+ * A reader that resolved the storage before the unlink can arm past that
+ * cancel.  Handlers resolve and use under one guard(rcu)(), so the two steps
+ * are issued separately here.
+ */
+static void rv_test_rvtest_arm_after_destroy(struct kunit *test)
+{
+	struct rv_kunit_ctx *ctx = test->priv;
+	const int id = 4242;
+	struct da_monitor *stale;
+
+	prepare_test(test, &rvtest_mon);
+
+	da_handle_start_run_event(id, NULL, start_rvtest);
+
+	scoped_guard(rcu)			/* resolve before the unlink */
+		stale = da_get_monitor(id, NULL);
+	KUNIT_ASSERT_NOT_NULL(test, stale);
+
+	da_destroy_storage(id);			/* cancel, unlink, call_rcu */
+	ha_start_timer_ns(to_ha_monitor(stale), clk_rvtest,
+			  RVTEST_BUDGET_NS, ha_get_ns());
+
+	rcu_barrier();
+
+	msleep(600);
+	RV_KUNIT_EXPECT_NO_REACTION(test, ctx);
+}
+
 #include "monitors/sco/sco_kunit.c"
 #include "monitors/sssw/sssw_kunit.c"
 #include "monitors/sts/sts_kunit.c"
@@ -285,6 +322,7 @@ static struct kunit_case rv_mon_test_cases[] = {
 	KUNIT_CASE(rv_test_pagefault),
 	KUNIT_CASE(rv_test_sleep),
 	KUNIT_CASE(rv_test_rvtest_underflow),
+	KUNIT_CASE(rv_test_rvtest_arm_after_destroy),
 	{}
 };
 
