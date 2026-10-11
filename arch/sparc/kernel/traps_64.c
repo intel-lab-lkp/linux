@@ -2716,6 +2716,33 @@ void do_privact(struct pt_regs *regs)
 	do_privop(regs);
 }
 
+/* SPARC64 VII Extensions, Appendix P.7.1 and P.7.4. */
+#define VII_AFSR_DEGRADATION	((1UL << 12) | (1UL << 11) | (1UL << 10))
+
+void sparc64_vii_ecc_error(struct pt_regs *regs)
+{
+	enum ctx_state prev_state = exception_enter();
+	unsigned long afsr;
+
+	__asm__ __volatile__("ldxa [%%g0] 0x4c, %0" : "=r" (afsr));
+	/* An ECC trap without a sticky error indication is explicitly allowed. */
+	if (!afsr)
+		goto out;
+
+	/* No data recovery is implemented for raw UE or store bus errors. */
+	if (afsr & ~VII_AFSR_DEGRADATION)
+		panic("SPARC64 VII: unhandled ECC error, CPU %u AFSR=%lx TPC=%lx",
+		      smp_processor_id(), afsr, regs->tpc);
+
+	/* Hardware has already reduced the affected cache/TLB associativity. */
+	__asm__ __volatile__("stxa %0, [%%g0] 0x4c; membar #Sync"
+			     : : "r" (afsr) : "memory");
+	pr_warn_ratelimited("SPARC64 VII: CPU %u cache/TLB degradation, AFSR=%lx\n",
+			    smp_processor_id(), afsr);
+out:
+	exception_exit(prev_state);
+}
+
 /* Trap level 1 stuff or other traps we should never see... */
 void do_cee(struct pt_regs *regs)
 {

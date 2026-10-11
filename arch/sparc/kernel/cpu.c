@@ -123,6 +123,7 @@ static const struct manufacturer_info __initconst manufacturer_info[] = {
 		FPU(-1, NULL)
 	}
 },{
+	/* SPARC64 Fujitsu %ver manufacturer 4 shares the sparc32 TI value. */
 	PSR_IMPL_TI,
 	.cpu_info = {
 		CPU(0, "Texas Instruments, Inc. - SuperSparc-(II)"),
@@ -132,6 +133,7 @@ static const struct manufacturer_info __initconst manufacturer_info[] = {
 		CPU(3, "Texas Instruments, Inc. - SuperSparc 51"),
 		CPU(4, "Texas Instruments, Inc. - SuperSparc 61"),
 		CPU(5, "Texas Instruments, Inc. - unknown"),
+		CPU(7, "Fujitsu SPARC64 VII / VII+"),
 		CPU(-1, NULL)
 	},
 	.fpu_info = {
@@ -139,6 +141,7 @@ static const struct manufacturer_info __initconst manufacturer_info[] = {
 		FPU(0, "SuperSparc on-chip FPU"),
 		/* SparcClassic */
 		FPU(4, "TI MicroSparc on chip FPU"),
+		FPU(7, "Fujitsu SPARC64 VII integrated FPU"),
 		FPU(-1, NULL)
 	}
 },{

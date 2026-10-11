@@ -75,6 +75,7 @@ enum ultra_tlb_layout {
 	cheetah = 1,
 	cheetah_plus = 2,
 	hypervisor = 3,
+	sparc64_vii = 4,
 };
 
 extern enum ultra_tlb_layout tlb_type;

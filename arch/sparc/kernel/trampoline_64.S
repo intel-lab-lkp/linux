@@ -40,12 +40,30 @@ tramp_stack:
 	.align		8
 	.globl		sparc64_cpu_startup, sparc64_cpu_startup_end
 sparc64_cpu_startup:
+	BRANCH_IF_SPARC64_VII(g1, g5, vii_startup)
 	BRANCH_IF_SUN4V(g1, niagara_startup)
 	BRANCH_IF_CHEETAH_BASE(g1, g5, cheetah_startup)
 	BRANCH_IF_CHEETAH_PLUS_OR_FOLLOWON(g1, g5, cheetah_plus_startup)
 
 	ba,pt	%xcc, spitfire_startup
 	 nop
+
+#ifdef CONFIG_SPARC64_VII
+vii_startup:
+	/* Preserve firmware cache/MMU control, as on the boot CPU. */
+	mov		8, %g1
+	ldxa		[%g1] 0x45, %g5
+	sethi		%hi(vii_startup_mcntl), %g1
+	stx		%g5, [%g1 + %lo(vii_startup_mcntl)]
+	membar		#Sync
+	set		0x101c0, %g1
+	andcc		%g5, %g1, %g0
+1:	bne,pn		%xcc, 1b
+	 nop
+	ba,pt		%xcc, niagara_startup
+	 nop
+
+#endif /* CONFIG_SPARC64_VII */
 
 cheetah_plus_startup:
 	/* Preserve OBP chosen DCU and DCR register settings.  */
@@ -144,6 +162,7 @@ startup_continue:
 	lduw		[%l6 + %lo(num_kernel_image_mappings)], %l6
 
 	mov		15, %l7
+	BRANCH_IF_SPARC64_VII(g1,g5,2f)
 	BRANCH_IF_ANY_CHEETAH(g1,g5,2f)
 
 	mov		63, %l7

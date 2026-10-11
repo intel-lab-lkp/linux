@@ -126,7 +126,8 @@ void flush_tsb_user(struct tlb_batch *tb)
 	if (tb->hugepage_shift < REAL_HPAGE_SHIFT) {
 		base = (unsigned long) mm->context.tsb_block[MM_TSB_BASE].tsb;
 		nentries = mm->context.tsb_block[MM_TSB_BASE].tsb_nentries;
-		if (tlb_type == cheetah_plus || tlb_type == hypervisor)
+		if (tlb_type == cheetah_plus || tlb_type == hypervisor ||
+		    tlb_type == sparc64_vii)
 			base = __pa(base);
 		if (tb->hugepage_shift == PAGE_SHIFT)
 			__flush_tsb_one(tb, PAGE_SHIFT, base, nentries);
@@ -140,7 +141,8 @@ void flush_tsb_user(struct tlb_batch *tb)
 	else if (mm->context.tsb_block[MM_TSB_HUGE].tsb) {
 		base = (unsigned long) mm->context.tsb_block[MM_TSB_HUGE].tsb;
 		nentries = mm->context.tsb_block[MM_TSB_HUGE].tsb_nentries;
-		if (tlb_type == cheetah_plus || tlb_type == hypervisor)
+		if (tlb_type == cheetah_plus || tlb_type == hypervisor ||
+		    tlb_type == sparc64_vii)
 			base = __pa(base);
 		__flush_huge_tsb_one(tb, REAL_HPAGE_SHIFT, base, nentries,
 				     tb->hugepage_shift);
@@ -159,7 +161,8 @@ void flush_tsb_user_page(struct mm_struct *mm, unsigned long vaddr,
 	if (hugepage_shift < REAL_HPAGE_SHIFT) {
 		base = (unsigned long) mm->context.tsb_block[MM_TSB_BASE].tsb;
 		nentries = mm->context.tsb_block[MM_TSB_BASE].tsb_nentries;
-		if (tlb_type == cheetah_plus || tlb_type == hypervisor)
+		if (tlb_type == cheetah_plus || tlb_type == hypervisor ||
+		    tlb_type == sparc64_vii)
 			base = __pa(base);
 		if (hugepage_shift == PAGE_SHIFT)
 			__flush_tsb_one_entry(base, vaddr, PAGE_SHIFT,
@@ -174,7 +177,8 @@ void flush_tsb_user_page(struct mm_struct *mm, unsigned long vaddr,
 	else if (mm->context.tsb_block[MM_TSB_HUGE].tsb) {
 		base = (unsigned long) mm->context.tsb_block[MM_TSB_HUGE].tsb;
 		nentries = mm->context.tsb_block[MM_TSB_HUGE].tsb_nentries;
-		if (tlb_type == cheetah_plus || tlb_type == hypervisor)
+		if (tlb_type == cheetah_plus || tlb_type == hypervisor ||
+		    tlb_type == sparc64_vii)
 			base = __pa(base);
 		__flush_huge_tsb_one_entry(base, vaddr, REAL_HPAGE_SHIFT,
 					   nentries, hugepage_shift);
@@ -270,7 +274,9 @@ static void setup_tsb_params(struct mm_struct *mm, unsigned long tsb_idx, unsign
 	}
 	tte |= pte_sz_bits(page_sz);
 
-	if (tlb_type == cheetah_plus || tlb_type == hypervisor) {
+	/* VII siblings share TLBs: per-mm TSBs cannot reuse a fixed VA/slot. */
+	if (tlb_type == cheetah_plus || tlb_type == hypervisor ||
+	    tlb_type == sparc64_vii) {
 		/* Physical mapping, no locked TLB entry for TSB.  */
 		tsb_reg |= tsb_paddr;
 
@@ -502,7 +508,8 @@ retry_tsb_alloc:
 		unsigned long old_tsb_base = (unsigned long) old_tsb;
 		unsigned long new_tsb_base = (unsigned long) new_tsb;
 
-		if (tlb_type == cheetah_plus || tlb_type == hypervisor) {
+		if (tlb_type == cheetah_plus || tlb_type == hypervisor ||
+		    tlb_type == sparc64_vii) {
 			old_tsb_base = __pa(old_tsb_base);
 			new_tsb_base = __pa(new_tsb_base);
 		}

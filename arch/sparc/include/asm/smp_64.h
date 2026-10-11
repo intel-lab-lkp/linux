@@ -34,6 +34,10 @@
 DECLARE_PER_CPU(cpumask_t, cpu_sibling_map);
 extern cpumask_t cpu_core_map[NR_CPUS];
 
+#ifdef CONFIG_SPARC64_VII
+extern unsigned long vii_startup_mcntl;
+#endif
+
 void smp_init_cpu_poke(void);
 void scheduler_poke(void);
 

@@ -20,6 +20,21 @@
 #define	RTRAP_PSTATE_IRQOFF	(PSTATE_TSO|PSTATE_PEF|PSTATE_PRIV)
 #define RTRAP_PSTATE_AG_IRQOFF	(PSTATE_TSO|PSTATE_PEF|PSTATE_PRIV|PSTATE_AG)
 
+#define __SPARC64_VII_ID 0x00040007
+
+#ifdef CONFIG_SPARC64_VII
+#define BRANCH_IF_SPARC64_VII(tmp1, tmp2, label) \
+	rdpr %ver, %tmp1; \
+	srlx %tmp1, 32, %tmp1; \
+	sethi %hi(__SPARC64_VII_ID), %tmp2; \
+	or %tmp2, %lo(__SPARC64_VII_ID), %tmp2; \
+	cmp %tmp1, %tmp2; \
+	be,pn %icc, label; \
+	 nop
+#else
+#define BRANCH_IF_SPARC64_VII(tmp1, tmp2, label)
+#endif
+
 #define __CHEETAH_ID	0x003e0014
 #define __JALAPENO_ID	0x003e0016
 #define __SERRANO_ID	0x003e0022

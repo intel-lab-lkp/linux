@@ -288,7 +288,6 @@ static void smp_synchronize_one_tick(int cpu)
 static void ldom_startcpu_cpuid(unsigned int cpu, unsigned long thread_reg,
 				void **descrp)
 {
-	extern unsigned long sparc64_ttable_tl0;
 	extern unsigned long kern_locked_tte_data;
 	struct hvtramp_descr *hdesc;
 	unsigned long trampoline_ra;
@@ -344,6 +343,11 @@ extern unsigned long sparc64_cpu_startup;
  */
 static struct thread_info *cpu_new_thread = NULL;
 
+#ifdef CONFIG_SPARC64_VII
+/* Written before the secondary validates its inherited MMU control. */
+unsigned long vii_startup_mcntl;
+#endif
+
 static int smp_boot_one_cpu(unsigned int cpu, struct task_struct *idle)
 {
 	unsigned long entry =
@@ -354,6 +358,10 @@ static int smp_boot_one_cpu(unsigned int cpu, struct task_struct *idle)
 	int timeout, ret;
 
 	callin_flag = 0;
+#ifdef CONFIG_SPARC64_VII
+	if (tlb_type == sparc64_vii)
+		WRITE_ONCE(vii_startup_mcntl, ~0UL);
+#endif
 	cpu_new_thread = task_thread_info(idle);
 
 	if (tlb_type == hypervisor) {
@@ -381,6 +389,11 @@ static int smp_boot_one_cpu(unsigned int cpu, struct task_struct *idle)
 		ret = 0;
 	} else {
 		printk("Processor %d is stuck.\n", cpu);
+#ifdef CONFIG_SPARC64_VII
+		if (tlb_type == sparc64_vii)
+			pr_err("VII secondary CPU %u MCNTL=%lx (all ones: not reached)\n",
+			       cpu, READ_ONCE(vii_startup_mcntl));
+#endif
 		ret = -ENODEV;
 	}
 	cpu_new_thread = NULL;
@@ -388,6 +401,55 @@ static int smp_boot_one_cpu(unsigned int cpu, struct task_struct *idle)
 	kfree(descr);
 
 	return ret;
+}
+
+/*
+ * VII manual Appendix N: dispatch using BUSY/NACK pair zero, one target
+ * at a time. No Spitfire UDB erratum access and no hypervisor operation.
+ */
+static void vii_xcall_deliver(struct trap_per_cpu *tb, int cnt)
+{
+	u64 *data = __va(tb->cpu_mondo_block_pa);
+	u16 *cpus = __va(tb->cpu_list_pa);
+	unsigned long pstate, disabled;
+	int i;
+
+	__asm__ __volatile__("rdpr %%pstate, %0" : "=r" (pstate));
+	disabled = pstate & ~PSTATE_IE;
+	for (i = 0; i < cnt; i++) {
+		unsigned long target = ((unsigned long)cpus[i] << 14) | 0x70;
+		unsigned long status = 0;
+		int retry;
+
+		for (retry = 0; retry < 10000; retry++) {
+			int polls = 1000000;
+
+			__asm__ __volatile__("wrpr %0, 0, %%pstate\n\t"
+				"stxa %1, [%4] %7\n\t"
+				"stxa %2, [%5] %7\n\t"
+				"stxa %3, [%6] %7\n\t"
+				"membar #Sync\n\t"
+				"stxa %%g0, [%8] %7\n\t"
+				"membar #Sync"
+				: : "r" (disabled), "r" (data[0]), "r" (data[1]),
+				"r" (data[2]), "r" (0x40UL), "r" (0x50UL),
+				"r" (0x60UL), "i" (ASI_INTR_W), "r" (target)
+				: "memory");
+			do {
+				__asm__ __volatile__("ldxa [%%g0] %1, %0"
+					: "=r" (status) : "i" (ASI_INTR_DISPATCH_STAT));
+			} while ((status & 1) && --polls);
+			__asm__ __volatile__("wrpr %0, 0, %%pstate"
+				: : "r" (pstate) : "memory");
+			if (!polls)
+				panic("VII IPI busy timeout target=%u status=%lx", cpus[i], status);
+			if (!(status & 2))
+				break;
+			udelay(2);
+		}
+		if (retry == 10000)
+			panic("VII IPI NACK timeout target=%u status=%lx", cpus[i], status);
+	}
 }
 
 static void spitfire_xcall_helper(u64 data0, u64 data1, u64 data2, u64 pstate, unsigned long cpu)
@@ -1205,7 +1267,9 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 
 void __init smp_setup_processor_id(void)
 {
-	if (tlb_type == spitfire)
+	if (tlb_type == sparc64_vii)
+		xcall_deliver_impl = vii_xcall_deliver;
+	else if (tlb_type == spitfire)
 		xcall_deliver_impl = spitfire_xcall_deliver;
 	else if (tlb_type == cheetah || tlb_type == cheetah_plus)
 		xcall_deliver_impl = cheetah_xcall_deliver;
@@ -1241,8 +1305,13 @@ void smp_fill_in_sib_core_maps(void)
 			    cpu_data(j).max_cache_id)
 				cpumask_set_cpu(j, &cpu_core_sib_cache_map[i]);
 
-			if (cpu_data(i).sock_id == cpu_data(j).sock_id)
+			if (tlb_type == sparc64_vii) {
+				if (i == j || (cpu_data(i).proc_id >= 0 &&
+				    cpu_data(i).proc_id == cpu_data(j).proc_id))
+					cpumask_set_cpu(j, &cpu_core_sib_map[i]);
+			} else if (cpu_data(i).sock_id == cpu_data(j).sock_id) {
 				cpumask_set_cpu(j, &cpu_core_sib_map[i]);
+			}
 		}
 	}
 
@@ -1256,8 +1325,14 @@ void smp_fill_in_sib_core_maps(void)
 		}
 
 		for_each_present_cpu(j) {
-			if (cpu_data(i).proc_id ==
-			    cpu_data(j).proc_id)
+			bool sibling;
+
+			/* VII proc_id identifies the package, not the core. */
+			if (tlb_type == sparc64_vii)
+				sibling = cpu_data(i).core_id == cpu_data(j).core_id;
+			else
+				sibling = cpu_data(i).proc_id == cpu_data(j).proc_id;
+			if (sibling)
 				cpumask_set_cpu(j, &per_cpu(cpu_sibling_map, i));
 		}
 	}
@@ -1325,6 +1400,10 @@ int __cpu_disable(void)
 	int cpu = smp_processor_id();
 	cpuinfo_sparc *c;
 	int i;
+
+	/* VII secondary startup does not implement offline/restart. */
+	if (tlb_type == sparc64_vii)
+		return -EOPNOTSUPP;
 
 	for_each_cpu(i, &cpu_core_map[cpu])
 		cpumask_clear_cpu(cpu, &cpu_core_map[i]);
