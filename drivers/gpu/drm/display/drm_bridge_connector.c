@@ -414,11 +414,24 @@ static int drm_bridge_connector_atomic_check(struct drm_connector *connector,
 {
 	struct drm_bridge_connector *bridge_connector =
 		to_drm_bridge_connector(connector);
+	struct drm_connector_state *old_state =
+		drm_atomic_get_old_connector_state(state, connector);
+	struct drm_connector_state *new_state =
+		drm_atomic_get_new_connector_state(state, connector);
+	struct drm_crtc_state *crtc_state;
 
-	if (bridge_connector->bridge_hdmi)
-		return drm_atomic_helper_connector_hdmi_check(connector, state);
+	if (!bridge_connector->bridge_hdmi)
+		return 0;
 
-	return 0;
+	if (new_state->crtc && old_state->colorspace != new_state->colorspace) {
+		crtc_state = drm_atomic_get_crtc_state(state, new_state->crtc);
+		if (IS_ERR(crtc_state))
+			return PTR_ERR(crtc_state);
+
+		crtc_state->mode_changed = true;
+	}
+
+	return drm_atomic_helper_connector_hdmi_check(connector, state);
 }
 
 static const struct drm_connector_helper_funcs drm_bridge_connector_helper_funcs = {
@@ -1079,6 +1092,12 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 					       connector_type, ddc);
 		if (ret)
 			return ERR_PTR(ret);
+
+		ret = drm_mode_create_hdmi_colorspace_property(connector, 0);
+		if (ret)
+			return ERR_PTR(ret);
+
+		drm_connector_attach_colorspace_property(connector);
 	} else {
 		ret = drmm_connector_init(drm, connector,
 					  &drm_bridge_connector_funcs,
