@@ -9207,8 +9207,13 @@ void ieee80211_sta_work(struct ieee80211_sub_if_data *sdata)
 			 * the response to be received and processed first.
 			 */
 			if (status_acked) {
+				/*
+				 * Some APs need ~200 ms to respond (seen with
+				 * MLO) and treat a retried request as a new
+				 * association, so don't retry too early.
+				 */
 				ifmgd->assoc_data->timeout =
-					jiffies + IEEE80211_ASSOC_TIMEOUT_SHORT;
+					jiffies + IEEE80211_ASSOC_TIMEOUT_LONG;
 				run_again(sdata, ifmgd->assoc_data->timeout);
 			} else {
 				ifmgd->assoc_data->timeout = jiffies - 1;
