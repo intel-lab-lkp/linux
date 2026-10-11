@@ -81,10 +81,40 @@ static struct blk_crypto_fallback_keyslot {
 static struct blk_crypto_profile *blk_crypto_fallback_profile;
 static struct workqueue_struct *blk_crypto_wq;
 static mempool_t *blk_crypto_bounce_page_pool;
+static struct kmem_cache *blk_crypto_du_ctx_cache;
+static mempool_t *blk_crypto_du_ctx_pool;
 static struct bio_set enc_bio_set;
 
-/* Data unit sizes blk-crypto-fallback can en/decrypt. */
-#define BLK_CRYPTO_FALLBACK_DU_MASK	GENMASK(PAGE_SHIFT, SECTOR_SHIFT)
+/*
+ * The maximum number of pages a data unit may span: the largest power of
+ * two that fits in one encrypted bio.  An encrypted bio holds at most
+ * BIO_MAX_VECS bio_vecs, and a data unit can need one more bio_vec than
+ * the pages it spans when a bio_vec boundary splits it.
+ */
+#define BLK_CRYPTO_DU_MAX_PAGES		BIT(ilog2(BIO_MAX_VECS - 1))
+
+/*
+ * Data unit sizes that blk-crypto-fallback can en/decrypt: at least a
+ * sector, and small enough that the bio_vecs of a data unit fit in one
+ * encrypted bio.
+ */
+#define BLK_CRYPTO_FALLBACK_DU_MASK \
+	GENMASK(ilog2(BLK_CRYPTO_DU_MAX_PAGES * PAGE_SIZE), SECTOR_SHIFT)
+
+/*
+ * Number of scratch buffers to keep around: mempool_alloc() only uses them
+ * when the page allocator fails, so this is the number of bios that can
+ * still make progress when memory is short.
+ */
+#define BLK_CRYPTO_DU_CTX_POOL_SIZE	8
+
+/*
+ * Size of one blk_crypto_du_ctx_pool allocation: the bio_vecs of the largest
+ * data unit, and a scatterlist for each side of the crypto request.
+ */
+#define BLK_CRYPTO_DU_CTX_SIZE \
+	((BLK_CRYPTO_DU_MAX_PAGES + 1) * \
+	(sizeof(struct bio_vec) + 2 * sizeof(struct scatterlist)))
 
 /*
  * This is the key we set when evicting a keyslot. This *should* be the all 0's
@@ -144,6 +174,17 @@ static const struct blk_crypto_ll_ops blk_crypto_fallback_ll_ops = {
 	.keyslot_evict          = blk_crypto_fallback_keyslot_evict,
 };
 
+static void blk_crypto_free_enc_pages(struct page **pages, unsigned int nr)
+{
+	unsigned int i;
+
+	if (!nr)
+		return;
+	i = mempool_free_bulk(blk_crypto_bounce_page_pool, (void **)pages, nr);
+	if (i < nr)
+		release_pages(pages + i, nr - i);
+}
+
 static void blk_crypto_fallback_encrypt_endio(struct bio *enc_bio)
 {
 	struct bio *src_bio = enc_bio->bi_private;
@@ -158,10 +199,7 @@ static void blk_crypto_fallback_encrypt_endio(struct bio *enc_bio)
 	bio_for_each_bvec_all(bv, enc_bio, i)
 		pages[i] = bv->bv_page;
 
-	i = mempool_free_bulk(blk_crypto_bounce_page_pool, (void **)pages,
-			enc_bio->bi_vcnt);
-	if (i < enc_bio->bi_vcnt)
-		release_pages(pages + i, enc_bio->bi_vcnt - i);
+	blk_crypto_free_enc_pages(pages, enc_bio->bi_vcnt);
 
 	if (enc_bio->bi_status)
 		cmpxchg(&src_bio->bi_status, 0, enc_bio->bi_status);
@@ -251,6 +289,8 @@ struct blk_crypto_du_ctx {
 	struct bio_vec		stack_bvec;
 	/* Backing store for src_sg and dst_sg, one entry each. */
 	struct scatterlist	stack_sgs[2];
+	/* Backing store for bvecs and the scatterlists, if not on the stack. */
+	void			*pool_buf;
 
 	/* The data unit size in bytes. */
 	unsigned int		du_size;
@@ -269,6 +309,11 @@ struct blk_crypto_du_ctx {
 	u64			curr_dun[BLK_CRYPTO_DUN_ARRAY_SIZE];
 };
 
+/*
+ * Prepare @du_ctx for the data unit of @bc's key.  A data unit that needs
+ * more than one bio_vec gets its arrays from blk_crypto_du_ctx_pool instead
+ * of the ones in @du_ctx; that never fails, as the pool is a mempool.
+ */
 static void blk_crypto_du_ctx_init(struct blk_crypto_du_ctx *du_ctx,
 				   struct skcipher_request *ciph_req,
 				   const struct bio_crypt_ctx *bc)
@@ -277,10 +322,27 @@ static void blk_crypto_du_ctx_init(struct blk_crypto_du_ctx *du_ctx,
 	du_ctx->du_size = bc->bc_key->crypto_cfg.data_unit_size;
 	memcpy(du_ctx->curr_dun, bc->bc_dun, sizeof(bc->bc_dun));
 
-	du_ctx->max_bvecs = 1;
-	du_ctx->bvecs = &du_ctx->stack_bvec;
-	du_ctx->src_sg = &du_ctx->stack_sgs[0];
-	du_ctx->dst_sg = &du_ctx->stack_sgs[1];
+	if (du_ctx->du_size <= PAGE_SIZE) {
+		du_ctx->max_bvecs = 1;
+		du_ctx->bvecs = &du_ctx->stack_bvec;
+		du_ctx->src_sg = &du_ctx->stack_sgs[0];
+		du_ctx->dst_sg = &du_ctx->stack_sgs[1];
+		du_ctx->pool_buf = NULL;
+	} else {
+		/* blk_crypto_fallback_bio_prep() checks the pool is set up. */
+		du_ctx->max_bvecs = PFN_UP(du_ctx->du_size) + 1;
+		du_ctx->pool_buf = mempool_alloc(blk_crypto_du_ctx_pool,
+						 GFP_NOIO);
+		du_ctx->bvecs = du_ctx->pool_buf;
+		du_ctx->src_sg = du_ctx->pool_buf +
+				 du_ctx->max_bvecs * sizeof(*du_ctx->bvecs);
+		du_ctx->dst_sg = du_ctx->src_sg + du_ctx->max_bvecs;
+	}
+}
+
+static void blk_crypto_du_ctx_exit(struct blk_crypto_du_ctx *du_ctx)
+{
+	mempool_free(du_ctx->pool_buf, blk_crypto_du_ctx_pool);
 }
 
 /*
@@ -372,9 +434,9 @@ static void __blk_crypto_fallback_encrypt_bio(struct bio *src_bio,
 
 	/*
 	 * Encrypt each data unit in the source bio.  A data unit is described by
-	 * one bio_vec per page.  Because the encrypted bios are limited to a
-	 * single page per bio_vec, this can generate more than a single
-	 * encrypted bio per source bio.
+	 * one bio_vec per page, and may span more than a single page.  Because
+	 * the encrypted bios are limited to a single page per bio_vec, this can
+	 * generate more than a single encrypted bio per source bio.
 	 */
 new_bio:
 	nr_enc_pages = min(bio_segments(src_bio), BIO_MAX_VECS);
@@ -416,6 +478,8 @@ new_bio:
 				enc_bio->bi_status = BLK_STS_INVAL;
 				goto out_free_enc_bio;
 			}
+			blk_crypto_free_enc_pages(enc_pages + enc_idx,
+						  nr_enc_pages - enc_idx);
 			/*
 			 * For each additional encrypted bio submitted,
 			 * increment the source bio's remaining count.  Each
@@ -444,14 +508,18 @@ new_bio:
 				enc_page = cur_enc_page;
 			} else {
 				/*
-				 * A bio_vec that holds more than one data unit
-				 * is added with its whole length; the data
-				 * units that follow it fill in the same bounce
-				 * page before the encrypted bio is submitted.
+				 * The whole bio_vec is added for the first
+				 * bio_vec of a data unit; the data units that
+				 * follow it fill in the same bounce page
+				 * before the encrypted bio is submitted.
 				 */
+				unsigned int len = i ? du_ctx.bvecs[i].bv_len :
+						      src_bv.bv_len;
+				unsigned int off = i ? du_ctx.bvecs[i].bv_offset :
+						      src_bv.bv_offset;
+
 				enc_page = enc_pages[enc_idx++];
-				__bio_add_page(enc_bio, enc_page, src_bv.bv_len,
-					       src_bv.bv_offset);
+				__bio_add_page(enc_bio, enc_page, len, off);
 				cur_enc_page = enc_page;
 			}
 
@@ -477,24 +545,20 @@ new_bio:
 			goto out_free_enc_bio;
 		}
 
-		bio_advance_iter_single(src_bio, &src_bio->bi_iter,
-					du_ctx.du_size);
+		/* A data unit can span several bio_vecs, e.g. for direct I/O. */
+		bio_advance_iter(src_bio, &src_bio->bi_iter, du_ctx.du_size);
 		if (!src_bio->bi_iter.bi_size)
 			break;
 	}
 
+	blk_crypto_du_ctx_exit(&du_ctx);
+	blk_crypto_free_enc_pages(enc_pages + enc_idx, nr_enc_pages - enc_idx);
 	submit_bio(enc_bio);
 	return;
 
 out_free_enc_bio:
-	/*
-	 * Add the remaining pages to the bio so that the normal completion path
-	 * in blk_crypto_fallback_encrypt_endio frees them.  The exact data
-	 * layout does not matter for that, so don't bother iterating the source
-	 * bio.
-	 */
-	for (; enc_idx < nr_enc_pages; enc_idx++)
-		__bio_add_page(enc_bio, enc_pages[enc_idx], PAGE_SIZE, 0);
+	blk_crypto_du_ctx_exit(&du_ctx);
+	blk_crypto_free_enc_pages(enc_pages + enc_idx, nr_enc_pages - enc_idx);
 	bio_endio(enc_bio);
 }
 
@@ -557,9 +621,11 @@ static blk_status_t __blk_crypto_fallback_decrypt_bio(struct bio *bio,
 			break;
 		}
 
-		bio_advance_iter_single(bio, &iter, du_ctx.du_size);
+		/* A data unit can span several bio_vecs, e.g. for direct I/O. */
+		bio_advance_iter(bio, &iter, du_ctx.du_size);
 	}
 
+	blk_crypto_du_ctx_exit(&du_ctx);
 	return status;
 }
 
@@ -648,6 +714,18 @@ bool blk_crypto_fallback_bio_prep(struct bio *bio)
 
 	if (bc->bc_key->crypto_cfg.key_type != BLK_CRYPTO_KEY_TYPE_RAW) {
 		bio_endio_status(bio, BLK_STS_NOTSUPP);
+		return false;
+	}
+	if (WARN_ON_ONCE(!(BLK_CRYPTO_FALLBACK_DU_MASK &
+			   bc->bc_key->crypto_cfg.data_unit_size))) {
+		/* The key was set up for a data unit the fallback can't handle. */
+		bio_endio_status(bio, BLK_STS_NOTSUPP);
+		return false;
+	}
+	if (WARN_ON_ONCE(bc->bc_key->crypto_cfg.data_unit_size > PAGE_SIZE &&
+			 !blk_crypto_du_ctx_pool)) {
+		/* The key was set up without the scratch space it needs. */
+		bio_io_error(bio);
 		return false;
 	}
 
@@ -765,7 +843,9 @@ out:
 /*
  * Prepare blk-crypto-fallback for the specified crypto configuration.
  * Returns -EOPNOTSUPP if the fallback can't handle the data unit size of the
- * configuration, or -ENOPKG if the needed crypto API support is missing.
+ * configuration, -ENOPKG if the needed crypto API support is missing, or
+ * -ENOMEM if the scratch space for a data unit larger than a page can't be
+ * allocated.
  */
 int blk_crypto_fallback_start_using_key(const struct blk_crypto_config *cfg)
 {
@@ -779,6 +859,35 @@ int blk_crypto_fallback_start_using_key(const struct blk_crypto_config *cfg)
 		pr_warn_ratelimited("can't handle data unit size %u\n",
 				    cfg->data_unit_size);
 		return -EOPNOTSUPP;
+	}
+
+	/*
+	 * A data unit that needs more than one bio_vec, e.g. a data unit that
+	 * is larger than a page, gets its data unit context from this pool.
+	 * Set the pool up before the fast path below, which can't create it.
+	 */
+	if (cfg->data_unit_size > PAGE_SIZE) {
+		mutex_lock(&tfms_init_lock);
+		if (!blk_crypto_du_ctx_pool) {
+			blk_crypto_du_ctx_cache =
+				kmem_cache_create("blk_crypto_du_ctx",
+						  BLK_CRYPTO_DU_CTX_SIZE,
+						  0, 0, NULL);
+			if (!blk_crypto_du_ctx_cache) {
+				mutex_unlock(&tfms_init_lock);
+				return -ENOMEM;
+			}
+			blk_crypto_du_ctx_pool =
+				mempool_create_slab_pool(BLK_CRYPTO_DU_CTX_POOL_SIZE,
+							 blk_crypto_du_ctx_cache);
+			if (!blk_crypto_du_ctx_pool) {
+				kmem_cache_destroy(blk_crypto_du_ctx_cache);
+				blk_crypto_du_ctx_cache = NULL;
+				mutex_unlock(&tfms_init_lock);
+				return -ENOMEM;
+			}
+		}
+		mutex_unlock(&tfms_init_lock);
 	}
 
 	/*
