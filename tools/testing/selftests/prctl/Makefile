@@ -7,8 +7,7 @@ ifeq ($(ARCH),x86)
 TEST_PROGS := disable-tsc-ctxt-sw-stress-test disable-tsc-on-off-stress-test \
 		disable-tsc-test set-anon-vma-name-test set-process-name
 all: $(TEST_PROGS)
+endif
+endif
 
 include ../lib.mk
-
-endif
-endif
