@@ -59,6 +59,7 @@ struct mtk_crtc {
 #endif
 
 	struct device			*mmsys_dev;
+	struct mtk_drm_private		*mmsys_priv;
 	struct device			*dma_dev;
 	struct mtk_mutex		*mutex;
 	unsigned int			ddp_comp_nr;
@@ -696,7 +697,7 @@ static void mtk_crtc_update_output(struct drm_crtc *crtc,
 	if (!mtk_crtc->num_conn_routes)
 		return;
 
-	priv = ((struct mtk_drm_private *)crtc->dev->dev_private)->all_drm_private[crtc_index];
+	priv = mtk_crtc->mmsys_priv;
 	dev = priv->dev;
 
 	dev_dbg(dev, "connector change:%d, encoder mask:0x%x for crtc:%d\n",
@@ -1055,6 +1056,7 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 
 	mtk_crtc->ddp_comp_nr = path_len;
 	mtk_crtc->mmsys_dev = priv->mmsys_dev;
+	mtk_crtc->mmsys_priv = priv;
 
 	mtk_crtc->mutex = mtk_mutex_get(priv->mutex_dev);
 	if (IS_ERR(mtk_crtc->mutex)) {
