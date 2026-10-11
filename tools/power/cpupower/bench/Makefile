@@ -10,11 +10,12 @@ ifneq ($(O),)
 	OUTPUT := $(O)/
 endif
 endif
+LIBOUTPUT := $(if $(filter /%,$(OUTPUT)),,../)$(OUTPUT)
 
 ifeq ($(strip $(STATIC)),true)
 LIBS = -L../ -L$(OUTPUT) -lm
 OBJS = $(OUTPUT)main.o $(OUTPUT)parse.o $(OUTPUT)system.o $(OUTPUT)benchmark.o \
-       $(OUTPUT)../lib/cpufreq.o $(OUTPUT)../lib/cpupower.o
+       $(LIBOUTPUT)lib/cpufreq.o $(LIBOUTPUT)lib/cpupower.o
 else
 LIBS = -L../ -L$(OUTPUT) -lm -lcpupower
 OBJS = $(OUTPUT)main.o $(OUTPUT)parse.o $(OUTPUT)system.o $(OUTPUT)benchmark.o
