@@ -7,13 +7,13 @@
 //!
 //! C header: [`include/sound/core.h`](srctree/include/sound/core.h)
 
-use core::marker::PhantomData;
+use core::{marker::PhantomData, ptr::NonNull};
 use kernel::{
     bindings,
     device::Device,
     error::{to_result, Result},
     prelude::*,
-    sync::Arc,
+    sync::{Arc, SpinLockIrq},
     types::ForeignOwnable,
 };
 
@@ -338,3 +338,66 @@ impl RawMidi {
         copy_to_c_buf(&mut rmidi.name, name)
     }
 }
+
+/// A thread-safe helper for sharing ALSA substream across execution contexts.
+///
+/// # Safety
+///
+/// Implementations MUST clear any [`ActiveMidiSubstream`] before `close` returns.
+/// TODO: enforce in framework.
+#[pin_data(PinnedDrop)]
+pub struct ActiveMidiSubstream {
+    #[pin]
+    ptr: SpinLockIrq<Option<NonNull<bindings::snd_rawmidi_substream>>>,
+}
+
+impl ActiveMidiSubstream {
+    /// Creates a new initialiser for an empty substream.
+    pub fn new() -> impl PinInit<Self> {
+        pin_init!(Self {
+            ptr <- kernel::sync::new_spinlock_irq!(None),
+        })
+    }
+
+    /// Stores the given substream reference as the active target.
+    pub fn store(&self, substream: &RawMidiSubstream) {
+        let mut guard = self.ptr.lock();
+        *guard = NonNull::new(substream.ptr);
+    }
+
+    /// Clears the tracked substream reference.
+    pub fn clear(&self) {
+        let mut guard = self.ptr.lock();
+        *guard = None;
+    }
+
+    /// Executes a closure while holding the spinlock with a temporary reference
+    /// to the active substream, if present.
+    ///
+    /// Returns `None` if no stream is currently active.
+    pub fn with_active<F, R>(&self, f: F) -> Option<R>
+    where
+        F: FnOnce(&RawMidiSubstream) -> R,
+    {
+        let guard = self.ptr.lock();
+        let nn_ptr = (*guard)?;
+        // SAFETY: The raw ptr can only be stored using a valid rawmidi_substream.
+        let safe_substream = unsafe { RawMidiSubstream::from_raw(nn_ptr.as_ptr()) };
+
+        Some(f(&safe_substream))
+    }
+}
+
+#[pinned_drop]
+impl PinnedDrop for ActiveMidiSubstream {
+    fn drop(self: Pin<&mut Self>) {
+        self.clear()
+    }
+}
+
+// SAFETY: snd_rawmidi_substream is accessed only under the SpinLockIrq and it is
+// only ever valid between the ALSA `open` and `close` callbacks, during
+// which the ALSA core guarantees the substream is alive (see the type docs).
+unsafe impl Send for ActiveMidiSubstream {}
+// SAFETY: snd_rawmidi_substream is accessed only under the SpinLockIrq. See above.
+unsafe impl Sync for ActiveMidiSubstream {}
