@@ -145,6 +145,10 @@ static void mtk_crtc_destroy(struct drm_crtc *crtc)
 		struct mtk_ddp_comp *comp;
 
 		comp = mtk_crtc->ddp_comp[i];
+		/* The connector route slot is empty until the first enable */
+		if (!comp)
+			continue;
+
 		mtk_ddp_comp_unregister_vblank_cb(comp);
 	}
 
