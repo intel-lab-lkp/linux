@@ -163,7 +163,7 @@ static void mlxsw_sp2_kvdl_free(struct mlxsw_sp *mlxsw_sp, void *priv,
 	struct mlxsw_sp2_kvdl *kvdl = priv;
 	struct mlxsw_sp2_kvdl_part *part = kvdl->parts[type];
 
-	return mlxsw_sp2_kvdl_part_free(mlxsw_sp, part, size, entry_index);
+	mlxsw_sp2_kvdl_part_free(mlxsw_sp, part, size, entry_index);
 }
 
 static int mlxsw_sp2_kvdl_alloc_size_query(struct mlxsw_sp *mlxsw_sp,
