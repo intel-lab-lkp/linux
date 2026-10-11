@@ -9,6 +9,7 @@
  */
 
 #include <linux/interrupt.h>
+#include <linux/iopoll.h>
 #include <linux/module.h>
 #include "otx_cptvf.h"
 #include "otx_cptvf_algs.h"
@@ -930,6 +931,8 @@ clear_drvdata:
 static void otx_cptvf_remove(struct pci_dev *pdev)
 {
 	struct otx_cptvf *cptvf = pci_get_drvdata(pdev);
+	union otx_cptx_vqx_inprog vqx_inprog;
+	int ret;
 
 	if (!cptvf) {
 		dev_err(&pdev->dev, "Invalid CPT-VF device\n");
@@ -937,22 +940,33 @@ static void otx_cptvf_remove(struct pci_dev *pdev)
 	}
 
 	/* Convey DOWN to PF */
-	if (otx_cptvf_send_vf_down(cptvf)) {
+	if (otx_cptvf_send_vf_down(cptvf))
 		dev_err(&pdev->dev, "PF not responding to DOWN msg\n");
-	} else {
-		sysfs_remove_group(&pdev->dev.kobj, &otx_cptvf_sysfs_group);
-		otx_cpt_crypto_exit(pdev, THIS_MODULE, cptvf->vftype);
-		cptvf_free_irq_affinity(cptvf, CPT_VF_INT_VEC_E_DONE);
-		cptvf_free_irq_affinity(cptvf, CPT_VF_INT_VEC_E_MISC);
-		free_irq(pci_irq_vector(pdev, CPT_VF_INT_VEC_E_DONE), cptvf);
-		free_irq(pci_irq_vector(pdev, CPT_VF_INT_VEC_E_MISC), cptvf);
-		cptvf_sw_cleanup(cptvf);
-		pci_free_irq_vectors(cptvf->pdev);
-		pci_iounmap(pdev, cptvf->reg_base);
-		pci_release_regions(pdev);
-		pci_disable_device(pdev);
-		pci_set_drvdata(pdev, NULL);
-	}
+
+	sysfs_remove_group(&pdev->dev.kobj, &otx_cptvf_sysfs_group);
+	otx_cpt_crypto_exit(pdev, THIS_MODULE, cptvf->vftype);
+
+	/* Disable the VQ and wait for in-flight instructions to complete. */
+	cptvf_write_vq_ctl(cptvf, 0);
+	ret = readq_poll_timeout(cptvf->reg_base + OTX_CPT_VQX_INPROG(0),
+				 vqx_inprog.u, !vqx_inprog.s.inflight,
+				 10, 1000000);
+	if (ret)
+		dev_warn(&pdev->dev, "Timed out waiting for VQ to become idle\n");
+
+	/* Disable PCI bus mastering before releasing resources. */
+	pci_clear_master(pdev);
+
+	cptvf_free_irq_affinity(cptvf, CPT_VF_INT_VEC_E_DONE);
+	cptvf_free_irq_affinity(cptvf, CPT_VF_INT_VEC_E_MISC);
+	free_irq(pci_irq_vector(pdev, CPT_VF_INT_VEC_E_DONE), cptvf);
+	free_irq(pci_irq_vector(pdev, CPT_VF_INT_VEC_E_MISC), cptvf);
+	cptvf_sw_cleanup(cptvf);
+	pci_free_irq_vectors(cptvf->pdev);
+	pci_iounmap(pdev, cptvf->reg_base);
+	pci_release_regions(pdev);
+	pci_disable_device(pdev);
+	pci_set_drvdata(pdev, NULL);
 }
 
 /* Supported devices */
