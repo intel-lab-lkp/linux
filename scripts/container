@@ -10,11 +10,95 @@ import dataclasses
 import logging
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
 import tomllib
 import uuid
+
+
+def _init_registry_regex():
+    domain = r'[{anum}][{anum}-]*\.[{anum}\.-]*[{anum}]'.format(anum=r'a-z0-9')
+    ipv6 = r'\[[a-fA-F0-9\:]+\]'
+    port = r'[\d]{1,5}'
+    return rf'((?P<domain>{domain})|(?P<ipv6>{ipv6}))(\:(?P<port>{port}))?'
+
+
+def _init_image_regex():
+    step = r'([{anum}]|[{anum}][a-z0-9_\.\-]*[{anum}])'.format(anum=r'a-z0-9')
+    tag = r'[a-zA-Z0-9_][a-zA-Z0-9_\.\-\/]{0,127}'
+    return rf'(?P<path>{step}(\/{step})*)(\:(?P<tag>{tag}))?'
+
+
+REGISTRY_REGEX = _init_registry_regex()
+IMAGE_REGEX = _init_image_regex()
+
+
+class ImageParserMixin:
+    """Helper mixin to parse container image names"""
+
+    @classmethod
+    def from_fields(cls, fields):
+        """Get an object using a valid subset of fields or None"""
+        kwargs = {}
+        for field in dataclasses.fields(cls):
+            if value := fields.get(field.name):
+                kwargs[field.name] = value
+        return cls(**kwargs) if kwargs else None
+
+    @classmethod
+    def from_name(cls, name):
+        """Get an object using fields in the name matching ._regex or None"""
+        re_match = cls._regex.match(name)
+        return cls.from_fields(re_match.groupdict()) if re_match else None
+
+
+@dataclasses.dataclass
+class RegistryName(ImageParserMixin):
+    """Parsed container registry name with no image"""
+    registry: str = None
+    domain: str = None
+    ipv6: str = None
+    port: str = None
+    _regex = re.compile(rf'^(?P<registry>{REGISTRY_REGEX})$')
+
+
+@dataclasses.dataclass
+class ImageName(ImageParserMixin):
+    """Parsed container image name with no registry"""
+    image: str = None
+    path: str = None
+    tag: str = None
+    _regex = re.compile(rf'^(?P<image>{IMAGE_REGEX})$')
+
+
+@dataclasses.dataclass
+class FullImageName(ImageParserMixin):
+    """Parsed image name including an optional registry"""
+    image: ImageName
+    registry: RegistryName = None
+    _regex = re.compile(
+        rf'^((?P<registry>{REGISTRY_REGEX})\/)?(?P<image>{IMAGE_REGEX})?$'
+    )
+
+    @property
+    def name(self):
+        """Full name in registry/image:tag format with optional registry"""
+        return (
+            '/'.join((self.registry.registry, self.image.image))
+            if self.registry else self.image.image
+        )
+
+    @classmethod
+    def from_name(cls, name):
+        if re_match := cls._regex.match(name):
+            fields = re_match.groupdict()
+            return FullImageName(
+                registry=RegistryName.from_fields(fields),
+                image=ImageName.from_fields(fields),
+            )
+        return None
 
 
 class ContainerRuntime(abc.ABC):
@@ -145,6 +229,7 @@ class Config:
     """Container configuration"""
     image: str = None
     runtime: str = None
+    registry: str = None
     env_file: str = None
     uid: int = None
     gid: int = None
@@ -188,23 +273,40 @@ def _get_logger(verbose):
     return logger
 
 
+def _get_image(args, config):
+    image_name = args.image or config.image
+    if not image_name:
+        raise ValueError("no image specified")
+    image = FullImageName.from_name(image_name)
+    if image is None:
+        raise ValueError(f"invalid image name: {image_name}")
+    if args.registry == '':
+        image.registry = None
+    elif args.registry is not None:
+        image.registry = RegistryName.from_name(args.registry)
+        if image.registry is None:
+            raise ValueError(f"invalid registry name: {args.registry}")
+    elif config.registry is not None and image.registry is None:
+        image.registry = RegistryName.from_name(config.registry)
+        if image.registry is None:
+            raise ValueError(f"invalid registry name: {config.registry}")
+    return image
+
+
 def main(args):
     """Main entry point for the container tool"""
     logger = _get_logger(args.verbose)
     try:
         config = Config.from_toml(args.config_file, args.config_profile)
-        runtime = args.runtime or config.runtime
-        cls = Runtimes.get(runtime) if runtime else Runtimes.find()
+        runtime_name = args.runtime or config.runtime
+        cls = Runtimes.get(runtime_name) if runtime_name else Runtimes.find()
+        logger.debug("runtime: %s", cls.name)
+        image = _get_image(args, config)
+        logger.debug("image: %s", image.name)
     except ValueError as ex:
         logger.error(ex)
         return 1
-    logger.debug("runtime: %s", cls.name)
-    image = args.image or config.image
-    if not image:
-        logger.error("no image specified")
-        return 1
-    logger.debug("image: %s", image)
-    return cls(args, config, logger).run(image, args.cmd)
+    return cls(args, config, logger).run(image.name, args.cmd)
 
 
 if __name__ == '__main__':
@@ -234,6 +336,12 @@ if __name__ == '__main__':
         '-p', '--config-profile',
         help="Profile section to use in the config file.  This will override "
         "any values defined in the DEFAULT section."
+    )
+    parser.add_argument(
+        '-R', '--registry', nargs='?', const='',
+        help="Container registry name.  Any registry already included in the "
+        "image name will be replaced or removed when using this option with "
+        "no value."
     )
     parser.add_argument(
         '-r', '--runtime', choices=Runtimes.get_names(),
