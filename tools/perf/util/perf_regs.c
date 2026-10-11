@@ -43,6 +43,9 @@ uint64_t perf_intr_reg_mask(uint16_t e_machine, int *abi /*inout*/)
 	uint64_t mask = 0;
 
 	switch (e_machine) {
+	case EM_ALPHA:
+		mask = __perf_reg_mask_alpha(/*intr=*/true);
+		break;
 	case EM_ARM:
 		mask = __perf_reg_mask_arm(/*intr=*/true);
 		break;
@@ -86,6 +89,9 @@ uint64_t perf_user_reg_mask(uint16_t e_machine, int *abi /*inout*/)
 	uint64_t mask = 0;
 
 	switch (e_machine) {
+	case EM_ALPHA:
+		mask = __perf_reg_mask_alpha(/*intr=*/false);
+		break;
 	case EM_ARM:
 		mask = __perf_reg_mask_arm(/*intr=*/false);
 		break;
@@ -129,6 +135,9 @@ const char *perf_reg_name(int id, uint16_t e_machine, uint32_t e_flags, int abi)
 	const char *reg_name = NULL;
 
 	switch (e_machine) {
+	case EM_ALPHA:
+		reg_name = __perf_reg_name_alpha(id);
+		break;
 	case EM_ARM:
 		reg_name = __perf_reg_name_arm(id);
 		break;
@@ -198,6 +207,8 @@ out:
 uint64_t perf_arch_reg_ip(uint16_t e_machine)
 {
 	switch (e_machine) {
+	case EM_ALPHA:
+		return __perf_reg_ip_alpha();
 	case EM_ARM:
 		return __perf_reg_ip_arm();
 	case EM_AARCH64:
@@ -227,6 +238,8 @@ uint64_t perf_arch_reg_ip(uint16_t e_machine)
 uint64_t perf_arch_reg_sp(uint16_t e_machine)
 {
 	switch (e_machine) {
+	case EM_ALPHA:
+		return __perf_reg_sp_alpha();
 	case EM_ARM:
 		return __perf_reg_sp_arm();
 	case EM_AARCH64:

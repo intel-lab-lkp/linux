@@ -185,6 +185,8 @@ static int get_libdw_frame_nregs(unsigned int machine, unsigned int flags __mayb
 		return 74;
 	case EM_MIPS:
 		return 71;
+	case EM_ALPHA:
+		return 65;
 	default:
 		return 0;
 	}
@@ -227,6 +229,9 @@ int get_dwarf_regnum_for_perf_regnum(int perf_regnum, unsigned int machine,
 		break;
 	case EM_MIPS:
 		reg = __get_dwarf_regnum_for_perf_regnum_mips(perf_regnum);
+		break;
+	case EM_ALPHA:
+		reg = __get_dwarf_regnum_for_perf_regnum_alpha(perf_regnum);
 		break;
 	default:
 		pr_err("ELF MACHINE %x is not supported.\n", machine);

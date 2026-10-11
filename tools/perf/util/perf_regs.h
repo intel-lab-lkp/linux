@@ -34,6 +34,11 @@ const char *__perf_reg_name_arm64(int id);
 uint64_t __perf_reg_ip_arm64(void);
 uint64_t __perf_reg_sp_arm64(void);
 
+uint64_t __perf_reg_mask_alpha(bool intr);
+const char *__perf_reg_name_alpha(int id);
+uint64_t __perf_reg_ip_alpha(void);
+uint64_t __perf_reg_sp_alpha(void);
+
 uint64_t __perf_reg_mask_arm(bool intr);
 const char *__perf_reg_name_arm(int id);
 uint64_t __perf_reg_ip_arm(void);

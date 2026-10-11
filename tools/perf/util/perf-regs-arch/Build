@@ -1,4 +1,5 @@
 perf-util-y += perf_regs_aarch64.o
+perf-util-y += perf_regs_alpha.o
 perf-util-y += perf_regs_arm.o
 perf-util-y += perf_regs_csky.o
 perf-util-y += perf_regs_loongarch.o
