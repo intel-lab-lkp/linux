@@ -863,6 +863,17 @@ static int tlob_parse_remove_line(char *buf, char **name_out)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_RV_MONITORS_KUNIT_TEST)
+#include <kunit/visibility.h>
+#include "tlob_kunit.h"
+
+const struct rv_tlob_kunit_ops rv_tlob_kunit_ops = {
+	.parse_uprobe_line = tlob_parse_uprobe_line,
+	.parse_remove_line = tlob_parse_remove_line,
+};
+EXPORT_SYMBOL_IF_KUNIT(rv_tlob_kunit_ops);
+#endif
+
 static int tlob_create_or_delete_uprobe(char *buf)
 {
 	loff_t offset_start, offset_stop;

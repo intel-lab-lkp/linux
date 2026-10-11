@@ -309,6 +309,7 @@ static void rv_test_rvtest_arm_after_destroy(struct kunit *test)
 #include "monitors/sts/sts_kunit.c"
 #include "monitors/opid/opid_kunit.c"
 #include "monitors/nomiss/nomiss_kunit.c"
+#include "monitors/tlob/tlob_kunit.c"
 #include "monitors/pagefault/pagefault_kunit.c"
 #include "monitors/sleep/sleep_kunit.c"
 
@@ -323,6 +324,7 @@ static struct kunit_case rv_mon_test_cases[] = {
 	KUNIT_CASE(rv_test_sleep),
 	KUNIT_CASE(rv_test_rvtest_underflow),
 	KUNIT_CASE(rv_test_rvtest_arm_after_destroy),
+	KUNIT_CASE(rv_test_tlob),
 	{}
 };
 
