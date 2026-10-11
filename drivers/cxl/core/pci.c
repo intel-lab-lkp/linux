@@ -6,6 +6,7 @@
 #include <linux/delay.h>
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
+#include <cxl/hdm.h>
 #include <cxl/pci.h>
 #include <linux/aer.h>
 #include <cxlpci.h>
@@ -179,6 +180,75 @@ int cxl_await_media_ready(struct cxl_dev_state *cxlds)
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_await_media_ready, "CXL");
+
+/**
+ * cxl_hdm_get_cached_info() - get the PCI-owned HDM cache for a decoder
+ * @cxlhdm: HDM capability whose port identifies the upstream PCI device
+ * @id: decoder ID to validate against the cached decoder count
+ *
+ * The caller must hold cxl_rwsem.dpa for write throughout this call and
+ * all access through the returned pointer. The pointer refers to the live
+ * cache; ownership remains with the PCI device.
+ *
+ * Return: the cache containing @id, or NULL if no upstream PCI device or
+ * cache exists, or @id is outside the cached decoder count.
+ */
+struct cxl_hdm_info *cxl_hdm_get_cached_info(struct cxl_hdm *cxlhdm, int id)
+{
+	struct cxl_hdm_info *info;
+
+	struct pci_dev *pdev __free(pci_dev_put) =
+		cxl_port_get_uport_pci_dev(cxlhdm->port);
+
+	if (!pdev)
+		return NULL;
+
+	lockdep_assert_held_write(&cxl_rwsem.dpa);
+	info = pdev->hdm;
+	if (!info)
+		return NULL;
+
+	if (id < 0 || id >= info->decoder_count) {
+		pci_warn(pdev, "CXL HDM decoder %d exceeds cached count %d\n",
+			 id, info->decoder_count);
+		return NULL;
+	}
+
+	return info;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_hdm_get_cached_info, "CXL");
+
+/**
+ * cxl_hdm_check_decoder_count() - check enumeration against the PCI HDM cache
+ * @cxlhdm: HDM capability containing the decoder count to check
+ *
+ * Take cxl_rwsem.dpa for read while comparing the cached count. Call only
+ * for hardware HDM decoders, since DVSEC-emulated ranges do not describe
+ * the HDM registers represented by the cache.
+ *
+ * Return: 0 if the counts match or no upstream PCI device or cache exists,
+ * or -ENXIO if the cached and enumerated decoder counts differ.
+ */
+int cxl_hdm_check_decoder_count(struct cxl_hdm *cxlhdm)
+{
+	struct pci_dev *pdev __free(pci_dev_put) =
+		cxl_port_get_uport_pci_dev(cxlhdm->port);
+
+	if (!pdev)
+		return 0;
+
+	guard(rwsem_read)(&cxl_rwsem.dpa);
+	if (pdev->hdm &&
+	    pdev->hdm->decoder_count != cxlhdm->decoder_count) {
+		pci_warn(pdev,
+			 "CXL HDM cache decoder count mismatch: cached=%d hdm=%d\n",
+			 pdev->hdm->decoder_count, cxlhdm->decoder_count);
+		return -ENXIO;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_hdm_check_decoder_count, "CXL");
 
 static int cxl_set_mem_enable(struct cxl_dev_state *cxlds, u16 val)
 {

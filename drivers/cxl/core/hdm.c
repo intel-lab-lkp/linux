@@ -730,6 +730,47 @@ static void cxlsd_set_targets(struct cxl_switch_decoder *cxlsd, u64 *tgt)
 		*tgt |= FIELD_PREP(GENMASK_ULL(63, 56), t[7]->port_id);
 }
 
+static void cxl_hdm_refresh_decoder(struct cxl_hdm *cxlhdm,
+				    struct cxl_decoder *cxld)
+{
+	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
+	struct cxl_endpoint_decoder_settings *settings;
+	struct cxl_hdm_info *info;
+	u32 global_ctrl;
+
+	if (!hdm)
+		return;
+	if (!is_endpoint_decoder(&cxld->dev))
+		return;
+
+	guard(rwsem_write)(&cxl_rwsem.dpa);
+	info = cxl_hdm_get_cached_info(cxlhdm, cxld->config.id);
+	if (!info)
+		return;
+
+	/* Preserve the last good value when the device does not respond. */
+	global_ctrl = readl(hdm + CXL_HDM_DECODER_CTRL_OFFSET);
+	if (global_ctrl != U32_MAX)
+		info->global_ctrl = global_ctrl;
+	settings = &info->settings[cxld->config.id];
+
+	/*
+	 * A disabled decoder's software object may retain its old range and
+	 * skip state. Leave only the decoder id in the cached settings so stale
+	 * state is not restored as an enabled decode.
+	 */
+	*settings = (struct cxl_endpoint_decoder_settings) {
+		.config.id = cxld->config.id,
+	};
+	if (cxld->config.flags & CXL_DECODER_F_ENABLE) {
+		struct cxl_endpoint_decoder *cxled =
+			to_cxl_endpoint_decoder(&cxld->dev);
+
+		settings->config = cxld->config;
+		settings->skip = cxled->skip;
+	}
+}
+
 static void
 cxl_endpoint_decoder_snapshot(struct cxl_endpoint_decoder *cxled,
 			      struct cxl_endpoint_decoder_settings *settings)
@@ -811,6 +852,7 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 	}
 	port->commit_end++;
 	cxld->config.flags |= CXL_DECODER_F_ENABLE;
+	cxl_hdm_refresh_decoder(cxlhdm, cxld);
 
 	return 0;
 }
@@ -883,6 +925,7 @@ static void cxl_decoder_reset(struct cxl_decoder *cxld)
 	writel(0, hdm + CXL_HDM_DECODER0_BASE_LOW_OFFSET(id));
 
 	cxld->config.flags &= ~CXL_DECODER_F_ENABLE;
+	cxl_hdm_refresh_decoder(cxlhdm, cxld);
 
 	/* Userspace is now responsible for reconfiguring this decoder */
 	if (is_endpoint_decoder(&cxld->dev)) {
@@ -1090,8 +1133,16 @@ static int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 {
 	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
 	struct cxl_port *port = cxlhdm->port;
-	int i;
+	/* DVSEC-emulated decoders do not describe the cached HDM registers. */
+	bool emulated = should_emulate_decoders(info);
+	int check_rc, i;
 	u64 dpa_base = 0;
+
+	if (is_cxl_endpoint(port) && hdm && !emulated) {
+		check_rc = cxl_hdm_check_decoder_count(cxlhdm);
+		if (check_rc)
+			return check_rc;
+	}
 
 	cxl_settle_decoders(cxlhdm);
 
@@ -1131,6 +1182,8 @@ static int devm_cxl_enumerate_decoders(struct cxl_hdm *cxlhdm,
 			put_device(&cxld->dev);
 			return rc;
 		}
+		if (!emulated)
+			cxl_hdm_refresh_decoder(cxlhdm, cxld);
 		rc = add_hdm_decoder(port, cxld);
 		if (rc) {
 			dev_warn(&port->dev,
