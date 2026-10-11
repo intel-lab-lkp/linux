@@ -37,6 +37,7 @@
 #include "panthor_gpu.h"
 #include "panthor_heap.h"
 #include "panthor_mmu.h"
+#include "panthor_perf.h"
 #include "panthor_sched.h"
 
 /**
@@ -1635,8 +1636,15 @@ panthor_open(struct drm_device *ddev, struct drm_file *file)
 	if (ret)
 		goto err_destroy_vm_pool;
 
+	ret = panthor_perf_pool_create(pfile);
+	if (ret)
+		goto err_destroy_group_pool;
+
 	file->driver_priv = pfile;
 	return 0;
+
+err_destroy_group_pool:
+	panthor_group_pool_destroy(pfile);
 
 err_destroy_vm_pool:
 	panthor_vm_pool_destroy(pfile);
@@ -1651,6 +1659,7 @@ panthor_postclose(struct drm_device *ddev, struct drm_file *file)
 {
 	struct panthor_file *pfile = file->driver_priv;
 
+	panthor_perf_pool_destroy(pfile);
 	panthor_group_pool_destroy(pfile);
 	panthor_vm_pool_destroy(pfile);
 

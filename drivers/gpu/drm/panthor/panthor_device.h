@@ -29,10 +29,11 @@ struct panthor_hw;
 struct panthor_job;
 struct panthor_mmu;
 struct panthor_fw;
-struct panthor_perfcnt;
 struct panthor_pwr;
+struct panthor_perf;
 struct panthor_vm;
 struct panthor_vm_pool;
+struct panthor_perf_pool;
 
 /**
  * struct panthor_soc_data - Panthor SoC Data
@@ -323,6 +324,9 @@ struct panthor_device {
 		atomic_t recovery_needed;
 	} pm;
 
+	/** @perf: Performance counter management data. */
+	struct panthor_perf *perf;
+
 	/** @profile_mask: User-set profiling flags for job accounting. */
 	u32 profile_mask;
 
@@ -376,6 +380,9 @@ struct panthor_file {
 
 	/** @groups: Scheduling group pool attached to this file. */
 	struct panthor_group_pool *groups;
+
+	/** @sessions: Perf session pool attached to this file. */
+	struct panthor_perf_pool *sessions;
 
 	/** @stats: cycle and timestamp measures for job execution. */
 	struct panthor_gpu_usage stats;

@@ -3,7 +3,9 @@
 /* Copyright 2025 Arm ltd. */
 
 #include <linux/bitops.h>
+#include <drm/drm_managed.h>
 #include <drm/panthor_drm.h>
+#include <drm/drm_print.h>
 
 #include "panthor_device.h"
 #include "panthor_fw.h"
@@ -23,9 +25,24 @@
  */
 #define PANTHOR_HW_COUNTER_SIZE (sizeof(u32))
 
+#define MAX_SESSIONS_PER_FILE 1
+
 struct panthor_perf_counter_block {
 	struct drm_panthor_perf_block_header header;
 	u64 counters[];
+};
+
+struct panthor_perf {
+	/** @info: Pointer to the previously initialized perf info. */
+	struct drm_panthor_perf_info *info;
+};
+
+struct panthor_perf_pool {
+	/** @session_range: The number of sessions supported at a time. */
+	struct xa_limit session_range;
+
+	/** @xa: Xarray used to manage session handles. */
+	struct xarray xa;
 };
 
 static size_t get_annotated_block_size(size_t counters_per_block)
@@ -74,14 +91,82 @@ static void panthor_perf_info_init(struct panthor_device *const ptdev)
  * panthor_perf_init - Initialize the performance counter subsystem.
  * @ptdev: Panthor device
  *
+ * The performance counters require the FW interface to be available to setup the
+ * sampling ringbuffers, so this must be called only after FW is initialized.
+ *
  * Return: 0 on success, negative error code on failure.
  */
 int panthor_perf_init(struct panthor_device *ptdev)
 {
+	struct panthor_perf *perf;
+	int ret = 0;
+
 	if (!ptdev)
 		return -EINVAL;
 
 	panthor_perf_info_init(ptdev);
 
+	perf = drmm_kzalloc(&ptdev->base, sizeof(*perf), GFP_KERNEL);
+	if (!perf)
+		return -ENOMEM;
+
+	drm_info(&ptdev->base, "Performance counter subsystem initialized");
+
+	perf->info = &ptdev->perf_info;
+	ptdev->perf = perf;
+
+	return ret;
+}
+
+/**
+ * panthor_perf_unplug - Terminate the performance counter subsystem.
+ * @ptdev: Panthor device.
+ *
+ * Release the performance counter hardware resources. The control structure is
+ * released with the DRM device.
+ */
+void panthor_perf_unplug(struct panthor_device *ptdev)
+{
+	struct panthor_perf *perf = ptdev->perf;
+
+	if (!perf)
+		return;
+
+	ptdev->perf = NULL;
+}
+
+int panthor_perf_pool_create(struct panthor_file *pfile)
+{
+	struct panthor_perf_pool *pool;
+
+	pool = kzalloc_obj(*pool);
+	if (!pool)
+		return -ENOMEM;
+
+	xa_init_flags(&pool->xa, XA_FLAGS_ALLOC);
+
+	pool->session_range.min = 0;
+	pool->session_range.max = MAX_SESSIONS_PER_FILE - 1;
+
+	pfile->sessions = pool;
+
 	return 0;
+}
+
+void panthor_perf_pool_destroy(struct panthor_file *pfile)
+{
+	struct panthor_perf_pool *pool = pfile->sessions;
+
+	if (IS_ERR_OR_NULL(pool))
+		return;
+
+	if (!xa_empty(&pool->xa)) {
+		drm_err(&pfile->ptdev->base,
+			"Performance counter sessions active when unplugging the driver!");
+	}
+
+	xa_destroy(&pool->xa);
+	kfree(pool);
+
+	pfile->sessions = NULL;
 }
