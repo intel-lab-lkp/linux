@@ -28,6 +28,7 @@ struct reset_control_ops {
 struct module;
 struct device_node;
 struct of_phandle_args;
+struct revocable;
 
 /**
  * struct reset_controller_dev - reset controller entity that might
@@ -48,6 +49,7 @@ struct of_phandle_args;
  *                :c:func:`fwnode_reset_simple_xlate`
  * @nr_resets: number of reset controls in this reset controller device
  * @lock: protects the reset control list from concurrent access
+ * @rev: revocable provider handle for itself
  */
 struct reset_controller_dev {
 	const struct reset_control_ops *ops;
@@ -65,6 +67,7 @@ struct reset_controller_dev {
 			    const struct fwnode_reference_args *reset_spec);
 	unsigned int nr_resets;
 	struct mutex lock;
+	struct revocable *rev;
 };
 
 #if IS_ENABLED(CONFIG_RESET_CONTROLLER)
