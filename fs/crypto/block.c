@@ -234,6 +234,9 @@ void fscrypt_set_bio_crypt_ctx(struct bio *bio, const struct inode *inode,
 		return;
 	ci = fscrypt_get_inode_info_raw(inode);
 
+	/* The data unit number of a bio describes its first data unit. */
+	WARN_ON_ONCE(!IS_ALIGNED(pos, 1U << ci->ci_data_unit_bits));
+
 	fscrypt_generate_dun(ci, pos, dun);
 	bio_crypt_set_ctx(bio, ci->ci_enc_key.blk_key, dun, gfp_mask);
 }

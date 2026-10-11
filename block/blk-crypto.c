@@ -98,6 +98,25 @@ out_no_mem:
 }
 subsys_initcall(bio_crypt_ctx_init);
 
+/**
+ * bio_crypt_set_ctx() - attach an encryption context to a bio
+ * @bio: the bio to attach the context to
+ * @key: the key that the bio will be en/decrypted with
+ * @dun: the data unit number of the bio's first data unit
+ * @gfp_mask: memory allocation flags
+ *
+ * The caller must keep the bio aligned to the data unit size of @key: it must
+ * start at a data unit boundary and be a whole number of data units long,
+ * since the data unit number of a bio describes its first data unit.
+ *
+ * blk_crypto_submit_bio() rejects a bio whose size is not a whole number
+ * of data units, and the block layer splits and merges encrypted bios
+ * only at data unit boundaries; a layer that splits bios itself, e.g.
+ * device-mapper, must keep the alignment itself.
+ *
+ * The bio must be submitted with blk_crypto_submit_bio(), after
+ * blk_crypto_start_using_key() was called for @key on the block device.
+ */
 void bio_crypt_set_ctx(struct bio *bio, const struct blk_crypto_key *key,
 		       const u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE], gfp_t gfp_mask)
 {
@@ -257,6 +276,13 @@ bool __blk_crypto_submit_bio(struct bio *bio)
 	/* Error if bio has no data. */
 	if (WARN_ON_ONCE(!bio_has_data(bio))) {
 		bio_io_error(bio);
+		return false;
+	}
+
+	/* Error if the bio doesn't cover a whole number of data units. */
+	if (WARN_ON_ONCE(!IS_ALIGNED(bio->bi_iter.bi_size,
+				     bc_key->crypto_cfg.data_unit_size))) {
+		bio_endio_status(bio, BLK_STS_INVAL);
 		return false;
 	}
 

@@ -198,6 +198,19 @@ it to a bio, given the blk_crypto_key and the data unit number that will be used
 for en/decryption.  Users don't need to worry about freeing the bio_crypt_ctx
 later, as that happens automatically when the bio is freed or reset.
 
+Users must keep such a bio aligned to the data unit size: the bio must start at
+a data unit boundary and be a whole number of data units long, since the data
+unit number of a bio describes its first data unit.  ``blk_crypto_submit_bio()``
+rejects a bio whose size is not a whole number of data units, and the block layer
+splits and merges encrypted bios only at data unit boundaries, but a layer that
+splits bios itself, e.g. device-mapper, must keep the alignment itself.
+
+Splitting a bio needs at least one whole data unit of room, so a queue limit
+that leaves less than a data unit for a split, e.g. when ``max_sectors_kb`` is
+lowered below the data unit size used on the device, fails the bio with
+``BLK_STS_INVAL``.  Devices that advertise a data unit size must therefore be
+able to issue requests of at least that size.
+
 To submit a bio that uses inline encryption, users must call
 ``blk_crypto_submit_bio()`` instead of the usual ``submit_bio()``.  This will
 submit the bio to the underlying driver if it supports inline crypto, or else

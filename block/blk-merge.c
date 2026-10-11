@@ -346,20 +346,18 @@ static inline unsigned int bvec_seg_gap(struct bio_vec *bvprv,
 int bio_split_io_at(struct bio *bio, const struct queue_limits *lim,
 		unsigned *segs, unsigned max_bytes, unsigned len_align_mask)
 {
-	struct bio_crypt_ctx *bc = bio_crypt_ctx(bio);
 	struct bio_vec bv, bvprv, *bvprvp = NULL;
 	unsigned nsegs = 0, bytes = 0, gaps = 0;
 	unsigned int align, split_bytes;
 	struct bvec_iter iter;
-	unsigned start_align_mask = lim->dma_alignment;
-
-	if (bc) {
-		start_align_mask |= (bc->bc_key->crypto_cfg.data_unit_size - 1);
-		len_align_mask |= (bc->bc_key->crypto_cfg.data_unit_size - 1);
-	}
 
 	bio_for_each_bvec(bv, bio, iter) {
-		if (bv.bv_offset & start_align_mask ||
+		/*
+		 * The bio_vecs of a bio with a crypto context don't have to
+		 * be data unit aligned, only the bio as a whole does; see
+		 * bio_crypt_set_ctx() and bio_split_alignment().
+		 */
+		if (bv.bv_offset & lim->dma_alignment ||
 		    bv.bv_len & len_align_mask)
 			return -EINVAL;
 
