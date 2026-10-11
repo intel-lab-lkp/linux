@@ -54,7 +54,8 @@ properties:
     description:
       A number of phandles to external blocks to set and clear the required
       bits to enable or disable bus protection, necessary to avoid any bus
-      faults while enabling or disabling a power domain.
+      faults while enabling or disabling a power domain, or to restore
+      settings that a block loses when its power domain is turned off.
       For example, this may hold phandles to INFRACFG and SMI.
     minItems: 1
     maxItems: 6
@@ -187,6 +188,19 @@ allOf:
         access-controllers:
           minItems: 2
           maxItems: 2
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt8188-power-controller
+    then:
+      properties:
+        access-controllers:
+          items:
+            - description: handle to INFRACFG_AO register block
+            - description: handle to MFGCFG register block
 
   - if:
       properties:
