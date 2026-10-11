@@ -410,6 +410,16 @@ static inline unsigned int iomap_dio_alignment(struct inode *inode,
 {
 	if (dio_flags & IOMAP_DIO_FSBLOCK_ALIGNED)
 		return i_blocksize(inode);
+
+	/*
+	 * A bio of an encrypted file must cover a whole number of data
+	 * units.  The data unit size of an encryption policy never exceeds
+	 * the block size, so cutting the bios at block size boundaries is
+	 * enough.
+	 */
+	if (IS_ENCRYPTED(inode))
+		return i_blocksize(inode);
+
 	return bdev_logical_block_size(bdev);
 }
 
