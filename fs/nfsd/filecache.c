@@ -1296,8 +1296,17 @@ open_file:
 	 */
 	if (status != nfs_ok || inode->i_nlink == 0)
 		nfsd_file_unhash(nf);
-	else if (want_gc)
+	else if (want_gc) {
 		nfsd_file_lru_add(nf);
+		/*
+		 * nfsd_file_cond_queue() can unhash nf before the LRU add.
+		 * Only one LRU removal succeeds, and that one drops the LRU
+		 * reference.
+		 */
+		if (!test_bit(NFSD_FILE_HASHED, &nf->nf_flags) &&
+		    nfsd_file_lru_remove(nf))
+			refcount_dec(&nf->nf_ref);
+	}
 
 	clear_and_wake_up_bit(NFSD_FILE_PENDING, &nf->nf_flags);
 	if (status == nfs_ok)
