@@ -445,6 +445,8 @@ static void mxc_update_irq_chained_handler(struct mxc_gpio_port *port, bool enab
 	}
 }
 
+DEFINE_FREE(pm_runtime_put_noidle, struct device *, if (_T) pm_runtime_put_noidle(_T))
+
 static int mxc_gpio_probe(struct platform_device *pdev)
 {
 	struct gpio_generic_chip_config config = { };
@@ -486,6 +488,9 @@ static int mxc_gpio_probe(struct platform_device *pdev)
 		return PTR_ERR(port->clk);
 
 	pm_runtime_get_noresume(dev);
+
+	struct device *pm_guard __free(pm_runtime_put_noidle) = dev;
+
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
 
@@ -556,6 +561,8 @@ static int mxc_gpio_probe(struct platform_device *pdev)
 	mxc_update_irq_chained_handler(port, true);
 
 	platform_set_drvdata(pdev, port);
+
+	retain_and_null_ptr(pm_guard);
 	pm_runtime_put_autosuspend(dev);
 
 	return 0;
@@ -564,7 +571,6 @@ out_irqdomain_remove:
 	irq_domain_remove(port->domain);
 out_bgio:
 	pm_runtime_disable(dev);
-	pm_runtime_put_noidle(dev);
 	dev_info(dev, "%s failed with errno %d\n", __func__, err);
 	return err;
 }
