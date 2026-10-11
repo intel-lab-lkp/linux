@@ -14,7 +14,45 @@
 #ifndef _RV_DA_MONITOR_H
 #define _RV_DA_MONITOR_H
 
+/*
+ * Allocation strategy for RV_MON_PER_OBJ monitors, selected before including
+ * this header.  Defining DA_MON_POOL_SIZE N implies DA_ALLOC_POOL.
+ *
+ * DA_ALLOC_AUTO   - kmalloc on demand; unbounded (default).
+ * DA_ALLOC_POOL   - DA_MON_POOL_SIZE pre-allocated slots.  The start handler
+ *                   must run in task context; other handlers only call
+ *                   da_handle_event() and never allocate.
+ * DA_ALLOC_MANUAL - caller pre-inserts storage; framework links the target.
+ */
+#define DA_ALLOC_AUTO   0
+#define DA_ALLOC_POOL   1
+#define DA_ALLOC_MANUAL 2
+
+#ifdef DA_MON_POOL_SIZE
+#if defined(DA_MON_ALLOCATION_STRATEGY) && \
+	DA_MON_ALLOCATION_STRATEGY != DA_ALLOC_POOL
+#error "DA_MON_POOL_SIZE implies DA_ALLOC_POOL"
+#endif
+#if DA_MON_POOL_SIZE == 0
+#error "DA_MON_POOL_SIZE must be non-zero"
+#endif
+#define DA_MON_ALLOCATION_STRATEGY DA_ALLOC_POOL
+#endif /* DA_MON_POOL_SIZE */
+
+#ifndef DA_MON_ALLOCATION_STRATEGY
+#define DA_MON_ALLOCATION_STRATEGY DA_ALLOC_AUTO
+#endif /* DA_MON_ALLOCATION_STRATEGY */
+
+/* Zero default keeps pool-mode conditionals compile-time constant. */
+#ifndef DA_MON_POOL_SIZE
+#if DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL
+#error "DA_ALLOC_POOL requires DA_MON_POOL_SIZE to be defined and non-zero"
+#endif
+#define DA_MON_POOL_SIZE 0
+#endif /* DA_MON_POOL_SIZE */
+
 #include <rv/automata.h>
+#include <linux/mempool.h>
 #include <linux/rv.h>
 #include <rv/kunit.h>
 #include <linux/stringify.h>
@@ -564,6 +602,46 @@ static void da_kfree_cb(struct rcu_head *head)
 }
 
 /*
+ * Zero-initialised for non-pool monitors, whose pool paths compile away.
+ */
+static mempool_t da_monitor_pool;
+
+static void da_pool_return_cb(struct rcu_head *head)
+{
+	struct da_monitor_storage *ms =
+		container_of(head, struct da_monitor_storage, rcu);
+
+	da_monitor_free_hook(&ms->rv.da_mon);
+	mempool_free(ms, &da_monitor_pool);
+}
+
+/*
+ * da_create_pool_storage - pop a free pool slot and insert it into the hash.
+ * Returns NULL if the pool is exhausted.  Caller holds an RCU read-side CS
+ * and the monitor's serialisation lock.
+ */
+static inline struct da_monitor *
+da_create_pool_storage(da_id_type id, monitor_target target,
+		       struct da_monitor *da_mon)
+{
+	struct da_monitor_storage *mon_storage;
+
+	if (da_mon)
+		return da_mon;
+
+	mon_storage = mempool_alloc_preallocated(&da_monitor_pool);
+	if (!mon_storage)
+		return NULL;
+	memset(mon_storage, 0, sizeof(*mon_storage));
+
+	mon_storage->id = id;
+	mon_storage->target = target;
+
+	hash_add_rcu(da_monitor_ht, &mon_storage->node, id);
+	return &mon_storage->rv.da_mon;
+}
+
+/*
  * da_destroy_storage - destroy the per-object storage
  *
  * The caller is responsible to synchronise writers, either with locks or
@@ -584,7 +662,10 @@ static inline void da_destroy_storage(da_id_type id)
 		return;
 	da_monitor_reset_hook(&mon_storage->rv.da_mon);
 	hash_del_rcu(&mon_storage->node);
-	call_rcu(&mon_storage->rcu, da_kfree_cb);
+	if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL)
+		call_rcu(&mon_storage->rcu, da_pool_return_cb);
+	else
+		call_rcu(&mon_storage->rcu, da_kfree_cb);
 }
 
 static void __da_monitor_reset_all(void (*reset)(struct da_monitor *))
@@ -610,6 +691,13 @@ static inline void da_monitor_reset_state_all(void)
 static inline int da_monitor_init(void)
 {
 	hash_init(da_monitor_ht);
+	if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL) {
+		size_t storage_size = sizeof(struct da_monitor_storage);
+
+		return mempool_init_kmalloc_pool(&da_monitor_pool,
+						 DA_MON_POOL_SIZE,
+						 storage_size);
+	}
 	return 0;
 }
 
@@ -629,20 +717,33 @@ static inline void da_monitor_destroy(void)
 	hash_for_each_safe(da_monitor_ht, bkt, tmp, mon_storage, node) {
 		da_monitor_free_hook(&mon_storage->rv.da_mon);
 		hash_del_rcu(&mon_storage->node);
-		kfree(mon_storage);
+		if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL)
+			mempool_free(mon_storage, &da_monitor_pool);
+		else
+			kfree(mon_storage);
+	}
+
+	if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL) {
+		rcu_barrier();
+		mempool_exit(&da_monitor_pool);
 	}
 }
 
 /*
- * Allow the per-object monitors to run allocation manually, necessary if the
- * start condition is in a context problematic for allocation (e.g. scheduling).
- * In such case, if the storage was pre-allocated without a target, set it now.
+ * da_prepare_storage - allocate or link per-object monitor storage.
+ * Only the first start allocates; later starts reuse the existing da_mon.
+ * Must run in task context (see the allocation strategies above).
  */
-#ifdef DA_SKIP_AUTO_ALLOC
-#define da_prepare_storage da_fill_empty_storage
-#else
-#define da_prepare_storage da_create_storage
-#endif /* DA_SKIP_AUTO_ALLOC */
+static inline struct da_monitor *
+da_prepare_storage(da_id_type id, monitor_target target,
+		   struct da_monitor *da_mon)
+{
+	if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL)
+		return da_create_pool_storage(id, target, da_mon);
+	if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_MANUAL)
+		return da_fill_empty_storage(id, target, da_mon);
+	return da_create_storage(id, target, da_mon);
+}
 
 #endif /* RV_MON_TYPE */
 
