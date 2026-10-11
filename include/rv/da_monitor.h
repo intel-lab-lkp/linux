@@ -117,6 +117,16 @@ static struct rv_monitor rv_this;
 #endif
 
 /*
+ * Per-object teardown hook, called for each entry after
+ * da_monitor_reset_all() + da_monitor_sync_hook() and before hash_del_rcu().
+ * Runs after da_monitor_free_hook(), so it may free the storage's target.
+ * Default: no-op.
+ */
+#ifndef da_extra_cleanup
+#define da_extra_cleanup(da_mon)
+#endif
+
+/*
  * Type for the target id, default to int but can be overridden.
  * A long type can work as hash table key (PER_OBJ) but will be downgraded to
  * int in the event tracepoint.
@@ -715,7 +725,9 @@ static inline void da_monitor_destroy(void)
 	 * pending, we can safely assume no concurrent user.
 	 */
 	hash_for_each_safe(da_monitor_ht, bkt, tmp, mon_storage, node) {
+		/* Before da_extra_cleanup(): it frees what the timer reads. */
 		da_monitor_free_hook(&mon_storage->rv.da_mon);
+		da_extra_cleanup(&mon_storage->rv.da_mon);
 		hash_del_rcu(&mon_storage->node);
 		if (DA_MON_ALLOCATION_STRATEGY == DA_ALLOC_POOL)
 			mempool_free(mon_storage, &da_monitor_pool);
