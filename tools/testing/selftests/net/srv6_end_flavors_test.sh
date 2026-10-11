@@ -22,8 +22,7 @@
 # flavors will be supported in the kernel.
 #
 # The purpose of the PSP flavor consists in instructing the penultimate node
-# listed in the SRv6 policy to remove (i.e. pop) the outermost SRH from the IPv6
-# header.
+# listed in the SRv6 policy to remove (i.e. pop) the SRH from the IPv6 header.
 # A PSP enabled SRv6 End behavior instance processes the SRH by:
 #  - decrementing the Segment Left (SL) value from 1 to 0;
 #  - copying the last SID from the SID List into the IPv6 Destination Address
@@ -258,6 +257,60 @@
 # the hosts). The loopback address of a host is reached only through the
 # router connected to that host: the ping succeeds only if the SRH is removed
 # by that router.
+#
+# Traffic with a consumed SRH
+# ---------------------------
+#
+# A packet can carry more than one SRH. The SRv6 End behavior skips an SRH with
+# SL=0 and processes the next header [1].
+#
+# The traffic of this section reuses the Policies (i.a), (i.b), (i.c) and (i.d).
+# A router on the path inserts an extra SRH in front of the Policy's SRH, and
+# another router then consumes the extra SRH.
+#
+# The Policy (i.a) has SID List=fcff:3::e,fcff:4::ef1,fcff:2::ef1,cafe::2. A
+# packet from hs-1 to hs-2 goes as follows:
+#
+#  - rt-1 applies the Policy and sends the packet to rt-3:
+#      IPv6 DA=fcff:3::e | Policy's SRH, SL=3 | Payload
+#
+#  - rt-3 (End) processes the Policy's SRH and sends the packet to rt-4:
+#      IPv6 DA=fcff:4::ef1 | Policy's SRH, SL=2 | Payload
+#
+#  - rt-4 (End with PSP and SL>1, acting as End) processes the Policy's SRH.
+#    The new DA is fcff:2::ef1:
+#      IPv6 DA=fcff:2::ef1 | Policy's SRH, SL=1 | Payload
+#    On rt-4, the route added by the test for fcff:2::ef1 then inserts the
+#    extra SRH, with SID List=fcff:3::e,fcff:2::ef1, and the packet goes back to
+#    rt-3:
+#      IPv6 DA=fcff:3::e | extra SRH, SL=1 | Policy's SRH, SL=1 | Payload
+#
+#  - rt-3 (End) consumes the extra SRH and sets the DA back to fcff:2::ef1:
+#      IPv6 DA=fcff:2::ef1 | extra SRH, SL=0 | Policy's SRH, SL=1 | Payload
+#
+#  - rt-2 (End with PSP) skips the extra SRH, processes the Policy's SRH and
+#    removes it:
+#      IPv6 DA=cafe::2 | extra SRH, SL=0 | Payload
+#
+# The extra SRH reaches hs-2, which skips it as its SL is 0. The other
+# Policies work in the same way:
+#
+#   (i.b) hs-2 -> hs-1: on the packets with DA=fcff:1::ef1, rt-2 inserts the
+#         extra SRH with SID List=fcff:3::e,fcff:1::ef1, and rt-3 consumes it.
+#   (i.c) hs-1 -> hs-2: on the packets with DA=fcbb:0:02a1::, rt-4 inserts the
+#         extra SRH with SID List=fcff:3::e,fcbb:0:02a1::, and rt-3 consumes it.
+#   (i.d) hs-2 -> hs-1: on the packets with DA=fcbb:0:01a1::, rt-3 inserts the
+#         extra SRH with SID List=fcff:4::e,fcbb:0:01a1::, and rt-4 consumes it.
+#
+# The Policy (i.b) has no router between rt-2 and rt-1. For this reason, rt-2
+# applies the Policy, inserts the extra SRH and sends the packet to rt-3:
+#      IPv6 DA=fcff:3::e | extra SRH, SL=1 | Policy's SRH, SL=1 | Payload
+# rt-3 consumes the extra SRH, and rt-1 removes the Policy's SRH.
+#
+# The hosts need seg6_enabled set to 1 to accept the extra SRH, and it is set
+# back to 0 at the end. These tests only check that the ping succeeds: PSP
+# itself is checked by the PSP flavor and NEXT-C-SID,PSP tests, which run with
+# seg6_enabled set to 0.
 
 # shellcheck source=lib.sh
 source lib.sh
@@ -967,6 +1020,92 @@ host_srv6_end_flv_next_csid_psp_tests()
 	check_and_log_hs_lo_addr_connectivity 2 1 "${END_CSID_PSP_FUNC}"
 }
 
+# On a router, add a route for a SID with seg6 encap in inline mode. The packets
+# that the router forwards to that SID get an extra SRH with the End SID of the
+# router that consumes it.
+# args:
+#  $1 - router on which the route is added
+#  $2 - SID of the route
+#  $3 - router with the SRv6 End behavior that consumes the extra SRH
+setup_rt_consumed_srh()
+{
+	local rt="$1"
+	local sid="$2"
+	local end_rt="$3"
+	local nsname
+
+	nsname="$(get_rtname "${rt}")"
+
+	ip -netns "${nsname}" -6 route \
+		add "${sid}" table "${LOCALSID_TABLE_ID}" \
+		encap seg6 mode inline \
+		segs "${LOCATOR_SERVICE}:${end_rt}::${END_FUNC}" \
+		dev "${DUMMY_DEVNAME}"
+}
+
+cleanup_rt_consumed_srh()
+{
+	local rt="$1"
+	local sid="$2"
+	local nsname
+
+	nsname="$(get_rtname "${rt}")"
+
+	ip -netns "${nsname}" -6 route \
+		del "${sid}" table "${LOCALSID_TABLE_ID}"
+}
+
+set_hs_seg6_enabled()
+{
+	local val="$1"
+	local hsname
+	local hs
+
+	for hs in ${HOSTS}; do
+		hsname="$(get_hsname "${hs}")"
+
+		ip netns exec "${hsname}" \
+			sysctl -wq net.ipv6.conf.all.seg6_enabled="${val}"
+		ip netns exec "${hsname}" \
+			sysctl -wq net.ipv6.conf.veth0.seg6_enabled="${val}"
+	done
+}
+
+host_srv6_end_flv_consumed_srh_tests()
+{
+	local sid
+
+	log_section "SRv6 connectivity test hosts (h1 <-> h2, consumed SRH)"
+
+	set_hs_seg6_enabled 1
+
+	# Policy (i.a): rt-4 inserts the extra SRH consumed by rt-3
+	sid="${LOCATOR_SERVICE}:2::${END_PSP_FUNC}"
+	setup_rt_consumed_srh 4 "${sid}" 3
+	check_and_log_hs_connectivity 1 2
+	cleanup_rt_consumed_srh 4 "${sid}"
+
+	# Policy (i.b): rt-2 inserts the extra SRH consumed by rt-3
+	sid="${LOCATOR_SERVICE}:1::${END_PSP_FUNC}"
+	setup_rt_consumed_srh 2 "${sid}" 3
+	check_and_log_hs_connectivity 2 1
+	cleanup_rt_consumed_srh 2 "${sid}"
+
+	# Policy (i.c): rt-4 inserts the extra SRH consumed by rt-3
+	sid="$(build_csid_container 2 "${END_CSID_PSP_FUNC}")"
+	setup_rt_consumed_srh 4 "${sid}" 3
+	check_and_log_hs_lo_addr_connectivity 1 2 "${END_CSID_PSP_FUNC}"
+	cleanup_rt_consumed_srh 4 "${sid}"
+
+	# Policy (i.d): rt-3 inserts the extra SRH consumed by rt-4
+	sid="$(build_csid_container 1 "${END_CSID_PSP_FUNC}")"
+	setup_rt_consumed_srh 3 "${sid}" 4
+	check_and_log_hs_lo_addr_connectivity 2 1 "${END_CSID_PSP_FUNC}"
+	cleanup_rt_consumed_srh 3 "${sid}"
+
+	set_hs_seg6_enabled 0
+}
+
 test_iproute2_supp_or_ksft_skip()
 {
 	local flavor="$1"
@@ -1071,5 +1210,6 @@ router_tests
 host2gateway_tests
 host_srv6_end_flv_psp_tests
 host_srv6_end_flv_next_csid_psp_tests
+host_srv6_end_flv_consumed_srh_tests
 
 print_log_test_results
