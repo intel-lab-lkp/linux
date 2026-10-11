@@ -1050,6 +1050,8 @@ static void schizo_register_error_handlers(struct pci_pbm_info *pbm)
 
 	upa_writeq((SCHIZO_SAFERRCTRL_EN | err_mask),
 		   pbm->controller_regs + SCHIZO_SAFARI_ERRCTRL);
+
+	platform_device_put(op);
 }
 
 static void pbm_config_busmastering(struct pci_pbm_info *pbm)
