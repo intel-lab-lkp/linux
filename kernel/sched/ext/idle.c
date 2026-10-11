@@ -999,7 +999,8 @@ static s32 select_cpu_from_kfunc(struct scx_sched *sch, struct task_struct *p,
 	 * used CPU is idle and within the allowed cpumask.
 	 */
 	if (p->nr_cpus_allowed == 1 || is_bpf_migration_disabled(p)) {
-		if (cpumask_test_cpu(prev_cpu, allowed ?: p->cpus_ptr) &&
+		if (cpumask_test_cpu(prev_cpu, p->cpus_ptr) &&
+		    (!allowed || cpumask_test_cpu(prev_cpu, allowed)) &&
 		    scx_idle_test_and_clear_cpu(prev_cpu))
 			cpu = prev_cpu;
 		else
