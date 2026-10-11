@@ -349,6 +349,7 @@ int bio_split_io_at(struct bio *bio, const struct queue_limits *lim,
 	struct bio_crypt_ctx *bc = bio_crypt_ctx(bio);
 	struct bio_vec bv, bvprv, *bvprvp = NULL;
 	unsigned nsegs = 0, bytes = 0, gaps = 0;
+	unsigned int align, split_bytes;
 	struct bvec_iter iter;
 	unsigned start_align_mask = lim->dma_alignment;
 
@@ -409,14 +410,20 @@ split:
 	 * we do not use the full hardware limits.
 	 *
 	 * It is possible to submit a bio that can't be split into a valid io:
-	 * there may either be too many discontiguous vectors for the max
-	 * segments limit, or contain virtual boundary gaps without having a
-	 * valid block sized split. A zero byte result means one of those
-	 * conditions occured.
+	 * it may have too many discontiguous vectors for the max segments
+	 * limit, contain virtual boundary gaps without having a valid block
+	 * sized split, or have a crypto context whose data units are larger
+	 * than the number of bytes that fit. A zero byte result means one of
+	 * those conditions occurred.
 	 */
-	bytes = ALIGN_DOWN(bytes, bio_split_alignment(bio, lim));
-	if (!bytes)
+	align = bio_split_alignment(bio, lim);
+	split_bytes = ALIGN_DOWN(bytes, align);
+	if (!split_bytes) {
+		pr_warn_ratelimited("%pg: split needs %u align, %u bytes fit\n",
+				    bio->bi_bdev, align, bytes);
 		return -EINVAL;
+	}
+	bytes = split_bytes;
 
 	/*
 	 * Bio splitting may cause subtle trouble such as hang when doing sync
