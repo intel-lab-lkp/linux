@@ -1,0 +1,65 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob unbind with a live window (no post-unbind violation, detection still works)
+# requires: tlob:monitor readelf:program
+
+# Fall back to the verification directory relative to FTRACETEST_ROOT when not
+# set by make (e.g. in installed kselftest environments).
+: "${VERIFICATIONTEST_BINDIR:="$FTRACETEST_ROOT/../verification"}"
+
+UPROBE_TARGET="${VERIFICATIONTEST_BINDIR}/tlob_target"
+TLOB_MONITOR=monitors/tlob/monitor
+
+sleep_offset=$(sym_offset "$UPROBE_TARGET" tlob_sleep_work)
+stop_offset=$(sym_offset "$UPROBE_TARGET" tlob_sleep_work_done)
+
+echo 1 > ../events/rv/error_env_tlob/enable
+echo 1 > ../tracing_on
+echo 1 > monitors/tlob/enable
+echo > ../trace
+
+# 300 ms budget keeps the live window far from expiry at unbind; duration 0
+# loops the target.
+echo "p:sleep_work ${UPROBE_TARGET}:${sleep_offset} ${stop_offset} threshold=300000000" >> "$TLOB_MONITOR"
+
+"$UPROBE_TARGET" 0 sleep &
+target_pid=$!
+teardown() {
+    kill "$target_pid" 2>/dev/null || true; wait "$target_pid" 2>/dev/null || true
+}
+trap teardown EXIT
+sleep 0.05
+
+# Unbind while the window is open: the task can no longer reach STOP, so the
+# window must be ended and its timer cancelled before the budget expires.
+echo "-:sleep_work" >> "$TLOB_MONITOR"
+
+# Wait past the 300 ms budget.
+sleep 0.6
+
+if grep -q "error_env_tlob" ../trace; then
+    echo "===== tlob unbind-with-live-window diagnostic =====" >&2
+    grep "error_env_tlob" ../trace >&2 || true
+    false
+fi
+
+# The target survived the unbind (its window was torn down, not the task).
+kill -0 "$target_pid"
+
+# Unbind must not break detection: a 10 us budget fires on the next sleep window.
+echo > ../trace
+echo "p:sleep_work ${UPROBE_TARGET}:${sleep_offset} ${stop_offset} threshold=10000" >> "$TLOB_MONITOR"
+
+found=0; i=0
+while [ "$i" -lt 20 ]; do
+    sleep 0.1
+    grep -q "error_env_tlob" ../trace && { found=1; break; }
+    i=$((i+1))
+done
+
+echo "-:sleep_work" >> "$TLOB_MONITOR" 2>/dev/null
+echo 0 > ../events/rv/error_env_tlob/enable
+echo 0 > monitors/tlob/enable
+
+[ "$found" = "1" ]
+echo > ../trace

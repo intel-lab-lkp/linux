@@ -1,0 +1,65 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor multiple tasks sharing one uprobe binding (concurrent instances)
+# requires: tlob:monitor readelf:program
+
+# Fall back to the verification directory relative to FTRACETEST_ROOT when not
+# set by make (e.g. in installed kselftest environments).
+: "${VERIFICATIONTEST_BINDIR:="$FTRACETEST_ROOT/../verification"}"
+
+UPROBE_TARGET="${VERIFICATIONTEST_BINDIR}/tlob_target"
+TLOB_MONITOR=monitors/tlob/monitor
+UPROBE_COMM=$(basename "$UPROBE_TARGET")
+
+busy_offset=$(sym_offset "$UPROBE_TARGET" tlob_busy_work)
+busy_stop=$(sym_offset "$UPROBE_TARGET" tlob_busy_work_done)
+
+# Start 3 concurrent instances of the target; each one hits the same binding.
+"$UPROBE_TARGET" 30000 &
+pid1=$!
+"$UPROBE_TARGET" 30000 &
+pid2=$!
+"$UPROBE_TARGET" 30000 &
+pid3=$!
+teardown() {
+	kill "$pid1" 2>/dev/null || true; wait "$pid1" 2>/dev/null || true
+	kill "$pid2" 2>/dev/null || true; wait "$pid2" 2>/dev/null || true
+	kill "$pid3" 2>/dev/null || true; wait "$pid3" 2>/dev/null || true
+}
+trap teardown EXIT
+sleep 0.05
+
+echo 1 > ../events/rv/event_tlob/enable
+echo 1 > ../tracing_on
+echo 1 > monitors/tlob/enable
+echo > ../trace
+
+# 5 s budget on the busy probe: no violation expected in 200 ms loops.
+echo "p:busy_work ${UPROBE_TARGET}:${busy_offset} ${busy_stop} threshold=5000000000" >> "$TLOB_MONITOR"
+
+# Wait up to 2 s for all three pids to register and transition through start.
+# This proves multiple tasks can hit the same uprobe binding concurrently.
+found1=0; found2=0; found3=0
+i=0
+while [ "$i" -lt 20 ]; do
+	sleep 0.1
+	grep "event_tlob" ../trace | grep -wq "${UPROBE_COMM}-${pid1}" && found1=1
+	grep "event_tlob" ../trace | grep -wq "${UPROBE_COMM}-${pid2}" && found2=1
+	grep "event_tlob" ../trace | grep -wq "${UPROBE_COMM}-${pid3}" && found3=1
+	if [ "$found1" = "1" ] && [ "$found2" = "1" ] && [ "$found3" = "1" ]; then
+		break
+	fi
+	i=$((i+1))
+done
+
+[ "$found1" = "1" ]
+[ "$found2" = "1" ]
+[ "$found3" = "1" ]
+
+# Removing the binding while tasks are active must succeed cleanly.
+echo "-:busy_work" >> "$TLOB_MONITOR"
+! grep -q "^p:busy_work " "$TLOB_MONITOR" || false
+
+echo 0 > monitors/tlob/enable
+echo 0 > ../events/rv/event_tlob/enable
+echo > ../trace

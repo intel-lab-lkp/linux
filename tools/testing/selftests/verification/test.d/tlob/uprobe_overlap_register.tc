@@ -1,0 +1,66 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob rejecting overlapping uprobe bindings and reporting shadowing
+# requires: tlob:monitor readelf:program
+
+# Fall back to the verification directory relative to FTRACETEST_ROOT when not
+# set by make (e.g. in installed kselftest environments).
+: "${VERIFICATIONTEST_BINDIR:="$FTRACETEST_ROOT/../verification"}"
+
+UPROBE_TARGET="${VERIFICATIONTEST_BINDIR}/tlob_target"
+TLOB_MONITOR=monitors/tlob/monitor
+
+busy_offset=$(sym_offset "$UPROBE_TARGET" tlob_busy_work)
+busy_stop=$(sym_offset "$UPROBE_TARGET" tlob_busy_work_done)
+sleep_offset=$(sym_offset "$UPROBE_TARGET" tlob_sleep_work)
+sleep_stop=$(sym_offset "$UPROBE_TARGET" tlob_sleep_work_done)
+
+echo 1 > ../events/rv/error_tlob/enable
+echo 1 > ../tracing_on
+echo 1 > monitors/tlob/enable
+echo > ../trace
+
+# Scenario 1: overlapping ranges on the same binary are rejected at
+# registration (a task runs one window at a time; the second would shadow).
+# Covers three flavours: identical, nested, and crossing.
+echo "p:busy_work ${UPROBE_TARGET}:${busy_offset} ${busy_stop} threshold=1000000000" >> "$TLOB_MONITOR"
+for r in \
+	"${busy_offset} ${busy_stop}" \
+	"$((busy_offset + 8)) ${busy_stop}" \
+	"$((busy_stop - 8)) $((busy_stop + 8))"; do
+	set -- $r
+	if echo "p:dup ${UPROBE_TARGET}:$1 $2 threshold=1000000000" >> "$TLOB_MONITOR" 2>/dev/null; then
+		echo "ERROR: overlapping binding accepted: $r" >&2
+		false
+	fi
+done
+# Only the original binding survives.
+if [ "$(grep -c "^p:busy_work " "$TLOB_MONITOR")" -ne 1 ]; then
+	echo "ERROR: rejected range left a binding behind" >&2
+	false
+fi
+
+# Scenario 2: two disjoint ranges on the same binary are both accepted, but a
+# task running them sequentially is shadowed by the first binding -- reported
+# via error_tlob instead of a silent no-op.
+echo "p:sleep_work ${UPROBE_TARGET}:${sleep_offset} ${sleep_stop} threshold=1000000000" >> "$TLOB_MONITOR"
+"$UPROBE_TARGET" 0 seq 2 &
+tpid=$!
+teardown() {
+	kill "$tpid" 2>/dev/null || true; wait "$tpid" 2>/dev/null || true
+}
+trap teardown EXIT
+wait "$tpid" || true
+
+if ! grep -q "error_tlob" ../trace; then
+	echo "ERROR: no error_tlob for sequentially shadowed binding" >&2
+	echo "--- trace ---" >&2
+	grep "error_tlob\|event_tlob" ../trace >&2 || true
+	false
+fi
+
+echo "-:busy_work" >> "$TLOB_MONITOR" 2>/dev/null
+echo "-:sleep_work" >> "$TLOB_MONITOR" 2>/dev/null
+echo 0 > monitors/tlob/enable
+echo 0 > ../events/rv/error_tlob/enable
+echo > ../trace

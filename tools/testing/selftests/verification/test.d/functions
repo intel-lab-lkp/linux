@@ -25,6 +25,15 @@ check_requires() { # Check required files, monitors and reactors
 	done
 }
 
+sym_offset() { # <binary> <symbol>: print the ELF file offset of <symbol>
+	readelf -W -S -s "$1" | awk -v symbol="$2" '
+		{ gsub(/\[ /, "[") }
+		$1 ~ /^\[[0-9]+\]$/ { sections[$1]="0x"$4; offsets[$1]="0x"$5 }
+		$1 ~ /^[0-9]+:$/ && $NF == symbol { addr="0x"$2; sec="["$7"]" }
+		END { printf "printf \"0x%%x\\n\" $((%s - %s + %s))\n", addr, sections[sec], offsets[sec] }
+	' | sh
+}
+
 initialize_system() { # Reset RV to initial-state
 	echo > enabled_monitors
 	for m in monitors/*; do

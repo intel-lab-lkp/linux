@@ -1,0 +1,47 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor uprobe binding (named, listed, removable, duplicate name/range rejected, O_TRUNC clears)
+# requires: tlob:monitor readelf:program
+
+# Fall back to the verification directory relative to FTRACETEST_ROOT when not
+# set by make (e.g. in installed kselftest environments).
+: "${VERIFICATIONTEST_BINDIR:="$FTRACETEST_ROOT/../verification"}"
+
+UPROBE_TARGET="${VERIFICATIONTEST_BINDIR}/tlob_target"
+TLOB_MONITOR=monitors/tlob/monitor
+
+busy_offset=$(sym_offset "$UPROBE_TARGET" tlob_busy_work)
+stop_offset=$(sym_offset "$UPROBE_TARGET" tlob_busy_work_done)
+
+"$UPROBE_TARGET" 30000 &
+busy_pid=$!
+teardown() {
+    kill "$busy_pid" 2>/dev/null || true; wait "$busy_pid" 2>/dev/null || true
+}
+trap teardown EXIT
+sleep 0.05
+
+echo 1 > monitors/tlob/enable
+echo "p:busy_work ${UPROBE_TARGET}:${busy_offset} ${stop_offset} threshold=5000000000" >> "$TLOB_MONITOR"
+
+# Binding must appear in monitor file with canonical hex-offset format.
+grep -qE "^p:busy_work ${UPROBE_TARGET}:0x[0-9a-f]+ 0x[0-9a-f]+ threshold=[0-9]+$" "$TLOB_MONITOR"
+grep -q "threshold=5000000000" "$TLOB_MONITOR"
+
+# Duplicate range must be rejected.
+! echo "p:busy_work ${UPROBE_TARGET}:${busy_offset} ${stop_offset} threshold=9999000" >> "$TLOB_MONITOR" 2>/dev/null || false
+
+# Duplicate name on a disjoint range must be rejected too.
+! echo "p:busy_work ${UPROBE_TARGET}:$((stop_offset + 64)) $((stop_offset + 128)) threshold=5000000" >> "$TLOB_MONITOR" 2>/dev/null || false
+
+# Remove the binding; it must no longer appear.
+echo "-:busy_work" >> "$TLOB_MONITOR"
+! grep -q "^p:busy_work " "$TLOB_MONITOR" || false
+
+# '>' opens with O_TRUNC and clears all bindings (ftrace dynamic-event
+# convention); individual commands must use '>>'.
+echo "p:busy_work ${UPROBE_TARGET}:${busy_offset} ${stop_offset} threshold=5000000000" >> "$TLOB_MONITOR"
+echo > "$TLOB_MONITOR"
+! grep -q "^p:" "$TLOB_MONITOR" || false
+
+echo 0 > monitors/tlob/enable

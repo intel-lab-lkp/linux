@@ -1,0 +1,48 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor restarting a window after a budget overrun (each later START on the same task starts a fresh window)
+# requires: tlob:monitor readelf:program
+
+# Fall back to the verification directory relative to FTRACETEST_ROOT when not
+# set by make (e.g. in installed kselftest environments).
+: "${VERIFICATIONTEST_BINDIR:="$FTRACETEST_ROOT/../verification"}"
+
+UPROBE_TARGET="${VERIFICATIONTEST_BINDIR}/tlob_target"
+TLOB_MONITOR=monitors/tlob/monitor
+
+busy_offset=$(sym_offset "$UPROBE_TARGET" tlob_busy_work)
+stop_offset=$(sym_offset "$UPROBE_TARGET" tlob_busy_work_done)
+
+echo 1 > ../events/rv/error_env_tlob/enable
+echo 1 > ../tracing_on
+echo 1 > monitors/tlob/enable
+
+# 30 ms budget: every ~200 ms window overruns.  Bind first, clear the trace
+# after, so the target's first window (START soon after launch) is caught.
+echo "p:busy_work ${UPROBE_TARGET}:${busy_offset} ${stop_offset} threshold=30000000" >> "$TLOB_MONITOR"
+echo > ../trace
+
+# 3 iterations (duration arg unused).  Every window overruns; a dropped
+# restart would leave one unmonitored, dropping the count below 3.
+"$UPROBE_TARGET" 0 busy 3 &
+busy_pid=$!
+teardown() {
+    kill "$busy_pid" 2>/dev/null || true; wait "$busy_pid" 2>/dev/null || true
+}
+trap teardown EXIT
+wait "$busy_pid" || true
+
+errors=$(grep -c "error_env_tlob" ../trace || true)
+if [ "$errors" -lt 3 ]; then
+    echo "ERROR: expected >= 3 error_env_tlob (one per window), got $errors" >&2
+    echo "--- error_env_tlob ---" >&2
+    grep "error_env_tlob" ../trace >&2 || true
+    echo "--- event_tlob (state transitions for target pid) ---" >&2
+    grep "event_tlob" ../trace | grep ":${busy_pid}:" >&2 || true
+    false
+fi
+
+echo "-:busy_work" >> "$TLOB_MONITOR" 2>/dev/null
+echo 0 > monitors/tlob/enable
+echo 0 > ../events/rv/error_env_tlob/enable
+echo > ../trace

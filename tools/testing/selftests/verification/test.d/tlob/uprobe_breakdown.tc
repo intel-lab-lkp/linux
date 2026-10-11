@@ -1,0 +1,136 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+# description: Test tlob monitor per-state breakdown derived from event_tlob
+# requires: tlob:monitor readelf:program
+
+# Fall back to the verification directory relative to FTRACETEST_ROOT when not
+# set by make (e.g. in installed kselftest environments).
+: "${VERIFICATIONTEST_BINDIR:="$FTRACETEST_ROOT/../verification"}"
+
+UPROBE_TARGET="${VERIFICATIONTEST_BINDIR}/tlob_target"
+TLOB_MONITOR=monitors/tlob/monitor
+
+# Per-state breakdown of one window, as described in monitor_tlob.rst: each
+# interval between two trace lines belongsto the state the eaerlier line
+# enters, and a violation ends the window at error_env_tlob. This test
+# monitors a single task, so the pid is not tracked.
+#
+# Lines look like (trace_clock=mono):
+#   <comm>-<pid> [<cpu>] <flags> <ts>: event_tlob: <pid>: <cur> x <ev> -> <next>
+#   <comm>-<pid> [<cpu>] <flags> <ts>: error_env_tlob: <pid>: ... clk_elapsed=<ns>
+#
+# Prints "<running> <waiting> <sleeping> <clk_elapsed>" in ns for the first
+# violation. With a second argument, each interval is printed first as
+# "<state> <duration_ms> <event>", the summary last.
+
+tlob_breakdown() { # <trace> [detail]
+	awk -v detail="${2:-}" '
+	function interval(state, dur, event) {
+		if (detail)
+			printf "%-9s %8.3f ms  %s\n", state, dur / 1e6, event
+	}
+
+	{
+		# The event name is the field ending in ":", the timestamp
+		# the one before it.
+		for (i = 1; i <= NF; i++)
+			if ($i ~ /_tlob:$/)
+				break
+		if (i > NF)
+			next
+
+		ts = $(i - 1)
+		sub(/:$/, "", ts)
+		now = ts * 1e9                  # ns
+
+		if ($i == "error_env_tlob:") {  # violation closes the window
+			if (!window)
+				next
+			acc[state] += now - last
+			interval(state, now - last, "budget_exceeded")
+			elapsed = $NF
+			sub(/^clk_elapsed=/, "", elapsed)
+			printf "%.0f %.0f %.0f %s\n",
+			       acc["running"], acc["waiting"],
+			       acc["sleeping"], elapsed
+			exit
+		}
+
+		# "event_tlob: <pid>: <cur> x <event> -> <next>"
+		event = $(i + 4)
+		next_state = $(i + 6)
+
+		if (event == "start") {
+			window = 1
+			acc["running"] = acc["waiting"] = acc["sleeping"] = 0
+		} else if (window) {
+			acc[state] += now - last        # the state just left
+			interval(state, now - last, event)
+		}
+		state = next_state
+		last = now
+	}' "$1"
+}
+
+busy_offset=$(sym_offset "$UPROBE_TARGET" tlob_busy_work)
+sleep_stop=$(sym_offset "$UPROBE_TARGET" tlob_sleep_work_done)
+
+old_clock=$(sed -n 's/.*\[\(.*\)\].*/\1/p' ../trace_clock)
+teardown() {
+        kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true
+        echo "$old_clock" > ../trace_clock
+}
+trap teardown EXIT
+
+# Timestamps of one window come from several CPUs.
+echo mono > ../trace_clock
+echo 1 > ../events/rv/event_tlob/enable
+echo 1 > ../events/rv/error_env_tlob/enable
+echo 1 > ../tracing_on
+echo 1 > monitors/tlob/enable
+echo > ../trace
+
+# Each "seq" iteration busy-spins 200 ms, then sleeps 200 ms.  One window
+# spans both, so a 300 ms budget expires while sleeping, after ~200 ms
+# busy (running, or waiting when preempted) and ~100 ms asleep.
+echo "p:breakdown ${UPROBE_TARGET}:${busy_offset} ${sleep_stop} threshold=300000000" >> "$TLOB_MONITOR"
+"$UPROBE_TARGET" 0 seq 1 &
+pid=$!
+wait "$pid" || true
+
+echo "-:breakdown" >> "$TLOB_MONITOR"
+echo 0 > monitors/tlob/enable
+echo 0 > ../events/rv/event_tlob/enable
+echo 0 > ../events/rv/error_env_tlob/enable
+
+detail=$(tlob_breakdown ../trace detail)
+summary=$(printf '%s\n' "$detail" | tail -n 1)
+first=$(printf '%s\n' "$detail" | head -n 1)
+dump() { echo "===== tlob breakdown =====" >&2; printf '%s\n' "$detail" >&2; }
+
+set -- $summary
+running=$1 waiting=$2 sleeping=$3 elapsed=$4
+echo "running=$running waiting=$waiting sleeping=$sleeping clk_elapsed=$elapsed"
+
+# A window must have been found and closed by a violation.
+[ -n "$elapsed" ] || { echo "no violation window in the trace" >&2; dump; false; }
+
+# The intervals must add up to the monitor clock, which start resets and
+# the violation reports.  Allow 5 ms for tracepoint and timer latency.
+sum=$((running + waiting + sleeping))
+diff=$((sum > elapsed ? sum - elapsed : elapsed - sum))
+[ "$diff" -lt 5000000 ] || { echo "intervals $sum ns vs clk_elapsed $elapsed ns" >&2; dump; false; }
+
+# The first interval is the one start opens, so it is always "running".
+[ "${first%% *}" = "running" ] || { echo "first interval is not running: $first" >&2; dump; false; }
+
+# The window spans a busy phase and a sleep phase: both must be accounted,
+# and the busy phase is the longer one.
+[ "$sleeping" -gt 0 ] || { echo "no sleeping interval recorded" >&2; dump; false; }
+[ $((running + waiting)) -gt "$sleeping" ] || { echo "sleeping dominates: $summary" >&2; dump; false; }
+
+echo > ../trace
+
+
+
+
