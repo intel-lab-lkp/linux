@@ -353,6 +353,13 @@ static void dma_do_tasklet(struct tasklet_struct *t)
 	dmaengine_desc_get_callback_invoke(&tdmac->desc, NULL);
 }
 
+static void mmp_tdma_kill_tasklet(void *data)
+{
+	struct mmp_tdma_chan *tdmac = data;
+
+	tasklet_kill(&tdmac->tasklet);
+}
+
 static void mmp_tdma_free_descriptor(struct mmp_tdma_chan *tdmac)
 {
 	struct gen_pool *gpool;
@@ -562,6 +569,7 @@ static int mmp_tdma_chan_init(struct mmp_tdma_device *tdev,
 					int type, struct gen_pool *pool)
 {
 	struct mmp_tdma_chan *tdmac;
+	int ret;
 
 	if (idx >= TDMA_CHANNEL_NUM) {
 		dev_err(tdev->dev, "too many channels for device!\n");
@@ -584,6 +592,9 @@ static int mmp_tdma_chan_init(struct mmp_tdma_device *tdev,
 	tdmac->status = DMA_COMPLETE;
 	tdev->tdmac[tdmac->idx] = tdmac;
 	tasklet_setup(&tdmac->tasklet, dma_do_tasklet);
+	ret = devm_add_action_or_reset(tdev->dev, mmp_tdma_kill_tasklet, tdmac);
+	if (ret)
+		return ret;
 
 	/* add the channel to tdma_chan list */
 	list_add_tail(&tdmac->chan.device_node,
@@ -666,18 +677,19 @@ static int mmp_tdma_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	if (irq_num != chan_num) {
-		irq = platform_get_irq(pdev, 0);
-		ret = devm_request_irq(&pdev->dev, irq,
-			mmp_tdma_int_handler, IRQF_SHARED, "tdma", tdev);
-		if (ret)
-			return ret;
-	}
-
 	/* initialize channel parameters */
 	for (i = 0; i < chan_num; i++) {
 		irq = (irq_num != chan_num) ? 0 : platform_get_irq(pdev, i);
 		ret = mmp_tdma_chan_init(tdev, i, irq, type, pool);
+		if (ret)
+			return ret;
+	}
+
+	/* Release the shared IRQ before draining and freeing the channels. */
+	if (irq_num != chan_num) {
+		irq = platform_get_irq(pdev, 0);
+		ret = devm_request_irq(&pdev->dev, irq, mmp_tdma_int_handler,
+				       IRQF_SHARED, "tdma", tdev);
 		if (ret)
 			return ret;
 	}
