@@ -60,6 +60,8 @@ void cxl_hdm_cache_publish(struct cxl_hdm_info **slot,
 void cxl_hdm_cache_release(struct cxl_hdm_info **slot);
 bool cxl_hdm_cache_dvsec_decode(struct cxl_hdm_info *const *slot);
 struct cxl_hdm_info *cxl_hdm_cache_snapshot(struct cxl_hdm_info *const *slot);
+int cxl_hdm_cache_copy_decoders(struct cxl_hdm_info *const *slot,
+				struct cxl_hdm_info *dst);
 
 /*
  * Region quiesce blocks CXL region commit and teardown, and with them decoder
