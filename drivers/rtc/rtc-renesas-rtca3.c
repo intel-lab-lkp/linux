@@ -121,6 +121,8 @@ struct rtca3_ppb_per_cycle {
  * @lock: device lock
  * @ppb: ppb per cycle for each the available adjustment modes
  * @wakeup_irq: wakeup IRQ
+ * @period_irq: periodic IRQ
+ * @stopping: removal has started, protected by lock
  */
 struct rtca3_priv {
 	void __iomem *base;
@@ -131,6 +133,8 @@ struct rtca3_priv {
 	spinlock_t lock;
 	struct rtca3_ppb_per_cycle ppb;
 	int wakeup_irq;
+	int period_irq;
+	bool stopping;
 };
 
 static void rtca3_byte_update_bits(struct rtca3_priv *priv, u8 off, u8 mask, u8 val)
@@ -351,6 +355,9 @@ static int rtca3_alarm_irq_enable(struct device *dev, unsigned int enabled)
 
 	guard(spinlock_irqsave)(&priv->lock);
 
+	if (priv->stopping)
+		return -ENODEV;
+
 	return rtca3_alarm_irq_set_helper(priv, RTCA3_RCR1_AIE, enabled);
 }
 
@@ -392,6 +399,9 @@ static int rtca3_set_alarm(struct device *dev, struct rtc_wkalrm *wkalrm)
 	int ret;
 
 	scoped_guard(spinlock_irqsave, &priv->lock) {
+		if (priv->stopping)
+			return -ENODEV;
+
 		tmp = readb(priv->base + RTCA3_RCR2);
 		if (!(tmp & RTCA3_RCR2_START))
 			return -EPERM;
@@ -684,6 +694,7 @@ static int rtca3_request_irqs(struct platform_device *pdev, struct rtca3_priv *p
 	ret = devm_request_irq(dev, irq, rtca3_periodic_handler, 0, "rtca3-period", priv);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to request period IRQ!\n");
+	priv->period_irq = irq;
 
 	/*
 	 * Driver doesn't implement carry handler. Just get the IRQ here
@@ -786,13 +797,18 @@ static void rtca3_remove(struct platform_device *pdev)
 {
 	struct rtca3_priv *priv = platform_get_drvdata(pdev);
 
-	guard(spinlock_irqsave)(&priv->lock);
+	/* Wait for RTC operations, including an alarm setup, to finish first. */
+	guard(mutex)(&priv->rtc_dev->ops_lock);
 
-	/*
-	 * Disable alarm, periodic interrupts. The RTC device cannot
-	 * power up the system.
-	 */
-	rtca3_alarm_irq_set_helper(priv, RTCA3_RCR1_AIE | RTCA3_RCR1_PIE, 0);
+	scoped_guard(spinlock_irqsave, &priv->lock) {
+		priv->stopping = true;
+		/* Disable alarm and periodic interrupt sources. */
+		rtca3_alarm_irq_set_helper(priv, RTCA3_RCR1_AIE | RTCA3_RCR1_PIE, 0);
+	}
+
+	/* Neither handler takes ops_lock. Do not hold priv->lock while waiting. */
+	disable_irq(priv->wakeup_irq);
+	disable_irq(priv->period_irq);
 }
 
 static int rtca3_suspend(struct device *dev)
