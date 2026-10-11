@@ -13,6 +13,87 @@
 #include <linux/rv.h>
 #include "rv.h"
 
+#include <rv_trace.h>
+
+/* rvtest: a minimal per-object HA monitor driven directly by the tests. */
+#define MONITOR_NAME rvtest
+#define RV_MON_TYPE RV_MON_PER_OBJ
+#define HA_TIMER_TYPE HA_TIMER_HRTIMER
+typedef void *monitor_target;
+
+/* The framework calls these for every monitor; this one reports nothing. */
+#define trace_event_rvtest(...)		do { } while (0)
+#define trace_error_rvtest(...)		do { } while (0)
+#define trace_error_env_rvtest(...)	do { } while (0)
+
+enum states_rvtest {
+	idle_rvtest,
+	armed_rvtest,
+	state_max_rvtest,
+};
+
+#define INVALID_STATE state_max_rvtest
+
+enum events_rvtest {
+	start_rvtest,
+	event_max_rvtest,
+};
+
+enum envs_rvtest {
+	clk_rvtest,
+	env_max_rvtest,
+	env_max_stored_rvtest = env_max_rvtest,
+};
+
+#define HA_CLK_NS
+
+struct automaton_rvtest {
+	char *state_names[state_max_rvtest];
+	char *event_names[event_max_rvtest];
+	char *env_names[env_max_rvtest];
+	unsigned char function[state_max_rvtest][event_max_rvtest];
+	unsigned char initial_state;
+	bool final_states[state_max_rvtest];
+};
+
+static const struct automaton_rvtest automaton_rvtest = {
+	.state_names = { "idle", "armed" },
+	.event_names = { "start" },
+	.env_names = { "clk" },
+	.function = {
+		{ armed_rvtest },
+		{ INVALID_STATE },
+	},
+	.initial_state = idle_rvtest,
+	.final_states = { 1, 0 },
+};
+
+#include <rv/ha_monitor.h>
+
+#define RVTEST_BUDGET_NS (300ULL * NSEC_PER_MSEC)
+
+static u64 ha_get_env(struct ha_monitor *ha_mon, enum envs_rvtest env,
+		      u64 time_ns)
+{
+	return ha_get_clk_ns(ha_mon, env, time_ns);
+}
+
+static void ha_reset_env(struct ha_monitor *ha_mon, enum envs_rvtest env,
+			 u64 time_ns)
+{
+	ha_reset_clk_ns(ha_mon, env, time_ns);
+}
+
+/* The tests arm the timer themselves. */
+static bool ha_verify_constraint(struct ha_monitor *ha_mon,
+				 enum states curr_state, enum events event,
+				 enum states next_state, u64 time_ns)
+{
+	return true;
+}
+
+static const struct rv_kunit_mon rvtest_mon = RV_MON_OPS_INIT();
+
 /*
  * An easy way to pass the context is to use kunit_get_current_test()->priv,
  * but this doesn't always work (e.g. a reactor running from another context
@@ -146,6 +227,46 @@ static void rv_test_dummy(struct kunit *test)
 	active_ctx = NULL;
 }
 
+/*
+ * rv_test_rvtest_underflow - the HA clock math must not underflow as u64
+ *
+ * An invariant checked while the uptime is below the budget holds, and a
+ * timer armed after the budget elapsed expires now.
+ */
+static void rv_test_rvtest_underflow(struct kunit *test)
+{
+	struct ha_monitor *ha_mon;
+	struct da_monitor *da_mon;
+	const int id = 4242;
+
+	prepare_test(test, &rvtest_mon);
+	da_handle_start_run_event(id, NULL, start_rvtest);
+
+	scoped_guard(rcu)
+		da_mon = da_get_monitor(id, NULL);
+	KUNIT_ASSERT_NOT_NULL(test, da_mon);
+	ha_mon = to_ha_monitor(da_mon);
+
+	/* Uptime below the budget: time_ns - expire_ns would underflow. */
+	ha_reset_clk_ns(ha_mon, clk_rvtest, 0);
+	KUNIT_EXPECT_TRUE(test, ha_check_invariant_ns(ha_mon, clk_rvtest, 0,
+						      RVTEST_BUDGET_NS));
+
+	/*
+	 * Budget already elapsed: expire - passed would underflow and queue
+	 * the timer at KTIME_SEC_MAX.
+	 */
+	da_monitor_reset(&ha_mon->da_mon);
+	ha_reset_clk_ns(ha_mon, clk_rvtest, 0);
+	ha_start_timer_ns(ha_mon, clk_rvtest, RVTEST_BUDGET_NS,
+			  RVTEST_BUDGET_NS + NSEC_PER_SEC);
+	KUNIT_EXPECT_TRUE(test,
+			  ktime_before(hrtimer_get_expires(&ha_mon->hrtimer),
+				       ktime_get() + NSEC_PER_SEC));
+
+	ha_cancel_timer_sync(ha_mon);
+}
+
 #include "monitors/sco/sco_kunit.c"
 #include "monitors/sssw/sssw_kunit.c"
 #include "monitors/sts/sts_kunit.c"
@@ -163,6 +284,7 @@ static struct kunit_case rv_mon_test_cases[] = {
 	KUNIT_CASE(rv_test_nomiss),
 	KUNIT_CASE(rv_test_pagefault),
 	KUNIT_CASE(rv_test_sleep),
+	KUNIT_CASE(rv_test_rvtest_underflow),
 	{}
 };
 
