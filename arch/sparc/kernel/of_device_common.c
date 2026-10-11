@@ -70,6 +70,8 @@ void of_propagate_archdata(struct platform_device *bus)
 
 		if (dp->child)
 			of_propagate_archdata(op);
+
+		platform_device_put(op);
 	}
 }
 
