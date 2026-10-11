@@ -28,5 +28,7 @@ int panthor_perf_session_start(struct panthor_file *pfile, u32 handle, u64 user_
 int panthor_perf_session_stop(struct panthor_file *pfile, unsigned int sid, u64 user_data);
 int panthor_perf_session_sample(struct panthor_file *pfile, unsigned int handle, u64 user_data);
 
+void panthor_perf_report_irq(struct panthor_device *ptdev, u32 status);
+
 #endif /* __PANTHOR_PERF_H__ */
 
