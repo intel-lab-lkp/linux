@@ -1070,6 +1070,8 @@ struct task_struct {
 	unsigned                        in_thrashing:1;
 #endif
 	unsigned			in_nf_duplicate:1;
+	unsigned			in_nf_dup_netdev:1;	/* netdev dup output is active */
+	unsigned			in_nf_duplicate_reinject:1;	/* NFQUEUE resume */
 #ifdef CONFIG_PREEMPT_RT
 	struct netdev_xmit		net_xmit;
 #endif

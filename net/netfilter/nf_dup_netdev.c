@@ -4,6 +4,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/netlink.h>
@@ -57,14 +58,24 @@ void nf_dup_netdev_egress(const struct nft_pktinfo *pkt, int oif)
 {
 	struct net_device *dev;
 	struct sk_buff *skb;
+	bool old_in_nf_dup_netdev;
+
+	if (in_task() && current->in_nf_duplicate_reinject)
+		return;
 
 	dev = dev_get_by_index_rcu(nft_net(pkt), oif);
 	if (dev == NULL)
 		return;
 
 	skb = skb_clone(pkt->skb, GFP_ATOMIC);
-	if (skb)
+	if (skb) {
+		local_bh_disable();
+		old_in_nf_dup_netdev = current->in_nf_dup_netdev;
+		current->in_nf_dup_netdev = true;
 		nf_do_netdev_egress(skb, dev, nft_hook(pkt));
+		current->in_nf_dup_netdev = old_in_nf_dup_netdev;
+		local_bh_enable();
+	}
 }
 EXPORT_SYMBOL_GPL(nf_dup_netdev_egress);
 

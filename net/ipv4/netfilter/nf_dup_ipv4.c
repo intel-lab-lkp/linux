@@ -7,6 +7,7 @@
  */
 #include <linux/ip.h>
 #include <linux/module.h>
+#include <linux/preempt.h>
 #include <linux/percpu.h>
 #include <linux/route.h>
 #include <linux/skbuff.h>
@@ -52,9 +53,11 @@ void nf_dup_ipv4(struct net *net, struct sk_buff *skb, unsigned int hooknum,
 		 const struct in_addr *gw, int oif)
 {
 	struct iphdr *iph;
+	bool in_nf_duplicate_reinject = in_task() &&
+					current->in_nf_duplicate_reinject;
 
 	local_bh_disable();
-	if (current->in_nf_duplicate)
+	if (current->in_nf_duplicate || in_nf_duplicate_reinject)
 		goto out;
 	/*
 	 * Copy the skb, and route the copy. Will later return %XT_CONTINUE for

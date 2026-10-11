@@ -13,6 +13,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/init.h>
@@ -368,9 +369,12 @@ static void nf_reinject(struct nf_queue_entry *entry, unsigned int verdict)
 	unsigned int i;
 	int err;
 	u8 pf;
+	bool old_in_nf_duplicate_reinject;
 
 	net = entry->state.net;
 	pf = entry->state.pf;
+	old_in_nf_duplicate_reinject = current->in_nf_duplicate_reinject;
+	current->in_nf_duplicate_reinject |= entry->in_nf_duplicate;
 
 	hooks = nf_hook_entries_head(net, pf, entry->state.hook);
 
@@ -378,7 +382,7 @@ static void nf_reinject(struct nf_queue_entry *entry, unsigned int verdict)
 	if (!hooks || i >= hooks->num_hook_entries) {
 		kfree_skb_reason(skb, SKB_DROP_REASON_NETFILTER_DROP);
 		nf_queue_entry_free(entry);
-		return;
+		goto out;
 	}
 
 	hook_entry = &hooks->hooks[i];
@@ -417,6 +421,8 @@ next_hook:
 	}
 
 	nf_queue_entry_free(entry);
+out:
+	current->in_nf_duplicate_reinject = old_in_nf_duplicate_reinject;
 }
 
 /* return true if the entry has an unconfirmed conntrack attached that isn't owned by us

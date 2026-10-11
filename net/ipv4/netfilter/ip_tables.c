@@ -14,6 +14,7 @@
 #include <linux/vmalloc.h>
 #include <linux/netdevice.h>
 #include <linux/module.h>
+#include <linux/preempt.h>
 #include <net/ip.h>
 #include <net/compat.h>
 #include <linux/uaccess.h>
@@ -270,7 +271,9 @@ ipt_do_table(void *priv,
 	 * but it is no problem since absolute verdict is issued by these.
 	 */
 	if (static_key_false(&xt_tee_enabled))
-		jumpstack += private->stacksize * current->in_nf_duplicate;
+		jumpstack += private->stacksize *
+			     (current->in_nf_duplicate ||
+			      (in_task() && current->in_nf_duplicate_reinject));
 
 	e = get_entry(table_base, private->hook_entry[hook]);
 

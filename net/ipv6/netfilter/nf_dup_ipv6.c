@@ -6,6 +6,7 @@
  * Extracted from xt_TEE.c
  */
 #include <linux/module.h>
+#include <linux/preempt.h>
 #include <linux/percpu.h>
 #include <linux/skbuff.h>
 #include <linux/netfilter.h>
@@ -47,8 +48,11 @@ static bool nf_dup_ipv6_route(struct net *net, struct sk_buff *skb,
 void nf_dup_ipv6(struct net *net, struct sk_buff *skb, unsigned int hooknum,
 		 const struct in6_addr *gw, int oif)
 {
+	bool in_nf_duplicate_reinject = in_task() &&
+					current->in_nf_duplicate_reinject;
+
 	local_bh_disable();
-	if (current->in_nf_duplicate)
+	if (current->in_nf_duplicate || in_nf_duplicate_reinject)
 		goto out;
 	skb = pskb_copy(skb, GFP_ATOMIC);
 	if (skb == NULL)
