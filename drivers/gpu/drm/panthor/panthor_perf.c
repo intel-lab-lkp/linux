@@ -1799,6 +1799,57 @@ int panthor_perf_session_sample(struct panthor_file *pfile, u32 handle, u64 user
 }
 
 /**
+ * panthor_perf_suspend - Prepare the performance counter subsystem for system suspend.
+ * @ptdev: Panthor device.
+ *
+ * Indicate to the performance counters that the system is suspending.
+ *
+ * This function must not be used to handle MCU power state transitions: just before MCU goes
+ * from on to any inactive state, an automatic sample will be performed by the firmware, and
+ * the performance counter firmware state will be restored on warm boot.
+ *
+ */
+void panthor_perf_suspend(struct panthor_device *ptdev)
+{
+	struct panthor_perf *perf = ptdev->perf;
+	int ret;
+
+	if (!perf)
+		return;
+
+	guard(mutex)(&perf->op_lock);
+
+	ret = perf_disable(perf);
+
+	if (ret)
+		drm_warn(&ptdev->base, "Could not stop sampling before suspend, err = %d", ret);
+}
+
+/**
+ * panthor_perf_resume - Resume the performance counter subsystem after system resumption.
+ * @ptdev: Panthor device.
+ *
+ * Indicate to the performance counters that the system has resumed. This must not be used
+ * to handle MCU state transitions, for the same reasons as detailed in the kerneldoc for
+ * @panthor_perf_suspend.
+ */
+void panthor_perf_resume(struct panthor_device *ptdev)
+{
+	struct panthor_perf *perf = ptdev->perf;
+	int ret;
+
+	if (!perf)
+		return;
+
+	guard(mutex)(&perf->op_lock);
+
+	ret = perf_enable(perf);
+
+	if (ret)
+		drm_warn(&ptdev->base, "Could not resume sampling, err = %d", ret);
+}
+
+/**
  * panthor_perf_unplug - Terminate the performance counter subsystem.
  * @ptdev: Panthor device.
  *
@@ -1867,4 +1918,36 @@ void panthor_perf_pool_destroy(struct panthor_file *pfile)
 	kfree(pool);
 
 	pfile->sessions = NULL;
+}
+
+void panthor_perf_pre_reset(struct panthor_device *ptdev)
+{
+	if (!ptdev->perf)
+		return;
+
+	guard(mutex)(&ptdev->perf->op_lock);
+
+	perf_disable(ptdev->perf);
+}
+
+void panthor_perf_post_reset(struct panthor_device *ptdev)
+{
+	bool rerequest = false;
+
+	if (!ptdev->perf)
+		return;
+
+	guard(mutex)(&ptdev->perf->op_lock);
+
+	perf_enable(ptdev->perf);
+
+	scoped_guard(spinlock_irqsave, &ptdev->perf->pend_lock) {
+		rerequest = ptdev->perf->fw_sample_requested;
+
+		if (rerequest)
+			ptdev->perf->fw_sample_requested = false;
+	}
+
+	if (rerequest)
+		perf_fw_request_sample(ptdev->perf);
 }
