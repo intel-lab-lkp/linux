@@ -12,6 +12,7 @@
 #include <cxlmem.h>
 
 #include "../watermark.h"
+#include "../cxl_core_test.h"
 #include "mock.h"
 
 static int interleave_arithmetic;
@@ -2452,6 +2453,10 @@ static __init int cxl_test_init(void)
 	cxl_mem_test();
 	cxl_pmem_test();
 	cxl_port_test();
+
+	rc = cxl_test_hdm_ranges();
+	if (rc)
+		return rc;
 
 	register_cxl_mock_ops(&cxl_mock_ops);
 
