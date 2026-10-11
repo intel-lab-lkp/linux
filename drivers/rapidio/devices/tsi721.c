@@ -2978,7 +2978,7 @@ static void tsi721_remove(struct pci_dev *pdev)
 
 	tsi721_disable_ints(priv);
 	tsi721_free_irq(priv);
-	flush_work(&priv->idb_work);
+	cancel_work_sync(&priv->idb_work);
 	flush_work(&priv->pw_work);
 	rio_unregister_mport(&priv->mport);
 
