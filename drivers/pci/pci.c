@@ -545,6 +545,78 @@ u16 pci_find_ext_capability(struct pci_dev *dev, int cap)
 EXPORT_SYMBOL_GPL(pci_find_ext_capability);
 
 /**
+ * pci_find_free_ext_cap_offset - Find free space in extended config
+ * @dev: PCI device to query
+ * @size: Minimum size needed (in bytes)
+ *
+ * Scans the extended capability chain and then searches for a contiguous
+ * region of zeroed space of at least @size bytes in the extended
+ * configuration space (0x100-0xFFF). This can be used by drivers that
+ * need to use unused extended config space for device-specific purposes
+ * (e.g., VFIO quirks for VM passthrough).
+ *
+ * Returns the offset to free space, or 0 if no suitable gap found.
+ */
+int pci_find_free_ext_cap_offset(struct pci_dev *dev, size_t size)
+{
+	int ttl = (PCI_CFG_SPACE_EXP_SIZE - PCI_CFG_SPACE_SIZE) / 8;
+	int pos = PCI_CFG_SPACE_SIZE;
+	int start = 0, run = 0;
+	int highest_pos = 0;
+	u32 header;
+	int offset;
+
+	if (!pci_is_pcie(dev) || dev->cfg_size <= PCI_CFG_SPACE_SIZE)
+		return 0;
+
+	if (size == 0 || size > PCI_CFG_SPACE_EXP_SIZE - PCI_CFG_SPACE_SIZE)
+		return 0;
+
+	if (pci_read_config_dword(dev, pos, &header))
+		return 0;
+	if (header == 0 || header == 0xffffffff)
+		return 0;
+
+	while (ttl-- > 0) {
+		if (pos > highest_pos)
+			highest_pos = pos;
+
+		pos = PCI_EXT_CAP_NEXT(header);
+		if (!pos || pos < PCI_CFG_SPACE_SIZE)
+			break;
+
+		if (pci_read_config_dword(dev, pos, &header))
+			break;
+		if (header == 0 || header == 0xffffffff)
+			break;
+	}
+
+	if (!highest_pos)
+		return 0;
+
+	for (offset = highest_pos; offset <= (int)PCI_CFG_SPACE_EXP_SIZE - 4;
+	     offset += 4) {
+		u32 val;
+
+		if (pci_read_config_dword(dev, offset, &val))
+			break;
+
+		if (val == 0) {
+			if (run == 0)
+				start = offset;
+			run += 4;
+			if (run >= (int)size)
+				return start;
+		} else {
+			run = 0;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_find_free_ext_cap_offset);
+
+/**
  * pci_get_dsn - Read and return the 8-byte Device Serial Number
  * @dev: PCI device to query
  *
