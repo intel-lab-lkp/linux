@@ -443,6 +443,10 @@ static const struct field_mapping version_mappings[] = {
 	FIELD_MAP(TDX_FIELD_UPDATE_VERSION,	version, update_version),
 };
 
+static const struct field_mapping features_mappings[] __initconst = {
+	FIELD_MAP(TDX_FIELD_TDX_FEATURES0, features, tdx_features0),
+};
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
