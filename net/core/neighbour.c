@@ -2438,7 +2438,7 @@ static const struct nla_policy nl_neightbl_policy[NDTA_MAX+1] = {
 #define NTBL_PARM_MS_MAX	(24 * 60 * 60 * MSEC_PER_SEC)
 
 static const struct netlink_range_validation nl_ntbl_parm_ms_range = {
-	.min = 1,
+	.min = 1000,
 	.max = NTBL_PARM_MS_MAX,
 };
 
@@ -3701,7 +3701,7 @@ static int neigh_proc_dointvec_ms_jiffies_positive(const struct ctl_table *ctl, 
 	struct ctl_table tmp = *ctl;
 	int ret, min, max;
 
-	min = msecs_to_jiffies(1);
+	min = HZ;
 	max = msecs_to_jiffies(NTBL_PARM_MS_MAX);
 
 	tmp.extra1 = &min;
