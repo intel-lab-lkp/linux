@@ -2567,14 +2567,30 @@ intel_hdmi_init_frl_config(struct intel_connector *connector)
 		intel_hdmi_sink_dsc_max_frl_rate(&connector->base);
 	int max_sink_frl_rate =
 		intel_hdmi_sink_max_frl_rate(&connector->base);
+	int max_frl_rate, max_dsc_frl_rate;
 
 	intel_hdmi->has_sink_hdmi_21 = max_sink_frl_rate > 0;
 
-	intel_hdmi->max_frl_rate = min(max_sink_frl_rate,
-				       max_src_frl_rate);
+	max_frl_rate = min(max_sink_frl_rate, max_src_frl_rate);
 
-	intel_hdmi->max_dsc_frl_rate = min(max_sink_dsc_frl_rate,
-					   max_src_frl_rate);
+	max_dsc_frl_rate = min(max_sink_dsc_frl_rate,
+			       max_src_frl_rate);
+	/*
+	 * Set the FRL rate cap on connect / capability change only.
+	 * Leaving it untouched on a plain re-probe lets a future
+	 * training-driven reduction persist across the retry.
+	 */
+	if (max_frl_rate != intel_hdmi->max_frl_rate ||
+	    max_dsc_frl_rate != intel_hdmi->max_dsc_frl_rate)
+		intel_hdmi->frl.reset_rate_cap = true;
+
+	intel_hdmi->max_frl_rate = max_frl_rate;
+	intel_hdmi->max_dsc_frl_rate = max_dsc_frl_rate;
+
+	if (intel_hdmi->frl.reset_rate_cap) {
+		intel_hdmi->frl.rate_cap = max(max_frl_rate, max_dsc_frl_rate);
+		intel_hdmi->frl.reset_rate_cap = false;
+	}
 
 	intel_hdmi_reset_frl_config(intel_hdmi);
 }
@@ -2656,8 +2672,15 @@ intel_hdmi_detect(struct drm_connector *_connector, bool force)
 out:
 	intel_display_power_put(display, POWER_DOMAIN_GMBUS, wakeref);
 
-	if (status != connector_status_connected)
+	if (status != connector_status_connected) {
 		cec_notifier_phys_addr_invalidate(intel_hdmi->cec_notifier);
+
+		/*
+		 * Reset the rate cap so that the next connect re-initializes
+		 * frl.rate_cap to the capability ceiling.
+		 */
+		intel_hdmi->frl.reset_rate_cap = true;
+	}
 
 	return status;
 }
