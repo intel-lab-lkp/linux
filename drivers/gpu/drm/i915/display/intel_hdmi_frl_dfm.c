@@ -424,3 +424,298 @@ intel_hdmi_frl_dfm_nondsc_requirement_met(struct intel_hdmi_frl_dfm *frl_dfm)
 
 	return false;
 }
+
+/* Get required no. of tribytes (estimate1) during HCBlank */
+static u32
+get_frl_hcblank_tb_est1_target(u32 hcactive_target_tb,
+			       u32 hactive, u32 hblank)
+{
+	return DIV_ROUND_UP(hcactive_target_tb * hblank, hactive);
+}
+
+/* Get required no. of tribytes during HCBlank */
+static u32
+get_frl_hcblank_tb_target(u32 hcactive_target_tb, u32 hactive,
+			  u32 hblank, u32 hcblank_audio_min,
+			  u32 cfrl_available)
+{
+	u32 hcblank_target_tb1 = get_frl_hcblank_tb_est1_target(hcactive_target_tb,
+									 hactive, hblank);
+	u32 hcblank_target_tb2 = max(hcblank_target_tb1, hcblank_audio_min);
+
+	return 4 * (min(hcblank_target_tb2,
+			(2 * cfrl_available - 3 * hcactive_target_tb) / 2) / 4);
+}
+
+static u32
+get_dsc_tribyte_time(u32 num_tribyte,
+		     u32 tribyte_rate_k)
+{
+	u32 time_multiplier;
+	u64 tribyte_time;
+
+	/*
+	 * tribyte_rate_k is the num of kilo tribytes in 1 sec, on an average.
+	 *
+	 * time taken for:
+	 * (tribyte_rate_k * 1000) tribytes -> 1 sec
+	 * (tribyte_rate_k * 1000) tribytes -> 10^9 nsec
+	 * 1000 tribytes                    -> (10^9 / tribyte_rate_k) nsec
+	 * 1 tribyte                        -> 10^9 / tribyte_rate_k * 1000)
+	 * 1 tribyte                        -> 10^6 / tribyte_rate_k
+	 * tribyte_time			    -> num_tribyte * 10 ^ 6 / (tribyte_rate_k)
+	 *
+	 * So, avg time for tribyte_time in nsec =
+	 *				num_tribyte * 10 ^ 6 / (tribyte_rate_k)
+	 */
+	time_multiplier = DIV_ROUND_UP(FRL_TIMING_NS_MULTIPLIER, 1000);
+	tribyte_time = mul_u32_u32(num_tribyte, time_multiplier);
+
+	return DIV_ROUND_UP_ULL(tribyte_time, tribyte_rate_k);
+}
+
+/* Get time to send all tribytes in hcactive region in nsec*/
+static u32
+get_dsc_tactive_target_ns(u32 frl_lanes, u32 hcactive_target_tb,
+			  u32 ftb_avg_k, u32 min_frl_char_rate_k,
+			  u32 overhead_max)
+{
+	u32 avg_tribyte_time_ns, tribyte_time_ns;
+	u32 num_chars_hcactive;
+	u32 frl_char_rate_k;
+
+	/* Avg time to transmit all active region tribytes */
+	avg_tribyte_time_ns = get_dsc_tribyte_time(hcactive_target_tb, ftb_avg_k);
+
+	/*
+	 * 2 bytes in active region = 1 FRL characters
+	 * 1 Tribyte in active region = 3/2 FRL characters
+	 */
+	num_chars_hcactive = DIV_ROUND_UP(hcactive_target_tb * 3, 2);
+
+	/*
+	 * FRL rate = lanes * frl character rate
+	 * But actual bandwidth wil be less, due to FRL limitations so account
+	 * for the overhead involved.
+	 * FRL rate with overhead = FRL rate * (100 - overhead %) / 100
+	 */
+	frl_char_rate_k = frl_lanes * min_frl_char_rate_k;
+	frl_char_rate_k = DIV_ROUND_UP_ULL(mul_u32_u32(frl_char_rate_k,
+						       EFFICIENCY_MULTIPLIER - overhead_max),
+					   EFFICIENCY_MULTIPLIER);
+
+	/* Time to transmit all characters with FRL limitations */
+	tribyte_time_ns	= get_dsc_tribyte_time(num_chars_hcactive, frl_char_rate_k);
+	return max(avg_tribyte_time_ns, tribyte_time_ns);
+}
+
+/* Get TBdelta : borrowing in tribytes relative to avg tribyte rate */
+static u32
+get_dsc_tri_bytes_delta(u32 tactive_target_ns, u32 tblank_target_ns,
+			u32 tactive_ref_ns, u32 tblank_ref_ns,
+			u32 hcactive_target_tb, u32 ftb_avg_k,
+			u32 hactive, u32 hblank,
+			u32 line_time_ns)
+{
+	u32 tb_delta_limit;
+	u32 hcblank_target_tb1 = get_frl_hcblank_tb_est1_target(hcactive_target_tb,
+								    hactive, hblank);
+	u32 tribytes = (hcactive_target_tb + hcblank_target_tb1);
+	u32 tactive_avg_ns;
+
+	if (tblank_ref_ns < tblank_target_ns) {
+		tactive_avg_ns =
+			div64_u64(mul_u32_u32(FRL_TIMING_NS_MULTIPLIER, hcactive_target_tb),
+				  mul_u32_u32(ftb_avg_k, 1000));
+		tb_delta_limit =
+			DIV_ROUND_UP_ULL(mul_u32_u32(tactive_ref_ns - tactive_avg_ns, tribytes),
+					 line_time_ns);
+	} else {
+		u32 t_delta_ns;
+
+		if (tactive_target_ns > tactive_ref_ns)
+			t_delta_ns = tactive_target_ns - tactive_ref_ns;
+		else
+			t_delta_ns = tactive_ref_ns - tactive_target_ns;
+		tb_delta_limit = div_u64(mul_u32_u32(t_delta_ns, tribytes), line_time_ns);
+	}
+
+	return tb_delta_limit;
+}
+
+static u32
+get_dsc_tri_bytes_borrowed(u32 ftb_avg_k,
+			   u32 tactive_target_ns,
+			   u32 hcactive_target)
+{
+	u32 hactive, tb_borrowed;
+
+	hactive = DIV_ROUND_UP_ULL(mul_u32_u32(tactive_target_ns,
+					       DIV_ROUND_UP(ftb_avg_k, 1000)),
+				   1000);
+	tb_borrowed = hactive - hcactive_target;
+
+	return tb_borrowed;
+}
+
+/* Compute hcactive and hcblank tribytes for given dsc bpp setting */
+static void
+compute_dsc_tribytes(struct intel_hdmi_frl_dfm *frl_dfm)
+{
+	u32 hcactive_target_tb;
+	u32 hcblank_target_tb;
+	u32 cfrl_available;
+	u32 num_slices;
+	u32 bytes_target;
+
+	/* Assert for slice width ?*/
+	if (!frl_dfm->config.slice_width)
+		return;
+
+	num_slices = DIV_ROUND_UP(frl_dfm->config.hactive, frl_dfm->config.slice_width);
+
+	/* Get required no. of tribytes during HCActive */
+	bytes_target = num_slices *
+		       DIV_ROUND_UP(frl_dfm->config.target_bpp_16 * frl_dfm->config.slice_width,
+				    8 * BPP_MULTIPLIER);
+
+	hcactive_target_tb = DIV_ROUND_UP(bytes_target, 3);
+
+	/* Get FRL Available characters */
+	cfrl_available = ((EFFICIENCY_MULTIPLIER - frl_dfm->params.overhead_max) *
+			  frl_dfm->params.cfrl_line) / EFFICIENCY_MULTIPLIER;
+
+	hcblank_target_tb =
+		get_frl_hcblank_tb_target(hcactive_target_tb,
+					  frl_dfm->config.hactive,
+					  frl_dfm->config.hblank,
+					  frl_dfm->params.hblank_audio_min,
+					  cfrl_available);
+
+	frl_dfm->params.hcactive_target = hcactive_target_tb;
+	frl_dfm->params.hcblank_target = hcblank_target_tb;
+}
+
+/* Check if audio supported with given dsc bpp and frl bandwidth */
+static bool
+audio_supported_with_dsc(struct intel_hdmi_frl_dfm *frl_dfm)
+{
+	return frl_dfm->params.hcblank_target >= frl_dfm->params.hblank_audio_min;
+}
+
+/* Is DFM timing requirement is met with DSC */
+static
+bool timing_req_met_with_dsc(struct intel_hdmi_frl_dfm *frl_dfm)
+{
+	u32 ftb_avg_k;
+	u32 tactive_ref_ns, tblank_ref_ns, tactive_target_ns, tblank_target_ns;
+	u32 tb_borrowed, tb_delta, tb_worst;
+
+	/* Get the avg no of tribytes sent per sec (Kbps) */
+	ftb_avg_k = (frl_dfm->params.hcactive_target + frl_dfm->params.hcblank_target) *
+		    DIV_ROUND_UP(frl_dfm->params.pixel_clock_max_khz,
+				 frl_dfm->config.hactive + frl_dfm->config.hblank);
+
+	/* Time to send Active tribytes in nanoseconds */
+	tactive_ref_ns = DIV_ROUND_UP(frl_dfm->params.line_time_ns * frl_dfm->config.hactive,
+				      frl_dfm->config.hactive + frl_dfm->config.hblank);
+
+	/* Time to send Blanking tribytes in nanoseconds */
+	tblank_ref_ns = DIV_ROUND_UP(frl_dfm->params.line_time_ns * frl_dfm->config.hblank,
+				     frl_dfm->config.hactive + frl_dfm->config.hblank);
+
+	tactive_target_ns = get_dsc_tactive_target_ns(frl_dfm->config.lanes,
+						      frl_dfm->params.hcactive_target,
+						      ftb_avg_k,
+						      frl_dfm->params.char_rate_min_kbps,
+						      frl_dfm->params.overhead_max);
+
+	tblank_target_ns = frl_dfm->params.line_time_ns - tactive_target_ns;
+
+	/* Get no. of tri bytes borrowed with DSC enabled */
+	tb_borrowed = get_dsc_tri_bytes_borrowed(ftb_avg_k,
+						 tactive_target_ns,
+						 frl_dfm->params.hcactive_target);
+
+	tb_delta = get_dsc_tri_bytes_delta(tactive_target_ns,
+					   tblank_target_ns,
+					   tactive_ref_ns,
+					   tblank_ref_ns,
+					   frl_dfm->params.hcactive_target,
+					   ftb_avg_k,
+					   frl_dfm->config.hactive,
+					   frl_dfm->config.hblank,
+					   frl_dfm->params.line_time_ns);
+
+	tb_worst = max(tb_borrowed, tb_delta);
+	if (tb_worst > TB_BORROWED_MAX)
+		return false;
+
+	frl_dfm->params.ftb_avg_k = ftb_avg_k;
+	frl_dfm->params.tb_borrowed = tb_borrowed;
+
+	return true;
+}
+
+/* Check Utilization constraint with DSC */
+static bool
+utilization_constraints_met_with_dsc(struct intel_hdmi_frl_dfm *frl_dfm)
+{
+	u32 hcactive_target_tb = frl_dfm->params.hcactive_target;
+	u32 hcblank_target_tb = frl_dfm->params.hcblank_target;
+	u32 frl_char_per_line = frl_dfm->params.cfrl_line;
+	u32 overhead_max = frl_dfm->params.overhead_max;
+	u32 utilization_with_overhead;
+	u32 actual_frl_char_payload;
+	u32 utilization;
+
+	/*
+	 * Note:
+	 * 1 FRL characters per 2 bytes in active period
+	 * 1 FRL char per byte in Blanking period
+	 */
+	actual_frl_char_payload = DIV_ROUND_UP(3 * hcactive_target_tb, 2) +
+				  hcblank_target_tb;
+
+	utilization = (actual_frl_char_payload * EFFICIENCY_MULTIPLIER) /
+		      frl_char_per_line;
+
+	/*
+	 * Utilization with overhead = utlization% +overhead %
+	 * should be less than 100%
+	 */
+	utilization_with_overhead = utilization + overhead_max;
+	if (utilization_with_overhead  > EFFICIENCY_MULTIPLIER)
+		return false;
+
+	return true;
+}
+
+/*
+ * intel_hdmi_frl_dfm_dsc_requirement_met : Check if FRL DFM requirements are met with
+ * the given bpp.
+ * @frl_dfm: dfm structure
+ *
+ * Returns true if the frl dfm requirements are met, else returns false.
+ */
+bool intel_hdmi_frl_dfm_dsc_requirement_met(struct intel_hdmi_frl_dfm *frl_dfm)
+{
+	if (!frl_dfm->config.slice_width || !frl_dfm->config.target_bpp_16)
+		return false;
+
+	compute_max_frl_link_overhead(frl_dfm);
+	compute_link_characteristics(frl_dfm);
+	compute_audio_hblank_min(frl_dfm);
+	compute_dsc_tribytes(frl_dfm);
+
+	if (!audio_supported_with_dsc(frl_dfm))
+		return false;
+
+	if (!timing_req_met_with_dsc(frl_dfm))
+		return false;
+
+	if (!utilization_constraints_met_with_dsc(frl_dfm))
+		return false;
+
+	return true;
+}

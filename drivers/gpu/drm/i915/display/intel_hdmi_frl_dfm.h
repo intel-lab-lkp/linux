@@ -112,4 +112,7 @@ struct intel_hdmi_frl_dfm {
 
 bool intel_hdmi_frl_dfm_nondsc_requirement_met(struct intel_hdmi_frl_dfm *frl_dfm);
 
+bool
+intel_hdmi_frl_dfm_dsc_requirement_met(struct intel_hdmi_frl_dfm *frl_dfm);
+
 #endif
