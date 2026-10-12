@@ -43,6 +43,7 @@ so_incoming_cpu
 so_netns_cookie
 so_rcv_listener
 stress_reuseport_listen
+sysctl_net_test
 tap
 tcp_fastopen_backup_key
 tcp_inq

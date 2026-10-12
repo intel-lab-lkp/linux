@@ -196,6 +196,7 @@ TEST_GEN_PROGS := \
 	sk_connect_zero_addr \
 	sk_so_peek_off \
 	so_incoming_cpu \
+	sysctl_net_test \
 	tap \
 	tcp_port_share \
 	tls \
