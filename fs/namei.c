@@ -2097,25 +2097,26 @@ all_done: // pure jump
  * __detach_mounts() marks it before the mounts are detached, so a walk
  * that doesn't find them anymore sees the mark. Any other dentry is fine
  * to step onto. The walk found the name before it was removed.
+ *
+ * The walk fails with -ESTALE and is repeated with LOOKUP_REVAL. That is
+ * the last attempt, so there it fails with -ENOENT.
  */
-static bool unlink_may_reveal(struct nameidata *nd, int flags,
-			      struct path *path, struct dentry *dentry)
+static int unlink_may_reveal(struct nameidata *nd, int flags,
+			     struct path *path, struct dentry *dentry)
 {
 	/* ".." and LOOKUP_DOWN may land on an unhashed directory */
 	if (flags & WALK_NOFOLLOW)
-		return false;
-	if (nd->flags & LOOKUP_REVAL)
-		return false;
+		return 0;
 	/* We crossed onto a mount and the name led us here while it still existed */
 	if (path->mnt != nd->path.mnt)
-		return false;
+		return 0;
 	/* only a name that went away while covered is flagged */
 	if (likely(!(READ_ONCE(dentry->d_flags) & DCACHE_UNCOVERED)))
-		return false;
+		return 0;
 	if (!cant_mount(dentry) || !d_unlinked(dentry))
-		return false;
+		return 0;
 	dput(no_free_ptr(path->dentry));
-	return true;
+	return nd->flags & LOOKUP_REVAL ? -ENOENT : -ESTALE;
 }
 
 /*
@@ -2147,8 +2148,9 @@ static noinline const char *step_into_slowpath(struct nameidata *nd, int flags,
 			if (unlikely(!inode))
 				return ERR_PTR(-ENOENT);
 		} else {
-			if (unlikely(unlink_may_reveal(nd, flags, &path, dentry)))
-				return ERR_PTR(-ESTALE);
+			err = unlink_may_reveal(nd, flags, &path, dentry);
+			if (unlikely(err))
+				return ERR_PTR(err);
 			dput(nd->path.dentry);
 			if (nd->path.mnt != path.mnt)
 				mntput(nd->path.mnt);
