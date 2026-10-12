@@ -36,6 +36,7 @@
 #include "intel_cursor_regs.h"
 #include "intel_ddi.h"
 #include "intel_de.h"
+#include "intel_display.h"
 #include "intel_display_irq.h"
 #include "intel_display_regs.h"
 #include "intel_display_rpm.h"
@@ -1792,6 +1793,19 @@ static void psr2_dc3co_disable_work(struct work_struct *work)
 	mutex_unlock(&intel_dp->psr.lock);
 }
 
+/* Frontbuffer bits for every pipe driving this PSR/Panel Replay instance. */
+static unsigned int psr_frontbuffer_mask(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	unsigned int mask = 0;
+	enum pipe pipe;
+
+	for_each_pipe_masked(display, pipe, intel_dp->psr.pipe_mask)
+		mask |= INTEL_FRONTBUFFER_ALL_MASK(pipe);
+
+	return mask;
+}
+
 static void
 psr2_dc3co_flush_locked(struct intel_dp *intel_dp, unsigned int frontbuffer_bits)
 {
@@ -1807,8 +1821,7 @@ psr2_dc3co_flush_locked(struct intel_dp *intel_dp, unsigned int frontbuffer_bits
 	 * At every frontbuffer flush flip event modified delay of delayed work,
 	 * when delayed work schedules that means display has been idle.
 	 */
-	if (!(frontbuffer_bits &
-	    INTEL_FRONTBUFFER_ALL_MASK(intel_dp->psr.pipe)))
+	if (!(frontbuffer_bits & psr_frontbuffer_mask(intel_dp)))
 		return;
 
 	mod_delayed_work(display->wq.unordered, &intel_dp->psr.dc3co_work,
@@ -2169,6 +2182,7 @@ static void intel_psr_enable_locked(struct intel_dp *intel_dp,
 	intel_dp->psr.panel_replay_enabled = crtc_state->has_panel_replay;
 	intel_dp->psr.busy_frontbuffer_bits = 0;
 	intel_dp->psr.pipe = to_intel_crtc(crtc_state->uapi.crtc)->pipe;
+	intel_dp->psr.pipe_mask = intel_crtc_joined_pipe_mask(crtc_state);
 	intel_dp->psr.transcoder = crtc_state->cpu_transcoder;
 	/* DC5/DC6 requires at least 6 idle frames */
 	val = usecs_to_jiffies(intel_get_frame_time_us(crtc_state) * 6);
@@ -2388,6 +2402,7 @@ static void intel_psr_disable_locked(struct intel_dp *intel_dp)
 	intel_dp->psr.psr2_sel_fetch_cff_enabled = false;
 	intel_dp->psr.active_non_psr_pipes = 0;
 	intel_dp->psr.pkg_c_latency_used = 0;
+	intel_dp->psr.pipe_mask = 0;
 	cancel_delayed_work(&intel_dp->psr.dc3co_work);
 	intel_dp->psr.dc3co_allowed = false;
 }
@@ -3621,8 +3636,7 @@ void intel_psr_invalidate(struct intel_display *display,
 			continue;
 		}
 
-		pipe_frontbuffer_bits &=
-			INTEL_FRONTBUFFER_ALL_MASK(intel_dp->psr.pipe);
+		pipe_frontbuffer_bits &= psr_frontbuffer_mask(intel_dp);
 		intel_dp->psr.busy_frontbuffer_bits |= pipe_frontbuffer_bits;
 
 		if (pipe_frontbuffer_bits)
@@ -3702,8 +3716,7 @@ void intel_psr_flush(struct intel_display *display,
 			continue;
 		}
 
-		pipe_frontbuffer_bits &=
-			INTEL_FRONTBUFFER_ALL_MASK(intel_dp->psr.pipe);
+		pipe_frontbuffer_bits &= psr_frontbuffer_mask(intel_dp);
 		intel_dp->psr.busy_frontbuffer_bits &= ~pipe_frontbuffer_bits;
 
 		/*
