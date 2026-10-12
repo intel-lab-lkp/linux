@@ -2341,6 +2341,28 @@ compute_frl_mn(struct intel_crtc_state *crtc_state, u32 ftb_avg_k)
 	crtc_state->frl.div18 = DIV_ROUND_UP_ULL(div_18_clk, 1000);
 }
 
+bool intel_hdmi_frl_audio_rate_supported(const struct intel_crtc_state *crtc_state,
+					 int audio_rate, int channels)
+{
+	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	struct intel_hdmi_frl_dfm frl_dfm = {};
+
+	frl_dfm.config.pixel_clock_nominal_khz = adjusted_mode->clock;
+	frl_dfm.config.hactive = adjusted_mode->hdisplay;
+	frl_dfm.config.hblank = adjusted_mode->htotal - adjusted_mode->hdisplay;
+	frl_dfm.config.bpc = crtc_state->pipe_bpp / 3;
+	frl_dfm.config.color_format = get_drm_color_format(crtc_state->output_format);
+
+	frl_dfm.config.lanes = crtc_state->frl.required_lanes;
+	frl_dfm.config.bit_rate_kbps = crtc_state->frl.required_rate * 1000000;
+
+	/* Audio config under test */
+	frl_dfm.config.audio_hz = audio_rate;
+	frl_dfm.config.audio_channels = channels;
+
+	return intel_hdmi_frl_dfm_nondsc_requirement_met(&frl_dfm);
+}
+
 static int
 intel_hdmi_compute_frl_config(struct intel_encoder *encoder,
 			      struct intel_crtc_state *crtc_state)

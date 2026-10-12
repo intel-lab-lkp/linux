@@ -63,6 +63,8 @@ int intel_hdmi_dsc_get_num_slices(const struct drm_display_mode *mode,
 				  int hdmi_max_slices, int hdmi_throughput);
 int intel_hdmi_dsc_get_slice_height(int vactive);
 bool intel_hdmi_is_frl(u32 clock);
+bool intel_hdmi_frl_audio_rate_supported(const struct intel_crtc_state *crtc_state,
+					 int audio_rate, int channels);
 void intel_hdmi_prepare_for_frl_mode(const struct intel_crtc_state *crtc_state);
 int intel_hdmi_start_frl(struct intel_encoder *encoder,
 			 const struct intel_crtc_state *crtc_state);
