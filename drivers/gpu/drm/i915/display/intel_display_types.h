@@ -1709,8 +1709,17 @@ struct intel_hdmi {
 		enum drm_dp_dual_mode_type type;
 		int max_tmds_clock;
 	} dp_dual_mode;
+	bool has_sink_hdmi_21;
+	int max_frl_rate;
+	int max_dsc_frl_rate;
 	struct intel_connector *attached_connector;
 	struct cec_notifier *cec_notifier;
+	struct {
+		bool trained;
+		int lanes;
+		int rate_gbps;
+		int ffe_level;
+	} frl;
 };
 
 struct intel_dp_mst_encoder;

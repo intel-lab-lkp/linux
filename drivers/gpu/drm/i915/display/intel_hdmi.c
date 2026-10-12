@@ -2485,6 +2485,8 @@ intel_hdmi_unset_edid(struct drm_connector *_connector)
 	struct intel_connector *connector = to_intel_connector(_connector);
 	struct intel_hdmi *intel_hdmi = intel_attached_hdmi(connector);
 
+	intel_hdmi->has_sink_hdmi_21 = false;
+
 	intel_hdmi->dp_dual_mode.type = DRM_DP_DUAL_MODE_NONE;
 	intel_hdmi->dp_dual_mode.max_tmds_clock = 0;
 
@@ -2545,6 +2547,38 @@ intel_hdmi_dp_dual_mode_detect(struct drm_connector *_connector)
 	}
 }
 
+static void
+intel_hdmi_reset_frl_config(struct intel_hdmi *intel_hdmi)
+{
+	intel_hdmi->frl.trained = false;
+	intel_hdmi->frl.lanes = 0;
+	intel_hdmi->frl.rate_gbps = 0;
+	intel_hdmi->frl.ffe_level = 0;
+}
+
+static void
+intel_hdmi_init_frl_config(struct intel_connector *connector)
+{
+	struct intel_hdmi *intel_hdmi = intel_attached_hdmi(connector);
+	struct intel_encoder *encoder = &hdmi_to_dig_port(intel_hdmi)->base;
+	int max_src_frl_rate =
+		DIV_ROUND_UP(intel_bios_hdmi_max_frl_rate(encoder->devdata), 1000000) * 4;
+	int max_sink_dsc_frl_rate =
+		intel_hdmi_sink_dsc_max_frl_rate(&connector->base);
+	int max_sink_frl_rate =
+		intel_hdmi_sink_max_frl_rate(&connector->base);
+
+	intel_hdmi->has_sink_hdmi_21 = max_sink_frl_rate > 0;
+
+	intel_hdmi->max_frl_rate = min(max_sink_frl_rate,
+				       max_src_frl_rate);
+
+	intel_hdmi->max_dsc_frl_rate = min(max_sink_dsc_frl_rate,
+					   max_src_frl_rate);
+
+	intel_hdmi_reset_frl_config(intel_hdmi);
+}
+
 static bool
 intel_hdmi_set_edid(struct drm_connector *_connector)
 {
@@ -2575,6 +2609,8 @@ intel_hdmi_set_edid(struct drm_connector *_connector)
 
 	if (drm_edid_is_digital(drm_edid)) {
 		intel_hdmi_dp_dual_mode_detect(&connector->base);
+
+		intel_hdmi_init_frl_config(connector);
 
 		connected = true;
 	}
