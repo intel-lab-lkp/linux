@@ -422,6 +422,80 @@ static int hfs_read_inode(struct inode *inode, void *data)
 }
 
 /*
+ * hfs_system_read_inode
+ *
+ * Initialize one of the internal B-tree inodes.  These are described by the
+ * MDB rather than by catalog records, so they need their own read helper -
+ * the HFS counterpart of hfsplus_system_read_inode().
+ */
+static int hfs_system_read_inode(struct inode *inode)
+{
+	struct hfs_sb_info *hsb = HFS_SB(inode->i_sb);
+	struct hfs_mdb *mdb = hsb->mdb;
+
+	HFS_I(inode)->flags = 0;
+	HFS_I(inode)->rsrc_inode = NULL;
+	mutex_init(&HFS_I(inode)->extents_lock);
+	HFS_I(inode)->tz_secondswest = sys_tz.tz_minuteswest * 60;
+
+	inode->i_uid = hsb->s_uid;
+	inode->i_gid = hsb->s_gid;
+	set_nlink(inode, 1);
+
+	switch (inode->i_ino) {
+	case HFS_EXT_CNID:
+		hfs_inode_read_fork(inode, mdb->drXTExtRec, mdb->drXTFlSize,
+				    mdb->drXTFlSize, be32_to_cpu(mdb->drXTClpSiz));
+		break;
+	case HFS_CAT_CNID:
+		hfs_inode_read_fork(inode, mdb->drCTExtRec, mdb->drCTFlSize,
+				    mdb->drCTFlSize, be32_to_cpu(mdb->drCTClpSiz));
+		break;
+	default:
+		return -EIO;
+	}
+
+	/*
+	 * Assign a dummy file type, for may_open() requires that an inode has
+	 * a valid file type.  These inodes are hashed by CNID like any other
+	 * inode, so without a type a catalog record of a crafted image that
+	 * aliases CNID 3 or 4 would reach the VFS with i_mode == 0.
+	 */
+	inode->i_mode = S_IFREG;
+
+	return 0;
+}
+
+/*
+ * hfs_system_iget
+ *
+ * Look up (or create) one of the internal B-tree inodes.  hfs_btree_open()
+ * uses this instead of a raw iget_locked() so that the inode is completely
+ * initialized before it becomes visible in the inode cache, in the same way
+ * hfsplus_iget() handles the system CNIDs for HFS+.
+ */
+struct inode *hfs_system_iget(struct super_block *sb, u32 cnid)
+{
+	struct inode *inode;
+	int err;
+
+	inode = iget_locked(sb, cnid);
+	if (!inode)
+		return ERR_PTR(-ENOMEM);
+	if (!(inode_state_read_once(inode) & I_NEW))
+		return inode;
+
+	err = hfs_system_read_inode(inode);
+	if (err) {
+		iget_failed(inode);
+		return ERR_PTR(err);
+	}
+
+	unlock_new_inode(inode);
+	return inode;
+}
+
+/*
  * __hfs_iget()
  *
  * Given the MDB for a HFS filesystem, a 'key' and an 'entry' in
