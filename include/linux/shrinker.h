@@ -7,7 +7,11 @@
 #include <linux/refcount.h>
 #include <linux/completion.h>
 
-#define SHRINKER_UNIT_BITS	BITS_PER_LONG
+/*
+ * One id less than a word holds, so that nr_deferred[] and the map word add
+ * up to BITS_PER_LONG longs: a power of two, which fills a kmalloc slot.
+ */
+#define SHRINKER_UNIT_BITS	(BITS_PER_LONG - 1)
 
 /*
  * Bitmap and deferred work of shrinker::id corresponding to memcg-aware
@@ -17,6 +21,9 @@ struct shrinker_info_unit {
 	atomic_long_t nr_deferred[SHRINKER_UNIT_BITS];
 	DECLARE_BITMAP(map, SHRINKER_UNIT_BITS);
 };
+
+static_assert(!(sizeof(struct shrinker_info_unit) &
+		(sizeof(struct shrinker_info_unit) - 1)));
 
 struct shrinker_info {
 	struct rcu_head rcu;
