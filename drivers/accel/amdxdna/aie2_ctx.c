@@ -1155,19 +1155,24 @@ again:
 		return -EFAULT;
 	}
 
+	mutex_lock(&mapp->lock);
 	ret = hmm_range_fault_unlocked_timeout(&mapp->range, timeout);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&mapp->lock);
 		goto put_mm;
+	}
 
 	down_write(&xdna->notifier_lock);
 	if (mmu_interval_read_retry(&mapp->notifier, mapp->range.notifier_seq)) {
 		up_write(&xdna->notifier_lock);
+		mutex_unlock(&mapp->lock);
 		amdxdna_umap_put(mapp);
 		mmput(mm);
 		goto again;
 	}
 	mapp->invalid = false;
 	up_write(&xdna->notifier_lock);
+	mutex_unlock(&mapp->lock);
 	amdxdna_umap_put(mapp);
 	mmput(mm);
 	goto again;

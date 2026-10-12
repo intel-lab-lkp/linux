@@ -19,6 +19,7 @@ struct amdxdna_umap {
 	struct kref			refcnt;
 	bool				invalid;
 	bool				unmapped;
+	struct mutex			lock; /* protect range */
 };
 
 struct amdxdna_mem {

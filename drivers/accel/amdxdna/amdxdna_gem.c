@@ -318,6 +318,7 @@ static void amdxdna_umap_release(struct kref *ref)
 	struct amdxdna_umap *mapp = container_of(ref, struct amdxdna_umap, refcnt);
 
 	mmu_interval_notifier_remove(&mapp->notifier);
+	mutex_destroy(&mapp->lock);
 	kvfree(mapp->range.hmm_pfns);
 	kfree(mapp);
 }
@@ -402,6 +403,7 @@ static int amdxdna_hmm_register(struct amdxdna_gem_obj *abo,
 		goto free_pfns;
 	}
 
+	mutex_init(&mapp->lock);
 	down_write(&xdna->notifier_lock);
 	if (list_empty(&abo->mem.umap_list))
 		abo->mem.uva = addr;
