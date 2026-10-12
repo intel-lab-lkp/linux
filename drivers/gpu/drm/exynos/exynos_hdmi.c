@@ -893,8 +893,10 @@ static int hdmi_get_modes(struct drm_connector *connector)
 	drm_edid = drm_edid_read_ddc(connector, hdata->ddc_adpt);
 
 	ret = drm_edid_connector_update(connector, drm_edid);
-	if (ret)
+	if (ret) {
+		drm_edid_free(drm_edid);
 		return 0;
+	}
 
 	cec_notifier_set_phys_addr(hdata->notifier, info->source_physical_address);
 
