@@ -1327,6 +1327,15 @@ int __ice_set_vf_mac(struct ice_pf *pf, u16 vf_id, const u8 *mac)
 
 	mutex_lock(&vf->cfg_lock);
 
+	/* The VF can have been disabled by a reset after the check above, and
+	 * ice_reset_vf() then skips the reprogram and still returns 0. Fail
+	 * here instead of reporting a MAC address that hardware never got.
+	 */
+	if (ice_is_vf_disabled(vf)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
 	/* VF is notified of its new MAC via the PF's response to the
 	 * VIRTCHNL_OP_GET_VF_RESOURCES message after the VF has been reset
 	 */
@@ -1345,6 +1354,8 @@ int __ice_set_vf_mac(struct ice_pf *pf, u16 vf_id, const u8 *mac)
 	}
 
 	ice_reset_vf(vf, ICE_VF_RESET_NOTIFY);
+
+out_unlock:
 	mutex_unlock(&vf->cfg_lock);
 
 out_put_vf:
@@ -1401,6 +1412,14 @@ int ice_set_vf_trust(struct net_device *netdev, int vf_id, bool trusted)
 
 	mutex_lock(&vf->cfg_lock);
 
+	/* See __ice_set_vf_mac(), the VF can have been disabled after the
+	 * check above and ice_reset_vf() would skip the reprogram.
+	 */
+	if (ice_is_vf_disabled(vf)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
 	while (!trusted && vf->num_mac_lldp)
 		ice_vf_update_mac_lldp_num(vf, ice_get_vf_vsi(vf), false);
 
@@ -1409,6 +1428,7 @@ int ice_set_vf_trust(struct net_device *netdev, int vf_id, bool trusted)
 	dev_info(ice_pf_to_dev(pf), "VF %u is now %strusted\n",
 		 vf_id, trusted ? "" : "un");
 
+out_unlock:
 	mutex_unlock(&vf->cfg_lock);
 
 out_put_vf:
@@ -1721,6 +1741,14 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 
 	mutex_lock(&vf->cfg_lock);
 
+	/* See __ice_set_vf_mac(), the VF can have been disabled after the
+	 * check above and ice_reset_vf() would skip the reprogram.
+	 */
+	if (ice_is_vf_disabled(vf)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
 	vf->port_vlan_info = ICE_VLAN(local_vlan_proto, vlan_id, qos);
 	if (ice_vf_is_port_vlan_ena(vf))
 		dev_info(dev, "Setting VLAN %u, QoS %u, TPID 0x%04x on VF %d\n",
@@ -1729,6 +1757,8 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 		dev_info(dev, "Clearing port VLAN on VF %d\n", vf_id);
 
 	ice_reset_vf(vf, ICE_VF_RESET_NOTIFY);
+
+out_unlock:
 	mutex_unlock(&vf->cfg_lock);
 
 out_put_vf:
