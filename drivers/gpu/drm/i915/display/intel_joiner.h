@@ -22,4 +22,6 @@ bool intel_joiner_candidate_valid(struct intel_connector *connector,
 	for ((__num_joined_pipes) = 1; (__num_joined_pipes) <= (I915_MAX_PIPES); (__num_joined_pipes)++) \
 		for_each_if(intel_joiner_candidate_valid(__connector, (__mode)->hdisplay, __num_joined_pipes))
 
+u8 intel_joiner_valid_primary_pipe_mask(struct intel_display *display, int num_joined_pipes);
+
 #endif /* __INTEL_JOINER_H__ */
