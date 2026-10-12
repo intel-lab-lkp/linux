@@ -62,15 +62,17 @@
  *
  * It is invoked as
  *
- *   fixdep <depfile> <target> <cmdline>
+ *   fixdep <depfile> <target> <cmdline> <prereqs>
  *
  * and will read the dependency file <depfile>
  *
  * The transformed dependency snipped is written to stdout.
  *
- * It first generates a line
+ * It first generates the lines
  *
- *   savedcmd_<target> = <cmdline>
+ *   savedcmd_<target> := <cmdline>
+ *
+ *   make_prereqs_<target> := <prereqs_without_deps>
  *
  * and then basically copies the .<target>.d file to stdout, in the
  * process filtering out the dependency on autoconf.h and adding
@@ -103,7 +105,7 @@
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: fixdep <depfile> <target> <cmdline>\n");
+	fprintf(stderr, "Usage: fixdep <depfile> <target> <cmdline> <prereqs>\n");
 	exit(1);
 }
 
@@ -478,23 +480,63 @@ static void print_dep_file(const char *target, const struct dep_info *info)
 	printf("$(deps_%s):\n", target);
 }
 
+/*
+ * Print make_prereqs_<target> from prereqs, excluding the deps listed
+ * in info.
+ */
+static void print_make_prereqs(const char *target, const char *prereqs,
+			       const struct dep_info *info)
+{
+	struct item *seen_prereqs_hashtab[HASHSZ] = {};
+	const struct dep_item *dep;
+	const char *p = prereqs;
+
+	for (dep = info->deps; dep; dep = dep->next)
+		in_hashtable(dep->name, strlen(dep->name),
+			     seen_prereqs_hashtab);
+
+	printf("make_prereqs_%s :=", target);
+
+	while (*p) {
+		const char *start;
+		int len;
+
+		while (*p == ' ' || *p == '\t')
+			p++;
+		if (!*p)
+			break;
+
+		start = p;
+		while (*p && *p != ' ' && *p != '\t')
+			p++;
+		len = p - start;
+
+		if (!in_hashtable(start, len, seen_prereqs_hashtab))
+			printf(" %.*s", len, start);
+	}
+
+	printf("\n\n");
+}
+
 int main(int argc, char *argv[])
 {
-	const char *depfile, *target, *cmdline;
+	const char *depfile, *target, *cmdline, *prereqs;
 	struct dep_info info;
 	void *buf;
 
-	if (argc != 4)
+	if (argc != 5)
 		usage();
 
 	depfile = argv[1];
 	target = argv[2];
 	cmdline = argv[3];
+	prereqs = argv[4];
 
 	buf = read_file(depfile);
 	info = parse_dep_file(buf);
 
 	printf("savedcmd_%s := %s\n\n", target, cmdline);
+	print_make_prereqs(target, prereqs, &info);
 	print_dep_file(target, &info);
 
 	free_dep_info(&info);
