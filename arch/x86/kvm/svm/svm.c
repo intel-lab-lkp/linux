@@ -192,6 +192,8 @@ DEFINE_PER_CPU(struct svm_cpu_data, svm_data);
 
 static DEFINE_MUTEX(vmcb_dump_mutex);
 
+kvm_tlb_tag_t fallback_asid;
+
 /*
  * Only MSR_TSC_AUX is switched via the user return hook.  EFER is switched via
  * the VMCB, and the SYSCALL/SYSENTER MSRs are handled by VMLOAD/VMSAVE.
@@ -583,15 +585,6 @@ static int svm_enable_virtualization_cpu(void)
 		return r;
 
 	sd = per_cpu_ptr(&svm_data, me);
-	/*
-	 * Bump the current asid_generation value to ensure any vCPU that
-	 * previously ran on this CPU sees a stale generation and is forced
-	 * to acquire a new ASID, preventing a latent ASID collision.
-	 */
-	sd->asid_generation++;
-	sd->max_asid = cpuid_ebx(SVM_CPUID_FUNC) - 1;
-	sd->next_asid = sd->max_asid + 1;
-	sd->min_asid = max_sev_asid + 1;
 
 	wrmsrq(MSR_VM_HSAVE_PA, sd->save_area_pa);
 
@@ -994,6 +987,8 @@ static void svm_hardware_unsetup(void)
 
 	__free_pages(__sme_pa_to_page(iopm_base), get_order(IOPM_SIZE));
 	iopm_base = 0;
+
+	kvm_destroy_tlb_tags();
 }
 
 static void init_seg(struct vmcb_seg *seg)
@@ -1246,8 +1241,8 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
 	if (gmet_enabled)
 		control->misc_ctl |= SVM_MISC_ENABLE_GMET;
 
-	svm->current_vmcb->asid_generation = 0;
-	svm->asid = 0;
+	control->asid = svm->asid;
+	vmcb_set_flush_asid(vmcb);
 
 	svm->nested.vmcb12_gpa = INVALID_GPA;
 	svm->nested.last_vmcb12_gpa = INVALID_GPA;
@@ -1375,6 +1370,12 @@ static int svm_vcpu_create(struct kvm_vcpu *vcpu)
 		goto error_free_avic;
 	}
 
+	svm->asid = allocate_asid(vcpu);
+	if (!svm->asid) {
+		err = -EINVAL;
+		goto error_free_msrpm;
+	}
+
 	svm->x2avic_msrs_intercepted = true;
 	svm->lbr_msrs_intercepted = true;
 
@@ -1386,6 +1387,8 @@ static int svm_vcpu_create(struct kvm_vcpu *vcpu)
 
 	return 0;
 
+error_free_msrpm:
+	svm_vcpu_free_msrpm(svm->msrpm);
 error_free_avic:
 	avic_vcpu_free(vcpu);
 error_free_sev:
@@ -1417,6 +1420,8 @@ static void svm_vcpu_free(struct kvm_vcpu *vcpu)
 
 	__free_page(__sme_pa_to_page(svm->vmcb01.pa));
 	svm_vcpu_free_msrpm(svm->msrpm);
+
+	free_asid(svm->asid);
 }
 
 #ifdef CONFIG_CPU_MITIGATIONS
@@ -1940,18 +1945,6 @@ static void svm_update_exception_bitmap(struct kvm_vcpu *vcpu)
 		if (vcpu->guest_debug & KVM_GUESTDBG_USE_SW_BP)
 			set_exception_intercept(svm, BP_VECTOR);
 	}
-}
-
-static void new_asid(struct vcpu_svm *svm, struct svm_cpu_data *sd)
-{
-	if (sd->next_asid > sd->max_asid) {
-		++sd->asid_generation;
-		sd->next_asid = sd->min_asid;
-		sd->flush_all_asids = true;
-	}
-
-	svm->current_vmcb->asid_generation = sd->asid_generation;
-	svm->asid = sd->next_asid++;
 }
 
 static void svm_set_dr6(struct kvm_vcpu *vcpu, unsigned long value)
@@ -3875,37 +3868,24 @@ static void svm_set_nested_run_soft_int_state(struct kvm_vcpu *vcpu)
 
 static int pre_svm_run(struct kvm_vcpu *vcpu)
 {
-	struct svm_cpu_data *sd = per_cpu_ptr(&svm_data, vcpu->cpu);
 	struct vcpu_svm *svm = to_svm(vcpu);
 
 	/*
 	 * If the previous VMRUN of the VMCB occurred on a different physical
-	 * cpu, then mark the VMCB dirty as hardware's clean bits are per pCPU.
-	 *
-	 * Reset the ASID generation in both VMCBs. This will lead to assigning
-	 * a new ASID now, and then again when switching to the other VMCB.
-	 * However, this is needed as the ASID is shared between the VMCBs, and
-	 * otherwise it would be possible to use an ASID allocated on one pCPU
-	 * on another, for example:
-	 * - vCPU migrates from pCPU A to pCPU B, allocates a new ASID.
-	 * - vCPU migrates back to pCPU A, and then switches the VMCB.
-	 * - The new VMCB does not detect a pCPU change and runs on pCPU A with
-	 *   the new ASID allocated on pCPU B, which is potentially used by
-	 *   another vCPU/VM.
+	 * cpu, then mark the VMCB dirty and flush the ASID, as hardware's clean
+	 * bits and TLB entries are per pCPU.
 	 */
 	if (unlikely(svm->current_vmcb->cpu != vcpu->cpu)) {
 		vmcb_mark_all_dirty(svm->vmcb);
 		svm->current_vmcb->cpu = vcpu->cpu;
-		svm->vmcb01.asid_generation = 0;
-		svm->nested.vmcb02.asid_generation = 0;
+		vmcb_set_flush_asid(svm->vmcb);
         }
 
 	if (is_sev_guest(vcpu))
 		return pre_sev_run(svm, vcpu->cpu);
 
-	/* FIXME: handle wraparound of asid_generation */
-	if (svm->current_vmcb->asid_generation != sd->asid_generation)
-		new_asid(svm, sd);
+	if (unlikely(svm->vmcb->control.asid == fallback_asid))
+		vmcb_set_flush_asid(svm->vmcb);
 
 	return 0;
 }
@@ -4644,13 +4624,6 @@ static __no_kcsan fastpath_t svm_vcpu_run(struct kvm_vcpu *vcpu, u64 run_flags)
 
 	sync_lapic_to_cr8(vcpu);
 
-	if (unlikely(svm->asid != svm->vmcb->control.asid)) {
-		svm->vmcb->control.asid = svm->asid;
-		vmcb_mark_dirty(svm->vmcb, VMCB_ASID);
-	}
-	if (this_cpu_ptr(&svm_data)->flush_all_asids)
-		svm->vmcb->control.tlb_ctl = TLB_CONTROL_FLUSH_ALL_ASID;
-
 	svm->vmcb->save.cr2 = vcpu->arch.cr2;
 
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_ERAPS) &&
@@ -4742,7 +4715,6 @@ static __no_kcsan fastpath_t svm_vcpu_run(struct kvm_vcpu *vcpu, u64 run_flags)
 	}
 
 	if (!svm_is_vmrun_failure(svm->vmcb->control.exit_code)) {
-		this_cpu_ptr(&svm_data)->flush_all_asids = false;
 		vmcb_clr_flush_asid(svm->vmcb);
 
 		/*
@@ -5754,6 +5726,7 @@ static __init void svm_set_cpu_caps(void)
 
 static __init int svm_hardware_setup(void)
 {
+	unsigned long nr_asids;
 	void *iopm_va;
 	int cpu, r;
 
@@ -5910,6 +5883,14 @@ static __init int svm_hardware_setup(void)
 	svm_set_cpu_caps();
 
 	kvm_caps.inapplicable_quirks &= ~KVM_X86_QUIRK_CD_NW_CLEARED;
+
+	/* Consumes max_sev_asid initialized by sev_hardware_setup() */
+	nr_asids = cpuid_ebx(SVM_CPUID_FUNC);
+	r = kvm_init_tlb_tags(nr_asids, max_sev_asid + 1);
+	if (r)
+		goto err;
+
+	fallback_asid = kvm_alloc_tlb_tag();
 
 	for_each_possible_cpu(cpu) {
 		r = svm_cpu_init(cpu);

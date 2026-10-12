@@ -26,6 +26,7 @@
 #include "regs.h"
 #include "x86.h"
 #include "pmu.h"
+#include "mmu.h"
 
 /*
  * Helpers to convert to/from physical addresses for pages whose address is
@@ -145,7 +146,6 @@ struct kvm_vmcb_info {
 	struct vmcb *ptr;
 	unsigned long pa;
 	int cpu;
-	uint64_t asid_generation;
 };
 
 struct vmcb_save_area_cached {
@@ -285,7 +285,7 @@ struct vcpu_svm {
 	struct vmcb *vmcb;
 	struct kvm_vmcb_info vmcb01;
 	struct kvm_vmcb_info *current_vmcb;
-	u32 asid;
+	kvm_tlb_tag_t asid;
 	u32 sysenter_esp_hi;
 	u32 sysenter_eip_hi;
 	uint64_t tsc_aux;
@@ -372,12 +372,6 @@ struct vcpu_svm {
 };
 
 struct svm_cpu_data {
-	u64 asid_generation;
-	u32 max_asid;
-	u32 next_asid;
-	u32 min_asid;
-
-	bool flush_all_asids;
 	bool bp_spec_reduce_set;
 
 	struct vmcb *save_area;
@@ -1079,6 +1073,21 @@ static inline struct vmcb_save_area *sev_decrypt_vmsa(struct kvm_vcpu *vcpu)
 }
 static inline void sev_free_decrypted_vmsa(struct kvm_vcpu *vcpu, struct vmcb_save_area *vmsa) {}
 #endif
+
+extern kvm_tlb_tag_t fallback_asid;
+
+static inline kvm_tlb_tag_t allocate_asid(struct kvm_vcpu *vcpu)
+{
+	if (is_sev_guest(vcpu))
+		return sev_get_asid(vcpu->kvm);
+	return kvm_alloc_tlb_tag() ?: fallback_asid;
+}
+
+static inline void free_asid(kvm_tlb_tag_t asid)
+{
+	if (asid > max_sev_asid && asid != fallback_asid)
+		kvm_free_tlb_tag(asid);
+}
 
 /* vmenter.S */
 
