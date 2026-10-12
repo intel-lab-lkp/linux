@@ -2104,6 +2104,9 @@ all_done: // pure jump
 static int unlink_may_reveal(struct nameidata *nd, int flags,
 			     struct path *path, struct dentry *dentry)
 {
+	/* rcuwalk catches this via d_seq */
+	if (nd->flags & LOOKUP_RCU)
+		return 0;
 	/* ".." and LOOKUP_DOWN may land on an unhashed directory */
 	if (flags & WALK_NOFOLLOW)
 		return 0;
@@ -2137,6 +2140,9 @@ static noinline const char *step_into_slowpath(struct nameidata *nd, int flags,
 	err = handle_mounts(nd, dentry, &path);
 	if (unlikely(err < 0))
 		return ERR_PTR(err);
+	err = unlink_may_reveal(nd, flags, &path, dentry);
+	if (unlikely(err))
+		return ERR_PTR(err);
 	inode = path.dentry->d_inode;
 	if (likely(!d_is_symlink(path.dentry)) ||
 	   ((flags & WALK_TRAILING) && !(nd->flags & LOOKUP_FOLLOW)) ||
@@ -2148,9 +2154,6 @@ static noinline const char *step_into_slowpath(struct nameidata *nd, int flags,
 			if (unlikely(!inode))
 				return ERR_PTR(-ENOENT);
 		} else {
-			err = unlink_may_reveal(nd, flags, &path, dentry);
-			if (unlikely(err))
-				return ERR_PTR(err);
 			dput(nd->path.dentry);
 			if (nd->path.mnt != path.mnt)
 				mntput(nd->path.mnt);
