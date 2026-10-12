@@ -1044,6 +1044,19 @@ int btrfs_sync_fs(struct super_block *sb, int wait)
 	return btrfs_commit_transaction(trans);
 }
 
+/*
+ * Once an error forced the filesystem read-only nothing can be committed
+ * anymore. Don't fail syncfs(2) and freezing because of that. BTRFS_IOC_SYNC
+ * calls btrfs_sync_fs() directly and still reports the error.
+ */
+static int btrfs_super_sync_fs(struct super_block *sb, int wait)
+{
+	if (btrfs_fs_rdonly(btrfs_sb(sb)))
+		return 0;
+
+	return btrfs_sync_fs(sb, wait);
+}
+
 static void print_rescue_option(struct seq_file *seq, const char *s, bool *printed)
 {
 	seq_printf(seq, "%s%s", (*printed) ? ":" : ",rescue=", s);
@@ -1141,6 +1154,8 @@ static int btrfs_show_options(struct seq_file *seq, struct dentry *dentry)
 		seq_puts(seq, ",ref_verify");
 	if (btrfs_test_opt(info, REF_TRACKER))
 		seq_puts(seq, ",ref_tracker");
+	if (test_bit(BTRFS_FS_STATE_EMERGENCY_RO, &info->fs_state))
+		seq_puts(seq, ",emergency_ro");
 	seq_printf(seq, ",subvolid=%llu", btrfs_root_id(BTRFS_I(d_inode(dentry))->root));
 	subvol_name = btrfs_get_subvol_name_from_objectid(info,
 			btrfs_root_id(BTRFS_I(d_inode(dentry))->root));
@@ -1295,7 +1310,7 @@ static int btrfs_remount_rw(struct btrfs_fs_info *fs_info)
 	if (unlikely(BTRFS_FS_ERROR(fs_info))) {
 		btrfs_err(fs_info,
 			  "remounting read-write after error is not allowed");
-		return -EINVAL;
+		return -EROFS;
 	}
 
 	if (fs_info->fs_devices->rw_devices == 0)
@@ -1357,9 +1372,11 @@ static int btrfs_remount_ro(struct btrfs_fs_info *fs_info)
 	 * Setting SB_RDONLY will put the cleaner thread to sleep at the next
 	 * loop if it's already active.  If it's already asleep, we'll leave
 	 * unused block groups on disk until we're mounted read-write again
-	 * unless we clean them up here.
+	 * unless we clean them up here. Not after an error though, that can't be
+	 * committed anymore and may still finish zones.
 	 */
-	btrfs_delete_unused_bgs(fs_info);
+	if (!BTRFS_FS_ERROR(fs_info))
+		btrfs_delete_unused_bgs(fs_info);
 
 	/*
 	 * The cleaner task could be already running before we set the flag
@@ -1393,6 +1410,13 @@ static int btrfs_remount_ro(struct btrfs_fs_info *fs_info)
 	 * the transaction and/or crash.
 	 */
 	btrfs_qgroup_wait_for_completion(fs_info, false);
+
+	/*
+	 * Nothing can be committed after an error forced the filesystem
+	 * read-only, so don't fail the remount because of that.
+	 */
+	if (unlikely(BTRFS_FS_ERROR(fs_info)))
+		return 0;
 
 	return btrfs_commit_super(fs_info);
 }
@@ -2318,6 +2342,12 @@ static int btrfs_freeze(struct super_block *sb)
 
 	set_bit(BTRFS_FS_FROZEN, &fs_info->flags);
 	/*
+	 * Nothing can be committed after an error forced the filesystem
+	 * read-only.
+	 */
+	if (btrfs_fs_rdonly(fs_info))
+		return 0;
+	/*
 	 * We don't need a barrier here, we'll wait for any transaction that
 	 * could be in progress on other threads (and do delayed iputs that
 	 * we want to avoid on a frozen filesystem), or do the commit
@@ -2391,7 +2421,13 @@ static int btrfs_unfreeze(struct super_block *sb)
 	 *
 	 * And since the fs is frozen, no one can modify the fs yet, thus
 	 * we don't need to hold device_list_mutex.
+	 *
+	 * After an error the super blocks on disk may lag behind, don't take
+	 * that for a modification.
 	 */
+	if (btrfs_fs_rdonly(fs_info))
+		goto out;
+
 	list_for_each_entry(device, &fs_info->fs_devices->devices, dev_list) {
 		ret = check_dev_super(device);
 		if (ret < 0) {
@@ -2401,6 +2437,7 @@ static int btrfs_unfreeze(struct super_block *sb)
 			break;
 		}
 	}
+out:
 	clear_bit(BTRFS_FS_FROZEN, &fs_info->flags);
 
 	/*
@@ -2531,7 +2568,7 @@ static const struct super_operations btrfs_super_ops = {
 	.drop_inode	= btrfs_drop_inode,
 	.evict_inode	= btrfs_evict_inode,
 	.put_super	= btrfs_put_super,
-	.sync_fs	= btrfs_sync_fs,
+	.sync_fs	= btrfs_super_sync_fs,
 	.show_options	= btrfs_show_options,
 	.show_devname	= btrfs_show_devname,
 	.alloc_inode	= btrfs_alloc_inode,

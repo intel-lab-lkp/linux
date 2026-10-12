@@ -156,6 +156,9 @@ enum {
 	 */
 	BTRFS_FS_STATE_EMERGENCY_SHUTDOWN,
 
+	/* An error forced the fs read-only, see __btrfs_handle_fs_error(). */
+	BTRFS_FS_STATE_EMERGENCY_RO,
+
 	BTRFS_FS_STATE_COUNT
 };
 
@@ -1197,8 +1200,9 @@ static inline int btrfs_need_cleaner_sleep(const struct btrfs_fs_info *fs_info)
 
 /*
  * Check whether the filesystem is read-only. BTRFS_FS_STATE_RO is set and
- * cleared together with SB_RDONLY on mount, on remount and when an error forces
- * the filesystem read-only. Use this instead of sb_rdonly() at runtime.
+ * cleared together with SB_RDONLY on mount and remount. When an error forces
+ * the filesystem read-only BTRFS_FS_STATE_RO gets set without SB_RDONLY, see
+ * __btrfs_handle_fs_error(). Use this instead of sb_rdonly() at runtime.
  */
 static inline bool btrfs_fs_rdonly(const struct btrfs_fs_info *fs_info)
 {
