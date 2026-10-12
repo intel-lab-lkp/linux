@@ -218,6 +218,24 @@ verify_crtc_state(struct intel_atomic_state *state,
 	if (!sw_crtc_state->hw.active)
 		goto destroy_state;
 
+	/*
+	 * The HDMI FRL pixel clock is decoupled from port_clock and cannot be
+	 * recovered from hardware readout. The FRL M/N is the DFM tri-byte ratio, not
+	 * a pixel:link ratio so we cannot derive the pixel clock accurately.
+	 * To avoid mismatches and to avoid handling PIPE_CONF_CHECK for FRL,
+	 * copy the software value to the hardware state.
+	 */
+	if (sw_crtc_state->frl.enable) {
+		hw_crtc_state->hw.adjusted_mode.crtc_clock =
+			sw_crtc_state->hw.adjusted_mode.crtc_clock;
+		hw_crtc_state->hw.pipe_mode.crtc_clock =
+			sw_crtc_state->hw.pipe_mode.crtc_clock;
+		hw_crtc_state->pixel_rate =
+			sw_crtc_state->pixel_rate;
+		hw_crtc_state->pixel_rate_cdclk =
+			sw_crtc_state->pixel_rate_cdclk;
+	}
+
 	intel_pipe_config_sanity_check(hw_crtc_state);
 
 	if (!intel_pipe_config_compare(sw_crtc_state,

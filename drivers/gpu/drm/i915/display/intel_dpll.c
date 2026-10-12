@@ -1171,7 +1171,7 @@ static int hsw_crtc_compute_clock(struct intel_atomic_state *state,
 		return 0;
 
 	/* CRT dotclock is determined via other means */
-	if (!crtc_state->has_pch_encoder)
+	if (!crtc_state->has_pch_encoder && !crtc_state->frl.enable)
 		crtc_state->hw.adjusted_mode.crtc_clock = intel_crtc_dotclock(crtc_state);
 
 	return 0;
