@@ -55,6 +55,7 @@
 #include "intel_dpio_phy.h"
 #include "intel_hdcp.h"
 #include "intel_hotplug.h"
+#include "intel_joiner.h"
 #include "intel_link_bw.h"
 #include "intel_pfit.h"
 #include "intel_psr.h"
@@ -652,7 +653,7 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 
 	intel_dp_dsc_reset_config(pipe_config);
 
-	joiner_needs_dsc = intel_dp_joiner_needs_dsc(display, num_joined_pipes);
+	joiner_needs_dsc = intel_joiner_needs_dsc(display, num_joined_pipes);
 
 	dsc_needed = joiner_needs_dsc || intel_dp->force_dsc_en ||
 		!mst_stream_compute_config_limits(intel_dp, conn_state,
@@ -1621,7 +1622,7 @@ mst_connector_mode_valid_ctx(struct drm_connector *_connector,
 							   bw_overhead_flags);
 		}
 
-		if (intel_dp_joiner_needs_dsc(display, num_joined_pipes) && !dsc) {
+		if (intel_joiner_needs_dsc(display, num_joined_pipes) && !dsc) {
 			*status = MODE_CLOCK_HIGH;
 			continue;
 		}

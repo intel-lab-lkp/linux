@@ -369,6 +369,7 @@ i915-y += \
 	display/intel_gmbus.o \
 	display/intel_hdmi.o \
 	display/intel_hdmi_frl_dfm.o \
+	display/intel_joiner.o \
 	display/intel_lspcon.o \
 	display/intel_lt_phy.o \
 	display/intel_lvds.o \
