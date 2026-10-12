@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/reset/toshiba,tc9564-reset.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Toshiba TC9564 Reset Controller
+
+maintainers:
+  - Alex Elder <elder@riscstar.com>
+  - Daniel Thompson <daniel@riscstar.com>
+
+description:
+  The Toshiba TC9564 is an SoC accessed by a host system through the
+  upstream PCIe port on the PCIe switch it implements.  The switch
+  includes an embedded PCIe endpoint that provides access to various
+  SoC peripherals (including a reset controller) via its BARs.
+
+  A total of 13 resets are implemented, though two of these are not
+  controllable.  Access to the reset controller relies on PCIe being
+  functional, so the PCIe reset is assumed to be deasserted.  Similarly,
+  the PCIe controller relies on I2C, so the I2C reset is also assumed
+  to be deasserted.
+
+  Reset ids are defined in <dt-bindings/reset/toshiba,tc9564.h>.
+
+  The reset controller uses registers within the same page as a
+  clock controller, so both devices are defined as children of a
+  "config" syscon.
+
+properties:
+  compatible:
+    const: toshiba,tc9564-reset
+
+  "#reset-cells":
+    const: 1
+
+required:
+  - compatible
+  - "#reset-cells"
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/reset/toshiba,tc9564.h>
+
+    syscon@0 {
+        compatible = "syscon", "simple-mfd";
+        reg = <0x0 0x2000>;
+
+        reset {
+            compatible = "toshiba,tc9564-reset";
+            #reset-cells = <1>;
+        };
+    };
