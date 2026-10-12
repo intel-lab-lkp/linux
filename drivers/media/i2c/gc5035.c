@@ -13,6 +13,7 @@
  */
 #include <linux/align.h>
 #include <linux/array_size.h>
+#include <linux/bits.h>
 #include <linux/clk.h>
 #include <linux/container_of.h>
 #include <linux/delay.h>
@@ -143,6 +144,36 @@
 					 GC5035_DATA_LANES / GC5035_RGB_DEPTH)
 
 /*
+ * 2x2 binning, with the vendor register sequence for 1296x972. It sets the
+ * PLL multiplier to 0x49 and adds a divider by 2 (register 0xfa), which
+ * gives a 175.2 MHz link frequency. The frame period scales with the PLL
+ * setting as expected, and the bandwidth limit of the link was measured at
+ * 176.3 +/- 0.9 MHz in this mode (420.7 +/- 1.5 MHz at full resolution with
+ * the same method): the time needed to send a line of a given width was
+ * found from the shortest line length that gives complete frames.
+ *
+ * The sensor reads one row of the pixel array per line and outputs one row
+ * every two lines. Expressing the timings in sensor lines keeps the frame
+ * length, vertical blanking and exposure registers in the same units as at
+ * full resolution: the line length is 1460 pixels at 70.08 MHz, and the
+ * vendor readout window, which is used in this mode, needs at least 1996
+ * lines per frame. Binning is only available on the default crop rectangle,
+ * and the output starts at (4, 4) in binned coordinates, which is (8, 8) in
+ * the area: GRBG, like the default rectangle.
+ */
+#define GC5035_PLL_MULT_BIN		0x49
+#define GC5035_LINK_FREQ_BIN		(GC5035_XCLK_FREQ * \
+					 GC5035_PLL_MULT_BIN / 8)
+#define GC5035_PIXEL_RATE_BIN		(GC5035_LINK_FREQ_BIN * 2 * \
+					 GC5035_DATA_LANES / GC5035_RGB_DEPTH)
+#define GC5035_HTS_BIN			1460
+#define GC5035_VTS_MIN_BIN		1996
+#define GC5035_WIN_TOP_BIN		GC5035_ROW_START_OFFSET
+#define GC5035_WIN_LEFT_BIN		3
+#define GC5035_WIN_HEIGHT_BIN		1960
+#define GC5035_WIN_WIDTH_BIN		2608
+
+/*
  * No datasheet is available. From the GC5035 driver posted by Tomasz Figa in
  * 2020: IOVDD at least 50 us before AVDD and DVDD, at least 1200 MCLK cycles
  * before the first I2C transaction, and 2000 MCLK cycles after streaming stops
@@ -158,8 +189,14 @@
 
 #define GC5035_MBUS_CODE		MEDIA_BUS_FMT_SGRBG10_1X10
 
+enum {
+	GC5035_LINK_FREQ_FULL_INDEX,
+	GC5035_LINK_FREQ_BIN_INDEX,
+};
+
 static const s64 gc5035_link_freq_menu[] = {
-	GC5035_LINK_FREQ,
+	[GC5035_LINK_FREQ_FULL_INDEX] = GC5035_LINK_FREQ,
+	[GC5035_LINK_FREQ_BIN_INDEX] = GC5035_LINK_FREQ_BIN,
 };
 
 static const char * const gc5035_test_pattern_menu[] = {
@@ -210,11 +247,16 @@ struct gc5035 {
 	struct gpio_desc *powerdown_gpio;
 
 	struct v4l2_ctrl_handler ctrls;
+	struct v4l2_ctrl *link_freq;
+	struct v4l2_ctrl *pixel_rate;
 	struct v4l2_ctrl *exposure;
 	struct v4l2_ctrl *vblank;
 	struct v4l2_ctrl *hblank;
 
 	struct regmap *regmap;
+
+	/* The firmware lists the link frequency of the binned mode. */
+	bool binning;
 };
 
 /*
@@ -376,6 +418,56 @@ static const struct cci_reg_sequence gc5035_regs[] = {
 	{ GC5035_REG_STREAM, GC5035_STREAM_OFF },
 };
 
+/*
+ * Written after gc5035_regs for 2x2 binning: the registers that the vendor
+ * sequence for 1296x972 sets differently, in its order, without the geometry.
+ * The sequence only works as a whole: without the PLL settings the image is
+ * saturated, without the MIPI ones (page 3) the CSI-2 receiver gets errors,
+ * and without the analog ones the four pixels are not averaged.
+ */
+static const struct cci_reg_sequence gc5035_bin_regs[] = {
+	{ GC5035_REG_PAGE_SELECT, 0x00 },
+	{ CCI_REG8(0xf5), 0xe4 },
+	{ GC5035_REG_PLL_MULT, GC5035_PLL_MULT_BIN },
+	{ CCI_REG8(0xf9), 0x12 },
+	{ CCI_REG8(0xfa), 0x01 },
+	{ CCI_REG8(0x33), 0x20 },
+	{ GC5035_REG_PAGE_SELECT, 0x03 },
+	{ CCI_REG8(0x01), 0x87 },
+	{ CCI_REG8(0xf7), 0x11 },
+	{ GC5035_REG_PAGE_SELECT, 0x00 },
+	{ CCI_REG8(0x9d), 0x0c },
+	{ CCI_REG8(0x21), 0x60 },
+	{ CCI_REG8(0x29), 0x30 },
+	{ CCI_REG8(0x44), 0x18 },
+	{ CCI_REG8(0x4e), 0x20 },
+	{ CCI_REG8(0x8c), 0x20 },
+	{ CCI_REG8(0x91), 0x15 },
+	{ CCI_REG8(0x92), 0x3a },
+	{ CCI_REG8(0x95), 0x45 },
+	{ CCI_REG8(0x96), 0x35 },
+	{ CCI_REG8(0xd5), 0xf0 },
+	{ CCI_REG8(0x97), 0x20 },
+	{ CCI_REG8(0x1f), 0x19 },
+	{ CCI_REG8(0xd0), 0xb3 },
+	{ GC5035_REG_PAGE_SELECT, 0x02 },
+	{ CCI_REG8(0x14), 0x02 },
+	{ CCI_REG8(0x15), 0x00 },
+	{ GC5035_REG_PAGE_SELECT, 0x01 },
+	{ CCI_REG8(0x49), 0x00 },
+	{ CCI_REG8(0x4a), 0x01 },
+	{ CCI_REG8(0x4b), 0xf8 },
+	{ CCI_REG8(0x4e), 0x06 },
+	{ CCI_REG8(0x44), 0x02 },
+	{ GC5035_REG_PAGE_SELECT, 0x03 },
+	{ CCI_REG8(0x02), 0x58 },
+	{ CCI_REG8(0x22), 0x03 },
+	{ CCI_REG8(0x26), 0x06 },
+	{ CCI_REG8(0x29), 0x03 },
+	{ CCI_REG8(0x2b), 0x06 },
+	{ GC5035_REG_PAGE_SELECT, 0x00 },
+};
+
 static inline struct gc5035 *to_gc5035(struct v4l2_subdev *sd)
 {
 	return container_of(sd, struct gc5035, sd);
@@ -462,52 +554,89 @@ static int gc5035_enum_frame_size(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_state *sd_state,
 				  struct v4l2_subdev_frame_size_enum *fse)
 {
+	struct gc5035 *gc5035 = to_gc5035(sd);
+
 	if (fse->code != GC5035_MBUS_CODE)
 		return -EINVAL;
 
-	if (fse->index > 0)
+	switch (fse->index) {
+	case 0:
+		/* Without binning, the output size is the crop size. */
+		fse->min_width = GC5035_MIN_WIDTH;
+		fse->max_width = GC5035_AREA_WIDTH;
+		fse->min_height = GC5035_MIN_HEIGHT;
+		fse->max_height = GC5035_AREA_HEIGHT;
+		break;
+	case 1:
+		/* 2x2 binning of the default crop rectangle. */
+		if (!gc5035->binning)
+			return -EINVAL;
+		fse->min_width = GC5035_WIDTH / 2;
+		fse->max_width = GC5035_WIDTH / 2;
+		fse->min_height = GC5035_HEIGHT / 2;
+		fse->max_height = GC5035_HEIGHT / 2;
+		break;
+	default:
 		return -EINVAL;
-
-	/* The output size is the size of the crop rectangle. */
-	fse->min_width = GC5035_MIN_WIDTH;
-	fse->max_width = GC5035_AREA_WIDTH;
-	fse->min_height = GC5035_MIN_HEIGHT;
-	fse->max_height = GC5035_AREA_HEIGHT;
+	}
 
 	return 0;
 }
 
+/* Binning is the only case where the output is smaller than the crop. */
+static bool gc5035_is_binned(const struct v4l2_rect *crop,
+			     const struct v4l2_mbus_framefmt *format)
+{
+	return format->width < crop->width;
+}
+
 /*
- * Update the controls that depend on the output size. Called with the state
- * lock held, which is also the control handler lock.
+ * Update the controls that depend on the output size and on binning. Called
+ * with the state lock held, which is also the control handler lock.
  */
 static int gc5035_update_ctrls(struct gc5035 *gc5035,
+			       const struct v4l2_rect *crop,
 			       const struct v4l2_mbus_framefmt *format)
 {
-	s64 vblank_max, exposure_max;
+	bool binned = gc5035_is_binned(crop, format);
+	s64 vblank_min, vblank_max, exposure_max;
+	u32 hts;
 	int ret;
 
-	ret = __v4l2_ctrl_modify_range(gc5035->hblank,
-				       GC5035_HTS - format->width,
-				       GC5035_HTS - format->width, 1,
-				       GC5035_HTS - format->width);
+	ret = __v4l2_ctrl_s_ctrl(gc5035->link_freq,
+				 binned ? GC5035_LINK_FREQ_BIN_INDEX :
+					  GC5035_LINK_FREQ_FULL_INDEX);
 	if (ret)
 		return ret;
 
-	vblank_max = GC5035_VBLANK_MIN +
-		     round_down(GC5035_VTS_MAX - format->height -
-				GC5035_VBLANK_MIN, GC5035_VBLANK_STEP);
+	ret = __v4l2_ctrl_s_ctrl_int64(gc5035->pixel_rate,
+				       binned ? GC5035_PIXEL_RATE_BIN :
+						GC5035_PIXEL_RATE);
+	if (ret)
+		return ret;
+
+	hts = binned ? GC5035_HTS_BIN : GC5035_HTS;
+	ret = __v4l2_ctrl_modify_range(gc5035->hblank, hts - format->width,
+				       hts - format->width, 1,
+				       hts - format->width);
+	if (ret)
+		return ret;
+
+	vblank_min = binned ? GC5035_VTS_MIN_BIN - format->height :
+			      GC5035_VBLANK_MIN;
+	vblank_max = vblank_min +
+		     round_down(GC5035_VTS_MAX - format->height - vblank_min,
+				GC5035_VBLANK_STEP);
 	/*
 	 * As in ov01a10, setting the format or the crop rectangle resets the
 	 * vertical blanking.
 	 */
-	ret = __v4l2_ctrl_modify_range(gc5035->vblank, GC5035_VBLANK_MIN,
-				       vblank_max, GC5035_VBLANK_STEP,
-				       GC5035_VBLANK_MIN);
+	ret = __v4l2_ctrl_modify_range(gc5035->vblank, vblank_min, vblank_max,
+				       GC5035_VBLANK_STEP, vblank_min);
 	if (ret)
 		return ret;
 
-	ret = __v4l2_ctrl_s_ctrl(gc5035->vblank, GC5035_VBLANK_MIN);
+	ret = __v4l2_ctrl_s_ctrl(gc5035->vblank, vblank_min);
 	if (ret)
 		return ret;
 
@@ -521,10 +650,10 @@ static int gc5035_update_ctrls(struct gc5035 *gc5035,
 }
 
 static void gc5035_fill_format(struct v4l2_mbus_framefmt *fmt,
-			       const struct v4l2_rect *crop)
+			       const struct v4l2_rect *crop, unsigned int bin)
 {
-	fmt->width = crop->width;
-	fmt->height = crop->height;
+	fmt->width = crop->width / bin;
+	fmt->height = crop->height / bin;
 	fmt->code = GC5035_MBUS_CODE;
 	fmt->field = V4L2_FIELD_NONE;
 	fmt->colorspace = V4L2_COLORSPACE_RAW;
@@ -594,31 +723,42 @@ static int gc5035_set_selection(struct v4l2_subdev *sd,
 	*v4l2_subdev_state_get_crop(state, 0) = rect;
 	sel->r = rect;
 
-	/* No binning or scaling: the output size is the crop size. */
+	/* A new crop rectangle disables binning: the output is its size. */
 	format = v4l2_subdev_state_get_format(state, 0);
-	gc5035_fill_format(format, &rect);
+	gc5035_fill_format(format, &rect, 1);
 
 	if (sel->which == V4L2_SUBDEV_FORMAT_ACTIVE)
-		return gc5035_update_ctrls(gc5035, format);
+		return gc5035_update_ctrls(gc5035, &rect, format);
 
 	return 0;
 }
 
 /*
- * No binning or scaling: the output size is the size of the crop rectangle. A
- * new width or height centres the crop rectangle on the default crop
- * rectangle along that axis, within the area, for userspace that does not set
- * the crop rectangle first. The default size gives the default rectangle back.
+ * Half the size of the default crop rectangle selects 2x2 binning and sets
+ * the default crop rectangle back, unless the crop rectangle already has
+ * that size: the size alone selects the binned mode, with the full field of
+ * view, and a crop rectangle of that size set first stays unbinned.
+ * Otherwise the output size is the size of the crop rectangle: a new width
+ * or height centres the crop rectangle on the default crop rectangle along
+ * that axis, within the area, for userspace that does not set the crop
+ * rectangle first. The default size gives the default rectangle back.
  */
 static int gc5035_set_fmt(struct v4l2_subdev *sd,
 			  const struct v4l2_subdev_client_info *ci,
 			  struct v4l2_subdev_state *state,
 			  struct v4l2_subdev_format *fmt)
 {
+	static const struct v4l2_rect crop_default = {
+		.left = GC5035_CROP_LEFT,
+		.top = GC5035_CROP_TOP,
+		.width = GC5035_WIDTH,
+		.height = GC5035_HEIGHT,
+	};
 	struct gc5035 *gc5035 = to_gc5035(sd);
 	struct v4l2_mbus_framefmt *format;
 	struct v4l2_rect *crop;
 	u32 width, height;
+	unsigned int bin;
 	int pos;
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE &&
@@ -631,13 +771,18 @@ static int gc5035_set_fmt(struct v4l2_subdev *sd,
 				    GC5035_AREA_HEIGHT), 4);
 
 	crop = v4l2_subdev_state_get_crop(state, 0);
-	if (width != crop->width) {
+	bin = gc5035->binning && width == GC5035_WIDTH / 2 &&
+	      height == GC5035_HEIGHT / 2 &&
+	      (width != crop->width || height != crop->height) ? 2 : 1;
+	if (bin == 2)
+		*crop = crop_default;
+	if (bin == 1 && width != crop->width) {
 		pos = GC5035_CROP_LEFT + (GC5035_WIDTH - (int)width) / 2;
 		pos = clamp(pos, 0, GC5035_AREA_WIDTH - (int)width);
 		crop->left = ALIGN_DOWN(pos, 2);
 		crop->width = width;
 	}
-	if (height != crop->height) {
+	if (bin == 1 && height != crop->height) {
 		pos = GC5035_CROP_TOP + (GC5035_HEIGHT - (int)height) / 2;
 		pos = clamp(pos, 0, GC5035_AREA_HEIGHT - (int)height);
 		crop->top = ALIGN_DOWN(pos, 2);
@@ -645,11 +790,11 @@ static int gc5035_set_fmt(struct v4l2_subdev *sd,
 	}
 
 	format = v4l2_subdev_state_get_format(state, 0);
-	gc5035_fill_format(format, crop);
+	gc5035_fill_format(format, crop, bin);
 	fmt->format = *format;
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE)
-		return gc5035_update_ctrls(gc5035, format);
+		return gc5035_update_ctrls(gc5035, crop, format);
 
 	return 0;
 }
@@ -664,7 +809,7 @@ static int gc5035_init_state(struct v4l2_subdev *sd,
 	crop->width = GC5035_WIDTH;
 	crop->height = GC5035_HEIGHT;
 
-	gc5035_fill_format(v4l2_subdev_state_get_format(state, 0), crop);
+	gc5035_fill_format(v4l2_subdev_state_get_format(state, 0), crop, 1);
 
 	return 0;
 }
@@ -803,11 +948,42 @@ static int gc5035_write_geometry(struct gc5035 *gc5035,
 	return ret;
 }
 
+/*
+ * Binning: the vendor readout window, which starts at the first row and
+ * column of the area, and the output crop in binned coordinates.
+ */
+static int gc5035_write_geometry_bin(struct gc5035 *gc5035,
+				     const struct v4l2_rect *crop,
+				     const struct v4l2_mbus_framefmt *format)
+{
+	int ret = 0;
+
+	cci_write(gc5035->regmap, GC5035_REG_PAGE_SELECT, GC5035_PAGE_0, &ret);
+	cci_write(gc5035->regmap, GC5035_REG_WIN_TOP, GC5035_WIN_TOP_BIN, &ret);
+	cci_write(gc5035->regmap, GC5035_REG_WIN_LEFT, GC5035_WIN_LEFT_BIN,
+		  &ret);
+	cci_write(gc5035->regmap, GC5035_REG_WIN_HEIGHT, GC5035_WIN_HEIGHT_BIN,
+		  &ret);
+	cci_write(gc5035->regmap, GC5035_REG_WIN_WIDTH, GC5035_WIN_WIDTH_BIN,
+		  &ret);
+
+	cci_write(gc5035->regmap, GC5035_REG_PAGE_SELECT, GC5035_PAGE_1, &ret);
+	cci_write(gc5035->regmap, GC5035_REG_CROP_TOP, crop->top / 2, &ret);
+	cci_write(gc5035->regmap, GC5035_REG_CROP_LEFT, crop->left / 2, &ret);
+	cci_write(gc5035->regmap, GC5035_REG_OUT_HEIGHT, format->height, &ret);
+	cci_write(gc5035->regmap, GC5035_REG_OUT_WIDTH, format->width, &ret);
+	cci_write(gc5035->regmap, GC5035_REG_PAGE_SELECT, GC5035_PAGE_0, &ret);
+
+	return ret;
+}
+
 static int gc5035_enable_streams(struct v4l2_subdev *sd,
 				 struct v4l2_subdev_state *state,
 				 u32 pad, u64 streams_mask)
 {
 	struct gc5035 *gc5035 = to_gc5035(sd);
+	const struct v4l2_mbus_framefmt *format;
+	const struct v4l2_rect *crop;
 	int ret;
 
 	ret = pm_runtime_resume_and_get(gc5035->dev);
@@ -819,8 +995,18 @@ static int gc5035_enable_streams(struct v4l2_subdev *sd,
 	if (ret)
 		goto err_rpm_put;
 
-	ret = gc5035_write_geometry(gc5035,
-				    v4l2_subdev_state_get_crop(state, 0));
+	crop = v4l2_subdev_state_get_crop(state, 0);
+	format = v4l2_subdev_state_get_format(state, 0);
+	if (gc5035_is_binned(crop, format)) {
+		ret = cci_multi_reg_write(gc5035->regmap, gc5035_bin_regs,
+					  ARRAY_SIZE(gc5035_bin_regs), NULL);
+		if (ret)
+			goto err_rpm_put;
+
+		ret = gc5035_write_geometry_bin(gc5035, crop, format);
+	} else {
+		ret = gc5035_write_geometry(gc5035, crop);
+	}
 	if (ret)
 		goto err_rpm_put;
 
@@ -912,6 +1098,17 @@ static int gc5035_parse_fwnode(struct gc5035 *gc5035)
 				       gc5035_link_freq_menu,
 				       ARRAY_SIZE(gc5035_link_freq_menu),
 				       &link_freq_bitmap);
+	if (ret)
+		goto done;
+
+	if (!(link_freq_bitmap & BIT(GC5035_LINK_FREQ_FULL_INDEX))) {
+		ret = dev_err_probe(dev, -EINVAL,
+				    "link frequency %lu Hz not supported\n",
+				    GC5035_LINK_FREQ);
+		goto done;
+	}
+
+	gc5035->binning = link_freq_bitmap & BIT(GC5035_LINK_FREQ_BIN_INDEX);
 
 done:
 	v4l2_fwnode_endpoint_free(&bus_cfg);
@@ -923,7 +1120,6 @@ static int gc5035_init_controls(struct gc5035 *gc5035)
 {
 	struct v4l2_fwnode_device_properties props;
 	struct v4l2_ctrl_handler *ctrl_hdlr;
-	struct v4l2_ctrl *link_freq;
 	s64 exposure_max;
 	int ret;
 
@@ -934,13 +1130,19 @@ static int gc5035_init_controls(struct gc5035 *gc5035)
 	ctrl_hdlr = &gc5035->ctrls;
 	v4l2_ctrl_handler_init(ctrl_hdlr, 9);
 
-	link_freq = v4l2_ctrl_new_int_menu(ctrl_hdlr, NULL, V4L2_CID_LINK_FREQ,
-					   ARRAY_SIZE(gc5035_link_freq_menu) -
-					   1, 0, gc5035_link_freq_menu);
+	/* The binned mode frequency is only listed when the firmware has it. */
+	gc5035->link_freq =
+		v4l2_ctrl_new_int_menu(ctrl_hdlr, NULL, V4L2_CID_LINK_FREQ,
+				       gc5035->binning ?
+				       GC5035_LINK_FREQ_BIN_INDEX :
+				       GC5035_LINK_FREQ_FULL_INDEX,
+				       GC5035_LINK_FREQ_FULL_INDEX,
+				       gc5035_link_freq_menu);
 
-	v4l2_ctrl_new_std(ctrl_hdlr, NULL, V4L2_CID_PIXEL_RATE,
-			  GC5035_PIXEL_RATE, GC5035_PIXEL_RATE, 1,
-			  GC5035_PIXEL_RATE);
+	gc5035->pixel_rate =
+		v4l2_ctrl_new_std(ctrl_hdlr, NULL, V4L2_CID_PIXEL_RATE,
+				  GC5035_PIXEL_RATE_BIN, GC5035_PIXEL_RATE, 1,
+				  GC5035_PIXEL_RATE);
 
 	/* Ranges for the default crop rectangle, see gc5035_update_ctrls(). */
 	gc5035->vblank = v4l2_ctrl_new_std(ctrl_hdlr, &gc5035_ctrl_ops,
@@ -977,7 +1179,7 @@ static int gc5035_init_controls(struct gc5035 *gc5035)
 	if (ctrl_hdlr->error)
 		return v4l2_ctrl_handler_free(ctrl_hdlr);
 
-	link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+	gc5035->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 	gc5035->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
 	gc5035->sd.ctrl_handler = ctrl_hdlr;
