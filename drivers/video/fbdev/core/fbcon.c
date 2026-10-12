@@ -3051,9 +3051,9 @@ void fbcon_fb_blanked(struct fb_info *info, int blank)
 
 	if (con_is_visible(vc)) {
 		if (blank)
-			do_blank_screen(0);
+			do_blank_screen(false);
 		else
-			do_unblank_screen(0);
+			do_unblank_screen(false);
 	}
 	par->blank_state = blank;
 }

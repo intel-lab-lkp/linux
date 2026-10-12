@@ -3374,7 +3374,7 @@ static void console_callback(struct work_struct *ignored)
 		scrollback_delta = 0;
 	}
 	if (blank_timer_expired) {
-		do_blank_screen(0);
+		do_blank_screen(false);
 		blank_timer_expired = 0;
 	}
 	notify_update(vc_cons[fg_console].d);
@@ -3636,7 +3636,7 @@ int tioclinux(struct tty_struct *tty, unsigned long arg)
 	case TIOCL_BLANKSCREEN:	/* until explicitly unblanked, not only poked */
 		scoped_guard(console_lock) {
 			ignore_poke = 1;
-			do_blank_screen(0);
+			do_blank_screen(false);
 		}
 		break;
 	case TIOCL_BLANKEDSCREEN:
@@ -4659,7 +4659,7 @@ static int set_vesa_blanking(u8 __user *mode_user)
 	return 0;
 }
 
-void do_blank_screen(int entering_gfx)
+void do_blank_screen(bool entering_gfx)
 {
 	struct vc_data *vc = vc_cons[fg_console].d;
 	int i;
@@ -4671,7 +4671,7 @@ void do_blank_screen(int entering_gfx)
 	if (console_blanked) {
 		if (blank_state == blank_vesa_wait) {
 			blank_state = blank_off;
-			vc->vc_sw->con_blank(vc, vesa_blank_mode + 1, 0);
+			vc->vc_sw->con_blank(vc, vesa_blank_mode + 1, false);
 		}
 		return;
 	}
@@ -4680,7 +4680,7 @@ void do_blank_screen(int entering_gfx)
 	if (entering_gfx) {
 		hide_cursor(vc);
 		save_screen(vc);
-		vc->vc_sw->con_blank(vc, VESA_VSYNC_SUSPEND, 1);
+		vc->vc_sw->con_blank(vc, VESA_VSYNC_SUSPEND, true);
 		console_blanked = fg_console + 1;
 		blank_state = blank_off;
 		set_origin(vc);
@@ -4702,7 +4702,7 @@ void do_blank_screen(int entering_gfx)
 	save_screen(vc);
 	/* In case we need to reset origin, blanking hook returns 1 */
 	i = vc->vc_sw->con_blank(vc, vesa_off_interval ? VESA_VSYNC_SUSPEND :
-				 (vesa_blank_mode + 1), 0);
+				 (vesa_blank_mode + 1), false);
 	console_blanked = fg_console + 1;
 	if (i)
 		set_origin(vc);
@@ -4721,7 +4721,7 @@ EXPORT_SYMBOL(do_blank_screen);
 /*
  * Called by timer as well as from vt_console_driver
  */
-void do_unblank_screen(int leaving_gfx)
+void do_unblank_screen(bool leaving_gfx)
 {
 	struct vc_data *vc;
 
@@ -4767,13 +4767,13 @@ EXPORT_SYMBOL(do_unblank_screen);
 
 /*
  * This is called by the outside world to cause a forced unblank, mostly for
- * oopses. Currently, I just call do_unblank_screen(0), but we could eventually
- * call it with 1 as an argument and so force a mode restore... that may kill
+ * oopses. Currently, I just call do_unblank_screen(false), but we could eventually
+ * call it with true as an argument and so force a mode restore... that may kill
  * X or at least garbage the screen but would also make the Oops visible...
  */
 static void unblank_screen(void)
 {
-	do_unblank_screen(0);
+	do_unblank_screen(false);
 }
 
 /*

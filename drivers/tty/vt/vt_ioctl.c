@@ -273,9 +273,9 @@ static int vt_kdsetmode(struct vc_data *vc, unsigned long mode)
 
 	/* explicitly blank/unblank the screen if switching modes */
 	if (mode == KD_TEXT)
-		do_unblank_screen(1);
+		do_unblank_screen(true);
 	else
-		do_blank_screen(1);
+		do_blank_screen(true);
 
 	return 0;
 }
@@ -1152,9 +1152,9 @@ static void complete_change_console(struct vc_data *vc)
 	 */
 	if (old_vc_mode != vc->vc_mode) {
 		if (vc->vc_mode == KD_TEXT)
-			do_unblank_screen(1);
+			do_unblank_screen(true);
 		else
-			do_blank_screen(1);
+			do_blank_screen(true);
 	}
 
 	/*
@@ -1182,9 +1182,9 @@ static void complete_change_console(struct vc_data *vc)
 
 			if (old_vc_mode != vc->vc_mode) {
 				if (vc->vc_mode == KD_TEXT)
-					do_unblank_screen(1);
+					do_unblank_screen(true);
 				else
-					do_blank_screen(1);
+					do_blank_screen(true);
 			}
 		}
 	}

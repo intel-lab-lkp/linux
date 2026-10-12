@@ -10,6 +10,7 @@
 #include <linux/vt.h>
 #include <linux/kd.h>
 #include <linux/tty.h>
+#include <linux/types.h>
 #include <linux/mutex.h>
 #include <linux/console_struct.h>
 #include <linux/mm.h>
@@ -29,8 +30,8 @@ int __vc_resize(struct vc_data *vc, unsigned int cols, unsigned int lines,
 		bool from_user);
 struct vc_data *vc_deallocate(unsigned int console);
 void reset_palette(struct vc_data *vc);
-void do_blank_screen(int entering_gfx);
-void do_unblank_screen(int leaving_gfx);
+void do_blank_screen(bool entering_gfx);
+void do_unblank_screen(bool leaving_gfx);
 void poke_blanked_console(void);
 int con_font_op(struct vc_data *vc, struct console_font_op *op);
 int con_set_cmap(unsigned char __user *cmap);
