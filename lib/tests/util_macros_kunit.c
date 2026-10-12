@@ -229,7 +229,7 @@ static struct kunit_case __refdata util_macros_test_cases[] = {
 };
 
 static struct kunit_suite util_macros_test_suite = {
-	.name = "util_macros.h",
+	.name = "util_macros",
 	.test_cases = util_macros_test_cases,
 };
 
