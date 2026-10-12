@@ -661,6 +661,12 @@ static void fbnic_clean_twq1(struct fbnic_napi_vector *nv, bool pp_allow_direct,
 	u64 total_bytes = 0, total_packets = 0;
 	unsigned int head = ring->head;
 
+	/* bound the device head to the ring; see fbnic_clean_twq0() */
+	if (unlikely(hw_head > ring->size_mask ||
+		     ((hw_head - head) & ring->size_mask) >
+		     fbnic_desc_used(ring)))
+		return;
+
 	while (hw_head != head) {
 		struct page *page;
 		u64 twd;
