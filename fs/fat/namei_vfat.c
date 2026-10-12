@@ -760,7 +760,7 @@ static int vfat_create(const struct mnt_idmap *idmap, struct inode *dir,
 	struct inode *inode;
 	struct fat_slot_info sinfo;
 	struct timespec64 ts;
-	int err;
+	int err, err2;
 
 	mutex_lock(&MSDOS_SB(sb)->s_lock);
 
@@ -771,11 +771,15 @@ static int vfat_create(const struct mnt_idmap *idmap, struct inode *dir,
 	inode_inc_iversion(dir);
 
 	inode = fat_build_inode(sb, sinfo.de, sinfo.i_pos);
-	brelse(sinfo.bh);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
+		err2 = fat_remove_entries(dir, &sinfo);
+		if (err2)
+			fat_msg(sb, KERN_WARNING,
+				"failed to roll back new entry (%d)", err2);
 		goto out;
 	}
+	brelse(sinfo.bh);
 	inode_inc_iversion(inode);
 
 	d_instantiate(dentry, inode);
@@ -853,7 +857,7 @@ static struct dentry *vfat_mkdir(const struct mnt_idmap *idmap, struct inode *di
 	struct inode *inode;
 	struct fat_slot_info sinfo;
 	struct timespec64 ts;
-	int err, cluster;
+	int err, err2, cluster;
 
 	mutex_lock(&MSDOS_SB(sb)->s_lock);
 
@@ -870,12 +874,17 @@ static struct dentry *vfat_mkdir(const struct mnt_idmap *idmap, struct inode *di
 	inc_nlink(dir);
 
 	inode = fat_build_inode(sb, sinfo.de, sinfo.i_pos);
-	brelse(sinfo.bh);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
-		/* the directory was completed, just return a error */
+		err2 = fat_remove_entries(dir, &sinfo);
+		if (err2)
+			fat_msg(sb, KERN_WARNING,
+				"failed to roll back new entry (%d)", err2);
+		drop_nlink(dir);
+		fat_free_clusters(dir, cluster);
 		goto out;
 	}
+	brelse(sinfo.bh);
 	inode_inc_iversion(inode);
 	set_nlink(inode, 2);
 

@@ -271,7 +271,7 @@ static int msdos_create(const struct mnt_idmap *idmap, struct inode *dir,
 	struct fat_slot_info sinfo;
 	struct timespec64 ts;
 	unsigned char msdos_name[MSDOS_NAME];
-	int err, is_hid;
+	int err, err2, is_hid;
 
 	mutex_lock(&MSDOS_SB(sb)->s_lock);
 
@@ -292,11 +292,15 @@ static int msdos_create(const struct mnt_idmap *idmap, struct inode *dir,
 	if (err)
 		goto out;
 	inode = fat_build_inode(sb, sinfo.de, sinfo.i_pos);
-	brelse(sinfo.bh);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
+		err2 = fat_remove_entries(dir, &sinfo);
+		if (err2)
+			fat_msg(sb, KERN_WARNING,
+				"failed to roll back new entry (%d)", err2);
 		goto out;
 	}
+	brelse(sinfo.bh);
 	fat_truncate_time(inode, &ts, FAT_UPDATE_ATIME | FAT_UPDATE_CMTIME);
 	/* timestamp is already written, so mark_inode_dirty() is unneeded. */
 
@@ -353,7 +357,7 @@ static struct dentry *msdos_mkdir(const struct mnt_idmap *idmap, struct inode *d
 	struct inode *inode;
 	unsigned char msdos_name[MSDOS_NAME];
 	struct timespec64 ts;
-	int err, is_hid, cluster;
+	int err, err2, is_hid, cluster;
 
 	mutex_lock(&MSDOS_SB(sb)->s_lock);
 
@@ -381,12 +385,17 @@ static struct dentry *msdos_mkdir(const struct mnt_idmap *idmap, struct inode *d
 	inc_nlink(dir);
 
 	inode = fat_build_inode(sb, sinfo.de, sinfo.i_pos);
-	brelse(sinfo.bh);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
-		/* the directory was completed, just return a error */
+		err2 = fat_remove_entries(dir, &sinfo);
+		if (err2)
+			fat_msg(sb, KERN_WARNING,
+				"failed to roll back new entry (%d)", err2);
+		drop_nlink(dir);
+		fat_free_clusters(dir, cluster);
 		goto out;
 	}
+	brelse(sinfo.bh);
 	set_nlink(inode, 2);
 	fat_truncate_time(inode, &ts, FAT_UPDATE_ATIME | FAT_UPDATE_CMTIME);
 	/* timestamp is already written, so mark_inode_dirty() is unneeded. */
