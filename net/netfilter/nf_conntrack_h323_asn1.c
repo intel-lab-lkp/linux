@@ -691,6 +691,8 @@ static int decode_seqof(struct bitstr *bs, const struct field_t *f,
 	}
 
 	/* Decode nested field */
+	if (!f->fields)
+		return H323_ERROR_NONE;
 	son = f->fields;
 	if (base)
 		base -= son->offset;
