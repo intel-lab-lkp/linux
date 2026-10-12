@@ -631,7 +631,8 @@ EXPORT_SYMBOL(filemap_fdatawait_keep_errors);
 /* Returns true if writeback might be needed or already in progress. */
 static bool mapping_needs_writeback(struct address_space *mapping)
 {
-	return mapping->nrpages;
+	/* Lockless hint; a stale value is harmless */
+	return data_race(mapping->nrpages);
 }
 
 bool filemap_range_has_writeback(struct address_space *mapping,
