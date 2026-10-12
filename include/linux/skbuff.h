@@ -963,6 +963,7 @@ struct sk_buff {
 #ifdef CONFIG_SKB_EXTENSIONS
 	__u8			active_extensions;
 #endif
+	u16                     alloc_cpu;
 
 	/* Fields enclosed in headers group are copied
 	 * using a single memcpy() in __copy_skb_header()
@@ -1036,7 +1037,6 @@ struct sk_buff {
 	__u16			tc_index;	/* traffic control index */
 #endif
 
-	u16			alloc_cpu;
 
 	union {
 		__wsum		csum;
