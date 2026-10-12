@@ -501,7 +501,30 @@ void __init of_populate_present_mask(void)
 	of_iterate_over_cpus(record_one_cpu, 0);
 }
 
-static void *fill_in_one_cpu(struct device_node *dp, int cpuid, int arg)
+static void __init vii_cpu_topology(struct device_node *dp, int cpuid)
+{
+	struct device_node *core = dp->parent;
+	struct device_node *package;
+
+	cpu_data(cpuid).core_id = 0;
+	cpu_data(cpuid).proc_id = -1;
+	cpu_data(cpuid).sock_id = cpuid;
+	if (!core || !of_node_is_type(core, "core") ||
+	    !of_device_is_compatible(core, "FJSV,SPARC64-VII"))
+		return;
+	package = core->parent;
+	if (!package || !of_node_name_eq(package, "cmp"))
+		return;
+	if (core->unique_id >= USHRT_MAX || package->unique_id > SHRT_MAX)
+		return;
+
+	/* Node IDs distinguish equal core addresses in different packages. */
+	cpu_data(cpuid).core_id = core->unique_id + 1;
+	cpu_data(cpuid).proc_id = package->unique_id;
+	cpu_data(cpuid).sock_id = package->unique_id;
+}
+
+static void * __init fill_in_one_cpu(struct device_node *dp, int cpuid, int arg)
 {
 	struct device_node *portid_parent = NULL;
 	int portid = -1;
@@ -564,6 +587,7 @@ static void *fill_in_one_cpu(struct device_node *dp, int cpuid, int arg)
 
 		cpu_data(cpuid).core_id = portid + 1;
 		cpu_data(cpuid).proc_id = portid;
+
 	} else {
 		cpu_data(cpuid).dcache_size =
 			of_getintprop_default(dp, "dcache-size", 16 * 1024);
@@ -584,6 +608,9 @@ static void *fill_in_one_cpu(struct device_node *dp, int cpuid, int arg)
 		cpu_data(cpuid).core_id = 0;
 		cpu_data(cpuid).proc_id = -1;
 	}
+
+	if (tlb_type == sparc64_vii)
+		vii_cpu_topology(dp, cpuid);
 
 	return NULL;
 }

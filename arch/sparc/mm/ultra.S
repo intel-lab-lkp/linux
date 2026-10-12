@@ -981,6 +981,242 @@ xcall_kgdb_capture:
 
 #endif /* CONFIG_SMP */
 
+/*
+ * Synchronize VII MMU stores before noninternal memory access or the end
+ * of a control-transfer delay slot (JPS2 F.10.1, p. 488).
+ * Instruction visibility also requires FLUSH or trap return (F.10.11,
+ * pp. 500-502); MEMBAR alone is insufficient.
+ */
+/*
+ * Absolute jumps preserve patch-slot sizes and caller return addresses
+ * without branch relocation. Local entries may clobber %g1; the xcall
+ * stub uses %g4 to preserve its address/context arguments in %g1/%g5.
+ */
+	.type		__vii_flush_tlb_page_patch, #function
+__vii_flush_tlb_page_patch:
+	sethi		%hi(__vii_flush_tlb_page), %g1
+	jmpl		%g1 + %lo(__vii_flush_tlb_page), %g0
+	 nop
+	.size		__vii_flush_tlb_page_patch, .-__vii_flush_tlb_page_patch
+	.if		(. - __vii_flush_tlb_page_patch) - 12
+	.error		"VII TLB jump template must contain three instructions"
+	.endif
+
+	.type		__vii_flush_tlb_page, #function
+__vii_flush_tlb_page:
+	/* %o0 = context, %o1 = vaddr */
+	rdpr		%pstate, %g7
+	andn		%g7, PSTATE_IE, %g2
+	wrpr		%g2, 0x0, %pstate
+	wrpr		%g0, 1, %tl
+	mov		PRIMARY_CONTEXT, %o4
+	ldxa		[%o4] ASI_DMMU, %g2
+	srlx		%g2, CTX_PGSZ1_NUC_SHIFT, %o3
+	sllx		%o3, CTX_PGSZ1_NUC_SHIFT, %o3
+	or		%o0, %o3, %o0	/* Preserve nucleus page size fields */
+	stxa		%o0, [%o4] ASI_DMMU
+	membar		#Sync
+	andcc		%o1, 1, %g0
+	be,pn		%icc, 1f
+	 andn		%o1, 1, %o3
+	stxa		%g0, [%o3] ASI_IMMU_DEMAP
+1:	stxa		%g0, [%o3] ASI_DMMU_DEMAP
+	membar		#Sync
+	stxa		%g2, [%o4] ASI_DMMU
+	sethi		%hi(KERNBASE), %o4
+	flush		%o4
+	wrpr		%g0, 0, %tl
+	retl
+	 wrpr		%g7, 0x0, %pstate
+	.size		__vii_flush_tlb_page, .-__vii_flush_tlb_page
+
+	.type		__vii_flush_tlb_pending_patch, #function
+__vii_flush_tlb_pending_patch:
+	sethi		%hi(__vii_flush_tlb_pending), %g1
+	jmpl		%g1 + %lo(__vii_flush_tlb_pending), %g0
+	 nop
+	.size		__vii_flush_tlb_pending_patch, .-__vii_flush_tlb_pending_patch
+	.if		(. - __vii_flush_tlb_pending_patch) - 12
+	.error		"VII TLB jump template must contain three instructions"
+	.endif
+
+	.type		__vii_flush_tlb_pending, #function
+__vii_flush_tlb_pending:
+	/* %o0 = context, %o1 = nr, %o2 = vaddrs[] */
+	rdpr		%pstate, %g7
+	sllx		%o1, 3, %o1
+	andn		%g7, PSTATE_IE, %g2
+	wrpr		%g2, 0x0, %pstate
+	wrpr		%g0, 1, %tl
+	mov		PRIMARY_CONTEXT, %o4
+	ldxa		[%o4] ASI_DMMU, %g2
+	srlx		%g2, CTX_PGSZ1_NUC_SHIFT, %o3
+	sllx		%o3, CTX_PGSZ1_NUC_SHIFT, %o3
+	or		%o0, %o3, %o0	/* Preserve nucleus page size fields */
+	stxa		%o0, [%o4] ASI_DMMU
+	membar		#Sync
+1:	sub		%o1, (1 << 3), %o1
+	ldx		[%o2 + %o1], %o3
+	andcc		%o3, 1, %g0
+	be,pn		%icc, 2f
+	 andn		%o3, 1, %o3
+	stxa		%g0, [%o3] ASI_IMMU_DEMAP
+2:	stxa		%g0, [%o3] ASI_DMMU_DEMAP
+	membar		#Sync
+	brnz,pt		%o1, 1b
+	 nop
+	stxa		%g2, [%o4] ASI_DMMU
+	sethi		%hi(KERNBASE), %o4
+	flush		%o4
+	wrpr		%g0, 0, %tl
+	retl
+	 wrpr		%g7, 0x0, %pstate
+	.size		__vii_flush_tlb_pending, .-__vii_flush_tlb_pending
+
+	.type		__vii_flush_tlb_kernel_range_patch, #function
+__vii_flush_tlb_kernel_range_patch:
+	sethi		%hi(__vii_flush_tlb_kernel_range), %g1
+	jmpl		%g1 + %lo(__vii_flush_tlb_kernel_range), %g0
+	 nop
+	.size		__vii_flush_tlb_kernel_range_patch, .-__vii_flush_tlb_kernel_range_patch
+	.if		(. - __vii_flush_tlb_kernel_range_patch) - 12
+	.error		"VII TLB jump template must contain three instructions"
+	.endif
+
+	.type		__vii_flush_tlb_kernel_range, #function
+__vii_flush_tlb_kernel_range:
+	/* %o0=start, %o1=end */
+	cmp		%o0, %o1
+	be,pn		%xcc, 2f
+	 sub		%o1, %o0, %o3
+	srlx		%o3, 18, %o4
+	brnz,pn		%o4, 3f
+	 sethi		%hi(PAGE_SIZE), %o4
+	sub		%o3, %o4, %o3
+	or		%o0, 0x20, %o0		! Nucleus
+1:	stxa		%g0, [%o0 + %o3] ASI_DMMU_DEMAP
+	stxa		%g0, [%o0 + %o3] ASI_IMMU_DEMAP
+	membar		#Sync
+	brnz,pt		%o3, 1b
+	 sub		%o3, %o4, %o3
+2:	sethi		%hi(KERNBASE), %o3
+	flush		%o3
+	retl
+	 nop
+3:	mov		0x80, %o4
+	stxa		%g0, [%o4] ASI_DMMU_DEMAP
+	membar		#Sync
+	stxa		%g0, [%o4] ASI_IMMU_DEMAP
+	membar		#Sync
+	sethi		%hi(KERNBASE), %o3
+	flush		%o3
+	retl
+	 nop
+	.size		__vii_flush_tlb_kernel_range, .-__vii_flush_tlb_kernel_range
+
+#ifdef CONFIG_SMP
+	.type		__vii_xcall_flush_tlb_page_patch, #function
+__vii_xcall_flush_tlb_page_patch:
+	sethi		%hi(__vii_xcall_flush_tlb_page), %g4
+	jmpl		%g4 + %lo(__vii_xcall_flush_tlb_page), %g0
+	 nop
+	.size		__vii_xcall_flush_tlb_page_patch, .-__vii_xcall_flush_tlb_page_patch
+	.if		(. - __vii_xcall_flush_tlb_page_patch) - 12
+	.error		"VII TLB jump template must contain three instructions"
+	.endif
+
+	.type		__vii_xcall_flush_tlb_page, #function
+__vii_xcall_flush_tlb_page:
+	/* %g5=context, %g1=vaddr */
+	mov		PRIMARY_CONTEXT, %g4
+	ldxa		[%g4] ASI_DMMU, %g2
+	srlx		%g2, CTX_PGSZ1_NUC_SHIFT, %g4
+	sllx		%g4, CTX_PGSZ1_NUC_SHIFT, %g4
+	or		%g5, %g4, %g5
+	mov		PRIMARY_CONTEXT, %g4
+	stxa		%g5, [%g4] ASI_DMMU
+	membar		#Sync
+	andcc		%g1, 0x1, %g0
+	be,pn		%icc, 2f
+	 andn		%g1, 0x1, %g5
+	stxa		%g0, [%g5] ASI_IMMU_DEMAP
+2:	stxa		%g0, [%g5] ASI_DMMU_DEMAP
+	membar		#Sync
+	stxa		%g2, [%g4] ASI_DMMU
+	retry
+	.size		__vii_xcall_flush_tlb_page, .-__vii_xcall_flush_tlb_page
+
+#endif /* CONFIG_SMP */
+
+	.globl		sparc64_vii_patch_cachetlbops
+sparc64_vii_patch_cachetlbops:
+	save		%sp, -128, %sp
+
+	sethi		%hi(__flush_tlb_mm), %o0
+	or		%o0, %lo(__flush_tlb_mm), %o0
+	sethi		%hi(__cheetah_flush_tlb_mm), %o1
+	or		%o1, %lo(__cheetah_flush_tlb_mm), %o1
+	call		tlb_patch_one
+	 mov		19, %o2
+
+	sethi		%hi(__flush_tlb_page), %o0
+	or		%o0, %lo(__flush_tlb_page), %o0
+	sethi		%hi(__vii_flush_tlb_page_patch), %o1
+	or		%o1, %lo(__vii_flush_tlb_page_patch), %o1
+	call		tlb_patch_one
+	 mov		3, %o2
+
+	sethi		%hi(__flush_tlb_pending), %o0
+	or		%o0, %lo(__flush_tlb_pending), %o0
+	sethi		%hi(__vii_flush_tlb_pending_patch), %o1
+	or		%o1, %lo(__vii_flush_tlb_pending_patch), %o1
+	call		tlb_patch_one
+	 mov		3, %o2
+
+	sethi		%hi(__flush_tlb_kernel_range), %o0
+	or		%o0, %lo(__flush_tlb_kernel_range), %o0
+	sethi		%hi(__vii_flush_tlb_kernel_range_patch), %o1
+	or		%o1, %lo(__vii_flush_tlb_kernel_range_patch), %o1
+	call		tlb_patch_one
+	 mov		3, %o2
+
+#ifdef CONFIG_SMP
+	sethi		%hi(xcall_flush_tlb_page), %o0
+	or		%o0, %lo(xcall_flush_tlb_page), %o0
+	sethi		%hi(__vii_xcall_flush_tlb_page_patch), %o1
+	or		%o1, %lo(__vii_xcall_flush_tlb_page_patch), %o1
+	call		tlb_patch_one
+	 mov		3, %o2
+
+	/* VII uses 32-entry fTLBs: do not use the Spitfire 64-slot sweep. */
+	sethi		%hi(xcall_flush_tlb_kernel_range), %o0
+	or		%o0, %lo(xcall_flush_tlb_kernel_range), %o0
+	sethi		%hi(__cheetah_xcall_flush_tlb_kernel_range), %o1
+	or		%o1, %lo(__cheetah_xcall_flush_tlb_kernel_range), %o1
+	call		tlb_patch_one
+	 mov		44, %o2
+#endif
+
+#ifdef DCACHE_ALIASING_POSSIBLE
+	sethi		%hi(__flush_dcache_page), %o0
+	or		%o0, %lo(__flush_dcache_page), %o0
+	sethi		%hi(__vii_flush_dcache_page), %o1
+	or		%o1, %lo(__vii_flush_dcache_page), %o1
+	call		tlb_patch_one
+	 mov		3, %o2
+#endif /* DCACHE_ALIASING_POSSIBLE */
+
+	ret
+	 restore
+
+/* VII caches are strongly coherent (VII manual section 8.4.7). */
+#ifdef DCACHE_ALIASING_POSSIBLE
+__vii_flush_dcache_page:
+	membar		#Sync
+	retl
+	 nop
+#endif
+
 	.globl		cheetah_patch_cachetlbops
 cheetah_patch_cachetlbops:
 	save		%sp, -128, %sp

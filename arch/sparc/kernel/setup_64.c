@@ -184,6 +184,9 @@ static void __init per_cpu_patch(void)
 			else
 				insns = &p->cheetah_safari[0];
 			break;
+		case sparc64_vii:
+			insns = &p->vii[0];
+			break;
 		case hypervisor:
 			insns = &p->sun4v[0];
 			break;
@@ -349,6 +352,40 @@ static void __init pause_patch(void)
 	}
 }
 
+/*
+ * Route restrainable ECC (0x63) to the VII C handler.
+ * Other patched errors record state and halt without touching Spitfire
+ * error/cache registers, including at TL>1.
+ */
+static void __init vii_patch_error_traps(void)
+{
+	static const unsigned int traps[] = { 0x0a, 0x32, 0x40, 0x63 };
+	unsigned int *tables[] = { sparc64_ttable_tl0, sparc64_ttable_tl1 };
+	int i, j;
+
+	for (i = 0; i < ARRAY_SIZE(tables); i++) {
+		for (j = 0; j < ARRAY_SIZE(traps); j++) {
+			unsigned int *slot = tables[i] + traps[j] * 8;
+			void (*handler)(void) = sparc64_vii_fatal_trap;
+			long delta;
+
+			if (traps[j] == 0x63)
+				handler = i ? sparc64_vii_ecc_trap_tl1 :
+					      sparc64_vii_ecc_trap;
+			delta = (long)handler - (long)slot;
+
+			/* ba (disp22), followed by nop. */
+			if (delta < -(1L << 23) || delta >= (1L << 23))
+				prom_halt();
+			slot[1] = 0x01000000;
+			slot[0] = 0x10800000 | ((delta >> 2) & 0x3fffff);
+			/* Publish the trap instructions before synchronizing fetch. */
+			wmb();
+			__asm__ __volatile__("flush %0" : : "r" (slot));
+		}
+	}
+}
+
 void __init start_early_boot(void)
 {
 	int cpu;
@@ -357,6 +394,24 @@ void __init start_early_boot(void)
 	per_cpu_patch();
 	sun4v_patch();
 	smp_init_cpu_poke();
+
+	if (tlb_type == sparc64_vii) {
+		unsigned long mcntl;
+
+		vii_patch_error_traps();
+
+		__asm__ __volatile__("ldxa [%1] 0x45, %0"
+				     : "=r" (mcntl) : "r" (8UL));
+		/*
+		 * No context hashing, forced uncached instruction caching or
+		 * multiple-page-size context mode is supported by this path.
+		 * Preserve firmware state; stop if a mode transition is required.
+		 */
+		if (mcntl & 0x101c0UL) {
+			prom_printf("VII-BOOT: incompatible inherited MCNTL; halted\n");
+			prom_halt();
+		}
+	}
 
 	cpu = hard_smp_processor_id();
 	if (cpu >= NR_CPUS) {

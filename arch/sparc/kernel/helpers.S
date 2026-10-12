@@ -64,3 +64,44 @@ real_hard_smp_processor_id:
 #endif
 	.size		real_hard_smp_processor_id,.-real_hard_smp_processor_id
 EXPORT_SYMBOL_GPL(real_hard_smp_processor_id)
+
+	.align 32
+	.globl sparc64_vii_ecc_trap
+sparc64_vii_ecc_trap:
+	TRAP(sparc64_vii_ecc_error)
+	.globl sparc64_vii_ecc_trap_tl1
+sparc64_vii_ecc_trap_tl1:
+	TRAPTL1(sparc64_vii_ecc_error)
+
+	.align 32
+	.globl sparc64_vii_fatal_trap
+sparc64_vii_fatal_trap:
+	wrpr %g0, 15, %pil
+	sethi %hi(sparc64_vii_fault_record), %g1
+	or %g1, %lo(sparc64_vii_fault_record), %g1
+	rdpr %tpc, %g2
+	stx %g2, [%g1 + 8]
+	rdpr %tnpc, %g2
+	stx %g2, [%g1 + 16]
+	rdpr %tstate, %g2
+	stx %g2, [%g1 + 24]
+	rdpr %tl, %g2
+	stx %g2, [%g1 + 32]
+	rdpr %tt, %g2
+	stx %g2, [%g1 + 40]
+	/* VII Appendix P: state-change error information, read-only here. */
+	mov 0x18, %g2
+	ldxa [%g2] 0x4c, %g2
+	stx %g2, [%g1 + 48]
+	sethi %hi(0x56494900), %g2
+	stx %g2, [%g1]
+	membar #Sync
+1:	ba,pt %xcc, 1b
+	 nop
+
+	.data
+	.align 64
+	.globl sparc64_vii_fault_record
+sparc64_vii_fault_record:
+	.xword 0, 0, 0, 0, 0, 0, 0, 0
+	.previous

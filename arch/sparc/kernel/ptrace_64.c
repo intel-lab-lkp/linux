@@ -109,6 +109,13 @@ void flush_ptrace_access(struct vm_area_struct *vma, struct page *page,
 {
 	BUG_ON(len > PAGE_SIZE);
 
+	if (tlb_type == sparc64_vii) {
+		/* VII caches are coherent; ASI_DCACHE_INVALIDATE is not valid. */
+		flush_icache_range((unsigned long)kaddr,
+				   (unsigned long)kaddr + len);
+		return;
+	}
+
 	if (tlb_type == hypervisor)
 		return;
 

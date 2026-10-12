@@ -250,6 +250,16 @@ config US3_MC
 
 	  If in doubt, say Y, as this information can be very useful.
 
+config SPARC64_VII
+	bool "Fujitsu SPARC64 VII and VII+ support"
+	depends on SPARC64
+	depends on !HUGETLB_PAGE && !TRANSPARENT_HUGEPAGE
+	help
+	  Support SPARC64 VII and VII+ processors in the Fujitsu M3000.
+	  Firmware must leave context hashing and multiple-page-size
+	  context mode disabled. HugeTLB and transparent huge pages are
+	  not supported by this CPU path.
+
 # Global things across all Sun machines.
 config GENERIC_LOCKBREAK
 	bool
