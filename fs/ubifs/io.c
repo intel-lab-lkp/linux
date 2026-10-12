@@ -72,7 +72,12 @@ void ubifs_ro_mode(struct ubifs_info *c, int err)
 	if (!c->ro_error) {
 		c->ro_error = 1;
 		c->no_chk_data_crc = 0;
-		c->vfs_sb->s_flags |= SB_RDONLY;
+		/*
+		 * Only a mount in progress may set SB_RDONLY, later that needs
+		 * s_umount. UBIFS refuses modifications itself afterwards.
+		 */
+		if (!(c->vfs_sb->s_flags & SB_BORN))
+			c->vfs_sb->s_flags |= SB_RDONLY;
 		ubifs_warn(c, "switched to read-only mode, error %d", err);
 		dump_stack();
 	}

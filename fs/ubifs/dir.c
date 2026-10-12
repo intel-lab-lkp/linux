@@ -1749,6 +1749,7 @@ const struct inode_operations ubifs_dir_inode_operations = {
 	.rmdir       = ubifs_rmdir,
 	.mknod       = ubifs_mknod,
 	.rename      = ubifs_rename,
+	.permission  = ubifs_permission,
 	.setattr     = ubifs_setattr,
 	.getattr     = ubifs_getattr,
 	.listxattr   = ubifs_listxattr,

@@ -148,10 +148,14 @@ int ubifs_fileattr_set(struct mnt_idmap *idmap,
 		       struct dentry *dentry, struct file_kattr *fa)
 {
 	struct inode *inode = d_inode(dentry);
+	struct ubifs_info *c = inode->i_sb->s_fs_info;
 	int flags = fa->flags;
 
 	if (d_is_special(dentry))
 		return -ENOTTY;
+
+	if (c->ro_error)
+		return -EROFS;
 
 	if (fileattr_has_fsx(fa))
 		return -EOPNOTSUPP;

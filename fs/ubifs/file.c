@@ -1251,6 +1251,18 @@ static int do_setattr(struct ubifs_info *c, struct inode *inode,
 	return err;
 }
 
+/* Like sb_permission() for a read-only superblock, see ubifs_ro_mode(). */
+int ubifs_permission(struct mnt_idmap *idmap, struct inode *inode, int mask)
+{
+	struct ubifs_info *c = inode->i_sb->s_fs_info;
+
+	if ((mask & MAY_WRITE) && c->ro_error &&
+	    (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
+	     S_ISLNK(inode->i_mode)))
+		return -EROFS;
+	return generic_permission(idmap, inode, mask);
+}
+
 int ubifs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		  struct iattr *attr)
 {
@@ -1260,6 +1272,9 @@ int ubifs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 
 	dbg_gen("ino %llu, mode %#x, ia_valid %#x",
 		inode->i_ino, inode->i_mode, attr->ia_valid);
+	if (c->ro_error)
+		return -EROFS;
+
 	err = setattr_prepare(&nop_mnt_idmap, dentry, attr);
 	if (err)
 		return err;
@@ -1309,6 +1324,10 @@ int ubifs_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	int err;
 
 	dbg_gen("syncing inode %llu", inode->i_ino);
+
+	/* Writeback drops what it can't write after an error. */
+	if (c->ro_error)
+		return -EROFS;
 
 	if (c->ro_mount)
 		/*
@@ -1373,6 +1392,9 @@ int ubifs_update_time(struct inode *inode, enum fs_update_time type,
 	/* ubifs sets S_NOCMTIME on all inodes, this should not happen. */
 	if (WARN_ON_ONCE(type != FS_UPD_ATIME))
 		return -EIO;
+
+	if (c->ro_error)
+		return -EROFS;
 
 	if (!IS_ENABLED(CONFIG_UBIFS_ATIME_SUPPORT))
 		return generic_update_time(inode, type, flags);
@@ -1634,6 +1656,7 @@ const struct address_space_operations ubifs_file_address_operations = {
 };
 
 const struct inode_operations ubifs_file_inode_operations = {
+	.permission  = ubifs_permission,
 	.setattr     = ubifs_setattr,
 	.getattr     = ubifs_getattr,
 	.listxattr   = ubifs_listxattr,
@@ -1644,6 +1667,7 @@ const struct inode_operations ubifs_file_inode_operations = {
 
 const struct inode_operations ubifs_symlink_inode_operations = {
 	.get_link    = ubifs_get_link,
+	.permission  = ubifs_permission,
 	.setattr     = ubifs_setattr,
 	.getattr     = ubifs_symlink_getattr,
 	.listxattr   = ubifs_listxattr,
