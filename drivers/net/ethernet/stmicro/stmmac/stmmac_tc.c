@@ -346,9 +346,6 @@ static int tc_setup_cbs(struct stmmac_priv *priv,
 	if (!priv->dma_cap.av)
 		return -EOPNOTSUPP;
 
-	if (qopt->enable && priv->xmit_qdisc.prio_offload)
-		return -EOPNOTSUPP;
-
 	port_transmit_rate_kbps = qopt->idleslope - qopt->sendslope;
 
 	if (qopt->enable) {
@@ -1340,7 +1337,6 @@ static void tc_mqprio_config_queue_prio(struct stmmac_priv *priv,
 static int tc_mqprio_validate_chan_mode(struct stmmac_priv *priv,
 					struct tc_mqprio_qopt_offload *mqprio)
 {
-	struct plat_stmmacenet_data *pdata = priv->plat;
 	struct tc_mqprio_qopt *qopt = &mqprio->qopt;
 	int i;
 
@@ -1348,18 +1344,6 @@ static int tc_mqprio_validate_chan_mode(struct stmmac_priv *priv,
 		NL_SET_ERR_MSG_MOD(mqprio->extack,
 				   "hw DCB is required to offload mqprio");
 		return -EOPNOTSUPP;
-	}
-
-	/* Forcing strict priority conflicts with the CBS algorithm
-	 * of AVB queues, so reject the offload when any queue is
-	 * configured as AVB.
-	 */
-	for (i = 0; i < pdata->tx_queues_to_use; i++) {
-		if (pdata->tx_queues_cfg[i].mode_to_use == MTL_QUEUE_AVB) {
-			NL_SET_ERR_MSG_MOD(mqprio->extack,
-					   "SP conflicts with AVB queues");
-			return -EOPNOTSUPP;
-		}
 	}
 
 	for (i = 0; i < qopt->num_tc; i++) {
