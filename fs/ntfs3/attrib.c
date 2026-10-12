@@ -1004,6 +1004,7 @@ int attr_data_get_block_locked(struct ntfs_inode *ni, CLST vcn, CLST clen,
 	CLST hint, svcn, to_alloc, evcn1, next_svcn, asize, end, vcn0;
 	CLST alloc, evcn;
 	unsigned fr;
+	enum ALLOCATE_OPT opt;
 	u64 total_size, total_size0;
 	int step;
 
@@ -1219,10 +1220,14 @@ again:
 	}
 
 	/* Allocate and zeroout new clusters. */
+	opt = zero ? ALLOCATE_ZERO : ALLOCATE_ONE_FR;
+	if (vcn < bytes_to_cluster(sbi, ni->i_valid)) {
+		/* What is below 'valid' is read from disk as it is. */
+		opt |= ALLOCATE_ZERO;
+	}
+
 	err = attr_allocate_clusters(sbi, run, run_da, vcn, hint + 1, to_alloc,
-				     NULL,
-				     zero ? ALLOCATE_ZERO : ALLOCATE_ONE_FR,
-				     len, fr, lcn, len);
+				     NULL, opt, len, fr, lcn, len);
 	if (err)
 		goto out;
 	*new = true;
