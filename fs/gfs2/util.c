@@ -133,9 +133,11 @@ static void do_withdraw(struct gfs2_sbd *sdp)
 			   gfs2_log_is_empty(sdp),
 			   HZ * 5);
 
-	sdp->sd_vfs->s_flags |= SB_RDONLY;
-
 	/*
+	 * We don't set SB_RDONLY. That requires sb->s_umount, and changing it
+	 * under freeze_super() and thaw_super() leaves the freeze protection
+	 * unbalanced. SDF_WITHDRAWN already stops all modifications.
+	 *
 	 * Dequeue any pending non-system glock holders that can no
 	 * longer be granted because the file system is withdrawn.
 	 */

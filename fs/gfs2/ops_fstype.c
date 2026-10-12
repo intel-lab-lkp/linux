@@ -1594,7 +1594,11 @@ static int gfs2_reconfigure(struct fs_context *fc)
 		if (fc->sb_flags & SB_RDONLY) {
 			gfs2_make_fs_ro(sdp);
 		} else {
-			error = gfs2_make_fs_rw(sdp);
+			/* A withdrawn filesystem can't go back to read-write. */
+			if (gfs2_withdrawn(sdp))
+				error = -EROFS;
+			else
+				error = gfs2_make_fs_rw(sdp);
 			if (error)
 				errorfc(fc, "unable to remount read-write");
 		}
