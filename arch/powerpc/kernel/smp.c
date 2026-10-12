@@ -37,6 +37,7 @@
 #include <linux/clockchips.h>
 #include <linux/kexec.h>
 #include <linux/debugfs.h>
+#include <linux/cpuset.h>
 
 #include <asm/ptrace.h>
 #include <linux/atomic.h>
@@ -1863,6 +1864,16 @@ void __noreturn arch_cpu_idle_dead(void)
 
 #endif
 
+int arch_update_cpu_topology(void)
+{
+	if (READ_ONCE(llc_override_changed)) {
+		WRITE_ONCE(llc_override_changed, 0);
+		return 1;
+	}
+
+	return 0;
+}
+
 static ssize_t llc_override_get(struct file *file, char __user *ubuf,
 				size_t count, loff_t *ppos)
 {
@@ -1909,10 +1920,10 @@ static ssize_t llc_override_set(struct file *file, const char __user *ubuf,
 	if (override != READ_ONCE(llc_override)) {
 		WRITE_ONCE(llc_override, override);
 		WRITE_ONCE(llc_override_changed, 1);
-		pr_info("sched LLC override set to %s\n",
+		pr_info("sched LLC override set to %s. Rebuilding sched domains\n",
 			llc_override_str[override]);
 
-		/* Will be calling rebuild sched domain in later patches */
+		rebuild_sched_domains();
 	}
 
 	mutex_unlock(&llc_override_mutex);
