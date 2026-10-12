@@ -114,6 +114,17 @@ struct item {
 	char		name[];
 };
 
+struct dep_item {
+	struct dep_item	*next;
+	char		name[];
+};
+
+struct dep_info {
+	char			*source;
+	struct dep_item		*deps;
+	struct dep_item		*last_dep;
+};
+
 #define HASHSZ 256
 static struct item *config_hashtab[HASHSZ], *file_hashtab[HASHSZ];
 
@@ -164,15 +175,41 @@ static bool in_hashtable(const char *name, int len, struct item *hashtab[])
 }
 
 /*
+ * Append a dependency or include/config/<SYM> path to the info linked list.
+ */
+static void dep_info_add(struct dep_info *info, const char *name, int len)
+{
+	struct dep_item *dep = xmalloc(sizeof(*dep) + len + 1);
+
+	memcpy(dep->name, name, len);
+	dep->name[len] = '\0';
+	dep->next = NULL;
+
+	if (info->last_dep)
+		info->last_dep->next = dep;
+	else
+		info->deps = dep;
+	info->last_dep = dep;
+}
+
+/*
  * Record the use of a CONFIG_* word.
  */
-static void use_config(const char *m, int slen)
+static void use_config(const char *m, int slen, struct dep_info *info)
 {
 	if (in_hashtable(m, slen, config_hashtab))
 		return;
 
-	/* Print out a dependency path from a symbol name. */
-	printf("    $(wildcard include/config/%.*s) \\\n", slen, m);
+	/* Build a dependency path from a symbol name. */
+	static const char config_path[] = "include/config/";
+	char *path;
+	int path_len = sizeof(config_path) - 1 + slen;
+
+	path = xmalloc(path_len);
+	memcpy(path, config_path, sizeof(config_path) - 1);
+	memcpy(path + sizeof(config_path) - 1, m, slen);
+	dep_info_add(info, path, path_len);
+	free(path);
 }
 
 /* test if s ends in sub */
@@ -186,7 +223,12 @@ static int str_ends_with(const char *s, int slen, const char *sub)
 	return !memcmp(s + slen - sublen, sub, sublen);
 }
 
-static void parse_config_file(const char *p)
+/*
+ * Scan dependency p for CONFIG_ words, map each to an
+ * include/config/ path and append to the dep_info list if not
+ * already included.
+ */
+static void parse_config_file(const char *p, struct dep_info *info)
 {
 	const char *q, *r;
 	const char *start = p;
@@ -205,7 +247,7 @@ static void parse_config_file(const char *p)
 		else
 			r = q;
 		if (r > p)
-			use_config(p, r - p);
+			use_config(p, r - p, info);
 		p = q;
 	}
 }
@@ -253,13 +295,9 @@ static int is_no_parse_file(const char *s, int len)
 	       str_ends_with(s, len, ".so");
 }
 
-/*
- * Important: The below generated source_foo.o and deps_foo.o variable
- * assignments are parsed not only by make, but also by the rather simple
- * parser in scripts/mod/sumversion.c.
- */
-static void parse_dep_file(char *p, const char *target)
+static struct dep_info parse_dep_file(char *p)
 {
+	struct dep_info info = {};
 	bool saw_any_target = false;
 	bool is_target = true;
 	bool is_source = false;
@@ -375,13 +413,12 @@ static void parse_dep_file(char *p, const char *target)
 			 */
 			if (!saw_any_target) {
 				saw_any_target = true;
-				printf("source_%s := %s\n\n", target, p);
-				printf("deps_%s := \\\n", target);
+				info.source = xstrdup(p);
 				need_parse = true;
 			}
 		} else if (!is_ignored_file(p, q - p) &&
 			   !in_hashtable(p, q - p, file_hashtab)) {
-			printf("  %s \\\n", p);
+			dep_info_add(&info, p, q - p);
 			need_parse = true;
 		}
 
@@ -389,7 +426,7 @@ static void parse_dep_file(char *p, const char *target)
 			void *buf;
 
 			buf = read_file(p);
-			parse_config_file(buf);
+			parse_config_file(buf, &info);
 			free(buf);
 		}
 
@@ -403,6 +440,40 @@ static void parse_dep_file(char *p, const char *target)
 		exit(1);
 	}
 
+	return info;
+}
+
+static void free_dep_info(struct dep_info *info)
+{
+	struct dep_item *dep, *next;
+
+	for (dep = info->deps; dep; dep = next) {
+		next = dep->next;
+		free(dep);
+	}
+	free(info->source);
+}
+
+/*
+ * Important: The below generated source_foo.o and deps_foo.o variable
+ * assignments are parsed not only by make, but also by the rather simple
+ * parser in scripts/mod/sumversion.c.
+ */
+static void print_dep_file(const char *target, const struct dep_info *info)
+{
+	static const char config_path[] = "include/config/";
+	const struct dep_item *dep;
+
+	printf("source_%s := %s\n\n", target, info->source);
+	printf("deps_%s := \\\n", target);
+
+	for (dep = info->deps; dep; dep = dep->next) {
+		if (!strncmp(dep->name, config_path, sizeof(config_path) - 1))
+			printf("    $(wildcard %s) \\\n", dep->name);
+		else
+			printf("  %s \\\n", dep->name);
+	}
+
 	printf("\n%s: $(deps_%s)\n\n", target, target);
 	printf("$(deps_%s):\n", target);
 }
@@ -410,6 +481,7 @@ static void parse_dep_file(char *p, const char *target)
 int main(int argc, char *argv[])
 {
 	const char *depfile, *target, *cmdline;
+	struct dep_info info;
 	void *buf;
 
 	if (argc != 4)
@@ -419,10 +491,13 @@ int main(int argc, char *argv[])
 	target = argv[2];
 	cmdline = argv[3];
 
-	printf("savedcmd_%s := %s\n\n", target, cmdline);
-
 	buf = read_file(depfile);
-	parse_dep_file(buf, target);
+	info = parse_dep_file(buf);
+
+	printf("savedcmd_%s := %s\n\n", target, cmdline);
+	print_dep_file(target, &info);
+
+	free_dep_info(&info);
 	free(buf);
 
 	fflush(stdout);
