@@ -39,6 +39,7 @@
 #include "intel_display_types.h"
 #include "intel_display_wa.h"
 #include "intel_dp.h"
+#include "intel_hdmi.h"
 #include "intel_lpe_audio.h"
 
 /**
@@ -817,10 +818,19 @@ static void intel_audio_hdmi_eld_compute_config(struct intel_crtc_state *crtc_st
 		channels = sad.channels + 1;
 
 		for (bit = 0; bit < 7; bit++) {
+			bool supported;
+
 			if (!(sad.freq & BIT(bit)))
 				continue;
-			if (hdmi_audio_rate_supported(crtc_state, available_tmds,
-						      sad_freqs[bit], channels))
+
+			if (crtc_state->frl.enable)
+				supported = intel_hdmi_frl_audio_rate_supported(crtc_state,
+										sad_freqs[bit],
+										channels);
+			else
+				supported = hdmi_audio_rate_supported(crtc_state, available_tmds,
+								      sad_freqs[bit], channels);
+			if (supported)
 				new_freq_mask |= BIT(bit);
 		}
 
