@@ -53,6 +53,7 @@ TARGETS += filesystems/fscontext_ns
 TARGETS += filesystems/xattr
 TARGETS += filesystems/mntns_unbindable
 TARGETS += filesystems/umount_propagation
+TARGETS += filesystems/sb_rdonly
 TARGETS += firmware
 TARGETS += fpu
 TARGETS += ftrace
