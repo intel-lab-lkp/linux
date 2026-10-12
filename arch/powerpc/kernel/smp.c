@@ -36,6 +36,7 @@
 #include <linux/pgtable.h>
 #include <linux/clockchips.h>
 #include <linux/kexec.h>
+#include <linux/debugfs.h>
 
 #include <asm/ptrace.h>
 #include <linux/atomic.h>
@@ -1826,3 +1827,92 @@ void __noreturn arch_cpu_idle_dead(void)
 }
 
 #endif
+
+enum llc_override_values {
+	LLC_OVERRIDE_DISABLED,
+	LLC_OVERRIDE_SMT,
+	LLC_OVERRIDE_MC,
+	LLC_OVERRIDE_PKG,
+};
+
+static int llc_override;
+static int llc_override_changed;
+static DEFINE_MUTEX(llc_override_mutex);
+
+static const char * const llc_override_str[] = {
+	[LLC_OVERRIDE_DISABLED]	= "0",
+	[LLC_OVERRIDE_SMT]	= "smt",
+	[LLC_OVERRIDE_MC]	= "mc",
+	[LLC_OVERRIDE_PKG]	= "pkg",
+};
+
+static ssize_t llc_override_get(struct file *file, char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	int override;
+	char buf[8];
+	int len;
+
+	override = READ_ONCE(llc_override);
+	len = scnprintf(buf, sizeof(buf), "%s\n", llc_override_str[override]);
+	return simple_read_from_buffer(ubuf, count, ppos, buf, len);
+}
+
+static ssize_t llc_override_set(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[8];
+	int override;
+
+	if (!count || count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+
+	buf[count] = '\0';
+	strim(buf);
+
+	if (!strcmp(buf, "0"))
+		override = LLC_OVERRIDE_DISABLED;
+	else if (!strcasecmp(buf, "smt"))
+		override = LLC_OVERRIDE_SMT;
+	else if (!strcasecmp(buf, "mc"))
+		override = LLC_OVERRIDE_MC;
+	else if (!strcasecmp(buf, "pkg"))
+		override = LLC_OVERRIDE_PKG;
+	else
+		return -EINVAL;
+
+	if (override == LLC_OVERRIDE_MC && !has_coregroup_support())
+		return -EINVAL;
+
+	mutex_lock(&llc_override_mutex);
+
+	if (override != READ_ONCE(llc_override)) {
+		WRITE_ONCE(llc_override, override);
+		WRITE_ONCE(llc_override_changed, 1);
+		pr_info("sched LLC override set to %s\n",
+			llc_override_str[override]);
+
+		/* Will be calling rebuild sched domain in later patches */
+	}
+
+	mutex_unlock(&llc_override_mutex);
+	return count;
+}
+
+static const struct file_operations llc_override_fops = {
+	.open		= simple_open,
+	.read		= llc_override_get,
+	.write		= llc_override_set,
+	.llseek		= default_llseek,
+};
+
+static __init int llc_override_debugfs_init(void)
+{
+	debugfs_create_file("llc_override", 0600, arch_debugfs_dir, NULL,
+			    &llc_override_fops);
+	return 0;
+}
+device_initcall(llc_override_debugfs_init);
