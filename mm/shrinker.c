@@ -13,6 +13,14 @@ DEFINE_MUTEX(shrinker_mutex);
 #ifdef CONFIG_MEMCG
 static int shrinker_nr_max;
 
+/*
+ * Orders installing a unit against the pointer copy in
+ * expand_one_shrinker_info(). Installs run from the list_lru allocation
+ * path with the caller's gfp and cannot wait for shrinker_mutex; they can
+ * nest in the i_pages lock, which is taken from interrupts.
+ */
+static DEFINE_SPINLOCK(shrinker_unit_lock);
+
 static inline int shrinker_unit_size(int nr_items)
 {
 	return (DIV_ROUND_UP(nr_items, SHRINKER_UNIT_BITS) * sizeof(struct shrinker_info_unit *));
@@ -30,9 +38,6 @@ static inline void shrinker_unit_free(struct shrinker_info *info, int start)
 	nr = DIV_ROUND_UP(info->map_nr_max, SHRINKER_UNIT_BITS);
 
 	for (i = start; i < nr; i++) {
-		if (!unit[i])
-			break;
-
 		kfree(unit[i]);
 		unit[i] = NULL;
 	}
@@ -96,7 +101,13 @@ int alloc_shrinker_info(struct mem_cgroup *memcg)
 		if (!info)
 			goto err;
 		info->map_nr_max = shrinker_nr_max;
-		if (shrinker_unit_alloc(info, NULL, nid)) {
+		/*
+		 * Global reclaim keeps the deferred work of memcg-aware
+		 * shrinkers in the root's units, and root has no list_lru
+		 * allocation to install them from.
+		 */
+		if (mem_cgroup_is_root(memcg) &&
+		    shrinker_unit_alloc(info, NULL, nid)) {
 			kvfree(info);
 			goto err;
 		}
@@ -124,6 +135,7 @@ static int expand_one_shrinker_info(struct mem_cgroup *memcg, int new_size,
 {
 	struct shrinker_info *new, *old;
 	struct mem_cgroup_per_node *pn;
+	unsigned long flags;
 	int nid;
 
 	for_each_node(nid) {
@@ -143,13 +155,20 @@ static int expand_one_shrinker_info(struct mem_cgroup *memcg, int new_size,
 
 		new->map_nr_max = new_nr_max;
 
-		memcpy(new->unit, old->unit, old_size);
-		if (shrinker_unit_alloc(new, old, nid)) {
+		if (mem_cgroup_is_root(memcg) &&
+		    shrinker_unit_alloc(new, old, nid)) {
 			kvfree(new);
 			return -ENOMEM;
 		}
 
+		/*
+		 * A unit installed meanwhile lands in old before the copy or
+		 * in new after the publish.
+		 */
+		spin_lock_irqsave(&shrinker_unit_lock, flags);
+		memcpy(new->unit, old->unit, old_size);
 		rcu_assign_pointer(pn->shrinker_info, new);
+		spin_unlock_irqrestore(&shrinker_unit_lock, flags);
 		kvfree_rcu(old, rcu);
 	}
 
@@ -204,21 +223,26 @@ static inline int calc_shrinker_id(int index, int offset)
 
 void set_shrinker_bit(struct mem_cgroup *memcg, int nid, int shrinker_id)
 {
-	if (shrinker_id >= 0 && memcg && !mem_cgroup_is_root(memcg)) {
-		struct shrinker_info *info;
+	struct shrinker_info_unit *unit;
+	struct shrinker_info *info;
 
-		rcu_read_lock();
-		info = rcu_dereference(memcg->nodeinfo[nid]->shrinker_info);
-		if (!WARN_ON_ONCE(shrinker_id >= info->map_nr_max)) {
-			struct shrinker_info_unit *unit;
+	if (shrinker_id < 0 || !memcg || mem_cgroup_is_root(memcg))
+		return;
 
-			unit = info->unit[shrinker_id_to_index(shrinker_id)];
-			/* Pairs with smp mb in shrink_slab() */
-			smp_mb__before_atomic();
-			set_bit(shrinker_id_to_offset(shrinker_id), unit->map);
-		}
-		rcu_read_unlock();
-	}
+	rcu_read_lock();
+	info = rcu_dereference(memcg->nodeinfo[nid]->shrinker_info);
+	if (WARN_ON_ONCE(shrinker_id >= info->map_nr_max))
+		goto unlock;
+
+	unit = READ_ONCE(info->unit[shrinker_id_to_index(shrinker_id)]);
+	if (WARN_ON_ONCE(!unit))
+		goto unlock;
+
+	/* Pairs with smp mb in shrink_slab() */
+	smp_mb__before_atomic();
+	set_bit(shrinker_id_to_offset(shrinker_id), unit->map);
+unlock:
+	rcu_read_unlock();
 }
 
 static DEFINE_IDR(shrinker_idr);
@@ -263,14 +287,16 @@ static void shrinker_memcg_remove(struct shrinker *shrinker)
 static long xchg_nr_deferred_memcg(int nid, struct shrinker *shrinker,
 				   struct mem_cgroup *memcg)
 {
+	int offset = shrinker_id_to_offset(shrinker->id);
 	struct shrinker_info *info;
 	struct shrinker_info_unit *unit;
 	long nr_deferred;
 
 	rcu_read_lock();
 	info = rcu_dereference(memcg->nodeinfo[nid]->shrinker_info);
-	unit = info->unit[shrinker_id_to_index(shrinker->id)];
-	nr_deferred = atomic_long_xchg(&unit->nr_deferred[shrinker_id_to_offset(shrinker->id)], 0);
+	unit = READ_ONCE(info->unit[shrinker_id_to_index(shrinker->id)]);
+	/* No unit: this memcg never held objects of this shrinker. */
+	nr_deferred = unit ? atomic_long_xchg(&unit->nr_deferred[offset], 0) : 0;
 	rcu_read_unlock();
 
 	return nr_deferred;
@@ -279,18 +305,81 @@ static long xchg_nr_deferred_memcg(int nid, struct shrinker *shrinker,
 static long add_nr_deferred_memcg(long nr, int nid, struct shrinker *shrinker,
 				  struct mem_cgroup *memcg)
 {
+	int offset = shrinker_id_to_offset(shrinker->id);
 	struct shrinker_info *info;
 	struct shrinker_info_unit *unit;
 	long nr_deferred;
 
 	rcu_read_lock();
 	info = rcu_dereference(memcg->nodeinfo[nid]->shrinker_info);
-	unit = info->unit[shrinker_id_to_index(shrinker->id)];
-	nr_deferred =
-		atomic_long_add_return(nr, &unit->nr_deferred[shrinker_id_to_offset(shrinker->id)]);
+	unit = READ_ONCE(info->unit[shrinker_id_to_index(shrinker->id)]);
+	nr_deferred = unit ? atomic_long_add_return(nr, &unit->nr_deferred[offset]) : 0;
 	rcu_read_unlock();
 
 	return nr_deferred;
+}
+
+static int shrinker_unit_install(struct mem_cgroup *memcg, int nid, int index,
+				 gfp_t gfp)
+{
+	struct shrinker_info_unit *unit;
+	struct shrinker_info *info;
+	unsigned long flags;
+
+	rcu_read_lock();
+	info = rcu_dereference(memcg->nodeinfo[nid]->shrinker_info);
+	/* Online memcgs have an info, and ids are expanded into it first. */
+	if (WARN_ON_ONCE(!info ||
+			 index >= shrinker_id_to_index(info->map_nr_max)) ||
+	    READ_ONCE(info->unit[index])) {
+		rcu_read_unlock();
+		return 0;
+	}
+	rcu_read_unlock();
+
+	unit = kzalloc_node(sizeof(*unit), gfp, nid);
+	if (!unit)
+		return -ENOMEM;
+
+	spin_lock_irqsave(&shrinker_unit_lock, flags);
+	/* memcg is pinned: only expand replaces info, and it holds the lock */
+	info = rcu_dereference_protected(memcg->nodeinfo[nid]->shrinker_info,
+					 lockdep_is_held(&shrinker_unit_lock));
+	if (!info->unit[index]) {
+		/* Walkers read the pointer locklessly: publish a zeroed unit. */
+		smp_store_release(&info->unit[index], unit);
+		unit = NULL;
+	}
+	spin_unlock_irqrestore(&shrinker_unit_lock, flags);
+
+	kfree(unit);
+	return 0;
+}
+
+/*
+ * Called before @memcg gets a list on a list_lru of shrinker @shrinker_id,
+ * from the path that allocates the list. A map bit is only ever set on a
+ * memcg that has the list, so set_shrinker_bit() always finds the unit.
+ * A shrinker that sets map bits without a list_lru, such as a NONSLAB
+ * one under cgroup.memory=nokmem, must call this first.
+ */
+int memcg_shrinker_unit_alloc(struct mem_cgroup *memcg, int shrinker_id,
+			      gfp_t gfp)
+{
+	int nid, ret;
+
+	if (shrinker_id < 0 || mem_cgroup_is_root(memcg))
+		return 0;
+
+	for_each_node(nid) {
+		ret = shrinker_unit_install(memcg, nid,
+					    shrinker_id_to_index(shrinker_id),
+					    gfp);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 void reparent_shrinker_deferred(struct mem_cgroup *memcg)
@@ -307,8 +396,17 @@ void reparent_shrinker_deferred(struct mem_cgroup *memcg)
 		child_info = shrinker_info_protected(memcg, nid);
 		parent_info = shrinker_info_protected(parent, nid);
 		for (index = 0; index < shrinker_id_to_index(child_info->map_nr_max); index++) {
-			child_unit = child_info->unit[index];
-			parent_unit = parent_info->unit[index];
+			child_unit = READ_ONCE(child_info->unit[index]);
+			if (!child_unit)
+				continue;
+
+			if (!READ_ONCE(parent_info->unit[index]))
+				shrinker_unit_install(parent, nid, index, GFP_KERNEL);
+			parent_unit = READ_ONCE(parent_info->unit[index]);
+			/* Drop the debt rather than fail the cgroup teardown. */
+			if (!parent_unit)
+				continue;
+
 			for (offset = 0; offset < SHRINKER_UNIT_BITS; offset++) {
 				nr = atomic_long_read(&child_unit->nr_deferred[offset]);
 				atomic_long_add(nr, &parent_unit->nr_deferred[offset]);
@@ -529,9 +627,12 @@ again:
 	if (index < shrinker_id_to_index(info->map_nr_max)) {
 		struct shrinker_info_unit *unit;
 
-		unit = info->unit[index];
+		unit = READ_ONCE(info->unit[index]);
 
 		rcu_read_unlock();
+
+		if (!unit)
+			goto next;
 
 		for_each_set_bit(offset, unit->map, SHRINKER_UNIT_BITS) {
 			struct shrink_control sc = {
@@ -587,7 +688,7 @@ again:
 			freed += ret;
 			shrinker_put(shrinker);
 		}
-
+next:
 		index++;
 		goto again;
 	}
