@@ -28178,6 +28178,7 @@ M:	Alex Elder <elder@kernel.org>
 M:	Daniel Thompson <danielt@kernel.org>
 S:	Maintained
 F:	Documentation/devicetree/bindings/interrupt-controller/toshiba,tc9564-msigen.yaml
+F:	drivers/irqchip/irq-tc9564-msigen.c
 
 TOSHIBA TC9564 PCI DRIVER
 M:	Alex Elder <elder@kernel.org>

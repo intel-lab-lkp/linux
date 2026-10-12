@@ -842,4 +842,14 @@ config SUNPLUS_SP7021_INTC
 	  chained controller, routing all interrupt source in P-Chip to
 	  the primary controller on C-Chip.
 
+config TC9564_MSIGEN
+	tristate "Toshiba TC9564 MSI distributor"
+	depends on TC9564_PCI
+	depends on GENERIC_IRQ_CHIP
+	default TC9564_PCI
+	help
+	  This enables support for the "MSIGEN" MSI distributor embedded
+	  in the Toshiba TC9564.  This device receives wired interrupts
+	  within the TC9564 and raises them to the host using MSI.
+
 endmenu
