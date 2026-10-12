@@ -234,6 +234,8 @@ static void vbi_stop_streaming(struct vb2_queue *vq)
 {
 	struct cx231xx *dev = vb2_get_drv_priv(vq);
 
+	/* Stop URB callbacks before returning their destination buffers. */
+	cx231xx_uninit_vbi_isoc(dev);
 	return_all_buffers(dev, VB2_BUF_STATE_ERROR);
 }
 
@@ -499,8 +501,12 @@ u32 cx231xx_copy_vbi_line(struct cx231xx *dev, struct cx231xx_dmaqueue *dma_q,
 		cx231xx_reset_vbi_buffer(dev, dma_q);
 	}
 
-	if (dma_q->current_field != field_number)
+	if (dma_q->current_field != field_number) {
+		/* Drop any incomplete surplus line from the previous field. */
 		dma_q->lines_completed = 0;
+		dma_q->bytes_left_in_line = _line_size;
+		dma_q->is_partial_line = 0;
+	}
 
 	/* get the buffer pointer */
 	buf = dev->vbi_mode.bulk_ctl.buf;
@@ -514,9 +520,13 @@ u32 cx231xx_copy_vbi_line(struct cx231xx *dev, struct cx231xx_dmaqueue *dma_q,
 
 	if (dma_q->lines_completed >= dma_q->lines_per_field) {
 		dma_q->bytes_left_in_line -= bytes_to_copy;
-		dma_q->is_partial_line =
-		    (dma_q->bytes_left_in_line == 0) ? 0 : 1;
-		return 0;
+		if (dma_q->bytes_left_in_line == 0) {
+			dma_q->bytes_left_in_line = _line_size;
+			dma_q->is_partial_line = 0;
+		} else {
+			dma_q->is_partial_line = 1;
+		}
+		return bytes_to_copy;
 	}
 
 	dma_q->is_partial_line = 1;

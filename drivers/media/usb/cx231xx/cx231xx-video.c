@@ -912,6 +912,10 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 	call_all(dev, pad, set_fmt, NULL, &format);
 	v4l2_fill_pix_format(&f->fmt.pix, &format.format);
 
+	/* The DMA engine keeps the requested 576-line PAL geometry. */
+	if (dev->model == CX231XX_BOARD_AUGUST_VGB100)
+		vidioc_g_fmt_vid_cap(file, priv, f);
+
 	return rc;
 }
 
@@ -1065,13 +1069,17 @@ int cx231xx_s_input(struct file *file, void *priv, unsigned int i)
 {
 	struct cx231xx *dev = video_drvdata(file);
 
-	dev->mode_tv = 0;
-
 	if (i >= MAX_CX231XX_INPUT)
 		return -EINVAL;
 	if (0 == INPUT(i)->type)
 		return -EINVAL;
 
+	/* Reapplying the vendor profile disturbs an active raw VBI stream. */
+	if (dev->model == CX231XX_BOARD_AUGUST_VGB100 &&
+	    i == dev->video_input)
+		return 0;
+
+	dev->mode_tv = 0;
 	video_mux(dev, i);
 
 	if (INPUT(i)->type == CX231XX_VMUX_TELEVISION ||

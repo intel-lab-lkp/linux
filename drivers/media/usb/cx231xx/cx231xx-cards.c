@@ -685,6 +685,28 @@ struct cx231xx_board cx231xx_boards[] = {
 			}
 		},
 	},
+	[CX231XX_BOARD_AUGUST_VGB100] = {
+		.name = "August VGB100",
+		.tuner_type = TUNER_ABSENT,
+		.decoder = CX231XX_AVDECODER,
+		.output_mode = OUT_MODE_VIP11,
+		.ctl_pin_status_mask = 0xFFFFFFC4,
+		.agc_analog_digital_select_gpio = 0x0c,
+		.gpio_pin_status_mask = 0x4001000,
+		.norm = V4L2_STD_PAL,
+		.no_alt_vanc = 1,
+		.external_av = 1,
+		.input = {{
+			.type = CX231XX_VMUX_COMPOSITE1,
+			.vmux = CX231XX_VIN_2_1,
+			.amux = CX231XX_AMUX_LINE_IN,
+		}, {
+			.type = CX231XX_VMUX_SVIDEO,
+			.vmux = CX231XX_VIN_1_1 |
+				(CX231XX_VIN_3_2 << 8),
+			.amux = CX231XX_AMUX_LINE_IN,
+		} },
+	},
 	[CX231XX_BOARD_HAUPPAUGE_930C_HD_1113xx] = {
 		.name = "Hauppauge WinTV 930C-HD (1113xx) / HVR-900H (111xxx) / PCTV QuatroStick 521e",
 		.tuner_type = TUNER_NXP_TDA18271,
@@ -1061,6 +1083,8 @@ struct usb_device_id cx231xx_id_table[] = {
 	 .driver_info = CX231XX_BOARD_ICONBIT_U100},
 	{USB_DEVICE(0x0fd9, 0x0037),
 	 .driver_info = CX231XX_BOARD_ELGATO_VIDEO_CAPTURE_V2},
+	{USB_DEVICE_VER(0x1f4d, 0x0102, 0x4002, 0x4002),
+	 .driver_info = CX231XX_BOARD_AUGUST_VGB100},
 	{USB_DEVICE(0x1f4d, 0x0102),
 	 .driver_info = CX231XX_BOARD_OTG102},
 	{USB_DEVICE(USB_VID_TERRATEC, 0x00a6),

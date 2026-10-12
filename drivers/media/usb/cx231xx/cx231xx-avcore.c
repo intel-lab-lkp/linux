@@ -348,6 +348,7 @@ int cx231xx_afe_update_power_control(struct cx231xx *dev,
 	case CX231XX_BOARD_HAUPPAUGE_USB2_FM_PAL:
 	case CX231XX_BOARD_HAUPPAUGE_USB2_FM_NTSC:
 	case CX231XX_BOARD_OTG102:
+	case CX231XX_BOARD_AUGUST_VGB100:
 		if (avmode == POLARIS_AVMODE_ANALOGT_TV) {
 			while (afe_power_status != (FLD_PWRDN_TUNING_BIAS |
 						FLD_PWRDN_ENABLE_PLL)) {
@@ -930,6 +931,18 @@ int cx231xx_set_decoder_video_input(struct cx231xx *dev,
 	if (value & 0x02) {
 		value |= (1 << 19);
 		status = vid_blk_write_word(dev, OUT_CTRL1, value);
+	}
+
+	/*
+	 * The generic setup derives TUNE1 from the reference clock and leaves
+	 * 0x42 here.  The VGB100 40.02 analogue front end requires 0xbe;
+	 * otherwise its decoder never acquires horizontal sync.
+	 */
+	if (dev->model == CX231XX_BOARD_AUGUST_VGB100 &&
+	    pin_type == CX231XX_VMUX_COMPOSITE1) {
+		status = afe_write_byte(dev, SUP_BLK_TUNE1, 0xbe);
+		if (status < 0)
+			return status;
 	}
 
 	return status;
@@ -1729,6 +1742,7 @@ int cx231xx_dif_set_standard(struct cx231xx *dev, u32 standard)
 	case CX231XX_BOARD_CNXT_VIDEO_GRABBER:
 	case CX231XX_BOARD_HAUPPAUGE_EXETER:
 	case CX231XX_BOARD_OTG102:
+	case CX231XX_BOARD_AUGUST_VGB100:
 		func_mode = 0x03;
 		break;
 	case CX231XX_BOARD_CNXT_RDE_253S:
