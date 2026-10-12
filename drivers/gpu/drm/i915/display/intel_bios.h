@@ -112,6 +112,7 @@ int intel_bios_hdmi_boost_level(const struct intel_bios_encoder_data *devdata);
 int intel_bios_hdmi_ddc_pin(const struct intel_bios_encoder_data *devdata);
 int intel_bios_hdmi_level_shift(const struct intel_bios_encoder_data *devdata);
 int intel_bios_hdmi_max_tmds_clock(const struct intel_bios_encoder_data *devdata);
+int intel_bios_hdmi_max_frl_rate(const struct intel_bios_encoder_data *devdata);
 
 void intel_bios_for_each_encoder(struct intel_display *display,
 				 void (*func)(struct intel_display *display,
