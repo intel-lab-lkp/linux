@@ -694,6 +694,19 @@ config SPI_LJCA
 	  This driver can also be built as a module. If so, the module
 	  will be called spi-ljca.
 
+config SPI_LSTP
+	tristate "NVIDIA LSTP SPI support"
+	depends on USB_LSTP
+	default USB_LSTP
+	help
+	  Say Y or M here to support the SPI channels of NVIDIA LSTP USB
+	  adapters. Each channel is registered as an SPI host controller,
+	  and the devices behind it can be described by device tree, ACPI
+	  or created through spidev.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called spi-lstp.
+
 config SPI_MA35D1_QSPI
 	tristate "Nuvoton MA35D1 QSPI controller"
 	depends on ARCH_MA35 || COMPILE_TEST
