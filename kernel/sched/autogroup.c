@@ -234,7 +234,7 @@ int proc_sched_autogroup_set_nice(struct task_struct *p, int nice)
 {
 	static unsigned long next = INITIAL_JIFFIES;
 	struct autogroup *ag;
-	unsigned long shares;
+	unsigned long shares, old;
 	int err, idx;
 
 	if (nice < MIN_NICE || nice > MAX_NICE)
@@ -247,11 +247,15 @@ int proc_sched_autogroup_set_nice(struct task_struct *p, int nice)
 	if (nice < 0 && !can_nice(current, nice))
 		return -EPERM;
 
-	/* This is a heavy operation, taking global locks.. */
-	if (!capable(CAP_SYS_ADMIN) && time_before(jiffies, next))
-		return -EAGAIN;
+	/* Rate-limit this heavy operation, which takes global locks. */
+	if (capable(CAP_SYS_ADMIN)) {
+		xchg(&next, HZ / 10 + jiffies);
+	} else {
+		old = READ_ONCE(next);
+		if (time_before(jiffies, old) || !try_cmpxchg(&next, &old, HZ / 10 + jiffies))
+			return -EAGAIN;
+	}
 
-	next = HZ / 10 + jiffies;
 	ag = autogroup_task_get(p);
 
 	idx = array_index_nospec(nice + 20, 40);
