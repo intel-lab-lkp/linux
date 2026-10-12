@@ -22,10 +22,13 @@
 #include <linux/power_supply.h>
 #include <linux/slab.h>
 #include <linux/usb.h>
+#include <linux/workqueue.h>
 
 #include "hid-ids.h"
 
 #define UNCTRL_VENDOR_IFNUM 2
+
+#define UNCTRL_BATTERY_TIMEOUT_MS 5000
 
 #define UNCTRL_MODE_RECEIVER 0x01
 #define UNCTRL_MODE_WIRED 0x44
@@ -46,6 +49,8 @@ struct unctrl_dev {
 
 	struct power_supply_desc battery_desc;
 	struct power_supply *battery;
+
+	struct delayed_work battery_work;
 
 	u8 battery_capacity;
 	u8 mode;
@@ -132,6 +137,17 @@ static void unctrl_fetch_battery(struct hid_device *hdev)
 	kfree(write_buf);
 }
 
+static void unctrl_battery_timer_tick(struct work_struct *work)
+{
+	struct unctrl_dev *dev =
+		container_of(work, struct unctrl_dev, battery_work.work);
+
+	unctrl_fetch_battery(dev->hdev);
+
+	queue_delayed_work(system_freezable_wq, &dev->battery_work,
+			      msecs_to_jiffies(UNCTRL_BATTERY_TIMEOUT_MS));
+}
+
 /* Register the power supply of this connection and start reporting. */
 static int unctrl_battery_register(struct unctrl_dev *dev)
 {
@@ -155,6 +171,8 @@ static int unctrl_battery_register(struct unctrl_dev *dev)
 		 dev->battery_desc.name);
 
 	unctrl_fetch_battery(dev->hdev);
+	queue_delayed_work(system_freezable_wq, &dev->battery_work,
+			      msecs_to_jiffies(UNCTRL_BATTERY_TIMEOUT_MS));
 
 	return 0;
 }
@@ -200,6 +218,8 @@ static int unctrl_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	dev->hdev = hdev;
+	INIT_DELAYED_WORK(&dev->battery_work, unctrl_battery_timer_tick);
+
 	dev->battery_capacity = 100;
 	dev->mode = UNCTRL_MODE_RECEIVER;
 	dev->wired = hdev->product == USB_DEVICE_ID_UNCTRL_M1_WIRED;
@@ -283,7 +303,11 @@ static void unctrl_remove(struct hid_device *hdev)
 {
 	struct unctrl_dev *dev = hid_get_drvdata(hdev);
 
-	hid_hw_close(hdev);
+	/* Stop polling before the transport goes down. */
+	if (dev) {
+		cancel_delayed_work_sync(&dev->battery_work);
+		hid_hw_close(hdev);
+	}
 
 	hid_hw_stop(hdev);
 
