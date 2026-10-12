@@ -828,6 +828,8 @@ static int ufs_update_inode(struct inode * inode, int do_sync)
 
 int ufs_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
+	if (ufs_emergency_ro(inode->i_sb))
+		return -EROFS;
 	return ufs_update_inode(inode, wbc->sync_mode == WB_SYNC_ALL);
 }
 
@@ -1201,6 +1203,9 @@ int ufs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	struct inode *inode = d_inode(dentry);
 	unsigned int ia_valid = attr->ia_valid;
 	int error;
+
+	if (ufs_emergency_ro(inode->i_sb))
+		return -EROFS;
 
 	error = setattr_prepare(&nop_mnt_idmap, dentry, attr);
 	if (error)

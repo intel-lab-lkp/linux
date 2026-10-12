@@ -74,6 +74,9 @@ static int ufs_create (struct mnt_idmap * idmap,
 {
 	struct inode *inode;
 
+	if (ufs_emergency_ro(dir->i_sb))
+		return -EROFS;
+
 	inode = ufs_new_inode(dir, mode);
 	if (IS_ERR(inode))
 		return PTR_ERR(inode);
@@ -91,6 +94,8 @@ static int ufs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	struct inode *inode;
 	int err;
 
+	if (ufs_emergency_ro(dir->i_sb))
+		return -EROFS;
 	if (!old_valid_dev(rdev))
 		return -EINVAL;
 
@@ -113,6 +118,8 @@ static int ufs_symlink (struct mnt_idmap * idmap, struct inode * dir,
 	unsigned l = strlen(symname)+1;
 	struct inode * inode;
 
+	if (ufs_emergency_ro(sb))
+		return -EROFS;
 	if (l > sb->s_blocksize)
 		return -ENAMETOOLONG;
 
@@ -152,6 +159,9 @@ static int ufs_link (struct dentry * old_dentry, struct inode * dir,
 	struct inode *inode = d_inode(old_dentry);
 	int error;
 
+	if (ufs_emergency_ro(dir->i_sb))
+		return -EROFS;
+
 	inode_set_ctime_current(inode);
 	inode_inc_link_count(inode);
 	ihold(inode);
@@ -170,6 +180,9 @@ static struct dentry *ufs_mkdir(struct mnt_idmap * idmap, struct inode * dir,
 {
 	struct inode * inode;
 	int err;
+
+	if (ufs_emergency_ro(dir->i_sb))
+		return ERR_PTR(-EROFS);
 
 	inode_inc_link_count(dir);
 
@@ -211,6 +224,9 @@ static int ufs_unlink(struct inode *dir, struct dentry *dentry)
 	struct folio *folio;
 	int err;
 
+	if (ufs_emergency_ro(dir->i_sb))
+		return -EROFS;
+
 	de = ufs_find_entry(dir, &dentry->d_name, &folio);
 	if (!de)
 		return -ENOENT;
@@ -229,6 +245,8 @@ static int ufs_rmdir (struct inode * dir, struct dentry *dentry)
 	struct inode * inode = d_inode(dentry);
 	int err= -ENOTEMPTY;
 
+	if (ufs_emergency_ro(dir->i_sb))
+		return -EROFS;
 	if (ufs_empty_dir (inode)) {
 		err = ufs_unlink(dir, dentry);
 		if (!err) {
@@ -254,6 +272,9 @@ static int ufs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 
 	if (flags & ~RENAME_NOREPLACE)
 		return -EINVAL;
+
+	if (ufs_emergency_ro(old_dir->i_sb))
+		return -EROFS;
 
 	old_de = ufs_find_entry(old_dir, &old_dentry->d_name, &old_folio);
 	if (!old_de)
@@ -326,4 +347,5 @@ const struct inode_operations ufs_dir_inode_operations = {
 	.rmdir		= ufs_rmdir,
 	.mknod		= ufs_mknod,
 	.rename		= ufs_rename,
+	.setattr	= ufs_setattr,
 };

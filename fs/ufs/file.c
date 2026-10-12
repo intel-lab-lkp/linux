@@ -30,6 +30,28 @@
 #include "ufs_fs.h"
 #include "ufs.h"
 
+static ssize_t ufs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+{
+	if (ufs_emergency_ro(file_inode(iocb->ki_filp)->i_sb))
+		return -EROFS;
+	return generic_file_write_iter(iocb, from);
+}
+
+/* Inodes aren't written back after an error, don't claim they're on disk. */
+int ufs_fsync(struct file *file, loff_t start, loff_t end, int datasync)
+{
+	if (ufs_emergency_ro(file_inode(file)->i_sb))
+		return -EROFS;
+	return simple_fsync(file, start, end, datasync);
+}
+
+static int ufs_file_open(struct inode *inode, struct file *filp)
+{
+	if ((filp->f_mode & FMODE_WRITE) && ufs_emergency_ro(inode->i_sb))
+		return -EROFS;
+	return generic_file_open(inode, filp);
+}
+
 /*
  * We have mostly NULL's here: the current defaults are ok for
  * the ufs filesystem.
@@ -38,10 +60,10 @@
 const struct file_operations ufs_file_operations = {
 	.llseek		= generic_file_llseek,
 	.read_iter	= generic_file_read_iter,
-	.write_iter	= generic_file_write_iter,
+	.write_iter	= ufs_file_write_iter,
 	.mmap_prepare	= generic_file_mmap_prepare,
-	.open           = generic_file_open,
-	.fsync		= simple_fsync,
+	.open           = ufs_file_open,
+	.fsync		= ufs_fsync,
 	.splice_read	= filemap_splice_read,
 	.splice_write	= iter_file_splice_write,
 	.setlease	= generic_setlease,

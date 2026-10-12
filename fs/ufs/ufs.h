@@ -26,6 +26,7 @@ struct ufs_sb_info {
 	unsigned short s_cg_loaded;
 	unsigned s_flavour;
 	unsigned s_on_err;
+	unsigned long s_state;	/* UFS_STATE_* bits */
 	struct super_block *sb;
 	int work_queued; /* non-zero if the delayed work is queued */
 	struct delayed_work sync_work; /* FS sync delayed work */
@@ -51,6 +52,9 @@ struct ufs_inode_info {
 	__u32   i_dir_start_lookup;
 	struct inode vfs_inode;
 };
+
+/* bits in ufs_sb_info->s_state */
+#define UFS_STATE_EMERGENCY_RO	0	/* refuse modifications after an error */
 
 /* mount options */
 #define UFS_MOUNT_ONERROR_PANIC		0x00000001
@@ -109,6 +113,7 @@ int ufs_set_link(struct inode *dir, struct ufs_dir_entry *de,
 /* file.c */
 extern const struct inode_operations ufs_file_inode_operations;
 extern const struct file_operations ufs_file_operations;
+extern int ufs_fsync(struct file *file, loff_t start, loff_t end, int datasync);
 extern const struct address_space_operations ufs_aops;
 
 /* ialloc.c */
@@ -138,6 +143,11 @@ void ufs_mark_sb_dirty(struct super_block *sb);
 static inline struct ufs_sb_info *UFS_SB(struct super_block *sb)
 {
 	return sb->s_fs_info;
+}
+
+static inline bool ufs_emergency_ro(struct super_block *sb)
+{
+	return test_bit(UFS_STATE_EMERGENCY_RO, &UFS_SB(sb)->s_state);
 }
 
 static inline struct ufs_inode_info *UFS_I(struct inode *inode)
