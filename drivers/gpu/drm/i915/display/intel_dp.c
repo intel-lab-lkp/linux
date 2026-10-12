@@ -1243,11 +1243,6 @@ intel_dp_sink_format_valid(struct intel_connector *connector,
 	}
 }
 
-int intel_dp_max_hdisplay_per_pipe(struct intel_display *display)
-{
-	return DISPLAY_VER(display) >= 30 ? 6144 : 5120;
-}
-
 bool intel_dp_has_dsc(const struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(connector);
@@ -1266,18 +1261,6 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 		return false;
 
 	return true;
-}
-
-static
-bool intel_dp_can_join(struct intel_dp *intel_dp,
-		       int num_joined_pipes)
-{
-	struct intel_display *display = to_intel_display(intel_dp);
-
-	if (num_joined_pipes > 1 && !intel_dp_has_joiner(intel_dp))
-		return false;
-
-	return intel_joiner_valid_primary_pipe_mask(display, num_joined_pipes);
 }
 
 bool intel_dp_dotclk_valid(struct intel_display *display,
@@ -7513,25 +7496,6 @@ int intel_dp_sdp_min_guardband(const struct intel_crtc_state *crtc_state,
 				    intel_dp_get_lines_for_sdp(crtc_state, DP_SDP_VSC));
 
 	return sdp_guardband;
-}
-
-bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
-				     int hdisplay,
-				     int num_joined_pipes)
-{
-	struct intel_display *display = to_intel_display(connector);
-	struct intel_dp *intel_dp = intel_attached_dp(connector);
-
-	if (!intel_dp_can_join(intel_dp, num_joined_pipes))
-		return false;
-
-	if (hdisplay > num_joined_pipes * intel_dp_max_hdisplay_per_pipe(display))
-		return false;
-
-	if (connector->force_joined_pipes && connector->force_joined_pipes != num_joined_pipes)
-		return false;
-
-	return true;
 }
 
 u8 intel_dp_as_sdp_transmission_time(void)
