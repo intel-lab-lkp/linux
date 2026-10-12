@@ -28,6 +28,7 @@
 #include <linux/mutex.h>
 #include <linux/pm.h>
 #include <linux/spinlock.h>
+#include <linux/string_choices.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/unaligned.h>
@@ -1586,7 +1587,7 @@ static ssize_t enabled_show(struct device *dev,
 			return -ENODEV;
 	}
 
-	return sysfs_emit(buf, "%s\n", drvdata->rgb_enabled ? "true" : "false");
+	return sysfs_emit(buf, "%s\n", str_true_false(drvdata->rgb_enabled));
 }
 static DEVICE_ATTR_RW(enabled);
 
