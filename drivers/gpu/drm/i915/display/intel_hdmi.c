@@ -3763,6 +3763,18 @@ intel_hdmi_frl_train_lts3(struct intel_encoder *encoder,
 	return frl_train_complete_ltsp(encoder, crtc_state);
 }
 
+static int get_next_frl_rate(int curr_rate_gbps)
+{
+	int valid_rate[] = { 48, 40, 32, 24, 18, 9 };
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(valid_rate); i++)
+		if (valid_rate[i] < curr_rate_gbps)
+			return valid_rate[i];
+
+	return -EINVAL;
+}
+
 static int get_ffe_level(int rate_gbps)
 {
 	return 0;
@@ -3779,6 +3791,7 @@ int intel_hdmi_start_frl(struct intel_encoder *encoder,
 	int req_rate = crtc_state->frl.required_lanes * crtc_state->frl.required_rate;
 	int ffe_level = get_ffe_level(req_rate);
 	enum frl_lt_status status;
+	int next_rate = -EINVAL;
 
 	if (!crtc_state->frl.enable)
 		return 0;
@@ -3812,10 +3825,22 @@ int intel_hdmi_start_frl(struct intel_encoder *encoder,
 			    connector->base.id, connector->name,
 			    intel_hdmi->frl.rate_gbps);
 		return 0;
-	default:
+	case FRL_TRAIN_STOP:
+		next_rate = 0;
 		break;
+	case FRL_CHANGE_RATE:
+		next_rate = get_next_frl_rate(req_rate);
+		break;
+	case FRL_TRAIN_RETRAIN:
+		fallthrough;
+	default:
+		goto ltsl_tmds_mode;
 	}
 
+	if (next_rate >= 0)
+		intel_hdmi->frl.rate_cap = next_rate;
+
+ltsl_tmds_mode:
 	if (crtc_state->frl.enable && !intel_hdmi->frl.trained)
 		drm_err(display->drm,
 			"[CONNECTOR:%d:%s] FRL Training Failed with rate=%d\n",
