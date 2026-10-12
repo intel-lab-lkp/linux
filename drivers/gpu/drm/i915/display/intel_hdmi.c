@@ -2132,20 +2132,55 @@ intel_hdmi_mode_valid_format(struct intel_connector *connector,
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_hdmi *hdmi = intel_attached_hdmi(connector);
 	enum drm_mode_status status;
+	int num_joined_pipes;
 
 	status = intel_hdmi_sink_format_valid(connector, mode,
 					      has_hdmi_sink, sink_format);
 	if (status != MODE_OK)
 		return status;
 
-	status = intel_pfit_mode_valid(display, mode, sink_format, 0);
-	if (status != MODE_OK)
+	status = intel_hdmi_tmds_mode_clock_valid(&connector->base, clock,
+						  has_hdmi_sink, sink_format);
+
+	if (status == MODE_OK)
 		return status;
 
-	status = intel_hdmi_tmds_mode_clock_valid(&connector->base, clock, has_hdmi_sink, sink_format);
+	/*
+	 * Joiner is supported only with FRL mode.
+	 * If a mode is not supported with TMDS and FRL is not supported,
+	 * prune the mode.
+	 */
+	if (status != MODE_OK && !intel_hdmi_can_support_frl(hdmi))
+		return status;
 
-	if (status != MODE_OK && intel_hdmi_can_support_frl(hdmi))
+	for_each_joiner_candidate(connector, mode, num_joined_pipes) {
+		if (intel_joiner_needs_dsc(display, num_joined_pipes)) {
+			status = MODE_CLOCK_HIGH;
+			continue;
+		}
+
+		status = intel_pfit_mode_valid(display, mode, sink_format,
+					       num_joined_pipes);
+		if (status != MODE_OK)
+			continue;
+
+		status = intel_mode_valid_max_plane_size(display, mode,
+							 num_joined_pipes);
+		if (status != MODE_OK)
+			continue;
+
+		if (!intel_dp_dotclk_valid(display, clock, mode->htotal, 0,
+					   num_joined_pipes)) {
+			status = MODE_CLOCK_HIGH;
+			continue;
+		}
+
 		status = intel_hdmi_frl_mode_clock_valid(connector, mode, sink_format);
+		if (status != MODE_OK)
+			continue;
+
+		break;
+	}
 
 	return status;
 }
@@ -2160,7 +2195,6 @@ intel_hdmi_mode_valid(struct drm_connector *_connector,
 	const struct drm_display_info *info = &connector->base.display_info;
 	enum drm_mode_status status;
 	int clock = mode->clock;
-	int max_dotclk = display->cdclk.max_dotclk_freq;
 	bool has_hdmi_sink = intel_has_hdmi_sink(hdmi, connector->base.state);
 
 	status = intel_cpu_transcoder_mode_valid(display, mode);
@@ -2169,9 +2203,6 @@ intel_hdmi_mode_valid(struct drm_connector *_connector,
 
 	if ((mode->flags & DRM_MODE_FLAG_3D_MASK) == DRM_MODE_FLAG_3D_FRAME_PACKING)
 		clock *= 2;
-
-	if (clock > max_dotclk)
-		return MODE_CLOCK_HIGH;
 
 	if (mode->flags & DRM_MODE_FLAG_DBLCLK) {
 		if (!has_hdmi_sink)
@@ -2197,10 +2228,8 @@ intel_hdmi_mode_valid(struct drm_connector *_connector,
 			status = intel_hdmi_mode_valid_format(connector, mode, clock, has_hdmi_sink,
 							      INTEL_OUTPUT_FORMAT_YCBCR420);
 	}
-	if (status != MODE_OK)
-		return status;
 
-	return intel_mode_valid_max_plane_size(display, mode, 1);
+	return status;
 }
 
 bool intel_hdmi_bpc_possible(const struct intel_crtc_state *crtc_state,
