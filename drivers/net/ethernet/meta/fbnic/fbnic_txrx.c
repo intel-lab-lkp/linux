@@ -797,6 +797,34 @@ static void fbnic_page_pool_drain(struct fbnic_ring *ring, unsigned int idx,
 	rx_buf->netmem = 0;
 }
 
+/* The device names an Rx buffer by its index in the buffer descriptor
+ * ring.  A completion may only name a buffer we posted, that is one in
+ * [head, tail), so test the index against the array and against the
+ * posted window.  The window test is not enough on its own: it masks the
+ * index, so an index past the end of the array can fold back into the
+ * window and run off rx_buf[].
+ */
+static bool fbnic_rx_buf_posted(struct fbnic_ring *ring, unsigned int idx)
+{
+	if (idx > ring->size_mask)
+		return false;
+
+	return ((idx - ring->head) & ring->size_mask) < fbnic_desc_used(ring);
+}
+
+/* fbnic_clean_bdq() is given a position to consume up to rather than a
+ * buffer to use, so unlike fbnic_rx_buf_posted() it also accepts tail,
+ * which is how the teardown path asks for the whole ring to be drained.
+ */
+static bool fbnic_bdq_head_valid(struct fbnic_ring *ring, unsigned int hw_head)
+{
+	if (hw_head > ring->size_mask)
+		return false;
+
+	return ((hw_head - ring->head) & ring->size_mask) <=
+	       fbnic_desc_used(ring);
+}
+
 static void fbnic_clean_twq(struct fbnic_napi_vector *nv, int napi_budget,
 			    struct fbnic_q_triad *qt, s32 ts_head, s32 head0,
 			    s32 head1)
@@ -881,6 +909,13 @@ static void fbnic_clean_bdq(struct fbnic_ring *ring, unsigned int hw_head,
 			    int napi_budget)
 {
 	unsigned int head = ring->head;
+
+	/* A head we never posted cannot name a buffer we own, and the loop
+	 * below masks head to the ring so it would never reach it.  Leave
+	 * the ring alone and wait for a head we can act on.
+	 */
+	if (unlikely(!fbnic_bdq_head_valid(ring, hw_head)))
+		return;
 
 	if (head == hw_head)
 		return;
@@ -985,13 +1020,24 @@ static void fbnic_pkt_prepare(struct fbnic_napi_vector *nv, u64 rcd,
 {
 	unsigned int hdr_pg_idx = FIELD_GET(FBNIC_RCD_AL_BUFF_PAGE_MASK, rcd);
 	unsigned int hdr_pg_off = FIELD_GET(FBNIC_RCD_AL_BUFF_OFF_MASK, rcd);
-	struct page *page = fbnic_page_pool_get_head(qt, hdr_pg_idx);
 	unsigned int len = FIELD_GET(FBNIC_RCD_AL_BUFF_LEN_MASK, rcd);
 	unsigned int frame_sz, hdr_pg_start, hdr_pg_end, headroom;
 	unsigned char *hdr_start;
+	struct page *page;
 
 	/* data_hard_start should always be NULL when this is called */
 	WARN_ON_ONCE(pkt->buff.data_hard_start);
+
+	/* A buffer ID we never posted cannot name a buffer we own, so drop
+	 * the packet instead of running off the end of rx_buf[] or picking
+	 * up a slot we have already drained.
+	 */
+	if (unlikely(!fbnic_rx_buf_posted(&qt->sub0, hdr_pg_idx))) {
+		pkt->add_frag_failed = true;
+		return;
+	}
+
+	page = fbnic_page_pool_get_head(qt, hdr_pg_idx);
 
 	/* Short-cut the end calculation if we know page is fully consumed */
 	hdr_pg_end = FIELD_GET(FBNIC_RCD_AL_PAGE_FIN, rcd) ?
@@ -1026,9 +1072,26 @@ static void fbnic_add_rx_frag(struct fbnic_napi_vector *nv, u64 rcd,
 	unsigned int pg_idx = FIELD_GET(FBNIC_RCD_AL_BUFF_PAGE_MASK, rcd);
 	unsigned int pg_off = FIELD_GET(FBNIC_RCD_AL_BUFF_OFF_MASK, rcd);
 	unsigned int len = FIELD_GET(FBNIC_RCD_AL_BUFF_LEN_MASK, rcd);
-	netmem_ref netmem = fbnic_page_pool_get_data(qt, pg_idx);
 	unsigned int truesize;
+	netmem_ref netmem;
 	bool added;
+
+	/* No header completion has set buff up, either because one was
+	 * rejected or because the device sent none, so there is nothing to
+	 * add a fragment to.  Mark the packet so the metadata descriptor
+	 * drops it instead of building an skb on an empty buffer.
+	 */
+	if (unlikely(!pkt->buff.data_hard_start)) {
+		pkt->add_frag_failed = true;
+		return;
+	}
+
+	if (unlikely(!fbnic_rx_buf_posted(&qt->sub1, pg_idx))) {
+		pkt->add_frag_failed = true;
+		return;
+	}
+
+	netmem = fbnic_page_pool_get_data(qt, pg_idx);
 
 	truesize = FIELD_GET(FBNIC_RCD_AL_PAGE_FIN, rcd) ?
 		   FBNIC_BD_FRAG_SIZE - pg_off : ALIGN(len, 128);
@@ -1270,6 +1333,7 @@ static int fbnic_clean_rcq(struct fbnic_napi_vector *nv,
 	while (likely(packets < budget)) {
 		struct sk_buff *skb = ERR_PTR(-EINVAL);
 		u32 pkt_bytes;
+		u32 pg_idx;
 		u64 rcd;
 
 		if ((*raw_rcd & cpu_to_le64(FBNIC_RCD_DONE)) == done)
@@ -1281,12 +1345,21 @@ static int fbnic_clean_rcq(struct fbnic_napi_vector *nv,
 
 		switch (FIELD_GET(FBNIC_RCD_TYPE_MASK, rcd)) {
 		case FBNIC_RCD_TYPE_HDR_AL:
-			head0 = FIELD_GET(FBNIC_RCD_AL_BUFF_PAGE_MASK, rcd);
+			pg_idx = FIELD_GET(FBNIC_RCD_AL_BUFF_PAGE_MASK, rcd);
+			/* Only take the head from a completion we are going
+			 * to act on, so that one rejected ID does not discard
+			 * the progress an earlier completion in this poll has
+			 * already reported.
+			 */
+			if (likely(fbnic_rx_buf_posted(&qt->sub0, pg_idx)))
+				head0 = pg_idx;
 			fbnic_pkt_prepare(nv, rcd, pkt, qt);
 
 			break;
 		case FBNIC_RCD_TYPE_PAY_AL:
-			head1 = FIELD_GET(FBNIC_RCD_AL_BUFF_PAGE_MASK, rcd);
+			pg_idx = FIELD_GET(FBNIC_RCD_AL_BUFF_PAGE_MASK, rcd);
+			if (likely(fbnic_rx_buf_posted(&qt->sub1, pg_idx)))
+				head1 = pg_idx;
 			fbnic_add_rx_frag(nv, rcd, pkt, qt);
 
 			break;
@@ -1300,7 +1373,11 @@ static int fbnic_clean_rcq(struct fbnic_napi_vector *nv,
 			/* We currently ignore the action table index */
 			break;
 		case FBNIC_RCD_TYPE_META:
-			if (likely(!fbnic_rcd_metadata_err(rcd) &&
+			/* A metadata completion with no header completion
+			 * ahead of it leaves nothing to build a frame from.
+			 */
+			if (likely(pkt->buff.data_hard_start &&
+				   !fbnic_rcd_metadata_err(rcd) &&
 				   !pkt->add_frag_failed)) {
 				pkt_bytes = xdp_get_buff_len(&pkt->buff);
 				skb = fbnic_run_xdp(nv, pkt);
