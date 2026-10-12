@@ -2689,6 +2689,9 @@ void gpiod_free_commit(struct gpio_desc *desc)
 		WRITE_ONCE(desc->debounce_period_us, 0);
 #endif
 		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_RELEASED);
+	} else if (!guard.gc) {
+		/* The chip is gone but the consumer label is still ours. */
+		desc_set_label(desc, NULL);
 	}
 }
 
