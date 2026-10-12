@@ -71,6 +71,8 @@
 #include "intel_snps_phy.h"
 #include "intel_vrr.h"
 
+#define HAS_HDMI_FRL(__display)		(DISPLAY_VER((__display)) >= 14)
+
 bool intel_hdmi_is_frl(u32 clock)
 {
 	static const u32 rates[] = { 300000, 600000, 800000, 1000000, 1200000 };
@@ -3397,6 +3399,31 @@ void intel_infoframe_init(struct intel_digital_port *dig_port)
 	}
 }
 
+/* Common code with DP, need to put in a common place */
+static void intel_hdmi_modeset_retry_work_fn(struct work_struct *work)
+{
+	struct intel_connector *intel_connector;
+	struct drm_connector *connector;
+
+	intel_connector = container_of(work, typeof(*intel_connector),
+				       modeset_retry_work);
+	connector = &intel_connector->base;
+	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n", connector->base.id,
+		      connector->name);
+
+	/* Grab the locks before changing connector property*/
+	mutex_lock(&connector->dev->mode_config.mutex);
+	/*
+	 * Set connector link status to BAD and send a Uevent to notify
+	 * userspace to do a modeset.
+	 */
+	drm_connector_set_link_status_property(connector,
+					       DRM_MODE_LINK_STATUS_BAD);
+	mutex_unlock(&connector->dev->mode_config.mutex);
+	/* Send Hotplug uevent so userspace can reprobe */
+	drm_kms_helper_hotplug_event(connector->dev);
+}
+
 bool intel_hdmi_init_connector(struct intel_digital_port *dig_port,
 			       struct intel_connector *intel_connector)
 {
@@ -3469,6 +3496,11 @@ bool intel_hdmi_init_connector(struct intel_digital_port *dig_port,
 					   &conn_info);
 	if (!intel_hdmi->cec_notifier)
 		drm_dbg_kms(display->drm, "CEC notifier get failed\n");
+
+	/* Initialize the work for modeset in case of link train failure */
+	if (HAS_HDMI_FRL(display))
+		INIT_WORK(&intel_connector->modeset_retry_work,
+			  intel_hdmi_modeset_retry_work_fn);
 
 	return true;
 }
