@@ -475,7 +475,10 @@ void arch_do_signal_or_restart(struct pt_regs *regs)
 		}
 		/* No longer in a system call */
 		clear_pt_regs_flag(regs, PIF_SYSCALL);
-
+		if (!(current->restart_block.arch_data & 1)) {
+			regs->psw.addr = current->restart_block.arch_data;
+			current->restart_block.arch_data = 1;
+		}
 		rseq_signal_deliver(&ksig, regs);
 		handle_signal(&ksig, oldset, regs);
 		return;
