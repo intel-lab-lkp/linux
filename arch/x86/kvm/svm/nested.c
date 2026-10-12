@@ -1329,7 +1329,7 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 	if (nested_svm_vmexit_update_vmcb12(vcpu))
 		kvm_make_request(KVM_REQ_TRIPLE_FAULT, vcpu);
 
-	/* Exit Guest-Mode */
+	svm_switch_vmcb(svm, &svm->vmcb01);
 	leave_guest_mode(vcpu);
 	svm_pmu_handle_nested_transition(svm);
 
@@ -1355,8 +1355,6 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_ERAPS))
 		vmcb01->control.erap_ctl |= ERAP_CONTROL_CLEAR_RAP;
-
-	svm_switch_vmcb(svm, &svm->vmcb01);
 
 	/*
 	 * Rules for synchronizing int_ctl bits from vmcb02 to vmcb01:
@@ -1543,6 +1541,7 @@ void svm_leave_nested(struct kvm_vcpu *vcpu)
 		vcpu->arch.nested_run_pending = 0;
 		svm->nested.vmcb12_gpa = INVALID_GPA;
 
+		svm_switch_vmcb(svm, &svm->vmcb01);
 		leave_guest_mode(vcpu);
 
 		/*
@@ -1553,8 +1552,6 @@ void svm_leave_nested(struct kvm_vcpu *vcpu)
 		 * stale state).
 		 */
 		__svm_pmu_handle_nested_transition(svm, true);
-
-		svm_switch_vmcb(svm, &svm->vmcb01);
 
 		nested_svm_transition_tlb_flush(vcpu);
 
