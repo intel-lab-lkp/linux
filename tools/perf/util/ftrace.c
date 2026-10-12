@@ -34,6 +34,9 @@ struct ftrace_cpu_state {
 	struct ftrace_stack_frame stack[FTRACE_MAX_STACK];
 	int depth;
 	int inlined_depth;
+	bool in_target;
+	int target_root_depth;
+	int orphan_depth;
 };
 
 static struct ftrace_cpu_state *ftrace_cpu_states[FTRACE_MAX_CPUS];
@@ -393,6 +396,39 @@ static int print_line(struct perf_ftrace *ftrace, const char *line, FILE *out)
 	return 0;
 }
 
+static inline bool ftrace_has_graph_funcs(const struct perf_ftrace *ftrace)
+{
+	return ftrace->graph_funcs.next != NULL && !list_empty(&ftrace->graph_funcs);
+}
+
+/**
+ * ftrace_is_graph_func - Check if a function matches the graph_funcs target filter
+ * @ftrace: Perf ftrace context
+ * @func_name: The function name to test
+ *
+ * Return: true if ftrace->graph_funcs is empty or @func_name matches a
+ * target filter, false otherwise.
+ */
+static bool ftrace_is_graph_func(const struct perf_ftrace *ftrace, const char *func_name)
+{
+	struct filter_entry *pos;
+
+	if (!ftrace_has_graph_funcs(ftrace))
+		return true;
+
+	list_for_each_entry(pos, &ftrace->graph_funcs, list) {
+		size_t len = strlen(pos->name);
+
+		if (strcmp(pos->name, func_name) == 0)
+			return true;
+		if (!strncmp(pos->name, func_name, len) &&
+		    (func_name[len] == '\0' || func_name[len] == '.'))
+			return true;
+	}
+
+	return false;
+}
+
 /**
  * ftrace_process_fgraph_line - Process and output a function graph trace line
  * @ftrace: Perf ftrace context
@@ -429,8 +465,9 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 	bool has_open_brace;
 	bool has_semicolon;
 	bool has_retaddr = false;
+	bool has_filter = ftrace_has_graph_funcs(ftrace);
 
-	if (!ftrace->use_inline)
+	if (!has_filter && !ftrace->use_inline)
 		return print_line(ftrace, line, out);
 
 	pipe_char = find_func_column(ftrace, line, &cpu);
@@ -454,6 +491,11 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 
 	if (is_exit) {
 		char exit_name[128];
+
+		if (cs->orphan_depth > 0) {
+			cs->orphan_depth--;
+			return 0;
+		}
 
 		extract_exit_func_name(func_start, exit_name, sizeof(exit_name));
 
@@ -480,8 +522,9 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 
 					if (cs->inlined_depth > 0)
 						cs->inlined_depth--;
-					fprintf(out, "%s%*s} /* %s (inline) */\n",
-						blank_prefix, exit_indent, "", top->name);
+					if (!has_filter || cs->in_target)
+						fprintf(out, "%s%*s} /* %s (inline) */\n",
+							blank_prefix, exit_indent, "", top->name);
 				}
 				free(top->name);
 				cs->depth--;
@@ -499,15 +542,113 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 			extra_indent = 0;
 		}
 
-		fprintf(out, "%.*s%*s%s\n",
-			(int)(pipe_char - line + 1), line,
-			leading_spaces + extra_indent, "", func_start);
+		if (!has_filter || cs->in_target) {
+			if (!ftrace->use_inline) {
+				print_line(ftrace, line, out);
+			} else {
+				fprintf(out, "%.*s%*s%s\n",
+					(int)(pipe_char - line + 1), line,
+					leading_spaces + extra_indent, "", func_start);
+			}
+		}
+
+		if (has_filter && cs->in_target && cs->depth <= cs->target_root_depth) {
+			cs->in_target = false;
+			cs->target_root_depth = 0;
+			cs->orphan_depth = 0;
+		}
 		return 0;
 	}
 
 	/* It's an entry or a leaf call */
 	has_open_brace = (strchr(func_start, '{') != NULL);
 	has_semicolon = (strchr(func_start, ';') != NULL);
+
+	if (cs->orphan_depth > 0) {
+		if (has_open_brace && !has_semicolon)
+			cs->orphan_depth++;
+		return 0;
+	}
+
+	if (has_filter) {
+		if (cs->depth == 0 || !cs->in_target) {
+			char entry_name[128];
+
+			extract_entry_func_name(func_start, entry_name, sizeof(entry_name));
+			if (ftrace_is_graph_func(ftrace, entry_name)) {
+				cs->in_target = true;
+				cs->target_root_depth = cs->depth;
+				cs->orphan_depth = 0;
+			} else if (cs->depth == 0) {
+				cs->in_target = false;
+				cs->orphan_depth = 0;
+			}
+		}
+
+		if (!cs->in_target) {
+			/* Non-matching call tree; track depth if entering scope, suppress output */
+			if (has_open_brace && !has_semicolon) {
+				char entry_name[128];
+
+				extract_entry_func_name(func_start, entry_name, sizeof(entry_name));
+				if (cs->depth < FTRACE_MAX_STACK) {
+					cs->stack[cs->depth].name = strdup(entry_name);
+					if (!cs->stack[cs->depth].name) {
+						pr_err("Not enough memory\n");
+						return -ENOMEM;
+					}
+					cs->stack[cs->depth].inlined = false;
+					cs->stack[cs->depth].indent = leading_spaces;
+					cs->depth++;
+				}
+			}
+			return 0;
+		}
+	}
+
+	if (!ftrace->use_inline) {
+		if (has_filter && cs->in_target && cs->depth > cs->target_root_depth) {
+			if (ftrace_parse_retaddr(func_start, caller_sym,
+						 sizeof(caller_sym), &caller_offset)) {
+				caller_idx = -1;
+				for (i = cs->depth - 1; i >= 0; i--) {
+					if (!cs->stack[i].inlined && cs->stack[i].name &&
+					    strcmp(cs->stack[i].name, caller_sym) == 0) {
+						caller_idx = i;
+						break;
+					}
+				}
+				if (caller_idx < cs->target_root_depth) {
+					if (has_open_brace && !has_semicolon)
+						cs->orphan_depth = 1;
+					return 0;
+				}
+			}
+		}
+
+		if (has_open_brace && !has_semicolon) {
+			char entry_name[128];
+
+			extract_entry_func_name(func_start, entry_name, sizeof(entry_name));
+			if (cs->depth < FTRACE_MAX_STACK) {
+				cs->stack[cs->depth].name = strdup(entry_name);
+				if (!cs->stack[cs->depth].name) {
+					pr_err("Not enough memory\n");
+					return -ENOMEM;
+				}
+				cs->stack[cs->depth].inlined = false;
+				cs->stack[cs->depth].indent = leading_spaces;
+				cs->depth++;
+			}
+		}
+		print_line(ftrace, line, out);
+		if (has_filter && cs->in_target && cs->depth == 0 &&
+		    has_semicolon && !has_open_brace) {
+			cs->in_target = false;
+			cs->orphan_depth = 0;
+		}
+		return 0;
+	}
 
 	if (ftrace_parse_retaddr(func_start, caller_sym, sizeof(caller_sym), &caller_offset)) {
 		has_retaddr = true;
@@ -532,6 +673,21 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 			for (i = 0; i < num_inlines; i++)
 				free((void *)inlined_names[i]);
 			num_inlines = 0;
+		}
+	}
+
+	/*
+	 * When inside a target graph filter, child functions must descend
+	 * from an active frame on the target stack. Suppress detached
+	 * calls originating outside the target hierarchy.
+	 */
+	if (has_filter && cs->in_target && cs->depth > cs->target_root_depth) {
+		if (has_retaddr && caller_idx < cs->target_root_depth) {
+			if (has_open_brace && !has_semicolon)
+				cs->orphan_depth = 1;
+			for (i = 0; i < num_inlines; i++)
+				free((void *)inlined_names[i]);
+			return 0;
 		}
 	}
 
@@ -643,6 +799,12 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 			cs->stack[cs->depth].indent = leading_spaces + extra_indent;
 			cs->depth++;
 		}
+	}
+
+	if (has_filter && cs->in_target && cs->depth == 0 &&
+	    has_semicolon && !has_open_brace) {
+		cs->in_target = false;
+		cs->orphan_depth = 0;
 	}
 
 	for (i = 0; i < num_inlines; i++)
