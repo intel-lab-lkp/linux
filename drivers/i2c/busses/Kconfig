@@ -1387,6 +1387,19 @@ config I2C_USBIO
 	  This driver can also be built as a module.  If so, the module
 	  will be called i2c_usbio.
 
+config I2C_LSTP
+	tristate "NVIDIA LSTP I2C support"
+	depends on USB_LSTP
+	default USB_LSTP
+	help
+	  Say Y or M here to support the I2C channels of NVIDIA LSTP USB
+	  adapters. Each channel is registered as an I2C adapter, and the
+	  devices behind it can be described by device tree, ACPI or
+	  instantiated from userspace.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called i2c-lstp.
+
 config I2C_CP2615
 	tristate "Silicon Labs CP2615 USB sound card and I2C adapter"
 	depends on USB
