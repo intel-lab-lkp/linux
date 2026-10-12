@@ -1501,6 +1501,25 @@ intel_lt_phy_program_port_clock_ctl(struct intel_encoder *encoder,
 		     XELPDP_SSC_ENABLE_PLLB, val);
 }
 
+static u32 intel_lt_phy_get_hdmi_frl_clock(u8 rate)
+{
+	switch (rate) {
+	case 0:
+		return 300000;
+	case 1:
+		return 600000;
+	case 2:
+		return 800000;
+	case 3:
+		return 1000000;
+	case 4:
+		return 1200000;
+	default:
+		MISSING_CASE(rate);
+		return 0;
+	}
+}
+
 static u32 intel_lt_phy_get_dp_clock(u8 rate)
 {
 	switch (rate) {
@@ -2000,6 +2019,10 @@ intel_lt_phy_calc_port_clock(struct intel_display *display,
 		rate = REG_FIELD_GET8(LT_PHY_VDR_RATE_ENCODING_MASK,
 				      lt_state->config[0]);
 		clk = intel_lt_phy_get_dp_clock(rate);
+	} else if (mode == MODE_HDMI_FRL) {
+		rate = REG_FIELD_GET8(LT_PHY_VDR_RATE_ENCODING_MASK,
+				      lt_state->config[0]);
+		clk = intel_lt_phy_get_hdmi_frl_clock(rate);
 	} else if (mode == MODE_HDMI_20) {
 		clk = intel_lt_phy_calc_hdmi_port_clock(display, lt_state);
 	} else {
