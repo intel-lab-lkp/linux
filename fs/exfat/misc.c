@@ -19,13 +19,14 @@
  * exfat_fs_error reports a file system problem that might indicate fa data
  * corruption/inconsistency. Depending on 'errors' mount option the
  * panic() is called, or error message is printed FAT and nothing is done,
- * or filesystem is remounted read-only (default behavior).
- * In case the file system is remounted read-only, it can be made writable
- * again by remounting it.
+ * or the filesystem is made read-only (default behavior): a mount in
+ * progress comes up read-only, a mounted filesystem refuses modifications
+ * until it is unmounted.
  */
 void __exfat_fs_error(struct super_block *sb, int report, const char *fmt, ...)
 {
-	struct exfat_mount_options *opts = &EXFAT_SB(sb)->options;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	struct exfat_mount_options *opts = &sbi->options;
 	va_list args;
 	struct va_format vaf;
 
@@ -41,7 +42,20 @@ void __exfat_fs_error(struct super_block *sb, int report, const char *fmt, ...)
 		panic("exFAT-fs (%s): fs panic from previous error\n",
 			sb->s_id);
 	} else if (opts->errors == EXFAT_ERRORS_RO && !sb_rdonly(sb)) {
-		sb->s_flags |= SB_RDONLY;
+		/*
+		 * Only a mount in progress may still set SB_RDONLY: the
+		 * mounter holds s_umount and nothing can freeze the superblock
+		 * before SB_BORN. Later, setting it without s_umount on a
+		 * frozen superblock makes thaw_super() mark it unfrozen but
+		 * skip sb_freeze_unlock(), so the s_writers rwsems stay
+		 * write-locked and every writer hangs. Refuse modifications
+		 * until umount instead.
+		 */
+		if (!(sb->s_flags & SB_BORN))
+			sb->s_flags |= SB_RDONLY;
+		else if (test_and_set_bit(EXFAT_FLAGS_EMERGENCY_RO,
+					  &sbi->s_exfat_flags))
+			return;
 		exfat_err(sb, "Filesystem has been set read-only");
 	}
 }

@@ -84,9 +84,10 @@ static int exfat_set_vol_flags(struct super_block *sb, unsigned short new_flags)
 	sbi->vol_flags = new_flags;
 
 	/* skip updating volume dirty flag,
-	 * if this volume has been mounted with read-only
+	 * if this volume has been mounted with read-only,
+	 * or an error left it read-only (it stays dirty then)
 	 */
-	if (sb_rdonly(sb))
+	if (sb_rdonly(sb) || exfat_emergency_ro(sb))
 		return 0;
 
 	p_boot->vol_flags = cpu_to_le16(new_flags);
@@ -149,6 +150,8 @@ static int exfat_show_options(struct seq_file *m, struct dentry *root)
 		seq_printf(m, ",time_offset=%d", opts->time_offset);
 	if (opts->zero_size_dir)
 		seq_puts(m, ",zero_size_dir");
+	if (exfat_emergency_ro(sb))
+		seq_puts(m, ",emergency_ro");
 	return 0;
 }
 
@@ -773,6 +776,11 @@ static int exfat_reconfigure(struct fs_context *fc)
 	struct exfat_mount_options *cur_opts = &sbi->options;
 
 	fc->sb_flags |= SB_NODIRATIME;
+
+	/* After an error the filesystem stays read-only until unmount. */
+	if ((fc->sb_flags_mask & SB_RDONLY) && !(fc->sb_flags & SB_RDONLY) &&
+	    sb_rdonly(sb) && exfat_emergency_ro(sb))
+		return -EROFS;
 
 	sync_filesystem(sb);
 	mutex_lock(&sbi->s_lock);
