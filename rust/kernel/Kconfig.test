@@ -104,4 +104,15 @@ config RUST_TIME_KUNIT_TEST
 
 	  If unsure, say N.
 
+config RUST_KCSAN_KUNIT_TEST
+	bool "KUnit test for KCSAN instrumentation of Rust code" if !KUNIT_ALL_TESTS
+	depends on KCSAN && HAVE_KCSAN_RUSTC && TRACEPOINTS
+	default KUNIT_ALL_TESTS
+	help
+	  This option enables a KUnit test checking that KCSAN detects data
+	  races in Rust code. The test needs at least 2 CPUs to reliably
+	  observe a data race.
+
+	  If unsure, say N.
+
 endif
