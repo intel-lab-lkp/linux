@@ -4015,6 +4015,8 @@ static int __init maple_tree_seed(void)
 
 	/* 64-bit: a 15-child non-root node two levels above the leaves */
 	check_rcu_destroy(&tree, 2768);
+	/* 64-bit: a full root */
+	check_rcu_destroy(&tree, 127);
 
 
 #if defined(BENCH)
