@@ -244,7 +244,7 @@ static int microread_i2c_probe(struct i2c_client *client)
 	phy->i2c_dev = client;
 
 	r = request_threaded_irq(client->irq, NULL, microread_i2c_irq_thread_fn,
-				 IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+				 IRQF_TRIGGER_RISING | IRQF_ONESHOT | IRQF_NO_AUTOEN,
 				 MICROREAD_I2C_DRIVER_NAME, phy);
 	if (r) {
 		nfc_err(&client->dev, "Unable to register IRQ handler\n");
@@ -258,6 +258,8 @@ static int microread_i2c_probe(struct i2c_client *client)
 	if (r < 0)
 		goto err_irq;
 
+	enable_irq(client->irq);
+
 	return 0;
 
 err_irq:
@@ -270,9 +272,8 @@ static void microread_i2c_remove(struct i2c_client *client)
 {
 	struct microread_i2c_phy *phy = i2c_get_clientdata(client);
 
-	microread_remove(phy->hdev);
-
 	free_irq(client->irq, phy);
+	microread_remove(phy->hdev);
 }
 
 static const struct i2c_device_id microread_i2c_id[] = {
