@@ -251,7 +251,7 @@ static void __dwc3_set_mode(struct work_struct *work)
 			for (i = 0; i < dwc->num_usb2_ports; i++)
 				phy_set_mode(dwc->usb2_generic_phy[i], PHY_MODE_USB_HOST);
 			for (i = 0; i < dwc->num_usb3_ports; i++)
-				phy_set_mode(dwc->usb3_generic_phy[i], PHY_MODE_USB_HOST);
+				phy_set_mode(dwc->usb3_generic_phy[i], PHY_MODE_USB_HOST_SS);
 
 			if (dwc->dis_split_quirk) {
 				reg = dwc3_readl(dwc, DWC3_GUCTL3);
@@ -1643,7 +1643,7 @@ static int dwc3_core_init_mode(struct dwc3 *dwc)
 		for (i = 0; i < dwc->num_usb2_ports; i++)
 			phy_set_mode(dwc->usb2_generic_phy[i], PHY_MODE_USB_HOST);
 		for (i = 0; i < dwc->num_usb3_ports; i++)
-			phy_set_mode(dwc->usb3_generic_phy[i], PHY_MODE_USB_HOST);
+			phy_set_mode(dwc->usb3_generic_phy[i], PHY_MODE_USB_HOST_SS);
 
 		ret = dwc3_host_init(dwc);
 		if (ret)
