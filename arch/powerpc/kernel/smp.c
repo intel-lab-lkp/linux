@@ -141,6 +141,24 @@ volatile unsigned int cpu_callin_map[NR_CPUS];
 
 int smt_enabled_at_boot = 1;
 
+enum llc_override_values {
+	LLC_OVERRIDE_DISABLED,
+	LLC_OVERRIDE_SMT,
+	LLC_OVERRIDE_MC,
+	LLC_OVERRIDE_PKG,
+};
+
+static int llc_override;
+static int llc_override_changed;
+static DEFINE_MUTEX(llc_override_mutex);
+
+static const char * const llc_override_str[] = {
+	[LLC_OVERRIDE_DISABLED]	= "0",
+	[LLC_OVERRIDE_SMT]	= "smt",
+	[LLC_OVERRIDE_MC]	= "mc",
+	[LLC_OVERRIDE_PKG]	= "pkg",
+};
+
 /*
  * Returns 1 if the specified cpu should be brought up during boot.
  * Used to inhibit booting threads if they've been disabled or
@@ -1022,14 +1040,31 @@ static int powerpc_shared_cache_flags(void)
 	return SD_SHARE_LLC;
 }
 
-static int powerpc_shared_proc_flags(void)
+static int powerpc_mc_flags(void)
 {
-	if (static_branch_unlikely(&splpar_asym_pack))
-		return SD_ASYM_PACKING;
+	int flags = 0;
 
-	return 0;
+	if (static_branch_unlikely(&splpar_asym_pack))
+		flags |= SD_ASYM_PACKING;
+
+	if (READ_ONCE(llc_override) >= LLC_OVERRIDE_MC)
+		flags |= SD_SHARE_LLC;
+
+	return flags;
 }
 
+static int powerpc_pkg_flags(void)
+{
+	int flags = 0;
+
+	if (static_branch_unlikely(&splpar_asym_pack))
+		flags |= SD_ASYM_PACKING;
+
+	if (READ_ONCE(llc_override) >= LLC_OVERRIDE_PKG)
+		flags |= SD_SHARE_LLC;
+
+	return flags;
+}
 /*
  * We can't just pass cpu_l2_cache_mask() directly because
  * returns a non-const pointer and the compiler barfs on that.
@@ -1737,10 +1772,10 @@ static void __init build_sched_topology(void)
 
 	if (has_coregroup_support()) {
 		powerpc_topology[i++] =
-			SDTL_INIT(tl_mc_mask, powerpc_shared_proc_flags, MC);
+			SDTL_INIT(tl_mc_mask, powerpc_mc_flags, MC);
 	}
 
-	powerpc_topology[i++] = SDTL_INIT(tl_pkg_mask, powerpc_shared_proc_flags, PKG);
+	powerpc_topology[i++] = SDTL_INIT(tl_pkg_mask, powerpc_pkg_flags, PKG);
 
 	/* There must be one trailing NULL entry left.  */
 	BUG_ON(i >= ARRAY_SIZE(powerpc_topology) - 1);
@@ -1827,24 +1862,6 @@ void __noreturn arch_cpu_idle_dead(void)
 }
 
 #endif
-
-enum llc_override_values {
-	LLC_OVERRIDE_DISABLED,
-	LLC_OVERRIDE_SMT,
-	LLC_OVERRIDE_MC,
-	LLC_OVERRIDE_PKG,
-};
-
-static int llc_override;
-static int llc_override_changed;
-static DEFINE_MUTEX(llc_override_mutex);
-
-static const char * const llc_override_str[] = {
-	[LLC_OVERRIDE_DISABLED]	= "0",
-	[LLC_OVERRIDE_SMT]	= "smt",
-	[LLC_OVERRIDE_MC]	= "mc",
-	[LLC_OVERRIDE_PKG]	= "pkg",
-};
 
 static ssize_t llc_override_get(struct file *file, char __user *ubuf,
 				size_t count, loff_t *ppos)
