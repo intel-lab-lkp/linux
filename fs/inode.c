@@ -2214,6 +2214,23 @@ static void iput_final(struct inode *inode)
 	inode_lru_list_del(inode);
 	spin_unlock(&inode->i_lock);
 
+	/*
+	 * Are we going to delete this inode while in reclaim path? Likely
+	 * reclaim of some object (e.g. overlayfs inode) ended up dropping the
+	 * last reference to an already deleted inode. Offload the eviction as
+	 * it's likely to require memory allocations and block on IO. Since
+	 * this eviction was triggered by a reclaim of unrelated object, the
+	 * inode is already outliving the operation that originally deleted it
+	 * (unlink, file close...). A slightly longer delay thus should not be
+	 * observable by userspace.
+	 */
+	if (current->flags & PF_MEMALLOC && !inode->i_nlink) {
+		LIST_HEAD(defer);
+
+		list_add(&inode->i_lru, &defer);
+		queue_deferred_reclaim(sb, 1, &defer);
+		return;
+	}
 	evict(inode);
 }
 
