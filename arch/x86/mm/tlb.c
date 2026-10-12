@@ -1504,13 +1504,14 @@ static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 
 void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 {
-	struct flush_tlb_info info;
+	struct flush_tlb_info info = {
+		.start = start,
+		.end = end,
+	};
 
 	guard(preempt)();
-	init_flush_tlb_info(&info, NULL, start, end, PAGE_SHIFT, false,
-			    TLB_GENERATION_INVALID);
 
-	if (info.end == TLB_FLUSH_ALL)
+	if (tlb_range_exceeds_ceiling(start, end, PAGE_SHIFT))
 		flush_tlb_all();
 	else
 		kernel_tlb_flush_range(&info);
