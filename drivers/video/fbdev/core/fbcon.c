@@ -2287,18 +2287,19 @@ static void fbcon_generic_blank(struct vc_data *vc, struct fb_info *info,
 	}
 }
 
-static bool fbcon_blank(struct vc_data *vc, enum vesa_blank_mode blank,
+static bool fbcon_blank(struct vc_data *vc, bool blank, enum vesa_blank_mode blank_mode,
 			bool mode_switch)
 {
 	struct fb_info *info = fbcon_info_from_console(vc->vc_num);
 	struct fbcon_par *par = info->fbcon_par;
+	int blank_state = !blank ? FB_BLANK_UNBLANK : blank_mode + 1;
 
 	if (mode_switch) {
 		struct fb_var_screeninfo var = info->var;
 
 		par->graphics = 1;
 
-		if (!blank) {
+		if (!blank_state) {
 			var.activate = FB_ACTIVATE_NOW | FB_ACTIVATE_FORCE |
 				FB_ACTIVATE_KD_TEXT;
 			fb_set_var(info, &var);
@@ -2308,16 +2309,16 @@ static bool fbcon_blank(struct vc_data *vc, enum vesa_blank_mode blank,
 	}
 
 	if (fbcon_is_active(vc, info)) {
-		if (par->blank_state != blank) {
-			par->blank_state = blank;
-			fbcon_cursor(vc, !blank);
-			par->cursor_flash = (!blank);
+		if (par->blank_state != blank_state) {
+			par->blank_state = blank_state;
+			fbcon_cursor(vc, !blank_state);
+			par->cursor_flash = (!blank_state);
 
-			if (fb_blank(info, blank))
-				fbcon_generic_blank(vc, info, blank);
+			if (fb_blank(info, blank_state))
+				fbcon_generic_blank(vc, info, blank_state);
 		}
 
-		if (!blank)
+		if (!blank_state)
 			update_screen(vc);
 	}
 

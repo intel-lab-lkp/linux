@@ -797,11 +797,31 @@ static void vga_pal_blank(struct vgastate *state)
 	}
 }
 
-static bool vgacon_blank(struct vc_data *c, enum vesa_blank_mode blank,
+static bool vgacon_blank(struct vc_data *c, bool blank, enum vesa_blank_mode blank_mode,
 			 bool mode_switch)
 {
-	switch (blank) {
-	case VESA_NO_BLANKING:		/* Unblank */
+	if (blank) {
+		switch (blank_mode) {
+		case VESA_NO_BLANKING:	/* Normal blanking */
+			if (!mode_switch && vga_video_type == VIDEO_TYPE_VGAC) {
+				vga_pal_blank(&vgastate);
+				vga_palette_blanked = true;
+				return 0;
+			}
+			vgacon_set_origin(c);
+			scr_memsetw((void *)vga_vram_base, BLANK,
+				    c->vc_screenbuf_size);
+			if (mode_switch)
+				vga_is_gfx = true;
+			return 1;
+		default:		/* VESA blanking */
+			if (vga_video_type == VIDEO_TYPE_VGAC) {
+				vga_vesa_blank(&vgastate, blank_mode);
+				vga_vesa_blanked = blank_mode;
+			}
+			return 0;
+		}
+	} else { /* Unblank */
 		if (vga_vesa_blanked) {
 			vga_vesa_unblank(&vgastate);
 			vga_vesa_blanked = VESA_NO_BLANKING;
@@ -814,24 +834,6 @@ static bool vgacon_blank(struct vc_data *c, enum vesa_blank_mode blank,
 		vga_is_gfx = false;
 		/* Tell console.c that it has to restore the screen itself */
 		return 1;
-	case VESA_VSYNC_SUSPEND:	/* Normal blanking */
-		if (!mode_switch && vga_video_type == VIDEO_TYPE_VGAC) {
-			vga_pal_blank(&vgastate);
-			vga_palette_blanked = true;
-			return 0;
-		}
-		vgacon_set_origin(c);
-		scr_memsetw((void *) vga_vram_base, BLANK,
-			    c->vc_screenbuf_size);
-		if (mode_switch)
-			vga_is_gfx = true;
-		return 1;
-	default:		/* VESA blanking */
-		if (vga_video_type == VIDEO_TYPE_VGAC) {
-			vga_vesa_blank(&vgastate, blank - 1);
-			vga_vesa_blanked = blank;
-		}
-		return 0;
 	}
 }
 

@@ -79,7 +79,7 @@ static void dummycon_putcs(struct vc_data *vc, const u16 *s, unsigned int count,
 	raw_notifier_call_chain(&dummycon_output_nh, 0, NULL);
 }
 
-static bool dummycon_blank(struct vc_data *vc, enum vesa_blank_mode blank,
+static bool dummycon_blank(struct vc_data *vc, bool blank, enum vesa_blank_mode blank_mode,
 			   bool mode_switch)
 {
 	/* Redraw, so that we get putc(s) for output done while blanked */
@@ -99,7 +99,7 @@ static void dummycon_putc(struct vc_data *vc, u16 c, unsigned int y,
 			  unsigned int x) { }
 static void dummycon_putcs(struct vc_data *vc, const u16 *s, unsigned int count,
 			   unsigned int ypos, unsigned int xpos) { }
-static bool dummycon_blank(struct vc_data *vc, enum vesa_blank_mode blank,
+static bool dummycon_blank(struct vc_data *vc, bool blank, enum vesa_blank_mode blank_mode,
 			   bool mode_switch)
 {
 	return false;

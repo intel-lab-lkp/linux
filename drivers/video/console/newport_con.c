@@ -476,12 +476,12 @@ static bool newport_switch(struct vc_data *vc)
 	return true;
 }
 
-static bool newport_blank(struct vc_data *c, enum vesa_blank_mode blank,
+static bool newport_blank(struct vc_data *c, bool blank, enum vesa_blank_mode blank_mode,
 			  bool mode_switch)
 {
 	unsigned short treg;
 
-	if (blank == VESA_NO_BLANKING) {
+	if (!blank) {
 		/* unblank console */
 		treg = newport_vc2_get(npregs, VC2_IREG_CONTROL);
 		newport_vc2_set(npregs, VC2_IREG_CONTROL,

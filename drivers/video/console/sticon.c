@@ -299,10 +299,10 @@ static bool sticon_switch(struct vc_data *conp)
     return true;	/* needs refreshing */
 }
 
-static bool sticon_blank(struct vc_data *c, enum vesa_blank_mode blank,
+static bool sticon_blank(struct vc_data *c, bool blank, enum vesa_blank_mode blank_mode,
 			 bool mode_switch)
 {
-    if (blank == VESA_NO_BLANKING) {
+    if (!blank) {
 	if (mode_switch)
 	    vga_is_gfx = 0;
 	return true;

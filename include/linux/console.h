@@ -56,8 +56,10 @@ enum vc_intensity;
  * @con_switch: notifier about the console switch; it is supposed to return
  *		true if a redraw is needed.
  * @con_blank:  blank/unblank the console. The target mode is passed in @blank.
- *		@mode_switch is set if changing from/to text/graphics. The hook
- *		is supposed to return true if a redraw is needed.
+ *		@blank_mode contains the requested level of power saving
+ *		if @blank is true. @mode_switch is set if changing from/to
+ *		text/graphics. The hook is supposed to return true if a redraw
+ *		is needed.
  * @con_font_set: set console @vc font to @font with height @vpitch. @flags can
  *		be %KD_FONT_FLAG_DONT_RECALC. (optional)
  * @con_font_get: fetch the current font on @vc of height @vpitch into @font.
@@ -97,7 +99,8 @@ struct consw {
 			unsigned int bottom, enum con_scroll dir,
 			unsigned int lines);
 	bool	(*con_switch)(struct vc_data *vc);
-	bool	(*con_blank)(struct vc_data *vc, enum vesa_blank_mode blank,
+	bool	(*con_blank)(struct vc_data *vc, bool blank,
+			     enum vesa_blank_mode blank_mode,
 			     bool mode_switch);
 	int	(*con_font_set)(struct vc_data *vc,
 				const struct console_font *font,
