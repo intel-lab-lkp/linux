@@ -1467,6 +1467,32 @@ struct intel_crtc_state {
 
 	/* to track changes in plane color blocks */
 	bool plane_color_changed;
+
+	struct {
+		/* Go for FRL training */
+		bool enable;
+
+		/* Enable resource based scheduling */
+		bool rsrc_sched_en;
+
+		/* can be either 3 or 4 lanes */
+		u8 required_lanes;
+
+		/* required rate - can be 3, 6, 8, 10, 12 Gbps */
+		u8 required_rate;
+
+		/* FRL DFM Parameters */
+		u32 tb_borrowed, tb_actual, tb_threshold_min, active_char_buf_threshold;
+
+		/* FRL DFM DSC Tribytes */
+		u32 hcactive_tb, hctotal_tb;
+
+		/* Clock parameters in KHz */
+		u32 div18;
+
+		/* link m/n */
+		u32 link_m, link_n;
+	} frl;
 };
 
 enum intel_pipe_crc_source {
