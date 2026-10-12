@@ -4360,6 +4360,7 @@ void f2fs_destroy_bioset(void);
 bool f2fs_is_cp_guaranteed(const struct folio *folio);
 int f2fs_init_bio_entry_cache(void);
 void f2fs_destroy_bio_entry_cache(void);
+bool f2fs_detach_bio_entry(struct f2fs_sb_info *sbi, struct bio *bio);
 void f2fs_submit_read_bio(struct f2fs_sb_info *sbi, struct bio *bio,
 			  enum page_type type);
 int f2fs_init_write_merge_io(struct f2fs_sb_info *sbi);

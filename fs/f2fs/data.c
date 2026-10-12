@@ -999,6 +999,47 @@ static int add_ipu_page(struct f2fs_io_info *fio, struct bio **bio,
 	return ret;
 }
 
+bool f2fs_detach_bio_entry(struct f2fs_sb_info *sbi, struct bio *bio)
+{
+	enum temp_type temp;
+	bool found = false;
+
+	for (temp = HOT; temp < NR_TEMP_TYPE && !found; temp++) {
+		struct f2fs_bio_info *io = sbi->write_io[DATA] + temp;
+		struct list_head *head = &io->bio_list;
+		struct bio_entry *be;
+
+		if (list_empty(head))
+			continue;
+
+		f2fs_down_read(&io->bio_list_lock);
+		list_for_each_entry(be, head, list) {
+			found = (bio == be->bio);
+			if (found)
+				break;
+		}
+		f2fs_up_read(&io->bio_list_lock);
+
+		if (!found)
+			continue;
+
+		found = false;
+
+		f2fs_down_write(&io->bio_list_lock);
+		list_for_each_entry(be, head, list) {
+			found = (bio == be->bio);
+			if (found) {
+				del_bio_entry(be);
+				break;
+			}
+		}
+		f2fs_up_write(&io->bio_list_lock);
+	}
+
+	bio_put(bio);
+	return found;
+}
+
 void f2fs_submit_merged_ipu_write(struct f2fs_sb_info *sbi,
 					struct bio **bio, struct folio *folio)
 {
