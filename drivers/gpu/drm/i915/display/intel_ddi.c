@@ -3121,11 +3121,19 @@ static void intel_ddi_buf_disable(struct intel_encoder *encoder,
 {
 	struct intel_display *display = to_intel_display(encoder);
 	enum port port = encoder->port;
+	u32 val;
 
 	intel_de_rmw(display, DDI_BUF_CTL(port), DDI_BUF_CTL_ENABLE, 0);
 
 	if (DISPLAY_VER(display) >= 14)
 		intel_wait_ddi_buf_idle(display, port);
+
+	/* Clear PORT_BUF_CTL HDMI FRL Shifter Enable to 0 */
+	if (crtc_state->frl.enable) {
+		val = intel_de_read(display, XELPDP_PORT_BUF_CTL1(display, port));
+		intel_de_write(display, XELPDP_PORT_BUF_CTL1(display, port),
+			       val & ~XELPDP_PORT_HDMI_FRL_SHFTR_EN);
+	}
 
 	mtl_ddi_disable_d2d(encoder);
 
@@ -3496,8 +3504,9 @@ static void intel_ddi_enable_hdmi(struct intel_atomic_state *state,
 	 * On ADL_P the PHY link rate and lane count must be programmed but
 	 * these are both 0 for HDMI.
 	 *
-	 * But MTL onwards HDMI2.1 is supported and in TMDS mode this
-	 * is filled with lane count, already set in the crtc_state.
+	 * But MTL onwards HDMI FRL is supported and in FRL mode, port width
+	 * needs to be filled with either 3 or 4 lanes. For TMDS mode this
+	 * is always filled with 4 lanes, already set in the crtc_state.
 	 * The same is required to be filled in PORT_BUF_CTL for C10/20 Phy.
 	 */
 	if (dig_port->lane_reversal)
@@ -3513,8 +3522,18 @@ static void intel_ddi_enable_hdmi(struct intel_atomic_state *state,
 		if (dig_port->lane_reversal)
 			port_buf |= XELPDP_PORT_REVERSAL;
 
+		if (crtc_state->frl.enable) {
+			port_buf |= XELPDP_PORT_HDMI_FRL_SHFTR_EN;
+			port_buf |= XELPDP_PORT_BUF_PORT_DATA_20BIT;
+			buf_ctl |= DDI_BUF_PORT_DATA_20BIT;
+		} else {
+			buf_ctl &= ~DDI_BUF_PORT_DATA_MASK;
+		}
+
 		intel_de_rmw(display, XELPDP_PORT_BUF_CTL1(display, port),
-			     XELPDP_PORT_WIDTH_MASK | XELPDP_PORT_REVERSAL, port_buf);
+			     XELPDP_PORT_WIDTH_MASK | XELPDP_PORT_REVERSAL |
+			     XELPDP_PORT_BUF_PORT_DATA_WIDTH_MASK |
+			     XELPDP_PORT_HDMI_FRL_SHFTR_EN, port_buf);
 
 		buf_ctl |= DDI_PORT_WIDTH(crtc_state->lane_count);
 
