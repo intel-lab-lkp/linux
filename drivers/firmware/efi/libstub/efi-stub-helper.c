@@ -641,8 +641,14 @@ efi_status_t efi_load_initrd(efi_loaded_image_t *image,
 				     EFISTUB_EVT_INITRD) == EFI_SUCCESS)
 		efi_info("Measured initrd data into PCR 9\n");
 
-	status = efi_bs_call(allocate_pool, EFI_LOADER_DATA, sizeof(initrd),
-			     (void **)&tbl);
+	/*
+	 * Use EFI_ACPI_RECLAIM_MEMORY so the table survives a kexec reboot:
+	 * configuration tables do, and the kernel wipes this one once it has
+	 * consumed it - a kexec'd kernel wipes it again, at the same address,
+	 * which in EFI_LOADER_DATA memory may hold anything by then.
+	 */
+	status = efi_bs_call(allocate_pool, EFI_ACPI_RECLAIM_MEMORY,
+			     sizeof(initrd), (void **)&tbl);
 	if (status != EFI_SUCCESS)
 		goto free_initrd;
 
