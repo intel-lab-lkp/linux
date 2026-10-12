@@ -1328,8 +1328,29 @@ static void amt_tunnel_expire(struct work_struct *work)
 						      struct amt_tunnel_list,
 						      gc_wq);
 	struct amt_dev *amt = tunnel->amt;
+	unsigned long deadline;
 
 	spin_lock_bh(&amt->lock);
+	/* amt_dev_stop() has taken ownership of the teardown. */
+	if (tunnel->dead) {
+		spin_unlock_bh(&amt->lock);
+		return;
+	}
+	/* A Membership Update may have refreshed the tunnel after this work was
+	 * queued.  Re-arm from last_seen rather than letting amt_update_handler()
+	 * re-arm gc_wq: this handler is then the only context that frees the
+	 * tunnel (and the only one amt_dev_stop() has to cancel), which closes
+	 * the use-after-free where a concurrent Update re-armed gc_wq on a tunnel
+	 * this function had already list_del_rcu()'d and kfree_rcu()'d.
+	 */
+	deadline = READ_ONCE(tunnel->last_seen) +
+		   msecs_to_jiffies(amt_gmi(amt)) * 3;
+	if (time_before(jiffies, deadline)) {
+		mod_delayed_work(amt_wq, &tunnel->gc_wq, deadline - jiffies);
+		spin_unlock_bh(&amt->lock);
+		return;
+	}
+	tunnel->dead = true;
 	rcu_read_lock();
 	list_del_rcu(&tunnel->list);
 	amt->nr_tunnels--;
@@ -2494,9 +2515,12 @@ static bool amt_update_handler(struct amt_dev *amt, struct sk_buff *skb)
 		if (tunnel->ip4 == saddr) {
 			if ((nonce == tunnel->nonce &&
 			     response_mac == tunnel->mac)) {
-				mod_delayed_work(amt_wq, &tunnel->gc_wq,
-						 msecs_to_jiffies(amt_gmi(amt))
-								  * 3);
+				/* Refresh liveness only.  gc_wq is re-armed by
+				 * amt_tunnel_expire() itself from last_seen, never
+				 * from here, so this cannot re-queue the work of a
+				 * tunnel that is being freed.
+				 */
+				WRITE_ONCE(tunnel->last_seen, jiffies);
 				goto report;
 			} else {
 				netdev_dbg(amt->dev, "Invalid MAC\n");
@@ -2732,6 +2756,7 @@ static bool amt_request_handler(struct amt_dev *amt, struct sk_buff *skb)
 	for (i = 0; i < amt->hash_buckets; i++)
 		INIT_HLIST_HEAD(&tunnel->groups[i]);
 
+	tunnel->last_seen = jiffies;
 	INIT_DELAYED_WORK(&tunnel->gc_wq, amt_tunnel_expire);
 
 	list_add_tail_rcu(&tunnel->list, &amt->tunnel_list);
@@ -3053,6 +3078,7 @@ static int amt_dev_stop(struct net_device *dev)
 	struct amt_tunnel_list *tunnel, *tmp;
 	struct sk_buff *skb;
 	struct sock *sk;
+	LIST_HEAD(doomed);
 	int i;
 
 	disable_delayed_work_sync(&amt->req_wq);
@@ -3079,9 +3105,19 @@ static int amt_dev_stop(struct net_device *dev)
 	amt->req_cnt = 0;
 	WRITE_ONCE(amt->remote_ip, 0);
 
-	list_for_each_entry_safe(tunnel, tmp, &amt->tunnel_list, list) {
-		list_del_rcu(&tunnel->list);
-		amt->nr_tunnels--;
+	/* Mark every tunnel dead and detach the list under the lock, so a
+	 * concurrent amt_tunnel_expire() sees ->dead and bails instead of
+	 * freeing a tunnel in parallel.  The detached list is then private to
+	 * this path, which is the sole freer.
+	 */
+	spin_lock_bh(&amt->lock);
+	list_for_each_entry(tunnel, &amt->tunnel_list, list)
+		tunnel->dead = true;
+	list_splice_init(&amt->tunnel_list, &doomed);
+	amt->nr_tunnels = 0;
+	spin_unlock_bh(&amt->lock);
+
+	list_for_each_entry_safe(tunnel, tmp, &doomed, list) {
 		cancel_delayed_work_sync(&tunnel->gc_wq);
 		amt_clear_groups(tunnel);
 		kfree_rcu(tunnel, rcu);
