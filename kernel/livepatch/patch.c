@@ -22,15 +22,19 @@
 
 static LIST_HEAD(klp_ops);
 
+/*
+ * Caller must hold klp_mutex or rcu_read_lock(): klp_check_stack_func() walks
+ * klp_ops from the scheduler without klp_mutex.
+ */
 struct klp_ops *klp_find_ops(void *old_func)
 {
 	struct klp_ops *ops;
 	struct klp_func *func;
 
-	list_for_each_entry(ops, &klp_ops, node) {
-		func = list_first_entry(&ops->func_stack, struct klp_func,
-					stack_node);
-		if (func->old_func == old_func)
+	list_for_each_entry_rcu(ops, &klp_ops, node, lockdep_is_held(&klp_mutex)) {
+		func = list_first_or_null_rcu(&ops->func_stack, struct klp_func,
+					      stack_node);
+		if (func && READ_ONCE(func->old_func) == old_func)
 			return ops;
 	}
 
@@ -148,8 +152,8 @@ static void klp_unpatch_func(struct klp_func *func)
 		WARN_ON(ftrace_set_filter_ip(&ops->fops, ftrace_loc, 1, 0));
 
 		list_del_rcu(&func->stack_node);
-		list_del(&ops->node);
-		kfree(ops);
+		list_del_rcu(&ops->node);
+		kfree_rcu(ops, rcu_head);
 	} else {
 		list_del_rcu(&func->stack_node);
 	}
@@ -191,10 +195,9 @@ static int klp_patch_func(struct klp_func *func)
 				  FTRACE_OPS_FL_IPMODIFY |
 				  FTRACE_OPS_FL_PERMANENT;
 
-		list_add(&ops->node, &klp_ops);
-
 		INIT_LIST_HEAD(&ops->func_stack);
 		list_add_rcu(&func->stack_node, &ops->func_stack);
+		list_add_rcu(&ops->node, &klp_ops);
 
 		ret = ftrace_set_filter_ip(&ops->fops, ftrace_loc, 0, 0);
 		if (ret) {
@@ -222,8 +225,8 @@ static int klp_patch_func(struct klp_func *func)
 
 err:
 	list_del_rcu(&func->stack_node);
-	list_del(&ops->node);
-	kfree(ops);
+	list_del_rcu(&ops->node);
+	kfree_rcu(ops, rcu_head);
 	return ret;
 }
 
@@ -240,7 +243,7 @@ static void __klp_unpatch_object(struct klp_object *obj, bool nops_only)
 	}
 
 	if (obj->dynamic || !nops_only)
-		obj->patched = false;
+		WRITE_ONCE(obj->patched, false);
 }
 
 
@@ -264,7 +267,13 @@ int klp_patch_object(struct klp_object *obj)
 			return ret;
 		}
 	}
-	obj->patched = true;
+
+	/*
+	 * Pairs with smp_load_acquire() in klp_check_stack(): a task that sees
+	 * the object patched also sees the func_stack linkage and the
+	 * old_func/new_func addresses and sizes of all its funcs.
+	 */
+	smp_store_release(&obj->patched, true);
 
 	return 0;
 }

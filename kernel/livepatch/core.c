@@ -499,7 +499,8 @@ static ssize_t patched_show(struct kobject *kobj,
 	struct klp_object *obj;
 
 	obj = container_of(kobj, struct klp_object, kobj);
-	return sysfs_emit(buf, "%d\n", obj->patched);
+	/* Racy without klp_mutex, but only reported to user space. */
+	return sysfs_emit(buf, "%d\n", data_race(obj->patched));
 }
 
 static struct kobj_attribute patched_kobj_attr = __ATTR_RO(patched);
@@ -696,10 +697,11 @@ static void klp_free_object_loaded(struct klp_object *obj)
 	obj->mod = NULL;
 
 	klp_for_each_func(obj, func) {
-		func->old_func = NULL;
+		/* Read without klp_mutex, see klp_check_stack_func(). */
+		WRITE_ONCE(func->old_func, NULL);
 
 		if (func->nop)
-			func->new_func = NULL;
+			WRITE_ONCE(func->new_func, NULL);
 	}
 }
 

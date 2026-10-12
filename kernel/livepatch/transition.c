@@ -8,6 +8,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/cpu.h>
+#include <linux/rculist.h>
 #include <linux/stacktrace.h>
 #include <linux/static_call.h>
 #include "core.h"
@@ -201,12 +202,16 @@ void klp_update_patch_state(struct task_struct *task)
 /*
  * Determine whether the given stack trace includes any references to a
  * to-be-patched or to-be-unpatched function.
+ *
+ * Must be called under rcu_read_lock(), see klp_check_stack().
  */
 static int klp_check_stack_func(struct klp_func *func, unsigned long *entries,
 				unsigned int nr_entries)
 {
 	unsigned long func_addr, func_size, address;
+	struct klp_func *prev;
 	struct klp_ops *ops;
+	void *old_func;
 	int i;
 
 	if (klp_target_state == KLP_TRANSITION_UNPATCHED) {
@@ -214,24 +219,35 @@ static int klp_check_stack_func(struct klp_func *func, unsigned long *entries,
 		  * Check for the to-be-unpatched function
 		  * (the func itself).
 		  */
-		func_addr = (unsigned long)func->new_func;
+		func_addr = (unsigned long)READ_ONCE(func->new_func);
 		func_size = func->new_size;
 	} else {
 		/*
 		 * Check for the to-be-patched function
 		 * (the previous func).
 		 */
-		ops = klp_find_ops(func->old_func);
+		old_func = READ_ONCE(func->old_func);
+		if (!old_func)
+			return 0;
 
-		if (list_is_singular(&ops->func_stack)) {
+		ops = klp_find_ops(old_func);
+
+		/*
+		 * The ops might have just been removed by a concurrent module
+		 * unload.  The function is not redirected anymore in that case.
+		 */
+		if (!ops)
+			return 0;
+
+		/* func_stack may shrink under us, even unlinking func itself. */
+		prev = list_next_or_null_rcu(&ops->func_stack, &func->stack_node,
+					     struct klp_func, stack_node);
+		if (!prev) {
 			/* original function */
-			func_addr = (unsigned long)func->old_func;
+			func_addr = (unsigned long)old_func;
 			func_size = func->old_size;
 		} else {
 			/* previously patched function */
-			struct klp_func *prev;
-
-			prev = list_next_entry(func, stack_node);
 			func_addr = (unsigned long)prev->new_func;
 			func_size = prev->new_size;
 		}
@@ -266,8 +282,12 @@ static int klp_check_stack(struct task_struct *task, const char **oldname)
 		return -EINVAL;
 	nr_entries = ret;
 
+	/* A concurrent module unload may free klp_ops, see klp_find_ops(). */
+	guard(rcu)();
+
 	klp_for_each_object(klp_transition_patch, obj) {
-		if (!obj->patched)
+		/* Pairs with smp_store_release() in klp_patch_object(). */
+		if (!smp_load_acquire(&obj->patched))
 			continue;
 		klp_for_each_func(obj, func) {
 			ret = klp_check_stack_func(func, entries, nr_entries);
