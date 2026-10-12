@@ -331,6 +331,8 @@ static int unctrl_raw_event(struct hid_device *hdev, struct hid_report *report,
 {
 	struct unctrl_dev *dev = hid_get_drvdata(hdev);
 	struct power_supply *battery = NULL;
+	bool changed;
+	u8 old_capacity, old_mode;
 
 	if (!dev || size < 8)
 		return 0;
@@ -345,16 +347,23 @@ static int unctrl_raw_event(struct hid_device *hdev, struct hid_report *report,
 
 	scoped_guard(spinlock_irqsave, &dev->lock) {
 		/* the receiver reports 0% while the mouse is switched off */
+		old_capacity = dev->battery_capacity;
+		old_mode = dev->mode;
+
 		dev->battery_capacity = min_t(u8, data[4], 100);
 		dev->mode = data[5];
 		dev->online = dev->battery_capacity != 0;
+
+		changed = dev->battery_capacity != old_capacity ||
+			  dev->mode != old_mode;
+
 		battery = dev->battery;
 		/*
 		 * Only schedules a work, so safe from the completion path that
 		 * raw_event runs in. Under the lock so that the unregistering side
 		 * is either done or still blocked when we touch the pointer.
 		 */
-		if (battery)
+		if (battery && changed)
 			power_supply_changed(battery);
 	}
 
