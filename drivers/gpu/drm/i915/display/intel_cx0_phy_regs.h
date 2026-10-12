@@ -112,6 +112,7 @@
 #define   XELPDP_TCSS_POWER_REQUEST			REG_BIT(5)
 #define   XELPDP_TCSS_POWER_STATE			REG_BIT(4)
 #define   XELPDP_PORT_WIDTH_MASK			REG_GENMASK(3, 1)
+#define   XELPDP_PORT_HDMI_FRL_SHFTR_EN			REG_BIT(0)
 #define   XELPDP_PORT_WIDTH(width)			REG_FIELD_PREP(XELPDP_PORT_WIDTH_MASK, \
 								       ((width) == 3 ? 4 : (width) - 1))
 
