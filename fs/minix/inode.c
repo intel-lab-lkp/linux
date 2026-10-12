@@ -64,7 +64,8 @@ static void minix_put_super(struct super_block *sb)
 	int i;
 	struct minix_sb_info *sbi = minix_sb(sb);
 
-	if (!sb_rdonly(sb)) {
+	/* a failed write clears uptodate; don't re-dirty the stale buffer */
+	if (!sb_rdonly(sb) && buffer_uptodate(sbi->s_sbh)) {
 		if (sbi->s_version != MINIX_V3)	 /* s_state is now out from V3 sb */
 			sbi->s_ms->s_state = sbi->s_mount_state;
 		mark_buffer_dirty(sbi->s_sbh);
@@ -146,6 +147,8 @@ static int minix_reconfigure(struct fs_context *fc)
 	ms = sbi->s_ms;
 	if ((bool)(fc->sb_flags & SB_RDONLY) == sb_rdonly(sb))
 		return 0;
+	if (!buffer_uptodate(sbi->s_sbh))
+		return -EIO;
 	if (fc->sb_flags & SB_RDONLY) {
 		if (ms->s_state & MINIX_VALID_FS ||
 		    !(sbi->s_mount_state & MINIX_VALID_FS))
