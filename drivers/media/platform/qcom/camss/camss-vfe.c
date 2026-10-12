@@ -502,6 +502,37 @@ out_unlock:
 	spin_unlock_irqrestore(&vfe->output_lock, flags);
 }
 
+/*
+ * vfe_upstream_csid_has_reg_update - Check whether the CSID feeding this line
+ * issues its own streamon RUP (i.e. its configure_stream does the RUP).
+ *
+ * The CSID->VFE link is created in camss.c for all CSIDs and VFEs, so the
+ * upstream entity of the sink pad is either a CSID (possibly with RUP) or an
+ * ISPIF (no RUP). Only enabled links are considered.
+ */
+static bool vfe_upstream_csid_has_reg_update(struct vfe_line *line)
+{
+	struct vfe_device *vfe = to_vfe(line);
+	struct camss *camss = vfe->camss;
+	struct media_pad *remote;
+	unsigned int i;
+
+	remote = media_pad_remote_pad_first(&line->pads[MSM_VFE_PAD_SINK]);
+	if (!remote || !is_media_entity_v4l2_subdev(remote->entity))
+		return false;
+
+	for (i = 0; i < camss->res->csid_num; i++) {
+		struct csid_device *csid = &camss->csid[i];
+
+		if (&csid->subdev.entity != remote->entity)
+			continue;
+
+		return !!csid->res->hw_ops->reg_update;
+	}
+
+	return false;
+}
+
 int vfe_enable_output_v2(struct vfe_line *line)
 {
 	struct vfe_device *vfe = to_vfe(line);
@@ -511,6 +542,7 @@ int vfe_enable_output_v2(struct vfe_line *line)
 	unsigned long flags;
 	unsigned int frame_skip = 0;
 	unsigned int i;
+	bool rup_in_csid;
 
 	sensor_pad = camss_find_sensor_pad(&line->subdev.entity);
 	if (sensor_pad) {
@@ -522,6 +554,8 @@ int vfe_enable_output_v2(struct vfe_line *line)
 		if (frame_skip > VFE_FRAME_DROP_VAL - 1)
 			frame_skip = VFE_FRAME_DROP_VAL - 1;
 	}
+
+	rup_in_csid = vfe_upstream_csid_has_reg_update(line);
 
 	spin_lock_irqsave(&vfe->output_lock, flags);
 
@@ -552,7 +586,8 @@ int vfe_enable_output_v2(struct vfe_line *line)
 		output->gen2.active_num++;
 		ops->vfe_wm_update(vfe, output->wm_idx[0],
 				   output->buf[i]->addr[0], line);
-		ops->reg_update(vfe, line->id);
+		if (!rup_in_csid)
+			ops->reg_update(vfe, line->id);
 	}
 
 	spin_unlock_irqrestore(&vfe->output_lock, flags);
