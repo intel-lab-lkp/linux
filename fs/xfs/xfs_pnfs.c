@@ -235,6 +235,23 @@ xfs_fs_map_blocks(
 
 	} else {
 		xfs_iunlock(ip, lock_flags);
+
+		/*
+		 * Blocks past EOF that were allocated for buffered writes, such
+		 * as speculative preallocation, can be freed by
+		 * xfs_free_eofblocks() without breaking the layout unless the
+		 * inode is marked as preallocated. Mark it before handing them
+		 * out for writing, as for blocks allocated above.
+		 */
+		if (write && !(ip->i_diflags & XFS_DIFLAG_PREALLOC) &&
+		    imap.br_startoff + imap.br_blockcount >
+		    XFS_B_TO_FSB(mp, XFS_ISIZE(ip))) {
+			error = xfs_fs_map_update_inode(ip);
+			if (!error)
+				error = xfs_log_force_inode(ip);
+			if (error)
+				goto out_unlock;
+		}
 	}
 	xfs_iunlock(ip, XFS_IOLOCK_EXCL);
 
