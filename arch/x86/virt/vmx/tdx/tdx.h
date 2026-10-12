@@ -91,6 +91,19 @@
 /* Class "TDX Module Handoff" */
 #define TDX_FIELD_MODULE_HV			0x8900000100000000ULL
 
+/*
+ * Bits 33:32 of a field ID hold the field size code. See
+ * "Metadata Field Identifier" in the Intel TDX Module ABI Specification.
+ */
+#define TDX_FIELD_SIZE_MASK		GENMASK_ULL(33, 32)
+
+#define TDX_FIELD_SIZE_CODE(_size)		\
+	((_size) == 1 ? 0 :			\
+	 (_size) == 2 ? BIT_ULL(32) :		\
+	 (_size) == 4 ? BIT_ULL(33) :		\
+	 (_size) == 8 ? TDX_FIELD_SIZE_MASK :	\
+	 ~0ULL)
+
 /* TDX page types */
 #define	PT_NDA		0x0
 #define	PT_RSVD		0x1
