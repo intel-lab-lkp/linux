@@ -16,9 +16,12 @@
  * answers over the interrupt out endpoint, where the queries go.
  */
 
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/hid.h>
+#include <linux/list.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/power_supply.h>
 #include <linux/slab.h>
 #include <linux/usb.h>
@@ -45,10 +48,14 @@ static const u8 unctrl_battery_query[33] = {
 };
 
 struct unctrl_dev {
+	struct list_head list;
 	struct hid_device *hdev;
 
 	struct power_supply_desc battery_desc;
 	struct power_supply *battery;
+
+	/* raw_event runs in the completion path, so this is a spinlock. */
+	spinlock_t lock;
 
 	struct delayed_work battery_work;
 
@@ -56,7 +63,11 @@ struct unctrl_dev {
 	u8 mode;
 	bool online;
 	bool wired;
+	bool vendor;
 };
+
+static LIST_HEAD(unctrl_connections);
+static DEFINE_MUTEX(unctrl_lock);
 
 static enum power_supply_property unctrl_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,     POWER_SUPPLY_PROP_PRESENT,
@@ -74,9 +85,11 @@ static int unctrl_battery_get_property(struct power_supply *psy,
 	u8 capacity, mode;
 	bool online;
 
-	capacity = dev->battery_capacity;
-	mode = dev->mode;
-	online = dev->online;
+	scoped_guard(spinlock_irqsave, &dev->lock) {
+		capacity = dev->battery_capacity;
+		mode = dev->mode;
+		online = dev->online;
+	}
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PRESENT:
@@ -148,12 +161,33 @@ static void unctrl_battery_timer_tick(struct work_struct *work)
 			      msecs_to_jiffies(UNCTRL_BATTERY_TIMEOUT_MS));
 }
 
-/* Register the power supply of this connection and start reporting. */
+static struct unctrl_dev *unctrl_battery_owner(void)
+{
+	struct unctrl_dev *dev;
+
+	list_for_each_entry(dev, &unctrl_connections, list) {
+		if (dev->battery)
+			return dev;
+	}
+
+	return NULL;
+}
+
+/*
+ * Register the power supply on the connection the mouse talks over,
+ * a wired connection takes it away from a receiver. Called with
+ * unctrl_lock held.
+ */
 static int unctrl_battery_register(struct unctrl_dev *dev)
 {
 	struct power_supply_config config = { .drv_data = dev };
+	struct unctrl_dev *owner;
 	struct power_supply *battery;
 	int ret;
+
+	owner = unctrl_battery_owner();
+	if (owner == dev || (owner && (!dev->wired || owner->wired)))
+		return 0;
 
 	battery = power_supply_register(&dev->hdev->dev, &dev->battery_desc,
 					&config);
@@ -166,9 +200,23 @@ static int unctrl_battery_register(struct unctrl_dev *dev)
 	}
 
 	power_supply_powers(battery, &dev->hdev->dev);
-	dev->battery = battery;
+	scoped_guard(spinlock_irqsave, &dev->lock)
+		dev->battery = battery;
 	hid_info(dev->hdev, "%s:battery registered as %s\n", __func__,
 		 dev->battery_desc.name);
+
+	/* the takeover cannot fail now, our supply already exists */
+	if (owner) {
+		struct power_supply *owner_battery;
+
+		cancel_delayed_work_sync(&owner->battery_work);
+		/* so a raw_event cannot touch the supply being unregistered */
+		scoped_guard(spinlock_irqsave, &owner->lock) {
+			owner_battery = owner->battery;
+			owner->battery = NULL;
+		}
+		power_supply_unregister(owner_battery);
+	}
 
 	unctrl_fetch_battery(dev->hdev);
 	queue_delayed_work(system_freezable_wq, &dev->battery_work,
@@ -223,6 +271,8 @@ static int unctrl_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	dev->battery_capacity = 100;
 	dev->mode = UNCTRL_MODE_RECEIVER;
 	dev->wired = hdev->product == USB_DEVICE_ID_UNCTRL_M1_WIRED;
+	dev->vendor = vendor;
+	spin_lock_init(&dev->lock);
 
 	dev->battery_desc.name = devm_kasprintf(&hdev->dev, GFP_KERNEL,
 						"unctrl-m1-%04x-battery",
@@ -254,19 +304,26 @@ static int unctrl_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	hid_set_drvdata(hdev, dev);
 
+	/* the list membership, the registration and any failure cleanup are
+	 * one step under unctrl_lock, so a concurrent handover cannot hand
+	 * this probe a battery while it is failing out
+	 */
+	mutex_lock(&unctrl_lock);
+	list_add_tail(&dev->list, &unctrl_connections);
 	ret = unctrl_battery_register(dev);
 	if (ret)
-		goto err_del;
+		list_del(&dev->list);
+	mutex_unlock(&unctrl_lock);
+
+	if (ret) {
+		hid_hw_close(hdev);
+		hid_hw_stop(hdev);
+		hid_set_drvdata(hdev, NULL);
+		kfree(dev);
+		return ret;
+	}
 
 	return 0;
-
-err_del:
-	hid_device_io_stop(hdev);
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
-	hid_set_drvdata(hdev, NULL);
-	kfree(dev);
-	return ret;
 }
 
 static int unctrl_raw_event(struct hid_device *hdev, struct hid_report *report,
@@ -286,15 +343,20 @@ static int unctrl_raw_event(struct hid_device *hdev, struct hid_report *report,
 	if (data[5] != UNCTRL_MODE_RECEIVER && data[5] != UNCTRL_MODE_WIRED)
 		return 0;
 
-	/* the receiver reports 0% while the mouse is switched off */
-	dev->battery_capacity = min_t(u8, data[4], 100);
-	dev->mode = data[5];
-	dev->online = dev->battery_capacity != 0;
-	battery = dev->battery;
-
-	/* only schedules a work, so this is safe from the completion path */
-	if (battery)
-		power_supply_changed(battery);
+	scoped_guard(spinlock_irqsave, &dev->lock) {
+		/* the receiver reports 0% while the mouse is switched off */
+		dev->battery_capacity = min_t(u8, data[4], 100);
+		dev->mode = data[5];
+		dev->online = dev->battery_capacity != 0;
+		battery = dev->battery;
+		/*
+		 * Only schedules a work, so safe from the completion path that
+		 * raw_event runs in. Under the lock so that the unregistering side
+		 * is either done or still blocked when we touch the pointer.
+		 */
+		if (battery)
+			power_supply_changed(battery);
+	}
 
 	return 0;
 }
@@ -302,20 +364,41 @@ static int unctrl_raw_event(struct hid_device *hdev, struct hid_report *report,
 static void unctrl_remove(struct hid_device *hdev)
 {
 	struct unctrl_dev *dev = hid_get_drvdata(hdev);
+	struct unctrl_dev *other;
 
 	/* Stop polling before the transport goes down. */
-	if (dev) {
-		cancel_delayed_work_sync(&dev->battery_work);
+	if (dev)
 		hid_hw_close(hdev);
-	}
 
 	hid_hw_stop(hdev);
 
 	if (!dev)
 		return;
 
-	if (dev->battery)
-		power_supply_unregister(dev->battery);
+	/*
+	 * Pass the battery to a capable connection without one, so that it
+	 * keeps being reported when the owner disappears.
+	 */
+	mutex_lock(&unctrl_lock);
+	list_del(&dev->list);
+	/* out of the list, nothing can reach this device anymore */
+	cancel_delayed_work_sync(&dev->battery_work);
+	if (dev->battery) {
+		struct power_supply *battery;
+
+		scoped_guard(spinlock_irqsave, &dev->lock) {
+			battery = dev->battery;
+			dev->battery = NULL;
+		}
+		power_supply_unregister(battery);
+		list_for_each_entry(other, &unctrl_connections, list) {
+			if (!other->vendor || other->battery)
+				continue;
+			unctrl_battery_register(other);
+			break;
+		}
+	}
+	mutex_unlock(&unctrl_lock);
 
 	hid_set_drvdata(hdev, NULL);
 	kfree(dev);
