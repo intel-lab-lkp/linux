@@ -2149,7 +2149,7 @@ static int drm_dp_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs,
 			   int num)
 {
 	struct drm_dp_aux *aux = adapter->algo_data;
-	unsigned int i, j;
+	unsigned int i, j, last;
 	unsigned transfer_size;
 	struct drm_dp_aux_msg msg;
 	int err = 0;
@@ -2158,6 +2158,10 @@ static int drm_dp_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs,
 		return -EBUSY;
 
 	dp_aux_i2c_transfer_size = clamp(dp_aux_i2c_transfer_size, 1, DP_AUX_MAX_PAYLOAD_BYTES);
+
+	last = num - 1;
+	while (last > 0 && !msgs[last].len)
+		last--;
 
 	memset(&msg, 0, sizeof(msg));
 
@@ -2192,7 +2196,8 @@ static int drm_dp_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs,
 			msg.buffer = msgs[i].buf + j;
 			msg.size = min(transfer_size, msgs[i].len - j);
 
-			if (j + msg.size == msgs[i].len && aux->no_zero_sized)
+			if (aux->no_zero_sized && i == last &&
+			    j + msg.size == msgs[i].len)
 				msg.request &= ~DP_AUX_I2C_MOT;
 			err = drm_dp_i2c_drain_msg(aux, &msg);
 
