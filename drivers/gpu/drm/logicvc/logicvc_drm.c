@@ -366,6 +366,7 @@ static int logicvc_drm_probe(struct platform_device *pdev)
 	drm_dev = &logicvc->drm_dev;
 
 	logicvc->regmap = regmap;
+	logicvc->irq = irq;
 	INIT_LIST_HEAD(&logicvc->layers_list);
 
 	caps = logicvc_drm_caps_match(logicvc);
@@ -383,13 +384,6 @@ static int logicvc_drm_probe(struct platform_device *pdev)
 	if (ret) {
 		drm_err(drm_dev, "Failed to prepare clocks\n");
 		goto error_reserved_mem;
-	}
-
-	ret = devm_request_irq(dev, irq, logicvc_drm_irq_handler, 0,
-			       dev_name(dev), logicvc);
-	if (ret) {
-		drm_err(drm_dev, "Failed to request IRQ\n");
-		goto error_clocks;
 	}
 
 	ret = logicvc_drm_config_parse(logicvc);
@@ -434,15 +428,25 @@ static int logicvc_drm_probe(struct platform_device *pdev)
 		goto error_clocks;
 	}
 
+	ret = devm_request_irq(dev, irq, logicvc_drm_irq_handler, 0,
+			       dev_name(dev), logicvc);
+	if (ret) {
+		drm_err(drm_dev, "Failed to request IRQ\n");
+		goto error_mode;
+	}
+
 	ret = drm_dev_register(drm_dev, 0);
 	if (ret) {
 		drm_err(drm_dev, "Failed to register DRM device\n");
-		goto error_mode;
+		goto error_irq;
 	}
 
 	drm_client_setup(drm_dev, NULL);
 
 	return 0;
+
+error_irq:
+	devm_free_irq(dev, irq, logicvc);
 
 error_mode:
 	logicvc_mode_fini(logicvc);
@@ -466,6 +470,7 @@ static void logicvc_drm_remove(struct platform_device *pdev)
 	drm_dev_unregister(drm_dev);
 	drm_atomic_helper_shutdown(drm_dev);
 
+	devm_free_irq(dev, logicvc->irq, logicvc);
 	logicvc_mode_fini(logicvc);
 
 	logicvc_clocks_unprepare(logicvc);

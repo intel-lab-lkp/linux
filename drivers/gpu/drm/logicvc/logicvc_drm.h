@@ -53,6 +53,7 @@ struct logicvc_drm {
 	struct drm_device drm_dev;
 	phys_addr_t reserved_mem_base;
 	struct regmap *regmap;
+	int irq;
 
 	struct clk *vclk;
 	struct clk *vclk2;
