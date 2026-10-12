@@ -1858,6 +1858,15 @@ int tcp_set_rcvlowat(struct sock *sk, int val)
 
 void tcp_set_rcvbuf(struct sock *sk, int val)
 {
+	/* A window clamp set explicitly via setsockopt(TCP_WINDOW_CLAMP)
+	 * takes precedence: SO_RCVBUF must not overwrite it.  Without such
+	 * a user clamp, keep updating window_clamp from the buffer size so
+	 * that SO_RCVBUF on an established socket still grows the advertised
+	 * window (commit b025461303d8).
+	 */
+	if (tcp_sk(sk)->window_clamp_user)
+		return;
+
 	tcp_set_window_clamp(sk, tcp_win_from_space(sk, val));
 }
 
@@ -3427,6 +3436,7 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->is_cwnd_limited = 0;
 	tp->max_packets_out = 0;
 	tp->window_clamp = 0;
+	tp->window_clamp_user = 0;
 	tp->delivered = 0;
 	tp->delivered_ce = 0;
 	tp->accecn_fail_mode = 0;
@@ -4056,6 +4066,8 @@ int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 
 	case TCP_WINDOW_CLAMP:
 		err = tcp_set_window_clamp(sk, val);
+		if (!err)
+			tp->window_clamp_user = !!val;
 		break;
 
 	case TCP_QUICKACK:

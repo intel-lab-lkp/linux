@@ -4137,7 +4137,7 @@ static void tcp_connect_init(struct sock *sk)
 
 	tcp_ca_dst_init(sk, dst);
 
-	if (!tp->window_clamp)
+	if (!tp->window_clamp_user)
 		WRITE_ONCE(tp->window_clamp, dst_metric(dst, RTAX_WINDOW));
 	tp->advmss = tcp_mss_clamp(tp, tcp_dst_advmss(dst));
 

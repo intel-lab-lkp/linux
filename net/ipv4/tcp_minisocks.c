@@ -442,8 +442,11 @@ void tcp_openreq_init_rwin(struct request_sock *req,
 
 	mss = tcp_mss_clamp(tp, tcp_dst_advmss(dst));
 	window_clamp = READ_ONCE(tp->window_clamp);
-	/* Set this up on the first call only */
-	req->rsk_window_clamp = window_clamp ? : dst_metric(dst, RTAX_WINDOW);
+	/* Set this up on the first call only.  Honour a window clamp the
+	 * listener set via TCP_WINDOW_CLAMP; otherwise use the route metric.
+	 */
+	req->rsk_window_clamp = tp->window_clamp_user ? window_clamp :
+				dst_metric(dst, RTAX_WINDOW);
 
 	/* limit the window selection if the user enforce a smaller rx buffer */
 	if (sk_listener->sk_userlocks & SOCK_RCVBUF_LOCK &&
