@@ -4,14 +4,17 @@
 
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
+#include <linux/clk.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-mapping.h>
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/of_dma.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/module.h>
 #include <linux/overflow.h>
 #include <linux/platform_device.h>
+#include <linux/reset.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 
@@ -1139,11 +1142,27 @@ static void d350_free_chan_resources(struct dma_chan *chan)
 static int d350_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct reset_control *reset;
+	struct clk *clk;
 	struct d350 *dmac;
 	void __iomem *base;
 	u32 reg;
 	int ret, nchan, dw, aw, r, p;
 	bool coherent, memset;
+
+	clk = devm_clk_get_optional_enabled(dev, NULL);
+	if (IS_ERR(clk))
+		return dev_err_probe(dev, PTR_ERR(clk),
+				     "failed to enable clock\n");
+
+	reset = devm_reset_control_get_optional_exclusive(dev, NULL);
+	if (IS_ERR(reset))
+		return dev_err_probe(dev, PTR_ERR(reset),
+				     "failed to get reset\n");
+
+	ret = reset_control_reset(reset);
+	if (ret)
+		return ret;
 
 	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
@@ -1251,15 +1270,26 @@ static int d350_probe(struct platform_device *pdev)
 		dmac->dma.device_prep_dma_memset = d350_prep_memset;
 	}
 
+	if (of_property_present(dev->of_node, "memory-region")) {
+		ret = of_reserved_mem_device_init(dev);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "failed to attach reserved memory\n");
+	}
+
 	platform_set_drvdata(pdev, dmac);
 
 	ret = dma_async_device_register(&dmac->dma);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to register DMA device\n");
+	if (ret) {
+		of_reserved_mem_device_release(dev);
+		return dev_err_probe(dev, ret,
+				     "Failed to register DMA device\n");
+	}
 
 	ret = of_dma_controller_register(dev->of_node, d350_of_xlate, dmac);
 	if (ret) {
 		dma_async_device_unregister(&dmac->dma);
+		of_reserved_mem_device_release(dev);
 		return dev_err_probe(dev, ret,
 				     "Failed to register OF DMA controller\n");
 	}
@@ -1273,6 +1303,7 @@ static void d350_remove(struct platform_device *pdev)
 
 	of_dma_controller_free(pdev->dev.of_node);
 	dma_async_device_unregister(&dmac->dma);
+	of_reserved_mem_device_release(&pdev->dev);
 }
 
 static const struct of_device_id d350_of_match[] __maybe_unused = {
