@@ -956,8 +956,14 @@ struct drm_panthor_group_create {
 	/** @priority: Group priority (see enum drm_panthor_group_priority). */
 	__u8 priority;
 
-	/** @pad: Padding field, MBZ. */
-	__u32 pad;
+	/**
+	 * @protected_suspend_bo_handle: BO to use as a protected suspend buffer.
+	 *
+	 * This BO must have been allocated from a protected DMA-BUF heap and
+	 * imported in panthor. It's size must be at least
+	 * drm_panthor_protm_info::group_protected_suspend_buf_size.
+	 */
+	__u32 protected_suspend_bo_handle;
 
 	/**
 	 * @compute_core_mask: Mask encoding cores that can be used for compute jobs.

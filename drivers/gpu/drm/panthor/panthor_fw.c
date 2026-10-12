@@ -269,6 +269,12 @@ struct panthor_fw {
 	/** @protm_init_lock: Used to serialize protm initialization. */
 	struct mutex protm_init_lock;
 
+	/** @suspend_size: Size of regular suspend buffer */
+	u32 suspend_size;
+
+	/** @protm_suspend_size: Size of protected suspend buffer size */
+	u32 protm_suspend_size;
+
 	/**
 	 * @req_waitqueue: FW request waitqueue.
 	 *
@@ -1006,6 +1012,14 @@ static int panthor_init_csg_iface(struct panthor_device *ptdev,
 	}
 
 	if (!csg_idx) {
+		/* We make a copy of these sizes, as csg_iface can read these
+		 * as zero during full GPU reset, between FW sections being
+		 * reloaded and FW fully booted.
+		 */
+		ptdev->fw->suspend_size = csg_iface->control->suspend_size;
+		ptdev->fw->protm_suspend_size =
+			csg_iface->control->protm_suspend_size;
+
 		ptdev->protm.info.group_protected_suspend_buf_size =
 			csg_iface->control->protm_suspend_size;
 	}
@@ -1521,6 +1535,16 @@ static void panthor_fw_ping_work(struct work_struct *work)
 		mod_delayed_work(ptdev->reset.wq, &fw->watchdog.ping_work,
 				 msecs_to_jiffies(PING_INTERVAL_MS));
 	}
+}
+
+u32 panthor_fw_suspend_size(struct panthor_device *ptdev)
+{
+	return ptdev->fw->suspend_size;
+}
+
+u32 panthor_fw_protm_suspend_size(struct panthor_device *ptdev)
+{
+	return ptdev->fw->protm_suspend_size;
 }
 
 static bool wait_protm_enter(struct panthor_device *ptdev,

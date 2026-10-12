@@ -1462,10 +1462,15 @@ cs_slot_process_protm_pending_event_locked(struct panthor_device *ptdev,
 	if (!group)
 		return;
 
-	/* Do not allow user space work to switch into protected mode, as we
-	 * do not fully support this quite yet.
+	/* Do not allow user space work to switch into protected mode if we
+	 * do not support protected mode on this device.
+	 * User space should query (and init) this support before attempting
+	 * to use such GPU instructions.
 	 */
-	atomic_or(BIT(cs_id), &group->fatal_queues);
+	if (group->protm_suspend_buf)
+		atomic_or(BIT(cs_id), &group->protm_pending_queues);
+	else
+		atomic_or(BIT(cs_id), &group->fatal_queues);
 
 	sched_queue_delayed_work(sched, tick, 0);
 }
@@ -4074,6 +4079,7 @@ static void add_group_kbo_sizes(struct panthor_device *ptdev,
 }
 
 #define MAX_GROUPS_PER_POOL		128
+#define GROUP_CREATE_FLAGS DRM_PANTHOR_GROUP_CREATE_PROTECTED
 
 int panthor_group_create(struct drm_file *file,
 			 const struct drm_panthor_group_create *group_args,
@@ -4083,13 +4089,9 @@ int panthor_group_create(struct drm_file *file,
 	struct panthor_device *ptdev = pfile->ptdev;
 	struct panthor_group_pool *gpool = pfile->groups;
 	struct panthor_scheduler *sched = ptdev->scheduler;
-	struct panthor_fw_csg_iface *csg_iface = panthor_fw_get_csg_iface(ptdev, 0);
 	struct panthor_group *group = NULL;
-	u32 gid, i, suspend_size;
+	u32 gid, i;
 	int ret;
-
-	if (group_args->pad)
-		return -EINVAL;
 
 	if (group_args->priority >= PANTHOR_CSG_PRIORITY_COUNT)
 		return -EINVAL;
@@ -4136,12 +4138,49 @@ int panthor_group_create(struct drm_file *file,
 		goto err_put_group;
 	}
 
-	suspend_size = csg_iface->control->suspend_size;
-	group->suspend_buf = panthor_fw_alloc_suspend_buf_mem(ptdev, suspend_size);
+	group->suspend_buf = panthor_fw_alloc_suspend_buf_mem(
+		ptdev, panthor_fw_suspend_size(ptdev));
 	if (IS_ERR(group->suspend_buf)) {
 		ret = PTR_ERR(group->suspend_buf);
 		group->suspend_buf = NULL;
 		goto err_put_group;
+	}
+
+	if (group_args->protected_suspend_bo_handle) {
+		struct drm_gem_object *obj;
+
+		/* Read a correct snapshot of the state */
+		if (!(smp_load_acquire(&ptdev->protm.info.state) &
+		      DRM_PANTHOR_PROTM_INITIALIZED)) {
+			ret = -EINVAL;
+			goto err_put_group;
+		}
+
+		obj = drm_gem_object_lookup(
+			file, group_args->protected_suspend_bo_handle);
+		if (!obj) {
+			ret = -ENOENT;
+			goto err_put_group;
+		}
+
+		if (obj->size <
+		    ptdev->protm.info.group_protected_suspend_buf_size) {
+			drm_gem_object_put(obj);
+			ret = -EINVAL;
+			goto err_put_group;
+		}
+
+		group->protm_suspend_buf = panthor_kernel_bo_create_from_gem(
+			ptdev, panthor_fw_vm(ptdev), to_panthor_bo(obj),
+			DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC,
+			PANTHOR_VM_KERNEL_AUTO_VA,
+			panthor_fw_protm_suspend_size(ptdev));
+		drm_gem_object_put(obj);
+		if (IS_ERR(group->protm_suspend_buf)) {
+			ret = PTR_ERR(group->protm_suspend_buf);
+			group->protm_suspend_buf = NULL;
+			goto err_put_group;
+		}
 	}
 
 	group->syncobjs = panthor_kernel_bo_create(ptdev, group->vm,
