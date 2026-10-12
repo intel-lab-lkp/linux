@@ -432,7 +432,7 @@ enum icvs_state {
  * @freq_ctrl: (future) frequency control pointer
  * @pads: Local media pads (sink/source)
  * @nr_of_lanes: Active CSI-2 lane count
- * @ipu_link: PM runtime device link (IPU consumer, CVS supplier)
+ * @ipu_link: Device link for suspend/resume ordering
  * @res: Resource capability (light/full)
  * @caps: Reported device protocol capabilities
  * @prefix: Firmware response prefix present

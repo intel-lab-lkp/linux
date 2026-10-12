@@ -15,7 +15,6 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
-#include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/time64.h>
 #include <linux/workqueue.h>
@@ -604,9 +603,6 @@ int cvs_send(struct icvs *ctx, struct icvs_cmd *cmd, size_t len)
  * @ctx: CVS device context
  * @owner: Desired owner (ICVS_CSI_LINK_HOST or ICVS_CSI_LINK_CVS)
  *
- * Called from runtime PM callbacks to claim or release the CSI-2 link.
- * Also callable directly for error recovery paths.
- *
  * Return: 0 on success or negative errno.
  */
 int cvs_set_link_owner(struct icvs *ctx, enum icvs_csi_link_owner owner)
@@ -801,21 +797,12 @@ fail_i2c:
 	}
 
 	dev_set_drvdata(dev, ctx);
-	pm_runtime_set_autosuspend_delay(dev, 1000);
-	pm_runtime_use_autosuspend(dev);
-	pm_runtime_enable(dev);
-	pm_runtime_idle(dev);
 
 	/*
-	 * Create a PM runtime device link with IPU as consumer and CVS as
-	 * supplier. When the IPU runtime-resumes to start streaming, the PM
-	 * framework automatically resumes CVS first, triggering
-	 * cvs_runtime_resume() which hands CSI-2 link ownership to the host.
+	 * Create a device link with IPU as consumer and CVS as supplier so
+	 * that CVS suspends after and resumes before the IPU.
 	 */
-	ctx->ipu_link = device_link_add(&ipu->dev, dev,
-					DL_FLAG_PM_RUNTIME |
-					DL_FLAG_RPM_ACTIVE |
-					DL_FLAG_STATELESS);
+	ctx->ipu_link = device_link_add(&ipu->dev, dev, DL_FLAG_STATELESS);
 	if (!ctx->ipu_link) {
 		dev_err(dev, "IPU device link failed\n");
 		ret = -ENODEV;
@@ -830,12 +817,7 @@ fail_i2c:
 	return 0;
 
 err_csi_remove:
-	if (ctx->ipu_link)
-		device_link_del(ctx->ipu_link);
 	cvs_csi_remove(ctx);
-	pm_runtime_dont_use_autosuspend(dev);
-	pm_runtime_disable(dev);
-	pm_runtime_set_suspended(dev);
 
 err_put_ipu:
 	put_device(&ipu->dev);
@@ -865,12 +847,7 @@ static void cvs_core_remove(struct device *dev)
 	cancel_delayed_work_sync(&ctx->work);
 	cvs_csi_remove(ctx);
 
-	if (ctx->ipu_link)
-		device_link_del(ctx->ipu_link);
-
-	pm_runtime_put_noidle(dev);
-	pm_runtime_disable(dev);
-	pm_runtime_set_suspended(dev);
+	device_link_del(ctx->ipu_link);
 
 	cvs_reset(ctx);
 }
@@ -922,42 +899,8 @@ static int __maybe_unused cvs_resume(struct device *dev)
 	return 0;
 }
 
-/**
- * cvs_runtime_resume - Runtime PM resume: claim CSI-2 link ownership
- * @dev: Device
- *
- * Triggered automatically when the IPU (consumer) runtime-resumes, because
- * a DL_FLAG_PM_RUNTIME device link makes CVS the supplier. Transfers CSI-2
- * link ownership to the host so the IPU can start receiving sensor frames.
- *
- * Return: 0 on success or negative errno.
- */
-static int __maybe_unused cvs_runtime_resume(struct device *dev)
-{
-	struct icvs *ctx = dev_get_drvdata(dev);
-
-	return cvs_set_link_owner(ctx, ICVS_CSI_LINK_HOST);
-}
-
-/**
- * cvs_runtime_suspend - Runtime PM suspend: release CSI-2 link ownership
- * @dev: Device
- *
- * Called when the streaming reference is dropped by cvs_csi_disable_streams
- * via pm_runtime_put_autosuspend. Returns CSI-2 link ownership to CVS firmware.
- *
- * Return: 0 on success or negative errno.
- */
-static int __maybe_unused cvs_runtime_suspend(struct device *dev)
-{
-	struct icvs *ctx = dev_get_drvdata(dev);
-
-	return cvs_set_link_owner(ctx, ICVS_CSI_LINK_CVS);
-}
-
 static const struct dev_pm_ops __maybe_unused cvs_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(cvs_suspend, cvs_resume)
-	SET_RUNTIME_PM_OPS(cvs_runtime_suspend, cvs_runtime_resume, NULL)
 };
 
 static const struct acpi_device_id intel_cvs_acpi_match[] = {

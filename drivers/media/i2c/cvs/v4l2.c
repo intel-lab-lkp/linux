@@ -7,7 +7,6 @@
 #include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/module.h>
-#include <linux/pm_runtime.h>
 #include <linux/property.h>
 
 #include <media/v4l2-async.h>
@@ -83,6 +82,10 @@ static int cvs_csi_enable_streams(struct v4l2_subdev *sd,
 	s64 link_freq;
 	int ret;
 
+	link_freq = v4l2_get_link_freq(ctx->remote, 0, 0);
+	if (link_freq < 0)
+		return link_freq;
+
 	ret = cvs_set_link_owner(ctx, ICVS_CSI_LINK_HOST);
 	if (ret) {
 		dev_err(dev, "failed to hand over CSI link to host: %d\n",
@@ -90,36 +93,23 @@ static int cvs_csi_enable_streams(struct v4l2_subdev *sd,
 		return ret;
 	}
 
-	ret = pm_runtime_resume_and_get(dev);
-	if (ret < 0)
-		return ret;
-
-	link_freq = v4l2_get_link_freq(ctx->remote, 0, 0);
-	if (link_freq < 0) {
-		ret = link_freq;
-		goto err_rpm_put;
-	}
-
 	if (ctx->i2c_client) {
 		ret = csi_set_link_cfg(ctx, link_freq);
 		if (ret < 0)
-			goto err_rpm_put_sync;
+			goto err_release_link;
 	}
 
 	ret = v4l2_subdev_enable_streams(remote_sd,
 					 ctx->remote->index,
 					 streams_mask);
 	if (ret)
-		goto err_rpm_put_sync;
+		goto err_release_link;
 
 	return 0;
 
-err_rpm_put_sync:
-	/* Bypass autosuspend to immediately release ownership on error */
-	pm_runtime_put_sync(dev);
-	return ret;
-err_rpm_put:
-	pm_runtime_put_autosuspend(dev);
+err_release_link:
+	cvs_set_link_owner(ctx, ICVS_CSI_LINK_CVS);
+
 	return ret;
 }
 
@@ -143,8 +133,6 @@ static int cvs_csi_disable_streams(struct v4l2_subdev *sd,
 	if (link_ret)
 		dev_err(dev, "failed to hand over CSI link to CVS: %d\n",
 			link_ret);
-
-	pm_runtime_put_autosuspend(dev);
 
 	return ret ? : link_ret;
 }
