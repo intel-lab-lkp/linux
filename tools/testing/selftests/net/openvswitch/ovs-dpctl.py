@@ -47,6 +47,7 @@ OVS_METER_FAMILY = "ovs_meter"
 OVS_CT_LIMIT_FAMILY = "ovs_ct_limit"
 
 OVS_DATAPATH_VERSION = 2
+OVS_PACKET_VERSION = 1
 OVS_DP_CMD_NEW = 1
 OVS_DP_CMD_DEL = 2
 OVS_DP_CMD_GET = 3
@@ -2218,6 +2219,28 @@ class OvsPacket(GenericNetlinkSocket):
         GenericNetlinkSocket.__init__(self)
         self.bind(OVS_PACKET_FAMILY, OvsPacket.ovs_packet_msg)
 
+    def execute_packet(self, dpifindex, packet, keystr, actstr):
+        msg = OvsPacket.ovs_packet_msg()
+        msg["cmd"] = self.OVS_PACKET_CMD_EXECUTE
+        msg["version"] = OVS_PACKET_VERSION
+        msg["reserved"] = 0
+        msg["dpifindex"] = dpifindex
+
+        key = ovskey()
+        key.parse(keystr)
+        actions = ovsactions()
+        actions.parse(actstr)
+
+        msg["attrs"].append(["OVS_PACKET_ATTR_PACKET", list(packet)])
+        msg["attrs"].append(["OVS_PACKET_ATTR_KEY", key])
+        msg["attrs"].append(["OVS_PACKET_ATTR_ACTIONS", actions])
+
+        return self.nlm_request(
+            msg,
+            msg_type=self.prid,
+            msg_flags=NLM_F_REQUEST | NLM_F_ACK,
+        )
+
     def upcall_handler(self, up=None):
         print("listening on upcall packet handler:", self.epid)
         while True:
@@ -3010,6 +3033,12 @@ def main(argv):
     delfscmd = subparsers.add_parser("del-flows")
     delfscmd.add_argument("flsbr", help="Datapath name")
 
+    execcmd = subparsers.add_parser("execute")
+    execcmd.add_argument("execdp", help="Datapath name")
+    execcmd.add_argument("execpacket", help="Ethernet packet as hexadecimal")
+    execcmd.add_argument("execkey", help="Flow key")
+    execcmd.add_argument("execacts", help="Flow actions")
+
     subparsers.add_parser("psample-events")
 
     args = parser.parse_args()
@@ -3088,6 +3117,17 @@ def main(argv):
         if args.dellink:
             ipr = pyroute2.iproute.IPRoute()
             ipr.link("del", index=ipr.link_lookup(ifname=args.delif)[0])
+    elif hasattr(args, "execdp"):
+        rep = ovsdp.info(args.execdp, 0)
+        if rep is None:
+            print("DP '%s' not found." % args.execdp)
+            return 1
+        ovspk.execute_packet(
+            rep["dpifindex"],
+            bytes.fromhex(args.execpacket),
+            args.execkey,
+            args.execacts,
+        )
     elif hasattr(args, "dumpdp"):
         rep = ovsdp.info(args.dumpdp, 0)
         if rep is None:

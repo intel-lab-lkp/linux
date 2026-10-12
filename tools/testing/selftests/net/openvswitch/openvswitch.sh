@@ -67,11 +67,6 @@ ovs_wait() {
 	return 1
 }
 
-ovs_flow_has_packets() {
-	python3 "$ovs_base/ovs-dpctl.py" dump-flows "$1" |
-		grep -Eq 'packets:[1-9][0-9]*,'
-}
-
 ovs_base=`pwd`
 sbxs=
 sbx_add () {
@@ -453,8 +448,22 @@ test_action_set() {
 
 test_ipv6_later_frag() {
 	local t="test_ipv6_later_frag"
-	local warning="WARNING:.*set_ipv6_addr"
+	local warning="WARNING:.*include/linux/skbuff\.h:"
+	local config=""
+	local config_file="/boot/config-$(uname -r)"
 	local before after
+
+	if [ -r /proc/config.gz ] && command -v zcat >/dev/null 2>&1; then
+		config=$(zcat /proc/config.gz 2>/dev/null |
+			grep -m1 -E '^(CONFIG_DEBUG_NET=y|# CONFIG_DEBUG_NET is not set)$' || true)
+	elif [ -r "$config_file" ]; then
+		config=$(grep -m1 -E '^(CONFIG_DEBUG_NET=y|# CONFIG_DEBUG_NET is not set)$' \
+			"$config_file" || true)
+	fi
+	if [ "$config" != "CONFIG_DEBUG_NET=y" ]; then
+		info "CONFIG_DEBUG_NET is disabled or kernel config unavailable - skipping"
+		return $ksft_skip
+	fi
 
 	if ! dmesg >/dev/null 2>&1; then
 		info "dmesg unavailable - cannot check for kernel warning"
@@ -463,25 +472,19 @@ test_ipv6_later_frag() {
 
 	before=$(dmesg | grep -c "$warning" || true)
 	if [ "$before" -ne 0 ]; then
-		info "set_ipv6_addr warning already present - skipping"
+		info "skb transport-header warning already present - skipping"
 		return $ksft_skip
 	fi
 
 	sbx_add "$t" || return 1
 	ovs_add_dp "$t" fragtest || return 1
-	ovs_add_netns_and_veths "$t" fragtest client c0 c1 || return 1
 
-	ovs_add_flow "$t" fragtest \
-		'in_port(1),eth(),eth_type(0x86dd),ipv6(proto=44)' \
-		'set(ipv6(src=2001:db8::99,proto=44)),drop' || return 1
-
-	ip netns exec client python3 "$ovs_base/ovs-ipv6-frag.py" c1 || \
+	ovs_sbx "$t" python3 "$ovs_base/ovs-ipv6-frag.py" fragtest || \
 		return 1
-	ovs_wait ovs_flow_has_packets fragtest || return 1
 
 	after=$(dmesg | grep -c "$warning" || true)
 	if [ "$after" -ne "$before" ]; then
-		info "set_ipv6_addr warning emitted for later IPv6 fragment"
+		info "skb transport-header warning emitted for later IPv6 fragment"
 		return 1
 	fi
 
