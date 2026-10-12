@@ -1,5 +1,4 @@
 perf-ftrace(1)
-==============
 
 NAME
 ----
@@ -133,6 +132,10 @@ OPTIONS for 'perf ftrace trace'
 	  - thresh=<n>   - Setup trace duration threshold in microseconds.
 	  - depth=<n>    - Set max depth for function graph tracer to follow.
 	  - tail         - Print function name at the end.
+
+--filter-retaddr::
+	Filter out function return address comments (`/* <-caller+offset */`)
+	from function_graph output.
 
 
 OPTIONS for 'perf ftrace latency'
