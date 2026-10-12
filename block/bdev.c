@@ -1170,6 +1170,19 @@ void bdev_release(struct file *bdev_file)
 	if (atomic_read(&bdev->bd_openers) == 1)
 		sync_blockdev(bdev);
 
+	/*
+	 * Always wait for all inflight read/write requests to complete.
+	 *
+	 * We can't omit this wait when it does not look like we're the last
+	 * one, for it is possible that two processes concurrently call
+	 * bdev_release() and see atomic_read(&bdev->bd_openers) > 1 and then
+	 * sequentially call blkdev_put_whole() with disk->open_mutex held.
+	 *
+	 * Also, we can't wait with disk->open_mutex held because there is
+	 * possibility of deadlock.
+	 */
+	blk_mq_unfreeze_queue(bdev->bd_queue, blk_mq_freeze_queue(bdev->bd_queue));
+
 	mutex_lock(&disk->open_mutex);
 	bdev_yield_write_access(bdev_file);
 
