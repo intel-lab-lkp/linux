@@ -18,6 +18,7 @@
 #include <linux/mempool.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
+#include <linux/delay.h>
 
 #include <trace/events/block.h>
 
@@ -2721,5 +2722,295 @@ int queue_zone_wplugs_show(void *data, struct seq_file *m)
 
 	return 0;
 }
-
 #endif
+
+static int disk_se_mgmt_in_progress(struct gendisk *disk,
+				     struct blk_se *elements,
+				     bool *in_progress)
+{
+	unsigned int i, nr_se = disk->nr_storage_elements;
+	int ret;
+
+	/*
+	 * Check if we have storage elements being removed or restored.
+	 */
+	ret = disk->fops->se_ops->report_elements(disk, elements, &nr_se);
+	if (ret) {
+		pr_err("Failed to get storage elements\n");
+		return ret;
+	}
+
+	for (i = 0; i < nr_se; i++) {
+		switch (elements[i].status) {
+		case BLK_SE_STS_REMOVE_IN_PROGRESS:
+		case BLK_SE_STS_RESTORE_IN_PROGRESS:
+			*in_progress = true;
+			return 0;
+		default:
+			break;
+		}
+	}
+
+	*in_progress = false;
+
+	return 0;
+}
+
+static int disk_check_remove_error(struct gendisk *disk,
+				   struct blk_se *elements,
+				   unsigned int element_id)
+{
+	unsigned int i;
+
+	for (i = 0; i < disk->nr_storage_elements; i++) {
+		if (elements[i].id == element_id
+		    && elements[i].status == BLK_SE_STS_REMOVE_ERROR)
+			return -EIO;
+	}
+
+	return 0;
+}
+
+static int disk_wait_for_se_mgmt_completion(struct gendisk *disk,
+					    struct blk_se *elements,
+					    unsigned int element_id)
+{
+	bool in_progress;
+	int ret;
+
+	/*
+	 * Poll the storage elements heath state to detect the end of a
+	 * removal or restoration operation. Since we do not know how long the
+	 * operation may take, we cannot have a timeout on this loop. So check
+	 * for fatal signals so that the user can terminate this retry loop if
+	 * the device misbehaves.
+	 */
+	while (1) {
+		ret = disk_se_mgmt_in_progress(disk, elements, &in_progress);
+		if (ret || !in_progress)
+			break;
+
+		if (fatal_signal_pending(current)) {
+			ret = -EINTR;
+			break;
+		}
+
+		/* Not done yet: wait and retry. */
+		msleep(1000);
+	}
+
+	/* Check for remove errors. */
+	if (!ret && !in_progress && element_id)
+		ret = disk_check_remove_error(disk, elements, element_id);
+
+	return ret;
+}
+
+/**
+ * bdev_report_storage_elements - report the storage elements of a zoned
+ *				  block device
+ * @bdev:	the zoned block device to check
+ * @elements:	array of storage element descriptors to fill
+ * @nr_elements: maximum size of @elements
+ *
+ * Fill at most @nr_elements storage element descriptors in the array
+ * @elements. The number of storage elements filled in the array is returned
+ * using @nr_elements. If @elements is NULL, only @nr_elements is returned to
+ * indicate the maximum number of storage elements of @bdev.
+ *
+ * Returns 0 on success and a negative error code on failure.
+ */
+int bdev_report_storage_elements(struct block_device *bdev,
+				 struct blk_se *elements,
+				 unsigned int *nr_elements)
+{
+	struct gendisk *disk = bdev->bd_disk;
+
+	if (!blk_queue_is_zoned(disk->queue) || !disk->nr_storage_elements)
+		return -EOPNOTSUPP;
+
+	if (!nr_elements)
+		return -EINVAL;
+
+	if (!elements) {
+		*nr_elements = disk->nr_storage_elements;
+		return 0;
+	}
+
+	*nr_elements = min(*nr_elements, disk->nr_storage_elements);
+	if (!*nr_elements)
+		return -EINVAL;
+
+	return disk->fops->se_ops->report_elements(disk, elements,
+						   nr_elements);
+}
+EXPORT_SYMBOL_GPL(bdev_report_storage_elements);
+
+/**
+ * bdev_remove_storage_element - Remove (depopulate) a storage element of a
+ *				 zoned block device
+ * @bdev:	block device to operate on
+ * @element_id:	ID of the storage element to remove
+ *
+ * Remove (depopulate) the storage element identified by @element_id from the
+ * block device @bdev. The caller is responsible for taking care of any
+ * necessary device write cache flush and invalidation of cached data for the
+ * zones that will be offlined.
+ *
+ * Returns 0 on success and a negative error code on failure.
+ */
+int bdev_remove_storage_element(struct block_device *bdev,
+				unsigned int element_id)
+{
+	struct gendisk *disk = bdev->bd_disk;
+	unsigned int memflags, noio_flag;
+	struct blk_se *elements;
+	int ret, err;
+
+	if (!blk_queue_is_zoned(disk->queue) || !disk->nr_storage_elements)
+		return -EOPNOTSUPP;
+
+	/* Zero is not a valid storage element ID. */
+	if (!element_id)
+		return -EINVAL;
+
+	noio_flag = memalloc_noio_save();
+	elements = kzalloc_objs(struct blk_se, disk->nr_storage_elements);
+	memalloc_noio_restore(noio_flag);
+	if (!elements)
+		return -ENOMEM;
+
+	/*
+	 * Serialize against concurrent revalidation and concurrent storage
+	 * element management operations so that we can see consistent zone
+	 * condition changes.
+	 */
+	mutex_lock(&disk->zone_revalidate_mutex);
+
+	/*
+	 * Freeze and unfreeze the queue to flush any outstanding command.
+	 * The caller is responsible for not queuing up more I/Os by higher
+	 * level means.
+	 */
+	memflags = blk_mq_freeze_queue(disk->queue);
+	blk_mq_unfreeze_queue(disk->queue, memflags);
+
+	/* Initiate the storage element removal and wait for its completion. */
+	ret = disk->fops->se_ops->remove_element(disk, element_id);
+	if (!ret)
+		ret = disk_wait_for_se_mgmt_completion(disk, elements,
+						       element_id);
+
+	/*
+	 * Always revalidate zones, even in the case of an error as we do not
+	 * know what condition the drive zones are in.
+	 */
+	err = disk_revalidate_zones(disk);
+	if (err && !ret)
+		ret = err;
+
+	mutex_unlock(&disk->zone_revalidate_mutex);
+
+	kfree(elements);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(bdev_remove_storage_element);
+
+/**
+ * bdev_restore_storage_elements - Restore all depopulated storage elements of
+ *				   a zoned block device
+ * @bdev:	block device to operate on
+ *
+ * Restore all storage elements of @bdev that have been depopulated. Not all
+ * elements may be restored by this operation.
+ *
+ * Returns 0 on success and a negative error code on failure.
+ */
+int bdev_restore_storage_elements(struct block_device *bdev)
+{
+	struct gendisk *disk = bdev->bd_disk;
+	unsigned int memflags, noio_flag;
+	struct blk_se *elements;
+	int ret, err;
+
+	if (!blk_queue_is_zoned(disk->queue) || !disk->nr_storage_elements)
+		return -EOPNOTSUPP;
+
+	noio_flag = memalloc_noio_save();
+	elements = kzalloc_objs(struct blk_se, disk->nr_storage_elements);
+	memalloc_noio_restore(noio_flag);
+	if (!elements)
+		return -ENOMEM;
+
+	/*
+	 * Serialize against concurrent revalidation and concurrent storage
+	 * element management operations so that we can see consistent zone
+	 * condition changes.
+	 */
+	mutex_lock(&disk->zone_revalidate_mutex);
+
+	/*
+	 * Freeze and unfreeze the queue to flush any outstanding commands.
+	 * The caller is responsible for not queuing up more I/O by higher
+	 * level means.
+	 */
+	memflags = blk_mq_freeze_queue(disk->queue);
+	blk_mq_unfreeze_queue(disk->queue, memflags);
+
+	/*
+	 * Initiate the storage elements restoration and wait for its
+	 * completion.
+	 */
+	ret = disk->fops->se_ops->restore_elements(disk);
+	if (!ret)
+		ret = disk_wait_for_se_mgmt_completion(disk, elements, 0);
+
+	/*
+	 * Always revalidate zones, even in the case of an error as we do not
+	 * know what condition the drive zones are in.
+	 */
+	err = disk_revalidate_zones(disk);
+	if (err && !ret)
+		ret = err;
+
+	mutex_unlock(&disk->zone_revalidate_mutex);
+
+	kfree(elements);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(bdev_restore_storage_elements);
+
+int disk_init_storage_element_mgmt(struct gendisk *disk)
+{
+	int ret;
+
+	/*
+	 * Storage element operations are for zoned disks only and
+	 * optional...
+	 */
+	if (!blk_queue_is_zoned(disk->queue) || !disk->fops->se_ops)
+		return 0;
+
+	/* ...but if supported, all operations must be defined. */
+	if (!disk->fops->se_ops->report_elements ||
+	    !disk->fops->se_ops->remove_element ||
+	    !disk->fops->se_ops->restore_elements) {
+		pr_err("%s: invalid storage element operations\n",
+		       disk->disk_name);
+		return -EINVAL;
+	}
+
+	/*
+	 * Get the number of storage elements of the disk. If this fails,
+	 * do not report an error as the failure may be because the zoned disk
+	 * does not support storage element management.
+	 */
+	ret = disk->fops->se_ops->report_elements(disk, NULL,
+						  &disk->nr_storage_elements);
+	if (ret)
+		disk->nr_storage_elements = 0;
+
+	return 0;
+}
