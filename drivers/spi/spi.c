@@ -3163,11 +3163,13 @@ struct spi_device *acpi_spi_device_alloc(struct spi_controller *ctlr,
 	struct list_head resource_list;
 	struct acpi_spi_lookup lookup = {};
 	struct spi_device *spi;
+	bool put_ctlr;
 	int ret;
 
 	if (!ctlr && index == -1)
 		return ERR_PTR(-EINVAL);
 
+	put_ctlr		= !ctlr;
 	lookup.ctlr		= ctlr;
 	lookup.irq		= -1;
 	lookup.index		= index;
@@ -3176,9 +3178,11 @@ struct spi_device *acpi_spi_device_alloc(struct spi_controller *ctlr,
 	INIT_LIST_HEAD(&resource_list);
 	ret = acpi_dev_get_resources(adev, &resource_list,
 				     acpi_spi_add_resource, &lookup);
-	if (ret < 0)
+	if (ret < 0) {
 		/* Found SPI in _CRS but it points to another controller */
-		return ERR_PTR(ret);
+		spi = ERR_PTR(ret);
+		goto out_put_ctlr;
+	}
 
 	acpi_dev_free_resource_list(&resource_list);
 
@@ -3189,14 +3193,17 @@ struct spi_device *acpi_spi_device_alloc(struct spi_controller *ctlr,
 		acpi_spi_parse_apple_properties(adev, &lookup);
 	}
 
-	if (!lookup.max_speed_hz)
-		return ERR_PTR(-ENODEV);
+	if (!lookup.max_speed_hz) {
+		spi = ERR_PTR(-ENODEV);
+		goto out_put_ctlr;
+	}
 
 	spi = spi_alloc_device(lookup.ctlr);
 	if (!spi) {
 		dev_err(&lookup.ctlr->dev, "failed to allocate SPI device for %s\n",
 			dev_name(&adev->dev));
-		return ERR_PTR(-ENOMEM);
+		spi = ERR_PTR(-ENOMEM);
+		goto out_put_ctlr;
 	}
 
 	spi_set_chipselect(spi, 0, lookup.chip_select);
@@ -3211,6 +3218,10 @@ struct spi_device *acpi_spi_device_alloc(struct spi_controller *ctlr,
 	 * so set bit 0 in spi->cs_index_mask.
 	 */
 	spi->cs_index_mask	= BIT(0);
+
+out_put_ctlr:
+	if (put_ctlr && lookup.ctlr)
+		put_device(&lookup.ctlr->dev);
 
 	return spi;
 }
