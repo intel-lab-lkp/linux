@@ -2702,6 +2702,10 @@ static int __init init_memory_definitions(struct acpi_table_header *table)
 
 	while (p < end) {
 		m = (struct ivmd_header *)p;
+		if (m->length < sizeof(*m)) {
+			pr_warn(FW_BUG "Invalid IVMD length %u\n", m->length);
+			break;
+		}
 		if (m->flags & (IVMD_FLAG_UNITY_MAP | IVMD_FLAG_EXCL_RANGE))
 			init_unity_map_range(m, table);
 
