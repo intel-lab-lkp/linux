@@ -1405,6 +1405,8 @@ out:
 static void svm_vcpu_free(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+	struct svm_cpu_data *sd;
+	int cpu;
 
 	WARN_ON_ONCE(!list_empty(&svm->ir_list));
 
@@ -1422,6 +1424,11 @@ static void svm_vcpu_free(struct kvm_vcpu *vcpu)
 	svm_vcpu_free_msrpm(svm->msrpm);
 
 	free_asid(svm->asid);
+
+	for_each_possible_cpu(cpu) {
+		sd = per_cpu_ptr(&svm_data, cpu);
+		cmpxchg(&sd->fallback_asid_vcpu, vcpu, NULL);
+	}
 }
 
 #ifdef CONFIG_CPU_MITIGATIONS
@@ -3868,6 +3875,7 @@ static void svm_set_nested_run_soft_int_state(struct kvm_vcpu *vcpu)
 
 static int pre_svm_run(struct kvm_vcpu *vcpu)
 {
+	struct svm_cpu_data *sd = this_cpu_ptr(&svm_data);
 	struct vcpu_svm *svm = to_svm(vcpu);
 
 	/*
@@ -3884,8 +3892,11 @@ static int pre_svm_run(struct kvm_vcpu *vcpu)
 	if (is_sev_guest(vcpu))
 		return pre_sev_run(svm, vcpu->cpu);
 
-	if (unlikely(svm->vmcb->control.asid == fallback_asid))
+	if (unlikely(svm->vmcb->control.asid == fallback_asid &&
+		     READ_ONCE(sd->fallback_asid_vcpu) != vcpu)) {
 		vmcb_set_flush_asid(svm->vmcb);
+		WRITE_ONCE(sd->fallback_asid_vcpu, vcpu);
+	}
 
 	return 0;
 }
