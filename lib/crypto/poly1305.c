@@ -35,11 +35,9 @@ void poly1305_init(struct poly1305_desc_ctx *desc,
 EXPORT_SYMBOL(poly1305_init);
 
 void poly1305_update(struct poly1305_desc_ctx *desc,
-		     const u8 *src, unsigned int nbytes)
+		     const u8 *src, size_t nbytes)
 {
-	if (desc->buflen + nbytes >= POLY1305_BLOCK_SIZE) {
-		unsigned int bulk_len;
-
+	if (nbytes >= POLY1305_BLOCK_SIZE - desc->buflen) {
 		if (desc->buflen) {
 			unsigned int l = POLY1305_BLOCK_SIZE - desc->buflen;
 
@@ -52,12 +50,14 @@ void poly1305_update(struct poly1305_desc_ctx *desc,
 			desc->buflen = 0;
 		}
 
-		bulk_len = round_down(nbytes, POLY1305_BLOCK_SIZE);
-		nbytes %= POLY1305_BLOCK_SIZE;
+		while (nbytes >= POLY1305_BLOCK_SIZE) {
+			/* poly1305_blocks() takes an unsigned int length. */
+			unsigned int bulk_len = round_down(min(nbytes, UINT_MAX),
+							   POLY1305_BLOCK_SIZE);
 
-		if (bulk_len) {
 			poly1305_blocks(&desc->state, src, bulk_len, 1);
 			src += bulk_len;
+			nbytes -= bulk_len;
 		}
 	}
 	if (nbytes) {
