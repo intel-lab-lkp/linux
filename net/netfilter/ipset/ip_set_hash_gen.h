@@ -764,6 +764,7 @@ mtype_resize(struct ip_set *set, bool retried)
 	struct hbucket *n, *m;
 	struct list_head *l, *lt;
 	struct mtype_resize_ad *x;
+	LIST_HEAD(backlog);
 	u32 i, j, r, nr, key;
 	int ret;
 
@@ -934,13 +935,21 @@ cleanup:
 	if (ret == -EAGAIN)
 		goto retry;
 
-	/* Cleanup the backlog of ADD/DEL elements */
+	/* Cleanup the backlog of ADD/DEL elements: kernel-side adds were
+	 * applied to the original table, which is still the live table,
+	 * so they are simply dropped. Kernel-side deletes were deferred,
+	 * replay them against the original table.
+	 */
 	spin_lock_bh(&set->lock);
-	list_for_each_safe(l, lt, &orig->ad) {
-		list_del(l);
-		kfree(l);
-	}
+	list_splice_init(&orig->ad, &backlog);
 	spin_unlock_bh(&set->lock);
+	list_for_each_safe(l, lt, &backlog) {
+		x = list_entry(l, struct mtype_resize_ad, list);
+		list_del(l);
+		if (x->ad == IPSET_DEL)
+			mtype_del(set, &x->d, NULL, NULL, 0);
+		kfree(x);
+	}
 	goto out;
 
 hbwarn:
@@ -1217,6 +1226,24 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 			goto out;
 
 		ret = 0;
+		if (t->resizing && ext && ext->target) {
+			/* Resize is in process and kernel side del: do not
+			 * delete the element and free its extensions here,
+			 * the extensions may be shared with the copy in
+			 * the new table. Save the values, the resize replays
+			 * the delete against the new table.
+			 */
+			x = kzalloc_obj(struct mtype_resize_ad, GFP_ATOMIC);
+			if (!x)
+				/* Don't bother, deleting the element here
+				 * could free the shared extensions twice.
+				 */
+				goto out;
+			x->ad = IPSET_DEL;
+			memcpy(&x->d, value, sizeof(struct mtype_elem));
+			x->flags = flags;
+			goto out;
+		}
 		clear_bit(i, n->used);
 		smp_mb__after_atomic();
 		if (i + 1 == pos)
@@ -1224,19 +1251,6 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 		t->hregion[r].elements--;
 		mtype_del_cidr_all(set, h, d);
 		ip_set_ext_destroy(set, data);
-
-		if (t->resizing && ext && ext->target) {
-			/* Resize is in process and kernel side del,
-			 * save values
-			 */
-			x = kzalloc_obj(struct mtype_resize_ad, GFP_ATOMIC);
-			if (x) {
-				x->ad = IPSET_DEL;
-				memcpy(&x->d, value,
-				       sizeof(struct mtype_elem));
-				x->flags = flags;
-			}
-		}
 		for (; i < pos; i++) {
 			if (!test_bit(i, n->used))
 				k++;
