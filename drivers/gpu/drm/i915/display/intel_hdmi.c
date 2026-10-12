@@ -27,6 +27,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/gcd.h>
 #include <linux/hdmi.h>
 #include <linux/i2c.h>
 #include <linux/iopoll.h>
@@ -2308,6 +2309,38 @@ static int intel_hdmi_compute_tmds_clock(struct intel_encoder *encoder,
 	return 0;
 }
 
+static void
+compute_frl_mn(struct intel_crtc_state *crtc_state, u32 ftb_avg_k)
+{
+	u64 ftb_avg, div_18_clk, gcd_val;
+	u64 link_m, link_n;
+
+	ftb_avg = (u64)ftb_avg_k * 1000;
+	div_18_clk = mult_frac(1000000000, crtc_state->frl.required_rate, 18);
+	gcd_val = gcd(ftb_avg, div_18_clk);
+
+	link_m = DIV_ROUND_UP_ULL(ftb_avg, gcd_val);
+	link_n = DIV_ROUND_UP_ULL(div_18_clk, gcd_val);
+
+	/*
+	 * PIPE_LINK_M1/N1 are 32-bit for HDMI2.1. Scale both
+	 * down preserving the ratio until they fit the register width.
+	 *
+	 * #TODO check if intel_reduce_m_n_ratio() can be exported.
+	 */
+	while (link_m > HDMI_FRL_LINK_M_N_MAX ||
+	       link_n > HDMI_FRL_LINK_M_N_MAX) {
+		link_m >>= 1;
+		link_n >>= 1;
+	}
+
+	crtc_state->frl.link_m = (u32)link_m;
+	crtc_state->frl.link_n = (u32)link_n;
+
+	/* Frl div 18 stored in Khz */
+	crtc_state->frl.div18 = DIV_ROUND_UP_ULL(div_18_clk, 1000);
+}
+
 static int
 intel_hdmi_compute_frl_config(struct intel_encoder *encoder,
 			      struct intel_crtc_state *crtc_state)
@@ -2377,6 +2410,11 @@ intel_hdmi_compute_frl_config(struct intel_encoder *encoder,
 		crtc_state->frl.tb_threshold_min = 492 - (frl_dfm.params.tb_borrowed / 2);
 	else
 		crtc_state->frl.tb_threshold_min = 492;
+
+	compute_frl_mn(crtc_state, frl_dfm.params.ftb_avg_k);
+	drm_dbg_kms(display->drm, "FRL Clock: link_m = %dHz, link_n = %dHz, div18 = %dKHz\n",
+		    crtc_state->frl.link_m, crtc_state->frl.link_n,
+		    crtc_state->frl.div18);
 
 	/*
 	 * TODO
