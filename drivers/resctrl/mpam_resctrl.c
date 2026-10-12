@@ -279,6 +279,12 @@ u32 resctrl_arch_rmid_idx_encode(u32 closid, u32 rmid)
 	return closid * (mpam_pmg_max + 1) + rmid;
 }
 
+/* Check if the RMID's associated closid matches the target CLOSID. */
+bool resctrl_arch_rmid_idx_match(u32 closid, u32 rmid_closid)
+{
+	return closid == rmid_closid;
+}
+
 void resctrl_arch_rmid_idx_decode(u32 idx, u32 *closid, u32 *rmid)
 {
 	*closid = idx / (mpam_pmg_max + 1);

@@ -205,23 +205,16 @@ bool has_busy_rmid(struct rdt_l3_mon_domain *d)
 static struct rmid_entry *resctrl_find_free_rmid(u32 closid)
 {
 	struct rmid_entry *itr;
-	u32 itr_idx, cmp_idx;
 
 	if (list_empty(&rmid_free_lru))
 		return rmid_limbo_count ? ERR_PTR(-EBUSY) : ERR_PTR(-ENOSPC);
 
 	list_for_each_entry(itr, &rmid_free_lru, list) {
 		/*
-		 * Get the index of this free RMID, and the index it would need
-		 * to be if it were used with this CLOSID.
-		 * If the CLOSID is irrelevant on this architecture, the two
-		 * index values are always the same on every entry and thus the
-		 * very first entry will be returned.
+		 * Check if the free RMID matches the target CLOSID.
+		 * Architecture-specific rules apply.
 		 */
-		itr_idx = resctrl_arch_rmid_idx_encode(itr->closid, itr->rmid);
-		cmp_idx = resctrl_arch_rmid_idx_encode(closid, itr->rmid);
-
-		if (itr_idx == cmp_idx)
+		if (resctrl_arch_rmid_idx_match(closid, itr->closid))
 			return itr;
 	}
 
