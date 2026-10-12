@@ -592,14 +592,13 @@ static int fib6_dump_table(struct fib6_table *table, struct sk_buff *skb,
 	w = (void *)cb->args[2];
 	w->root = &table->tb6_root;
 
+	spin_lock_bh(&table->tb6_lock);
 	if (cb->args[4] == 0) {
 		w->count = 0;
 		w->skip = 0;
 		w->skip_in_node = 0;
 
-		spin_lock_bh(&table->tb6_lock);
 		res = fib6_walk(net, w);
-		spin_unlock_bh(&table->tb6_lock);
 		if (res > 0) {
 			cb->args[4] = 1;
 			cb->args[5] = READ_ONCE(w->root->fn_sernum);
@@ -616,14 +615,13 @@ static int fib6_dump_table(struct fib6_table *table, struct sk_buff *skb,
 		} else
 			w->skip = 0;
 
-		spin_lock_bh(&table->tb6_lock);
 		res = fib6_walk_continue(w);
-		spin_unlock_bh(&table->tb6_lock);
 		if (res <= 0) {
 			fib6_walker_unlink(net, w);
 			cb->args[4] = 0;
 		}
 	}
+	spin_unlock_bh(&table->tb6_lock);
 
 	return res;
 }
