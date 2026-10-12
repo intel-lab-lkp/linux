@@ -62,6 +62,7 @@
 #include "intel_hdcp_regs.h"
 #include "intel_hdcp_shim.h"
 #include "intel_hdmi.h"
+#include "intel_hdmi_frl_dfm.h"
 #include "intel_link_bw.h"
 #include "intel_lspcon.h"
 #include "intel_panel.h"
@@ -2021,6 +2022,51 @@ intel_hdmi_tmds_mode_clock_valid(struct drm_connector *_connector, int clock,
 	return status;
 }
 
+static u32
+get_drm_color_format(enum intel_output_format output_format)
+{
+	switch (output_format) {
+	case INTEL_OUTPUT_FORMAT_RGB:
+		return DRM_OUTPUT_COLOR_FORMAT_RGB444;
+	case INTEL_OUTPUT_FORMAT_YCBCR420:
+		return DRM_OUTPUT_COLOR_FORMAT_YCBCR420;
+	case INTEL_OUTPUT_FORMAT_YCBCR444:
+		return DRM_OUTPUT_COLOR_FORMAT_YCBCR444;
+	default:
+		return DRM_OUTPUT_COLOR_FORMAT_RGB444;
+	}
+}
+
+static enum drm_mode_status
+intel_hdmi_frl_mode_clock_valid(struct intel_connector *connector,
+				const struct drm_display_mode *mode,
+				enum intel_output_format output_format)
+{
+	struct intel_hdmi *hdmi = intel_attached_hdmi(connector);
+	struct intel_hdmi_frl_dfm frl_dfm = {};
+	int max_rate = hdmi->max_frl_rate;
+	int lanes = max_rate < 24 ? 3 : 4;
+
+	frl_dfm.config.pixel_clock_nominal_khz = mode->clock;
+	frl_dfm.config.hactive = mode->hdisplay;
+	frl_dfm.config.hblank = mode->htotal - mode->hdisplay;
+
+	/* Use min bpc to check if mode can be supported */
+	frl_dfm.config.bpc = 8;
+	frl_dfm.config.color_format = get_drm_color_format(output_format);
+	frl_dfm.config.lanes = lanes;
+	frl_dfm.config.bit_rate_kbps = (max_rate * 1000000) / lanes;
+
+	/* min audio */
+	frl_dfm.config.audio_channels = 2;
+	frl_dfm.config.audio_hz = 48000;
+
+	if (!intel_hdmi_frl_dfm_nondsc_requirement_met(&frl_dfm))
+		return MODE_CLOCK_HIGH;
+
+	return MODE_OK;
+}
+
 static enum drm_mode_status
 intel_hdmi_sink_format_valid(struct intel_connector *connector,
 			     const struct drm_display_mode *mode,
@@ -2045,6 +2091,13 @@ intel_hdmi_sink_format_valid(struct intel_connector *connector,
 	}
 }
 
+static bool
+intel_hdmi_can_support_frl(struct intel_hdmi *intel_hdmi)
+{
+	/* TODO check for FRL support */
+	return false;
+}
+
 static enum drm_mode_status
 intel_hdmi_mode_valid_format(struct intel_connector *connector,
 			     const struct drm_display_mode *mode,
@@ -2052,6 +2105,7 @@ intel_hdmi_mode_valid_format(struct intel_connector *connector,
 			     enum intel_output_format sink_format)
 {
 	struct intel_display *display = to_intel_display(connector);
+	struct intel_hdmi *hdmi = intel_attached_hdmi(connector);
 	enum drm_mode_status status;
 
 	status = intel_hdmi_sink_format_valid(connector, mode,
@@ -2063,7 +2117,12 @@ intel_hdmi_mode_valid_format(struct intel_connector *connector,
 	if (status != MODE_OK)
 		return status;
 
-	return intel_hdmi_tmds_mode_clock_valid(&connector->base, clock, has_hdmi_sink, sink_format);
+	status = intel_hdmi_tmds_mode_clock_valid(&connector->base, clock, has_hdmi_sink, sink_format);
+
+	if (status != MODE_OK && intel_hdmi_can_support_frl(hdmi))
+		status = intel_hdmi_frl_mode_clock_valid(connector, mode, sink_format);
+
+	return status;
 }
 
 static enum drm_mode_status
