@@ -1486,16 +1486,6 @@ static void do_kernel_range_flush(void *info)
 		flush_tlb_one_kernel(addr);
 }
 
-static void kernel_tlb_flush_all(struct flush_tlb_info *info)
-{
-	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
-
-	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
-		invlpgb_flush_all();
-	else
-		on_each_cpu(do_flush_tlb_all, NULL, 1);
-}
-
 static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 {
 	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
@@ -1515,7 +1505,7 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 			    TLB_GENERATION_INVALID);
 
 	if (info.end == TLB_FLUSH_ALL)
-		kernel_tlb_flush_all(&info);
+		flush_tlb_all();
 	else
 		kernel_tlb_flush_range(&info);
 }
