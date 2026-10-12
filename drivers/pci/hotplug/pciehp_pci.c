@@ -73,7 +73,7 @@ int pciehp_configure_device(struct controller *ctrl)
 	down_read_nested(&ctrl->reset_lock, ctrl->depth);
 
 	dev = pci_get_slot(parent, PCI_DEVFN(0, 0));
-	ctrl->dsn = pci_get_dsn(dev);
+	ctrl->dsn = dev ? pci_get_dsn(dev) : 0;
 	pci_dev_put(dev);
 
  out:
