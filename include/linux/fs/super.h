@@ -235,6 +235,7 @@ int freeze_super(struct super_block *super, enum freeze_holder who,
 int thaw_super(struct super_block *super, enum freeze_holder who,
 	       const void *freeze_owner);
 
+void wake_deferred_reclaim_workers(struct super_block *sb, int count);
 int sb_init_dio_done_wq(struct super_block *sb);
 
 struct file;

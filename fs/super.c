@@ -2319,6 +2319,16 @@ retry:
 		return ret;
 	}
 
+	/*
+	 * Block deferred reclaim so that workers don't hang on frozen fs. We
+	 * wait for outstanding deferred reclaim here. Because the filesystem
+	 * is already partially frozen, workers will not start new deferred
+	 * reclaim for this sb.
+	 */
+	while (atomic_cmpxchg(&sb->s_deferred_reclaim_running, 0, -1))
+		wait_var_event(&sb->s_deferred_reclaim_running,
+			atomic_read(&sb->s_deferred_reclaim_running) == 0);
+
 	/* Now wait for internal filesystem counter */
 	sb->s_writers.frozen = SB_FREEZE_FS;
 	sb_wait_write(sb, SB_FREEZE_FS);
@@ -2399,6 +2409,10 @@ static int thaw_super_locked(struct super_block *sb, enum freeze_holder who,
 	sb->s_writers.freeze_owner = NULL;
 	wake_up_var(&sb->s_writers.frozen);
 	sb_freeze_unlock(sb, SB_FREEZE_FS);
+	/* Unblock deferred inode reclaim and wake workers */
+	atomic_set(&sb->s_deferred_reclaim_running, 0);
+	wake_deferred_reclaim_workers(sb,
+		atomic_read(&sb->s_deferred_reclaim_count));
 out_deactivate:
 	deactivate_locked_super(sb);
 	return 0;

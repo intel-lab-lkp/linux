@@ -234,6 +234,8 @@ struct super_block {
 
 	/* Number of inodes queued for deferred reclaim */
 	atomic_t				s_deferred_reclaim_count;
+	/* Number of inodes currently undergoing direct reclaim */
+	atomic_t				s_deferred_reclaim_running;
 	/* Average time to reclaim one deferred inode */
 	u64					s_deferred_reclaim_delay;
 

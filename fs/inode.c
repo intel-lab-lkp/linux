@@ -1022,20 +1022,11 @@ static int get_deferred_sb_id(struct super_block *sb)
 	return hash_ptr(sb, 32) % deferred_reclaim.workers;
 }
 
-static void queue_deferred_reclaim(struct super_block *sb, int count,
-				   struct list_head *list)
+void wake_deferred_reclaim_workers(struct super_block *sb, int count)
 {
 	int id = get_deferred_sb_id(sb);
-	struct deferred_reclaim_queue *queue =
-					&deferred_reclaim.queues[id];
 	int i, wake_count;
 
-	spin_lock(&queue->lock);
-	list_splice_tail(list, &queue->list);
-	atomic_add(count, &sb->s_deferred_reclaim_count);
-	spin_unlock(&queue->lock);
-
-	/* Queue works to process inodes we've added to the list */
 	wake_count = DIV_ROUND_UP(count, INODE_RECLAIM_BATCH_SIZE);
 	if (wake_count > deferred_reclaim.workers)
 		wake_count = deferred_reclaim.workers;
@@ -1044,6 +1035,28 @@ static void queue_deferred_reclaim(struct super_block *sb, int count,
 			   &deferred_reclaim.work[id]);
 		id = (id + 1) % deferred_reclaim.workers;
 	}
+}
+
+static void queue_deferred_reclaim(struct super_block *sb, int count,
+				   struct list_head *list)
+{
+	int id = get_deferred_sb_id(sb);
+	struct deferred_reclaim_queue *queue =
+					&deferred_reclaim.queues[id];
+
+	spin_lock(&queue->lock);
+	list_splice_tail(list, &queue->list);
+	atomic_add(count, &sb->s_deferred_reclaim_count);
+	spin_unlock(&queue->lock);
+
+	/*
+	 * Skip waking up workers for frozen filesystem. They'd skip the inodes
+	 * anyway.
+	 */
+	if (atomic_read(&sb->s_deferred_reclaim_running) < 0)
+		return;
+
+	wake_deferred_reclaim_workers(sb, count);
 }
 
 /*
@@ -1084,18 +1097,24 @@ static void __get_inode_reclaim_batch(int *start, int end,
 	for (i = *start; i < end; i++) {
 		struct deferred_reclaim_queue *queue =
 						&deferred_reclaim.queues[i];
-		struct list_head *entry, tmp;
+		struct inode *inode, *next;
 
 		if (list_empty_careful(&queue->list))
 			continue;
 		spin_lock(&queue->lock);
-		list_for_each(entry, &queue->list) {
-			if (*count >= INODE_RECLAIM_BATCH_SIZE)
+		list_for_each_entry_safe(inode, next, &queue->list, i_lru) {
+			/*
+			 * Skip inodes on frozen fs as we'd likely block. We
+			 * always accept inodes from read-only fs as there
+			 * eviction cannot require writing.
+			 */
+			if (!sb_rdonly(inode->i_sb) &&
+			    inode->i_sb->s_writers.frozen != SB_UNFROZEN)
+				continue;
+			list_move_tail(&inode->i_lru, list);
+			if (++(*count) >= INODE_RECLAIM_BATCH_SIZE)
 				break;
-			(*count)++;
 		}
-		list_cut_before(&tmp, &queue->list, entry);
-		list_splice_tail(&tmp, list);
 		spin_unlock(&queue->lock);
 		if (*count >= INODE_RECLAIM_BATCH_SIZE)
 			break;
@@ -1147,6 +1166,35 @@ static void inode_reclaim_update_stat(struct super_block *sb, unsigned int n,
 		wake_up_var(&sb->s_deferred_reclaim_count);
 }
 
+/* Put inodes from sb back to reclaim queue */
+static void inode_reclaim_skip_inodes(struct list_head *list,
+				      struct super_block *sb)
+{
+	struct inode *inode;
+	struct deferred_reclaim_queue *queue;
+	struct list_head tmp;
+
+	queue = &deferred_reclaim.queues[get_deferred_sb_id(sb)];
+	list_for_each_entry(inode, list, i_lru)
+		if (inode->i_sb != sb)
+			break;
+	list_cut_before(&tmp, list, &inode->i_lru);
+	spin_lock(&queue->lock);
+	list_splice_tail(&tmp, &queue->list);
+	spin_unlock(&queue->lock);
+}
+
+static bool sb_deferred_reclaim_get(struct super_block *sb)
+{
+	return atomic_inc_unless_negative(&sb->s_deferred_reclaim_running);
+}
+
+static void sb_deferred_reclaim_put(struct super_block *sb)
+{
+	if (sb && atomic_dec_and_test(&sb->s_deferred_reclaim_running))
+		wake_up_var(&sb->s_deferred_reclaim_running);
+}
+
 static void inode_reclaim_deferred(struct work_struct *work)
 {
 	struct inode *inode;
@@ -1176,10 +1224,18 @@ static void inode_reclaim_deferred(struct work_struct *work)
 						 i_lru);
 			if (inode->i_sb != sb) {
 				inode_reclaim_update_stat(sb, count, start);
+				sb_deferred_reclaim_put(sb);
 
 				sb = inode->i_sb;
 				count = 0;
 				start = ktime_get_ns();
+				/* Protect us from filesystem freezing */
+				if (!sb_deferred_reclaim_get(sb)) {
+					inode_reclaim_skip_inodes(&inode_batch,
+								  sb);
+					sb = NULL;
+					continue;
+				}
 			}
 			count++;
 			list_del_init(&inode->i_lru);
@@ -1188,6 +1244,7 @@ static void inode_reclaim_deferred(struct work_struct *work)
 		}
 
 		inode_reclaim_update_stat(sb, count, start);
+		sb_deferred_reclaim_put(sb);
 	}
 }
 
