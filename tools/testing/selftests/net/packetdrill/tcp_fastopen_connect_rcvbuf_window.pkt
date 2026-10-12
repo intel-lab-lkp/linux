@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: GPL-2.0
+// TCP_FASTOPEN_CONNECT defers the SYN until the first write(); between
+// connect() and that write the socket is in TCP_SYN_SENT. SO_RCVBUF applied
+// in that gap must not defeat the route "window" metric on the deferred SYN.
+// optname 30 = TCP_FASTOPEN_CONNECT, 34 = TCP_FASTOPEN_NO_COOKIE on SOL_TCP.
+--ip_version=ipv4
+
+`./defaults.sh
+sysctl -q net.ipv4.tcp_fastopen=5
+ip route replace 192.0.2.1 via 192.168.0.1 dev tun0 window 4096`
+
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_TCP, 30, [1], 4) = 0
+   +0 setsockopt(3, SOL_TCP, 34, [1], 4) = 0
+   +0 connect(3, ..., ...) = 0
+   +0 setsockopt(3, SOL_SOCKET, SO_RCVBUF, [1048576], 4) = 0
+   +0 fcntl(3, F_SETFL, O_RDWR|O_NONBLOCK) = 0
+   +0 write(3, ..., 1) = 1
+
+// The deferred SYN (carrying 1 byte of data) must advertise the route
+// clamped window and window scale 0 (not win 65535, wscale 5).
+   +0 > S 0:1(1) win 2920 <mss 1460,sackOK,TS val 0 ecr 0,nop,wscale 0>

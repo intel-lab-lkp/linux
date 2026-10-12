@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: GPL-2.0
+// A window clamp the user set with setsockopt(TCP_WINDOW_CLAMP) must be
+// honoured on the SYN even when SO_RCVBUF is set afterwards on the still
+// unconnected socket: SO_RCVBUF must not overwrite the user's clamp, and
+// the route "window" metric must not replace it either.
+//
+// TCP_WINDOW_CLAMP is optname 10 on SOL_TCP (this packetdrill build has no
+// symbol for it).
+--ip_version=ipv4
+
+`./defaults.sh
+ip route replace 192.0.2.1 via 192.168.0.1 dev tun0 window 4096`
+
+    0 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+   +0 setsockopt(3, SOL_TCP, 10, [16384], 4) = 0
+   +0 setsockopt(3, SOL_SOCKET, SO_RCVBUF, [1048576], 4) = 0
+   +0 fcntl(3, F_SETFL, O_RDWR|O_NONBLOCK) = 0
+   +0 connect(3, ..., ...) = -1 EINPROGRESS (Operation now in progress)
+
+// The SYN advertises the user's clamp (win 16060), not the route window
+// (2920) and not the SO_RCVBUF-derived full window.
+   +0 > S 0:0(0) win 16060 <mss 1460,sackOK,TS val 0 ecr 0,nop,wscale 0>
+  +.1 < S. 0:0(0) ack 1 win 65535 <mss 1460,nop,wscale 7>
+   +0 > . 1:1(0) ack 1
