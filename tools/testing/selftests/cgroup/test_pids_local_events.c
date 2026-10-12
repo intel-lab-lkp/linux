@@ -90,7 +90,11 @@ static int test_pids_events_notify(const char *root)
 		goto cleanup;
 	}
 	n = read(inotify_fd, event_buf.bytes, sizeof(event_buf.bytes));
-	if (n < sizeof(struct inotify_event) ||
+	if (n < 0) {
+		reason = "failed to read pids.events notification";
+		goto cleanup;
+	}
+	if ((size_t)n < sizeof(struct inotify_event) ||
 	    !(event_buf.align.mask & IN_MODIFY)) {
 		reason = "received no pids.events modify notification";
 		goto cleanup;
