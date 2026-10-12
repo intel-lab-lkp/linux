@@ -2543,10 +2543,11 @@ static int intel_hdmi_compute_output_format(struct intel_encoder *encoder,
 	return intel_hdmi_compute_clock(encoder, crtc_state, respect_downstream_limits, enable_frl);
 }
 
-static int intel_hdmi_compute_formats(struct intel_encoder *encoder,
-				      struct intel_crtc_state *crtc_state,
-				      const struct drm_connector_state *conn_state,
-				      bool respect_downstream_limits)
+static int _intel_hdmi_compute_formats(struct intel_encoder *encoder,
+				       struct intel_crtc_state *crtc_state,
+				       const struct drm_connector_state *conn_state,
+				       bool respect_downstream_limits,
+				       bool enable_frl)
 {
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_connector *connector = to_intel_connector(conn_state->connector);
@@ -2558,7 +2559,7 @@ static int intel_hdmi_compute_formats(struct intel_encoder *encoder,
 		ret = intel_hdmi_compute_output_format(encoder, crtc_state, connector,
 						       respect_downstream_limits,
 						       INTEL_OUTPUT_FORMAT_YCBCR420,
-						       false);
+						       enable_frl);
 
 		if (ret && !respect_downstream_limits) {
 			drm_dbg_kms(display->drm,
@@ -2567,19 +2568,19 @@ static int intel_hdmi_compute_formats(struct intel_encoder *encoder,
 			ret = intel_hdmi_compute_output_format(encoder, crtc_state, connector,
 							       respect_downstream_limits,
 							       INTEL_OUTPUT_FORMAT_RGB,
-							       false);
+							       enable_frl);
 		}
 	} else {
 		ret = intel_hdmi_compute_output_format(encoder, crtc_state, connector,
 						       respect_downstream_limits,
 						       INTEL_OUTPUT_FORMAT_RGB,
-						       false);
+						       enable_frl);
 
 		if (ret && drm_mode_is_420_also(info, adjusted_mode))
 			ret = intel_hdmi_compute_output_format(encoder, crtc_state, connector,
 							       respect_downstream_limits,
 							       INTEL_OUTPUT_FORMAT_YCBCR420,
-							       false);
+							       enable_frl);
 	}
 
 	return ret;
@@ -2620,6 +2621,26 @@ bool intel_hdmi_compute_has_hdmi_sink(struct intel_encoder *encoder,
 		!intel_hdmi_is_cloned(crtc_state);
 }
 
+static int intel_hdmi_compute_formats(struct intel_encoder *encoder,
+				      struct intel_crtc_state *crtc_state,
+				      const struct drm_connector_state *conn_state,
+				      bool enable_frl)
+{
+	int ret;
+
+	/*
+	 * Try to respect downstream TMDS clock limits first, if
+	 * that fails assume the user might know something we don't.
+	 */
+	ret = _intel_hdmi_compute_formats(encoder, crtc_state,
+					  conn_state, true, enable_frl);
+	if (ret)
+		ret = _intel_hdmi_compute_formats(encoder, crtc_state,
+						  conn_state, false, enable_frl);
+
+	return ret;
+}
+
 int intel_hdmi_compute_config(struct intel_encoder *encoder,
 			      struct intel_crtc_state *pipe_config,
 			      struct drm_connector_state *conn_state)
@@ -2628,6 +2649,9 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 	struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
 	struct intel_connector *connector = to_intel_connector(conn_state->connector);
 	struct drm_scdc *scdc = &connector->base.display_info.hdmi.scdc;
+	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
+	bool enable_frl = false;
+	int lane_count = 4;
 	int ret;
 
 	if (adjusted_mode->flags & DRM_MODE_FLAG_DBLSCAN)
@@ -2648,13 +2672,23 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 	if (!intel_link_bw_compute_pipe_bpp(pipe_config))
 		return -EINVAL;
 
-	/*
-	 * Try to respect downstream TMDS clock limits first, if
-	 * that fails assume the user might know something we don't.
-	 */
-	ret = intel_hdmi_compute_formats(encoder, pipe_config, conn_state, true);
-	if (ret)
-		ret = intel_hdmi_compute_formats(encoder, pipe_config, conn_state, false);
+	if (HAS_HDMI_FRL(display) &&
+	    intel_bios_hdmi_max_frl_rate(encoder->devdata) &&
+	    intel_hdmi->has_sink_hdmi_21)
+		enable_frl = true;
+
+	ret = intel_hdmi_compute_formats(encoder, pipe_config, conn_state, false);
+
+	if (ret && enable_frl) {
+		ret = intel_hdmi_compute_formats(encoder, pipe_config, conn_state, true);
+		drm_dbg_kms(display->drm,
+			    "Enabling FRL mode with lanes = %d rate = %d\n",
+			    pipe_config->frl.required_lanes,
+			    pipe_config->frl.required_rate);
+		pipe_config->frl.enable = true;
+		lane_count = pipe_config->frl.required_lanes;
+	}
+
 	if (ret) {
 		drm_dbg_kms(display->drm,
 			    "unsupported HDMI clock (%d kHz), rejecting mode\n",
@@ -2677,7 +2711,7 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 		adjusted_mode->picture_aspect_ratio =
 			conn_state->picture_aspect_ratio;
 
-	pipe_config->lane_count = 4;
+	pipe_config->lane_count = lane_count;
 
 	if (scdc->scrambling.supported && source_supports_scrambling(encoder) &&
 	    !pipe_config->frl.enable) {
