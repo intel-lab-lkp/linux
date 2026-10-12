@@ -500,17 +500,18 @@ static void xas_delete_node(struct xa_state *xas)
 		parent = xa_parent_locked(xas->xa, node);
 		xas->xa_node = parent;
 		xas->xa_offset = node->offset;
-		xa_node_free(node);
 
 		if (!parent) {
 			xas->xa->xa_head = NULL;
 			xas->xa_node = XAS_BOUNDS;
+			xa_node_free(node);
 			return;
 		}
 
 		parent->slots[xas->xa_offset] = NULL;
 		parent->count--;
 		XA_NODE_BUG_ON(parent, parent->count > XA_CHUNK_SIZE);
+		xa_node_free(node);
 		node = parent;
 		xas_update(xas, node);
 	}
