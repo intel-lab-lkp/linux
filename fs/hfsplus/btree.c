@@ -385,7 +385,12 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id)
 	if (IS_ERR(node))
 		goto free_inode;
 
-	if (!hfs_bmap_test_bit(node, 0)) {
+	/*
+	 * Only a mount may set SB_RDONLY, later that needs s_umount. After the
+	 * mount this only opens the attributes tree that
+	 * hfsplus_create_attributes_file() just created with the bit set.
+	 */
+	if (!(sb->s_flags & SB_BORN) && !hfs_bmap_test_bit(node, 0)) {
 		pr_warn("(%s): %s (cnid 0x%x) map record invalid or bitmap corruption detected, forcing read-only.\n",
 				sb->s_id, hfs_btree_name(id), id);
 		pr_warn("Run fsck.hfsplus to repair.\n");
