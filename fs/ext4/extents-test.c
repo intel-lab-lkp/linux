@@ -1043,12 +1043,12 @@ static int test_handle_unwritten_init(struct kunit *test)
  * https://lore.kernel.org/linux-kselftest/aULJpTvJDw9ctUDe@li-dc0c254c-257c-11b2-a85c-98b6c1322444.ibm.com/
  */
 static struct kunit_case extents_test_cases[] = {
-	KUNIT_CASE_PARAM_WITH_INIT(test_split_convert, kunit_array_gen_params,
-				   test_split_convert_param_init, NULL),
-	KUNIT_CASE_PARAM_WITH_INIT(test_split_convert, kunit_array_gen_params,
-				   test_convert_initialized_param_init, NULL),
-	KUNIT_CASE_PARAM_WITH_INIT(test_split_convert, kunit_array_gen_params,
-				   test_handle_unwritten_init, NULL),
+	KUNIT_CASE_PARAM_WITH_INIT_UNIQUE(test_split_convert, kunit_array_gen_params,
+					  test_split_convert_param_init, NULL),
+	KUNIT_CASE_PARAM_WITH_INIT_UNIQUE(test_split_convert, kunit_array_gen_params,
+					  test_convert_initialized_param_init, NULL),
+	KUNIT_CASE_PARAM_WITH_INIT_UNIQUE(test_split_convert, kunit_array_gen_params,
+					  test_handle_unwritten_init, NULL),
 	{}
 };
 
