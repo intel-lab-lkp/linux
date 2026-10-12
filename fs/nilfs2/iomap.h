@@ -8,6 +8,6 @@
 #ifndef _NILFS_IOMAP_H
 #define _NILFS_IOMAP_H
 
-extern const struct iomap_ops nilfs_iomap_ops;
+DECLARE_IOMAP_ITER_NEXT(nilfs_iomap_next);
 
 #endif /* _NILFS_IOMAP_H */
