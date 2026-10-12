@@ -83,6 +83,7 @@ struct ext2_sb_info {
 	struct ext2_super_block * s_es;	/* Pointer to the super block in the buffer */
 	struct buffer_head ** s_group_desc;
 	unsigned long  s_mount_opt;
+	unsigned long s_ext2_flags;	/* EXT2_FLAGS_* runtime state */
 	unsigned long s_sb_block;
 	kuid_t s_resuid;
 	kgid_t s_resgid;
@@ -355,6 +356,18 @@ struct ext2_inode {
  */
 #define	EXT2_VALID_FS			0x0001	/* Unmounted cleanly */
 #define	EXT2_ERROR_FS			0x0002	/* Errors detected */
+
+/*
+ * Runtime state bits in ext2_sb_info->s_ext2_flags
+ */
+enum {
+	EXT2_FLAGS_EMERGENCY_RO,	/* read-only after an error */
+};
+
+static inline bool ext2_emergency_ro(struct super_block *sb)
+{
+	return test_bit(EXT2_FLAGS_EMERGENCY_RO, &EXT2_SB(sb)->s_ext2_flags);
+}
 
 /*
  * Mount flags
@@ -775,6 +788,7 @@ extern const struct file_operations ext2_dir_operations;
 /* file.c */
 extern const struct inode_operations ext2_file_inode_operations;
 extern const struct file_operations ext2_file_operations;
+extern int ext2_fsync(struct file *file, loff_t start, loff_t end, int datasync);
 
 /* inode.c */
 extern void ext2_set_file_ops(struct inode *inode);

@@ -205,6 +205,10 @@ static int ext2_link (struct dentry * old_dentry, struct inode * dir,
 	struct inode *inode = d_inode(old_dentry);
 	int err;
 
+	/* Refuse before touching the link count and ctime of the inode. */
+	if (ext2_emergency_ro(dir->i_sb))
+		return -EROFS;
+
 	err = dquot_initialize(dir);
 	if (err)
 		return err;
@@ -275,6 +279,9 @@ static int ext2_unlink(struct inode *dir, struct dentry *dentry)
 	struct folio *folio;
 	int err;
 
+	if (ext2_emergency_ro(dir->i_sb))
+		return -EROFS;
+
 	err = dquot_initialize(dir);
 	if (err)
 		goto out;
@@ -332,6 +339,9 @@ static int ext2_rename (struct mnt_idmap * idmap,
 
 	if (flags & ~RENAME_NOREPLACE)
 		return -EINVAL;
+
+	if (ext2_emergency_ro(old_dir->i_sb))
+		return -EROFS;
 
 	err = dquot_initialize(old_dir);
 	if (err)

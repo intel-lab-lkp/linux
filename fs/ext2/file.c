@@ -175,14 +175,28 @@ static ssize_t ext2_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 
 static ssize_t ext2_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
+	if (ext2_emergency_ro(file_inode(iocb->ki_filp)->i_sb))
+		return -EROFS;
+
 	if (iocb->ki_flags & IOCB_DIRECT)
 		return ext2_dio_write_iter(iocb, from);
 
 	return generic_file_write_iter(iocb, from);
 }
 
+/* Inodes aren't written back after an error, don't claim they're on disk. */
+int ext2_fsync(struct file *file, loff_t start, loff_t end, int datasync)
+{
+	if (ext2_emergency_ro(file_inode(file)->i_sb))
+		return -EROFS;
+	return simple_fsync(file, start, end, datasync);
+}
+
 static int ext2_file_open(struct inode *inode, struct file *filp)
 {
+	if ((filp->f_mode & FMODE_WRITE) && ext2_emergency_ro(inode->i_sb))
+		return -EROFS;
+
 	filp->f_mode |= FMODE_CAN_ODIRECT;
 	return dquot_file_open(inode, filp);
 }
@@ -198,7 +212,7 @@ const struct file_operations ext2_file_operations = {
 	.mmap_prepare	= generic_file_mmap_prepare,
 	.open		= ext2_file_open,
 	.release	= ext2_release_file,
-	.fsync		= simple_fsync,
+	.fsync		= ext2_fsync,
 	.get_unmapped_area = thp_get_unmapped_area,
 	.splice_read	= filemap_splice_read,
 	.splice_write	= iter_file_splice_write,

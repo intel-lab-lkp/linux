@@ -53,7 +53,7 @@ void ext2_error(struct super_block *sb, const char *function,
 	struct ext2_sb_info *sbi = EXT2_SB(sb);
 	struct ext2_super_block *es = sbi->s_es;
 
-	if (!sb_rdonly(sb)) {
+	if (!sb_rdonly(sb) && !ext2_emergency_ro(sb)) {
 		spin_lock(&sbi->s_lock);
 		sbi->s_mount_state |= EXT2_ERROR_FS;
 		es->s_state |= cpu_to_le16(EXT2_ERROR_FS);
@@ -73,11 +73,15 @@ void ext2_error(struct super_block *sb, const char *function,
 
 	if (test_opt(sb, ERRORS_PANIC))
 		panic("EXT2-fs: panic from previous error\n");
-	if (!sb_rdonly(sb) && test_opt(sb, ERRORS_RO)) {
+	/*
+	 * Don't set SB_RDONLY, that needs sb->s_umount and a remount. Flipping
+	 * it on a frozen filesystem makes thaw leave s_writers locked forever.
+	 * EXT2_FLAGS_EMERGENCY_RO makes ext2 refuse modifications instead.
+	 */
+	if (!sb_rdonly(sb) && test_opt(sb, ERRORS_RO) &&
+	    !test_and_set_bit(EXT2_FLAGS_EMERGENCY_RO, &sbi->s_ext2_flags))
 		ext2_msg(sb, KERN_CRIT,
 			     "error: remounting filesystem read-only");
-		sb->s_flags |= SB_RDONLY;
-	}
 }
 
 static void ext2_msg_fc(struct fs_context *fc, const char *prefix,
@@ -178,7 +182,7 @@ static void ext2_put_super (struct super_block * sb)
 	ext2_xattr_destroy_cache(sbi->s_ea_block_cache);
 	sbi->s_ea_block_cache = NULL;
 
-	if (!sb_rdonly(sb)) {
+	if (!sb_rdonly(sb) && !ext2_emergency_ro(sb)) {
 		struct ext2_super_block *es = sbi->s_es;
 
 		spin_lock(&sbi->s_lock);
@@ -298,6 +302,8 @@ static int ext2_show_options(struct seq_file *seq, struct dentry *root)
 		seq_puts(seq, ",errors=continue");
 	if (test_opt(sb, ERRORS_PANIC))
 		seq_puts(seq, ",errors=panic");
+	if (ext2_emergency_ro(sb))
+		seq_puts(seq, ",emergency_ro");
 	if (test_opt(sb, NO_UID32))
 		seq_puts(seq, ",nouid32");
 	if (test_opt(sb, DEBUG))
@@ -346,14 +352,30 @@ static struct dquot __rcu **ext2_get_dquots(struct inode *inode)
 	return EXT2_I(inode)->i_dquot;
 }
 
+/* After an error quota changes can't be written anymore. */
+static int ext2_set_dqinfo(struct super_block *sb, int type, struct qc_info *ii)
+{
+	if (ext2_emergency_ro(sb))
+		return -EROFS;
+	return dquot_set_dqinfo(sb, type, ii);
+}
+
+static int ext2_set_dqblk(struct super_block *sb, struct kqid qid,
+			  struct qc_dqblk *di)
+{
+	if (ext2_emergency_ro(sb))
+		return -EROFS;
+	return dquot_set_dqblk(sb, qid, di);
+}
+
 static const struct quotactl_ops ext2_quotactl_ops = {
 	.quota_on	= ext2_quota_on,
 	.quota_off	= ext2_quota_off,
 	.quota_sync	= dquot_quota_sync,
 	.get_state	= dquot_get_state,
-	.set_info	= dquot_set_dqinfo,
+	.set_info	= ext2_set_dqinfo,
 	.get_dqblk	= dquot_get_dqblk,
-	.set_dqblk	= dquot_set_dqblk,
+	.set_dqblk	= ext2_set_dqblk,
 	.get_nextdqblk	= dquot_get_next_dqblk,
 };
 #endif
@@ -1282,6 +1304,10 @@ static int ext2_sync_fs(struct super_block *sb, int wait)
 	struct ext2_sb_info *sbi = EXT2_SB(sb);
 	struct ext2_super_block *es = EXT2_SB(sb)->s_es;
 
+	/* Nothing may be written after an error made us read-only. */
+	if (ext2_emergency_ro(sb))
+		return 0;
+
 	/*
 	 * Write quota structures to quota file, sync_blockdev() will write
 	 * them to disk later
@@ -1301,6 +1327,9 @@ static int ext2_sync_fs(struct super_block *sb, int wait)
 static int ext2_freeze(struct super_block *sb)
 {
 	struct ext2_sb_info *sbi = EXT2_SB(sb);
+
+	if (ext2_emergency_ro(sb))
+		return 0;
 
 	/*
 	 * Open but unlinked files present? Keep EXT2_VALID_FS flag cleared
@@ -1344,7 +1373,9 @@ static int ext2_reconfigure(struct fs_context *fc)
 	int flags = fc->sb_flags;
 	int err;
 
-	sync_filesystem(sb);
+	/* Nothing may be written after an error made us read-only. */
+	if (!ext2_emergency_ro(sb))
+		sync_filesystem(sb);
 
 	new_opts.s_mount_opt = ctx->vals_s_mount_opt;
 	new_opts.s_resuid = ctx->s_resuid;
@@ -1355,6 +1386,9 @@ static int ext2_reconfigure(struct fs_context *fc)
 	if ((bool)(flags & SB_RDONLY) == sb_rdonly(sb))
 		goto out_set;
 	if (flags & SB_RDONLY) {
+		/* After an error nothing may be written, just go read-only. */
+		if (ext2_emergency_ro(sb))
+			goto out_set;
 		if (le16_to_cpu(es->s_state) & EXT2_VALID_FS ||
 		    !(sbi->s_mount_state & EXT2_VALID_FS))
 			goto out_set;
@@ -1375,6 +1409,12 @@ static int ext2_reconfigure(struct fs_context *fc)
 	} else {
 		__le32 ret = EXT2_HAS_RO_COMPAT_FEATURE(sb,
 					       ~EXT2_FEATURE_RO_COMPAT_SUPP);
+
+		/* An error made the filesystem read-only until umount. */
+		if (ext2_emergency_ro(sb)) {
+			spin_unlock(&sbi->s_lock);
+			return -EROFS;
+		}
 		if (ret) {
 			spin_unlock(&sbi->s_lock);
 			ext2_msg(sb, KERN_WARNING,
@@ -1540,6 +1580,9 @@ static ssize_t ext2_quota_write(struct super_block *sb, int type,
 	struct buffer_head tmp_bh;
 	struct buffer_head *bh;
 
+	if (ext2_emergency_ro(sb))
+		return -EROFS;
+
 	while (towrite > 0) {
 		tocopy = min_t(size_t, sb->s_blocksize - offset, towrite);
 
@@ -1584,6 +1627,9 @@ static int ext2_quota_on(struct super_block *sb, int type, int format_id,
 {
 	int err;
 	struct inode *inode;
+
+	if (ext2_emergency_ro(sb))
+		return -EROFS;
 
 	err = dquot_quota_on(sb, type, format_id, path);
 	if (err)

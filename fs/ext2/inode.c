@@ -71,7 +71,9 @@ void ext2_evict_inode(struct inode * inode)
 	struct ext2_block_alloc_info *rsv;
 	int want_delete = 0;
 
-	if (!inode->i_nlink && !is_bad_inode(inode)) {
+	/* After an error made us read-only the inode is left to e2fsck. */
+	if (!inode->i_nlink && !is_bad_inode(inode) &&
+	    !ext2_emergency_ro(inode->i_sb)) {
 		want_delete = 1;
 		dquot_initialize(inode);
 	} else {
@@ -1474,10 +1476,14 @@ int ext2_write_inode(struct inode *inode, struct writeback_control *wbc)
 	uid_t uid = i_uid_read(inode);
 	gid_t gid = i_gid_read(inode);
 	struct buffer_head * bh;
-	struct ext2_inode * raw_inode = ext2_get_inode(sb, ino, &bh);
+	struct ext2_inode *raw_inode;
 	int n;
 	int err = 0;
 
+	if (ext2_emergency_ro(sb))
+		return -EROFS;
+
+	raw_inode = ext2_get_inode(sb, ino, &bh);
 	if (IS_ERR(raw_inode))
  		return -EIO;
 
@@ -1622,6 +1628,9 @@ int ext2_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 {
 	struct inode *inode = d_inode(dentry);
 	int error;
+
+	if (ext2_emergency_ro(inode->i_sb))
+		return -EROFS;
 
 	error = setattr_prepare(&nop_mnt_idmap, dentry, iattr);
 	if (error)

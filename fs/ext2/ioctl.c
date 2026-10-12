@@ -33,6 +33,9 @@ int ext2_fileattr_set(struct mnt_idmap *idmap,
 	struct inode *inode = d_inode(dentry);
 	struct ext2_inode_info *ei = EXT2_I(inode);
 
+	if (ext2_emergency_ro(inode->i_sb))
+		return -EROFS;
+
 	if (fileattr_has_fsx(fa))
 		return -EOPNOTSUPP;
 
@@ -71,6 +74,10 @@ long ext2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		ret = mnt_want_write_file(filp);
 		if (ret)
 			return ret;
+		if (ext2_emergency_ro(inode->i_sb)) {
+			ret = -EROFS;
+			goto setversion_out;
+		}
 		if (get_user(generation, (int __user *) arg)) {
 			ret = -EFAULT;
 			goto setversion_out;
