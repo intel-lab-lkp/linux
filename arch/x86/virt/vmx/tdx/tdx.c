@@ -467,6 +467,10 @@ static const struct field_mapping td_ctrl_mappings[] __initconst = {
 	FIELD_MAP(TDX_FIELD_TDVPS_BASE_SIZE,	td_ctrl, tdvps_base_size),
 };
 
+static const struct field_mapping handoff_mappings[] = {
+	FIELD_MAP(TDX_FIELD_MODULE_HV, handoff, module_hv),
+};
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
@@ -1394,7 +1398,7 @@ int tdx_module_shutdown(void)
 	int ret;
 	int cpu;
 
-	ret = get_tdx_sys_info_handoff(&handoff);
+	ret = read_sys_metadata_table(handoff_mappings, &handoff);
 	/*
 	 * Handoff information is required for proper
 	 * shutdown. Refuse to shut down without it.
