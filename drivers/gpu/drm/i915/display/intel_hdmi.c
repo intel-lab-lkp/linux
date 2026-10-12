@@ -1985,9 +1985,9 @@ static bool intel_hdmi_sink_bpc_possible(struct drm_connector *_connector,
 }
 
 static enum drm_mode_status
-intel_hdmi_mode_clock_valid(struct drm_connector *_connector, int clock,
-			    bool has_hdmi_sink,
-			    enum intel_output_format sink_format)
+intel_hdmi_tmds_mode_clock_valid(struct drm_connector *_connector, int clock,
+				 bool has_hdmi_sink,
+				 enum intel_output_format sink_format)
 {
 	struct intel_connector *connector = to_intel_connector(_connector);
 	struct intel_display *display = to_intel_display(connector);
@@ -2063,7 +2063,7 @@ intel_hdmi_mode_valid_format(struct intel_connector *connector,
 	if (status != MODE_OK)
 		return status;
 
-	return intel_hdmi_mode_clock_valid(&connector->base, clock, has_hdmi_sink, sink_format);
+	return intel_hdmi_tmds_mode_clock_valid(&connector->base, clock, has_hdmi_sink, sink_format);
 }
 
 static enum drm_mode_status
