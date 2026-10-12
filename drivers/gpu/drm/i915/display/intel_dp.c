@@ -191,102 +191,47 @@ static void intel_dp_set_default_sink_rates(struct intel_dp *intel_dp)
 	intel_dp->num_sink_rates = 1;
 }
 
-static bool dprx_supports_128b132b(struct intel_dp *intel_dp)
-{
-	if (intel_dp_tunnel_bw_alloc_is_enabled(intel_dp))
-		return drm_dp_tunnel_128b132b_supported(intel_dp->tunnel);
-	else
-		return drm_dp_128b132b_supported(intel_dp->dpcd);
-}
-
-static u8 dprx_128b132b_link_rates(struct intel_dp *intel_dp, u8 no_bwa_rates)
-{
-	u8 ret;
-
-	if (!intel_dp_tunnel_bw_alloc_is_enabled(intel_dp))
-		return no_bwa_rates;
-
-	ret = drm_dp_tunnel_128b132b_dprx_rates(intel_dp->tunnel);
-	static_assert(DP_TUNNELING_10GBPS_PER_LANE_SUPPORT == DP_UHBR10 &&
-		      DP_TUNNELING_13_5GBPS_PER_LANE_SUPPORT == DP_UHBR13_5 &&
-		      DP_TUNNELING_20GBPS_PER_LANE_SUPPORT == DP_UHBR20);
-
-	return ret;
-}
-
 /* update sink rates from dpcd */
 static void intel_dp_set_dpcd_sink_rates(struct intel_dp *intel_dp)
 {
-	static const int dp_rates[] = {
-		162000, 270000, 540000, 810000
-	};
-	int i, max_rate;
-	int max_lttpr_rate;
-	u8 uhbr_rates = 0;
+	int num_sink_rates;
+	int max_rate;
+	int i, num;
 
-	if (drm_dp_has_quirk(&intel_dp->desc, DP_DPCD_QUIRK_CAN_DO_MAX_LINK_RATE_3_24_GBPS)) {
-		/* Needed, e.g., for Apple MBP 2017, 15 inch eDP Retina panel */
-		static const int quirk_rates[] = { 162000, 270000, 324000 };
-
-		memcpy(intel_dp->sink_rates, quirk_rates, sizeof(quirk_rates));
-		intel_dp->num_sink_rates = ARRAY_SIZE(quirk_rates);
-
-		return;
-	}
+	num_sink_rates = drm_dp_read_dpcd_sink_rates(&intel_dp->aux,
+						     intel_dp->dpcd,
+						     intel_dp->lttpr_common_caps,
+						     &intel_dp->desc,
+						     intel_dp->tunnel,
+						     intel_dp->sink_rates);
+	if (num_sink_rates < 0)
+		num_sink_rates = 0;
 
 	/*
-	 * Sink rates for 8b/10b.
+	 * Don't limit the rates of sinks with the 3.24 Gbps DPCD quirk
+	 * (needed, e.g., for Apple MBP 2017, 15 inch eDP Retina panels),
+	 * they support rates not advertised by DP_MAX_LINK_RATE.
 	 */
-	max_rate = max_dprx_rate(intel_dp);
-	max_lttpr_rate = drm_dp_lttpr_max_link_rate(intel_dp->lttpr_common_caps);
-	if (max_lttpr_rate)
-		max_rate = min(max_rate, max_lttpr_rate);
+	if (!drm_dp_has_quirk(&intel_dp->desc, DP_DPCD_QUIRK_CAN_DO_MAX_LINK_RATE_3_24_GBPS)) {
+		/*
+		 * Limit the 8b/10b rates to the maximum rate the source can
+		 * drive. The 128b/132b rates are all above the maximum 8b/10b
+		 * rate and are not limited by the source's DP_MAX_LINK_RATE.
+		 */
+		max_rate = max_dprx_rate(intel_dp);
+		num = 0;
+		for (i = 0; i < num_sink_rates; i++) {
+			if (!drm_dp_is_uhbr_rate(intel_dp->sink_rates[i]) &&
+			    intel_dp->sink_rates[i] > max_rate)
+				continue;
 
-	for (i = 0; i < ARRAY_SIZE(dp_rates); i++) {
-		if (dp_rates[i] > max_rate)
-			break;
-		intel_dp->sink_rates[i] = dp_rates[i];
-	}
-
-	/*
-	 * The following register must be read unconditionally for the later
-	 * DP tunnel 128b132b detection to work, see DP Standard v2.1 5.14.3 .
-	 */
-	drm_dp_dpcd_read_byte(&intel_dp->aux, DP_128B132B_SUPPORTED_LINK_RATES, &uhbr_rates);
-
-	/*
-	 * Sink rates for 128b/132b. If set, sink should support all 8b/10b
-	 * rates and 10 Gbps.
-	 */
-	if (dprx_supports_128b132b(intel_dp)) {
-		BUILD_BUG_ON(ARRAY_SIZE(intel_dp->sink_rates) < ARRAY_SIZE(dp_rates) + 3);
-
-		uhbr_rates = dprx_128b132b_link_rates(intel_dp, uhbr_rates);
-
-		if (drm_dp_lttpr_count(intel_dp->lttpr_common_caps)) {
-			/* We have a repeater */
-			if (intel_dp->lttpr_common_caps[0] >= 0x20 &&
-			    intel_dp->lttpr_common_caps[DP_MAIN_LINK_CHANNEL_CODING_PHY_REPEATER -
-							DP_LT_TUNABLE_PHY_REPEATER_FIELD_DATA_STRUCTURE_REV] &
-			    DP_PHY_REPEATER_128B132B_SUPPORTED) {
-				/* Repeater supports 128b/132b, valid UHBR rates */
-				uhbr_rates &= intel_dp->lttpr_common_caps[DP_PHY_REPEATER_128B132B_RATES -
-									  DP_LT_TUNABLE_PHY_REPEATER_FIELD_DATA_STRUCTURE_REV];
-			} else {
-				/* Does not support 128b/132b */
-				uhbr_rates = 0;
-			}
+			intel_dp->sink_rates[num++] = intel_dp->sink_rates[i];
 		}
 
-		if (uhbr_rates & DP_UHBR10)
-			intel_dp->sink_rates[i++] = 1000000;
-		if (uhbr_rates & DP_UHBR13_5)
-			intel_dp->sink_rates[i++] = 1350000;
-		if (uhbr_rates & DP_UHBR20)
-			intel_dp->sink_rates[i++] = 2000000;
+		num_sink_rates = num;
 	}
 
-	intel_dp->num_sink_rates = i;
+	intel_dp->num_sink_rates = num_sink_rates;
 }
 
 static void intel_dp_set_sink_rates(struct intel_dp *intel_dp)
@@ -4722,50 +4667,24 @@ static void
 intel_edp_set_sink_rates(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
+	int num_sink_rates;
 
-	intel_dp->num_sink_rates = 0;
+	num_sink_rates = drm_dp_read_edp_sink_rates(&intel_dp->aux,
+						    intel_dp->edp_dpcd[0],
+						    intel_dp->sink_rates);
+	if (num_sink_rates < 0)
+		num_sink_rates = 0;
 
-	if (intel_dp->edp_dpcd[0] >= DP_EDP_14) {
-		__le16 sink_rates[DP_MAX_SUPPORTED_RATES];
-		int ret;
-		int i;
+	/*
+	 * Some platforms cannot reliably drive HBR3 rates due to PHY limitations,
+	 * even if the sink advertises support. Reject any sink rates above HBR2 on
+	 * the known machines for stable output.
+	 */
+	if (num_sink_rates && intel_has_quirk(display, QUIRK_EDP_LIMIT_RATE_HBR2))
+		num_sink_rates = intel_dp_rate_limit_len(intel_dp->sink_rates,
+							 num_sink_rates, 540000);
 
-		ret = drm_dp_dpcd_read_data(&intel_dp->aux,
-					    DP_SUPPORTED_LINK_RATES,
-					    sink_rates, sizeof(sink_rates));
-		if (ret < 0) {
-			drm_dbg_kms(display->drm,
-				    "Unable to read eDP supported link rates, using default rates\n");
-			memset(sink_rates, 0, sizeof(sink_rates));
-		}
-
-		for (i = 0; i < ARRAY_SIZE(sink_rates); i++) {
-			int rate;
-
-			/* Value read multiplied by 200kHz gives the per-lane
-			 * link rate in kHz. The source rates are, however,
-			 * stored in terms of LS_Clk kHz. The full conversion
-			 * back to symbols is
-			 * (val * 200kHz)*(8/10 ch. encoding)*(1/8 bit to Byte)
-			 */
-			rate = le16_to_cpu(sink_rates[i]) * 200 / 10;
-
-			if (rate == 0)
-				break;
-
-			/*
-			 * Some platforms cannot reliably drive HBR3 rates due to PHY limitations,
-			 * even if the sink advertises support. Reject any sink rates above HBR2 on
-			 * the known machines for stable output.
-			 */
-			if (rate > 540000 &&
-			    intel_has_quirk(display, QUIRK_EDP_LIMIT_RATE_HBR2))
-				break;
-
-			intel_dp->sink_rates[i] = rate;
-		}
-		intel_dp->num_sink_rates = i;
-	}
+	intel_dp->num_sink_rates = num_sink_rates;
 
 	/*
 	 * Use DP_LINK_RATE_SET if DP_SUPPORTED_LINK_RATES are available,
