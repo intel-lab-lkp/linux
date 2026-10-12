@@ -26,6 +26,8 @@ affs_file_open(struct inode *inode, struct file *filp)
 {
 	pr_debug("open(%llu,%d)\n",
 		 inode->i_ino, atomic_read(&AFFS_I(inode)->i_opencnt));
+	if ((filp->f_mode & FMODE_WRITE) && affs_emergency_ro(inode->i_sb))
+		return -EROFS;
 	atomic_inc(&AFFS_I(inode)->i_opencnt);
 	return 0;
 }
@@ -988,6 +990,10 @@ int affs_file_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
 	struct inode *inode = filp->f_mapping->host;
 	int ret, err;
 
+	/* Inodes aren't written back after an error. */
+	if (affs_emergency_ro(inode->i_sb))
+		return -EROFS;
+
 	err = file_write_and_wait_range(filp, start, end);
 	if (err)
 		return err;
@@ -1000,10 +1006,18 @@ int affs_file_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
 	inode_unlock(inode);
 	return ret;
 }
+
+static ssize_t affs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+{
+	if (affs_emergency_ro(file_inode(iocb->ki_filp)->i_sb))
+		return -EROFS;
+	return generic_file_write_iter(iocb, from);
+}
+
 const struct file_operations affs_file_operations = {
 	.llseek		= generic_file_llseek,
 	.read_iter	= generic_file_read_iter,
-	.write_iter	= generic_file_write_iter,
+	.write_iter	= affs_file_write_iter,
 	.mmap_prepare	= generic_file_mmap_prepare,
 	.open		= affs_file_open,
 	.release	= affs_file_release,

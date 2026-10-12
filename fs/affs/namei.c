@@ -238,6 +238,8 @@ affs_unlink(struct inode *dir, struct dentry *dentry)
 	pr_debug("%s(dir=%llu, %llu \"%pd\")\n", __func__, dir->i_ino,
 		 d_inode(dentry)->i_ino, dentry);
 
+	if (affs_emergency_ro(dir->i_sb))
+		return -EROFS;
 	return affs_remove_header(dentry);
 }
 
@@ -251,6 +253,9 @@ affs_create(struct mnt_idmap *idmap, struct inode *dir,
 
 	pr_debug("%s(%llu,\"%pd\",0%ho)\n",
 		 __func__, dir->i_ino, dentry, mode);
+
+	if (affs_emergency_ro(sb))
+		return -EROFS;
 
 	inode = affs_new_inode(dir);
 	if (!inode)
@@ -283,6 +288,9 @@ affs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	pr_debug("%s(%llu,\"%pd\",0%ho)\n",
 		 __func__, dir->i_ino, dentry, mode);
 
+	if (affs_emergency_ro(dir->i_sb))
+		return ERR_PTR(-EROFS);
+
 	inode = affs_new_inode(dir);
 	if (!inode)
 		return ERR_PTR(-ENOSPC);
@@ -309,6 +317,8 @@ affs_rmdir(struct inode *dir, struct dentry *dentry)
 	pr_debug("%s(dir=%llu, %llu \"%pd\")\n", __func__, dir->i_ino,
 		 d_inode(dentry)->i_ino, dentry);
 
+	if (affs_emergency_ro(dir->i_sb))
+		return -EROFS;
 	return affs_remove_header(dentry);
 }
 
@@ -325,6 +335,9 @@ affs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 
 	pr_debug("%s(%llu,\"%pd\" -> \"%s\")\n",
 		 __func__, dir->i_ino, dentry, symname);
+
+	if (affs_emergency_ro(sb))
+		return -EROFS;
 
 	maxlen = AFFS_SB(sb)->s_hashsize * sizeof(u32) - 1;
 	inode  = affs_new_inode(dir);
@@ -398,6 +411,8 @@ affs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 	pr_debug("%s(%llu, %llu, \"%pd\")\n", __func__, inode->i_ino, dir->i_ino,
 		 dentry);
 
+	if (affs_emergency_ro(dir->i_sb))
+		return -EROFS;
 	return affs_add_entry(dir, inode, dentry, ST_LINKFILE);
 }
 
@@ -513,6 +528,9 @@ int affs_rename2(struct mnt_idmap *idmap, struct inode *old_dir,
 
 	pr_debug("%s(old=%llu,\"%pd\" to new=%llu,\"%pd\")\n", __func__,
 		 old_dir->i_ino, old_dentry, new_dir->i_ino, new_dentry);
+
+	if (affs_emergency_ro(old_dir->i_sb))
+		return -EROFS;
 
 	if (flags & RENAME_EXCHANGE)
 		return affs_xrename(old_dir, old_dentry, new_dir, new_dentry);

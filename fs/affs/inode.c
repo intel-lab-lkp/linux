@@ -173,6 +173,8 @@ affs_write_inode(struct inode *inode, struct writeback_control *wbc)
 
 	pr_debug("write_inode(%llu)\n", inode->i_ino);
 
+	if (affs_emergency_ro(sb))
+		return -EROFS;
 	if (!inode->i_nlink)
 		// possibly free block
 		return 0;
@@ -219,6 +221,9 @@ affs_setattr(struct mnt_idmap *idmap, struct dentry *dentry, struct iattr *attr)
 	int error;
 
 	pr_debug("setattr(%llu,0x%x)\n", inode->i_ino, attr->ia_valid);
+
+	if (affs_emergency_ro(inode->i_sb))
+		return -EROFS;
 
 	error = setattr_prepare(&nop_mnt_idmap, dentry, attr);
 	if (error)

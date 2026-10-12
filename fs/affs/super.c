@@ -36,6 +36,9 @@ affs_commit_super(struct super_block *sb, int wait)
 	struct buffer_head *bh = sbi->s_root_bh;
 	struct affs_root_tail *tail = AFFS_ROOT_TAIL(sb, bh);
 
+	if (affs_emergency_ro(sb))
+		return;
+
 	lock_buffer(bh);
 	affs_secs_to_datestamp(ktime_get_real_seconds(), &tail->disk_change);
 	affs_fix_checksum(sb, bh);
@@ -82,7 +85,7 @@ void affs_mark_sb_dirty(struct super_block *sb)
 	struct affs_sb_info *sbi = AFFS_SB(sb);
 	unsigned long delay;
 
-	if (sb_rdonly(sb))
+	if (sb_rdonly(sb) || affs_emergency_ro(sb))
 	       return;
 
 	spin_lock(&sbi->work_lock);
@@ -296,6 +299,8 @@ static int affs_show_options(struct seq_file *m, struct dentry *root)
 		seq_puts(m, ",verbose");
 	if (sbi->s_volume[0])
 		seq_printf(m, ",volume=%s", sbi->s_volume);
+	if (affs_emergency_ro(sb))
+		seq_puts(m, ",emergency_ro");
 	return 0;
 }
 
@@ -524,6 +529,11 @@ static int affs_reconfigure(struct fs_context *fc)
 	struct affs_sb_info	*sbi = AFFS_SB(sb);
 	int			 res = 0;
 
+	/* After an error, refuse going back to read-write until umount. */
+	if (affs_emergency_ro(sb) && sb_rdonly(sb) &&
+	    !(fc->sb_flags & SB_RDONLY))
+		return -EROFS;
+
 	sync_filesystem(sb);
 	fc->sb_flags |= SB_NODIRATIME;
 
@@ -550,10 +560,16 @@ static int affs_reconfigure(struct fs_context *fc)
 	if ((bool)(fc->sb_flags & SB_RDONLY) == sb_rdonly(sb))
 		return 0;
 
-	if (fc->sb_flags & SB_RDONLY)
-		affs_free_bitmap(sb);
-	else
+	if (fc->sb_flags & SB_RDONLY) {
+		/*
+		 * After an error evict and release still hand preallocated
+		 * and truncated blocks back, keep the bitmap until umount.
+		 */
+		if (!affs_emergency_ro(sb))
+			affs_free_bitmap(sb);
+	} else {
 		res = affs_init_bitmap(sb, &fc->sb_flags);
+	}
 
 	return res;
 }

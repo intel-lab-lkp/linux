@@ -479,9 +479,15 @@ affs_error(struct super_block *sb, const char *function, const char *fmt, ...)
 	vaf.fmt = fmt;
 	vaf.va = &args;
 	pr_crit("error (device %s): %s(): %pV\n", sb->s_id, function, &vaf);
-	if (!sb_rdonly(sb))
+	/*
+	 * Don't set SB_RDONLY: that requires sb->s_umount and a proper
+	 * remount. Set while the superblock is frozen it makes thaw_super()
+	 * skip releasing s_writers and every later writer hangs. Refuse
+	 * modifications until umount instead.
+	 */
+	if (!sb_rdonly(sb) &&
+	    !test_and_set_bit(AFFS_STATE_EMERGENCY_RO, &AFFS_SB(sb)->s_state))
 		pr_warn("Remounting filesystem read-only\n");
-	sb->s_flags |= SB_RDONLY;
 	va_end(args);
 }
 

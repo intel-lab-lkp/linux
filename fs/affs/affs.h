@@ -86,6 +86,7 @@ struct affs_sb_info {
 	u32 s_root_block;		/* FFS root block number. */
 	int s_hashsize;			/* Size of hash table. */
 	unsigned long s_flags;		/* See below. */
+	unsigned long s_state;		/* AFFS_STATE_* bits. */
 	kuid_t s_uid;			/* uid to override */
 	kgid_t s_gid;			/* gid to override */
 	umode_t s_mode;			/* mode to override */
@@ -119,6 +120,9 @@ struct affs_sb_info {
 #define AFFS_MOUNT_SF_VERBOSE		0x0800 /* Talk about fs when mounting */
 #define AFFS_MOUNT_SF_NO_TRUNCATE	0x1000 /* Don't truncate filenames */
 
+/* Bits in affs_sb_info->s_state. */
+#define AFFS_STATE_EMERGENCY_RO	0	/* Refuse modifications after an error */
+
 #define affs_clear_opt(o, opt)    (o &= ~AFFS_MOUNT_##opt)
 #define affs_set_opt(o, opt)      (o |= AFFS_MOUNT_##opt)
 #define affs_test_opt(o, opt)     ((o) & AFFS_MOUNT_##opt)
@@ -127,6 +131,11 @@ struct affs_sb_info {
 static inline struct affs_sb_info *AFFS_SB(struct super_block *sb)
 {
 	return sb->s_fs_info;
+}
+
+static inline bool affs_emergency_ro(struct super_block *sb)
+{
+	return test_bit(AFFS_STATE_EMERGENCY_RO, &AFFS_SB(sb)->s_state);
 }
 
 void affs_mark_sb_dirty(struct super_block *sb);
