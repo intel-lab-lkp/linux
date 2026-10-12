@@ -2536,6 +2536,7 @@ void wakeup_flusher_threads_bdi(struct backing_dev_info *bdi,
 	__wakeup_flusher_threads_bdi(bdi, reason);
 	rcu_read_unlock();
 }
+EXPORT_SYMBOL_GPL(wakeup_flusher_threads_bdi);
 
 /**
  * filemap_dontcache_kick_writeback - kick flusher for IOCB_DONTCACHE writes
