@@ -883,8 +883,9 @@ static int ntfs_setxattr(const struct xattr_handler *handler,
 	int err;
 	__le32 fattr;
 
-	if (NVolShutdown(ni->vol))
-		return -EIO;
+	err = ntfs_emergency_state(ni->vol);
+	if (err)
+		return err;
 
 	if (ntfs_is_reserved_lxattr(name) && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -1106,6 +1107,11 @@ out:
 int ntfs_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 		 struct posix_acl *acl, int type)
 {
+	int err;
+
+	err = ntfs_emergency_state(NTFS_I(d_inode(dentry))->vol);
+	if (err)
+		return err;
 	return ntfs_set_acl_ex(idmap, d_inode(dentry), acl, type, false);
 }
 

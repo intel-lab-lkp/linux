@@ -90,6 +90,7 @@
  * @sparse_compression_unit: Size of compression/sparse unit in clusters.
  * @lcn_empty_bits_per_page: Number of empty bits per page in the LCN bitmap.
  * @precalc_work: Work structure for background pre-calculation tasks.
+ * @error_work: Marks the volume dirty on disk after an error made it read-only.
  * @preallocated_size: reallocation size (in bytes).
  */
 struct ntfs_volume {
@@ -156,6 +157,7 @@ struct ntfs_volume {
 	u8 sparse_compression_unit;
 	unsigned int *lcn_empty_bits_per_page;
 	struct work_struct precalc_work;
+	struct work_struct error_work;
 	loff_t preallocated_size;
 };
 
@@ -184,6 +186,8 @@ struct ntfs_volume {
  * NV_Discard			Issue discard/TRIM commands for freed clusters.
  * NV_DisableSparse		Disable creation of sparse regions.
  * NV_NativeSymlinkRel		Translate absolute Windows reparse targets (native_symlink=rel).
+ * NV_EmergencyRO		An error made the volume read-only until it is
+ *				unmounted (errors=remount-ro).
  */
 enum {
 	NV_Errors,
@@ -203,6 +207,7 @@ enum {
 	NV_DisableSparse,
 	NV_NativeSymlinkRel,
 	NV_SymlinkNative,
+	NV_EmergencyRO,
 };
 
 /*
@@ -241,6 +246,23 @@ DEFINE_NVOL_BIT_OPS(Discard)
 DEFINE_NVOL_BIT_OPS(DisableSparse)
 DEFINE_NVOL_BIT_OPS(NativeSymlinkRel)
 DEFINE_NVOL_BIT_OPS(SymlinkNative)
+DEFINE_NVOL_BIT_OPS(EmergencyRO)
+
+/*
+ * ntfs_emergency_state - check whether the volume refuses modifications
+ * @vol:	ntfs volume to check
+ *
+ * Return -EIO if the volume was shut down, -EROFS if an error made it
+ * read-only (errors=remount-ro) and 0 otherwise.
+ */
+static inline int ntfs_emergency_state(struct ntfs_volume *vol)
+{
+	if (unlikely(NVolShutdown(vol)))
+		return -EIO;
+	if (unlikely(NVolEmergencyRO(vol)))
+		return -EROFS;
+	return 0;
+}
 
 static inline void ntfs_inc_free_clusters(struct ntfs_volume *vol, s64 nr)
 {

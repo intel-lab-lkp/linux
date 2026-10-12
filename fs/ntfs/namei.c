@@ -740,8 +740,9 @@ static int ntfs_create(struct mnt_idmap *idmap, struct inode *dir,
 	__le16 *uname;
 	int uname_len, err;
 
-	if (NVolShutdown(vol))
-		return -EIO;
+	err = ntfs_emergency_state(vol);
+	if (err)
+		return err;
 
 	uname_len = ntfs_nlstoucs(vol, dentry->d_name.name, dentry->d_name.len,
 				  &uname, NTFS_MAX_NAME_LEN);
@@ -1015,8 +1016,9 @@ static int ntfs_unlink(struct inode *dir, struct dentry *dentry)
 	__le16 *uname = NULL;
 	int uname_len;
 
-	if (NVolShutdown(vol))
-		return -EIO;
+	err = ntfs_emergency_state(vol);
+	if (err)
+		return err;
 
 	uname_len = ntfs_nlstoucs(vol, dentry->d_name.name, dentry->d_name.len,
 				  &uname, NTFS_MAX_NAME_LEN);
@@ -1059,8 +1061,9 @@ static struct dentry *ntfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	__le16 *uname;
 	int uname_len;
 
-	if (NVolShutdown(vol))
-		return ERR_PTR(-EIO);
+	err = ntfs_emergency_state(vol);
+	if (err)
+		return ERR_PTR(err);
 
 	uname_len = ntfs_nlstoucs(vol, dentry->d_name.name, dentry->d_name.len,
 				  &uname, NTFS_MAX_NAME_LEN);
@@ -1100,8 +1103,9 @@ static int ntfs_rmdir(struct inode *dir, struct dentry *dentry)
 	__le16 *uname = NULL;
 	int uname_len;
 
-	if (NVolShutdown(vol))
-		return -EIO;
+	err = ntfs_emergency_state(vol);
+	if (err)
+		return err;
 
 	ni = NTFS_I(vi);
 	uname_len = ntfs_nlstoucs(vol, dentry->d_name.name, dentry->d_name.len,
@@ -1265,8 +1269,9 @@ static int ntfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 	struct ntfs_inode *old_dir_ni = NTFS_I(old_dir), *new_dir_ni = NTFS_I(new_dir);
 	bool new_dir_first = false;
 
-	if (NVolShutdown(old_dir_ni->vol))
-		return -EIO;
+	err = ntfs_emergency_state(vol);
+	if (err)
+		return err;
 
 	if (flags & (RENAME_EXCHANGE | RENAME_WHITEOUT))
 		return -EINVAL;
@@ -1411,8 +1416,9 @@ static int ntfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	int usrc_len;
 	int symlen = strlen(symname);
 
-	if (NVolShutdown(vol))
-		return -EIO;
+	err = ntfs_emergency_state(vol);
+	if (err)
+		return err;
 
 	usrc_len = ntfs_nlstoucs(vol, dentry->d_name.name,
 				 dentry->d_name.len, &usrc, NTFS_MAX_NAME_LEN);
@@ -1457,8 +1463,9 @@ static int ntfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	__le16 *uname = NULL;
 	int uname_len;
 
-	if (NVolShutdown(vol))
-		return -EIO;
+	err = ntfs_emergency_state(vol);
+	if (err)
+		return err;
 
 	uname_len = ntfs_nlstoucs(vol, dentry->d_name.name,
 			dentry->d_name.len, &uname, NTFS_MAX_NAME_LEN);
@@ -1510,8 +1517,9 @@ static int ntfs_link(struct dentry *old_dentry, struct inode *dir,
 	int err;
 	struct ntfs_inode *ni = NTFS_I(vi), *dir_ni = NTFS_I(dir);
 
-	if (NVolShutdown(vol))
-		return -EIO;
+	err = ntfs_emergency_state(vol);
+	if (err)
+		return err;
 
 	uname_len = ntfs_nlstoucs(vol, dentry->d_name.name,
 			dentry->d_name.len, &uname, NTFS_MAX_NAME_LEN);

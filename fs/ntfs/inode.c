@@ -2302,7 +2302,13 @@ void ntfs_evict_big_inode(struct inode *vi)
 
 	truncate_inode_pages_final(&vi->i_data);
 
-	if (!vi->i_nlink) {
+	/*
+	 * After an error don't free the on-disk structures of an unlinked
+	 * inode: the freed mft record would be written right away while the
+	 * rest of the deletion can't be written back anymore. Leave the inode
+	 * to chkdsk and only release it from memory.
+	 */
+	if (!vi->i_nlink && !ntfs_emergency_state(ni->vol)) {
 		if (!NInoAttr(ni)) {
 			/* Never called with extent inodes */
 			WARN_ON(ni->nr_extents == -1);
@@ -2392,6 +2398,8 @@ int ntfs_show_options(struct seq_file *sf, struct dentry *root)
 		if (on_errors_arr[i].val == vol->on_errors)
 			seq_printf(sf, ",errors=%s", on_errors_arr[i].str);
 	}
+	if (NVolEmergencyRO(vol))
+		seq_puts(sf, ",emergency_ro");
 	seq_printf(sf, ",mft_zone_multiplier=%i", vol->mft_zone_multiplier);
 	if (NVolSysImmutable(vol))
 		seq_puts(sf, ",sys_immutable");
@@ -2754,8 +2762,16 @@ int __ntfs_write_inode(struct inode *vi, int sync)
 	ntfs_debug("Entering for %sinode 0x%llx.", NInoAttr(ni) ? "attr " : "",
 			ni->mft_no);
 
-	if (NVolShutdown(ni->vol))
-		return -EIO;
+	/*
+	 * After an error only $Volume is still written: it holds
+	 * VOLUME_IS_DIRTY, see ntfs_error_work().
+	 */
+	err = ntfs_emergency_state(ni->vol);
+	if (err) {
+		if (err != -EROFS || vi != ni->vol->vol_ino)
+			return err;
+		err = 0;
+	}
 
 	/*
 	 * Dirty attribute inodes are written via their real inodes so just

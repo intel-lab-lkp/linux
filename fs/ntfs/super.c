@@ -269,6 +269,8 @@ static int ntfs_reconfigure(struct fs_context *fc)
 
 	ntfs_debug("Entering with remount");
 
+	/* Mark the volume dirty first if an error made it read-only. */
+	flush_work(&vol->error_work);
 	sync_filesystem(sb);
 
 	/*
@@ -338,7 +340,28 @@ void ntfs_handle_error(struct super_block *sb)
 		return;
 
 	if (vol->on_errors == ON_ERRORS_REMOUNT_RO) {
-		sb->s_flags |= SB_RDONLY;
+		if (!(sb->s_flags & SB_BORN)) {
+			/*
+			 * Still mounting: the mounter holds s_umount and
+			 * nothing can freeze the superblock yet, so make it
+			 * a read-only mount.
+			 */
+			sb->s_flags |= SB_RDONLY;
+		} else {
+			/*
+			 * Don't set SB_RDONLY: that needs sb->s_umount and a
+			 * proper remount, and setting it while the volume is
+			 * frozen makes thaw_super() leave the s_writers rwsems
+			 * locked. NV_EmergencyRO makes the volume refuse
+			 * modifications instead and NV_Errors keeps it from
+			 * being remounted read-write. The error work marks
+			 * the volume dirty on disk.
+			 */
+			NVolSetErrors(vol);
+			if (test_and_set_bit(NV_EmergencyRO, &vol->flags))
+				return;
+			queue_work(ntfs_wq, &vol->error_work);
+		}
 		pr_crit("(device %s): Filesystem has been set read-only\n",
 			sb->s_id);
 	} else if (vol->on_errors == ON_ERRORS_PANIC) {
@@ -421,6 +444,29 @@ int ntfs_set_volume_flags(struct ntfs_volume *vol, __le16 flags)
 {
 	flags &= VOLUME_FLAGS_MASK;
 	return ntfs_write_volume_flags(vol, vol->vol_flags | flags);
+}
+
+/*
+ * ntfs_error_work - mark the volume dirty on disk after an error
+ * @work:	the error_work of the ntfs volume
+ *
+ * VOLUME_IS_DIRTY makes chkdsk check the volume. It is set lazily on the first
+ * modification and ntfs_sync_fs() clears it again, so it may not be on disk
+ * when an error makes the volume read-only, and the inode writeback that would
+ * write it is refused from then on. __ntfs_write_inode() still writes $Volume
+ * in that state. This runs from a work item because ntfs_error() may be called
+ * with mft records locked. sb_start_intwrite() waits for a frozen volume to be
+ * thawed.
+ */
+static void ntfs_error_work(struct work_struct *work)
+{
+	struct ntfs_volume *vol = container_of(work, struct ntfs_volume,
+					       error_work);
+
+	sb_start_intwrite(vol->sb);
+	if (!ntfs_set_volume_flags(vol, VOLUME_IS_DIRTY))
+		ntfs_commit_inode(vol->vol_ino);
+	sb_end_intwrite(vol->sb);
 }
 
 /*
@@ -1717,6 +1763,15 @@ static void ntfs_put_super(struct super_block *sb)
 	cancel_work_sync(&vol->precalc_work);
 
 	/*
+	 * If an error made the volume read-only, make sure it is marked dirty
+	 * even if the error work didn't get to run. The commit of $Volume
+	 * below writes it.
+	 */
+	disable_work_sync(&vol->error_work);
+	if (NVolEmergencyRO(vol))
+		ntfs_set_volume_flags(vol, VOLUME_IS_DIRTY);
+
+	/*
 	 * Commit all inodes while they are still open in case some of them
 	 * cause others to be dirtied.
 	 */
@@ -2566,6 +2621,7 @@ static int ntfs_init_fs_context(struct fs_context *fc)
 	init_rwsem(&vol->mftbmp_lock);
 	init_rwsem(&vol->lcnbmp_lock);
 	mutex_init(&vol->volume_label_lock);
+	INIT_WORK(&vol->error_work, ntfs_error_work);
 
 	fc->s_fs_info = vol;
 	fc->ops = &ntfs_context_ops;
