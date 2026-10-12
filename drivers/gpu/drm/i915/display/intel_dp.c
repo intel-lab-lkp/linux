@@ -471,9 +471,15 @@ bool intel_dp_has_joiner(struct intel_dp *intel_dp)
 	if (intel_dp->mso_link_count)
 		return false;
 
-	if (intel_dp_is_edp(intel_dp) &&
-	    !connector->panel.vbt.edp.pipe_joiner_enable)
-		return false;
+	if (intel_dp_is_edp(intel_dp)) {
+		bool pipe_joiner_enable = connector->panel.vbt.edp.pipe_joiner_enable;
+
+		if (connector->force_joined_pipes > 1)
+			pipe_joiner_enable = true;
+
+		if (!pipe_joiner_enable)
+			return false;
+	}
 
 	return DISPLAY_VER(display) >= 12 ||
 		(DISPLAY_VER(display) == 11 &&
