@@ -2630,6 +2630,9 @@ static void intel_lt_phy_pll_verify_params(struct intel_display *display,
 	if (!pll_params->is_hdmi)
 		return;
 
+	if (intel_hdmi_is_frl(pll_params->clock_rate))
+		return;
+
 	if (intel_lt_phy_calculate_hdmi_state(&pll_state, pll_params->clock_rate) != 0)
 		return;
 
