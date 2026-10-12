@@ -3501,3 +3501,25 @@ int intel_hdmi_sink_dsc_max_frl_rate(struct drm_connector *connector)
 
 	return max_lanes * rate_per_lane;
 }
+
+void intel_hdmi_prepare_for_frl_mode(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder trans = crtc_state->cpu_transcoder;
+	int num_lanes = crtc_state->frl.required_lanes;
+	u32 write_buf = 0;
+	int lane;
+
+	if (!crtc_state->frl.enable)
+		return;
+
+	intel_de_rmw(display, TRANS_HDMI_FRL_CFG(display, trans),
+		     TRANS_HDMI_FRL_TRAINING_COMPLETE,
+		     TRANS_HDMI_FRL_ENABLE);
+
+	/* Reset Training Pattern to default 0x1 */
+	for (lane = 0; lane < num_lanes; lane++)
+		write_buf |= TRANS_HDMI_FRL_LTP(0x1, lane);
+
+	intel_de_write(display, TRANS_HDMI_FRL_TRAIN(display, trans), write_buf);
+}
