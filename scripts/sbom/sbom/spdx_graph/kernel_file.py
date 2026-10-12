@@ -245,7 +245,7 @@ def _get_primary_purpose(absolute_path: PathStr) -> SoftwarePurpose | None:
         return any(segment in absolute_path for segment in path_segments)
 
     # Source code
-    if ends_with([".c", ".h", ".S", ".s", ".rs", ".pl", "gen_smb1_mapping", "gen_smb2_mapping"]):
+    if ends_with([".c", ".h", ".S", ".s", ".rs"]):
         return "source"
 
     # Libraries
@@ -271,45 +271,61 @@ def _get_primary_purpose(absolute_path: PathStr) -> SoftwarePurpose | None:
     # Data files
     if ends_with(
         [
-            ".tbl",
-            ".relocs",
-            ".rmeta",
-            ".in",
+            ".awk",
             ".dbg",
-            ".x509",
-            ".pbm",
-            ".ppm",
             ".dtb",
-            ".uc",
-            ".inc",
+            ".dtbo",
             ".dts",
             ".dtsi",
-            ".dtbo",
-            ".xml",
+            ".dtso",
+            ".in",
+            ".inc",
+            ".json",
+            ".ld",
+            ".lds",
+            ".mod",
+            ".order",
+            ".pbm",
+            ".ppm",
+            ".relocs",
+            ".rmeta",
             ".ro",
-            "initramfs_inc_data",
-            "default_cpio_list",
-            "x509_certificate_list",
-            "utf8data.c_shipped",
+            ".tbl",
+            ".uc",
+            ".x509",
+            ".xml",
             "blacklist_hash_list",
-            "x509_revocation_list",
             "cpucaps",
-            "sysreg",
+            "default_cpio_list",
+            "initramfs_inc_data",
+            "kheaders.md5",
+            "kheaders-objlist",
+            "kheaders-srclist",
             "mach-types",
+            "sysreg",
+            "utf8data.c_shipped",
+            "x509_certificate_list",
+            "x509_revocation_list",
         ]
     ) or includes_path_segments(["drivers/gpu/drm/radeon/reg_srcs/"]):
         return "data"
 
     # Configuration files
-    if ends_with([".pem", ".key", ".conf", ".config", ".cfg", ".bconf"]):
+    if ends_with([
+        ".pem",
+        ".key",
+        ".conf",
+        ".config",
+        ".cfg",
+        ".bconf",
+        "config_data",
+        ".genkey",
+        "bindgen_parameters",
+    ]):
         return "configuration"
 
-    # Documentation
-    if ends_with([".md"]):
-        return "documentation"
-
     # Other / miscellaneous
-    if ends_with([".o", ".tmp"]):
+    if ends_with([".o"]):
         return "other"
 
     sbom_logging.warning("Could not infer primary purpose for {absolute_path}", absolute_path=absolute_path)
