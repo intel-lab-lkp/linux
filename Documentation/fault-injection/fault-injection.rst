@@ -347,6 +347,9 @@ EI_ETYPE_ERRNO_NULL
 EI_ETYPE_TRUE
   This function will return `true` (non-zero positive value) if it fails.
 
+EI_ETYPE_FALSE
+  This function will return `false` if it fails.
+
 If you specifies a wrong type, for example, EI_TYPE_ERRNO for the function
 which returns an allocated object, it may cause a problem because the returned
 value is not an object address and the caller can not access to the address.
