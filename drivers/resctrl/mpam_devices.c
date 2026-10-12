@@ -68,6 +68,25 @@ static bool partid_max_init, partid_max_published;
 static DEFINE_SPINLOCK(partid_max_lock);
 
 /*
+ * Configuration constraints for resctrl-to-MPAM partitioning.
+ * mpam_num_closid == 0 indicates resctrl is unmounted or inactive.
+ */
+static u16 mpam_num_closid;
+static u16 mpam_num_partid;
+
+/*
+ * Map a request PARTID onto its owning control group using modulo
+ * interleaving. Without resctrl active, every PARTID maps 1:1 onto itself.
+ */
+u16 mpam_partid_to_intpartid(u16 partid)
+{
+	if (!mpam_num_closid || partid >= mpam_num_partid)
+		return partid;
+
+	return partid % mpam_num_closid;
+}
+
+/*
  * mpam is enabled once all devices have been probed from CPU online callbacks,
  * scheduled via this work_struct. If access to an MSC depends on a CPU that
  * was not brought online at boot, this can happen surprisingly late.
@@ -1560,14 +1579,24 @@ static void mpam_reprogram_ris_partid(struct mpam_msc_ris *ris, u16 partid,
 
 	if (mpam_has_feature(mpam_feat_partid_nrw, rprops)) {
 		/* Update the intpartid mapping */
+		u16 intpartid = mpam_partid_to_intpartid(partid);
+
 		mpam_write_partsel_reg(msc, INTPARTID,
-				       MPAMCFG_INTPARTID_INTERNAL | partid);
+				       MPAMCFG_INTPARTID_INTERNAL | intpartid);
+
+		/*
+		 * The internal PARTID holds the configuration. Only the
+		 * request PARTID that maps onto itself writes the controls,
+		 * the others share the same internal PARTID.
+		 */
+		if (partid != intpartid)
+			goto out;
 
 		/*
 		 * Then switch to the 'internal' partid to update the
 		 * configuration.
 		 */
-		__mpam_intpart_sel(ris->ris_idx, partid, msc);
+		__mpam_intpart_sel(ris->ris_idx, intpartid, msc);
 	}
 
 	if (mpam_has_feature(mpam_feat_cpor_part, rprops)) {
@@ -1643,6 +1672,7 @@ static void mpam_reprogram_ris_partid(struct mpam_msc_ris *ris, u16 partid,
 
 	mpam_quirk_post_config_change(ris, partid, cfg);
 
+out:
 	mutex_unlock(&msc->part_sel_lock);
 }
 
@@ -1770,15 +1800,37 @@ struct mpam_write_config_arg {
 static int __write_config(void *arg)
 {
 	struct mpam_write_config_arg *c = arg;
+	u16 partid;
 
-	mpam_reprogram_ris_partid(c->ris, c->partid, &c->comp->cfg[c->partid]);
+	if (!mpam_num_closid) {
+		mpam_reprogram_ris_partid(c->ris, c->partid,
+					  &c->comp->cfg[c->partid]);
+		return 0;
+	}
+
+	/* c->partid is the control group, and must be a valid one. */
+	WARN_ON_ONCE(c->partid >= mpam_num_closid);
+
+	/*
+	 * A control group owns every request PARTID that maps onto it. Write
+	 * the group's configuration into each of them. Resources that
+	 * implement narrowing collapse them back onto a single internal
+	 * PARTID, so only the first write changes the hardware.
+	 */
+	for (partid = 0; partid < mpam_num_partid; partid++) {
+		if (mpam_partid_to_intpartid(partid) != c->partid)
+			continue;
+
+		mpam_reprogram_ris_partid(c->ris, partid,
+					  &c->comp->cfg[c->partid]);
+	}
 
 	return 0;
 }
 
 static void mpam_reprogram_msc(struct mpam_msc *msc)
 {
-	u16 partid;
+	u16 partid, loop_max;
 	bool reset;
 	struct mpam_config *cfg;
 	struct mpam_msc_ris *ris;
@@ -1802,7 +1854,13 @@ static void mpam_reprogram_msc(struct mpam_msc *msc)
 		arg.comp = ris->vmsc->comp;
 		arg.ris = ris;
 		reset = true;
-		for (partid = 0; partid <= mpam_partid_max; partid++) {
+		/*
+		 * Configurations are stored per control group. When resctrl
+		 * has grouped several PARTIDs together, __write_config()
+		 * expands one group into all of its PARTIDs.
+		 */
+		loop_max = mpam_num_closid ? mpam_num_closid : mpam_partid_max + 1;
+		for (partid = 0; partid < loop_max; partid++) {
 			cfg = &ris->vmsc->comp->cfg[partid];
 			if (!bitmap_empty(cfg->features, MPAM_FEATURE_LAST))
 				reset = false;
