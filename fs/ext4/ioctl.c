@@ -1284,6 +1284,9 @@ static int ext4_ioctl_get_tune_sb(struct ext4_sb_info *sbi,
 	struct ext4_tune_sb_params ret;
 	struct ext4_super_block *es = sbi->s_es;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	memset(&ret, 0, sizeof(ret));
 	ret.set_flags = TUNE_OPS_SUPPORTED;
 	ret.errors_behavior = le16_to_cpu(es->s_errors);
