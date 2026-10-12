@@ -44,7 +44,7 @@ static void unmark_dirty(struct super_block *s)
 {
 	struct buffer_head *bh;
 	struct hpfs_spare_block *sb;
-	if (sb_rdonly(s)) return;
+	if (sb_rdonly(s) || hpfs_emergency_ro(s)) return;
 	sync_blockdev(s->s_bdev);
 	if ((sb = hpfs_map_sector(s, 17, &bh, 0))) {
 		sb->dirty = hpfs_sb(s)->sb_chkdsk > 1 - hpfs_sb(s)->sb_was_error;
@@ -81,7 +81,18 @@ void hpfs_error(struct super_block *s, const char *fmt, ...)
 			else {
 				pr_cont("; remounting read-only\n");
 				mark_dirty(s, 0);
-				s->s_flags |= SB_RDONLY;
+				/*
+				 * Only a mount in progress may still set
+				 * SB_RDONLY: later that needs s->s_umount,
+				 * and on a frozen superblock it makes
+				 * thaw_super() leave s_writers locked.
+				 * Refuse modifications until umount instead.
+				 */
+				if (s->s_flags & SB_BORN)
+					set_bit(HPFS_STATE_EMERGENCY_RO,
+						&hpfs_sb(s)->sb_state);
+				else
+					s->s_flags |= SB_RDONLY;
 			}
 		} else if (sb_rdonly(s))
 				pr_cont("; going on - but anything won't be destroyed because it's read-only\n");
@@ -426,6 +437,11 @@ static int hpfs_reconfigure(struct fs_context *fc)
 	struct super_block *s = fc->root->d_sb;
 	struct hpfs_sb_info *sbi = hpfs_sb(s);
 
+	/* After an error, refuse going back to read-write until umount. */
+	if (hpfs_emergency_ro(s) && sb_rdonly(s) &&
+	    !(fc->sb_flags & SB_RDONLY))
+		return -EROFS;
+
 	sync_filesystem(s);
 
 	fc->sb_flags |= SB_NOATIME;
@@ -483,6 +499,8 @@ static int hpfs_show_options(struct seq_file *seq, struct dentry *root)
 		seq_printf(seq, ",eas=ro");
 	if (sbi->sb_timeshift)
 		seq_printf(seq, ",timeshift=%d", sbi->sb_timeshift);
+	if (hpfs_emergency_ro(root->d_sb))
+		seq_puts(seq, ",emergency_ro");
 	return 0;
 }
 

@@ -263,6 +263,8 @@ int hpfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	struct inode *inode = d_inode(dentry);
 	int error = -EINVAL;
 
+	if (hpfs_emergency_ro(inode->i_sb))
+		return -EROFS;
 	hpfs_lock(inode->i_sb);
 	if (inode->i_ino == hpfs_sb(inode->i_sb)->sb_root)
 		goto out_unlock;

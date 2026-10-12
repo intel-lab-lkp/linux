@@ -256,12 +256,27 @@ const struct address_space_operations hpfs_aops = {
 	.migrate_folio = buffer_migrate_folio,
 };
 
+static ssize_t hpfs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+{
+	if (hpfs_emergency_ro(file_inode(iocb->ki_filp)->i_sb))
+		return -EROFS;
+	return generic_file_write_iter(iocb, from);
+}
+
+static int hpfs_file_open(struct inode *inode, struct file *filp)
+{
+	if ((filp->f_mode & FMODE_WRITE) && hpfs_emergency_ro(inode->i_sb))
+		return -EROFS;
+	return 0;
+}
+
 const struct file_operations hpfs_file_ops =
 {
 	.llseek		= generic_file_llseek,
 	.read_iter	= generic_file_read_iter,
-	.write_iter	= generic_file_write_iter,
+	.write_iter	= hpfs_file_write_iter,
 	.mmap_prepare	= generic_file_mmap_prepare,
+	.open		= hpfs_file_open,
 	.release	= hpfs_file_release,
 	.fsync		= hpfs_file_fsync,
 	.splice_read	= filemap_splice_read,

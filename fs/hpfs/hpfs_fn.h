@@ -80,6 +80,7 @@ struct hpfs_sb_info {
 	unsigned sb_lowercase : 1;	/* downcase filenames hackery */
 	unsigned sb_was_error : 1;	/* there was an error, set dirty flag */
 	unsigned sb_chkdsk : 2;		/* chkdsk: 0-no, 1-on errs, 2-allways */
+	unsigned long sb_state;		/* HPFS_STATE_* bits */
 	unsigned char *sb_cp_table;	/* code page tables: */
 					/* 	128 bytes uppercasing table & */
 					/*	128 bytes lowercasing table */
@@ -93,6 +94,9 @@ struct hpfs_sb_info {
 	secno hotfix_from[256];
 	secno hotfix_to[256];
 };
+
+/* bits in hpfs_sb_info->sb_state */
+#define HPFS_STATE_EMERGENCY_RO	0	/* refuse modifications after an error */
 
 /* Four 512-byte buffers and the 2k block obtained by concatenating them */
 
@@ -320,6 +324,11 @@ static inline struct hpfs_inode_info *hpfs_i(struct inode *inode)
 static inline struct hpfs_sb_info *hpfs_sb(struct super_block *sb)
 {
 	return sb->s_fs_info;
+}
+
+static inline bool hpfs_emergency_ro(struct super_block *sb)
+{
+	return test_bit(HPFS_STATE_EMERGENCY_RO, &hpfs_sb(sb)->sb_state);
 }
 
 /* super.c */

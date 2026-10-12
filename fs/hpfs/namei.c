@@ -35,6 +35,8 @@ static struct dentry *hpfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	int r;
 	struct hpfs_dirent dee;
 	int err;
+	if (hpfs_emergency_ro(dir->i_sb))
+		return ERR_PTR(-EROFS);
 	if ((err = hpfs_chk_name(name, &len))) return ERR_PTR(err==-ENOENT ? -EINVAL : err);
 	hpfs_lock(dir->i_sb);
 	err = -ENOSPC;
@@ -140,6 +142,8 @@ static int hpfs_create(struct mnt_idmap *idmap, struct inode *dir,
 	int r;
 	struct hpfs_dirent dee;
 	int err;
+	if (hpfs_emergency_ro(dir->i_sb))
+		return -EROFS;
 	if ((err = hpfs_chk_name(name, &len)))
 		return err==-ENOENT ? -EINVAL : err;
 	hpfs_lock(dir->i_sb);
@@ -227,6 +231,8 @@ static int hpfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	struct hpfs_dirent dee;
 	struct inode *result = NULL;
 	int err;
+	if (hpfs_emergency_ro(dir->i_sb))
+		return -EROFS;
 	if ((err = hpfs_chk_name(name, &len))) return err==-ENOENT ? -EINVAL : err;
 	if (hpfs_sb(dir->i_sb)->sb_eas < 2) return -EPERM;
 	hpfs_lock(dir->i_sb);
@@ -301,6 +307,8 @@ static int hpfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	struct hpfs_dirent dee;
 	struct inode *result;
 	int err;
+	if (hpfs_emergency_ro(dir->i_sb))
+		return -EROFS;
 	if ((err = hpfs_chk_name(name, &len))) return err==-ENOENT ? -EINVAL : err;
 	hpfs_lock(dir->i_sb);
 	if (hpfs_sb(dir->i_sb)->sb_eas < 2) {
@@ -380,6 +388,8 @@ static int hpfs_unlink(struct inode *dir, struct dentry *dentry)
 	int r;
 	int err;
 
+	if (hpfs_emergency_ro(dir->i_sb))
+		return -EROFS;
 	hpfs_lock(dir->i_sb);
 	hpfs_adjust_length(name, &len);
 
@@ -432,6 +442,8 @@ static int hpfs_rmdir(struct inode *dir, struct dentry *dentry)
 	int err;
 	int r;
 
+	if (hpfs_emergency_ro(dir->i_sb))
+		return -EROFS;
 	hpfs_adjust_length(name, &len);
 	hpfs_lock(dir->i_sb);
 	err = -ENOENT;
@@ -522,6 +534,8 @@ static int hpfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 	if (flags & ~RENAME_NOREPLACE)
 		return -EINVAL;
 
+	if (hpfs_emergency_ro(old_dir->i_sb))
+		return -EROFS;
 	if ((err = hpfs_chk_name(new_name, &new_len))) return err;
 	err = 0;
 	hpfs_adjust_length(old_name, &old_len);
