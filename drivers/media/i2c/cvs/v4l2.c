@@ -83,7 +83,13 @@ static int cvs_csi_enable_streams(struct v4l2_subdev *sd,
 	s64 link_freq;
 	int ret;
 
-	/* cvs_set_link_owner(ICVS_CSI_LINK_HOST) */
+	ret = cvs_set_link_owner(ctx, ICVS_CSI_LINK_HOST);
+	if (ret) {
+		dev_err(dev, "failed to hand over CSI link to host: %d\n",
+			ret);
+		return ret;
+	}
+
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0)
 		return ret;
@@ -125,7 +131,7 @@ static int cvs_csi_disable_streams(struct v4l2_subdev *sd,
 	struct v4l2_subdev *remote_sd =
 			    media_entity_to_v4l2_subdev(ctx->remote->entity);
 	struct device *dev = cvs_dev(ctx);
-	int ret;
+	int ret, link_ret;
 
 	ret = v4l2_subdev_disable_streams(remote_sd,
 					  ctx->remote->index,
@@ -133,10 +139,14 @@ static int cvs_csi_disable_streams(struct v4l2_subdev *sd,
 	if (ret)
 		dev_err(dev, "disable streams failed: %d\n", ret);
 
-	/* cvs_set_link_owner(ICVS_CSI_LINK_CVS) */
+	link_ret = cvs_set_link_owner(ctx, ICVS_CSI_LINK_CVS);
+	if (link_ret)
+		dev_err(dev, "failed to hand over CSI link to CVS: %d\n",
+			link_ret);
+
 	pm_runtime_put_autosuspend(dev);
 
-	return ret;
+	return ret ? : link_ret;
 }
 
 /*
