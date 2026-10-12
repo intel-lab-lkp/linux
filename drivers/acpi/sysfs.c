@@ -448,14 +448,13 @@ static int acpi_bert_data_init(void *th, struct acpi_data_attr *data_attr)
 	struct acpi_table_bert *bert = th;
 
 	if (bert->header.length < sizeof(struct acpi_table_bert) ||
-	    bert->region_length < sizeof(struct acpi_bert_region)) {
-		kfree(data_attr);
+	    bert->region_length < sizeof(struct acpi_bert_region))
 		return -EINVAL;
-	}
+
 	data_attr->addr = bert->address;
 	data_attr->attr.size = bert->region_length;
 
-	return sysfs_create_bin_file(tables_data_kobj, &data_attr->attr);
+	return 0;
 }
 
 static int acpi_ccel_data_init(void *th, struct acpi_data_attr *data_attr)
@@ -463,14 +462,13 @@ static int acpi_ccel_data_init(void *th, struct acpi_data_attr *data_attr)
 	struct acpi_table_ccel *ccel = th;
 
 	if (ccel->header.length < sizeof(struct acpi_table_ccel) ||
-	    !ccel->log_area_start_address || !ccel->log_area_minimum_length) {
-		kfree(data_attr);
+	    !ccel->log_area_start_address || !ccel->log_area_minimum_length)
 		return -EINVAL;
-	}
+
 	data_attr->addr = ccel->log_area_start_address;
 	data_attr->attr.size = ccel->log_area_minimum_length;
 
-	return sysfs_create_bin_file(tables_data_kobj, &data_attr->attr);
+	return 0;
 }
 
 static struct acpi_data_obj {
@@ -486,7 +484,7 @@ static struct acpi_data_obj {
 static int acpi_table_data_init(struct acpi_table_header *th, struct acpi_table_attr *table_attr)
 {
 	struct acpi_data_attr *data_attr;
-	int i;
+	int i, ret;
 
 	for (i = 0; i < NUM_ACPI_DATA_OBJS; i++) {
 		if (ACPI_COMPARE_NAMESEG(th->signature, acpi_data_objs[i].name)) {
@@ -498,7 +496,13 @@ static int acpi_table_data_init(struct acpi_table_header *th, struct acpi_table_
 			data_attr->attr.attr.mode = 0400;
 			strscpy(data_attr->filename, table_attr->filename);
 			data_attr->attr.attr.name = data_attr->filename;
-			return acpi_data_objs[i].fn(th, data_attr);
+			ret = acpi_data_objs[i].fn(th, data_attr);
+			if (!ret)
+				ret = sysfs_create_bin_file(tables_data_kobj,
+							    &data_attr->attr);
+			if (ret)
+				kfree(data_attr);
+			return ret;
 		}
 	}
 	return 0;
