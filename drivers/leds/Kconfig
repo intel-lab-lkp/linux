@@ -1050,6 +1050,20 @@ source "drivers/leds/flash/Kconfig"
 comment "RGB LED drivers"
 source "drivers/leds/rgb/Kconfig"
 
+config LEDS_LSTP
+	tristate "LED support for NVIDIA LSTP adapters"
+	depends on LEDS_CLASS
+	depends on GPIO_LSTP
+	default GPIO_LSTP
+	help
+	  Say Y or M here to support the LEDs of NVIDIA LSTP USB adapters,
+	  the pins of the adapter's GPIO channels that the firmware reports
+	  as LEDs. They are registered with the LED class, with blink and
+	  pattern requests handed to the adapter.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called leds-lstp.
+
 comment "LED Triggers"
 source "drivers/leds/trigger/Kconfig"
 
