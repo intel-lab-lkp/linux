@@ -723,6 +723,7 @@ static void srcu_torture_init_forbidden_apis(void)
 	cur_ops->deferred_free = NULL;
 	cur_ops->exp_current = NULL;
 	cur_ops->start_gp_poll = NULL;
+	cur_ops->cbflood_max = 0;
 }
 
 static void srcu_torture_init(void)
@@ -1250,7 +1251,6 @@ static struct rcu_torture_ops tasks_rude_ops = {
 	.exp_sync	= synchronize_rcu_tasks_rude,
 	.gp_kthread_dbg	= show_rcu_tasks_rude_gp_kthread,
 	.get_gp_data	= rcu_tasks_rude_get_gp_data,
-	.cbflood_max	= 50000,
 	.irq_capable	= 1,
 	.name		= "tasks-rude"
 };
