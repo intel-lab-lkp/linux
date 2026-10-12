@@ -33,6 +33,7 @@ powerpc
     qe_firmware
     syscall64-abi
     transactional_memory
+    topology
     ultravisor
     vas-api
     vcpudispatch_stats
