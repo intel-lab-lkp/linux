@@ -1183,8 +1183,15 @@ static void usb_rebind_intf(struct usb_interface *intf)
 	if (!intf->dev.power.is_prepared) {
 		intf->needs_binding = 0;
 		rc = device_attach(&intf->dev);
-		if (rc < 0 && rc != -EPROBE_DEFER)
+		if (rc < 0 && rc != -EPROBE_DEFER) {
 			dev_warn(&intf->dev, "rebind failed: %d\n", rc);
+		} else if (rc == 0) {
+			/*
+			 * Emit a KOBJ_CHANGE uevent to notify userspace
+			 * that the interface could not be rebound.
+			 */
+			kobject_uevent(&intf->dev.kobj, KOBJ_CHANGE);
+		}
 	}
 }
 
