@@ -592,6 +592,8 @@ int  nfs_show_stats(struct seq_file *, struct dentry *);
 int  nfs_reconfigure(struct fs_context *);
 
 /* write.c */
+extern int nfs_file_write_and_wait_range(struct file *file, loff_t start,
+					 loff_t end);
 extern void nfs_pageio_init_write(struct nfs_pageio_descriptor *pgio,
 			struct inode *inode, int ioflags, bool force_mds,
 			const struct nfs_pgio_completion_ops *compl_ops);
