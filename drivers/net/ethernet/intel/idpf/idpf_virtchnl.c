@@ -190,20 +190,32 @@ static void idpf_prepare_ptp_mb_msg(struct idpf_adapter *adapter, u32 op,
  * Cleanup the mailbox queue entries of the previously sent message to
  * unmap and release the buffer.
  *
+ * The transaction timeout is capped at adapter->vc_xn_timeout_ms. Once a
+ * transaction with a shortened timeout times out, later ones fail at once
+ * instead of waiting again.
+ *
  * Return: 0 if the request was successful, -%EBUSY if reset is detected
- *	   or Tx control queue is full, other negative error code on failure.
+ *	   or Tx control queue is full, -%ETIMEDOUT if a shortened transaction
+ *	   already timed out, other negative error code on failure.
  */
 int idpf_send_mb_msg(struct idpf_adapter *adapter,
 		     struct libie_ctlq_xn_send_params *xn_params,
 		     void *send_buf, size_t send_buf_size)
 {
+	u32 timeout_ms = READ_ONCE(adapter->vc_xn_timeout_ms);
 	struct libie_ctlq_msg ctlq_msg = {};
+	int err = 0;
 
-	if (idpf_is_reset_detected(adapter)) {
+	if (idpf_is_reset_detected(adapter))
+		err = -EBUSY;
+	else if (!timeout_ms)
+		err = -ETIMEDOUT;
+
+	if (err) {
 		if (!libie_cp_can_send_onstack(send_buf_size))
 			kfree(send_buf);
 
-		return -EBUSY;
+		return err;
 	}
 
 	idpf_prepare_ptp_mb_msg(adapter, xn_params->chnl_opcode, &ctlq_msg);
@@ -214,10 +226,15 @@ int idpf_send_mb_msg(struct idpf_adapter *adapter,
 	xn_params->xnm = adapter->xnm;
 	xn_params->ctlq = xn_params->ctlq ? xn_params->ctlq : adapter->asq;
 	xn_params->rel_tx_buf = kfree;
+	xn_params->timeout_ms = min_t(u64, xn_params->timeout_ms, timeout_ms);
 
 	idpf_mb_clean(xn_params->ctlq, false);
 
-	return libie_ctlq_xn_send(xn_params);
+	err = libie_ctlq_xn_send(xn_params);
+	if (err == -ETIMEDOUT && timeout_ms < IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC)
+		WRITE_ONCE(adapter->vc_xn_timeout_ms, 0);
+
+	return err;
 }
 
 /**
@@ -356,6 +373,33 @@ static int idpf_send_chunked_msg(struct idpf_adapter *adapter,
 }
 
 /**
+ * idpf_wait_for_marker - wait for TxQ marker
+ * @adapter: driver specific private structure
+ * @txq: Tx queue to wait for
+ *
+ * Return: %true if the marker was received
+ */
+static bool idpf_wait_for_marker(struct idpf_adapter *adapter,
+				 struct idpf_tx_queue *txq)
+{
+	u32 timeout_ms = READ_ONCE(adapter->vc_xn_timeout_ms);
+
+	idpf_queue_set(SW_MARKER, txq);
+
+	if (!timeout_ms)
+		return false;
+
+	idpf_wait_for_sw_marker_completion(txq);
+	if (!idpf_queue_has(SW_MARKER, txq))
+		return true;
+
+	if (timeout_ms < IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC)
+		WRITE_ONCE(adapter->vc_xn_timeout_ms, 0);
+
+	return false;
+}
+
+/**
  * idpf_wait_for_marker_event_set - wait for software marker response for
  *				    selected Tx queues
  * @qs: set of the Tx queues
@@ -375,9 +419,7 @@ static int idpf_wait_for_marker_event_set(const struct idpf_queue_set *qs)
 
 			netdev = txq->netdev;
 
-			idpf_queue_set(SW_MARKER, txq);
-			idpf_wait_for_sw_marker_completion(txq);
-			markers_rcvd &= !idpf_queue_has(SW_MARKER, txq);
+			markers_rcvd &= idpf_wait_for_marker(qs->adapter, txq);
 			break;
 		default:
 			break;
