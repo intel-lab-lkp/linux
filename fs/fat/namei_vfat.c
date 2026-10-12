@@ -791,6 +791,9 @@ static int vfat_rmdir(struct inode *dir, struct dentry *dentry)
 	struct fat_slot_info sinfo;
 	int err;
 
+	if (unlikely(fat_emergency_ro(sb)))
+		return -EROFS;
+
 	mutex_lock(&MSDOS_SB(sb)->s_lock);
 
 	err = fat_dir_empty(inode);
@@ -826,6 +829,9 @@ static int vfat_unlink(struct inode *dir, struct dentry *dentry)
 	struct super_block *sb = dir->i_sb;
 	struct fat_slot_info sinfo;
 	int err;
+
+	if (unlikely(fat_emergency_ro(sb)))
+		return -EROFS;
 
 	mutex_lock(&MSDOS_SB(sb)->s_lock);
 
@@ -1166,6 +1172,9 @@ static int vfat_rename2(struct mnt_idmap *idmap, struct inode *old_dir,
 {
 	if (flags & ~(RENAME_NOREPLACE | RENAME_EXCHANGE))
 		return -EINVAL;
+
+	if (unlikely(fat_emergency_ro(old_dir->i_sb)))
+		return -EROFS;
 
 	if (flags & RENAME_EXCHANGE) {
 		return vfat_rename_exchange(old_dir, old_dentry,

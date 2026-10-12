@@ -14,13 +14,14 @@
  * fat_fs_error reports a file system problem that might indicate fa data
  * corruption/inconsistency. Depending on 'errors' mount option the
  * panic() is called, or error message is printed FAT and nothing is done,
- * or filesystem is remounted read-only (default behavior).
- * In case the file system is remounted read-only, it can be made writable
- * again by remounting it.
+ * or the filesystem is made read-only (default behavior): a mount in
+ * progress comes up read-only, a mounted filesystem refuses all further
+ * modifications until it is unmounted.
  */
 void __fat_fs_error(struct super_block *sb, int report, const char *fmt, ...)
 {
-	struct fat_mount_options *opts = &MSDOS_SB(sb)->options;
+	struct msdos_sb_info *sbi = MSDOS_SB(sb);
+	struct fat_mount_options *opts = &sbi->options;
 	va_list args;
 	struct va_format vaf;
 
@@ -32,10 +33,22 @@ void __fat_fs_error(struct super_block *sb, int report, const char *fmt, ...)
 		va_end(args);
 	}
 
-	if (opts->errors == FAT_ERRORS_PANIC)
+	if (opts->errors == FAT_ERRORS_PANIC) {
 		panic("FAT-fs (%s): fs panic from previous error\n", sb->s_id);
-	else if (opts->errors == FAT_ERRORS_RO && !sb_rdonly(sb)) {
-		sb->s_flags |= SB_RDONLY;
+	} else if (opts->errors == FAT_ERRORS_RO && !sb_rdonly(sb)) {
+		/*
+		 * Only a mount in progress may still set SB_RDONLY: the
+		 * mounter holds s_umount and nothing can freeze the superblock
+		 * before SB_BORN. Later, setting it without s_umount on a
+		 * frozen superblock makes thaw_super() mark it unfrozen but
+		 * skip sb_freeze_unlock(), so the s_writers rwsems stay
+		 * write-locked and every writer hangs. Refuse modifications
+		 * until umount instead.
+		 */
+		if (!(sb->s_flags & SB_BORN))
+			sb->s_flags |= SB_RDONLY;
+		else if (test_and_set_bit(FAT_FLAGS_EMERGENCY_RO, &sbi->flags))
+			return;
 		fat_msg(sb, KERN_ERR, "Filesystem has been set read-only");
 	}
 }
@@ -342,6 +355,8 @@ EXPORT_SYMBOL_GPL(fat_truncate_time);
 int fat_update_time(struct inode *inode, enum fs_update_time type,
 		unsigned int flags)
 {
+	if (unlikely(fat_emergency_ro(inode->i_sb)))
+		return -EROFS;
 	if (inode->i_ino != MSDOS_ROOT_INO) {
 		fat_truncate_time(inode, NULL, type == FS_UPD_ATIME ?
 				FAT_UPDATE_ATIME : FAT_UPDATE_CMTIME);

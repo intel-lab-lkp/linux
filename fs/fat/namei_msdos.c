@@ -316,6 +316,9 @@ static int msdos_rmdir(struct inode *dir, struct dentry *dentry)
 	struct fat_slot_info sinfo;
 	int err;
 
+	if (unlikely(fat_emergency_ro(sb)))
+		return -EROFS;
+
 	mutex_lock(&MSDOS_SB(sb)->s_lock);
 	err = fat_dir_empty(inode);
 	if (err)
@@ -411,6 +414,9 @@ static int msdos_unlink(struct inode *dir, struct dentry *dentry)
 	struct super_block *sb = inode->i_sb;
 	struct fat_slot_info sinfo;
 	int err;
+
+	if (unlikely(fat_emergency_ro(sb)))
+		return -EROFS;
 
 	mutex_lock(&MSDOS_SB(sb)->s_lock);
 	err = msdos_find(dir, dentry->d_name.name, dentry->d_name.len, &sinfo);
@@ -611,6 +617,9 @@ static int msdos_rename(struct mnt_idmap *idmap,
 
 	if (flags & ~RENAME_NOREPLACE)
 		return -EINVAL;
+
+	if (unlikely(fat_emergency_ro(sb)))
+		return -EROFS;
 
 	mutex_lock(&MSDOS_SB(sb)->s_lock);
 

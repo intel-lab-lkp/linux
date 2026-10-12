@@ -135,6 +135,10 @@ static int fat_ioctl_fitrim(struct inode *inode, unsigned long arg)
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
+	/* Don't trust the FAT after an error. */
+	if (unlikely(fat_emergency_ro(sb)))
+		return -EROFS;
+
 	if (!bdev_max_discard_sectors(sb->s_bdev))
 		return -EOPNOTSUPP;
 
@@ -173,6 +177,13 @@ long fat_generic_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 }
 
+static int fat_file_open(struct inode *inode, struct file *filp)
+{
+	if ((filp->f_mode & FMODE_WRITE) && fat_emergency_ro(inode->i_sb))
+		return -EROFS;
+	return 0;
+}
+
 static int fat_file_release(struct inode *inode, struct file *filp)
 {
 	if ((filp->f_mode & FMODE_WRITE) &&
@@ -189,6 +200,10 @@ int fat_file_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
 	struct inode *inode = filp->f_mapping->host;
 	struct inode *fat_inode = MSDOS_SB(inode->i_sb)->fat_inode;
 	int err;
+
+	/* Inodes aren't written back after an error. */
+	if (unlikely(fat_emergency_ro(inode->i_sb)))
+		return -EROFS;
 
 	err = simple_fsync_noflush(filp, start, end, datasync);
 	if (err)
@@ -207,6 +222,7 @@ const struct file_operations fat_file_operations = {
 	.read_iter	= generic_file_read_iter,
 	.write_iter	= generic_file_write_iter,
 	.mmap_prepare	= generic_file_mmap_prepare,
+	.open		= fat_file_open,
 	.release	= fat_file_release,
 	.unlocked_ioctl	= fat_generic_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
@@ -521,6 +537,9 @@ int fat_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	struct inode *inode = d_inode(dentry);
 	unsigned int ia_valid;
 	int error;
+
+	if (unlikely(fat_emergency_ro(inode->i_sb)))
+		return -EROFS;
 
 	/* Check for setting the inode time. */
 	ia_valid = attr->ia_valid;

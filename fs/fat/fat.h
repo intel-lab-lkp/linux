@@ -28,6 +28,9 @@ struct file_kattr;
 #define FAT_NFS_STALE_RW	1      /* NFS RW support, can cause ESTALE */
 #define FAT_NFS_NOSTALE_RO	2      /* NFS RO support, no ESTALE issue */
 
+/* bits in msdos_sb_info->flags */
+#define FAT_FLAGS_EMERGENCY_RO	0      /* read-only after an error */
+
 struct fat_mount_options {
 	kuid_t fs_uid;
 	kgid_t fs_gid;
@@ -106,6 +109,7 @@ struct msdos_sb_info {
 	struct hlist_head dir_hashtable[FAT_HASH_SIZE];
 
 	unsigned int dirty;           /* fs state before mount */
+	unsigned long flags;	      /* FAT_FLAGS_* */
 	struct rcu_head rcu;
 };
 
@@ -147,6 +151,15 @@ struct fat_slot_info {
 static inline struct msdos_sb_info *MSDOS_SB(struct super_block *sb)
 {
 	return sb->s_fs_info;
+}
+
+/*
+ * An error with errors=remount-ro stopped all modifications until unmount.
+ * SB_RDONLY isn't used for that because it must not change without s_umount.
+ */
+static inline bool fat_emergency_ro(struct super_block *sb)
+{
+	return test_bit(FAT_FLAGS_EMERGENCY_RO, &MSDOS_SB(sb)->flags);
 }
 
 /*
