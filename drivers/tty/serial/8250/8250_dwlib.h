@@ -88,6 +88,10 @@ struct dw8250_port_data {
 	u32			cpr_value;
 	u8			dlf_size;
 
+	/* Timing for the programmed divisor. */
+	u32			frame_time;
+	u32			frame_time_uartclk;
+
 	/* RS485 variables */
 	bool			hw_rs485_support;
 };

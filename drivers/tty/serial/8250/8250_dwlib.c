@@ -39,8 +39,12 @@ static unsigned int dw8250_get_divisor(struct uart_port *p, unsigned int baud,
 static void dw8250_set_divisor(struct uart_port *p, unsigned int baud,
 			       unsigned int quot, unsigned int quot_frac)
 {
+	struct dw8250_port_data *d = p->private_data;
+
 	dw8250_writel_ext(p, DW_UART_DLF, quot_frac);
 	serial8250_do_set_divisor(p, baud, quot);
+	d->frame_time = p->frame_time;
+	d->frame_time_uartclk = p->uartclk;
 }
 
 void dw8250_do_set_termios(struct uart_port *p, struct ktermios *termios,

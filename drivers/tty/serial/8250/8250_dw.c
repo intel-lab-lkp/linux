@@ -17,6 +17,8 @@
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/lockdep.h>
+#include <linux/math64.h>
+#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -131,6 +133,9 @@ static int dw8250_idle_enter(struct uart_port *p)
 	struct dw8250_data *d = to_dw8250_data(p->private_data);
 	unsigned int usr_reg = d->pdata ? d->pdata->usr_reg : DW_UART_USR;
 	struct uart_8250_port *up = up_to_u8250p(p);
+	unsigned int frame_time = d->data.frame_time ?: p->frame_time;
+	unsigned int saved_frame_time = p->frame_time;
+	u64 scaled_frame_time;
 	int retries;
 	u32 lsr;
 
@@ -138,6 +143,12 @@ static int dw8250_idle_enter(struct uart_port *p)
 
 	if (d->uart_16550_compatible)
 		return 0;
+
+	if (d->data.frame_time && d->data.frame_time_uartclk && p->uartclk) {
+		scaled_frame_time = (u64)frame_time * d->data.frame_time_uartclk;
+		scaled_frame_time = DIV_ROUND_UP_ULL(scaled_frame_time, p->uartclk);
+		frame_time = min_t(u64, scaled_frame_time, U32_MAX);
+	}
 
 	d->in_idle = 1;
 
@@ -156,8 +167,10 @@ static int dw8250_idle_enter(struct uart_port *p)
 	 *
 	 * FIXME: frame_time delay is too long with very low baudrates.
 	 */
+	p->frame_time = frame_time;
 	serial8250_fifo_wait_for_lsr_thre(up, NULL, p->fifosize);
-	ndelay(p->frame_time);
+	p->frame_time = saved_frame_time;
+	ndelay(frame_time);
 
 	serial_port_out(p, UART_MCR, up->mcr | UART_MCR_LOOP);
 
@@ -167,7 +180,7 @@ static int dw8250_idle_enter(struct uart_port *p)
 		if (!(serial_port_in(p, usr_reg) & DW_UART_USR_BUSY))
 			break;
 		/* FIXME: frame_time delay is too long with very low baudrates. */
-		ndelay(p->frame_time);
+		ndelay(frame_time);
 	} while (--retries);
 
 	lsr = serial_lsr_in(up);
@@ -188,6 +201,7 @@ static int dw8250_idle_enter(struct uart_port *p)
 static void dw8250_set_divisor(struct uart_port *p, unsigned int baud,
 			       unsigned int quot, unsigned int quot_frac)
 {
+	struct dw8250_port_data *d = p->private_data;
 	struct uart_8250_port *up = up_to_u8250p(p);
 	int ret;
 
@@ -200,6 +214,8 @@ static void dw8250_set_divisor(struct uart_port *p, unsigned int baud,
 		goto idle_failed;
 
 	serial_dl_write(up, quot);
+	d->frame_time = p->frame_time;
+	d->frame_time_uartclk = p->uartclk;
 	serial_port_out(p, UART_LCR, up->lcr);
 
 idle_failed:
