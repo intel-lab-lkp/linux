@@ -1488,6 +1488,8 @@ static void do_kernel_range_flush(void *info)
 
 static void kernel_tlb_flush_all(struct flush_tlb_info *info)
 {
+	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
+
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
 		invlpgb_flush_all();
 	else
@@ -1496,6 +1498,8 @@ static void kernel_tlb_flush_all(struct flush_tlb_info *info)
 
 static void kernel_tlb_flush_range(struct flush_tlb_info *info)
 {
+	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
+
 	if (cpu_feature_enabled(X86_FEATURE_INVLPGB))
 		invlpgb_kernel_range_flush(info);
 	else
