@@ -1033,7 +1033,6 @@ panthor_gem_create(struct drm_device *dev, size_t size, uint32_t flags,
 		bo->base.resv = bo->exclusive_vm_root_gem->resv;
 	}
 
-	panthor_gem_debugfs_add_usage_flags(bo, usage_flags);
 	panthor_gem_debugfs_bo_add(bo);
 	return bo;
 
@@ -1260,7 +1259,9 @@ void panthor_kernel_bo_destroy(struct panthor_kernel_bo *bo)
 	panthor_kernel_bo_vunmap(bo);
 
 	drm_WARN_ON(bo->obj->dev,
-		    to_panthor_bo(bo->obj)->exclusive_vm_root_gem != panthor_vm_root_gem(vm));
+		    to_panthor_bo(bo->obj)->exclusive_vm_root_gem &&
+			    (to_panthor_bo(bo->obj)->exclusive_vm_root_gem !=
+			     panthor_vm_root_gem(vm)));
 	panthor_vm_unmap_range(vm, bo->va_node.start, bo->va_node.size);
 	panthor_vm_free_va(vm, &bo->va_node);
 	if (vm == panthor_fw_vm(ptdev))
@@ -1268,6 +1269,78 @@ void panthor_kernel_bo_destroy(struct panthor_kernel_bo *bo)
 	drm_gem_object_put(bo->obj);
 	panthor_vm_put(vm);
 	kfree(bo);
+}
+
+/**
+ * panthor_kernel_bo_create_from_gem() - Create kernel BO from existing GEM object
+ * @ptdev: Device.
+ * @vm: VM to map the GEM to.
+ * @bo: BO to use for our kernel BO.
+ * @vm_map_flags: Combination of drm_panthor_vm_bind_op_flags (only those
+ * that are related to map operations).
+ * @gpu_va: GPU address assigned when mapping to the VM.
+ * If gpu_va == PANTHOR_VM_KERNEL_AUTO_VA, the virtual address will be
+ * automatically allocated.
+ * @vm_map_size: Size of the BO to map to the VM.
+ *
+ * Return: A valid pointer in case of success, an ERR_PTR() otherwise.
+ */
+struct panthor_kernel_bo *
+panthor_kernel_bo_create_from_gem(struct panthor_device *ptdev,
+				  struct panthor_vm *vm,
+				  struct panthor_gem_object *bo,
+				  u32 vm_map_flags, u64 gpu_va, u32 vm_map_size)
+{
+	struct panthor_kernel_bo *kbo;
+	int ret;
+
+	kbo = kzalloc_obj(*kbo);
+	if (!kbo)
+		return ERR_PTR(-ENOMEM);
+
+	drm_gem_object_get(&bo->base);
+	kbo->obj = &bo->base;
+
+	if (vm == panthor_fw_vm(ptdev)) {
+		ret = panthor_gem_pin(bo);
+		if (ret)
+			goto err_put_obj;
+	}
+
+	/* The system and GPU MMU page size might differ, which becomes a
+	 * problem for FW sections that need to be mapped at explicit address
+	 * since our PAGE_SIZE alignment might cover a VA range that's
+	 * expected to be used for another section.
+	 * Make sure we never map more than we need.
+	 */
+	vm_map_size = ALIGN(vm_map_size, panthor_vm_page_size(vm));
+	ret = panthor_vm_alloc_va(vm, gpu_va, vm_map_size, &kbo->va_node);
+	if (ret)
+		goto err_unpin;
+
+	ret = panthor_vm_map_bo_range(vm, bo, 0, vm_map_size,
+				      kbo->va_node.start, vm_map_flags);
+	if (ret)
+		goto err_free_va;
+
+	kbo->vm = panthor_vm_get(vm);
+	if (vm == panthor_fw_vm(ptdev))
+		panthor_gem_debugfs_add_usage_flags(
+			bo, PANTHOR_DEBUGFS_GEM_USAGE_FLAG_FW_MAPPED);
+
+	return kbo;
+
+err_free_va:
+	panthor_vm_free_va(vm, &kbo->va_node);
+
+err_unpin:
+	if (vm == panthor_fw_vm(ptdev))
+		panthor_gem_unpin(bo);
+
+err_put_obj:
+	drm_gem_object_put(&bo->base);
+	kfree(kbo);
+	return ERR_PTR(ret);
 }
 
 /**
@@ -1292,66 +1365,27 @@ panthor_kernel_bo_create(struct panthor_device *ptdev, struct panthor_vm *vm,
 {
 	struct panthor_kernel_bo *kbo;
 	struct panthor_gem_object *bo;
-	u32 debug_flags = PANTHOR_DEBUGFS_GEM_USAGE_FLAG_KERNEL;
-	int ret;
 
 	if (drm_WARN_ON(&ptdev->base, !vm))
 		return ERR_PTR(-EINVAL);
 
-	kbo = kzalloc_obj(*kbo);
-	if (!kbo)
-		return ERR_PTR(-ENOMEM);
+	bo = panthor_gem_create(&ptdev->base, size, bo_flags, vm, 0);
+	if (IS_ERR(bo))
+		return ERR_CAST(bo);
 
-	if (vm == panthor_fw_vm(ptdev))
-		debug_flags |= PANTHOR_DEBUGFS_GEM_USAGE_FLAG_FW_MAPPED;
-
-	bo = panthor_gem_create(&ptdev->base, size, bo_flags, vm, debug_flags);
-	if (IS_ERR(bo)) {
-		ret = PTR_ERR(bo);
-		goto err_free_kbo;
+	kbo = panthor_kernel_bo_create_from_gem(ptdev, vm, bo, vm_map_flags,
+						gpu_va, size);
+	if (!IS_ERR(kbo)) {
+		panthor_gem_debugfs_add_usage_flags(
+			bo, PANTHOR_DEBUGFS_GEM_USAGE_FLAG_KERNEL);
+		panthor_gem_kernel_bo_set_label(kbo, name);
 	}
 
-	kbo->obj = &bo->base;
-
-	if (vm == panthor_fw_vm(ptdev)) {
-		ret = panthor_gem_pin(bo);
-		if (ret)
-			goto err_put_obj;
-	}
-
-	panthor_gem_kernel_bo_set_label(kbo, name);
-
-	/* The system and GPU MMU page size might differ, which becomes a
-	 * problem for FW sections that need to be mapped at explicit address
-	 * since our PAGE_SIZE alignment might cover a VA range that's
-	 * expected to be used for another section.
-	 * Make sure we never map more than we need.
+	/* panthor_kernel_bo_create_from_gem() acquires a GEM ref if the import
+	 * succeeds, so we can release it unconditionally here.
 	 */
-	size = ALIGN(size, panthor_vm_page_size(vm));
-	ret = panthor_vm_alloc_va(vm, gpu_va, size, &kbo->va_node);
-	if (ret)
-		goto err_unpin;
-
-	ret = panthor_vm_map_bo_range(vm, bo, 0, size, kbo->va_node.start, vm_map_flags);
-	if (ret)
-		goto err_free_va;
-
-	kbo->vm = panthor_vm_get(vm);
-	return kbo;
-
-err_free_va:
-	panthor_vm_free_va(vm, &kbo->va_node);
-
-err_unpin:
-	if (vm == panthor_fw_vm(ptdev))
-		panthor_gem_unpin(bo);
-
-err_put_obj:
 	drm_gem_object_put(&bo->base);
-
-err_free_kbo:
-	kfree(kbo);
-	return ERR_PTR(ret);
+	return kbo;
 }
 
 /**
