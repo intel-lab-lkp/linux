@@ -350,6 +350,115 @@ int drm_scdc_set_source_version(struct drm_connector *connector, u8 ver)
 }
 EXPORT_SYMBOL(drm_scdc_set_source_version);
 
+int drm_scdc_read_update_flags(struct i2c_adapter *adapter, u8 *update_flags)
+{
+	return drm_scdc_readb(adapter, SCDC_UPDATE_0, update_flags);
+}
+EXPORT_SYMBOL(drm_scdc_read_update_flags);
+
+int drm_scdc_clear_update_flags(struct i2c_adapter *adapter, u8 update_flags)
+{
+	if (update_flags & SCDC_READ_REQUEST_TEST)
+		return -EINVAL;
+
+	return drm_scdc_writeb(adapter, SCDC_UPDATE_0, update_flags);
+}
+EXPORT_SYMBOL(drm_scdc_clear_update_flags);
+
+int drm_scdc_read_status_flags(struct i2c_adapter *adapter, u8 *status_flags)
+{
+	return drm_scdc_readb(adapter, SCDC_STATUS_FLAGS_0, status_flags);
+}
+EXPORT_SYMBOL(drm_scdc_read_status_flags);
+
+int drm_scdc_config_frl(struct i2c_adapter *adapter, int frl_rate,
+			int num_lanes, int ffe_levels)
+{
+	enum drm_scdc_frl_rate rate;
+	u8 config;
+
+	if (ffe_levels < 0 || ffe_levels > 3)
+		return -EINVAL;
+
+	switch (frl_rate) {
+	case 3:
+		if (num_lanes != 3)
+			return -EINVAL;
+		rate = SCDC_FRL_RATE_3X3;
+		break;
+	case 6:
+		if (num_lanes == 3)
+			rate = SCDC_FRL_RATE_6X3;
+		else if (num_lanes == 4)
+			rate = SCDC_FRL_RATE_6X4;
+		else
+			return -EINVAL;
+		break;
+	case 8:
+		if (num_lanes != 4)
+			return -EINVAL;
+		rate = SCDC_FRL_RATE_8X4;
+		break;
+	case 10:
+		if (num_lanes != 4)
+			return -EINVAL;
+		rate = SCDC_FRL_RATE_10X4;
+		break;
+	case 12:
+		if (num_lanes != 4)
+			return -EINVAL;
+		rate = SCDC_FRL_RATE_12X4;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	config = FIELD_PREP(SCDC_FRL_RATE, rate) |
+		 FIELD_PREP(SCDC_FFE_LEVELS, ffe_levels);
+
+	return drm_scdc_writeb(adapter, SCDC_CONFIG_1, config);
+}
+EXPORT_SYMBOL(drm_scdc_config_frl);
+
+int drm_scdc_disable_frl(struct i2c_adapter *adapter)
+{
+	u8 config;
+	int ret;
+
+	ret = drm_scdc_readb(adapter, SCDC_CONFIG_1, &config);
+	if (ret)
+		return ret;
+
+	config &= ~SCDC_FRL_RATE;
+
+	return drm_scdc_writeb(adapter, SCDC_CONFIG_1, config);
+}
+EXPORT_SYMBOL(drm_scdc_disable_frl);
+
+int drm_scdc_get_ltp(struct i2c_adapter *adapter,
+		     enum drm_scdc_frl_ltp ltp[4])
+{
+	u8 status_flags;
+	int ret;
+
+	ret = drm_scdc_readb(adapter, SCDC_STATUS_FLAGS_1, &status_flags);
+	if (ret)
+		return ret;
+
+	ltp[0] = FIELD_GET(SCDC_LN_EVEN_TRAIN_PTRN, status_flags);
+	ltp[1] = FIELD_GET(SCDC_LN_ODD_TRAIN_PTRN, status_flags);
+
+	ret = drm_scdc_readb(adapter, SCDC_STATUS_FLAGS_2, &status_flags);
+	if (ret)
+		return ret;
+
+	ltp[2] = FIELD_GET(SCDC_LN_EVEN_TRAIN_PTRN, status_flags);
+	ltp[3] = FIELD_GET(SCDC_LN_ODD_TRAIN_PTRN, status_flags);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_scdc_get_ltp);
+
 static void
 drm_scdc_parse_status0_flags(u8 val, struct drm_scdc_status_flags *flags)
 {

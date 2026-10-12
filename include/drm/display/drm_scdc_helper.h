@@ -33,6 +33,20 @@ struct drm_connector;
 struct i2c_adapter;
 struct dentry;
 
+enum drm_scdc_frl_ltp {
+	SCDC_FRL_NO_LTP = 0,
+	SCDC_FRL_LTP1,
+	SCDC_FRL_LTP2,
+	SCDC_FRL_LTP3,
+	SCDC_FRL_LTP4,
+	SCDC_FRL_LTP5,
+	SCDC_FRL_LTP6,
+	SCDC_FRL_LTP7,
+	SCDC_FRL_LTP8,
+	SCDC_FRL_CHNG_FFE = 0xE,
+	SCDC_FRL_CHNG_RATE = 0xF,
+};
+
 struct drm_scdc_status_flags {
 	/* Status Register 0 */
 	bool clock_detected;
@@ -173,5 +187,14 @@ int drm_scdc_set_source_version(struct drm_connector *connector, u8 ver);
 int drm_scdc_read_state(struct drm_connector *connector,
 			struct drm_scdc_state *state);
 void drm_scdc_debugfs_init(struct drm_connector *connector, struct dentry *root);
+
+int drm_scdc_read_update_flags(struct i2c_adapter *adapter, u8 *update_flags);
+int drm_scdc_clear_update_flags(struct i2c_adapter *adapter, u8 update_flags);
+int drm_scdc_read_status_flags(struct i2c_adapter *adapter, u8 *status_flags);
+int drm_scdc_config_frl(struct i2c_adapter *adapter, int frl_rate,
+			int num_lanes, int ffe_levels);
+int drm_scdc_disable_frl(struct i2c_adapter *adapter);
+int drm_scdc_get_ltp(struct i2c_adapter *adapter,
+		     enum drm_scdc_frl_ltp ltp[4]);
 
 #endif
