@@ -55,6 +55,11 @@ OPTIONS
 	Do not fork child for each test, run all tests within single process, this
 	sets sequential mode and disables the per-test timeout.
 
+-j[<file>]::
+--junit[=<file>]::
+	Generate JUnit XML test report to the specified file, or 'test.xml' if
+	no file is specified.
+
 --dso::
 	Specify a DSO for the "Symbols" test.
 
