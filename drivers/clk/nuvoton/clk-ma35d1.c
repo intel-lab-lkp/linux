@@ -64,298 +64,298 @@ static DEFINE_SPINLOCK(ma35d1_lock);
 #define PLL_MODE_SS             2
 
 static const struct clk_parent_data ca35clk_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "capll", },
-	{ .fw_name = "ddrpll", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "capll", .name = "capll", },
+	{ .fw_name = "ddrpll", .name = "ddrpll", },
 };
 
 static const struct clk_parent_data sysclk0_sel_clks[] = {
-	{ .fw_name = "epll_div2", },
-	{ .fw_name = "syspll", },
+	{ .fw_name = "epll_div2", .name = "epll_div2", },
+	{ .fw_name = "syspll", .name = "syspll", },
 };
 
 static const struct clk_parent_data sysclk1_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "syspll", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "syspll", .name = "syspll", },
 };
 
 static const struct clk_parent_data axiclk_sel_clks[] = {
-	{ .fw_name = "capll_div2", },
-	{ .fw_name = "capll_div4", },
+	{ .fw_name = "capll_div2", .name = "capll_div2", },
+	{ .fw_name = "capll_div4", .name = "capll_div4", },
 };
 
 static const struct clk_parent_data ccap_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "vpll", },
-	{ .fw_name = "apll", },
-	{ .fw_name = "syspll", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "vpll", .name = "vpll", },
+	{ .fw_name = "apll", .name = "apll", },
+	{ .fw_name = "syspll", .name = "syspll", },
 };
 
 static const struct clk_parent_data sdh_sel_clks[] = {
-	{ .fw_name = "syspll", },
-	{ .fw_name = "apll", },
+	{ .fw_name = "syspll", .name = "syspll", },
+	{ .fw_name = "apll", .name = "apll", },
 };
 
 static const struct clk_parent_data dcu_sel_clks[] = {
-	{ .fw_name = "epll_div2", },
-	{ .fw_name = "syspll", },
+	{ .fw_name = "epll_div2", .name = "epll_div2", },
+	{ .fw_name = "syspll", .name = "syspll", },
 };
 
 static const struct clk_parent_data gfx_sel_clks[] = {
-	{ .fw_name = "epll", },
-	{ .fw_name = "syspll", },
+	{ .fw_name = "epll", .name = "epll", },
+	{ .fw_name = "syspll", .name = "syspll", },
 };
 
 static const struct clk_parent_data dbg_sel_clks[] = {
-	{ .fw_name = "hirc", },
-	{ .fw_name = "syspll", },
+	{ .fw_name = "hirc", .name = "hirc", },
+	{ .fw_name = "syspll", .name = "syspll", },
 };
 
 static const struct clk_parent_data timer0_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk0", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk0", .name = "pclk0", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer1_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk0", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk0", .name = "pclk0", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer2_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk1", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk1", .name = "pclk1", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer3_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk1", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk1", .name = "pclk1", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer4_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk2", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk2", .name = "pclk2", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer5_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk2", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk2", .name = "pclk2", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer6_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk0", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk0", .name = "pclk0", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer7_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk0", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk0", .name = "pclk0", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer8_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk1", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk1", .name = "pclk1", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer9_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk1", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk1", .name = "pclk1", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer10_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk2", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk2", .name = "pclk2", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data timer11_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk2", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk2", .name = "pclk2", },
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
 	{ .index = -1, },
-	{ .fw_name = "hirc", },
+	{ .fw_name = "hirc", .name = "hirc", },
 };
 
 static const struct clk_parent_data uart_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "sysclk1_div2", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "sysclk1_div2", .name = "sysclk1_div2", },
 };
 
 static const struct clk_parent_data wdt0_sel_clks[] = {
 	{ .index = -1, },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk3_div4096", },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk3_div4096", .name = "pclk3_div4096", },
+	{ .fw_name = "lirc", .name = "lirc", },
 };
 
 static const struct clk_parent_data wdt1_sel_clks[] = {
 	{ .index = -1, },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk3_div4096", },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk3_div4096", .name = "pclk3_div4096", },
+	{ .fw_name = "lirc", .name = "lirc", },
 };
 
 static const struct clk_parent_data wdt2_sel_clks[] = {
 	{ .index = -1, },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "pclk4_div4096", },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "pclk4_div4096", .name = "pclk4_div4096", },
+	{ .fw_name = "lirc", .name = "lirc", },
 };
 
 static const struct clk_parent_data wwdt0_sel_clks[] = {
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "pclk3_div4096", },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "pclk3_div4096", .name = "pclk3_div4096", },
+	{ .fw_name = "lirc", .name = "lirc", },
 };
 
 static const struct clk_parent_data wwdt1_sel_clks[] = {
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "pclk3_div4096", },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "pclk3_div4096", .name = "pclk3_div4096", },
+	{ .fw_name = "lirc", .name = "lirc", },
 };
 
 static const struct clk_parent_data wwdt2_sel_clks[] = {
 	{ .index = -1, },
 	{ .index = -1, },
-	{ .fw_name = "pclk4_div4096", },
-	{ .fw_name = "lirc", },
+	{ .fw_name = "pclk4_div4096", .name = "pclk4_div4096", },
+	{ .fw_name = "lirc", .name = "lirc", },
 };
 
 static const struct clk_parent_data spi0_sel_clks[] = {
-	{ .fw_name = "pclk1", },
-	{ .fw_name = "apll", },
+	{ .fw_name = "pclk1", .name = "pclk1", },
+	{ .fw_name = "apll", .name = "apll", },
 };
 
 static const struct clk_parent_data spi1_sel_clks[] = {
-	{ .fw_name = "pclk2", },
-	{ .fw_name = "apll", },
+	{ .fw_name = "pclk2", .name = "pclk2", },
+	{ .fw_name = "apll", .name = "apll", },
 };
 
 static const struct clk_parent_data spi2_sel_clks[] = {
-	{ .fw_name = "pclk1", },
-	{ .fw_name = "apll", },
+	{ .fw_name = "pclk1", .name = "pclk1", },
+	{ .fw_name = "apll", .name = "apll", },
 };
 
 static const struct clk_parent_data spi3_sel_clks[] = {
-	{ .fw_name = "pclk2", },
-	{ .fw_name = "apll", },
+	{ .fw_name = "pclk2", .name = "pclk2", },
+	{ .fw_name = "apll", .name = "apll", },
 };
 
 static const struct clk_parent_data qspi0_sel_clks[] = {
-	{ .fw_name = "pclk0", },
-	{ .fw_name = "apll", },
+	{ .fw_name = "pclk0", .name = "pclk0", },
+	{ .fw_name = "apll", .name = "apll", },
 };
 
 static const struct clk_parent_data qspi1_sel_clks[] = {
-	{ .fw_name = "pclk0", },
-	{ .fw_name = "apll", },
+	{ .fw_name = "pclk0", .name = "pclk0", },
+	{ .fw_name = "apll", .name = "apll", },
 };
 
 static const struct clk_parent_data i2s0_sel_clks[] = {
-	{ .fw_name = "apll", },
-	{ .fw_name = "sysclk1_div2", },
+	{ .fw_name = "apll", .name = "apll", },
+	{ .fw_name = "sysclk1_div2", .name = "sysclk1_div2", },
 };
 
 static const struct clk_parent_data i2s1_sel_clks[] = {
-	{ .fw_name = "apll", },
-	{ .fw_name = "sysclk1_div2", },
+	{ .fw_name = "apll", .name = "apll", },
+	{ .fw_name = "sysclk1_div2", .name = "sysclk1_div2", },
 };
 
 static const struct clk_parent_data can_sel_clks[] = {
-	{ .fw_name = "apll", },
-	{ .fw_name = "vpll", },
+	{ .fw_name = "apll", .name = "apll", },
+	{ .fw_name = "vpll", .name = "vpll", },
 };
 
 static const struct clk_parent_data cko_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
-	{ .fw_name = "hirc", },
-	{ .fw_name = "lirc", },
-	{ .fw_name = "capll_div4", },
-	{ .fw_name = "syspll", },
-	{ .fw_name = "ddrpll", },
-	{ .fw_name = "epll_div2", },
-	{ .fw_name = "apll", },
-	{ .fw_name = "vpll", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
+	{ .fw_name = "hirc", .name = "hirc", },
+	{ .fw_name = "lirc", .name = "lirc", },
+	{ .fw_name = "capll_div4", .name = "capll_div4", },
+	{ .fw_name = "syspll", .name = "syspll", },
+	{ .fw_name = "ddrpll", .name = "ddrpll", },
+	{ .fw_name = "epll_div2", .name = "epll_div2", },
+	{ .fw_name = "apll", .name = "apll", },
+	{ .fw_name = "vpll", .name = "vpll", },
 };
 
 static const struct clk_parent_data smc_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "pclk4", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "pclk4", .name = "pclk4", },
 };
 
 static const struct clk_parent_data kpi_sel_clks[] = {
-	{ .fw_name = "hxt", },
-	{ .fw_name = "lxt", },
+	{ .fw_name = "hxt", .name = "hxt", },
+	{ .fw_name = "lxt", .name = "lxt", },
 };
 
 static const struct clk_div_table ip_div_table[] = {
