@@ -3824,3 +3824,31 @@ int intel_hdmi_start_frl(struct intel_encoder *encoder,
 
 	return -EINVAL;
 }
+
+static void intel_hdmi_frl_ltsl(struct intel_encoder *encoder,
+				const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct i2c_adapter *adapter =
+		intel_gmbus_get_adapter(display, intel_hdmi_ddc_pin(encoder));
+
+	drm_scdc_disable_frl(adapter);
+	drm_scdc_clear_update_flags(adapter, SCDC_FLT_UPDATE);
+}
+
+void intel_hdmi_disable_frl(struct intel_encoder *encoder,
+			    const struct intel_crtc_state *crtc_state)
+{
+	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
+	struct intel_display *display = to_intel_display(encoder);
+	enum transcoder trans = crtc_state->cpu_transcoder;
+
+	if (!crtc_state->frl.enable)
+		return;
+
+	intel_hdmi_frl_ltsl(encoder, crtc_state);
+	intel_de_rmw(display, TRANS_HDMI_FRL_CFG(display, trans),
+		     TRANS_HDMI_FRL_ENABLE | TRANS_HDMI_FRL_TRAINING_COMPLETE, 0);
+
+	intel_hdmi_reset_frl_config(intel_hdmi);
+}
