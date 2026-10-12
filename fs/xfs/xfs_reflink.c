@@ -34,6 +34,8 @@
 #include "xfs_rtalloc.h"
 #include "xfs_rtgroup.h"
 #include "xfs_metafile.h"
+#include "xfs_errortag.h"
+#include "xfs_error.h"
 
 /*
  * Copy on Write of Shared Blocks
@@ -345,6 +347,9 @@ xfs_reflink_convert_cow(
 	int			error;
 
 	ASSERT(count != 0);
+
+	if (XFS_TEST_ERROR(mp, XFS_ERRTAG_WB_COW_CONVERT_ERROR))
+		return -EIO;
 
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
 	error = xfs_reflink_convert_cow_locked(ip, offset_fsb, count_fsb);
@@ -1719,7 +1724,7 @@ xfs_reflink_remap_prep(
 				pos_out, len, remap_flags);
 	else
 		ret = dax_remap_file_range_prep(file_in, pos_in, file_out,
-				pos_out, len, remap_flags, &xfs_read_iomap_ops);
+				pos_out, len, remap_flags, xfs_read_iomap_next);
 	if (ret || *len == 0)
 		goto out_unlock;
 
@@ -1914,10 +1919,10 @@ xfs_reflink_unshare(
 
 	if (IS_DAX(inode))
 		error = dax_file_unshare(inode, offset, len,
-				&xfs_dax_write_iomap_ops);
+				xfs_dax_write_iomap_next);
 	else
 		error = iomap_file_unshare(inode, offset, len,
-				&xfs_buffered_write_iomap_ops,
+				xfs_buffered_write_iomap_next,
 				&xfs_iomap_write_ops);
 	if (error)
 		goto out;

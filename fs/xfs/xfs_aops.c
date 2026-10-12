@@ -23,7 +23,6 @@
 #include "xfs_ioend.h"
 #include "xfs_zone_alloc.h"
 #include "xfs_rtgroup.h"
-#include <linux/bio-integrity.h>
 
 struct xfs_writepage_ctx {
 	struct iomap_writepage_ctx ctx;
@@ -498,8 +497,7 @@ xfs_zoned_writeback_submit(
 		bio_endio(&ioend->io_bio);
 		return error;
 	}
-	if (wpc->iomap.flags & IOMAP_F_INTEGRITY)
-		fs_bio_integrity_generate(&ioend->io_bio);
+
 	xfs_zone_alloc_and_submit(ioend, &XFS_ZWPC(wpc)->open_zone);
 	return 0;
 }
@@ -577,7 +575,7 @@ xfs_vm_bmap(
 	 */
 	if (xfs_is_cow_inode(ip) || XFS_IS_REALTIME_INODE(ip))
 		return 0;
-	return iomap_bmap(mapping, block, &xfs_read_iomap_ops);
+	return iomap_bmap(mapping, block, xfs_read_iomap_next);
 }
 
 static void
@@ -585,11 +583,10 @@ xfs_bio_submit_read(
 	const struct iomap_iter		*iter,
 	struct iomap_read_folio_ctx	*ctx)
 {
-	struct bio			*bio = ctx->read_ctx;
-
-	/* defer read completions to the ioend workqueue */
-	iomap_init_ioend(iter->inode, bio, ctx->read_ctx_file_offset, 0);
-	iomap_bio_submit_read_endio(iter, ctx, xfs_end_bio);
+	xfs_ioend_submit_read(iter->inode, ctx->read_ctx,
+			ctx->read_ctx_file_offset,
+			iomap_ioend_flags(&iter->iomap));
+	ctx->read_ctx = NULL;
 }
 
 static const struct iomap_read_ops xfs_iomap_read_ops = {
@@ -617,7 +614,7 @@ xfs_vm_read_folio(
 	struct iomap_read_folio_ctx	ctx = { .cur_folio = folio };
 
 	ctx.ops = xfs_get_iomap_read_ops(folio->mapping);
-	iomap_read_folio(&xfs_read_iomap_ops, &ctx, NULL);
+	iomap_read_folio(xfs_read_iomap_next, &ctx, NULL);
 	return 0;
 }
 
@@ -628,7 +625,7 @@ xfs_vm_readahead(
 	struct iomap_read_folio_ctx	ctx = { .rac = rac };
 
 	ctx.ops = xfs_get_iomap_read_ops(rac->mapping),
-	iomap_readahead(&xfs_read_iomap_ops, &ctx, NULL);
+	iomap_readahead(xfs_read_iomap_next, &ctx, NULL);
 }
 
 static int
@@ -674,7 +671,7 @@ xfs_vm_swap_activate(
 	sis->bdev = xfs_inode_buftarg(ip)->bt_bdev;
 
 	return iomap_swapfile_activate(sis, swap_file, span,
-			&xfs_read_iomap_ops);
+			xfs_read_iomap_next);
 }
 
 const struct address_space_operations xfs_address_space_operations = {
