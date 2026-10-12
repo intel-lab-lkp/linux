@@ -3399,7 +3399,46 @@ static void intel_ddi_enable_dp(struct intel_atomic_state *state,
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
+	struct intel_crtc *pipe_crtc;
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	enum port port = encoder->port;
+
+	/* 128b/132b SST */
+	if (intel_dp_is_uhbr(crtc_state)) {
+		const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+		u64 crtc_clock_hz = KHz(adjusted_mode->crtc_clock);
+
+		intel_de_write(display, TRANS_DP2_VFREQHIGH(cpu_transcoder),
+			       TRANS_DP2_VFREQ_PIXEL_CLOCK(crtc_clock_hz >> 24));
+		intel_de_write(display, TRANS_DP2_VFREQLOW(cpu_transcoder),
+			       TRANS_DP2_VFREQ_PIXEL_CLOCK(crtc_clock_hz & 0xffffff));
+	}
+
+	intel_ddi_enable_transcoder_func(encoder, crtc_state);
+
+	intel_vrr_transcoder_enable(crtc_state);
+
+	/* 128b/132b SST */
+	if (intel_dp_is_uhbr(crtc_state)) {
+		intel_ddi_clear_act_sent(encoder, crtc_state);
+
+		intel_de_rmw(display, TRANS_DDI_FUNC_CTL(display, cpu_transcoder), 0,
+			     TRANS_DDI_DP_VC_PAYLOAD_ALLOC);
+
+		intel_ddi_wait_for_act_sent(encoder, crtc_state);
+		drm_dp_dpcd_poll_act_handled(&intel_dp->aux, 0);
+	}
+
+	intel_enable_transcoder(crtc_state);
+
+	intel_ddi_wait_for_fec_status(encoder, crtc_state, true);
+
+	for_each_pipe_crtc_modeset_enable(display, pipe_crtc, crtc_state) {
+		const struct intel_crtc_state *pipe_crtc_state =
+			intel_atomic_get_new_crtc_state(state, pipe_crtc);
+
+		intel_crtc_vblank_on(pipe_crtc_state);
+	}
 
 	if (port == PORT_A && DISPLAY_VER(display) < 9)
 		intel_dp_stop_link_train(intel_dp, crtc_state);
@@ -3442,8 +3481,24 @@ static void intel_ddi_enable_hdmi(struct intel_atomic_state *state,
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 	struct drm_connector *connector = conn_state->connector;
+	struct intel_crtc *pipe_crtc;
 	enum port port = encoder->port;
 	u32 buf_ctl = 0;
+
+	intel_ddi_enable_transcoder_func(encoder, crtc_state);
+
+	intel_vrr_transcoder_enable(crtc_state);
+
+	intel_enable_transcoder(crtc_state);
+
+	intel_ddi_wait_for_fec_status(encoder, crtc_state, true);
+
+	for_each_pipe_crtc_modeset_enable(display, pipe_crtc, crtc_state) {
+		const struct intel_crtc_state *pipe_crtc_state =
+			intel_atomic_get_new_crtc_state(state, pipe_crtc);
+
+		intel_crtc_vblank_on(pipe_crtc_state);
+	}
 
 	if (!intel_hdmi_handle_sink_scrambling(encoder, connector,
 					       crtc_state->hdmi_high_tmds_clock_ratio,
@@ -3554,57 +3609,12 @@ static void intel_ddi_enable(struct intel_atomic_state *state,
 			     const struct intel_crtc_state *crtc_state,
 			     const struct drm_connector_state *conn_state)
 {
-	struct intel_display *display = to_intel_display(encoder);
-	struct intel_crtc *pipe_crtc;
-	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
-	bool is_hdmi = intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI);
-
-	/* 128b/132b SST */
-	if (!is_hdmi && intel_dp_is_uhbr(crtc_state)) {
-		const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
-		u64 crtc_clock_hz = KHz(adjusted_mode->crtc_clock);
-
-		intel_de_write(display, TRANS_DP2_VFREQHIGH(cpu_transcoder),
-			       TRANS_DP2_VFREQ_PIXEL_CLOCK(crtc_clock_hz >> 24));
-		intel_de_write(display, TRANS_DP2_VFREQLOW(cpu_transcoder),
-			       TRANS_DP2_VFREQ_PIXEL_CLOCK(crtc_clock_hz & 0xffffff));
-	}
-
-	intel_ddi_enable_transcoder_func(encoder, crtc_state);
-
-	intel_vrr_transcoder_enable(crtc_state);
-
-	/* 128b/132b SST */
-	if (!is_hdmi && intel_dp_is_uhbr(crtc_state)) {
-		struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
-
-		intel_ddi_clear_act_sent(encoder, crtc_state);
-
-		intel_de_rmw(display, TRANS_DDI_FUNC_CTL(display, cpu_transcoder), 0,
-			     TRANS_DDI_DP_VC_PAYLOAD_ALLOC);
-
-		intel_ddi_wait_for_act_sent(encoder, crtc_state);
-		drm_dp_dpcd_poll_act_handled(&intel_dp->aux, 0);
-	}
-
-	intel_enable_transcoder(crtc_state);
-
-	intel_ddi_wait_for_fec_status(encoder, crtc_state, true);
-
-	for_each_pipe_crtc_modeset_enable(display, pipe_crtc, crtc_state) {
-		const struct intel_crtc_state *pipe_crtc_state =
-			intel_atomic_get_new_crtc_state(state, pipe_crtc);
-
-		intel_crtc_vblank_on(pipe_crtc_state);
-	}
-
-	if (is_hdmi)
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI))
 		intel_ddi_enable_hdmi(state, encoder, crtc_state, conn_state);
 	else
 		intel_ddi_enable_dp(state, encoder, crtc_state, conn_state);
 
 	intel_hdcp_enable(state, encoder, crtc_state, conn_state);
-
 }
 
 static void intel_ddi_disable_dp(struct intel_atomic_state *state,
