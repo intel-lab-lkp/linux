@@ -94,6 +94,10 @@ void *dmar_alloc_dev_scope(void *start, void *end, int *cnt)
 			scope->entry_type != ACPI_DMAR_SCOPE_TYPE_HPET) {
 			pr_warn("Unsupported device scope\n");
 		}
+		if (!scope->length) {
+			pr_warn(FW_BUG "Invalid 0-length device scope\n");
+			break;
+		}
 		start += scope->length;
 	}
 	if (*cnt == 0)
@@ -227,6 +231,10 @@ int dmar_insert_dev_scope(struct dmar_pci_notify_info *info,
 
 	for (; start < end; start += scope->length) {
 		scope = start;
+		if (!scope->length) {
+			pr_warn(FW_BUG "Invalid 0-length device scope\n");
+			break;
+		}
 		if (scope->entry_type != ACPI_DMAR_SCOPE_TYPE_ENDPOINT &&
 		    scope->entry_type != ACPI_DMAR_SCOPE_TYPE_BRIDGE)
 			continue;
@@ -743,6 +751,10 @@ static void __init dmar_acpi_insert_dev_scope(u8 device_number,
 		for (scope = (void *)(drhd + 1);
 		     (unsigned long)scope < ((unsigned long)drhd) + drhd->header.length;
 		     scope = ((void *)scope) + scope->length) {
+			if (!scope->length) {
+				pr_warn(FW_BUG "Invalid 0-length device scope\n");
+				break;
+			}
 			if (scope->entry_type != ACPI_DMAR_SCOPE_TYPE_NAMESPACE)
 				continue;
 			if (scope->enumeration_id != device_number)
@@ -778,6 +790,10 @@ static int __init dmar_acpi_dev_scope_init(void)
 	for (andd = (void *)dmar_tbl + sizeof(struct acpi_table_dmar);
 	     ((unsigned long)andd) < ((unsigned long)dmar_tbl) + dmar_tbl->length;
 	     andd = ((void *)andd) + andd->header.length) {
+		if (!andd->header.length) {
+			pr_warn(FW_BUG "Invalid 0-length namespace entry\n");
+			break;
+		}
 		if (andd->header.type == ACPI_DMAR_TYPE_NAMESPACE) {
 			acpi_handle h;
 			struct acpi_device *adev;

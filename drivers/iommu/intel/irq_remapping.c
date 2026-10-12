@@ -933,6 +933,11 @@ static int ir_parse_ioapic_hpet_scope(struct acpi_dmar_header *header,
 			ret = ir_parse_one_ioapic_scope(scope, iommu, drhd);
 		else if (scope->entry_type == ACPI_DMAR_SCOPE_TYPE_HPET)
 			ret = ir_parse_one_hpet_scope(scope, iommu, drhd);
+		if (!scope->length) {
+			pr_warn(FW_BUG "Invalid 0-length device scope\n");
+			ret = -EINVAL;
+			break;
+		}
 		start += scope->length;
 	}
 
