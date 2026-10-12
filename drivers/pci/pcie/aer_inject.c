@@ -27,9 +27,16 @@
 
 #include "portdrv.h"
 
-/* Override the existing corrected and uncorrected error masks */
+/*
+ * Allow injecting errors that are masked in PCI_ERR_COR_MASK or
+ * PCI_ERR_UNCOR_MASK.  aer_inject never writes the hardware Mask registers
+ * itself: aer_inj_read_config() emulates the override and
+ * aer_inj_write_config() keeps the emulated value from being written back.
+ */
 static bool aer_mask_override;
 module_param(aer_mask_override, bool, 0);
+MODULE_PARM_DESC(aer_mask_override,
+		 "Allow injecting errors that the device masks");
 
 struct aer_error_inj {
 	u8 bus;
@@ -59,6 +66,9 @@ struct aer_error {
 	u32 header_log3;
 	u32 root_status;
 	u32 source_id;
+	/* Hardware Mask bits hidden from readers by aer_inj_read_config() */
+	u32 uncor_mask_hidden;
+	u32 cor_mask_hidden;
 };
 
 struct pci_bus_ops {
@@ -218,7 +228,7 @@ static int aer_inj_read_config(struct pci_bus *bus, unsigned int devfn,
 			       int where, int size, u32 *val)
 {
 	u32 *sim;
-	struct aer_error *err;
+	struct aer_error *err = NULL;
 	unsigned long flags;
 	int domain;
 	int rv;
@@ -241,6 +251,26 @@ static int aer_inj_read_config(struct pci_bus *bus, unsigned int devfn,
 	}
 out:
 	rv = aer_inj_read(bus, devfn, where, size, val);
+	/*
+	 * Report the injected errors as unmasked while they are pending in
+	 * the emulated Status registers, and remember which hardware Mask
+	 * bits were hidden that way so that aer_inj_write_config() can keep
+	 * a value derived from this read (e.g., by pci_save_state()) from
+	 * clearing them.  *val is unspecified if the read failed and ~0 if
+	 * the device is gone, so leave it alone then.
+	 */
+	if (!rv && !PCI_POSSIBLE_ERROR(*val) && aer_mask_override && err) {
+		switch (where - err->pos_cap_err) {
+		case PCI_ERR_UNCOR_MASK:
+			err->uncor_mask_hidden |= *val & err->uncor_status;
+			*val &= ~err->uncor_status;
+			break;
+		case PCI_ERR_COR_MASK:
+			err->cor_mask_hidden |= *val & err->cor_status;
+			*val &= ~err->cor_status;
+			break;
+		}
+	}
 	spin_unlock_irqrestore(&inject_lock, flags);
 	return rv;
 }
@@ -249,7 +279,7 @@ static int aer_inj_write_config(struct pci_bus *bus, unsigned int devfn,
 				int where, int size, u32 val)
 {
 	u32 *sim;
-	struct aer_error *err;
+	struct aer_error *err = NULL;
 	unsigned long flags;
 	int rw1cs;
 	int domain;
@@ -275,6 +305,22 @@ static int aer_inj_write_config(struct pci_bus *bus, unsigned int devfn,
 		return 0;
 	}
 out:
+	/*
+	 * Set the hardware Mask bits hidden from readers again, so that a
+	 * value derived from such a read (e.g., by pci_save_state()) can't
+	 * clear them.  The record is never cleared, so until aer_inject is
+	 * unloaded no dword write can unmask those bits.
+	 */
+	if (aer_mask_override && err) {
+		switch (where - err->pos_cap_err) {
+		case PCI_ERR_UNCOR_MASK:
+			val |= err->uncor_mask_hidden;
+			break;
+		case PCI_ERR_COR_MASK:
+			val |= err->cor_mask_hidden;
+			break;
+		}
+	}
 	rv = aer_inj_write(bus, devfn, where, size, val);
 	spin_unlock_irqrestore(&inject_lock, flags);
 	return rv;
@@ -326,7 +372,7 @@ static int aer_inject(struct aer_error_inj *einj)
 	unsigned long flags;
 	unsigned int devfn = PCI_DEVFN(einj->dev, einj->fn);
 	int pos_cap_err, rp_pos_cap_err;
-	u32 sever, cor_mask, uncor_mask, cor_mask_orig = 0, uncor_mask_orig = 0;
+	u32 sever, cor_mask, uncor_mask;
 	int ret = 0;
 
 	dev = pci_get_domain_bus_and_slot(einj->domain, einj->bus, devfn);
@@ -369,18 +415,6 @@ static int aer_inject(struct aer_error_inj *einj)
 	if (!rperr_alloc) {
 		ret = -ENOMEM;
 		goto out_put;
-	}
-
-	if (aer_mask_override) {
-		cor_mask_orig = cor_mask;
-		cor_mask &= !(einj->cor_status);
-		pci_write_config_dword(dev, pos_cap_err + PCI_ERR_COR_MASK,
-				       cor_mask);
-
-		uncor_mask_orig = uncor_mask;
-		uncor_mask &= !(einj->uncor_status);
-		pci_write_config_dword(dev, pos_cap_err + PCI_ERR_UNCOR_MASK,
-				       uncor_mask);
 	}
 
 	spin_lock_irqsave(&inject_lock, flags);
@@ -446,13 +480,6 @@ static int aer_inject(struct aer_error_inj *einj)
 		rperr->source_id |= PCI_DEVID(einj->bus, devfn) << 16;
 	}
 	spin_unlock_irqrestore(&inject_lock, flags);
-
-	if (aer_mask_override) {
-		pci_write_config_dword(dev, pos_cap_err + PCI_ERR_COR_MASK,
-				       cor_mask_orig);
-		pci_write_config_dword(dev, pos_cap_err + PCI_ERR_UNCOR_MASK,
-				       uncor_mask_orig);
-	}
 
 	ret = pci_bus_set_aer_ops(dev->bus);
 	if (ret)
