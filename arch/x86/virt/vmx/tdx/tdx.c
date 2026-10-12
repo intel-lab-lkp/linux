@@ -408,8 +408,8 @@ struct field_mapping {
 };
 
 /* Read each metadata field listed in @mappings[] into @data. */
-static int __maybe_unused __read_sys_metadata_table(const struct field_mapping *mappings,
-						    int num_mappings, void *data)
+static int __read_sys_metadata_table(const struct field_mapping *mappings,
+				     int num_mappings, void *data)
 {
 	int i, ret;
 	u64 val;
@@ -436,6 +436,12 @@ static int __maybe_unused __read_sys_metadata_table(const struct field_mapping *
 
 #define FIELD_MAP(_field, _type, _member)	\
 	__FIELD_MAP(_field, struct tdx_sys_info_##_type, _member)
+
+static const struct field_mapping version_mappings[] = {
+	FIELD_MAP(TDX_FIELD_MINOR_VERSION,	version, minor_version),
+	FIELD_MAP(TDX_FIELD_MAJOR_VERSION,	version, major_version),
+	FIELD_MAP(TDX_FIELD_UPDATE_VERSION,	version, update_version),
+};
 
 #include "tdx_global_metadata.c"
 
@@ -1404,7 +1410,7 @@ int tdx_module_run_update(void)
 	if (ret)
 		return ret;
 
-	ret = get_tdx_sys_info_version(&tdx_sysinfo.version);
+	ret = read_sys_metadata_table(version_mappings, &tdx_sysinfo.version);
 	/*
 	 * Only fails if there is something unexpected
 	 * and severely wrong with the module.
