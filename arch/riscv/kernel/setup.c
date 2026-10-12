@@ -9,6 +9,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/arch_topology.h>
 #include <linux/cpu.h>
 #include <linux/init.h>
 #include <linux/mm.h>
@@ -369,6 +370,17 @@ void __init setup_arch(char **cmdline_p)
 
 	riscv_clear_hypervisor_csr();
 }
+
+#ifndef CONFIG_SMP
+static int __init riscv_init_cpu_topology(void)
+{
+	init_cpu_topology();
+	store_cpu_topology(0);
+
+	return 0;
+}
+early_initcall(riscv_init_cpu_topology);
+#endif
 
 bool arch_cpu_is_hotpluggable(int cpu)
 {
