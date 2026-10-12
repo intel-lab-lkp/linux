@@ -19571,6 +19571,7 @@ M:	Donald Shannon <donalds@nvidia.com>
 L:	linux-usb@vger.kernel.org
 S:	Supported
 F:	Documentation/devicetree/bindings/gpio/nvidia,lstp-gpio.yaml
+F:	Documentation/devicetree/bindings/i2c/nvidia,lstp-i2c.yaml
 
 NVIDIA VRS RTC DRIVER
 M:	Shubhi Garg <shgarg@nvidia.com>
