@@ -406,6 +406,19 @@ config RPMSG_TTY
 	  To compile this driver as a module, choose M here: the module will be
 	  called rpmsg_tty.
 
+config LSTP_TTY
+	tristate "NVIDIA LSTP UART support"
+	depends on USB_LSTP
+	default USB_LSTP
+	help
+	  Say Y or M here to support the UART channels of NVIDIA LSTP USB
+	  adapters. Each channel is registered as a tty device named
+	  ttyLSTP<n>, so the usual serial tools and line disciplines work
+	  on top of it.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called lstp_tty.
+
 endif # TTY
 
 source "drivers/tty/serdev/Kconfig"

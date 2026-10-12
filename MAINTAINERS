@@ -19581,6 +19581,7 @@ F:	drivers/gpio/gpio-lstp.c
 F:	drivers/i2c/busses/i2c-lstp.c
 F:	drivers/leds/leds-lstp.c
 F:	drivers/spi/spi-lstp.c
+F:	drivers/tty/lstp_tty.c
 F:	drivers/usb/misc/lstp.c
 F:	include/linux/usb/lstp.h
 
