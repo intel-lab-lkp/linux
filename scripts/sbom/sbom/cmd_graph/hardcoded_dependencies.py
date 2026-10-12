@@ -10,7 +10,6 @@ from sbom.environment import Environment
 HARDCODED_DEPENDENCIES: dict[str, list[str]] = {
     # defined in linux/Kbuild
     "include/generated/rq-offsets.h": ["kernel/sched/rq-offsets.s"],
-    "kernel/sched/rq-offsets.s": ["include/generated/asm-offsets.h"],
     "include/generated/bounds.h": ["kernel/bounds.s"],
     "include/generated/asm-offsets.h": ["arch/{arch}/kernel/asm-offsets.s"],
 }

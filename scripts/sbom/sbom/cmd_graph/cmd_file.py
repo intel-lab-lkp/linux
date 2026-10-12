@@ -71,16 +71,13 @@ class CmdFile:
 
         return CmdFile(cmd_file_path, savedcmd, make_prereqs, deps)
 
-    def get_dependencies(
-        self: "CmdFile", target_path: PathStr, obj_tree: PathStr, fail_on_unknown_build_command: bool
-    ) -> list[PathStr]:
+    def get_dependencies(self: "CmdFile", target_path: PathStr, obj_tree: PathStr) -> list[PathStr]:
         """
         Parses all dependencies required to build a target file from its cmd file.
 
         Args:
             target_path: path to the target file relative to `obj_tree`.
             obj_tree: absolute path to the object tree.
-            fail_on_unknown_build_command: Whether to fail if an unknown build command is encountered.
 
         Returns:
             list[PathStr]: dependency file paths relative to `obj_tree`.

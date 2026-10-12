@@ -47,9 +47,6 @@ class KernelSbomConfig:
     debug: bool
     """Whether to enable debug logging."""
 
-    fail_on_unknown_build_command: bool
-    """Whether to fail if an unknown build command is encountered in a .cmd file."""
-
     write_output_on_error: bool
     """Whether to write output documents even if errors occur."""
 
@@ -141,15 +138,6 @@ def _parse_cli_arguments(parser: argparse.ArgumentParser) -> dict[str, Any]:
     )
 
     # Error handling settings
-    parser.add_argument(
-        "--do-not-fail-on-unknown-build-command",
-        action="store_true",
-        default=False,
-        help=(
-            "Whether to fail if an unknown build command is encountered in a .cmd file.\n"
-            "If set to True, errors are logged as warnings instead. (default: False)"
-        ),
-    )
     parser.add_argument(
         "--write-output-on-error",
         action="store_true",
@@ -245,7 +233,6 @@ def get_config() -> KernelSbomConfig:
     output_directory = os.path.realpath(args["output_directory"])
     debug = args["debug"]
 
-    fail_on_unknown_build_command = not args["do_not_fail_on_unknown_build_command"]
     write_output_on_error = args["write_output_on_error"]
 
     created = datetime.fromtimestamp(
@@ -283,7 +270,6 @@ def get_config() -> KernelSbomConfig:
         used_files_file_name=used_files_file_name,
         output_directory=output_directory,
         debug=debug,
-        fail_on_unknown_build_command=fail_on_unknown_build_command,
         write_output_on_error=write_output_on_error,
         created=created,
         spdxId_prefix=spdxId_prefix,

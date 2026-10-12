@@ -121,9 +121,9 @@ from multiple sources:
 
 * **.cmd files**: The primary source is the ``.cmd`` file of the
   generated artifact, e.g., ``arch/x86/boot/.bzImage.cmd``. These files
-  contain the exact command used to build the artifact and often include
-  an explicit list of input dependencies. By parsing the ``.cmd``
-  file, the full list of dependencies can be obtained.
+  record the shell command used to build the artifact, the make
+  prerequisites (``make_prereqs_*``), and, for compiler-generated targets,
+  additional dependencies (``deps_*``) like header files.
 
 * **.incbin statements**: The second source are include binary
   ``.incbin`` statements in ``.S`` assembly files.
@@ -188,19 +188,3 @@ In this scenario, KernelSbom does not produce a dedicated
 artifacts are included together in ``sbom-build.spdx.json``, and
 ``sbom.used-files.txt`` lists all files referenced in the build document.
 
-Unknown Build Commands
-~~~~~~~~~~~~~~~~~~~~~~
-
-Because the kernel supports a wide range of configurations and versions,
-KernelSbom may encounter build commands in ``.cmd`` files that it does
-not yet support. By default, KernelSbom will fail if an unknown build
-command is encountered.
-
-If you still wish to generate SPDX documents despite unsupported
-commands, you can use the ``--do-not-fail-on-unknown-build-command``
-option. KernelSbom will continue and produce the documents, although
-the resulting SBOM will be incomplete.
-
-This option should only be used when the missing portion of the
-dependency graph is small and an incomplete SBOM is acceptable for
-your use case.

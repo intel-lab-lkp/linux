@@ -23,7 +23,6 @@ class IncbinDependency:
 class CmdGraphNodeConfig(Protocol):
     obj_tree: PathStr
     src_tree: PathStr
-    fail_on_unknown_build_command: bool
 
 
 @dataclass
@@ -120,9 +119,7 @@ class CmdGraphNode:
         if cmd_file is not None:
             node.cmd_file_dependencies = [
                 _build_child_node(cmd_file_dependency_path)
-                for cmd_file_dependency_path in cmd_file.get_dependencies(
-                    target_path, config.obj_tree, config.fail_on_unknown_build_command
-                )
+                for cmd_file_dependency_path in cmd_file.get_dependencies(target_path, config.obj_tree)
             ]
 
         if node.absolute_path.endswith(".S"):
