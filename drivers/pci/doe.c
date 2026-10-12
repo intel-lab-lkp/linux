@@ -27,6 +27,9 @@
 /* Timeout of 1 second from 6.30.2 Operation, PCI Spec r6.0 */
 #define PCI_DOE_TIMEOUT HZ
 #define PCI_DOE_POLL_INTERVAL	(PCI_DOE_TIMEOUT / 128)
+#define PCI_DOE_POLL_FAST_MIN_US	20
+#define PCI_DOE_POLL_FAST_MAX_US	50
+#define PCI_DOE_POLL_FAST_TRIES		40
 
 #define PCI_DOE_FLAG_CANCEL	0
 #define PCI_DOE_FLAG_DEAD	1
@@ -487,7 +490,7 @@ static void doe_statemachine_work(struct work_struct *work)
 	int offset = doe_mb->cap_offset;
 	unsigned long timeout_jiffies;
 	u32 val;
-	int rc;
+	int rc, tries = 0;
 
 	if (test_bit(PCI_DOE_FLAG_DEAD, &doe_mb->flags)) {
 		signal_task_complete(task, -EIO);
@@ -525,10 +528,25 @@ retry_resp:
 			signal_task_abort(task, -EIO);
 			return;
 		}
-		rc = pci_doe_wait(doe_mb, PCI_DOE_POLL_INTERVAL);
-		if (rc) {
-			signal_task_abort(task, rc);
-			return;
+		/*
+		 * Exchanges are served from the device's local mailbox
+		 * logic and usually complete in tens of microseconds, far
+		 * below the jiffies granularity of PCI_DOE_POLL_INTERVAL.
+		 * Poll for up to ~2 ms before falling back to it.
+		 */
+		if (tries++ < PCI_DOE_POLL_FAST_TRIES) {
+			if (test_bit(PCI_DOE_FLAG_CANCEL, &doe_mb->flags)) {
+				signal_task_abort(task, -EIO);
+				return;
+			}
+			usleep_range(PCI_DOE_POLL_FAST_MIN_US,
+				     PCI_DOE_POLL_FAST_MAX_US);
+		} else {
+			rc = pci_doe_wait(doe_mb, PCI_DOE_POLL_INTERVAL);
+			if (rc) {
+				signal_task_abort(task, rc);
+				return;
+			}
 		}
 		goto retry_resp;
 	}
