@@ -10,6 +10,7 @@
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
 #include "intel_dp.h"
+#include "intel_hdmi.h"
 #include "intel_lt_phy.h"
 
 /* HDMI/DVI modes ignore everything but the last 2 items. So we share
@@ -1164,6 +1165,14 @@ static const union intel_ddi_buf_trans_entry _xe3plpd_lt_trans_edp[] = {
 	{ .lt = { 1, 3, 0, 26, 0 } },
 };
 
+static const union intel_ddi_buf_trans_entry _xe3plpd_lt_trans_hdmi_frl[] = {
+	{ .lt = { 0, 0, 0, 48, 0  } },
+	{ .lt = { 0, 0, 4, 38, 6  } },
+	{ .lt = { 0, 0, 4, 36, 8  } },
+	{ .lt = { 0, 0, 4, 34, 10 } },
+	{ .lt = { 0, 0, 4, 32, 12 } },
+};
+
 static const struct intel_ddi_buf_trans xe3plpd_lt_trans_dp14 = {
 	.entries = _xe3plpd_lt_trans_dp14,
 	.num_entries = ARRAY_SIZE(_xe3plpd_lt_trans_dp14),
@@ -1177,6 +1186,11 @@ static const struct intel_ddi_buf_trans xe3plpd_lt_trans_uhbr = {
 static const struct intel_ddi_buf_trans xe3plpd_lt_trans_edp = {
 	.entries = _xe3plpd_lt_trans_edp,
 	.num_entries = ARRAY_SIZE(_xe3plpd_lt_trans_edp),
+};
+
+static const struct intel_ddi_buf_trans xe3plpd_lt_trans_hdmi_frl = {
+	.entries = _xe3plpd_lt_trans_hdmi_frl,
+	.num_entries = ARRAY_SIZE(_xe3plpd_lt_trans_hdmi_frl),
 };
 
 bool is_hobl_buf_trans(const struct intel_ddi_buf_trans *table)
@@ -1780,6 +1794,9 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 		return intel_get_buf_trans(&xe3plpd_lt_trans_uhbr, n_entries);
 	else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP))
 		return intel_get_buf_trans(&xe3plpd_lt_trans_edp, n_entries);
+	else if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI) &&
+		 intel_hdmi_is_frl(crtc_state->port_clock))
+		return intel_get_buf_trans(&xe3plpd_lt_trans_hdmi_frl, n_entries);
 	else
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
 }
