@@ -446,6 +446,8 @@ int
 xfs_mount_reset_sbqflags(
 	struct xfs_mount	*mp)
 {
+	int			error;
+
 	mp->m_qflags = 0;
 
 	/* It is OK to look at sb_qflags in the mount path without m_sb_lock. */
@@ -458,7 +460,20 @@ xfs_mount_reset_sbqflags(
 	if (!xfs_fs_writable(mp, SB_FREEZE_WRITE))
 		return 0;
 
-	return xfs_sync_sb(mp, false);
+	error = xfs_sync_sb(mp, false);
+	if (error || !xfs_has_metadir(mp))
+		return error;
+
+	/*
+	 * For metadir filesystems, quota flag state persists across mounts, so
+	 * update secondary superblocks in case xfs_repair ever has to recover
+	 * the primary from a secondary.  growfs also updates backup supers so
+	 * lock against that.
+	 */
+	mutex_lock(&mp->m_growlock);
+	error = xfs_update_secondary_sbs(mp);
+	mutex_unlock(&mp->m_growlock);
+	return error;
 }
 
 static const char *const xfs_free_pool_name[] = {

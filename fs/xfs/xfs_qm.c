@@ -718,7 +718,20 @@ xfs_qm_prep_metadir_sb(
 	spin_unlock(&mp->m_sb_lock);
 	xfs_log_sb(tp);
 
-	return xfs_trans_commit(tp);
+	error = xfs_trans_commit(tp);
+	if (error)
+		return error;
+
+	/*
+	 * For metadir filesystems, quota flag state persists across mounts, so
+	 * update secondary superblocks in case xfs_repair ever has to recover
+	 * the primary from a secondary.  growfs also updates backup supers so
+	 * lock against that.
+	 */
+	mutex_lock(&mp->m_growlock);
+	error = xfs_update_secondary_sbs(mp);
+	mutex_unlock(&mp->m_growlock);
+	return error;
 }
 
 /*
@@ -1684,6 +1697,16 @@ xfs_qm_mount_quotas(
 			xfs_alert(mp, "%s: Superblock update failed!",
 				__func__);
 		}
+
+		/*
+		 * For metadir filesystems, quota flag state persists across
+		 * mounts, so update secondary superblocks in case xfs_repair
+		 * ever has to recover the primary from a secondary.  growfs
+		 * also updates backup supers so lock against that.
+		 */
+		mutex_lock(&mp->m_growlock);
+		xfs_update_secondary_sbs(mp);
+		mutex_unlock(&mp->m_growlock);
 	}
 
 	if (error) {
