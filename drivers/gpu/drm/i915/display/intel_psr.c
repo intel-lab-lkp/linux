@@ -1588,6 +1588,13 @@ static bool intel_sel_update_config_valid(struct intel_crtc_state *crtc_state,
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
 	struct intel_display *display = to_intel_display(intel_dp);
 
+	if (crtc_state->joiner_pipes && !crtc_state->dsc.compression_enable &&
+	    crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR420) {
+		drm_dbg_kms(display->drm,
+			    "Selective update not enabled, uncompressed joiner does not support YUV 4:2:0\n");
+		goto unsupported;
+	}
+
 	if (HAS_PSR2_SEL_FETCH(display) &&
 	    !intel_psr2_sel_fetch_config_valid(intel_dp, crtc_state) &&
 	    !HAS_PSR_HW_TRACKING(display)) {
@@ -1735,8 +1742,8 @@ static bool _panel_replay_compute_config(struct intel_crtc_state *crtc_state,
 
 	/* Remaining checks are for eDP only */
 
-	if (to_intel_crtc(crtc_state->uapi.crtc)->pipe != PIPE_A &&
-	    to_intel_crtc(crtc_state->uapi.crtc)->pipe != PIPE_B)
+	/* Every joined pipe needs its own PSR/Panel Replay register block. */
+	if (intel_crtc_joined_pipe_mask(crtc_state) & ~(BIT(PIPE_A) | BIT(PIPE_B)))
 		return false;
 
 	/* 128b/132b Panel Replay is not supported on eDP */
@@ -1880,17 +1887,6 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 		return;
 	}
 
-	/*
-	 * FIXME figure out what is wrong with PSR+joiner and
-	 * fix it. Presumably something related to the fact that
-	 * PSR is a transcoder level feature.
-	 */
-	if (crtc_state->joiner_pipes) {
-		drm_dbg_kms(display->drm,
-			    "PSR disabled due to joiner\n");
-		return;
-	}
-
 	/* Only used for state verification. */
 	crtc_state->panel_replay_dsc_support = connector->dp.panel_replay_caps.dsc_support;
 	crtc_state->has_panel_replay = _panel_replay_compute_config(crtc_state, conn_state);
@@ -1902,6 +1898,14 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 		return;
 
 	crtc_state->has_sel_update = intel_sel_update_config_valid(crtc_state, conn_state);
+
+	/* Plain PSR1 is not supported with joiner. */
+	if (crtc_state->joiner_pipes && !crtc_state->has_panel_replay &&
+	    !crtc_state->has_sel_update) {
+		drm_dbg_kms(display->drm,
+			    "PSR disabled, PSR1 not supported with joiner\n");
+		crtc_state->has_psr = false;
+	}
 }
 
 void intel_psr_get_config(struct intel_encoder *encoder,
@@ -4728,6 +4732,10 @@ void intel_psr_compute_config_late(struct intel_dp *intel_dp,
 		crtc_state->has_sel_update = false;
 		crtc_state->enable_psr2_su_region_et = false;
 		crtc_state->enable_psr2_sel_fetch = false;
+
+		/* Plain PSR1 is not supported with joiner. */
+		if (crtc_state->joiner_pipes)
+			crtc_state->has_psr = false;
 	}
 
 	/* Wa_18037818876 */
