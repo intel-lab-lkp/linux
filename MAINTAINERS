@@ -19577,6 +19577,7 @@ F:	Documentation/devicetree/bindings/spi/nvidia,lstp-spi.yaml
 F:	Documentation/devicetree/bindings/usb/nvidia,lstp.yaml
 F:	Documentation/driver-api/usb/lstp.rst
 F:	Documentation/firmware-guide/acpi/lstp.rst
+F:	drivers/gpio/gpio-lstp.c
 F:	drivers/usb/misc/lstp.c
 F:	include/linux/usb/lstp.h
 

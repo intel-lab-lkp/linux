@@ -2051,6 +2051,20 @@ config GPIO_USBIO
 	  This driver can also be built as a module. If so, the module
 	  will be called gpio_usbio.
 
+config GPIO_LSTP
+	tristate "NVIDIA LSTP GPIO support"
+	depends on USB_LSTP
+	default USB_LSTP
+	select GPIOLIB_IRQCHIP
+	help
+	  Say Y or M here to support the GPIO channels of NVIDIA LSTP USB
+	  adapters. Each channel is registered as a GPIO chip, together
+	  with an interrupt controller for its pins. Pins the firmware
+	  reports as LEDs are left to the LEDS_LSTP driver.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called gpio-lstp.
+
 endmenu
 
 menu "Virtual GPIO drivers"
