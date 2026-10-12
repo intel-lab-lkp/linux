@@ -7,7 +7,12 @@
 
 #include <drm/drm_connector.h>
 
+#include "intel_de.h"
+#include "intel_display_driver.h"
+#include "intel_display_regs.h"
+#include "intel_display_types.h"
 #include "intel_hdmi_frl_dfm.h"
+#include "intel_hdmi_frl_dfm_regs.h"
 
 /* DFM constraints and tolerance values */
 #define TB_BORROWED_MAX			400
@@ -718,4 +723,41 @@ bool intel_hdmi_frl_dfm_dsc_requirement_met(struct intel_hdmi_frl_dfm *frl_dfm)
 		return false;
 
 	return true;
+}
+
+void intel_hdmi_frl_dfm_write(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_trans = crtc_state->cpu_transcoder;
+	i915_reg_t reg;
+	u32 val;
+
+	if (!crtc_state->frl.enable)
+		return;
+
+	reg = TRANS_HDMI_FRL_DFMWRCTL(display, cpu_trans);
+	val = TB_ACTUAL_OFFSET(crtc_state->frl.tb_actual);
+	intel_de_rmw(display, reg, TB_ACTUAL_OFFSET_MASK, val);
+
+	reg = TRANS_HDMI_FRL_DFMTHRSH(display, cpu_trans);
+	val = TB_MIN_THESHOLD(crtc_state->frl.tb_threshold_min);
+	intel_de_rmw(display, reg, TB_MIN_THESHOLD_MASK, val);
+}
+
+void intel_hdmi_frl_dfm_read(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_trans = crtc_state->cpu_transcoder;
+	u32 val;
+
+	if (!crtc_state->frl.enable)
+		return;
+
+	val = intel_de_read(display, TRANS_HDMI_FRL_DFMWRCTL(display, cpu_trans));
+	crtc_state->frl.tb_actual =
+		REG_FIELD_GET(TB_ACTUAL_OFFSET_MASK, val);
+
+	val = intel_de_read(display, TRANS_HDMI_FRL_DFMTHRSH(display, cpu_trans));
+	crtc_state->frl.tb_threshold_min =
+		REG_FIELD_GET(TB_MIN_THESHOLD_MASK, val);
 }
