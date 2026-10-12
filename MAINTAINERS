@@ -19565,6 +19565,13 @@ L:	linux-acpi@vger.kernel.org
 S:	Maintained
 F:	drivers/acpi/apei/ghes-nvidia.c
 
+NVIDIA LSTP USB ADAPTER DRIVERS
+M:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+M:	Donald Shannon <donalds@nvidia.com>
+L:	linux-usb@vger.kernel.org
+S:	Supported
+F:	Documentation/devicetree/bindings/gpio/nvidia,lstp-gpio.yaml
+
 NVIDIA VRS RTC DRIVER
 M:	Shubhi Garg <shgarg@nvidia.com>
 L:	linux-tegra@vger.kernel.org

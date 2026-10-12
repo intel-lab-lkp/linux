@@ -1,0 +1,276 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/gpio/nvidia,lstp-gpio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NVIDIA LSTP GPIO Channel
+
+maintainers:
+  - Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+  - Donald Shannon <donalds@nvidia.com>
+
+description: |
+  GPIO controller channel on an NVIDIA LSTP USB device.
+
+  The number of GPIO lines and their default names and directions are
+  reported by the device firmware.
+
+  gpio-line-names overrides the firmware-reported pin names.  The
+  gpio-controller and #gpio-cells properties let consumers (e.g.
+  gpio-leds, gpio-keys) reference the lines by phandle.
+
+  The channel is also an interrupt controller.  A consumer may reference
+  a line through a *-gpios property and use it as an interrupt, or
+  reference it through interrupts-extended, or interrupt-parent and
+  interrupts, using the interrupt-controller and #interrupt-cells
+  properties.  An interrupt line must be an input; the firmware-reported
+  pin direction is authoritative and is not changed at runtime.
+
+  GPIO hog child nodes are supported for boot-time pin configuration.
+
+  Pins the device firmware reports as LEDs are not GPIO lines; each is
+  an LED instead, named after the firmware pin name.  An optional leds
+  child node describes some of them: their names, initial state, default
+  trigger, and a pattern the device plays on its own.
+
+  Because the controller sits behind USB, every line access is a USB
+  transaction that blocks until it completes.  Consumers that need
+  non-blocking line access cannot use this controller.
+
+properties:
+  compatible:
+    const: nvidia,lstp-gpio
+
+  reg:
+    description: Channel ID reported by the device firmware.
+    maxItems: 1
+
+  gpio-controller: true
+
+  "#gpio-cells":
+    const: 2
+    description: |
+      Two cells: pin number and flags.
+      Cell 0: GPIO pin offset (0-based).
+      Cell 1: GPIO flags (e.g. GPIO_ACTIVE_LOW).
+
+  interrupt-controller: true
+
+  "#interrupt-cells":
+    const: 2
+    description: |
+      Two cells: GPIO line offset and trigger flags.
+      Cell 0: GPIO line offset (0-based), same numbering as #gpio-cells.
+      Cell 1: Trigger flags (see <dt-bindings/interrupt-controller/irq.h>).
+
+  gpio-line-names:
+    description: |
+      Optional list of human-readable names for each GPIO line.
+      Overrides the firmware-reported pin names.  The number of entries
+      must not exceed the number of GPIO lines reported by firmware.
+    minItems: 1
+    maxItems: 255
+
+  leds:
+    type: object
+    description: |
+      LED pins of the channel.  A pin the device firmware reports as an
+      LED is an LED whether or not it has a node here, and a node for a
+      pin the firmware does not report as an LED is ignored.
+
+    properties:
+      "#address-cells":
+        const: 1
+
+      "#size-cells":
+        const: 0
+
+    patternProperties:
+      "^led@[0-9a-f]+$":
+        type: object
+        $ref: /schemas/leds/common.yaml#
+        unevaluatedProperties: false
+        description: |
+          One LED pin.  The LED takes its name from label, or from color,
+          function and function-enumerator, instead of the firmware pin
+          name.
+
+        properties:
+          reg:
+            description: Pin number, in the channel's own pin numbering.
+            maxItems: 1
+
+          default-state:
+            description: |
+              Written to the device once, when the LED is set up, and "off"
+              when absent, as in leds/common.yaml.  "keep" leaves the LED as
+              the device firmware set it; the device cannot report its
+              current state.  Not written for a node with led-pattern.
+
+          led-pattern:
+            description: |
+              A pattern the device plays in a loop once the LED is set up.
+              Each entry is <brightness duration>: brightness from 0 to
+              255, held or faded towards for duration milliseconds,
+              depending on the pin's firmware-reported LED mode.  The
+              pattern is sent to the device once and played there without
+              further USB traffic.  It must fit in a single request, which
+              for a device with 64-byte USB endpoints is ten entries; a
+              longer pattern is not sent.
+            minItems: 1
+            maxItems: 255
+            items:
+              items:
+                - description: Brightness
+                  maximum: 255
+                - description: Duration in milliseconds
+
+          active-low: false
+          flash-max-microamp: false
+          flash-max-timeout-us: false
+          inactive-high-impedance: false
+          led-max-microamp: false
+          led-sources: false
+          max-brightness: false
+          panic-indicator: false
+          retain-state-shutdown: false
+          retain-state-suspended: false
+
+        required:
+          - reg
+
+        anyOf:
+          - required: [label]
+          - required: [function]
+
+        dependentSchemas:
+          led-pattern:
+            properties:
+              default-state: false
+              linux,default-trigger: false
+
+    required:
+      - "#address-cells"
+      - "#size-cells"
+
+    additionalProperties: false
+
+patternProperties:
+  "^(hog-[0-9]+|.+-hog(-[0-9]+)?)$":
+    type: object
+    required:
+      - gpio-hog
+
+dependentRequired:
+  interrupt-controller: ["#interrupt-cells"]
+  "#interrupt-cells": [interrupt-controller]
+
+required:
+  - compatible
+  - reg
+  - gpio-controller
+  - "#gpio-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    /* Minimal: let firmware define pin count and names */
+    interface {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        gpio@3 {
+            compatible = "nvidia,lstp-gpio";
+            reg = <3>;
+            gpio-controller;
+            #gpio-cells = <2>;
+        };
+    };
+  - |
+    /* Override pin names and add a hog */
+    interface {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        gpio_ch: gpio@3 {
+            compatible = "nvidia,lstp-gpio";
+            reg = <3>;
+            gpio-controller;
+            #gpio-cells = <2>;
+            gpio-line-names = "STATUS_LED", "ALERT_INT";
+
+            led-hog {
+                gpio-hog;
+                gpios = <0 0>;
+                output-high;
+                line-name = "status-led-hog";
+            };
+        };
+    };
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    /* Act as an interrupt controller for a consumer via interrupts-extended */
+    interface {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        gpio_irq_ch: gpio@3 {
+            compatible = "nvidia,lstp-gpio";
+            reg = <3>;
+            gpio-controller;
+            #gpio-cells = <2>;
+            interrupt-controller;
+            #interrupt-cells = <2>;
+        };
+    };
+
+    gpio-keys {
+        compatible = "gpio-keys";
+
+        key-alert {
+            label = "alert";
+            linux,code = <143>; /* KEY_WAKEUP */
+            /* Line 1 as a falling-edge interrupt source */
+            interrupts-extended = <&gpio_irq_ch 1 IRQ_TYPE_EDGE_FALLING>;
+        };
+    };
+  - |
+    #include <dt-bindings/leds/common.h>
+
+    /* Name two firmware-reported LED pins; one plays a pattern on its own */
+    interface {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        gpio@3 {
+            compatible = "nvidia,lstp-gpio";
+            reg = <3>;
+            gpio-controller;
+            #gpio-cells = <2>;
+
+            leds {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                led@4 {
+                    reg = <4>;
+                    color = <LED_COLOR_ID_GREEN>;
+                    function = LED_FUNCTION_POWER;
+                    default-state = "on";
+                };
+
+                led@5 {
+                    reg = <5>;
+                    color = <LED_COLOR_ID_AMBER>;
+                    function = LED_FUNCTION_STATUS;
+                    /* Two short flashes, then a pause */
+                    led-pattern = <255 100>, <0 100>, <255 100>, <0 700>;
+                };
+            };
+        };
+    };
