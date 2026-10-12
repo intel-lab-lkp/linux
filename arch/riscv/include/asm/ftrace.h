@@ -95,14 +95,6 @@ struct dyn_arch_ftrace {
 	(((offset & AUIPC_OFFSET_MASK) + AUIPC_PAD) | AUIPC_T0) :	\
 	((offset & AUIPC_OFFSET_MASK) | AUIPC_T0))
 
-#define make_call_t0(caller, callee, call)				\
-do {									\
-	unsigned int offset =						\
-		(unsigned long) (callee) - (unsigned long) (caller);	\
-	call[0] = to_auipc_t0(offset);					\
-	call[1] = to_jalr_t0(offset);					\
-} while (0)
-
 /*
  * Only the jalr insn in the auipc+jalr is patched, so we make it 4
  * bytes here.
