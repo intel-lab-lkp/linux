@@ -67,6 +67,11 @@ static int lowpan_dev_init(struct net_device *ldev)
 	return 0;
 }
 
+static void lowpan_dev_free(struct net_device *ldev)
+{
+	dev_put(lowpan_802154_dev(ldev)->wdev);
+}
+
 static int lowpan_open(struct net_device *dev)
 {
 	if (!open_count)
@@ -181,6 +186,7 @@ static int lowpan_newlink(struct net_device *ldev,
 		return ret;
 	}
 
+	ldev->priv_destructor = lowpan_dev_free;
 	wdev->ieee802154_ptr->lowpan_dev = ldev;
 	return 0;
 }
@@ -193,7 +199,6 @@ static void lowpan_dellink(struct net_device *ldev, struct list_head *head)
 
 	wdev->ieee802154_ptr->lowpan_dev = NULL;
 	lowpan_unregister_netdevice(ldev);
-	dev_put(wdev);
 }
 
 static struct rtnl_link_ops lowpan_link_ops __read_mostly = {
