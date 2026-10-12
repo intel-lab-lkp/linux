@@ -282,6 +282,7 @@ enum ocfs2_mount_options
 #define OCFS2_OSB_SOFT_RO	0x0001
 #define OCFS2_OSB_HARD_RO	0x0002
 #define OCFS2_OSB_ERROR_FS	0x0004
+#define OCFS2_OSB_EMERGENCY_RO	0x0008	/* error made the fs read-only */
 #define OCFS2_DEFAULT_ATIME_QUANTUM	60
 
 struct ocfs2_triggers {
@@ -683,6 +684,17 @@ static inline int ocfs2_is_readonly(struct ocfs2_super *osb)
 	int ret;
 	spin_lock(&osb->osb_lock);
 	ret = osb->osb_flags & (OCFS2_OSB_SOFT_RO | OCFS2_OSB_HARD_RO);
+	spin_unlock(&osb->osb_lock);
+
+	return ret;
+}
+
+static inline int ocfs2_is_emergency_ro(struct ocfs2_super *osb)
+{
+	int ret;
+
+	spin_lock(&osb->osb_lock);
+	ret = osb->osb_flags & OCFS2_OSB_EMERGENCY_RO;
 	spin_unlock(&osb->osb_lock);
 
 	return ret;

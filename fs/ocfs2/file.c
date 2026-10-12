@@ -91,6 +91,11 @@ static int ocfs2_file_open(struct inode *inode, struct file *file)
 			      file->f_path.dentry->d_name.name, mode);
 
 	if (file->f_mode & FMODE_WRITE) {
+		if (unlikely(ocfs2_emergency_state(OCFS2_SB(inode->i_sb)))) {
+			status = -EROFS;
+			goto leave;
+		}
+
 		status = dquot_initialize(inode);
 		if (status)
 			goto leave;
@@ -2403,6 +2408,9 @@ static ssize_t ocfs2_file_write_iter(struct kiocb *iocb,
 
 	if (count == 0)
 		return 0;
+
+	if (unlikely(ocfs2_emergency_state(osb)))
+		return -EROFS;
 
 	if (nowait) {
 		if (!inode_trylock(inode))

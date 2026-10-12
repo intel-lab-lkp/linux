@@ -97,6 +97,9 @@ int ocfs2_fileattr_set(struct mnt_idmap *idmap,
 	if (fileattr_has_fsx(fa))
 		return -EOPNOTSUPP;
 
+	if (unlikely(ocfs2_emergency_state(osb)))
+		return -EROFS;
+
 	status = ocfs2_inode_lock(inode, &bh, 1);
 	if (status < 0) {
 		mlog_errno(status);

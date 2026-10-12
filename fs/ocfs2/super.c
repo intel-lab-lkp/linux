@@ -125,6 +125,33 @@ static struct dquot __rcu **ocfs2_get_dquots(struct inode *inode)
 	return OCFS2_I(inode)->i_dquot;
 }
 
+/*
+ * quotactl_fd() takes write access to the mount, which an error doesn't take
+ * away anymore. Refuse quota limit and info changes once an error made the
+ * file system read-only: they are journalled writes.
+ */
+static int ocfs2_set_dqinfo(struct super_block *sb, int type,
+			    struct qc_info *ii)
+{
+	if (unlikely(ocfs2_is_emergency_ro(OCFS2_SB(sb))))
+		return -EROFS;
+	return dquot_set_dqinfo(sb, type, ii);
+}
+
+static int ocfs2_set_dqblk(struct super_block *sb, struct kqid qid,
+			   struct qc_dqblk *di)
+{
+	if (unlikely(ocfs2_is_emergency_ro(OCFS2_SB(sb))))
+		return -EROFS;
+	return dquot_set_dqblk(sb, qid, di);
+}
+
+/*
+ * dquot_quotactl_sysfile_ops with set_info and set_dqblk replaced, filled in by
+ * ocfs2_init().
+ */
+static struct quotactl_ops ocfs2_quotactl_ops __ro_after_init;
+
 static const struct super_operations ocfs2_sops = {
 	.statfs		= ocfs2_statfs,
 	.alloc_inode	= ocfs2_alloc_inode,
@@ -402,6 +429,13 @@ static int ocfs2_sync_fs(struct super_block *sb, int wait)
 	if (ocfs2_is_hard_readonly(osb))
 		return -EROFS;
 
+	/*
+	 * An error made the file system read-only: don't flush the truncate
+	 * log or kick off a journal commit.
+	 */
+	if (ocfs2_is_soft_readonly(osb))
+		return 0;
+
 	if (wait) {
 		status = ocfs2_flush_truncate_log(osb);
 		if (status < 0)
@@ -646,8 +680,11 @@ static int ocfs2_reconfigure(struct fs_context *fc)
 
 	/* We're going to/from readonly mode. */
 	if ((bool)(fc->sb_flags & SB_RDONLY) != sb_rdonly(sb)) {
-		/* Disable quota accounting before remounting RO */
-		if (fc->sb_flags & SB_RDONLY) {
+		/*
+		 * Disable quota accounting before remounting RO, unless an
+		 * error made the fs read-only: nothing may be written then.
+		 */
+		if ((fc->sb_flags & SB_RDONLY) && !ocfs2_is_emergency_ro(osb)) {
 			ret = ocfs2_susp_quotas(osb, 0);
 			if (ret < 0)
 				goto out;
@@ -1136,7 +1173,7 @@ static int ocfs2_fill_super(struct super_block *sb, struct fs_context *fc)
 	/* Now we can initialize quotas because we can afford to wait
 	 * for cluster locks recovery now. That also means that truncation
 	 * log recovery can happen but that waits for proper quota setup */
-	if (!sb_rdonly(sb)) {
+	if (!sb_rdonly(sb) && !ocfs2_is_emergency_ro(osb)) {
 		status = ocfs2_enable_quotas(osb);
 		if (status < 0) {
 			/* We have to err-out specially here because
@@ -1460,6 +1497,9 @@ static int ocfs2_show_options(struct seq_file *s, struct dentry *root)
 	else
 		seq_printf(s, ",errors=remount-ro");
 
+	if (ocfs2_is_emergency_ro(osb))
+		seq_puts(s, ",emergency_ro");
+
 	if (osb->preferred_slot != OCFS2_INVALID_SLOT)
 		seq_printf(s, ",preferred_slot=%d", osb->preferred_slot);
 
@@ -1528,6 +1568,10 @@ static int __init ocfs2_init(void)
 	ocfs2_debugfs_root = debugfs_create_dir("ocfs2", NULL);
 
 	ocfs2_set_locking_protocol();
+
+	ocfs2_quotactl_ops = dquot_quotactl_sysfile_ops;
+	ocfs2_quotactl_ops.set_info = ocfs2_set_dqinfo;
+	ocfs2_quotactl_ops.set_dqblk = ocfs2_set_dqblk;
 
 	register_quota_format(&ocfs2_quota_format);
 
@@ -1976,7 +2020,7 @@ static int ocfs2_initialize_super(struct super_block *sb,
 	sb->s_op = &ocfs2_sops;
 	set_default_d_op(sb, &ocfs2_dentry_ops);
 	sb->s_export_op = &ocfs2_export_ops;
-	sb->s_qcop = &dquot_quotactl_sysfile_ops;
+	sb->s_qcop = &ocfs2_quotactl_ops;
 	sb->dq_op = &ocfs2_quota_operations;
 	sb->s_quota_types = QTYPE_MASK_USR | QTYPE_MASK_GRP;
 	sb->s_xattr = ocfs2_xattr_handlers;
@@ -2497,11 +2541,18 @@ static int ocfs2_handle_error(struct super_block *sb)
 		rv = -EIO;
 	} else { /* default option */
 		rv = -EROFS;
-		if (sb_rdonly(sb) && ocfs2_emergency_state(osb))
+		if (ocfs2_emergency_state(osb))
 			return rv;
 
 		pr_crit("OCFS2: File system is now read-only.\n");
-		sb->s_flags |= SB_RDONLY;
+		/*
+		 * Don't set SB_RDONLY: that needs sb->s_umount and a proper
+		 * remount, and setting it while the file system is frozen
+		 * makes thaw_super() leave the s_writers rwsems locked.  The
+		 * soft read-only flag makes ocfs2_emergency_state() refuse
+		 * modifications until the file system is unmounted.
+		 */
+		ocfs2_set_osb_flag(osb, OCFS2_OSB_EMERGENCY_RO);
 		ocfs2_set_ro_flag(osb, 0);
 	}
 

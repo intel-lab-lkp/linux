@@ -262,6 +262,9 @@ static int ocfs2_mknod(struct mnt_idmap *idmap,
 			  (unsigned long long)OCFS2_I(dir)->ip_blkno,
 			  (unsigned long)dev, mode);
 
+	if (unlikely(ocfs2_emergency_state(OCFS2_SB(dir->i_sb))))
+		return -EROFS;
+
 	status = dquot_initialize(dir);
 	if (status) {
 		mlog_errno(status);
@@ -659,6 +662,9 @@ static struct dentry *ocfs2_mkdir(struct mnt_idmap *idmap,
 
 	trace_ocfs2_mkdir(dir, dentry, dentry->d_name.len, dentry->d_name.name,
 			  OCFS2_I(dir)->ip_blkno, mode);
+	if (unlikely(ocfs2_emergency_state(OCFS2_SB(dir->i_sb))))
+		return ERR_PTR(-EROFS);
+
 	ret = ocfs2_mknod(&nop_mnt_idmap, dir, dentry, mode, 0);
 	if (ret)
 		mlog_errno(ret);
@@ -675,6 +681,9 @@ static int ocfs2_create(struct mnt_idmap *idmap,
 
 	trace_ocfs2_create(dir, dentry, dentry->d_name.len, dentry->d_name.name,
 			   (unsigned long long)OCFS2_I(dir)->ip_blkno, mode);
+	if (unlikely(ocfs2_emergency_state(OCFS2_SB(dir->i_sb))))
+		return -EROFS;
+
 	ret = ocfs2_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFREG, 0);
 	if (ret)
 		mlog_errno(ret);
@@ -702,6 +711,9 @@ static int ocfs2_link(struct dentry *old_dentry,
 	trace_ocfs2_link((unsigned long long)OCFS2_I(inode)->ip_blkno,
 			 old_dentry->d_name.len, old_dentry->d_name.name,
 			 dentry->d_name.len, dentry->d_name.name);
+
+	if (unlikely(ocfs2_emergency_state(osb)))
+		return -EROFS;
 
 	if (S_ISDIR(inode->i_mode))
 		return -EPERM;
@@ -898,6 +910,9 @@ static int ocfs2_unlink(struct inode *dir,
 			   dentry->d_name.name,
 			   (unsigned long long)OCFS2_I(dir)->ip_blkno,
 			   (unsigned long long)OCFS2_I(inode)->ip_blkno);
+
+	if (unlikely(ocfs2_emergency_state(osb)))
+		return -EROFS;
 
 	status = dquot_initialize(dir);
 	if (status) {
@@ -1235,6 +1250,9 @@ static int ocfs2_rename(struct mnt_idmap *idmap,
 	struct ocfs2_dir_lookup_result orphan_insert = { NULL, };
 	struct ocfs2_dir_lookup_result target_insert = { NULL, };
 	bool should_add_orphan = false;
+
+	if (unlikely(ocfs2_emergency_state(OCFS2_SB(old_dir->i_sb))))
+		return -EROFS;
 
 	if (flags)
 		return -EINVAL;
@@ -1842,6 +1860,9 @@ static int ocfs2_symlink(struct mnt_idmap *idmap,
 
 	trace_ocfs2_symlink_begin(dir, dentry, symname,
 				  dentry->d_name.len, dentry->d_name.name);
+
+	if (unlikely(ocfs2_emergency_state(OCFS2_SB(dir->i_sb))))
+		return -EROFS;
 
 	status = dquot_initialize(dir);
 	if (status) {

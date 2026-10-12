@@ -4441,6 +4441,9 @@ int ocfs2_reflink_ioctl(struct inode *inode,
 	if (!ocfs2_refcount_tree(OCFS2_SB(inode->i_sb)))
 		return -EOPNOTSUPP;
 
+	if (unlikely(ocfs2_emergency_state(OCFS2_SB(inode->i_sb))))
+		return -EROFS;
+
 	error = user_path_at(AT_FDCWD, oldname, 0, &old_path);
 	if (error) {
 		mlog_errno(error);
