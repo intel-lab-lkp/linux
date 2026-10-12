@@ -3194,6 +3194,15 @@ static const struct nla_policy amt_policy[IFLA_AMT_MAX + 1] = {
 	[IFLA_AMT_MAX_TUNNELS]	= { .type = NLA_U32 },
 };
 
+static bool amt_ip6_in_ip4_attr(const struct nlattr *attr,
+				struct netlink_ext_ack *extack)
+{
+	if (!attr || nla_len(attr) != sizeof(struct in6_addr))
+		return false;
+	NL_SET_ERR_MSG_ATTR(extack, attr, "IPv6 address in an IPv4 attribute");
+	return true;
+}
+
 static int amt_validate(struct nlattr *tb[], struct nlattr *data[],
 			struct netlink_ext_ack *extack)
 {
@@ -3224,12 +3233,18 @@ static int amt_validate(struct nlattr *tb[], struct nlattr *data[],
 		return -EINVAL;
 	}
 
+	if (amt_ip6_in_ip4_attr(data[IFLA_AMT_LOCAL_IP], extack))
+		return -EINVAL;
+
 	if (!data[IFLA_AMT_DISCOVERY_IP] &&
 	    nla_get_u32(data[IFLA_AMT_MODE]) == AMT_MODE_GATEWAY) {
 		NL_SET_ERR_MSG_ATTR(extack, data[IFLA_AMT_LOCAL_IP],
 				    "Discovery attribute is required");
 		return -EINVAL;
 	}
+
+	if (amt_ip6_in_ip4_attr(data[IFLA_AMT_DISCOVERY_IP], extack))
+		return -EINVAL;
 
 	return 0;
 }
