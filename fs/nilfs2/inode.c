@@ -162,7 +162,7 @@ static int nilfs_writepages(struct address_space *mapping,
 	struct inode *inode = mapping->host;
 	int err = 0;
 
-	if (sb_rdonly(inode->i_sb)) {
+	if (nilfs_sb_rdonly(inode->i_sb)) {
 		nilfs_clear_dirty_pages(mapping);
 		return -EROFS;
 	}
@@ -868,7 +868,7 @@ void nilfs_evict_inode(struct inode *inode)
 	truncate_inode_pages_final(&inode->i_data);
 
 	nilfs = sb->s_fs_info;
-	if (unlikely(sb_rdonly(sb) || !nilfs->ns_writer)) {
+	if (unlikely(nilfs_sb_rdonly(sb) || !nilfs->ns_writer)) {
 		/*
 		 * If this inode is about to be disposed after the file system
 		 * has been degraded to read-only due to file system corruption
@@ -912,6 +912,9 @@ int nilfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	struct super_block *sb = inode->i_sb;
 	int err;
 
+	if (nilfs_emergency_ro(sb->s_fs_info))
+		return -EROFS;
+
 	err = setattr_prepare(&nop_mnt_idmap, dentry, iattr);
 	if (err)
 		return err;
@@ -951,6 +954,12 @@ int nilfs_permission(struct mnt_idmap *idmap, struct inode *inode,
 	if ((mask & MAY_WRITE) && root &&
 	    root->cno != NILFS_CPTREE_CURRENT_CNO)
 		return -EROFS; /* snapshot is not writable */
+
+	/* After an error made us read-only, like sb_permission() would */
+	if ((mask & MAY_WRITE) && nilfs_emergency_ro(inode->i_sb->s_fs_info) &&
+	    (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
+	     S_ISLNK(inode->i_mode)))
+		return -EROFS;
 
 	return generic_permission(&nop_mnt_idmap, inode, mask);
 }

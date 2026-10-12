@@ -583,6 +583,7 @@ const struct inode_operations nilfs_special_inode_operations = {
 
 const struct inode_operations nilfs_symlink_inode_operations = {
 	.get_link	= page_get_link,
+	.setattr	= nilfs_setattr,
 	.permission     = nilfs_permission,
 };
 

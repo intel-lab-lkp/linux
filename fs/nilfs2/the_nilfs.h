@@ -30,6 +30,7 @@ enum {
 	THE_NILFS_GC_RUNNING,	/* gc process is running */
 	THE_NILFS_SB_DIRTY,	/* super block is dirty */
 	THE_NILFS_PURGING,	/* disposing dirty files for cleanup */
+	THE_NILFS_EMERGENCY_RO,	/* read-only after an error */
 };
 
 /**
@@ -204,6 +205,13 @@ THE_NILFS_FNS(DISCONTINUED, discontinued)
 THE_NILFS_FNS(GC_RUNNING, gc_running)
 THE_NILFS_FNS(SB_DIRTY, sb_dirty)
 THE_NILFS_FNS(PURGING, purging)
+THE_NILFS_FNS(EMERGENCY_RO, emergency_ro)
+
+/* Mounted read-only or read-only after an error: nothing may be written. */
+static inline bool nilfs_sb_rdonly(struct super_block *sb)
+{
+	return sb_rdonly(sb) || nilfs_emergency_ro(sb->s_fs_info);
+}
 
 /*
  * Mount option operations

@@ -54,6 +54,8 @@ static vm_fault_t nilfs_page_mkwrite(struct vm_fault *vmf)
 
 	if (unlikely(nilfs_near_disk_full(inode->i_sb->s_fs_info)))
 		return VM_FAULT_SIGBUS; /* -ENOSPC */
+	if (unlikely(nilfs_emergency_ro(inode->i_sb->s_fs_info)))
+		return VM_FAULT_SIGBUS; /* -EROFS */
 
 	sb_start_pagefault(inode->i_sb);
 	folio_lock(folio);
@@ -133,6 +135,17 @@ static int nilfs_file_mmap_prepare(struct vm_area_desc *desc)
 	return 0;
 }
 
+static ssize_t nilfs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+{
+	struct inode *inode = file_inode(iocb->ki_filp);
+
+	/* refuse before file_update_time() touches the inode */
+	if (unlikely(nilfs_emergency_ro(inode->i_sb->s_fs_info)))
+		return -EROFS;
+
+	return generic_file_write_iter(iocb, from);
+}
+
 /*
  * We have mostly NULL's here: the current defaults are ok for
  * the nilfs filesystem.
@@ -140,7 +153,7 @@ static int nilfs_file_mmap_prepare(struct vm_area_desc *desc)
 const struct file_operations nilfs_file_operations = {
 	.llseek		= generic_file_llseek,
 	.read_iter	= generic_file_read_iter,
-	.write_iter	= generic_file_write_iter,
+	.write_iter	= nilfs_file_write_iter,
 	.unlocked_ioctl	= nilfs_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= nilfs_compat_ioctl,

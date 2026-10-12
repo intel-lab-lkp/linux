@@ -143,6 +143,9 @@ int nilfs_fileattr_set(struct mnt_idmap *idmap,
 	unsigned int flags, oldflags;
 	int ret;
 
+	if (nilfs_emergency_ro(inode->i_sb->s_fs_info))
+		return -EROFS;
+
 	if (fileattr_has_fsx(fa))
 		return -EOPNOTSUPP;
 
@@ -176,6 +179,23 @@ static int nilfs_ioctl_getversion(struct inode *inode, void __user *argp)
 	return put_user(inode->i_generation, (int __user *)argp);
 }
 
+/*
+ * Like mnt_want_write_file(), but also refuse writers once an error made the
+ * filesystem read-only, the VFS doesn't know about that.
+ */
+static int nilfs_mnt_want_write_file(struct file *filp)
+{
+	struct the_nilfs *nilfs = file_inode(filp)->i_sb->s_fs_info;
+	int ret;
+
+	ret = mnt_want_write_file(filp);
+	if (!ret && nilfs_emergency_ro(nilfs)) {
+		mnt_drop_write_file(filp);
+		ret = -EROFS;
+	}
+	return ret;
+}
+
 /**
  * nilfs_ioctl_change_cpmode - change checkpoint mode (checkpoint/snapshot)
  * @inode: inode object
@@ -203,7 +223,7 @@ static int nilfs_ioctl_change_cpmode(struct inode *inode, struct file *filp,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	ret = mnt_want_write_file(filp);
+	ret = nilfs_mnt_want_write_file(filp);
 	if (ret)
 		return ret;
 
@@ -255,7 +275,7 @@ nilfs_ioctl_delete_checkpoint(struct inode *inode, struct file *filp,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	ret = mnt_want_write_file(filp);
+	ret = nilfs_mnt_want_write_file(filp);
 	if (ret)
 		return ret;
 
@@ -866,7 +886,7 @@ static int nilfs_ioctl_clean_segments(struct inode *inode, struct file *filp,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	ret = mnt_want_write_file(filp);
+	ret = nilfs_mnt_want_write_file(filp);
 	if (ret)
 		return ret;
 
@@ -1014,7 +1034,7 @@ static int nilfs_ioctl_resize(struct inode *inode, struct file *filp,
 	if (!capable(CAP_SYS_ADMIN))
 		goto out;
 
-	ret = mnt_want_write_file(filp);
+	ret = nilfs_mnt_want_write_file(filp);
 	if (ret)
 		goto out;
 
@@ -1049,6 +1069,10 @@ static int nilfs_ioctl_trim_fs(struct inode *inode, void __user *argp)
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
+
+	/* Don't trust the segment usage after an error. */
+	if (nilfs_emergency_ro(nilfs))
+		return -EROFS;
 
 	if (!bdev_max_discard_sectors(nilfs->ns_bdev))
 		return -EOPNOTSUPP;
@@ -1202,7 +1226,7 @@ static int nilfs_ioctl_set_suinfo(struct inode *inode, struct file *filp,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	ret = mnt_want_write_file(filp);
+	ret = nilfs_mnt_want_write_file(filp);
 	if (ret)
 		return ret;
 
@@ -1295,7 +1319,7 @@ static int nilfs_ioctl_set_fslabel(struct super_block *sb, struct file *filp,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	ret = mnt_want_write_file(filp);
+	ret = nilfs_mnt_want_write_file(filp);
 	if (ret)
 		return ret;
 

@@ -398,7 +398,7 @@ static int nilfs_mdt_write_folio(struct folio *folio,
 	struct super_block *sb;
 	int err = 0;
 
-	if (inode && sb_rdonly(inode->i_sb)) {
+	if (inode && nilfs_sb_rdonly(inode->i_sb)) {
 		/*
 		 * It means that filesystem was remounted in read-only
 		 * mode because of error or metadata corruption. But we
