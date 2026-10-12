@@ -166,8 +166,6 @@ static void idxd_clean_wqs(struct idxd_device *idxd)
 		conf_dev = wq_confdev(idxd->wqs[i]);
 		put_device(conf_dev);
 	}
-	bitmap_free(idxd->wq_enable_map);
-	kfree(idxd->wqs);
 }
 
 static int idxd_setup_wqs(struct idxd_device *idxd)
@@ -245,11 +243,8 @@ err_unwind:
 		conf_dev = wq_confdev(idxd->wqs[i]);
 		put_device(conf_dev);
 	}
-	bitmap_free(idxd->wq_enable_map);
 
 err_free_wqs:
-	kfree(idxd->wqs);
-
 	return rc;
 }
 
@@ -262,7 +257,6 @@ static void idxd_clean_engines(struct idxd_device *idxd)
 		conf_dev = engine_confdev(idxd->engines[i]);
 		put_device(conf_dev);
 	}
-	kfree(idxd->engines);
 }
 
 static int idxd_setup_engines(struct idxd_device *idxd)
@@ -308,7 +302,6 @@ static int idxd_setup_engines(struct idxd_device *idxd)
 		conf_dev = engine_confdev(idxd->engines[i]);
 		put_device(conf_dev);
 	}
-	kfree(idxd->engines);
 
 	return rc;
 }
@@ -320,7 +313,6 @@ static void idxd_clean_groups(struct idxd_device *idxd)
 	for (i = 0; i < idxd->max_groups; i++) {
 		put_device(group_confdev(idxd->groups[i]));
 	}
-	kfree(idxd->groups);
 }
 
 static int idxd_setup_groups(struct idxd_device *idxd)
@@ -378,7 +370,6 @@ static int idxd_setup_groups(struct idxd_device *idxd)
 		group = idxd->groups[i];
 		put_device(group_confdev(group));
 	}
-	kfree(idxd->groups);
 
 	return rc;
 }
@@ -388,7 +379,6 @@ static void idxd_cleanup_internals(struct idxd_device *idxd)
 	idxd_clean_groups(idxd);
 	idxd_clean_engines(idxd);
 	idxd_clean_wqs(idxd);
-	destroy_workqueue(idxd->wq);
 }
 
 static int idxd_init_evl(struct idxd_device *idxd)
@@ -459,7 +449,6 @@ static int idxd_setup_internals(struct idxd_device *idxd)
 	return 0;
 
  err_evl:
-	destroy_workqueue(idxd->wq);
  err_wkq_create:
 	idxd_clean_groups(idxd);
  err_group:
