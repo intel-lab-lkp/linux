@@ -19570,10 +19570,15 @@ M:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
 M:	Donald Shannon <donalds@nvidia.com>
 L:	linux-usb@vger.kernel.org
 S:	Supported
+F:	Documentation/ABI/testing/sysfs-bus-usb-devices-lstp
 F:	Documentation/devicetree/bindings/gpio/nvidia,lstp-gpio.yaml
 F:	Documentation/devicetree/bindings/i2c/nvidia,lstp-i2c.yaml
 F:	Documentation/devicetree/bindings/spi/nvidia,lstp-spi.yaml
 F:	Documentation/devicetree/bindings/usb/nvidia,lstp.yaml
+F:	Documentation/driver-api/usb/lstp.rst
+F:	Documentation/firmware-guide/acpi/lstp.rst
+F:	drivers/usb/misc/lstp.c
+F:	include/linux/usb/lstp.h
 
 NVIDIA VRS RTC DRIVER
 M:	Shubhi Garg <shgarg@nvidia.com>

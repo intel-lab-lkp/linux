@@ -22,3 +22,4 @@ Linux USB API
    typec
    typec_bus
    usb3-debug-port
+   lstp

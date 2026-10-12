@@ -1,0 +1,331 @@
+What:		/sys/bus/usb/devices/<intf>/lstp/name
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Name the device reported for this LSTP interface during
+		channel discovery. <intf> is the USB interface directory,
+		for example 1-1.2.2:1.2.
+
+What:		/sys/bus/usb/devices/<intf>/lstp.<type>.<instance>/
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		A channel's auxiliary device, as seen from its parent USB
+		interface. This is the canonical location for a channel;
+		the same device is reachable on the auxiliary bus as
+		/sys/bus/auxiliary/devices/lstp.<type>.<instance>.
+
+		<type> is the channel's subsystem: spi, i2c, gpio, ipmi,
+		uart or mmio. <instance> is an auxiliary-bus instance number
+		drawn in channel-discovery order from a module-global pool
+		shared by every LSTP device in the system. It is fixed for
+		the life of the channel, including across an unbind and
+		rebind of its driver, and is drawn again when the interface
+		is probed afresh. It is not the firmware channel id <N> and
+		must not be parsed to obtain one: read the channel attribute
+		instead.
+
+		A firmware channel whose type the lstp core does not support
+		gets no auxiliary device, so a gap in the instance numbers
+		carries no meaning.
+
+		The directory exists for every channel of a supported type,
+		whether or not a driver ever bound to it, so its presence
+		is not a liveness signal. Read the driver symlink, or look
+		for the nested subsystem device, to tell a bound channel
+		from an offered one.
+
+What:		/sys/bus/usb/devices/<intf>/lstp.<type>.<instance>/<subsys-device>
+What:		/sys/bus/usb/devices/<intf>/lstp.<type>.<instance>/<class>/<subsys-device>
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		The Linux device the channel's driver created -- an SPI
+		controller, I2C adapter, GPIO chip, tty or misc device --
+		nested beneath the channel that owns it, either directly or
+		inside its class directory. This is the way to reach a
+		channel's underlying node.
+
+		Present only while a driver is bound to the channel, because
+		the bound driver is what creates the device. Treat its
+		absence as "not currently bound" rather than as a channel
+		that does not exist: it may be waiting for its driver, its
+		driver may have failed to probe, or it may have been unbound
+		by hand.
+
+		For the channel types backed by a character device the
+		class-device name is also the node name under /dev:
+		tty/ttyLSTP<line> is /dev/ttyLSTP<line> and misc/ipmi-lstp<n>
+		is /dev/ipmi-lstp<n>. A label property in an IPMI channel's
+		firmware node does not change the name.
+		LEDs are one level further down; see lstp.led.<instance>
+		below.
+
+		None of these numbers is the firmware channel id, and none
+		is stable. i2c-<busnr>, spi_master/spi<busnr> and
+		gpiochip<chipnr> are assigned by the subsystem core from its
+		own pool, and <line> and the <n> of the misc names by the
+		driver from its own, lowest free number first, each time the
+		driver binds. An unbind releases the number, or, if a file
+		descriptor is still open on the node, the last close does,
+		so a rebind takes another number while the old node is held
+		or once another channel has taken it. Use a device-tree i2c
+		or spi alias to pin an I2C or SPI bus number and a udev
+		symlink to pin any other name, or resolve it at runtime
+		through the channel.
+
+		The class device's own device link, and every walk up out of
+		it, resolves through the channel: /sys/class/<class>/<dev>/device
+		is the channel's auxiliary device (for LEDs see
+		lstp.led.<instance> below), and its parent is the USB
+		interface.
+
+What:		/sys/bus/usb/devices/<intf>/lstp.gpio.<instance>/lstp.led.<instance>
+What:		/sys/bus/usb/devices/<intf>/lstp.gpio.<instance>/lstp.led.<instance>/leds/<ledname>
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		The LED pins of a GPIO channel, on an auxiliary device the
+		GPIO channel's driver creates for the LED driver when the
+		device firmware reports any. <instance> is the GPIO channel's
+		own. It is present while a driver is bound to the GPIO
+		channel. It is also listed on the auxiliary bus, as
+		/sys/bus/auxiliary/devices/lstp.led.<instance>, but led is
+		not a channel <type>: the device has none of the channel
+		attributes.
+
+		Each pin registers one LED class device, leds/<ledname>, with
+		/sys/class/leds/<ledname> linking to it. <ledname> is the
+		firmware node's label, or its color and function, when a
+		leds node under the channel's firmware node describes the pin,
+		and the firmware pin name otherwise. The LED core adds a
+		numbered suffix to a name that is already taken.
+		/sys/class/leds/<ledname>/device is this auxiliary device, and
+		its parent is the GPIO channel.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/name
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Name of the channel, built from the interface name and the
+		channel name the device reported. This is the stable
+		identifier for a channel; the Linux device names underneath
+		it are not stable across boots or hotplug.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/channel
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Firmware channel index of this channel, the <N> the device
+		itself uses. Read it to recover a channel's firmware index
+		when starting from the auxiliary device directory, whose
+		<instance> suffix is unrelated to <N>.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/enable
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Whether the device has this channel enabled. Reading
+		queries the device; writing 0 or 1 asks the device to
+		disable or enable the channel. A channel that is disabled
+		does not carry traffic. The setting is part of the device's
+		stored channel configuration and may persist across resets
+		and power cycles. Either direction exchanges packets on
+		control channel 0, so polling this attribute advances the
+		interface counters under lstp/statistics/.
+
+What:		/sys/bus/usb/devices/<intf>/lstp/statistics/
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/statistics/
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Directories of read-only counters. Every counter starts at
+		zero when the interface is probed and only increases; there
+		is no way to reset one, so a rate is obtained by sampling
+		twice and subtracting. The counters under lstp/statistics/
+		describe the USB bulk endpoints, which all channels share,
+		while those under a channel describe that channel's LSTP
+		request and response exchanges.
+
+		The two levels do not add up. An interface counter covers
+		every packet on the endpoint, including traffic on the
+		control channel 0, which has no directory of its own, and
+		packets that no channel accepted. Expect the interface
+		totals to exceed the sum of the per-channel ones.
+
+		The driver takes no action of its own based on any counter.
+
+What:		/sys/bus/usb/devices/<intf>/lstp/statistics/rx_packets
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of packets received successfully on the bulk endpoint
+		shared by every channel of this interface.
+
+What:		/sys/bus/usb/devices/<intf>/lstp/statistics/rx_errors
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of received packets discarded as malformed, because
+		the length or channel field did not describe a usable LSTP
+		packet. A device whose firmware disagrees with the driver
+		about the wire format shows up here.
+
+What:		/sys/bus/usb/devices/<intf>/lstp/statistics/rx_no_channel
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of well-formed packets discarded because they named a
+		channel that is not registered. This indicates the device
+		and the driver disagree about which channels exist, rather
+		than a problem with the transfer itself.
+
+What:		/sys/bus/usb/devices/<intf>/lstp/statistics/rx_urb_errors
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of receive transfers that completed with an error,
+		excluding the errors expected while the device is being
+		disconnected. Sustained growth points at the USB link rather
+		than at any one channel.
+
+What:		/sys/bus/usb/devices/<intf>/lstp/statistics/rx_stalls
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of times the receive endpoint was found halted and
+		the driver attempted to clear the halt before receiving
+		again. Counted when the halt is detected, so an attempt
+		that fails to clear it still counts and is logged.
+
+What:		/sys/bus/usb/devices/<intf>/lstp/statistics/rx_retries
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of attempts made to resubmit the receive transfer
+		after a failure. Because retries are spaced by a growing
+		backoff, a large value alongside a small rx_packets means
+		the interface is spending its time recovering rather than
+		carrying traffic.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/statistics/tx_packets
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of requests this channel handed to the host
+		controller, both request/response exchanges and one-way
+		sends. Responses the driver returns for device-initiated
+		events are not requests and are not counted. Serves as the
+		denominator for timeouts and errors, which apply only to
+		exchanges that expect a response.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/statistics/rx_packets
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of responses this channel received and accepted,
+		meaning the response reported success and was long enough to
+		satisfy the request that asked for it. Only counts replies to
+		requests the driver sent; traffic the device originates is
+		counted by rx_events instead.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/statistics/rx_events
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of unsolicited packets the device sent on this channel
+		that were delivered to the subsystem, as opposed to answering
+		a request from the host. Channels whose inbound data arrives
+		this way, such as UART receive or a GPIO interrupt event,
+		show their traffic here and not in rx_packets. Stays at zero
+		for a channel that the device never originates traffic on.
+
+		This is the denominator for the unsolicited share of
+		rx_dropped: comparing the two tells whether losses are
+		occasional or routine.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/statistics/timeouts
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of requests that reached the wire but drew no
+		response before the driver stopped waiting. Together with
+		errors this separates a device that has gone quiet from one
+		that is answering and reporting failures. Requests abandoned
+		because the interface is being torn down or the channel's
+		driver is unbinding are not counted here.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/statistics/errors
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of responses rejected because the device reported a
+		failure status, or because the response was too short to
+		satisfy the request. The device is reachable in both cases;
+		see the driver logs to tell the two apart.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/statistics/tx_errors
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of requests that did not reach the device, because
+		the host controller refused the submission or a one-way
+		send failed to complete. These requests never had a
+		response to wait for, so they are not counted in timeouts
+		or errors. Requests abandoned because the interface is
+		being torn down are not counted here either.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/statistics/rx_dropped
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of packets addressed to this channel that it could
+		not accept: an unsolicited request arrived while the previous
+		one was still being handled, no driver was bound to the
+		channel to receive it, or the channel does not handle the
+		kind of packet that arrived. Read it against rx_events to
+		judge how much of the device's unsolicited traffic is being
+		lost. A channel deliberately left unbound accumulates drops
+		here with nothing wrong.
+
+What:		/sys/bus/auxiliary/devices/lstp.<type>.<instance>/statistics/rx_late
+Date:		October 2026
+KernelVersion:	7.5
+Contact:	Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+Description:
+		Number of responses that arrived after the request waiting
+		for them had already timed out, and found no other request
+		waiting, or that arrived while a request was waiting but
+		after it already had its answer. Growth here alongside
+		timeouts means the device is answering more slowly than the
+		driver waits, rather than not answering at all. Growth
+		without timeouts points at surplus responses: a device that
+		answers a request twice, or a response left over from
+		before the driver was bound.
+
+		A lower bound, not a count of every late response. Nothing
+		on the wire ties a response to the request that asked for
+		it, so a late response that arrives while a subsequent
+		request is outstanding is delivered to that request instead
+		and is not counted here.

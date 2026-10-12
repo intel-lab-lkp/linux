@@ -194,6 +194,21 @@ config USB_USBIO
 	  This driver can also be built as a module. If so, the module
 	  will be called usbio.
 
+config USB_LSTP
+	tristate "NVIDIA LSTP USB adapter support"
+	depends on USB
+	select AUXILIARY_BUS
+	help
+	  Say Y here to support NVIDIA LSTP (Low-Speed Transport Protocol)
+	  USB adapters. An LSTP adapter exposes firmware-configured I2C,
+	  SPI, GPIO, UART and IPMI channels over a single USB interface.
+	  This core driver discovers the channels and offers each one as an
+	  auxiliary device; enable GPIO_LSTP, LEDS_LSTP, I2C_LSTP, SPI_LSTP,
+	  LSTP_TTY and LSTP_IPMI_BMC for the channel types you need.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called lstp.
+
 source "drivers/usb/misc/sisusbvga/Kconfig"
 
 config USB_LD
