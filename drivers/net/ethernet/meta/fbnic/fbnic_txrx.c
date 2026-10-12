@@ -1014,6 +1014,33 @@ static unsigned int fbnic_hdr_pg_end(unsigned int pg_off, unsigned int len)
 	return ALIGN(pg_off, 128) - FBNIC_RX_HROOM;
 }
 
+static void fbnic_put_pkt_buff(struct fbnic_q_triad *qt,
+			       struct fbnic_pkt_buff *pkt, int budget)
+{
+	struct page *page;
+
+	if (!pkt->buff.data_hard_start)
+		return;
+
+	if (xdp_buff_has_frags(&pkt->buff)) {
+		struct skb_shared_info *shinfo;
+		netmem_ref netmem;
+		int nr_frags;
+
+		shinfo = xdp_get_shared_info_from_buff(&pkt->buff);
+		nr_frags = shinfo->nr_frags;
+
+		while (nr_frags--) {
+			netmem = skb_frag_netmem(&shinfo->frags[nr_frags]);
+			page_pool_put_full_netmem(qt->sub1.page_pool, netmem,
+						  !!budget);
+		}
+	}
+
+	page = virt_to_page(pkt->buff.data_hard_start);
+	page_pool_put_full_page(qt->sub0.page_pool, page, !!budget);
+}
+
 static void fbnic_pkt_prepare(struct fbnic_napi_vector *nv, u64 rcd,
 			      struct fbnic_pkt_buff *pkt,
 			      struct fbnic_q_triad *qt)
@@ -1025,8 +1052,12 @@ static void fbnic_pkt_prepare(struct fbnic_napi_vector *nv, u64 rcd,
 	unsigned char *hdr_start;
 	struct page *page;
 
-	/* data_hard_start should always be NULL when this is called */
-	WARN_ON_ONCE(pkt->buff.data_hard_start);
+	/* a new header while one is pending: release the old one */
+	if (unlikely(pkt->buff.data_hard_start)) {
+		WARN_ON_ONCE(1);
+		fbnic_put_pkt_buff(qt, pkt, 1);
+		pkt->buff.data_hard_start = NULL;
+	}
 
 	/* A buffer ID we never posted cannot name a buffer we own, so drop
 	 * the packet instead of running off the end of rx_buf[] or picking
@@ -1144,33 +1175,6 @@ static void fbnic_add_rx_frag(struct fbnic_napi_vector *nv, u64 rcd,
 		netdev_err_once(nv->napi.dev,
 				"Failed to add fragment to xdp_buff\n");
 	}
-}
-
-static void fbnic_put_pkt_buff(struct fbnic_q_triad *qt,
-			       struct fbnic_pkt_buff *pkt, int budget)
-{
-	struct page *page;
-
-	if (!pkt->buff.data_hard_start)
-		return;
-
-	if (xdp_buff_has_frags(&pkt->buff)) {
-		struct skb_shared_info *shinfo;
-		netmem_ref netmem;
-		int nr_frags;
-
-		shinfo = xdp_get_shared_info_from_buff(&pkt->buff);
-		nr_frags = shinfo->nr_frags;
-
-		while (nr_frags--) {
-			netmem = skb_frag_netmem(&shinfo->frags[nr_frags]);
-			page_pool_put_full_netmem(qt->sub1.page_pool, netmem,
-						  !!budget);
-		}
-	}
-
-	page = virt_to_page(pkt->buff.data_hard_start);
-	page_pool_put_full_page(qt->sub0.page_pool, page, !!budget);
 }
 
 static struct sk_buff *fbnic_build_skb(struct fbnic_napi_vector *nv,
