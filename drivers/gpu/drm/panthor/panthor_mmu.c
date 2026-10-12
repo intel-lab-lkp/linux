@@ -77,6 +77,12 @@ struct panthor_mmu {
 		/** @as.faulty_mask: Bitmask encoding the faulty slots. */
 		unsigned long faulty_mask;
 
+		/** @as.delay_update_mask: Bitmask encoding slots which must use delayed updates */
+		u32 delay_update_mask;
+
+		/** @as.delayed_update_mask: Bitmask encoding slots with pending delayed updates */
+		u32 delayed_update_mask;
+
 		/** @as.slots: VMs currently bound to the AS slots. */
 		struct panthor_as_slot slots[MAX_AS_SLOTS];
 
@@ -449,6 +455,26 @@ struct panthor_vm_bind_job {
  * Having a kmem_cache allows us to speed allocations.
  */
 static struct kmem_cache *pt_cache;
+
+static bool protm_block_timeout(struct panthor_vm *vm)
+{
+	return panthor_sched_protm_block_timeout(vm->ptdev, vm);
+}
+
+static bool protm_try_block(struct panthor_vm *vm)
+{
+	return panthor_sched_protm_try_block(vm->ptdev);
+}
+
+static void protm_unblock(struct panthor_vm *vm)
+{
+	panthor_sched_protm_unblock(vm->ptdev);
+}
+
+/* Only cond variants can be used, hence the use of WARN_ON() here */
+DEFINE_GUARD(protm_block, struct panthor_vm*, WARN_ON(_T), protm_unblock(_T));
+DEFINE_GUARD_COND(protm_block, _timeout, protm_block_timeout(_T));
+DEFINE_GUARD_COND(protm_block, _try, protm_try_block(_T));
 
 /**
  * alloc_pt() - Custom page table allocator
@@ -1809,12 +1835,17 @@ static int panthor_vm_lock_region(struct panthor_vm *vm, u64 start, u64 size)
 
 	mutex_lock(&ptdev->mmu->as.slots_lock);
 	if (vm->as.id >= 0 && size) {
-		/* Lock the region that needs to be updated */
-		gpu_write64(ptdev->mmu->iomem, AS_LOCKADDR(vm->as.id),
-			    pack_region_range(ptdev, &start, &size));
+		if (ptdev->mmu->as.delay_update_mask & BIT(vm->as.id)) {
+			ptdev->mmu->as.delayed_update_mask |= BIT(vm->as.id);
+		} else {
+			/* Lock the region that needs to be updated */
+			gpu_write64(ptdev->mmu->iomem, AS_LOCKADDR(vm->as.id),
+				    pack_region_range(ptdev, &start, &size));
 
-		/* If the lock succeeded, update the locked_region info. */
-		ret = as_send_cmd_and_wait(ptdev, vm->as.id, AS_COMMAND_LOCK);
+			/* If the lock succeeded, update the locked_region info. */
+			ret = as_send_cmd_and_wait(ptdev, vm->as.id,
+						   AS_COMMAND_LOCK);
+		}
 	}
 
 	if (!ret) {
@@ -1832,25 +1863,31 @@ static void panthor_vm_unlock_region(struct panthor_vm *vm)
 
 	mutex_lock(&ptdev->mmu->as.slots_lock);
 	if (vm->as.id >= 0) {
-		int ret;
+		if (ptdev->mmu->as.delay_update_mask & BIT(vm->as.id)) {
+			ptdev->mmu->as.delayed_update_mask |= BIT(vm->as.id);
+		} else {
+			int ret;
 
-		/* flush+invalidate RW caches and invalidate RO ones.
-		 * TODO: See if we can use FLUSH_PA_RANGE when the physical
-		 * range is narrow enough and the HW supports it.
-		 */
-		ret = panthor_gpu_flush_caches(ptdev, CACHE_CLEAN | CACHE_INV,
-					       CACHE_CLEAN | CACHE_INV,
-					       CACHE_INV);
+			/* flush+invalidate RW caches and invalidate RO ones.
+			 * TODO: See if we can use FLUSH_PA_RANGE when the physical
+			 * range is narrow enough and the HW supports it.
+			 */
+			ret = panthor_gpu_flush_caches(ptdev,
+						       CACHE_CLEAN | CACHE_INV,
+						       CACHE_CLEAN | CACHE_INV,
+						       CACHE_INV);
 
-		/* Unlock the region if the flush is effective. */
-		if (!ret)
-			ret = as_send_cmd_and_wait(ptdev, vm->as.id, AS_COMMAND_UNLOCK);
+			/* Unlock the region if the flush is effective. */
+			if (!ret)
+				ret = as_send_cmd_and_wait(ptdev, vm->as.id,
+							   AS_COMMAND_UNLOCK);
 
-		/* If we fail to flush or unlock the region, schedule a GPU reset
-		 * to unblock the situation.
-		 */
-		if (ret)
-			panthor_device_schedule_reset(ptdev);
+			/* If we fail to flush or unlock the region, schedule a
+			 * GPU reset to unblock the situation.
+			 */
+			if (ret)
+				panthor_device_schedule_reset(ptdev);
+		}
 	}
 	vm->locked_region.start = 0;
 	vm->locked_region.size = 0;
@@ -2014,6 +2051,8 @@ void panthor_mmu_post_reset(struct panthor_device *ptdev)
 	 */
 	ptdev->mmu->as.alloc_mask = 0;
 	ptdev->mmu->as.faulty_mask = 0;
+	ptdev->mmu->as.delay_update_mask = 0;
+	ptdev->mmu->as.delayed_update_mask = 0;
 
 	for (u32 i = 0; i < ARRAY_SIZE(ptdev->mmu->as.slots); i++) {
 		struct panthor_vm *vm = ptdev->mmu->as.slots[i].vm;
@@ -2493,6 +2532,52 @@ void panthor_vm_update_bo_reclaim_lru_locked(struct panthor_gem_object *bo)
 	}
 }
 
+static int evict_vm_bo_locked(struct drm_gpuvm_bo *vm_bo)
+{
+	struct drm_gpuva *va;
+
+	/* It can be that the vm_bo was already evicted but a new
+	 * mapping pointing to this BO got created in the meantime,
+	 * thus turning the vm_bo in partially evicted state. In that case
+	 * we don't call drm_gpuvm_bo_evict() again because this would
+	 * mess up with the internal gpuvm lists, but we do walk the
+	 * VAs on this vm_bo to make sure the non-evicted ones are
+	 * torn down.
+	 */
+	if (!vm_bo->evicted)
+		drm_gpuvm_bo_evict(vm_bo, true);
+
+	drm_gpuvm_bo_for_each_va(va, vm_bo) {
+		struct panthor_vm *vm =
+			container_of(vm_bo->vm, struct panthor_vm, base);
+		struct panthor_vma *vma =
+			container_of(va, struct panthor_vma, base);
+		int ret;
+
+		if (vma->evicted)
+			continue;
+
+		/* If something fail in the middle of a VM_BO eviction, the
+		 * VM_BO is considered fully evicted, but some of its VMAs might
+		 * still be active. That's okay because the pages won't be
+		 * released if this function returns an error.
+		 *
+		 * On the next job targeting this VM, the partially evicted
+		 * VM_BO will be validated, causing all its evicted VMAs to be
+		 * repopulated before the job runs. So no GPU fault expected.
+		 */
+		ret = panthor_vm_lock_region(vm, va->va.addr, va->va.range);
+		if (ret)
+			return ret;
+
+		panthor_vm_unmap_pages(vm, va->va.addr, va->va.range);
+		panthor_vm_unlock_region(vm);
+		vma->evicted = true;
+	}
+
+	return 0;
+}
+
 int panthor_vm_evict_bo_mappings_locked(struct panthor_gem_object *bo)
 {
 	struct drm_gpuvm_bo *vm_bo;
@@ -2500,47 +2585,12 @@ int panthor_vm_evict_bo_mappings_locked(struct panthor_gem_object *bo)
 
 	drm_gem_for_each_gpuvm_bo(vm_bo, &bo->base) {
 		struct panthor_vm *vm = container_of(vm_bo->vm, struct panthor_vm, base);
-		struct drm_gpuva *va;
 
-		if (!mutex_trylock(&vm->op_lock))
-			return -EDEADLK;
-
-		/* It can be that the vm_bo was already evicted but a new
-		 * mapping pointing to this BO got created in the meantime,
-		 * thus turning the vm_bo in partially evicted state. In that case
-		 * we don't call drm_gpuvm_bo_evict() again because this would
-		 * mess up with the internal gpuvm lists, but we do walk the
-		 * VAs on this vm_bo to make sure the non-evicted ones are
-		 * torn down.
-		 */
-		if (!vm_bo->evicted)
-			drm_gpuvm_bo_evict(vm_bo, true);
-
-		drm_gpuvm_bo_for_each_va(va, vm_bo) {
-			struct panthor_vma *vma = container_of(va, struct panthor_vma, base);
-
-			if (vma->evicted)
-				continue;
-
-			/* If something fail in the middle of a VM_BO eviction, the VM_BO
-			 * is considered fully evicted, but some of its VMAs might still be
-			 * active. That's okay because the pages won't be released if this
-			 * function returns an error.
-			 *
-			 * On the next job targeting this VM, the partially evicted VM_BO
-			 * will be validated, causing all its evicted VMAs to be repopulated
-			 * before the job runs. So no GPU fault expected.
-			 */
-			ret = panthor_vm_lock_region(vm, va->va.addr, va->va.range);
-			if (ret)
-				break;
-
-			panthor_vm_unmap_pages(vm, va->va.addr, va->va.range);
-			panthor_vm_unlock_region(vm);
-			vma->evicted = true;
+		scoped_cond_guard(mutex_try, ret = -EDEADLK, &vm->op_lock) {
+			scoped_cond_guard(protm_block_try, ret = -EDEADLK, vm) {
+				ret = evict_vm_bo_locked(vm_bo);
+			}
 		}
-
-		mutex_unlock(&vm->op_lock);
 
 		if (ret)
 			break;
@@ -2611,8 +2661,12 @@ static int remap_evicted_vma(struct drm_gpuvm_bo *vm_bo,
 		break;
 	}
 
-	if (found) {
+	if (!found)
+		goto out_unlock;
+
+	scoped_cond_guard(protm_block_timeout, ret = -ETIMEDOUT, vm) {
 		vm->op_ctx = op_ctx;
+
 		ret = panthor_vm_lock_region(vm, evicted_vma->base.va.addr,
 					     evicted_vma->base.va.range);
 		if (!ret) {
@@ -2636,6 +2690,7 @@ static int remap_evicted_vma(struct drm_gpuvm_bo *vm_bo,
 		vm->op_ctx = NULL;
 	}
 
+out_unlock:
 	mutex_unlock(&vm->op_lock);
 
 out_cleanup:
@@ -2726,38 +2781,41 @@ panthor_vm_exec_op(struct panthor_vm *vm, struct panthor_vm_op_ctx *op,
 	mutex_lock(&vm->op_lock);
 	vm->op_ctx = op;
 
-	ret = panthor_vm_lock_region(vm, op->va.addr, op->va.range);
-	if (ret)
-		goto out;
+	scoped_cond_guard(protm_block_timeout, ret = -ETIMEDOUT, vm) {
+		ret = panthor_vm_lock_region(vm, op->va.addr, op->va.range);
+		if (ret)
+			goto out;
 
-	switch (op_type) {
-	case DRM_PANTHOR_VM_BIND_OP_TYPE_MAP: {
-		const struct drm_gpuvm_map_req map_req = {
-			.map.va.addr = op->va.addr,
-			.map.va.range = op->va.range,
-			.map.gem.obj = op->map.vm_bo->obj,
-			.map.gem.offset = op->map.bo_offset,
-		};
+		switch (op_type) {
+		case DRM_PANTHOR_VM_BIND_OP_TYPE_MAP: {
+			const struct drm_gpuvm_map_req map_req = {
+				.map.va.addr = op->va.addr,
+				.map.va.range = op->va.range,
+				.map.gem.obj = op->map.vm_bo->obj,
+				.map.gem.offset = op->map.bo_offset,
+			};
 
-		if (vm->unusable) {
+			if (vm->unusable) {
+				ret = -EINVAL;
+				break;
+			}
+
+			ret = drm_gpuvm_sm_map(&vm->base, vm, &map_req);
+			break;
+		}
+
+		case DRM_PANTHOR_VM_BIND_OP_TYPE_UNMAP:
+			ret = drm_gpuvm_sm_unmap(&vm->base, vm, op->va.addr,
+						 op->va.range);
+			break;
+
+		default:
 			ret = -EINVAL;
 			break;
 		}
 
-		ret = drm_gpuvm_sm_map(&vm->base, vm, &map_req);
-		break;
+		panthor_vm_unlock_region(vm);
 	}
-
-	case DRM_PANTHOR_VM_BIND_OP_TYPE_UNMAP:
-		ret = drm_gpuvm_sm_unmap(&vm->base, vm, op->va.addr, op->va.range);
-		break;
-
-	default:
-		ret = -EINVAL;
-		break;
-	}
-
-	panthor_vm_unlock_region(vm);
 
 out:
 	if (ret && flag_vm_unusable_on_failure)
@@ -3516,4 +3574,55 @@ int panthor_mmu_pt_cache_init(void)
 void panthor_mmu_pt_cache_fini(void)
 {
 	kmem_cache_destroy(pt_cache);
+}
+
+bool panthor_vm_for_mcu(struct panthor_vm *vm)
+{
+	return vm->for_mcu;
+}
+
+void panthor_mmu_protm_enter_event(struct panthor_device *ptdev,
+				   struct panthor_vm *vm)
+{
+	/* Scheduler is entering protm mode with specified VM (AS).
+	 * Scheduler now promises it will not run any work using any other VM
+	 * than the provided vm and the FW VM until further notice.
+	 * This means we can do page table updates for all the other VMs, even
+	 * in protected mode, as long as we do the necessary cache operations
+	 * before normal scheduling is resumed. This is done on protm exit,
+	 * see panthor_mmu_protm_exit_event().
+	 */
+	if (drm_WARN_ON(&ptdev->base, !vm))
+		return;
+
+	if (drm_WARN_ON(&ptdev->base, vm->as.id < 0))
+		return;
+
+	guard(mutex)(&ptdev->mmu->as.slots_lock);
+
+	drm_WARN_ON(&ptdev->base, ptdev->mmu->as.delay_update_mask);
+
+	ptdev->mmu->as.delay_update_mask = ~(BIT(0) | BIT(vm->as.id));
+}
+
+void panthor_mmu_protm_exit_event(struct panthor_device *ptdev)
+{
+	/* We left protected mode and scheduler is about to resume normal
+	 * scheduling. Do the necessary cache operation so any page table
+	 * updates we might have done during protm is correctly visible
+	 * to the GPU.
+	 */
+	int ret;
+
+	guard(mutex)(&ptdev->mmu->as.slots_lock);
+
+	ptdev->mmu->as.delay_update_mask = 0;
+
+	if (!ptdev->mmu->as.delayed_update_mask)
+		return;
+
+	ret = panthor_gpu_flush_caches(ptdev, CACHE_CLEAN | CACHE_INV,
+				       CACHE_CLEAN | CACHE_INV, CACHE_INV);
+	if (ret)
+		panthor_device_schedule_reset(ptdev);
 }

@@ -53,6 +53,11 @@ void panthor_sched_report_fw_events(struct panthor_device *ptdev, u32 events);
 
 void panthor_fdinfo_gather_group_samples(struct drm_file *file);
 
+bool panthor_sched_protm_block_timeout(struct panthor_device *ptdev,
+				       struct panthor_vm *vm);
+bool panthor_sched_protm_try_block(struct panthor_device *ptdev);
+void panthor_sched_protm_unblock(struct panthor_device *ptdev);
+
 #ifdef CONFIG_DEBUG_FS
 void panthor_sched_debugfs_init(struct drm_minor *minor);
 #endif

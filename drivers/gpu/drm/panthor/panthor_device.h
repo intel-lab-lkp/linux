@@ -336,6 +336,14 @@ struct panthor_device {
 		struct list_head node;
 	} gems;
 #endif
+	/** @protm: Protected mode related data. */
+	struct {
+		/** @protm_enter_count: Number of times we entered protm. */
+		atomic64_t protm_enter_count;
+
+		/** @protm_exit_count: Number of times we exited protm. */
+		atomic64_t protm_exit_count;
+	} protm;
 };
 
 struct panthor_gpu_usage {

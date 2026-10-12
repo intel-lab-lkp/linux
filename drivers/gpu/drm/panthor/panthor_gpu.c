@@ -46,6 +46,9 @@ struct panthor_gpu {
 
 	/** @cache_flush_lock: Lock to serialize cache flushes */
 	struct mutex cache_flush_lock;
+
+	/** @protm_fault: True if a GPU_IRQ_PROTM_FAULT has been raised */
+	atomic_t protm_fault;
 };
 
 #define GPU_INTERRUPTS_MASK	\
@@ -91,6 +94,35 @@ static void panthor_gpu_irq_handler(struct panthor_irq *pirq, u32 status)
 	struct panthor_device *ptdev = pirq->ptdev;
 	struct panthor_gpu *gpu = ptdev->gpu;
 
+	if (status & GPU_IRQ_PROTM_FAULT) {
+		/* Make a note of this fault before we clear the interrupt.
+		 * This ensures panthor_gpu_protm_fault_pending() can always
+		 * give an accurate answer.
+		 *
+		 * There is a race we need to handle between two interrupts,
+		 * this GPU_IRQ_PROTM_FAULT and JOB_INT_GLOBAL_IF with the
+		 * GLB_PROTM_EXIT event.
+		 *
+		 * Although GPU_IRQ_PROTM_FAULT is always raised first,
+		 * processing of GLB_PROTM_EXIT could still execute first.
+		 * The handling of GLB_PROTM_EXIT MUST know if a
+		 * GPU_IRQ_PROTM_FAULT has been raised or not, otherwise it
+		 * could incorrectly think everything is fine and resume
+		 * with normal scheduling to early.
+		 *
+		 * We still need to do fault handling (reset) here as well,
+		 * because some failures during protected mode do not
+		 * automatically exit protected mode (no GLB_PROTM_EXIT).
+		 * This means there is a slim chance we do two GPU resets
+		 * instead of just one. This is not ideal, but should be safe.
+		 */
+		atomic_set(&gpu->protm_fault, 1);
+		panthor_irq_disable_events(&ptdev->gpu->irq,
+					   GPU_IRQ_PROTM_FAULT);
+		drm_warn(&ptdev->base, "GPU Fault in protected mode");
+		panthor_device_schedule_reset(ptdev);
+	}
+
 	gpu_write(gpu->irq.iomem, INT_CLEAR, status);
 
 	if (tracepoint_enabled(gpu_power_status) && (status & GPU_POWER_INTERRUPTS_MASK))
@@ -107,8 +139,6 @@ static void panthor_gpu_irq_handler(struct panthor_irq *pirq, u32 status)
 			 fault_status, panthor_exception_name(ptdev, fault_status & 0xFF),
 			 address);
 	}
-	if (status & GPU_IRQ_PROTM_FAULT)
-		drm_warn(&ptdev->base, "GPU Fault in protected mode\n");
 
 	spin_lock(&ptdev->gpu->reqs_lock);
 	if (status & ptdev->gpu->pending_reqs) {
@@ -121,6 +151,13 @@ static void panthor_gpu_irq_handler(struct panthor_irq *pirq, u32 status)
 static irqreturn_t panthor_gpu_irq_threaded_handler(int irq, void *data)
 {
 	return panthor_irq_default_threaded_handler(data, panthor_gpu_irq_handler);
+}
+
+bool panthor_gpu_protm_fault_pending(struct panthor_device *ptdev)
+{
+	return gpu_read(ptdev->gpu->irq.iomem, INT_RAWSTAT) &
+		       GPU_IRQ_PROTM_FAULT ||
+	       atomic_read(&ptdev->gpu->protm_fault);
 }
 
 /**
@@ -430,6 +467,9 @@ int panthor_gpu_soft_reset(struct panthor_device *ptdev)
 		return -ETIMEDOUT;
 	}
 
+	atomic_set(&ptdev->gpu->protm_fault, 0);
+	panthor_irq_enable_events(&ptdev->gpu->irq, GPU_IRQ_PROTM_FAULT);
+
 	scoped_guard(spinlock, &ptdev->gpu->reqs_lock) {
 		ptdev->gpu->pending_reqs = 0;
 	}
@@ -507,4 +547,9 @@ int panthor_gpu_coherency_init(struct panthor_device *ptdev)
 
 	drm_err(&ptdev->base, "Coherency not supported by the device");
 	return -ENOTSUPP;
+}
+
+u32 panthor_gpu_status(struct panthor_device *ptdev)
+{
+	return gpu_read(ptdev->gpu->iomem, GPU_STATUS);
 }

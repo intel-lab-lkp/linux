@@ -307,6 +307,50 @@ struct panthor_scheduler {
 		 */
 		struct list_head stopped_groups;
 	} reset;
+
+	/** @protm: Protected mode related fields. */
+	struct {
+		/**
+		 * @lock: Lock for the protected mode state (active_group)
+		 *
+		 * This lock is used to manage current protected mode state,
+		 * as represented by the member active_group.
+		 *
+		 * Knowing this state is critical for MMU operations, because:
+		 * - The MMU will silently ignore commands issued when the GPU
+		 *   is in protected mode.
+		 * - There can not be any pending MMU LOCKS in place when
+		 *   entering protected mode.
+		 *
+		 * Code which interacts with the MMU, typically by calling
+		 * panthor_vm_lock_region(), should therefore ensure the
+		 * scheduler is not in and will not enter protected mode first.
+		 * This is done by calling either
+		 * - panthor_sched_protm_block_timeout(), or
+		 * - panthor_sched_protm_try_block()
+		 *
+		 * Once the MMU operations have completed, call
+		 * panthor_sched_protm_unblock() to tell the scheduler that
+		 * it is safe to enter protected mode again.
+		 */
+		struct rw_semaphore lock;
+
+		/**
+		 * @active_group: The active protected group.
+		 *
+		 * We only allow one protected group to run at the same time,
+		 * as it makes it easier to handle faults in protected mode.
+		 *
+		 * If the active_group member is set, then the scheduler
+		 * believes the GPU is in protected mode. If not set, then the
+		 * GPU is for sure not in normal mode.
+
+		 * Changes are done with both panthor_scheduler::lock and
+		 * panthor_scheduler::protm::lock held as writer.
+		 * This means you only need to hold one of these locks for read.
+		 */
+		struct panthor_group *active_group;
+	} protm;
 };
 
 /**
@@ -570,6 +614,16 @@ struct panthor_group {
 	 * every time we need to check the group state.
 	 */
 	atomic_t fatal_queues;
+
+	/**
+	 * @protm_pending_queues: Bitmask reflecting the queues that have raised
+	 *                        a CS_PROTM_PENDING.
+	 *
+	 * The GPU will set the bit associated to the queue pending protected
+	 * mode when a PROT_REGION command is executing or when trying to resume
+	 * previously suspended protected mode jobs.
+	 */
+	atomic_t protm_pending_queues;
 
 	/** @tiler_oom: Mask of queues that have a tiler OOM event to process. */
 	atomic_t tiler_oom;
@@ -1154,8 +1208,9 @@ cs_slot_reset_locked(struct panthor_device *ptdev, u32 csg_id, u32 cs_id)
 	lockdep_assert_held(&ptdev->scheduler->lock);
 
 	panthor_fw_update_reqs(cs_iface, req,
-			       CS_STATE_STOP,
-			       CS_STATE_MASK);
+			       CS_STATE_STOP | (cs_iface->output->ack &
+						CS_PROTM_PENDING),
+			       CS_STATE_MASK | CS_PROTM_PENDING);
 
 	queue_suspend_timeout(queue);
 
@@ -1392,6 +1447,27 @@ csg_slot_prog_locked(struct panthor_device *ptdev, u32 csg_id, u32 priority)
 	csg_iface->input->ack_irq_mask = ~0;
 	panthor_fw_toggle_reqs(csg_iface, doorbell_req, doorbell_ack, queue_mask);
 	return 0;
+}
+
+static void
+cs_slot_process_protm_pending_event_locked(struct panthor_device *ptdev,
+					   u32 csg_id, u32 cs_id)
+{
+	struct panthor_scheduler *sched = ptdev->scheduler;
+	struct panthor_csg_slot *csg_slot = &sched->csg_slots[csg_id];
+	struct panthor_group *group = csg_slot->group;
+
+	lockdep_assert_held(&sched->events_lock);
+
+	if (!group)
+		return;
+
+	/* Do not allow user space work to switch into protected mode, as we
+	 * do not fully support this quite yet.
+	 */
+	atomic_or(BIT(cs_id), &group->fatal_queues);
+
+	sched_queue_delayed_work(sched, tick, 0);
 }
 
 static void
@@ -1642,6 +1718,10 @@ static bool cs_slot_process_irq_locked(struct panthor_device *ptdev,
 	if (events & CS_TILER_OOM)
 		cs_slot_process_tiler_oom_event_locked(ptdev, csg_id, cs_id);
 
+	if (events & CS_PROTM_PENDING)
+		cs_slot_process_protm_pending_event_locked(ptdev, csg_id,
+							   cs_id);
+
 	/* We don't acknowledge the TILER_OOM event since its handling is
 	 * deferred to a separate work.
 	 */
@@ -1856,6 +1936,30 @@ static void sched_process_idle_event_locked(struct panthor_device *ptdev)
 	sched_queue_delayed_work(ptdev->scheduler, tick, 0);
 }
 
+static void sched_process_protm_exit_event_locked(struct panthor_device *ptdev)
+{
+	struct panthor_fw_global_iface *glb_iface =
+		panthor_fw_get_glb_iface(ptdev);
+	struct panthor_scheduler *sched = ptdev->scheduler;
+
+	lockdep_assert_held(&sched->events_lock);
+
+	atomic64_inc(&ptdev->protm.protm_exit_count);
+
+	/* Acknowledge the protm exit */
+	panthor_fw_update_reqs(glb_iface, req, glb_iface->output->ack,
+			       GLB_PROTM_EXIT);
+
+	/* If there are pending fault from protected mode execution, then early
+	 * out here. The GPU_IRQ_PROTM_FAULT handling will trigger the propper
+	 * error recovery via a GPU reset.
+	 */
+	if (panthor_gpu_protm_fault_pending(ptdev))
+		return;
+
+	sched_queue_delayed_work(sched, tick, 0);
+}
+
 /**
  * sched_process_global_irq_locked() - Process the scheduling part of a global IRQ
  * @ptdev: Device.
@@ -1871,6 +1975,9 @@ static void sched_process_global_irq_locked(struct panthor_device *ptdev)
 	ack = READ_ONCE(glb_iface->output->ack);
 	evts = (req ^ ack) & GLB_EVT_MASK;
 
+	if (evts & GLB_PROTM_EXIT)
+		sched_process_protm_exit_event_locked(ptdev);
+
 	if (evts & GLB_IDLE)
 		sched_process_idle_event_locked(ptdev);
 }
@@ -1882,22 +1989,22 @@ static void sched_process_global_irq_locked(struct panthor_device *ptdev)
  */
 void panthor_sched_report_fw_events(struct panthor_device *ptdev, u32 events)
 {
+	u32 csg_events = events & ~JOB_INT_GLOBAL_IF;
+
 	if (!ptdev->scheduler)
 		return;
 
 	guard(spinlock)(&ptdev->scheduler->events_lock);
 
-	if (events & JOB_INT_GLOBAL_IF) {
-		sched_process_global_irq_locked(ptdev);
-		events &= ~JOB_INT_GLOBAL_IF;
-	}
-
-	while (events) {
-		u32 csg_id = ffs(events) - 1;
+	while (csg_events) {
+		u32 csg_id = ffs(csg_events) - 1;
 
 		sched_process_csg_irq_locked(ptdev, csg_id);
-		events &= ~BIT(csg_id);
+		csg_events &= ~BIT(csg_id);
 	}
+
+	if (events & JOB_INT_GLOBAL_IF)
+		sched_process_global_irq_locked(ptdev);
 }
 
 /**
@@ -1983,6 +2090,69 @@ group_unbind_locked(struct panthor_group *group)
 	return 0;
 }
 
+static void handle_protm_fault(struct panthor_device *ptdev)
+{
+	struct panthor_scheduler *sched = ptdev->scheduler;
+	u32 csg_id;
+	struct panthor_group *protm_group;
+
+	guard(mutex)(&sched->lock);
+
+	protm_group = sched->protm.active_group;
+
+	if (!protm_group || !panthor_gpu_protm_fault_pending(ptdev))
+		return;
+
+	atomic_set(&protm_group->fatal_queues,
+		   GENMASK(protm_group->queue_count - 1, 0));
+
+	/* Different kinds of faults during protected mode can give different
+	 * behavior/state.
+	 * Case 1) The fault keeps the GPU in protected mode.
+	 *         In this case, the request to exit protected mode below will
+	 *         fail and we need to take some further action.
+	 * Case 2) The fault do not keep the GPU in protected mode.
+	 *         In this case, the request to exit protected
+	 *         mode below will succeed, and we don't need to take any
+	 *         further action right here.
+	 */
+	if (!panthor_fw_protm_exit(ptdev, 500))
+		return;
+
+	/* GPU failed to exit protected mode.
+	 * Mark all CSGs as suspended and unbind them, so that they are
+	 * unaffected by the GPU reset itself.
+	 * We can not suspend the groups in this case, because we are stuck
+	 * in protected mode. That is also the reason it is safe to unbind
+	 * without suspending first (the groups are already "suspended").
+	 * The failing protected group will be scheduled for termination.
+	 */
+
+	for (csg_id = 0; csg_id < sched->csg_slot_count; csg_id++) {
+		struct panthor_group *group = sched->csg_slots[csg_id].group;
+
+		if (!group)
+			continue;
+
+		group_get(group);
+
+		group->state = PANTHOR_CS_GROUP_SUSPENDED;
+		group_unbind_locked(group);
+
+		drm_WARN_ON(&group->ptdev->base, !list_empty(&group->run_node));
+
+		if (group_can_run(group)) {
+			list_add(&group->run_node,
+				 &sched->groups.idle[group->priority]);
+		} else {
+			list_del_init(&group->wait_node);
+			group_queue_work(group, term);
+		}
+
+		group_put(group);
+	}
+}
+
 static const char *fence_get_driver_name(struct dma_fence *fence)
 {
 	return "panthor";
@@ -2012,6 +2182,12 @@ static void csgs_upd_ctx_init(struct panthor_csg_slots_upd_ctx *ctx)
 	memset(ctx, 0, sizeof(*ctx));
 }
 
+static void csgs_upd_ctx_ring_doorbell(struct panthor_csg_slots_upd_ctx *ctx,
+				       u32 csg_id)
+{
+	ctx->update_mask |= BIT(csg_id);
+}
+
 static void csgs_upd_ctx_queue_reqs(struct panthor_device *ptdev,
 				    struct panthor_csg_slots_upd_ctx *ctx,
 				    u32 csg_id, u32 value, u32 mask)
@@ -2022,7 +2198,8 @@ static void csgs_upd_ctx_queue_reqs(struct panthor_device *ptdev,
 
 	ctx->requests[csg_id].value = (ctx->requests[csg_id].value & ~mask) | (value & mask);
 	ctx->requests[csg_id].mask |= mask;
-	ctx->update_mask |= BIT(csg_id);
+
+	csgs_upd_ctx_ring_doorbell(ctx, csg_id);
 }
 
 static int csgs_upd_ctx_apply_locked(struct panthor_device *ptdev,
@@ -2039,8 +2216,12 @@ static int csgs_upd_ctx_apply_locked(struct panthor_device *ptdev,
 	while (update_slots) {
 		struct panthor_fw_csg_iface *csg_iface;
 		u32 csg_id = ffs(update_slots) - 1;
+		u32 req_mask = ctx->requests[csg_id].mask;
 
 		update_slots &= ~BIT(csg_id);
+		if (!req_mask)
+			continue;
+
 		csg_iface = panthor_fw_get_csg_iface(ptdev, csg_id);
 		panthor_fw_update_reqs(csg_iface, req,
 				       ctx->requests[csg_id].value,
@@ -2057,6 +2238,9 @@ static int csgs_upd_ctx_apply_locked(struct panthor_device *ptdev,
 		int ret;
 
 		update_slots &= ~BIT(csg_id);
+		if (!req_mask)
+			continue;
+
 		csg_iface = panthor_fw_get_csg_iface(ptdev, csg_id);
 
 		ret = panthor_fw_csg_wait_acks(ptdev, csg_id, req_mask, &acked, 100);
@@ -2093,13 +2277,14 @@ struct panthor_sched_tick_ctx {
 	bool immediate_tick;
 	bool stop_tick;
 	u32 csg_upd_failed_mask;
+	struct panthor_group *protm_group;
 };
 
 static bool
 tick_ctx_is_full(const struct panthor_scheduler *sched,
 		 const struct panthor_sched_tick_ctx *ctx)
 {
-	return ctx->group_count == sched->csg_slot_count;
+	return (ctx->group_count == sched->csg_slot_count) || ctx->protm_group;
 }
 
 static void
@@ -2133,6 +2318,13 @@ tick_ctx_pick_groups_from_list(const struct panthor_scheduler *sched,
 
 		if (!owned_by_tick_ctx)
 			group_get(group);
+
+		/* Only the first pick is allowed to request switch to protm */
+		if (ctx->group_count == 0 &&
+		    atomic_read(&group->protm_pending_queues)) {
+			ctx->protm_group = group;
+			ctx->stop_tick = false;
+		}
 
 		ctx->group_count++;
 
@@ -2292,6 +2484,79 @@ static void group_term_work(struct work_struct *work)
 	group_put(group);
 }
 
+bool panthor_sched_protm_block_timeout(struct panthor_device *ptdev,
+				      struct panthor_vm *vm)
+{
+	struct panthor_scheduler *sched = ptdev->scheduler;
+	int ret;
+
+	if (!sched)
+		return true;
+
+	down_read(&sched->protm.lock);
+
+	if (!sched->protm.active_group)
+		return true; /* All good, we are in normal mode */
+
+	/* We will only exit protected mode for the passed vm and the MCU VM.
+	 * Other VMs have no active CSG work, so MMU updates can proceed,
+	 * although with special caution (delayed updates)!
+	 */
+	if (sched->protm.active_group->vm != vm && !panthor_vm_for_mcu(vm))
+		return true; /* Specified VM can proceed, with caution. */
+
+	/* Give GPU a chance to finish ongoing protm work by itself */
+	ret = panthor_fw_protm_exit_wait(ptdev, 5);
+	if (!ret)
+		return true; /* All good, we are back to normal mode */
+
+	/* We do not want this function to fail, because that can lead to
+	 * innocent processes failing. That is why we wait up to 2x the job
+	 * timeout for GPU to exit protm here. This shall cover the worst case
+	 * where protm work hangs and we must rely on job timeout to recover.
+	 */
+	ret = panthor_fw_protm_exit(ptdev, JOB_TIMEOUT_MS << 1);
+	if (ret)
+		up_read(&sched->protm.lock);
+
+	return ret ? false : true;
+}
+
+bool panthor_sched_protm_try_block(struct panthor_device *ptdev)
+{
+	struct panthor_scheduler *sched = ptdev->scheduler;
+	int ret;
+
+	if (!sched)
+		return false;
+
+	ret = down_read_trylock(&sched->protm.lock);
+	if (ret) {
+		/* Unlike panthor_sched_protm_block_timeout(), we don't bother
+		 * checking against a particular vm. It is not that important
+		 * to succeed in this use case.
+		 */
+		if (sched->protm.active_group) {
+			up_read(&sched->protm.lock);
+			return false;
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+void panthor_sched_protm_unblock(struct panthor_device *ptdev)
+{
+	struct panthor_scheduler *sched = ptdev->scheduler;
+
+	if (!sched)
+		return;
+
+	up_read(&sched->protm.lock);
+}
+
 static void
 tick_ctx_cleanup(struct panthor_scheduler *sched,
 		 struct panthor_sched_tick_ctx *ctx)
@@ -2420,6 +2685,41 @@ tick_ctx_schedule_group(struct panthor_scheduler *sched,
 }
 
 static void
+tick_ctx_handle_protm_group(struct panthor_scheduler *sched,
+			    struct panthor_csg_slots_upd_ctx *upd_ctx,
+			    struct panthor_group *group)
+{
+	struct panthor_device *ptdev = sched->ptdev;
+	struct panthor_fw_csg_iface *csg_iface =
+		panthor_fw_get_csg_iface(ptdev, group->csg_id);
+	u32 q;
+
+	if (drm_WARN_ON(&ptdev->base, group->csg_id < 0))
+		return;
+
+	guard(spinlock)(&sched->events_lock);
+
+	for (q = 0; q < group->queue_count; q++) {
+		struct panthor_fw_cs_iface *cs_iface =
+			panthor_fw_get_cs_iface(ptdev, group->csg_id, q);
+
+		/* Ack any pending CS_PROTM_PENDING so it can run in protm */
+		if ((cs_iface->output->ack ^ cs_iface->input->req) &
+		    CS_PROTM_PENDING)
+			panthor_fw_update_reqs(cs_iface, req,
+					       cs_iface->output->ack,
+					       CS_PROTM_PENDING);
+	}
+
+	panthor_fw_toggle_reqs(csg_iface, doorbell_req, doorbell_ack,
+			       GENMASK(group->queue_count - 1, 0));
+
+	csgs_upd_ctx_ring_doorbell(upd_ctx, group->csg_id);
+
+	atomic_set(&group->protm_pending_queues, 0);
+}
+
+static void
 tick_ctx_apply(struct panthor_scheduler *sched, struct panthor_sched_tick_ctx *ctx)
 {
 	struct panthor_group *group, *tmp;
@@ -2488,11 +2788,32 @@ tick_ctx_apply(struct panthor_scheduler *sched, struct panthor_sched_tick_ctx *c
 		}
 	}
 
+	if (ctx->protm_group)
+		tick_ctx_handle_protm_group(sched, &upd_ctx, ctx->protm_group);
+
 	ret = csgs_upd_ctx_apply_locked(ptdev, &upd_ctx);
 	if (ret) {
 		panthor_device_schedule_reset(ptdev);
 		ctx->csg_upd_failed_mask |= upd_ctx.timedout_mask;
 		return;
+	}
+
+	if (ctx->protm_group) {
+		down_write(&sched->protm.lock);
+
+		sched->protm.active_group = ctx->protm_group;
+		group_get(sched->protm.active_group);
+
+		/* Tell MMU we are entering protm with this VM (AS) */
+		panthor_mmu_protm_enter_event(ptdev, ctx->protm_group->vm);
+
+		ret = panthor_fw_protm_enter(ptdev);
+		if (ret) {
+			panthor_device_schedule_reset(ptdev);
+			ctx->csg_upd_failed_mask = U32_MAX;
+		}
+
+		up_write(&sched->protm.lock);
 	}
 
 	for (prio = PANTHOR_CSG_PRIORITY_COUNT - 1; prio >= 0; prio--) {
@@ -2531,12 +2852,12 @@ tick_ctx_apply(struct panthor_scheduler *sched, struct panthor_sched_tick_ctx *c
 }
 
 static u64
-tick_ctx_update_resched_target(struct panthor_scheduler *sched,
-			       const struct panthor_sched_tick_ctx *ctx)
+tick_update_resched_target(struct panthor_scheduler *sched,
+			   bool stop_tick)
 {
 	u64 resched_target;
 
-	if (ctx->stop_tick)
+	if (stop_tick)
 		goto no_tick;
 
 	resched_target = sched->last_tick + sched->tick_period;
@@ -2550,6 +2871,38 @@ tick_ctx_update_resched_target(struct panthor_scheduler *sched,
 no_tick:
 	sched->resched_target = U64_MAX;
 	return U64_MAX;
+}
+
+static bool preempt_protm_group(struct panthor_group *group, bool full_tick)
+{
+	struct panthor_device *ptdev = group->ptdev;
+	struct panthor_scheduler *sched = ptdev->scheduler;
+	bool groups_waiting;
+
+	/* If the protm group can not run, then preempt! */
+	if (!group_can_run(group))
+		return true;
+
+	/* If we have RT groups waiting and we are not RT, then preempt! */
+	groups_waiting =
+		!list_empty(&sched->groups.runnable[PANTHOR_CSG_PRIORITY_RT]);
+	if (groups_waiting && group->priority < PANTHOR_CSG_PRIORITY_RT)
+		return true;
+
+	/* The below conditions for preempting are only valid for full ticks */
+	if (!full_tick)
+		return false;
+
+	for (int pri = PANTHOR_CSG_PRIORITY_RT - 1;
+	     pri >= sched->protm.active_group->priority; pri--) {
+		if (!list_empty(&sched->groups.runnable[pri])) {
+			groups_waiting = true;
+			break;
+		}
+	}
+
+	return groups_waiting;
+
 }
 
 static void tick_work(struct work_struct *work)
@@ -2583,6 +2936,58 @@ static void tick_work(struct work_struct *work)
 	mutex_lock(&sched->lock);
 	if (panthor_device_reset_is_pending(sched->ptdev))
 		goto out_unlock;
+
+	/* If we exited protm since last tick, then deal with that first */
+	if (sched->protm.active_group) {
+		bool protm = atomic64_read(&ptdev->protm.protm_exit_count) !=
+			     atomic64_read(&ptdev->protm.protm_enter_count);
+		if (!protm) {
+			down_write(&sched->protm.lock);
+
+			/* No longer in protected mode, clear active_group */
+			group_put(sched->protm.active_group);
+			sched->protm.active_group = NULL;
+
+			/* Allow MMU ops on all ASes again */
+			panthor_mmu_protm_exit_event(ptdev);
+
+			up_write(&sched->protm.lock);
+		}
+	}
+
+	if (sched->protm.active_group) {
+		/* A normal tick will issue CSG_STATUS_UPDATE requests in
+		 * tick_ctx_init(). If we do this while running in protm, then
+		 * the FW will preempt and exit protm in order to fullfill the
+		 * request. That is why we do a "SW only" check for preemption
+		 * in this case, so we avoid unnecessary preemption.
+		 */
+		if (preempt_protm_group(sched->protm.active_group, full_tick)) {
+			/* Ensure we are fully out of protected mode first.
+			 * We rely on the GLB_PROTM_EXIT (or error recovery)
+			 * to get a new tick.
+			 */
+			if (panthor_fw_protm_exit(ptdev, 500)) {
+				drm_warn(&ptdev->base,
+					 "Failed to preempt protm");
+				panthor_device_schedule_reset(ptdev);
+			}
+		} else {
+			sched->last_tick = now;
+
+			/* We can stop ticking if this was a full tick.
+			 * New work which can preempt this protm work will
+			 * generate new ticks.
+			 */
+			resched_delay =
+				tick_update_resched_target(sched, full_tick);
+			if (resched_delay != U64_MAX)
+				sched_queue_delayed_work(sched, tick,
+							 resched_delay);
+		}
+
+		goto out_unlock;
+	}
 
 	tick_ctx_init(sched, &ctx);
 	if (ctx.csg_upd_failed_mask)
@@ -2635,14 +3040,20 @@ static void tick_work(struct work_struct *work)
 		}
 	}
 
-	/* If we have free CSG slots left, pick idle groups */
-	for (prio = PANTHOR_CSG_PRIORITY_COUNT - 1;
-	     prio >= 0 && !tick_ctx_is_full(sched, &ctx);
-	     prio--) {
-		/* Check the old_group queue first to avoid reprogramming the slots */
-		tick_ctx_pick_groups_from_list(sched, &ctx, &ctx.old_groups[prio], false, true);
-		tick_ctx_pick_groups_from_list(sched, &ctx, &sched->groups.idle[prio],
-					       false, false);
+	/* No need to pick any more groups if we are going to run in protm */
+	if (!ctx.protm_group) {
+		for (prio = PANTHOR_CSG_PRIORITY_COUNT - 1;
+		     prio >= 0 && !tick_ctx_is_full(sched, &ctx); prio--) {
+			/* Check the old_group queue first to avoid
+			 * reprogramming the slots
+			 */
+			tick_ctx_pick_groups_from_list(sched, &ctx,
+						       &ctx.old_groups[prio],
+						       false, true);
+			tick_ctx_pick_groups_from_list(sched, &ctx,
+						       &sched->groups.idle[prio],
+						       false, false);
+		}
 	}
 
 	tick_ctx_apply(sched, &ctx);
@@ -2664,7 +3075,7 @@ static void tick_work(struct work_struct *work)
 	}
 
 	sched->last_tick = now;
-	resched_delay = tick_ctx_update_resched_target(sched, &ctx);
+	resched_delay = tick_update_resched_target(sched, ctx.stop_tick);
 	if (ctx.immediate_tick)
 		resched_delay = 0;
 
@@ -3069,6 +3480,8 @@ void panthor_sched_pre_reset(struct panthor_device *ptdev)
 	cancel_work_sync(&sched->sync_upd_work);
 	cancel_delayed_work_sync(&sched->tick_work);
 
+	handle_protm_fault(ptdev);
+
 	panthor_sched_suspend(ptdev);
 
 	/* Stop all groups that might still accept jobs, so we don't get passed
@@ -3093,6 +3506,11 @@ void panthor_sched_post_reset(struct panthor_device *ptdev, bool reset_failed)
 	struct panthor_group *group, *group_tmp;
 
 	mutex_lock(&sched->reset.lock);
+
+	if (sched->protm.active_group) {
+		group_put(sched->protm.active_group);
+		sched->protm.active_group = NULL;
+	}
 
 	list_for_each_entry_safe(group, group_tmp, &sched->reset.stopped_groups, run_node) {
 		/* Consider all previously running group as terminated if the
@@ -4170,6 +4588,7 @@ int panthor_sched_init(struct panthor_device *ptdev)
 	INIT_WORK(&sched->sync_upd_work, sync_upd_work);
 
 	spin_lock_init(&sched->events_lock);
+	init_rwsem(&sched->protm.lock);
 
 	ret = drmm_mutex_init(&ptdev->base, &sched->lock);
 	if (ret)

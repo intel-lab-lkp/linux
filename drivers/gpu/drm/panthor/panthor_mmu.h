@@ -106,6 +106,12 @@ void panthor_vm_update_resvs(struct panthor_vm *vm, struct drm_exec *exec,
 int panthor_mmu_pt_cache_init(void);
 void panthor_mmu_pt_cache_fini(void);
 
+bool panthor_vm_for_mcu(struct panthor_vm *vm);
+
+void panthor_mmu_protm_enter_event(struct panthor_device *ptdev,
+				   struct panthor_vm *vm);
+void panthor_mmu_protm_exit_event(struct panthor_device *ptdev);
+
 #ifdef CONFIG_DEBUG_FS
 void panthor_mmu_debugfs_init(struct drm_minor *minor);
 #endif
