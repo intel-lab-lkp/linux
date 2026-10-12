@@ -2333,7 +2333,7 @@ void f2fs_clear_prefree_segments(struct f2fs_sb_info *sbi,
 
 		/* Should cover 2MB zoned device for zone-based reset */
 		if (!f2fs_sb_has_blkzoned(sbi) &&
-		    (!f2fs_lfs_mode(sbi) || !__is_large_section(sbi))) {
+		    (!section_alignment || !__is_large_section(sbi))) {
 			f2fs_issue_discard(sbi, START_BLOCK(sbi, start),
 				SEGS_TO_BLKS(sbi, end - start));
 			continue;
