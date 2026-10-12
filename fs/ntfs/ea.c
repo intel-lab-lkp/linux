@@ -1027,8 +1027,9 @@ static noinline int ntfs_set_acl_ex(const struct mnt_idmap *idmap,
 {
 	const char *name;
 	size_t size, name_len;
-	void *value;
-	int err;
+	void *value, *old_value = NULL;
+	int err, old_len = -ENODATA;
+	bool old_exists = false;
 	int flags;
 	umode_t mode;
 
@@ -1072,7 +1073,39 @@ static noinline int ntfs_set_acl_ex(const struct mnt_idmap *idmap,
 	}
 
 	mutex_lock(&NTFS_I(inode)->mrec_lock);
+	if (acl && !init_acl) {
+		/*
+		 * Save the previous xattr so a committed set can be
+		 * rolled back to it.  A new inode cannot have one yet,
+		 * and one that cannot be read fails the update instead
+		 * of being replaced: what was not saved cannot be
+		 * rolled back to.
+		 */
+		old_len = ntfs_get_ea(inode, name, name_len, NULL, 0);
+		if (old_len >= 0) {
+			old_exists = true;
+			/* kmalloc(0) returns the non-NULL ZERO_SIZE_PTR. */
+			old_value = kmalloc(old_len, GFP_NOFS);
+			if (!old_value) {
+				err = -ENOMEM;
+				goto out_unlock;
+			}
+			err = ntfs_get_ea(inode, name, name_len,
+					  old_value, old_len);
+			if (err != old_len) {
+				kfree(old_value);
+				old_value = NULL;
+				if (err >= 0)
+					err = -EIO;
+				goto out_unlock;
+			}
+		} else if (old_len != -ENODATA) {
+			err = old_len;
+			goto out_unlock;
+		}
+	}
 	err = ntfs_set_ea(inode, name, name_len, value, size, flags, NULL);
+out_unlock:
 	mutex_unlock(&NTFS_I(inode)->mrec_lock);
 	if (err == -ENODATA && !size)
 		err = 0; /* Removing non existed xattr. */
@@ -1084,8 +1117,52 @@ static noinline int ntfs_set_acl_ex(const struct mnt_idmap *idmap,
 		mutex_lock(&NTFS_I(inode)->mrec_lock);
 		err = ntfs_ea_set_wsl_inode(inode, 0, &ea_size, NTFS_EA_MODE);
 		if (err) {
-			ntfs_set_ea(inode, name, name_len, NULL, 0,
-				    XATTR_REPLACE, NULL);
+			if (acl) {
+				int undo_err;
+
+				/*
+				 * Only a set needs undoing: a removal
+				 * leaves no new ACL behind, and repeating
+				 * it would either return -ENODATA again
+				 * or, once it dropped the last EA,
+				 * re-create an empty xattr.
+				 */
+				if (old_exists) {
+					/*
+					 * A zero-length xattr cannot be
+					 * restored with XATTR_REPLACE,
+					 * which would remove it again.
+					 */
+					int undo_flags = old_len ?
+						XATTR_REPLACE : 0;
+
+					undo_err = ntfs_set_ea(inode, name,
+							name_len, old_value,
+							old_len, undo_flags,
+							NULL);
+				} else {
+					undo_err = ntfs_set_ea(inode, name,
+							name_len, NULL, 0,
+							XATTR_REPLACE, NULL);
+				}
+				if (undo_err) {
+					/*
+					 * The ACL xattr is committed
+					 * already, so a failed rollback
+					 * leaves the new, typically more
+					 * permissive, ACL on disk while
+					 * i_mode, the mode EA and the
+					 * cached ACL keep the old values.
+					 * Record the error: the next
+					 * persistence point persists it as
+					 * VOLUME_IS_DIRTY.  Run chkdsk.
+					 */
+					NVolSetErrors(NTFS_I(inode)->vol);
+					ntfs_error(inode->i_sb,
+						   "Failed to undo the ACL xattr: %d",
+						   undo_err);
+				}
+			}
 			mutex_unlock(&NTFS_I(inode)->mrec_lock);
 			inode->i_mode = old_mode;
 			goto out;
@@ -1098,6 +1175,7 @@ static noinline int ntfs_set_acl_ex(const struct mnt_idmap *idmap,
 	}
 
 out:
+	kfree(old_value);
 	kfree(value);
 
 	return err;
