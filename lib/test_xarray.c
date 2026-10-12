@@ -32,6 +32,22 @@ void xa_dump(const struct xarray *xa) { }
 } while (0)
 #endif
 
+/*
+ * Warn if @x holds and return whether it did, so that the caller can skip
+ * checks which would not terminate or would not mean anything on the
+ * broken state.  Counted with tests_run and tests_passed like the rest.
+ */
+#define XA_WARN_ON(xa, x) ({					\
+	bool __failed = WARN_ON(x);				\
+								\
+	tests_run++;						\
+	if (__failed)						\
+		xa_dump(xa);					\
+	else							\
+		tests_passed++;					\
+	__failed;						\
+})
+
 static void *xa_mk_index(unsigned long index)
 {
 	return xa_mk_value(index & LONG_MAX);
@@ -368,6 +384,39 @@ static noinline void check_xa_shrink(struct xarray *xa)
 		XA_BUG_ON(xa, xa->xa_head != node);
 		xa_erase_index(xa, 0);
 	}
+}
+
+static noinline void check_xa_root_offset(struct xarray *xa)
+{
+	DEFINE_XARRAY(tmp);
+	struct xa_node *node;
+
+	/* Free two nodes with non-zero offsets so the slab can reuse them */
+	xa_store_index(&tmp, 0, GFP_KERNEL);
+	xa_store_index(&tmp, 5UL << XA_CHUNK_SHIFT, GFP_KERNEL);
+	xa_store_index(&tmp, 6UL << XA_CHUNK_SHIFT, GFP_KERNEL);
+	xa_store_index(&tmp, 7UL << XA_CHUNK_SHIFT, GFP_KERNEL);
+	xa_erase_index(&tmp, 5UL << XA_CHUNK_SHIFT);
+	xa_erase_index(&tmp, 6UL << XA_CHUNK_SHIFT);
+	rcu_barrier();
+
+	/* A root created by xas_create() must have offset 0 */
+	XA_WARN_ON(xa, xa_store_index(xa, 0, GFP_KERNEL));
+	XA_WARN_ON(xa, xa_store_index(xa, 1, GFP_KERNEL));
+	rcu_read_lock();
+	node = xa_to_node(xa_head(xa));
+	XA_WARN_ON(xa, node->offset != 0);
+	rcu_read_unlock();
+
+	/* And so must a root created by xas_expand() */
+	XA_WARN_ON(xa, xa_store_index(xa, XA_CHUNK_SIZE, GFP_KERNEL));
+	rcu_read_lock();
+	node = xa_to_node(xa_head(xa));
+	XA_WARN_ON(xa, node->offset != 0);
+	rcu_read_unlock();
+
+	xa_destroy(xa);
+	xa_destroy(&tmp);
 }
 
 static noinline void check_insert(struct xarray *xa)
@@ -2235,6 +2284,7 @@ static int xarray_checks(void)
 	check_xa_load(&array);
 	check_xa_mark(&array);
 	check_xa_shrink(&array);
+	check_xa_root_offset(&array);
 	check_xas_erase(&array);
 	check_insert(&array);
 	check_cmpxchg(&array);
