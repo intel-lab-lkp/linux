@@ -447,6 +447,20 @@ static const struct field_mapping features_mappings[] __initconst = {
 	FIELD_MAP(TDX_FIELD_TDX_FEATURES0, features, tdx_features0),
 };
 
+static const struct field_mapping tdmr_mappings[] __initconst = {
+	FIELD_MAP(TDX_FIELD_MAX_TDMRS,		tdmr, max_tdmrs),
+	FIELD_MAP(TDX_FIELD_PAMT_4K_ENTRY_SIZE,	tdmr, pamt_4k_entry_size),
+	FIELD_MAP(TDX_FIELD_PAMT_2M_ENTRY_SIZE,	tdmr, pamt_2m_entry_size),
+	FIELD_MAP(TDX_FIELD_PAMT_1G_ENTRY_SIZE,	tdmr, pamt_1g_entry_size),
+	FIELD_MAP(TDX_FIELD_MAX_RESERVED_PER_TDMR,
+		  tdmr, max_reserved_per_tdmr),
+};
+
+static const struct field_mapping dpamt_mappings[] __initconst = {
+	FIELD_MAP(TDX_FIELD_PAMT_PAGE_BITMAP_ENTRY_BITS,
+		  tdmr, pamt_page_bitmap_entry_bits),
+};
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
