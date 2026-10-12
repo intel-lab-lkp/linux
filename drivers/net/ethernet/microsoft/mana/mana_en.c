@@ -543,6 +543,16 @@ netdev_tx_t mana_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	err = NETDEV_TX_OK;
 	atomic_inc(&txq->pending_sends);
 
+	/* Account the skb in BQL before the doorbell lets the hardware
+	 * complete it. The XDP paths send even when the queue is stopped,
+	 * only count the bytes then, since stopping the queue again would
+	 * refresh its trans_start and keep the TX watchdog from firing.
+	 */
+	if (netif_xmit_stopped(net_txq))
+		__netdev_tx_sent_queue(net_txq, len, true);
+	else
+		netdev_tx_sent_queue(net_txq, len);
+
 	mana_gd_wq_ring_doorbell(gd->gdma_context, gdma_sq);
 
 	/* skb may be freed after mana_gd_post_work_request. Do not use it. */
@@ -2038,10 +2048,12 @@ static void mana_poll_tx_cq(struct mana_cq *cq)
 	gdma_wq = txq->gdma_sq;
 	avail_space = mana_gd_wq_avail_space(gdma_wq);
 
+	net_txq = txq->net_txq;
+	netdev_tx_completed_queue(net_txq, pkt_transmitted, tx_bytes);
+
 	/* Ensure tail updated before checking q stop */
 	smp_mb();
 
-	net_txq = txq->net_txq;
 	txq_stopped = netif_tx_queue_stopped(net_txq);
 
 	/* Ensure checking txq_stopped before apc->port_is_up. */
@@ -2693,6 +2705,13 @@ static void mana_destroy_txq(struct mana_port_context *apc)
 			netif_napi_del_locked(napi);
 			apc->tx_qp[i]->txq.napi_initialized = false;
 		}
+
+		/* Forget the SKBs freed without being completed after a drain
+		 * timeout, now that NAPI can't complete any. Doing it here also
+		 * covers the queues that a lower channel count won't recreate,
+		 * which could otherwise stay stopped.
+		 */
+		netdev_tx_reset_queue(apc->tx_qp[i]->txq.net_txq);
 
 		if (apc->tx_qp[i]->tx_object != INVALID_MANA_HANDLE)
 			mana_destroy_wq_obj(apc, GDMA_SQ, apc->tx_qp[i]->tx_object);
