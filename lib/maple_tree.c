@@ -4823,6 +4823,7 @@ static inline void __rcu **mte_destroy_descend(struct maple_enode **enode,
 
 		mte_set_node_dead(*enode);
 		node->type = type;
+		mt_clear_meta(mt, node, type);
 		node->piv_parent = prev;
 		node->parent_slot = offset;
 		offset = next_offset;
