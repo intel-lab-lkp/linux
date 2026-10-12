@@ -2253,8 +2253,11 @@ static int blk_mq_hctx_next_cpu(struct blk_mq_hw_ctx *hctx)
 	bool tried = false;
 	int next_cpu = hctx->next_cpu;
 
-	/* Switch to unbound if no allowable CPUs in this hctx */
-	if (hctx->queue->nr_hw_queues == 1 || blk_mq_hctx_empty_cpumask(hctx))
+	/* Switch to housekeeping CPU if no allowable CPUs in this hctx */
+	if (blk_mq_hctx_empty_cpumask(hctx))
+		return housekeeping_any_cpu(HK_TYPE_TIMER);
+
+	if (hctx->queue->nr_hw_queues == 1)
 		return WORK_CPU_UNBOUND;
 
 	if (--hctx->next_cpu_batch <= 0) {
