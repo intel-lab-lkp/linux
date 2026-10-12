@@ -1692,8 +1692,9 @@ panthor_vm_pool_get_vm(struct panthor_vm_pool *pool, u32 handle)
  * Note that VMs can outlive the pool they were created from if other
  * objects hold a reference to there VMs.
  */
-void panthor_vm_pool_destroy(struct panthor_file *pfile)
+void panthor_vm_pool_destroy(struct drm_file *file)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_vm *vm;
 	unsigned long i;
 
@@ -1715,8 +1716,9 @@ void panthor_vm_pool_destroy(struct panthor_file *pfile)
  *
  * Return: 0 on success, a negative error code otherwise.
  */
-int panthor_vm_pool_create(struct panthor_file *pfile)
+int panthor_vm_pool_create(struct drm_file *file)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_gem_object *dummy;
 	int ret;
 
@@ -1737,7 +1739,7 @@ int panthor_vm_pool_create(struct panthor_file *pfile)
 	return 0;
 
 err_destroy_vm_pool:
-	panthor_vm_pool_destroy(pfile);
+	panthor_vm_pool_destroy(file);
 	return ret;
 }
 
@@ -2157,8 +2159,9 @@ struct panthor_heap_pool *panthor_vm_get_heap_pool(struct panthor_vm *vm, bool c
  * Calculate all heap chunk sizes in all heap pools bound to a VM. If the VM
  * is active, record the size as active as well.
  */
-void panthor_vm_heaps_sizes(struct panthor_file *pfile, struct drm_memory_stats *stats)
+void panthor_vm_heaps_sizes(struct drm_file *file, struct drm_memory_stats *stats)
 {
+	struct panthor_file *pfile = file->driver_priv;
 	struct panthor_vm *vm;
 	unsigned long i;
 

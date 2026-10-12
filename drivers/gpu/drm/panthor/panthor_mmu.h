@@ -38,7 +38,7 @@ int panthor_vm_as(struct panthor_vm *vm);
 struct panthor_heap_pool *
 panthor_vm_get_heap_pool(struct panthor_vm *vm, bool create);
 
-void panthor_vm_heaps_sizes(struct panthor_file *pfile, struct drm_memory_stats *stats);
+void panthor_vm_heaps_sizes(struct drm_file *file, struct drm_memory_stats *stats);
 
 struct panthor_vm *panthor_vm_get(struct panthor_vm *vm);
 void panthor_vm_put(struct panthor_vm *vm);
@@ -64,8 +64,8 @@ void panthor_vm_add_job_fence_to_bos_resvs(struct panthor_vm *vm,
 struct dma_resv *panthor_vm_resv(struct panthor_vm *vm);
 struct drm_gem_object *panthor_vm_root_gem(struct panthor_vm *vm);
 
-void panthor_vm_pool_destroy(struct panthor_file *pfile);
-int panthor_vm_pool_create(struct panthor_file *pfile);
+void panthor_vm_pool_destroy(struct drm_file *file);
+int panthor_vm_pool_create(struct drm_file *file);
 int panthor_vm_pool_create_vm(struct panthor_device *ptdev,
 			      struct panthor_vm_pool *pool,
 			      struct drm_panthor_vm_create *args);
