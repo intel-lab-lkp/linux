@@ -45,6 +45,9 @@ static int jfs_open(struct inode *inode, struct file *file)
 {
 	int rc;
 
+	if ((file->f_mode & FMODE_WRITE) && jfs_emergency_ro(inode->i_sb))
+		return -EROFS;
+
 	if (S_ISREG(inode->i_mode) && inode->i_size < 0)
 		return -EIO;
 
@@ -95,6 +98,9 @@ int jfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	struct inode *inode = d_inode(dentry);
 	int rc;
 
+	if (jfs_emergency_ro(inode->i_sb))
+		return -EROFS;
+
 	rc = setattr_prepare(&nop_mnt_idmap, dentry, iattr);
 	if (rc)
 		return rc;
@@ -131,6 +137,14 @@ int jfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	return rc;
 }
 
+static ssize_t jfs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+{
+	if (jfs_emergency_ro(file_inode(iocb->ki_filp)->i_sb))
+		return -EROFS;
+
+	return generic_file_write_iter(iocb, from);
+}
+
 const struct inode_operations jfs_file_inode_operations = {
 	.listxattr	= jfs_listxattr,
 	.setattr	= jfs_setattr,
@@ -146,7 +160,7 @@ const struct file_operations jfs_file_operations = {
 	.open		= jfs_open,
 	.llseek		= generic_file_llseek,
 	.read_iter	= generic_file_read_iter,
-	.write_iter	= generic_file_write_iter,
+	.write_iter	= jfs_file_write_iter,
 	.mmap_prepare	= generic_file_mmap_prepare,
 	.splice_read	= filemap_splice_read,
 	.splice_write	= iter_file_splice_write,

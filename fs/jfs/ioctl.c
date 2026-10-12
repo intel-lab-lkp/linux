@@ -77,6 +77,9 @@ int jfs_fileattr_set(struct mnt_idmap *idmap,
 	struct jfs_inode_info *jfs_inode = JFS_IP(inode);
 	unsigned int flags;
 
+	if (jfs_emergency_ro(inode->i_sb))
+		return -EROFS;
+
 	if (d_is_special(dentry))
 		return -ENOTTY;
 
@@ -115,6 +118,10 @@ long jfs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
+
+		/* Don't trust the block map after an error. */
+		if (jfs_emergency_ro(sb))
+			return -EROFS;
 
 		if (!bdev_max_discard_sectors(sb->s_bdev)) {
 			jfs_warn("FITRIM not supported on device");

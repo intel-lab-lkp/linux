@@ -343,6 +343,9 @@ static int jfs_rmdir(struct inode *dip, struct dentry *dentry)
 
 	jfs_info("jfs_rmdir: dip:0x%p name:%pd", dip, dentry);
 
+	if (jfs_emergency_ro(dip->i_sb))
+		return -EROFS;
+
 	/* Init inode for quota operations. */
 	rc = dquot_initialize(dip);
 	if (rc)
@@ -474,6 +477,9 @@ static int jfs_unlink(struct inode *dip, struct dentry *dentry)
 	int commit_flag;
 
 	jfs_info("jfs_unlink: dip:0x%p name:%pd", dip, dentry);
+
+	if (jfs_emergency_ro(dip->i_sb))
+		return -EROFS;
 
 	/* Init inode for quota operations. */
 	rc = dquot_initialize(dip);
@@ -797,6 +803,9 @@ static int jfs_link(struct dentry *old_dentry,
 
 	jfs_info("jfs_link: %pd %pd", old_dentry, dentry);
 
+	if (jfs_emergency_ro(dir->i_sb))
+		return -EROFS;
+
 	rc = dquot_initialize(dir);
 	if (rc)
 		goto out;
@@ -1091,6 +1100,9 @@ static int jfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		return -EINVAL;
 
 	jfs_info("jfs_rename: %pd %pd", old_dentry, new_dentry);
+
+	if (jfs_emergency_ro(old_dir->i_sb))
+		return -EROFS;
 
 	rc = dquot_initialize(old_dir);
 	if (rc)

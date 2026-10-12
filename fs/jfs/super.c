@@ -63,7 +63,7 @@ static void jfs_handle_error(struct super_block *sb)
 {
 	struct jfs_sb_info *sbi = JFS_SBI(sb);
 
-	if (sb_rdonly(sb))
+	if (sb_rdonly(sb) || jfs_emergency_ro(sb))
 		return;
 
 	updateSuper(sb, FM_DIRTY);
@@ -74,7 +74,12 @@ static void jfs_handle_error(struct super_block *sb)
 	else if (sbi->flag & JFS_ERR_REMOUNT_RO) {
 		jfs_err("ERROR: (device %s): remounting filesystem as read-only",
 			sb->s_id);
-		sb->s_flags |= SB_RDONLY;
+		/*
+		 * Don't set SB_RDONLY, that needs sb->s_umount and a remount.
+		 * Flipping it on a frozen filesystem makes thaw skip
+		 * jfs_unfreeze() and leave s_writers locked forever.
+		 */
+		set_bit(JFS_FLAGS_EMERGENCY_RO, &sbi->jfs_flags);
 	}
 
 	/* nothing is done for continue beyond marking the superblock dirty */
@@ -166,14 +171,30 @@ static void jfs_quota_off_umount(struct super_block *sb)
 		jfs_quota_off(sb, type);
 }
 
+/* After an error quota changes can't be written anymore. */
+static int jfs_set_dqinfo(struct super_block *sb, int type, struct qc_info *ii)
+{
+	if (jfs_emergency_ro(sb))
+		return -EROFS;
+	return dquot_set_dqinfo(sb, type, ii);
+}
+
+static int jfs_set_dqblk(struct super_block *sb, struct kqid qid,
+			 struct qc_dqblk *di)
+{
+	if (jfs_emergency_ro(sb))
+		return -EROFS;
+	return dquot_set_dqblk(sb, qid, di);
+}
+
 static const struct quotactl_ops jfs_quotactl_ops = {
 	.quota_on	= jfs_quota_on,
 	.quota_off	= jfs_quota_off,
 	.quota_sync	= dquot_quota_sync,
 	.get_state	= dquot_get_state,
-	.set_info	= dquot_set_dqinfo,
+	.set_info	= jfs_set_dqinfo,
 	.get_dqblk	= dquot_get_dqblk,
-	.set_dqblk	= dquot_set_dqblk,
+	.set_dqblk	= jfs_set_dqblk,
 	.get_nextdqblk	= dquot_get_next_dqblk,
 };
 #else
@@ -367,6 +388,11 @@ static int jfs_reconfigure(struct fs_context *fc)
 	int flag = ctx->flag;
 	int ret;
 
+	/* An error made the filesystem read-only until it is unmounted. */
+	if (jfs_emergency_ro(sb) && (ctx->resize || (sb_rdonly(sb) && !readonly)))
+		return -EROFS;
+
+	/* After an error this only commits what was queued before it. */
 	sync_filesystem(sb);
 
 	/* Transfer results of parsing to the sbi */
@@ -415,6 +441,9 @@ static int jfs_reconfigure(struct fs_context *fc)
 		return ret;
 	}
 	if (!sb_rdonly(sb) && readonly) {
+		/* After an error nothing may be written, umount closes the log. */
+		if (jfs_emergency_ro(sb))
+			return 0;
 		rc = dquot_suspend(sb, -1);
 		if (rc < 0)
 			return rc;
@@ -587,6 +616,17 @@ static int jfs_freeze(struct super_block *sb)
 	int rc = 0;
 
 	if (!sb_rdonly(sb)) {
+		/*
+		 * After an error leave the log open and the superblock alone.
+		 * Only wait until what was committed before is in the log.
+		 * Waiting for all of it to be written home needs a quiesced
+		 * log, otherwise jfs_flush_journal() BUG()s when other
+		 * filesystems keep committing to a shared external log.
+		 */
+		if (jfs_emergency_ro(sb)) {
+			jfs_flush_journal(log, 1);
+			return 0;
+		}
 		txQuiesce(sb);
 		rc = lmLogShutdown(log);
 		if (rc) {
@@ -597,6 +637,7 @@ static int jfs_freeze(struct super_block *sb)
 
 			return rc;
 		}
+		set_bit(JFS_FLAGS_LOG_SHUTDOWN, &sbi->jfs_flags);
 		rc = updateSuper(sb, FM_CLEAN);
 		if (rc) {
 			jfs_err("jfs_freeze: updateSuper failed");
@@ -616,15 +657,19 @@ static int jfs_unfreeze(struct super_block *sb)
 	struct jfs_log *log = sbi->log;
 	int rc = 0;
 
-	if (!sb_rdonly(sb)) {
+	/* Undo what jfs_freeze() did, also if an error happened meanwhile. */
+	if (test_bit(JFS_FLAGS_LOG_SHUTDOWN, &sbi->jfs_flags)) {
 		rc = updateSuper(sb, FM_MOUNT);
 		if (rc) {
 			jfs_error(sb, "updateSuper failed\n");
 			goto out;
 		}
 		rc = lmLogInit(log);
-		if (rc)
+		if (rc) {
 			jfs_error(sb, "lmLogInit failed\n");
+			goto out;
+		}
+		clear_bit(JFS_FLAGS_LOG_SHUTDOWN, &sbi->jfs_flags);
 out:
 		txResume(sb);
 	}
@@ -639,6 +684,10 @@ static int jfs_get_tree(struct fs_context *fc)
 static int jfs_sync_fs(struct super_block *sb, int wait)
 {
 	struct jfs_log *log = JFS_SBI(sb)->log;
+
+	/* After an error only freeze and umount write out the log. */
+	if (jfs_emergency_ro(sb))
+		return 0;
 
 	/* log == NULL indicates read-only mount */
 	if (log) {
@@ -674,6 +723,8 @@ static int jfs_show_options(struct seq_file *seq, struct dentry *root)
 		seq_printf(seq, ",errors=continue");
 	if (sbi->flag & JFS_ERR_PANIC)
 		seq_printf(seq, ",errors=panic");
+	if (jfs_emergency_ro(root->d_sb))
+		seq_puts(seq, ",emergency_ro");
 
 #ifdef CONFIG_QUOTA
 	if (sbi->flag & JFS_USRQUOTA)
@@ -748,6 +799,9 @@ static ssize_t jfs_quota_write(struct super_block *sb, int type,
 	struct buffer_head tmp_bh;
 	struct buffer_head *bh;
 
+	if (jfs_emergency_ro(sb))
+		return -EROFS;
+
 	inode_lock(inode);
 	while (towrite > 0) {
 		tocopy = min_t(size_t, sb->s_blocksize - offset, towrite);
@@ -800,6 +854,9 @@ static int jfs_quota_on(struct super_block *sb, int type, int format_id,
 {
 	int err;
 	struct inode *inode;
+
+	if (jfs_emergency_ro(sb))
+		return -EROFS;
 
 	err = dquot_quota_on(sb, type, format_id, path);
 	if (err)

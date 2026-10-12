@@ -192,6 +192,7 @@ struct jfs_sb_info {
 	struct inode *direct_inode;	/* metadata inode */
 	uint		state;		/* mount/recovery state	*/
 	unsigned long	flag;		/* mount time flags */
+	unsigned long	jfs_flags;	/* runtime state, JFS_FLAGS_* */
 	uint		p_state;	/* state prior to going no integrity */
 	kuid_t		uid;		/* uid to override on-disk uid */
 	kgid_t		gid;		/* gid to override on-disk gid */
@@ -201,6 +202,12 @@ struct jfs_sb_info {
 
 /* jfs_sb_info commit_state */
 #define IN_LAZYCOMMIT 1
+
+/* jfs_sb_info jfs_flags bits */
+enum {
+	JFS_FLAGS_EMERGENCY_RO,	/* read-only after an error */
+	JFS_FLAGS_LOG_SHUTDOWN,	/* jfs_freeze() shut the log down */
+};
 
 static inline struct jfs_inode_info *JFS_IP(struct inode *inode)
 {
@@ -222,5 +229,10 @@ static inline int isReadOnly(struct inode *inode)
 	if (JFS_SBI(inode->i_sb)->log)
 		return 0;
 	return 1;
+}
+
+static inline bool jfs_emergency_ro(struct super_block *sb)
+{
+	return test_bit(JFS_FLAGS_EMERGENCY_RO, &JFS_SBI(sb)->jfs_flags);
 }
 #endif /* _H_JFS_INCORE */
