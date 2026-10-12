@@ -3145,6 +3145,33 @@ static void resctrl_fs_teardown(void)
 	rdtgroup_destroy_root();
 }
 
+/*
+ * The RMID limbo handler keeps running after unmount. Any CLOSID still in
+ * limbo would be re-interpreted with the CDP state of the next mount. MPAM
+ * doubles CLOSID when CDP is enabled, which can push the stale value out of
+ * range. Force the limbo list back to the free list before the CLOSID state
+ * is torn down.
+ */
+static void rdt_flush_limbo(void)
+{
+	struct rdt_resource *r = resctrl_arch_get_resource(RDT_RESOURCE_L3);
+	struct rdt_l3_mon_domain *d;
+
+	if (!IS_ENABLED(CONFIG_RESCTRL_RMID_DEPENDS_ON_CLOSID))
+		return;
+
+	if (!resctrl_is_mon_event_enabled(QOS_L3_OCCUP_EVENT_ID))
+		return;
+
+	list_for_each_entry(d, &r->mon_domains, hdr.list) {
+		if (!has_busy_rmid(d))
+			continue;
+
+		cancel_delayed_work(&d->cqm_limbo);
+		__check_limbo(d, true);
+	}
+}
+
 static void resctrl_unmount(void)
 {
 	struct rdt_resource *r;
@@ -3152,13 +3179,20 @@ static void resctrl_unmount(void)
 	cpus_read_lock();
 	mutex_lock(&rdtgroup_mutex);
 
-	rdt_disable_ctx();
-
 	/* Put everything back to default values. */
 	for_each_alloc_capable_rdt_resource(r)
 		resctrl_arch_reset_all_ctrls(r);
 
 	resctrl_fs_teardown();
+	rdt_flush_limbo();
+
+	/*
+	 * Clear the CDP state last. free_rmid() translates between CLOSID and
+	 * PARTID using the CDP state; clearing it first would make the
+	 * translation inconsistent for the RMIDs being torn down.
+	 */
+	rdt_disable_ctx();
+
 	if (resctrl_arch_alloc_capable())
 		resctrl_arch_disable_alloc();
 	if (resctrl_arch_mon_capable())
