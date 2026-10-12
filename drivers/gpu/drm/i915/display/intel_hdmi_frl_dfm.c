@@ -725,6 +725,26 @@ bool intel_hdmi_frl_dfm_dsc_requirement_met(struct intel_hdmi_frl_dfm *frl_dfm)
 	return true;
 }
 
+static void frl_set_m_n(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+
+	intel_de_write(display, PIPE_LINK_M1(display, cpu_transcoder),
+		       crtc_state->frl.link_m);
+	intel_de_write(display, PIPE_LINK_N1(display, cpu_transcoder),
+		       crtc_state->frl.link_n);
+}
+
+static void frl_get_m_n(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+
+	crtc_state->frl.link_m = intel_de_read(display, PIPE_LINK_M1(display, cpu_transcoder));
+	crtc_state->frl.link_n = intel_de_read(display, PIPE_LINK_N1(display, cpu_transcoder));
+}
+
 void intel_hdmi_frl_dfm_write(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -734,6 +754,8 @@ void intel_hdmi_frl_dfm_write(const struct intel_crtc_state *crtc_state)
 
 	if (!crtc_state->frl.enable)
 		return;
+
+	frl_set_m_n(crtc_state);
 
 	reg = TRANS_HDMI_FRL_DFMWRCTL(display, cpu_trans);
 	val = TB_ACTUAL_OFFSET(crtc_state->frl.tb_actual);
@@ -752,6 +774,8 @@ void intel_hdmi_frl_dfm_read(struct intel_crtc_state *crtc_state)
 
 	if (!crtc_state->frl.enable)
 		return;
+
+	frl_get_m_n(crtc_state);
 
 	val = intel_de_read(display, TRANS_HDMI_FRL_DFMWRCTL(display, cpu_trans));
 	crtc_state->frl.tb_actual =
