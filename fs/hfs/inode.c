@@ -520,6 +520,17 @@ struct inode *hfs_iget(struct super_block *sb, struct hfs_cat_key *key, hfs_cat_
 	default:
 		return NULL;
 	}
+
+	/*
+	 * Never let a catalog record address one of the internal B-tree
+	 * objects.  hfs_test_inode() matches on i_ino alone, so such a
+	 * record would make hfs_lookup() hand out the cached B-tree inode as
+	 * a regular dentry, bypassing the CNID validation done by
+	 * hfs_read_inode().
+	 */
+	if (cnid == HFS_EXT_CNID || cnid == HFS_CAT_CNID)
+		return NULL;
+
 	inode = iget5_locked(sb, cnid, hfs_test_inode, hfs_read_inode, &data);
 	if (inode && (inode_state_read_once(inode) & I_NEW))
 		unlock_new_inode(inode);
