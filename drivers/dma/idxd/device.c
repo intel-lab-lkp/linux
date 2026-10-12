@@ -1350,6 +1350,16 @@ void idxd_wq_free_irq(struct idxd_wq *wq)
 
 void idxd_wq_flush_descs(struct idxd_wq *wq)
 {
+	guard(mutex)(&wq->wq_lock);
+
+	if (wq->state != IDXD_WQ_ENABLED || wq->type != IDXD_WQT_KERNEL)
+		return;
+
+	idxd_flush_pending_descs(&wq->ie);
+}
+
+void idxd_wq_release_int_handle(struct idxd_wq *wq)
+{
 	struct idxd_irq_entry *ie = &wq->ie;
 	struct idxd_device *idxd = wq->idxd;
 
@@ -1358,7 +1368,6 @@ void idxd_wq_flush_descs(struct idxd_wq *wq)
 	if (wq->state != IDXD_WQ_ENABLED || wq->type != IDXD_WQT_KERNEL)
 		return;
 
-	idxd_flush_pending_descs(ie);
 	if (idxd->request_int_handles)
 		idxd_device_release_int_handle(idxd, ie->int_handle, IDXD_IRQ_MSIX);
 	idxd_device_clear_perm_entry(idxd, ie);

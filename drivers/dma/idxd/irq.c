@@ -405,6 +405,7 @@ static void idxd_wqs_flush_descs(struct idxd_device *idxd)
 		struct idxd_wq *wq = idxd->wqs[i];
 
 		idxd_wq_flush_descs(wq);
+		idxd_wq_release_int_handle(wq);
 	}
 }
 
