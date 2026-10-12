@@ -1876,6 +1876,7 @@ sg_build_indirect(Sg_scatter_hold * schp, Sg_fd * sfp, int buff_size)
 	num = scatter_elem_sz;
 	if (unlikely(num != scatter_elem_sz_prev)) {
 		if (num < PAGE_SIZE) {
+			num = PAGE_SIZE;
 			scatter_elem_sz = PAGE_SIZE;
 			scatter_elem_sz_prev = PAGE_SIZE;
 		} else
