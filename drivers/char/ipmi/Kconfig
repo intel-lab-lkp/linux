@@ -119,6 +119,38 @@ config IPMI_POWEROFF
 
 endif # IPMI_HANDLER
 
+config LSTP_IPMI_BMC
+	tristate "NVIDIA LSTP IPMI BMC support"
+	depends on USB_LSTP
+	default USB_LSTP
+	help
+	  Say Y or M here to support the IPMI channels of NVIDIA LSTP USB
+	  adapters on a BMC. Each channel is exposed as an ipmi-lstp<n>
+	  character device through which BMC userspace receives requests
+	  from the host and sends the responses back.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called ipmi-lstp.
+
+config USB_LSTP_IPMI_MSG_NUM
+	bool "Message-number header on LSTP IPMI nodes"
+	depends on LSTP_IPMI_BMC
+	default y
+	help
+	  Messages read from and written to an LSTP IPMI device node carry a
+	  one-byte message number between the length and the payload, and a
+	  response must echo the number of the request it answers. The number
+	  exists only on the device node, not in the LSTP protocol, and no
+	  other BMC-side IPMI driver has it.
+
+	  Disable this option to drop it. The node then uses the layout of
+	  struct ipmi_ssif_msg from the ssif_bmc driver, a length followed by
+	  the payload, so that userspace written for ssif_bmc works unchanged.
+	  A response answers the request read last, and is dropped once a newer
+	  request has arrived.
+
+	  Say Y if userspace parses the message number.
+
 config IPMI_KCS_BMC
 	tristate
 
