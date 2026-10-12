@@ -13,8 +13,10 @@
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/capability.h>
 
 #include <drm/drm_drv.h>
+#include <drm/drm_file.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 
@@ -252,6 +254,9 @@ struct panthor_fw {
 	/** @shared_section: The section containing the FW interfaces. */
 	struct panthor_fw_section *shared_section;
 
+	/** @protm_section: The protected mode section. */
+	struct panthor_fw_section *protm_section;
+
 	/** @iface: FW interfaces. */
 	struct panthor_fw_iface iface;
 
@@ -260,6 +265,9 @@ struct panthor_fw {
 		/** @ping_work: Delayed work used to ping the FW. */
 		struct delayed_work ping_work;
 	} watchdog;
+
+	/** @protm_init_lock: Used to serialize protm initialization. */
+	struct mutex protm_init_lock;
 
 	/**
 	 * @req_waitqueue: FW request waitqueue.
@@ -462,6 +470,9 @@ static void panthor_fw_init_section_mem(struct panthor_device *ptdev,
 	    !(section->flags & CSF_FW_BINARY_IFACE_ENTRY_ZERO))
 		return;
 
+	if (!section->mem)
+		return;
+
 	ret = panthor_kernel_bo_vmap(section->mem);
 	if (drm_WARN_ON(&ptdev->base, ret))
 		return;
@@ -621,12 +632,6 @@ static int panthor_fw_load_section_entry(struct panthor_device *ptdev,
 		return -EINVAL;
 	}
 
-	if (hdr.flags & CSF_FW_BINARY_IFACE_ENTRY_PROT) {
-		drm_warn(&ptdev->base,
-			 "Firmware protected mode entry is not supported, ignoring");
-		return 0;
-	}
-
 	if (hdr.va.start == CSF_MCU_SHARED_REGION_START &&
 	    !(hdr.flags & CSF_FW_BINARY_IFACE_ENTRY_SHARED)) {
 		drm_err(&ptdev->base,
@@ -678,7 +683,22 @@ static int panthor_fw_load_section_entry(struct panthor_device *ptdev,
 	section->size = section_size;
 	section->va = hdr.va.start;
 
-	if (section_size) {
+	if (hdr.flags & CSF_FW_BINARY_IFACE_ENTRY_PROT) {
+		if (ptdev->fw->protm_section) {
+			drm_err(&ptdev->base,
+				"Only one protected section supported\n");
+			return -EINVAL;
+		}
+
+		ptdev->protm.info.fw_protected_sections_size =
+			ALIGN(section->size, vm_pgsz);
+		ptdev->fw->protm_section = section;
+	}
+
+	/* Defer the section->mem creation if this is a protected entry.
+	 * This will be populated when DRM_IOCTL_PANTHOR_PROTM_INIT is called.
+	 */
+	if (section->size && !(hdr.flags & CSF_FW_BINARY_IFACE_ENTRY_PROT)) {
 		u32 vm_map_flags = section_vm_map_flags(section);
 
 		section->mem = panthor_kernel_bo_create(
@@ -983,6 +1003,11 @@ static int panthor_init_csg_iface(struct panthor_device *ptdev,
 	if (!csg_iface->input || !csg_iface->output) {
 		drm_err(&ptdev->base, "Invalid group control interface input/output VA");
 		return -EINVAL;
+	}
+
+	if (!csg_idx) {
+		ptdev->protm.info.group_protected_suspend_buf_size =
+			csg_iface->control->protm_suspend_size;
 	}
 
 	if (csg_idx > 0) {
@@ -1585,6 +1610,70 @@ int panthor_fw_protm_exit(struct panthor_device *ptdev, u32 timeout_ms)
 	return panthor_fw_protm_exit_wait(ptdev, timeout_ms);
 }
 
+int panthor_fw_protm_init(struct drm_file *file,
+			  struct drm_panthor_protm_init *args)
+{
+	struct panthor_file *pfile = file->driver_priv;
+	struct panthor_device *ptdev = pfile->ptdev;
+	struct panthor_fw_section *protm_section = ptdev->fw->protm_section;
+	struct drm_gem_object *obj;
+	u32 vm_map_flags;
+	int cookie, ret = 0;
+
+	if (!capable(CAP_SYS_MODULE))
+		return -EPERM;
+
+	if (args->pad)
+		return -EINVAL;
+
+	if (!protm_section || !protm_section->size)
+		return -EINVAL;
+
+	guard(mutex)(&ptdev->fw->protm_init_lock);
+
+	/* Thread safe access so other readers do not need protm_init_lock */
+	if (smp_load_acquire(&ptdev->protm.info.state) &
+	    DRM_PANTHOR_PROTM_INITIALIZED)
+		return 0;
+
+	if (!drm_dev_enter(&ptdev->base, &cookie))
+		return -ENODEV;
+
+	obj = drm_gem_object_lookup(file,
+				    args->fw_protected_sections_bo_handle);
+	if (!obj) {
+		ret = -ENOENT;
+		goto out_dev_exit;
+	}
+
+	if (obj->size < ptdev->protm.info.fw_protected_sections_size) {
+		ret = -EINVAL;
+		goto out_gem_put;
+	}
+
+	vm_map_flags = section_vm_map_flags(protm_section);
+
+	protm_section->mem = panthor_kernel_bo_create_from_gem(
+		ptdev, panthor_fw_vm(ptdev), to_panthor_bo(obj), vm_map_flags,
+		protm_section->va, protm_section->size);
+	if (IS_ERR(protm_section->mem)) {
+		ret = PTR_ERR(protm_section->mem);
+		protm_section->mem = NULL;
+		goto out_gem_put;
+	}
+
+	/* Make sure all above is completed before we update state */
+	smp_store_release(&ptdev->protm.info.state,
+			  DRM_PANTHOR_PROTM_INITIALIZED);
+
+out_gem_put:
+	drm_gem_object_put(obj);
+
+out_dev_exit:
+	drm_dev_exit(cookie);
+	return ret;
+}
+
 /**
  * panthor_fw_init() - Initialize FW related data.
  * @ptdev: Device.
@@ -1605,6 +1694,10 @@ int panthor_fw_init(struct panthor_device *ptdev)
 	init_waitqueue_head(&fw->req_waitqueue);
 	INIT_LIST_HEAD(&fw->sections);
 	INIT_DELAYED_WORK(&fw->watchdog.ping_work, panthor_fw_ping_work);
+
+	ret = drmm_mutex_init(&ptdev->base, &fw->protm_init_lock);
+	if (ret)
+		return ret;
 
 	irq = platform_get_irq_byname(to_platform_device(ptdev->base.dev), "job");
 	if (irq <= 0)
