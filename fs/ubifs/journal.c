@@ -1943,7 +1943,9 @@ int ubifs_jnl_delete_xattr(struct ubifs_info *c, const struct inode *host,
 
 	/* And update TNC with the new host inode position */
 	ino_key_init(c, &key1, host->i_ino);
-	err = ubifs_tnc_add(c, &key1, lnum, xent_offs + len - hlen, hlen, hash);
+	err = ubifs_tnc_add(c, &key1, lnum,
+				xent_offs + aligned_xlen + UBIFS_INO_NODE_SZ,
+				hlen, hash);
 	if (err)
 		goto out_ro;
 
