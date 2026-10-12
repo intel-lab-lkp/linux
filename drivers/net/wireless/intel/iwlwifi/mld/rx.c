@@ -1526,7 +1526,7 @@ static void iwl_mld_rx_fill_status(struct iwl_mld *mld, int link_id,
 		if (mld->monitor.ptp_time) {
 			u64 adj_time =
 				iwl_mld_ptp_get_adj_time(mld,
-							 phy_data->gp2_on_air_rise *
+							 (u64)phy_data->gp2_on_air_rise *
 							 NSEC_PER_USEC);
 
 			rx_status->mactime = div64_u64(adj_time, NSEC_PER_USEC);
