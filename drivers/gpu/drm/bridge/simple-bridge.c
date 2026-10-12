@@ -253,6 +253,10 @@ static const struct drm_bridge_timings ti_ths8135_bridge_timings = {
 	.hold_time_ps = 500,
 };
 
+static const struct drm_bridge_timings toradex_apalis_imx6_vga_dac_timings = {
+	.input_bus_flags = DRM_BUS_FLAG_DE_LOW,
+};
+
 static const struct of_device_id simple_bridge_match[] = {
 	{
 		.compatible = "dumb-vga-dac",
@@ -310,6 +314,12 @@ static const struct of_device_id simple_bridge_match[] = {
 		.compatible = "ti,ths8134",
 		.data = &(const struct simple_bridge_info) {
 			.timings = &ti_ths8134_bridge_timings,
+			.connector_type = DRM_MODE_CONNECTOR_VGA,
+		},
+	}, {
+		.compatible = "toradex,apalis-imx6-vga-dac",
+		.data = &(const struct simple_bridge_info) {
+			.timings = &toradex_apalis_imx6_vga_dac_timings,
 			.connector_type = DRM_MODE_CONNECTOR_VGA,
 		},
 	},
