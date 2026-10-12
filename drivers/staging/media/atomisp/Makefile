@@ -35,7 +35,6 @@ atomisp-objs += \
 	pci/sh_css_sp.o \
 	pci/sh_css_stream_format.o \
 	pci/sh_css_version.o \
-	pci/base/circbuf/src/circbuf.o \
 	pci/base/refcount/src/refcount.o \
 	pci/camera/pipe/src/pipe_binarydesc.o \
 	pci/camera/pipe/src/pipe_stagedesc.o \
@@ -162,7 +161,6 @@ INCLUDES += \
 	-I$(atomisp)/include/hmm/ \
 	-I$(atomisp)/include/mmu/ \
 	-I$(atomisp)/pci/ \
-	-I$(atomisp)/pci/base/circbuf/interface/ \
 	-I$(atomisp)/pci/base/refcount/interface/ \
 	-I$(atomisp)/pci/camera/pipe/interface/ \
 	-I$(atomisp)/pci/camera/util/interface/ \
