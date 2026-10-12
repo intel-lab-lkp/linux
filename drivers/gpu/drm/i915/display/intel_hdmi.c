@@ -2430,7 +2430,8 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 
 	pipe_config->lane_count = 4;
 
-	if (scdc->scrambling.supported && source_supports_scrambling(encoder)) {
+	if (scdc->scrambling.supported && source_supports_scrambling(encoder) &&
+	    !pipe_config->frl.enable) {
 		if (scdc->scrambling.low_rates)
 			pipe_config->hdmi_scrambling = true;
 
