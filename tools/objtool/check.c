@@ -4196,6 +4196,14 @@ static int validate_retpoline(struct objtool_file *file)
 	list_for_each_entry(insn, &file->retpoline_call_list, call_node) {
 		struct symbol *sym = insn_sym(insn);
 
+		/*
+		 * A jump through a jump table stays inside the function, so
+		 * it has no kCFI check.  GCC turns the computed goto in
+		 * ___bpf_prog_run() into one under MITIGATION_RETPOLINE.
+		 */
+		if (is_jump_table_jump(insn))
+			continue;
+
 		if (sym && (is_notype_sym(sym) ||
 			    is_func_sym(sym)) && !sym->nocfi) {
 			struct instruction *prev =
