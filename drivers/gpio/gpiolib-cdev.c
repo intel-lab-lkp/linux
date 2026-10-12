@@ -1226,13 +1226,12 @@ static void gpio_v2_line_config_flags_to_desc_flags(u64 lflags,
 {
 	unsigned long flags = READ_ONCE(*flagsp);
 
+	/*
+	 * GPIOD_FLAG_IS_OUT is left to gpiod_direction_input/output(), which
+	 * only update it once the chip has accepted the direction.
+	 */
 	assign_bit(GPIOD_FLAG_ACTIVE_LOW, &flags,
 		   lflags & GPIO_V2_LINE_FLAG_ACTIVE_LOW);
-
-	if (lflags & GPIO_V2_LINE_FLAG_OUTPUT)
-		set_bit(GPIOD_FLAG_IS_OUT, &flags);
-	else if (lflags & GPIO_V2_LINE_FLAG_INPUT)
-		clear_bit(GPIOD_FLAG_IS_OUT, &flags);
 
 	assign_bit(GPIOD_FLAG_EDGE_RISING, &flags,
 		   lflags & GPIO_V2_LINE_FLAG_EDGE_RISING);
