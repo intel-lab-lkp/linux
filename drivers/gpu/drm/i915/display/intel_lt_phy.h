@@ -49,5 +49,6 @@ void intel_xe3plpd_pll_enable(struct intel_encoder *encoder,
 			      const struct intel_dpll_hw_state *dpll_hw_state);
 void intel_xe3plpd_pll_disable(struct intel_encoder *encoder);
 void intel_lt_phy_verify_plls(struct intel_display *display);
+enum drm_mode_status intel_lt_phy_hdmi_frl_rate_valid(int clock_rate);
 
 #endif /* __INTEL_LT_PHY_H__ */

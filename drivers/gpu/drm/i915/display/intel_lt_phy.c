@@ -2654,3 +2654,19 @@ void intel_lt_phy_verify_plls(struct intel_display *display)
 	intel_lt_phy_pll_verify_tables(display, xe3plpd_lt_edp_tables);
 	intel_lt_phy_pll_verify_tables(display, xe3plpd_lt_hdmi_tables);
 }
+
+enum drm_mode_status intel_lt_phy_hdmi_frl_rate_valid(int clock_rate)
+{
+	const struct intel_lt_phy_pll_params *tables = xe3plpd_lt_hdmi_tables;
+	int i;
+
+	for (i = 0; tables[i].name; i++) {
+		if (!intel_hdmi_is_frl(tables[i].clock_rate))
+			continue;
+
+		if (clock_rate == tables[i].clock_rate)
+			return MODE_OK;
+	}
+
+	return MODE_CLOCK_RANGE;
+}
