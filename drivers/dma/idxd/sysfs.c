@@ -1876,7 +1876,7 @@ static int idxd_register_engine_devices(struct idxd_device *idxd)
 	return 0;
 
 cleanup:
-	j = i - 1;
+	j = i;
 	for (; i < idxd->max_engines; i++) {
 		engine = idxd->engines[i];
 		put_device(engine_confdev(engine));
@@ -1904,7 +1904,7 @@ static int idxd_register_group_devices(struct idxd_device *idxd)
 	return 0;
 
 cleanup:
-	j = i - 1;
+	j = i;
 	for (; i < idxd->max_groups; i++) {
 		group = idxd->groups[i];
 		put_device(group_confdev(group));
@@ -1932,7 +1932,7 @@ static int idxd_register_wq_devices(struct idxd_device *idxd)
 	return 0;
 
 cleanup:
-	j = i - 1;
+	j = i;
 	for (; i < idxd->max_wqs; i++) {
 		wq = idxd->wqs[i];
 		put_device(wq_confdev(wq));
