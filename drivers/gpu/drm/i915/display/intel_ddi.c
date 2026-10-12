@@ -4302,6 +4302,9 @@ static void intel_ddi_get_config(struct intel_encoder *encoder,
 	intel_dip_sdp_transmission_line_get_config(pipe_config);
 
 	intel_audio_codec_get_config(encoder, pipe_config);
+
+	if (intel_crtc_has_type(pipe_config, INTEL_OUTPUT_HDMI))
+		intel_hdmi_frl_get_config(pipe_config);
 }
 
 void intel_ddi_get_clock(struct intel_encoder *encoder,

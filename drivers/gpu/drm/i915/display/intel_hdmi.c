@@ -4160,3 +4160,38 @@ void intel_hdmi_frl_cfg_write(const struct intel_crtc_state *crtc_state)
 
 	intel_de_rmw(display, TRANS_HDMI_FRL_CFG(display, cpu_trans), 0, val);
 }
+
+static void intel_hdmi_frl_cfg_read(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_trans = crtc_state->cpu_transcoder;
+	u32 val;
+
+	val = intel_de_read(display, TRANS_HDMI_FRL_CFG(display, cpu_trans));
+
+	if (val & TRANS_HDMI_FRL_ENABLE)
+		crtc_state->frl.enable = true;
+
+	crtc_state->frl.rsrc_sched_en =
+		REG_FIELD_GET(TRANS_HDMI_R_B_SCHED_ENABLE_MASK, val);
+	crtc_state->frl.active_char_buf_threshold =
+		REG_FIELD_GET(TRANS_HDMI_ACTIVE_CHAR_BUF_THRESH_MASK, val);
+}
+
+void intel_hdmi_frl_get_config(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	if (!HAS_HDMI_FRL(display))
+		return;
+
+	intel_hdmi_frl_cfg_read(crtc_state);
+
+	if (!crtc_state->frl.enable)
+		return;
+
+	crtc_state->frl.required_rate = crtc_state->port_clock / 100000;
+	crtc_state->frl.required_lanes = crtc_state->lane_count;
+
+	intel_hdmi_frl_dfm_read(crtc_state);
+}
