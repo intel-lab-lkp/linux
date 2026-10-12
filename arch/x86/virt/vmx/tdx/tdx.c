@@ -471,6 +471,62 @@ static const struct field_mapping handoff_mappings[] = {
 	FIELD_MAP(TDX_FIELD_MODULE_HV, handoff, module_hv),
 };
 
+static const struct field_mapping td_conf_mappings[] __initconst = {
+	FIELD_MAP(TDX_FIELD_ATTRIBUTES_FIXED0,	td_conf, attributes_fixed0),
+	FIELD_MAP(TDX_FIELD_ATTRIBUTES_FIXED1,	td_conf, attributes_fixed1),
+	FIELD_MAP(TDX_FIELD_XFAM_FIXED0,	td_conf, xfam_fixed0),
+	FIELD_MAP(TDX_FIELD_XFAM_FIXED1,	td_conf, xfam_fixed1),
+	FIELD_MAP(TDX_FIELD_NUM_CPUID_CONFIG,	td_conf, num_cpuid_config),
+	FIELD_MAP(TDX_FIELD_MAX_VCPUS_PER_TD,	td_conf, max_vcpus_per_td),
+};
+
+static __init int get_tdx_sys_info_td_conf(struct tdx_sys_info_td_conf *td_conf)
+{
+	int ret, i;
+
+	ret = read_sys_metadata_table(td_conf_mappings, td_conf);
+	if (ret)
+		return ret;
+
+	/*
+	 * The number of CPUID config entries must not exceed the array
+	 * sizes.
+	 */
+	if (td_conf->num_cpuid_config > ARRAY_SIZE(td_conf->cpuid_config_leaves) ||
+	    td_conf->num_cpuid_config > ARRAY_SIZE(td_conf->cpuid_config_values))
+		return -EINVAL;
+
+	/*
+	 * cpuid_config_leaves[i] holds a CPUID leaf and sub-leaf number,
+	 * and the two u64s of cpuid_config_values[i] mark which bits of
+	 * that leaf's EAX/EBX/ECX/EDX the host can set to 0 or 1 for a TD.
+	 *
+	 * TDX_FIELD_CPUID_CONFIG_LEAVES and TDX_FIELD_CPUID_CONFIG_VALUES
+	 * give the field ID of each array's first element, and the rest
+	 * follow in order.
+	 */
+	for (i = 0; i < td_conf->num_cpuid_config; i++) {
+		u64 cpuid_config_values_id = TDX_FIELD_CPUID_CONFIG_VALUES + i * 2;
+
+		ret = read_sys_metadata_field(TDX_FIELD_CPUID_CONFIG_LEAVES + i,
+					      &td_conf->cpuid_config_leaves[i]);
+		if (ret)
+			return ret;
+
+		ret = read_sys_metadata_field(cpuid_config_values_id,
+					      &td_conf->cpuid_config_values[i][0]);
+		if (ret)
+			return ret;
+
+		ret = read_sys_metadata_field(cpuid_config_values_id + 1,
+					      &td_conf->cpuid_config_values[i][1]);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
