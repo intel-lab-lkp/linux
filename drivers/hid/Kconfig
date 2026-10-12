@@ -1362,6 +1362,14 @@ config HID_PULSAR
 
 	  Additional supported devices: Kysona M600, ATK VXE R1 SE+
 
+config HID_UNCTRL_M1
+	tristate "UNCTRL RAGE Wireless Mouse battery support"
+	depends on USB_HID
+	select POWER_SUPPLY
+	help
+	  Report the battery status of the UNCTRL RAGE Wireless Mouse
+	  over its 2.4 GHz receiver and while wired.
+
 config HID_WACOM
 	tristate "Wacom Intuos/Graphire tablet support (USB)"
 	depends on USB_HID
