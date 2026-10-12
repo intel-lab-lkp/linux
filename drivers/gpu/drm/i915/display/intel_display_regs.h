@@ -550,6 +550,32 @@
 #define _TRANS_MULT_B		0x6102c
 #define TRANS_MULT(dev_priv, trans)	_MMIO_TRANS2(dev_priv, (trans), _TRANS_MULT_A)
 
+/* HDMI FRL Configuration */
+#define _TRANS_HDMI_FRL_CFG_A				0x600b0
+#define TRANS_HDMI_FRL_CFG(dev_priv, trans)		_MMIO_TRANS2(dev_priv, \
+								     (trans), \
+								     _TRANS_HDMI_FRL_CFG_A)
+#define  TRANS_HDMI_FRL_ENABLE				REG_BIT(31)
+#define  TRANS_HDMI_TMDS_ENABLE				0
+#define  TRANS_HDMI_FRL_TRAINING_COMPLETE		REG_BIT(28)
+#define  TRANS_HDMI_DISABLE_DFM_MASKING			REG_BIT(20)
+#define  TRANS_HDMI_R_B_SCHED_ENABLE_MASK		REG_BIT(19)
+#define  TRANS_HDMI_R_B_SCHED_ENABLE(val)		REG_FIELD_PREP(TRANS_HDMI_R_B_SCHED_ENABLE_MASK, val)
+#define  TRANS_HDMI_ACTIVE_CHAR_BUF_THRESH_MASK		REG_GENMASK(18, 16)
+#define  TRANS_HDMI_ACTIVE_CHAR_BUF_THRESH(val)		REG_FIELD_PREP(TRANS_HDMI_ACTIVE_CHAR_BUF_THRESH_MASK, val)
+#define  TRANS_HDMI_MIN_BLANK_CHAR_MASK			REG_GENMASK(15, 12)
+#define  TRANS_HDMI_MIN_BLANK_CHAR(val)			REG_FIELD_PREP(TRANS_HDMI_MIN_BLANK_CHAR_MASK, val)
+#define  TRANS_HDMI_MIN_BLANK_CHAR_VAL			0xa
+#define  TRANS_HDMI_FRL_PKT_PAYLOAD_MAX_MASK		REG_GENMASK(9, 0)
+#define  TRANS_HDMI_FRL_PKT_PAYLOAD_MAX(val)		REG_FIELD_PREP(TRANS_HDMI_FRL_PKT_PAYLOAD_MAX_MASK, val)
+#define  TRANS_HDMI_PAYLOAD_UPPER_BOUND			0x3fe
+
+#define _TRANS_HDMI_FRL_TRAIN_A				0x600b4
+#define TRANS_HDMI_FRL_TRAIN(dev_priv, trans)		_MMIO_TRANS2(dev_priv, \
+								     (trans), \
+								     _TRANS_HDMI_FRL_TRAIN_A)
+#define  TRANS_HDMI_FRL_LTP(pattern, lane) ((pattern) << (lane) * 8)
+
 /* Hotplug control (945+ only) */
 #define PORT_HOTPLUG_EN(dev_priv)		_MMIO(DISPLAY_MMIO_BASE(dev_priv) + 0x61110)
 #define   PORTB_HOTPLUG_INT_EN			(1 << 29)
