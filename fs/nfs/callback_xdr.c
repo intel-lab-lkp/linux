@@ -100,24 +100,14 @@ static __be32 decode_fh(struct xdr_stream *xdr, struct nfs_fh *fh)
 	return 0;
 }
 
-static __be32 decode_bitmap(struct xdr_stream *xdr, uint32_t *bitmap)
+static __be32 decode_bitmap(struct xdr_stream *xdr, __u32 *bitmap,
+			    size_t bitmap_size)
 {
-	__be32 *p;
-	unsigned int attrlen;
+	ssize_t status;
 
-	p = xdr_inline_decode(xdr, 4);
-	if (unlikely(p == NULL))
+	status = xdr_stream_decode_uint32_array(xdr, bitmap, bitmap_size);
+	if (unlikely(status < 0))
 		return htonl(NFS4ERR_RESOURCE);
-	attrlen = ntohl(*p);
-	p = xdr_inline_decode(xdr, attrlen << 2);
-	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE);
-	if (likely(attrlen > 0))
-		bitmap[0] = ntohl(*p++);
-	if (attrlen > 1)
-		bitmap[1] = ntohl(*p++);
-	if (attrlen > 2)
-		bitmap[2] = ntohl(*p);
 	return 0;
 }
 
@@ -182,7 +172,7 @@ static __be32 decode_getattr_args(struct svc_rqst *rqstp,
 	status = decode_fh(xdr, &args->fh);
 	if (unlikely(status != 0))
 		return status;
-	return decode_bitmap(xdr, args->bitmap);
+	return decode_bitmap(xdr, args->bitmap, ARRAY_SIZE(args->bitmap));
 }
 
 static __be32 decode_recall_args(struct svc_rqst *rqstp,
@@ -451,7 +441,7 @@ static __be32 decode_recallany_args(struct svc_rqst *rqstp,
 	if (unlikely(p == NULL))
 		return htonl(NFS4ERR_BADXDR);
 	args->craa_objs_to_keep = ntohl(*p++);
-	status = decode_bitmap(xdr, bitmap);
+	status = decode_bitmap(xdr, bitmap, ARRAY_SIZE(bitmap));
 	if (unlikely(status))
 		return status;
 	args->craa_type_mask = bitmap[0];
