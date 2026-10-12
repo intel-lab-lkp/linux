@@ -2306,13 +2306,129 @@ static int intel_hdmi_compute_tmds_clock(struct intel_encoder *encoder,
 	return 0;
 }
 
+static int
+intel_hdmi_compute_frl_config(struct intel_encoder *encoder,
+			      struct intel_crtc_state *crtc_state)
+{
+	static const int rate[] = {9, 18, 24, 32, 40, 48};
+	struct intel_hdmi_frl_dfm frl_dfm = {0};
+	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int max_rate = intel_hdmi->max_frl_rate;
+	bool can_support_frl_mode = false;
+	int i;
+
+	/* Fill mode related input params */
+	frl_dfm.config.pixel_clock_nominal_khz = adjusted_mode->clock;
+	frl_dfm.config.hactive = adjusted_mode->hdisplay;
+	frl_dfm.config.hblank = adjusted_mode->htotal - adjusted_mode->hdisplay;
+
+	/* Fill color related input params */
+	frl_dfm.config.bpc = crtc_state->pipe_bpp / 3;
+	frl_dfm.config.color_format = get_drm_color_format(crtc_state->output_format);
+
+	/*
+	 * Using fixed 2ch / 48 kHz baseline makes the chosen rate carry video + basic
+	 * stereo (L-PCM), so the guaranteed floor is never pruned.
+	 * Since overhead is only a few packets/line, it almost never bumps the FRL rate,
+	 * but it avoids the situation where a rate is chosen with no room for audio gap.
+	 *
+	 * Everything above the baseline is decided by pruning the ELD at the committed
+	 * rate.
+	 */
+	frl_dfm.config.audio_hz = 48000;
+	frl_dfm.config.audio_channels = 2;
+
+	/*
+	 * Check if the resolution can be supported in FRL mode.
+	 * We try with the lowest FRL rate first — the minimum rate that
+	 * satisfies DFM requirements — for better SI margin and lower power.
+	 */
+	for (i = 0; i < ARRAY_SIZE(rate); i++) {
+		if (rate[i] > max_rate)
+			continue;
+		/* Fill the bw related input parameters */
+		frl_dfm.config.lanes = rate[i] < 24 ? 3 : 4;
+		frl_dfm.config.bit_rate_kbps = (rate[i] * 1000000) / frl_dfm.config.lanes;
+
+		if (intel_hdmi_frl_dfm_nondsc_requirement_met(&frl_dfm)) {
+			can_support_frl_mode = true;
+			break;
+		}
+	}
+
+	if (!can_support_frl_mode) {
+		memset(&crtc_state->frl, 0, sizeof(crtc_state->frl));
+		return -EINVAL;
+	}
+
+	/* Fill crtc_state frl DFM output params */
+	crtc_state->frl.required_lanes = frl_dfm.config.lanes;
+	crtc_state->frl.required_rate = frl_dfm.config.bit_rate_kbps / 1000000;
+	crtc_state->frl.tb_borrowed = frl_dfm.params.tb_borrowed;
+	crtc_state->frl.tb_actual = frl_dfm.params.tb_borrowed / 2;
+	drm_dbg_kms(display->drm, "FRL DFM config: tb_borrowed = %d, tb_actual = %d\n",
+		    crtc_state->frl.tb_borrowed, crtc_state->frl.tb_actual);
+
+	if (frl_dfm.params.tb_borrowed && (frl_dfm.params.tb_borrowed / 2) <= 492)
+		crtc_state->frl.tb_threshold_min = 492 - (frl_dfm.params.tb_borrowed / 2);
+	else
+		crtc_state->frl.tb_threshold_min = 492;
+
+	/*
+	 * TODO
+	 * 1. Calculate condition for Reseource based scheduling enable.
+	 * Disabling resource based scheduling for now.
+	 * 2. Active Character buffer threshold depends on cd clock bw.
+	 * Setting default value of 0.
+	 */
+	crtc_state->frl.rsrc_sched_en = false;
+	crtc_state->frl.active_char_buf_threshold = 0;
+
+	return 0;
+}
+
+static int
+intel_hdmi_compute_frl_clock(struct intel_encoder *encoder,
+			     struct intel_crtc_state *crtc_state)
+{
+	struct intel_hdmi *hdmi = enc_to_intel_hdmi(encoder);
+	int max_bpc = max(crtc_state->pipe_bpp / 3, 8);
+	int port_clock;
+	int bpc;
+
+	for (bpc = max_bpc; bpc >= 8; bpc -= 2) {
+		int ret;
+
+		if (!hdmi_bpc_possible(crtc_state, bpc))
+			continue;
+
+		crtc_state->pipe_bpp = bpc * 3;
+
+		ret = intel_hdmi_compute_frl_config(encoder, crtc_state);
+		if (ret)
+			continue;
+
+		/* Port clock for FRL rates is bitrate in 10Kbps */
+		port_clock = FRL_GBPS_TO_10KBPS(crtc_state->frl.required_rate);
+
+		if (hdmi_port_frl_clock_valid(hdmi, port_clock) == MODE_OK) {
+			crtc_state->port_clock = port_clock;
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
 static int intel_hdmi_compute_clock(struct intel_encoder *encoder,
 				    struct intel_crtc_state *crtc_state,
 				    bool respect_downstream_limits,
 				    bool enable_frl)
 {
 	if (enable_frl)
-		return -EINVAL;
+		return intel_hdmi_compute_frl_clock(encoder, crtc_state);
 
 	return intel_hdmi_compute_tmds_clock(encoder, crtc_state, respect_downstream_limits);
 }
