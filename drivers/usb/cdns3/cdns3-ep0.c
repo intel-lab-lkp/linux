@@ -251,6 +251,9 @@ static int cdns3_req_ep0_get_status(struct cdns3_device *priv_dev,
 		return cdns3_ep0_delegate_req(priv_dev, ctrl);
 	case USB_RECIP_ENDPOINT:
 		index = cdns3_ep_addr_to_index(le16_to_cpu(ctrl->wIndex));
+		if (index >= CDNS3_ENDPOINTS_MAX_COUNT ||
+		    !priv_dev->eps[index])
+			return -EINVAL;
 		priv_ep = priv_dev->eps[index];
 
 		/* check if endpoint is stalled or stall is pending */
@@ -368,6 +371,8 @@ static int cdns3_ep0_feature_handle_endpoint(struct cdns3_device *priv_dev,
 		return 0;
 
 	index = cdns3_ep_addr_to_index(le16_to_cpu(ctrl->wIndex));
+	if (index >= CDNS3_ENDPOINTS_MAX_COUNT || !priv_dev->eps[index])
+		return -EINVAL;
 	priv_ep = priv_dev->eps[index];
 
 	cdns3_select_ep(priv_dev, le16_to_cpu(ctrl->wIndex));
