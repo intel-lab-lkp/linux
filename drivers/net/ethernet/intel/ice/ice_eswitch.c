@@ -566,6 +566,13 @@ static void ice_eswitch_detach(struct ice_pf *pf, struct ice_repr *repr)
 
 	xa_erase(&pf->eswitch.reprs, repr->id);
 
+	/* The Rx path looks the representor up by its id and dereferences the
+	 * result without holding a reference to it. Nothing can find it in the
+	 * xarray anymore, so wait for the polls that picked it up before the
+	 * erase to finish before the representor is torn down.
+	 */
+	synchronize_net();
+
 	if (xa_empty(&pf->eswitch.reprs))
 		ice_eswitch_disable_switchdev(pf);
 
@@ -624,7 +631,8 @@ void ice_eswitch_detach_sf(struct ice_pf *pf, struct ice_dynamic_port *sf)
  * @rx_desc: descriptor used to get src_vsi value
  *
  * Get src_vsi value from descriptor and load correct representor. If it isn't
- * found return rx_ring->netdev.
+ * found return rx_ring->netdev. The caller must hold the RCU read lock, the
+ * returned netdev can go away as soon as the read-side section ends.
  */
 struct net_device *ice_eswitch_get_target(struct ice_rx_ring *rx_ring,
 					  union ice_32b_rx_flex_desc *rx_desc)

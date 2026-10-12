@@ -224,8 +224,16 @@ ice_process_skb_fields(struct ice_rx_ring *rx_ring,
 
 	/* modifies the skb - consumes the enet header */
 	if (unlikely(rx_ring->flags & ICE_RX_FLAGS_MULTIDEV)) {
-		struct net_device *netdev = ice_eswitch_get_target(rx_ring,
-								   rx_desc);
+		struct net_device *netdev;
+
+		/* ice_eswitch_get_target() looks the representor up in the
+		 * eswitch xarray without taking a reference to it, so hold the
+		 * RCU read lock while the netdev it returns is in use.
+		 * ice_eswitch_detach() waits for the section to end before it
+		 * frees the representor.
+		 */
+		rcu_read_lock();
+		netdev = ice_eswitch_get_target(rx_ring, rx_desc);
 
 		if (ice_is_port_repr_netdev(netdev))
 			ice_repr_inc_rx_stats(netdev, skb->len);
@@ -235,6 +243,7 @@ ice_process_skb_fields(struct ice_rx_ring *rx_ring,
 		 */
 		__skb_push(skb, ETH_HLEN);
 		skb->protocol = eth_type_trans(skb, netdev);
+		rcu_read_unlock();
 	}
 
 	ice_rx_csum(rx_ring, skb, rx_desc, ptype);
