@@ -9,6 +9,7 @@
  *
  */
 #include <linux/module.h>
+#include <linux/unaligned.h>
 #include <linux/stddef.h>
 #include <linux/netfilter/x_tables.h>
 #include <linux/netfilter_bridge/ebtables.h>
@@ -46,8 +47,17 @@ ebt_802_3_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	}
 
 	if (info->bitmask & EBT_802_3_TYPE) {
-		type = frame->llc.ui.ctrl & IS_UI ? frame->llc.ui.type :
-						    frame->llc.ni.type;
+		/* IS_UI is the exact UI control field; the S and I formats
+		 * carry two-byte controls, and their type sits at llc offset
+		 * 7 on the wire while the in-kernel hdr_ni has a padding
+		 * byte before its type field.
+		 */
+		if ((frame->llc.ui.ctrl & IS_UI) == IS_UI) {
+			type = frame->llc.ui.type;
+		} else {
+			type = get_unaligned_be16((__be16 *)((u8 *)frame +
+					offsetof(struct ebt_802_3_hdr, llc) + 7));
+		}
 		if (!(frame->llc.ui.dsap == CHECK_TYPE &&
 		      frame->llc.ui.ssap == CHECK_TYPE))
 			return false;
