@@ -264,8 +264,11 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 		mutex_lock(&wq->uc_lock);
 		rc = xa_insert(&wq->upasid_xa, pasid, ctx, GFP_KERNEL);
 		mutex_unlock(&wq->uc_lock);
-		if (rc < 0)
-			dev_warn(dev, "PASID entry already exist in xarray.\n");
+		if (rc < 0) {
+			/* An existing entry is harmless, warn and continue */
+			dev_warn(dev, "PASID entry already exists in xarray.\n");
+			rc = 0;
+		}
 
 		if (wq_dedicated(wq)) {
 			rc = idxd_wq_set_pasid(wq, pasid);
@@ -279,6 +282,7 @@ static int idxd_cdev_open(struct inode *inode, struct file *filp)
 	idxd_cdev = wq->idxd_cdev;
 	ctx->id = ida_alloc(&file_ida, GFP_KERNEL);
 	if (ctx->id < 0) {
+		rc = ctx->id;
 		dev_warn(dev, "ida alloc failure\n");
 		goto failed_ida;
 	}
