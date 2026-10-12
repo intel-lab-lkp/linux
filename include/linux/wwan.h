@@ -57,6 +57,13 @@ struct wwan_port;
  * @tx_blocking: Optional blocking routine that sends WWAN port protocol data
  *               to the device.
  * @tx_poll: Optional routine that sets additional TX poll flags.
+ * @dtr_rts: Optional routine that updates the modem control lines to match
+ *           @mdmbits, the TIOCM_* output bits (DTR, RTS, OUT1, OUT2, LOOP)
+ *           currently set for the port. Called on first open, on last close
+ *           if HUPCL is set, on port removal, and when TIOCMSET, TIOCMBIS or
+ *           TIOCMBIC changes DTR or RTS. Only called for WWAN_PORT_AT ports,
+ *           as only the AT (DUN) port carries the modem's virtual RS-232
+ *           control signals.
  *
  * The wwan_port_ops structure contains a list of low-level operations
  * that control a WWAN port device. All functions are mandatory unless specified.
@@ -70,6 +77,7 @@ struct wwan_port_ops {
 	int (*tx_blocking)(struct wwan_port *port, struct sk_buff *skb);
 	__poll_t (*tx_poll)(struct wwan_port *port, struct file *filp,
 			    poll_table *wait);
+	void (*dtr_rts)(struct wwan_port *port, unsigned int mdmbits);
 };
 
 /** struct wwan_port_caps - The WWAN port capbilities
