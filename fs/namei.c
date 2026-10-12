@@ -2092,6 +2092,11 @@ all_done: // pure jump
  * don't reveal the underyling dentry during refwalk. In rcuwalk we
  * catch this via d_seq and another lookup for the name. Give the same
  * guarantee in refwalk.
+ *
+ * Only a dentry that still had mounts when its name went away matters.
+ * __detach_mounts() marks it before the mounts are detached, so a walk
+ * that doesn't find them anymore sees the mark. Any other dentry is fine
+ * to step onto. The walk found the name before it was removed.
  */
 static bool unlink_may_reveal(struct nameidata *nd, int flags,
 			      struct path *path, struct dentry *dentry)
@@ -2104,10 +2109,10 @@ static bool unlink_may_reveal(struct nameidata *nd, int flags,
 	/* We crossed onto a mount and the name led us here while it still existed */
 	if (path->mnt != nd->path.mnt)
 		return false;
-	/* only a name on its way out is flagged */
-	if (likely(!cant_mount(dentry)))
+	/* only a name that went away while covered is flagged */
+	if (likely(!(READ_ONCE(dentry->d_flags) & DCACHE_UNCOVERED)))
 		return false;
-	if (!d_unlinked(dentry))
+	if (!cant_mount(dentry) || !d_unlinked(dentry))
 		return false;
 	dput(no_free_ptr(path->dentry));
 	return true;
