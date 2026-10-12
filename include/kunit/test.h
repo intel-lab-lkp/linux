@@ -210,6 +210,24 @@ static inline char *kunit_status_to_ok_not_ok(enum kunit_status status)
 		  .generate_params = gen_params, .module_name = KBUILD_MODNAME}
 
 /**
+ * KUNIT_CASE_PARAM_UNIQUE - A helper for creating a parameterized &struct
+ * kunit_case named after both the test and its parameter generator
+ *
+ * @test_name: a reference to a test case function.
+ * @gen_params: a reference to a parameter generator function.
+ *
+ * Identical to KUNIT_CASE_PARAM() except that the case is named
+ * "test_name-gen_params" rather than "test_name". Use this when the same
+ * test function is listed in a suite with more than one parameter generator,
+ * where KUNIT_CASE_PARAM() would give every instance the same name. Test
+ * names must be unique within a suite for the results to be unambiguous and
+ * for filters such as kunit.filter_glob= to be able to select a single case.
+ */
+#define KUNIT_CASE_PARAM_UNIQUE(test_name, gen_params)				\
+		{ .run_case = test_name, .name = #test_name "-" #gen_params,	\
+		  .generate_params = gen_params, .module_name = KBUILD_MODNAME}
+
+/**
  * KUNIT_CASE_PARAM_ATTR - A helper for creating a parameterized &struct
  * kunit_case with attributes
  *
@@ -244,6 +262,29 @@ static inline char *kunit_status_to_ok_not_ok(enum kunit_status status)
  */
 #define KUNIT_CASE_PARAM_WITH_INIT(test_name, gen_params, init, exit)		\
 		{ .run_case = test_name, .name = #test_name,			\
+		  .generate_params = gen_params,				\
+		  .param_init = init, .param_exit = exit,			\
+		  .module_name = KBUILD_MODNAME}
+
+/**
+ * KUNIT_CASE_PARAM_WITH_INIT_UNIQUE - Define a parameterized KUnit test case
+ * with custom param_init() and param_exit() functions, named after both the
+ * test and its param_init() function.
+ * @test_name: The function implementing the test case.
+ * @gen_params: The function to generate parameters for the test case.
+ * @init: A reference to the param_init() function to run before a parameterized test.
+ * @exit: A reference to the param_exit() function to run after a parameterized test.
+ *
+ * Identical to KUNIT_CASE_PARAM_WITH_INIT() except that the case is named
+ * "test_name-init" rather than "test_name". Use this when the same test
+ * function is listed in a suite with more than one param_init() function,
+ * where KUNIT_CASE_PARAM_WITH_INIT() would give every instance the same
+ * name. The param_init() function is used rather than the generator since
+ * tests registering parameter arrays in param_init() all share the generic
+ * kunit_array_gen_params() generator.
+ */
+#define KUNIT_CASE_PARAM_WITH_INIT_UNIQUE(test_name, gen_params, init, exit)	\
+		{ .run_case = test_name, .name = #test_name "-" #init,		\
 		  .generate_params = gen_params,				\
 		  .param_init = init, .param_exit = exit,			\
 		  .module_name = KBUILD_MODNAME}

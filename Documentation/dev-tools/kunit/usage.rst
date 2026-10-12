@@ -662,6 +662,15 @@ Custom Parameter Generator Function:
    You can pass the generator function to the ``KUNIT_CASE_PARAM``
    or ``KUNIT_CASE_PARAM_WITH_INIT`` macros.
 
+   These macros name the test case after the test function. If the same test
+   function is listed in a suite with more than one generator (or, for
+   ``KUNIT_CASE_PARAM_WITH_INIT``, more than one ``param_init()`` function)
+   use ``KUNIT_CASE_PARAM_UNIQUE`` or ``KUNIT_CASE_PARAM_WITH_INIT_UNIQUE``
+   instead. These also include the name of the generator or ``param_init()``
+   function in the test case name, for example ``sha1_test-sha1_gen_params``,
+   so that each case has a distinct name which can be selected with
+   ``kunit.filter_glob=``.
+
    The function receives the previously generated parameter as the ``prev`` argument
    (which is ``NULL`` on the first call) and can also access the parameterized
    test context passed as the ``test`` argument. KUnit calls this function
