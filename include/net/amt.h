@@ -253,10 +253,6 @@ struct amt_tunnel_list {
 	bool			dead;
 	__be16			source_port;
 	__be32			ip4;
-	__be32			nonce;
-	siphash_key_t		key;
-	u64			mac:48,
-				reserved:16;
 	struct rcu_head		rcu;
 	struct hlist_head	groups[];
 };
@@ -336,8 +332,11 @@ struct amt_dev {
 	struct work_struct	event_wq;
 	/* AMT status */
 	enum amt_status		status;
-	/* Generated key */
-	siphash_key_t		key;
+	/* Generated keys.  key[0] is current; key[1] and key[2] are the two
+	 * previous generations, kept so a Request/Update exchange straddling
+	 * one or two secret rotations still verifies (see amt_secret_work()).
+	 */
+	siphash_key_t		key[3];
 	struct sock	  __rcu *sk;
 	u32			max_groups;
 	u32			max_sources;
@@ -394,6 +393,12 @@ struct amt_dev {
 #define AMT_SECRET_TIMEOUT	60000
 #define IANA_AMT_UDP_PORT	2268
 #define AMT_MAX_TUNNELS         128
+/* Per-source tunnel cap.  A single gateway needs at most one tunnel per
+ * family; this stops one verified source endpoint from monopolising the
+ * AMT_MAX_TUNNELS-slot table.  Deployments that legitimately need more behind
+ * one address (e.g. CGNAT) use the configurable net-next per-source bound.
+ */
+#define AMT_MAX_TUNNELS_PER_SRC 16
 #define AMT_MAX_REQS		128
 #define AMT_GW_HLEN (sizeof(struct iphdr) + \
 		     sizeof(struct udphdr) + \
