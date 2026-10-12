@@ -361,9 +361,7 @@ static int ptrace_pokeusr(struct task_struct *child, long regno, long val)
 }
 
 #ifdef CONFIG_HAVE_HW_BREAKPOINT
-static void ptrace_hbptriggered(struct perf_event *bp,
-				struct perf_sample_data *data,
-				struct pt_regs *regs)
+void perf_arch_hwbp_send_sig(struct perf_event *bp)
 {
 	int i;
 	struct arch_hw_breakpoint *bkpt = counter_arch_bp(bp);
@@ -395,8 +393,7 @@ static struct perf_event *ptrace_hbp_create(struct task_struct *tsk, int type)
 	attr.bp_type	= type;
 	attr.disabled	= 1;
 
-	return register_user_hw_breakpoint(&attr, ptrace_hbptriggered, NULL,
-					   tsk);
+	return register_user_hw_breakpoint(&attr, perf_hwbp_notify, NULL, tsk);
 }
 
 /*
