@@ -247,6 +247,20 @@ static void zonefs_inode_update_mode(struct inode *inode)
 	z->z_mode = inode->i_mode;
 }
 
+/*
+ * Make the file system refuse writes after an error. Don't set SB_RDONLY:
+ * that needs sb->s_umount and a proper remount, and setting it while the file
+ * system is frozen makes thaw_super() leave the s_writers rwsems locked.
+ */
+void zonefs_set_emergency_ro(struct super_block *sb)
+{
+	if (sb_rdonly(sb) ||
+	    test_and_set_bit(ZONEFS_SB_EMERGENCY_RO, &ZONEFS_SB(sb)->s_state))
+		return;
+
+	zonefs_warn(sb, "remounting filesystem read-only\n");
+}
+
 static int zonefs_io_error_cb(struct blk_zone *zone, unsigned int idx,
 			      void *data)
 {
@@ -339,13 +353,11 @@ static void zonefs_handle_io_error(struct inode *inode, struct blk_zone *zone,
 		z->z_flags &= ~ZONEFS_ZONE_OPEN;
 
 	/*
-	 * If error=remount-ro was specified, any error result in remounting
-	 * the volume as read-only.
+	 * If error=remount-ro was specified, any error makes the volume
+	 * read-only.
 	 */
-	if ((sbi->s_mount_opts & ZONEFS_MNTOPT_ERRORS_RO) && !sb_rdonly(sb)) {
-		zonefs_warn(sb, "remounting filesystem read-only\n");
-		sb->s_flags |= SB_RDONLY;
-	}
+	if (sbi->s_mount_opts & ZONEFS_MNTOPT_ERRORS_RO)
+		zonefs_set_emergency_ro(sb);
 
 	/*
 	 * Update block usage stats and the inode size  to prevent access to
@@ -404,8 +416,7 @@ void __zonefs_io_error(struct inode *inode, bool write)
 	if (ret != 1) {
 		zonefs_err(sb, "Get inode %llu zone information failed %d\n",
 			   inode->i_ino, ret);
-		zonefs_warn(sb, "remounting filesystem read-only\n");
-		sb->s_flags |= SB_RDONLY;
+		zonefs_set_emergency_ro(sb);
 		return;
 	}
 
@@ -529,6 +540,8 @@ static int zonefs_show_options(struct seq_file *seq, struct dentry *root)
 		seq_puts(seq, ",errors=zone-offline");
 	if (sbi->s_mount_opts & ZONEFS_MNTOPT_ERRORS_REPAIR)
 		seq_puts(seq, ",errors=repair");
+	if (zonefs_emergency_ro(root->d_sb))
+		seq_puts(seq, ",emergency_ro");
 
 	return 0;
 }
@@ -538,6 +551,9 @@ static int zonefs_inode_setattr(struct mnt_idmap *idmap,
 {
 	struct inode *inode = d_inode(dentry);
 	int ret;
+
+	if (unlikely(zonefs_emergency_ro(inode->i_sb)))
+		return -EROFS;
 
 	if (unlikely(IS_IMMUTABLE(inode)))
 		return -EPERM;
@@ -1368,6 +1384,11 @@ static int zonefs_reconfigure(struct fs_context *fc)
 	struct zonefs_context *ctx = fc->fs_private;
 	struct super_block *sb = fc->root->d_sb;
 	struct zonefs_sb_info *sbi = sb->s_fs_info;
+
+	/* An error made the file system read-only until it is unmounted. */
+	if (sb_rdonly(sb) && !(fc->sb_flags & SB_RDONLY) &&
+	    zonefs_emergency_ro(sb))
+		return -EROFS;
 
 	sync_filesystem(fc->root->d_sb);
 	/* Copy new options from ctx into sbi. */
