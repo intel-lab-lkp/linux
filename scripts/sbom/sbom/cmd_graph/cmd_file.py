@@ -50,6 +50,10 @@ class CmdFile:
         with open(cmd_file_path, "rt", encoding="utf-8") as f:
             lines = [line.strip() for line in f.readlines() if line.strip() != "" and not line.startswith("#")]
 
+        # make_prereqs_* is recorded for future use. Ignore it for now to
+        # preserve the existing parser behavior.
+        lines = [line for line in lines if not line.startswith("make_prereqs_")]
+
         # savedcmd
         match = SAVEDCMD_PATTERN.match(lines[0] if lines else "")
         if match is None:
