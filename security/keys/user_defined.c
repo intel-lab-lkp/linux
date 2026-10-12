@@ -15,6 +15,7 @@
 #include "internal.h"
 
 static int logon_vet_description(const char *desc);
+static int user_instantiate(struct key *key, struct key_preparsed_payload *prep);
 
 /*
  * user defined keys take an arbitrary string as the description and an
@@ -24,7 +25,7 @@ struct key_type key_type_user = {
 	.name			= "user",
 	.preparse		= user_preparse,
 	.free_preparse		= user_free_preparse,
-	.instantiate		= generic_key_instantiate,
+	.instantiate		= user_instantiate,
 	.update			= user_update,
 	.revoke			= user_revoke,
 	.destroy		= user_destroy,
@@ -85,6 +86,19 @@ void user_free_preparse(struct key_preparsed_payload *prep)
 	kfree_sensitive(prep->payload.data[0]);
 }
 EXPORT_SYMBOL_GPL(user_free_preparse);
+
+/*
+ * Keep the owner account stable while reserving quota during instantiation.
+ */
+static int user_instantiate(struct key *key, struct key_preparsed_payload *prep)
+{
+	int ret;
+
+	down_read(&key->sem);
+	ret = generic_key_instantiate(key, prep);
+	up_read(&key->sem);
+	return ret;
+}
 
 static void user_free_payload_rcu(struct rcu_head *head)
 {
