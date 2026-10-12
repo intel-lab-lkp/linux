@@ -483,7 +483,7 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 
 	scoped_guard(mutex, &av->isys->mutex) {
 		if (av->isys->need_reset) {
-			ret = -EBUSY;
+			ret = -EIO;
 			goto out_return_buffers;
 		}
 	}
