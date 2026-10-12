@@ -353,15 +353,21 @@ void resctrl_arch_set_closid_rmid(struct task_struct *tsk, u32 closid, u32 rmid)
 	mpam_set_task_partid_pmg(tsk, partid_d, partid_i, pmg_d, pmg_i);
 }
 
+/* Does the request PARTID belong to this control group? */
+static bool resctrl_partid_in_closid(u16 partid, u32 closid)
+{
+	if (cdp_enabled)
+		partid >>= 1;
+
+	return partid == closid;
+}
+
 bool resctrl_arch_match_closid(struct task_struct *tsk, u32 closid)
 {
 	u64 regval = mpam_get_regval(tsk);
-	u32 tsk_closid = FIELD_GET(MPAM0_EL1_PARTID_D, regval);
+	u32 tsk_partid = FIELD_GET(MPAM0_EL1_PARTID_D, regval);
 
-	if (cdp_enabled)
-		tsk_closid >>= 1;
-
-	return tsk_closid == closid;
+	return resctrl_partid_in_closid(tsk_partid, closid);
 }
 
 /* The task's pmg is not unique, the partid must be considered too */
