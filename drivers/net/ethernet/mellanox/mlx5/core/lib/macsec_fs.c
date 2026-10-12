@@ -476,7 +476,6 @@ static int macsec_fs_tx_create(struct mlx5_macsec_fs *macsec_fs)
 	tx_tables->ft_check = flow_table;
 
 	/* Tx check table Default miss group/rule */
-	memset(flow_group_in, 0, inlen);
 	MLX5_SET(create_flow_group_in, flow_group_in, start_flow_index, flow_table->max_fte - 1);
 	MLX5_SET(create_flow_group_in, flow_group_in, end_flow_index, flow_table->max_fte - 1);
 	flow_group = mlx5_create_flow_group(tx_tables->ft_check, flow_group_in);

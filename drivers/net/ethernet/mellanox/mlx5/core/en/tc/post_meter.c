@@ -310,7 +310,6 @@ mlx5e_post_meter_create_mtu_table(struct mlx5e_priv *priv,
 	}
 
 	/* create miss group */
-	memset(flow_group_in, 0, inlen);
 	MLX5_SET(create_flow_group_in, flow_group_in, start_flow_index, 1);
 	MLX5_SET(create_flow_group_in, flow_group_in, end_flow_index, 1);
 	fg = mlx5_create_flow_group(table->ft, flow_group_in);
