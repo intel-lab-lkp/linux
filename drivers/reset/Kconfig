@@ -358,6 +358,18 @@ config RESET_SUNXI
 	help
 	  This enables the reset driver for Allwinner SoCs.
 
+config RESET_TC9564
+	tristate "Toshiba TC9564 reset support"
+	depends on TC9564_PCI
+	select MFD_SYSCON
+	default TC9564_PCI
+	help
+	  This enables support for the reset controller embedded in the
+	  Toshiba TC9564 SoC.  The state of reset lines is controlled
+	  via MMIO to a region managed by a system controller; this
+	  ensures access to the region is coordinated between this and
+	  the clock and XGMAC (stmmac) drivers.
+
 config RESET_TENSTORRENT_ATLANTIS
 	tristate "Tenstorrent atlantis reset driver"
 	depends on ARCH_TENSTORRENT || COMPILE_TEST
