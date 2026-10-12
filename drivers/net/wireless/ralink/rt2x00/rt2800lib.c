@@ -2979,7 +2979,7 @@ static void rt2800_config_channel_rf3053(struct rt2x00_dev *rt2x00dev,
 
 	rfcsr = rt2800_rfcsr_read(rt2x00dev, 6);
 	if (rf->channel >= 1 && rf->channel <= 14)
-		rt2x00_set_field8(&rfcsr, RFCSR6_VCO_IC, 1);
+		rt2x00_set_field8(&rfcsr, RFCSR6_VCO_IC, 2);
 	else if (rf->channel >= 36 && rf->channel <= 64)
 		rt2x00_set_field8(&rfcsr, RFCSR6_VCO_IC, 2);
 	else if (rf->channel >= 100 && rf->channel <= 128)
