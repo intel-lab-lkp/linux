@@ -337,6 +337,11 @@ static inline void kvm_hv_purge_tlb_flush_fifo(struct kvm_vcpu *vcpu)
 		__kvm_hv_purge_tlb_flush_fifo(vcpu, fifo);
 }
 
+static inline void kvm_hv_purge_all_tlb_flush_fifos(struct kvm_vcpu *vcpu)
+{
+	__kvm_hv_purge_tlb_flush_fifo(vcpu, NULL);
+}
+
 static inline bool guest_hv_cpuid_has_l2_tlb_flush(struct kvm_vcpu *vcpu)
 {
 	struct kvm_vcpu_hv *hv_vcpu = to_hv_vcpu(vcpu);
@@ -408,6 +413,7 @@ static inline int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 	return HV_STATUS_ACCESS_DENIED;
 }
 static inline void kvm_hv_purge_tlb_flush_fifo(struct kvm_vcpu *vcpu) {}
+static inline void kvm_hv_purge_all_tlb_flush_fifos(struct kvm_vcpu *vcpu) {}
 static inline bool kvm_hv_synic_has_vector(struct kvm_vcpu *vcpu, int vector)
 {
 	return false;
