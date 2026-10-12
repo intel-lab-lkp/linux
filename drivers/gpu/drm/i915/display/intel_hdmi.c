@@ -1858,9 +1858,9 @@ static bool intel_hdmi_is_ycbcr420(const struct intel_crtc_state *crtc_state)
 	return crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR420;
 }
 
-static int hdmi_port_clock_limit(struct intel_hdmi *hdmi,
-				 bool respect_downstream_limits,
-				 bool has_hdmi_sink)
+static int hdmi_port_tmds_clock_limit(struct intel_hdmi *hdmi,
+				      bool respect_downstream_limits,
+				      bool has_hdmi_sink)
 {
 	struct intel_encoder *encoder = &hdmi_to_dig_port(hdmi)->base;
 	int max_tmds_clock = intel_hdmi_source_max_tmds_clock(encoder);
@@ -1893,8 +1893,8 @@ hdmi_port_clock_valid(struct intel_hdmi *hdmi,
 
 	if (clock < 25000)
 		return MODE_CLOCK_LOW;
-	if (clock > hdmi_port_clock_limit(hdmi, respect_downstream_limits,
-					  has_hdmi_sink))
+	if (clock > hdmi_port_tmds_clock_limit(hdmi, respect_downstream_limits,
+					       has_hdmi_sink))
 		return MODE_CLOCK_HIGH;
 
 	/* GLK DPLL can't generate 446-480 MHz */
