@@ -150,14 +150,17 @@ out:
 static u16 nvmet_bdev_validate_zone_mgmt_recv(struct nvmet_req *req)
 {
 	sector_t sect = nvmet_lba_to_sect(req->ns, req->cmd->zmr.slba);
-	u32 out_bufsize = (le32_to_cpu(req->cmd->zmr.numd) + 1) << 2;
+	u32 numd = le32_to_cpu(req->cmd->zmr.numd);
+	u32 out_bufsize = (numd + 1) << 2;
 
 	if (sect >= get_capacity(req->ns->bdev->bd_disk)) {
 		req->error_loc = offsetof(struct nvme_zone_mgmt_recv_cmd, slba);
 		return NVME_SC_LBA_RANGE | NVME_STATUS_DNR;
 	}
 
-	if (out_bufsize < sizeof(struct nvme_zone_report)) {
+	/* From U32_MAX / 4 up, the byte count wraps and no longer matches NUMD. */
+	if (numd >= U32_MAX / 4 ||
+	    out_bufsize < sizeof(struct nvme_zone_report)) {
 		req->error_loc = offsetof(struct nvme_zone_mgmt_recv_cmd, numd);
 		return NVME_SC_INVALID_FIELD | NVME_STATUS_DNR;
 	}
