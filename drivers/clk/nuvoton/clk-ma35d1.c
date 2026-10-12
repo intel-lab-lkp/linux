@@ -1017,10 +1017,11 @@ static int ma35d1_clocks_probe(struct platform_device *pdev)
 	hws[QEI2_GATE] = ma35d1_clk_gate(dev, "qei2_gate", "pclk1",
 					 clk_base + REG_CLK_APBCLK2, 14);
 
-	hws[ADC_DIV] = ma35d1_reg_adc_clkdiv(dev, "adc_div", hws[PCLK0],
-					     &ma35d1_lock, 0,
-					     clk_base + REG_CLK_CLKDIV4,
-					     4, 17, 0x1ffff);
+	hws[ADC_DIV] = devm_clk_hw_register_divider_parent_hw(dev, "adc_div", hws[PCLK0], 0,
+							      clk_base + REG_CLK_CLKDIV4, 4, 17,
+							      CLK_DIVIDER_EVEN_INTEGERS |
+							      CLK_DIVIDER_ROUND_CLOSEST,
+							      &ma35d1_lock);
 	hws[ADC_GATE] = ma35d1_clk_gate(dev, "adc_gate", "adc_div",
 					clk_base + REG_CLK_APBCLK2, 24);
 
