@@ -10,97 +10,66 @@ import sbom.sbom_logging as sbom_logging
 from sbom.path_utils import PathStr
 
 SAVEDCMD_PATTERN = re.compile(r"^(saved)?cmd_.*?:=\s*(?P<full_command>.+)$")
-SOURCE_PATTERN = re.compile(r"^source.*?:=\s*(?P<source_file>.+)$")
+MAKE_PREREQS_PATTERN = re.compile(r"^make_prereqs_.*?:=\s*(?P<prereqs>.+)$")
+DEPS_ASSIGNMENT_PATTERN = re.compile(r"^deps_.*?:=")
 
 
 @dataclass
 class CmdFile:
     cmd_file_path: PathStr
     savedcmd: str
-    source: PathStr | None = None
+    make_prereqs: list[str] = field(default_factory=list)
     deps: list[str] = field(default_factory=list)
-    make_rules: list[str] = field(default_factory=list)
 
     @classmethod
     def create(cls, cmd_file_path: PathStr) -> "CmdFile | None":
-        """
-        Parses a .cmd file.
-        .cmd files are assumed to have one of the following structures:
-        1. Full Cmd File
-            (saved)?cmd_<output> := <command>
-            source_<output> := <main_input>
-            deps_<output> := \
-            <dependencies>
-            <output> := $(deps_<output>)
-            $(deps_<output>):
+        r"""
+        Parse the following fields from a `.cmd` file:
 
-        2. Command Only Cmd File
-            (saved)?cmd_<output> := <command>
-
-        3. Single Dependency Cmd File
-            (saved)?cmd_<output> := <command>
-            <output> : <dependency>
+        * `(saved)?cmd_<target> := <shell command>` (required) —
+          the shell command Kbuild ran to produce the build target.
+        * `make_prereqs_<target> := <prerequisites>` (required but can be empty) —
+          the non-phony make prerequisites.
+        * `deps_<target> := \` (optional) —
+          additional dependencies not covered by make prerequisites, e.g., headers.
 
         Args:
-            cmd_file_path (Path): absolute Path to a .cmd file
+            cmd_file_path (Path): absolute Path to a `.cmd` file.
 
         Returns:
-            cmd_file (CmdFile): Parsed cmd file.
+            cmd_file (CmdFile): Parsed `.cmd` file or `None` if no `savedcmd` line was found.
         """
         with open(cmd_file_path, "rt", encoding="utf-8") as f:
             lines = [line.strip() for line in f.readlines() if line.strip() != "" and not line.startswith("#")]
 
-        # make_prereqs_* is recorded for future use. Ignore it for now to
-        # preserve the existing parser behavior.
-        lines = [line for line in lines if not line.startswith("make_prereqs_")]
+        savedcmd: str | None = None
+        make_prereqs: list[str] = []
+        deps: list[str] = []
 
-        # savedcmd
-        match = SAVEDCMD_PATTERN.match(lines[0] if lines else "")
-        if match is None:
+        for i, line in enumerate(lines):
+            match = SAVEDCMD_PATTERN.match(line)
+            if match is not None:
+                savedcmd = match.group("full_command")
+                continue
+
+            match = MAKE_PREREQS_PATTERN.match(line)
+            if match is not None:
+                make_prereqs = match.group("prereqs").split()
+                continue
+
+            if DEPS_ASSIGNMENT_PATTERN.match(line):
+                j = i + 1
+                while j < len(lines) and lines[j].endswith("\\"):
+                    deps.append(lines[j].removesuffix("\\").strip())
+                    j += 1
+
+        if savedcmd is None:
             sbom_logging.error(
                 "Skip parsing '{cmd_file_path}' because no 'savedcmd_' command was found.", cmd_file_path=cmd_file_path
             )
             return None
-        savedcmd = match.group("full_command")
 
-        # Command Only Cmd File
-        if len(lines) == 1:
-            return CmdFile(cmd_file_path, savedcmd)
-
-        # Single Dependency Cmd File
-        if len(lines) == 2:
-            parts = lines[1].split(":", 1)
-            if len(parts) != 2:
-                sbom_logging.error(
-                    "Skip parsing '{cmd_file_path}'. Expected dependency line '<output>: <dependency>' but got {second_line}", cmd_file_path=cmd_file_path, second_line=lines[1]
-                )
-                return None
-            dep = parts[1].strip()
-            return CmdFile(cmd_file_path, savedcmd, deps=[dep])
-
-        # Full Cmd File
-        # source
-        line1 = SOURCE_PATTERN.match(lines[1])
-        if line1 is None:
-            sbom_logging.error(
-                "Skip parsing '{cmd_file_path}' because no 'source_' entry was found.", cmd_file_path=cmd_file_path
-            )
-            return CmdFile(cmd_file_path, savedcmd)
-        source = line1.group("source_file")
-
-        # deps
-        deps: list[str] = []
-        i = 3  # lines[2] includes the variable assignment but no actual dependency, so we need to start at lines[3].
-        while i < len(lines):
-            if not lines[i].endswith("\\"):
-                break
-            deps.append(lines[i][:-1].strip())
-            i += 1
-
-        # make_rules
-        make_rules = lines[i:]
-
-        return CmdFile(cmd_file_path, savedcmd, source, deps, make_rules)
+        return CmdFile(cmd_file_path, savedcmd, make_prereqs, deps)
 
     def get_dependencies(
         self: "CmdFile", target_path: PathStr, obj_tree: PathStr, fail_on_unknown_build_command: bool
