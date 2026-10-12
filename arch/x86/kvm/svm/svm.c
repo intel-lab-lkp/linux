@@ -2468,17 +2468,61 @@ static int clgi_interception(struct kvm_vcpu *vcpu)
 
 static int invlpga_interception(struct kvm_vcpu *vcpu)
 {
+	struct vcpu_svm *svm = to_svm(vcpu);
 	/* FIXME: Handle an address size prefix. */
 	gva_t gva = kvm_rax_read(vcpu);
 	u32 asid = kvm_ecx_read(vcpu);
+	int cpu;
 
 	if (nested_svm_check_permissions(vcpu))
 		return 1;
 
 	trace_kvm_invlpga(to_svm(vcpu)->vmcb->save.rip, asid, gva);
 
-	/* Let's treat INVLPGA the same as INVLPG (can be optimized!) */
-	kvm_mmu_invlpg(vcpu, gva);
+	/*
+	 * INVLPG on a non-canonical address is a NOP according to the SDM,
+	 * assume the same behavior from INVLPGA since the APM doesn't specify.
+	 */
+	if (is_noncanonical_invlpg_address(gva, vcpu))
+		return kvm_skip_emulated_instruction(vcpu);
+
+	/*
+	 * If L1 is flushing its own ASID, handle it like INVLPG. Do the same if
+	 * this is an unintercepted INVLPGA from L2, as
+	 * kvm_mmu_free_guest_mode_roots() does not handle being in guest mode.
+	 */
+	if (!asid || is_guest_mode(vcpu)) {
+		kvm_mmu_invlpg(vcpu, gva);
+		return kvm_skip_emulated_instruction(vcpu);
+	}
+
+	/*
+	 * Do nothing if L1 is flushing a different L2 ASID than the one KVM is
+	 * currently tracking.  KVM tracks a single L2 ASID, and performs a TLB
+	 * flush (and MMU resync if needed) when L1 switches ASIDs anyway.
+	 */
+	if (asid != svm->nested.last_asid)
+		return kvm_skip_emulated_instruction(vcpu);
+
+	/*
+	 * Use INVLPGA to flush L2's ASID in hardware if running on the same
+	 * CPU, otherwise fallback to a full ASID flush.
+	 */
+	cpu = get_cpu();
+	if (cpu == svm->nested.vmcb02.cpu)
+		invlpga(gva, svm->nested.asid02);
+	else
+		vmcb_set_flush_asid(svm->nested.vmcb02.ptr);
+	put_cpu();
+
+	/*
+	 * If NPT is disabled, free L2's shadow roots as they may have stale
+	 * translations for the flushed address. Do not sync the mappings for
+	 * the flushed address, as it involves walking L2 shadow page tables
+	 * with L1's MMU context.
+	 */
+	if (!npt_enabled)
+		kvm_mmu_free_guest_mode_roots(vcpu->kvm, &vcpu->arch.root_mmu);
 
 	return kvm_skip_emulated_instruction(vcpu);
 }
