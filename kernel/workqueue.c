@@ -988,7 +988,11 @@ static unsigned long work_offqd_pack_flags(struct work_offq_data *offqd)
  */
 static bool need_more_worker(struct worker_pool *pool)
 {
-	return !list_empty(&pool->worklist) && !pool->nr_running;
+	/*
+	 * wq_worker_running() bumps nr_running without pool->lock. A stale
+	 * read at worst causes a spurious wakeup, so the race is benign.
+	 */
+	return !list_empty(&pool->worklist) && !data_race(pool->nr_running);
 }
 
 /* Can I start working?  Called from busy but !running workers. */
