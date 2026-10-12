@@ -1443,9 +1443,13 @@ static int atomisp_pci_probe(struct pci_dev *pdev, const struct pci_device_id *i
 	return 0;
 
 error_unload_firmware:
+	disable_work_sync(&isp->assert_recovery_work);
 	atomisp_pm_uninit(isp);
+	devm_free_irq(&pdev->dev, pdev->irq, isp);
 	ia_css_unload_firmware();
+	goto error_unregister_entities;
 error_free_irq:
+	disable_work_sync(&isp->assert_recovery_work);
 	devm_free_irq(&pdev->dev, pdev->irq, isp);
 error_unregister_entities:
 	hmm_cleanup();
@@ -1464,15 +1468,19 @@ static void atomisp_pci_remove(struct pci_dev *pdev)
 {
 	struct atomisp_device *isp = pci_get_drvdata(pdev);
 
+	if (!isp->pm_only)
+		disable_work_sync(&isp->assert_recovery_work);
+
 	atomisp_pm_uninit(isp);
 
 	if (isp->pm_only)
 		return;
 
+	devm_free_irq(&pdev->dev, pdev->irq, isp);
+
 	/* Undo ia_css_init() from atomisp_power_on() */
 	atomisp_css_uninit(isp);
 	ia_css_unload_firmware();
-	devm_free_irq(&pdev->dev, pdev->irq, isp);
 	hmm_cleanup();
 
 	atomisp_unregister_entities(isp);
