@@ -402,6 +402,7 @@ static int dlpar_online_cpu(struct device_node *dn)
 			if (get_hard_smp_processor_id(cpu) != thread)
 				continue;
 
+			find_and_update_cpu_nid(cpu);
 			if (!topology_is_primary_thread(cpu)) {
 				if (cpu_smt_control != CPU_SMT_ENABLED)
 					break;
@@ -410,7 +411,6 @@ static int dlpar_online_cpu(struct device_node *dn)
 			}
 
 			cpu_maps_update_done();
-			find_and_update_cpu_nid(cpu);
 			rc = device_online(get_cpu_device(cpu));
 			if (rc) {
 				dlpar_offline_cpu(dn);
