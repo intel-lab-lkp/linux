@@ -21,7 +21,6 @@
 
 /* Queue type specifier */
 /* Avoiding enums to save space */
-#define IA_CSS_QUEUE_TYPE_LOCAL  0
 #define IA_CSS_QUEUE_TYPE_REMOTE 1
 
 /* for DDR Allocated queues,
