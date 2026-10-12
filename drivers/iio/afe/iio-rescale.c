@@ -301,10 +301,9 @@ static int rescale_configure_channel(struct device *dev,
 	}
 
 	chan->info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
-		BIT(IIO_CHAN_INFO_SCALE);
+		BIT(IIO_CHAN_INFO_SCALE) |
+		BIT(IIO_CHAN_INFO_OFFSET);
 
-	if (rescale->offset)
-		chan->info_mask_separate |= BIT(IIO_CHAN_INFO_OFFSET);
 
 	/*
 	 * Using .read_avail() is fringe to begin with and makes no sense
