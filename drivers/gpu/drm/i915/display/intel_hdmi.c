@@ -65,6 +65,7 @@
 #include "intel_hdmi_frl_dfm.h"
 #include "intel_link_bw.h"
 #include "intel_lspcon.h"
+#include "intel_lt_phy.h"
 #include "intel_panel.h"
 #include "intel_pfit.h"
 #include "intel_snps_phy.h"
@@ -1922,6 +1923,20 @@ hdmi_port_tmds_clock_valid(struct intel_hdmi *hdmi,
 	return MODE_OK;
 }
 
+static enum drm_mode_status
+hdmi_port_frl_clock_valid(struct intel_hdmi *hdmi, int clock)
+{
+	struct intel_display *display = to_intel_display(hdmi);
+
+	if (DISPLAY_VER(display) >= 35)
+		return intel_lt_phy_hdmi_frl_rate_valid(clock);
+
+	if (DISPLAY_VER(display) >= 14)
+		return intel_cx0_phy_hdmi_frl_rate_valid(hdmi, clock);
+
+	return MODE_CLOCK_RANGE;
+}
+
 int intel_hdmi_tmds_clock(int clock, int bpc,
 			  enum intel_output_format sink_format)
 {
@@ -2046,6 +2061,7 @@ intel_hdmi_frl_mode_clock_valid(struct intel_connector *connector,
 	struct intel_hdmi_frl_dfm frl_dfm = {};
 	int max_rate = hdmi->max_frl_rate;
 	int lanes = max_rate < 24 ? 3 : 4;
+	int port_clock;
 
 	frl_dfm.config.pixel_clock_nominal_khz = mode->clock;
 	frl_dfm.config.hactive = mode->hdisplay;
@@ -2064,7 +2080,9 @@ intel_hdmi_frl_mode_clock_valid(struct intel_connector *connector,
 	if (!intel_hdmi_frl_dfm_nondsc_requirement_met(&frl_dfm))
 		return MODE_CLOCK_HIGH;
 
-	return MODE_OK;
+	port_clock = FRL_GBPS_TO_10KBPS(max_rate / lanes);
+
+	return hdmi_port_frl_clock_valid(hdmi, port_clock);
 }
 
 static enum drm_mode_status
