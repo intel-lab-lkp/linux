@@ -331,6 +331,8 @@ struct stm32f7_i2c_alert {
  * @dnf_dt: value of digital filter requested via dt
  * @dnf: value of digital filter to apply
  * @alert: SMBus alert specific data
+ * @irq_event: interrupt for events
+ * @irq_error: interrupt for errors, or irq_event for single-line controllers
  * @atomic: boolean indicating that current transfer is atomic
  */
 struct stm32f7_i2c_dev {
@@ -364,6 +366,8 @@ struct stm32f7_i2c_dev {
 	u32 dnf_dt;
 	u32 dnf;
 	struct stm32f7_i2c_alert *alert;
+	int irq_event;
+	int irq_error;
 	bool atomic;
 };
 
@@ -1534,9 +1538,12 @@ static irqreturn_t stm32f7_i2c_handle_isr_errs(struct stm32f7_i2c_dev *i2c_dev, 
 	}
 
 	if (status & STM32F7_I2C_ISR_ALERT) {
+		struct stm32f7_i2c_alert *alert = READ_ONCE(i2c_dev->alert);
+
 		dev_dbg(dev, "SMBus alert received\n");
 		writel_relaxed(STM32F7_I2C_ICR_ALERTCF, base + STM32F7_I2C_ICR);
-		i2c_handle_smbus_alert(i2c_dev->alert->ara);
+		if (alert)
+			i2c_handle_smbus_alert(alert->ara);
 		return IRQ_HANDLED;
 	}
 
@@ -2116,13 +2123,39 @@ static void stm32f7_i2c_disable_smbus_alert(struct stm32f7_i2c_dev *i2c_dev)
 {
 	struct stm32f7_i2c_alert *alert = i2c_dev->alert;
 	void __iomem *base = i2c_dev->base;
+	int ret;
 
-	if (alert) {
-		/* Disable SMBus Alert */
+	if (!alert)
+		return;
+
+	ret = pm_runtime_resume_and_get(i2c_dev->dev);
+	if (ret < 0)
+		dev_warn(i2c_dev->dev, "Failed to resume for SMBus alert shutdown: %d\n", ret);
+
+	/* Exclude transfers and both interrupt handlers while detaching ARA. */
+	i2c_lock_bus(&i2c_dev->adap, I2C_LOCK_ROOT_ADAPTER);
+	disable_irq(i2c_dev->irq_event);
+	if (i2c_dev->irq_error != i2c_dev->irq_event)
+		disable_irq(i2c_dev->irq_error);
+
+	/* Keep late or pending ALERT flags from queuing work on the old ARA. */
+	WRITE_ONCE(i2c_dev->alert, NULL);
+	if (ret >= 0) {
 		stm32f7_i2c_clr_bits(base + STM32F7_I2C_CR1,
 				     STM32F7_I2C_CR1_ALERTEN);
-		i2c_unregister_device(alert->ara);
+		writel_relaxed(STM32F7_I2C_ICR_ALERTCF, base + STM32F7_I2C_ICR);
+		readl(base + STM32F7_I2C_ISR);
 	}
+
+	if (i2c_dev->irq_error != i2c_dev->irq_event)
+		enable_irq(i2c_dev->irq_error);
+	enable_irq(i2c_dev->irq_event);
+	i2c_unlock_bus(&i2c_dev->adap, I2C_LOCK_ROOT_ADAPTER);
+
+	/* The alert worker may need a transfer before its removal completes. */
+	i2c_unregister_device(alert->ara);
+	if (ret >= 0)
+		pm_runtime_put_autosuspend(i2c_dev->dev);
 }
 
 static u32 stm32f7_i2c_func(struct i2c_adapter *adap)
@@ -2178,6 +2211,8 @@ static int stm32f7_i2c_probe(struct platform_device *pdev)
 	irq_event = platform_get_irq(pdev, 0);
 	if (irq_event < 0)
 		return irq_event;
+	i2c_dev->irq_event = irq_event;
+	i2c_dev->irq_error = irq_event;
 
 	i2c_dev->wakeup_src = of_property_read_bool(pdev->dev.of_node,
 						    "wakeup-source");
@@ -2210,6 +2245,7 @@ static int stm32f7_i2c_probe(struct platform_device *pdev)
 		irq_error = platform_get_irq(pdev, 1);
 		if (irq_error < 0)
 			return irq_error;
+		i2c_dev->irq_error = irq_error;
 
 		ret = devm_request_threaded_irq(&pdev->dev, irq_error,
 						NULL,
