@@ -459,10 +459,21 @@ static void gs_read_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct gs_port	*port = ep->driver_data;
 
-	/* Queue all received data until the tty layer is ready for it. */
 	spin_lock(&port->port_lock);
-	list_add_tail(&req->list, &port->read_queue);
-	schedule_delayed_work(&port->push, 0);
+	if (!port->port_usb) {
+		/*
+		 * The port was disconnected: gserial_disconnect() has already
+		 * freed read_pool/read_queue and reset the request counters.
+		 * Free this request now instead of queueing it, otherwise
+		 * gs_rx_push() would return it to read_pool and the next
+		 * gserial_connect() would submit it on the new OUT endpoint.
+		 */
+		gs_free_req(ep, req);
+	} else {
+		/* Queue all received data until the tty layer is ready for it. */
+		list_add_tail(&req->list, &port->read_queue);
+		schedule_delayed_work(&port->push, 0);
+	}
 	spin_unlock(&port->port_lock);
 }
 
