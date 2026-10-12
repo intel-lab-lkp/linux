@@ -820,7 +820,7 @@ void intel_dsc_dp_pps_write(struct intel_encoder *encoder,
 				  sizeof(dp_dsc_pps_sdp));
 }
 
-void intel_dsc_su_et_parameters_configure(struct intel_dsb *dsb, struct intel_encoder *encoder,
+void intel_dsc_su_et_parameters_configure(struct intel_dsb *dsb,
 					  const struct intel_crtc_state *crtc_state, int su_lines)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
