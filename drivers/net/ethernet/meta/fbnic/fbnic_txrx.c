@@ -1037,12 +1037,33 @@ static void fbnic_pkt_prepare(struct fbnic_napi_vector *nv, u64 rcd,
 		return;
 	}
 
-	page = fbnic_page_pool_get_head(qt, hdr_pg_idx);
+	/* The completion describes one frame inside the one
+	 * FBNIC_BD_FRAG_SIZE fragment it names.  fbnic_hdr_pg_start() takes
+	 * the headroom back out of the offset, so an offset below the
+	 * headroom underflows it, and the frame data runs to
+	 * hdr_pg_off + len, which has to stay inside the fragment.
+	 */
+	if (unlikely(hdr_pg_off < FBNIC_RX_HROOM ||
+		     hdr_pg_off + len > FBNIC_BD_FRAG_SIZE)) {
+		pkt->add_frag_failed = true;
+		return;
+	}
 
 	/* Short-cut the end calculation if we know page is fully consumed */
 	hdr_pg_end = FIELD_GET(FBNIC_RCD_AL_PAGE_FIN, rcd) ?
 		     FBNIC_BD_FRAG_SIZE : fbnic_hdr_pg_end(hdr_pg_off, len);
 	hdr_pg_start = fbnic_hdr_pg_start(hdr_pg_off);
+
+	/* fbnic_hdr_pg_end() rounds the frame up to where the next header
+	 * would start, which can be past the end of the fragment when this
+	 * frame is the last one in it.  napi_build_skb() puts the shared
+	 * info at the end of the frame, so hold the frame inside the
+	 * fragment, which is what the FBNIC_RCD_AL_PAGE_FIN case above
+	 * already does.
+	 */
+	hdr_pg_end = min(hdr_pg_end, FBNIC_BD_FRAG_SIZE);
+
+	page = fbnic_page_pool_get_head(qt, hdr_pg_idx);
 
 	headroom = hdr_pg_off - hdr_pg_start + FBNIC_RX_PAD;
 	frame_sz = hdr_pg_end - hdr_pg_start;
@@ -1091,10 +1112,24 @@ static void fbnic_add_rx_frag(struct fbnic_napi_vector *nv, u64 rcd,
 		return;
 	}
 
-	netmem = fbnic_page_pool_get_data(qt, pg_idx);
-
 	truesize = FIELD_GET(FBNIC_RCD_AL_PAGE_FIN, rcd) ?
 		   FBNIC_BD_FRAG_SIZE - pg_off : ALIGN(len, 128);
+
+	/* The data has to stay inside the FBNIC_BD_FRAG_SIZE fragment the
+	 * completion names.
+	 */
+	if (unlikely(pg_off + len > FBNIC_BD_FRAG_SIZE)) {
+		pkt->add_frag_failed = true;
+		return;
+	}
+
+	/* ALIGN() can round the charged size past the end of the fragment
+	 * when this is the last fragment in it, so hold it inside, which is
+	 * what the FBNIC_RCD_AL_PAGE_FIN case above already does.
+	 */
+	truesize = min(truesize, FBNIC_BD_FRAG_SIZE - pg_off);
+
+	netmem = fbnic_page_pool_get_data(qt, pg_idx);
 
 	pg_off += (FBNIC_RCD_AL_BUFF_FRAG_MASK & rcd) *
 		  FBNIC_BD_FRAG_SIZE;
