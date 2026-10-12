@@ -21,7 +21,21 @@ properties:
     maxItems: 1
 
   interrupts:
-    maxItems: 1
+    description:
+      The image input frame-end interrupt must be specified first to remain
+      compatible with drivers that retrieve it by index.
+    minItems: 1
+    items:
+      - description: Image input frame-end interrupt
+      - description: Image input frame-start interrupt
+      - description: Frame-stop processing completion interrupt
+
+  interrupt-names:
+    minItems: 1
+    items:
+      - const: isp_vvalid_ifp
+      - const: isp_vvalid_irp
+      - const: isp_int_fstop
 
   clocks:
     items:
@@ -92,7 +106,11 @@ examples:
                <&cpg 0xd3>;
       reset-names = "reg", "axi", "isp";
 
-      interrupts = <GIC_SPI 861 IRQ_TYPE_EDGE_RISING>;
+      /* RZ/V2H interrupt numbers. */
+      interrupts = <GIC_SPI 861 IRQ_TYPE_EDGE_RISING>,
+                   <GIC_SPI 860 IRQ_TYPE_EDGE_RISING>,
+                   <GIC_SPI 864 IRQ_TYPE_LEVEL_HIGH>;
+      interrupt-names = "isp_vvalid_ifp", "isp_vvalid_irp", "isp_int_fstop";
 
       port {
         ivc_out: endpoint {
