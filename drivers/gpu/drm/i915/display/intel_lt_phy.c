@@ -2419,6 +2419,24 @@ void intel_lt_phy_set_signal_levels(struct intel_encoder *encoder,
 	struct ref_tracker *wakeref;
 	int n_entries, ln;
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
+	/*
+	 * HDMI 2.1 FRL distributes the DDI lanes across the PHY transmitters in
+	 * a fixed, non-identity order unlike DP which uses
+	 * lane = ln / 2, tx = ln % 2. tx selects LT_PHY_TXY_*(tx)
+	 * within the message-bus lane. Indexed [lane_reversal][ddi_lane]; the
+	 * x3 case uses the first three entries of each row.
+	 */
+	static const struct {
+		u8 lane_mask;
+		u8 tx;
+	} frl_lane_map[2][4] = {
+		/* not reversed: LN1_TX1, LN0_TX2, LN0_TX1, LN1_TX2 */
+		{ { INTEL_LT_PHY_LANE1, 0 }, { INTEL_LT_PHY_LANE0, 1 },
+		  { INTEL_LT_PHY_LANE0, 0 }, { INTEL_LT_PHY_LANE1, 1 } },
+		/* reversed:     LN0_TX2, LN1_TX1, LN1_TX2, LN0_TX1 */
+		{ { INTEL_LT_PHY_LANE0, 1 }, { INTEL_LT_PHY_LANE1, 0 },
+		  { INTEL_LT_PHY_LANE1, 1 }, { INTEL_LT_PHY_LANE0, 0 } },
+	};
 
 	if (intel_tc_port_in_tbt_alt_mode(dig_port))
 		return;
@@ -2435,9 +2453,18 @@ void intel_lt_phy_set_signal_levels(struct intel_encoder *encoder,
 
 	for (ln = 0; ln < crtc_state->lane_count; ln++) {
 		int level = intel_ddi_level(encoder, crtc_state, ln);
-		int lane = ln / 2;
-		int tx = ln % 2;
-		u8 lane_mask = lane == 0 ? INTEL_LT_PHY_LANE0 : INTEL_LT_PHY_LANE1;
+		u8 lane_mask;
+		int tx;
+
+		if (crtc_state->frl.enable) {
+			lane_mask = frl_lane_map[dig_port->lane_reversal][ln].lane_mask;
+			tx = frl_lane_map[dig_port->lane_reversal][ln].tx;
+		} else {
+			lane_mask = (ln / 2) == 0 ? INTEL_LT_PHY_LANE0 :
+						    INTEL_LT_PHY_LANE1;
+			tx = ln % 2;
+		}
+
 
 		if (!(lane_mask & owned_lane_mask))
 			continue;
