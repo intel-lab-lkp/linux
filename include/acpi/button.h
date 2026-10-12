@@ -15,4 +15,17 @@ static inline int acpi_lid_open(void)
 }
 #endif /* IS_ENABLED(CONFIG_ACPI_BUTTON) */
 
+/*
+ * sleep.c is built-in and calls this helper. Use IS_REACHABLE so that when
+ * CONFIG_ACPI_BUTTON=m the call site gets an inline stub instead of an
+ * unresolved vmlinux link reference (0day/LKP ERROR).
+ */
+#if IS_REACHABLE(CONFIG_ACPI_BUTTON)
+extern void acpi_button_power_wakeup_pending(void);
+#else
+static inline void acpi_button_power_wakeup_pending(void)
+{
+}
+#endif /* IS_REACHABLE(CONFIG_ACPI_BUTTON) */
+
 #endif /* ACPI_BUTTON_H */
