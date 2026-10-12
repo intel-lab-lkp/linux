@@ -602,6 +602,7 @@ static struct gpu_buddy_block *gpu_block_alloc(struct gpu_buddy *mm,
 	block->header = offset;
 	block->header |= order;
 	block->parent = parent;
+	block->subtree_max_free_order = GPU_BUDDY_NO_FREE_ORDER;
 
 	RB_CLEAR_NODE(&block->rb);
 
@@ -717,6 +718,27 @@ static void rbtree_remove(struct gpu_buddy *mm,
 	RB_CLEAR_NODE(&block->rb);
 }
 
+static void update_subtree_max_free_order(struct gpu_buddy_block *block)
+{
+	while (block) {
+		s8 max_free;
+
+		if (gpu_buddy_block_is_free(block))
+			max_free = gpu_buddy_block_order(block);
+		else if (gpu_buddy_block_is_split(block))
+			max_free = max(block->left->subtree_max_free_order,
+				       block->right->subtree_max_free_order);
+		else
+			max_free = GPU_BUDDY_NO_FREE_ORDER;
+
+		if (block->subtree_max_free_order == max_free)
+			break;
+
+		block->subtree_max_free_order = max_free;
+		block = block->parent;
+	}
+}
+
 static void mark_allocated(struct gpu_buddy *mm,
 			   struct gpu_buddy_block *block)
 {
@@ -729,6 +751,7 @@ static void mark_allocated(struct gpu_buddy *mm,
 	mm->used_scoreboard[gpu_buddy_block_order(block)]++;
 
 	rbtree_remove(mm, block);
+	update_subtree_max_free_order(block);
 }
 
 static void __mark_free(struct gpu_buddy *mm,
@@ -750,6 +773,7 @@ static void __mark_free(struct gpu_buddy *mm,
 	mm->free_scoreboard[gpu_buddy_block_order(block)]++;
 
 	rbtree_insert(mm, block);
+	update_subtree_max_free_order(block);
 }
 
 static void mark_free(struct gpu_buddy *mm,
@@ -772,6 +796,7 @@ static void mark_split(struct gpu_buddy *mm,
 	mm->free_scoreboard[gpu_buddy_block_order(block)]--;
 
 	rbtree_remove(mm, block);
+	update_subtree_max_free_order(block);
 }
 
 static inline bool overlaps(u64 s1, u64 e1, u64 s2, u64 e2)
@@ -868,6 +893,8 @@ int gpu_buddy_init(struct gpu_buddy *mm, u64 size, u64 chunk_size)
 		return -EINVAL;
 
 	size = round_down(size, chunk_size);
+
+	BUILD_BUG_ON(GPU_BUDDY_MAX_ORDER > S8_MAX);
 
 	mm->size = size;
 	mm->avail = size;
@@ -1278,6 +1305,9 @@ __alloc_range_bias(struct gpu_buddy *mm,
 		list_del(&block->tmp_link);
 
 		if (gpu_buddy_block_order(block) < order)
+			continue;
+
+		if (block->subtree_max_free_order < (int)order)
 			continue;
 
 		block_start = gpu_buddy_block_offset(block);
@@ -1881,6 +1911,7 @@ int gpu_buddy_block_trim(struct gpu_buddy *mm,
 	}
 
 	block->parent = parent;
+	update_subtree_max_free_order(parent);
 	return err;
 }
 EXPORT_SYMBOL(gpu_buddy_block_trim);
