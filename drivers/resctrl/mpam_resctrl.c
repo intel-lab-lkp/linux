@@ -62,6 +62,9 @@ static DEFINE_MUTEX(domain_list_lock);
  */
 static bool cdp_enabled;
 
+static u16 resctrl_num_closid = 1;
+static u16 resctrl_num_mon_partid = 1;
+
 /* If resctrl is leveraging extra request PARTIDs for monitoring. */
 static bool resctrl_using_extra_partids;
 
@@ -279,12 +282,12 @@ static bool mpam_resctrl_hide_cdp(enum resctrl_res_level rid)
  */
 u32 resctrl_arch_get_num_closid(struct rdt_resource *ignored)
 {
-	return mpam_partid_max + 1;
+	return resctrl_num_closid;
 }
 
 u32 resctrl_arch_system_num_rmid_idx(void)
 {
-	return (mpam_pmg_max + 1) * (mpam_partid_max + 1);
+	return (mpam_pmg_max + 1) * resctrl_num_mon_partid;
 }
 
 /* The request PARTID and PMG a resctrl RMID maps onto. */
@@ -1927,6 +1930,65 @@ void mpam_resctrl_offline_cpu(unsigned int cpu)
 	}
 }
 
+/*
+ * Decide how the PARTID space is presented to resctrl. This runs once the
+ * classes are known, and before resctrl_init() advertises any limits to
+ * user-space.
+ *
+ * The extra request PARTIDs on a class that implements narrowing can be used
+ * as monitoring groups. That is only safe when no class would lose a
+ * non-aliasing control: its value can not be written to each PARTID of a
+ * control group, whereas an aliasing control's value can. A class that
+ * implements narrowing doesn't have the problem, as its PARTIDs are already
+ * configured as one.
+ *
+ * Every class is considered, including the ones resctrl doesn't use. An
+ * unknown class may gain a resctrl schema later, and using the extra PARTIDs
+ * would prevent that.
+ */
+static void mpam_resctrl_configure_partids(void)
+{
+	struct mpam_class *class;
+	u16 num_closid = mpam_partid_max + 1;
+	bool can_expand = false, blocked = false;
+
+	guard(srcu)(&mpam_srcu);
+	list_for_each_entry_srcu(class, &mpam_classes, classes_list,
+				 srcu_read_lock_held(&mpam_srcu)) {
+		struct mpam_props *cprops = &class->props;
+
+		num_closid = min(num_closid, (u16)(cprops->intpartid_max + 1));
+
+		if (mpam_has_feature(mpam_feat_partid_nrw, cprops)) {
+			if (cprops->intpartid_max < cprops->partid_max)
+				can_expand = true;
+		} else if (mpam_props_has_non_aliasing_controls(cprops)) {
+			pr_debug("class %u has non-aliasing controls without narrowing\n",
+				 class->level);
+			blocked = true;
+		}
+	}
+
+	if (!num_closid)
+		num_closid = 1;
+
+	resctrl_num_closid = num_closid;
+	if (can_expand && !blocked) {
+		resctrl_using_extra_partids = true;
+		resctrl_num_mon_partid = mpam_partid_max + 1;
+	} else {
+		resctrl_using_extra_partids = false;
+		resctrl_num_mon_partid = num_closid;
+	}
+
+	/* Tell the driver how the request PARTIDs map onto control groups. */
+	mpam_partid_map_init(resctrl_num_mon_partid, resctrl_num_closid);
+
+	pr_debug("PARTIDs: monitor=%u closid=%u extra=%u\n",
+		 resctrl_num_mon_partid, resctrl_num_closid,
+		 resctrl_using_extra_partids);
+}
+
 int mpam_resctrl_setup(void)
 {
 	int err = 0;
@@ -1947,6 +2009,9 @@ int mpam_resctrl_setup(void)
 	/* Find some classes to use for controls */
 	mpam_resctrl_pick_caches();
 	mpam_resctrl_pick_mba();
+
+	/* Decide how the request PARTIDs map onto the control groups */
+	mpam_resctrl_configure_partids();
 
 	/* Initialise the resctrl structures from the classes */
 	for_each_mpam_resctrl_control(res, rid) {
@@ -2003,6 +2068,9 @@ void mpam_resctrl_exit(void)
 
 	WRITE_ONCE(resctrl_enabled, false);
 	resctrl_exit();
+
+	/* resctrl is gone: forget how the PARTIDs were grouped. */
+	mpam_partid_map_exit();
 }
 
 static void mpam_resctrl_teardown_mon(struct mpam_resctrl_mon *mon, struct mpam_class *class)

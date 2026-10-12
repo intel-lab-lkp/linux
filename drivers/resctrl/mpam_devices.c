@@ -74,6 +74,18 @@ static DEFINE_SPINLOCK(partid_max_lock);
 static u16 mpam_num_closid;
 static u16 mpam_num_partid;
 
+void mpam_partid_map_init(u16 num_partid, u16 num_closid)
+{
+	mpam_num_partid = num_partid;
+	mpam_num_closid = num_closid;
+}
+
+void mpam_partid_map_exit(void)
+{
+	mpam_num_closid = 0;
+	mpam_num_partid = 0;
+}
+
 /*
  * Map a request PARTID onto its owning control group using modulo
  * interleaving. Without resctrl active, every PARTID maps 1:1 onto itself.
@@ -959,6 +971,9 @@ static void mpam_ris_hw_probe(struct mpam_msc_ris *ris)
 	 * A RIS that implements PARTID narrowing has one configuration per
 	 * internal PARTID, and several request PARTIDs share it. Record both
 	 * limits in the resource properties.
+	 * Keep msc->partid_max at the full request PARTID range. The resctrl
+	 * glue code will broadcast a control group's configuration to every
+	 * request PARTID that maps onto that group's internal PARTID.
 	 */
 	props->partid_max = msc->partid_max;
 	props->intpartid_max = msc->partid_max;
@@ -969,7 +984,6 @@ static void mpam_ris_hw_probe(struct mpam_msc_ris *ris)
 
 		mpam_set_feature(mpam_feat_partid_nrw, props);
 		props->intpartid_max = min(props->intpartid_max, intpartid_max);
-		msc->partid_max = min(msc->partid_max, intpartid_max);
 	}
 }
 
