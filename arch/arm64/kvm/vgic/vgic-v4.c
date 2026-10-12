@@ -467,6 +467,13 @@ int kvm_vgic_v4_set_forwarding(struct kvm *kvm, int virq,
 		goto out_unlock_irq;
 
 	/*
+	 * Silently exit if the LPI has no target vCPU, as one mapped by
+	 * multiple ITEs (UNPREDICTABLE) can have.
+	 */
+	if (!irq->target_vcpu)
+		goto out_unlock_irq;
+
+	/*
 	 * Emit the mapping request. If it fails, the ITS probably
 	 * isn't v4 compatible, so let's silently bail out. Holding
 	 * the ITS lock should ensure that nothing can modify the
