@@ -64,6 +64,7 @@
 #include "intel_hdcp_shim.h"
 #include "intel_hdmi.h"
 #include "intel_hdmi_frl_dfm.h"
+#include "intel_joiner.h"
 #include "intel_link_bw.h"
 #include "intel_lspcon.h"
 #include "intel_lt_phy.h"
@@ -2453,8 +2454,8 @@ intel_hdmi_compute_frl_config(struct intel_encoder *encoder,
 }
 
 static int
-intel_hdmi_compute_frl_clock(struct intel_encoder *encoder,
-			     struct intel_crtc_state *crtc_state)
+_intel_hdmi_compute_frl_clock(struct intel_encoder *encoder,
+			      struct intel_crtc_state *crtc_state)
 {
 	struct intel_hdmi *hdmi = enc_to_intel_hdmi(encoder);
 	int max_bpc = max(crtc_state->pipe_bpp / 3, 8);
@@ -2485,13 +2486,70 @@ intel_hdmi_compute_frl_clock(struct intel_encoder *encoder,
 	return -EINVAL;
 }
 
+static int
+intel_hdmi_compute_clock_for_joined_pipes(struct intel_encoder *encoder,
+					  struct intel_crtc_state *crtc_state,
+					  struct intel_connector *connector)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	int num_joined_pipes = intel_crtc_num_joined_pipes(crtc_state);
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+	int ret;
+
+	if (intel_joiner_needs_dsc(display, num_joined_pipes))
+		return -EINVAL;
+
+	ret = _intel_hdmi_compute_frl_clock(encoder, crtc_state);
+	if (ret || !intel_dp_dotclk_valid(display,
+					  adjusted_mode->crtc_clock,
+					  adjusted_mode->crtc_htotal,
+					  0,
+					  num_joined_pipes))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int
+intel_hdmi_compute_frl_clock(struct intel_encoder *encoder,
+			     struct intel_crtc_state *crtc_state,
+			     struct intel_connector *connector)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+	int num_joined_pipes;
+	int ret = -EINVAL;
+
+	for_each_joiner_candidate(connector, adjusted_mode, num_joined_pipes) {
+		if (!(intel_joiner_valid_primary_pipe_mask(display, num_joined_pipes) & BIT(crtc->pipe)))
+			continue;
+
+		if (num_joined_pipes > 1)
+			crtc_state->joiner_pipes = GENMASK(crtc->pipe + num_joined_pipes - 1,
+							   crtc->pipe);
+		ret = intel_hdmi_compute_clock_for_joined_pipes(encoder, crtc_state, connector);
+
+		if (ret == 0)
+			break;
+	}
+
+	if (ret < 0)
+		crtc_state->joiner_pipes = 0;
+
+	return ret;
+}
+
 static int intel_hdmi_compute_clock(struct intel_encoder *encoder,
 				    struct intel_crtc_state *crtc_state,
+				    struct intel_connector *connector,
 				    bool respect_downstream_limits,
 				    bool enable_frl)
 {
 	if (enable_frl)
-		return intel_hdmi_compute_frl_clock(encoder, crtc_state);
+		return intel_hdmi_compute_frl_clock(encoder, crtc_state, connector);
 
 	return intel_hdmi_compute_tmds_clock(encoder, crtc_state, respect_downstream_limits);
 }
@@ -2563,7 +2621,8 @@ static int intel_hdmi_compute_output_format(struct intel_encoder *encoder,
 	crtc_state->sink_format = sink_format;
 	crtc_state->output_format = intel_hdmi_output_format(crtc_state);
 
-	return intel_hdmi_compute_clock(encoder, crtc_state, respect_downstream_limits, enable_frl);
+	return intel_hdmi_compute_clock(encoder, crtc_state, connector,
+					respect_downstream_limits, enable_frl);
 }
 
 static int _intel_hdmi_compute_formats(struct intel_encoder *encoder,
