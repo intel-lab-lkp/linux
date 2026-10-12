@@ -84,5 +84,6 @@ void intel_lnl_mac_transmit_lfps(struct intel_encoder *encoder,
 void intel_mtl_tbt_pll_enable(struct intel_encoder *encoder,
 			      const struct intel_crtc_state *crtc_state);
 void intel_mtl_tbt_pll_disable(struct intel_encoder *encoder);
+enum drm_mode_status intel_cx0_phy_hdmi_frl_rate_valid(struct intel_hdmi *hdmi, int clock_rate);
 
 #endif /* __INTEL_CX0_PHY_H__ */

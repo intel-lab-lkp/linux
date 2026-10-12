@@ -3870,3 +3870,26 @@ void intel_cx0pll_verify_plls(struct intel_display *display)
 	intel_cx0pll_verify_tables(display, xe3lpd_c20_dp_edp_tables);
 	intel_cx0pll_verify_tables(display, mtl_c20_hdmi_tables);
 }
+
+enum drm_mode_status
+intel_cx0_phy_hdmi_frl_rate_valid(struct intel_hdmi *hdmi, int clock_rate)
+{
+	struct intel_digital_port *dig_port = hdmi_to_dig_port(hdmi);
+	const struct intel_cx0pll_params *tables;
+	int i;
+
+	if (intel_encoder_is_c10phy(&dig_port->base))
+		tables = mtl_c10_hdmi_tables;
+	else
+		tables = mtl_c20_hdmi_tables;
+
+	for (i = 0; tables[i].name; i++) {
+		if (!intel_hdmi_is_frl(tables[i].clock_rate))
+			continue;
+
+		if (clock_rate == tables[i].clock_rate)
+			return MODE_OK;
+	}
+
+	return MODE_CLOCK_RANGE;
+}
