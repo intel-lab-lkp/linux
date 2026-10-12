@@ -49,6 +49,12 @@ void vivaldi_feature_mapping(struct hid_device *hdev,
 	if (fn_key > data->num_function_row_keys)
 		data->num_function_row_keys = fn_key;
 
+	if (usage->usage_index) {
+		data->function_row_physmap[fn_key - MIN_FN_ROW_KEY] =
+			field->value[usage->usage_index];
+		return;
+	}
+
 	report_data = buf = hid_alloc_report_buf(report, GFP_KERNEL);
 	if (!report_data)
 		return;
