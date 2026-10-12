@@ -39,8 +39,21 @@ chacha_crypt_generic(struct chacha_state *state, u8 *dst, const u8 *src,
 #endif
 
 void chacha_crypt(struct chacha_state *state, u8 *dst, const u8 *src,
-		  unsigned int bytes, int nrounds)
+		  size_t bytes, int nrounds)
 {
+	/*
+	 * chacha_crypt_arch() takes an unsigned int length.  Process longer
+	 * messages in chunks that are a multiple of CHACHA_BLOCK_SIZE, so that
+	 * the keystream continues correctly from one chunk to the next.
+	 */
+	while (bytes > UINT_MAX) {
+		unsigned int l = round_down(UINT_MAX, CHACHA_BLOCK_SIZE);
+
+		chacha_crypt_arch(state, dst, src, l, nrounds);
+		dst += l;
+		src += l;
+		bytes -= l;
+	}
 	chacha_crypt_arch(state, dst, src, bytes, nrounds);
 }
 EXPORT_SYMBOL_GPL(chacha_crypt);
