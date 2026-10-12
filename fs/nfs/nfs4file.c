@@ -120,6 +120,10 @@ nfs4_file_flush(struct file *file, fl_owner_t id)
 	nfs_inc_stats(inode, NFSIOS_VFSFLUSH);
 	if ((file->f_mode & FMODE_WRITE) == 0)
 		return 0;
+	if (nfs_current_task_killed()) {
+		nfs_flush_killed(inode);
+		return 0;
+	}
 
 	/*
 	 * If we're holding a write delegation, then check if we're required
@@ -130,7 +134,7 @@ nfs4_file_flush(struct file *file, fl_owner_t id)
 
 	/* Flush writes to the server and return any errors */
 	since = filemap_sample_wb_err(file->f_mapping);
-	nfs_wb_all(inode);
+	nfs_wb_all_close(inode);
 	return filemap_check_wb_err(file->f_mapping, since);
 }
 

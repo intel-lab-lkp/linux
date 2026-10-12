@@ -1332,7 +1332,11 @@ void nfs_file_clear_open_context(struct file *filp)
 		if (ctx->error < 0)
 			invalidate_inode_pages2(inode->i_mapping);
 		filp->private_data = NULL;
-		put_nfs_open_context_sync(ctx);
+		/* A killed task must not wait for the CLOSE */
+		if (nfs_current_task_killed())
+			put_nfs_open_context(ctx);
+		else
+			put_nfs_open_context_sync(ctx);
 	}
 }
 

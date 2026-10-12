@@ -592,6 +592,8 @@ int  nfs_show_stats(struct seq_file *, struct dentry *);
 int  nfs_reconfigure(struct fs_context *);
 
 /* write.c */
+extern void nfs_flush_killed(struct inode *inode);
+extern int nfs_wb_all_close(struct inode *inode);
 extern int nfs_file_write_and_wait_range(struct file *file, loff_t start,
 					 loff_t end);
 extern void nfs_pageio_init_write(struct nfs_pageio_descriptor *pgio,
@@ -935,6 +937,42 @@ static inline u32 nfs_stateid_hash(const nfs4_stateid *stateid)
 static inline bool nfs_current_task_exiting(void)
 {
 	return (current->flags & PF_EXITING) != 0;
+}
+
+/*
+ * Is the current thread group being killed by a signal, i.e. will waitpid()
+ * report WIFSIGNALED?  An ordinary exit() or exit_group() records a status
+ * with the low seven bits clear, even though exit_group() sends SIGKILL to
+ * the other threads.  Read the group exit flag and status under siglock.
+ * Kernel threads exit with arbitrary codes.
+ */
+static inline bool nfs_current_group_killed(void)
+{
+	struct task_struct *tsk = current;
+	const struct signal_struct *sig = tsk->signal;
+	bool killed;
+
+	if (tsk->flags & PF_KTHREAD)
+		return false;
+	spin_lock_irq(&tsk->sighand->siglock);
+	killed = (sig->flags & SIGNAL_GROUP_EXIT) &&
+		 (sig->group_exit_code & 0x7f);
+	spin_unlock_irq(&tsk->sighand->siglock);
+	return killed;
+}
+
+/*
+ * Is the current task dying because its thread group was killed?  It either
+ * still has the SIGKILL pending, e.g. while close(2) finishes, or is exiting
+ * and can no longer be signalled.  Either way it must not wait for the
+ * server when it closes files.  A thread writing a core dump has neither,
+ * unless the dump is aborted with SIGKILL.
+ */
+static inline bool nfs_current_task_killed(void)
+{
+	if (!(current->flags & PF_EXITING) && !fatal_signal_pending(current))
+		return false;
+	return nfs_current_group_killed();
 }
 
 static inline bool nfs_error_is_fatal(int err)
