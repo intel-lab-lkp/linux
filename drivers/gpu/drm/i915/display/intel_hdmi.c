@@ -1884,9 +1884,9 @@ static int hdmi_port_tmds_clock_limit(struct intel_hdmi *hdmi,
 }
 
 static enum drm_mode_status
-hdmi_port_clock_valid(struct intel_hdmi *hdmi,
-		      int clock, bool respect_downstream_limits,
-		      bool has_hdmi_sink)
+hdmi_port_tmds_clock_valid(struct intel_hdmi *hdmi,
+			   int clock, bool respect_downstream_limits,
+			   bool has_hdmi_sink)
 {
 	struct intel_display *display = to_intel_display(hdmi);
 	struct intel_encoder *encoder = &hdmi_to_dig_port(hdmi)->base;
@@ -2010,7 +2010,7 @@ intel_hdmi_mode_clock_valid(struct drm_connector *_connector, int clock,
 						  sink_format))
 			continue;
 
-		status = hdmi_port_clock_valid(hdmi, tmds_clock, true, has_hdmi_sink);
+		status = hdmi_port_tmds_clock_valid(hdmi, tmds_clock, true, has_hdmi_sink);
 		if (status == MODE_OK)
 			return MODE_OK;
 	}
@@ -2186,9 +2186,9 @@ static int intel_hdmi_compute_bpc(struct intel_encoder *encoder,
 						       crtc_state->sink_format);
 
 		if (hdmi_bpc_possible(crtc_state, bpc) &&
-		    hdmi_port_clock_valid(intel_hdmi, tmds_clock,
-					  respect_downstream_limits,
-					  crtc_state->has_hdmi_sink) == MODE_OK)
+		    hdmi_port_tmds_clock_valid(intel_hdmi, tmds_clock,
+					       respect_downstream_limits,
+					       crtc_state->has_hdmi_sink) == MODE_OK)
 			return bpc;
 	}
 
