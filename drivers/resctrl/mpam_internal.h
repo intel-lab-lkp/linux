@@ -221,6 +221,24 @@ struct mpam_props {
 #define mpam_set_feature(_feat, x)	__set_bit(_feat, (x)->features)
 #define mpam_clear_feature(_feat, x)	__clear_bit(_feat, (x)->features)
 
+/*
+ * A non-aliasing control (e.g. a cache capacity) can't be presented by
+ * writing the same value to several PARTIDs: its value is additive, two 50%
+ * values add up to 100%. An aliasing control (e.g. a cache portion bitmap)
+ * shares the resource, so the same value written to each PARTID keeps its
+ * meaning.
+ */
+static inline bool
+mpam_props_has_non_aliasing_controls(const struct mpam_props *props)
+{
+	return mpam_has_feature(mpam_feat_mbw_max, props) ||
+	       mpam_has_feature(mpam_feat_mbw_min, props) ||
+	       mpam_has_feature(mpam_feat_mbw_prop, props) ||
+	       mpam_has_feature(mpam_feat_cmax_cmax, props) ||
+	       mpam_has_feature(mpam_feat_cmax_cmin, props) ||
+	       mpam_has_feature(mpam_feat_cmax_softlim, props);
+}
+
 /* Workaround bits for msc->quirks */
 enum mpam_device_quirks {
 	T241_SCRUB_SHADOW_REGS,
