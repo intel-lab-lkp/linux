@@ -285,6 +285,7 @@ static int drm_connector_init_only(struct drm_device *dev,
 	mutex_init(&connector->edid_override_mutex);
 	mutex_init(&connector->hdmi.infoframes.lock);
 	mutex_init(&connector->hdmi_audio.lock);
+	mutex_init(&connector->dp.mutex);
 	connector->edid_blob_ptr = NULL;
 	connector->epoch_counter = 0;
 	connector->tile_blob_ptr = NULL;
@@ -940,6 +941,16 @@ void drm_connector_cleanup(struct drm_connector *connector)
 		drm_mode_put_tile_group(dev, connector->tile_group);
 		connector->tile_group = NULL;
 	}
+
+	scoped_guard(mutex, &connector->dp.mutex) {
+		kfree(connector->dp.source_link_caps.link_rates);
+		connector->dp.source_link_caps.link_rates = NULL;
+		kfree(connector->dp.sink_link_caps.link_rates);
+		connector->dp.sink_link_caps.link_rates = NULL;
+		kfree(connector->dp.cur_link_info.link_rates);
+		connector->dp.cur_link_info.link_rates = NULL;
+	}
+	mutex_destroy(&connector->dp.mutex);
 
 	list_for_each_entry_safe(mode, t, &connector->probed_modes, head)
 		drm_mode_remove(connector, mode);

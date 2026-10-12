@@ -10,4 +10,5 @@ void drm_sysfs_hotplug_event(struct drm_device *dev);
 void drm_sysfs_connector_hotplug_event(struct drm_connector *connector);
 void drm_sysfs_connector_property_event(struct drm_connector *connector,
 					struct drm_property *property);
+void drm_sysfs_connector_dp_link_update(struct drm_connector *connector);
 #endif

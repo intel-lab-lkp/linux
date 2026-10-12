@@ -340,6 +340,149 @@ static const struct attribute_group *connector_dev_groups[] = {
 	NULL
 };
 
+static ssize_t drm_link_rates_show(int num_link_rates, const int *link_rates, char *buf)
+{
+	ssize_t size = 0;
+
+	if (!num_link_rates)
+		return 0;
+
+	/* We are using deca-kbps in the kernel historically, due to
+	 * calculation over the link rates that could overflow 32 bits.
+	 * Report link rates in kbps to avoid confusing the user
+	 */
+	size += sysfs_emit_at(buf, size, "%d", link_rates[0] * 10);
+	for (int i = 1; i < num_link_rates; i++)
+		size += sysfs_emit_at(buf, size, " %d", link_rates[i] * 10);
+
+	size += sysfs_emit_at(buf, size, "\n");
+	return size;
+}
+
+#define DRM_CONNECTOR_DP_ATTR_SHOW_LINK_RATES_NESTED(_name)                    \
+static ssize_t _name##_link_rates_show(struct device *device,                  \
+			    struct device_attribute *attr,                     \
+			    char *buf)                                         \
+{                                                                              \
+	struct drm_connector *connector = to_drm_connector(device);            \
+	ssize_t size;                                                          \
+	scoped_guard(mutex, &connector->dp.mutex)			       \
+		size = drm_link_rates_show(connector->dp._name.nlink_rates,    \
+					   connector->dp._name.link_rates, buf); \
+	return size;                                                           \
+}
+
+#define DRM_CONNECTOR_DP_ATTR_SHOW_SIMPLE_NESTED(_name, _info)                 \
+static ssize_t _name##_##_info##_show(struct device *device,                   \
+				   struct device_attribute *attr,              \
+				   char *buf)                                  \
+{                                                                              \
+	struct drm_connector *connector = to_drm_connector(device);            \
+	ssize_t size;                                                          \
+	scoped_guard(mutex, &connector->dp.mutex)			       \
+		size = sysfs_emit(buf, "%d\n", connector->dp._name._info);     \
+	return size;                                                           \
+}
+
+static ssize_t cur_link_info_link_rate_show(struct device *device,
+					    struct device_attribute *attr,
+					    char *buf)
+{
+	struct drm_connector *connector = to_drm_connector(device);
+	ssize_t size;
+
+	scoped_guard(mutex, &connector->dp.mutex)
+		size = drm_link_rates_show(connector->dp.cur_link_info.nlink_rates,
+					   connector->dp.cur_link_info.link_rates, buf);
+	return size;
+}
+
+DRM_CONNECTOR_DP_ATTR_SHOW_SIMPLE_NESTED(source_link_caps, nlanes);
+DRM_CONNECTOR_DP_ATTR_SHOW_LINK_RATES_NESTED(source_link_caps);
+DRM_CONNECTOR_DP_ATTR_SHOW_SIMPLE_NESTED(source_link_caps, dsc);
+DRM_CONNECTOR_DP_ATTR_SHOW_SIMPLE_NESTED(sink_link_caps, nlanes);
+DRM_CONNECTOR_DP_ATTR_SHOW_LINK_RATES_NESTED(sink_link_caps);
+DRM_CONNECTOR_DP_ATTR_SHOW_SIMPLE_NESTED(sink_link_caps, dsc);
+DRM_CONNECTOR_DP_ATTR_SHOW_SIMPLE_NESTED(cur_link_info, nlanes);
+DRM_CONNECTOR_DP_ATTR_SHOW_SIMPLE_NESTED(cur_link_info, dsc);
+
+static DEVICE_ATTR_RO(source_link_caps_nlanes);
+static DEVICE_ATTR_RO(source_link_caps_link_rates);
+static DEVICE_ATTR_RO(source_link_caps_dsc);
+static DEVICE_ATTR_RO(sink_link_caps_nlanes);
+static DEVICE_ATTR_RO(sink_link_caps_link_rates);
+static DEVICE_ATTR_RO(sink_link_caps_dsc);
+static DEVICE_ATTR_RO(cur_link_info_nlanes);
+static DEVICE_ATTR_RO(cur_link_info_link_rate);
+static DEVICE_ATTR_RO(cur_link_info_dsc);
+
+static struct attribute *connector_dp_link_attrs[] = {
+	&dev_attr_source_link_caps_nlanes.attr,
+	&dev_attr_source_link_caps_link_rates.attr,
+	&dev_attr_source_link_caps_dsc.attr,
+	&dev_attr_sink_link_caps_nlanes.attr,
+	&dev_attr_sink_link_caps_link_rates.attr,
+	&dev_attr_sink_link_caps_dsc.attr,
+	&dev_attr_cur_link_info_nlanes.attr,
+	&dev_attr_cur_link_info_link_rate.attr,
+	&dev_attr_cur_link_info_dsc.attr,
+	NULL
+};
+
+static umode_t dp_link_attr_visible(struct kobject *kobj,
+				    struct attribute *a, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct drm_connector *connector = to_drm_connector(dev);
+	struct drm_connector_dp_link_caps *caps;
+
+	if (a == &dev_attr_source_link_caps_nlanes.attr ||
+	    a == &dev_attr_source_link_caps_link_rates.attr ||
+	    a == &dev_attr_source_link_caps_dsc.attr)
+		caps = &connector->dp.source_link_caps;
+	else if (a == &dev_attr_sink_link_caps_nlanes.attr ||
+		 a == &dev_attr_sink_link_caps_link_rates.attr ||
+		 a == &dev_attr_sink_link_caps_dsc.attr)
+		caps = &connector->dp.sink_link_caps;
+	else
+		caps = &connector->dp.cur_link_info;
+
+	/* Checking nlanes is enough to decide whether the attributes should
+	 * be exposed: without lanes there is no working DisplayPort link
+	 */
+	return caps->nlanes ? a->mode : 0;
+}
+
+static const struct attribute_group connector_dp_link_group = {
+	.name = "dp_link",
+	.attrs = connector_dp_link_attrs,
+	.is_visible = dp_link_attr_visible,
+};
+
+/**
+ * drm_sysfs_connector_dp_link_update - Update the visibility of the DP link
+ *                                      attributes
+ * @connector: DisplayPort connector
+ */
+void drm_sysfs_connector_dp_link_update(struct drm_connector *connector)
+{
+	int ret;
+
+	if (!connector->kdev)
+		return;
+
+	if (connector->connector_type != DRM_MODE_CONNECTOR_DisplayPort &&
+	    connector->connector_type != DRM_MODE_CONNECTOR_eDP)
+		return;
+
+	ret = sysfs_update_group(&connector->kdev->kobj,
+				 &connector_dp_link_group);
+	if (ret)
+		drm_err(connector->dev,
+			"failed to update DP link sysfs attributes: %d\n", ret);
+}
+EXPORT_SYMBOL_GPL(drm_sysfs_connector_dp_link_update);
+
 int drm_sysfs_connector_add(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
@@ -376,6 +519,15 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 
 	connector->kdev = kdev;
 
+	if (connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort ||
+	    connector->connector_type == DRM_MODE_CONNECTOR_eDP) {
+		r = sysfs_create_group(&connector->kdev->kobj, &connector_dp_link_group);
+		if (r) {
+			drm_err(dev, "failed to create DP connector sysfs: %d\n", r);
+			goto err_dp_sysfs;
+		}
+	}
+
 	if (dev_fwnode(kdev)) {
 		r = component_add(kdev, &typec_connector_ops);
 		if (r)
@@ -384,6 +536,9 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 
 	return 0;
 
+err_dp_sysfs:
+	connector->kdev = NULL;
+	device_del(kdev);
 err_free:
 	put_device(kdev);
 	return r;

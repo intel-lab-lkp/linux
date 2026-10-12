@@ -40,6 +40,7 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_fixed.h>
 #include <drm/drm_print.h>
+#include <drm/drm_sysfs.h>
 #include <drm/drm_vblank.h>
 #include <drm/drm_panel.h>
 
@@ -5119,6 +5120,30 @@ int drm_dp_read_dpcd_sink_rates(struct drm_dp_aux *aux,
 EXPORT_SYMBOL_GPL(drm_dp_read_dpcd_sink_rates);
 
 /**
+ * drm_dp_get_max_lane_count - Get the max lane count from DPCD and LTTPR
+ *			       capabilities
+ * @dpcd: DPCD receiver capabilities
+ * @lttpr_common_caps: LTTPR common capabilities (NULL if no LTTPR supported)
+ *
+ * Returns: Number of max lane count
+ */
+int drm_dp_get_max_lane_count(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
+			      const u8 lttpr_common_caps[DP_LTTPR_COMMON_CAP_SIZE])
+{
+	int nlanes, lttpr_nlanes;
+
+	nlanes = dpcd[DP_MAX_LANE_COUNT] & DP_MAX_LANE_COUNT_MASK;
+	if (lttpr_common_caps) {
+		lttpr_nlanes = drm_dp_lttpr_max_lane_count(lttpr_common_caps);
+		if (lttpr_nlanes)
+			nlanes = min(nlanes, lttpr_nlanes);
+	}
+
+	return nlanes;
+}
+EXPORT_SYMBOL_GPL(drm_dp_get_max_lane_count);
+
+/**
  * drm_dp_read_edp_sink_rates() - read the sink rates from the eDP DPCD
  * @aux: DisplayPort AUX channel
  * @edp_dpcd_rev: eDP DPCD revision of the sink
@@ -5179,3 +5204,282 @@ int drm_dp_read_dsc_dpcd(struct drm_dp_aux *aux,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(drm_dp_read_dsc_dpcd);
+
+static int drm_dp_copy_caps(struct drm_connector_dp_link_caps *dest_caps,
+			    const struct drm_connector_dp_link_caps *src_caps)
+{
+	int *link_rates = NULL;
+	int nlink_rates = 0;
+
+	if (src_caps->link_rates && src_caps->nlink_rates > 0) {
+		link_rates = kmemdup_array(src_caps->link_rates,
+					   src_caps->nlink_rates,
+					   sizeof(*src_caps->link_rates),
+					   GFP_KERNEL);
+		if (!link_rates)
+			return -ENOMEM;
+
+		nlink_rates = src_caps->nlink_rates;
+	}
+
+	kfree(dest_caps->link_rates);
+
+	dest_caps->nlanes = src_caps->nlanes;
+	dest_caps->nlink_rates = nlink_rates;
+	dest_caps->link_rates = link_rates;
+	dest_caps->dsc = src_caps->dsc;
+
+	return 0;
+}
+
+/**
+ * drm_dp_source_set_caps - Set DisplayPort source capabilities
+ * @connector: DisplayPort connector
+ * @link_caps: DisplayPort link training capabilities. The link_rates pointer
+ *	       is not kept by the DRM core
+ *
+ * This function sets the DisplayPort source link training capabilities
+ * for the given connector. This function has to be called after
+ * drm_connector_init() and before drm_dev_register().
+ */
+int drm_dp_source_set_caps(struct drm_connector *connector,
+			   const struct drm_connector_dp_link_caps *link_caps)
+{
+	int ret;
+
+	if (!connector)
+		return -ENODEV;
+
+	if (!(connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort ||
+	      connector->connector_type == DRM_MODE_CONNECTOR_eDP))
+		return -EINVAL;
+
+	WARN_ON(connector->dev->registered);
+
+	/* No need to take the dp mutex as the connector sysfs is not yet
+	 * created
+	 */
+	ret = drm_dp_copy_caps(&connector->dp.source_link_caps, link_caps);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(drm_dp_source_set_caps);
+
+/**
+ * drm_dp_sink_set_caps - Set DisplayPort sink link capabilities
+ * @connector: DisplayPort connector
+ * @link_caps: DisplayPort link training capabilities. The link_rates pointer
+ *	       is not kept by the DRM core
+ *
+ * This function sets the DisplayPort sink (monitor) link training
+ * capabilities for the given connector. This function lets the controller
+ * driver read the DPCD on its own, to avoid too many read of the same
+ * DPCD data.
+ * This should be called when a sink is connected.
+ *
+ * Returns: 0 if the capabilities were set successfully, negative error code
+ * otherwise.
+ */
+int drm_dp_sink_set_caps(struct drm_connector *connector,
+			 const struct drm_connector_dp_link_caps *link_caps)
+{
+	int ret;
+
+	if (!connector)
+		return -ENODEV;
+
+	drm_modeset_lock_assert_held(&connector->dev->mode_config.connection_mutex);
+
+	scoped_guard(mutex, &connector->dp.mutex) {
+		ret = drm_dp_copy_caps(&connector->dp.sink_link_caps, link_caps);
+		if (ret)
+			return ret;
+
+		drm_sysfs_connector_dp_link_update(connector);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(drm_dp_sink_set_caps);
+
+/**
+ * drm_dp_sink_sync_caps - Fetch and set DisplayPort sink link capabilities
+ * @connector: DisplayPort connector
+ * @aux: DisplayPort AUX channel
+ * @tunnel: Tunnel object (NULL if not supported)
+ *
+ * This function fetches the DisplayPort sink link capabilities from DPCD and
+ * sets them for the given connector.
+ * This should be called when a sink is connected.
+ *
+ * Returns: 0 if the capabilities were fetched and set successfully, negative
+ * error code otherwise.
+ */
+int drm_dp_sink_sync_caps(struct drm_connector *connector, struct drm_dp_aux *aux,
+			  const struct drm_dp_tunnel *tunnel)
+{
+	u8 lttpr_common_caps[DP_LTTPR_COMMON_CAP_SIZE] = {0};
+	struct drm_connector_dp_link_caps link_caps;
+	int sink_rates[DP_MAX_SUPPORTED_RATES] = {0};
+	u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE] = {0};
+	u8 dpcd_caps[DP_RECEIVER_CAP_SIZE] = {0};
+	struct drm_dp_desc desc = {0};
+	int num_sink_rates, ret;
+	u8 edp_dpcd_rev = 0;
+
+	if (!connector)
+		return -ENODEV;
+
+	drm_modeset_lock_assert_held(&connector->dev->mode_config.connection_mutex);
+
+	ret = drm_dp_read_dpcd_caps(aux, dpcd_caps);
+	if (ret < 0) {
+		drm_dbg_kms(aux->drm_dev, "%s: error reading DPCD capabilities (%d)\n",
+			    aux->name, ret);
+		return ret;
+	}
+
+	if (connector->connector_type == DRM_MODE_CONNECTOR_eDP) {
+		ret = drm_dp_dpcd_read_byte(aux, DP_EDP_DPCD_REV, &edp_dpcd_rev);
+		if (ret < 0)
+			drm_dbg_kms(aux->drm_dev, "%s: No DPCD eDP revision found\n",
+				    aux->name);
+	}
+
+	if (connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort &&
+	    dpcd_caps[DP_DPCD_REV] >= DP_DPCD_REV_13) {
+		ret = drm_dp_read_lttpr_common_caps(aux, dpcd_caps, lttpr_common_caps);
+		if (ret < 0) {
+			drm_dbg_kms(aux->drm_dev,
+				    "%s: error reading LTTPR caps, assuming no LTTPR (%d)\n",
+				    aux->name, ret);
+			/* LTTPR capabilities are read block by block. Clean the
+			 * entire capabilities if the read fails to avoid
+			 * partial garbage
+			 */
+			memset(lttpr_common_caps, 0, sizeof(lttpr_common_caps));
+		}
+	}
+
+	ret = drm_dp_read_desc(aux, &desc, drm_dp_is_branch(dpcd_caps));
+	if (ret)
+		drm_dbg_kms(aux->drm_dev, "%s: No DPCD descriptor found\n",
+			    aux->name);
+
+	if (connector->connector_type == DRM_MODE_CONNECTOR_eDP) {
+		num_sink_rates = drm_dp_read_edp_sink_rates(aux, edp_dpcd_rev,
+							    sink_rates);
+
+		/*
+		 * Use the rates of the DP_MAX_LINK_RATE and
+		 * DP_128B132B_SUPPORTED_LINK_RATES registers if the sink does
+		 * not support the DP_SUPPORTED_LINK_RATES register.
+		 */
+		if (num_sink_rates <= 0)
+			num_sink_rates = drm_dp_read_dpcd_sink_rates(aux, dpcd_caps,
+								     lttpr_common_caps,
+								     &desc,
+								     tunnel,
+								     sink_rates);
+	} else {
+		num_sink_rates = drm_dp_read_dpcd_sink_rates(aux, dpcd_caps,
+							     lttpr_common_caps,
+							     &desc,
+							     tunnel,
+							     sink_rates);
+	}
+
+	if ((connector->connector_type == DRM_MODE_CONNECTOR_DisplayPort &&
+	     dpcd_caps[DP_DPCD_REV] >= DP_DPCD_REV_14) ||
+	    (connector->connector_type == DRM_MODE_CONNECTOR_eDP &&
+	     edp_dpcd_rev >= DP_EDP_14)) {
+		ret = drm_dp_read_dsc_dpcd(aux, dsc_dpcd);
+		if (ret < 0)
+			drm_dbg_kms(aux->drm_dev,
+				    "%s: error reading DPCD DSC capabilities (%d)\n",
+				    aux->name, ret);
+	}
+
+	link_caps.nlanes = drm_dp_get_max_lane_count(dpcd_caps, lttpr_common_caps);
+	link_caps.nlink_rates = num_sink_rates;
+	link_caps.link_rates = sink_rates;
+	link_caps.dsc = drm_dp_sink_supports_dsc(dsc_dpcd);
+
+	return drm_dp_sink_set_caps(connector, &link_caps);
+}
+EXPORT_SYMBOL_GPL(drm_dp_sink_sync_caps);
+
+/**
+ * drm_dp_set_cur_link_params - Set current DisplayPort link parameters
+ * @connector: DisplayPort connector
+ * @link_rate: Current link rate in deca-kbps
+ * @lane_count: Current lane count
+ * @dsc_en: Display Stream Compression enabled
+ *
+ * This function sets the current active DisplayPort link parameters after
+ * link training has completed. These parameters represent the actual link
+ * configuration being used for display output.
+ */
+void drm_dp_set_cur_link_params(struct drm_connector *connector,
+				int link_rate, int lane_count, bool dsc_en)
+{
+	bool update = false;
+	int *_link_rates;
+
+	if (!connector)
+		return;
+
+	drm_modeset_lock_assert_held(&connector->dev->mode_config.connection_mutex);
+
+	scoped_guard(mutex, &connector->dp.mutex) {
+		if (!connector->dp.cur_link_info.nlanes || !lane_count)
+			update = true;
+
+		if (!connector->dp.cur_link_info.link_rates) {
+			_link_rates = kzalloc_obj(*_link_rates);
+			if (!_link_rates)
+				return;
+
+			connector->dp.cur_link_info.link_rates = _link_rates;
+			connector->dp.cur_link_info.nlink_rates = 1;
+		}
+
+		*connector->dp.cur_link_info.link_rates = link_rate;
+		connector->dp.cur_link_info.nlanes = lane_count;
+		connector->dp.cur_link_info.dsc = dsc_en;
+
+		if (update)
+			drm_sysfs_connector_dp_link_update(connector);
+	}
+}
+EXPORT_SYMBOL_GPL(drm_dp_set_cur_link_params);
+
+/**
+ * drm_dp_sink_reset_caps - Reset DisplayPort sink capabilities
+ * @connector: DisplayPort connector
+ *
+ * This function clears all DisplayPort sink link capabilities and parameters.
+ * This should be called when a sink is disconnected to clear stale
+ * capability information.
+ */
+void drm_dp_sink_reset_caps(struct drm_connector *connector)
+{
+	struct drm_connector_dp_link_caps zero_caps = {0};
+
+	if (!connector)
+		return;
+
+	drm_modeset_lock_assert_held(&connector->dev->mode_config.connection_mutex);
+
+	scoped_guard(mutex, &connector->dp.mutex) {
+		kfree(connector->dp.cur_link_info.link_rates);
+		memcpy(&connector->dp.cur_link_info, &zero_caps, sizeof(zero_caps));
+		kfree(connector->dp.sink_link_caps.link_rates);
+		memcpy(&connector->dp.sink_link_caps, &zero_caps, sizeof(zero_caps));
+
+		drm_sysfs_connector_dp_link_update(connector);
+	}
+}
+EXPORT_SYMBOL_GPL(drm_dp_sink_reset_caps);

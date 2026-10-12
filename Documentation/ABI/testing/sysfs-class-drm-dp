@@ -1,0 +1,85 @@
+What:		/sys/class/drm/card<X>-<connector>/dp_link/
+Date:		October 2026
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+		Directory of DisplayPort link attributes. It exists for
+		DisplayPort and eDP connectors and is empty until the
+		driver reports the source and the sink capabilities.
+
+What:		/sys/class/drm/card<X>-<connector>/dp_link/source_link_caps_nlanes
+Date:		October 2026
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+		Maximum number of DisplayPort lanes the source of this
+		connector can drive.
+
+		Valid values: 1, 2 or 4
+
+What:		/sys/class/drm/card<X>-<connector>/dp_link/source_link_caps_link_rates
+Date:		October 2026
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+		Space-separated list of the DisplayPort link rates the
+		source of this connector can drive, in kbps, sorted in
+		ascending order.
+
+What:		/sys/class/drm/card<X>-<connector>/dp_link/source_link_caps_dsc
+Date:		October 2026
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+		Indicates whether the source of this connector supports
+		Display Stream Compression (DSC).
+
+		Valid values: 0 (not supported), 1 (supported)
+
+What:		/sys/class/drm/card<X>-<connector>/dp_link/sink_link_caps_nlanes
+Date:		October 2026
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+		Maximum number of DisplayPort lanes supported by the
+		connected sink, as reported by the sink capabilities.
+
+		Valid values: 1, 2 or 4
+
+What:		/sys/class/drm/card<X>-<connector>/dp_link/sink_link_caps_link_rates
+Date:		October 2026
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+		Space-separated list of the DisplayPort link rates
+		supported by the connected sink, in kbps, sorted in
+		ascending order. The list is empty if the sink link
+		rates could not be read.
+
+What:		/sys/class/drm/card<X>-<connector>/dp_link/sink_link_caps_dsc
+Date:		October 2026
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+		Indicates whether the connected sink supports Display
+		Stream Compression (DSC).
+
+		Valid values: 0 (not supported), 1 (supported)
+
+What:		/sys/class/drm/card<X>-<connector>/dp_link/cur_link_info_nlanes
+Date:		October 2026
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+		Number of lanes used by the currently trained DisplayPort
+		link of this connector.
+
+		Valid values: 1, 2 or 4
+
+What:		/sys/class/drm/card<X>-<connector>/dp_link/cur_link_info_link_rate
+Date:		October 2026
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+		Link rate of the currently trained DisplayPort link of
+		this connector, in kbps.
+
+What:		/sys/class/drm/card<X>-<connector>/dp_link/cur_link_info_dsc
+Date:		October 2026
+Contact:	dri-devel@lists.freedesktop.org
+Description:
+		Indicates whether Display Stream Compression (DSC) is
+		active on the currently trained DisplayPort link.
+
+		Valid values: 0 (disabled), 1 (enabled)
