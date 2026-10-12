@@ -793,7 +793,6 @@ static void mpam_ris_hw_probe(struct mpam_msc_ris *ris)
 	struct mpam_msc *msc = ris->vmsc->msc;
 	struct device *dev = &msc->pdev->dev;
 	struct mpam_props *props = &ris->props;
-	struct mpam_class *class = ris->vmsc->comp->class;
 
 	lockdep_assert_held(&msc->probe_lock);
 	lockdep_assert_held(&msc->part_sel_lock);
@@ -938,18 +937,20 @@ static void mpam_ris_hw_probe(struct mpam_msc_ris *ris)
 	}
 
 	/*
-	 * RIS with PARTID narrowing don't have enough storage for one
-	 * configuration per PARTID. If these are in a class we could use,
-	 * reduce the supported partid_max to match the number of intpartid.
-	 * If the class is unknown, just ignore it.
+	 * A RIS that implements PARTID narrowing has one configuration per
+	 * internal PARTID, and several request PARTIDs share it. Record both
+	 * limits in the resource properties.
 	 */
-	if (FIELD_GET(MPAMF_IDR_HAS_PARTID_NRW, ris->idr) &&
-	    class->type != MPAM_CLASS_UNKNOWN) {
+	props->partid_max = msc->partid_max;
+	props->intpartid_max = msc->partid_max;
+
+	if (FIELD_GET(MPAMF_IDR_HAS_PARTID_NRW, ris->idr)) {
 		u32 nrwidr = mpam_read_partsel_reg(msc, PARTID_NRW_IDR);
-		u16 partid_max = FIELD_GET(MPAMF_PARTID_NRW_IDR_INTPARTID_MAX, nrwidr);
+		u16 intpartid_max = FIELD_GET(MPAMF_PARTID_NRW_IDR_INTPARTID_MAX, nrwidr);
 
 		mpam_set_feature(mpam_feat_partid_nrw, props);
-		msc->partid_max = min(msc->partid_max, partid_max);
+		props->intpartid_max = min(props->intpartid_max, intpartid_max);
+		msc->partid_max = min(msc->partid_max, intpartid_max);
 	}
 }
 
@@ -2258,6 +2259,10 @@ static void __props_mismatch(struct mpam_props *parent,
 		parent->num_mbwu_mon = min(parent->num_mbwu_mon,
 					   child->num_mbwu_mon);
 	}
+
+	/* Take the smallest, so the result is safe for every RIS in the class. */
+	parent->partid_max = min(parent->partid_max, child->partid_max);
+	parent->intpartid_max = min(parent->intpartid_max, child->intpartid_max);
 
 	if (CAN_MERGE_FEAT(parent, child, mpam_feat_intpri_part, alias)) {
 		parent->intpri_wd = child->intpri_wd;
