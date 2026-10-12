@@ -1745,6 +1745,7 @@ static int hub_configure(struct usb_hub *hub,
 		if (ret < 0) {
 			dev_err(hub->intfdev,
 				"couldn't create port%d device.\n", i + 1);
+			message = "couldn't create port device";
 			break;
 		}
 	}
