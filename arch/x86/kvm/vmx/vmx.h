@@ -299,7 +299,7 @@ struct kvm_vmx {
 
 static __always_inline int init_vpids(void)
 {
-	return enable_vpid ? kvm_init_tlb_tags(VMX_NR_VPIDS) : 0;
+	return enable_vpid ? kvm_init_tlb_tags(VMX_NR_VPIDS, 1) : 0;
 }
 
 static __always_inline void destroy_vpids(void)
