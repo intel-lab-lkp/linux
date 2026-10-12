@@ -56,11 +56,6 @@ properties:
           - const: qcom,apq8084
 
       - items:
-          - const: qcom,eliza-cqs-evk
-          - const: qcom,eliza-cqs-som
-          - const: qcom,eliza
-
-      - items:
           - enum:
               - sony,karin_windy
           - const: qcom,apq8094
@@ -78,6 +73,11 @@ properties:
           - const: qcom,apq8096-sbc
           - const: qcom,apq8096sg
           - const: qcom,apq8096
+
+      - items:
+          - const: qcom,eliza-cqs-evk
+          - const: qcom,eliza-cqs-som
+          - const: qcom,eliza
 
       - items:
           - enum:
