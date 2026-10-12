@@ -1,0 +1,280 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/nvidia,lstp.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NVIDIA LSTP USB Multi-Function Device
+
+maintainers:
+  - Adrian Ambrozewicz <aambrozewicz@nvidia.com>
+  - Donald Shannon <donalds@nvidia.com>
+
+description: |
+  The NVIDIA LSTP (Low-Speed Transport Protocol) device is a USB device
+  that exposes function channels (SPI, I2C, GPIO, IPMI, UART) over one USB
+  interface.  Channel traffic is multiplexed over the bulk endpoints of
+  that interface.
+
+  The device reports its channels, their types and their IDs itself, so
+  it needs no device tree to work.  A node adds only what the device
+  cannot report: peripherals on its SPI and I2C buses, GPIO line names
+  and hogs, and LEDs.  As for any USB device, a node is matched to the
+  device by position alone, each level by the port number in reg, so a
+  node suits only an LSTP device hard-wired on the board.
+
+  Each channel node is matched to a firmware-reported channel by reg (the
+  channel ID) and compatible (the channel type).  A channel without a node
+  is still usable.  A channel whose node has status = "disabled" is not
+  used at all.
+
+  Where the channel nodes go follows the rules for USB device and
+  interface nodes in usb-device.yaml, which depend on the device's
+  descriptors and not on its compatible:
+
+  - A device of class 0 with one configuration and one interface has a
+    combined node.  The channels go directly under the device node, which
+    has #address-cells = <1>.
+  - Any other device has an interface node for the LSTP interface,
+    interface@N with reg = <N C> (interface number, configuration value).
+    The channels go under it, and the device node has
+    #address-cells = <2>.
+
+  For interface 2, in configuration 1, of a device on port 3 of a hub on
+  root port 1, the path from the host controller node is hub@1, then the
+  device node with reg = <3>, then interface@2 with reg = <2 1>.
+
+  The reg of a node on a root-hub port, hub@1 here, is the host
+  controller's port number, which is not always the port number in the
+  USB path.  On an xHCI controller it is the one-based index of the
+  port's register set, and the USB 2 and USB 3 ports share that one
+  numbering.  A node on a port of an external hub uses the hub's port
+  number, as the USB path shows it.
+
+allOf:
+  - $ref: /schemas/usb/usb-device.yaml#
+  - $ref: "#/$defs/channels"
+  - if:
+      properties:
+        "#address-cells":
+          const: 1
+    then:
+      patternProperties:
+        "^interface@": false
+    else:
+      patternProperties:
+        "^(spi|i2c|gpio|serial|ipmi)@": false
+
+properties:
+  compatible:
+    enum:
+      - usb955,cf11
+      - usb424,4940
+      - usb174c,2214
+
+  reg:
+    description: Port number on the parent hub or host controller.
+    maxItems: 1
+
+  "#address-cells":
+    enum: [1, 2]
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^interface@[0-9a-f]{1,2}(,[0-9a-f]{1,2})?$":
+    type: object
+    description: |
+      Interface node for the interface that carries the LSTP channels.  The
+      configuration component of the unit address is omitted for
+      configuration 1.
+
+      status = "disabled" disables the interface, and with it every
+      channel below it.
+
+    $ref: "#/$defs/channels"
+
+    properties:
+      compatible:
+        pattern: "^usbif[0-9a-f]{1,4},[0-9a-f]{1,4}\\.config[0-9a-f]{1,2}\\.[0-9a-f]{1,2}$"
+
+      reg:
+        description: Interface number, then configuration value.
+        maxItems: 1
+
+      "#address-cells":
+        const: 1
+
+      "#size-cells":
+        const: 0
+
+    required:
+      - reg
+      - "#address-cells"
+      - "#size-cells"
+
+    unevaluatedProperties: false
+
+$defs:
+  channels:
+    patternProperties:
+      "^spi@[0-9a-f]+$":
+        $ref: /schemas/spi/nvidia,lstp-spi.yaml#
+
+      "^i2c@[0-9a-f]+$":
+        $ref: /schemas/i2c/nvidia,lstp-i2c.yaml#
+
+      "^gpio@[0-9a-f]+$":
+        $ref: /schemas/gpio/nvidia,lstp-gpio.yaml#
+
+      "^serial@[0-9a-f]+$":
+        type: object
+        description: |
+          UART channel.
+
+          The device firmware sets the baud rate, framing, parity and flow
+          control and reports them to the host; the host cannot change them.
+
+        properties:
+          compatible:
+            const: nvidia,lstp-uart
+
+          reg:
+            description: Channel ID reported by the device firmware.
+            maxItems: 1
+
+        required:
+          - compatible
+          - reg
+
+        additionalProperties: false
+
+      "^ipmi@[0-9a-f]+$":
+        type: object
+        description: |
+          IPMI message channel, on a device attached to a BMC.  The device
+          firmware terminates the managed host's IPMI transport, passes each
+          request to the BMC over this channel and returns the BMC's response.
+
+        properties:
+          compatible:
+            const: nvidia,lstp-ipmi
+
+          reg:
+            description: Channel ID reported by the device firmware.
+            maxItems: 1
+
+        required:
+          - compatible
+          - reg
+
+        additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - "#address-cells"
+  - "#size-cells"
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    usb {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        hub@1 {
+            reg = <1>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            /* Three interfaces; the LSTP channels are on interface 2. */
+            device@3 {
+                compatible = "usb955,cf11";
+                reg = <3>;
+                #address-cells = <2>;
+                #size-cells = <0>;
+
+                interface@2 {
+                    compatible = "usbif955,cf11.config1.2";
+                    reg = <2 1>;
+                    #address-cells = <1>;
+                    #size-cells = <0>;
+
+                    spi@1 {
+                        compatible = "nvidia,lstp-spi";
+                        reg = <1>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+
+                        flash@0 {
+                            compatible = "jedec,spi-nor";
+                            reg = <0>;
+                            spi-max-frequency = <18750000>;
+                        };
+                    };
+
+                    i2c@2 {
+                        compatible = "nvidia,lstp-i2c";
+                        reg = <2>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+
+                        temperature-sensor@48 {
+                            compatible = "ti,tmp102";
+                            reg = <0x48>;
+                        };
+                    };
+
+                    gpio@3 {
+                        compatible = "nvidia,lstp-gpio";
+                        reg = <3>;
+                        gpio-controller;
+                        #gpio-cells = <2>;
+                        gpio-line-names = "LED", "INT";
+                    };
+
+                    ipmi@4 {
+                        compatible = "nvidia,lstp-ipmi";
+                        reg = <4>;
+                    };
+
+                    serial@5 {
+                        compatible = "nvidia,lstp-uart";
+                        reg = <5>;
+                    };
+                };
+            };
+        };
+    };
+
+  - |
+    usb {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        /* Class 0, one interface: a combined node carries the channels. */
+        device@2 {
+            compatible = "usb424,4940";
+            reg = <2>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            i2c@1 {
+                compatible = "nvidia,lstp-i2c";
+                reg = <1>;
+                #address-cells = <1>;
+                #size-cells = <0>;
+            };
+
+            gpio@2 {
+                compatible = "nvidia,lstp-gpio";
+                reg = <2>;
+                gpio-controller;
+                #gpio-cells = <2>;
+            };
+        };
+    };

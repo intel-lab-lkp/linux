@@ -19573,6 +19573,7 @@ S:	Supported
 F:	Documentation/devicetree/bindings/gpio/nvidia,lstp-gpio.yaml
 F:	Documentation/devicetree/bindings/i2c/nvidia,lstp-i2c.yaml
 F:	Documentation/devicetree/bindings/spi/nvidia,lstp-spi.yaml
+F:	Documentation/devicetree/bindings/usb/nvidia,lstp.yaml
 
 NVIDIA VRS RTC DRIVER
 M:	Shubhi Garg <shgarg@nvidia.com>
