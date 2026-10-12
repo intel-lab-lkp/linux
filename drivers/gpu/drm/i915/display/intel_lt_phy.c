@@ -2042,7 +2042,8 @@ intel_lt_phy_pll_calc_state(struct intel_crtc_state *crtc_state,
 		}
 	}
 
-	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI)) {
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI) &&
+	    !intel_hdmi_is_frl(crtc_state->port_clock)) {
 		hw_state->ltpll.lane_count = crtc_state->lane_count;
 		return intel_lt_phy_calculate_hdmi_state(&hw_state->ltpll,
 							 crtc_state->port_clock);
