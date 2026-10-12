@@ -387,6 +387,16 @@ endif
 endmenu
 
 menu "Bus options (PCI etc.)"
+
+config SPARC64_OBERON
+	bool "Fujitsu M3000 Oberon PCIe bridge"
+	depends on SPARC64_VII && PCI
+	help
+	  Support Oberon enumeration, translated DMA and legacy interrupts.
+	  Firmware link configuration is preserved. MSI and native bridge
+	  error interrupt handling are not supported on Oberon.
+	  Enable this option for the M3000 on-board network and disk devices.
+
 config SBUS
 	bool
 	default y
