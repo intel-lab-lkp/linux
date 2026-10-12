@@ -1219,23 +1219,23 @@ KUNIT_ARRAY_PARAM(wm_adsp_fw_find_pick,
 		  wm_adsp_fw_find_test_param_desc);
 
 static struct kunit_case wm_adsp_fw_find_test_cases[] = {
-	KUNIT_CASE_PARAM(wm_adsp_fw_find_test_search_order,
-			 wm_adsp_fw_find_full_search_gen_params),
+	KUNIT_CASE_PARAM_UNIQUE(wm_adsp_fw_find_test_search_order,
+				wm_adsp_fw_find_full_search_gen_params),
 
-	KUNIT_CASE_PARAM(wm_adsp_fw_find_test_search_order,
-			 wm_adsp_fw_find_system_alsaname_gen_params),
+	KUNIT_CASE_PARAM_UNIQUE(wm_adsp_fw_find_test_search_order,
+				wm_adsp_fw_find_system_alsaname_gen_params),
 
-	KUNIT_CASE_PARAM(wm_adsp_fw_find_test_search_order,
-			 wm_adsp_fw_find_system_gen_params),
+	KUNIT_CASE_PARAM_UNIQUE(wm_adsp_fw_find_test_search_order,
+				wm_adsp_fw_find_system_gen_params),
 
-	KUNIT_CASE_PARAM(wm_adsp_fw_find_test_search_order,
-			 wm_adsp_fw_find_alsaname_gen_params),
+	KUNIT_CASE_PARAM_UNIQUE(wm_adsp_fw_find_test_search_order,
+				wm_adsp_fw_find_alsaname_gen_params),
 
-	KUNIT_CASE_PARAM(wm_adsp_fw_find_test_search_order,
-			 wm_adsp_fw_find_noqual_gen_params),
+	KUNIT_CASE_PARAM_UNIQUE(wm_adsp_fw_find_test_search_order,
+				wm_adsp_fw_find_noqual_gen_params),
 
-	KUNIT_CASE_PARAM(wm_adsp_fw_find_test_search_order,
-			 wm_adsp_fw_find_normalization_gen_params),
+	KUNIT_CASE_PARAM_UNIQUE(wm_adsp_fw_find_test_search_order,
+				wm_adsp_fw_find_normalization_gen_params),
 
 	KUNIT_CASE_PARAM(wm_adsp_fw_find_test_pick_file,
 			 wm_adsp_fw_find_pick_gen_params),
