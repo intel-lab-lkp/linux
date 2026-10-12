@@ -4378,3 +4378,11 @@ void intel_hdmi_frl_get_config(struct intel_crtc_state *crtc_state)
 
 	intel_hdmi_frl_dfm_read(crtc_state);
 }
+
+bool intel_hdmi_has_joiner(struct intel_hdmi *intel_hdmi)
+{
+	struct intel_display *display = to_intel_display(intel_hdmi);
+	struct intel_encoder *encoder = &hdmi_to_dig_port(intel_hdmi)->base;
+
+	return HAS_HDMI_FRL(display) && intel_bios_hdmi_max_frl_rate(encoder->devdata);
+}

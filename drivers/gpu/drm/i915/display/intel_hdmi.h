@@ -87,6 +87,7 @@ int intel_hdmi_sink_max_frl_rate(struct drm_connector *connector);
 int intel_hdmi_sink_dsc_max_frl_rate(struct drm_connector *connector);
 void intel_hdmi_frl_cfg_write(const struct intel_crtc_state *crtc_state);
 void intel_hdmi_frl_get_config(struct intel_crtc_state *crtc_state);
+bool intel_hdmi_has_joiner(struct intel_hdmi *intel_hdmi);
 
 /* FRL rate per lane (Gbps) -> PHY PLL table units (10 kbps) */
 #define FRL_GBPS_TO_10KBPS(rate)	((rate) * 100000)

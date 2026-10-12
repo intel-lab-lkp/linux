@@ -6,6 +6,7 @@
 #include "intel_display_core.h"
 #include "intel_display_types.h"
 #include "intel_dp.h"
+#include "intel_hdmi.h"
 #include "intel_joiner.h"
 
 bool intel_joiner_needs_dsc(struct intel_display *display,
@@ -33,6 +34,9 @@ bool intel_joiner_connector_can_join(struct intel_connector *connector)
 	case DRM_MODE_CONNECTOR_DisplayPort:
 	case DRM_MODE_CONNECTOR_eDP:
 		return intel_dp_has_joiner(intel_attached_dp(connector));
+	case DRM_MODE_CONNECTOR_HDMIA:
+	case DRM_MODE_CONNECTOR_HDMIB:
+		return intel_hdmi_has_joiner(intel_attached_hdmi(connector));
 	default:
 		return false;
 	}
