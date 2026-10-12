@@ -636,6 +636,7 @@ struct bcmgenet_priv {
 	unsigned autoneg_pause:1;
 	unsigned tx_pause:1;
 	unsigned rx_pause:1;
+	unsigned datapath_up:1;
 
 	/* MDIO bus variables */
 	wait_queue_head_t wq;
