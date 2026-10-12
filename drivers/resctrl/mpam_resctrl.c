@@ -298,23 +298,35 @@ void resctrl_arch_sched_in(struct task_struct *tsk)
 	mpam_thread_switch(tsk);
 }
 
-void resctrl_arch_set_cpu_default_closid_rmid(int cpu, u32 closid, u32 rmid)
+static void resctrl_closid_rmid_to_partid_pmg(u32 closid, u32 rmid,
+					      u32 *partid_d, u32 *partid_i,
+					      u8 *pmg_d, u8 *pmg_i)
 {
 	WARN_ON_ONCE(closid > U16_MAX);
 	WARN_ON_ONCE(rmid > U8_MAX);
 
 	if (!cdp_enabled) {
-		mpam_set_cpu_defaults(cpu, closid, closid, rmid, rmid);
+		*partid_d = *partid_i = closid;
+		*pmg_d = *pmg_i = rmid;
 	} else {
 		/*
 		 * When CDP is enabled, resctrl halves the closid range and we
 		 * use odd/even partid for one closid.
 		 */
-		u32 partid_d = resctrl_get_config_index(closid, CDP_DATA);
-		u32 partid_i = resctrl_get_config_index(closid, CDP_CODE);
-
-		mpam_set_cpu_defaults(cpu, partid_d, partid_i, rmid, rmid);
+		*partid_d = resctrl_get_config_index(closid, CDP_DATA);
+		*partid_i = resctrl_get_config_index(closid, CDP_CODE);
+		*pmg_d = *pmg_i = rmid;
 	}
+}
+
+void resctrl_arch_set_cpu_default_closid_rmid(int cpu, u32 closid, u32 rmid)
+{
+	u32 partid_d, partid_i;
+	u8 pmg_d, pmg_i;
+
+	resctrl_closid_rmid_to_partid_pmg(closid, rmid, &partid_d, &partid_i,
+					  &pmg_d, &pmg_i);
+	mpam_set_cpu_defaults(cpu, partid_d, partid_i, pmg_d, pmg_i);
 }
 
 void resctrl_arch_sync_cpu_closid_rmid(void *info)
@@ -333,17 +345,12 @@ void resctrl_arch_sync_cpu_closid_rmid(void *info)
 
 void resctrl_arch_set_closid_rmid(struct task_struct *tsk, u32 closid, u32 rmid)
 {
-	WARN_ON_ONCE(closid > U16_MAX);
-	WARN_ON_ONCE(rmid > U8_MAX);
+	u32 partid_d, partid_i;
+	u8 pmg_d, pmg_i;
 
-	if (!cdp_enabled) {
-		mpam_set_task_partid_pmg(tsk, closid, closid, rmid, rmid);
-	} else {
-		u32 partid_d = resctrl_get_config_index(closid, CDP_DATA);
-		u32 partid_i = resctrl_get_config_index(closid, CDP_CODE);
-
-		mpam_set_task_partid_pmg(tsk, partid_d, partid_i, rmid, rmid);
-	}
+	resctrl_closid_rmid_to_partid_pmg(closid, rmid, &partid_d, &partid_i,
+					  &pmg_d, &pmg_i);
+	mpam_set_task_partid_pmg(tsk, partid_d, partid_i, pmg_d, pmg_i);
 }
 
 bool resctrl_arch_match_closid(struct task_struct *tsk, u32 closid)
@@ -361,13 +368,15 @@ bool resctrl_arch_match_closid(struct task_struct *tsk, u32 closid)
 bool resctrl_arch_match_rmid(struct task_struct *tsk, u32 closid, u32 rmid)
 {
 	u64 regval = mpam_get_regval(tsk);
-	u32 tsk_closid = FIELD_GET(MPAM0_EL1_PARTID_D, regval);
-	u32 tsk_rmid = FIELD_GET(MPAM0_EL1_PMG_D, regval);
+	u32 tsk_partid = FIELD_GET(MPAM0_EL1_PARTID_D, regval);
+	u32 tsk_pmg = FIELD_GET(MPAM0_EL1_PMG_D, regval);
+	u32 partid_d, partid_i;
+	u8 pmg_d, pmg_i;
 
-	if (cdp_enabled)
-		tsk_closid >>= 1;
+	resctrl_closid_rmid_to_partid_pmg(closid, rmid, &partid_d, &partid_i,
+					  &pmg_d, &pmg_i);
 
-	return (tsk_closid == closid) && (tsk_rmid == rmid);
+	return (tsk_partid == partid_d) && (tsk_pmg == pmg_d);
 }
 
 struct rdt_resource *resctrl_arch_get_resource(enum resctrl_res_level l)
@@ -454,16 +463,19 @@ static int __read_mon(struct mpam_resctrl_mon *mon, struct mpam_component *mon_c
 		      int mon_idx,
 		      enum resctrl_conf_type cdp_type, u32 closid, u32 rmid, u64 *val)
 {
+	u32 partid, partid_d, partid_i;
 	struct mon_cfg cfg;
+	u8 pmg_d, pmg_i;
 
 	if (!mpam_is_enabled())
 		return -EINVAL;
 
-	/* Shift closid to account for CDP */
-	closid = resctrl_get_config_index(closid, cdp_type);
+	resctrl_closid_rmid_to_partid_pmg(closid, rmid, &partid_d, &partid_i,
+					  &pmg_d, &pmg_i);
+	partid = (cdp_type == CDP_CODE) ? partid_i : partid_d;
 
 	if (mon_idx == USE_PRE_ALLOCATED) {
-		int mbwu_idx = resctrl_arch_rmid_idx_encode(closid, rmid);
+		int mbwu_idx = resctrl_arch_rmid_idx_encode(partid, rmid);
 
 		mon_idx = mon->mbwu_idx_to_mon[mbwu_idx];
 		if (mon_idx == -1)
@@ -478,8 +490,8 @@ static int __read_mon(struct mpam_resctrl_mon *mon, struct mpam_component *mon_c
 	cfg = (struct mon_cfg) {
 		.mon = mon_idx,
 		.match_pmg = true,
-		.partid = closid,
-		.pmg = rmid,
+		.partid = partid,
+		.pmg = pmg_d,
 	};
 
 	return mpam_msmon_read(mon_comp, &cfg, mon_type, val);
