@@ -1852,7 +1852,7 @@ void intel_psr_set_non_psr_pipes(struct intel_dp *intel_dp,
 	active_pipes = intel_calc_active_pipes(state, active_pipes);
 
 	crtc_state->active_non_psr_pipes = active_pipes &
-		~BIT(to_intel_crtc(crtc_state->uapi.crtc)->pipe);
+		~intel_crtc_joined_pipe_mask(crtc_state);
 }
 
 void intel_psr_compute_config(struct intel_dp *intel_dp,
