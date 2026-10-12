@@ -30,6 +30,7 @@
 #include <linux/uaccess.h>
 #include <linux/perf_event.h>
 #include <linux/perf/arm_pmu.h>
+#include <linux/perf/arm_pmuv3.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
@@ -1368,6 +1369,35 @@ static void etm4_fixup_wrong_ccitmin(struct etmv4_drvdata *drvdata)
 	}
 }
 
+/*
+ * Find the external outputs of this trace unit that the PMU counts as the
+ * common events TRCEXTOUT0-3. The trace unit has an external output for each
+ * of its events, and PMCEID0_EL0[63:32] reports the common events
+ * 0x4000-0x401f from PMUv3p1.
+ *
+ * Must run on the CPU that owns the trace unit.
+ */
+static u8 etm4_pmu_extout(struct etmv4_drvdata *drvdata)
+{
+	int pmuver = read_pmuver();
+	u64 pmceid;
+	u8 extout = 0;
+	int n;
+
+	if (!pmuv3_implemented(pmuver) || pmuver < ID_AA64DFR0_EL1_PMUVer_V3P1)
+		return 0;
+
+	pmceid = read_pmceid0() >> 32;
+	/* nr_event is TRCIDR0.NUMEVENT, the number of events minus one */
+	for (n = 0; n <= drvdata->nr_event; n++) {
+		if (pmceid & BIT_ULL(ARMV8_PMUV3_PERFCTR_TRCEXTOUT0 + n -
+				     ARMV8_PMUV3_EXT_COMMON_EVENT_BASE))
+			extout |= BIT(n);
+	}
+
+	return extout;
+}
+
 static void etm4_init_arch_data(void *info)
 {
 	u32 etmidr0;
@@ -1521,6 +1551,8 @@ static void etm4_init_arch_data(void *info)
 		drvdata->nr_seq_ctrls = ETM_MAX_SEQ_TRANSITIONS;
 	/* NUMCNTR, bits[30:28] number of counters available for tracing */
 	drvdata->nr_cntr = FIELD_GET(TRCIDR5_NUMCNTR_MASK, etmidr5);
+
+	drvdata->pmu_extout = etm4_pmu_extout(drvdata);
 
 	coresight_clear_self_claim_tag_unlocked(csa);
 	etm4_cs_lock(drvdata, csa);

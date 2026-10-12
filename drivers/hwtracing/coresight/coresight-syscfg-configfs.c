@@ -243,12 +243,19 @@ static ssize_t cscfg_feat_matches_show(struct config_item *item, char *page)
 							struct cscfg_fs_feature, group);
 	u32 match_flags = fs_feat->feat_desc->match_flags;
 	int used = 0;
+	int n;
 
 	if (match_flags & CS_CFG_MATCH_CLASS_SRC_ALL)
 		used = scnprintf(page, PAGE_SIZE, "SRC_ALL ");
 
 	if (match_flags & CS_CFG_MATCH_CLASS_SRC_ETM4)
 		used += scnprintf(page + used, PAGE_SIZE - used, "SRC_ETMV4 ");
+
+	for (n = 0; n < CS_CFG_MATCH_CAP_PMU_EXTOUT_NR; n++) {
+		if (match_flags & CS_CFG_MATCH_CAP_PMU_EXTOUT(n))
+			used += scnprintf(page + used, PAGE_SIZE - used,
+					  "PMU_EXTOUT%d ", n);
+	}
 
 	used += scnprintf(page + used, PAGE_SIZE - used, "\n");
 	return used;

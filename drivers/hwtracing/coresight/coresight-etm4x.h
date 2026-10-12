@@ -979,6 +979,8 @@ struct etmv4_save_state {
  * @nrseqstate: The number of sequencer states that are implemented.
  * @nr_seq_ctrls: The number of sequence state transition control registers.
  * @nr_event:	Indicates how many events the trace unit support.
+ * @pmu_extout:	Bitmap of the external outputs n that the PMU counts as
+ *		TRCEXTOUTn.
  * @nr_resource:The number of resource selection pairs available for tracing.
  * @nr_ss_cmp:	Number of single-shot comparator controls that are available.
  * @trcid:	value of the current ID for this component.
@@ -1045,6 +1047,7 @@ struct etmv4_drvdata {
 	u8				nrseqstate;
 	u8				nr_seq_ctrls;
 	u8				nr_event;
+	u8				pmu_extout;
 	u8				nr_resource;
 	u8				nr_ss_cmp;
 	u8				trcid;
