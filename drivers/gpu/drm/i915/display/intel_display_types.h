@@ -1744,9 +1744,10 @@ struct intel_hdmi {
 		bool trained;
 		int lanes;
 		int rate_gbps;
-		int ffe_level;
 		int rate_cap;
 		bool reset_rate_cap;
+		u8 max_ffe_level;
+		u8 ffe_level[4];
 	} frl;
 };
 

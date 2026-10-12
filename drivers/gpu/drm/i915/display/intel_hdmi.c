@@ -2554,7 +2554,23 @@ intel_hdmi_reset_frl_config(struct intel_hdmi *intel_hdmi)
 	intel_hdmi->frl.trained = false;
 	intel_hdmi->frl.lanes = 0;
 	intel_hdmi->frl.rate_gbps = 0;
-	intel_hdmi->frl.ffe_level = 0;
+	intel_hdmi->frl.max_ffe_level = 0;
+	memset(intel_hdmi->frl.ffe_level, 0, sizeof(intel_hdmi->frl.ffe_level));
+}
+
+/*
+ * HDMI FRL training level is encoded as follows:
+ *   0		: No FFE (LTP4 test mode)
+ *   1..3	: TxFFE 1-3 levels
+ */
+int intel_hdmi_frl_level(struct intel_encoder *encoder, int lane)
+{
+	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
+
+	if (lane < 0 || lane >= ARRAY_SIZE(intel_hdmi->frl.ffe_level))
+		return 1;
+
+	return 1 + intel_hdmi->frl.ffe_level[lane];
 }
 
 static void
@@ -3806,6 +3822,7 @@ int intel_hdmi_start_frl(struct intel_encoder *encoder,
 	}
 
 	intel_hdmi_reset_frl_config(intel_hdmi);
+	intel_hdmi->frl.max_ffe_level = ffe_level;
 
 	if (!intel_hdmi_frl_prepare_lts2(encoder,
 					 crtc_state->frl.required_rate,
@@ -3819,7 +3836,7 @@ int intel_hdmi_start_frl(struct intel_encoder *encoder,
 	case FRL_TRAINING_PASSED:
 		intel_hdmi->frl.trained = true;
 		intel_hdmi->frl.rate_gbps = req_rate;
-		intel_hdmi->frl.ffe_level = ffe_level;
+		intel_hdmi->frl.max_ffe_level = ffe_level;
 		drm_dbg_kms(display->drm,
 			    "[CONNECTOR:%d:%s] FRL Training Passed with rate=%d\n",
 			    connector->base.id, connector->name,

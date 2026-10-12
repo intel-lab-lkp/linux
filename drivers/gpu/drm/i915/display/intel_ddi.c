@@ -1518,11 +1518,15 @@ int intel_ddi_level(struct intel_encoder *encoder,
 	if (drm_WARN_ON_ONCE(display->drm, !trans))
 		return 0;
 
-	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI))
-		level = intel_ddi_hdmi_level(encoder, trans);
-	else
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI)) {
+		if (intel_hdmi_is_frl(crtc_state->port_clock))
+			level = intel_hdmi_frl_level(encoder, lane);
+		else
+			level = intel_ddi_hdmi_level(encoder, trans);
+	} else {
 		level = intel_ddi_dp_level(enc_to_intel_dp(encoder), crtc_state,
 					   lane);
+	}
 
 	if (drm_WARN_ON_ONCE(display->drm, level >= n_entries))
 		level = n_entries - 1;
