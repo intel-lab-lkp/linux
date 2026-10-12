@@ -71,6 +71,7 @@
 #include "intel_gmbus.h"
 #include "intel_hdcp.h"
 #include "intel_hdmi.h"
+#include "intel_hdmi_frl_dfm.h"
 #include "intel_hotplug.h"
 #include "intel_hti.h"
 #include "intel_lspcon.h"
@@ -3240,6 +3241,8 @@ static void intel_ddi_post_disable_hdmi(struct intel_atomic_state *state,
 		intel_ddi_disable_transcoder_clock(old_crtc_state);
 
 	intel_ddi_buf_disable(encoder, old_crtc_state);
+	if (intel_crtc_has_type(old_crtc_state, INTEL_OUTPUT_HDMI))
+		intel_hdmi_disable_frl(encoder, old_crtc_state);
 
 	if (DISPLAY_VER(display) >= 12)
 		intel_ddi_disable_transcoder_clock(old_crtc_state);
@@ -3494,6 +3497,9 @@ static void intel_ddi_enable_hdmi(struct intel_atomic_state *state,
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 	struct drm_connector *connector = conn_state->connector;
+	struct intel_hdmi *intel_hdmi = &dig_port->hdmi;
+	struct intel_connector *intel_connector =
+		intel_hdmi->attached_connector;
 	enum port port = encoder->port;
 	u32 buf_ctl = 0;
 
@@ -3513,6 +3519,9 @@ static void intel_ddi_enable_hdmi(struct intel_atomic_state *state,
 
 	if (has_buf_trans_select(display))
 		hsw_prepare_hdmi_ddi_buffers(encoder, crtc_state);
+
+	if (DISPLAY_VER(display) >= 14 && crtc_state->frl.enable)
+		intel_hdmi_prepare_for_frl_mode(crtc_state);
 
 	/* e. Enable D2D Link for C10/C20 Phy */
 	mtl_ddi_enable_d2d(encoder);
@@ -3605,8 +3614,15 @@ static void intel_ddi_enable_hdmi(struct intel_atomic_state *state,
 
 	intel_ddi_buf_enable(encoder, buf_ctl);
 
-	if (DISPLAY_VER(display) >= 14)
+	if (DISPLAY_VER(display) >= 14) {
+		if (crtc_state->frl.enable &&
+		    intel_hdmi_start_frl(encoder, crtc_state) < 0)
+			schedule_work(&intel_connector->modeset_retry_work);
+
+		intel_hdmi_frl_cfg_write(crtc_state);
+		intel_hdmi_frl_dfm_write(crtc_state);
 		intel_ddi_enable_transcoder_and_vblank(state, encoder, crtc_state);
+	}
 
 	intel_hdmi_poll_for_scrambling_enable(crtc_state, connector);
 }
