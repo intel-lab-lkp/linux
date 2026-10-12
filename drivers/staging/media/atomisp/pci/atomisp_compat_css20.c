@@ -532,9 +532,9 @@ void atomisp_destroy_pipes_stream(struct atomisp_sub_device *asd)
 }
 
 static void __apply_additional_pipe_config(
-    struct atomisp_sub_device *asd,
-    struct atomisp_stream_env *stream_env,
-    enum ia_css_pipe_id pipe_id)
+	struct atomisp_sub_device *asd,
+	struct atomisp_stream_env *stream_env,
+	enum ia_css_pipe_id pipe_id)
 {
 	struct atomisp_device *isp = asd->isp;
 
@@ -552,14 +552,16 @@ static void __apply_additional_pipe_config(
 	switch (pipe_id) {
 	case IA_CSS_PIPE_ID_CAPTURE:
 		/* enable capture pp/dz manually or digital zoom would
-		 * fail*/
+		 * fail
+		 */
 		if (stream_env->pipe_configs[pipe_id].
 		    default_capture_config.mode == IA_CSS_CAPTURE_MODE_RAW)
 			stream_env->pipe_configs[pipe_id].enable_dz = false;
 		break;
 	case IA_CSS_PIPE_ID_VIDEO:
 		/* enable reduced pipe to have binary
-		 * video_dz_2_min selected*/
+		 * video_dz_2_min selected
+		 */
 		stream_env->pipe_extra_configs[pipe_id]
 		.enable_reduced_pipe = true;
 		stream_env->pipe_configs[pipe_id]
@@ -1305,7 +1307,8 @@ int atomisp_css_get_grid_info(struct atomisp_sub_device *asd,
 
 	/* If the grid info has not changed and the buffers for 3A and
 	 * DIS statistics buffers are allocated or buffer size would be zero
-	 * then no need to do anything. */
+	 * then no need to do anything.
+	 */
 	if (((!memcmp(&old_info, &asd->params.curr_grid_info, sizeof(old_info))
 	      && asd->params.s3a_user_stat && asd->params.dvs_stat)
 	     || asd->params.curr_grid_info.s3a_grid.width == 0
@@ -1392,7 +1395,8 @@ int atomisp_alloc_metadata_output_buf(struct atomisp_sub_device *asd)
 	int i;
 
 	/* We allocate the cpu-side buffer used for communication with user
-	 * space */
+	 * space
+	 */
 	for (i = 0; i < ATOMISP_METADATA_TYPE_NUM; i++) {
 		asd->params.metadata_user[i] = kvmalloc(
 						   asd->stream_env[ATOMISP_INPUT_STREAM_GENERAL].
@@ -1554,10 +1558,10 @@ int atomisp_css_set_default_isys_config(struct atomisp_sub_device *asd,
 }
 
 void atomisp_css_isys_two_stream_cfg_update_stream1(
-    struct atomisp_sub_device *asd,
-    enum atomisp_input_stream_id stream_id,
-    enum atomisp_input_format input_format,
-    unsigned int width, unsigned int height)
+	struct atomisp_sub_device *asd,
+	enum atomisp_input_stream_id stream_id,
+	enum atomisp_input_format input_format,
+	unsigned int width, unsigned int height)
 {
 	struct ia_css_stream_config *s_config =
 		    &asd->stream_env[stream_id].stream_config;
@@ -1572,10 +1576,10 @@ void atomisp_css_isys_two_stream_cfg_update_stream1(
 }
 
 void atomisp_css_isys_two_stream_cfg_update_stream2(
-    struct atomisp_sub_device *asd,
-    enum atomisp_input_stream_id stream_id,
-    enum atomisp_input_format input_format,
-    unsigned int width, unsigned int height)
+	struct atomisp_sub_device *asd,
+	enum atomisp_input_stream_id stream_id,
+	enum atomisp_input_format input_format,
+	unsigned int width, unsigned int height)
 {
 	struct ia_css_stream_config *s_config =
 		    &asd->stream_env[stream_id].stream_config;
@@ -1592,9 +1596,9 @@ void atomisp_css_isys_two_stream_cfg_update_stream2(
 }
 
 int atomisp_css_input_set_effective_resolution(
-    struct atomisp_sub_device *asd,
-    enum atomisp_input_stream_id stream_id,
-    unsigned int width, unsigned int height)
+	struct atomisp_sub_device *asd,
+	enum atomisp_input_stream_id stream_id,
+	unsigned int width, unsigned int height)
 {
 	struct ia_css_stream_config *s_config =
 		    &asd->stream_env[stream_id].stream_config;
@@ -1613,8 +1617,8 @@ void atomisp_css_video_set_dis_envelope(struct atomisp_sub_device *asd,
 }
 
 void atomisp_css_input_set_two_pixels_per_clock(
-    struct atomisp_sub_device *asd,
-    bool two_ppc)
+	struct atomisp_sub_device *asd,
+	bool two_ppc)
 {
 	int i;
 
@@ -1725,14 +1729,14 @@ void atomisp_css_preview_enable_online(struct atomisp_sub_device *asd,
 }
 
 int atomisp_css_input_configure_port(
-    struct atomisp_sub_device *asd,
-    enum mipi_port_id port,
-    unsigned int num_lanes,
-    unsigned int timeout,
-    unsigned int mipi_freq,
-    enum atomisp_input_format metadata_format,
-    unsigned int metadata_width,
-    unsigned int metadata_height)
+	struct atomisp_sub_device *asd,
+	enum mipi_port_id port,
+	unsigned int num_lanes,
+	unsigned int timeout,
+	unsigned int mipi_freq,
+	enum atomisp_input_format metadata_format,
+	unsigned int metadata_width,
+	unsigned int metadata_height)
 {
 	int i;
 	struct atomisp_stream_env *stream_env;
@@ -1822,8 +1826,8 @@ void atomisp_css_stop(struct atomisp_sub_device *asd, bool in_reset)
 }
 
 void atomisp_css_continuous_set_num_raw_frames(
-     struct atomisp_sub_device *asd,
-     int num_frames)
+	struct atomisp_sub_device *asd,
+	int num_frames)
 {
 	if (asd->enable_raw_buffer_lock->val) {
 		asd->stream_env[ATOMISP_INPUT_STREAM_GENERAL]
@@ -1850,8 +1854,8 @@ void atomisp_css_continuous_set_num_raw_frames(
 }
 
 static enum ia_css_pipe_mode __pipe_id_to_pipe_mode(
-    struct atomisp_sub_device *asd,
-    enum ia_css_pipe_id pipe_id)
+	struct atomisp_sub_device *asd,
+	enum ia_css_pipe_id pipe_id)
 {
 	struct atomisp_device *isp = asd->isp;
 	struct camera_mipi_info *mipi_info = atomisp_to_sensor_mipi_info(
@@ -2357,10 +2361,10 @@ int atomisp_css_video_configure_output(struct atomisp_sub_device *asd,
 }
 
 int atomisp_css_video_configure_viewfinder(
-    struct atomisp_sub_device *asd,
-    unsigned int width, unsigned int height,
-    unsigned int min_width,
-    enum ia_css_frame_format format)
+	struct atomisp_sub_device *asd,
+	unsigned int width, unsigned int height,
+	unsigned int min_width,
+	enum ia_css_frame_format format)
 {
 	__configure_vf_output(asd, width, height, min_width, format,
 			      IA_CSS_PIPE_ID_VIDEO);
@@ -2368,67 +2372,67 @@ int atomisp_css_video_configure_viewfinder(
 }
 
 int atomisp_css_capture_configure_viewfinder(
-    struct atomisp_sub_device *asd,
-    unsigned int width, unsigned int height,
-    unsigned int min_width,
-    enum ia_css_frame_format format)
+	struct atomisp_sub_device *asd,
+	unsigned int width, unsigned int height,
+	unsigned int min_width,
+	enum ia_css_frame_format format)
 {
 	__configure_vf_output(asd, width, height, min_width, format, IA_CSS_PIPE_ID_CAPTURE);
 	return 0;
 }
 
 int atomisp_css_video_get_viewfinder_frame_info(
-    struct atomisp_sub_device *asd,
-    struct ia_css_frame_info *info)
+	struct atomisp_sub_device *asd,
+	struct ia_css_frame_info *info)
 {
 	return __get_frame_info(asd, ATOMISP_INPUT_STREAM_GENERAL, info,
 				ATOMISP_CSS_VF_FRAME, IA_CSS_PIPE_ID_VIDEO);
 }
 
 int atomisp_css_capture_get_viewfinder_frame_info(
-    struct atomisp_sub_device *asd,
-    struct ia_css_frame_info *info)
+	struct atomisp_sub_device *asd,
+	struct ia_css_frame_info *info)
 {
 	return __get_frame_info(asd, ATOMISP_INPUT_STREAM_GENERAL, info,
 				ATOMISP_CSS_VF_FRAME, IA_CSS_PIPE_ID_CAPTURE);
 }
 
 int atomisp_css_copy_get_output_frame_info(
-    struct atomisp_sub_device *asd,
-    unsigned int stream_index,
-    struct ia_css_frame_info *info)
+	struct atomisp_sub_device *asd,
+	unsigned int stream_index,
+	struct ia_css_frame_info *info)
 {
 	return __get_frame_info(asd, stream_index, info,
 				ATOMISP_CSS_OUTPUT_FRAME, IA_CSS_PIPE_ID_COPY);
 }
 
 int atomisp_css_preview_get_output_frame_info(
-    struct atomisp_sub_device *asd,
-    struct ia_css_frame_info *info)
+	struct atomisp_sub_device *asd,
+	struct ia_css_frame_info *info)
 {
 	return __get_frame_info(asd, ATOMISP_INPUT_STREAM_GENERAL, info,
 				ATOMISP_CSS_OUTPUT_FRAME, IA_CSS_PIPE_ID_PREVIEW);
 }
 
 int atomisp_css_capture_get_output_frame_info(
-    struct atomisp_sub_device *asd,
-    struct ia_css_frame_info *info)
+	struct atomisp_sub_device *asd,
+	struct ia_css_frame_info *info)
 {
 	return __get_frame_info(asd, ATOMISP_INPUT_STREAM_GENERAL, info,
 				ATOMISP_CSS_OUTPUT_FRAME, IA_CSS_PIPE_ID_CAPTURE);
 }
 
 int atomisp_css_video_get_output_frame_info(
-    struct atomisp_sub_device *asd,
-    struct ia_css_frame_info *info)
+	struct atomisp_sub_device *asd,
+	struct ia_css_frame_info *info)
 {
 	return __get_frame_info(asd, ATOMISP_INPUT_STREAM_GENERAL, info,
 				ATOMISP_CSS_OUTPUT_FRAME, IA_CSS_PIPE_ID_VIDEO);
 }
 
 int atomisp_css_preview_configure_pp_input(
-    struct atomisp_sub_device *asd,
-    unsigned int width, unsigned int height)
+	struct atomisp_sub_device *asd,
+	unsigned int width, unsigned int height)
 {
 	struct atomisp_stream_env *stream_env =
 		    &asd->stream_env[ATOMISP_INPUT_STREAM_GENERAL];
@@ -2442,16 +2446,16 @@ int atomisp_css_preview_configure_pp_input(
 }
 
 int atomisp_css_capture_configure_pp_input(
-    struct atomisp_sub_device *asd,
-    unsigned int width, unsigned int height)
+	struct atomisp_sub_device *asd,
+	unsigned int width, unsigned int height)
 {
 	__configure_capture_pp_input(asd, width, height, IA_CSS_PIPE_ID_CAPTURE);
 	return 0;
 }
 
 int atomisp_css_video_configure_pp_input(
-    struct atomisp_sub_device *asd,
-    unsigned int width, unsigned int height)
+	struct atomisp_sub_device *asd,
+	unsigned int width, unsigned int height)
 {
 	struct atomisp_stream_env *stream_env =
 		    &asd->stream_env[ATOMISP_INPUT_STREAM_GENERAL];
@@ -2613,8 +2617,9 @@ int atomisp_css_set_dis_coefs(struct atomisp_sub_device *asd,
 {
 	if (atomisp_compare_dvs_grid(asd, &coefs->grid_info) != 0)
 		/* If the grid info in the argument differs from the current
-		   grid info, we tell the caller to reset the grid size and
-		   try again. */
+		 * grid info, we tell the caller to reset the grid size and
+		   try again.
+		 */
 		return -EAGAIN;
 
 	if (!coefs->hor_coefs.odd_real ||
@@ -3039,8 +3044,9 @@ int atomisp_css_get_dis_stat(struct atomisp_sub_device *asd,
 
 	if (atomisp_compare_dvs_grid(asd, &stats->dvs2_stat.grid_info) != 0)
 		/* If the grid info in the argument differs from the current
-		   grid info, we tell the caller to reset the grid size and
-		   try again. */
+		 * grid info, we tell the caller to reset the grid size and
+		   try again.
+		 */
 		return -EAGAIN;
 
 	spin_lock_irqsave(&asd->dis_stats_lock, flags);
@@ -3104,7 +3110,7 @@ int atomisp_css_get_dis_stat(struct atomisp_sub_device *asd,
 }
 
 struct ia_css_shading_table *atomisp_css_shading_table_alloc(
-    unsigned int width, unsigned int height)
+	unsigned int width, unsigned int height)
 {
 	return ia_css_shading_table_alloc(width, height);
 }
@@ -3394,7 +3400,7 @@ void atomisp_en_dz_capt_pipe(struct atomisp_sub_device *asd, bool enable)
 }
 
 struct ia_css_dvs_grid_info *atomisp_css_get_dvs_grid_info(
-    struct ia_css_grid_info *grid_info)
+	struct ia_css_grid_info *grid_info)
 {
 	if (!grid_info)
 		return NULL;
