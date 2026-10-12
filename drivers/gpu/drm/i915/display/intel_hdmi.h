@@ -64,6 +64,8 @@ int intel_hdmi_dsc_get_num_slices(const struct drm_display_mode *mode,
 int intel_hdmi_dsc_get_slice_height(int vactive);
 bool intel_hdmi_is_frl(u32 clock);
 void intel_hdmi_prepare_for_frl_mode(const struct intel_crtc_state *crtc_state);
+int intel_hdmi_start_frl(struct intel_encoder *encoder,
+			 const struct intel_crtc_state *crtc_state);
 void hsw_write_infoframe(struct intel_encoder *encoder,
 			 const struct intel_crtc_state *crtc_state,
 			 unsigned int type,
