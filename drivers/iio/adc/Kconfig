@@ -603,6 +603,7 @@ config ADE9000
 	    - ADE9000
 	    - ADE9078
 	    - ADE9430
+	    - ADE9039
 
 	  The devices feature high-precision analog-to-digital converters
 	  and digital signal processing to compute RMS values, power factor,
