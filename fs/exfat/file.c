@@ -786,10 +786,16 @@ static ssize_t exfat_fallback_buffered_write(struct kiocb *iocb,
 
 static ssize_t exfat_dio_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
+	struct inode *inode = file_inode(iocb->ki_filp);
+	loff_t end = iocb->ki_pos + iov_iter_count(from);
+	unsigned int dio_flags = 0;
 	ssize_t ret;
 
+	if (end > exfat_get_valid_size(EXFAT_I(inode)))
+		dio_flags |= IOMAP_DIO_FORCE_WAIT;
+
 	ret = iomap_dio_rw(iocb, from, &exfat_write_iomap_ops,
-			&exfat_write_dio_ops, 0, NULL, 0);
+			&exfat_write_dio_ops, dio_flags, NULL, 0);
 	if (ret == -ENOTBLK)
 		ret = 0;
 	else if (ret < 0)
