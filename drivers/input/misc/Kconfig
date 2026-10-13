@@ -126,6 +126,20 @@ config INPUT_ATMEL_CAPTOUCH
 	  To compile this driver as a module, choose M here: the
 	  module will be called atmel_captouch.
 
+config INPUT_AW8697
+	tristate "Awinic AW8697 Haptic Driver Support"
+	depends on I2C && INPUT
+	select INPUT_FF_MEMLESS
+	select REGMAP_I2C
+	help
+	  Say Y here if you have an Awinic AW8697 haptic chip. The
+	  AW8697 drives a linear resonant actuator and is found in
+	  phones such as the Xiaomi POCO F3. The driver exposes a
+	  force feedback input device with rumble support.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called aw8697.
+
 config INPUT_AW86927
 	tristate "Awinic AW86927 Haptic Driver Support"
 	depends on I2C && INPUT
