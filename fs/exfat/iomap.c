@@ -57,6 +57,7 @@ static int __exfat_iomap_begin(struct inode *inode, loff_t offset, loff_t length
 			iomap->addr = IOMAP_NULL_ADDR;
 			iomap->offset = offset;
 			iomap->length = length;
+			iomap->validity_cookie = valid_size;
 			return 0;
 		}
 
@@ -134,7 +135,7 @@ static int __exfat_iomap_begin(struct inode *inode, loff_t offset, loff_t length
 		}
 	}
 
-	iomap->flags |= IOMAP_F_MERGED;
+	iomap->validity_cookie = valid_size;
 out:
 	mutex_unlock(&sbi->s_lock);
 	return err;
@@ -241,6 +242,17 @@ const struct iomap_ops exfat_write_iomap_ops = {
 	.iomap_next	= exfat_write_iomap_next,
 };
 
+static struct folio *exfat_iomap_get_folio(struct iomap_iter *iter, loff_t pos,
+			unsigned int len)
+{
+	struct folio *folio = iomap_get_folio(iter, pos, len);
+
+	if (!IS_ERR(folio))
+		iter->iomap.private = folio;
+
+	return folio;
+}
+
 static void exfat_iomap_put_folio(struct inode *inode, loff_t pos,
 		unsigned int copied, struct folio *folio)
 {
@@ -253,8 +265,32 @@ static void exfat_iomap_put_folio(struct inode *inode, loff_t pos,
 	folio_put(folio);
 }
 
+static bool exfat_iomap_valid(struct inode *inode, const struct iomap *iomap)
+{
+	struct folio *folio = iomap->private;
+	loff_t old_valid_size = iomap->validity_cookie;
+	loff_t valid_size = exfat_get_valid_size(EXFAT_I(inode));
+
+	if (valid_size == old_valid_size)
+		return true;
+
+	if (!folio)
+		return false;
+
+	/* Still valid for this folio. */
+	if (old_valid_size >= folio_next_pos(folio))
+		return true;
+
+	if (valid_size <= folio_pos(folio))
+		return true;
+
+	return false;
+}
+
 const struct iomap_write_ops exfat_iomap_write_ops = {
+	.get_folio	= exfat_iomap_get_folio,
 	.put_folio	= exfat_iomap_put_folio,
+	.iomap_valid	= exfat_iomap_valid,
 };
 
 /*
