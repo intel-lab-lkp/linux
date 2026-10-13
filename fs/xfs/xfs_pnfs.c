@@ -273,6 +273,46 @@ xfs_pnfs_validate_isize(
 }
 
 /*
+ * Ensure the committed range is backed by allocated blocks. A client may only
+ * write to blocks that a layout handed out, xfs_fs_map_blocks() allocates
+ * blocks for any hole in a write layout, and no layout hands out a delalloc
+ * extent. A hole or a delalloc extent in the range was either never laid out
+ * or lost its blocks after the layout was handed out, so nothing the client
+ * wrote can be committed there. Converting a hole would also allocate blocks
+ * that the transaction did not reserve.
+ */
+static int
+xfs_pnfs_validate_commit(
+	struct xfs_inode	*ip,
+	xfs_off_t		start,
+	xfs_off_t		end)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, start);
+	xfs_fileoff_t		end_fsb = XFS_B_TO_FSB(mp, end);
+	struct xfs_bmbt_irec	imap;
+	uint			lock_flags;
+	int			nimaps;
+	int			error = 0;
+
+	lock_flags = xfs_ilock_data_map_shared(ip);
+	while (offset_fsb < end_fsb) {
+		nimaps = 1;
+		error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb,
+				&imap, &nimaps, 0);
+		if (error)
+			break;
+		if (!nimaps || !xfs_bmap_is_real_extent(&imap)) {
+			error = -EIO;
+			break;
+		}
+		offset_fsb = imap.br_startoff + imap.br_blockcount;
+	}
+	xfs_iunlock(ip, lock_flags);
+	return error;
+}
+
+/*
  * Make sure the blocks described by maps are stable on disk.  This includes
  * converting any unwritten extents, flushing the disk cache and updating the
  * time stamps.
@@ -305,6 +345,22 @@ xfs_fs_commit_blocks(
 		size = new_size;
 	}
 
+	/*
+	 * Check all of the maps before converting any of them, so that a commit
+	 * refused for a hole or a delalloc extent converts nothing.
+	 */
+	for (i = 0; i < nr_maps; i++) {
+		u64 start = maps[i].offset;
+		u64 end;
+
+		if (start >= size)
+			continue;
+		end = start + min_t(u64, maps[i].length, size - start);
+		error = xfs_pnfs_validate_commit(ip, start, end);
+		if (error)
+			goto out_drop_iolock;
+	}
+
 	for (i = 0; i < nr_maps; i++) {
 		u64 start, length, end;
 
@@ -312,9 +368,7 @@ xfs_fs_commit_blocks(
 		if (start > size)
 			continue;
 
-		end = start + maps[i].length;
-		if (end > size)
-			end = size;
+		end = start + min_t(u64, maps[i].length, size - start);
 
 		length = end - start;
 		if (!length)
