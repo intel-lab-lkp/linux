@@ -67,6 +67,12 @@ struct mem_cgroup_event {
 #define MEMFILE_TYPE(val)	((val) >> 16 & 0xffff)
 #define MEMFILE_ATTR(val)	((val) & 0xffff)
 
+#define MEMCG_OOM_WAIT_PATH_LEN		128
+#define MEMCG_OOM_STAGE_ENTER		"enter"
+#define MEMCG_OOM_STAGE_RECOVERED	"recovered"
+#define MEMCG_OOM_STAGE_KILLED		"killed"
+#define MEMCG_OOM_UNKNOWN_PATH		"<unknown>"
+
 enum {
 	RES_USAGE,
 	RES_LIMIT,
@@ -1023,6 +1029,34 @@ void memcg1_oom_recover(struct mem_cgroup *memcg)
 }
 
 /**
+ * memcg1_log_oom_wait - Log memcg userspace OOM wait entry and completion
+ * @memcg: The memory cgroup experiencing the userspace OOM wait
+ * @stage: Lifecycle stage string ("enter", "recovered", or "killed")
+ * @waited_ms: Elapsed time spent waiting on memcg_oom_waitq in milliseconds
+ * @killed: Whether the waiting task woke with a fatal signal pending
+ *
+ * Emits a rate-limited KERN_ERR message so that memcg userspace OOM handler
+ * stalls are captured on serial consoles even when booted with quiet
+ * (console_loglevel=4) and preserved in dmesg.
+ */
+static void memcg1_log_oom_wait(struct mem_cgroup *memcg, const char *stage,
+				unsigned int waited_ms, bool killed)
+{
+	char cgrp_path[MEMCG_OOM_WAIT_PATH_LEN];
+	u64 usage_kb = K((u64)page_counter_read(&memcg->memory));
+	u64 limit_kb = K((u64)READ_ONCE(memcg->memory.max));
+	u64 unevictable_kb = K((u64)memcg_page_state(memcg, NR_UNEVICTABLE));
+
+	if (cgroup_path(memcg->css.cgroup, cgrp_path, sizeof(cgrp_path)) < 0)
+		strscpy(cgrp_path, MEMCG_OOM_UNKNOWN_PATH, sizeof(cgrp_path));
+
+	pr_err_ratelimited("memcg_oom_wait: stage=%s cgroup=%s comm=%s pid=%d usage_kb=%llu limit_kb=%llu unevictable_kb=%llu waited_ms=%u killed=%d\n",
+			   stage, cgrp_path, current->comm, current->pid,
+			   usage_kb, limit_kb, unevictable_kb,
+			   waited_ms, killed);
+}
+
+/**
  * mem_cgroup_oom_synchronize - complete memcg OOM handling
  * @handle: actually kill/wait or just clean up the OOM state
  *
@@ -1043,6 +1077,7 @@ bool mem_cgroup_oom_synchronize(bool handle)
 {
 	struct mem_cgroup *memcg = current->memcg_in_oom;
 	struct oom_wait_info owait;
+	unsigned long start_jiffies = 0;
 	bool locked;
 
 	/* OOM is global, do not handle */
@@ -1063,10 +1098,22 @@ bool mem_cgroup_oom_synchronize(bool handle)
 
 	locked = mem_cgroup_oom_trylock(memcg);
 
-	if (locked)
+	if (locked) {
+		start_jiffies = jiffies;
+		memcg1_log_oom_wait(memcg, MEMCG_OOM_STAGE_ENTER, 0, false);
 		mem_cgroup_oom_notify(memcg);
+	}
 
 	schedule();
+	if (locked) {
+		bool killed = fatal_signal_pending(current);
+
+		memcg1_log_oom_wait(memcg,
+				    killed ? MEMCG_OOM_STAGE_KILLED :
+					     MEMCG_OOM_STAGE_RECOVERED,
+				    jiffies_to_msecs(jiffies - start_jiffies),
+				    killed);
+	}
 	mem_cgroup_unmark_under_oom(memcg);
 	finish_wait(&memcg_oom_waitq, &owait.wait);
 
