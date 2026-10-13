@@ -827,9 +827,15 @@ bool snp_probe_rmptable_info(void)
 			setup_clear_cpu_cap(X86_FEATURE_RMPOPT);
 			return false;
 		}
-	} else {
-		setup_clear_cpu_cap(X86_FEATURE_RMPOPT);
 	}
+
+	/*
+	 * Segmented RMP is either not supported on the platform or is
+	 * disabled by the firmware.  RMPOPT is not supported without
+	 * segmented RMP, so drop the capability before it reaches the
+	 * initcall and faults programming RMPOPT_BASE / issuing RMPOPT.
+	 */
+	setup_clear_cpu_cap(X86_FEATURE_RMPOPT);
 
 	return probe_contiguous_rmptable_info();
 }
