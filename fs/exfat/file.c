@@ -670,6 +670,7 @@ static int exfat_prepare_valid_range(struct inode *inode, loff_t start,
 				    loff_t end)
 {
 	struct address_space *mapping = inode->i_mapping;
+	struct exfat_inode_info *ei = EXFAT_I(inode);
 	loff_t next, pos = start;
 	struct folio *folio;
 	pgoff_t index;
@@ -690,11 +691,20 @@ static int exfat_prepare_valid_range(struct inode *inode, loff_t start,
 		folio_lock(folio);
 		if (folio->mapping == mapping) {
 			folio_mark_dirty(folio);
+			exfat_advance_valid_size(ei, next);
 			pos = next;
 		}
 		folio_unlock(folio);
 		folio_put(folio);
 	}
+
+	/*
+	 * Track zeroed_size by block, not page, because writeback stops
+	 * at i_size recording blocks wholly beyond it could skip a
+	 * later required zeroing.
+	 */
+	exfat_advance_zeroed_size(ei, round_up(next, i_blocksize(inode)));
+	mark_inode_dirty(inode);
 
 	return 0;
 }
@@ -740,11 +750,6 @@ static int exfat_extend_valid_size(struct inode *inode, loff_t new_valid_size)
 			filemap_invalidate_unlock(inode->i_mapping);
 			return ret;
 		}
-
-		exfat_set_valid_size(ei, new_valid_size);
-		exfat_advance_zeroed_size(ei,
-				round_up(new_valid_size, i_blocksize(inode)));
-		mark_inode_dirty(inode);
 	}
 
 	return ret;
@@ -908,6 +913,7 @@ static vm_fault_t exfat_page_mkwrite(struct vm_fault *vmf)
 	struct exfat_inode_info *ei = EXFAT_I(inode);
 	vm_fault_t ret;
 	loff_t new_valid_size, mmap_valid_size, fault_page_start;
+	bool dirty = false;
 
 	if (!inode_trylock(inode))
 		return VM_FAULT_RETRY;
@@ -934,16 +940,7 @@ static vm_fault_t exfat_page_mkwrite(struct vm_fault *vmf)
 				return vmf_fs_error(err);
 			}
 		}
-
-		/*
-		 * Track zeroed_size by block, not page, because writeback stops
-		 * at i_size recording blocks wholly beyond it could skip a
-		 * later required zeroing.
-		 */
-		exfat_advance_zeroed_size(ei,
-				round_up(new_valid_size, i_blocksize(inode)));
-		exfat_set_valid_size(ei, new_valid_size);
-		mark_inode_dirty(inode);
+		dirty = true;
 	}
 
 	sb_start_pagefault(inode->i_sb);
@@ -951,6 +948,13 @@ static vm_fault_t exfat_page_mkwrite(struct vm_fault *vmf)
 
 	filemap_invalidate_lock_shared(inode->i_mapping);
 	ret = iomap_page_mkwrite(vmf, &exfat_iomap_ops, NULL);
+	if (ret == VM_FAULT_LOCKED && dirty) {
+		exfat_advance_valid_size(ei, new_valid_size);
+		exfat_advance_zeroed_size(ei,
+				round_up(new_valid_size, i_blocksize(inode)));
+		mark_inode_dirty(inode);
+	}
+
 	filemap_invalidate_unlock_shared(inode->i_mapping);
 	sb_end_pagefault(inode->i_sb);
 	inode_unlock(inode);
