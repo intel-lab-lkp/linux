@@ -109,6 +109,7 @@ mod common_clk {
     use core::{
         marker::PhantomData,
         mem::ManuallyDrop,
+        ops::Deref,
         ptr, //
     };
 
@@ -228,6 +229,11 @@ mod common_clk {
     /// `clk_prepare()`, and the [`Enabled`] state is associated with a single
     /// count of both `clk_prepare()` and `clk_enable()`.
     ///
+    /// A shared reference to a [`Clk<Prepared>`] or a [`Clk<Enabled>`] may also
+    /// be obtained from a [`PreparedGuard`], an [`EnabledGuard`] or a
+    /// [`PrepareEnabledGuard`]. In that case, the guard owns the counts of that
+    /// state for as long as the reference is alive.
+    ///
     /// All states are associated with a single count of `clk_get()`.
     ///
     /// # Examples
@@ -311,6 +317,43 @@ mod common_clk {
     ///             suspended => suspended,
     ///         })
     ///     }
+    /// }
+    /// ```
+    ///
+    /// Drivers that keep a clock around in a lower state can take a guard
+    /// instead of moving the clock through the states, e.g. to have it running
+    /// for a short section:
+    ///
+    /// ```
+    /// use kernel::clk::{
+    ///     Clk,
+    ///     Hertz,
+    ///     Prepared,
+    ///     Unprepared,
+    /// };
+    ///
+    /// fn read_rate(clk: &Clk<Prepared>) -> Result<Hertz> {
+    ///     let enabled = clk.enable_guard()?;
+    ///
+    ///     // The clock is enabled until `enabled` goes out of scope.
+    ///     Ok(enabled.rate())
+    /// }
+    ///
+    /// fn touch_registers(clk: &Clk<Unprepared>) -> Result {
+    ///     {
+    ///         let prepared = clk.prepare_guard()?;
+    ///         let _enabled = prepared.enable_guard()?;
+    ///
+    ///         // `_enabled` borrows `prepared`, so the clock is disabled before
+    ///         // it is unprepared.
+    ///     }
+    ///
+    ///     // Or, alternatively:
+    ///     {
+    ///         let _enabled = clk.prepare_enable_guard()?;
+    ///     }
+    ///
+    ///     Ok(())
     /// }
     /// ```
     ///
@@ -414,6 +457,43 @@ mod common_clk {
                     clk: ManuallyDrop::into_inner(clk),
                 })
         }
+
+        /// Prepares the clock for the lifetime of the returned guard.
+        ///
+        /// Unlike [`Clk::prepare`], this does not consume `self`. The guard
+        /// dereferences to a [`Clk<Prepared>`].
+        ///
+        /// Equivalent to the kernel's [`clk_prepare`] API.
+        ///
+        /// [`clk_prepare`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_prepare
+        #[inline]
+        pub fn prepare_guard(&self) -> Result<PreparedGuard<'_>> {
+            // SAFETY: By the type invariants, `self.as_raw()` is a valid argument
+            // for `clk_prepare()`.
+            to_result(unsafe { bindings::clk_prepare(self.as_raw()) })?;
+
+            // INVARIANT: `clk_prepare()` succeeded, so the guard owns a single
+            // count of it.
+            Ok(PreparedGuard { clk: self })
+        }
+
+        /// Prepares and enables the clock for the lifetime of the returned guard.
+        ///
+        /// Unlike [`Clk::prepare`] followed by [`Clk::enable`], this does not
+        /// consume `self`. The guard dereferences to a [`Clk<Enabled>`].
+        ///
+        /// Equivalent to calling [`Clk::prepare_guard`] followed by
+        /// [`Clk::enable_guard`], with a single guard holding both counts.
+        #[inline]
+        pub fn prepare_enable_guard(&self) -> Result<PrepareEnabledGuard<'_>> {
+            // SAFETY: By the type invariants, `self.as_raw()` is a valid argument
+            // for `clk_prepare_enable()`.
+            to_result(unsafe { bindings::clk_prepare_enable(self.as_raw()) })?;
+
+            // INVARIANT: `clk_prepare_enable()` succeeded, so the guard owns a
+            // single count of both `clk_prepare()` and `clk_enable()`.
+            Ok(PrepareEnabledGuard { clk: self })
+        }
     }
 
     impl Clk<Prepared> {
@@ -481,6 +561,27 @@ mod common_clk {
                     error,
                     clk: ManuallyDrop::into_inner(clk),
                 })
+        }
+
+        /// Enables the clock for the lifetime of the returned guard.
+        ///
+        /// Unlike [`Clk::enable`], this does not consume `self`, so it can be used
+        /// on a [`Clk<Prepared>`] that is shared or stored in driver data. The
+        /// clock stays [`Prepared`] through `self`, and the guard dereferences to
+        /// a [`Clk<Enabled>`].
+        ///
+        /// Equivalent to the kernel's [`clk_enable`] API.
+        ///
+        /// [`clk_enable`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_enable
+        #[inline]
+        pub fn enable_guard(&self) -> Result<EnabledGuard<'_>> {
+            // SAFETY: By the type invariants, `self.as_raw()` is a valid argument
+            // for `clk_enable()`.
+            to_result(unsafe { bindings::clk_enable(self.as_raw()) })?;
+
+            // INVARIANT: `clk_enable()` succeeded, so the guard owns a single
+            // count of it.
+            Ok(EnabledGuard { clk: self })
         }
     }
 
@@ -580,6 +681,123 @@ mod common_clk {
             // SAFETY: By the type invariants, `self.as_raw()` is a valid
             // argument for `clk_put()`.
             unsafe { bindings::clk_put(self.as_raw()) };
+        }
+    }
+
+    /// A guard that keeps a [`Clk`] enabled.
+    ///
+    /// Returned by [`Clk::enable_guard`]. Dropping it disables the clock again,
+    /// while the borrowed [`Clk<Prepared>`] keeps it prepared. It dereferences to
+    /// [`Clk<Enabled>`], so it can be passed wherever an enabled clock is
+    /// expected.
+    ///
+    /// # Invariants
+    ///
+    /// The guard owns a single count of `clk_enable()` on `clk`, taken by
+    /// [`Clk::enable_guard`].
+    #[must_use = "if unused, the clock will be disabled immediately"]
+    pub struct EnabledGuard<'a> {
+        clk: &'a Clk<Prepared>,
+    }
+
+    impl Deref for EnabledGuard<'_> {
+        type Target = Clk<Enabled>;
+
+        #[inline]
+        fn deref(&self) -> &Clk<Enabled> {
+            // SAFETY: `Clk<T>` is `#[repr(transparent)]` over the `struct clk`
+            // pointer for every `T`, so `Clk<Prepared>` and `Clk<Enabled>` have
+            // the same layout. By the type invariants, the guard owns an enable
+            // count for as long as the returned reference is alive, and a shared
+            // reference cannot be used to drop the `Clk`.
+            unsafe { &*ptr::from_ref(self.clk).cast::<Clk<Enabled>>() }
+        }
+    }
+
+    impl Drop for EnabledGuard<'_> {
+        #[inline]
+        fn drop(&mut self) {
+            // SAFETY: By the type invariants, the guard owns a `clk_enable()`
+            // count on `self.clk`, which this releases.
+            unsafe { bindings::clk_disable(self.clk.as_raw()) };
+        }
+    }
+
+    /// A guard that keeps a [`Clk`] prepared.
+    ///
+    /// Returned by [`Clk::prepare_guard`]. Dropping it unprepares the clock
+    /// again, which may sleep. It dereferences to [`Clk<Prepared>`], so it can be
+    /// passed wherever a prepared clock is expected.
+    ///
+    /// # Invariants
+    ///
+    /// The guard owns a single count of `clk_prepare()` on `clk`, taken by
+    /// [`Clk::prepare_guard`].
+    #[must_use = "if unused, the clock will be unprepared immediately"]
+    pub struct PreparedGuard<'a> {
+        clk: &'a Clk<Unprepared>,
+    }
+
+    impl Deref for PreparedGuard<'_> {
+        type Target = Clk<Prepared>;
+
+        #[inline]
+        fn deref(&self) -> &Clk<Prepared> {
+            // SAFETY: `Clk<T>` is `#[repr(transparent)]` over the `struct clk`
+            // pointer for every `T`, so `Clk<Unprepared>` and `Clk<Prepared>`
+            // have the same layout. By the type invariants, the guard owns a
+            // prepare count for as long as the returned reference is alive, and
+            // a shared reference cannot be used to drop the `Clk`.
+            unsafe { &*ptr::from_ref(self.clk).cast::<Clk<Prepared>>() }
+        }
+    }
+
+    impl Drop for PreparedGuard<'_> {
+        #[inline]
+        fn drop(&mut self) {
+            // SAFETY: By the type invariants, the guard owns a `clk_prepare()`
+            // count on `self.clk`, which this releases.
+            unsafe { bindings::clk_unprepare(self.clk.as_raw()) };
+        }
+    }
+
+    /// A guard that keeps a [`Clk`] prepared and enabled.
+    ///
+    /// Returned by [`Clk::prepare_enable_guard`]. Dropping it disables and
+    /// unprepares the clock again, which may sleep. It dereferences to
+    /// [`Clk<Enabled>`], so it can be passed wherever an enabled clock is
+    /// expected.
+    ///
+    /// # Invariants
+    ///
+    /// The guard owns a single count of both `clk_prepare()` and `clk_enable()`
+    /// on `clk`, taken by [`Clk::prepare_enable_guard`].
+    #[must_use = "if unused, the clock will be disabled and unprepared immediately"]
+    pub struct PrepareEnabledGuard<'a> {
+        clk: &'a Clk<Unprepared>,
+    }
+
+    impl Deref for PrepareEnabledGuard<'_> {
+        type Target = Clk<Enabled>;
+
+        #[inline]
+        fn deref(&self) -> &Clk<Enabled> {
+            // SAFETY: `Clk<T>` is `#[repr(transparent)]` over the `struct clk`
+            // pointer for every `T`, so `Clk<Unprepared>` and `Clk<Enabled>`
+            // have the same layout. By the type invariants, the guard owns a
+            // prepare and an enable count for as long as the returned reference
+            // is alive, and a shared reference cannot be used to drop the `Clk`.
+            unsafe { &*ptr::from_ref(self.clk).cast::<Clk<Enabled>>() }
+        }
+    }
+
+    impl Drop for PrepareEnabledGuard<'_> {
+        #[inline]
+        fn drop(&mut self) {
+            // SAFETY: By the type invariants, the guard owns a count of both
+            // `clk_prepare()` and `clk_enable()` on `self.clk`, which this
+            // releases.
+            unsafe { bindings::clk_disable_unprepare(self.clk.as_raw()) };
         }
     }
 }
