@@ -793,9 +793,21 @@ void ice_reset_all_vfs(struct ice_pf *pf)
 
 	/* free VF resources to begin resetting the VSI state */
 	ice_for_each_vf(pf, bkt, vf) {
+		/* Detach the representor before cfg_lock and attach it after
+		 * releasing it again: both take the devlink instance lock and
+		 * then RTNL, while __ice_set_vf_mac(), ice_set_vf_port_vlan()
+		 * and the representor ethtool reset take cfg_lock under RTNL.
+		 * Take cfg_lock once ahead of the detach to wait out a reset
+		 * that is already inside the lock; ICE_VF_DIS, raised above,
+		 * keeps later ones out.
+		 */
 		mutex_lock(&vf->cfg_lock);
+		mutex_unlock(&vf->cfg_lock);
 
 		ice_eswitch_detach_vf(pf, vf);
+
+		mutex_lock(&vf->cfg_lock);
+
 		vf->driver_caps = 0;
 		ice_vc_set_default_allowlist(vf);
 
@@ -816,10 +828,10 @@ void ice_reset_all_vfs(struct ice_pf *pf)
 		}
 		ice_vf_post_vsi_rebuild(vf);
 
+		mutex_unlock(&vf->cfg_lock);
+
 		if (ice_is_eswitch_mode_switchdev(pf))
 			ice_eswitch_attach_vf(pf, vf);
-
-		mutex_unlock(&vf->cfg_lock);
 	}
 
 	ice_flush(hw);
