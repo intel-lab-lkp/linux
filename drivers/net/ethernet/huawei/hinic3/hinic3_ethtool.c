@@ -723,6 +723,179 @@ static void hinic3_get_ethtool_stats(struct net_device *netdev,
 	hinic3_get_drv_queue_stats(netdev, data + i);
 }
 
+static void hinic3_get_eth_phy_stats(struct net_device *netdev,
+				     struct ethtool_eth_phy_stats *phy_stats)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct mag_cmd_port_stats *ps;
+	int err;
+
+	if (HINIC3_IS_VF(nic_dev->hwdev))
+		return;
+
+	ps = kmalloc_obj(*ps);
+	if (!ps)
+		return;
+
+	err = hinic3_get_phy_port_stats(nic_dev->hwdev, ps);
+	if (err) {
+		kfree(ps);
+		netdev_err(netdev, "Failed to get eth phy stats from fw\n");
+		return;
+	}
+
+	phy_stats->SymbolErrorDuringCarrier = ps->mac_rx_sym_err_pkt_num;
+
+	kfree(ps);
+}
+
+static void hinic3_get_eth_mac_stats(struct net_device *netdev,
+				     struct ethtool_eth_mac_stats *mac_stats)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct mag_cmd_port_stats *ps;
+	int err;
+
+	ps = kmalloc_obj(*ps);
+	if (!ps)
+		return;
+
+	err = hinic3_get_phy_port_stats(nic_dev->hwdev, ps);
+	if (err) {
+		kfree(ps);
+		netdev_err(netdev, "Failed to get eth mac stats from fw\n");
+		return;
+	}
+
+	mac_stats->FramesTransmittedOK = ps->mac_tx_good_pkt_num;
+	mac_stats->FramesReceivedOK = ps->mac_rx_good_pkt_num;
+	mac_stats->FrameCheckSequenceErrors = ps->mac_rx_fcs_err_pkt_num;
+	mac_stats->OctetsTransmittedOK = ps->mac_tx_good_oct_num;
+	mac_stats->OctetsReceivedOK = ps->mac_rx_good_oct_num;
+	mac_stats->MulticastFramesXmittedOK = ps->mac_tx_multi_pkt_num;
+	mac_stats->BroadcastFramesXmittedOK = ps->mac_tx_broad_pkt_num;
+	mac_stats->MulticastFramesReceivedOK = ps->mac_rx_multi_pkt_num;
+	mac_stats->BroadcastFramesReceivedOK = ps->mac_rx_broad_pkt_num;
+
+	kfree(ps);
+}
+
+static void hinic3_get_eth_ctrl_stats(struct net_device *netdev,
+				      struct ethtool_eth_ctrl_stats *ctrl_stats)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct mag_cmd_port_stats *ps;
+	int err;
+
+	ps = kmalloc_obj(*ps);
+	if (!ps)
+		return;
+
+	err = hinic3_get_phy_port_stats(nic_dev->hwdev, ps);
+	if (err) {
+		kfree(ps);
+		netdev_err(netdev, "Failed to get eth ctrl stats from fw\n");
+		return;
+	}
+
+	ctrl_stats->MACControlFramesTransmitted = ps->mac_tx_control_pkt_num;
+	ctrl_stats->MACControlFramesReceived = ps->mac_rx_control_pkt_num;
+
+	kfree(ps);
+}
+
+static const struct ethtool_rmon_hist_range hinic3_rmon_ranges[] = {
+	{     0,    64 },
+	{    65,   127 },
+	{   128,   255 },
+	{   256,   511 },
+	{   512,  1023 },
+	{  1024,  1518 },
+	{  1519,  2047 },
+	{  2048,  4095 },
+	{  4096,  8191 },
+	{  8192,  9216 },
+	{  9217, 12287 },
+	{}
+};
+
+static void hinic3_get_rmon_stats(struct net_device *netdev,
+				  struct ethtool_rmon_stats *rmon_stats,
+				  const struct ethtool_rmon_hist_range **ranges)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct mag_cmd_port_stats *ps;
+	int err;
+
+	ps = kmalloc_obj(*ps);
+	if (!ps)
+		return;
+
+	err = hinic3_get_phy_port_stats(nic_dev->hwdev, ps);
+	if (err) {
+		kfree(ps);
+		netdev_err(netdev, "Failed to get eth rmon stats from fw\n");
+		return;
+	}
+
+	rmon_stats->undersize_pkts	= ps->mac_rx_undersize_pkt_num;
+	rmon_stats->oversize_pkts	= ps->mac_rx_oversize_pkt_num;
+	rmon_stats->fragments		= ps->mac_rx_fragment_pkt_num;
+	rmon_stats->jabbers		= ps->mac_rx_jabber_pkt_num;
+
+	rmon_stats->hist[0]		= ps->mac_rx_64_oct_pkt_num;
+	rmon_stats->hist[1]		= ps->mac_rx_65_127_oct_pkt_num;
+	rmon_stats->hist[2]		= ps->mac_rx_128_255_oct_pkt_num;
+	rmon_stats->hist[3]		= ps->mac_rx_256_511_oct_pkt_num;
+	rmon_stats->hist[4]		= ps->mac_rx_512_1023_oct_pkt_num;
+	rmon_stats->hist[5]		= ps->mac_rx_1024_1518_oct_pkt_num;
+	rmon_stats->hist[6]		= ps->mac_rx_1519_2047_oct_pkt_num;
+	rmon_stats->hist[7]		= ps->mac_rx_2048_4095_oct_pkt_num;
+	rmon_stats->hist[8]		= ps->mac_rx_4096_8191_oct_pkt_num;
+	rmon_stats->hist[9]		= ps->mac_rx_8192_9216_oct_pkt_num;
+	rmon_stats->hist[10]		= ps->mac_rx_9217_12287_oct_pkt_num;
+
+	rmon_stats->hist_tx[0]		= ps->mac_tx_64_oct_pkt_num;
+	rmon_stats->hist_tx[1]		= ps->mac_tx_65_127_oct_pkt_num;
+	rmon_stats->hist_tx[2]		= ps->mac_tx_128_255_oct_pkt_num;
+	rmon_stats->hist_tx[3]		= ps->mac_tx_256_511_oct_pkt_num;
+	rmon_stats->hist_tx[4]		= ps->mac_tx_512_1023_oct_pkt_num;
+	rmon_stats->hist_tx[5]		= ps->mac_tx_1024_1518_oct_pkt_num;
+	rmon_stats->hist_tx[6]		= ps->mac_tx_1519_2047_oct_pkt_num;
+	rmon_stats->hist_tx[7]		= ps->mac_tx_2048_4095_oct_pkt_num;
+	rmon_stats->hist_tx[8]		= ps->mac_tx_4096_8191_oct_pkt_num;
+	rmon_stats->hist_tx[9]		= ps->mac_tx_8192_9216_oct_pkt_num;
+	rmon_stats->hist_tx[10]		= ps->mac_tx_9217_12287_oct_pkt_num;
+
+	*ranges = hinic3_rmon_ranges;
+
+	kfree(ps);
+}
+
+static void hinic3_get_pause_stats(struct net_device *netdev,
+				   struct ethtool_pause_stats *pause_stats)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct mag_cmd_port_stats *ps;
+	int err;
+
+	ps = kmalloc_obj(*ps);
+	if (!ps)
+		return;
+
+	err = hinic3_get_phy_port_stats(nic_dev->hwdev, ps);
+	if (err) {
+		kfree(ps);
+		netdev_err(netdev, "Failed to get eth pause stats from fw\n");
+		return;
+	}
+
+	pause_stats->tx_pause_frames = ps->mac_tx_pause_num;
+	pause_stats->rx_pause_frames = ps->mac_rx_pause_num;
+
+	kfree(ps);
+}
+
 static const struct ethtool_ops hinic3_ethtool_ops = {
 	.supported_coalesce_params      = ETHTOOL_COALESCE_USECS |
 					  ETHTOOL_COALESCE_PKT_RATE_RX_USECS,
@@ -734,6 +907,11 @@ static const struct ethtool_ops hinic3_ethtool_ops = {
 	.get_strings                    = hinic3_get_strings,
 	.get_sset_count                 = hinic3_get_sset_count,
 	.get_ethtool_stats              = hinic3_get_ethtool_stats,
+	.get_eth_phy_stats              = hinic3_get_eth_phy_stats,
+	.get_eth_mac_stats              = hinic3_get_eth_mac_stats,
+	.get_eth_ctrl_stats             = hinic3_get_eth_ctrl_stats,
+	.get_rmon_stats                 = hinic3_get_rmon_stats,
+	.get_pause_stats                = hinic3_get_pause_stats,
 };
 
 void hinic3_set_ethtool_ops(struct net_device *netdev)
