@@ -2073,7 +2073,8 @@ static int __synth_event_add_val(const char *field_name, u64 val,
 	if (trace_state->add_name) {
 		for (i = 0; i < event->n_fields; i++) {
 			field = event->fields[i];
-			if (strcmp(field->name, field_name) == 0)
+			if (!field_name ||
+			    strcmp(field->name, field_name) == 0)
 				break;
 		}
 		if (!field) {
