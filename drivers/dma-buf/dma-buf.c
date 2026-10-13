@@ -193,11 +193,26 @@ static void dma_buf_release(struct dentry *dentry)
 
 static int dma_buf_file_release(struct inode *inode, struct file *file)
 {
-	if (!is_dma_buf_file(file))
-		return -EINVAL;
+	struct dma_buf *dmabuf = file->private_data;
 
-	__dma_buf_list_del(file->private_data);
+	if (!dmabuf)
+		return 0;
 
+	__dma_buf_list_del(dmabuf);
+
+	/*
+	 * As the file is being closed, dmabuf->file is no longer
+	 * valid and NULL replaces an otherwise stale pointer.  If a
+	 * reference to the file isn't already held, the file can be
+	 * closed at any time, including before dmabuf->ops->release()
+	 * happens: dmabuf->file _must not_ be accessed directly.  An
+	 * exporter should use get_file_active(&dmabuf->file) which
+	 * atomically tests and acquires a reference to the file (or
+	 * returns NULL if the file has closed).  The barrier ensures
+	 * get_file_active() observes the store before file_free()
+	 * frees the memory.
+	 */
+	smp_store_mb(dmabuf->file, NULL);
 	return 0;
 }
 

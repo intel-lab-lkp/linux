@@ -303,7 +303,10 @@ struct dma_buf {
 	 * @file:
 	 *
 	 * File pointer used for sharing buffers across, and for refcounting.
-	 * See dma_buf_get() and dma_buf_put().
+	 * See dma_buf_get() and dma_buf_put().  When an exporter holds a
+	 * common lock with the ->release() callback, it can use
+	 * get_file_active(&dma_buf->file) to safely acquire a reference;
+	 * the file could otherwise be closed at any time.
 	 */
 	struct file *file;
 
