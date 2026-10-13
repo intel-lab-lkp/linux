@@ -149,7 +149,7 @@ static void atiixp_set_piomode(struct ata_port *ap, struct ata_device *adev)
 
 static void atiixp_set_dmamode(struct ata_port *ap, struct ata_device *adev)
 {
-	static const u8 mwdma_timings[5] = { 0x77, 0x21, 0x20 };
+	static const u8 mwdma_timings[3] = { 0x77, 0x21, 0x20 };
 
 	struct pci_dev *pdev = to_pci_dev(ap->host->dev);
 	int dma = adev->dma_mode;
