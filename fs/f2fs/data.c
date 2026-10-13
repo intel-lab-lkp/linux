@@ -2794,10 +2794,49 @@ out:
 }
 #endif
 
+struct f2fs_folio_state *f2fs_ffs_alloc(struct f2fs_sb_info *sbi,
+					struct folio *folio)
+{
+	struct f2fs_folio_state *ffs;
+	unsigned int nr_subpages;
+
+	if (!folio_test_large(folio) || f2fs_folio_has_ffs(folio))
+		return NULL;
+
+	nr_subpages = folio_nr_pages(folio);
+	ffs = f2fs_kmalloc(sbi,
+			struct_size(ffs, state, BITS_TO_LONGS(2 * nr_subpages)),
+			GFP_NOFS | __GFP_ZERO);
+	if (!ffs)
+		return ERR_PTR(-ENOMEM);
+
+	spin_lock_init(&ffs->state_lock);
+	return ffs;
+}
+
+void f2fs_ffs_attach(struct folio *folio, struct f2fs_folio_state *ffs)
+{
+	unsigned int nr_subpages = folio_nr_pages(folio);
+
+	if (!ffs)
+		return;
+
+	if (!folio_test_large(folio) || f2fs_folio_has_ffs(folio)) {
+		kfree(ffs);
+		return;
+	}
+
+	if (folio_test_uptodate(folio))
+		bitmap_set(ffs->state, 0, nr_subpages);
+	if (folio_test_dirty(folio))
+		bitmap_set(ffs->state, nr_subpages, nr_subpages);
+
+	folio_attach_private(folio, ffs);
+}
+
 struct f2fs_folio_state *f2fs_ffs_find_or_alloc(struct folio *folio)
 {
 	struct f2fs_folio_state *ffs;
-	unsigned int nr_subpages = folio_nr_pages(folio);
 	unsigned long private = (unsigned long)folio->private;
 
 	f2fs_bug_on(F2FS_F_SB(folio), !folio_test_large(folio));
@@ -2807,20 +2846,12 @@ struct f2fs_folio_state *f2fs_ffs_find_or_alloc(struct folio *folio)
 	if (f2fs_folio_has_ffs(folio))
 		return (struct f2fs_folio_state *)folio->private;
 
-	ffs = f2fs_kmalloc(F2FS_F_SB(folio),
-			struct_size(ffs, state, BITS_TO_LONGS(2 * nr_subpages)),
-			GFP_NOFS | __GFP_ZERO);
-	if (!ffs)
+	ffs = f2fs_ffs_alloc(F2FS_F_SB(folio), folio);
+	if (IS_ERR(ffs))
 		return NULL;
 
-	spin_lock_init(&ffs->state_lock);
-	if (folio_test_uptodate(folio))
-		bitmap_set(ffs->state, 0, nr_subpages);
-	if (folio_test_dirty(folio))
-		bitmap_set(ffs->state, nr_subpages, nr_subpages);
-
-	folio_attach_private(folio, ffs);
-	return ffs;
+	f2fs_ffs_attach(folio, ffs);
+	return (struct f2fs_folio_state *)folio->private;
 }
 
 static void ffs_detach_free(struct folio *folio)
