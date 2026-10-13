@@ -24,6 +24,7 @@ JsonObj = Dict[str, Any]
 _status_map: Dict[TestStatus, str] = {
 	TestStatus.SUCCESS: "PASS",
 	TestStatus.SKIPPED: "SKIP",
+	TestStatus.FORCE_SKIPPED: "FAIL",
 	TestStatus.TEST_CRASHED: "ERROR",
 }
 
@@ -46,6 +47,7 @@ def _get_group_json(test: Test, common_fields: JsonObj) -> JsonObj:
 		"failed": test_counts.failed,
 		"crashed": test_counts.crashed,
 		"skipped": test_counts.skipped,
+		"forced_skipped": test_counts.force_skipped,
 		"errors": test_counts.errors,
 	}
 	test_group = {

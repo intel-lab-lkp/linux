@@ -285,6 +285,9 @@ struct kunit_suite {
 	struct string_stream *log;
 	int suite_init_err;
 	bool is_init;
+
+	/* true if any tests in this suite has been forcefully skipped */
+	bool forced_skip;
 	enum kunit_status status;
 };
 
@@ -345,6 +348,7 @@ struct kunit {
 	 */
 	spinlock_t lock; /* Guards all mutable test state. */
 	enum kunit_status status; /* Read only after test_case finishes! */
+	bool forced_skip; /* True if this test has been forcefully skipped */
 	/*
 	 * Because resources is a list that may be updated multiple times (with
 	 * new resources) from any thread associated with a test case, we must

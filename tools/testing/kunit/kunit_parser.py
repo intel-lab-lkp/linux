@@ -69,6 +69,7 @@ class TestStatus(Enum):
 	SUCCESS = auto()
 	FAILURE = auto()
 	SKIPPED = auto()
+	FORCE_SKIPPED = auto()
 	TEST_CRASHED = auto()
 	NO_TESTS = auto()
 	FAILURE_TO_PARSE_TESTS = auto()
@@ -83,13 +84,14 @@ class TestCounts:
 	failed: int = 0
 	crashed: int = 0
 	skipped: int = 0
+	force_skipped: int = 0
 	errors: int = 0
 
 	def __str__(self) -> str:
 		"""Returns the string representation of a TestCounts object."""
 		statuses = [('passed', self.passed), ('failed', self.failed),
 			('crashed', self.crashed), ('skipped', self.skipped),
-			('errors', self.errors)]
+			('force skipped', self.force_skipped), ('errors', self.errors)]
 		return f'Ran {self.total()} tests: ' + \
 			', '.join(f'{s}: {n}' for s, n in statuses if n > 0)
 
@@ -98,7 +100,7 @@ class TestCounts:
 		object, where a test case is a test with no subtests.
 		"""
 		return (self.passed + self.failed + self.crashed +
-			self.skipped)
+			self.skipped + self.force_skipped)
 
 	def add_subtest_counts(self, counts: TestCounts) -> None:
 		"""
@@ -114,6 +116,7 @@ class TestCounts:
 		self.failed += counts.failed
 		self.crashed += counts.crashed
 		self.skipped += counts.skipped
+		self.force_skipped += counts.force_skipped
 		self.errors += counts.errors
 
 	def get_status(self) -> TestStatus:
@@ -130,6 +133,8 @@ class TestCounts:
 		if self.passed:
 			# No failures or crashes, looks good!
 			return TestStatus.SUCCESS
+		if self.force_skipped:
+			return TestStatus.FORCE_SKIPPED
 		# We have only skipped tests.
 		return TestStatus.SKIPPED
 
@@ -141,6 +146,8 @@ class TestCounts:
 			self.failed += 1
 		elif status == TestStatus.SKIPPED:
 			self.skipped += 1
+		elif status == TestStatus.FORCE_SKIPPED:
+			self.force_skipped += 1
 		elif status != TestStatus.NO_TESTS:
 			self.crashed += 1
 
@@ -384,6 +391,8 @@ def peek_test_name_match(lines: LineStream, test: Test) -> bool:
 		return False
 	return name == test.name
 
+FORCE_SKIP_PREFIX = 'force skip:'
+
 def parse_test_result(lines: LineStream, test: Test,
 			expected_num: int, printer: Printer) -> bool:
 	"""
@@ -431,8 +440,13 @@ def parse_test_result(lines: LineStream, test: Test,
 	# Set status of test object
 	status = match.group(1)
 	if skip_match:
-		test.status = TestStatus.SKIPPED
-		test.skip_reason = skip_match.group(5) or ''
+		skip_reason = skip_match.group(5) or ''
+		if skip_reason.startswith(FORCE_SKIP_PREFIX):
+			test.status = TestStatus.FORCE_SKIPPED
+			test.skip_reason = skip_reason[len(FORCE_SKIP_PREFIX):].strip()
+		else:
+			test.status = TestStatus.SKIPPED
+			test.skip_reason = skip_reason
 	elif status == 'ok':
 		test.status = TestStatus.SUCCESS
 	else:
@@ -540,6 +554,11 @@ def format_test_result(test: Test, printer: Printer) -> str:
 	"""
 	if test.status == TestStatus.SUCCESS:
 		return printer.green('[PASSED] ') + test.name
+	if test.status == TestStatus.FORCE_SKIPPED:
+		skip_message = printer.orange('[FORCE SKIPPED] ') + test.name
+		if test.skip_reason != '':
+			skip_message += printer.yellow(' (' + test.skip_reason + ')')
+		return skip_message
 	if test.status == TestStatus.SKIPPED:
 		skip_message = printer.yellow('[SKIPPED] ') + test.name
 		if test.skip_reason != '':
@@ -659,6 +678,8 @@ def print_summary_line(test: Test, printer: Printer) -> None:
 		color = printer.green
 	elif test.status in (TestStatus.SKIPPED, TestStatus.NO_TESTS):
 		color = printer.yellow
+	elif test.status == TestStatus.FORCE_SKIPPED:
+		color = printer.orange
 	else:
 		color = printer.red
 	printer.print_with_timestamp(color(f'Testing complete. {test.counts}'))
@@ -678,7 +699,9 @@ def bubble_up_test_results(test: Test) -> None:
 	"""
 	If the test has subtests, add the test counts of the subtests to the
 	test and check if any of the tests crashed and if so set the test
-	status to crashed. Otherwise if the test has no subtests add the
+	status to crashed. If the test has subtests, is marked as failed
+	and all subtests are FORCE_SKIPPED then mark the test as FORCE_SKIPPED.
+	Otherwise if the test has no subtests add the
 	status of the test to the test counts.
 
 	Parameters:
@@ -693,6 +716,9 @@ def bubble_up_test_results(test: Test) -> None:
 		counts.add_status(status)
 	elif test.counts.get_status() == TestStatus.TEST_CRASHED:
 		test.status = TestStatus.TEST_CRASHED
+
+	if status == TestStatus.FAILURE and test.counts.get_status() == TestStatus.FORCE_SKIPPED:
+		test.status = TestStatus.FORCE_SKIPPED
 
 	if status == TestStatus.FAILURE and test.counts.get_status() == TestStatus.SUCCESS:
 		counts.add_status(status)

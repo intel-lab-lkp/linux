@@ -28,6 +28,28 @@
 static DEFINE_MUTEX(kunit_run_lock);
 
 /*
+ * True if test cases/suites can be forcefully skipped
+ */
+#define KUNIT_CAN_FORCE_SKIP \
+	(IS_ENABLED(CONFIG_KUNIT_FAIL_TEST_ON_WARN) || \
+	 IS_ENABLED(CONFIG_KUNIT_FAIL_TEST_ON_LOCKDEP))
+
+/*
+ * If force skips are possible, forced_skip should be logged as a stat.
+ * Macro must expand to multiple function arguments.
+ * checkpatche falsely displays an error for this.
+ */
+#if KUNIT_CAN_FORCE_SKIP
+#define KUNIT_STATS_FMT "pass:%lu fail:%lu skip:%lu forced_skip:%lu total:%lu"
+#define KUNIT_STATS_ARGS(s) \
+	(s)->passed, (s)->failed, (s)->skipped, (s)->forced_skipped, (s)->total
+#else
+#define KUNIT_STATS_FMT "pass:%lu fail:%lu skip:%lu total:%lu"
+#define KUNIT_STATS_ARGS(s) \
+	(s)->passed, (s)->failed, (s)->skipped, (s)->total
+#endif
+
+/*
  * Hook to fail the current test and print an error message to the log.
  */
 void __printf(3, 4) __kunit_fail_current_test_impl(const char *file, int line, const char *fmt, ...)
@@ -90,6 +112,7 @@ MODULE_PARM_DESC(stats_enabled,
 struct kunit_result_stats {
 	unsigned long passed;
 	unsigned long skipped;
+	unsigned long forced_skipped;
 	unsigned long failed;
 	unsigned long total;
 };
@@ -113,12 +136,8 @@ static void kunit_print_test_stats(struct kunit *test,
 
 	kunit_log(KERN_INFO, test,
 		  KUNIT_SUBTEST_INDENT
-		  "# %s: pass:%lu fail:%lu skip:%lu total:%lu",
-		  test->name,
-		  stats->passed,
-		  stats->failed,
-		  stats->skipped,
-		  stats->total);
+		  "# %s: " KUNIT_STATS_FMT,
+		test->name, KUNIT_STATS_ARGS(stats));
 }
 
 /* Append formatted message to log. */
@@ -229,6 +248,10 @@ enum kunit_status kunit_suite_has_succeeded(struct kunit_suite *suite)
 		else if (test_case->status == KUNIT_SUCCESS)
 			status = KUNIT_SUCCESS;
 	}
+
+	/* If any test cases has been forcefully skipped, mark the test suite as failed */
+	if (suite->forced_skip && status == KUNIT_SKIPPED)
+		status = KUNIT_FAILURE;
 
 	return status;
 }
@@ -360,6 +383,7 @@ void kunit_init_test(struct kunit *test, const char *name, struct string_stream 
 	if (test->log)
 		string_stream_clear(log);
 	test->status = KUNIT_SUCCESS;
+	test->forced_skip = false;
 	test->status_comment[0] = '\0';
 	kunit_init_params(test);
 }
@@ -611,21 +635,14 @@ static void kunit_print_suite_stats(struct kunit_suite *suite,
 {
 	if (kunit_should_print_stats(suite_stats)) {
 		kunit_log(KERN_INFO, suite,
-			  "# %s: pass:%lu fail:%lu skip:%lu total:%lu",
-			  suite->name,
-			  suite_stats->passed,
-			  suite_stats->failed,
-			  suite_stats->skipped,
-			  suite_stats->total);
+		"# %s: " KUNIT_STATS_FMT,
+		suite->name, KUNIT_STATS_ARGS(suite_stats));
 	}
 
 	if (kunit_should_print_stats(param_stats)) {
 		kunit_log(KERN_INFO, suite,
-			  "# Totals: pass:%lu fail:%lu skip:%lu total:%lu",
-			  param_stats->passed,
-			  param_stats->failed,
-			  param_stats->skipped,
-			  param_stats->total);
+		"# Totals: " KUNIT_STATS_FMT,
+		KUNIT_STATS_ARGS(param_stats));
 	}
 }
 
@@ -647,11 +664,23 @@ static void kunit_update_stats(struct kunit_result_stats *stats,
 	stats->total++;
 }
 
+static void kunit_update_stats_forced_skip(struct kunit_result_stats *stats,
+				      enum kunit_status status, bool forced)
+{
+	if (KUNIT_CAN_FORCE_SKIP && status == KUNIT_SKIPPED && forced) {
+		stats->forced_skipped++;
+		stats->total++;
+		return;
+	}
+	kunit_update_stats(stats, status);
+}
+
 static void kunit_accumulate_stats(struct kunit_result_stats *total,
 				   struct kunit_result_stats add)
 {
 	total->passed += add.passed;
 	total->skipped += add.skipped;
+	total->forced_skipped += add.forced_skipped;
 	total->failed += add.failed;
 	total->total += add.total;
 }
@@ -723,6 +752,7 @@ kunit_run_param_test(struct kunit_suite *suite, struct kunit_case *test_case,
 			.param_value = curr_param,
 			.param_index = ++test->param_index,
 			.parent = test,
+			.forced_skip = false,
 		};
 		kunit_init_test(&param_test, test_case->name, NULL);
 		param_test.log = test_case->log;
@@ -739,7 +769,15 @@ kunit_run_param_test(struct kunit_suite *suite, struct kunit_case *test_case,
 				      param_desc,
 				      param_test.status_comment);
 
-		kunit_update_stats(param_stats, param_test.status);
+		kunit_update_stats_forced_skip(param_stats, param_test.status,
+				param_test.forced_skip);
+
+		/* If any param test is forcefully skipped, mark the test as well */
+		if (param_test.forced_skip && !test->forced_skip) {
+			test->forced_skip = true;
+			strscpy(test->status_comment, param_test.status_comment,
+				sizeof(test->status_comment));
+		}
 
 		/* Get next param. */
 		param_desc[0] = '\0';
@@ -773,7 +811,7 @@ kunit_run_one_test(struct kunit_suite *suite, struct kunit_case *test_case,
 		/* Non-parameterised test. */
 		test_case->status = KUNIT_SKIPPED;
 		kunit_run_case_catch_errors(suite, test_case, &test);
-		kunit_update_stats(&param_stats, test.status);
+		kunit_update_stats_forced_skip(&param_stats, test.status, test.forced_skip);
 	} else {
 		kunit_run_param_test(suite, test_case, &test, suite_stats,
 				     total_stats, &param_stats);
@@ -787,7 +825,7 @@ kunit_run_one_test(struct kunit_suite *suite, struct kunit_case *test_case,
 			      test_case->name,
 			      test.status_comment);
 
-	kunit_update_stats(suite_stats, test_case->status);
+	kunit_update_stats_forced_skip(suite_stats, test_case->status, test.forced_skip);
 	kunit_accumulate_stats(total_stats, param_stats);
 }
 
@@ -840,6 +878,7 @@ static void kunit_init_suite(struct kunit_suite *suite)
 	suite->status_comment[0] = '\0';
 	suite->suite_init_err = 0;
 	suite->status = KUNIT_SUCCESS;
+	suite->forced_skip = false;
 
 	if (suite->log)
 		string_stream_clear(suite->log);

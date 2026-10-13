@@ -45,6 +45,9 @@ class Printer:
 	def green(self, text: str) -> str:
 		return self._color('\033[1;32m', text)
 
+	def orange(self, text: str) -> str:
+		return self._color('\033[1;38;5;208m', text)
+
 	def color_len(self) -> int:
 		"""Returns the length of the color escape codes."""
 		return len(self.red(''))

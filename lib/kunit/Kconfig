@@ -142,4 +142,27 @@ config KUNIT_UML_PCI
 
 	  If unsure, say N.
 
+config KUNIT_FAIL_TEST_ON_WARN
+	bool "Enable kernel TAINT_WARN assertions in KUnit tests"
+	default n
+	help
+		Enables asserting if the kernel is tainted with `TAINT_WARN` before
+		and after a KUnit test case is run. In case `TAINT_WARN` is set
+		before a test case is run, skip that test, if `TAINT_WARN`
+		gets set during the test, fail that test and skip all proceeding test cases.
+		Tests that intentionally trigger warnings must use `kunit_warning_suppress()`,
+		or they will fail with this option.
+
+		If unsure, say N.
+
+config KUNIT_FAIL_TEST_ON_LOCKDEP
+	bool "Enable debug_locks assertions in KUnit tests"
+	depends on LOCKDEP
+	default n
+	help
+		Enables asserting `debug_locks` is on before and after a KUnit test case is run.
+		In case `debug_locks` is off before a test case is run, skip that test, if `debug_locks`
+		has been turned off during the test, fail that test and skip all proceeding test cases.
+
+		If unsure, say N.
 endif # KUNIT
