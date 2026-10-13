@@ -473,13 +473,16 @@ out:
 alloc:
 	xas_unlock_irqrestore(&xas, flags);
 	alloc = kzalloc_obj(*bitmap, gfp);
-	if (!alloc)
+	if (!alloc) {
+		xas_destroy(&xas);
 		return -ENOMEM;
+	}
 	xas_set(&xas, min / IDA_BITMAP_BITS);
 	bit = min % IDA_BITMAP_BITS;
 	goto retry;
 nospc:
 	xas_unlock_irqrestore(&xas, flags);
+	xas_destroy(&xas);
 	kfree(alloc);
 	return -ENOSPC;
 }

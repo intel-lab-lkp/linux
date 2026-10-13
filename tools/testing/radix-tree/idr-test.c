@@ -523,6 +523,29 @@ void ida_check_retry_stale(void)
 }
 
 /*
+ * The node preallocated by xas_nomem() must be freed when the retry finds
+ * that another allocation took the only ID in range, whether that ID lives
+ * in a value entry or in a bitmap.
+ */
+void ida_check_retry_nospc(void)
+{
+	DEFINE_IDA(ida);
+	unsigned int ids[] = { IDA_BITMAP_BITS + 5, IDA_BITMAP_BITS + 63 };
+	int allocated, i, id;
+
+	rcu_barrier();
+	allocated = nr_allocated;
+	for (i = 0; i < ARRAY_SIZE(ids); i++) {
+		id = ida_alloc_window(&ida, ids[i], ids[i], ids[i]);
+		IDA_BUG_ON(&ida, id != -ENOSPC);
+		ida_free(&ida, ids[i]);
+		IDA_BUG_ON(&ida, !ida_is_empty(&ida));
+		rcu_barrier();
+		IDA_BUG_ON(&ida, nr_allocated != allocated);
+	}
+}
+
+/*
  * Check handling of conversions between exceptional entries and full bitmaps.
  */
 void ida_check_conv_user(void)
@@ -594,6 +617,7 @@ void user_ida_checks(void)
 
 	ida_check_nomem();
 	ida_check_retry_stale();
+	ida_check_retry_nospc();
 	ida_check_conv_user();
 	ida_check_random();
 	ida_alloc_free_test();
