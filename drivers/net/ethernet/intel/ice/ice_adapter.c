@@ -77,6 +77,7 @@ static struct ice_adapter *ice_adapter_new(struct pci_dev *pdev)
 
 	spin_lock_init(&adapter->ports.lock);
 	INIT_LIST_HEAD(&adapter->ports.list);
+	init_rwsem(&adapter->ctrl_pf_lock);
 
 	mutex_init(&adapter->ps_lock);
 
