@@ -150,7 +150,7 @@ int amdgpu_dm_dce110_register_irq_handlers(struct amdgpu_device *adev);
 int amdgpu_dm_dcn10_register_irq_handlers(struct amdgpu_device *adev);
 int amdgpu_dm_register_outbox_irq_handlers(struct amdgpu_device *adev);
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 struct amdgpu_irq_src;
 struct amdgpu_iv_entry;
 enum amdgpu_interrupt_state;

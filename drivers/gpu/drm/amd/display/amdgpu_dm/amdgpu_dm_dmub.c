@@ -386,7 +386,7 @@ dm_dmub_send_vbios_gpint_command(struct amdgpu_device *adev,
 	return DMUB_STATUS_TIMEOUT;
 }
 
-STATIC_IFN_KUNIT void *dm_dmub_get_vbios_bounding_box(struct amdgpu_device *adev)
+VISIBLE_IF_KUNIT void *dm_dmub_get_vbios_bounding_box(struct amdgpu_device *adev)
 {
 	void *bb;
 	long long addr;
@@ -842,7 +842,7 @@ out:
 }
 EXPORT_IF_KUNIT(amdgpu_dm_process_dmub_aux_transfer_sync);
 
-STATIC_IFN_KUNIT void abort_fused_io(
+VISIBLE_IF_KUNIT void abort_fused_io(
 		struct dc_context *ctx,
 		const struct dmub_cmd_fused_request *request
 )

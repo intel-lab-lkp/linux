@@ -149,7 +149,7 @@ void amdgpu_dm_ism_disable(struct amdgpu_display_manager *dm);
 void amdgpu_dm_ism_force_full_power(struct amdgpu_display_manager *dm);
 void amdgpu_dm_ism_enable(struct amdgpu_display_manager *dm);
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 bool dm_ism_next_state(enum amdgpu_dm_ism_state current_state,
 		       enum amdgpu_dm_ism_event event,
 		       enum amdgpu_dm_ism_state *next_state);

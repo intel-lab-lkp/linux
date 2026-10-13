@@ -46,7 +46,7 @@ struct tetrahedral_params;
 struct dc_transfer_func;
 struct dc_3dlut;
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 /*
  * Prototypes for functions exposed to KUnit tests. The enum types
  * used below (dc_transfer_func_predefined, amdgpu_transfer_function,

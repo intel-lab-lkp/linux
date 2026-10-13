@@ -151,7 +151,7 @@ void amdgpu_dm_crtc_secure_display_create_contexts(struct amdgpu_device *adev);
 #define amdgpu_dm_crtc_secure_display_create_contexts(x)
 #endif
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 enum amdgpu_dm_pipe_crc_source dm_parse_crc_source(const char *source);
 bool dm_is_crc_source_crtc(enum amdgpu_dm_pipe_crc_source src);
 bool dm_is_crc_source_dprx(enum amdgpu_dm_pipe_crc_source src);

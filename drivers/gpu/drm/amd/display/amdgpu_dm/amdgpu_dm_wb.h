@@ -36,7 +36,7 @@ int amdgpu_dm_wb_connector_init(struct amdgpu_display_manager *dm,
 				struct amdgpu_dm_wb_connector *dm_wbcon,
 				uint32_t link_index);
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 #include <drm/drm_connector.h>
 #include <drm/drm_crtc.h>
 

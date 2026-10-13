@@ -42,7 +42,7 @@ bool amdgpu_dm_psr_set_event(struct amdgpu_display_manager *dm,
 		struct dc_stream_state *stream, bool set_event,	enum psr_event event,
 		bool wait_for_disable);
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 bool link_supports_psrsu(struct dc_link *link);
 void amdgpu_dm_psr_fill_caps(struct dc_link *link, struct psr_caps *caps);
 unsigned int amdgpu_dm_psr_get_dc_feature_mask(void);

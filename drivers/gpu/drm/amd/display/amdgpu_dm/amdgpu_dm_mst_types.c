@@ -56,7 +56,7 @@
  * Translate a failed AUX transaction's operation result into an errno-style
  * return value. @result is returned unchanged for AUX_RET_SUCCESS.
  */
-STATIC_IFN_KUNIT ssize_t dm_dp_aux_transfer_result(ssize_t result,
+VISIBLE_IF_KUNIT ssize_t dm_dp_aux_transfer_result(ssize_t result,
 						   enum aux_return_code_type operation_result)
 {
 	switch (operation_result) {
@@ -84,7 +84,7 @@ EXPORT_IF_KUNIT(dm_dp_aux_transfer_result);
 /*
  * Derive the AUX payload transaction flags from a DP AUX request field.
  */
-STATIC_IFN_KUNIT void dm_dp_aux_fill_payload_flags(u8 request,
+VISIBLE_IF_KUNIT void dm_dp_aux_fill_payload_flags(u8 request,
 						   struct aux_payload *payload)
 {
 	payload->i2c_over_aux = (request & DP_AUX_NATIVE_WRITE) == 0;
@@ -98,7 +98,7 @@ EXPORT_IF_KUNIT(dm_dp_aux_fill_payload_flags);
 /*
  * This function handles both native AUX and I2C-Over-AUX transactions.
  */
-STATIC_IFN_KUNIT ssize_t dm_dp_aux_transfer(struct drm_dp_aux *aux,
+VISIBLE_IF_KUNIT ssize_t dm_dp_aux_transfer(struct drm_dp_aux *aux,
 					    struct drm_dp_aux_msg *msg)
 {
 	ssize_t result = 0;
@@ -207,7 +207,7 @@ amdgpu_dm_mst_connector_late_register(struct drm_connector *connector)
 }
 
 
-STATIC_IFN_KUNIT void
+VISIBLE_IF_KUNIT void
 amdgpu_dm_mst_reset_mst_connector_setting(struct amdgpu_dm_connector *aconnector)
 {
 	aconnector->drm_edid = NULL;
@@ -337,7 +337,7 @@ static bool validate_dsc_caps_on_connector(struct amdgpu_dm_connector *aconnecto
 }
 #endif
 
-STATIC_IFN_KUNIT bool retrieve_downstream_port_device(struct amdgpu_dm_connector *aconnector)
+VISIBLE_IF_KUNIT bool retrieve_downstream_port_device(struct amdgpu_dm_connector *aconnector)
 {
 	union dp_downstream_port_present ds_port_present;
 
@@ -357,7 +357,7 @@ STATIC_IFN_KUNIT bool retrieve_downstream_port_device(struct amdgpu_dm_connector
 }
 EXPORT_IF_KUNIT(retrieve_downstream_port_device);
 
-STATIC_IFN_KUNIT bool retrieve_branch_specific_data(struct amdgpu_dm_connector *aconnector)
+VISIBLE_IF_KUNIT bool retrieve_branch_specific_data(struct amdgpu_dm_connector *aconnector)
 {
 	struct drm_connector *connector = &aconnector->base;
 	struct drm_dp_mst_port *port = aconnector->mst_output_port;
@@ -519,7 +519,7 @@ static int dm_dp_mst_get_modes(struct drm_connector *connector)
 	return ret;
 }
 
-STATIC_IFN_KUNIT struct drm_encoder *
+VISIBLE_IF_KUNIT struct drm_encoder *
 dm_mst_atomic_best_encoder(struct drm_connector *connector,
 			   struct drm_atomic_commit *state)
 {
@@ -532,7 +532,7 @@ dm_mst_atomic_best_encoder(struct drm_connector *connector,
 }
 EXPORT_IF_KUNIT(dm_mst_atomic_best_encoder);
 
-STATIC_IFN_KUNIT int
+VISIBLE_IF_KUNIT int
 dm_dp_mst_detect(struct drm_connector *connector,
 		 struct drm_modeset_acquire_ctx *ctx, bool force)
 {
@@ -604,7 +604,7 @@ dm_dp_mst_detect(struct drm_connector *connector,
 }
 EXPORT_IF_KUNIT(dm_dp_mst_detect);
 
-STATIC_IFN_KUNIT int dm_dp_mst_atomic_check(struct drm_connector *connector,
+VISIBLE_IF_KUNIT int dm_dp_mst_atomic_check(struct drm_connector *connector,
 					    struct drm_atomic_commit *state)
 {
 	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
@@ -743,7 +743,7 @@ dm_dp_add_mst_connector(struct drm_dp_mst_topology_mgr *mgr,
  * Select the ESI[1] mask used to filter the MST sideband ready bits for a
  * given message-ready event type.
  */
-STATIC_IFN_KUNIT u8 dm_mst_msg_ready_mask(enum mst_msg_ready_type msg_rdy_type)
+VISIBLE_IF_KUNIT u8 dm_mst_msg_ready_mask(enum mst_msg_ready_type msg_rdy_type)
 {
 	switch (msg_rdy_type) {
 	case DOWN_REP_MSG_RDY_EVENT:
@@ -762,7 +762,7 @@ EXPORT_IF_KUNIT(dm_mst_msg_ready_mask);
 /*
  * Select the DPCD ESI address and read length based on the DPCD revision.
  */
-STATIC_IFN_KUNIT void dm_mst_select_esi_dpcd(u8 dpcd_rev, int *dpcd_addr,
+VISIBLE_IF_KUNIT void dm_mst_select_esi_dpcd(u8 dpcd_rev, int *dpcd_addr,
 					     u8 *dpcd_bytes_to_read)
 {
 	if (dpcd_rev < 0x12) {
@@ -862,7 +862,7 @@ void dm_handle_mst_sideband_msg_ready_event(
 }
 EXPORT_IF_KUNIT(dm_handle_mst_sideband_msg_ready_event);
 
-STATIC_IFN_KUNIT void dm_handle_mst_down_rep_msg_ready(struct drm_dp_mst_topology_mgr *mgr)
+VISIBLE_IF_KUNIT void dm_handle_mst_down_rep_msg_ready(struct drm_dp_mst_topology_mgr *mgr)
 {
 	dm_handle_mst_sideband_msg_ready_event(mgr, DOWN_REP_MSG_RDY_EVENT);
 }

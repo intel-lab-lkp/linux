@@ -42,7 +42,7 @@ void amdgpu_dm_fill_audio_info(struct audio_info *audio_info,
 		     const struct dc_sink *dc_sink);
 void amdgpu_dm_audio_eld_notify(struct amdgpu_device *adev, int pin);
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 struct device;
 
 int amdgpu_dm_audio_component_bind(struct device *kdev,

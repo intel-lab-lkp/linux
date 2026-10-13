@@ -1167,7 +1167,7 @@ struct __drm_planes_state *amdgpu_dm_get_next_zpos(struct drm_atomic_commit *sta
 			     (old_plane_state) = __i->old_state,		\
 			     (new_plane_state) = __i->new_state, 1))
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 struct amdgpu_ip_block;
 bool dm_is_idle(struct amdgpu_ip_block *ip_block);
 int dm_wait_for_idle(struct amdgpu_ip_block *ip_block);

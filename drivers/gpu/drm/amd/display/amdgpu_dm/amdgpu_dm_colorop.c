@@ -63,7 +63,7 @@ static const struct drm_colorop_funcs dm_colorop_funcs = {
 	.destroy = drm_colorop_destroy,
 };
 
-STATIC_IFN_KUNIT int
+VISIBLE_IF_KUNIT int
 amdgpu_dm_build_default_pipeline(struct drm_device *dev, struct drm_plane *plane,
 				  bool hw_3d_lut, struct drm_prop_enum_list *list)
 {

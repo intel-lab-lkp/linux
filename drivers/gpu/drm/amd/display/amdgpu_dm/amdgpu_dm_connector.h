@@ -145,7 +145,7 @@ int amdgpu_dm_encoder_init(struct drm_device *dev,
 			   struct amdgpu_encoder *aencoder,
 			   uint32_t link_index);
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 int amdgpu_dm_i2c_xfer(struct i2c_adapter *i2c_adap,
 		       struct i2c_msg *msgs, int num);
 u32 amdgpu_dm_i2c_func(struct i2c_adapter *adap);

@@ -66,7 +66,7 @@ int dm_init_microcode(struct amdgpu_device *adev);
 #define FIRMWARE_RAVEN_DMCU		"amdgpu/raven_dmcu.bin"
 #define FIRMWARE_NAVI12_DMCU		"amdgpu/navi12_dmcu.bin"
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 struct dc_context;
 struct dmub_cmd_fused_request;
 

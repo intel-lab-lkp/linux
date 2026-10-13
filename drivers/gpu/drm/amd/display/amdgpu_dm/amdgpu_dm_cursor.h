@@ -42,11 +42,11 @@ int amdgpu_dm_crtc_get_cursor_mode(struct amdgpu_device *adev,
 				   struct dm_crtc_state *dm_crtc_state,
 				   enum amdgpu_dm_cursor_mode *cursor_mode);
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 void dm_get_oriented_plane_size(struct drm_plane_state *plane_state,
 				int *src_w, int *src_h);
 void dm_get_plane_scale(struct drm_plane_state *plane_state,
 			int *out_plane_scale_w, int *out_plane_scale_h);
-#endif /* CONFIG_DRM_AMD_DC_KUNIT_TEST */
+#endif /* CONFIG_KUNIT */
 
 #endif /* __AMDGPU_DM_CURSOR_H__ */

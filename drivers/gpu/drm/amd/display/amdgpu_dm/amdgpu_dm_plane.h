@@ -67,7 +67,7 @@ void amdgpu_dm_plane_fill_blending_from_plane_state(const struct drm_plane_state
 
 bool amdgpu_dm_plane_is_video_format(uint32_t format);
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 void amdgpu_dm_plane_add_modifier(uint64_t **mods, uint64_t *size,
 				  uint64_t *cap, uint64_t mod);
 void amdgpu_dm_plane_fill_gfx9_tiling_info_from_device(const struct amdgpu_device *adev,

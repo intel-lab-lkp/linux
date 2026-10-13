@@ -6,7 +6,7 @@
 #ifndef __AMDGPU_DM_HELPERS_H__
 #define __AMDGPU_DM_HELPERS_H__
 
-#if IS_ENABLED(CONFIG_DRM_AMD_DC_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KUNIT)
 #include <drm/drm_edid.h>
 
 struct amdgpu_dm_connector;
@@ -56,6 +56,6 @@ void apply_synaptics_fifo_reset_wa(struct drm_dp_aux *aux);
 uint8_t write_dsc_enable_synaptics_non_virtual_dpcd_mst(struct drm_dp_aux *aux,
 							const struct dc_stream_state *stream,
 							bool enable);
-#endif /* CONFIG_DRM_AMD_DC_KUNIT_TEST */
+#endif /* CONFIG_KUNIT */
 
 #endif /* __AMDGPU_DM_HELPERS_H__ */
