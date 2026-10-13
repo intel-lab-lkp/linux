@@ -198,6 +198,49 @@ static void alc897_fixup_lenovo_headset_mode(struct hda_codec *codec,
 	}
 }
 
+static void alc897_fixup_limit_linein_boost(struct hda_codec *codec,
+					    const struct hda_fixup *fix, int action)
+{
+	struct alc_spec *spec = codec->spec;
+	struct auto_pin_cfg *cfg = &spec->gen.autocfg;
+	int i;
+
+	if (action != HDA_FIXUP_ACT_PROBE)
+		return;
+
+	for (i = 0; i < cfg->num_inputs; i++) {
+		hda_nid_t nid = cfg->inputs[i].pin;
+		unsigned int defcfg;
+
+		if (cfg->inputs[i].type != AUTO_PIN_LINE_IN &&
+		    cfg->inputs[i].type != AUTO_PIN_MIC)
+			continue;
+
+		defcfg = snd_hda_codec_get_pincfg(codec, nid);
+		if (snd_hda_get_input_pin_attr(defcfg) == INPUT_PIN_ATTR_INT ||
+		    snd_hda_get_input_pin_attr(defcfg) == INPUT_PIN_ATTR_DOCK)
+			continue;
+
+		snd_hda_override_amp_caps(codec, nid, HDA_INPUT,
+					  (0x00 << AC_AMPCAP_OFFSET_SHIFT) |
+					  (0x01 << AC_AMPCAP_NUM_STEPS_SHIFT) |
+					  (0x2f << AC_AMPCAP_STEP_SIZE_SHIFT) |
+					  (0 << AC_AMPCAP_MUTE_SHIFT));
+	}
+
+	for (i = 0; i < spec->gen.num_all_adcs; i++) {
+		hda_nid_t adc = spec->gen.all_adcs[i];
+		unsigned int caps;
+
+		caps = query_amp_caps(codec, adc, HDA_INPUT);
+		if ((caps & AC_AMPCAP_NUM_STEPS) >> AC_AMPCAP_NUM_STEPS_SHIFT > 1) {
+			caps &= ~AC_AMPCAP_NUM_STEPS;
+			caps |= (0x01 << AC_AMPCAP_NUM_STEPS_SHIFT);
+			snd_hda_override_amp_caps(codec, adc, HDA_INPUT, caps);
+		}
+	}
+}
+
 static const struct coef_fw alc668_coefs[] = {
 	WRITE_COEF(0x01, 0xbebe), WRITE_COEF(0x02, 0xaaaa), WRITE_COEF(0x03,    0x0),
 	WRITE_COEF(0x04, 0x0180), WRITE_COEF(0x06,    0x0), WRITE_COEF(0x07, 0x0f80),
@@ -326,6 +369,7 @@ enum {
 	ALC897_FIXUP_HEADSET_MIC_PIN3,
 	ALC662_FIXUP_CSL_GPIO,
 	ALC897_FIXUP_BEELINK_SER6_AMP,
+	ALC897_FIXUP_LIMIT_LINEIN_BOOST,
 };
 
 static const struct hda_fixup alc662_fixups[] = {
@@ -787,6 +831,10 @@ static const struct hda_fixup alc662_fixups[] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = alc_fixup_gpio4,
 	},
+	[ALC897_FIXUP_LIMIT_LINEIN_BOOST] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = alc897_fixup_limit_linein_boost,
+	},
 };
 
 static const struct hda_quirk alc662_fixup_tbl[] = {
@@ -859,6 +907,7 @@ static const struct hda_quirk alc662_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x1c6c, 0x1239, "Compaq N14JP6-V2", ALC897_FIXUP_HP_HSMIC_VERB),
 	SND_PCI_QUIRK(0x1e63, 0x6d9a, "F+ FLAPTOP r", ALC897_FIXUP_HP_HSMIC_VERB),
 	SND_PCI_QUIRK(0x1f66, 0x0202, "Beelink SER6 Max 6900", ALC897_FIXUP_BEELINK_SER6_AMP),
+	SND_PCI_QUIRK(0x1e0b, 0x1297, "DECENTA MATX03", ALC897_FIXUP_LIMIT_LINEIN_BOOST),
 
 #if 0
 	/* Below is a quirk table taken from the old code.
@@ -954,6 +1003,7 @@ static const struct hda_model_fixup alc662_fixup_models[] = {
 	{.id = ALC662_FIXUP_LENOVO_MULTI_CODECS, .name = "dual-codecs"},
 	{.id = ALC669_FIXUP_ACER_ASPIRE_ETHOS, .name = "aspire-ethos"},
 	{.id = ALC897_FIXUP_UNIS_H3C_X500S, .name = "unis-h3c-x500s"},
+	{.id = ALC897_FIXUP_LIMIT_LINEIN_BOOST, .name = "alc897-limit-linein-boost"},
 	{}
 };
 
