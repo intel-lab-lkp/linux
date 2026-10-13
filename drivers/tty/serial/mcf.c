@@ -55,6 +55,14 @@ struct mcf_uart {
 	unsigned char		imr;		/* Local IMR mirror */
 };
 
+/*
+ * Define maximum number of UARTs this driver will support.
+ * This is set to maximum number on any known ColdFire SoC.
+ */
+#define MCF_MAXPORTS            10
+
+static struct mcf_uart *mcf_ports[MCF_MAXPORTS];
+
 /****************************************************************************/
 
 static unsigned int mcf_tx_empty(struct uart_port *port)
@@ -462,18 +470,18 @@ static const struct uart_ops mcf_uart_ops = {
 	.verify_port	= mcf_verify_port,
 };
 
-static struct mcf_uart mcf_ports[10];
-
-#define	MCF_MAXPORTS	ARRAY_SIZE(mcf_ports)
-
 /****************************************************************************/
 #if defined(CONFIG_SERIAL_MCF_CONSOLE)
 /****************************************************************************/
 
 static void mcf_console_putc(struct console *co, const char c)
 {
-	struct uart_port *port = &(mcf_ports + co->index)->port;
+	struct uart_port *port;
 	int i;
+
+	if ((co->index < 0) || (co->index >= MCF_MAXPORTS))
+		co->index = 0;
+	port = &mcf_ports[co->index]->port;
 
 	for (i = 0; (i < 0x10000); i++) {
 		if (readb(port->membase + MCFUART_USR) & MCFUART_USR_TXREADY)
@@ -509,9 +517,9 @@ static int __init mcf_console_setup(struct console *co, char *options)
 
 	if ((co->index < 0) || (co->index >= MCF_MAXPORTS))
 		co->index = 0;
-	port = &mcf_ports[co->index].port;
-	if (port->membase == 0)
+	if (mcf_ports[co->index] == NULL)
 		return -ENODEV;
+	port = &mcf_ports[co->index]->port;
 
 	if (options)
 		uart_parse_options(options, &baud, &parity, &bits, &flow);
@@ -572,10 +580,16 @@ static int mcf_probe(struct platform_device *pdev)
 {
 	struct uart_port *port;
 	struct resource *res;
+	struct mcf_uart *mp;
 
 	if (pdev->id >= MCF_MAXPORTS)
 		return -ENODEV;
-	port = &mcf_ports[pdev->id].port;
+
+	mp = devm_kzalloc(&pdev->dev, sizeof(*mp), GFP_KERNEL);
+	if (mp == NULL)
+		return -ENOMEM;
+	mcf_ports[pdev->id] = mp;
+	port = &mp->port;
 
 	port->membase = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(port->membase))
@@ -605,13 +619,11 @@ static int mcf_probe(struct platform_device *pdev)
 
 static void mcf_remove(struct platform_device *pdev)
 {
-	struct uart_port *port;
 	int i;
 
 	for (i = 0; (i < MCF_MAXPORTS); i++) {
-		port = &mcf_ports[i].port;
-		if (port)
-			uart_remove_one_port(&mcf_driver, port);
+		if (mcf_ports[i])
+			uart_remove_one_port(&mcf_driver, &mcf_ports[i]->port);
 	}
 }
 
