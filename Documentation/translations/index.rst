@@ -57,3 +57,6 @@ in a different form.
 If you need to communicate with the Linux community but you do not feel
 comfortable writing in English, you can ask the translation's maintainers
 for help.
+
+If you want to help translate the documentation, see
+Documentation/doc-guide/translations.rst.

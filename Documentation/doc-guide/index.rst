@@ -12,4 +12,5 @@ How to write kernel documentation
    parse-headers
    contributing
    maintainer-profile
+   translations
    checktransupdate
