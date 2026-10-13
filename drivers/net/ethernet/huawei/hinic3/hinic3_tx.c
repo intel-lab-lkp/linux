@@ -25,11 +25,9 @@ static void hinic3_txq_clean_stats(struct hinic3_txq_stats *txq_stats)
 	txq_stats->dropped = 0;
 
 	txq_stats->skb_pad_err = 0;
-	txq_stats->frag_len_overflow = 0;
 	txq_stats->offload_cow_skb_err = 0;
 	txq_stats->map_frag_err = 0;
 	txq_stats->unknown_tunnel_pkt = 0;
-	txq_stats->frag_size_err = 0;
 	u64_stats_update_end(&txq_stats->syncp);
 }
 
@@ -97,8 +95,12 @@ static int hinic3_tx_map_skb(struct net_device *netdev, struct sk_buff *skb,
 
 	dma_info[0].dma = dma_map_single(&pdev->dev, skb->data,
 					 skb_headlen(skb), DMA_TO_DEVICE);
-	if (dma_mapping_error(&pdev->dev, dma_info[0].dma))
+	if (dma_mapping_error(&pdev->dev, dma_info[0].dma)) {
+		u64_stats_update_begin(&txq->txq_stats.syncp);
+		txq->txq_stats.map_frag_err++;
+		u64_stats_update_end(&txq->txq_stats.syncp);
 		return -EFAULT;
+	}
 
 	dma_info[0].len = skb_headlen(skb);
 
@@ -117,6 +119,9 @@ static int hinic3_tx_map_skb(struct net_device *netdev, struct sk_buff *skb,
 						     skb_frag_size(frag),
 						     DMA_TO_DEVICE);
 		if (dma_mapping_error(&pdev->dev, dma_info[idx].dma)) {
+			u64_stats_update_begin(&txq->txq_stats.syncp);
+			txq->txq_stats.map_frag_err++;
+			u64_stats_update_end(&txq->txq_stats.syncp);
 			err = -EFAULT;
 			goto err_unmap_page;
 		}
@@ -260,6 +265,9 @@ static int hinic3_tx_csum(struct hinic3_txq *txq, struct hinic3_sq_task *task,
 		if (l4_proto != IPPROTO_UDP ||
 		    ((struct udphdr *)skb_transport_header(skb))->dest !=
 		    VXLAN_OFFLOAD_PORT_LE) {
+			u64_stats_update_begin(&txq->txq_stats.syncp);
+			txq->txq_stats.unknown_tunnel_pkt++;
+			u64_stats_update_end(&txq->txq_stats.syncp);
 			/* Unsupported tunnel packet, disable csum offload */
 			return skb_checksum_help(skb);
 		}
@@ -487,6 +495,27 @@ static u16 hinic3_set_wqe_combo(struct hinic3_txq *txq,
 					      num_sge + !!offload);
 }
 
+static void hinic3_get_pkt_stats(struct hinic3_txq *txq, struct sk_buff *skb)
+{
+	u32 hdr_len, tx_bytes;
+	unsigned short pkts;
+
+	if (skb_is_gso(skb)) {
+		hdr_len = (skb_shinfo(skb)->gso_segs - 1) *
+			  skb_tcp_all_headers(skb);
+		tx_bytes = skb->len + hdr_len;
+		pkts = skb_shinfo(skb)->gso_segs;
+	} else {
+		tx_bytes = skb->len > ETH_ZLEN ? skb->len : ETH_ZLEN;
+		pkts = 1;
+	}
+
+	u64_stats_update_begin(&txq->txq_stats.syncp);
+	txq->txq_stats.bytes += tx_bytes;
+	txq->txq_stats.packets += pkts;
+	u64_stats_update_end(&txq->txq_stats.syncp);
+}
+
 static void hinic3_prepare_sq_ctrl(struct hinic3_sq_wqe_combo *wqe_combo,
 				   __le32 queue_info, int nr_descs, u16 owner)
 {
@@ -542,8 +571,12 @@ static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
 	int err;
 
 	if (unlikely(skb->len < MIN_SKB_LEN)) {
-		if (skb_pad(skb, MIN_SKB_LEN - skb->len))
+		if (skb_pad(skb, MIN_SKB_LEN - skb->len)) {
+			u64_stats_update_begin(&txq->txq_stats.syncp);
+			txq->txq_stats.skb_pad_err++;
+			u64_stats_update_end(&txq->txq_stats.syncp);
 			goto err_out;
+		}
 
 		skb->len = MIN_SKB_LEN;
 	}
@@ -561,10 +594,16 @@ static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
 					hinic3_wq_free_wqebbs(&txq->sq->wq),
 					txq->tx_start_thrs);
 
+		u64_stats_update_begin(&txq->txq_stats.syncp);
+		txq->txq_stats.busy++;
+		u64_stats_update_end(&txq->txq_stats.syncp);
 		return NETDEV_TX_BUSY;
 	}
 
 	if (unlikely(offload == HINIC3_TX_OFFLOAD_INVALID)) {
+		u64_stats_update_begin(&txq->txq_stats.syncp);
+		txq->txq_stats.offload_cow_skb_err++;
+		u64_stats_update_end(&txq->txq_stats.syncp);
 		goto err_drop_pkt;
 	} else if (!offload) {
 		wqebb_cnt -= 1;
@@ -599,6 +638,7 @@ static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
 				  txq->tx_stop_thrs,
 				  txq->tx_start_thrs);
 
+	hinic3_get_pkt_stats(txq, skb);
 	hinic3_prepare_sq_ctrl(&wqe_combo, queue_info, num_sge, owner);
 	hinic3_write_db(txq->sq, 0, DB_CFLAG_DP_SQ,
 			hinic3_get_sq_local_pi(txq->sq));
@@ -608,6 +648,9 @@ static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
 err_drop_pkt:
 	dev_kfree_skb_any(skb);
 err_out:
+	u64_stats_update_begin(&txq->txq_stats.syncp);
+	txq->txq_stats.dropped++;
+	u64_stats_update_end(&txq->txq_stats.syncp);
 	return NETDEV_TX_OK;
 }
 
@@ -798,4 +841,20 @@ bool hinic3_tx_poll(struct hinic3_txq *txq, int budget)
 				      txq->tx_start_thrs);
 
 	return pkts == HINIC3_TX_POLL_WEIGHT;
+}
+
+void hinic3_txq_get_stats(struct hinic3_txq *txq,
+			  struct hinic3_txq_stats *stats)
+{
+	struct hinic3_txq_stats *txq_stats = &txq->txq_stats;
+	unsigned int start;
+
+	do {
+		start = u64_stats_fetch_begin(&txq_stats->syncp);
+		stats->busy = txq_stats->busy;
+		stats->skb_pad_err = txq_stats->skb_pad_err;
+		stats->offload_cow_skb_err = txq_stats->offload_cow_skb_err;
+		stats->map_frag_err = txq_stats->map_frag_err;
+		stats->unknown_tunnel_pkt = txq_stats->unknown_tunnel_pkt;
+	} while (u64_stats_fetch_retry(&txq_stats->syncp, start));
 }

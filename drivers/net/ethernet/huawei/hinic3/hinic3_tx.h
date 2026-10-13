@@ -106,11 +106,9 @@ struct hinic3_txq_stats {
 	u64                   busy;
 	u64                   dropped;
 	u64                   skb_pad_err;
-	u64                   frag_len_overflow;
 	u64                   offload_cow_skb_err;
 	u64                   map_frag_err;
 	u64                   unknown_tunnel_pkt;
-	u64                   frag_size_err;
 	struct u64_stats_sync syncp;
 };
 
@@ -160,4 +158,6 @@ netdev_tx_t hinic3_xmit_frame(struct sk_buff *skb, struct net_device *netdev);
 bool hinic3_tx_poll(struct hinic3_txq *txq, int budget);
 void hinic3_flush_txqs(struct net_device *netdev);
 
+void hinic3_txq_get_stats(struct hinic3_txq *txq,
+			  struct hinic3_txq_stats *stats);
 #endif
