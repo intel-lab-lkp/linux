@@ -1634,8 +1634,9 @@ cleanup:
 
 /* helper for ddebug_dyndbg_(boot|module)_param_cb */
 static int ddebug_dyndbg_param_cb(char *param, char *val,
-				const char *modname, int on_err)
+				  const char *modname, int on_err)
 {
+	char dflt_flags[] = "+p";
 	char *sep;
 
 	sep = strchr(param, '.');
@@ -1648,7 +1649,7 @@ static int ddebug_dyndbg_param_cb(char *param, char *val,
 	if (strcmp(param, "dyndbg"))
 		return on_err; /* determined by caller */
 
-	ddebug_exec_queries((val ? val : "+p"), modname);
+	ddebug_exec_queries((val ? val : dflt_flags), modname);
 
 	return 0; /* query failure shouldn't stop module load */
 }
