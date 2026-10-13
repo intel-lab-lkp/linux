@@ -29,12 +29,10 @@
 #define TXSCALE_TABLE_SIZE		37
 #define TXPWR_TRACK_TABLE_SIZE	30
 #define DELTA_SWINGIDX_SIZE     30
-#define BAND_NUM				4
 
 /* 3 PSD Handler */
 /* 3 ============================================================ */
 
-#define	AFH_PSD		1	/* 0:normal PSD scan, 1: only do 20 pts PSD */
 #define	MODE_40M		0	/* 0:20M, 1:40M */
 #define	PSD_TH2		3
 #define	PSD_CHMIN		20   /*  Minimum channel number for BT AFH */
@@ -46,7 +44,6 @@
 #define   Smooth_Size_3		20
 #define	Smooth_TH_3	4
 #define   Smooth_Step_Size 5
-#define	Adaptive_SIR	1
 #define	PSD_RESCAN		4
 #define	PSD_SCAN_INTERVAL	700 /* ms */
 
@@ -56,16 +53,10 @@
 #define		DM_DIG_HIGH_PWR_THRESHOLD	0x3a
 #define		DM_DIG_LOW_PWR_THRESHOLD	0x14
 
-/* ANT Test */
-#define			ANTTESTALL		0x00		/* Ant A or B will be Testing */
-#define		ANTTESTA		0x01		/* Ant A will be Testing */
-#define		ANTTESTB		0x02		/* Ant B will be testing */
-
 #define	PS_MODE_ACTIVE 0x01
 
 /* for 8723A Ant Definition--2012--06--07 due to different IC may be different ANT define */
 #define		MAIN_ANT		1		/* Ant A or Ant Main */
-#define		AUX_ANT		2		/* AntB or Ant Aux */
 #define		MAX_ANT		3		/*  3 for AP using */
 
 /* Antenna Diversity Type */
