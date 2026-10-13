@@ -49,6 +49,9 @@
 #define IS31FL3293_RESET_MAGIC 0xc5
 #define IS31FL3293_MAX_MICROAMP 20000
 
+/* Custom LED Control enable value for IS31FL3206 */
+#define IS31FL3206_CONTROL_ENABLE_WITH_IMAX BIT(4)
+
 struct is31fl32xx_priv;
 struct is31fl32xx_led_data {
 	struct led_classdev cdev;
@@ -79,6 +82,7 @@ struct is31fl32xx_priv {
  * @enable_bits_per_led_control_register: number of LEDs enable bits in each
  * @brightness_steps    : number of brightness steps supported by the chip
  * @reset_func          : pointer to reset function
+ * @enable_all_channels_func  : pointer to enable all channels function
  * @sw_shutdown_func    : pointer to software shutdown function
  *
  * For all optional register addresses, the sentinel value %IS31FL32XX_REG_NONE
@@ -105,6 +109,7 @@ struct is31fl32xx_chipdef {
 	u8	enable_bits_per_led_control_register;
 	u16	brightness_steps;
 	int (*reset_func)(struct is31fl32xx_priv *priv);
+	int (*enable_all_channels_func)(struct is31fl32xx_priv *priv);
 	int (*sw_shutdown_func)(struct is31fl32xx_priv *priv, bool enable);
 };
 
@@ -229,6 +234,28 @@ static int is31fl3293_software_shutdown(struct is31fl32xx_priv *priv,
 }
 
 /*
+ * Custom enable_all_channels function for IS31FL3206 because this
+ * variant has only one bit in the higher nibble for enable, and the
+ * lower nibble controls output current.
+ */
+static int is31fl3206_enable_all_channels(struct is31fl32xx_priv *priv)
+{
+	const struct is31fl32xx_chipdef *cdef = priv->cdef;
+	u8 num_regs = cdef->channels / cdef->enable_bits_per_led_control_register;
+	int i, ret;
+
+	for (i = 0; i < num_regs; i++) {
+		ret = is31fl32xx_write(priv,
+				       cdef->led_control_register_base+i,
+				       IS31FL3206_CONTROL_ENABLE_WITH_IMAX);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+/*
  * NOTE: A mutex is not needed in this function because:
  * - All referenced data is read-only after probe()
  * - The I2C core has a mutex on to protect the bus
@@ -315,6 +342,33 @@ static int is31fl32xx_reset_regs(struct is31fl32xx_priv *priv)
 	return 0;
 }
 
+static int is31fl32xx_enable_all_channels(struct is31fl32xx_priv *priv)
+{
+	const struct is31fl32xx_chipdef *cdef = priv->cdef;
+	int ret;
+
+	if (cdef->led_control_register_base != IS31FL32XX_REG_NONE) {
+		u8 value =
+			GENMASK(cdef->enable_bits_per_led_control_register-1, 0);
+		u8 num_regs = cdef->channels /
+			cdef->enable_bits_per_led_control_register;
+		int i;
+
+		for (i = 0; i < num_regs; i++) {
+			ret = is31fl32xx_write(priv,
+					       cdef->led_control_register_base+i,
+					       value);
+			if (ret)
+				return ret;
+		}
+	}
+
+	if (cdef->enable_all_channels_func)
+		return cdef->enable_all_channels_func(priv);
+
+	return 0;
+}
+
 static int is31fl32xx_software_shutdown(struct is31fl32xx_priv *priv,
 					bool enable)
 {
@@ -345,24 +399,12 @@ static int is31fl32xx_init_regs(struct is31fl32xx_priv *priv)
 		return ret;
 
 	/*
-	 * Set enable bit for all channels.
+	 * Enable all channels.
 	 * We will control state with PWM registers alone.
 	 */
-	if (cdef->led_control_register_base != IS31FL32XX_REG_NONE) {
-		u8 value =
-		    GENMASK(cdef->enable_bits_per_led_control_register-1, 0);
-		u8 num_regs = cdef->channels /
-				cdef->enable_bits_per_led_control_register;
-		int i;
-
-		for (i = 0; i < num_regs; i++) {
-			ret = is31fl32xx_write(priv,
-					       cdef->led_control_register_base+i,
-					       value);
-			if (ret)
-				return ret;
-		}
-	}
+	ret = is31fl32xx_enable_all_channels(priv);
+	if (ret)
+		return ret;
 
 	ret = is31fl32xx_software_shutdown(priv, false);
 	if (ret)
@@ -552,7 +594,22 @@ static const struct is31fl32xx_chipdef is31fl3293_cdef = {
 	.sw_shutdown_func			= is31fl3293_software_shutdown,
 };
 
+static const struct is31fl32xx_chipdef is31fl3206_cdef = {
+	.channels				= 12,
+	.shutdown_reg				= 0x00,
+	.pwm_update_reg			= 0x13,
+	.global_control_reg			= 0x26,
+	.reset_reg				= 0x2f,
+	.output_frequency_setting_reg		= 0x27,
+	.pwm_register_base			= 0x04,
+	.led_control_register_base		= 0x17,
+	.enable_bits_per_led_control_register	= 1,
+	.brightness_steps			= 256,
+	.enable_all_channels_func		= is31fl3206_enable_all_channels,
+};
+
 static const struct of_device_id of_is31fl32xx_match[] = {
+	{ .compatible = "issi,is31fl3206",  .data = &is31fl3206_cdef, },
 	{ .compatible = "issi,is31fl3293",  .data = &is31fl3293_cdef, },
 	{ .compatible = "issi,is31fl3236",  .data = &is31fl3236_cdef, },
 	{ .compatible = "issi,is31fl3236a", .data = &is31fl3236a_cdef, },
