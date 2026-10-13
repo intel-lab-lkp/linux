@@ -829,12 +829,26 @@ static int vgic_its_cmd_handle_discard(struct kvm *kvm, struct vgic_its *its,
 		struct its_device *device = find_its_device(its, device_id);
 		int ite_esz = vgic_its_get_abi(its)->ite_esz;
 		gpa_t gpa = device->itt_addr + ite->event_id * ite_esz;
-		/*
-		 * Though the spec talks about removing the pending state, we
-		 * don't bother here since we clear the ITTE anyway and the
-		 * pending state is a property of the ITTE struct.
-		 */
+		struct vgic_irq *irq = ite->irq;
+		bool queued;
+
 		vgic_its_invalidate_cache(its);
+
+		/*
+		 * A queued LPI can be pending in a running vCPU's list register,
+		 * which the exit path folds back: halt the guest before clearing.
+		 */
+		scoped_guard(raw_spinlock_irqsave, &irq->irq_lock)
+			queued = irq->vcpu;
+
+		if (queued)
+			kvm_arm_halt_guest(kvm);
+
+		scoped_guard(raw_spinlock_irqsave, &irq->irq_lock)
+			irq->pending_latch = false;
+
+		if (queued)
+			kvm_arm_resume_guest(kvm);
 
 		its_free_ite(kvm, ite);
 
