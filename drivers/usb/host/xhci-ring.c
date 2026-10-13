@@ -65,6 +65,7 @@
 static int queue_command(struct xhci_hcd *xhci, struct xhci_command *cmd,
 			 u32 field1, u32 field2,
 			 u32 field3, u32 field4, bool command_must_succeed);
+static void xhci_kill_endpoint_urbs(struct xhci_hcd *xhci, int slot_id, int ep_index);
 
 /*
  * Returns zero if the TRB isn't in this segment, otherwise it returns the DMA
@@ -991,10 +992,17 @@ static int xhci_handle_halted_endpoint(struct xhci_hcd *xhci,
 	/*
 	 * Avoid resetting endpoint if link is inactive or device disonnected.
 	 * Can cause host hang.
-	 * Device will be reset to recover an inactive link, so don't do anything
+	 * The endpoint won't restart before the device is reset or the endpoint
+	 * dropped, so give back all its TDs now instead of letting them time out.
 	 */
 	if (rhub_port->link_inactive || !rhub_port->connected) {
+		xhci_dbg(xhci, "Not resetting ep %u slot %u after disconnect or link error\n",
+			 ep->ep_index, slot_id);
 		ep->ep_state |= EP_DROP_PENDING;
+		if (td)
+			xhci_td_cleanup(xhci, td, xhci_urb_to_transfer_ring(xhci, td->urb),
+					td->status ?: -EPROTO);
+		xhci_kill_endpoint_urbs(xhci, slot_id, ep->ep_index);
 		return -ENODEV;
 	}
 
