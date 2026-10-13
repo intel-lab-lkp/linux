@@ -1858,7 +1858,8 @@ int ubifs_jnl_delete_xattr(struct ubifs_info *c, const struct inode *host,
 			   const struct inode *inode,
 			   const struct fscrypt_name *nm)
 {
-	int err, xlen, hlen, len, lnum, xent_offs, aligned_xlen, write_len;
+	int err, xlen, hlen, len, lnum, xent_offs, host_offs, aligned_xlen,
+		write_len;
 	struct ubifs_dent_node *xent;
 	struct ubifs_ino_node *ino;
 	union ubifs_key xent_key, key1, key2;
@@ -1915,6 +1916,8 @@ int ubifs_jnl_delete_xattr(struct ubifs_info *c, const struct inode *host,
 		ubifs_wbuf_add_ino_nolock(&c->jheads[BASEHD].wbuf, host->i_ino);
 	release_head(c, BASEHD);
 
+	host_offs = xent_offs + aligned_xlen + UBIFS_INO_NODE_SZ;
+
 	ubifs_add_auth_dirt(c, lnum);
 	kfree(xent);
 	if (err)
@@ -1943,7 +1946,7 @@ int ubifs_jnl_delete_xattr(struct ubifs_info *c, const struct inode *host,
 
 	/* And update TNC with the new host inode position */
 	ino_key_init(c, &key1, host->i_ino);
-	err = ubifs_tnc_add(c, &key1, lnum, xent_offs + len - hlen, hlen, hash);
+	err = ubifs_tnc_add(c, &key1, lnum, host_offs, hlen, hash);
 	if (err)
 		goto out_ro;
 
