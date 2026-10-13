@@ -1065,6 +1065,7 @@ static void qcom_smd_release_device(struct device *dev)
 	struct rpmsg_device *rpdev = to_rpmsg_device(dev);
 	struct qcom_smd_device *qsdev = to_smd_device(rpdev);
 
+	of_node_put(dev->of_node);
 	kfree(qsdev);
 }
 
