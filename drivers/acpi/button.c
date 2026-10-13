@@ -26,7 +26,6 @@
 #define ACPI_BUTTON_FILE_STATE		"state"
 #define ACPI_BUTTON_TYPE_UNKNOWN	0x00
 #define ACPI_BUTTON_NOTIFY_WAKE		0x02
-#define ACPI_BUTTON_NOTIFY_STATUS	0x80
 
 #define ACPI_BUTTON_CLASS_POWER		"button/power"
 #define ACPI_BUTTON_DEVICE_NAME_POWER	"Power Button"
@@ -477,7 +476,8 @@ static void acpi_button_notify(acpi_handle handle, u32 event, void *data)
 
 	switch (event) {
 	case ACPI_BUTTON_NOTIFY_STATUS:
-		break;
+	case ACPI_BUTTON_NOTIFY_PRESS:
+	case ACPI_BUTTON_NOTIFY_RELEASE:
 	case ACPI_BUTTON_NOTIFY_WAKE:
 		break;
 	default:
@@ -494,10 +494,22 @@ static void acpi_button_notify(acpi_handle handle, u32 event, void *data)
 	input = button->input;
 	keycode = test_bit(KEY_SLEEP, input->keybit) ? KEY_SLEEP : KEY_POWER;
 
-	input_report_key(input, keycode, 1);
-	input_sync(input);
-	input_report_key(input, keycode, 0);
-	input_sync(input);
+	switch (event) {
+	case ACPI_BUTTON_NOTIFY_STATUS:
+		input_report_key(input, keycode, 1);
+		input_sync(input);
+		input_report_key(input, keycode, 0);
+		input_sync(input);
+		break;
+	case ACPI_BUTTON_NOTIFY_PRESS:
+		input_report_key(input, keycode, 1);
+		input_sync(input);
+		break;
+	case ACPI_BUTTON_NOTIFY_RELEASE:
+		input_report_key(input, keycode, 0);
+		input_sync(input);
+		break;
+	}
 
 	acpi_bus_generate_netlink_event(button->class, dev_name(&device->dev),
 					event, ++button->pushed);
