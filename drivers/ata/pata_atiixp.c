@@ -279,7 +279,25 @@ static int atiixp_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		.udma_mask = ATA_UDMA5,
 		.port_ops = &atiixp_port_ops
 	};
+	static const struct ata_port_info info_ata133 = {
+		.flags = ATA_FLAG_SLAVE_POSS,
+		.pio_mask = ATA_PIO4,
+		.mwdma_mask = ATA_MWDMA12_ONLY,
+		.udma_mask = ATA_UDMA6,
+		.port_ops = &atiixp_port_ops
+	};
 	const struct ata_port_info *ppi[] = { &info, &info };
+
+	/* SB300 and newer: UDMA6 */
+	switch (pdev->device) {
+	case PCI_DEVICE_ID_ATI_IXP300_IDE:
+	case PCI_DEVICE_ID_ATI_IXP400_IDE:
+	case PCI_DEVICE_ID_ATI_IXP600_IDE:
+	case PCI_DEVICE_ID_ATI_IXP700_IDE:
+	case PCI_DEVICE_ID_AMD_HUDSON2_IDE:
+		ppi[0] = ppi[1] = &info_ata133;
+		break;
+	}
 
 	/* SB600 doesn't have secondary port wired */
 	if (pdev->device == PCI_DEVICE_ID_ATI_IXP600_IDE)
@@ -314,7 +332,7 @@ static struct pci_driver atiixp_pci_driver = {
 module_pci_driver(atiixp_pci_driver);
 
 MODULE_AUTHOR("Alan Cox");
-MODULE_DESCRIPTION("low-level driver for ATI IXP200/300/400");
+MODULE_DESCRIPTION("low-level driver for ATI IXP200/300/400, AMD SB600/700 series and Hudson-2");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, atiixp);
 MODULE_VERSION(DRV_VERSION);
