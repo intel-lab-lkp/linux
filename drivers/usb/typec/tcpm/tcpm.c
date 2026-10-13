@@ -8376,14 +8376,21 @@ static int tcpm_fw_get_caps(struct tcpm_port *port, struct fwnode_handle *fwnode
 		}
 	}
 
-	port->pds = devm_kcalloc(port->dev, port->pd_count, sizeof(struct usb_power_delivery *),
+	/*
+	 * Allocate one extra entry for each array to keep them NULL-terminated.
+	 * select_usb_power_delivery_show() iterates through port->pds (via the
+	 * pd_get callback) until it finds a NULL entry. Similarly,
+	 * tcpm_find_pd_data() iterates through port->pd_list until it finds a
+	 * NULL entry.
+	 */
+	port->pds = devm_kcalloc(port->dev, port->pd_count + 1, sizeof(struct usb_power_delivery *),
 				 GFP_KERNEL);
 	if (!port->pds) {
 		ret = -ENOMEM;
 		goto put_capabilities;
 	}
 
-	port->pd_list = devm_kcalloc(port->dev, port->pd_count, sizeof(struct pd_data *),
+	port->pd_list = devm_kcalloc(port->dev, port->pd_count + 1, sizeof(struct pd_data *),
 				     GFP_KERNEL);
 	if (!port->pd_list) {
 		ret = -ENOMEM;
