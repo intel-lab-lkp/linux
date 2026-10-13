@@ -207,11 +207,17 @@ struct optee_ffa {
  * @rdev: owning RPMI service device
  * @shm_map: lookup by the host-endian parcel ID and nonce pair
  * @nonce_ida: nonzero SHM nonces, reusable after successful parcel reclamation
+ * @signal: allocated TEE-to-REE doorbell, independent of logical keys
+ * @notif_wq: private bottom-half workqueue, NULL when inactive
+ * @notif_work: processes bottom halves requested by the RPMI signal
  */
 struct optee_rpmi {
 	struct rpmi_tee_device *rdev;
 	struct optee_shm_handle_map shm_map;
 	struct ida nonce_ida;
+	u32 signal;
+	struct workqueue_struct *notif_wq;
+	struct work_struct notif_work;
 };
 #endif
 
