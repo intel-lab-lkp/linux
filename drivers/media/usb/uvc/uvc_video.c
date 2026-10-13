@@ -1984,6 +1984,16 @@ static int uvc_init_video_bulk(struct uvc_streaming *stream,
 	size = stream->ctrl.dwMaxPayloadTransferSize;
 	stream->bulk.max_payload_size = size;
 
+	/*
+	 * Output payloads start with a 2-byte header (see
+	 * uvc_video_encode_header()), so a device negotiating a maximum
+	 * payload transfer size smaller than that would make the encode
+	 * path underflow its signed length counter. Reject it here.
+	 */
+	if (stream->type == V4L2_BUF_TYPE_VIDEO_OUTPUT &&
+	    stream->bulk.max_payload_size < 2)
+		return -EINVAL;
+
 	npackets = uvc_alloc_urb_buffers(stream, size, psize, gfp_flags);
 	if (npackets == 0)
 		return -ENOMEM;
