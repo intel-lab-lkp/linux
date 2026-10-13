@@ -7662,6 +7662,12 @@ static struct r5conf *setup_conf(struct mddev *mddev)
 			mdname(mddev), mddev->raid_disks);
 		return ERR_PTR(-EINVAL);
 	}
+	if ((mddev->new_level == 4 || mddev->new_level == 5) &&
+	    mddev->raid_disks < 2) {
+		pr_warn("md/raid:%s: not enough configured devices (%d, minimum 2)\n",
+			mdname(mddev), mddev->raid_disks);
+		return ERR_PTR(-EINVAL);
+	}
 
 	if (!mddev->new_chunk_sectors ||
 	    (mddev->new_chunk_sectors << 9) % PAGE_SIZE ||
