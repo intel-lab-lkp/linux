@@ -5341,8 +5341,9 @@ static int edid_hfeeodb_extension_block_count(const struct edid *edid)
  * etc). For example, if the bit 0 in bitmap is set, first mode in VDB can
  * support YCBCR420 output too.
  */
-static void parse_cta_y420cmdb(struct drm_connector *connector,
-			       const struct cea_db *db, u64 *y420cmdb_map)
+static noinline_for_stack void
+parse_cta_y420cmdb(struct drm_connector *connector, const struct cea_db *db,
+		   u64 *y420cmdb_map)
 {
 	struct drm_display_info *info = &connector->display_info;
 	int i, map_len = cea_db_payload_len(db) - 1;
@@ -5515,7 +5516,7 @@ static uint8_t hdr_metadata_type(const u8 *edid_ext)
 		BIT(HDMI_STATIC_METADATA_TYPE1);
 }
 
-static void
+static noinline_for_stack void
 drm_parse_hdr_metadata_block(struct drm_connector *connector, const u8 *db)
 {
 	struct hdr_static_metadata *hdr_metadata =
@@ -6070,7 +6071,8 @@ drm_default_rgb_quant_range(const struct drm_display_mode *mode)
 EXPORT_SYMBOL(drm_default_rgb_quant_range);
 
 /* CTA-861 Video Data Block (CTA VDB) */
-static void parse_cta_vdb(struct drm_connector *connector, const struct cea_db *db)
+static noinline_for_stack void
+parse_cta_vdb(struct drm_connector *connector, const struct cea_db *db)
 {
 	struct drm_display_info *info = &connector->display_info;
 	int i, vic_index, len = cea_db_payload_len(db);
@@ -6136,8 +6138,8 @@ static bool cta_vdb_has_vic(const struct drm_connector *connector, u8 vic)
 }
 
 /* CTA-861-H YCbCr 4:2:0 Video Data Block (CTA Y420VDB) */
-static void parse_cta_y420vdb(struct drm_connector *connector,
-			      const struct cea_db *db)
+static noinline_for_stack void
+parse_cta_y420vdb(struct drm_connector *connector, const struct cea_db *db)
 {
 	struct drm_display_info *info = &connector->display_info;
 	struct drm_hdmi_info *hdmi = &info->hdmi;
@@ -6155,7 +6157,8 @@ static void parse_cta_y420vdb(struct drm_connector *connector,
 	}
 }
 
-static void drm_parse_vcdb(struct drm_connector *connector, const u8 *db)
+static noinline_for_stack void
+drm_parse_vcdb(struct drm_connector *connector, const u8 *db)
 {
 	struct drm_display_info *info = &connector->display_info;
 
@@ -6310,8 +6313,8 @@ static void drm_parse_dsc_info(struct drm_hdmi_dsc_cap *hdmi_dsc,
 }
 
 /* Sink Capability Data Structure */
-static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
-				      const u8 *hf_scds)
+static noinline_for_stack void
+drm_parse_hdmi_forum_scds(struct drm_connector *connector, const u8 *hf_scds)
 {
 	struct drm_display_info *info = &connector->display_info;
 	struct drm_hdmi_info *hdmi = &info->hdmi;
@@ -6451,7 +6454,7 @@ static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
 }
 
 /* HDMI Vendor-Specific Data Block (HDMI VSDB, H14b-VSDB) */
-static void
+static noinline_for_stack void
 drm_parse_hdmi_vsdb_video(struct drm_connector *connector, const u8 *db)
 {
 	struct drm_display_info *info = &connector->display_info;
@@ -6486,8 +6489,8 @@ drm_parse_hdmi_vsdb_video(struct drm_connector *connector, const u8 *db)
  * See EDID extension for head-mounted and specialized monitors, specified at:
  * https://docs.microsoft.com/en-us/windows-hardware/drivers/display/specialized-monitors-edid-extension
  */
-static void drm_parse_microsoft_vsdb(struct drm_connector *connector,
-				     const u8 *db)
+static noinline_for_stack void
+drm_parse_microsoft_vsdb(struct drm_connector *connector, const u8 *db)
 {
 	struct drm_display_info *info = &connector->display_info;
 	u8 version = db[4];
@@ -6558,8 +6561,8 @@ static void drm_parse_amd_vsdb_v3(struct drm_display_info *info,
 	info->amd_vsdb.max_frame_rate = max_frame_rate;
 }
 
-static void drm_parse_amd_vsdb(struct drm_connector *connector,
-			       const struct cea_db *db)
+static noinline_for_stack void
+drm_parse_amd_vsdb(struct drm_connector *connector, const struct cea_db *db)
 {
 	struct drm_display_info *info = &connector->display_info;
 	const u8 *data = cea_db_data(db);
