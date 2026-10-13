@@ -99,7 +99,7 @@ xfs_dir_fsync(
  * waiting on sequences that are still in flight to correctly order concurrent
  * sync operations.
  */
-static int
+int
 xfs_fsync_flush_log(
 	struct xfs_inode	*ip,
 	bool			datasync,
