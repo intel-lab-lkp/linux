@@ -5,6 +5,7 @@
 #include <linux/bits.h>
 #include <linux/clk-provider.h>
 #include <linux/device.h>
+#include <linux/platform_device.h>
 #include <linux/spinlock.h>
 
 /* register fields */
@@ -28,6 +29,16 @@ struct jh71x0_clk_data {
 	u32 max;
 	u8 parents[4];
 };
+
+/*
+ * Parent indexes with this bit set refer to an external clock, i.e. an entry
+ * of jh71x0_crg_domain_info::ext_clk, instead of a clock provided by the CRG
+ * itself. This keeps the external clock indexes independent of the number of
+ * clocks the CRG provides, which in turn must stay below the flag; drivers
+ * check this with a static_assert() on their clock table.
+ */
+#define JH71X0_EXT_CLK_FLAG	BIT(7)
+#define JH71X0_EXT_CLK(_n)	(JH71X0_EXT_CLK_FLAG | (_n))
 
 #define JH71X0_GATE(_idx, _name, _flags, _parent)				\
 [_idx] = {									\
@@ -109,6 +120,14 @@ struct jh71x0_clk {
 	unsigned int max_div;
 };
 
+struct jh71x0_crg_domain_info {
+	const struct jh71x0_clk_data *clk_data;
+	unsigned int num_clk;
+	const char * const *ext_clk;
+	unsigned int num_ext_clk;
+	const char *rst_name;
+};
+
 struct jh71x0_clk_priv {
 	/* protect clk enable and set rate/parent from happening at the same time */
 	spinlock_t rmw_lock;
@@ -116,6 +135,7 @@ struct jh71x0_clk_priv {
 	void __iomem *base;
 	struct clk *original_clk;
 	struct notifier_block pll_clk_nb;
+	const struct jh71x0_crg_domain_info *info;
 	struct clk_hw *pll[3];
 	unsigned int num_reg;
 	struct jh71x0_clk reg[] __counted_by(num_reg);
@@ -125,5 +145,6 @@ const struct clk_ops *starfive_jh71x0_clk_ops(u32 max);
 struct clk_hw *jh71x0_clk_get(struct of_phandle_args *clkspec, void *data);
 int jh71x0_reset_controller_register(struct jh71x0_clk_priv *priv,
 				     const char *adev_name);
+int jh71x0_crg_probe(struct platform_device *pdev);
 
 #endif
