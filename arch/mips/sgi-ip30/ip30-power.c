@@ -17,6 +17,8 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/pm.h>
+#include <linux/reboot.h>
+#include <linux/workqueue.h>
 
 #include <asm/reboot.h>
 #include <asm/sgi/heart.h>
@@ -50,6 +52,30 @@ static void ip30_machine_power_off(void)
 	heart_write(HEART_ACK_ALL_MASK, &heart_regs->clear_isr);
 
 	ds1685_rtc_poweroff(to_platform_device(dev));
+}
+
+#define IP30_POWERDOWN_TIMEOUT	120	/* seconds */
+
+static bool ip30_shutting_down;
+
+static void ip30_power_timeout(struct work_struct *work)
+{
+	ip30_machine_power_off();
+}
+
+static DECLARE_DELAYED_WORK(ip30_power_work, ip30_power_timeout);
+
+/* Called by the RTC driver when the power button is pressed. */
+void ip30_prepare_poweroff(void)
+{
+	/* A second press powers off at once. */
+	if (ip30_shutting_down)
+		ip30_machine_power_off();
+
+	/* Shut down through userspace, powering off anyway if it stalls. */
+	ip30_shutting_down = true;
+	orderly_poweroff(true);
+	schedule_delayed_work(&ip30_power_work, IP30_POWERDOWN_TIMEOUT * HZ);
 }
 
 static int __init ip30_reboot_setup(void)

@@ -317,6 +317,8 @@ struct ip30_heart_regs {		/* 0x0ff00000 */
 
 extern struct ip30_heart_regs __iomem *heart_regs;
 
+void ip30_prepare_poweroff(void);
+
 #define heart_read	____raw_readq
 #define heart_write	____raw_writeq
 

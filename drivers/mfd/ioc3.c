@@ -24,6 +24,9 @@
 
 #include <asm/pci/bridge.h>
 #include <asm/sn/ioc3.h>
+#ifdef CONFIG_SGI_IP30
+#include <asm/sgi/heart.h>
+#endif
 
 #define IOC3_IRQ_SERIAL_A	6
 #define IOC3_IRQ_SERIAL_B	15
@@ -321,6 +324,9 @@ static struct ds1685_rtc_platform_data ip30_rtc_platform_data = {
 	.no_irq = false,
 	.uie_unsupported = true,
 	.access_type = ds1685_reg_indirect,
+#ifdef CONFIG_SGI_IP30
+	.plat_prepare_poweroff = ip30_prepare_poweroff,
+#endif
 };
 
 static const struct resource ioc3_rtc_ds1685_resources[] = {
