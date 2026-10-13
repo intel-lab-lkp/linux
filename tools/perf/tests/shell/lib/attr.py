@@ -209,10 +209,13 @@ class Notest(Exception):
         return '[%s] \'%s\'' % (self.arch, self.test.path)
 
 class Unsup(Exception):
-    def __init__(self, test):
+    def __init__(self, test, ret, expected):
         self.test = test
+        self.ret = ret
+        self.expected = expected
     def getMsg(self):
-        return '\'%s\'' % self.test.path
+        return '\'%s\' exit %d, expected %s, likely a missing capability' % (
+            self.test.path, self.ret, self.expected)
 
 class Event(dict):
     terms = [
@@ -425,13 +428,17 @@ class Test(object):
 
     def skip_test_kernel_since(self):
         if not self.kernel_since:
-            return False
-        return not self.kernel_since <= parse_version(platform.release())
+            return None
+        if self.kernel_since <= parse_version(platform.release()):
+            return None
+        return "kernel older than %d.%d" % tuple(self.kernel_since)
 
     def skip_test_kernel_until(self):
         if not self.kernel_until:
-            return False
-        return not parse_version(platform.release()) < self.kernel_until
+            return None
+        if parse_version(platform.release()) < self.kernel_until:
+            return None
+        return "kernel newer than %d.%d" % tuple(self.kernel_until)
 
     def skip_test_auxv(self):
         def new_auxv(a, pattern):
@@ -447,18 +454,20 @@ class Test(object):
             return (items[0], value)
 
         if not self.auxv:
-            return False
+            return None
         auxv = subprocess.check_output("LD_SHOW_AUXV=1 sleep 0", shell=True) \
                .decode(sys.stdout.encoding)
         pattern = re.compile(r"[: ]+")
         auxv = dict([new_auxv(a, pattern) for a in auxv.splitlines()])
-        return not eval(self.auxv)
+        if eval(self.auxv):
+            return None
+
+        return "the auxv condition doesn't hold here"
 
     def skip_test_arch(self, myarch):
         # If architecture not set always run test
         if self.arch == '':
-            # log.warning("test for arch %s is ok" % myarch)
-            return False
+            return None
 
         # Allow multiple values in assignment separated by ','
         arch_list = self.arch.split(',')
@@ -468,24 +477,23 @@ class Test(object):
             arch_list[0] = arch_list[0][1:]
             log.warning("excluded architecture list %s", arch_list)
             for arch_item in arch_list:
-                # log.warning("test for %s arch is %s" % (arch_item, myarch))
                 if arch_item == myarch:
-                    return True
-            return False
+                    return "arch = %s, machine = %s" % (self.arch, myarch)
+            return None
 
         for arch_item in arch_list:
-            # log.warning("test for architecture '%s' current '%s'" % (arch_item, myarch))
             if arch_item == myarch:
-                return False
-        return True
+                return None
+
+        return "arch = %s, machine = %s" % (self.arch, myarch)
 
     def skip_test_requires(self):
         for requirement in filter(None, map(str.strip, self.requires.split(','))):
             if requirement == 'core-pmu' and not core_pmu_available():
                 log.warning("test limitation 'requires %s'", requirement)
-                return True
+                return "needs a core PMU, none here"
 
-        return False
+        return None
 
     def restore_sample_rate(self, value=10000):
         try:
@@ -529,20 +537,36 @@ class Test(object):
     def run_cmd(self, tempdir):
         _junk1, _junk2, _junk3, _junk4, myarch = (os.uname())
 
-        if self.skip_test_arch(myarch):
-            raise Notest(self, myarch)
+        arch = self.skip_test_arch(myarch)
+        if arch:
+            log.debug("  detail: the test file has arch = %s, the machine reports %s",
+                     self.arch, myarch)
+            raise Notest(self, arch)
 
-        if self.skip_test_auxv():
-            raise Notest(self, "auxv skip")
+        auxv = self.skip_test_auxv()
+        if auxv:
+            log.debug("  detail: the auxv condition %s doesn't hold, the bits come "
+                     "from the LD_SHOW_AUXV=1 output", self.auxv)
+            raise Notest(self, auxv)
 
-        if self.skip_test_kernel_since():
-            raise Notest(self, "old kernel skip")
+        kernel = self.skip_test_kernel_since()
+        if kernel:
+            log.debug("  detail: the test file's kernel_since = %d.%d, this kernel is %s",
+                     self.kernel_since[0], self.kernel_since[1], platform.release())
+            raise Notest(self, kernel)
 
-        if self.skip_test_kernel_until():
-            raise Notest(self, "new kernel skip")
+        kernel = self.skip_test_kernel_until()
+        if kernel:
+            log.debug("  detail: the test file's kernel_until = %d.%d, this kernel is %s",
+                     self.kernel_until[0], self.kernel_until[1], platform.release())
+            raise Notest(self, kernel)
 
-        if self.skip_test_requires():
-            raise Notest(self, "requirements skip")
+        requirement = self.skip_test_requires()
+        if requirement:
+            log.debug("  detail: requires core-pmu, nothing countable here, check "
+                     "kernel.perf_event_paranoid and the PMU nodes under "
+                     "/sys/bus/event_source/")
+            raise Notest(self, requirement)
 
         self.restore_sample_rate()
         cmd = "PERF_TEST_ATTR=%s %s %s -o %s/perf.data %s" % (tempdir,
@@ -552,10 +576,16 @@ class Test(object):
         log.info("  '%s' ret '%s', expected '%s'", cmd, str(ret), str(self.ret))
 
         if not data_equal(str(ret), str(self.ret)):
+            plain_cmd = "%s %s %s" % (self.perf, self.command,
+                                      self.args.split('>/dev/null')[0].rstrip())
             if self.test_ret:
                 raise Fail(self, "Perf exit code failure")
             else:
-                raise Unsup(self)
+                log.debug("  detail: '%s' exited with %d, the expectations want the "
+                         "workload's %s exit, so there are no attrs recorded to "
+                         "verify; this is normally a capability problem, run '%s' "
+                         "to see why", plain_cmd, ret, self.ret, plain_cmd)
+                raise Unsup(self, ret, str(self.ret))
 
     def drop_dummy_tracking_events(self):
         """
