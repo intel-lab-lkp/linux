@@ -55,10 +55,13 @@ struct sdw_amd_dai_runtime {
 	enum sdw_stream_type stream_type;
 };
 
+struct amd_sdw_hw_ops;
+
 /**
  * struct amd_sdw_manager - amd manager driver context
  * @bus: bus handle
  * @dev: linux device
+ * @hw_ops: pointer to hardware-revision-specific dispatch table
  * @mmio: SoundWire registers mmio base
  * @acp_mmio: acp registers mmio base
  * @amd_sdw_irq_thread: SoundWire manager irq workqueue
@@ -85,6 +88,7 @@ struct sdw_amd_dai_runtime {
 struct amd_sdw_manager {
 	struct sdw_bus bus;
 	struct device *dev;
+	const struct amd_sdw_hw_ops *hw_ops;
 
 	void __iomem *mmio;
 	void __iomem *acp_mmio;
