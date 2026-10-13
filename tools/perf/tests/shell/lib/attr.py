@@ -115,6 +115,50 @@ SAMPLE_ID_BITS = PERF_SAMPLE_ID | PERF_SAMPLE_IDENTIFIER
 # sample id bits" when comparing the two sides.
 SAMPLE_ID_EITHER = 1 << 40
 
+PERF_FORMAT_GROUP = 1 << 3
+
+def core_pmu_count():
+    """
+    How many core PMUs does perf see?  An event with no PMU named in it
+    becomes one event per core PMU, see parse_events_multi_pmu_add(), and
+    that is the expansion that leaves the clones for the other core PMUs
+    without any group members and that makes the kernel qualify 'config'
+    with the type of the PMU it is for, so this is the number of events perf
+    makes of 'cycles'.  None when there is no binding to ask, as in
+    core_pmu_available().
+    """
+    try:
+        import perf
+        parse_events = perf.parse_events
+    except (ImportError, AttributeError):
+        return None
+
+    try:
+        return len(parse_events('cycles'))
+    except OSError:
+        # No PMU that can count it, see core_pmu_available().
+        return None
+
+SINGLE_CORE_PMU = core_pmu_count() == 1
+
+def hide_group_format(expected, recorded):
+    """
+    read_format's PERF_FORMAT_GROUP bit asks for the group members to be read
+    along with the leader, which aside from this bit is verified with the
+    fd/group_fd based group checking, and with more than one core PMU a group
+    whose members are pinned to one of them, say 'default_core', leaves the
+    clones for the other core PMUs without any members, so that bit isn't
+    there: whether it is there is a consequence of how the evlist got
+    expanded to more than one core PMU, not of what the expectations are
+    about, so take it out on both sides.  On a machine with a single core PMU
+    there is nothing to expand, so the expectations keep verifying it.
+    """
+    if SINGLE_CORE_PMU:
+        return expected, recorded
+
+    return (mask_bits(expected, PERF_FORMAT_GROUP),
+            mask_bits(recorded, PERF_FORMAT_GROUP))
+
 def hide_sample_id(expected, recorded):
     """
     perf asks for a way to tell the samples apart, PERF_SAMPLE_IDENTIFIER where
@@ -245,6 +289,8 @@ class Event(dict):
     def hide_event_count_dependent_terms(self, term, expected, recorded):
         if term == 'sample_type':
             return hide_sample_id(expected, recorded)
+        if term == 'read_format':
+            return hide_group_format(expected, recorded)
 
         return expected, recorded
 
