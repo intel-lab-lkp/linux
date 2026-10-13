@@ -1700,6 +1700,13 @@ static void uvc_video_encode_bulk(struct uvc_urb *uvc_urb,
 		return;
 	}
 
+	/* The 2-byte payload header must fit; a smaller URB would make len
+	 * underflow and uvc_video_encode_data() copy past the buffer. */
+	if (len < 2) {
+		urb->transfer_buffer_length = 0;
+		return;
+	}
+
 	/* If the URB is the first of its payload, add the header. */
 	if (stream->bulk.header_size == 0) {
 		ret = uvc_video_encode_header(stream, buf, mem, len);
