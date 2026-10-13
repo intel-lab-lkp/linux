@@ -261,6 +261,7 @@ int mempool_init_node(struct mempool *pool, int min_nr,
 					    gfp_mask, node_id);
 	if (!pool->elements)
 		return -ENOMEM;
+	pool->__elements_size = max(1, min_nr);
 
 	/*
 	 * First pre-allocate the guaranteed number of buffers,
@@ -353,6 +354,8 @@ EXPORT_SYMBOL(mempool_create_node_noprof);
  * This function shrinks/grows the pool. In the case of growing,
  * it cannot be guaranteed that the pool will be grown to the new
  * size immediately, but new mempool_free() calls will refill it.
+ * Shrinking keeps the elements array, so growing the pool again up to
+ * the largest size it ever had does not reallocate it.
  * This function may sleep.
  *
  * Note, the caller must guarantee that no mempool_destroy is called
@@ -364,7 +367,7 @@ EXPORT_SYMBOL(mempool_create_node_noprof);
 int mempool_resize(struct mempool *pool, int new_min_nr)
 {
 	void *element;
-	void **new_elements;
+	void **new_elements = NULL;
 	unsigned long flags;
 
 	BUG_ON(new_min_nr <= 0);
@@ -381,24 +384,31 @@ int mempool_resize(struct mempool *pool, int new_min_nr)
 		pool->min_nr = new_min_nr;
 		goto out_unlock;
 	}
-	spin_unlock_irqrestore(&pool->lock, flags);
 
-	/* Grow the pool */
-	new_elements = kmalloc_objs(*new_elements, new_min_nr);
-	if (!new_elements)
-		return -ENOMEM;
-
-	spin_lock_irqsave(&pool->lock, flags);
-	if (unlikely(new_min_nr <= pool->min_nr)) {
-		/* Raced, other resize will do our work */
+	/*
+	 * Grow the pool.  The elements array is only reallocated if it is too
+	 * small, it may still be large from before an earlier shrink.
+	 */
+	if (new_min_nr > pool->__elements_size) {
 		spin_unlock_irqrestore(&pool->lock, flags);
-		kfree(new_elements);
-		goto out;
+		new_elements = kmalloc_objs(*new_elements, new_min_nr);
+		if (!new_elements)
+			return -ENOMEM;
+
+		spin_lock_irqsave(&pool->lock, flags);
+		if (unlikely(new_min_nr <= pool->min_nr)) {
+			/* Raced, other resize will do our work */
+			goto out_unlock;
+		}
+		/* A racing resize may have enlarged the array meanwhile */
+		if (new_min_nr > pool->__elements_size) {
+			memcpy(new_elements, pool->elements,
+			       pool->curr_nr * sizeof(*new_elements));
+			/* The old array is freed below, outside the lock */
+			swap(pool->elements, new_elements);
+			pool->__elements_size = new_min_nr;
+		}
 	}
-	memcpy(new_elements, pool->elements,
-			pool->curr_nr * sizeof(*new_elements));
-	kfree(pool->elements);
-	pool->elements = new_elements;
 	pool->min_nr = new_min_nr;
 
 	while (pool->curr_nr < pool->min_nr) {
@@ -418,6 +428,7 @@ int mempool_resize(struct mempool *pool, int new_min_nr)
 out_unlock:
 	spin_unlock_irqrestore(&pool->lock, flags);
 out:
+	kfree(new_elements);
 	return 0;
 }
 EXPORT_SYMBOL(mempool_resize);

@@ -20,6 +20,7 @@ typedef struct mempool {
 	int min_nr;		/* nr of elements at *elements */
 	int curr_nr;		/* Current nr of elements at *elements */
 	void **elements;
+	int __elements_size;	/* nr of slots in *elements, never shrinks */
 
 	void *pool_data;
 	mempool_alloc_t *alloc;
