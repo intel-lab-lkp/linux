@@ -549,17 +549,9 @@ struct drm_gem_object *amdgpu_gem_prime_import(struct drm_device *dev,
 	struct dma_buf_attachment *attach;
 	struct drm_gem_object *obj;
 
-	if (dma_buf->ops == &amdgpu_dmabuf_ops) {
-		obj = dma_buf->priv;
-		if (obj->dev == dev) {
-			/*
-			 * Importing dmabuf exported from out own gem increases
-			 * refcount on gem itself instead of f_count of dmabuf.
-			 */
-			drm_gem_object_get(obj);
-			return obj;
-		}
-	}
+	obj = drm_gem_prime_self_import(dev, dma_buf, &amdgpu_dmabuf_ops);
+	if (obj)
+		return obj;
 
 	obj = amdgpu_dma_buf_create_obj(dev, dma_buf);
 	if (IS_ERR(obj))
