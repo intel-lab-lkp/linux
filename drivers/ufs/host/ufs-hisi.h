@@ -40,11 +40,6 @@
 #define BIT_UFS_DEVICE_RESET		(0x1)
 
 /*
- * M-TX Configuration Attributes for Hixxxx
- */
-#define MPHY_TX_FSM_STATE	0x41
-
-/*
  * Hixxxx UFS HC specific Registers
  */
 enum {
