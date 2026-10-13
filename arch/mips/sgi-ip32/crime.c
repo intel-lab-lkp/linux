@@ -34,6 +34,10 @@ void __init crime_init(void)
 	crime = ioremap(CRIME_BASE, sizeof(struct sgi_crime));
 	mace = ioremap(MACE_BASE, sizeof(struct sgi_mace));
 
+	/* Errors latched before the kernel starts would be reported as new */
+	crime->mem_error_stat = 0;
+	crime->cpu_error_stat = 0;
+
 	id = crime->id;
 	rev = id & CRIME_ID_REV;
 	id = (id & CRIME_ID_IDBITS) >> 4;
