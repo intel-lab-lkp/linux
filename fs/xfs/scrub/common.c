@@ -727,9 +727,10 @@ xchk_ag_init(
 int
 xchk_rtgroup_init(
 	struct xfs_scrub	*sc,
-	xfs_rgnumber_t		rgno,
-	struct xchk_rt		*sr)
+	xfs_rgnumber_t		rgno)
 {
+	struct xchk_rt		*sr = &sc->sr;
+
 	ASSERT(sr->rtg == NULL);
 	ASSERT(sr->rtlock_flags == 0);
 
@@ -743,9 +744,9 @@ xchk_rtgroup_init(
 int
 xchk_rtgroup_lock(
 	struct xfs_scrub	*sc,
-	struct xchk_rt		*sr,
 	unsigned int		rtglock_flags)
 {
+	struct xchk_rt		*sr = &sc->sr;
 	int			error = 0;
 
 	ASSERT(sr->rtg != NULL);
@@ -828,8 +829,10 @@ xchk_rtgroup_lock(
  */
 void
 xchk_rtgroup_btcur_free(
-	struct xchk_rt		*sr)
+	struct xfs_scrub	*sc)
 {
+	struct xchk_rt		*sr = &sc->sr;
+
 	if (sr->rmap_cur)
 		xfs_btree_del_cursor(sr->rmap_cur, XFS_BTREE_ERROR);
 	if (sr->refc_cur)
@@ -845,8 +848,10 @@ xchk_rtgroup_btcur_free(
  */
 void
 xchk_rtgroup_unlock(
-	struct xchk_rt		*sr)
+	struct xfs_scrub	*sc)
 {
+	struct xchk_rt		*sr = &sc->sr;
+
 	ASSERT(sr->rtg != NULL);
 
 	if (sr->rtlock_flags) {
@@ -861,12 +866,13 @@ xchk_rtgroup_unlock(
  */
 void
 xchk_rtgroup_free(
-	struct xfs_scrub	*sc,
-	struct xchk_rt		*sr)
+	struct xfs_scrub	*sc)
 {
+	struct xchk_rt		*sr = &sc->sr;
+
 	ASSERT(sr->rtg != NULL);
 
-	xchk_rtgroup_unlock(sr);
+	xchk_rtgroup_unlock(sc);
 
 	xfs_rtgroup_put(sr->rtg);
 	sr->rtg = NULL;
