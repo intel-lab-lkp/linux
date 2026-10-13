@@ -942,6 +942,9 @@ static inline unsigned int disk_zone_capacity(struct gendisk *disk,
 		return disk->last_zone_capacity;
 	return disk->zone_capacity;
 }
+
+bool disk_zone_is_offline(struct gendisk *disk, sector_t sector);
+
 static inline unsigned int bdev_zone_capacity(struct block_device *bdev,
 					      sector_t pos)
 {
@@ -954,6 +957,12 @@ bool bdev_zone_is_seq(struct block_device *bdev, sector_t sector);
 static inline unsigned int disk_nr_zones(struct gendisk *disk)
 {
 	return 0;
+}
+
+static inline bool disk_zone_is_offline(struct gendisk *disk,
+					sector_t sector)
+{
+	return false;
 }
 
 static inline bool bdev_zone_is_seq(struct block_device *bdev, sector_t sector)
