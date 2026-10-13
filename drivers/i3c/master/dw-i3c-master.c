@@ -232,6 +232,8 @@
 #define I3C_BUS_I2C_FMP_TLOW_MIN_NS	500
 #define I3C_BUS_THIGH_MAX_NS		41
 
+#define DW_I3C_HDR_DDR_SPEED	6
+
 #define XFER_TIMEOUT (msecs_to_jiffies(1000))
 #define RPM_AUTOSUSPEND_TIMEOUT 1000 /* ms */
 
@@ -1016,6 +1018,11 @@ static int dw_i3c_master_i3c_xfers(struct i3c_dev_desc *dev,
 		cmd->cmd_lo |= COMMAND_PORT_TID(i) |
 			       COMMAND_PORT_DEV_INDEX(data->index) |
 			       COMMAND_PORT_ROC;
+
+		if (mode == I3C_HDR_DDR)
+			cmd->cmd_lo |= COMMAND_PORT_CP |
+				COMMAND_PORT_CMD(I3C_CCC_ENTHDR(0)) |
+				COMMAND_PORT_SPEED(DW_I3C_HDR_DDR_SPEED);
 
 		if (i == (i3c_nxfers - 1))
 			cmd->cmd_lo |= COMMAND_PORT_TOC;
