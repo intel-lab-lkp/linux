@@ -500,6 +500,7 @@ struct enetc_ndev_priv {
 
 	struct clk *ref_clk; /* RGMII/RMII reference clock */
 	u64 sysclk_freq; /* NETC system clock frequency */
+	struct of_changeset *ppm_ocs; /* pseudo-MAC fixed-link changeset */
 };
 
 #define ENETC_CBD(R, i)	(&(((struct enetc_cbd *)((R).bd_base))[i]))
