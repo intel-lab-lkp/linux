@@ -3317,16 +3317,21 @@ static void ice_ptp_setup_adapter(struct ice_pf *pf)
 
 static void ice_ptp_cleanup_adapter(struct ice_pf *pf)
 {
-	guard(rwsem_write)(&pf->adapter->ctrl_pf_lock);
+	bool synchronize = false;
 
-	/* Zero out adapter->ctrl_pf pointer when the ctrl_pf itself
-	 * is being removed to prevent any secondary PFs from accessing
-	 * it after it is deleted.
-	 */
-	if (ice_get_ctrl_pf(pf) == pf) {
-		rcu_assign_pointer(pf->adapter->ctrl_pf, NULL);
-		synchronize_rcu();
+	scoped_guard(rwsem_write, &pf->adapter->ctrl_pf_lock) {
+		/* Zero out adapter->ctrl_pf pointer when the ctrl_pf itself
+		 * is being removed to prevent any secondary PFs from accessing
+		 * it after it is deleted.
+		 */
+		if (ice_get_ctrl_pf(pf) == pf) {
+			rcu_assign_pointer(pf->adapter->ctrl_pf, NULL);
+			synchronize = true;
+		}
 	}
+
+	if (synchronize)
+		synchronize_rcu();
 }
 
 static int ice_ptp_setup_pf(struct ice_pf *pf)
