@@ -4717,7 +4717,8 @@ static bool tcp_parse_aligned_timestamp(struct tcp_sock *tp, const struct tcphdr
 		tp->rx_opt.rcv_tsval = ntohl(*ptr);
 		++ptr;
 		if (*ptr)
-			tp->rx_opt.rcv_tsecr = ntohl(*ptr) - tp->tsoffset;
+			tp->rx_opt.rcv_tsecr = tcp_tsecr_decode_tp(ntohl(*ptr),
+								   tp);
 		else
 			tp->rx_opt.rcv_tsecr = 0;
 		return true;
@@ -4749,7 +4750,8 @@ static bool tcp_fast_parse_options(const struct net *net,
 
 	tcp_parse_options(net, skb, &tp->rx_opt, 1, NULL);
 	if (tp->rx_opt.saw_tstamp && tp->rx_opt.rcv_tsecr)
-		tp->rx_opt.rcv_tsecr -= tp->tsoffset;
+		tp->rx_opt.rcv_tsecr =
+			tcp_tsecr_decode_tp(tp->rx_opt.rcv_tsecr, tp);
 
 	return true;
 }
@@ -6881,7 +6883,8 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 
 	tcp_parse_options(sock_net(sk), skb, &tp->rx_opt, 0, &foc);
 	if (tp->rx_opt.saw_tstamp && tp->rx_opt.rcv_tsecr)
-		tp->rx_opt.rcv_tsecr -= tp->tsoffset;
+		tp->rx_opt.rcv_tsecr =
+			tcp_tsecr_decode_tp(tp->rx_opt.rcv_tsecr, tp);
 
 	if (th->ack) {
 		/* rfc793:
@@ -7512,6 +7515,8 @@ static void tcp_openreq_init(struct request_sock *req,
 	tcp_rsk(req)->rcv_nxt = TCP_SKB_CB(skb)->seq + 1;
 	tcp_rsk(req)->snt_synack = 0;
 	tcp_rsk(req)->snt_tsval_first = 0;
+	tcp_rsk(req)->ts_id = 0;
+	tcp_rsk(req)->ts_id_bits = 0;
 	tcp_rsk(req)->last_oow_ack_time = 0;
 	tcp_rsk(req)->accecn_ok = 0;
 	tcp_rsk(req)->saw_accecn_opt = TCP_ACCECN_OPT_NOT_SEEN;

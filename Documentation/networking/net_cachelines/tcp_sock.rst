@@ -32,6 +32,8 @@ u32                           lsndtime                read_write                
 u32                           last_oow_ack_time
 u32                           compressed_ack_rcv_nxt
 u32                           tsoffset                read_mostly         read_mostly         tcp_established_options(tx);tcp_fast_parse_options(rx)
+u8                            ts_id                   read_mostly         read_mostly         tcp_established_options(tx);tcp_fast_parse_options(rx)
+u8                            ts_id_bits              read_mostly         read_mostly         tcp_established_options(tx);tcp_fast_parse_options(rx)
 struct list_head              tsq_node
 struct list_head              tsorted_sent_queue      read_write                              tcp_update_skb_after_send
 u32                           snd_wl1                                     read_mostly         tcp_may_update_window

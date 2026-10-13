@@ -145,6 +145,8 @@ static inline void tcp_clear_options(struct tcp_options_received *rx_opt)
  * only four options will fit in a standard TCP header */
 #define TCP_NUM_SACKS 4
 
+#define TCP_TS_ID_BITS_MAX	8
+
 struct tcp_request_sock_ops;
 
 struct tcp_request_sock {
@@ -154,6 +156,8 @@ struct tcp_request_sock {
 	bool				tfo_listener;
 	bool				is_mptcp;
 	bool				req_usec_ts;
+	u8				ts_id;
+	u8				ts_id_bits;
 #if IS_ENABLED(CONFIG_MPTCP)
 	bool				drop_req;
 #endif
@@ -220,6 +224,8 @@ struct tcp_sock {
 	/* TXRX read-mostly hotpath cache lines */
 	__cacheline_group_begin(tcp_sock_read_txrx);
 	u32	tsoffset;	/* timestamp offset */
+	u8	ts_id;		/* identifier encoded in TSval low bits */
+	u8	ts_id_bits;	/* number of identifier bits in TSval */
 	u32	snd_wnd;	/* The window we expect to receive	*/
 	u32	mss_cache;	/* Cached effective mss, not including SACKS */
 	u32	snd_cwnd;	/* Sending congestion window		*/
@@ -575,6 +581,8 @@ struct tcp_timewait_sock {
 	u32			  tw_rcv_wnd;
 	u32			  tw_ts_offset;
 	u32			  tw_ts_recent;
+	u8			  tw_ts_id;
+	u8			  tw_ts_id_bits;
 
 	/* The time we sent the last out-of-window ACK: */
 	u32			  tw_last_oow_ack_time;

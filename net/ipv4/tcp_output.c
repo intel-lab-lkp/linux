@@ -1101,11 +1101,15 @@ static unsigned int tcp_synack_options(const struct sock *sk,
 		opts->options |= OPTION_TS;
 		opts->tsval = tcp_skb_timestamp_ts(tcp_rsk(req)->req_usec_ts, skb) +
 			      tcp_rsk(req)->ts_off;
-		if (!tcp_rsk(req)->snt_tsval_first) {
-			if (!opts->tsval)
-				opts->tsval = ~0U;
+		opts->tsval = tcp_tsval_encode(opts->tsval,
+					       tcp_rsk(req)->ts_id,
+					       tcp_rsk(req)->ts_id_bits);
+		if (!tcp_rsk(req)->snt_tsval_first && !opts->tsval)
+			opts->tsval = tcp_tsval_encode(~0U,
+						       tcp_rsk(req)->ts_id,
+						       tcp_rsk(req)->ts_id_bits);
+		if (!tcp_rsk(req)->snt_tsval_first)
 			tcp_rsk(req)->snt_tsval_first = opts->tsval;
-		}
 		WRITE_ONCE(tcp_rsk(req)->snt_tsval_last, opts->tsval);
 		opts->tsecr = req->ts_recent;
 		remaining -= TCPOLEN_TSTAMP_ALIGNED;
@@ -1171,6 +1175,9 @@ static unsigned int tcp_established_options(struct sock *sk, struct sk_buff *skb
 		opts->options |= OPTION_TS;
 		opts->tsval = skb ? tcp_skb_timestamp_ts(tp->tcp_usec_ts, skb) +
 				tp->tsoffset : 0;
+		if (skb)
+			opts->tsval = tcp_tsval_encode(opts->tsval, tp->ts_id,
+						       tp->ts_id_bits);
 		opts->tsecr = tp->rx_opt.ts_recent;
 		size += TCPOLEN_TSTAMP_ALIGNED;
 	}

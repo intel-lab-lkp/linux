@@ -12579,6 +12579,8 @@ __bpf_kfunc int bpf_sk_assign_tcp_reqsk(struct __sk_buff *s, struct sock *sk,
 
 	treq->req_usec_ts = !!attrs->usec_ts_ok;
 	treq->ts_off = tsoff;
+	treq->ts_id = 0;
+	treq->ts_id_bits = 0;
 
 	skb_orphan(skb);
 	skb->sk = req_to_sk(req);

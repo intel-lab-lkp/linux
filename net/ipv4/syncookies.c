@@ -280,6 +280,8 @@ static int cookie_tcp_reqsk_init(struct sock *sk, struct sk_buff *skb,
 	treq->snt_synack = 0;
 	treq->snt_tsval_first = 0;
 	treq->tfo_listener = false;
+	treq->ts_id = 0;
+	treq->ts_id_bits = 0;
 	treq->rcv_isn = ntohl(th->seq) - 1;
 	treq->snt_isn = ntohl(th->ack_seq) - 1;
 	/* The request socket was freed after the SYN-ACK; use the cookie

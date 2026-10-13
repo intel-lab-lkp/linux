@@ -122,7 +122,11 @@ tcp_timewait_state_process(struct inet_timewait_sock *tw, struct sk_buff *skb,
 
 		if (tmp_opt.saw_tstamp) {
 			if (tmp_opt.rcv_tsecr)
-				tmp_opt.rcv_tsecr -= tcptw->tw_ts_offset;
+				tmp_opt.rcv_tsecr =
+					tcp_tsecr_decode(tmp_opt.rcv_tsecr,
+							 tcptw->tw_ts_offset,
+							 tcptw->tw_ts_id_bits,
+							 tcp_clock_ts(tw->tw_usec_ts));
 			tmp_opt.ts_recent	= READ_ONCE(tcptw->tw_ts_recent);
 			tmp_opt.ts_recent_stamp	= ts_recent_stamp;
 			paws_reject = tcp_paws_reject(&tmp_opt, th->rst);
@@ -347,6 +351,8 @@ void tcp_time_wait(struct sock *sk, int state, int timeo)
 		tcptw->tw_ts_recent	= tp->rx_opt.ts_recent;
 		tcptw->tw_ts_recent_stamp = tp->rx_opt.ts_recent_stamp;
 		tcptw->tw_ts_offset	= tp->tsoffset;
+		tcptw->tw_ts_id		= tp->ts_id;
+		tcptw->tw_ts_id_bits	= tp->ts_id_bits;
 		tw->tw_usec_ts		= tp->tcp_usec_ts;
 		tcptw->tw_last_oow_ack_time = 0;
 		tcptw->tw_tx_delay	= tp->tcp_tx_delay;
@@ -639,6 +645,8 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 		newtp->total_rto_recoveries = 1;
 	}
 	newtp->tsoffset = treq->ts_off;
+	newtp->ts_id = treq->ts_id;
+	newtp->ts_id_bits = treq->ts_id_bits;
 #ifdef CONFIG_TCP_MD5SIG
 	newtp->md5sig_info = NULL;	/*XXX*/
 #endif
@@ -705,11 +713,17 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 		if (tmp_opt.saw_tstamp) {
 			tmp_opt.ts_recent = req->ts_recent;
 			if (tmp_opt.rcv_tsecr) {
+				u32 now = tcp_clock_ts(tcp_rsk(req)->req_usec_ts);
+
 				if (inet_rsk(req)->tstamp_ok && !fastopen)
 					tsecr_reject = !between(tmp_opt.rcv_tsecr,
 							tcp_rsk(req)->snt_tsval_first,
 							READ_ONCE(tcp_rsk(req)->snt_tsval_last));
-				tmp_opt.rcv_tsecr -= tcp_rsk(req)->ts_off;
+				tmp_opt.rcv_tsecr =
+					tcp_tsecr_decode(tmp_opt.rcv_tsecr,
+							 tcp_rsk(req)->ts_off,
+							 tcp_rsk(req)->ts_id_bits,
+							 now);
 			}
 			/* We do not store true stamp, but it is not required,
 			 * it can be estimated (approximately)

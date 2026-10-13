@@ -1074,14 +1074,60 @@ static inline u32 tcp_skb_timestamp_ts(bool usec_ts, const struct sk_buff *skb)
 	return div_u64(skb->skb_mstamp_ns, NSEC_PER_MSEC);
 }
 
+static inline u32 tcp_ts_id_mask(u8 ts_id_bits)
+{
+	return BIT(ts_id_bits) - 1;
+}
+
+static inline u32 tcp_ts_clock_mask(u8 ts_id_bits)
+{
+	return U32_MAX >> ts_id_bits;
+}
+
+static inline u32 tcp_tsval_encode(u32 tsval, u8 ts_id, u8 ts_id_bits)
+{
+	if (!ts_id_bits)
+		return tsval;
+
+	return ((tsval & tcp_ts_clock_mask(ts_id_bits)) << ts_id_bits) |
+	       ts_id;
+}
+
+static inline u32 tcp_tsecr_decode(u32 tsecr, u32 tsoffset, u8 ts_id_bits,
+				   u32 now)
+{
+	if (!ts_id_bits)
+		return tsecr - tsoffset;
+
+	tsecr = ((tsecr >> ts_id_bits) - tsoffset) &
+		tcp_ts_clock_mask(ts_id_bits);
+
+	return now + sign_extend32(tsecr - now, 31 - ts_id_bits);
+}
+
+/* Keeps the timestamp clock read behind the branch: it is only needed to
+ * re-center an echo that was truncated to make room for an identifier.
+ */
+static inline u32 tcp_tsecr_decode_tp(u32 tsecr, const struct tcp_sock *tp)
+{
+	if (likely(!tp->ts_id_bits))
+		return tsecr - tp->tsoffset;
+
+	return tcp_tsecr_decode(tsecr, tp->tsoffset, tp->ts_id_bits,
+				tcp_time_stamp_ts(tp));
+}
+
 static inline u32 tcp_tw_tsval(const struct tcp_timewait_sock *tcptw)
 {
-	return tcp_clock_ts(tcptw->tw_sk.tw_usec_ts) + tcptw->tw_ts_offset;
+	return tcp_tsval_encode(tcp_clock_ts(tcptw->tw_sk.tw_usec_ts) +
+				tcptw->tw_ts_offset, tcptw->tw_ts_id,
+				tcptw->tw_ts_id_bits);
 }
 
 static inline u32 tcp_rsk_tsval(const struct tcp_request_sock *treq)
 {
-	return tcp_clock_ts(treq->req_usec_ts) + treq->ts_off;
+	return tcp_tsval_encode(tcp_clock_ts(treq->req_usec_ts) + treq->ts_off,
+				treq->ts_id, treq->ts_id_bits);
 }
 
 #define tcp_flag_byte(th) (((u_int8_t *)th)[13])

@@ -462,6 +462,8 @@ void tcp_init_sock(struct sock *sk)
 	tcp_assign_congestion_control(sk);
 
 	tp->tsoffset = 0;
+	tp->ts_id = 0;
+	tp->ts_id_bits = 0;
 	tp->rack.reo_wnd_steps = 1;
 
 	sk->sk_write_space = sk_stream_write_space;
@@ -3429,6 +3431,8 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->window_clamp = 0;
 	tp->delivered = 0;
 	tp->delivered_ce = 0;
+	tp->ts_id = 0;
+	tp->ts_id_bits = 0;
 	tp->accecn_fail_mode = 0;
 	tp->saw_accecn_opt = TCP_ACCECN_OPT_NOT_SEEN;
 	tcp_accecn_init_counters(tp);
@@ -5212,6 +5216,8 @@ static void __init tcp_struct_check(void)
 
 	/* TXRX read-mostly hotpath cache lines */
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_read_txrx, tsoffset);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_read_txrx, ts_id);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_read_txrx, ts_id_bits);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_read_txrx, snd_wnd);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_read_txrx, mss_cache);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_read_txrx, snd_cwnd);
@@ -5301,6 +5307,13 @@ void __init tcp_init(void)
 	BUILD_BUG_ON(TCP_MIN_SND_MSS <= MAX_TCP_OPTION_SPACE);
 	BUILD_BUG_ON(sizeof(struct tcp_skb_cb) >
 		     sizeof_field(struct sk_buff, cb));
+
+	/* An encoded TSval must not advance by 2^31 within the window that
+	 * Linux PAWS keeps ts_recent valid; peers using RFC 7323's 24 day
+	 * window are not covered (see tcp_ts_id_bits in ip-sysctl.rst).
+	 */
+	BUILD_BUG_ON(((u64)TCP_PAWS_WRAP * MSEC_PER_SEC) <<
+		     TCP_TS_ID_BITS_MAX >= (1ULL << 31));
 
 	tcp_struct_check();
 
