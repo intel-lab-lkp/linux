@@ -1037,7 +1037,7 @@ long keyctl_chown_key(key_serial_t id, uid_t user, gid_t group)
 		}
 
 		zapowner = key->user;
-		key->user = newowner;
+		WRITE_ONCE(key->user, newowner);
 		key->uid = uid;
 	}
 
