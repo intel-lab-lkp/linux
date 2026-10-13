@@ -51,7 +51,8 @@ static DEFINE_IDA(reset_gpio_ida);
  * @triggered_count: Number of times this reset line has been reset. Currently
  *                   only used for shared resets, which means that the value
  *                   will be either 0 or 1.
- * @lock: serializes the internals of reset_control_acquire()
+ * @lock: serializes the internals of reset_control_acquire() and the
+ *        assert/deassert/reset of shared reset controls
  */
 struct reset_control {
 	struct reset_controller_dev __rcu *rcdev;
@@ -382,6 +383,12 @@ int reset_control_reset(struct reset_control *rstc)
 	if (reset_control_is_array(rstc))
 		return reset_control_array_reset(rstc_to_array(rstc));
 
+	/*
+	 * Hold the lock across the shared refcount update and the hardware
+	 * reset so that a concurrent caller does not continue before this
+	 * caller's not-yet-finished reset pulse has been issued.
+	 */
+	guard(mutex)(&rstc->lock);
 	guard(srcu)(&rstc->srcu);
 
 	rcdev = srcu_dereference(rstc->rcdev, &rstc->srcu);
@@ -503,6 +510,12 @@ int reset_control_assert(struct reset_control *rstc)
 	if (reset_control_is_array(rstc))
 		return reset_control_array_assert(rstc_to_array(rstc));
 
+	/*
+	 * Hold the lock across the shared refcount update and the hardware
+	 * assert so that a concurrent caller does not observe the line as
+	 * released while this caller is still driving it.
+	 */
+	guard(mutex)(&rstc->lock);
 	guard(srcu)(&rstc->srcu);
 
 	rcdev = srcu_dereference(rstc->rcdev, &rstc->srcu);
@@ -599,6 +612,12 @@ int reset_control_deassert(struct reset_control *rstc)
 	if (reset_control_is_array(rstc))
 		return reset_control_array_deassert(rstc_to_array(rstc));
 
+	/*
+	 * Hold the lock across the shared refcount update and the hardware
+	 * deassert so that a concurrent caller does not continue while the
+	 * line is still asserted by this caller's not-yet-finished deassert.
+	 */
+	guard(mutex)(&rstc->lock);
 	guard(srcu)(&rstc->srcu);
 
 	rcdev = srcu_dereference(rstc->rcdev, &rstc->srcu);
