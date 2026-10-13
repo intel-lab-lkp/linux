@@ -1424,15 +1424,21 @@ ds1685_rtc_poweroff(struct platform_device *pdev)
 			rtc->write(rtc, RTC_EXT_CTRL_4B, ctrl4b);
 		}
 
-		/* Set PAB to 1 in Control 4A to power the system down. */
+		/*
+		 * Set PAB to 1 in Control 4A to power the system down.  PAB
+		 * is cleared again while KF and KSE, or WF and WIE, are set,
+		 * so keep clearing the flags and setting PAB until power is
+		 * gone.  We do not switch back to bank0.
+		 */
 		dev_warn(&pdev->dev, "Powerdown.\n");
 		msleep(20);
-		rtc->write(rtc, RTC_EXT_CTRL_4A,
-			   (ctrl4a | RTC_CTRL_4A_PAB));
-
-		/* Spin ... we do not switch back to bank0. */
-		while(1);
-		unreachable();
+		while (1) {
+			ctrl4a = rtc->read(rtc, RTC_EXT_CTRL_4A);
+			rtc->write(rtc, RTC_EXT_CTRL_4A,
+				   (ctrl4a & ~RTC_CTRL_4A_RWK_MASK) |
+				   RTC_CTRL_4A_PAB);
+			msleep(100);
+		}
 	}
 }
 EXPORT_SYMBOL_GPL(ds1685_rtc_poweroff);
