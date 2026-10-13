@@ -13,16 +13,6 @@
 #define	mcfuart_h
 /****************************************************************************/
 
-#include <linux/serial_core.h>
-#include <linux/platform_device.h>
-
-struct mcf_platform_uart {
-	unsigned long	mapbase;	/* Physical address base */
-	void __iomem	*membase;	/* Virtual address if mapped */
-	unsigned int	irq;		/* Interrupt vector */
-	unsigned int	uartclk;	/* UART clock rate */
-};
-
 /*
  *	Define the ColdFire UART register set addresses.
  */
