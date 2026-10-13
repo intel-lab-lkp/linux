@@ -82,7 +82,7 @@ void dm_dmub_aux_setconfig_callback(struct amdgpu_device *adev,
 	if (notify->type == DMUB_NOTIFICATION_AUX_REPLY)
 		complete(&adev->dm.dmub_aux_transfer_done);
 }
-EXPORT_IF_KUNIT(dm_dmub_aux_setconfig_callback);
+EXPORT_SYMBOL_IF_KUNIT(dm_dmub_aux_setconfig_callback);
 
 void dm_dmub_aux_fused_io_callback(struct amdgpu_device *adev,
 				   struct dmub_notification *notify)
@@ -106,7 +106,7 @@ void dm_dmub_aux_fused_io_callback(struct amdgpu_device *adev,
 	memcpy(sync->reply_data, req, sizeof(*req));
 	complete(&sync->replied);
 }
-EXPORT_IF_KUNIT(dm_dmub_aux_fused_io_callback);
+EXPORT_SYMBOL_IF_KUNIT(dm_dmub_aux_fused_io_callback);
 
 /**
  * dm_register_dmub_notify_callback - Sets callback for DMUB notify
@@ -133,7 +133,7 @@ bool dm_register_dmub_notify_callback(struct amdgpu_device *adev,
 
 	return true;
 }
-EXPORT_IF_KUNIT(dm_register_dmub_notify_callback);
+EXPORT_SYMBOL_IF_KUNIT(dm_register_dmub_notify_callback);
 
 int dm_dmub_hw_init(struct amdgpu_device *adev)
 {
@@ -322,7 +322,7 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 
 	return 0;
 }
-EXPORT_IF_KUNIT(dm_dmub_hw_init);
+EXPORT_SYMBOL_IF_KUNIT(dm_dmub_hw_init);
 
 void dm_dmub_hw_resume(struct amdgpu_device *adev)
 {
@@ -352,7 +352,7 @@ void dm_dmub_hw_resume(struct amdgpu_device *adev)
 			drm_err(adev_to_drm(adev), "DMUB interface failed to initialize: status=%d\n", r);
 	}
 }
-EXPORT_IF_KUNIT(dm_dmub_hw_resume);
+EXPORT_SYMBOL_IF_KUNIT(dm_dmub_hw_resume);
 
 static enum dmub_status
 dm_dmub_send_vbios_gpint_command(struct amdgpu_device *adev,
@@ -444,7 +444,7 @@ free_bb:
 	return NULL;
 
 }
-EXPORT_IF_KUNIT(dm_dmub_get_vbios_bounding_box);
+EXPORT_SYMBOL_IF_KUNIT(dm_dmub_get_vbios_bounding_box);
 
 enum dmub_ips_disable_type dm_get_default_ips_mode(
 	struct amdgpu_device *adev)
@@ -466,7 +466,7 @@ enum dmub_ips_disable_type dm_get_default_ips_mode(
 
 	return ret;
 }
-EXPORT_IF_KUNIT(dm_get_default_ips_mode);
+EXPORT_SYMBOL_IF_KUNIT(dm_get_default_ips_mode);
 
 static uint32_t amdgpu_dm_dmub_reg_read(void *ctx, uint32_t address)
 {
@@ -694,7 +694,7 @@ int dm_dmub_sw_init(struct amdgpu_device *adev)
 
 	return 0;
 }
-EXPORT_IF_KUNIT(dm_dmub_sw_init);
+EXPORT_SYMBOL_IF_KUNIT(dm_dmub_sw_init);
 
 int dm_init_microcode(struct amdgpu_device *adev)
 {
@@ -770,7 +770,7 @@ int dm_init_microcode(struct amdgpu_device *adev)
 				 "%s", fw_name_dmub);
 	return r;
 }
-EXPORT_IF_KUNIT(dm_init_microcode);
+EXPORT_SYMBOL_IF_KUNIT(dm_init_microcode);
 
 int amdgpu_dm_process_dmub_aux_transfer_sync(
 		struct dc_context *ctx,
@@ -840,7 +840,7 @@ out:
 	mutex_unlock(&adev->dm.dpia_aux_lock);
 	return ret;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_process_dmub_aux_transfer_sync);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_process_dmub_aux_transfer_sync);
 
 VISIBLE_IF_KUNIT void abort_fused_io(
 		struct dc_context *ctx,
@@ -856,7 +856,7 @@ VISIBLE_IF_KUNIT void abort_fused_io(
 	io->request = *request;
 	dm_execute_dmub_cmd(ctx, &command, DM_DMUB_WAIT_TYPE_NO_WAIT);
 }
-EXPORT_IF_KUNIT(abort_fused_io);
+EXPORT_SYMBOL_IF_KUNIT(abort_fused_io);
 
 static bool execute_fused_io(
 		struct amdgpu_device *dev,
@@ -944,7 +944,7 @@ int amdgpu_dm_process_dmub_set_config_sync(
 	mutex_unlock(&adev->dm.dpia_aux_lock);
 	return ret;
 }
-EXPORT_IF_KUNIT(amdgpu_dm_process_dmub_set_config_sync);
+EXPORT_SYMBOL_IF_KUNIT(amdgpu_dm_process_dmub_set_config_sync);
 
 bool dm_execute_dmub_cmd(const struct dc_context *ctx, union dmub_rb_cmd *cmd, enum dm_dmub_wait_type wait_type)
 {
@@ -953,7 +953,7 @@ bool dm_execute_dmub_cmd(const struct dc_context *ctx, union dmub_rb_cmd *cmd, e
 	guard(spinlock_irqsave)(&adev->dm.dmub_lock);
 	return dc_dmub_srv_cmd_run(ctx->dmub_srv, cmd, wait_type);
 }
-EXPORT_IF_KUNIT(dm_execute_dmub_cmd);
+EXPORT_SYMBOL_IF_KUNIT(dm_execute_dmub_cmd);
 
 bool dm_execute_dmub_cmd_list(const struct dc_context *ctx, unsigned int count, union dmub_rb_cmd *cmd, enum dm_dmub_wait_type wait_type)
 {
