@@ -600,23 +600,23 @@ function GOLDEN_RECORDS {
 #K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.16
 #K= d682c98ced7d31f1555ab474a9ebe253 FT_modprobe_w_param.17
 #K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.18
-#K= 362ab2e7e5f5e3ede8b69645c64fb987 FT_modprobe_w_param.19
-#K= 362ab2e7e5f5e3ede8b69645c64fb987 FT_modprobe_w_param.20
-#K= 4f539816f9cc9fb9dd4a032138e3abde FT_modprobe_w_param.21
+#K= c468e49e8ce1f1aa25a3c6684f221fe5 FT_modprobe_w_param.19
+#K= c468e49e8ce1f1aa25a3c6684f221fe5 FT_modprobe_w_param.20
+#K= ef2408a036206c895d95061521f67906 FT_modprobe_w_param.21
 #K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.22
-#K= 20659d16ffb5b18475e83602223216d1 FT_modprobe_w_param.23
+#K= 92c0174d5de412de82e3d5837b0690d0 FT_modprobe_w_param.23
 #K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.24
-#K= 0b24971fb1018c38353141f8fcb9cbdc FT_modprobe_w_param.25
+#K= a563a79aeffbf3d8cf2e37ab93898ae9 FT_modprobe_w_param.25
 #K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.26
-#K= 66eb387a95512f679eb5cad4168b0992 FT_modprobe_w_param.27
+#K= 8d2f4db3b7885064a56594e1d81deb26 FT_modprobe_w_param.27
 #K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.28
-#K= 2583cb4637bcc2ce1e93eea4222ec76c FT_modprobe_w_param.29
+#K= 7185968287bbc0e5a72350ea4786e852 FT_modprobe_w_param.29
 #K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.30
-#K= d592c5bf23312e705b39064c21ca68e4 FT_modprobe_w_param.31
+#K= b2514a7fda24f196fa87c0ace35f0b37 FT_modprobe_w_param.31
 #K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.32
-#K= b44d105d151123c93cfe953bacdb573f FT_modprobe_w_param.33
+#K= 545c3efd767efbae33ee341df9008c52 FT_modprobe_w_param.33
 #K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.34
-#K= 4819f715ba485c493afb455542f7ab8c FT_modprobe_w_param.35
+#K= 28ace93a95da7aaea5b9b54a8656a2cf FT_modprobe_w_param.35
 #K= 0239d8c0808eef396782362613f675b0 FT_modprobe_w_param.36
 EO_DYNDBG_GOLDEN_REFS
         # Read the K-recs and skip those for tests that can't run
