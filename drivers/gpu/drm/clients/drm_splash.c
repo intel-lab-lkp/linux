@@ -40,17 +40,89 @@
  * a static image.
  */
 
-static unsigned int splash_color = CONFIG_DRM_CLIENT_SPLASH_BACKGROUND_COLOR;
-module_param(splash_color, uint, 0400);
+/*
+ * What is given on the command line wins over the device tree and the
+ * firmware tables, and each parameter only for what it says. Neither has a
+ * value of its own until it is given: -1 and NULL mean "not given".
+ */
+static int splash_color = -1;
+module_param(splash_color, int, 0400);
 MODULE_PARM_DESC(splash_color,
-		 "Background color (RGB888) around the BMP loaded as firmware, or of the whole screen with no image");
+		 "Background color as 0xRRGGBB, preferred over any other");
+
+static int splash_pos[2];
+static unsigned int splash_pos_n;
+module_param_array(splash_pos, int, &splash_pos_n, 0400);
+MODULE_PARM_DESC(splash_pos,
+		 "Image position as X,Y in screen pixels, -1 centres that axis");
+
+static int splash_offset[2];
+static unsigned int splash_offset_n;
+module_param_array(splash_offset, int, &splash_offset_n, 0400);
+MODULE_PARM_DESC(splash_offset,
+		 "Displacement as DX,DY in screen pixels, added after placing");
+
+static int splash_rotation = -1;
+module_param(splash_rotation, int, 0400);
+MODULE_PARM_DESC(splash_rotation,
+		 "Image rotation in degrees counter clockwise: 0, 90, 180 or 270");
 
 #if IS_ENABLED(CONFIG_DRM_CLIENT_SPLASH_SRC_BMP)
 #define DEFAULT_SPLASH_BMP "drm_splash.bmp"
-static char *splash_bmp = DEFAULT_SPLASH_BMP;
+static char *splash_bmp;
 module_param(splash_bmp, charp, 0400);
-MODULE_PARM_DESC(splash_bmp, "Name of splash image (default: \"" DEFAULT_SPLASH_BMP "\")");
+MODULE_PARM_DESC(splash_bmp,
+		 "BMP to load as firmware, preferred over any other image");
+
+/* Given on the command line, and not empty */
+static bool drm_splash_bmp_given(void)
+{
+	return splash_bmp && *splash_bmp;
+}
+
+/* "none" asks for no image at all, whatever the other sources have */
+static bool drm_splash_bmp_none(void)
+{
+	return drm_splash_bmp_given() && !strcmp(splash_bmp, "none");
+}
+
+static const char *drm_splash_bmp_name(void)
+{
+	return drm_splash_bmp_given() ? splash_bmp : DEFAULT_SPLASH_BMP;
+}
+#else
+static bool drm_splash_bmp_given(void)
+{
+	return false;
+}
+
+static bool drm_splash_bmp_none(void)
+{
+	return false;
+}
 #endif // CONFIG_DRM_CLIENT_SPLASH_SRC_BMP
+
+/* Degrees counter clockwise, as for panels, and as DRM counts them */
+static bool drm_splash_rotation_from_degrees(u32 degrees,
+					     unsigned int *rotation)
+{
+	switch (degrees) {
+	case 0:
+		*rotation = DRM_MODE_ROTATE_0;
+		return true;
+	case 90:
+		*rotation = DRM_MODE_ROTATE_90;
+		return true;
+	case 180:
+		*rotation = DRM_MODE_ROTATE_180;
+		return true;
+	case 270:
+		*rotation = DRM_MODE_ROTATE_270;
+		return true;
+	}
+
+	return false;
+}
 
 #define BMP_FILE_MAGIC_ID 0x4d42
 
@@ -134,6 +206,8 @@ struct drm_splash {
 	s32 off_x, off_y;
 	/* One of DRM_MODE_ROTATE_*: turns the image, not the screen */
 	unsigned int rotation;
+	/* Placed from the command line, in screen pixels, whatever the source */
+	bool place_cmdline;
 	/* RGB888, from the same place as the image */
 	u32 bg_color;
 };
@@ -218,10 +292,11 @@ static int drm_splash_fw_request_bmp(struct drm_splash *splash)
 {
 	struct drm_client_dev *client = &splash->client;
 
-	drm_info(client->dev, "splash: request %s as firmware", splash_bmp);
+	drm_info(client->dev, "splash: request %s as firmware",
+		 drm_splash_bmp_name());
 
 	return request_firmware_nowait(THIS_MODULE, FW_ACTION_UEVENT,
-				       splash_bmp, client->dev->dev, GFP_KERNEL,
+				       drm_splash_bmp_name(), client->dev->dev, GFP_KERNEL,
 				       splash, drm_splash_fw_callback);
 }
 #else
@@ -280,11 +355,9 @@ static void drm_splash_dt_props(struct drm_splash *splash,
 {
 	u32 val[2];
 
-	/* The colour travels with the image, or it is the kernel's default */
+	/* The colour travels with the image */
 	if (!of_property_read_u32(np, "background-color", &val[0]))
 		splash->bg_color = val[0] & 0xffffff;
-	else
-		splash->bg_color = CONFIG_DRM_CLIENT_SPLASH_BACKGROUND_COLOR;
 
 	if (!of_property_read_u32_array(np, "logo-position", val, 2)) {
 		splash->pos_x = (s32)val[0];
@@ -296,27 +369,10 @@ static void drm_splash_dt_props(struct drm_splash *splash,
 		splash->off_y = (s32)val[1];
 	}
 
-	/* Degrees counter clockwise, as for panels, and as DRM counts them */
-	if (!of_property_read_u32(np, "rotation", &val[0])) {
-		switch (val[0]) {
-		case 0:
-			splash->rotation = DRM_MODE_ROTATE_0;
-			break;
-		case 90:
-			splash->rotation = DRM_MODE_ROTATE_90;
-			break;
-		case 180:
-			splash->rotation = DRM_MODE_ROTATE_180;
-			break;
-		case 270:
-			splash->rotation = DRM_MODE_ROTATE_270;
-			break;
-		default:
-			drm_warn(splash->client.dev,
-				 "splash: %pOF: unsupported rotation %u",
-				 np, val[0]);
-		}
-	}
+	if (!of_property_read_u32(np, "rotation", &val[0]) &&
+	    !drm_splash_rotation_from_degrees(val[0], &splash->rotation))
+		drm_warn(splash->client.dev,
+			 "splash: %pOF: unsupported rotation %u", np, val[0]);
 }
 
 static int drm_splash_dt_load(struct drm_splash *splash, const u8 **data,
@@ -702,7 +758,7 @@ static int drm_splash_bmp_to_scanout(struct drm_splash *splash,
 		return -EINVAL;
 	}
 
-	if (splash->src == DRM_SPLASH_SRC_BGRT) {
+	if (splash->src == DRM_SPLASH_SRC_BGRT && !splash->place_cmdline) {
 		/*
 		 * The BGRT offsets place the upright image on the upright
 		 * screen, which for a panel mounted turned is not the frame
@@ -827,9 +883,52 @@ static int drm_splash_image_load(struct drm_splash *splash, const u8 **img_data,
  * is whatever the firmware shows, and the BMP loaded as firmware is the
  * fallback. With none of them, only the background colour is drawn.
  */
+/*
+ * What the command line gives wins whatever the image and its source, each
+ * parameter for what it says. Positions come in pairs: half of one is
+ * ignored rather than guessed.
+ */
+static void drm_splash_cmdline_overrides(struct drm_splash *splash)
+{
+	struct drm_device *dev = splash->client.dev;
+
+	if (splash_color >= 0)
+		splash->bg_color = splash_color & 0xffffff;
+
+	if (splash_pos_n == 2) {
+		splash->pos_x = splash_pos[0];
+		splash->pos_y = splash_pos[1];
+		splash->place_cmdline = true;
+	} else if (splash_pos_n) {
+		drm_warn(dev, "splash: splash_pos needs X,Y, ignored");
+	}
+
+	if (splash_offset_n == 2) {
+		splash->off_x = splash_offset[0];
+		splash->off_y = splash_offset[1];
+		splash->place_cmdline = true;
+	} else if (splash_offset_n) {
+		drm_warn(dev, "splash: splash_offset needs DX,DY, ignored");
+	}
+
+	if (splash_rotation >= 0 &&
+	    !drm_splash_rotation_from_degrees(splash_rotation, &splash->rotation))
+		drm_warn(dev, "splash: unsupported splash_rotation %d, ignored",
+			 splash_rotation);
+}
+
 static enum drm_splash_source drm_splash_pick_source(struct drm_splash *splash)
 {
 	struct device_node *np;
+
+	/* Unless the source says otherwise, the kernel's default colour */
+	splash->bg_color = CONFIG_DRM_CLIENT_SPLASH_BACKGROUND_COLOR;
+
+	/* A BMP named on the command line was asked for this very boot */
+	if (drm_splash_bmp_none())
+		return DRM_SPLASH_SRC_NONE;
+	if (drm_splash_bmp_given())
+		return DRM_SPLASH_SRC_BMP;
 
 	np = drm_splash_dt_node(splash);
 	if (np) {
@@ -838,18 +937,11 @@ static enum drm_splash_source drm_splash_pick_source(struct drm_splash *splash)
 		return DRM_SPLASH_SRC_DT;
 	}
 
-	/* The BGRT carries no colour: firmware splashes sit on black */
 	if (drm_splash_bgrt_available(splash)) {
-		splash->bg_color = CONFIG_DRM_CLIENT_SPLASH_BACKGROUND_COLOR;
 		splash->rotation = drm_splash_bgrt_rotation();
 		return DRM_SPLASH_SRC_BGRT;
 	}
 
-	/*
-	 * The BMP loaded as firmware is named on the command line, and so is
-	 * its colour, which also covers the screen when there is no image.
-	 */
-	splash->bg_color = splash_color & 0xffffff;
 	if (IS_ENABLED(CONFIG_DRM_CLIENT_SPLASH_SRC_BMP))
 		return DRM_SPLASH_SRC_BMP;
 
@@ -1169,6 +1261,7 @@ static int drm_splash_client_hotplug(struct drm_client_dev *client)
 	splash->thread = thread;
 
 	splash->src = drm_splash_pick_source(splash);
+	drm_splash_cmdline_overrides(splash);
 
 	/* The BMP loaded as firmware is the only source that arrives later */
 	if (splash->src == DRM_SPLASH_SRC_BMP) {
