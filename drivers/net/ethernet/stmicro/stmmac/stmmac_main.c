@@ -5216,6 +5216,10 @@ static int stmmac_xdp_xmit_xdpf(struct stmmac_priv *priv, int queue,
 	dma_addr_t dma_addr;
 	bool set_ic;
 
+	/* Ring may be torn down for an XSK pool switch */
+	if (netif_tx_queue_stopped(netdev_get_tx_queue(priv->dev, queue)))
+		return STMMAC_XDP_CONSUMED;
+
 	if (stmmac_tx_avail(priv, queue) < STMMAC_TX_THRESH(priv))
 		return STMMAC_XDP_CONSUMED;
 
