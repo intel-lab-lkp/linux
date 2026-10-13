@@ -954,15 +954,13 @@ struct drm_gem_object *drm_gem_shmem_prime_import_no_map(struct drm_device *dev,
 	size_t size;
 	int ret;
 
-	if (drm_gem_is_prime_exported_dma_buf(dev, dma_buf)) {
-		/*
-		 * Importing dmabuf exported from our own gem increases
-		 * refcount on gem itself instead of f_count of dmabuf.
-		 */
-		obj = dma_buf->priv;
-		drm_gem_object_get(obj);
+	/*
+	 * Importing a dmabuf exported from our own gem increases the refcount
+	 * on the gem itself instead of the f_count of the dmabuf.
+	 */
+	obj = drm_gem_prime_dma_buf_to_gem(dev, dma_buf);
+	if (obj)
 		return obj;
-	}
 
 	attach = dma_buf_attach(dma_buf, dev->dev);
 	if (IS_ERR(attach))

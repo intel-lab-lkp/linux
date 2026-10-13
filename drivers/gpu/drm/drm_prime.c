@@ -933,23 +933,27 @@ EXPORT_SYMBOL(drm_gem_prime_export);
 
 
 /**
- * drm_gem_is_prime_exported_dma_buf -
- * checks if the DMA-BUF was exported from a GEM object belonging to @dev.
+ * drm_gem_prime_dma_buf_to_gem - GEM object backing a self-exported PRIME dma-buf
  * @dev: drm_device to check against
  * @dma_buf: dma-buf object to import
  *
- * Return: true if the DMA-BUF was exported from a GEM object belonging
- * to @dev, false otherwise.
+ * If @dma_buf is a PRIME export of a GEM object that belongs to @dev and uses
+ * the core PRIME dma-buf ops, return that GEM object with an extra reference
+ * taken, so a self-import reuses the GEM object instead of referencing the
+ * dma-buf file. Returns NULL for a foreign dma-buf or one using driver-private
+ * ops; such drivers call drm_gem_prime_self_import() with their own ops.
+ *
+ * The returned object carries a reference the caller must drop with
+ * drm_gem_object_put().
+ *
+ * Return: the referenced GEM object on self-import, or NULL otherwise.
  */
-
-bool drm_gem_is_prime_exported_dma_buf(struct drm_device *dev,
-				       struct dma_buf *dma_buf)
+struct drm_gem_object *drm_gem_prime_dma_buf_to_gem(struct drm_device *dev,
+						    struct dma_buf *dma_buf)
 {
-	struct drm_gem_object *obj = dma_buf->priv;
-
-	return (dma_buf->ops == &drm_gem_prime_dmabuf_ops) && (obj->dev == dev);
+	return drm_gem_prime_self_import(dev, dma_buf, &drm_gem_prime_dmabuf_ops);
 }
-EXPORT_SYMBOL(drm_gem_is_prime_exported_dma_buf);
+EXPORT_SYMBOL(drm_gem_prime_dma_buf_to_gem);
 
 /**
  * drm_gem_prime_import_dev - core implementation of the import callback
