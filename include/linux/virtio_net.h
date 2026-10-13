@@ -14,6 +14,14 @@
 #include <uapi/linux/tcp.h>
 #include <uapi/linux/virtio_net.h>
 
+/*
+ * virtio_net_hdr_to_skb() and virtio_net_hdr_tnl_to_skb() return 0 on
+ * success and a negative errno on failure.  On success they may also
+ * return 1, indicating that an uncommon checksum was completed in
+ * software at ingress rather than deferred to the egress path;
+ * drivers can use this to account for such packets.
+ */
+
 static inline bool virtio_net_hdr_match_proto(__be16 protocol, __u8 gso_type)
 {
 	switch (gso_type & ~VIRTIO_NET_HDR_GSO_ECN) {
@@ -292,7 +300,7 @@ retry:
 
 		err = skb_checksum_help(skb);
 		skb->transport_header = old_transport;
-		return err;
+		return err ?: 1;
 	}
 
 	return 0;
@@ -441,7 +449,7 @@ virtio_net_hdr_tnl_to_skb(struct sk_buff *skb,
 	/* Let the basic parsing deal with plain GSO features. */
 	ret = __virtio_net_hdr_to_skb(skb, hdr, true,
 				      hdr->gso_type & ~gso_tunnel_type, false);
-	if (ret)
+	if (ret < 0)
 		return ret;
 
 	/* In case of USO, the inner protocol is still unknown and
