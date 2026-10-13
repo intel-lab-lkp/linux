@@ -367,7 +367,9 @@ int wcn36xx_rx_skb(struct wcn36xx *wcn, struct sk_buff *skb)
 		 */
 		u8 hwch = (bd->reserved0 << 4) + bd->rx_ch;
 
-		if (bd->rf_band != 1 && hwch <= sizeof(ab_rx_ch_map) && hwch >= 1) {
+		/* WCN3620 can report a 5 GHz band for 2.4 GHz scan results. */
+		if (wcn->hw->wiphy->bands[NL80211_BAND_5GHZ] &&
+		    bd->rf_band != 1 && hwch <= sizeof(ab_rx_ch_map) && hwch >= 1) {
 			status.band = NL80211_BAND_5GHZ;
 			status.freq = ieee80211_channel_to_frequency(ab_rx_ch_map[hwch - 1],
 								     status.band);
@@ -375,6 +377,9 @@ int wcn36xx_rx_skb(struct wcn36xx *wcn, struct sk_buff *skb)
 			status.band = NL80211_BAND_2GHZ;
 			status.freq = ieee80211_channel_to_frequency(hwch, status.band);
 		}
+
+		if (!ieee80211_get_channel(wcn->hw->wiphy, status.freq))
+			goto drop;
 	} else {
 		status.band = WCN36XX_BAND(wcn);
 		status.freq = WCN36XX_CENTER_FREQ(wcn);
