@@ -698,7 +698,7 @@ struct pci_host_bridge *pci_alloc_host_bridge(size_t priv)
 }
 EXPORT_SYMBOL(pci_alloc_host_bridge);
 
-static void devm_pci_alloc_host_bridge_release(void *data)
+void devm_pci_alloc_host_bridge_release(void *data)
 {
 	pci_free_host_bridge(data);
 }
