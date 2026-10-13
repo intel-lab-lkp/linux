@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 or MIT
 
 use kernel::{
-    clk::{
-        Clk,
-        OptionalClk, //
-    },
+    clk::Clk,
     device::{
         Bound,
         Core,
@@ -117,8 +114,8 @@ impl platform::Driver for TyrPlatformDriver {
         _info: Option<&'bound Self::IdInfo>,
     ) -> impl PinInit<Self::Data<'bound>, Error> + 'bound {
         let core_clk = Clk::get(pdev.as_ref(), Some(c"core"))?;
-        let stacks_clk = OptionalClk::get(pdev.as_ref(), Some(c"stacks"))?;
-        let coregroup_clk = OptionalClk::get(pdev.as_ref(), Some(c"coregroup"))?;
+        let stacks_clk = Clk::get_optional(pdev.as_ref(), Some(c"stacks"))?;
+        let coregroup_clk = Clk::get_optional(pdev.as_ref(), Some(c"coregroup"))?;
 
         core_clk.prepare_enable()?;
         stacks_clk.prepare_enable()?;
@@ -219,8 +216,8 @@ impl drm::Driver for TyrDrmDriver {
 
 struct Clocks {
     core: Clk,
-    stacks: OptionalClk,
-    coregroup: OptionalClk,
+    stacks: Clk,
+    coregroup: Clk,
 }
 
 impl Drop for Clocks {

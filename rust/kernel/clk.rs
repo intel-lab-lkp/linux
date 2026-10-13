@@ -103,10 +103,7 @@ mod common_clk {
         prelude::*, //
     };
 
-    use core::{
-        ops::Deref,
-        ptr, //
-    };
+    use core::ptr;
 
     /// A reference-counted clock.
     ///
@@ -172,6 +169,25 @@ mod common_clk {
             // INVARIANT: The reference-count is decremented when [`Clk`] goes out of scope.
             Ok(Self(from_err_ptr(unsafe {
                 bindings::clk_get(dev.as_raw(), con_id)
+            })?))
+        }
+
+        /// Behaves the same as [`Self::get`], except when there is no clock
+        /// producer. In this case, instead of returning [`ENOENT`], it returns
+        /// a dummy [`Clk`].
+        ///
+        /// Equivalent to the kernel's [`clk_get_optional`] API.
+        ///
+        /// [`clk_get_optional`]:
+        /// https://docs.kernel.org/core-api/kernel-api.html#c.clk_get_optional
+        pub fn get_optional(dev: &Device, name: Option<&CStr>) -> Result<Self> {
+            let con_id = name.map_or(ptr::null(), |n| n.as_char_ptr());
+
+            // SAFETY: It is safe to call [`clk_get_optional`] for a valid device pointer.
+            //
+            // INVARIANT: The reference-count is decremented when [`Clk`] goes out of scope.
+            Ok(Self(from_err_ptr(unsafe {
+                bindings::clk_get_optional(dev.as_raw(), con_id)
             })?))
         }
 
@@ -278,80 +294,6 @@ mod common_clk {
         fn drop(&mut self) {
             // SAFETY: By the type invariants, self.as_raw() is a valid argument for [`clk_put`].
             unsafe { bindings::clk_put(self.as_raw()) };
-        }
-    }
-
-    /// A reference-counted optional clock.
-    ///
-    /// A lightweight wrapper around an optional [`Clk`]. An [`OptionalClk`] represents a [`Clk`]
-    /// that a driver can function without but may improve performance or enable additional
-    /// features when available.
-    ///
-    /// # Invariants
-    ///
-    /// An [`OptionalClk`] instance encapsulates a [`Clk`] with either a valid [`struct clk`] or
-    /// `NULL` pointer.
-    ///
-    /// Instances of this type are reference-counted. Calling [`OptionalClk::get`] ensures that the
-    /// allocation remains valid for the lifetime of the [`OptionalClk`].
-    ///
-    /// # Examples
-    ///
-    /// The following example demonstrates how to obtain and configure an optional clock for a
-    /// device. The code functions correctly whether or not the clock is available.
-    ///
-    /// ```
-    /// use kernel::clk::{
-    ///     Hertz,
-    ///     OptionalClk,
-    /// };
-    /// use kernel::device::Device;
-    ///
-    /// fn configure_clk(dev: &Device) -> Result {
-    ///     let clk = OptionalClk::get(dev, Some(c"apb_clk"))?;
-    ///
-    ///     clk.prepare_enable()?;
-    ///
-    ///     let expected_rate = Hertz::from_ghz(1);
-    ///
-    ///     if clk.rate() != expected_rate {
-    ///         clk.set_rate(expected_rate)?;
-    ///     }
-    ///
-    ///     clk.disable_unprepare();
-    ///     Ok(())
-    /// }
-    /// ```
-    ///
-    /// [`struct clk`]: https://docs.kernel.org/driver-api/clk.html
-    pub struct OptionalClk(Clk);
-
-    impl OptionalClk {
-        /// Gets [`OptionalClk`] corresponding to a [`Device`] and a connection id.
-        ///
-        /// Equivalent to the kernel's [`clk_get_optional`] API.
-        ///
-        /// [`clk_get_optional`]:
-        /// https://docs.kernel.org/core-api/kernel-api.html#c.clk_get_optional
-        pub fn get(dev: &Device, name: Option<&CStr>) -> Result<Self> {
-            let con_id = name.map_or(ptr::null(), |n| n.as_char_ptr());
-
-            // SAFETY: It is safe to call [`clk_get_optional`] for a valid device pointer.
-            //
-            // INVARIANT: The reference-count is decremented when [`OptionalClk`] goes out of
-            // scope.
-            Ok(Self(Clk(from_err_ptr(unsafe {
-                bindings::clk_get_optional(dev.as_raw(), con_id)
-            })?)))
-        }
-    }
-
-    // Make [`OptionalClk`] behave like [`Clk`].
-    impl Deref for OptionalClk {
-        type Target = Clk;
-
-        fn deref(&self) -> &Clk {
-            &self.0
         }
     }
 }
