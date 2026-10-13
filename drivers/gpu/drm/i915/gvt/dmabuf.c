@@ -503,6 +503,7 @@ int intel_vgpu_get_dmabuf(struct intel_vgpu *vgpu, unsigned int dmabuf_id)
 	struct drm_device *dev = &vgpu->gvt->gt->i915->drm;
 	struct intel_vgpu_dmabuf_obj *dmabuf_obj;
 	struct drm_i915_gem_object *obj;
+	unsigned long db_fcount;
 	struct dma_buf *dmabuf;
 	int dmabuf_fd;
 	int ret = 0;
@@ -531,6 +532,7 @@ int intel_vgpu_get_dmabuf(struct intel_vgpu *vgpu, unsigned int dmabuf_id)
 		ret = PTR_ERR(dmabuf);
 		goto out_free_gem;
 	}
+	db_fcount = file_count(dmabuf->file);
 
 	ret = dma_buf_fd(dmabuf, DRM_CLOEXEC | DRM_RDWR);
 	if (ret < 0) {
@@ -552,8 +554,7 @@ int intel_vgpu_get_dmabuf(struct intel_vgpu *vgpu, unsigned int dmabuf_id)
 		    "        file count: %ld, GEM ref: %d\n",
 		    vgpu->id, dmabuf_obj->dmabuf_id,
 		    kref_read(&dmabuf_obj->kref),
-		    dmabuf_fd,
-		    file_count(dmabuf->file),
+		    dmabuf_fd, db_fcount,
 		    kref_read(&obj->base.refcount));
 
 	i915_gem_object_put(obj);
