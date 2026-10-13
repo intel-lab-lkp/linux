@@ -656,8 +656,6 @@ static int __init rmpopt_init(void)
 	if ((rmpopt_pa_end - rmpopt_pa_start) > SZ_2T)
 		rmpopt_pa_end = rmpopt_pa_start + SZ_2T;
 
-	pr_info("RMPOPT optimizations enabled\n");
-
 	rmpopt_soft_init = true;
 
 	return 0;
@@ -690,6 +688,8 @@ void snp_enable_rmpopt(void)
 
 	mod_delayed_work(rmpopt_wq, &rmpopt_delayed_work,
 			 msecs_to_jiffies(RMPOPT_WORK_TIMEOUT));
+
+	pr_info_once("RMPOPT optimizations enabled\n");
 }
 EXPORT_SYMBOL_FOR_MODULES(snp_enable_rmpopt, "ccp,kvm-amd");
 
