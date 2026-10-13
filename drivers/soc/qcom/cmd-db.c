@@ -4,6 +4,8 @@
  * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#define pr_fmt(fmt) "cmd-db: " fmt
+
 #include <linux/bitfield.h>
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
@@ -108,6 +110,24 @@ static bool cmd_db_magic_matches(const struct cmd_db_header *header)
 }
 
 static struct cmd_db_header *cmd_db_header;
+static size_t cmd_db_size;
+
+/*
+ * Check that a [addr, addr + len) range lies entirely within the mapped
+ * command DB region. The slave and entry headers carry offsets and counts
+ * supplied by firmware, so a walk derived from them has to be validated
+ * before it is dereferenced.
+ */
+static bool cmd_db_in_bounds(const void *addr, size_t len)
+{
+	const void *start = cmd_db_header;
+	const void *end = start + cmd_db_size;
+
+	if (addr < start || addr > end)
+		return false;
+
+	return len <= (size_t)(end - addr);
+}
 
 static inline const void *rsc_to_entry_header(const struct rsc_hdr *hdr)
 {
@@ -147,6 +167,7 @@ static int cmd_db_get_header(const char *id, const struct entry_header **eh,
 	const struct rsc_hdr *rsc_hdr;
 	const struct entry_header *ent;
 	int ret, i, j;
+	u16 cnt;
 	u8 query[sizeof(ent->id)] __nonstring;
 
 	ret = cmd_db_ready();
@@ -161,7 +182,13 @@ static int cmd_db_get_header(const char *id, const struct entry_header **eh,
 			break;
 
 		ent = rsc_to_entry_header(rsc_hdr);
-		for (j = 0; j < le16_to_cpu(rsc_hdr->cnt); j++, ent++) {
+		cnt = le16_to_cpu(rsc_hdr->cnt);
+		if (!cmd_db_in_bounds(ent, (size_t)cnt * sizeof(*ent))) {
+			pr_warn_once("slave %d entries are outside the database\n", i);
+			continue;
+		}
+
+		for (j = 0; j < cnt; j++, ent++) {
 			if (memcmp(ent->id, query, sizeof(ent->id)) == 0) {
 				if (eh)
 					*eh = ent;
@@ -209,15 +236,24 @@ const void *cmd_db_read_aux_data(const char *id, size_t *len)
 	int ret;
 	const struct entry_header *ent;
 	const struct rsc_hdr *rsc_hdr;
+	const void *data;
+	u16 ent_len;
 
 	ret = cmd_db_get_header(id, &ent, &rsc_hdr);
 	if (ret)
 		return ERR_PTR(ret);
 
-	if (len)
-		*len = le16_to_cpu(ent->len);
+	ent_len = le16_to_cpu(ent->len);
+	data = rsc_offset(rsc_hdr, ent);
+	if (!cmd_db_in_bounds(data, ent_len)) {
+		pr_warn_once("aux data of %s is outside the database\n", id);
+		return ERR_PTR(-EINVAL);
+	}
 
-	return rsc_offset(rsc_hdr, ent);
+	if (len)
+		*len = ent_len;
+
+	return data;
 }
 EXPORT_SYMBOL_GPL(cmd_db_read_aux_data);
 
@@ -273,8 +309,9 @@ static int cmd_db_debugfs_dump(struct seq_file *seq, void *p)
 	int i, j;
 	const struct rsc_hdr *rsc;
 	const struct entry_header *ent;
+	const void *data;
 	const char *name;
-	u16 len, version;
+	u16 cnt, len, version;
 	u8 major, minor;
 
 	seq_puts(seq, "Command DB DUMP\n");
@@ -307,14 +344,23 @@ static int cmd_db_debugfs_dump(struct seq_file *seq, void *p)
 		seq_puts(seq, "-------------------------\n");
 
 		ent = rsc_to_entry_header(rsc);
-		for (j = 0; j < le16_to_cpu(rsc->cnt); j++, ent++) {
+		cnt = le16_to_cpu(rsc->cnt);
+		if (!cmd_db_in_bounds(ent, (size_t)cnt * sizeof(*ent))) {
+			seq_puts(seq, "(entries out of range)\n");
+			continue;
+		}
+
+		for (j = 0; j < cnt; j++, ent++) {
 			seq_printf(seq, "0x%05x: %*pEp", le32_to_cpu(ent->addr),
 				   (int)strnlen(ent->id, sizeof(ent->id)), ent->id);
 
 			len = le16_to_cpu(ent->len);
+			data = rsc_offset(rsc, ent);
 			if (len) {
-				seq_printf(seq, " [%*ph]",
-					   len, rsc_offset(rsc, ent));
+				if (cmd_db_in_bounds(data, len))
+					seq_printf(seq, " [%*ph]", len, data);
+				else
+					seq_puts(seq, " [out of range]");
 			}
 			seq_putc(seq, '\n');
 		}
@@ -340,8 +386,8 @@ static const struct file_operations cmd_db_debugfs_ops = {
 
 static int cmd_db_dev_probe(struct platform_device *pdev)
 {
+	struct cmd_db_header *header;
 	struct reserved_mem *rmem;
-	int ret = 0;
 
 	rmem = of_reserved_mem_lookup(pdev->dev.of_node);
 	if (!rmem) {
@@ -349,18 +395,18 @@ static int cmd_db_dev_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	cmd_db_header = devm_memremap(&pdev->dev, rmem->base, rmem->size, MEMREMAP_WC);
-	if (IS_ERR(cmd_db_header)) {
-		ret = PTR_ERR(cmd_db_header);
-		cmd_db_header = NULL;
-		return ret;
-	}
+	header = devm_memremap(&pdev->dev, rmem->base, rmem->size, MEMREMAP_WC);
+	if (IS_ERR(header))
+		return PTR_ERR(header);
 
-	if (!cmd_db_magic_matches(cmd_db_header)) {
+	if (!cmd_db_magic_matches(header)) {
 		dev_err(&pdev->dev, "Invalid Command DB Magic\n");
-		cmd_db_header = NULL;
 		return -EINVAL;
 	}
+
+	/* The size must be valid before callers can see the header */
+	cmd_db_size = rmem->size;
+	cmd_db_header = header;
 
 	debugfs_create_file("cmd-db", 0400, NULL, NULL, &cmd_db_debugfs_ops);
 
