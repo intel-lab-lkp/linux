@@ -988,7 +988,8 @@ static unsigned long work_offqd_pack_flags(struct work_offq_data *offqd)
  */
 static bool need_more_worker(struct worker_pool *pool)
 {
-	return !list_empty(&pool->worklist) && !pool->nr_running;
+	/* Racy against the lockless increment, see @nr_running. */
+	return !list_empty(&pool->worklist) && !data_race(pool->nr_running);
 }
 
 /* Can I start working?  Called from busy but !running workers. */
