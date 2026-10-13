@@ -5,12 +5,72 @@
  * Copyright (C) 2026 Namjae Jeon <linkinjeon@kernel.org>
  */
 
+#include <linux/bio.h>
+#include <linux/blk-crypto.h>
 #include <linux/iomap.h>
+#include <linux/slab.h>
 #include <linux/pagemap.h>
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
 #include "iomap.h"
+
+struct exfat_dio_read {
+	struct bvec_iter zero;
+	void *private;
+};
+
+/*
+ * exfat_dio_read_end_io - Direct I/O read bio completion handler
+ *
+ * exfat_iomap_begin() maps the whole block containing valid_size, so a
+ * direct read of that block also reads the stale data beyond valid_size.
+ * Zero it before iomap releases the pages, as exfat_iomap_read_end_io()
+ * does for buffered reads.
+ */
+static void exfat_dio_read_end_io(struct bio *bio)
+{
+	struct exfat_dio_read *read = bio->bi_private;
+	struct bvec_iter iter;
+	struct bio_vec bv;
+
+	__bio_for_each_segment(bv, bio, iter, read->zero)
+		memzero_bvec(&bv);
+
+	bio->bi_private = read->private;
+	kfree(read);
+	iomap_dio_bio_end_io(bio);
+}
+
+static void exfat_dio_read_submit_io(const struct iomap_iter *iter,
+				     struct bio *bio, loff_t pos)
+{
+	loff_t valid_size = exfat_get_valid_size(EXFAT_I(iter->inode));
+	struct exfat_dio_read *read;
+
+	if (pos + bio->bi_iter.bi_size > valid_size) {
+		read = kmalloc_obj(*read, GFP_NOFS);
+		if (!read) {
+			bio->bi_status = BLK_STS_RESOURCE;
+			bio_endio(bio);
+			return;
+		}
+
+		/* bio->bi_iter may have advanced by the time the bio completes. */
+		read->zero = bio->bi_iter;
+		if (pos < valid_size)
+			bio_advance_iter(bio, &read->zero, valid_size - pos);
+		read->private = bio->bi_private;
+		bio->bi_private = read;
+		bio->bi_end_io = exfat_dio_read_end_io;
+	}
+
+	blk_crypto_submit_bio(bio);
+}
+
+const struct iomap_dio_ops exfat_read_dio_ops = {
+	.submit_io	= exfat_dio_read_submit_io,
+};
 
 /*
  * exfat_file_write_dio_end_io - Direct I/O write completion handler
