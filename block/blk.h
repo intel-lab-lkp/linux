@@ -527,6 +527,7 @@ static inline void ioc_clear_queue(struct request_queue *q)
 #endif /* CONFIG_BLK_ICQ */
 
 #ifdef CONFIG_BLK_DEV_ZONED
+int disk_init_storage_element_mgmt(struct gendisk *disk);
 void disk_init_zone_resources(struct gendisk *disk);
 void disk_release_zone_resources(struct gendisk *disk);
 static inline bool bio_zone_write_plugging(struct bio *bio)
@@ -579,6 +580,10 @@ int blkdev_zone_mgmt_ioctl(struct block_device *bdev, blk_mode_t mode,
 		unsigned int cmd, unsigned long arg);
 bool bdev_zone_mgmt_allowed(struct block_device *bdev, sector_t sector);
 #else /* CONFIG_BLK_DEV_ZONED */
+static inline int disk_init_storage_element_mgmt(struct gendisk *disk)
+{
+	return 0;
+}
 static inline void disk_init_zone_resources(struct gendisk *disk)
 {
 }
