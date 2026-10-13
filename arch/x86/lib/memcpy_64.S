@@ -31,7 +31,9 @@
  * which the compiler could/should do much better anyway.
  */
 SYM_TYPED_FUNC_START(__memcpy)
-	ALTERNATIVE "jmp memcpy_orig", "", X86_FEATURE_FSRM
+	ALTERNATIVE_2 "jmp memcpy_orig", \
+		      "cmpq $512, %rdx; jb memcpy_orig", X86_FEATURE_ERMS, \
+		      "", X86_FEATURE_FSRM
 
 	movq %rdi, %rax
 	movq %rdx, %rcx
