@@ -72,6 +72,7 @@ static int cdns3_pci_probe(struct pci_dev *pdev,
 	struct cdns3_wrap *wrap;
 	struct resource *res;
 	struct pci_dev *func;
+	bool own_wrap;
 	int err;
 
 	/*
@@ -99,12 +100,17 @@ static int cdns3_pci_probe(struct pci_dev *pdev,
 		if (!wrap) {
 			dev_err(&pdev->dev,
 				"second function not initialized, retrying\n");
-			return -EPROBE_DEFER;
+			err = -EPROBE_DEFER;
+			goto put_pci;
 		}
+		own_wrap = false;
 	} else {
 		wrap = kzalloc_obj(*wrap);
-		if (!wrap)
-			return -ENOMEM;
+		if (!wrap) {
+			err = -ENOMEM;
+			goto put_pci;
+		}
+		own_wrap = true;
 	}
 
 	res = wrap->dev_res;
@@ -164,12 +170,15 @@ static int cdns3_pci_probe(struct pci_dev *pdev,
 		wrap->plat_dev = platform_device_register_full(&plat_info);
 		if (IS_ERR(wrap->plat_dev)) {
 			err = PTR_ERR(wrap->plat_dev);
-			kfree(wrap);
-			return err;
+			if (own_wrap)
+				kfree(wrap);
+			goto put_pci;
 		}
 	}
 
 	pci_set_drvdata(pdev, wrap);
+put_pci:
+	pci_dev_put(func);
 	return err;
 }
 
@@ -184,8 +193,10 @@ static void cdns3_pci_remove(struct pci_dev *pdev)
 	if (wrap->devfn == pdev->devfn)
 		platform_device_unregister(wrap->plat_dev);
 
-	if (!pci_is_enabled(func))
+	if (!func || !pci_is_enabled(func))
 		kfree(wrap);
+
+	pci_dev_put(func);
 }
 
 static const struct pci_device_id cdns3_pci_ids[] = {
