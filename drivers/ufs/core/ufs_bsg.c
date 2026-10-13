@@ -73,6 +73,9 @@ static int ufs_bsg_exec_advanced_rpmb_req(struct ufs_hba *hba, struct bsg_job *j
 	if (hba->ufs_version < ufshci_version(4, 0) || !hba->dev_info.b_advanced_rpmb_en)
 		return -EINVAL;
 
+	if (job->request_len < sizeof(*rpmb_request))
+		return -EINVAL;
+
 	if (rpmb_request->ehs_req.length != 2 || rpmb_request->ehs_req.ehs_type != 1)
 		return -EINVAL;
 
@@ -141,6 +144,11 @@ static int ufs_bsg_request(struct bsg_job *job)
 	bool rpmb = false;
 
 	bsg_reply->reply_payload_rcv_len = 0;
+
+	if (job->request_len < sizeof(*bsg_request)) {
+		bsg_reply->result = -EINVAL;
+		return -EINVAL;
+	}
 
 	ufshcd_rpm_get_sync(hba);
 
