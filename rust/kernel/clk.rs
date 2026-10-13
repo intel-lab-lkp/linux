@@ -95,7 +95,10 @@ impl From<Hertz> for c_ulong {
 mod common_clk {
     use super::Hertz;
     use crate::{
-        device::Device,
+        device::{
+            Bound,
+            Device, //
+        },
         error::{
             from_err_ptr,
             to_result, //
@@ -103,11 +106,115 @@ mod common_clk {
         prelude::*, //
     };
 
-    use core::ptr;
+    use core::{
+        marker::PhantomData,
+        mem::ManuallyDrop,
+        ptr, //
+    };
+
+    mod private {
+        pub trait Sealed {}
+
+        impl Sealed for super::Unprepared {}
+        impl Sealed for super::Prepared {}
+        impl Sealed for super::Enabled {}
+    }
+
+    /// A trait representing the different states that a [`Clk`] can be in.
+    pub trait ClkState: private::Sealed {
+        /// Whether the clock is enabled in this state.
+        const ENABLED: bool;
+
+        /// Whether the clock is prepared in this state.
+        const PREPARED: bool;
+    }
+
+    /// A state where the [`Clk`] is not prepared and not enabled.
+    pub struct Unprepared;
+
+    /// A state where the [`Clk`] is prepared but not enabled.
+    pub struct Prepared;
+
+    /// A state where the [`Clk`] is both prepared and enabled.
+    pub struct Enabled;
+
+    impl ClkState for Unprepared {
+        const ENABLED: bool = false;
+        const PREPARED: bool = false;
+    }
+
+    impl ClkState for Prepared {
+        const ENABLED: bool = false;
+        const PREPARED: bool = true;
+    }
+
+    impl ClkState for Enabled {
+        const ENABLED: bool = true;
+        const PREPARED: bool = true;
+    }
+
+    /// An error that can occur when trying to convert a [`Clk`] between states.
+    pub struct Error<State: ClkState> {
+        /// The error that occurred.
+        pub error: kernel::error::Error,
+
+        /// The [`Clk`] that caused the error, so that the operation may be
+        /// retried.
+        pub clk: Clk<State>,
+    }
+
+    impl<State: ClkState> core::fmt::Debug for Error<State> {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            self.error.fmt(f)
+        }
+    }
+
+    impl<State: ClkState> From<Error<State>> for kernel::error::Error {
+        /// Discards the [`Clk`] and keeps only the error code.
+        ///
+        /// This makes the fallible state transitions usable with the `?`
+        /// operator when the caller does not need to retry the operation on the
+        /// original [`Clk`], e.g.:
+        ///
+        /// ```
+        /// use kernel::clk::{
+        ///     Clk,
+        ///     Enabled,
+        ///     Unprepared,
+        /// };
+        /// use kernel::device::{
+        ///     Bound,
+        ///     Device,
+        /// };
+        ///
+        /// fn get_enabled(dev: &Device<Bound>) -> Result<Clk<Enabled>> {
+        ///     let clk = Clk::<Unprepared>::get(dev, Some(c"apb_clk"))?
+        ///         .prepare()?
+        ///         .enable()?;
+        ///     Ok(clk)
+        /// }
+        /// ```
+        #[inline]
+        fn from(err: Error<State>) -> Self {
+            err.error
+        }
+    }
 
     /// A reference-counted clock.
     ///
     /// Rust abstraction for the C [`struct clk`].
+    ///
+    /// A [`Clk`] instance represents a clock that can be in one of several
+    /// states: [`Unprepared`], [`Prepared`], or [`Enabled`].
+    ///
+    /// No action needs to be taken when a [`Clk`] is dropped. The calls to
+    /// `clk_disable()` and `clk_unprepare()` will be made as applicable.
+    /// Since `clk_unprepare()` may sleep, a [`Clk<Prepared>`] or a
+    /// [`Clk<Enabled>`] must not be dropped in atomic context.
+    ///
+    /// An optional [`Clk`] is treated like a regular [`Clk`], but its
+    /// inner `struct clk` pointer is `NULL`. This interfaces correctly with the
+    /// C API and also exposes all the methods of a regular [`Clk`] to users.
     ///
     /// # Invariants
     ///
@@ -117,6 +224,12 @@ mod common_clk {
     /// Instances of this type are reference-counted. Calling [`Clk::get`] ensures that the
     /// allocation remains valid for the lifetime of the [`Clk`].
     ///
+    /// The [`Prepared`] state is associated with a single count of
+    /// `clk_prepare()`, and the [`Enabled`] state is associated with a single
+    /// count of both `clk_prepare()` and `clk_enable()`.
+    ///
+    /// All states are associated with a single count of `clk_get()`.
+    ///
     /// # Examples
     ///
     /// The following example demonstrates how to obtain and configure a clock for a device.
@@ -124,14 +237,30 @@ mod common_clk {
     /// ```
     /// use kernel::clk::{
     ///     Clk,
+    ///     Enabled,
     ///     Hertz,
+    ///     Prepared,
+    ///     Unprepared,
     /// };
-    /// use kernel::device::Device;
+    /// use kernel::device::{
+    ///     Bound,
+    ///     Device,
+    /// };
     ///
-    /// fn configure_clk(dev: &Device) -> Result {
-    ///     let clk = Clk::get(dev, Some(c"apb_clk"))?;
+    /// fn configure_clk(dev: &Device<Bound>) -> Result {
+    ///     // Each state has its own `Clk::get`, e.g.:
+    ///     let clk: Clk<Enabled> = Clk::<Enabled>::get(dev, Some(c"apb_clk"))?;
     ///
-    ///     clk.prepare_enable()?;
+    ///     // Any other state is also possible, e.g.:
+    ///     let clk: Clk<Prepared> = Clk::<Prepared>::get(dev, Some(c"bus_clk"))?;
+    ///
+    ///     // Later:
+    ///     //
+    ///     // `?` works directly thanks to `From<Error<State>>`. The failed
+    ///     // `Clk` is dropped on error. Match on the returned `Error<State>`
+    ///     // instead (its `clk` field is the original `Clk`) if you want to
+    ///     // retry the operation.
+    ///     let clk: Clk<Enabled> = clk.enable()?;
     ///
     ///     let expected_rate = Hertz::from_ghz(1);
     ///
@@ -139,37 +268,102 @@ mod common_clk {
     ///         clk.set_rate(expected_rate)?;
     ///     }
     ///
-    ///     clk.disable_unprepare();
+    ///     // Nothing is needed here. The drop implementation will undo any
+    ///     // operations as appropriate.
     ///     Ok(())
+    /// }
+    ///
+    /// fn shutdown(clk: Clk<Enabled>) -> Result {
+    ///     // The states can also be traversed in reverse:
+    ///     let clk: Clk<Prepared> = clk.disable();
+    ///
+    ///     // This is of type `Clk<Unprepared>`.
+    ///     let clk = clk.unprepare();
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// Drivers that need to change a clock's state at runtime (for example to
+    /// enable it on resume and disable it on suspend) can keep it in an enum
+    /// and move between the variants:
+    ///
+    /// ```
+    /// use kernel::clk::{Clk, Enabled, Prepared};
+    /// use kernel::error::Result;
+    ///
+    /// enum DeviceClk {
+    ///     Suspended(Clk<Prepared>),
+    ///     Resumed(Clk<Enabled>),
+    /// }
+    ///
+    /// impl DeviceClk {
+    ///     fn resume(self) -> Result<Self> {
+    ///         Ok(match self {
+    ///             DeviceClk::Suspended(clk) => DeviceClk::Resumed(clk.enable()?),
+    ///             resumed => resumed,
+    ///         })
+    ///     }
+    ///
+    ///     fn suspend(self) -> Result<Self> {
+    ///         Ok(match self {
+    ///             DeviceClk::Resumed(clk) => DeviceClk::Suspended(clk.disable()),
+    ///             suspended => suspended,
+    ///         })
+    ///     }
     /// }
     /// ```
     ///
     /// [`struct clk`]: https://docs.kernel.org/driver-api/clk.html
     #[repr(transparent)]
-    pub struct Clk(*mut bindings::clk);
+    pub struct Clk<T: ClkState> {
+        inner: *mut bindings::clk,
+        _phantom: core::marker::PhantomData<T>,
+    }
 
     // SAFETY: It is safe to call `clk_put` on another thread than where `clk_get` was called.
-    unsafe impl Send for Clk {}
+    unsafe impl<T: ClkState> Send for Clk<T> {}
 
     // SAFETY: It is safe to call any combination of the `&self` methods in parallel, as the
     // methods are synchronized internally.
-    unsafe impl Sync for Clk {}
+    unsafe impl<T: ClkState> Sync for Clk<T> {}
 
-    impl Clk {
-        /// Gets [`Clk`] corresponding to a [`Device`] and a connection id.
+    impl Clk<Unprepared> {
+        /// Gets [`Clk`] corresponding to a bound [`Device`] and a connection
+        /// id.
         ///
         /// Equivalent to the kernel's [`clk_get`] API.
         ///
         /// [`clk_get`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_get
-        pub fn get(dev: &Device, name: Option<&CStr>) -> Result<Self> {
+        #[inline]
+        pub fn get(dev: &Device<Bound>, name: Option<&CStr>) -> Result<Clk<Unprepared>> {
+            Self::get_unbound(dev, name)
+        }
+
+        /// Gets [`Clk`] corresponding to a [`Device`] and a connection id,
+        /// without requiring the device to be bound.
+        ///
+        /// This is sound because [`clk_get`] and [`clk_put`] do not depend on the
+        /// device being bound to a driver. It is `pub(crate)` because a driver
+        /// should obtain its clocks through a bound device (see [`Clk::get`]). It
+        /// is meant for the few in-tree abstractions that operate on a device
+        /// outside a bind scope, such as the generic DT cpufreq driver.
+        ///
+        /// [`clk_get`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_get
+        /// [`clk_put`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_put
+        #[inline]
+        pub(crate) fn get_unbound(dev: &Device, name: Option<&CStr>) -> Result<Clk<Unprepared>> {
             let con_id = name.map_or(ptr::null(), |n| n.as_char_ptr());
 
-            // SAFETY: It is safe to call [`clk_get`] for a valid device pointer.
-            //
+            // SAFETY: It is safe to call `clk_get()` for a valid device pointer
+            // and any `con_id`, including NULL.
+            let inner = from_err_ptr(unsafe { bindings::clk_get(dev.as_raw(), con_id) })?;
+
             // INVARIANT: The reference-count is decremented when [`Clk`] goes out of scope.
-            Ok(Self(from_err_ptr(unsafe {
-                bindings::clk_get(dev.as_raw(), con_id)
-            })?))
+            Ok(Self {
+                inner,
+                _phantom: PhantomData,
+            })
         }
 
         /// Behaves the same as [`Self::get`], except when there is no clock
@@ -180,100 +374,179 @@ mod common_clk {
         ///
         /// [`clk_get_optional`]:
         /// https://docs.kernel.org/core-api/kernel-api.html#c.clk_get_optional
-        pub fn get_optional(dev: &Device, name: Option<&CStr>) -> Result<Self> {
+        #[inline]
+        pub fn get_optional(dev: &Device<Bound>, name: Option<&CStr>) -> Result<Clk<Unprepared>> {
             let con_id = name.map_or(ptr::null(), |n| n.as_char_ptr());
 
-            // SAFETY: It is safe to call [`clk_get_optional`] for a valid device pointer.
-            //
+            // SAFETY: It is safe to call `clk_get_optional()` for a valid device
+            // pointer and any `con_id`, including NULL.
+            let inner = from_err_ptr(unsafe { bindings::clk_get_optional(dev.as_raw(), con_id) })?;
+
             // INVARIANT: The reference-count is decremented when [`Clk`] goes out of scope.
-            Ok(Self(from_err_ptr(unsafe {
-                bindings::clk_get_optional(dev.as_raw(), con_id)
-            })?))
+            Ok(Self {
+                inner,
+                _phantom: PhantomData,
+            })
         }
 
-        /// Obtain the raw [`struct clk`] pointer.
-        #[inline]
-        pub fn as_raw(&self) -> *mut bindings::clk {
-            self.0
-        }
-
-        /// Enable the clock.
-        ///
-        /// Equivalent to the kernel's [`clk_enable`] API.
-        ///
-        /// [`clk_enable`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_enable
-        #[inline]
-        pub fn enable(&self) -> Result {
-            // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-            // [`clk_enable`].
-            to_result(unsafe { bindings::clk_enable(self.as_raw()) })
-        }
-
-        /// Disable the clock.
-        ///
-        /// Equivalent to the kernel's [`clk_disable`] API.
-        ///
-        /// [`clk_disable`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_disable
-        #[inline]
-        pub fn disable(&self) {
-            // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-            // [`clk_disable`].
-            unsafe { bindings::clk_disable(self.as_raw()) };
-        }
-
-        /// Prepare the clock.
+        /// Attempts to convert the [`Clk`] to a [`Prepared`] state.
         ///
         /// Equivalent to the kernel's [`clk_prepare`] API.
         ///
         /// [`clk_prepare`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_prepare
         #[inline]
-        pub fn prepare(&self) -> Result {
-            // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-            // [`clk_prepare`].
-            to_result(unsafe { bindings::clk_prepare(self.as_raw()) })
+        pub fn prepare(self) -> Result<Clk<Prepared>, Error<Unprepared>> {
+            // The `clk_get()` count moves to the returned `Clk<Prepared>`.
+            let clk = ManuallyDrop::new(self);
+
+            // SAFETY: By the type invariants, `clk.as_raw()` is a valid argument
+            // for `clk_prepare()`.
+            to_result(unsafe { bindings::clk_prepare(clk.as_raw()) })
+                // INVARIANT: `clk_prepare()` succeeded, so the returned
+                // `Clk<Prepared>` owns a single count of it, which is released
+                // when it leaves the [`Prepared`] state.
+                .map(|()| Clk {
+                    inner: clk.inner,
+                    _phantom: PhantomData,
+                })
+                .map_err(|error| Error {
+                    error,
+                    clk: ManuallyDrop::into_inner(clk),
+                })
+        }
+    }
+
+    impl Clk<Prepared> {
+        /// Obtains a [`Clk`] from a bound [`Device`] and a connection id and
+        /// prepares it.
+        ///
+        /// Equivalent to calling [`Clk::get`], followed by [`Clk::prepare`].
+        #[inline]
+        pub fn get(dev: &Device<Bound>, name: Option<&CStr>) -> Result<Clk<Prepared>> {
+            Ok(Clk::<Unprepared>::get(dev, name)?.prepare()?)
         }
 
-        /// Unprepare the clock.
+        /// Behaves the same as [`Self::get`], except when there is no clock
+        /// producer. In this case, instead of returning [`ENOENT`], it returns
+        /// a dummy [`Clk`].
+        #[inline]
+        pub fn get_optional(dev: &Device<Bound>, name: Option<&CStr>) -> Result<Clk<Prepared>> {
+            Ok(Clk::<Unprepared>::get_optional(dev, name)?.prepare()?)
+        }
+
+        /// Converts the [`Clk`] to an [`Unprepared`] state.
         ///
         /// Equivalent to the kernel's [`clk_unprepare`] API.
         ///
         /// [`clk_unprepare`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_unprepare
         #[inline]
-        pub fn unprepare(&self) {
-            // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-            // [`clk_unprepare`].
-            unsafe { bindings::clk_unprepare(self.as_raw()) };
+        pub fn unprepare(self) -> Clk<Unprepared> {
+            // The `clk_get()` count moves to the returned `Clk<Unprepared>`.
+            let clk = ManuallyDrop::new(self);
+
+            // SAFETY: By the type invariants, `clk.as_raw()` is a valid argument
+            // for `clk_unprepare()`.
+            unsafe { bindings::clk_unprepare(clk.as_raw()) }
+
+            // INVARIANT: The `clk_prepare()` count was released above, so the
+            // returned `Clk<Unprepared>` owns only the `clk_get()` count.
+            Clk {
+                inner: clk.inner,
+                _phantom: PhantomData,
+            }
         }
 
-        /// Prepare and enable the clock.
+        /// Attempts to convert the [`Clk`] to an [`Enabled`] state.
         ///
-        /// Equivalent to calling [`Clk::prepare`] followed by [`Clk::enable`].
+        /// Equivalent to the kernel's [`clk_enable`] API.
+        ///
+        /// [`clk_enable`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_enable
         #[inline]
-        pub fn prepare_enable(&self) -> Result {
-            // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-            // [`clk_prepare_enable`].
-            to_result(unsafe { bindings::clk_prepare_enable(self.as_raw()) })
+        pub fn enable(self) -> Result<Clk<Enabled>, Error<Prepared>> {
+            // The `clk_get()` and `clk_prepare()` counts move to the returned
+            // `Clk<Enabled>`.
+            let clk = ManuallyDrop::new(self);
+
+            // SAFETY: By the type invariants, `clk.as_raw()` is a valid argument
+            // for `clk_enable()`.
+            to_result(unsafe { bindings::clk_enable(clk.as_raw()) })
+                // INVARIANT: `clk_enable()` succeeded, so the returned
+                // `Clk<Enabled>` owns a single count of it, which is released
+                // when it leaves the [`Enabled`] state.
+                .map(|()| Clk {
+                    inner: clk.inner,
+                    _phantom: PhantomData,
+                })
+                .map_err(|error| Error {
+                    error,
+                    clk: ManuallyDrop::into_inner(clk),
+                })
+        }
+    }
+
+    impl Clk<Enabled> {
+        /// Gets [`Clk`] corresponding to a bound [`Device`] and a connection id
+        /// and then prepares and enables it.
+        ///
+        /// Equivalent to calling [`Clk::get`], followed by [`Clk::prepare`],
+        /// followed by [`Clk::enable`].
+        #[inline]
+        pub fn get(dev: &Device<Bound>, name: Option<&CStr>) -> Result<Clk<Enabled>> {
+            Ok(Clk::<Prepared>::get(dev, name)?.enable()?)
         }
 
-        /// Disable and unprepare the clock.
-        ///
-        /// Equivalent to calling [`Clk::disable`] followed by [`Clk::unprepare`].
+        /// Behaves the same as [`Self::get`], except when there is no clock
+        /// producer. In this case, instead of returning [`ENOENT`], it returns
+        /// a dummy [`Clk`].
         #[inline]
-        pub fn disable_unprepare(&self) {
-            // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-            // [`clk_disable_unprepare`].
-            unsafe { bindings::clk_disable_unprepare(self.as_raw()) };
+        pub fn get_optional(dev: &Device<Bound>, name: Option<&CStr>) -> Result<Clk<Enabled>> {
+            Ok(Clk::<Prepared>::get_optional(dev, name)?.enable()?)
+        }
+
+        /// Disables the [`Clk`] and converts it to the [`Prepared`] state.
+        ///
+        /// Equivalent to the kernel's [`clk_disable`] API.
+        ///
+        /// [`clk_disable`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_disable
+        #[inline]
+        pub fn disable(self) -> Clk<Prepared> {
+            // The `clk_get()` and `clk_prepare()` counts move to the returned
+            // `Clk<Prepared>`.
+            let clk = ManuallyDrop::new(self);
+
+            // SAFETY: By the type invariants, `clk.as_raw()` is a valid argument
+            // for `clk_disable()`.
+            unsafe { bindings::clk_disable(clk.as_raw()) };
+
+            // INVARIANT: The `clk_enable()` count was released above, so the
+            // returned `Clk<Prepared>` owns the `clk_get()` and `clk_prepare()`
+            // counts.
+            Clk {
+                inner: clk.inner,
+                _phantom: PhantomData,
+            }
+        }
+    }
+
+    impl<T: ClkState> Clk<T> {
+        /// Obtain the raw [`struct clk`] pointer.
+        #[inline]
+        pub fn as_raw(&self) -> *mut bindings::clk {
+            self.inner
         }
 
         /// Get clock's rate.
         ///
         /// Equivalent to the kernel's [`clk_get_rate`] API.
         ///
+        /// The returned rate is only guaranteed to reflect what the hardware is
+        /// doing once the clock is [`Enabled`].
+        ///
         /// [`clk_get_rate`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_get_rate
         #[inline]
         pub fn rate(&self) -> Hertz {
-            // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-            // [`clk_get_rate`].
+            // SAFETY: By the type invariants, `self.as_raw()` is a valid argument
+            // for `clk_get_rate()`.
             Hertz(unsafe { bindings::clk_get_rate(self.as_raw()) })
         }
 
@@ -284,15 +557,28 @@ mod common_clk {
         /// [`clk_set_rate`]: https://docs.kernel.org/core-api/kernel-api.html#c.clk_set_rate
         #[inline]
         pub fn set_rate(&self, rate: Hertz) -> Result {
-            // SAFETY: By the type invariants, self.as_raw() is a valid argument for
-            // [`clk_set_rate`].
+            // SAFETY: By the type invariants, `self.as_raw()` is a valid argument
+            // for `clk_set_rate()`.
             to_result(unsafe { bindings::clk_set_rate(self.as_raw(), rate.as_hz()) })
         }
     }
 
-    impl Drop for Clk {
+    impl<T: ClkState> Drop for Clk<T> {
         fn drop(&mut self) {
-            // SAFETY: By the type invariants, self.as_raw() is a valid argument for [`clk_put`].
+            if T::ENABLED {
+                // SAFETY: By the type invariants, `self.as_raw()` is a valid
+                // argument for `clk_disable()`.
+                unsafe { bindings::clk_disable(self.as_raw()) };
+            }
+
+            if T::PREPARED {
+                // SAFETY: By the type invariants, `self.as_raw()` is a valid
+                // argument for `clk_unprepare()`.
+                unsafe { bindings::clk_unprepare(self.as_raw()) };
+            }
+
+            // SAFETY: By the type invariants, `self.as_raw()` is a valid
+            // argument for `clk_put()`.
             unsafe { bindings::clk_put(self.as_raw()) };
         }
     }

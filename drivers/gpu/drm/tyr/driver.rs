@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0 or MIT
 
 use kernel::{
-    clk::Clk,
+    clk::{
+        Clk,
+        Enabled, //
+    },
     device::{
         Bound,
         Core,
@@ -113,13 +116,9 @@ impl platform::Driver for TyrPlatformDriver {
         pdev: &'bound platform::Device<Core<'_>>,
         _info: Option<&'bound Self::IdInfo>,
     ) -> impl PinInit<Self::Data<'bound>, Error> + 'bound {
-        let core_clk = Clk::get(pdev.as_ref(), Some(c"core"))?;
-        let stacks_clk = Clk::get_optional(pdev.as_ref(), Some(c"stacks"))?;
-        let coregroup_clk = Clk::get_optional(pdev.as_ref(), Some(c"coregroup"))?;
-
-        core_clk.prepare_enable()?;
-        stacks_clk.prepare_enable()?;
-        coregroup_clk.prepare_enable()?;
+        let core_clk = Clk::<Enabled>::get(pdev.as_ref(), Some(c"core"))?;
+        let stacks_clk = Clk::<Enabled>::get_optional(pdev.as_ref(), Some(c"stacks"))?;
+        let coregroup_clk = Clk::<Enabled>::get_optional(pdev.as_ref(), Some(c"coregroup"))?;
 
         let mali_regulator = Regulator::<regulator::Enabled>::get(pdev.as_ref(), c"mali")?;
         let sram_regulator = Regulator::<regulator::Enabled>::get(pdev.as_ref(), c"sram")?;
@@ -160,9 +159,9 @@ impl platform::Driver for TyrPlatformDriver {
                 pdev,
                 fw: firmware,
                 clks <- new_mutex!(Clocks {
-                    core: core_clk,
-                    stacks: stacks_clk,
-                    coregroup: coregroup_clk,
+                    _core: core_clk,
+                    _stacks: stacks_clk,
+                    _coregroup: coregroup_clk,
                 }),
                 regulators <- new_mutex!(Regulators {
                     _mali: mali_regulator,
@@ -215,17 +214,9 @@ impl drm::Driver for TyrDrmDriver {
 }
 
 struct Clocks {
-    core: Clk,
-    stacks: Clk,
-    coregroup: Clk,
-}
-
-impl Drop for Clocks {
-    fn drop(&mut self) {
-        self.core.disable_unprepare();
-        self.stacks.disable_unprepare();
-        self.coregroup.disable_unprepare();
-    }
+    _core: Clk<Enabled>,
+    _stacks: Clk<Enabled>,
+    _coregroup: Clk<Enabled>,
 }
 
 struct Regulators {

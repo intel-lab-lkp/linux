@@ -3,7 +3,10 @@
 //! Rust based implementation of the cpufreq-dt driver.
 
 use kernel::{
-    clk::Clk,
+    clk::{
+        Clk,
+        Unprepared, //
+    },
     cpu,
     cpufreq, //
     cpumask::CpumaskVar,
@@ -47,7 +50,7 @@ struct CPUFreqDTDevice {
     freq_table: opp::FreqTable,
     _mask: CpumaskVar,
     _token: Option<opp::ConfigToken>,
-    _clk: Clk,
+    _clk: Clk<Unprepared>,
 }
 
 #[derive(Default)]
