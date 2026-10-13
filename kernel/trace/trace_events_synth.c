@@ -376,7 +376,9 @@ static enum print_line_t print_synth_event(struct trace_iterator *iter,
 				union trace_synth_field *data = &entry->fields[n_u64];
 
 				trace_seq_printf(s, print_fmt, se->fields[i]->name,
-						 (char *)entry + data->as_dynamic.offset,
+						 data->as_dynamic.len ?
+						 (char *)entry + data->as_dynamic.offset :
+						 FAULT_STRING,
 						 i == se->n_fields - 1 ? "" : " ");
 				n_u64++;
 			} else {
@@ -438,11 +440,20 @@ static unsigned int trace_string(struct synth_trace_event *entry,
 	if (is_dynamic) {
 		union trace_synth_field *data = &entry->fields[*n_u64];
 
-		len = fetch_store_strlen((unsigned long)str_val);
 		data->as_dynamic.offset = struct_size(entry, fields, event->n_u64) + data_size;
-		data->as_dynamic.len = len;
+
+		ret = fetch_store_strlen((unsigned long)str_val);
+		if (ret <= 0) {
+			data->as_dynamic.len = 0;
+			(*n_u64)++;
+			return 0;
+		}
+
+		data->as_dynamic.len = ret;
 
 		ret = fetch_store_string((unsigned long)str_val, &entry->fields[*n_u64], entry);
+		if (ret > 0)
+			len = ret;
 
 		(*n_u64)++;
 	} else {
@@ -522,6 +533,8 @@ static __always_inline int get_field_size(struct synth_event *event,
 			len *= sizeof(unsigned long);
 		} else {
 			len = fetch_store_strlen((unsigned long)str_val);
+			if (len <= 0)
+				continue;
 		}
 
 		fields_size += len;
