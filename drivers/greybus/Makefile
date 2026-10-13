@@ -25,4 +25,6 @@ gb-es2-y := es2.o
 
 obj-$(CONFIG_GREYBUS_ES2)	+= gb-es2.o
 
+obj-$(CONFIG_GREYBUS_SOFTSVC)	+= gb-softsvc.o
+gb-softsvc-y			+= gb_softsvc.o gb_softsvc_exports.o
 
