@@ -164,17 +164,32 @@ struct hwc_wq {
 	u16 queue_depth;
 
 	struct hwc_cq *hwc_cq;
+
+	/* Serializes SQ posting; unused for the RQ. */
+	spinlock_t lock;
 };
 
 struct hwc_caller_ctx {
 	struct completion comp_event;
-	/* Protects the output buffer and response state from timeout. */
+
+	/* The slot is initialized while unpublished under inflight_msg_res.lock.
+	 * Once its bitmap bit is set, lock protects every field below except
+	 * msg_id and refcnt. The sender owns output_buf; the response handler
+	 * may write it only while holding lock.
+	 */
 	spinlock_t lock;
 	void *output_buf;
 	u32 output_buflen;
-
-	int error; /* Linux error code */
+	int error;
 	u32 status_code;
+	bool responded;
+	bool resp_pending;
+
+	/* Tracks sender + response-handler ownership. The last put releases
+	 * the bitmap slot under inflight_msg_res.lock.
+	 */
+	refcount_t refcnt;
+	u16 msg_id;
 };
 
 struct hw_channel_context {
@@ -196,18 +211,30 @@ struct hw_channel_context {
 	struct hwc_wq *txq;
 	struct hwc_cq *cq;
 
+	/* Admission permits. Timed-out requests retain theirs until a
+	 * response or teardown releases the slot.
+	 */
 	struct semaphore sema;
 	struct gdma_resource inflight_msg_res;
 
 	u32 dest_vrq_id;
 	u32 dest_vrcq_id;
+
+	/* Zero permanently cancels waits for this channel instance. Firmware
+	 * and query updates may replace a live nonzero value; fail-fast may
+	 * only reduce a live value to one millisecond.
+	 */
 	u32 hwc_timeout;
 
-	/* Prevents message ID reuse after a timeout; protected by the map lock. */
-	bool hwc_timed_out;
+	/* Checked after slot acquisition; cleared on teardown to reject sends. */
+	bool channel_up;
 
 	/* The PF may own the HWC queues while this is true. */
 	bool setup_active;
+
+	/* mana_gd_send_request() callers, including waiters; under hwc_lock. */
+	unsigned int active_senders;
+
 	struct hwc_caller_ctx *caller_ctx;
 };
 
@@ -216,5 +243,11 @@ void mana_hwc_destroy_channel(struct gdma_context *gc);
 
 int mana_hwc_send_request(struct hw_channel_context *hwc, u32 req_len,
 			  const void *req, u32 resp_len, void *resp);
+int mana_gd_test_hwc_eq(struct hw_channel_context *hwc,
+			struct gdma_queue *eq);
+
+u32 mana_hwc_timeout_read(const struct hw_channel_context *hwc);
+void mana_hwc_timeout_update(struct hw_channel_context *hwc, u32 timeout_ms);
+void mana_hwc_timeout_cancel(struct hw_channel_context *hwc);
 
 #endif /* _HW_CHANNEL_H */
