@@ -471,6 +471,148 @@ function FT_modprobe_w_param {
     ddcmd =_
 }
 
+function FT_count_calls {
+    v_echo "${GREEN}# TEST_COUNT_CALLS - verify +c, -c, reset_stats${NC}"
+
+    if [ "${LACK_TMOD:-0}" -eq 1 ]; then
+        echo "SKIP - test requires test_dynamic_debug module"
+        return
+    fi
+
+    ifrmmod test_dynamic_debug_submod
+    ifrmmod test_dynamic_debug
+    my_modprobe test_dynamic_debug
+    ddcmd =_
+
+    local marker cnt hits
+
+    # 0. Baseline verification: reset_stats clears counter and epilogue
+    ddcmd reset_stats
+    cnt=$(awk '/^#: counted_calls:/ { print $3 }' /proc/dynamic_debug/control)
+    cnt=${cnt:-0}
+    if [ "$cnt" -ne 0 ]; then
+        echo -e "${RED}: baseline count expected 0, got $cnt${NC}"
+        exit $ksft_fail
+    fi
+
+    # 1. Baseline execution: unenabled callsites produce 0 counts and 0 prints
+    marker="FT_CNT_BASE_$$"
+    echo "$marker" > /dev/kmsg
+    set_param 1 /sys/module/test_dynamic_debug/parameters/do_bulk
+    cnt=$(awk '/^#: counted_calls:/ { print $3 }' /proc/dynamic_debug/control)
+    cnt=${cnt:-0}
+    hits=$(dmesg | sed -n "/$marker/,\$p" | grep -v "$marker" | \
+	grep -c "test_dd: ")
+    if [ "$cnt" -ne 0 ] || [ "$hits" -ne 0 ]; then
+        echo -e "${RED}: unenabled callsite counted ($cnt)" \
+            "or logged ($hits)${NC}"
+        exit $ksft_fail
+    fi
+    v_echo "${GREEN}: Baseline: 0 counts, 0 prints on unenabled callsites${NC}"
+
+    # 2. Pure counting (+c): counts call executions without syslog printing
+    ddcmd "module test_dynamic_debug func do_bulk +c"
+    marker="FT_CNT_PURE_$$"
+    echo "$marker" > /dev/kmsg
+    set_param 1 /sys/module/test_dynamic_debug/parameters/do_bulk
+    cnt=$(awk '/^#: counted_calls:/ { print $3 }' /proc/dynamic_debug/control)
+    cnt=${cnt:-0}
+    hits=$(dmesg | sed -n "/$marker/,\$p" | grep -v "$marker" | \
+	grep -c "test_dd: ")
+    # do_bulk(1) executes 1 header + 10 bulk prints = 11 calls
+    if [ "$cnt" -ne 11 ]; then
+        echo -e "${RED}: pure +c count mismatch: expected 11, got $cnt${NC}"
+        exit $ksft_fail
+    fi
+    if [ "$hits" -ne 0 ]; then
+        echo -e "${RED}: pure +c leaked $hits prints to dmesg!${NC}"
+        exit $ksft_fail
+    fi
+    v_echo "${GREEN}: Proven: +c counted exactly $cnt calls with 0 prints${NC}"
+
+    # 3. Scaling verification: additional iterations accumulate accurately
+    set_param 2 /sys/module/test_dynamic_debug/parameters/do_bulk
+    cnt=$(awk '/^#: counted_calls:/ { print $3 }' /proc/dynamic_debug/control)
+    cnt=${cnt:-0}
+    # previous 11 + (1 header + 20 bulk prints = 21) = 32 calls
+    if [ "$cnt" -ne 32 ]; then
+        echo -e "${RED}: accumulated count mismatch: expected 32, got $cnt${NC}"
+        exit $ksft_fail
+    fi
+    v_echo "${GREEN}: Proven: accumulated count scaled to $cnt calls${NC}"
+
+    # 4. reset_stats clears active counter
+    ddcmd reset_stats
+    cnt=$(awk '/^#: counted_calls:/ { print $3 }' /proc/dynamic_debug/control)
+    cnt=${cnt:-0}
+    if [ "$cnt" -ne 0 ]; then
+        echo -e "${RED}: reset_stats failed: expected 0, got $cnt${NC}"
+        exit $ksft_fail
+    fi
+    v_echo "${GREEN}: Proven: reset_stats zeroed counter and epilogue${NC}"
+
+    # 5. Class-mapped call counting: verify +c on class-specific callsites
+    ddcmd =_
+    ddcmd "class D2_CORE +c"
+    set_param 1 /sys/module/test_dynamic_debug/parameters/do_classes
+    cnt=$(awk '/^#: counted_calls:/ { print $3 }' /proc/dynamic_debug/control)
+    cnt=${cnt:-0}
+    # do_classes(1) triggers do_cats() which calls D2_CORE once
+    if [ "$cnt" -ne 1 ]; then
+        echo -e "${RED}: class +c count mismatch: expected 1, got $cnt${NC}"
+        exit $ksft_fail
+    fi
+    v_echo "${GREEN}: Proven: class D2_CORE +c counted exactly $cnt call${NC}"
+
+    # 6. Simultaneous print and count (+pc): both operate in tandem
+    ddcmd reset_stats
+    ddcmd =_
+    ddcmd "module test_dynamic_debug func do_bulk +pc"
+    marker="FT_CNT_PC_$$"
+    echo "$marker" > /dev/kmsg
+    set_param 1 /sys/module/test_dynamic_debug/parameters/do_bulk
+    cnt=$(awk '/^#: counted_calls:/ { print $3 }' /proc/dynamic_debug/control)
+    cnt=${cnt:-0}
+    hits=$(dmesg | sed -n "/$marker/,\$p" | grep -v "$marker" | \
+	grep -c "test_dd: ")
+    if [ "$cnt" -ne 11 ]; then
+        echo -e "${RED}: +pc count mismatch: expected 11, got $cnt${NC}"
+        exit $ksft_fail
+    fi
+    if [ "$hits" -ne 11 ]; then
+        echo -e "${RED}: +pc print mismatch: expected 11, got $hits${NC}"
+        exit $ksft_fail
+    fi
+    v_echo "${GREEN}: Proven: +pc counted $cnt calls" \
+        "and logged $hits prints${NC}"
+
+    # 7. Disabling counter (-c): preserves printing (+p), stops count
+    ddcmd reset_stats
+    ddcmd "module test_dynamic_debug func do_bulk -c"
+    marker="FT_CNT_NOC_$$"
+    echo "$marker" > /dev/kmsg
+    set_param 1 /sys/module/test_dynamic_debug/parameters/do_bulk
+    cnt=$(awk '/^#: counted_calls:/ { print $3 }' /proc/dynamic_debug/control)
+    cnt=${cnt:-0}
+    hits=$(dmesg | sed -n "/$marker/,\$p" | grep -v "$marker" | \
+	grep -c "test_dd: ")
+    if [ "$cnt" -ne 0 ]; then
+        echo -e "${RED}: -c unsetting failed: expected 0, got $cnt${NC}"
+        exit $ksft_fail
+    fi
+    if [ "$hits" -ne 11 ]; then
+        echo -e "${RED}: -c print mismatch: expected 11, got $hits${NC}"
+        exit $ksft_fail
+    fi
+    v_echo "${GREEN}: Proven: -c stopped count accumulation" \
+        "while retaining +p${NC}"
+
+    # Teardown
+    ddcmd =_
+    ddcmd reset_stats
+    ifrmmod test_dynamic_debug
+}
+
 # Built-in Feature Tests (Can run on any CONFIG_DYNAMIC_DEBUG kernel, modular or monolithic)
 builtin_tests=(
     FT_grammar_ok
@@ -485,6 +627,7 @@ modular_tests=(
     FT_test_classes
     FT_classmap_inheritance
     FT_modprobe_w_param
+    FT_count_calls
 )
 
 # ==============================================================================
@@ -637,7 +780,8 @@ EO_DYNDBG_GOLDEN_REFS
                 local label=$(echo "$line" | awk '{print $3}')
                 if [[ "$label" == FT_test_classes* \
 			  || "$label" == FT_classmap_inheritance* \
-			  || "$label" == FT_modprobe_w_param* ]]; then
+			  || "$label" == FT_modprobe_w_param* \
+			  || "$label" == FT_count_calls* ]]; then
                     continue
                 fi
             fi
