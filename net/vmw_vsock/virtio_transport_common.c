@@ -1820,6 +1820,7 @@ virtio_transport_recv_pkt_batchable(struct virtio_transport *t,
 	return sk->sk_state == TCP_ESTABLISHED &&
 	       sk->sk_type == SOCK_STREAM &&
 	       READ_ONCE(sk->sk_prot) == sk->sk_prot_creator &&
+	       READ_ONCE(sk->sk_write_space) == vsk->default_write_space &&
 	       !sock_flag(sk, SOCK_DONE) &&
 	       vsk->transport == &t->transport &&
 	       vvs && virtio_transport_rx_skb_has_headroom(vvs) &&
@@ -1836,7 +1837,8 @@ virtio_transport_recv_pkt_locked(struct virtio_transport *t,
 				 struct sk_buff *skb, struct sock *sk,
 				 const struct sockaddr_vm *src,
 				 const struct sockaddr_vm *dst,
-				 struct net *net, bool *batchable)
+				 struct net *net, bool *batchable,
+				 struct virtio_transport_rx_batch *batch)
 {
 	struct vsock_sock *vsk = vsock_sk(sk);
 	bool space_available;
@@ -1860,8 +1862,12 @@ virtio_transport_recv_pkt_locked(struct virtio_transport *t,
 	if (vsk->local_addr.svm_cid != VMADDR_CID_ANY)
 		vsk->local_addr.svm_cid = dst->svm_cid;
 
-	if (space_available)
-		sk->sk_write_space(sk);
+	if (space_available) {
+		if (batch)
+			batch->write_space_pending = true;
+		else
+			sk->sk_write_space(sk);
+	}
 
 	switch (sk->sk_state) {
 	case TCP_LISTEN:
@@ -1929,7 +1935,7 @@ void virtio_transport_recv_pkt(struct virtio_transport *t,
 
 	lock_sock(sk);
 	free_pkt = virtio_transport_recv_pkt_locked(t, skb, sk, &src, &dst,
-						    net, NULL);
+						    net, NULL, NULL);
 	release_sock(sk);
 
 	/* Release refcnt obtained when we fetched this socket out of the
@@ -1954,14 +1960,19 @@ EXPORT_SYMBOL_GPL(virtio_transport_recv_pkt);
  */
 void virtio_transport_rx_batch_finish(struct virtio_transport_rx_batch *batch)
 {
+	bool write_space_pending = batch->write_space_pending;
 	struct sock *sk = batch->sk;
 
 	batch->sk = NULL;
 	batch->pkts = 0;
 	batch->bytes = 0;
+	batch->write_space_pending = false;
 
 	if (!sk)
 		return;
+
+	if (write_space_pending)
+		vsock_sk(sk)->default_write_space(sk);
 
 	release_sock(sk);
 	sock_put(sk);
@@ -2018,7 +2029,8 @@ void virtio_transport_recv_pkt_batch(struct virtio_transport *t,
 			free_pkt = virtio_transport_recv_pkt_locked(t, skb, sk,
 								    &src, &dst,
 								    net,
-								    &batchable);
+								    &batchable,
+								    batch);
 			if (!batchable)
 				virtio_transport_rx_batch_finish(batch);
 			if (free_pkt)
@@ -2044,24 +2056,32 @@ void virtio_transport_recv_pkt_batch(struct virtio_transport *t,
 
 	lock_sock(sk);
 	/*
-	 * Sockmap removal restores the native protocol under sk_callback_lock.
-	 * Serialize this initial eligibility check with that update.
+	 * Sockmap teardown restores callbacks under sk_callback_lock. Keep the
+	 * initial eligibility check consistent with that update.
 	 */
 	read_lock_bh(&sk->sk_callback_lock);
 	start_batch = virtio_transport_recv_pkt_batchable(t, sk);
 	read_unlock_bh(&sk->sk_callback_lock);
 
+	if (start_batch)
+		batch->sk = sk;
+
 	free_pkt = virtio_transport_recv_pkt_locked(t, skb, sk, &src, &dst,
 						    net,
-						    start_batch ? &batchable : NULL);
+						    start_batch ? &batchable : NULL,
+						    start_batch ? batch : NULL);
 	if (start_batch && batchable) {
 		/* Keep the lookup reference until the batch is released. */
-		batch->sk = sk;
 		return;
 	}
 
-	release_sock(sk);
-	sock_put(sk);
+	if (start_batch) {
+		virtio_transport_rx_batch_finish(batch);
+	} else {
+		release_sock(sk);
+		sock_put(sk);
+	}
+
 	if (free_pkt)
 		kfree_skb(skb);
 }
