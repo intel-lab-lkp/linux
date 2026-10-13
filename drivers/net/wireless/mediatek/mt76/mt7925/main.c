@@ -2377,10 +2377,11 @@ mt7927_reconfig_band(struct mt792x_dev *dev, struct ieee80211_vif *vif,
 					   true);
 }
 
-static int mt7925_assign_vif_chanctx(struct ieee80211_hw *hw,
-				     struct ieee80211_vif *vif,
-				     struct ieee80211_bss_conf *link_conf,
-				     struct ieee80211_chanctx_conf *ctx)
+static int __mt7925_assign_vif_chanctx(struct ieee80211_hw *hw,
+				       struct ieee80211_vif *vif,
+				       struct ieee80211_bss_conf *link_conf,
+				       struct ieee80211_chanctx_conf *ctx,
+				       bool switching)
 {
 	struct mt792x_chanctx *mctx = (struct mt792x_chanctx *)ctx->drv_priv;
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
@@ -2405,7 +2406,9 @@ static int mt7925_assign_vif_chanctx(struct ieee80211_hw *hw,
 		if (is_mt7927(&dev->mt76)) {
 			band_idx = mt7927_band_idx(ctx->def.chan->band);
 
-			mt7927_reconfig_band(dev, vif, link_conf, mconf, band_idx);
+			if (!switching || mconf->mt76.band_idx != band_idx)
+				mt7927_reconfig_band(dev, vif, link_conf, mconf,
+						     band_idx);
 		}
 	}
 
@@ -2414,6 +2417,14 @@ static int mt7925_assign_vif_chanctx(struct ieee80211_hw *hw,
 	mutex_unlock(&dev->mt76.mutex);
 
 	return 0;
+}
+
+static int mt7925_assign_vif_chanctx(struct ieee80211_hw *hw,
+				     struct ieee80211_vif *vif,
+				     struct ieee80211_bss_conf *link_conf,
+				     struct ieee80211_chanctx_conf *ctx)
+{
+	return __mt7925_assign_vif_chanctx(hw, vif, link_conf, ctx, false);
 }
 
 static void mt7925_unassign_vif_chanctx(struct ieee80211_hw *hw,
@@ -2466,8 +2477,8 @@ static int mt7925_switch_vif_chanctx(struct ieee80211_hw *hw,
 				     int n_vifs,
 				     enum ieee80211_chanctx_switch_mode mode)
 {
-	return mt7925_assign_vif_chanctx(hw, vifs->vif, vifs->link_conf,
-					 vifs->new_ctx);
+	return __mt7925_assign_vif_chanctx(hw, vifs->vif, vifs->link_conf,
+					   vifs->new_ctx, true);
 }
 
 void mt7925_csa_work(struct work_struct *work)
