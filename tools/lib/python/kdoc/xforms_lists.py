@@ -105,7 +105,6 @@ class CTransforms:
         (CMatch("__attribute_const__"), ""),
         (CMatch("__attribute__"), ""),
         (CMatch("VISIBLE_IF_KUNIT"), ""),
-        (CMatch("INLINE_IFN_KUNIT"), ""),
 
         #
         # HACK: this is similar to process_export() hack. It is meant to
