@@ -2024,6 +2024,8 @@ int snd_hda_add_vmaster_hook(struct hda_codec *codec,
 {
 	if (!hook->hook || !hook->sw_kctl)
 		return 0;
+	/* Serialize hook registration with control callbacks. */
+	guard(rwsem_write)(&codec->card->controls_rwsem);
 	hook->codec = codec;
 	snd_ctl_add_vmaster_hook(hook->sw_kctl, vmaster_hook, hook);
 	return 0;
