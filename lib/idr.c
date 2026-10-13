@@ -450,6 +450,8 @@ next:
 			__set_bit(bit, bitmap->bitmap);
 		}
 		xas_store(&xas, bitmap);
+		if (xas_error(&xas) && !xa_is_value(bitmap))
+			__clear_bit(bit, bitmap->bitmap);
 	}
 out:
 	xas_unlock_irqrestore(&xas, flags);

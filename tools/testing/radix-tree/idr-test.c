@@ -471,6 +471,58 @@ void ida_check_nomem(void)
 }
 
 /*
+ * Run a second allocation on the same IDA while ida_alloc_range() has
+ * dropped the lock in xas_nomem() to allocate a node.  In userspace every
+ * GFP_NOWAIT allocation fails, so an allocation in a chunk which has no
+ * node yet fails its first store and retries; the node cache callback runs
+ * before xas_nomem() allocates, with the lock dropped.
+ */
+static struct ida *window_ida;
+static unsigned int window_min;
+static int window_id;
+
+static void ida_window_alloc(void *unused)
+{
+	kmem_cache_set_callback(radix_tree_node_cachep, NULL);
+	kmem_cache_set_non_kernel(radix_tree_node_cachep, 1);
+	window_id = ida_alloc_min(window_ida, window_min, GFP_KERNEL);
+	kmem_cache_set_non_kernel(radix_tree_node_cachep, 0);
+}
+
+static int ida_alloc_window(struct ida *ida, unsigned int min,
+			    unsigned int max, unsigned int other)
+{
+	int id;
+
+	window_ida = ida;
+	window_min = other;
+	window_id = -1;
+	kmem_cache_set_callback(radix_tree_node_cachep, ida_window_alloc);
+	id = ida_alloc_range(ida, min, max, GFP_KERNEL);
+	kmem_cache_set_callback(radix_tree_node_cachep, NULL);
+	IDA_BUG_ON(ida, window_id != other);
+
+	return id;
+}
+
+/*
+ * A bit set in a bitmap whose store failed must not be stored by the retry
+ * once another allocation has put a value entry in that chunk.
+ */
+void ida_check_retry_stale(void)
+{
+	DEFINE_IDA(ida);
+	unsigned int min = IDA_BITMAP_BITS + BITS_PER_LONG + 12;
+	int id;
+
+	id = ida_alloc_window(&ida, min, ~0, IDA_BITMAP_BITS + 5);
+	IDA_BUG_ON(&ida, id != min);
+	ida_free(&ida, IDA_BITMAP_BITS + 5);
+	ida_free(&ida, id);
+	IDA_BUG_ON(&ida, !ida_is_empty(&ida));
+}
+
+/*
  * Check handling of conversions between exceptional entries and full bitmaps.
  */
 void ida_check_conv_user(void)
@@ -541,6 +593,7 @@ void user_ida_checks(void)
 	radix_tree_cpu_dead(1);
 
 	ida_check_nomem();
+	ida_check_retry_stale();
 	ida_check_conv_user();
 	ida_check_random();
 	ida_alloc_free_test();

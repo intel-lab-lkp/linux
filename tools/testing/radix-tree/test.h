@@ -48,6 +48,10 @@ void tree_verify_min_height(struct radix_tree_root *root, int maxindex);
 void verify_tag_consistency(struct radix_tree_root *root, unsigned int tag);
 
 extern int nr_allocated;
+extern struct kmem_cache *radix_tree_node_cachep;
+void kmem_cache_set_callback(struct kmem_cache *cachep,
+			     void (*callback)(void *));
+void kmem_cache_set_non_kernel(struct kmem_cache *cachep, unsigned int val);
 
 /* Normally private parts of lib/radix-tree.c */
 struct radix_tree_node *entry_to_node(void *ptr);
