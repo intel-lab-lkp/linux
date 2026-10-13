@@ -1157,8 +1157,8 @@ static inline bool ice_pf_src_tmr_owned(struct ice_pf *pf)
  * while holding adapter->ctrl_pf_lock.
  * hw is embedded in struct ice_pf, so either mechanism protects its lifetime.
  *
- * Return: A pointer to ice_hw structure with access to timesync
- * register space.
+ * Return: A pointer to ice_hw structure with access to timesync register
+ * space, or NULL if the control PF is not available.
  */
 static inline struct ice_hw *ice_get_primary_hw(struct ice_pf *pf)
 {
@@ -1167,10 +1167,7 @@ static inline struct ice_hw *ice_get_primary_hw(struct ice_pf *pf)
 	ctrl_pf = rcu_dereference_check(pf->adapter->ctrl_pf,
 					lockdep_is_held(&pf->adapter->ctrl_pf_lock));
 
-	if (!ctrl_pf)
-		return &pf->hw;
-	else
-		return &ctrl_pf->hw;
+	return ctrl_pf ? &ctrl_pf->hw : NULL;
 }
 
 /**
