@@ -157,6 +157,29 @@ struct optee_smc {
 };
 #endif
 
+/**
+ * struct optee_shm_handle_map - Shared-memory lookup by secure-world identity
+ * @mutex: Serializes lookup, insertion and removal
+ * @rht: Maps opaque 64-bit identities to shared-memory objects
+ *
+ * Owners keep SHM objects alive while their registrations are in use.
+ * Never hold @mutex across transport calls, RPC or thread-availability waits.
+ */
+struct optee_shm_handle_map {
+	/* Protects lookup, insertion and removal. */
+	struct mutex mutex;
+	struct rhashtable rht;
+};
+
+int optee_shm_handle_map_init(struct optee_shm_handle_map *map);
+void optee_shm_handle_map_uninit(struct optee_shm_handle_map *map);
+int optee_shm_handle_map_add(struct optee_shm_handle_map *map,
+			     struct tee_shm *shm, u64 global_id);
+int optee_shm_handle_map_remove(struct optee_shm_handle_map *map,
+				u64 global_id);
+struct tee_shm *
+optee_shm_handle_map_lookup(struct optee_shm_handle_map *map, u64 global_id);
+
 #if IS_REACHABLE(CONFIG_ARM_FFA_TRANSPORT)
 /**
  * struct optee_ffa -  FFA communication struct
@@ -164,17 +187,14 @@ struct optee_smc {
  *			OP-TEE in secure world
  * @bottom_half_value:	notification ID used for bottom half signalling or
  *			U32_MAX if unused
- * @mutex:		serializes access to @global_ids
- * @global_ids:		FF-A shared memory global handle translation
+ * @shm_map:		FF-A shared memory global handle translation
  * @notif_wq:		workqueue for FF-A asynchronous notification
  * @notif_work:		work for FF-A asynchronous notification
  */
 struct optee_ffa {
 	struct ffa_device *ffa_dev;
 	u32 bottom_half_value;
-	/* Serializes access to @global_ids */
-	struct mutex mutex;
-	struct rhashtable global_ids;
+	struct optee_shm_handle_map shm_map;
 	struct workqueue_struct *notif_wq;
 	struct work_struct notif_work;
 };

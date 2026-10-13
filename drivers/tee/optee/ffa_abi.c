@@ -22,100 +22,15 @@
  * This file implement the FF-A ABI used when communicating with secure world
  * OP-TEE OS via FF-A.
  * This file is divided into the following sections:
- * 1. Maintain a hash table for lookup of a global FF-A memory handle
- * 2. Convert between struct tee_param and struct optee_msg_param
- * 3. Low level support functions to register shared memory in secure world
- * 4. Dynamic shared memory pool based on alloc_pages()
- * 5. Do a normal scheduled call into secure world
- * 6. Driver initialization.
+ * 1. Convert between struct tee_param and struct optee_msg_param
+ * 2. Low level support functions to register shared memory in secure world
+ * 3. Dynamic shared memory pool based on alloc_pages()
+ * 4. Do a normal scheduled call into secure world
+ * 5. Driver initialization.
  */
 
 /*
- * 1. Maintain a hash table for lookup of a global FF-A memory handle
- *
- * FF-A assigns a global memory handle for each piece shared memory.
- * This handle is then used when communicating with secure world.
- *
- * Main functions are optee_shm_add_ffa_handle() and optee_shm_rem_ffa_handle()
- */
-struct shm_rhash {
-	struct tee_shm *shm;
-	u64 global_id;
-	struct rhash_head linkage;
-};
-
-static void rh_free_fn(void *ptr, void *arg)
-{
-	kfree(ptr);
-}
-
-static const struct rhashtable_params shm_rhash_params = {
-	.head_offset = offsetof(struct shm_rhash, linkage),
-	.key_len     = sizeof(u64),
-	.key_offset  = offsetof(struct shm_rhash, global_id),
-	.automatic_shrinking = true,
-};
-
-static struct tee_shm *optee_shm_from_ffa_handle(struct optee *optee,
-						 u64 global_id)
-{
-	struct tee_shm *shm = NULL;
-	struct shm_rhash *r;
-
-	mutex_lock(&optee->ffa.mutex);
-	r = rhashtable_lookup_fast(&optee->ffa.global_ids, &global_id,
-				   shm_rhash_params);
-	if (r)
-		shm = r->shm;
-	mutex_unlock(&optee->ffa.mutex);
-
-	return shm;
-}
-
-static int optee_shm_add_ffa_handle(struct optee *optee, struct tee_shm *shm,
-				    u64 global_id)
-{
-	struct shm_rhash *r;
-	int rc;
-
-	r = kmalloc_obj(*r);
-	if (!r)
-		return -ENOMEM;
-	r->shm = shm;
-	r->global_id = global_id;
-
-	mutex_lock(&optee->ffa.mutex);
-	rc = rhashtable_lookup_insert_fast(&optee->ffa.global_ids, &r->linkage,
-					   shm_rhash_params);
-	mutex_unlock(&optee->ffa.mutex);
-
-	if (rc)
-		kfree(r);
-
-	return rc;
-}
-
-static int optee_shm_rem_ffa_handle(struct optee *optee, u64 global_id)
-{
-	struct shm_rhash *r;
-	int rc = -ENOENT;
-
-	mutex_lock(&optee->ffa.mutex);
-	r = rhashtable_lookup_fast(&optee->ffa.global_ids, &global_id,
-				   shm_rhash_params);
-	if (r)
-		rc = rhashtable_remove_fast(&optee->ffa.global_ids,
-					    &r->linkage, shm_rhash_params);
-	mutex_unlock(&optee->ffa.mutex);
-
-	if (!rc)
-		kfree(r);
-
-	return rc;
-}
-
-/*
- * 2. Convert between struct tee_param and struct optee_msg_param
+ * 1. Convert between struct tee_param and struct optee_msg_param
  *
  * optee_ffa_from_msg_param() and optee_ffa_to_msg_param() are the main
  * functions.
@@ -133,7 +48,8 @@ static void from_msg_param_ffa_mem(struct optee *optee, struct tee_param *p,
 	p->u.memref.size = mp->u.fmem.size;
 
 	if (mp->u.fmem.global_id != OPTEE_MSG_FMEM_INVALID_GLOBAL_ID)
-		shm = optee_shm_from_ffa_handle(optee, mp->u.fmem.global_id);
+		shm = optee_shm_handle_map_lookup(&optee->ffa.shm_map,
+						  mp->u.fmem.global_id);
 	p->u.memref.shm = shm;
 
 	if (shm) {
@@ -262,7 +178,7 @@ static int optee_ffa_to_msg_param(struct optee *optee,
 }
 
 /*
- * 3. Low level support functions to register shared memory in secure world
+ * 2. Low level support functions to register shared memory in secure world
  *
  * Functions to register and unregister shared memory both for normal
  * clients and for tee-supplicant.
@@ -313,7 +229,7 @@ static int optee_ffa_shm_register(struct tee_context *ctx, struct tee_shm *shm,
 	if (rc)
 		return rc;
 
-	rc = optee_shm_add_ffa_handle(optee, shm, args.g_handle);
+	rc = optee_shm_handle_map_add(&optee->ffa.shm_map, shm, args.g_handle);
 	if (rc) {
 		mem_ops->memory_reclaim(args.g_handle, 0);
 		return rc;
@@ -339,7 +255,7 @@ static int optee_ffa_shm_unregister(struct tee_context *ctx,
 	};
 	int rc;
 
-	optee_shm_rem_ffa_handle(optee, global_handle);
+	optee_shm_handle_map_remove(&optee->ffa.shm_map, global_handle);
 	shm->sec_world_id = 0;
 
 	rc = msg_ops->sync_send_receive(ffa_dev, &data);
@@ -367,7 +283,7 @@ static int optee_ffa_shm_unregister_supp(struct tee_context *ctx,
 	 * this ID.
 	 */
 
-	optee_shm_rem_ffa_handle(optee, global_handle);
+	optee_shm_handle_map_remove(&optee->ffa.shm_map, global_handle);
 	mem_ops = optee->ffa.ffa_dev->ops->mem_ops;
 	rc = mem_ops->memory_reclaim(global_handle, 0);
 	if (rc)
@@ -379,7 +295,7 @@ static int optee_ffa_shm_unregister_supp(struct tee_context *ctx,
 }
 
 /*
- * 4. Dynamic shared memory pool based on alloc_pages()
+ * 3. Dynamic shared memory pool based on alloc_pages()
  *
  * Implements an OP-TEE specific shared memory pool.
  * The main function is optee_ffa_shm_pool_alloc_pages().
@@ -428,7 +344,7 @@ static struct tee_shm_pool *optee_ffa_shm_pool_alloc_pages(void)
 }
 
 /*
- * 5. Do a normal scheduled call into secure world
+ * 4. Do a normal scheduled call into secure world
  *
  * The function optee_ffa_do_call_with_arg() performs a normal scheduled
  * call into secure world. During this call may normal world request help
@@ -488,7 +404,8 @@ static void handle_ffa_rpc_func_cmd_shm_free(struct tee_context *ctx,
 	    arg->params[0].attr != OPTEE_MSG_ATTR_TYPE_VALUE_INPUT)
 		goto err_bad_param;
 
-	shm = optee_shm_from_ffa_handle(optee, arg->params[0].u.value.b);
+	shm = optee_shm_handle_map_lookup(&optee->ffa.shm_map,
+					  arg->params[0].u.value.b);
 	if (!shm)
 		goto err_bad_param;
 	switch (arg->params[0].u.value.a) {
@@ -736,7 +653,8 @@ static int optee_ffa_lend_protmem(struct optee *optee, struct tee_shm *protmem,
 	if (rc)
 		goto err_reclaim;
 
-	rc = optee_shm_add_ffa_handle(optee, protmem, args.g_handle);
+	rc = optee_shm_handle_map_add(&optee->ffa.shm_map, protmem,
+				      args.g_handle);
 	if (rc)
 		goto err_unreg;
 
@@ -770,7 +688,7 @@ static int optee_ffa_reclaim_protmem(struct optee *optee,
 	};
 	int rc;
 
-	optee_shm_rem_ffa_handle(optee, global_handle);
+	optee_shm_handle_map_remove(&optee->ffa.shm_map, global_handle);
 	protmem->sec_world_id = 0;
 
 	rc = msg_ops->sync_send_receive(ffa_dev, &data);
@@ -785,9 +703,9 @@ static int optee_ffa_reclaim_protmem(struct optee *optee,
 }
 
 /*
- * 6. Driver initialization
+ * 5. Driver initialization
  *
- * During driver inititialization is the OP-TEE Secure Partition is probed
+ * During driver initialization is the OP-TEE Secure Partition is probed
  * to find out which features it supports so the driver can be initialized
  * with a matching configuration.
  */
@@ -991,8 +909,7 @@ static void optee_ffa_remove(struct ffa_device *ffa_dev)
 	}
 	optee_remove_common(optee);
 
-	mutex_destroy(&optee->ffa.mutex);
-	rhashtable_free_and_destroy(&optee->ffa.global_ids, rh_free_fn, NULL);
+	optee_shm_handle_map_uninit(&optee->ffa.shm_map);
 
 	kfree(optee);
 }
@@ -1137,10 +1054,9 @@ static int optee_ffa_probe(struct ffa_device *ffa_dev)
 
 	optee_set_dev_group(optee);
 
-	rc = rhashtable_init(&optee->ffa.global_ids, &shm_rhash_params);
+	rc = optee_shm_handle_map_init(&optee->ffa.shm_map);
 	if (rc)
 		goto err_unreg_supp_teedev;
-	mutex_init(&optee->ffa.mutex);
 	optee_cq_init(&optee->call_queue, 0);
 	optee_supp_init(&optee->supp);
 	optee_shm_arg_cache_init(optee, arg_cache_flags);
@@ -1193,12 +1109,11 @@ err_unregister_devices:
 err_close_ctx:
 	teedev_close_context(ctx);
 err_rhashtable_free:
-	rhashtable_free_and_destroy(&optee->ffa.global_ids, rh_free_fn, NULL);
+	optee_shm_handle_map_uninit(&optee->ffa.shm_map);
 	rpmb_dev_put(optee->rpmb_dev);
 	mutex_destroy(&optee->rpmb_dev_mutex);
 	optee_supp_uninit(&optee->supp);
 	mutex_destroy(&optee->call_queue.mutex);
-	mutex_destroy(&optee->ffa.mutex);
 err_unreg_supp_teedev:
 	tee_device_unregister(optee->supp_teedev);
 err_unreg_teedev:
