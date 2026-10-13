@@ -730,6 +730,15 @@ static int do_tls_setsockopt_conf(struct sock *sk, sockptr_t optval,
 			conf = TLS_SW;
 		}
 	} else {
+		struct tls_sw_context_rx *rx_ctx = tls_sw_ctx_rx(ctx);
+
+		/* Only a KeyUpdate may follow the last record number */
+		if (update && rx_ctx->rec_seq_exhausted &&
+		    !rx_ctx->key_update_pending) {
+			rc = -EBADMSG;
+			goto err_crypto_info;
+		}
+
 		rc = tls_set_device_offload_rx(sk, ctx);
 		conf = TLS_HW;
 		if (!rc) {

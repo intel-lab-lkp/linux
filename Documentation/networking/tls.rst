@@ -202,6 +202,23 @@ received without a cmsg buffer set.
 
 recv will never return data from mixed types of TLS records.
 
+Receive record-number exhaustion
+--------------------------------
+
+The receive record number must not wrap under the same key. Once the
+record with the last 64-bit record number has been received, no further
+record is decrypted under that key: a receive that needs another record
+fails with ``EBADMSG``, even after ``SO_ERROR`` has been read. Plaintext
+that was already decrypted, such as the rest of a partially read or
+peeked final record, can still be read. This applies to both software
+and hardware receive offload.
+
+Unless the final record is a TLS 1.3 KeyUpdate, the condition is
+terminal: the socket error is also set to ``EBADMSG``, and a ``TLS_RX``
+key replacement fails with ``EBADMSG``. A KeyUpdate in the final record
+retires the key the usual way: receives fail with ``EKEYEXPIRED`` until a
+new ``TLS_RX`` key is installed, after which receiving continues.
+
 TLS 1.3 Key Updates
 -------------------
 

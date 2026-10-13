@@ -139,6 +139,8 @@ struct tls_sw_context_rx {
 	u8 zc_capable:1;
 	u8 reader_contended:1;
 	bool key_update_pending;
+	/* record numbers of this key are used up; cleared by a KeyUpdate */
+	bool rec_seq_exhausted;
 
 	struct tls_strparser strp;
 

@@ -307,17 +307,26 @@ static inline void tls_bigint_subtract(unsigned char *seq, int  n)
 	*p = cpu_to_be64(rcd_sn - n);
 }
 
-static inline void
-tls_advance_record_sn(struct sock *sk, struct tls_prot_info *prot,
-		      struct cipher_context *ctx)
+/* Returns true if the record number wrapped */
+static inline bool
+__tls_advance_record_sn(struct tls_prot_info *prot, struct cipher_context *ctx)
 {
-	if (tls_bigint_increment(ctx->rec_seq, prot->rec_seq_size))
-		tls_err_abort(sk, -EBADMSG);
+	bool overflow = tls_bigint_increment(ctx->rec_seq, prot->rec_seq_size);
 
 	if (prot->version != TLS_1_3_VERSION &&
 	    prot->cipher_type != TLS_CIPHER_CHACHA20_POLY1305)
 		tls_bigint_increment(ctx->iv + prot->salt_size,
 				     prot->iv_size);
+
+	return overflow;
+}
+
+static inline void
+tls_advance_record_sn(struct sock *sk, struct tls_prot_info *prot,
+		      struct cipher_context *ctx)
+{
+	if (__tls_advance_record_sn(prot, ctx))
+		tls_err_abort(sk, -EBADMSG);
 }
 
 static inline void

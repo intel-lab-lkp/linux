@@ -1104,6 +1104,10 @@ tls_rx_rec_wait(struct sock *sk, bool nonblock, bool released, bool has_copied)
 	if (unlikely(ctx->key_update_pending))
 		return -EKEYEXPIRED;
 
+	/* no record can follow the last one under this key */
+	if (unlikely(ctx->rec_seq_exhausted))
+		return -EBADMSG;
+
 	timeo = sock_rcvtimeo(sk, nonblock);
 
 	while (!tls_strp_msg_ready(ctx)) {
@@ -1566,6 +1570,7 @@ static int tls_rx_one_record(struct sock *sk, struct msghdr *msg,
 {
 	struct tls_context *tls_ctx = tls_get_ctx(sk);
 	struct tls_prot_info *prot = &tls_ctx->prot_info;
+	struct tls_sw_context_rx *ctx = tls_sw_ctx_rx(tls_ctx);
 	struct strp_msg *rxm;
 	int err;
 
@@ -1580,9 +1585,18 @@ static int tls_rx_one_record(struct sock *sk, struct msghdr *msg,
 	rxm = strp_msg(darg->skb);
 	rxm->offset += prot->prepend_size;
 	rxm->full_len -= prot->overhead_size;
-	tls_advance_record_sn(sk, prot, &tls_ctx->rx);
+	err = tls_check_pending_rekey(sk, tls_ctx, darg->skb);
+	if (__tls_advance_record_sn(prot, &tls_ctx->rx)) {
+		/* sk_err alone can't stop the next record, SO_ERROR clears
+		 * it. A KeyUpdate in the last record properly retires the
+		 * key, so don't treat that one as an error.
+		 */
+		ctx->rec_seq_exhausted = true;
+		if (!ctx->key_update_pending)
+			tls_err_abort(sk, -EBADMSG);
+	}
 
-	return tls_check_pending_rekey(sk, tls_ctx, darg->skb);
+	return err;
 }
 
 int decrypt_skb(struct sock *sk, struct scatterlist *sgout)
@@ -2518,6 +2532,7 @@ static void tls_finish_key_update(struct sock *sk, struct tls_context *tls_ctx)
 	struct tls_sw_context_rx *ctx = tls_ctx->priv_ctx_rx;
 
 	WRITE_ONCE(ctx->key_update_pending, false);
+	ctx->rec_seq_exhausted = false;
 	/* wake-up pre-existing poll() */
 	ctx->saved_data_ready(sk);
 }

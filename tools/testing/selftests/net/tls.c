@@ -26,6 +26,7 @@
 #define TLS_PAYLOAD_MAX_LEN 16384
 #define TLS_HDR_LEN 5
 #define SOL_TLS 282
+#define TLS_RECORD_TYPE_HANDSHAKE      0x16
 
 static int fips_enabled;
 
@@ -298,6 +299,261 @@ TEST_F(tls_basic, recseq_wrap)
 
 	EXPECT_EQ(send(self->fd, test_str, send_len, 0), -1);
 	EXPECT_EQ(errno, EBADMSG);
+}
+
+/* Fixed AES-GCM records avoid a dependency on a userspace crypto library.
+ * Each authenticates "test", with zero key and static IV, at sequence
+ * numbers UINT64_MAX - 1, UINT64_MAX and zero. TLS 1.2 uses the record
+ * number as its explicit IV; TLS 1.3 appends inner content type 23.
+ * The last record must never be accepted after counter exhaustion.
+ * tls_rx_recseq_ku_record is a TLS 1.3 KeyUpdate at UINT64_MAX.
+ */
+static const char tls_rx_recseq_ku_record[] =
+	"\x17\x03\x03\x00\x16\x49\xd1\xc7\x79\x45\x74\xd7"
+	"\x12\xe8\xbf\xe4\xaa\x70\x17\x58\x60\x66\xa0\xf9"
+	"\x5b\xac\x6a";
+
+FIXTURE(tls_rx_recseq)
+{
+	int fd, cfd;
+	bool notls;
+};
+
+FIXTURE_VARIANT(tls_rx_recseq)
+{
+	uint16_t tls_version;
+	size_t record_len;
+	const char *records[3];
+};
+
+FIXTURE_VARIANT_ADD(tls_rx_recseq, 12_aes_gcm)
+{
+	.tls_version = TLS_1_2_VERSION,
+	.record_len = 33,
+	.records = {
+		"\x17\x03\x03\x00\x1c\xff\xff\xff\xff\xff\xff\xff"
+		"\xfe\x62\x3c\xf3\xee\x4d\x18\x45\xf7\x62\x62\x2c"
+		"\x01\x9a\xfc\x47\x3d\x82\xb0\x9f\x7f",
+		"\x17\x03\x03\x00\x1c\xff\xff\xff\xff\xff\xff\xff"
+		"\xff\x25\xb4\xb4\x0c\xf7\x4c\xef\x86\xa2\xe1\x2d"
+		"\xa6\x31\xb5\x64\xf6\x21\x81\x7f\xad",
+		"\x17\x03\x03\x00\x1c\x00\x00\x00\x00\x00\x00\x00"
+		"\x00\x77\xed\xa9\xba\xbb\x29\xb7\x1a\x44\x35\x46"
+		"\x0f\x55\x94\x07\xdd\xc3\xe4\x91\x80",
+	},
+};
+
+FIXTURE_VARIANT_ADD(tls_rx_recseq, 13_aes_gcm)
+{
+	.tls_version = TLS_1_3_VERSION,
+	.record_len = 26,
+	.records = {
+		"\x17\x03\x03\x00\x15\x62\x3c\xf3\xee\xd7\x87\xd1"
+		"\x21\x46\x96\xc2\xfc\x59\x1c\x4c\x15\xec\x57\x6d"
+		"\xc8\x0a",
+		"\x17\x03\x03\x00\x15\x25\xb4\xb4\x0c\x52\x2e\x4d"
+		"\xcd\xf4\xec\xc2\x7e\xb8\x85\xed\xb7\x79\xf8\x39"
+		"\x68\xd6",
+		"\x17\x03\x03\x00\x15\x77\xed\xa9\xba\x77\x59\x33"
+		"\x88\x89\x13\x8d\x3c\xb4\x2e\xe0\x64\x72\xa5\x17"
+		"\x71\x45",
+	},
+};
+
+FIXTURE_SETUP(tls_rx_recseq)
+{
+	struct timeval timeout = { .tv_sec = 2 };
+	struct tls_crypto_info_keys key;
+	socklen_t len;
+	char buf[4];
+	int err;
+
+	ulp_sock_pair(_metadata, &self->fd, &self->cfd, &self->notls);
+	if (self->notls)
+		SKIP(return, "no TLS support");
+
+	ASSERT_EQ(setsockopt(self->cfd, SOL_SOCKET, SO_RCVTIMEO,
+			     &timeout, sizeof(timeout)), 0);
+	tls_crypto_info_init(variant->tls_version, TLS_CIPHER_AES_GCM_128,
+			     &key, 0);
+	memset(key.aes128.rec_seq, 0xff, sizeof(key.aes128.rec_seq));
+	key.aes128.rec_seq[sizeof(key.aes128.rec_seq) - 1]--;
+	ASSERT_EQ(setsockopt(self->cfd, SOL_TLS, TLS_RX, &key, key.len), 0);
+
+	/* The penultimate record must still advance normally. */
+	ASSERT_EQ(send(self->fd, variant->records[0], variant->record_len, 0),
+		  variant->record_len);
+	ASSERT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_WAITALL), sizeof(buf));
+	ASSERT_EQ(memcmp(buf, "test", sizeof(buf)), 0);
+	len = sizeof(err);
+	ASSERT_EQ(getsockopt(self->cfd, SOL_SOCKET, SO_ERROR, &err, &len), 0);
+	ASSERT_EQ(err, 0);
+};
+
+FIXTURE_TEARDOWN(tls_rx_recseq)
+{
+	close(self->fd);
+	close(self->cfd);
+};
+
+static void tls_clear_rx_error(struct __test_metadata *_metadata, int fd)
+{
+	socklen_t len;
+	int err;
+
+	len = sizeof(err);
+	ASSERT_EQ(getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len), 0);
+	ASSERT_EQ(err, EBADMSG);
+	len = sizeof(err);
+	ASSERT_EQ(getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len), 0);
+	ASSERT_EQ(err, 0);
+}
+
+TEST_F(tls_rx_recseq, queued)
+{
+	char records[80], buf[8];
+
+	memcpy(records, variant->records[1], variant->record_len);
+	memcpy(records + variant->record_len, variant->records[2],
+	       variant->record_len);
+	ASSERT_EQ(send(self->fd, records, 2 * variant->record_len, 0),
+		  2 * variant->record_len);
+
+	/* Both records are queued, but only the final valid one can pass. */
+	ASSERT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_WAITALL), 4);
+	EXPECT_EQ(memcmp(buf, "test", 4), 0);
+	tls_clear_rx_error(_metadata, self->cfd);
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_DONTWAIT), -1);
+	EXPECT_EQ(errno, EBADMSG);
+}
+
+TEST_F(tls_rx_recseq, so_error)
+{
+	char buf[4];
+
+	ASSERT_EQ(send(self->fd, variant->records[1], variant->record_len, 0),
+		  variant->record_len);
+	ASSERT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_WAITALL), sizeof(buf));
+	tls_clear_rx_error(_metadata, self->cfd);
+
+	ASSERT_EQ(send(self->fd, variant->records[2], variant->record_len, 0),
+		  variant->record_len);
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), 0), -1);
+	EXPECT_EQ(errno, EBADMSG);
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_DONTWAIT), -1);
+	EXPECT_EQ(errno, EBADMSG);
+}
+
+TEST_F(tls_rx_recseq, splice)
+{
+	char buf[4];
+	int p[2];
+
+	ASSERT_EQ(send(self->fd, variant->records[1], variant->record_len, 0),
+		  variant->record_len);
+	ASSERT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_WAITALL), sizeof(buf));
+	tls_clear_rx_error(_metadata, self->cfd);
+
+	ASSERT_EQ(send(self->fd, variant->records[2], variant->record_len, 0),
+		  variant->record_len);
+	ASSERT_EQ(pipe(p), 0);
+	EXPECT_EQ(splice(self->cfd, NULL, p[1], NULL, sizeof(buf), 0), -1);
+	EXPECT_EQ(errno, EBADMSG);
+	close(p[0]);
+	close(p[1]);
+}
+
+TEST_F(tls_rx_recseq, peek)
+{
+	char buf[4];
+
+	ASSERT_EQ(send(self->fd, variant->records[1], variant->record_len, 0),
+		  variant->record_len);
+	ASSERT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_PEEK), sizeof(buf));
+	tls_clear_rx_error(_metadata, self->cfd);
+
+	/* Plaintext decrypted before exhaustion can still be read. */
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_DONTWAIT), sizeof(buf));
+	EXPECT_EQ(memcmp(buf, "test", sizeof(buf)), 0);
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_DONTWAIT), -1);
+	EXPECT_EQ(errno, EBADMSG);
+}
+
+TEST_F(tls_rx_recseq, partial_read)
+{
+	char buf[4];
+
+	ASSERT_EQ(send(self->fd, variant->records[1], variant->record_len, 0),
+		  variant->record_len);
+	ASSERT_EQ(recv(self->cfd, buf, 1, 0), 1);
+	tls_clear_rx_error(_metadata, self->cfd);
+
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_DONTWAIT), 3);
+	EXPECT_EQ(memcmp(buf, "est", 3), 0);
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_DONTWAIT), -1);
+	EXPECT_EQ(errno, EBADMSG);
+}
+
+/* Only a KeyUpdate may introduce a key after the last record number. */
+TEST_F(tls_rx_recseq, rekey)
+{
+	struct tls_crypto_info_keys key;
+	struct tls12_crypto_info_aes_gcm_128 before, after;
+	socklen_t len;
+	char buf[4];
+
+	if (variant->tls_version != TLS_1_3_VERSION)
+		SKIP(return, "rekey requires TLS 1.3");
+
+	ASSERT_EQ(send(self->fd, variant->records[1], variant->record_len, 0),
+		  variant->record_len);
+	ASSERT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_WAITALL), sizeof(buf));
+	tls_clear_rx_error(_metadata, self->cfd);
+
+	len = sizeof(before);
+	ASSERT_EQ(getsockopt(self->cfd, SOL_TLS, TLS_RX, &before, &len), 0);
+	tls_crypto_info_init(variant->tls_version, TLS_CIPHER_AES_GCM_128,
+			     &key, 1);
+	EXPECT_EQ(setsockopt(self->cfd, SOL_TLS, TLS_RX, &key, key.len), -1);
+	EXPECT_EQ(errno, EBADMSG);
+	len = sizeof(after);
+	ASSERT_EQ(getsockopt(self->cfd, SOL_TLS, TLS_RX, &after, &len), 0);
+	EXPECT_EQ(memcmp(&before, &after, sizeof(before)), 0);
+}
+
+/* A KeyUpdate in the last record retires the key without an error. */
+TEST_F(tls_rx_recseq, keyupdate)
+{
+	size_t len = sizeof(tls_rx_recseq_ku_record) - 1;
+	struct tls_crypto_info_keys key;
+	socklen_t optlen;
+	char buf[16];
+	int err;
+
+	if (variant->tls_version != TLS_1_3_VERSION)
+		SKIP(return, "KeyUpdate requires TLS 1.3");
+
+	ASSERT_EQ(send(self->fd, tls_rx_recseq_ku_record, len, 0), len);
+	EXPECT_EQ(tls_recv_cmsg(_metadata, self->cfd, TLS_RECORD_TYPE_HANDSHAKE,
+				buf, sizeof(buf), 0), 5);
+	EXPECT_EQ(memcmp(buf, "\x18\x00\x00\x01\x00", 5), 0);
+	EXPECT_EQ(recv(self->cfd, buf, sizeof(buf), MSG_DONTWAIT), -1);
+	EXPECT_EQ(errno, EKEYEXPIRED);
+	optlen = sizeof(err);
+	ASSERT_EQ(getsockopt(self->cfd, SOL_SOCKET, SO_ERROR, &err, &optlen), 0);
+	EXPECT_EQ(err, 0);
+
+	/* The new key resets the record number, so receiving continues. */
+	tls_crypto_info_init(variant->tls_version, TLS_CIPHER_AES_GCM_128,
+			     &key, 1);
+	ASSERT_EQ(setsockopt(self->cfd, SOL_TLS, TLS_RX, &key, key.len), 0);
+	ASSERT_EQ(setsockopt(self->fd, SOL_TLS, TLS_TX, &key, key.len), 0);
+	ASSERT_EQ(send(self->fd, "test", 4, 0), 4);
+	ASSERT_EQ(recv(self->cfd, buf, 4, MSG_WAITALL), 4);
+	EXPECT_EQ(memcmp(buf, "test", 4), 0);
+	optlen = sizeof(err);
+	ASSERT_EQ(getsockopt(self->cfd, SOL_SOCKET, SO_ERROR, &err, &optlen), 0);
+	EXPECT_EQ(err, 0);
 }
 
 FIXTURE(tls)
@@ -1838,8 +2094,6 @@ TEST_F(tls, recv_efault)
 	if (ret > 9)
 		EXPECT_EQ(memcmp(rec2, recv_mem + 9, ret - 9), 0);
 }
-
-#define TLS_RECORD_TYPE_HANDSHAKE      0x16
 
 TEST_F(tls_basic, recvmsg_nopad_retry_iov)
 {
