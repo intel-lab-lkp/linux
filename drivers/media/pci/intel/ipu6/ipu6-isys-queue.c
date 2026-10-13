@@ -515,6 +515,13 @@ static void return_buffers(struct ipu6_isys_queue *aq,
 
 	spin_unlock_irqrestore(&aq->lock, flags);
 
+	/*
+	 * On IPU7 the buffers still queued to the firmware are left on the
+	 * active list by every stream stop. That is not an error there.
+	 */
+	if (IS_IPU7(av->isys->adev->isp))
+		need_reset = false;
+
 	if (need_reset) {
 		mutex_lock(&av->isys->mutex);
 		av->isys->need_reset = true;
