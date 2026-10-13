@@ -4398,6 +4398,7 @@ int ufshcd_dme_set_attr(struct ufs_hba *hba, u32 attr_sel,
 	int retries = UFS_UIC_COMMAND_RETRIES;
 
 	do {
+		uic_cmd.argument2 &= ~MASK_UIC_COMMAND_RESULT;
 		/* for peer attributes we retry upon failure */
 		ret = ufshcd_send_uic_cmd(hba, &uic_cmd);
 		if (ret)
@@ -4465,6 +4466,7 @@ int ufshcd_dme_get_attr(struct ufs_hba *hba, u32 attr_sel,
 	}
 
 	do {
+		uic_cmd.argument2 &= ~MASK_UIC_COMMAND_RESULT;
 		/* for peer attributes we retry upon failure */
 		ret = ufshcd_send_uic_cmd(hba, &uic_cmd);
 		if (ret)
