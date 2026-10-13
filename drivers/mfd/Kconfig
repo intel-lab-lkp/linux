@@ -1178,6 +1178,19 @@ config MFD_NCT6694
 	  Additional drivers must be enabled to utilize the specific
 	  functionalities of the device.
 
+config MFD_NCT6694_HIF
+	tristate "Nuvoton NCT6694 HIF (eSPI) interface support"
+	depends on MFD_NCT6694 && HAS_IOPORT && ACPI
+	select REGMAP_MMIO
+	help
+	  This enables support for the Nuvoton NCT6694 connected through
+	  the Host Interface (HIF) over eSPI. The driver uses the Super-I/O
+	  configuration and the shared memory window to send commands to
+	  the device firmware.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called nct6694-hif.
+
 config MFD_NCT6694_USB
 	tristate "Nuvoton NCT6694 USB interface support"
 	depends on MFD_NCT6694 && USB
