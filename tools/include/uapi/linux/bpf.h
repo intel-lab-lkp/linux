@@ -7062,6 +7062,7 @@ struct bpf_sock_ops {
 	 *                                header has not been written.
 	 * BPF_SOCK_OPS_WRITE_HDR_OPT_CB: The header and options have
 	 *				  been written so far.
+	 * BPF_SOCK_OPS_TCP_TS_ID_CB:     The SYN received by a listener.
 	 * BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB:  The SYNACK that concludes
 	 *					the 3WHS.
 	 * BPF_SOCK_OPS_PASSIVE_ESTABLISHED_CB: The ACK that concludes
@@ -7137,8 +7138,12 @@ enum {
 	 * options first before the BPF program does.
 	 */
 	BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG = (1<<6),
+	/* Call bpf to select a TCP timestamp connection ID for a passive
+	 * connection before sending the SYN-ACK.
+	 */
+	BPF_SOCK_OPS_TCP_TS_ID_CB_FLAG = (1 << 7),
 /* Mask of all currently supported cb flags */
-	BPF_SOCK_OPS_ALL_CB_FLAGS       = 0x7F,
+	BPF_SOCK_OPS_ALL_CB_FLAGS       = 0xFF,
 };
 
 enum {
@@ -7281,6 +7286,14 @@ enum {
 					 * is triggered. It's used to correlate
 					 * sendmsg timestamp with corresponding
 					 * tskey.
+					 */
+	BPF_SOCK_OPS_TCP_TS_ID_CB,	/* Called after a passive SYN created a
+					 * request socket and before the SYN-ACK is
+					 * sent. Not called for SYN cookies. Arg2 is
+					 * the number of low timestamp bits available
+					 * for an identifier. Set reply to an identifier
+					 * that fits in Arg2 bits. Replies are ignored
+					 * for usec timestamps.
 					 */
 };
 

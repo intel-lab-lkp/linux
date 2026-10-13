@@ -55,6 +55,7 @@ static int tcp_min_rcvbuf = 4096;
 
 /* obsolete */
 static int sysctl_tcp_low_latency __read_mostly;
+static const unsigned int tcp_ts_id_bits_max = TCP_TS_ID_BITS_MAX;
 
 /* Update system visible IP port range */
 static void set_local_port_range(struct net *net, unsigned int low, unsigned int high)
@@ -1226,6 +1227,15 @@ static const struct ctl_table ipv4_net_table[] = {
 		.maxlen		= sizeof(u8),
 		.mode		= 0644,
 		.proc_handler	= proc_dou8vec_minmax,
+	},
+	{
+		.procname	= "tcp_ts_id_bits",
+		.data		= &init_net.ipv4.sysctl_tcp_ts_id_bits,
+		.maxlen		= sizeof(u8),
+		.mode		= 0644,
+		.proc_handler	= proc_dou8vec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= (void *)&tcp_ts_id_bits_max,
 	},
 	{
 		.procname	= "tcp_early_retrans",

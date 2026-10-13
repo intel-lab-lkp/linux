@@ -87,6 +87,7 @@ unsigned_int                    sysctl_tcp_notsent_lowat                     rea
 u8                              sysctl_tcp_sack                                                                      tcp_syn_options
 u8                              sysctl_tcp_window_scaling                                                            tcp_syn_options,tcp_parse_options
 u8                              sysctl_tcp_timestamps
+u8                              sysctl_tcp_ts_id_bits                                                               bpf_skops_tcp_ts_id
 u8                              sysctl_tcp_early_retrans                     read_mostly                             tcp_schedule_loss_probe(tcp_write_xmit)
 u32                             sysctl_tcp_rto_max_ms
 u8                              sysctl_tcp_recovery                                                                  tcp_fastretrans_alert

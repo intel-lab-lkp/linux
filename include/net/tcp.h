@@ -1105,6 +1105,14 @@ static inline u32 tcp_tsecr_decode(u32 tsecr, u32 tsoffset, u8 ts_id_bits,
 	return now + sign_extend32(tsecr - now, 31 - ts_id_bits);
 }
 
+/* A TSecr echoing one of our TSvals must still carry our identifier in its
+ * low bits; anything else means the echo was rewritten in flight.
+ */
+static inline bool tcp_tsecr_id_ok(u32 tsecr, u8 ts_id, u8 ts_id_bits)
+{
+	return (tsecr & tcp_ts_id_mask(ts_id_bits)) == ts_id;
+}
+
 /* Keeps the timestamp clock read behind the branch: it is only needed to
  * re-center an echo that was truncated to make room for an identifier.
  */

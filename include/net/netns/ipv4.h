@@ -204,6 +204,7 @@ struct netns_ipv4 {
 	u8 sysctl_tcp_sack;
 	u8 sysctl_tcp_window_scaling;
 	u8 sysctl_tcp_timestamps;
+	u8 sysctl_tcp_ts_id_bits;
 	int sysctl_tcp_rto_min_us;
 	int sysctl_tcp_rto_max_ms;
 	u8 sysctl_tcp_recovery;

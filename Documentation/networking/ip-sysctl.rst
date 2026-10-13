@@ -1096,6 +1096,43 @@ tcp_timestamps - INTEGER
 
 	Default: 1
 
+tcp_ts_id_bits - INTEGER
+	Number of low bits in locally generated TCP timestamp values that may
+	contain an identifier selected by BPF_SOCK_OPS_TCP_TS_ID_CB. The upper
+	bits contain the millisecond timestamp clock. Valid values are 0 to 8.
+	A value of 0 disables the callback and timestamp identifier encoding.
+
+	The value is captured when the callback selects an identifier. Changing
+	it does not alter existing connections. Identifier encoding is disabled
+	for connections using microsecond timestamps and for SYN cookies.
+
+	Encoding shifts the timestamp clock up by this many bits, so the TSval
+	wrap time falls from 49.7 days to 49.7/2^bits days and peers see an
+	apparently faster clock. Peers that size their PAWS replay window in
+	timestamp units (Linux does) therefore tolerate less real time before
+	rejecting a reordered pure ACK. The window shrinks with every extra
+	bit, so use the narrowest width that holds the identifiers needed.
+
+	The faster clock also limits how long a connection may stay idle.
+	TSval advances by 2^31 after 24.8/2^bits days (about 2.3 hours at 8
+	bits, 37 hours at 4 bits). Linux peers stop enforcing PAWS after 2147
+	seconds of idle, so they are unaffected. Peers that follow RFC 7323 and
+	keep ts_recent for 24 days (e.g. FreeBSD, macOS) will drop every
+	segment once that point is passed. The connection then stalls until it
+	times out. Traffic in either direction, including TCP keepalives, more
+	often than this interval prevents it.
+
+	Progress is visible through the TCPTSId* counters in
+	/proc/net/netstat.
+
+	Checkpoint/restore is not supported. The identifier is selected by BPF
+	when the SYN arrives and cannot be restored onto a new socket, so a
+	connection carrying one will emit unencoded timestamp values after a
+	TCP_REPAIR restore and be rejected by the peer's PAWS check. Leave
+	this at 0 on hosts that migrate established connections.
+
+	Default: 0 (disabled)
+
 tcp_min_tso_segs - INTEGER
 	Minimal number of segments per TSO frame.
 

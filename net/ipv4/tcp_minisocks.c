@@ -719,6 +719,15 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 					tsecr_reject = !between(tmp_opt.rcv_tsecr,
 							tcp_rsk(req)->snt_tsval_first,
 							READ_ONCE(tcp_rsk(req)->snt_tsval_last));
+				/* First echo of a TSval we encoded: a mismatch
+				 * here means TSecr was rewritten in flight.
+				 */
+				if (tcp_rsk(req)->ts_id_bits &&
+				    !tcp_tsecr_id_ok(tmp_opt.rcv_tsecr,
+						     tcp_rsk(req)->ts_id,
+						     tcp_rsk(req)->ts_id_bits))
+					NET_INC_STATS(sock_net(sk),
+						      LINUX_MIB_TCPTSIDECHOMISMATCH);
 				tmp_opt.rcv_tsecr =
 					tcp_tsecr_decode(tmp_opt.rcv_tsecr,
 							 tcp_rsk(req)->ts_off,

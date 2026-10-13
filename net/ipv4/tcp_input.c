@@ -144,6 +144,49 @@ EXPORT_SYMBOL_GPL(clean_acked_data_flush);
 #endif
 
 #ifdef CONFIG_CGROUP_BPF
+static void bpf_skops_tcp_ts_id(struct sock *sk, struct request_sock *req,
+				struct sk_buff *skb)
+{
+	struct bpf_sock_ops_kern sock_ops;
+	u8 ts_id_bits;
+	int err;
+
+	/* Cheapest and most selective test first: it keeps the netns sysctl
+	 * out of the SYN path for listeners that never opted in.
+	 */
+	if (!BPF_SOCK_OPS_TEST_FLAG(tcp_sk(sk),
+				    BPF_SOCK_OPS_TCP_TS_ID_CB_FLAG))
+		return;
+
+	if (tcp_rsk(req)->req_usec_ts) {
+		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPTSIDSKIPPED);
+		return;
+	}
+
+	ts_id_bits = READ_ONCE(sock_net(sk)->ipv4.sysctl_tcp_ts_id_bits);
+	if (!ts_id_bits) {
+		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPTSIDSKIPPED);
+		return;
+	}
+
+	memset(&sock_ops, 0, offsetof(struct bpf_sock_ops_kern, temp));
+	sock_ops.op = BPF_SOCK_OPS_TCP_TS_ID_CB;
+	sock_ops.sk = req_to_sk(req);
+	sock_ops.syn_skb = skb;
+	sock_ops.args[1] = ts_id_bits;
+	sock_ops.reply = U32_MAX;
+	bpf_skops_init_skb(&sock_ops, skb, tcp_hdrlen(skb));
+
+	err = BPF_CGROUP_RUN_PROG_SOCK_OPS_SK(&sock_ops, sk);
+	if (!err && sock_ops.reply <= tcp_ts_id_mask(ts_id_bits)) {
+		tcp_rsk(req)->ts_id = sock_ops.reply;
+		tcp_rsk(req)->ts_id_bits = ts_id_bits;
+		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPTSIDASSIGNED);
+	} else {
+		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPTSIDDECLINED);
+	}
+}
+
 static void bpf_skops_parse_hdr(struct sock *sk, struct sk_buff *skb)
 {
 	bool unknown_opt = tcp_sk(sk)->rx_opt.saw_unknown &&
@@ -198,6 +241,11 @@ static void bpf_skops_established(struct sock *sk, int bpf_op,
 	BPF_CGROUP_RUN_PROG_SOCK_OPS(&sock_ops);
 }
 #else
+static void bpf_skops_tcp_ts_id(struct sock *sk, struct request_sock *req,
+				struct sk_buff *skb)
+{
+}
+
 static void bpf_skops_parse_hdr(struct sock *sk, struct sk_buff *skb)
 {
 }
@@ -7781,6 +7829,8 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	sk_rx_queue_set(req_to_sk(req), skb);
 	if (!want_cookie) {
 		tcp_reqsk_record_syn(sk, req, skb);
+		if (inet_rsk(req)->tstamp_ok)
+			bpf_skops_tcp_ts_id(sk, req, skb);
 		fastopen_sk = tcp_try_fastopen(sk, skb, req, &foc, dst);
 	}
 	if (fastopen_sk) {
