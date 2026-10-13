@@ -2528,8 +2528,13 @@ static int call_zone_finish(struct btrfs_block_group *block_group,
 			return ret;
 	}
 
-	if (!(block_group->flags & BTRFS_BLOCK_GROUP_DATA))
+	if (!(block_group->flags & BTRFS_BLOCK_GROUP_DATA)) {
+		struct btrfs_fs_info *fs_info = block_group->fs_info;
+
+		spin_lock(&fs_info->zone_active_bgs_lock);
 		zinfo->reserved_active_zones++;
+		spin_unlock(&fs_info->zone_active_bgs_lock);
+	}
 	btrfs_dev_clear_active_zone(device, physical);
 
 	return 0;
