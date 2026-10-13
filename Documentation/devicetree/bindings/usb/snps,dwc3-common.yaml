@@ -51,6 +51,13 @@ properties:
       - items:
           pattern: "^usb(2-([0-9]|1[0-4])|3-[0-3])$"
 
+  usb-psy-name:
+    description:
+      Name of the USB power supply accepting the input current limit
+      requested by the gadget after USB configuration, and during bus
+      suspend and resume.
+    $ref: /schemas/types.yaml#/definitions/string
+
   snps,usb2-lpm-disable:
     description: Indicate if we don't want to enable USB2 HW LPM for host
       mode.
