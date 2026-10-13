@@ -312,6 +312,11 @@ struct qcom_glink_smem *qcom_glink_smem_register(struct device *parent,
 	}
 
 	smem->irq = of_irq_get(smem->dev.of_node, 0);
+	if (smem->irq <= 0) {
+		ret = smem->irq ?: -EINVAL;
+		goto err_put_dev;
+	}
+
 	ret = devm_request_irq(&smem->dev, smem->irq, qcom_glink_smem_intr,
 			       IRQF_NO_SUSPEND | IRQF_NO_AUTOEN,
 			       "glink-smem", smem);
