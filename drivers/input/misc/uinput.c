@@ -119,14 +119,78 @@ static bool uinput_request_alloc_id(struct uinput_device *udev,
 	return reserved;
 }
 
+/*
+ * Find an input request, by ID. Returns NULL if the ID isn't valid.
+ * Requests live on their submitter's stack, so the caller must hold
+ * requests_lock while using the result.
+ */
 static struct uinput_request *uinput_request_find(struct uinput_device *udev,
 						  unsigned int id)
 {
-	/* Find an input request, by ID. Returns NULL if the ID isn't valid. */
+	lockdep_assert_held(&udev->requests_lock);
+
 	if (id >= UINPUT_NUM_REQUESTS)
 		return NULL;
 
 	return udev->requests[id];
+}
+
+static int uinput_ff_upload_begin(struct uinput_device *udev,
+				  struct uinput_ff_upload *ff_up)
+{
+	struct uinput_request *req;
+
+	guard(spinlock)(&udev->requests_lock);
+
+	req = uinput_request_find(udev, ff_up->request_id);
+	if (!req || req->code != UI_FF_UPLOAD || !req->u.upload.effect)
+		return -EINVAL;
+
+	ff_up->retval = 0;
+	ff_up->effect = *req->u.upload.effect;
+	if (req->u.upload.old)
+		ff_up->old = *req->u.upload.old;
+	else
+		memset(&ff_up->old, 0, sizeof(ff_up->old));
+
+	return 0;
+}
+
+static int uinput_ff_erase_begin(struct uinput_device *udev,
+				 struct uinput_ff_erase *ff_erase)
+{
+	struct uinput_request *req;
+
+	guard(spinlock)(&udev->requests_lock);
+
+	req = uinput_request_find(udev, ff_erase->request_id);
+	if (!req || req->code != UI_FF_ERASE)
+		return -EINVAL;
+
+	ff_erase->retval = 0;
+	ff_erase->effect_id = req->u.effect_id;
+
+	return 0;
+}
+
+static int uinput_ff_request_end(struct uinput_device *udev,
+				 unsigned int id, unsigned int code, int retval)
+{
+	struct uinput_request *req;
+
+	guard(spinlock)(&udev->requests_lock);
+
+	req = uinput_request_find(udev, id);
+	if (!req || req->code != code)
+		return -EINVAL;
+
+	if (code == UI_FF_UPLOAD && !req->u.upload.effect)
+		return -EINVAL;
+
+	req->retval = retval;
+	complete(&req->done);
+
+	return 0;
 }
 
 static int uinput_request_reserve_slot(struct uinput_device *udev,
@@ -913,7 +977,6 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 	struct uinput_device	*udev = file->private_data;
 	struct uinput_ff_upload ff_up;
 	struct uinput_ff_erase  ff_erase;
-	struct uinput_request   *req;
 	char			*phys;
 	const char		*name;
 	unsigned int		size;
@@ -1011,19 +1074,9 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 		if (retval)
 			goto out;
 
-		req = uinput_request_find(udev, ff_up.request_id);
-		if (!req || req->code != UI_FF_UPLOAD ||
-		    !req->u.upload.effect) {
-			retval = -EINVAL;
+		retval = uinput_ff_upload_begin(udev, &ff_up);
+		if (retval)
 			goto out;
-		}
-
-		ff_up.retval = 0;
-		ff_up.effect = *req->u.upload.effect;
-		if (req->u.upload.old)
-			ff_up.old = *req->u.upload.old;
-		else
-			memset(&ff_up.old, 0, sizeof(struct ff_effect));
 
 		retval = uinput_ff_upload_to_user(p, &ff_up);
 		goto out;
@@ -1034,14 +1087,10 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 			goto out;
 		}
 
-		req = uinput_request_find(udev, ff_erase.request_id);
-		if (!req || req->code != UI_FF_ERASE) {
-			retval = -EINVAL;
+		retval = uinput_ff_erase_begin(udev, &ff_erase);
+		if (retval)
 			goto out;
-		}
 
-		ff_erase.retval = 0;
-		ff_erase.effect_id = req->u.effect_id;
 		if (copy_to_user(p, &ff_erase, sizeof(ff_erase))) {
 			retval = -EFAULT;
 			goto out;
@@ -1054,15 +1103,8 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 		if (retval)
 			goto out;
 
-		req = uinput_request_find(udev, ff_up.request_id);
-		if (!req || req->code != UI_FF_UPLOAD ||
-		    !req->u.upload.effect) {
-			retval = -EINVAL;
-			goto out;
-		}
-
-		req->retval = ff_up.retval;
-		complete(&req->done);
+		retval = uinput_ff_request_end(udev, ff_up.request_id,
+					       UI_FF_UPLOAD, ff_up.retval);
 		goto out;
 
 	case UI_END_FF_ERASE:
@@ -1071,14 +1113,8 @@ static long uinput_ioctl_handler(struct file *file, unsigned int cmd,
 			goto out;
 		}
 
-		req = uinput_request_find(udev, ff_erase.request_id);
-		if (!req || req->code != UI_FF_ERASE) {
-			retval = -EINVAL;
-			goto out;
-		}
-
-		req->retval = ff_erase.retval;
-		complete(&req->done);
+		retval = uinput_ff_request_end(udev, ff_erase.request_id,
+					       UI_FF_ERASE, ff_erase.retval);
 		goto out;
 	}
 
