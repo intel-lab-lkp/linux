@@ -123,6 +123,10 @@ enum sunxi_desc_bias_voltage {
 	 */
 	BIAS_VOLTAGE_PIO_POW_MODE_SEL,
 	/*
+	 * Same as above, but using a 2-bits-per-bank encoding.
+	 */
+	BIAS_VOLTAGE_PIO_POW_MODE_SEL_2BIT,
+	/*
 	 * Bias voltage is set through PIO_POW_MOD_SEL_REG
 	 * and PIO_POW_MOD_CTL_REG register, as seen on
 	 * A100 and D1 SoC, for example.

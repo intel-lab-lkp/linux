@@ -783,6 +783,7 @@ static int sunxi_pinctrl_set_io_bias_cfg(struct sunxi_pinctrl *pctl,
 		raw_spin_unlock_irqrestore(&pctl->lock, flags);
 
 		fallthrough;
+	case BIAS_VOLTAGE_PIO_POW_MODE_SEL_2BIT:
 	case BIAS_VOLTAGE_PIO_POW_MODE_SEL:
 		val = uV <= 1800000 ? 1 : 0;
 		if (inverted)
@@ -790,9 +791,14 @@ static int sunxi_pinctrl_set_io_bias_cfg(struct sunxi_pinctrl *pctl,
 
 		raw_spin_lock_irqsave(&pctl->lock, flags);
 		reg = readl(pctl->membase + pctl->pow_mod_sel_offset);
-		reg &= ~(1 << bank);
-		writel(reg | val << bank,
-		       pctl->membase + pctl->pow_mod_sel_offset);
+		if (pctl->desc->io_bias_cfg_variant == BIAS_VOLTAGE_PIO_POW_MODE_SEL_2BIT) {
+			reg &= ~(3U << (bank * 2));
+			reg |= (val | 0x2) << (bank * 2);
+		} else {
+			reg &= ~BIT(bank);
+			reg |= val << bank;
+		}
+		writel(reg, pctl->membase + pctl->pow_mod_sel_offset);
 		raw_spin_unlock_irqrestore(&pctl->lock, flags);
 		return 0;
 	default:
