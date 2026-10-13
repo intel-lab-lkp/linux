@@ -1965,6 +1965,7 @@ static void unmap_partial_tx_skb(struct happy_meal *hp, u32 first_mapping,
 		len = hme_read_desc32(hp, &this->tx_flags);
 		len &= TXFLAG_SIZE;
 		dma_unmap_page(hp->dma_dev, addr, len, DMA_TO_DEVICE);
+		first_entry = NEXT_TX(first_entry);
 	}
 }
 
