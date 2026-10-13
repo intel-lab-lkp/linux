@@ -330,8 +330,8 @@ void ice_ptp_complete_tx_single_tstamp(struct ice_ptp_tx *tx);
 void ice_ptp_process_ts(struct ice_pf *pf);
 irqreturn_t ice_ptp_ts_irq(struct ice_pf *pf);
 bool ice_ptp_tx_tstamps_pending(struct ice_pf *pf, bool in_irq);
-u64 ice_ptp_read_src_clk_reg(struct ice_pf *pf,
-			     struct ptp_system_timestamp *sts);
+int ice_ptp_read_src_clk_reg(struct ice_pf *pf,
+			     struct ptp_system_timestamp *sts, u64 *time);
 
 u64 ice_ptp_get_rx_hwts(const union ice_32b_rx_flex_desc *rx_desc,
 			const struct ice_pkt_ctx *pkt_ctx);
@@ -383,10 +383,11 @@ ice_ptp_tx_tstamps_pending(struct ice_pf *pf, bool in_irq)
 	return false;
 }
 
-static inline u64 ice_ptp_read_src_clk_reg(struct ice_pf *pf,
-					   struct ptp_system_timestamp *sts)
+static inline int ice_ptp_read_src_clk_reg(struct ice_pf *pf,
+					   struct ptp_system_timestamp *sts,
+					   u64 *time)
 {
-	return 0;
+	return -EOPNOTSUPP;
 }
 
 static inline u64
