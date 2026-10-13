@@ -1534,6 +1534,21 @@ static int dpu_crtc_atomic_check(struct drm_crtc *crtc,
 
 	bool needs_dirtyfb = dpu_crtc_needs_dirtyfb(crtc_state);
 
+	/*
+	 * The DRM core only checks the blob against the maximum LUT size and
+	 * the element size, so a shorter blob is accepted.  The GC path packs
+	 * DPU_GAMMA_LUT_SIZE entries unconditionally, so validate the size
+	 * here to avoid reading past the end of the blob.
+	 */
+	if (crtc_state->gamma_lut &&
+	    crtc_state->gamma_lut->length !=
+			DPU_GAMMA_LUT_SIZE * sizeof(struct drm_color_lut)) {
+		DRM_DEBUG_ATOMIC("%s: invalid gamma LUT size %zu, expected %zu\n",
+				 dpu_crtc->name, crtc_state->gamma_lut->length,
+				 DPU_GAMMA_LUT_SIZE * sizeof(struct drm_color_lut));
+		return -EINVAL;
+	}
+
 	/* don't reallocate resources if only ACTIVE has beeen changed */
 	if (crtc_state->mode_changed || crtc_state->connectors_changed ||
 	    crtc_state->color_mgmt_changed) {
