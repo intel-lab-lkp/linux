@@ -3326,6 +3326,20 @@ static void ice_ptp_setup_adapter(struct ice_pf *pf)
 	rcu_assign_pointer(pf->adapter->ctrl_pf, pf);
 }
 
+static void ice_ptp_cleanup_adapter(struct ice_pf *pf)
+{
+	guard(rwsem_write)(&pf->adapter->ctrl_pf_lock);
+
+	/* Zero out adapter->ctrl_pf pointer when the ctrl_pf itself
+	 * is being removed to prevent any secondary PFs from accessing
+	 * it after it is deleted.
+	 */
+	if (ice_get_ctrl_pf(pf) == pf) {
+		rcu_assign_pointer(pf->adapter->ctrl_pf, NULL);
+		synchronize_rcu();
+	}
+}
+
 static int ice_ptp_setup_pf(struct ice_pf *pf)
 {
 	struct ice_ptp *ptp = &pf->ptp;
@@ -3654,6 +3668,7 @@ err_release_kworker:
 	kthread_destroy_worker(ptp->kworker);
 	ptp->kworker = NULL;
 err_exit:
+	ice_ptp_cleanup_adapter(pf);
 	/* If we registered a PTP clock, release it */
 	if (pf->ptp.clock) {
 		ptp_clock_unregister(ptp->clock);
@@ -3679,10 +3694,6 @@ void ice_ptp_release(struct ice_pf *pf)
 		return;
 
 	if (pf->ptp.state != ICE_PTP_READY) {
-		if (pf->ptp.clock) {
-			ptp_clock_unregister(pf->ptp.clock);
-			pf->ptp.clock = NULL;
-		}
 		ice_ptp_cleanup_pf(pf);
 		ice_ptp_release_tx_tracker(pf, &pf->ptp.port.tx);
 		if (pf->ptp.kworker) {
@@ -3691,6 +3702,13 @@ void ice_ptp_release(struct ice_pf *pf)
 				kthread_cancel_delayed_work_sync(&pf->ptp.port.ov_work);
 			kthread_destroy_worker(pf->ptp.kworker);
 			pf->ptp.kworker = NULL;
+		}
+		/* Unregister only once no sibling PF can reach pf->ptp.clock
+		 * through adapter->ctrl_pf any more.
+		 */
+		if (pf->ptp.clock) {
+			ptp_clock_unregister(pf->ptp.clock);
+			pf->ptp.clock = NULL;
 		}
 
 		pf->ptp.state = ICE_PTP_UNINIT;
@@ -3703,6 +3721,8 @@ void ice_ptp_release(struct ice_pf *pf)
 	ice_ptp_disable_timestamp_mode(pf);
 
 	ice_ptp_cleanup_pf(pf);
+
+	ice_ptp_cleanup_adapter(pf);
 
 	ice_ptp_release_tx_tracker(pf, &pf->ptp.port.tx);
 
