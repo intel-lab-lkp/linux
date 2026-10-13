@@ -3090,7 +3090,7 @@ static bool ni_update_parent(struct ntfs_inode *ni, struct NTFS_DUP_INFO *dup,
 		}
 	}
 
-	dup->extend_data = 0;
+	dup->rp.reparse = 0;
 
 	if (dup->fa & FILE_ATTRIBUTE_REPARSE_POINT) {
 		attr = ni_find_attr(ni, NULL, NULL, ATTR_REPARSE, NULL, 0, NULL,
@@ -3103,7 +3103,7 @@ static bool ni_update_parent(struct ntfs_inode *ni, struct NTFS_DUP_INFO *dup,
 					      sizeof(struct REPARSE_POINT));
 			/* If ATTR_REPARSE exists 'rp' can't be NULL. */
 			if (rp)
-				dup->extend_data = rp->ReparseTag;
+				dup->rp.reparse = rp->ReparseTag;
 		}
 	} else if (ni->ni_flags & NI_FLAG_EA) {
 		attr = ni_find_attr(ni, attr, &le, ATTR_EA_INFO, NULL, 0, NULL,
@@ -3114,7 +3114,7 @@ static bool ni_update_parent(struct ntfs_inode *ni, struct NTFS_DUP_INFO *dup,
 			info = resident_data_ex(attr, sizeof(struct EA_INFO));
 			/* If ATTR_EA_INFO exists 'info' can't be NULL. */
 			if (info)
-				dup->extend_data = info->size;
+				dup->ea.ea_size = info->size_pack;
 		}
 	}
 

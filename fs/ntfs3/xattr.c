@@ -316,7 +316,7 @@ out:
 static noinline int ntfs_set_ea(struct inode *inode, const char *name,
 				size_t name_len, const void *value,
 				size_t val_size, int flags, bool locked,
-				__le32 *ea_size)
+				__le16 *ea_size)
 {
 	struct ntfs_inode *ni = ntfs_i(inode);
 	struct ntfs_sb_info *sbi = ni->mi.sbi;
@@ -525,7 +525,7 @@ update_ea:
 	if (ea_info.size_pack != size_pack)
 		ni->ni_flags |= NI_FLAG_UPDATE_PARENT;
 	if (ea_size)
-		*ea_size = ea_info.size;
+		*ea_size = ea_info.size_pack;
 	mark_inode_dirty(&ni->vfs_inode);
 
 out:
@@ -987,7 +987,7 @@ out:
  *
  * save uid/gid/mode in xattr
  */
-int ntfs_save_wsl_perm(struct inode *inode, __le32 *ea_size)
+int ntfs_save_wsl_perm(struct inode *inode, __le16 *ea_size)
 {
 	int err;
 	__le32 value;

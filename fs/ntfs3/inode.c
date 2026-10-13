@@ -1594,7 +1594,7 @@ int ntfs_create_inode(const struct mnt_idmap *idmap, struct inode *dir,
 		fname->dup.a_time = std5->cr_time;
 	fname->dup.alloc_size = fname->dup.data_size = 0;
 	fname->dup.fa = std5->fa;
-	fname->dup.extend_data = S_ISLNK(mode) ? IO_REPARSE_TAG_SYMLINK : 0;
+	fname->dup.rp.reparse =	S_ISLNK(mode) ? IO_REPARSE_TAG_SYMLINK : 0;
 
 	dsize = le16_to_cpu(new_de->key_size);
 	asize = ALIGN(SIZEOF_RESIDENT + dsize, 8);
@@ -1837,7 +1837,7 @@ int ntfs_create_inode(const struct mnt_idmap *idmap, struct inode *dir,
 		 * The packed size of extended attribute is stored in direntry too.
 		 * 'fname' here points to inside new_de.
 		 */
-		err = ntfs_save_wsl_perm(inode, &fname->dup.extend_data);
+		err = ntfs_save_wsl_perm(inode, &fname->dup.ea.ea_size);
 		if (err)
 			goto out6;
 
@@ -1853,7 +1853,7 @@ int ntfs_create_inode(const struct mnt_idmap *idmap, struct inode *dir,
 
 			fn = resident_data_ex(attr, SIZEOF_ATTRIBUTE_FILENAME);
 			if (fn)
-				fn->dup.extend_data = fname->dup.extend_data;
+				fn->dup.ea.ea_size = fname->dup.ea.ea_size;
 		}
 	}
 

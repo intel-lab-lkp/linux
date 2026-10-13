@@ -566,7 +566,15 @@ struct NTFS_DUP_INFO {
 	__le64 alloc_size;	// 0x20: Data attribute allocated size, multiple of cluster size.
 	__le64 data_size;	// 0x28: Data attribute size <= Dataalloc_size.
 	enum FILE_ATTRIBUTE fa;	// 0x30: Standard DOS attributes & more.
-	__le32 extend_data;	// 0x34: Extended data.
+	union {
+		struct {
+			__le16 ea_size; // 0x34: Packed EAs.
+			__le16 reserved;
+		} ea;
+		struct {
+			__le32 reparse; // 0x34: Used by Reparse.
+		} rp;
+	};
 
 }; // 0x38
 
