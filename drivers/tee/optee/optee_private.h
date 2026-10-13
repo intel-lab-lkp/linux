@@ -6,6 +6,7 @@
 #ifndef OPTEE_PRIVATE_H
 #define OPTEE_PRIVATE_H
 
+#include <linux/idr.h>
 #include <linux/notifier.h>
 #include <linux/rhashtable.h>
 #include <linux/rpmb.h>
@@ -200,6 +201,20 @@ struct optee_ffa {
 };
 #endif
 
+#if IS_REACHABLE(CONFIG_RISCV_RPMI_TEE_TRANSPORT)
+/**
+ * struct optee_rpmi - RPMI transport-specific OP-TEE state
+ * @rdev: owning RPMI service device
+ * @shm_map: lookup by the host-endian parcel ID and nonce pair
+ * @nonce_ida: nonzero SHM nonces, reusable after successful parcel reclamation
+ */
+struct optee_rpmi {
+	struct rpmi_tee_device *rdev;
+	struct optee_shm_handle_map shm_map;
+	struct ida nonce_ida;
+};
+#endif
+
 struct optee;
 
 /**
@@ -260,6 +275,7 @@ struct optee_ops {
  * @ctx:			driver internal TEE context
  * @smc:			specific to SMC ABI
  * @ffa:			specific to FF-A ABI
+ * @rpmi:			specific to RPMI ABI
  * @shm_arg_cache:		shared memory cache argument
  * @call_queue:			queue of threads waiting to call @invoke_fn
  * @notif:			notification synchronization struct
@@ -291,6 +307,9 @@ struct optee {
 #endif
 #if IS_REACHABLE(CONFIG_ARM_FFA_TRANSPORT)
 		struct optee_ffa ffa;
+#endif
+#if IS_REACHABLE(CONFIG_RISCV_RPMI_TEE_TRANSPORT)
+		struct optee_rpmi rpmi;
 #endif
 	};
 	struct optee_shm_arg_cache shm_arg_cache;
