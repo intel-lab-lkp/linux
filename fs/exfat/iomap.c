@@ -15,21 +15,30 @@
 /*
  * exfat_file_write_dio_end_io - Direct I/O write completion handler
  *
- * Updates i_size if the write extended the file. Called from the dio layer
- * after I/O completion.
+ * Updates i_size and valid_size after the transfer has completed
+ * successfully. The updating of i_size and valid_size runs in process
+ * context and under i_rwsem.
  */
 static int exfat_file_write_dio_end_io(struct kiocb *iocb, ssize_t size,
 		int error, unsigned int flags)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
+	loff_t end = iocb->ki_pos + size;
+	bool dirtied = false;
 
-	if (error)
+	if (error || !size)
 		return error;
 
-	if (size && i_size_read(inode) < iocb->ki_pos + size) {
-		i_size_write(inode, iocb->ki_pos + size);
-		mark_inode_dirty(inode);
+	if (i_size_read(inode) < end) {
+		i_size_write(inode, end);
+		dirtied = true;
 	}
+
+	if (exfat_advance_valid_size(EXFAT_I(inode), end))
+		dirtied = true;
+
+	if (dirtied)
+		mark_inode_dirty(inode);
 
 	return 0;
 }
@@ -202,15 +211,11 @@ static const struct iomap_ops exfat_swap_iomap_ops = {
 
 /*
  * exfat_write_iomap_end - Update the state after write
- *
- * Extends ->valid_size to cover the newly written range.
- * Marks the inode dirty if metadata was changed.
  */
 static int exfat_write_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 		ssize_t written, unsigned int flags, struct iomap *iomap)
 {
 	struct exfat_inode_info *ei = EXFAT_I(inode);
-	bool dirtied = false;
 	loff_t end;
 
 	if (!written)
@@ -218,18 +223,17 @@ static int exfat_write_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 
 	end = pos + written;
 
-	if (exfat_advance_valid_size(ei, end))
-		dirtied = true;
-
 	/*
 	 * IOMAP_F_ZERO_TAIL zeroes the remainder of the last block. Track that
 	 * block as zeroed so later valid_size extensions do not zero it again.
 	 */
 	if (iomap->flags & IOMAP_F_ZERO_TAIL)
 		end = round_up(end, i_blocksize(inode));
-	exfat_advance_zeroed_size(ei, end);
 
-	if (dirtied || iomap->flags & IOMAP_F_SIZE_CHANGED)
+	if (!(flags & IOMAP_DIRECT))
+		exfat_advance_zeroed_size(ei, end);
+
+	if (iomap->flags & IOMAP_F_SIZE_CHANGED)
 		mark_inode_dirty(inode);
 
 	return written;
