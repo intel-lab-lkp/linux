@@ -5,7 +5,11 @@
 #include <linux/if_vlan.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
+#include <linux/netdevice.h>
 #include <linux/udp.h>
+#include <net/gso.h>
+#include <net/ip.h>
+#include <net/ipv6.h>
 #include <net/tcp.h>
 #include <uapi/linux/tcp.h>
 #include <uapi/linux/virtio_net.h>
@@ -48,15 +52,111 @@ static inline int virtio_net_hdr_set_proto(struct sk_buff *skb,
 	return 0;
 }
 
+/* Does checksum metadata match a known TCP or UDP header? */
+static inline bool
+virtio_net_csum_partial_ok_at_offset(struct sk_buff *skb, u8 hdr_gso_type,
+				     unsigned int nhoff, __be16 proto)
+{
+	unsigned int thoff;
+	int ip_proto;
+
+	if (proto == htons(ETH_P_IP)) {
+		const struct iphdr *iph = ip4_parse(skb, nhoff, &thoff);
+
+		if (!iph || ip_is_fragment(iph))
+			return false;
+		ip_proto = iph->protocol;
+	} else if (proto == htons(ETH_P_IPV6)) {
+		const struct ipv6hdr *iph;
+		int flags = 0;
+
+		if (!pskb_may_pull(skb, nhoff + sizeof(*iph)))
+			return false;
+		iph = (const void *)(skb->data + nhoff);
+		if (iph->version != 6)
+			return false;
+		thoff = nhoff + sizeof(*iph);
+		ip_proto = iph->nexthdr;
+		if (ip_proto != IPPROTO_TCP && ip_proto != IPPROTO_UDP) {
+			thoff = nhoff;
+			ip_proto = ipv6_find_hdr(skb, &thoff, -1, NULL,
+						 &flags);
+			if (ip_proto < 0 || flags & IP6_FH_F_FRAG)
+				return false;
+		}
+	} else {
+		return false;
+	}
+
+	if (skb_checksum_start_offset(skb) != thoff)
+		return false;
+
+	switch (ip_proto) {
+	case IPPROTO_TCP:
+		if (skb->csum_offset != offsetof(struct tcphdr, check) ||
+		    !pskb_may_pull(skb, thoff + sizeof(struct tcphdr)))
+			return false;
+		break;
+	case IPPROTO_UDP:
+		if (skb->csum_offset != offsetof(struct udphdr, check) ||
+		    !pskb_may_pull(skb, thoff + sizeof(struct udphdr)))
+			return false;
+		break;
+	default:
+		return false;
+	}
+
+	switch (hdr_gso_type & ~VIRTIO_NET_HDR_GSO_ECN) {
+	case VIRTIO_NET_HDR_GSO_NONE:
+		return true;
+	case VIRTIO_NET_HDR_GSO_TCPV4:
+		return proto == htons(ETH_P_IP) && ip_proto == IPPROTO_TCP;
+	case VIRTIO_NET_HDR_GSO_TCPV6:
+		return proto == htons(ETH_P_IPV6) && ip_proto == IPPROTO_TCP;
+	case VIRTIO_NET_HDR_GSO_UDP:
+	case VIRTIO_NET_HDR_GSO_UDP_L4:
+		return ip_proto == IPPROTO_UDP;
+	default:
+		return false;
+	}
+}
+
+static inline bool
+virtio_net_csum_partial_ok(struct sk_buff *skb, u8 hdr_gso_type)
+{
+	unsigned int nhoff;
+	__be16 proto;
+
+	if (skb->dev->type == ARPHRD_ETHER) {
+		if (!pskb_may_pull(skb, ETH_HLEN))
+			return false;
+		nhoff = ETH_HLEN;
+		proto = eth_hdr(skb)->h_proto;
+		if (eth_type_vlan(proto)) {
+			proto = __vlan_get_protocol(skb, proto, &nhoff);
+			if (!proto)
+				return false;
+		}
+	} else {
+		nhoff = skb_network_offset(skb);
+		proto = skb->protocol;
+	}
+
+	return virtio_net_csum_partial_ok_at_offset(skb, hdr_gso_type, nhoff,
+						   proto);
+}
+
 static inline int __virtio_net_hdr_to_skb(struct sk_buff *skb,
 					  const struct virtio_net_hdr *hdr,
-					  bool little_endian, u8 hdr_gso_type)
+					  bool little_endian, u8 hdr_gso_type,
+					  bool need_csum_check)
 {
-	unsigned int nh_min_len = sizeof(struct iphdr);
+	typeof(skb->transport_header) old_transport = skb->transport_header;
 	unsigned int gso_type = 0;
 	unsigned int thlen = 0;
 	unsigned int p_off = 0;
 	unsigned int ip_proto;
+	bool csum_partial_ok = true;
 
 	if (hdr_gso_type != VIRTIO_NET_HDR_GSO_NONE) {
 		switch (hdr_gso_type & ~VIRTIO_NET_HDR_GSO_ECN) {
@@ -69,7 +169,6 @@ static inline int __virtio_net_hdr_to_skb(struct sk_buff *skb,
 			gso_type = SKB_GSO_TCPV6;
 			ip_proto = IPPROTO_TCP;
 			thlen = sizeof(struct tcphdr);
-			nh_min_len = sizeof(struct ipv6hdr);
 			break;
 		case VIRTIO_NET_HDR_GSO_UDP:
 			gso_type = SKB_GSO_UDP;
@@ -104,11 +203,11 @@ static inline int __virtio_net_hdr_to_skb(struct sk_buff *skb,
 
 		if (!skb_partial_csum_set(skb, start, off))
 			return -EINVAL;
-		if (skb_transport_offset(skb) < nh_min_len)
-			return -EINVAL;
+		if (need_csum_check)
+			csum_partial_ok =
+				virtio_net_csum_partial_ok(skb, hdr_gso_type);
 
-		nh_min_len = skb_transport_offset(skb);
-		p_off = nh_min_len + thlen;
+		p_off = skb_transport_offset(skb) + thlen;
 		if (!pskb_may_pull(skb, p_off))
 			return -EINVAL;
 	} else if (gso_type) {
@@ -158,8 +257,6 @@ retry:
 		case SKB_GSO_UDP_L4:
 			if (!(hdr->flags & VIRTIO_NET_HDR_F_NEEDS_CSUM))
 				return -EINVAL;
-			if (skb->csum_offset != offsetof(struct udphdr, check))
-				return -EINVAL;
 			if (skb->len - p_off > gso_size * UDP_MAX_SEGMENTS)
 				return -EINVAL;
 			if (gso_type != SKB_GSO_UDP_L4)
@@ -167,10 +264,6 @@ retry:
 			break;
 		case SKB_GSO_TCPV4:
 		case SKB_GSO_TCPV6:
-			if (skb->ip_summed == CHECKSUM_PARTIAL &&
-			    skb->csum_offset != offsetof(struct tcphdr, check))
-				return -EINVAL;
-
 			BUILD_BUG_ON(TCP_MIN_GSO_SIZE * GSO_MAX_SEGS < GSO_MAX_SIZE);
 			gso_size = max(gso_size, TCP_MIN_GSO_SIZE);
 			break;
@@ -191,6 +284,17 @@ retry:
 		}
 	}
 
+	if ((hdr->flags & VIRTIO_NET_HDR_F_NEEDS_CSUM) && !csum_partial_ok) {
+		int err;
+
+		if (skb_is_gso(skb))
+			return -EINVAL;
+
+		err = skb_checksum_help(skb);
+		skb->transport_header = old_transport;
+		return err;
+	}
+
 	return 0;
 }
 
@@ -198,7 +302,8 @@ static inline int virtio_net_hdr_to_skb(struct sk_buff *skb,
 					const struct virtio_net_hdr *hdr,
 					bool little_endian)
 {
-	return __virtio_net_hdr_to_skb(skb, hdr, little_endian, hdr->gso_type);
+	return __virtio_net_hdr_to_skb(skb, hdr, little_endian,
+				       hdr->gso_type, true);
 }
 
 /* This function must be called after virtio_net_hdr_from_skb(). */
@@ -293,6 +398,7 @@ virtio_net_hdr_tnl_to_skb(struct sk_buff *skb,
 	unsigned int inner_nh, outer_th, inner_th;
 	unsigned int inner_l3min, outer_l3min;
 	u8 gso_inner_type, gso_tunnel_type;
+	__be16 inner_proto;
 	bool outer_isv6, inner_isv6;
 	int ret;
 
@@ -334,7 +440,7 @@ virtio_net_hdr_tnl_to_skb(struct sk_buff *skb,
 
 	/* Let the basic parsing deal with plain GSO features. */
 	ret = __virtio_net_hdr_to_skb(skb, hdr, true,
-				      hdr->gso_type & ~gso_tunnel_type);
+				      hdr->gso_type & ~gso_tunnel_type, false);
 	if (ret)
 		return ret;
 
@@ -352,8 +458,8 @@ virtio_net_hdr_tnl_to_skb(struct sk_buff *skb,
 			return -EINVAL;
 	}
 
-	skb_set_inner_protocol(skb, inner_isv6 ? htons(ETH_P_IPV6) :
-						 htons(ETH_P_IP));
+	inner_proto = inner_isv6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
+	skb_set_inner_protocol(skb, inner_proto);
 	if (hdr->flags & VIRTIO_NET_HDR_F_UDP_TUNNEL_CSUM) {
 		if (!tnl_csum_negotiated)
 			return -EINVAL;
@@ -368,7 +474,16 @@ virtio_net_hdr_tnl_to_skb(struct sk_buff *skb,
 	skb->inner_mac_header = inner_nh + skb_headroom(skb);
 	skb->transport_header = outer_th + skb_headroom(skb);
 	skb->encapsulation = 1;
-	return 0;
+
+	if (virtio_net_csum_partial_ok_at_offset(skb, gso_inner_type, inner_nh,
+					       inner_proto))
+		return 0;
+
+	if (skb_is_gso(skb))
+		return -EINVAL;
+
+	ret = skb_checksum_help(skb);
+	return ret ?: 1;
 }
 
 /* Checksum-related fields validation for the driver */
