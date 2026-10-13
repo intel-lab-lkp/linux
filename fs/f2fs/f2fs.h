@@ -4471,6 +4471,7 @@ struct f2fs_folio_state *f2fs_ffs_alloc(struct f2fs_sb_info *sbi,
 					struct folio *folio);
 void f2fs_ffs_attach(struct folio *folio, struct f2fs_folio_state *ffs);
 struct f2fs_folio_state *f2fs_ffs_find_or_alloc(struct folio *folio);
+bool f2fs_ffs_test_blk_dirty(const struct folio *folio, pgoff_t index);
 void f2fs_ffs_mark_subrange_dirty(struct folio *folio, size_t offset, size_t len);
 bool f2fs_ffs_clear_subrange_dirty_and_test(struct folio *folio, size_t offset,
 					    size_t len);
