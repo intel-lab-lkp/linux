@@ -463,6 +463,13 @@ void contpte_set_ptes(struct mm_struct *mm, unsigned long addr,
 	if (!mm_is_user(mm))
 		return __set_ptes(mm, addr, ptep, pte, nr);
 
+	/*
+	 * Keep the producer-side invariant documented in pgtable.h true even
+	 * if a direct caller passes an invalid descriptor with PTE_CONT set.
+	 */
+	if (!pte_valid(pte))
+		return __set_ptes(mm, addr, ptep, pte_mknoncont(pte), nr);
+
 	end = addr + (nr << PAGE_SHIFT);
 	pfn = pte_pfn(pte);
 	prot = pte_pgprot(pte);
