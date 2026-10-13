@@ -5,10 +5,12 @@
  * Copyright (C) 2021-2022 Emil Renner Berthing <kernel@esmil.dk>
  */
 
+#include <linux/auxiliary_bus.h>
 #include <linux/clk-provider.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/io.h>
+#include <soc/starfive/reset-starfive-jh71x0.h>
 
 #include "clk-starfive-jh71x0.h"
 
@@ -337,3 +339,25 @@ struct clk_hw *jh71x0_clk_get(struct of_phandle_args *clkspec, void *data)
 	return ERR_PTR(-EINVAL);
 }
 EXPORT_SYMBOL_GPL(jh71x0_clk_get);
+
+int jh71x0_reset_controller_register(struct jh71x0_clk_priv *priv,
+				     const char *adev_name)
+{
+	struct jh71x0_reset_adev *rdev;
+	struct auxiliary_device *adev;
+
+	rdev = devm_kzalloc(priv->dev, sizeof(*rdev), GFP_KERNEL);
+	if (!rdev)
+		return -ENOMEM;
+
+	rdev->base = priv->base;
+
+	adev = devm_auxiliary_device_create(priv->dev, adev_name, rdev);
+	if (!adev)
+		return dev_err_probe(priv->dev, -ENODEV,
+				     "failed to create auxiliary device %s\n",
+				     adev_name);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(jh71x0_reset_controller_register);
