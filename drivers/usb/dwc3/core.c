@@ -21,6 +21,7 @@
 #include <linux/io.h>
 #include <linux/list.h>
 #include <linux/delay.h>
+#include <linux/gpio/consumer.h>
 #include <linux/dma-mapping.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
@@ -166,6 +167,9 @@ static void __dwc3_set_mode(struct work_struct *work)
 {
 	struct dwc3 *dwc = work_to_dwc(work);
 	unsigned long flags;
+	struct dwc3_role_mux *mux = dwc->role_mux;
+	enum usb_role mux_role = USB_ROLE_NONE;
+	int mux_port = 0;
 	int ret;
 	u32 reg;
 	u32 desired_dr_role;
@@ -174,7 +178,14 @@ static void __dwc3_set_mode(struct work_struct *work)
 	mutex_lock(&dwc->mutex);
 	spin_lock_irqsave(&dwc->lock, flags);
 	desired_dr_role = dwc->desired_dr_role;
+	if (mux) {
+		mux_port = mux->desired_port;
+		mux_role = mux->desired_role;
+	}
 	spin_unlock_irqrestore(&dwc->lock, flags);
+
+	if (mux && READ_ONCE(mux->error))
+		goto out;
 
 	pm_runtime_get_sync(dwc->dev);
 
@@ -184,7 +195,8 @@ static void __dwc3_set_mode(struct work_struct *work)
 	if (!desired_dr_role)
 		goto out;
 
-	if (desired_dr_role == dwc->current_dr_role)
+	if (desired_dr_role == dwc->current_dr_role &&
+	    (!mux || mux_port == mux->active_port))
 		goto out;
 
 	if (desired_dr_role == DWC3_GCTL_PRTCAP_OTG && dwc->edev)
@@ -231,6 +243,22 @@ static void __dwc3_set_mode(struct work_struct *work)
 		reg = dwc3_readl(dwc, DWC3_GCTL);
 		reg &= ~DWC3_GCTL_CORESOFTRESET;
 		dwc3_writel(dwc, DWC3_GCTL, reg);
+	}
+
+	/*
+	 * The previous host/gadget has been torn down above, so it is safe to
+	 * move the shared HS data path to the requesting connector.
+	 */
+	if (mux && mux_port != mux->active_port) {
+		ret = gpiod_direction_output(mux->select, mux_port);
+		if (ret) {
+			WRITE_ONCE(mux->error, ret);
+			goto out;
+		}
+
+		spin_lock_irqsave(&dwc->lock, flags);
+		mux->active_port = mux_port;
+		spin_unlock_irqrestore(&dwc->lock, flags);
 	}
 
 	spin_lock_irqsave(&dwc->lock, flags);

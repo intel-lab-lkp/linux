@@ -8,6 +8,7 @@
  */
 
 #include <linux/extcon.h>
+#include <linux/gpio/consumer.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
@@ -501,10 +502,178 @@ static enum usb_role dwc3_usb_role_switch_get(struct usb_role_switch *sw)
 	return role;
 }
 
+static int dwc3_mux_role_set(struct usb_role_switch *sw, enum usb_role role)
+{
+	struct dwc3_role_port *port = usb_role_switch_get_drvdata(sw);
+	struct dwc3 *dwc = port->dwc;
+	struct dwc3_role_mux *mux = dwc->role_mux;
+	enum usb_role selected_role;
+	unsigned long flags;
+	int selected, ret;
+	u32 mode;
+
+	if (role < USB_ROLE_NONE || role > USB_ROLE_DEVICE)
+		return -EINVAL;
+
+	mutex_lock(&mux->lock);
+	if (mux->stopping) {
+		ret = -ESHUTDOWN;
+		goto out;
+	}
+	if (READ_ONCE(mux->error)) {
+		ret = READ_ONCE(mux->error);
+		goto out;
+	}
+
+	port->role = role;
+	if (mux->ports[0].role != USB_ROLE_NONE)
+		selected = 0;
+	else if (mux->ports[1].role != USB_ROLE_NONE)
+		selected = 1;
+	else
+		selected = mux->desired_port;
+	selected_role = mux->ports[selected].role;
+	if (selected == mux->desired_port && selected_role == mux->desired_role) {
+		ret = 0;
+		goto out;
+	}
+
+	if (selected_role == USB_ROLE_HOST ||
+	    (selected_role == USB_ROLE_NONE &&
+	     dwc->role_switch_default_mode == USB_DR_MODE_HOST))
+		mode = DWC3_GCTL_PRTCAP_HOST;
+	else
+		mode = DWC3_GCTL_PRTCAP_DEVICE;
+
+	spin_lock_irqsave(&dwc->lock, flags);
+	mux->desired_port = selected;
+	mux->desired_role = selected_role;
+	dwc->desired_dr_role = mode;
+	spin_unlock_irqrestore(&dwc->lock, flags);
+	queue_work(system_freezable_wq, &dwc->drd_work);
+	flush_work(&dwc->drd_work);
+	ret = READ_ONCE(mux->error);
+out:
+	mutex_unlock(&mux->lock);
+	return ret;
+}
+
+static enum usb_role dwc3_mux_role_get(struct usb_role_switch *sw)
+{
+	struct dwc3_role_port *port = usb_role_switch_get_drvdata(sw);
+	struct dwc3_role_mux *mux = port->dwc->role_mux;
+	unsigned long flags;
+	enum usb_role role = USB_ROLE_NONE;
+
+	mutex_lock(&mux->lock);
+	spin_lock_irqsave(&port->dwc->lock, flags);
+	if (!READ_ONCE(mux->error) && mux->active_port == port->state)
+		role = port->role;
+	spin_unlock_irqrestore(&port->dwc->lock, flags);
+	mutex_unlock(&mux->lock);
+	return role;
+}
+
+static void dwc3_role_mux_unregister(struct dwc3 *dwc)
+{
+	struct dwc3_role_mux *mux = dwc->role_mux;
+	unsigned int i;
+
+	if (!mux)
+		return;
+
+	mutex_lock(&mux->lock);
+	mux->stopping = true;
+	mutex_unlock(&mux->lock);
+	for (i = 0; i < ARRAY_SIZE(mux->ports); i++) {
+		usb_role_switch_unregister(mux->ports[i].sw);
+		mux->ports[i].sw = NULL;
+		fwnode_handle_put(mux->ports[i].fwnode);
+		mux->ports[i].fwnode = NULL;
+	}
+}
+
+/* Returns one when the optional two-connector mux is configured. */
+static int dwc3_setup_role_mux(struct dwc3 *dwc, u32 mode)
+{
+	struct usb_role_switch_desc desc = {};
+	struct fwnode_handle *ep;
+	struct dwc3_role_mux *mux;
+	struct gpio_desc *select;
+	char name[64];
+	u32 state;
+	int ret, i;
+
+	select = devm_gpiod_get_optional(dwc->dev, "port-select", GPIOD_ASIS);
+	if (IS_ERR(select))
+		return PTR_ERR(select);
+	if (!select)
+		return 0;
+	ret = gpiod_get_value_cansleep(select);
+	if (ret < 0)
+		return ret;
+
+	mux = devm_kzalloc(dwc->dev, sizeof(*mux), GFP_KERNEL);
+	if (!mux)
+		return -ENOMEM;
+	mux->select = select;
+	mux->desired_port = ret;
+	mux->active_port = -1;
+	mutex_init(&mux->lock);
+	dwc->role_mux = mux;
+
+	fwnode_graph_for_each_endpoint(dev_fwnode(dwc->dev), ep) {
+		if (!fwnode_property_present(ep, "usb-role-switch"))
+			continue;
+		ret = fwnode_property_read_u32(ep, "mux-state", &state);
+		if (ret || state >= ARRAY_SIZE(mux->ports)) {
+			ret = -EINVAL;
+			goto put_ep;
+		}
+		if (mux->ports[state].fwnode) {
+			ret = -EINVAL;
+			goto put_ep;
+		}
+		mux->ports[state].fwnode = fwnode_handle_get(ep);
+		mux->ports[state].state = state;
+		mux->ports[state].dwc = dwc;
+	}
+	for (i = 0; i < ARRAY_SIZE(mux->ports); i++) {
+		if (!mux->ports[i].fwnode) {
+			ret = -EINVAL;
+			goto err;
+		}
+	}
+
+	/* All state is initialized before either role provider becomes visible. */
+	dwc3_set_mode(dwc, mode);
+	for (i = 0; i < ARRAY_SIZE(mux->ports); i++) {
+		snprintf(name, sizeof(name), "%s-port%d", dev_name(dwc->dev), i);
+		desc.name = name;
+		desc.fwnode = mux->ports[i].fwnode;
+		desc.set = dwc3_mux_role_set;
+		desc.get = dwc3_mux_role_get;
+		desc.driver_data = &mux->ports[i];
+		mux->ports[i].sw = usb_role_switch_register(dwc->dev, &desc);
+		if (IS_ERR(mux->ports[i].sw)) {
+			ret = PTR_ERR(mux->ports[i].sw);
+			goto err;
+		}
+	}
+	return 1;
+
+put_ep:
+	fwnode_handle_put(ep);
+err:
+	dwc3_drd_exit(dwc);
+	return ret;
+}
+
 static int dwc3_setup_role_switch(struct dwc3 *dwc)
 {
 	struct usb_role_switch_desc dwc3_role_switch = {NULL};
 	u32 mode;
+	int ret;
 
 	dwc->role_switch_default_mode = usb_get_role_switch_default_mode(dwc->dev);
 	if (dwc->role_switch_default_mode == USB_DR_MODE_HOST) {
@@ -513,6 +682,10 @@ static int dwc3_setup_role_switch(struct dwc3 *dwc)
 		dwc->role_switch_default_mode = USB_DR_MODE_PERIPHERAL;
 		mode = DWC3_GCTL_PRTCAP_DEVICE;
 	}
+	ret = dwc3_setup_role_mux(dwc, mode);
+	if (ret)
+		return ret < 0 ? ret : 0;
+
 	dwc3_set_mode(dwc, mode);
 
 	dwc3_role_switch.fwnode = dev_fwnode(dwc->dev);
@@ -526,7 +699,7 @@ static int dwc3_setup_role_switch(struct dwc3 *dwc)
 
 	if (dwc->dev->of_node) {
 		/* populate connector entry */
-		int ret = devm_of_platform_populate(dwc->dev);
+		ret = devm_of_platform_populate(dwc->dev);
 
 		if (ret) {
 			usb_role_switch_unregister(dwc->role_sw);
@@ -541,6 +714,7 @@ static int dwc3_setup_role_switch(struct dwc3 *dwc)
 #else
 #define ROLE_SWITCH 0
 #define dwc3_setup_role_switch(x) 0
+static inline void dwc3_role_mux_unregister(struct dwc3 *dwc) {}
 #endif
 
 int dwc3_drd_init(struct dwc3 *dwc)
@@ -597,6 +771,7 @@ void dwc3_drd_exit(struct dwc3 *dwc)
 {
 	unsigned long flags;
 
+	dwc3_role_mux_unregister(dwc);
 	if (dwc->role_sw)
 		usb_role_switch_unregister(dwc->role_sw);
 
