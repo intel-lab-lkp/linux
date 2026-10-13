@@ -5359,15 +5359,16 @@ static void ice_ptp_init_phy_e830(struct ice_ptp_hw *ptp)
 bool ice_ptp_lock(struct ice_hw *hw)
 {
 	struct ice_pf *pf = container_of(hw, struct ice_pf, hw);
+	struct ice_hw *pri_hw = hw;
 	u32 hw_lock;
 	int i;
 
-	down_read(&pf->adapter->ctrl_pf_lock);
+	down_read(ice_hw_ctrl_pf_lock(hw));
 
 	if (!ice_is_primary(hw)) {
-		hw = ice_get_primary_hw(pf);
-		if (!hw) {
-			up_read(&pf->adapter->ctrl_pf_lock);
+		pri_hw = ice_get_primary_hw(pf);
+		if (!pri_hw) {
+			up_read(ice_hw_ctrl_pf_lock(hw));
 			return false;
 		}
 	}
@@ -5375,7 +5376,8 @@ bool ice_ptp_lock(struct ice_hw *hw)
 #define MAX_TRIES 15
 
 	for (i = 0; i < MAX_TRIES; i++) {
-		hw_lock = rd32(hw, PFTSYN_SEM + (PFTSYN_SEM_BYTES * hw->pf_id));
+		hw_lock = rd32(pri_hw,
+			       PFTSYN_SEM + (PFTSYN_SEM_BYTES * pri_hw->pf_id));
 		hw_lock = hw_lock & PFTSYN_SEM_BUSY_M;
 		if (hw_lock) {
 			/* Somebody is holding the lock */
@@ -5387,7 +5389,7 @@ bool ice_ptp_lock(struct ice_hw *hw)
 	}
 
 	if (hw_lock)
-		up_read(&pf->adapter->ctrl_pf_lock);
+		up_read(ice_hw_ctrl_pf_lock(hw));
 
 	return !hw_lock;
 }
@@ -5402,14 +5404,18 @@ bool ice_ptp_lock(struct ice_hw *hw)
 void ice_ptp_unlock(struct ice_hw *hw)
 {
 	struct ice_pf *pf = container_of(hw, struct ice_pf, hw);
+	struct ice_hw *pri_hw = hw;
 
-	lockdep_assert_held(&pf->adapter->ctrl_pf_lock);
+	lockdep_assert_held(ice_hw_ctrl_pf_lock(hw));
 
+	/* ctrl_pf cannot be cleared while ctrl_pf_lock is held for read, so a
+	 * successful ice_ptp_lock() guarantees a primary hw is still there.
+	 */
 	if (!ice_is_primary(hw))
-		hw = ice_get_primary_hw(pf);
+		pri_hw = ice_get_primary_hw(pf);
 
-	wr32(hw, PFTSYN_SEM + (PFTSYN_SEM_BYTES * hw->pf_id), 0);
-	up_read(&pf->adapter->ctrl_pf_lock);
+	wr32(pri_hw, PFTSYN_SEM + (PFTSYN_SEM_BYTES * pri_hw->pf_id), 0);
+	up_read(ice_hw_ctrl_pf_lock(hw));
 }
 
 /**
