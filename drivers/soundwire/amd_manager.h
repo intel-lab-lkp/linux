@@ -207,73 +207,23 @@
 #define AMD_SDW_DEVICE_STATE_D3				3
 #define ACP_PME_EN					0x0001400
 
-struct sdw_manager_dp_reg {
-	u32 frame_fmt_reg;
-	u32 sample_int_reg;
-	u32 hctrl_dp0_reg;
-	u32 offset_reg;
-	u32 lane_ctrl_ch_en_reg;
-};
+/* Cross-file prototypes: amd_manager_common.c functions used by amd_acp63_manager.c */
+enum sdw_command_response amd_sdw_xfer_msg(struct sdw_bus *bus, struct sdw_msg *msg);
+void amd_sdw_fill_slave_status(struct amd_sdw_manager *amd_manager, u16 index, u32 status);
+void amd_sdw_process_ping_status(u64 response, struct amd_sdw_manager *amd_manager);
+void amd_sdw_update_slave_status(u32 status_change_0to7, u32 status_change_8to11,
+				 struct amd_sdw_manager *amd_manager);
+int amd_sdw_clock_stop(struct amd_sdw_manager *amd_manager);
+int amd_sdw_host_wake_enable_by_rev(struct amd_sdw_manager *amd_manager, bool enable);
+int amd_prop_read(struct sdw_bus *bus);
 
-/*
- * SDW0 Manager instance registers  6 CPU DAI (3 TX & 3 RX Ports)
- * whereas SDW1  Manager Instance registers 2 CPU DAI (one TX & one RX port)
- * Below is the CPU DAI <->Manager port number mapping
- * i.e SDW0 Pin0 -> port number 0 -> AUDIO0 TX
- *     SDW0 Pin1 -> Port number 1 -> AUDIO1 TX
- *     SDW0 Pin2 -> Port number 2 -> AUDIO2 TX
- *     SDW0 Pin3 -> port number 3 -> AUDIO0 RX
- *     SDW0 Pin4 -> Port number 4 -> AUDIO1 RX
- *     SDW0 Pin5 -> Port number 5 -> AUDIO2 RX
- *  Whereas for SDW1 instance
- *  SDW1 Pin0 -> port number 0 -> AUDIO1 TX
- *  SDW1 Pin1 -> Port number 1 -> AUDIO1 RX
- *  Same mapping should be used for programming DMA controller registers in SoundWire DMA driver.
- * i.e if AUDIO0 TX channel is selected then we need to use AUDIO0 TX registers for DMA programming
- * in SoundWire DMA driver.
- */
-
-static struct sdw_manager_dp_reg acp63_sdw0_dp_reg[AMD_ACP63_SDW0_MAX_DAI] =  {
-	{ACP_SW_AUDIO0_TX_FRAME_FORMAT, ACP_SW_AUDIO0_TX_SAMPLEINTERVAL, ACP_SW_AUDIO0_TX_HCTRL_DP0,
-	 ACP_SW_AUDIO0_TX_OFFSET_DP0, ACP_SW_AUDIO0_TX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO1_TX_FRAME_FORMAT, ACP_SW_AUDIO1_TX_SAMPLEINTERVAL, ACP_SW_AUDIO1_TX_HCTRL,
-	 ACP_SW_AUDIO1_TX_OFFSET, ACP_SW_AUDIO1_TX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO2_TX_FRAME_FORMAT, ACP_SW_AUDIO2_TX_SAMPLEINTERVAL, ACP_SW_AUDIO2_TX_HCTRL,
-	 ACP_SW_AUDIO2_TX_OFFSET, ACP_SW_AUDIO2_TX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO0_RX_FRAME_FORMAT, ACP_SW_AUDIO0_RX_SAMPLEINTERVAL, ACP_SW_AUDIO0_RX_HCTRL_DP0,
-	 ACP_SW_AUDIO0_RX_OFFSET_DP0, ACP_SW_AUDIO0_RX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO1_RX_FRAME_FORMAT, ACP_SW_AUDIO1_RX_SAMPLEINTERVAL, ACP_SW_AUDIO1_RX_HCTRL,
-	 ACP_SW_AUDIO1_RX_OFFSET, ACP_SW_AUDIO1_RX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO2_RX_FRAME_FORMAT, ACP_SW_AUDIO2_RX_SAMPLEINTERVAL, ACP_SW_AUDIO2_RX_HCTRL,
-	 ACP_SW_AUDIO2_RX_OFFSET, ACP_SW_AUDIO2_RX_CHANNEL_ENABLE_DP0},
-};
-
-static struct sdw_manager_dp_reg acp63_sdw1_dp_reg[AMD_ACP63_SDW1_MAX_DAI] =  {
-	{ACP_SW_AUDIO1_TX_FRAME_FORMAT, ACP_SW_AUDIO1_TX_SAMPLEINTERVAL, ACP_SW_AUDIO1_TX_HCTRL,
-	 ACP_SW_AUDIO1_TX_OFFSET, ACP_SW_AUDIO1_TX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO1_RX_FRAME_FORMAT, ACP_SW_AUDIO1_RX_SAMPLEINTERVAL, ACP_SW_AUDIO1_RX_HCTRL,
-	 ACP_SW_AUDIO1_RX_OFFSET, ACP_SW_AUDIO1_RX_CHANNEL_ENABLE_DP0}
-};
-
-static struct sdw_manager_dp_reg acp70_sdw_dp_reg[AMD_ACP70_SDW_MAX_DAI] =  {
-	{ACP_SW_AUDIO0_TX_FRAME_FORMAT, ACP_SW_AUDIO0_TX_SAMPLEINTERVAL, ACP_SW_AUDIO0_TX_HCTRL_DP0,
-	 ACP_SW_AUDIO0_TX_OFFSET_DP0, ACP_SW_AUDIO0_TX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO1_TX_FRAME_FORMAT, ACP_SW_AUDIO1_TX_SAMPLEINTERVAL, ACP_SW_AUDIO1_TX_HCTRL,
-	 ACP_SW_AUDIO1_TX_OFFSET, ACP_SW_AUDIO1_TX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO2_TX_FRAME_FORMAT, ACP_SW_AUDIO2_TX_SAMPLEINTERVAL, ACP_SW_AUDIO2_TX_HCTRL,
-	 ACP_SW_AUDIO2_TX_OFFSET, ACP_SW_AUDIO2_TX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO0_RX_FRAME_FORMAT, ACP_SW_AUDIO0_RX_SAMPLEINTERVAL, ACP_SW_AUDIO0_RX_HCTRL_DP0,
-	 ACP_SW_AUDIO0_RX_OFFSET_DP0, ACP_SW_AUDIO0_RX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO1_RX_FRAME_FORMAT, ACP_SW_AUDIO1_RX_SAMPLEINTERVAL, ACP_SW_AUDIO1_RX_HCTRL,
-	 ACP_SW_AUDIO1_RX_OFFSET, ACP_SW_AUDIO1_RX_CHANNEL_ENABLE_DP0},
-	{ACP_SW_AUDIO2_RX_FRAME_FORMAT, ACP_SW_AUDIO2_RX_SAMPLEINTERVAL, ACP_SW_AUDIO2_RX_HCTRL,
-	 ACP_SW_AUDIO2_RX_OFFSET, ACP_SW_AUDIO2_RX_CHANNEL_ENABLE_DP0},
-};
-
-static u32 sdw_manager_reg_mask_array[AMD_ACP63_SDW_MAX_MANAGER_COUNT] =  {
-		AMD_SDW0_EXT_INTR_MASK,
-		AMD_SDW1_EXT_INTR_MASK
-};
+/* Cross-file prototypes: amd_acp63_manager.c symbols used by amd_manager_common.c */
+int amd_sdw_hw_init_ops(struct amd_sdw_manager *amd_manager);
+int amd_acp63_sdw_compute_params(struct sdw_bus *bus, struct sdw_stream_runtime *stream);
+extern const struct sdw_master_port_ops amd_acp63_sdw_port_ops;
+extern const struct sdw_master_ops amd_acp63_sdw_ops;
+void amd_acp63_sdw_irq_thread(struct amd_sdw_manager *amd_manager);
+void amd_acp63_sdw_update_slave_status_work(struct amd_sdw_manager *amd_manager);
 
 #define AMD_SDW_HW_OPS(amd_manager, cb)	((amd_manager)->hw_ops->cb)
 
