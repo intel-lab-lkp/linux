@@ -155,10 +155,22 @@ struct ice_dpll {
  * Locking:
  *   Acquisition order (top to bottom):
  *
- *     txclk_notify_rwsem (read)
- *       -> pf->dplls.lock
- *         -> ctrl_pf->dplls.lock
+ *     adapter->ctrl_pf_lock (read)
+ *       -> txclk_notify_rwsem (read)
+ *         -> pf->dplls.lock
+ *           -> ctrl_pf->dplls.lock
  *
+ *   PTP hardware semaphore path:
+ *
+ *     adapter->ps_lock
+ *       -> adapter->ctrl_pf_lock (read)
+ *         -> PFTSYN_SEM
+ *
+ *   - ice_ptp_port_phy_restart() runs with adapter->ps_lock held by its
+ *     caller and reaches ice_ptp_lock() via ice_start_phy_timer_eth56g()
+ *     or ice_start_phy_timer_e82x(), so ctrl_pf_lock is not the outermost
+ *     lock on that path. Never take adapter->ps_lock with ctrl_pf_lock
+ *     held.
  *   - @lock serializes all DPLL state mutations on this PF. When the
  *     controlling PF's lock must also be taken (e.g. updating the shared
  *     tx_refclks usage map), acquire pf->dplls.lock first, then
