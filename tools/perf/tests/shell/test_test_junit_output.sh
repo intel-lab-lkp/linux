@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
-# perf test junit XML output validation
+# perf test junit XML output validation (no_mlock)
 
 set -e
 
