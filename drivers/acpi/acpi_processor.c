@@ -18,6 +18,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/platform_data/x86/apple.h>
 #include <linux/platform_device.h>
 
 #include <acpi/processor.h>
@@ -837,27 +838,38 @@ int acpi_processor_evaluate_cst(acpi_handle handle, u32 cpu,
 	acpi_status status;
 	u64 count;
 	int last_index = 0;
-	int i, ret = 0;
+	int i, ret = 0, base = 0;
 
+	if (x86_apple_machine) {
+		status = acpi_evaluate_object(handle, "ACST", NULL, &buffer);
+		if (ACPI_SUCCESS(status)) {
+			base = 1; /* ACST is a 4 field variable we need to skip the first field */
+			goto success;
+		}
+
+		buffer.length = ACPI_ALLOCATE_BUFFER;
+		buffer.pointer = NULL;
+	}
 	status = acpi_evaluate_object(handle, "_CST", NULL, &buffer);
 	if (ACPI_FAILURE(status)) {
 		acpi_handle_debug(handle, "No _CST\n");
 		return -ENODEV;
 	}
+success:
 
 	cst = buffer.pointer;
 
 	/* There must be at least 2 elements. */
-	if (!cst || cst->type != ACPI_TYPE_PACKAGE || cst->package.count < 2) {
+	if (!cst || cst->type != ACPI_TYPE_PACKAGE || cst->package.count < base + 2) {
 		acpi_handle_warn(handle, "Invalid _CST output\n");
 		ret = -EFAULT;
 		goto end;
 	}
 
-	count = cst->package.elements[0].integer.value;
+	count = cst->package.elements[base].integer.value;
 
 	/* Validate the number of C-states. */
-	if (count < 1 || count != cst->package.count - 1) {
+	if (count < 1 || count != cst->package.count - 1 - base) {
 		acpi_handle_warn(handle, "Inconsistent _CST data\n");
 		ret = -EFAULT;
 		goto end;
@@ -882,7 +894,7 @@ int acpi_processor_evaluate_cst(acpi_handle handle, u32 cpu,
 
 		memset(&cx, 0, sizeof(cx));
 
-		element = &cst->package.elements[i];
+		element = &cst->package.elements[base + i];
 		if (element->type != ACPI_TYPE_PACKAGE) {
 			acpi_handle_info(handle, "_CST C%d type(%x) is not package, skip...\n",
 					 i, element->type);
