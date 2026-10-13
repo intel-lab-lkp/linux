@@ -22,6 +22,7 @@
 #include <linux/unaligned.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
+#include <linux/suspend.h>
 
 #include "rtsx_pcr.h"
 #include "rts5261.h"
@@ -1791,16 +1792,28 @@ static int rtsx_pci_runtime_resume(struct device *device)
 	struct pci_dev *pcidev = to_pci_dev(device);
 	struct pcr_handle *handle = pci_get_drvdata(pcidev);
 	struct rtsx_pcr *pcr = handle->pcr;
+	unsigned int old_card_exist;
 
 	dev_dbg(device, "--> %s\n", __func__);
 
 	mutex_lock(&pcr->pcr_mutex);
 
+	old_card_exist = pcr->card_exist;
+
 	rtsx_pci_write_register(pcr, HOST_SLEEP_STATE, 0x03, 0x00);
 
 	rtsx_pci_init_hw(pcr);
 
-	if (pcr->slots[RTSX_SD_CARD].p_dev != NULL) {
+	/*
+	 * System suspend runtime-resumes the idle reader, and an
+	 * unconditional card event would take an mmc host wakeup event and
+	 * abort/shorten the sleep. Only signal it then if the card presence
+	 * actually changed; otherwise keep signalling so mmc core can detect
+	 * a card swapped while the reader was in D3.
+	 */
+	if (pcr->slots[RTSX_SD_CARD].p_dev != NULL &&
+	    (((old_card_exist ^ pcr->card_exist) & SD_EXIST) ||
+	     !pm_suspend_in_progress())) {
 		pcr->slots[RTSX_SD_CARD].card_event(
 				pcr->slots[RTSX_SD_CARD].p_dev);
 	}
