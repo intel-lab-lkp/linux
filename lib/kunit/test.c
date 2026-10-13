@@ -82,6 +82,30 @@ void __printf(3, 4) __kunit_fail_current_test_impl(const char *file, int line, c
 }
 
 /*
+ * Fails current test if TAINT_WARN has been set (changed) after the test has run.
+ */
+static void kunit_check_taint_warn(struct kunit *test, unsigned long tainted_before)
+{
+	if (IS_ENABLED(CONFIG_KUNIT_FAIL_TEST_ON_WARN) &&
+		test_taint(TAINT_WARN) && !tainted_before) {
+		kunit_err(test, "Test triggered a kernel WARN");
+		kunit_set_failure(test);
+	}
+}
+
+/*
+ * Skip a KUnit test if the kernel is tainted with TAINT_WARN.
+ */
+static void kunit_skip_if_taint_warn(struct kunit *test, struct kunit_suite *suite)
+{
+	if (IS_ENABLED(CONFIG_KUNIT_FAIL_TEST_ON_WARN) && test_taint(TAINT_WARN)) {
+		suite->forced_skip = true;
+		test->forced_skip = true;
+		kunit_skip(test, "force skip: kernel is tainted with TAINT_WARN");
+	}
+}
+
+/*
  * Fails current test if test turns off debug_locks.
  */
 static void kunit_check_lockdep(struct kunit *test, int prev_debug_locks)
@@ -487,6 +511,7 @@ static void kunit_run_case_internal(struct kunit *test,
 	struct timespec64 start, end;
 
 	kunit_skip_if_lockdep(test, suite);
+	kunit_skip_if_taint_warn(test, suite);
 
 	if (suite->init) {
 		int ret;
@@ -539,6 +564,7 @@ static void kunit_try_run_case(void *data)
 	struct kunit_suite *suite = ctx->suite;
 	struct kunit_case *test_case = ctx->test_case;
 	int debug_locks_snapshot = debug_locks;
+	unsigned long tainted_warn_snapshot = test_taint(TAINT_WARN);
 
 	current->kunit_test = test;
 
@@ -549,6 +575,7 @@ static void kunit_try_run_case(void *data)
 	 */
 	kunit_run_case_internal(test, suite, test_case);
 
+	kunit_check_taint_warn(test, tainted_warn_snapshot);
 	kunit_check_lockdep(test, debug_locks_snapshot);
 }
 
