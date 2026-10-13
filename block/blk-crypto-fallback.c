@@ -605,6 +605,7 @@ fail_destroy_profile:
 	blk_crypto_profile_destroy(blk_crypto_fallback_profile);
 fail_free_profile:
 	kfree(blk_crypto_fallback_profile);
+	blk_crypto_fallback_profile = NULL;
 fail_free_bioset:
 	bioset_exit(&enc_bio_set);
 out:
