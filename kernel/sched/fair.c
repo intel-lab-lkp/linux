@@ -8513,6 +8513,10 @@ static unsigned long capacity_of(int cpu)
 
 static void record_wakee(struct task_struct *p)
 {
+	/* IRQ/softirq current is the interrupted task, not the logical waker. */
+	if (!in_task())
+		return;
+
 	/*
 	 * Only decay a single time; tasks that have less then 1 wakeup per
 	 * jiffy will not have built up many flips.
@@ -9162,6 +9166,22 @@ static inline bool asym_fits_cpu(unsigned long util,
 		 */
 		return (!sched_smt_active() || is_core_idle(cpu)) &&
 		       (util_fits_cpu(util, util_min, util_max, cpu) > 0);
+	}
+
+	return true;
+}
+
+static bool can_stack_on_waker(struct task_struct *p, int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	if ((rq->nr_running - cfs_h_nr_delayed(rq)) != 1)
+		return false;
+
+	if (sched_asym_cpucap_active()) {
+		sync_entity_load_avg(&p->se);
+		if (!task_fits_cpu(p, cpu))
+			return false;
 	}
 
 	return true;
@@ -9920,6 +9940,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	struct sched_domain *tmp, *sd = NULL;
 	int cpu = smp_processor_id();
 	int new_cpu = prev_cpu;
+	bool reciprocal_wakeup = false;
 	int want_affine = 0;
 	/* SD_flags and WF_flags share the first nibble */
 	int sd_flag = wake_flags & 0xF;
@@ -9929,6 +9950,12 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 	 */
 	lockdep_assert_held(&p->pi_lock);
 	if (wake_flags & WF_TTWU) {
+		/*
+		 * Check if current is p's last wakee before recording p as
+		 * current's last wakee.
+		 */
+		reciprocal_wakeup = in_task() &&
+			p->last_wakee == current;
 		record_wakee(p);
 
 		if ((wake_flags & WF_CURRENT_CPU) &&
@@ -9954,6 +9981,19 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 		    cpumask_test_cpu(prev_cpu, sched_domain_span(tmp))) {
 			if (cpu != prev_cpu)
 				new_cpu = wake_affine(tmp, p, cpu, prev_cpu, sync);
+
+			/*
+			 * If wake-affine selected or kept the waker CPU, stack
+			 * a reciprocal WF_SYNC wakee there on non-SMT when it
+			 * has no other runnable task. On SMT, retain
+			 * select_idle_sibling() so it can consider idle
+			 * sibling/core placement.
+			 */
+			if (sync && !sched_smt_active() &&
+			    new_cpu == cpu &&
+			    reciprocal_wakeup &&
+			    can_stack_on_waker(p, cpu))
+				return cpu;
 
 			sd = NULL; /* Prefer wake_affine over balance flags */
 			break;
