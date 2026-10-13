@@ -6,6 +6,7 @@
  * Author: Brendan Higgins <brendanhiggins@google.com>
  */
 
+#include <linux/debug_locks.h>
 #include <kunit/resource.h>
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
@@ -78,6 +79,29 @@ void __printf(3, 4) __kunit_fail_current_test_impl(const char *file, int line, c
 
 	kunit_err(current->kunit_test, "%s:%d: %s", file, line, buffer);
 	kunit_kfree(current->kunit_test, buffer);
+}
+
+/*
+ * Fails current test if test turns off debug_locks.
+ */
+static void kunit_check_lockdep(struct kunit *test, int prev_debug_locks)
+{
+	if (IS_ENABLED(CONFIG_KUNIT_FAIL_TEST_ON_LOCKDEP) && !debug_locks && prev_debug_locks) {
+		kunit_err(test, "Test triggered a lockdep warning");
+		kunit_set_failure(test);
+	}
+}
+
+/*
+ * Skip a KUnit test if debug_locks is turned off by lockdep.
+ */
+static void kunit_skip_if_lockdep(struct kunit *test, struct kunit_suite *suite)
+{
+	if (IS_ENABLED(CONFIG_KUNIT_FAIL_TEST_ON_LOCKDEP) && !debug_locks) {
+		suite->forced_skip = true;
+		test->forced_skip = true;
+		kunit_skip(test, "force skip: debug_locks are off");
+	}
 }
 
 /*
@@ -462,6 +486,8 @@ static void kunit_run_case_internal(struct kunit *test,
 {
 	struct timespec64 start, end;
 
+	kunit_skip_if_lockdep(test, suite);
+
 	if (suite->init) {
 		int ret;
 
@@ -512,6 +538,7 @@ static void kunit_try_run_case(void *data)
 	struct kunit *test = ctx->test;
 	struct kunit_suite *suite = ctx->suite;
 	struct kunit_case *test_case = ctx->test_case;
+	int debug_locks_snapshot = debug_locks;
 
 	current->kunit_test = test;
 
@@ -521,6 +548,8 @@ static void kunit_try_run_case(void *data)
 	 * thread will resume control and handle any necessary clean up.
 	 */
 	kunit_run_case_internal(test, suite, test_case);
+
+	kunit_check_lockdep(test, debug_locks_snapshot);
 }
 
 static void kunit_try_run_case_cleanup(void *data)
