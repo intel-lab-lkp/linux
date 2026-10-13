@@ -196,6 +196,7 @@ static int gpio_shared_of_traverse(struct device_node *curr)
 		for (i = 0; i < count; i++) {
 			struct device_node *np __free(device_node) = NULL;
 			char *con_id __free(kfree) = NULL;
+			struct fwnode_handle *curr_fwnode;
 
 			ret = of_parse_phandle_with_args(curr, prop->name,
 							 "#gpio-cells", i,
@@ -261,8 +262,7 @@ static int gpio_shared_of_traverse(struct device_node *curr)
 				con_id[con_id_len - suffix_len] = '\0';
 			}
 
-			struct fwnode_handle *curr_fwnode =
-				fwnode_handle_get(of_fwnode_handle(curr));
+			curr_fwnode = fwnode_handle_get(of_fwnode_handle(curr));
 			ref = gpio_shared_make_ref(curr_fwnode, con_id, args.args[1]);
 			if (!ref) {
 				fwnode_handle_put(curr_fwnode);
