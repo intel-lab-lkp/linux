@@ -4419,6 +4419,12 @@ L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	drivers/media/pci/hws/
 
+AWINIC AW8697 HAPTICS DRIVER
+M:	Armandas Kvietkus <armandas.kvietkus@proton.me>
+L:	linux-input@vger.kernel.org
+S:	Maintained
+F:	drivers/input/misc/aw8697.c
+
 AWINIC AW99706 WLED BACKLIGHT DRIVER
 M:	Junjie Cao <junjie.cao@linux.dev>
 S:	Maintained
