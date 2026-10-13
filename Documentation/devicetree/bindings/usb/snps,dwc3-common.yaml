@@ -13,6 +13,28 @@ description:
   Defines the properties of the DWC3 core as being embedded in either an
   vendor-specific implementation or as a standalone component.
 
+$defs:
+  hs-port:
+    $ref: /schemas/graph.yaml#/$defs/port-base
+    unevaluatedProperties: false
+    properties:
+      endpoint:
+        $ref: /schemas/graph.yaml#/$defs/endpoint-base
+        unevaluatedProperties: false
+        properties:
+          usb-role-switch:
+            type: boolean
+            description: Separate role-switch input for this connector.
+          mux-state:
+            $ref: /schemas/types.yaml#/definitions/uint32
+            enum: [0, 1]
+            description:
+              Logical port-select GPIO level for this data path. State 0
+              takes precedence when both connectors request USB data.
+        dependentRequired:
+          usb-role-switch: [mux-state]
+          mux-state: [usb-role-switch]
+
 allOf:
   - $ref: usb-drd.yaml#
   - if:
@@ -26,8 +48,44 @@ allOf:
       $ref: usb.yaml#
     else:
       $ref: usb-xhci.yaml#
+  - if:
+      required: [port-select-gpios]
+    then:
+      required: [usb-role-switch, ports, dr_mode]
+      properties:
+        dr_mode:
+          const: otg
+        ports:
+          required: [port@0, port@2]
+          properties:
+            port@0:
+              required: [endpoint]
+              properties:
+                endpoint:
+                  required: [usb-role-switch, mux-state]
+            port@2:
+              required: [endpoint]
+              properties:
+                endpoint:
+                  required: [usb-role-switch, mux-state]
 
 properties:
+  usb-psy-name:
+    description:
+      Name of the USB power supply accepting the input current limit
+      requested by the gadget after USB configuration, and during bus
+      suspend and resume.
+    $ref: /schemas/types.yaml#/definitions/string
+
+  port-select-gpios:
+    maxItems: 1
+    description:
+      Selects between two external connectors sharing the controller's HS
+      data bus. The port@0 and port@2 endpoints specify distinct mux-state
+      values and provide independent role-switch inputs. The controller
+      stops the previous role before changing the data path. With neither
+      connector requesting data, the last selection is retained.
+
   extcon:
     maxItems: 1
     deprecated: true
@@ -50,13 +108,6 @@ properties:
           enum: [ usb2-phy, usb3-phy ]
       - items:
           pattern: "^usb(2-([0-9]|1[0-4])|3-[0-3])$"
-
-  usb-psy-name:
-    description:
-      Name of the USB power supply accepting the input current limit
-      requested by the gadget after USB configuration, and during bus
-      suspend and resume.
-    $ref: /schemas/types.yaml#/definitions/string
 
   snps,usb2-lpm-disable:
     description: Indicate if we don't want to enable USB2 HW LPM for host
@@ -418,12 +469,16 @@ properties:
 
     properties:
       port@0:
-        $ref: /schemas/graph.yaml#/properties/port
+        $ref: '#/$defs/hs-port'
         description: High Speed (HS) data bus.
 
       port@1:
         $ref: /schemas/graph.yaml#/properties/port
         description: Super Speed (SS) data bus.
+
+      port@2:
+        $ref: '#/$defs/hs-port'
+        description: Alternate connector on the multiplexed HS data bus.
 
   wakeup-source:
     $ref: /schemas/types.yaml#/definitions/flag
@@ -436,4 +491,3 @@ required:
 
 additionalProperties: true
 ...
-
