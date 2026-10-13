@@ -1190,4 +1190,16 @@ static inline struct ice_pf *ice_get_ctrl_pf(struct ice_pf *pf)
 		rcu_dereference_check(pf->adapter->ctrl_pf,
 				      lockdep_is_held(&pf->adapter->ctrl_pf_lock));
 }
+
+/* container_of() expands to a statement expression, which clang cannot parse
+ * inside a context analysis attribute argument, so open-code the cast here.
+ */
+#define ice_hw_ctrl_pf_lock(_hw)					\
+	(&((struct ice_pf *)((void *)(_hw) -				\
+			     offsetof(struct ice_pf, hw)))->adapter->ctrl_pf_lock)
+
+bool ice_ptp_lock(struct ice_hw *hw)
+	__cond_acquires_shared(true, ice_hw_ctrl_pf_lock(hw));
+void ice_ptp_unlock(struct ice_hw *hw)
+	__releases_shared(ice_hw_ctrl_pf_lock(hw));
 #endif /* _ICE_H_ */
