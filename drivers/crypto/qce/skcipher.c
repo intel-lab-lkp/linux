@@ -57,6 +57,14 @@ static void qce_skcipher_done(void *data)
 		dev_dbg(qce->dev, "skcipher operation error (%x)\n", status);
 
 	memcpy(rctx->iv, result_buf->encr_cntr_iv, rctx->ivsize);
+
+	/*
+	 * QCE hardware does not count a partial final block, so the counter it
+	 * reports is one short of the value CTR mode expects for iv_out.
+	 */
+	if (IS_CTR(rctx->flags) && !IS_ALIGNED(rctx->cryptlen, AES_BLOCK_SIZE))
+		crypto_inc(rctx->iv, rctx->ivsize);
+
 	qce->async_req_done(tmpl->qce, error);
 }
 
