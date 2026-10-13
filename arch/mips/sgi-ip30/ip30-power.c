@@ -15,6 +15,7 @@
 #include <linux/delay.h>
 #include <linux/rtc/ds1685.h>
 #include <linux/interrupt.h>
+#include <linux/platform_device.h>
 #include <linux/pm.h>
 
 #include <asm/reboot.h>
@@ -31,9 +32,38 @@ static void __noreturn ip30_machine_restart(char *cmd)
 	unreachable();
 }
 
+static void ip30_machine_power_off(void)
+{
+	struct device *dev;
+	int cpu;
+
+	if (!IS_REACHABLE(CONFIG_RTC_DRV_DS1685_FAMILY))
+		return;
+
+	dev = bus_find_device_by_name(&platform_bus_type, NULL, "rtc-ds1685");
+	if (!dev || !dev_get_drvdata(dev))
+		return;
+
+	/* Devices losing power may still interrupt; keep their handlers out. */
+	for (cpu = 0; cpu < HEART_MAX_CPUS; cpu++)
+		heart_write(HEART_CLR_ALL_MASK, &heart_regs->imr[cpu]);
+	heart_write(HEART_ACK_ALL_MASK, &heart_regs->clear_isr);
+
+	ds1685_rtc_poweroff(to_platform_device(dev));
+}
+
 static int __init ip30_reboot_setup(void)
 {
 	_machine_restart = ip30_machine_restart;
+
+	/*
+	 * The DS1687 RTC switches the power supply off.  Halt powers off
+	 * too, as the power button needs a running kernel.
+	 */
+	if (IS_REACHABLE(CONFIG_RTC_DRV_DS1685_FAMILY)) {
+		_machine_halt = ip30_machine_power_off;
+		pm_power_off = ip30_machine_power_off;
+	}
 
 	return 0;
 }
