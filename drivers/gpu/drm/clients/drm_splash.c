@@ -37,7 +37,84 @@
  * DOC: overview
  *
  * This is a simple graphic bootsplash, able to display either a plain color or
- * a static image.
+ * a static image. It draws once the display driver has registered, and stays
+ * until userspace takes the display over.
+ *
+ * It is selected with ``drm_client_lib.active=splash`` or
+ * CONFIG_DRM_CLIENT_DEFAULT_SPLASH. A device has a single in-kernel client, so
+ * with the splash there is no fbdev emulation: no ``/dev/fb0`` and no
+ * framebuffer console.
+ *
+ * Image sources
+ * -------------
+ *
+ * The image is a BMP with a 40 byte BITMAPINFOHEADER, 24 bits per pixel and no
+ * compression. It comes from the first of these that provides one:
+ *
+ * 1. a BMP loaded as firmware and named on the command line with
+ *    ``drm_client_lib.splash_bmp=``; ``splash_bmp=none`` asks for no image at
+ *    all, and a named file that is missing gives no image rather than falling
+ *    back to the sources below;
+ * 2. a "boot-logo" node under ``/chosen`` in the device tree, carrying the BMP
+ *    itself or pointing at a reserved memory region the bootloader loaded it
+ *    into (see Documentation/devicetree/bindings/display/boot-logo.yaml);
+ * 3. the EFI BGRT, the image the firmware showed;
+ * 4. ``drm_splash.bmp`` loaded as firmware, for instance built into the kernel
+ *    with CONFIG_EXTRA_FIRMWARE.
+ *
+ * With none of them, only the background is drawn.
+ *
+ * A reserved memory region keeps its contents across a reset, and may even
+ * across a short power cycle, and the kernel cannot tell a stale image from a
+ * fresh one: a bootloader that loads no image there disables the node, or
+ * removes it.
+ *
+ * Placement
+ * ---------
+ *
+ * The image is placed at a position in screen pixels, where -1 centres it on
+ * that axis, and an offset is added afterwards; the result is clamped so that
+ * the whole image stays on screen. A rotation of 90, 180 or 270 degrees
+ * counter clockwise turns the image and not the screen: position and offset
+ * stay in screen pixels, and a quarter turn only swaps how much room the image
+ * takes up.
+ *
+ * A device tree image is placed and turned as its node says. A BGRT image is
+ * placed at the table offsets and turned as its orientation bits say, the
+ * offsets then being given on the upright screen. Any other image is centred
+ * and upright.
+ *
+ * Background
+ * ----------
+ *
+ * The rest of the screen is filled with the node's "background-color" for a
+ * device tree image, and with CONFIG_DRM_CLIENT_SPLASH_BACKGROUND_COLOR
+ * otherwise.
+ *
+ * Command line
+ * ------------
+ *
+ * What the command line gives wins over every source, each parameter only for
+ * what it says, and only when it is given:
+ *
+ * ``drm_client_lib.splash_bmp=NAME``
+ *   BMP to load as firmware, or ``none`` for no image.
+ * ``drm_client_lib.splash_color=0xRRGGBB``
+ *   background color, whatever the image.
+ * ``drm_client_lib.splash_pos=X,Y``
+ *   position; ``-1,-1`` centres, ``-1,183`` centres horizontally only.
+ * ``drm_client_lib.splash_offset=DX,DY``
+ *   offset added to the position, for instance ``0,80``.
+ * ``drm_client_lib.splash_rotation=DEGREES``
+ *   0, 90, 180 or 270, counter clockwise.
+ *
+ * Positions take both values, or are ignored with a warning. Since each
+ * parameter only replaces its own part, the rest keeps coming from the image
+ * source: ``splash_offset=`` alone moves the image from where the source puts
+ * it, centred for a BMP loaded as firmware, and ``splash_pos=`` alone keeps a
+ * device tree node's "logo-offset". Give both to place the image exactly. A
+ * BGRT image placed from the command line is placed in screen pixels like any
+ * other: the table offsets are then not used.
  */
 
 /*
