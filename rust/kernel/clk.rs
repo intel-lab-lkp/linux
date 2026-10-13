@@ -96,11 +96,17 @@ mod common_clk {
     use super::Hertz;
     use crate::{
         device::Device,
-        error::{from_err_ptr, to_result, Result},
-        prelude::*,
+        error::{
+            from_err_ptr,
+            to_result, //
+        },
+        prelude::*, //
     };
 
-    use core::{ops::Deref, ptr};
+    use core::{
+        ops::Deref,
+        ptr, //
+    };
 
     /// A reference-counted clock.
     ///
@@ -119,9 +125,11 @@ mod common_clk {
     /// The following example demonstrates how to obtain and configure a clock for a device.
     ///
     /// ```
-    /// use kernel::clk::{Clk, Hertz};
+    /// use kernel::clk::{
+    ///     Clk,
+    ///     Hertz,
+    /// };
     /// use kernel::device::Device;
-    /// use kernel::error::Result;
     ///
     /// fn configure_clk(dev: &Device) -> Result {
     ///     let clk = Clk::get(dev, Some(c"apb_clk"))?;
@@ -293,9 +301,11 @@ mod common_clk {
     /// device. The code functions correctly whether or not the clock is available.
     ///
     /// ```
-    /// use kernel::clk::{OptionalClk, Hertz};
+    /// use kernel::clk::{
+    ///     Hertz,
+    ///     OptionalClk,
+    /// };
     /// use kernel::device::Device;
-    /// use kernel::error::Result;
     ///
     /// fn configure_clk(dev: &Device) -> Result {
     ///     let clk = OptionalClk::get(dev, Some(c"apb_clk"))?;
