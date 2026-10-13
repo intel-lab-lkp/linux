@@ -911,8 +911,9 @@ static vm_fault_t exfat_page_mkwrite(struct vm_fault *vmf)
 {
 	struct inode *inode = file_inode(vmf->vma->vm_file);
 	struct exfat_inode_info *ei = EXFAT_I(inode);
+	loff_t mmap_valid_size, fault_page_start;
+	loff_t old_valid_size, new_valid_size;
 	vm_fault_t ret;
-	loff_t new_valid_size, mmap_valid_size, fault_page_start;
 	bool dirty = false;
 
 	sb_start_pagefault(inode->i_sb);
@@ -921,12 +922,14 @@ static vm_fault_t exfat_page_mkwrite(struct vm_fault *vmf)
 
 	mmap_valid_size = ((loff_t)vmf->pgoff + 1) << PAGE_SHIFT;
 	fault_page_start = ((loff_t)vmf->pgoff) << PAGE_SHIFT;
+	old_valid_size = exfat_get_valid_size(ei);
 	new_valid_size = min(mmap_valid_size, i_size_read(inode));
 
-	if (exfat_get_valid_size(ei) < new_valid_size) {
+	if (old_valid_size < new_valid_size) {
 		loff_t zeroed_size = exfat_get_zeroed_size(ei);
 
 		if (zeroed_size < fault_page_start) {
+			loff_t gap_start = max(old_valid_size, zeroed_size);
 			int err;
 
 			/*
@@ -934,7 +937,7 @@ static vm_fault_t exfat_page_mkwrite(struct vm_fault *vmf)
 			 * fault populated its folio and iomap_page_mkwrite()
 			 * will dirty it.
 			 */
-			err = exfat_prepare_valid_range(inode, zeroed_size,
+			err = exfat_prepare_valid_range(inode, gap_start,
 					fault_page_start);
 			if (err < 0) {
 				ret = vmf_fs_error(err);
