@@ -114,6 +114,7 @@ struct nfcmrvl_if_ops {
 	int (*nci_send) (struct nfcmrvl_private *priv, struct sk_buff *skb);
 	void (*nci_ready)(struct nfcmrvl_private *priv);
 	void (*nci_unready)(struct nfcmrvl_private *priv);
+	void (*nci_quiesce)(struct nfcmrvl_private *priv);
 	void (*nci_update_config)(struct nfcmrvl_private *priv,
 				  const void *param);
 };
