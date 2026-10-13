@@ -2087,6 +2087,14 @@ static void push_rt_tasks(struct rq *rq)
 
 #ifdef HAVE_RT_PUSH_IPI
 
+static inline bool rto_push_allowed(void)
+{
+	enum system_states state = READ_ONCE(system_state);
+
+	return state != SYSTEM_HALT && state != SYSTEM_POWER_OFF &&
+	       state != SYSTEM_RESTART;
+}
+
 /*
  * When a high priority task schedules out from a CPU and a lower priority
  * task is scheduled in, a check is made to see if there's any RT tasks
@@ -2134,6 +2142,11 @@ static int rto_next_cpu(struct root_domain *rd)
 	int next;
 	int cpu;
 
+	if (unlikely(!rto_push_allowed())) {
+		rd->rto_cpu = -1;
+		return -1;
+	}
+
 	/*
 	 * When starting the IPI RT pushing, the rto_cpu is set to -1,
 	 * rt_next_cpu() will simply return the first CPU found in
@@ -2158,8 +2171,13 @@ static int rto_next_cpu(struct root_domain *rd)
 		if (cpu == this_cpu)
 			continue;
 
-		if (cpu < nr_cpu_ids)
+		if (cpu < nr_cpu_ids) {
+			/* smp_send_stop() does not clear stale rto_mask bits. */
+			if (!cpu_online(cpu))
+				continue;
+
 			return cpu;
+		}
 
 		rd->rto_cpu = -1;
 
