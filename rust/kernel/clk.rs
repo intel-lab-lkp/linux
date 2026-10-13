@@ -846,6 +846,106 @@ mod common_clk {
             unsafe { bindings::clk_disable_unprepare(self.clk.as_raw()) };
         }
     }
+
+    /// A [`Clk`] with exclusive control over its rate.
+    ///
+    /// While an [`ExclusiveClk`] exists, no other consumer of the same clock
+    /// may change its rate. The rate can still be changed through the
+    /// [`ExclusiveClk`] itself, which dereferences to the [`Clk`] in its
+    /// current state.
+    ///
+    /// The [`Clk`] is moved into the [`ExclusiveClk`], and a [`Clk`] cannot be
+    /// cloned, so only the [`ExclusiveClk`] refers to the consumer handle that
+    /// holds the exclusivity.
+    ///
+    /// # Invariants
+    ///
+    /// `clk_rate_exclusive_get()` has been called on the wrapped [`Clk`], and
+    /// the matching `clk_rate_exclusive_put()` has not been called yet.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::clk::{
+    ///     Clk,
+    ///     Enabled,
+    ///     ExclusiveClk,
+    ///     Hertz,
+    /// };
+    /// use kernel::device::{
+    ///     Bound,
+    ///     Device,
+    /// };
+    ///
+    /// fn lock_rate(dev: &Device<Bound>) -> Result<ExclusiveClk<Enabled>> {
+    ///     let clk = Clk::<Enabled>::get(dev, None)?;
+    ///     clk.set_rate(Hertz::from_mhz(24))?;
+    ///
+    ///     ExclusiveClk::new(clk)
+    /// }
+    /// ```
+    pub struct ExclusiveClk<T: ClkState>(Clk<T>);
+
+    impl<T: ClkState> ExclusiveClk<T> {
+        /// Takes exclusive control over the rate of `clk`.
+        ///
+        /// No other consumer of the clock may change its rate until the
+        /// returned [`ExclusiveClk`] is dropped or [`ExclusiveClk::into_inner`]
+        /// is called. This may sleep.
+        ///
+        /// Equivalent to the kernel's [`clk_rate_exclusive_get`] API.
+        ///
+        /// [`clk_rate_exclusive_get`]:
+        /// https://docs.kernel.org/core-api/kernel-api.html#c.clk_rate_exclusive_get
+        #[inline]
+        pub fn new(clk: Clk<T>) -> Result<Self> {
+            // SAFETY: By the type invariants of `Clk`, `clk.as_raw()` is a valid
+            // argument for `clk_rate_exclusive_get()`.
+            to_result(unsafe { bindings::clk_rate_exclusive_get(clk.as_raw()) })?;
+
+            // INVARIANT: `clk_rate_exclusive_get()` succeeded, and the matching
+            // `clk_rate_exclusive_put()` is called when the `ExclusiveClk` is
+            // dropped or consumed by `into_inner()`.
+            Ok(Self(clk))
+        }
+
+        /// Releases the exclusive control over the rate and returns the [`Clk`].
+        ///
+        /// Equivalent to the kernel's [`clk_rate_exclusive_put`] API.
+        ///
+        /// [`clk_rate_exclusive_put`]:
+        /// https://docs.kernel.org/core-api/kernel-api.html#c.clk_rate_exclusive_put
+        #[inline]
+        pub fn into_inner(self) -> Clk<T> {
+            let this = ManuallyDrop::new(self);
+
+            // SAFETY: By the type invariants, `clk_rate_exclusive_get()` was
+            // called on `this.0` and not yet balanced, so this balances it.
+            unsafe { bindings::clk_rate_exclusive_put(this.0.as_raw()) };
+
+            // SAFETY: `this` is wrapped in `ManuallyDrop`, so the `Clk` is moved
+            // out exactly once and the `Drop` of `ExclusiveClk` does not run.
+            unsafe { ptr::read(&this.0) }
+        }
+    }
+
+    impl<T: ClkState> Deref for ExclusiveClk<T> {
+        type Target = Clk<T>;
+
+        #[inline]
+        fn deref(&self) -> &Clk<T> {
+            &self.0
+        }
+    }
+
+    impl<T: ClkState> Drop for ExclusiveClk<T> {
+        #[inline]
+        fn drop(&mut self) {
+            // SAFETY: By the type invariants, `clk_rate_exclusive_get()` was
+            // called on `self.0` and not yet balanced, so this balances it.
+            unsafe { bindings::clk_rate_exclusive_put(self.0.as_raw()) };
+        }
+    }
 }
 
 #[cfg(CONFIG_COMMON_CLK)]
