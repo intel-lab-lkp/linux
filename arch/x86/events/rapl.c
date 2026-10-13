@@ -763,8 +763,10 @@ static int __init init_rapl_pmus(struct rapl_pmus **rapl_pmus_ptr, int rapl_pmu_
 	rapl_pmus->pmu.capabilities	= PERF_PMU_CAP_NO_EXCLUDE;
 
 	ret = init_rapl_pmu(rapl_pmus);
-	if (ret)
+	if (ret) {
+		*rapl_pmus_ptr = NULL;
 		kfree(rapl_pmus);
+	}
 
 	return ret;
 }
@@ -939,6 +941,7 @@ static int __init rapl_pmu_init(void)
 		if (ret) {
 			pr_warn("power-core PMU registration failed (%d)\n", ret);
 			cleanup_rapl_pmus(rapl_pmus_core);
+			rapl_pmus_core = NULL;
 		}
 	}
 
