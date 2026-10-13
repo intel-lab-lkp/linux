@@ -32,6 +32,9 @@
 #include <subcmd/parse-options.h>
 #include <subcmd/run-command.h>
 
+#include <signal.h>
+#include <sys/mman.h>
+
 #include "builtin.h"
 #include "color.h"
 #include "config.h"
@@ -42,6 +45,7 @@
 #include "symbol.h"
 #include "tests-scripts.h"
 #include "tests.h"
+#include "util/mutex.h"
 #include "util/rlimit.h"
 #include "util/strbuf.h"
 #include "util/term.h"
@@ -62,6 +66,17 @@ static bool list_requisites;
 static unsigned int runs_per_test = 1;
 /* Number of lines to include in failure snippet. */
 static unsigned int failure_snippet_lines = 10;
+/*
+ * The tests mapping ring buffers take turns using their share of
+ * kernel.perf_event_mlock_kb via this mutex, shared with the forked test
+ * processes and robust so that a test killed while holding it doesn't leave
+ * the budget locked, see mutex_init_pshared_robust().
+ */
+struct mlock_budget {
+	struct mutex lock;
+};
+
+static struct mlock_budget *mlock_budget;
 const char *dso_to_test;
 const char *test_objdump_path = "objdump";
 static const char *workload_control;
@@ -378,12 +393,30 @@ static void child_test_sig_handler(int sig)
 	siglongjmp(run_test_jmp_buf, sig);
 }
 
+static int run_test_case(struct child_test *child)
+{
+	return test_function(child->test, child->test_case_num)(child->test, child->test_case_num);
+}
+
+/* The thread safety analysis can't express a lock held conditionally. */
+static int run_test_case_mlocked(struct child_test *child)
+{
+	int err;
+
+	mutex_lock(&mlock_budget->lock);
+	err = run_test_case(child);
+	mutex_unlock(&mlock_budget->lock);
+
+	return err;
+}
+
 static int run_test_child(struct child_process *process)
 {
 	const int signals[] = {
 		SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGINT, SIGPIPE, SIGQUIT, SIGSEGV, SIGTERM,
 	};
 	struct child_test *child = container_of(process, struct child_test, process);
+	bool needs_mlock = mlock_budget && child->test->needs_mlock;
 	int err;
 
 	close_parent_fds();
@@ -400,7 +433,12 @@ static int run_test_child(struct child_process *process)
 
 	pr_debug("---- start ----\n");
 	pr_debug("test child forked, pid %d\n", getpid());
-	err = test_function(child->test, child->test_case_num)(child->test, child->test_case_num);
+
+	if (needs_mlock)
+		err = run_test_case_mlocked(child);
+	else
+		err = run_test_case(child);
+
 	pr_debug("---- end(%d) ----\n", err);
 
 	check_leaks();
@@ -1776,6 +1814,59 @@ static struct test_suite **build_suites(void)
 #undef for_each_suite
 }
 
+static bool perf_test__shares_mlock_budget(struct test_suite **suites, int argc,
+					   const char *argv[], struct intlist *skiplist)
+{
+	int sharing = 0;
+
+	/* Nothing to share the budget with if just one test maps ring buffers. */
+	for (int curr_suite = 0; suites[curr_suite]; curr_suite++) {
+		struct test_suite *t = suites[curr_suite];
+		int curr_test_case;
+		bool suite_matched;
+
+		if (!t->needs_mlock || intlist__find(skiplist, curr_suite + 1))
+			continue;
+
+		suite_matched = perf_test__matches(test_description(t, /*test_case=*/-1),
+						   curr_suite, argc, argv);
+		test_suite__for_each_test_case(t, curr_test_case) {
+			if (test_exclusive(t, curr_test_case))
+				continue;
+
+			if (suite_matched ||
+			    perf_test__matches(test_description(t, curr_test_case),
+					       curr_suite, argc, argv))
+				sharing += runs_per_test;
+		}
+		if (sharing > 1)
+			return true;
+	}
+	return false;
+}
+
+static void perf_test__setup_mlock_budget(struct test_suite **suites, int argc,
+					  const char *argv[], struct intlist *skiplist)
+{
+	/* Nothing runs at the same time, nothing to share the budget with. */
+	if (sequential || !perf_test__shares_mlock_budget(suites, argc, argv, skiplist))
+		return;
+
+	mlock_budget = mmap(NULL, sizeof(*mlock_budget), PROT_READ | PROT_WRITE,
+			    MAP_SHARED | MAP_ANONYMOUS, /*fd=*/-1, /*offset=*/0);
+	if (mlock_budget == MAP_FAILED) {
+		mlock_budget = NULL;
+		pr_err("Failed to map the shared area used to take turns using the perf mlock budget\n");
+		return;
+	}
+
+	if (!mutex_init_pshared_robust(&mlock_budget->lock)) {
+		munmap(mlock_budget, sizeof(*mlock_budget));
+		mlock_budget = NULL;
+		pr_debug("Robust mutexes aren't available, not taking turns using the perf mlock budget\n");
+	}
+}
+
 int cmd_test(int argc, const char **argv)
 {
 	const char *test_usage[] = {
@@ -1884,6 +1975,7 @@ int cmd_test(int argc, const char **argv)
 		intlist__delete(skiplist);
 		return err ? -err : -ENOMEM;
 	}
+	perf_test__setup_mlock_budget(suites, argc, argv, skiplist);
 	ret = __cmd_test(suites, argc, argv, skiplist);
 	free(suites);
 	intlist__delete(skiplist);
