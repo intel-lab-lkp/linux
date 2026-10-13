@@ -882,8 +882,10 @@ static void rtw_reconfig_complete(struct ieee80211_hw *hw,
 	struct rtw_dev *rtwdev = hw->priv;
 
 	mutex_lock(&rtwdev->mutex);
-	if (reconfig_type == IEEE80211_RECONFIG_TYPE_RESTART)
+	if (reconfig_type == IEEE80211_RECONFIG_TYPE_RESTART) {
 		clear_bit(RTW_FLAG_RESTARTING, rtwdev->flags);
+		ieee80211_wake_queues(hw);
+	}
 	mutex_unlock(&rtwdev->mutex);
 }
 
