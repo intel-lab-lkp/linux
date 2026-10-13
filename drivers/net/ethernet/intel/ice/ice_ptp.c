@@ -215,17 +215,23 @@ void ice_ptp_restore_timestamp_mode(struct ice_pf *pf)
  * @pf: Board private structure
  * @sts: Optional parameter for holding a pair of system timestamps from
  *       the system clock. Will be ignored if NULL is given.
+ * @time: Storage for the source clock time
+ *
+ * Return: 0 on success, negative error code otherwise.
  */
-u64 ice_ptp_read_src_clk_reg(struct ice_pf *pf,
-			     struct ptp_system_timestamp *sts)
+int ice_ptp_read_src_clk_reg(struct ice_pf *pf,
+			     struct ptp_system_timestamp *sts, u64 *time)
 {
 	struct ice_hw *hw = &pf->hw;
 	u32 hi, lo, lo2;
 	u8 tmr_idx;
 
 	scoped_guard(rcu) {
-		if (!ice_is_primary(hw))
+		if (!ice_is_primary(hw)) {
 			hw = ice_get_primary_hw(pf);
+			if (!hw)
+				return -ENODEV;
+		}
 
 		tmr_idx = ice_get_ptp_src_clock_index(hw);
 		guard(spinlock)(&pf->adapter->ptp_gltsyn_time_lock);
@@ -233,12 +239,12 @@ u64 ice_ptp_read_src_clk_reg(struct ice_pf *pf,
 		ptp_read_system_prets(sts);
 
 		if (hw->mac_type == ICE_MAC_E830) {
-			u64 clk_time = rd64(hw, E830_GLTSYN_TIME_L(tmr_idx));
+			*time = rd64(hw, E830_GLTSYN_TIME_L(tmr_idx));
 
 			/* Read the system timestamp post PHC read */
 			ptp_read_system_postts(sts);
 
-			return clk_time;
+			return 0;
 		}
 
 		lo = rd32(hw, GLTSYN_TIME_L(tmr_idx));
@@ -261,7 +267,9 @@ u64 ice_ptp_read_src_clk_reg(struct ice_pf *pf,
 
 	}
 
-	return ((u64)hi << 32) | lo;
+	*time = ((u64)hi << 32) | lo;
+
+	return 0;
 }
 
 /**
@@ -361,6 +369,7 @@ static u64 ice_ptp_extend_40b_ts(struct ice_pf *pf, u64 in_tstamp)
 {
 	const u64 mask = GENMASK_ULL(31, 0);
 	unsigned long discard_time;
+	u64 cached_time;
 
 	/* Discard the hardware timestamp if the cached PHC time is too old */
 	discard_time = pf->ptp.cached_phc_jiffies + msecs_to_jiffies(2000);
@@ -369,8 +378,17 @@ static u64 ice_ptp_extend_40b_ts(struct ice_pf *pf, u64 in_tstamp)
 		return 0;
 	}
 
-	return ice_ptp_extend_32b_ts(READ_ONCE(pf->ptp.cached_phc_time),
-				     (in_tstamp >> 8) & mask);
+	/* Discard it as well if there is no cached PHC time at all, which is
+	 * how ice_ptp_update_cached_phctime() reports that the source clock
+	 * has become unreachable.
+	 */
+	cached_time = READ_ONCE(pf->ptp.cached_phc_time);
+	if (!cached_time) {
+		pf->ptp.tx_hwtstamp_discarded++;
+		return 0;
+	}
+
+	return ice_ptp_extend_32b_ts(cached_time, (in_tstamp >> 8) & mask);
 }
 
 /**
@@ -984,13 +1002,15 @@ static int ice_ptp_init_tx(struct ice_pf *pf, struct ice_ptp_tx *tx, u8 port)
  * Return:
  * * 0 - OK, successfully updated
  * * -EAGAIN - PF was busy, need to reschedule the update
+ * * -ENODEV - no control PF owns the source clock register space
+ * * -EOPNOTSUPP - PTP support is not compiled in
  */
 static int ice_ptp_update_cached_phctime(struct ice_pf *pf)
 {
 	struct device *dev = ice_pf_to_dev(pf);
 	unsigned long update_before;
 	u64 systime;
-	int i;
+	int err, i;
 
 	update_before = pf->ptp.cached_phc_jiffies + msecs_to_jiffies(2000);
 	if (pf->ptp.cached_phc_time &&
@@ -1003,11 +1023,22 @@ static int ice_ptp_update_cached_phctime(struct ice_pf *pf)
 	}
 
 	/* Read the current PHC time */
-	systime = ice_ptp_read_src_clk_reg(pf, NULL);
-
-	/* Update the cached PHC time stored in the PF structure */
-	WRITE_ONCE(pf->ptp.cached_phc_time, systime);
-	WRITE_ONCE(pf->ptp.cached_phc_jiffies, jiffies);
+	err = ice_ptp_read_src_clk_reg(pf, NULL, &systime);
+	if (err) {
+		/* The source clock is gone, so the cache can no longer be
+		 * refreshed. Publish zero instead of leaving the last good
+		 * value behind: neither ice_ptp_get_rx_hwts() nor
+		 * ice_ptp_extend_40b_ts() may extend against a value that no
+		 * longer tracks the PHC, and both treat a zero cache as
+		 * "no timestamp".
+		 */
+		systime = 0;
+		WRITE_ONCE(pf->ptp.cached_phc_time, 0);
+	} else {
+		/* Update the cached PHC time stored in the PF structure */
+		WRITE_ONCE(pf->ptp.cached_phc_time, systime);
+		WRITE_ONCE(pf->ptp.cached_phc_jiffies, jiffies);
+	}
 
 	if (test_and_set_bit(ICE_CFG_BUSY, pf->state))
 		return -EAGAIN;
@@ -1030,7 +1061,7 @@ static int ice_ptp_update_cached_phctime(struct ice_pf *pf)
 	}
 	clear_bit(ICE_CFG_BUSY, pf->state);
 
-	return 0;
+	return err;
 }
 
 /**
@@ -1060,8 +1091,8 @@ static void ice_ptp_reset_cached_phctime(struct ice_pf *pf)
 		 * properly reset them here. This could lead to reporting of
 		 * invalid timestamps, but there isn't much we can do.
 		 */
-		dev_warn(dev, "%s: ICE_CFG_BUSY, unable to immediately update cached PHC time\n",
-			 __func__);
+		dev_warn(dev, "%s: unable to immediately update cached PHC time, err %d\n",
+			 __func__, err);
 
 		/* Queue the work item to update the Rx rings when possible */
 		kthread_queue_delayed_work(pf->ptp.kworker, &pf->ptp.work,
@@ -1817,6 +1848,7 @@ static int ice_ptp_cfg_perout(struct ice_pf *pf, struct ptp_perout_request *rq,
 	u64 clk, period, start, phase;
 	struct ice_hw *hw = &pf->hw;
 	int pin_desc_idx;
+	int err;
 
 	pin_desc_idx = ice_ptp_find_pin_idx(pf, PTP_PF_PEROUT, rq->index);
 	if (pin_desc_idx < 0)
@@ -1855,7 +1887,10 @@ static int ice_ptp_cfg_perout(struct ice_pf *pf, struct ptp_perout_request *rq,
 	 * at the next multiple of period, maintaining phase at least 0.5 second
 	 * from now, so we have time to write it to HW.
 	 */
-	clk = ice_ptp_read_src_clk_reg(pf, NULL) + NSEC_PER_MSEC * 500;
+	err = ice_ptp_read_src_clk_reg(pf, NULL, &clk);
+	if (err)
+		return err;
+	clk += NSEC_PER_MSEC * 500;
 	if (rq->flags & PTP_PEROUT_PHASE || start <= clk - prop_delay_ns)
 		start = div64_u64(clk + period - 1, period) * period + phase;
 
@@ -1998,8 +2033,12 @@ ice_ptp_gettimex64(struct ptp_clock_info *info, struct timespec64 *ts,
 {
 	struct ice_pf *pf = ptp_info_to_pf(info);
 	u64 time_ns;
+	int err;
 
-	time_ns = ice_ptp_read_src_clk_reg(pf, sts);
+	err = ice_ptp_read_src_clk_reg(pf, sts, &time_ns);
+	if (err)
+		return err;
+
 	*ts = ns_to_timespec64(time_ns);
 	return 0;
 }
@@ -3050,9 +3089,13 @@ static void ice_ptp_periodic_work(struct kthread_work *work)
 
 	ice_ptp_maybe_trigger_tx_interrupt(pf);
 
-	/* Run twice a second or reschedule if phc update failed */
+	/* Run twice a second, or retry soon if another thread was busy
+	 * updating the Rx rings. Other errors, such as a missing control PF,
+	 * do not clear up on their own and must not turn the periodic worker
+	 * into a busy loop.
+	 */
 	kthread_queue_delayed_work(ptp->kworker, &ptp->work,
-				   msecs_to_jiffies(err ? 10 : 500));
+				   msecs_to_jiffies(err == -EAGAIN ? 10 : 500));
 }
 
 /**
