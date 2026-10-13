@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/serial/fsl-mcf-uart.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Freescale ColdFire UART
+
+maintainers:
+  - Greg Ungerer <gerg@linux-m68k.org>
+
+allof:
+  - $ref: serial.yaml#
+
+properties:
+  compatible:
+    const: fsl,mcf-uart
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    uart0: serial@fc060000 {
+        compatible = "fsl,mcf-uart";
+        reg = <0xfc060000 0x80>;
+        interrupts = <90>;
+        clocks = <&coreclk>;
+    };
