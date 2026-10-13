@@ -2019,7 +2019,7 @@ out_brelse:
 out:
 	iput(inode);
 	if (!ret)
-		blkdev_issue_flush(sb->s_bdev);
+		ret = blkdev_issue_flush(sb->s_bdev);
 
 	return ret;
 }
