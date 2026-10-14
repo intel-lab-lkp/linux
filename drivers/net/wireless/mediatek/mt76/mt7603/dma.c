@@ -88,7 +88,6 @@ mt7603_rx_loopback_skb(struct mt7603_dev *dev, struct sk_buff *skb)
 	}
 
 	skb->priority = tid;
-	ieee80211_sta_set_buffered(sta, tid, true);
 
 	val = le32_to_cpu(txd[0]);
 	val &= ~(MT_TXD0_P_IDX | MT_TXD0_Q_IDX);
@@ -96,6 +95,13 @@ mt7603_rx_loopback_skb(struct mt7603_dev *dev, struct sk_buff *skb)
 	txd[0] = cpu_to_le32(val);
 
 	spin_lock_bh(&dev->ps_lock);
+	/* The wake-up may have drained psq before this loopback arrived. */
+	if (!msta->ps_sleeping) {
+		spin_unlock_bh(&dev->ps_lock);
+		goto free;
+	}
+
+	ieee80211_sta_set_buffered(sta, tid, true);
 	__skb_queue_tail(&msta->psq, skb);
 	if (skb_queue_len(&msta->psq) >= 64) {
 		skb = __skb_dequeue(&msta->psq);
