@@ -63,6 +63,7 @@ The options available for the add command can be listed by reading the
 	$ cat /dev/zloop-control
         add id=%d,capacity_mb=%u,zone_size_mb=%u,zone_capacity_mb=%u,conv_zones=%u,max_open_zones=%u,base_dir=%s,nr_queues=%u,queue_depth=%u,buffered_io,zone_append=%u,ordered_zone_append,discard_write_cache,stor_elements=%u
         remove id=%d
+        degrade_element id=%d,element_id=%u
 
 In more details, the options that can be used with the "add" command are as
 follows.
@@ -143,7 +144,23 @@ the zoned device will not be created.
 To fully delete a zoned device, after executing the remove operation, the device
 base directory containing the backing files of the device zones must be deleted.
 
-4) Example
+4) Degrading a storage element
+------------------------------
+
+When storage element emulation is enabled, storage elements can be set in a
+degraded state to emulate defective storage elements (e.g. defective heads of a
+hard disk). This is done by issuing the "degrade_element" command to
+/dev/zloop-control, specifying the ID of the target device and the ID of the
+storage element to degrade::
+
+        $ echo "degrade_element id=X,element_id=Y" > /dev/zloop-control
+
+Any write access to sectors of a zone served by a degraded storage element will
+result in a failure. For read accesses, the command will be failed if the read
+element serving the zone is degraded, or if the storage elements are emulated
+as all access physical elements.
+
+5) Example
 ----------
 
 The following sequence of commands creates a 2GB zoned device with zones of 64
