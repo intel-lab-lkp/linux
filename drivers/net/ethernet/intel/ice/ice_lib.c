@@ -476,7 +476,7 @@ void ice_vsi_free(struct ice_vsi *vsi)
 		return;
 	}
 
-	mutex_lock(&pf->sw_mutex);
+	guard(mutex)(&pf->sw_mutex);
 	/* updates the PF for this cleared VSI */
 
 	pf->vsi[vsi->idx] = NULL;
@@ -485,7 +485,6 @@ void ice_vsi_free(struct ice_vsi *vsi)
 	ice_vsi_free_stats(vsi);
 	ice_vsi_free_arrays(vsi);
 	mutex_destroy(&vsi->xdp_state_lock);
-	mutex_unlock(&pf->sw_mutex);
 	devm_kfree(dev, vsi);
 }
 
