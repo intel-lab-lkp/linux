@@ -241,6 +241,9 @@ static int snd_pcm_ioctl_hw_params_compat(struct snd_pcm_substream *substream,
 	runtime = substream->runtime;
 	if (!runtime)
 		return -ENOTTY;
+	if (refine &&
+	    snd_pcm_get_state(substream) == SNDRV_PCM_STATE_DISCONNECTED)
+		return -EBADFD;
 
 	struct snd_pcm_hw_params *data __free(kfree) =
 		kmalloc_obj(*data);
