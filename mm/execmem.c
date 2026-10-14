@@ -166,11 +166,9 @@ static void execmem_cache_clean(struct work_struct *work)
 	mutex_lock(mutex);
 	mas_for_each(&mas, area, ULONG_MAX) {
 		size_t size = mas_range_len(&mas);
+		struct vm_struct *vm = find_vm_area(area);
 
-		if (IS_ALIGNED(size, PMD_SIZE) &&
-		    IS_ALIGNED(mas.index, PMD_SIZE)) {
-			struct vm_struct *vm = find_vm_area(area);
-
+		if (vm->addr == area && get_vm_area_size(vm) == size) {
 			execmem_set_direct_map_valid(vm, true);
 			mas_store_gfp(&mas, NULL, GFP_KERNEL);
 			vfree(area);
