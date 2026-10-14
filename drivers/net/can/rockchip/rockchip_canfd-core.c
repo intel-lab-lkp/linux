@@ -356,8 +356,10 @@ static int rkcanfd_set_mode(struct net_device *ndev,
 
 	switch (mode) {
 	case CAN_MODE_START:
+		disable_irq(ndev->irq);
 		rkcanfd_chip_start(priv);
 		rkcanfd_chip_interrupts_enable(priv);
+		enable_irq(ndev->irq);
 		netif_wake_queue(ndev);
 		break;
 
@@ -758,6 +760,7 @@ static int rkcanfd_stop(struct net_device *ndev)
 {
 	struct rkcanfd_priv *priv = netdev_priv(ndev);
 
+	close_candev_cancel_restart_sync(ndev);
 	netif_stop_queue(ndev);
 
 	rkcanfd_chip_interrupts_disable(priv);
