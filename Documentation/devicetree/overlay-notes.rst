@@ -148,3 +148,19 @@ pointers to the overlay nodes or data.  Any example of an inadvertent use
 of such pointers is if a driver or subsystem module is loaded after an
 overlay has been applied, and the driver or subsystem scans the entire
 devicetree or a large portion of it, including the overlay nodes.
+
+Overlays and /aliases
+---------------------
+
+An overlay may add entries to /aliases.  They are mirrored into the kernel's
+alias lookup as the overlay is applied, so of_alias_get_id() honors them just
+like the aliases present at boot, and removing the overlay removes them again.
+
+An alias is a request for one specific id, not a hint.  Subsystems hand out
+ids dynamically to devices that have no alias, and they cannot reserve ids for
+an overlay that has not been loaded yet, so an overlay alias may name an id
+that is already in use.  When that happens the device registration fails
+instead of silently falling back to a dynamic id: i2c_add_adapter() and
+spi_register_controller() return -EBUSY, and a serial port fails to be added.
+Choose overlay alias indices above anything the base system allocates
+dynamically.
