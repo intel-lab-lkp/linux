@@ -227,6 +227,11 @@ void bcma_core_chipcommon_init(struct bcma_drv_cc *cc)
 			((leddc_on << BCMA_CC_GPIOTIMER_ONTIME_SHIFT) |
 			 (leddc_off << BCMA_CC_GPIOTIMER_OFFTIME_SHIFT)));
 	}
+
+	/* Corecontrol bits 5:2: bit 3 is UARTCLKEN, the rest undocumented. */
+	if (cc->core->bus->chipinfo.id == BCMA_CHIP_ID_BCM4352 ||
+	    cc->core->bus->chipinfo.id == BCMA_CHIP_ID_BCM4360)
+		bcma_cc_set32(cc, BCMA_CC_CORECTL, 0x3c);
 	cc->ticks_per_ms = bcma_chipco_watchdog_ticks_per_ms(cc);
 
 	cc->setup_done = true;
