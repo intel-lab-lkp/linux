@@ -10099,13 +10099,19 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 
 	if (ifmgd->associated) {
 		u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+		/*
+		 * With MFP the AP protects our association and may not
+		 * accept a new (re)association from us until an SA Query
+		 * on the old one times out, so tell it that we leave.
+		 */
+		bool tx = ifmgd->flags & IEEE80211_STA_MFP_ENABLED;
 
 		sdata_info(sdata,
 			   "disconnect from AP %pM for new auth to %pM\n",
 			   sdata->vif.cfg.ap_addr, auth_data->ap_addr);
 		ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH,
 				       WLAN_REASON_UNSPECIFIED,
-				       false, frame_buf);
+				       tx, frame_buf);
 
 		ieee80211_report_disconnect(sdata, frame_buf,
 					    sizeof(frame_buf), true,
@@ -10452,13 +10458,19 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 
 	if (ifmgd->associated) {
 		u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+		/*
+		 * With MFP the AP protects our association and may not
+		 * accept a new (re)association from us until an SA Query
+		 * on the old one times out, so tell it that we leave.
+		 */
+		bool tx = ifmgd->flags & IEEE80211_STA_MFP_ENABLED;
 
 		sdata_info(sdata,
 			   "disconnect from AP %pM for new assoc to %pM\n",
 			   sdata->vif.cfg.ap_addr, assoc_data->ap_addr);
 		ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH,
 				       WLAN_REASON_UNSPECIFIED,
-				       false, frame_buf);
+				       tx, frame_buf);
 
 		ieee80211_report_disconnect(sdata, frame_buf,
 					    sizeof(frame_buf), true,
