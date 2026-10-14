@@ -283,6 +283,8 @@
 #define PHY_DELAY_CODE_SD		0x55
 #define PHY_DELAY_CODE_SDIO		0x29
 
+/* CIT for the JHB100 SoC */
+#define JHB100_CQHCI_CIT_NS	320
 struct rk35xx_priv {
 	struct reset_control *reset;
 	u8 txclk_tapnum;
@@ -2340,6 +2342,25 @@ static const struct sdhci_ops starfive_jhb100_ops = {
 	.platform_execute_tuning = th1520_execute_tuning,
 };
 
+static void dwcmshc_starfive_jhb100_pre_enable(struct mmc_host *mmc)
+{
+	struct cqhci_host *cq_host = mmc->cqe_private;
+	int ret;
+
+	ret = cqhci_set_cmd_idle_time(cq_host, JHB100_CQHCI_CIT_NS);
+	if (ret)
+		dev_warn_once(mmc_dev(mmc),
+			      "failed to set CQE command idle time: %d\n", ret);
+}
+
+static const struct cqhci_host_ops starfive_jhb100_cqhci_ops = {
+	.enable			= dwcmshc_sdhci_cqe_enable,
+	.disable		= sdhci_cqe_disable,
+	.pre_enable		= dwcmshc_starfive_jhb100_pre_enable,
+	.dumpregs		= dwcmshc_cqhci_dumpregs,
+	.set_tran_desc		= dwcmshc_set_tran_desc,
+};
+
 static int dwcmshc_starfive_jhb100_init(struct device *dev, struct sdhci_host *host,
 					struct dwcmshc_priv *dwc_priv)
 {
@@ -2412,6 +2433,7 @@ static const struct dwcmshc_pltfm_data sdhci_dwcmshc_jhb100_pdata = {
 		.quirks = SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN,
 		.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN,
 	},
+	.cqhci_host_ops = &starfive_jhb100_cqhci_ops,
 	.init = dwcmshc_starfive_jhb100_init,
 	.deinit = dwcmshc_starfive_jhb100_deinit,
 };
