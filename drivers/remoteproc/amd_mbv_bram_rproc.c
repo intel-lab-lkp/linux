@@ -16,6 +16,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
@@ -94,8 +95,24 @@ static int amd_bram_rproc_start(struct rproc *rproc)
 		return ret;
 	}
 
+	/*
+	 * Partial reconfiguration restores the PL GPIO hardware defaults but
+	 * leaves gpiolib's cached direction unchanged. Re-establish the output
+	 * direction and generate a reset pulse after firmware has been loaded.
+	 * gpiod_set_value_cansleep() is insufficient here because it changes the
+	 * value without restoring an output direction lost during DFX.
+	 */
+	ret = gpiod_direction_output(priv->reset, 1);
+	if (ret) {
+		dev_err(priv->dev, "failed to assert reset: %d\n", ret);
+		clk_disable_unprepare(priv->clk);
+		return ret;
+	}
+	/* Hold reset asserted long enough to provide a clean reset pulse. */
+	usleep_range(10, 20);
+
 	/* Deassert reset and let the processor run. */
-	ret = gpiod_set_value_cansleep(priv->reset, 0);
+	ret = gpiod_direction_output(priv->reset, 0);
 	if (ret) {
 		dev_err(priv->dev, "failed to deassert reset: %d\n", ret);
 		clk_disable_unprepare(priv->clk);
@@ -110,8 +127,8 @@ static int amd_bram_rproc_stop(struct rproc *rproc)
 	struct amd_bram_rproc *priv = rproc->priv;
 	int ret;
 
-	/* Assert reset before disabling the processor clock. */
-	ret = gpiod_set_value_cansleep(priv->reset, 1);
+	/* Restore the output direction after DFX and assert reset. */
+	ret = gpiod_direction_output(priv->reset, 1);
 	if (ret) {
 		dev_err(priv->dev, "failed to assert reset: %d\n", ret);
 		return ret;
