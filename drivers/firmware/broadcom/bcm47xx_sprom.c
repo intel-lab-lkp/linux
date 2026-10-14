@@ -173,6 +173,32 @@ static void nvram_read_alpha2(const char *prefix, const char *name,
 	memcpy(val, buf, 2);
 }
 
+/*
+ * AvVmid_c<core>: Av,Vmid of the chain's power detector for 2g, 5gl, 5gml,
+ * 5gmu and 5gh. The chain is marked valid only if all ten values parse.
+ */
+static void nvram_read_avvmid(const char *prefix, int core,
+			      struct ssb_sprom *sprom, bool fallback)
+{
+	char name[sizeof("AvVmid_c0")];
+	char buf[64], *p = buf, *tok;
+	u8 v[10];
+	int n = 0;
+
+	snprintf(name, sizeof(name), "AvVmid_c%d", core);
+	if (get_nvram_var(prefix, NULL, name, buf, sizeof(buf), fallback) < 0)
+		return;
+	while (n < ARRAY_SIZE(v) && (tok = strsep(&p, ",")) != NULL) {
+		if (kstrtou8(strim(tok), 0, &v[n]))
+			return;
+		n++;
+	}
+	if (n != ARRAY_SIZE(v))
+		return;
+	memcpy(sprom->avvmid[core], v, sizeof(v));
+	sprom->avvmid_valid |= BIT(core);
+}
+
 /* Variables read from NVRAM whether or not the SPROM itself comes from it. */
 static void bcm47xx_sprom_fill_nvram_only(struct ssb_sprom *sprom,
 					  const char *prefix, bool fallback)
@@ -185,6 +211,12 @@ static void bcm47xx_sprom_fill_nvram_only(struct ssb_sprom *sprom,
 		nvram_read_u8(prefix, NULL, name, &sprom->gpio_ext[i], 0xff,
 			      fallback);
 	}
+
+	nvram_read_u32(prefix, NULL, "boardflags3", &sprom->boardflags3, 0,
+		       fallback);
+	sprom->avvmid_valid = 0;
+	for (i = 0; i < ARRAY_SIZE(sprom->avvmid); i++)
+		nvram_read_avvmid(prefix, i, sprom, fallback);
 }
 
 /* This is one-function-only macro, it uses local "sprom" variable! */

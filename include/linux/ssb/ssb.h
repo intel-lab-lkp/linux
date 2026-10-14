@@ -77,6 +77,9 @@ struct ssb_sprom {
 	u8 gpio2;		/* GPIO pin 2 */
 	u8 gpio3;		/* GPIO pin 3 */
 	u8 gpio_ext[12];	/* GPIO pins 4-15, NVRAM ledbh4-15 only */
+	/* NVRAM AvVmid_c0..2: {Av, Vmid} for 2g, 5gl, 5gml, 5gmu, 5gh */
+	u8 avvmid[3][5][2];
+	u8 avvmid_valid;	/* bit per chain whose AvVmid_cN parsed */
 	u8 maxpwr_bg;		/* 2.4GHz Amplifier Max Power (in dBm Q5.2) */
 	u8 maxpwr_al;		/* 5.2GHz Amplifier Max Power (in dBm Q5.2) */
 	u8 maxpwr_a;		/* 5.3GHz Amplifier Max Power (in dBm Q5.2) */
