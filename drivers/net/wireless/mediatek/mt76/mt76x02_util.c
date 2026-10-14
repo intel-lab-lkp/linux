@@ -241,7 +241,19 @@ int mt76x02_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	struct mt76x02_dev *dev = container_of(mdev, struct mt76x02_dev, mt76);
 	struct mt76x02_sta *msta = (struct mt76x02_sta *)sta->drv_priv;
 	struct mt76x02_vif *mvif = (struct mt76x02_vif *)vif->drv_priv;
-	int idx = 0;
+	int idx = msta->wcid.idx;
+
+	/* Recovery replays the station while it is still registered: keep
+	 * its WCID and software state, and only restore the hardware entry.
+	 */
+	if (mt76_is_mmio(mdev) &&
+	    rcu_access_pointer(mdev->wcid[idx]) == &msta->wcid) {
+		mt76x02_mac_wcid_setup(dev, idx, mvif->idx, sta->addr);
+		mt76x02_mac_wcid_set_drop(dev, idx,
+					  test_bit(MT_WCID_FLAG_PS,
+						   &msta->wcid.flags));
+		return 0;
+	}
 
 	memset(msta, 0, sizeof(*msta));
 

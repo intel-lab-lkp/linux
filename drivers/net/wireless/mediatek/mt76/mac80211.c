@@ -1613,11 +1613,14 @@ mt76_sta_add(struct mt76_phy *phy, struct ieee80211_vif *vif,
 	struct mt76_wcid *wcid = (struct mt76_wcid *)sta->drv_priv;
 	struct mt76_dev *dev = phy->dev;
 	struct mt76_wcid *published;
+	bool already_present;
 	int ret;
 	int i;
 
 	mutex_lock(&dev->mutex);
 
+	/* Before the driver callback: some drivers publish a new WCID there. */
+	already_present = rcu_access_pointer(dev->wcid[wcid->idx]) == wcid;
 	ret = dev->drv->sta_add(dev, vif, sta);
 	if (ret)
 		goto out;
@@ -1643,7 +1646,8 @@ mt76_sta_add(struct mt76_phy *phy, struct ieee80211_vif *vif,
 		wcid->phy_idx = phy->band_idx;
 	}
 
-	phy->num_sta++;
+	if (!already_present)
+		phy->num_sta++;
 
 out:
 	mutex_unlock(&dev->mutex);
