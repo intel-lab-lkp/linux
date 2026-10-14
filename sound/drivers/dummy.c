@@ -476,11 +476,18 @@ static int dummy_hrtimer_create(struct snd_pcm_substream *substream)
 	return 0;
 }
 
+static void dummy_hrtimer_runtime_free(struct snd_pcm_runtime *runtime)
+{
+	struct dummy_hrtimer_pcm *dpcm = runtime->private_data;
+
+	hrtimer_cancel(&dpcm->timer);
+	kfree(dpcm);
+}
+
 static void dummy_hrtimer_free(struct snd_pcm_substream *substream)
 {
-	struct dummy_hrtimer_pcm *dpcm = substream->runtime->private_data;
-
-	kfree(dpcm);
+	/* Linked PREPARE can still use the data until unlink. */
+	substream->runtime->private_free = dummy_hrtimer_runtime_free;
 }
 
 static const struct dummy_timer_ops dummy_hrtimer_ops = {
