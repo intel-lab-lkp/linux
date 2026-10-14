@@ -2193,6 +2193,13 @@ void pn533_recv_frame(struct pn533 *dev, struct sk_buff *skb, int status)
 		goto sched_wq;
 	}
 
+	if (skb->len < PN533_STD_FRAME_ACK_SIZE) {
+		nfc_err(dev->dev, "Received a too short frame\n");
+		dev->cmd->status = -EIO;
+		dev_kfree_skb(skb);
+		goto sched_wq;
+	}
+
 	if (pn533_rx_frame_is_ack(skb->data)) {
 		dev_dbg(dev->dev, "%s: Received ACK frame\n", __func__);
 		dev_kfree_skb(skb);
@@ -2200,9 +2207,12 @@ void pn533_recv_frame(struct pn533 *dev, struct sk_buff *skb, int status)
 	}
 
 	print_hex_dump_debug("PN533 RX: ", DUMP_PREFIX_NONE, 16, 1, skb->data,
-			     dev->ops->rx_frame_size(skb->data), false);
+			     skb->len, false);
 
-	if (!dev->ops->rx_is_frame_valid(skb->data, dev)) {
+	if (skb->len < PN533_STD_FRAME_HEADER_LEN + PN533_STD_FRAME_TAIL_LEN ||
+	    skb->len < dev->ops->rx_header_len ||
+	    skb->len < dev->ops->rx_frame_size(skb->data) ||
+	    !dev->ops->rx_is_frame_valid(skb->data, dev)) {
 		nfc_err(dev->dev, "Received an invalid frame\n");
 		dev->cmd->status = -EIO;
 	} else if (!pn533_rx_frame_is_cmd_response(dev, skb->data)) {
