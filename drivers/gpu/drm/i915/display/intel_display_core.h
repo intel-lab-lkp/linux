@@ -624,6 +624,11 @@ struct intel_display {
 	} state;
 
 	struct {
+		/* serializes the TCSS mailbox of Wa_14020908590 */
+		struct mutex mailbox_lock;
+	} tc;
+
+	struct {
 		unsigned int hpll_freq;
 		unsigned int czclk_freq;
 	} vlv_clock;

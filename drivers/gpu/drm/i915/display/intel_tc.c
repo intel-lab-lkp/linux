@@ -1068,12 +1068,15 @@ xelpdp_tc_phy_wait_for_tcss_power(struct intel_tc_port *tc, bool enabled)
  */
 static void xelpdp_tc_power_request_wa(struct intel_display *display, bool enable)
 {
+	/* the mailbox is shared by all ports, keep their commands apart */
+	mutex_lock(&display->tc.mailbox_lock);
+
 	/* check if mailbox is running busy */
 	if (intel_de_wait_for_clear_ms(display, TCSS_DISP_MAILBOX_IN_CMD,
 				       TCSS_DISP_MAILBOX_IN_CMD_RUN_BUSY, 10)) {
 		drm_dbg_kms(display->drm,
 			    "Timeout waiting for TCSS mailbox run/busy bit to clear\n");
-		return;
+		goto out_unlock;
 	}
 
 	intel_de_write(display, TCSS_DISP_MAILBOX_IN_DATA, enable ? 1 : 0);
@@ -1083,11 +1086,12 @@ static void xelpdp_tc_power_request_wa(struct intel_display *display, bool enabl
 
 	/* wait to clear mailbox running busy bit before continuing */
 	if (intel_de_wait_for_clear_ms(display, TCSS_DISP_MAILBOX_IN_CMD,
-				       TCSS_DISP_MAILBOX_IN_CMD_RUN_BUSY, 10)) {
+				       TCSS_DISP_MAILBOX_IN_CMD_RUN_BUSY, 10))
 		drm_dbg_kms(display->drm,
 			    "Timeout after writing data to mailbox. Mailbox run/busy bit did not clear\n");
-		return;
-	}
+
+out_unlock:
+	mutex_unlock(&display->tc.mailbox_lock);
 }
 
 static void __xelpdp_tc_phy_enable_tcss_power(struct intel_tc_port *tc, bool enable)

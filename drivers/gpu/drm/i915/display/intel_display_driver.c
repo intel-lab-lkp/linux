@@ -187,6 +187,7 @@ void intel_display_driver_early_probe(struct intel_display *display)
 	mutex_init(&display->wm.wm_mutex);
 	mutex_init(&display->pps.mutex);
 	mutex_init(&display->hdcp.hdcp_mutex);
+	mutex_init(&display->tc.mailbox_lock);
 
 	intel_display_irq_init(display);
 	intel_dkl_phy_init(display);
