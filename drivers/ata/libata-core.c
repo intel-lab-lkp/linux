@@ -4517,6 +4517,7 @@ static u64 ata_dev_quirks(const struct ata_device *dev)
 	unsigned char model_num[ATA_ID_PROD_LEN + 1];
 	unsigned char model_rev[ATA_ID_FW_REV_LEN + 1];
 	const struct ata_dev_quirks_entry *ad = __ata_dev_quirks;
+	u64 quirks = 0;
 
 	/* dev->quirks is an u64. */
 	BUILD_BUG_ON(__ATA_QUIRK_MAX > 64);
@@ -4524,16 +4525,18 @@ static u64 ata_dev_quirks(const struct ata_device *dev)
 	ata_id_c_string(dev->id, model_num, ATA_ID_PROD, sizeof(model_num));
 	ata_id_c_string(dev->id, model_rev, ATA_ID_FW_REV, sizeof(model_rev));
 
+	/* Get the quirks for all matching entries */
 	while (ad->model_num) {
 		if (glob_match(ad->model_num, model_num) &&
 		    (!ad->model_rev || glob_match(ad->model_rev, model_rev))) {
 			ata_dev_print_quirks(dev, model_num, model_rev,
 					     ad->quirks);
-			return ad->quirks;
+			quirks |= ad->quirks;
 		}
 		ad++;
 	}
-	return 0;
+
+	return quirks;
 }
 
 static u64 ata_dev_get_max_sec_quirk_value(struct ata_device *dev)
