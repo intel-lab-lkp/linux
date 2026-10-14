@@ -346,6 +346,9 @@ int __blk_crypto_evict_key(struct blk_crypto_profile *profile,
 	struct blk_crypto_keyslot *slot;
 	int err;
 
+	if (!profile)
+		return 0;
+
 	if (profile->num_slots == 0) {
 		if (profile->ll_ops.keyslot_evict) {
 			blk_crypto_hw_enter(profile);

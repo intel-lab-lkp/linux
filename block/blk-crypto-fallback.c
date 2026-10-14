@@ -524,12 +524,18 @@ bool blk_crypto_fallback_bio_prep(struct bio *bio)
 
 int blk_crypto_fallback_evict_key(const struct blk_crypto_key *key)
 {
-	return __blk_crypto_evict_key(blk_crypto_fallback_profile, key);
+	struct blk_crypto_profile *profile;
+
+	/* Pairs with smp_store_release() in blk_crypto_fallback_init(). */
+	profile = smp_load_acquire(&blk_crypto_fallback_profile);
+
+	return __blk_crypto_evict_key(profile, key);
 }
 
 static bool blk_crypto_fallback_inited;
 static int blk_crypto_fallback_init(void)
 {
+	struct blk_crypto_profile *profile;
 	int i;
 	int err;
 
@@ -543,26 +549,25 @@ static int blk_crypto_fallback_init(void)
 		goto out;
 
 	/* Dynamic allocation is needed because of lockdep_register_key(). */
-	blk_crypto_fallback_profile = kzalloc_obj(*blk_crypto_fallback_profile);
-	if (!blk_crypto_fallback_profile) {
+	profile = kzalloc_obj(*profile);
+	if (!profile) {
 		err = -ENOMEM;
 		goto fail_free_bioset;
 	}
 
-	err = blk_crypto_profile_init(blk_crypto_fallback_profile,
-				      blk_crypto_num_keyslots);
+	err = blk_crypto_profile_init(profile, blk_crypto_num_keyslots);
 	if (err)
 		goto fail_free_profile;
 	err = -ENOMEM;
 
-	blk_crypto_fallback_profile->ll_ops = blk_crypto_fallback_ll_ops;
-	blk_crypto_fallback_profile->max_dun_bytes_supported = BLK_CRYPTO_MAX_IV_SIZE;
-	blk_crypto_fallback_profile->key_types_supported = BLK_CRYPTO_KEY_TYPE_RAW;
+	profile->ll_ops = blk_crypto_fallback_ll_ops;
+	profile->max_dun_bytes_supported = BLK_CRYPTO_MAX_IV_SIZE;
+	profile->key_types_supported = BLK_CRYPTO_KEY_TYPE_RAW;
 
 	/* All blk-crypto modes have a crypto API fallback. */
 	for (i = 0; i < BLK_ENCRYPTION_MODE_MAX; i++)
-		blk_crypto_fallback_profile->modes_supported[i] = 0xFFFFFFFF;
-	blk_crypto_fallback_profile->modes_supported[BLK_ENCRYPTION_MODE_INVALID] = 0;
+		profile->modes_supported[i] = 0xFFFFFFFF;
+	profile->modes_supported[BLK_ENCRYPTION_MODE_INVALID] = 0;
 
 	blk_crypto_wq = alloc_workqueue("blk_crypto_wq",
 					WQ_UNBOUND | WQ_HIGHPRI |
@@ -590,6 +595,8 @@ static int blk_crypto_fallback_init(void)
 	if (!bio_fallback_crypt_ctx_pool)
 		goto fail_free_crypt_ctx_cache;
 
+	/* Pairs with smp_load_acquire() in blk_crypto_fallback_evict_key(). */
+	smp_store_release(&blk_crypto_fallback_profile, profile);
 	blk_crypto_fallback_inited = true;
 
 	return 0;
@@ -602,9 +609,9 @@ fail_free_keyslots:
 fail_free_wq:
 	destroy_workqueue(blk_crypto_wq);
 fail_destroy_profile:
-	blk_crypto_profile_destroy(blk_crypto_fallback_profile);
+	blk_crypto_profile_destroy(profile);
 fail_free_profile:
-	kfree(blk_crypto_fallback_profile);
+	kfree(profile);
 fail_free_bioset:
 	bioset_exit(&enc_bio_set);
 out:
