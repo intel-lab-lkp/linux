@@ -253,9 +253,9 @@ static void user_unlock_ast(struct ocfs2_dlm_lksb *lksb, int status)
 
 	lockres->l_flags &= ~USER_LOCK_BUSY;
 out_noclear:
-	spin_unlock(&lockres->l_lock);
-
+	/* Complete the wakeup before a BUSY waiter can free lockres. */
 	wake_up(&lockres->l_event);
+	spin_unlock(&lockres->l_lock);
 }
 
 /*
