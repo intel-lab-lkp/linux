@@ -6458,6 +6458,12 @@ Kernel parameters
 			perf telemetry monitoring associated with guid 0x12345
 			is enabled use:
 				rdt=!energy,perf:0x12345
+			On Skylake-X stepping < 4, rdt=l3cat is ignored
+			unless the bare token "force" is also given, e.g.:
+				rdt=force,l3cat
+			because L3 CAT there can hang a later kexec boot.
+			The token may appear anywhere in any rdt= parameter.
+			"!force" is ignored.
 
 	reboot=		[KNL]
 			Format (x86 or x86_64):

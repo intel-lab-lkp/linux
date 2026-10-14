@@ -833,6 +833,8 @@ static struct rdt_options rdt_options[]  __ro_after_init = {
 };
 #define NUM_RDT_OPTIONS ARRAY_SIZE(rdt_options)
 
+static bool rdt_force_raw __initdata;
+
 static int __init set_rdt_options(char *str)
 {
 	struct rdt_options *o;
@@ -842,6 +844,10 @@ static int __init set_rdt_options(char *str)
 	if (*str == '=')
 		str++;
 	while ((tok = strsep(&str, ",")) != NULL) {
+		if (!strcmp(tok, "force")) {
+			rdt_force_raw = true;
+			continue;
+		}
 		force_off = *tok == '!';
 		if (force_off)
 			tok++;
@@ -989,6 +995,26 @@ static __init bool get_rdt_mon_resources(void)
 	return !rdt_get_l3_mon_config(r);
 }
 
+/*
+ * Disable a feature that plain rdt= enable requests must not re-enable.
+ * Only rdt=force lets an explicit enable request override this.
+ */
+static __init void rdt_force_off_hard(int idx)
+{
+	struct rdt_options *o = &rdt_options[idx];
+
+	o->force_off = true;
+	if (!o->force_on)
+		return;
+
+	if (rdt_force_raw) {
+		pr_info("rdt=force: keeping %s enabled on this CPU\n", o->name);
+	} else {
+		pr_info("Ignoring rdt=%s: unsafe on this CPU, see rdt=force\n", o->name);
+		o->force_on = false;
+	}
+}
+
 static __init void __check_quirks_intel(void)
 {
 	switch (boot_cpu_data.x86_vfm) {
@@ -998,7 +1024,10 @@ static __init void __check_quirks_intel(void)
 		break;
 	case INTEL_SKYLAKE_X:
 		if (boot_cpu_data.x86_stepping <= 4)
-			set_rdt_options("!cmt,!mbmtotal,!mbmlocal,!l3cat");
+			set_rdt_options("!cmt,!mbmtotal,!mbmlocal");
+		/* L3 CAT on these steppings can hang a later kexec boot. */
+		if (boot_cpu_data.x86_stepping < 4)
+			rdt_force_off_hard(RDT_FLAG_L3_CAT);
 		else
 			set_rdt_options("!l3cat");
 		fallthrough;
