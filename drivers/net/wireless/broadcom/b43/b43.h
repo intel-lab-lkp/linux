@@ -668,6 +668,7 @@ struct b43_dma {
 	u32 translation; /* Routing bits */
 	bool translation_in_low; /* Should translation bit go into low addr? */
 	bool parity; /* Check for parity */
+	bool ptr_is_addr;
 };
 
 struct b43_pio_txqueue;
