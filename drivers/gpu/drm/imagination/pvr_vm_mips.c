@@ -3,10 +3,10 @@
 
 #include "pvr_device.h"
 #include "pvr_gem.h"
+#define PVR_MIPS_INTERNAL_H_EXPLICIT_INCLUDE
+#include "pvr_mips_internal.h"
+#undef PVR_MIPS_INTERNAL_H_EXPLICIT_INCLUDE
 #include "pvr_mmu.h"
-#define PVR_ROGUE_MIPS_INTERNAL_H_EXPLICIT_INCLUDE
-#include "pvr_rogue_mips_internal.h"
-#undef PVR_ROGUE_MIPS_INTERNAL_H_EXPLICIT_INCLUDE
 #include "pvr_vm.h"
 #include "pvr_vm_mips.h"
 
@@ -18,7 +18,7 @@
 #include <linux/vmalloc.h>
 
 #define PVR_MIPS_PT_PAGE_COUNT \
-	DIV_ROUND_UP(ROGUE_MIPSFW_MAX_NUM_PAGETABLE_PAGES * ROGUE_MIPSFW_PAGE_SIZE_4K, PAGE_SIZE)
+	DIV_ROUND_UP(PVR_MIPSFW_MAX_NUM_PAGETABLE_PAGES * PVR_MIPSFW_PAGE_SIZE_4K, PAGE_SIZE)
 
 /**
  * struct pvr_vm_mips_data - MIPS-VM-specific data
@@ -55,15 +55,15 @@ struct pvr_vm_mips_data {
 int
 pvr_vm_mips_init(struct pvr_device *pvr_dev)
 {
-	u32 pt_size = 1 << ROGUE_MIPSFW_LOG2_PAGETABLE_SIZE_4K(pvr_dev);
+	u32 pt_size = 1 << PVR_MIPSFW_LOG2_PAGETABLE_SIZE_4K(pvr_dev);
 	struct device *dev = from_pvr_device(pvr_dev)->dev;
 	struct pvr_vm_mips_data *vm_data;
 	u32 phys_bus_width;
 	int page_nr;
 	int err;
 
-	/* Page table size must be at most ROGUE_MIPSFW_MAX_NUM_PAGETABLE_PAGES * 4k pages. */
-	if (pt_size > ROGUE_MIPSFW_MAX_NUM_PAGETABLE_PAGES * SZ_4K)
+	/* Page table size must be at most PVR_MIPSFW_MAX_NUM_PAGETABLE_PAGES * 4k pages. */
+	if (pt_size > PVR_MIPSFW_MAX_NUM_PAGETABLE_PAGES * SZ_4K)
 		return -EINVAL;
 
 	if (PVR_FEATURE_VALUE(pvr_dev, phys_bus_width, &phys_bus_width))
@@ -96,11 +96,11 @@ pvr_vm_mips_init(struct pvr_device *pvr_dev)
 		goto err_free_pages;
 	}
 
-	vm_data->pfn_mask = (phys_bus_width > 32) ? ROGUE_MIPSFW_ENTRYLO_PFN_MASK_ABOVE_32BIT :
-						    ROGUE_MIPSFW_ENTRYLO_PFN_MASK;
+	vm_data->pfn_mask = (phys_bus_width > 32) ? PVR_MIPSFW_ENTRYLO_PFN_MASK_ABOVE_32BIT :
+						    PVR_MIPSFW_ENTRYLO_PFN_MASK;
 
-	vm_data->cache_policy = (phys_bus_width > 32) ? ROGUE_MIPSFW_CACHED_POLICY_ABOVE_32BIT :
-							ROGUE_MIPSFW_CACHED_POLICY;
+	vm_data->cache_policy = (phys_bus_width > 32) ? PVR_MIPSFW_CACHED_POLICY_ABOVE_32BIT :
+							PVR_MIPSFW_CACHED_POLICY;
 
 	pvr_dev->fw_dev.processor_data.mips_data.vm_data = vm_data;
 
@@ -144,15 +144,15 @@ get_mips_pte_flags(bool read, bool write, u32 cache_policy)
 	u32 flags = 0;
 
 	if (read && write) /* Read/write. */
-		flags |= ROGUE_MIPSFW_ENTRYLO_DIRTY_EN;
+		flags |= PVR_MIPSFW_ENTRYLO_DIRTY_EN;
 	else if (write)    /* Write only. */
-		flags |= ROGUE_MIPSFW_ENTRYLO_READ_INHIBIT_EN;
+		flags |= PVR_MIPSFW_ENTRYLO_READ_INHIBIT_EN;
 	else
 		WARN_ON(!read);
 
-	flags |= cache_policy << ROGUE_MIPSFW_ENTRYLO_CACHE_POLICY_SHIFT;
+	flags |= cache_policy << PVR_MIPSFW_ENTRYLO_CACHE_POLICY_SHIFT;
 
-	flags |= ROGUE_MIPSFW_ENTRYLO_VALID_EN | ROGUE_MIPSFW_ENTRYLO_GLOBAL_EN;
+	flags |= PVR_MIPSFW_ENTRYLO_VALID_EN | PVR_MIPSFW_ENTRYLO_GLOBAL_EN;
 
 	return flags;
 }
@@ -190,15 +190,15 @@ pvr_vm_mips_map(struct pvr_device *pvr_dev, struct pvr_fw_object *fw_obj)
 	    start >= ROGUE_FW_HEAP_BASE + fw_dev->fw_heap_info.raw_size ||
 	    end < ROGUE_FW_HEAP_BASE ||
 	    end >= ROGUE_FW_HEAP_BASE + fw_dev->fw_heap_info.raw_size ||
-	    (start & ROGUE_MIPSFW_PAGE_MASK_4K) ||
-	    ((end + 1) & ROGUE_MIPSFW_PAGE_MASK_4K))
+	    (start & PVR_MIPSFW_PAGE_MASK_4K) ||
+	    ((end + 1) & PVR_MIPSFW_PAGE_MASK_4K))
 		return -EINVAL;
 
-	start_pfn = (start & fw_dev->fw_heap_info.offset_mask) >> ROGUE_MIPSFW_LOG2_PAGE_SIZE_4K;
-	end_pfn = (end & fw_dev->fw_heap_info.offset_mask) >> ROGUE_MIPSFW_LOG2_PAGE_SIZE_4K;
+	start_pfn = (start & fw_dev->fw_heap_info.offset_mask) >> PVR_MIPSFW_LOG2_PAGE_SIZE_4K;
+	end_pfn = (end & fw_dev->fw_heap_info.offset_mask) >> PVR_MIPSFW_LOG2_PAGE_SIZE_4K;
 
 	if (pvr_obj->flags & PVR_BO_FW_FLAGS_DEVICE_UNCACHED)
-		cache_policy = ROGUE_MIPSFW_UNCACHED_CACHE_POLICY;
+		cache_policy = PVR_MIPSFW_UNCACHED_CACHE_POLICY;
 	else
 		cache_policy = vm_data->cache_policy;
 
@@ -210,13 +210,13 @@ pvr_vm_mips_map(struct pvr_device *pvr_dev, struct pvr_fw_object *fw_obj)
 
 		err = pvr_fw_object_get_dma_addr(fw_obj,
 						 (pfn - start_pfn) <<
-						 ROGUE_MIPSFW_LOG2_PAGE_SIZE_4K,
+						 PVR_MIPSFW_LOG2_PAGE_SIZE_4K,
 						 &dma_addr);
 		if (err)
 			goto err_unmap_pages;
 
-		pte = ((dma_addr >> ROGUE_MIPSFW_LOG2_PAGE_SIZE_4K)
-		       << ROGUE_MIPSFW_ENTRYLO_PFN_SHIFT) & vm_data->pfn_mask;
+		pte = ((dma_addr >> PVR_MIPSFW_LOG2_PAGE_SIZE_4K)
+		       << PVR_MIPSFW_ENTRYLO_PFN_SHIFT) & vm_data->pfn_mask;
 		pte |= pte_flags;
 
 		WRITE_ONCE(vm_data->pt[pfn], pte);
@@ -251,9 +251,9 @@ pvr_vm_mips_unmap(struct pvr_device *pvr_dev, struct pvr_fw_object *fw_obj)
 	const u64 end = start + size;
 
 	const u32 start_pfn = (start & fw_dev->fw_heap_info.offset_mask) >>
-			      ROGUE_MIPSFW_LOG2_PAGE_SIZE_4K;
+			      PVR_MIPSFW_LOG2_PAGE_SIZE_4K;
 	const u32 end_pfn = (end & fw_dev->fw_heap_info.offset_mask) >>
-			    ROGUE_MIPSFW_LOG2_PAGE_SIZE_4K;
+			    PVR_MIPSFW_LOG2_PAGE_SIZE_4K;
 
 	for (u32 pfn = start_pfn; pfn < end_pfn; pfn++)
 		WRITE_ONCE(vm_data->pt[pfn], 0);
@@ -283,8 +283,8 @@ pvr_vm_get_pt_phys_addrs(struct pvr_device *pvr_dev, u64 *phys_addrs, int max_nu
 
 	for (u32 page_nr = 0; page_nr < max_num_addrs; page_nr++) {
 		/* Firmware expects 4k pages, but host page size might be different. */
-		u32 src_page_nr = (page_nr * ROGUE_MIPSFW_PAGE_SIZE_4K) >> PAGE_SHIFT;
-		u32 page_offset = (page_nr * ROGUE_MIPSFW_PAGE_SIZE_4K) & ~PAGE_MASK;
+		u32 src_page_nr = (page_nr * PVR_MIPSFW_PAGE_SIZE_4K) >> PAGE_SHIFT;
+		u32 page_offset = (page_nr * PVR_MIPSFW_PAGE_SIZE_4K) & ~PAGE_MASK;
 
 		phys_addrs[page_nr] = vm_data->pt_dma_addr[src_page_nr] + page_offset;
 	}
