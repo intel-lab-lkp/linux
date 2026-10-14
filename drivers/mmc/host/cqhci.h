@@ -26,6 +26,8 @@
 #define CQHCI_CAP_CS			0x10000000 /* Crypto Support */
 #define CQHCI_CAP_ITCFMUL		GENMASK(15, 12)
 #define CQHCI_ITCFMUL(x)		FIELD_GET(CQHCI_CAP_ITCFMUL, (x))
+#define CQHCI_CAP_ITCFVAL		GENMASK(9, 0)
+#define CQHCI_ITCFVAL(x)		FIELD_GET(CQHCI_CAP_ITCFVAL, (x))
 
 /* configuration */
 #define CQHCI_CFG			0x08
@@ -234,6 +236,9 @@ struct cqhci_host {
 	int num_slots;
 	int qcnt;
 
+	/* Internal Timer Clock Frequency (Hz), 0 if not reported by CQHCI_CAP */
+	u32 itcf_hz;
+
 	u32 dcmd_slot;
 	u32 caps;
 #define CQHCI_TASK_DESC_SZ_128		0x1
@@ -318,6 +323,7 @@ struct platform_device;
 irqreturn_t cqhci_irq(struct mmc_host *mmc, int cmd_error, int data_error);
 int cqhci_init(struct cqhci_host *cq_host, struct mmc_host *mmc, bool dma64);
 struct cqhci_host *cqhci_pltfm_init(struct platform_device *pdev);
+int cqhci_set_cmd_idle_time(struct cqhci_host *cq_host, u32 ns);
 int cqhci_deactivate(struct mmc_host *mmc);
 void cqhci_set_tran_desc(u8 *desc, dma_addr_t addr, int len, bool end, bool dma64);
 static inline int cqhci_suspend(struct mmc_host *mmc)

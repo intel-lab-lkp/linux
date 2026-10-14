@@ -12,6 +12,7 @@
 #include <linux/scatterlist.h>
 #include <linux/platform_device.h>
 #include <linux/ktime.h>
+#include <linux/units.h>
 
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/host.h>
@@ -1163,6 +1164,63 @@ struct cqhci_host *cqhci_pltfm_init(struct platform_device *pdev)
 }
 EXPORT_SYMBOL(cqhci_pltfm_init);
 
+static u64 cqhci_itcfmul_to_hz(u32 itcfmul)
+{
+	/* CQHCI_CAP.ITCFMUL: 0 = 1 kHz, 1 = 10 kHz, ..., 4 = 10 MHz, others reserved */
+	if (itcfmul > 4)
+		return 0;
+
+	return HZ_PER_KHZ * int_pow(10, itcfmul);
+}
+
+static void cqhci_itcf_init(struct cqhci_host *cq_host)
+{
+	u32 cap = cqhci_readl(cq_host, CQHCI_CAP);
+	u64 itcf;
+
+	itcf = cqhci_itcfmul_to_hz(CQHCI_ITCFMUL(cap)) * CQHCI_ITCFVAL(cap);
+	if (!itcf || itcf > U32_MAX) {
+		pr_debug("%s: cqhci: internal timer clock frequency not available (CAP 0x%08x)\n",
+			 mmc_hostname(cq_host->mmc), cap);
+		return;
+	}
+
+	cq_host->itcf_hz = itcf;
+}
+
+/**
+ * cqhci_set_cmd_idle_time - program the Send Status Command Idle Timer (CIT)
+ * @cq_host: CQHCI host
+ * @ns: idle time in nanoseconds
+ *
+ * Set the number of internal timer clock cycles the CQE waits on an idle bus
+ * before issuing CMD13 to poll the Queue Status Register. The cycle count is
+ * rounded up so that the resulting idle time is never shorter than @ns.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the controller does not report its
+ * internal timer clock frequency, or -ERANGE if @ns does not fit the CIT field.
+ */
+int cqhci_set_cmd_idle_time(struct cqhci_host *cq_host, u32 ns)
+{
+	u32 ssc1;
+	u64 cit;
+
+	if (!cq_host->itcf_hz)
+		return -EOPNOTSUPP;
+
+	cit = DIV_ROUND_UP_ULL((u64)cq_host->itcf_hz * ns, NSEC_PER_SEC);
+	if (!cit || cit > FIELD_MAX(CQHCI_SSC1_CIT_MASK))
+		return -ERANGE;
+
+	ssc1 = cqhci_readl(cq_host, CQHCI_SSC1);
+	ssc1 &= ~CQHCI_SSC1_CIT_MASK;
+	ssc1 |= FIELD_PREP(CQHCI_SSC1_CIT_MASK, cit);
+	cqhci_writel(cq_host, ssc1, CQHCI_SSC1);
+
+	return 0;
+}
+EXPORT_SYMBOL(cqhci_set_cmd_idle_time);
+
 static unsigned int cqhci_ver_major(struct cqhci_host *cq_host)
 {
 	return CQHCI_VER_MAJOR(cqhci_readl(cq_host, CQHCI_VER));
@@ -1206,6 +1264,8 @@ int cqhci_init(struct cqhci_host *cq_host, struct mmc_host *mmc,
 		       mmc_hostname(mmc));
 		goto out_err;
 	}
+
+	cqhci_itcf_init(cq_host);
 
 	spin_lock_init(&cq_host->lock);
 
