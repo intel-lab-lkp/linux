@@ -192,7 +192,7 @@ int vxlan_fdb_create(struct vxlan_dev *vxlan,
 		     __u16 state, __be16 port, __be32 src_vni,
 		     __be32 vni, __u32 ifindex, __u16 ndm_flags,
 		     u32 nhid, struct vxlan_fdb **fdb,
-		     struct netlink_ext_ack *extack);
+		     struct netlink_ext_ack *extack, gfp_t gfp);
 int __vxlan_fdb_delete(struct vxlan_dev *vxlan,
 		       const unsigned char *addr, union vxlan_addr ip,
 		       __be16 port, __be32 src_vni, __be32 vni,
@@ -202,7 +202,8 @@ int vxlan_fdb_update(struct vxlan_dev *vxlan,
 		     __u16 state, __u16 flags,
 		     __be16 port, __be32 src_vni, __be32 vni,
 		     __u32 ifindex, __u16 ndm_flags, u32 nhid,
-		     bool swdev_notify, struct netlink_ext_ack *extack);
+		     bool swdev_notify, struct netlink_ext_ack *extack,
+		     gfp_t gfp);
 void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		    const struct vxlan_config *cfg,
 		    __be32 default_vni, struct vxlan_rdst *rdst, bool did_rsc);
@@ -229,7 +230,7 @@ int vxlan_update_default_fdb_entry(struct vxlan_dev *vxlan, __be32 vni,
 				   const union vxlan_addr *old_remote_ip,
 				   const union vxlan_addr *remote_ip,
 				   u32 old_ifindex, u32 new_ifindex,
-				   struct netlink_ext_ack *extack);
+				   struct netlink_ext_ack *extack, gfp_t gfp);
 int vxlan_vnilist_update_group(struct vxlan_dev *vxlan,
 			       const union vxlan_addr *old_remote_ip,
 			       const union vxlan_addr *new_remote_ip,
