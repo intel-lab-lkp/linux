@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mailbox/amd,zynqmp-pl-mbox-2.1.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: AMD Programmable Logic Mailbox IP
+
+maintainers:
+  - Ben Levinsky <ben.levinsky@amd.com>
+
+description: |
+  The AMD Programmable Logic Mailbox IP provides bidirectional message passing
+  between two processor-facing interfaces. Each interface writes messages to
+  a send FIFO and reads messages from a receive FIFO. The register aperture,
+  interrupt, and clock described by a node belong to one processor-facing
+  interface. Channel 0 represents transmit and channel 1 represents receive
+  for that interface.
+
+properties:
+  compatible:
+    oneOf:
+      - const: amd,zynqmp-pl-mbox-2.1
+      - items:
+          - enum:
+              - amd,versal-pl-mbox-2.1
+              - amd,versal-net-pl-mbox-2.1
+              - amd,versal2-pl-mbox-2.1
+          - const: amd,zynqmp-pl-mbox-2.1
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  amd,mbox-pl-fifo-len:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 16
+    maximum: 8192
+    default: 16
+    description:
+      Depth of the send and receive FIFOs in 32-bit words, as configured by
+      the C_MAILBOX_DEPTH parameter of the IP. Must match the configured
+      depth.
+
+  '#mbox-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - '#mbox-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    mailbox@b2060000 {
+        compatible = "amd,zynqmp-pl-mbox-2.1";
+        reg = <0xb2060000 0x10000>;
+        interrupts = <GIC_SPI 106 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&pl_clk>;
+        amd,mbox-pl-fifo-len = <16>;
+        #mbox-cells = <1>;
+    };
+...
