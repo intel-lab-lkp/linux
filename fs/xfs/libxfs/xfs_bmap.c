@@ -4130,6 +4130,8 @@ xfs_bmapi_finish(
  * Returns a negative error code on failure, including -ENOSPC when it could not
  * allocate any blocks and -ENOSR when it did allocate blocks to convert a
  * delalloc range, but those blocks were before the passed in range.
+ * With XFS_BMAPI_CONVERT_ONLY, returns -EIO instead of allocating blocks when
+ * the range starts with a hole or a delalloc extent.
  */
 int
 xfs_bmapi_write(
@@ -4237,6 +4239,18 @@ xfs_bmapi_write(
 		 * that we found, if any.
 		 */
 		if (need_alloc || wasdelay) {
+			if (flags & XFS_BMAPI_CONVERT_ONLY) {
+				/*
+				 * Earlier mappings may have dirtied the
+				 * transaction, so return them and fail on the
+				 * next call.
+				 */
+				if (n)
+					break;
+				error = -EIO;
+				goto error0;
+			}
+
 			bma.eof = eof;
 			bma.conv = !!(flags & XFS_BMAPI_CONVERT);
 			bma.wasdel = wasdelay;
