@@ -639,7 +639,8 @@ static void do_rmpopt_work(struct work_struct *work)
 
 static int __init rmpopt_init(void)
 {
-	if (!cpu_feature_enabled(X86_FEATURE_RMPOPT))
+	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP) ||
+	    !cpu_feature_enabled(X86_FEATURE_RMPOPT))
 		return -ENODEV;
 
 	rmpopt_wq = alloc_workqueue("rmpopt_wq", WQ_PERCPU, 1);
