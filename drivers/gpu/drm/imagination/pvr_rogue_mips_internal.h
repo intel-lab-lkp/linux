@@ -1,8 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-only OR MIT */
 /* Copyright (c) 2023 Imagination Technologies Ltd. */
 
-#ifndef PVR_ROGUE_MIPS_H
-#define PVR_ROGUE_MIPS_H
+#ifndef PVR_ROGUE_MIPS_INTERNAL_H
+#define PVR_ROGUE_MIPS_INTERNAL_H
+
+#ifndef PVR_ROGUE_MIPS_INTERNAL_H_EXPLICIT_INCLUDE
+#error This file may only be included if explicitly defined
+#endif
 
 #include <linux/bits.h>
 #include <linux/types.h>
@@ -330,6 +334,6 @@ struct rogue_mips_state {
 	struct rogue_mips_remap_entry remap[ROGUE_MIPSFW_NUMBER_OF_REMAP_ENTRIES];
 };
 
-#include "pvr_rogue_mips_check.h"
+#include "pvr_rogue_mips_internal_check.h"
 
-#endif /* PVR_ROGUE_MIPS_H */
+#endif /* PVR_ROGUE_MIPS_INTERNAL_H */

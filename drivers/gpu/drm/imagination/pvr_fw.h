@@ -310,10 +310,15 @@ struct pvr_fw_device {
 	/** @funcs: Function table for the FW processor used by this device. */
 	const struct pvr_fw_defs *defs;
 
-	/** @processor_data: Pointer to data specific to FW processor. */
+	/** @processor_data: Data specific to FW processor. */
 	union {
-		/** @mips_data: Pointer to MIPS-specific data. */
-		struct pvr_fw_mips_data *mips_data;
+		/** @mips_data: MIPS-specific data. */
+		struct {
+			/** @mips_fw_data: Pointer to MIPS-FW-specific data. */
+			struct pvr_fw_mips_data *fw_data;
+			/** @mips_vm_data: Pointer to MIPS-VM-specific data. */
+			struct pvr_vm_mips_data *vm_data;
+		} mips_data;
 	} processor_data;
 
 	/** @fw_heap_info: Firmware heap information. */
