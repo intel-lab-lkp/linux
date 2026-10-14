@@ -88,6 +88,7 @@ bool intel_tc_port_in_legacy_mode(struct intel_digital_port *dig_port);
 bool intel_tc_port_handles_hpd_glitches(struct intel_digital_port *dig_port);
 
 bool intel_tc_port_connected(struct intel_encoder *encoder);
+void intel_tc_request_tcss_power(struct intel_encoder *encoder, bool enable);
 
 enum intel_tc_pin_assignment
 intel_tc_port_get_pin_assignment(struct intel_digital_port *dig_port);
