@@ -80,6 +80,20 @@ struct ieee80211_mesh_fast_tx;
 #define IEEE80211_DEFAULT_MAX_SP_LEN		\
 	IEEE80211_WMM_IE_STA_QOSINFO_SP_ALL
 
+/*
+ * TODO: Synchronize this skb->mark encoding with the userspace application
+ * (hostapd). These values reuse IEEE element IDs, but their use in skb->mark
+ * is an implementation contract between hostapd/nftables and mac80211.
+ */
+/* skb->mark bits [7:0] carry a QoS Management protocol tag. The values
+ * match the IEEE Std 802.11-2024 element IDs for the respective descriptors:
+ * WLAN_EID_SCS_DESCRIPTOR (185) and WLAN_EID_EXT_MSCS_DESCRIPTOR (88).
+ */
+#define IEEE80211_QOS_MGMT_TAG_MASK	GENMASK(7, 0)
+#define IEEE80211_QOS_MGMT_SCS_TAG	WLAN_EID_SCS_DESCRIPTOR
+#define IEEE80211_QOS_MGMT_MSCS_TAG	WLAN_EID_EXT_MSCS_DESCRIPTOR
+#define IEEE80211_QOS_MGMT_ID_MASK	GENMASK(15, 8)
+
 extern const u8 ieee80211_ac_to_qos_mask[IEEE80211_NUM_ACS];
 
 #define IEEE80211_DEAUTH_FRAME_LEN	(24 /* hdr */ + 2 /* reason */)

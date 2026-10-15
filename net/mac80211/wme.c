@@ -113,6 +113,41 @@ static u16 ieee80211_downgrade_queue(struct ieee80211_sub_if_data *sdata,
 	return ieee802_1d_to_ac[skb->priority];
 }
 
+static void
+ieee80211_qos_mgmt_set_priority(struct sta_info *sta, struct sk_buff *skb)
+{
+	struct ieee80211_sta_qos_rcu *qos;
+	u8 qos_tag;
+	u8 qos_id;
+	u8 tid;
+
+	if (!sta)
+		return;
+
+	qos_tag = u32_get_bits(skb->mark, IEEE80211_QOS_MGMT_TAG_MASK);
+	qos_id = u32_get_bits(skb->mark, IEEE80211_QOS_MGMT_ID_MASK);
+	if (qos_tag != IEEE80211_QOS_MGMT_SCS_TAG)
+		return;
+
+	if (!qos_id)
+		return;
+
+	guard(rcu)();
+	qos = rcu_dereference(sta->qos);
+
+	if (!qos)
+		return;
+
+	if (!qos->data.scs_enabled ||
+	    !test_bit(qos_id, qos->data.active_scs_id))
+		return;
+
+	tid = qos->data.scs_id_tid_mapping[qos_id];
+
+	if (tid < IEEE80211_QOS_MGMT_MAX_TID)
+		skb->priority = tid;
+}
+
 /* Indicate which queue to use for this fully formed 802.11 frame */
 u16 ieee80211_select_queue_80211(struct ieee80211_sub_if_data *sdata,
 				 struct sk_buff *skb,
@@ -179,6 +214,7 @@ u16 ieee80211_select_queue(struct ieee80211_sub_if_data *sdata,
 	qos_map = rcu_dereference(sdata->qos_map);
 	skb->priority = cfg80211_classify8021d(skb, qos_map ?
 					       &qos_map->qos_map : NULL);
+	ieee80211_qos_mgmt_set_priority(sta, skb);
 
  downgrade:
 	return ieee80211_downgrade_queue(sdata, sta, skb);
