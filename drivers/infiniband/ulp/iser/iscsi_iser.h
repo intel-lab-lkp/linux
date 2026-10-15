@@ -362,6 +362,7 @@ struct iser_fr_pool {
  * @device:              reference to iser device
  * @fr_pool:             connection fast registration pool
  * @pi_support:          Indicate device T10-PI support
+ * @max_inline_data:     inline data size granted to the QP
  * @reg_cqe:             completion handler
  */
 struct ib_conn {
@@ -372,6 +373,7 @@ struct ib_conn {
 	struct iser_device          *device;
 	struct iser_fr_pool          fr_pool;
 	bool			     pi_support;
+	u32			     max_inline_data;
 	struct ib_cqe		     reg_cqe;
 };
 

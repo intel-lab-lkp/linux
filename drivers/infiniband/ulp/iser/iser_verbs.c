@@ -230,7 +230,7 @@ static int iser_create_ib_conn_res(struct ib_conn *ib_conn)
 	struct iser_conn *iser_conn = to_iser_conn(ib_conn);
 	struct iser_device	*device;
 	struct ib_device	*ib_dev;
-	struct ib_qp_init_attr	init_attr;
+	struct ib_qp_init_attr	init_attr, attr;
 	int			ret = -ENOMEM;
 	unsigned int max_send_wr, cq_size;
 
@@ -271,11 +271,23 @@ static int iser_create_ib_conn_res(struct ib_conn *ib_conn)
 		init_attr.create_flags |= IB_QP_CREATE_INTEGRITY_EN;
 	iser_conn->max_cmds = ISER_GET_MAX_XMIT_CMDS(max_send_wr - 1);
 
-	ret = rdma_create_qp(ib_conn->cma_id, device->pd, &init_attr);
+	/*
+	 * Ask for enough inline data to post the iSER and iSCSI headers
+	 * inline (see iser_post_send()).  If the device cannot provide it,
+	 * create the QP without inline data.
+	 */
+	attr = init_attr;
+	attr.cap.max_inline_data = ISER_HEADERS_LEN;
+	ret = rdma_create_qp(ib_conn->cma_id, device->pd, &attr);
+	if (ret) {
+		attr = init_attr;
+		ret = rdma_create_qp(ib_conn->cma_id, device->pd, &attr);
+	}
 	if (ret)
 		goto out_err;
 
 	ib_conn->qp = ib_conn->cma_id->qp;
+	ib_conn->max_inline_data = attr.cap.max_inline_data;
 	iser_info("setting conn %p cma_id %p qp %p max_send_wr %d\n", ib_conn,
 		  ib_conn->cma_id, ib_conn->cma_id->qp, max_send_wr);
 	return ret;
@@ -869,6 +881,19 @@ int iser_post_send(struct ib_conn *ib_conn, struct iser_tx_desc *tx_desc)
 	wr->num_sge = tx_desc->num_sge;
 	wr->opcode = IB_WR_SEND;
 	wr->send_flags = IB_SEND_SIGNALED;
+
+	/*
+	 * Post a header-only PDU inline if it fits in the granted inline
+	 * size, so the HCA does not have to DMA-read it from host memory.
+	 * The CPU copies inline data from a kernel virtual address, so point
+	 * the SGE at the headers.
+	 */
+	tx_desc->tx_sg[0].addr = tx_desc->dma_addr;
+	if (tx_desc->num_sge == 1 &&
+	    tx_desc->tx_sg[0].length <= ib_conn->max_inline_data) {
+		tx_desc->tx_sg[0].addr = (uintptr_t)&tx_desc->iser_header;
+		wr->send_flags |= IB_SEND_INLINE;
+	}
 
 	if (tx_desc->inv_wr.next)
 		first_wr = &tx_desc->inv_wr;
