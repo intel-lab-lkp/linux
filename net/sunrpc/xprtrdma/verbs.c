@@ -55,6 +55,7 @@
 #include <linux/sunrpc/addr.h>
 #include <linux/sunrpc/svc_rdma.h>
 #include <linux/log2.h>
+#include <linux/pci_ids.h>
 
 #include <asm/barrier.h>
 
@@ -62,6 +63,44 @@
 
 #include "xprt_rdma.h"
 #include <trace/events/rpcrdma.h>
+
+/* Bytes of inline data (IB_SEND_INLINE) to ask for on each Send WR.
+ * This is unrelated to the RPC-over-RDMA inline threshold.
+ */
+#define RPCRDMA_WQE_INLINE_SIZE	(256)
+#define RPCRDMA_WQE_INLINE_STEP	(16)
+
+/* The verbs API cannot report a device's inline data limit. Some
+ * drivers have a fixed one: Intel irdma 216, 101 or 48 depending on
+ * the generation, Alibaba erdma 96. Try those first, by vendor ID,
+ * then step down RPCRDMA_WQE_INLINE_STEP bytes at a time to zero.
+ * libfabric's verbs provider also probes the limit
+ * (vrb_find_max_inline()).
+ */
+static const struct {
+	u32	vendor_id;
+	u32	max_inline;
+} rpcrdma_inline_limits[] = {
+	{ PCI_VENDOR_ID_INTEL, 216 },
+	{ PCI_VENDOR_ID_INTEL, 101 },
+	{ PCI_VENDOR_ID_INTEL, 48 },
+	{ PCI_VENDOR_ID_ALIBABA, 96 },
+};
+
+/* Inline data size to ask for: on the first try, @size capped at the
+ * vendor's first known limit; after a refusal, the vendor's next
+ * smaller known limit, else one step smaller.
+ */
+static u32 rpcrdma_inline_size(u32 vendor_id, u32 size, bool refused)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(rpcrdma_inline_limits); i++)
+		if (rpcrdma_inline_limits[i].vendor_id == vendor_id &&
+		    (!refused || rpcrdma_inline_limits[i].max_inline < size))
+			return min(rpcrdma_inline_limits[i].max_inline, size);
+	return refused ? size - min(size, RPCRDMA_WQE_INLINE_STEP) : size;
+}
 
 static int rpcrdma_sendctxs_create(struct rpcrdma_xprt *r_xprt);
 static void rpcrdma_sendctxs_destroy(struct rpcrdma_xprt *r_xprt);
@@ -392,8 +431,10 @@ static int rpcrdma_ep_create(struct rpcrdma_xprt *r_xprt)
 {
 	struct rpcrdma_connect_private *pmsg;
 	struct ib_device *device;
+	struct ib_qp_init_attr attr;
 	struct rdma_cm_id *id;
 	struct rpcrdma_ep *ep;
+	u32 inline_size;
 	int rc;
 
 	ep = kzalloc_obj(*ep, XPRTRDMA_GFP_FLAGS);
@@ -487,7 +528,22 @@ static int rpcrdma_ep_create(struct rpcrdma_xprt *r_xprt)
 		goto out_destroy;
 	}
 
-	rc = rdma_create_qp(id, ep->re_pd, &ep->re_attr);
+	/* Ask for enough inline data to copy small Sends into the send
+	 * WQE (see rpcrdma_prepare_send_inline()), or for as much as the
+	 * device accepts.
+	 */
+	attr = ep->re_attr;
+	inline_size = rpcrdma_inline_size(device->attrs.vendor_id,
+					  RPCRDMA_WQE_INLINE_SIZE, false);
+	for (;;) {
+		ep->re_attr = attr;
+		ep->re_attr.cap.max_inline_data = inline_size;
+		rc = rdma_create_qp(id, ep->re_pd, &ep->re_attr);
+		if (!rc || !inline_size)
+			break;
+		inline_size = rpcrdma_inline_size(device->attrs.vendor_id,
+						  inline_size, true);
+	}
 	if (rc)
 		goto out_destroy;
 

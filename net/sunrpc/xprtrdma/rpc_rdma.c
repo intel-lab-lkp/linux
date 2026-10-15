@@ -732,6 +732,33 @@ static bool rpcrdma_prepare_readch(struct rpcrdma_xprt *r_xprt,
 	return true;
 }
 
+/* Post a Send inline when its SGEs cover only the transport header
+ * and head buffers and it fits in the granted inline size. The CPU
+ * then copies it into the send WQE and the HCA does not DMA-read it.
+ * Inline data is copied from kernel virtual addresses, so point the
+ * SGEs there. The buffers stay DMA-mapped and are not unmapped
+ * through these SGEs.
+ */
+static void rpcrdma_prepare_send_inline(struct rpcrdma_xprt *r_xprt,
+					struct rpcrdma_req *req)
+{
+	struct ib_sge *sge = req->rl_wr.sg_list;
+	unsigned int len = 0;
+	int i;
+
+	if (req->rl_sendctx->sc_unmap_count)
+		return;
+	for (i = 0; i < req->rl_wr.num_sge; i++)
+		len += sge[i].length;
+	if (len > r_xprt->rx_ep->re_attr.cap.max_inline_data)
+		return;
+
+	sge[0].addr = (uintptr_t)rdmab_data(req->rl_rdmabuf);
+	if (req->rl_wr.num_sge > 1)
+		sge[1].addr = (uintptr_t)rdmab_data(req->rl_sendbuf);
+	req->rl_wr.send_flags |= IB_SEND_INLINE;
+}
+
 /**
  * rpcrdma_prepare_send_sges - Construct SGEs for a Send WR
  * @r_xprt: controlling transport
@@ -760,6 +787,7 @@ inline int rpcrdma_prepare_send_sges(struct rpcrdma_xprt *r_xprt,
 	req->rl_wr.sg_list = req->rl_sendctx->sc_sges;
 	req->rl_wr.num_sge = 0;
 	req->rl_wr.opcode = IB_WR_SEND;
+	req->rl_wr.send_flags &= ~IB_SEND_INLINE;
 
 	rpcrdma_prepare_hdr_sge(r_xprt, req, hdrlen);
 
@@ -782,6 +810,8 @@ inline int rpcrdma_prepare_send_sges(struct rpcrdma_xprt *r_xprt,
 	default:
 		goto out_unmap;
 	}
+
+	rpcrdma_prepare_send_inline(r_xprt, req);
 
 	/* The Send-side owner releases this reference when the
 	 * Send has completed.
