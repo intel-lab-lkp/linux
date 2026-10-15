@@ -402,6 +402,17 @@ retry:
 			continue;
 
 		if (!hugetlb_vma_trylock_write(vma)) {
+			/*
+			 * The referenced fallback below is specific to the
+			 * hugetlb_vma_lock stored by shareable VMAs.  A private
+			 * owner VMA stores a tagged resv_map pointer here instead.
+			 */
+			if (!(vma->vm_flags & VM_MAYSHARE)) {
+				i_mmap_unlock_write(mapping);
+				cond_resched();
+				i_mmap_lock_write(mapping);
+				goto retry;
+			}
 			vma_lock = vma->vm_private_data;
 			/*
 			 * If we can not get vma lock, we need to drop
