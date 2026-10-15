@@ -12037,12 +12037,119 @@ void ieee80211_sta_rx_queued_frame(struct ieee80211_sub_if_data *sdata,
 	}
 }
 
+static void
+ieee80211_qos_mgmt_update_scs(struct ieee80211_sta_qos *qos,
+			      struct cfg80211_qm_req_data *qm_req,
+			      struct cfg80211_qm_resp_data *qm_resp)
+{
+	u8 tid;
+	int i;
+
+	if (qm_req->qm_type != NL80211_QM_TYPE_SCS)
+		return;
+
+	for (i = 0; i < qm_req->num_qm_desc; i++) {
+		struct cfg80211_qm_req_desc_data *qm_req_desc =
+			&qm_req->qm_req_desc[i];
+		struct cfg80211_qm_resp_desc_data *qm_resp_desc =
+			&qm_resp->qm_resp_desc[i];
+
+		if (qm_resp_desc->qm_id != qm_req_desc->qm_id ||
+		    qm_resp_desc->status != NL80211_QM_STATUS_SUCCESS)
+			continue;
+
+		switch (qm_req_desc->request_type) {
+		case NL80211_QM_REMOVE_REQ:
+			clear_bit(qm_req_desc->qm_id, qos->active_scs_id);
+			break;
+		case NL80211_QM_ADD_REQ:
+		case NL80211_QM_CHANGE_REQ:
+			/*
+			 * For legacy SCS the TID is derived from the UP
+			 * field of the first TCLAS element (11.25.2, IEEE
+			 * Std 802.11-2024). For 802.11be SCS the TID is
+			 * taken from the QoS
+			 * Characteristics element (9.4.2.326, IEEE Std
+			 * 802.11be-2024).
+			 */
+			if (qm_req_desc->is_qos_present)
+				tid = qm_req_desc->qos_attr.tid;
+			else if (qm_req_desc->num_tclas_elements > 0)
+				tid = qm_req_desc->tclas[0].up;
+			else
+				continue;
+
+			if (tid >= IEEE80211_QOS_MGMT_MAX_TID)
+				continue;
+
+			qos->scs_id_tid_mapping[qm_req_desc->qm_id] = tid;
+			set_bit(qm_req_desc->qm_id, qos->active_scs_id);
+			break;
+		default:
+			break;
+		}
+	}
+
+	qos->scs_enabled =
+		!bitmap_empty(qos->active_scs_id,
+			      IEEE80211_QOS_MGMT_MAX_SCS_ID + 1);
+}
+
+static void
+ieee80211_qos_mgmt_update_mscs(struct ieee80211_sta_qos *qos,
+			       struct cfg80211_qm_req_data *qm_req,
+			       struct cfg80211_qm_resp_data *qm_resp)
+{
+	struct cfg80211_qm_req_desc_data *qm_req_desc;
+	struct cfg80211_qm_resp_desc_data *qm_resp_desc;
+
+	qm_req_desc = &qm_req->qm_req_desc[0];
+	qm_resp_desc = &qm_resp->qm_resp_desc[0];
+
+	if (qm_resp_desc->qm_id != qm_req_desc->qm_id ||
+	    qm_resp_desc->status != NL80211_QM_STATUS_SUCCESS)
+		return;
+
+	switch (qm_req_desc->request_type) {
+	case NL80211_QM_ADD_REQ:
+	case NL80211_QM_CHANGE_REQ:
+		qos->mscs_user_priority_bitmap =
+			qm_req_desc->user_priority_bitmap;
+		qos->mscs_user_priority_limit =
+			qm_req_desc->user_priority_limit;
+		qos->mscs_enabled = true;
+		break;
+	case NL80211_QM_REMOVE_REQ:
+		qos->mscs_user_priority_bitmap = 0;
+		qos->mscs_user_priority_limit = 0;
+		qos->mscs_enabled = false;
+		break;
+	default:
+		break;
+	}
+}
+
+static bool
+ieee80211_qos_mgmt_has_qos_char(struct cfg80211_qm_req_data *qm_req)
+{
+	unsigned int i;
+
+	for (i = 0; i < qm_req->num_qm_desc; i++) {
+		if (qm_req->qm_req_desc[i].is_qos_present)
+			return true;
+	}
+	return false;
+}
+
 int ieee80211_qos_mgmt_cfg(struct ieee80211_sub_if_data *sdata,
 			   struct cfg80211_qm_req_data *qm_req,
 			   struct cfg80211_qm_resp_data *qm_resp)
 {
 	struct ieee80211_local *local = sdata->local;
+	struct ieee80211_sta_qos_rcu *new_qos = NULL;
+	struct ieee80211_sta_qos_rcu *old_qos;
 	struct sta_info *sta;
+	int ret;
 
 	if (sdata->vif.type != NL80211_IFTYPE_AP)
 		return -EOPNOTSUPP;
@@ -12051,5 +12158,46 @@ int ieee80211_qos_mgmt_cfg(struct ieee80211_sub_if_data *sdata,
 	if (!sta)
 		return -ENOENT;
 
-	return drv_qos_mgmt_cfg(sdata, local, &sta->sta, qm_req, qm_resp);
+	if (qm_req->qm_type == NL80211_QM_TYPE_SCS ||
+	    qm_req->qm_type == NL80211_QM_TYPE_MSCS) {
+		new_qos = kzalloc_obj(*new_qos);
+		if (!new_qos)
+			return -ENOMEM;
+
+		old_qos = rcu_dereference_protected(sta->qos,
+						    lockdep_is_held(&local->hw.wiphy->mtx));
+		if (old_qos)
+			new_qos->data = old_qos->data;
+	}
+
+	/*
+	 * SCS descriptors carrying a QoS Characteristics element
+	 * (9.4.2.326, IEEE Std 802.11be-2024) require hardware-specific
+	 * scheduling support; forward the request to the driver.  Legacy
+	 * SCS and MSCS are handled in mac80211.
+	 */
+	if (ieee80211_qos_mgmt_has_qos_char(qm_req)) {
+		ret = drv_qos_mgmt_cfg(sdata, local, &sta->sta,
+				       qm_req, qm_resp);
+		if (ret) {
+			kfree(new_qos);
+			return ret;
+		}
+	}
+
+	if (!new_qos)
+		return 0;
+
+	if (qm_req->qm_type == NL80211_QM_TYPE_SCS)
+		ieee80211_qos_mgmt_update_scs(&new_qos->data, qm_req,
+					      qm_resp);
+	else
+		ieee80211_qos_mgmt_update_mscs(&new_qos->data, qm_req,
+					       qm_resp);
+	old_qos = rcu_replace_pointer(sta->qos, new_qos,
+				      lockdep_is_held(&local->hw.wiphy->mtx));
+	if (old_qos)
+		kfree_rcu(old_qos, rcu_head);
+
+	return 0;
 }

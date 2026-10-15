@@ -467,7 +467,14 @@ static void sta_remove_link(struct sta_info *sta, unsigned int link_id,
  */
 void sta_info_free(struct ieee80211_local *local, struct sta_info *sta)
 {
+	struct ieee80211_sta_qos_rcu *qos;
 	int i;
+
+	lockdep_assert_wiphy(local->hw.wiphy);
+	qos = rcu_replace_pointer(sta->qos, NULL,
+				  lockdep_is_held(&local->hw.wiphy->mtx));
+	if (qos)
+		kfree_rcu(qos, rcu_head);
 
 	for (i = 0; i < ARRAY_SIZE(sta->link); i++) {
 		struct link_sta_info *link_sta;

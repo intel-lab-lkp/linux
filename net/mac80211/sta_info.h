@@ -16,9 +16,28 @@
 #include <linux/average.h>
 #include <linux/bitfield.h>
 #include <linux/etherdevice.h>
+#include <linux/rcupdate.h>
 #include <linux/rhashtable.h>
 #include <linux/u64_stats_sync.h>
 #include "key.h"
+
+/* SCS IDs are in the range 1-255; zero is reserved. */
+#define IEEE80211_QOS_MGMT_MAX_SCS_ID	255
+#define IEEE80211_QOS_MGMT_MAX_TID	8
+
+struct ieee80211_sta_qos {
+	bool scs_enabled;
+	bool mscs_enabled;
+	DECLARE_BITMAP(active_scs_id, IEEE80211_QOS_MGMT_MAX_SCS_ID + 1);
+	u8 scs_id_tid_mapping[IEEE80211_QOS_MGMT_MAX_SCS_ID + 1];
+	u8 mscs_user_priority_bitmap;
+	u8 mscs_user_priority_limit;
+};
+
+struct ieee80211_sta_qos_rcu {
+	struct rcu_head rcu_head;
+	struct ieee80211_sta_qos data;
+};
 
 /**
  * enum ieee80211_sta_info_flags - Stations flags
@@ -657,6 +676,7 @@ struct ieee80211_sta_removed_link_stats {
  * @rate_ctrl_priv: rate control private per-STA pointer
  * @lock: used for locking all fields that require locking, see comments
  *	in the header file.
+ * @qos: RCU-published QoS Management state
  * @drv_deliver_wk: used for delivering frames after driver PS unblocking
  * @listen_interval: listen interval of this station, when we're acting as AP
  * @_flags: STA flags, see &enum ieee80211_sta_info_flags, do not use directly
@@ -728,6 +748,7 @@ struct sta_info {
 	void *rate_ctrl_priv;
 	spinlock_t rate_ctrl_lock;
 	spinlock_t lock;
+	struct ieee80211_sta_qos_rcu __rcu *qos;
 
 	struct ieee80211_fast_tx __rcu *fast_tx;
 	struct ieee80211_fast_rx __rcu *fast_rx;
