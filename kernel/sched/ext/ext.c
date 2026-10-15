@@ -7321,13 +7321,6 @@ struct scx_sched *scx_alloc_and_add_sched(struct scx_enable_cmd *cmd,
 	INIT_LIST_HEAD(&sch->sibling);
 #endif	/* CONFIG_EXT_SUB_SCHED */
 
-	/*
-	 * Publishing makes @sch visible to scx_prog_sched() readers. Failure
-	 * paths after this point must free @sch through kobject_put() whose
-	 * release path defers the actual freeing by an RCU grace period.
-	 */
-	rcu_assign_pointer(ops->priv, sch);
-
 	sch->kobj.kset = scx_kset;
 	INIT_LIST_HEAD(&sch->all);
 
@@ -7361,6 +7354,14 @@ struct scx_sched *scx_alloc_and_add_sched(struct scx_enable_cmd *cmd,
 		sch->arena_kern_base = bpf_arena_map_kern_vm_start(sch->arena_map);
 #endif
 	cmd->arena_map = NULL;
+
+	/*
+	 * Publishing makes @sch visible to scx_prog_sched() readers. Failure
+	 * paths after this point must free @sch through kobject_put() whose
+	 * release path defers the actual freeing by an RCU grace period.
+	 */
+	rcu_assign_pointer(ops->priv, sch);
+
 	return sch;
 
 #ifdef CONFIG_EXT_SUB_SCHED
