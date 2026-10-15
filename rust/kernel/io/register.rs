@@ -118,7 +118,10 @@ use core::marker::PhantomData;
 
 use crate::{
     build_assert::build_assert,
-    io::IoLoc, //
+    io::{
+        access,
+        IoLoc, //
+    },
 };
 
 /// Allows `()` to be used as the `location` parameter of [`Io::write`](super::Io::write) when
@@ -127,6 +130,8 @@ impl<Base: ?Sized, T> IoLoc<Base, T> for ()
 where
     T: FixedIoLoc<Base>,
 {
+    type Access = <T::Location as IoLoc<Base, T>>::Access;
+
     #[inline(always)]
     fn offset(self) -> usize {
         T::LOCATION.offset()
@@ -135,7 +140,7 @@ where
 
 // Provides a `IoLoc` impl that for a fixed offset.
 #[doc(hidden)]
-pub struct OffsetLoc<Base: ?Sized, T>(usize, PhantomData<(T, Base)>);
+pub struct OffsetLoc<Base: ?Sized, T, A = access::ReadWrite>(usize, PhantomData<(T, A, Base)>);
 
 impl<Base: ?Sized, T> OffsetLoc<Base, T> {
     #[inline]
@@ -149,7 +154,9 @@ impl<Base: ?Sized, T> OffsetLoc<Base, T> {
     }
 }
 
-impl<Base: ?Sized, T> IoLoc<Base, T> for OffsetLoc<Base, T> {
+impl<Base: ?Sized, T, A: access::Mode> IoLoc<Base, T> for OffsetLoc<Base, T, A> {
+    type Access = A;
+
     #[inline(always)]
     fn offset(self) -> usize {
         self.0
@@ -160,6 +167,9 @@ impl<Base: ?Sized, T> IoLoc<Base, T> for OffsetLoc<Base, T> {
 pub trait RegisterArray: Sized {
     /// Base type for this register.
     type Base: ?Sized;
+
+    /// Access mode of the registers in this array.
+    type Access: access::Mode;
 
     /// Start offset of the register.
     ///
@@ -198,6 +208,8 @@ impl<Base: ?Sized, T> IoLoc<Base, T> for RegisterArrayLoc<T>
 where
     T: RegisterArray<Base = Base>,
 {
+    type Access = T::Access;
+
     #[inline(always)]
     fn offset(self) -> usize {
         T::OFFSET + self.0 * T::STRIDE

@@ -22,6 +22,7 @@ use crate::{
     }, //
 };
 
+pub mod access;
 #[cfg(CONFIG_HAS_IOMEM)]
 pub mod mem;
 pub mod poll;
@@ -377,12 +378,16 @@ pub trait IoCopyWritable: IoBackend {
 ///
 /// - The valid `Base` to operate on. For most registers, this should be [`Region`].
 /// - The offset to access (returned by [`IoLoc::offset`]),
-/// - The type `T` in which the data is returned or provided.
+/// - The type `T` in which the data is returned or provided,
+/// - The access mode ([`IoLoc::Access`]) applied to the views projected through it.
 ///
 /// `T` is not necessarily the type for underlying I/O operation. Methods that take `IoLoc` have `T:
 /// AsRepr` bound and the `<T as AsRepr>::Repr` type would be used to perform I/O and converted to
 /// `T` instead.
 pub trait IoLoc<Base: ?Sized, T> {
+    /// Access mode applied to the views projected through this location.
+    type Access: access::Mode;
+
     /// Consumes `self` and returns the offset of this location.
     fn offset(self) -> usize;
 }
@@ -393,6 +398,8 @@ macro_rules! impl_usize_ioloc {
     ($($ty:ty),*) => {
         $(
             impl<const SIZE: usize> IoLoc<Region<SIZE>, $ty> for usize {
+                type Access = access::ReadWrite;
+
                 #[inline(always)]
                 fn offset(self) -> usize {
                     self
@@ -961,7 +968,7 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsReprMut,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoReadable<<T as AsRepr>::Repr>,
+        <L::Access as access::Mode>::Backend<Self::Backend>: IoReadable<<T as AsRepr>::Repr>,
     {
         Ok(io_read!(self, try: location))
     }
@@ -994,7 +1001,7 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsRepr,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoWritable<<T as AsRepr>::Repr>,
+        <L::Access as access::Mode>::Backend<Self::Backend>: IoWritable<<T as AsRepr>::Repr>,
     {
         io_write!(self, try: location, value);
         Ok(())
@@ -1040,7 +1047,7 @@ pub trait Io<'a>: IoBase<'a> {
         T: AsRepr,
         L: IoLoc<Self::Target, T>,
         V: LocatedRegister<Self::Target, Location = L, Value = T>,
-        Self::Backend: IoWritable<<T as AsRepr>::Repr>,
+        <L::Access as access::Mode>::Backend<Self::Backend>: IoWritable<<T as AsRepr>::Repr>,
     {
         let (location, value) = value.into_io_op();
 
@@ -1074,7 +1081,8 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsReprMut,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoReadable<<T as AsRepr>::Repr> + IoWritable<<T as AsRepr>::Repr>,
+        <L::Access as access::Mode>::Backend<Self::Backend>:
+            IoReadable<<T as AsRepr>::Repr> + IoWritable<<T as AsRepr>::Repr>,
         F: FnOnce(T) -> T,
     {
         let view = io_project!(self, try: location);
@@ -1108,7 +1116,7 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsReprMut,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoReadable<<T as AsRepr>::Repr>,
+        <L::Access as access::Mode>::Backend<Self::Backend>: IoReadable<<T as AsRepr>::Repr>,
     {
         io_read!(self, build: location)
     }
@@ -1139,7 +1147,7 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsRepr,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoWritable<<T as AsRepr>::Repr>,
+        <L::Access as access::Mode>::Backend<Self::Backend>: IoWritable<<T as AsRepr>::Repr>,
     {
         io_write!(self, build: location, value);
     }
@@ -1183,7 +1191,7 @@ pub trait Io<'a>: IoBase<'a> {
         T: AsRepr,
         L: IoLoc<Self::Target, T>,
         V: LocatedRegister<Self::Target, Location = L, Value = T>,
-        Self::Backend: IoWritable<<T as AsRepr>::Repr>,
+        <L::Access as access::Mode>::Backend<Self::Backend>: IoWritable<<T as AsRepr>::Repr>,
     {
         let (location, value) = value.into_io_op();
 
@@ -1217,7 +1225,8 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsReprMut,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoReadable<<T as AsRepr>::Repr> + IoWritable<<T as AsRepr>::Repr>,
+        <L::Access as access::Mode>::Backend<Self::Backend>:
+            IoReadable<<T as AsRepr>::Repr> + IoWritable<<T as AsRepr>::Repr>,
         F: FnOnce(T) -> T,
     {
         let view = io_project!(self, build: location);
@@ -1909,19 +1918,26 @@ where
     pub fn try_project_loc<U, L>(
         self,
         location: L,
-    ) -> Result<<T::Backend as IoBackend>::View<'a, U>>
+    ) -> Result<access::RestrictedView<'a, L::Access, T::Backend, U>>
     where
         L: IoLoc<T::Target, U>,
     {
-        io_view::<_, U>(self.0, location.offset())
+        let view = io_view::<_, U>(self.0, location.offset())?;
+
+        Ok(<L::Access as access::Mode>::restrict::<T::Backend, U>(view))
     }
 
     #[inline(always)]
-    pub fn project_loc<U, L>(self, location: L) -> <T::Backend as IoBackend>::View<'a, U>
+    pub fn project_loc<U, L>(
+        self,
+        location: L,
+    ) -> access::RestrictedView<'a, L::Access, T::Backend, U>
     where
         L: IoLoc<T::Target, U>,
     {
-        io_view_assert::<_, U>(self.0, location.offset())
+        let view = io_view_assert::<_, U>(self.0, location.offset());
+
+        <L::Access as access::Mode>::restrict::<T::Backend, U>(view)
     }
 }
 

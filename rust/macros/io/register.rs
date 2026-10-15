@@ -283,6 +283,7 @@ pub(crate) fn register(def: RegDef) -> Result<TokenStream> {
 
                     impl ::kernel::io::register::RegisterArray for #name {
                         type Base = #base;
+                        type Access = ::kernel::io::access::ReadWrite;
                         const OFFSET: usize = #offset;
                         const SIZE: usize = #size;
                         const STRIDE: usize = #stride;
