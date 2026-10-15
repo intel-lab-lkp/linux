@@ -760,7 +760,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u8>,
         Self::Backend: IoReadable<u8>,
     {
-        self.try_read(offset)
+        Ok(io_view::<_, u8>(self, offset)?.read_val())
     }
 
     /// Fallible 16-bit read with runtime bounds check.
@@ -770,7 +770,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u16>,
         Self::Backend: IoReadable<u16>,
     {
-        self.try_read(offset)
+        Ok(io_view::<_, u16>(self, offset)?.read_val())
     }
 
     /// Fallible 32-bit read with runtime bounds check.
@@ -780,7 +780,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u32>,
         Self::Backend: IoReadable<u32>,
     {
-        self.try_read(offset)
+        Ok(io_view::<_, u32>(self, offset)?.read_val())
     }
 
     /// Fallible 64-bit read with runtime bounds check.
@@ -790,7 +790,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u64>,
         Self::Backend: IoReadable<u64>,
     {
-        self.try_read(offset)
+        Ok(io_view::<_, u64>(self, offset)?.read_val())
     }
 
     /// Fallible 8-bit write with runtime bounds check.
@@ -800,7 +800,8 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u8>,
         Self::Backend: IoWritable<u8>,
     {
-        self.try_write(offset, value)
+        io_view::<_, u8>(self, offset)?.write_val(value);
+        Ok(())
     }
 
     /// Fallible 16-bit write with runtime bounds check.
@@ -810,7 +811,8 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u16>,
         Self::Backend: IoWritable<u16>,
     {
-        self.try_write(offset, value)
+        io_view::<_, u16>(self, offset)?.write_val(value);
+        Ok(())
     }
 
     /// Fallible 32-bit write with runtime bounds check.
@@ -820,7 +822,8 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u32>,
         Self::Backend: IoWritable<u32>,
     {
-        self.try_write(offset, value)
+        io_view::<_, u32>(self, offset)?.write_val(value);
+        Ok(())
     }
 
     /// Fallible 64-bit write with runtime bounds check.
@@ -830,7 +833,8 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u64>,
         Self::Backend: IoWritable<u64>,
     {
-        self.try_write(offset, value)
+        io_view::<_, u64>(self, offset)?.write_val(value);
+        Ok(())
     }
 
     /// Infallible 8-bit read with compile-time bounds check.
@@ -842,7 +846,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u8>,
         Self::Backend: IoReadable<u8>,
     {
-        self.read(offset)
+        io_view_assert::<_, u8>(self, offset).read_val()
     }
 
     /// Infallible 16-bit read with compile-time bounds check.
@@ -854,7 +858,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u16>,
         Self::Backend: IoReadable<u16>,
     {
-        self.read(offset)
+        io_view_assert::<_, u16>(self, offset).read_val()
     }
 
     /// Infallible 32-bit read with compile-time bounds check.
@@ -866,7 +870,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u32>,
         Self::Backend: IoReadable<u32>,
     {
-        self.read(offset)
+        io_view_assert::<_, u32>(self, offset).read_val()
     }
 
     /// Infallible 64-bit read with compile-time bounds check.
@@ -878,7 +882,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u64>,
         Self::Backend: IoReadable<u64>,
     {
-        self.read(offset)
+        io_view_assert::<_, u64>(self, offset).read_val()
     }
 
     /// Infallible 8-bit write with compile-time bounds check.
@@ -890,7 +894,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u8>,
         Self::Backend: IoWritable<u8>,
     {
-        self.write(offset, value)
+        io_view_assert::<_, u8>(self, offset).write_val(value)
     }
 
     /// Infallible 16-bit write with compile-time bounds check.
@@ -902,7 +906,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u16>,
         Self::Backend: IoWritable<u16>,
     {
-        self.write(offset, value)
+        io_view_assert::<_, u16>(self, offset).write_val(value)
     }
 
     /// Infallible 32-bit write with compile-time bounds check.
@@ -914,7 +918,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u32>,
         Self::Backend: IoWritable<u32>,
     {
-        self.write(offset, value)
+        io_view_assert::<_, u32>(self, offset).write_val(value)
     }
 
     /// Infallible 64-bit write with compile-time bounds check.
@@ -926,7 +930,7 @@ pub trait Io<'a>: IoBase<'a> {
         usize: IoLoc<Self::Target, u64>,
         Self::Backend: IoWritable<u64>,
     {
-        self.write(offset, value)
+        io_view_assert::<_, u64>(self, offset).write_val(value)
     }
 
     /// Generic fallible read with runtime bounds check.
