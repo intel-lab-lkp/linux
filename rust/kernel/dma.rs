@@ -17,7 +17,8 @@ use crate::{
     io::{
         IoBackend,
         IoBase,
-        IoCopyable,
+        IoCopyReadable,
+        IoCopyWritable,
         IoReadable,
         IoWritable,
         SysMem,
@@ -1201,7 +1202,7 @@ where
     }
 }
 
-impl IoCopyable for CoherentIoBackend {
+impl IoCopyReadable for CoherentIoBackend {
     #[inline]
     unsafe fn copy_from_io(view: Self::View<'_, [u8]>, buffer: *mut u8) {
         // SAFETY: Per safety requirement.
@@ -1209,14 +1210,16 @@ impl IoCopyable for CoherentIoBackend {
     }
 
     #[inline]
+    fn copy_read<T: zerocopy::FromBytes>(view: Self::View<'_, T>) -> T {
+        SysMemBackend::copy_read(view.cpu_addr)
+    }
+}
+
+impl IoCopyWritable for CoherentIoBackend {
+    #[inline]
     unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8) {
         // SAFETY: Per safety requirement.
         unsafe { SysMemBackend::copy_to_io(view.cpu_addr, buffer) }
-    }
-
-    #[inline]
-    fn copy_read<T: zerocopy::FromBytes>(view: Self::View<'_, T>) -> T {
-        SysMemBackend::copy_read(view.cpu_addr)
     }
 
     #[inline]

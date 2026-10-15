@@ -298,8 +298,8 @@ pub trait IoWritable<T>: IoBackend {
     fn io_write<'a>(view: Self::View<'a, T>, value: T);
 }
 
-/// Trait indicating that an I/O backend supports memory copy operations.
-pub trait IoCopyable: IoBackend {
+/// Trait indicating that an I/O backend supports memory copy operations from I/O.
+pub trait IoCopyReadable: IoBackend {
     /// Copy contents of `view` to `buffer`.
     ///
     /// # Safety
@@ -307,14 +307,6 @@ pub trait IoCopyable: IoBackend {
     /// - `buffer` is valid for volatile write for `view.size()` bytes.
     /// - `buffer` should not overlap with `view`.
     unsafe fn copy_from_io(view: Self::View<'_, [u8]>, buffer: *mut u8);
-
-    /// Copy contents from `buffer` to `view`.
-    ///
-    /// # Safety
-    ///
-    /// - `buffer` is valid for volatile read for `view.size()` bytes.
-    /// - `buffer` should not overlap with `view`.
-    unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8);
 
     /// Copy from `view` and return the value.
     #[inline]
@@ -337,6 +329,17 @@ pub trait IoCopyable: IoBackend {
         // SAFETY: `T: FromBytes` guarantee that all bit patterns are valid.
         unsafe { buf.assume_init() }
     }
+}
+
+/// Trait indicating that an I/O backend supports memory copy operations to I/O.
+pub trait IoCopyWritable: IoBackend {
+    /// Copy contents from `buffer` to `view`.
+    ///
+    /// # Safety
+    ///
+    /// - `buffer` is valid for volatile read for `view.size()` bytes.
+    /// - `buffer` should not overlap with `view`.
+    unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8);
 
     /// Copy `value` to `view`.
     ///
@@ -602,7 +605,7 @@ pub trait Io<'a>: IoBase<'a> {
     #[inline]
     fn copy_read(self) -> Self::Target
     where
-        Self::Backend: IoCopyable,
+        Self::Backend: IoCopyReadable,
         Self::Target: Sized + FromBytes,
     {
         Self::Backend::copy_read(self.as_view())
@@ -629,7 +632,7 @@ pub trait Io<'a>: IoBase<'a> {
     #[inline]
     fn copy_write(self, value: Self::Target)
     where
-        Self::Backend: IoCopyable,
+        Self::Backend: IoCopyWritable,
         Self::Target: Sized + IntoBytes,
     {
         Self::Backend::copy_write(self.as_view(), value);
@@ -654,7 +657,7 @@ pub trait Io<'a>: IoBase<'a> {
     #[inline]
     fn copy_from_slice(self, data: &[u8])
     where
-        Self::Backend: IoCopyable,
+        Self::Backend: IoCopyWritable,
         Self: Io<'a, Target = [u8]>,
     {
         assert_eq!(self.len(), data.len());
@@ -685,7 +688,7 @@ pub trait Io<'a>: IoBase<'a> {
     #[inline]
     fn copy_to_slice(self, data: &mut [u8])
     where
-        Self::Backend: IoCopyable,
+        Self::Backend: IoCopyReadable,
         Self: Io<'a, Target = [u8]>,
     {
         assert_eq!(self.len(), data.len());
@@ -1275,7 +1278,7 @@ impl_mmio_io_capable!(MmioBackend, u32, readl, writel);
 #[cfg(CONFIG_64BIT)]
 impl_mmio_io_capable!(MmioBackend, u64, readq, writeq);
 
-impl IoCopyable for MmioBackend {
+impl IoCopyReadable for MmioBackend {
     #[inline]
     unsafe fn copy_from_io(view: Self::View<'_, [u8]>, buffer: *mut u8) {
         // SAFETY:
@@ -1285,7 +1288,9 @@ impl IoCopyable for MmioBackend {
             bindings::memcpy_fromio(buffer.cast(), view.ptr.cast(), view.size());
         }
     }
+}
 
+impl IoCopyWritable for MmioBackend {
     #[inline]
     unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8) {
         // SAFETY:
@@ -1442,7 +1447,7 @@ impl_sysmem_io_capable!(u32);
 #[cfg(CONFIG_64BIT)]
 impl_sysmem_io_capable!(u64);
 
-impl IoCopyable for SysMemBackend {
+impl IoCopyReadable for SysMemBackend {
     #[inline]
     unsafe fn copy_from_io(view: Self::View<'_, [u8]>, buffer: *mut u8) {
         // Use `bindings::memcpy` instead of `copy_nonoverlapping` for volatile.
@@ -1450,15 +1455,6 @@ impl IoCopyable for SysMemBackend {
         // - `view.ptr` is in CPU address space and valid for read.
         // - `buffer` is valid for write for `view.size()` bytes which is equal to `view.ptr.len()`.
         unsafe { bindings::memcpy(buffer.cast(), view.ptr.cast(), view.ptr.len()) };
-    }
-
-    #[inline]
-    unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8) {
-        // Use `bindings::memcpy` instead of `copy_nonoverlapping` for volatile.
-        // SAFETY:
-        // - `view.ptr` is in CPU address space and valid for write.
-        // - `buffer` is valid for read for `view.size()` bytes which is equal to `view.ptr.len()`.
-        unsafe { bindings::memcpy(view.ptr.cast(), buffer.cast(), view.ptr.len()) };
     }
 
     #[inline]
@@ -1470,6 +1466,17 @@ impl IoCopyable for SysMemBackend {
         //   rules, but this is allowed per LKMM.
         // - `T: FromBytes` so all bit patterns are valid.
         unsafe { view.ptr.read_volatile() }
+    }
+}
+
+impl IoCopyWritable for SysMemBackend {
+    #[inline]
+    unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8) {
+        // Use `bindings::memcpy` instead of `copy_nonoverlapping` for volatile.
+        // SAFETY:
+        // - `view.ptr` is in CPU address space and valid for write.
+        // - `buffer` is valid for read for `view.size()` bytes which is equal to `view.ptr.len()`.
+        unsafe { bindings::memcpy(view.ptr.cast(), buffer.cast(), view.ptr.len()) };
     }
 
     #[inline]
@@ -1640,7 +1647,7 @@ where
     }
 }
 
-impl IoCopyable for IoSysMapBackend {
+impl IoCopyReadable for IoSysMapBackend {
     #[inline]
     unsafe fn copy_from_io(view: Self::View<'_, [u8]>, buffer: *mut u8) {
         match view {
@@ -1652,20 +1659,22 @@ impl IoCopyable for IoSysMapBackend {
     }
 
     #[inline]
+    fn copy_read<T: FromBytes>(view: Self::View<'_, T>) -> T {
+        match view {
+            IoSysMap::Io(l) => MmioBackend::copy_read(l),
+            IoSysMap::Sys(r) => SysMemBackend::copy_read(r),
+        }
+    }
+}
+
+impl IoCopyWritable for IoSysMapBackend {
+    #[inline]
     unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8) {
         match view {
             // SAFETY: Per safety requirement.
             IoSysMap::Io(l) => unsafe { MmioBackend::copy_to_io(l, buffer) },
             // SAFETY: Per safety requirement.
             IoSysMap::Sys(r) => unsafe { SysMemBackend::copy_to_io(r, buffer) },
-        }
-    }
-
-    #[inline]
-    fn copy_read<T: FromBytes>(view: Self::View<'_, T>) -> T {
-        match view {
-            IoSysMap::Io(l) => MmioBackend::copy_read(l),
-            IoSysMap::Sys(r) => SysMemBackend::copy_read(r),
         }
     }
 
