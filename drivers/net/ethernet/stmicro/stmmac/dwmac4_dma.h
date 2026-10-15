@@ -175,9 +175,9 @@ static inline u32 dma_chanx_base_addr(const struct dwmac4_addrs *addrs,
 
 int dwmac4_dma_reset(void __iomem *ioaddr);
 void dwmac4_enable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
-			   u32 chan, bool rx, bool tx);
+			   u32 chan, u32 group);
 void dwmac4_disable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
-			    u32 chan, bool rx, bool tx);
+			    u32 chan, u32 group);
 void dwmac4_dma_start_tx(struct stmmac_priv *priv, void __iomem *ioaddr,
 			 u32 chan);
 void dwmac4_dma_stop_tx(struct stmmac_priv *priv, void __iomem *ioaddr,

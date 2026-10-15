@@ -38,28 +38,37 @@ void dwmac_enable_dma_reception(void __iomem *ioaddr, u32 chan)
 	writel(1, ioaddr + DMA_CHAN_RCV_POLL_DEMAND(chan));
 }
 
+static u32 dwmac_enable_dma_mask(u32 group)
+{
+	u32 mask = 0;
+
+	if (group & STMMAC_DMA_IRQ_RX)
+		mask |= DMA_INTR_DEFAULT_RX;
+	if (group & STMMAC_DMA_IRQ_TX)
+		mask |= DMA_INTR_DEFAULT_TX;
+	if (group & STMMAC_DMA_IRQ_OTHER)
+		mask |= DMA_INTR_DEFAULT_MASK &
+			~(DMA_INTR_DEFAULT_RX | DMA_INTR_DEFAULT_TX);
+
+	return mask;
+}
+
 void dwmac_enable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
-			  u32 chan, bool rx, bool tx)
+			  u32 chan, u32 group)
 {
 	u32 value = readl(ioaddr + DMA_CHAN_INTR_ENA(chan));
 
-	if (rx)
-		value |= DMA_INTR_DEFAULT_RX;
-	if (tx)
-		value |= DMA_INTR_DEFAULT_TX;
+	value |= dwmac_enable_dma_mask(group);
 
 	writel(value, ioaddr + DMA_CHAN_INTR_ENA(chan));
 }
 
 void dwmac_disable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
-			   u32 chan, bool rx, bool tx)
+			   u32 chan, u32 group)
 {
 	u32 value = readl(ioaddr + DMA_CHAN_INTR_ENA(chan));
 
-	if (rx)
-		value &= ~DMA_INTR_DEFAULT_RX;
-	if (tx)
-		value &= ~DMA_INTR_DEFAULT_TX;
+	value &= ~dwmac_enable_dma_mask(group);
 
 	writel(value, ioaddr + DMA_CHAN_INTR_ENA(chan));
 }

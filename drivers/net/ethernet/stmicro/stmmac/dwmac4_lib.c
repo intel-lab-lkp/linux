@@ -109,30 +109,39 @@ void dwmac4_set_rx_ring_len(struct stmmac_priv *priv, void __iomem *ioaddr,
 	writel(len, ioaddr + DMA_CHAN_RX_RING_LEN(dwmac4_addrs, chan));
 }
 
+static u32 dwmac4_enable_dma_mask(u32 group)
+{
+	u32 mask = 0;
+
+	if (group & STMMAC_DMA_IRQ_RX)
+		mask |= DMA_CHAN_INTR_ENA_RIE;
+	if (group & STMMAC_DMA_IRQ_TX)
+		mask |= DMA_CHAN_INTR_ENA_TIE;
+	if (group & STMMAC_DMA_IRQ_OTHER)
+		mask |= DMA_CHAN_INTR_DEFAULT_MASK &
+			~(DMA_CHAN_INTR_ENA_RIE | DMA_CHAN_INTR_ENA_TIE);
+
+	return mask;
+}
+
 void dwmac4_enable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
-			   u32 chan, bool rx, bool tx)
+			   u32 chan, u32 group)
 {
 	const struct dwmac4_addrs *dwmac4_addrs = priv->plat->dwmac4_addrs;
 	u32 value = readl(ioaddr + DMA_CHAN_INTR_ENA(dwmac4_addrs, chan));
 
-	if (rx)
-		value |= DMA_CHAN_INTR_ENA_RIE;
-	if (tx)
-		value |= DMA_CHAN_INTR_ENA_TIE;
+	value |= dwmac4_enable_dma_mask(group);
 
 	writel(value, ioaddr + DMA_CHAN_INTR_ENA(dwmac4_addrs, chan));
 }
 
 void dwmac4_disable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
-			    u32 chan, bool rx, bool tx)
+			    u32 chan, u32 group)
 {
 	const struct dwmac4_addrs *dwmac4_addrs = priv->plat->dwmac4_addrs;
 	u32 value = readl(ioaddr + DMA_CHAN_INTR_ENA(dwmac4_addrs, chan));
 
-	if (rx)
-		value &= ~DMA_CHAN_INTR_ENA_RIE;
-	if (tx)
-		value &= ~DMA_CHAN_INTR_ENA_TIE;
+	value &= ~dwmac4_enable_dma_mask(group);
 
 	writel(value, ioaddr + DMA_CHAN_INTR_ENA(dwmac4_addrs, chan));
 }

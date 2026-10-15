@@ -163,6 +163,12 @@ struct stmmac_desc_ops {
 struct stmmac_dma_cfg;
 struct dma_features;
 
+#define STMMAC_DMA_IRQ_RX BIT(0)
+#define STMMAC_DMA_IRQ_TX BIT(1)
+#define STMMAC_DMA_IRQ_OTHER BIT(2)
+#define STMMAC_DMA_IRQ_TXRX (STMMAC_DMA_IRQ_TX | STMMAC_DMA_IRQ_RX)
+#define STMMAC_DMA_IRQ_ALL (STMMAC_DMA_IRQ_TXRX | STMMAC_DMA_IRQ_OTHER)
+
 /* Specific DMA helpers */
 struct stmmac_dma_ops {
 	/* DMA core initialization */
@@ -194,9 +200,9 @@ struct stmmac_dma_ops {
 	void (*enable_dma_transmission)(void __iomem *ioaddr, u32 chan);
 	void (*enable_dma_reception)(void __iomem *ioaddr, u32 chan);
 	void (*enable_dma_irq)(struct stmmac_priv *priv, void __iomem *ioaddr,
-			       u32 chan, bool rx, bool tx);
+			       u32 chan, u32 group);
 	void (*disable_dma_irq)(struct stmmac_priv *priv, void __iomem *ioaddr,
-				u32 chan, bool rx, bool tx);
+				u32 chan, u32 group);
 	void (*start_tx)(struct stmmac_priv *priv, void __iomem *ioaddr,
 			 u32 chan);
 	void (*stop_tx)(struct stmmac_priv *priv, void __iomem *ioaddr,

@@ -347,13 +347,13 @@ static void sun8i_dwmac_dump_mac_regs(struct mac_device_info *hw,
 
 static void sun8i_dwmac_enable_dma_irq(struct stmmac_priv *priv,
 				       void __iomem *ioaddr, u32 chan,
-				       bool rx, bool tx)
+				       u32 flags)
 {
 	u32 value = readl(ioaddr + EMAC_INT_EN);
 
-	if (rx)
+	if (flags & STMMAC_DMA_IRQ_RX)
 		value |= EMAC_RX_INT;
-	if (tx)
+	if (flags & STMMAC_DMA_IRQ_TX)
 		value |= EMAC_TX_INT;
 
 	writel(value, ioaddr + EMAC_INT_EN);
@@ -361,13 +361,13 @@ static void sun8i_dwmac_enable_dma_irq(struct stmmac_priv *priv,
 
 static void sun8i_dwmac_disable_dma_irq(struct stmmac_priv *priv,
 					void __iomem *ioaddr, u32 chan,
-					bool rx, bool tx)
+					u32 flags)
 {
 	u32 value = readl(ioaddr + EMAC_INT_EN);
 
-	if (rx)
+	if (flags & STMMAC_DMA_IRQ_RX)
 		value &= ~EMAC_RX_INT;
-	if (tx)
+	if (flags & STMMAC_DMA_IRQ_TX)
 		value &= ~EMAC_TX_INT;
 
 	writel(value, ioaddr + EMAC_INT_EN);

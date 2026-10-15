@@ -2515,7 +2515,7 @@ static void stmmac_enable_all_dma_irq(struct stmmac_priv *priv)
 		unsigned long flags;
 
 		spin_lock_irqsave(&ch->lock, flags);
-		stmmac_enable_dma_irq(priv, priv->ioaddr, chan, 1, 1);
+		stmmac_enable_dma_irq(priv, priv->ioaddr, chan, STMMAC_DMA_IRQ_ALL);
 		spin_unlock_irqrestore(&ch->lock, flags);
 	}
 }
@@ -3088,7 +3088,7 @@ static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan, u32 dir)
 	if ((status & handle_rx) && (chan < priv->plat->rx_queues_to_use)) {
 		if (napi_schedule_prep(rx_napi)) {
 			spin_lock_irqsave(&ch->lock, flags);
-			stmmac_disable_dma_irq(priv, priv->ioaddr, chan, 1, 0);
+			stmmac_disable_dma_irq(priv, priv->ioaddr, chan, STMMAC_DMA_IRQ_RX);
 			spin_unlock_irqrestore(&ch->lock, flags);
 			__napi_schedule(rx_napi);
 		}
@@ -3097,7 +3097,7 @@ static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan, u32 dir)
 	if ((status & handle_tx) && (chan < priv->plat->tx_queues_to_use)) {
 		if (napi_schedule_prep(tx_napi)) {
 			spin_lock_irqsave(&ch->lock, flags);
-			stmmac_disable_dma_irq(priv, priv->ioaddr, chan, 0, 1);
+			stmmac_disable_dma_irq(priv, priv->ioaddr, chan, STMMAC_DMA_IRQ_TX);
 			spin_unlock_irqrestore(&ch->lock, flags);
 			__napi_schedule(tx_napi);
 		}
@@ -3291,7 +3291,7 @@ static int stmmac_init_dma_engine(struct stmmac_priv *priv)
 	/* DMA CSR Channel configuration */
 	for (chan = 0; chan < dma_csr_ch; chan++) {
 		stmmac_init_chan(priv, priv->ioaddr, priv->plat->dma_cfg, chan);
-		stmmac_disable_dma_irq(priv, priv->ioaddr, chan, 1, 1);
+		stmmac_disable_dma_irq(priv, priv->ioaddr, chan, STMMAC_DMA_IRQ_TXRX);
 	}
 
 	/* DMA RX Channel Configuration */
@@ -3365,7 +3365,7 @@ static enum hrtimer_restart stmmac_tx_timer(struct hrtimer *t)
 		unsigned long flags;
 
 		spin_lock_irqsave(&ch->lock, flags);
-		stmmac_disable_dma_irq(priv, priv->ioaddr, ch->index, 0, 1);
+		stmmac_disable_dma_irq(priv, priv->ioaddr, ch->index, STMMAC_DMA_IRQ_TX);
 		spin_unlock_irqrestore(&ch->lock, flags);
 		__napi_schedule(napi);
 	}
@@ -6013,7 +6013,7 @@ static int stmmac_napi_poll_rx(struct napi_struct *napi, int budget)
 		unsigned long flags;
 
 		spin_lock_irqsave(&ch->lock, flags);
-		stmmac_enable_dma_irq(priv, priv->ioaddr, chan, 1, 0);
+		stmmac_enable_dma_irq(priv, priv->ioaddr, chan, STMMAC_DMA_IRQ_RX);
 		spin_unlock_irqrestore(&ch->lock, flags);
 	}
 
@@ -6042,7 +6042,7 @@ static int stmmac_napi_poll_tx(struct napi_struct *napi, int budget)
 		unsigned long flags;
 
 		spin_lock_irqsave(&ch->lock, flags);
-		stmmac_enable_dma_irq(priv, priv->ioaddr, chan, 0, 1);
+		stmmac_enable_dma_irq(priv, priv->ioaddr, chan, STMMAC_DMA_IRQ_TX);
 		spin_unlock_irqrestore(&ch->lock, flags);
 	}
 
@@ -6095,7 +6095,7 @@ static int stmmac_napi_poll_rxtx(struct napi_struct *napi, int budget)
 		/* Both RX and TX work done are complete,
 		 * so enable both RX & TX IRQs.
 		 */
-		stmmac_enable_dma_irq(priv, priv->ioaddr, chan, 1, 1);
+		stmmac_enable_dma_irq(priv, priv->ioaddr, chan, STMMAC_DMA_IRQ_TXRX);
 		spin_unlock_irqrestore(&ch->lock, flags);
 	}
 
@@ -7032,7 +7032,7 @@ void stmmac_disable_rx_queue(struct stmmac_priv *priv, u32 queue)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ch->lock, flags);
-	stmmac_disable_dma_irq(priv, priv->ioaddr, queue, 1, 0);
+	stmmac_disable_dma_irq(priv, priv->ioaddr, queue, STMMAC_DMA_IRQ_RX);
 	spin_unlock_irqrestore(&ch->lock, flags);
 
 	stmmac_stop_rx_dma(priv, queue);
@@ -7072,7 +7072,7 @@ void stmmac_enable_rx_queue(struct stmmac_priv *priv, u32 queue)
 	stmmac_start_rx_dma(priv, queue);
 
 	spin_lock_irqsave(&ch->lock, flags);
-	stmmac_enable_dma_irq(priv, priv->ioaddr, queue, 1, 0);
+	stmmac_enable_dma_irq(priv, priv->ioaddr, queue, STMMAC_DMA_IRQ_RX);
 	spin_unlock_irqrestore(&ch->lock, flags);
 }
 
@@ -7082,7 +7082,7 @@ void stmmac_disable_tx_queue(struct stmmac_priv *priv, u32 queue)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ch->lock, flags);
-	stmmac_disable_dma_irq(priv, priv->ioaddr, queue, 0, 1);
+	stmmac_disable_dma_irq(priv, priv->ioaddr, queue, STMMAC_DMA_IRQ_TX);
 	spin_unlock_irqrestore(&ch->lock, flags);
 
 	stmmac_stop_tx_dma(priv, queue);
@@ -7123,7 +7123,7 @@ void stmmac_enable_tx_queue(struct stmmac_priv *priv, u32 queue)
 	stmmac_start_tx_dma(priv, queue);
 
 	spin_lock_irqsave(&ch->lock, flags);
-	stmmac_enable_dma_irq(priv, priv->ioaddr, queue, 0, 1);
+	stmmac_enable_dma_irq(priv, priv->ioaddr, queue, STMMAC_DMA_IRQ_TX);
 	spin_unlock_irqrestore(&ch->lock, flags);
 }
 
@@ -7191,7 +7191,7 @@ int stmmac_xdp_open(struct net_device *dev)
 	/* DMA CSR Channel configuration */
 	for (chan = 0; chan < dma_csr_ch; chan++) {
 		stmmac_init_chan(priv, priv->ioaddr, priv->plat->dma_cfg, chan);
-		stmmac_disable_dma_irq(priv, priv->ioaddr, chan, 1, 1);
+		stmmac_disable_dma_irq(priv, priv->ioaddr, chan, STMMAC_DMA_IRQ_TXRX);
 	}
 
 	/* Adjust Split header */
