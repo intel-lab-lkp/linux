@@ -795,7 +795,9 @@ struct dentry *ceph_handle_snapdir(struct ceph_mds_request *req,
 		struct dentry *res;
 		struct inode *inode = ceph_get_snapdir(parent);
 
+		ceph_quarantine_splice_start(parent->i_sb);
 		res = d_splice_alias(inode, dentry);
+		ceph_quarantine_splice_finish(parent->i_sb);
 		boutc_formats(cl,
 			      "ENOENT on snapdir %p '%s', linking to snapdir %p %llx.%llx. Spliced dentry %p\n",
 			      "ENOENT on snapdir %p '%pd', linking to snapdir %p %llx.%llx. Spliced dentry %p\n",
@@ -1373,7 +1375,9 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 		d_drop(dentry);
 	} else if (!req->r_reply_info.head->is_dentry) {
 		ihold(d_inode(old_dentry));
+		ceph_quarantine_splice_start(dir->i_sb);
 		d_instantiate(dentry, d_inode(old_dentry));
+		ceph_quarantine_splice_finish(dir->i_sb);
 	}
 	ceph_mdsc_put_request(req);
 	ceph_blog_exit(&__ji);
@@ -1701,12 +1705,17 @@ static int ceph_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 	}
 	err = ceph_mdsc_do_request(mdsc, old_dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry) {
+		struct inode *moved;
+
 		/*
 		 * Normally d_move() is done by fill_trace (called by
 		 * do_request, above).  If there is no trace, we need
 		 * to do it here.
 		 */
+		moved = d_inode(old_dentry);
+		ceph_quarantine_move_start(moved, old_dir, new_dir);
 		d_move(old_dentry, new_dentry);
+		ceph_quarantine_move_finish(moved, old_dir, new_dir);
 	}
 	ceph_mdsc_put_request(req);
 	ceph_blog_exit(&__ji);
