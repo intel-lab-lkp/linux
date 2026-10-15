@@ -63,6 +63,7 @@ struct Reg {
     attrs: Vec<Attribute>,
     vis: Visibility,
     name: Ident,
+    access: Type,
     unique: bool,
     ty: Type,
     array: Option<RegArrayDef>,
@@ -72,7 +73,26 @@ struct Reg {
 
 impl Parse for Reg {
     fn parse(input: syn::parse::ParseStream<'_>) -> Result<Self> {
-        let attrs = input.call(Attribute::parse_outer)?;
+        let mut attrs = input.call(Attribute::parse_outer)?;
+        let modes = attrs
+            .extract_if(.., |attr| {
+                attr.path().is_ident("ro") || attr.path().is_ident("wo")
+            })
+            .collect::<Vec<_>>();
+        if let Some(attr) = modes.get(1) {
+            Err(Error::new_spanned(
+                attr,
+                "only one of `#[ro]` and `#[wo]` can be specified",
+            ))?
+        }
+        let access = match modes.first() {
+            None => parse_quote!(::kernel::io::access::ReadWrite),
+            Some(attr) if attr.path().is_ident("ro") => {
+                parse_quote!(::kernel::io::access::ReadOnly)
+            }
+            Some(_) => parse_quote!(::kernel::io::access::WriteOnly),
+        };
+
         let vis = input.parse()?;
         let name = input.parse()?;
 
@@ -161,6 +181,7 @@ impl Parse for Reg {
             attrs,
             vis,
             name,
+            access,
             unique,
             ty,
             array,
@@ -205,6 +226,7 @@ pub(crate) fn register(def: RegDef) -> Result<TokenStream> {
             attrs,
             vis,
             name,
+            access,
             unique,
             ty,
             array,
@@ -220,7 +242,7 @@ pub(crate) fn register(def: RegDef) -> Result<TokenStream> {
             RegOffset::Fixed { offset } => quote!(#offset),
             RegOffset::Alias { alias } => {
                 quote_spanned!(alias.span().resolved_at(span) =>
-                    ::kernel::io::register::OffsetLoc::<#base, _>::const_offset(#alias)
+                    ::kernel::io::register::OffsetLoc::<#base, _, _>::const_offset(#alias)
                 )
             }
             RegOffset::ElementAlias { alias, idx } => {
@@ -246,15 +268,16 @@ pub(crate) fn register(def: RegDef) -> Result<TokenStream> {
                 if unique {
                     outputs.extend(quote!(
                         impl ::kernel::io::register::FixedIoLoc<#base> for #ty {
-                            type Location = ::kernel::io::register::OffsetLoc<#base, #ty>;
+                            type Location = ::kernel::io::register::OffsetLoc<#base, #ty, #access>;
                             const LOCATION: Self::Location = #name;
                         }
                     ))
                 }
 
                 outputs.extend(quote_spanned!(span =>
-                    #(#attrs)* #vis const #name: ::kernel::io::register::OffsetLoc<#base, #ty> =
-                        ::kernel::io::register::OffsetLoc::new(#offset);
+                    #(#attrs)* #vis const #name:
+                        ::kernel::io::register::OffsetLoc<#base, #ty, #access> =
+                        ::kernel::io::register::OffsetLoc::with_access(#offset);
                 ));
             }
 
@@ -283,7 +306,7 @@ pub(crate) fn register(def: RegDef) -> Result<TokenStream> {
 
                     impl ::kernel::io::register::RegisterArray for #name {
                         type Base = #base;
-                        type Access = ::kernel::io::access::ReadWrite;
+                        type Access = #access;
                         const OFFSET: usize = #offset;
                         const SIZE: usize = #size;
                         const STRIDE: usize = #stride;

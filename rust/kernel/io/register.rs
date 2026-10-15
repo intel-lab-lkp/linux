@@ -147,6 +147,13 @@ impl<Base: ?Sized, T> OffsetLoc<Base, T> {
     pub const fn new(offset: usize) -> Self {
         Self(offset, PhantomData)
     }
+}
+
+impl<Base: ?Sized, T, A> OffsetLoc<Base, T, A> {
+    #[inline]
+    pub const fn with_access(offset: usize) -> Self {
+        Self(offset, PhantomData)
+    }
 
     #[inline]
     pub const fn const_offset(self) -> usize {
@@ -596,6 +603,52 @@ pub const fn element_alias_offset<Base: ?Sized, Alias: RegisterArray<Base = Base
 /// io_project!(io, build: CPU0).write_reg(CPU_CTL::zeroed());
 /// # }
 /// ```
+///
+/// ## Access modes
+///
+/// Registers are read-write unless declared with the `#[ro]` (read-only) or `#[wo]` (write-only)
+/// attribute. Reading a write-only register, or writing or updating a read-only one, does not
+/// compile:
+///
+/// ```no_run
+/// use kernel::io::{
+///     register,
+///     Io,
+///     Region,
+/// };
+/// # use kernel::io::Mmio;
+///
+/// register! {
+///     base: Region<0x1000>;
+///
+///     #[ro]
+///     pub R1(u32) @ 0x0 {
+///         31:0 value;
+///     }
+///
+///     #[wo]
+///     pub R2(u32) @ 0x4 {
+///         31:0 value;
+///     }
+///
+///     #[ro]
+///     pub R3: u8 @ 0x8;
+/// }
+///
+/// # fn test(io: Mmio<'_, Region<0x1000>>) {
+/// let r1 = io.read(R1);
+/// let r3 = io.read(R3);
+/// io.write_reg(R2::zeroed());
+///
+/// // Neither of these compiles.
+/// // io.write_reg(r1);
+/// // io.read(R2);
+/// # }
+/// ```
+///
+/// The mode applies to accesses through the register's location only. An alias is read-write
+/// unless declared `#[ro]` or `#[wo]` itself, and the register's offset can still be accessed
+/// directly through the I/O region.
 #[macro_export]
 macro_rules! register {
     ($($tt:tt)*) => {
