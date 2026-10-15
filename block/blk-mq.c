@@ -2242,6 +2242,13 @@ static bool blk_mq_hctx_empty_cpumask(struct blk_mq_hw_ctx *hctx)
         return hctx->next_cpu >= nr_cpu_ids;
 }
 
+static inline int blk_mq_hctx_unbound_cpu(void)
+{
+	if (cpu_is_isolated(raw_smp_processor_id()))
+		return housekeeping_any_cpu(HK_TYPE_TIMER);
+	return WORK_CPU_UNBOUND;
+}
+
 /*
  * It'd be great if the workqueue API had a way to pass
  * in a mask and had some smarts for more clever placement.
@@ -2255,7 +2262,7 @@ static int blk_mq_hctx_next_cpu(struct blk_mq_hw_ctx *hctx)
 
 	/* Switch to unbound if no allowable CPUs in this hctx */
 	if (hctx->queue->nr_hw_queues == 1 || blk_mq_hctx_empty_cpumask(hctx))
-		return WORK_CPU_UNBOUND;
+		return blk_mq_hctx_unbound_cpu();
 
 	if (--hctx->next_cpu_batch <= 0) {
 select_cpu:
@@ -2282,7 +2289,7 @@ select_cpu:
 		 */
 		hctx->next_cpu = next_cpu;
 		hctx->next_cpu_batch = 1;
-		return WORK_CPU_UNBOUND;
+		return blk_mq_hctx_unbound_cpu();
 	}
 
 	hctx->next_cpu = next_cpu;
