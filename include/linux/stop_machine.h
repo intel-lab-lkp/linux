@@ -198,8 +198,35 @@ stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
 void arch_send_self_nmi(void);
 bool noinstr stop_machine_nmi_handler(void);
 
+/**
+ * stop_machine_nmi_cpuslocked() - Freeze CPUs and run a function in NMI context
+ *
+ * @nmisafe_fn:	The function to run
+ * @data:	The data pointer for @nmisafe_fn()
+ * @cpus:	The CPUs to run @nmisafe_fn() on (NULL = one unspecified online CPU)
+ *
+ * Description: This stop_machine() variant runs @nmisafe_fn() from NMI context
+ * to prevent preemption by other NMIs. The callback must be built with noinstr.
+ * Other than that, the semantics match stop_machine_cpuslocked().
+ *
+ * Context: Must be called from within a cpus_read_lock() protected region.
+ * Avoid nested calls to cpus_read_lock().
+ *
+ * Return: 0 if all invocations of @nmisafe_fn return zero, -ENOMEM if cpumask
+ * allocation fails, -EINVAL if not initialized yet or any target CPU failed to
+ * receive NMI. Otherwise, the value returned by an arbitrarily chosen member of
+ * the set of calls to @nmisafe_fn that returned non-zero.
+ */
+int stop_machine_nmi_cpuslocked(cpu_stop_nmisafe_fn_t nmisafe_fn, void *data,
+				const struct cpumask *cpus);
+
 #else
 static inline bool stop_machine_nmi_handler(void) { return false; }
+static inline int
+stop_machine_nmi_cpulocked(cpu_stop_nmisafe_fn_t nmisafe_fn, void *data, conststruct cpumask *cpus)
+{
+	return 0;
+}
 #endif /* CONFIG_STOP_MACHINE_NMI */
 
 #endif	/* _LINUX_STOP_MACHINE */
