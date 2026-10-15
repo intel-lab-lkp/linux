@@ -134,6 +134,10 @@ Misaligned WRITE:
     already DIO-aligned gets no buffered segment at all. If the
     filesystem supports FOP_DONTCACHE, the misaligned segments are
     marked DONTCACHE.
+    So is the O_DIRECT segment, where the flag has no effect unless the
+    filesystem services it with buffered IO instead, as XFS does when it
+    cannot invalidate page cache that overlaps the segment. The
+    iomap_dio_invalidate_fail trace event reports such a fallback.
 
 Tracing:
     The nfsd_read_direct trace event shows how NFSD expands any
