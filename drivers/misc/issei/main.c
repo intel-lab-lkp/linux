@@ -24,7 +24,7 @@ static void issei_rst_state_set(struct issei_device *idev, enum issei_rst_state 
 		wake_up(&idev->wait_rst_state);
 }
 
-static int issei_reset(struct issei_device *idev)
+static int issei_reset(struct issei_device *idev, bool power_down)
 {
 	int ret;
 
@@ -34,14 +34,14 @@ static int issei_reset(struct issei_device *idev)
 	issei_fw_cl_remove_all(idev);
 	/* No need to check for overflow here, the counter is used only for info */
 	idev->all_reset_count++;
-	ret = idev->ops->hw_reset(idev, !idev->power_down);
+	ret = idev->ops->hw_reset(idev, !power_down);
 	issei_dmam_setup(idev);
 	if (ret) {
 		dev_err(&idev->dev, "hw_reset failed ret = %d\n", ret);
 		return ret;
 	}
 
-	if (idev->power_down) {
+	if (power_down) {
 		dev_dbg(&idev->dev, "powering down: end of reset\n");
 		issei_rst_state_set(idev, ISSEI_RST_STATE_DISABLED);
 		return -ENODEV;
@@ -87,24 +87,26 @@ static int issei_process_thread(void *_dev)
 {
 	long timeout, old_timeout = MAX_SCHEDULE_TIMEOUT;
 	struct issei_device *idev = _dev;
+	bool power_down;
 	int ret;
 
 	while (!kthread_should_stop()) {
 		dev_dbg(&idev->dev, "process_work in %d\n", idev->rst_state);
+		WRITE_ONCE(idev->has_data, false);
+		power_down = idev->power_down; /* to save state */
 		if (!idev->ops->hw_is_ready(idev) && idev->rst_state > ISSEI_RST_STATE_HW_READY) {
-			if (!idev->power_down)
+			if (!power_down)
 				dev_dbg(&idev->dev, "HW not ready, resetting\n");
 			idev->rst_state = ISSEI_RST_STATE_INIT;
 		}
-		if (idev->power_down)
+		if (power_down)
 			idev->rst_state = ISSEI_RST_STATE_INIT;
-		WRITE_ONCE(idev->has_data, false);
 		dev_dbg(&idev->dev, "reset_step in %d\n", idev->rst_state);
 		timeout = MAX_SCHEDULE_TIMEOUT;
 		ret = 0;
 		switch (idev->rst_state) {
 		case ISSEI_RST_STATE_DISABLED:
-			if (idev->power_down) {
+			if (power_down) {
 				dev_dbg(&idev->dev, "Interrupt in power down?\n");
 				break;
 			}
@@ -115,7 +117,7 @@ static int issei_process_thread(void *_dev)
 			idev->ops->irq_clear(idev);
 			idev->ops->irq_sync(idev);
 
-			if (!idev->power_down) {
+			if (!power_down) {
 				idev->reset_count++;
 				if (idev->reset_count > ISSEI_MAX_CONSEC_RESET) {
 					dev_err(&idev->dev, "reset: reached maximal consecutive resets: disabling the device\n");
@@ -124,8 +126,8 @@ static int issei_process_thread(void *_dev)
 				}
 			}
 
-			ret = issei_reset(idev);
-			if (idev->power_down) {
+			ret = issei_reset(idev, power_down);
+			if (power_down) {
 				dev_dbg(&idev->dev, "Powering down\n");
 				return 0;
 			}
