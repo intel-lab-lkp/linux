@@ -4860,6 +4860,216 @@ struct cfg80211_update_owe_info {
 	u8 peer_mld_addr[ETH_ALEN] __aligned(2);
 };
 
+/* QoS Management IP address lengths */
+#define QM_IPV4_LEN	4
+#define QM_IPV6_LEN	16
+
+/**
+ * enum cfg80211_qm_ip_version - IP protocol version identifiers used in
+ *	QoS Management traffic classification
+ * @QM_IP_VERSION_4: Internet Protocol version 4 (IPv4)
+ * @QM_IP_VERSION_6: Internet Protocol version 6 (IPv6)
+ */
+enum cfg80211_qm_ip_version {
+	QM_IP_VERSION_4 = 4,
+	QM_IP_VERSION_6 = 6,
+};
+
+/**
+ * struct cfg80211_qm_tclas4_params - TCLAS classifier type 4 parameters
+ * @classifier_mask: bitmask indicating which fields are used for
+ *	classification; the version bit is mandatory and the remaining bits
+ *	identify fields used for classification, as defined by
+ *	&enum nl80211_qm_tclas_type4_mask
+ * @ip_ver: IP version of @src_ip / @dst_ip
+ * @src_ip: source IP address (IPv4 or IPv6)
+ * @dst_ip: destination IP address (IPv4 or IPv6)
+ * @src_port: source port number
+ * @dst_port: destination port number
+ * @dscp: Differentiated Services Code Point
+ * @protocol: IP protocol number, valid for IPv4 only
+ * @next_header: next header field, valid for IPv6 only
+ * @flow_label: flow label, valid for IPv6 only
+ */
+struct cfg80211_qm_tclas4_params {
+	u8 classifier_mask;
+	enum cfg80211_qm_ip_version ip_ver;
+	union {
+		u8 ipv4[QM_IPV4_LEN];
+		u8 ipv6[QM_IPV6_LEN];
+	} src_ip;
+	union {
+		u8 ipv4[QM_IPV4_LEN];
+		u8 ipv6[QM_IPV6_LEN];
+	} dst_ip;
+	u16 src_port;
+	u16 dst_port;
+	u8 dscp;
+	u8 protocol;
+	u8 next_header;
+	u8 flow_label[NL80211_QM_TCLAS_TYPE4_FLOW_LABEL_LEN];
+};
+
+/**
+ * struct cfg80211_qm_tclas10_params - TCLAS classifier type 10 parameters
+ * @protocol_instance: protocol instance identifier
+ * @protocol_number: protocol number
+ * @filter_value: filter value bytes
+ * @filter_mask: filter mask bytes
+ * @filter_len: length of @filter_value / @filter_mask
+ */
+struct cfg80211_qm_tclas10_params {
+	u8 protocol_instance;
+	u8 protocol_number;
+	u8 filter_value[NL80211_QM_TCLAS_TYPE10_MAX_FILTER_LEN];
+	u8 filter_mask[NL80211_QM_TCLAS_TYPE10_MAX_FILTER_LEN];
+	u8 filter_len;
+};
+
+/**
+ * struct cfg80211_qm_tclas_elements - a single TCLAS element
+ * @up: user priority
+ * @classifier_type: classifier type, see
+ *	&enum nl80211_qm_tclas_classifier_type
+ * @tclas_elem: classifier-specific parameters
+ */
+struct cfg80211_qm_tclas_elements {
+	u8 up;
+	enum nl80211_qm_tclas_classifier_type classifier_type;
+	union {
+		struct cfg80211_qm_tclas4_params type4_params;
+		struct cfg80211_qm_tclas10_params type10_params;
+	} tclas_elem;
+};
+
+/**
+ * struct cfg80211_qm_qos_attributes - QoS attributes of a QoS Management
+ *	request
+ * @direction: traffic direction, see &enum nl80211_qm_direction
+ * @tid: traffic identifier
+ * @up: user priority
+ * @bitmap: TID/UP bitmap
+ * @link_id: link identifier
+ * @min_service_interval: minimum service interval, in microseconds
+ * @max_service_interval: maximum service interval, in microseconds
+ * @min_data_rate: minimum data rate, in kbps
+ * @delay_bound: delay bound, in microseconds
+ * @max_msdu_size: maximum MSDU size, in bytes
+ * @service_start_time: service start time, in microseconds
+ * @service_start_time_link_id: link ID for @service_start_time
+ * @mean_data_rate: mean data rate, in kbps
+ * @burst_size: burst size, in bytes
+ * @msdu_lifetime: MSDU lifetime, in milliseconds
+ * @msdu_delivery_ratio: MSDU delivery ratio
+ * @msdu_count_exponent: MSDU count exponent
+ * @medium_time: medium time, in units of 32 microseconds
+ */
+struct cfg80211_qm_qos_attributes {
+	enum nl80211_qm_direction direction;
+	u8 tid;
+	u8 up;
+	u16 bitmap;
+	u8 link_id;
+	u32 min_service_interval;
+	u32 max_service_interval;
+	u32 min_data_rate;
+	u32 delay_bound;
+	u16 max_msdu_size;
+	u32 service_start_time;
+	u8 service_start_time_link_id;
+	u32 mean_data_rate;
+	u32 burst_size;
+	u16 msdu_lifetime;
+	u8 msdu_delivery_ratio;
+	u8 msdu_count_exponent;
+	u16 medium_time;
+};
+
+/**
+ * struct cfg80211_qm_req_desc_data - a single QoS Management request
+ *	descriptor
+ * @qm_id: identifier for this descriptor within the request
+ * @request_type: request type, see &enum nl80211_qm_req_type
+ * @priority: SCS descriptor priority
+ * @num_tclas_elements: number of entries in @tclas
+ * @tclas: SCS TCLAS elements used for traffic classification
+ * @tclas_processing: SCS TCLAS processing rule, see
+ *	&enum nl80211_qm_tclas_processing
+ * @is_qos_present: whether @qos_attr is populated
+ * @qos_attr: SCS QoS attributes associated with this descriptor
+ * @user_priority_bitmap: user priority bitmap of TID values sent by the
+ *	non-AP STA in an MSCS request
+ * @user_priority_limit: user priority limit sent by the non-AP STA in an
+ *	MSCS request
+ * @tclas_mask: traffic classifier mask with a bitmap of parameters to
+ *	match in an uplink flow for downlink prioritization
+ */
+struct cfg80211_qm_req_desc_data {
+	u8 qm_id;
+	enum nl80211_qm_req_type request_type;
+	u8 priority;
+	unsigned int num_tclas_elements;
+	struct cfg80211_qm_tclas_elements *tclas;
+	enum nl80211_qm_tclas_processing tclas_processing;
+	bool is_qos_present;
+	struct cfg80211_qm_qos_attributes qos_attr;
+	u8 user_priority_bitmap;
+	u8 user_priority_limit;
+	u8 tclas_mask;
+};
+
+/**
+ * struct cfg80211_qm_req_data - a complete QoS Management request for a
+ *	peer
+ * @peer_mac: MAC address of the peer
+ * @qm_type: QoS Management protocol, see &enum nl80211_qm_type
+ * @num_qm_desc: number of entries in @qm_req_desc
+ * @qm_req_desc: QoS Management request descriptors
+ *
+ * This is the parsed representation passed to the driver by the
+ * &struct cfg80211_ops.set_qos_mgmt_cfg callback. The descriptor and TCLAS
+ * arrays are owned by cfg80211 and are valid only for the duration of the
+ * callback. The driver must not retain these pointers after the callback
+ * returns.
+ */
+struct cfg80211_qm_req_data {
+	u8 peer_mac[ETH_ALEN];
+	enum nl80211_qm_type qm_type;
+	unsigned int num_qm_desc;
+	struct cfg80211_qm_req_desc_data *qm_req_desc;
+};
+
+/**
+ * struct cfg80211_qm_resp_desc_data - result of processing a single QoS
+ *	Management request descriptor
+ * @qm_id: identifier matching the corresponding request descriptor
+ * @status: response status, see &enum nl80211_qm_status
+ */
+struct cfg80211_qm_resp_desc_data {
+	u8 qm_id;
+	enum nl80211_qm_status status;
+};
+
+/**
+ * struct cfg80211_qm_resp_data - a complete QoS Management response
+ * @qm_resp_desc: response descriptors corresponding to the request
+ *
+ * cfg80211 allocates and initializes one response descriptor for each
+ * request descriptor with the corresponding
+ * &struct cfg80211_qm_req_desc_data.qm_id and a declined status.
+ * The driver updates the status for each descriptor it processes. The
+ * response array is parallel to the request descriptor array: entry @i
+ * corresponds to request descriptor @i, and the driver must update entries
+ * in place without reordering them. The initialized @qm_id values must be
+ * left unchanged. The response array is valid only for the duration of the
+ * callback and must not be retained by the driver.
+ * cfg80211/nl80211 supplies the peer address and protocol type from the
+ * request when it builds the reply.
+ */
+struct cfg80211_qm_resp_data {
+	struct cfg80211_qm_resp_desc_data *qm_resp_desc;
+};
+
 /**
  * struct mgmt_frame_regs - management frame registrations data
  * @global_stypes: bitmap of management frame subtypes registered
@@ -5332,6 +5542,13 @@ struct mgmt_frame_regs {
  *
  * @start_pd: Start the PD interface.
  * @stop_pd: Stop the PD interface.
+ *
+ * @set_qos_mgmt_cfg: Configure QoS Management (QM) parameters such as
+ *	traffic classification (TCLAS) and QoS attributes for a station. The
+ *	request has already been parsed from the nested nl80211 attributes.
+ *	The driver or firmware applies the protocol-specific configuration and
+ *	populates the response structure with a status for each descriptor.
+ *	This callback provides the control-path interface for the driver.
  */
 struct cfg80211_ops {
 	int	(*suspend)(struct wiphy *wiphy, struct cfg80211_wowlan *wow);
@@ -5730,6 +5947,9 @@ struct cfg80211_ops {
 			    bool val);
 	int	(*start_pd)(struct wiphy *wiphy, struct wireless_dev *wdev);
 	void	(*stop_pd)(struct wiphy *wiphy, struct wireless_dev *wdev);
+	int	(*set_qos_mgmt_cfg)(struct wiphy *wiphy, struct net_device *dev,
+				    struct cfg80211_qm_req_data *qm_req,
+				    struct cfg80211_qm_resp_data *qm_resp);
 };
 
 /*
