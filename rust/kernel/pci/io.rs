@@ -10,7 +10,8 @@ use crate::{
     io::{
         IoBackend,
         IoBase,
-        IoCapable,
+        IoReadable,
+        IoWritable,
         Mmio,
         MmioBackend,
         MmioRaw,
@@ -111,10 +112,11 @@ impl IoBackend for ConfigSpaceBackend {
     }
 }
 
-/// Implements [`IoCapable`] on [`ConfigSpace`] for `$ty` using `$read_fn` and `$write_fn`.
+/// Implements [`IoReadable`] and [`IoWritable`] on [`ConfigSpace`] for `$ty` using `$read_fn`
+/// and `$write_fn`.
 macro_rules! impl_config_space_io_capable {
     ($ty:ty, $read_fn:ident, $write_fn:ident) => {
-        impl IoCapable<$ty> for ConfigSpaceBackend {
+        impl IoReadable<$ty> for ConfigSpaceBackend {
             fn io_read(view: ConfigSpace<'_, $ty>) -> $ty {
                 // CAST: The offset is cast to `i32` because the C functions expect a 32-bit
                 // signed offset parameter. PCI configuration space size is at most 4096 bytes,
@@ -128,7 +130,9 @@ macro_rules! impl_config_space_io_capable {
                 let _ = unsafe { bindings::$read_fn(view.pdev.as_raw(), addr, &mut val) };
                 val
             }
+        }
 
+        impl IoWritable<$ty> for ConfigSpaceBackend {
             fn io_write(view: ConfigSpace<'_, $ty>, value: $ty) {
                 // CAST: The offset is cast to `i32` because the C functions expect a 32-bit
                 // signed offset parameter. PCI configuration space size is at most 4096 bytes,

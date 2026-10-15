@@ -17,8 +17,9 @@ use crate::{
     io::{
         IoBackend,
         IoBase,
-        IoCapable,
         IoCopyable,
+        IoReadable,
+        IoWritable,
         SysMem,
         SysMemBackend, //
     },
@@ -1180,15 +1181,20 @@ impl IoBackend for CoherentIoBackend {
     }
 }
 
-impl<T> IoCapable<T> for CoherentIoBackend
+impl<T> IoReadable<T> for CoherentIoBackend
 where
-    SysMemBackend: IoCapable<T>,
+    SysMemBackend: IoReadable<T>,
 {
     #[inline]
     fn io_read<'a>(view: Self::View<'a, T>) -> T {
         SysMemBackend::io_read(view.cpu_addr)
     }
+}
 
+impl<T> IoWritable<T> for CoherentIoBackend
+where
+    SysMemBackend: IoWritable<T>,
+{
     #[inline]
     fn io_write<'a>(view: Self::View<'a, T>, value: T) {
         SysMemBackend::io_write(view.cpu_addr, value)

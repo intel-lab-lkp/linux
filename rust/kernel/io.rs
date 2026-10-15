@@ -247,9 +247,9 @@ fn io_view_as_repr<'a, IO: Io<'a, Target = T>, T: AsRepr>(
 /// backends (e.g. MMIO, PCI config space, etc.).
 ///
 /// The base trait only defines the projection operations; which I/O methods are available depends
-/// on which [`IoCapable<T>`] traits are implemented for the type. For example, for MMIO regions,
-/// all widths (u8, u16, u32, and u64 on 64-bit systems) are typically supported. For PCI
-/// configuration space, u8, u16, and u32 are supported but u64 is not.
+/// on which [`IoReadable<T>`] and [`IoWritable<T>`] traits are implemented for the type. For
+/// example, for MMIO regions, all widths (u8, u16, u32, and u64 on 64-bit systems) are typically
+/// supported. For PCI configuration space, u8, u16, and u32 are supported but u64 is not.
 ///
 /// This trait is separate from the `Io` trait as multiple different I/O types may share the same
 /// operation.
@@ -276,18 +276,24 @@ pub trait IoBackend {
     ) -> Self::View<'a, U>;
 }
 
-/// Trait indicating that an I/O backend supports operations of a certain type and providing an
-/// implementation for these operations.
+/// Trait indicating that an I/O backend supports reads of a certain type and providing an
+/// implementation for these reads.
 ///
 /// Different I/O backends can implement this trait to expose only the operations they support.
 ///
-/// For example, a PCI configuration space may implement `IoCapable<u8>`, `IoCapable<u16>`,
-/// and `IoCapable<u32>`, but not `IoCapable<u64>`, while an MMIO region on a 64-bit
+/// For example, a PCI configuration space may implement `IoReadable<u8>`, `IoReadable<u16>`,
+/// and `IoReadable<u32>`, but not `IoReadable<u64>`, while an MMIO region on a 64-bit
 /// system might implement all four.
-pub trait IoCapable<T>: IoBackend {
+pub trait IoReadable<T>: IoBackend {
     /// Performs an I/O read of type `T` at `view` and returns the result.
     fn io_read<'a>(view: Self::View<'a, T>) -> T;
+}
 
+/// Trait indicating that an I/O backend supports writes of a certain type and providing an
+/// implementation for these writes.
+///
+/// Like [`IoReadable`], it is implemented for each type the backend supports.
+pub trait IoWritable<T>: IoBackend {
     /// Performs an I/O write of `value` at `view`.
     fn io_write<'a>(view: Self::View<'a, T>, value: T);
 }
@@ -548,7 +554,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn read_val(self) -> Self::Target
     where
         Self::Target: AsReprMut,
-        Self::Backend: IoCapable<<Self::Target as AsRepr>::Repr>,
+        Self::Backend: IoReadable<<Self::Target as AsRepr>::Repr>,
     {
         Self::Target::from_repr(Self::Backend::io_read(io_view_as_repr(self)))
     }
@@ -570,7 +576,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn write_val(self, value: Self::Target)
     where
         Self::Target: AsRepr,
-        Self::Backend: IoCapable<<Self::Target as AsRepr>::Repr>,
+        Self::Backend: IoWritable<<Self::Target as AsRepr>::Repr>,
     {
         Self::Backend::io_write(io_view_as_repr(self), Self::Target::into_repr(value))
     }
@@ -695,7 +701,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn try_read8(self, offset: usize) -> Result<u8>
     where
         usize: IoLoc<Self::Target, u8>,
-        Self::Backend: IoCapable<u8>,
+        Self::Backend: IoReadable<u8>,
     {
         self.try_read(offset)
     }
@@ -705,7 +711,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn try_read16(self, offset: usize) -> Result<u16>
     where
         usize: IoLoc<Self::Target, u16>,
-        Self::Backend: IoCapable<u16>,
+        Self::Backend: IoReadable<u16>,
     {
         self.try_read(offset)
     }
@@ -715,7 +721,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn try_read32(self, offset: usize) -> Result<u32>
     where
         usize: IoLoc<Self::Target, u32>,
-        Self::Backend: IoCapable<u32>,
+        Self::Backend: IoReadable<u32>,
     {
         self.try_read(offset)
     }
@@ -725,7 +731,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn try_read64(self, offset: usize) -> Result<u64>
     where
         usize: IoLoc<Self::Target, u64>,
-        Self::Backend: IoCapable<u64>,
+        Self::Backend: IoReadable<u64>,
     {
         self.try_read(offset)
     }
@@ -735,7 +741,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn try_write8(self, value: u8, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u8>,
-        Self::Backend: IoCapable<u8>,
+        Self::Backend: IoWritable<u8>,
     {
         self.try_write(offset, value)
     }
@@ -745,7 +751,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn try_write16(self, value: u16, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u16>,
-        Self::Backend: IoCapable<u16>,
+        Self::Backend: IoWritable<u16>,
     {
         self.try_write(offset, value)
     }
@@ -755,7 +761,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn try_write32(self, value: u32, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u32>,
-        Self::Backend: IoCapable<u32>,
+        Self::Backend: IoWritable<u32>,
     {
         self.try_write(offset, value)
     }
@@ -765,7 +771,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn try_write64(self, value: u64, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u64>,
-        Self::Backend: IoCapable<u64>,
+        Self::Backend: IoWritable<u64>,
     {
         self.try_write(offset, value)
     }
@@ -777,7 +783,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn read8(self, offset: usize) -> u8
     where
         usize: IoLoc<Self::Target, u8>,
-        Self::Backend: IoCapable<u8>,
+        Self::Backend: IoReadable<u8>,
     {
         self.read(offset)
     }
@@ -789,7 +795,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn read16(self, offset: usize) -> u16
     where
         usize: IoLoc<Self::Target, u16>,
-        Self::Backend: IoCapable<u16>,
+        Self::Backend: IoReadable<u16>,
     {
         self.read(offset)
     }
@@ -801,7 +807,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn read32(self, offset: usize) -> u32
     where
         usize: IoLoc<Self::Target, u32>,
-        Self::Backend: IoCapable<u32>,
+        Self::Backend: IoReadable<u32>,
     {
         self.read(offset)
     }
@@ -813,7 +819,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn read64(self, offset: usize) -> u64
     where
         usize: IoLoc<Self::Target, u64>,
-        Self::Backend: IoCapable<u64>,
+        Self::Backend: IoReadable<u64>,
     {
         self.read(offset)
     }
@@ -825,7 +831,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn write8(self, value: u8, offset: usize)
     where
         usize: IoLoc<Self::Target, u8>,
-        Self::Backend: IoCapable<u8>,
+        Self::Backend: IoWritable<u8>,
     {
         self.write(offset, value)
     }
@@ -837,7 +843,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn write16(self, value: u16, offset: usize)
     where
         usize: IoLoc<Self::Target, u16>,
-        Self::Backend: IoCapable<u16>,
+        Self::Backend: IoWritable<u16>,
     {
         self.write(offset, value)
     }
@@ -849,7 +855,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn write32(self, value: u32, offset: usize)
     where
         usize: IoLoc<Self::Target, u32>,
-        Self::Backend: IoCapable<u32>,
+        Self::Backend: IoWritable<u32>,
     {
         self.write(offset, value)
     }
@@ -861,7 +867,7 @@ pub trait Io<'a>: IoBase<'a> {
     fn write64(self, value: u64, offset: usize)
     where
         usize: IoLoc<Self::Target, u64>,
-        Self::Backend: IoCapable<u64>,
+        Self::Backend: IoWritable<u64>,
     {
         self.write(offset, value)
     }
@@ -894,7 +900,7 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsReprMut,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoCapable<<T as AsRepr>::Repr>,
+        Self::Backend: IoReadable<<T as AsRepr>::Repr>,
     {
         Ok(io_read!(self, try: location))
     }
@@ -927,7 +933,7 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsRepr,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoCapable<<T as AsRepr>::Repr>,
+        Self::Backend: IoWritable<<T as AsRepr>::Repr>,
     {
         io_write!(self, try: location, value);
         Ok(())
@@ -973,7 +979,7 @@ pub trait Io<'a>: IoBase<'a> {
         T: AsRepr,
         L: IoLoc<Self::Target, T>,
         V: LocatedRegister<Self::Target, Location = L, Value = T>,
-        Self::Backend: IoCapable<<T as AsRepr>::Repr>,
+        Self::Backend: IoWritable<<T as AsRepr>::Repr>,
     {
         let (location, value) = value.into_io_op();
 
@@ -1007,7 +1013,7 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsReprMut,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoCapable<<T as AsRepr>::Repr>,
+        Self::Backend: IoReadable<<T as AsRepr>::Repr> + IoWritable<<T as AsRepr>::Repr>,
         F: FnOnce(T) -> T,
     {
         let view = io_project!(self, try: location);
@@ -1041,7 +1047,7 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsReprMut,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoCapable<<T as AsRepr>::Repr>,
+        Self::Backend: IoReadable<<T as AsRepr>::Repr>,
     {
         io_read!(self, build: location)
     }
@@ -1072,7 +1078,7 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsRepr,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoCapable<<T as AsRepr>::Repr>,
+        Self::Backend: IoWritable<<T as AsRepr>::Repr>,
     {
         io_write!(self, build: location, value);
     }
@@ -1116,7 +1122,7 @@ pub trait Io<'a>: IoBase<'a> {
         T: AsRepr,
         L: IoLoc<Self::Target, T>,
         V: LocatedRegister<Self::Target, Location = L, Value = T>,
-        Self::Backend: IoCapable<<T as AsRepr>::Repr>,
+        Self::Backend: IoWritable<<T as AsRepr>::Repr>,
     {
         let (location, value) = value.into_io_op();
 
@@ -1150,7 +1156,7 @@ pub trait Io<'a>: IoBase<'a> {
     where
         T: AsReprMut,
         L: IoLoc<Self::Target, T>,
-        Self::Backend: IoCapable<<T as AsRepr>::Repr>,
+        Self::Backend: IoReadable<<T as AsRepr>::Repr> + IoWritable<<T as AsRepr>::Repr>,
         F: FnOnce(T) -> T,
     {
         let view = io_project!(self, build: location);
@@ -1237,17 +1243,20 @@ impl IoBackend for MmioBackend {
     }
 }
 
-/// Implements [`IoCapable`] on `$backend` for `$ty` using `$read_fn` and `$write_fn`.
+/// Implements [`IoReadable`] and [`IoWritable`] on `$backend` for `$ty` using `$read_fn` and
+/// `$write_fn`.
 macro_rules! impl_mmio_io_capable {
     ($backend: ident, $ty:ty, $read_fn:ident, $write_fn:ident) => {
-        impl IoCapable<$ty> for $backend {
+        impl IoReadable<$ty> for $backend {
             #[inline]
             fn io_read(view: <$backend as IoBackend>::View<'_, $ty>) -> $ty {
                 // SAFETY: `$backend::as_ptr(view)` is a valid pointer for MMIO operations for both
                 // `MmioBackend` and `RelaxedMmioBackend`.
                 unsafe { bindings::$read_fn($backend::as_ptr(view).cast_const().cast()) }
             }
+        }
 
+        impl IoWritable<$ty> for $backend {
             #[inline]
             fn io_write(view: <$backend as IoBackend>::View<'_, $ty>, value: $ty) {
                 // SAFETY: `$backend::as_ptr(view)` is a valid pointer for MMIO operations for both
@@ -1396,11 +1405,11 @@ impl IoBackend for SysMemBackend {
     }
 }
 
-/// Implements [`IoCapable`] on `SysMemBackend` for `$ty` using `read_volatile` and
-/// `write_volatile`.
+/// Implements [`IoReadable`] and [`IoWritable`] on `SysMemBackend` for `$ty` using
+/// `read_volatile` and `write_volatile`.
 macro_rules! impl_sysmem_io_capable {
     ($ty:ty) => {
-        impl IoCapable<$ty> for SysMemBackend {
+        impl IoReadable<$ty> for SysMemBackend {
             #[inline]
             fn io_read(view: SysMem<'_, $ty>) -> $ty {
                 // SAFETY:
@@ -1411,7 +1420,9 @@ macro_rules! impl_sysmem_io_capable {
                 // - The macro is only used on primitives so all bit patterns are valid.
                 unsafe { view.ptr.read_volatile() }
             }
+        }
 
+        impl IoWritable<$ty> for SysMemBackend {
             #[inline]
             fn io_write(view: SysMem<'_, $ty>, value: $ty) {
                 // SAFETY:
@@ -1601,10 +1612,10 @@ impl IoBackend for IoSysMapBackend {
     }
 }
 
-impl<T> IoCapable<T> for IoSysMapBackend
+impl<T> IoReadable<T> for IoSysMapBackend
 where
-    MmioBackend: IoCapable<T>,
-    SysMemBackend: IoCapable<T>,
+    MmioBackend: IoReadable<T>,
+    SysMemBackend: IoReadable<T>,
 {
     #[inline]
     fn io_read(view: Self::View<'_, T>) -> T {
@@ -1613,7 +1624,13 @@ where
             IoSysMap::Sys(r) => SysMemBackend::io_read(r),
         }
     }
+}
 
+impl<T> IoWritable<T> for IoSysMapBackend
+where
+    MmioBackend: IoWritable<T>,
+    SysMemBackend: IoWritable<T>,
+{
     #[inline]
     fn io_write<'a>(view: Self::View<'a, T>, value: T) {
         match view {
