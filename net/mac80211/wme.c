@@ -126,10 +126,11 @@ ieee80211_qos_mgmt_set_priority(struct sta_info *sta, struct sk_buff *skb)
 
 	qos_tag = u32_get_bits(skb->mark, IEEE80211_QOS_MGMT_TAG_MASK);
 	qos_id = u32_get_bits(skb->mark, IEEE80211_QOS_MGMT_ID_MASK);
-	if (qos_tag != IEEE80211_QOS_MGMT_SCS_TAG)
+	if (qos_tag != IEEE80211_QOS_MGMT_SCS_TAG &&
+	    qos_tag != IEEE80211_QOS_MGMT_MSCS_TAG)
 		return;
 
-	if (!qos_id)
+	if (qos_tag == IEEE80211_QOS_MGMT_SCS_TAG && !qos_id)
 		return;
 
 	guard(rcu)();
@@ -138,11 +139,21 @@ ieee80211_qos_mgmt_set_priority(struct sta_info *sta, struct sk_buff *skb)
 	if (!qos)
 		return;
 
-	if (!qos->data.scs_enabled ||
-	    !test_bit(qos_id, qos->data.active_scs_id))
-		return;
+	if (qos_tag == IEEE80211_QOS_MGMT_SCS_TAG) {
+		if (!qos->data.scs_enabled ||
+		    !test_bit(qos_id, qos->data.active_scs_id))
+			return;
 
-	tid = qos->data.scs_id_tid_mapping[qos_id];
+		tid = qos->data.scs_id_tid_mapping[qos_id];
+	} else {
+		if (!qos->data.mscs_enabled ||
+		    qos_id >= IEEE80211_QOS_MGMT_MAX_TID ||
+		    !(qos->data.mscs_user_priority_bitmap & BIT(qos_id)))
+			return;
+
+		tid = min_t(u8, qos_id,
+			    qos->data.mscs_user_priority_limit);
+	}
 
 	if (tid < IEEE80211_QOS_MGMT_MAX_TID)
 		skb->priority = tid;

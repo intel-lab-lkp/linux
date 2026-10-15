@@ -1003,6 +1003,31 @@ static void ieee80211_parse_qos(struct ieee80211_rx_data *rx)
 	rx->skb->priority = (tid > 7) ? 0 : tid;
 }
 
+static void ieee80211_qos_mgmt_mscs_set_mark(struct ieee80211_rx_data *rx)
+{
+	struct ieee80211_sta_qos_rcu *qos;
+	u8 tid;
+
+	if (!rx->sta ||
+	    (rx->sdata->vif.type != NL80211_IFTYPE_AP &&
+	     rx->sdata->vif.type != NL80211_IFTYPE_AP_VLAN) ||
+	    rx->seqno_idx >= IEEE80211_QOS_MGMT_MAX_TID)
+		return;
+
+	tid = rx->skb->priority;
+
+	qos = rcu_dereference(rx->sta->qos);
+	if (!qos || !qos->data.mscs_enabled ||
+	    !(BIT(tid) & qos->data.mscs_user_priority_bitmap))
+		return;
+
+	rx->skb->mark = u32_replace_bits(rx->skb->mark,
+					 IEEE80211_QOS_MGMT_MSCS_TAG,
+					 IEEE80211_QOS_MGMT_TAG_MASK);
+	rx->skb->mark = u32_replace_bits(rx->skb->mark, tid,
+					 IEEE80211_QOS_MGMT_ID_MASK);
+}
+
 /**
  * DOC: Packet alignment
  *
@@ -3333,6 +3358,9 @@ ieee80211_rx_h_data(struct ieee80211_rx_data *rx)
 
 	rx->skb->dev = dev;
 
+	if (!port_control)
+		ieee80211_qos_mgmt_mscs_set_mark(rx);
+
 	if (!ieee80211_hw_check(&local->hw, SUPPORTS_DYNAMIC_PS) &&
 	    local->ps_sdata && local->hw.conf.dynamic_ps_timeout > 0 &&
 	    !is_multicast_ether_addr(
@@ -4996,6 +5024,7 @@ static void ieee80211_rx_8023(struct ieee80211_rx_data *rx,
 	stats->packets++;
 
 	skb->dev = fast_rx->dev;
+	ieee80211_qos_mgmt_mscs_set_mark(rx);
 
 	dev_sw_netstats_rx_add(fast_rx->dev, skb->len);
 
