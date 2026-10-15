@@ -97,6 +97,7 @@ struct rtrs_con {
 	int                     nr_cqe;
 	atomic_t		wr_cnt;
 	atomic_t		sq_wr_avail;
+	u32			max_inline_data;
 };
 
 struct rtrs_path {
@@ -286,6 +287,13 @@ struct rtrs_msg_rdma_read {
 	struct rtrs_sg_desc    desc[];
 };
 
+/*
+ * Inline data the client asks for on its QPs: enough for a read request
+ * with one memory descriptor and a user message of up to 64 bytes.
+ */
+#define RTRS_CLT_MAX_INLINE_DATA (sizeof(struct rtrs_msg_rdma_read) + \
+				  sizeof(struct rtrs_sg_desc) + 64)
+
 /**
  * struct rtrs_msg_rdma_write - Message transferred to server with RDMA-Write
  * @type:		always @RTRS_MSG_WRITE
@@ -325,7 +333,7 @@ int rtrs_post_recv_empty(struct rtrs_con *con, struct ib_cqe *cqe);
 int rtrs_cq_qp_create(struct rtrs_path *path, struct rtrs_con *con,
 		      u32 max_send_sge, int cq_vector, int nr_cqe,
 		      u32 max_send_wr, u32 max_recv_wr,
-		      enum ib_poll_context poll_ctx);
+		      u32 max_inline_data, enum ib_poll_context poll_ctx);
 void rtrs_cq_qp_destroy(struct rtrs_con *con);
 
 void rtrs_init_hb(struct rtrs_path *path, struct ib_cqe *cqe,

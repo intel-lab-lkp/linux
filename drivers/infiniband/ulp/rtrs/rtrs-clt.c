@@ -489,6 +489,17 @@ static int rtrs_post_send_rdma(struct rtrs_clt_con *con,
 				      req->iu->dma_addr,
 				      req->sg_size, DMA_TO_DEVICE);
 
+	/*
+	 * Post the request inline if it fits in the granted inline size, so
+	 * the HCA does not have to DMA-read it from host memory.  The CPU
+	 * copies inline data from a kernel virtual address, so put
+	 * req->iu->buf in the SGE.
+	 */
+	if (req->sg_size <= con->c.max_inline_data) {
+		sge.addr = (uintptr_t)req->iu->buf;
+		flags |= IB_SEND_INLINE;
+	}
+
 	return rtrs_iu_post_rdma_write_imm(&con->c, req->iu, &sge, 1,
 					    rbuf->rkey, rbuf->addr + off,
 					    imm, flags, wr, NULL);
@@ -1714,11 +1725,13 @@ static int create_con_cq_qp(struct rtrs_clt_con *con)
 	if (con->c.cid >= clt_path->s.irq_con_num)
 		err = rtrs_cq_qp_create(&clt_path->s, &con->c, max_send_sge,
 					cq_vector, cq_num, max_send_wr,
-					max_recv_wr, IB_POLL_DIRECT);
+					max_recv_wr, RTRS_CLT_MAX_INLINE_DATA,
+					IB_POLL_DIRECT);
 	else
 		err = rtrs_cq_qp_create(&clt_path->s, &con->c, max_send_sge,
 					cq_vector, cq_num, max_send_wr,
-					max_recv_wr, IB_POLL_SOFTIRQ);
+					max_recv_wr, RTRS_CLT_MAX_INLINE_DATA,
+					IB_POLL_SOFTIRQ);
 	/*
 	 * In case of error we do not bother to clean previous allocations,
 	 * since destroy_con_cq_qp() must be called.

@@ -1759,7 +1759,7 @@ static int create_con(struct rtrs_srv_path *srv_path,
 
 	/* TODO: SOFTIRQ can be faster, but be careful with softirq context */
 	err = rtrs_cq_qp_create(&srv_path->s, &con->c, 1, cq_vector, cq_num,
-				 max_send_wr, max_recv_wr,
+				 max_send_wr, max_recv_wr, 0,
 				 IB_POLL_WORKQUEUE);
 	if (err) {
 		rtrs_err(s, "rtrs_cq_qp_create(), err: %pe\n", ERR_PTR(err));

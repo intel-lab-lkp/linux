@@ -253,9 +253,10 @@ static int create_cq(struct rtrs_con *con, int cq_vector, int nr_cqe,
 }
 
 static int create_qp(struct rtrs_con *con, struct ib_pd *pd,
-		     u32 max_send_wr, u32 max_recv_wr, u32 max_sge)
+		     u32 max_send_wr, u32 max_recv_wr, u32 max_sge,
+		     u32 max_inline_data)
 {
-	struct ib_qp_init_attr init_attr = {};
+	struct ib_qp_init_attr init_attr = {}, attr;
 	struct rdma_cm_id *cm_id = con->cm_id;
 	int ret;
 
@@ -271,13 +272,24 @@ static int create_qp(struct rtrs_con *con, struct ib_pd *pd,
 	init_attr.recv_cq = con->cq;
 	init_attr.sq_sig_type = IB_SIGNAL_REQ_WR;
 
-	ret = rdma_create_qp(cm_id, pd, &init_attr);
+	/*
+	 * If the device cannot provide the requested inline data, create the
+	 * QP without it.
+	 */
+	attr = init_attr;
+	attr.cap.max_inline_data = max_inline_data;
+	ret = rdma_create_qp(cm_id, pd, &attr);
+	if (ret && max_inline_data) {
+		attr = init_attr;
+		ret = rdma_create_qp(cm_id, pd, &attr);
+	}
 	if (ret) {
 		rtrs_err(con->path, "Creating QP failed, err: %pe\n",
 			 ERR_PTR(ret));
 		return ret;
 	}
 	con->qp = cm_id->qp;
+	con->max_inline_data = attr.cap.max_inline_data;
 
 	return ret;
 }
@@ -296,7 +308,7 @@ static void destroy_cq(struct rtrs_con *con)
 int rtrs_cq_qp_create(struct rtrs_path *path, struct rtrs_con *con,
 		       u32 max_send_sge, int cq_vector, int nr_cqe,
 		       u32 max_send_wr, u32 max_recv_wr,
-		       enum ib_poll_context poll_ctx)
+		       u32 max_inline_data, enum ib_poll_context poll_ctx)
 {
 	int err;
 
@@ -305,7 +317,7 @@ int rtrs_cq_qp_create(struct rtrs_path *path, struct rtrs_con *con,
 		return err;
 
 	err = create_qp(con, path->dev->ib_pd, max_send_wr, max_recv_wr,
-			max_send_sge);
+			max_send_sge, max_inline_data);
 	if (err) {
 		destroy_cq(con);
 		return err;
