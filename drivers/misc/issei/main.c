@@ -7,6 +7,7 @@
 #include <linux/export.h>
 #include <linux/jiffies.h>
 #include <linux/kthread.h>
+#include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
 
@@ -83,132 +84,152 @@ static int issei_process_write_msg(struct issei_device *idev)
 	return issei_cl_write_from_queue(idev);
 }
 
+static bool issei_process_thread_worker(struct issei_device *idev, bool power_down,
+					long *timeout, long *old_timeout)
+{
+	int ret;
+
+	PM_RUNTIME_ACQUIRE_AUTOSUSPEND(idev->parent, pm);
+	ret = PM_RUNTIME_ACQUIRE_ERR(&pm);
+	if (ret) {
+		dev_err(&idev->dev, "Failed to acquire pm %d\n", ret);
+		idev->rst_state = ISSEI_RST_STATE_INIT;
+		return false;
+	}
+
+	if (!idev->ops->hw_is_ready(idev) && idev->rst_state > ISSEI_RST_STATE_HW_READY) {
+		if (!power_down)
+			dev_dbg(&idev->dev, "HW not ready, resetting\n");
+		idev->rst_state = ISSEI_RST_STATE_INIT;
+	}
+	if (power_down)
+		idev->rst_state = ISSEI_RST_STATE_INIT;
+	dev_dbg(&idev->dev, "reset_step in %d\n", idev->rst_state);
+	*timeout = MAX_SCHEDULE_TIMEOUT;
+	ret = 0;
+	switch (idev->rst_state) {
+	case ISSEI_RST_STATE_DISABLED:
+		if (power_down) {
+			dev_dbg(&idev->dev, "Interrupt in power down?\n");
+			break;
+		}
+		idev->rst_state = ISSEI_RST_STATE_INIT;
+		idev->reset_count = 0;
+		fallthrough;
+
+	case ISSEI_RST_STATE_INIT:
+		idev->ops->irq_clear(idev);
+		idev->ops->irq_sync(idev);
+
+		if (!power_down) {
+			if (!idev->reset_count)
+				pm_runtime_get_noresume(idev->parent);
+			idev->reset_count++;
+			if (idev->reset_count > ISSEI_MAX_CONSEC_RESET) {
+				dev_err(&idev->dev, "reset: reached maximal consecutive resets: disabling the device\n");
+				issei_rst_state_set(idev, ISSEI_RST_STATE_DISABLED);
+				pm_runtime_put_noidle(idev->parent);
+				break;
+			}
+		}
+
+		ret = issei_reset(idev, power_down);
+		if (power_down) {
+			dev_dbg(&idev->dev, "Powering down\n");
+			return true;
+		}
+		if (ret)
+			break;
+
+		idev->rst_state = ISSEI_RST_STATE_HW_READY;
+		*timeout = msecs_to_jiffies(ISSEI_RST_HW_READY_TIMEOUT_MSEC);
+		break;
+
+	case ISSEI_RST_STATE_HW_READY:
+		if (!idev->ops->hw_is_ready(idev)) {
+			dev_dbg(&idev->dev, "HW is not ready?\n");
+			*timeout = *old_timeout;
+			break;
+		}
+
+		dev_dbg(&idev->dev, "HW is ready\n");
+		idev->ops->hw_reset_release(idev);
+		idev->ops->host_set_ready(idev);
+		ret = idev->ops->setup_message_send(idev);
+		if (ret)
+			break;
+
+		idev->rst_state = ISSEI_RST_STATE_SETUP;
+		*timeout = msecs_to_jiffies(ISSEI_RST_STEP_TIMEOUT_MSEC);
+		break;
+
+	case ISSEI_RST_STATE_SETUP:
+		ret = idev->ops->setup_message_recv(idev);
+		if (ret) {
+			if (ret == -ENODATA) {
+				ret = 0;
+				*timeout = *old_timeout;
+			}
+		} else {
+			*timeout = msecs_to_jiffies(ISSEI_RST_STEP_TIMEOUT_MSEC);
+			ret = issei_ham_send_start_req(idev);
+			idev->rst_state = ISSEI_RST_STATE_START;
+		}
+		break;
+
+	case ISSEI_RST_STATE_START:
+		ret = issei_process_read_msg(idev);
+		if (!ret) {
+			*timeout = msecs_to_jiffies(ISSEI_RST_STEP_TIMEOUT_MSEC);
+			idev->rst_state = ISSEI_RST_STATE_CLIENT_ENUM;
+		} else if (ret == -ENODATA) {
+			ret = 0;
+			*timeout = *old_timeout;
+		}
+		break;
+
+	case ISSEI_RST_STATE_CLIENT_ENUM:
+		ret = issei_process_read_msg(idev);
+		if (ret) {
+			if (ret == -ENODATA) {
+				ret = 0;
+				*timeout = *old_timeout;
+			}
+		} else {
+			idev->reset_count = 0;
+			issei_rst_state_set(idev, ISSEI_RST_STATE_DONE);
+			pm_runtime_put_autosuspend(idev->parent);
+			dev_dbg(&idev->dev, "Reset finished successfully\n");
+		}
+		break;
+
+	case ISSEI_RST_STATE_DONE:
+		ret = issei_process_read_msg(idev);
+		if (ret != 0 && ret != -ENODATA)
+			break;
+
+		ret = issei_process_write_msg(idev);
+		break;
+	}
+
+	if (ret) {
+		dev_warn(&idev->dev, "Process failed ret = %d\n", ret);
+		idev->rst_state = ISSEI_RST_STATE_INIT;
+	}
+	return false;
+}
+
 static int issei_process_thread(void *_dev)
 {
 	long timeout, old_timeout = MAX_SCHEDULE_TIMEOUT;
 	struct issei_device *idev = _dev;
-	bool power_down;
-	int ret;
 
 	while (!kthread_should_stop()) {
 		dev_dbg(&idev->dev, "process_work in %d\n", idev->rst_state);
 		WRITE_ONCE(idev->has_data, false);
-		power_down = idev->power_down; /* to save state */
-		if (!idev->ops->hw_is_ready(idev) && idev->rst_state > ISSEI_RST_STATE_HW_READY) {
-			if (!power_down)
-				dev_dbg(&idev->dev, "HW not ready, resetting\n");
-			idev->rst_state = ISSEI_RST_STATE_INIT;
-		}
-		if (power_down)
-			idev->rst_state = ISSEI_RST_STATE_INIT;
-		dev_dbg(&idev->dev, "reset_step in %d\n", idev->rst_state);
-		timeout = MAX_SCHEDULE_TIMEOUT;
-		ret = 0;
-		switch (idev->rst_state) {
-		case ISSEI_RST_STATE_DISABLED:
-			if (power_down) {
-				dev_dbg(&idev->dev, "Interrupt in power down?\n");
-				break;
-			}
-			idev->rst_state = ISSEI_RST_STATE_INIT;
-			fallthrough;
 
-		case ISSEI_RST_STATE_INIT:
-			idev->ops->irq_clear(idev);
-			idev->ops->irq_sync(idev);
-
-			if (!power_down) {
-				idev->reset_count++;
-				if (idev->reset_count > ISSEI_MAX_CONSEC_RESET) {
-					dev_err(&idev->dev, "reset: reached maximal consecutive resets: disabling the device\n");
-					issei_rst_state_set(idev, ISSEI_RST_STATE_DISABLED);
-					break;
-				}
-			}
-
-			ret = issei_reset(idev, power_down);
-			if (power_down) {
-				dev_dbg(&idev->dev, "Powering down\n");
-				return 0;
-			}
-			if (ret)
-				break;
-
-			idev->rst_state = ISSEI_RST_STATE_HW_READY;
-			timeout = msecs_to_jiffies(ISSEI_RST_HW_READY_TIMEOUT_MSEC);
-			break;
-
-		case ISSEI_RST_STATE_HW_READY:
-			if (!idev->ops->hw_is_ready(idev)) {
-				dev_dbg(&idev->dev, "HW is not ready?\n");
-				timeout = old_timeout;
-				break;
-			}
-
-			dev_dbg(&idev->dev, "HW is ready\n");
-			idev->ops->hw_reset_release(idev);
-			idev->ops->host_set_ready(idev);
-			ret = idev->ops->setup_message_send(idev);
-			if (ret)
-				break;
-
-			idev->rst_state = ISSEI_RST_STATE_SETUP;
-			timeout = msecs_to_jiffies(ISSEI_RST_STEP_TIMEOUT_MSEC);
-			break;
-
-		case ISSEI_RST_STATE_SETUP:
-			ret = idev->ops->setup_message_recv(idev);
-			if (ret) {
-				if (ret == -ENODATA) {
-					ret = 0;
-					timeout = old_timeout;
-				}
-			} else {
-				timeout = msecs_to_jiffies(ISSEI_RST_STEP_TIMEOUT_MSEC);
-				ret = issei_ham_send_start_req(idev);
-				idev->rst_state = ISSEI_RST_STATE_START;
-			}
-			break;
-
-		case ISSEI_RST_STATE_START:
-			ret = issei_process_read_msg(idev);
-			if (!ret) {
-				timeout = msecs_to_jiffies(ISSEI_RST_STEP_TIMEOUT_MSEC);
-				idev->rst_state = ISSEI_RST_STATE_CLIENT_ENUM;
-			} else if (ret == -ENODATA) {
-				ret = 0;
-				timeout = old_timeout;
-			}
-			break;
-
-		case ISSEI_RST_STATE_CLIENT_ENUM:
-			ret = issei_process_read_msg(idev);
-			if (ret) {
-				if (ret == -ENODATA) {
-					ret = 0;
-					timeout = old_timeout;
-				}
-			} else {
-				idev->reset_count = 0;
-				idev->rst_state = ISSEI_RST_STATE_DONE;
-				dev_dbg(&idev->dev, "Reset finished successfully\n");
-			}
-			break;
-
-		case ISSEI_RST_STATE_DONE:
-			ret = issei_process_read_msg(idev);
-			if (ret != 0 && ret != -ENODATA)
-				break;
-
-			ret = issei_process_write_msg(idev);
-			break;
-		}
-
-		if (ret) {
-			dev_warn(&idev->dev, "Process failed ret = %d\n", ret);
-			idev->rst_state = ISSEI_RST_STATE_INIT;
-			continue;
-		}
+		if (issei_process_thread_worker(idev, idev->power_down, &timeout, &old_timeout))
+			return 0;
 
 		/*
 		 * Every thread that has data to process sets the 'has_data' flag and

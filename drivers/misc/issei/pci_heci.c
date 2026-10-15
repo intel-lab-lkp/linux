@@ -8,10 +8,14 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/pm.h>
+#include <linux/pm_runtime.h>
+#include <linux/time.h>
 
 #include "cdev.h"
 #include "hw_heci.h"
 #include "hw_heci_regs.h"
+
+#define HW_HECI_RPM_TIMEOUT_MSEC (60 * MSEC_PER_SEC)
 
 static int issei_heci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
@@ -70,6 +74,18 @@ static int issei_heci_probe(struct pci_dev *pdev, const struct pci_device_id *en
 		goto free_irq;
 	}
 
+	pm_runtime_use_autosuspend(dev);
+	pm_runtime_set_autosuspend_delay(dev, HW_HECI_RPM_TIMEOUT_MSEC);
+
+	/*
+	 * ISSEI requires to resume from runtime suspend mode
+	 * in order to perform link reset flow upon system suspend.
+	 */
+	dev_pm_set_driver_flags(dev, DPM_FLAG_NO_DIRECT_COMPLETE);
+
+	pm_runtime_put_noidle(dev);
+	pm_runtime_allow(dev);
+
 	return 0;
 
 free_irq:
@@ -86,6 +102,11 @@ static void issei_heci_shutdown(struct pci_dev *pdev)
 {
 	struct issei_device *idev = pci_get_drvdata(pdev);
 	struct issei_heci_hw *hw = to_heci_hw(idev);
+	struct device *dev = &pdev->dev;
+
+	pm_runtime_dont_use_autosuspend(dev);
+	pm_runtime_forbid(dev);
+	pm_runtime_get_noresume(dev);
 
 	issei_stop(idev);
 
