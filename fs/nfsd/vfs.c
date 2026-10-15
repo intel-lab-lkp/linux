@@ -1273,8 +1273,13 @@ __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	case NFSD_IO_BUFFERED:
 		break;
 	case NFSD_IO_DIRECT:
-		/* When dio_read_offset_align is zero, dio is not supported */
+		/*
+		 * A zero dio_read_offset_align means dio is not supported.
+		 * A READ smaller than the alignment is not worth rounding
+		 * out to whole alignment units.
+		 */
 		if (dio_ok && nf->nf_dio_read_offset_align &&
+		    *count >= nf->nf_dio_read_offset_align &&
 		    !rqstp->rq_res.page_len)
 			return nfsd_direct_read(rqstp, fhp, nf, offset,
 						count, page, eof);
