@@ -1474,16 +1474,28 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 {
 	struct nfsd_write_dio_seg segments[3];
 	struct file *file = nf->nf_file;
+	loff_t start = kiocb->ki_pos;
 	unsigned int nsegs, i;
+	int sync_flags;
 	ssize_t host_err;
 	size_t expected;
 
 	nsegs = nfsd_write_dio_iters_init(nf, rqstp->rq_bvec, nvecs,
 					  kiocb, *cnt, segments);
 
+	/*
+	 * Sync a split WRITE once, after its last segment, instead of after
+	 * each segment that carries IOCB_DSYNC. A single segment keeps the
+	 * flag so a direct overwrite can complete with FUA instead of a cache
+	 * flush.
+	 */
+	sync_flags = kiocb->ki_flags & (IOCB_DSYNC | IOCB_SYNC);
+	if (nsegs == 1)
+		sync_flags = 0;
+
 	*cnt = 0;
 	for (i = 0; i < nsegs; i++) {
-		kiocb->ki_flags = segments[i].flags;
+		kiocb->ki_flags = segments[i].flags & ~sync_flags;
 		if (kiocb->ki_flags & IOCB_DIRECT)
 			trace_nfsd_write_direct(rqstp, fhp, kiocb->ki_pos,
 						segments[i].iter.count);
@@ -1499,6 +1511,13 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		*cnt += host_err;
 		if (host_err < (ssize_t)expected)
 			break;	/* partial write */
+	}
+
+	if (sync_flags && *cnt) {
+		host_err = vfs_fsync_range(file, start, start + *cnt - 1,
+					   !(sync_flags & IOCB_SYNC));
+		if (host_err < 0)
+			return host_err;
 	}
 
 	return 0;
