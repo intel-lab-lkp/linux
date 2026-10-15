@@ -118,6 +118,7 @@ static inline void mmap_assert_write_locked(const struct mm_struct *mm)
 static inline void mm_lock_seqcount_init(struct mm_struct *mm)
 {
 	seqcount_init(&mm->mm_lock_seq);
+	mm->mm_lock_seq_epoch = 0;
 }
 
 static inline void mm_lock_seqcount_begin(struct mm_struct *mm)
@@ -128,6 +129,8 @@ static inline void mm_lock_seqcount_begin(struct mm_struct *mm)
 static inline void mm_lock_seqcount_end(struct mm_struct *mm)
 {
 	ASSERT_EXCLUSIVE_WRITER(mm->mm_lock_seq);
+	if (unlikely(mm->mm_lock_seq.sequence == UINT_MAX))
+		mm->mm_lock_seq_epoch++;
 	do_raw_write_seqcount_end(&mm->mm_lock_seq);
 }
 
@@ -157,6 +160,7 @@ static inline void vma_lock_init(struct vm_area_struct *vma, bool reset_refcnt)
 	if (reset_refcnt)
 		refcount_set(&vma->vm_refcnt, 0);
 	vma->vm_lock_seq = UINT_MAX;
+	vma->vm_lock_seq_epoch = UINT_MAX;
 }
 
 /*
@@ -281,11 +285,15 @@ static inline unsigned int __vma_raw_mm_seqnum(struct vm_area_struct *vma)
  */
 static inline bool __is_vma_write_locked(struct vm_area_struct *vma)
 {
+	const struct mm_struct *mm = vma->vm_mm;
+
 	/*
-	 * current task is holding mmap_write_lock, both vma->vm_lock_seq and
-	 * mm->mm_lock_seq can't be concurrently modified.
+	 * The current task holds mmap_write_lock, so neither generation can be
+	 * concurrently modified. The epoch prevents a wrapped sequence from
+	 * making an old VMA stamp look current to a writer.
 	 */
-	return vma->vm_lock_seq == __vma_raw_mm_seqnum(vma);
+	return vma->vm_lock_seq == __vma_raw_mm_seqnum(vma) &&
+		vma->vm_lock_seq_epoch == mm->mm_lock_seq_epoch;
 }
 
 int __vma_start_write(struct vm_area_struct *vma, int state);

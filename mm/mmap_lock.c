@@ -139,6 +139,7 @@ static int __vma_start_exclude_readers(struct vma_exclude_readers_state *ves)
 int __vma_start_write(struct vm_area_struct *vma, int state)
 {
 	const unsigned int mm_lock_seq = __vma_raw_mm_seqnum(vma);
+	const unsigned int mm_lock_seq_epoch = vma->vm_mm->mm_lock_seq_epoch;
 	struct vma_exclude_readers_state ves = {
 		.vma = vma,
 		.state = state,
@@ -158,6 +159,7 @@ int __vma_start_write(struct vm_area_struct *vma, int state)
 	 * we should use WRITE_ONCE() for cleanliness and to keep KCSAN happy.
 	 */
 	WRITE_ONCE(vma->vm_lock_seq, mm_lock_seq);
+	WRITE_ONCE(vma->vm_lock_seq_epoch, mm_lock_seq_epoch);
 
 	if (ves.exclusive) {
 		__vma_end_exclude_readers(&ves);

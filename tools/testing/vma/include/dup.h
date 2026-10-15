@@ -571,9 +571,9 @@ struct vm_area_struct {
 	 * Can be read unreliably (using READ_ONCE()) for pessimistic bailout
 	 * while holding nothing (except RCU to keep the VMA struct allocated).
 	 *
-	 * This sequence counter is explicitly allowed to overflow; sequence
-	 * counter reuse can only lead to occasional unnecessary use of the
-	 * slowpath.
+	 * This sequence counter is explicitly allowed to overflow. Readers can
+	 * treat a reused value as a pessimistic false positive. Writers also
+	 * compare vm_lock_seq_epoch so reuse cannot skip reader exclusion.
 	 */
 	unsigned int vm_lock_seq;
 #endif
@@ -611,7 +611,8 @@ struct vm_area_struct {
 	struct vma_numab_state *numab_state;	/* NUMA Balancing state */
 #endif
 #ifdef CONFIG_PER_VMA_LOCK
-	/* Unstable RCU readers are allowed to read this. */
+	/* Extends vm_lock_seq without moving the hot VMA header fields. */
+	unsigned int vm_lock_seq_epoch;
 	refcount_t vm_refcnt;
 #endif
 #ifdef CONFIG_64BIT
@@ -1230,6 +1231,7 @@ static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
 	vma->vm_ops = &vma_dummy_vm_ops;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
 	vma->vm_lock_seq = UINT_MAX;
+	vma->vm_lock_seq_epoch = UINT_MAX;
 }
 
 /*

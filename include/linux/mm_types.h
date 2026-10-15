@@ -961,9 +961,9 @@ struct vm_area_struct {
 	 * Can be read unreliably (using READ_ONCE()) for pessimistic bailout
 	 * while holding nothing (except RCU to keep the VMA struct allocated).
 	 *
-	 * This sequence counter is explicitly allowed to overflow; sequence
-	 * counter reuse can only lead to occasional unnecessary use of the
-	 * slowpath.
+	 * This sequence counter is explicitly allowed to overflow. Readers can
+	 * treat a reused value as a pessimistic false positive. Writers also
+	 * compare vm_lock_seq_epoch so reuse cannot skip reader exclusion.
 	 */
 	unsigned int vm_lock_seq;
 #endif
@@ -1004,6 +1004,8 @@ struct vm_area_struct {
 	struct vma_numab_state *numab_state;	/* NUMA Balancing state */
 #endif
 #ifdef CONFIG_PER_VMA_LOCK
+	/* Extends vm_lock_seq without moving the hot VMA header fields. */
+	unsigned int vm_lock_seq_epoch;
 	/*
 	 * Used to keep track of firstly, whether the VMA is attached, secondly,
 	 * if attached, how many read locks are taken, and thirdly, if the
@@ -1274,6 +1276,8 @@ struct mm_struct {
 		 * mmap_lock.
 		 */
 		seqcount_t mm_lock_seq;
+		/* Extends the VMA writer generation across sequence wrap. */
+		unsigned int mm_lock_seq_epoch;
 #endif
 		struct futex_mm_data	futex;
 
