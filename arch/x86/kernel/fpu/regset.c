@@ -49,6 +49,13 @@ static void sync_fpstate(struct fpu *fpu)
 		fpu_sync_fpstate(fpu);
 }
 
+/* Keep the same invocation context with sync_fpstate() */
+static void sync_pkru(struct task_struct *target)
+{
+	if (target == current)
+		target->thread.pkru = read_pkru();
+}
+
 /*
  * Invalidate cached FPU registers before modifying the stopped target
  * task's fpstate.
@@ -134,6 +141,9 @@ int xstateregs_get(struct task_struct *target, const struct user_regset *regset,
 		return -ENODEV;
 
 	sync_fpstate(x86_task_fpu(target));
+
+	/* copy_xstate_to_uabi_buf() takes PKRU from thread.pkru */
+	sync_pkru(target);
 
 	copy_xstate_to_uabi_buf(to, target, XSTATE_COPY_XSAVE);
 	return 0;
