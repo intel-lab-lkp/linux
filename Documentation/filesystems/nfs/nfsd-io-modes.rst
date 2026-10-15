@@ -116,10 +116,17 @@ But NFSD DIRECT does handle misaligned IO in terms of O_DIRECT as best
 it can:
 
 Misaligned READ:
-    If NFSD_IO_DIRECT is used, expand any misaligned READ to the next
-    DIO-aligned block (on either end of the READ). The expanded READ is
-    verified to have proper offset/len (logical_block_size) and
-    dma_alignment checking.
+    If NFSD_IO_DIRECT is used, expand a misaligned READ to the next
+    DIO-aligned block (on either end of the READ), except as noted
+    below. The expanded READ is verified to have proper offset/len
+    (logical_block_size) and dma_alignment checking.
+
+    A READ smaller than the file system's DIO read offset alignment
+    (statx dio_read_offset_align, or dio_offset_align on a file system
+    that does not report STATX_DIO_READ_ALIGN) is not expanded: it
+    would read one or two whole alignment units to return less than
+    one unit of data. It is issued as DONTCACHE buffered IO instead
+    (normal buffered IO if the filesystem lacks FOP_DONTCACHE).
 
 Misaligned WRITE:
     If NFSD_IO_DIRECT is used, NFSD splits a misaligned WRITE into a
