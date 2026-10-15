@@ -1181,8 +1181,10 @@ static int __nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
 			   struct nfs_page *req)
 {
 	struct nfs_pgio_mirror *mirror = nfs_pgio_current_mirror(desc);
+	struct pnfs_layout_segment *lseg = NULL;
 	struct nfs_page *subreq;
 	unsigned int size, subreq_size;
+	size_t bsize = 0;
 
 	nfs_page_group_lock(req);
 
@@ -1204,7 +1206,15 @@ static int __nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
 			subreq = req;
 			continue;
 		}
-		if (WARN_ON_ONCE(subreq != req)) {
+		if (subreq != req) {
+			/*
+			 * An empty mirror runs pg_init again for the subrequest,
+			 * and a layout that changed since it was sized can refuse
+			 * it.  Anything else means pg_test changed its answer.
+			 */
+			WARN_ON_ONCE(desc->pg_error >= 0 &&
+				     desc->pg_lseg == lseg &&
+				     mirror->pg_bsize == bsize);
 			nfs_page_group_unlock(req);
 			nfs_pageio_cleanup_request(desc, subreq);
 			subreq = req;
@@ -1227,6 +1237,8 @@ static int __nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
 		if (IS_ERR(subreq))
 			goto err_ptr;
 		subreq_size = size;
+		lseg = desc->pg_lseg;
+		bsize = mirror->pg_bsize;
 	}
 
 	nfs_page_group_unlock(req);
