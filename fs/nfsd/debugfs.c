@@ -140,6 +140,9 @@ void nfsd_debugfs_init(void)
 
 	debugfs_create_file("io_cache_write", 0644, nfsd_top_dir, NULL,
 			    &nfsd_io_cache_write_fops);
+
+	debugfs_create_u32("direct_misaligned_min_bytes", 0644, nfsd_top_dir,
+			   &nfsd_direct_misaligned_min_bytes);
 #ifdef CONFIG_NFSD_V4
 	debugfs_create_bool("delegated_timestamps", 0644, nfsd_top_dir,
 			    &nfsd_delegts_enabled);
