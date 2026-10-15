@@ -3281,6 +3281,26 @@ TRACE_EVENT(rdev_set_epcs,
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->val)
 );
 
+TRACE_EVENT(rdev_set_qos_mgmt_cfg,
+	    TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
+		     struct cfg80211_qm_req_data *qm_req),
+	    TP_ARGS(wiphy, netdev, qm_req),
+	    TP_STRUCT__entry(WIPHY_ENTRY
+			     NETDEV_ENTRY
+			     __field(u8, qm_type)
+			     __field(unsigned int, num_qm_desc)
+	),
+	    TP_fast_assign(WIPHY_ASSIGN;
+			   NETDEV_ASSIGN;
+			   __entry->qm_type = qm_req->qm_type;
+			   __entry->num_qm_desc = qm_req->num_qm_desc;
+	),
+	    TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT
+		      ", qm_type=%u num_qm_desc=%u",
+		      WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->qm_type,
+		      __entry->num_qm_desc)
+);
+
 /*************************************************************
  *	     cfg80211 exported functions traces		     *
  *************************************************************/

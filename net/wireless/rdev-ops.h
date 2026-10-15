@@ -1707,4 +1707,21 @@ rdev_set_epcs(struct cfg80211_registered_device *rdev,
 	return ret;
 }
 
+static inline int
+rdev_set_qos_mgmt_cfg(struct cfg80211_registered_device *rdev,
+		      struct net_device *dev,
+		      struct cfg80211_qm_req_data *qm_req,
+		      struct cfg80211_qm_resp_data *qm_resp)
+{
+	struct wiphy *wiphy = &rdev->wiphy;
+	int ret = -EOPNOTSUPP;
+
+	trace_rdev_set_qos_mgmt_cfg(wiphy, dev, qm_req);
+	if (rdev->ops->set_qos_mgmt_cfg)
+		ret = rdev->ops->set_qos_mgmt_cfg(wiphy, dev, qm_req, qm_resp);
+	trace_rdev_return_int(wiphy, ret);
+
+	return ret;
+}
+
 #endif /* __CFG80211_RDEV_OPS */
