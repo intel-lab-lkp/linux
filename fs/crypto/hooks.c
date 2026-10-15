@@ -321,11 +321,13 @@ int __fscrypt_encrypt_symlink(struct inode *inode, const char *target,
 	 */
 	sd->encrypted_path[ciphertext_len] = '\0';
 
-	/* Cache the plaintext symlink target for later use by get_link() */
-	err = -ENOMEM;
-	inode->i_link = kmemdup(target, len + 1, GFP_NOFS);
-	if (!inode->i_link)
-		goto err_free_sd;
+	/* Cache the plaintext symlink target if the filesystem allows it. */
+	if (!inode->i_sb->s_cop->no_symlink_cache) {
+		err = -ENOMEM;
+		inode->i_link = kmemdup(target, len + 1, GFP_NOFS);
+		if (!inode->i_link)
+			goto err_free_sd;
+	}
 
 	if (!disk_link->name)
 		disk_link->name = (unsigned char *)sd;
@@ -358,17 +360,21 @@ const char *fscrypt_get_symlink(struct inode *inode, const void *caddr,
 {
 	const struct fscrypt_symlink_data *sd;
 	struct fscrypt_str cstr, pstr;
-	bool has_key;
+	bool has_key, cache;
 	int err;
 
 	/* This is for encrypted symlinks only */
 	if (WARN_ON_ONCE(!IS_ENCRYPTED(inode)))
 		return ERR_PTR(-EINVAL);
 
+	cache = !inode->i_sb->s_cop->no_symlink_cache;
+
 	/* If the decrypted target is already cached, just return it. */
-	pstr.name = READ_ONCE(inode->i_link);
-	if (pstr.name)
-		return pstr.name;
+	if (cache) {
+		pstr.name = READ_ONCE(inode->i_link);
+		if (pstr.name)
+			return pstr.name;
+	}
 
 	/*
 	 * Try to set up the symlink's encryption key, but we can continue
@@ -411,12 +417,12 @@ const char *fscrypt_get_symlink(struct inode *inode, const void *caddr,
 	pstr.name[pstr.len] = '\0';
 
 	/*
-	 * Cache decrypted symlink targets in i_link for later use.  Don't cache
-	 * symlink targets encoded without the key, since those become outdated
-	 * once the key is added.  This pairs with the READ_ONCE() above and in
-	 * the VFS path lookup code.
+	 * Cache decrypted symlink targets in i_link if the filesystem allows it.
+	 * Don't cache symlink targets encoded without the key, since those
+	 * become outdated once the key is added.  This pairs with the
+	 * READ_ONCE() above and in the VFS path lookup code.
 	 */
-	if (!has_key ||
+	if (!cache || !has_key ||
 	    cmpxchg_release(&inode->i_link, NULL, pstr.name) != NULL)
 		set_delayed_call(done, kfree_link, pstr.name);
 
@@ -460,7 +466,8 @@ int fscrypt_symlink_getattr(const struct path *path, struct kstat *stat)
 	 * decrypted target or the no-key encoded target), we can just get it in
 	 * the same way the VFS does during path resolution and readlink().
 	 */
-	link = READ_ONCE(inode->i_link);
+	link = inode->i_sb->s_cop->no_symlink_cache ?
+		NULL : READ_ONCE(inode->i_link);
 	if (!link) {
 		link = inode->i_op->get_link(dentry, inode, &done);
 		if (IS_ERR(link))

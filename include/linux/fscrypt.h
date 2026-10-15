@@ -108,6 +108,13 @@ struct fscrypt_operations {
 	unsigned int supports_subblock_data_units : 1;
 
 	/*
+	 * If set, don't cache decrypted symlink targets in ->i_link.  This
+	 * ensures that the VFS calls ->get_link() for every access, allowing
+	 * the filesystem to revalidate the symlink before returning its target.
+	 */
+	unsigned int no_symlink_cache : 1;
+
+	/*
 	 * This field exists only for backwards compatibility reasons and should
 	 * only be set by the filesystems that are setting it already.  It
 	 * contains the filesystem-specific key description prefix that is
