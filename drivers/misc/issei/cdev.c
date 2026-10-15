@@ -272,14 +272,14 @@ static const struct file_operations issei_fops = {
 	.poll = issei_poll,
 };
 
-static void issei_device_release(struct device *dev)
+static void issei_dev_release(struct device *dev)
 {
 	kfree(dev_get_drvdata(dev));
 }
 
-static void issei_device_init(struct issei_device *idev, struct device *parent,
-			      const struct issei_dma_length *dma_length,
-			      const struct issei_hw_ops *ops)
+static void issei_dev_init(struct issei_device *idev, struct device *parent,
+			   const struct issei_dma_length *dma_length,
+			   const struct issei_hw_ops *ops)
 {
 	idev->parent = parent;
 	idev->power_down = false;
@@ -322,7 +322,7 @@ struct issei_device *issei_register(size_t hw_size, struct device *parent,
 	if (!idev)
 		return ERR_PTR(-ENOMEM);
 
-	issei_device_init(idev, parent, dma_length, ops);
+	issei_dev_init(idev, parent, dma_length, ops);
 
 	ret = xa_alloc(&issei_minor_xa, &minor, idev, XA_LIMIT(0, ISSEI_MAX_DEVS), GFP_KERNEL);
 	if (ret < 0) {
@@ -339,7 +339,7 @@ struct issei_device *issei_register(size_t hw_size, struct device *parent,
 	idev->dev.class = issei_class;
 	idev->dev.parent = parent;
 	idev->dev.groups = issei_groups;
-	idev->dev.release = issei_device_release;
+	idev->dev.release = issei_dev_release;
 	dev_set_drvdata(&idev->dev, idev);
 
 	idev->cdev = cdev_alloc();

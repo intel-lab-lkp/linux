@@ -8,6 +8,7 @@ issei-objs += dma.o
 issei-objs += fw_client.o
 issei-objs += host_client.o
 issei-objs += ham.o
+issei-objs += issei_device.o
 issei-objs += main.o
 
 obj-$(CONFIG_INTEL_SSEI_HW_HECI) += issei-heci.o
