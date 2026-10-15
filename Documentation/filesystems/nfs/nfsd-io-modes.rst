@@ -133,15 +133,17 @@ Misaligned WRITE:
     with a buffered one. A larger folio already in the page cache can
     still span the cut. A start or end that is already DIO-aligned gets
     no buffered segment at all. If the filesystem supports
-    FOP_DONTCACHE, the misaligned segments are marked DONTCACHE.
-    So is the O_DIRECT segment, where the flag has no effect unless the
+    FOP_DONTCACHE, the O_DIRECT segment is marked DONTCACHE, and so are
+    the misaligned segments unless direct_misaligned_dontcache is N
+    (below). The flag has no effect on the O_DIRECT segment unless the
     filesystem services it with buffered IO instead, as XFS does when it
     cannot invalidate page cache that overlaps the segment. The
     iomap_dio_invalidate_fail trace event reports such a fallback.
 
     If NFSD does not split a WRITE, it issues the whole WRITE
     as a single DONTCACHE buffered IO (normal buffered IO if the
-    filesystem lacks FOP_DONTCACHE). NFSD does not split a WRITE when:
+    filesystem lacks FOP_DONTCACHE or direct_misaligned_dontcache is N).
+    NFSD does not split a WRITE when:
 
     - the filesystem advertises no DIO alignment;
     - the WRITE is smaller than the larger of the offset and memory
@@ -152,6 +154,11 @@ Misaligned WRITE:
     - the DIO-aligned middle does not start at a memory address aligned
       to the block device's dma_alignment, so the middle cannot be
       issued as O_DIRECT.
+
+    /sys/kernel/debug/nfsd/direct_misaligned_dontcache (default Y)
+    controls the DONTCACHE marking of the buffered segments described
+    above. Set it to N for a workload that reads back or rewrites what
+    it just wrote.
 
 Tracing:
     The nfsd_read_direct trace event shows how NFSD expands any
