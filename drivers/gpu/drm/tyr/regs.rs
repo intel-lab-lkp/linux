@@ -63,6 +63,7 @@ pub(crate) mod gpu_control {
         base: TyrRegisters;
 
         /// GPU identification register.
+        #[ro]
         pub(crate) GPU_ID(u32) @ 0x0 {
             /// Status of the GPU release.
             3:0     ver_status;
@@ -81,6 +82,7 @@ pub(crate) mod gpu_control {
         }
 
         /// Level 2 cache features register.
+        #[ro]
         pub(crate) L2_FEATURES(u32) @ 0x4 {
             /// Cache line size.
             7:0     line_size;
@@ -93,12 +95,14 @@ pub(crate) mod gpu_control {
         }
 
         /// Shader core features.
+        #[ro]
         pub(crate) CORE_FEATURES(u32) @ 0x8 {
             /// Shader core variant.
             7:0     core_variant;
         }
 
         /// Tiler features.
+        #[ro]
         pub(crate) TILER_FEATURES(u32) @ 0xc {
             /// Log of the tiler's bin size.
             5:0     bin_size;
@@ -107,6 +111,7 @@ pub(crate) mod gpu_control {
         }
 
         /// Memory system features.
+        #[ro]
         pub(crate) MEM_FEATURES(u32) @ 0x10 {
             0:0     coherent_core_group => bool;
             1:1     coherent_super_group => bool;
@@ -114,6 +119,7 @@ pub(crate) mod gpu_control {
         }
 
         /// Memory management unit features.
+        #[ro]
         pub(crate) MMU_FEATURES(u32) @ 0x14 {
             /// Number of bits supported in virtual addresses.
             7:0     va_bits;
@@ -122,11 +128,13 @@ pub(crate) mod gpu_control {
         }
 
         /// Address spaces present.
+        #[ro]
         pub(crate) AS_PRESENT(u32) @ 0x18 {
             31:0    present;
         }
 
         /// CSF version information.
+        #[ro]
         pub(crate) CSF_ID(u32) @ 0x1c {
             /// MCU revision ID.
             3:0     mcu_rev;
@@ -164,6 +172,7 @@ pub(crate) mod gpu_control {
         }
 
         /// IRQ sources to clear. Write only.
+        #[wo]
         pub(crate) GPU_IRQ_CLEAR(u32) @ 0x24 {
             /// Clear the GPU_FAULT interrupt, a 1-bit boolean flag.
             0:0     gpu_fault => bool;
@@ -202,6 +211,7 @@ pub(crate) mod gpu_control {
         }
 
         /// IRQ status for enabled sources. Read only.
+        #[ro]
         pub(crate) GPU_IRQ_STATUS(u32) @ 0x2c {
             /// GPU_FAULT interrupt status, a 1-bit boolean flag.
             0:0     gpu_fault => bool;
@@ -328,11 +338,13 @@ pub(crate) mod gpu_control {
         /// - [`GPU_COMMAND::reset()`]
         /// - [`GPU_COMMAND::flush_caches()`]
         /// - [`GPU_COMMAND::clear_fault()`]
+        #[wo]
         pub(crate) GPU_COMMAND (u32) @ 0x30 {
             7:0     command ?=> GpuCommand;
         }
         /// Internal alias for GPU_COMMAND in reset mode.
         /// Use [`GPU_COMMAND::reset()`] instead.
+        #[wo]
         GPU_COMMAND_RESET (u32) => GPU_COMMAND {
             7:0     command ?=> GpuCommand;
             11:8    reset_mode ?=> ResetMode;
@@ -340,6 +352,7 @@ pub(crate) mod gpu_control {
 
         /// Internal alias for GPU_COMMAND in cache flush mode.
         /// Use [`GPU_COMMAND::flush_caches()`] instead.
+        #[wo]
         GPU_COMMAND_FLUSH (u32) => GPU_COMMAND {
             7:0     command ?=> GpuCommand;
             /// L2 cache flush mode.
@@ -389,6 +402,7 @@ pub(crate) mod gpu_control {
         base: TyrRegisters;
 
         /// GPU status register. Read only.
+        #[ro]
         pub(crate) GPU_STATUS(u32) @ 0x34 {
             /// GPU active, a 1-bit boolean flag.
             0:0     gpu_active => bool;
@@ -474,6 +488,7 @@ pub(crate) mod gpu_control {
         base: TyrRegisters;
 
         /// GPU fault status register. Read only.
+        #[ro]
         pub(crate) GPU_FAULTSTATUS(u32) @ 0x3c {
             /// Exception type.
             7:0     exception_type ?=> ExceptionType;
@@ -493,10 +508,12 @@ pub(crate) mod gpu_control {
         /// Once a fault is reported, it must be manually cleared by issuing a
         /// [`GPU_COMMAND::clear_fault()`] command to the [`GPU_COMMAND`] register. No further GPU
         /// faults will be reported until the previous fault has been cleared.
+        #[ro]
         pub(crate) GPU_FAULTADDRESS_LO(u32) @ 0x40 {
             31:0    pointer;
         }
 
+        #[ro]
         pub(crate) GPU_FAULTADDRESS_HI(u32) @ 0x44 {
             31:0    pointer;
         }
@@ -519,39 +536,47 @@ pub(crate) mod gpu_control {
         }
 
         /// GPU cycle counter. Read only.
+        #[ro]
         pub(crate) CYCLE_COUNT_LO(u32) @ 0x90 {
             31:0    count;
         }
 
+        #[ro]
         pub(crate) CYCLE_COUNT_HI(u32) @ 0x94 {
             31:0    count;
         }
 
         /// Global time stamp. Read only.
+        #[ro]
         pub(crate) TIMESTAMP_LO(u32) @ 0x98 {
             31:0    timestamp;
         }
 
+        #[ro]
         pub(crate) TIMESTAMP_HI(u32) @ 0x9c {
             31:0    timestamp;
         }
 
         /// Maximum number of threads per core. Read only constant.
+        #[ro]
         pub(crate) THREAD_MAX_THREADS(u32) @ 0xa0 {
             31:0    threads;
         }
 
         /// Maximum number of threads per workgroup. Read only constant.
+        #[ro]
         pub(crate) THREAD_MAX_WORKGROUP_SIZE(u32) @ 0xa4 {
             31:0    threads;
         }
 
         /// Maximum number of threads per barrier. Read only constant.
+        #[ro]
         pub(crate) THREAD_MAX_BARRIER_SIZE(u32) @ 0xa8 {
             31:0    threads;
         }
 
         /// Thread features. Read only constant.
+        #[ro]
         pub(crate) THREAD_FEATURES(u32) @ 0xac {
             /// Total number of registers per core.
             21:0    max_registers;
@@ -565,173 +590,211 @@ pub(crate) mod gpu_control {
         ///
         /// A bitmap where each bit indicates support for a specific compressed texture format.
         /// The bit position maps to an opaque format ID (`texture_features_key_t` in spec).
+        #[ro]
         pub(crate) TEXTURE_FEATURES(u32)[4] @ 0xb0 {
             31:0    supported_formats;
         }
 
         /// Shader core present bitmap. Read only constant.
+        #[ro]
         pub(crate) SHADER_PRESENT_LO(u32) @ 0x100 {
             31:0    value;
         }
 
+        #[ro]
         pub(crate) SHADER_PRESENT_HI(u32) @ 0x104 {
             31:0    value;
         }
 
         /// Tiler present bitmap. Read only constant.
+        #[ro]
         pub(crate) TILER_PRESENT_LO(u32) @ 0x110 {
             31:0    present;
         }
 
+        #[ro]
         pub(crate) TILER_PRESENT_HI(u32) @ 0x114 {
             31:0    present;
         }
 
         /// L2 cache present bitmap. Read only constant.
+        #[ro]
         pub(crate) L2_PRESENT_LO(u32) @ 0x120 {
             31:0    present;
         }
 
+        #[ro]
         pub(crate) L2_PRESENT_HI(u32) @ 0x124 {
             31:0    present;
         }
 
         /// Shader core ready bitmap. Read only.
+        #[ro]
         pub(crate) SHADER_READY_LO(u32) @ 0x140 {
             31:0    ready;
         }
 
+        #[ro]
         pub(crate) SHADER_READY_HI(u32) @ 0x144 {
             31:0    ready;
         }
 
         /// Tiler ready bitmap. Read only.
+        #[ro]
         pub(crate) TILER_READY_LO(u32) @ 0x150 {
             31:0    ready;
         }
 
+        #[ro]
         pub(crate) TILER_READY_HI(u32) @ 0x154 {
             31:0    ready;
         }
 
         /// L2 ready bitmap. Read only.
+        #[ro]
         pub(crate) L2_READY_LO(u32) @ 0x160 {
             31:0    ready;
         }
 
+        #[ro]
         pub(crate) L2_READY_HI(u32) @ 0x164 {
             31:0    ready;
         }
 
         /// Shader core power up bitmap.
+        #[wo]
         pub(crate) SHADER_PWRON_LO(u32) @ 0x180 {
             31:0    request;
         }
 
+        #[wo]
         pub(crate) SHADER_PWRON_HI(u32) @ 0x184 {
             31:0    request;
         }
 
         /// Tiler power up bitmap.
+        #[wo]
         pub(crate) TILER_PWRON_LO(u32) @ 0x190 {
             31:0    request;
         }
 
+        #[wo]
         pub(crate) TILER_PWRON_HI(u32) @ 0x194 {
             31:0    request;
         }
 
         /// L2 power up bitmap.
+        #[wo]
         pub(crate) L2_PWRON_LO(u32) @ 0x1a0 {
             31:0    request;
         }
 
+        #[wo]
         pub(crate) L2_PWRON_HI(u32) @ 0x1a4 {
             31:0    request;
         }
 
         /// Shader core power down bitmap.
+        #[wo]
         pub(crate) SHADER_PWROFF_LO(u32) @ 0x1c0 {
             31:0    request;
         }
 
+        #[wo]
         pub(crate) SHADER_PWROFF_HI(u32) @ 0x1c4 {
             31:0    request;
         }
 
         /// Tiler power down bitmap.
+        #[wo]
         pub(crate) TILER_PWROFF_LO(u32) @ 0x1d0 {
             31:0    request;
         }
 
+        #[wo]
         pub(crate) TILER_PWROFF_HI(u32) @ 0x1d4 {
             31:0    request;
         }
 
         /// L2 power down bitmap.
+        #[wo]
         pub(crate) L2_PWROFF_LO(u32) @ 0x1e0 {
             31:0    request;
         }
 
+        #[wo]
         pub(crate) L2_PWROFF_HI(u32) @ 0x1e4 {
             31:0    request;
         }
 
         /// Shader core power transition bitmap. Read-only.
+        #[ro]
         pub(crate) SHADER_PWRTRANS_LO(u32) @ 0x200 {
             31:0    changing;
         }
 
+        #[ro]
         pub(crate) SHADER_PWRTRANS_HI(u32) @ 0x204 {
             31:0    changing;
         }
 
         /// Tiler power transition bitmap. Read-only.
+        #[ro]
         pub(crate) TILER_PWRTRANS_LO(u32) @ 0x210 {
             31:0    changing;
         }
 
+        #[ro]
         pub(crate) TILER_PWRTRANS_HI(u32) @ 0x214 {
             31:0    changing;
         }
 
         /// L2 power transition bitmap. Read-only.
+        #[ro]
         pub(crate) L2_PWRTRANS_LO(u32) @ 0x220 {
             31:0    changing;
         }
 
+        #[ro]
         pub(crate) L2_PWRTRANS_HI(u32) @ 0x224 {
             31:0    changing;
         }
 
         /// Shader core active bitmap. Read-only.
+        #[ro]
         pub(crate) SHADER_PWRACTIVE_LO(u32) @ 0x240 {
             31:0    active;
         }
 
+        #[ro]
         pub(crate) SHADER_PWRACTIVE_HI(u32) @ 0x244 {
             31:0    active;
         }
 
         /// Tiler active bitmap. Read-only.
+        #[ro]
         pub(crate) TILER_PWRACTIVE_LO(u32) @ 0x250 {
             31:0    active;
         }
 
+        #[ro]
         pub(crate) TILER_PWRACTIVE_HI(u32) @ 0x254 {
             31:0    active;
         }
 
         /// L2 active bitmap.  Read-only.
+        #[ro]
         pub(crate) L2_PWRACTIVE_LO(u32) @ 0x260 {
             31:0    active;
         }
 
+        #[ro]
         pub(crate) L2_PWRACTIVE_HI(u32) @ 0x264 {
             31:0    active;
         }
 
         /// Revision ID. Read only constant.
+        #[ro]
         pub(crate) REVIDR(u32) @ 0x280 {
             31:0    revision;
         }
@@ -739,6 +802,7 @@ pub(crate) mod gpu_control {
         /// Coherency features present. Read only constant.
         /// Supported protocols on the interconnect between the GPU and the
         /// system into which it is integrated.
+        #[ro]
         pub(crate) COHERENCY_FEATURES(u32) @ 0x300 {
             /// ACE-Lite protocol supported, a 1-bit boolean flag.
             0:0     ace_lite => bool;
@@ -866,6 +930,7 @@ pub(crate) mod gpu_control {
         base: TyrRegisters;
 
         /// MCU status. Read only.
+        #[ro]
         pub(crate) MCU_STATUS(u32) @ 0x704 {
             /// Read current state of MCU.
             1:0 value => McuStatus;
@@ -897,6 +962,7 @@ pub(crate) mod job_control {
         /// Clear job interrupts. Write only.
         ///
         /// Write a 1 to a bit to clear the corresponding bit in [`JOB_IRQ_RAWSTAT`].
+        #[wo]
         pub(crate) JOB_IRQ_CLEAR(u32) @ 0x1004 {
             /// Clear CSG request interrupts.
             30:0    csg;
@@ -918,6 +984,7 @@ pub(crate) mod job_control {
         ///
         /// This register contains the result of ANDing together [`JOB_IRQ_RAWSTAT`] and
         /// [`JOB_IRQ_MASK`].
+        #[ro]
         pub(crate) JOB_IRQ_STATUS(u32) @ 0x100c {
             /// CSG request interrupt status.
             30:0    csg;
@@ -953,6 +1020,7 @@ pub(crate) mod mmu_control {
 
         /// IRQ sources to clear.
         /// Write a 1 to a bit to clear the corresponding bit in [`IRQ_RAWSTAT`].
+        #[wo]
         pub(crate) IRQ_CLEAR(u32) @ 0x2004 {
             /// Clear the PAGE_FAULT interrupt.
             15:0    page_fault;
@@ -973,6 +1041,7 @@ pub(crate) mod mmu_control {
         /// IRQ status for enabled sources. Read only.
         ///
         /// This register contains the result of ANDing together [`IRQ_RAWSTAT`] and [`IRQ_MASK`].
+        #[ro]
         pub(crate) IRQ_STATUS(u32) @ 0x200c {
             /// PAGE_FAULT interrupt status.
             15:0    page_fault;
@@ -1388,6 +1457,7 @@ pub(crate) mod mmu_control {
             base: TyrRegisters;
 
             /// MMU command register for each address space. Write only.
+            #[wo]
             pub(crate) COMMAND(u32)[MAX_AS, stride = STRIDE] @ 0x2418 {
                 7:0     command ?=> MmuCommand;
             }
@@ -1517,6 +1587,7 @@ pub(crate) mod mmu_control {
             base: TyrRegisters;
 
             /// Fault status register for each address space. Read only.
+            #[ro]
             pub(crate) FAULTSTATUS(u32)[MAX_AS, stride = STRIDE] @ 0x241c {
                 /// Exception type.
                 7:0     exception_type ?=> MmuExceptionType;
@@ -1527,15 +1598,18 @@ pub(crate) mod mmu_control {
             }
 
             /// Fault address for each address space. Read only.
+            #[ro]
             pub(crate) FAULTADDRESS_LO(u32)[MAX_AS, stride = STRIDE] @ 0x2420 {
                 31:0    pointer;
             }
 
+            #[ro]
             pub(crate) FAULTADDRESS_HI(u32)[MAX_AS, stride = STRIDE] @ 0x2424 {
                 31:0    pointer;
             }
 
             /// MMU status register for each address space. Read only.
+            #[ro]
             pub(crate) STATUS(u32)[MAX_AS, stride = STRIDE] @ 0x2428 {
                 /// External address space command is active, a 1-bit boolean flag.
                 0:0     active_ext => bool;
@@ -1783,10 +1857,12 @@ pub(crate) mod mmu_control {
             }
 
             /// Extra fault information for each address space. Read only.
+            #[ro]
             pub(crate) FAULTEXTRA_LO(u32)[MAX_AS, stride = STRIDE] @ 0x2438 {
                 31:0    value;
             }
 
+            #[ro]
             pub(crate) FAULTEXTRA_HI(u32)[MAX_AS, stride = STRIDE] @ 0x243c {
                 31:0    value;
             }
@@ -1816,6 +1892,7 @@ pub(crate) mod doorbell_block {
         base: TyrRegisters;
 
         /// Doorbell request register. Write-only.
+        #[wo]
         pub(crate) DOORBELL(u32)[NUM_DOORBELLS, stride = STRIDE] @ 0x80000 {
             /// Doorbell set. Writing 1 triggers the doorbell.
             0:0    ring => bool;
