@@ -144,7 +144,7 @@ static ssize_t dm_test_aux_transfer_fail(struct drm_dp_aux *aux,
  */
 static struct dc_sink *dm_test_sink_create(struct dc_link *link)
 {
-	struct dc_sink *sink = kzalloc(sizeof(*sink), GFP_KERNEL);
+	struct dc_sink *sink = kzalloc_obj(*sink, GFP_KERNEL);
 
 	if (!sink)
 		return NULL;
