@@ -6309,6 +6309,18 @@ ieee80211_set_nan_non_evac_channels(struct wiphy *wiphy,
 	return ieee80211_nan_set_non_evac_channels(sdata, channels);
 }
 
+static int
+ieee80211_set_qos_mgmt_cfg(struct wiphy *wiphy, struct net_device *dev,
+			   struct cfg80211_qm_req_data *qm_req,
+			   struct cfg80211_qm_resp_data *qm_resp)
+{
+	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
+
+	lockdep_assert_wiphy(wiphy);
+
+	return ieee80211_qos_mgmt_cfg(sdata, qm_req, qm_resp);
+}
+
 const struct cfg80211_ops mac80211_config_ops = {
 	.add_virtual_intf = ieee80211_add_iface,
 	.del_virtual_intf = ieee80211_del_iface,
@@ -6432,4 +6444,5 @@ const struct cfg80211_ops mac80211_config_ops = {
 	.nan_set_local_sched = ieee80211_set_local_nan_sched,
 	.nan_set_peer_sched = ieee80211_set_peer_nan_sched,
 	.nan_set_non_evac_channels = ieee80211_set_nan_non_evac_channels,
+	.set_qos_mgmt_cfg = ieee80211_set_qos_mgmt_cfg,
 };

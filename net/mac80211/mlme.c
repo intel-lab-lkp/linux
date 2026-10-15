@@ -12036,3 +12036,20 @@ void ieee80211_sta_rx_queued_frame(struct ieee80211_sub_if_data *sdata,
 		break;
 	}
 }
+
+int ieee80211_qos_mgmt_cfg(struct ieee80211_sub_if_data *sdata,
+			   struct cfg80211_qm_req_data *qm_req,
+			   struct cfg80211_qm_resp_data *qm_resp)
+{
+	struct ieee80211_local *local = sdata->local;
+	struct sta_info *sta;
+
+	if (sdata->vif.type != NL80211_IFTYPE_AP)
+		return -EOPNOTSUPP;
+
+	sta = sta_info_get_bss(sdata, qm_req->peer_mac);
+	if (!sta)
+		return -ENOENT;
+
+	return drv_qos_mgmt_cfg(sdata, local, &sta->sta, qm_req, qm_resp);
+}

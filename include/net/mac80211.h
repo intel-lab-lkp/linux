@@ -4760,6 +4760,9 @@ struct ieee80211_prep_tx_info {
  * @set_eml_op_mode: Configure eMLSR/eMLMR operation mode in the underlay
  *	driver according to the parameter received in the EML Operating mode
  *	notification frame.
+ * @qos_mgmt_cfg: Configure QoS Management (QM) for a station. The request
+ *	contains SCS or MSCS parameters, and the driver populates the
+ *	per-descriptor response status.
  */
 struct ieee80211_ops {
 	void (*tx)(struct ieee80211_hw *hw,
@@ -5173,6 +5176,10 @@ struct ieee80211_ops {
 			       struct ieee80211_vif *vif,
 			       struct ieee80211_sta *sta,
 			       struct ieee80211_eml_params *eml_params);
+	int (*qos_mgmt_cfg)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			    struct ieee80211_sta *sta,
+			    struct cfg80211_qm_req_data *qm_req,
+			    struct cfg80211_qm_resp_data *qm_resp);
 };
 
 /**

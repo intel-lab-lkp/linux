@@ -3431,6 +3431,30 @@ TRACE_EVENT(drv_nan_peer_sched_changed,
 	)
 );
 
+TRACE_EVENT(drv_qos_mgmt_cfg,
+	    TP_PROTO(struct ieee80211_local *local,
+		     struct ieee80211_sub_if_data *sdata,
+		     struct ieee80211_sta *sta,
+		     struct cfg80211_qm_req_data *qm_req),
+	    TP_ARGS(local, sdata, sta, qm_req),
+	    TP_STRUCT__entry(LOCAL_ENTRY
+			     VIF_ENTRY
+			     STA_ENTRY
+			     __field(u8, qm_type)
+			     __field(unsigned int, num_qm_desc)
+	),
+	    TP_fast_assign(LOCAL_ASSIGN;
+			   VIF_ASSIGN;
+			   STA_NAMED_ASSIGN(sta);
+			   __entry->qm_type = qm_req->qm_type;
+			   __entry->num_qm_desc = qm_req->num_qm_desc;
+	),
+	    TP_printk(LOCAL_PR_FMT VIF_PR_FMT STA_PR_FMT
+		      " qm_type:%u num_qm_desc:%u",
+		      LOCAL_PR_ARG, VIF_PR_ARG, STA_PR_ARG,
+		      __entry->qm_type, __entry->num_qm_desc)
+);
+
 #endif /* !__MAC80211_DRIVER_TRACE || TRACE_HEADER_MULTI_READ */
 
 #undef TRACE_INCLUDE_PATH
