@@ -286,7 +286,8 @@ out_put:
 	hdr->release(hdr);
 }
 
-static void nfs_read_sync_pgio_error(struct list_head *head, int error)
+static void nfs_read_sync_pgio_error(struct list_head *head, int error,
+				     struct nfs_pageio_descriptor *desc)
 {
 	struct nfs_page *req;
 
@@ -796,9 +797,32 @@ out_put:
 	hdr->release(hdr);
 }
 
-static void nfs_write_sync_pgio_error(struct list_head *head, int error)
+static void nfs_write_sync_pgio_error(struct list_head *head, int error,
+				      struct nfs_pageio_descriptor *desc)
 {
+	struct nfs_direct_req *dreq = desc ? desc->pg_dreq : NULL;
+	struct nfs_commit_info cinfo;
 	struct nfs_page *req;
+
+	/*
+	 * The layout changed under the descriptor: the queued requests were
+	 * never sent, and may be another mirror's share of a write that has
+	 * already completed elsewhere.  Resend them with the rest.
+	 */
+	if (error == -EAGAIN && dreq) {
+		nfs_init_cinfo_from_dreq(&cinfo, dreq);
+		spin_lock(&dreq->lock);
+		if (dreq->error == 0)
+			dreq->flags = NFS_ODIRECT_RESCHED_WRITES;
+		spin_unlock(&dreq->lock);
+		while (!list_empty(head)) {
+			req = nfs_list_entry(head->next);
+			nfs_list_remove_request(req);
+			nfs_unlock_request(req);
+			nfs_mark_request_commit(req, NULL, &cinfo, 0);
+		}
+		return;
+	}
 
 	while (!list_empty(head)) {
 		req = nfs_list_entry(head->next);

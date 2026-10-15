@@ -1162,7 +1162,7 @@ nfs_pageio_cleanup_request(struct nfs_pageio_descriptor *desc,
 	LIST_HEAD(head);
 
 	nfs_list_move_request(req, &head);
-	desc->pg_completion_ops->error_cleanup(&head, desc->pg_error);
+	desc->pg_completion_ops->error_cleanup(&head, desc->pg_error, desc);
 }
 
 /**
@@ -1291,7 +1291,7 @@ static void nfs_pageio_error_cleanup(struct nfs_pageio_descriptor *desc)
 	for (midx = 0; midx < desc->pg_mirror_count; midx++) {
 		mirror = nfs_pgio_get_mirror(desc, midx);
 		desc->pg_completion_ops->error_cleanup(&mirror->pg_list,
-				desc->pg_error);
+				desc->pg_error, desc);
 	}
 }
 
@@ -1394,7 +1394,7 @@ int nfs_pageio_resend(struct nfs_pageio_descriptor *desc,
 	nfs_pageio_complete(desc);
 	if (!list_empty(&pages)) {
 		int err = desc->pg_error < 0 ? desc->pg_error : -EIO;
-		hdr->completion_ops->error_cleanup(&pages, err);
+		hdr->completion_ops->error_cleanup(&pages, err, NULL);
 		nfs_set_pgio_error(hdr, err, hdr->io_start);
 		return err;
 	}

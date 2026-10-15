@@ -1739,8 +1739,11 @@ struct nfs_commit_data {
 	unsigned long		flags;
 };
 
+struct nfs_pageio_descriptor;
+
 struct nfs_pgio_completion_ops {
-	void	(*error_cleanup)(struct list_head *head, int);
+	void	(*error_cleanup)(struct list_head *head, int error,
+				 struct nfs_pageio_descriptor *desc);
 	void	(*init_hdr)(struct nfs_pgio_header *hdr);
 	void	(*completion)(struct nfs_pgio_header *hdr);
 	void	(*reschedule_io)(struct nfs_pgio_header *hdr);

@@ -1375,7 +1375,8 @@ static void nfs_redirty_request(struct nfs_page *req)
 	nfs_release_request(req);
 }
 
-static void nfs_async_write_error(struct list_head *head, int error)
+static void nfs_async_write_error(struct list_head *head, int error,
+				  struct nfs_pageio_descriptor *desc)
 {
 	struct nfs_page	*req;
 
@@ -1391,7 +1392,7 @@ static void nfs_async_write_error(struct list_head *head, int error)
 
 static void nfs_async_write_reschedule_io(struct nfs_pgio_header *hdr)
 {
-	nfs_async_write_error(&hdr->pages, 0);
+	nfs_async_write_error(&hdr->pages, 0, NULL);
 }
 
 static const struct nfs_pgio_completion_ops nfs_async_write_completion_ops = {
