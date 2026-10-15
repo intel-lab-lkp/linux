@@ -1878,4 +1878,7 @@ config ARCH_HAS_CPU_ATTACK_VECTORS
 config HAVE_ARCH_GET_SECUREBOOT
 	def_bool EFI
 
+config STOP_MACHINE_NMI
+	bool
+
 endmenu
