@@ -540,6 +540,60 @@ pub trait Io<'a>: IoBase<'a> {
         Ok(unsafe { Self::Backend::project_view(view, ptr.cast()) })
     }
 
+    /// Returns a view of this I/O region that can only be read.
+    ///
+    /// The returned view, and every view projected from it, provides the read methods of [`Io`]
+    /// and none of the write methods.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use kernel::io::{
+    ///     Io,
+    ///     Mmio,
+    ///     ReadOnly,
+    ///     Region,
+    /// };
+    ///
+    /// fn do_reads(io: Mmio<'_, Region<0x100>>) -> u32 {
+    ///     let ro: ReadOnly<Mmio<'_, Region<0x100>>> = io.read_only();
+    ///
+    ///     // Reads work as on `io`. A write such as `ro.write32(0, 0x10)` does not compile.
+    ///     ro.read32(0x10)
+    /// }
+    /// ```
+    #[inline]
+    fn read_only(self) -> ReadOnly<<Self::Backend as IoBackend>::View<'a, Self::Target>> {
+        ReadOnly(self.as_view())
+    }
+
+    /// Returns a view of this I/O region that can only be written.
+    ///
+    /// The returned view, and every view projected from it, provides the write methods of [`Io`]
+    /// and none of the read methods.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use kernel::io::{
+    ///     Io,
+    ///     Mmio,
+    ///     Region,
+    ///     WriteOnly,
+    /// };
+    ///
+    /// fn do_writes(io: Mmio<'_, Region<0x100>>) {
+    ///     let wo: WriteOnly<Mmio<'_, Region<0x100>>> = io.write_only();
+    ///
+    ///     // Writes work as on `io`. A read such as `wo.read32(0x10)` does not compile.
+    ///     wo.write32(1, 0x10);
+    /// }
+    /// ```
+    #[inline]
+    fn write_only(self) -> WriteOnly<<Self::Backend as IoBackend>::View<'a, Self::Target>> {
+        WriteOnly(self.as_view())
+    }
+
     /// Read a value from I/O.
     ///
     /// This only works for primitives supported by the I/O backend.
@@ -1694,6 +1748,128 @@ impl<'a, T: ?Sized + KnownSize> IoBase<'a> for IoSysMap<'a, T> {
     #[inline]
     fn as_view(self) -> IoSysMap<'a, T> {
         self
+    }
+}
+
+/// A view that can only be read.
+///
+/// It wraps a view `V` of another I/O backend and provides the read methods of [`Io`] for it, but
+/// none of the write methods. Views projected from it are read-only too, and the wrapped view
+/// cannot be retrieved.
+///
+/// See [`Io::read_only`] for a usage example.
+#[derive(Clone, Copy)]
+pub struct ReadOnly<V>(V);
+
+/// I/O Backend for [`ReadOnly`] views of backend `B`.
+pub struct ReadOnlyBackend<B>(PhantomData<B>);
+
+impl<B: IoBackend> IoBackend for ReadOnlyBackend<B> {
+    type View<'a, T: ?Sized + KnownSize> = ReadOnly<B::View<'a, T>>;
+
+    #[inline]
+    fn as_ptr<'a, T: ?Sized + KnownSize>(view: Self::View<'a, T>) -> *mut T {
+        B::as_ptr(view.0)
+    }
+
+    #[inline]
+    unsafe fn project_view<'a, T: ?Sized + KnownSize, U: ?Sized + KnownSize>(
+        view: Self::View<'a, T>,
+        ptr: *mut U,
+    ) -> Self::View<'a, U> {
+        // SAFETY: Per safety requirement.
+        ReadOnly(unsafe { B::project_view(view.0, ptr) })
+    }
+}
+
+impl<'a, V: IoBase<'a>> IoBase<'a> for ReadOnly<V> {
+    type Backend = ReadOnlyBackend<V::Backend>;
+    type Target = V::Target;
+
+    #[inline]
+    fn as_view(self) -> <Self::Backend as IoBackend>::View<'a, Self::Target> {
+        ReadOnly(self.0.as_view())
+    }
+}
+
+impl<B: IoReadable<T>, T> IoReadable<T> for ReadOnlyBackend<B> {
+    #[inline]
+    fn io_read(view: Self::View<'_, T>) -> T {
+        B::io_read(view.0)
+    }
+}
+
+impl<B: IoCopyReadable> IoCopyReadable for ReadOnlyBackend<B> {
+    #[inline]
+    unsafe fn copy_from_io(view: Self::View<'_, [u8]>, buffer: *mut u8) {
+        // SAFETY: Per safety requirement.
+        unsafe { B::copy_from_io(view.0, buffer) }
+    }
+
+    #[inline]
+    fn copy_read<T: FromBytes>(view: Self::View<'_, T>) -> T {
+        B::copy_read(view.0)
+    }
+}
+
+/// A view that can only be written.
+///
+/// It wraps a view `V` of another I/O backend and provides the write methods of [`Io`] for it, but
+/// none of the read methods. Views projected from it are write-only too, and the wrapped view
+/// cannot be retrieved.
+///
+/// See [`Io::write_only`] for a usage example.
+#[derive(Clone, Copy)]
+pub struct WriteOnly<V>(V);
+
+/// I/O Backend for [`WriteOnly`] views of backend `B`.
+pub struct WriteOnlyBackend<B>(PhantomData<B>);
+
+impl<B: IoBackend> IoBackend for WriteOnlyBackend<B> {
+    type View<'a, T: ?Sized + KnownSize> = WriteOnly<B::View<'a, T>>;
+
+    #[inline]
+    fn as_ptr<'a, T: ?Sized + KnownSize>(view: Self::View<'a, T>) -> *mut T {
+        B::as_ptr(view.0)
+    }
+
+    #[inline]
+    unsafe fn project_view<'a, T: ?Sized + KnownSize, U: ?Sized + KnownSize>(
+        view: Self::View<'a, T>,
+        ptr: *mut U,
+    ) -> Self::View<'a, U> {
+        // SAFETY: Per safety requirement.
+        WriteOnly(unsafe { B::project_view(view.0, ptr) })
+    }
+}
+
+impl<'a, V: IoBase<'a>> IoBase<'a> for WriteOnly<V> {
+    type Backend = WriteOnlyBackend<V::Backend>;
+    type Target = V::Target;
+
+    #[inline]
+    fn as_view(self) -> <Self::Backend as IoBackend>::View<'a, Self::Target> {
+        WriteOnly(self.0.as_view())
+    }
+}
+
+impl<B: IoWritable<T>, T> IoWritable<T> for WriteOnlyBackend<B> {
+    #[inline]
+    fn io_write(view: Self::View<'_, T>, value: T) {
+        B::io_write(view.0, value)
+    }
+}
+
+impl<B: IoCopyWritable> IoCopyWritable for WriteOnlyBackend<B> {
+    #[inline]
+    unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8) {
+        // SAFETY: Per safety requirement.
+        unsafe { B::copy_to_io(view.0, buffer) }
+    }
+
+    #[inline]
+    fn copy_write<T: IntoBytes>(view: Self::View<'_, T>, value: T) {
+        B::copy_write(view.0, value)
     }
 }
 
