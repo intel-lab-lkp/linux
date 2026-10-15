@@ -43,6 +43,7 @@
 #include <linux/jiffies.h>
 #include <linux/lockdep.h>
 #include <linux/inet.h>
+#include <linux/pci_ids.h>
 #include <net/net_namespace.h>
 #include <rdma/ib_cache.h>
 
@@ -522,6 +523,66 @@ static void srp_destroy_qp(struct srp_rdma_ch *ch)
 	ib_destroy_qp(ch->qp);
 }
 
+#define SRP_INLINE_STEP	16
+
+/*
+ * The verbs API cannot report a device's inline data limit. Some drivers
+ * have a fixed one: Intel irdma 216, 101 or 48 depending on the
+ * generation, Alibaba erdma 96. Try those first, by vendor ID, then step
+ * down SRP_INLINE_STEP bytes at a time to zero. libfabric's verbs
+ * provider also probes the limit (vrb_find_max_inline()).
+ */
+static const struct {
+	u32	vendor_id;
+	u32	max_inline;
+} srp_inline_limits[] = {
+	{ PCI_VENDOR_ID_INTEL, 216 },
+	{ PCI_VENDOR_ID_INTEL, 101 },
+	{ PCI_VENDOR_ID_INTEL, 48 },
+	{ PCI_VENDOR_ID_ALIBABA, 96 },
+};
+
+/*
+ * Inline data size to ask for: on the first try, @size capped at the
+ * vendor's first known limit; after a refusal, the vendor's next smaller
+ * known limit, else one step smaller.
+ */
+static u32 srp_inline_size(u32 vendor_id, u32 size, bool refused)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(srp_inline_limits); i++)
+		if (srp_inline_limits[i].vendor_id == vendor_id &&
+		    (!refused || srp_inline_limits[i].max_inline < size))
+			return min(srp_inline_limits[i].max_inline, size);
+	return refused ? size - min(size, SRP_INLINE_STEP) : size;
+}
+
+static int srp_create_qp(struct srp_rdma_ch *ch,
+			 struct ib_qp_init_attr *init_attr, struct ib_qp **qpp)
+{
+	struct srp_target_port *target = ch->target;
+	struct srp_device *dev = target->srp_host->srp_dev;
+	struct ib_qp *qp;
+	int ret;
+
+	if (target->using_rdma_cm) {
+		ret = rdma_create_qp(ch->rdma_cm.cm_id, dev->pd, init_attr);
+		qp = ch->rdma_cm.cm_id->qp;
+	} else {
+		qp = ib_create_qp(dev->pd, init_attr);
+		if (!IS_ERR(qp)) {
+			ret = srp_init_ib_qp(target, qp);
+			if (ret)
+				ib_destroy_qp(qp);
+		} else {
+			ret = PTR_ERR(qp);
+		}
+	}
+	*qpp = qp;
+	return ret;
+}
+
 static int srp_create_ch_ib(struct srp_rdma_ch *ch)
 {
 	struct srp_target_port *target = ch->target;
@@ -529,8 +590,10 @@ static int srp_create_ch_ib(struct srp_rdma_ch *ch)
 	const struct ib_device_attr *attr = &dev->dev->attrs;
 	struct ib_qp_init_attr *init_attr;
 	struct ib_cq *recv_cq, *send_cq;
+	struct ib_qp_cap cap;
 	struct ib_qp *qp;
 	struct srp_fr_pool *fr_pool = NULL;
+	u32 inline_size;
 	const int m = 1 + dev->use_fast_reg * target->mr_per_cmd * 2;
 	int ret;
 
@@ -565,18 +628,21 @@ static int srp_create_ch_ib(struct srp_rdma_ch *ch)
 
 	ch->max_imm_sge = min(init_attr->cap.max_send_sge - 1U, 255U);
 
-	if (target->using_rdma_cm) {
-		ret = rdma_create_qp(ch->rdma_cm.cm_id, dev->pd, init_attr);
-		qp = ch->rdma_cm.cm_id->qp;
-	} else {
-		qp = ib_create_qp(dev->pd, init_attr);
-		if (!IS_ERR(qp)) {
-			ret = srp_init_ib_qp(target, qp);
-			if (ret)
-				ib_destroy_qp(qp);
-		} else {
-			ret = PTR_ERR(qp);
-		}
+	/*
+	 * Ask for enough inline data to post command IUs inline (see
+	 * srp_post_send()), or for as much as the device accepts.
+	 */
+	cap = init_attr->cap;
+	inline_size = srp_inline_size(attr->vendor_id, SRP_MAX_INLINE_DATA,
+				      false);
+	for (;;) {
+		init_attr->cap = cap;
+		init_attr->cap.max_inline_data = inline_size;
+		ret = srp_create_qp(ch, init_attr, &qp);
+		if (!ret || !inline_size)
+			break;
+		inline_size = srp_inline_size(attr->vendor_id, inline_size,
+					      true);
 	}
 	if (ret) {
 		pr_err("QP creation failed for dev %s: %d\n",
@@ -604,6 +670,7 @@ static int srp_create_ch_ib(struct srp_rdma_ch *ch)
 	ch->qp = qp;
 	ch->recv_cq = recv_cq;
 	ch->send_cq = send_cq;
+	ch->max_inline_data = init_attr->cap.max_inline_data;
 
 	if (dev->use_fast_reg) {
 		if (ch->fr_pool)
@@ -1914,6 +1981,17 @@ static int srp_post_send(struct srp_rdma_ch *ch, struct srp_iu *iu, int len)
 	wr.num_sge    = iu->num_sge;
 	wr.opcode     = IB_WR_SEND;
 	wr.send_flags = IB_SEND_SIGNALED;
+
+	/*
+	 * Post an IU without immediate data inline if it fits in the granted
+	 * inline size, so the HCA does not have to DMA-read it from host
+	 * memory.  The CPU copies inline data from a kernel virtual address,
+	 * so point the SGE at iu->buf.
+	 */
+	if (iu->num_sge == 1 && len <= ch->max_inline_data) {
+		iu->sge[0].addr = (uintptr_t)iu->buf;
+		wr.send_flags |= IB_SEND_INLINE;
+	}
 
 	return ib_post_send(ch->qp, &wr, NULL);
 }

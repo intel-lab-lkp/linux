@@ -74,6 +74,14 @@ enum {
 	SRP_IMM_DATA_OFFSET	= sizeof(struct srp_cmd) +
 				  SRP_MAX_ADD_CDB_LEN +
 				  sizeof(struct srp_imm_buf),
+	/*
+	 * Inline data to ask for: enough for an SRP_CMD with an additional
+	 * CDB and an indirect table of two memory descriptors.
+	 */
+	SRP_MAX_INLINE_DATA	= sizeof(struct srp_cmd) +
+				  SRP_MAX_ADD_CDB_LEN +
+				  sizeof(struct srp_indirect_buf) +
+				  2 * sizeof(struct srp_direct_buf),
 };
 
 enum {
@@ -162,6 +170,7 @@ struct srp_rdma_ch {
 	uint32_t		max_ti_iu_len;
 	u8			max_imm_sge;
 	bool			use_imm_data;
+	u32			max_inline_data;
 
 	/* Everything above this point is used in the hot path of
 	 * command processing. Try to keep them packed into cachelines.
