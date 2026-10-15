@@ -13382,6 +13382,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	INIT_LIST_HEAD(&event->rb_entry);
 	INIT_LIST_HEAD(&event->active_entry);
 	INIT_LIST_HEAD(&event->addr_filters.list);
+	INIT_LIST_HEAD(&event->owner_entry);
 	INIT_HLIST_NODE(&event->hlist_entry);
 	INIT_LIST_HEAD(&event->pmu_list);
 
@@ -14252,7 +14253,8 @@ SYSCALL_DEFINE5(perf_event_open,
 	}
 
 	mutex_lock(&current->perf_event_mutex);
-	list_add_tail(&event->owner_entry, &current->perf_event_list);
+	if (event->owner)
+		list_add_tail(&event->owner_entry, &current->perf_event_list);
 	mutex_unlock(&current->perf_event_mutex);
 
 	/*
