@@ -2130,6 +2130,16 @@ static const struct action_ops snd_pcm_action_drain_init = {
 	.post_action = snd_pcm_post_drain_init
 };
 
+static int snd_pcm_drain_wake_function(wait_queue_entry_t *wait,
+				       unsigned int mode, int flags, void *key)
+{
+	int ret = default_wake_function(wait, mode, flags, key);
+
+	/* Unlink must remove the entry even if a signal already woke the task. */
+	list_del_init_careful(&wait->entry);
+	return ret;
+}
+
 /*
  * Drain the stream(s).
  * When the substream is linked, sync until the draining of all playback streams
@@ -2144,7 +2154,7 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime;
 	struct snd_pcm_substream *s;
 	struct snd_pcm_group *group;
-	wait_queue_entry_t wait;
+	DEFINE_WAIT_FUNC(wait, snd_pcm_drain_wake_function);
 	int result = 0;
 	int nonblock = 0;
 
@@ -2199,20 +2209,20 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
 				break;
 			}
 		}
-		snd_pcm_group_unref(group, substream);
-		if (!to_check)
+		if (!to_check) {
+			snd_pcm_group_unref(group, substream);
 			break; /* all drained */
+		}
 		/*
-		 * Cache the runtime fields needed after unlock.
-		 * A concurrent close() on the linked stream may free
-		 * its runtime via snd_pcm_detach_substream() once we
-		 * release the stream lock below.
+		 * Keep the group locked until the wait is queued so unlink cannot
+		 * wake the queue and free the peer runtime before we get there.
+		 * Cache the fields needed after releasing the locks.
 		 */
 		drain_no_period_wakeup = to_check->no_period_wakeup;
 		drain_rate = to_check->rate;
 		drain_bufsz = to_check->buffer_size;
-		init_wait_entry(&wait, 0);
 		prepare_to_wait(&to_check->sleep, &wait, TASK_INTERRUPTIBLE);
+		snd_pcm_group_unref(group, substream);
 		snd_pcm_stream_unlock_irq(substream);
 		if (drain_no_period_wakeup)
 			tout = MAX_SCHEDULE_TIMEOUT;
