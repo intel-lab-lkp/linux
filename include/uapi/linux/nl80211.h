@@ -1468,6 +1468,10 @@
  *	and multiple can be nested in %NL80211_ATTR_MLO_LINKS but then the
  *	update isn't atomic if any failures happen.
  *	Only supported with %NL80211_EXT_FEATURE_UPDATE_BEACON.
+ * @NL80211_CMD_QOS_MGMT: QoS Management configuration for a station. Used
+ *	by userspace to send QoS Management (QM) requests and to receive the
+ *	corresponding status response via %NL80211_ATTR_QOS_MGMT.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1749,6 +1753,8 @@ enum nl80211_commands {
 	NL80211_CMD_NAN_SET_NON_EVAC_CHANNELS,
 
 	NL80211_CMD_UPDATE_BEACON,
+
+	NL80211_CMD_QOS_MGMT,
 
 	/* add new commands above here */
 
@@ -3243,6 +3249,13 @@ enum nl80211_commands {
  * @NL80211_ATTR_ASSOC_PROTECTED_TWT: Enable protected TWT for the association,
  *	requires protected TWT support (flag attribute)
  *
+ * @NL80211_ATTR_QOS_MGMT: Used with %NL80211_CMD_QOS_MGMT to configure
+ *	QoS Management (QM) features for a station. The nested payload is
+ *	described by &enum nl80211_qm_attrs. It contains a nested array of
+ *	&enum nl80211_qm_desc_attrs entries; SCS TCLAS and QoS attributes use
+ *	&enum nl80211_qm_tclas_attrs and &enum nl80211_qm_qos_attrs,
+ *	respectively.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3849,6 +3862,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_CIP_CAPABILITIES,
 
 	NL80211_ATTR_ASSOC_PROTECTED_TWT,
+
+	NL80211_ATTR_QOS_MGMT,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -9199,5 +9214,334 @@ enum nl80211_nan_peer_map_attrs {
 };
 
 #define NL80211_NAN_SCHED_NOT_AVAIL_SLOT 0xff
+
+#define NL80211_IPADDR_MAX_LEN			16
+#define NL80211_QM_TCLAS_TYPE10_MAX_FILTER_LEN	12
+#define NL80211_QM_TCLAS_TYPE4_FLOW_LABEL_LEN	3
+
+/*
+ * The TCLAS element (reference 9.4.2.29, IEEE Std 802.11-2024) is used by
+ * SCS for traffic classification.
+ */
+/**
+ * enum nl80211_qm_tclas_type4_attrs - TCLAS classifier type 4 attributes
+ *
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_INVALID: Invalid
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_CLASSIFIER_MASK: Classifier mask (u8), see
+ *	&enum nl80211_qm_tclas_type4_mask
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_IP_VERSION: IP version, 4 or 6 (u8)
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_SRC_IP: Source IP address
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_DST_IP: Destination IP address
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_SRC_PORT: Source port (u16)
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_DST_PORT: Destination port (u16)
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_DSCP: DSCP value, 0-63 (u8)
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_PROTOCOL: IP protocol number, IPv4 only (u8)
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_NEXT_HEADER: Next header, IPv6 only (u8)
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_FLOW_LABEL: Flow label, IPv6 only
+ * @__NL80211_QM_TCLAS_TYPE4_ATTR_AFTER_LAST: internal use
+ * @NL80211_QM_TCLAS_TYPE4_ATTR_MAX: highest type 4 attribute number currently
+ *	defined
+ */
+enum nl80211_qm_tclas_type4_attrs {
+	NL80211_QM_TCLAS_TYPE4_ATTR_INVALID,
+	NL80211_QM_TCLAS_TYPE4_ATTR_CLASSIFIER_MASK,
+	NL80211_QM_TCLAS_TYPE4_ATTR_IP_VERSION,
+	NL80211_QM_TCLAS_TYPE4_ATTR_SRC_IP,
+	NL80211_QM_TCLAS_TYPE4_ATTR_DST_IP,
+	NL80211_QM_TCLAS_TYPE4_ATTR_SRC_PORT,
+	NL80211_QM_TCLAS_TYPE4_ATTR_DST_PORT,
+	NL80211_QM_TCLAS_TYPE4_ATTR_DSCP,
+	NL80211_QM_TCLAS_TYPE4_ATTR_PROTOCOL,
+	NL80211_QM_TCLAS_TYPE4_ATTR_NEXT_HEADER,
+	NL80211_QM_TCLAS_TYPE4_ATTR_FLOW_LABEL,
+
+	/* keep last */
+	__NL80211_QM_TCLAS_TYPE4_ATTR_AFTER_LAST,
+	NL80211_QM_TCLAS_TYPE4_ATTR_MAX =
+		__NL80211_QM_TCLAS_TYPE4_ATTR_AFTER_LAST - 1
+};
+
+/**
+ * enum nl80211_qm_tclas_type10_attrs - TCLAS classifier type 10 attributes
+ *
+ * @NL80211_QM_TCLAS_TYPE10_ATTR_INVALID: Invalid
+ * @NL80211_QM_TCLAS_TYPE10_ATTR_PROT_INSTANCE: Protocol instance (u8)
+ * @NL80211_QM_TCLAS_TYPE10_ATTR_PROT_NUMBER: Protocol number (u8)
+ * @NL80211_QM_TCLAS_TYPE10_ATTR_FILTER_VALUE: Filter value bytes
+ * @NL80211_QM_TCLAS_TYPE10_ATTR_FILTER_MASK: Filter mask bytes
+ * @__NL80211_QM_TCLAS_TYPE10_ATTR_AFTER_LAST: internal use
+ * @NL80211_QM_TCLAS_TYPE10_ATTR_MAX: highest type 10 attribute number currently
+ *	defined
+ */
+enum nl80211_qm_tclas_type10_attrs {
+	NL80211_QM_TCLAS_TYPE10_ATTR_INVALID,
+	NL80211_QM_TCLAS_TYPE10_ATTR_PROT_INSTANCE,
+	NL80211_QM_TCLAS_TYPE10_ATTR_PROT_NUMBER,
+	NL80211_QM_TCLAS_TYPE10_ATTR_FILTER_VALUE,
+	NL80211_QM_TCLAS_TYPE10_ATTR_FILTER_MASK,
+
+	/* keep last */
+	__NL80211_QM_TCLAS_TYPE10_ATTR_AFTER_LAST,
+	NL80211_QM_TCLAS_TYPE10_ATTR_MAX =
+		__NL80211_QM_TCLAS_TYPE10_ATTR_AFTER_LAST - 1
+};
+
+/**
+ * enum nl80211_qm_tclas_attrs - TCLAS element attributes
+ *
+ * @NL80211_QM_TCLAS_ATTR_INVALID: Invalid
+ * @NL80211_QM_TCLAS_ATTR_USER_PRIORITY: User priority, 0-7 (u8)
+ * @NL80211_QM_TCLAS_ATTR_CLASSIFIER_TYPE: Classifier type, 4 or 10 (u8)
+ * @NL80211_QM_TCLAS_ATTR_TYPE4_PARAMS: Nested type 4 classifier params, see
+ *	&enum nl80211_qm_tclas_type4_attrs
+ * @NL80211_QM_TCLAS_ATTR_TYPE10_PARAMS: Nested type 10 classifier params, see
+ *	&enum nl80211_qm_tclas_type10_attrs
+ * @__NL80211_QM_TCLAS_ATTR_AFTER_LAST: internal use
+ * @NL80211_QM_TCLAS_ATTR_MAX: highest TCLAS attribute number currently defined
+ */
+enum nl80211_qm_tclas_attrs {
+	NL80211_QM_TCLAS_ATTR_INVALID,
+	NL80211_QM_TCLAS_ATTR_USER_PRIORITY,
+	NL80211_QM_TCLAS_ATTR_CLASSIFIER_TYPE,
+	NL80211_QM_TCLAS_ATTR_TYPE4_PARAMS,
+	NL80211_QM_TCLAS_ATTR_TYPE10_PARAMS,
+
+	/* keep last */
+	__NL80211_QM_TCLAS_ATTR_AFTER_LAST,
+	NL80211_QM_TCLAS_ATTR_MAX = __NL80211_QM_TCLAS_ATTR_AFTER_LAST - 1
+};
+
+/**
+ * enum nl80211_qm_tclas_classifier_type - TCLAS classifier type values sent
+ *	in %NL80211_QM_TCLAS_ATTR_CLASSIFIER_TYPE
+ * @NL80211_QM_TCLAS_CLASSIFIER_TYPE4: Classifier type 4, 5-tuple based;
+ *	reference 9.4.2.29, IEEE Std 802.11-2024.
+ * @NL80211_QM_TCLAS_CLASSIFIER_TYPE10: Classifier type 10, filter based;
+ *	reference 9.4.2.29, IEEE Std 802.11-2024.
+ *
+ * The SCS interface currently supports only classifier types 4 and 10.
+ */
+enum nl80211_qm_tclas_classifier_type {
+	NL80211_QM_TCLAS_CLASSIFIER_TYPE4 = 4,
+	NL80211_QM_TCLAS_CLASSIFIER_TYPE10 = 10,
+};
+
+/**
+ * enum nl80211_qm_tclas_type4_mask - classifier mask bits for TCLAS type 4
+ * @NL80211_QM_TCLAS_TYPE4_MASK_VERSION: IP version field
+ * @NL80211_QM_TCLAS_TYPE4_MASK_SRC_IP: source IP address
+ * @NL80211_QM_TCLAS_TYPE4_MASK_DST_IP: destination IP address
+ * @NL80211_QM_TCLAS_TYPE4_MASK_SRC_PORT: source port
+ * @NL80211_QM_TCLAS_TYPE4_MASK_DST_PORT: destination port
+ * @NL80211_QM_TCLAS_TYPE4_MASK_DSCP: DSCP field
+ * @NL80211_QM_TCLAS_TYPE4_MASK_PROTOCOL: protocol / next-header field
+ * @NL80211_QM_TCLAS_TYPE4_MASK_FLOW_LABEL: IPv6 flow label
+ */
+enum nl80211_qm_tclas_type4_mask {
+	NL80211_QM_TCLAS_TYPE4_MASK_VERSION    = 1 << 0,
+	NL80211_QM_TCLAS_TYPE4_MASK_SRC_IP     = 1 << 1,
+	NL80211_QM_TCLAS_TYPE4_MASK_DST_IP     = 1 << 2,
+	NL80211_QM_TCLAS_TYPE4_MASK_SRC_PORT   = 1 << 3,
+	NL80211_QM_TCLAS_TYPE4_MASK_DST_PORT   = 1 << 4,
+	NL80211_QM_TCLAS_TYPE4_MASK_DSCP       = 1 << 5,
+	NL80211_QM_TCLAS_TYPE4_MASK_PROTOCOL   = 1 << 6,
+	NL80211_QM_TCLAS_TYPE4_MASK_FLOW_LABEL = 1 << 7,
+};
+
+/**
+ * enum nl80211_qm_tclas_processing - TCLAS processing rules
+ *
+ * Processing field values are defined in 9.4.2.31, IEEE Std 802.11-2024.
+ *
+ * @NL80211_QM_TCLAS_PROCESSING_MATCH_ALL: all TCLAS elements must match
+ * @NL80211_QM_TCLAS_PROCESSING_MATCH_ANY: any TCLAS element may match
+ * @NL80211_QM_TCLAS_PROCESSING_MATCH_ALL_EXCEPT_FIRST: all except the first
+ *	must match
+ */
+enum nl80211_qm_tclas_processing {
+	NL80211_QM_TCLAS_PROCESSING_MATCH_ALL = 0,
+	NL80211_QM_TCLAS_PROCESSING_MATCH_ANY = 1,
+	NL80211_QM_TCLAS_PROCESSING_MATCH_ALL_EXCEPT_FIRST = 2,
+};
+
+/**
+ * enum nl80211_qm_qos_attrs - QoS Management QoS attributes
+ *
+ * The QoS Characteristics element is specified in 9.4.2.326,
+ * IEEE Std 802.11be-2024.
+ *
+ * @NL80211_QM_QOS_ATTR_INVALID: Invalid
+ * @NL80211_QM_QOS_ATTR_CONTROL_INFO: QoS characteristics control info (u32)
+ * @NL80211_QM_QOS_ATTR_MIN_SVC_INTERVAL: Minimum service interval, us (u32)
+ * @NL80211_QM_QOS_ATTR_MAX_SVC_INTERVAL: Maximum service interval, us (u32)
+ * @NL80211_QM_QOS_ATTR_MIN_DATA_RATE: Minimum data rate, kbps (u32)
+ * @NL80211_QM_QOS_ATTR_DELAY_BOUND: Delay bound, us (u32)
+ * @NL80211_QM_QOS_ATTR_MAX_MSDU_SIZE: Maximum MSDU size, bytes (u16)
+ * @NL80211_QM_QOS_ATTR_SVC_START_TIME: Service start time, us (u32)
+ * @NL80211_QM_QOS_ATTR_SVC_START_TIME_LINK_ID: Link ID for service start
+ *	time (u8)
+ * @NL80211_QM_QOS_ATTR_MEAN_DATA_RATE: Mean data rate, kbps (u32)
+ * @NL80211_QM_QOS_ATTR_BURST_SIZE: Burst size, bytes (u32)
+ * @NL80211_QM_QOS_ATTR_MSDU_LIFETIME: MSDU lifetime, ms (u16)
+ * @NL80211_QM_QOS_ATTR_MSDU_DELIVERY_INFO: MSDU delivery ratio and count
+ *	exponent (u8)
+ * @NL80211_QM_QOS_ATTR_MEDIUM_TIME: Medium time, 32 us units (u16)
+ * @__NL80211_QM_QOS_ATTR_AFTER_LAST: internal use
+ * @NL80211_QM_QOS_ATTR_MAX: highest QoS attribute number currently defined
+ */
+enum nl80211_qm_qos_attrs {
+	NL80211_QM_QOS_ATTR_INVALID,
+	NL80211_QM_QOS_ATTR_CONTROL_INFO,
+	NL80211_QM_QOS_ATTR_MIN_SVC_INTERVAL,
+	NL80211_QM_QOS_ATTR_MAX_SVC_INTERVAL,
+	NL80211_QM_QOS_ATTR_MIN_DATA_RATE,
+	NL80211_QM_QOS_ATTR_DELAY_BOUND,
+	NL80211_QM_QOS_ATTR_MAX_MSDU_SIZE,
+	NL80211_QM_QOS_ATTR_SVC_START_TIME,
+	NL80211_QM_QOS_ATTR_SVC_START_TIME_LINK_ID,
+	NL80211_QM_QOS_ATTR_MEAN_DATA_RATE,
+	NL80211_QM_QOS_ATTR_BURST_SIZE,
+	NL80211_QM_QOS_ATTR_MSDU_LIFETIME,
+	NL80211_QM_QOS_ATTR_MSDU_DELIVERY_INFO,
+	NL80211_QM_QOS_ATTR_MEDIUM_TIME,
+
+	/* keep last */
+	__NL80211_QM_QOS_ATTR_AFTER_LAST,
+	NL80211_QM_QOS_ATTR_MAX = __NL80211_QM_QOS_ATTR_AFTER_LAST - 1
+};
+
+/**
+ * enum nl80211_qm_desc_attrs - QoS Management descriptor attributes
+ *
+ * @NL80211_QM_DESC_ATTR_INVALID: Invalid
+ * @NL80211_QM_DESC_ATTR_QM_ID: Userspace-assigned identifier (u8) used
+ *	to correlate a request descriptor with its response descriptor
+ * @NL80211_QM_DESC_ATTR_REQUEST_TYPE: Request type, see
+ *	&enum nl80211_qm_req_type (u8)
+ * @NL80211_QM_DESC_ATTR_PRIORITY: SCS descriptor priority (u8)
+ * @NL80211_QM_DESC_ATTR_TCLAS_ELEMENTS: Nested array of SCS TCLAS elements,
+ *	see &enum nl80211_qm_tclas_attrs
+ * @NL80211_QM_DESC_ATTR_TCLAS_PROCESSING: SCS TCLAS processing rule (u8),
+ *	see &enum nl80211_qm_tclas_processing
+ * @NL80211_QM_DESC_ATTR_QOS_ATTRIBUTES: Nested SCS QoS attributes, see
+ *	&enum nl80211_qm_qos_attrs
+ * @NL80211_QM_DESC_ATTR_STATUS: Response status for this descriptor (u8),
+ *	see &enum nl80211_qm_status
+ * @NL80211_QM_DESC_ATTR_USER_PRIORITY_BITMAP: MSCS user priority bitmap of
+ *	TID values sent by the non-AP STA (u8)
+ * @NL80211_QM_DESC_ATTR_USER_PRIORITY_LIMIT: MSCS user priority limit sent
+ *	by the non-AP STA (u8)
+ * @NL80211_QM_DESC_ATTR_TCLAS_MASK: MSCS traffic classifier mask with a
+ *	bitmap of parameters to match in an uplink flow for downlink
+ *	prioritization (u8)
+ * @__NL80211_QM_DESC_ATTR_AFTER_LAST: internal use
+ * @NL80211_QM_DESC_ATTR_MAX: highest QoS Management descriptor attribute
+ *	number currently defined
+ */
+enum nl80211_qm_desc_attrs {
+	NL80211_QM_DESC_ATTR_INVALID,
+	NL80211_QM_DESC_ATTR_QM_ID,
+	NL80211_QM_DESC_ATTR_REQUEST_TYPE,
+	NL80211_QM_DESC_ATTR_PRIORITY,
+	NL80211_QM_DESC_ATTR_TCLAS_ELEMENTS,
+	NL80211_QM_DESC_ATTR_TCLAS_PROCESSING,
+	NL80211_QM_DESC_ATTR_QOS_ATTRIBUTES,
+	NL80211_QM_DESC_ATTR_STATUS,
+	NL80211_QM_DESC_ATTR_USER_PRIORITY_BITMAP,
+	NL80211_QM_DESC_ATTR_USER_PRIORITY_LIMIT,
+	NL80211_QM_DESC_ATTR_TCLAS_MASK,
+
+	/* keep last */
+	__NL80211_QM_DESC_ATTR_AFTER_LAST,
+	NL80211_QM_DESC_ATTR_MAX = __NL80211_QM_DESC_ATTR_AFTER_LAST - 1
+};
+
+/**
+ * enum nl80211_qm_attrs - QoS Management attributes
+ *
+ * @NL80211_QM_ATTR_INVALID: Invalid
+ * @NL80211_QM_ATTR_MAC_ADDR: Target station MAC address (6 bytes)
+ * @NL80211_QM_ATTR_QM_TYPE: QoS Management protocol type, see
+ *	&enum nl80211_qm_type (u8)
+ * @NL80211_QM_ATTR_DESCRIPTOR_PARAMS: Nested array of QM descriptors, see
+ *	&enum nl80211_qm_desc_attrs
+ * @__NL80211_QM_ATTR_AFTER_LAST: internal use
+ * @NL80211_QM_ATTR_MAX: highest QoS Management attribute number currently
+ *	defined
+ */
+enum nl80211_qm_attrs {
+	NL80211_QM_ATTR_INVALID,
+	NL80211_QM_ATTR_MAC_ADDR,
+	NL80211_QM_ATTR_QM_TYPE,
+	NL80211_QM_ATTR_DESCRIPTOR_PARAMS,
+
+	/* keep last */
+	__NL80211_QM_ATTR_AFTER_LAST,
+	NL80211_QM_ATTR_MAX = __NL80211_QM_ATTR_AFTER_LAST - 1
+};
+
+/**
+ * enum nl80211_qm_type - QoS Management protocol types
+ * @NL80211_QM_TYPE_SCS: Stream Classification Service (SCS) protocol,
+ *	reference 11.25.2, IEEE Std 802.11-2024.
+ * @NL80211_QM_TYPE_MSCS: Mirrored Stream Classification Service (MSCS)
+ *	protocol, reference 11.25.3, IEEE Std 802.11-2024.
+ * @NL80211_QM_TYPE_MAX: Maximum value for QoS Management protocol types
+ *
+ * Enumerates the QoS Management protocols supported through the generic
+ * QoS Management (QM) request/response framework.
+ *
+ */
+enum nl80211_qm_type {
+	NL80211_QM_TYPE_SCS,
+	NL80211_QM_TYPE_MSCS,
+	/* Future QM protocols to be added here */
+	NL80211_QM_TYPE_MAX,
+};
+
+/**
+ * enum nl80211_qm_direction - QoS Management descriptor
+ *	traffic direction
+ * @NL80211_QM_DIRECTION_UPLINK: Traffic direction is uplink, from the
+ *	non-AP STA to the AP.
+ * @NL80211_QM_DIRECTION_DOWNLINK: Traffic direction is downlink, from
+ *	the AP to the non-AP STA.
+ * @NL80211_QM_DIRECTION_DIRECT: Direct link traffic between STAs (P2P).
+ *
+ * Encodes the QoS characteristics element direction subfield, denoting
+ * which traffic direction a set of QoS attributes applies to. The QoS
+ * Characteristics element is specified in 9.4.2.326, IEEE Std 802.11be-2024.
+ */
+enum nl80211_qm_direction {
+	NL80211_QM_DIRECTION_UPLINK = 0,
+	NL80211_QM_DIRECTION_DOWNLINK = 1,
+	NL80211_QM_DIRECTION_DIRECT = 2,
+};
+
+/**
+ * enum nl80211_qm_req_type - QoS Management request types
+ * @NL80211_QM_ADD_REQ: Add a new QoS Management configuration
+ * @NL80211_QM_REMOVE_REQ: Remove an existing QoS Management configuration
+ * @NL80211_QM_CHANGE_REQ: Modify an existing QoS Management configuration
+ *
+ * Identifies the operation requested in a QoS Management transaction.
+ * Reference 11.25.2 and 11.25.3, IEEE Std 802.11-2024, for the operation
+ * values.
+ */
+enum nl80211_qm_req_type {
+	NL80211_QM_ADD_REQ,
+	NL80211_QM_REMOVE_REQ,
+	NL80211_QM_CHANGE_REQ,
+};
+
+/**
+ * enum nl80211_qm_status - QoS Management response status codes
+ * @NL80211_QM_STATUS_SUCCESS: request accepted
+ * @NL80211_QM_STATUS_DECLINED: request declined
+ */
+enum nl80211_qm_status {
+	NL80211_QM_STATUS_SUCCESS = 0,
+	NL80211_QM_STATUS_DECLINED = 1,
+};
 
 #endif /* __LINUX_NL80211_H */
