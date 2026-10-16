@@ -36,6 +36,9 @@ properties:
       - const: bi_tcxo_ao
       - const: sleep_clk
 
+  '#interconnect-cells':
+    const: 1
+
   power-domains:
     items:
       - description: MMCX power domain
@@ -70,5 +73,6 @@ examples:
       #clock-cells = <1>;
       #reset-cells = <1>;
       #power-domain-cells = <1>;
+      #interconnect-cells = <1>;
     };
 ...

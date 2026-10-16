@@ -173,4 +173,7 @@
 #define SLAVE_QUP_CORE_1		4
 #define SLAVE_QUP_CORE_2		5
 
+#define MASTER_CAMCC_CAMNOC_AXI		0
+#define SLAVE_CAMCC_CAMNOC_AXI		1
+
 #endif
