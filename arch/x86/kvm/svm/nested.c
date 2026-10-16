@@ -197,6 +197,14 @@ void nested_vmcb02_recalc_intercepts(struct vcpu_svm *svm)
 	} else {
 		WARN_ON_ONCE(!(vmcb02->control.misc_ctl2 & SVM_MISC2_ENABLE_V_VMLOAD_VMSAVE));
 	}
+
+	/*
+	 * If KVM is intercepting VMLOAD/VMSAVE, virtual VMLOAD/VMSAVE must be
+	 * off, or hardware would honor the virtualization and render the
+	 * intercept inert.
+	 */
+	WARN_ON_ONCE(vmcb_is_intercept(&vmcb02->control, INTERCEPT_VMLOAD) &&
+		     (vmcb02->control.misc_ctl2 & SVM_MISC2_ENABLE_V_VMLOAD_VMSAVE));
 }
 
 /*
@@ -993,6 +1001,13 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm)
 	}
 
 	/* SVM_MISC2_ENABLE_V_LBR is controlled by svm_update_lbrv() */
+
+	/*
+	 * vmcb02 is reused across nested VMRUNs and the VLS bit below is only
+	 * OR-set, so clear it first; a stale bit would let L2 run VMLOAD/VMSAVE
+	 * unintercepted even on a VMRUN that asks KVM to intercept them.
+	 */
+	vmcb02->control.misc_ctl2 &= ~SVM_MISC2_ENABLE_V_VMLOAD_VMSAVE;
 
 	if (!nested_vmcb_needs_vls_intercept(svm))
 		vmcb02->control.misc_ctl2 |= SVM_MISC2_ENABLE_V_VMLOAD_VMSAVE;
