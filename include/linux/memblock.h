@@ -52,6 +52,8 @@ extern unsigned long long max_possible_pfn;
  * kernel that we know is good to use. It is the only memory that
  * allocations may happen from in this phase.
  * @MEMBLOCK_RSRV_HUGETLB: memory is reserved for hugetlb pages
+ * @MEMBLOCK_RSRV_HWPOISON: reserved memory region holding frames an earlier
+ * kernel found to be hardware-poisoned.
  */
 enum memblock_flags {
 	MEMBLOCK_NONE		= 0x0,	/* No special request */
@@ -63,6 +65,7 @@ enum memblock_flags {
 	MEMBLOCK_RSRV_KERN	= 0x20,	/* memory reserved for kernel use */
 	MEMBLOCK_KHO_SCRATCH	= 0x40,	/* scratch memory for kexec handover */
 	MEMBLOCK_RSRV_HUGETLB	= 0x80, /* memory reserved for hugetlb pages */
+	MEMBLOCK_RSRV_HWPOISON	= 0x100, /* poisoned by an earlier kernel */
 };
 
 /**
@@ -141,6 +144,8 @@ static __always_inline int memblock_reserve_kern(phys_addr_t base, phys_addr_t s
 {
 	return __memblock_reserve(base, size, NUMA_NO_NODE, MEMBLOCK_RSRV_KERN);
 }
+
+int memblock_reserve_hwpoison(phys_addr_t base, phys_addr_t size);
 
 #ifdef CONFIG_HAVE_MEMBLOCK_PHYS_MAP
 int memblock_physmem_add(phys_addr_t base, phys_addr_t size);
@@ -293,6 +298,11 @@ static inline bool memblock_is_nomap(struct memblock_region *m)
 static inline bool memblock_is_reserved_noinit(struct memblock_region *m)
 {
 	return m->flags & MEMBLOCK_RSRV_NOINIT;
+}
+
+static inline bool memblock_is_reserved_hwpoison(struct memblock_region *m)
+{
+	return m->flags & MEMBLOCK_RSRV_HWPOISON;
 }
 
 static inline bool memblock_is_driver_managed(struct memblock_region *m)

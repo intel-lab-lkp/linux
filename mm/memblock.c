@@ -36,6 +36,9 @@
 # define INIT_MEMBLOCK_RESERVED_REGIONS		INIT_MEMBLOCK_REGIONS
 #endif
 
+/* Reserved slots memblock_reserve_hwpoison() leaves free until a resize. */
+#define MEMBLOCK_HWPOISON_SPARE			32
+
 #ifndef INIT_MEMBLOCK_MEMORY_REGIONS
 #define INIT_MEMBLOCK_MEMORY_REGIONS		INIT_MEMBLOCK_REGIONS
 #endif
@@ -1013,6 +1016,55 @@ int __init_memblock __memblock_reserve(phys_addr_t base, phys_addr_t size,
 		     &base, &end, nid, flags, (void *)_RET_IP_);
 
 	return memblock_add_range(&memblock.reserved, base, size, nid, flags);
+}
+
+int __init memblock_reserve_hwpoison(phys_addr_t base, phys_addr_t size)
+{
+	phys_addr_t end = base + size;
+	bool reserved = false;
+	int err = 0;
+
+	while (base < end) {
+		phys_addr_t next = end;
+		struct memblock_region *r;
+		bool covered = false;
+
+		for_each_reserved_mem_region(r) {
+			if (r->base + r->size <= base)
+				continue;
+			if (r->base >= end)
+				break;
+			if (PAGE_ALIGN_DOWN(r->base) <= base) {
+				base = min(end, PAGE_ALIGN(r->base + r->size));
+				covered = true;
+			} else {
+				next = PAGE_ALIGN_DOWN(r->base);
+			}
+			break;
+		}
+		if (covered)
+			continue;
+
+		if (!memblock_can_resize &&
+		    memblock.reserved.cnt + MEMBLOCK_HWPOISON_SPARE >=
+		    memblock.reserved.max) {
+			err = -ENOSPC;
+			break;
+		}
+
+		err = __memblock_reserve(base, next - base, NUMA_NO_NODE,
+					 MEMBLOCK_RSRV_HWPOISON);
+		if (err)
+			break;
+
+		reserved = true;
+		base = next;
+	}
+
+	if (err)
+		return err;
+
+	return reserved ? 0 : -EBUSY;
 }
 
 #ifdef CONFIG_HAVE_MEMBLOCK_PHYS_MAP
@@ -2394,6 +2446,27 @@ static void __init memmap_init_reserved_range(phys_addr_t start,
 	}
 }
 
+/*
+ * Frames an earlier kernel found poisoned end up as a frame poisoned by this
+ * kernel would: PG_hwpoison, not PG_reserved. Holes in the range stay reserved.
+ */
+static void __init memmap_init_hwpoison_range(phys_addr_t start,
+					      phys_addr_t end, int nid)
+{
+	unsigned long pfn;
+
+	for_each_valid_pfn(pfn, PFN_DOWN(start), PFN_UP(end)) {
+		struct page *page = pfn_to_page(pfn);
+
+		init_deferred_page(pfn, nid);
+
+		if (memblock_is_map_memory(PFN_PHYS(pfn)))
+			hwpoison_boot_page(page);
+		else
+			__SetPageReserved(page);
+	}
+}
+
 static void __init memmap_init_reserved_pages(void)
 {
 	struct memblock_region *region;
@@ -2438,7 +2511,10 @@ repeat:
 			if (!numa_valid_node(nid))
 				nid = early_pfn_to_nid(PFN_DOWN(start));
 
-			memmap_init_reserved_range(start, end, nid);
+			if (memblock_is_reserved_hwpoison(region))
+				memmap_init_hwpoison_range(start, end, nid);
+			else
+				memmap_init_reserved_range(start, end, nid);
 		}
 	}
 }
@@ -2874,6 +2950,8 @@ static const char * const flagname[] = {
 	[ilog2(MEMBLOCK_RSRV_NOINIT)] = "RSV_NIT",
 	[ilog2(MEMBLOCK_RSRV_KERN)] = "RSV_KERN",
 	[ilog2(MEMBLOCK_KHO_SCRATCH)] = "KHO_SCRATCH",
+	[ilog2(MEMBLOCK_RSRV_HUGETLB)] = "RSV_HUGETLB",
+	[ilog2(MEMBLOCK_RSRV_HWPOISON)] = "RSV_HWPOISON",
 };
 
 static int memblock_debug_show(struct seq_file *m, void *private)
