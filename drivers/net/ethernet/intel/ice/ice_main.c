@@ -776,8 +776,9 @@ static void ice_print_topo_conflict(struct ice_vsi *vsi)
  * ice_print_link_msg - print link up or down message
  * @vsi: the VSI whose link status is being queried
  * @isup: boolean for if the link is now up or down
+ * @link_speed: current link speed value to display
  */
-void ice_print_link_msg(struct ice_vsi *vsi, bool isup)
+void ice_print_link_msg(struct ice_vsi *vsi, bool isup, u16 link_speed)
 {
 	struct ice_aqc_get_phy_caps_data *caps;
 	const char *an_advertised;
@@ -801,7 +802,7 @@ void ice_print_link_msg(struct ice_vsi *vsi, bool isup)
 		return;
 	}
 
-	switch (vsi->port_info->phy.link_info.link_speed) {
+	switch (link_speed) {
 	case ICE_AQ_LINK_SPEED_200GB:
 		speed = "200 G";
 		break;
@@ -1112,7 +1113,8 @@ ice_link_event(struct ice_pf *pf, struct ice_port_info *pi, bool link_up,
 	struct ice_vsi *vsi;
 	u16 old_link_speed;
 	bool old_link;
-	int status;
+	bool changed;
+	int err;
 
 	phy_info = &pi->phy;
 	phy_info->link_info_old = phy_info->link_info;
@@ -1120,22 +1122,31 @@ ice_link_event(struct ice_pf *pf, struct ice_port_info *pi, bool link_up,
 	old_link = !!(phy_info->link_info_old.link_info & ICE_AQ_LINK_UP);
 	old_link_speed = phy_info->link_info_old.link_speed;
 
+	/* don't drop an event that the refreshed link info no longer shows */
+	changed = link_up != old_link || link_speed != old_link_speed;
+
 	/* update the link info structures and re-enable link events,
 	 * don't bail on failure due to other book keeping needed
 	 */
-	status = ice_update_link_info(pi);
-	if (status)
+	err = ice_aq_get_link_info(pi, true, NULL, NULL);
+	if (!err) {
+		link_up = phy_info->link_info.link_info & ICE_AQ_LINK_UP;
+		link_speed = phy_info->link_info.link_speed;
+		err = ice_update_media_caps(pi);
+	} else {
+		/* read failed, keep the cache in sync with the applied state */
+		if (link_up)
+			phy_info->link_info.link_info |= ICE_AQ_LINK_UP;
+		else
+			phy_info->link_info.link_info &= ~ICE_AQ_LINK_UP;
+		phy_info->link_info.link_speed = link_speed;
+	}
+	if (err)
 		dev_dbg(dev, "Failed to update link status on port %d, err %d aq_err %s\n",
-			pi->lport, status,
+			pi->lport, err,
 			libie_aq_str(pi->hw->adminq.sq_last_status));
 
 	ice_check_link_cfg_err(pf, pi->phy.link_info.link_cfg_err);
-
-	/* Check if the link state is up after updating link info, and treat
-	 * this event as an UP event since the link is actually UP now.
-	 */
-	if (phy_info->link_info.link_info & ICE_AQ_LINK_UP)
-		link_up = true;
 
 	vsi = ice_get_main_vsi(pf);
 	if (!vsi || !vsi->port_info)
@@ -1150,8 +1161,9 @@ ice_link_event(struct ice_pf *pf, struct ice_port_info *pi, bool link_up,
 
 	ice_ptp_link_change(pf, link_up);
 
-	/* if the old link up/down and speed is the same as the new */
-	if (link_up == old_link && link_speed == old_link_speed)
+	/* nothing to do if neither the event nor the refreshed state changed */
+	changed |= link_up != old_link || link_speed != old_link_speed;
+	if (!changed)
 		return 0;
 
 	if (!link_up && old_link)
@@ -1165,7 +1177,7 @@ ice_link_event(struct ice_pf *pf, struct ice_port_info *pi, bool link_up,
 			ice_set_dflt_mib(pf);
 	}
 	ice_vsi_link_event(vsi, link_up);
-	ice_print_link_msg(vsi, link_up);
+	ice_print_link_msg(vsi, link_up, link_speed);
 
 	ice_vc_notify_link_state(pf);
 
@@ -6778,7 +6790,8 @@ static int ice_up_complete(struct ice_vsi *vsi)
 	    (vsi->port_info->phy.link_info.link_info & ICE_AQ_LINK_UP) &&
 	    ((vsi->netdev && (vsi->type == ICE_VSI_PF ||
 			      vsi->type == ICE_VSI_SF)))) {
-		ice_print_link_msg(vsi, true);
+		ice_print_link_msg(vsi, true,
+				   vsi->port_info->phy.link_info.link_speed);
 		netif_tx_start_all_queues(vsi->netdev);
 		netif_carrier_on(vsi->netdev);
 	}
