@@ -4920,7 +4920,7 @@ static int ieee80211_set_antenna(struct wiphy *wiphy, int radio_idx,
 	int ret;
 
 	if (local->started)
-		return -EOPNOTSUPP;
+		return -EBUSY;
 
 	ret = drv_set_antenna(local, tx_ant, rx_ant);
 	if (ret)
