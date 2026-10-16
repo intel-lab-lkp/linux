@@ -843,6 +843,12 @@ static int snd_dummy_iobox_put(struct snd_kcontrol *kcontrol,
 
 	changed = value->value.enumerated.item[0] != dummy->iobox;
 	if (changed) {
+		dummy->cd_switch_ctl =
+			snd_ctl_find_id_mixer(dummy->card,
+					      "CD Capture Switch");
+		if (!dummy->cd_switch_ctl)
+			return -ENOENT;
+
 		dummy->iobox = value->value.enumerated.item[0];
 
 		if (dummy->iobox) {
