@@ -216,6 +216,33 @@ static inline bool kfd_svm_vm_covers_user_va(struct amdgpu_device *adev)
 		AMDGPU_GMC_HOLE_START;
 }
 
+/*
+ * A range is mappable on adev only if it lies below both the page table
+ * limit and the GPUVM address hole. start and last are CPU page indices
+ * and are inclusive, matching svm_range.start and svm_range.last.
+ *
+ * Each GPU is checked against its own limits, so a range that only some
+ * GPUs can represent is rejected for those GPUs alone.
+ *
+ * The parameter must be named adev since AMDGPU_GMC_HOLE_START references
+ * adev->vm_manager.max_level.
+ */
+static inline bool kfd_svm_range_fits_gpu(struct amdgpu_device *adev,
+					  uint64_t start, uint64_t last)
+{
+	uint64_t limit;
+
+	/* Rejects empty and wrapped ranges, so last bounds start as well. */
+	if (start > last)
+		return false;
+
+	/* First CPU page the GPUVM cannot represent. */
+	limit = min(adev->vm_manager.max_pfn << AMDGPU_GPU_PAGE_SHIFT,
+		    AMDGPU_GMC_HOLE_START) >> PAGE_SHIFT;
+
+	return last < limit;
+}
+
 /* SVM API and HMM page migration work together, device memory type
  * is initialized to not 0 when page migration register device memory.
  */

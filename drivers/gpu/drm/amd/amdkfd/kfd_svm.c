@@ -1427,6 +1427,16 @@ svm_range_unmap_from_gpu(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 		return -EINVAL;
 	}
 
+	/* Such a range was rejected by svm_range_map_to_gpu() and so was
+	 * never mapped. Skip it rather than failing, since unmap is also
+	 * used on the eviction and process teardown paths.
+	 */
+	if (!kfd_svm_range_fits_gpu(adev, start, last)) {
+		pr_debug("CPU[0x%llx 0x%llx] exceeds GPUVM, skipping unmap\n",
+			 start, last);
+		return 0;
+	}
+
 	return amdgpu_vm_update_range(adev, vm, false, true, true, false, NULL, gpu_start,
 				      gpu_end, init_pte_value, 0, 0, NULL, NULL,
 				      fence);
@@ -1501,6 +1511,16 @@ svm_range_map_to_gpu(struct kfd_process_device *pdd, struct svm_range *prange,
 
 	if (!amdgpu_vm_ready(vm)) {
 		pr_debug("VM not ready, canceling map\n");
+		return -EINVAL;
+	}
+
+	/* Last line of defence before amdgpu_vm_update_range() walks the
+	 * page tables with these PFNs.
+	 */
+	if (npages && !kfd_svm_range_fits_gpu(adev, last_start,
+					      last_start + npages - 1)) {
+		pr_debug("CPU[0x%lx 0x%lx] exceeds GPUVM, canceling map\n",
+			 last_start, last_start + npages - 1);
 		return -EINVAL;
 	}
 
@@ -1601,6 +1621,20 @@ svm_range_map_to_gpus(struct svm_range *prange, unsigned long offset,
 		if (bo_adev && pdd->dev->adev != bo_adev &&
 		    !amdgpu_xgmi_same_hive(pdd->dev->adev, bo_adev)) {
 			pr_debug("cannot map to device idx %d\n", gpuidx);
+			continue;
+		}
+
+		/* GPUs in the same process can have different address limits.
+		 * Skip the ones that cannot represent this range instead of
+		 * failing the whole mapping.
+		 */
+		if (npages && !kfd_svm_range_fits_gpu(pdd->dev->adev,
+						      prange->start + offset,
+						      prange->start + offset +
+						      npages - 1)) {
+			pr_debug("device idx %d cannot map CPU[0x%lx 0x%lx]\n",
+				 gpuidx, prange->start + offset,
+				 prange->start + offset + npages - 1);
 			continue;
 		}
 
@@ -3093,6 +3127,14 @@ svm_range_restore_pages(struct amdgpu_device *adev, unsigned int pasid,
 
 	if (!KFD_IS_SVM_API_SUPPORTED(adev)) {
 		pr_debug("device does not support SVM\n");
+		return -EFAULT;
+	}
+
+	/* addr is a CPU page index here. Reject faults the GPUVM cannot
+	 * represent before any range is looked up or migrated.
+	 */
+	if (!kfd_svm_range_fits_gpu(adev, addr, addr)) {
+		pr_debug("fault address 0x%llx exceeds GPUVM\n", addr);
 		return -EFAULT;
 	}
 
