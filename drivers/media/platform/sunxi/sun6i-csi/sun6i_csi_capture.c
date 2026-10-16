@@ -41,6 +41,12 @@ void sun6i_csi_capture_format(struct sun6i_csi_device *csi_dev,
 		*field = csi_dev->capture.format.fmt.pix.field;
 }
 
+static unsigned int sun6i_csi_capture_format_align(u32 pixelformat)
+{
+	/* Returns log2 of the required alignment. */
+	return pixelformat == V4L2_PIX_FMT_NV12_16L16 ? 4 : 1;
+}
+
 /* Format */
 
 static const struct sun6i_csi_capture_format sun6i_csi_capture_formats[] = {
@@ -665,16 +671,18 @@ static void sun6i_csi_capture_format_prepare(struct v4l2_format *format)
 {
 	struct v4l2_pix_format *pix_format = &format->fmt.pix;
 	const struct v4l2_format_info *info;
-	unsigned int width, height;
-
-	v4l_bound_align_image(&pix_format->width, SUN6I_CSI_CAPTURE_WIDTH_MIN,
-			      SUN6I_CSI_CAPTURE_WIDTH_MAX, 1,
-			      &pix_format->height, SUN6I_CSI_CAPTURE_HEIGHT_MIN,
-			      SUN6I_CSI_CAPTURE_HEIGHT_MAX, 1, 0);
+	unsigned int width, height, align;
 
 	if (!sun6i_csi_capture_format_find(pix_format->pixelformat))
 		pix_format->pixelformat =
 			sun6i_csi_capture_formats[0].pixelformat;
+
+	align = sun6i_csi_capture_format_align(pix_format->pixelformat);
+
+	v4l_bound_align_image(&pix_format->width, SUN6I_CSI_CAPTURE_WIDTH_MIN,
+			      SUN6I_CSI_CAPTURE_WIDTH_MAX, align,
+			      &pix_format->height, SUN6I_CSI_CAPTURE_HEIGHT_MIN,
+			      SUN6I_CSI_CAPTURE_HEIGHT_MAX, align, 0);
 
 	width = pix_format->width;
 	height = pix_format->height;
