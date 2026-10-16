@@ -1007,6 +1007,9 @@ void __init setup_arch(char **cmdline_p)
 	if (efi_enabled(EFI_BOOT))
 		efi_init();
 
+	/* Poisoned units go after the image, the initrd and setup_data. */
+	efi_poisoned_memory_reserve_units();
+
 	reserve_ibft_region();
 	x86_init.resources.dmi_setup();
 
