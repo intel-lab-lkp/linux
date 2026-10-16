@@ -149,6 +149,18 @@
 	linux,code = <KEY_VOLUMEDOWN>;
 };
 
+&pm8916_rpm_regulators {
+	pm8916_l16: l16 {
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	pm8916_l17: l17 {
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
+	};
+};
+
 &sdhc_1 {
 	status = "okay";
 };
@@ -244,6 +256,13 @@
 		pins = "gpio38";
 		function = "gpio";
 
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	proxy_int_default: proxy-int-default-state {
+		pins = "gpio113";
+		function = "gpio";
 		drive-strength = <2>;
 		bias-disable;
 	};
