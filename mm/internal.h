@@ -1169,6 +1169,7 @@ void SetPageHWPoisonTakenOff(struct page *page);
 void ClearPageHWPoisonTakenOff(struct page *page);
 bool take_page_off_buddy(struct page *page);
 bool put_page_back_buddy(struct page *page);
+void __init hwpoison_boot_page(struct page *page);
 struct task_struct *task_early_kill(struct task_struct *tsk, int force_early);
 void add_to_kill_ksm(struct task_struct *tsk, const struct page *p,
 		     struct vm_area_struct *vma, struct list_head *to_kill,
@@ -1180,6 +1181,10 @@ unsigned long page_mapped_in_vma(const struct page *page,
 static inline int unmap_poisoned_folio(struct folio *folio, unsigned long pfn, bool must_kill)
 {
 	return -EBUSY;
+}
+
+static inline void hwpoison_boot_page(struct page *page)
+{
 }
 #endif
 

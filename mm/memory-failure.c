@@ -96,6 +96,14 @@ void num_poisoned_pages_sub(unsigned long pfn, long i)
 		memblk_nr_poison_sub(pfn, i);
 }
 
+void __init hwpoison_boot_page(struct page *page)
+{
+	SetPageHWPoison(page);
+	atomic_long_inc(&num_poisoned_pages);
+	hw_memory_failure = true;
+	adjust_managed_page_count(page, 1);
+}
+
 /*
  * Return the first or the last hardware-poisoned online page in [start,
  * start + size), or PHYS_ADDR_MAX if the range is clean.
