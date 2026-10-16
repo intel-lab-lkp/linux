@@ -134,7 +134,7 @@ struct snd_dummy {
 	int mixer_volume[MIXER_ADDR_LAST+1][2];
 	int capture_source[MIXER_ADDR_LAST+1][2];
 	int iobox;
-	struct snd_kcontrol *cd_volume_ctl;
+	struct snd_ctl_elem_id cd_volume_id;
 	struct snd_kcontrol *cd_switch_ctl;
 };
 
@@ -836,6 +836,7 @@ static int snd_dummy_iobox_put(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *value)
 {
 	struct snd_dummy *dummy = snd_kcontrol_chip(kcontrol);
+	struct snd_kcontrol *cd_volume_ctl;
 	int changed;
 
 	if (value->value.enumerated.item[0] > 1)
@@ -845,20 +846,27 @@ static int snd_dummy_iobox_put(struct snd_kcontrol *kcontrol,
 	if (changed) {
 		dummy->iobox = value->value.enumerated.item[0];
 
+		/* The control-write path holds controls_rwsem. */
+		cd_volume_ctl = snd_ctl_find_id(dummy->card,
+						&dummy->cd_volume_id);
 		if (dummy->iobox) {
-			dummy->cd_volume_ctl->vd[0].access &=
-				~SNDRV_CTL_ELEM_ACCESS_INACTIVE;
+			if (cd_volume_ctl)
+				cd_volume_ctl->vd[0].access &=
+					~SNDRV_CTL_ELEM_ACCESS_INACTIVE;
 			dummy->cd_switch_ctl->vd[0].access &=
 				~SNDRV_CTL_ELEM_ACCESS_INACTIVE;
 		} else {
-			dummy->cd_volume_ctl->vd[0].access |=
-				SNDRV_CTL_ELEM_ACCESS_INACTIVE;
+			if (cd_volume_ctl)
+				cd_volume_ctl->vd[0].access |=
+					SNDRV_CTL_ELEM_ACCESS_INACTIVE;
 			dummy->cd_switch_ctl->vd[0].access |=
 				SNDRV_CTL_ELEM_ACCESS_INACTIVE;
 		}
 
-		snd_ctl_notify(dummy->card, SNDRV_CTL_EVENT_MASK_INFO,
-			       &dummy->cd_volume_ctl->id);
+		if (cd_volume_ctl)
+			snd_ctl_notify(dummy->card,
+				       SNDRV_CTL_EVENT_MASK_INFO,
+				       &cd_volume_ctl->id);
 		snd_ctl_notify(dummy->card, SNDRV_CTL_EVENT_MASK_INFO,
 			       &dummy->cd_switch_ctl->id);
 	}
@@ -903,7 +911,7 @@ static int snd_card_dummy_new_mixer(struct snd_dummy *dummy)
 		if (err < 0)
 			return err;
 		if (!strcmp(kcontrol->id.name, "CD Volume"))
-			dummy->cd_volume_ctl = kcontrol;
+			dummy->cd_volume_id = kcontrol->id;
 		else if (!strcmp(kcontrol->id.name, "CD Capture Switch"))
 			dummy->cd_switch_ctl = kcontrol;
 
