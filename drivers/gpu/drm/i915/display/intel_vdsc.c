@@ -261,7 +261,7 @@ calculate_rc_params(struct drm_dsc_config *vdsc_cfg)
 		 * and so on.
 		 * 0.5 fractional part with 4 decimal precision becomes 5000
 		 */
-		bpp_i  = ((bpp - 6) + (fractional_bits < 5000 ? 0 : 1));
+		bpp_i  = (2 * (bpp - 6) + (fractional_bits < 5000 ? 0 : 1));
 
 		for (buf_i = 0; buf_i < DSC_NUM_BUF_RANGES; buf_i++) {
 			u8 range_bpg_offset;
