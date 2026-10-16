@@ -10,8 +10,10 @@ use crate::{
     bindings,
     error::{
         code::*,
+        Error,
         Result, //
     },
+    mm::Mm,
     uaccess::UserSliceReader, //
 };
 use core::{
@@ -195,6 +197,28 @@ impl Page {
         Ok(Self { page })
     }
 
+    /// Allocates a new page and charges it to the memory cgroup of `mm`.
+    #[inline]
+    pub fn alloc_page_memcg(flags: Flags, mm: &Mm) -> Result<Self, MemcgAllocError> {
+        let page = Self::alloc_page(flags)?;
+        // Note: Charging the folio with `mem_cgroup_charge()` only works because `Page::drop` uses
+        // `put_page()` (which uncharges the folio before freeing it) rather than `__free_pages()`.
+        //
+        // SAFETY: `page` was just allocated, so we hold the only reference to it and it is not
+        // yet charged to any memcg. `mm.as_raw()` is a valid pointer to an `mm_struct`.
+        let ret = unsafe {
+            bindings::mem_cgroup_charge(
+                bindings::page_folio(page.as_ptr()),
+                mm.as_raw(),
+                flags.as_raw(),
+            )
+        };
+        if ret != 0 {
+            return Err(MemcgAllocError::Memcg);
+        }
+        Ok(page)
+    }
+
     /// Returns a raw pointer to the page.
     pub fn as_ptr(&self) -> *mut bindings::page {
         self.page.as_ptr()
@@ -376,7 +400,31 @@ impl Page {
 impl Drop for Page {
     #[inline]
     fn drop(&mut self) {
+        // We need to use `put_page()` instead of `__free_pages()` to properly handle memcg
+        // accounting.
+        //
         // SAFETY: By the type invariants, we have ownership of the page and can free it.
-        unsafe { bindings::__free_pages(self.page.as_ptr(), 0) };
+        unsafe { bindings::put_page(self.page.as_ptr()) };
+    }
+}
+
+/// Error returned by [`Page::alloc_page_memcg`].
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum MemcgAllocError {
+    /// Allocating the page failed.
+    Alloc,
+    /// Charging the page to the memory cgroup failed.
+    Memcg,
+}
+
+impl From<AllocError> for MemcgAllocError {
+    fn from(_: AllocError) -> Self {
+        Self::Alloc
+    }
+}
+
+impl From<MemcgAllocError> for Error {
+    fn from(_: MemcgAllocError) -> Error {
+        ENOMEM
     }
 }
