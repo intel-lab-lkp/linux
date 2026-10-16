@@ -421,6 +421,7 @@ static void snd_jack_kctl_private_free(struct snd_kcontrol *kctl)
 
 static void snd_jack_kctl_add(struct snd_jack *jack, struct snd_jack_kctl *jack_kctl)
 {
+	guard(rwsem_read)(&jack->card->controls_rwsem);
 	jack_kctl->jack = jack;
 	list_add_tail(&jack_kctl->list, &jack->kctl_list);
 	snd_jack_debugfs_add_inject_node(jack, jack_kctl);
