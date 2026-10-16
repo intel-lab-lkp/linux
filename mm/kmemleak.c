@@ -1696,8 +1696,10 @@ static void scan_gray_list(void)
  * Conditionally call resched() in an object iteration loop while making sure
  * that the given object won't go away without RCU read lock by performing a
  * get_object() if necessaary.
+ * If @scan_gray is set, also scan the gray list while the RCU lock is dropped.
  */
-static void kmemleak_cond_resched(struct kmemleak_object *object)
+static void kmemleak_cond_resched(struct kmemleak_object *object,
+				  bool scan_gray)
 {
 	if (!get_object(object))
 		return;	/* Try next object */
@@ -1709,6 +1711,8 @@ static void kmemleak_cond_resched(struct kmemleak_object *object)
 	raw_spin_unlock_irq(&kmemleak_lock);
 
 	rcu_read_unlock();
+	if (scan_gray)
+		scan_gray_list();
 	cond_resched_tasks_rcu_qs();
 	rcu_read_lock();
 
@@ -1910,7 +1914,7 @@ static int __kmemleak_scan(bool full)
 		raw_spin_unlock_irq(&object->lock);
 
 		if (need_resched())
-			kmemleak_cond_resched(object);
+			kmemleak_cond_resched(object, false);
 	}
 	rcu_read_unlock();
 
@@ -1981,8 +1985,13 @@ scan_gray:
 	 */
 	rcu_read_lock();
 	list_for_each_entry_rcu(object, &object_list, object_list) {
-		if (need_resched())
-			kmemleak_cond_resched(object);
+		/*
+		 * Scan newly grayed objects now, not after the walk: one may
+		 * hold the only reference to another and be freed by then,
+		 * like a maple tree node that keeps being replaced.
+		 */
+		if (need_resched() || !list_empty(&gray_list))
+			kmemleak_cond_resched(object, true);
 
 		/*
 		 * This is racy but we can save the overhead of lock/unlock
@@ -2082,7 +2091,7 @@ static void kmemleak_scan(void)
 		bool dedup_print;
 
 		if (need_resched())
-			kmemleak_cond_resched(object);
+			kmemleak_cond_resched(object, false);
 
 		/*
 		 * This is racy but we can save the overhead of lock/unlock
