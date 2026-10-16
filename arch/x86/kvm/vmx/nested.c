@@ -3311,6 +3311,24 @@ static int nested_check_guest_non_reg_state(struct vmcs12 *vmcs12)
 	       vmcs12->guest_activity_state != GUEST_ACTIVITY_WAIT_SIPI))
 		return -EINVAL;
 
+	/*
+	 * The activity state must be active if the interruptibility state
+	 * blocks by STI or MOV SS.
+	 */
+	if (CC(vmcs12->guest_activity_state != GUEST_ACTIVITY_ACTIVE &&
+	       (vmcs12->guest_interruptibility_info &
+		(GUEST_INTR_STATE_STI | GUEST_INTR_STATE_MOV_SS))))
+		return -EINVAL;
+
+	/*
+	 * An injected event must not be one that would be blocked in the
+	 * guest's activity state; no interruptions are allowed in the
+	 * wait-for-SIPI state.
+	 */
+	if (vmcs12->guest_activity_state == GUEST_ACTIVITY_WAIT_SIPI &&
+	    CC(vmcs12->vm_entry_intr_info_field & INTR_INFO_VALID_MASK))
+		return -EINVAL;
+
 	return 0;
 }
 
