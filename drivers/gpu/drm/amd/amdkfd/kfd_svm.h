@@ -203,11 +203,25 @@ struct kfd_process_device *
 svm_range_get_pdd_by_node(struct svm_range *prange, struct kfd_node *node);
 void svm_range_list_lock_and_flush_work(struct svm_range_list *svms, struct mm_struct *mm);
 
+/*
+ * SVM uses CPU virtual addresses for GPU mappings. Disable SVM if the GPUVM
+ * address range cannot cover the required CPU address range.
+ *
+ * The parameter must be named adev since AMDGPU_GMC_HOLE_START references
+ * adev->vm_manager.max_level.
+ */
+static inline bool kfd_svm_vm_covers_user_va(struct amdgpu_device *adev)
+{
+	return (adev->vm_manager.max_pfn << AMDGPU_GPU_PAGE_SHIFT) >=
+		AMDGPU_GMC_HOLE_START;
+}
+
 /* SVM API and HMM page migration work together, device memory type
  * is initialized to not 0 when page migration register device memory.
  */
-#define KFD_IS_SVM_API_SUPPORTED(adev) ((adev)->kfd.pgmap.type != 0 ||\
-					((adev)->apu_prefer_gtt))
+#define KFD_IS_SVM_API_SUPPORTED(adev)					\
+	(((adev)->kfd.pgmap.type != 0 || (adev)->apu_prefer_gtt) &&	\
+	 kfd_svm_vm_covers_user_va(adev))
 
 void svm_range_bo_unref_async(struct svm_range_bo *svm_bo);
 
