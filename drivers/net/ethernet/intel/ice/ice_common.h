@@ -93,6 +93,7 @@ ice_clean_rq_elem(struct ice_hw *hw, struct ice_ctl_q_info *cq,
 		  struct ice_rq_event_info *e, u16 *pending);
 int
 ice_get_link_status(struct ice_port_info *pi, bool *link_up);
+int ice_update_media_caps(struct ice_port_info *pi);
 int ice_update_link_info(struct ice_port_info *pi);
 int
 ice_acquire_res(struct ice_hw *hw, enum ice_aq_res_ids res,

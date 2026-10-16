@@ -3638,35 +3638,42 @@ ice_aq_set_phy_cfg(struct ice_hw *hw, struct ice_port_info *pi,
 }
 
 /**
+ * ice_update_media_caps - refresh the PHY capabilities of the present media
+ * @pi: port info structure of the interested logical port
+ *
+ * Return: 0 on success or if no media is available, negative on failure.
+ */
+int ice_update_media_caps(struct ice_port_info *pi)
+{
+	struct ice_aqc_get_phy_caps_data *pcaps __free(kfree) = NULL;
+
+	if (!(pi->phy.link_info.link_info & ICE_AQ_MEDIA_AVAILABLE))
+		return 0;
+
+	pcaps = kzalloc_obj(*pcaps);
+	if (!pcaps)
+		return -ENOMEM;
+
+	return ice_aq_get_phy_caps(pi, false, ICE_AQC_REPORT_TOPO_CAP_MEDIA,
+				   pcaps, NULL);
+}
+
+/**
  * ice_update_link_info - update status of the HW network link
  * @pi: port info structure of the interested logical port
  */
 int ice_update_link_info(struct ice_port_info *pi)
 {
-	struct ice_link_status *li;
 	int status;
 
 	if (!pi)
 		return -EINVAL;
 
-	li = &pi->phy.link_info;
-
 	status = ice_aq_get_link_info(pi, true, NULL, NULL);
 	if (status)
 		return status;
 
-	if (li->link_info & ICE_AQ_MEDIA_AVAILABLE) {
-		struct ice_aqc_get_phy_caps_data *pcaps __free(kfree) = NULL;
-
-		pcaps = kzalloc_obj(*pcaps);
-		if (!pcaps)
-			return -ENOMEM;
-
-		status = ice_aq_get_phy_caps(pi, false, ICE_AQC_REPORT_TOPO_CAP_MEDIA,
-					     pcaps, NULL);
-	}
-
-	return status;
+	return ice_update_media_caps(pi);
 }
 
 /**
