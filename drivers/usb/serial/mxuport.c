@@ -265,7 +265,32 @@ static bool mxuport_write_ready(struct usb_serial_port *port)
 {
 	struct mxuport_port *mxport = usb_get_serial_port_data(port);
 
-	return !(mxport->hold_reason & MX_WAIT_FOR_SEND_NEXT);
+	return !(mxport->hold_reason & (MX_WAIT_FOR_START_TX |
+					MX_WAIT_FOR_SEND_NEXT));
+}
+
+static void mxuport_stop(struct tty_struct *tty)
+{
+	struct usb_serial_port *port = tty->driver_data;
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+	unsigned long flags;
+
+	spin_lock_irqsave(&port->lock, flags);
+	mxport->hold_reason |= MX_WAIT_FOR_START_TX;
+	spin_unlock_irqrestore(&port->lock, flags);
+}
+
+static void mxuport_start(struct tty_struct *tty)
+{
+	struct usb_serial_port *port = tty->driver_data;
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+	unsigned long flags;
+
+	spin_lock_irqsave(&port->lock, flags);
+	mxport->hold_reason &= ~MX_WAIT_FOR_START_TX;
+	spin_unlock_irqrestore(&port->lock, flags);
+
+	usb_serial_generic_write_start(port, GFP_ATOMIC);
 }
 
 /*
@@ -1475,7 +1500,7 @@ static int mxuport_open(struct tty_struct *tty, struct usb_serial_port *port)
 
 	spin_lock_irqsave(&port->lock, flags);
 	mxport->sent_payload = 0;
-	mxport->hold_reason &= ~MX_WAIT_FOR_SEND_NEXT;
+	mxport->hold_reason &= ~(MX_WAIT_FOR_START_TX | MX_WAIT_FOR_SEND_NEXT);
 	spin_unlock_irqrestore(&port->lock, flags);
 
 	err = mxuport_recv_ctrl(serial, RQ_VENDOR_GET_MSR, 0,
@@ -1574,6 +1599,8 @@ static struct usb_serial_driver mxuport_device = {
 	.get_icount		= usb_serial_generic_get_icount,
 	.throttle		= mxuport_throttle,
 	.unthrottle		= mxuport_unthrottle,
+	.stop			= mxuport_stop,
+	.start			= mxuport_start,
 	.tiocmget		= mxuport_tiocmget,
 	.tiocmset		= mxuport_tiocmset,
 	.dtr_rts		= mxuport_dtr_rts,
