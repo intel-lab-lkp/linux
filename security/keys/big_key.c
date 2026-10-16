@@ -195,7 +195,7 @@ int big_key_update(struct key *key, struct key_preparsed_payload *prep)
 {
 	int ret;
 
-	ret = key_payload_reserve(key, prep->datalen);
+	ret = key_payload_reserve(key, prep->quotalen);
 	if (ret < 0)
 		return ret;
 
