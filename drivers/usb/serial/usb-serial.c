@@ -429,6 +429,22 @@ static void serial_unthrottle(struct tty_struct *tty)
 		port->serial->type->unthrottle(tty);
 }
 
+static void serial_stop(struct tty_struct *tty)
+{
+	struct usb_serial_port *port = tty->driver_data;
+
+	if (port->serial->type->stop)
+		port->serial->type->stop(tty);
+}
+
+static void serial_start(struct tty_struct *tty)
+{
+	struct usb_serial_port *port = tty->driver_data;
+
+	if (port->serial->type->start)
+		port->serial->type->start(tty);
+}
+
 static int serial_get_serial(struct tty_struct *tty, struct serial_struct *ss)
 {
 	struct usb_serial_port *port = tty->driver_data;
@@ -1351,6 +1367,8 @@ static const struct tty_operations serial_ops = {
 	.set_termios =		serial_set_termios,
 	.throttle =		serial_throttle,
 	.unthrottle =		serial_unthrottle,
+	.stop =			serial_stop,
+	.start =		serial_start,
 	.break_ctl =		serial_break,
 	.chars_in_buffer =	serial_chars_in_buffer,
 	.wait_until_sent =	serial_wait_until_sent,

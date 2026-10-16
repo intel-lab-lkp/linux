@@ -285,6 +285,8 @@ struct usb_serial_driver {
 	bool (*tx_empty)(struct usb_serial_port *port);
 	void (*throttle)(struct tty_struct *tty);
 	void (*unthrottle)(struct tty_struct *tty);
+	void (*stop)(struct tty_struct *tty);
+	void (*start)(struct tty_struct *tty);
 	int  (*tiocmget)(struct tty_struct *tty);
 	int  (*tiocmset)(struct tty_struct *tty,
 			 unsigned int set, unsigned int clear);
