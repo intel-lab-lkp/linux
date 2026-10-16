@@ -61,8 +61,6 @@
 
 #define PCIE_LOCAL_REG_QRTR_NODE_ID(ab) \
 	((ab)->hal.regs->qrtr_node_id)
-#define DOMAIN_NUMBER_MASK			GENMASK(7, 4)
-#define BUS_NUMBER_MASK				GENMASK(3, 0)
 
 #define PCI_BAR_WINDOW0_BASE	0x1E00000
 #define PCI_BAR_WINDOW0_END	0x1E7FFFC
@@ -73,8 +71,8 @@
 #define PCI_PARF_END		0x1E0BFFC
 #define PCI_MHIREGLEN_REG	0x1E0E100
 #define PCI_MHI_REGION_END	0x1E0EFFC
-#define QRTR_PCI_DOMAIN_NR_MASK		GENMASK(7, 4)
-#define QRTR_PCI_BUS_NUMBER_MASK	GENMASK(3, 0)
+#define QRTR_PCI_BUS_NUMBER_MASK	GENMASK(9, 6)
+#define QRTR_PCI_DOMAIN_NR_MASK		GENMASK(12, 10)
 
 struct ath12k_msi_user {
 	const char *name;

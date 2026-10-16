@@ -711,9 +711,14 @@ static void ath12k_pci_init_qmi_ce_config(struct ath12k_base *ab)
 	ab->qmi.service_ins_id = ab->hw_params->qmi_service_ins_id;
 
 	if (ath12k_fw_feature_supported(ab, ATH12K_FW_FEATURE_MULTI_QRTR_ID)) {
+		/*
+		 * QRTR NID layout: [12:10] domain, [9:6] bus, [5:0] proc_id.
+		 * proc_id is fixed for WLAN and is not encoded into qmi_instance.
+		 */
 		ab_pci->qmi_instance =
-			u32_encode_bits(pci_domain_nr(bus), DOMAIN_NUMBER_MASK) |
-			u32_encode_bits(bus->number, BUS_NUMBER_MASK);
+			u32_encode_bits(bus->number, QRTR_PCI_BUS_NUMBER_MASK) |
+			u32_encode_bits(pci_domain_nr(bus),
+					QRTR_PCI_DOMAIN_NR_MASK);
 		ab->qmi.service_ins_id += ab_pci->qmi_instance;
 	}
 }
