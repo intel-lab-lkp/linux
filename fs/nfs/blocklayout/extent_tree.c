@@ -696,6 +696,7 @@ ext_tree_mark_committed(struct nfs4_layoutcommit_args *arg, int status)
 	struct pnfs_block_layout *bl = BLK_LO2EXT(NFS_I(arg->inode)->layout);
 	struct rb_root *root = &bl->bl_ext_rw;
 	struct pnfs_block_extent *be;
+	bool uncommitted = false;
 
 	dprintk("%s status %d\n", __func__, status);
 
@@ -709,11 +710,13 @@ ext_tree_mark_committed(struct nfs4_layoutcommit_args *arg, int status)
 
 		if (status) {
 			/*
-			 * Mark as written and try again.
-			 *
-			 * XXX: some real error handling here wouldn't hurt..
+			 * The server may not have converted these blocks, so
+			 * what we wrote to them may not be part of the file.
+			 * Keep them for a later LAYOUTCOMMIT, but tell fsync
+			 * and close.
 			 */
 			be->be_tag = EXTENT_WRITTEN;
+			uncommitted = true;
 		} else {
 			be->be_state = PNFS_BLOCK_READWRITE_DATA;
 			be->be_tag = 0;
@@ -723,4 +726,9 @@ ext_tree_mark_committed(struct nfs4_layoutcommit_args *arg, int status)
 		be = ext_try_to_merge_right(root, be);
 	}
 	spin_unlock(&bl->bl_ext_lock);
+
+	if (uncommitted) {
+		filemap_set_wb_err(arg->inode->i_mapping, -EIO);
+		errseq_set(&arg->inode->i_sb->s_wb_err, -EIO);
+	}
 }

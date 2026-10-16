@@ -3444,7 +3444,13 @@ EXPORT_SYMBOL_GPL(pnfs_layoutcommit_inode);
 int
 pnfs_generic_sync(struct inode *inode, bool datasync)
 {
-	return pnfs_layoutcommit_inode(inode, true);
+	errseq_t since = filemap_sample_wb_err(inode->i_mapping);
+	int ret;
+
+	ret = pnfs_layoutcommit_inode(inode, true);
+	if (ret)
+		return ret;
+	return filemap_check_wb_err(inode->i_mapping, since);
 }
 EXPORT_SYMBOL_GPL(pnfs_generic_sync);
 
