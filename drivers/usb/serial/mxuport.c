@@ -148,6 +148,10 @@ static const u16 mxuport_mux50u_fw_ver_offsets[] = {
 
 #define RQ_VENDOR_GET_MSR		0x86 /* Get modem status register */
 
+/* Definitions for purge request */
+#define MX_PURGE_TX			0x04
+#define MX_PURGE_RX			0x08
+
 /* Definitions for UPort event type */
 #define UPORT_EVENT_NONE		0 /* None */
 #define UPORT_EVENT_TXBUF_THRESHOLD	1 /* Tx buffer threshold */
@@ -201,11 +205,12 @@ static const u16 mxuport_mux50u_fw_ver_offsets[] = {
 #define MX_WAIT_FOR_UNTHROTTLE		0x0020
 #define MX_WAIT_FOR_LOW_WATER		0x0040
 #define MX_WAIT_FOR_SEND_NEXT		0x0080
+#define MX_WAIT_FOR_PURGE		0x0100
 
 /* This structure holds all of the local port information */
 struct mxuport_port {
 	u32 sent_payload;
-	u8 hold_reason;
+	u16 hold_reason;
 	u8 mcr_state;		/* Last MCR state */
 	u8 msr_state;		/* Last MSR state */
 	struct serial_rs485 rs485;
@@ -266,7 +271,8 @@ static bool mxuport_write_ready(struct usb_serial_port *port)
 	struct mxuport_port *mxport = usb_get_serial_port_data(port);
 
 	return !(mxport->hold_reason & (MX_WAIT_FOR_START_TX |
-					MX_WAIT_FOR_SEND_NEXT));
+					MX_WAIT_FOR_SEND_NEXT |
+					MX_WAIT_FOR_PURGE));
 }
 
 static void mxuport_stop(struct tty_struct *tty)
@@ -952,6 +958,70 @@ static int mxuport_set_rs485_config(struct usb_serial_port *port,
 	return 0;
 }
 
+static void mxuport_tx_flush_start(struct usb_serial_port *port)
+{
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+	unsigned long flags;
+
+	spin_lock_irqsave(&port->lock, flags);
+	mxport->hold_reason |= MX_WAIT_FOR_PURGE;
+	kfifo_reset_out(&port->write_fifo);
+	spin_unlock_irqrestore(&port->lock, flags);
+}
+
+static void mxuport_tx_flush_done(struct usb_serial_port *port, bool purged)
+{
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+	unsigned long flags;
+
+	spin_lock_irqsave(&port->lock, flags);
+	if (purged) {
+		mxport->sent_payload = 0;
+		mxport->hold_reason &= ~MX_WAIT_FOR_SEND_NEXT;
+	}
+	mxport->hold_reason &= ~MX_WAIT_FOR_PURGE;
+	spin_unlock_irqrestore(&port->lock, flags);
+
+	usb_serial_generic_write_start(port, GFP_KERNEL);
+}
+
+static int mxuport_flush_buffer(struct tty_struct *tty,
+				unsigned long arg)
+{
+	struct usb_serial_port *port = tty->driver_data;
+	int err, ret;
+	u16 mask;
+
+	switch (arg) {
+	case TCIFLUSH:
+		mask = MX_PURGE_RX;
+		break;
+	case TCOFLUSH:
+		mask = MX_PURGE_TX;
+		break;
+	case TCIOFLUSH:
+		mask = MX_PURGE_RX | MX_PURGE_TX;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (mask & MX_PURGE_TX)
+		mxuport_tx_flush_start(port);
+
+	err = mxuport_send_ctrl_urb(port->serial, RQ_VENDOR_PURGE, mask,
+				    port->port_number);
+	ret = tty_perform_flush(tty, arg);
+
+	if (mask & MX_PURGE_TX)
+		mxuport_tx_flush_done(port, !err);
+
+	if (err)
+		return err;
+
+	return ret;
+}
+
 static int mxuport_ioctl(struct tty_struct *tty, unsigned int cmd,
 			 unsigned long arg)
 {
@@ -959,6 +1029,8 @@ static int mxuport_ioctl(struct tty_struct *tty, unsigned int cmd,
 	void __user *argp = (void __user *)arg;
 
 	switch (cmd) {
+	case TCFLSH:
+		return mxuport_flush_buffer(tty, arg);
 	case TIOCGRS485:
 		return mxuport_get_rs485_config(port, argp);
 	case TIOCSRS485:
