@@ -459,7 +459,7 @@ int blk_rq_append_bio(struct request *rq, struct bio *bio)
 }
 EXPORT_SYMBOL(blk_rq_append_bio);
 
-/* Prepare bio for passthrough IO given ITER_BVEC iter */
+/* Prepare a bio for passthrough I/O from a directly mapped iterator. */
 static int blk_rq_map_user_bvec(struct request *rq, const struct iov_iter *iter)
 {
 	unsigned int max_bytes = rq->q->limits.max_hw_sectors << SECTOR_SHIFT;
@@ -505,6 +505,13 @@ int blk_rq_map_user_iov(struct request_queue *q, struct request *rq,
 	struct bio *bio = NULL;
 	struct iov_iter i;
 	int ret = -EINVAL;
+
+	if (iov_iter_is_dmabuf_map(iter)) {
+		if (map_data || (iov_iter_alignment(iter) & align))
+			return -EINVAL;
+		ret = blk_rq_map_user_bvec(rq, iter);
+		return ret == -EREMOTEIO ? -EINVAL : ret;
+	}
 
 	if (map_data)
 		copy = true;
