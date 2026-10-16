@@ -311,32 +311,20 @@ static void mxuport_write_rollback(struct usb_serial_port *port, int count)
 }
 
 /* Read the given buffer in from the control pipe. */
-static int mxuport_recv_ctrl_urb(struct usb_serial *serial,
-				 u8 request, u16 value, u16 index,
-				 u8 *data, size_t size)
+static int mxuport_recv_ctrl(struct usb_serial *serial, u8 request,
+			     u16 value, u16 index, void *data, u16 size)
 {
 	int status;
 
-	status = usb_control_msg(serial->dev,
-				 usb_rcvctrlpipe(serial->dev, 0),
-				 request,
-				 (USB_DIR_IN | USB_TYPE_VENDOR |
-				  USB_RECIP_DEVICE), value, index,
-				 data, size,
-				 USB_CTRL_GET_TIMEOUT);
-	if (status < 0) {
+	status = usb_control_msg_recv(serial->dev, 0, request,
+				      USB_DIR_IN | USB_TYPE_VENDOR |
+				      USB_RECIP_DEVICE, value, index,
+				      data, size, USB_CTRL_GET_TIMEOUT,
+				      GFP_KERNEL);
+	if (status)
 		dev_err(&serial->interface->dev,
-			"%s - usb_control_msg failed (%d)\n",
+			"%s - usb_control_msg_recv failed (%d)\n",
 			__func__, status);
-		return status;
-	}
-
-	if (status != size) {
-		dev_err(&serial->interface->dev,
-			"%s - short read (%d / %zd)\n",
-			__func__, status, size);
-		return -EIO;
-	}
 
 	return status;
 }
@@ -682,29 +670,19 @@ static void mxuport_process_read_urb(struct urb *urb)
 static bool mxuport_tx_empty(struct usb_serial_port *port)
 {
 	struct usb_serial *serial = port->serial;
-	bool is_empty = true;
+	u8 buf[sizeof(u32)];
 	u32 txlen;
-	u8 *len_buf;
 	int err;
 
-	len_buf = kzalloc(4, GFP_KERNEL);
-	if (!len_buf)
-		goto out;
+	err = mxuport_recv_ctrl(serial, RQ_VENDOR_GET_OUTQUEUE, 0,
+				port->port_number, buf, sizeof(buf));
+	if (err)
+		return true;
 
-	err = mxuport_recv_ctrl_urb(serial, RQ_VENDOR_GET_OUTQUEUE, 0,
-				    port->port_number, len_buf, 4);
-	if (err < 0)
-		goto out;
-
-	txlen = get_unaligned_be32(len_buf);
+	txlen = get_unaligned_be32(buf);
 	dev_dbg(&port->dev, "%s - tx len = %u\n", __func__, txlen);
 
-	if (txlen != 0)
-		is_empty = false;
-
-out:
-	kfree(len_buf);
-	return is_empty;
+	return txlen == 0;
 }
 
 static int mxuport_set_mcr(struct usb_serial_port *port, u8 mcr_state)
@@ -1229,51 +1207,37 @@ static void mxuport_get_fw_name(unsigned long features, u16 productid,
 
 static int mxuport_fw_running_from_sram(struct usb_serial *serial, bool *from_sram)
 {
-	int err;
+	u8 buf[sizeof(u32)];
 	u32 reg;
-	u8 *buf;
+	int err;
 
-	buf = kzalloc_objs(*buf, sizeof(reg));
-	if (!buf)
-		return -ENOMEM;
-
-	err = mxuport_recv_ctrl_urb(serial, RQ_VENDOR_GET_SYS_REG,
-				    MX_SYS_REG_REMAP_OFF, 0, buf, sizeof(reg));
-	if (err < 0)
-		goto out;
+	err = mxuport_recv_ctrl(serial, RQ_VENDOR_GET_SYS_REG,
+				MX_SYS_REG_REMAP_OFF, 0, buf, sizeof(buf));
+	if (err)
+		return err;
 
 	reg = get_unaligned_be32(buf);
 	*from_sram = (((reg >> 24) & MX_PWR_REMAP_MASK) == MX_REMAP_TO_SRAM);
-	err = 0;
-out:
-	kfree(buf);
-	return err;
+
+	return 0;
 }
 
 /* Get the version of the firmware currently running. */
 static int mxuport_get_fw_version(struct usb_serial *serial,
 				  struct mxuport_fw_version *version)
 {
-	u8 *ver_buf;
+	u8 buf[4];
 	int err;
 
-	ver_buf = kzalloc(4, GFP_KERNEL);
-	if (!ver_buf)
-		return -ENOMEM;
-
 	/* Get firmware version from SDRAM */
-	err = mxuport_recv_ctrl_urb(serial, RQ_VENDOR_GET_VERSION, 0, 0,
-				    ver_buf, 4);
-	if (err != 4) {
-		err = -EIO;
-		goto out;
-	}
+	err = mxuport_recv_ctrl(serial, RQ_VENDOR_GET_VERSION, 0, 0,
+				buf, sizeof(buf));
+	if (err)
+		return err;
 
-	mxuport_compose_fw_version(version, ver_buf[0], ver_buf[1], ver_buf[2]);
-	err = 0;
-out:
-	kfree(ver_buf);
-	return err;
+	mxuport_compose_fw_version(version, buf[0], buf[1], buf[2]);
+
+	return 0;
 }
 
 /* Given a firmware blob, download it to the device. */
