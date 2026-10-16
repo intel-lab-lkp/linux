@@ -392,8 +392,15 @@ void gspca_frame_add(struct gspca_dev *gspca_dev,
 	spin_unlock_irqrestore(&gspca_dev->qlock, flags);
 
 	if (packet_type == FIRST_PACKET) {
-		/* if there is no queued buffer, discard the whole frame */
-		if (!buf) {
+		/*
+		 * If there is no queued buffer, discard the whole frame.
+		 * Frames are also discarded while streaming has not been
+		 * started successfully yet: the transfers can already be
+		 * running at that point, but buffers must not be handed to
+		 * vb2 as long as start_streaming() can still fail, since a
+		 * completed buffer cannot be taken back.
+		 */
+		if (!buf || !vb2_is_streaming(&gspca_dev->queue)) {
 			gspca_dev->last_packet_type = DISCARD_PACKET;
 			gspca_dev->sequence++;
 			return;
