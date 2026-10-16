@@ -247,11 +247,7 @@ int stack_depot_init(void)
 
 		entries = nr_free_buffer_pages();
 		entries = roundup_pow_of_two(entries);
-
-		if (scale > PAGE_SHIFT)
-			entries >>= (scale - PAGE_SHIFT);
-		else
-			entries <<= (PAGE_SHIFT - scale);
+		entries >>= (scale - PAGE_SHIFT);
 	}
 
 	if (entries < 1UL << STACK_BUCKET_NUMBER_ORDER_MIN)
