@@ -17,6 +17,18 @@
 #define FUSE_INT_REQ_BIT (1ULL << 0)
 #define FUSE_REQ_ID_STEP (1ULL << 1)
 
+/**
+ * Background request accounting mode
+ *
+ * @FUSE_BG_MODE_GLOBAL: legacy accounting, a single global spinlock
+ *	protects the background accounting of all queues
+ * @FUSE_BG_MODE_PER_QUEUE: each fuse_ring_queue owns its own budget.
+ */
+enum fuse_bg_mode {
+	FUSE_BG_MODE_GLOBAL,
+	FUSE_BG_MODE_PER_QUEUE,
+};
+
 struct fuse_arg;
 struct fuse_args;
 struct fuse_pqueue;
@@ -222,6 +234,12 @@ struct fuse_chan {
 
 	/** Protects: max_background, num_background, active_background, bg_queue, blocked */
 	spinlock_t bg_lock;
+
+	/** Background accounting mode, set at INIT, read-only afterwards */
+	enum fuse_bg_mode bg_mode;
+
+	/** Per-queue background budget (FUSE_BG_MODE_PER_QUEUE only) */
+	unsigned int uring_max_bg_per_queue;
 
 	/** Flag indicating that INIT reply has been received. Allocating
 	 * any fuse request will be suspended until the flag is set */

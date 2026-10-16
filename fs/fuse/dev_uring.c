@@ -10,13 +10,26 @@
 #include "fuse_trace.h"
 
 #include <linux/bitmap.h>
+#include <linux/capability.h>
+#include <linux/cpumask.h>
 #include <linux/fs.h>
 #include <linux/io_uring/cmd.h>
+#include <linux/minmax.h>
 
 static bool __read_mostly enable_uring;
 module_param(enable_uring, bool, 0644);
 MODULE_PARM_DESC(enable_uring,
 		 "Enable userspace communication through io-uring");
+
+static unsigned int uring_max_bg_per_queue = 1;
+module_param(uring_max_bg_per_queue, uint, 0644);
+MODULE_PARM_DESC(uring_max_bg_per_queue,
+		 "Default per-queue budget of outstanding background requests for io-uring (0 = disable per-queue background accounting)");
+
+static bool uring_max_bg_per_queue_force;
+module_param(uring_max_bg_per_queue_force, bool, 0644);
+MODULE_PARM_DESC(uring_max_bg_per_queue_force,
+		 "Activate per-queue background accounting for io-uring even if a daemon does not negotiate it");
 
 #define FUSE_URING_IOV_SEGS 2 /* header and payload */
 #define FUSE_URING_IOV_HEADERS 0
@@ -27,6 +40,32 @@ MODULE_PARM_DESC(enable_uring,
 bool fuse_uring_enabled(void)
 {
 	return enable_uring;
+}
+
+bool fuse_uring_per_queue_bg_advertise(void)
+{
+	return uring_max_bg_per_queue;
+}
+
+unsigned int fuse_uring_per_queue_bg_budget(u64 flags, u16 daemon_max_bg,
+					    unsigned int user_bg_limit)
+{
+	unsigned int nr_queues = num_possible_cpus();
+	unsigned int max_bg;
+
+	if (!enable_uring || !(flags & FUSE_OVER_IO_URING))
+		return 0;
+	if (!((flags & FUSE_PER_QUEUE_BG) && uring_max_bg_per_queue) &&
+	    !uring_max_bg_per_queue_force)
+		return 0;
+
+	max_bg = daemon_max_bg ?: uring_max_bg_per_queue;
+	max_bg = clamp(max_bg, 1U, FUSE_URING_MAX_BG_PER_QUEUE);
+	if (!capable(CAP_SYS_ADMIN) && user_bg_limit &&
+	    max_bg > user_bg_limit / nr_queues)
+		max_bg = max(user_bg_limit / nr_queues, 1U);
+
+	return max_bg;
 }
 
 struct fuse_uring_pdu {
@@ -120,6 +159,20 @@ static void fuse_uring_flush_bg(struct fuse_ring_queue *queue)
 	}
 }
 
+static void fuse_uring_flush_bg_per_queue(struct fuse_ring_queue *queue)
+{
+	lockdep_assert_held(&queue->lock);
+
+	while (!list_empty(&queue->fuse_req_bg_queue) &&
+	       !list_empty(&queue->ent_avail_queue)) {
+		struct fuse_req *req;
+
+		req = list_first_entry(&queue->fuse_req_bg_queue,
+				       struct fuse_req, list);
+		list_move_tail(&req->list, &queue->fuse_req_queue);
+	}
+}
+
 static bool can_zero_copy_req(struct fuse_ring_ent *ent, struct fuse_req *req)
 {
 	struct fuse_args *args = req->args;
@@ -160,11 +213,18 @@ static void fuse_uring_req_end(struct fuse_ring_ent *ent, struct fuse_req *req,
 	ent->fuse_req = NULL;
 	list_del_init(&req->list);
 	if (test_bit(FR_BACKGROUND, &req->flags)) {
-		queue->active_background--;
-		spin_lock(&fch->bg_lock);
-		fuse_request_bg_finish(fch, req);
-		fuse_uring_flush_bg(queue);
-		spin_unlock(&fch->bg_lock);
+		if (fch->bg_mode == FUSE_BG_MODE_PER_QUEUE) {
+			clear_bit(FR_BACKGROUND, &req->flags);
+			if (!WARN_ON_ONCE(queue->bg_local == 0))
+				queue->bg_local--;
+			wake_up(&queue->bg_waitq);
+		} else {
+			queue->active_background--;
+			spin_lock(&fch->bg_lock);
+			fuse_request_bg_finish(fch, req);
+			fuse_uring_flush_bg(queue);
+			spin_unlock(&fch->bg_lock);
+		}
 	}
 
 	spin_unlock(&queue->lock);
@@ -208,10 +268,17 @@ void fuse_uring_abort_end_requests(struct fuse_ring *ring)
 		WARN_ON_ONCE(fch->max_background != UINT_MAX);
 		spin_lock(&queue->lock);
 		queue->stopped = true;
-		spin_lock(&fch->bg_lock);
-		fuse_uring_flush_bg(queue);
-		spin_unlock(&fch->bg_lock);
-		spin_unlock(&queue->lock);
+		if (fch->bg_mode == FUSE_BG_MODE_PER_QUEUE) {
+			list_splice_init(&queue->fuse_req_bg_queue,
+					 &queue->fuse_req_queue);
+			spin_unlock(&queue->lock);
+			wake_up_all(&queue->bg_waitq);
+		} else {
+			spin_lock(&fch->bg_lock);
+			fuse_uring_flush_bg(queue);
+			spin_unlock(&fch->bg_lock);
+			spin_unlock(&queue->lock);
+		}
 		fuse_uring_abort_end_queue_requests(queue);
 	}
 }
@@ -278,6 +345,7 @@ void fuse_uring_destruct(struct fuse_chan *fch)
 		WARN_ON(!list_empty(&queue->ent_w_req_queue));
 		WARN_ON(!list_empty(&queue->ent_commit_queue));
 		WARN_ON(!list_empty(&queue->ent_in_userspace));
+		WARN_ON_ONCE(queue->bg_local);
 
 		list_for_each_entry_safe(ent, next, &queue->ent_released,
 					 list) {
@@ -366,6 +434,8 @@ static struct fuse_ring_queue *fuse_uring_create_queue(struct fuse_ring *ring,
 	queue->ring = ring;
 	spin_lock_init(&queue->lock);
 	queue->zero_copy = zero_copy;
+	queue->max_bg = fch->uring_max_bg_per_queue;
+	init_waitqueue_head(&queue->bg_waitq);
 
 	INIT_LIST_HEAD(&queue->ent_avail_queue);
 	INIT_LIST_HEAD(&queue->ent_commit_queue);
@@ -1096,6 +1166,9 @@ static void fuse_uring_ent_avail(struct fuse_ring_ent *ent,
 	WARN_ON_ONCE(!ent->cmd);
 	list_move(&ent->list, &queue->ent_avail_queue);
 	ent->state = FRRS_AVAILABLE;
+
+	if (queue->ring->chan->bg_mode == FUSE_BG_MODE_PER_QUEUE)
+		fuse_uring_flush_bg_per_queue(queue);
 }
 
 /*
@@ -1785,6 +1858,71 @@ static struct fuse_ring_queue *fuse_uring_task_to_queue(struct fuse_ring *ring)
 	return queue;
 }
 
+struct fuse_ring_queue *fuse_uring_bg_admit(struct fuse_chan *fch)
+{
+	struct fuse_ring_queue *queue;
+	int err = 0;
+
+	queue = fuse_uring_task_to_queue(fch->ring);
+	if (!queue)
+		return ERR_PTR(-ENOTCONN);
+
+	spin_lock(&queue->lock);
+	for (;;) {
+		if (queue->stopped ||
+		    READ_ONCE(queue->bg_local) < queue->max_bg)
+			break;
+
+		spin_unlock(&queue->lock);
+		if (wait_event_state_exclusive(queue->bg_waitq,
+					       queue->stopped ||
+					       READ_ONCE(queue->bg_local) < queue->max_bg,
+					       (TASK_KILLABLE | TASK_FREEZABLE))) {
+			spin_lock(&queue->lock);
+			err = -EINTR;
+			goto out_unlock;
+		}
+		spin_lock(&queue->lock);
+	}
+
+	if (queue->stopped || !READ_ONCE(fch->connected)) {
+		err = -ENOTCONN;
+		goto out_unlock;
+	}
+
+	queue->bg_local++;
+
+out_unlock:
+	spin_unlock(&queue->lock);
+	return err ? ERR_PTR(err) : queue;
+}
+
+void fuse_uring_bg_req_release(struct fuse_ring_queue *queue)
+{
+	spin_lock(&queue->lock);
+	if (!WARN_ON_ONCE(queue->bg_local == 0))
+		queue->bg_local--;
+	spin_unlock(&queue->lock);
+
+	wake_up(&queue->bg_waitq);
+}
+
+unsigned int fuse_uring_num_background(struct fuse_chan *fch)
+{
+	struct fuse_ring *ring = fch->ring;
+	unsigned int sum = 0;
+	int qid;
+
+	for (qid = 0; qid < ring->nr_queues; qid++) {
+		struct fuse_ring_queue *queue = READ_ONCE(ring->queues[qid]);
+
+		if (queue)
+			sum += READ_ONCE(queue->bg_local);
+	}
+
+	return sum;
+}
+
 static void fuse_uring_dispatch_ent(struct fuse_ring_ent *ent)
 {
 	struct io_uring_cmd *cmd = ent->cmd;
@@ -1843,10 +1981,16 @@ bool fuse_uring_queue_bq_req(struct fuse_req *req)
 	struct fuse_ring *ring = fch->ring;
 	struct fuse_ring_queue *queue;
 	struct fuse_ring_ent *ent = NULL;
+	bool per_queue = fch->bg_mode == FUSE_BG_MODE_PER_QUEUE;
+	bool accounted = req->ring_queue;
 
-	queue = fuse_uring_task_to_queue(ring);
-	if (!queue)
-		return false;
+	if (accounted) {
+		queue = req->ring_queue;
+	} else {
+		queue = fuse_uring_task_to_queue(ring);
+		if (!queue)
+			return false;
+	}
 
 	spin_lock(&queue->lock);
 	if (unlikely(queue->stopped)) {
@@ -1858,14 +2002,21 @@ bool fuse_uring_queue_bq_req(struct fuse_req *req)
 	req->ring_queue = queue;
 	list_add_tail(&req->list, &queue->fuse_req_bg_queue);
 
+	if (per_queue) {
+		if (!accounted)
+			queue->bg_local++;
+		fuse_uring_flush_bg_per_queue(queue);
+	} else {
+		spin_lock(&fch->bg_lock);
+		fch->num_background++;
+		if (fch->num_background == fch->max_background)
+			fch->blocked = 1;
+		fuse_uring_flush_bg(queue);
+		spin_unlock(&fch->bg_lock);
+	}
+
 	ent = list_first_entry_or_null(&queue->ent_avail_queue,
 				       struct fuse_ring_ent, list);
-	spin_lock(&fch->bg_lock);
-	fch->num_background++;
-	if (fch->num_background == fch->max_background)
-		fch->blocked = 1;
-	fuse_uring_flush_bg(queue);
-	spin_unlock(&fch->bg_lock);
 
 	/*
 	 * Due to bg_queue flush limits there might be other bg requests

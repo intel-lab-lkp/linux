@@ -4,9 +4,13 @@
 #define _FS_FUSE_DEV_H
 
 #include <linux/cleanup.h>
+#include <linux/types.h>
 
 /** Maximum number of outstanding background requests */
 #define FUSE_DEFAULT_MAX_BACKGROUND 12
+
+/** Maximum number of outstanding background requests per io-uring queue */
+#define FUSE_URING_MAX_BG_PER_QUEUE 4096
 
 struct fuse_conn;
 struct fuse_chan;
@@ -31,7 +35,8 @@ void fuse_chan_release(struct fuse_chan *fch);
 void fuse_chan_free(struct fuse_chan *fch);
 unsigned int fuse_chan_num_background(struct fuse_chan *fch);
 unsigned int fuse_chan_max_background(struct fuse_chan *fch);
-void fuse_chan_max_background_set(struct fuse_chan *fch, unsigned int val);
+int fuse_chan_max_background_set(struct fuse_chan *fch, unsigned int val);
+void fuse_chan_per_queue_bg_enable(struct fuse_chan *fch, unsigned int max_bg);
 unsigned int fuse_chan_num_waiting(struct fuse_chan *fch);
 void fuse_chan_set_fc(struct fuse_chan *fch, struct fuse_conn *fc);
 void fuse_chan_set_initialized(struct fuse_chan *fch, struct fuse_chan_param *param);
@@ -95,11 +100,26 @@ void fuse_copy_finish(struct fuse_copy_state *cs);
 
 #ifdef CONFIG_FUSE_IO_URING
 bool fuse_uring_enabled(void);
+bool fuse_uring_per_queue_bg_advertise(void);
+unsigned int fuse_uring_per_queue_bg_budget(u64 flags, u16 daemon_max_bg,
+					    unsigned int user_bg_limit);
 void fuse_uring_destruct(struct fuse_chan *fch);
 #else /* CONFIG_FUSE_IO_URING */
 static inline bool fuse_uring_enabled(void)
 {
 	return false;
+}
+
+static inline bool fuse_uring_per_queue_bg_advertise(void)
+{
+	return false;
+}
+
+static inline unsigned int
+fuse_uring_per_queue_bg_budget(u64 flags, u16 daemon_max_bg,
+			       unsigned int user_bg_limit)
+{
+	return 0;
 }
 
 static inline void fuse_uring_destruct(struct fuse_chan *fch)

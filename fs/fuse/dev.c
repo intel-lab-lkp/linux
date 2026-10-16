@@ -114,6 +114,9 @@ static void fuse_put_request(struct fuse_req *req);
 static struct fuse_req *fuse_get_req(struct fuse_chan *fch, bool for_background)
 {
 	struct fuse_req *req;
+#ifdef CONFIG_FUSE_IO_URING
+	struct fuse_ring_queue *bg_queue = NULL;
+#endif
 	int err;
 
 	atomic_inc(&fch->num_waiting);
@@ -130,17 +133,39 @@ static struct fuse_req *fuse_get_req(struct fuse_chan *fch, bool for_background)
 	if (!fch->connected)
 		goto out;
 
+#ifdef CONFIG_FUSE_IO_URING
+	if (for_background && fuse_uring_per_queue_bg(fch)) {
+		bg_queue = fuse_uring_bg_admit(fch);
+		if (IS_ERR(bg_queue)) {
+			err = PTR_ERR(bg_queue);
+			bg_queue = NULL;
+			goto out;
+		}
+	}
+#endif
+
 	req = fuse_request_alloc(fch, GFP_KERNEL);
 	err = -ENOMEM;
 	if (!req) {
-		if (for_background)
+		if (for_background) {
+#ifdef CONFIG_FUSE_IO_URING
+			if (bg_queue) {
+				fuse_uring_bg_req_release(bg_queue);
+				goto out;
+			}
+#endif
 			wake_up(&fch->blocked_waitq);
+		}
 		goto out;
 	}
 
 	__set_bit(FR_WAITING, &req->flags);
-	if (for_background)
+	if (for_background) {
 		__set_bit(FR_BACKGROUND, &req->flags);
+#ifdef CONFIG_FUSE_IO_URING
+		req->ring_queue = bg_queue;
+#endif
+	}
 
 	return req;
 
@@ -159,10 +184,18 @@ static void fuse_put_request(struct fuse_req *req)
 			 * We get here in the unlikely case that a background
 			 * request was allocated but not sent
 			 */
-			spin_lock(&fch->bg_lock);
-			if (!fch->blocked)
-				wake_up(&fch->blocked_waitq);
-			spin_unlock(&fch->bg_lock);
+#ifdef CONFIG_FUSE_IO_URING
+			if (fch->bg_mode == FUSE_BG_MODE_PER_QUEUE &&
+			    req->ring_queue) {
+				fuse_uring_bg_req_release(req->ring_queue);
+			} else
+#endif
+			{
+				spin_lock(&fch->bg_lock);
+				if (!fch->blocked)
+					wake_up(&fch->blocked_waitq);
+				spin_unlock(&fch->bg_lock);
+			}
 		}
 
 		if (test_bit(FR_WAITING, &req->flags)) {
@@ -392,22 +425,46 @@ EXPORT_SYMBOL_GPL(fuse_dev_chan_new);
 
 unsigned int fuse_chan_num_background(struct fuse_chan *fch)
 {
+#ifdef CONFIG_FUSE_IO_URING
+	if (fch->bg_mode == FUSE_BG_MODE_PER_QUEUE && fch->ring)
+		return fuse_uring_num_background(fch);
+#endif
 	return READ_ONCE(fch->num_background);
 }
 
 unsigned int fuse_chan_max_background(struct fuse_chan *fch)
 {
+#ifdef CONFIG_FUSE_IO_URING
+	if (fch->bg_mode == FUSE_BG_MODE_PER_QUEUE && fch->ring)
+		return fch->uring_max_bg_per_queue * fch->ring->nr_queues;
+#endif
 	return READ_ONCE(fch->max_background);
 }
 
-void fuse_chan_max_background_set(struct fuse_chan *fch, unsigned int val)
+int fuse_chan_max_background_set(struct fuse_chan *fch, unsigned int val)
 {
+#ifdef CONFIG_FUSE_IO_URING
+	if (fch->bg_mode == FUSE_BG_MODE_PER_QUEUE)
+		return -EINVAL;
+#endif
 	spin_lock(&fch->bg_lock);
 	fch->max_background = val;
 	fch->blocked = fch->num_background >= fch->max_background;
 	if (!fch->blocked)
 		wake_up_nr(&fch->blocked_waitq,
 			   fch->max_background - fch->num_background);
+	spin_unlock(&fch->bg_lock);
+
+	return 0;
+}
+
+void fuse_chan_per_queue_bg_enable(struct fuse_chan *fch, unsigned int max_bg)
+{
+	spin_lock(&fch->bg_lock);
+	fch->bg_mode = FUSE_BG_MODE_PER_QUEUE;
+	fch->uring_max_bg_per_queue = max_bg;
+	fch->max_background = UINT_MAX;
+	fch->blocked = 0;
 	spin_unlock(&fch->bg_lock);
 }
 
@@ -652,10 +709,24 @@ void fuse_request_end(struct fuse_req *req)
 	WARN_ON(test_bit(FR_PENDING, &req->flags));
 	WARN_ON(test_bit(FR_SENT, &req->flags));
 	if (test_bit(FR_BACKGROUND, &req->flags)) {
-		spin_lock(&fch->bg_lock);
-		fuse_request_bg_finish(fch, req);
-		flush_bg_queue(fch);
-		spin_unlock(&fch->bg_lock);
+#ifdef CONFIG_FUSE_IO_URING
+		if (fch->bg_mode == FUSE_BG_MODE_PER_QUEUE && req->ring_queue) {
+			clear_bit(FR_BACKGROUND, &req->flags);
+			fuse_uring_bg_req_release(req->ring_queue);
+			if (!test_bit(FR_URING, &req->flags)) {
+				spin_lock(&fch->bg_lock);
+				fch->num_background--;
+				fch->active_background--;
+				spin_unlock(&fch->bg_lock);
+			}
+		} else
+#endif
+		{
+			spin_lock(&fch->bg_lock);
+			fuse_request_bg_finish(fch, req);
+			flush_bg_queue(fch);
+			spin_unlock(&fch->bg_lock);
+		}
 	} else {
 		/* Wake up waiter sleeping in request_wait_answer() */
 		wake_up(&req->waitq);

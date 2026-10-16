@@ -126,8 +126,11 @@ static ssize_t fuse_conn_max_background_write(struct file *file,
 	if (ret > 0) {
 		struct fuse_conn *fc = fuse_ctl_file_conn_get(file);
 		if (fc) {
-			fuse_chan_max_background_set(fc->chan, val);
+			int err = fuse_chan_max_background_set(fc->chan, val);
+
 			fuse_conn_put(fc);
+			if (err)
+				ret = err;
 		}
 	}
 

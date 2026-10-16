@@ -139,6 +139,11 @@ struct fuse_ring_queue {
 
 	unsigned int active_background;
 
+	/* Per-queue background budget and accounting (FUSE_BG_MODE_PER_QUEUE) */
+	unsigned int max_bg;
+	unsigned int bg_local;
+	wait_queue_head_t bg_waitq;
+
 	bool stopped;
 
 	/* how this queue's payload buffers are provided */
@@ -192,6 +197,9 @@ void fuse_uring_queue_fuse_req(struct fuse_iqueue *fiq, struct fuse_req *req);
 bool fuse_uring_queue_bq_req(struct fuse_req *req);
 bool fuse_uring_remove_pending_req(struct fuse_req *req);
 bool fuse_uring_request_expired(struct fuse_chan *fch);
+struct fuse_ring_queue *fuse_uring_bg_admit(struct fuse_chan *fch);
+void fuse_uring_bg_req_release(struct fuse_ring_queue *queue);
+unsigned int fuse_uring_num_background(struct fuse_chan *fch);
 
 static inline void fuse_uring_abort(struct fuse_chan *fch)
 {
@@ -222,6 +230,11 @@ static inline bool fuse_uring_ready(struct fuse_chan *fch)
 	return ring && smp_load_acquire(&ring->ready);
 }
 
+static inline bool fuse_uring_per_queue_bg(struct fuse_chan *fch)
+{
+	return fch->bg_mode == FUSE_BG_MODE_PER_QUEUE && fuse_uring_ready(fch);
+}
+
 #else /* CONFIG_FUSE_IO_URING */
 
 static inline void fuse_uring_conn_init(struct fuse_chan *fch)
@@ -249,6 +262,25 @@ static inline bool fuse_uring_remove_pending_req(struct fuse_req *req)
 static inline bool fuse_uring_request_expired(struct fuse_chan *fch)
 {
 	return false;
+}
+
+static inline bool fuse_uring_per_queue_bg(struct fuse_chan *fch)
+{
+	return false;
+}
+
+static inline struct fuse_ring_queue *fuse_uring_bg_admit(struct fuse_chan *fch)
+{
+	return NULL;
+}
+
+static inline void fuse_uring_bg_req_release(void *queue)
+{
+}
+
+static inline unsigned int fuse_uring_num_background(struct fuse_chan *fch)
+{
+	return 0;
 }
 
 #endif /* CONFIG_FUSE_IO_URING */

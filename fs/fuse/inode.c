@@ -1276,6 +1276,7 @@ static void process_init_reply(struct fuse_args *args, int error)
 	struct fuse_conn *fc = fm->fc;
 	struct fuse_init_out *arg = &ia->out;
 	bool io_uring_enabled = false;
+	unsigned int max_bg = 0;
 	bool ok = true;
 
 	if (error || arg->major != FUSE_KERNEL_VERSION)
@@ -1408,6 +1409,10 @@ static void process_init_reply(struct fuse_args *args, int error)
 			if (flags & FUSE_OVER_IO_URING && fuse_uring_enabled())
 				io_uring_enabled = true;
 
+			max_bg = fuse_uring_per_queue_bg_budget(flags,
+								arg->max_bg_per_queue,
+								max_user_bgreq);
+
 			if (flags & FUSE_REQUEST_TIMEOUT)
 				timeout = arg->request_timeout;
 		} else {
@@ -1417,6 +1422,9 @@ static void process_init_reply(struct fuse_args *args, int error)
 		}
 
 		fuse_init_server_timeout(fc->chan, timeout);
+
+		if (max_bg)
+			fuse_chan_per_queue_bg_enable(fc->chan, max_bg);
 
 		fm->sb->s_bdi->ra_pages =
 				min(fm->sb->s_bdi->ra_pages, ra_pages);
@@ -1480,8 +1488,11 @@ static struct fuse_init_args *fuse_new_init(struct fuse_mount *fm)
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		flags |= FUSE_PASSTHROUGH;
 
-	if (fuse_uring_enabled())
+	if (fuse_uring_enabled()) {
 		flags |= FUSE_OVER_IO_URING | FUSE_HAS_IO_URING_BUFPOOL;
+		if (fuse_uring_per_queue_bg_advertise())
+			flags |= FUSE_PER_QUEUE_BG;
+	}
 
 	ia->in.flags = flags;
 	ia->in.flags2 = flags >> 32;
