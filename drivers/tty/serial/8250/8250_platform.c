@@ -85,7 +85,6 @@ static void __init __serial8250_isa_init_ports(void)
 		port->irqflags = 0;
 		port->uartclk  = old_serial_port[i].baud_base * 16;
 		port->flags    = old_serial_port[i].flags;
-		port->hub6     = 0;
 		port->membase  = old_serial_port[i].iomem_base;
 		port->iotype   = old_serial_port[i].io_type;
 		port->regshift = old_serial_port[i].iomem_reg_shift;
@@ -168,7 +167,6 @@ static int serial8250_probe_platform(struct platform_device *dev, struct plat_se
 		uart->port.flags		= p->flags;
 		uart->port.mapbase	= p->mapbase;
 		uart->port.mapsize	= p->mapsize;
-		uart->port.hub6		= p->hub6;
 		uart->port.has_sysrq	= p->has_sysrq;
 		uart->port.private_data	= p->private_data;
 		uart->port.type		= p->type;
@@ -316,14 +314,10 @@ static int __init serial8250_init(void)
 	if (ret)
 		goto unreg_uart_drv;
 
-	ret = serial8250_hub6_init();
-	if (ret)
-		goto unreg_pnp;
-
 	serial8250_isa_devs = platform_device_alloc("serial8250", PLAT8250_DEV_LEGACY);
 	if (!serial8250_isa_devs) {
 		ret = -ENOMEM;
-		goto unreg_hub6;
+		goto unreg_pnp;
 	}
 
 	ret = platform_device_add(serial8250_isa_devs);
@@ -339,8 +333,6 @@ static int __init serial8250_init(void)
 	platform_device_del(serial8250_isa_devs);
 put_dev:
 	platform_device_put(serial8250_isa_devs);
-unreg_hub6:
-	serial8250_hub6_exit();
 unreg_pnp:
 	serial8250_pnp_exit();
 unreg_uart_drv:
@@ -368,7 +360,6 @@ static void __exit serial8250_exit(void)
 	platform_driver_unregister(&serial8250_isa_driver);
 	platform_device_unregister(isa_dev);
 
-	serial8250_hub6_exit();
 	serial8250_pnp_exit();
 
 #ifdef CONFIG_SPARC

@@ -106,10 +106,6 @@ static unsigned int serial_in(struct uart_sunsu_port *up, int offset)
 	offset <<= up->port.regshift;
 
 	switch (up->port.iotype) {
-	case UPIO_HUB6:
-		outb(up->port.hub6 - 1 + offset, up->port.iobase);
-		return inb(up->port.iobase + 1);
-
 	case UPIO_MEM:
 		return readb(up->port.membase + offset);
 
@@ -136,11 +132,6 @@ static void serial_out(struct uart_sunsu_port *up, int offset, int value)
 	offset <<= up->port.regshift;
 
 	switch (up->port.iotype) {
-	case UPIO_HUB6:
-		outb(up->port.hub6 - 1 + offset, up->port.iobase);
-		outb(value, up->port.iobase + 1);
-		break;
-
 	case UPIO_MEM:
 		writeb(value, up->port.membase + offset);
 		break;

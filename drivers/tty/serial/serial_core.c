@@ -813,7 +813,7 @@ static int uart_get_info(struct tty_port *port, struct serial_struct *retinfo)
 				ASYNC_CLOSING_WAIT_NONE :
 				jiffies_to_msecs(port->closing_wait) / 10;
 	retinfo->custom_divisor  = uport->custom_divisor;
-	retinfo->hub6	    = uport->hub6;
+	retinfo->hub6		 = 0;
 	retinfo->io_type         = uport->iotype;
 	retinfo->iomem_reg_shift = uport->regshift;
 	retinfo->iomem_base      = (void *)(unsigned long)uport->mapbase;
@@ -835,13 +835,12 @@ static int uart_change_port(struct uart_port *uport,
 			    unsigned long new_port)
 {
 	unsigned long old_iobase, old_mapbase;
-	unsigned int old_type, old_iotype, old_hub6, old_shift;
+	unsigned int old_type, old_iotype, old_shift;
 	int retval;
 
 	old_iobase = uport->iobase;
 	old_mapbase = uport->mapbase;
 	old_type = uport->type;
-	old_hub6 = uport->hub6;
 	old_iotype = uport->iotype;
 	old_shift = uport->regshift;
 
@@ -850,7 +849,6 @@ static int uart_change_port(struct uart_port *uport,
 
 	uport->iobase = new_port;
 	uport->type = new_info->type;
-	uport->hub6 = new_info->hub6;
 	uport->iotype = new_info->io_type;
 	uport->regshift = new_info->iomem_reg_shift;
 	uport->mapbase = (unsigned long)new_info->iomem_base;
@@ -868,7 +866,6 @@ static int uart_change_port(struct uart_port *uport,
 	 */
 	uport->iobase = old_iobase;
 	uport->type = old_type;
-	uport->hub6 = old_hub6;
 	uport->iotype = old_iotype;
 	uport->regshift = old_shift;
 	uport->mapbase = old_mapbase;
@@ -925,7 +922,6 @@ static int uart_set_info(struct tty_struct *tty, struct tty_port *port,
 	change_port = !(uport->flags & UPF_FIXED_PORT)
 		&& (new_port != uport->iobase ||
 		    (unsigned long)new_info->iomem_base != uport->mapbase ||
-		    new_info->hub6 != uport->hub6 ||
 		    new_info->io_type != uport->iotype ||
 		    new_info->iomem_reg_shift != uport->regshift ||
 		    new_info->type != uport->type);
@@ -954,6 +950,10 @@ static int uart_set_info(struct tty_struct *tty, struct tty_port *port,
 		uport->custom_divisor = new_info->custom_divisor;
 		goto check_and_exit;
 	}
+
+	/* hub6 is no longer support */
+        if (new_info->hub6 != 0)
+                return -EINVAL;
 
 	if (change_irq || change_port) {
 		retval = security_locked_down(LOCKDOWN_TIOCSSERIAL);
@@ -2011,7 +2011,6 @@ bool uart_iotype_io(enum uart_iotype iotype)
 {
 	switch (iotype) {
 	case UPIO_PORT:
-	case UPIO_HUB6:
 		return true;
 	default:
 		return false;
@@ -2539,10 +2538,7 @@ void uart_get_ioinfos(struct uart_port *port, char *buf, size_t size)
 	if (uart_iotype_mmio(port->iotype)) {
 		scnprintf(buf, size, " MMIO%s:%pa", uart_get_mmio_width(port), &port->mapbase);
 	} else if (uart_iotype_io(port->iotype)) {
-		if (port->iotype == UPIO_PORT)
-			scnprintf(buf, size, " I/O:0x%lx", port->iobase);
-		else if (port->iotype == UPIO_HUB6)
-			scnprintf(buf, size, " I/O:0x%lx, offset 0x%x", port->iobase, port->hub6);
+		scnprintf(buf, size, " I/O:0x%lx", port->iobase);
 	}
 }
 EXPORT_SYMBOL(uart_get_ioinfos);
