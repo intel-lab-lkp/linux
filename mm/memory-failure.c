@@ -43,6 +43,7 @@
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>
 #include <linux/dax.h>
+#include <linux/efi.h>
 #include <linux/ksm.h>
 #include <linux/rmap.h>
 #include <linux/export.h>
@@ -1327,9 +1328,15 @@ static bool panic_on_unrecoverable_mf(enum mf_action_page_type type,
  * setting PG_dirty outside page lock. See also comment above set_page_dirty().
  */
 static int action_result(unsigned long pfn, enum mf_action_page_type type,
-			 enum mf_result result)
+			 enum mf_result result, int flags)
 {
 	trace_memory_failure_event(pfn, type, result);
+
+	/*
+	 * An error injected by software is not a hardware fault, leave it out.
+	 */
+	if (type != MF_MSG_PFN_MAP && !(flags & MF_SW_SIMULATED))
+		efi_hwpoison_record_pfn(pfn);
 
 	if (type != MF_MSG_ALREADY_POISONED && type != MF_MSG_PFN_MAP) {
 		num_poisoned_pages_inc(pfn);
@@ -1346,7 +1353,7 @@ static int action_result(unsigned long pfn, enum mf_action_page_type type,
 }
 
 static int page_action(struct page_state *ps, struct page *p,
-			unsigned long pfn)
+			unsigned long pfn, int flags)
 {
 	int result;
 
@@ -1358,7 +1365,7 @@ static int page_action(struct page_state *ps, struct page *p,
 	 * Could adjust zone counters here to correct for the missing page.
 	 */
 
-	return action_result(pfn, ps->type, result);
+	return action_result(pfn, ps->type, result, flags);
 }
 
 static inline bool PageHWPoisonTakenOff(struct page *page)
@@ -1731,7 +1738,7 @@ static bool hwpoison_user_mappings(struct folio *folio, struct page *p,
 }
 
 static int identify_page_state(unsigned long pfn, struct page *p,
-				unsigned long page_flags)
+				unsigned long page_flags, int flags)
 {
 	struct page_state *ps;
 
@@ -1750,7 +1757,7 @@ static int identify_page_state(unsigned long pfn, struct page *p,
 		for (ps = error_states;; ps++)
 			if ((page_flags & ps->mask) == ps->res)
 				break;
-	return page_action(ps, p, pfn);
+	return page_action(ps, p, pfn, flags);
 }
 
 /*
@@ -2144,16 +2151,16 @@ retry:
 			flags |= MF_NO_RETRY;
 			goto retry;
 		}
-		return action_result(pfn, MF_MSG_GET_HWPOISON, MF_IGNORED);
+		return action_result(pfn, MF_MSG_GET_HWPOISON, MF_IGNORED, flags);
 	case MF_HUGETLB_FOLIO_PRE_POISONED:
 	case MF_HUGETLB_PAGE_PRE_POISONED:
 		rv = -EHWPOISON;
 		if (flags & MF_ACTION_REQUIRED)
 			rv = kill_accessing_process(current, pfn, flags);
 		if (res == MF_HUGETLB_PAGE_PRE_POISONED)
-			action_result(pfn, MF_MSG_ALREADY_POISONED, MF_FAILED);
+			action_result(pfn, MF_MSG_ALREADY_POISONED, MF_FAILED, flags);
 		else
-			action_result(pfn, MF_MSG_HUGE, MF_FAILED);
+			action_result(pfn, MF_MSG_HUGE, MF_FAILED, flags);
 		return rv;
 	default:
 		WARN_ON((res != MF_HUGETLB_FREED) && (res != MF_HUGETLB_IN_USED));
@@ -2185,17 +2192,17 @@ retry:
 		} else {
 			res = MF_FAILED;
 		}
-		return action_result(pfn, MF_MSG_FREE_HUGE, res);
+		return action_result(pfn, MF_MSG_FREE_HUGE, res, flags);
 	}
 
 	page_flags = folio->flags.f;
 
 	if (!hwpoison_user_mappings(folio, p, pfn, flags)) {
 		folio_unlock(folio);
-		return action_result(pfn, MF_MSG_UNMAP_FAILED, MF_FAILED);
+		return action_result(pfn, MF_MSG_UNMAP_FAILED, MF_FAILED, flags);
 	}
 
-	return identify_page_state(pfn, p, page_flags);
+	return identify_page_state(pfn, p, page_flags, flags);
 }
 
 #else
@@ -2247,7 +2254,7 @@ out:
 	/* drop pgmap ref acquired in caller */
 	put_dev_pagemap(pgmap);
 	if (rc != -EOPNOTSUPP)
-		action_result(pfn, MF_MSG_DAX, rc ? MF_FAILED : MF_RECOVERED);
+		action_result(pfn, MF_MSG_DAX, rc ? MF_FAILED : MF_RECOVERED, flags);
 	return rc;
 }
 
@@ -2390,7 +2397,7 @@ static int memory_failure_pfn(unsigned long pfn, int flags)
 		}
 
 		if (!mf_handled)
-			return action_result(pfn, MF_MSG_PFN_MAP, MF_IGNORED);
+			return action_result(pfn, MF_MSG_PFN_MAP, MF_IGNORED, flags);
 	}
 
 	/*
@@ -2403,7 +2410,7 @@ static int memory_failure_pfn(unsigned long pfn, int flags)
 
 	kill_procs(&tokill, true, pfn, flags);
 
-	return action_result(pfn, MF_MSG_PFN_MAP, MF_RECOVERED);
+	return action_result(pfn, MF_MSG_PFN_MAP, MF_RECOVERED, flags);
 }
 
 /**
@@ -2490,7 +2497,7 @@ try_again:
 			res = kill_accessing_process(current, pfn, flags);
 		if (flags & MF_COUNT_INCREASED)
 			put_page(p);
-		action_result(pfn, MF_MSG_ALREADY_POISONED, MF_FAILED);
+		action_result(pfn, MF_MSG_ALREADY_POISONED, MF_FAILED, flags);
 		goto unlock_mutex;
 	}
 
@@ -2521,9 +2528,9 @@ try_again:
 				}
 				res = MF_FAILED;
 			}
-			res = action_result(pfn, MF_MSG_BUDDY, res);
+			res = action_result(pfn, MF_MSG_BUDDY, res, flags);
 		} else {
-			res = action_result(pfn, MF_MSG_KERNEL_HIGH_ORDER, MF_IGNORED);
+			res = action_result(pfn, MF_MSG_KERNEL_HIGH_ORDER, MF_IGNORED, flags);
 		}
 		goto unlock_mutex;
 	case 1:
@@ -2535,11 +2542,11 @@ try_again:
 		 * slab, page tables, large-kmalloc).
 		 * No recovery possible.
 		 */
-		res = action_result(pfn, MF_MSG_KERNEL, MF_IGNORED);
+		res = action_result(pfn, MF_MSG_KERNEL, MF_IGNORED, flags);
 		goto unlock_mutex;
 	default:
 		/* Transient lifecycle race with the page allocator. */
-		res = action_result(pfn, MF_MSG_GET_HWPOISON, MF_IGNORED);
+		res = action_result(pfn, MF_MSG_GET_HWPOISON, MF_IGNORED, flags);
 		goto unlock_mutex;
 	}
 
@@ -2587,7 +2594,7 @@ try_again:
 			res = -EHWPOISON;
 			kill_procs_now(p, pfn, flags, folio);
 			put_page(p);
-			action_result(pfn, MF_MSG_UNSPLIT_THP, MF_FAILED);
+			action_result(pfn, MF_MSG_UNSPLIT_THP, MF_FAILED, flags);
 			goto unlock_mutex;
 		}
 		VM_BUG_ON_PAGE(!page_count(p), p);
@@ -2641,7 +2648,7 @@ try_again:
 	 * Abort on fail: __filemap_remove_folio() assumes unmapped page.
 	 */
 	if (!hwpoison_user_mappings(folio, p, pfn, flags)) {
-		res = action_result(pfn, MF_MSG_UNMAP_FAILED, MF_FAILED);
+		res = action_result(pfn, MF_MSG_UNMAP_FAILED, MF_FAILED, flags);
 		goto unlock_page;
 	}
 
@@ -2650,12 +2657,12 @@ try_again:
 	 */
 	if (folio_test_lru(folio) && !folio_test_swapcache(folio) &&
 	    folio->mapping == NULL) {
-		res = action_result(pfn, MF_MSG_TRUNCATED_LRU, MF_IGNORED);
+		res = action_result(pfn, MF_MSG_TRUNCATED_LRU, MF_IGNORED, flags);
 		goto unlock_page;
 	}
 
 identify_page_state:
-	res = identify_page_state(pfn, p, page_flags);
+	res = identify_page_state(pfn, p, page_flags, flags);
 	mutex_unlock(&mf_mutex);
 	return res;
 unlock_page:

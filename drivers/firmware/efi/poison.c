@@ -11,12 +11,14 @@
 #define pr_fmt(fmt) "efi: " fmt
 
 #include <linux/bitmap.h>
+#include <linux/cc_platform.h>
 #include <linux/efi.h>
 #include <linux/io.h>
 #include <linux/log2.h>
 #include <linux/memblock.h>
 #include <linux/mm.h>
 #include <linux/overflow.h>
+#include <linux/uaccess.h>
 
 static bool __init
 efi_poison_geometry_valid(const struct linux_efi_poisoned_memory *pm)
@@ -171,4 +173,71 @@ void __init efi_poisoned_memory_reserve_units(void)
 		return;
 
 	efi_poison_reserve_units(efi.poisoned_memory, &efi_poison_hdr);
+}
+
+static struct linux_efi_poisoned_memory *efi_poison_table __ro_after_init;
+
+static bool __init efi_poison_mapped(const void *map, size_t len)
+{
+	const void *end = map + len;
+	const void *p;
+	u64 val;
+
+	for (p = map; p < end; p = PTR_ALIGN_DOWN(p, PAGE_SIZE) + PAGE_SIZE)
+		if (copy_from_kernel_nofault(&val, p, sizeof(val)))
+			return false;
+
+	return true;
+}
+
+static int __init efi_poisoned_memory_map(void)
+{
+	struct linux_efi_poisoned_memory *hdr, *table = NULL;
+	size_t len = 0;
+
+	if (efi.poisoned_memory == EFI_INVALID_TABLE_ADDR)
+		return 0;
+
+	/*
+	 * The stub writes the table in the clear, so an SME host needs a
+	 * decrypted mapping. Skip such hosts for now.
+	 */
+	if (cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT)) {
+		pr_warn("SME is active, poisoned frames are not recorded\n");
+		return 0;
+	}
+
+	hdr = memremap(efi.poisoned_memory, sizeof(*hdr), MEMREMAP_WB);
+	if (hdr) {
+		if (efi_poison_mapped(hdr, sizeof(*hdr)))
+			len = sizeof(*hdr) + hdr->size;
+		memunmap(hdr);
+		if (len)
+			table = memremap(efi.poisoned_memory, len, MEMREMAP_WB);
+	}
+	if (table && !efi_poison_mapped(table, len)) {
+		memunmap(table);
+		table = NULL;
+	}
+	if (!table)
+		pr_warn("Could not map poisoned-memory table, poisoned frames are not recorded\n");
+	efi_poison_table = table;
+
+	return 0;
+}
+early_initcall(efi_poisoned_memory_map);
+
+void efi_hwpoison_record_pfn(unsigned long pfn)
+{
+	struct linux_efi_poisoned_memory *pm = efi_poison_table;
+	phys_addr_t addr = PFN_PHYS(pfn);
+	u64 unit;
+
+	if (!pm || addr < pm->phys_base)
+		return;
+
+	/* unit is the bit we are going to set in the bitmap */
+	unit = (addr - pm->phys_base) / pm->unit_size;
+	if (unit < pm->size * BITS_PER_BYTE)
+		set_bit(unit, pm->bitmap);
 }
