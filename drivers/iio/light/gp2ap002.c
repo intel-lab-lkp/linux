@@ -129,6 +129,7 @@
  * @dev: pointer to parent device
  * @vdd: regulator controlling VDD
  * @vio: regulator controlling VIO
+ * @vled: regulator controlling VLED
  * @alsout: IIO ADC channel to convert the ALSOUT signal
  * @hys_far: hysteresis control from device tree
  * @hys_close: hysteresis control from device tree
@@ -142,6 +143,7 @@ struct gp2ap002 {
 	struct device *dev;
 	struct regulator *vdd;
 	struct regulator *vio;
+	struct regulator *vled;
 	struct iio_channel *alsout;
 	u8 hys_far;
 	u8 hys_close;
@@ -169,7 +171,7 @@ static irqreturn_t gp2ap002_prox_irq(int irq, void *d)
 
 	if (val & GP2AP002_PROX_VO_DETECT) {
 		/* Close */
-		dev_dbg(gp2ap002->dev, "close\n");
+		dev_dbg(gp2ap002->dev, "close %i\n", val);
 		ret = regmap_write(gp2ap002->map, GP2AP002_HYS,
 				   gp2ap002->hys_far);
 		if (ret)
@@ -179,7 +181,7 @@ static irqreturn_t gp2ap002_prox_irq(int irq, void *d)
 					IIO_EV_TYPE_THRESH, IIO_EV_DIR_RISING);
 	} else {
 		/* Far */
-		dev_dbg(gp2ap002->dev, "far\n");
+		dev_dbg(gp2ap002->dev, "far %i\n", val);
 		ret = regmap_write(gp2ap002->map, GP2AP002_HYS,
 				   gp2ap002->hys_close);
 		if (ret)
@@ -530,13 +532,21 @@ static int gp2ap002_probe(struct i2c_client *client)
 	if (IS_ERR(gp2ap002->vio))
 		return dev_err_probe(dev, PTR_ERR(gp2ap002->vio),
 				     "failed to get VIO regulator\n");
+	// returns a dummy if not declared:
+	gp2ap002->vled = devm_regulator_get(dev, "vled");
+	if (IS_ERR(gp2ap002->vled))
+		return dev_err_probe(dev, PTR_ERR(gp2ap002->vled),
+				     "failed to get VLED regulator\n");
 
 	/* Operating voltage 2.4V .. 3.6V according to datasheet */
 	ret = regulator_set_voltage(gp2ap002->vdd, 2400000, 3600000);
 	if (ret) {
-		dev_err(dev, "failed to sett VDD voltage\n");
+		dev_err(dev, "failed to set VDD voltage\n");
 		return ret;
 	}
+
+	/* LED voltage 2.4V .. 3.6V according to datasheet */
+	/* nothing to set: it's a simple "regulator-fixed" gpio pin */
 
 	/* VIO should be between 1.65V and VDD */
 	ret = regulator_get_voltage(gp2ap002->vdd);
@@ -559,6 +569,11 @@ static int gp2ap002_probe(struct i2c_client *client)
 	if (ret) {
 		dev_err(dev, "failed to enable VIO regulator\n");
 		goto out_disable_vdd;
+	}
+	ret = regulator_enable(gp2ap002->vled);
+	if (ret) {
+		dev_err(dev, "failed to enable VLED regulator\n");
+		goto out_disable_vio;
 	}
 
 	msleep(20);
@@ -635,6 +650,7 @@ static void gp2ap002_remove(struct i2c_client *client)
 	iio_device_unregister(indio_dev);
 	regulator_disable(gp2ap002->vio);
 	regulator_disable(gp2ap002->vdd);
+	regulator_disable(gp2ap002->vled);
 }
 
 static int gp2ap002_runtime_suspend(struct device *dev)
@@ -659,6 +675,7 @@ static int gp2ap002_runtime_suspend(struct device *dev)
 	 */
 	regulator_disable(gp2ap002->vio);
 	regulator_disable(gp2ap002->vdd);
+	regulator_disable(gp2ap002->vled);
 
 	return 0;
 }
@@ -678,6 +695,11 @@ static int gp2ap002_runtime_resume(struct device *dev)
 	if (ret) {
 		dev_err(dev, "failed to enable VIO regulator in resume path\n");
 		goto out_disable_vdd;
+	}
+	ret = regulator_enable(gp2ap002->vled);
+	if (ret) {
+		dev_err(dev, "failed to enable VLED regulator in resume path\n");
+		goto out_disable_vio;
 	}
 
 	msleep(20);
