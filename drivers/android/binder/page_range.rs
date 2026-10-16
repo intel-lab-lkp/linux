@@ -27,7 +27,7 @@ use kernel::{
     ffi::{c_ulong, c_void},
     mm::{virt, Mm, MmWithUser},
     new_mutex, new_spinlock,
-    page::{Page, PAGE_SHIFT, PAGE_SIZE},
+    page::{MemcgAllocError, Page, PAGE_SHIFT, PAGE_SIZE},
     prelude::*,
     str::CStr,
     sync::{aref::ARef, Mutex, SpinLock},
@@ -399,7 +399,16 @@ impl ShrinkablePageRange {
     /// Assumes that `i` is in bounds.
     #[cold]
     unsafe fn use_page_slow(&self, i: usize) -> Result<()> {
-        let new_page = Page::alloc_page(GFP_KERNEL | __GFP_HIGHMEM | __GFP_ZERO)?;
+        let new_page = Page::alloc_page_memcg(GFP_KERNEL | __GFP_HIGHMEM | __GFP_ZERO, &self.mm)
+            .inspect_err(|err| {
+                if *err == MemcgAllocError::Memcg {
+                    binder_debug!(
+                        FailedTransaction,
+                        "page allocation for message to {} was blocked by memory cgroup limits",
+                        self.pid,
+                    );
+                }
+            })?;
 
         let mm_mutex = self.mm_lock.lock();
         let inner = self.lock.lock();
