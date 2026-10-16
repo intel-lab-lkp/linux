@@ -2471,8 +2471,20 @@ void kfd_update_svm_support_properties(struct amdgpu_device *adev)
 				sys_props.generation_count++;
 			else
 				dev_err(adev->dev, "Failed to update SVM support properties. ret=%d\n", ret);
-		} else
+		} else {
+#if IS_ENABLED(CONFIG_HSA_AMD_SVM)
+			/* Report it rather than letting the capability
+			 * silently vanish from the KFD topology.
+			 */
+			if ((adev->kfd.pgmap.type || adev->apu_prefer_gtt) &&
+			    !kfd_svm_vm_covers_user_va(adev))
+				dev_warn_once(adev->dev,
+					      "GPUVM size 0x%llx is too small for KFD SVM; SVM disabled (amdgpu.vm_size=%d)\n",
+					      adev->vm_manager.max_pfn << AMDGPU_GPU_PAGE_SHIFT,
+					      amdgpu_vm_size);
+#endif
 			dev->node_props.capability &= ~HSA_CAP_SVMAPI_SUPPORTED;
+		}
 	}
 	up_write(&topology_lock);
 }
