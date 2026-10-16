@@ -12,9 +12,14 @@ KERNELRELEASE=$1
 
 : ${DEPMOD:=depmod}
 
-if ! test -r "${objtree}/System.map" ; then
-	echo "Warning: modules_install: missing 'System.map' file. Skipping depmod." >&2
-	exit 0
+system_map="${objtree}/System.map"
+if ! test -r "${system_map}" ; then
+	if test -r "${INSTALL_MOD_PATH}/boot/System.map-${KERNELRELEASE}" ; then
+		system_map="${INSTALL_MOD_PATH}/boot/System.map-${KERNELRELEASE}"
+	else
+		echo "Warning: modules_install: missing 'System.map' file. Skipping depmod." >&2
+		exit 0
+	fi
 fi
 
 # legacy behavior: "depmod" in /sbin, no /sbin in PATH
@@ -25,7 +30,7 @@ if [ -z $(command -v $DEPMOD) ]; then
 	exit 0
 fi
 
-set -- -ae -F "${objtree}/System.map"
+set -- -ae -F "${system_map}"
 if test -n "$INSTALL_MOD_PATH"; then
 	set -- "$@" -b "$INSTALL_MOD_PATH"
 fi
