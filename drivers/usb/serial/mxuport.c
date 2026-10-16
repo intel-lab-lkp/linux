@@ -25,6 +25,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/firmware.h>
+#include <linux/hrtimer.h>
 #include <linux/jiffies.h>
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
@@ -206,6 +207,11 @@ static const u16 mxuport_mux50u_fw_ver_offsets[] = {
 #define MX_WAIT_FOR_LOW_WATER		0x0040
 #define MX_WAIT_FOR_SEND_NEXT		0x0080
 #define MX_WAIT_FOR_PURGE		0x0100
+
+/* G1 queue count excludes its 128-byte UART FIFO and transmit shifter. */
+#define MX_UPORT_G1_DRAIN_FRAMES	129
+/* MUX50U queue count includes its UART FIFO but may exclude the shifter. */
+#define MX_MUX50U_DRAIN_FRAMES		1
 
 /* This structure holds all of the local port information */
 struct mxuport_port {
@@ -714,6 +720,64 @@ static bool mxuport_tx_empty(struct usb_serial_port *port)
 	dev_dbg(&port->dev, "%s - tx len = %u\n", __func__, txlen);
 
 	return txlen == 0;
+}
+
+static void mxuport_wait_until_sent(struct tty_struct *tty, long timeout)
+{
+	struct usb_serial_port *port = tty->driver_data;
+	struct usb_serial *serial = port->serial;
+	unsigned long features = (unsigned long)usb_get_serial_data(serial);
+	unsigned long deadline = 0;
+	unsigned int frame_bits;
+	unsigned int frames;
+	unsigned int baud;
+	ktime_t expires;
+	u64 delay_ns;
+
+	switch (MX_FAMILY(features)) {
+	case MX_UPORT_G1:
+		frames = MX_UPORT_G1_DRAIN_FRAMES;
+		break;
+	case MX_UPORT_G2:
+	case MX_PLATFORM_UART:
+		frames = MX_MUX50U_DRAIN_FRAMES;
+		break;
+	default:
+		usb_serial_generic_wait_until_sent(tty, timeout);
+		return;
+	}
+
+	baud = tty_get_baud_rate(tty);
+	if (!baud)
+		baud = 9600;
+
+	frame_bits = tty_get_frame_size(tty->termios.c_cflag);
+	if (timeout)
+		deadline = jiffies + timeout;
+
+	usb_serial_generic_wait_until_sent(tty, timeout);
+	if (signal_pending(current))
+		return;
+
+	if (timeout && time_after_eq(jiffies, deadline))
+		return;
+
+	delay_ns = DIV_ROUND_UP_ULL((u64)frames * frame_bits * NSEC_PER_SEC,
+				    baud);
+	if (timeout)
+		delay_ns = min_t(u64, delay_ns,
+				 jiffies_to_nsecs(deadline - jiffies));
+
+	dev_dbg(&port->dev,
+		"%s - waiting %llu us after transmit queue drained\n",
+		__func__, DIV_ROUND_UP_ULL(delay_ns, NSEC_PER_USEC));
+
+	expires = ktime_add_ns(ktime_get(), delay_ns);
+	while (!signal_pending(current)) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		if (!schedule_hrtimeout(&expires, HRTIMER_MODE_ABS))
+			break;
+	}
 }
 
 static int mxuport_set_mcr(struct usb_serial_port *port, u8 mcr_state)
@@ -1666,6 +1730,7 @@ static struct usb_serial_driver mxuport_device = {
 	.set_termios		= mxuport_set_termios,
 	.break_ctl		= mxuport_break_ctl,
 	.tx_empty		= mxuport_tx_empty,
+	.wait_until_sent	= mxuport_wait_until_sent,
 	.ioctl			= mxuport_ioctl,
 	.tiocmiwait		= usb_serial_generic_tiocmiwait,
 	.get_icount		= usb_serial_generic_get_icount,
