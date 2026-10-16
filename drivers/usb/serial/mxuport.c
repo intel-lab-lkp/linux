@@ -1452,6 +1452,7 @@ static int mxuport_open(struct tty_struct *tty, struct usb_serial_port *port)
 	struct mxuport_port *mxport = usb_get_serial_port_data(port);
 	struct usb_serial *serial = port->serial;
 	unsigned long flags;
+	u8 msr_state;
 	int err;
 
 	/* Set receive host (enable) */
@@ -1477,13 +1478,19 @@ static int mxuport_open(struct tty_struct *tty, struct usb_serial_port *port)
 	mxport->hold_reason &= ~MX_WAIT_FOR_SEND_NEXT;
 	spin_unlock_irqrestore(&port->lock, flags);
 
-	/*
-	 * TODO: use RQ_VENDOR_GET_MSR, once we know what it
-	 * returns.
-	 */
-	mxport->msr_state = 0;
+	err = mxuport_recv_ctrl(serial, RQ_VENDOR_GET_MSR, 0,
+				port->port_number, &msr_state,
+				sizeof(msr_state));
+	if (err)
+		msr_state = 0;
+	else
+		msr_state &= ~UART_MSR_ANY_DELTA;
 
-	return err;
+	spin_lock_irqsave(&mxport->spinlock, flags);
+	mxport->msr_state = msr_state;
+	spin_unlock_irqrestore(&mxport->spinlock, flags);
+
+	return 0;
 }
 
 static void mxuport_close(struct usb_serial_port *port)
