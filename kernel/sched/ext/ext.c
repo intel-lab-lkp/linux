@@ -4430,7 +4430,7 @@ static u32 reenq_local(struct scx_sched *sch, struct rq *rq, u64 reenq_flags)
 
 	if (WARN_ON_ONCE(reenq_flags & __SCX_REENQ_TSR_MASK))
 		reenq_flags &= ~__SCX_REENQ_TSR_MASK;
-	if (rq_is_open(rq, 0))
+	if (!(reenq_flags & SCX_REENQ_IDLE_PICK) && rq_is_open(rq, 0))
 		reenq_flags |= SCX_REENQ_TSR_RQ_OPEN;
 
 	/*

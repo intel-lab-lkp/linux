@@ -1778,6 +1778,12 @@ enum scx_reenq_flags {
 	/* internal: kernel-issued on cap revoke, not accepted from BPF */
 	SCX_REENQ_CAP_REVOKE	= 1LLU << 1,
 
+	/*
+	 * internal: kernel-issued when the rq picks idle with IMMED tasks on its
+	 * local DSQ, the rq isn't open for them regardless of rq_is_open().
+	 */
+	SCX_REENQ_IDLE_PICK	= 1LLU << 2,
+
 	__SCX_REENQ_FILTER_MASK	= 0xffffLLU,
 
 	__SCX_REENQ_USER_MASK	= SCX_REENQ_ANY,

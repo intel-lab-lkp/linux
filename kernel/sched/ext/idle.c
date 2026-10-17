@@ -805,6 +805,16 @@ void __scx_update_idle(struct rq *rq, bool idle, bool do_notify)
 	lockdep_assert_rq_held(rq);
 
 	/*
+	 * Picking idle with IMMED tasks on the local DSQ means that they didn't
+	 * run immediately, e.g., core scheduling forced the CPU idle. Outside
+	 * of that, pick_task_scx() would have taken the local DSQ head. As
+	 * next_class is idle, the rq looks open to rq_is_open(), tell
+	 * reenq_local() to reenqueue the IMMED tasks anyway.
+	 */
+	if (idle && unlikely(rq->scx.nr_immed))
+		scx_schedule_reenq_local(rq, SCX_REENQ_IDLE_PICK);
+
+	/*
 	 * pick_task_idle() calls here only on an idle-to-idle re-pick and the
 	 * transitions call with @do_notify, so every reaching call updates the
 	 * masks.
