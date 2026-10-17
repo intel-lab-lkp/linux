@@ -9,6 +9,14 @@
 
 #include "rtw8723x.h"
 
+enum rtw8723b_package_type {
+	RTW8723B_PACKAGE_DEFAULT,
+	RTW8723B_PACKAGE_QFN68,
+	RTW8723B_PACKAGE_TFBGA90,
+	RTW8723B_PACKAGE_TFBGA80,
+	RTW8723B_PACKAGE_TFBGA79,
+};
+
 extern const struct rtw_chip_info rtw8723b_hw_spec;
 
 #endif

@@ -6,6 +6,7 @@
 
 #include "main.h"
 #include "coex.h"
+#include "efuse.h"
 #include "fw.h"
 #include "mac.h"
 #include "phy.h"
@@ -2349,6 +2350,38 @@ static void rtw8723b_fill_txdesc_checksum(struct rtw_dev *rtwdev,
 	fill_txdesc_checksum_common(txdesc, 16);
 }
 
+static void rtw8723b_read_package_type(struct rtw_dev *rtwdev)
+{
+	struct rtw_hal *hal = &rtwdev->hal;
+	u8 val_1fb;
+
+	rtw8723b_efuse_grant(rtwdev, true);
+	rtw_read8_physical_efuse(rtwdev, 0x1fb, &val_1fb);
+	rtw8723b_efuse_grant(rtwdev, false);
+
+	switch (u8_get_bits(val_1fb, GENMASK(2, 0))) {
+	case 0x4:
+		hal->pkg_type = RTW8723B_PACKAGE_TFBGA79;
+		break;
+	case 0x5:
+		hal->pkg_type = RTW8723B_PACKAGE_TFBGA90;
+		break;
+	case 0x6:
+		hal->pkg_type = RTW8723B_PACKAGE_QFN68;
+		break;
+	case 0x7:
+		hal->pkg_type = RTW8723B_PACKAGE_TFBGA80;
+		break;
+	default:
+		hal->pkg_type = RTW8723B_PACKAGE_DEFAULT;
+		break;
+	}
+
+	if (rtw_hci_type(rtwdev) == RTW_HCI_TYPE_SDIO &&
+	    u8_get_bits(val_1fb, GENMASK(5, 4)) == 0x2)
+		rtwdev->efuse.hw_cap.bw &= ~BIT(RTW_CHANNEL_WIDTH_40);
+}
+
 static int rtw8723b_read_efuse(struct rtw_dev *rtwdev, u8 *log_map)
 {
 	struct rtw_efuse *efuse = &rtwdev->efuse;
@@ -2373,6 +2406,8 @@ static int rtw8723b_read_efuse(struct rtw_dev *rtwdev, u8 *log_map)
 	efuse->hw_cap.ant_num = efuse->hw_cap.nss;
 	efuse->hw_cap.bw = BIT(RTW_CHANNEL_WIDTH_20) |
 			   BIT(RTW_CHANNEL_WIDTH_40);
+
+	rtw8723b_read_package_type(rtwdev);
 
 	return 0;
 }
