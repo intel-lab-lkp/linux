@@ -33,6 +33,10 @@ properties:
   vio-supply:
     description: VIO power supply a phandle to a regulator
 
+  vled-supply:
+    description: LED power supply a phandle to a regulator
+      Optional. It may already be connected to VDD.
+
   io-channels:
     maxItems: 1
     description: ALSOUT ADC channel to read the ambient light
