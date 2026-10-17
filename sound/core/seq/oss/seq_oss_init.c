@@ -198,6 +198,14 @@ snd_seq_oss_open(struct file *file, int level)
 		goto _error;
 	}
 
+	/* initialize timer before the port can receive events */
+	dp->timer = snd_seq_oss_timer_new(dp);
+	if (!dp->timer) {
+		pr_err("ALSA: seq_oss: can't alloc timer\n");
+		rc = -ENOMEM;
+		goto _error;
+	}
+
 	/* create port */
 	rc = create_port(dp);
 	if (rc < 0) {
@@ -237,14 +245,6 @@ snd_seq_oss_open(struct file *file, int level)
 			rc = -ENOMEM;
 			goto _error;
 		}
-	}
-
-	/* initialize timer */
-	dp->timer = snd_seq_oss_timer_new(dp);
-	if (!dp->timer) {
-		pr_err("ALSA: seq_oss: can't alloc timer\n");
-		rc = -ENOMEM;
-		goto _error;
 	}
 
 	/* set private data pointer */
@@ -328,7 +328,7 @@ static int
 delete_port(struct seq_oss_devinfo *dp)
 {
 	if (dp->port < 0) {
-		kfree(dp);
+		free_devinfo(dp);
 		return 0;
 	}
 
