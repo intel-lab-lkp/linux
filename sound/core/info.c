@@ -737,27 +737,13 @@ static void snd_info_clear_entries(struct snd_info_entry *entry)
 	entry->p = NULL;
 }
 
-/**
- * snd_info_free_entry - release the info entry
- * @entry: the info entry
- *
- * Releases the info entry.
- */
-void snd_info_free_entry(struct snd_info_entry * entry)
+static void __snd_info_free_entry(struct snd_info_entry *entry)
 {
 	struct snd_info_entry *p, *n;
 
-	if (!entry)
-		return;
-	if (entry->p) {
-		proc_remove(entry->p);
-		guard(mutex)(&info_mutex);
-		snd_info_clear_entries(entry);
-	}
-
 	/* free all children at first */
 	list_for_each_entry_safe(p, n, &entry->children, list)
-		snd_info_free_entry(p);
+		__snd_info_free_entry(p);
 
 	p = entry->parent;
 	if (p) {
@@ -769,6 +755,25 @@ void snd_info_free_entry(struct snd_info_entry * entry)
 		entry->private_free(entry);
 	kfree(entry);
 }
+
+/**
+ * snd_info_free_entry - release the info entry
+ * @entry: the info entry
+ *
+ * Releases the info entry.
+ */
+void snd_info_free_entry(struct snd_info_entry *entry)
+{
+	if (!entry)
+		return;
+	if (entry->p)
+		proc_remove(entry->p);
+
+	/* Serialize clearing and unlinking with recursive registration. */
+	guard(mutex)(&info_mutex);
+	snd_info_clear_entries(entry);
+	__snd_info_free_entry(entry);
+}
 EXPORT_SYMBOL(snd_info_free_entry);
 
 static int __snd_info_register(struct snd_info_entry *entry)
@@ -778,7 +783,6 @@ static int __snd_info_register(struct snd_info_entry *entry)
 	if (snd_BUG_ON(!entry))
 		return -ENXIO;
 	root = entry->parent == NULL ? snd_proc_root->p : entry->parent->p;
-	guard(mutex)(&info_mutex);
 	if (entry->p || !root)
 		return 0;
 	if (S_ISDIR(entry->mode)) {
@@ -801,16 +805,7 @@ static int __snd_info_register(struct snd_info_entry *entry)
 	return 0;
 }
 
-/**
- * snd_info_register - register the info entry
- * @entry: the info entry
- *
- * Registers the proc info entry.
- * The all children entries are registered recursively.
- *
- * Return: Zero if successful, or a negative error code on failure.
- */
-int snd_info_register(struct snd_info_entry *entry)
+static int snd_info_register_recursive(struct snd_info_entry *entry)
 {
 	struct snd_info_entry *p;
 	int err;
@@ -822,12 +817,27 @@ int snd_info_register(struct snd_info_entry *entry)
 	}
 
 	list_for_each_entry(p, &entry->children, list) {
-		err = snd_info_register(p);
+		err = snd_info_register_recursive(p);
 		if (err < 0)
 			return err;
 	}
 
 	return 0;
+}
+
+/**
+ * snd_info_register - register the info entry
+ * @entry: the info entry
+ *
+ * Registers the proc info entry.
+ * The all children entries are registered recursively.
+ *
+ * Return: Zero if successful, or a negative error code on failure.
+ */
+int snd_info_register(struct snd_info_entry *entry)
+{
+	guard(mutex)(&info_mutex);
+	return snd_info_register_recursive(entry);
 }
 EXPORT_SYMBOL(snd_info_register);
 
