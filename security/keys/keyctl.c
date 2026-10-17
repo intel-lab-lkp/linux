@@ -861,10 +861,13 @@ long keyctl_read_key(key_serial_t keyid, char __user *buffer, size_t buflen)
 
 	/* the key is probably readable - now try to read it */
 can_read_key:
-	if (!key->type->read) {
-		ret = -EOPNOTSUPP;
+	down_read(&key->sem);
+	ret = -EOPNOTSUPP;
+	if (key->type->read)
+		ret = 0;
+	up_read(&key->sem);
+	if (ret)
 		goto key_put_out;
-	}
 
 	if (!buffer || !buflen) {
 		/* Get the key length from the read method */
