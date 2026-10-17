@@ -4,4 +4,3 @@
  - Ensure ptraced processes actually see the register state visible through
    the ptrace interface.
  - Big endian.
-- Test PR_SVE_VL_INHERIT after a double fork.

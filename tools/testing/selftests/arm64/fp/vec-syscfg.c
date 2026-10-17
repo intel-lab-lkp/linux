@@ -24,6 +24,8 @@
 
 #define ARCH_MIN_VL SVE_VL_MIN
 
+#define FORK_EXEC_ARG "--fork-exec"
+
 struct vec_data {
 	const char *name;
 	unsigned long hwcap_type;
@@ -85,8 +87,12 @@ static int stdio_read_integer(FILE *f, const char *what, int *val)
 	return 0;
 }
 
-/* Start a new process and return the vector length it sees */
-static int get_child_rdvl(struct vec_data *data)
+/*
+ * Start a new process and return the vector length it sees.  With
+ * grandchild set the child re-executes this program, which forks and
+ * execs once more, so the VL is read two fork()/exec() generations down.
+ */
+static int get_descendant_rdvl(struct vec_data *data, bool grandchild)
 {
 	FILE *out;
 	int pipefd[2];
@@ -120,6 +126,14 @@ static int get_child_rdvl(struct vec_data *data)
 		ret = dup2(pipefd[1], 1);
 		if (ret == -1) {
 			fprintf(stderr, "dup2() %d\n", errno);
+			exit(EXIT_FAILURE);
+		}
+
+		if (grandchild) {
+			execl("/proc/self/exe", "vec-syscfg", FORK_EXEC_ARG,
+			      data->rdvl_binary, NULL);
+			fprintf(stderr, "execl(/proc/self/exe) failed: %d (%s)\n",
+				errno, strerror(errno));
 			exit(EXIT_FAILURE);
 		}
 
@@ -172,6 +186,37 @@ static int get_child_rdvl(struct vec_data *data)
 		return ret;
 
 	return read_vl;
+}
+
+static int get_child_rdvl(struct vec_data *data)
+{
+	return get_descendant_rdvl(data, false);
+}
+
+/* FORK_EXEC_ARG mode: fork, exec path and pass on its exit status */
+static int fork_exec(const char *path)
+{
+	pid_t child;
+	int status;
+
+	child = fork();
+	if (child == -1) {
+		fprintf(stderr, "fork() failed: %d (%s)\n",
+			errno, strerror(errno));
+		return EXIT_FAILURE;
+	}
+
+	if (child == 0) {
+		execl(path, path, NULL);
+		fprintf(stderr, "execl(%s) failed: %d (%s)\n",
+			path, errno, strerror(errno));
+		_exit(EXIT_FAILURE);
+	}
+
+	if (waitpid(child, &status, 0) != child || !WIFEXITED(status))
+		return EXIT_FAILURE;
+
+	return WEXITSTATUS(status);
 }
 
 static int file_read_integer(const char *name, int *val)
@@ -498,6 +543,14 @@ static void prctl_set_for_child(struct vec_data *data)
 		return;
 	}
 
+	/* _INHERIT must survive the child's exec(), check a grandchild */
+	child_vl = get_descendant_rdvl(data, true);
+	if (child_vl != data->min_vl) {
+		ksft_test_result_fail("%s set %d _INHERIT but grandchild VL is %d\n",
+				      data->name, data->min_vl, child_vl);
+		return;
+	}
+
 	ksft_test_result_pass("%s vector length was inherited\n", data->name);
 
 	file_write_integer(data->default_vl_file, data->default_vl);
@@ -759,10 +812,13 @@ static const struct {
 	{ "change_sve_with_za", change_sve_with_za },
 };
 
-int main(void)
+int main(int argc, char **argv)
 {
 	bool all_supported = true;
 	int i, j;
+
+	if (argc == 3 && strcmp(argv[1], FORK_EXEC_ARG) == 0)
+		return fork_exec(argv[2]);
 
 	ksft_print_header();
 	ksft_set_plan(ARRAY_SIZE(tests) * ARRAY_SIZE(vec_data) +
