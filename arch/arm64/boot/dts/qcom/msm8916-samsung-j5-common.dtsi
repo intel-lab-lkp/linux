@@ -149,6 +149,14 @@
 	linux,code = <KEY_VOLUMEDOWN>;
 };
 
+&pm8916_rpm_regulators {
+	pm8916_l17: l17 {
+		regulator-name = "proximity_vdd";
+		regulator-min-microvolt = <2850000>;
+		regulator-max-microvolt = <3100000>;
+	};
+};
+
 &sdhc_1 {
 	status = "okay";
 };
@@ -244,6 +252,13 @@
 		pins = "gpio38";
 		function = "gpio";
 
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	proximity_int_default: proximity-int-default-state {
+		pins = "gpio113";
+		function = "gpio";
 		drive-strength = <2>;
 		bias-disable;
 	};
