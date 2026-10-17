@@ -476,6 +476,9 @@ struct rkcanfd_priv {
 	struct net_device *ndev;
 
 	void __iomem *regs;
+	/* Serialize TX submission/completion with bus-off and restart. */
+	spinlock_t tx_lock;
+	bool tx_enabled;
 	unsigned int tx_head;
 	unsigned int tx_tail;
 

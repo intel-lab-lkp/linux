@@ -91,6 +91,7 @@ rkcanfd_fifo_header_to_cfd_header(const struct rkcanfd_priv *priv,
 	return len + cfd->len;
 }
 
+/* Called with tx_lock held and TX enabled. */
 static int rkcanfd_rxstx_filter(struct rkcanfd_priv *priv,
 				const struct canfd_frame *cfd_rx, const u32 ts,
 				bool *tx_done)
@@ -204,7 +205,9 @@ static int rkcanfd_handle_rx_int_one(struct rkcanfd_priv *priv)
 	struct canfd_frame cfd[1] = { }, *skb_cfd;
 	struct rkcanfd_fifo_header header[1] = { };
 	struct sk_buff *skb;
+	unsigned long flags;
 	unsigned int len;
+	bool tx_done = false;
 	int err;
 
 	/* read header into separate struct and convert it later */
@@ -237,15 +240,24 @@ static int rkcanfd_handle_rx_int_one(struct rkcanfd_priv *priv)
 		return 0;
 	}
 
-	if (rkcanfd_get_tx_pending(priv)) {
-		bool tx_done = false;
-
-		err = rkcanfd_rxstx_filter(priv, cfd, header->ts, &tx_done);
-		if (err)
-			return err;
-		if (tx_done && !(priv->can.ctrlmode & CAN_CTRLMODE_LOOPBACK))
-			return 0;
+	/* Drop FIFO entries while TX is disabled, as they may be self-
+	 * received frames. Do not access the echo ring, retry TX or wake the
+	 * queue while restart owns the ring. The entry is already consumed.
+	 */
+	spin_lock_irqsave(&priv->tx_lock, flags);
+	if (unlikely(!priv->tx_enabled)) {
+		spin_unlock_irqrestore(&priv->tx_lock, flags);
+		return 0;
 	}
+
+	err = 0;
+	if (rkcanfd_get_tx_pending(priv))
+		err = rkcanfd_rxstx_filter(priv, cfd, header->ts, &tx_done);
+	spin_unlock_irqrestore(&priv->tx_lock, flags);
+	if (err)
+		return err;
+	if (tx_done && !(priv->can.ctrlmode & CAN_CTRLMODE_LOOPBACK))
+		return 0;
 
 	/* Manual handling of CAN Bus Error counters. See
 	 * rkcanfd_get_corrected_berr_counter() for detailed
