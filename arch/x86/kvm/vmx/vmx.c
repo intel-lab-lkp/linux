@@ -7082,6 +7082,13 @@ void vmx_load_eoi_exitmap(struct kvm_vcpu *vcpu, u64 *eoi_exit_bitmap)
 	if (!kvm_vcpu_apicv_active(vcpu))
 		return;
 
+	/*
+	 * The EOI-exit bitmap tracks L1's APIC, so it must land in vmcs01, not
+	 * whichever VMCS is currently loaded; a nested VID L2 can be active
+	 * here.  Mirror vmx_hwapic_isr_update()/vmx_sync_pir_to_irr().
+	 */
+	guard(vmx_vmcs01)(vcpu);
+
 	vmcs_write64(EOI_EXIT_BITMAP0, eoi_exit_bitmap[0]);
 	vmcs_write64(EOI_EXIT_BITMAP1, eoi_exit_bitmap[1]);
 	vmcs_write64(EOI_EXIT_BITMAP2, eoi_exit_bitmap[2]);
