@@ -2502,6 +2502,17 @@ prio_changed_rt(struct rq *rq, struct task_struct *p, u64 oldprio)
 		 */
 		if (p->prio < rq->donor->prio)
 			resched_curr(rq);
+
+		/*
+		 * A boost can create a migration opportunity that the pull
+		 * side cannot reach: pull_rt_task() on another CPU only picks
+		 * tasks whose affinity includes that CPU, so a task that gets
+		 * boosted while its CPUs are busy can stay queued until it
+		 * becomes current. Queue a push on this rq instead, which
+		 * selects a target from the task's own affinity.
+		 */
+		if (p->prio < oldprio && rq->rt.overloaded)
+			rt_queue_push_tasks(rq);
 	}
 }
 
