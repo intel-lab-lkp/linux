@@ -17,19 +17,6 @@
 #include "super.h"
 #include "mds_client.h"
 
-static inline void ceph_set_cached_acl(struct inode *inode,
-					int type, struct posix_acl *acl)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-
-	spin_lock(&ci->i_ceph_lock);
-	if (__ceph_caps_issued_mask_metric(ci, CEPH_CAP_XATTR_SHARED, 0))
-		set_cached_acl(inode, type, acl);
-	else
-		forget_cached_acl(inode, type);
-	spin_unlock(&ci->i_ceph_lock);
-}
-
 struct posix_acl *ceph_get_acl(struct inode *inode, int type, bool rcu)
 {
 	struct ceph_client *cl = ceph_inode_to_client(inode);
@@ -73,6 +60,8 @@ retry:
 		acl = posix_acl_from_xattr(&init_user_ns, value, size);
 	} else if (size == -ENODATA || size == 0) {
 		acl = NULL;
+	} else if (size == -EACCES) {
+		acl = ERR_PTR(-EACCES);
 	} else {
 		pr_err_ratelimited_client(cl, "%llx.%llx failed, err=%d\n",
 					  ceph_vinop(inode), size);
@@ -80,9 +69,6 @@ retry:
 	}
 
 	kfree(value);
-
-	if (!IS_ERR(acl))
-		ceph_set_cached_acl(inode, type, acl);
 
 	return acl;
 }
@@ -153,8 +139,6 @@ int ceph_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 		}
 		goto out_free;
 	}
-
-	ceph_set_cached_acl(inode, type, acl);
 
 out_free:
 	kfree(value);
@@ -248,12 +232,4 @@ out_err:
 	if (pagelist)
 		ceph_pagelist_release(pagelist);
 	return err;
-}
-
-void ceph_init_inode_acls(struct inode *inode, struct ceph_acl_sec_ctx *as_ctx)
-{
-	if (!inode)
-		return;
-	ceph_set_cached_acl(inode, ACL_TYPE_ACCESS, as_ctx->acl);
-	ceph_set_cached_acl(inode, ACL_TYPE_DEFAULT, as_ctx->default_acl);
 }
