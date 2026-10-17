@@ -792,5 +792,5 @@ int main(void)
 			ksft_test_result_skip("%s\n", all_types_tests[i].name);
 	}
 
-	ksft_exit_pass();
+	ksft_finished();
 }
