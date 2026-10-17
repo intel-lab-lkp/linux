@@ -8374,6 +8374,18 @@ int vmx_leave_smm(struct kvm_vcpu *vcpu, const union kvm_smram *smram)
 	}
 
 	if (vmx->nested.smm.guest_mode) {
+		/*
+		 * Clear smm.guest_mode up front so the failure arms below, which
+		 * triple-fault the vCPU, cannot leave the internal pair
+		 * (smm.guest_mode=true, smm.vmxon=false): smm.vmxon was already
+		 * consumed into nested.vmxon above, and KVM_GET_NESTED_STATE
+		 * would then serialize SMM_GUEST_MODE without SMM_VMXON, which
+		 * KVM_SET_NESTED_STATE rejects (-EINVAL), breaking the
+		 * save/restore round-trip.  The flag has served its only purpose
+		 * (bringing the vCPU into this re-entry) by now.
+		 */
+		vmx->nested.smm.guest_mode = false;
+
 		/* Triple fault if the state is invalid.  */
 		if (nested_vmx_check_restored_vmcs12(vcpu) < 0)
 			return 1;
@@ -8383,7 +8395,6 @@ int vmx_leave_smm(struct kvm_vcpu *vcpu, const union kvm_smram *smram)
 			return 1;
 
 		vcpu->arch.nested_run_pending = KVM_NESTED_RUN_PENDING;
-		vmx->nested.smm.guest_mode = false;
 	}
 	return 0;
 }
