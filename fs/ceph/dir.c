@@ -349,6 +349,13 @@ static int ceph_readdir(struct file *file, struct dir_context *ctx)
 
 	ceph_blog_enter(fsc, &__ji);
 
+	/* Validate before returning cached entries, dots, or end-of-directory. */
+	err = ceph_quarantine_revalidate(inode);
+	if (err) {
+		ceph_blog_exit(&__ji);
+		return err;
+	}
+
 	boutc(cl, "%p %llx.%llx file %p pos %llx\n", inode,
 	      ceph_vinop(inode), file, ctx->pos);
 	if (dfi->file_info.flags & CEPH_F_ATEND) {
@@ -904,8 +911,13 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 			ceph_dir_clear_complete(dir);
 	}
 
-	/* can we conclude ENOENT locally? */
-	if (d_really_is_negative(dentry)) {
+	/*
+	 * A marked directory, or one whose parents are not cached,
+	 * must not answer from the complete-dir cache. The MDS reply
+	 * is what clears a lost disable.
+	 */
+	if (d_really_is_negative(dentry) &&
+	    ceph_inode_quarantine_state(dir) == CEPH_Q_CLEAR) {
 		struct ceph_inode_info *ci = ceph_inode(dir);
 		struct ceph_dentry_info *di = ceph_dentry(dentry);
 
@@ -1068,9 +1080,7 @@ static int ceph_mknod(struct mnt_idmap *idmap, struct inode *dir,
 out_req:
 	ceph_mdsc_put_request(req);
 out:
-	if (!err)
-		ceph_init_inode_acls(d_inode(dentry), &as_ctx);
-	else
+	if (err)
 		d_drop(dentry);
 	ceph_release_acl_sec_ctx(&as_ctx);
 	ceph_blog_exit(&__ji);
@@ -1297,13 +1307,8 @@ out_req:
 		ret = dget(req->r_dentry);
 	ceph_mdsc_put_request(req);
 out:
-	if (!IS_ERR(ret)) {
-		if (ret)
-			dentry = ret;
-		ceph_init_inode_acls(d_inode(dentry), &as_ctx);
-	} else {
+	if (IS_ERR(ret))
 		d_drop(dentry);
-	}
 	ceph_release_acl_sec_ctx(&as_ctx);
 	ceph_blog_exit(&__ji);
 	return ret;
@@ -1441,7 +1446,16 @@ static int get_caps_for_async_unlink(struct inode *dir, struct dentry *dentry)
 {
 	struct ceph_inode_info *ci = ceph_inode(dir);
 	struct ceph_dentry_info *di;
+	struct inode *inode = d_inode(dentry);
 	int got = 0, want = CEPH_CAP_FILE_EXCL | CEPH_CAP_DIR_UNLINK;
+
+	/*
+	 * Async unlink completes in the cache. A marked inode, or one
+	 * whose parents are not cached, has to go to the MDS.
+	 */
+	if (ceph_inode_quarantine_write_state(dir) != CEPH_Q_CLEAR ||
+	    (inode && ceph_inode_quarantine_write_state(inode) != CEPH_Q_CLEAR))
+		return 0;
 
 	spin_lock(&ci->i_ceph_lock);
 	if ((__ceph_caps_issued(ci, NULL) & want) == want) {
@@ -2349,11 +2363,15 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 	struct ceph_dir_file_info *dfi = file->private_data;
 	struct inode *inode = file_inode(file);
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int left;
+	int left, err;
 	const int bufsize = 1024;
 
 	if (!ceph_test_mount_opt(ceph_sb_to_fs_client(inode->i_sb), DIRSTAT))
 		return -EISDIR;
+
+	err = ceph_quarantine_revalidate(inode);
+	if (err)
+		return err;
 
 	if (!dfi->dir_info) {
 		dfi->dir_info = kmalloc(bufsize, GFP_KERNEL);

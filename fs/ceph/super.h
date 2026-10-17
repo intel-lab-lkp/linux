@@ -1394,8 +1394,6 @@ int ceph_set_acl(struct mnt_idmap *idmap,
 		 struct dentry *dentry, struct posix_acl *acl, int type);
 int ceph_pre_init_acls(struct inode *dir, umode_t *mode,
 		       struct ceph_acl_sec_ctx *as_ctx);
-void ceph_init_inode_acls(struct inode *inode,
-			  struct ceph_acl_sec_ctx *as_ctx);
 
 static inline void ceph_forget_all_cached_acls(struct inode *inode)
 {
@@ -1412,11 +1410,6 @@ static inline int ceph_pre_init_acls(struct inode *dir, umode_t *mode,
 {
 	return 0;
 }
-static inline void ceph_init_inode_acls(struct inode *inode,
-					struct ceph_acl_sec_ctx *as_ctx)
-{
-}
-
 static inline void ceph_forget_all_cached_acls(struct inode *inode)
 {
 }
@@ -1578,7 +1571,7 @@ static inline bool ceph_has_inline_data(const struct ceph_inode_info *ci)
 /* file.c */
 extern const struct file_operations ceph_file_fops;
 
-extern int ceph_renew_caps(struct inode *inode, int fmode);
+int ceph_renew_caps(struct inode *inode, int fmode, bool force);
 extern int ceph_open(struct inode *inode, struct file *file);
 extern int ceph_atomic_open(struct inode *dir, struct dentry *dentry,
 			    struct file *file, unsigned flags, umode_t mode);

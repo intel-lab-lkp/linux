@@ -540,6 +540,10 @@ static int ceph_init_request(struct netfs_io_request *rreq, struct file *file)
 			want |= CEPH_CAP_FILE_LAZYIO;
 	}
 
+	/*
+	 * NETFS_READPAGE is synchronous. ceph_read_folio() holds caps for
+	 * its duration, including the authorization for a snapshot read.
+	 */
 	if (rreq->origin == NETFS_READAHEAD) {
 		/*
 		 * readahead callers do not necessarily hold Fcb caps
@@ -561,21 +565,6 @@ static int ceph_init_request(struct netfs_io_request *rreq, struct file *file)
 		}
 		if (ret == 0) {
 			ret = -EACCES;
-			goto out;
-		}
-	} else {
-		/*
-		 * Make sure we have caps, just in case read_folio was
-		 * called directly (e.g. by erofs) which may have
-		 * bypassed the usual Ceph cap checks.  This branch
-		 * uses __ceph_get_caps() which blocks until the
-		 * required cap has been granted.
-		 */
-		ret = __ceph_get_caps(inode, fi, CEPH_CAP_FILE_RD, want, -1,
-				      &got);
-		if (ret < 0) {
-			boutc(cl, "%llx.%llx, error getting cap\n",
-			      ceph_vinop(inode));
 			goto out;
 		}
 	}
@@ -2069,8 +2058,44 @@ out:
 	return copied;
 }
 
+/* Direct read_folio callers may not have entered through read_iter or fault. */
+static int ceph_read_folio(struct file *file, struct folio *folio)
+{
+	struct address_space *mapping = folio->mapping;
+	struct inode *inode = mapping->host;
+	struct ceph_file_info *fi = file ? file->private_data : NULL;
+	int want = CEPH_CAP_FILE_CACHE;
+	int got, ret;
+
+	if (fi && ceph_find_rw_context(fi))
+		return netfs_read_folio(file, folio);
+
+	if (fi && (fi->fmode & CEPH_FILE_MODE_LAZY))
+		want |= CEPH_CAP_FILE_LAZYIO;
+
+	/* A blocking getattr can fill inline data into this folio. */
+	folio_unlock(folio);
+	got = 0;
+	ret = __ceph_get_caps(inode, fi, CEPH_CAP_FILE_RD, want, -1, &got);
+	if (ret < 0)
+		return ret;
+
+	folio_lock(folio);
+	if (folio->mapping != mapping) {
+		folio_unlock(folio);
+		ret = AOP_TRUNCATED_PAGE;
+	} else if (folio_test_uptodate(folio)) {
+		folio_unlock(folio);
+		ret = 0;
+	} else {
+		ret = netfs_read_folio(file, folio);
+	}
+	ceph_put_cap_refs(ceph_inode(inode), got);
+	return ret;
+}
+
 const struct address_space_operations ceph_aops = {
-	.read_folio = netfs_read_folio,
+	.read_folio = ceph_read_folio,
 	.readahead = netfs_readahead,
 	.writepages = ceph_writepages_start,
 	.write_begin = ceph_write_begin,
@@ -2649,9 +2674,24 @@ static const struct vm_operations_struct ceph_vmops = {
 int ceph_mmap_prepare(struct vm_area_desc *desc)
 {
 	struct address_space *mapping = desc->file->f_mapping;
+	struct inode *inode = file_inode(desc->file);
+	int err, got = 0;
 
 	if (!mapping->a_ops->read_folio)
 		return -ENOEXEC;
+	err = ceph_quarantine_revalidate(inode);
+	if (err)
+		return err;
+	if (vma_desc_test_all(desc, VMA_SHARED_BIT, VMA_WRITE_BIT) &&
+	    ceph_inode_quarantine_write_state(inode) != CEPH_Q_CLEAR) {
+		/* A read receipt cannot admit a writable shared mapping. */
+		err = ceph_get_caps(desc->file, CEPH_CAP_FILE_WR, 0, -1, &got);
+		if (err)
+			return err;
+		ceph_put_cap_refs(ceph_inode(inode), got);
+	}
+	if (ceph_inode_quarantine_direct(inode))
+		return -EACCES;
 	desc->vm_ops = &ceph_vmops;
 	return 0;
 }
