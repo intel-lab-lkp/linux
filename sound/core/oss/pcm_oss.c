@@ -3111,6 +3111,7 @@ static void snd_pcm_oss_proc_done(struct snd_pcm *pcm)
 		struct snd_pcm_str *pstr = &pcm->streams[stream];
 		snd_info_free_entry(pstr->oss.proc_entry);
 		pstr->oss.proc_entry = NULL;
+		guard(mutex)(&pstr->oss.setup_mutex);
 		snd_pcm_oss_proc_free_setup_list(pstr);
 	}
 }
