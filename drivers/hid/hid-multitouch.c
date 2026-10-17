@@ -1954,24 +1954,8 @@ static int mt_input_configured(struct hid_device *hdev, struct hid_input *hi)
 	struct mt_report_data *rdata;
 	struct mt_application *mt_application = NULL;
 	struct hid_report *report;
+	bool has_mt_touchpad = false;
 	int ret;
-
-	if (td->is_haptic_touchpad && (td->mtclass.name == MT_CLS_WIN_8 ||
-	    td->mtclass.name == MT_CLS_WIN_8_FORCE_MULTI_INPUT ||
-	    td->mtclass.name == MT_CLS_WIN_8_KEEP_LATENCY_ON_CLOSE)) {
-		if (hi->application == HID_DG_TOUCHPAD) {
-			ret = hid_haptic_input_configured(hdev, td->haptic, hi);
-			if (ret < 0) {
-				td->haptic_init_error = ret;
-				td->is_haptic_touchpad = false;
-				return ret;
-			}
-			if (ret == 0)
-				td->is_haptic_touchpad = false;
-		}
-	} else {
-		td->is_haptic_touchpad = false;
-	}
 
 	list_for_each_entry(report, &hi->reports, hidinput_list) {
 		rdata = mt_find_report_data(td, report);
@@ -1987,7 +1971,27 @@ static int mt_input_configured(struct hid_device *hdev, struct hid_input *hi)
 							mt_application);
 			if (ret)
 				return ret;
+			if (hi->application == HID_DG_TOUCHPAD)
+				has_mt_touchpad = true;
 		}
+	}
+
+	if (td->is_haptic_touchpad &&
+	    (td->mtclass.name == MT_CLS_WIN_8 ||
+	     td->mtclass.name == MT_CLS_WIN_8_FORCE_MULTI_INPUT ||
+	     td->mtclass.name == MT_CLS_WIN_8_KEEP_LATENCY_ON_CLOSE)) {
+		if (has_mt_touchpad) {
+			ret = hid_haptic_input_configured(hdev, td->haptic, hi);
+			if (ret < 0) {
+				td->haptic_init_error = ret;
+				td->is_haptic_touchpad = false;
+				return ret;
+			}
+			if (ret == 0)
+				td->is_haptic_touchpad = false;
+		}
+	} else {
+		td->is_haptic_touchpad = false;
 	}
 
 	switch (hi->application) {

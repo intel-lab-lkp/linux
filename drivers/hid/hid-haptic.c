@@ -5,6 +5,7 @@
  *  Copyright (c) 2021 Angela Czubak <acz@semihalf.com>
  */
 
+#include <linux/cleanup.h>
 #include <linux/input/mt.h>
 #include <linux/module.h>
 
@@ -90,7 +91,9 @@ int hid_haptic_input_configured(struct hid_device *hdev,
 	if (!haptic->auto_trigger_report || !haptic->manual_trigger_report)
 		return 0;
 
-	__set_bit(INPUT_PROP_PRESSUREPAD, hi->input->propbit);
+	/* The HID reports are shared; create only one FF instance. */
+	if (haptic->input_dev)
+		return 1;
 
 	error = hid_haptic_init(hdev, haptic, hi->input);
 	if (error) {
@@ -98,6 +101,9 @@ int hid_haptic_input_configured(struct hid_device *hdev,
 			 hdev->name);
 		return error;
 	}
+
+	__set_bit(INPUT_PROP_PRESSUREPAD, hi->input->propbit);
+	haptic->input_dev = hi->input;
 
 	return 1;
 }
@@ -377,53 +383,76 @@ static int hid_haptic_erase(struct input_dev *dev, int effect_id)
 	return 0;
 }
 
-static void hid_haptic_stop(struct ff_device *ff)
+static void hid_haptic_stop_work(struct hid_haptic_device *haptic)
 {
-	struct hid_haptic_device *haptic = ff->private;
-
 	if (haptic->wq) {
 		destroy_workqueue(haptic->wq);
 		haptic->wq = NULL;
 	}
 }
 
-static void hid_haptic_destroy(struct ff_device *ff)
+static void hid_haptic_stop(struct ff_device *ff)
 {
-	struct hid_haptic_device *haptic = ff->private;
+	hid_haptic_stop_work(ff->private);
+}
+
+static void hid_haptic_free_resources(struct hid_haptic_device *haptic)
+{
 	int r;
 
-	hid_haptic_stop(ff);
+	hid_haptic_stop_work(haptic);
 
 	kfree(haptic->stop_effect.report_buf);
-	haptic->stop_effect.report_buf = NULL;
 
 	if (haptic->effect) {
-		for (r = 0; r < ff->max_effects; r++)
+		for (r = 0; r < FF_MAX_EFFECTS; r++)
 			kfree(haptic->effect[r].report_buf);
 		kfree(haptic->effect);
 	}
-	haptic->effect = NULL;
 
 	kfree(haptic->duration_map);
-	haptic->duration_map = NULL;
-
 	kfree(haptic->hid_usage_map);
-	haptic->hid_usage_map = NULL;
+}
+
+static void hid_haptic_free_state(struct hid_haptic_device *haptic)
+{
+	if (haptic) {
+		hid_haptic_free_resources(haptic);
+		kfree(haptic);
+	}
+}
+
+DEFINE_FREE(hid_haptic_state, struct hid_haptic_device *, hid_haptic_free_state(_T));
+
+static void hid_haptic_destroy(struct ff_device *ff)
+{
+	struct hid_haptic_device *haptic = ff->private;
+
+	hid_haptic_free_resources(haptic);
 
 	module_put(THIS_MODULE);
 }
 
 int hid_haptic_init(struct hid_device *hdev,
-		    struct hid_haptic_device *haptic,
+		    const struct hid_haptic_device *config,
 		    struct input_dev *dev)
 {
+	struct hid_haptic_device *haptic __free(hid_haptic_state) =
+		kmemdup(config, sizeof(*config), GFP_KERNEL);
 	struct ff_device *ff;
-	int ret = 0, r;
+	int ret, r;
 	struct ff_haptic_effect stop_effect = {
 		.hid_usage = HID_HP_WAVEFORMSTOP & HID_USAGE,
 	};
-	const char *prefix = "hid-haptic";
-	char *name;
+	if (!haptic)
+		return -ENOMEM;
+
+	/* The mapping state does not own these allocations. */
+	haptic->hid_usage_map = NULL;
+	haptic->duration_map = NULL;
+	haptic->effect = NULL;
+	haptic->stop_effect.report_buf = NULL;
+	haptic->wq = NULL;
 
 	haptic->hdev = hdev;
 	haptic->max_waveform_id = max(2u, haptic->max_waveform_id);
@@ -431,16 +460,12 @@ int hid_haptic_init(struct hid_device *hdev,
 
 	haptic->hid_usage_map = kcalloc(haptic->max_waveform_id + 1,
 					sizeof(u16), GFP_KERNEL);
-	if (!haptic->hid_usage_map) {
-		ret = -ENOMEM;
-		goto exit;
-	}
+	if (!haptic->hid_usage_map)
+		return -ENOMEM;
 	haptic->duration_map = kcalloc(haptic->max_duration_id + 1,
 				       sizeof(u32), GFP_KERNEL);
-	if (!haptic->duration_map) {
-		ret = -ENOMEM;
-		goto usage_map;
-	}
+	if (!haptic->duration_map)
+		return -ENOMEM;
 
 	if (haptic->max_waveform_id != haptic->max_duration_id)
 		dev_warn(&hdev->dev,
@@ -460,21 +485,19 @@ int hid_haptic_init(struct hid_device *hdev,
 	haptic->manual_trigger_report_len =
 		hid_report_len(haptic->manual_trigger_report);
 	mutex_init(&haptic->manual_trigger_mutex);
-	name = kmalloc(strlen(prefix) + strlen(hdev->name) + 2, GFP_KERNEL);
-	if (name) {
-		sprintf(name, "%s %s", prefix, hdev->name);
+	{
+		char *name __free(kfree) = kasprintf(GFP_KERNEL,
+						     "hid-haptic %s", hdev->name);
+
+		if (!name)
+			return -ENOMEM;
 		haptic->wq = create_singlethread_workqueue(name);
-		kfree(name);
 	}
-	if (!haptic->wq) {
-		ret = -ENOMEM;
-		goto duration_map;
-	}
+	if (!haptic->wq)
+		return -ENOMEM;
 	haptic->effect = kzalloc_objs(struct hid_haptic_effect, FF_MAX_EFFECTS);
-	if (!haptic->effect) {
-		ret = -ENOMEM;
-		goto output_queue;
-	}
+	if (!haptic->effect)
+		return -ENOMEM;
 	for (r = 0; r < FF_MAX_EFFECTS; r++) {
 		haptic->effect[r].report_buf =
 			hid_alloc_report_buf(haptic->manual_trigger_report,
@@ -482,8 +505,7 @@ int hid_haptic_init(struct hid_device *hdev,
 		if (!haptic->effect[r].report_buf) {
 			dev_err(&hdev->dev,
 				"Failed to allocate a buffer for an effect.\n");
-			ret = -ENOMEM;
-			goto buffer_free;
+			return -ENOMEM;
 		}
 		haptic->effect[r].input_dev = dev;
 		INIT_WORK(&haptic->effect[r].work, haptic_work_handler);
@@ -494,8 +516,7 @@ int hid_haptic_init(struct hid_device *hdev,
 	if (!haptic->stop_effect.report_buf) {
 		dev_err(&hdev->dev,
 			"Failed to allocate a buffer for stop effect.\n");
-		ret = -ENOMEM;
-		goto buffer_free;
+		return -ENOMEM;
 	}
 	haptic->stop_effect.input_dev = dev;
 	INIT_WORK(&haptic->stop_effect.work, haptic_work_handler);
@@ -507,7 +528,9 @@ int hid_haptic_init(struct hid_device *hdev,
 	ret = input_ff_create(dev, FF_MAX_EFFECTS);
 	if (ret) {
 		dev_err(&hdev->dev, "Failed to create ff device.\n");
-		goto ff_cap_clear;
+		__clear_bit(FF_HAPTIC, dev->ffbit);
+		__clear_bit(EV_FF, dev->evbit);
+		return ret;
 	}
 
 	ff = dev->ff;
@@ -517,30 +540,8 @@ int hid_haptic_init(struct hid_device *hdev,
 	ff->stop = hid_haptic_stop;
 	ff->destroy = hid_haptic_destroy;
 	__module_get(THIS_MODULE);
-	ff->private = haptic;
+	ff->private = no_free_ptr(haptic);
 	return 0;
-
-ff_cap_clear:
-	__clear_bit(FF_HAPTIC, dev->ffbit);
-	__clear_bit(EV_FF, dev->evbit);
-	kfree(haptic->stop_effect.report_buf);
-	haptic->stop_effect.report_buf = NULL;
-buffer_free:
-	while (--r >= 0)
-		kfree(haptic->effect[r].report_buf);
-	kfree(haptic->effect);
-	haptic->effect = NULL;
-output_queue:
-	destroy_workqueue(haptic->wq);
-	haptic->wq = NULL;
-duration_map:
-	kfree(haptic->duration_map);
-	haptic->duration_map = NULL;
-usage_map:
-	kfree(haptic->hid_usage_map);
-	haptic->hid_usage_map = NULL;
-exit:
-	return ret;
 }
 EXPORT_SYMBOL_GPL(hid_haptic_init);
 
