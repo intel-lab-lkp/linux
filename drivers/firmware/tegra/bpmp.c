@@ -16,6 +16,7 @@
 #include <linux/semaphore.h>
 #include <linux/sched/clock.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 
 #include <soc/tegra/bpmp.h>
 #include <soc/tegra/bpmp-abi.h>
@@ -1052,8 +1053,26 @@ int tegra_bpmp_init_dt_providers(struct tegra_bpmp *bpmp)
 	return 0;
 }
 
+struct tegra_bpmp_debugfs_work {
+	struct work_struct work;
+	struct tegra_bpmp *bpmp;
+};
+
+static void tegra_bpmp_debugfs_work_fn(struct work_struct *work)
+{
+	struct tegra_bpmp_debugfs_work *dw =
+		container_of(work, struct tegra_bpmp_debugfs_work, work);
+	int err;
+
+	err = tegra_bpmp_init_debugfs(dw->bpmp);
+	if (err < 0)
+		dev_err(dw->bpmp->dev, "debugfs initialization failed: %d\n",
+			err);
+}
+
 static int tegra_bpmp_probe(struct platform_device *pdev)
 {
+	struct tegra_bpmp_debugfs_work *debugfs_work;
 	struct tegra_bpmp *bpmp;
 	char tag[TAG_SZ];
 	int err;
@@ -1089,9 +1108,19 @@ static int tegra_bpmp_probe(struct platform_device *pdev)
 	if (err < 0)
 		dev_err(&pdev->dev, "failed to initialize sysfs: %d\n", err);
 
-	err = tegra_bpmp_init_debugfs(bpmp);
-	if (err < 0)
-		dev_err(&pdev->dev, "debugfs initialization failed: %d\n", err);
+	/*
+	 * Mirroring the BPMP's debugfs tree takes several requests per
+	 * directory, which on Tegra234 adds up to seconds.  Nothing else
+	 * waits for it, so do it in the background rather than hold up every
+	 * device that depends on the BPMP.
+	 */
+	debugfs_work = devm_kzalloc(&pdev->dev, sizeof(*debugfs_work),
+				    GFP_KERNEL);
+	if (debugfs_work) {
+		debugfs_work->bpmp = bpmp;
+		INIT_WORK(&debugfs_work->work, tegra_bpmp_debugfs_work_fn);
+		queue_work(system_dfl_long_wq, &debugfs_work->work);
+	}
 
 	return 0;
 
