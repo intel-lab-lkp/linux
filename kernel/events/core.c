@@ -14246,14 +14246,14 @@ SYSCALL_DEFINE5(perf_event_open,
 
 	mutex_unlock(&ctx->mutex);
 
+	mutex_lock(&current->perf_event_mutex);
+	list_add_tail(&event->owner_entry, &current->perf_event_list);
+	mutex_unlock(&current->perf_event_mutex);
+
 	if (task) {
 		up_read(&task->signal->exec_update_lock);
 		put_task_struct(task);
 	}
-
-	mutex_lock(&current->perf_event_mutex);
-	list_add_tail(&event->owner_entry, &current->perf_event_list);
-	mutex_unlock(&current->perf_event_mutex);
 
 	/*
 	 * File reference in group guarantees that group_leader has been
