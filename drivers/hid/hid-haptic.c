@@ -5,6 +5,7 @@
  *  Copyright (c) 2021 Angela Czubak <acz@semihalf.com>
  */
 
+#include <linux/cleanup.h>
 #include <linux/input/mt.h>
 #include <linux/module.h>
 
@@ -92,12 +93,18 @@ int hid_haptic_input_configured(struct hid_device *hdev,
 
 	__set_bit(INPUT_PROP_PRESSUREPAD, hi->input->propbit);
 
+	/* The HID reports are shared; create only one FF instance. */
+	if (haptic->input_dev)
+		return 1;
+
 	error = hid_haptic_init(hdev, haptic, hi->input);
 	if (error) {
 		dev_warn(&hdev->dev, "Cannot allocate haptic for %s\n",
 			 hdev->name);
 		return error;
 	}
+
+	haptic->input_dev = hi->input;
 
 	return 1;
 }
@@ -414,9 +421,11 @@ static void hid_haptic_destroy(struct ff_device *ff)
 }
 
 int hid_haptic_init(struct hid_device *hdev,
-		    struct hid_haptic_device *haptic,
+		    const struct hid_haptic_device *config,
 		    struct input_dev *dev)
 {
+	struct hid_haptic_device *haptic __free(kfree) =
+		kmemdup(config, sizeof(*config), GFP_KERNEL);
 	struct ff_device *ff;
 	int ret = 0, r;
 	struct ff_haptic_effect stop_effect = {
@@ -424,6 +433,9 @@ int hid_haptic_init(struct hid_device *hdev,
 	};
 	const char *prefix = "hid-haptic";
 	char *name;
+
+	if (!haptic)
+		return -ENOMEM;
 
 	haptic->hdev = hdev;
 	haptic->max_waveform_id = max(2u, haptic->max_waveform_id);
@@ -517,7 +529,7 @@ int hid_haptic_init(struct hid_device *hdev,
 	ff->stop = hid_haptic_stop;
 	ff->destroy = hid_haptic_destroy;
 	__module_get(THIS_MODULE);
-	ff->private = haptic;
+	ff->private = no_free_ptr(haptic);
 	return 0;
 
 ff_cap_clear:
