@@ -405,12 +405,20 @@ static int artop_init_one (struct pci_dev *pdev, const struct pci_device_id *id)
 	case 1:		/* 6260 */
 		ppi[0] = &info_626x;
 		break;
-	case 2:		/* 6280 or 6280 + fast */
-		if (inb(pci_resource_start(pdev, 4)) & 0x10)
+	case 2: {	/* 6280 or 6280 + fast */
+		void __iomem *bmdma = pci_iomap(pdev, 4, 1);
+		u8 cfg;
+
+		if (!bmdma)
+			return -ENOMEM;
+		cfg = ioread8(bmdma);
+		pci_iounmap(pdev, bmdma);
+		if (cfg & 0x10)
 			ppi[0] = &info_628x_fast;
 		else
 			ppi[0] = &info_628x;
 		break;
+	}
 	}
 
 	BUG_ON(ppi[0] == NULL);
