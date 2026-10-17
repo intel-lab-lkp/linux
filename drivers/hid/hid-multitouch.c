@@ -174,6 +174,7 @@ struct mt_device {
 	struct mt_class mtclass;	/* our mt device class */
 	struct timer_list release_timer;	/* to release sticky fingers */
 	struct hid_haptic_device *haptic;	/* haptic related configuration */
+	struct input_dev *haptic_pressure_input;
 	int haptic_init_error;
 	struct hid_device *hdev;	/* hid_device we're attached to */
 	unsigned long mt_io_flags;	/* mt flags (MT_IO_FLAGS_RUNNING) */
@@ -963,9 +964,12 @@ static int mt_touch_input_mapping(struct hid_device *hdev, struct hid_input *hi,
 		case HID_DG_TIPPRESSURE:
 			set_abs(hi->input, ABS_MT_PRESSURE, field,
 				cls->sn_pressure);
-			td->is_haptic_touchpad =
-				hid_haptic_check_pressure_unit(td->haptic,
-							       hi, field);
+			if (!td->haptic_pressure_input &&
+			    field->application == HID_DG_TOUCHPAD &&
+			    hid_haptic_check_pressure_unit(td->haptic, hi, field)) {
+				td->haptic_pressure_input = hi->input;
+				td->is_haptic_touchpad = true;
+			}
 			MT_STORE_FIELD(p);
 			return 1;
 		case HID_DG_SCANTIME:
@@ -1087,7 +1091,9 @@ static void mt_sync_frame(struct mt_device *td, struct mt_application *app,
 
 	app->num_received = 0;
 	app->left_button_state = 0;
-	if (td->is_haptic_touchpad)
+	if (td->is_haptic_touchpad &&
+	    app->application == HID_DG_TOUCHPAD &&
+	    td->haptic->input_dev == input)
 		hid_haptic_pressure_reset(td->haptic);
 }
 
@@ -1240,7 +1246,9 @@ static int mt_process_slot(struct mt_device *td, struct input_dev *input,
 			minor = minor >> 1;
 		}
 
-		if (td->is_haptic_touchpad)
+		if (td->is_haptic_touchpad &&
+		    app->application == HID_DG_TOUCHPAD &&
+		    td->haptic->input_dev == input)
 			hid_haptic_pressure_increase(td->haptic, *slot->p);
 
 		x = hdev->quirks & HID_QUIRK_X_INVERT ?
@@ -1443,8 +1451,10 @@ static int mt_touch_input_configured(struct hid_device *hdev,
 	if (cls->is_indirect)
 		app->mt_flags |= INPUT_MT_POINTER;
 
-	if (td->is_haptic_touchpad)
-		app->mt_flags |= INPUT_MT_TOTAL_FORCE;
+	if (td->is_haptic_touchpad &&
+	    app->application == HID_DG_TOUCHPAD &&
+	    td->haptic->input_dev == input)
+		app->mt_flags |= INPUT_MT_POINTER | INPUT_MT_TOTAL_FORCE;
 
 	if (app->quirks & MT_QUIRK_NOT_SEEN_MEANS_UP)
 		app->mt_flags |= INPUT_MT_DROP_UNUSED;
@@ -1956,22 +1966,11 @@ static int mt_input_configured(struct hid_device *hdev, struct hid_input *hi)
 	struct hid_report *report;
 	int ret;
 
-	if (td->is_haptic_touchpad && (td->mtclass.name == MT_CLS_WIN_8 ||
-	    td->mtclass.name == MT_CLS_WIN_8_FORCE_MULTI_INPUT ||
-	    td->mtclass.name == MT_CLS_WIN_8_KEEP_LATENCY_ON_CLOSE)) {
-		if (hi->application == HID_DG_TOUCHPAD) {
-			ret = hid_haptic_input_configured(hdev, td->haptic, hi);
-			if (ret < 0) {
-				td->haptic_init_error = ret;
-				td->is_haptic_touchpad = false;
-				return ret;
-			}
-			if (ret == 0)
-				td->is_haptic_touchpad = false;
-		}
-	} else {
+	if (td->is_haptic_touchpad &&
+	    td->mtclass.name != MT_CLS_WIN_8 &&
+	    td->mtclass.name != MT_CLS_WIN_8_FORCE_MULTI_INPUT &&
+	    td->mtclass.name != MT_CLS_WIN_8_KEEP_LATENCY_ON_CLOSE)
 		td->is_haptic_touchpad = false;
-	}
 
 	list_for_each_entry(report, &hi->reports, hidinput_list) {
 		rdata = mt_find_report_data(td, report);
@@ -1983,6 +1982,22 @@ static int mt_input_configured(struct hid_device *hdev, struct hid_input *hi)
 		mt_application = rdata->application;
 
 		if (rdata->is_mt_collection) {
+			if (td->is_haptic_touchpad &&
+			    hi->application == HID_DG_TOUCHPAD &&
+			    mt_application->application == HID_DG_TOUCHPAD &&
+			    td->haptic_pressure_input == hi->input &&
+			    !td->haptic->input_dev) {
+				ret = hid_haptic_input_configured(hdev, td->haptic,
+								  hi);
+				if (ret < 0) {
+					td->haptic_init_error = ret;
+					td->is_haptic_touchpad = false;
+					return ret;
+				}
+				if (ret == 0)
+					td->is_haptic_touchpad = false;
+			}
+
 			ret = mt_touch_input_configured(hdev, hi,
 							mt_application);
 			if (ret)
@@ -2211,6 +2226,8 @@ static int mt_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		hid_hw_stop(hdev);
 		return ret;
 	}
+	if (!td->haptic->input_dev)
+		td->is_haptic_touchpad = false;
 
 	ret = sysfs_create_group(&hdev->dev.kobj, &mt_attribute_group);
 	if (ret)
