@@ -653,8 +653,8 @@ static struct recv_buf *sd_recv_rxfifo(struct adapter *adapter, u32 size)
 
 	/* 3 2. alloc skb */
 	if (!recvbuf->pskb) {
-		SIZE_PTR tmpaddr = 0;
-		SIZE_PTR alignment = 0;
+		uintptr_t tmpaddr = 0;
+		size_t alignment = 0;
 
 		recvbuf->pskb = __dev_alloc_skb(MAX_RECVBUF_SZ + RECVBUFF_ALIGN_SZ, GFP_ATOMIC);
 		if (!recvbuf->pskb)
@@ -662,7 +662,7 @@ static struct recv_buf *sd_recv_rxfifo(struct adapter *adapter, u32 size)
 
 		recvbuf->pskb->dev = adapter->pnetdev;
 
-		tmpaddr = (SIZE_PTR)recvbuf->pskb->data;
+		tmpaddr = (uintptr_t)recvbuf->pskb->data;
 		alignment = tmpaddr & (RECVBUFF_ALIGN_SZ - 1);
 		skb_reserve(recvbuf->pskb, (RECVBUFF_ALIGN_SZ - alignment));
 	}
