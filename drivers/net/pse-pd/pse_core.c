@@ -741,12 +741,19 @@ static int pse_pi_get_voltage(struct regulator_dev *rdev)
 	return ret;
 }
 
+/* uA = mW * 1000000000 / uV, which does not fit an int for a low uV */
+static int pse_mw_to_ua(unsigned int mW, int uV)
+{
+	u64 uA = DIV_ROUND_CLOSEST_ULL((u64)mW * 1000000000ull, uV);
+
+	return uA > INT_MAX ? -ERANGE : uA;
+}
+
 static int pse_pi_get_current_limit(struct regulator_dev *rdev)
 {
 	struct pse_controller_dev *pcdev = rdev_get_drvdata(rdev);
 	const struct pse_controller_ops *ops;
 	int id, uV, mW, ret;
-	s64 tmp_64;
 
 	ops = pcdev->ops;
 	id = rdev_get_id(rdev);
@@ -769,10 +776,7 @@ static int pse_pi_get_current_limit(struct regulator_dev *rdev)
 		goto out;
 	uV = ret;
 
-	tmp_64 = mW;
-	tmp_64 *= 1000000000ull;
-	/* uA = mW * 1000000000 / uV */
-	ret = DIV_ROUND_CLOSEST_ULL(tmp_64, uV);
+	ret = pse_mw_to_ua(mW, uV);
 
 out:
 	mutex_unlock(&pcdev->lock);
@@ -1910,7 +1914,6 @@ int pse_ethtool_set_pw_limit(struct pse_control *psec,
 {
 	int uV, uA, ret, previous_pw_allocated = 0;
 	bool updated;
-	s64 tmp_64;
 
 	if (pw_limit > MAX_PI_PW)
 		return -ERANGE;
@@ -1928,10 +1931,12 @@ int pse_ethtool_set_pw_limit(struct pse_control *psec,
 	}
 	uV = ret;
 
-	tmp_64 = pw_limit;
-	tmp_64 *= 1000000000ull;
-	/* uA = mW * 1000000000 / uV */
-	uA = DIV_ROUND_CLOSEST_ULL(tmp_64, uV);
+	uA = pse_mw_to_ua(pw_limit, uV);
+	if (uA < 0) {
+		NL_SET_ERR_MSG(extack,
+			       "PSE voltage read is too low to set the limit");
+		return uA;
+	}
 
 	/* Update power budget only in software power control case and
 	 * if a Power Device is powered.
