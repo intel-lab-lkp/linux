@@ -9,7 +9,7 @@
 
 unsigned int rtw_remainder_len(struct pkt_file *pfile)
 {
-	return (pfile->buf_len - ((SIZE_PTR)(pfile->cur_addr) - (SIZE_PTR)(pfile->buf_start)));
+	return pfile->buf_len - (pfile->cur_addr - pfile->buf_start);
 }
 
 void _rtw_open_pktfile(struct sk_buff *pktptr, struct pkt_file *pfile)
