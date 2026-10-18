@@ -11,6 +11,7 @@
 #include <linux/pagemap.h>
 #include <linux/delay.h>
 #include <linux/netdevice.h>
+#include <linux/sizes.h>
 #include <linux/interrupt.h>
 #include <linux/tcp.h>
 #include <linux/ipv6.h>
@@ -7359,6 +7360,34 @@ static int e1000_set_features(struct net_device *netdev,
 	return 1;
 }
 
+/**
+ * e1000_features_check - validate offloads for a packet about to be sent
+ * @skb: packet to check
+ * @netdev: network interface device structure
+ * @features: offload features usable for this packet
+ *
+ * The transmit DMA can stop for good when a TSO packet's protocol headers
+ * cross a 4 KB boundary in the buffer holding them: the descriptor is never
+ * written back, the driver reports "Detected Hardware Unit Hang", and only a
+ * reset brings the queue back. Seen on I219-LM/-V (PCH) with forwarded
+ * guest traffic, which arrives as linear GSO skbs that can start anywhere in a
+ * page. Let the stack segment those few packets in software instead.
+ *
+ * Returns: the features to use for @skb.
+ */
+static netdev_features_t e1000_features_check(struct sk_buff *skb,
+					      struct net_device *netdev,
+					      netdev_features_t features)
+{
+	if (skb_is_gso(skb) &&
+	    (skb_shinfo(skb)->gso_type & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6)) &&
+	    (offset_in_page(skb->data) & (SZ_4K - 1)) +
+	    skb_tcp_all_headers(skb) > SZ_4K)
+		features &= ~NETIF_F_GSO_MASK;
+
+	return features;
+}
+
 static const struct net_device_ops e1000e_netdev_ops = {
 	.ndo_open		= e1000e_open,
 	.ndo_stop		= e1000e_close,
@@ -7378,7 +7407,7 @@ static const struct net_device_ops e1000e_netdev_ops = {
 #endif
 	.ndo_set_features	= e1000_set_features,
 	.ndo_fix_features	= e1000_fix_features,
-	.ndo_features_check	= passthru_features_check,
+	.ndo_features_check	= e1000_features_check,
 	.ndo_hwtstamp_get	= e1000e_hwtstamp_get,
 	.ndo_hwtstamp_set	= e1000e_hwtstamp_set,
 };
