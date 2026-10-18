@@ -380,7 +380,7 @@ static int create_image(int platform_mode)
 	pm_sleep_enable_secondary_cpus();
 
 	/* Allow architectures to do nosmt-specific post-resume dances */
-	if (!in_suspend)
+	if (!in_suspend && !error)
 		error = arch_resume_nosmt();
 
  Platform_finish:
