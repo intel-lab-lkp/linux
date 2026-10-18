@@ -81,13 +81,8 @@ static ssize_t max_brightness_show(struct device *dev, const struct device_attri
 				   char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
-	unsigned int max_brightness;
 
-	mutex_lock(&led_cdev->led_access);
-	max_brightness = led_cdev->max_brightness;
-	mutex_unlock(&led_cdev->led_access);
-
-	return sysfs_emit(buf, "%u\n", max_brightness);
+	return sysfs_emit(buf, "%u\n", led_cdev->max_brightness);
 }
 
 static const DEVICE_ATTR_RO(max_brightness);
@@ -524,16 +519,6 @@ int led_classdev_register_ext(struct device *parent,
 		dev_warn(parent, "LED %s color identifier out of range\n", final_name);
 
 	mutex_init(&led_cdev->led_access);
-	mutex_lock(&led_cdev->led_access);
-	led_cdev->dev = device_create_with_groups(&leds_class, parent, 0,
-						  led_cdev, led_cdev->groups, "%s", final_name);
-	if (IS_ERR(led_cdev->dev)) {
-		mutex_unlock(&led_cdev->led_access);
-		return PTR_ERR(led_cdev->dev);
-	}
-	if (init_data && init_data->fwnode)
-		device_set_node(led_cdev->dev, init_data->fwnode);
-
 	led_cdev->work_flags = 0;
 #ifdef CONFIG_LEDS_TRIGGERS
 	init_rwsem(&led_cdev->trigger_lock);
@@ -548,6 +533,17 @@ int led_classdev_register_ext(struct device *parent,
 #endif
 	if (!led_cdev->max_brightness)
 		led_cdev->max_brightness = LED_FULL;
+
+	mutex_lock(&led_cdev->led_access);
+	led_cdev->dev = device_create_with_groups(&leds_class, parent, 0, led_cdev,
+						  led_cdev->groups, "%s", final_name);
+	if (IS_ERR(led_cdev->dev)) {
+		mutex_unlock(&led_cdev->led_access);
+		return PTR_ERR(led_cdev->dev);
+	}
+
+	if (init_data && init_data->fwnode)
+		device_set_node(led_cdev->dev, init_data->fwnode);
 
 	led_update_brightness(led_cdev);
 
