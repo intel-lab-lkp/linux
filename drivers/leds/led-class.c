@@ -27,8 +27,7 @@ static LIST_HEAD(leds_lookup_list);
 
 static struct workqueue_struct *leds_wq;
 
-static ssize_t brightness_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t brightness_show(struct device *dev, const struct device_attribute *attr, char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	unsigned int brightness;
@@ -44,8 +43,8 @@ static ssize_t brightness_show(struct device *dev,
 	return sysfs_emit(buf, "%u\n", brightness);
 }
 
-static ssize_t brightness_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
+static ssize_t brightness_store(struct device *dev, const struct device_attribute *attr,
+				const char *buf, size_t size)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	unsigned long state;
@@ -74,10 +73,11 @@ unlock:
 	mutex_unlock(&led_cdev->led_access);
 	return ret;
 }
-static DEVICE_ATTR_RW(brightness);
 
-static ssize_t max_brightness_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static const DEVICE_ATTR_RW(brightness);
+
+static ssize_t max_brightness_show(struct device *dev, const struct device_attribute *attr,
+				   char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	unsigned int max_brightness;
@@ -88,19 +88,20 @@ static ssize_t max_brightness_show(struct device *dev,
 
 	return sysfs_emit(buf, "%u\n", max_brightness);
 }
-static DEVICE_ATTR_RO(max_brightness);
 
-static struct attribute *led_class_attrs[] = {
+static const DEVICE_ATTR_RO(max_brightness);
+
+static const struct attribute *const led_class_attrs[] = {
 	&dev_attr_brightness.attr,
 	&dev_attr_max_brightness.attr,
 	NULL,
 };
 
 static const struct attribute_group led_group = {
-	.attrs = led_class_attrs,
+	.attrs_const = led_class_attrs,
 };
 
-static const struct attribute_group *led_groups[] = {
+static const struct attribute_group *const led_groups[] = {
 	&led_group,
 #ifdef CONFIG_LEDS_TRIGGERS
 	&led_trigger_group,
@@ -109,8 +110,8 @@ static const struct attribute_group *led_groups[] = {
 };
 
 #ifdef CONFIG_LEDS_BRIGHTNESS_HW_CHANGED
-static ssize_t brightness_hw_changed_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t brightness_hw_changed_show(struct device *dev, const struct device_attribute *attr,
+					  char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 
@@ -120,7 +121,7 @@ static ssize_t brightness_hw_changed_show(struct device *dev,
 	return sysfs_emit(buf, "%u\n", led_cdev->brightness_hw_changed);
 }
 
-static DEVICE_ATTR_RO(brightness_hw_changed);
+static const DEVICE_ATTR_RO(brightness_hw_changed);
 
 static int led_add_brightness_hw_changed(struct led_classdev *led_cdev)
 {
