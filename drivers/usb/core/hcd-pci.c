@@ -348,7 +348,13 @@ void usb_hcd_pci_remove(struct pci_dev *dev)
 	usb_put_hcd(hcd);
 	if ((hcd_driver_flags & HCD_MASK) < HCD_USB3)
 		pci_free_irq_vectors(dev);
-	pci_disable_device(dev);
+	/*
+	 * suspend_common() disables the device. If the controller is
+	 * hot-removed during system resume before resume_common() had a
+	 * chance to re-enable it, there is nothing left to disable.
+	 */
+	if (pci_is_enabled(dev))
+		pci_disable_device(dev);
 }
 EXPORT_SYMBOL_GPL(usb_hcd_pci_remove);
 
