@@ -1427,7 +1427,7 @@ pse_control_get_internal(struct pse_controller_dev *pcdev, unsigned int index,
 
 	if (!pcdev->ops->pi_get_admin_state) {
 		ret = -EOPNOTSUPP;
-		goto free_psec;
+		goto put_module;
 	}
 
 	/* Initialize admin_state_enabled before the regulator_get. This
@@ -1436,7 +1436,7 @@ pse_control_get_internal(struct pse_controller_dev *pcdev, unsigned int index,
 	 */
 	ret = pse_pi_is_hw_enabled(pcdev, index);
 	if (ret < 0)
-		goto free_psec;
+		goto put_module;
 
 	pcdev->pi[index].admin_state_enabled = ret;
 	psec->ps = regulator_get_exclusive(pcdev->dev,
