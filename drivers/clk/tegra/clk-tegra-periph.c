@@ -878,6 +878,9 @@ static void __init periph_clk_init(void __iomem *clk_base,
 		if (!bank)
 			continue;
 
+		if (tegra_clks[data->clk_id].use_integer_div)
+			data->periph.divider.flags |= TEGRA_DIVIDER_INT;
+
 		data->periph.gate.regs = bank;
 		clk = tegra_clk_register_periph_data(clk_base, data);
 		*dt_clk = clk;

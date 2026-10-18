@@ -208,9 +208,13 @@ tegra124_clk_set_emc_callbacks(tegra124_emc_prepare_timing_change_cb *prep_cb,
 
 #ifdef CONFIG_ARCH_TEGRA_210_SOC
 int tegra210_plle_hw_sequence_start(void);
+int tegra210b01_plle_hw_sequence_start(void);
 bool tegra210_plle_hw_sequence_is_enabled(void);
+bool tegra210b01_plle_hw_sequence_is_enabled(void);
 void tegra210_xusb_pll_hw_control_enable(void);
+void tegra210b01_xusb_pll_hw_control_enable(void);
 void tegra210_xusb_pll_hw_sequence_start(void);
+void tegra210b01_xusb_pll_hw_sequence_start(void);
 void tegra210_sata_pll_hw_control_enable(void);
 void tegra210_sata_pll_hw_sequence_start(void);
 void tegra210_set_sata_pll_seq_sw(bool state);
