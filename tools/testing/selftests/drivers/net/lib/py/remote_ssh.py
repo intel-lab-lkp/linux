@@ -35,5 +35,5 @@ class Remote:
         if not os.path.isabs(what):
             what = os.path.abspath(self.dir_path + "/" + what)
 
-        cmd(f"scp {what} {self.name}:{file_name}")
+        cmd(["scp", what, f"{self.name}:{file_name}"])
         return file_name
