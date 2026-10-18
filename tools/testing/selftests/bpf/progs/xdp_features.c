@@ -4,6 +4,7 @@
 #include <linux/bpf.h>
 #include <linux/netdev.h>
 #include <bpf/bpf_helpers.h>
+#include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_tracing.h>
 #include <linux/if_ether.h>
@@ -22,7 +23,16 @@
 				 (a).s6_addr32[3] == (b).s6_addr32[3])
 
 struct net_device;
-struct bpf_prog;
+struct bpf_prog_aux {
+	__u32 id;
+} __attribute__((preserve_access_index));
+
+struct bpf_prog {
+	struct bpf_prog_aux *aux;
+} __attribute__((preserve_access_index));
+
+__u32 dut_prog_id;
+__u32 dut_cpumap_id;
 
 struct xdp_cpumap_stats {
 	unsigned int redirect;
@@ -228,6 +238,9 @@ int BPF_PROG(xdp_exception, const struct net_device *dev,
 {
 	__u32 *val, key = 0;
 
+	if (!dut_prog_id || BPF_CORE_READ(xdp, aux, id) != dut_prog_id)
+		return 0;
+
 	val = bpf_map_lookup_elem(&dut_stats, &key);
 	if (val)
 		__sync_add_and_fetch(val, 1);
@@ -240,6 +253,9 @@ int BPF_PROG(tp_xdp_cpumap_kthread, int map_id, unsigned int processed,
 	     unsigned int drops, int sched, struct xdp_cpumap_stats *xdp_stats)
 {
 	__u32 *val, key = 0;
+
+	if (!dut_cpumap_id || map_id != dut_cpumap_id)
+		return 0;
 
 	val = bpf_map_lookup_elem(&dut_stats, &key);
 	if (val)

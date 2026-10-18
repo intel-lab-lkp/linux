@@ -667,11 +667,33 @@ static int tester_run(struct xdp_features *skel)
 		detected_cap ? GREEN("DETECTED") : RED("NOT DETECTED"),
 		env.feature.drv_feature & advertised_feature ? GREEN("ADVERTISED")
 							     : RED("NOT ADVERTISED"));
+	if (!err && detected_cap != !!(env.feature.drv_feature & advertised_feature))
+		err = -EINVAL;
 out:
 	if (xdp_attached)
 		bpf_xdp_detach(env.ifindex, flags, NULL);
 	close(sockfd);
 	return err < 0 ? err : 0;
+}
+
+static int dut_set_trace_ids(struct xdp_features *skel)
+{
+	struct bpf_prog_info prog = {};
+	struct bpf_map_info map = {};
+	__u32 len = sizeof(prog);
+	int err;
+
+	err = bpf_prog_get_info_by_fd(bpf_program__fd(skel->progs.xdp_do_aborted),
+				      &prog, &len);
+	if (err)
+		return err;
+	len = sizeof(map);
+	err = bpf_map_get_info_by_fd(bpf_map__fd(skel->maps.cpu_map), &map, &len);
+	if (err)
+		return err;
+	skel->bss->dut_prog_id = prog.id;
+	skel->bss->dut_cpumap_id = map.id;
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -715,6 +737,10 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to load and verify BPF skeleton\n");
 		goto cleanup;
 	}
+
+	err = dut_set_trace_ids(skel);
+	if (err)
+		goto cleanup;
 
 	err = xdp_features__attach(skel);
 	if (err) {
