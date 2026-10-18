@@ -56,8 +56,7 @@ u32 _rtw_init_sta_priv(struct	sta_priv *pstapriv)
 	if (!pstapriv->pallocated_stainfo_buf)
 		return _FAIL;
 
-	pstapriv->pstainfo_buf = pstapriv->pallocated_stainfo_buf + 4 -
-		((SIZE_PTR)(pstapriv->pallocated_stainfo_buf) & 3);
+	pstapriv->pstainfo_buf = PTR_ALIGN(pstapriv->pallocated_stainfo_buf, 4);
 
 	INIT_LIST_HEAD(&pstapriv->free_sta_queue.queue);
 	spin_lock_init(&pstapriv->free_sta_queue.lock);
