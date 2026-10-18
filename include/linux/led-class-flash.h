@@ -28,8 +28,6 @@ struct led_classdev_flash;
 #define LED_FAULT_LED_OVER_TEMPERATURE	(1 << 8)
 #define LED_NUM_FLASH_FAULTS		9
 
-#define LED_FLASH_SYSFS_GROUPS_SIZE	5
-
 struct led_flash_ops {
 	/* set flash brightness */
 	int (*flash_brightness_set)(struct led_classdev_flash *fled_cdev,
@@ -79,9 +77,6 @@ struct led_classdev_flash {
 
 	/* flash timeout value in microseconds along with its constraints */
 	struct led_flash_setting duration;
-
-	/* LED Flash class sysfs groups */
-	const struct attribute_group *sysfs_groups[LED_FLASH_SYSFS_GROUPS_SIZE];
 };
 
 static inline struct led_classdev_flash *lcdev_to_flcdev(

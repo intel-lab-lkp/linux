@@ -613,6 +613,10 @@ int led_classdev_add(struct led_classdev *led_cdev)
 }
 EXPORT_SYMBOL_GPL(led_classdev_add);
 
+static const struct device_type led_device_type = {
+	.name = "standard",
+};
+
 /**
  * led_classdev_register_ext - register a new object of led_classdev class
  *                             with init data.
@@ -631,6 +635,7 @@ int led_classdev_register_ext(struct device *parent,
 	if (ret < 0)
 		return ret;
 
+	led_cdev->dev->type = &led_device_type;
 	ret = led_classdev_add(led_cdev);
 	if (ret < 0)
 		put_device(led_cdev->dev);
