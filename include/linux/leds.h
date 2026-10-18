@@ -235,7 +235,7 @@ struct led_classdev {
 #endif
 
 #ifdef CONFIG_LEDS_BRIGHTNESS_HW_CHANGED
-	int			 brightness_hw_changed;
+	unsigned int		brightness_hw_changed;
 #endif
 
 #ifdef CONFIG_LEDS_TRIGGERS_HW_CHANGED
