@@ -597,10 +597,10 @@ static int dcmipp_pixelproc_set_selection(struct v4l2_subdev *sd,
 		s->r.top = 0;
 		s->r.left = 0;
 		s->r.width = clamp_t(u32, s->r.width,
-				     crop->width / DCMIPP_MAX_DOWNSCALE_RATIO,
+				     DIV_ROUND_UP(crop->width, DCMIPP_MAX_DOWNSCALE_RATIO),
 				     crop->width);
 		s->r.height = clamp_t(u32, s->r.height,
-				      crop->height / DCMIPP_MAX_DOWNSCALE_RATIO,
+				      DIV_ROUND_UP(crop->height, DCMIPP_MAX_DOWNSCALE_RATIO),
 				      crop->height);
 		v4l2_rect_set_min_size(&s->r, &min_rect);
 		*compose = s->r;
