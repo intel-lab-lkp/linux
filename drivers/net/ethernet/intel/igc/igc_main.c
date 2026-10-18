@@ -19,7 +19,6 @@
 #include <net/ipv6.h>
 
 #include "igc.h"
-#include "igc_hw.h"
 #include "igc_tsn.h"
 #include "igc_xdp.h"
 
