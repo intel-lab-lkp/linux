@@ -21,7 +21,6 @@ struct attribute_group;
 struct device_node;
 struct fwnode_handle;
 struct gpio_desc;
-struct kernfs_node;
 struct led_pattern;
 struct platform_device;
 
@@ -237,7 +236,6 @@ struct led_classdev {
 
 #ifdef CONFIG_LEDS_BRIGHTNESS_HW_CHANGED
 	int			 brightness_hw_changed;
-	struct kernfs_node	*brightness_hw_changed_kn;
 #endif
 
 #ifdef CONFIG_LEDS_TRIGGERS_HW_CHANGED
