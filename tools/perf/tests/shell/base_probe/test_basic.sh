@@ -31,24 +31,24 @@ if [ "$PARAM_GENERAL_HELP_TEXT_CHECK" = "y" ]; then
 	$CMD_PERF probe --help > $LOGS_DIR/basic_helpmsg.log 2> $LOGS_DIR/basic_helpmsg.err
 	PERF_EXIT_CODE=$?
 
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"PERF-PROBE" "NAME" "SYNOPSIS" "DESCRIPTION" "OPTIONS" \
 		"PROBE\s+SYNTAX" "PROBE\s+ARGUMENT" "LINE\s+SYNTAX" \
 		< $LOGS_DIR/basic_helpmsg.log
 	CHECK_EXIT_CODE=$?
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"LAZY\s+MATCHING" "FILTER\s+PATTERN" "EXAMPLES" "SEE\s+ALSO" \
 		< $LOGS_DIR/basic_helpmsg.log
 	(( CHECK_EXIT_CODE += $? ))
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"vmlinux" "module=" "source=" "verbose" "quiet" "add=" "del=" \
 		"list.*EVENT" "line=" "vars=" "externs" < $LOGS_DIR/basic_helpmsg.log
 	(( CHECK_EXIT_CODE += $? ))
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"no-inlines" "funcs.*FILTER" "filter=FILTER" "force" "dry-run" \
 		"max-probes" "exec=" "demangle-kernel" < $LOGS_DIR/basic_helpmsg.log
 	(( CHECK_EXIT_CODE += $? ))
-	"$DIR_PATH/../common/check_no_patterns_found.pl" \
+	"$DIR_PATH/../common/check_no_patterns_found.py" \
 		"No manual entry for" < $LOGS_DIR/basic_helpmsg.err
 	(( CHECK_EXIT_CODE += $? ))
 
@@ -64,7 +64,7 @@ fi
 # without any args perf-probe should print usage
 $CMD_PERF probe 2> $LOGS_DIR/basic_usage.log > /dev/null
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"[Uu]sage" "perf probe" "verbose" "quiet" "add" "del" "force" \
 	"line" "vars" "externs" "range" < $LOGS_DIR/basic_usage.log
 CHECK_EXIT_CODE=$?
