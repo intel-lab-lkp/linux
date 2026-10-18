@@ -2068,8 +2068,6 @@ int pmc_core_resume_common(struct pmc_dev *pmcdev)
 {
 	struct device *dev = &pmcdev->pdev->dev;
 	struct pmc *pmc = pmcdev->pmcs[PMC_IDX_MAIN];
-	const struct pmc_bit_map **maps = pmc->map->lpm_sts;
-	int offset = pmc->map->lpm_status_offset;
 	unsigned int pmc_idx, i;
 
 	/* Check if the syspend used S0ix */
@@ -2114,7 +2112,9 @@ int pmc_core_resume_common(struct pmc_dev *pmcdev)
 		if (!pmc)
 			continue;
 		if (pmc->map->lpm_sts)
-			pmc_core_lpm_display(pmc, dev, NULL, offset, pmc_idx, "STATUS", maps);
+			pmc_core_lpm_display(pmc, dev, NULL,
+					     pmc->map->lpm_status_offset,
+					     pmc_idx, "STATUS", pmc->map->lpm_sts);
 	}
 
 	return 0;
