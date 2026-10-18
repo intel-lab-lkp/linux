@@ -6,6 +6,7 @@
  * Copyright (C) 2005-2007 Richard Purdie <rpurdie@openedhand.com>
  */
 
+#include <linux/cleanup.h>
 #include <linux/ctype.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -102,11 +103,15 @@ static ssize_t brightness_hw_changed_show(struct device *dev, const struct devic
 					  char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	unsigned int brightness_hw_changed;
 
-	if (led_cdev->brightness_hw_changed == -1)
+	scoped_guard(mutex, &led_cdev->led_access)
+		brightness_hw_changed = led_cdev->brightness_hw_changed;
+
+	if (brightness_hw_changed == -1)
 		return -ENODATA;
 
-	return sysfs_emit(buf, "%u\n", led_cdev->brightness_hw_changed);
+	return sysfs_emit(buf, "%u\n", brightness_hw_changed);
 }
 
 static const DEVICE_ATTR_RO(brightness_hw_changed);
