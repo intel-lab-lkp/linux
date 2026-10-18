@@ -10,6 +10,7 @@
 #include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include <linux/uaccess.h>
 
 static unsigned int led_mc_get_max_intensity(struct led_classdev_mc *mcled_cdev, size_t index)
@@ -47,7 +48,7 @@ int led_mc_calc_color_components(struct led_classdev_mc *mcled_cdev,
 EXPORT_SYMBOL_GPL(led_mc_calc_color_components);
 
 static ssize_t multi_max_intensity_show(struct device *dev,
-					struct device_attribute *intensity_attr, char *buf)
+					const struct device_attribute *intensity_attr, char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_mc *mcled_cdev = lcdev_to_mccdev(led_cdev);
@@ -64,11 +65,11 @@ static ssize_t multi_max_intensity_show(struct device *dev,
 	buf[len++] = '\n';
 	return len;
 }
-static DEVICE_ATTR_RO(multi_max_intensity);
+static const DEVICE_ATTR_RO(multi_max_intensity);
 
 static ssize_t multi_intensity_store(struct device *dev,
-				struct device_attribute *intensity_attr,
-				const char *buf, size_t size)
+				     const struct device_attribute *intensity_attr, const char *buf,
+				     size_t size)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_mc *mcled_cdev = lcdev_to_mccdev(led_cdev);
@@ -110,8 +111,7 @@ err_out:
 }
 
 static ssize_t multi_intensity_show(struct device *dev,
-			      struct device_attribute *intensity_attr,
-			      char *buf)
+				    const struct device_attribute *intensity_attr, char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_mc *mcled_cdev = lcdev_to_mccdev(led_cdev);
@@ -128,11 +128,10 @@ static ssize_t multi_intensity_show(struct device *dev,
 	buf[len++] = '\n';
 	return len;
 }
-static DEVICE_ATTR_RW(multi_intensity);
+static const DEVICE_ATTR_RW(multi_intensity);
 
 static ssize_t multi_index_show(struct device *dev,
-			      struct device_attribute *multi_index_attr,
-			      char *buf)
+				const struct device_attribute *multi_index_attr, char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
 	struct led_classdev_mc *mcled_cdev = lcdev_to_mccdev(led_cdev);
@@ -150,9 +149,9 @@ static ssize_t multi_index_show(struct device *dev,
 	buf[len++] = '\n';
 	return len;
 }
-static DEVICE_ATTR_RO(multi_index);
+static const DEVICE_ATTR_RO(multi_index);
 
-static struct attribute *led_multicolor_attrs[] = {
+static const struct attribute *const led_multicolor_attrs[] = {
 	&dev_attr_multi_max_intensity.attr,
 	&dev_attr_multi_intensity.attr,
 	&dev_attr_multi_index.attr,
