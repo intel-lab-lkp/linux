@@ -1152,8 +1152,8 @@ try_again:
 			table_index++;
 			lookup_table = lookup_tables[table_index];
 			if (!lookup_table) {
-				dev_err(board->gpib_dev, "Unable to obtain gpio descriptor for pin %d error %ld\n",
-					gpios_vector[j], PTR_ERR(desc));
+				dev_err(board->gpib_dev, "Unable to obtain gpio descriptor for pin %d error %pe\n",
+					gpios_vector[j], desc);
 				goto alloc_gpios_fail;
 			}
 			dbg_printk(1, "Allocation failed, now using table_index %d\n", table_index);
