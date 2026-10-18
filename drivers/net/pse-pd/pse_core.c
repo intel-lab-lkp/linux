@@ -11,6 +11,7 @@
 #include <linux/of.h>
 #include <linux/phy.h>
 #include <linux/pse-pd/pse.h>
+#include <linux/regulator/consumer.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/rtnetlink.h>
@@ -826,6 +827,65 @@ static const struct regulator_ops pse_pi_ops = {
 	.set_current_limit = pse_pi_set_current_limit,
 };
 
+/* Look up PI @id's vpwr supply on its own node, as the regulator core
+ * will. Only if the PI node has a vpwr-supply phandle: otherwise the
+ * lookup falls back to of_get_child_regulator() on the controller node,
+ * which can return a sibling PI's supply.
+ *
+ * Return: 0 if this PI needs nothing more, 1 if the controller node has
+ *	   to answer for it, or a negative error such as -EPROBE_DEFER.
+ */
+static int pse_pi_check_supply(struct pse_controller_dev *pcdev, int id)
+{
+	struct device_node *np;
+	struct regulator *supply;
+	int ret;
+
+	/* The PIs the registration loop skips. */
+	if (!pcdev->no_of_pse_pi && !pcdev->pi[id].np)
+		return 0;
+
+	np = pcdev->pi[id].np ?
+	     of_parse_phandle(pcdev->pi[id].np, "vpwr-supply", 0) : NULL;
+	if (!np)
+		return 1;
+
+	of_node_put(np);
+	supply = of_regulator_get_optional(pcdev->dev, pcdev->pi[id].np,
+					   "vpwr");
+	if (!IS_ERR(supply)) {
+		regulator_put(supply);
+		return 0;
+	}
+
+	ret = PTR_ERR(supply);
+	if (ret == -ENODEV)
+		return 1;
+
+	return dev_err_probe(pcdev->dev, ret,
+			     "PI %d: failed to get vpwr supply\n", id);
+}
+
+/* The core's fallback: a vpwr-supply on the controller node. */
+static int pse_controller_check_supply(struct pse_controller_dev *pcdev)
+{
+	struct regulator *supply;
+	int ret;
+
+	supply = regulator_get_optional(pcdev->dev, "vpwr");
+	if (!IS_ERR(supply)) {
+		regulator_put(supply);
+		return 0;
+	}
+
+	ret = PTR_ERR(supply);
+	if (ret == -ENODEV)
+		return 0;
+
+	return dev_err_probe(pcdev->dev, ret,
+			     "failed to get vpwr supply\n");
+}
+
 static int
 devm_pse_pi_regulator_register(struct pse_controller_dev *pcdev,
 			       char *name, int id)
@@ -1068,6 +1128,7 @@ static void pse_send_ntf_worker(struct work_struct *work)
  */
 int pse_controller_register(struct pse_controller_dev *pcdev)
 {
+	bool ctrl_supply_ok = false;
 	size_t reg_name_len;
 	int ret, i;
 
@@ -1100,6 +1161,26 @@ int pse_controller_register(struct pse_controller_dev *pcdev)
 		ret = pcdev->ops->setup_pi_matrix(pcdev);
 		if (ret)
 			goto release_pis;
+	}
+
+	/* Check vpwr supplies while pcdev->pi can still be freed. Not before
+	 * setup_pi_matrix(): pd692x0 registers the regulators its PIs name
+	 * there.
+	 */
+	for (i = 0; i < pcdev->nr_lines; i++) {
+		ret = pse_pi_check_supply(pcdev, i);
+		if (ret < 0)
+			goto release_pis;
+
+		/* Same answer for every PI: ask once. */
+		if (!ret || ctrl_supply_ok)
+			continue;
+
+		ret = pse_controller_check_supply(pcdev);
+		if (ret)
+			goto release_pis;
+
+		ctrl_supply_ok = true;
 	}
 
 	/* Each regulator name len is pcdev dev name + 7 char +
