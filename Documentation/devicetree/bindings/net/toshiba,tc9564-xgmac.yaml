@@ -1,0 +1,327 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/toshiba,tc9564-xgmac.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Toshiba TC9564 XGMAC Ethernet Controller
+
+maintainers:
+  - Lorenzo Bianconi <lorenzo.bianconi@oss.qualcomm.com>
+  - Alex Elder <elder@riscstar.com>
+  - Daniel Thompson <daniel@riscstar.com>
+
+description:
+  This binding describes the Toshiba TC9564 SoC implementation of the
+  Synopsys XGMAC Ethernet controller.
+
+  The Toshiba TC9564 incorporates a PCIe gen 3 switch with one upstream
+  and three downstream ports.  The first two downstream ports are exposed
+  externally, while the third is used by an internal PCIe endpoint.  The
+  PCIe endpoint implements two PCIe functions, and attached to each of
+  these is a 10 Gbps capable Synopsys XGMAC Ethernet controller.  Access
+  to management registers for each controller is via BAR 4 of its
+  respective PCI function.
+
+allOf:
+  - $ref: snps,dwmac.yaml#
+
+select:
+  properties:
+    compatible:
+      contains:
+        const: toshiba,tc9564-xgmac
+  required:
+    - compatible
+
+properties:
+  compatible:
+    const: toshiba,tc9564-xgmac
+
+  reg:
+    maxItems: 1
+
+  toshiba,config-syscon:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      The phandle and offset for a syscon that provides access to a
+      register containing a bit that indicates that PMA initialization
+      is done.
+    maxItems: 1
+
+  clocks:
+    minItems: 5
+    items:
+      - description: MAC main clock (125 MHz)
+      - description: PTP reference clock (250 MHz)
+      - description: MAC TX clock
+      - description: MAC RX clock
+      - description: MAC all clock gate
+      - description: MAC RMII clock (function 1 only)
+
+  clock-names:
+    minItems: 5
+    items:
+      - const: stmmaceth
+      - const: ptp_ref
+      - const: mac-tx-clock
+      - const: mac-rx-clock
+      - const: mac-all-clock
+      - const: mac-rmii-clock
+
+  resets:
+    items:
+      - description: MAC reset
+      - description: PMA (Physical Medium Attachment) reset
+      - description: XPCS reset
+
+  reset-names:
+    items:
+      - const: mac-reset
+      - const: pma-reset
+      - const: xpcs-reset
+
+  interrupts:
+    minItems: 17
+    maxItems: 17
+
+  interrupt-names:
+    minItems: 17
+    maxItems: 17
+
+  snps,tso:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Enable TCP segmentation offload.
+
+  snps,pbl:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Set the programmable burst length.
+
+  snps,force_sf_dma_mode:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Force store-and-forward mode for both TX and RX DMA.
+
+  snps,perfect-filter-entries:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Set the number of perfect filter entries supported.
+
+  snps,mtl-rx-config:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to a rx-queues-config node that describes the RX queues
+      managed by the stmmac memory transfer layer.
+
+  snps,mtl-tx-config:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to a tx-queues-config node that describes the TX queues
+      managed by the stmmac memory transfer layer.
+
+  rx-fifo-depth:
+    $ref: /schemas/net/ethernet-controller.yaml#/properties/rx-fifo-depth
+    maximum: 47104
+    description:
+      RX FIFO size in bytes.  This must be set explicitly because
+      the size (46KB) differs from the power-of-2 indicated by the
+      HW_FEATURE0 register, so the size is not accurately detected.
+
+  tx-fifo-depth:
+    $ref: /schemas/net/ethernet-controller.yaml#/properties/tx-fifo-depth
+    maximum: 47104
+    description:
+      TX FIFO size in bytes.  This must be set explicitly because
+      the size (46KB) differs from the power-of-2 indicated by the
+      HW_FEATURE0 register, so the size is not accurately detected.
+
+  snps,axi-config:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to a node describing AXI burst configuration.
+
+  iommus:
+    maxItems: 1
+
+  phy-mode:
+    const: sgmii
+
+  phy-handle: true
+
+  tx-queues-config:
+    $ref: /schemas/net/snps,dwmac.yaml#/properties/tx-queues-config
+
+  rx-queues-config:
+    $ref: /schemas/net/snps,dwmac.yaml#/properties/rx-queues-config
+
+  stmmac-axi-config:
+    $ref: /schemas/net/snps,dwmac-common.yaml#/properties/stmmac-axi-config
+
+  mdio:
+    $ref: /schemas/net/snps,dwmac.yaml#/properties/mdio
+
+required:
+  - toshiba,config-syscon
+  - clocks
+  - clock-names
+  - resets
+  - reset-names
+  - rx-fifo-depth
+  - tx-fifo-depth
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    ethernet@48000 {
+        compatible = "toshiba,tc9564-xgmac";
+        reg = <0x48000 0x8000>;
+        toshiba,config-syscon = <&tc9564_config_syscon0 0x1074>;
+
+        clocks = <&tc9564_ref_125mhz_clk>,
+                 <&tc9564_ref_250mhz_clk>,
+                 <&tc9564_clock0 13>,
+                 <&tc9564_clock0 14>,
+                 <&tc9564_clock0 18>,
+                 <&tc9564_clock0 15>;
+        clock-names = "stmmaceth",
+                      "ptp_ref",
+                      "mac-tx-clock",
+                      "mac-rx-clock",
+                      "mac-all-clock",
+                      "mac-rmii-clock";
+
+        resets = <&tc9564_reset0 8>,
+                 <&tc9564_reset0 9>,
+                 <&tc9564_reset0 10>;
+        reset-names = "mac-reset",
+                      "pma-reset",
+                      "xpcs-reset";
+
+        interrupts-extended = <&tc9564_msigen1 2>,
+                              <&tc9564_msigen1 3>,
+                              <&tc9564_msigen1 4>,
+                              <&tc9564_msigen1 5>,
+                              <&tc9564_msigen1 6>,
+                              <&tc9564_msigen1 7>,
+                              <&tc9564_msigen1 8>,
+                              <&tc9564_msigen1 9>,
+                              <&tc9564_msigen1 10>,
+                              <&tc9564_msigen1 11>,
+                              <&tc9564_msigen1 12>,
+                              <&tc9564_msigen1 13>,
+                              <&tc9564_msigen1 14>,
+                              <&tc9564_msigen1 15>,
+                              <&tc9564_msigen1 16>,
+                              <&tc9564_msigen1 17>,
+                              <&tc9564_msigen1 18>;
+        interrupt-names = "macirq",
+                          "tx-queue-0",
+                          "tx-queue-1",
+                          "tx-queue-2",
+                          "tx-queue-3",
+                          "tx-queue-4",
+                          "tx-queue-5",
+                          "tx-queue-6",
+                          "tx-queue-7",
+                          "rx-queue-0",
+                          "rx-queue-1",
+                          "rx-queue-2",
+                          "rx-queue-3",
+                          "rx-queue-4",
+                          "rx-queue-5",
+                          "rx-queue-6",
+                          "rx-queue-7";
+
+        snps,tso;
+        snps,pbl = <32>;
+        snps,force_sf_dma_mode;
+        snps,perfect-filter-entries = <32>;
+
+        snps,mtl-rx-config = <&tc9564_mtl_rx_emac1_setup>;
+        snps,mtl-tx-config = <&tc9564_mtl_tx_emac1_setup>;
+        rx-fifo-depth = <32768>;
+        tx-fifo-depth = <32768>;
+
+        snps,axi-config = <&tc9564_axi_emac1_setup>;
+
+        /* SID comes from the iommu-map for &pcie1 */
+        iommus = <&apps_smmu 0x1c90 0x0>;
+
+        phy-mode = "sgmii";
+        phy-handle = <&tc9564_emac1_phy>;
+
+        tc9564_mtl_rx_emac1_setup: rx-queues-config {
+            snps,rx-queues-to-use = <4>;
+            snps,rx-sched-sp;
+            queue0 {
+                snps,dcb-algorithm;
+                snps,map-to-dma-channel = <0x0>;
+            };
+            queue1 {
+                snps,dcb-algorithm;
+                snps,map-to-dma-channel = <0x1>;
+            };
+            queue2 {
+                snps,dcb-algorithm;
+                snps,map-to-dma-channel = <0x2>;
+            };
+            queue3 {
+                snps,dcb-algorithm;
+                snps,map-to-dma-channel = <0x3>;
+            };
+        };
+
+        tc9564_mtl_tx_emac1_setup: tx-queues-config {
+            snps,tx-queues-to-use = <4>;
+            snps,tx-sched-wrr;
+            queue0 {
+                snps,weight = <0x0c>;
+                snps,dcb-algorithm;
+            };
+            queue1 {
+                snps,weight = <0x0c>;
+                snps,dcb-algorithm;
+            };
+            queue2 {
+                snps,weight = <0x0c>;
+                snps,dcb-algorithm;
+            };
+            queue3 {
+                snps,weight = <0x0c>;
+                snps,dcb-algorithm;
+            };
+        };
+
+        tc9564_axi_emac1_setup: stmmac-axi-config {
+            snps,lpi_en;
+            snps,wr_osr_lmt = <31>;
+            snps,rd_osr_lmt = <31>;
+            snps,blen = <256 128 64 32 16 8 4>;
+        };
+
+        mdio {
+            compatible = "snps,dwmac-mdio";
+
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            tc9564_emac1_phy: ethernet-phy@1c {
+                compatible = "ethernet-phy-id004d.d101";
+                reg = <0x1c>;
+
+                reset-assert-us = <11000>;
+                reset-deassert-us = <70000>;
+
+                vdd18-supply = <&qep_1p8>;
+
+                pinctrl-names = "default";
+                pinctrl-0 = <&qep_irq_pin>;
+                interrupts-extended = <&tlmm 101 IRQ_TYPE_LEVEL_LOW>;
+            };
+        };
+    };
