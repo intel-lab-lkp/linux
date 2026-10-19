@@ -3082,6 +3082,15 @@ F:	drivers/usb/host/ohci-nxp.c
 F:	drivers/watchdog/pnx4008_wdt.c
 N:	lpc32xx
 
+BEAMFS FILE SYSTEM
+M:	Aurelien DESBRIERES <aurelien@hackers.camp>
+L:	linux-fsdevel@vger.kernel.org
+S:	Maintained
+W:	https://github.com/roastercode/beamfs
+F:	Documentation/ABI/testing/sysfs-fs-beamfs
+F:	Documentation/filesystems/beamfs.rst
+F:	fs/beamfs/
+
 LPC32XX DMAMUX SUPPORT
 M:	J.M.B. Downing <jonathan.downing@nautel.com>
 M:	Piotr Wojtaszczyk <piotr.wojtaszczyk@timesys.com>
