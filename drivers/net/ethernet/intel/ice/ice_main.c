@@ -5330,27 +5330,29 @@ ice_probe(struct pci_dev *pdev, const struct pci_device_id __always_unused *ent)
 		hw->debug_mask = debug;
 #endif
 
-	if (ice_is_recovery_mode(hw))
-		return ice_probe_recovery_mode(pf);
+	adapter = ice_adapter_get(pdev);
+	if (IS_ERR(adapter))
+		return PTR_ERR(adapter);
+	pf->adapter = adapter;
+
+	if (ice_is_recovery_mode(hw)) {
+		err = ice_probe_recovery_mode(pf);
+		if (err)
+			ice_adapter_put(pdev);
+		return err;
+	}
 
 	err = ice_init_hw(hw);
 	if (err) {
 		dev_err(dev, "ice_init_hw failed: %d\n", err);
-		return err;
+		goto unroll_adapter;
 	}
 
 	ice_init_dev_hw(pf);
 
-	adapter = ice_adapter_get(pdev);
-	if (IS_ERR(adapter)) {
-		err = PTR_ERR(adapter);
-		goto unroll_hw_init;
-	}
-	pf->adapter = adapter;
-
 	err = ice_init_dev(pf);
 	if (err)
-		goto unroll_adapter;
+		goto unroll_hw_init;
 
 	err = ice_init(pf);
 	if (err)
@@ -5375,12 +5377,12 @@ unroll_init:
 	ice_deinit(pf);
 unroll_dev_init:
 	need_dev_deinit = true;
-unroll_adapter:
-	ice_adapter_put(pdev);
 unroll_hw_init:
 	ice_deinit_hw(hw);
 	if (need_dev_deinit)
 		ice_deinit_dev(pf);
+unroll_adapter:
+	ice_adapter_put(pdev);
 	return err;
 }
 
@@ -5465,6 +5467,7 @@ static void ice_remove(struct pci_dev *pdev)
 		scoped_guard(devl, priv_to_devlink(pf)) {
 			ice_deinit_devlink(pf);
 		}
+		ice_adapter_put(pdev);
 		return;
 	}
 
@@ -5492,11 +5495,11 @@ static void ice_remove(struct pci_dev *pdev)
 
 	ice_set_wake(pf);
 
-	ice_adapter_put(pdev);
 	ice_deinit_hw(&pf->hw);
 
 	ice_deinit_dev(pf);
 	ice_aq_cancel_waiting_tasks(pf);
+	ice_adapter_put(pdev);
 	set_bit(ICE_DOWN, pf->state);
 }
 
