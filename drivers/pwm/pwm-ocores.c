@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/property.h>
 #include <linux/pwm.h>
 #include <linux/reset.h>
 
@@ -31,12 +32,15 @@
 
 #define OCPWM_NUM_SAVED_REGS	3
 
+#define OCPWM_FLAG_POLARITY_NORMAL	BIT(0)
+
 struct ocores_pwm_device {
 	void __iomem *base;
 	struct clk *clk;
 	unsigned long clk_rate;
 	struct reset_control *rst;
 	u32 saved_regs[OCPWM_NUM_SAVED_REGS];
+	unsigned long flags;
 };
 
 static int ocores_pwm_get_state(struct pwm_chip *chip,
@@ -60,7 +64,11 @@ static int ocores_pwm_get_state(struct pwm_chip *chip,
 	if (state->duty_cycle > state->period)
 		state->duty_cycle = state->period;
 
-	state->polarity = PWM_POLARITY_INVERSED;
+	if (ddata->flags & OCPWM_FLAG_POLARITY_NORMAL)
+		state->polarity = PWM_POLARITY_NORMAL;
+	else
+		state->polarity = PWM_POLARITY_INVERSED;
+
 	state->enabled = (ctrl_data & OCPWM_CTRL_EN) ? true : false;
 
 	pm_runtime_put(pwmchip_parent(chip));
@@ -85,8 +93,13 @@ static int ocores_pwm_apply(struct pwm_chip *chip,
 		return 0;
 	}
 
-	if (state->polarity != PWM_POLARITY_INVERSED)
-		return -EINVAL;
+	if (ddata->flags & OCPWM_FLAG_POLARITY_NORMAL) {
+		if (state->polarity != PWM_POLARITY_NORMAL)
+			return -EINVAL;
+	} else {
+		if (state->polarity != PWM_POLARITY_INVERSED)
+			return -EINVAL;
+	}
 
 	period_data = mul_u64_u32_div(state->period, ddata->clk_rate, NSEC_PER_SEC);
 	if (period_data > U32_MAX)
@@ -218,6 +231,7 @@ static int ocores_pwm_probe(struct platform_device *pdev)
 
 	chip->ops = &ocores_pwm_ops;
 	ddata = pwmchip_get_drvdata(chip);
+	ddata->flags = (unsigned long)device_get_match_data(dev);
 
 	ddata->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(ddata->base))
@@ -279,6 +293,10 @@ err_clk_disable:
 
 static const struct of_device_id ocores_pwm_of_match[] = {
 	{ .compatible = "opencores,pwm-v1" },
+	{
+		.compatible = "starfive,jhb100-pwm",
+		.data = (void *)OCPWM_FLAG_POLARITY_NORMAL
+	},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, ocores_pwm_of_match);
