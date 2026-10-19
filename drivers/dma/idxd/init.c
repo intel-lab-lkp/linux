@@ -1267,13 +1267,31 @@ static void idxd_remove(struct pci_dev *pdev)
 {
 	struct idxd_device *idxd = pci_get_drvdata(pdev);
 
+	/*
+	 * The devices on the dsa bus stay registered, and so open to a
+	 * sysfs bind, until the unregisters below. A bind during the
+	 * removal would re-probe the device or enable one of its queues
+	 * while they are torn down, and the PCI device lock held here does
+	 * not exclude it, so the probes test this first. The command path
+	 * changes IDXD_FLAG_CMD_RUNNING in the same word with non-atomic
+	 * bit operations under cmd_lock, which would lose a bit set
+	 * concurrently, so the flag is set under that lock too.
+	 */
+	spin_lock_irq(&idxd->cmd_lock);
+	set_bit(IDXD_FLAG_REMOVING, &idxd->flags);
+	spin_unlock_irq(&idxd->cmd_lock);
+	/*
+	 * The idxd sub-driver's remove walks idxd->wqs to disable the
+	 * active queues, and each wq is freed with its conf_dev. Unbind
+	 * that driver while the queues still exist.
+	 */
+	device_release_driver(idxd_confdev(idxd));
 	idxd_unregister_devices(idxd);
 	/*
-	 * When ->release() is called for the idxd->conf_dev, it frees all the memory related
-	 * to the idxd context. The driver still needs those bits in order to do the rest of
-	 * the cleanup. However, we do need to unbound the idxd sub-driver. So take a ref
-	 * on the device here to hold off the freeing while allowing the idxd sub-driver
-	 * to unbind.
+	 * When ->release() is called for the idxd->conf_dev, it frees all
+	 * the memory related to the idxd context. The driver still needs
+	 * those bits in order to do the rest of the cleanup, so take a ref
+	 * on the device here to hold off the freeing until that is done.
 	 */
 	get_device(idxd_confdev(idxd));
 	device_unregister(idxd_confdev(idxd));

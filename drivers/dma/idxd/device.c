@@ -1415,6 +1415,16 @@ int idxd_drv_enable_wq(struct idxd_wq *wq)
 
 	lockdep_assert_held(&wq->wq_lock);
 
+	/*
+	 * The device remove releases the queues' drivers before it disables
+	 * the device, so the device still reads enabled meanwhile.
+	 */
+	if (test_bit(IDXD_FLAG_REMOVING, &idxd->flags)) {
+		idxd->cmd_status = IDXD_SCMD_DEV_NOT_ENABLED;
+		rc = -ENODEV;
+		goto err;
+	}
+
 	if (idxd->state != IDXD_DEV_ENABLED) {
 		idxd->cmd_status = IDXD_SCMD_DEV_NOT_ENABLED;
 		goto err;
@@ -1563,6 +1573,9 @@ int idxd_device_drv_probe(struct idxd_dev *idxd_dev)
 	struct idxd_device *idxd = idxd_dev_to_idxd(idxd_dev);
 	int rc = 0;
 
+	if (test_bit(IDXD_FLAG_REMOVING, &idxd->flags))
+		return -ENODEV;
+
 	/*
 	 * Device should be in disabled state for the idxd_drv to load. If it's in
 	 * enabled state, then the device was altered outside of driver's control.
@@ -1623,9 +1636,16 @@ void idxd_device_drv_remove(struct idxd_dev *idxd_dev)
 		struct idxd_wq *wq = idxd->wqs[i];
 		struct device *wq_dev = wq_confdev(wq);
 
-		if (wq->state == IDXD_WQ_DISABLED)
-			continue;
-		dev_warn(dev, "Active wq %d on disable %s.\n", i, dev_name(wq_dev));
+		/*
+		 * A halt's clear_state leaves a bound queue DISABLED while
+		 * its driver still holds the queue's channel and resources.
+		 * Release every bound driver, not only the enabled queues',
+		 * before the dma_device below frees their channels. For a
+		 * queue without a driver the release is a no-op.
+		 */
+		if (wq->state != IDXD_WQ_DISABLED)
+			dev_warn(dev, "Active wq %d on disable %s.\n", i,
+				 dev_name(wq_dev));
 		device_release_driver(wq_dev);
 	}
 

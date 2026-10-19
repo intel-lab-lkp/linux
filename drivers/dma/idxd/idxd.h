@@ -269,6 +269,7 @@ enum idxd_device_flag {
 	IDXD_FLAG_CMD_RUNNING,
 	IDXD_FLAG_PASID_ENABLED,
 	IDXD_FLAG_USER_PASID_ENABLED,
+	IDXD_FLAG_REMOVING,	/* PCI remove under way, refuse binds */
 };
 
 struct idxd_dma_dev {
