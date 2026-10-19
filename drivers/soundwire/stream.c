@@ -1107,17 +1107,24 @@ static void sdw_master_port_free(struct sdw_master_runtime *m_rt)
 static int sdw_master_port_alloc(struct sdw_master_runtime *m_rt,
 				 unsigned int num_ports)
 {
-	struct sdw_port_runtime *p_rt;
+	struct sdw_port_runtime *p_rt, *tmp;
+	LIST_HEAD(port_list);
 	int i;
 
-	/* Iterate for number of ports to perform initialization */
+	/* Publish the ports only after the entire allocation succeeds. */
 	for (i = 0; i < num_ports; i++) {
-		p_rt = sdw_port_alloc(&m_rt->port_list);
+		p_rt = sdw_port_alloc(&port_list);
 		if (!p_rt)
-			return -ENOMEM;
+			goto free_ports;
 	}
 
+	list_splice_tail_init(&port_list, &m_rt->port_list);
 	return 0;
+
+free_ports:
+	list_for_each_entry_safe(p_rt, tmp, &port_list, port_node)
+		sdw_port_free(p_rt);
+	return -ENOMEM;
 }
 
 static int sdw_master_port_config(struct sdw_master_runtime *m_rt,
@@ -2017,6 +2024,9 @@ int sdw_stream_add_master(struct sdw_bus *bus,
 {
 	struct sdw_master_runtime *m_rt;
 	bool alloc_master_rt = false;
+	bool alloc_master_ports = false;
+	unsigned int old_ch_count;
+	enum sdw_data_direction old_direction;
 	int ret;
 
 	mutex_lock(&bus->bus_lock);
@@ -2056,26 +2066,39 @@ int sdw_stream_add_master(struct sdw_bus *bus,
 		alloc_master_rt = true;
 	}
 
+	old_ch_count = m_rt->ch_count;
+	old_direction = m_rt->direction;
+
 	if (!sdw_master_port_allocated(m_rt)) {
 		ret = sdw_master_port_alloc(m_rt, num_ports);
 		if (ret)
 			goto alloc_error;
 
 		stream->m_rt_count++;
+		alloc_master_ports = true;
 	}
 
 	ret = sdw_master_rt_config(m_rt, stream_config);
 	if (ret < 0)
-		goto unlock;
+		goto config_error;
 
 	ret = sdw_config_stream(bus->dev, stream, stream_config, false);
 	if (ret)
-		goto unlock;
+		goto config_error;
 
 	ret = sdw_master_port_config(m_rt, port_config);
+	if (ret)
+		goto config_error;
 
 	goto unlock;
 
+config_error:
+	m_rt->ch_count = old_ch_count;
+	m_rt->direction = old_direction;
+	if (alloc_master_ports) {
+		sdw_master_port_free(m_rt);
+		stream->m_rt_count--;
+	}
 alloc_error:
 	/*
 	 * we only cleanup what was allocated in this routine
