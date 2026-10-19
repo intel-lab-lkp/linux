@@ -115,6 +115,11 @@ static void idxd_abort_invalid_int_handle_descs(struct idxd_irq_entry *ie)
 	struct idxd_desc *d, *t;
 	struct llist_node *head;
 
+	/*
+	 * An unbind frees the descriptors and the allocator under
+	 * wq_lock, so they are completed under it as well.
+	 */
+	lockdep_assert_held(&ie_to_wq(ie)->wq_lock);
 	spin_lock(&ie->list_lock);
 	head = llist_del_all(&ie->pending_llist);
 	if (head) {
@@ -142,6 +147,7 @@ static void idxd_int_handle_revoke(struct work_struct *work)
 	struct pci_dev *pdev = idxd->pdev;
 	struct device *dev = &pdev->dev;
 	int i, new_handle, rc;
+	bool killed;
 
 	if (!idxd->request_int_handles) {
 		kfree(revoke);
@@ -166,15 +172,31 @@ static void idxd_int_handle_revoke(struct work_struct *work)
 			continue;
 
 		rc = idxd_device_request_int_handle(idxd, i, &new_handle, IDXD_IRQ_MSIX);
-		if (rc < 0) {
+		if (rc < 0)
 			dev_warn(dev, "get int handle %d failed: %d\n", i, rc);
+
+		/*
+		 * The request runs without wq_lock, so that a reset can end
+		 * it, and the queue may have been unbound meanwhile. An
+		 * unbind invalidates the handle in the same wq_lock hold
+		 * that unmaps the portal and frees the descriptors, so a
+		 * handle still valid under the lock means that the queue
+		 * still has its portal, its descriptors and its completion
+		 * handler. Everything below, the drain included, stays in
+		 * this hold.
+		 */
+		guard(mutex)(&wq->wq_lock);
+		if (ie->int_handle == INVALID_INT_HANDLE)
+			continue;
+
+		if (rc < 0) {
 			/*
 			 * Failed to acquire new interrupt handle. Kill the WQ
 			 * and release all the pending submitters. The submitters will
 			 * get error return code and handle appropriately.
 			 */
 			ie->int_handle = INVALID_INT_HANDLE;
-			idxd_wq_quiesce(wq);
+			__idxd_wq_quiesce(wq);
 			idxd_abort_invalid_int_handle_descs(ie);
 			continue;
 		}
@@ -193,21 +215,20 @@ static void idxd_int_handle_revoke(struct work_struct *work)
 			continue;
 		}
 
-		mutex_lock(&wq->wq_lock);
-		reinit_completion(&wq->wq_resurrect);
-
-		/* Kill percpu_ref to pause additional descriptor submissions */
-		percpu_ref_kill(&wq->wq_active);
-
-		/* Wait for all submitters quiesce before we change interrupt handle */
-		wait_for_completion(&wq->wq_dead);
+		/*
+		 * Kill percpu_ref to pause additional descriptor submissions
+		 * and wait for all submitters to quiesce before we change
+		 * the interrupt handle. A queue a halt already killed and did
+		 * not revive is left dead.
+		 */
+		killed = idxd_wq_kill(wq);
 
 		ie->int_handle = new_handle;
 
 		/* Revive percpu ref and wake up all the waiting submitters */
-		percpu_ref_reinit(&wq->wq_active);
+		if (killed)
+			percpu_ref_reinit(&wq->wq_active);
 		complete_all(&wq->wq_resurrect);
-		mutex_unlock(&wq->wq_lock);
 
 		/*
 		 * The delay here is to wait for all possible MOVDIR64B that
