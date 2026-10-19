@@ -2101,6 +2101,7 @@ static void ice_init_pkg_hints(struct ice_hw *hw, struct ice_seg *ice_seg)
 	int i;
 
 	memset(&hw->tnl, 0, sizeof(hw->tnl));
+	memset(&hw->dvm_upd, 0, sizeof(hw->dvm_upd));
 	memset(&state, 0, sizeof(state));
 
 	if (!ice_seg)
