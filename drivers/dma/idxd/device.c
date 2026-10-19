@@ -12,6 +12,9 @@
 #include "idxd.h"
 #include "registers.h"
 
+/* generous bound: drain of a loaded WQ is the slowest legitimate command */
+#define IDXD_CMD_TIMEOUT_MS	30000
+
 static void idxd_cmd_exec(struct idxd_device *idxd, int cmd_code, u32 operand,
 			  u32 *status);
 static void idxd_device_wqs_clear_state(struct idxd_device *idxd);
@@ -498,10 +501,19 @@ static void idxd_cmd_exec(struct idxd_device *idxd, int cmd_code, u32 operand,
 	union idxd_command_reg cmd;
 	DECLARE_COMPLETION_ONSTACK(done);
 	u32 stat;
-	unsigned long flags;
+	unsigned long flags, left;
 
 	if (idxd_device_is_halted(idxd)) {
 		dev_warn(&idxd->pdev->dev, "Device is HALTED!\n");
+		if (status)
+			*status = IDXD_CMDSTS_HW_ERR;
+		return;
+	}
+
+	if (test_bit(IDXD_FLAG_CMD_TIMEDOUT, &idxd->flags)) {
+		dev_warn(&idxd->pdev->dev,
+			 "Not sending command %#x: an earlier device command timed out, device needs a reset\n",
+			 cmd_code);
 		if (status)
 			*status = IDXD_CMDSTS_HW_ERR;
 		return;
@@ -513,15 +525,54 @@ static void idxd_cmd_exec(struct idxd_device *idxd, int cmd_code, u32 operand,
 	cmd.int_req = 1;
 
 	spin_lock_irqsave(&idxd->cmd_lock, flags);
-	wait_event_lock_irq(idxd->cmd_waitq,
-			    !test_bit(IDXD_FLAG_CMD_RUNNING, &idxd->flags),
-			    idxd->cmd_lock);
+	/*
+	 * Wait for the running command, if any. Only its owner can tell
+	 * that it is stuck, so this wait does not declare a timeout of its
+	 * own: its budget covers one owner and restarts whenever another
+	 * command starts running, and it ends early when the owner gives
+	 * up and marks the device. Several healthy commands queued behind
+	 * one another therefore never add up to a false timeout.
+	 */
+	while (test_bit(IDXD_FLAG_CMD_RUNNING, &idxd->flags)) {
+		u32 seq = idxd->cmd_seq;
+
+		if (test_bit(IDXD_FLAG_CMD_TIMEDOUT, &idxd->flags)) {
+			spin_unlock_irqrestore(&idxd->cmd_lock, flags);
+			dev_err(&idxd->pdev->dev,
+				"not sending command %#x: the running device command timed out, device needs a reset\n",
+				cmd_code);
+			if (status)
+				*status = IDXD_CMDSTS_HW_ERR;
+			return;
+		}
+		if (!wait_event_lock_irq_timeout(idxd->cmd_waitq,
+				!test_bit(IDXD_FLAG_CMD_RUNNING, &idxd->flags) ||
+				test_bit(IDXD_FLAG_CMD_TIMEDOUT, &idxd->flags) ||
+				idxd->cmd_seq != seq,
+				idxd->cmd_lock,
+				msecs_to_jiffies(IDXD_CMD_TIMEOUT_MS))) {
+			/*
+			 * The owner started before this wait and has the
+			 * same budget, so its own timeout is due; it marks
+			 * the device and wakes this queue. Give up without
+			 * marking anything here.
+			 */
+			spin_unlock_irqrestore(&idxd->cmd_lock, flags);
+			dev_err(&idxd->pdev->dev,
+				"timed out waiting for the running device command before %#x\n",
+				cmd_code);
+			if (status)
+				*status = IDXD_CMDSTS_HW_ERR;
+			return;
+		}
+	}
 
 	dev_dbg(&idxd->pdev->dev, "%s: sending cmd: %#x op: %#x\n",
 		__func__, cmd_code, operand);
 
 	idxd->cmd_status = 0;
 	__set_bit(IDXD_FLAG_CMD_RUNNING, &idxd->flags);
+	idxd->cmd_seq++;
 	idxd->cmd_done = &done;
 	iowrite32(cmd.bits, idxd->reg_base + IDXD_CMD_OFFSET);
 
@@ -530,9 +581,57 @@ static void idxd_cmd_exec(struct idxd_device *idxd, int cmd_code, u32 operand,
 	 * the command completes via interrupt.
 	 */
 	spin_unlock_irqrestore(&idxd->cmd_lock, flags);
-	wait_for_completion(&done);
-	stat = ioread32(idxd->reg_base + IDXD_CMDSTS_OFFSET);
+	left = wait_for_completion_timeout(&done,
+				msecs_to_jiffies(IDXD_CMD_TIMEOUT_MS));
 	spin_lock(&idxd->cmd_lock);
+	/*
+	 * A reset, or the recovery from a halt, forgot this command
+	 * meanwhile, and another may be running by now. Forgetting the
+	 * command completes the wait, but it can also happen between the
+	 * interrupt's completion and this lock, or after the wait ran out,
+	 * so ownership is checked whichever way the wait ended. The device
+	 * is not stuck on this command, and the command state belongs to
+	 * whatever runs now. Mark nothing and leave that state alone, even
+	 * if this command completed just before the reset or the halt: its
+	 * status can no longer be trusted.
+	 */
+	if (idxd->cmd_done != &done) {
+		spin_unlock(&idxd->cmd_lock);
+		dev_err(&idxd->pdev->dev,
+			"device command %#x was ended by a reset\n",
+			cmd_code);
+		if (status)
+			*status = IDXD_CMDSTS_HW_ERR;
+		return;
+	}
+	/* A timeout, unless the interrupt beat the lock. */
+	if (!left && !completion_done(&done)) {
+		/*
+		 * The device did not complete the command. Detach the
+		 * on-stack completion so a late interrupt cannot touch it,
+		 * and leave IDXD_FLAG_CMD_RUNNING set: the device may still
+		 * be executing, so no further commands may be issued.
+		 * IDXD_FLAG_CMD_TIMEDOUT makes waiters and future callers
+		 * fail fast; a late completion interrupt or a device reset
+		 * clears both flags.
+		 */
+		idxd->cmd_done = NULL;
+		set_bit(IDXD_FLAG_CMD_TIMEDOUT, &idxd->flags);
+		wake_up(&idxd->cmd_waitq);
+		spin_unlock(&idxd->cmd_lock);
+		dev_err(&idxd->pdev->dev,
+			"device command %#x timed out, device needs a reset\n",
+			cmd_code);
+		if (status)
+			*status = IDXD_CMDSTS_HW_ERR;
+		return;
+	}
+	/*
+	 * Read the status while this command still owns the register: no
+	 * other command is written before RUNNING is cleared below.
+	 */
+	stat = ioread32(idxd->reg_base + IDXD_CMDSTS_OFFSET);
+	idxd->cmd_done = NULL;
 	if (status)
 		*status = stat;
 	idxd->cmd_status = stat & GENMASK(7, 0);
@@ -541,6 +640,33 @@ static void idxd_cmd_exec(struct idxd_device *idxd, int cmd_code, u32 operand,
 	/* Wake up other pending commands */
 	wake_up(&idxd->cmd_waitq);
 	spin_unlock(&idxd->cmd_lock);
+}
+
+/*
+ * Forget the running command, whether its owner still waits for it or
+ * has given up on it. Called when the device has been reset or has
+ * halted, so the command can no longer be executing. A waiting owner is
+ * woken instead of sleeping out its timeout. It finds that it no longer
+ * owns the command and returns without touching the command state,
+ * which belongs to whatever command runs next.
+ */
+void idxd_cmd_reset_state(struct idxd_device *idxd)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&idxd->cmd_lock, flags);
+	/*
+	 * The completion is on the owner's stack. It is valid while
+	 * cmd_done points to it, since the owner clears cmd_done, or sees
+	 * that it points elsewhere, under cmd_lock before it returns.
+	 */
+	if (idxd->cmd_done)
+		complete(idxd->cmd_done);
+	idxd->cmd_done = NULL;
+	__clear_bit(IDXD_FLAG_CMD_RUNNING, &idxd->flags);
+	clear_bit(IDXD_FLAG_CMD_TIMEDOUT, &idxd->flags);
+	wake_up(&idxd->cmd_waitq);
+	spin_unlock_irqrestore(&idxd->cmd_lock, flags);
 }
 
 int idxd_device_enable(struct idxd_device *idxd)
@@ -644,31 +770,20 @@ int idxd_device_release_int_handle(struct idxd_device *idxd, int handle,
 {
 	struct device *dev = &idxd->pdev->dev;
 	u32 operand, status;
-	union idxd_command_reg cmd;
 
 	if (!(idxd->hw.cmd_cap & BIT(IDXD_CMD_RELEASE_INT_HANDLE)))
 		return -EOPNOTSUPP;
 
 	dev_dbg(dev, "release int handle, handle %d\n", handle);
 
-	memset(&cmd, 0, sizeof(cmd));
 	operand = handle & GENMASK(15, 0);
 
 	if (irq_type == IDXD_IRQ_IMS)
 		operand |= CMD_INT_HANDLE_IMS;
 
-	cmd.cmd = IDXD_CMD_RELEASE_INT_HANDLE;
-	cmd.operand = operand;
-
 	dev_dbg(dev, "cmd: %u operand: %#x\n", IDXD_CMD_RELEASE_INT_HANDLE, operand);
 
-	spin_lock(&idxd->cmd_lock);
-	iowrite32(cmd.bits, idxd->reg_base + IDXD_CMD_OFFSET);
-
-	while (ioread32(idxd->reg_base + IDXD_CMDSTS_OFFSET) & IDXD_CMDSTS_ACTIVE)
-		cpu_relax();
-	status = ioread32(idxd->reg_base + IDXD_CMDSTS_OFFSET);
-	spin_unlock(&idxd->cmd_lock);
+	idxd_cmd_exec(idxd, IDXD_CMD_RELEASE_INT_HANDLE, operand, &status);
 
 	if ((status & IDXD_CMDSTS_ERR_MASK) != IDXD_CMDSTS_SUCCESS) {
 		dev_dbg(dev, "release int handle failed: %#x\n", status);
@@ -1340,6 +1455,12 @@ void idxd_wq_free_irq(struct idxd_wq *wq)
 	if (ie->int_handle == INVALID_INT_HANDLE)
 		return;
 
+	/*
+	 * The release waits for a running command like any other command.
+	 * It is not sent, or does not complete, only on a halted device or
+	 * after a command timed out, and the reset such a device needs
+	 * revokes the handle. The handle is forgotten in any case.
+	 */
 	if (idxd->request_int_handles)
 		idxd_device_release_int_handle(idxd, ie->int_handle, IDXD_IRQ_MSIX);
 	idxd_device_clear_perm_entry(idxd, ie);

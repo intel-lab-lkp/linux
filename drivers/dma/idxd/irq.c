@@ -35,6 +35,11 @@ static void idxd_device_reinit(struct work_struct *work)
 	struct device *dev = &idxd->pdev->dev;
 	int rc, i;
 
+	/*
+	 * The halt ended whatever command was running, and a command that
+	 * timed out before the halt would otherwise refuse the reset.
+	 */
+	idxd_cmd_reset_state(idxd);
 	idxd_device_reset(idxd);
 	rc = idxd_device_config(idxd);
 	if (rc < 0)
@@ -550,7 +555,25 @@ irqreturn_t idxd_misc_thread(int vec, void *data)
 
 	if (cause & IDXD_INTC_CMD) {
 		val |= IDXD_INTC_CMD;
-		complete(idxd->cmd_done);
+		/*
+		 * cmd_done is cleared under cmd_lock when idxd_cmd_exec()
+		 * gives up on a command: the completion lives on its stack,
+		 * so a late interrupt must not touch it.
+		 */
+		spin_lock(&idxd->cmd_lock);
+		if (idxd->cmd_done) {
+			complete(idxd->cmd_done);
+		} else if (test_bit(IDXD_FLAG_CMD_TIMEDOUT, &idxd->flags)) {
+			/*
+			 * The command its owner gave up on has finished after
+			 * all. The device is usable again, so let the queue go.
+			 */
+			__clear_bit(IDXD_FLAG_CMD_RUNNING, &idxd->flags);
+			clear_bit(IDXD_FLAG_CMD_TIMEDOUT, &idxd->flags);
+			wake_up(&idxd->cmd_waitq);
+			dev_warn(dev, "a timed-out device command completed late\n");
+		}
+		spin_unlock(&idxd->cmd_lock);
 	}
 
 	if (cause & IDXD_INTC_OCCUPY) {

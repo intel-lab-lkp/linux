@@ -267,6 +267,7 @@ enum idxd_device_state {
 enum idxd_device_flag {
 	IDXD_FLAG_CONFIGURABLE = 0,
 	IDXD_FLAG_CMD_RUNNING,
+	IDXD_FLAG_CMD_TIMEDOUT,
 	IDXD_FLAG_PASID_ENABLED,
 	IDXD_FLAG_USER_PASID_ENABLED,
 	IDXD_FLAG_REMOVING,	/* PCI remove under way, refuse binds */
@@ -332,6 +333,7 @@ struct idxd_device {
 	spinlock_t dev_lock;	/* spinlock for device */
 	spinlock_t cmd_lock;	/* spinlock for device commands */
 	struct completion *cmd_done;
+	u32 cmd_seq;		/* bumps when a command starts running */
 	struct idxd_group **groups;
 	struct idxd_wq **wqs;
 	struct idxd_engine **engines;
@@ -779,6 +781,7 @@ int idxd_device_enable(struct idxd_device *idxd);
 int idxd_device_disable(struct idxd_device *idxd);
 void idxd_device_reset(struct idxd_device *idxd);
 void idxd_device_clear_state(struct idxd_device *idxd);
+void idxd_cmd_reset_state(struct idxd_device *idxd);
 int idxd_device_config(struct idxd_device *idxd);
 void idxd_device_drain_pasid(struct idxd_device *idxd, int pasid);
 int idxd_device_load_config(struct idxd_device *idxd);
