@@ -1,0 +1,88 @@
+What:		/sys/fs/beamfs/<dev>/
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	One directory per mounted beamfs volume, named after the
+		block device, holding the scrubber's controls and counters
+		and the volume's clock anchor. The counters are kept since
+		the mount.
+
+		A KOBJ_CHANGE uevent is raised on this directory, at most
+		once a minute per reason, with the variables BEAMFS_ALERT=1,
+		BEAMFS_REASON=<reason> and BEAMFS_DETAIL=<text>; the reasons
+		are "uncorrectable" (a block could not be recovered),
+		"no-margin" (a block whose worst codeword has no correction
+		left) and "correction-rate" (more blocks corrected in one
+		sweep than alert_rate_limit allows).
+
+What:		/sys/fs/beamfs/<dev>/interval
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	(RW) Milliseconds the scrubber waits between two blocks of
+		this volume. Writing it sets the pace the scrubber returns
+		to when nothing is wrong, and the pacing only tightens from
+		there. 0 parks the scrubber; correction on read is not
+		affected. The value a volume starts with is the module
+		parameter scrub_interval_ms.
+
+What:		/sys/fs/beamfs/<dev>/cursor
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	(RO) Where the sweep is, as a physical block number.
+
+What:		/sys/fs/beamfs/<dev>/passes
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	(RO) Complete sweeps of the volume since the mount.
+
+What:		/sys/fs/beamfs/<dev>/blocks
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	(RO) Blocks the scrubber has read since the mount.
+
+What:		/sys/fs/beamfs/<dev>/corrected
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	(RO) Blocks the scrubber corrected and wrote back since
+		the mount.
+
+What:		/sys/fs/beamfs/<dev>/uncorrectable
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	(RO) Blocks with a codeword the scrubber could not correct
+		since the mount.
+
+What:		/sys/fs/beamfs/<dev>/error_budget
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	(RO) How much correction capacity the volume has left: one
+		line per wear level, "<level> <blocks>", the number of
+		blocks whose worst codeword has needed that many
+		corrections, from 0 (untouched) to 8 (no correction left).
+		Reading walks the volume's budget region, which is a cost
+		paid on request rather than a counter kept in memory.
+		"disabled" on a volume formatted without a budget region.
+
+What:		/sys/fs/beamfs/<dev>/clock_anchor
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	(RO) What the two clocks read at the same instant, taken
+		once per sweep: "mono <monotonic>", "real <wall clock>" and
+		"quality <unknown|rtc|ntp|hardware>", the worth of that wall
+		clock reading. A reader dating a journal entry needs all
+		three.
+
+What:		/sys/fs/beamfs/<dev>/scrub_pace
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	(RO) The pacing of the scrubber: "interval_ms <current>",
+		"base_ms <the interval written>", "factor <base / current>",
+		"corrected <blocks corrected>" and "wear_visits <blocks
+		visited through the wear map>".
+
+What:		/sys/fs/beamfs/<dev>/alert_rate_limit
+Date:		October 2026
+Contact:	Aurelien DESBRIERES <aurelien@hackers.camp>
+Description:	(RW) Blocks that may be corrected in one sweep before the
+		"correction-rate" uevent is raised. 0, the default, disables
+		the check: the right number depends on where the machine
+		sits.

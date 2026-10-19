@@ -74,6 +74,7 @@ Documentation for filesystem implementations.
    afs
    autofs
    autofs-mount-control
+   beamfs
    befs
    btrfs
    ceph
