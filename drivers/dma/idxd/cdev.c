@@ -592,6 +592,26 @@ void idxd_wq_del_cdev(struct idxd_wq *wq)
 	put_device(cdev_dev(idxd_cdev));
 }
 
+/*
+ * The event log walk tests the fault workqueue and queues on it, and the
+ * drain of a closing context's PASID tests it and drains it, both under
+ * the log's lock, which neither the probe nor the remove otherwise takes.
+ * The workqueue is therefore detached and destroyed under that lock. A
+ * walk or a drain that finds it gone knows that its work has run.
+ */
+static void idxd_user_wq_destroy_fault_wq(struct idxd_wq *wq)
+{
+	struct idxd_evl *evl = wq->idxd->evl;
+
+	if (evl)
+		mutex_lock(&evl->lock);
+	wq->type = IDXD_WQT_NONE;
+	destroy_workqueue(wq->wq);
+	wq->wq = NULL;
+	if (evl)
+		mutex_unlock(&evl->lock);
+}
+
 static int idxd_user_drv_probe(struct idxd_dev *idxd_dev)
 {
 	struct device *dev = &idxd_dev->conf_dev;
@@ -653,8 +673,7 @@ static int idxd_user_drv_probe(struct idxd_dev *idxd_dev)
 err_cdev:
 	idxd_drv_disable_wq(wq);
 err:
-	destroy_workqueue(wq->wq);
-	wq->type = IDXD_WQT_NONE;
+	idxd_user_wq_destroy_fault_wq(wq);
 wq_err:
 	mutex_unlock(&wq->wq_lock);
 	return rc;
@@ -667,9 +686,7 @@ static void idxd_user_drv_remove(struct idxd_dev *idxd_dev)
 	mutex_lock(&wq->wq_lock);
 	idxd_wq_del_cdev(wq);
 	idxd_drv_disable_wq(wq);
-	wq->type = IDXD_WQT_NONE;
-	destroy_workqueue(wq->wq);
-	wq->wq = NULL;
+	idxd_user_wq_destroy_fault_wq(wq);
 	mutex_unlock(&wq->wq_lock);
 }
 

@@ -339,7 +339,10 @@ static void process_evl_entry(struct idxd_device *idxd,
 			 * PASID xarray, which is populated by cdev opens
 			 * alone. A kernel WQ has no cdev workqueue and no
 			 * user contexts, so queueing could only warn and
-			 * drop the record. Note it and move on.
+			 * drop the record. Note it and move on. The user
+			 * driver detaches the workqueue under evl->lock,
+			 * which this walk holds, so the one tested here is
+			 * the one queued on.
 			 */
 			if (!is_idxd_wq_user(wq) || !wq->wq) {
 				dev_warn_ratelimited(dev,
