@@ -115,7 +115,8 @@ idxd_dma_submit_memcpy(struct dma_chan *c, dma_addr_t dma_dest,
 	if (wq->state != IDXD_WQ_ENABLED)
 		return NULL;
 
-	if (len > idxd->max_xfer_bytes)
+	/* The work queue's configured limit is what the hardware enforces. */
+	if (len > idxd->max_xfer_bytes || len > wq->max_xfer_bytes)
 		return NULL;
 
 	op_flag_setup(flags, &desc_flags);
