@@ -1155,6 +1155,47 @@ int dma_async_device_channel_register(struct dma_device *device,
 }
 EXPORT_SYMBOL_GPL(dma_async_device_channel_register);
 
+/**
+ * dma_async_device_channel_add - register a channel and make it available
+ * @device: the dmaengine device, DMA_PRIVATE and registered already
+ * @chan: the channel, not on @device's channel list
+ * @name: the channel's name, or NULL for the default one
+ *
+ * Channel requests walk the channel list of every registered device under
+ * dma_list_mutex and may hand out any listed channel that has no client.
+ * A channel added to a registered device is therefore linked to the list
+ * only once it is registered, and under that mutex, so that a request
+ * never finds it half initialized. The driver's own state behind the
+ * channel must be complete before the call. A channel that fails to
+ * register is not linked.
+ *
+ * Only a DMA_PRIVATE device may add channels this way. The channel list
+ * of a public device is also walked under RCU alone, and its channels
+ * hold references for the dmaengine_get() users, which this function
+ * does not take.
+ *
+ * Return: 0 on success or a negative errno.
+ */
+int dma_async_device_channel_add(struct dma_device *device,
+				 struct dma_chan *chan, const char *name)
+{
+	int rc;
+
+	if (WARN_ON_ONCE(!dma_has_cap(DMA_PRIVATE, device->cap_mask)))
+		return -EINVAL;
+
+	rc = __dma_async_device_channel_register(device, chan, name);
+	if (rc < 0)
+		return rc;
+
+	mutex_lock(&dma_list_mutex);
+	list_add_tail(&chan->device_node, &device->channels);
+	dma_channel_rebalance();
+	mutex_unlock(&dma_list_mutex);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dma_async_device_channel_add);
+
 static void __dma_async_device_channel_unregister(struct dma_device *device,
 						  struct dma_chan *chan)
 {

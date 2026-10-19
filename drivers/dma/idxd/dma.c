@@ -279,7 +279,7 @@ static int idxd_register_dma_channel(struct idxd_wq *wq)
 
 	chan = &idxd_chan->chan;
 	chan->device = dma;
-	list_add_tail(&chan->device_node, &dma->channels);
+	idxd_chan->wq = wq;
 
 	for (i = 0; i < wq->num_descs; i++) {
 		struct idxd_desc *desc = wq->descs[i];
@@ -288,14 +288,20 @@ static int idxd_register_dma_channel(struct idxd_wq *wq)
 		desc->txd.tx_submit = idxd_dma_tx_submit;
 	}
 
-	rc = dma_async_device_channel_register(dma, chan, NULL);
+	/*
+	 * The dma_device is registered already, so a channel request may
+	 * take the channel as soon as it is on the device's list. The core
+	 * links it only once it is registered, and everything a client
+	 * reaches through it is set up by then. What follows serves the
+	 * unbind, which cannot run before this probe returns.
+	 */
+	rc = dma_async_device_channel_add(dma, chan, NULL);
 	if (rc < 0) {
 		kfree(idxd_chan);
 		return rc;
 	}
 
 	wq->idxd_chan = idxd_chan;
-	idxd_chan->wq = wq;
 	get_device(wq_confdev(wq));
 
 	return 0;
