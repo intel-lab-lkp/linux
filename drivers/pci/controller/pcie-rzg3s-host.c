@@ -82,6 +82,7 @@
 #define RZG3S_PCI_MSGRCVIE			0x120
 #define RZG3S_PCI_MSGRCVIE_MSG_RCV		BIT(24)
 
+/* Register is R/W1C, it doesn't require locking. */
 #define RZG3S_PCI_MSGRCVIS			0x124
 #define RZG3S_PCI_MSGRCVIS_MRI			BIT(24)
 
@@ -591,11 +592,10 @@ static irqreturn_t rzg3s_pcie_msi_irq(int irq, void *data)
 		return IRQ_NONE;
 
 	/* Clear the MSI */
-	rzg3s_pcie_update_bits(host->axi, RZG3S_PCI_PINTRCVIS,
-			       RZG3S_PCI_PINTRCVIS_MSI,
-			       RZG3S_PCI_PINTRCVIS_MSI);
-	rzg3s_pcie_update_bits(host->axi, RZG3S_PCI_MSGRCVIS,
-			       RZG3S_PCI_MSGRCVIS_MRI, RZG3S_PCI_MSGRCVIS_MRI);
+	writel_relaxed(RZG3S_PCI_PINTRCVIS_MSI,
+		       host->axi + RZG3S_PCI_PINTRCVIS);
+	writel_relaxed(RZG3S_PCI_MSGRCVIS_MRI,
+		       host->axi + RZG3S_PCI_MSGRCVIS);
 
 	for (u8 reg_id = 0; reg_id < regs; reg_id++) {
 		status = readl_relaxed(host->axi + RZG3S_PCI_MSIRS(reg_id));
@@ -958,9 +958,8 @@ static void rzg3s_pcie_intx_irq_ack(struct irq_data *d)
 {
 	struct rzg3s_pcie_host *host = irq_data_get_irq_chip_data(d);
 
-	rzg3s_pcie_update_bits(host->axi, RZG3S_PCI_PINTRCVIS,
-			       RZG3S_PCI_PINTRCVIS_INTX(d->hwirq),
-			       RZG3S_PCI_PINTRCVIS_INTX(d->hwirq));
+	writel_relaxed(RZG3S_PCI_PINTRCVIS_INTX(d->hwirq),
+		       host->axi + RZG3S_PCI_PINTRCVIS);
 }
 
 static void rzg3s_pcie_intx_irq_mask(struct irq_data *d)
