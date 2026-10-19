@@ -52,6 +52,21 @@ struct idxd_desc *idxd_alloc_desc(struct idxd_wq *wq, enum idxd_op_type optype)
 		return __get_desc(wq, idx, cpu);
 	}
 
+	/*
+	 * A dying reference whose resurrect has completed belongs to a
+	 * queue quiesced for good: no kill in progress will revive it, and
+	 * every submission fails. Waiting for a slot there gains nothing
+	 * and may never end. The teardown flush and the interrupt thread
+	 * free the slot of each descriptor they complete only when its
+	 * completion returns, and iaa_crypto's verify of a compression
+	 * allocates from inside one. The two reads are not atomic, so an
+	 * allocation that races a revive can fail like a request the kill
+	 * caught.
+	 */
+	if (data_race(percpu_ref_is_dying(&wq->wq_active)) &&
+	    completion_done(&wq->wq_resurrect))
+		return ERR_PTR(-ENXIO);
+
 	ws = &sbq->ws[0];
 	for (;;) {
 		sbitmap_prepare_to_wait(sbq, ws, &wait, TASK_INTERRUPTIBLE);
@@ -149,7 +164,12 @@ static void llist_abort_desc(struct idxd_wq *wq, struct idxd_irq_entry *ie,
 	 * complete and free it, and the caller frees it as well.
 	 */
 	WARN_ON_ONCE(!found);
-	if (found)
+	/*
+	 * Another driver's submitter cleans up all of its own: it learns
+	 * of the failure from the return value and its descriptor carries
+	 * its request where a dmaengine descriptor has its txd.
+	 */
+	if (found && idxd_wq_has_txd(wq))
 		idxd_dma_complete_txd(desc, IDXD_COMPLETE_ABORT, false,
 				      NULL, NULL);
 }

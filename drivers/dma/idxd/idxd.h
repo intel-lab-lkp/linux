@@ -755,6 +755,16 @@ void idxd_dma_complete_txd(struct idxd_desc *desc,
 			   enum idxd_complete_type comp_type,
 			   bool free_desc, void *ctx, u32 *status);
 
+/*
+ * Whether the queue's descriptors are dmaengine transactions. Another
+ * driver, such as iaa_crypto, keeps its own context where they keep
+ * their txd.
+ */
+static inline bool idxd_wq_has_txd(struct idxd_wq *wq)
+{
+	return wq_to_idxd_drv(wq)->desc_complete == idxd_dma_complete_txd;
+}
+
 static inline void idxd_desc_complete(struct idxd_desc *desc,
 				      enum idxd_complete_type comp_type,
 				      bool free_desc)

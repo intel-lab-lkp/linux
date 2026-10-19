@@ -1534,10 +1534,25 @@ static void idxd_flush_pending_descs(struct idxd_irq_entry *ie,
 		list_del(&desc->list);
 		ctype = desc->completion->status ? IDXD_COMPLETE_NORMAL : IDXD_COMPLETE_ABORT;
 		/*
-		 * wq is being disabled. Any remaining descriptors are
-		 * likely to be stuck and can be dropped. callback could
-		 * point to code that is no longer accessible, for example
-		 * if dmatest module has been unloaded.
+		 * Another driver's descriptor carries that driver's request
+		 * in place of a txd, and a client may still wait for it, so it
+		 * goes back through that driver's completion. The completion
+		 * reads the outcome from the record, which the device never
+		 * wrote for an unfinished descriptor. Only a dmaengine channel
+		 * terminates, so nothing of such a queue is quarantined.
+		 */
+		if (!idxd_wq_has_txd(wq)) {
+			if (ctype == IDXD_COMPLETE_ABORT)
+				desc->completion->status = IDXD_COMP_DESC_ABORT;
+			idxd_desc_complete(desc, ctype, true);
+			continue;
+		}
+		/*
+		 * wq is being disabled or terminated. Any remaining
+		 * descriptors are likely to be stuck and can be dropped.
+		 * With no client left the callback could point to code that
+		 * is no longer accessible (dmatest unloaded), and a client's
+		 * own terminate must not get it, so it is stripped.
 		 */
 		tx = &desc->txd;
 		tx->callback = NULL;
