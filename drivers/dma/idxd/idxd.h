@@ -224,6 +224,13 @@ struct idxd_wq {
 	struct idxd_desc **descs;
 	struct sbitmap_queue sbq;
 	struct idxd_dma_chan *idxd_chan;
+	struct list_head quarantine;	/* descriptors a terminate_all took
+					 * off the lists while the device
+					 * still held them. Their slots, with
+					 * their unmap data, are freed once a
+					 * drain that covers them completes or
+					 * the device stops. Under ie.list_lock.
+					 */
 	char name[WQ_NAME_SIZE + 1];
 	u64 max_xfer_bytes;
 	u32 max_batch_size;
@@ -807,7 +814,10 @@ void idxd_wq_quiesce(struct idxd_wq *wq);
 int idxd_wq_init_percpu_ref(struct idxd_wq *wq);
 void idxd_wq_free_irq(struct idxd_wq *wq);
 int idxd_wq_request_irq(struct idxd_wq *wq);
-void idxd_wq_flush_descs(struct idxd_wq *wq);
+void idxd_wq_flush_descs(struct idxd_wq *wq, bool quarantine);
+void idxd_wq_quarantine_take(struct idxd_wq *wq, struct list_head *list);
+void idxd_wq_quarantine_free(struct idxd_wq *wq, struct list_head *list);
+void idxd_wq_halt_release(struct idxd_wq *wq);
 
 /* submission */
 int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc);

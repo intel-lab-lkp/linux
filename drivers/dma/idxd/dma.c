@@ -199,7 +199,8 @@ static int idxd_dma_terminate_all(struct dma_chan *c)
 {
 	struct idxd_wq *wq = to_idxd_wq(c);
 
-	idxd_wq_flush_descs(wq);
+	/* The device keeps running what the lists held. See synchronize. */
+	idxd_wq_flush_descs(wq, true);
 
 	return 0;
 }
@@ -207,8 +208,17 @@ static int idxd_dma_terminate_all(struct dma_chan *c)
 static void idxd_dma_synchronize(struct dma_chan *c)
 {
 	struct idxd_wq *wq = to_idxd_wq(c);
+	LIST_HEAD(quarantined);
 
+	/*
+	 * dmaengine_synchronize() promises the client that its memory may
+	 * be freed afterwards. The drain keeps that promise, and nothing
+	 * the device held before it is left to write a completion record,
+	 * so the slots terminate_all quarantined are free again.
+	 */
+	idxd_wq_quarantine_take(wq, &quarantined);
 	idxd_wq_drain(wq);
+	idxd_wq_quarantine_free(wq, &quarantined);
 }
 
 int idxd_register_dma_device(struct idxd_device *idxd)

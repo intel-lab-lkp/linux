@@ -213,6 +213,7 @@ static int idxd_setup_wqs(struct idxd_device *idxd)
 		init_waitqueue_head(&wq->err_queue);
 		init_completion(&wq->wq_dead);
 		init_completion(&wq->wq_resurrect);
+		INIT_LIST_HEAD(&wq->quarantine);
 		wq->max_xfer_bytes = WQ_DEFAULT_MAX_XFER;
 		idxd_wq_set_max_batch_size(idxd->data->type, wq, WQ_DEFAULT_MAX_BATCH);
 		idxd_wq_set_init_max_sgl_size(idxd, wq);

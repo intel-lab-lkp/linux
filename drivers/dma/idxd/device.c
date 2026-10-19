@@ -118,6 +118,8 @@ int idxd_wq_alloc_resources(struct idxd_wq *wq)
 	if (wq->type != IDXD_WQT_KERNEL)
 		return 0;
 
+	/* A fresh pool: nothing outstanding can land in it. */
+	INIT_LIST_HEAD(&wq->quarantine);
 	num_descs = wq_dedicated(wq) ? wq->size : wq->threshold;
 	wq->num_descs = num_descs;
 
@@ -170,10 +172,18 @@ EXPORT_SYMBOL_NS_GPL(idxd_wq_alloc_resources, "IDXD");
 void idxd_wq_free_resources(struct idxd_wq *wq)
 {
 	struct device *dev = &wq->idxd->pdev->dev;
+	LIST_HEAD(dead_descs);
 
 	if (wq->type != IDXD_WQT_KERNEL)
 		return;
 
+	/*
+	 * The disable frees the pool only after its drain and its reset
+	 * completed, and a failed enable has run nothing, so the device no
+	 * longer reaches what a quarantined descriptor maps.
+	 */
+	idxd_wq_quarantine_take(wq, &dead_descs);
+	idxd_wq_quarantine_free(wq, &dead_descs);
 	free_hw_descs(wq);
 	free_descs(wq);
 	dma_free_coherent(dev, wq->compls_size, wq->compls, wq->compls_addr);
@@ -1391,11 +1401,14 @@ int idxd_device_load_config(struct idxd_device *idxd)
 	return 0;
 }
 
-static void idxd_flush_pending_descs(struct idxd_irq_entry *ie)
+static void idxd_flush_pending_descs(struct idxd_irq_entry *ie,
+				     bool quarantine)
 {
+	struct idxd_wq *wq = ie_to_wq(ie);
 	struct idxd_desc *desc, *itr;
 	struct llist_node *head;
 	LIST_HEAD(flist);
+	LIST_HEAD(qlist);
 	enum idxd_complete_type ctype;
 
 	spin_lock(&ie->list_lock);
@@ -1423,8 +1436,82 @@ static void idxd_flush_pending_descs(struct idxd_irq_entry *ie)
 		tx = &desc->txd;
 		tx->callback = NULL;
 		tx->callback_result = NULL;
+		/*
+		 * A descriptor the device has not finished still has its
+		 * completion record to write. A flush that leaves the
+		 * device running keeps its slot out of use, or the record
+		 * would land on the slot's next owner and complete it with
+		 * this descriptor's status. Its unmap data stays with the
+		 * slot as well, since the device may still access what it
+		 * maps, and an address released now could be mapped again
+		 * for someone else before the late access.
+		 */
+		if (quarantine && ctype == IDXD_COMPLETE_ABORT) {
+			struct dmaengine_unmap_data *unmap = tx->unmap;
+
+			tx->unmap = NULL;
+			idxd_dma_complete_txd(desc, ctype, false, NULL, NULL);
+			tx->unmap = unmap;
+			list_add_tail(&desc->list, &qlist);
+			continue;
+		}
 		idxd_dma_complete_txd(desc, ctype, true, NULL, NULL);
 	}
+
+	if (list_empty(&qlist))
+		return;
+	spin_lock(&ie->list_lock);
+	list_splice_tail(&qlist, &wq->quarantine);
+	spin_unlock(&ie->list_lock);
+}
+
+/*
+ * Take what terminate_all has quarantined so far. A drain covers only
+ * what the device held when it was issued, so a synchronize takes the
+ * quarantine before it drains and frees it if the drain completed. A
+ * descriptor terminated meanwhile waits for the next one. The list lock
+ * serialises this with the flush that adds to the quarantine and with a
+ * halt or a teardown that frees it all.
+ */
+void idxd_wq_quarantine_take(struct idxd_wq *wq, struct list_head *list)
+{
+	spin_lock(&wq->ie.list_lock);
+	list_splice_init(&wq->quarantine, list);
+	spin_unlock(&wq->ie.list_lock);
+}
+
+/*
+ * Nothing the device holds can write their completion records, or reach
+ * the memory their unmap data maps, any more. The unmap data goes before
+ * the slot, which a new owner may take at once.
+ */
+void idxd_wq_quarantine_free(struct idxd_wq *wq, struct list_head *list)
+{
+	struct idxd_desc *desc, *itr;
+
+	list_for_each_entry_safe(desc, itr, list, list) {
+		list_del(&desc->list);
+		dma_descriptor_unmap(&desc->txd);
+		idxd_free_desc(wq, desc);
+	}
+}
+
+/*
+ * A halt killed every descriptor the device held: the quarantined slots
+ * are free. Under wq_lock, since an unbind racing the halt may free the
+ * pool.
+ */
+void idxd_wq_halt_release(struct idxd_wq *wq)
+{
+	LIST_HEAD(dead_descs);
+
+	guard(mutex)(&wq->wq_lock);
+
+	if (wq->state != IDXD_WQ_ENABLED || wq->type != IDXD_WQT_KERNEL)
+		return;
+
+	idxd_wq_quarantine_take(wq, &dead_descs);
+	idxd_wq_quarantine_free(wq, &dead_descs);
 }
 
 static void idxd_device_set_perm_entry(struct idxd_device *idxd,
@@ -1456,7 +1543,7 @@ void idxd_wq_free_irq(struct idxd_wq *wq)
 		return;
 
 	free_irq(ie->vector, ie);
-	idxd_flush_pending_descs(ie);
+	idxd_flush_pending_descs(ie, false);
 
 	/* FLR revokes every handle; the halt path marks them invalid. */
 	if (ie->int_handle == INVALID_INT_HANDLE)
@@ -1476,16 +1563,38 @@ void idxd_wq_free_irq(struct idxd_wq *wq)
 	ie->pasid = IOMMU_PASID_INVALID;
 }
 
-void idxd_wq_flush_descs(struct idxd_wq *wq)
+/*
+ * @quarantine: the device keeps running, so the slots of the descriptors
+ * it has not finished stay out of use until a drain covers them. A halt
+ * has killed them and frees their slots at once.
+ */
+void idxd_wq_flush_descs(struct idxd_wq *wq, bool quarantine)
 {
 	struct idxd_irq_entry *ie = &wq->ie;
+	bool killed = false;
 
 	guard(mutex)(&wq->wq_lock);
 
 	if (wq->state != IDXD_WQ_ENABLED || wq->type != IDXD_WQT_KERNEL)
 		return;
 
-	idxd_flush_pending_descs(ie);
+	/*
+	 * A submitter between its list add and its portal write holds
+	 * wq_active. Waiting for the reference to die puts every listed
+	 * descriptor in the device, where the drain that frees the
+	 * quarantine covers it. A halt flush has done this itself.
+	 */
+	if (quarantine && !percpu_ref_is_dying(&wq->wq_active)) {
+		reinit_completion(&wq->wq_resurrect);
+		percpu_ref_kill(&wq->wq_active);
+		wait_for_completion(&wq->wq_dead);
+		killed = true;
+	}
+	idxd_flush_pending_descs(ie, quarantine);
+	if (killed) {
+		percpu_ref_reinit(&wq->wq_active);
+		complete_all(&wq->wq_resurrect);
+	}
 }
 
 int idxd_wq_request_irq(struct idxd_wq *wq)
