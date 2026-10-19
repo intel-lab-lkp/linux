@@ -112,6 +112,7 @@ pub mod of;
 #[cfg(CONFIG_PM_OPP)]
 pub mod opp;
 pub mod page;
+pub mod panic;
 #[cfg(CONFIG_PCI)]
 pub mod pci;
 pub mod pid_namespace;
