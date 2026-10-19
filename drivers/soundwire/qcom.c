@@ -1241,7 +1241,8 @@ static int qcom_swrm_stream_alloc_ports(struct qcom_swrm_ctrl *ctrl,
 	struct sdw_port_runtime *p_rt;
 	struct sdw_slave *slave;
 	unsigned long *port_mask;
-	int maxport, pn, nports = 0;
+	int maxport, pn, nports = 0, ret;
+	unsigned long saved_port_mask;
 	unsigned int m_port;
 	struct sdw_port_config *pconfig __free(kfree) = kzalloc_objs(*pconfig,
 								     ctrl->nports);
@@ -1260,6 +1261,7 @@ static int qcom_swrm_stream_alloc_ports(struct qcom_swrm_ctrl *ctrl,
 	sconfig.bps = 1;
 
 	guard(mutex)(&ctrl->port_lock);
+	saved_port_mask = ctrl->port_mask;
 
 	list_for_each_entry(m_rt, &stream->master_list, stream_node) {
 		/*
@@ -1286,7 +1288,8 @@ static int qcom_swrm_stream_alloc_ports(struct qcom_swrm_ctrl *ctrl,
 
 				if (pn >= maxport) {
 					dev_err(ctrl->dev, "All ports busy\n");
-					return -EBUSY;
+					ret = -EBUSY;
+					goto restore_mask;
 				}
 				set_bit(pn, port_mask);
 				pconfig[nports].num = pn;
@@ -1296,10 +1299,14 @@ static int qcom_swrm_stream_alloc_ports(struct qcom_swrm_ctrl *ctrl,
 		}
 	}
 
-	sdw_stream_add_master(&ctrl->bus, &sconfig, pconfig,
-			      nports, stream);
+	ret = sdw_stream_add_master(&ctrl->bus, &sconfig, pconfig,
+				    nports, stream);
+	if (!ret)
+		return 0;
 
-	return 0;
+restore_mask:
+	ctrl->port_mask = saved_port_mask;
+	return ret;
 }
 
 static int qcom_swrm_hw_params(struct snd_pcm_substream *substream,
@@ -1308,14 +1315,9 @@ static int qcom_swrm_hw_params(struct snd_pcm_substream *substream,
 {
 	struct qcom_swrm_ctrl *ctrl = dev_get_drvdata(dai->dev);
 	struct sdw_stream_runtime *sruntime = ctrl->sruntime[dai->id];
-	int ret;
 
-	ret = qcom_swrm_stream_alloc_ports(ctrl, sruntime, params,
-					   substream->stream);
-	if (ret)
-		qcom_swrm_stream_free_ports(ctrl, sruntime);
-
-	return ret;
+	return qcom_swrm_stream_alloc_ports(ctrl, sruntime, params,
+					    substream->stream);
 }
 
 static int qcom_swrm_hw_free(struct snd_pcm_substream *substream,
