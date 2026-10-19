@@ -1418,7 +1418,10 @@ refclk_disable:
 	return ret;
 }
 
-static int rzg3s_pcie_host_init(struct rzg3s_pcie_host *host)
+static int
+rzg3s_pcie_host_init(struct rzg3s_pcie_host *host,
+		     int (*init_irqdomain)(struct rzg3s_pcie_host *host),
+		     void (*teardown_irqdomain)(struct rzg3s_pcie_host *host))
 {
 	u32 val;
 	int ret;
@@ -1445,10 +1448,14 @@ static int rzg3s_pcie_host_init(struct rzg3s_pcie_host *host)
 	/* Initialize the interrupts */
 	rzg3s_pcie_irq_init(host);
 
+	ret = init_irqdomain(host);
+	if (ret)
+		goto config_deinit_and_refclk;
+
 	/* SoC-specific post-configuration */
 	ret = host->data->config_post_init(host);
 	if (ret)
-		goto config_deinit_and_refclk;
+		goto teardown_irqdomain;
 
 	/* Wait for link up */
 	ret = readl_poll_timeout(host->axi + RZG3S_PCI_PCSTAT1, val,
@@ -1466,6 +1473,8 @@ static int rzg3s_pcie_host_init(struct rzg3s_pcie_host *host)
 
 config_deinit_post:
 	host->data->config_deinit(host);
+teardown_irqdomain:
+	teardown_irqdomain(host);
 config_deinit_and_refclk:
 	clk_disable_unprepare(host->port.refclk);
 config_deinit:
@@ -1721,15 +1730,10 @@ rzg3s_pcie_host_setup(struct rzg3s_pcie_host *host,
 		return dev_err_probe(dev, ret,
 				     "Failed to set outbound windows!\n");
 
-	ret = init_irqdomain(host);
+	ret = rzg3s_pcie_host_init(host, init_irqdomain, teardown_irqdomain);
 	if (ret)
-		return dev_err_probe(dev, ret, "Failed to init IRQ domain\n");
-
-	ret = rzg3s_pcie_host_init(host);
-	if (ret) {
-		dev_err_probe(dev, ret, "Failed to initialize the HW!\n");
-		goto teardown_irqdomain;
-	}
+		return dev_err_probe(dev, ret,
+				     "Failed to initialize the HW!\n");
 
 	ret = rzg3s_pcie_set_max_link_speed(host);
 	if (ret)
@@ -1738,11 +1742,6 @@ rzg3s_pcie_host_setup(struct rzg3s_pcie_host *host,
 	pci_host_common_link_train_delay(host->max_link_speed);
 
 	return 0;
-
-teardown_irqdomain:
-	teardown_irqdomain(host);
-
-	return ret;
 }
 
 static int rzg3s_pcie_get_controller_id(struct rzg3s_pcie_host *host)
@@ -1923,8 +1922,8 @@ static int rzg3s_pcie_probe(struct platform_device *pdev)
 	return 0;
 
 host_probe_teardown:
-	clk_disable_unprepare(host->port.refclk);
 	rzg3s_pcie_teardown_irqdomain(host);
+	clk_disable_unprepare(host->port.refclk);
 	host->data->config_deinit(host);
 power_resets_assert:
 	reset_control_bulk_assert(host->data->num_power_resets,
