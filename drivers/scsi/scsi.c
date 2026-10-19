@@ -61,6 +61,7 @@
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_dbg.h>
 #include <scsi/scsi_device.h>
+#include <scsi/scsi_devinfo.h>
 #include <scsi/scsi_driver.h>
 #include <scsi/scsi_eh.h>
 #include <scsi/scsi_host.h>
@@ -547,6 +548,220 @@ void scsi_attach_vpd(struct scsi_device *sdev)
 		}
 	}
 	kfree(vpd_buf);
+}
+
+/*
+ * Size of the buffer that holds sdev->inquiry. sdev->inquiry_len is an
+ * unsigned char, so at most 255 bytes of INQUIRY data are ever stored.
+ */
+#define SCSI_INQUIRY_BUF_LEN	256
+
+/*
+ * Set the capability flags derived from INQUIRY data. These are only set
+ * when the device is first probed: LLDs and upper-level drivers adjust
+ * several of them afterwards (lockable, tagged_supported, ppr, ...), and
+ * they share a word with runtime state bits that are updated without
+ * inquiry_mutex, so they must not be rewritten on a live device.
+ */
+static void scsi_set_inquiry_flags(struct scsi_device *sdev,
+				   unsigned char *inq_result, size_t inq_len)
+	__must_hold(&sdev->inquiry_mutex)
+{
+	/*
+	 * Check if this is an ATA device (SATA emulation layer).
+	 * ATA devices need allow_restart set to work around SATL power
+	 * management specifications.
+	 */
+	if (strncmp(sdev->vendor, "ATA     ", 8) == 0) {
+		sdev->is_ata = 1;
+		sdev->allow_restart = 1;
+	}
+
+	/*
+	 * BLIST_ISROM is a quirk for devices that report the wrong type but
+	 * should be treated as (removable) CD-ROM.
+	 */
+	if (sdev->sdev_bflags & BLIST_ISROM)
+		sdev->removable = 1;
+	else
+		sdev->removable = (inq_result[1] & 0x80) >> 7;
+
+	/*
+	 * Set lockable to match removable. Devices with removable media
+	 * can typically have their media locked/unlocked via the
+	 * ALLOW_MEDIUM_REMOVAL command.
+	 */
+	sdev->lockable = sdev->removable;
+
+	/* Capability flags from INQUIRY bytes 3, 7 and 56 */
+	sdev->soft_reset = (inq_result[7] & 1) && ((inq_result[3] & 7) == 2);
+	if (sdev->scsi_level >= SCSI_3 ||
+	    (inq_len > 56 && inq_result[56] & 0x04))
+		sdev->ppr = 1;
+	if (inq_result[7] & 0x60)
+		sdev->wdtr = 1;
+	if (inq_result[7] & 0x10)
+		sdev->sdtr = 1;
+
+	/* BLIST_NOTQ forces tagged queuing off */
+	if (sdev->scsi_level >= SCSI_2 && (inq_result[7] & 2) &&
+	    !(sdev->sdev_bflags & BLIST_NOTQ)) {
+		sdev->tagged_supported = 1;
+		sdev->simple_tags = 1;
+	}
+}
+
+/**
+ * scsi_update_inquiry_data - Update standard INQUIRY data for a SCSI device
+ * @sdev: The device to update
+ * @inq_result: Buffer containing new INQUIRY data
+ * @inq_len: Length of inquiry data
+ *
+ * Stores the standard INQUIRY data for @sdev and updates the fields derived
+ * from it: vendor, model, revision, peripheral qualifier, device type and
+ * SCSI level. This is used both during initial device setup and when an
+ * existing device is rescanned. On the first call the capability flags
+ * derived from INQUIRY data are set as well; see scsi_set_inquiry_flags().
+ *
+ * The INQUIRY buffer is allocated once, at its maximum size, and later
+ * updates copy the new data into it in place. Several helpers in
+ * <scsi/scsi_device.h> read sdev->inquiry without holding inquiry_mutex,
+ * so the buffer must not be freed or reallocated while the device is live.
+ *
+ * The BLIST_ISROM type override is applied on every call. Its removable
+ * override, like BLIST_NOTQ, only affects the capability flags and is
+ * therefore only applied on the first call.
+ *
+ * Returns:
+ *   SCSI_INQ_UNCHANGED on success
+ *   SCSI_INQ_REPROBE_NEEDED if peripheral qualifier or device type changed
+ *  -ENOMEM on allocation failure
+ *  -EINVAL if inquiry data is too short
+ */
+int scsi_update_inquiry_data(struct scsi_device *sdev,
+			     unsigned char *inq_result, size_t inq_len)
+{
+	unsigned char *new_inquiry = NULL;
+	unsigned char old_type;
+	unsigned char old_periph_qual;
+	unsigned char type;
+	char scsi_level;
+	bool refresh;
+
+	/*
+	 * Ensure we have at least the minimum standard INQUIRY data (36 bytes)
+	 * to safely access device type, vendor, model, rev, and capability flags.
+	 */
+	if (inq_len < 36) {
+		sdev_printk(KERN_WARNING, sdev,
+			    "INQUIRY data too short (%zu bytes), need at least 36\n",
+			    inq_len);
+		return -EINVAL;
+	}
+	inq_len = min_t(size_t, inq_len, SCSI_INQUIRY_BUF_LEN - 1);
+
+	/*
+	 * The buffer is only allocated on the first call, from scsi_add_lun(),
+	 * before the device is visible to anyone else.
+	 */
+	if (!sdev->inquiry) {
+		new_inquiry = kzalloc(SCSI_INQUIRY_BUF_LEN, GFP_KERNEL);
+		if (!new_inquiry)
+			return -ENOMEM;
+	}
+
+	mutex_lock(&sdev->inquiry_mutex);
+
+	/*
+	 * Save peripheral qualifier and device type before updating. These
+	 * are the only two values that determine whether device_reprobe() is
+	 * needed: type controls which upper-layer driver (sd, st, sr, ...) is
+	 * bound, and PQ controls whether the LUN is accessible at all
+	 * (scsi_bus_match() only matches PQ == 0).
+	 */
+	refresh = !new_inquiry;
+	old_type = sdev->type;
+	old_periph_qual = sdev->inq_periph_qual;
+
+	if (new_inquiry)
+		sdev->inquiry = new_inquiry;
+	memcpy(sdev->inquiry, inq_result, inq_len);
+	memset(sdev->inquiry + inq_len, 0, SCSI_INQUIRY_BUF_LEN - inq_len);
+	sdev->inquiry_len = inq_len;
+
+	strscpy(sdev->vendor, sdev->inquiry + INQUIRY_VENDOR_OFFSET);
+	strscpy(sdev->model, sdev->inquiry + INQUIRY_MODEL_OFFSET);
+	/*
+	 * memcpy() instead of strscpy() because strscpy() would read past
+	 * the end of the INQUIRY data if its length is exactly 36 bytes.
+	 */
+	memcpy(sdev->rev, sdev->inquiry + INQUIRY_REVISION_OFFSET,
+	       INQUIRY_REVISION_LEN);
+	sdev->rev[INQUIRY_REVISION_LEN] = '\0';
+	sdev->inq_periph_qual = (inq_result[0] >> 5) & 7;
+
+	/*
+	 * Compute scsi_level from INQUIRY bytes 2 and 3. This must be
+	 * updated under inquiry_mutex alongside the other INQUIRY-derived
+	 * fields so sysfs readers always see a consistent snapshot.
+	 *
+	 * scsi_level and type are also read without inquiry_mutex, by the
+	 * I/O path, upper-level drivers and scsi_bus_uevent(). Compute them
+	 * in local variables and store each one once, so that a lockless
+	 * reader sees either the old or the new value, never an
+	 * intermediate one.
+	 */
+	scsi_level = inq_result[2] & 0x0f;
+	if (scsi_level >= 2 ||
+	    (scsi_level == 1 && (inq_result[3] & 0x0f) == 1))
+		scsi_level++;
+	WRITE_ONCE(sdev->scsi_level, scsi_level);
+
+	/*
+	 * Update device type from INQUIRY byte 0. BLIST_ISROM overrides the
+	 * reported type with TYPE_ROM.
+	 */
+	if (sdev->sdev_bflags & BLIST_ISROM) {
+		type = TYPE_ROM;
+	} else {
+		type = inq_result[0] & 0x1f;
+
+		/*
+		 * Some devices may respond with wrong type for well-known
+		 * logical units. Force well-known type to enumerate them
+		 * correctly.
+		 */
+		if (scsi_is_wlun(sdev->lun) && type != TYPE_WLUN) {
+			sdev_printk(KERN_WARNING, sdev,
+				"%s: correcting incorrect peripheral device type 0x%x for W-LUN 0x%16xhN\n",
+				__func__, type,
+				(unsigned int)sdev->lun);
+			type = TYPE_WLUN;
+		}
+	}
+	WRITE_ONCE(sdev->type, type);
+
+	if (!refresh)
+		scsi_set_inquiry_flags(sdev, inq_result, inq_len);
+
+	mutex_unlock(&sdev->inquiry_mutex);
+
+	if (refresh) {
+		if (old_type != sdev->type) {
+			sdev_printk(KERN_NOTICE, sdev,
+				    "device type changed from %d to %d\n",
+				    old_type, sdev->type);
+			return SCSI_INQ_REPROBE_NEEDED;
+		}
+		if (old_periph_qual != sdev->inq_periph_qual) {
+			sdev_printk(KERN_NOTICE, sdev,
+				    "peripheral qualifier changed from %d to %d\n",
+				    old_periph_qual, sdev->inq_periph_qual);
+			return SCSI_INQ_REPROBE_NEEDED;
+		}
+	}
+
+	return SCSI_INQ_UNCHANGED;
 }
 
 /**
