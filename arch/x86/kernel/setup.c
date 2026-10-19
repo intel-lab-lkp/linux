@@ -56,6 +56,7 @@
 #include <asm/prom.h>
 #include <asm/proto.h>
 #include <asm/realmode.h>
+#include <asm/sev.h>
 #include <asm/thermal.h>
 #include <asm/unwind.h>
 #include <asm/vsyscall.h>
@@ -1029,6 +1030,9 @@ void __init setup_arch(char **cmdline_p)
 
 	e820_add_kernel_range();
 	trim_bios_range();
+
+	/* Do the RMP table fixups before max_pfn and memblock use e820. */
+	snp_fixup_e820_tables();
 #ifdef CONFIG_X86_32
 	if (ppro_with_ram_bug()) {
 		pr_info("Applying PPro RAM bug workaround: punching 256 kB hole at 1.75 GB physical.\n");
