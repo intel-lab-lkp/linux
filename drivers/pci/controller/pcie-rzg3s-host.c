@@ -1822,9 +1822,8 @@ static int rzg3s_pcie_probe(struct platform_device *pdev)
 	struct pci_host_bridge *bridge;
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
-	struct device_node *sysc_np __free(device_node) =
-		of_parse_phandle(np, "renesas,sysc", 0);
 	struct rzg3s_pcie_host *host;
+	struct device_node *sysc_np;
 	struct rzg3s_sysc *sysc;
 	int ret;
 
@@ -1859,7 +1858,14 @@ static int rzg3s_pcie_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	sysc_np = of_parse_phandle(np, "renesas,sysc", 0);
+	if (!sysc_np) {
+		ret = -ENODEV;
+		goto port_refclk_put;
+	}
+
 	sysc->regmap = syscon_node_to_regmap(sysc_np);
+	of_node_put(sysc_np);
 	if (IS_ERR(sysc->regmap)) {
 		ret = PTR_ERR(sysc->regmap);
 		goto port_refclk_put;
