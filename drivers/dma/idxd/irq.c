@@ -40,7 +40,9 @@ static void idxd_device_reinit(struct work_struct *work)
 	 * timed out before the halt would otherwise refuse the reset.
 	 */
 	idxd_cmd_reset_state(idxd);
-	idxd_device_reset(idxd);
+	rc = idxd_device_reset(idxd);
+	if (rc < 0)
+		goto out;
 	rc = idxd_device_config(idxd);
 	if (rc < 0)
 		goto out;

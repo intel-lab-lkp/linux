@@ -19,6 +19,7 @@ static void idxd_cmd_exec(struct idxd_device *idxd, int cmd_code, u32 operand,
 			  u32 *status);
 static void idxd_device_wqs_clear_state(struct idxd_device *idxd);
 static void idxd_wq_disable_cleanup(struct idxd_wq *wq);
+static inline bool idxd_device_is_halted(struct idxd_device *idxd);
 static int idxd_wq_config_write(struct idxd_wq *wq);
 
 /* Interrupt control bits */
@@ -119,6 +120,7 @@ int idxd_wq_alloc_resources(struct idxd_wq *wq)
 		return 0;
 
 	/* A fresh pool: nothing outstanding can land in it. */
+	wq->stuck = false;
 	INIT_LIST_HEAD(&wq->quarantine);
 	num_descs = wq_dedicated(wq) ? wq->size : wq->threshold;
 	wq->num_descs = num_descs;
@@ -222,6 +224,7 @@ int idxd_wq_disable(struct idxd_wq *wq, bool reset_config)
 	struct idxd_device *idxd = wq->idxd;
 	struct device *dev = &idxd->pdev->dev;
 	u32 status, operand;
+	int rc;
 
 	dev_dbg(dev, "Disabling WQ %d\n", wq->id);
 
@@ -239,8 +242,14 @@ int idxd_wq_disable(struct idxd_wq *wq, bool reset_config)
 	 * To make sure pending translations are drained before WQ
 	 * attributes are changed, we use a WQ Drain followed by WQ Reset and
 	 * then restore the WQ configuration.
+	 *
+	 * A drain that timed out leaves descriptors in the queue. Report
+	 * it instead of resetting, so that the caller keeps whatever those
+	 * descriptors can still reach, a PASID for instance.
 	 */
-	idxd_wq_drain(wq);
+	rc = idxd_wq_drain(wq);
+	if (rc)
+		return rc;
 
 	operand = BIT(wq->id % 16) | ((wq->id / 16) << 16);
 	idxd_cmd_exec(idxd, IDXD_CMD_RESET_WQ, operand, &status);
@@ -260,36 +269,72 @@ int idxd_wq_disable(struct idxd_wq *wq, bool reset_config)
 	return 0;
 }
 
-void idxd_wq_drain(struct idxd_wq *wq)
+/*
+ * The result of a drain or a reset. IDXD_CMDSTS_HW_ERR stands for a
+ * command that timed out, or was refused after one did, and then the
+ * device may still run what it holds. It is also the device's own code
+ * for a hardware error, after which the specification has software read
+ * GENSTS. Both leave the device enabled unless it halted, and a halted
+ * device runs nothing until it is reset, so what it holds is then as
+ * gone as after a drain and that is not a timeout.
+ */
+static int idxd_cmd_drain_result(struct idxd_device *idxd, u32 status)
+{
+	if (status != IDXD_CMDSTS_HW_ERR || idxd_device_is_halted(idxd))
+		return 0;
+	return -ETIMEDOUT;
+}
+
+/*
+ * Returns -ETIMEDOUT when the command never completed, or was refused
+ * because an earlier one never did, in which case descriptors may still
+ * be in the device and the caller must not free anything it can write
+ * into.
+ */
+int idxd_wq_drain(struct idxd_wq *wq)
 {
 	struct idxd_device *idxd = wq->idxd;
 	struct device *dev = &idxd->pdev->dev;
-	u32 operand;
+	u32 operand, status;
 
 	if (wq->state != IDXD_WQ_ENABLED) {
 		dev_dbg(dev, "WQ %d in wrong state: %d\n", wq->id, wq->state);
-		return;
+		return 0;
 	}
 
 	dev_dbg(dev, "Draining WQ %d\n", wq->id);
 	operand = BIT(wq->id % 16) | ((wq->id / 16) << 16);
-	idxd_cmd_exec(idxd, IDXD_CMD_DRAIN_WQ, operand, NULL);
+	idxd_cmd_exec(idxd, IDXD_CMD_DRAIN_WQ, operand, &status);
+	return idxd_cmd_drain_result(idxd, status);
 }
 
-void idxd_wq_reset(struct idxd_wq *wq)
+int idxd_wq_reset(struct idxd_wq *wq)
 {
 	struct idxd_device *idxd = wq->idxd;
 	struct device *dev = &idxd->pdev->dev;
-	u32 operand;
+	u32 operand, status;
+	int rc;
 
 	if (wq->state != IDXD_WQ_ENABLED) {
 		dev_dbg(dev, "WQ %d in wrong state: %d\n", wq->id, wq->state);
-		return;
+		return 0;
 	}
 
 	operand = BIT(wq->id % 16) | ((wq->id / 16) << 16);
-	idxd_cmd_exec(idxd, IDXD_CMD_RESET_WQ, operand, NULL);
+	idxd_cmd_exec(idxd, IDXD_CMD_RESET_WQ, operand, &status);
+	/*
+	 * A reset that timed out, or was refused after a command did,
+	 * leaves the queue enabled in the device on its configuration.
+	 * Its software state stays enabled too, as after a failed
+	 * idxd_wq_disable(), so that the queue is neither reconfigured nor
+	 * enabled again on a configuration the device does not run until
+	 * a device disable or reset has stopped it.
+	 */
+	rc = idxd_cmd_drain_result(idxd, status);
+	if (rc)
+		return rc;
 	idxd_wq_disable_cleanup(wq);
+	return 0;
 }
 
 int idxd_wq_map_portal(struct idxd_wq *wq)
@@ -732,24 +777,41 @@ int idxd_device_disable(struct idxd_device *idxd)
 	return 0;
 }
 
-void idxd_device_reset(struct idxd_device *idxd)
+/*
+ * Returns -ENXIO when the device refused or never ran the reset. The
+ * software state is cleared only after a reset that ran, since clearing
+ * it for an enabled device lets a later teardown free memory the device
+ * still writes.
+ */
+int idxd_device_reset(struct idxd_device *idxd)
 {
-	idxd_cmd_exec(idxd, IDXD_CMD_RESET_DEVICE, 0, NULL);
+	u32 status;
+
+	idxd_cmd_exec(idxd, IDXD_CMD_RESET_DEVICE, 0, &status);
+	if (status != IDXD_CMDSTS_SUCCESS) {
+		dev_dbg(&idxd->pdev->dev, "%s: err_code: %#x\n", __func__, status);
+		return -ENXIO;
+	}
 	idxd_device_clear_state(idxd);
 	spin_lock(&idxd->dev_lock);
 	idxd_unmask_error_interrupts(idxd);
 	spin_unlock(&idxd->dev_lock);
+	return 0;
 }
 
-void idxd_device_drain_pasid(struct idxd_device *idxd, int pasid)
+/* Returns -ETIMEDOUT when the drain was never run or never completed. */
+int idxd_device_drain_pasid(struct idxd_device *idxd, int pasid)
 {
 	struct device *dev = &idxd->pdev->dev;
-	u32 operand;
+	u32 operand, status;
 
 	operand = pasid;
 	dev_dbg(dev, "cmd: %u operand: %#x\n", IDXD_CMD_DRAIN_PASID, operand);
-	idxd_cmd_exec(idxd, IDXD_CMD_DRAIN_PASID, operand, NULL);
+	idxd_cmd_exec(idxd, IDXD_CMD_DRAIN_PASID, operand, &status);
+	if (idxd_cmd_drain_result(idxd, status))
+		return -ETIMEDOUT;
 	dev_dbg(dev, "pasid %d drained\n", pasid);
+	return 0;
 }
 
 int idxd_device_request_int_handle(struct idxd_device *idxd, int idx, int *handle,
@@ -1480,6 +1542,14 @@ void idxd_wq_quarantine_take(struct idxd_wq *wq, struct list_head *list)
 	spin_unlock(&wq->ie.list_lock);
 }
 
+/* The drain did not complete: the device may still run them. */
+void idxd_wq_quarantine_put_back(struct idxd_wq *wq, struct list_head *list)
+{
+	spin_lock(&wq->ie.list_lock);
+	list_splice(list, &wq->quarantine);
+	spin_unlock(&wq->ie.list_lock);
+}
+
 /*
  * Nothing the device holds can write their completion records, or reach
  * the memory their unmap data maps, any more. The unmap data goes before
@@ -1498,8 +1568,8 @@ void idxd_wq_quarantine_free(struct idxd_wq *wq, struct list_head *list)
 
 /*
  * A halt killed every descriptor the device held: the quarantined slots
- * are free. Under wq_lock, since an unbind racing the halt may free the
- * pool.
+ * are free, and the fence a failed drain raised can be lifted. Under
+ * wq_lock, since an unbind racing the halt may free the pool.
  */
 void idxd_wq_halt_release(struct idxd_wq *wq)
 {
@@ -1512,6 +1582,7 @@ void idxd_wq_halt_release(struct idxd_wq *wq)
 
 	idxd_wq_quarantine_take(wq, &dead_descs);
 	idxd_wq_quarantine_free(wq, &dead_descs);
+	WRITE_ONCE(wq->stuck, false);
 }
 
 static void idxd_device_set_perm_entry(struct idxd_device *idxd,
@@ -1783,6 +1854,7 @@ void idxd_drv_disable_wq(struct idxd_wq *wq)
 {
 	struct idxd_device *idxd = wq->idxd;
 	struct device *dev = &idxd->pdev->dev;
+	int rc;
 
 	lockdep_assert_held(&wq->wq_lock);
 
@@ -1791,10 +1863,19 @@ void idxd_drv_disable_wq(struct idxd_wq *wq)
 			 wq->id, idxd_wq_refcount(wq));
 
 	idxd_wq_unmap_portal(wq);
-	idxd_wq_drain(wq);
+	rc = idxd_wq_drain(wq);
 	idxd_wq_free_irq(wq);
-	idxd_wq_reset(wq);
-	idxd_wq_free_resources(wq);
+	rc |= idxd_wq_reset(wq);
+	/*
+	 * A drain or reset that never completed leaves descriptors in the
+	 * device, and their completion records live in the memory freed
+	 * here. Leak it; the device writing into freed memory is worse.
+	 */
+	if (rc)
+		dev_err(dev, "wq %d: drain or reset timed out, leaking its descriptor memory\n",
+			wq->id);
+	else
+		idxd_wq_free_resources(wq);
 	percpu_ref_exit(&wq->wq_active);
 	wq->client_count = 0;
 }
@@ -1862,6 +1943,7 @@ void idxd_device_drv_remove(struct idxd_dev *idxd_dev)
 {
 	struct device *dev = &idxd_dev->conf_dev;
 	struct idxd_device *idxd = idxd_dev_to_idxd(idxd_dev);
+	bool stopped;
 	int i;
 
 	for (i = 0; i < idxd->max_wqs; i++) {
@@ -1882,10 +1964,20 @@ void idxd_device_drv_remove(struct idxd_dev *idxd_dev)
 	}
 
 	idxd_unregister_dma_device(idxd);
-	idxd_device_disable(idxd);
-	if (test_bit(IDXD_FLAG_CONFIGURABLE, &idxd->flags))
-		idxd_device_reset(idxd);
-	idxd_device_evl_free(idxd);
+	/*
+	 * A disable or a reset that ran, or found the device disabled or
+	 * halted, leaves nothing in flight. Both are refused after a device
+	 * command timed out, and the device then stays enabled with whatever
+	 * it holds, so what it may still write is kept.
+	 */
+	stopped = !idxd_device_disable(idxd);
+	if (test_bit(IDXD_FLAG_CONFIGURABLE, &idxd->flags) &&
+	    !idxd_device_reset(idxd))
+		stopped = true;
+	if (stopped)
+		idxd_device_evl_free(idxd);
+	else
+		dev_err(dev, "device still enabled after a command timeout, leaking the event log\n");
 }
 
 static enum idxd_dev_type dev_types[] = {

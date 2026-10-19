@@ -224,6 +224,11 @@ struct idxd_wq {
 	struct idxd_desc **descs;
 	struct sbitmap_queue sbq;
 	struct idxd_dma_chan *idxd_chan;
+	bool stuck;		/* a drain failed with the device enabled: the
+				 * outstanding descriptors may complete at any
+				 * time, so no slot is reused until a later
+				 * drain completes or a halt kills them
+				 */
 	struct list_head quarantine;	/* descriptors a terminate_all took
 					 * off the lists while the device
 					 * still held them. Their slots, with
@@ -786,11 +791,11 @@ void idxd_drv_disable_wq(struct idxd_wq *wq);
 int idxd_device_init_reset(struct idxd_device *idxd);
 int idxd_device_enable(struct idxd_device *idxd);
 int idxd_device_disable(struct idxd_device *idxd);
-void idxd_device_reset(struct idxd_device *idxd);
+int idxd_device_reset(struct idxd_device *idxd);
 void idxd_device_clear_state(struct idxd_device *idxd);
 void idxd_cmd_reset_state(struct idxd_device *idxd);
 int idxd_device_config(struct idxd_device *idxd);
-void idxd_device_drain_pasid(struct idxd_device *idxd, int pasid);
+int idxd_device_drain_pasid(struct idxd_device *idxd, int pasid);
 int idxd_device_load_config(struct idxd_device *idxd);
 int idxd_device_request_int_handle(struct idxd_device *idxd, int idx, int *handle,
 				   enum idxd_interrupt_type irq_type);
@@ -803,8 +808,8 @@ int idxd_wq_alloc_resources(struct idxd_wq *wq);
 void idxd_wq_free_resources(struct idxd_wq *wq);
 int idxd_wq_enable(struct idxd_wq *wq);
 int idxd_wq_disable(struct idxd_wq *wq, bool reset_config);
-void idxd_wq_drain(struct idxd_wq *wq);
-void idxd_wq_reset(struct idxd_wq *wq);
+int idxd_wq_drain(struct idxd_wq *wq);
+int idxd_wq_reset(struct idxd_wq *wq);
 int idxd_wq_map_portal(struct idxd_wq *wq);
 void idxd_wq_unmap_portal(struct idxd_wq *wq);
 int idxd_wq_set_pasid(struct idxd_wq *wq, int pasid);
@@ -816,6 +821,7 @@ void idxd_wq_free_irq(struct idxd_wq *wq);
 int idxd_wq_request_irq(struct idxd_wq *wq);
 void idxd_wq_flush_descs(struct idxd_wq *wq, bool quarantine);
 void idxd_wq_quarantine_take(struct idxd_wq *wq, struct list_head *list);
+void idxd_wq_quarantine_put_back(struct idxd_wq *wq, struct list_head *list);
 void idxd_wq_quarantine_free(struct idxd_wq *wq, struct list_head *list);
 void idxd_wq_halt_release(struct idxd_wq *wq);
 

@@ -34,6 +34,13 @@ struct idxd_desc *idxd_alloc_desc(struct idxd_wq *wq, enum idxd_op_type optype)
 
 	if (idxd->state != IDXD_DEV_ENABLED)
 		return ERR_PTR(-EIO);
+	/*
+	 * A failed drain left descriptors the device may still complete.
+	 * No slot is reused until a later drain completes or a halt kills
+	 * them.
+	 */
+	if (READ_ONCE(wq->stuck))
+		return ERR_PTR(-ENXIO);
 
 	sbq = &wq->sbq;
 	idx = sbitmap_queue_get(sbq, &cpu);

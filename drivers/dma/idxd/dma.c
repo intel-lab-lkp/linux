@@ -212,13 +212,34 @@ static void idxd_dma_synchronize(struct dma_chan *c)
 
 	/*
 	 * dmaengine_synchronize() promises the client that its memory may
-	 * be freed afterwards. The drain keeps that promise, and nothing
-	 * the device held before it is left to write a completion record,
-	 * so the slots terminate_all quarantined are free again.
+	 * be freed afterwards. A drain that completed keeps that promise,
+	 * and nothing the device held before it is left to write a
+	 * completion record, so the slots terminate_all quarantined are
+	 * free again. A drain that never completed, or that was refused
+	 * because an earlier command never did, leaves the client's
+	 * descriptors in a device that may still run them. The channel
+	 * release path runs this under dma_list_mutex, and a device that
+	 * refused the drain offers nothing to wait for, so waiting longer
+	 * here would hold up every dmaengine user for nothing. The driver
+	 * cannot keep the promise for the client's memory then and says so.
+	 * It keeps its own memory safe: the quarantined slots stay out of
+	 * use and the queue takes no new descriptor until a later drain
+	 * completes or a halt kills what the device holds, so a late
+	 * completion record lands in a slot nobody reuses, and
+	 * idxd_drv_disable_wq() leaks what the device may still write.
+	 * Only a device reset ends the exposure of the client's memory.
 	 */
 	idxd_wq_quarantine_take(wq, &quarantined);
-	idxd_wq_drain(wq);
-	idxd_wq_quarantine_free(wq, &quarantined);
+	if (!idxd_wq_drain(wq)) {
+		idxd_wq_quarantine_free(wq, &quarantined);
+		WRITE_ONCE(wq->stuck, false);
+		return;
+	}
+	idxd_wq_quarantine_put_back(wq, &quarantined);
+	WRITE_ONCE(wq->stuck, true);
+	dev_err_ratelimited(&wq->idxd->pdev->dev,
+			    "wq %d: drain failed. Its descriptors may still complete and it takes no new work until a drain completes or the device is reset\n",
+			    wq->id);
 }
 
 int idxd_register_dma_device(struct idxd_device *idxd)
