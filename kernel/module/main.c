@@ -953,6 +953,7 @@ void module_put(struct module *module)
 	int ret;
 
 	if (module) {
+		guard(rcu)();
 		ret = atomic_dec_if_positive(&module->refcnt);
 		WARN_ON(ret < 0);	/* Failed to put refcount */
 		trace_module_put(module, _RET_IP_);
