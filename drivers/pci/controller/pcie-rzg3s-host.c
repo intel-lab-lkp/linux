@@ -1084,6 +1084,25 @@ static int rzg3s_pcie_set_max_link_speed(struct rzg3s_pcie_host *host)
 	return ret;
 }
 
+static int rzg3s_pcie_wait_for_link_up(struct rzg3s_pcie_host *host)
+{
+	u32 val;
+	int ret;
+
+	ret = readl_poll_timeout(host->axi + RZG3S_PCI_PCSTAT1, val,
+				 !(val & RZG3S_PCI_PCSTAT1_DL_DOWN_STS),
+				 PCIE_LINK_WAIT_SLEEP_MS * MILLI,
+				 PCIE_LINK_WAIT_SLEEP_MS * MILLI *
+				 PCIE_LINK_WAIT_MAX_RETRIES);
+	if (ret)
+		return ret;
+
+	val = readl_relaxed(host->axi + RZG3S_PCI_PCSTAT2);
+	dev_info(host->dev, "PCIe link status [0x%x]\n", val);
+
+	return 0;
+}
+
 static void rzg3s_pcie_teardown_intx(struct rzg3s_pcie_host *host, int count)
 {
 	while (--count >= 0) {
@@ -1633,7 +1652,6 @@ rzg3s_pcie_host_init(struct rzg3s_pcie_host *host,
 		     int (*init_irqdomain)(struct rzg3s_pcie_host *host),
 		     void (*teardown_irqdomain)(struct rzg3s_pcie_host *host))
 {
-	u32 val;
 	int ret;
 
 	/* SoC-specific pre-configuration */
@@ -1667,17 +1685,9 @@ rzg3s_pcie_host_init(struct rzg3s_pcie_host *host,
 	if (ret)
 		goto teardown_irqdomain;
 
-	/* Wait for link up */
-	ret = readl_poll_timeout(host->axi + RZG3S_PCI_PCSTAT1, val,
-				 !(val & RZG3S_PCI_PCSTAT1_DL_DOWN_STS),
-				 PCIE_LINK_WAIT_SLEEP_MS * MILLI,
-				 PCIE_LINK_WAIT_SLEEP_MS * MILLI *
-				 PCIE_LINK_WAIT_MAX_RETRIES);
+	ret = rzg3s_pcie_wait_for_link_up(host);
 	if (ret)
 		goto config_deinit_post;
-
-	val = readl_relaxed(host->axi + RZG3S_PCI_PCSTAT2);
-	dev_info(host->dev, "PCIe link status [0x%x]\n", val);
 
 	return 0;
 
