@@ -2760,7 +2760,7 @@ static struct iommu_domain *amd_iommu_domain_alloc_paging_v1(struct device *dev,
 		cfg.common.features |= BIT(PT_FEAT_FLUSH_RANGE);
 
 	cfg.common.hw_max_vasz_lg2 = amd_iommu_hpt_vasize;
-	cfg.common.hw_max_oasz_lg2 = 52;
+	cfg.common.hw_max_oasz_lg2 = amd_iommu_pasize;
 	cfg.starting_level = 2;
 	domain->domain.ops = &amdv1_ops;
 
@@ -2835,7 +2835,7 @@ static struct iommu_domain *amd_iommu_domain_alloc_paging_v2(struct device *dev,
 		cfg.common.hw_max_vasz_lg2 = 47;
 		cfg.top_level = 3;
 	}
-	cfg.common.hw_max_oasz_lg2 = 52;
+	cfg.common.hw_max_oasz_lg2 = amd_iommu_pasize;
 	domain->domain.ops = &amdv2_ops;
 
 	ret = pt_iommu_x86_64_init(&domain->amdv2, &cfg, GFP_KERNEL);

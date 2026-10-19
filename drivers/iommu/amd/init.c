@@ -157,6 +157,8 @@ bool amd_iommu_irq_remap __read_mostly;
 enum protection_domain_mode amd_iommu_pgtable = PD_MODE_V1;
 /* Virtual address size */
 u8 amd_iommu_hpt_vasize;
+/* Physical address size */
+u8 amd_iommu_pasize __ro_after_init;
 /* Guest page table level */
 int amd_iommu_gpt_level = PAGE_MODE_4_LEVEL;
 
@@ -3196,7 +3198,12 @@ static void __init ivinfo_init(void *ivrs)
 
 static void __init init_pgtable_params(void)
 {
-	u8 vasize, efr_hats;
+	u8 pasize, vasize, efr_hats;
+
+	pasize = FIELD_GET(IOMMU_IVINFO_PASIZE, amd_iommu_ivinfo);
+	if (!pasize)
+		pasize = 52;
+	amd_iommu_pasize = min_t(u8, pasize, 52);
 
 	vasize = FIELD_GET(IOMMU_IVINFO_VASIZE, amd_iommu_ivinfo);
 	if (!vasize)
