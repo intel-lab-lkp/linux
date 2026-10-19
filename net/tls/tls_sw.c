@@ -2027,6 +2027,7 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	struct sock *sk = sock->sk;
 	struct tls_msg *tlm;
 	struct sk_buff *skb;
+	bool released = true;
 	ssize_t copied = 0;
 	bool nonblock;
 	int chunk;
@@ -2044,12 +2045,13 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	if (err)
 		goto splice_read_end;
 
+retry:
 	if (!skb_queue_empty(&ctx->rx_list)) {
 		skb = __skb_dequeue(&ctx->rx_list);
 	} else {
 		struct tls_decrypt_arg darg;
 
-		err = tls_rx_rec_wait(sk, nonblock, true, false);
+		err = tls_rx_rec_wait(sk, nonblock, released, false);
 		if (err <= 0)
 			goto splice_read_end;
 
@@ -2061,6 +2063,9 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 
 		tls_rx_rec_done(ctx);
 		skb = darg.skb;
+
+		/* The retry's wait runs with the socket lock still held. */
+		released = false;
 	}
 
 	rxm = strp_msg(skb);
@@ -2070,6 +2075,16 @@ ssize_t tls_sw_splice_read(struct socket *sock,  loff_t *ppos,
 	if (tlm->control != TLS_RECORD_TYPE_DATA) {
 		err = -EINVAL;
 		goto splice_requeue;
+	}
+
+	/* Splicing zero bytes reads as EOF to the caller. */
+	if (rxm->full_len == 0) {
+		consume_skb(skb);
+		if (signal_pending(current)) {
+			err = tls_rx_signal_err(sk, nonblock);
+			goto splice_read_end;
+		}
+		goto retry;
 	}
 
 	chunk = min_t(unsigned int, rxm->full_len, len);
