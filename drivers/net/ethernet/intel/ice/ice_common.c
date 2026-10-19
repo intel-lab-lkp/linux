@@ -7,6 +7,7 @@
 #include "ice_flow.h"
 #include "ice_ptp_hw.h"
 #include <linux/packing.h>
+#include <linux/sched.h>
 
 #define ICE_PF_RESET_WAIT_COUNT	300
 #define ICE_MAX_NETLIST_SIZE	10
@@ -1751,6 +1752,10 @@ static int
 ice_sbq_send_cmd(struct ice_hw *hw, struct ice_sbq_cmd_desc *desc,
 		 void *buf, u16 buf_size, struct ice_sq_cd *cd)
 {
+	if (!ice_is_sbq_supported(hw))
+		return ice_aq_send_cmd(hw, (struct libie_aq_desc *)desc,
+				       buf, buf_size, cd);
+
 	return ice_sq_send_cmd(hw, ice_get_sbq(hw),
 			       (struct libie_aq_desc *)desc, buf, buf_size, cd);
 }
@@ -1796,12 +1801,6 @@ int ice_sbq_rw_reg(struct ice_hw *hw, struct ice_sbq_msg_input *in, u16 flags)
 }
 
 /* FW Admin Queue command wrappers */
-
-/* Software lock/mutex that is meant to be held while the Global Config Lock
- * in firmware is acquired by the software to prevent most (but not all) types
- * of AQ commands from being sent to FW
- */
-DEFINE_MUTEX(ice_global_cfg_lock_sw);
 
 /**
  * ice_should_retry_sq_send_cmd
@@ -1895,17 +1894,24 @@ ice_aq_send_cmd(struct ice_hw *hw, struct libie_aq_desc *desc, void *buf,
 		u16 buf_size, struct ice_sq_cd *cd)
 {
 	struct libie_aqc_req_res *cmd = libie_aq_raw(desc);
-	bool lock_acquired = false;
-	int status;
+	struct ice_pf *pf = hw->back;
+	struct ice_adapter *adapter = pf->adapter;
+
+	if (READ_ONCE(adapter->global_cfg_owner) != current) {
+		guard(mutex)(&adapter->global_cfg_lock);
+		return ice_sq_send_cmd_retry(hw, &hw->adminq, desc, buf,
+					     buf_size, cd);
+	}
 
 	/* When a package download is in process (i.e. when the firmware's
 	 * Global Configuration Lock resource is held), only the Download
 	 * Package, Get Version, Get Package Info List, Upload Section,
 	 * Update Package, Set Port Parameters, Get/Set VLAN Mode Parameters,
-	 * Add Recipe, Set Recipes to Profile Association, Get Recipe, and Get
-	 * Recipes to Profile Association, and Release Resource (with resource
-	 * ID set to Global Config Lock) AdminQ commands are allowed; all others
-	 * must block until the package download completes and the Global Config
+	 * Get/Set Tx Scheduler Topology, Add Recipe, Set Recipes to Profile
+	 * Association, Get Recipe, Get Recipes to Profile Association, and
+	 * Request/Release Resource (with resource ID set to Global Config
+	 * Lock) AdminQ commands are allowed for the owner; all others must
+	 * block until the package download completes and the Global Config
 	 * Lock is released.  See also ice_acquire_global_cfg_lock().
 	 */
 	switch (le16_to_cpu(desc->opcode)) {
@@ -1924,21 +1930,16 @@ ice_aq_send_cmd(struct ice_hw *hw, struct libie_aq_desc *desc, void *buf,
 	case ice_aqc_opc_get_recipe:
 	case ice_aqc_opc_get_recipe_to_profile:
 		break;
+	case ice_aqc_opc_req_res:
 	case ice_aqc_opc_release_res:
 		if (le16_to_cpu(cmd->res_id) == LIBIE_AQC_RES_ID_GLBL_LOCK)
 			break;
 		fallthrough;
 	default:
-		mutex_lock(&ice_global_cfg_lock_sw);
-		lock_acquired = true;
-		break;
+		return -EBUSY;
 	}
 
-	status = ice_sq_send_cmd_retry(hw, &hw->adminq, desc, buf, buf_size, cd);
-	if (lock_acquired)
-		mutex_unlock(&ice_global_cfg_lock_sw);
-
-	return status;
+	return ice_sq_send_cmd_retry(hw, &hw->adminq, desc, buf, buf_size, cd);
 }
 
 /**
@@ -2161,9 +2162,16 @@ ice_acquire_res(struct ice_hw *hw, enum ice_aq_res_ids res,
 		enum ice_aq_res_access_type access, u32 timeout)
 {
 #define ICE_RES_POLLING_DELAY_MS	10
+	struct ice_pf *pf = hw->back;
+	struct ice_adapter *adapter = pf->adapter;
 	u32 delay = ICE_RES_POLLING_DELAY_MS;
 	u32 time_left = timeout;
 	int status;
+
+	if (res == ICE_GLOBAL_CFG_LOCK_RES_ID) {
+		mutex_lock(&adapter->global_cfg_lock);
+		WRITE_ONCE(adapter->global_cfg_owner, current);
+	}
 
 	status = ice_aq_req_res(hw, res, access, 0, &time_left, NULL);
 
@@ -2197,6 +2205,9 @@ ice_acquire_res(struct ice_hw *hw, enum ice_aq_res_ids res,
 		ice_debug(hw, ICE_DBG_RES, "resource acquire timed out.\n");
 
 ice_acquire_res_exit:
+	if (res == ICE_GLOBAL_CFG_LOCK_RES_ID && status)
+		ice_global_cfg_unlock(hw);
+
 	if (status == -EALREADY) {
 		if (access == ICE_RES_WRITE)
 			ice_debug(hw, ICE_DBG_RES, "resource indicates no work to do.\n");
@@ -2228,6 +2239,18 @@ void ice_release_res(struct ice_hw *hw, enum ice_aq_res_ids res)
 			break;
 		usleep_range(1000, 2000);
 	} while (time_before(jiffies, timeout));
+
+	if (res == ICE_GLOBAL_CFG_LOCK_RES_ID)
+		ice_global_cfg_unlock(hw);
+}
+
+void ice_global_cfg_unlock(struct ice_hw *hw)
+{
+	struct ice_pf *pf = hw->back;
+	struct ice_adapter *adapter = pf->adapter;
+
+	WRITE_ONCE(adapter->global_cfg_owner, NULL);
+	mutex_unlock(&adapter->global_cfg_lock);
 }
 
 /**

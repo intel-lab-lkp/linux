@@ -15,6 +15,7 @@
 
 struct pci_dev;
 struct ice_pf;
+struct task_struct;
 
 /**
  * struct ice_port_list - data used to store the list of adapter ports
@@ -46,6 +47,8 @@ struct ice_port_list {
  * @ctrl_pf_lock: Protect control PF lifetime for sleepable users
  * @ctrl_pf: Control PF of the adapter
  * @rebuild_lock: serialize PFR recovery across PFs of the same adapter
+ * @global_cfg_lock: serialize AQ access during global configuration
+ * @global_cfg_owner: task holding the global configuration lock
  * @ports: Ports list
  * @index: 64-bit index cached for collision detection on 32bit systems
  */
@@ -59,6 +62,9 @@ struct ice_adapter {
 	struct mutex cpi_phy_lock[ICE_E825_MAX_PHYS];
 	/* Serialize PFR recovery touching shared FW global state */
 	struct mutex rebuild_lock;
+	/* Keep other PFs off the AQ until firmware releases ownership */
+	struct mutex global_cfg_lock;
+	struct task_struct *global_cfg_owner;
 
 	/* For serializing PHY port start/stop sequences */
 	struct mutex ps_lock;
