@@ -71,10 +71,6 @@ static void __init __serial8250_isa_init_ports(void)
 	for (i = 0; i < nr_uarts; i++)
 		serial8250_setup_port(i);
 
-	/* chain base port ops to support Remote Supervisor Adapter */
-	univ8250_port_ops = *univ8250_port_base_ops;
-	univ8250_rsa_support(&univ8250_port_ops, univ8250_port_base_ops);
-
 	for (i = 0; i < ARRAY_SIZE(old_serial_port) && i < nr_uarts; i++) {
 		struct uart_8250_port *up = serial8250_get_port(i);
 		struct uart_port *port = &up->port;
