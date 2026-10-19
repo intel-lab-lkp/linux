@@ -1024,6 +1024,16 @@ static int rzg3s_pcie_init_irqdomain(struct rzg3s_pcie_host *host)
 	struct platform_device *pdev = to_platform_device(dev);
 	int i, ret;
 
+	host->intx_domain = irq_domain_create_linear(dev_fwnode(dev),
+						     PCI_NUM_INTX,
+						     &rzg3s_pcie_intx_domain_ops,
+						     host);
+	if (!host->intx_domain) {
+		return dev_err_probe(dev, -EINVAL,
+				     "Failed to add irq domain for INTx IRQs\n");
+	}
+	irq_domain_update_bus_token(host->intx_domain, DOMAIN_BUS_WIRED);
+
 	for (i = 0; i < PCI_NUM_INTX; i++) {
 		char irq_name[5] = {0};
 		int irq;
@@ -1044,18 +1054,6 @@ static int rzg3s_pcie_init_irqdomain(struct rzg3s_pcie_host *host)
 						 rzg3s_pcie_intx_irq_handler,
 						 host);
 	}
-
-	host->intx_domain = irq_domain_create_linear(dev_fwnode(dev),
-						     PCI_NUM_INTX,
-						     &rzg3s_pcie_intx_domain_ops,
-						     host);
-	if (!host->intx_domain) {
-		ret = -EINVAL;
-		dev_err_probe(dev, ret,
-			      "Failed to add irq domain for INTx IRQs\n");
-		goto teardown_intx;
-	}
-	irq_domain_update_bus_token(host->intx_domain, DOMAIN_BUS_WIRED);
 
 	if (IS_ENABLED(CONFIG_PCI_MSI)) {
 		ret = rzg3s_pcie_init_msi(host);
