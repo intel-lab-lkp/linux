@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright(c) 2019 Intel Corporation. All rights rsvd. */
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -92,12 +93,6 @@ static struct idxd_desc *list_abort_desc(struct idxd_wq *wq, struct idxd_irq_ent
 		}
 	}
 
-	/*
-	 * At this point, the desc needs to be aborted is held by the completion
-	 * handler where it has taken it off the pending list but has not added to the
-	 * work list. It will be cleaned up by the interrupt handler when it sees the
-	 * IDXD_COMP_DESC_ABORT for completion status.
-	 */
 	return NULL;
 }
 
@@ -106,9 +101,8 @@ static void llist_abort_desc(struct idxd_wq *wq, struct idxd_irq_entry *ie,
 {
 	struct idxd_desc *d, *t, *found = NULL;
 	struct llist_node *head;
-	LIST_HEAD(flist);
+	bool wake = false;
 
-	desc->completion->status = IDXD_COMP_DESC_ABORT;
 	/*
 	 * Grab the list lock so it will block the irq thread handler. This allows the
 	 * abort code to locate the descriptor need to be aborted.
@@ -122,10 +116,15 @@ static void llist_abort_desc(struct idxd_wq *wq, struct idxd_irq_entry *ie,
 				continue;
 			}
 
+			/*
+			 * A finished descriptor goes on the work list for
+			 * the interrupt thread, as one still in flight does,
+			 * rather than being completed in the submitter's
+			 * context.
+			 */
 			if (d->completion->status)
-				list_add_tail(&d->list, &flist);
-			else
-				list_add_tail(&d->list, &ie->work_list);
+				wake = true;
+			list_add_tail(&d->list, &ie->work_list);
 		}
 	}
 
@@ -133,21 +132,26 @@ static void llist_abort_desc(struct idxd_wq *wq, struct idxd_irq_entry *ie,
 		found = list_abort_desc(wq, ie, desc);
 	spin_unlock(&ie->list_lock);
 
-	if (found)
-		idxd_dma_complete_txd(found, IDXD_COMPLETE_ABORT, false,
-				      NULL, NULL);
+	/*
+	 * Their interrupts may have run the thread before they reached the
+	 * work list, so it is woken again.
+	 */
+	if (wake)
+		irq_wake_thread(ie->vector, ie);
 
 	/*
-	 * completing the descriptor will return desc to allocator and
-	 * the desc can be acquired by a different process and the
-	 * desc->list can be modified.  Delete desc from list so the
-	 * list traversing does not get corrupted by the other process.
+	 * The device never took the descriptor, so its record is still
+	 * clear. The interrupt thread and another submitter's abort sort
+	 * the lists under the list lock and leave one with a clear record
+	 * on a list, so the search finds the descriptor, and once off the
+	 * lists it is the submitter's alone. Marking it aborted before
+	 * that would let another context that saw the mark on a list
+	 * complete and free it, and the caller frees it as well.
 	 */
-	list_for_each_entry_safe(d, t, &flist, list) {
-		list_del_init(&d->list);
-		idxd_dma_complete_txd(d, IDXD_COMPLETE_ABORT, true,
+	WARN_ON_ONCE(!found);
+	if (found)
+		idxd_dma_complete_txd(desc, IDXD_COMPLETE_ABORT, false,
 				      NULL, NULL);
-	}
 }
 
 /*

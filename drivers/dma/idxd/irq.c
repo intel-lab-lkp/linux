@@ -651,31 +651,39 @@ static void irq_process_pending_llist(struct idxd_irq_entry *irq_entry)
 {
 	struct idxd_desc *desc, *t;
 	struct llist_node *head;
+	LIST_HEAD(flist);
 
-	head = llist_del_all(&irq_entry->pending_llist);
-	if (!head)
+	if (llist_empty(&irq_entry->pending_llist))
 		return;
 
+	/*
+	 * Sort under the list lock, as the submit abort does. A descriptor
+	 * still waiting on the hardware reaches the work list within the
+	 * same hold, so the abort of a failed submission, which searches
+	 * both lists under the lock, always finds its own descriptor.
+	 */
+	spin_lock(&irq_entry->list_lock);
+	head = llist_del_all(&irq_entry->pending_llist);
 	llist_for_each_entry_safe(desc, t, head, llnode) {
 		u8 status = desc->completion->status & DSA_COMP_STATUS_MASK;
 
-		if (status) {
-			/*
-			 * Check against the original status as ABORT is software defined
-			 * and 0xff, which DSA_COMP_STATUS_MASK can mask out.
-			 */
-			if (unlikely(desc->completion->status == IDXD_COMP_DESC_ABORT)) {
-				idxd_desc_complete(desc, IDXD_COMPLETE_ABORT, true);
-				continue;
-			}
+		if (status)
+			list_add_tail(&desc->list, &flist);
+		else
+			list_add_tail(&desc->list, &irq_entry->work_list);
+	}
+	spin_unlock(&irq_entry->list_lock);
 
+	list_for_each_entry_safe(desc, t, &flist, list) {
+		list_del(&desc->list);
+		/*
+		 * Check against the original status as ABORT is software
+		 * defined and 0xff, which DSA_COMP_STATUS_MASK can mask out.
+		 */
+		if (unlikely(desc->completion->status == IDXD_COMP_DESC_ABORT))
+			idxd_desc_complete(desc, IDXD_COMPLETE_ABORT, true);
+		else
 			idxd_desc_complete(desc, IDXD_COMPLETE_NORMAL, true);
-		} else {
-			spin_lock(&irq_entry->list_lock);
-			list_add_tail(&desc->list,
-				      &irq_entry->work_list);
-			spin_unlock(&irq_entry->list_lock);
-		}
 	}
 }
 
@@ -727,18 +735,19 @@ irqreturn_t idxd_wq_thread(int irq, void *data)
 	 * submmiter adds all the submitted descriptor after sending it to
 	 * the workqueue. It's a lockless singly linked list. The work_list
 	 * is the common linux double linked list. We are in a scenario of
-	 * multiple producers and a single consumer. The producers are all
-	 * the kernel submitters of descriptors, and the consumer is the
-	 * kernel irq handler thread for the msix vector when using threaded
-	 * irq. To work with the restrictions of llist to remain lockless,
-	 * we are doing the following steps:
+	 * multiple producers and several consumers. The producers are all
+	 * the kernel submitters of descriptors, and they add to the llist
+	 * without a lock. The consumers are the kernel irq handler thread
+	 * for the msix vector when using threaded irq, the abort of a
+	 * failed submission, the interrupt handle abort and the flushes,
+	 * and each empties the llist under the list lock. The thread does
+	 * so in these steps:
 	 * 1. Iterate through the work_list and process any completed
 	 *    descriptor. Delete the completed entries during iteration.
-	 * 2. llist_del_all() from the pending list.
-	 * 3. Iterate through the llist that was deleted from the pending list
-	 *    and process the completed entries.
-	 * 4. If the entry is still waiting on hardware, list_add_tail() to
-	 *    the work_list.
+	 * 2. Under the list lock, llist_del_all() from the pending list and
+	 *    move each entry still waiting on hardware to the work_list and
+	 *    each completed one to a private list.
+	 * 3. Process the entries of the private list outside the lock.
 	 */
 	irq_process_work_list(irq_entry);
 	irq_process_pending_llist(irq_entry);
