@@ -442,13 +442,23 @@ static irqreturn_t idxd_halt(struct idxd_device *idxd)
 			INIT_WORK(&idxd->work, idxd_device_reinit);
 			queue_work(idxd->wq, &idxd->work);
 		} else if (gensts.reset_type == IDXD_DEVICE_RESET_FLR) {
+			int i;
+
 			idxd->state = IDXD_DEV_HALTED;
 			idxd_mask_error_interrupts(idxd);
-			/* Flush all pending descriptors, and disable
-			 * interrupts, they will be re-enabled when FLR
-			 * concludes.
+			/*
+			 * Flush all pending descriptors. The FLR revokes every
+			 * interrupt handle, so mark them invalid here without a
+			 * device command; they are requested again when a work
+			 * queue is re-enabled after the reset.
 			 */
 			idxd_wqs_flush_descs(idxd);
+			for (i = 0; i < idxd->max_wqs; i++) {
+				struct idxd_wq *wq = idxd->wqs[i];
+
+				if (wq->type == IDXD_WQT_KERNEL)
+					WRITE_ONCE(wq->ie.int_handle, INVALID_INT_HANDLE);
+			}
 			dev_dbg(&idxd->pdev->dev,
 				"idxd halted, doing FLR. After FLR, configs are restored\n");
 			INIT_WORK(&idxd->work, idxd_device_flr);
