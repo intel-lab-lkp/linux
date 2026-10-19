@@ -2070,6 +2070,22 @@ splice_requeue:
 	goto splice_read_end;
 }
 
+static void tls_rx_data_ready_work(struct work_struct *w)
+{
+	struct tls_sw_context_rx *ctx =
+		container_of(w, struct tls_sw_context_rx, data_ready_work);
+	struct sock *sk = ctx->strp.sk;
+
+	/* strp_data_ready() reads in place from a socket it finds unowned. */
+	lock_sock(sk);
+	/* Past tls_strp_stop(), sk_data_ready is no longer the consumer's. */
+	if (!ctx->strp.stopped)
+		READ_ONCE(sk->sk_data_ready)(sk);
+	release_sock(sk);
+}
+
+#define TLS_RX_NODATA_LIMIT	16
+
 int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 		     sk_read_actor_t read_actor)
 {
@@ -2078,6 +2094,7 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 	struct tls_prot_info *prot = &tls_ctx->prot_info;
 	struct strp_msg *rxm = NULL;
 	struct sk_buff *skb = NULL;
+	unsigned int nodata = 0;
 	struct sk_psock *psock;
 	size_t flushed_at = 0;
 	bool released = true;
@@ -2144,6 +2161,16 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 		 */
 		if (rxm->full_len == 0) {
 			consume_skb(skb);
+			if (++nodata >= TLS_RX_NODATA_LIMIT) {
+				/* tls_rx_reader_release() wakes only the
+				 * callback saved when TLS_RX was set up,
+				 * not one installed since.
+				 */
+				if (tls_strp_msg_ready(ctx))
+					queue_work(tls_strp_wq,
+						   &ctx->data_ready_work);
+				break;
+			}
 			continue;
 		}
 
@@ -2154,6 +2181,7 @@ int tls_sw_read_sock(struct sock *sk, read_descriptor_t *desc,
 			goto read_sock_requeue;
 		}
 		copied += used;
+		nodata = 0;
 		if (used < rxm->full_len) {
 			rxm->offset += used;
 			rxm->full_len -= used;
@@ -2345,6 +2373,7 @@ void tls_sw_strparser_done(struct tls_context *tls_ctx)
 {
 	struct tls_sw_context_rx *ctx = tls_sw_ctx_rx(tls_ctx);
 
+	cancel_work_sync(&ctx->data_ready_work);
 	tls_strp_done(&ctx->strp);
 }
 
@@ -2476,6 +2505,7 @@ static struct tls_sw_context_rx *init_ctx_rx(struct tls_context *ctx)
 	crypto_init_wait(&sw_ctx_rx->async_wait);
 	atomic_set(&sw_ctx_rx->decrypt_pending, 1);
 	init_waitqueue_head(&sw_ctx_rx->wq);
+	INIT_WORK(&sw_ctx_rx->data_ready_work, tls_rx_data_ready_work);
 	skb_queue_head_init(&sw_ctx_rx->rx_list);
 	skb_queue_head_init(&sw_ctx_rx->async_hold);
 
