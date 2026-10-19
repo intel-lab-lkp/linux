@@ -1734,6 +1734,14 @@ tls_read_flush_backlog(struct sock *sk, struct tls_prot_info *prot,
 	return sk_flush_backlog(sk);
 }
 
+/* io_uring retries a nonblocking receive only on -EAGAIN. */
+static int tls_rx_signal_err(struct sock *sk, bool nonblock)
+{
+	long timeo = sock_rcvtimeo(sk, nonblock);
+
+	return timeo ? sock_intr_errno(timeo) : -EAGAIN;
+}
+
 static int tls_rx_reader_acquire(struct sock *sk, struct tls_sw_context_rx *ctx,
 				 bool nonblock)
 {
@@ -1755,7 +1763,7 @@ static int tls_rx_reader_acquire(struct sock *sk, struct tls_sw_context_rx *ctx,
 		if (timeo <= 0)
 			return -EAGAIN;
 		if (signal_pending(current))
-			return sock_intr_errno(timeo);
+			return tls_rx_signal_err(sk, nonblock);
 		if (ret < 0)
 			return ret;
 	}
@@ -1824,6 +1832,7 @@ int tls_sw_recvmsg(struct sock *sk,
 	bool is_peek = flags & MSG_PEEK;
 	bool rx_more = false;
 	bool released = true;
+	bool nodata = false;
 	bool zc_capable;
 
 	if (unlikely(flags & MSG_ERRQUEUE))
@@ -1858,6 +1867,14 @@ int tls_sw_recvmsg(struct sock *sk,
 		struct tls_decrypt_arg darg;
 		int to_decrypt, chunk;
 
+		/* A run of empty records advances neither loop bound, and
+		 * tls_rx_rec_wait() tests for a signal only after sleeping.
+		 */
+		if (nodata && signal_pending(current)) {
+			err = tls_rx_signal_err(sk, flags & MSG_DONTWAIT);
+			goto recv_end;
+		}
+
 		err = tls_rx_rec_wait(sk, flags & MSG_DONTWAIT,
 				      released, !!(decrypted + copied));
 		if (err <= 0)
@@ -1874,9 +1891,12 @@ int tls_sw_recvmsg(struct sock *sk,
 		    tlm->control == TLS_RECORD_TYPE_DATA)
 			darg.zc = true;
 
-		/* Do not use async mode if record is non-data */
+		/* Do not use async mode if record is non-data or empty.
+		 * Once a record has gone async, recv_end discards the
+		 * error that ends a run of empty records.
+		 */
 		if (tlm->control == TLS_RECORD_TYPE_DATA)
-			darg.async = ctx->async_capable;
+			darg.async = ctx->async_capable && to_decrypt;
 		else
 			darg.async = false;
 
@@ -1910,6 +1930,7 @@ put_on_rx_list_err:
 		/* TLS 1.3 may have updated the length by more than overhead */
 		rxm = strp_msg(darg.skb);
 		chunk = rxm->full_len;
+		nodata = !chunk;
 		tls_rx_rec_done(ctx);
 
 		if (!darg.zc) {
