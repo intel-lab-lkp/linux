@@ -323,14 +323,6 @@ static inline int serial8250_pnp_init(void) { return 0; }
 static inline void serial8250_pnp_exit(void) { }
 #endif
 
-#ifdef CONFIG_SERIAL_8250_HUB6
-int serial8250_hub6_init(void);
-void serial8250_hub6_exit(void);
-#else
-static inline int serial8250_hub6_init(void) { return 0; }
-static inline void serial8250_hub6_exit(void) { }
-#endif
-
 #ifdef CONFIG_SERIAL_8250_RSA
 void univ8250_rsa_support(struct uart_ops *ops, const struct uart_ops *core_ops);
 void rsa_enable(struct uart_8250_port *up);
@@ -349,13 +341,6 @@ static inline void rsa_reset(struct uart_8250_port *up) {}
 int fintek_8250_probe(struct uart_8250_port *uart);
 #else
 static inline int fintek_8250_probe(struct uart_8250_port *uart) { return 0; }
-#endif
-
-#if IS_ENABLED(CONFIG_SERIAL_8250_HUB6)
-bool hub6_match_port(const struct uart_port *port1, const struct uart_port *port2);
-#else
-static inline bool hub6_match_port(const struct uart_port *port1, const struct uart_port *port2)
-{ return false; }
 #endif
 
 #ifdef CONFIG_ARCH_OMAP1

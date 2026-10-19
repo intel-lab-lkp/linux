@@ -2432,8 +2432,6 @@ static int lpuart_verify_port(struct uart_port *port, struct serial_struct *ser)
 		ret = -EINVAL;
 	if (port->iobase != ser->port)
 		ret = -EINVAL;
-	if (ser->hub6 != 0)
-		ret = -EINVAL;
 	return ret;
 }
 
