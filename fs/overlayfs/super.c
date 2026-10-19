@@ -1508,7 +1508,7 @@ static int ovl_fill_super_creds(struct fs_context *fc, struct super_block *sb)
 	else if (!ofs->nofh)
 		sb->s_export_op = &ovl_export_fid_operations;
 
-	/* Never override disk quota limits or use reserved space */
+	/* Never override disk quota limits or use reserved space by capability */
 	cap_lower(creator_cred->cap_effective, CAP_SYS_RESOURCE);
 
 	sb->s_magic = OVERLAYFS_SUPER_MAGIC;
