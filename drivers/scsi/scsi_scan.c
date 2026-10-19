@@ -1156,6 +1156,16 @@ static int scsi_probe_and_add_lun(struct Scsi_Host *shost,
 			SCSI_LOG_SCAN_BUS(3, sdev_printk(KERN_INFO, sdev,
 				"scsi scan: device exists on %s\n",
 				dev_name(&sdev->sdev_gendev)));
+			/*
+			 * Rescanning a device that has been fully set up:
+			 * refresh its INQUIRY data so that peripheral
+			 * qualifier or device type changes (e.g. ALUA state
+			 * transitions) are picked up.
+			 */
+			if (rescan != SCSI_SCAN_INITIAL &&
+			    !scsi_device_created(sdev) &&
+			    !scsi_device_is_pseudo_dev(sdev))
+				scsi_rescan_device(sdev);
 			if (sdevp)
 				*sdevp = sdev;
 			else
