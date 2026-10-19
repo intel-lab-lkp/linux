@@ -1463,7 +1463,9 @@ def main() -> None:
           action: Callable[[Sequence[str], os.DirEntry], None]) -> None:
     """Replicate the directory/file walking behavior of C's file tree walk."""
     assert _args is not None
-    for item in sorted(os.scandir(path), key=lambda e: e.name):
+    # Visit a directory's files before its subdirectories, because
+    # entering a subdirectory switches the table that files are added to.
+    for item in sorted(os.scandir(path), key=lambda e: (e.is_dir(), e.name)):
       if _args.model != 'all' and item.is_dir():
         # Check if the model matches one in _args.model.
         if len(parents) == _args.model.split(',')[0].count('/'):
