@@ -519,8 +519,7 @@ u16 pci_find_next_ext_capability(struct pci_dev *dev, u16 start, int cap)
 	if (dev->cfg_size <= PCI_CFG_SPACE_SIZE)
 		return 0;
 
-	return PCI_FIND_NEXT_EXT_CAP(pci_bus_read_config, start, cap,
-				     NULL, dev->bus, dev->devfn);
+	return PCI_FIND_NEXT_EXT_CAP(pci_read_config, start, cap, NULL, dev);
 }
 EXPORT_SYMBOL_GPL(pci_find_next_ext_capability);
 
