@@ -483,13 +483,32 @@ int idxd_wq_init_percpu_ref(struct idxd_wq *wq)
 }
 EXPORT_SYMBOL_NS_GPL(idxd_wq_init_percpu_ref, "IDXD");
 
-void __idxd_wq_quiesce(struct idxd_wq *wq)
+/*
+ * Kill wq_active and wait for the last submitter to drop its reference.
+ * Every killer runs under wq_lock and waits before it unlocks, so a
+ * reference found dying here was killed and waited out by an earlier
+ * caller, such as a halt flush that did not revive the queue. Killing
+ * it again would drop the count below zero and wait forever. A
+ * reference that percpu_ref_exit() released reads as dying too, so a
+ * queue the device re-enabled behind an unbind is skipped as well.
+ * Returns whether this call killed the reference.
+ */
+bool idxd_wq_kill(struct idxd_wq *wq)
 {
 	lockdep_assert_held(&wq->wq_lock);
+	if (percpu_ref_is_dying(&wq->wq_active))
+		return false;
 	reinit_completion(&wq->wq_resurrect);
 	percpu_ref_kill(&wq->wq_active);
-	complete_all(&wq->wq_resurrect);
 	wait_for_completion(&wq->wq_dead);
+	return true;
+}
+
+void __idxd_wq_quiesce(struct idxd_wq *wq)
+{
+	idxd_wq_kill(wq);
+	/* Let parked submitters retry and fail on the dead reference. */
+	complete_all(&wq->wq_resurrect);
 }
 EXPORT_SYMBOL_NS_GPL(__idxd_wq_quiesce, "IDXD");
 
@@ -1627,14 +1646,15 @@ void idxd_wq_quarantine_free(struct idxd_wq *wq, struct list_head *list)
 
 /*
  * A halt killed every descriptor the device held: the quarantined slots
- * are free, and the fence a failed drain raised can be lifted. Under
- * wq_lock, since an unbind racing the halt may free the pool.
+ * are free, and the fence a failed drain raised can be lifted. The halt
+ * flush calls this under wq_lock, since an unbind racing the halt may
+ * free the pool.
  */
 void idxd_wq_halt_release(struct idxd_wq *wq)
 {
 	LIST_HEAD(dead_descs);
 
-	guard(mutex)(&wq->wq_lock);
+	lockdep_assert_held(&wq->wq_lock);
 
 	if (wq->state != IDXD_WQ_ENABLED || wq->type != IDXD_WQT_KERNEL)
 		return;
@@ -1697,13 +1717,14 @@ void idxd_wq_free_irq(struct idxd_wq *wq)
  * @quarantine: the device keeps running, so the slots of the descriptors
  * it has not finished stay out of use until a drain covers them. A halt
  * has killed them and frees their slots at once.
+ * The caller holds wq_lock.
  */
-void idxd_wq_flush_descs(struct idxd_wq *wq, bool quarantine)
+void __idxd_wq_flush_descs(struct idxd_wq *wq, bool quarantine)
 {
 	struct idxd_irq_entry *ie = &wq->ie;
 	bool killed = false;
 
-	guard(mutex)(&wq->wq_lock);
+	lockdep_assert_held(&wq->wq_lock);
 
 	if (wq->state != IDXD_WQ_ENABLED || wq->type != IDXD_WQT_KERNEL)
 		return;
@@ -1714,17 +1735,19 @@ void idxd_wq_flush_descs(struct idxd_wq *wq, bool quarantine)
 	 * descriptor in the device, where the drain that frees the
 	 * quarantine covers it. A halt flush has done this itself.
 	 */
-	if (quarantine && !percpu_ref_is_dying(&wq->wq_active)) {
-		reinit_completion(&wq->wq_resurrect);
-		percpu_ref_kill(&wq->wq_active);
-		wait_for_completion(&wq->wq_dead);
-		killed = true;
-	}
+	if (quarantine)
+		killed = idxd_wq_kill(wq);
 	idxd_flush_pending_descs(ie, quarantine);
 	if (killed) {
 		percpu_ref_reinit(&wq->wq_active);
 		complete_all(&wq->wq_resurrect);
 	}
+}
+
+void idxd_wq_flush_descs(struct idxd_wq *wq, bool quarantine)
+{
+	guard(mutex)(&wq->wq_lock);
+	__idxd_wq_flush_descs(wq, quarantine);
 }
 
 int idxd_wq_request_irq(struct idxd_wq *wq)

@@ -132,10 +132,14 @@ static void llist_abort_desc(struct idxd_wq *wq, struct idxd_irq_entry *ie,
 			}
 
 			/*
-			 * A finished descriptor goes on the work list for
-			 * the interrupt thread, as one still in flight does,
-			 * rather than being completed in the submitter's
-			 * context.
+			 * A completion runs a client's callback or another
+			 * driver's handler, and either may submit or terminate
+			 * and so wait for a killer, which waits for this
+			 * submitter's wq_active reference. iaa_crypto's verify
+			 * of a compression may also wait for a free descriptor
+			 * while this submitter holds one. A finished
+			 * descriptor therefore goes on the work list for the
+			 * interrupt thread, as one still in flight does.
 			 */
 			if (d->completion->status)
 				wake = true;
@@ -156,10 +160,16 @@ static void llist_abort_desc(struct idxd_wq *wq, struct idxd_irq_entry *ie,
 
 	/*
 	 * The device never took the descriptor, so its record is still
-	 * clear. The interrupt thread and another submitter's abort sort
-	 * the lists under the list lock and leave one with a clear record
-	 * on a list, so the search finds the descriptor, and once off the
-	 * lists it is the submitter's alone. Marking it aborted before
+	 * clear. While this submitter holds wq_active, only the interrupt
+	 * thread and another submitter's abort may take descriptors off
+	 * the lists, and both sort them under the list lock and leave one
+	 * with a clear record on a list. A flush takes them all, so every
+	 * flusher must kill wq_active and wait for this reference before
+	 * it takes the lists, and nothing may revive the reference before
+	 * the flush runs. The error path of iaa_crypto_probe() breaks the
+	 * rule: it disables a queue it has already published without a
+	 * quiesce. Otherwise the search finds the descriptor, and once off
+	 * the lists it is the submitter's alone. Marking it aborted before
 	 * that would let another context that saw the mark on a list
 	 * complete and free it, and the caller frees it as well.
 	 */
@@ -215,6 +225,22 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
 			return -ENXIO;
 	}
 
+	/*
+	 * A software-reset halt revives wq_active before its reinit enables
+	 * the device again. A submitter that passed the check above before
+	 * the halt and got its reference after the revive would post to the
+	 * halted device, which drops the descriptor, and nothing would
+	 * complete an interrupt-armed one. The halt stores the state before
+	 * its kill and revives the reference after the wait. The barrier
+	 * pairs with the release in percpu_ref_reinit() and orders this
+	 * read after the tryget that saw the revive.
+	 */
+	smp_rmb();
+	if (idxd->state != IDXD_DEV_ENABLED) {
+		percpu_ref_put(&wq->wq_active);
+		return -EIO;
+	}
+
 	portal = idxd_wq_portal_addr(wq);
 
 	/*
@@ -239,10 +265,18 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
 	} else {
 		rc = idxd_enqcmds(wq, portal, desc->hw);
 		if (rc < 0) {
-			percpu_ref_put(&wq->wq_active);
-			/* abort operation frees the descriptor */
+			/*
+			 * Abort before dropping the reference: a halt flush
+			 * waits for wq_active to die before it takes the
+			 * pending descriptors, and this one must not still be
+			 * listed when it does. The abort takes the descriptor
+			 * off the lists and runs no callback, which could wait
+			 * for this reference to die. The caller completes or
+			 * frees the descriptor.
+			 */
 			if (ie)
 				llist_abort_desc(wq, ie, desc);
+			percpu_ref_put(&wq->wq_active);
 			return rc;
 		}
 	}

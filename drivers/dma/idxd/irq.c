@@ -422,15 +422,61 @@ static void idxd_device_flr(struct work_struct *work)
 		dev_err(&idxd->pdev->dev, "FLR failed\n");
 }
 
-static void idxd_wqs_flush_descs(struct idxd_device *idxd)
+/*
+ * Complete what the halted engines will never finish, or a client waiting
+ * on one of those descriptors waits forever. The flush hands descriptors
+ * back, so no submitter may still own one: a submitter that passed the
+ * state check before the halt can hold a descriptor on the pending list
+ * while its ENQCMDS retries, and it aborts and frees that descriptor
+ * itself when the submit fails. Killing wq_active and waiting for the
+ * last submitter to drop its reference orders the flush after that.
+ * Each queue is handled in one hold of wq_lock, from the state check
+ * through the revive. A driver remove that quiesces the queue in one
+ * hold and disables it in another, as iaa_crypto's does, would otherwise
+ * find the reference dying between the kill and the revive, skip its
+ * own kill, and have the revive undo its quiesce before its disable
+ * frees the queue.
+ * @resurrect: revive the queues afterwards for a reset that keeps them.
+ */
+static void idxd_wqs_halt_flush(struct idxd_device *idxd, bool resurrect)
 {
+	bool killed;
 	int i;
 
 	for (i = 0; i < idxd->max_wqs; i++) {
 		struct idxd_wq *wq = idxd->wqs[i];
 
-		idxd_wq_flush_descs(wq, false);
+		mutex_lock(&wq->wq_lock);
+		if (wq->state != IDXD_WQ_ENABLED || wq->type != IDXD_WQT_KERNEL) {
+			mutex_unlock(&wq->wq_lock);
+			continue;
+		}
+		killed = idxd_wq_kill(wq);
+		__idxd_wq_flush_descs(wq, false);
 		idxd_wq_halt_release(wq);
+
+		if (resurrect) {
+			/*
+			 * Revive only what this flush killed, and only if no
+			 * failed interrupt handle revoke killed it for good,
+			 * which leaves the handle invalid. The state changes
+			 * without the lock only to enabled, in the reinit of
+			 * an earlier halt, or on a queue that an FLR recovery
+			 * has unbound, whose reference reads as dying, so this
+			 * flush did not kill it. A reference an earlier halt
+			 * left dead stays dead, since that halt's recovery
+			 * unbinds the queue. The revive has to stay in this
+			 * hold: moved to the reinit, it would reopen the
+			 * window described above.
+			 */
+			if (killed && wq->ie.int_handle != INVALID_INT_HANDLE)
+				percpu_ref_reinit(&wq->wq_active);
+			complete_all(&wq->wq_resurrect);
+		} else {
+			/* Let blocked submitters retry and fail on the state. */
+			complete_all(&wq->wq_resurrect);
+		}
+		mutex_unlock(&wq->wq_lock);
 	}
 }
 
@@ -442,6 +488,8 @@ static irqreturn_t idxd_halt(struct idxd_device *idxd)
 	if (gensts.state == IDXD_DEVICE_STATE_HALT) {
 		idxd->state = IDXD_DEV_HALTED;
 		if (gensts.reset_type == IDXD_DEVICE_RESET_SOFTWARE) {
+			/* The reinit below re-enables the queues, so revive them. */
+			idxd_wqs_halt_flush(idxd, true);
 			/*
 			 * If we need a software reset, we will throw the work
 			 * on a system workqueue in order to allow interrupts
@@ -460,7 +508,7 @@ static irqreturn_t idxd_halt(struct idxd_device *idxd)
 			 * device command; they are requested again when a work
 			 * queue is re-enabled after the reset.
 			 */
-			idxd_wqs_flush_descs(idxd);
+			idxd_wqs_halt_flush(idxd, false);
 			for (i = 0; i < idxd->max_wqs; i++) {
 				struct idxd_wq *wq = idxd->wqs[i];
 
@@ -474,7 +522,8 @@ static irqreturn_t idxd_halt(struct idxd_device *idxd)
 
 		} else {
 			idxd->state = IDXD_DEV_HALTED;
-			idxd_wqs_quiesce(idxd);
+			/* Same as above: nothing in flight will ever complete. */
+			idxd_wqs_halt_flush(idxd, false);
 			idxd_wqs_unmap_portal(idxd);
 			idxd_device_clear_state(idxd);
 			dev_err(&idxd->pdev->dev,
