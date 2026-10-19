@@ -635,21 +635,31 @@ EXPORT_SYMBOL(scsi_sanitize_inquiry_string);
  * @inq_result:	area to store the INQUIRY result
  * @result_len: len of inq_result
  * @bflags:	store any bflags found here
+ * @rescan:	@sdev is a live device whose INQUIRY data is being refreshed
  *
  * Description:
  *     Probe the lun associated with @req using a standard SCSI INQUIRY;
  *
- *     If the INQUIRY is successful, zero is returned and the
- *     INQUIRY data is in @inq_result; the scsi_level and INQUIRY length
- *     are copied to the scsi_device any flags value is stored in *@bflags.
+ *     If the INQUIRY is successful, the number of valid bytes of INQUIRY
+ *     data (at least 36) is returned, the INQUIRY data is in @inq_result
+ *     and any flags value is stored in *@bflags. The INQUIRY length is not
+ *     stored in @sdev: this function is also called for live devices, and
+ *     scsi_update_inquiry_data() updates it together with the data.
+ *     A negative errno is returned on failure.
+ *
+ *     When @rescan is true, the host's short_inquiry flag, the target's
+ *     scsi_level and lun_in_cdb are left alone. They are bitfields or
+ *     share a word with bitfields that are written at runtime without a
+ *     common lock, so they are only set when a device is first probed.
  **/
 static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
-			  int result_len, blist_flags_t *bflags)
+			  int result_len, blist_flags_t *bflags, bool rescan)
 {
 	unsigned char scsi_cmd[MAX_COMMAND_SIZE];
 	int first_inquiry_len, try_inquiry_len, next_inquiry_len;
 	int response_len = 0;
 	int pass, count, result, resid;
+	int inquiry_len;
 	char scsi_level;
 	struct scsi_failure failure_defs[] = {
 		/*
@@ -798,7 +808,7 @@ static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
 		return -EIO;
 
 	/* Don't report any more data than the device says is valid */
-	sdev->inquiry_len = min(try_inquiry_len, response_len);
+	inquiry_len = min(try_inquiry_len, response_len);
 
 	/*
 	 * XXX Abort if the response length is less than 36? If less than
@@ -815,14 +825,14 @@ static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
 	 * and displaying garbage for the Vendor, Product, or Revision
 	 * strings.
 	 */
-	if (sdev->inquiry_len < 36) {
-		if (!sdev->host->short_inquiry) {
+	if (inquiry_len < 36) {
+		if (!rescan && !sdev->host->short_inquiry) {
 			shost_printk(KERN_INFO, sdev->host,
 				    "scsi scan: INQUIRY result too short (%d),"
-				    " using 36\n", sdev->inquiry_len);
+				    " using 36\n", inquiry_len);
 			sdev->host->short_inquiry = 1;
 		}
-		sdev->inquiry_len = 36;
+		inquiry_len = 36;
 	}
 
 	/*
@@ -850,19 +860,22 @@ static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
 	if (scsi_level >= 2 ||
 	    (scsi_level == 1 && (inq_result[3] & 0x0f) == 1))
 		scsi_level++;
-	sdev->sdev_target->scsi_level = scsi_level;
 
-	/*
-	 * If SCSI-2 or lower, and if the transport requires it,
-	 * store the LUN value in CDB[1].
-	 */
-	sdev->lun_in_cdb = 0;
-	if (scsi_level <= SCSI_2 &&
-	    scsi_level != SCSI_UNKNOWN &&
-	    !sdev->host->no_scsi2_lun_in_cdb)
-		sdev->lun_in_cdb = 1;
+	if (!rescan) {
+		sdev->sdev_target->scsi_level = scsi_level;
 
-	return 0;
+		/*
+		 * If SCSI-2 or lower, and if the transport requires it,
+		 * store the LUN value in CDB[1].
+		 */
+		sdev->lun_in_cdb = 0;
+		if (scsi_level <= SCSI_2 &&
+		    scsi_level != SCSI_UNKNOWN &&
+		    !sdev->host->no_scsi2_lun_in_cdb)
+			sdev->lun_in_cdb = 1;
+	}
+
+	return inquiry_len;
 }
 
 /**
@@ -1131,6 +1144,7 @@ static int scsi_probe_and_add_lun(struct Scsi_Host *shost,
 	unsigned char *result;
 	blist_flags_t bflags;
 	int res = SCSI_SCAN_NO_RESPONSE, result_len = 256;
+	int ret;
 
 	/*
 	 * The rescan flag is used as an optimization, the first scan of a
@@ -1169,8 +1183,10 @@ static int scsi_probe_and_add_lun(struct Scsi_Host *shost,
 	if (!result)
 		goto out_free_sdev;
 
-	if (scsi_probe_lun(sdev, result, result_len, &bflags))
+	ret = scsi_probe_lun(sdev, result, result_len, &bflags, false);
+	if (ret < 0)
 		goto out_free_result;
+	sdev->inquiry_len = ret;
 
 	if (bflagsp)
 		*bflagsp = bflags;
@@ -1658,9 +1674,54 @@ unlock:
 }
 EXPORT_SYMBOL(scsi_resume_device);
 
+/**
+ * scsi_refresh_inquiry - Fetch fresh standard INQUIRY data for a device
+ * @sdev: The SCSI device to refresh
+ *
+ * Failures are logged and otherwise ignored, so that the caller carries on
+ * with the rest of the rescan using the INQUIRY data it already has.
+ *
+ * Returns true if the peripheral qualifier or device type changed and the
+ * device needs to be reprobed.
+ */
+static bool scsi_refresh_inquiry(struct scsi_device *sdev)
+{
+	unsigned char *inq_result;
+	blist_flags_t bflags;
+	int ret = -ENOMEM;
+
+	inq_result = kmalloc(256, GFP_KERNEL);
+	if (inq_result) {
+		ret = scsi_probe_lun(sdev, inq_result, 256, &bflags, true);
+		if (ret >= 0)
+			ret = scsi_update_inquiry_data(sdev, inq_result, ret);
+		kfree(inq_result);
+	}
+
+	if (ret < 0) {
+		sdev_printk(KERN_WARNING, sdev,
+			    "failed to refresh INQUIRY data: %d\n", ret);
+		return false;
+	}
+
+	return ret == SCSI_INQ_REPROBE_NEEDED;
+}
+
+/**
+ * scsi_rescan_device - Rescan a SCSI device
+ * @sdev: The SCSI device to rescan
+ *
+ * Refreshes the INQUIRY data and VPD pages of @sdev and lets the device
+ * handler and the upper-level driver update their view of the device. If
+ * the peripheral qualifier or device type changed, the device is reprobed
+ * so that the right upper-level driver, if any, is bound to it.
+ *
+ * The caller must hold a reference to @sdev.
+ */
 int scsi_rescan_device(struct scsi_device *sdev)
 {
 	struct device *dev = &sdev->sdev_gendev;
+	bool need_reprobe;
 	int ret = 0;
 
 	device_lock(dev);
@@ -1677,11 +1738,48 @@ int scsi_rescan_device(struct scsi_device *sdev)
 		goto unlock;
 	}
 
+	need_reprobe = scsi_refresh_inquiry(sdev);
+
 	scsi_attach_vpd(sdev);
 	scsi_cdl_check(sdev);
 
 	if (sdev->handler && sdev->handler->rescan)
 		sdev->handler->rescan(sdev);
+
+	if (need_reprobe) {
+		/*
+		 * The peripheral qualifier or device type changed, so the
+		 * driver binding has to be re-evaluated. device_reprobe()
+		 * takes the device lock itself. sdev stays valid while the
+		 * lock is dropped because the caller holds a reference;
+		 * scsi_evt_thread() is covered by the cancel_work_sync() in
+		 * scsi_device_dev_release().
+		 */
+		device_unlock(dev);
+		ret = device_reprobe(dev);
+		device_lock(dev);
+
+		/*
+		 * state_mutex serializes against __scsi_remove_device(), so
+		 * a device that is being removed cannot be moved from
+		 * SDEV_CANCEL or SDEV_DEL to SDEV_OFFLINE.
+		 */
+		mutex_lock(&sdev->state_mutex);
+		if (sdev->sdev_state == SDEV_CANCEL ||
+		    sdev->sdev_state == SDEV_DEL) {
+			ret = -ENODEV;
+		} else if (ret < 0) {
+			if (scsi_device_set_state(sdev, SDEV_OFFLINE) == 0)
+				sdev_printk(KERN_WARNING, sdev,
+					    "device reprobe failed (%d), marked offline\n",
+					    ret);
+			else
+				sdev_printk(KERN_WARNING, sdev,
+					    "device reprobe failed (%d)\n", ret);
+		}
+		mutex_unlock(&sdev->state_mutex);
+		goto unlock;
+	}
 
 	if (dev->driver && try_module_get(dev->driver->owner)) {
 		struct scsi_driver *drv = to_scsi_driver(dev->driver);
