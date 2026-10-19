@@ -724,6 +724,50 @@ void idxd_cmd_reset_state(struct idxd_device *idxd)
 	spin_unlock_irqrestore(&idxd->cmd_lock, flags);
 }
 
+/*
+ * Hold device commands off while the re-probe after a reset frees the
+ * interrupts and requests them again. A command whose completion
+ * interrupt comes while the misc vector is gone is never completed, and
+ * its owner would time out and fence the device that was just reset.
+ * The running command, if any, is waited for first: its owner gives up
+ * within its timeout, and the misc vector still takes its interrupt.
+ * RUNNING is then held without an owner, and new commands wait for it
+ * as for any running command. Returns false, holding nothing, when a
+ * command timed out, since commands then fail fast anyway.
+ */
+bool idxd_cmd_hold(struct idxd_device *idxd, u32 *seq)
+{
+	bool held = false;
+
+	spin_lock_irq(&idxd->cmd_lock);
+	wait_event_lock_irq(idxd->cmd_waitq,
+			    !test_bit(IDXD_FLAG_CMD_RUNNING, &idxd->flags) ||
+			    test_bit(IDXD_FLAG_CMD_TIMEDOUT, &idxd->flags),
+			    idxd->cmd_lock);
+	if (!test_bit(IDXD_FLAG_CMD_RUNNING, &idxd->flags)) {
+		__set_bit(IDXD_FLAG_CMD_RUNNING, &idxd->flags);
+		*seq = ++idxd->cmd_seq;
+		held = true;
+	}
+	spin_unlock_irq(&idxd->cmd_lock);
+	return held;
+}
+
+/*
+ * End a hold taken by idxd_cmd_hold(). A halt's recovery may have
+ * forgotten the hold meanwhile and let another command run, which then
+ * has an owner or a newer sequence number, and its state is left alone.
+ */
+void idxd_cmd_unhold(struct idxd_device *idxd, u32 seq)
+{
+	spin_lock_irq(&idxd->cmd_lock);
+	if (idxd->cmd_seq == seq && !idxd->cmd_done) {
+		__clear_bit(IDXD_FLAG_CMD_RUNNING, &idxd->flags);
+		wake_up(&idxd->cmd_waitq);
+	}
+	spin_unlock_irq(&idxd->cmd_lock);
+}
+
 int idxd_device_enable(struct idxd_device *idxd)
 {
 	struct device *dev = &idxd->pdev->dev;

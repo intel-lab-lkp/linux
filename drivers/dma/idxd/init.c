@@ -1212,6 +1212,14 @@ int idxd_pci_probe_alloc(struct idxd_device *idxd, struct pci_dev *pdev,
 	}
 
 	if (!alloc_idxd) {
+		bool held;
+		u32 seq;
+
+		/*
+		 * Commands complete through the misc interrupt, which is
+		 * gone until it is requested again.
+		 */
+		held = idxd_cmd_hold(idxd, &seq);
 		/* Release interrupts in the IDXD device. */
 		idxd_cleanup_interrupts(idxd);
 
@@ -1219,6 +1227,8 @@ int idxd_pci_probe_alloc(struct idxd_device *idxd, struct pci_dev *pdev,
 		rc = idxd_setup_interrupts(idxd);
 		if (rc)
 			dev_warn(dev, "IDXD interrupts failed to setup\n");
+		if (held)
+			idxd_cmd_unhold(idxd, seq);
 	}
 
 	dev_info(&pdev->dev, "Intel(R) Accelerator Device (v%x)\n",

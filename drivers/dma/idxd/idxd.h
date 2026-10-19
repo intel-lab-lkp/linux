@@ -794,6 +794,8 @@ int idxd_device_disable(struct idxd_device *idxd);
 int idxd_device_reset(struct idxd_device *idxd);
 void idxd_device_clear_state(struct idxd_device *idxd);
 void idxd_cmd_reset_state(struct idxd_device *idxd);
+bool idxd_cmd_hold(struct idxd_device *idxd, u32 *seq);
+void idxd_cmd_unhold(struct idxd_device *idxd, u32 seq);
 int idxd_device_config(struct idxd_device *idxd);
 int idxd_device_drain_pasid(struct idxd_device *idxd, int pasid);
 int idxd_device_load_config(struct idxd_device *idxd);
