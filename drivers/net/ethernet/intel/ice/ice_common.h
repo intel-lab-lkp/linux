@@ -98,6 +98,7 @@ int
 ice_acquire_res(struct ice_hw *hw, enum ice_aq_res_ids res,
 		enum ice_aq_res_access_type access, u32 timeout);
 void ice_release_res(struct ice_hw *hw, enum ice_aq_res_ids res);
+void ice_global_cfg_unlock(struct ice_hw *hw);
 int
 ice_alloc_hw_res(struct ice_hw *hw, u16 type, u16 num, bool btm, u16 *res);
 int
@@ -141,8 +142,6 @@ int ice_aq_q_shutdown(struct ice_hw *hw, bool unloading);
 void ice_fill_dflt_direct_cmd_desc(struct libie_aq_desc *desc, u16 opcode);
 
 void ice_pack_txq_ctx(const struct ice_tlan_ctx *ctx, ice_txq_ctx_buf_t *buf);
-
-extern struct mutex ice_global_cfg_lock_sw;
 
 int
 ice_aq_send_cmd(struct ice_hw *hw, struct libie_aq_desc *desc,
