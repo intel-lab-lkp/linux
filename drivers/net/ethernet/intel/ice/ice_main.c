@@ -5539,6 +5539,12 @@ static void ice_prepare_for_shutdown(struct ice_pf *pf)
 	/* disable the VSIs and their queues that are not already DOWN */
 	ice_pf_dis_all_vsi(pf, false);
 
+	if (test_bit(ICE_FLAG_PTP_SUPPORTED, pf->flags) &&
+	    pf->ptp.state == ICE_PTP_READY) {
+		kthread_cancel_delayed_work_sync(&pf->ptp.work);
+		kthread_cancel_delayed_work_sync(&pf->ptp.port.ov_work);
+	}
+
 	ice_for_each_vsi(pf, v)
 		if (pf->vsi[v])
 			pf->vsi[v]->vsi_num = 0;
