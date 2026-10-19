@@ -520,8 +520,18 @@ __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 	enum io_wq_cancel cret;
 	bool ret = false;
 
-	/* set it so io_req_local_work_add() would wake us up */
-	if (ctx->flags & IORING_SETUP_DEFER_TASKRUN) {
+	/*
+	 * Arm so that io_req_local_work_add() wakes ->submitter_task. An
+	 * arm wakes no other task, so only that task's passes arm, the same
+	 * ones that run the local work below. A store from another task
+	 * could restore an arm that a stalled add spent while the owner was
+	 * getting ready to sleep, and so hide the spent arm from the
+	 * owner's test. See the comment above IO_CQ_WAKE_INIT. This leaves
+	 * out io_ring_exit_work(), which never sleeps on the arm and runs
+	 * stranded work itself.
+	 */
+	if ((ctx->flags & IORING_SETUP_DEFER_TASKRUN) &&
+	    io_allowed_defer_tw_run(ctx)) {
 		atomic_set(&ctx->cq_wait_nr, 1);
 		smp_mb();
 	}
@@ -638,6 +648,17 @@ __cold void io_uring_cancel_generic(bool cancel_all, struct io_sq_data *sqd)
 		xa_for_each(&tctx->xa, index, node) {
 			if (io_local_work_pending(node->ctx) &&
 			    io_allowed_defer_tw_run(node->ctx))
+				goto end_wait;
+			/*
+			 * The pass armed ->cq_wait_nr while running, so a
+			 * stalled add may have spent the arm with a lost
+			 * wake up. See the comment above IO_CQ_WAKE_INIT.
+			 * Run another pass, which re-arms, instead of
+			 * sleeping. An arm only wakes the ring's
+			 * submitter_task.
+			 */
+			if (io_allowed_defer_tw_run(node->ctx) &&
+			    io_cq_wait_arm_spent(node->ctx))
 				goto end_wait;
 		}
 		/*

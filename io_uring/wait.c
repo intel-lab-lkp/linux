@@ -178,6 +178,25 @@ static inline int io_cqring_wait_schedule(struct io_ring_ctx *ctx,
 		return -EINTR;
 	if (unlikely(io_should_wake(iowq)))
 		return 0;
+	/*
+	 * A DEFER_TASKRUN producer that stalls between publishing its work
+	 * and claiming the wake can claim an arm from a later wait cycle
+	 * than the one its work belongs to: this task may already have
+	 * drained that work while disarmed and re-armed for the next sleep.
+	 * The claimed wake then lands via wake_up_state() while this task
+	 * is still TASK_RUNNING, between the arm and set_current_state(),
+	 * and is a no-op. The arm is gone, so every later producer reads a
+	 * non-positive ->cq_wait_nr and skips the wake, and this task would
+	 * sleep unwakeable under a non-empty work list. If the arm set at
+	 * the top of the wait loop is no longer intact, a claim has fired:
+	 * re-run the loop, which drains anything pending and re-arms,
+	 * instead of sleeping. From here to schedule() the state stays
+	 * TASK_INTERRUPTIBLE, so any later claim delivers its wake.
+	 */
+	if (io_cq_wait_arm_spent(ctx)) {
+		__set_current_state(TASK_RUNNING);
+		return 1;
+	}
 
 	return __io_cqring_wait_schedule(ctx, iowq, ext_arg, start_time);
 }

@@ -11,8 +11,28 @@
  * wake up is to be issued: IO_CQ_WAKE_INIT when no task is waiting (also
  * what a forced wake up resets it to when claiming one), zero once the
  * countdown has fired.
+ *
+ * An add can stall between publishing its work and claiming the wake up,
+ * and the waiter may run that work and arm a later cycle in between. The
+ * add then claims the new arm, and if the waiter has not set its task state
+ * yet, that wake up is a no-op. Every later add sees the spent arm and
+ * issues none. A waiter must therefore test io_cq_wait_arm_spent() after
+ * setting its task state and must not sleep if it returns true.
+ *
+ * The test is sound only if nothing but the waiter stores an arm while it
+ * gets ready to sleep, as such a store could restore a spent arm and hide
+ * it. io_uring_try_cancel_requests() therefore arms only in the
+ * submitter_task's own passes, and the min_wait timer stores an arm only
+ * during the timed sleep, which cancels the timer before the waiter tests
+ * again.
  */
 #define IO_CQ_WAKE_INIT		(-1)
+
+static inline bool io_cq_wait_arm_spent(struct io_ring_ctx *ctx)
+{
+	return (ctx->flags & IORING_SETUP_DEFER_TASKRUN) &&
+	       atomic_read(&ctx->cq_wait_nr) <= 0;
+}
 
 struct ext_arg {
 	size_t argsz;

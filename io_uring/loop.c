@@ -29,7 +29,8 @@ static void io_loop_wait(struct io_ring_ctx *ctx, struct iou_loop_params *lp,
 
 	if (unlikely(io_local_work_pending(ctx) ||
 		     io_loop_nr_cqes(ctx, lp) <= 0) ||
-		     READ_ONCE(ctx->check_cq)) {
+		     READ_ONCE(ctx->check_cq) ||
+		     io_cq_wait_arm_spent(ctx)) {
 		io_loop_wait_finish(ctx);
 		return;
 	}
