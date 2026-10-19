@@ -19,11 +19,13 @@ allOf:
 
 properties:
   compatible:
-    items:
-      - enum:
-          - starfive,jh7100-pwm
-          - starfive,jh7110-pwm
-      - const: opencores,pwm-v1
+    oneOf:
+      - items:
+          - enum:
+              - starfive,jh7100-pwm
+              - starfive,jh7110-pwm
+          - const: opencores,pwm-v1
+      - const: starfive,jhb100-pwm
 
   reg:
     maxItems: 1
