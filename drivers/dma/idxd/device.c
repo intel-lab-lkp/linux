@@ -704,9 +704,16 @@ int idxd_device_disable(struct idxd_device *idxd)
 
 	idxd_cmd_exec(idxd, IDXD_CMD_DISABLE_DEVICE, 0, &status);
 
-	/* If the command is successful or if the device was disabled */
+	/*
+	 * The command succeeded, or the device was already disabled. The
+	 * error code is a value, not a bit mask, so compare it whole. A
+	 * refused command reports IDXD_CMDSTS_HW_ERR, which shares a bit
+	 * with the already-disabled code but leaves the device enabled,
+	 * and clearing the software state of an enabled device lets a
+	 * later teardown free memory the device still writes.
+	 */
 	if (status != IDXD_CMDSTS_SUCCESS &&
-	    !(status & IDXD_CMDSTS_ERR_DIS_DEV_EN)) {
+	    (status & IDXD_CMDSTS_ERR_MASK) != IDXD_CMDSTS_ERR_DIS_DEV_EN) {
 		dev_dbg(dev, "%s: err_code: %#x\n", __func__, status);
 		return -ENXIO;
 	}
