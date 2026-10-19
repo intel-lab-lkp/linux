@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+# Copyright (c) 2026 Oracle.  All Rights Reserved.
+# Author: Darrick J. Wong <djwong@kernel.org>
+
+# Cite a list of git hashes in Fixes: tag format.
+
+if [ -z "$1" ] || [ "$1" = "--help" ]; then
+	echo "Usage: $0 commit [commits...]"
+	echo "Generate Fixes: tags for each commit passed in, along with a Cc:"
+	echo "line for the author.  If 'user.stableSubmissionTarget' is set in"
+	echo "the git configuration, a Cc: header will be generated with a"
+	echo "comment identifying the first tag created after the commit."
+	exit 1
+fi
+
+stable_email="$(git config user.stableSubmissionTarget)"
+
+# Find the most recent version tag for this commit.  Assumes that version tags
+# start with v and a digit.
+tag_for_commit() {
+	local arg="$1"
+	local tag
+	local release_tag
+	local rc_suffix
+
+	# Find the first tag created after this commit.
+	tag="$(git tag -l --contains "${arg}" --sort version:refname | \
+		grep "^v[0-9]" | \
+		head -n 1)"
+	test -z "${tag}" && return 1
+
+	# Strip off any version suffix (presumably "-rcX") to construct what
+	# ought to be the tag name for the final release.
+	rc_suffix="$(git config versionsort.suffix)"
+	# shellcheck disable=SC2001
+	release_tag="$(echo "${tag}" | sed -e "s/${rc_suffix}.*//g")"
+
+	# If the release tag actually exists, print that instead of the first
+	# tag.  Otherwise, print that first tag.  We'd rather print "v5.4" than
+	# the more accurate "v5.4-rc1" because stable backports target
+	# releases, not -rcX.
+	if [ -n "$(git tag -l "${release_tag}" 2>/dev/null)" ]; then
+		echo "${release_tag}"
+	else
+		echo "${tag}"
+	fi
+	return 0
+}
+
+gitcc=(git log --format='Cc: <%aE>')
+gitfixes=(git log --format='Fixes: %h ("%s")')
+for arg in "$@"; do
+	"${gitcc[@]}" "${arg}^1..${arg}"
+	if [ -n "${stable_email}" ]; then
+		fixed_in="$(tag_for_commit "${arg}")" && \
+			echo "Cc: <${stable_email}> # ${fixed_in}"
+	fi
+	"${gitfixes[@]}" "${arg}^1..${arg}"
+done
