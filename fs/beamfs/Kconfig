@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# beamfs filesystem configuration
+#
+
+config BEAMFS_FS
+	tristate "beamfs filesystem support"
+	depends on BLOCK
+	select BUFFER_HEAD
+	select FS_IOMAP
+	select CRC32
+	select REED_SOLOMON
+	select REED_SOLOMON_ENC8
+	select REED_SOLOMON_DEC8
+	help
+	  beamfs is a block-device filesystem that corrects corrupted bytes
+	  in place, on a single device, without a second copy to repair
+	  from. Data and directory blocks carry Reed-Solomon RS(255,239)
+	  parity over GF(2^8) inside the block, indirect blocks carry it in
+	  a region of their own, and every read decodes.
+
+	  Up to eight corrupted bytes per 255-byte codeword are corrected.
+	  A codeword the decoder reports as uncorrectable fails the read
+	  with -EIO. Nothing is guaranteed beyond eight bytes per codeword.
+
+	  It is meant for storage that takes bit flips the device does not
+	  correct itself, such as single-event upsets. See
+	  Documentation/filesystems/beamfs.rst.
+
+	  To compile this file system support as a module, choose M here:
+	  the module will be called beamfs.
+
+	  If unsure, say N.
+
+config BEAMFS_DEBUG_TREE
+	bool "beamfs: check the indirect tree invariant at every store"
+	depends on BEAMFS_FS
+	help
+	  Record every pointer installed in an indirect block and check
+	  each later store to the same slot against that record. A slot
+	  that held a live pointer and reads back as zero is reported
+	  with a stack trace at the instant it happens, instead of being
+	  counted by fsck long after.
+
+	  Costs one hash lookup and sixteen bytes per live pointer. Say
+	  N for production.
+
+config BEAMFS_ORDERED_META
+	bool "Write metadata in dependency order (slow, experimental)"
+	depends on BEAMFS_FS
+	default n
+	help
+	  Write every metadata block to the medium before anything names
+	  it: one synchronous write per level of indirection, up to four
+	  for a block reached through the triple indirect.
+
+	  This exists to answer a question, not to be enabled. beamfs
+	  relies on mark_buffer_dirty for ordering and mark_buffer_dirty
+	  gives none, and this forces the safe order at whatever cost in
+	  speed so that the hypothesis can be measured rather than
+	  argued. A journal is how the same property is had for one
+	  sequential write instead.
+
+	  Say N.

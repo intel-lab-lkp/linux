@@ -110,6 +110,7 @@ obj-$(CONFIG_XFS_FS)		+= xfs/
 obj-$(CONFIG_9P_FS)		+= 9p/
 obj-$(CONFIG_AFS_FS)		+= afs/
 obj-$(CONFIG_NILFS2_FS)		+= nilfs2/
+obj-$(CONFIG_BEAMFS_FS)		+= beamfs/
 obj-$(CONFIG_BEFS_FS)		+= befs/
 obj-y				+= hostfs/
 obj-$(CONFIG_CACHEFILES)	+= cachefiles/
