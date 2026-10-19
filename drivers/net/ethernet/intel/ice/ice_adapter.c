@@ -74,6 +74,7 @@ static struct ice_adapter *ice_adapter_new(struct pci_dev *pdev)
 		mutex_init(&adapter->cpi_phy_lock[i]);
 	mutex_init(&adapter->cgu_synce_lock);
 	mutex_init(&adapter->rebuild_lock);
+	mutex_init(&adapter->global_cfg_lock);
 	refcount_set(&adapter->refcount, 1);
 
 	spin_lock_init(&adapter->ports.lock);
@@ -92,6 +93,7 @@ static void ice_adapter_free(struct ice_adapter *adapter)
 		mutex_destroy(&adapter->cpi_phy_lock[i]);
 	mutex_destroy(&adapter->cgu_synce_lock);
 	mutex_destroy(&adapter->rebuild_lock);
+	mutex_destroy(&adapter->global_cfg_lock);
 
 	cleanup_srcu_struct(&adapter->ports.srcu);
 	mutex_destroy(&adapter->ps_lock);
