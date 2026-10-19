@@ -660,19 +660,9 @@ static void rzg3s_pcie_irq_compose_msi_msg(struct irq_data *data,
 					   struct msi_msg *msg)
 {
 	struct rzg3s_pcie_msi *msi = irq_data_get_irq_chip_data(data);
-	struct rzg3s_pcie_host *host = rzg3s_msi_to_host(msi);
-	u32 lo, hi;
 
-	/*
-	 * Enable and msg data enable bits are part of the address lo. Drop
-	 * them along with the unused bit.
-	 */
-	lo = readl_relaxed(host->axi + RZG3S_PCI_MSIRCVWADRL) &
-	     RZG3S_PCI_MSIRCVWADRL_MASK;
-	hi = readl_relaxed(host->axi + RZG3S_PCI_MSIRCVWADRU);
-
-	msg->address_lo = lo;
-	msg->address_hi = hi;
+	msg->address_lo = lower_32_bits(msi->window_base);
+	msg->address_hi = upper_32_bits(msi->window_base);
 	msg->data = data->hwirq;
 }
 
