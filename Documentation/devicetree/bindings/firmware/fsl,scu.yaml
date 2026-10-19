@@ -155,6 +155,12 @@ properties:
       Watchdog controller provided by the SCU
     $ref: /schemas/watchdog/fsl,scu-wdt.yaml
 
+patternProperties:
+  "^dc[0-1]-pixel-link[0-1]$":
+    description:
+      Display pixel link in display controller subsystem controlled by the SCU
+    $ref: /schemas/display/bridge/fsl,imx8qxp-pixel-link.yaml
+
 required:
   - compatible
   - mbox-names
