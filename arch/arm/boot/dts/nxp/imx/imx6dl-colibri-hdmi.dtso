@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: GPL-2.0-only OR MIT
+/*
+ * Copyright (c) Toradex
+ *
+ * Enable HDMI output on Colibri iMX6 through the module's dedicated
+ * 24-pin FFC connector (X2), separate from the SODIMM connector.
+ *
+ * Connect the module's X2 using a 24-pin FFC cable to either:
+ * - Colibri HDMI Adapter X2, providing HDMI output on X1;
+ * - Colibri Evaluation Board V3 X6, providing display output on X5;
+ * - Iris / Iris V2 X2, providing display output on X4.
+ *
+ * The Colibri HDMI Adapter can also be used with carrier boards without
+ * a dedicated display FFC connector, such as Aster.
+ *
+ * https://developer.toradex.com/hardware/colibri-som-family/modules/colibri-imx6/
+ * https://developer.toradex.com/hardware/colibri-som-family/add-ons/colibri-hdmi-adapter/
+ * https://developer.toradex.com/hardware/colibri-som-family/carrier-boards/colibri-evaluation-board/
+ * https://developer.toradex.com/hardware/colibri-som-family/carrier-boards/iris-carrier-board/
+ */
+
+/dts-v1/;
+/plugin/;
+
+&hdmi {
+	status = "okay";
+};
