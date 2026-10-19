@@ -135,13 +135,20 @@ static struct dst_entry *rxe_find_route6(struct rxe_qp *qp,
 {
 	struct dst_entry *ndst;
 	struct flowi6 fl6 = {};
+	struct sock *sk;
 
 	fl6.flowi6_oif = ndev->ifindex;
 	memcpy(&fl6.saddr, saddr, sizeof(*saddr));
 	memcpy(&fl6.daddr, daddr, sizeof(*daddr));
 	fl6.flowi6_proto = IPPROTO_UDP;
 
-	ndst = ip6_dst_lookup_flow(net, rxe_ns_pernet_sk6(net), &fl6, NULL);
+	/* keep the socket pinned while it is passed to the IPv6 routing
+	 * code which dereferences it outside of rcu_read_lock()
+	 */
+	sk = rxe_ns_pernet_sk6(net);
+	ndst = ip6_dst_lookup_flow(net, sk, &fl6, NULL);
+	if (sk)
+		sock_put(sk);
 	if (IS_ERR(ndst)) {
 		rxe_dbg_qp(qp, "no route to %pI6\n", daddr);
 		return NULL;
@@ -638,9 +645,15 @@ static void rxe_sock_put(struct sock *sk,
 	if (refcount_read(&sk->sk_refcnt) > SK_REF_FOR_TUNNEL) {
 		__sock_put(sk);
 	} else {
+		/*
+		 * Clear the per-net pointer before the socket is released:
+		 * rxe_ns_pernet_sk4/6() take a reference on the socket, but
+		 * new lookups must not find it once it is being released.
+		 */
+		set_sk(net, NULL);
 		rxe_release_udp_tunnel(sk);
-		sk = NULL;
-		set_sk(net, sk);
+		/* drop the reference from rxe_ns_pernet_sk4/6() */
+		sock_put(sk);
 	}
 }
 
@@ -758,11 +771,10 @@ static int rxe_net_ipv4_init(struct net *net)
 	struct sock *sk;
 	struct socket *sock;
 
+	/* returns with a reference held for this device */
 	sk = rxe_ns_pernet_sk4(net);
-	if (sk) {
-		sock_hold(sk);
+	if (sk)
 		return 0;
-	}
 
 	sock = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), false);
 	if (IS_ERR(sock)) {
@@ -780,11 +792,10 @@ static int rxe_net_ipv6_init(struct net *net)
 	struct sock *sk;
 	struct socket *sock;
 
+	/* returns with a reference held for this device */
 	sk = rxe_ns_pernet_sk6(net);
-	if (sk) {
-		sock_hold(sk);
+	if (sk)
 		return 0;
-	}
 
 	sock = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), true);
 	if (PTR_ERR(sock) == -EAFNOSUPPORT) {

@@ -71,6 +71,12 @@ static struct pernet_operations rxe_net_ops = {
 	.size = sizeof(struct rxe_ns_sock),
 };
 
+/*
+ * Return the per-net tunnel socket with a reference taken, or NULL if
+ * the namespace has no tunnel socket.  The reference is taken under
+ * rcu_read_lock() so the socket cannot be freed while the pointer is
+ * still published; the caller must sock_put() it.
+ */
 struct sock *rxe_ns_pernet_sk4(struct net *net)
 {
 	struct rxe_ns_sock *ns_sk = net_generic(net, rxe_pernet_id);
@@ -78,6 +84,8 @@ struct sock *rxe_ns_pernet_sk4(struct net *net)
 
 	rcu_read_lock();
 	sk = rcu_dereference(ns_sk->rxe_sk4);
+	if (sk && !refcount_inc_not_zero(&sk->sk_refcnt))
+		sk = NULL;
 	rcu_read_unlock();
 
 	return sk;
@@ -99,6 +107,8 @@ struct sock *rxe_ns_pernet_sk6(struct net *net)
 
 	rcu_read_lock();
 	sk = rcu_dereference(ns_sk->rxe_sk6);
+	if (sk && !refcount_inc_not_zero(&sk->sk_refcnt))
+		sk = NULL;
 	rcu_read_unlock();
 
 	return sk;
