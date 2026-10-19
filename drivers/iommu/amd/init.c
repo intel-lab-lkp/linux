@@ -3194,6 +3194,52 @@ static void __init ivinfo_init(void *ivrs)
 	amd_iommu_ivinfo = *((u32 *)(ivrs + IOMMU_IVINFO_OFFSET));
 }
 
+static void __init init_pgtable_params(void)
+{
+	u8 vasize, efr_hats;
+
+	vasize = FIELD_GET(IOMMU_IVINFO_VASIZE, amd_iommu_ivinfo);
+	if (!vasize)
+		vasize = 64;
+
+	/* 5 level guest page table */
+	if (cpu_feature_enabled(X86_FEATURE_LA57) &&
+	    FIELD_GET(FEATURE_GATS, amd_iommu_efr) == GUEST_PGTABLE_5_LEVEL)
+		amd_iommu_gpt_level = PAGE_MODE_5_LEVEL;
+
+	efr_hats = FIELD_GET(FEATURE_HATS, amd_iommu_efr);
+	if (efr_hats != 0x3) {
+		/*
+		 * efr[HATS] bits specify the maximum host translation level
+		 * supported, with LEVEL 4 being initial max level.
+		 */
+		amd_iommu_hpt_vasize = min_t(unsigned int, vasize,
+					 (efr_hats + PAGE_MODE_4_LEVEL - 1) * 9 + 21);
+	} else {
+		pr_warn_once(FW_BUG "Disable host address translation due to invalid translation level (%#x).\n",
+			     efr_hats);
+		amd_iommu_hatdis = true;
+	}
+
+	if (amd_iommu_pgtable == PD_MODE_V2) {
+		if (!amd_iommu_v2_pgtbl_supported()) {
+			pr_warn("Cannot enable v2 page table for DMA-API. Fallback to v1.\n");
+			amd_iommu_pgtable = PD_MODE_V1;
+		}
+	}
+
+	if (amd_iommu_hatdis) {
+		/*
+		 * Host (v1) page table is not available. Attempt to use
+		 * Guest (v2) page table.
+		 */
+		if (amd_iommu_v2_pgtbl_supported())
+			amd_iommu_pgtable = PD_MODE_V2;
+		else
+			amd_iommu_pgtable = PD_MODE_NONE;
+	}
+}
+
 /*
  * This is the hardware init function for AMD IOMMU in the system.
  * This function is called either from amd_iommu_init or from the interrupt
@@ -3226,7 +3272,6 @@ static int __init early_amd_iommu_init(void)
 	struct acpi_table_header *ivrs_base;
 	int ret;
 	acpi_status status;
-	u8 efr_hats, max_vasize;
 
 	if (!amd_iommu_detected)
 		return -ENODEV;
@@ -3256,10 +3301,6 @@ static int __init early_amd_iommu_init(void)
 
 	ivinfo_init(ivrs_base);
 
-	max_vasize = FIELD_GET(IOMMU_IVINFO_VASIZE, amd_iommu_ivinfo);
-	if (!max_vasize)
-		max_vasize = 64;
-
 	amd_iommu_target_ivhd_type = get_highest_supported_ivhd_type(ivrs_base);
 	DUMP_printk("Using IVHD type %#x\n", amd_iommu_target_ivhd_type);
 
@@ -3271,42 +3312,7 @@ static int __init early_amd_iommu_init(void)
 	if (ret)
 		goto out;
 
-	/* 5 level guest page table */
-	if (cpu_feature_enabled(X86_FEATURE_LA57) &&
-	    FIELD_GET(FEATURE_GATS, amd_iommu_efr) == GUEST_PGTABLE_5_LEVEL)
-		amd_iommu_gpt_level = PAGE_MODE_5_LEVEL;
-
-	efr_hats = FIELD_GET(FEATURE_HATS, amd_iommu_efr);
-	if (efr_hats != 0x3) {
-		/*
-		 * efr[HATS] bits specify the maximum host translation level
-		 * supported, with LEVEL 4 being initial max level.
-		 */
-		amd_iommu_hpt_vasize = min_t(unsigned int, max_vasize,
-					 (efr_hats + PAGE_MODE_4_LEVEL - 1) * 9 + 21);
-	} else {
-		pr_warn_once(FW_BUG "Disable host address translation due to invalid translation level (%#x).\n",
-			     efr_hats);
-		amd_iommu_hatdis = true;
-	}
-
-	if (amd_iommu_pgtable == PD_MODE_V2) {
-		if (!amd_iommu_v2_pgtbl_supported()) {
-			pr_warn("Cannot enable v2 page table for DMA-API. Fallback to v1.\n");
-			amd_iommu_pgtable = PD_MODE_V1;
-		}
-	}
-
-	if (amd_iommu_hatdis) {
-		/*
-		 * Host (v1) page table is not available. Attempt to use
-		 * Guest (v2) page table.
-		 */
-		if (amd_iommu_v2_pgtbl_supported())
-			amd_iommu_pgtable = PD_MODE_V2;
-		else
-			amd_iommu_pgtable = PD_MODE_NONE;
-	}
+	init_pgtable_params();
 
 	/* Disable any previously enabled IOMMUs */
 	if (!is_kdump_kernel() || amd_iommu_disabled)
