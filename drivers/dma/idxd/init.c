@@ -1296,6 +1296,13 @@ static void idxd_remove(struct pci_dev *pdev)
 	 * that driver while the queues still exist.
 	 */
 	device_release_driver(idxd_confdev(idxd));
+	/*
+	 * Disable the device while the queues still exist too. The
+	 * sub-driver's remove leaves the device enabled when a command has
+	 * timed out, a late completion can clear that state at any time,
+	 * and the disable below then clears the queues' software state.
+	 */
+	idxd_shutdown(pdev);
 	idxd_unregister_devices(idxd);
 	/*
 	 * When ->release() is called for the idxd->conf_dev, it frees all
@@ -1305,15 +1312,20 @@ static void idxd_remove(struct pci_dev *pdev)
 	 */
 	get_device(idxd_confdev(idxd));
 	device_unregister(idxd_confdev(idxd));
-	idxd_shutdown(pdev);
 	idxd_device_remove_debugfs(idxd);
 	perfmon_pmu_remove(idxd);
 	idxd_cleanup_interrupts(idxd);
 	if (device_pasid_enabled(idxd))
 		idxd_disable_system_pasid(idxd);
 	pci_iounmap(pdev, idxd->reg_base);
-	put_device(idxd_confdev(idxd));
 	pci_disable_device(pdev);
+	/*
+	 * Bus mastering is off, so nothing the device holds can complete.
+	 * The store comes before the reference taken above is dropped:
+	 * that reference is the last one, and its release frees the device.
+	 */
+	idxd->state = IDXD_DEV_DISABLED;
+	put_device(idxd_confdev(idxd));
 }
 
 static struct pci_driver idxd_pci_driver = {
