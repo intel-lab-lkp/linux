@@ -15,6 +15,7 @@
 
 struct pci_dev;
 struct ice_pf;
+struct task_struct;
 
 /**
  * struct ice_port_list - data used to store the list of adapter ports
@@ -45,6 +46,8 @@ struct ice_port_list {
  * @cgu_synce_lock: Mutex serializing changes of the CGU registers R10 and R11,
  *                  which all PFs reach. Used on E825C devices.
  * @rebuild_lock: serialize PFR recovery across PFs of the same adapter
+ * @global_cfg_lock: serialize AQ access during global configuration
+ * @global_cfg_owner: task holding the global configuration lock
  * @ps_lock: Mutex to serialize PHY port start/stop across adapter.
  * @ctrl_pf_lock: Protect control PF lifetime for sleepable users
  * @ctrl_pf: Control PF of the adapter
@@ -63,6 +66,9 @@ struct ice_adapter {
 	struct mutex cgu_synce_lock;
 	/* Serialize PFR recovery touching shared FW global state */
 	struct mutex rebuild_lock;
+	/* Keep other PFs off the AQ until firmware releases ownership */
+	struct mutex global_cfg_lock;
+	struct task_struct *global_cfg_owner;
 
 	/* For serializing PHY port start/stop sequences */
 	struct mutex ps_lock;
