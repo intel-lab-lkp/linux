@@ -1888,10 +1888,6 @@ static int rzg3s_pcie_probe(struct platform_device *pdev)
 	if (ret)
 		goto sysc_signal_restore;
 
-	ret = rzg3s_pcie_power_resets_deassert(host);
-	if (ret)
-		goto sysc_signal_restore;
-
 	pm_runtime_enable(dev);
 
 	/*
@@ -1902,12 +1898,16 @@ static int rzg3s_pcie_probe(struct platform_device *pdev)
 	if (ret)
 		goto rpm_disable;
 
+	ret = rzg3s_pcie_power_resets_deassert(host);
+	if (ret)
+		goto rpm_put;
+
 	raw_spin_lock_init(&host->hw_lock);
 
 	ret = rzg3s_pcie_host_setup(host, rzg3s_pcie_init_irqdomain,
 				    rzg3s_pcie_teardown_irqdomain);
 	if (ret)
-		goto rpm_put;
+		goto power_resets_assert;
 
 	bridge->sysdata = host;
 	bridge->ops = &rzg3s_pcie_root_ops;
@@ -1922,12 +1922,13 @@ host_probe_teardown:
 	clk_disable_unprepare(host->port.refclk);
 	rzg3s_pcie_teardown_irqdomain(host);
 	host->data->config_deinit(host);
+power_resets_assert:
+	reset_control_bulk_assert(host->data->num_power_resets,
+				  host->power_resets);
 rpm_put:
 	pm_runtime_put_sync(dev);
 rpm_disable:
 	pm_runtime_disable(dev);
-	reset_control_bulk_assert(host->data->num_power_resets,
-				  host->power_resets);
 sysc_signal_restore:
 	/*
 	 * SYSC RST_RSM_B signal need to be asserted before turning off the
@@ -1948,10 +1949,6 @@ static int rzg3s_pcie_suspend_noirq(struct device *dev)
 	struct rzg3s_sysc *sysc = host->sysc;
 	int ret;
 
-	ret = pm_runtime_put_sync(dev);
-	if (ret)
-		return ret;
-
 	clk_disable_unprepare(port->refclk);
 
 	/* SoC-specific de-initialization */
@@ -1964,13 +1961,19 @@ static int rzg3s_pcie_suspend_noirq(struct device *dev)
 	if (ret)
 		goto config_reinit;
 
-	ret = rzg3s_sysc_config_func(sysc, RZG3S_SYSC_FUNC_ID_RST_RSM_B, 0);
+	ret = pm_runtime_put_sync(dev);
 	if (ret)
 		goto power_resets_restore;
+
+	ret = rzg3s_sysc_config_func(sysc, RZG3S_SYSC_FUNC_ID_RST_RSM_B, 0);
+	if (ret)
+		goto rpm_resume;
 
 	return 0;
 
 	/* Restore the previous state if any error happens */
+rpm_resume:
+	pm_runtime_resume_and_get(dev);
 power_resets_restore:
 	reset_control_bulk_deassert(data->num_power_resets,
 				    host->power_resets);
@@ -1980,7 +1983,6 @@ config_reinit:
 	data->config_post_init(host);
 refclk_restore:
 	clk_prepare_enable(port->refclk);
-	pm_runtime_resume_and_get(dev);
 	return ret;
 }
 
@@ -2009,18 +2011,18 @@ static int rzg3s_pcie_resume_noirq(struct device *dev)
 			goto assert_rst_rsm_b;
 	}
 
-	ret = rzg3s_pcie_power_resets_deassert(host);
+	ret = pm_runtime_resume_and_get(dev);
 	if (ret)
 		goto assert_rst_rsm_b;
 
-	ret = pm_runtime_resume_and_get(dev);
+	ret = rzg3s_pcie_power_resets_deassert(host);
 	if (ret)
-		goto assert_power_resets;
+		goto rpm_put;
 
 	ret = rzg3s_pcie_host_setup(host, rzg3s_pcie_msi_hw_setup,
 				    rzg3s_pcie_msi_hw_teardown);
 	if (ret)
-		goto rpm_put;
+		goto assert_power_resets;
 
 	return 0;
 
@@ -2028,11 +2030,11 @@ static int rzg3s_pcie_resume_noirq(struct device *dev)
 	 * If any error happens there is no way to recover the IP. Put it in the
 	 * lowest possible power state.
 	 */
-rpm_put:
-	pm_runtime_put_sync(dev);
 assert_power_resets:
 	reset_control_bulk_assert(data->num_power_resets,
 				  host->power_resets);
+rpm_put:
+	pm_runtime_put_sync(dev);
 assert_rst_rsm_b:
 	rzg3s_sysc_config_func(sysc, RZG3S_SYSC_FUNC_ID_RST_RSM_B, 0);
 	return ret;
