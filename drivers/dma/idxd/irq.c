@@ -331,10 +331,25 @@ static void process_evl_entry(struct idxd_device *idxd,
 			if (!entry_head->rcr && status == DSA_COMP_DRAIN_EVL)
 				return;
 
+			struct idxd_wq *wq = idxd->wqs[entry_head->wq_idx];
+
+			/*
+			 * The fault worker only does user-context work,
+			 * copying the completion record through the wq's
+			 * PASID xarray, which is populated by cdev opens
+			 * alone. A kernel WQ has no cdev workqueue and no
+			 * user contexts, so queueing could only warn and
+			 * drop the record. Note it and move on.
+			 */
+			if (!is_idxd_wq_user(wq) || !wq->wq) {
+				dev_warn_ratelimited(dev,
+					"EVL fault on kernel wq %d, status %#x\n",
+					wq->id, status);
+				return;
+			}
+
 			fault = kmem_cache_alloc(idxd->evl_cache, GFP_ATOMIC);
 			if (fault) {
-				struct idxd_wq *wq = idxd->wqs[entry_head->wq_idx];
-
 				fault->wq = wq;
 				fault->status = status;
 				memcpy(&fault->entry, entry_head, ent_size);
