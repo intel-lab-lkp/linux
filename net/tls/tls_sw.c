@@ -1933,6 +1933,12 @@ put_on_rx_list_err:
 			/* An empty record still marks a boundary. */
 			msg->msg_flags |= MSG_EOR;
 
+			/* Return data already copied instead of holding it
+			 * through a run of empty records.
+			 */
+			if (decrypted + copied >= target)
+				break;
+
 			/* A run of empty records advances neither loop bound,
 			 * and tls_rx_rec_wait() tests for a signal only after
 			 * sleeping.
