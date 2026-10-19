@@ -1165,6 +1165,37 @@ remove_pmd_table(pmd_t *pmd_start, unsigned long addr, unsigned long end,
 		update_page_count(PG_LEVEL_2M, -pages);
 }
 
+/* A hot-remove range may cover only part of a 1G page */
+static bool __meminit split_direct_pud(pud_t *pud)
+{
+	pmd_t *pmd = (pmd_t *)__get_free_page(GFP_KERNEL);
+	unsigned long pfn;
+	pgprot_t prot;
+	int i;
+
+	if (!pmd)
+		return false;
+
+	/* set_memory_*() may split or change it for the rest of the 1G */
+	spin_lock(&pgd_lock);
+	if (!pud_leaf(*pud)) {
+		spin_unlock(&pgd_lock);
+		free_page((unsigned long)pmd);
+		return true;
+	}
+	pfn = pud_pfn(*pud);
+	prot = pud_pgprot(*pud);
+	for (i = 0; i < PTRS_PER_PMD; i++)
+		set_pmd(pmd + i, pfn_pmd(pfn + i * (PMD_SIZE >> PAGE_SHIFT), prot));
+	/* Same frames and attributes, so no flush until remove_pagetable() */
+	pud_populate(&init_mm, pud, pmd);
+	spin_unlock(&pgd_lock);
+
+	update_page_count(PG_LEVEL_1G, -1);
+	update_page_count(PG_LEVEL_2M, PTRS_PER_PMD);
+	return true;
+}
+
 static void __meminit
 remove_pud_table(pud_t *pud_start, unsigned long addr, unsigned long end,
 		 struct vmem_altmap *altmap, bool direct)
@@ -1189,6 +1220,9 @@ remove_pud_table(pud_t *pud_start, unsigned long addr, unsigned long end,
 			pages++;
 			continue;
 		}
+
+		if (pud_leaf(*pud) && (!direct || !split_direct_pud(pud)))
+			continue;
 
 		pmd_base = pmd_offset(pud, 0);
 		remove_pmd_table(pmd_base, addr, next, direct, altmap);
