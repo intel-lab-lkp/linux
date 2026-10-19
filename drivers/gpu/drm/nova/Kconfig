@@ -12,6 +12,15 @@ config DRM_NOVA
 	  Choose this if you want to build the Nova DRM driver for Nvidia
 	  GSP-based GPUs.
 
-	  This driver is work in progress and may not be functional.
+	  This driver is under active upstream development and may not be
+	  functional. Its uAPI is intended to be developed upstream alongside
+	  the driver and is not yet stable. It may change incompatibly during
+	  development.
+
+	  Loading requires the acknowledge_unstable_uapi=1 module parameter, or
+	  nova-drm.acknowledge_unstable_uapi=1 on the kernel command line when
+	  built in.
+
+	  Enabling the driver taints the kernel.
 
 	  If M is selected, the module will be called nova-drm.
