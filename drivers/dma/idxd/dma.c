@@ -199,8 +199,18 @@ static int idxd_dma_terminate_all(struct dma_chan *c)
 {
 	struct idxd_wq *wq = to_idxd_wq(c);
 
+	guard(mutex)(&wq->wq_lock);
+	/*
+	 * A descriptor that completed with a revoked interrupt handle is
+	 * resubmitted by a work item. One submitted before this terminate
+	 * may reach that work after the flush, from the interrupt thread or
+	 * from a work item queued earlier, and is cancelled there rather
+	 * than run with its callback once the client may have freed its
+	 * memory.
+	 */
+	WRITE_ONCE(wq->terminate_gen, wq->terminate_gen + 1);
 	/* The device keeps running what the lists held. See synchronize. */
-	idxd_wq_flush_descs(wq, true);
+	__idxd_wq_flush_descs(wq, false, true);
 
 	return 0;
 }

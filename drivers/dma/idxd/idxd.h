@@ -229,6 +229,9 @@ struct idxd_wq {
 				 * time, so no slot is reused until a later
 				 * drain completes or a halt kills them
 				 */
+	u16 terminate_gen;	/* bumps on every terminate_all, under
+				 * wq_lock before its kill
+				 */
 	struct list_head quarantine;	/* descriptors a terminate_all took
 					 * off the lists while the device
 					 * still held them. Their slots, with
@@ -444,6 +447,9 @@ struct idxd_desc {
 	struct list_head list;
 	int id;
 	int cpu;
+	u16 terminate_gen;	/* the queue's terminate_gen at an
+				 * interrupt-armed submit
+				 */
 	struct idxd_wq *wq;
 };
 
@@ -832,8 +838,10 @@ void idxd_wq_quiesce(struct idxd_wq *wq);
 int idxd_wq_init_percpu_ref(struct idxd_wq *wq);
 void idxd_wq_free_irq(struct idxd_wq *wq);
 int idxd_wq_request_irq(struct idxd_wq *wq);
-void __idxd_wq_flush_descs(struct idxd_wq *wq, bool quarantine);
-void idxd_wq_flush_descs(struct idxd_wq *wq, bool quarantine);
+void __idxd_wq_flush_descs(struct idxd_wq *wq, bool keep_callbacks,
+			   bool quarantine);
+void idxd_wq_flush_descs(struct idxd_wq *wq, bool keep_callbacks,
+			 bool quarantine);
 void idxd_wq_quarantine_take(struct idxd_wq *wq, struct list_head *list);
 void idxd_wq_quarantine_put_back(struct idxd_wq *wq, struct list_head *list);
 void idxd_wq_quarantine_free(struct idxd_wq *wq, struct list_head *list);
@@ -841,6 +849,7 @@ void idxd_wq_halt_release(struct idxd_wq *wq);
 
 /* submission */
 int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc);
+int idxd_resubmit_desc(struct idxd_wq *wq, struct idxd_desc *desc);
 struct idxd_desc *idxd_alloc_desc(struct idxd_wq *wq, enum idxd_op_type optype);
 int idxd_enqcmds(struct idxd_wq *wq, void __iomem *portal, const void *desc);
 

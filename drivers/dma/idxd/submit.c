@@ -112,7 +112,7 @@ static struct idxd_desc *list_abort_desc(struct idxd_wq *wq, struct idxd_irq_ent
 }
 
 static void llist_abort_desc(struct idxd_wq *wq, struct idxd_irq_entry *ie,
-			     struct idxd_desc *desc)
+			     struct idxd_desc *desc, bool submitter_cleans)
 {
 	struct idxd_desc *d, *t, *found = NULL;
 	struct llist_node *head;
@@ -175,13 +175,23 @@ static void llist_abort_desc(struct idxd_wq *wq, struct idxd_irq_entry *ie,
 	 */
 	WARN_ON_ONCE(!found);
 	/*
-	 * Another driver's submitter cleans up all of its own: it learns
-	 * of the failure from the return value and its descriptor carries
-	 * its request where a dmaengine descriptor has its txd.
+	 * When the failing submission is a client's tx_submit(), the
+	 * client learns of it from the return value and owns the cleanup,
+	 * and a callback on top of that would complete the descriptor
+	 * twice. A dmaengine descriptor then only has its cookie completed
+	 * and its unmap data released here, with the callbacks stripped.
+	 * Nothing reads its record before the caller frees it, so it is
+	 * not marked. An internal resubmission reports the abort through
+	 * the callback, which its worker runs once the submit has dropped
+	 * its reference. Another driver's submitter cleans up all of its
+	 * own, and only dmaengine descriptors are resubmitted.
 	 */
-	if (found && idxd_wq_has_txd(wq))
+	if (found && submitter_cleans && idxd_wq_has_txd(wq)) {
+		desc->txd.callback = NULL;
+		desc->txd.callback_result = NULL;
 		idxd_dma_complete_txd(desc, IDXD_COMPLETE_ABORT, false,
 				      NULL, NULL);
+	}
 }
 
 /*
@@ -208,7 +218,8 @@ int idxd_enqcmds(struct idxd_wq *wq, void __iomem *portal, const void *desc)
 	return rc;
 }
 
-int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
+static int __idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc,
+			      bool submitter_cleans)
 {
 	struct idxd_device *idxd = wq->idxd;
 	struct idxd_irq_entry *ie = NULL;
@@ -240,6 +251,19 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
 		percpu_ref_put(&wq->wq_active);
 		return -EIO;
 	}
+	/*
+	 * A resubmission of a descriptor first submitted before a
+	 * terminate_all is cancelled. The terminate bumps the generation
+	 * before its kill, so the barrier above orders this read too. A
+	 * resubmission that read the old one is on the pending list when
+	 * the terminate's flush runs, since the kill waits for it, or has
+	 * failed with its stamp unchanged.
+	 */
+	if (!submitter_cleans &&
+	    desc->terminate_gen != READ_ONCE(wq->terminate_gen)) {
+		percpu_ref_put(&wq->wq_active);
+		return -ECANCELED;
+	}
 
 	portal = idxd_wq_portal_addr(wq);
 
@@ -250,6 +274,12 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
 	if (desc_flags & IDXD_OP_FLAG_RCI) {
 		ie = &wq->ie;
 		desc->hw->int_handle = ie->int_handle;
+		/*
+		 * A resubmission keeps the stamp of the client's submit, so
+		 * the resubmit work sees every terminate since then.
+		 */
+		if (submitter_cleans)
+			desc->terminate_gen = READ_ONCE(wq->terminate_gen);
 		llist_add(&desc->llnode, &ie->pending_llist);
 	}
 
@@ -275,7 +305,7 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
 			 * frees the descriptor.
 			 */
 			if (ie)
-				llist_abort_desc(wq, ie, desc);
+				llist_abort_desc(wq, ie, desc, submitter_cleans);
 			percpu_ref_put(&wq->wq_active);
 			return rc;
 		}
@@ -284,4 +314,15 @@ int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
 	percpu_ref_put(&wq->wq_active);
 	return 0;
 }
+/* A client submission: on failure the return value is the notification. */
+int idxd_submit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
+{
+	return __idxd_submit_desc(wq, desc, true);
+}
 EXPORT_SYMBOL_NS_GPL(idxd_submit_desc, "IDXD");
+
+/* The driver's own resubmission: a failure must still call the client back. */
+int idxd_resubmit_desc(struct idxd_wq *wq, struct idxd_desc *desc)
+{
+	return __idxd_submit_desc(wq, desc, false);
+}

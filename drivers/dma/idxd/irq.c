@@ -452,7 +452,7 @@ static void idxd_wqs_halt_flush(struct idxd_device *idxd, bool resurrect)
 			continue;
 		}
 		killed = idxd_wq_kill(wq);
-		__idxd_wq_flush_descs(wq, false);
+		__idxd_wq_flush_descs(wq, idxd_wq_refcount(wq) > 0, false);
 		idxd_wq_halt_release(wq);
 
 		if (resurrect) {
@@ -659,22 +659,27 @@ static void idxd_int_handle_resubmit_work(struct work_struct *work)
 	int rc;
 
 	desc->completion->status = 0;
-	rc = idxd_submit_desc(wq, desc);
+	rc = idxd_resubmit_desc(wq, desc);
 	if (rc < 0) {
 		dev_dbg(&wq->idxd->pdev->dev, "Failed to resubmit desc %d to wq %d.\n",
 			desc->id, wq->id);
 		/*
-		 * If the error is not -EAGAIN, it means the submission failed due to wq
-		 * has been killed instead of ENQCMDS failure. Here the driver needs to
-		 * notify the submitter of the failure by reporting abort status.
-		 *
-		 * -EAGAIN comes from ENQCMDS failure. idxd_submit_desc() will handle the
-		 * abort.
+		 * The submission failed because the device is not enabled,
+		 * because the wq has been killed or because ENQCMDS failed,
+		 * and in each case the descriptor is on no list. Here the
+		 * driver needs to notify the submitter of the failure by
+		 * reporting abort status. The submit has dropped its
+		 * wq_active reference by now, so a callback that submits or
+		 * terminates does not wait for it. A descriptor submitted
+		 * before a terminate_all, which cancels its resubmission,
+		 * gets no callback, since its client terminated it.
 		 */
-		if (rc != -EAGAIN) {
-			desc->completion->status = IDXD_COMP_DESC_ABORT;
-			idxd_desc_complete(desc, IDXD_COMPLETE_ABORT, false);
+		if (desc->terminate_gen != READ_ONCE(wq->terminate_gen)) {
+			desc->txd.callback = NULL;
+			desc->txd.callback_result = NULL;
 		}
+		desc->completion->status = IDXD_COMP_DESC_ABORT;
+		idxd_desc_complete(desc, IDXD_COMPLETE_ABORT, false);
 		idxd_free_desc(wq, desc);
 	}
 	kfree(irw);
