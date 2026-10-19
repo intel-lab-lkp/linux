@@ -151,7 +151,14 @@ static int snd_opl3_synth_event_input(struct snd_seq_event * ev, int direct,
 static void snd_opl3_synth_free_port(void *private_data)
 {
 	struct snd_opl3 *opl3 = private_data;
+	int i;
 
+	timer_shutdown_sync(&opl3->tlist);
+	/* Discard delayed notes before reusing the timer on rebind. */
+	scoped_guard(spinlock_irqsave, &opl3->voice_lock) {
+		for (i = 0; i < MAX_OPL3_VOICES; i++)
+			opl3->voices[i].note_off_check = 0;
+	}
 	snd_midi_channel_free_set(opl3->chset);
 }
 
