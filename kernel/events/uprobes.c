@@ -1032,8 +1032,8 @@ static void consumer_add(struct uprobe *uprobe, struct uprobe_consumer *uc)
 	static atomic64_t id;
 
 	down_write(&uprobe->consumer_rwsem);
-	list_add_rcu(&uc->cons_node, &uprobe->consumers);
 	uc->id = (__u64) atomic64_inc_return(&id);
+	list_add_rcu(&uc->cons_node, &uprobe->consumers);
 	up_write(&uprobe->consumer_rwsem);
 }
 
