@@ -1832,7 +1832,6 @@ int tls_sw_recvmsg(struct sock *sk,
 	bool is_peek = flags & MSG_PEEK;
 	bool rx_more = false;
 	bool released = true;
-	bool nodata = false;
 	bool zc_capable;
 
 	if (unlikely(flags & MSG_ERRQUEUE))
@@ -1867,14 +1866,6 @@ int tls_sw_recvmsg(struct sock *sk,
 		struct tls_decrypt_arg darg;
 		int to_decrypt, chunk;
 
-		/* A run of empty records advances neither loop bound, and
-		 * tls_rx_rec_wait() tests for a signal only after sleeping.
-		 */
-		if (nodata && signal_pending(current)) {
-			err = tls_rx_signal_err(sk, flags & MSG_DONTWAIT);
-			goto recv_end;
-		}
-
 		err = tls_rx_rec_wait(sk, flags & MSG_DONTWAIT,
 				      released, !!(decrypted + copied));
 		if (err <= 0)
@@ -1892,8 +1883,8 @@ int tls_sw_recvmsg(struct sock *sk,
 			darg.zc = true;
 
 		/* Do not use async mode if record is non-data or empty.
-		 * Once a record has gone async, recv_end discards the
-		 * error that ends a run of empty records.
+		 * The receive loop frees an empty record's skb, which an
+		 * async decrypt would still be using.
 		 */
 		if (tlm->control == TLS_RECORD_TYPE_DATA)
 			darg.async = ctx->async_capable && to_decrypt;
@@ -1930,8 +1921,28 @@ put_on_rx_list_err:
 		/* TLS 1.3 may have updated the length by more than overhead */
 		rxm = strp_msg(darg.skb);
 		chunk = rxm->full_len;
-		nodata = !chunk;
 		tls_rx_rec_done(ctx);
+
+		/* Keep an empty record off rx_list. On the zero-copy path
+		 * darg.skb is the strparser's, released by tls_rx_rec_done().
+		 */
+		if (!chunk && control == TLS_RECORD_TYPE_DATA) {
+			if (!darg.zc)
+				consume_skb(darg.skb);
+
+			/* An empty record still marks a boundary. */
+			msg->msg_flags |= MSG_EOR;
+
+			/* A run of empty records advances neither loop bound,
+			 * and tls_rx_rec_wait() tests for a signal only after
+			 * sleeping.
+			 */
+			if (signal_pending(current)) {
+				err = tls_rx_signal_err(sk, flags & MSG_DONTWAIT);
+				goto recv_end;
+			}
+			continue;
+		}
 
 		if (!darg.zc) {
 			bool partially_consumed = chunk > len;
