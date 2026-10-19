@@ -26,10 +26,25 @@
 static bool is_registered;
 static DEFINE_IDA(ctrl_ida);
 
+static bool serdev_device_has_modalias_node(const struct device *dev)
+{
+	if (ACPI_COMPANION(dev))
+		return true;
+
+	return dev->of_node && !dev_of_node_reused(dev);
+}
+
 static ssize_t modalias_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {
 	int len;
+
+	/*
+	 * Serdev devices instantiated by a driver instead of by firmware have
+	 * no node to derive a modalias from, which is not an error.
+	 */
+	if (!serdev_device_has_modalias_node(dev))
+		return 0;
 
 	len = acpi_device_modalias(dev, buf, PAGE_SIZE - 1);
 	if (len != -ENODEV)
@@ -50,6 +65,9 @@ static int serdev_device_uevent(const struct device *dev, struct kobj_uevent_env
 	int rc;
 
 	/* TODO: platform modalias */
+
+	if (!serdev_device_has_modalias_node(dev))
+		return 0;
 
 	rc = acpi_device_uevent_modalias(dev, env);
 	if (rc != -ENODEV)
