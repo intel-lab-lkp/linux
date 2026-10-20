@@ -224,7 +224,10 @@ The interface for a seccomp notification fd consists of two structures:
         __u64 id;
         __u32 pid;
         __u32 flags;
-        struct seccomp_data data;
+        union {
+            struct seccomp_data data;
+            struct seccomp_notif_result result;
+        };
     };
 
     struct seccomp_notif_resp {
@@ -280,6 +283,118 @@ such that when a user notification is received by the supervisor, the notifying
 process will ignore non-fatal signals until the response is sent. Signals that
 are sent prior to the notification being received by userspace are handled
 normally.
+
+System call results
+-------------------
+
+A supervisor that continues a system call can ask how the call turned out by
+adding ``SECCOMP_USER_NOTIF_FLAG_RESULT`` to
+``SECCOMP_USER_NOTIF_FLAG_CONTINUE`` in its response. The set of supported
+system calls may grow; so far it is ``fork()``, ``vfork()``, ``clone()`` and
+``clone3()``. The flag is refused with ``EINVAL`` for any other system call,
+for system call conventions the kernel cannot classify, and by kernels that
+do not support it, so trying it is a reliable probe.
+
+The outcome is reported once, as a notification with
+``SECCOMP_NOTIF_FLAG_RESULT`` set in ``flags`` and the same ``id`` as the
+continued notification. It is a record, not a request: it is not answered,
+and the task does not wait for it to be read. It is queued by the time the
+task returns to user space, so it arrives before the task's next
+notification. Its ``pid`` is the task that made the call, and ``result``
+replaces ``data``:
+
+.. code-block:: c
+
+    struct seccomp_notif_result {
+        __s32 nr;
+        __u32 arch;
+        __s64 val;
+        __u32 child_pid;
+        __u32 __reserved;
+        __u64 child_ino;
+    };
+
+``nr`` and ``arch`` identify the system call. ``val`` is its return value as
+the task saw it, including any change made at a ptrace syscall exit stop. A
+negative value is an error number:
+
+- One of the kernel internal ``-ERESTART*`` values (-512 to -516) means the
+  call did not complete because of a signal. It is then either restarted,
+  and passes through the filter again as a new notification, or fails with
+  ``EINTR``.
+- If a signal interrupted the notification after the response was sent, the
+  call never ran, and the record reports the error it fails with.
+- If the task exits before the call returns, ``val`` is ``-ESRCH``.
+
+Fork results
+~~~~~~~~~~~~
+
+A successful fork also fills in ``child_pid``, the new task in the listener's
+pid namespace, and ``child_ino``, its pidfs inode number.
+``SECCOMP_NOTIF_FLAG_THREAD`` is set if the new task is a thread. Both fields
+are zero if the fork failed.
+
+The record of a successful fork is queued before the new task first runs, and
+records are received before any pending notification, so the supervisor
+always hears of a task before it hears from it. The new task inherits the
+filter, so its own forks are reported the same way, and so on down the tree.
+
+The task may have run, exited and been reaped by the time the record is read,
+so its pid may already name another task. ``child_ino`` is never reused:
+opening a pidfd by it either yields exactly the new task or fails, in which
+case the task has already exited:
+
+.. code-block:: c
+
+    struct {
+        unsigned int handle_bytes;
+        int handle_type;
+        __u64 ino;
+    } fh = { sizeof(__u64), FILEID_KERNFS /* 0xfe */, rec.result.child_ino };
+
+    pidfd = open_by_handle_at(FD_PIDFS_ROOT, (struct file_handle *)&fh, 0);
+
+This needs no privileges. Together with the pidfd's exit notification it lets
+a supervisor track every task below it, including one that is killed before
+it makes a single notified system call.
+
+Holding a result
+~~~~~~~~~~~~~~~~
+
+A record is one-way: the task does not wait for it to be read. Where the
+supervisor must act on a result before the task goes on, the response can
+carry ``SECCOMP_USER_NOTIF_FLAG_HOLD`` together with
+``SECCOMP_USER_NOTIF_FLAG_RESULT`` and ``SECCOMP_USER_NOTIF_FLAG_CONTINUE``.
+It is supported for the same system calls as ``SECCOMP_USER_NOTIF_FLAG_RESULT``
+and refused with ``EINVAL`` for the others.
+
+The result is then reported as a held notification instead of a record:
+``flags`` has both ``SECCOMP_NOTIF_FLAG_RESULT`` and
+``SECCOMP_NOTIF_FLAG_HELD`` set, ``id`` is that of the continued
+notification, and ``result`` is filled in as above. The task does not return
+to user space until the held notification is answered, whether the call
+succeeded or failed.
+
+For the fork family, a successful fork is held before the new task is woken,
+so neither the parent nor the new task runs until the answer. This is for a
+supervisor that must know a new task before it executes anything at all, for
+example when tasks share memory and one could change another's arguments
+without a system call.
+
+A held notification is answered like any other, except:
+
+- The only accepted response is ``SECCOMP_USER_NOTIF_FLAG_CONTINUE`` with
+  ``val`` and ``error`` zero. Anything else fails with ``EINVAL``; the call
+  has completed and its result cannot be changed.
+- ``SECCOMP_IOCTL_NOTIF_ADDFD`` fails with ``EINVAL``.
+- ``SECCOMP_IOCTL_NOTIF_ID_VALID`` works as usual.
+
+The task waits killable, so non-fatal signals do not end the wait. If the task
+is killed before the supervisor received the held notification, it is turned
+into an ordinary record, so the supervisor still learns the result. A result
+reported because the task exits (``-ESRCH``) is never held. If the listener is
+closed, the task continues. For a fork, the new task is woken once the wait
+ends in every case.
 
 It is worth noting that ``struct seccomp_data`` contains the values of register
 arguments to the syscall, but does not contain pointers to memory. The task's
