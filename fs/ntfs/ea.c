@@ -129,6 +129,7 @@ static int ntfs_get_ea(struct inode *inode, const char *name, size_t name_len,
 		return PTR_ERR(p_ea_info);
 	if (ea_info_size != sizeof(struct ea_information)) {
 		kvfree(p_ea_info);
+		ntfs_report_file_metadata_error(inode, -EUCLEAN);
 		return -EUCLEAN;
 	}
 
@@ -168,6 +169,8 @@ static int ntfs_get_ea(struct inode *inode, const char *name, size_t name_len,
 	if (err == -ENOENT)
 		err = -ENODATA;
 free_ea_buf:
+	if (err == -EUCLEAN)
+		ntfs_report_file_metadata_error(inode, err);
 	kvfree(ea_buf);
 	return err;
 }
@@ -253,8 +256,10 @@ static int ntfs_set_ea(struct inode *inode, const char *name, size_t name_len,
 	if (err && err != -ENOENT)
 		return err;
 	/* Do not silently discard an orphaned attribute. */
-	if (exists != !err)
+	if (exists != !err) {
+		ntfs_report_file_metadata_error(inode, -EUCLEAN);
 		return -EUCLEAN;
+	}
 
 	if (exists) {
 		old_info = ntfs_attr_readall(ni, AT_EA_INFORMATION, NULL, 0,
@@ -307,9 +312,13 @@ static int ntfs_set_ea(struct inode *inode, const char *name, size_t name_len,
 
 	add_size = remove ? 0 : ALIGN(sizeof(*entry) + name_len + 1 + val_size, 4);
 	new_size = size - entry_size + add_size;
-	if (new_size && ntfs_attr_size_bounds_check(ni->vol, AT_EA, new_size)) {
-		err = -EFBIG;
-		goto out;
+	if (new_size) {
+		err = ntfs_attr_size_bounds_check(ni->vol, AT_EA, new_size);
+		if (err) {
+			if (err == -ERANGE)
+				err = -EFBIG;
+			goto out;
+		}
 	}
 	if (new_size) {
 		ea = kvzalloc(new_size, GFP_NOFS);
@@ -366,7 +375,10 @@ static int ntfs_set_ea(struct inode *inode, const char *name, size_t name_len,
 		info_err = ntfs_ea_update_attr(ni, AT_EA_INFORMATION,
 					       (char *)old_info, sizeof(info));
 		if (ea_err || info_err) {
-			NVolSetErrors(ni->vol);
+			if (ea_err)
+				ntfs_report_file_metadata_error(inode, ea_err);
+			if (info_err)
+				ntfs_report_file_metadata_error(inode, info_err);
 			NVolSetShutdown(ni->vol);
 			ntfs_error(inode->i_sb,
 				   "Failed to restore EAs of inode 0x%llx (%d, %d); shutting down.",
@@ -385,6 +397,8 @@ done:
 	else
 		NInoClearHasEA(ni);
 out:
+	if (err == -EUCLEAN)
+		ntfs_report_file_metadata_error(inode, err);
 	kvfree(ea);
 	kvfree(old_ea);
 	kvfree(old_info);
@@ -492,10 +506,12 @@ int ntfs_ea_get_linuxflags(struct inode *inode)
 			  &value, sizeof(value));
 	if (err == -ENODATA)
 		return 0;
-	if (err < 0)
-		return err == -ERANGE ? -EUCLEAN : err;
-	if (err != sizeof(value))
+	if (err < 0 && err != -ERANGE)
+		return err;
+	if (err != sizeof(value)) {
+		ntfs_report_file_metadata_error(inode, -EUCLEAN);
 		return -EUCLEAN;
+	}
 
 	ni->linuxflags = le32_to_cpu(value);
 	if (ni->linuxflags & NTFS_LINUXFLAGS_IMMUTABLE)
@@ -605,6 +621,8 @@ ssize_t ntfs_listxattr(struct dentry *dentry, char *buffer, size_t size)
 	} while (next > 0 && offset < ea_info_qsize);
 
 out:
+	if (err == -EUCLEAN)
+		ntfs_report_file_metadata_error(inode, err);
 	mutex_unlock(&NTFS_I(inode)->mrec_lock);
 	kvfree(ea_info);
 	kvfree(ea_buf);
@@ -694,7 +712,8 @@ static int ntfs_new_attr_flags(struct ntfs_inode *ni, __le32 fattr)
 	err = ntfs_attr_lookup(ni->type, ni->name, ni->name_len,
 			CASE_SENSITIVE, 0, NULL, 0, ctx);
 	if (err) {
-		err = -EINVAL;
+		if (err == -ENOENT)
+			err = -EINVAL;
 		goto err_out;
 	}
 
@@ -744,7 +763,11 @@ static int ntfs_new_attr_flags(struct ntfs_inode *ni, __le32 fattr)
 				CASE_SENSITIVE,
 				0, NULL, 0, ctx);
 		if (err) {
-			err = -EINVAL;
+			if (err == -ENOENT) {
+				err = -EFSCORRUPTED;
+				ntfs_report_file_metadata_error(VFS_I(ni),
+								-EFSCORRUPTED);
+			}
 			goto err_out;
 		}
 		a = ctx->attr;
@@ -770,6 +793,8 @@ static int ntfs_new_attr_flags(struct ntfs_inode *ni, __le32 fattr)
 	mp_size = ntfs_get_size_for_mapping_pairs(ni->vol, ni->runlist.rl, 0, -1, -1);
 	if (unlikely(mp_size < 0)) {
 		err = mp_size;
+		if (err == -EFSCORRUPTED)
+			ntfs_report_file_metadata_error(VFS_I(ni), err);
 		ntfs_debug("Failed to get size for mapping pairs array, error code %i.\n", err);
 		goto err_out;
 	}
@@ -1036,12 +1061,17 @@ struct posix_acl *ntfs_get_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 	mutex_unlock(&ni->mrec_lock);
 
 	/* Translate extended attribute to acl. */
-	if (err >= 0)
+	if (err >= 0) {
 		acl = posix_acl_from_xattr(&init_user_ns, buf, err);
-	else if (err == -ENODATA)
+		if (IS_ERR(acl) && PTR_ERR(acl) == -EINVAL) {
+			acl = ERR_PTR(-EFSCORRUPTED);
+			ntfs_report_file_metadata_error(inode, -EFSCORRUPTED);
+		}
+	} else if (err == -ENODATA) {
 		acl = NULL;
-	else
+	} else {
 		acl = ERR_PTR(err);
+	}
 
 	if (!IS_ERR(acl))
 		set_cached_acl(inode, type, acl);
@@ -1118,8 +1148,11 @@ static noinline int ntfs_set_acl_ex(struct mnt_idmap *idmap,
 			if (err != old_len) {
 				kfree(old_value);
 				old_value = NULL;
-				if (err >= 0)
-					err = -EIO;
+				if (err >= 0) {
+					err = -EFSCORRUPTED;
+					ntfs_report_file_metadata_error(inode,
+									-EFSCORRUPTED);
+				}
 				goto out_unlock;
 			}
 		} else if (old_len != -ENODATA) {
@@ -1163,12 +1196,9 @@ out_unlock:
 							XATTR_REPLACE, NULL);
 				}
 				if (undo_err) {
-					/*
-					 * Record a failed rollback so the next
-					 * persistence point marks the volume
-					 * dirty.  Run chkdsk.
-					 */
-					NVolSetErrors(NTFS_I(inode)->vol);
+					/* The ACL and WSL mode may now disagree. */
+					ntfs_report_file_metadata_error(inode,
+									undo_err);
 					ntfs_error(inode->i_sb,
 						   "Failed to undo the ACL xattr: %d",
 						   undo_err);
