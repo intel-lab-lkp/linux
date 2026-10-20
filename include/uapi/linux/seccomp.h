@@ -72,11 +72,39 @@ struct seccomp_notif_sizes {
 	__u16 seccomp_data;
 };
 
+/**
+ * struct seccomp_notif_result - the outcome of a continued system call
+ * @nr: the system call number, as in struct seccomp_data
+ * @arch: the system call convention, as in struct seccomp_data
+ * @val: the return value the task saw
+ * @child_pid: for the fork family, the new task in the listener's pid
+ *             namespace, or 0 if the call failed
+ * @__reserved: always 0
+ * @child_ino: for the fork family, the pidfs inode number of the new task,
+ *             or 0 if the call failed. Unlike @child_pid it is never
+ *             reused, so it names the task race free.
+ */
+struct seccomp_notif_result {
+	__s32 nr;
+	__u32 arch;
+	__s64 val;
+	__u32 child_pid;
+	__u32 __reserved;
+	__u64 child_ino;
+};
+
+/* Valid flags for struct seccomp_notif */
+#define SECCOMP_NOTIF_FLAG_RESULT	(1UL << 0) /* @result is valid, not @data */
+#define SECCOMP_NOTIF_FLAG_THREAD	(1UL << 1) /* the new task is a thread */
+
 struct seccomp_notif {
 	__u64 id;
 	__u32 pid;
 	__u32 flags;
-	struct seccomp_data data;
+	union {
+		struct seccomp_data data;
+		struct seccomp_notif_result result;
+	};
 };
 
 /*

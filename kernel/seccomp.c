@@ -38,6 +38,7 @@
 #include <linux/file.h>
 #include <linux/filter.h>
 #include <linux/pid.h>
+#include <linux/pidfs.h>
 #include <linux/ptrace.h>
 #include <linux/capability.h>
 #include <linux/uaccess.h>
@@ -133,6 +134,30 @@ struct seccomp_kaddfd {
 };
 
 /**
+ * struct seccomp_kresult - a one-way record of a continued system call's
+ *			    outcome
+ *
+ * @id: The id of the notification whose reply asked for this record.
+ * @task: The task that made the system call.
+ * @child: The new task, for a successful call in the fork family.
+ * @nr: The system call number.
+ * @arch: The system call convention.
+ * @val: The system call's return value.
+ * @flags: SECCOMP_NOTIF_FLAG_* flags to report.
+ * @list: list_head for chaining onto notification->results.
+ */
+struct seccomp_kresult {
+	u64 id;
+	struct pid *task;
+	struct pid *child;
+	int nr;
+	u32 arch;
+	long val;
+	u32 flags;
+	struct list_head list;
+};
+
+/**
  * struct notification - container for seccomp userspace notifications. Since
  * most seccomp filters will not have notification listeners attached and this
  * structure is fairly large, we store the notification-specific stuff in a
@@ -144,6 +169,8 @@ struct seccomp_kaddfd {
  * @flags: A set of SECCOMP_USER_NOTIF_FD_* flags.
  * @next_id: The id of the next request.
  * @notifications: A list of struct seccomp_knotif elements.
+ * @results: A list of struct seccomp_kresult elements, delivered before any
+ *	     notification.
  */
 
 struct notification {
@@ -151,6 +178,7 @@ struct notification {
 	u32 flags;
 	u64 next_id;
 	struct list_head notifications;
+	struct list_head results;
 };
 
 #ifdef SECCOMP_ARCH_NATIVE
@@ -1446,8 +1474,19 @@ out:
 }
 
 #ifdef CONFIG_SECCOMP_FILTER
+static void seccomp_kresult_free(struct seccomp_kresult *kres)
+{
+	put_pid(kres->task);
+	put_pid(kres->child);
+	kfree(kres);
+}
+
 static void seccomp_notify_free(struct seccomp_filter *filter)
 {
+	struct seccomp_kresult *kres, *tmp;
+
+	list_for_each_entry_safe(kres, tmp, &filter->notif->results, list)
+		seccomp_kresult_free(kres);
 	kfree(filter->notif);
 	filter->notif = NULL;
 }
@@ -1547,10 +1586,62 @@ static int recv_wait_event(struct seccomp_filter *filter)
 	return 0;
 }
 
+static int seccomp_fill_result(struct seccomp_notif *unotif,
+			       struct seccomp_kresult *kres)
+{
+	int ret;
+
+	/*
+	 * A pidfd can only be opened by inode number once the struct pid is
+	 * registered with pidfs. A child that is already reaped cannot be
+	 * registered anymore; the supervisor finds out when opening fails.
+	 */
+	ret = pidfs_register_pid(kres->child);
+	if (ret && ret != -ESRCH)
+		return ret;
+
+	unotif->id = kres->id;
+	unotif->pid = pid_vnr(kres->task);
+	unotif->flags = SECCOMP_NOTIF_FLAG_RESULT | kres->flags;
+	unotif->result.nr = kres->nr;
+	unotif->result.arch = kres->arch;
+	unotif->result.val = kres->val;
+	if (kres->child) {
+		unotif->result.child_pid = pid_vnr(kres->child);
+		unotif->result.child_ino = kres->child->ino;
+	}
+	return 0;
+}
+
+static long seccomp_copy_result(struct seccomp_filter *filter,
+				struct seccomp_kresult *kres,
+				const struct seccomp_notif *unotif,
+				void __user *buf)
+{
+	if (!copy_to_user(buf, unotif, sizeof(*unotif))) {
+		seccomp_kresult_free(kres);
+		return 0;
+	}
+
+	/* Put the record back at the head so that no record is lost. */
+	mutex_lock(&filter->notify_lock);
+	if (filter->notif) {
+		list_add(&kres->list, &filter->notif->results);
+		atomic_inc(&filter->notif->requests);
+		wake_up_poll(&filter->wqh, EPOLLIN | EPOLLRDNORM);
+		kres = NULL;
+	}
+	mutex_unlock(&filter->notify_lock);
+	if (kres)
+		seccomp_kresult_free(kres);
+	return -EFAULT;
+}
+
 static long seccomp_notify_recv(struct seccomp_filter *filter,
 				void __user *buf)
 {
 	struct seccomp_knotif *knotif = NULL, *cur;
+	struct seccomp_kresult *kres;
 	struct seccomp_notif unotif;
 	ssize_t ret;
 
@@ -1568,6 +1659,19 @@ static long seccomp_notify_recv(struct seccomp_filter *filter,
 		return ret;
 
 	mutex_lock(&filter->notify_lock);
+	kres = list_first_entry_or_null(&filter->notif->results,
+					struct seccomp_kresult, list);
+	if (kres) {
+		ret = seccomp_fill_result(&unotif, kres);
+		if (ret < 0) {
+			atomic_inc(&filter->notif->requests);
+			kres = NULL;
+		} else {
+			list_del(&kres->list);
+		}
+		goto out;
+	}
+
 	list_for_each_entry(cur, &filter->notif->notifications, list) {
 		if (cur->state == SECCOMP_NOTIFY_INIT) {
 			knotif = cur;
@@ -1594,6 +1698,9 @@ static long seccomp_notify_recv(struct seccomp_filter *filter,
 	ret = 0;
 out:
 	mutex_unlock(&filter->notify_lock);
+
+	if (kres)
+		return seccomp_copy_result(filter, kres, &unotif, buf);
 
 	if (ret == 0 && copy_to_user(buf, &unotif, sizeof(unotif))) {
 		ret = -EFAULT;
@@ -1862,6 +1969,9 @@ static __poll_t seccomp_notify_poll(struct file *file,
 	if (mutex_lock_interruptible(&filter->notify_lock) < 0)
 		return EPOLLERR;
 
+	if (!list_empty(&filter->notif->results))
+		ret |= EPOLLIN | EPOLLRDNORM;
+
 	list_for_each_entry(cur, &filter->notif->notifications, list) {
 		if (cur->state == SECCOMP_NOTIFY_INIT)
 			ret |= EPOLLIN | EPOLLRDNORM;
@@ -1897,6 +2007,7 @@ static struct file *init_listener(struct seccomp_filter *filter)
 
 	filter->notif->next_id = get_random_u64();
 	INIT_LIST_HEAD(&filter->notif->notifications);
+	INIT_LIST_HEAD(&filter->notif->results);
 
 	ret = anon_inode_getfile("seccomp notify", &seccomp_notify_ops,
 				 filter, O_RDWR);
