@@ -24,10 +24,12 @@
 __le16 I30[5] = { cpu_to_le16('$'), cpu_to_le16('I'),
 		cpu_to_le16('3'),	cpu_to_le16('0'), 0 };
 
-static inline u64 ntfs_check_mref(u64 mref)
+static inline u64 ntfs_check_mref(struct ntfs_inode *dir_ni, u64 mref)
 {
-	if (IS_ERR_MREF(mref))
-		return ERR_MREF(-EIO);
+	if (IS_ERR_MREF(mref)) {
+		ntfs_report_file_metadata_error(VFS_I(dir_ni), -EFSCORRUPTED);
+		return ERR_MREF(-EFSCORRUPTED);
+	}
 	return mref;
 }
 
@@ -113,7 +115,9 @@ u64 ntfs_lookup_inode_by_name(struct ntfs_inode *dir_ni, const __le16 *uname,
 			ntfs_error(sb,
 				"Index root attribute missing in directory inode 0x%llx.",
 				dir_ni->mft_no);
-			err = -EIO;
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(dir_ni),
+							-EFSCORRUPTED);
 		}
 		goto err_out;
 	}
@@ -187,7 +191,7 @@ found_it:
 			mref = le64_to_cpu(ie->data.dir.indexed_file);
 			ntfs_attr_put_search_ctx(ctx);
 			unmap_mft_record(dir_ni);
-			return ntfs_check_mref(mref);
+			return ntfs_check_mref(dir_ni, mref);
 		}
 		/*
 		 * For a case insensitive mount, we also perform a case
@@ -282,7 +286,7 @@ found_it:
 		if (name) {
 			ntfs_attr_put_search_ctx(ctx);
 			unmap_mft_record(dir_ni);
-			return ntfs_check_mref(name->mref);
+			return ntfs_check_mref(dir_ni, name->mref);
 		}
 		ntfs_debug("Entry not found.");
 		err = -ENOENT;
@@ -320,6 +324,8 @@ descend_into_child_node:
 		ntfs_error(sb, "Failed to map directory index page, error %ld.",
 				-PTR_ERR(folio));
 		err = PTR_ERR(folio);
+		if (err == -EIO)
+			ntfs_report_file_metadata_error(VFS_I(dir_ni), err);
 		goto err_out;
 	}
 
@@ -344,14 +350,14 @@ fast_descend_into_child_node:
 		ntfs_error(sb,
 			"Out of bounds check failed. Corrupt directory inode 0x%llx or driver bug.",
 			dir_ni->mft_no);
-		goto unm_err_out;
+		goto unm_corrupt;
 	}
 	index_end = (u8 *)ia + dir_ni->itype.index.block_size;
 	if (index_end > kaddr + PAGE_SIZE) {
 		ntfs_error(sb,
 			   "Index buffer (VCN 0x%llx) of directory inode 0x%llx crosses page boundary. Impossible! Cannot access! This is probably a bug in the driver.",
 			   vcn, dir_ni->mft_no);
-		goto unm_err_out;
+		goto unm_corrupt;
 	}
 	err = post_read_mst_fixup((struct ntfs_record *)ia,
 				  dir_ni->itype.index.block_size);
@@ -359,14 +365,14 @@ fast_descend_into_child_node:
 		ntfs_error(sb,
 			   "MST fixup failed for index block vcn %lld in directory inode 0x%llx.",
 			   vcn, dir_ni->mft_no);
-		goto unm_err_out;
+		goto unm_corrupt;
 	}
 	err = ntfs_index_block_inconsistent(vol, ia,
 					    dir_ni->itype.index.block_size,
 					    vcn, COLLATION_FILE_NAME,
 					    dir_ni->mft_no);
 	if (err)
-		goto unm_err_out;
+		goto unm_corrupt;
 	index_end = (u8 *)&ia->index + le32_to_cpu(ia->index.index_length);
 	/* The first index entry. */
 	ie = (struct index_entry *)((u8 *)&ia->index +
@@ -385,7 +391,7 @@ fast_descend_into_child_node:
 			break;
 		/* Key length should not be zero if it is not last entry. */
 		if (!ie->key_length)
-			goto unm_err_out;
+			goto unm_corrupt;
 		/*
 		 * We perform a case sensitive comparison and if that matches
 		 * we are done and return the mft reference of the inode (i.e.
@@ -429,7 +435,7 @@ found_it2:
 			mref = le64_to_cpu(ie->data.dir.indexed_file);
 			kfree(kaddr);
 			iput(ia_vi);
-			return ntfs_check_mref(mref);
+			return ntfs_check_mref(dir_ni, mref);
 		}
 		/*
 		 * For a case insensitive mount, we also perform a case
@@ -524,7 +530,7 @@ found_it2:
 			ntfs_error(sb,
 				"Index entry with child node found in a leaf node in directory inode 0x%llx.",
 				dir_ni->mft_no);
-			goto unm_err_out;
+			goto unm_corrupt;
 		}
 		/* Child node present, descend into it. */
 		old_vcn = vcn;
@@ -544,7 +550,7 @@ found_it2:
 		}
 		ntfs_error(sb, "Negative child node vcn in directory inode 0x%llx.",
 				dir_ni->mft_no);
-		goto unm_err_out;
+		goto unm_corrupt;
 	}
 	/*
 	 * No child node present, return -ENOENT, unless we have got a matching
@@ -554,15 +560,19 @@ found_it2:
 	if (name) {
 		kfree(kaddr);
 		iput(ia_vi);
-		return ntfs_check_mref(name->mref);
+		return ntfs_check_mref(dir_ni, name->mref);
 	}
 	ntfs_debug("Entry not found.");
 	err = -ENOENT;
+	goto unm_err_out;
+unm_corrupt:
+	err = -EFSCORRUPTED;
+	ntfs_report_file_metadata_error(VFS_I(dir_ni), -EFSCORRUPTED);
 unm_err_out:
 	kfree(kaddr);
 err_out:
 	if (!err)
-		err = -EIO;
+		err = -EFSCORRUPTED;
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
 	if (m)
@@ -573,6 +583,7 @@ err_out:
 		iput(ia_vi);
 	return ERR_MREF(err);
 dir_err_out:
+	ntfs_report_file_metadata_error(VFS_I(dir_ni), -EFSCORRUPTED);
 	ntfs_error(sb, "Corrupt directory.  Aborting lookup.");
 	goto err_out;
 }
@@ -640,7 +651,7 @@ static inline int ntfs_filldir(struct ntfs_volume *vol,
 	}
 	mref = MREF_LE(ie->data.dir.indexed_file);
 	if (ie->key.file_name.file_attributes & FILE_ATTR_REPARSE_POINT)
-		dt_type = ntfs_reparse_tag_dt_types(vol, mref);
+		dt_type = ntfs_reparse_tag_dt_types(VFS_I(ndir), mref);
 	else if (ie->key.file_name.file_attributes &
 			FILE_ATTR_DUP_FILE_NAME_INDEX_PRESENT)
 		dt_type = DT_DIR;
@@ -844,12 +855,17 @@ static int ntfs_readdir(struct file *file, struct dir_context *actor)
 	}
 
 	/* Find the index root attribute in the mft record. */
-	if (ntfs_attr_lookup(AT_INDEX_ROOT, I30, 4, CASE_SENSITIVE, 0, NULL, 0,
-				ctx)) {
+	err = ntfs_attr_lookup(AT_INDEX_ROOT, I30, 4, CASE_SENSITIVE, 0,
+			       NULL, 0, ctx);
+	if (err) {
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(ndir),
+							-EFSCORRUPTED);
+		}
 		ntfs_error(sb, "Index root attribute missing in directory inode %llu",
 				ndir->mft_no);
 		ntfs_attr_put_search_ctx(ctx);
-		err = -ENOMEM;
 		goto out;
 	}
 
@@ -867,7 +883,8 @@ static int ntfs_readdir(struct file *file, struct dir_context *actor)
 	if (ictx->block_size < NTFS_BLOCK_SIZE) {
 		ntfs_error(sb, "Index block size (%d) is smaller than the sector size (%d)",
 				ictx->block_size, NTFS_BLOCK_SIZE);
-		err = -EIO;
+		ntfs_report_file_metadata_error(VFS_I(ndir), -EFSCORRUPTED);
+		err = -EFSCORRUPTED;
 		goto out;
 	}
 
@@ -1054,6 +1071,11 @@ int ntfs_check_empty_dir(struct ntfs_inode *ni, struct mft_record *ni_mrec)
 	ret = ntfs_attr_lookup(AT_INDEX_ROOT, I30, 4, CASE_SENSITIVE, 0, NULL,
 				0, ctx);
 	if (ret) {
+		if (ret == -ENOENT) {
+			ret = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							-EFSCORRUPTED);
+		}
 		ntfs_error(ni->vol->sb, "Index root attribute missing in directory inode %llu",
 				ni->mft_no);
 		ntfs_attr_put_search_ctx(ctx);
@@ -1158,8 +1180,13 @@ static int ntfs_dir_fsync(struct file *filp, loff_t start, loff_t end,
 			continue;
 
 		parent_vi = ntfs_iget(vi->i_sb, MREF_LE(fn->parent_directory));
-		if (IS_ERR(parent_vi))
+		if (IS_ERR(parent_vi)) {
+			if (PTR_ERR(parent_vi) == -ENOENT && !NInoBeingDeleted(ni)) {
+				ntfs_report_file_metadata_error(vi,
+								-EFSCORRUPTED);
+			}
 			continue;
+		}
 		mutex_lock_nested(&NTFS_I(parent_vi)->mrec_lock, NTFS_INODE_MUTEX_NORMAL);
 		ia_vi = ntfs_index_iget(parent_vi, I30, 4);
 		mutex_unlock(&NTFS_I(parent_vi)->mrec_lock);

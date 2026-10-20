@@ -396,16 +396,19 @@ out:
 	return err;
 }
 
-unsigned int ntfs_reparse_tag_dt_types(struct ntfs_volume *vol, unsigned long mref)
+unsigned int ntfs_reparse_tag_dt_types(struct inode *dir, unsigned long mref)
 {
 	s64 attr_size = 0;
 	struct reparse_point *reparse_attr;
 	unsigned int dt_type = DT_UNKNOWN;
 	struct inode *vi;
 
-	vi = ntfs_iget(vol->sb, mref);
-	if (IS_ERR(vi))
+	vi = ntfs_iget(dir->i_sb, mref);
+	if (IS_ERR(vi)) {
+		if (PTR_ERR(vi) == -ENOENT)
+			ntfs_report_file_metadata_error(dir, -EFSCORRUPTED);
 		return DT_UNKNOWN;
+	}
 
 	reparse_attr = (struct reparse_point *)ntfs_attr_readall(NTFS_I(vi),
 			AT_REPARSE_POINT, NULL, 0, &attr_size);
