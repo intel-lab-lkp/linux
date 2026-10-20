@@ -500,18 +500,167 @@ DEFINE_EVENT(nfsd_io_class, nfsd_##name,	\
 
 DEFINE_NFSD_IO_EVENT(read_start);
 DEFINE_NFSD_IO_EVENT(read_splice);
-DEFINE_NFSD_IO_EVENT(read_vector);
 DEFINE_NFSD_IO_EVENT(read_direct);
 DEFINE_NFSD_IO_EVENT(read_io_done);
 DEFINE_NFSD_IO_EVENT(read_done);
 DEFINE_NFSD_IO_EVENT(write_start);
 DEFINE_NFSD_IO_EVENT(write_opened);
-DEFINE_NFSD_IO_EVENT(write_direct);
-DEFINE_NFSD_IO_EVENT(write_vector);
 DEFINE_NFSD_IO_EVENT(write_io_done);
 DEFINE_NFSD_IO_EVENT(write_done);
+
+DECLARE_EVENT_CLASS(nfsd_io_kiocb_class,
+	TP_PROTO(struct svc_rqst *rqstp,
+		 struct svc_fh	*fhp,
+		 u64		offset,
+		 u32		len,
+		 int		ki_flags),
+	TP_ARGS(rqstp, fhp, offset, len, ki_flags),
+	TP_STRUCT__entry(
+		__field(u32, xid)
+		__field(u32, fh_hash)
+		__field(u64, offset)
+		__field(u32, len)
+	),
+	TP_fast_assign(
+		__entry->xid = be32_to_cpu(rqstp->rq_xid);
+		__entry->fh_hash = knfsd_fh_hash(&fhp->fh_handle);
+		__entry->offset = offset;
+		__entry->len = len;
+	),
+	TP_printk("xid=0x%08x fh_hash=0x%08x offset=%llu len=%u",
+		  __entry->xid, __entry->fh_hash,
+		  __entry->offset, __entry->len)
+)
+
+#define DEFINE_NFSD_IO_KIOCB_EVENT(name, cond)			\
+DEFINE_EVENT_CONDITION(nfsd_io_kiocb_class, nfsd_##name,	\
+	TP_PROTO(struct svc_rqst *rqstp,			\
+		 struct svc_fh	*fhp,				\
+		 u64		offset,				\
+		 u32		len,				\
+		 int		ki_flags),			\
+	TP_ARGS(rqstp, fhp, offset, len, ki_flags),		\
+	TP_CONDITION(cond))
+
+DEFINE_NFSD_IO_KIOCB_EVENT(read_vector, !(ki_flags & IOCB_DONTCACHE));
+DEFINE_NFSD_IO_KIOCB_EVENT(read_dontcache, ki_flags & IOCB_DONTCACHE);
+DEFINE_NFSD_IO_KIOCB_EVENT(write_direct, ki_flags & IOCB_DIRECT);
+DEFINE_NFSD_IO_KIOCB_EVENT(write_dontcache,
+			   (ki_flags & (IOCB_DIRECT | IOCB_DONTCACHE)) ==
+			   IOCB_DONTCACHE);
+DEFINE_NFSD_IO_KIOCB_EVENT(write_vector,
+			   !(ki_flags & (IOCB_DIRECT | IOCB_DONTCACHE)));
 DEFINE_NFSD_IO_EVENT(commit_start);
 DEFINE_NFSD_IO_EVENT(commit_done);
+
+DECLARE_EVENT_CLASS(nfsd_write_dio_class,
+	TP_PROTO(struct svc_rqst *rqstp,
+		 struct svc_fh *fhp,
+		 u64 offset,
+		 u32 len,
+		 u32 offset_align,
+		 u32 mem_align,
+		 u32 mem_offset,
+		 u32 start,
+		 u32 middle,
+		 u32 end),
+	TP_ARGS(rqstp, fhp, offset, len, offset_align, mem_align, mem_offset,
+		start, middle, end),
+	TP_STRUCT__entry(
+		__field(u32, xid)
+		__field(u32, fh_hash)
+		__field(u64, offset)
+		__field(u32, len)
+		__field(u32, offset_align)
+		__field(u32, mem_align)
+		__field(u32, mem_offset)
+		__field(u32, start)
+		__field(u32, middle)
+		__field(u32, end)
+	),
+	TP_fast_assign(
+		__entry->xid = be32_to_cpu(rqstp->rq_xid);
+		__entry->fh_hash = knfsd_fh_hash(&fhp->fh_handle);
+		__entry->offset = offset;
+		__entry->len = len;
+		__entry->offset_align = offset_align;
+		__entry->mem_align = mem_align;
+		__entry->mem_offset = mem_offset;
+		__entry->start = start;
+		__entry->middle = middle;
+		__entry->end = end;
+	),
+	TP_printk("xid=0x%08x fh_hash=0x%08x offset=%llu len=%u "
+		  "offset_align=%u mem_align=%u mem_offset=%u "
+		  "start=%u middle=%u end=%u",
+		  __entry->xid, __entry->fh_hash,
+		  __entry->offset, __entry->len,
+		  __entry->offset_align, __entry->mem_align,
+		  __entry->mem_offset,
+		  __entry->start, __entry->middle, __entry->end)
+);
+
+#define DEFINE_NFSD_WRITE_DIO_EVENT(name)				\
+DEFINE_EVENT(nfsd_write_dio_class, nfsd_write_dio_##name,		\
+	TP_PROTO(struct svc_rqst *rqstp,				\
+		 struct svc_fh *fhp,					\
+		 u64 offset,						\
+		 u32 len,						\
+		 u32 offset_align,					\
+		 u32 mem_align,						\
+		 u32 mem_offset,					\
+		 u32 start,						\
+		 u32 middle,						\
+		 u32 end),						\
+	TP_ARGS(rqstp, fhp, offset, len, offset_align, mem_align,	\
+		mem_offset, start, middle, end))
+
+DEFINE_NFSD_WRITE_DIO_EVENT(direct);
+DEFINE_NFSD_WRITE_DIO_EVENT(no_alignment);
+DEFINE_NFSD_WRITE_DIO_EVENT(too_small);
+DEFINE_NFSD_WRITE_DIO_EVENT(no_middle);
+DEFINE_NFSD_WRITE_DIO_EVENT(mem_misaligned);
+
+DECLARE_EVENT_CLASS(nfsd_read_dio_class,
+	TP_PROTO(struct svc_rqst *rqstp,
+		 struct svc_fh *fhp,
+		 u64 offset,
+		 u32 len,
+		 u32 offset_align),
+	TP_ARGS(rqstp, fhp, offset, len, offset_align),
+	TP_STRUCT__entry(
+		__field(u32, xid)
+		__field(u32, fh_hash)
+		__field(u64, offset)
+		__field(u32, len)
+		__field(u32, offset_align)
+	),
+	TP_fast_assign(
+		__entry->xid = be32_to_cpu(rqstp->rq_xid);
+		__entry->fh_hash = knfsd_fh_hash(&fhp->fh_handle);
+		__entry->offset = offset;
+		__entry->len = len;
+		__entry->offset_align = offset_align;
+	),
+	TP_printk("xid=0x%08x fh_hash=0x%08x offset=%llu len=%u "
+		  "offset_align=%u",
+		  __entry->xid, __entry->fh_hash,
+		  __entry->offset, __entry->len, __entry->offset_align)
+);
+
+#define DEFINE_NFSD_READ_DIO_EVENT(name)				\
+DEFINE_EVENT(nfsd_read_dio_class, nfsd_read_dio_##name,		\
+	TP_PROTO(struct svc_rqst *rqstp,				\
+		 struct svc_fh *fhp,					\
+		 u64 offset,						\
+		 u32 len,						\
+		 u32 offset_align),					\
+	TP_ARGS(rqstp, fhp, offset, len, offset_align))
+
+DEFINE_NFSD_READ_DIO_EVENT(no_alignment);
+DEFINE_NFSD_READ_DIO_EVENT(too_small);
+DEFINE_NFSD_READ_DIO_EVENT(pages_in_use);
+DEFINE_NFSD_READ_DIO_EVENT(not_last_op);
 
 DECLARE_EVENT_CLASS(nfsd_err_class,
 	TP_PROTO(struct svc_rqst *rqstp,
