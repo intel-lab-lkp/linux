@@ -1235,6 +1235,91 @@ static bool should_sleep_killable(struct seccomp_filter *match,
 	return match->wait_killable_recv && n->state >= SECCOMP_NOTIFY_SENT;
 }
 
+static void seccomp_notify_queue(struct seccomp_filter *match,
+				 struct seccomp_knotif *n)
+{
+	lockdep_assert_held(&match->notify_lock);
+
+	n->state = SECCOMP_NOTIFY_INIT;
+	init_completion(&n->ready);
+	list_add_tail(&n->list, &match->notif->notifications);
+	INIT_LIST_HEAD(&n->addfd);
+
+	atomic_inc(&match->notif->requests);
+	if (match->notif->flags & SECCOMP_USER_NOTIF_FD_SYNC_WAKE_UP)
+		wake_up_poll_on_current_cpu(&match->wqh, EPOLLIN | EPOLLRDNORM);
+	else
+		wake_up_poll(&match->wqh, EPOLLIN | EPOLLRDNORM);
+}
+
+/* Returns 0 once @n is replied to, or the error that interrupted the wait. */
+static int seccomp_notify_wait(struct seccomp_filter *match,
+			       struct seccomp_knotif *n)
+{
+	struct seccomp_kaddfd *addfd;
+	int err;
+
+	lockdep_assert_held(&match->notify_lock);
+
+	do {
+		bool wait_killable = should_sleep_killable(match, n);
+
+		mutex_unlock(&match->notify_lock);
+		if (wait_killable)
+			err = wait_for_completion_killable(&n->ready);
+		else
+			err = wait_for_completion_interruptible(&n->ready);
+		mutex_lock(&match->notify_lock);
+
+		if (err != 0) {
+			/*
+			 * Check to see whether we should switch to wait
+			 * killable. Only return the interrupted error if not.
+			 */
+			if (!(!wait_killable && should_sleep_killable(match, n)))
+				return err;
+		}
+
+		addfd = list_first_entry_or_null(&n->addfd,
+						 struct seccomp_kaddfd, list);
+		/* Check if we were woken up by a addfd message */
+		if (addfd)
+			seccomp_handle_addfd(addfd, n);
+
+	}  while (n->state != SECCOMP_NOTIFY_REPLIED);
+
+	return 0;
+}
+
+static void seccomp_notify_dequeue(struct seccomp_filter *match,
+				   struct seccomp_knotif *n)
+{
+	struct seccomp_kaddfd *addfd, *tmp;
+
+	lockdep_assert_held(&match->notify_lock);
+
+	/* If there were any pending addfd calls, clear them out */
+	list_for_each_entry_safe(addfd, tmp, &n->addfd, list) {
+		/* The process went away before we got a chance to handle it */
+		addfd->ret = -ESRCH;
+		list_del_init(&addfd->list);
+		complete(&addfd->completion);
+	}
+
+	/*
+	 * Note that it's possible the listener died in between the time when
+	 * we were notified of a response (or a signal) and when we were able to
+	 * re-acquire the lock, so only delete from the list if the
+	 * notification actually exists.
+	 *
+	 * Also note that this test is only valid because there's no way to
+	 * *reattach* to a notifier right now. If one is added, we'll need to
+	 * keep track of the notif itself and make sure they match here.
+	 */
+	if (match->notif)
+		list_del(&n->list);
+}
+
 /* Report the system call's outcome on the way back to user space. */
 static void seccomp_result_work(struct callback_head *work)
 {
@@ -1276,7 +1361,6 @@ static int seccomp_do_user_notification(int this_syscall,
 	u32 flags = 0;
 	long ret = 0;
 	struct seccomp_knotif n = {};
-	struct seccomp_kaddfd *addfd, *tmp;
 
 	mutex_lock(&match->notify_lock);
 	err = -ENOSYS;
@@ -1284,74 +1368,21 @@ static int seccomp_do_user_notification(int this_syscall,
 		goto out;
 
 	n.task = current;
-	n.state = SECCOMP_NOTIFY_INIT;
 	n.data = sd;
 	n.id = seccomp_next_notify_id(match);
-	init_completion(&n.ready);
-	list_add_tail(&n.list, &match->notif->notifications);
-	INIT_LIST_HEAD(&n.addfd);
-
-	atomic_inc(&match->notif->requests);
-	if (match->notif->flags & SECCOMP_USER_NOTIF_FD_SYNC_WAKE_UP)
-		wake_up_poll_on_current_cpu(&match->wqh, EPOLLIN | EPOLLRDNORM);
-	else
-		wake_up_poll(&match->wqh, EPOLLIN | EPOLLRDNORM);
+	seccomp_notify_queue(match, &n);
 
 	/*
 	 * This is where we wait for a reply from userspace.
 	 */
-	do {
-		bool wait_killable = should_sleep_killable(match, &n);
-
-		mutex_unlock(&match->notify_lock);
-		if (wait_killable)
-			err = wait_for_completion_killable(&n.ready);
-		else
-			err = wait_for_completion_interruptible(&n.ready);
-		mutex_lock(&match->notify_lock);
-
-		if (err != 0) {
-			/*
-			 * Check to see whether we should switch to wait
-			 * killable. Only return the interrupted error if not.
-			 */
-			if (!(!wait_killable && should_sleep_killable(match, &n)))
-				goto interrupted;
-		}
-
-		addfd = list_first_entry_or_null(&n.addfd,
-						 struct seccomp_kaddfd, list);
-		/* Check if we were woken up by a addfd message */
-		if (addfd)
-			seccomp_handle_addfd(addfd, &n);
-
-	}  while (n.state != SECCOMP_NOTIFY_REPLIED);
-
-	ret = n.val;
-	err = n.error;
-	flags = n.flags;
-
-interrupted:
-	/* If there were any pending addfd calls, clear them out */
-	list_for_each_entry_safe(addfd, tmp, &n.addfd, list) {
-		/* The process went away before we got a chance to handle it */
-		addfd->ret = -ESRCH;
-		list_del_init(&addfd->list);
-		complete(&addfd->completion);
+	err = seccomp_notify_wait(match, &n);
+	if (!err) {
+		ret = n.val;
+		err = n.error;
+		flags = n.flags;
 	}
 
-	/*
-	 * Note that it's possible the listener died in between the time when
-	 * we were notified of a response (or a signal) and when we were able to
-	 * re-acquire the lock, so only delete from the list if the
-	 * notification actually exists.
-	 *
-	 * Also note that this test is only valid because there's no way to
-	 * *reattach* to a notifier right now. If one is added, we'll need to
-	 * keep track of the notif itself and make sure they match here.
-	 */
-	if (match->notif)
-		list_del(&n.list);
+	seccomp_notify_dequeue(match, &n);
 out:
 	mutex_unlock(&match->notify_lock);
 
