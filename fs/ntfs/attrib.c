@@ -5952,9 +5952,10 @@ int ntfs_non_resident_attr_insert_range(struct ntfs_inode *ni, s64 start_vcn, s6
 
 	rl = ntfs_rl_find_vcn_nolock(ni->runlist.rl, start_vcn);
 	if (!rl) {
+		ntfs_report_file_metadata_error(VFS_I(base_ni), -EFSCORRUPTED);
 		up_write(&ni->runlist.lock);
 		kfree(hole_rl);
-		return -EIO;
+		return -EFSCORRUPTED;
 	}
 
 	rl = ntfs_rl_insert_range(ni->runlist.rl, (int)ni->runlist.count,
@@ -5974,19 +5975,20 @@ int ntfs_non_resident_attr_insert_range(struct ntfs_inode *ni, s64 start_vcn, s6
 	ret = ntfs_attr_update_mapping_pairs_locked(ni, 0, ni);
 	up_write(&ni->runlist.lock);
 	if (ret)
-		return ret;
+		goto report_error;
 
 	ctx = ntfs_attr_get_search_ctx(base_ni, NULL);
 	if (IS_ERR(ctx)) {
 		ret = PTR_ERR(ctx);
-		return ret;
+		ctx = NULL;
+		goto report_error;
 	}
 
 	ret = ntfs_attr_lookup(ni->type, ni->name, ni->name_len,
 			       CASE_SENSITIVE, 0, NULL, 0, ctx);
 	if (ret) {
 		ntfs_attr_put_search_ctx(ctx);
-		return ret;
+		goto report_error;
 	}
 
 	ctx->attr->data.non_resident.data_size = cpu_to_le64(ni->data_size);
@@ -5995,6 +5997,13 @@ int ntfs_non_resident_attr_insert_range(struct ntfs_inode *ni, s64 start_vcn, s6
 		NInoSetFileNameDirty(ni);
 	mark_mft_record_dirty(ctx->ntfs_ino);
 	ntfs_attr_put_search_ctx(ctx);
+	return ret;
+
+report_error:
+	if (ret == -ENOENT)
+		ret = -EFSCORRUPTED;
+	/* The runlist and sizes have already changed without rollback. */
+	ntfs_report_file_metadata_error(VFS_I(base_ni), ret);
 	return ret;
 }
 
@@ -6028,8 +6037,9 @@ int ntfs_non_resident_attr_collapse_range(struct ntfs_inode *ni, s64 start_vcn, 
 		dst_cnt++;
 	rl = ntfs_rl_find_vcn_nolock(ni->runlist.rl, start_vcn);
 	if (!rl) {
+		ntfs_report_file_metadata_error(VFS_I(base_ni), -EFSCORRUPTED);
 		up_write(&ni->runlist.lock);
-		return -EIO;
+		return -EFSCORRUPTED;
 	}
 
 	rl = ntfs_rl_collapse_range(ni->runlist.rl, dst_cnt + 1,
@@ -6090,6 +6100,11 @@ out_ctx:
 	if (ctx)
 		ntfs_attr_put_search_ctx(ctx);
 out_rl:
+	if (ret == -ENOENT)
+		ret = -EFSCORRUPTED;
+	/* The range was removed from the runlist and cannot be restored. */
+	if (ret)
+		ntfs_report_file_metadata_error(VFS_I(base_ni), ret);
 	kvfree(punch_rl);
 	mark_mft_record_dirty(base_ni);
 	return ret;
@@ -6124,8 +6139,9 @@ int ntfs_non_resident_attr_punch_hole(struct ntfs_inode *ni, s64 start_vcn, s64 
 		dst_cnt++;
 	rl = ntfs_rl_find_vcn_nolock(ni->runlist.rl, start_vcn);
 	if (!rl) {
+		ntfs_report_file_metadata_error(VFS_I(base_ni), -EFSCORRUPTED);
 		up_write(&ni->runlist.lock);
-		return -EIO;
+		return -EFSCORRUPTED;
 	}
 
 	rl = ntfs_rl_punch_hole(ni->runlist.rl, dst_cnt + 1,
@@ -6140,13 +6156,16 @@ int ntfs_non_resident_attr_punch_hole(struct ntfs_inode *ni, s64 start_vcn, s64 
 	ret = ntfs_attr_update_mapping_pairs_locked(ni, 0, ni);
 	up_write(&ni->runlist.lock);
 	if (ret) {
+		ntfs_report_file_metadata_error(VFS_I(base_ni), ret);
 		kvfree(punch_rl);
 		return ret;
 	}
 
 	ret = ntfs_cluster_free_from_rl(vol, punch_rl);
-	if (ret)
+	if (ret) {
+		ntfs_report_file_metadata_error(VFS_I(base_ni), ret);
 		ntfs_error(vol->sb, "Freeing of clusters failed");
+	}
 
 	kvfree(punch_rl);
 	mark_mft_record_dirty(base_ni);
@@ -6195,7 +6214,11 @@ int ntfs_attr_fallocate(struct ntfs_inode *ni, loff_t start, loff_t byte_len, bo
 	err = ntfs_attr_lookup(ni->type, ni->name, ni->name_len,
 			CASE_SENSITIVE, 0, NULL, 0, ctx);
 	if (err) {
-		err = -EIO;
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
+		}
 		goto out_unmap;
 	}
 
@@ -6210,7 +6233,9 @@ int ntfs_attr_fallocate(struct ntfs_inode *ni, loff_t start, loff_t byte_len, bo
 					CASE_SENSITIVE, 0, NULL, 0,
 					ctx);
 			if (err) {
-				err = -EIO;
+				if (err == -ENOENT)
+					err = -EFSCORRUPTED;
+				ntfs_report_file_metadata_error(VFS_I(base_ni), err);
 				goto out_unmap;
 			}
 			ni->data_size = old_data_size;
@@ -6296,6 +6321,10 @@ int ntfs_attr_fallocate(struct ntfs_inode *ni, loff_t start, loff_t byte_len, bo
 			}
 		} else {
 			err = -EIO;
+			if (rl_lcn < LCN_HOLE) {
+				err = -EFSCORRUPTED;
+				ntfs_report_file_metadata_error(VFS_I(base_ni), err);
+			}
 			goto out;
 		}
 	}
