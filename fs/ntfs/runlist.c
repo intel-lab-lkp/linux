@@ -817,7 +817,7 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 	/* Validate lowest_vcn from on-disk metadata to ensure it is sane. */
 	if (overflows_type(lowest_vcn, vcn)) {
 		ntfs_error(vol->sb, "Invalid lowest_vcn in mapping pairs.");
-		return ERR_PTR(-EIO);
+		return ERR_PTR(-EFSCORRUPTED);
 	}
 	/* Start at vcn = lowest_vcn and lcn 0. */
 	vcn = lowest_vcn;
@@ -828,7 +828,7 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 	attr_end = (u8 *)attr + le32_to_cpu(attr->length);
 	if (unlikely(buf < (u8 *)attr || buf >= attr_end)) {
 		ntfs_error(vol->sb, "Corrupt attribute.");
-		return ERR_PTR(-EIO);
+		return ERR_PTR(-EFSCORRUPTED);
 	}
 
 	/*
@@ -843,7 +843,7 @@ struct runlist_element *ntfs_mapping_pairs_decompress(const struct ntfs_volume *
 	     le64_to_cpu(attr->data.non_resident.data_size) ||
 	     le64_to_cpu(attr->data.non_resident.initialized_size))) {
 		ntfs_error(vol->sb, "Invalid empty mapping pairs array.");
-		return ERR_PTR(-EIO);
+		return ERR_PTR(-EFSCORRUPTED);
 	}
 	if (!vcn && !*buf && old_runlist && old_runlist->rl) {
 		*new_rl_count = old_runlist->count;
@@ -1079,12 +1079,12 @@ mpa_err:
 		return new_rl;
 	kvfree(rl);
 	ntfs_error(vol->sb, "Failed to merge runlists.");
-	return new_rl;
+	return PTR_ERR(new_rl) == -ENOMEM ? new_rl : ERR_PTR(-EFSCORRUPTED);
 io_error:
 	ntfs_error(vol->sb, "Corrupt attribute.");
 err_out:
 	kvfree(rl);
-	return ERR_PTR(-EIO);
+	return ERR_PTR(-EFSCORRUPTED);
 }
 
 /*
@@ -1337,7 +1337,7 @@ err_out:
 	if (rl->lcn == LCN_RL_NOT_MAPPED)
 		rls = -EINVAL;
 	else
-		rls = -EIO;
+		rls = -EFSCORRUPTED;
 	return rls;
 }
 
@@ -1426,7 +1426,7 @@ err_out:
  * defined:
  *	-EINVAL	- Run list contains unmapped elements.  Make sure to only pass
  *		  fully mapped runlists to this function.
- *	-EIO	- The runlist is corrupt.
+ *	-EFSCORRUPTED - The runlist is corrupt.
  *	-ENOSPC	- The destination buffer is too small.
  *
  * Locking: @rl must be locked on entry (either for reading or writing), it
@@ -1585,7 +1585,7 @@ err_out:
 	if (rl->lcn == LCN_RL_NOT_MAPPED)
 		err = -EINVAL;
 	else
-		err = -EIO;
+		err = -EFSCORRUPTED;
 	return err;
 }
 

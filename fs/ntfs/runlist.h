@@ -63,6 +63,7 @@ enum {
 	LCN_ENOMEM		= -5,
 	LCN_EIO			= -6,
 	LCN_EINVAL		= -7,
+	LCN_EFSCORRUPTED	= -8,
 };
 
 struct runlist_element *ntfs_runlists_merge(struct runlist *d_runlist,

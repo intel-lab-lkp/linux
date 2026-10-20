@@ -175,7 +175,7 @@ static sector_t ntfs_bmap(struct address_space *mapping, sector_t block)
 		/*
 		 * Step down to an integer to avoid gcc doing a long long
 		 * comparision in the switch when we know @lcn is between
-		 * LCN_HOLE and LCN_EIO (i.e. -1 to -5).
+		 * LCN_HOLE and LCN_EFSCORRUPTED (i.e. -2 to -8).
 		 *
 		 * Otherwise older gcc (at least on some architectures) will
 		 * try to use __cmpdi2() which is of course not available in

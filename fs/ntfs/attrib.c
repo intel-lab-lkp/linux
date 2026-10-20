@@ -112,7 +112,7 @@ int ntfs_map_runlist_nolock(struct ntfs_inode *ni, s64 vcn, struct ntfs_attr_sea
 		     base_ni == NTFS_I(ni->vol->mft_ino))) {
 		ntfs_error(ni->vol->sb,
 			   "$MFT needs its own extent records to describe itself; cannot mount.");
-		return -EIO;
+		return -EFSCORRUPTED;
 	}
 	if (!ctx) {
 		ctx_is_temporary = ctx_needs_reset = true;
@@ -131,7 +131,9 @@ int ntfs_map_runlist_nolock(struct ntfs_inode *ni, s64 vcn, struct ntfs_attr_sea
 		WARN_ON(IS_ERR(ctx->mrec));
 		a = ctx->attr;
 		if (!a->non_resident) {
-			err = -EIO;
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
+			err = -EFSCORRUPTED;
 			goto err_out;
 		}
 		end_vcn = le64_to_cpu(a->data.non_resident.highest_vcn);
@@ -183,12 +185,17 @@ int ntfs_map_runlist_nolock(struct ntfs_inode *ni, s64 vcn, struct ntfs_attr_sea
 		err = ntfs_attr_lookup(ni->type, ni->name, ni->name_len,
 				CASE_SENSITIVE, vcn, NULL, 0, ctx);
 		if (unlikely(err)) {
-			if (err == -ENOENT)
-				err = -EIO;
+			if (err == -ENOENT) {
+				err = -EFSCORRUPTED;
+				ntfs_report_file_metadata_error(VFS_I(base_ni),
+								-EFSCORRUPTED);
+			}
 			goto err_out;
 		}
 		if (unlikely(!ctx->attr->non_resident)) {
-			err = -EIO;
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
+			err = -EFSCORRUPTED;
 			goto err_out;
 		}
 	}
@@ -201,13 +208,25 @@ int ntfs_map_runlist_nolock(struct ntfs_inode *ni, s64 vcn, struct ntfs_attr_sea
 	 */
 	end_vcn = le64_to_cpu(a->data.non_resident.highest_vcn) + 1;
 	if (unlikely(vcn && vcn >= end_vcn)) {
+		/* Report missing extents inside the allocation to direct callers. */
 		err = -ENOENT;
+		read_lock_irqsave(&ni->size_lock, flags);
+		if (vcn >= 0 && vcn < ntfs_bytes_to_cluster(ni->vol,
+							    ni->allocated_size))
+			err = -EFSCORRUPTED;
+		read_unlock_irqrestore(&ni->size_lock, flags);
+		if (err == -EFSCORRUPTED)
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
 		goto err_out;
 	}
 	rl = ntfs_mapping_pairs_decompress(ni->vol, a, &ni->runlist, &new_rl_count);
-	if (IS_ERR(rl))
+	if (IS_ERR(rl)) {
 		err = PTR_ERR(rl);
-	else {
+		if (err != -ENOMEM)
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
+	} else {
 		ni->runlist.rl = rl;
 		ni->runlist.count = new_rl_count;
 	}
@@ -335,7 +354,7 @@ struct runlist_element *ntfs_attr_vcn_to_rl(struct ntfs_inode *ni, s64 vcn, s64 
 	if (!rl) {
 		err = ntfs_attr_map_whole_runlist(ni);
 		if (err)
-			return ERR_PTR(-ENOENT);
+			return ERR_PTR(err);
 		rl = ni->runlist.rl;
 	}
 
@@ -357,12 +376,11 @@ remap_rl:
 	/*
 	 * Neither the runlist nor the retry mapped @vcn, e.g. because the
 	 * extent mft record holding it is corrupt or because the mapping
-	 * pairs end too soon.  ntfs_map_runlist_nolock() reports the latter
-	 * as -ENOENT, as @vcn lies past the extent it found.  Below the
-	 * allocated size, callers would treat LCN_RL_NOT_MAPPED or LCN_ENOENT
-	 * as a hole, so fail instead.  At or beyond it nothing is mapped: the
-	 * runlist ends there with LCN_ENOENT, or with LCN_RL_NOT_MAPPED if
-	 * only a later extent has been mapped, so return that end as it is.
+	 * pairs end too soon.  Below the allocated size, callers would treat
+	 * LCN_RL_NOT_MAPPED or LCN_ENOENT as a hole, so fail instead.  At or
+	 * beyond it nothing is mapped: the runlist ends there with LCN_ENOENT,
+	 * or with LCN_RL_NOT_MAPPED if only a later extent has been mapped,
+	 * so return that end as it is.
 	 */
 	if (*lcn <= LCN_RL_NOT_MAPPED) {
 		unsigned long flags;
@@ -371,8 +389,12 @@ remap_rl:
 		read_lock_irqsave(&ni->size_lock, flags);
 		allocated_size = ni->allocated_size;
 		read_unlock_irqrestore(&ni->size_lock, flags);
-		if ((s64)ntfs_cluster_to_bytes(ni->vol, vcn) < allocated_size)
-			return ERR_PTR(err == -ENOMEM ? -ENOMEM : -EIO);
+		if ((s64)ntfs_cluster_to_bytes(ni->vol, vcn) < allocated_size) {
+			if (!err || err == -ENOENT)
+				ntfs_report_file_metadata_error(VFS_I(ni),
+								-EFSCORRUPTED);
+			return ERR_PTR(!err || err == -ENOENT ? -EFSCORRUPTED : err);
+		}
 	}
 
 	return rl;
@@ -401,7 +423,8 @@ remap_rl:
  *  LCN_HOLE	Hole / not allocated on disk.
  *  LCN_ENOENT	There is no such vcn in the runlist, i.e. @vcn is out of bounds.
  *  LCN_ENOMEM	Not enough memory to map runlist.
- *  LCN_EIO	Critical error (runlist/file is corrupt, i/o error, etc).
+ *  LCN_EIO	I/O or other mapping failure.
+ *  LCN_EFSCORRUPTED	Corrupt runlist or file metadata.
  *
  * Locking: - The runlist must be locked on entry and is left locked on return.
  *	    - If @write_locked is 'false', i.e. the runlist is locked for reading,
@@ -434,8 +457,11 @@ retry_remap:
 		return lcn;
 	}
 	if (lcn != LCN_RL_NOT_MAPPED) {
-		if (lcn != LCN_ENOENT)
-			lcn = LCN_EIO;
+		if (lcn != LCN_ENOENT) {
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							-EFSCORRUPTED);
+			lcn = LCN_EFSCORRUPTED;
+		}
 	} else if (!is_retry) {
 		int err;
 
@@ -462,8 +488,23 @@ retry_remap:
 			lcn = LCN_ENOENT;
 		else if (err == -ENOMEM)
 			lcn = LCN_ENOMEM;
+		else if (err == -EFSCORRUPTED)
+			lcn = LCN_EFSCORRUPTED;
 		else
 			lcn = LCN_EIO;
+	} else {
+		lcn = LCN_EFSCORRUPTED;
+		ntfs_report_file_metadata_error(VFS_I(ni), -EFSCORRUPTED);
+	}
+	if (lcn == LCN_ENOENT) {
+		read_lock_irqsave(&ni->size_lock, flags);
+		if (vcn >= 0 && vcn < ntfs_bytes_to_cluster(ni->vol,
+							    ni->allocated_size))
+			lcn = LCN_EFSCORRUPTED;
+		read_unlock_irqrestore(&ni->size_lock, flags);
+		if (lcn == LCN_EFSCORRUPTED)
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							-EFSCORRUPTED);
 	}
 	if (lcn != LCN_ENOENT)
 		ntfs_error(ni->vol->sb, "Failed with error code %lli.",
@@ -585,8 +626,11 @@ retry_remap:
 			err = PTR_ERR(rl);
 		else if (rl->lcn >= LCN_HOLE)
 			return rl;
-		else if (rl->lcn <= LCN_ENOENT)
-			err = -EIO;
+		else if (rl->lcn <= LCN_ENOENT) {
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							-EFSCORRUPTED);
+			err = -EFSCORRUPTED;
+		}
 	}
 	if (!err && !is_retry) {
 		/*
@@ -608,8 +652,20 @@ retry_remap:
 		}
 		if (err == -EINVAL)
 			err = -EIO;
-	} else if (!err)
-		err = -EIO;
+	} else if (!err) {
+		ntfs_report_file_metadata_error(VFS_I(ni), -EFSCORRUPTED);
+		err = -EFSCORRUPTED;
+	}
+	if (err == -ENOENT) {
+		read_lock_irqsave(&ni->size_lock, flags);
+		if (vcn >= 0 && vcn < ntfs_bytes_to_cluster(ni->vol,
+							    ni->allocated_size))
+			err = -EFSCORRUPTED;
+		read_unlock_irqrestore(&ni->size_lock, flags);
+		if (err == -EFSCORRUPTED)
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							-EFSCORRUPTED);
+	}
 	if (err != -ENOENT)
 		ntfs_error(ni->vol->sb, "Failed with error code %i.", err);
 	return ERR_PTR(err);
@@ -3365,6 +3421,9 @@ int ntfs_attr_map_whole_runlist(struct ntfs_inode *ni)
 							   &new_rl_count);
 			if (IS_ERR(rl)) {
 				err = PTR_ERR(rl);
+				if (err != -ENOMEM)
+					ntfs_report_file_metadata_error(VFS_I(base_ni),
+									-EFSCORRUPTED);
 				goto err_out;
 			}
 			ni->runlist.rl = rl;
@@ -3374,7 +3433,9 @@ int ntfs_attr_map_whole_runlist(struct ntfs_inode *ni)
 		/* Are we in the first extent? */
 		if (!next_vcn) {
 			if (a->data.non_resident.lowest_vcn) {
-				err = -EIO;
+				ntfs_report_file_metadata_error(VFS_I(base_ni),
+								-EFSCORRUPTED);
+				err = -EFSCORRUPTED;
 				ntfs_error(sb,
 					"First extent of inode %llu attribute has non-zero lowest_vcn",
 					(unsigned long long)ni->mft_no);
@@ -3397,18 +3458,26 @@ int ntfs_attr_map_whole_runlist(struct ntfs_inode *ni)
 
 		/* Avoid endless loops due to corruption. */
 		if (next_vcn < le64_to_cpu(a->data.non_resident.lowest_vcn)) {
-			err = -EIO;
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
+			err = -EFSCORRUPTED;
 			ntfs_error(sb, "Inode %llu has corrupt attribute list",
 					(unsigned long long)ni->mft_no);
 			goto err_out;
 		}
 	}
 	if (!a) {
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
+		}
 		ntfs_error(sb, "Couldn't find attribute for runlist mapping");
 		goto err_out;
 	}
 	if (not_mapped && highest_vcn && highest_vcn != last_vcn - 1) {
-		err = -EIO;
+		ntfs_report_file_metadata_error(VFS_I(base_ni), -EFSCORRUPTED);
+		err = -EFSCORRUPTED;
 		ntfs_error(sb,
 			"Failed to load full runlist: inode: %llu highest_vcn: 0x%llx last_vcn: 0x%llx",
 			(unsigned long long)ni->mft_no,

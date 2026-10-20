@@ -792,7 +792,7 @@ out:
 			ntfs_error(vol->sb,
 				"Failed to rollback (error %i). Leaving inconsistent metadata! Unmount and run chkdsk.",
 				err2);
-			NVolSetErrors(vol);
+			ntfs_report_metadata_error(vol, err2);
 		}
 		/* Free the runlist. */
 		kvfree(rl);
@@ -921,9 +921,11 @@ s64 __ntfs_cluster_free(struct ntfs_inode *ni, const s64 start_vcn, s64 count,
 		goto err_out;
 	}
 	if (unlikely(rl->lcn < LCN_HOLE)) {
+		ntfs_report_file_metadata_error(VFS_I(ntfs_inode_base(ni)),
+						-EFSCORRUPTED);
 		if (!is_rollback)
 			ntfs_error(vol->sb, "First runlist element has invalid lcn, aborting.");
-		err = -EIO;
+		err = -EFSCORRUPTED;
 		goto err_out;
 	}
 	/* Find the starting cluster inside the run that needs freeing. */
@@ -968,17 +970,24 @@ s64 __ntfs_cluster_free(struct ntfs_inode *ni, const s64 start_vcn, s64 count,
 			rl = ntfs_attr_find_vcn_nolock(ni, vcn, ctx);
 			if (IS_ERR(rl)) {
 				err = PTR_ERR(rl);
+				if (err == -ENOENT) {
+					err = -EFSCORRUPTED;
+					ntfs_report_file_metadata_error(VFS_I(ni),
+									-EFSCORRUPTED);
+				}
 				if (!is_rollback)
 					ntfs_error(vol->sb,
 						"Failed to map runlist fragment or failed to find subsequent runlist element.");
 				goto err_out;
 			}
 			if (unlikely(rl->lcn < LCN_HOLE)) {
+				ntfs_report_file_metadata_error(VFS_I(ntfs_inode_base(ni)),
+								-EFSCORRUPTED);
 				if (!is_rollback)
 					ntfs_error(vol->sb,
 						"Runlist element has invalid lcn (0x%llx).",
 						rl->lcn);
-				err = -EIO;
+				err = -EFSCORRUPTED;
 				goto err_out;
 			}
 		}
@@ -1073,7 +1082,7 @@ err_out:
 		ntfs_error(vol->sb,
 			"Failed to rollback (error %i).  Leaving inconsistent metadata!  Unmount and run chkdsk.",
 			(int)delta);
-		NVolSetErrors(vol);
+		ntfs_report_metadata_error(vol, delta);
 	} else {
 		ntfs_dec_free_clusters(vol, delta);
 	}
