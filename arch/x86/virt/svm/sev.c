@@ -207,8 +207,6 @@ static void __init __snp_fixup_e820_tables(u64 pa)
 		pr_info("Reserving start/end of RMP table on a 2MB boundary [0x%016llx]\n", pa);
 		e820__range_update(pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
 		e820__range_update_table(e820_table_kexec, pa, PMD_SIZE, E820_TYPE_RAM, E820_TYPE_RESERVED);
-		if (!memblock_is_region_reserved(pa, PMD_SIZE))
-			memblock_reserve(pa, PMD_SIZE);
 	}
 }
 
@@ -261,11 +259,12 @@ static void __init fixup_e820_tables_for_contiguous_rmp(void)
 
 void __init snp_fixup_e820_tables(void)
 {
-	if (rmp_cfg & MSR_AMD64_SEG_RMP_ENABLED) {
+	if (rmp_cfg & MSR_AMD64_SEG_RMP_ENABLED)
 		fixup_e820_tables_for_segmented_rmp();
-	} else {
+	else
 		fixup_e820_tables_for_contiguous_rmp();
-	}
+
+	e820__update_table(e820_table);
 }
 
 static void clear_rmp(void)

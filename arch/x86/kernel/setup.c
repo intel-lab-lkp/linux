@@ -1029,6 +1029,7 @@ void __init setup_arch(char **cmdline_p)
 
 	e820_add_kernel_range();
 	trim_bios_range();
+	mem_encrypt_fixup_e820();
 #ifdef CONFIG_X86_32
 	if (ppro_with_ram_bug()) {
 		pr_info("Applying PPro RAM bug workaround: punching 256 kB hole at 1.75 GB physical.\n");
