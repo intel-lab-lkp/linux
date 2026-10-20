@@ -39,7 +39,14 @@ enum ceph_feature_type {
 	CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK,
 	CEPHFS_FEATURE_SUBVOLUME_METRICS,
 
-	CEPHFS_FEATURE_MAX = CEPHFS_FEATURE_SUBVOLUME_METRICS,
+	/*
+	 * Bit 23 is CEPHFS_FEATURE_BLOCKDIFF on the MDS and is not
+	 * advertised here. Bit 24 is subvolume quarantine; it must stay
+	 * aligned with the userspace client.
+	 */
+	CEPHFS_FEATURE_QUARANTINE = 24,
+
+	CEPHFS_FEATURE_MAX = CEPHFS_FEATURE_QUARANTINE,
 };
 
 #define CEPHFS_FEATURES_CLIENT_SUPPORTED {	\
@@ -57,6 +64,7 @@ enum ceph_feature_type {
 	CEPHFS_FEATURE_HAS_OWNER_UIDGID,	\
 	CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK,	\
 	CEPHFS_FEATURE_SUBVOLUME_METRICS,	\
+	CEPHFS_FEATURE_QUARANTINE,		\
 }
 
 /*
@@ -507,6 +515,10 @@ struct ceph_mds_client {
 	spinlock_t              stopping_lock;  /* protect snap_empty */
 	int                     stopping;      /* the stage of shutting down */
 	atomic_t                stopping_blockers;
+	/* Once negotiated, keep tracking across reconnects and mixed ranks. */
+	bool			quarantine_supported;
+	wait_queue_head_t	quarantine_waitq;
+	struct list_head	quarantine_splice_owners; /* quarantine_lock */
 	/*
 	 * Inodes with CEPH_I_QUARANTINE set. Hot paths skip the
 	 * ancestor walk while this is zero.
