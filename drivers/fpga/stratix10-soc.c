@@ -73,6 +73,69 @@ static int s10_svc_send_msg(struct s10_priv *priv,
 }
 
 /*
+ * s10_svc_wait - wait for a service layer reply and decode its status
+ * priv: private data
+ * done_bits: mask of SVC_STATUS_* bits that indicate success
+ * timeout: maximum time to wait for the reply, in jiffies
+ *
+ * Status bits accumulate in priv->status until they are consumed here, and
+ * SVC_STATUS_ERROR takes precedence over any success bit set alongside it.
+ * Returns 0 if a bit in done_bits was set, -EFAULT on SVC_STATUS_ERROR,
+ * -EBUSY on SVC_STATUS_BUSY, -ETIMEDOUT if no reply arrived, or -EAGAIN if
+ * the wake-up carried none of these bits (e.g. a late completion whose
+ * status bits were already consumed).
+ */
+static int s10_svc_wait(struct s10_priv *priv, unsigned long done_bits,
+			unsigned long timeout)
+{
+	struct device *dev = priv->client.dev;
+	unsigned long time_left, status;
+
+	time_left = wait_for_completion_timeout(&priv->status_return_completion,
+						timeout);
+	status = xchg(&priv->status, 0);
+
+	if (status & BIT(SVC_STATUS_ERROR)) {
+		dev_err(dev, "ERROR - giving up - SVC_STATUS_ERROR\n");
+		return -EFAULT;
+	}
+
+	if (status & done_bits)
+		return 0;
+
+	if (status & BIT(SVC_STATUS_BUSY))
+		return -EBUSY;
+
+	if (!time_left) {
+		dev_err(dev, "timeout waiting for service layer reply\n");
+		return -ETIMEDOUT;
+	}
+
+	return -EAGAIN;
+}
+
+/*
+ * s10_svc_send_and_wait - send a command and wait for its reply
+ * Returns a negative errno from s10_svc_send_msg(), otherwise the result of
+ * s10_svc_wait().
+ */
+static int s10_svc_send_and_wait(struct s10_priv *priv,
+				 enum stratix10_svc_command_code command,
+				 void *payload, u32 payload_length,
+				 unsigned long done_bits, unsigned long timeout)
+{
+	int ret;
+
+	reinit_completion(&priv->status_return_completion);
+
+	ret = s10_svc_send_msg(priv, command, payload, payload_length);
+	if (ret < 0)
+		return ret;
+
+	return s10_svc_wait(priv, done_bits, timeout);
+}
+
+/*
  * Free buffers allocated from the service layer's pool that are not in use.
  * Return true when all buffers are freed.
  */
@@ -159,8 +222,8 @@ static void s10_receive_callback(struct stratix10_svc_client *client,
 	status = data->status;
 
 	/*
-	 * Here we set status bits as we receive them.  Elsewhere, we always use
-	 * test_and_clear_bit() to check status in priv->status
+	 * Here we set status bits as we receive them.  s10_svc_wait() consumes
+	 * them from priv->status.
 	 */
 	for (i = 0; i <= SVC_STATUS_ERROR; i++)
 		if (status & (1 << i))
@@ -190,6 +253,9 @@ static int s10_ops_write_init(struct fpga_manager *mgr,
 	uint i;
 	int ret;
 
+	/* A reply to an aborted previous write may have left status bits. */
+	priv->status = 0;
+
 	ctype.flags = 0;
 	if (info->flags & FPGA_MGR_PARTIAL_RECONFIG) {
 		dev_dbg(dev, "Requesting partial reconfiguration.\n");
@@ -198,23 +264,11 @@ static int s10_ops_write_init(struct fpga_manager *mgr,
 		dev_dbg(dev, "Requesting full reconfiguration.\n");
 	}
 
-	reinit_completion(&priv->status_return_completion);
-	ret = s10_svc_send_msg(priv, COMMAND_RECONFIG,
-			       &ctype, sizeof(ctype));
-	if (ret < 0)
+	ret = s10_svc_send_and_wait(priv, COMMAND_RECONFIG,
+				    &ctype, sizeof(ctype),
+				    BIT(SVC_STATUS_OK), S10_RECONFIG_TIMEOUT);
+	if (ret)
 		goto init_error;
-
-	if (!wait_for_completion_timeout(&priv->status_return_completion,
-					 S10_RECONFIG_TIMEOUT)) {
-		dev_err(dev, "timeout waiting for RECONFIG_REQUEST\n");
-		ret = -ETIMEDOUT;
-		goto init_error;
-	}
-
-	if (!test_and_clear_bit(SVC_STATUS_OK, &priv->status)) {
-		ret = -ETIMEDOUT;
-		goto init_error;
-	}
 
 	/* Allocate buffers from the service layer's pool. */
 	for (i = 0; i < NUM_SVC_BUFS; i++) {
@@ -287,7 +341,6 @@ static int s10_ops_write(struct fpga_manager *mgr, const char *buf,
 {
 	struct s10_priv *priv = mgr->priv;
 	struct device *dev = priv->client.dev;
-	long wait_status;
 	int sent = 0;
 	int ret = 0;
 
@@ -320,30 +373,15 @@ static int s10_ops_write(struct fpga_manager *mgr, const char *buf,
 		 * Always wait for the completion rather than skipping it when
 		 * priv->status is already set. The callback may have fired
 		 * between the CLAIM/SUBMIT send and here; if so, complete()
-		 * has already incremented the done counter and
-		 * wait_for_completion_timeout() returns immediately.
+		 * has already incremented the done counter and s10_svc_wait()
+		 * returns immediately.
 		 */
-		wait_status = wait_for_completion_timeout(
-			&priv->status_return_completion, S10_BUFFER_TIMEOUT);
-
-		if (test_and_clear_bit(SVC_STATUS_BUFFER_DONE, &priv->status) ||
-		    test_and_clear_bit(SVC_STATUS_BUFFER_SUBMITTED,
-				       &priv->status)) {
-			ret = 0;
-			continue;
-		}
-
-		if (test_and_clear_bit(SVC_STATUS_ERROR, &priv->status)) {
-			dev_err(dev, "ERROR - giving up - SVC_STATUS_ERROR\n");
-			ret = -EFAULT;
+		ret = s10_svc_wait(priv, BIT(SVC_STATUS_BUFFER_SUBMITTED) |
+					 BIT(SVC_STATUS_BUFFER_DONE),
+				   S10_BUFFER_TIMEOUT);
+		if (ret == -EFAULT || ret == -ETIMEDOUT)
 			break;
-		}
-
-		if (!wait_status) {
-			dev_err(dev, "timeout waiting for svc layer buffers\n");
-			ret = -ETIMEDOUT;
-			break;
-		}
+		ret = 0;
 	}
 
 	if (!s10_free_buffers(mgr))
@@ -366,35 +404,22 @@ static int s10_ops_write_complete(struct fpga_manager *mgr,
 	deadline = jiffies + usecs_to_jiffies(info->config_complete_timeout_us);
 
 	do {
-		reinit_completion(&priv->status_return_completion);
+		ret = s10_svc_send_and_wait(priv, COMMAND_RECONFIG_STATUS,
+					    NULL, 0, BIT(SVC_STATUS_COMPLETED),
+					    S10_RECONFIG_STATUS_TIMEOUT);
+		/*
+		 * A late completion from the last RECONFIG_DATA_CLAIM callback
+		 * can wake us before the reply to this request arrives.
+		 */
+		while (ret == -EAGAIN)
+			ret = s10_svc_wait(priv, BIT(SVC_STATUS_COMPLETED),
+					   S10_RECONFIG_STATUS_TIMEOUT);
+	} while (ret == -EBUSY && time_before(jiffies, deadline));
 
-		ret = s10_svc_send_msg(priv, COMMAND_RECONFIG_STATUS, NULL, 0);
-		if (ret < 0)
-			break;
-
-		if (!wait_for_completion_timeout(&priv->status_return_completion,
-						 S10_RECONFIG_STATUS_TIMEOUT)) {
-			dev_err(dev, "timeout waiting for RECONFIG_STATUS\n");
-			ret = -ETIMEDOUT;
-			break;
-		}
-
-		if (test_and_clear_bit(SVC_STATUS_COMPLETED, &priv->status))
-			break;
-
-		if (test_and_clear_bit(SVC_STATUS_ERROR, &priv->status)) {
-			dev_err(dev, "ERROR - giving up - SVC_STATUS_ERROR\n");
-			ret = -EFAULT;
-			break;
-		}
-
-		if (time_after_eq(jiffies, deadline)) {
-			dev_err(dev,
-				"timeout waiting for RECONFIG_COMPLETED\n");
-			ret = -ETIMEDOUT;
-			break;
-		}
-	} while (1);
+	if (ret == -EBUSY) {
+		dev_err(dev, "timeout waiting for RECONFIG_COMPLETED\n");
+		ret = -ETIMEDOUT;
+	}
 
 	stratix10_svc_done(priv->chan);
 
