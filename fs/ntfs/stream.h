@@ -29,7 +29,7 @@ int ntfs_stream_path_names(struct ntfs_volume *vol,
 		__le16 **stream_name, int *stream_len);
 
 struct inode *ntfs_stream_lookup_inode_by_name(struct inode *dir,
-		__le16 *name, int name_len);
+		__le16 *name, int name_len, bool dir_locked);
 struct dentry *ntfs_lookup_stream(struct inode *dir, struct dentry *dentry,
 		const struct ntfs_stream_path *path);
 struct inode *ntfs_create_named_stream(struct mnt_idmap *idmap,

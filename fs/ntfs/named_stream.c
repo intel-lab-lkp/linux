@@ -252,6 +252,7 @@ int ntfs_stream_path_check(struct ntfs_volume *vol,
  * @dir_ino: directory containing the base file or directory
  * @uname: UTF-16LE base name
  * @uname_len: Length of @uname in UTF-16 code units
+ * @dir_locked: caller holds the directory i_rwsem against namespace changes
  *
  * Resolve the directory entry and verify its MFT reference before returning
  * the inode.
@@ -259,7 +260,7 @@ int ntfs_stream_path_check(struct ntfs_volume *vol,
  * Return: Referenced inode on success, or ERR_PTR() on failure.
  */
 struct inode *ntfs_stream_lookup_inode_by_name(struct inode *dir_ino,
-		__le16 *uname, int uname_len)
+		__le16 *uname, int uname_len, bool dir_locked)
 {
 	struct ntfs_volume *vol = NTFS_SB(dir_ino->i_sb);
 	struct ntfs_name *name = NULL;
@@ -276,12 +277,20 @@ struct inode *ntfs_stream_lookup_inode_by_name(struct inode *dir_ino,
 		return ERR_PTR(MREF_ERR(mref));
 
 	inode = ntfs_iget(vol->sb, MREF(mref));
-	if (IS_ERR(inode))
+	if (IS_ERR(inode)) {
+		if (dir_locked && PTR_ERR(inode) == -ENOENT) {
+			ntfs_report_file_metadata_error(dir_ino, -EFSCORRUPTED);
+			inode = ERR_PTR(-EFSCORRUPTED);
+		}
 		return inode;
+	}
 	if (MSEQNO(mref) != NTFS_I(inode)->seq_no &&
 	    MREF(mref) != FILE_MFT) {
+		/* Unlocked dentry revalidation can race with unlink and reuse. */
+		if (dir_locked)
+			ntfs_report_file_metadata_error(dir_ino, -EFSCORRUPTED);
 		iput(inode);
-		return ERR_PTR(-EIO);
+		return ERR_PTR(dir_locked ? -EFSCORRUPTED : -EIO);
 	}
 	return inode;
 }
@@ -333,7 +342,7 @@ static int ntfs_stream_d_revalidate(struct inode *dir,
 			ni->vol->upcase_len))
 		goto out;
 
-	base_vi = ntfs_stream_lookup_inode_by_name(dir, base_name, base_len);
+	base_vi = ntfs_stream_lookup_inode_by_name(dir, base_name, base_len, false);
 	if (IS_ERR(base_vi))
 		goto out;
 	if (NTFS_I(base_vi) != ni->ext.base_ntfs_ino) {
@@ -441,7 +450,7 @@ struct dentry *ntfs_lookup_stream(struct inode *dir_ino,
 	}
 
 	base_vi = ntfs_stream_lookup_inode_by_name(dir_ino, base_uname,
-			base_len);
+			base_len, true);
 	kmem_cache_free(ntfs_name_cache, base_uname);
 	if (IS_ERR(base_vi)) {
 		err = PTR_ERR(base_vi);
@@ -564,7 +573,7 @@ struct inode *ntfs_create_named_stream(struct mnt_idmap *idmap,
 	bool stream_created = false;
 	int err, rollback_err;
 
-	base_vi = ntfs_stream_lookup_inode_by_name(dir, base_name, base_len);
+	base_vi = ntfs_stream_lookup_inode_by_name(dir, base_name, base_len, true);
 	if (IS_ERR(base_vi))
 		return base_vi;
 	if (!S_ISREG(base_vi->i_mode) && !S_ISDIR(base_vi->i_mode)) {
@@ -635,6 +644,10 @@ struct inode *ntfs_create_named_stream(struct mnt_idmap *idmap,
 	else
 		err = PTR_ERR(stream_vi);
 	if (err) {
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(base_vi, -EFSCORRUPTED);
+		}
 		if (stream_created) {
 			rollback_err = ntfs_attr_remove(base_ni, AT_DATA,
 					stream_name, stream_len, &rollback_vi);
@@ -646,7 +659,8 @@ struct inode *ntfs_create_named_stream(struct mnt_idmap *idmap,
 				    rollback_err == -ERESTARTSYS) {
 					err = rollback_err;
 				} else {
-					NVolSetErrors(base_ni->vol);
+					ntfs_report_file_metadata_error(base_vi,
+									rollback_err);
 					NVolSetShutdown(base_ni->vol);
 					err = -EIO;
 				}
@@ -698,7 +712,7 @@ int ntfs_unlink_named_stream(struct inode *dir, struct dentry *dentry)
 	if (!path_result)
 		return -EINVAL;
 
-	base_vi = ntfs_stream_lookup_inode_by_name(dir, base_name, base_len);
+	base_vi = ntfs_stream_lookup_inode_by_name(dir, base_name, base_len, true);
 	if (IS_ERR(base_vi)) {
 		err = PTR_ERR(base_vi);
 		goto out_free;
@@ -1044,6 +1058,7 @@ static int ntfs_stream_finish_remove(struct inode *attr_vi)
 		remove_inode_hash(attr_vi);
 	} else {
 		NInoSetBeingDeleted(attr_ni);
+		ntfs_report_file_metadata_error(VFS_I(ni), err);
 		remove_inode_hash(attr_vi);
 	}
 
@@ -1279,6 +1294,10 @@ static int ntfs_stream_ioctl_get_inode(struct inode *base_vi, __le16 *sname,
 	attr_vi = ntfs_attr_iget(base_vi, AT_DATA, sname, sname_len);
 	if (IS_ERR(attr_vi)) {
 		err = PTR_ERR(attr_vi);
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(base_vi, -EFSCORRUPTED);
+		}
 		attr_vi = NULL;
 		goto out_unlock;
 	}
