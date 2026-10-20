@@ -13,8 +13,14 @@ struct auxiliary_device;
 
 #if IS_ENABLED(CONFIG_DRM_AUX_BRIDGE)
 int drm_aux_bridge_register(struct device *parent);
+int drm_aux_bridge_register_from_node(struct device *parent, struct device_node *np);
 #else
 static inline int drm_aux_bridge_register(struct device *parent)
+{
+	return 0;
+}
+
+static inline int drm_aux_bridge_register_from_node(struct device *parent, struct device_node *np)
 {
 	return 0;
 }
