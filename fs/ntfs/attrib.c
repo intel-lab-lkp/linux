@@ -4092,7 +4092,7 @@ retry:
 					goto put_err_out;
 				}
 				err = ntfs_inode_free_space(base_ni, mp_size -
-							cur_max_mp_size);
+							cur_max_mp_size, NULL);
 				if (err)
 					return err;
 				err = ntfs_attrlist_update_locked(
@@ -4514,6 +4514,7 @@ static int ntfs_non_resident_attr_shrink(struct ntfs_inode *ni,
 	int err;
 	struct ntfs_inode *base_ni;
 	bool runlist_locked = locked_ni == ni;
+	bool sizes_inconsistent = false;
 
 	ntfs_debug("Inode 0x%llx attr 0x%x new size %lld\n",
 		(unsigned long long)ni->mft_no, ni->type, (long long)newsize);
@@ -4591,7 +4592,9 @@ static int ntfs_non_resident_attr_shrink(struct ntfs_inode *ni,
 		ntfs_attr_put_search_ctx(ctx);
 
 		/* Truncate the runlist itself. */
-		if (ntfs_rl_truncate_nolock(vol, &ni->runlist, first_free_vcn)) {
+		err = ntfs_rl_truncate_nolock(vol, &ni->runlist, first_free_vcn);
+		if (err) {
+			ntfs_report_file_metadata_error(VFS_I(base_ni), err);
 			/*
 			 * Failed to truncate the runlist, so just throw it
 			 * away, it will be mapped afresh on next use.
@@ -4619,15 +4622,20 @@ static int ntfs_non_resident_attr_shrink(struct ntfs_inode *ni,
 		err = ntfs_attr_update_mapping_pairs_locked(ni, 0, ni);
 		if (err) {
 			ntfs_debug("Eeek! Mapping pairs update failed. Leaving inconstant metadata. Run chkdsk.\n");
+			ntfs_report_file_metadata_error(VFS_I(base_ni), err);
 			goto unlock_runlist;
 		}
 		if (!runlist_locked)
 			up_write(&ni->runlist.lock);
+		sizes_inconsistent = ni->allocated_size < ni->data_size;
 	}
 
 	/* Get the first attribute record. */
 	ctx = ntfs_attr_get_search_ctx(base_ni, NULL);
 	if (IS_ERR(ctx)) {
+		/* The old sizes no longer describe the shortened allocation. */
+		if (sizes_inconsistent)
+			ntfs_report_file_metadata_error(VFS_I(base_ni), PTR_ERR(ctx));
 		ntfs_error(vol->sb, "%s: Failed to get search context", __func__);
 		return PTR_ERR(ctx);
 	}
@@ -4635,8 +4643,15 @@ static int ntfs_non_resident_attr_shrink(struct ntfs_inode *ni,
 	err = ntfs_attr_lookup(ni->type, ni->name, ni->name_len,
 				CASE_SENSITIVE, 0, NULL, 0, ctx);
 	if (err) {
-		if (err == -ENOENT)
-			err = -EIO;
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
+		} else if (sizes_inconsistent &&
+			   (err == -ENOMEM || err == -EINTR || err == -ERESTARTSYS)) {
+			/* Lookup does not report these otherwise harmless errors. */
+			ntfs_report_file_metadata_error(VFS_I(base_ni), err);
+		}
 		ntfs_debug("Eeek! Lookup of first attribute extent failed. Leaving inconstant metadata.\n");
 		goto put_err_out;
 	}
@@ -4886,7 +4901,9 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 				 rl->length != first_free_vcn -
 					ntfs_bytes_to_cluster(vol, ni->allocated_size) ||
 				 rl[1].length)) {
-				ntfs_cluster_free_from_rl(vol, rl);
+				err2 = ntfs_cluster_free_from_rl(vol, rl);
+				if (err2)
+					ntfs_report_file_metadata_error(VFS_I(base_ni), err2);
 				kvfree(rl);
 				rl = ntfs_cluster_alloc(vol,
 						ntfs_bytes_to_cluster(vol,
@@ -4907,11 +4924,20 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 			/* Append new clusters to attribute runlist. */
 			rln = ntfs_runlists_merge(&ni->runlist, rl, 0, &new_rl_count);
 			if (IS_ERR(rln)) {
+				int free_err;
+
+				err = PTR_ERR(rln);
+				if (err != -ENOMEM) {
+					err = -EFSCORRUPTED;
+					ntfs_report_file_metadata_error(VFS_I(base_ni),
+									-EFSCORRUPTED);
+				}
 				/* Failed, free just allocated clusters. */
 				ntfs_error(sb, "Run list merge failed");
-				ntfs_cluster_free_from_rl(vol, rl);
+				free_err = ntfs_cluster_free_from_rl(vol, rl);
+				if (free_err)
+					ntfs_report_file_metadata_error(VFS_I(base_ni), free_err);
 				kvfree(rl);
-				err = -EIO;
 				goto unlock_runlist;
 			}
 			ni->runlist.rl = rln;
@@ -4957,8 +4983,11 @@ static int ntfs_non_resident_attr_expand(struct ntfs_inode *ni, const s64 newsiz
 	err = ntfs_attr_lookup(ni->type, ni->name, ni->name_len,
 			       CASE_SENSITIVE, 0, NULL, 0, ctx);
 	if (err) {
-		if (err == -ENOENT)
-			err = -EIO;
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
+		}
 		if (ni->allocated_size != org_alloc_size)
 			goto rollback;
 		goto put_err_out;
@@ -4982,8 +5011,10 @@ rollback_locked:
 	/* Free allocated clusters. */
 	freed = ntfs_cluster_free(ni, ntfs_bytes_to_cluster(vol, org_alloc_size),
 				  -1, ctx);
-	if (freed < 0)
+	if (freed < 0) {
 		ntfs_debug("Leaking clusters");
+		ntfs_report_file_metadata_error(VFS_I(base_ni), freed);
+	}
 
 	/*
 	 * Now, truncate the runlist itself.  Restore allocated_size before
@@ -5005,10 +5036,14 @@ rollback_locked:
 		kvfree(ni->runlist.rl);
 		ni->runlist.rl = NULL;
 		ntfs_error(sb, "Couldn't truncate runlist. Rollback failed");
+		ntfs_report_file_metadata_error(VFS_I(base_ni), err2);
 	} else {
 		/* Restore mapping pairs. */
-		if (__ntfs_attr_update_mapping_pairs(ni, 0, ni, true))
+		err2 = __ntfs_attr_update_mapping_pairs(ni, 0, ni, true);
+		if (err2) {
 			ntfs_error(sb, "Failed to restore old mapping pairs");
+			ntfs_report_file_metadata_error(VFS_I(base_ni), err2);
+		}
 
 		if (NInoSparse(ni) || NInoCompressed(ni)) {
 			ni->itype.compressed.size =  org_compressed_size;
@@ -5048,6 +5083,7 @@ static int ntfs_resident_attr_resize(struct ntfs_inode *attr_ni, const s64 newsi
 	struct super_block *sb = vol->sb;
 	int err = -EIO;
 	struct ntfs_inode *base_ni, *ext_ni = NULL;
+	bool moved;
 
 attr_resize_again:
 	ntfs_debug("Inode 0x%llx attr 0x%x new size %lld\n",
@@ -5069,6 +5105,11 @@ attr_resize_again:
 	err = ntfs_attr_lookup(attr_ni->type, attr_ni->name, attr_ni->name_len,
 			CASE_SENSITIVE, 0, NULL, 0, ctx);
 	if (err) {
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
+		}
 		ntfs_error(sb, "ntfs_attr_lookup failed");
 		goto put_err_out;
 	}
@@ -5157,6 +5198,10 @@ attr_resize_again:
 				(__le16 *)((u8 *)a + le16_to_cpu(a->name_offset)),
 				a->name_length);
 		if (IS_ERR(tvi)) {
+			if (PTR_ERR(tvi) == -ENOENT) {
+				ntfs_report_file_metadata_error(VFS_I(base_ni),
+								-EFSCORRUPTED);
+			}
 			ntfs_error(sb, "Couldn't open attribute");
 			continue;
 		}
@@ -5192,16 +5237,23 @@ attr_resize_again:
 				return err;
 		}
 
-		err = ntfs_inode_free_space(base_ni, sizeof(struct attr_record));
+		err = ntfs_inode_free_space(base_ni, sizeof(struct attr_record),
+					    &moved);
 		if (err) {
+			/* Previously moved records are not restored on this exit. */
+			if (moved)
+				ntfs_report_file_metadata_error(VFS_I(base_ni), err);
 			err = -ENOSPC;
 			ntfs_error(sb,
 				"Couldn't free space in the MFT record to make attribute list non resident");
 			return err;
 		}
 		err = ntfs_attrlist_update(base_ni);
-		if (err)
+		if (err) {
+			if (moved)
+				ntfs_report_file_metadata_error(VFS_I(base_ni), err);
 			return err;
+		}
 		goto attr_resize_again;
 	}
 
@@ -5215,6 +5267,11 @@ attr_resize_again:
 	err = ntfs_attr_lookup(attr_ni->type, attr_ni->name, attr_ni->name_len,
 			CASE_SENSITIVE, 0, NULL, 0, ctx);
 	if (err) {
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(base_ni),
+							-EFSCORRUPTED);
+		}
 		ntfs_error(sb, "%s: Attribute lookup failed 2", __func__);
 		goto put_err_out;
 	}
@@ -5256,8 +5313,11 @@ attr_resize_again:
 	}
 
 	err = ntfs_attrlist_update(base_ni);
-	if (err < 0)
+	if (err < 0) {
+		/* The record moved, but its on-disk list entry is still stale. */
+		ntfs_report_file_metadata_error(VFS_I(base_ni), err);
 		goto put_err_out;
+	}
 
 	ntfs_attr_put_search_ctx(ctx);
 	/* Try to perform resize once again. */

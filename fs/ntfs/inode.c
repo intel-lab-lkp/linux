@@ -3326,7 +3326,7 @@ int ntfs_inode_add_attrlist(struct ntfs_inode *ni)
 	/* Free space if there is not enough it for $ATTRIBUTE_LIST. */
 	if (le32_to_cpu(ni_mrec->bytes_allocated) -
 			le32_to_cpu(ni_mrec->bytes_in_use) < attr_al_len) {
-		if (ntfs_inode_free_space(ni, (int)attr_al_len)) {
+		if (ntfs_inode_free_space(ni, (int)attr_al_len, NULL)) {
 			/* Failed to free space. */
 			err = -ENOSPC;
 			ntfs_error(ni->vol->sb, "Failed to free space for attrlist");
@@ -3609,16 +3609,19 @@ static int ntfs_attr_position(__le32 type, struct ntfs_attr_search_ctx *ctx)
  * ntfs_inode_free_space - free space in the MFT record of inode
  * @ni:		ntfs inode in which MFT record free space
  * @size:	amount of space needed to free
+ * @moved:	optional output, set if any attribute record was moved
  *
  * Return 0 on success or error.
  */
-int ntfs_inode_free_space(struct ntfs_inode *ni, int size)
+int ntfs_inode_free_space(struct ntfs_inode *ni, int size, bool *moved)
 {
 	struct ntfs_attr_search_ctx *ctx;
 	int freed, err;
 	struct mft_record *ni_mrec;
 	struct super_block *sb;
 
+	if (moved)
+		*moved = false;
 	if (!ni || size < 0)
 		return -EINVAL;
 	ntfs_debug("Entering for inode %llu, size %d\n", ni->mft_no, size);
@@ -3626,7 +3629,7 @@ int ntfs_inode_free_space(struct ntfs_inode *ni, int size)
 	sb = ni->vol->sb;
 	ni_mrec = map_mft_record(ni);
 	if (IS_ERR(ni_mrec))
-		return -EIO;
+		return PTR_ERR(ni_mrec);
 
 	freed = (le32_to_cpu(ni_mrec->bytes_allocated) -
 			le32_to_cpu(ni_mrec->bytes_in_use));
@@ -3699,6 +3702,8 @@ retry:
 			break;
 		}
 		freed += record_size;
+		if (moved)
+			*moved = true;
 
 		/* Check whether we done. */
 		if (size <= freed) {
