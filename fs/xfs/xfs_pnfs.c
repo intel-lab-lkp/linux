@@ -224,6 +224,14 @@ xfs_fs_map_blocks(
 		else if (nimaps && imap.br_startblock == HOLESTARTBLOCK)
 			end_fsb = min(end_fsb, imap.br_startoff +
 					       imap.br_blockcount);
+		/*
+		 * xfs_bmapi_write() maps at most XFS_MAX_BMBT_EXTLEN blocks
+		 * in one mapping, so don't reserve blocks for more. The
+		 * range comes from a client, and its block count may not
+		 * even fit the 32-bit reservation. The rest of the range
+		 * is mapped by a later call.
+		 */
+		end_fsb = min(end_fsb, offset_fsb + XFS_MAX_BMBT_EXTLEN);
 		xfs_iunlock(ip, lock_flags);
 
 		error = xfs_iomap_write_direct(ip, offset_fsb,
