@@ -218,7 +218,8 @@ int sparx5_fdma_xmit(struct sparx5 *sparx5, u32 *ifh, struct sk_buff *skb,
 	void *virt_addr;
 
 	fdma_dcb_advance(fdma);
-	if (!fdma_db_is_done(fdma_db_get(fdma, fdma->dcb_index, 0)))
+	if (!fdma_db_is_done(fdma_db_get(fdma, fdma->dcb_index, 0)) ||
+	    fdma_is_last(fdma, fdma_dcb_next_get(fdma)))
 		return -EINVAL;
 
 	/* Get the virtual address of the dataptr for the next DB */
