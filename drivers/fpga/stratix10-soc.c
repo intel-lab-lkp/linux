@@ -310,14 +310,14 @@ static int s10_ops_write(struct fpga_manager *mgr, const char *buf,
 		}
 
 		/*
-		 * If callback hasn't already happened, wait for buffers to be
-		 * returned from service layer
+		 * Always wait for the completion rather than skipping it when
+		 * priv->status is already set. The callback may have fired
+		 * between the CLAIM/SUBMIT send and here; if so, complete()
+		 * has already incremented the done counter and
+		 * wait_for_completion_timeout() returns immediately.
 		 */
-		wait_status = 1; /* not timed out */
-		if (!priv->status)
-			wait_status = wait_for_completion_timeout(
-				&priv->status_return_completion,
-				S10_BUFFER_TIMEOUT);
+		wait_status = wait_for_completion_timeout(
+			&priv->status_return_completion, S10_BUFFER_TIMEOUT);
 
 		if (test_and_clear_bit(SVC_STATUS_BUFFER_DONE, &priv->status) ||
 		    test_and_clear_bit(SVC_STATUS_BUFFER_SUBMITTED,
