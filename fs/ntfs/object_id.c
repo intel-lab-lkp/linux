@@ -37,15 +37,16 @@ __le16 objid_index_name[] = {cpu_to_le16('$'), cpu_to_le16('O'), 0};
 
 /*
  * open_object_id_index - Open the $Extend/$ObjId file and its index
- * @vol: NTFS volume structure
+ * @ni: NTFS inode with an existing object ID attribute
  *
  * Opens the $ObjId system file and retrieves its index context.
  *
  * Return: The index context if opened successfully, or NULL if an error
  *	   occurred.
  */
-static struct ntfs_index_context *open_object_id_index(struct ntfs_volume *vol)
+static struct ntfs_index_context *open_object_id_index(struct ntfs_inode *ni)
 {
+	struct ntfs_volume *vol = ni->vol;
 	struct inode *dir_vi, *vi;
 	struct ntfs_inode *dir_ni;
 	struct ntfs_index_context *xo = NULL;
@@ -62,6 +63,8 @@ static struct ntfs_index_context *open_object_id_index(struct ntfs_volume *vol)
 	/* do not use path_name_to inode - could reopen root */
 	dir_vi = ntfs_iget(vol->sb, FILE_Extend);
 	if (IS_ERR(dir_vi)) {
+		if (vol->major_ver >= 3 && PTR_ERR(dir_vi) == -ENOENT)
+			ntfs_report_metadata_error(vol, -EFSCORRUPTED);
 		kmem_cache_free(ntfs_name_cache, uname);
 		return NULL;
 	}
@@ -72,12 +75,19 @@ static struct ntfs_index_context *open_object_id_index(struct ntfs_volume *vol)
 	mutex_unlock(&dir_ni->mrec_lock);
 	kfree(name);
 	kmem_cache_free(ntfs_name_cache, uname);
-	if (IS_ERR_MREF(mref))
+	if (IS_ERR_MREF(mref)) {
+		if (MREF_ERR(mref) == -ENOENT)
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							-EFSCORRUPTED);
 		goto put_dir_vi;
+	}
 
 	vi = ntfs_iget(vol->sb, MREF(mref));
-	if (IS_ERR(vi))
+	if (IS_ERR(vi)) {
+		if (PTR_ERR(vi) == -ENOENT)
+			ntfs_report_file_metadata_error(dir_vi, -EFSCORRUPTED);
 		goto put_dir_vi;
+	}
 
 	xo = ntfs_index_ctx_get(NTFS_I(vi), objid_index_name, 2);
 	if (!xo)
@@ -101,18 +111,28 @@ static int remove_object_id_index(struct ntfs_inode *ni, struct ntfs_index_conte
 {
 	struct object_id_index_key key = {0};
 	s64 size;
+	int err;
 
-	if (ni->data_size == 0)
-		return -ENODATA;
+	if (ni->data_size == 0) {
+		ntfs_report_file_metadata_error(VFS_I(ni), -EFSCORRUPTED);
+		return -EFSCORRUPTED;
+	}
 
 	/* read the existing object id attribute */
 	size = ntfs_inode_attr_pread(VFS_I(ni), 0, sizeof(struct guid),
 				     (char *)&key);
-	if (size != sizeof(struct guid))
-		return -ENODATA;
+	if (size != sizeof(struct guid)) {
+		if (size >= 0 || size == -EIO)
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							size < 0 ? (int)size : -EFSCORRUPTED);
+		return size < 0 ? size : -EFSCORRUPTED;
+	}
 
-	if (!ntfs_index_lookup(&key, sizeof(struct object_id_index_key), xo))
+	err = ntfs_index_lookup(&key, sizeof(struct object_id_index_key), xo);
+	if (!err)
 		return ntfs_index_rm(xo);
+	if (err == -ENOENT)
+		ntfs_report_file_metadata_error(VFS_I(ni), -EFSCORRUPTED);
 
 	return 0;
 }
@@ -139,7 +159,7 @@ int ntfs_delete_object_id_index(struct ntfs_inode *ni)
 	/*
 	 * read the existing object id and un-index it
 	 */
-	xo = open_object_id_index(ni->vol);
+	xo = open_object_id_index(ni);
 	if (xo) {
 		xoni = xo->idx_ni;
 		mutex_lock_nested(&xoni->mrec_lock, NTFS_EXTEND_MUTEX_PARENT);

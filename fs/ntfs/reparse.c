@@ -598,26 +598,36 @@ static int remove_reparse_index(struct inode *rp, struct ntfs_index_context *xr,
 
 	/* read the existing reparse_tag */
 	size = ntfs_inode_attr_pread(rp, 0, 4, (char *)preparse_tag);
-	if (size != 4)
-		return -ENODATA;
+	if (size != 4) {
+		if (size >= 0 || size == -EIO)
+			ntfs_report_file_metadata_error(rp,
+							size < 0 ? (int)size : -EFSCORRUPTED);
+		return size < 0 ? size : -EFSCORRUPTED;
+	}
 
 	file_id_cpu = MK_MREF(ni->mft_no, ni->seq_no);
 	file_id = cpu_to_le64(file_id_cpu);
 	key.reparse_tag = *preparse_tag;
 	/* danger on processors which require proper alignment! */
 	memcpy(&key.file_id, &file_id, 8);
-	if (!ntfs_index_lookup(&key, sizeof(struct reparse_index_key), xr)) {
+	err = ntfs_index_lookup(&key, sizeof(struct reparse_index_key), xr);
+	if (!err) {
 		err = ntfs_index_rm(xr);
 		if (err)
 			ret = err;
+	} else if (err == -ENOENT && *preparse_tag) {
+		/* A newly created attribute has a zero tag and is not indexed yet. */
+		ntfs_report_file_metadata_error(rp, -EFSCORRUPTED);
 	}
 	return ret;
 }
 
 /*
  * Open the $Extend/$Reparse file and its index
+ * @inode is non-NULL when existing reparse metadata requires the index.
  */
-static struct ntfs_index_context *open_reparse_index(struct ntfs_volume *vol)
+static struct ntfs_index_context *open_reparse_index(struct ntfs_volume *vol,
+						     struct inode *inode)
 {
 	struct ntfs_index_context *xr = NULL;
 	u64 mref;
@@ -628,14 +638,19 @@ static struct ntfs_index_context *open_reparse_index(struct ntfs_volume *vol)
 
 	/* do not use path_name_to inode - could reopen root */
 	dir_vi = ntfs_iget(vol->sb, FILE_Extend);
-	if (IS_ERR(dir_vi))
-		return NULL;
+	if (IS_ERR(dir_vi)) {
+		if (vol->major_ver >= 3 && PTR_ERR(dir_vi) == -ENOENT) {
+			ntfs_report_metadata_error(vol, -EFSCORRUPTED);
+			dir_vi = ERR_PTR(-EFSCORRUPTED);
+		}
+		return ERR_CAST(dir_vi);
+	}
 
 	uname_len = ntfs_nlstoucs(vol, "$Reparse", 8, &uname,
 				  NTFS_MAX_NAME_LEN);
 	if (uname_len < 0) {
 		iput(dir_vi);
-		return NULL;
+		return ERR_PTR(uname_len);
 	}
 
 	mutex_lock_nested(&NTFS_I(dir_vi)->mrec_lock, NTFS_EXTEND_MUTEX_PARENT);
@@ -644,16 +659,30 @@ static struct ntfs_index_context *open_reparse_index(struct ntfs_volume *vol)
 	mutex_unlock(&NTFS_I(dir_vi)->mrec_lock);
 	kfree(name);
 	kmem_cache_free(ntfs_name_cache, uname);
-	if (IS_ERR_MREF(mref))
+	if (IS_ERR_MREF(mref)) {
+		if (MREF_ERR(mref) == -ENOENT && inode) {
+			ntfs_report_file_metadata_error(inode, -EFSCORRUPTED);
+			mref = ERR_MREF(-EFSCORRUPTED);
+		}
+		xr = ERR_PTR(MREF_ERR(mref));
 		goto put_dir_vi;
+	}
 
 	vi = ntfs_iget(vol->sb, MREF(mref));
-	if (IS_ERR(vi))
+	if (IS_ERR(vi)) {
+		if (PTR_ERR(vi) == -ENOENT) {
+			ntfs_report_file_metadata_error(dir_vi, -EFSCORRUPTED);
+			vi = ERR_PTR(-EFSCORRUPTED);
+		}
+		xr = ERR_CAST(vi);
 		goto put_dir_vi;
+	}
 
 	xr = ntfs_index_ctx_get(NTFS_I(vi), reparse_index_name, 2);
-	if (!xr)
+	if (!xr) {
 		iput(vi);
+		xr = ERR_PTR(-ENOMEM);
+	}
 put_dir_vi:
 	iput(dir_vi);
 	return xr;
@@ -678,8 +707,14 @@ static int update_reparse_data(struct ntfs_inode *ni, struct ntfs_index_context 
 	struct ntfs_inode *rp_ni;
 
 	rp_inode = ntfs_attr_iget(VFS_I(ni), AT_REPARSE_POINT, AT_UNNAMED, 0);
-	if (IS_ERR(rp_inode))
+	if (IS_ERR(rp_inode)) {
+		if (PTR_ERR(rp_inode) == -ENOENT) {
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							-EFSCORRUPTED);
+			rp_inode = ERR_PTR(-EFSCORRUPTED);
+		}
 		return PTR_ERR(rp_inode);
+	}
 	rp_ni = NTFS_I(rp_inode);
 
 	/* remove the existing reparse data */
@@ -693,19 +728,26 @@ static int update_reparse_data(struct ntfs_inode *ni, struct ntfs_index_context 
 	written = ntfs_inode_attr_pwrite(rp_inode, 0, size, value, false);
 	if (written != size) {
 		ntfs_error(ni->vol->sb, "Failed to update reparse data\n");
-		err = -EIO;
+		if (oldsize > 0 || written > 0)
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							written < 0 ? (int)written : -EIO);
+		err = written < 0 ? written : -EIO;
 		goto put_rp_inode;
 	}
 
 	err = set_reparse_index(ni, xr,
 				((const struct reparse_point *)value)->reparse_tag);
 	if (err && oldsize > 0) {
+		int rollback_err;
+
 		/*
 		 * If cannot index, try to remove the reparse
 		 * data and log the error. There will be an
 		 * inconsistency if removal fails.
 		 */
-		ntfs_attr_rm(rp_ni);
+		rollback_err = ntfs_attr_rm(rp_ni);
+		if (rollback_err)
+			ntfs_report_file_metadata_error(VFS_I(ni), rollback_err);
 		ntfs_error(ni->vol->sb,
 			   "Failed to index reparse data. Possible corruption.\n");
 	}
@@ -732,14 +774,24 @@ int ntfs_delete_reparse_index(struct ntfs_inode *ni)
 		return 0;
 
 	vi = ntfs_attr_iget(VFS_I(ni), AT_REPARSE_POINT, AT_UNNAMED, 0);
-	if (IS_ERR(vi))
+	if (IS_ERR(vi)) {
+		if (PTR_ERR(vi) == -ENOENT) {
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							-EFSCORRUPTED);
+			vi = ERR_PTR(-EFSCORRUPTED);
+		}
 		return PTR_ERR(vi);
+	}
 
 	/*
 	 * read the existing reparse data (the tag is enough)
 	 * and un-index it
 	 */
-	xr = open_reparse_index(ni->vol);
+	xr = open_reparse_index(ni->vol, VFS_I(ni));
+	if (IS_ERR(xr)) {
+		err = PTR_ERR(xr);
+		goto out;
+	}
 	if (xr) {
 		xrni = xr->idx_ni;
 		mutex_lock_nested(&xrni->mrec_lock, NTFS_EXTEND_MUTEX_PARENT);
@@ -785,9 +837,10 @@ static int ntfs_set_ntfs_reparse_data(struct ntfs_inode *ni, char *value, size_t
 	if (valid_reparse_data(ni, (const struct reparse_point *)value, size) == false)
 		return -EINVAL;
 
-	xr = open_reparse_index(ni->vol);
-	if (!xr)
-		return -EINVAL;
+	xr = open_reparse_index(ni->vol,
+				ni->flags & FILE_ATTR_REPARSE_POINT ? VFS_I(ni) : NULL);
+	if (IS_ERR(xr))
+		return PTR_ERR(xr);
 	xrni = xr->idx_ni;
 
 	if (!ntfs_attr_exist(ni, AT_REPARSE_POINT, AT_UNNAMED, 0)) {
