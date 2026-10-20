@@ -641,6 +641,12 @@ config HAVE_ARCH_SECCOMP
 	  - __NR_seccomp_write_32
 	  - __NR_seccomp_exit_32
 	  - __NR_seccomp_sigreturn_32
+	  and, optionally, the compat fork family, for features that need to
+	  recognise it (there is no generic default for these):
+	  - __NR_seccomp_clone_32
+	  - __NR_seccomp_clone3_32
+	  - __NR_seccomp_fork_32
+	  - __NR_seccomp_vfork_32
 
 config HAVE_ARCH_SECCOMP_FILTER
 	bool
