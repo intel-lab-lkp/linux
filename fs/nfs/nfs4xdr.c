@@ -6065,7 +6065,7 @@ static int decode_getdeviceinfo(struct xdr_stream *xdr,
 {
 	struct pnfs_device *pdev = res->pdev;
 	__be32 *p;
-	uint32_t len, type;
+	uint32_t type;
 	int status;
 
 	status = decode_op_hdr(xdr, OP_GETDEVICEINFO);
@@ -6100,26 +6100,8 @@ static int decode_getdeviceinfo(struct xdr_stream *xdr,
 		return -EIO;
 
 	/* Parse notification bitmap, verifying that it is zero. */
-	p = xdr_inline_decode(xdr, 4);
-	if (unlikely(!p))
+	if (decode_bitmap4(xdr, &res->notification, 1) < 0)
 		return -EIO;
-	len = be32_to_cpup(p);
-	if (len) {
-		uint32_t i;
-
-		p = xdr_inline_decode(xdr, 4 * len);
-		if (unlikely(!p))
-			return -EIO;
-
-		res->notification = be32_to_cpup(p++);
-		for (i = 1; i < len; i++) {
-			if (be32_to_cpup(p++)) {
-				dprintk("%s: unsupported notification\n",
-					__func__);
-				return -EIO;
-			}
-		}
-	}
 	return 0;
 }
 
