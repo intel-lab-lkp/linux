@@ -3231,7 +3231,7 @@ int ntfs_inode_attach_all_extents(struct ntfs_inode *ni)
  */
 int ntfs_inode_add_attrlist(struct ntfs_inode *ni)
 {
-	int err;
+	int err, rollback_err;
 	struct ntfs_attr_search_ctx *ctx;
 	u8 *al = NULL, *aln;
 	int al_len = 0;
@@ -3252,7 +3252,7 @@ int ntfs_inode_add_attrlist(struct ntfs_inode *ni)
 
 	ni_mrec = map_mft_record(ni);
 	if (IS_ERR(ni_mrec))
-		return -EIO;
+		return PTR_ERR(ni_mrec);
 
 	/* Form attribute list. */
 	ctx = ntfs_attr_get_search_ctx(ni, ni_mrec);
@@ -3267,7 +3267,9 @@ int ntfs_inode_add_attrlist(struct ntfs_inode *ni)
 		int ale_size;
 
 		if (ctx->attr->type == AT_ATTRIBUTE_LIST) {
-			err = -EIO;
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							-EFSCORRUPTED);
 			ntfs_error(ni->vol->sb, "Attribute list already present");
 			goto put_err_out;
 		}
@@ -3355,15 +3357,19 @@ remove_attrlist_record:
 	NInoClearAttrList(ni);
 	/* Remove $ATTRIBUTE_LIST record. */
 	ntfs_attr_reinit_search_ctx(ctx);
-	if (!ntfs_attr_lookup(AT_ATTRIBUTE_LIST, NULL, 0,
-				CASE_SENSITIVE, 0, NULL, 0, ctx)) {
-		if (ntfs_attr_record_rm(ctx))
+	rollback_err = ntfs_attr_lookup(AT_ATTRIBUTE_LIST, NULL, 0,
+					CASE_SENSITIVE, 0, NULL, 0, ctx);
+	if (!rollback_err) {
+		rollback_err = ntfs_attr_record_rm(ctx);
+		if (rollback_err)
 			ntfs_error(ni->vol->sb, "Rollback failed to remove attrlist");
 		else
 			free_empty_extents = true;
 	} else {
 		ntfs_error(ni->vol->sb, "Rollback failed to find attrlist");
 	}
+	if (rollback_err)
+		ntfs_report_file_metadata_error(VFS_I(ni), rollback_err);
 
 	/* Setup back in-memory runlist. */
 	ni->attr_list = al;
@@ -3378,17 +3384,21 @@ rollback:
 	ale = (struct attr_list_entry *)al;
 	while ((u8 *)ale < al + al_len) {
 		if (MREF_LE(ale->mft_reference) != ni->mft_no) {
-			if (!ntfs_attr_lookup(ale->type, ale->name,
-						ale->name_length,
-						CASE_SENSITIVE,
-						le64_to_cpu(ale->lowest_vcn),
-						NULL, 0, ctx)) {
-				if (ntfs_attr_record_move_to(ctx, ni))
+			rollback_err = ntfs_attr_lookup(ale->type, ale->name,
+							ale->name_length,
+							CASE_SENSITIVE,
+							le64_to_cpu(ale->lowest_vcn),
+							NULL, 0, ctx);
+			if (!rollback_err) {
+				rollback_err = ntfs_attr_record_move_to(ctx, ni);
+				if (rollback_err)
 					ntfs_error(ni->vol->sb,
 							"Rollback failed to move attribute");
 			} else {
 				ntfs_error(ni->vol->sb, "Rollback failed to find attr");
 			}
+			if (rollback_err)
+				ntfs_report_file_metadata_error(VFS_I(ni), rollback_err);
 			ntfs_attr_reinit_search_ctx(ctx);
 		}
 		ale = (struct attr_list_entry *)((u8 *)ale + le16_to_cpu(ale->length));
@@ -3401,8 +3411,13 @@ rollback:
 	NInoClearAttrListDirty(ni);
 	ntfs_attr_put_search_ctx(ctx);
 	ctx = NULL;
-	if (free_empty_extents && ntfs_inode_free_empty_extents(ni))
-		ntfs_error(ni->vol->sb, "Rollback failed to free empty extent");
+	if (free_empty_extents) {
+		rollback_err = ntfs_inode_free_empty_extents(ni);
+		if (rollback_err) {
+			ntfs_report_file_metadata_error(VFS_I(ni), rollback_err);
+			ntfs_error(ni->vol->sb, "Rollback failed to free empty extent");
+		}
+	}
 	goto err_out;
 put_err_out:
 	ntfs_attr_put_search_ctx(ctx);
