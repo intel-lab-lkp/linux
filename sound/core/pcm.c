@@ -825,6 +825,7 @@ static void snd_pcm_free_stream(struct snd_pcm_str * pstr)
 	substream = pstr->substream;
 	while (substream) {
 		substream_next = substream->next;
+		snd_pcm_lib_preallocate_free(substream);
 		snd_pcm_timer_done(substream);
 		kfree(substream);
 		substream = substream_next;
@@ -861,7 +862,6 @@ static int snd_pcm_free(struct snd_pcm *pcm)
 	}
 	if (pcm->private_free)
 		pcm->private_free(pcm);
-	snd_pcm_lib_preallocate_free_for_all(pcm);
 	snd_pcm_free_stream(&pcm->streams[SNDRV_PCM_STREAM_PLAYBACK]);
 	snd_pcm_free_stream(&pcm->streams[SNDRV_PCM_STREAM_CAPTURE]);
 	kfree(pcm);
