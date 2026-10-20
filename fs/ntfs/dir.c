@@ -805,7 +805,9 @@ static int ntfs_readdir(struct file *file, struct dir_context *actor)
 		err = ntfs_index_lookup(private->key,
 					le16_to_cpu(private->key_length),
 					ictx);
-		if (!err) {
+		if (!err || err == -ENOENT) {
+			/* A deleted resume key leaves the next entry in the context. */
+			err = 0;
 			next = ictx->entry;
 			/*
 			 * Update ie_pos with private->curr_pos
@@ -819,6 +821,8 @@ static int ntfs_readdir(struct file *file, struct dir_context *actor)
 					goto out;
 			}
 
+			if (next->flags & INDEX_ENTRY_END)
+				goto next_entry;
 			goto nextdir;
 		} else {
 			goto out;
@@ -879,8 +883,9 @@ static int ntfs_readdir(struct file *file, struct dir_context *actor)
 
 	if (next->flags & INDEX_ENTRY_NODE) {
 		ictx->ia_ni = ntfs_ia_open(ictx, ictx->idx_ni);
-		if (!ictx->ia_ni) {
-			err = -EINVAL;
+		if (IS_ERR(ictx->ia_ni)) {
+			err = PTR_ERR(ictx->ia_ni);
+			ictx->ia_ni = NULL;
 			goto out;
 		}
 
@@ -901,6 +906,7 @@ static int ntfs_readdir(struct file *file, struct dir_context *actor)
 		goto nextdir;
 
 	while (1) {
+next_entry:
 		next = ntfs_index_next(next, ictx);
 		if (IS_ERR(next)) {
 			err = PTR_ERR(next);
@@ -989,7 +995,11 @@ filldir:
 			private->key_length = next->key_length;
 			break;
 		}
+		/* The saved key is consumed; retry from the next offset. */
+		kfree(private->key);
+		private->key = NULL;
 		ie_pos += le16_to_cpu(next->length);
+		actor->pos = ie_pos;
 	}
 
 	if (!err)
@@ -1015,9 +1025,8 @@ out:
 	if (err) {
 		if (private) {
 			private->curr_pos = actor->pos;
-			private->end_in_iterate = true;
+			private->end_in_iterate = false;
 		}
-		err = 0;
 	}
 	ntfs_index_ctx_put(ictx);
 	kfree(name);
