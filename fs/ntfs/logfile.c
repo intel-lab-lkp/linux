@@ -17,14 +17,14 @@
  * @rp:		restart page header to check
  * @pos:	position in @vi at which the restart page header resides
  *
- * Check the restart page header @rp for consistency and return 'true' if it is
- * consistent and 'false' otherwise.
+ * Check the restart page header @rp for consistency. Return 0 on success,
+ * -EOPNOTSUPP for an unsupported version, or -EINVAL for corruption.
  *
  * This function only needs NTFS_BLOCK_SIZE bytes in @rp, i.e. it does not
  * require the full restart page.
  */
-static bool ntfs_check_restart_page_header(struct inode *vi,
-		struct restart_page_header *rp, s64 pos)
+static int ntfs_check_restart_page_header(struct inode *vi,
+					  struct restart_page_header *rp, s64 pos)
 {
 	u32 logfile_system_page_size, logfile_log_page_size;
 	u16 ra_ofs, usa_count, usa_ofs, usa_end = 0;
@@ -43,7 +43,7 @@ static bool ntfs_check_restart_page_header(struct inode *vi,
 			(logfile_system_page_size - 1) ||
 			!is_power_of_2(logfile_log_page_size)) {
 		ntfs_error(vi->i_sb, "LogFile uses unsupported page size.");
-		return false;
+		return -EINVAL;
 	}
 	/*
 	 * We must be either at !pos (1st restart page) or at pos = system page
@@ -51,7 +51,7 @@ static bool ntfs_check_restart_page_header(struct inode *vi,
 	 */
 	if (pos && pos != logfile_system_page_size) {
 		ntfs_error(vi->i_sb, "Found restart area in incorrect position in LogFile.");
-		return false;
+		return -EINVAL;
 	}
 	/* We only know how to handle version 1.1. */
 	if (le16_to_cpu(rp->major_ver) != 1 ||
@@ -60,7 +60,7 @@ static bool ntfs_check_restart_page_header(struct inode *vi,
 			"LogFile version %i.%i is not supported.  (This driver supports version 1.1 only.)",
 			(int)le16_to_cpu(rp->major_ver),
 			(int)le16_to_cpu(rp->minor_ver));
-		return false;
+		return -EOPNOTSUPP;
 	}
 	/*
 	 * If chkdsk has been run the restart page may not be protected by an
@@ -75,7 +75,7 @@ static bool ntfs_check_restart_page_header(struct inode *vi,
 	if (usa_count != le16_to_cpu(rp->usa_count)) {
 		ntfs_error(vi->i_sb,
 			"LogFile restart page specifies inconsistent update sequence array count.");
-		return false;
+		return -EINVAL;
 	}
 	/* Verify the position of the update sequence array. */
 	usa_ofs = le16_to_cpu(rp->usa_ofs);
@@ -84,7 +84,7 @@ static bool ntfs_check_restart_page_header(struct inode *vi,
 			usa_end > NTFS_BLOCK_SIZE - sizeof(u16)) {
 		ntfs_error(vi->i_sb,
 			"LogFile restart page specifies inconsistent update sequence array offset.");
-		return false;
+		return -EINVAL;
 	}
 skip_usa_checks:
 	/*
@@ -99,7 +99,7 @@ skip_usa_checks:
 			ra_ofs > logfile_system_page_size) {
 		ntfs_error(vi->i_sb,
 			"LogFile restart page specifies inconsistent restart area offset.");
-		return false;
+		return -EINVAL;
 	}
 	/*
 	 * Only restart pages modified by chkdsk are allowed to have chkdsk_lsn
@@ -108,10 +108,10 @@ skip_usa_checks:
 	if (!ntfs_is_chkd_record(rp->magic) && le64_to_cpu(rp->chkdsk_lsn)) {
 		ntfs_error(vi->i_sb,
 			"LogFile restart page is not modified by chkdsk but a chkdsk LSN is specified.");
-		return false;
+		return -EINVAL;
 	}
 	ntfs_debug("Done.");
-	return true;
+	return 0;
 }
 
 /*
@@ -315,6 +315,7 @@ err_out:
  *
  * The following error codes are defined:
  *	-EINVAL	- The restart page is inconsistent.
+ *	-EOPNOTSUPP - The logfile version is unsupported.
  *	-ENOMEM	- Not enough memory to load the restart page.
  *	-EIO	- Failed to reading from LogFile.
  */
@@ -328,10 +329,9 @@ static int ntfs_check_and_load_restart_page(struct inode *vi,
 
 	ntfs_debug("Entering.");
 	/* Check the restart page header for consistency. */
-	if (!ntfs_check_restart_page_header(vi, rp, pos)) {
-		/* Error output already done inside the function. */
-		return -EINVAL;
-	}
+	err = ntfs_check_restart_page_header(vi, rp, pos);
+	if (err)
+		return err;
 	/* Check the restart area for consistency. */
 	if (!ntfs_check_restart_area(vi, rp)) {
 		/* Error output already done inside the function. */
@@ -372,8 +372,6 @@ static int ntfs_check_and_load_restart_page(struct inode *vi,
 				ntfs_error(vi->i_sb, "Error mapping LogFile page (index %lu).",
 						idx);
 				err = PTR_ERR(folio);
-				if (err != -EIO && err != -ENOMEM)
-					err = -EIO;
 				goto err_out;
 			}
 			size = min_t(int, to_read, PAGE_SIZE);
@@ -461,7 +459,7 @@ bool ntfs_check_logfile(struct inode *log_vi, struct restart_page_header **rp)
 	struct restart_page_header *rstr1_ph = NULL;
 	struct restart_page_header *rstr2_ph = NULL;
 	int log_page_size, err;
-	bool logfile_is_empty = true;
+	bool logfile_is_empty = true, unsupported_version = false;
 	u8 log_page_bits;
 
 	ntfs_debug("Entering.");
@@ -495,6 +493,7 @@ bool ntfs_check_logfile(struct inode *log_vi, struct restart_page_header **rp)
 	 */
 	if (size < log_page_size * 2 || (size - log_page_size * 2) >>
 			log_page_bits < MinLogRecordPages) {
+		ntfs_report_file_metadata_error(log_vi, -EFSCORRUPTED);
 		ntfs_error(vol->sb, "LogFile is too small.");
 		return false;
 	}
@@ -516,6 +515,8 @@ bool ntfs_check_logfile(struct inode *log_vi, struct restart_page_header **rp)
 			}
 			folio = read_mapping_folio(mapping, idx, NULL);
 			if (IS_ERR(folio)) {
+				if (PTR_ERR(folio) == -EIO)
+					ntfs_report_file_metadata_error(log_vi, -EIO);
 				ntfs_error(vol->sb, "Error mapping LogFile page (index %lu).",
 						idx);
 				goto err_out;
@@ -574,7 +575,11 @@ bool ntfs_check_logfile(struct inode *log_vi, struct restart_page_header **rp)
 		 * not abort if the restart page was invalid as we might still
 		 * find a valid one further in the file.
 		 */
-		if (err != -EINVAL) {
+		if (err == -EOPNOTSUPP)
+			unsupported_version = true;
+		else if (err != -EINVAL) {
+			if (err == -EIO)
+				ntfs_report_file_metadata_error(log_vi, err);
 			kunmap_local(kbase);
 			folio_put(folio);
 			goto err_out;
@@ -594,6 +599,8 @@ is_empty:
 		return true;
 	}
 	if (!rstr1_ph) {
+		if (!unsupported_version)
+			ntfs_report_file_metadata_error(log_vi, -EFSCORRUPTED);
 		ntfs_error(vol->sb,
 			"Did not find any restart pages in LogFile and it was not empty.");
 		return false;
@@ -767,10 +774,10 @@ io_err:
 	ntfs_error(sb, "Failed to write buffer.  Unmount and run chkdsk.");
 	goto dirty_err;
 rl_err:
+	err = -EFSCORRUPTED;
 	ntfs_error(sb, "Runlist is corrupt.  Unmount and run chkdsk.");
 dirty_err:
-	NVolSetErrors(vol);
-	err = -EIO;
+	ntfs_report_file_metadata_error(log_vi, err);
 err:
 	kvfree(empty_buf);
 	kfree(ra);

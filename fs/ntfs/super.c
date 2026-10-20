@@ -1357,7 +1357,7 @@ static int load_and_check_logfile(struct ntfs_volume *vol,
 	int err = 0;
 
 	ntfs_debug("Entering.");
-	tmp_ino = ntfs_iget(vol->sb, FILE_LogFile);
+	tmp_ino = ntfs_system_iget(vol, FILE_LogFile);
 	if (IS_ERR(tmp_ino)) {
 		if (!IS_ERR(tmp_ino))
 			iput(tmp_ino);
