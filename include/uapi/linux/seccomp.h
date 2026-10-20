@@ -143,6 +143,10 @@ struct seccomp_notif {
  * SECCOMP_NOTIF_FLAG_RESULT set and the same id, by the time the task
  * returns to user space, and that notification is not answered. A system
  * call for which results are not supported is refused with EINVAL.
+ *
+ * So far fork, vfork, clone and clone3 are supported. For these a new task
+ * is reported before it runs, so the record reaches the listener before
+ * any notification the new task can trigger.
  */
 #define SECCOMP_USER_NOTIF_FLAG_RESULT (1UL << 1)
 

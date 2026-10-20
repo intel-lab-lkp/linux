@@ -1815,6 +1815,8 @@ static void copy_seccomp(struct task_struct *p)
 	/* Ref-count the new filter user, and assign it. */
 	get_seccomp_filter(current);
 	p->seccomp = current->seccomp;
+	/* The result of this fork is reported by the parent only. */
+	p->seccomp.result = NULL;
 
 	/*
 	 * Explicitly enable no_new_privs here in case it got set
@@ -2809,6 +2811,7 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 		task_unlock(p);
 	}
 
+	seccomp_report_fork(p, nr);
 	wake_up_new_task(p);
 
 	/* forking complete and child started to run, tell ptracer */

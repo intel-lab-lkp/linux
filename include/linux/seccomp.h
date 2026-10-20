@@ -75,6 +75,7 @@ static inline int seccomp_mode(struct seccomp *s)
 #ifdef CONFIG_SECCOMP_FILTER
 extern void seccomp_filter_release(struct task_struct *tsk);
 extern void get_seccomp_filter(struct task_struct *tsk);
+extern void seccomp_report_fork(struct task_struct *child, pid_t nr);
 #else  /* CONFIG_SECCOMP_FILTER */
 static inline void seccomp_filter_release(struct task_struct *tsk)
 {
@@ -83,6 +84,9 @@ static inline void seccomp_filter_release(struct task_struct *tsk)
 static inline void get_seccomp_filter(struct task_struct *tsk)
 {
 	return;
+}
+static inline void seccomp_report_fork(struct task_struct *child, pid_t nr)
+{
 }
 #endif /* CONFIG_SECCOMP_FILTER */
 

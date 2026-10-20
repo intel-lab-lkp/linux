@@ -1371,6 +1371,30 @@ out:
 	return -1;
 }
 
+/**
+ * seccomp_report_fork - report a new task to the listener that asked for it
+ * @child: the new task, not woken up yet
+ * @nr: its pid, the value the fork returns
+ *
+ * Exit is too late for a successful fork: the child would already run, and
+ * might be gone with its pid reused. Report it before it is woken instead.
+ * A failed fork is reported on exit, like any other system call.
+ */
+void seccomp_report_fork(struct task_struct *child, pid_t nr)
+{
+	struct seccomp_kresult *kres = current->seccomp.result;
+
+	if (likely(!kres))
+		return;
+	current->seccomp.result = NULL;
+
+	kres->val = nr;
+	kres->child = get_task_pid(child, PIDTYPE_PID);
+	if (!thread_group_leader(child))
+		kres->flags |= SECCOMP_NOTIF_FLAG_THREAD;
+	seccomp_report_result(kres);
+}
+
 static bool __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 {
 	u32 filter_ret, action;
@@ -1806,10 +1830,32 @@ out:
 	return ret;
 }
 
+static bool seccomp_is_fork_syscall(const struct seccomp_data *sd)
+{
+	/* The aliases use -1 for a syscall the arch lacks. */
+	if (sd->nr < 0)
+		return false;
+#if defined(SECCOMP_ARCH_COMPAT) && defined(__NR_seccomp_clone_32)
+	if (sd->arch == SECCOMP_ARCH_COMPAT)
+		return sd->nr == __NR_seccomp_clone_32 ||
+		       sd->nr == __NR_seccomp_clone3_32 ||
+		       sd->nr == __NR_seccomp_fork_32 ||
+		       sd->nr == __NR_seccomp_vfork_32;
+#endif
+#if defined(SECCOMP_ARCH_NATIVE) && defined(__NR_seccomp_clone)
+	if (sd->arch == SECCOMP_ARCH_NATIVE)
+		return sd->nr == __NR_seccomp_clone ||
+		       sd->nr == __NR_seccomp_clone3 ||
+		       sd->nr == __NR_seccomp_fork ||
+		       sd->nr == __NR_seccomp_vfork;
+#endif
+	return false;
+}
+
 /* Which system calls can report their result. */
 static bool seccomp_result_supported(const struct seccomp_data *sd)
 {
-	return false;
+	return seccomp_is_fork_syscall(sd);
 }
 
 static long seccomp_notify_send(struct seccomp_filter *filter,
