@@ -3115,6 +3115,7 @@ retry:
 			pfn = KVM_PFN_ERR_FAULT;
 	} else {
 		if ((kfp->flags & FOLL_NOWAIT) &&
+		    npages == 0 && /* no PFN_ERR_NEEDS_IO on errors */
 		    vma_is_valid(vma, kfp->flags & FOLL_WRITE))
 			pfn = KVM_PFN_ERR_NEEDS_IO;
 		else
