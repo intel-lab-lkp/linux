@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/export.h>
 #include <linux/slab.h>
+#include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -952,13 +953,8 @@ static irqreturn_t ldc_tx(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-/* XXX ldc_alloc() and ldc_free() needs to run under a mutex so
- * XXX that addition and removal from the ldc_channel_list has
- * XXX atomicity, otherwise the __ldc_channel_exists() check is
- * XXX totally pointless as another thread can slip into ldc_alloc()
- * XXX and add a channel with the same ID.  There also needs to be
- * XXX a spinlock for ldc_channel_list.
- */
+/* Serializes ldc_channel_list and the channel-ID uniqueness check. */
+static DEFINE_MUTEX(ldc_channel_lock);
 static HLIST_HEAD(ldc_channel_list);
 
 static int __ldc_channel_exists(unsigned long id)
@@ -1165,16 +1161,17 @@ struct ldc_channel *ldc_alloc(unsigned long id,
 	if (hv_err == HV_ECHANNEL)
 		goto out_err;
 
+	mutex_lock(&ldc_channel_lock);
 	err = -EEXIST;
 	if (__ldc_channel_exists(id))
-		goto out_err;
+		goto out_err_locked;
 
 	mssbuf = NULL;
 
 	lp = kzalloc_obj(*lp);
 	err = -ENOMEM;
 	if (!lp)
-		goto out_err;
+		goto out_err_locked;
 
 	spin_lock_init(&lp->lock);
 
@@ -1223,9 +1220,6 @@ struct ldc_channel *ldc_alloc(unsigned long id,
 	lp->hs_state = LDC_HS_CLOSED;
 	ldc_set_state(lp, LDC_STATE_INIT);
 
-	INIT_HLIST_NODE(&lp->list);
-	hlist_add_head(&lp->list, &ldc_channel_list);
-
 	INIT_HLIST_HEAD(&lp->mh_list);
 
 	snprintf(lp->rx_irq_name, LDC_IRQ_NAME_MAX, "%s RX", name);
@@ -1243,6 +1237,11 @@ struct ldc_channel *ldc_alloc(unsigned long id,
 		goto out_free_txq;
 	}
 
+	INIT_HLIST_NODE(&lp->list);
+	hlist_add_head(&lp->list, &ldc_channel_list);
+
+	mutex_unlock(&ldc_channel_lock);
+
 	return lp;
 
 out_free_txq:
@@ -1256,6 +1255,9 @@ out_free_iommu:
 
 out_free_ldc:
 	kfree(lp);
+
+out_err_locked:
+	mutex_unlock(&ldc_channel_lock);
 
 out_err:
 	return ERR_PTR(err);
