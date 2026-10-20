@@ -147,6 +147,11 @@ static void pse_release_pis(struct pse_controller_dev *pcdev)
 	kfree(pcdev->pi);
 }
 
+static void devm_pse_release_pis(void *data)
+{
+	pse_release_pis(data);
+}
+
 /**
  * of_load_pse_pis - load all the PSE PIs
  * @pcdev: a pointer to the PSE controller device
@@ -612,6 +617,13 @@ static int _pse_pi_delivery_power_sw_pw_ctrl(struct pse_controller_dev *pcdev,
 	struct pse_pi *pi = &pcdev->pi[id];
 	int ret, pw_req;
 
+	/* pse_isr(), a priority change and the retry after a disable all
+	 * power a PI through here, so stop them here once unregistering
+	 * has started.
+	 */
+	if (pcdev->unregistering)
+		return -ENODEV;
+
 	if (!ops->pi_get_pw_req) {
 		/* No power allocation management */
 		ret = ops->pi_enable(pcdev, id);
@@ -668,6 +680,11 @@ static int pse_pi_enable(struct regulator_dev *rdev)
 
 	id = rdev_get_id(rdev);
 	mutex_lock(&pcdev->lock);
+	if (pcdev->unregistering) {
+		mutex_unlock(&pcdev->lock);
+		return -ENODEV;
+	}
+
 	if (pse_pw_d_is_sw_pw_control(pcdev, pcdev->pi[id].pw_d)) {
 		/* Manage enabled status by software.
 		 * Real enable process will happen if a port is connected.
@@ -884,6 +901,27 @@ static void __pse_pw_d_release(struct kref *kref)
 	kfree(pw_d);
 }
 
+/* A PI that holds budget is under software power control, and nothing
+ * controls it once its controller is gone: switch it off, then give the
+ * budget back. If it cannot be switched off, keep the budget reserved,
+ * as the PI may still draw it.
+ */
+static void pse_pi_power_off(struct pse_controller_dev *pcdev, int id)
+{
+	int ret;
+
+	if (!pcdev->pi[id].pw_allocated_mW)
+		return;
+
+	ret = pcdev->ops->pi_disable ? pcdev->ops->pi_disable(pcdev, id) :
+				       -EOPNOTSUPP;
+	if (ret) {
+		dev_warn(pcdev->dev, "PI %d: cannot switch off: %d\n", id, ret);
+		return;
+	}
+	pse_pi_deallocate_pw_budget(&pcdev->pi[id]);
+}
+
 /**
  * pse_flush_pw_ds - flush all PSE power domains of a PSE
  * @pcdev: a pointer to the initialized PSE controller device
@@ -899,6 +937,7 @@ static void pse_flush_pw_ds(struct pse_controller_dev *pcdev)
 		 * use it.
 		 */
 		mutex_lock(&pcdev->lock);
+		pse_pi_power_off(pcdev, i);
 		pw_d = pcdev->pi[i].pw_d;
 		pcdev->pi[i].pw_d = NULL;
 		mutex_unlock(&pcdev->lock);
@@ -1088,6 +1127,13 @@ int pse_controller_register(struct pse_controller_dev *pcdev)
 	if (ret)
 		return ret;
 
+	/* The PI regulator ops use pcdev->pi until devres unregisters the
+	 * regulators, so free it from devres too, after them.
+	 */
+	ret = devm_add_action_or_reset(pcdev->dev, devm_pse_release_pis, pcdev);
+	if (ret)
+		return ret;
+
 	if (pcdev->ops->setup_pi_matrix) {
 		ret = pcdev->ops->setup_pi_matrix(pcdev);
 		if (ret)
@@ -1137,6 +1183,13 @@ EXPORT_SYMBOL_GPL(pse_controller_register);
  */
 void pse_controller_unregister(struct pse_controller_dev *pcdev)
 {
+	/* The PI regulators stay until devres unregisters them: from now
+	 * on the PSE core must not power a PI.
+	 */
+	mutex_lock(&pcdev->lock);
+	pcdev->unregistering = true;
+	mutex_unlock(&pcdev->lock);
+
 	/* Stop the IRQ and the notification worker first: pse_isr() uses
 	 * pcdev->pi and the power domains that pse_flush_pw_ds() drops,
 	 * and the worker reads the kfifo that is freed below.
@@ -1152,7 +1205,6 @@ void pse_controller_unregister(struct pse_controller_dev *pcdev)
 	mutex_unlock(&pse_list_mutex);
 	cancel_work_sync(&pcdev->ntf_work);
 	pse_flush_pw_ds(pcdev);
-	pse_release_pis(pcdev);
 	kfifo_free(&pcdev->ntf_fifo);
 }
 EXPORT_SYMBOL_GPL(pse_controller_unregister);
