@@ -290,8 +290,9 @@ handle_name:
 				goto err_out;
 			}
 			ctx = ntfs_attr_get_search_ctx(ni, m);
-			if (unlikely(!ctx)) {
-				err = -ENOMEM;
+			if (IS_ERR(ctx)) {
+				err = PTR_ERR(ctx);
+				ctx = NULL;
 				goto err_out;
 			}
 			do {
@@ -941,13 +942,13 @@ static int ntfs_delete(struct ntfs_inode *ni, struct ntfs_inode *dir_ni,
 	 * only then remove WIN32 name.
 	 */
 	actx = ntfs_attr_get_search_ctx(ni, NULL);
-	if (!actx) {
+	if (IS_ERR(actx)) {
 		ntfs_error(sb, "%s, Failed to get search context", __func__);
 		if (need_lock) {
 			mutex_unlock(&dir_ni->mrec_lock);
 			mutex_unlock(&ni->mrec_lock);
 		}
-		return -ENOMEM;
+		return PTR_ERR(actx);
 	}
 search:
 	while ((err = ntfs_attr_lookup(AT_FILE_NAME, AT_UNNAMED, 0, CASE_SENSITIVE,
@@ -1710,9 +1711,9 @@ static struct dentry *ntfs_get_parent(struct dentry *child_dent)
 		return ERR_CAST(mrec);
 	/* Find the first file name attribute in the mft record. */
 	ctx = ntfs_attr_get_search_ctx(ni, mrec);
-	if (unlikely(!ctx)) {
+	if (IS_ERR(ctx)) {
 		unmap_mft_record(ni);
-		return ERR_PTR(-ENOMEM);
+		return ERR_PTR(PTR_ERR(ctx));
 	}
 try_next:
 	err = ntfs_attr_lookup(AT_FILE_NAME, NULL, 0, CASE_SENSITIVE, 0, NULL,
