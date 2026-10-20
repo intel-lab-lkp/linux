@@ -207,27 +207,33 @@ static void qlcnic_add_lb_filter(struct qlcnic_adapter *adapter,
 		 (adapter->fhash.fbucket_size - 1);
 
 	if (loopback_pkt) {
-		if (adapter->rx_fhash.fnum >= adapter->rx_fhash.fmax)
-			return;
 
 		head = &(adapter->rx_fhash.fhead[hindex]);
+
+		spin_lock(&adapter->rx_mac_learn_lock);
+		if (adapter->rx_fhash.fnum >= adapter->rx_fhash.fmax) {
+			spin_unlock(&adapter->rx_mac_learn_lock);
+			return;
+		}
 
 		tmp_fil = qlcnic_find_mac_filter(head, &src_addr, vlan_id);
 		if (tmp_fil) {
 			time = tmp_fil->ftime;
 			if (time_after(jiffies, QLCNIC_READD_AGE * HZ + time))
 				tmp_fil->ftime = jiffies;
+			spin_unlock(&adapter->rx_mac_learn_lock);
 			return;
 		}
 
 		fil = kzalloc_obj(struct qlcnic_filter, GFP_ATOMIC);
-		if (!fil)
+		if (!fil) {
+			spin_unlock(&adapter->rx_mac_learn_lock);
 			return;
+		}
 
 		fil->ftime = jiffies;
 		memcpy(fil->faddr, &src_addr, ETH_ALEN);
 		fil->vlan_id = vlan_id;
-		spin_lock(&adapter->rx_mac_learn_lock);
 		hlist_add_head(&(fil->fnode), head);
 		adapter->rx_fhash.fnum++;
 		spin_unlock(&adapter->rx_mac_learn_lock);
@@ -330,6 +336,7 @@ static void qlcnic_send_filter(struct qlcnic_adapter *adapter,
 	hindex = hval & (adapter->fhash.fbucket_size - 1);
 	head = &(adapter->fhash.fhead[hindex]);
 
+	spin_lock(&adapter->mac_learn_lock);
 	hlist_for_each_entry_safe(tmp_fil, n, head, fnode) {
 		if (ether_addr_equal(tmp_fil->faddr, (u8 *)&src_addr) &&
 		    tmp_fil->vlan_id == vlan_id) {
@@ -337,6 +344,7 @@ static void qlcnic_send_filter(struct qlcnic_adapter *adapter,
 				qlcnic_change_filter(adapter, &src_addr,
 						     vlan_id, tx_ring);
 			tmp_fil->ftime = jiffies;
+			spin_unlock(&adapter->mac_learn_lock);
 			return;
 		}
 	}
@@ -347,14 +355,15 @@ static void qlcnic_send_filter(struct qlcnic_adapter *adapter,
 	}
 
 	fil = kzalloc_obj(struct qlcnic_filter, GFP_ATOMIC);
-	if (!fil)
+	if (!fil) {
+		spin_unlock(&adapter->mac_learn_lock);
 		return;
+	}
 
 	qlcnic_change_filter(adapter, &src_addr, vlan_id, tx_ring);
 	fil->ftime = jiffies;
 	fil->vlan_id = vlan_id;
 	memcpy(fil->faddr, &src_addr, ETH_ALEN);
-	spin_lock(&adapter->mac_learn_lock);
 	hlist_add_head(&(fil->fnode), head);
 	adapter->fhash.fnum++;
 	spin_unlock(&adapter->mac_learn_lock);

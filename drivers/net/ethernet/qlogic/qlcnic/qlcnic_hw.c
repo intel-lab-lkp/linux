@@ -635,6 +635,7 @@ void qlcnic_prune_lb_filters(struct qlcnic_adapter *adapter)
 	unsigned long expires;
 	u8 cmd;
 
+	spin_lock_bh(&adapter->mac_learn_lock);
 	for (i = 0; i < adapter->fhash.fbucket_size; i++) {
 		head = &(adapter->fhash.fhead[i]);
 		hlist_for_each_entry_safe(tmp_fil, n, head, fnode) {
@@ -646,14 +647,14 @@ void qlcnic_prune_lb_filters(struct qlcnic_adapter *adapter)
 							  tmp_fil->faddr,
 							  tmp_fil->vlan_id,
 							  cmd);
-				spin_lock_bh(&adapter->mac_learn_lock);
 				adapter->fhash.fnum--;
 				hlist_del(&tmp_fil->fnode);
-				spin_unlock_bh(&adapter->mac_learn_lock);
 				kfree(tmp_fil);
 			}
 		}
 	}
+	spin_unlock_bh(&adapter->mac_learn_lock);
+	spin_lock_bh(&adapter->rx_mac_learn_lock);
 	for (i = 0; i < adapter->rx_fhash.fbucket_size; i++) {
 		head = &(adapter->rx_fhash.fhead[i]);
 
@@ -661,14 +662,13 @@ void qlcnic_prune_lb_filters(struct qlcnic_adapter *adapter)
 		{
 			expires = tmp_fil->ftime + QLCNIC_FILTER_AGE * HZ;
 			if (time_before(expires, jiffies)) {
-				spin_lock_bh(&adapter->rx_mac_learn_lock);
 				adapter->rx_fhash.fnum--;
 				hlist_del(&tmp_fil->fnode);
-				spin_unlock_bh(&adapter->rx_mac_learn_lock);
 				kfree(tmp_fil);
 			}
 		}
 	}
+	spin_unlock_bh(&adapter->rx_mac_learn_lock);
 }
 
 void qlcnic_delete_lb_filters(struct qlcnic_adapter *adapter)
@@ -679,6 +679,7 @@ void qlcnic_delete_lb_filters(struct qlcnic_adapter *adapter)
 	int i;
 	u8 cmd;
 
+	spin_lock_bh(&adapter->mac_learn_lock);
 	for (i = 0; i < adapter->fhash.fbucket_size; i++) {
 		head = &(adapter->fhash.fhead[i]);
 		hlist_for_each_entry_safe(tmp_fil, n, head, fnode) {
@@ -688,13 +689,12 @@ void qlcnic_delete_lb_filters(struct qlcnic_adapter *adapter)
 						  tmp_fil->faddr,
 						  tmp_fil->vlan_id,
 						  cmd);
-			spin_lock_bh(&adapter->mac_learn_lock);
 			adapter->fhash.fnum--;
 			hlist_del(&tmp_fil->fnode);
-			spin_unlock_bh(&adapter->mac_learn_lock);
 			kfree(tmp_fil);
 		}
 	}
+	spin_unlock_bh(&adapter->mac_learn_lock);
 }
 
 static int qlcnic_set_fw_loopback(struct qlcnic_adapter *adapter, u8 flag)
