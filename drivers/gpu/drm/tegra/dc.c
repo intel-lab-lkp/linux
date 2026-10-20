@@ -740,7 +740,8 @@ static int tegra_plane_atomic_check(struct drm_plane *plane,
 
 	err = tegra_plane_format(new_plane_state->fb->format->format,
 				 &plane_state->format,
-				 &plane_state->swap);
+				 &plane_state->swap,
+				 &plane_state->swap_uv);
 	if (err < 0)
 		return err;
 
@@ -871,6 +872,9 @@ static void tegra_plane_atomic_update(struct drm_plane *plane,
 		if (i < 2)
 			window.stride[i] = fb->pitches[i];
 	}
+
+	if (tegra_plane_state->swap_uv)
+		swap(window.base[1], window.base[2]);
 
 	tegra_dc_setup_window(p, &window);
 }
