@@ -379,7 +379,7 @@ static int ntfs_set_ea(struct inode *inode, const char *name, size_t name_len,
 				ntfs_report_file_metadata_error(inode, ea_err);
 			if (info_err)
 				ntfs_report_file_metadata_error(inode, info_err);
-			NVolSetShutdown(ni->vol);
+			ntfs_report_shutdown(ni->vol);
 			ntfs_error(inode->i_sb,
 				   "Failed to restore EAs of inode 0x%llx (%d, %d); shutting down.",
 				   ni->mft_no, ea_err, info_err);

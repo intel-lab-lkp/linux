@@ -661,7 +661,7 @@ struct inode *ntfs_create_named_stream(struct mnt_idmap *idmap,
 				} else {
 					ntfs_report_file_metadata_error(base_vi,
 									rollback_err);
-					NVolSetShutdown(base_ni->vol);
+					ntfs_report_shutdown(base_ni->vol);
 					err = -EIO;
 				}
 			}
