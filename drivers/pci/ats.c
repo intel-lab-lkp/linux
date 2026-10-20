@@ -31,6 +31,24 @@ void pci_ats_init(struct pci_dev *dev)
 	dev->ats_cap = pos;
 }
 
+static struct pci_dev *pci_acs_tb_path_blocked(struct pci_dev *dev)
+{
+	struct pci_dev *bridge;
+
+	for (bridge = pci_upstream_bridge(dev); bridge;
+	     bridge = pci_upstream_bridge(bridge)) {
+		u16 ctrl;
+
+		if (!bridge->acs_cap)
+			continue;
+		pci_read_config_word(bridge, bridge->acs_cap + PCI_ACS_CTRL,
+				     &ctrl);
+		if (ctrl & PCI_ACS_TB)
+			return bridge;
+	}
+	return NULL;
+}
+
 /**
  * pci_ats_supported - check if the device can use ATS
  * @dev: the PCI device
@@ -40,11 +58,21 @@ void pci_ats_init(struct pci_dev *dev)
  */
 bool pci_ats_supported(struct pci_dev *dev)
 {
+	struct pci_dev *bridge;
+
 	if (!dev->ats_cap || dev->untrusted)
 		return false;
 
 	if (dev->is_virtfn)
 		return pci_ats_supported(pci_physfn(dev));
+
+	/* Do not allow ATS if any upstream bridge blocks translation */
+	bridge = pci_acs_tb_path_blocked(dev);
+	if (bridge) {
+		pci_warn_once(dev, "ATS disabled: upstream bridge %s has ACS Translation Blocking enabled\n",
+			      pci_name(bridge));
+		return false;
+	}
 
 	return true;
 }
