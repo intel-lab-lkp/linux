@@ -444,6 +444,33 @@ struct ceph_inode_info {
 #define CEPH_SUBVOLUME_ID_NONE 0
 	u64 i_subvolume_id;
 
+	/*
+	 * Cap oserrno from the MDS. -CEPH_EQUARANTINED means this inode
+	 * was revoked because its subvolume is quarantined. Paired with
+	 * CEPH_I_QUARANTINE, which stays set when a later PIN-only update
+	 * clears the errno.
+	 */
+	int i_qtine_errno;
+	int i_qtine_mds; /* negative cap origin, retained across pending reset */
+	/*
+	 * Cached ancestry answer: epoch | under, where epoch is even.
+	 * Atomic64 accesses also prevent tearing on 32-bit clients. An odd
+	 * quarantine_epoch means a mark or a rename is in progress.
+	 * Do not trust this word while the epoch is odd or an alias
+	 * splice is in progress.
+	 * Zero means "not under" at epoch 0.
+	 *
+	 * i_qmds stores (epoch | 1) after the MDS confirms an inode
+	 * can be read despite uncertain or marked ancestry. This read
+	 * permission is scoped to this inode, never its descendants or
+	 * cached writes. The next epoch bump drops the confirmation.
+	 * Zero means there is no confirmation.
+	 */
+	atomic64_t i_qtag;
+	atomic64_t i_qmds;
+	/* Immutable request credentials scope the MDS read receipt. */
+	const struct cred *i_qmds_cred; /* protected with i_qmds by i_ceph_lock */
+
 	s32 i_dir_pin;
 
 	int i_fragtree_nsplits;
@@ -773,6 +800,8 @@ static inline u64 ceph_get_truncate_pagecache_size(const struct ceph_inode_info 
 					      * the deferred work completes
 					      */
 #define CEPH_I_EVICT_ON_FINAL_IPUT_BIT	(16) /* evict at the final iput() */
+#define CEPH_I_QUARANTINE_BIT		(17) /* subvolume quarantine opt set */
+#define CEPH_I_QUARANTINE_PENDING_BIT	(18) /* quarantine needs MDS confirmation */
 
 #define CEPH_I_DIR_ORDERED		(1 << CEPH_I_DIR_ORDERED_BIT)
 #define CEPH_I_FLUSH			(1 << CEPH_I_FLUSH_BIT)
@@ -1259,6 +1288,38 @@ extern int ceph_getattr(struct mnt_idmap *idmap,
 			u32 request_mask, unsigned int flags);
 void ceph_inode_shutdown(struct inode *inode);
 
+/*
+ * CEPH_Q_CLEAR: cached ancestry is clear, or the MDS confirmed read
+ * access to this exact inode for the current epoch. Writers must use
+ * ceph_inode_quarantine_write_state(), which ignores read receipts.
+ * CEPH_Q_UNDER: this inode or a cached ancestor is marked.
+ * CEPH_Q_UNKNOWN: the parent chain is not fully cached. Ask the MDS.
+ * Do not treat that as quarantined and do not use cached caps.
+ */
+enum ceph_qstate {
+	CEPH_Q_CLEAR = 0,
+	CEPH_Q_UNDER,
+	CEPH_Q_UNKNOWN,
+};
+
+enum ceph_qstate ceph_inode_quarantine_state(struct inode *inode);
+enum ceph_qstate ceph_inode_quarantine_write_state(struct inode *inode);
+bool ceph_inode_quarantine_direct(struct inode *inode);
+int ceph_quarantine_revalidate(struct inode *inode);
+int ceph_snapshot_read_auth(struct inode *inode);
+void ceph_quarantine_set(struct ceph_inode_info *ci);
+bool ceph_quarantine_clear(struct ceph_inode_info *ci);
+bool ceph_quarantine_reset(struct ceph_inode_info *ci);
+void ceph_quarantine_move_start(struct inode *inode, struct inode *old_dir,
+				struct inode *new_dir);
+void ceph_quarantine_move_finish(struct inode *inode, struct inode *old_dir,
+				 struct inode *new_dir);
+void ceph_quarantine_splice_start(struct super_block *sb);
+void ceph_quarantine_splice_finish(struct super_block *sb);
+void ceph_handle_quarantine_disable(struct ceph_mds_client *mdsc,
+				    struct ceph_mds_session *session,
+				    struct ceph_msg *msg);
+
 static inline bool ceph_inode_is_shutdown(const struct inode *inode)
 {
 	unsigned long flags = READ_ONCE(ceph_inode(inode)->i_ceph_flags);
@@ -1368,11 +1429,11 @@ extern void ceph_handle_caps(struct ceph_mds_session *session,
 			     struct ceph_msg *msg);
 extern struct ceph_cap *ceph_get_cap(struct ceph_mds_client *mdsc,
 				     struct ceph_cap_reservation *ctx);
-extern void ceph_add_cap(struct inode *inode,
-			 struct ceph_mds_session *session, u64 cap_id,
-			 unsigned issued, unsigned wanted,
-			 unsigned cap, unsigned seq, u64 realmino, int flags,
-			 struct ceph_cap **new_cap);
+bool ceph_add_cap(struct inode *inode,
+		  struct ceph_mds_session *session, u64 cap_id,
+		  unsigned int issued, unsigned int wanted,
+		  unsigned int seq, unsigned int mseq, u64 realmino, int flags,
+		  struct ceph_cap **new_cap);
 
 /**
  * Determine whether __ceph_remove_cap() has been called on this #cap
