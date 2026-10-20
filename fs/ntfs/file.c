@@ -117,14 +117,17 @@ static int ntfs_trim_prealloc(struct inode *vi)
 		if (err) {
 			kvfree(ni->runlist.rl);
 			ni->runlist.rl = NULL;
+			ntfs_report_file_metadata_error(vi, err);
 			ntfs_error(vol->sb, "Preallocated block rollback failed");
 		} else {
 			ni->allocated_size = ntfs_cluster_to_bytes(vol, vcn_tr);
 			err = ntfs_attr_update_mapping_pairs_locked(
 					ni, 0, ni);
-			if (err)
+			if (err) {
+				ntfs_report_file_metadata_error(vi, err);
 				ntfs_error(vol->sb,
 					   "Failed to rollback mapping pairs for prealloc");
+			}
 		}
 	}
 
@@ -341,8 +344,13 @@ int ntfs_file_fsync(struct file *filp, loff_t start, loff_t end,
 					le16_to_cpu(ctx->attr->data.resident.value_offset));
 
 			parent_vi = ntfs_iget(vi->i_sb, MREF_LE(fn->parent_directory));
-			if (IS_ERR(parent_vi))
+			if (IS_ERR(parent_vi)) {
+				if (PTR_ERR(parent_vi) == -ENOENT &&
+				    !NInoBeingDeleted(ni))
+					ntfs_report_file_metadata_error(vi,
+									-EFSCORRUPTED);
 				continue;
+			}
 			mutex_lock_nested(&NTFS_I(parent_vi)->mrec_lock, NTFS_INODE_MUTEX_NORMAL);
 			ia_vi = ntfs_index_iget(parent_vi, I30, 4);
 			mutex_unlock(&NTFS_I(parent_vi)->mrec_lock);
@@ -373,6 +381,11 @@ int ntfs_file_fsync(struct file *filp, loff_t start, loff_t end,
 			attr_vi = ntfs_attr_iget(vi, ctx->attr->type,
 						 name, ctx->attr->name_length);
 			if (IS_ERR(attr_vi)) {
+				if (PTR_ERR(attr_vi) == -ENOENT) {
+					ntfs_report_file_metadata_error(vi,
+									-EFSCORRUPTED);
+					attr_vi = ERR_PTR(-EFSCORRUPTED);
+				}
 				kfree(attr);
 				continue;
 			}
@@ -810,7 +823,7 @@ static ssize_t ntfs_dio_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		ret2 = filemap_write_and_wait_range(iocb->ki_filp->f_mapping,
 				offset, end);
 		if (ret2) {
-			ret = -EIO;
+			ret = ret2;
 			goto out;
 		}
 		invalidate_mapping_pages(iocb->ki_filp->f_mapping,
@@ -934,12 +947,16 @@ ssize_t ntfs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 				&ntfs_iomap_folio_ops, NULL);
 out:
 	if (ret < 0 && ret != -EIOCBQUEUED) {
+		int rollback_err;
+
 		if (ni->initialized_size != old_init_size) {
 			struct ntfs_inode *mrec_ni =
 				ntfs_base_inode(ni);
 
 			mutex_lock(&mrec_ni->mrec_lock);
-			ntfs_attr_set_initialized_size(ni, old_init_size);
+			rollback_err = ntfs_attr_set_initialized_size(ni, old_init_size);
+			if (rollback_err)
+				ntfs_report_file_metadata_error(vi, rollback_err);
 			mutex_unlock(&mrec_ni->mrec_lock);
 		}
 		if (ni->data_size != old_data_size) {
@@ -948,7 +965,9 @@ out:
 
 			truncate_setsize(vi, old_data_size);
 			mutex_lock(&mrec_ni->mrec_lock);
-			ntfs_attr_truncate(ni, old_data_size);
+			rollback_err = ntfs_attr_truncate(ni, old_data_size);
+			if (rollback_err)
+				ntfs_report_file_metadata_error(vi, rollback_err);
 			mutex_unlock(&mrec_ni->mrec_lock);
 		}
 	}

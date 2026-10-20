@@ -236,14 +236,21 @@ static struct dentry *ntfs_lookup(struct inode *dir_ino, struct dentry *dent,
 				goto handle_name;
 			}
 			ntfs_error(vol->sb,
-				"Found stale reference to inode 0x%lx (reference sequence number = 0x%x, inode sequence number = 0x%x), returning -EIO. Run chkdsk.",
+				"Found stale reference to inode 0x%lx (reference sequence number = 0x%x, inode sequence number = 0x%x), returning -EFSCORRUPTED. Run chkdsk.",
 				dent_ino, MSEQNO(mref),
 				NTFS_I(dent_inode)->seq_no);
+			ntfs_report_file_metadata_error(dir_ino, -EFSCORRUPTED);
 			iput(dent_inode);
-			dent_inode = ERR_PTR(-EIO);
-		} else
+			dent_inode = ERR_PTR(-EFSCORRUPTED);
+		} else {
+			if (PTR_ERR(dent_inode) == -ENOENT) {
+				ntfs_report_file_metadata_error(dir_ino,
+								-EFSCORRUPTED);
+				dent_inode = ERR_PTR(-EFSCORRUPTED);
+			}
 			ntfs_error(vol->sb, "ntfs_iget(0x%lx) failed with error code %li.",
 					dent_ino, PTR_ERR(dent_inode));
+		}
 		kfree(name);
 		/* Return the error code. */
 		return ERR_CAST(dent_inode);
@@ -303,8 +310,11 @@ handle_name:
 				if (unlikely(err)) {
 					ntfs_error(vol->sb,
 						"Inode corrupt: No WIN32 namespace counterpart to DOS file name. Run chkdsk.");
-					if (err == -ENOENT)
-						err = -EIO;
+					if (err == -ENOENT) {
+						err = -EFSCORRUPTED;
+						ntfs_report_file_metadata_error(dent_inode,
+										-EFSCORRUPTED);
+					}
 					goto err_out;
 				}
 				/* Consistency checks. */
@@ -339,7 +349,8 @@ handle_name:
 
 eio_err_out:
 		ntfs_error(vol->sb, "Illegal file name attribute. Run chkdsk.");
-		err = -EIO;
+		err = -EFSCORRUPTED;
+		ntfs_report_file_metadata_error(dent_inode, -EFSCORRUPTED);
 err_out:
 		if (ctx)
 			ntfs_attr_put_search_ctx(ctx);
@@ -534,7 +545,7 @@ static struct ntfs_inode *__ntfs_create(struct mnt_idmap *idmap, struct inode *d
 	if (IS_ERR(dni_mrec)) {
 		ntfs_error(dir_ni->vol->sb, "failed to map mft record for file 0x%llx.\n",
 			   dir_ni->mft_no);
-		err = -EIO;
+		err = PTR_ERR(dni_mrec);
 		goto err_out;
 	}
 	parent_mft_ref = MK_LE_MREF(dir_ni->mft_no,
@@ -725,9 +736,11 @@ err_out:
 		rollback_err = ntfs_attr_remove(ni,
 				AT_SECURITY_DESCRIPTOR, AT_UNNAMED, 0,
 				&rollback_sd_vi);
-		if (rollback_err)
+		if (rollback_err) {
+			ntfs_report_metadata_error(ni->vol, rollback_err);
 			ntfs_error(sb,
 				"Failed to roll back security descriptor.\n");
+		}
 	}
 
 	if (rollback_data) {
@@ -735,12 +748,18 @@ err_out:
 
 		rollback_err = ntfs_attr_remove(ni, AT_DATA, AT_UNNAMED,
 				0, &rollback_data_vi);
-		if (rollback_err)
+		if (rollback_err) {
+			ntfs_report_metadata_error(ni->vol, rollback_err);
 			ntfs_error(sb, "Failed to roll back DATA attribute.\n");
+		}
 	}
 
-	if (rollback_reparse)
-		ntfs_delete_reparse_index(ni);
+	if (rollback_reparse) {
+		int rollback_err = ntfs_delete_reparse_index(ni);
+
+		if (rollback_err)
+			ntfs_report_metadata_error(ni->vol, rollback_err);
+	}
 	/*
 	 * Free extent MFT records (should not exist any with current
 	 * ntfs_create implementation, but for any case if something will be
@@ -750,14 +769,22 @@ err_out:
 		int err2;
 
 		err2 = ntfs_mft_record_free(ni->vol, *(ni->ext.extent_ntfs_inos));
-		if (err2)
+		if (err2) {
+			ntfs_report_metadata_error(ni->vol, err2);
 			ntfs_error(sb,
 				"Failed to free extent MFT record. Leaving inconsistent metadata.\n");
+		}
 		ntfs_inode_close(*(ni->ext.extent_ntfs_inos));
 	}
-	if (ntfs_mft_record_free(ni->vol, ni))
-		ntfs_error(sb,
-			"Failed to free MFT record. Leaving inconsistent metadata. Run chkdsk.\n");
+	{
+		int free_err = ntfs_mft_record_free(ni->vol, ni);
+
+		if (free_err) {
+			ntfs_report_metadata_error(ni->vol, free_err);
+			ntfs_error(sb,
+				   "Failed to free MFT record. Leaving inconsistent metadata. Run chkdsk.\n");
+		}
+	}
 	unmap_mft_record(ni);
 	kfree(fn);
 	kfree(si);
@@ -1013,6 +1040,11 @@ search:
 			ntfs_attr_reinit_search_ctx(actx);
 			goto search;
 		}
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(ni),
+							-EFSCORRUPTED);
+		}
 		goto err_out;
 	}
 
@@ -1021,8 +1053,14 @@ search:
 		goto err_out;
 
 	err = ntfs_index_remove(dir_ni, fn, le32_to_cpu(actx->attr->data.resident.value_length));
-	if (err)
+	if (err) {
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(VFS_I(dir_ni),
+							-EFSCORRUPTED);
+		}
 		goto err_out;
+	}
 
 	err = ntfs_attr_record_rm(actx);
 	if (err)
@@ -1234,7 +1272,7 @@ static int __ntfs_link(struct ntfs_inode *ni, struct ntfs_inode *dir_ni,
 	struct super_block *sb;
 	struct inode *vi = VFS_I(ni);
 	struct file_name_attr *fn = NULL;
-	int fn_len, err = 0;
+	int fn_len, rollback_err, err = 0;
 	struct mft_record *dir_mrec = NULL, *ni_mrec = NULL;
 
 	ntfs_debug("Entering.\n");
@@ -1245,7 +1283,7 @@ static int __ntfs_link(struct ntfs_inode *ni, struct ntfs_inode *dir_ni,
 
 	ni_mrec = map_mft_record(ni);
 	if (IS_ERR(ni_mrec)) {
-		err = -EIO;
+		err = PTR_ERR(ni_mrec);
 		goto err_out;
 	}
 
@@ -1265,7 +1303,7 @@ static int __ntfs_link(struct ntfs_inode *ni, struct ntfs_inode *dir_ni,
 
 	dir_mrec = map_mft_record(dir_ni);
 	if (IS_ERR(dir_mrec)) {
-		err = -EIO;
+		err = PTR_ERR(dir_mrec);
 		goto err_out;
 	}
 
@@ -1307,7 +1345,8 @@ static int __ntfs_link(struct ntfs_inode *ni, struct ntfs_inode *dir_ni,
 	if (err) {
 		ntfs_error(sb, "Failed to add FILE_NAME attribute.\n");
 		/* Try to remove just added attribute from index. */
-		if (ntfs_index_remove(dir_ni, fn, fn_len))
+		rollback_err = ntfs_index_remove(dir_ni, fn, fn_len);
+		if (rollback_err)
 			goto rollback_failed;
 		goto err_out;
 	}
@@ -1325,6 +1364,7 @@ static int __ntfs_link(struct ntfs_inode *ni, struct ntfs_inode *dir_ni,
 
 	return 0;
 rollback_failed:
+	ntfs_report_file_metadata_error(VFS_I(dir_ni), rollback_err);
 	ntfs_error(sb, "Rollback failed. Leaving inconsistent metadata.\n");
 err_out:
 	kfree(fn);
@@ -1428,7 +1468,7 @@ static int ntfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 
 			ni_mrec = map_mft_record(NTFS_I(new_inode));
 			if (IS_ERR(ni_mrec)) {
-				err = -EIO;
+				err = PTR_ERR(ni_mrec);
 				goto err_out;
 			}
 			err = ntfs_check_empty_dir(NTFS_I(new_inode), ni_mrec);
@@ -1453,9 +1493,11 @@ static int ntfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		ntfs_error(sb, "Failed to delete old ntfs inode(%llu) in old dir, err : %d\n",
 				old_ni->mft_no, err);
 		err2 = ntfs_delete(old_ni, new_dir_ni, uname_new, new_name_len, false);
-		if (err2)
+		if (err2) {
+			ntfs_report_file_metadata_error(VFS_I(new_dir_ni), err2);
 			ntfs_error(sb, "Failed to delete old ntfs inode in new dir, err : %d\n",
 					err2);
+		}
 		goto err_out;
 	}
 
