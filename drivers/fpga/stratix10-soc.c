@@ -26,6 +26,13 @@
 #define S10_RECONFIG_TIMEOUT (msecs_to_jiffies(SVC_RECONFIG_REQUEST_TIMEOUT_MS))
 
 /*
+ * The service layer polls the configuration status for up to 30 seconds
+ * (SVC_COMPLETED_TIMEOUT_MS) before it replies to COMMAND_RECONFIG_STATUS.
+ */
+#define S10_RECONFIG_STATUS_TIMEOUT \
+	(msecs_to_jiffies(SVC_COMPLETED_TIMEOUT_MS) + S10_RECONFIG_TIMEOUT)
+
+/*
  * struct s10_svc_buf
  * buf:  virtual address of buf provided by service layer
  * lock: locked if buffer is in use
@@ -353,10 +360,10 @@ static int s10_ops_write_complete(struct fpga_manager *mgr,
 {
 	struct s10_priv *priv = mgr->priv;
 	struct device *dev = priv->client.dev;
-	unsigned long timeout;
+	unsigned long deadline;
 	int ret;
 
-	timeout = usecs_to_jiffies(info->config_complete_timeout_us);
+	deadline = jiffies + usecs_to_jiffies(info->config_complete_timeout_us);
 
 	do {
 		reinit_completion(&priv->status_return_completion);
@@ -365,17 +372,12 @@ static int s10_ops_write_complete(struct fpga_manager *mgr,
 		if (ret < 0)
 			break;
 
-		ret = wait_for_completion_timeout(
-			&priv->status_return_completion, timeout);
-		if (!ret) {
-			dev_err(dev,
-				"timeout waiting for RECONFIG_COMPLETED\n");
+		if (!wait_for_completion_timeout(&priv->status_return_completion,
+						 S10_RECONFIG_STATUS_TIMEOUT)) {
+			dev_err(dev, "timeout waiting for RECONFIG_STATUS\n");
 			ret = -ETIMEDOUT;
 			break;
 		}
-		/* Not error or timeout, so ret is # of jiffies until timeout */
-		timeout = ret;
-		ret = 0;
 
 		if (test_and_clear_bit(SVC_STATUS_COMPLETED, &priv->status))
 			break;
@@ -383,6 +385,13 @@ static int s10_ops_write_complete(struct fpga_manager *mgr,
 		if (test_and_clear_bit(SVC_STATUS_ERROR, &priv->status)) {
 			dev_err(dev, "ERROR - giving up - SVC_STATUS_ERROR\n");
 			ret = -EFAULT;
+			break;
+		}
+
+		if (time_after_eq(jiffies, deadline)) {
+			dev_err(dev,
+				"timeout waiting for RECONFIG_COMPLETED\n");
+			ret = -ETIMEDOUT;
 			break;
 		}
 	} while (1);
