@@ -3737,6 +3737,8 @@ static struct i40e_vsi *i40e_find_vsi_from_seid(struct i40e_vf *vf, u16 seid)
  *
  * This function deletes all cloud filters
  **/
+static DEFINE_MUTEX(i40e_vf_cloud_filter_lock);
+
 static void i40e_del_all_cloud_filters(struct i40e_vf *vf)
 {
 	struct i40e_cloud_filter *cfilter = NULL;
@@ -3745,6 +3747,7 @@ static void i40e_del_all_cloud_filters(struct i40e_vf *vf)
 	struct hlist_node *node;
 	int ret;
 
+	mutex_lock(&i40e_vf_cloud_filter_lock);
 	hlist_for_each_entry_safe(cfilter, node,
 				  &vf->cloud_filter_list, cloud_node) {
 		vsi = i40e_find_vsi_from_seid(vf, cfilter->seid);
@@ -3770,6 +3773,7 @@ static void i40e_del_all_cloud_filters(struct i40e_vf *vf)
 		kfree(cfilter);
 		vf->num_cloud_filters--;
 	}
+	mutex_unlock(&i40e_vf_cloud_filter_lock);
 }
 
 /**
@@ -3853,6 +3857,7 @@ static int i40e_vc_del_cloud_filter(struct i40e_vf *vf, u8 *msg)
 	}
 
 	/* get the vsi to which the tc belongs to */
+	mutex_lock(&i40e_vf_cloud_filter_lock);
 	vsi = pf->vsi[vf->ch[vcf->action_meta].vsi_idx];
 	cfilter.seid = vsi->seid;
 	cfilter.flags = vcf->field_flags;
@@ -3867,6 +3872,7 @@ static int i40e_vc_del_cloud_filter(struct i40e_vf *vf, u8 *msg)
 			"VF %d: Failed to delete cloud filter, err %pe aq_err %s\n",
 			vf->vf_id, ERR_PTR(ret),
 			libie_aq_str(pf->hw.aq.asq_last_status));
+		mutex_unlock(&i40e_vf_cloud_filter_lock);
 		goto err;
 	}
 
@@ -3898,6 +3904,7 @@ static int i40e_vc_del_cloud_filter(struct i40e_vf *vf, u8 *msg)
 		kfree(cf);
 		vf->num_cloud_filters--;
 	}
+	mutex_unlock(&i40e_vf_cloud_filter_lock);
 
 err:
 	return i40e_vc_send_resp_to_vf(vf, VIRTCHNL_OP_DEL_CLOUD_FILTER,
@@ -3999,6 +4006,7 @@ static int i40e_vc_add_cloud_filter(struct i40e_vf *vf, u8 *msg)
 	}
 
 	/* get the VSI to which the TC belongs to */
+	mutex_lock(&i40e_vf_cloud_filter_lock);
 	vsi = pf->vsi[vf->ch[vcf->action_meta].vsi_idx];
 	cfilter->seid = vsi->seid;
 	cfilter->flags = vcf->field_flags;
@@ -4013,6 +4021,7 @@ static int i40e_vc_add_cloud_filter(struct i40e_vf *vf, u8 *msg)
 			"VF %d: Failed to add cloud filter, err %pe aq_err %s\n",
 			vf->vf_id, ERR_PTR(aq_ret),
 			libie_aq_str(pf->hw.aq.asq_last_status));
+		mutex_unlock(&i40e_vf_cloud_filter_lock);
 		goto err_free;
 	}
 
@@ -4021,6 +4030,7 @@ static int i40e_vc_add_cloud_filter(struct i40e_vf *vf, u8 *msg)
 	/* release the pointer passing it to the collection */
 	cfilter = NULL;
 	vf->num_cloud_filters++;
+	mutex_unlock(&i40e_vf_cloud_filter_lock);
 err_free:
 	kfree(cfilter);
 err_out:
