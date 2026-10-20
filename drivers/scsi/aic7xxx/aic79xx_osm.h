@@ -508,7 +508,8 @@ void ahd_cmd_set_transaction_status(struct scsi_cmnd *cmd, uint32_t status)
 static inline
 void ahd_set_transaction_status(struct scb *scb, uint32_t status)
 {
-	ahd_cmd_set_transaction_status(scb->io_ctx,status);
+	if (scb->io_ctx)
+		ahd_cmd_set_transaction_status(scb->io_ctx, status);
 }
 
 static inline
@@ -521,7 +522,8 @@ void ahd_cmd_set_scsi_status(struct scsi_cmnd *cmd, uint32_t status)
 static inline
 void ahd_set_scsi_status(struct scb *scb, uint32_t status)
 {
-	ahd_cmd_set_scsi_status(scb->io_ctx, status);
+	if (scb->io_ctx)
+		ahd_cmd_set_scsi_status(scb->io_ctx, status);
 }
 
 static inline
@@ -533,6 +535,8 @@ uint32_t ahd_cmd_get_transaction_status(struct scsi_cmnd *cmd)
 static inline
 uint32_t ahd_get_transaction_status(struct scb *scb)
 {
+	if (!scb->io_ctx)
+		return CAM_REQ_INPROG;
 	return (ahd_cmd_get_transaction_status(scb->io_ctx));
 }
 
@@ -545,6 +549,8 @@ uint32_t ahd_cmd_get_scsi_status(struct scsi_cmnd *cmd)
 static inline
 uint32_t ahd_get_scsi_status(struct scb *scb)
 {
+	if (!scb->io_ctx)
+		return SAM_STAT_GOOD;
 	return (ahd_cmd_get_scsi_status(scb->io_ctx));
 }
 
@@ -566,13 +572,16 @@ u_long ahd_get_transfer_length(struct scb *scb)
 static inline
 int ahd_get_transfer_dir(struct scb *scb)
 {
+	if (!scb->io_ctx)
+		return DMA_NONE;
 	return (scb->io_ctx->sc_data_direction);
 }
 
 static inline
 void ahd_set_residual(struct scb *scb, u_long resid)
 {
-	scsi_set_resid(scb->io_ctx, resid);
+	if (scb->io_ctx)
+		scsi_set_resid(scb->io_ctx, resid);
 }
 
 static inline
@@ -584,6 +593,8 @@ void ahd_set_sense_residual(struct scb *scb, u_long resid)
 static inline
 u_long ahd_get_residual(struct scb *scb)
 {
+	if (!scb->io_ctx)
+		return 0;
 	return scsi_get_resid(scb->io_ctx);
 }
 
@@ -631,6 +642,8 @@ void	ahd_platform_freeze_devq(struct ahd_softc *ahd, struct scb *scb);
 static inline void
 ahd_freeze_scb(struct scb *scb)
 {
+	if (!scb->io_ctx)
+		return;
 	if ((scb->io_ctx->result & (CAM_DEV_QFRZN << 16)) == 0) {
 		scb->io_ctx->result |= CAM_DEV_QFRZN << 16;
 		scb->platform_data->dev->qfrozen++;
