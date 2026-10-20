@@ -28,6 +28,7 @@
 #include <linux/slab.h>
 #include <linux/syscalls.h>
 #include <linux/sysctl.h>
+#include <linux/task_work.h>
 
 #include <asm/syscall.h>
 
@@ -98,6 +99,9 @@ struct seccomp_knotif {
 
 	/* outstanding addfd requests */
 	struct list_head addfd;
+
+	/* The result record the reply asked for, handed over with the reply */
+	struct seccomp_kresult *kres;
 };
 
 /**
@@ -137,6 +141,8 @@ struct seccomp_kaddfd {
  * struct seccomp_kresult - a one-way record of a continued system call's
  *			    outcome
  *
+ * @filter: The filter whose listener asked for this record. Only used while
+ *	    the record is pending in the task, which keeps its filters alive.
  * @id: The id of the notification whose reply asked for this record.
  * @task: The task that made the system call.
  * @child: The new task, for a successful call in the fork family.
@@ -147,6 +153,7 @@ struct seccomp_kaddfd {
  * @list: list_head for chaining onto notification->results.
  */
 struct seccomp_kresult {
+	struct seccomp_filter *filter;
 	u64 id;
 	struct pid *task;
 	struct pid *child;
@@ -549,6 +556,36 @@ static inline pid_t seccomp_can_sync_threads(void)
 	return 0;
 }
 
+static void seccomp_kresult_free(struct seccomp_kresult *kres)
+{
+	put_pid(kres->task);
+	put_pid(kres->child);
+	kfree(kres);
+}
+
+static void seccomp_queue_result(struct seccomp_filter *filter,
+				 struct seccomp_kresult *kres)
+{
+	lockdep_assert_held(&filter->notify_lock);
+
+	if (!filter->notif) {
+		seccomp_kresult_free(kres);
+		return;
+	}
+	list_add_tail(&kres->list, &filter->notif->results);
+	atomic_inc(&filter->notif->requests);
+	wake_up_poll(&filter->wqh, EPOLLIN | EPOLLRDNORM);
+}
+
+static void seccomp_report_result(struct seccomp_kresult *kres)
+{
+	struct seccomp_filter *filter = kres->filter;
+
+	mutex_lock(&filter->notify_lock);
+	seccomp_queue_result(filter, kres);
+	mutex_unlock(&filter->notify_lock);
+}
+
 static inline void seccomp_filter_free(struct seccomp_filter *filter)
 {
 	if (filter) {
@@ -601,6 +638,15 @@ void seccomp_filter_release(struct task_struct *tsk)
 
 	if (WARN_ON((tsk->flags & PF_EXITING) == 0))
 		return;
+
+	/* The filter is gone by the time task work runs; report now. */
+	if (tsk->seccomp.result) {
+		struct seccomp_kresult *kres = tsk->seccomp.result;
+
+		tsk->seccomp.result = NULL;
+		kres->val = -ESRCH;
+		seccomp_report_result(kres);
+	}
 
 	if (READ_ONCE(tsk->seccomp.filter) == NULL)
 		return;
@@ -1189,6 +1235,39 @@ static bool should_sleep_killable(struct seccomp_filter *match,
 	return match->wait_killable_recv && n->state >= SECCOMP_NOTIFY_SENT;
 }
 
+/* Report the system call's outcome on the way back to user space. */
+static void seccomp_result_work(struct callback_head *work)
+{
+	struct seccomp_kresult *kres = current->seccomp.result;
+	struct pt_regs *regs = current_pt_regs();
+	long err;
+
+	if (!kres)
+		return;
+	current->seccomp.result = NULL;
+
+	err = syscall_get_error(current, regs);
+	kres->val = err ? err : syscall_get_return_value(current, regs);
+	seccomp_report_result(kres);
+}
+
+static void seccomp_result_pending(struct seccomp_kresult *kres)
+{
+	current->seccomp.result = kres;
+	init_task_work(&current->seccomp.result_work, seccomp_result_work);
+	/*
+	 * TWA_RESUME rather than TWA_SIGNAL: the latter would make the system
+	 * call see a pending signal. The work still runs before a signal is
+	 * delivered or the call restarted, as get_signal() runs task work
+	 * first.
+	 */
+	if (task_work_add(current, &current->seccomp.result_work, TWA_RESUME)) {
+		current->seccomp.result = NULL;
+		kres->val = -ESRCH;
+		seccomp_report_result(kres);
+	}
+}
+
 static int seccomp_do_user_notification(int this_syscall,
 					struct seccomp_filter *match,
 					const struct seccomp_data *sd)
@@ -1275,6 +1354,13 @@ interrupted:
 		list_del(&n.list);
 out:
 	mutex_unlock(&match->notify_lock);
+
+	/*
+	 * Even if a signal beat the reply, the record is due: it then reports
+	 * the call as failed with the error set below.
+	 */
+	if (n.kres)
+		seccomp_result_pending(n.kres);
 
 	/* Userspace requests to continue the syscall. */
 	if (flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE)
@@ -1474,13 +1560,6 @@ out:
 }
 
 #ifdef CONFIG_SECCOMP_FILTER
-static void seccomp_kresult_free(struct seccomp_kresult *kres)
-{
-	put_pid(kres->task);
-	put_pid(kres->child);
-	kfree(kres);
-}
-
 static void seccomp_notify_free(struct seccomp_filter *filter)
 {
 	struct seccomp_kresult *kres, *tmp;
@@ -1727,26 +1806,46 @@ out:
 	return ret;
 }
 
+/* Which system calls can report their result. */
+static bool seccomp_result_supported(const struct seccomp_data *sd)
+{
+	return false;
+}
+
 static long seccomp_notify_send(struct seccomp_filter *filter,
 				void __user *buf)
 {
 	struct seccomp_notif_resp resp = {};
+	struct seccomp_kresult *kres = NULL;
 	struct seccomp_knotif *knotif;
 	long ret;
 
 	if (copy_from_user(&resp, buf, sizeof(resp)))
 		return -EFAULT;
 
-	if (resp.flags & ~SECCOMP_USER_NOTIF_FLAG_CONTINUE)
+	if (resp.flags & ~(SECCOMP_USER_NOTIF_FLAG_CONTINUE |
+			   SECCOMP_USER_NOTIF_FLAG_RESULT))
 		return -EINVAL;
 
 	if ((resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE) &&
 	    (resp.error || resp.val))
 		return -EINVAL;
 
+	if (resp.flags & SECCOMP_USER_NOTIF_FLAG_RESULT) {
+		if (!(resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE))
+			return -EINVAL;
+		/*
+		 * Allocate here, where failing is harmless, so that the
+		 * system call never has to.
+		 */
+		kres = kzalloc_obj(*kres, GFP_KERNEL_ACCOUNT);
+		if (!kres)
+			return -ENOMEM;
+	}
+
 	ret = mutex_lock_interruptible(&filter->notify_lock);
 	if (ret < 0)
-		return ret;
+		goto out_free;
 
 	knotif = find_notification(filter, resp.id);
 	if (!knotif) {
@@ -1760,6 +1859,20 @@ static long seccomp_notify_send(struct seccomp_filter *filter,
 		goto out;
 	}
 
+	if (kres) {
+		if (!seccomp_result_supported(knotif->data)) {
+			ret = -EINVAL;
+			goto out;
+		}
+		kres->filter = filter;
+		kres->id = knotif->id;
+		kres->task = get_task_pid(knotif->task, PIDTYPE_PID);
+		kres->nr = knotif->data->nr;
+		kres->arch = knotif->data->arch;
+		knotif->kres = kres;
+		kres = NULL;
+	}
+
 	ret = 0;
 	knotif->state = SECCOMP_NOTIFY_REPLIED;
 	knotif->error = resp.error;
@@ -1771,6 +1884,8 @@ static long seccomp_notify_send(struct seccomp_filter *filter,
 		complete(&knotif->ready);
 out:
 	mutex_unlock(&filter->notify_lock);
+out_free:
+	kfree(kres);
 	return ret;
 }
 

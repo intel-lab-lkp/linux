@@ -7,6 +7,7 @@
 #ifdef CONFIG_SECCOMP
 
 struct seccomp_filter;
+struct seccomp_kresult;
 /**
  * struct seccomp - the state of a seccomp'ed process
  *
@@ -18,11 +19,16 @@ struct seccomp_filter;
  *
  *          @filter must only be accessed from the context of current as there
  *          is no read locking.
+ * @result: a result record requested by a listener for the system call in
+ *          progress, owned by current until it is reported.
+ * @result_work: reports @result when current returns to user space.
  */
 struct seccomp {
 	int mode;
 	atomic_t filter_count;
 	struct seccomp_filter *filter;
+	struct seccomp_kresult *result;
+	struct callback_head result_work;
 };
 
 #else

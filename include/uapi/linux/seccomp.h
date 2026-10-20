@@ -136,6 +136,16 @@ struct seccomp_notif {
  */
 #define SECCOMP_USER_NOTIF_FLAG_CONTINUE (1UL << 0)
 
+/*
+ * SECCOMP_USER_NOTIF_FLAG_RESULT, together with
+ * SECCOMP_USER_NOTIF_FLAG_CONTINUE, asks for the outcome of the continued
+ * system call. It is reported once, as a notification with
+ * SECCOMP_NOTIF_FLAG_RESULT set and the same id, by the time the task
+ * returns to user space, and that notification is not answered. A system
+ * call for which results are not supported is refused with EINVAL.
+ */
+#define SECCOMP_USER_NOTIF_FLAG_RESULT (1UL << 1)
+
 struct seccomp_notif_resp {
 	__u64 id;
 	__s64 val;
