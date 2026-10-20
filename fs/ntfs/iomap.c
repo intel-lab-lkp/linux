@@ -76,8 +76,13 @@ static int ntfs_read_iomap_begin_resident(struct inode *inode, loff_t offset, lo
 
 	err = ntfs_attr_lookup(ni->type, ni->name, ni->name_len,
 			CASE_SENSITIVE, 0, NULL, 0, ctx);
-	if (unlikely(err))
+	if (unlikely(err)) {
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(inode, -EFSCORRUPTED);
+		}
 		goto out;
+	}
 
 	attr_len = le32_to_cpu(ctx->attr->data.resident.value_length);
 	if (unlikely(attr_len > ni->initialized_size))
@@ -215,11 +220,12 @@ static int ntfs_read_iomap_begin_non_resident(struct inode *inode, loff_t offset
 	rl_length = ntfs_cluster_to_bytes(vol, rl->length - (vcn - rl->vcn));
 
 	if (rl_length == 0 && rl->lcn > LCN_DELALLOC) {
+		ntfs_report_file_metadata_error(inode, -EFSCORRUPTED);
 		ntfs_error(inode->i_sb,
 				"runlist(vcn : %lld, length : %lld, lcn : %lld) is corrupted\n",
 				rl->vcn, rl->length, rl->lcn);
 		up_write(&ni->runlist.lock);
-		return -EIO;
+		return -EFSCORRUPTED;
 	}
 
 	if (rl_length && length > rl_length - vcn_ofs)
@@ -418,7 +424,7 @@ static int ntfs_write_simple_iomap_begin_non_resident(struct inode *inode, loff_
 		err = ntfs_map_runlist(ni, vcn);
 		if (err) {
 			mutex_unlock(&mrec_ni->mrec_lock);
-			return -ENOENT;
+			return err;
 		}
 		down_read(&ni->runlist.lock);
 		rl = ni->runlist.rl;
@@ -430,9 +436,17 @@ remap_rl:
 	/* Seek to element containing target vcn. */
 	rl = __ntfs_attr_find_vcn_nolock(&ni->runlist, vcn);
 	if (IS_ERR(rl)) {
+		unsigned long irqflags;
+		s64 allocated_size;
+
+		read_lock_irqsave(&ni->size_lock, irqflags);
+		allocated_size = ni->allocated_size;
+		read_unlock_irqrestore(&ni->size_lock, irqflags);
+		if (offset < allocated_size)
+			ntfs_report_file_metadata_error(inode, -EFSCORRUPTED);
 		up_write(&ni->runlist.lock);
 		mutex_unlock(&mrec_ni->mrec_lock);
-		return -EIO;
+		return offset < allocated_size ? -EFSCORRUPTED : -EIO;
 	}
 	lcn = ntfs_rl_vcn_to_lcn(rl, vcn);
 
@@ -451,19 +465,22 @@ remap_rl:
 	 * extent over clusters that are allocated on disk but unknown to us.
 	 */
 	if (lcn == LCN_RL_NOT_MAPPED) {
+		if (!map_err || map_err == -ENOENT)
+			ntfs_report_file_metadata_error(inode, -EFSCORRUPTED);
 		up_write(&ni->runlist.lock);
 		mutex_unlock(&mrec_ni->mrec_lock);
-		return map_err == -ENOMEM ? -ENOMEM : -EIO;
+		return !map_err || map_err == -ENOENT ? -EFSCORRUPTED : map_err;
 	}
 
 	max_clu_count = min(max_clu_count, rl->length - (vcn - rl->vcn));
 	if (max_clu_count == 0) {
+		ntfs_report_file_metadata_error(inode, -EFSCORRUPTED);
 		ntfs_error(inode->i_sb,
 				"runlist(vcn : %lld, length : %lld) is corrupted\n",
 				rl->vcn, rl->length);
 		up_write(&ni->runlist.lock);
 		mutex_unlock(&mrec_ni->mrec_lock);
-		return -EIO;
+		return -EFSCORRUPTED;
 	}
 
 	iomap->bdev = inode->i_sb->s_bdev;
@@ -506,11 +523,17 @@ remap_rl:
 			rl = ntfs_runlists_merge(&ni->runlist, rlc, 0,
 					&new_rl_count);
 			if (IS_ERR(rl)) {
+				err = PTR_ERR(rl);
+				if (err != -ENOMEM) {
+					err = -EFSCORRUPTED;
+					ntfs_report_file_metadata_error(inode,
+									err);
+				}
 				ntfs_error(vol->sb, "Failed to merge runlists");
 				up_write(&ni->runlist.lock);
 				mutex_unlock(&mrec_ni->mrec_lock);
 				kvfree(rlc);
-				return PTR_ERR(rl);
+				return err;
 			}
 
 			ni->runlist.rl = rl;
@@ -698,8 +721,10 @@ static int ntfs_write_iomap_begin_resident(struct inode *inode, loff_t offset,
 	err = ntfs_attr_lookup(ni->type, ni->name, ni->name_len,
 			CASE_SENSITIVE, 0, NULL, 0, ctx);
 	if (err) {
-		if (err == -ENOENT)
-			err = -EIO;
+		if (err == -ENOENT) {
+			err = -EFSCORRUPTED;
+			ntfs_report_file_metadata_error(inode, -EFSCORRUPTED);
+		}
 		goto out;
 	}
 

@@ -48,6 +48,22 @@ static const struct iomap_read_ops ntfs_iomap_bio_read_ops = {
 	.submit_read		= ntfs_iomap_bio_submit_read,
 };
 
+static int ntfs_read_folio_iomap_next(const struct iomap_iter *iter,
+				      struct iomap *iomap, struct iomap *srcmap)
+{
+	int *error = iter->private;
+	int ret;
+
+	ret = ntfs_read_iomap_ops.iomap_next(iter, iomap, srcmap);
+	if (ret < 0)
+		*error = ret;
+	return ret;
+}
+
+static const struct iomap_ops ntfs_read_folio_iomap_ops = {
+	.iomap_next = ntfs_read_folio_iomap_next,
+};
+
 /*
  * ntfs_read_folio - Read data for a folio from the device
  * @file:	open file to which the folio @folio belongs or NULL
@@ -72,6 +88,7 @@ static int ntfs_read_folio(struct file *file, struct folio *folio)
 		.cur_folio = folio,
 		.ops = &ntfs_iomap_bio_read_ops,
 	};
+	int err = 0;
 
 	/*
 	 * Only $DATA attributes can be encrypted and only unnamed $DATA
@@ -103,8 +120,9 @@ static int ntfs_read_folio(struct file *file, struct folio *folio)
 			return ntfs_read_compressed_block(folio);
 	}
 
-	iomap_read_folio(&ntfs_read_iomap_ops, &ctx, NULL);
-	return 0;
+	/* iomap_read_folio() otherwise discards synchronous mapping errors. */
+	iomap_read_folio(&ntfs_read_folio_iomap_ops, &ctx, &err);
+	return err;
 }
 
 /*
