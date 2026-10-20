@@ -296,6 +296,8 @@ void ath10k_htt_rx_free(struct ath10k_htt *htt)
 	skb_queue_purge(&htt->rx_in_ord_compl_q);
 	skb_queue_purge(&htt->tx_fetch_ind_q);
 
+	skb_queue_purge(&htt->rx_in_ord_split.msdus);
+
 	spin_lock_bh(&htt->rx_ring.lock);
 	ath10k_htt_rx_ring_free(htt);
 	spin_unlock_bh(&htt->rx_ring.lock);
@@ -845,6 +847,8 @@ int ath10k_htt_rx_alloc(struct ath10k_htt *htt)
 	skb_queue_head_init(&htt->rx_in_ord_compl_q);
 	skb_queue_head_init(&htt->tx_fetch_ind_q);
 	atomic_set(&htt->num_mpdus_ready, 0);
+
+	skb_queue_head_init(&htt->rx_in_ord_split.msdus);
 
 	ath10k_dbg(ar, ATH10K_DBG_BOOT, "htt rx ring size %d fill_level %d\n",
 		   htt->rx_ring.size, htt->rx_ring.fill_level);
@@ -3301,6 +3305,28 @@ static int ath10k_htt_rx_in_ord_ind(struct ath10k *ar, struct sk_buff *skb)
 	 * extracted and processed.
 	 */
 	__skb_queue_head_init(&list);
+
+	if (!skb_queue_empty(&htt->rx_in_ord_split.msdus)) {
+		/* An MPDU left incomplete by a previous indication is
+		 * pending. It might still be possible to handle indications
+		 * that do not continue it if there is only one peer that
+		 * splits at each given moment. We are bailing out because we
+		 * should have a test case for this before trying to fix it.
+		 */
+		if (tid != htt->rx_in_ord_split.tid ||
+		    peer_id != htt->rx_in_ord_split.peer_id ||
+		    frag != htt->rx_in_ord_split.frag ||
+		    offload) {
+			ath10k_warn(ar, "split amsdu did not resume immediately\n");
+			htt->rx_confused = true;
+			__skb_queue_purge(&htt->rx_in_ord_split.msdus);
+			ath10k_core_start_recovery(ar);
+			return -EIO;
+		}
+
+		skb_queue_splice_init(&htt->rx_in_ord_split.msdus, &list);
+	}
+
 	if (ar->hw_params.target_64bit)
 		ret = ath10k_htt_rx_pop_paddr64_list(htt, &resp->rx_in_ord_ind,
 						     &list);
@@ -3339,7 +3365,27 @@ static int ath10k_htt_rx_in_ord_ind(struct ath10k *ar, struct sk_buff *skb)
 			ath10k_htt_rx_h_enqueue(ar, &amsdu, status);
 			break;
 		case -EAGAIN:
-			fallthrough;
+			/* The MPDU is incomplete. Stash the remaining MSDUs
+			 * and wait for the next indication to continue it.
+			 * A last MSDU that never arrives would otherwise keep
+			 * growing the stash on every indication, so give up
+			 * once it cannot plausibly be an A-MSDU any more.
+			 */
+			if (skb_queue_len(&list) > HTT_RX_RING_SIZE) {
+				ath10k_warn(ar, "split amsdu exceeds %d msdus\n",
+					    HTT_RX_RING_SIZE);
+				htt->rx_confused = true;
+				__skb_queue_purge(&list);
+				ath10k_core_start_recovery(ar);
+				return -EIO;
+			}
+
+			htt->rx_in_ord_split.tid = tid;
+			htt->rx_in_ord_split.peer_id = peer_id;
+			htt->rx_in_ord_split.frag = frag;
+			skb_queue_splice_init(&list,
+					      &htt->rx_in_ord_split.msdus);
+			return 0;
 		default:
 			/* Should not happen. */
 			ath10k_warn(ar, "failed to extract amsdu: %d\n", ret);

@@ -1929,6 +1929,16 @@ struct ath10k_htt {
 	bool bundle_tx;
 	struct sk_buff_head tx_req_head;
 	struct sk_buff_head tx_complete_head;
+
+	/* MSDUs of an MPDU left incomplete by an in-order indication, waiting
+	 * for the next indication to continue it
+	 */
+	struct {
+		u8 tid;
+		u16 peer_id;
+		bool frag;
+		struct sk_buff_head msdus;
+	} rx_in_ord_split;
 };
 
 struct ath10k_htt_tx_ops {
