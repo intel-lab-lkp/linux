@@ -1292,6 +1292,8 @@ void ceph_inode_shutdown(struct inode *inode);
  * CEPH_Q_CLEAR: cached ancestry is clear, or the MDS confirmed read
  * access to this exact inode for the current epoch. Writers must use
  * ceph_inode_quarantine_write_state(), which ignores read receipts.
+ * Cached metadata access also needs a live cap for quarantine revocations;
+ * use ceph_quarantine_revalidate() before returning it without cap references.
  * CEPH_Q_UNDER: this inode or a cached ancestor is marked.
  * CEPH_Q_UNKNOWN: the parent chain is not fully cached. Ask the MDS.
  * Do not treat that as quarantined and do not use cached caps.
@@ -1306,16 +1308,27 @@ enum ceph_qstate ceph_inode_quarantine_state(struct inode *inode);
 enum ceph_qstate ceph_inode_quarantine_write_state(struct inode *inode);
 bool ceph_inode_quarantine_direct(struct inode *inode);
 int ceph_quarantine_revalidate(struct inode *inode);
+int ceph_quarantine_wait(struct inode *inode);
+bool ceph_snapshot_needs_revalidate(struct inode *inode);
+bool ceph_quarantine_head_cap_valid(struct inode *inode);
+void ceph_quarantine_enable(struct ceph_mds_client *mdsc);
 int ceph_snapshot_read_auth(struct inode *inode);
 void ceph_quarantine_set(struct ceph_inode_info *ci);
 bool ceph_quarantine_clear(struct ceph_inode_info *ci);
 bool ceph_quarantine_reset(struct ceph_inode_info *ci);
-void ceph_quarantine_move_start(struct inode *inode, struct inode *old_dir,
-				struct inode *new_dir);
-void ceph_quarantine_move_finish(struct inode *inode, struct inode *old_dir,
-				 struct inode *new_dir);
-void ceph_quarantine_splice_start(struct super_block *sb);
-void ceph_quarantine_splice_finish(struct super_block *sb);
+struct ceph_mds_client *ceph_quarantine_move_start(struct inode *inode,
+						   struct inode *old_dir,
+						   struct inode *new_dir);
+void ceph_quarantine_move_finish(struct ceph_mds_client *mdsc);
+struct ceph_quarantine_splice {
+	struct ceph_mds_client *mdsc;
+	struct task_struct *task;
+	struct list_head item;
+};
+
+void ceph_quarantine_splice_start(struct super_block *sb,
+				  struct ceph_quarantine_splice *splice);
+void ceph_quarantine_splice_finish(struct ceph_quarantine_splice *splice);
 void ceph_handle_quarantine_disable(struct ceph_mds_client *mdsc,
 				    struct ceph_mds_session *session,
 				    struct ceph_msg *msg);
@@ -1379,6 +1392,7 @@ static inline int ceph_security_init_secctx(struct dentry *dentry, umode_t mode,
 {
 	return 0;
 }
+
 static inline void ceph_security_invalidate_secctx(struct inode *inode)
 {
 }
@@ -1394,8 +1408,9 @@ int ceph_set_acl(struct mnt_idmap *idmap,
 		 struct dentry *dentry, struct posix_acl *acl, int type);
 int ceph_pre_init_acls(struct inode *dir, umode_t *mode,
 		       struct ceph_acl_sec_ctx *as_ctx);
-void ceph_init_inode_acls(struct inode *inode,
-			  struct ceph_acl_sec_ctx *as_ctx);
+void ceph_init_inode_acls(struct inode *inode, struct ceph_acl_sec_ctx *as_ctx);
+void ceph_quarantine_uncache_inode_acls(struct inode *inode);
+void ceph_quarantine_disable_acl_cache(struct super_block *sb);
 
 static inline void ceph_forget_all_cached_acls(struct inode *inode)
 {
@@ -1412,8 +1427,17 @@ static inline int ceph_pre_init_acls(struct inode *dir, umode_t *mode,
 {
 	return 0;
 }
+
 static inline void ceph_init_inode_acls(struct inode *inode,
 					struct ceph_acl_sec_ctx *as_ctx)
+{
+}
+
+static inline void ceph_quarantine_uncache_inode_acls(struct inode *inode)
+{
+}
+
+static inline void ceph_quarantine_disable_acl_cache(struct super_block *sb)
 {
 }
 
@@ -1578,7 +1602,7 @@ static inline bool ceph_has_inline_data(const struct ceph_inode_info *ci)
 /* file.c */
 extern const struct file_operations ceph_file_fops;
 
-extern int ceph_renew_caps(struct inode *inode, int fmode);
+int ceph_renew_caps(struct inode *inode, int fmode, bool force);
 extern int ceph_open(struct inode *inode, struct file *file);
 extern int ceph_atomic_open(struct inode *dir, struct dentry *dentry,
 			    struct file *file, unsigned flags, umode_t mode);
