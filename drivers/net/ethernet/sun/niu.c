@@ -9260,7 +9260,7 @@ static int niu_get_of_props(struct niu *np)
 	else
 		dp = pci_device_to_OF_node(np->pdev);
 
-	phy_type = of_get_property(dp, "phy-type", NULL);
+	phy_type = of_get_property(dp, "phy-type", &prop_len);
 	if (!phy_type) {
 		netdev_err(dev, "%pOF: OF node lacks phy-type property\n", dp);
 		return -EINVAL;
@@ -9269,7 +9269,12 @@ static int niu_get_of_props(struct niu *np)
 	if (!strcmp(phy_type, "none"))
 		return -ENODEV;
 
-	strcpy(np->vpd.phy_type, phy_type);
+	if (prop_len > sizeof(np->vpd.phy_type)) {
+		netdev_err(dev, "%pOF: phy-type property too long (%d)\n",
+			   dp, prop_len);
+		return -EINVAL;
+	}
+	strscpy(np->vpd.phy_type, phy_type, sizeof(np->vpd.phy_type));
 
 	if (niu_phy_type_prop_decode(np, np->vpd.phy_type)) {
 		netdev_err(dev, "%pOF: Illegal phy string [%s]\n",
@@ -9294,10 +9299,15 @@ static int niu_get_of_props(struct niu *np)
 		return -EINVAL;
 	}
 
-	model = of_get_property(dp, "model", NULL);
-
-	if (model)
-		strcpy(np->vpd.model, model);
+	model = of_get_property(dp, "model", &prop_len);
+	if (model) {
+		if (prop_len > sizeof(np->vpd.model)) {
+			netdev_err(dev, "%pOF: model property too long (%d)\n",
+				   dp, prop_len);
+			return -EINVAL;
+		}
+		strscpy(np->vpd.model, model, sizeof(np->vpd.model));
+	}
 
 	if (of_property_read_bool(dp, "hot-swappable-phy")) {
 		np->flags |= (NIU_FLAGS_10G | NIU_FLAGS_FIBER |
