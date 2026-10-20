@@ -27,6 +27,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_device.h>
+#include <linux/pm_wakeirq.h>
 #include <linux/regmap.h>
 #include <linux/watchdog.h>
 
@@ -1251,6 +1252,12 @@ static int pcf2127_probe(struct device *dev, struct regmap *regmap,
 	if (alarm_irq > 0 || device_property_read_bool(dev, "wakeup-source")) {
 		device_init_wakeup(dev, true);
 		set_bit(RTC_FEATURE_ALARM, pcf2127->rtc->features);
+
+		if (alarm_irq > 0) {
+			ret = devm_pm_set_wake_irq(dev, alarm_irq);
+			if (ret)
+				dev_warn(dev, "failed to set wake IRQ: %d\n", ret);
+		}
 	}
 
 	if (pcf2127->cfg->has_int_a_b) {
