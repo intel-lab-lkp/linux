@@ -869,10 +869,10 @@ err:
  * @b:		boot sector to parse
  *
  * Parse the ntfs boot sector @b and store all imporant information therein in
- * the ntfs super block @vol.  Return 'true' on success and 'false' on error.
+ * the ntfs super block @vol. Return 0 on success and -errno on error.
  */
-static bool parse_ntfs_boot_sector(struct ntfs_volume *vol,
-		const struct ntfs_boot_sector *b)
+static int parse_ntfs_boot_sector(struct ntfs_volume *vol,
+				  const struct ntfs_boot_sector *b)
 {
 	unsigned int sectors_per_cluster, sectors_per_cluster_bits, nr_hidden_sects;
 	unsigned int logical_block_size;
@@ -890,7 +890,7 @@ static bool parse_ntfs_boot_sector(struct ntfs_volume *vol,
 		ntfs_error(vol->sb,
 			"Sector size (%i) is smaller than the device block size (%lu).  This is not supported.",
 			vol->sector_size, vol->sb->s_blocksize);
-		return false;
+		return -EINVAL;
 	}
 
 	if (b->bpb.sectors_per_cluster >= 0xf4)
@@ -914,7 +914,7 @@ static bool parse_ntfs_boot_sector(struct ntfs_volume *vol,
 		ntfs_error(vol->sb,
 			"Cluster size (%i) is smaller than the sector size (%i).  This is not supported.",
 			vol->cluster_size, vol->sector_size);
-		return false;
+		return -EINVAL;
 	}
 	clusters_per_mft_record = b->clusters_per_mft_record;
 	ntfs_debug("clusters_per_mft_record = %i (0x%x)",
@@ -945,7 +945,7 @@ static bool parse_ntfs_boot_sector(struct ntfs_volume *vol,
 		ntfs_error(vol->sb,
 			"Mft record size (%i) exceeds the PAGE_SIZE on your system (%lu).  This is not supported.",
 			vol->mft_record_size, PAGE_SIZE);
-		return false;
+		return -EINVAL;
 	}
 	/* We cannot support mft record sizes below the sector size. */
 	if (vol->mft_record_size < vol->sector_size) {
@@ -953,7 +953,7 @@ static bool parse_ntfs_boot_sector(struct ntfs_volume *vol,
 				vol->mft_record_size, vol->sector_size);
 	}
 	if (!ntfs_validate_mft_io_geometry(vol, logical_block_size))
-		return false;
+		return -EINVAL;
 
 	clusters_per_index_record = b->clusters_per_index_record;
 	ntfs_debug("clusters_per_index_record = %i (0x%x)",
@@ -983,7 +983,7 @@ static bool parse_ntfs_boot_sector(struct ntfs_volume *vol,
 		ntfs_error(vol->sb,
 			   "Index record size (%i) is smaller than the sector size (%i).  This is not supported.",
 			   vol->index_record_size, vol->sector_size);
-		return false;
+		return -EINVAL;
 	}
 	/*
 	 * Get the size of the volume in clusters and check for 64-bit-ness.
@@ -993,23 +993,25 @@ static bool parse_ntfs_boot_sector(struct ntfs_volume *vol,
 	ll = le64_to_cpu(b->number_of_sectors) >> sectors_per_cluster_bits;
 	if (ll >= 1ULL << 32) {
 		ntfs_error(vol->sb, "Cannot handle 64-bit clusters.");
-		return false;
+		return -EINVAL;
 	}
 	vol->nr_clusters = ll;
 	ntfs_debug("vol->nr_clusters = 0x%llx", vol->nr_clusters);
 	ll = le64_to_cpu(b->mft_lcn);
 	if (ll >= (u64)vol->nr_clusters) {
+		ntfs_report_metadata_error(vol, -EFSCORRUPTED);
 		ntfs_error(vol->sb, "MFT LCN (%llu, 0x%llx) is beyond end of volume.  Weird.",
 				ll, ll);
-		return false;
+		return -EFSCORRUPTED;
 	}
 	vol->mft_lcn = ll;
 	ntfs_debug("vol->mft_lcn = 0x%llx", vol->mft_lcn);
 	ll = le64_to_cpu(b->mftmirr_lcn);
 	if (ll >= (u64)vol->nr_clusters) {
+		ntfs_report_metadata_error(vol, -EFSCORRUPTED);
 		ntfs_error(vol->sb, "MFTMirr LCN (%llu, 0x%llx) is beyond end of volume.  Weird.",
 				ll, ll);
-		return false;
+		return -EFSCORRUPTED;
 	}
 	vol->mftmirr_lcn = ll;
 	ntfs_debug("vol->mftmirr_lcn = 0x%llx", vol->mftmirr_lcn);
@@ -1050,7 +1052,7 @@ static bool parse_ntfs_boot_sector(struct ntfs_volume *vol,
 		}
 	}
 
-	return true;
+	return 0;
 }
 
 /*
@@ -1127,6 +1129,18 @@ static void ntfs_setup_allocators(struct ntfs_volume *vol)
 	ntfs_debug("vol->mft_data_pos = 0x%llx", vol->mft_data_pos);
 }
 
+/* An unused record is corruption when a required system file is loaded. */
+static struct inode *ntfs_system_iget(struct ntfs_volume *vol, unsigned long mft_no)
+{
+	struct inode *inode = ntfs_iget(vol->sb, mft_no);
+
+	if (IS_ERR(inode) && PTR_ERR(inode) == -ENOENT) {
+		ntfs_report_metadata_error(vol, -EFSCORRUPTED);
+		inode = ERR_PTR(-EFSCORRUPTED);
+	}
+	return inode;
+}
+
 static struct lock_class_key mftmirr_runlist_lock_key,
 			     mftmirr_mrec_lock_key;
 /*
@@ -1142,7 +1156,7 @@ static bool load_and_init_mft_mirror(struct ntfs_volume *vol)
 
 	ntfs_debug("Entering.");
 	/* Get mft mirror inode. */
-	tmp_ino = ntfs_iget(vol->sb, FILE_MFTMirr);
+	tmp_ino = ntfs_system_iget(vol, FILE_MFTMirr);
 	if (IS_ERR(tmp_ino)) {
 		if (!IS_ERR(tmp_ino))
 			iput(tmp_ino);
@@ -1242,6 +1256,7 @@ static bool check_mft_mirror(struct ntfs_volume *vol)
 		if (((struct mft_record *)kmft)->flags & MFT_RECORD_IN_USE) {
 			/* Make sure the record is ok. */
 			if (ntfs_is_baad_recordp((__le32 *)kmft)) {
+				ntfs_report_metadata_error(vol, -EFSCORRUPTED);
 				ntfs_error(sb,
 					"Incomplete multi sector transfer detected in mft record %i.",
 					i);
@@ -1257,6 +1272,7 @@ mft_unmap_out:
 		/* Do not check the mirror record if it is not in use. */
 		if (((struct mft_record *)kmirr)->flags & MFT_RECORD_IN_USE) {
 			if (ntfs_is_baad_recordp((__le32 *)kmirr)) {
+				ntfs_report_metadata_error(vol, -EFSCORRUPTED);
 				ntfs_error(sb,
 					"Incomplete multi sector transfer detected in mft mirror record %i.",
 					i);
@@ -1276,6 +1292,7 @@ mft_unmap_out:
 		}
 		/* Compare the two records. */
 		if (memcmp(kmft, kmirr, bytes)) {
+			ntfs_report_metadata_error(vol, -EFSCORRUPTED);
 			ntfs_error(sb,
 				   "$MFT and $MFTMirr record %i do not match.  Run chkdsk.",
 				   i);
@@ -1310,6 +1327,7 @@ mft_unmap_out:
 	do {
 		if (rl2[i].vcn != rl[i].vcn || rl2[i].lcn != rl[i].lcn ||
 				rl2[i].length != rl[i].length) {
+			ntfs_report_metadata_error(vol, -EFSCORRUPTED);
 			ntfs_error(sb, "$MFTMirr location mismatch.  Run chkdsk.");
 			up_read(&mirr_ni->runlist.lock);
 			return false;
@@ -2741,9 +2759,10 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	 */
 	result = parse_ntfs_boot_sector(vol, (struct ntfs_boot_sector *)boot);
 	kfree(boot);
-	if (!result) {
+	if (result) {
+		err = result;
 		if (!silent)
-			ntfs_error(sb, "Unsupported NTFS filesystem.");
+			ntfs_error(sb, "Failed to parse NTFS boot sector.");
 		goto err_out_now;
 	}
 	if (!vol->mft_write_supported && !sb_rdonly(sb)) {
@@ -2795,6 +2814,7 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 		ntfs_set_default_dentry_ops(sb);
 	tmp_ino = new_inode(sb);
 	if (!tmp_ino) {
+		err = -ENOMEM;
 		if (!silent)
 			ntfs_error(sb, "Failed to load essential metadata.");
 		goto err_out_now;
@@ -2802,7 +2822,8 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 
 	tmp_ino->i_ino = FILE_MFT;
 	insert_inode_hash(tmp_ino);
-	if (ntfs_read_inode_mount(tmp_ino) < 0) {
+	err = ntfs_read_inode_mount(tmp_ino);
+	if (err) {
 		if (!silent)
 			ntfs_error(sb, "Failed to load essential metadata.");
 		goto iput_tmp_ino_err_out_now;
@@ -2826,6 +2847,7 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	vol->lcn_empty_bits_per_page = kvmalloc_array(lcn_bit_pages, sizeof(unsigned int),
 						      GFP_KERNEL);
 	if (!vol->lcn_empty_bits_per_page) {
+		err = -ENOMEM;
 		ntfs_error(sb,
 			   "Unable to allocate pages for storing LCN empty bit counts\n");
 		goto unl_upcase_iput_tmp_ino_err_out_now;
@@ -2876,6 +2898,7 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 		queue_work(ntfs_wq, &vol->precalc_work);
 		return 0;
 	}
+	err = -ENOMEM;
 	ntfs_error(sb, "Failed to allocate root directory.");
 	/* Clean up after the successful load_system_files() call from above. */
 	iput(vol->vol_ino);

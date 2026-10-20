@@ -1880,7 +1880,7 @@ static int load_attribute_list_mount(struct ntfs_volume *vol,
 	ntfs_debug("Entering.");
 	if (!vol || !rl || !al || size <= 0 || initialized_size < 0 ||
 			initialized_size > size)
-		return -EINVAL;
+		return -EFSCORRUPTED;
 	if (!initialized_size) {
 		memset(al, 0, size);
 		return 0;
@@ -1896,7 +1896,7 @@ static int load_attribute_list_mount(struct ntfs_volume *vol,
 		/* The attribute list cannot be sparse. */
 		if (lcn < 0) {
 			ntfs_error(sb, "ntfs_rl_vcn_to_lcn() failed. Cannot read attribute list.");
-			return -EIO;
+			return -EFSCORRUPTED;
 		}
 
 		rl_byte_off = ntfs_cluster_to_bytes(vol, lcn);
@@ -1974,7 +1974,7 @@ int ntfs_read_inode_mount(struct inode *vi)
 	struct attr_record *a;
 	struct ntfs_attr_search_ctx *ctx;
 	unsigned int i;
-	int err;
+	int err = -EIO;
 	size_t new_rl_count;
 
 	ntfs_debug("Entering.");
@@ -2002,6 +2002,7 @@ int ntfs_read_inode_mount(struct inode *vi)
 
 	/* Allocate enough memory to read the first mft record. */
 	if (vol->mft_record_size > 64 * 1024) {
+		err = -EOPNOTSUPP;
 		ntfs_error(sb, "Unsupported mft record size %i (max 64kiB).",
 				vol->mft_record_size);
 		goto err_out;
@@ -2013,6 +2014,7 @@ int ntfs_read_inode_mount(struct inode *vi)
 
 	m = kzalloc(i, GFP_NOFS);
 	if (!m) {
+		err = -ENOMEM;
 		ntfs_error(sb, "Failed to allocate buffer for $MFT record 0.");
 		goto err_out;
 	}
@@ -2101,6 +2103,7 @@ int ntfs_read_inode_mount(struct inode *vi)
 		ni->attr_list = kvzalloc(round_up(ni->attr_list_size, SECTOR_SIZE),
 					 GFP_NOFS);
 		if (!ni->attr_list) {
+			err = -ENOMEM;
 			ntfs_error(sb, "Not enough memory to allocate buffer for attribute list.");
 			goto put_err_out;
 		}
@@ -2120,6 +2123,8 @@ int ntfs_read_inode_mount(struct inode *vi)
 			rl = ntfs_mapping_pairs_decompress(vol, a, NULL, &new_rl_count);
 			if (IS_ERR(rl)) {
 				err = PTR_ERR(rl);
+				if (err != -ENOMEM)
+					err = -EFSCORRUPTED;
 				ntfs_error(sb,
 					   "Mapping pairs decompression failed with error code %i.",
 					   -err);
@@ -2222,6 +2227,9 @@ int ntfs_read_inode_mount(struct inode *vi)
 		nrl = ntfs_mapping_pairs_decompress(vol, a, &ni->runlist,
 						    &new_rl_count);
 		if (IS_ERR(nrl)) {
+			err = PTR_ERR(nrl);
+			if (err != -ENOMEM)
+				err = -EFSCORRUPTED;
 			ntfs_error(sb,
 				"ntfs_mapping_pairs_decompress() failed with error code %ld.",
 				PTR_ERR(nrl));
@@ -2260,6 +2268,7 @@ int ntfs_read_inode_mount(struct inode *vi)
 			 */
 			if ((vi->i_size >> vol->mft_record_size_bits) >=
 					(1ULL << 32)) {
+				err = -EOPNOTSUPP;
 				ntfs_error(sb, "$MFT is too big! Aborting.");
 				goto put_err_out;
 			}
@@ -2285,6 +2294,11 @@ int ntfs_read_inode_mount(struct inode *vi)
 			err = ntfs_read_locked_inode(vi);
 			if (err) {
 				ntfs_error(sb, "ntfs_read_inode() of $MFT failed.\n");
+				if (err == -ENOENT) {
+					err = -EFSCORRUPTED;
+					ntfs_report_metadata_error(vol,
+								   -EFSCORRUPTED);
+				}
 				NVolClearMftBootstrap(vol);
 				ntfs_attr_put_search_ctx(ctx);
 				/* Revert to the safe super operations. */
@@ -2356,9 +2370,14 @@ put_err_out:
 err_out:
 	/* Also reached from inside the $DATA loop. */
 	NVolClearMftBootstrap(vol);
+	if (err == -ENOENT || !err)
+		err = -EFSCORRUPTED;
+	if (err != -ENOMEM && err != -EOPNOTSUPP &&
+	    err != -EINTR && err != -ERESTARTSYS)
+		ntfs_report_metadata_error(vol, err);
 	ntfs_error(sb, "Failed. Marking inode as bad.");
 	kfree(m);
-	return -1;
+	return err;
 }
 
 static void __ntfs_clear_inode(struct ntfs_inode *ni)
