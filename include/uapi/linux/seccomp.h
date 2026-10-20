@@ -96,6 +96,7 @@ struct seccomp_notif_result {
 /* Valid flags for struct seccomp_notif */
 #define SECCOMP_NOTIF_FLAG_RESULT	(1UL << 0) /* @result is valid, not @data */
 #define SECCOMP_NOTIF_FLAG_THREAD	(1UL << 1) /* the new task is a thread */
+#define SECCOMP_NOTIF_FLAG_HELD		(1UL << 2) /* answer to release the task */
 
 struct seccomp_notif {
 	__u64 id;
@@ -149,6 +150,18 @@ struct seccomp_notif {
  * any notification the new task can trigger.
  */
 #define SECCOMP_USER_NOTIF_FLAG_RESULT (1UL << 1)
+
+/*
+ * SECCOMP_USER_NOTIF_FLAG_HOLD, together with SECCOMP_USER_NOTIF_FLAG_RESULT,
+ * also keeps the task from returning to user space until the listener has
+ * seen the result. The result is then reported with SECCOMP_NOTIF_FLAG_HELD
+ * set, and the task waits until that notification is answered with
+ * SECCOMP_USER_NOTIF_FLAG_CONTINUE (and nothing else). For the fork family,
+ * a new task does not run until then either. If the task is killed before
+ * the listener received the notification, it is reported without
+ * SECCOMP_NOTIF_FLAG_HELD instead. HOLD is supported wherever RESULT is.
+ */
+#define SECCOMP_USER_NOTIF_FLAG_HOLD (1UL << 2)
 
 struct seccomp_notif_resp {
 	__u64 id;

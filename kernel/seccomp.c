@@ -102,6 +102,9 @@ struct seccomp_knotif {
 
 	/* The result record the reply asked for, handed over with the reply */
 	struct seccomp_kresult *kres;
+
+	/* The result this notification reports, holding the task until answered */
+	struct seccomp_kresult *held;
 };
 
 /**
@@ -150,6 +153,7 @@ struct seccomp_kaddfd {
  * @arch: The system call convention.
  * @val: The system call's return value.
  * @flags: SECCOMP_NOTIF_FLAG_* flags to report.
+ * @hold: Whether the listener asked to hold the task until it answers.
  * @list: list_head for chaining onto notification->results.
  */
 struct seccomp_kresult {
@@ -161,6 +165,7 @@ struct seccomp_kresult {
 	u32 arch;
 	long val;
 	u32 flags;
+	bool hold;
 	struct list_head list;
 };
 
@@ -1232,6 +1237,9 @@ static void seccomp_handle_addfd(struct seccomp_kaddfd *addfd, struct seccomp_kn
 static bool should_sleep_killable(struct seccomp_filter *match,
 				  struct seccomp_knotif *n)
 {
+	/* A held call has completed and cannot be restarted. */
+	if (n->held)
+		return true;
 	return match->wait_killable_recv && n->state >= SECCOMP_NOTIFY_SENT;
 }
 
@@ -1265,7 +1273,11 @@ static int seccomp_notify_wait(struct seccomp_filter *match,
 		bool wait_killable = should_sleep_killable(match, n);
 
 		mutex_unlock(&match->notify_lock);
-		if (wait_killable)
+		/* The supervisor may be frozen before it can answer. */
+		if (n->held)
+			err = wait_for_completion_state(&n->ready,
+							TASK_KILLABLE | TASK_FREEZABLE);
+		else if (wait_killable)
 			err = wait_for_completion_killable(&n->ready);
 		else
 			err = wait_for_completion_interruptible(&n->ready);
@@ -1320,6 +1332,40 @@ static void seccomp_notify_dequeue(struct seccomp_filter *match,
 		list_del(&n->list);
 }
 
+static void seccomp_hold_result(struct seccomp_filter *filter,
+				struct seccomp_kresult *kres)
+{
+	struct seccomp_knotif n = {};
+
+	n.task = current;
+	n.id = kres->id;
+	n.held = kres;
+	seccomp_notify_queue(filter, &n);
+
+	if (seccomp_notify_wait(filter, &n) &&
+	    n.state == SECCOMP_NOTIFY_INIT) {
+		/* Killed unseen: the listener must still learn the result. */
+		seccomp_queue_result(filter, kres);
+		kres = NULL;
+	}
+
+	seccomp_notify_dequeue(filter, &n);
+	if (kres)
+		seccomp_kresult_free(kres);
+}
+
+static void seccomp_deliver_result(struct seccomp_kresult *kres)
+{
+	struct seccomp_filter *filter = kres->filter;
+
+	mutex_lock(&filter->notify_lock);
+	if (kres->hold && filter->notif)
+		seccomp_hold_result(filter, kres);
+	else
+		seccomp_queue_result(filter, kres);
+	mutex_unlock(&filter->notify_lock);
+}
+
 /* Report the system call's outcome on the way back to user space. */
 static void seccomp_result_work(struct callback_head *work)
 {
@@ -1333,7 +1379,7 @@ static void seccomp_result_work(struct callback_head *work)
 
 	err = syscall_get_error(current, regs);
 	kres->val = err ? err : syscall_get_return_value(current, regs);
-	seccomp_report_result(kres);
+	seccomp_deliver_result(kres);
 }
 
 static void seccomp_result_pending(struct seccomp_kresult *kres)
@@ -1423,7 +1469,7 @@ void seccomp_report_fork(struct task_struct *child, pid_t nr)
 	kres->child = get_task_pid(child, PIDTYPE_PID);
 	if (!thread_group_leader(child))
 		kres->flags |= SECCOMP_NOTIF_FLAG_THREAD;
-	seccomp_report_result(kres);
+	seccomp_deliver_result(kres);
 }
 
 static bool __seccomp_filter(int this_syscall, const bool recheck_after_trace)
@@ -1823,9 +1869,18 @@ static long seccomp_notify_recv(struct seccomp_filter *filter,
 		goto out;
 	}
 
-	unotif.id = knotif->id;
-	unotif.pid = task_pid_vnr(knotif->task);
-	unotif.data = *(knotif->data);
+	if (knotif->held) {
+		ret = seccomp_fill_result(&unotif, knotif->held);
+		if (ret < 0) {
+			atomic_inc(&filter->notif->requests);
+			goto out;
+		}
+		unotif.flags |= SECCOMP_NOTIF_FLAG_HELD;
+	} else {
+		unotif.id = knotif->id;
+		unotif.pid = task_pid_vnr(knotif->task);
+		unotif.data = *(knotif->data);
+	}
 
 	knotif->state = SECCOMP_NOTIFY_SENT;
 	wake_up_poll(&filter->wqh, EPOLLOUT | EPOLLWRNORM);
@@ -1901,7 +1956,12 @@ static long seccomp_notify_send(struct seccomp_filter *filter,
 		return -EFAULT;
 
 	if (resp.flags & ~(SECCOMP_USER_NOTIF_FLAG_CONTINUE |
-			   SECCOMP_USER_NOTIF_FLAG_RESULT))
+			   SECCOMP_USER_NOTIF_FLAG_RESULT |
+			   SECCOMP_USER_NOTIF_FLAG_HOLD))
+		return -EINVAL;
+
+	if ((resp.flags & SECCOMP_USER_NOTIF_FLAG_HOLD) &&
+	    !(resp.flags & SECCOMP_USER_NOTIF_FLAG_RESULT))
 		return -EINVAL;
 
 	if ((resp.flags & SECCOMP_USER_NOTIF_FLAG_CONTINUE) &&
@@ -1936,6 +1996,11 @@ static long seccomp_notify_send(struct seccomp_filter *filter,
 		goto out;
 	}
 
+	if (knotif->held && resp.flags != SECCOMP_USER_NOTIF_FLAG_CONTINUE) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	if (kres) {
 		if (!seccomp_result_supported(knotif->data)) {
 			ret = -EINVAL;
@@ -1946,6 +2011,7 @@ static long seccomp_notify_send(struct seccomp_filter *filter,
 		kres->task = get_task_pid(knotif->task, PIDTYPE_PID);
 		kres->nr = knotif->data->nr;
 		kres->arch = knotif->data->arch;
+		kres->hold = resp.flags & SECCOMP_USER_NOTIF_FLAG_HOLD;
 		knotif->kres = kres;
 		kres = NULL;
 	}
@@ -2061,6 +2127,12 @@ static long seccomp_notify_addfd(struct seccomp_filter *filter,
 	 */
 	if (knotif->state != SECCOMP_NOTIFY_SENT) {
 		ret = -EINPROGRESS;
+		goto out_unlock;
+	}
+
+	/* A held call has completed; there is nothing to add to. */
+	if (knotif->held) {
+		ret = -EINVAL;
 		goto out_unlock;
 	}
 
