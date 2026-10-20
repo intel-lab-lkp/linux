@@ -489,7 +489,7 @@ static int referring_call_exists(struct nfs_client *clp,
 			ref = &rclist->rcl_refcalls[j];
 			spin_unlock(lock);
 			status = nfs4_slot_wait_on_seqid(tbl, ref->rc_slotid,
-					ref->rc_sequenceid, HZ >> 1) < 0;
+					ref->rc_sequenceid, HZ >> 1);
 			spin_lock(lock);
 			if (status)
 				goto out;
