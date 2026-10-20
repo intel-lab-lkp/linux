@@ -2276,21 +2276,29 @@ int ice_add_cls_flower(struct net_device *netdev, struct ice_vsi *vsi,
 		return -EINVAL;
 	}
 
+	mutex_lock(&pf->tc_flower_fltr_lock);
+
 	/* avoid duplicate entries, if exists - return error */
 	fltr = ice_find_tc_flower_fltr(pf, cls_flower->cookie);
 	if (fltr) {
 		NL_SET_ERR_MSG_MOD(extack, "filter cookie already exists, ignoring");
+		mutex_unlock(&pf->tc_flower_fltr_lock);
 		return -EEXIST;
 	}
 
 	/* prep and add TC-flower filter in HW */
 	err = ice_add_tc_fltr(netdev, vsi, cls_flower, &fltr, ingress);
 	if (err)
-		return err;
+		goto unlock;
 
 	/* add filter into an ordered list */
 	hlist_add_head(&fltr->tc_flower_node, &pf->tc_flower_fltr_list);
+	mutex_unlock(&pf->tc_flower_fltr_lock);
 	return 0;
+
+unlock:
+	mutex_unlock(&pf->tc_flower_fltr_lock);
+	return err;
 }
 
 /**
@@ -2305,28 +2313,36 @@ ice_del_cls_flower(struct ice_vsi *vsi, struct flow_cls_offload *cls_flower)
 	struct ice_pf *pf = vsi->back;
 	int err;
 
+	mutex_lock(&pf->tc_flower_fltr_lock);
+
 	/* find filter */
 	fltr = ice_find_tc_flower_fltr(pf, cls_flower->cookie);
 	if (!fltr) {
 		if (!test_bit(ICE_FLAG_TC_MQPRIO, pf->flags) &&
-		    hlist_empty(&pf->tc_flower_fltr_list))
-			return 0;
+		    hlist_empty(&pf->tc_flower_fltr_list)) {
+				mutex_unlock(&pf->tc_flower_fltr_lock);
+				return 0;
+		}
 
 		NL_SET_ERR_MSG_MOD(cls_flower->common.extack, "failed to delete TC flower filter because unable to find it");
+		mutex_unlock(&pf->tc_flower_fltr_lock);
 		return -EINVAL;
 	}
 
 	fltr->extack = cls_flower->common.extack;
 	/* delete filter from HW */
 	err = ice_del_tc_fltr(vsi, fltr);
-	if (err)
+	if (err) {
+		mutex_unlock(&pf->tc_flower_fltr_lock);
 		return err;
+	}
 
 	/* delete filter from an ordered list */
 	hlist_del(&fltr->tc_flower_node);
 
 	/* free the filter node */
 	kfree(fltr);
+	mutex_unlock(&pf->tc_flower_fltr_lock);
 
 	return 0;
 }
@@ -2340,10 +2356,12 @@ void ice_replay_tc_fltrs(struct ice_pf *pf)
 	struct ice_tc_flower_fltr *fltr;
 	struct hlist_node *node;
 
+	mutex_lock(&pf->tc_flower_fltr_lock);
 	hlist_for_each_entry_safe(fltr, node,
 				  &pf->tc_flower_fltr_list,
 				  tc_flower_node) {
 		fltr->extack = NULL;
 		ice_add_switch_fltr(fltr->src_vsi, fltr);
 	}
+	mutex_unlock(&pf->tc_flower_fltr_lock);
 }

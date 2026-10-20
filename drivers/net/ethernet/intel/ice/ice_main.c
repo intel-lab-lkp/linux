@@ -3877,6 +3877,7 @@ void ice_deinit_pf(struct ice_pf *pf)
 	mutex_destroy(&pf->adev_mutex);
 	mutex_destroy(&pf->sw_mutex);
 	mutex_destroy(&pf->tc_mutex);
+	mutex_destroy(&pf->tc_flower_fltr_lock);
 	mutex_destroy(&pf->avail_q_mutex);
 	mutex_destroy(&pf->vfs.table_lock);
 
@@ -3976,6 +3977,7 @@ int ice_init_pf(struct ice_pf *pf)
 
 	mutex_init(&pf->sw_mutex);
 	mutex_init(&pf->tc_mutex);
+	mutex_init(&pf->tc_flower_fltr_lock);
 	mutex_init(&pf->adev_mutex);
 	mutex_init(&pf->lag_mutex);
 
@@ -8882,6 +8884,7 @@ static void ice_rem_all_chnl_fltrs(struct ice_pf *pf)
 		hlist_del(&fltr->tc_flower_node);
 		kfree(fltr);
 	}
+	mutex_lock(&pf->tc_flower_fltr_lock);
 }
 
 /**
