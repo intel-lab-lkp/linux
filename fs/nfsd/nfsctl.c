@@ -2944,6 +2944,69 @@ int nfsd_nl_unlock_export_doit(struct sk_buff *skb, struct genl_info *info)
 }
 
 /**
+ * nfsd_nl_filehandle_get_doit - look up the root filehandle of an export
+ * @skb: reply buffer
+ * @info: netlink metadata and command arguments
+ *
+ * Netlink equivalent of the /proc/fs/nfsd/filehandle transaction interface:
+ * compose the root filehandle of the export at NFSD_A_FILEHANDLE_PATH
+ * as visible to client NFSD_A_FILEHANDLE_DOMAIN, no larger than
+ * NFSD_A_FILEHANDLE_MAXSIZE bytes.
+ *
+ * Return: 0 on success or a negative errno.
+ */
+int nfsd_nl_filehandle_get_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct net *net = genl_info_net(info);
+	struct auth_domain *dom;
+	struct knfsd_fh fh;
+	char *dname, *path;
+	u32 maxsize;
+	void *hdr;
+	int err;
+
+	if (GENL_REQ_ATTR_CHECK(info, NFSD_A_FILEHANDLE_DOMAIN) ||
+	    GENL_REQ_ATTR_CHECK(info, NFSD_A_FILEHANDLE_PATH) ||
+	    GENL_REQ_ATTR_CHECK(info, NFSD_A_FILEHANDLE_MAXSIZE))
+		return -EINVAL;
+
+	dname = nla_data(info->attrs[NFSD_A_FILEHANDLE_DOMAIN]);
+	path = nla_data(info->attrs[NFSD_A_FILEHANDLE_PATH]);
+	maxsize = nla_get_u32(info->attrs[NFSD_A_FILEHANDLE_MAXSIZE]);
+
+	trace_nfsd_ctl_filehandle(net, dname, path, maxsize);
+
+	dom = unix_domain_find(dname);
+	if (!dom)
+		return -ENOMEM;
+
+	err = exp_rootfh(net, dom, path, &fh, maxsize);
+	auth_domain_put(dom);
+	if (err)
+		return err;
+
+	skb = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	if (!skb)
+		return -ENOMEM;
+
+	err = -EMSGSIZE;
+	hdr = genlmsg_iput(skb, info);
+	if (!hdr)
+		goto err_free_msg;
+
+	err = nla_put(skb, NFSD_A_FILEHANDLE_HANDLE, fh.fh_size, fh.fh_raw);
+	if (err)
+		goto err_free_msg;
+
+	genlmsg_end(skb, hdr);
+	return genlmsg_reply(skb, info);
+
+err_free_msg:
+	nlmsg_free(skb);
+	return err;
+}
+
+/**
  * nfsd_net_init - Prepare the nfsd_net portion of a new net namespace
  * @net: a freshly-created network namespace
  *

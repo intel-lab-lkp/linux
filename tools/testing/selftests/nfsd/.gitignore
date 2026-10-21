@@ -1,4 +1,5 @@
 nfsd_lockd_netlink
+nfsd_netlink_filehandle
 nfsd_netlink_listener
 nfsd_netns_isolation
 nfsd_netns_stress
