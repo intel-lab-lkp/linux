@@ -326,29 +326,6 @@ static int bmc150_accel_get_startup_times(struct bmc150_accel_data *data)
 
 	return BMC150_ACCEL_MAX_STARTUP_TIME_MS;
 }
-
-static int bmc150_accel_set_power_state(struct bmc150_accel_data *data, bool on)
-{
-	struct device *dev = regmap_get_device(data->regmap);
-	int ret;
-
-	if (on)
-		ret = pm_runtime_resume_and_get(dev);
-	else
-		ret = pm_runtime_put_autosuspend(dev);
-	if (ret < 0) {
-		dev_err(dev,
-			"Failed: %s for %d\n", __func__, on);
-		return ret;
-	}
-
-	return 0;
-}
-#else
-static int bmc150_accel_set_power_state(struct bmc150_accel_data *data, bool on)
-{
-	return 0;
-}
 #endif
 
 #ifdef CONFIG_ACPI
@@ -530,23 +507,17 @@ static int bmc150_accel_set_interrupt(struct bmc150_accel_data *data, int i,
 	if (state) {
 		if (atomic_inc_return(&intr->users) > 1)
 			return 0;
+
+		ret = pm_runtime_resume_and_get(dev);
+		if (ret < 0) {
+			dev_err(dev, "failed to resume: %d\n", ret);
+			atomic_dec(&intr->users);
+			return ret;
+		}
 	} else {
 		if (atomic_dec_return(&intr->users) > 0)
 			return 0;
 	}
-
-	/*
-	 * We will expect the enable and disable to do operation in reverse
-	 * order. This will happen here anyway, as our resume operation uses
-	 * sync mode runtime pm calls. The suspend operation will be delayed
-	 * by autosuspend delay.
-	 * So the disable operation will still happen in reverse order of
-	 * enable operation. When runtime pm is disabled the mode is always on,
-	 * so sequence doesn't matter.
-	 */
-	ret = bmc150_accel_set_power_state(data, state);
-	if (ret < 0)
-		return ret;
 
 	/* map the interrupt to the appropriate pins */
 	ret = regmap_update_bits(data->regmap, info->map_reg, info->map_bitmask,
@@ -564,10 +535,18 @@ static int bmc150_accel_set_interrupt(struct bmc150_accel_data *data, int i,
 		goto out_fix_power_state;
 	}
 
+	if (!state)
+		pm_runtime_put_autosuspend(dev);
+
 	return 0;
 
 out_fix_power_state:
-	bmc150_accel_set_power_state(data, false);
+	if (state) {
+		pm_runtime_put_autosuspend(dev);
+		atomic_dec(&intr->users);
+	} else {
+		atomic_inc(&intr->users);
+	}
 	return ret;
 }
 
@@ -625,8 +604,9 @@ static int bmc150_accel_get_axis(struct bmc150_accel_data *data,
 	__le16 raw_val;
 
 	mutex_lock(&data->mutex);
-	ret = bmc150_accel_set_power_state(data, true);
+	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0) {
+		dev_err(dev, "failed to resume: %d\n", ret);
 		mutex_unlock(&data->mutex);
 		return ret;
 	}
@@ -635,16 +615,14 @@ static int bmc150_accel_get_axis(struct bmc150_accel_data *data,
 			       &raw_val, sizeof(raw_val));
 	if (ret < 0) {
 		dev_err(dev, "Error reading axis %d\n", axis);
-		bmc150_accel_set_power_state(data, false);
+		pm_runtime_put_autosuspend(dev);
 		mutex_unlock(&data->mutex);
 		return ret;
 	}
 	*val = sign_extend32(le16_to_cpu(raw_val) >> chan->scan_type.shift,
 			     chan->scan_type.realbits - 1);
-	ret = bmc150_accel_set_power_state(data, false);
+	pm_runtime_put_autosuspend(dev);
 	mutex_unlock(&data->mutex);
-	if (ret < 0)
-		return ret;
 
 	return IIO_VAL_INT;
 }
@@ -1477,8 +1455,14 @@ static int bmc150_accel_fifo_set_mode(struct bmc150_accel_data *data)
 static int bmc150_accel_buffer_preenable(struct iio_dev *indio_dev)
 {
 	struct bmc150_accel_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
+	int ret;
 
-	return bmc150_accel_set_power_state(data, true);
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret < 0)
+		dev_err(dev, "failed to resume: %d\n", ret);
+
+	return ret;
 }
 
 static int bmc150_accel_buffer_postenable(struct iio_dev *indio_dev)
@@ -1540,8 +1524,11 @@ out:
 static int bmc150_accel_buffer_postdisable(struct iio_dev *indio_dev)
 {
 	struct bmc150_accel_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
 
-	return bmc150_accel_set_power_state(data, false);
+	pm_runtime_put_autosuspend(dev);
+
+	return 0;
 }
 
 static const struct iio_buffer_setup_ops bmc150_accel_buffer_ops = {
