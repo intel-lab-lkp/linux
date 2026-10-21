@@ -106,6 +106,11 @@ enum hp_thermal_profile {
 	HP_THERMAL_PROFILE_QUIET			= 0x03,
 };
 
+/*
+ * Some firmware returns status flags in bits 31:8 of the thermal profile
+ * query; only bits 7:0 hold the profile.
+ */
+#define HP_THERMAL_PROFILE_MASK				GENMASK(7, 0)
 
 struct thermal_profile_params {
 	u8 performance;
@@ -1843,7 +1848,13 @@ static int platform_profile_omen_set(struct device *dev,
 
 static int thermal_profile_get(void)
 {
-	return hp_wmi_read_int(HPWMI_THERMAL_PROFILE_QUERY);
+	int tp;
+
+	tp = hp_wmi_read_int(HPWMI_THERMAL_PROFILE_QUERY);
+	if (tp < 0)
+		return tp;
+
+	return tp & HP_THERMAL_PROFILE_MASK;
 }
 
 static int thermal_profile_set(int thermal_profile)
