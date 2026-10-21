@@ -1501,6 +1501,21 @@ static void rtw_pci_aspm_set(struct rtw_dev *rtwdev, bool enable)
 	rtw_dbi_write8(rtwdev, RTK_PCIE_LINK_CFG, value);
 }
 
+static void rtw_pci_link_hw_disable(struct rtw_dev *rtwdev)
+{
+	u8 value;
+	int ret;
+
+	ret = rtw_dbi_read8(rtwdev, RTK_PCIE_LINK_CFG, &value);
+	if (ret) {
+		rtw_err(rtwdev, "failed to read link config, ret=%d", ret);
+		return;
+	}
+
+	value &= ~(BIT_CLKREQ_SW_EN | BIT_L1_SW_EN);
+	rtw_dbi_write8(rtwdev, RTK_PCIE_LINK_CFG, value);
+}
+
 static void rtw_pci_link_ps(struct rtw_dev *rtwdev, bool enter)
 {
 	struct rtw_pci *rtwpci = (struct rtw_pci *)rtwdev->priv;
@@ -1536,6 +1551,13 @@ static void rtw_pci_link_cfg(struct rtw_dev *rtwdev)
 	 */
 	if (chip->id == RTW_CHIP_TYPE_8822C)
 		rtw_dbi_write8(rtwdev, RTK_PCIE_CLKDLY_CTRL, 0);
+
+	/* The CLKREQ/ASPM enable bits live in the device and are not reset
+	 * by a driver reload, so a previous load may have left them set.
+	 * Clear them explicitly when ASPM is disabled.
+	 */
+	if (rtw_pci_disable_aspm)
+		rtw_pci_link_hw_disable(rtwdev);
 
 	/* Though there is standard PCIE configuration space to set the
 	 * link control register, but by Realtek's design, driver should
