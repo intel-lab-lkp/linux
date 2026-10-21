@@ -2544,7 +2544,11 @@ err_sq:
 err_ahid:
 	kfree(qp->hdr);
 err_ah_alloc:
-	ionic_put_qpid(dev, qp->qpid);
+	if (attr->qp_type == IB_QPT_GSI)
+		ionic_resid_put(&dev->inuse_qpid, IB_QPT_GSI);
+	else
+		ionic_put_qpid(dev, qp->qpid);
+
 	return rc;
 }
 
@@ -2858,7 +2862,10 @@ int ionic_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 		ionic_put_ahid(dev, qp->ahid);
 		kfree(qp->hdr);
 	}
-	ionic_put_qpid(dev, qp->qpid);
+	if (qp->qpid == IB_QPT_GSI)
+		ionic_resid_put(&dev->inuse_qpid, IB_QPT_GSI);
+	else
+		ionic_put_qpid(dev, qp->qpid);
 
 	return 0;
 }
