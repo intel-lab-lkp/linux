@@ -1328,6 +1328,30 @@ out_put_vf:
 }
 
 /**
+ * ice_check_vf_ready_for_cfg_locked - re-check VF readiness under cfg_lock
+ * @vf: VF to check
+ *
+ * The flag tests of ice_check_vf_ready_for_cfg(), repeated with vf->cfg_lock
+ * held. ice_wait_on_vf_reset() is left out on purpose: it sleeps while it
+ * polls for ICE_VF_STATE_INIT, and the resets that clear that bit set it
+ * again from ice_vf_post_vsi_rebuild() with cfg_lock held, so the wait could
+ * never observe the transition and would only hold the lock for its full
+ * timeout.
+ *
+ * Return: 0 if the VF can still be configured, -EINVAL if it is disabled or
+ * -EBUSY if it is in reset.
+ */
+static int ice_check_vf_ready_for_cfg_locked(struct ice_vf *vf)
+{
+	lockdep_assert_held(&vf->cfg_lock);
+
+	if (ice_is_vf_disabled(vf))
+		return -EINVAL;
+
+	return ice_check_vf_init(vf);
+}
+
+/**
  * __ice_set_vf_mac - program VF MAC address
  * @pf: PF to be configure
  * @vf_id: VF identifier
@@ -1365,6 +1389,10 @@ int __ice_set_vf_mac(struct ice_pf *pf, u16 vf_id, const u8 *mac)
 
 	mutex_lock(&vf->cfg_lock);
 
+	ret = ice_check_vf_ready_for_cfg_locked(vf);
+	if (ret)
+		goto out_unlock;
+
 	/* VF is notified of its new MAC via the PF's response to the
 	 * VIRTCHNL_OP_GET_VF_RESOURCES message after the VF has been reset
 	 */
@@ -1383,6 +1411,8 @@ int __ice_set_vf_mac(struct ice_pf *pf, u16 vf_id, const u8 *mac)
 	}
 
 	ice_reset_vf(vf, ICE_VF_RESET_NOTIFY);
+
+out_unlock:
 	mutex_unlock(&vf->cfg_lock);
 
 out_put_vf:
@@ -1454,6 +1484,10 @@ int ice_set_vf_trust(struct net_device *netdev, int vf_id, bool trusted)
 
 	mutex_lock(&vf->cfg_lock);
 
+	ret = ice_check_vf_ready_for_cfg_locked(vf);
+	if (ret)
+		goto out_unlock;
+
 	/* Reset only if revoking trust and VF has advanced features configured */
 	if (!trusted &&
 	    (vf->num_mac_lldp > 0 ||
@@ -1470,6 +1504,7 @@ int ice_set_vf_trust(struct net_device *netdev, int vf_id, bool trusted)
 	dev_info(ice_pf_to_dev(pf), "VF %u is now %strusted\n",
 		 vf_id, trusted ? "" : "un");
 
+out_unlock:
 	mutex_unlock(&vf->cfg_lock);
 
 out_put_vf:
@@ -1782,6 +1817,10 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 
 	mutex_lock(&vf->cfg_lock);
 
+	ret = ice_check_vf_ready_for_cfg_locked(vf);
+	if (ret)
+		goto out_unlock;
+
 	vf->port_vlan_info = ICE_VLAN(local_vlan_proto, vlan_id, qos);
 	if (ice_vf_is_port_vlan_ena(vf))
 		dev_info(dev, "Setting VLAN %u, QoS %u, TPID 0x%04x on VF %d\n",
@@ -1790,6 +1829,8 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 		dev_info(dev, "Clearing port VLAN on VF %d\n", vf_id);
 
 	ice_reset_vf(vf, ICE_VF_RESET_NOTIFY);
+
+out_unlock:
 	mutex_unlock(&vf->cfg_lock);
 
 out_put_vf:
