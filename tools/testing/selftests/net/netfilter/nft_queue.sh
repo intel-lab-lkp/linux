@@ -912,9 +912,17 @@ table inet nfqscope {
 	}
 	counter delivered {}
 }
+table ip unrelated {
+	chain prerouting {
+		type filter hook prerouting priority 0; policy accept;
+	}
+}
 table ip6 unrelated {
 	chain prerouting {
 		type filter hook prerouting priority 0; policy accept;
+	}
+	chain output {
+		type filter hook output priority 0; policy accept;
 	}
 }
 EOF
@@ -926,13 +934,19 @@ EOF
 	ip netns exec "$ns1" bash -c \
 		"for i in \$(seq $packets); do echo x > /dev/udp/127.0.0.1/12345; done"
 
-	busywait "$BUSYWAIT_TIMEOUT" hook_drop_all_queued "$packets"
-
-	ip netns exec "$ns1" nft "$@"
-	queued=$(hook_drop_queued)
+	if ! busywait "$BUSYWAIT_TIMEOUT" hook_drop_all_queued "$packets"; then
+		echo "FAIL: $desc: $(hook_drop_queued) of $packets packets queued" 1>&2
+		ret=1
+	elif ! ip netns exec "$ns1" nft "$@"; then
+		echo "FAIL: $desc: nft $* failed" 1>&2
+		ret=1
+	else
+		queued=$(hook_drop_queued)
+	fi
 
 	kill -USR1 "$nfqpid"
 	wait "$nfqpid"
+	[ -z "$queued" ] && return
 	delivered=$(hook_drop_delivered)
 
 	if [ "$queued" = "$packets" ] && [ "$delivered" = "$packets" ] &&
@@ -955,9 +969,15 @@ EOF
 
 test_hook_drop_scope()
 {
-	# the hook array of another hook point changes, queued packets stay
+	# the hook array of another hook point changes, queued packets stay.
+	# The packets are ipv4 at output; cover a chain that differs in both
+	# family and hook, in the family only and in the hook only.
 	hook_drop_case keep "base chain removed at another hook point" \
 		delete chain ip6 unrelated prerouting
+	hook_drop_case keep "base chain removed at the same hook of another family" \
+		delete chain ip6 unrelated output
+	hook_drop_case keep "base chain removed at another hook of the same family" \
+		delete chain ip unrelated prerouting
 
 	# the hook array of the queueing hook point changes, the position of
 	# the queued packets in it is stale, they are dropped
