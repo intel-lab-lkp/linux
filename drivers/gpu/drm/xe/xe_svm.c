@@ -12,6 +12,7 @@
 #include <drm/ttm/ttm_bo.h>
 
 #include "xe_bo.h"
+#include "xe_device.h"
 #include "xe_exec_queue_types.h"
 #include "xe_gt_stats.h"
 #include "xe_log.h"
@@ -457,9 +458,15 @@ static void xe_svm_garbage_collector_work_func(struct work_struct *w)
 {
 	struct xe_vm *vm = container_of(w, struct xe_vm,
 					svm.garbage_collector.work);
+	int io_idx;
 
 	guard(rwsem_read)(&vm->lock);
+
+	if (xe_device_io_get(vm->xe, &io_idx))
+		return;
+
 	xe_svm_garbage_collector(vm);
+	xe_device_io_put(io_idx);
 }
 
 #if IS_ENABLED(CONFIG_DRM_XE_PAGEMAP)
@@ -600,6 +607,8 @@ static int xe_svm_copy(struct page **pages,
 #define XE_VRAM_ADDR_INVALID	~0x0ull
 	u64 vram_addr = XE_VRAM_ADDR_INVALID;
 	int err = 0, pos = 0;
+	bool io_held = false;
+	int io_idx;
 	bool sram = dir == XE_SVM_COPY_TO_SRAM;
 	ktime_t start = xe_gt_stats_ktime_get();
 
@@ -630,6 +639,12 @@ static int xe_svm_copy(struct page **pages,
 			vr = xe_page_to_vr(spage);
 			gt = xe_migrate_exec_queue(vr->migrate)->gt;
 			xe = vr->xe;
+
+			err = xe_device_io_get(xe, &io_idx);
+			if (err)
+				goto err_out;
+
+			io_held = true;
 		}
 		XE_WARN_ON(spage && xe_page_to_vr(spage) != vr);
 
@@ -749,6 +764,9 @@ err_out:
 	}
 	if (pre_migrate_fence)
 		dma_fence_wait(pre_migrate_fence, false);
+
+	if (io_held)
+		xe_device_io_put(io_idx);
 
 	/*
 	 * XXX: We can't derive the GT here (or anywhere in this functions, but
@@ -1124,8 +1142,9 @@ static int xe_drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
 	struct xe_bo *bo;
 	int err = 0, idx;
 
-	if (!drm_dev_enter(&xe->drm, &idx))
-		return -ENODEV;
+	err = xe_device_io_get(xe, &idx);
+	if (err)
+		return err;
 
 	xe_pm_runtime_get(xe);
 
@@ -1167,7 +1186,8 @@ static int xe_drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
 		xe_bo_put(bo);
 	}
 	xe_pm_runtime_put(xe);
-	drm_dev_exit(idx);
+
+	xe_device_io_put(idx);
 
 	return err;
 }
