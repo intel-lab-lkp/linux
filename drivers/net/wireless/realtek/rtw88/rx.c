@@ -208,7 +208,7 @@ static void rtw_rx_fill_rx_status(struct rtw_dev *rtwdev,
 	if (rtw_fw_feature_check(&rtwdev->fw, FW_FEATURE_SCAN_OFFLOAD) &&
 	    test_bit(RTW_FLAG_SCANNING, rtwdev->flags))
 		rtw_set_rx_freq_by_pktstat(pkt_stat, rx_status);
-	if (pkt_stat->crc_err)
+	if (pkt_stat->crc_err || pkt_stat->icv_err)
 		rx_status->flag |= RX_FLAG_FAILED_FCS_CRC;
 	if (pkt_stat->decrypted)
 		rx_status->flag |= RX_FLAG_DECRYPTED;
@@ -264,6 +264,24 @@ static void rtw_rx_fill_rx_status(struct rtw_dev *rtwdev,
 	}
 }
 
+static bool rtw_rx_ccmp_hdr_valid(struct rtw_rx_pkt_stat *pkt_stat,
+				  struct ieee80211_hdr *hdr)
+{
+	u32 hdr_len = ieee80211_hdrlen(hdr->frame_control);
+	u8 *iv;
+
+	if (!ieee80211_has_protected(hdr->frame_control))
+		return true;
+
+	if (pkt_stat->pkt_len < hdr_len + IEEE80211_CCMP_HDR_LEN + FCS_LEN)
+		return false;
+
+	iv = (u8 *)hdr + hdr_len;
+
+	/* reserved octet is zero, key ID octet has ExtIV set */
+	return iv[2] == 0 && (iv[3] & BIT(5));
+}
+
 int rtw_rx_query_rx_desc(struct rtw_dev *rtwdev, void *rx_desc8,
 			 struct rtw_rx_pkt_stat *pkt_stat,
 			 struct ieee80211_rx_status *rx_status)
@@ -285,7 +303,8 @@ int rtw_rx_query_rx_desc(struct rtw_dev *rtwdev, void *rx_desc8,
 	pkt_stat->shift = le32_get_bits(rx_desc->w0, RTW_RX_DESC_W0_SHIFT);
 	pkt_stat->phy_status = le32_get_bits(rx_desc->w0, RTW_RX_DESC_W0_PHYST);
 	swdec = le32_get_bits(rx_desc->w0, RTW_RX_DESC_W0_SWDEC);
-	pkt_stat->decrypted = !swdec && enc_type != RX_DESC_ENC_NONE;
+	pkt_stat->decrypted = !swdec && enc_type != RX_DESC_ENC_NONE &&
+			      !pkt_stat->crc_err && !pkt_stat->icv_err;
 
 	pkt_stat->cam_id = le32_get_bits(rx_desc->w1, RTW_RX_DESC_W1_MACID);
 
@@ -327,6 +346,13 @@ int rtw_rx_query_rx_desc(struct rtw_dev *rtwdev, void *rx_desc8,
 
 	if (pkt_stat->phy_status)
 		rtwdev->chip->ops->query_phy_status(rtwdev, phy_status, pkt_stat);
+
+	if (pkt_stat->decrypted && enc_type == RX_DESC_ENC_AES &&
+	    !rtw_rx_ccmp_hdr_valid(pkt_stat, hdr)) {
+		rtw_dbg(rtwdev, RTW_DBG_RX,
+			"AES frame without a usable CCMP header, drop the decryption flag\n");
+		pkt_stat->decrypted = false;
+	}
 
 	rtw_rx_fill_rx_status(rtwdev, pkt_stat, hdr, rx_status);
 
