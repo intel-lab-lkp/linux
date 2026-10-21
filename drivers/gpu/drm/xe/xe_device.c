@@ -232,6 +232,19 @@ static const struct drm_ioctl_desc xe_ioctls[] = {
 			  DRM_RENDER_ALLOW),
 };
 
+static bool xe_drm_ioctl_is_wait(unsigned int cmd)
+{
+	switch (DRM_IOCTL_NR(cmd)) {
+	case DRM_IOCTL_NR(DRM_IOCTL_SYNCOBJ_WAIT):
+	case DRM_IOCTL_NR(DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT):
+	case DRM_IOCTL_NR(DRM_IOCTL_SYNCOBJ_TRANSFER):
+	case DRM_IOCTL_NR(DRM_IOCTL_XE_WAIT_USER_FENCE):
+		return true;
+	default:
+		return false;
+	}
+}
+
 static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct drm_file *file_priv = file->private_data;
@@ -242,6 +255,12 @@ static long xe_drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	ret = xe_device_io_get(xe, &io_idx);
 	if (ret)
 		return ret;
+
+	/* These waits must not hold up device I/O draining. */
+	if (xe_drm_ioctl_is_wait(cmd)) {
+		xe_device_io_put(io_idx);
+		return drm_ioctl(file, cmd, arg);
+	}
 
 	scoped_cond_guard(xe_pm_runtime_ioctl,
 			  ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &scope),
@@ -264,6 +283,12 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
 	ret = xe_device_io_get(xe, &io_idx);
 	if (ret)
 		return ret;
+
+	/* These waits must not hold up device I/O draining. */
+	if (xe_drm_ioctl_is_wait(cmd)) {
+		xe_device_io_put(io_idx);
+		return drm_compat_ioctl(file, cmd, arg);
+	}
 
 	scoped_cond_guard(xe_pm_runtime_ioctl,
 			  ret = ACQUIRE_ERR(xe_pm_runtime_ioctl, &scope),
@@ -1142,6 +1167,8 @@ void xe_device_remove(struct xe_device *xe)
 
 	drm_dev_unplug(&xe->drm);
 
+	wake_up_all(&xe->ufence_wq);
+
 	xe_bo_pci_dev_remove_all(xe);
 }
 
@@ -1441,6 +1468,7 @@ void xe_device_declare_wedged(struct xe_device *xe)
 	if (!atomic_xchg(&xe->wedged.flag, 1)) {
 		xe->needs_flr_on_fini = true;
 		xe_pm_runtime_get_noresume(xe);
+		wake_up_all(&xe->ufence_wq);
 
 		xe_log_err_fatal(xe, WEDGED, -EIO, "Device declared wedged!\n");
 		xe_err_once(xe, "IOCTLs and executions are now blocked!\n"

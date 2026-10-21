@@ -14,13 +14,19 @@
 #include "xe_macros.h"
 #include "xe_exec_queue.h"
 
-static int do_compare(u64 addr, u64 value, u64 mask, u16 op)
+static int do_compare(struct xe_device *xe, u64 addr, u64 value, u64 mask, u16 op)
 {
 	u64 rvalue;
+	int io_idx;
 	int err;
 	bool passed;
 
+	err = xe_device_io_get(xe, &io_idx);
+	if (err)
+		return err;
+
 	err = copy_from_user(&rvalue, u64_to_user_ptr(addr), sizeof(rvalue));
+	xe_device_io_put(io_idx);
 	if (err)
 		return -EFAULT;
 
@@ -136,7 +142,7 @@ int xe_wait_user_fence_ioctl(struct drm_device *dev, void *data,
 
 	add_wait_queue(&xe->ufence_wq, &w_wait);
 	for (;;) {
-		err = do_compare(addr, args->value, args->mask, args->op);
+		err = do_compare(xe, addr, args->value, args->mask, args->op);
 		if (err <= 0)
 			break;
 
@@ -155,7 +161,7 @@ int xe_wait_user_fence_ioctl(struct drm_device *dev, void *data,
 
 		if (!timeout) {
 			LNL_FLUSH_WORKQUEUE(xe->ordered_wq);
-			err = do_compare(addr, args->value, args->mask,
+			err = do_compare(xe, addr, args->value, args->mask,
 					 args->op);
 			if (err <= 0) {
 				drm_dbg(&xe->drm, "LNL_FLUSH_WORKQUEUE resolved ufence timeout\n");

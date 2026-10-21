@@ -21,6 +21,7 @@ static void prepare_device_for_reset(struct pci_dev *pdev)
 
 	/* Block device access until PCI error recovery completes. */
 	xe_device_set_in_reset(xe);
+	wake_up_all(&xe->ufence_wq);
 
 	for_each_gt(gt, xe, id)
 		xe_gt_declare_wedged(gt);
