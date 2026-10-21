@@ -10,6 +10,7 @@
 #include <linux/err.h>
 #include <linux/export.h>
 #include <linux/gfp.h>
+#include <linux/irqdomain.h>
 #include <linux/types.h>
 
 #include <linux/gpio/consumer.h>
@@ -322,6 +323,38 @@ void devm_gpiod_put_array(struct device *dev, struct gpio_descs *descs)
 	devm_release_action(dev, devm_gpiod_release_array, descs);
 }
 EXPORT_SYMBOL_GPL(devm_gpiod_put_array);
+
+struct gpiochip_irqdomain {
+	struct gpio_chip *gc;
+	struct irq_domain *domain;
+};
+
+static void gpiochip_dispose_irq_mappings(struct device *dev, void *res)
+{
+	struct gpiochip_irqdomain *gcirq = res;
+
+	for (unsigned int i = 0; i < gcirq->gc->ngpio; i++)
+		irq_dispose_mapping(irq_find_mapping(gcirq->domain, i));
+}
+
+int devm_gpiochip_dispose_irq_mappings(struct device *dev,
+				       struct gpio_chip *gc,
+				       struct irq_domain *domain)
+{
+	struct gpiochip_irqdomain *gcirq;
+
+	gcirq = devres_alloc(gpiochip_dispose_irq_mappings, sizeof(*gcirq), GFP_KERNEL);
+	if (!gcirq)
+		return -ENOMEM;
+
+	gcirq->gc = gc;
+	gcirq->domain = domain;
+
+	devres_add(dev, gcirq);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devm_gpiochip_dispose_irq_mappings);
 
 static void devm_gpio_chip_release(void *data)
 {

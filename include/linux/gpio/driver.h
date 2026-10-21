@@ -711,6 +711,10 @@ static inline int gpiochip_irqchip_add_domain(struct gpio_chip *gc,
 }
 #endif
 
+int devm_gpiochip_dispose_irq_mappings(struct device *dev,
+				       struct gpio_chip *gc,
+				       struct irq_domain *domain);
+
 int gpiochip_generic_request(struct gpio_chip *gc, unsigned int offset);
 void gpiochip_generic_free(struct gpio_chip *gc, unsigned int offset);
 int gpiochip_generic_config(struct gpio_chip *gc, unsigned int offset,
