@@ -126,9 +126,6 @@ void serial8250_isa_init_ports(void);
 
 extern struct platform_device *serial8250_isa_devs;
 
-extern const struct uart_ops *univ8250_port_base_ops;
-extern struct uart_ops univ8250_port_ops;
-
 static inline int serial_in(struct uart_8250_port *up, int offset)
 {
 	return up->port.serial_in(&up->port, offset);
@@ -329,20 +326,6 @@ void serial8250_hub6_exit(void);
 #else
 static inline int serial8250_hub6_init(void) { return 0; }
 static inline void serial8250_hub6_exit(void) { }
-#endif
-
-#ifdef CONFIG_SERIAL_8250_RSA
-void univ8250_rsa_support(struct uart_ops *ops, const struct uart_ops *core_ops);
-void rsa_enable(struct uart_8250_port *up);
-void rsa_disable(struct uart_8250_port *up);
-void rsa_autoconfig(struct uart_8250_port *up);
-void rsa_reset(struct uart_8250_port *up);
-#else
-static inline void univ8250_rsa_support(struct uart_ops *ops, const struct uart_ops *core_ops) { }
-static inline void rsa_enable(struct uart_8250_port *up) {}
-static inline void rsa_disable(struct uart_8250_port *up) {}
-static inline void rsa_autoconfig(struct uart_8250_port *up) {}
-static inline void rsa_reset(struct uart_8250_port *up) {}
 #endif
 
 #ifdef CONFIG_SERIAL_8250_FINTEK
