@@ -1,0 +1,165 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2025 Rockchip Electronics Co., Ltd.
+ */
+
+/ {
+	cluster0_opp_table: opp-table-cluster0 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-600000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <600000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+
+		opp-816000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <816000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+
+		opp-1008000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <1008000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+
+		opp-1200000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <1200000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+	};
+
+	cluster1_opp_table: opp-table-cluster1 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-600000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <600000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+
+		opp-816000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <816000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+
+		opp-1008000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <1008000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+
+		opp-1200000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <1200000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+	};
+
+	cluster2_opp_table: opp-table-cluster2 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-600000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <600000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+
+		opp-816000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <816000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+
+		opp-1008000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <1008000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+
+		opp-1200000000 {
+			clock-latency-ns = <40000>;
+			opp-hz = /bits/ 64 <1200000000>;
+			opp-microvolt = <850000 850000 950000>;
+		};
+	};
+};
+
+&cpu_b0 {
+	#cooling-cells = <2>;
+	operating-points-v2 = <&cluster2_opp_table>;
+};
+
+&cpu_b1 {
+	operating-points-v2 = <&cluster2_opp_table>;
+};
+
+&cpu_l0 {
+	#cooling-cells = <2>;
+	operating-points-v2 = <&cluster0_opp_table>;
+};
+
+&cpu_l1 {
+	operating-points-v2 = <&cluster0_opp_table>;
+};
+
+&cpu_l2 {
+	operating-points-v2 = <&cluster0_opp_table>;
+};
+
+&cpu_l3 {
+	operating-points-v2 = <&cluster0_opp_table>;
+};
+
+&cpu_l4 {
+	#cooling-cells = <2>;
+	operating-points-v2 = <&cluster1_opp_table>;
+};
+
+&cpu_l5 {
+	operating-points-v2 = <&cluster1_opp_table>;
+};
+
+&big_core_thermal {
+	cooling-maps {
+		map0 {
+			cooling-device =
+				<&cpu_b0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+			trip = <&big_core_hot>;
+		};
+	};
+
+	trips {
+		big_core_hot: big-core-hot {
+			hysteresis = <2000>;
+			temperature = <85000>;
+			type = "passive";
+		};
+	};
+};
+
+&little_core_thermal {
+	cooling-maps {
+		map0 {
+			cooling-device =
+				<&cpu_l0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+				<&cpu_l4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+			trip = <&little_core_hot>;
+		};
+	};
+
+	trips {
+		little_core_hot: little-core-hot {
+			hysteresis = <2000>;
+			temperature = <85000>;
+			type = "passive";
+		};
+	};
+};
