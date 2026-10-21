@@ -866,8 +866,16 @@ struct nfs4_layout_stateid {
 	/*
 	 * Forward-channel slot that carried the last LAYOUTGET that added
 	 * a layout to this layout stateid, or extended one by merging.
-	 * Under ls_mutex. Until that slot retires, the client may not
-	 * have processed the reply to the LAYOUTGET.
+	 * Under ls_mutex.
+	 *
+	 * RFC 8881 section 2.10.6.3 has a callback name every request that
+	 * created state it refers to and whose slot has not retired. The
+	 * recall names only this one. A layout stateid the client does
+	 * not know yet was created by a single LAYOUTGET, because
+	 * nfsd4_preprocess_layout_stateid() makes a new layout stateid for
+	 * each LAYOUTGET that presents another kind of stateid, and the
+	 * client cannot use the layout stateid before it has that reply.
+	 * LAYOUTGETs for one layout stateid are serialized by ls_mutex.
 	 */
 	struct nfsd4_grant_slot		ls_grant;
 	/* Recall state for ->done, reset in ->prepare */

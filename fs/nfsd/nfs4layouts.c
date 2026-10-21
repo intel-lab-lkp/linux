@@ -254,6 +254,8 @@ nfsd4_free_layout_stateid(struct nfs4_stid *stid)
 	if (ls->ls_recalled)
 		atomic_dec(&ls->ls_stid.sc_file->fi_lo_recalls);
 
+	/* The list outlives one send of the recall. */
+	nfsd41_cb_destroy_referring_call_list(&ls->ls_recall);
 	kmem_cache_free(nfs4_layout_stateid_cache, ls);
 }
 
@@ -897,6 +899,18 @@ nfsd4_cb_layout_prepare(struct nfsd4_callback *cb)
 	ls->ls_recall_retired_at_send = !grant.valid ||
 		nfsd41_grant_slot_retired(clp, &grant);
 	ls->ls_recall_resent = false;
+
+	/*
+	 * The recall can reach the client before the reply to the
+	 * LAYOUTGET that handed out the layout. Name that LAYOUTGET as a
+	 * referring call (RFC 8881 section 2.10.6.3) if the client has not
+	 * retired its slot yet, so that a client that honors it holds the
+	 * recall back instead of answering NFS4ERR_NOMATCHING_LAYOUT.
+	 * ->prepare runs once per recall; the list stays for the polls and
+	 * the resend that follow and is freed with @ls.
+	 */
+	if (!ls->ls_recall_retired_at_send)
+		nfsd41_cb_referring_grant(&ls->ls_recall, clp, &grant);
 	return true;
 }
 
@@ -1009,9 +1023,10 @@ nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 		return 1;
 	case -NFS4ERR_NOMATCHING_LAYOUT:
 		/*
-		 * The recall can reach the client before the reply to the
-		 * LAYOUTGET that added the layout, and a client that has not
-		 * processed that reply answers this way too. As the
+		 * A client that has not processed the reply to the LAYOUTGET
+		 * named as referring call answers this way too: one that
+		 * ignores referring calls, and a Linux client that stops
+		 * waiting for that LAYOUTGET after half a second. As the
 		 * delegation code does for NFS4ERR_BAD_STATEID, trust the
 		 * answer if the slot of the LAYOUTGET had retired when the
 		 * recall was sent, and send the recall once more after a
@@ -1026,7 +1041,10 @@ nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 		 * do, although RFC 8881 section 12.5.3 has a new one for each
 		 * request: a client that did not take the request in expects
 		 * that seqid next, and a client that did answers
-		 * NFS4ERR_OLD_STATEID, which the polls handle.
+		 * NFS4ERR_OLD_STATEID, which the polls handle. Unlike the
+		 * delegation code, the resend does not test the slot again:
+		 * a referring call that is complete by then is harmless, as
+		 * the client finds it complete.
 		 */
 		if (!list_empty(&ls->ls_layouts) && !ls->ls_recall_accepted &&
 		    !ls->ls_recall_retired_at_send && !ls->ls_recall_resent) {
