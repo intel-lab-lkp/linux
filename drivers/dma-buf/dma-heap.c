@@ -115,7 +115,13 @@ static struct dma_buf *dma_heap_ioctl_allocate(struct file *file, void *data)
 
 			memcg = mem_cgroup_from_css(css);
 			rcu_read_unlock();
+
+			ret = security_dma_buf_charge_cgroup(current_cred(), cgrp);
 			cgroup_put(cgrp);
+			if (ret) {
+				mem_cgroup_put(memcg);
+				return ERR_PTR(ret);
+			}
 		} else {
 			/* charge_fd is a pidfd  */
 			task = pidfd_get_task(heap_allocation->charge_fd, &pidfd_flags);

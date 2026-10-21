@@ -351,6 +351,7 @@ int security_capable(const struct cred *cred,
 		       int cap,
 		       unsigned int opts);
 int security_dma_buf_charge_task(const struct cred *from, const struct cred *to);
+int security_dma_buf_charge_cgroup(const struct cred *cred, struct cgroup *cgrp);
 int security_quotactl(int cmds, int type, int id, const struct super_block *sb);
 int security_quota_on(struct dentry *dentry);
 int security_syslog(int type);
@@ -704,6 +705,12 @@ static inline int security_capable(const struct cred *cred,
 
 static inline int security_dma_buf_charge_task(const struct cred *from,
 					       const struct cred *to)
+{
+	return 0;
+}
+
+static inline int security_dma_buf_charge_cgroup(const struct cred *cred,
+						 struct cgroup *cgrp)
 {
 	return 0;
 }
