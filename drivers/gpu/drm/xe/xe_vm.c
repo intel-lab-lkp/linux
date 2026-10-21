@@ -1932,10 +1932,7 @@ err_no_resv:
 static void xe_vm_close(struct xe_vm *vm)
 {
 	struct xe_device *xe = vm->xe;
-	bool bound;
 	int idx;
-
-	bound = drm_dev_enter(&xe->drm, &idx);
 
 	down_write(&vm->lock);
 	xe_vm_lock(vm, false);
@@ -1955,13 +1952,15 @@ static void xe_vm_close(struct xe_vm *vm)
 				      DMA_RESV_USAGE_BOOKKEEP,
 				      false, MAX_SCHEDULE_TIMEOUT);
 
-		if (bound) {
+		if (!xe_device_io_get(xe, &idx)) {
 			for_each_tile(tile, xe, id)
 				if (vm->pt_root[id])
 					xe_pt_clear(xe, vm->pt_root[id]);
 
 			for_each_gt(gt, xe, id)
 				xe_tlb_inval_vm(&gt->tlb_inval, vm);
+
+			xe_device_io_put(idx);
 		}
 	}
 
@@ -1970,9 +1969,6 @@ static void xe_vm_close(struct xe_vm *vm)
 
 	xe_vm_unlock(vm);
 	up_write(&vm->lock);
-
-	if (bound)
-		drm_dev_exit(idx);
 }
 
 void xe_vm_close_and_put(struct xe_vm *vm)
