@@ -27,6 +27,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_device.h>
+#include <linux/pm_wakeirq.h>
 #include <linux/regmap.h>
 #include <linux/watchdog.h>
 
@@ -1188,7 +1189,8 @@ static int pcf2127_configure_interrupt_pins(struct device *dev)
 }
 
 static int pcf2127_probe(struct device *dev, struct regmap *regmap,
-			 int alarm_irq, const struct pcf21xx_config *config)
+			 int alarm_irq, bool bus_wake_irq,
+			 const struct pcf21xx_config *config)
 {
 	struct pcf2127 *pcf2127;
 	int ret = 0;
@@ -1251,6 +1253,13 @@ static int pcf2127_probe(struct device *dev, struct regmap *regmap,
 	if (alarm_irq > 0 || device_property_read_bool(dev, "wakeup-source")) {
 		device_init_wakeup(dev, true);
 		set_bit(RTC_FEATURE_ALARM, pcf2127->rtc->features);
+
+		/* Skip if the bus code has already set the wake IRQ */
+		if (alarm_irq > 0 && !bus_wake_irq) {
+			ret = devm_pm_set_wake_irq(dev, alarm_irq);
+			if (ret)
+				dev_warn(dev, "failed to set wake IRQ: %d\n", ret);
+		}
 	}
 
 	if (pcf2127->cfg->has_int_a_b) {
@@ -1478,7 +1487,9 @@ static int pcf2127_i2c_probe(struct i2c_client *client)
 		return PTR_ERR(regmap);
 	}
 
-	return pcf2127_probe(&client->dev, regmap, client->irq, variant);
+	/* With I2C_CLIENT_WAKE, the I2C core has already set the wake IRQ */
+	return pcf2127_probe(&client->dev, regmap, client->irq,
+			     client->flags & I2C_CLIENT_WAKE, variant);
 }
 
 static struct i2c_driver pcf2127_i2c_driver = {
@@ -1555,7 +1566,7 @@ static int pcf2127_spi_probe(struct spi_device *spi)
 		return PTR_ERR(regmap);
 	}
 
-	return pcf2127_probe(&spi->dev, regmap, spi->irq, variant);
+	return pcf2127_probe(&spi->dev, regmap, spi->irq, false, variant);
 }
 
 static const struct spi_device_id pcf2127_spi_id[] = {
