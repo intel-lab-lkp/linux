@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/cleanup.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/iio/iio.h>
@@ -313,30 +314,6 @@ static int bmg160_chip_init(struct bmg160_data *data)
 	return 0;
 }
 
-static int bmg160_set_power_state(struct bmg160_data *data, bool on)
-{
-#ifdef CONFIG_PM
-	struct device *dev = regmap_get_device(data->regmap);
-	int ret;
-
-	if (on)
-		ret = pm_runtime_get_sync(dev);
-	else
-		ret = pm_runtime_put_autosuspend(dev);
-
-	if (ret < 0) {
-		dev_err(dev, "Failed: bmg160_set_power_state for %d\n", on);
-
-		if (on)
-			pm_runtime_put_noidle(dev);
-
-		return ret;
-	}
-#endif
-
-	return 0;
-}
-
 static int bmg160_setup_any_motion_interrupt(struct bmg160_data *data,
 					     bool status)
 {
@@ -503,8 +480,9 @@ static int bmg160_get_temp(struct bmg160_data *data, int *val)
 	unsigned int raw_val;
 
 	mutex_lock(&data->mutex);
-	ret = bmg160_set_power_state(data, true);
+	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0) {
+		dev_err(dev, "failed to resume: %d\n", ret);
 		mutex_unlock(&data->mutex);
 		return ret;
 	}
@@ -512,16 +490,14 @@ static int bmg160_get_temp(struct bmg160_data *data, int *val)
 	ret = regmap_read(data->regmap, BMG160_REG_TEMP, &raw_val);
 	if (ret < 0) {
 		dev_err(dev, "Error reading reg_temp\n");
-		bmg160_set_power_state(data, false);
+		pm_runtime_put_autosuspend(dev);
 		mutex_unlock(&data->mutex);
 		return ret;
 	}
 
 	*val = sign_extend32(raw_val, 7);
-	ret = bmg160_set_power_state(data, false);
+	pm_runtime_put_autosuspend(dev);
 	mutex_unlock(&data->mutex);
-	if (ret < 0)
-		return ret;
 
 	return IIO_VAL_INT;
 }
@@ -533,8 +509,9 @@ static int bmg160_get_axis(struct bmg160_data *data, int axis, int *val)
 	__le16 raw_val;
 
 	mutex_lock(&data->mutex);
-	ret = bmg160_set_power_state(data, true);
+	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0) {
+		dev_err(dev, "failed to resume: %d\n", ret);
 		mutex_unlock(&data->mutex);
 		return ret;
 	}
@@ -543,16 +520,14 @@ static int bmg160_get_axis(struct bmg160_data *data, int axis, int *val)
 			       sizeof(raw_val));
 	if (ret < 0) {
 		dev_err(dev, "Error reading axis %d\n", axis);
-		bmg160_set_power_state(data, false);
+		pm_runtime_put_autosuspend(dev);
 		mutex_unlock(&data->mutex);
 		return ret;
 	}
 
 	*val = sign_extend32(le16_to_cpu(raw_val), 15);
-	ret = bmg160_set_power_state(data, false);
+	pm_runtime_put_autosuspend(dev);
 	mutex_unlock(&data->mutex);
-	if (ret < 0)
-		return ret;
 
 	return IIO_VAL_INT;
 }
@@ -624,6 +599,7 @@ static int bmg160_write_raw(struct iio_dev *indio_dev,
 			    int val, int val2, long mask)
 {
 	struct bmg160_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
 	int ret;
 
 	switch (mask) {
@@ -636,18 +612,14 @@ static int bmg160_write_raw(struct iio_dev *indio_dev,
 		 * register. Since we will be in suspend mode by default, change
 		 * mode to power on for other writes.
 		 */
-		ret = bmg160_set_power_state(data, true);
+		ret = pm_runtime_resume_and_get(dev);
 		if (ret < 0) {
+			dev_err(dev, "failed to resume: %d\n", ret);
 			mutex_unlock(&data->mutex);
 			return ret;
 		}
 		ret = bmg160_set_bw(data, val);
-		if (ret < 0) {
-			bmg160_set_power_state(data, false);
-			mutex_unlock(&data->mutex);
-			return ret;
-		}
-		ret = bmg160_set_power_state(data, false);
+		pm_runtime_put_autosuspend(dev);
 		mutex_unlock(&data->mutex);
 		return ret;
 	case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
@@ -655,19 +627,14 @@ static int bmg160_write_raw(struct iio_dev *indio_dev,
 			return -EINVAL;
 
 		mutex_lock(&data->mutex);
-		ret = bmg160_set_power_state(data, true);
+		ret = pm_runtime_resume_and_get(dev);
 		if (ret < 0) {
-			bmg160_set_power_state(data, false);
+			dev_err(dev, "failed to resume: %d\n", ret);
 			mutex_unlock(&data->mutex);
 			return ret;
 		}
 		ret = bmg160_set_filter(data, val);
-		if (ret < 0) {
-			bmg160_set_power_state(data, false);
-			mutex_unlock(&data->mutex);
-			return ret;
-		}
-		ret = bmg160_set_power_state(data, false);
+		pm_runtime_put_autosuspend(dev);
 		mutex_unlock(&data->mutex);
 		return ret;
 	case IIO_CHAN_INFO_SCALE:
@@ -676,18 +643,14 @@ static int bmg160_write_raw(struct iio_dev *indio_dev,
 
 		mutex_lock(&data->mutex);
 		/* Refer to comments above for the suspend mode ops */
-		ret = bmg160_set_power_state(data, true);
+		ret = pm_runtime_resume_and_get(dev);
 		if (ret < 0) {
+			dev_err(dev, "failed to resume: %d\n", ret);
 			mutex_unlock(&data->mutex);
 			return ret;
 		}
 		ret = bmg160_set_scale(data, val2);
-		if (ret < 0) {
-			bmg160_set_power_state(data, false);
-			mutex_unlock(&data->mutex);
-			return ret;
-		}
-		ret = bmg160_set_power_state(data, false);
+		pm_runtime_put_autosuspend(dev);
 		mutex_unlock(&data->mutex);
 		return ret;
 	default:
@@ -759,42 +722,40 @@ static int bmg160_write_event_config(struct iio_dev *indio_dev,
 				     bool state)
 {
 	struct bmg160_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
 	int ret;
 
 	if (state == data->ev_enable_state)
 		return 0;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	if (!state && data->motion_trigger_on) {
 		data->ev_enable_state = 0;
-		mutex_unlock(&data->mutex);
 		return 0;
 	}
-	/*
-	 * We will expect the enable and disable to do operation
-	 * in reverse order. This will happen here anyway as our
-	 * resume operation uses sync mode runtime pm calls, the
-	 * suspend operation will be delayed by autosuspend delay
-	 * So the disable operation will still happen in reverse of
-	 * enable operation. When runtime pm is disabled the mode
-	 * is always on so sequence doesn't matter
-	 */
-	ret = bmg160_set_power_state(data, state);
-	if (ret < 0) {
-		mutex_unlock(&data->mutex);
-		return ret;
-	}
 
-	ret =  bmg160_setup_any_motion_interrupt(data, state);
-	if (ret < 0) {
-		bmg160_set_power_state(data, false);
-		mutex_unlock(&data->mutex);
-		return ret;
+	if (state) {
+		ret = pm_runtime_resume_and_get(dev);
+		if (ret < 0) {
+			dev_err(dev, "failed to resume: %d\n", ret);
+			return ret;
+		}
+
+		ret = bmg160_setup_any_motion_interrupt(data, true);
+		if (ret < 0) {
+			pm_runtime_put_autosuspend(dev);
+			return ret;
+		}
+	} else {
+		ret = bmg160_setup_any_motion_interrupt(data, false);
+		if (ret < 0)
+			return ret;
+
+		pm_runtime_put_autosuspend(dev);
 	}
 
 	data->ev_enable_state = state;
-	mutex_unlock(&data->mutex);
 
 	return 0;
 }
@@ -929,40 +890,46 @@ static int bmg160_data_rdy_trigger_set_state(struct iio_trigger *trig,
 {
 	struct iio_dev *indio_dev = iio_trigger_get_drvdata(trig);
 	struct bmg160_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
 	int ret;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	if (!state && data->ev_enable_state && data->motion_trigger_on) {
 		data->motion_trigger_on = false;
-		mutex_unlock(&data->mutex);
 		return 0;
 	}
 
-	/*
-	 * Refer to comment in bmg160_write_event_config for
-	 * enable/disable operation order
-	 */
-	ret = bmg160_set_power_state(data, state);
-	if (ret < 0) {
-		mutex_unlock(&data->mutex);
-		return ret;
+	if (state) {
+		ret = pm_runtime_resume_and_get(dev);
+		if (ret < 0) {
+			dev_err(dev, "failed to resume: %d\n", ret);
+			return ret;
+		}
+
+		if (data->motion_trig == trig)
+			ret = bmg160_setup_any_motion_interrupt(data, true);
+		else
+			ret = bmg160_setup_new_data_interrupt(data, true);
+		if (ret < 0) {
+			pm_runtime_put_autosuspend(dev);
+			return ret;
+		}
+	} else {
+		if (data->motion_trig == trig)
+			ret = bmg160_setup_any_motion_interrupt(data, false);
+		else
+			ret = bmg160_setup_new_data_interrupt(data, false);
+		if (ret < 0)
+			return ret;
+
+		pm_runtime_put_autosuspend(dev);
 	}
-	if (data->motion_trig == trig)
-		ret =  bmg160_setup_any_motion_interrupt(data, state);
-	else
-		ret = bmg160_setup_new_data_interrupt(data, state);
-	if (ret < 0) {
-		bmg160_set_power_state(data, false);
-		mutex_unlock(&data->mutex);
-		return ret;
-	}
+
 	if (data->motion_trig == trig)
 		data->motion_trigger_on = state;
 	else
 		data->dready_trigger_on = state;
-
-	mutex_unlock(&data->mutex);
 
 	return 0;
 }
@@ -1046,15 +1013,24 @@ static irqreturn_t bmg160_data_rdy_trig_poll(int irq, void *private)
 static int bmg160_buffer_preenable(struct iio_dev *indio_dev)
 {
 	struct bmg160_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
+	int ret;
 
-	return bmg160_set_power_state(data, true);
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret < 0)
+		dev_err(dev, "failed to resume: %d\n", ret);
+
+	return ret;
 }
 
 static int bmg160_buffer_postdisable(struct iio_dev *indio_dev)
 {
 	struct bmg160_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
 
-	return bmg160_set_power_state(data, false);
+	pm_runtime_put_autosuspend(dev);
+
+	return 0;
 }
 
 static const struct iio_buffer_setup_ops bmg160_buffer_setup_ops = {
