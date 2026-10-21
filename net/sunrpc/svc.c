@@ -483,6 +483,8 @@ EXPORT_SYMBOL_GPL(svc_create);
  * @prog:  Array of RPC programs the new service will handle
  * @nprogs: Number of programs in the array
  * @stats: the stats struct if desired
+ * @net: network namespace the service belongs to. No reference is
+ *	 held, so the caller tears the serv down before @net exits.
  * @bufsize: maximum message size for @prog
  * @threadfn: a function to service RPC requests for @prog
  *
@@ -491,6 +493,7 @@ EXPORT_SYMBOL_GPL(svc_create);
 struct svc_serv *svc_create_pooled(struct svc_program *prog,
 				   unsigned int nprogs,
 				   struct svc_stat *stats,
+				   struct net *net,
 				   unsigned int bufsize,
 				   int (*threadfn)(void *data))
 {
@@ -504,6 +507,7 @@ struct svc_serv *svc_create_pooled(struct svc_program *prog,
 	if (!serv)
 		goto out_err;
 	serv->sv_is_pooled = true;
+	serv->sv_net = net;
 	return serv;
 out_err:
 	svc_pool_map_put();
