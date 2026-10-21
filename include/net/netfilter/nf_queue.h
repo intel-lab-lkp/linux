@@ -42,6 +42,11 @@ struct nf_queue_handler {
 void nf_register_queue_handler(const struct nf_queue_handler *qh);
 void nf_unregister_queue_handler(void);
 
+/* Drop the packets of @net queued from the hook point of @ops, or every
+ * queued packet of @net when @ops is NULL.
+ */
+void nf_queue_nf_hook_drop(struct net *net, const struct nf_hook_ops *ops);
+
 bool nf_queue_entry_get_refs(struct nf_queue_entry *entry);
 void nf_queue_entry_free(struct nf_queue_entry *entry);
 

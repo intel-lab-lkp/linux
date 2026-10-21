@@ -37,6 +37,7 @@
 #include <net/dst_metadata.h>
 #include <net/route.h>
 #include <net/netfilter/br_netfilter.h>
+#include <net/netfilter/nf_queue.h>
 #include <net/netns/generic.h>
 #include <net/inet_dscp.h>
 
@@ -1296,14 +1297,27 @@ static int __net_init brnf_init_net(struct net *net)
 	return br_netfilter_sysctl_init_net(net);
 }
 
+static void __net_exit brnf_pre_exit_net(struct net *net)
+{
+	struct brnf_net *brnet = net_generic(net, brnf_net_id);
+
+	if (brnet->enabled)
+		nf_unregister_net_hooks(net, br_nf_ops, ARRAY_SIZE(br_nf_ops));
+}
+
 static void __net_exit brnf_exit_net(struct net *net)
 {
-	struct brnf_net *brnet;
+	struct brnf_net *brnet = net_generic(net, brnf_net_id);
 
-	brnet = net_generic(net, brnf_net_id);
 	if (brnet->enabled) {
-		nf_unregister_net_hooks(net, br_nf_ops, ARRAY_SIZE(br_nf_ops));
 		brnet->enabled = false;
+		/* A grace period has passed since brnf_pre_exit_net() removed
+		 * the hooks, so none of them is still running.  Drop what they
+		 * queued from the ip, ip6 and arp forward and postrouting hook
+		 * points: those entries carry an okfn in this module and the
+		 * hook removal did not flush them.
+		 */
+		nf_queue_nf_hook_drop(net, NULL);
 	}
 
 	br_netfilter_sysctl_exit_net(net, brnet);
@@ -1311,6 +1325,7 @@ static void __net_exit brnf_exit_net(struct net *net)
 
 static struct pernet_operations brnf_net_ops __read_mostly = {
 	.init = brnf_init_net,
+	.pre_exit = brnf_pre_exit_net,
 	.exit = brnf_exit_net,
 	.id   = &brnf_net_id,
 	.size = sizeof(struct brnf_net),

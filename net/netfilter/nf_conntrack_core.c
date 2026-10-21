@@ -49,6 +49,7 @@
 #include <net/netfilter/nf_conntrack_synproxy.h>
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_nat_helper.h>
+#include <net/netfilter/nf_queue.h>
 #include <net/netns/hash.h>
 #include <net/ip.h>
 
