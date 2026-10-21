@@ -1008,7 +1008,8 @@ static ssize_t iio_read_channel_info_avail(struct device *dev,
 static int __iio_str_to_fixpoint(const char *str, int fract_mult,
 				 int *integer, int *fract, bool scale_db)
 {
-	int i = 0, f = 0;
+	s64 i = 0, f = 0;
+	s64 limit;
 	bool integer_part = true, negative = false;
 
 	if (fract_mult == 0) {
@@ -1024,12 +1025,21 @@ static int __iio_str_to_fixpoint(const char *str, int fract_mult,
 		str++;
 	}
 
+	/*
+	 * The integer part is accumulated as a magnitude and the sign is only
+	 * applied once the whole string has been parsed. Hence the limit
+	 * depends on the sign.
+	 */
+	limit = negative ? (s64)INT_MAX + 1 : INT_MAX;
+
 	while (*str) {
 		if ('0' <= *str && *str <= '9') {
 			if (integer_part) {
-				i = i * 10 + *str - '0';
+				i = i * 10 + (*str - '0');
+				if (i > limit)
+					return -ERANGE;
 			} else {
-				f += fract_mult * (*str - '0');
+				f += (s64)fract_mult * (*str - '0');
 				fract_mult /= 10;
 			}
 		} else if (*str == '\n') {
@@ -1059,8 +1069,11 @@ static int __iio_str_to_fixpoint(const char *str, int fract_mult,
 			f = -f;
 	}
 
-	*integer = i;
-	*fract = f;
+	if (f < INT_MIN || f > INT_MAX)
+		return -ERANGE;
+
+	*integer = (int)i;
+	*fract = (int)f;
 
 	return 0;
 }
