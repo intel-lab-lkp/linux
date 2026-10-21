@@ -193,24 +193,25 @@ static struct lock_class_key eeprom_lock_key;
 #endif
 
 static ssize_t type_show(struct device *dev,
-			 struct device_attribute *attr, char *buf)
+			 const struct device_attribute *attr, char *buf)
 {
 	struct nvmem_device *nvmem = to_nvmem_device(dev);
 
 	return sysfs_emit(buf, "%s\n", nvmem_type_str[nvmem->type]);
 }
 
-static DEVICE_ATTR_RO(type);
+static const DEVICE_ATTR_RO(type);
 
-static ssize_t force_ro_show(struct device *dev, struct device_attribute *attr,
-			     char *buf)
+static ssize_t force_ro_show(struct device *dev,
+			     const struct device_attribute *attr, char *buf)
 {
 	struct nvmem_device *nvmem = to_nvmem_device(dev);
 
 	return sysfs_emit(buf, "%d\n", nvmem->read_only);
 }
 
-static ssize_t force_ro_store(struct device *dev, struct device_attribute *attr,
+static ssize_t force_ro_store(struct device *dev,
+			      const struct device_attribute *attr,
 			      const char *buf, size_t count)
 {
 	struct nvmem_device *nvmem = to_nvmem_device(dev);
@@ -222,9 +223,9 @@ static ssize_t force_ro_store(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
-static DEVICE_ATTR_RW(force_ro);
+static const DEVICE_ATTR_RW(force_ro);
 
-static struct attribute *nvmem_attrs[] = {
+static const struct attribute *const nvmem_attrs[] = {
 	&dev_attr_force_ro.attr,
 	&dev_attr_type.attr,
 	NULL,
@@ -339,7 +340,7 @@ static size_t nvmem_bin_attr_size(struct kobject *kobj,
 }
 
 static umode_t nvmem_attr_is_visible(struct kobject *kobj,
-				     struct attribute *attr, int i)
+				     const struct attribute *attr, int i)
 {
 	struct device *dev = kobj_to_dev(kobj);
 	struct nvmem_device *nvmem = to_nvmem_device(dev);
@@ -412,10 +413,10 @@ static const struct bin_attribute *const nvmem_bin_attributes[] = {
 
 static const struct attribute_group nvmem_bin_group = {
 	.bin_attrs	= nvmem_bin_attributes,
-	.attrs		= nvmem_attrs,
+	.attrs_const	= nvmem_attrs,
 	.is_bin_visible = nvmem_bin_attr_is_visible,
 	.bin_size	= nvmem_bin_attr_size,
-	.is_visible	= nvmem_attr_is_visible,
+	.is_visible_const = nvmem_attr_is_visible,
 };
 
 static const struct attribute_group *nvmem_dev_groups[] = {
