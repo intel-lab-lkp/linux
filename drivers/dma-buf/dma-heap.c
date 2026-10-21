@@ -19,6 +19,7 @@
 #include <linux/minmax.h>
 #include <linux/nospec.h>
 #include <linux/pidfd.h>
+#include <linux/security.h>
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 #include <linux/xarray.h>
@@ -81,13 +82,14 @@ static struct dma_buf *dma_heap_ioctl_allocate(struct file *file, void *data)
 {
 	struct cgroup *cgrp;
 	struct cgroup_subsys_state *css;
+	const struct cred *tcred;
 	struct dma_heap_allocation_data *heap_allocation = data;
 	struct dma_heap *heap = file->private_data;
 	struct dma_buf *dmabuf;
 	struct mem_cgroup *memcg = NULL;
 	struct task_struct *task;
 	unsigned int pidfd_flags;
-	int fd;
+	int fd, ret;
 	size_t len;
 
 	if (heap_allocation->fd)
@@ -119,6 +121,14 @@ static struct dma_buf *dma_heap_ioctl_allocate(struct file *file, void *data)
 			task = pidfd_get_task(heap_allocation->charge_fd, &pidfd_flags);
 			if (IS_ERR(task))
 				return ERR_CAST(task);
+
+			tcred = get_task_cred(task);
+			ret = security_dma_buf_charge_task(current_cred(), tcred);
+			put_cred(tcred);
+			if (ret) {
+				put_task_struct(task);
+				return ERR_PTR(ret);
+			}
 
 			memcg = get_mem_cgroup_from_mm(task->mm);
 			put_task_struct(task);
