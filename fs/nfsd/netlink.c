@@ -10,6 +10,7 @@
 #include "netlink.h"
 
 #include <uapi/linux/nfsd_netlink.h>
+#include <linux/nfsd/export.h>
 
 /* Common nested types */
 const struct nla_policy nfsd_auth_flavor_nl_policy[NFSD_A_AUTH_FLAVOR_FLAGS + 1] = {
@@ -117,6 +118,13 @@ static const struct nla_policy nfsd_unlock_filesystem_nl_policy[NFSD_A_UNLOCK_FI
 /* NFSD_CMD_UNLOCK_EXPORT - do */
 static const struct nla_policy nfsd_unlock_export_nl_policy[NFSD_A_UNLOCK_EXPORT_PATH + 1] = {
 	[NFSD_A_UNLOCK_EXPORT_PATH] = { .type = NLA_NUL_STRING, },
+};
+
+/* NFSD_CMD_FILEHANDLE_GET - do */
+static const struct nla_policy nfsd_filehandle_get_nl_policy[NFSD_A_FILEHANDLE_MAXSIZE + 1] = {
+	[NFSD_A_FILEHANDLE_DOMAIN] = { .type = NLA_NUL_STRING, .len = NFSCLNT_IDMAX, },
+	[NFSD_A_FILEHANDLE_PATH] = { .type = NLA_NUL_STRING, .len = 4095, },
+	[NFSD_A_FILEHANDLE_MAXSIZE] = NLA_POLICY_RANGE(NLA_U32, 32, 64),
 };
 
 /* Ops table for nfsd */
@@ -230,6 +238,13 @@ static const struct genl_split_ops nfsd_nl_ops[] = {
 		.cmd	= NFSD_CMD_SERVER_STATS_GET,
 		.dumpit	= nfsd_nl_server_stats_get_dumpit,
 		.flags	= GENL_CMD_CAP_DUMP,
+	},
+	{
+		.cmd		= NFSD_CMD_FILEHANDLE_GET,
+		.doit		= nfsd_nl_filehandle_get_doit,
+		.policy		= nfsd_filehandle_get_nl_policy,
+		.maxattr	= NFSD_A_FILEHANDLE_MAXSIZE,
+		.flags		= GENL_ADMIN_PERM | GENL_CMD_CAP_DO,
 	},
 };
 

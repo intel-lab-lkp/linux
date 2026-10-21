@@ -51,6 +51,11 @@ definitions:
       so the caller must skip the udp and udp6 netids for it.
     entries:
       - no-udp
+  -
+    type: const
+    name: nfsclnt-idmax
+    value: 1024
+    header: linux/nfsd/export.h
 
 attribute-sets:
   -
@@ -460,6 +465,33 @@ attribute-sets:
         nested-attributes: server-proc-entry
         multi-attr: true
 
+  -
+    name: filehandle
+    attributes:
+      -
+        name: domain
+        type: string
+        doc: Client domain name the export is visible to.
+        checks:
+          max-len: nfsclnt-idmax
+      -
+        name: path
+        type: string
+        doc: Pathname of the export whose root filehandle is requested.
+        checks:
+          max-len: 4095 # PATH_MAX - 1
+      -
+        name: maxsize
+        type: u32
+        doc: Largest filehandle the caller can accept, in bytes.
+        checks:
+          min: 32 # NFS_FHSIZE
+          max: 64 # NFS3_FHSIZE
+      -
+        name: handle
+        type: binary
+        doc: The composed root filehandle. Reply only.
+
 operations:
   list:
     -
@@ -680,6 +712,24 @@ operations:
             - proc4-ops
             - proc4ops-ops
             - proc4cb-ops
+
+    -
+      name: filehandle-get
+      doc: >-
+        Look up the root filehandle of an export for a client domain.
+        Netlink equivalent of the /proc/fs/nfsd/filehandle transaction
+        interface used by rpc.mountd.
+      attribute-set: filehandle
+      flags: [admin-perm]
+      do:
+        request:
+          attributes:
+            - domain
+            - path
+            - maxsize
+        reply:
+          attributes:
+            - handle
 
 mcast-groups:
   list:
