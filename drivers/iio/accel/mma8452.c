@@ -220,26 +220,6 @@ static int mma8452_drdy(struct mma8452_data *data)
 	return -EIO;
 }
 
-static int mma8452_set_runtime_pm_state(struct i2c_client *client, bool on)
-{
-#ifdef CONFIG_PM
-	struct device *dev = &client->dev;
-	int ret;
-
-	if (on)
-		ret = pm_runtime_resume_and_get(dev);
-	else
-		ret = pm_runtime_put_autosuspend(dev);
-	if (ret < 0) {
-		dev_err(dev, "failed to change power state to %d\n", on);
-
-		return ret;
-	}
-#endif
-
-	return 0;
-}
-
 static int mma8452_read(struct mma8452_data *data, __be16 buf[3])
 {
 	int ret = mma8452_drdy(data);
@@ -247,18 +227,20 @@ static int mma8452_read(struct mma8452_data *data, __be16 buf[3])
 	if (ret < 0)
 		return ret;
 
-	ret = mma8452_set_runtime_pm_state(data->client, true);
-	if (ret)
+	ret = pm_runtime_resume_and_get(&data->client->dev);
+	if (ret < 0) {
+		dev_err(&data->client->dev, "failed to resume: %d\n", ret);
 		return ret;
+	}
 
 	ret = i2c_smbus_read_i2c_block_data(data->client, MMA8452_OUT_X,
 					    3 * sizeof(__be16), (u8 *)buf);
 	if (ret < 0)
 		return ret;
 
-	ret = mma8452_set_runtime_pm_state(data->client, false);
+	pm_runtime_put_autosuspend(&data->client->dev);
 
-	return ret;
+	return 0;
 }
 
 static ssize_t mma8452_show_int_plus_micros(char *buf, const int (*vals)[2],
@@ -974,17 +956,25 @@ static int mma8452_write_event_config(struct iio_dev *indio_dev,
 	if (ret)
 		return ret;
 
-	ret = mma8452_set_runtime_pm_state(data->client, state);
-	if (ret)
-		return ret;
+	if (state) {
+		ret = pm_runtime_resume_and_get(&data->client->dev);
+		if (ret < 0) {
+			dev_err(&data->client->dev, "failed to resume: %d\n",
+				ret);
+			return ret;
+		}
+	}
 
 	switch (dir) {
 	case IIO_EV_DIR_FALLING:
-		return mma8452_set_freefall_mode(data, state);
+		ret = mma8452_set_freefall_mode(data, state);
+		break;
 	case IIO_EV_DIR_RISING:
 		val = i2c_smbus_read_byte_data(data->client, ev_regs->ev_cfg);
-		if (val < 0)
-			return val;
+		if (val < 0) {
+			ret = val;
+			break;
+		}
 
 		if (state) {
 			if (mma8452_freefall_mode_enabled(data)) {
@@ -997,7 +987,7 @@ static int mma8452_write_event_config(struct iio_dev *indio_dev,
 					ev_regs->ev_cfg_chan_shift);
 		} else {
 			if (mma8452_freefall_mode_enabled(data))
-				return 0;
+				break;
 
 			val &= ~BIT(chan->scan_index +
 					ev_regs->ev_cfg_chan_shift);
@@ -1005,10 +995,23 @@ static int mma8452_write_event_config(struct iio_dev *indio_dev,
 
 		val |= ev_regs->ev_cfg_ele;
 
-		return mma8452_change_config(data, ev_regs->ev_cfg, val);
+		ret = mma8452_change_config(data, ev_regs->ev_cfg, val);
+		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
+		break;
 	}
+
+	if (ret) {
+		if (state)
+			pm_runtime_put_autosuspend(&data->client->dev);
+		return ret;
+	}
+
+	if (!state)
+		pm_runtime_put_autosuspend(&data->client->dev);
+
+	return 0;
 }
 
 static void mma8452_transient_interrupt(struct iio_dev *indio_dev)
@@ -1447,20 +1450,39 @@ static int mma8452_data_rdy_trigger_set_state(struct iio_trigger *trig,
 	struct mma8452_data *data = iio_priv(indio_dev);
 	int reg, ret;
 
-	ret = mma8452_set_runtime_pm_state(data->client, state);
-	if (ret)
-		return ret;
+	if (state) {
+		ret = pm_runtime_resume_and_get(&data->client->dev);
+		if (ret < 0) {
+			dev_err(&data->client->dev, "failed to resume: %d\n",
+				ret);
+			return ret;
+		}
+	}
 
 	reg = i2c_smbus_read_byte_data(data->client, MMA8452_CTRL_REG4);
-	if (reg < 0)
-		return reg;
+	if (reg < 0) {
+		ret = reg;
+		goto err_put_pm;
+	}
 
 	if (state)
 		reg |= MMA8452_INT_DRDY;
 	else
 		reg &= ~MMA8452_INT_DRDY;
 
-	return mma8452_change_config(data, MMA8452_CTRL_REG4, reg);
+	ret = mma8452_change_config(data, MMA8452_CTRL_REG4, reg);
+	if (ret)
+		goto err_put_pm;
+
+	if (!state)
+		pm_runtime_put_autosuspend(&data->client->dev);
+
+	return 0;
+
+err_put_pm:
+	if (state)
+		pm_runtime_put_autosuspend(&data->client->dev);
+	return ret;
 }
 
 static const struct iio_trigger_ops mma8452_trigger_ops = {
