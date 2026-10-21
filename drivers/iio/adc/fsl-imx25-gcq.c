@@ -83,7 +83,13 @@ static irqreturn_t mx25_gcq_irq(int irq, void *data)
 	struct mx25_gcq_priv *priv = data;
 	u32 stats;
 
-	regmap_read(priv->regs, MX25_ADCQ_SR, &stats);
+	/*
+	 * If the status can't be read we don't know whether the conversion
+	 * has finished. The interrupt is still acknowledged below, so just
+	 * skip the completion and let the reader time out.
+	 */
+	if (regmap_read(priv->regs, MX25_ADCQ_SR, &stats))
+		stats = 0;
 
 	if (stats & MX25_ADCQ_SR_EOQ) {
 		regmap_set_bits(priv->regs, MX25_ADCQ_MR,
@@ -109,15 +115,29 @@ static int mx25_gcq_get_raw_value(struct device *dev,
 {
 	long time_left;
 	u32 data;
+	int ret;
 
 	/* Setup the configuration we want to use */
-	regmap_write(priv->regs, MX25_ADCQ_ITEM_7_0,
-		     MX25_ADCQ_ITEM(0, chan->channel));
+	ret = regmap_write(priv->regs, MX25_ADCQ_ITEM_7_0,
+			   MX25_ADCQ_ITEM(0, chan->channel));
+	if (ret) {
+		dev_err(dev, "Failed to setup the queue item: %d\n", ret);
+		return ret;
+	}
 
-	regmap_clear_bits(priv->regs, MX25_ADCQ_MR, MX25_ADCQ_MR_EOQ_IRQ);
+	ret = regmap_clear_bits(priv->regs, MX25_ADCQ_MR,
+				MX25_ADCQ_MR_EOQ_IRQ);
+	if (ret) {
+		dev_err(dev, "Failed to clear the EoQ interrupt: %d\n", ret);
+		return ret;
+	}
 
 	/* Trigger queue for one run */
-	regmap_set_bits(priv->regs, MX25_ADCQ_CR, MX25_ADCQ_CR_FQS);
+	ret = regmap_set_bits(priv->regs, MX25_ADCQ_CR, MX25_ADCQ_CR_FQS);
+	if (ret) {
+		dev_err(dev, "Failed to trigger the queue: %d\n", ret);
+		return ret;
+	}
 
 	time_left = wait_for_completion_interruptible_timeout(
 		&priv->completed, MX25_GCQ_TIMEOUT);
@@ -129,7 +149,11 @@ static int mx25_gcq_get_raw_value(struct device *dev,
 		return -ETIMEDOUT;
 	}
 
-	regmap_read(priv->regs, MX25_ADCQ_FIFO, &data);
+	ret = regmap_read(priv->regs, MX25_ADCQ_FIFO, &data);
+	if (ret) {
+		dev_err(dev, "Failed to read the FIFO: %d\n", ret);
+		return ret;
+	}
 
 	*val = MX25_ADCQ_FIFO_DATA(data);
 
@@ -204,14 +228,18 @@ static int mx25_gcq_setup_cfgs(struct platform_device *pdev,
 	 * Setup all configurations registers with a default conversion
 	 * configuration for each input
 	 */
-	for (i = 0; i < MX25_NUM_CFGS; ++i)
-		regmap_write(priv->regs, MX25_ADCQ_CFG(i),
-			     MX25_ADCQ_CFG_YPLL_OFF |
-			     MX25_ADCQ_CFG_XNUR_OFF |
-			     MX25_ADCQ_CFG_XPUL_OFF |
-			     MX25_ADCQ_CFG_REFP_INT |
-			     MX25_ADCQ_CFG_IN(i) |
-			     MX25_ADCQ_CFG_REFN_NGND2);
+	for (i = 0; i < MX25_NUM_CFGS; ++i) {
+		ret = regmap_write(priv->regs, MX25_ADCQ_CFG(i),
+				   MX25_ADCQ_CFG_YPLL_OFF |
+				   MX25_ADCQ_CFG_XNUR_OFF |
+				   MX25_ADCQ_CFG_XPUL_OFF |
+				   MX25_ADCQ_CFG_REFP_INT |
+				   MX25_ADCQ_CFG_IN(i) |
+				   MX25_ADCQ_CFG_REFN_NGND2);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Failed to write the configuration register\n");
+	}
 
 	device_for_each_child_node_scoped(dev, child) {
 		u32 reg;
@@ -265,16 +293,26 @@ static int mx25_gcq_setup_cfgs(struct platform_device *pdev,
 			return dev_err_probe(dev, -EINVAL,
 					     "Invalid fsl,adc-refn property value\n");
 
-		regmap_update_bits(priv->regs, MX25_ADCQ_CFG(reg),
-				   MX25_ADCQ_CFG_REFP_MASK |
-				   MX25_ADCQ_CFG_REFN_MASK,
-				   refp | refn);
+		ret = regmap_update_bits(priv->regs, MX25_ADCQ_CFG(reg),
+					 MX25_ADCQ_CFG_REFP_MASK |
+					 MX25_ADCQ_CFG_REFN_MASK,
+					 refp | refn);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Failed to update the configuration register\n");
 	}
-	regmap_set_bits(priv->regs, MX25_ADCQ_CR,
-			MX25_ADCQ_CR_FRST | MX25_ADCQ_CR_QRST);
 
-	regmap_write(priv->regs, MX25_ADCQ_CR,
-		     MX25_ADCQ_CR_PDMSK | MX25_ADCQ_CR_QSM_FQS);
+	ret = regmap_set_bits(priv->regs, MX25_ADCQ_CR,
+			      MX25_ADCQ_CR_FRST | MX25_ADCQ_CR_QRST);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "Failed to reset the conversion queue\n");
+
+	ret = regmap_write(priv->regs, MX25_ADCQ_CR,
+			    MX25_ADCQ_CR_PDMSK | MX25_ADCQ_CR_QSM_FQS);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "Failed to configure the conversion queue\n");
 
 	return 0;
 }
