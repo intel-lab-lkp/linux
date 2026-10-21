@@ -400,19 +400,6 @@ static void gpio_mockup_debugfs_cleanup(void *data)
 	debugfs_remove_recursive(chip->dbg_dir);
 }
 
-static void gpio_mockup_dispose_mappings(void *data)
-{
-	struct gpio_mockup_chip *chip = data;
-	struct gpio_chip *gc = &chip->gc;
-	int i, irq;
-
-	for (i = 0; i < gc->ngpio; i++) {
-		irq = irq_find_mapping(chip->irq_sim_domain, i);
-		if (irq)
-			irq_dispose_mapping(irq);
-	}
-}
-
 static int gpio_mockup_probe(struct platform_device *pdev)
 {
 	struct gpio_mockup_chip *chip;
@@ -473,7 +460,7 @@ static int gpio_mockup_probe(struct platform_device *pdev)
 	if (IS_ERR(chip->irq_sim_domain))
 		return PTR_ERR(chip->irq_sim_domain);
 
-	rv = devm_add_action_or_reset(dev, gpio_mockup_dispose_mappings, chip);
+	rv = devm_gpiochip_dispose_irq_mappings(dev, gc, chip->irq_sim_domain);
 	if (rv)
 		return rv;
 
