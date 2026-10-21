@@ -1021,7 +1021,6 @@ EXPORT_SYMBOL_GPL(regmap_add_irq_chip);
  */
 void regmap_del_irq_chip(int irq, struct regmap_irq_chip_data *d)
 {
-	unsigned int virq;
 	int i, hwirq;
 
 	if (!d)
@@ -1039,9 +1038,7 @@ void regmap_del_irq_chip(int irq, struct regmap_irq_chip_data *d)
 		 * Find the virtual irq of hwirq on chip and if it is
 		 * there then dispose it
 		 */
-		virq = irq_find_mapping(d->domain, hwirq);
-		if (virq)
-			irq_dispose_mapping(virq);
+		irq_dispose_mapping(irq_find_mapping(d->domain, hwirq));
 	}
 
 	irq_domain_remove(d->domain);
