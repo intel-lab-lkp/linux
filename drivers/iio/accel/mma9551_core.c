@@ -655,37 +655,6 @@ int mma9551_set_device_state(struct i2c_client *client, bool enable)
 EXPORT_SYMBOL_NS(mma9551_set_device_state, "IIO_MMA9551");
 
 /**
- * mma9551_set_power_state() - sets runtime PM state
- * @client:	I2C client
- * @on:		Use true to power on device, false to power off
- *
- * Resume or suspend the device using Runtime PM.
- * The device will suspend after the autosuspend delay.
- *
- * Returns: 0 on success, negative value on failure.
- */
-int mma9551_set_power_state(struct i2c_client *client, bool on)
-{
-#ifdef CONFIG_PM
-	int ret;
-
-	if (on)
-		ret = pm_runtime_resume_and_get(&client->dev);
-	else
-		ret = pm_runtime_put_autosuspend(&client->dev);
-	if (ret < 0) {
-		dev_err(&client->dev,
-			"failed to change power state to %d\n", on);
-
-		return ret;
-	}
-#endif
-
-	return 0;
-}
-EXPORT_SYMBOL_NS(mma9551_set_power_state, "IIO_MMA9551");
-
-/**
  * mma9551_sleep() - sleep
  * @freq:	Application frequency
  *
@@ -741,9 +710,11 @@ int mma9551_read_accel_chan(struct i2c_client *client,
 		return -EINVAL;
 	}
 
-	ret = mma9551_set_power_state(client, true);
-	if (ret < 0)
+	ret = pm_runtime_resume_and_get(&client->dev);
+	if (ret < 0) {
+		dev_err(&client->dev, "failed to resume: %d\n", ret);
 		return ret;
+	}
 
 	ret = mma9551_read_status_word(client, MMA9551_APPID_AFE,
 				       reg_addr, &raw_accel);
@@ -755,7 +726,7 @@ int mma9551_read_accel_chan(struct i2c_client *client,
 	ret = IIO_VAL_INT;
 
 out_poweroff:
-	mma9551_set_power_state(client, false);
+	pm_runtime_put_autosuspend(&client->dev);
 	return ret;
 }
 EXPORT_SYMBOL_NS(mma9551_read_accel_chan, "IIO_MMA9551");

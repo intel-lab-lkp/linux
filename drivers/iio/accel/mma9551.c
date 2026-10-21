@@ -71,9 +71,11 @@ static int mma9551_read_incli_chan(struct i2c_client *client,
 		return -EINVAL;
 	}
 
-	ret = mma9551_set_power_state(client, true);
-	if (ret < 0)
+	ret = pm_runtime_resume_and_get(&client->dev);
+	if (ret < 0) {
+		dev_err(&client->dev, "failed to resume: %d\n", ret);
 		return ret;
+	}
 
 	ret = mma9551_read_status_byte(client, MMA9551_APPID_TILT,
 				       reg_addr, &angle);
@@ -96,7 +98,7 @@ static int mma9551_read_incli_chan(struct i2c_client *client,
 	ret = IIO_VAL_INT;
 
 out_poweroff:
-	mma9551_set_power_state(client, false);
+	pm_runtime_put_autosuspend(&client->dev);
 	return ret;
 }
 
@@ -178,9 +180,7 @@ static int mma9551_config_incli_event(struct iio_dev *indio_dev,
 		if (ret < 0)
 			return ret;
 
-		ret = mma9551_set_power_state(data->client, false);
-		if (ret < 0)
-			return ret;
+		pm_runtime_put_autosuspend(&data->client->dev);
 	} else {
 		int bitnum;
 
@@ -200,15 +200,18 @@ static int mma9551_config_incli_event(struct iio_dev *indio_dev,
 		}
 
 
-		ret = mma9551_set_power_state(data->client, true);
-		if (ret < 0)
+		ret = pm_runtime_resume_and_get(&data->client->dev);
+		if (ret < 0) {
+			dev_err(&data->client->dev, "failed to resume: %d\n",
+				ret);
 			return ret;
+		}
 
 		ret = mma9551_gpio_config(data->client,
 					  (enum mma9551_gpio_pin)mma_axis,
 					  MMA9551_APPID_TILT, bitnum, 0);
 		if (ret < 0) {
-			mma9551_set_power_state(data->client, false);
+			pm_runtime_put_autosuspend(&data->client->dev);
 			return ret;
 		}
 	}

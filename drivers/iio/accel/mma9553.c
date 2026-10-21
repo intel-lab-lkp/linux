@@ -610,10 +610,16 @@ static int mma9553_write_raw(struct iio_dev *indio_dev,
 		if (data->stepcnt_enabled == !!val)
 			return 0;
 		mutex_lock(&data->mutex);
-		ret = mma9551_set_power_state(data->client, val);
-		if (ret < 0) {
-			mutex_unlock(&data->mutex);
-			return ret;
+		if (val) {
+			ret = pm_runtime_resume_and_get(&data->client->dev);
+			if (ret < 0) {
+				dev_err(&data->client->dev,
+					"failed to resume: %d\n", ret);
+				mutex_unlock(&data->mutex);
+				return ret;
+			}
+		} else {
+			pm_runtime_put_autosuspend(&data->client->dev);
 		}
 		data->stepcnt_enabled = val;
 		mutex_unlock(&data->mutex);
@@ -737,24 +743,32 @@ static int mma9553_write_event_config(struct iio_dev *indio_dev,
 
 	mutex_lock(&data->mutex);
 
-	ret = mma9551_set_power_state(data->client, state);
-	if (ret < 0)
-		goto err_out;
+	if (state) {
+		ret = pm_runtime_resume_and_get(&data->client->dev);
+		if (ret < 0) {
+			dev_err(&data->client->dev, "failed to resume: %d\n",
+				ret);
+			goto err_out;
+		}
+	}
+
 	event->enabled = state;
 
 	ret = mma9553_conf_gpio(data);
 	if (ret < 0)
 		goto err_conf_gpio;
 
+	if (!state)
+		pm_runtime_put_autosuspend(&data->client->dev);
+
 	mutex_unlock(&data->mutex);
 
 	return 0;
 
 err_conf_gpio:
-	if (state) {
-		event->enabled = false;
-		mma9551_set_power_state(data->client, false);
-	}
+	if (state)
+		pm_runtime_put_autosuspend(&data->client->dev);
+	event->enabled = !state;
 err_out:
 	mutex_unlock(&data->mutex);
 	return ret;

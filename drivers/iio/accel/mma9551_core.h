@@ -62,7 +62,6 @@ int mma9551_gpio_config(struct i2c_client *client, enum mma9551_gpio_pin pin,
 			u8 app_id, u8 bitnum, int polarity);
 int mma9551_read_version(struct i2c_client *client);
 int mma9551_set_device_state(struct i2c_client *client, bool enable);
-int mma9551_set_power_state(struct i2c_client *client, bool on);
 void mma9551_sleep(int freq);
 int mma9551_read_accel_chan(struct i2c_client *client,
 			    const struct iio_chan_spec *chan,
