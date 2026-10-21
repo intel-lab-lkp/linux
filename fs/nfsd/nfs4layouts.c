@@ -330,6 +330,7 @@ nfsd4_alloc_layout_stateid(struct nfsd4_compound_state *cstate,
 	}
 
 	ls->ls_recall_start = 0;
+	ls->ls_grant.valid = false;
 	ls->ls_fenced = false;
 	ls->ls_fence_inflight = false;
 	ls->ls_fence_stopped = false;
@@ -880,11 +881,22 @@ nfsd4_cb_layout_prepare(struct nfsd4_callback *cb)
 {
 	struct nfs4_layout_stateid *ls =
 		container_of(cb, struct nfs4_layout_stateid, ls_recall);
+	struct nfs4_client *clp = ls->ls_stid.sc_client;
+	struct nfsd4_grant_slot grant;
 
 	mutex_lock(&ls->ls_mutex);
 	nfs4_inc_and_copy_stateid(&ls->ls_recall_sid, &ls->ls_stid);
+	grant = ls->ls_grant;
 	mutex_unlock(&ls->ls_mutex);
 	ls->ls_recall_accepted = false;
+	/*
+	 * A layout stateid with layouts has its slot recorded, as
+	 * nfsd4_layoutget() records it under ls_mutex; without one there
+	 * is no reply to wait for.
+	 */
+	ls->ls_recall_retired_at_send = !grant.valid ||
+		nfsd41_grant_slot_retired(clp, &grant);
+	ls->ls_recall_resent = false;
 	return true;
 }
 
@@ -915,8 +927,10 @@ nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 		 * The poll reuses the recall's seqid, against RFC 8881
 		 * section 12.5.3, so a client returning its layouts answers
 		 * NFS4ERR_OLD_STATEID too. A client that has not taken the
-		 * recall up is past that seqid, e.g. after a LAYOUTRETURN,
-		 * and gets a new one. ls_mutex could block rpciod, so the bump
+		 * recall up is past that seqid and gets a new one: after a
+		 * LAYOUTRETURN, or when the resend below repeats the seqid of a
+		 * recall that the Linux client took in although it matched no
+		 * layout segment. ls_mutex could block rpciod, so the bump
 		 * relies on sc_lock.
 		 */
 		if (!ls->ls_recall_accepted) {
@@ -994,6 +1008,33 @@ nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 		}
 		return 1;
 	case -NFS4ERR_NOMATCHING_LAYOUT:
+		/*
+		 * The recall can reach the client before the reply to the
+		 * LAYOUTGET that added the layout, and a client that has not
+		 * processed that reply answers this way too. As the
+		 * delegation code does for NFS4ERR_BAD_STATEID, trust the
+		 * answer if the slot of the LAYOUTGET had retired when the
+		 * recall was sent, and send the recall once more after a
+		 * delay otherwise. Unlike the delegation code, trust the
+		 * answer to that resend: not trusting it would end in fencing
+		 * the client, and an idle client leaves its slot unretired
+		 * also when it has no layout. A client that has answered
+		 * NFS4_OK to this recall knew the layout stateid, so its
+		 * answer to a poll is trusted at once.
+		 *
+		 * The resend repeats the request with its seqid, as the polls
+		 * do, although RFC 8881 section 12.5.3 has a new one for each
+		 * request: a client that did not take the request in expects
+		 * that seqid next, and a client that did answers
+		 * NFS4ERR_OLD_STATEID, which the polls handle.
+		 */
+		if (!list_empty(&ls->ls_layouts) && !ls->ls_recall_accepted &&
+		    !ls->ls_recall_retired_at_send && !ls->ls_recall_resent) {
+			ls->ls_recall_resent = true;
+			trace_nfsd_layout_recall_resend(&ls->ls_recall_sid);
+			rpc_delay(task, 2 * HZ);
+			return 0;
+		}
 		trace_nfsd_layout_recall_done(&ls->ls_stid.sc_stateid);
 		task->tk_status = 0;
 		return 1;

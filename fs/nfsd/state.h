@@ -863,6 +863,16 @@ struct nfs4_layout_stateid {
 	bool				ls_recall_accepted;
 	bool				ls_recalled;
 	struct mutex			ls_mutex;
+	/*
+	 * Forward-channel slot that carried the last LAYOUTGET that added
+	 * a layout to this layout stateid, or extended one by merging.
+	 * Under ls_mutex. Until that slot retires, the client may not
+	 * have processed the reply to the LAYOUTGET.
+	 */
+	struct nfsd4_grant_slot		ls_grant;
+	/* Recall state for ->done, reset in ->prepare */
+	bool				ls_recall_retired_at_send;
+	bool				ls_recall_resent;
 
 	struct delayed_work		ls_fence_work;
 	struct mutex			ls_fence_mutex; /* serializes fence shutdown */

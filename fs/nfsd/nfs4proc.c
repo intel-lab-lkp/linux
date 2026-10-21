@@ -2968,6 +2968,12 @@ nfsd4_layoutget(struct svc_rqst *rqstp,
 		goto out_put_stid;
 
 	nfserr = nfsd4_insert_layout(lgp, ls);
+	/*
+	 * Under ls_mutex, which nfsd4_cb_layout_prepare() takes as well, so
+	 * that a recall of the new layout finds the slot recorded.
+	 */
+	if (!nfserr)
+		nfsd41_record_grant_slot(&ls->ls_grant, cstate);
 
 out_put_stid:
 	mutex_unlock(&ls->ls_mutex);
