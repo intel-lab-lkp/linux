@@ -13,6 +13,7 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/acpi.h>
+#include <linux/cleanup.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
@@ -628,25 +629,6 @@ static int kxcjk1013_get_startup_times(struct kxcjk1013_data *data)
 	return KXCJK1013_MAX_STARTUP_TIME_US;
 }
 
-static int kxcjk1013_set_power_state(struct kxcjk1013_data *data, bool on)
-{
-#ifdef CONFIG_PM
-	int ret;
-
-	if (on)
-		ret = pm_runtime_resume_and_get(&data->client->dev);
-	else
-		ret = pm_runtime_put_autosuspend(&data->client->dev);
-	if (ret < 0) {
-		dev_err(&data->client->dev,
-			"Failed: %s for %d\n", __func__, on);
-		return ret;
-	}
-#endif
-
-	return 0;
-}
-
 static int kxcjk1013_chip_update_thresholds(struct kxcjk1013_data *data)
 {
 	const struct kx_chipset_regs *regs = data->info->regs;
@@ -895,20 +877,22 @@ static int kxcjk1013_read_raw(struct iio_dev *indio_dev,
 		if (iio_buffer_enabled(indio_dev))
 			ret = -EBUSY;
 		else {
-			ret = kxcjk1013_set_power_state(data, true);
+			ret = pm_runtime_resume_and_get(&data->client->dev);
 			if (ret < 0) {
+				dev_err(&data->client->dev,
+					"failed to resume: %d\n", ret);
 				mutex_unlock(&data->mutex);
 				return ret;
 			}
 			ret = kxcjk1013_get_acc_reg(data, chan->scan_index);
 			if (ret < 0) {
-				kxcjk1013_set_power_state(data, false);
+				pm_runtime_put_autosuspend(&data->client->dev);
 				mutex_unlock(&data->mutex);
 				return ret;
 			}
 			*val = sign_extend32(ret >> chan->scan_type.shift,
 					     chan->scan_type.realbits - 1);
-			ret = kxcjk1013_set_power_state(data, false);
+			pm_runtime_put_autosuspend(&data->client->dev);
 		}
 		mutex_unlock(&data->mutex);
 
@@ -1033,39 +1017,35 @@ static int kxcjk1013_write_event_config(struct iio_dev *indio_dev,
 	if (state == data->ev_enable_state)
 		return 0;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	if (!state && data->motion_trigger_on) {
 		data->ev_enable_state = 0;
-		mutex_unlock(&data->mutex);
 		return 0;
 	}
 
-	/*
-	 * We will expect the enable and disable to do operation in
-	 * reverse order. This will happen here anyway as our
-	 * resume operation uses sync mode runtime pm calls, the
-	 * suspend operation will be delayed by autosuspend delay
-	 * So the disable operation will still happen in reverse of
-	 * enable operation. When runtime pm is disabled the mode
-	 * is always on so sequence doesn't matter
-	 */
-	ret = kxcjk1013_set_power_state(data, state);
-	if (ret < 0) {
-		mutex_unlock(&data->mutex);
-		return ret;
-	}
+	if (state) {
+		ret = pm_runtime_resume_and_get(&data->client->dev);
+		if (ret < 0) {
+			dev_err(&data->client->dev, "failed to resume: %d\n",
+				ret);
+			return ret;
+		}
 
-	ret =  kxcjk1013_setup_interrupt(data, state, false);
-	if (ret < 0) {
-		kxcjk1013_set_power_state(data, false);
-		data->ev_enable_state = 0;
-		mutex_unlock(&data->mutex);
-		return ret;
+		ret = kxcjk1013_setup_interrupt(data, true, false);
+		if (ret < 0) {
+			pm_runtime_put_autosuspend(&data->client->dev);
+			return ret;
+		}
+	} else {
+		ret = kxcjk1013_setup_interrupt(data, false, false);
+		if (ret < 0)
+			return ret;
+
+		pm_runtime_put_autosuspend(&data->client->dev);
 	}
 
 	data->ev_enable_state = state;
-	mutex_unlock(&data->mutex);
 
 	return 0;
 }
@@ -1073,15 +1053,22 @@ static int kxcjk1013_write_event_config(struct iio_dev *indio_dev,
 static int kxcjk1013_buffer_preenable(struct iio_dev *indio_dev)
 {
 	struct kxcjk1013_data *data = iio_priv(indio_dev);
+	int ret;
 
-	return kxcjk1013_set_power_state(data, true);
+	ret = pm_runtime_resume_and_get(&data->client->dev);
+	if (ret < 0)
+		dev_err(&data->client->dev, "failed to resume: %d\n", ret);
+
+	return ret;
 }
 
 static int kxcjk1013_buffer_postdisable(struct iio_dev *indio_dev)
 {
 	struct kxcjk1013_data *data = iio_priv(indio_dev);
 
-	return kxcjk1013_set_power_state(data, false);
+	pm_runtime_put_autosuspend(&data->client->dev);
+
+	return 0;
 }
 
 static ssize_t kxcjk1013_get_samp_freq_avail(struct device *dev,
@@ -1224,31 +1211,40 @@ static int kxcjk1013_data_rdy_trigger_set_state(struct iio_trigger *trig,
 	struct kxcjk1013_data *data = iio_priv(indio_dev);
 	int ret;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	if (!state && data->ev_enable_state && data->motion_trigger_on) {
 		data->motion_trigger_on = false;
-		mutex_unlock(&data->mutex);
 		return 0;
 	}
 
-	ret = kxcjk1013_set_power_state(data, state);
-	if (ret < 0) {
-		mutex_unlock(&data->mutex);
-		return ret;
+	if (state) {
+		ret = pm_runtime_resume_and_get(&data->client->dev);
+		if (ret < 0) {
+			dev_err(&data->client->dev, "failed to resume: %d\n",
+				ret);
+			return ret;
+		}
+
+		ret = kxcjk1013_setup_interrupt(data, true,
+						data->motion_trig != trig);
+		if (ret < 0) {
+			pm_runtime_put_autosuspend(&data->client->dev);
+			return ret;
+		}
+	} else {
+		ret = kxcjk1013_setup_interrupt(data, false,
+						data->motion_trig != trig);
+		if (ret < 0)
+			return ret;
+
+		pm_runtime_put_autosuspend(&data->client->dev);
 	}
-	ret = kxcjk1013_setup_interrupt(data, state, data->motion_trig != trig);
-	if (ret < 0) {
-		kxcjk1013_set_power_state(data, false);
-		mutex_unlock(&data->mutex);
-		return ret;
-	}
+
 	if (data->motion_trig == trig)
 		data->motion_trigger_on = state;
 	else
 		data->dready_trigger_on = state;
-
-	mutex_unlock(&data->mutex);
 
 	return 0;
 }
