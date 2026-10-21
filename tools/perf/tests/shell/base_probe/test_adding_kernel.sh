@@ -44,7 +44,7 @@ for opt in "" "-a" "--add"; do
 	$CMD_PERF probe $opt $TEST_PROBE 2> $LOGS_DIR/adding_kernel_add$opt.err
 	PERF_EXIT_CODE=$?
 
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"Added new events?:" "probe:$TEST_PROBE" "on $TEST_PROBE" \
 		< $LOGS_DIR/adding_kernel_add$opt.err
 	CHECK_EXIT_CODE=$?
@@ -60,7 +60,7 @@ done
 $CMD_PERF list probe:\* > $LOGS_DIR/adding_kernel_list.log
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_lines_matched.pl" \
+"$DIR_PATH/../common/check_all_lines_matched.py" \
 	"$RE_LINE_EMPTY" "List of pre-defined events" \
 	"probe:${TEST_PROBE}(?:_\d+)?\s+\[Tracepoint event\]" \
 	"Metric Groups:" < $LOGS_DIR/adding_kernel_list.log
@@ -76,7 +76,7 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "listing added probe :: perf list
 $CMD_PERF probe -l > $LOGS_DIR/adding_kernel_list-l.log
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"\s*probe:${TEST_PROBE}(?:_\d+)?\s+\(on ${TEST_PROBE}(?:[:\+]$RE_NUMBER_HEX)?@.+\)" \
 	< $LOGS_DIR/adding_kernel_list-l.log
 CHECK_EXIT_CODE=$?
@@ -100,11 +100,11 @@ REGEX_STAT_VALUES="\s*\d+\s+probe:$TEST_PROBE"
 # the value should be greater than 1
 REGEX_STAT_VALUE_NONZERO="\s*[1-9][0-9]*\s+probe:$TEST_PROBE"
 REGEX_STAT_TIME="\s*$RE_NUMBER\s+seconds (?:time elapsed|user|sys)"
-"$DIR_PATH/../common/check_all_lines_matched.pl" \
+"$DIR_PATH/../common/check_all_lines_matched.py" \
 	"$REGEX_STAT_HEADER" "$REGEX_STAT_VALUES" "$REGEX_STAT_TIME" \
 	"$RE_LINE_COMMENT" "$RE_LINE_EMPTY" < $LOGS_DIR/adding_kernel_using_probe.log
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"$REGEX_STAT_HEADER" "$REGEX_STAT_VALUE_NONZERO" "$REGEX_STAT_TIME" \
 	< $LOGS_DIR/adding_kernel_using_probe.log
 (( CHECK_EXIT_CODE += $? ))
@@ -119,7 +119,7 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "using added probe"
 $CMD_PERF probe -d $TEST_PROBE\* 2> $LOGS_DIR/adding_kernel_removing.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_lines_matched.pl" \
+"$DIR_PATH/../common/check_all_lines_matched.py" \
 	"Removed event: probe:$TEST_PROBE" < $LOGS_DIR/adding_kernel_removing.err
 CHECK_EXIT_CODE=$?
 
@@ -133,7 +133,7 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "deleting added probe"
 $CMD_PERF list probe:\* > $LOGS_DIR/adding_kernel_list_removed.log
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_lines_matched.pl" \
+"$DIR_PATH/../common/check_all_lines_matched.py" \
 	"$RE_LINE_EMPTY" "List of pre-defined events" "Metric Groups:" \
 	< $LOGS_DIR/adding_kernel_list_removed.log
 CHECK_EXIT_CODE=$?
@@ -149,7 +149,7 @@ $CMD_PERF probe -n --add $TEST_PROBE 2> $LOGS_DIR/adding_kernel_dryrun.err
 PERF_EXIT_CODE=$?
 
 # check for the output (should be the same as usual)
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"Added new events?:" "probe:$TEST_PROBE" "on $TEST_PROBE" \
 	< $LOGS_DIR/adding_kernel_dryrun.err
 CHECK_EXIT_CODE=$?
@@ -168,7 +168,7 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "dry run :: adding probe"
 $CMD_PERF probe --add $TEST_PROBE 2> $LOGS_DIR/adding_kernel_forceadd_01.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"Added new events?:" "probe:$TEST_PROBE" "on $TEST_PROBE" \
 	< $LOGS_DIR/adding_kernel_forceadd_01.err
 CHECK_EXIT_CODE=$?
@@ -180,7 +180,7 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "force-adding probes :: first pro
 ! $CMD_PERF probe --add $TEST_PROBE 2> $LOGS_DIR/adding_kernel_forceadd_02.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"Error: event \"$TEST_PROBE\" already exists." \
 	"Error: Failed to add events." < $LOGS_DIR/adding_kernel_forceadd_02.err
 CHECK_EXIT_CODE=$?
@@ -193,7 +193,7 @@ NO_OF_PROBES=`$CMD_PERF probe -l $TEST_PROBE| wc -l`
 $CMD_PERF probe --force --add $TEST_PROBE 2> $LOGS_DIR/adding_kernel_forceadd_03.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"Added new events?:" "probe:${TEST_PROBE}_${NO_OF_PROBES}" \
 	"on $TEST_PROBE" < $LOGS_DIR/adding_kernel_forceadd_03.err
 CHECK_EXIT_CODE=$?
@@ -209,7 +209,7 @@ $CMD_PERF stat -e probe:$TEST_PROBE -e probe:${TEST_PROBE}_${NO_OF_PROBES} -x';'
 PERF_EXIT_CODE=$?
 
 REGEX_LINE="$RE_NUMBER;+probe:${TEST_PROBE}_?(?:$NO_OF_PROBES)?;$RE_NUMBER;$RE_NUMBER"
-"$DIR_PATH/../common/check_all_lines_matched.pl" \
+"$DIR_PATH/../common/check_all_lines_matched.py" \
 	"$REGEX_LINE" "$RE_LINE_EMPTY" "$RE_LINE_COMMENT" \
 	< $LOGS_DIR/adding_kernel_using_two.log
 CHECK_EXIT_CODE=$?
@@ -229,7 +229,7 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "using doubled probe"
 $CMD_PERF probe --del \* 2> $LOGS_DIR/adding_kernel_removing_wildcard.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_lines_matched.pl" \
+"$DIR_PATH/../common/check_all_lines_matched.py" \
 	"Removed event: probe:$TEST_PROBE" \
 	"Removed event: probe:${TEST_PROBE}_1" < $LOGS_DIR/adding_kernel_removing_wildcard.err
 CHECK_EXIT_CODE=$?
@@ -243,7 +243,7 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "removing multiple probes"
 $CMD_PERF probe -nf --max-probes=512 -a 'vfs_* $params' 2> $LOGS_DIR/adding_kernel_adding_wildcard.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"probe:vfs_mknod" "probe:vfs_create" "probe:vfs_rmdir" \
 	"probe:vfs_link" "probe:vfs_write" < $LOGS_DIR/adding_kernel_adding_wildcard.err
 CHECK_EXIT_CODE=$?
@@ -268,21 +268,21 @@ test $PERF_EXIT_CODE -ne 139 -a $PERF_EXIT_CODE -ne 0
 PERF_EXIT_CODE=$?
 
 # check that the error message is reasonable
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"Failed to find" \
 	"somenonexistingrandomstuffwhichisalsoprettylongorevenlongertoexceed64" \
 	< $LOGS_DIR/adding_kernel_nonexisting.err
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"in this function|at this address" "Error" "Failed to add events" \
 	< $LOGS_DIR/adding_kernel_nonexisting.err
 (( CHECK_EXIT_CODE += $? ))
-"$DIR_PATH/../common/check_all_lines_matched.pl" \
+"$DIR_PATH/../common/check_all_lines_matched.py" \
 	"Failed to find" "Error" "Probe point .+ not found" "optimized out" \
 	"Use.+\-\-range option to show.+location range" \
 	< $LOGS_DIR/adding_kernel_nonexisting.err
 (( CHECK_EXIT_CODE += $? ))
-"$DIR_PATH/../common/check_no_patterns_found.pl" \
+"$DIR_PATH/../common/check_no_patterns_found.py" \
 	"$RE_SEGFAULT" < $LOGS_DIR/adding_kernel_nonexisting.err
 (( CHECK_EXIT_CODE += $? ))
 
@@ -301,7 +301,7 @@ fi
 $CMD_PERF probe --add "$TEST_PROBE%return \$retval" 2> $LOGS_DIR/adding_kernel_func_retval_add.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"Added new events?:" "probe:$TEST_PROBE" \
 	"on $TEST_PROBE%return with \\\$retval" \
 	< $LOGS_DIR/adding_kernel_func_retval_add.err
@@ -314,7 +314,7 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "function with retval :: add"
 $CMD_PERF record -e probe:$TEST_PROBE\* -o $CURRENT_TEST_DIR/perf.data -- cat /proc/cpuinfo > /dev/null 2> $LOGS_DIR/adding_kernel_func_retval_record.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"$RE_LINE_RECORD1" "$RE_LINE_RECORD2" \
 	< $LOGS_DIR/adding_kernel_func_retval_record.err
 CHECK_EXIT_CODE=$?
@@ -327,10 +327,10 @@ $CMD_PERF script -i $CURRENT_TEST_DIR/perf.data > $LOGS_DIR/adding_kernel_func_r
 PERF_EXIT_CODE=$?
 
 REGEX_SCRIPT_LINE="\s*cat\s+$RE_NUMBER\s+\[$RE_NUMBER\]\s+$RE_NUMBER:\s+probe:$TEST_PROBE\w*:\s+\($RE_NUMBER_HEX\s+<\-\s+$RE_NUMBER_HEX\)\s+arg1=$RE_NUMBER_HEX"
-"$DIR_PATH/../common/check_all_lines_matched.pl" \
+"$DIR_PATH/../common/check_all_lines_matched.py" \
 	"$REGEX_SCRIPT_LINE" < $LOGS_DIR/adding_kernel_func_retval_script.log
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"$REGEX_SCRIPT_LINE" < $LOGS_DIR/adding_kernel_func_retval_script.log
 (( CHECK_EXIT_CODE += $? ))
 

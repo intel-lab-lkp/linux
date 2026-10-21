@@ -26,7 +26,7 @@ SW_EVENT="cpu-clock"
 $CMD_PERF record -asdg -e $SW_EVENT -o $CURRENT_TEST_DIR/perf.data -- $CMD_LONGER_SLEEP 2> $LOGS_DIR/setup.log
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"$RE_LINE_RECORD1" "$RE_LINE_RECORD2" < $LOGS_DIR/setup.log
 CHECK_EXIT_CODE=$?
 
@@ -41,7 +41,7 @@ echo ==================
 cat $LOGS_DIR/setup-latency.log
 echo ==================
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"$RE_LINE_RECORD1" "$RE_LINE_RECORD2" < $LOGS_DIR/setup-latency.log
 CHECK_EXIT_CODE=$?
 

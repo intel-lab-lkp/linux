@@ -26,36 +26,36 @@ if [ "$PARAM_GENERAL_HELP_TEXT_CHECK" = "y" ]; then
 	$CMD_PERF report --help > $LOGS_DIR/basic_helpmsg.log 2> $LOGS_DIR/basic_helpmsg.err
 	PERF_EXIT_CODE=$?
 
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"PERF-REPORT" "NAME" "SYNOPSIS" "DESCRIPTION" "OPTIONS" \
 		"OVERHEAD\s+CALCULATION" "SEE ALSO" < $LOGS_DIR/basic_helpmsg.log
 	CHECK_EXIT_CODE=$?
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"input" "verbose" "show-nr-samples" "show-cpu-utilization" \
 		"threads" "comms" "pid" "tid" "dsos" "symbols" "symbol-filter" \
 		< $LOGS_DIR/basic_helpmsg.log
 	(( CHECK_EXIT_CODE += $? ))
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"hide-unresolved" "sort" "fields" "parent" "exclude-other" \
 		"column-widths" "field-separator" "dump-raw-trace" "children" \
 		< $LOGS_DIR/basic_helpmsg.log
 	(( CHECK_EXIT_CODE += $? ))
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"call-graph" "max-stack" "inverted" "ignore-callees" "pretty" \
 		"stdio" "tui" "gtk" "vmlinux" "kallsyms" "modules" \
 		< $LOGS_DIR/basic_helpmsg.log
 	(( CHECK_EXIT_CODE += $? ))
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"force" "symfs" "cpu" "disassembler-style" "source" "asm-raw" \
 		"show-total-period" "show-info" "branch-stack" "group" \
 		< $LOGS_DIR/basic_helpmsg.log
 	(( CHECK_EXIT_CODE += $? ))
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"branch-history" "objdump" "demangle" "percent-limit" "percentage" \
 		"header" "itrace" "full-source-path" "show-ref-call-graph" \
 		< $LOGS_DIR/basic_helpmsg.log
 	(( CHECK_EXIT_CODE += $? ))
-	"$DIR_PATH/../common/check_no_patterns_found.pl" \
+	"$DIR_PATH/../common/check_no_patterns_found.py" \
 		"No manual entry for" < $LOGS_DIR/basic_helpmsg.err
 	(( CHECK_EXIT_CODE += $? ))
 
@@ -76,11 +76,11 @@ REGEX_LOST_SAMPLES_INFO="#\s*Total Lost Samples:\s+$RE_NUMBER"
 REGEX_SAMPLES_INFO="#\s*Samples:\s+(?:$RE_NUMBER)\w?\s+of\s+event\s+'$RE_EVENT_ANY'"
 REGEX_LINES_HEADER="#\s*Children\s+Self\s+Command\s+Shared Object\s+Symbol"
 REGEX_LINES="\s*$RE_NUMBER%\s+$RE_NUMBER%\s+\S+\s+\[kernel\.(?:vmlinux)|(?:kallsyms)\]\s+\[[k\.]\]\s+\w+"
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"$REGEX_LOST_SAMPLES_INFO" "$REGEX_SAMPLES_INFO" \
 	"$REGEX_LINES_HEADER" "$REGEX_LINES" < $LOGS_DIR/basic_basic.log
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_errors_whitelisted.pl" \
+"$DIR_PATH/../common/check_errors_whitelisted.py" \
 	"$DIR_PATH/stderr-whitelist.txt" < $LOGS_DIR/basic_basic.err
 (( CHECK_EXIT_CODE += $? ))
 
@@ -96,10 +96,10 @@ PERF_EXIT_CODE=$?
 
 REGEX_LINES_HEADER="#\s*Children\s+Self\s+Samples\s+Command\s+Shared Object\s+Symbol"
 REGEX_LINES="\s*$RE_NUMBER%\s+$RE_NUMBER%\s+$RE_NUMBER\s+\S+\s+\[kernel\.(?:vmlinux)|(?:kallsyms)\]\s+\[[k\.]\]\s+\w+"
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"$REGEX_LINES_HEADER" "$REGEX_LINES" < $LOGS_DIR/basic_nrsamples.log
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_errors_whitelisted.pl" \
+"$DIR_PATH/../common/check_errors_whitelisted.py" \
 	"$DIR_PATH/stderr-whitelist.txt" < $LOGS_DIR/basic_nrsamples.err
 (( CHECK_EXIT_CODE += $? ))
 
@@ -122,7 +122,7 @@ REGEX_LINE_CPUS_ONLINE="#\s+nrcpus online\s*:\s*$MY_CPUS_ONLINE"
 REGEX_LINE_CPUS_AVAIL="#\s+nrcpus avail\s*:\s*$MY_CPUS_AVAILABLE"
 # disable precise check for "nrcpus avail" in BASIC runmode
 test $PERFTOOL_TESTSUITE_RUNMODE -lt $RUNMODE_STANDARD && REGEX_LINE_CPUS_AVAIL="#\s+nrcpus avail\s*:\s*$RE_NUMBER"
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"$REGEX_LINE_TIMESTAMP" "$REGEX_LINE_HOSTNAME" "$REGEX_LINE_KERNEL" \
 	"$REGEX_LINE_PERF" "$REGEX_LINE_ARCH" "$REGEX_LINE_CPUS_ONLINE" \
 	"$REGEX_LINE_CPUS_AVAIL" < $LOGS_DIR/basic_header.log
@@ -156,10 +156,10 @@ PERF_EXIT_CODE=$?
 
 REGEX_LINES_HEADER="#\s*Children\s+Self\s+sys\s+usr\s+Command\s+Shared Object\s+Symbol"
 REGEX_LINES="\s*$RE_NUMBER%\s+$RE_NUMBER%\s+$RE_NUMBER%\s+$RE_NUMBER%\s+\S+\s+\[kernel\.(?:vmlinux)|(?:kallsyms)\]\s+\[[k\.]\]\s+\w+"
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"$REGEX_LINES_HEADER" "$REGEX_LINES" < $LOGS_DIR/basic_cpuut.log
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_errors_whitelisted.pl" \
+"$DIR_PATH/../common/check_errors_whitelisted.py" \
 	"$DIR_PATH/stderr-whitelist.txt" < $LOGS_DIR/basic_cpuut.err
 (( CHECK_EXIT_CODE += $? ))
 
@@ -174,9 +174,9 @@ $CMD_PERF report --stdio -i $CURRENT_TEST_DIR/perf.data --pid=1 > $LOGS_DIR/basi
 PERF_EXIT_CODE=$?
 
 grep -P -v '^#' $LOGS_DIR/basic_pid.log | grep -P '\s+[\d\.]+%' | \
-	"$DIR_PATH/../common/check_all_lines_matched.pl" "systemd|init"
+	"$DIR_PATH/../common/check_all_lines_matched.py" "systemd|init"
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_errors_whitelisted.pl" \
+"$DIR_PATH/../common/check_errors_whitelisted.py" \
 	"$DIR_PATH/stderr-whitelist.txt" < $LOGS_DIR/basic_pid.err
 (( CHECK_EXIT_CODE += $? ))
 
@@ -190,10 +190,10 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "pid"
 $CMD_PERF report --stdio -i $CURRENT_TEST_DIR/perf.data --symbols=dummynonexistingsymbol > $LOGS_DIR/basic_symbols.log 2> $LOGS_DIR/basic_symbols.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_lines_matched.pl" \
+"$DIR_PATH/../common/check_all_lines_matched.py" \
 	"$RE_LINE_EMPTY" "$RE_LINE_COMMENT" < $LOGS_DIR/basic_symbols.log
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_errors_whitelisted.pl" \
+"$DIR_PATH/../common/check_errors_whitelisted.py" \
 	"$DIR_PATH/stderr-whitelist.txt" < $LOGS_DIR/basic_symbols.err
 (( CHECK_EXIT_CODE += $? ))
 
@@ -208,9 +208,9 @@ $CMD_PERF report --stdio -i $CURRENT_TEST_DIR/perf.data --symbol-filter=map > $L
 PERF_EXIT_CODE=$?
 
 grep -P -v '^#' $LOGS_DIR/basic_symbolfilter.log | grep -P '\s+[\d\.]+%' | \
-	"$DIR_PATH/../common/check_all_lines_matched.pl" "\[[k\.]\]\s+.*map"
+	"$DIR_PATH/../common/check_all_lines_matched.py" "\[[k\.]\]\s+.*map"
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_errors_whitelisted.pl" \
+"$DIR_PATH/../common/check_errors_whitelisted.py" \
 	"$DIR_PATH/stderr-whitelist.txt" < $LOGS_DIR/basic_symbolfilter.err
 (( CHECK_EXIT_CODE += $? ))
 
@@ -224,7 +224,7 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "symbol filter"
 $CMD_PERF report -i $CURRENT_TEST_DIR/perf.data.1 --stdio --header-only > $LOGS_DIR/latency_header.log
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	", context_switch = 1, " < $LOGS_DIR/latency_header.log
 CHECK_EXIT_CODE=$?
 
@@ -236,10 +236,10 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "latency header"
 $CMD_PERF report --stdio -i $CURRENT_TEST_DIR/perf.data.1 > $LOGS_DIR/latency_default.log 2> $LOGS_DIR/latency_default.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"# Overhead   Latency  Command" < $LOGS_DIR/latency_default.log
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_errors_whitelisted.pl" \
+"$DIR_PATH/../common/check_errors_whitelisted.py" \
 	"stderr-whitelist.txt" < $LOGS_DIR/latency_default.err
 (( CHECK_EXIT_CODE += $? ))
 
@@ -251,10 +251,10 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "default report for latency profi
 $CMD_PERF report --latency --stdio -i $CURRENT_TEST_DIR/perf.data.1 > $LOGS_DIR/latency_latency.log 2> $LOGS_DIR/latency_latency.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"#  Latency  Overhead  Command" < $LOGS_DIR/latency_latency.log
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_errors_whitelisted.pl" \
+"$DIR_PATH/../common/check_errors_whitelisted.py" \
 	"stderr-whitelist.txt" < $LOGS_DIR/latency_latency.err
 (( CHECK_EXIT_CODE += $? ))
 
@@ -266,11 +266,11 @@ print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "latency report for latency profi
 $CMD_PERF report --hierarchy --sort latency,parallelism,comm,symbol --parallelism=1,2 --stdio -i $CURRENT_TEST_DIR/perf.data.1 > $LOGS_DIR/parallelism_hierarchy.log 2> $LOGS_DIR/parallelism_hierarchy.err
 PERF_EXIT_CODE=$?
 
-"$DIR_PATH/../common/check_all_patterns_found.pl" \
+"$DIR_PATH/../common/check_all_patterns_found.py" \
 	"#           Latency  Parallelism / Command / Symbol" \
 	< $LOGS_DIR/parallelism_hierarchy.log
 CHECK_EXIT_CODE=$?
-"$DIR_PATH/../common/check_errors_whitelisted.pl" \
+"$DIR_PATH/../common/check_errors_whitelisted.py" \
 	"stderr-whitelist.txt" < $LOGS_DIR/parallelism_hierarchy.err
 (( CHECK_EXIT_CODE += $? ))
 

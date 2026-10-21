@@ -34,7 +34,7 @@ for opt in '-a' '-d' '-L' '-V'; do
 	! $CMD_PERF probe $opt 2> $LOGS_DIR/invalid_options_missing_argument$opt.err
 	PERF_EXIT_CODE=$?
 
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"Error: switch .* requires a value" \
 		< $LOGS_DIR/invalid_options_missing_argument$opt.err
 	CHECK_EXIT_CODE=$?
@@ -69,7 +69,7 @@ for opt in '-a xxx -d xxx' '-a xxx -L foo' '-a xxx -V foo' '-a xxx -l' '-a xxx -
 	! $CMD_PERF probe $opt > /dev/null 2> $LOGS_DIR/aux.log
 	PERF_EXIT_CODE=$?
 
-	"$DIR_PATH/../common/check_all_patterns_found.pl" \
+	"$DIR_PATH/../common/check_all_patterns_found.py" \
 		"Error: switch .+ cannot be used with switch .+" < $LOGS_DIR/aux.log
 	CHECK_EXIT_CODE=$?
 
