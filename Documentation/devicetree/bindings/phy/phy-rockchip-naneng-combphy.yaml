@@ -15,6 +15,7 @@ properties:
       - rockchip,rk3528-naneng-combphy
       - rockchip,rk3562-naneng-combphy
       - rockchip,rk3568-naneng-combphy
+      - rockchip,rk3572-naneng-combphy
       - rockchip,rk3576-naneng-combphy
       - rockchip,rk3588-naneng-combphy
 
@@ -22,12 +23,14 @@ properties:
     maxItems: 1
 
   clocks:
+    minItems: 2
     items:
       - description: reference clock
       - description: apb clock
       - description: pipe clock
 
   clock-names:
+    minItems: 2
     items:
       - const: ref
       - const: apb
@@ -94,6 +97,26 @@ required:
   - "#phy-cells"
 
 allOf:
+  - if:
+      properties:
+        compatible:
+          const: rockchip,rk3572-naneng-combphy
+    then:
+      properties:
+        clocks:
+          maxItems: 2
+        clock-names:
+          maxItems: 2
+        resets:
+          maxItems: 1
+        reset-names:
+          maxItems: 1
+    else:
+      properties:
+        clocks:
+          minItems: 3
+        clock-names:
+          minItems: 3
   - if:
       properties:
         compatible:
