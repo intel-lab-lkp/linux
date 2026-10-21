@@ -302,7 +302,9 @@ struct rockchip_drv {
  *	    bank has its own IOC block
  * @clk: clock of the gpio bank
  * @db_clk: clock of the gpio debounce
- * @irq: interrupt of the gpio bank
+ * @irqs: parent interrupts of the GPIO bank
+ * @irq_masks: pins assigned to each parent interrupt
+ * @nr_irqs: number of parent interrupts
  * @saved_masks: Saved content of GPIO_INTEN at suspend time.
  * @pin_base: first pin number
  * @nr_pins: number of pins in this bank
@@ -331,7 +333,9 @@ struct rockchip_pin_bank {
 	struct regmap			*regmap_ioc;
 	struct clk			*clk;
 	struct clk			*db_clk;
-	int				irq;
+	unsigned int			irqs[4];
+	u32				irq_masks[4];
+	unsigned int			nr_irqs;
 	u32				saved_masks;
 	u32				pin_base;
 	u8				nr_pins;

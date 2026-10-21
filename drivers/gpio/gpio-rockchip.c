@@ -6,6 +6,7 @@
  * Copyright (c) 2021 Rockchip Electronics Co. Ltd.
  */
 
+#include <linux/arm-smccc.h>
 #include <linux/bitops.h>
 #include <linux/clk.h>
 #include <linux/device.h>
@@ -21,6 +22,7 @@
 #include <linux/pinctrl/pinconf-generic.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <soc/rockchip/rockchip_sip.h>
 
 #include "../pinctrl/core.h"
 #include "../pinctrl/pinctrl-rockchip.h"
@@ -35,6 +37,7 @@
 #define GPIO_TYPE_V2		(0x01000C2B)
 #define GPIO_TYPE_V2_1		(0x0101157C)
 #define GPIO_TYPE_V2_2		(0x010219C8)
+#define GPIO_TYPE_V2_7		(0x01074D2E)
 
 static const struct rockchip_gpio_regs gpio_regs_v1 = {
 	.port_dr = 0x00,
@@ -209,12 +212,27 @@ static int rockchip_gpio_set_debounce(struct gpio_chip *gc,
 	if (bank->gpio_type == GPIO_TYPE_V2 && !IS_ERR(bank->db_clk)) {
 		div_debounce_support = true;
 		freq = clk_get_rate(bank->db_clk);
-		max_debounce = (GENMASK(23, 0) + 1) * 2 * 1000000 / freq;
-		if (debounce > max_debounce)
-			return -EINVAL;
 
-		div = debounce * freq;
-		div_reg = DIV_ROUND_CLOSEST_ULL(div, 2 * USEC_PER_SEC) - 1;
+		if (of_device_is_compatible(bank->of_node, "rockchip,rk3572-gpio-bank")) {
+			if (!freq)
+				return -EINVAL;
+
+			div = (u64)(GENMASK(23, 0) + 1) * USEC_PER_SEC;
+			max_debounce = div_u64(div, 2 * freq);
+			if (debounce > max_debounce)
+				return -EINVAL;
+
+			div = (u64)debounce * freq * 2;
+			div_reg = DIV_ROUND_CLOSEST_ULL(div, USEC_PER_SEC);
+			div_reg = div_reg ? div_reg - 1 : 0;
+		} else {
+			max_debounce = (GENMASK(23, 0) + 1) * 2 * 1000000 / freq;
+			if (debounce > max_debounce)
+				return -EINVAL;
+
+			div = debounce * freq;
+			div_reg = DIV_ROUND_CLOSEST_ULL(div, 2 * USEC_PER_SEC) - 1;
+		}
 	} else {
 		div_debounce_support = false;
 	}
@@ -342,6 +360,12 @@ static void rockchip_irq_demux(struct irq_desc *desc)
 	chained_irq_enter(chip, desc);
 
 	pending = readl_relaxed(bank->reg_base + bank->gpio_regs->int_status);
+	for (unsigned int i = 0; i < bank->nr_irqs; i++) {
+		if (bank->irqs[i] == irq_desc_get_irq(desc)) {
+			pending &= bank->irq_masks[i];
+			break;
+		}
+	}
 	for_each_set_bit(irq, &pending, 32) {
 		dev_dbg(bank->dev, "handling irq %d\n", irq);
 
@@ -568,8 +592,9 @@ static int rockchip_interrupts_register(struct rockchip_pin_bank *bank)
 	rockchip_gpio_writel(bank, 0xffffffff, bank->gpio_regs->int_en);
 	gc->mask_cache = 0xffffffff;
 
-	irq_set_chained_handler_and_data(bank->irq,
-					 rockchip_irq_demux, bank);
+	for (unsigned int i = 0; i < bank->nr_irqs; i++)
+		irq_set_chained_handler_and_data(bank->irqs[i],
+						 rockchip_irq_demux, bank);
 
 	return 0;
 }
@@ -645,6 +670,36 @@ static void rockchip_clk_put(void *data)
 	clk_put(clk);
 }
 
+static int rockchip_gpio_read_irq_groups(struct rockchip_pin_bank *bank)
+{
+	struct arm_smccc_res res;
+	u32 assigned = 0;
+	int status;
+
+	for (unsigned int i = 1; i < bank->nr_irqs; i++) {
+		arm_smccc_smc(ROCKCHIP_SIP_GPIO_CONFIG, ROCKCHIP_SIP_GPIO_GET_GROUP,
+			      bank->bank_num, i, 0, 0, 0, 0, &res);
+		status = (int)res.a0;
+		if (i == 1 && (status == SMCCC_RET_NOT_SUPPORTED ||
+			       status == ROCKCHIP_SIP_RET_NOT_SUPPORTED)) {
+			/* Older firmware leaves all pins on the primary IRQ. */
+			dev_dbg(bank->dev, "GPIO group query unsupported: %d\n",
+				status);
+			break;
+		}
+		if (status)
+			return dev_err_probe(bank->dev, -EIO,
+					     "cannot read interrupt group %u: %d\n",
+					     i, status);
+		bank->irq_masks[i] = res.a1;
+		if (assigned & bank->irq_masks[i])
+			return -EINVAL;
+		assigned |= bank->irq_masks[i];
+	}
+	bank->irq_masks[0] = ~assigned;
+	return 0;
+}
+
 static int rockchip_get_bank_data(struct rockchip_pin_bank *bank)
 {
 	struct platform_device *pdev = to_platform_device(bank->dev);
@@ -654,10 +709,23 @@ static int rockchip_get_bank_data(struct rockchip_pin_bank *bank)
 	if (IS_ERR(bank->reg_base))
 		return PTR_ERR(bank->reg_base);
 
-	ret = platform_get_irq(pdev, 0);
+	ret = platform_irq_count(pdev);
 	if (ret < 0)
 		return ret;
-	bank->irq = ret;
+	if (ret != (of_device_is_compatible(bank->of_node,
+					    "rockchip,rk3572-gpio-bank") ? 4 : 1))
+		return -EINVAL;
+	bank->nr_irqs = ret;
+	for (unsigned int i = 0; i < bank->nr_irqs; i++) {
+		ret = platform_get_irq(pdev, i);
+		if (ret < 0)
+			return ret;
+		bank->irqs[i] = ret;
+	}
+
+	ret = rockchip_gpio_read_irq_groups(bank);
+	if (ret)
+		return ret;
 
 	bank->clk = devm_clk_get_enabled(bank->dev, NULL);
 	if (IS_ERR(bank->clk))
@@ -669,6 +737,7 @@ static int rockchip_get_bank_data(struct rockchip_pin_bank *bank)
 	case GPIO_TYPE_V2:
 	case GPIO_TYPE_V2_1:
 	case GPIO_TYPE_V2_2:
+	case GPIO_TYPE_V2_7:
 		bank->gpio_regs = &gpio_regs_v2;
 		bank->gpio_type = GPIO_TYPE_V2;
 		bank->db_clk = of_clk_get(bank->of_node, 1);
@@ -797,7 +866,8 @@ static void rockchip_gpio_remove(struct platform_device *pdev)
 {
 	struct rockchip_pin_bank *bank = platform_get_drvdata(pdev);
 
-	irq_set_chained_handler_and_data(bank->irq, NULL, NULL);
+	for (unsigned int i = 0; i < bank->nr_irqs; i++)
+		irq_set_chained_handler_and_data(bank->irqs[i], NULL, NULL);
 	if (bank->domain) {
 		irq_domain_remove_generic_chips(bank->domain);
 		irq_domain_remove(bank->domain);
@@ -807,6 +877,7 @@ static void rockchip_gpio_remove(struct platform_device *pdev)
 
 static const struct of_device_id rockchip_gpio_match[] = {
 	{ .compatible = "rockchip,gpio-bank", },
+	{ .compatible = "rockchip,rk3572-gpio-bank" },
 	{ .compatible = "rockchip,rk3188-gpio-bank0" },
 	{ },
 };
