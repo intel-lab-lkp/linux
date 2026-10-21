@@ -240,17 +240,16 @@ test_queue()
 	busywait "$BUSYWAIT_TIMEOUT" nf_queue_wait "$nsrouter" 1
 
 	if ! test_ping;then
-		echo "FAIL: netns routing/connectivity with active listener on queues 0 and 1: $ret" 1>&2
-		exit $ret
+		echo "FAIL: netns routing/connectivity with active listener on queues 0 and 1" 1>&2
+		exit 1
 	fi
 
 	if ! test_ping_router;then
-		echo "FAIL: netns router unreachable listener on queue 0 and 1: $ret" 1>&2
-		exit $ret
+		echo "FAIL: netns router unreachable listener on queue 0 and 1" 1>&2
+		exit 1
 	fi
 
 	wait
-	ret=$?
 
 	for file in $TMPFILE0 $TMPFILE1; do
 		last=$(tail -n1 "$file")
@@ -851,7 +850,7 @@ test_queue_bridge()
 
 	if ! test_ping;then
 		echo "FAIL: netns bridge connectivity" 1>&2
-		exit $ret
+		exit 1
 	fi
 
 	load_ruleset "bridge" "filter" 10
@@ -979,8 +978,8 @@ if test_ping; then
 	# queue bypass works (rules were skipped, no listener)
 	echo "PASS: ${ns1} can reach ${ns2}"
 else
-	echo "FAIL: ${ns1} cannot reach ${ns2}: $ret" 1>&2
-	exit $ret
+	echo "FAIL: ${ns1} cannot reach ${ns2}" 1>&2
+	exit 1
 fi
 
 test_queue_blackhole ip
