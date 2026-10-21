@@ -22,6 +22,10 @@
 #define EIC7700_HSP_AXI_LP_XM_CSYSREQ	BIT(0)
 #define EIC7700_HSP_AXI_LP_XS_CSYSREQ	BIT(16)
 
+#define RK3572_PIPE_USB3		0x1100
+#define RK3572_PIPE_USB2_ONLY		0x0189
+#define RK3572_PIPE_WRITE_MASK		GENMASK(31, 16)
+
 struct dwc3_generic {
 	struct device		*dev;
 	struct dwc3		dwc;
@@ -83,6 +87,27 @@ static int dwc3_spacemit_k1_init(struct dwc3_generic *dwc3g)
 	}
 
 	return 0;
+}
+
+static int dwc3_rk3572_init(struct dwc3_generic *dwc3g)
+{
+	struct device *dev = dwc3g->dev;
+	enum usb_device_speed speed = usb_get_maximum_speed(dev);
+	struct regmap *grf;
+	u32 offset, value = RK3572_PIPE_USB2_ONLY;
+
+	grf = syscon_regmap_lookup_by_phandle_args(dev->of_node, "rockchip,grf",
+						   1, &offset);
+	if (IS_ERR(grf))
+		return dev_err_probe(dev, PTR_ERR(grf), "failed to get PHP GRF\n");
+
+	if (device_property_match_string(dev, "phy-names", "usb3-phy") >= 0 &&
+	    speed != USB_SPEED_LOW && speed != USB_SPEED_FULL &&
+	    speed != USB_SPEED_HIGH)
+		value = RK3572_PIPE_USB3;
+
+	/* Configure the PIPE port before the core reads its port count. */
+	return regmap_write(grf, offset, RK3572_PIPE_WRITE_MASK | value);
 }
 
 static int dwc3_generic_probe(struct platform_device *pdev)
@@ -231,11 +256,17 @@ static const struct dwc3_generic_config eic7700_dwc3 =  {
 	.properties = DWC3_DEFAULT_PROPERTIES,
 };
 
+static const struct dwc3_generic_config rk3572_dwc3 = {
+	.init = dwc3_rk3572_init,
+	.properties = DWC3_DEFAULT_PROPERTIES,
+};
+
 static const struct of_device_id dwc3_generic_of_match[] = {
 	{ .compatible = "spacemit,k1-dwc3", &spacemit_k1_dwc3},
 	{ .compatible = "spacemit,k3-dwc3", },
 	{ .compatible = "fsl,ls1028a-dwc3", &fsl_ls1028_dwc3},
 	{ .compatible = "eswin,eic7700-dwc3", &eic7700_dwc3},
+	{ .compatible = "rockchip,rk3572-dwc3", &rk3572_dwc3 },
 	{ .compatible = "starfive,jhb100-dwc3", },
 	{ /* sentinel */ }
 };
