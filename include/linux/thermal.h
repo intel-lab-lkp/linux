@@ -17,11 +17,10 @@
 #include <linux/workqueue.h>
 #include <uapi/linux/thermal.h>
 
+#include <dt-bindings/thermal/thermal.h>
+
 /* invalid cooling state */
 #define THERMAL_CSTATE_INVALID -1UL
-
-/* No upper/lower limit requirement */
-#define THERMAL_NO_LIMIT	((u32)~0)
 
 /* Default weight of a bound cooling device */
 #define THERMAL_WEIGHT_DEFAULT 0
