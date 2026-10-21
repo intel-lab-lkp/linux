@@ -5,6 +5,7 @@
 
 #include <linux/pci.h>
 
+#include "xe_bo.h"
 #include "xe_device.h"
 #include "xe_ggtt.h"
 #include "xe_gt.h"
@@ -39,6 +40,9 @@ static void prepare_device_for_reset(struct pci_dev *pdev)
 	 * finish without blocking reset.
 	 */
 	xe_device_io_drain(xe);
+
+	/* Remove existing VRAM CPU mappings before disabling PCI. */
+	xe_bo_wedged_invalidate_mmaps(xe);
 
 	pci_disable_device(pdev);
 }
