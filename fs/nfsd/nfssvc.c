@@ -673,7 +673,7 @@ int nfsd_create_serv(struct net *net, bool no_rpcbind)
 		nn->max_blksize = nfsd_get_default_max_blksize();
 	nfsd_reset_versions(nn);
 	serv = svc_create_pooled(nfsd_programs, ARRAY_SIZE(nfsd_programs),
-				 &nn->nfsd_svcstats,
+				 &nn->nfsd_svcstats, net,
 				 nn->max_blksize, nfsd);
 	if (serv == NULL) {
 		percpu_ref_exit(&nn->nfsd_net_ref);
@@ -967,8 +967,7 @@ nfsd(void *vrqstp)
 {
 	struct svc_rqst *rqstp = (struct svc_rqst *) vrqstp;
 	struct svc_pool *pool = rqstp->rq_pool;
-	struct svc_xprt *perm_sock = list_entry(rqstp->rq_server->sv_permsocks.next, typeof(struct svc_xprt), xpt_list);
-	struct net *net = perm_sock->xpt_net;
+	struct net *net = rqstp->rq_server->sv_net;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 	struct nfsd_thread_local_info ntli = { };
 	bool have_mutex = false;
