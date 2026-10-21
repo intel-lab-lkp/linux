@@ -66,14 +66,12 @@ static int send_tlb_inval_ggtt(struct xe_tlb_inval *tlb_inval, u32 seqno)
 	struct xe_guc *guc = tlb_inval->private;
 	struct xe_gt *gt = guc_to_gt(guc);
 	struct xe_device *xe = guc_to_xe(guc);
+	int io_idx;
 
 	/*
 	 * Returning -ECANCELED in this function is squashed at the caller and
 	 * signals waiters.
 	 */
-
-	if (xe_device_io_blocked(xe))
-		return -ECANCELED;
 
 	if (xe_guc_ct_enabled(&guc->ct) && guc->submission_state.enabled) {
 		u32 action[] = {
@@ -84,21 +82,26 @@ static int send_tlb_inval_ggtt(struct xe_tlb_inval *tlb_inval, u32 seqno)
 
 		return send_tlb_inval(guc, action, ARRAY_SIZE(action));
 	} else if (xe_device_uc_enabled(xe)) {
-		struct xe_mmio *mmio = &gt->mmio;
-
-		if (IS_SRIOV_VF(xe))
+		if (xe_device_io_get(xe, &io_idx))
 			return -ECANCELED;
 
-		CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FW_GT);
-		if (xe->info.platform == XE_PVC || GRAPHICS_VER(xe) >= 20) {
-			xe_mmio_write32(mmio, PVC_GUC_TLB_INV_DESC1,
-					PVC_GUC_TLB_INV_DESC1_INVALIDATE);
-			xe_mmio_write32(mmio, PVC_GUC_TLB_INV_DESC0,
-					PVC_GUC_TLB_INV_DESC0_VALID);
-		} else {
-			xe_mmio_write32(mmio, GUC_TLB_INV_CR,
-					GUC_TLB_INV_CR_INVALIDATE);
+		if (!IS_SRIOV_VF(xe)) {
+			struct xe_mmio *mmio = &gt->mmio;
+
+			CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FW_GT);
+			if (xe->info.platform == XE_PVC ||
+			    GRAPHICS_VER(xe) >= 20) {
+				xe_mmio_write32(mmio, PVC_GUC_TLB_INV_DESC1,
+						PVC_GUC_TLB_INV_DESC1_INVALIDATE);
+				xe_mmio_write32(mmio, PVC_GUC_TLB_INV_DESC0,
+						PVC_GUC_TLB_INV_DESC0_VALID);
+			} else {
+				xe_mmio_write32(mmio, GUC_TLB_INV_CR,
+						GUC_TLB_INV_CR_INVALIDATE);
+			}
 		}
+
+		xe_device_io_put(io_idx);
 	}
 
 	return -ECANCELED;
