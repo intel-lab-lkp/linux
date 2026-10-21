@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/rockchip,rk3572-dwc3.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Rockchip RK3572 DWC3 USB controller
+
+maintainers:
+  - Heiko Stuebner <heiko@sntech.de>
+  - Cunhao Lu <1579567540@qq.com>
+
+allOf:
+  - $ref: snps,dwc3-common.yaml#
+
+properties:
+  compatible:
+    const: rockchip,rk3572-dwc3
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  dma-coherent: true
+
+  clocks:
+    minItems: 3
+    maxItems: 3
+
+  clock-names:
+    items:
+      - const: ref_clk
+      - const: suspend_clk
+      - const: bus_clk
+
+  phys:
+    minItems: 1
+    items:
+      - description: USB2 PHY
+      - description: USB3 PHY
+
+  phy-names:
+    minItems: 1
+    items:
+      - const: usb2-phy
+      - const: usb3-phy
+
+  power-domains:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  rockchip,grf:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      PHP GRF and the controller's PIPE configuration register offset.
+    items:
+      - items:
+          - description: PHP GRF phandle
+          - enum: [0x14, 0x34]
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - clock-names
+  - phys
+  - phy-names
+  - power-domains
+  - resets
+  - rockchip,grf
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/rockchip,rk3572-cru.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/phy/phy.h>
+    #include <dt-bindings/power/rockchip,rk3572-power-controller.h>
+    #include <dt-bindings/reset/rockchip,rk3572-cru.h>
+
+    usb@24400000 {
+        compatible = "rockchip,rk3572-dwc3";
+        reg = <0x24400000 0x400000>;
+        interrupts = <GIC_SPI 254 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&cru CLK_REF_USB3OTG1>, <&cru CLK_SUSPEND_USB3OTG1>,
+                 <&cru ACLK_USB3OTG1>;
+        clock-names = "ref_clk", "suspend_clk", "bus_clk";
+        phys = <&u2phy1_otg>, <&combphy1 PHY_TYPE_USB3>;
+        phy-names = "usb2-phy", "usb3-phy";
+        power-domains = <&power RK3572_PD_PHP>;
+        resets = <&cru SRST_ARESETN_USB3OTG1>;
+        rockchip,grf = <&php_grf 0x34>;
+        dr_mode = "host";
+    };
