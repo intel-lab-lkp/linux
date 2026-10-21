@@ -20,6 +20,7 @@
 #include "regs/xe_regs.h"
 #include "xe_assert.h"
 #include "xe_bo.h"
+#include "xe_device.h"
 #include "xe_gt.h"
 #include "xe_gt_printk.h"
 #include "xe_gt_types.h"
@@ -370,12 +371,25 @@ int xe_ggtt_init_kunit(struct xe_ggtt *ggtt, u32 start, u32 size)
 }
 EXPORT_SYMBOL_IF_KUNIT(xe_ggtt_init_kunit);
 
+/**
+ * xe_ggtt_offline - Stop hardware access from GGTT node removal
+ * @ggtt: the &xe_ggtt to take offline
+ *
+ * Node removal keeps clearing entries and invalidating TLBs while the GGTT
+ * is online. Take it offline before disabling PCI access, and drain the DRM
+ * device SRCU afterwards so users already admitted finish first.
+ */
+void xe_ggtt_offline(struct xe_ggtt *ggtt)
+{
+	guard(mutex)(&ggtt->lock);
+	ggtt->flags &= ~XE_GGTT_FLAGS_ONLINE;
+}
+
 static void dev_fini_ggtt(void *arg)
 {
 	struct xe_ggtt *ggtt = arg;
 
-	scoped_guard(mutex, &ggtt->lock)
-		ggtt->flags &= ~XE_GGTT_FLAGS_ONLINE;
+	xe_ggtt_offline(ggtt);
 	drain_workqueue(ggtt->wq);
 }
 
@@ -475,13 +489,13 @@ static void ggtt_node_fini(struct xe_ggtt_node *node)
 	kfree(node);
 }
 
-static void ggtt_node_remove(struct xe_ggtt_node *node)
+static void __ggtt_node_remove(struct xe_ggtt_node *node, bool clear_hw)
 {
 	struct xe_ggtt *ggtt = node->ggtt;
 	bool bound;
 
 	mutex_lock(&ggtt->lock);
-	bound = ggtt->flags & XE_GGTT_FLAGS_ONLINE;
+	bound = clear_hw && (ggtt->flags & XE_GGTT_FLAGS_ONLINE);
 	if (bound)
 		xe_ggtt_clear(ggtt, xe_ggtt_node_addr(node), xe_ggtt_node_size(node));
 	drm_mm_remove_node(&node->base);
@@ -494,6 +508,27 @@ static void ggtt_node_remove(struct xe_ggtt_node *node)
 	mutex_unlock(&ggtt->lock);
 
 	ggtt_node_fini(node);
+}
+
+static void ggtt_node_remove(struct xe_ggtt_node *node)
+{
+	struct xe_device *xe = tile_to_xe(node->ggtt->tile);
+	int idx;
+
+	/*
+	 * GGTT updates write page table entries through the BAR and request a
+	 * TLB invalidation. Skip them after unplug, where the BAR is gone.
+	 * Keep them during PCI error recovery so a recovered device does not
+	 * inherit stale GGTT entries.
+	 */
+	if (!drm_dev_enter(&xe->drm, &idx)) {
+		__ggtt_node_remove(node, false);
+		return;
+	}
+
+	__ggtt_node_remove(node, !xe_device_wedged(xe));
+
+	drm_dev_exit(idx);
 }
 
 static void ggtt_node_remove_work_func(struct work_struct *work)

@@ -6,17 +6,20 @@
 #include <linux/pci.h>
 
 #include "xe_device.h"
+#include "xe_ggtt.h"
 #include "xe_gt.h"
 #include "xe_log.h"
 #include "xe_pci.h"
 #include "xe_printk.h"
 #include "xe_ras.h"
 #include "xe_survivability_mode.h"
+#include "xe_tile.h"
 
 static void prepare_device_for_reset(struct pci_dev *pdev)
 {
 	struct xe_device *xe = pdev_to_xe_device(pdev);
 	struct xe_gt *gt;
+	struct xe_tile *tile;
 	u8 id;
 
 	/* Block device access until PCI error recovery completes. */
@@ -25,6 +28,11 @@ static void prepare_device_for_reset(struct pci_dev *pdev)
 
 	for_each_gt(gt, xe, id)
 		xe_gt_declare_wedged(gt);
+
+	/* Stop GGTT removal MMIO before draining users and disabling PCI. */
+	for_each_tile(tile, xe, id)
+		if (tile->mem.ggtt)
+			xe_ggtt_offline(tile->mem.ggtt);
 
 	/*
 	 * GT wedging signals pending fences. Existing hardware users can now
