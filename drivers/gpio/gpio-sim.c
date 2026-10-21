@@ -338,15 +338,6 @@ static void gpio_sim_put_device(void *data)
 	put_device(dev);
 }
 
-static void gpio_sim_dispose_mappings(void *data)
-{
-	struct gpio_sim_chip *chip = data;
-	unsigned int i;
-
-	for (i = 0; i < chip->gc.ngpio; i++)
-		irq_dispose_mapping(irq_find_mapping(chip->irq_sim, i));
-}
-
 static void gpio_sim_sysfs_remove(void *data)
 {
 	struct gpio_sim_chip *chip = data;
@@ -467,10 +458,6 @@ static int gpio_sim_add_bank(struct fwnode_handle *swnode, struct device *dev)
 	if (IS_ERR(chip->irq_sim))
 		return PTR_ERR(chip->irq_sim);
 
-	ret = devm_add_action_or_reset(dev, gpio_sim_dispose_mappings, chip);
-	if (ret)
-		return ret;
-
 	ret = devm_mutex_init(dev, &chip->lock);
 	if (ret)
 		return ret;
@@ -495,6 +482,10 @@ static int gpio_sim_add_bank(struct fwnode_handle *swnode, struct device *dev)
 	gc->free = gpio_sim_free;
 	gc->dbg_show = PTR_IF(IS_ENABLED(CONFIG_DEBUG_FS), gpio_sim_dbg_show);
 	gc->can_sleep = true;
+
+	ret = devm_gpiochip_dispose_irq_mappings(dev, gc, chip->irq_sim);
+	if (ret)
+		return ret;
 
 	ret = devm_gpiochip_add_data(dev, gc, chip);
 	if (ret)
