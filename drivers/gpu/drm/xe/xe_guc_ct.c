@@ -1146,6 +1146,13 @@ static int h2g_write(struct xe_guc_ct *ct, const u32 *action, u32 len,
 	return 0;
 }
 
+static int guc_ct_cancel_errno(struct xe_guc_ct *ct)
+{
+	/* AER is temporary. Only a permanent wedge is terminal. */
+	return xe_device_wedged(ct_to_xe(ct)) ?
+		-ENOTRECOVERABLE : -ECANCELED;
+}
+
 static int __guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action,
 				u32 len, u32 g2h_len, u32 num_g2h,
 				struct g2h_fence *g2h_fence, bool defer_flush)
@@ -1161,8 +1168,8 @@ static int __guc_ct_send_locked(struct xe_guc_ct *ct, const u32 *action,
 	xe_gt_assert(gt, g2h_len || !num_g2h);
 	lockdep_assert_held(&ct->lock);
 
-	if (xe_device_wedged(ct_to_xe(ct))) {
-		ret = -ENOTRECOVERABLE;
+	if (xe_device_io_blocked(ct_to_xe(ct))) {
+		ret = guc_ct_cancel_errno(ct);
 		goto out;
 	}
 
@@ -1590,7 +1597,7 @@ wait_again:
 	if (g2h_fence.fail) {
 		if (g2h_fence.cancel) {
 			xe_gt_dbg(gt, "H2G request %#x canceled!\n", action[0]);
-			ret = xe_device_wedged(ct_to_xe(ct)) ? -ENOTRECOVERABLE : -ECANCELED;
+			ret = guc_ct_cancel_errno(ct);
 			goto unlock;
 		}
 		xe_gt_err(gt, "H2G request %#x failed: error %#x hint %#x\n",
@@ -1935,8 +1942,8 @@ static int g2h_read(struct xe_guc_ct *ct, u32 *msg, bool fast_path)
 	lockdep_assert_held(&ct->fast_lock);
 
 	/* Keep in sync with g2h_err_is_fatal() */
-	if (xe_device_wedged(xe))
-		return -ENOTRECOVERABLE;
+	if (xe_device_io_blocked(xe))
+		return guc_ct_cancel_errno(ct);
 
 	if (ct->state == XE_GUC_CT_STATE_DISABLED)
 		return -ENODEV;
