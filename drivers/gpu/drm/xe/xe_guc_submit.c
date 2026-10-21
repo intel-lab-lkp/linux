@@ -2185,6 +2185,12 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 	q->entity = &ge->entity;
 
 	mutex_lock(&guc->submission_state.lock);
+	if (xe_device_wedged(guc_to_xe(guc))) {
+		mutex_unlock(&guc->submission_state.lock);
+		err = -ECANCELED;
+		goto err_entity;
+	}
+
 	if (xe_guc_read_stopped(guc) || vf_recovery(guc))
 		xe_sched_stop(sched);
 	publish_guc_id(guc, q);
@@ -2212,6 +2218,9 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 
 	return 0;
 
+err_entity:
+	q->entity = NULL;
+	xe_sched_entity_fini(&ge->entity);
 err_sched:
 	xe_sched_fini(&ge->sched);
 err_release_id:

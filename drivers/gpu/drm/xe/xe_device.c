@@ -85,6 +85,8 @@
 #include <generated/xe_device_wa_oob.h>
 #include <generated/xe_wa_oob.h>
 
+static void xe_device_wedged_work(struct work_struct *work);
+
 static int xe_file_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct xe_device *xe = to_xe_device(dev);
@@ -497,6 +499,9 @@ static void xe_device_parse_modparam(struct xe_device *xe)
 int xe_device_init_early(struct xe_device *xe)
 {
 	int err;
+
+	INIT_WORK(&xe->wedged.work, xe_device_wedged_work);
+	xe->wedged.reported_method = ~0UL;
 
 	err = ttm_device_init(&xe->ttm, &xe_ttm_funcs, xe->drm.dev,
 			      xe->drm.anon_inode->i_mapping,
@@ -924,6 +929,40 @@ static void xe_uid_probe(struct xe_device *xe)
 		xe->device_uid = xe_mmio_read64_2x32(xe_root_tile_mmio(xe), CRI_DEVICE_UID);
 }
 
+static void xe_device_wedged_work(struct work_struct *work)
+{
+	struct xe_device *xe =
+			container_of(work, struct xe_device, wedged.work);
+	unsigned long method;
+	int err;
+
+	/* Report at most one recovery method per worker invocation. */
+	method = READ_ONCE(xe->wedged.method);
+	if (method != READ_ONCE(xe->wedged.reported_method)) {
+		err = drm_dev_wedged_event(&xe->drm, method, NULL);
+		if (!err)
+			WRITE_ONCE(xe->wedged.reported_method, method);
+	}
+
+	/*
+	 * Queue another pass if the method changed while the event was sent.
+	 * This preserves the update without keeping this worker in a loop.
+	 */
+	if (!atomic_read(&xe->wedged.stopping) &&
+	    READ_ONCE(xe->wedged.method) != method)
+		queue_work(xe->unordered_wq, &xe->wedged.work);
+}
+
+static void xe_device_wedged_disable(void *arg)
+{
+	struct xe_device *xe = arg;
+
+	if (atomic_xchg(&xe->wedged.stopping, 1))
+		return;
+
+	disable_work_sync(&xe->wedged.work);
+}
+
 int xe_device_probe(struct xe_device *xe)
 {
 	struct xe_tile *tile;
@@ -1044,9 +1083,17 @@ int xe_device_probe(struct xe_device *xe)
 
 	for_each_gt(gt, xe, id) {
 		err = xe_gt_init(gt);
-		if (err)
+		if (err) {
+			xe_device_wedged_disable(xe);
 			return err;
+		}
 	}
+
+	/* Stop wedge work before GT and IRQ devres cleanup. */
+	err = devm_add_action_or_reset(xe->drm.dev,
+				       xe_device_wedged_disable, xe);
+	if (err)
+		return err;
 
 	err = xe_vram_memtest(xe);
 	if (err)
@@ -1155,6 +1202,7 @@ int xe_device_probe(struct xe_device *xe)
 	return 0;
 
 err_unregister_display:
+	xe_device_wedged_disable(xe);
 	xe_display_unregister(xe);
 	drm_dev_unregister(&xe->drm);
 
@@ -1163,6 +1211,8 @@ err_unregister_display:
 
 void xe_device_remove(struct xe_device *xe)
 {
+	xe_device_wedged_disable(xe);
+
 	xe_display_unregister(xe);
 
 	drm_dev_unplug(&xe->drm);
@@ -1178,6 +1228,8 @@ void xe_device_shutdown(struct xe_device *xe)
 	u8 id;
 
 	drm_dbg(&xe->drm, "Shutting down device\n");
+
+	xe_device_wedged_disable(xe);
 
 	xe_display_shutdown(xe);
 
@@ -1431,7 +1483,7 @@ u64 xe_device_uncanonicalize_addr(struct xe_device *xe, u64 address)
  */
 void xe_device_set_wedged_method(struct xe_device *xe, unsigned long method)
 {
-	xe->wedged.method = method;
+	WRITE_ONCE(xe->wedged.method, method);
 }
 
 #define WEDGED_URL	"https://docs.kernel.org/gpu/drm-uapi.html#device-wedging"
@@ -1458,6 +1510,7 @@ void xe_device_set_wedged_method(struct xe_device *xe, unsigned long method)
 void xe_device_declare_wedged(struct xe_device *xe)
 {
 	struct xe_gt *gt;
+	bool first;
 	u8 id;
 
 	if (xe->wedged.mode == XE_WEDGED_MODE_NEVER) {
@@ -1465,7 +1518,8 @@ void xe_device_declare_wedged(struct xe_device *xe)
 		return;
 	}
 
-	if (!atomic_xchg(&xe->wedged.flag, 1)) {
+	first = !atomic_xchg(&xe->wedged.flag, 1);
+	if (first) {
 		xe->needs_flr_on_fini = true;
 		xe_pm_runtime_get_noresume(xe);
 		wake_up_all(&xe->ufence_wq);
@@ -1475,12 +1529,7 @@ void xe_device_declare_wedged(struct xe_device *xe)
 			    "For recovery procedure, refer to %s\n"
 			    "Please file a _new_ bug report at %s\n",
 			    WEDGED_URL, XE_BUG_URL);
-	}
 
-	for_each_gt(gt, xe, id)
-		xe_gt_declare_wedged(gt);
-
-	if (xe_device_wedged(xe)) {
 		/*
 		 * XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET is intended for debugging
 		 * hangs, so wedge the device with 'none' recovery method and have
@@ -1488,14 +1537,22 @@ void xe_device_declare_wedged(struct xe_device *xe)
 		 */
 		if (xe->wedged.mode == XE_WEDGED_MODE_UPON_ANY_HANG_NO_RESET)
 			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_NONE);
-		/* If no wedge recovery method is set, use default */
-		else if (!xe->wedged.method)
-			xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_REBIND |
-						    DRM_WEDGE_RECOVERY_BUS_RESET);
 
-		/* Notify userspace of wedged device */
-		drm_dev_wedged_event(&xe->drm, xe->wedged.method, NULL);
+		/* Prepare GTs only on the first wedge declaration. */
+		for_each_gt(gt, xe, id)
+			xe_gt_declare_wedged(gt);
 	}
+
+	/* Set the default only if no recovery method was selected. */
+	cmpxchg(&xe->wedged.method, 0UL,
+		DRM_WEDGE_RECOVERY_REBIND |
+		DRM_WEDGE_RECOVERY_BUS_RESET);
+
+	if (!atomic_read(&xe->wedged.stopping) &&
+	    (first ||
+	     READ_ONCE(xe->wedged.method) !=
+	     READ_ONCE(xe->wedged.reported_method)))
+		queue_work(xe->unordered_wq, &xe->wedged.work);
 }
 
 /**
