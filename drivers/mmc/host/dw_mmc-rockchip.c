@@ -10,6 +10,7 @@
 #include <linux/mmc/host.h>
 #include <linux/of_address.h>
 #include <linux/mmc/slot-gpio.h>
+#include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 
@@ -528,6 +529,19 @@ static int dw_mci_rockchip_init(struct dw_mci *host)
 	return 0;
 }
 
+static int dw_mci_rk3572_init(struct dw_mci *host)
+{
+	int ret;
+
+	/* Power cycling the NVM domain disrupts SDMMC recovery. */
+	ret = dev_pm_genpd_rpm_always_on(host->dev, true);
+	if (ret && ret != -EOPNOTSUPP)
+		dev_warn(host->dev, "failed to keep power domain on: %pe\n",
+			 ERR_PTR(ret));
+
+	return dw_mci_rockchip_init(host);
+}
+
 static const struct dw_mci_drv_data rk2928_drv_data = {
 	.init			= dw_mci_rockchip_init,
 	.parse_dt		= dw_mci_rk2928_parse_dt,
@@ -539,6 +553,14 @@ static const struct dw_mci_drv_data rk3288_drv_data = {
 	.execute_tuning		= dw_mci_rk3288_execute_tuning,
 	.parse_dt		= dw_mci_rk3288_parse_dt,
 	.init			= dw_mci_rockchip_init,
+};
+
+static const struct dw_mci_drv_data rk3572_drv_data = {
+	.common_caps		= MMC_CAP_CMD23,
+	.set_ios		= dw_mci_rk3288_set_ios,
+	.execute_tuning		= dw_mci_rk3288_execute_tuning,
+	.parse_dt		= dw_mci_rk3576_parse_dt,
+	.init			= dw_mci_rk3572_init,
 };
 
 static const struct dw_mci_drv_data rk3576_drv_data = {
@@ -554,6 +576,8 @@ static const struct of_device_id dw_mci_rockchip_match[] = {
 		.data = &rk2928_drv_data },
 	{ .compatible = "rockchip,rk3288-dw-mshc",
 		.data = &rk3288_drv_data },
+	{ .compatible = "rockchip,rk3572-dw-mshc",
+		.data = &rk3572_drv_data },
 	{ .compatible = "rockchip,rk3576-dw-mshc",
 		.data = &rk3576_drv_data },
 	{},
