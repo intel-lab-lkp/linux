@@ -6439,6 +6439,7 @@ nfsd4_encode_listxattrs(struct nfsd4_compoundres *resp, __be32 nfserr,
 {
 	struct nfsd4_listxattrs *listxattrs = &u->listxattrs;
 	struct xdr_stream *xdr = resp->xdr;
+	unsigned int starting_len = xdr->buf->len;
 	u32 cookie_offset, count_offset, eof;
 	u32 left, xdrleft, slen, count;
 	u32 xdrlen, offset;
@@ -6546,6 +6547,8 @@ wreof:
 out:
 	if (listxattrs->lsxa_len)
 		kvfree(listxattrs->lsxa_buf);
+	if (status)
+		xdr_truncate_encode(xdr, starting_len);
 	return status;
 }
 
