@@ -610,17 +610,14 @@ TEST_F(tiocsti, test)
 		/* SECURITY TEST: Try TIOCSTI with FD opened by child */
 		int result = test_tiocsti_injection(_metadata, received_fd);
 
-		/* Log security concern if demonstrated */
-		if (result == 0 && !variant->requires_cap) {
-			TH_LOG("*** SECURITY CONCERN DEMONSTRATED ***");
-			TH_LOG("Privileged parent can use TIOCSTI on FD from unprivileged child");
-			TH_LOG("This shows current process credentials are used, not opener credentials");
-		}
-
-		EXPECT_EQ(result, variant->expected_success)
+		/*
+		 * TIOCSTI checks the capabilities of the caller, not those of
+		 * the process that opened the tty, so the privileged parent
+		 * succeeds even where the child failed.
+		 */
+		EXPECT_EQ(result, 0)
 		{
-			TH_LOG("FD passing: expected error %d, got %d",
-			       variant->expected_success, result);
+			TH_LOG("FD passing: expected success, got %d", result);
 		}
 
 		/* Signal child completion */
