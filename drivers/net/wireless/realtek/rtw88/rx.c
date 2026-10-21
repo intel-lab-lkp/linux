@@ -308,6 +308,8 @@ static void rtw_rx_report_suspect(struct rtw_dev *rtwdev, const char *why,
 	if (pkt_stat->pkt_len >= hdr_len + IEEE80211_CCMP_HDR_LEN)
 		pn = rtw_rx_ccmp_pn((u8 *)hdr + hdr_len);
 
+	pkt_stat->suspect = true;
+
 	if (n > RTW_RX_PN_GUARD_DUMPS) {
 		dev_warn_ratelimited(rtwdev->dev,
 				     "suspect hw-decrypted frame #%u (%s): tid %u max pn 0x%012llx pn 0x%012llx%s\n",

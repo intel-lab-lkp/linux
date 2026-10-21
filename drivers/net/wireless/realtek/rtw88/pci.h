@@ -225,6 +225,8 @@ struct rtw_pci {
 	u16 link_ctrl;
 	atomic_t link_usage;
 	bool rx_no_aspm;
+	bool rx_debug;
+	enum dma_data_direction rx_dma_dir;
 	DECLARE_BITMAP(flags, NUM_OF_RTW_PCI_FLAGS);
 
 	void __iomem *mmap;

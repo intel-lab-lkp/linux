@@ -22,6 +22,36 @@ module_param_named(disable_aspm, rtw_pci_disable_aspm, bool, 0644);
 MODULE_PARM_DESC(disable_msi, "Set Y to disable MSI interrupt support");
 MODULE_PARM_DESC(disable_aspm, "Set Y to disable PCI ASPM support");
 
+static bool rtw_pci_rx_debug;
+module_param_named(rx_debug, rtw_pci_rx_debug, bool, 0644);
+MODULE_PARM_DESC(rx_debug,
+		 "Set Y to poison RX buffers and recheck suspect frames (debug, takes effect at probe)");
+
+/* With rx_debug, bytes [RTW_PCI_RX_POISON_START, RTW_PCI_RX_POISON_END) of
+ * every RX buffer are filled with a known pattern before the buffer is
+ * handed to the device, and frames the core reports as suspect are read
+ * again after a short delay. That shows whether the device wrote the bytes
+ * after the 802.11 header at all, and whether they were still changing when
+ * the driver consumed the buffer. The buffers are mapped bidirectionally so
+ * that the pattern also reaches a swiotlb bounce buffer.
+ */
+#define RTW_PCI_RX_POISON_START	24
+#define RTW_PCI_RX_POISON_END	256
+#define RTW_PCI_RX_RECHECK_US	100
+
+static u8 rtw_pci_rx_poison_byte(u32 off)
+{
+	return 0xa5 ^ (u8)off;
+}
+
+static void rtw_pci_rx_poison(struct sk_buff *skb)
+{
+	u32 i;
+
+	for (i = RTW_PCI_RX_POISON_START; i < RTW_PCI_RX_POISON_END; i++)
+		skb->data[i] = rtw_pci_rx_poison_byte(i);
+}
+
 static const u32 rtw_pci_tx_queue_idx_addr[] = {
 	[RTW_TX_QUEUE_BK]	= RTK_PCI_TXBD_IDX_BKQ,
 	[RTW_TX_QUEUE_BE]	= RTK_PCI_TXBD_IDX_BEQ,
@@ -128,6 +158,7 @@ static void rtw_pci_free_tx_ring(struct rtw_dev *rtwdev,
 static void rtw_pci_free_rx_ring_skbs(struct rtw_dev *rtwdev,
 				      struct rtw_pci_rx_ring *rx_ring)
 {
+	struct rtw_pci *rtwpci = (struct rtw_pci *)rtwdev->priv;
 	struct pci_dev *pdev = to_pci_dev(rtwdev->dev);
 	struct sk_buff *skb;
 	int buf_sz = RTK_PCI_RX_BUF_SIZE;
@@ -140,7 +171,7 @@ static void rtw_pci_free_rx_ring_skbs(struct rtw_dev *rtwdev,
 			continue;
 
 		dma = *((dma_addr_t *)skb->cb);
-		dma_unmap_single(&pdev->dev, dma, buf_sz, DMA_FROM_DEVICE);
+		dma_unmap_single(&pdev->dev, dma, buf_sz, rtwpci->rx_dma_dir);
 		dev_kfree_skb(skb);
 		rx_ring->buf[i] = NULL;
 	}
@@ -211,6 +242,7 @@ static int rtw_pci_reset_rx_desc(struct rtw_dev *rtwdev, struct sk_buff *skb,
 				 struct rtw_pci_rx_ring *rx_ring,
 				 u32 idx, u32 desc_sz)
 {
+	struct rtw_pci *rtwpci = (struct rtw_pci *)rtwdev->priv;
 	struct pci_dev *pdev = to_pci_dev(rtwdev->dev);
 	struct rtw_pci_rx_buffer_desc *buf_desc;
 	int buf_sz = RTK_PCI_RX_BUF_SIZE;
@@ -219,7 +251,10 @@ static int rtw_pci_reset_rx_desc(struct rtw_dev *rtwdev, struct sk_buff *skb,
 	if (!skb)
 		return -EINVAL;
 
-	dma = dma_map_single(&pdev->dev, skb->data, buf_sz, DMA_FROM_DEVICE);
+	if (rtwpci->rx_debug)
+		rtw_pci_rx_poison(skb);
+
+	dma = dma_map_single(&pdev->dev, skb->data, buf_sz, rtwpci->rx_dma_dir);
 	if (dma_mapping_error(&pdev->dev, dma))
 		return -EBUSY;
 
@@ -237,11 +272,22 @@ static void rtw_pci_sync_rx_desc_device(struct rtw_dev *rtwdev, dma_addr_t dma,
 					struct rtw_pci_rx_ring *rx_ring,
 					u32 idx, u32 desc_sz)
 {
+	struct rtw_pci *rtwpci = (struct rtw_pci *)rtwdev->priv;
 	struct device *dev = rtwdev->dev;
 	struct rtw_pci_rx_buffer_desc *buf_desc;
 	int buf_sz = RTK_PCI_RX_BUF_SIZE;
 
-	dma_sync_single_for_device(dev, dma, buf_sz, DMA_FROM_DEVICE);
+	if (rtwpci->rx_debug) {
+		/* Only the poisoned head needs to reach the device copy;
+		 * the CPU did not write the rest of the buffer.
+		 */
+		rtw_pci_rx_poison(rx_ring->buf[idx]);
+		dma_sync_single_range_for_device(dev, dma, 0,
+						 RTW_PCI_RX_POISON_END,
+						 DMA_BIDIRECTIONAL);
+	} else {
+		dma_sync_single_for_device(dev, dma, buf_sz, DMA_FROM_DEVICE);
+	}
 
 	buf_desc = (struct rtw_pci_rx_buffer_desc *)(rx_ring->r.head +
 						     idx * desc_sz);
@@ -254,6 +300,7 @@ static int rtw_pci_init_rx_ring(struct rtw_dev *rtwdev,
 				struct rtw_pci_rx_ring *rx_ring,
 				u8 desc_size, u32 len)
 {
+	struct rtw_pci *rtwpci = (struct rtw_pci *)rtwdev->priv;
 	struct pci_dev *pdev = to_pci_dev(rtwdev->dev);
 	struct sk_buff *skb = NULL;
 	dma_addr_t dma;
@@ -302,7 +349,7 @@ err_out:
 		if (!skb)
 			continue;
 		dma = *((dma_addr_t *)skb->cb);
-		dma_unmap_single(&pdev->dev, dma, buf_sz, DMA_FROM_DEVICE);
+		dma_unmap_single(&pdev->dev, dma, buf_sz, rtwpci->rx_dma_dir);
 		dev_kfree_skb_any(skb);
 		rx_ring->buf[i] = NULL;
 	}
@@ -323,6 +370,13 @@ static int rtw_pci_init_trx_ring(struct rtw_dev *rtwdev)
 	int tx_desc_size, rx_desc_size;
 	u32 len;
 	int ret;
+
+	rtwpci->rx_debug = READ_ONCE(rtw_pci_rx_debug);
+	rtwpci->rx_dma_dir = rtwpci->rx_debug ? DMA_BIDIRECTIONAL :
+						DMA_FROM_DEVICE;
+	if (rtwpci->rx_debug)
+		rtw_info(rtwdev, "rx_debug: poisoning RX buffers [%u, %u)\n",
+			 RTW_PCI_RX_POISON_START, RTW_PCI_RX_POISON_END);
 
 	tx_desc_size = chip->tx_buf_desc_sz;
 
@@ -1039,6 +1093,69 @@ static int rtw_pci_get_hw_rx_ring_nr(struct rtw_dev *rtwdev,
 	return count;
 }
 
+/* Called for a frame the core reported as suspect, with the buffer synced
+ * for the CPU. Count how much of the poison survived in the drv_info area
+ * and after the 802.11 header, then read the head of the buffer again a
+ * little later to see whether the device was still writing to it.
+ */
+static void rtw_pci_rx_debug_recheck(struct rtw_dev *rtwdev,
+				     struct rtw_pci *rtwpci,
+				     struct sk_buff *skb, dma_addr_t dma,
+				     u32 idx, struct rtw_rx_pkt_stat *pkt_stat)
+{
+	u32 drv_start = rtwdev->chip->rx_pkt_desc_sz + pkt_stat->shift;
+	u32 drv_end = drv_start + pkt_stat->drv_info_sz;
+	u32 hdr_off = (u8 *)pkt_stat->hdr - skb->data;
+	u32 tail_start = hdr_off + ieee80211_hdrlen(pkt_stat->hdr->frame_control);
+	/* only bytes that belong to the frame; shorter frames leave poison */
+	u32 tail_end = min_t(u32, hdr_off + pkt_stat->pkt_len,
+			     RTW_PCI_RX_POISON_END);
+	u32 tail_len = tail_end > tail_start ? tail_end - tail_start : 0;
+	u32 drv_len = drv_end > drv_start ? drv_end - drv_start : 0;
+	u32 drv_poison = 0, tail_poison = 0, changed = 0, first_changed = 0;
+	u8 before[RTW_PCI_RX_POISON_END];
+	u32 i;
+
+	memcpy(before, skb->data, sizeof(before));
+
+	for (i = max_t(u32, drv_start, RTW_PCI_RX_POISON_START);
+	     i < min_t(u32, drv_end, RTW_PCI_RX_POISON_END); i++)
+		drv_poison += before[i] == rtw_pci_rx_poison_byte(i);
+	for (i = tail_start; i < tail_end; i++)
+		tail_poison += before[i] == rtw_pci_rx_poison_byte(i);
+
+	udelay(RTW_PCI_RX_RECHECK_US);
+	dma_sync_single_range_for_cpu(rtwdev->dev, dma, 0,
+				      RTW_PCI_RX_POISON_END, rtwpci->rx_dma_dir);
+
+	for (i = 0; i < RTW_PCI_RX_POISON_END; i++) {
+		if (skb->data[i] == before[i])
+			continue;
+		if (!changed)
+			first_changed = i;
+		changed++;
+	}
+
+	/* a changed reread is the interesting case, always report it in full */
+	if (!changed && rtwdev->rx_pn_guard.events > RTW_RX_PN_GUARD_DUMPS) {
+		dev_warn_ratelimited(rtwdev->dev,
+				     "rx_debug: ring %u: drv_info %u/%u poison, after header %u/%u poison, %u bytes changed\n",
+				     idx, drv_poison, drv_len, tail_poison, tail_len,
+				     changed);
+		return;
+	}
+
+	rtw_warn(rtwdev,
+		 "rx_debug: ring %u: drv_info %u/%u poison, after header [%u,%u) %u/%u poison, %u bytes changed after %uus (first at %u)\n",
+		 idx, drv_poison, drv_len, tail_start, tail_end,
+		 tail_poison, tail_len, changed, RTW_PCI_RX_RECHECK_US,
+		 first_changed);
+	if (changed)
+		print_hex_dump(KERN_WARNING, "rtw88 rx reread: ",
+			       DUMP_PREFIX_OFFSET, 16, 1, skb->data,
+			       RTW_PCI_RX_POISON_END, false);
+}
+
 static u32 rtw_pci_rx_napi(struct rtw_dev *rtwdev, struct rtw_pci *rtwpci,
 			   u8 hw_queue, u32 limit)
 {
@@ -1066,12 +1183,16 @@ static u32 rtw_pci_rx_napi(struct rtw_dev *rtwdev, struct rtw_pci *rtwpci,
 		skb = ring->buf[cur_rp];
 		dma = *((dma_addr_t *)skb->cb);
 		dma_sync_single_for_cpu(rtwdev->dev, dma, RTK_PCI_RX_BUF_SIZE,
-					DMA_FROM_DEVICE);
+					rtwpci->rx_dma_dir);
 		rx_desc = skb->data;
 		ret = rtw_rx_query_rx_desc(rtwdev, rx_desc,
 					   &pkt_stat, &rx_status);
 		if (ret)
 			goto next_rp;
+
+		if (unlikely(rtwpci->rx_debug && pkt_stat.suspect))
+			rtw_pci_rx_debug_recheck(rtwdev, rtwpci, skb, dma,
+						 cur_rp, &pkt_stat);
 
 		/* offset from rx_desc to payload */
 		pkt_offset = pkt_desc_sz + pkt_stat.drv_info_sz +
