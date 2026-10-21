@@ -14,12 +14,14 @@ properties:
     enum:
       - rockchip,gpio-bank
       - rockchip,rk3188-gpio-bank0
+      - rockchip,rk3572-gpio-bank
 
   reg:
     maxItems: 1
 
   interrupts:
-    maxItems: 1
+    minItems: 1
+    maxItems: 4
 
   clocks:
     minItems: 1
@@ -50,6 +52,26 @@ properties:
       The phandle of the syscon node managing the IO control registers
       of this bank, on SoCs such as the RV1106 where each GPIO bank has
       its own IOC block.
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          const: rockchip,rk3572-gpio-bank
+    then:
+      properties:
+        interrupts:
+          items:
+            - description: GPIO group 0
+            - description: GPIO group 1
+            - description: GPIO group 2
+            - description: GPIO group 3
+        clocks:
+          minItems: 2
+    else:
+      properties:
+        interrupts:
+          maxItems: 1
 
 patternProperties:
   "^.+-hog(-[0-9]+)?$":
