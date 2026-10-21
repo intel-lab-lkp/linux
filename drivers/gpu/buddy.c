@@ -1723,43 +1723,32 @@ static int __gpu_buddy_alloc_range(struct gpu_buddy *mm,
 			     blocks, total_allocated_on_err);
 }
 
-static int __alloc_contig_aligned_retry(struct gpu_buddy *mm,
-					u64 unaligned_offset,
-					u64 size,
-					u64 min_block_size,
-					unsigned long flags,
-					struct list_head *blocks)
-{
-	u64 aligned_offset = round_down(unaligned_offset, min_block_size);
-
-	return __gpu_buddy_alloc_range(mm, aligned_offset, size, flags,
-				       NULL, blocks);
-}
-
 static int __alloc_contig_try_harder(struct gpu_buddy *mm,
+				     u64 range_start, u64 range_end,
 				     u64 size,
 				     u64 min_block_size,
 				     unsigned long flags,
 				     struct list_head *blocks)
 {
-	u64 rhs_offset, lhs_offset, filled;
+	u64 rhs_offset, lhs_offset, filled, aligned;
 	struct gpu_buddy_block *block;
+	unsigned int min_order, order;
 	struct rb_root *root;
 	struct rb_node *iter;
 	unsigned long pages;
-	unsigned int order;
 	u64 modify_size;
 	int err;
+
+	min_order = ilog2(min_block_size) - ilog2(mm->chunk_size);
 
 	modify_size = rounddown_pow_of_two(size);
 	pages = modify_size >> ilog2(mm->chunk_size);
 	order = fls(pages) - 1;
-	if (order == 0)
-		return -ENOSPC;
 
+retry_order:
 	root = &mm->free_tree[order];
 	if (RB_EMPTY_ROOT(root))
-		return -ENOSPC;
+		goto next_order;
 
 	iter = rb_last(root);
 	while (iter) {
@@ -1767,25 +1756,48 @@ static int __alloc_contig_try_harder(struct gpu_buddy *mm,
 
 		rhs_offset = gpu_buddy_block_offset(block);
 
+		if (rhs_offset >= range_end) {
+			iter = rb_prev(iter);
+			continue;
+		}
+		if (rhs_offset < range_start)
+			break;
+
 		/* Allocate blocks traversing RHS */
 		err =  __gpu_buddy_alloc_range(mm, rhs_offset, size,
 					       flags, &filled, blocks);
 		if (err && err != -ENOSPC)
 			return err;
-		if (!err && IS_ALIGNED(rhs_offset, min_block_size))
+
+		if (!err)
+			filled = size;
+
+		/* Clamp a full or partial fill that crosses range_end. */
+		if (rhs_offset + filled > range_end) {
+			gpu_buddy_free_list_internal(mm, blocks);
+			filled = range_end - rhs_offset;
+			err = -ENOSPC;
+		}
+
+		if (!err && IS_ALIGNED(rhs_offset, min_block_size) &&
+		    rhs_offset >= range_start)
 			return 0;
+
 		if (!err) {
 			/* Allocate the unaligned RHS offset using round_down */
 			gpu_buddy_free_list_internal(mm, blocks);
-			err = __alloc_contig_aligned_retry(mm, rhs_offset,
-							   size,
-							   min_block_size,
-							   flags, blocks);
-			if (!err)
-				return 0;
-			if (err != -ENOSPC) {
-				gpu_buddy_free_list_internal(mm, blocks);
-				return err;
+
+			aligned = round_down(rhs_offset, min_block_size);
+			if (aligned >= range_start &&
+			    aligned + size <= range_end) {
+				err = __gpu_buddy_alloc_range(mm, aligned, size,
+							      flags, NULL, blocks);
+				if (!err)
+					return 0;
+				if (err != -ENOSPC) {
+					gpu_buddy_free_list_internal(mm, blocks);
+					return err;
+				}
 			}
 			goto next;
 		}
@@ -1797,19 +1809,71 @@ static int __alloc_contig_try_harder(struct gpu_buddy *mm,
 
 		/* Allocate the unaligned LHS offset using round_down */
 		gpu_buddy_free_list_internal(mm, blocks);
-		err = __alloc_contig_aligned_retry(mm, lhs_offset,
-						   size,
-						   min_block_size,
-						   flags, blocks);
-		if (!err)
-			return 0;
-		if (err != -ENOSPC) {
-			gpu_buddy_free_list_internal(mm, blocks);
-			return err;
+
+		aligned = round_down(lhs_offset, min_block_size);
+		if (aligned >= range_start && aligned + size <= range_end) {
+			err = __gpu_buddy_alloc_range(mm, aligned, size,
+						      flags, NULL, blocks);
+			if (!err)
+				return 0;
+			if (err != -ENOSPC) {
+				gpu_buddy_free_list_internal(mm, blocks);
+				return err;
+			}
 		}
 next:
 		gpu_buddy_free_list_internal(mm, blocks);
 		iter = rb_prev(iter);
+	}
+
+next_order:
+	if (order > min_order) {
+		order--;
+		goto retry_order;
+	}
+
+	/* A non-range request would already have used a larger free block. */
+	if (!(flags & GPU_BUDDY_RANGE_ALLOCATION))
+		return -ENOSPC;
+
+	/*
+	 * Last resort: the span may sit inside a larger coalesced free block
+	 * that the anchored search above never visits. Walk the higher-order
+	 * free trees (bounded by the number of free blocks, not by the window
+	 * size) and carve the highest aligned span that fits inside each block
+	 * overlapping the window.
+	 */
+	for (order = fls(modify_size >> ilog2(mm->chunk_size));
+	     order <= mm->max_order; order++) {
+		for (iter = rb_last(&mm->free_tree[order]); iter;
+		     iter = rb_prev(iter)) {
+			u64 low, high;
+
+			block = rbtree_get_free_block(iter);
+			low = max(gpu_buddy_block_offset(block), range_start);
+			high = min(gpu_buddy_block_offset(block) +
+				   gpu_buddy_block_size(mm, block), range_end);
+
+			if (gpu_buddy_block_offset(block) >= range_end)
+				continue;
+			if (gpu_buddy_block_offset(block) +
+			    gpu_buddy_block_size(mm, block) <= range_start)
+				break;
+			if (high < low + size)
+				continue;
+
+			aligned = round_down(high - size, min_block_size);
+			if (aligned < low)
+				continue;
+
+			err = __gpu_buddy_alloc_range(mm, aligned, size, flags,
+						      NULL, blocks);
+			if (!err)
+				return 0;
+			gpu_buddy_free_list_internal(mm, blocks);
+			if (err != -ENOSPC)
+				return err;
+		}
 	}
 
 	return -ENOSPC;
@@ -2059,11 +2123,18 @@ int gpu_buddy_alloc_blocks(struct gpu_buddy *mm,
 	min_order = ilog2(min_block_size) - ilog2(mm->chunk_size);
 
 	if (order > mm->max_order || size > mm->size) {
-		if ((flags & GPU_BUDDY_CONTIGUOUS_ALLOCATION) &&
-		    !(flags & GPU_BUDDY_RANGE_ALLOCATION))
-			return __alloc_contig_try_harder(mm, original_size,
+		if (flags & GPU_BUDDY_CONTIGUOUS_ALLOCATION) {
+			u64 range_start, range_end;
+
+			range_start = (flags & GPU_BUDDY_RANGE_ALLOCATION) ? start : 0;
+			range_end = (flags & GPU_BUDDY_RANGE_ALLOCATION) ? end : mm->size;
+
+			return __alloc_contig_try_harder(mm, range_start,
+							 range_end,
+							 original_size,
 							 original_min_size,
 							 flags, blocks);
+		}
 
 		return -EINVAL;
 	}
@@ -2096,9 +2167,14 @@ int gpu_buddy_alloc_blocks(struct gpu_buddy *mm,
 			 * Try contiguous block allocation through
 			 * try harder method.
 			 */
-			if (flags & GPU_BUDDY_CONTIGUOUS_ALLOCATION &&
-			    !(flags & GPU_BUDDY_RANGE_ALLOCATION)) {
-				err = __alloc_contig_try_harder(mm,
+			if (flags & GPU_BUDDY_CONTIGUOUS_ALLOCATION) {
+				u64 range_start, range_end;
+
+				range_start = (flags & GPU_BUDDY_RANGE_ALLOCATION) ? start : 0;
+				range_end = (flags & GPU_BUDDY_RANGE_ALLOCATION) ? end : mm->size;
+
+				err = __alloc_contig_try_harder(mm, range_start,
+								range_end,
 								original_size,
 								original_min_size,
 								flags,
@@ -2106,9 +2182,9 @@ int gpu_buddy_alloc_blocks(struct gpu_buddy *mm,
 				if (!err)
 					return 0;
 				if (err != -ENOSPC)
-					return err;
-				goto err_free;
+					goto err_free;
 			}
+
 			err = -ENOSPC;
 			goto err_free;
 		} while (1);

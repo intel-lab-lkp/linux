@@ -1251,6 +1251,147 @@ static void gpu_test_buddy_alloc_contiguous(struct kunit *test)
 	gpu_buddy_fini(&mm);
 }
 
+/*
+ * Issue a range-restricted contiguous request and assert that it returns an
+ * exact-size, contiguous span confined to [range_start, range_end). Frees the
+ * allocation before returning; the caller owns mm init/fini and any pins.
+ */
+static void check_contig_range_alloc(struct kunit *test, struct gpu_buddy *mm,
+				     u64 range_start, u64 range_end,
+				     u64 size, u64 min, const char *shape)
+{
+	struct gpu_buddy_block *block, *prev;
+	LIST_HEAD(allocated);
+	u64 total;
+
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(mm, range_start, range_end,
+						      size, min, &allocated,
+						      GPU_BUDDY_CONTIGUOUS_ALLOCATION |
+						      GPU_BUDDY_RANGE_ALLOCATION),
+			       "%s: range-restricted contiguous alloc failed\n",
+			       shape);
+
+	total = 0;
+	prev = NULL;
+	list_for_each_entry(block, &allocated, link) {
+		u64 offset = gpu_buddy_block_offset(block);
+		u64 bsize = gpu_buddy_block_size(mm, block);
+
+		KUNIT_EXPECT_TRUE_MSG(test, offset >= range_start &&
+				      offset + bsize <= range_end,
+				      "%s: block [%llx, %llx) outside range\n",
+				      shape, offset, offset + bsize);
+		if (prev)
+			KUNIT_EXPECT_EQ_MSG(test,
+					    gpu_buddy_block_offset(prev) +
+					    gpu_buddy_block_size(mm, prev),
+					    offset,
+					    "%s: block at %llx not contiguous\n",
+					    shape, offset);
+		prev = block;
+		total += bsize;
+	}
+	KUNIT_EXPECT_EQ_MSG(test, total, size, "%s: wrong total size\n", shape);
+
+	gpu_buddy_free_list(mm, &allocated, 0);
+}
+
+static void gpu_test_buddy_alloc_range_contiguous(struct kunit *test)
+{
+	const unsigned long ps = SZ_4K;
+	struct gpu_buddy mm;
+	LIST_HEAD(pin_lo);
+	LIST_HEAD(pin_hi);
+	LIST_HEAD(barrier);
+
+	/*
+	 * Feature: confine a 12K contiguous request (rounded up to 16K) to
+	 * [0, 32K), which splits into two naturally aligned 16K slots. Pin the
+	 * first page of each ([0, 4K) and [16K, 20K)) so neither slot can
+	 * satisfy the rounded-up 16K alloc, yet a contiguous but 16K-unaligned
+	 * 12K hole remains at offset 4K. The fallback must stitch that hole
+	 * instead of returning -ENOSPC.
+	 */
+	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_init(&mm, 16 * ps, ps),
+			       "buddy_init failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 0, ps, ps, ps,
+						      &pin_lo, 0),
+			       "failed to pin low page\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 4 * ps, 5 * ps, ps,
+						      ps, &pin_hi, 0),
+			       "failed to pin high page\n");
+	check_contig_range_alloc(test, &mm, 0, 8 * ps, 3 * ps, ps, "feature");
+	gpu_buddy_free_list(&mm, &pin_lo, 0);
+	gpu_buddy_free_list(&mm, &pin_hi, 0);
+	gpu_buddy_fini(&mm);
+
+	/*
+	 * Higher-order: an empty arena coalesces all free
+	 * space into one high-order block, so the anchored search finds no
+	 * block at or below the derived order inside [4K, 20K). The allocator
+	 * must still carve the 12K span out of the larger block.
+	 */
+	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_init(&mm, 8 * ps, ps),
+			       "buddy_init failed\n");
+	check_contig_range_alloc(test, &mm, ps, 5 * ps, 3 * ps, ps,
+				 "higher_order");
+	gpu_buddy_fini(&mm);
+
+	/*
+	 * Beyond range_end: pin [8K, 16K) and leave
+	 * [16K, 32K) free, so the only fit inside [12K, 28K) is [16K, 28K) with
+	 * a free page spilling past range_end. The tail coalesces above the
+	 * derived order, so the request must still land on [16K, 28K).
+	 */
+	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_init(&mm, 8 * ps, ps),
+			       "buddy_init failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 2 * ps, 4 * ps,
+						      2 * ps, ps, &barrier, 0),
+			       "failed to pin barrier\n");
+	check_contig_range_alloc(test, &mm, 3 * ps, 7 * ps, 3 * ps, ps,
+				 "beyond_end");
+	gpu_buddy_free_list(&mm, &barrier, 0);
+	gpu_buddy_fini(&mm);
+
+	/*
+	 * Left shift: pin [28K, 32K) and leave [0, 28K) free. For a 12K request
+	 * in [4K, 20K) the anchored search fills rightward to [16K, 28K), a full
+	 * fill ending past range_end. The overshoot must be clamped so the
+	 * leftward shift finds the valid placement [8K, 20K).
+	 */
+	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_init(&mm, 8 * ps, ps),
+			       "buddy_init failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 7 * ps, 8 * ps,
+						      ps, ps, &barrier, 0),
+			       "failed to pin barrier\n");
+	check_contig_range_alloc(test, &mm, ps, 5 * ps, 3 * ps, ps,
+				 "left_shift");
+	gpu_buddy_free_list(&mm, &barrier, 0);
+	gpu_buddy_fini(&mm);
+
+	/*
+	 * Partial fill past range_end: pin [24K, 32K) and leave [0, 24K) free.
+	 * For a 12K request in [4K, 20K) the anchored search at 16K fills only
+	 * 8K before hitting the pin, still crossing range_end. A placement
+	 * inside the window must be found regardless.
+	 */
+	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_init(&mm, 8 * ps, ps),
+			       "buddy_init failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 6 * ps, 8 * ps,
+						      2 * ps, ps, &barrier, 0),
+			       "failed to pin barrier\n");
+	check_contig_range_alloc(test, &mm, ps, 5 * ps, 3 * ps, ps,
+				 "partial_fill");
+	gpu_buddy_free_list(&mm, &barrier, 0);
+	gpu_buddy_fini(&mm);
+}
+
 static void gpu_test_buddy_alloc_pathological(struct kunit *test)
 {
 	u64 mm_size, size, start = 0;
@@ -1534,10 +1675,13 @@ static void gpu_test_buddy_alloc_exceeds_max_order(struct kunit *test)
 				     GPU_BUDDY_RANGE_ALLOCATION);
 	KUNIT_EXPECT_EQ(test, err, -EINVAL);
 
-	/* CONTIGUOUS + RANGE should return -EINVAL (no try_harder for RANGE) */
-	err = gpu_buddy_alloc_blocks(&mm, 0, mm_size, size, SZ_4K, &blocks,
-				     GPU_BUDDY_CONTIGUOUS_ALLOCATION | GPU_BUDDY_RANGE_ALLOCATION);
-	KUNIT_EXPECT_EQ(test, err, -EINVAL);
+	/* CONTIGUOUS + RANGE should succeed via the range-aware try_harder */
+	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_alloc_blocks(&mm, 0, mm_size, size,
+							    SZ_4K, &blocks,
+							    GPU_BUDDY_CONTIGUOUS_ALLOCATION |
+							    GPU_BUDDY_RANGE_ALLOCATION),
+			       "range contiguous alloc hit an error size=%llu\n", size);
+	gpu_buddy_free_list(&mm, &blocks, 0);
 
 	gpu_buddy_fini(&mm);
 }
@@ -1583,6 +1727,70 @@ static void gpu_test_buddy_addr_to_block(struct kunit *test)
 
 	/* 3. Standard inline cleanup flow */
 	gpu_buddy_free_list(&mm, &allocated_list, 0);
+	gpu_buddy_fini(&mm);
+}
+
+static void gpu_test_buddy_alloc_contiguous_descent(struct kunit *test)
+{
+	const unsigned long ps = SZ_4K, mm_size = 16 * ps;
+	struct gpu_buddy_block *block, *prev;
+	LIST_HEAD(allocated);
+	struct gpu_buddy mm;
+	LIST_HEAD(pin_lo);
+	LIST_HEAD(pin_hi);
+	u64 total;
+
+	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_init(&mm, mm_size, ps),
+			       "buddy_init failed\n");
+
+	/*
+	 * Pin [0, 16K) and [48K, 64K). The remaining [16K, 48K) is free as two
+	 * adjacent 16K halves under different parents; being un-mergeable
+	 * buddies they never coalesce, so free_tree[3] (32K) stays empty. A
+	 * contiguous 32K request with min_block_size 4K therefore has no 32K
+	 * anchor and must descend to order 2 and stitch [16K, 48K).
+	 */
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 0, 4 * ps, 4 * ps,
+						      ps, &pin_lo, 0),
+			       "failed to pin low block\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 12 * ps, 16 * ps,
+						      4 * ps, ps, &pin_hi, 0),
+			       "failed to pin high block\n");
+
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 0, mm_size, 8 * ps,
+						      ps, &allocated,
+						      GPU_BUDDY_CONTIGUOUS_ALLOCATION),
+			       "contiguous alloc failed to descend\n");
+
+	/* The result must be exactly 8*ps, contiguous, within [16K, 48K). */
+	total = 0;
+	prev = NULL;
+	list_for_each_entry(block, &allocated, link) {
+		u64 offset = gpu_buddy_block_offset(block);
+		u64 bsize = gpu_buddy_block_size(&mm, block);
+
+		KUNIT_EXPECT_TRUE_MSG(test, offset >= 4 * ps &&
+				      offset + bsize <= 12 * ps,
+				      "block [%llx, %llx) outside stitched span\n",
+				      offset, offset + bsize);
+		if (prev)
+			KUNIT_EXPECT_EQ_MSG(test,
+					    gpu_buddy_block_offset(prev) +
+					    gpu_buddy_block_size(&mm, prev),
+					    offset,
+					    "block at %llx not contiguous\n",
+					    offset);
+		prev = block;
+		total += bsize;
+	}
+	KUNIT_EXPECT_EQ(test, total, 8 * ps);
+
+	gpu_buddy_free_list(&mm, &allocated, 0);
+	gpu_buddy_free_list(&mm, &pin_lo, 0);
+	gpu_buddy_free_list(&mm, &pin_hi, 0);
 	gpu_buddy_fini(&mm);
 }
 
@@ -1716,6 +1924,8 @@ static struct kunit_case gpu_buddy_tests[] = {
 	KUNIT_CASE(gpu_test_buddy_alloc_pessimistic),
 	KUNIT_CASE(gpu_test_buddy_alloc_pathological),
 	KUNIT_CASE(gpu_test_buddy_alloc_contiguous),
+	KUNIT_CASE(gpu_test_buddy_alloc_range_contiguous),
+	KUNIT_CASE(gpu_test_buddy_alloc_contiguous_descent),
 	KUNIT_CASE(gpu_test_buddy_alloc_clear),
 	KUNIT_CASE(gpu_test_buddy_alloc_range),
 	KUNIT_CASE(gpu_test_buddy_alloc_range_bias),
