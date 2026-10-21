@@ -282,12 +282,6 @@ static bool rtw_rx_ccmp_hdr_valid(struct rtw_rx_pkt_stat *pkt_stat,
 	return iv[2] == 0 && (iv[3] & BIT(5));
 }
 
-/* A forward PN jump this large between two frames of one key/TID is not
- * plausible; frames with garbage after the 802.11 header produce random
- * 48-bit PNs.
- */
-#define RTW_RX_PN_GUARD_JUMP	BIT_ULL(24)
-
 static u64 rtw_rx_ccmp_pn(const u8 *iv)
 {
 	return (u64)iv[0] | (u64)iv[1] << 8 | (u64)iv[4] << 16 |
@@ -386,7 +380,8 @@ static void rtw_rx_pn_guard(struct rtw_dev *rtwdev,
 	if (pn <= max)
 		return;
 
-	if (pn - max > RTW_RX_PN_GUARD_JUMP) {
+	/* rtw_pn_guard_jump is 2^24 by default; see the comment above */
+	if (pn - max > READ_ONCE(rtw_pn_guard_jump)) {
 		if (READ_ONCE(rtw_sw_decrypt_suspect))
 			pkt_stat->decrypted = false;
 		rtw_rx_report_suspect(rtwdev, "PN jump", pkt_stat, rx_desc8,
