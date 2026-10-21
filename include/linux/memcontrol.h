@@ -674,6 +674,9 @@ int mem_cgroup_swapin_charge_folio(struct folio *folio, unsigned short id,
 bool mem_cgroup_charge_dmabuf(struct dma_buf *dmabuf, struct mem_cgroup *memcg,
 			      gfp_t gfp_mask);
 
+bool mem_cgroup_transfer_dmabuf_charge(struct dma_buf *dmabuf,
+				       struct mem_cgroup *new_memcg);
+
 void __mem_cgroup_uncharge(struct folio *folio);
 
 /**
@@ -1179,6 +1182,12 @@ static inline int mem_cgroup_swapin_charge_folio(struct folio *folio,
 static inline bool mem_cgroup_charge_dmabuf(struct dma_buf *dmabuf,
 					    struct mem_cgroup *memcg,
 					    gfp_t gfp_mask)
+{
+	return true;
+}
+
+static inline bool mem_cgroup_transfer_dmabuf_charge(struct dma_buf *dmabuf,
+						     struct mem_cgroup *new_memcg)
 {
 	return true;
 }
