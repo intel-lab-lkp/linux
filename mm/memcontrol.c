@@ -69,6 +69,7 @@
 #include <net/ip.h>
 #include "slab.h"
 #include "memcontrol-v1.h"
+#include <linux/dma-buf.h>
 
 #include <linux/uaccess.h>
 
@@ -442,6 +443,7 @@ static const unsigned int memcg_stat_items[] = {
 	MEMCG_ZSWAP_B,
 	MEMCG_ZSWAPPED,
 	MEMCG_ZSWAP_INCOMP,
+	MEMCG_DMABUF,
 };
 
 #define NR_MEMCG_NODE_STAT_ITEMS ARRAY_SIZE(memcg_node_stat_items)
@@ -1625,6 +1627,7 @@ static const struct memory_stat memory_stats[] = {
 #ifdef CONFIG_HUGETLB_PAGE
 	{ "hugetlb",			NR_HUGETLB			},
 #endif
+	{ "dmabuf",			MEMCG_DMABUF			},
 
 	/* The memory events */
 	{ "workingset_refault_anon",	WORKINGSET_REFAULT_ANON		},
@@ -5656,6 +5659,57 @@ void mem_cgroup_sk_uncharge(const struct sock *sk, unsigned int nr_pages)
 void mem_cgroup_flush_workqueue(void)
 {
 	flush_workqueue(memcg_wq);
+}
+
+/**
+ * mem_cgroup_charge_dmabuf - charge a dma-buf to a memcg
+ * @dmabuf: buffer to charge
+ * @memcg: memcg to charge; caller must hold a reference
+ * @gfp_mask: reclaim mode
+ *
+ * Charges the memory backing @dmabuf to @memcg and, on success, stores
+ * @memcg in @dmabuf->memcg (transferring the caller's reference).
+ * Returns %true on success, %false if the charge would exceed the limit.
+ * On failure the caller retains its reference to @memcg.
+ */
+bool mem_cgroup_charge_dmabuf(struct dma_buf *dmabuf, struct mem_cgroup *memcg,
+			      gfp_t gfp_mask)
+{
+	unsigned int nr_pages = PAGE_ALIGN(dmabuf->size) >> PAGE_SHIFT;
+
+	if (mem_cgroup_disabled())
+		return true;
+
+	if (try_charge(memcg, gfp_mask, nr_pages))
+		return false;
+
+	mod_memcg_state(memcg, MEMCG_DMABUF, nr_pages);
+	dmabuf->memcg = memcg;
+	return true;
+}
+
+/**
+ * mem_cgroup_uncharge_dmabuf - uncharge a dma-buf from its memcg
+ * @dmabuf: buffer to uncharge
+ *
+ * Reverses a successful mem_cgroup_charge_dmabuf(). Drops the memcg
+ * reference stored in @dmabuf->memcg and clears the pointer.
+ * Safe to call when @dmabuf->memcg is %NULL.
+ */
+void mem_cgroup_uncharge_dmabuf(struct dma_buf *dmabuf)
+{
+	unsigned int nr_pages;
+	struct mem_cgroup *memcg = dmabuf->memcg;
+
+	if (!memcg)
+		return;
+
+	nr_pages = PAGE_ALIGN(dmabuf->size) >> PAGE_SHIFT;
+	mod_memcg_state(memcg, MEMCG_DMABUF, -nr_pages);
+	if (!mem_cgroup_is_root(memcg))
+		refill_stock(memcg, nr_pages);
+	mem_cgroup_put(memcg);
+	dmabuf->memcg = NULL;
 }
 
 static int __init cgroup_memory(char *s)
