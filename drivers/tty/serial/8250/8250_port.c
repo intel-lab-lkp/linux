@@ -354,22 +354,6 @@ static void default_serial_dl_write(struct uart_8250_port *up, u32 value)
 	serial_out(up, UART_DLM, value >> 8 & 0xff);
 }
 
-#ifdef CONFIG_HAS_IOPORT
-static u32 hub6_serial_in(struct uart_port *p, unsigned int offset)
-{
-	offset = offset << p->regshift;
-	outb(p->hub6 - 1 + offset, p->iobase);
-	return inb(p->iobase + 1);
-}
-
-static void hub6_serial_out(struct uart_port *p, unsigned int offset, u32 value)
-{
-	offset = offset << p->regshift;
-	outb(p->hub6 - 1 + offset, p->iobase);
-	outb(value, p->iobase + 1);
-}
-#endif /* CONFIG_HAS_IOPORT */
-
 static u32 mem_serial_in(struct uart_port *p, unsigned int offset)
 {
 	offset = offset << p->regshift;
@@ -450,13 +434,6 @@ static void set_io_from_upio(struct uart_port *p)
 	up->dl_write = default_serial_dl_write;
 
 	switch (p->iotype) {
-#ifdef CONFIG_HAS_IOPORT
-	case UPIO_HUB6:
-		p->serial_in = hub6_serial_in;
-		p->serial_out = hub6_serial_out;
-		break;
-#endif
-
 	case UPIO_MEM:
 		p->serial_in = mem_serial_in;
 		p->serial_out = mem_serial_out;

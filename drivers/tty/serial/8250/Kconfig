@@ -208,9 +208,9 @@ config SERIAL_8250_EXTENDED
 	depends on SERIAL_8250
 	help
 	  If you wish to use any non-standard features of the standard "dumb"
-	  driver, say Y here. This includes HUB6 support, shared serial
-	  interrupts, special multiport support, support for more than the
-	  four COM 1/2/3/4 boards, etc.
+	  driver, say Y here. This includes shared serial interrupts, special
+	  multiport support, support for more than the four COM 1/2/3/4 boards,
+	  etc.
 
 	  Note that the answer to this question won't directly affect the
 	  kernel: saying N will just cause the configurator to skip all
@@ -291,15 +291,6 @@ config SERIAL_8250_EXAR_ST16C554
 
 	  To compile this driver as a module, choose M here: the module
 	  will be called 8250_exar_st16c554.
-
-config SERIAL_8250_HUB6
-	bool "Support Hub6 cards"
-	depends on SERIAL_8250_MANY_PORTS && ISA
-	help
-	  Say Y here if you have a HUB6 serial board.
-
-	  To compile this driver as a module, choose M here: the module
-	  will be called 8250_hub6.
 
 config SERIAL_8250_PCI1XXXX
 	tristate "Microchip 8250 based serial port"

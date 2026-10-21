@@ -1079,8 +1079,6 @@ static int cdns_uart_verify_port(struct uart_port *port,
 		return -EINVAL;
 	if (port->iobase != ser->port)
 		return -EINVAL;
-	if (ser->hub6 != 0)
-		return -EINVAL;
 	return 0;
 }
 

@@ -430,7 +430,6 @@ typedef unsigned int __bitwise upstat_t;
 enum uart_iotype {
 	UPIO_UNKNOWN	= -1,
 	UPIO_PORT	= SERIAL_IO_PORT,	/* 8b I/O port access */
-	UPIO_HUB6	= SERIAL_IO_HUB6,	/* Hub6 ISA card */
 	UPIO_MEM	= SERIAL_IO_MEM,	/* driver-specific */
 	UPIO_MEM32	= SERIAL_IO_MEM32,	/* 32b little endian */
 	UPIO_AU		= SERIAL_IO_AU,		/* Au1x00 and RT288x type IO */
@@ -590,7 +589,6 @@ struct uart_port {
 	unsigned char		has_sysrq;
 	unsigned char		sysrq_seq;		/* index in sysrq_toggle_seq */
 
-	unsigned char		hub6;			/* this should be in the 8250 driver */
 	unsigned char		suspended;
 	unsigned char		console_reinit;
 	const char		*name;			/* port name */

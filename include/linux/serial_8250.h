@@ -41,7 +41,6 @@ struct plat_serial8250_port {
 	void            *private_data;
 	unsigned char	regshift;	/* register shift */
 	unsigned char	iotype;		/* UPIO_* */
-	unsigned char	hub6;
 	unsigned char	has_sysrq;	/* supports magic SysRq */
 	unsigned int	type;		/* If UPF_FIXED_TYPE */
 	upf_t		flags;		/* UPF_* flags */
@@ -75,7 +74,6 @@ enum {
 	PLAT8250_DEV_ACCENT,
 	PLAT8250_DEV_BOCA,
 	PLAT8250_DEV_EXAR_ST16C554,
-	PLAT8250_DEV_HUB6,
 	PLAT8250_DEV_AU1X00,
 	PLAT8250_DEV_SM501,
 };
