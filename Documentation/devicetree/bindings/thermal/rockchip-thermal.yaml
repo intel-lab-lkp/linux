@@ -21,6 +21,7 @@ properties:
       - rockchip,rk3368-tsadc
       - rockchip,rk3399-tsadc
       - rockchip,rk3568-tsadc
+      - rockchip,rk3572-tsadc
       - rockchip,rk3576-tsadc
       - rockchip,rk3588-tsadc
       - rockchip,rv1108-tsadc
@@ -151,6 +152,7 @@ allOf:
             contains:
               enum:
                 - rockchip,rk3568-tsadc
+                - rockchip,rk3572-tsadc
                 - rockchip,rk3576-tsadc
     then:
       patternProperties:
