@@ -205,30 +205,6 @@ enum fxls8962af_int_pin {
 	FXLS8962AF_PIN_INT2,
 };
 
-static int fxls8962af_power_on(struct fxls8962af_data *data)
-{
-	struct device *dev = regmap_get_device(data->regmap);
-	int ret;
-
-	ret = pm_runtime_resume_and_get(dev);
-	if (ret)
-		dev_err(dev, "failed to power on\n");
-
-	return ret;
-}
-
-static int fxls8962af_power_off(struct fxls8962af_data *data)
-{
-	struct device *dev = regmap_get_device(data->regmap);
-	int ret;
-
-	ret = pm_runtime_put_autosuspend(dev);
-	if (ret)
-		dev_err(dev, "failed to power off\n");
-
-	return ret;
-}
-
 static int fxls8962af_standby(struct fxls8962af_data *data)
 {
 	return regmap_clear_bits(data->regmap, FXLS8962AF_SENS_CONFIG1,
@@ -263,16 +239,18 @@ static int fxls8962af_get_out(struct fxls8962af_data *data,
 
 	is_active = fxls8962af_is_active(data);
 	if (!is_active) {
-		ret = fxls8962af_power_on(data);
-		if (ret)
+		ret = pm_runtime_resume_and_get(dev);
+		if (ret) {
+			dev_err(dev, "failed to power on: %d\n", ret);
 			return ret;
+		}
 	}
 
 	ret = regmap_bulk_read(data->regmap, chan->address,
 			       &raw_val, sizeof(data->lower_thres));
 
 	if (!is_active)
-		fxls8962af_power_off(data);
+		pm_runtime_put_autosuspend(dev);
 
 	if (ret) {
 		dev_err(dev, "failed to get out reg 0x%lx\n", chan->address);
@@ -628,6 +606,7 @@ fxls8962af_write_event_config(struct iio_dev *indio_dev,
 			      enum iio_event_direction dir, bool state)
 {
 	struct fxls8962af_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
 	u8 enable_event, enable_bits;
 	int ret, value;
 
@@ -687,18 +666,22 @@ fxls8962af_write_event_config(struct iio_dev *indio_dev,
 
 	if (data->enable_event) {
 		fxls8962af_active(data);
-		ret = fxls8962af_power_on(data);
+		ret = pm_runtime_resume_and_get(dev);
+		if (ret) {
+			dev_err(dev, "failed to power on: %d\n", ret);
+			return ret;
+		}
 	} else {
 		if (!iio_device_claim_direct(indio_dev))
 			return -EBUSY;
 
 		/* Not in buffered mode so disable power */
-		ret = fxls8962af_power_off(data);
+		pm_runtime_put_autosuspend(dev);
 
 		iio_device_release_direct(indio_dev);
 	}
 
-	return ret;
+	return 0;
 }
 
 static const struct iio_event_spec fxls8962af_event[] = {
@@ -840,7 +823,15 @@ static int __fxls8962af_fifo_set_mode(struct fxls8962af_data *data, bool onoff)
 
 static int fxls8962af_buffer_preenable(struct iio_dev *indio_dev)
 {
-	return fxls8962af_power_on(iio_priv(indio_dev));
+	struct fxls8962af_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
+	int ret;
+
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret)
+		dev_err(dev, "failed to power on: %d\n", ret);
+
+	return ret;
 }
 
 static int fxls8962af_buffer_postenable(struct iio_dev *indio_dev)
@@ -889,9 +880,10 @@ static int fxls8962af_buffer_predisable(struct iio_dev *indio_dev)
 static int fxls8962af_buffer_postdisable(struct iio_dev *indio_dev)
 {
 	struct fxls8962af_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
 
 	if (!data->enable_event)
-		fxls8962af_power_off(data);
+		pm_runtime_put_autosuspend(dev);
 
 	return 0;
 }
