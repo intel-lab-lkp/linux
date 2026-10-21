@@ -23,6 +23,7 @@ properties:
       - rockchip,rk3528-usb2phy
       - rockchip,rk3562-usb2phy
       - rockchip,rk3568-usb2phy
+      - rockchip,rk3572-usb2phy
       - rockchip,rk3576-usb2phy
       - rockchip,rk3588-usb2phy
       - rockchip,rv1108-usb2phy
@@ -252,6 +253,19 @@ allOf:
           minItems: 3
         clock-names:
           minItems: 3
+
+  - if:
+      properties:
+        compatible:
+          const: rockchip,rk3572-usb2phy
+    then:
+      properties:
+        clocks:
+          minItems: 2
+          maxItems: 2
+        clock-names:
+          minItems: 2
+          maxItems: 2
 
 additionalProperties: false
 
