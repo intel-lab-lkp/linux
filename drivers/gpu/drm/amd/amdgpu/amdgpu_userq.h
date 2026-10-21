@@ -41,7 +41,7 @@ enum amdgpu_userq_state {
 };
 
 struct amdgpu_mqd_prop;
-struct amdgpu_cwsr_params;
+struct amdgpu_trap_params;
 
 struct amdgpu_userq_obj {
 	void		 *cpu_ptr;
@@ -202,8 +202,7 @@ int amdgpu_userq_input_va_validate(struct amdgpu_device *adev,
 
 void amdgpu_userq_gem_va_unmap_validate(struct amdgpu_device *adev,
 					struct amdgpu_bo_va_mapping *mapping);
-int amdgpu_userq_input_cwsr_params_validate(
-	struct amdgpu_usermode_queue *queue,
-	struct amdgpu_cwsr_params *cwsr_params);
+int amdgpu_userq_input_trap_params_validate(struct amdgpu_usermode_queue *queue,
+					    struct amdgpu_trap_params *trap_params);
 
 #endif

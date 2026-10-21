@@ -50,7 +50,7 @@
 #include "amdgpu_video_codecs.h"
 #include "amdgpu_ras_mgr.h"
 #include "amdgpu_vm.h"
-#include "amdgpu_cwsr.h"
+#include "amdgpu_trap.h"
 
 void amdgpu_unregister_gpu_instance(struct amdgpu_device *adev)
 {
@@ -1460,15 +1460,15 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 		int num_xcc, r;
 
 		fpriv = (struct amdgpu_fpriv *)filp->driver_priv;
-		if (!amdgpu_cwsr_is_enabled(adev) || !fpriv->cwsr_trap)
+		if (!amdgpu_trap_is_enabled(adev) || !fpriv->trap_obj)
 			return -EOPNOTSUPP;
 		num_xcc = amdgpu_xcp_get_num_xcc(adev->xcp_mgr, fpriv->xcp_id);
 		cwsr_info.ctl_stack_size =
-			adev->cwsr_info->xcc_ctl_stack_sz * num_xcc;
+			adev->trap_info->cwsr.xcc_ctl_stack_sz * num_xcc;
 		cwsr_info.dbg_mem_size =
-			adev->cwsr_info->xcc_dbg_mem_sz * num_xcc;
+			adev->trap_info->cwsr.xcc_dbg_mem_sz * num_xcc;
 		cwsr_info.min_save_area_size =
-			amdgpu_cwsr_size_needed(adev, num_xcc);
+			amdgpu_trap_size_needed(adev, num_xcc);
 		r = copy_to_user(out, &cwsr_info,
 				 min((size_t)size, sizeof(cwsr_info))) ?
 			    -EFAULT :
@@ -1604,8 +1604,9 @@ int amdgpu_driver_open_kms(struct drm_device *dev, struct drm_file *file_priv)
 
 	amdgpu_evf_mgr_init(&fpriv->evf_mgr);
 
-	r = amdgpu_cwsr_alloc(adev, &fpriv->vm,
-			      &fpriv->cwsr_trap);
+	r = amdgpu_trap_alloc(adev,
+			      &fpriv->vm,
+			      &fpriv->trap_obj);
 	if (r == -EOPNOTSUPP)
 		r = 0;
 
@@ -1678,7 +1679,7 @@ void amdgpu_driver_postclose_kms(struct drm_device *dev,
 	}
 
 	amdgpu_ctx_mgr_fini(&fpriv->ctx_mgr);
-	amdgpu_cwsr_free(adev, &fpriv->vm, &fpriv->cwsr_trap);
+	amdgpu_trap_free(adev, &fpriv->vm, &fpriv->trap_obj);
 
 	if (pasid)
 		amdgpu_pasid_free_delayed(pd->tbo.base.resv, pasid);
