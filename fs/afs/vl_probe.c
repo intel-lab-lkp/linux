@@ -22,8 +22,7 @@ static void afs_finished_vl_probe(struct afs_vlserver *server)
 		clear_bit(AFS_VLSERVER_FL_RESPONDING, &server->flags);
 	}
 
-	clear_bit_unlock(AFS_VLSERVER_FL_PROBING, &server->flags);
-	wake_up_bit(&server->flags, AFS_VLSERVER_FL_PROBING);
+	clear_and_wake_up_bit(AFS_VLSERVER_FL_PROBING, &server->flags);
 }
 
 /*

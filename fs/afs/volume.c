@@ -444,6 +444,11 @@ update:
 			set_bit(AFS_VOLUME_NEEDS_UPDATE, &volume->flags);
 		clear_bit_unlock(AFS_VOLUME_WAIT, &volume->flags);
 		clear_bit_unlock(AFS_VOLUME_UPDATING, &volume->flags);
+		/* Memory barrier must be set between clearing AFS_VOLUME_WAIT and
+		 * wake_up_bit() since clear_bit_unlock() is not a full barrier.
+		 * See wake_up_bit() description for more information.
+		 */
+		smp_mb__after_atomic();
 		wake_up_bit(&volume->flags, AFS_VOLUME_WAIT);
 		_leave(" = %d", ret);
 		return ret;
