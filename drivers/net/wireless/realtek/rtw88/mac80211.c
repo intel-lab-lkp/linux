@@ -566,6 +566,9 @@ static int rtw_ops_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	u8 hw_key_idx;
 	int ret = 0;
 
+	/* new keys restart the PN sequences rtw_rx_pn_guard() tracks */
+	atomic_inc(&rtwdev->rx_pn_guard_gen);
+
 	switch (key->cipher) {
 	case WLAN_CIPHER_SUITE_WEP40:
 		hw_key_type = RTW_CAM_WEP40;

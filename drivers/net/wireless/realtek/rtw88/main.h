@@ -43,6 +43,7 @@
 extern bool rtw_bf_support;
 extern bool rtw_disable_lps_deep_mode;
 extern unsigned int rtw_debug_mask;
+extern bool rtw_sw_decrypt_suspect;
 extern bool rtw_edcca_enabled;
 extern const struct ieee80211_ops rtw_ops;
 
@@ -637,6 +638,20 @@ struct rtw_tx_pkt_info {
 	u8 hw_ssn_sel;
 	bool nav_use_hdr;
 	bool bt_null;
+};
+
+/* Suspect frames reported in full; later ones get rate-limited one-liners */
+#define RTW_RX_PN_GUARD_DUMPS	20
+
+/* Highest CCMP PN seen per [group-addressed] key for hardware-decrypted
+ * data frames, see rtw_rx_pn_guard().
+ */
+struct rtw_rx_pn_guard {
+	u64 pn[2];
+	u8 ta[2][ETH_ALEN];
+	bool valid[2];
+	u32 gen;
+	u32 events;
 };
 
 struct rtw_rx_pkt_stat {
@@ -2072,6 +2087,8 @@ struct rtw_dev {
 	struct rtw_fw_state fw;
 	struct rtw_efuse efuse;
 	struct rtw_sec_desc sec;
+	struct rtw_rx_pn_guard rx_pn_guard;
+	atomic_t rx_pn_guard_gen;
 	struct rtw_traffic_stats stats;
 	struct rtw_regd regd;
 	struct rtw_bf_info bf_info;

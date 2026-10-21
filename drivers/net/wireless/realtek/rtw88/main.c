@@ -34,14 +34,18 @@ EXPORT_SYMBOL(rtw_debug_mask);
  * there is a tough reason to maintain rtw_edcca_enabled by device.
  */
 bool rtw_edcca_enabled = true;
+bool rtw_sw_decrypt_suspect;
 
 module_param_named(disable_lps_deep, rtw_disable_lps_deep_mode, bool, 0644);
 module_param_named(support_bf, rtw_bf_support, bool, 0644);
 module_param_named(debug_mask, rtw_debug_mask, uint, 0644);
+module_param_named(sw_decrypt_suspect, rtw_sw_decrypt_suspect, bool, 0644);
 
 MODULE_PARM_DESC(disable_lps_deep, "Set Y to disable Deep PS");
 MODULE_PARM_DESC(support_bf, "Set Y to enable beamformee support");
 MODULE_PARM_DESC(debug_mask, "Debugging mask");
+MODULE_PARM_DESC(sw_decrypt_suspect,
+		 "Set Y to have mac80211 verify hardware-decrypted frames whose CCMP PN jumps implausibly (default: only report them)");
 
 static struct ieee80211_channel rtw_channeltable_2g[] = {
 	{.center_freq = 2412, .hw_value = 1,},
