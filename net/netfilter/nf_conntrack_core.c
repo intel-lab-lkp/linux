@@ -2490,6 +2490,12 @@ void nf_conntrack_cleanup_net_list(struct list_head *net_exit_list)
 	 *  delete...
 	 */
 	synchronize_rcu_expedited();
+
+	/* Packets queued to userspace hold nf_conn references; the hook
+	 * removal only flushed the hook points conntrack was registered at.
+	 */
+	list_for_each_entry(net, net_exit_list, exit_list)
+		nf_queue_nf_hook_drop(net, NULL);
 i_see_dead_people:
 	busy = 0;
 	list_for_each_entry(net, net_exit_list, exit_list) {
