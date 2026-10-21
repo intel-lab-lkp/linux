@@ -8,6 +8,7 @@
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/iopoll.h>
+#include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/termios.h>
 #include <linux/delay.h>
@@ -18,6 +19,10 @@ struct serdev_device;
 /*
  * serdev device structures
  */
+
+/* Large enough to hold the KBUILD_MODNAME of any serdev client driver */
+#define SERDEV_NAME_SIZE	40
+#define SERDEV_MODULE_PREFIX	"serial:"
 
 /**
  * struct serdev_device_ops - Callback operations for a serdev device
@@ -35,6 +40,9 @@ struct serdev_device_ops {
  * struct serdev_device - Basic representation of an serdev device
  * @dev:	Driver model representation of the device.
  * @nr:		Device number on serdev bus.
+ * @name:	Name of the device, set by its creator, empty for devices
+ *		which are enumerated from firmware, see
+ *		serdev_device_set_name().
  * @ctrl:	serdev controller managing this device.
  * @ops:	Device operations.
  * @write_comp:	Completion used by serdev_device_write() internally
@@ -43,6 +51,7 @@ struct serdev_device_ops {
 struct serdev_device {
 	struct device dev;
 	int nr;
+	char name[SERDEV_NAME_SIZE];
 	struct serdev_controller *ctrl;
 	const struct serdev_device_ops *ops;
 	struct completion write_comp;
@@ -133,6 +142,28 @@ static inline void serdev_device_set_client_ops(struct serdev_device *serdev,
 					      const struct serdev_device_ops *ops)
 {
 	serdev->ops = ops;
+}
+
+/**
+ * serdev_device_set_name() - set the name of a serdev device
+ * @serdev:	serdev device.
+ * @name:	non-empty name to use, typically KBUILD_MODNAME of the client
+ *		driver.
+ *
+ * A serdev device is identified by its ACPI companion, by its device tree
+ * node, or by a name set by its creator. Serdev devices which are
+ * instantiated by a driver rather than by firmware have neither of the
+ * former, so they must set a name before serdev_device_add() to be
+ * identifiable. Doing so gives them a SERDEV_MODULE_PREFIX modalias and
+ * makes them match a serdev device driver of the same name.
+ *
+ * Devices enumerated from firmware have no name and keep deriving their
+ * modalias and their driver match from firmware only.
+ */
+static inline void serdev_device_set_name(struct serdev_device *serdev,
+					  const char *name)
+{
+	strscpy(serdev->name, name);
 }
 
 static inline
