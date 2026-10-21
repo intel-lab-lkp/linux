@@ -1597,6 +1597,119 @@ static int gpu_buddy_suite_init(struct kunit_suite *suite)
 	return 0;
 }
 
+static void gpu_test_buddy_alloc_range_clear_guard(struct kunit *test)
+{
+	const unsigned long chunk = SZ_1M, mm_size = SZ_4M;
+	struct gpu_buddy_block *block;
+	LIST_HEAD(high_clear_a);
+	LIST_HEAD(high_clear_b);
+	LIST_HEAD(low_dirty);
+	struct gpu_buddy mm;
+	LIST_HEAD(barrier);
+	LIST_HEAD(result);
+
+	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_init(&mm, mm_size, chunk),
+			       "buddy_init failed\n");
+
+	/*
+	 * Lay out a 4 MiB aperture as three regions:
+	 *
+	 *   [0,  1M)   dirty free
+	 *   [1M, 2M)   allocated  (barrier, keeps the two halves un-mergeable)
+	 *   [2M, 4M)   clear free (one naturally aligned 2 MiB extent)
+	 *
+	 * A dirty (non-clear) range allocation must take the low dirty block
+	 * and leave the large clear extent intact. Without the guard the
+	 * top-down search cuts the higher clear extent instead and returns a
+	 * clear block -- the interleaving that fragments the aperture and
+	 * ultimately fails a large same-class scanout allocation.
+	 */
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 0, chunk, chunk, chunk,
+						      &low_dirty, GPU_BUDDY_RANGE_ALLOCATION),
+			       "alloc [0, 1M) failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, chunk, 2 * chunk, chunk, chunk,
+						      &barrier, GPU_BUDDY_RANGE_ALLOCATION),
+			       "alloc [1M, 2M) failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 2 * chunk, 3 * chunk, chunk, chunk,
+						      &high_clear_a, GPU_BUDDY_RANGE_ALLOCATION),
+			       "alloc [2M, 3M) failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 3 * chunk, 4 * chunk, chunk, chunk,
+						      &high_clear_b, GPU_BUDDY_RANGE_ALLOCATION),
+			       "alloc [3M, 4M) failed\n");
+
+	/* [2M, 4M) coalesces into one aligned clear extent; [0, 1M) stays dirty. */
+	gpu_buddy_free_list(&mm, &low_dirty, 0);
+	gpu_buddy_free_list(&mm, &high_clear_a, GPU_BUDDY_CLEARED);
+	gpu_buddy_free_list(&mm, &high_clear_b, GPU_BUDDY_CLEARED);
+
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 0, mm_size, chunk, chunk,
+						      &result, GPU_BUDDY_RANGE_ALLOCATION),
+			       "dirty range alloc failed\n");
+
+	block = list_first_entry(&result, struct gpu_buddy_block, link);
+	KUNIT_EXPECT_FALSE_MSG(test, gpu_buddy_block_is_clear(block),
+			       "dirty range alloc cut the clear extent (offset=%llx)\n",
+			       gpu_buddy_block_offset(block));
+	KUNIT_EXPECT_EQ(test, gpu_buddy_block_offset(block), 0ULL);
+
+	/*
+	 * Coalesced GPU_BLOCK_MIXED subtree:
+	 *
+	 *   [0,  1M)   allocated (result)
+	 *   [1M, 2M)   dirty free
+	 *   [2M, 3M)   clear free  } coalesced into [2M, 4M) GPU_BLOCK_MIXED
+	 *   [3M, 4M)   dirty free  }
+	 *
+	 * A dirty range alloc restricted to [1M, 3M) visits [2M, 4M) first,
+	 * splits it, rejects the clear [2M, 3M) half and must unsplit
+	 * [2M, 4M) before taking [1M, 2M). Otherwise the split leaks.
+	 */
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 2 * chunk, 3 * chunk, chunk, chunk,
+						      &high_clear_a, GPU_BUDDY_RANGE_ALLOCATION),
+			       "alloc [2M, 3M) failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 3 * chunk, 4 * chunk, chunk, chunk,
+						      &high_clear_b, GPU_BUDDY_RANGE_ALLOCATION),
+			       "alloc [3M, 4M) failed\n");
+	gpu_buddy_free_list(&mm, &barrier, 0);
+	gpu_buddy_free_list(&mm, &high_clear_a, GPU_BUDDY_CLEARED);
+	gpu_buddy_free_list(&mm, &high_clear_b, 0);
+
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, chunk, 3 * chunk, chunk, chunk,
+						      &low_dirty, GPU_BUDDY_RANGE_ALLOCATION),
+			       "dirty range alloc [1M, 3M) failed\n");
+	block = list_first_entry(&low_dirty, struct gpu_buddy_block, link);
+	KUNIT_EXPECT_FALSE(test, gpu_buddy_block_is_clear(block));
+	KUNIT_EXPECT_EQ(test, gpu_buddy_block_offset(block), (u64)chunk);
+
+	/* The rejected split of [2M, 4M) must have been merged back. */
+	KUNIT_EXPECT_EQ(test, mm.free_scoreboard[0], 0ULL);
+	KUNIT_EXPECT_EQ(test, mm.free_scoreboard[1], 1ULL);
+
+	/* A clear alloc must descend into the mixed [2M, 4M) block. */
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 0, mm_size, chunk, chunk,
+						      &high_clear_a,
+						      GPU_BUDDY_RANGE_ALLOCATION |
+						      GPU_BUDDY_CLEAR_ALLOCATION),
+			       "clear range alloc failed\n");
+	block = list_first_entry(&high_clear_a, struct gpu_buddy_block, link);
+	KUNIT_EXPECT_TRUE(test, gpu_buddy_block_is_clear(block));
+	KUNIT_EXPECT_EQ(test, gpu_buddy_block_offset(block), (u64)(2 * chunk));
+
+	gpu_buddy_free_list(&mm, &high_clear_a, GPU_BUDDY_CLEARED);
+	gpu_buddy_free_list(&mm, &low_dirty, 0);
+	gpu_buddy_free_list(&mm, &result, 0);
+	gpu_buddy_fini(&mm);
+}
+
 static struct kunit_case gpu_buddy_tests[] = {
 	KUNIT_CASE(gpu_test_buddy_alloc_limit),
 	KUNIT_CASE(gpu_test_buddy_alloc_optimistic),
@@ -1606,6 +1719,7 @@ static struct kunit_case gpu_buddy_tests[] = {
 	KUNIT_CASE(gpu_test_buddy_alloc_clear),
 	KUNIT_CASE(gpu_test_buddy_alloc_range),
 	KUNIT_CASE(gpu_test_buddy_alloc_range_bias),
+	KUNIT_CASE(gpu_test_buddy_alloc_range_clear_guard),
 	KUNIT_CASE_SLOW(gpu_test_buddy_fragmentation_performance),
 	KUNIT_CASE_SLOW(gpu_test_buddy_dirty_tracker_performance),
 	KUNIT_CASE(gpu_test_buddy_alloc_exceeds_max_order),

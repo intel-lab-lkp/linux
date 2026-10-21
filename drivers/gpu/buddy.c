@@ -1240,11 +1240,46 @@ static void __gpu_buddy_undo_splits(struct gpu_buddy *mm,
 	}
 }
 
+static void unsplit_block(struct gpu_buddy *mm,
+			  struct gpu_buddy_block *block)
+{
+	unsigned int child_order = gpu_buddy_block_order(block) - 1;
+
+	rbtree_remove(mm, block->left);
+	rbtree_remove(mm, block->right);
+	mm->free_scoreboard[child_order] -= 2;
+
+	gpu_block_free(mm, block->left);
+	gpu_block_free(mm, block->right);
+	block->left = NULL;
+	block->right = NULL;
+
+	__mark_free(mm, block, gpu_block_cached_state(block));
+}
+
+static bool block_incompatible(struct gpu_buddy_block *block,
+			       unsigned int order,
+			       unsigned long flags)
+{
+	bool needs_clear = flags & GPU_BUDDY_CLEAR_ALLOCATION;
+
+	if (!gpu_buddy_block_is_free(block))
+		return false;
+
+	if (gpu_buddy_block_order(block) == order)
+		return needs_clear ? !gpu_buddy_block_is_clear(block) :
+				     block->has_clear;
+
+	return needs_clear ? !block->has_clear :
+			     gpu_buddy_block_is_clear(block);
+}
+
 static struct gpu_buddy_block *
 __alloc_range_bias(struct gpu_buddy *mm,
 		   u64 start, u64 end,
 		   unsigned int order,
-		   unsigned long flags)
+		   unsigned long flags,
+		   bool fallback)
 {
 	u64 req_size = mm->chunk_size << order;
 	struct gpu_buddy_block *block;
@@ -1258,9 +1293,7 @@ __alloc_range_bias(struct gpu_buddy *mm,
 	 * This range-constrained search hands back the highest/right-most
 	 * address that satisfies the request: the roots are seeded high-to-low
 	 * and the right (higher-address) child is descended first, making
-	 * top-down the default placement here. A non-top-down clear request is
-	 * the only exception, where the descent is biased towards clear or
-	 * clear-containing subtrees to satisfy the clear preference.
+	 * top-down the default placement here.
 	 */
 	for (i = mm->n_roots - 1; i >= 0; --i)
 		list_add_tail(&mm->roots[i]->tmp_link, &dfs);
@@ -1276,6 +1309,17 @@ __alloc_range_bias(struct gpu_buddy *mm,
 			break;
 
 		list_del(&block->tmp_link);
+
+		/*
+		 * We split this block earlier and found nothing compatible in
+		 * either child; merge it back before moving on.
+		 */
+		if (gpu_buddy_block_is_split(block) &&
+		    gpu_buddy_block_is_free(block->left) &&
+		    gpu_buddy_block_is_free(block->right)) {
+			unsplit_block(mm, block);
+			continue;
+		}
 
 		if (gpu_buddy_block_order(block) < order)
 			continue;
@@ -1298,6 +1342,9 @@ __alloc_range_bias(struct gpu_buddy *mm,
 				continue;
 		}
 
+		if (!fallback && block_incompatible(block, order, flags))
+			continue;
+
 		if (contains(start, end, block_start, block_end) &&
 		    order == gpu_buddy_block_order(block)) {
 			/*
@@ -1313,40 +1360,13 @@ __alloc_range_bias(struct gpu_buddy *mm,
 			err = split_block(mm, block);
 			if (unlikely(err))
 				goto err_undo;
+
+			/* Revisit after the children so the split can be undone. */
+			list_add(&block->tmp_link, &dfs);
 		}
 
-		/*
-		 * Top-down is a strict address-placement policy, so when it is
-		 * requested we ignore clear steering and simply descend the
-		 * right (higher-address) child first. Only a non-top-down clear
-		 * request biases the descent towards clear/has_clear subtrees.
-		 */
-		if ((flags & GPU_BUDDY_CLEAR_ALLOCATION) &&
-		    !(flags & GPU_BUDDY_TOPDOWN_ALLOCATION)) {
-			struct gpu_buddy_block *prefer;
-
-			if (gpu_buddy_block_is_clear(block->right))
-				prefer = block->right;
-			else if (gpu_buddy_block_is_clear(block->left))
-				prefer = block->left;
-			else if (block->right->has_clear)
-				prefer = block->right;
-			else if (block->left->has_clear)
-				prefer = block->left;
-			else
-				prefer = block->right;
-
-			if (prefer == block->right) {
-				list_add(&block->left->tmp_link, &dfs);
-				list_add(&block->right->tmp_link, &dfs);
-			} else {
-				list_add(&block->right->tmp_link, &dfs);
-				list_add(&block->left->tmp_link, &dfs);
-			}
-		} else {
-			list_add(&block->left->tmp_link, &dfs);
-			list_add(&block->right->tmp_link, &dfs);
-		}
+		list_add(&block->left->tmp_link, &dfs);
+		list_add(&block->right->tmp_link, &dfs);
 	} while (1);
 
 	return ERR_PTR(-ENOSPC);
@@ -1359,6 +1379,24 @@ err_undo:
 	 */
 	__gpu_buddy_undo_splits(mm, block);
 	return ERR_PTR(err);
+}
+
+static struct gpu_buddy_block *
+__gpu_buddy_alloc_range_bias(struct gpu_buddy *mm,
+			     u64 start, u64 end,
+			     unsigned int order,
+			     unsigned long flags)
+{
+	struct gpu_buddy_block *block;
+	bool fallback = false;
+
+	block = __alloc_range_bias(mm, start, end, order,
+				   flags, fallback);
+	if (IS_ERR(block))
+		return __alloc_range_bias(mm, start, end, order,
+					  flags, !fallback);
+
+	return block;
 }
 
 /* Return the highest-address free block of at least @order. */
@@ -1924,7 +1962,7 @@ __gpu_buddy_alloc_blocks(struct gpu_buddy *mm,
 
 	if (flags & GPU_BUDDY_RANGE_ALLOCATION) {
 		/* Allocate traversing within the range */
-		block = __alloc_range_bias(mm, start, end, order, flags);
+		block = __gpu_buddy_alloc_range_bias(mm, start, end, order, flags);
 		if (!IS_ERR(block) || !steered)
 			return block;
 
