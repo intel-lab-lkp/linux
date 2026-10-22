@@ -1953,6 +1953,7 @@ static inline bool br_mst_is_enabled(const struct net_bridge_port *p)
 	/* check the port's vlan group to avoid racing with port deletion */
 	return static_branch_unlikely(&br_mst_used) &&
 	       br_opt_get(p->br, BROPT_MST_ENABLED) &&
+	       br_opt_get(p->br, BROPT_VLAN_ENABLED) &&
 	       rcu_access_pointer(p->vlgrp);
 }
 
