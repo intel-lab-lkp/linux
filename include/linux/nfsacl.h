@@ -15,7 +15,6 @@
 /* Maximum number of ACL entries over NFS */
 #define NFS_ACL_MAX_ENTRIES	1024
 
-#define NFSACL_MAXWORDS		(2*(2+3*NFS_ACL_MAX_ENTRIES))
 #define NFSACL_MAXPAGES		((2*(8+12*NFS_ACL_MAX_ENTRIES) + PAGE_SIZE-1) \
 				 >> PAGE_SHIFT)
 
