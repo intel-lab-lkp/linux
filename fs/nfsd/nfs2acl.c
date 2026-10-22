@@ -188,15 +188,28 @@ static __be32 nfsacld_map_errno(int errno)
 static __be32 nfsacld_map_status(__be32 status)
 {
 	switch (status) {
+	case acl2_ok:
+	case acl2err_perm:
+	case acl2err_noent:
+	case acl2err_io:
+	case acl2err_acces:
+	case acl2err_inval:
+	case acl2err_nospc:
+	case acl2err_rofs:
+	case acl2err_notsupp:
+	case acl2err_dquot:
+	case acl2err_stale:
+		return status;
 	case cpu_to_be32(NFS4ERR_NOFILEHANDLE):
 	case cpu_to_be32(NFS3ERR_BADHANDLE):
-		status = acl2err_stale;
-		break;
+		return acl2err_stale;
 	case cpu_to_be32(NFS4ERR_WRONGSEC):
-		status = acl2err_acces;
-		break;
+		return acl2err_acces;
+	case cpu_to_be32(NFS3ERR_NOTSUPP):
+		return acl2err_notsupp;
+	default:
+		return acl2err_io;
 	}
-	return status;
 }
 
 /*
