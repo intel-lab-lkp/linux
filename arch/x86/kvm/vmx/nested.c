@@ -3647,19 +3647,38 @@ enum nvmx_vmentry_status nested_vmx_enter_non_root_mode(struct kvm_vcpu *vcpu,
 
 	kvm_service_local_tlb_flush_requests(vcpu);
 
+	/*
+	 * Snapshot the state that VM-Enter leaves unchanged when the matching
+	 * VM_ENTRY_LOAD_* control is clear, so it can be restored into vmcs02.
+	 * On VM-Enter the active VMCS is vmcs01 and its guest state is what L2
+	 * inherits.  On the !from_vmentry paths (RSM back into L2, and
+	 * KVM_SET_NESTED_STATE) the active VMCS is still vmcs01, i.e. holds
+	 * L1's state, whereas L2's state lives in vmcs12 -- read it from there
+	 * so that resuming L2 doesn't clobber its DEBUGCTL/BNDCFGS/CET with
+	 * L1's values.
+	 */
 	if (!vcpu->arch.nested_run_pending ||
 	    !(vmcs12->vm_entry_controls & VM_ENTRY_LOAD_DEBUG_CONTROLS))
-		vmx->nested.pre_vmenter_debugctl = vmx_guest_debugctl_read();
+		vmx->nested.pre_vmenter_debugctl = from_vmentry ?
+			vmx_guest_debugctl_read() : vmcs12->guest_ia32_debugctl;
 	if (kvm_mpx_supported() &&
 	    (!vcpu->arch.nested_run_pending ||
 	     !(vmcs12->vm_entry_controls & VM_ENTRY_LOAD_BNDCFGS)))
-		vmx->nested.pre_vmenter_bndcfgs = vmcs_read64(GUEST_BNDCFGS);
+		vmx->nested.pre_vmenter_bndcfgs = from_vmentry ?
+			vmcs_read64(GUEST_BNDCFGS) : vmcs12->guest_bndcfgs;
 
 	if (!vcpu->arch.nested_run_pending ||
-	    !(vmcs12->vm_entry_controls & VM_ENTRY_LOAD_CET_STATE))
-		vmcs_read_cet_state(vcpu, &vmx->nested.pre_vmenter_s_cet,
-				    &vmx->nested.pre_vmenter_ssp,
-				    &vmx->nested.pre_vmenter_ssp_tbl);
+	    !(vmcs12->vm_entry_controls & VM_ENTRY_LOAD_CET_STATE)) {
+		if (from_vmentry) {
+			vmcs_read_cet_state(vcpu, &vmx->nested.pre_vmenter_s_cet,
+					    &vmx->nested.pre_vmenter_ssp,
+					    &vmx->nested.pre_vmenter_ssp_tbl);
+		} else {
+			vmx->nested.pre_vmenter_s_cet = vmcs12->guest_s_cet;
+			vmx->nested.pre_vmenter_ssp = vmcs12->guest_ssp;
+			vmx->nested.pre_vmenter_ssp_tbl = vmcs12->guest_ssp_tbl;
+		}
+	}
 
 	/*
 	 * Stash L1's CR3, so that in the event of a "late" VM-Fail, i.e. a
