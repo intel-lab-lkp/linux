@@ -8,17 +8,9 @@
  * guest's devices.  The module calls neither KVM nor iommufd: it answers
  * "what is page N" and revokes a range when the answer changes.
  *
- * The region is either:
- *
- *  - a fixed range given with addr= and len=, which has no struct page, for
- *    example memory hidden from the kernel with memmap= on the command line;
- *  - or, without those parameters, a range from alloc_contig_pages().
- *
  * The control device /dev/mem_provider_sample creates provider files.
- * SETUP makes one file over the whole region.  NEW_CHILD carves part of the
- * region into a child file, and MOVE, DONATE and RECLAIM change which child
- * has which page.  A page can also be taken away or made read only.  See
- * mem_provider_sample.h.
+ * NEW_CHILD carves part of the region into a child file. A page can also
+ * be taken away. See mem_provider_sample.h.
  *
  * Confidential VMs are not supported.
  */
@@ -37,15 +29,6 @@
 #include <linux/slab.h>
 
 #include "mem_provider_sample.h"
-
-static unsigned long long addr;
-module_param(addr, ullong, 0444);
-MODULE_PARM_DESC(addr,
-		 "Physical base of a region with no struct page (optional)");
-
-static unsigned long long len;
-module_param(len, ullong, 0444);
-MODULE_PARM_DESC(len, "Size in bytes of that region (optional)");
 
 /*
  * One provider file.
@@ -314,32 +297,26 @@ static struct page *mps_alloc_region(unsigned long npages)
 
 /* ---- Root and children -------------------------------------------------- */
 
-/* Create the root on the first NEW_CHILD, from addr=/len= or of @size. */
+/* Create the root on the first NEW_CHILD of @size. */
 static int mps_root_ensure(u64 size)
 {
-	struct page *pages = NULL;
+	struct page *pages;
 	unsigned long npages;
 
 	lockdep_assert_held(&mps_root.lock);
 	if (mps_root.npages)
 		return 0;
 
-	if (addr && len) {
-		mps_root.base_pfn = addr >> PAGE_SHIFT;
-		npages = len >> PAGE_SHIFT;
-	} else {
-		if (!size || !PAGE_ALIGNED(size))
-			return -EINVAL;
-		npages = size >> PAGE_SHIFT;
-		pages = mps_alloc_region(npages);
-		if (!pages)
-			return -ENOMEM;
-		mps_root.base_pfn = page_to_pfn(pages);
-	}
+	if (!size || !PAGE_ALIGNED(size))
+		return -EINVAL;
+	npages = size >> PAGE_SHIFT;
+	pages = mps_alloc_region(npages);
+	if (!pages)
+		return -ENOMEM;
+	mps_root.base_pfn = page_to_pfn(pages);
 	mps_root.allocated = bitmap_zalloc(npages, GFP_KERNEL);
 	if (!mps_root.allocated) {
-		if (pages)
-			free_contig_range(page_to_pfn(pages), npages);
+		free_contig_range(page_to_pfn(pages), npages);
 		return -ENOMEM;
 	}
 	mps_root.cma_pages = pages;
@@ -488,12 +465,6 @@ static struct miscdevice mps_dev = {
 static int __init mps_init(void)
 {
 	int ret;
-
-	if ((addr || len) &&
-	    (!addr || !len || !PAGE_ALIGNED(addr) || !PAGE_ALIGNED(len))) {
-		pr_err("mem_provider_sample: addr= and len= must both be set and page aligned\n");
-		return -EINVAL;
-	}
 
 	mutex_init(&mps_root.lock);
 	INIT_LIST_HEAD(&mps_root.children);
