@@ -40,6 +40,8 @@
  *   ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+pragma header nfs_acl2;
+
 const NFS_ACL_MAX_ENTRIES = 1024;
 
 typedef unsigned int uid;
