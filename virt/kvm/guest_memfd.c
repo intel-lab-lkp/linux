@@ -421,18 +421,25 @@ static void kvm_gmem_pfn_reclaim(struct gmem_inode *gi, pgoff_t start, pgoff_t e
 static void kvm_gmem_pfn_reclaim(struct gmem_inode *gi, pgoff_t start, pgoff_t end) {}
 #endif
 
-static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
+static int __kvm_gmem_revoke(struct inode *inode, pgoff_t start,
+			      size_t nr_pages, const unsigned long *pfn,
+			      bool put_pfn_range)
 {
 	enum kvm_gfn_range_filter filter = kvm_gmem_get_all_gfns_filter(inode);
-	loff_t size = i_size_read(inode);
-	pgoff_t start, end;
+	pgoff_t max_pages = i_size_read(inode) >> PAGE_SHIFT;
+	loff_t offset, len;
+	pgoff_t end;
 
-	if (offset >= size)
+	if (start >= max_pages)
 		return 0;
 
-	len = min(len, size - offset);
-	start = offset >> PAGE_SHIFT;
-	end = (offset + len) >> PAGE_SHIFT;
+	nr_pages = min_t(size_t, nr_pages, max_pages - start);
+	if (!nr_pages)
+		return 0;
+
+	offset = (loff_t)start << PAGE_SHIFT;
+	len = (loff_t)nr_pages << PAGE_SHIFT;
+	end = start + nr_pages;
 
 	/*
 	 * Bindings must be stable across invalidation to ensure the start+end
@@ -444,8 +451,14 @@ static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 
 	if (kvm_gmem_is_pfn_mode(GMEM_I(inode))) {
 		unmap_mapping_range(inode->i_mapping, offset, len, 0);
-		kvm_gmem_pfn_reclaim(GMEM_I(inode), start, end);
-		gmem_provider_put_pfn_range(GMEM_I(inode), start, end - start);
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_RECLAIM
+		if (pfn)
+			kvm_arch_gmem_reclaim(*pfn, nr_pages);
+		else
+			kvm_gmem_pfn_reclaim(GMEM_I(inode), start, end);
+#endif
+		if (put_pfn_range)
+			gmem_provider_put_pfn_range(GMEM_I(inode), start, nr_pages);
 	} else {
 		truncate_inode_pages_range(inode->i_mapping, offset, offset + len - 1);
 	}
@@ -456,6 +469,38 @@ static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 
 	return 0;
 }
+
+static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
+{
+	return __kvm_gmem_revoke(inode, offset >> PAGE_SHIFT, len >> PAGE_SHIFT,
+				 NULL, true);
+}
+
+/**
+ * kvm_gmem_revoke - Revoke and reclaim a range of memory in guest_memfd.
+ * @inode:    The guest_memfd inode.
+ * @start:    Starting page index within the file.
+ * @nr_pages: Number of pages to revoke.
+ * @pfn:      The physical address / frame number being revoked. Directly
+ *            reclaims this physical range without querying the provider's
+ *            .lookup_pfn_range().
+ *
+ * guest_memfd will do everything to make sure the range revoked is no longer in
+ * use across guest and host mappings, as well as reclaim any confidential
+ * architecture state.
+ *
+ * Must be called before accessing memory contents. Keeping the mapping from
+ * @start to @pfn constant is the responsibility of the caller.
+ * .put_pfn_range() will not be called.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int kvm_gmem_revoke(struct inode *inode, pgoff_t start, size_t nr_pages,
+		    const unsigned long *pfn)
+{
+	return __kvm_gmem_revoke(inode, start, nr_pages, pfn, false);
+}
+EXPORT_SYMBOL_GPL(kvm_gmem_revoke);
 
 static long kvm_gmem_allocate(struct inode *inode, loff_t offset, loff_t len)
 {
