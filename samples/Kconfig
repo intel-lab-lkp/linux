@@ -326,6 +326,23 @@ source "samples/rust/Kconfig"
 
 source "samples/damon/Kconfig"
 
+config SAMPLE_KVM_MEM_PROVIDER
+	tristate "Build sample memory provider -- loadable module only"
+	depends on MEM_PROVIDER && CONTIG_ALLOC && X86_64 && m
+	help
+	  This builds a sample memory provider (include/linux/mem_provider.h).
+	  Its files can back a guest_memfd and be mapped by iommufd.  Loaded
+	  with addr= and len=, it lends a fixed physical range that has no
+	  struct page, for example memory hidden with memmap= on the command
+	  line.  Without them, it allocates a contiguous region with
+	  alloc_contig_pages().
+
+	  It shows how a memory owner moves pages between VMs, takes them
+	  back or makes them read only, and how guest_memfd and iommufd
+	  follow each change.
+
+	  If unsure, say N.
+
 endif # SAMPLES
 
 config HAVE_SAMPLE_FTRACE_DIRECT
