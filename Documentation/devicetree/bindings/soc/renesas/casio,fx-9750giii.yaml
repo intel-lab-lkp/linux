@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/renesas/casio,fx-9750giii.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Casio fx-9750GIII Graphing Calculator
+
+maintainers:
+  - Artem Novak <artem122novak@gmail.com>
+
+description:
+  The Casio fx-9750GIII graphing calculator is based on
+  the Renesas SH7305 processor.
+
+select:
+  properties:
+    compatible:
+      contains:
+        const: casio,fx-9750giii
+  required:
+    - compatible
+
+properties:
+  compatible:
+    items:
+      - const: casio,fx-9750giii
+      - const: renesas,sh7305
+
+required:
+  - compatible
+
+additionalProperties: true
