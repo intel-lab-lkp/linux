@@ -1075,29 +1075,21 @@ void svc_age_temp_xprts_now(struct svc_serv *serv, struct sockaddr *server_addr)
 {
 	struct svc_xprt *xprt;
 	struct list_head *le, *next;
-	LIST_HEAD(to_be_closed);
 
 	spin_lock_bh(&serv->sv_lock);
 	list_for_each_safe(le, next, &serv->sv_tempsocks) {
 		xprt = list_entry(le, struct svc_xprt, xpt_list);
-		if (rpc_cmp_addr(server_addr, (struct sockaddr *)
-				&xprt->xpt_local)) {
-			dprintk("svc_age_temp_xprts_now: found %p\n", xprt);
-			list_move(le, &to_be_closed);
-		}
-	}
-	spin_unlock_bh(&serv->sv_lock);
-
-	while (!list_empty(&to_be_closed)) {
-		le = to_be_closed.next;
+		if (!rpc_cmp_addr(server_addr, (struct sockaddr *)
+				&xprt->xpt_local))
+			continue;
 		list_del_init(le);
-		xprt = list_entry(le, struct svc_xprt, xpt_list);
 		set_bit(XPT_CLOSE, &xprt->xpt_flags);
 		set_bit(XPT_KILL_TEMP, &xprt->xpt_flags);
 		dprintk("svc_age_temp_xprts_now: queuing xprt %p for closing\n",
 				xprt);
 		svc_xprt_enqueue(xprt);
 	}
+	spin_unlock_bh(&serv->sv_lock);
 }
 EXPORT_SYMBOL_GPL(svc_age_temp_xprts_now);
 
