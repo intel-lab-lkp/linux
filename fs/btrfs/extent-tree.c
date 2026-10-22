@@ -4321,6 +4321,18 @@ static int can_allocate_chunk(struct btrfs_fs_info *fs_info,
 	}
 }
 
+static bool find_free_extent_skip_block_group(struct btrfs_block_group *block_group,
+					      struct find_free_extent_ctl *ffe_ctl)
+{
+	if (likely(!block_group->ro && !(block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED)))
+		return false;
+	if (ffe_ctl->for_treelog)
+		btrfs_clear_treelog_bg(block_group);
+	if (ffe_ctl->for_data_reloc)
+		btrfs_clear_data_reloc_bg(block_group);
+	return true;
+}
+
 /*
  * Return >0 means caller needs to re-search for free extent
  * Return 0 means we have the needed free extent.
@@ -4678,15 +4690,8 @@ search:
 		ffe_ctl->hinted = false;
 		ffe_ctl->search_start = block_group->start;
 check_block_group:
-		/* If the block group is read-only, we can skip it entirely. */
-		if (unlikely(block_group->ro ||
-			     (block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED))) {
-			if (ffe_ctl->for_treelog)
-				btrfs_clear_treelog_bg(block_group);
-			if (ffe_ctl->for_data_reloc)
-				btrfs_clear_data_reloc_bg(block_group);
+		if (find_free_extent_skip_block_group(block_group, ffe_ctl))
 			continue;
-		}
 
 		btrfs_lock_block_group(block_group, ffe_ctl->delalloc);
 
