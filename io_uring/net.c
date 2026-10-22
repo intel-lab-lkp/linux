@@ -753,6 +753,8 @@ static int io_recvmsg_copy_hdr(struct io_kiocb *req,
 	if (unlikely(ret))
 		return ret;
 
+	iomsg->msg.msg_inq = 0;
+
 	if (!(req->flags & REQ_F_BUFFER_SELECT)) {
 		ret = io_net_import_vec(req, iomsg, msg.msg_iov, msg.msg_iovlen,
 					ITER_DEST);
@@ -848,7 +850,8 @@ int io_recvmsg_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	}
 
 	if (sr->flags & IORING_RECVSEND_BUNDLE) {
-		if (req->opcode == IORING_OP_RECVMSG)
+		if (req->opcode == IORING_OP_RECVMSG &&
+		    !(sr->flags & IORING_RECV_MULTISHOT))
 			return -EINVAL;
 	}
 
@@ -862,6 +865,37 @@ int io_recvmsg_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 /* bits to clear in old and inherit in new cflags on bundle retry */
 #define CQE_F_MASK	(IORING_CQE_F_SOCK_NONEMPTY|IORING_CQE_F_MORE|\
 			 IORING_CQE_F_BUF_MORE)
+
+static int io_recv_payload_len(struct io_kiocb *req,
+			       struct io_async_msghdr *kmsg, int consumed)
+{
+	size_t hdr;
+
+	if (req->opcode != IORING_OP_RECVMSG ||
+	    !(req->flags & REQ_F_APOLL_MULTISHOT) || consumed <= 0)
+		return consumed;
+
+	if (check_add_overflow(sizeof(struct io_uring_recvmsg_out),
+			       (size_t)kmsg->namelen, &hdr) ||
+	    check_add_overflow(hdr, kmsg->controllen, &hdr) ||
+	    (size_t)consumed <= hdr)
+		return 0;
+
+	return consumed - (int)hdr;
+}
+
+static bool io_recvmsg_bundle_bufs_left(struct io_async_msghdr *kmsg,
+					int nbufs)
+{
+	struct iov_iter *iter = &kmsg->msg.msg_iter;
+	const struct iovec *iov;
+
+	if (!iter_is_iovec(iter))
+		return false;
+
+	iov = kmsg->vec.iovec ?: &kmsg->fast_iov;
+	return iter_iov(iter) - iov + iter->nr_segs > nbufs;
+}
 
 /*
  * Finishes io_recv and io_recvmsg.
@@ -895,20 +929,37 @@ static inline bool io_recv_finish(struct io_kiocb *req,
 
 	if (sr->flags & IORING_RECVSEND_BUNDLE) {
 		size_t this_ret = sel->val - sr->done_io;
+		int nbufs;
+		int payload = io_recv_payload_len(req, kmsg, consumed);
 
-		cflags |= io_put_kbufs(req, consumed, sel->buf_list, io_bundle_nbufs(kmsg, consumed));
+		/*
+		 * A zero-length plain recv recycles its selection before this point.
+		 * recvmsg still consumes the first buffer for its output envelope.
+		 */
+		if (req->opcode == IORING_OP_RECVMSG && consumed > 0 && !payload)
+			nbufs = 1;
+		else
+			nbufs = io_bundle_nbufs(kmsg, payload);
+
+		cflags |= io_put_kbufs(req, consumed, sel->buf_list, nbufs);
 		if (sr->flags & IORING_RECV_RETRY)
 			cflags = req->cqe.flags | (cflags & CQE_F_MASK);
 		if (sr->mshot_len && sel->val >= sr->mshot_len)
 			sr->flags |= IORING_RECV_MSHOT_CAP;
+		if (req->opcode == IORING_OP_RECVMSG &&
+		    io_recvmsg_bundle_bufs_left(kmsg, nbufs))
+			req->flags &= ~REQ_F_BL_EMPTY;
 		/* bundle with no more immediate buffers, we're done */
 		if (req->flags & REQ_F_BL_EMPTY)
 			goto finish;
 		/*
 		 * If more is available AND it was a full transfer, retry and
-		 * append to this one
+		 * append to this one. This is not supported for recvmsg: each
+		 * CQE must carry exactly one envelope, so appending a second
+		 * recvmsg return into the same completion is not possible.
 		 */
-		if (!(sr->flags & IORING_RECV_NO_RETRY) &&
+		if (req->opcode != IORING_OP_RECVMSG &&
+		    !(sr->flags & IORING_RECV_NO_RETRY) &&
 		    kmsg->msg.msg_inq > 1 && this_ret > 0 &&
 		    !iov_iter_count(&kmsg->msg.msg_iter)) {
 			req->cqe.flags = cflags & ~CQE_F_MASK;
@@ -954,14 +1005,14 @@ finish:
 
 static int io_recvmsg_prep_multishot(struct io_async_msghdr *kmsg,
 				     struct io_sr_msg *sr, void __user **buf,
-				     size_t *len)
+				     size_t *len, size_t total)
 {
 	unsigned long ubuf = (unsigned long) *buf;
 	unsigned long hdr;
 
 	hdr = sizeof(struct io_uring_recvmsg_out) + kmsg->namelen +
 		kmsg->controllen;
-	if (*len < hdr)
+	if (*len < hdr || total < hdr)
 		return -EFAULT;
 
 	if (kmsg->controllen) {
@@ -973,7 +1024,8 @@ static int io_recvmsg_prep_multishot(struct io_async_msghdr *kmsg,
 
 	sr->buf = *buf; /* stash for later copy */
 	*buf = (void __user *) (ubuf + hdr);
-	kmsg->payloadlen = *len = *len - hdr;
+	*len = *len - hdr;
+	kmsg->payloadlen = total - hdr;
 	return 0;
 }
 
@@ -1072,28 +1124,94 @@ static int io_recv_bundle_peek(struct io_kiocb *req,
 	return nr_iovs;
 }
 
+static int io_recvmsg_bundle_select(struct io_kiocb *req,
+				    struct io_async_msghdr *kmsg,
+				    struct io_br_sel *sel)
+{
+	struct io_sr_msg *sr = io_kiocb_to_cmd(req, struct io_sr_msg);
+	struct buf_sel_arg arg;
+	size_t iov0_len, max_len;
+	int nr_iovs;
+	int ret;
+
+	if (sr->len)
+		max_len = sr->len;
+	else if (kmsg->msg.msg_inq > 1)
+		/* the envelope + cmsg also live in the mapped buffers */
+		max_len = kmsg->msg.msg_inq +
+			  sizeof(struct io_uring_recvmsg_out) +
+			  kmsg->namelen + kmsg->controllen;
+	else
+		/*
+		 * No size hint (datagram sockets don't report inq): map all
+		 * available buffers so a single datagram can span them. A
+		 * recvmsg returns at most one datagram and only the consumed
+		 * buffers are committed.
+		 */
+		max_len = MAX_RW_COUNT;
+
+	nr_iovs = io_recv_bundle_peek(req, kmsg, sel, &arg, max_len);
+	if (unlikely(nr_iovs <= 0))
+		return !nr_iovs ? -ENOBUFS : nr_iovs;
+	/* legacy provided buffers map a single buffer and don't set out_len */
+	if (!sel->buf_list)
+		arg.out_len = arg.iovs[0].iov_len;
+
+	if (sel->buf_list && sel->buf_list->flags & IOBL_INC)
+		return -EOPNOTSUPP;
+
+	/* reserve the envelope + cmsg at the front of the first buffer only */
+	iov0_len = arg.iovs[0].iov_len;
+	ret = io_recvmsg_prep_multishot(kmsg, sr, &arg.iovs[0].iov_base,
+					&iov0_len, arg.out_len);
+	if (unlikely(ret))
+		return ret;
+	arg.iovs[0].iov_len = iov0_len;
+
+	iov_iter_init(&kmsg->msg.msg_iter, ITER_DEST, arg.iovs, nr_iovs,
+		      kmsg->payloadlen);
+	return 0;
+}
+
 static int io_recvmsg_buf_select(struct io_kiocb *req,
 				 struct io_async_msghdr *kmsg,
 				 struct io_br_sel *sel,
 				 unsigned int issue_flags)
 {
 	struct io_sr_msg *sr = io_kiocb_to_cmd(req, struct io_sr_msg);
-	size_t len = sr->len;
 	int ret;
 
-	*sel = io_buffer_select(req, &len, sr->buf_group, issue_flags);
-	if (!sel->addr)
-		return -ENOBUFS;
-
-	if (req->flags & REQ_F_APOLL_MULTISHOT) {
-		ret = io_recvmsg_prep_multishot(kmsg, sr, &sel->addr, &len);
-		if (ret) {
+	/*
+	 * Bundle recvmsg spans multiple provided buffers, but the peek
+	 * interface can only be used when the ring is locked. If we came
+	 * in unlocked, fall back to a single-buffer envelope carve.
+	 */
+	if (!(issue_flags & IO_URING_F_UNLOCKED) &&
+	    sr->flags & IORING_RECVSEND_BUNDLE) {
+		ret = io_recvmsg_bundle_select(req, kmsg, sel);
+		if (unlikely(ret < 0)) {
 			io_kbuf_recycle(req, sel->buf_list, issue_flags);
 			return ret;
 		}
+	} else {
+		size_t len = sr->len;
+
+		*sel = io_buffer_select(req, &len, sr->buf_group, issue_flags);
+		if (!sel->addr)
+			return -ENOBUFS;
+
+		if (req->flags & REQ_F_APOLL_MULTISHOT) {
+			ret = io_recvmsg_prep_multishot(kmsg, sr, &sel->addr,
+							&len, len);
+			if (ret) {
+				io_kbuf_recycle(req, sel->buf_list, issue_flags);
+				return ret;
+			}
+		}
+
+		iov_iter_ubuf(&kmsg->msg.msg_iter, ITER_DEST, sel->addr, len);
 	}
 
-	iov_iter_ubuf(&kmsg->msg.msg_iter, ITER_DEST, sel->addr, len);
 	return 0;
 }
 
