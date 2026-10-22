@@ -13,10 +13,44 @@
 #include <linux/gfp.h>
 #include "cache.h"
 #include "xdr.h"
-#include "xdr3.h"
 #include "vfs.h"
 
 #define NFSDDBG_FACILITY		NFSDDBG_PROC
+
+struct posix_acl;
+
+struct nfsd3_getaclargs {
+	struct svc_fh		fh;
+	__u32			mask;
+};
+
+struct nfsd3_getaclres {
+	__be32			status;
+	struct svc_fh		fh;
+	int			mask;
+	struct posix_acl	*acl_access;
+	struct posix_acl	*acl_default;
+	struct kstat		stat;
+};
+
+struct nfsd3_setaclargs {
+	struct svc_fh		fh;
+	__u32			mask;
+	struct posix_acl	*acl_access;
+	struct posix_acl	*acl_default;
+};
+
+struct nfsd3_accessargs {
+	struct svc_fh		fh;
+	__u32			access;
+};
+
+struct nfsd3_accessres {
+	__be32			status;
+	struct svc_fh		fh;
+	__u32			access;
+	struct kstat		stat;
+};
 
 /*
  * These maps are identical to the NFSv3 maps (nfs3proc.c). This enables
