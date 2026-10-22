@@ -19,6 +19,8 @@
 #define ACLPROC3_GETACL		1
 #define ACLPROC3_SETACL		2
 
+/* Maximum number of ACL entries over NFS */
+#define NFS_ACL_MAX_ENTRIES	1024
 
 /* Flags for the getacl/setacl mode */
 #define NFS_ACL			0x0001
