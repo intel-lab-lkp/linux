@@ -16,6 +16,20 @@ static struct clk peripheral_clk = {
 	.flags		= CLK_ENABLE_ON_INIT,
 };
 
+#ifdef CONFIG_CPU_SUBTYPE_SH7305
+/*
+ * SH7305 TMU0 module clock.
+ *
+ * MSTPCR0 bit 15 gates the peripheral clock to TMU0.
+ * Early platform initialization enables the gate before timer setup.
+ */
+static struct clk sh7305_tmu0_clk =
+	SH_CLK_MSTP32(&peripheral_clk, 0xa4150030, 15, 0);
+
+static struct clk_lookup sh7305_tmu0_lookup =
+	CLKDEV_ICK_ID("fck", "sh-tmu.0", &sh7305_tmu0_clk);
+#endif
+
 static struct clk bus_clk = {
 	.parent		= &master_clk,
 	.flags		= CLK_ENABLE_ON_INIT,
@@ -58,7 +72,15 @@ int __init __deprecated cpg_clk_init(void)
 	clkdev_add_table(lookups, ARRAY_SIZE(lookups));
 
 	clk_add_alias("fck", "sh-tmu-sh3.0", "peripheral_clk", NULL);
+#ifdef CONFIG_CPU_SUBTYPE_SH7305
+	if (!ret) {
+		ret = sh_clk_mstp_register(&sh7305_tmu0_clk, 1);
+		if (!ret)
+			clkdev_add(&sh7305_tmu0_lookup);
+	}
+#else
 	clk_add_alias("fck", "sh-tmu.0", "peripheral_clk", NULL);
+#endif
 	clk_add_alias("fck", "sh-tmu.1", "peripheral_clk", NULL);
 	clk_add_alias("fck", "sh-tmu.2", "peripheral_clk", NULL);
 	clk_add_alias("fck", "sh-mtu2", "peripheral_clk", NULL);
