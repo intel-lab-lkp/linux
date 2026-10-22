@@ -212,7 +212,7 @@ module_param(nested, int, S_IRUGO);
 MODULE_PARM_DESC(nested, "Nested virtualization support");
 
 /* allow 1m huge page guest backing */
-static int hpage;
+static int hpage = 1;
 module_param(hpage, int, 0444);
 MODULE_PARM_DESC(hpage, "1m huge page backing support");
 
