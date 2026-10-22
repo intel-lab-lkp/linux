@@ -17,6 +17,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
+#include <linux/guest_memfd.h>
 #include <linux/io.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
@@ -118,11 +119,30 @@ static long mps_file_ioctl(struct file *file, unsigned int cmd,
 	}
 }
 
+static void *mps_gmem_attach(struct inode *gmem_inode,
+			     struct file *resource_file)
+{
+	return get_file(resource_file);
+}
+
+static void mps_gmem_release(void *provider)
+{
+	struct file *resource_file = provider;
+
+	fput(resource_file);
+}
+
+static const struct guest_memfd_provider_operations mps_gmem_provider_ops = {
+	.attach		= mps_gmem_attach,
+	.release	= mps_gmem_release,
+};
+
 static const struct file_operations mps_file_fops = {
 	.owner		= THIS_MODULE,
 	.release	= mps_file_release,
 	.unlocked_ioctl	= mps_file_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
+	.gmem_provider_ops = &mps_gmem_provider_ops,
 };
 
 static long mps_ctl_new_file(void __user *uarg)
