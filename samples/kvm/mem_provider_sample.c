@@ -61,7 +61,6 @@ struct mps_info {
 	unsigned long base_pfn;
 	unsigned long npages;
 	struct page *cma_pages;		/* from alloc_contig_pages(), or NULL */
-	bool fixed;			/* a SETUP file over addr=/len= */
 	bool mmap_capable;
 	bool fixed_wb;			/* holds a ref on the fixed-region WB alias */
 
@@ -87,11 +86,6 @@ static struct mps_root {
 	struct page *cma_pages;
 	unsigned long *allocated;	/* pages allocated to a child */
 	struct list_head children;
-	/*
-	 * The addr=/len= region is used either by one SETUP file or by the
-	 * root, never by both, so that its frames have one owner.
-	 */
-	bool fixed_setup;
 	/* Files over the fixed region that may be mapped into userspace. */
 	unsigned int fixed_wb_users;
 } mps_root;
@@ -289,8 +283,6 @@ static int mps_file_release(struct inode *inode, struct file *file)
 	}
 	if (addr && len && !info->cma_pages) {
 		mutex_lock(&mps_root.lock);
-		if (info->fixed)
-			mps_root.fixed_setup = false;
 		if (info->fixed_wb)
 			mps_fixed_wb_put();
 		mutex_unlock(&mps_root.lock);
@@ -373,66 +365,6 @@ static struct page *mps_alloc_region(unsigned long npages)
 	return pages;
 }
 
-static long mps_ctl_setup(void __user *uarg)
-{
-	struct mps_setup setup;
-	unsigned long base_pfn, npages;
-	struct page *pages = NULL;
-	struct mps_info *info;
-	struct file *file;
-	int fd;
-
-	if (copy_from_user(&setup, uarg, sizeof(setup)))
-		return -EFAULT;
-	if ((setup.flags & ~MPS_FLAG_MMAP_CAPABLE) || setup.pad)
-		return -EINVAL;
-
-	if (addr && len) {
-		/* The fixed region has one owner: this file or the root. */
-		mutex_lock(&mps_root.lock);
-		if (mps_root.fixed_setup || mps_root.npages) {
-			mutex_unlock(&mps_root.lock);
-			return -EBUSY;
-		}
-		fd = mps_new_file(addr >> PAGE_SHIFT, len >> PAGE_SHIFT,
-				  setup.flags, &info, &file);
-		if (fd >= 0 && mps_over_fixed_mappable(info)) {
-			if (mps_fixed_wb_get()) {
-				put_unused_fd(fd);
-				fput(file);
-				fd = -ENOMEM;
-			} else {
-				info->fixed_wb = true;
-			}
-		}
-		if (fd >= 0) {
-			info->fixed = true;
-			mps_root.fixed_setup = true;
-		}
-		mutex_unlock(&mps_root.lock);
-		if (fd >= 0)
-			fd_install(fd, file);
-		return fd;
-	}
-
-	if (!setup.size || !PAGE_ALIGNED(setup.size))
-		return -EINVAL;
-	npages = setup.size >> PAGE_SHIFT;
-	pages = mps_alloc_region(npages);
-	if (!pages)
-		return -ENOMEM;
-	base_pfn = page_to_pfn(pages);
-
-	fd = mps_new_file(base_pfn, npages, setup.flags, &info, &file);
-	if (fd < 0) {
-		free_contig_range(base_pfn, npages);
-		return fd;
-	}
-	info->cma_pages = pages;
-	fd_install(fd, file);
-	return fd;
-}
-
 /* ---- Root and children -------------------------------------------------- */
 
 /* Create the root on the first NEW_CHILD, from addr=/len= or of @size. */
@@ -446,8 +378,6 @@ static int mps_root_ensure(u64 size)
 		return 0;
 
 	if (addr && len) {
-		if (mps_root.fixed_setup)
-			return -EBUSY;
 		mps_root.base_pfn = addr >> PAGE_SHIFT;
 		npages = len >> PAGE_SHIFT;
 	} else {
@@ -596,8 +526,6 @@ static long mps_ctl_ioctl(struct file *file, unsigned int cmd,
 	void __user *uarg = (void __user *)arg;
 
 	switch (cmd) {
-	case MPS_SETUP:
-		return mps_ctl_setup(uarg);
 	case MPS_NEW_CHILD:
 		return mps_ctl_new_child(uarg);
 	case MPS_CTL_SET_PRESENT:

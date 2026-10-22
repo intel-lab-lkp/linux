@@ -14,38 +14,17 @@
  * the ioctls below make.
  */
 
-/* Flags for struct mps_setup and struct mps_new_child */
+/* Flags for struct mps_new_child */
 /* The host may map the pages; otherwise they are NO_USER_MAP */
 #define MPS_FLAG_MMAP_CAPABLE	(1u << 0)
 
-/*
- * ioctl on /dev/mem_provider_sample: create a provider fd.
- *
- * If the module was loaded with addr= and len=, the fd covers that fixed
- * range, which has no struct page, and @size is ignored.  The fixed range
- * then has one owner.  SETUP fails with -EBUSY while a SETUP file uses it,
- * or once the first MPS_NEW_CHILD has made it the root of the children, which
- * lasts until the module is unloaded.  MPS_NEW_CHILD fails with -EBUSY while
- * a SETUP file uses it.  Otherwise the fd covers @size bytes from
- * alloc_contig_pages().
- */
-struct mps_setup {
-	__u32 flags;	/* MPS_FLAG_* */
-	__u32 pad;
-	__u64 size;	/* bytes, page aligned */
-};
-
 #define MPS_IOCTL_BASE		'P'
-#define MPS_SETUP \
-	_IOW(MPS_IOCTL_BASE, 1, struct mps_setup)
 
 /*
  * ---- A tree of owners --------------------------------------------------
  *
  * The control device owns one region, the root.  NEW_CHILD carves part of
- * it into a new provider fd for one VM.  The owner can MOVE pages between
- * children, DONATE pages to the root, so that no child has them, and
- * RECLAIM them.  Each change revokes the range, so KVM and iommufd follow.
+ * it into a new provider fd for one VM.
  *
  * The owner changes a child's pages through the control device
  * (CTL_SET_PRESENT).  A child fd is read-only to its holder: a VMM can
@@ -54,9 +33,7 @@ struct mps_setup {
 
 /*
  * ioctl on /dev/mem_provider_sample: carve [@offset, @offset + @len) of the
- * root into a new child fd.  The child gets every page of the range that no
- * other child has and that is not donated.  Ranges of children may overlap,
- * which is how a page can MOVE between them.  Returns the child fd.
+ * root into a new child fd. Returns the child fd.
  */
 struct mps_new_child {
 	__u32 flags;	/* MPS_FLAG_* */
