@@ -80,12 +80,12 @@ struct SETACL2args_wrapper {
 
 static_assert(offsetof(struct SETACL2args_wrapper, xdrgen) == 0);
 
-struct nfsd3_setaclargs {
-	struct svc_fh		fh;
-	__u32			mask;
-	struct posix_acl	*acl_access;
-	struct posix_acl	*acl_default;
+struct SETACL2res_wrapper {
+	struct SETACL2res	xdrgen;
+	struct kstat		stat;
 };
+
+static_assert(offsetof(struct SETACL2res_wrapper, xdrgen) == 0);
 
 struct nfsd3_accessargs {
 	struct svc_fh		fh;
@@ -398,41 +398,59 @@ fail:
 	goto out;
 }
 
-/*
- * Set the Access and/or Default ACL of a file.
+/**
+ * nfsacld_proc_setacl - SETACL: Set the Access and/or Default ACL of a file
+ * @rqstp: RPC transaction context
+ *
+ * Return:
+ *   %rpc_success:		RPC executed successfully
+ *
+ * RPC synopsis:
+ *   SETACL2res ACLPROC2_SETACL(SETACL2args) = 2;
  */
 static __be32 nfsacld_proc_setacl(struct svc_rqst *rqstp)
 {
-	struct nfsd3_setaclargs *argp = rqstp->rq_argp;
-	struct nfsd_attrstat *resp = rqstp->rq_resp;
+	struct SETACL2args_wrapper *argp = rqstp->rq_argp;
+	struct SETACL2res_wrapper *resp = rqstp->rq_resp;
+	struct svc_fh *fhp = &argp->fh;
 	struct inode *inode;
-	svc_fh *fh;
 	int error;
 
-	dprintk("nfsd: SETACL(2acl)   %s\n", SVCFH_fmt(&argp->fh));
+	nfsacld_fhandle_to_svc_fh(fhp, &argp->xdrgen.fh);
+	dprintk("nfsd: SETACL(2acl)   %s\n", SVCFH_fmt(fhp));
 
-	fh = fh_copy(&resp->fh, &argp->fh);
-	resp->status = fh_verify(rqstp, &resp->fh, 0, NFSD_MAY_SATTR);
-	if (resp->status != acl2_ok)
+	/* A well-formed but invalid ACL is rejected before authorization. */
+	if (argp->invalid) {
+		resp->xdrgen.status = acl2err_inval;
 		goto out;
+	}
 
-	inode = d_inode(fh->fh_dentry);
+	resp->xdrgen.status = fh_verify(rqstp, fhp, 0, NFSD_MAY_SATTR);
+	if (resp->xdrgen.status != acl2_ok)
+		goto out;
+	inode = d_inode(fhp->fh_dentry);
 
-	error = fh_want_write(fh);
+	/* The VFS reports a default ACL on a non-directory as EACCES. */
+	if (argp->acl_default && !S_ISDIR(inode->i_mode)) {
+		resp->xdrgen.status = acl2err_inval;
+		goto out;
+	}
+
+	error = fh_want_write(fhp);
 	if (error)
 		goto out_errno;
 
 	inode_lock(inode);
 
 	error = 0;
-	if (argp->mask & NA_ACL) {
-		error = set_posix_acl(&nop_mnt_idmap, fh->fh_dentry,
+	if (argp->xdrgen.acl.mask & NA_ACL) {
+		error = set_posix_acl(&nop_mnt_idmap, fhp->fh_dentry,
 				      ACL_TYPE_ACCESS, argp->acl_access);
 		if (error)
 			goto out_drop_lock;
 	}
-	if (argp->mask & NA_DFACL) {
-		error = set_posix_acl(&nop_mnt_idmap, fh->fh_dentry,
+	if (argp->xdrgen.acl.mask & NA_DFACL) {
+		error = set_posix_acl(&nop_mnt_idmap, fhp->fh_dentry,
 				      ACL_TYPE_DEFAULT, argp->acl_default);
 		if (error)
 			goto out_drop_lock;
@@ -440,20 +458,24 @@ static __be32 nfsacld_proc_setacl(struct svc_rqst *rqstp)
 
 	inode_unlock(inode);
 
-	fh_drop_write(fh);
+	fh_drop_write(fhp);
 
-	resp->status = fh_getattr(fh, &resp->stat);
+	resp->xdrgen.status = fh_getattr(fhp, &resp->stat);
 
 out:
+	if (resp->xdrgen.status == acl2_ok)
+		nfsacld_stat_to_fattr(rqstp, &resp->xdrgen.u.resok.attr,
+				      &resp->stat, fhp);
 	/* argp->acl_{access,default} are released in nfsaclsvc_release_setacl. */
-	resp->status = nfsacld_map_status(resp->status);
+	fh_put(fhp);
+	resp->xdrgen.status = nfsacld_map_status(resp->xdrgen.status);
 	return rpc_success;
 
 out_drop_lock:
 	inode_unlock(inode);
-	fh_drop_write(fh);
+	fh_drop_write(fhp);
 out_errno:
-	resp->status = nfsacld_map_errno(error);
+	resp->xdrgen.status = nfsacld_map_errno(error);
 	goto out;
 }
 
@@ -723,27 +745,6 @@ bool nfs_acl2_secattr_decode_end(struct xdrgen_aggregate_cursor *c, bool ok)
  */
 
 static bool
-nfsaclsvc_decode_setaclargs(struct svc_rqst *rqstp, struct xdr_stream *xdr)
-{
-	struct nfsd3_setaclargs *argp = rqstp->rq_argp;
-
-	if (!svcxdr_decode_fhandle(xdr, &argp->fh))
-		return false;
-	if (xdr_stream_decode_u32(xdr, &argp->mask) < 0)
-		return false;
-	if (argp->mask & ~NFS_ACL_MASK)
-		return false;
-	if (!nfs_stream_decode_acl(xdr, NULL, (argp->mask & NA_ACL) ?
-				   &argp->acl_access : NULL))
-		return false;
-	if (!nfs_stream_decode_acl(xdr, NULL, (argp->mask & NA_DFACL) ?
-				   &argp->acl_default : NULL))
-		return false;
-
-	return true;
-}
-
-static bool
 nfsaclsvc_decode_accessargs(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 {
 	struct nfsd3_accessargs *args = rqstp->rq_argp;
@@ -800,10 +801,8 @@ static void nfsaclsvc_release_access(struct svc_rqst *rqstp)
 
 static void nfsaclsvc_release_setacl(struct svc_rqst *rqstp)
 {
-	struct nfsd3_setaclargs *argp = rqstp->rq_argp;
-	struct nfsd_attrstat *resp = rqstp->rq_resp;
+	struct SETACL2args_wrapper *argp = rqstp->rq_argp;
 
-	fh_put(&resp->fh);
 	posix_acl_release(argp->acl_access);
 	posix_acl_release(argp->acl_default);
 }
@@ -836,16 +835,16 @@ static const struct svc_procedure nfsd_acl_procedures2[5] = {
 		.pc_name	= "GETACL",
 	},
 	[ACLPROC2_SETACL] = {
-		.pc_func = nfsacld_proc_setacl,
-		.pc_decode = nfsaclsvc_decode_setaclargs,
-		.pc_encode = nfssvc_encode_attrstatres,
-		.pc_release = nfsaclsvc_release_setacl,
-		.pc_argsize = sizeof(struct nfsd3_setaclargs),
-		.pc_argzero = sizeof(struct nfsd3_setaclargs),
-		.pc_ressize = sizeof(struct nfsd_attrstat),
-		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST+AT,
-		.pc_name = "SETACL",
+		.pc_func	= nfsacld_proc_setacl,
+		.pc_decode	= nfs_acl_svc_decode_SETACL2args,
+		.pc_encode	= nfs_acl_svc_encode_SETACL2res,
+		.pc_release	= nfsaclsvc_release_setacl,
+		.pc_argsize	= sizeof(struct SETACL2args_wrapper),
+		.pc_argzero	= sizeof(struct SETACL2args_wrapper),
+		.pc_ressize	= sizeof(struct SETACL2res_wrapper),
+		.pc_cachetype	= RC_NOCACHE,
+		.pc_xdrressize	= NFS_ACL2_SETACL2res_sz,
+		.pc_name	= "SETACL",
 	},
 	[ACLPROC2_GETATTR] = {
 		.pc_func = nfsacld_proc_getattr,
@@ -878,10 +877,11 @@ static const struct svc_procedure nfsd_acl_procedures2[5] = {
  */
 union nfsd_acl2_xdrstore {
 	struct GETACL2args_wrapper	getaclargs;
-	struct nfsd3_setaclargs		setaclargs;
+	struct SETACL2args_wrapper	setaclargs;
 	struct nfsd3_accessargs		accessargs;
 	struct nfsd_fhandle		fhandle;
 	struct GETACL2res_wrapper	getaclres;
+	struct SETACL2res_wrapper	setaclres;
 	struct nfsd_attrstat		attrstat;
 	struct nfsd3_accessres		accessres;
 };
