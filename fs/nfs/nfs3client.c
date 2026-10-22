@@ -3,6 +3,7 @@
 #include <linux/nfs_mount.h>
 #include <linux/sunrpc/addr.h>
 #include <net/handshake.h>
+#include <uapi/linux/nfsacl.h>
 #include "internal.h"
 #include "nfs3_fs.h"
 #include "netns.h"

@@ -6,6 +6,7 @@
 #include <linux/nfs_fs.h>
 #include <linux/posix_acl_xattr.h>
 #include <linux/nfsacl.h>
+#include <uapi/linux/nfsacl.h>
 
 #include "internal.h"
 #include "nfs3_fs.h"
