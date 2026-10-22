@@ -20,11 +20,29 @@
 FIXTURE(gmem_conversions) {
 	struct kvm_vcpu *vcpu;
 	int gmem_fd;
+	int resource_fd;
 	/* HVA of the first byte of the memory mmap()-ed from gmem_fd. */
 	char *mem;
 };
 
 typedef FIXTURE_DATA(gmem_conversions) test_data_t;
+
+FIXTURE_VARIANT(gmem_conversions) {
+	int (*create_resource)(size_t size);
+};
+
+FIXTURE_VARIANT_ADD(gmem_conversions, native) {
+	.create_resource = NULL,
+};
+
+static int create_tmpfs_resource(size_t size)
+{
+	return create_tmpfs_pool_fd("never", true, size);
+}
+
+FIXTURE_VARIANT_ADD(gmem_conversions, tmpfs) {
+	.create_resource = create_tmpfs_resource,
+};
 
 FIXTURE_SETUP(gmem_conversions) { }
 
@@ -37,8 +55,9 @@ static void guest_do_rmw(void);
  * Defer setup until the individual test is invoked so that tests can specify
  * the number of pages and flags for the guest_memfd instance.
  */
-static void gmem_conversions_do_setup(test_data_t *t, int nr_pages,
-				      int gmem_flags)
+static void gmem_conversions_do_setup(test_data_t *t,
+				      const FIXTURE_VARIANT(gmem_conversions) * variant,
+				      int nr_pages, int gmem_flags)
 {
 	const struct vm_shape shape = {
 		.mode = VM_MODE_DEFAULT,
@@ -50,12 +69,27 @@ static void gmem_conversions_do_setup(test_data_t *t, int nr_pages,
 	 */
 	const gpa_t gpa = SZ_4G;
 	const u32 slot = 1;
+	size_t size = nr_pages * page_size;
 	struct kvm_vm *vm;
+	int gmem_fd = -1;
 
 	vm = __vm_create_shape_with_one_vcpu(shape, &t->vcpu, nr_pages, guest_do_rmw);
 
+	t->resource_fd = -1;
+
+	if (variant->create_resource) {
+		uint64_t flags = gmem_flags | GUEST_MEMFD_FLAG_USE_RESOURCE;
+
+		t->resource_fd = variant->create_resource(size);
+		TEST_ASSERT(t->resource_fd >= 0, "Failed to create backing resource");
+
+		gmem_fd = __vm_create_guest_memfd_resource(vm, size, flags,
+							   t->resource_fd);
+		TEST_ASSERT(gmem_fd >= 0, "Failed to create guest_memfd with resource");
+	}
+
 	vm_mem_add(vm, VM_MEM_SRC_SHMEM, gpa, slot, nr_pages,
-		   KVM_MEM_GUEST_MEMFD, -1, 0, gmem_flags);
+		   KVM_MEM_GUEST_MEMFD, gmem_fd, 0, gmem_flags);
 
 	t->gmem_fd = kvm_slot_to_fd(vm, slot);
 	t->mem = addr_gpa2hva(vm, gpa);
@@ -67,6 +101,11 @@ static void gmem_conversions_do_teardown(test_data_t *t)
 	/* Use NULL to avoid second free in FIXTURE_TEARDOWN (multipage tests). */
 	if (!t->vcpu)
 		return;
+
+	if (t->resource_fd >= 0) {
+		close(t->resource_fd);
+		t->resource_fd = -1;
+	}
 
 	/* No need to close gmem_fd, it's owned by the VM structure. */
 	kvm_vm_free(t->vcpu->vm);
@@ -91,7 +130,7 @@ TEST_F(gmem_conversions, test)							\
 {										\
 	const int nr = (__nr_pages);						\
 										\
-	gmem_conversions_do_setup(self, nr, flags);				\
+	gmem_conversions_do_setup(self, variant, nr, flags);			\
 	__gmem_conversions_##test(self, nr);					\
 }										\
 static void __gmem_conversions_##test(test_data_t *t, int nr_pages)		\
@@ -127,7 +166,7 @@ TEST_F(gmem_conversions, test)							\
 	int i;									\
 										\
 	for (i = 0; i < nr; ++i) {						\
-		gmem_conversions_do_setup(self, nr, flags);			\
+		gmem_conversions_do_setup(self, variant, nr, flags);		\
 		__gmem_conversions_multipage_##test(self, nr, i);		\
 		gmem_conversions_do_teardown(self);				\
 	}									\
