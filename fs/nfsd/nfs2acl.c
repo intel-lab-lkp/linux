@@ -31,6 +31,45 @@ struct nfsd_attrstat {
 	struct kstat		stat;
 };
 
+/*
+ * Wrapper structures combine xdrgen types with legacy structures.
+ * The xdrgen field must be first so the structure can be cast
+ * to its XDR type for the RPC dispatch layer.
+ */
+
+struct GETACL2args_wrapper {
+	struct GETACL2args	xdrgen;
+	struct svc_fh		fh;
+};
+
+static_assert(offsetof(struct GETACL2args_wrapper, xdrgen) == 0);
+
+struct GETACL2res_wrapper {
+	struct GETACL2res	xdrgen;
+	int			mask;
+	struct posix_acl	*acl_access;
+	struct posix_acl	*acl_default;
+	struct kstat		stat;
+};
+
+static_assert(offsetof(struct GETACL2res_wrapper, xdrgen) == 0);
+
+struct SETACL2args_wrapper {
+	struct SETACL2args	xdrgen;
+	struct svc_fh		fh;
+	struct posix_acl	*acl_access;
+	struct posix_acl	*acl_default;
+	/*
+	 * Set when the wire ACL is well-formed XDR but semantically
+	 * invalid. The decoder accepts the request so that
+	 * nfsacld_proc_setacl can return ACL2ERR_INVAL rather than RPC
+	 * GARBAGE_ARGS. See draft-ietf-nfsv4-nfs-acl Section 3.4.4.2.
+	 */
+	bool			invalid;
+};
+
+static_assert(offsetof(struct SETACL2args_wrapper, xdrgen) == 0);
+
 struct nfsd3_getaclargs {
 	struct svc_fh		fh;
 	__u32			mask;
@@ -162,6 +201,19 @@ static __be32 nfsacld_map_status(__be32 status)
 		break;
 	}
 	return status;
+}
+
+/*
+ * A minimal (three-entry) ACL travels as four wire entries: the
+ * POSIX entries plus a synthesized NA_CLASS_OBJ mask. The wire
+ * element count is thus max(a_count, 4) when the ACL has at least
+ * three entries, and zero otherwise. An ACL with fewer than three
+ * entries has no minimal set to expand, so it travels as empty.
+ * See draft-ietf-nfsv4-nfs-acl Section 3.4.4.2.
+ */
+static u32 nfsacld_acl_entries(const struct posix_acl *acl)
+{
+	return (acl && acl->a_count >= 3) ? max_t(int, acl->a_count, 4) : 0;
 }
 
 /**
@@ -347,6 +399,222 @@ static __be32 nfsacld_proc_access(struct svc_rqst *rqstp)
 out:
 	resp->status = nfsacld_map_status(resp->status);
 	return rpc_success;
+}
+
+/*
+ * Aggregate codec hooks for the generated secattr codec.
+ *
+ * The generated codec owns the wire framing and drives these hooks
+ * once per element; the hooks hold all posix_acl application logic. The
+ * application context (@c->ctx) is the svc_rqst, bound to the stream by
+ * svcxdr_init_{decode,encode}(); each hook reaches the proc's arg or
+ * result wrapper through rq_{argp,resp}.
+ * The cursor's member_id selects the member: it is
+ * NFS_ACL2_SECATTR_ACLENT or NFS_ACL2_SECATTR_DFACLENT.
+ */
+
+/* GETACL reply: stream the wire entries out of the source posix_acl. */
+
+bool nfs_acl2_secattr_encode_begin(struct xdrgen_aggregate_cursor *c)
+{
+	struct svc_rqst *rqstp = c->ctx;
+	struct GETACL2res_wrapper *resp = rqstp->rq_resp;
+	bool dfacl = c->member_id == NFS_ACL2_SECATTR_DFACLENT;
+	struct posix_acl *acl = dfacl ? resp->acl_default : resp->acl_access;
+	int gate = dfacl ? (resp->mask & NA_DFACL) : (resp->mask & NA_ACL);
+
+	c->count = gate ? nfsacld_acl_entries(acl) : 0;
+	return true;
+}
+
+bool nfs_acl2_secattr_encode(struct xdrgen_aggregate_cursor *c,
+			     struct aclent *out)
+{
+	struct svc_rqst *rqstp = c->ctx;
+	struct GETACL2res_wrapper *resp = rqstp->rq_resp;
+	bool dfacl = c->member_id == NFS_ACL2_SECATTR_DFACLENT;
+	struct posix_acl *acl = dfacl ? resp->acl_default : resp->acl_access;
+	int typeflag = dfacl ? NA_ACL_DEFAULT : 0;
+	const struct posix_acl_entry *entry;
+	int tag;
+
+	/*
+	 * A three-entry ACL expands to four wire entries in ascending
+	 * type order (USER_OBJ, GROUP_OBJ, a NA_CLASS_OBJ mask cloned
+	 * from GROUP_OBJ, OTHER). Some receivers depend on this ordering.
+	 * See draft-ietf-nfsv4-nfs-acl Section 3.4.4.2.
+	 */
+	if (acl->a_count == 3) {
+		static const u8 map[4] = { 0, 1, 1, 2 };
+
+		entry = &acl->a_entries[map[c->index]];
+		tag = (c->index == 2) ? ACL_MASK : entry->e_tag;
+	} else {
+		entry = &acl->a_entries[c->index];
+		tag = entry->e_tag;
+	}
+
+	out->type = tag | typeflag;
+	switch (tag) {
+	case ACL_USER_OBJ:
+		out->id = from_kuid(&init_user_ns, resp->stat.uid);
+		break;
+	case ACL_GROUP_OBJ:
+		out->id = from_kgid(&init_user_ns, resp->stat.gid);
+		break;
+	case ACL_USER:
+		out->id = from_kuid(&init_user_ns, entry->e_uid);
+		break;
+	case ACL_GROUP:
+		out->id = from_kgid(&init_user_ns, entry->e_gid);
+		break;
+	default:
+		/*
+		 * The id field is undefined for these entry types;
+		 * emit zero per draft-ietf-nfsv4-nfs-acl Section 3.4.4.2.
+		 */
+		out->id = 0;
+		break;
+	}
+	out->perm = entry->e_perm & (ACL_READ | ACL_WRITE | ACL_EXECUTE);
+	return true;
+}
+
+/*
+ * The xdr_stream primitives do not advance rq_next_page, and svcrdma
+ * retains only the pages below it for Send completion. The fields
+ * that follow the entry list start a new page when this one is full.
+ */
+bool nfs_acl2_secattr_encode_end(struct xdrgen_aggregate_cursor *c, bool ok)
+{
+	struct svc_rqst *rqstp = c->ctx;
+	struct xdr_stream *xdr = c->xdr;
+
+	rqstp->rq_next_page = xdr->page_ptr + 1;
+	if (xdr->p == xdr->end)
+		rqstp->rq_next_page++;
+	return true;
+}
+
+/* SETACL args: consume the decoded wire entries into the target posix_acl. */
+
+bool nfs_acl2_secattr_decode_begin(struct xdrgen_aggregate_cursor *c)
+{
+	struct svc_rqst *rqstp = c->ctx;
+	struct SETACL2args_wrapper *argp = rqstp->rq_argp;
+	bool dfacl = c->member_id == NFS_ACL2_SECATTR_DFACLENT;
+	struct posix_acl **pacl = dfacl ? &argp->acl_default : &argp->acl_access;
+	u32 mask = argp->xdrgen.acl.mask;
+	u32 declared = dfacl ? (u32)argp->xdrgen.acl.dfaclcnt :
+			       (u32)argp->xdrgen.acl.aclcnt;
+	int gate = dfacl ? (mask & NA_DFACL) : (mask & NA_ACL);
+
+	/* Already rejected: consume the list. */
+	if (argp->invalid)
+		return true;
+	/* The access list is decoded first, so the mask is checked once. */
+	if (!dfacl && (mask & ~NFS_ACL_MASK)) {
+		argp->invalid = true;
+		return true;
+	}
+	/* Too many ACEs is an invalid ACL, not a malformed request. */
+	if (declared > NFS_ACL_MAX_ENTRIES) {
+		argp->invalid = true;
+		return true;
+	}
+
+	if (gate) {
+		/*
+		 * A published list whose declared count differs from its
+		 * length is an invalid ACL, not a malformed request.
+		 */
+		if (c->count != declared) {
+			argp->invalid = true;
+			return true;
+		}
+		if (!dfacl && !c->count) {
+			argp->invalid = true;
+			return true;
+		}
+		/* An empty default list publishes NULL: default ACL removal. */
+		if (c->count) {
+			*pacl = posix_acl_alloc(c->count, GFP_KERNEL);
+			if (!*pacl)
+				return false;
+		}
+	} else if (c->count > declared) {
+		argp->invalid = true;
+		return true;
+	}
+	return true;
+}
+
+bool nfs_acl2_secattr_decode(struct xdrgen_aggregate_cursor *c,
+			     const struct aclent *in)
+{
+	struct svc_rqst *rqstp = c->ctx;
+	struct SETACL2args_wrapper *argp = rqstp->rq_argp;
+	bool dfacl = c->member_id == NFS_ACL2_SECATTR_DFACLENT;
+	struct posix_acl *acl = dfacl ? argp->acl_default : argp->acl_access;
+	struct posix_acl_entry *entry;
+
+	/* Already rejected, or list gated out by mask: consume it. */
+	if (argp->invalid || !acl)
+		return true;
+
+	/* A perm bit outside rwx makes the ACL invalid. */
+	if (in->perm & ~(ACL_READ | ACL_WRITE | ACL_EXECUTE)) {
+		argp->invalid = true;
+		return true;
+	}
+
+	entry = &acl->a_entries[c->index];
+	switch (in->type & ~NA_ACL_DEFAULT) {
+	case ACL_USER:
+		/* An id with no kernel mapping makes the ACL invalid. */
+		entry->e_uid = make_kuid(&init_user_ns, in->id);
+		if (!uid_valid(entry->e_uid)) {
+			argp->invalid = true;
+			return true;
+		}
+		break;
+	case ACL_GROUP:
+		entry->e_gid = make_kgid(&init_user_ns, in->id);
+		if (!gid_valid(entry->e_gid)) {
+			argp->invalid = true;
+			return true;
+		}
+		break;
+	case ACL_USER_OBJ:
+	case ACL_GROUP_OBJ:
+	case ACL_OTHER:
+	case ACL_MASK:
+		break;
+	default:
+		/* An undefined entry type makes the ACL invalid. */
+		argp->invalid = true;
+		return true;
+	}
+	entry->e_tag = in->type & ~NA_ACL_DEFAULT;
+	entry->e_perm = in->perm;
+
+	return true;
+}
+
+bool nfs_acl2_secattr_decode_end(struct xdrgen_aggregate_cursor *c, bool ok)
+{
+	struct svc_rqst *rqstp = c->ctx;
+	struct SETACL2args_wrapper *argp = rqstp->rq_argp;
+	bool dfacl = c->member_id == NFS_ACL2_SECATTR_DFACLENT;
+	struct posix_acl *acl = dfacl ? argp->acl_default : argp->acl_access;
+
+	/*
+	 * On failure the published ACL stays reachable through the arg
+	 * wrapper and is freed by pc_release; nothing to do here.
+	 */
+	if (!ok || argp->invalid)
+		return true;
+	return posix_acl_from_nfsacl(acl) == 0;
 }
 
 /*
