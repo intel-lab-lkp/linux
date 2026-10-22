@@ -245,7 +245,7 @@ void ubifs_scanned_corruption(const struct ubifs_info *c, int lnum, int offs,
  *
  * This function scans LEB number @lnum and returns complete information about
  * its contents. Returns the scanned information in case of success and,
- * %-EUCLEAN if the LEB neads recovery, and other negative error codes in case
+ * %-EUCLEAN if the LEB needs recovery, and other negative error codes in case
  * of failure.
  *
  * If @quiet is non-zero, this function does not print large and scary
