@@ -326,6 +326,18 @@ config SH_LBOX_RE2
 	help
 	  Select L-BOX RE2 if configuring for the NTT COMWARE L-BOX RE2.
 
+
+config SH_FX9750GIII
+	bool "Casio fx-9750GIII"
+	depends on CPU_SUBTYPE_SH7305
+	select OF
+	select OF_EARLY_FLATTREE
+	help
+	  Enable board support for the Casio fx-9750GIII
+	  graphing calculator, based on the Renesas SH7305.
+	  This selects the calculator machine vector and
+	  enables early Device Tree support for the board.
+
 config SH_X3PROTO
 	bool "SH-X3 Prototype board"
 	depends on CPU_SUBTYPE_SHX3

@@ -32,6 +32,7 @@ obj-$(CONFIG_SH_ECOVEC)		+= mach-ecovec24/
 obj-$(CONFIG_SH_SDK7780)	+= mach-sdk7780/
 obj-$(CONFIG_SH_SDK7786)	+= mach-sdk7786/
 obj-$(CONFIG_SH_X3PROTO)	+= mach-x3proto/
+obj-$(CONFIG_SH_FX9750GIII)	+= mach-fx9750giii/
 obj-$(CONFIG_SH_SH7763RDP)	+= mach-sh7763rdp/
 obj-$(CONFIG_SH_LANDISK)	+= mach-landisk/
 obj-$(CONFIG_SH_LBOX_RE2)	+= mach-lboxre2/
