@@ -163,6 +163,7 @@ enum aclstat2 {
     ACL2ERR_DQUOT = 69,
     ACL2ERR_STALE = 70
 };
+pragma big_endian aclstat2;
 
 /*
  * NFS_ACL version 2 procedure arguments and results
