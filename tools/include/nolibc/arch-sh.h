@@ -154,8 +154,13 @@ void __attribute__((weak, noreturn)) __nolibc_entrypoint __nolibc_no_stack_prote
 		"_start:\n"
 
 		"mov sp, r4\n"               /* save argc pointer to r4, as arg1 of _start_c */
-		"bsr _start_c\n"             /* transfer to c runtime                        */
+		"mova 1f, r0\n"              /* load the effective address of 1: into r0     */
+		"mov.l @r0, r1\n"            /* load the distance to _start_c from 1:        */
+		"add r0, r1\n"               /* calculate address of _start_c                */
+		"jsr @r1\n"                  /* transfer to c runtime                        */
 		"nop\n"                      /* delay slot                                   */
+		".balign 4\n"
+		"1: .long _start_c - 1b\n"   /* Distance from here to _start_c               */
 
 		".size _start, .-_start\n"
 	);
