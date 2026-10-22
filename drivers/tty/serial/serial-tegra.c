@@ -532,16 +532,39 @@ static void tegra_uart_tx_dma_complete(void *args)
 	struct dma_tx_state state;
 	unsigned long flags;
 	unsigned int count;
+	enum dma_status status;
 
-	dmaengine_tx_status(tup->tx_dma_chan, tup->tx_cookie, &state);
+	uart_port_lock_irqsave(&tup->uport, &flags);
+
+	/*
+	 * dmaengine_terminate_all() does not wait for a callback that is
+	 * already running. If tegra_uart_stop_tx() or
+	 * tegra_uart_flush_buffer() stopped this transfer while we were
+	 * waiting for the port lock, they have already handled it and
+	 * cleared tx_in_progress, so there is nothing left to do.
+	 */
+	if (tup->tx_in_progress != TEGRA_UART_TX_DMA)
+		goto out;
+
+	/*
+	 * A new transfer may have been started after this one was stopped.
+	 * Its cookie is normally still in progress, so leave it to its own
+	 * callback. If it has already completed, handling it here is fine:
+	 * its own callback will then find it is no longer current.
+	 */
+	status = dmaengine_tx_status(tup->tx_dma_chan, tup->tx_cookie, &state);
+	if (status != DMA_COMPLETE)
+		goto out;
+
 	count = tup->tx_bytes_requested - state.residue;
 	async_tx_ack(tup->tx_dma_desc);
-	uart_port_lock_irqsave(&tup->uport, &flags);
 	uart_xmit_advance(&tup->uport, count);
 	tup->tx_in_progress = 0;
 	if (kfifo_len(&tport->xmit_fifo) < WAKEUP_CHARS)
 		uart_write_wakeup(&tup->uport);
 	tegra_uart_start_next_tx(tup);
+
+out:
 	uart_port_unlock_irqrestore(&tup->uport, flags);
 }
 
@@ -748,6 +771,22 @@ static void tegra_uart_rx_dma_complete(void *args)
 
 	uart_port_lock_irqsave(u, &flags);
 
+	/*
+	 * dmaengine_terminate_all() does not wait for a callback that is
+	 * already running. If tegra_uart_terminate_rx_dma() stopped this
+	 * transfer while we were waiting for the port lock, it has already
+	 * pushed the received data and cleared rx_dma_active, so there is
+	 * nothing left to do.
+	 */
+	if (!tup->rx_dma_active)
+		goto done;
+
+	/*
+	 * A new transfer may have been started after this one was stopped.
+	 * Its cookie is normally still in progress, so leave it to its own
+	 * callback. If it has already completed, handling it here is fine:
+	 * its own callback will then find it is no longer current.
+	 */
 	status = dmaengine_tx_status(tup->rx_dma_chan, tup->rx_cookie, &state);
 
 	if (status == DMA_IN_PROGRESS) {
