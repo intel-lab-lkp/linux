@@ -4644,12 +4644,10 @@ static noinline int find_free_extent(struct btrfs_root *root,
 		    block_group->space_info == space_info &&
 		    block_group->cached != BTRFS_CACHE_NO) {
 			down_read(&space_info->groups_sem);
-			if (list_empty(&block_group->list) ||
-			    block_group->ro ||
-			    (block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED)) {
+			if (list_empty(&block_group->list)) {
 				/*
 				 * someone is removing this block group,
-				 * we can't jump into the have_block_group
+				 * we can't jump into the check_block_group
 				 * target because our list pointers are not
 				 * valid
 				 */
@@ -4659,10 +4657,8 @@ static noinline int find_free_extent(struct btrfs_root *root,
 				ffe_ctl->index = btrfs_bg_flags_to_raid_index(
 							block_group->flags);
 				btrfs_put_block_group(block_group);
-				btrfs_lock_block_group(block_group,
-						       ffe_ctl->delalloc);
 				ffe_ctl->hinted = true;
-				goto have_block_group;
+				goto check_block_group;
 			}
 		} else if (block_group) {
 			btrfs_put_block_group(block_group);
@@ -4680,6 +4676,8 @@ search:
 		struct btrfs_block_group *bg_ret;
 
 		ffe_ctl->hinted = false;
+		ffe_ctl->search_start = block_group->start;
+check_block_group:
 		/* If the block group is read-only, we can skip it entirely. */
 		if (unlikely(block_group->ro ||
 			     (block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED))) {
@@ -4691,7 +4689,6 @@ search:
 		}
 
 		btrfs_lock_block_group(block_group, ffe_ctl->delalloc);
-		ffe_ctl->search_start = block_group->start;
 
 		/*
 		 * this can happen if we end up cycling through all the
