@@ -72,7 +72,6 @@ struct mps_new_child {
 struct mps_stats {
 	__u64 region_offset;	/* the child's range in the root */
 	__u64 region_len;
-	__u64 owned_pages;	/* pages the child has */
 	__u64 absent_pages;	/* pages taken away by CTL_SET_PRESENT */
 };
 

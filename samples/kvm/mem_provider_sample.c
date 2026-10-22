@@ -68,11 +68,11 @@ struct mps_info {
 	unsigned long *absent;		/* taken away by CTL_SET_PRESENT */
 
 	/*
-	 * A child of the root: its first page in the root, and the pages it
-	 * has.  NULL @owned for a file made by SETUP, which has all its pages.
+	 * A child of the root: its first page in the root, and whether it
+	 * was carved out from the root (is_child).
 	 */
 	unsigned long root_index;
-	unsigned long *owned;
+	bool is_child;
 	struct list_head root_link;	/* mps_root.children, mps_root.lock */
 };
 
@@ -85,8 +85,7 @@ static struct mps_root {
 	unsigned long base_pfn;
 	unsigned long npages;
 	struct page *cma_pages;
-	unsigned long *owned;		/* pages that a child has */
-	unsigned long *donated;		/* pages kept at the root */
+	unsigned long *allocated;	/* pages allocated to a child */
 	struct list_head children;
 	/*
 	 * The addr=/len= region is used either by one SETUP file or by the
@@ -138,8 +137,6 @@ static void mps_fixed_wb_put(void)
 /* Does @info have page @index now?  Called with or without info->lock. */
 static bool mps_page_present(struct mps_info *info, unsigned long index)
 {
-	if (info->owned && !test_bit(index, info->owned))
-		return false;
 	return !test_bit(index, info->absent);
 }
 
@@ -152,9 +149,6 @@ static unsigned long mps_run(struct mps_info *info, unsigned long index)
 	unsigned long end = info->npages;
 
 	end = min(end, find_next_bit(info->absent, info->npages, index + 1));
-	if (info->owned)
-		end = min(end, find_next_zero_bit(info->owned, info->npages,
-						  index + 1));
 	return end - index;
 }
 
@@ -259,8 +253,6 @@ static long mps_get_stats(struct mps_info *info, void __user *uarg)
 	mutex_lock(&info->lock);
 	st.region_offset = (u64)info->root_index << PAGE_SHIFT;
 	st.region_len = (u64)info->npages << PAGE_SHIFT;
-	st.owned_pages = info->owned ?
-		bitmap_weight(info->owned, info->npages) : info->npages;
 	st.absent_pages = bitmap_weight(info->absent, info->npages);
 	mutex_unlock(&info->lock);
 
@@ -287,19 +279,13 @@ static long mps_file_ioctl(struct file *file, unsigned int cmd,
 static int mps_file_release(struct inode *inode, struct file *file)
 {
 	struct mps_info *info = file->private_data;
-	unsigned long i;
 
-	/*
-	 * A child gives the pages it has back to the root.  Pages it donated
-	 * stay at the root, and pages moved out belong to another child.
-	 */
-	if (info->owned) {
+	/* A child gives the pages it has back to the root. */
+	if (info->is_child) {
 		mutex_lock(&mps_root.lock);
 		list_del(&info->root_link);
-		for_each_set_bit(i, info->owned, info->npages)
-			__clear_bit(info->root_index + i, mps_root.owned);
+		bitmap_clear(mps_root.allocated, info->root_index, info->npages);
 		mutex_unlock(&mps_root.lock);
-		bitmap_free(info->owned);
 	}
 	if (addr && len && !info->cma_pages) {
 		mutex_lock(&mps_root.lock);
@@ -473,13 +459,8 @@ static int mps_root_ensure(u64 size)
 			return -ENOMEM;
 		mps_root.base_pfn = page_to_pfn(pages);
 	}
-	mps_root.owned = bitmap_zalloc(npages, GFP_KERNEL);
-	mps_root.donated = bitmap_zalloc(npages, GFP_KERNEL);
-	if (!mps_root.owned || !mps_root.donated) {
-		bitmap_free(mps_root.owned);
-		bitmap_free(mps_root.donated);
-		mps_root.owned = NULL;
-		mps_root.donated = NULL;
+	mps_root.allocated = bitmap_zalloc(npages, GFP_KERNEL);
+	if (!mps_root.allocated) {
 		if (pages)
 			free_contig_range(page_to_pfn(pages), npages);
 		return -ENOMEM;
@@ -496,8 +477,7 @@ static void mps_root_teardown(void)
 	WARN_ON(!list_empty(&mps_root.children));
 	if (mps_root.cma_pages)
 		free_contig_range(mps_root.base_pfn, mps_root.npages);
-	bitmap_free(mps_root.owned);
-	bitmap_free(mps_root.donated);
+	bitmap_free(mps_root.allocated);
 }
 
 /* A page-aligned byte range of the root as page indices [first, last). */
@@ -521,7 +501,7 @@ static struct file *mps_get_child(int fd, struct mps_info **infop)
 	if (!file)
 		return ERR_PTR(-EBADF);
 	if (file->f_op != &mps_file_fops.fops ||
-	    !((struct mps_info *)file->private_data)->owned) {
+	    !((struct mps_info *)file->private_data)->is_child) {
 		fput(file);
 		return ERR_PTR(-EINVAL);
 	}
@@ -532,9 +512,8 @@ static struct file *mps_get_child(int fd, struct mps_info **infop)
 static long mps_ctl_new_child(void __user *uarg)
 {
 	struct mps_new_child nc;
-	unsigned long first, last, i, grant = 0;
+	unsigned long first, last;
 	struct mps_info *info;
-	unsigned long *owned;
 	struct file *file;
 	int fd, ret;
 
@@ -551,25 +530,14 @@ static long mps_ctl_new_child(void __user *uarg)
 	if (ret)
 		goto out_unlock;
 
-	/* A child that would get no page is likely a mistake. */
-	for (i = first; i < last; i++)
-		if (!test_bit(i, mps_root.owned) &&
-		    !test_bit(i, mps_root.donated))
-			grant++;
-	if (!grant) {
+	if (find_next_bit(mps_root.allocated, last, first) < last) {
 		ret = -EBUSY;
 		goto out_unlock;
 	}
 
-	owned = bitmap_zalloc(last - first, GFP_KERNEL);
-	if (!owned) {
-		ret = -ENOMEM;
-		goto out_unlock;
-	}
 	fd = mps_new_file(mps_root.base_pfn + first, last - first, nc.flags,
 			  &info, &file);
 	if (fd < 0) {
-		bitmap_free(owned);
 		ret = fd;
 		goto out_unlock;
 	}
@@ -577,22 +545,14 @@ static long mps_ctl_new_child(void __user *uarg)
 		if (mps_fixed_wb_get()) {
 			put_unused_fd(fd);
 			fput(file);
-			bitmap_free(owned);
 			ret = -ENOMEM;
 			goto out_unlock;
 		}
 		info->fixed_wb = true;
 	}
 
-	/* No other thread can reach the child until fd_install(). */
-	for (i = first; i < last; i++) {
-		if (test_bit(i, mps_root.owned) ||
-		    test_bit(i, mps_root.donated))
-			continue;
-		__set_bit(i - first, owned);
-		__set_bit(i, mps_root.owned);
-	}
-	info->owned = owned;
+	bitmap_set(mps_root.allocated, first, last - first);
+	info->is_child = true;
 	info->root_index = first;
 	list_add(&info->root_link, &mps_root.children);
 	mutex_unlock(&mps_root.lock);
@@ -602,51 +562,6 @@ static long mps_ctl_new_child(void __user *uarg)
 out_unlock:
 	mutex_unlock(&mps_root.lock);
 	return ret;
-}
-
-/* Take [first, last) of the root from @info.  Called under mps_root.lock. */
-static void mps_child_lose(struct mps_info *info, unsigned long first,
-			   unsigned long last)
-{
-	unsigned long s = first - info->root_index;
-	unsigned long e = last - info->root_index;
-
-	mutex_lock(&info->lock);
-	bitmap_clear(info->owned, s, e - s);
-	mps_revoke(info, s, e);
-	mutex_unlock(&info->lock);
-	bitmap_clear(mps_root.owned, first, last - first);
-}
-
-/* Give [first, last) of the root to @info.  Called under mps_root.lock. */
-static void mps_child_gain(struct mps_info *info, unsigned long first,
-			   unsigned long last)
-{
-	unsigned long s = first - info->root_index;
-	unsigned long e = last - info->root_index;
-
-	mutex_lock(&info->lock);
-	bitmap_set(info->owned, s, e - s);
-	mps_revoke(info, s, e);
-	mutex_unlock(&info->lock);
-	bitmap_set(mps_root.owned, first, last - first);
-}
-
-static bool mps_child_covers(struct mps_info *info, unsigned long first,
-			     unsigned long last)
-{
-	return first >= info->root_index &&
-	       last <= info->root_index + info->npages;
-}
-
-static bool mps_child_owns(struct mps_info *info, unsigned long first,
-			   unsigned long last)
-{
-	unsigned long s = first - info->root_index;
-	unsigned long e = last - info->root_index;
-
-	return mps_child_covers(info, first, last) &&
-	       find_next_zero_bit(info->owned, e, s) >= e;
 }
 
 /*
