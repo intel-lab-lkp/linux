@@ -243,6 +243,8 @@ extern int swap_retry_table_alloc(swp_entry_t entry, gfp_t gfp);
  *
  * folio_put_swap(): does the opposite thing of folio_dup_swap().
  */
+void folio_alloc_swap_prepare(struct list_head *folios);
+void folio_alloc_swap_split(unsigned int nr_pages);
 int folio_alloc_swap(struct folio *folio);
 int folio_dup_swap(struct folio *folio, struct page *page);
 void folio_put_swap(struct folio *folio, struct page *page);
@@ -361,6 +363,14 @@ static inline void swap_cluster_unlock_irq(struct swap_cluster_info *ci)
 static inline struct swap_info_struct *__swap_entry_to_info(swp_entry_t entry)
 {
 	return NULL;
+}
+
+static inline void folio_alloc_swap_prepare(struct list_head *folios)
+{
+}
+
+static inline void folio_alloc_swap_split(unsigned int nr_pages)
+{
 }
 
 static inline int folio_alloc_swap(struct folio *folio)

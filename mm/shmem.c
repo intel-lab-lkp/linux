@@ -1850,6 +1850,8 @@ try_split:
 		folio_test_set_dirty(folio);
 		if (split_folio_to_list(folio, folio_list))
 			goto redirty;
+		if (folio_list)
+			folio_alloc_swap_split(1 << order);
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 		if (order >= HPAGE_PMD_ORDER) {

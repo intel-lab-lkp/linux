@@ -1175,6 +1175,8 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
 	memset(stat, 0, sizeof(*stat));
 	cond_resched();
 	do_demote_pass = can_demote(pgdat->node_id, sc, memcg);
+	if (sc->gfp_mask & __GFP_IO)
+		folio_alloc_swap_prepare(folio_list);
 
 retry:
 	while (!list_empty(folio_list)) {
@@ -1378,9 +1380,11 @@ retry:
 				 * We can free the unmapped pages without IO.
 				 */
 				if (data_race(!list_empty(&folio->_deferred_list) &&
-				    folio_test_partially_mapped(folio)) &&
-				    split_folio_to_list(folio, folio_list))
-					goto activate_locked;
+				    folio_test_partially_mapped(folio))) {
+					if (split_folio_to_list(folio, folio_list))
+						goto activate_locked;
+					folio_alloc_swap_split(nr_pages);
+				}
 			}
 			ret = folio_alloc_swap(folio);
 			if (ret) {
@@ -1393,6 +1397,7 @@ retry:
 				/* Fallback to swap normal pages */
 				if (split_folio_to_list(folio, folio_list))
 					goto activate_locked;
+				folio_alloc_swap_split(nr_pages);
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 				if (nr_pages >= HPAGE_PMD_NR) {
 					count_memcg_folio_events(folio,

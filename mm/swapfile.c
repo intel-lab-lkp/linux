@@ -120,6 +120,8 @@ atomic_t nr_rotate_swap = ATOMIC_INIT(0);
 struct percpu_swap_cluster {
 	struct swap_info_struct *si[SWAP_NR_ORDERS];
 	unsigned long offset[SWAP_NR_ORDERS];
+	/* Pages of the current reclaim batch still to allocate, per order */
+	unsigned int batch_left[SWAP_NR_ORDERS];
 	local_lock_t lock;
 };
 
@@ -916,6 +918,41 @@ static bool cluster_scan_range(struct swap_info_struct *si,
 	return true;
 }
 
+/*
+ * First offset in [@start, @end), aligned to @nr_pages, followed by
+ * @nr_contig free slots. Reclaimable swap cache does not count as free.
+ */
+static unsigned long cluster_find_free_contig(struct swap_cluster_info *ci,
+					      unsigned long start,
+					      unsigned long end,
+					      unsigned int nr_pages,
+					      unsigned int nr_contig)
+{
+	unsigned long offset, contig_start = start;
+
+	if (cluster_is_empty(ci))
+		return start + nr_contig <= end ? start : SWAP_ENTRY_INVALID;
+
+	for (offset = start; offset < end; offset++) {
+		if (!swp_tb_is_null(__swap_table_get(ci, offset % SWAPFILE_CLUSTER))) {
+			contig_start = ALIGN(offset + 1, nr_pages);
+			offset = contig_start - 1;
+			continue;
+		}
+		if (offset + 1 - contig_start >= nr_contig)
+			return contig_start;
+	}
+
+	return SWAP_ENTRY_INVALID;
+}
+
+static bool cluster_slots_free(struct swap_cluster_info *ci,
+			       unsigned long offset, unsigned int nr_pages)
+{
+	return cluster_find_free_contig(ci, offset, offset + nr_pages,
+					nr_pages, nr_pages) == offset;
+}
+
 static bool __swap_cluster_alloc_entries(struct swap_info_struct *si,
 					 struct swap_cluster_info *ci,
 					 struct folio *folio,
@@ -1042,6 +1079,59 @@ static unsigned int alloc_swap_scan_list(struct swap_info_struct *si,
 	return found;
 }
 
+/* Larger folios already make large enough write requests on their own */
+#define SWAP_BATCH_MAX_ORDER	(ilog2(SWAP_CLUSTER_MAX) - 1)
+
+static inline unsigned int swap_batch_contig(unsigned int left)
+{
+	return min_t(unsigned int, left, SWAP_CLUSTER_MAX);
+}
+
+/*
+ * Like alloc_swap_scan_list(), but only allocate at the start of @nr_contig
+ * free slots. Order 0 clusters without them move to the frag list until a
+ * slot is freed, larger orders stay nonfull as the folio may still fit.
+ */
+static unsigned int alloc_swap_scan_list_contig(struct swap_info_struct *si,
+						struct list_head *list,
+						struct folio *folio,
+						unsigned int nr_contig)
+{
+	unsigned int found = SWAP_ENTRY_INVALID, order = folio_order(folio);
+	struct swap_cluster_info *ci;
+	unsigned long start, offset;
+	LIST_HEAD(skipped);
+
+	while ((ci = isolate_lock_cluster(si, list))) {
+		start = cluster_offset(si, ci);
+		offset = SWAP_ENTRY_INVALID;
+		if (SWAPFILE_CLUSTER - ci->count >= nr_contig)
+			offset = cluster_find_free_contig(ci, start,
+							  start + SWAPFILE_CLUSTER,
+							  1 << order, nr_contig);
+		if (offset == SWAP_ENTRY_INVALID) {
+			if (order)
+				move_cluster(si, ci, &skipped,
+					     CLUSTER_FLAG_NONFULL);
+			else
+				relocate_cluster(si, ci);
+			swap_cluster_unlock(ci);
+			continue;
+		}
+		found = alloc_swap_scan_cluster(si, ci, folio, offset);
+		if (found)
+			break;
+	}
+
+	if (!list_empty(&skipped)) {
+		spin_lock(&si->lock);
+		list_splice_tail(&skipped, list);
+		spin_unlock(&si->lock);
+	}
+
+	return found;
+}
+
 static void swap_reclaim_full_clusters(struct swap_info_struct *si, bool force)
 {
 	long to_scan = 1;
@@ -1109,6 +1199,7 @@ static unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si,
 	struct swap_cluster_info *ci;
 	unsigned int order = likely(folio) ? folio_order(folio) : 0;
 	unsigned int offset = SWAP_ENTRY_INVALID, found = SWAP_ENTRY_INVALID;
+	unsigned int left;
 
 	/*
 	 * Swapfile is not block device so unable
@@ -1129,7 +1220,14 @@ static unsigned long cluster_alloc_swap_entry(struct swap_info_struct *si,
 		if (cluster_is_usable(ci, order)) {
 			if (cluster_is_empty(ci))
 				offset = cluster_offset(si, ci);
-			found = alloc_swap_scan_cluster(si, ci, folio, offset);
+			/* The batch's contiguous slots are used up */
+			if (likely(folio) &&
+			    this_cpu_read(percpu_swap_cluster.batch_left[order]) &&
+			    !cluster_slots_free(ci, offset, 1 << order))
+				swap_cluster_unlock(ci);
+			else
+				found = alloc_swap_scan_cluster(si, ci, folio,
+								offset);
 		} else {
 			swap_cluster_unlock(ci);
 		}
@@ -1146,6 +1244,21 @@ new_cluster:
 		found = alloc_swap_scan_list(si, &si->free_clusters, folio, false);
 		if (found)
 			goto done;
+	}
+
+	/* Keep a reclaim batch on contiguous free slots, not in small holes */
+	left = likely(folio) ?
+	       this_cpu_read(percpu_swap_cluster.batch_left[order]) : 0;
+	if (left && order < PMD_ORDER) {
+		found = alloc_swap_scan_list_contig(si, &si->nonfull_clusters[order],
+						    folio, swap_batch_contig(left));
+		if (found)
+			goto done;
+		found = alloc_swap_scan_list(si, &si->free_clusters, folio, false);
+		if (found)
+			goto done;
+		/* No contiguous slots left, allocate the rest of the batch as usual */
+		this_cpu_write(percpu_swap_cluster.batch_left[order], 0);
 	}
 
 	if (order < PMD_ORDER) {
@@ -1390,7 +1503,15 @@ static bool swap_alloc_fast(struct folio *folio)
 	if (cluster_is_usable(ci, order)) {
 		if (cluster_is_empty(ci))
 			offset = cluster_offset(si, ci);
-		alloc_swap_scan_cluster(si, ci, folio, offset);
+		/* The batch's contiguous slots are used up */
+		if (this_cpu_read(percpu_swap_cluster.batch_left[order]) &&
+		    !cluster_slots_free(ci, offset, 1 << order)) {
+			swap_cluster_unlock(ci);
+			this_cpu_write(percpu_swap_cluster.offset[order],
+				       SWAP_ENTRY_INVALID);
+		} else {
+			alloc_swap_scan_cluster(si, ci, folio, offset);
+		}
 	} else {
 		swap_cluster_unlock(ci);
 	}
@@ -1729,6 +1850,86 @@ failed:
 	return err;
 }
 
+static void swap_alloc_prepare(unsigned int order, unsigned int nr)
+{
+	unsigned int nr_contig = swap_batch_contig(nr);
+	struct swap_cluster_info *ci;
+	struct swap_info_struct *si;
+	unsigned long offset;
+	bool keep = false;
+
+	local_lock(&percpu_swap_cluster.lock);
+	if (nr <= (1 << order)) {
+		this_cpu_write(percpu_swap_cluster.batch_left[order], 0);
+		goto out;
+	}
+	this_cpu_write(percpu_swap_cluster.batch_left[order], nr);
+
+	/* Keep the cursor if enough free slots follow it */
+	si = this_cpu_read(percpu_swap_cluster.si[order]);
+	offset = this_cpu_read(percpu_swap_cluster.offset[order]);
+	if (si && offset && get_swap_device_info(si)) {
+		ci = swap_cluster_lock(si, offset);
+		if (cluster_is_usable(ci, order)) {
+			if (cluster_is_empty(ci))
+				offset = cluster_offset(si, ci);
+			keep = offset % SWAPFILE_CLUSTER + nr_contig <=
+			       SWAPFILE_CLUSTER &&
+			       cluster_find_free_contig(ci, offset,
+							offset + nr_contig,
+							1 << order,
+							nr_contig) == offset;
+		}
+		swap_cluster_unlock(ci);
+		put_swap_device(si);
+	}
+	if (!keep)
+		this_cpu_write(percpu_swap_cluster.offset[order],
+			       SWAP_ENTRY_INVALID);
+out:
+	local_unlock(&percpu_swap_cluster.lock);
+}
+
+/**
+ * folio_alloc_swap_prepare - prepare swap allocation for a reclaim batch
+ * @folios: list of folios reclaim is about to swap out
+ *
+ * Record how many pages of each small order the batch will swap out, so
+ * that their slots are allocated contiguously. Nothing is reserved.
+ */
+void folio_alloc_swap_prepare(struct list_head *folios)
+{
+	unsigned int max_order = min(SWAP_BATCH_MAX_ORDER, SWAP_NR_ORDERS - 1);
+	unsigned int nr[SWAP_BATCH_MAX_ORDER + 1] = {};
+	struct folio *folio;
+	unsigned int order;
+
+	if (!total_swap_pages)
+		return;
+
+	list_for_each_entry(folio, folios, lru) {
+		if (!folio_test_swapbacked(folio) || folio_test_swapcache(folio))
+			continue;
+		order = folio_order(folio);
+		if (order <= max_order)
+			nr[order] += 1 << order;
+	}
+
+	for (order = 0; order <= max_order; order++)
+		swap_alloc_prepare(order, nr[order]);
+}
+
+/**
+ * folio_alloc_swap_split - account for a large folio split by reclaim
+ * @nr_pages: number of order-0 folios the split produced
+ */
+void folio_alloc_swap_split(unsigned int nr_pages)
+{
+	local_lock(&percpu_swap_cluster.lock);
+	this_cpu_add(percpu_swap_cluster.batch_left[0], nr_pages);
+	local_unlock(&percpu_swap_cluster.lock);
+}
+
 /**
  * folio_alloc_swap - allocate swap space for a folio
  * @folio: folio we want to move to swap
@@ -1771,6 +1972,12 @@ again:
 	local_lock(&percpu_swap_cluster.lock);
 	if (!swap_alloc_fast(folio))
 		swap_alloc_slow(folio);
+	if (folio_test_swapcache(folio)) {
+		unsigned int left = this_cpu_read(percpu_swap_cluster.batch_left[order]);
+
+		this_cpu_write(percpu_swap_cluster.batch_left[order],
+			       left > size ? left - size : 0);
+	}
 	local_unlock(&percpu_swap_cluster.lock);
 
 	if (!order && unlikely(!folio_test_swapcache(folio))) {
