@@ -59,6 +59,9 @@ struct find_free_extent_ctl {
 	/* Whether or not the allocator is currently following a hint. */
 	bool hinted;
 
+	/* A block group was skipped for its size class during this loop. */
+	bool size_class_skipped;
+
 	/* RAID index, converted from flags */
 	int index;
 

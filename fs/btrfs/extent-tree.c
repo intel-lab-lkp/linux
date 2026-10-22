@@ -4365,6 +4365,9 @@ static int find_free_extent_update_loop(struct btrfs_fs_info *fs_info,
 	    (!ffe_ctl->orig_have_caching_bg && full_search))
 		ffe_ctl->loop++;
 	ffe_ctl->loop++;
+	/* Relaxing the size class cannot help if no block group was skipped for it. */
+	if (ffe_ctl->loop == LOOP_UNSET_SIZE_CLASS && !ffe_ctl->size_class_skipped)
+		ffe_ctl->loop++;
 
 	if (ffe_ctl->loop == LOOP_ALLOC_CHUNK) {
 		struct btrfs_trans_handle *trans;
@@ -4404,6 +4407,9 @@ static int find_free_extent_update_loop(struct btrfs_fs_info *fs_info,
 			return ret;
 	}
 
+	if (ffe_ctl->loop == LOOP_WRONG_SIZE_CLASS && !ffe_ctl->size_class_skipped)
+		ffe_ctl->loop++;
+
 	if (ffe_ctl->loop == LOOP_NO_EMPTY_SIZE) {
 		if (ffe_ctl->policy != BTRFS_EXTENT_ALLOC_CLUSTERED)
 			return -ENOSPC;
@@ -4418,6 +4424,7 @@ static int find_free_extent_update_loop(struct btrfs_fs_info *fs_info,
 		ffe_ctl->empty_cluster = 0;
 	}
 
+	ffe_ctl->size_class_skipped = false;
 	return 1;
 }
 
@@ -4581,6 +4588,7 @@ static noinline int find_free_extent(struct btrfs_root *root,
 	ffe_ctl->index = btrfs_bg_flags_to_raid_index(ffe_ctl->flags);
 	ffe_ctl->loop = 0;
 	ffe_ctl->retry_uncached = false;
+	ffe_ctl->size_class_skipped = false;
 	ffe_ctl->cached = 0;
 	ffe_ctl->max_extent_size = 0;
 	ffe_ctl->total_free_space = 0;
@@ -4742,8 +4750,10 @@ have_block_group:
 			goto loop;
 		}
 
-		if (!find_free_extent_check_size_class(ffe_ctl, block_group))
+		if (!find_free_extent_check_size_class(ffe_ctl, block_group)) {
+			ffe_ctl->size_class_skipped = true;
 			goto loop;
+		}
 
 		bg_ret = NULL;
 		ret = do_allocation(block_group, ffe_ctl, &bg_ret);
