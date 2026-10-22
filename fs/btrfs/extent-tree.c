@@ -4324,7 +4324,23 @@ static int can_allocate_chunk(struct btrfs_fs_info *fs_info,
 static bool find_free_extent_skip_block_group(struct btrfs_block_group *block_group,
 					      struct find_free_extent_ctl *ffe_ctl)
 {
-	if (likely(!block_group->ro && !(block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED)))
+	bool skip = block_group->ro || (block_group->flags & BTRFS_BLOCK_GROUP_REMAPPED);
+
+	/*
+	 * caching_thread() sets FINISHED under a a separate block_group->lock
+	 * critical section after it is done populating, so smp_load_acquire
+	 * guarantees we see the block group as populated by caching.
+	 */
+	if (!skip && smp_load_acquire(&block_group->cached) == BTRFS_CACHE_FINISHED) {
+		u64 free_space = data_race(block_group->free_space_ctl->free_space);
+
+		if (free_space < ffe_ctl->num_bytes) {
+			ffe_ctl->total_free_space = max(ffe_ctl->total_free_space,
+							free_space);
+			skip = true;
+		}
+	}
+	if (!skip)
 		return false;
 	if (ffe_ctl->for_treelog)
 		btrfs_clear_treelog_bg(block_group);
