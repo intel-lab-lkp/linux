@@ -103,6 +103,26 @@ mx25l12805d_4pp3b_post_sfdp_fixups(struct spi_nor *nor)
 	return 0;
 }
 
+static int mx66l1g45g_late_init_fixups(struct spi_nor *nor)
+{
+	struct spi_nor_flash_parameter *params = nor->params;
+	u8 opcode = SPINOR_OP_READ_1_4_4_DTR;
+
+	/*
+	 * When a 4BAIT table is present, SFDP parsing already converted all
+	 * read opcodes to their 4-byte variants and spi_nor_set_4byte_opcodes()
+	 * is skipped later on, so select the 4-byte opcode here.
+	 */
+	if (params->flags & SNOR_F_HAS_4BAIT)
+		opcode = SPINOR_OP_READ_1_4_4_DTR_4B;
+
+	params->hwcaps.mask |= SNOR_HWCAPS_READ_1_4_4_DTR;
+	spi_nor_set_read_settings(&params->reads[SNOR_CMD_READ_1_4_4_DTR],
+				  0, 6, opcode, SNOR_PROTO_1_4_4_DTR);
+
+	return 0;
+}
+
 static const struct spi_nor_fixups mx25l25635_fixups = {
 	.post_bfpt = mx25l25635_post_bfpt_fixups,
 	.post_sfdp = macronix_qpp4b_post_sfdp_fixups,
@@ -118,6 +138,11 @@ static const struct spi_nor_fixups mx25l3255e_fixups = {
 
 static const struct spi_nor_fixups mx25l12805d_4pp3b_fixups = {
 	.post_sfdp = mx25l12805d_4pp3b_post_sfdp_fixups,
+};
+
+static const struct spi_nor_fixups mx66l1g45g_fixups = {
+	.post_sfdp = macronix_qpp4b_post_sfdp_fixups,
+	.late_init = mx66l1g45g_late_init_fixups,
 };
 
 static const struct flash_info macronix_nor_parts[] = {
@@ -355,7 +380,8 @@ static const struct spi_nor_fixup macronix_fixups[] = {
 	{ .id = SNOR_ID(0xc2, 0x20, 0x19), .fixups = &mx25l25635_fixups },
 	{ .id = SNOR_ID(0xc2, 0x20, 0x1a), .fixups = &macronix_qpp4b_fixups,
 	  .fixup_flags = SPI_NOR_4B_OPCODES },
-	{ .id = SNOR_ID(0xc2, 0x20, 0x1b), .fixups = &macronix_qpp4b_fixups },
+	{ .id = SNOR_ID(0xc2, 0x20, 0x1b), .fixups = &mx66l1g45g_fixups,
+	  .fixup_flags = SPI_NOR_4B_OPCODES },
 	{ .id = SNOR_ID(0xc2, 0x20, 0x1c), .fixups = &macronix_qpp4b_fixups },
 	{ .id = SNOR_ID(0xc2, 0x25, 0x3a), .fixups = &macronix_qpp4b_fixups },
 	{ .id = SNOR_ID(0xc2, 0x25, 0x3b), .fixups = &macronix_qpp4b_fixups },
