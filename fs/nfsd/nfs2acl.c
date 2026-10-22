@@ -12,12 +12,17 @@
 #include <uapi/linux/nfsacl.h>
 #include <linux/gfp.h>
 #include "cache.h"
-#include "xdr.h"
 #include "vfs.h"
 
 #define NFSDDBG_FACILITY		NFSDDBG_PROC
 
 struct posix_acl;
+
+struct nfsd_attrstat {
+	__be32			status;
+	struct svc_fh		fh;
+	struct kstat		stat;
+};
 
 struct nfsd3_getaclargs {
 	struct svc_fh		fh;
@@ -51,6 +56,16 @@ struct nfsd3_accessres {
 	__u32			access;
 	struct kstat		stat;
 };
+
+bool nfssvc_decode_fhandleargs(struct svc_rqst *rqstp, struct xdr_stream *xdr);
+bool nfssvc_encode_attrstatres(struct svc_rqst *rqstp, struct xdr_stream *xdr);
+
+void nfssvc_release_attrstat(struct svc_rqst *rqstp);
+
+bool svcxdr_decode_fhandle(struct xdr_stream *xdr, struct svc_fh *fhp);
+bool svcxdr_encode_stat(struct xdr_stream *xdr, __be32 status);
+bool svcxdr_encode_fattr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
+			 const struct svc_fh *fhp, const struct kstat *stat);
 
 /*
  * These maps are identical to the NFSv3 maps (nfs3proc.c). This enables
