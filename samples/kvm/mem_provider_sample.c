@@ -674,86 +674,6 @@ static bool mps_child_owns(struct mps_info *info, unsigned long first,
 	       find_next_zero_bit(info->owned, e, s) >= e;
 }
 
-static long mps_ctl_move(void __user *uarg)
-{
-	struct mps_move mv;
-	struct mps_info *src, *dst;
-	unsigned long first, last;
-	struct file *sf, *df;
-	long ret;
-
-	if (copy_from_user(&mv, uarg, sizeof(mv)))
-		return -EFAULT;
-	sf = mps_get_child(mv.src_fd, &src);
-	if (IS_ERR(sf))
-		return PTR_ERR(sf);
-	df = mps_get_child(mv.dst_fd, &dst);
-	if (IS_ERR(df)) {
-		fput(sf);
-		return PTR_ERR(df);
-	}
-
-	mutex_lock(&mps_root.lock);
-	ret = mps_root_range(mv.offset, mv.len, &first, &last);
-	if (ret)
-		goto out;
-	if (src == dst || !mps_child_owns(src, first, last) ||
-	    !mps_child_covers(dst, first, last)) {
-		ret = -EINVAL;
-		goto out;
-	}
-	/* Revoke from the source before the destination gets the pages. */
-	mps_child_lose(src, first, last);
-	mps_child_gain(dst, first, last);
-out:
-	mutex_unlock(&mps_root.lock);
-	fput(df);
-	fput(sf);
-	return ret;
-}
-
-static long mps_ctl_donate(void __user *uarg, bool reclaim)
-{
-	struct mps_donate d;
-	unsigned long first, last;
-	struct mps_info *info;
-	struct file *file;
-	long ret;
-
-	if (copy_from_user(&d, uarg, sizeof(d)))
-		return -EFAULT;
-	if (d.pad)
-		return -EINVAL;
-	file = mps_get_child(d.fd, &info);
-	if (IS_ERR(file))
-		return PTR_ERR(file);
-
-	mutex_lock(&mps_root.lock);
-	ret = mps_root_range(d.offset, d.len, &first, &last);
-	if (ret)
-		goto out;
-	if (!reclaim) {
-		if (!mps_child_owns(info, first, last)) {
-			ret = -EINVAL;
-			goto out;
-		}
-		mps_child_lose(info, first, last);
-		bitmap_set(mps_root.donated, first, last - first);
-	} else {
-		if (!mps_child_covers(info, first, last) ||
-		    find_next_zero_bit(mps_root.donated, last, first) < last) {
-			ret = -EINVAL;
-			goto out;
-		}
-		bitmap_clear(mps_root.donated, first, last - first);
-		mps_child_gain(info, first, last);
-	}
-out:
-	mutex_unlock(&mps_root.lock);
-	fput(file);
-	return ret;
-}
-
 /*
  * CTL_SET_READONLY and CTL_SET_PRESENT change a child's pages, by the owner on
  * the control device.  A VMM that holds the child fd cannot, so it cannot undo
@@ -795,12 +715,6 @@ static long mps_ctl_ioctl(struct file *file, unsigned int cmd,
 		return mps_ctl_setup(uarg);
 	case MPS_NEW_CHILD:
 		return mps_ctl_new_child(uarg);
-	case MPS_MOVE:
-		return mps_ctl_move(uarg);
-	case MPS_DONATE:
-		return mps_ctl_donate(uarg, false);
-	case MPS_RECLAIM:
-		return mps_ctl_donate(uarg, true);
 	case MPS_CTL_SET_READONLY:
 		return mps_ctl_set_range(uarg, true);
 	case MPS_CTL_SET_PRESENT:

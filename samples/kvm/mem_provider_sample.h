@@ -68,41 +68,6 @@ struct mps_new_child {
 #define MPS_NEW_CHILD \
 	_IOW(MPS_IOCTL_BASE, 5, struct mps_new_child)
 
-/*
- * ioctl on /dev/mem_provider_sample: move [@offset, @offset + @len) of the root
- * from child @src_fd to child @dst_fd.  @src_fd must have every page of the
- * range, and the range must be inside @dst_fd's.  The pages are revoked from
- * the source before the destination gets them, so the consumers of the two
- * children never map them at the same time.
- */
-struct mps_move {
-	__s32 src_fd;
-	__s32 dst_fd;
-	__u64 offset;	/* bytes into the root, page aligned */
-	__u64 len;	/* bytes, page aligned */
-};
-
-#define MPS_MOVE \
-	_IOW(MPS_IOCTL_BASE, 6, struct mps_move)
-
-/*
- * ioctls on /dev/mem_provider_sample: DONATE takes [@offset, @offset + @len) of
- * the root from child @fd, which must have all of it, and keeps it at the
- * root.  RECLAIM gives a donated range to child @fd, whose range must
- * contain it.  The sample does not scrub the pages.
- */
-struct mps_donate {
-	__s32 fd;
-	__u32 pad;
-	__u64 offset;	/* bytes into the root, page aligned */
-	__u64 len;	/* bytes, page aligned */
-};
-
-#define MPS_DONATE \
-	_IOW(MPS_IOCTL_BASE, 7, struct mps_donate)
-#define MPS_RECLAIM \
-	_IOW(MPS_IOCTL_BASE, 8, struct mps_donate)
-
 /* ioctl on a child fd: read the child's state, for tests. */
 struct mps_stats {
 	__u64 region_offset;	/* the child's range in the root */
