@@ -360,6 +360,7 @@ struct ceph_mds_request {
 #define CEPH_MDS_R_PARENT_LOCKED	(7) /* is r_parent->i_rwsem wlocked? */
 #define CEPH_MDS_R_ASYNC		(8) /* async request */
 #define CEPH_MDS_R_FSCRYPT_FILE		(9) /* must marshal fscrypt_file field */
+#define CEPH_MDS_R_ABANDONED		(10) /* caller left; reply unlocks a grant */
 	unsigned long	r_req_flags;
 
 	struct mutex r_fill_mutex;

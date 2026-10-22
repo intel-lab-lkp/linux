@@ -163,6 +163,66 @@ static int ceph_lock_message(u8 lock_type, u16 operation, struct inode *inode,
 	return err;
 }
 
+/*
+ * The waiter was killed, or the interrupt request failed, after the
+ * original SETFILELOCK was sent. The MDS may still grant it. Unlock a
+ * grant so the lock is not left held by a caller that already returned
+ * an error and did not record it locally.
+ */
+static void ceph_lock_orphan_cb(struct ceph_mds_client *mdsc,
+				struct ceph_mds_request *req)
+{
+	struct ceph_client *cl = mdsc->fsc->client;
+	struct ceph_mds_request *unlock;
+	struct inode *inode = req->r_inode;
+	int result, err;
+
+	if (!req->r_reply_info.head)
+		return;
+	result = le32_to_cpu(req->r_reply_info.head->result);
+	if (result)
+		return;
+
+	unlock = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETFILELOCK,
+					  USE_AUTH_MDS);
+	if (IS_ERR(unlock)) {
+		pr_warn_ratelimited_client(cl,
+			"abandoned lock grant on %llx.%llx could not be unlocked: %ld\n",
+			ceph_vinop(inode), PTR_ERR(unlock));
+		return;
+	}
+
+	unlock->r_inode = inode;
+	ihold(inode);
+	unlock->r_num_caps = 1;
+	unlock->r_args.filelock_change = req->r_args.filelock_change;
+	unlock->r_args.filelock_change.type = CEPH_LOCK_UNLOCK;
+	unlock->r_args.filelock_change.wait = 0;
+
+	err = ceph_mdsc_submit_request(mdsc, inode, unlock);
+	if (err)
+		pr_warn_ratelimited_client(cl,
+			"abandoned lock grant on %llx.%llx could not be unlocked: %d\n",
+			ceph_vinop(inode), err);
+	ceph_mdsc_put_request(unlock);
+}
+
+/* mdsc->mutex held. The request has been sent and has no result yet. */
+static int ceph_lock_abandon(struct ceph_mds_client *mdsc,
+			     struct ceph_mds_request *req, int err)
+{
+	lockdep_assert_held(&mdsc->mutex);
+
+	if (test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags))
+		return 0;
+
+	req->r_args.filelock_change.wait = 0;
+	req->r_callback = ceph_lock_orphan_cb;
+	req->r_err = err;
+	set_bit(CEPH_MDS_R_ABANDONED, &req->r_req_flags);
+	return err;
+}
+
 static int ceph_lock_wait_for_completion(struct ceph_mds_client *mdsc,
                                          struct ceph_mds_request *req)
 {
@@ -191,12 +251,11 @@ static int ceph_lock_wait_for_completion(struct ceph_mds_client *mdsc,
 		err = 0;
 	} else if (!req->r_session) {
 		/*
-		 * haven't sent the request, so the MDS can't have granted
-		 * the lock: abort it.
-		 *
-		 * ensure we aren't running concurrently with
-		 * ceph_fill_trace or ceph_readdir_prepopulate, which
-		 * rely on locks (dir mutex) held by our caller.
+		 * Not sent, so the MDS cannot have granted the lock:
+		 * abort it. Take r_fill_mutex so this does not run
+		 * concurrently with ceph_fill_trace or
+		 * ceph_readdir_prepopulate, which rely on locks held
+		 * by our caller.
 		 */
 		mutex_lock(&req->r_fill_mutex);
 		req->r_err = err;
@@ -223,32 +282,38 @@ static int ceph_lock_wait_for_completion(struct ceph_mds_client *mdsc,
 
 	intr_req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETFILELOCK,
 					    USE_AUTH_MDS);
-	if (IS_ERR(intr_req))
-		return PTR_ERR(intr_req);
+	if (!IS_ERR(intr_req)) {
+		intr_req->r_inode = inode;
+		ihold(inode);
+		intr_req->r_num_caps = 1;
 
-	intr_req->r_inode = inode;
-	ihold(inode);
-	intr_req->r_num_caps = 1;
+		intr_req->r_args.filelock_change = req->r_args.filelock_change;
+		intr_req->r_args.filelock_change.rule = lock_type;
+		intr_req->r_args.filelock_change.type = CEPH_LOCK_UNLOCK;
 
-	intr_req->r_args.filelock_change = req->r_args.filelock_change;
-	intr_req->r_args.filelock_change.rule = lock_type;
-	intr_req->r_args.filelock_change.type = CEPH_LOCK_UNLOCK;
-
-	err = ceph_mdsc_do_request(mdsc, inode, intr_req);
-	ceph_mdsc_put_request(intr_req);
-
-	if (err && err != -ERESTARTSYS)
-		return err;
+		err = ceph_mdsc_do_request(mdsc, inode, intr_req);
+		ceph_mdsc_put_request(intr_req);
+	} else {
+		err = PTR_ERR(intr_req);
+	}
 
 	/*
-	 * Once it has handled the interrupt, the MDS replies to the
-	 * original request: 0 if the lock was granted first, -EINTR if
-	 * the wait was cancelled. Wait for that reply even with a fatal
-	 * signal pending, so that the caller records a granted lock and
-	 * the lock gets released when the file is closed.
+	 * The MDS replies to the original request after the interrupt:
+	 * 0 if the lock was granted first, -EINTR if the wait was
+	 * cancelled. A fatal signal must not turn this into an
+	 * uninterruptible sleep. If this wait is killed, or the
+	 * interrupt request never went out, leave the original request
+	 * registered. Its reply callback unlocks a late grant.
 	 */
-	wait_for_completion(&req->r_completion);
-	return 0;
+	if (!err)
+		err = wait_for_completion_killable(&req->r_completion);
+	if (!err)
+		return 0;
+
+	mutex_lock(&mdsc->mutex);
+	err = ceph_lock_abandon(mdsc, req, err);
+	mutex_unlock(&mdsc->mutex);
+	return err;
 }
 
 static int try_unlock_file(struct file *file, struct file_lock *fl)

@@ -4076,8 +4076,15 @@ int ceph_mdsc_wait_request(struct ceph_mds_client *mdsc,
 	boutc(cl, "do_request waited, got %d\n", err);
 	mutex_lock(&mdsc->mutex);
 
-	/* only abort if we didn't race with a real reply */
-	if (test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags)) {
+	/*
+	 * The caller was killed or the interrupt request failed after
+	 * this request was sent. Leave it registered. A late grant is
+	 * unlocked by r_callback; do not turn that grant into success
+	 * for a caller that has already given up.
+	 */
+	if (test_bit(CEPH_MDS_R_ABANDONED, &req->r_req_flags)) {
+		err = req->r_err;
+	} else if (test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags)) {
 		err = le32_to_cpu(req->r_reply_info.head->result);
 		if (err > 0 || err < -MAX_ERRNO) {
 			/*
