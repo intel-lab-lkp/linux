@@ -6,12 +6,10 @@
 #include <linux/types.h>
 
 /*
- * A sample memory provider (include/linux/mem_provider.h).
+ * A sample memory provider.
  *
- * Every fd that this module returns is a provider file.  Pass it as
- * resource_fd to KVM_CREATE_GUEST_MEMFD with GUEST_MEMFD_FLAG_USE_RESOURCE,
- * and as fd to IOMMU_IOAS_MAP_FILE.  Both consumers follow every change that
- * the ioctls below make.
+ * Every fd that this module returns is a child file. Pass it to
+ * KVM_CREATE_GUEST_MEMFD.
  */
 
 #define MPS_IOCTL_BASE		'P'

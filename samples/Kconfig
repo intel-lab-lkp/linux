@@ -328,9 +328,9 @@ source "samples/damon/Kconfig"
 
 config SAMPLE_KVM_MEM_PROVIDER
 	tristate "Build sample memory provider -- loadable module only"
-	depends on MEM_PROVIDER && CONTIG_ALLOC && X86_64 && m
+	depends on CONTIG_ALLOC && X86_64 && m
 	help
-	  This builds a sample memory provider (include/linux/mem_provider.h).
+	  This builds a sample memory provider.
 	  Its files can back a guest_memfd and be mapped by iommufd.
 	  It allocates a contiguous region with alloc_contig_pages()
 	  and carves out child provider files on the fly.

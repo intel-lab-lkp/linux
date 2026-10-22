@@ -2,13 +2,10 @@
 /*
  * mem_provider_sample - a sample memory provider.
  *
- * The module owns a region of physical memory and lends it through provider
- * files (include/linux/mem_provider.h).  A VMM passes the same file to
- * KVM_CREATE_GUEST_MEMFD, for the guest, and to IOMMU_IOAS_MAP_FILE, for the
- * guest's devices.  The module calls neither KVM nor iommufd: it answers
- * "what is page N" and revokes a range when the answer changes.
+ * The module owns a region of physical memory and lends it through child
+ * files.
  *
- * The control device /dev/mem_provider_sample creates provider files.
+ * The control device /dev/mem_provider_sample creates child files.
  * NEW_CHILD carves part of the region into a child file. A page can also
  * be taken away. See mem_provider_sample.h.
  *
@@ -21,7 +18,6 @@
 #include <linux/fs.h>
 #include <linux/gfp.h>
 #include <linux/io.h>
-#include <linux/mem_provider.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
@@ -31,14 +27,11 @@
 #include "mem_provider_sample.h"
 
 /*
- * One provider file.
+ * One child file.
  *
- * Lock order: mps_root.lock, then mps_info.lock, then the consumers' locks
- * (taken by their revoke callbacks).  get_page() takes no lock, so a
- * consumer can call it from its fault paths and its revoke callback.
+ * Lock order: mps_root.lock, then mps_info.lock.
  */
 struct mps_info {
-	struct mem_provider_file mpf;
 	struct mutex lock;		/* the bitmaps */
 
 	unsigned long base_pfn;
@@ -69,89 +62,7 @@ static struct mps_root {
 	struct list_head children;
 } mps_root;
 
-/* Does @info have page @index now?  Called with or without info->lock. */
-static bool mps_page_present(struct mps_info *info, unsigned long index)
-{
-	return !test_bit(index, info->absent);
-}
-
-/*
- * The length of the run from @index of pages with the same state as @index:
- * present.
- */
-static unsigned long mps_run(struct mps_info *info, unsigned long index)
-{
-	unsigned long end = info->npages;
-
-	end = min(end, find_next_bit(info->absent, info->npages, index + 1));
-	return end - index;
-}
-
-/* ---- Provider operations ------------------------------------------------ */
-
-static struct mem_provider_file *
-mps_mp_attach(struct file *file, loff_t size)
-{
-	struct mps_info *info = file->private_data;
-
-	if (size > (loff_t)info->npages << PAGE_SHIFT)
-		return ERR_PTR(-EINVAL);
-	return &info->mpf;
-}
-
-static void mps_mp_detach(struct mem_provider_file *mpf)
-{
-}
-
-/*
- * Reads the bitmaps without info->lock.  A change runs under the lock and
- * revokes the range afterwards, so an answer that a change makes out of date
- * is dropped by the consumer.
- */
-static int mps_mp_get_page(struct mem_provider_file *mpf, pgoff_t index,
-			   unsigned long *pfn, int *max_order, u32 *attrs)
-{
-	struct mps_info *info = container_of(mpf, struct mps_info, mpf);
-	unsigned long run;
-
-	if (index >= info->npages)
-		return -EINVAL;
-
-	if (!mps_page_present(info, index))
-		return -EFAULT;
-
-	/* The aligned block around @index must be one run. */
-	run = mps_run(info, index);
-	while (*max_order) {
-		unsigned long first = ALIGN_DOWN(index, 1UL << *max_order);
-
-		if (first + (1UL << *max_order) <= index + run &&
-		    (first == index || mps_page_present(info, first)) &&
-		    mps_run(info, first) >= 1UL << *max_order)
-			break;
-		(*max_order)--;
-	}
-
-	*pfn = info->base_pfn + index;
-	return 0;
-}
-
-static const struct mem_provider_ops mps_mp_ops = {
-	.attach		= mps_mp_attach,
-	.detach		= mps_mp_detach,
-	.get_page	= mps_mp_get_page,
-};
-
-/* Tell the consumers that pages [start, end) of @info changed. */
-static void mps_revoke(struct mps_info *info, unsigned long start,
-		       unsigned long end)
-{
-	if (end > start)
-		mem_provider_revoke(&info->mpf, (loff_t)start << PAGE_SHIFT,
-				    (loff_t)(end - start) << PAGE_SHIFT);
-}
-
-/* ---- Provider file ------------------------------------------------------ */
+/* ---- Child file --------------------------------------------------------- */
 
 /* Byte range [offset, offset + len) of @info as page indices. */
 static int mps_range(struct mps_info *info, u64 offset, u64 len,
@@ -174,7 +85,6 @@ static void mps_set_present(struct mps_info *info, unsigned long start,
 		bitmap_clear(info->absent, start, end - start);
 	else
 		bitmap_set(info->absent, start, end - start);
-	mps_revoke(info, start, end);
 	mutex_unlock(&info->lock);
 }
 
@@ -226,15 +136,11 @@ static int mps_file_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static const struct mem_provider_fops mps_file_fops = {
-	.fops = {
-		.owner		= THIS_MODULE,
-		.fop_flags	= FOP_MEM_PROVIDER,
-		.release	= mps_file_release,
-		.unlocked_ioctl	= mps_file_ioctl,
-		.compat_ioctl	= compat_ptr_ioctl,
-	},
-	.ops = &mps_mp_ops,
+static const struct file_operations mps_file_fops = {
+	.owner		= THIS_MODULE,
+	.release	= mps_file_release,
+	.unlocked_ioctl	= mps_file_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
 };
 
 /*
@@ -253,7 +159,6 @@ static int mps_new_file(unsigned long base_pfn, unsigned long npages,
 	info = kzalloc_obj(*info);
 	if (!info)
 		return -ENOMEM;
-	mem_provider_file_init(&info->mpf);
 	info->base_pfn = base_pfn;
 	info->npages = npages;
 	info->absent = bitmap_zalloc(npages, GFP_KERNEL);
@@ -269,7 +174,7 @@ static int mps_new_file(unsigned long base_pfn, unsigned long npages,
 		ret = fd;
 		goto err_free;
 	}
-	file = anon_inode_getfile("[mem-provider-sample]", &mps_file_fops.fops,
+	file = anon_inode_getfile("[mem-provider-sample]", &mps_file_fops,
 				  info, O_RDWR);
 	if (IS_ERR(file)) {
 		put_unused_fd(fd);
@@ -354,7 +259,7 @@ static struct file *mps_get_child(int fd, struct mps_info **infop)
 
 	if (!file)
 		return ERR_PTR(-EBADF);
-	if (file->f_op != &mps_file_fops.fops ||
+	if (file->f_op != &mps_file_fops ||
 	    !((struct mps_info *)file->private_data)->is_child) {
 		fput(file);
 		return ERR_PTR(-EINVAL);
