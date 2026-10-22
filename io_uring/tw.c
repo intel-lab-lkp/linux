@@ -179,36 +179,13 @@ static void io_local_work_wake_poll(struct io_ring_ctx *ctx, unsigned int flags)
 	call_rcu_hurry(&ctx->poll_wq_rcu, io_poll_wq_wake_rcu);
 }
 
-void io_req_local_work_add(struct io_kiocb *req, unsigned flags)
+/*
+ * Issue the wake up of the waiter's cycle if this add is the one that takes
+ * ->cq_wait_nr's credit, see io_cq_wait_arm().
+ */
+static void io_local_work_wake(struct io_ring_ctx *ctx, unsigned int flags)
 {
-	struct io_ring_ctx *ctx = req->ctx;
 	int nr_wait;
-
-	/* pairs with synchronize_rcu() in io_ring_exit_work() */
-	guard(rcu)();
-
-	/*
-	 * We don't know how many requests there are in the link and whether
-	 * they can even be queued lazily, fall back to non-lazy.
-	 */
-	if (req->flags & IO_REQ_LINK_FLAGS)
-		flags &= ~IOU_F_TWQ_LAZY_WAKE;
-
-	/*
-	 * The xchg() in mpscq_push() implies a full barrier, which pairs with
-	 * the barrier in io_cq_wait_arm() on the io_cqring_wait() side. This
-	 * ensures that either we see the updated ->cq_wait_nr, or waiters going
-	 * to sleep will observe the work added to the list, which is similar to
-	 * the wait/wake task state sync.
-	 */
-	if (mpscq_push(&ctx->work_list, &req->io_task_work.node)) {
-		io_ctx_mark_taskrun(ctx);
-		if (data_race(ctx->int_flags) & IO_RING_F_HAS_EVFD)
-			io_eventfd_signal(ctx, false, flags & IOU_F_TWQ_IN_WAKE);
-		/* whoever sets the flag wakes ->poll_wq afterwards */
-		if (data_race(ctx->int_flags) & IO_RING_F_POLL_ACTIVATED)
-			io_local_work_wake_poll(ctx, flags);
-	}
 
 	/*
 	 * No one is waiting (IO_CQ_WAKE_INIT), or this cycle's wake up has
@@ -237,6 +214,53 @@ void io_req_local_work_add(struct io_kiocb *req, unsigned flags)
 		return;
 	}
 	wake_up_state(ctx->submitter_task, TASK_INTERRUPTIBLE);
+}
+
+void io_req_local_work_add(struct io_kiocb *req, unsigned flags)
+{
+	struct io_ring_ctx *ctx = req->ctx;
+	bool first;
+
+	/* pairs with synchronize_rcu() in io_ring_exit_work() */
+	guard(rcu)();
+
+	/*
+	 * We don't know how many requests there are in the link and whether
+	 * they can even be queued lazily, fall back to non-lazy.
+	 */
+	if (req->flags & IO_REQ_LINK_FLAGS)
+		flags &= ~IOU_F_TWQ_LAZY_WAKE;
+
+	/*
+	 * Only the add that takes the credit wakes the waiter, later ones
+	 * return early, and a lazy add that hasn't counted itself down yet
+	 * holds back the one that would. Neither may be preempted between
+	 * queueing its entry and the wake up: the waiter, whatever its
+	 * priority, sleeps with the entry queued for as long as anything of
+	 * higher priority runs on the adder's CPU, and nothing boosts the
+	 * adder, as it holds no lock.
+	 *
+	 * The xchg() in mpscq_push() implies a full barrier, which pairs with
+	 * the barrier in io_cq_wait_arm() on the io_cqring_wait() side. This
+	 * ensures that either we see the updated ->cq_wait_nr, or waiters going
+	 * to sleep will observe the work added to the list, which is similar to
+	 * the wait/wake task state sync.
+	 */
+	preempt_disable();
+	first = mpscq_push(&ctx->work_list, &req->io_task_work.node);
+	if (first)
+		io_ctx_mark_taskrun(ctx);
+	io_local_work_wake(ctx, flags);
+	preempt_enable();
+
+	/* eventfd_signal() takes a spinlock_t, not allowed above on PREEMPT_RT */
+	if (first) {
+		if (data_race(ctx->int_flags) & IO_RING_F_HAS_EVFD)
+			io_eventfd_signal(ctx, false, flags & IOU_F_TWQ_IN_WAKE);
+		/* whoever sets the flag wakes ->poll_wq afterwards */
+		if (data_race(ctx->int_flags) & IO_RING_F_POLL_ACTIVATED)
+			io_local_work_wake_poll(ctx, flags);
+	}
 }
 
 void io_req_normal_work_add(struct io_kiocb *req)
