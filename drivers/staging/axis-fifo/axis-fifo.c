@@ -148,7 +148,7 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 	words_available = bytes_available / sizeof(u32);
 
 	if (bytes_available > len) {
-		ret = -EINVAL;
+		ret = -ENOBUFS;
 		goto err_flush_rx;
 	}
 
@@ -378,6 +378,8 @@ DEFINE_SHOW_ATTRIBUTE(axis_fifo_debugfs_regs);
 static void axis_fifo_debugfs_init(struct axis_fifo *fifo)
 {
 	fifo->debugfs_dir = debugfs_create_dir(dev_name(fifo->dt_device), NULL);
+	if (IS_ERR_OR_NULL(fifo->debugfs_dir))
+		return;
 
 	debugfs_create_file("regs", 0444, fifo->debugfs_dir, fifo,
 			    &axis_fifo_debugfs_regs_fops);
@@ -428,7 +430,6 @@ static int axis_fifo_parse_dt(struct axis_fifo *fifo)
 
 static int axis_fifo_probe(struct platform_device *pdev)
 {
-	struct resource *r_mem;
 	struct device *dev = &pdev->dev;
 	struct axis_fifo *fifo = NULL;
 	int rc = 0; /* error return value */
@@ -447,7 +448,7 @@ static int axis_fifo_probe(struct platform_device *pdev)
 	mutex_init(&fifo->read_lock);
 	mutex_init(&fifo->write_lock);
 
-	fifo->base_addr = devm_platform_get_and_ioremap_resource(pdev, 0, &r_mem);
+	fifo->base_addr = devm_platform_get_and_ioremap_resource(pdev, 0, NULL);
 	if (IS_ERR(fifo->base_addr))
 		return PTR_ERR(fifo->base_addr);
 
