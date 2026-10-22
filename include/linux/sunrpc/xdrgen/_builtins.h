@@ -88,10 +88,14 @@ static inline bool
 xdrgen_decode_unsigned_short(struct xdr_stream *xdr, u16 *ptr)
 {
 	__be32 *p = xdr_inline_decode(xdr, XDR_UNIT);
+	u32 val;
 
 	if (unlikely(!p))
 		return false;
-	*ptr = (u16)be32_to_cpup(p);
+	val = be32_to_cpup(p);
+	if (unlikely(val > U16_MAX))
+		return false;
+	*ptr = val;
 	return true;
 }
 
