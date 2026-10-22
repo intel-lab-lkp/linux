@@ -420,6 +420,49 @@ static const struct iio_chan_spec _name[] = {                           \
 LTC2497_DEFINE_CHANNELS(ltc2497core_channel, 0);
 LTC2497_DEFINE_CHANNELS(ltc2497core_channel_samp_freq, BIT(IIO_CHAN_INFO_SAMP_FREQ));
 
+#define LTC2493_DEFINE_CHANNELS(_name, _extra_mask)                     \
+static const struct iio_chan_spec _name[] = {                           \
+	LTC2497_CHAN(0, LTC2497_SGL, "CH0", _extra_mask),               \
+	LTC2497_CHAN(1, LTC2497_SGL, "CH1", _extra_mask),               \
+	LTC2497_CHAN(2, LTC2497_SGL, "CH2", _extra_mask),               \
+	LTC2497_CHAN(3, LTC2497_SGL, "CH3", _extra_mask),               \
+	LTC2497_CHAN_DIFF(0, LTC2497_DIFF, _extra_mask),                \
+	LTC2497_CHAN_DIFF(1, LTC2497_DIFF, _extra_mask),                \
+	LTC2497_CHAN_DIFF(0, LTC2497_DIFF | LTC2497_SIGN, _extra_mask), \
+	LTC2497_CHAN_DIFF(1, LTC2497_DIFF | LTC2497_SIGN, _extra_mask), \
+	LTC2497_TEMP_CHANNEL,                                           \
+}
+
+LTC2493_DEFINE_CHANNELS(ltc2493_channel, 0);
+LTC2493_DEFINE_CHANNELS(ltc2493_channel_samp_freq, BIT(IIO_CHAN_INFO_SAMP_FREQ));
+
+/*
+ * Channel sets keyed by the part's single-ended input count, so that adding a
+ * family member with a different count is a new table and a new row here
+ * rather than a new branch in probe.  num_channels counts the temperature
+ * entry, which probe drops again for parts without the sensor.
+ */
+struct ltc2497core_channel_set {
+	u8 num_inputs;
+	unsigned int num_channels;
+	const struct iio_chan_spec *channels;
+	const struct iio_chan_spec *channels_samp_freq;
+};
+
+static const struct ltc2497core_channel_set ltc2497core_channel_sets[] = {
+	{
+		.num_inputs		= 4,
+		.num_channels		= ARRAY_SIZE(ltc2493_channel),
+		.channels		= ltc2493_channel,
+		.channels_samp_freq	= ltc2493_channel_samp_freq,
+	}, {
+		.num_inputs		= 16,
+		.num_channels		= ARRAY_SIZE(ltc2497core_channel),
+		.channels		= ltc2497core_channel,
+		.channels_samp_freq	= ltc2497core_channel_samp_freq,
+	},
+};
+
 static const struct iio_info ltc2497core_info = {
 	.read_raw = ltc2497core_read_raw,
 	.read_avail = ltc2497core_read_avail,
@@ -430,6 +473,7 @@ int ltc2497core_probe(struct device *dev, struct iio_dev *indio_dev)
 {
 	struct ltc2497core_driverdata *ddata = iio_priv(indio_dev);
 	struct iio_map *plat_data = dev_get_platdata(dev);
+	const struct ltc2497core_channel_set *set = NULL;
 	int ret;
 
 	/*
@@ -441,17 +485,25 @@ int ltc2497core_probe(struct device *dev, struct iio_dev *indio_dev)
 	else
 		indio_dev->name = dev_name(dev);
 
+	for (unsigned int i = 0; i < ARRAY_SIZE(ltc2497core_channel_sets); i++) {
+		if (ltc2497core_channel_sets[i].num_inputs ==
+		    ddata->chip_info->num_inputs) {
+			set = &ltc2497core_channel_sets[i];
+			break;
+		}
+	}
+	if (!set)
+		return -EINVAL;
+
 	indio_dev->info = &ltc2497core_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	if (ddata->chip_info->has_speed_mode)
-		indio_dev->channels = ltc2497core_channel_samp_freq;
+		indio_dev->channels = set->channels_samp_freq;
 	else
-		indio_dev->channels = ltc2497core_channel;
-	/* Only the ltc2499 has a temperature channel; it is the last entry. */
-	if (ddata->chip_info->has_temp)
-		indio_dev->num_channels = ARRAY_SIZE(ltc2497core_channel);
-	else
-		indio_dev->num_channels = ARRAY_SIZE(ltc2497core_channel) - 1;
+		indio_dev->channels = set->channels;
+	indio_dev->num_channels = set->num_channels;
+	if (!ddata->chip_info->has_temp)
+		indio_dev->num_channels--;
 
 	if (ddata->chip_info->has_rejection_mode) {
 		struct iio_chan_spec *channels;

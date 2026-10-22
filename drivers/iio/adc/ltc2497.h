@@ -47,6 +47,7 @@ enum ltc2497_rejection {
 struct ltc2497_chip_info {
 	const char *name;
 	u32 resolution;
+	u8 num_inputs;		/* single-ended inputs */
 	bool has_temp;
 	bool has_speed_mode;	/* SPD bit in the 2nd config byte (LTC2499/LTC2493) */
 	bool has_rejection_mode;	/* FA/FB bits in the 2nd config byte */
