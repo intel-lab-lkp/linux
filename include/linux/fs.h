@@ -1915,6 +1915,7 @@ struct dir_context {
 
 struct io_uring_cmd;
 struct offset_ctx;
+struct guest_memfd_provider_operations;
 
 struct file_operations {
 	struct module *owner;
@@ -1960,6 +1961,9 @@ struct file_operations {
 	int (*uring_cmd_iopoll)(struct io_uring_cmd *, struct io_comp_batch *,
 				unsigned int poll_flags);
 	int (*mmap_prepare)(struct vm_area_desc *);
+#ifdef CONFIG_KVM_GUEST_MEMFD
+	const struct guest_memfd_provider_operations *gmem_provider_ops;
+#endif
 } __randomize_layout;
 
 /* Supports async buffered reads */
@@ -3337,6 +3341,8 @@ int simple_offset_rename_exchange(struct inode *old_dir,
 				  struct dentry *new_dentry);
 void simple_offset_destroy(struct offset_ctx *octx);
 
+loff_t offset_dir_llseek(struct file *file, loff_t offset, int whence);
+int offset_readdir(struct file *file, struct dir_context *ctx);
 extern const struct file_operations simple_offset_dir_operations;
 
 extern int simple_fsync_noflush(struct file *, loff_t, loff_t, int);

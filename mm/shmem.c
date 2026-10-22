@@ -38,6 +38,7 @@
 #include <linux/uio.h>
 #include <linux/hugetlb.h>
 #include <linux/fs_parser.h>
+#include <linux/guest_memfd.h>
 #include <linux/swapfile.h>
 #include <linux/iversion.h>
 #include <linux/unicode.h>
@@ -268,6 +269,9 @@ static void shmem_inode_unacct_blocks(struct inode *inode, long pages)
 static const struct super_operations shmem_ops;
 static const struct address_space_operations shmem_aops;
 static const struct file_operations shmem_file_operations;
+#ifdef CONFIG_KVM_GUEST_MEMFD
+static const struct file_operations shmem_dir_operations;
+#endif
 static const struct inode_operations shmem_inode_operations;
 static const struct inode_operations shmem_dir_inode_operations;
 static const struct inode_operations shmem_special_inode_operations;
@@ -3088,7 +3092,11 @@ static struct inode *__shmem_get_inode(struct mnt_idmap *idmap,
 		/* Some things misbehave if size == 0 on a directory */
 		inode->i_size = 2 * BOGO_DIRENT_SIZE;
 		inode->i_op = &shmem_dir_inode_operations;
+#ifdef CONFIG_KVM_GUEST_MEMFD
+		inode->i_fop = &shmem_dir_operations;
+#else
 		inode->i_fop = &simple_offset_dir_operations;
+#endif
 		simple_offset_init(shmem_get_offset_ctx(inode));
 		break;
 	case S_IFLNK:
@@ -5236,6 +5244,124 @@ static const struct inode_operations shmem_special_inode_operations = {
 	.set_acl	= simple_set_acl,
 #endif
 };
+
+#ifdef CONFIG_KVM_GUEST_MEMFD
+static void *shmem_gmem_attach(struct inode *gmem_inode,
+			       struct file *resource_file)
+{
+	struct inode *inode = file_inode(resource_file);
+	struct shmem_sb_info *sbinfo;
+
+	if (!S_ISDIR(inode->i_mode))
+		return ERR_PTR(-ENOTDIR);
+
+	/*
+	 * Would like comments: Requiring the root directory of the mount
+	 * provides a less confusing interface, although this is not strictly
+	 * necessary.
+	 */
+	if (resource_file->f_path.dentry != resource_file->f_path.mnt->mnt_root)
+		return ERR_PTR(-EINVAL);
+
+	if (__mnt_is_readonly(resource_file->f_path.mnt))
+		return ERR_PTR(-EROFS);
+
+	if (inode_permission(file_mnt_idmap(resource_file), inode,
+			     MAY_WRITE | MAY_EXEC))
+		return ERR_PTR(-EACCES);
+
+	/* Enforce noswap because guest_memfd does not support swapping. */
+	sbinfo = SHMEM_SB(inode->i_sb);
+	if (!sbinfo->noswap)
+		return ERR_PTR(-EINVAL);
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	/*
+	 * guest_memfd does not support huge pages yet; this restriction can be
+	 * relaxed in the future.
+	 *
+	 * TODO: Block rebinding with huge page support.
+	 */
+	if (sbinfo->huge != SHMEM_HUGE_NEVER)
+		return ERR_PTR(-EINVAL);
+#endif
+
+	return (void *)mntget(resource_file->f_path.mnt);
+}
+
+static void shmem_gmem_release(void *provider)
+{
+	struct vfsmount *mnt = provider;
+
+	mntput(mnt);
+}
+
+/*
+ * TODO: Consider refactoring shmem allocation helpers to share code between
+ * internal tmpfs folio allocation and guest_memfd provider allocation.
+ */
+static struct folio *shmem_gmem_alloc_folio(void *provider, pgoff_t index,
+					    struct mempolicy *mpol)
+{
+	struct mempolicy *sb_mpol = NULL;
+	struct vfsmount *mnt = provider;
+	struct shmem_sb_info *sbinfo;
+	struct folio *folio;
+
+	sbinfo = SHMEM_SB(mnt->mnt_sb);
+	if (sbinfo->max_blocks &&
+	    !percpu_counter_limited_add(&sbinfo->used_blocks,
+					sbinfo->max_blocks, 1))
+		return ERR_PTR(-ENOSPC);
+
+	if (!mpol) {
+		sb_mpol = shmem_get_sbmpol(sbinfo);
+		mpol = sb_mpol;
+	}
+
+	if (mpol)
+		folio = folio_alloc_mpol(GFP_HIGHUSER_MOVABLE, 0, mpol, index,
+					 numa_node_id());
+	else
+		folio = folio_alloc(GFP_HIGHUSER_MOVABLE, 0);
+
+	mpol_cond_put(sb_mpol);
+
+	if (!folio) {
+		if (sbinfo->max_blocks)
+			percpu_counter_sub(&sbinfo->used_blocks, 1);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	return folio;
+}
+
+static void shmem_gmem_invalidate_folio(void *provider, struct folio *folio)
+{
+	struct vfsmount *mnt = provider;
+	struct shmem_sb_info *sbinfo;
+
+	sbinfo = SHMEM_SB(mnt->mnt_sb);
+	if (sbinfo->max_blocks)
+		percpu_counter_sub(&sbinfo->used_blocks, folio_nr_pages(folio));
+}
+
+static const struct guest_memfd_provider_operations shmem_gmem_provider_ops = {
+	.attach			= shmem_gmem_attach,
+	.release		= shmem_gmem_release,
+	.alloc_folio		= shmem_gmem_alloc_folio,
+	.invalidate_folio	= shmem_gmem_invalidate_folio,
+};
+
+static const struct file_operations shmem_dir_operations = {
+	.llseek		= offset_dir_llseek,
+	.iterate_shared	= offset_readdir,
+	.read		= generic_read_dir,
+	.fsync		= noop_fsync,
+	.setlease	= generic_setlease,
+	.gmem_provider_ops = &shmem_gmem_provider_ops,
+};
+#endif /* CONFIG_KVM_GUEST_MEMFD */
 
 static const struct super_operations shmem_ops = {
 	.alloc_inode	= shmem_alloc_inode,

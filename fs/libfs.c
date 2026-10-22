@@ -429,7 +429,7 @@ void simple_offset_destroy(struct offset_ctx *octx)
  * Returns the updated read position if successful; otherwise a
  * negative errno is returned and the read position remains unchanged.
  */
-static loff_t offset_dir_llseek(struct file *file, loff_t offset, int whence)
+loff_t offset_dir_llseek(struct file *file, loff_t offset, int whence)
 {
 	switch (whence) {
 	case SEEK_CUR:
@@ -551,7 +551,7 @@ out_eod:
  * Return values:
  *   %0 - Complete
  */
-static int offset_readdir(struct file *file, struct dir_context *ctx)
+int offset_readdir(struct file *file, struct dir_context *ctx)
 {
 	struct dentry *dir = file->f_path.dentry;
 
