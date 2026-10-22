@@ -1072,7 +1072,7 @@ static void submit_one_async_extent(struct async_chunk *async_chunk,
 	compressed_size = async_extent->cb->bbio.bio.bi_iter.bi_size;
 	ret = btrfs_reserve_extent(root, async_extent->ram_size,
 				   compressed_size, compressed_size,
-				   0, *alloc_hint, &ins, true, true);
+				   0, *alloc_hint, &ins, true);
 	if (ret) {
 		/*
 		 * We can't reserve contiguous space for the compressed size.
@@ -1131,7 +1131,7 @@ done:
 
 out_free_reserve:
 	btrfs_dec_block_group_reservations(fs_info, ins.objectid);
-	btrfs_free_reserved_extent(fs_info, ins.objectid, ins.offset, true);
+	btrfs_free_reserved_extent(fs_info, ins.objectid, ins.offset);
 	mapping_set_error(inode->vfs_inode.i_mapping, -EIO);
 	extent_clear_unlock_delalloc(inode, start, end,
 				     NULL, &cached,
@@ -1217,7 +1217,7 @@ static int cow_one_range(struct btrfs_inode *inode, struct folio *locked_folio,
 	int ret;
 
 	ret = btrfs_reserve_extent(root, num_bytes, num_bytes, min_alloc_size,
-				   0, alloc_hint, ins, true, true);
+				   0, alloc_hint, ins, true);
 	if (ret < 0) {
 		*ret_alloc_size = cur_len;
 		return ret;
@@ -1314,7 +1314,7 @@ free_reserved:
 				     PAGE_END_WRITEBACK);
 	btrfs_qgroup_free_data(inode, NULL, file_offset, cur_len, NULL);
 	btrfs_dec_block_group_reservations(fs_info, ins->objectid);
-	btrfs_free_reserved_extent(fs_info, ins->objectid, ins->offset, true);
+	btrfs_free_reserved_extent(fs_info, ins->objectid, ins->offset);
 	mapping_set_error(inode->vfs_inode.i_mapping, -EIO);
 	*ret_alloc_size = cur_len;
 	/*
@@ -3141,21 +3141,6 @@ static int insert_reserved_file_extent(struct btrfs_trans_handle *trans,
 						qgroup_reserved, &ins);
 }
 
-static void btrfs_release_delalloc_bytes(struct btrfs_fs_info *fs_info,
-					 u64 start, u64 len)
-{
-	struct btrfs_block_group *cache;
-
-	cache = btrfs_lookup_block_group(fs_info, start);
-	ASSERT(cache);
-
-	spin_lock(&cache->lock);
-	cache->delalloc_bytes -= len;
-	spin_unlock(&cache->lock);
-
-	btrfs_put_block_group(cache);
-}
-
 static int insert_ordered_extent_file_extent(struct btrfs_trans_handle *trans,
 					     struct btrfs_ordered_extent *oe)
 {
@@ -3316,9 +3301,6 @@ int btrfs_finish_one_ordered(struct btrfs_ordered_extent *ordered_extent)
 			goto out;
 		}
 		clear_reserved_extent = false;
-		btrfs_release_delalloc_bytes(fs_info,
-					     ordered_extent->disk_bytenr,
-					     ordered_extent->disk_num_bytes);
 	}
 
 	ret = btrfs_unpin_extent_cache(inode, ordered_extent->file_offset,
@@ -3402,7 +3384,7 @@ out:
 						NULL, true);
 			btrfs_free_reserved_extent(fs_info,
 					ordered_extent->disk_bytenr,
-					ordered_extent->disk_num_bytes, true);
+					ordered_extent->disk_num_bytes);
 			/*
 			 * Actually free the qgroup rsv which was released when
 			 * the ordered extent was created.
@@ -9197,7 +9179,7 @@ int btrfs_prealloc_file_range(struct inode *inode, int mode,
 		 */
 		cur_bytes = min(cur_bytes, last_alloc);
 		ret = btrfs_reserve_extent(root, cur_bytes, cur_bytes,
-				min_size, 0, *alloc_hint, &ins, true, false);
+				min_size, 0, *alloc_hint, &ins, true);
 		if (ret)
 			break;
 
@@ -9223,7 +9205,7 @@ int btrfs_prealloc_file_range(struct inode *inode, int mode,
 		if (IS_ERR(trans)) {
 			ret = PTR_ERR(trans);
 			btrfs_free_reserved_extent(fs_info, ins.objectid,
-						   ins.offset, false);
+						   ins.offset);
 			break;
 		}
 
@@ -10023,7 +10005,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 	}
 
 	ret = btrfs_reserve_extent(root, disk_num_bytes, disk_num_bytes,
-				   disk_num_bytes, 0, 0, &ins, true, true);
+				   disk_num_bytes, 0, 0, &ins, true);
 	if (ret)
 		goto out_delalloc_release;
 	extent_reserved = true;
@@ -10064,7 +10046,7 @@ ssize_t btrfs_do_encoded_write(struct kiocb *iocb, struct iov_iter *from,
 
 out_free_reserved:
 	btrfs_dec_block_group_reservations(fs_info, ins.objectid);
-	btrfs_free_reserved_extent(fs_info, ins.objectid, ins.offset, true);
+	btrfs_free_reserved_extent(fs_info, ins.objectid, ins.offset);
 out_delalloc_release:
 	btrfs_delalloc_release_extents(inode, num_bytes);
 	btrfs_delalloc_release_metadata(inode, disk_num_bytes, ret < 0);

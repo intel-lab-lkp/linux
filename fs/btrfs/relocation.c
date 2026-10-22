@@ -4289,7 +4289,7 @@ static int move_existing_remap(struct btrfs_fs_info *fs_info,
 		min_size = fs_info->nodesize;
 
 	ret = btrfs_reserve_extent(fs_info->fs_root, length, length, min_size,
-				   0, 0, &ins, is_data, false);
+				   0, 0, &ins, is_data);
 	if (unlikely(ret)) {
 		spin_lock(&sinfo->lock);
 		btrfs_space_info_update_bytes_may_use(sinfo, -length);
@@ -4312,7 +4312,7 @@ static int move_existing_remap(struct btrfs_fs_info *fs_info,
 		u64 new_length = ALIGN_DOWN(dest_length, fs_info->nodesize);
 
 		btrfs_free_reserved_extent(fs_info, dest_addr + new_length,
-					   dest_length - new_length, 0);
+					   dest_length - new_length);
 
 		dest_length = new_length;
 	}
@@ -4446,14 +4446,14 @@ end:
 	btrfs_dec_block_group_reservations(fs_info, dest_addr);
 
 	if (unlikely(ret)) {
-		btrfs_free_reserved_extent(fs_info, dest_addr, dest_length, 0);
+		btrfs_free_reserved_extent(fs_info, dest_addr, dest_length);
 
 		if (trans) {
 			btrfs_abort_transaction(trans, ret);
 			btrfs_end_transaction(trans);
 		}
 	} else {
-		btrfs_free_reserved_bytes(dest_bg, dest_length, 0);
+		btrfs_free_reserved_bytes(dest_bg, dest_length);
 
 		ret = btrfs_commit_transaction(trans);
 	}
@@ -5118,7 +5118,7 @@ static int do_remap_reloc_trans(struct btrfs_fs_info *fs_info,
 	 * rest of it the next time round.
 	 */
 	ret = btrfs_reserve_extent(fs_info->fs_root, remap_length, remap_length,
-				   min_size, 0, 0, &ins, is_data, false);
+				   min_size, 0, 0, &ins, is_data);
 	if (ret) {
 		spin_lock(&sinfo->lock);
 		btrfs_space_info_update_bytes_may_use(sinfo, -remap_length);
@@ -5144,7 +5144,7 @@ static int do_remap_reloc_trans(struct btrfs_fs_info *fs_info,
 		u64 new_length = ALIGN_DOWN(length, fs_info->nodesize);
 
 		btrfs_free_reserved_extent(fs_info, new_addr + new_length,
-					   length - new_length, 0);
+					   length - new_length);
 
 		length = new_length;
 	}
@@ -5183,7 +5183,7 @@ static int do_remap_reloc_trans(struct btrfs_fs_info *fs_info,
 	}
 
 	adjust_block_group_remap_bytes(trans, dest_bg, length);
-	btrfs_free_reserved_bytes(dest_bg, length, 0);
+	btrfs_free_reserved_bytes(dest_bg, length);
 
 	spin_lock(&sinfo->lock);
 	sinfo->bytes_readonly += length;
@@ -5227,7 +5227,7 @@ fail:
 	if (dest_bg)
 		btrfs_put_block_group(dest_bg);
 
-	btrfs_free_reserved_extent(fs_info, new_addr, length, 0);
+	btrfs_free_reserved_extent(fs_info, new_addr, length);
 
 	mutex_unlock(&fs_info->remap_mutex);
 	btrfs_end_transaction(trans);

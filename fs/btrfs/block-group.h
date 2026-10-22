@@ -121,7 +121,6 @@ struct btrfs_block_group {
 	u64 pinned;
 	u64 reserved;
 	u64 used;
-	u64 delalloc_bytes;
 	u64 bytes_super;
 	u64 flags;
 	u64 global_root_id;
@@ -151,13 +150,6 @@ struct btrfs_block_group {
 	 * block group back to extents.
 	 */
 	u32 bitmap_low_thresh;
-
-	/*
-	 * It is just used for the delayed data space allocation because
-	 * only the data space allocation and the relative metadata update
-	 * can be done cross the transaction.
-	 */
-	struct rw_semaphore data_rwsem;
 
 	/* For raid56, this is a full stripe, without parity */
 	unsigned long full_stripe_len;
@@ -358,10 +350,9 @@ int btrfs_write_dirty_block_groups(struct btrfs_trans_handle *trans);
 int btrfs_update_block_group(struct btrfs_trans_handle *trans,
 			     u64 bytenr, u64 num_bytes, bool alloc);
 int btrfs_add_reserved_bytes(struct btrfs_block_group *cache,
-			     u64 ram_bytes, u64 num_bytes, bool delalloc,
+			     u64 ram_bytes, u64 num_bytes,
 			     bool force_wrong_size_class);
-void btrfs_free_reserved_bytes(struct btrfs_block_group *cache, u64 num_bytes,
-			       bool is_delalloc);
+void btrfs_free_reserved_bytes(struct btrfs_block_group *cache, u64 num_bytes);
 int btrfs_chunk_alloc(struct btrfs_trans_handle *trans,
 		      struct btrfs_space_info *space_info, u64 flags,
 		      enum btrfs_chunk_alloc_enum force);

@@ -685,10 +685,9 @@ again:
 		spin_lock(&cache->lock);
 		avail = btrfs_block_group_available_space(cache);
 		btrfs_info(fs_info,
-"block group %llu has %llu bytes, %llu used %llu pinned %llu reserved %llu delalloc %llu super %llu zone_unusable (%llu bytes available) %s",
+"block group %llu has %llu bytes, %llu used %llu pinned %llu reserved %llu super %llu zone_unusable (%llu bytes available) %s",
 			   cache->start, cache->length, cache->used, cache->pinned,
-			   cache->reserved, cache->delalloc_bytes,
-			   cache->bytes_super, cache->zone_unusable,
+			   cache->reserved, cache->bytes_super, cache->zone_unusable,
 			   avail, cache->ro ? "[readonly]" : "");
 		spin_unlock(&cache->lock);
 		btrfs_dump_free_space(cache, bytes);

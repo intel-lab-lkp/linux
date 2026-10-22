@@ -39,7 +39,6 @@ struct find_free_extent_ctl {
 	struct btrfs_free_cluster *last_ptr;
 	bool use_cluster;
 
-	bool delalloc;
 	bool have_caching_bg;
 	bool orig_have_caching_bg;
 
@@ -140,7 +139,7 @@ int btrfs_alloc_logged_file_extent(struct btrfs_trans_handle *trans,
 				   struct btrfs_key *ins);
 int btrfs_reserve_extent(struct btrfs_root *root, u64 ram_bytes, u64 num_bytes,
 			 u64 min_alloc_size, u64 empty_size, u64 hint_byte,
-			 struct btrfs_key *ins, bool is_data, bool delalloc);
+			 struct btrfs_key *ins, bool is_data);
 int btrfs_inc_ref(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 		  struct extent_buffer *buf, bool full_backref);
 int btrfs_dec_ref(struct btrfs_trans_handle *trans, struct btrfs_root *root,
@@ -151,8 +150,7 @@ int btrfs_free_extent(struct btrfs_trans_handle *trans, struct btrfs_ref *ref);
 
 u64 btrfs_get_extent_owner_root(struct btrfs_fs_info *fs_info,
 				struct extent_buffer *leaf, int slot);
-int btrfs_free_reserved_extent(struct btrfs_fs_info *fs_info, u64 start, u64 len,
-			       bool is_delalloc);
+int btrfs_free_reserved_extent(struct btrfs_fs_info *fs_info, u64 start, u64 len);
 int btrfs_pin_reserved_extent(struct btrfs_trans_handle *trans,
 			      const struct extent_buffer *eb);
 int btrfs_finish_extent_commit(struct btrfs_trans_handle *trans);

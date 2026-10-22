@@ -2432,7 +2432,6 @@ static struct btrfs_block_group *btrfs_create_block_group(
 
 	refcount_set(&cache->refs, 1);
 	spin_lock_init(&cache->lock);
-	init_rwsem(&cache->data_rwsem);
 	INIT_LIST_HEAD(&cache->list);
 	INIT_LIST_HEAD(&cache->cluster_list);
 	INIT_LIST_HEAD(&cache->bg_list);
@@ -3640,14 +3639,13 @@ int btrfs_update_block_group(struct btrfs_trans_handle *trans,
  * @ram_bytes:  The number of bytes of file content, and will be same to
  *              @num_bytes except for the compress path.
  * @num_bytes:	The number of bytes in question
- * @delalloc:   The blocks are allocated for the delalloc write
  *
  * This is called by the allocator when it reserves space. If this is a
  * reservation and the block group has become read only we cannot make the
  * reservation and return -EAGAIN, otherwise this function always succeeds.
  */
 int btrfs_add_reserved_bytes(struct btrfs_block_group *cache,
-			     u64 ram_bytes, u64 num_bytes, bool delalloc,
+			     u64 ram_bytes, u64 num_bytes,
 			     bool force_wrong_size_class)
 {
 	struct btrfs_space_info *space_info = cache->space_info;
@@ -3669,8 +3667,6 @@ int btrfs_add_reserved_bytes(struct btrfs_block_group *cache,
 	}
 
 	cache->reserved += num_bytes;
-	if (delalloc)
-		cache->delalloc_bytes += num_bytes;
 
 	trace_btrfs_space_reservation(cache->fs_info, "space_info",
 				      space_info->flags, num_bytes, 1);
@@ -3700,15 +3696,13 @@ out_error:
  *
  * @cache:       The cache we are manipulating.
  * @num_bytes:   The number of bytes in question.
- * @is_delalloc: Whether the blocks are allocated for a delalloc write.
  *
  * This is called by somebody who is freeing space that was never actually used
  * on disk.  For example if you reserve some space for a new leaf in transaction
  * A and before transaction A commits you free that leaf, you call this with
  * reserve set to 0 in order to clear the reservation.
  */
-void btrfs_free_reserved_bytes(struct btrfs_block_group *cache, u64 num_bytes,
-			       bool is_delalloc)
+void btrfs_free_reserved_bytes(struct btrfs_block_group *cache, u64 num_bytes)
 {
 	struct btrfs_space_info *space_info = cache->space_info;
 	bool bg_ro;
@@ -3718,8 +3712,6 @@ void btrfs_free_reserved_bytes(struct btrfs_block_group *cache, u64 num_bytes,
 	bg_ro = cache->ro;
 	cache->reserved -= num_bytes;
 	btrfs_maybe_reset_size_class(cache);
-	if (is_delalloc)
-		cache->delalloc_bytes -= num_bytes;
 	spin_unlock(&cache->lock);
 
 	if (bg_ro)
