@@ -854,7 +854,8 @@ static int __kvm_gmem_set_attributes(struct inode *inode, pgoff_t start,
 		 */
 		unmap_mapping_pages(mapping, start, nr_pages, false);
 
-		if (kvm_gmem_has_outstanding_references(inode, start, nr_pages,
+		if (!kvm_gmem_is_pfn_mode(gi) &&
+		    kvm_gmem_has_outstanding_references(inode, start, nr_pages,
 							err_index)) {
 			mas_destroy(&mas);
 			r = -EAGAIN;
