@@ -39,13 +39,13 @@ struct mps_info {
 	struct page *cma_pages;		/* from alloc_contig_pages() */
 
 	unsigned long *absent;		/* taken away by MPS_SET_PRESENT */
+
+	struct inode *gmem_inode;
 };
 
-static void mps_gmem_put_pfn_range(void *provider, pgoff_t index,
-				   size_t nr_pages)
+static void mps_zero_range(struct mps_info *info, pgoff_t index,
+			    size_t nr_pages)
 {
-	struct file *resource_file = provider;
-	struct mps_info *info = resource_file->private_data;
 	size_t i;
 
 	if (index >= info->npages)
@@ -54,6 +54,14 @@ static void mps_gmem_put_pfn_range(void *provider, pgoff_t index,
 	nr_pages = min_t(size_t, nr_pages, info->npages - index);
 	for (i = 0; i < nr_pages; i++)
 		clear_highpage(info->cma_pages + index + i);
+}
+
+static void mps_gmem_put_pfn_range(void *provider, pgoff_t index,
+				   size_t nr_pages)
+{
+	struct file *resource_file = provider;
+
+	mps_zero_range(resource_file->private_data, index, nr_pages);
 }
 
 /* Byte range [offset, offset + len) of @info as page indices. */
@@ -73,10 +81,17 @@ static void mps_set_present(struct mps_info *info, unsigned long start,
 			    unsigned long end, bool present)
 {
 	mutex_lock(&info->lock);
-	if (present)
+	if (present) {
 		bitmap_clear(info->absent, start, end - start);
-	else
+	} else {
 		bitmap_set(info->absent, start, end - start);
+		if (info->gmem_inode) {
+			unsigned long pfn = info->base_pfn + start;
+
+			kvm_gmem_revoke(info->gmem_inode, start, end - start, &pfn);
+			mps_zero_range(info, start, end - start);
+		}
+	}
 	mutex_unlock(&info->lock);
 }
 
@@ -138,12 +153,27 @@ static long mps_file_ioctl(struct file *file, unsigned int cmd,
 static void *mps_gmem_attach(struct inode *gmem_inode,
 			     struct file *resource_file)
 {
+	struct mps_info *info = resource_file->private_data;
+
+	mutex_lock(&info->lock);
+	if (info->gmem_inode) {
+		mutex_unlock(&info->lock);
+		return ERR_PTR(-EBUSY);
+	}
+	info->gmem_inode = gmem_inode;
+	mutex_unlock(&info->lock);
+
 	return get_file(resource_file);
 }
 
 static void mps_gmem_release(void *provider)
 {
 	struct file *resource_file = provider;
+	struct mps_info *info = resource_file->private_data;
+
+	mutex_lock(&info->lock);
+	info->gmem_inode = NULL;
+	mutex_unlock(&info->lock);
 
 	fput(resource_file);
 }
