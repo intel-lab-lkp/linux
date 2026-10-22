@@ -1435,6 +1435,7 @@ static int _do_shadow_pte(struct kvm_s390_mmu_cache *mc, struct gmap *sg, gpa_t 
 	newpte.s.d |= ptep_h->s.d;
 	newpte.s.sd |= ptep_h->s.sd;
 	newpte.h.p &= ptep_h->h.p;
+	newpte.s.prefix_notif = ptep_h->s.prefix_notif;
 	if (!newpte.h.p && !f->writable) {
 		rc = -EOPNOTSUPP;
 	} else {

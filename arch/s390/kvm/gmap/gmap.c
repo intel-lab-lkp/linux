@@ -298,7 +298,7 @@ static long gmap_clear_young_pte(union pte *ptep, gfn_t gfn, gfn_t end, struct d
 		return 0;
 
 	pgste = pgste_get_lock(ptep);
-	if (!pgste.prefix_notif || gmap_mkold_prefix(p->gmap, gfn, end)) {
+	if (!pte.s.prefix_notif || gmap_mkold_prefix(p->gmap, gfn, end)) {
 		new = pte;
 		new.h.i = 1;
 		new.s.y = 0;
@@ -307,7 +307,7 @@ static long gmap_clear_young_pte(union pte *ptep, gfn_t gfn, gfn_t end, struct d
 		new.s.d = 0;
 		new.h.p = 1;
 
-		pgste.prefix_notif = 0;
+		new.s.prefix_notif = 0;
 		pgste = __dat_ptep_xchg(ptep, pgste, new, gfn, walk->asce, uses_skeys(p->gmap));
 	}
 	p->young = 1;
@@ -470,7 +470,7 @@ static union pgste __pte_test_and_clear_softdirty(union pte *ptep, union pgste p
 	 * If this page contains one or more prefixes of vCPUS that are currently
 	 * running, do not reset the protection, leave it marked as dirty.
 	 */
-	if (!pgste.prefix_notif || gmap_mkold_prefix(gmap, gfn, gfn + 1)) {
+	if (!pte.s.prefix_notif || gmap_mkold_prefix(gmap, gfn, gfn + 1)) {
 		pte.h.p = 1;
 		pte.s.sd = 0;
 		pgste = gmap_ptep_xchg(gmap, ptep, pte, pgste, gfn);
@@ -707,6 +707,7 @@ static int _gmap_link(struct kvm_s390_mmu_cache *mc, struct gmap *gmap, int leve
 		pgste = pgste_get_lock(f->ptep);
 		oldpte = *f->ptep;
 		newpte = _pte(f->pfn, f->writable, f->write_attempt | oldpte.s.d, !f->page);
+		newpte.s.prefix_notif = oldpte.s.prefix_notif;
 		newpte.s.sd = oldpte.s.sd;
 		oldpte.s.sd = 0;
 		if (oldpte.val == _PTE_EMPTY.val || oldpte.h.pfra == f->pfn) {

@@ -234,12 +234,12 @@ static int dat_split_ste(struct kvm_s390_mmu_cache *mc, union pmd *pmdp, gfn_t g
 		init.s.y = old.s.fc1.y;
 		init.s.sd = old.s.fc1.sd;
 		init.s.pr = old.s.fc1.pr;
+		init.s.prefix_notif = old.s.fc1.prefix_notif;
 		pgste_init.val = 0;
 		if (old.h.fc) {
 			for (i = 0; i < _PAGE_ENTRIES; i++)
 				pt->ptes[i].val = init.val | i * PAGE_SIZE;
 			/* No need to take locks as the page table is not installed yet. */
-			pgste_init.prefix_notif = old.s.fc1.prefix_notif;
 			pgste_init.vsie_notif = old.s.fc1.vsie_notif;
 			pgste_init.vsie_gmem = old.s.fc1.vsie_notif;
 			pgste_init.pcl = uses_skeys && init.h.i;
@@ -1017,14 +1017,15 @@ static long dat_set_pn_crste(union crste *crstep, gfn_t gfn, gfn_t next, struct 
 static long dat_set_pn_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct dat_walk *walk)
 {
 	int *n = walk->priv;
-	union pgste pgste;
 
-	pgste = pgste_get_lock(ptep);
+	/*
+	 * Updating a softbit while holding kvm->mmu_lock in write mode, no
+	 * need to take the PCL lock.
+	 */
 	if (!ptep->h.i && !ptep->h.p) {
-		pgste.prefix_notif = 1;
+		__atomic64_or(_PAGE_PREFIX_NOTIF, &ptep->val);
 		*n += 1;
 	}
-	pgste_set_unlock(ptep, pgste);
 	return 0;
 }
 
