@@ -38,22 +38,66 @@ xdrgen_decode_secattr(struct xdr_stream *xdr, struct secattr *ptr)
 		return false;
 	if (!xdrgen_decode_int(xdr, &ptr->aclcnt))
 		return false;
-	if (xdr_stream_decode_u32(xdr, &ptr->aclent.count) < 0)
-		return false;
-	if (ptr->aclent.count > NFS_ACL_MAX_ENTRIES)
-		return false;
-	for (u32 i = 0; i < ptr->aclent.count; i++)
-		if (!xdrgen_decode_aclent(xdr, &ptr->aclent.element[i]))
+	{
+		struct xdrgen_aggregate_cursor cursor = {
+			.xdr = xdr,
+			.member_id = NFS_ACL2_SECATTR_ACLENT,
+			.ctx = xdr->xdrgen_ctx,
+		};
+		bool ok = true;
+
+		if (xdr_stream_decode_u32(xdr, &cursor.count) < 0)
 			return false;
+		if (cursor.count > NFS_ACL_MAX_ENTRIES)
+			return false;
+		if (!nfs_acl2_secattr_decode_begin(&cursor))
+			return false;
+		for (cursor.index = 0; cursor.index < cursor.count; cursor.index++) {
+			struct aclent element = {};
+
+			if (!xdrgen_decode_aclent(xdr, &element)) {
+				ok = false;
+				break;
+			}
+			if (!nfs_acl2_secattr_decode(&cursor, &element)) {
+				ok = false;
+				break;
+			}
+		}
+		if (!nfs_acl2_secattr_decode_end(&cursor, ok) || !ok)
+			return false;
+	}
 	if (!xdrgen_decode_int(xdr, &ptr->dfaclcnt))
 		return false;
-	if (xdr_stream_decode_u32(xdr, &ptr->dfaclent.count) < 0)
-		return false;
-	if (ptr->dfaclent.count > NFS_ACL_MAX_ENTRIES)
-		return false;
-	for (u32 i = 0; i < ptr->dfaclent.count; i++)
-		if (!xdrgen_decode_aclent(xdr, &ptr->dfaclent.element[i]))
+	{
+		struct xdrgen_aggregate_cursor cursor = {
+			.xdr = xdr,
+			.member_id = NFS_ACL2_SECATTR_DFACLENT,
+			.ctx = xdr->xdrgen_ctx,
+		};
+		bool ok = true;
+
+		if (xdr_stream_decode_u32(xdr, &cursor.count) < 0)
 			return false;
+		if (cursor.count > NFS_ACL_MAX_ENTRIES)
+			return false;
+		if (!nfs_acl2_secattr_decode_begin(&cursor))
+			return false;
+		for (cursor.index = 0; cursor.index < cursor.count; cursor.index++) {
+			struct aclent element = {};
+
+			if (!xdrgen_decode_aclent(xdr, &element)) {
+				ok = false;
+				break;
+			}
+			if (!nfs_acl2_secattr_decode(&cursor, &element)) {
+				ok = false;
+				break;
+			}
+		}
+		if (!nfs_acl2_secattr_decode_end(&cursor, ok) || !ok)
+			return false;
+	}
 	return true;
 }
 
@@ -445,22 +489,66 @@ xdrgen_encode_secattr(struct xdr_stream *xdr, const struct secattr *value)
 		return false;
 	if (!xdrgen_encode_int(xdr, value->aclcnt))
 		return false;
-	if (value->aclent.count > NFS_ACL_MAX_ENTRIES)
-		return false;
-	if (xdr_stream_encode_u32(xdr, value->aclent.count) != XDR_UNIT)
-		return false;
-	for (u32 i = 0; i < value->aclent.count; i++)
-		if (!xdrgen_encode_aclent(xdr, &value->aclent.element[i]))
+	{
+		struct xdrgen_aggregate_cursor cursor = {
+			.xdr = xdr,
+			.member_id = NFS_ACL2_SECATTR_ACLENT,
+			.ctx = xdr->xdrgen_ctx,
+		};
+		bool ok = true;
+
+		if (!nfs_acl2_secattr_encode_begin(&cursor))
 			return false;
+		if (cursor.count > NFS_ACL_MAX_ENTRIES)
+			ok = false;
+		if (ok && xdr_stream_encode_u32(xdr, cursor.count) != XDR_UNIT)
+			ok = false;
+		for (cursor.index = 0; ok && cursor.index < cursor.count; cursor.index++) {
+			struct aclent element = {};
+
+			if (!nfs_acl2_secattr_encode(&cursor, &element)) {
+				ok = false;
+				break;
+			}
+			if (!xdrgen_encode_aclent(xdr, &element)) {
+				ok = false;
+				break;
+			}
+		}
+		if (!nfs_acl2_secattr_encode_end(&cursor, ok) || !ok)
+			return false;
+	}
 	if (!xdrgen_encode_int(xdr, value->dfaclcnt))
 		return false;
-	if (value->dfaclent.count > NFS_ACL_MAX_ENTRIES)
-		return false;
-	if (xdr_stream_encode_u32(xdr, value->dfaclent.count) != XDR_UNIT)
-		return false;
-	for (u32 i = 0; i < value->dfaclent.count; i++)
-		if (!xdrgen_encode_aclent(xdr, &value->dfaclent.element[i]))
+	{
+		struct xdrgen_aggregate_cursor cursor = {
+			.xdr = xdr,
+			.member_id = NFS_ACL2_SECATTR_DFACLENT,
+			.ctx = xdr->xdrgen_ctx,
+		};
+		bool ok = true;
+
+		if (!nfs_acl2_secattr_encode_begin(&cursor))
 			return false;
+		if (cursor.count > NFS_ACL_MAX_ENTRIES)
+			ok = false;
+		if (ok && xdr_stream_encode_u32(xdr, cursor.count) != XDR_UNIT)
+			ok = false;
+		for (cursor.index = 0; ok && cursor.index < cursor.count; cursor.index++) {
+			struct aclent element = {};
+
+			if (!nfs_acl2_secattr_encode(&cursor, &element)) {
+				ok = false;
+				break;
+			}
+			if (!xdrgen_encode_aclent(xdr, &element)) {
+				ok = false;
+				break;
+			}
+		}
+		if (!nfs_acl2_secattr_encode_end(&cursor, ok) || !ok)
+			return false;
+	}
 	return true;
 }
 

@@ -13,6 +13,18 @@
 #include <linux/sunrpc/xdrgen/_builtins.h>
 #include <linux/sunrpc/xdrgen/nfs_acl2.h>
 
+enum {
+	NFS_ACL2_SECATTR_ACLENT,
+	NFS_ACL2_SECATTR_DFACLENT,
+};
+
+bool nfs_acl2_secattr_encode_begin(struct xdrgen_aggregate_cursor *c);
+bool nfs_acl2_secattr_encode(struct xdrgen_aggregate_cursor *c, struct aclent *out);
+bool nfs_acl2_secattr_encode_end(struct xdrgen_aggregate_cursor *c, bool ok);
+bool nfs_acl2_secattr_decode_begin(struct xdrgen_aggregate_cursor *c);
+bool nfs_acl2_secattr_decode(struct xdrgen_aggregate_cursor *c, const struct aclent *in);
+bool nfs_acl2_secattr_decode_end(struct xdrgen_aggregate_cursor *c, bool ok);
+
 bool nfs_acl_svc_decode_GETACL2args(struct svc_rqst *rqstp, struct xdr_stream *xdr);
 bool nfs_acl_svc_decode_SETACL2args(struct svc_rqst *rqstp, struct xdr_stream *xdr);
 bool nfs_acl_svc_decode_GETATTR2args(struct svc_rqst *rqstp, struct xdr_stream *xdr);
