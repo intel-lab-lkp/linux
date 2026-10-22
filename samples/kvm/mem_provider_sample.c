@@ -66,7 +66,6 @@ struct mps_info {
 	bool fixed_wb;			/* holds a ref on the fixed-region WB alias */
 
 	unsigned long *absent;		/* taken away by CTL_SET_PRESENT */
-	unsigned long *readonly;
 
 	/*
 	 * A child of the root: its first page in the root, and the pages it
@@ -146,7 +145,7 @@ static bool mps_page_present(struct mps_info *info, unsigned long index)
 
 /*
  * The length of the run from @index of pages with the same state as @index:
- * present, and the same read-only bit.
+ * present.
  */
 static unsigned long mps_run(struct mps_info *info, unsigned long index)
 {
@@ -156,12 +155,6 @@ static unsigned long mps_run(struct mps_info *info, unsigned long index)
 	if (info->owned)
 		end = min(end, find_next_zero_bit(info->owned, info->npages,
 						  index + 1));
-	if (test_bit(index, info->readonly))
-		end = min(end, find_next_zero_bit(info->readonly, info->npages,
-						  index + 1));
-	else
-		end = min(end, find_next_bit(info->readonly, info->npages,
-					     index + 1));
 	return end - index;
 }
 
@@ -211,8 +204,6 @@ static int mps_mp_get_page(struct mem_provider_file *mpf, pgoff_t index,
 	}
 
 	*pfn = info->base_pfn + index;
-	if (test_bit(index, info->readonly))
-		*attrs |= MEM_PROVIDER_ATTR_READONLY;
 	/* The creator of the file decides whether the host may map it. */
 	if (!info->mmap_capable)
 		*attrs |= MEM_PROVIDER_ATTR_NO_USER_MAP;
@@ -249,18 +240,6 @@ static int mps_range(struct mps_info *info, u64 offset, u64 len,
 	return 0;
 }
 
-static void mps_set_readonly(struct mps_info *info, unsigned long start,
-			     unsigned long end, bool readonly)
-{
-	mutex_lock(&info->lock);
-	if (readonly)
-		bitmap_set(info->readonly, start, end - start);
-	else
-		bitmap_clear(info->readonly, start, end - start);
-	mps_revoke(info, start, end);
-	mutex_unlock(&info->lock);
-}
-
 static void mps_set_present(struct mps_info *info, unsigned long start,
 			    unsigned long end, bool present)
 {
@@ -283,7 +262,6 @@ static long mps_get_stats(struct mps_info *info, void __user *uarg)
 	st.owned_pages = info->owned ?
 		bitmap_weight(info->owned, info->npages) : info->npages;
 	st.absent_pages = bitmap_weight(info->absent, info->npages);
-	st.readonly_pages = bitmap_weight(info->readonly, info->npages);
 	mutex_unlock(&info->lock);
 
 	return copy_to_user(uarg, &st, sizeof(st)) ? -EFAULT : 0;
@@ -291,8 +269,8 @@ static long mps_get_stats(struct mps_info *info, void __user *uarg)
 
 /*
  * A child fd is read-only to its holder: only GET_STATS.  The owner changes a
- * child's pages through the control device (MPS_CTL_SET_PRESENT and
- * MPS_CTL_SET_READONLY), so a VMM that holds a child cannot.
+ * child's pages through the control device (MPS_CTL_SET_PRESENT), so a VMM
+ * that holds a child cannot.
  */
 static long mps_file_ioctl(struct file *file, unsigned int cmd,
 			   unsigned long arg)
@@ -335,7 +313,6 @@ static int mps_file_release(struct inode *inode, struct file *file)
 	if (info->cma_pages)
 		free_contig_range(info->base_pfn, info->npages);
 	bitmap_free(info->absent);
-	bitmap_free(info->readonly);
 	kfree(info);
 	return 0;
 }
@@ -372,8 +349,7 @@ static int mps_new_file(unsigned long base_pfn, unsigned long npages,
 	info->npages = npages;
 	info->mmap_capable = flags & MPS_FLAG_MMAP_CAPABLE;
 	info->absent = bitmap_zalloc(npages, GFP_KERNEL);
-	info->readonly = bitmap_zalloc(npages, GFP_KERNEL);
-	if (!info->absent || !info->readonly) {
+	if (!info->absent) {
 		ret = -ENOMEM;
 		goto err_free;
 	}
@@ -398,7 +374,6 @@ static int mps_new_file(unsigned long base_pfn, unsigned long npages,
 
 err_free:
 	bitmap_free(info->absent);
-	bitmap_free(info->readonly);
 	kfree(info);
 	return ret;
 }
@@ -675,11 +650,10 @@ static bool mps_child_owns(struct mps_info *info, unsigned long first,
 }
 
 /*
- * CTL_SET_READONLY and CTL_SET_PRESENT change a child's pages, by the owner on
- * the control device.  A VMM that holds the child fd cannot, so it cannot undo
- * them.
+ * CTL_SET_PRESENT changes a child's pages, by the owner on the control device.
+ * A VMM that holds the child fd cannot, so it cannot undo them.
  */
-static long mps_ctl_set_range(void __user *uarg, bool readonly)
+static long mps_ctl_set_present(void __user *uarg)
 {
 	struct mps_ctl_range cr;
 	unsigned long start, end;
@@ -695,12 +669,8 @@ static long mps_ctl_set_range(void __user *uarg, bool readonly)
 	if (IS_ERR(file))
 		return PTR_ERR(file);
 	ret = mps_range(info, cr.offset, cr.len, &start, &end);
-	if (!ret) {
-		if (readonly)
-			mps_set_readonly(info, start, end, cr.value);
-		else
-			mps_set_present(info, start, end, cr.value);
-	}
+	if (!ret)
+		mps_set_present(info, start, end, cr.value);
 	fput(file);
 	return ret;
 }
@@ -715,10 +685,8 @@ static long mps_ctl_ioctl(struct file *file, unsigned int cmd,
 		return mps_ctl_setup(uarg);
 	case MPS_NEW_CHILD:
 		return mps_ctl_new_child(uarg);
-	case MPS_CTL_SET_READONLY:
-		return mps_ctl_set_range(uarg, true);
 	case MPS_CTL_SET_PRESENT:
-		return mps_ctl_set_range(uarg, false);
+		return mps_ctl_set_present(uarg);
 	default:
 		return -ENOTTY;
 	}

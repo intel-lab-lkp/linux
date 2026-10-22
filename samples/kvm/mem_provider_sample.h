@@ -48,8 +48,8 @@ struct mps_setup {
  * RECLAIM them.  Each change revokes the range, so KVM and iommufd follow.
  *
  * The owner changes a child's pages through the control device
- * (CTL_SET_READONLY, CTL_SET_PRESENT).  A child fd is read-only to its
- * holder: a VMM can only GET_STATS, never change the memory.
+ * (CTL_SET_PRESENT).  A child fd is read-only to its holder: a VMM can
+ * only GET_STATS, never change the memory.
  */
 
 /*
@@ -74,16 +74,15 @@ struct mps_stats {
 	__u64 region_len;
 	__u64 owned_pages;	/* pages the child has */
 	__u64 absent_pages;	/* pages taken away by CTL_SET_PRESENT */
-	__u64 readonly_pages;
 };
 
 #define MPS_GET_STATS \
 	_IOR(MPS_IOCTL_BASE, 10, struct mps_stats)
 
 /*
- * ioctls on /dev/mem_provider_sample: CTL_SET_READONLY or CTL_SET_PRESENT on
- * child @fd, by the owner.  @value is the readonly or present value, and
- * @offset and @len are a byte range within the child, page aligned.
+ * ioctl on /dev/mem_provider_sample: CTL_SET_PRESENT on child @fd, by the
+ * owner. @value is the present value (1 = present, 0 = absent), and @offset
+ * and @len are a byte range within the child, page aligned.
  */
 struct mps_ctl_range {
 	__s32 fd;
@@ -92,8 +91,6 @@ struct mps_ctl_range {
 	__u64 len;	/* bytes, page aligned */
 };
 
-#define MPS_CTL_SET_READONLY \
-	_IOW(MPS_IOCTL_BASE, 11, struct mps_ctl_range)
 #define MPS_CTL_SET_PRESENT \
 	_IOW(MPS_IOCTL_BASE, 12, struct mps_ctl_range)
 
