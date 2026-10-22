@@ -1068,6 +1068,11 @@ static int kvm_gmem_migrate_folio(struct address_space *mapping,
 	return -EINVAL;
 }
 
+/*
+ * TODO: Support memory failure notification for PFN mode. In PFN mode, memory
+ * is not backed by page cache folios, so ->error_remove_folio() will not be
+ * invoked by the core memory failure handler.
+ */
 static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *folio)
 {
 	struct inode *inode = mapping->host;
