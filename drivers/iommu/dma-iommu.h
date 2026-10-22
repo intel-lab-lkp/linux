@@ -21,6 +21,9 @@ void iommu_dma_get_resv_regions(struct device *dev, struct list_head *list);
 
 int iommu_dma_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
 		     phys_addr_t msi_addr);
+int iommu_dma_sw_msi_list(struct iommu_domain *domain, struct msi_desc *desc,
+			  const phys_addr_t *phys_addrs, unsigned int nr_addrs,
+			  size_t granule);
 
 extern bool iommu_dma_forcedac;
 
@@ -55,6 +58,13 @@ static inline void iommu_dma_get_resv_regions(struct device *dev, struct list_he
 
 static inline int iommu_dma_sw_msi(struct iommu_domain *domain,
 				   struct msi_desc *desc, phys_addr_t msi_addr)
+{
+	return -ENODEV;
+}
+
+static inline int iommu_dma_sw_msi_list(struct iommu_domain *domain, struct msi_desc *desc,
+					const phys_addr_t *phys_addrs, unsigned int nr_addrs,
+					size_t granule)
 {
 	return -ENODEV;
 }

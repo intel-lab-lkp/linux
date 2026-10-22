@@ -58,6 +58,8 @@ struct iommu_dma_options {
 struct iommu_dma_cookie {
 	struct iova_domain iovad;
 	struct list_head msi_page_list;
+	/* Base IOVA of the complete MSI target list */
+	dma_addr_t msi_list_iova;
 	/* Flush queue */
 	union {
 		struct iova_fq *single_fq;
@@ -2191,13 +2193,42 @@ static struct list_head *cookie_msi_pages(const struct iommu_domain *domain)
 	}
 }
 
+static dma_addr_t iommu_dma_alloc_msi_iova(struct device *dev, struct iommu_domain *domain,
+					   const phys_addr_t *phys_addrs,
+					   unsigned int nr_addrs, size_t granule)
+{
+	int prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
+	size_t size = nr_addrs * granule;
+	dma_addr_t iova;
+	unsigned int i;
+
+	iova = iommu_dma_alloc_iova(domain, size, dma_get_mask(dev), dev);
+	if (!iova)
+		return 0;
+
+	for (i = 0; i < nr_addrs; i++) {
+		if (iommu_map(domain, iova + i * granule, phys_addrs[i], granule,
+			      prot, GFP_KERNEL))
+			goto out_unmap;
+	}
+	return iova;
+
+out_unmap:
+	if (i) {
+		size_t mapped = i * granule;
+
+		WARN_ON_ONCE(iommu_unmap(domain, iova, mapped) != mapped);
+	}
+	iommu_dma_free_iova(domain, iova, size, NULL);
+	return 0;
+}
+
 static struct iommu_dma_msi_page *iommu_dma_get_msi_page(struct device *dev,
 		phys_addr_t msi_addr, struct iommu_domain *domain)
 {
 	struct list_head *msi_page_list = cookie_msi_pages(domain);
 	struct iommu_dma_msi_page *msi_page;
 	dma_addr_t iova;
-	int prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
 	size_t size = cookie_msi_granule(domain);
 	static DEFINE_MUTEX(msi_prepare_lock);
 
@@ -2222,12 +2253,9 @@ static struct iommu_dma_msi_page *iommu_dma_get_msi_page(struct device *dev,
 	if (!msi_page)
 		return NULL;
 
-	iova = iommu_dma_alloc_iova(domain, size, dma_get_mask(dev), dev);
+	iova = iommu_dma_alloc_msi_iova(dev, domain, &msi_addr, 1, size);
 	if (!iova)
 		goto out_free_page;
-
-	if (iommu_map(domain, iova, msi_addr, size, prot, GFP_KERNEL))
-		goto out_free_iova;
 
 	INIT_LIST_HEAD(&msi_page->list);
 	msi_page->phys = msi_addr;
@@ -2235,8 +2263,6 @@ static struct iommu_dma_msi_page *iommu_dma_get_msi_page(struct device *dev,
 	list_add(&msi_page->list, msi_page_list);
 	return msi_page;
 
-out_free_iova:
-	iommu_dma_free_iova(domain, iova, size, NULL);
 out_free_page:
 	kfree(msi_page);
 	return NULL;
@@ -2260,6 +2286,43 @@ int iommu_dma_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
 
 	msi_desc_set_iommu_msi_iova(desc, msi_page->iova,
 				    ilog2(cookie_msi_granule(domain)));
+	return 0;
+}
+
+/*
+ * All calls for a DMA domain must supply the same complete target list.
+ * The group mutex serializes creation and reuse of the cached mapping.
+ */
+int iommu_dma_sw_msi_list(struct iommu_domain *domain, struct msi_desc *desc,
+			  const phys_addr_t *phys_addrs, unsigned int nr_addrs,
+			  size_t granule)
+{
+	struct device *dev = msi_desc_to_dev(desc);
+	struct iommu_dma_cookie *cookie;
+	unsigned int i;
+
+	iommu_group_mutex_assert(dev);
+	if (domain->cookie_type != IOMMU_COOKIE_DMA_IOVA)
+		return -EOPNOTSUPP;
+
+	cookie = domain->iova_cookie;
+	if (granule < PAGE_SIZE || granule != cookie->iovad.granule)
+		return -EOPNOTSUPP;
+	if (!nr_addrs || nr_addrs > SIZE_MAX / granule)
+		return -EINVAL;
+
+	if (!cookie->msi_list_iova) {
+		for (i = 0; i < nr_addrs; i++)
+			if (!IS_ALIGNED(phys_addrs[i], granule))
+				return -EINVAL;
+
+		cookie->msi_list_iova = iommu_dma_alloc_msi_iova(dev, domain, phys_addrs,
+								 nr_addrs, granule);
+		if (!cookie->msi_list_iova)
+			return -ENOMEM;
+	}
+
+	msi_desc_set_iommu_msi_iova(desc, cookie->msi_list_iova, ilog2(granule));
 	return 0;
 }
 
