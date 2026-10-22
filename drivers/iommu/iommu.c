@@ -4262,4 +4262,47 @@ int iommu_dma_prepare_msi(struct msi_desc *desc, phys_addr_t msi_addr)
 	mutex_unlock(&group->mutex);
 	return ret;
 }
+
+/**
+ * iommu_dma_prepare_msi_list() - Map the complete list of MSI targets
+ * @desc: MSI descriptor to receive the base IOVA and granule shift
+ * @phys_addrs: Ordered array of target physical addresses
+ * @nr_addrs: Number of targets in the array
+ * @granule: Size and alignment of each target mapping
+ *
+ * Every call for a DMA domain must supply the same complete list, order and
+ * granule. The first call maps the targets into one contiguous IOVA range;
+ * subsequent calls use the cached base. The array is consumed synchronously
+ * and is not retained.
+ *
+ * Each target must be aligned to @granule, which must match the DMA domain's
+ * granule and be at least PAGE_SIZE.
+ *
+ * Without a translated domain, @desc is left unchanged. Only DMA-IOMMU
+ * domains currently support translated MSI target lists.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int iommu_dma_prepare_msi_list(struct msi_desc *desc, const phys_addr_t *phys_addrs,
+			       unsigned int nr_addrs, size_t granule)
+{
+	struct device *dev = msi_desc_to_dev(desc);
+	struct iommu_group *group = dev->iommu_group;
+	struct iommu_domain *domain;
+	int ret;
+
+	if (!group)
+		return 0;
+
+	ret = iommu_deferred_attach(dev, iommu_get_domain_for_dev(dev));
+	if (ret)
+		return ret;
+
+	guard(mutex)(&group->mutex);
+	domain = group->domain;
+	if (!domain || domain->type == IOMMU_DOMAIN_IDENTITY)
+		return 0;
+
+	return iommu_dma_sw_msi_list(domain, desc, phys_addrs, nr_addrs, granule);
+}
 #endif /* CONFIG_IRQ_MSI_IOMMU */
