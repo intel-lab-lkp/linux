@@ -703,16 +703,22 @@ static void svc_rdma_get_inv_rkey(struct svcxprt_rdma *rdma,
  * On successful exit, head[0] points to first byte past the
  * RPC-over-RDMA header. For RDMA_MSG, this is the RPC message.
  *
- * The length of the RPC-over-RDMA header is returned.
- *
  * Assumptions:
  * - The transport header is entirely contained in the head iovec.
+ *
+ * Return:
+ *   %0: The message is discarded without a reply.
+ *   Negative errno: The caller sends an RDMA_ERROR reply.
+ *   Otherwise, the length in bytes of the RPC-over-RDMA header.
  */
 static int svc_rdma_xdr_decode_req(struct xdr_buf *rq_arg,
 				   struct svc_rdma_recv_ctxt *rctxt)
 {
 	__be32 *p, *rdma_argp;
 	unsigned int hdr_len;
+
+	if (unlikely(rq_arg->len < RPCRDMA_HDRLEN_MIN))
+		goto out_short;
 
 	rdma_argp = rq_arg->head[0].iov_base;
 	xdr_init_decode(&rctxt->rc_stream, rq_arg, rdma_argp, NULL);
@@ -758,7 +764,7 @@ static int svc_rdma_xdr_decode_req(struct xdr_buf *rq_arg,
 
 out_short:
 	trace_svcrdma_decode_short_err(rctxt, rq_arg->len);
-	return -EINVAL;
+	return 0;
 
 out_version:
 	trace_svcrdma_decode_badvers_err(rctxt, rdma_argp);
