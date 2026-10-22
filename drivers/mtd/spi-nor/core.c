@@ -97,13 +97,7 @@ void spi_nor_spimem_setup_op(const struct spi_nor *nor,
 	if (op->data.nbytes)
 		op->data.buswidth = spi_nor_get_protocol_data_nbits(proto);
 
-	if (spi_nor_protocol_is_dtr(proto)) {
-		/*
-		 * SPIMEM supports mixed DTR modes, but right now we can only
-		 * have all phases either DTR or STR. IOW, SPIMEM can have
-		 * something like 4S-4D-4D, but SPI NOR can't. So, set all 4
-		 * phases to either DTR or STR.
-		 */
+	if (proto == SNOR_PROTO_8_8_8_DTR) {
 		op->cmd.dtr = true;
 		op->addr.dtr = true;
 		op->dummy.dtr = true;
@@ -115,6 +109,19 @@ void spi_nor_spimem_setup_op(const struct spi_nor *nor,
 		ext = spi_nor_get_cmd_ext(nor, op);
 		op->cmd.opcode = (op->cmd.opcode << 8) | ext;
 		op->cmd.nbytes = 2;
+	} else if (spi_nor_protocol_is_dtr(proto)) {
+		/*
+		 * 1S-xD-xD protocols: the opcode is sent in STR on a single
+		 * line, only the address, dummy and data phases are DTR. The
+		 * opcode stays 1 byte (no command extension).
+		 */
+		op->cmd.dtr = false;
+		op->addr.dtr = true;
+		op->dummy.dtr = true;
+		op->data.dtr = true;
+
+		/* 2 bytes per clock cycle in DTR mode. */
+		op->dummy.nbytes *= 2;
 	}
 
 	if (proto == SNOR_PROTO_8_8_8_DTR && params->flags & SNOR_F_SWAP16)
