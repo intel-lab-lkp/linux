@@ -367,6 +367,13 @@ static void del_nbp(struct net_bridge_port *p)
 
 	netdev_rx_handler_unregister(dev);
 
+	/* The first flush can race with an MRP-aware port whose state was
+	 * restored to forwarding by br_mrp_port_del().  The handler
+	 * unregistration above waits for all active receive paths, so flush
+	 * once more before the port is queued for RCU free.
+	 */
+	br_fdb_delete_by_port(br, p, 0, 1);
+
 	br_multicast_del_port(p);
 
 	kobject_uevent(&p->kobj, KOBJ_REMOVE);
