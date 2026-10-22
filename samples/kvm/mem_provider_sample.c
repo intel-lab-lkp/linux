@@ -36,7 +36,7 @@ struct mps_info {
 	unsigned long npages;
 	struct page *cma_pages;		/* from alloc_contig_pages() */
 
-	unsigned long *absent;		/* taken away by CTL_SET_PRESENT */
+	unsigned long *absent;		/* taken away by MPS_SET_PRESENT */
 };
 
 /* Byte range [offset, offset + len) of @info as page indices. */
@@ -75,21 +75,6 @@ static long mps_get_stats(struct mps_info *info, void __user *uarg)
 	return copy_to_user(uarg, &st, sizeof(st)) ? -EFAULT : 0;
 }
 
-/*
- * A provider fd is read-only to its holder: only GET_STATS. The owner changes
- * a file's pages through the control device (MPS_CTL_SET_PRESENT).
- */
-static long mps_file_ioctl(struct file *file, unsigned int cmd,
-			   unsigned long arg)
-{
-	struct mps_info *info = file->private_data;
-	void __user *uarg = (void __user *)arg;
-
-	if (cmd == MPS_GET_STATS)
-		return mps_get_stats(info, uarg);
-	return -ENOTTY;
-}
-
 static int mps_file_release(struct inode *inode, struct file *file)
 {
 	struct mps_info *info = file->private_data;
@@ -101,26 +86,44 @@ static int mps_file_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static long mps_file_set_present(struct mps_info *info, void __user *uarg)
+{
+	struct mps_set_present sp;
+	unsigned long start, end;
+	int ret;
+
+	if (copy_from_user(&sp, uarg, sizeof(sp)))
+		return -EFAULT;
+	if (sp.value > 1 || sp.pad)
+		return -EINVAL;
+	ret = mps_range(info, sp.offset, sp.len, &start, &end);
+	if (!ret)
+		mps_set_present(info, start, end, sp.value);
+	return ret;
+}
+
+static long mps_file_ioctl(struct file *file, unsigned int cmd,
+			   unsigned long arg)
+{
+	struct mps_info *info = file->private_data;
+	void __user *uarg = (void __user *)arg;
+
+	switch (cmd) {
+	case MPS_GET_STATS:
+		return mps_get_stats(info, uarg);
+	case MPS_SET_PRESENT:
+		return mps_file_set_present(info, uarg);
+	default:
+		return -ENOTTY;
+	}
+}
+
 static const struct file_operations mps_file_fops = {
 	.owner		= THIS_MODULE,
 	.release	= mps_file_release,
 	.unlocked_ioctl	= mps_file_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
 };
-
-static struct file *mps_get_file(int fd, struct mps_info **infop)
-{
-	struct file *file = fget(fd);
-
-	if (!file)
-		return ERR_PTR(-EBADF);
-	if (file->f_op != &mps_file_fops) {
-		fput(file);
-		return ERR_PTR(-EINVAL);
-	}
-	*infop = file->private_data;
-	return file;
-}
 
 static long mps_ctl_new_file(void __user *uarg)
 {
@@ -190,31 +193,6 @@ err_free_info:
 	return ret;
 }
 
-/*
- * CTL_SET_PRESENT changes a file's pages, by the owner on the control device.
- */
-static long mps_ctl_set_present(void __user *uarg)
-{
-	struct mps_ctl_range cr;
-	unsigned long start, end;
-	struct mps_info *info;
-	struct file *file;
-	int ret;
-
-	if (copy_from_user(&cr, uarg, sizeof(cr)))
-		return -EFAULT;
-	if (cr.value > 1)
-		return -EINVAL;
-	file = mps_get_file(cr.fd, &info);
-	if (IS_ERR(file))
-		return PTR_ERR(file);
-	ret = mps_range(info, cr.offset, cr.len, &start, &end);
-	if (!ret)
-		mps_set_present(info, start, end, cr.value);
-	fput(file);
-	return ret;
-}
-
 static long mps_ctl_ioctl(struct file *file, unsigned int cmd,
 			  unsigned long arg)
 {
@@ -223,8 +201,6 @@ static long mps_ctl_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case MPS_NEW_FILE:
 		return mps_ctl_new_file(uarg);
-	case MPS_CTL_SET_PRESENT:
-		return mps_ctl_set_present(uarg);
 	default:
 		return -ENOTTY;
 	}
