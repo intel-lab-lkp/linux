@@ -95,22 +95,19 @@ struct GETATTR2res_wrapper {
 
 static_assert(offsetof(struct GETATTR2res_wrapper, xdrgen) == 0);
 
-struct nfsd3_accessargs {
+struct ACCESS2args_wrapper {
+	struct ACCESS2args	xdrgen;
 	struct svc_fh		fh;
-	__u32			access;
 };
 
-struct nfsd3_accessres {
-	__be32			status;
-	struct svc_fh		fh;
-	__u32			access;
+static_assert(offsetof(struct ACCESS2args_wrapper, xdrgen) == 0);
+
+struct ACCESS2res_wrapper {
+	struct ACCESS2res	xdrgen;
 	struct kstat		stat;
 };
 
-bool svcxdr_decode_fhandle(struct xdr_stream *xdr, struct svc_fh *fhp);
-bool svcxdr_encode_stat(struct xdr_stream *xdr, __be32 status);
-bool svcxdr_encode_fattr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
-			 const struct svc_fh *fhp, const struct kstat *stat);
+static_assert(offsetof(struct ACCESS2res_wrapper, xdrgen) == 0);
 
 /*
  * These maps are identical to the NFSv3 maps (nfs3proc.c). This enables
@@ -515,28 +512,41 @@ out:
 	return rpc_success;
 }
 
-/*
- * Check file access
+/**
+ * nfsacld_proc_access - ACCESS: Check access permission
+ * @rqstp: RPC transaction context
+ *
+ * Return:
+ *   %rpc_success:		RPC executed successfully
+ *
+ * RPC synopsis:
+ *   ACCESS2res ACLPROC2_ACCESS(ACCESS2args) = 4;
  */
 static __be32 nfsacld_proc_access(struct svc_rqst *rqstp)
 {
-	struct nfsd3_accessargs *argp = rqstp->rq_argp;
-	struct nfsd3_accessres *resp = rqstp->rq_resp;
+	struct ACCESS2args_wrapper *argp = rqstp->rq_argp;
+	struct ACCESS2res_wrapper *resp = rqstp->rq_resp;
+	struct svc_fh *fhp = &argp->fh;
 
+	nfsacld_fhandle_to_svc_fh(fhp, &argp->xdrgen.fh);
 	dprintk("nfsd: ACCESS(2acl)   %s 0x%x\n",
-			SVCFH_fmt(&argp->fh),
-			argp->access);
+			SVCFH_fmt(fhp), argp->xdrgen.access);
 
-	fh_copy(&resp->fh, &argp->fh);
-	resp->access = argp->access;
-
-	resp->status = nfsd_access(rqstp, &resp->fh, &nfsd2_access_maps,
-				   &resp->access, NULL);
-	if (resp->status != acl2_ok)
+	resp->xdrgen.status = nfsd_access(rqstp, fhp, &nfsd2_access_maps,
+					  &argp->xdrgen.access, NULL);
+	if (resp->xdrgen.status != acl2_ok)
 		goto out;
-	resp->status = fh_getattr(&resp->fh, &resp->stat);
+	resp->xdrgen.status = fh_getattr(fhp, &resp->stat);
+
 out:
-	resp->status = nfsacld_map_status(resp->status);
+	if (resp->xdrgen.status == acl2_ok) {
+		struct ACCESS2resok *resok = &resp->xdrgen.u.resok;
+
+		resok->access = argp->xdrgen.access;
+		nfsacld_stat_to_fattr(rqstp, &resok->attr, &resp->stat, fhp);
+	}
+	fh_put(fhp);
+	resp->xdrgen.status = nfsacld_map_status(resp->xdrgen.status);
 	return rpc_success;
 }
 
@@ -757,47 +767,6 @@ bool nfs_acl2_secattr_decode_end(struct xdrgen_aggregate_cursor *c, bool ok)
 }
 
 /*
- * XDR decode functions
- */
-
-static bool
-nfsaclsvc_decode_accessargs(struct svc_rqst *rqstp, struct xdr_stream *xdr)
-{
-	struct nfsd3_accessargs *args = rqstp->rq_argp;
-
-	if (!svcxdr_decode_fhandle(xdr, &args->fh))
-		return false;
-	if (xdr_stream_decode_u32(xdr, &args->access) < 0)
-		return false;
-
-	return true;
-}
-
-/*
- * XDR encode functions
- */
-
-/* ACCESS */
-static bool
-nfsaclsvc_encode_accessres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
-{
-	struct nfsd3_accessres *resp = rqstp->rq_resp;
-
-	if (!svcxdr_encode_stat(xdr, resp->status))
-		return false;
-	switch (resp->status) {
-	case acl2_ok:
-		if (!svcxdr_encode_fattr(rqstp, xdr, &resp->fh, &resp->stat))
-			return false;
-		if (xdr_stream_encode_u32(xdr, resp->access) < 0)
-			return false;
-		break;
-	}
-
-	return true;
-}
-
-/*
  * XDR release functions
  */
 static void nfsaclsvc_release_getacl(struct svc_rqst *rqstp)
@@ -808,13 +777,6 @@ static void nfsaclsvc_release_getacl(struct svc_rqst *rqstp)
 	posix_acl_release(resp->acl_default);
 }
 
-static void nfsaclsvc_release_access(struct svc_rqst *rqstp)
-{
-	struct nfsd3_accessres *resp = rqstp->rq_resp;
-
-	fh_put(&resp->fh);
-}
-
 static void nfsaclsvc_release_setacl(struct svc_rqst *rqstp)
 {
 	struct SETACL2args_wrapper *argp = rqstp->rq_argp;
@@ -822,9 +784,6 @@ static void nfsaclsvc_release_setacl(struct svc_rqst *rqstp)
 	posix_acl_release(argp->acl_access);
 	posix_acl_release(argp->acl_default);
 }
-
-#define ST 1		/* status*/
-#define AT 21		/* attributes */
 
 static const struct svc_procedure nfsd_acl_procedures2[5] = {
 	[ACLPROC2_NULL] = {
@@ -874,16 +833,15 @@ static const struct svc_procedure nfsd_acl_procedures2[5] = {
 		.pc_name	= "GETATTR",
 	},
 	[ACLPROC2_ACCESS] = {
-		.pc_func = nfsacld_proc_access,
-		.pc_decode = nfsaclsvc_decode_accessargs,
-		.pc_encode = nfsaclsvc_encode_accessres,
-		.pc_release = nfsaclsvc_release_access,
-		.pc_argsize = sizeof(struct nfsd3_accessargs),
-		.pc_argzero = sizeof(struct nfsd3_accessargs),
-		.pc_ressize = sizeof(struct nfsd3_accessres),
-		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST+AT+1,
-		.pc_name = "SETATTR",
+		.pc_func	= nfsacld_proc_access,
+		.pc_decode	= nfs_acl_svc_decode_ACCESS2args,
+		.pc_encode	= nfs_acl_svc_encode_ACCESS2res,
+		.pc_argsize	= sizeof(struct ACCESS2args_wrapper),
+		.pc_argzero	= 0,
+		.pc_ressize	= sizeof(struct ACCESS2res_wrapper),
+		.pc_cachetype	= RC_NOCACHE,
+		.pc_xdrressize	= NFS_ACL2_ACCESS2res_sz,
+		.pc_name	= "ACCESS",
 	},
 };
 
@@ -894,11 +852,11 @@ union nfsd_acl2_xdrstore {
 	struct GETACL2args_wrapper	getaclargs;
 	struct SETACL2args_wrapper	setaclargs;
 	struct GETATTR2args_wrapper	getattrargs;
-	struct nfsd3_accessargs		accessargs;
+	struct ACCESS2args_wrapper	accessargs;
 	struct GETACL2res_wrapper	getaclres;
 	struct SETACL2res_wrapper	setaclres;
 	struct GETATTR2res_wrapper	getattrres;
-	struct nfsd3_accessres		accessres;
+	struct ACCESS2res_wrapper	accessres;
 };
 
 const struct svc_version nfsd_acl_version2 = {
