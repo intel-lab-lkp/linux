@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 Artem Novak
+/dts-v1/;
+
+#include "sh7305.dtsi"
+
+/ {
+	model = "Casio fx-9750GIII";
+	compatible = "casio,fx-9750giii", "renesas,sh7305";
+
+	memory@8000000 {
+		device_type = "memory";
+		reg = <0x08000000 0x00080000>;
+	};
+};
