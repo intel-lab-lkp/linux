@@ -562,8 +562,10 @@ static bool kvm_gmem_supports_mmap(struct inode *inode)
 static vm_fault_t kvm_gmem_fault_user_mapping(struct vm_fault *vmf)
 {
 	struct inode *inode = file_inode(vmf->vma->vm_file);
+	struct gmem_inode *gi = GMEM_I(inode);
 	vm_fault_t ret = VM_FAULT_LOCKED;
 	struct folio *folio = NULL;
+	kvm_pfn_t pfn;
 	int r = 0;
 
 	if (((loff_t)vmf->pgoff << PAGE_SHIFT) >= i_size_read(inode))
@@ -572,6 +574,10 @@ static vm_fault_t kvm_gmem_fault_user_mapping(struct vm_fault *vmf)
 	filemap_invalidate_lock_shared(inode->i_mapping);
 	if (!kvm_gmem_is_shared_mem(inode, vmf->pgoff)) {
 		r = -EACCES;
+	} else if (kvm_gmem_is_pfn_mode(gi)) {
+		r = gmem_provider_get_pfn(gi, vmf->pgoff, &pfn, NULL);
+		if (!r)
+			ret = vmf_insert_pfn(vmf->vma, vmf->address, pfn);
 	} else {
 		folio = kvm_gmem_get_folio(inode, vmf->pgoff);
 		if (IS_ERR(folio))
@@ -585,6 +591,9 @@ static vm_fault_t kvm_gmem_fault_user_mapping(struct vm_fault *vmf)
 
 		return vmf_error(r);
 	}
+
+	if (kvm_gmem_is_pfn_mode(gi))
+		return ret;
 
 	if (WARN_ON_ONCE(folio_test_large(folio))) {
 		ret = VM_FAULT_SIGBUS;
@@ -646,6 +655,8 @@ static const struct vm_operations_struct kvm_gmem_vm_ops = {
 
 static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 {
+	struct gmem_inode *gi = GMEM_I(file_inode(file));
+
 	if (!kvm_gmem_supports_mmap(file_inode(file)))
 		return -ENODEV;
 
@@ -653,6 +664,9 @@ static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 	    (VM_SHARED | VM_MAYSHARE)) {
 		return -EINVAL;
 	}
+
+	if (kvm_gmem_is_pfn_mode(gi))
+		vm_flags_set(vma, VM_PFNMAP);
 
 	vma->vm_ops = &kvm_gmem_vm_ops;
 
