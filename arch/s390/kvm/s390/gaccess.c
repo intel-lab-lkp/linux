@@ -653,7 +653,7 @@ static int vm_check_access_key_gpa(struct kvm *kvm, u8 access_key,
 	int r;
 
 	scoped_guard(read_lock, &kvm->mmu_lock)
-		r = dat_get_storage_key(kvm->arch.gmap->asce, gpa_to_gfn(gpa), &storage_key);
+		r = dat_get_storage_key(kvm->arch.gmap->datt, gpa_to_gfn(gpa), &storage_key);
 	if (r)
 		return r;
 	if (access_key == 0 || storage_key.acc == access_key)
@@ -712,7 +712,7 @@ static int vcpu_check_access_key_gpa(struct kvm_vcpu *vcpu, u8 access_key,
 	 * assume that this cannot fail
 	 */
 	scoped_guard(read_lock, &vcpu->kvm->mmu_lock)
-		r = dat_get_storage_key(vcpu->arch.gmap->asce, gpa_to_gfn(gpa), &storage_key);
+		r = dat_get_storage_key(vcpu->arch.gmap->datt, gpa_to_gfn(gpa), &storage_key);
 	if (r)
 		return r;
 	/* access key matches storage key -> allow */
@@ -1286,7 +1286,7 @@ static int walk_guest_tables(struct gmap *sg, unsigned long saddr, struct pgtwal
 		return -EAGAIN;
 	kvm = parent->kvm;
 	WARN_ON(!kvm);
-	asce = sg->guest_asce;
+	asce.val = sg->guest_asce.val;
 	entries = get_entries(w);
 
 	w->level = LEVEL_MEM;
@@ -1452,7 +1452,7 @@ static int _do_shadow_pte(struct kvm_s390_mmu_cache *mc, struct gmap *sg, gpa_t 
 	newpte = _pte(f->pfn, 0, !p, 0);
 	if (!pgste_get_trylock(ptep, &pgste))
 		return -EAGAIN;
-	pgste = __dat_ptep_xchg(ptep, pgste, newpte, gpa_to_gfn(raddr), sg->asce, uses_skeys(sg));
+	pgste = __dat_ptep_xchg(ptep, pgste, newpte, gpa_to_gfn(raddr), sg->datt);
 	pgste_set_unlock(ptep, pgste);
 
 	return 0;
@@ -1495,7 +1495,7 @@ static int _do_shadow_crste(struct kvm_s390_mmu_cache *mc, struct gmap *sg, gpa_
 		return -EAGAIN;
 
 	newcrste = _crste_fc1(f->pfn, oldcrste.h.tt, 0, !p);
-	while (!dat_crstep_xchg_atomic(table, READ_ONCE(*table), newcrste, r_gfn, sg->asce))
+	while (!dat_crstep_xchg_atomic(table, READ_ONCE(*table), newcrste, r_gfn, sg->datt.asce))
 		;
 	return 0;
 }
@@ -1504,9 +1504,9 @@ static int _gaccess_do_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *sg,
 			      unsigned long saddr, struct pgtwalk *w)
 {
 	struct guest_fault *entries;
-	int flags, i, hl, gl, l, rc;
 	union crste *table, *host;
 	union pte *ptep, *ptep_h;
+	int i, hl, gl, l, rc;
 
 	lockdep_assert_held(&sg->kvm->mmu_lock);
 	lockdep_assert_held(&sg->parent->children_lock);
@@ -1515,8 +1515,8 @@ static int _gaccess_do_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *sg,
 	ptep_h = NULL;
 	ptep = NULL;
 
-	rc = dat_entry_walk(NULL, gpa_to_gfn(saddr), sg->asce, DAT_WALK_ANY, TABLE_TYPE_PAGE_TABLE,
-			    &table, &ptep);
+	rc = dat_entry_walk(NULL, gpa_to_gfn(saddr), sg->datt, DAT_WALK_ANY,
+			    TABLE_TYPE_PAGE_TABLE, &table, &ptep);
 	if (rc)
 		return rc;
 
@@ -1547,7 +1547,7 @@ static int _gaccess_do_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *sg,
 			return -EAGAIN;
 	}
 
-	rc = dat_entry_walk(NULL, entries[LEVEL_MEM].gfn, sg->parent->asce, DAT_WALK_LEAF,
+	rc = dat_entry_walk(NULL, entries[LEVEL_MEM].gfn, sg->parent->datt, DAT_WALK_LEAF,
 			    TABLE_TYPE_PAGE_TABLE, &host, &ptep_h);
 	if (rc)
 		return rc;
@@ -1557,16 +1557,16 @@ static int _gaccess_do_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *sg,
 	l = min3(gl, hl, w->level);
 
 real_address_space:
-	flags = DAT_WALK_SPLIT_ALLOC | (uses_skeys(sg->parent) ? DAT_WALK_USES_SKEYS : 0);
 	/* If necessary, create the shadow mapping */
 	if (l < gl) {
-		rc = dat_entry_walk(mc, gpa_to_gfn(saddr), sg->asce, flags, l, &table, &ptep);
+		rc = dat_entry_walk(mc, gpa_to_gfn(saddr), sg->datt, DAT_WALK_SPLIT_ALLOC, l,
+				    &table, &ptep);
 		if (rc)
 			return rc;
 	}
 	if (l < hl) {
-		rc = dat_entry_walk(mc, entries[LEVEL_MEM].gfn, sg->parent->asce,
-				    flags, l, &host, &ptep_h);
+		rc = dat_entry_walk(mc, entries[LEVEL_MEM].gfn, sg->parent->datt,
+				    DAT_WALK_SPLIT_ALLOC, l, &host, &ptep_h);
 		if (rc)
 			return rc;
 	}

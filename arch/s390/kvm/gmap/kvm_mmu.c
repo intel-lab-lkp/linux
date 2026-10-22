@@ -72,7 +72,7 @@ int s390_kvm_mmu_prepare_memory_region(struct kvm *kvm,
 			return -EINVAL;
 		if ((new->base_gfn + new->npages) * PAGE_SIZE > kvm->arch.mem_limit)
 			return -EINVAL;
-		if (!asce_contains_gfn(kvm->arch.gmap->asce, new->base_gfn + new->npages - 1))
+		if (!dat_tables_contain_gfn(kvm->arch.gmap->datt, new->base_gfn + new->npages - 1))
 			return -EINVAL;
 	}
 
@@ -102,9 +102,9 @@ int s390_kvm_mmu_prepare_memory_region(struct kvm *kvm,
 	scoped_guard(write_lock, &kvm->mmu_lock) {
 		kvm_s390_update_cmma_dirty(kvm, old);
 		if (change == KVM_MR_DELETE || change == KVM_MR_MOVE)
-			rc = dat_delete_slot(kvm->arch.gmap->asce, old->base_gfn, old->npages);
+			rc = dat_delete_slot(kvm->arch.gmap->datt, old->base_gfn, old->npages);
 		if (!rc && (change == KVM_MR_MOVE || change == KVM_MR_CREATE))
-			rc = dat_create_slot(mc, kvm->arch.gmap->asce, new->base_gfn, new->npages);
+			rc = dat_create_slot(mc, kvm->arch.gmap->datt, new->base_gfn, new->npages);
 	}
 	/*
 	 * Can only be triggered if dat_{create,delete}_slot() found an

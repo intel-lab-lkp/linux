@@ -487,7 +487,7 @@ int kvm_s390_pv_set_aside(struct kvm *kvm, u16 *rc, u16 *rrc)
 		return -EINVAL;
 
 	/* Guest with segment type ASCE, refuse to destroy asynchronously */
-	if (kvm->arch.gmap->asce.dt == TABLE_TYPE_SEGMENT)
+	if (kvm->arch.gmap->datt.asce.dt == TABLE_TYPE_SEGMENT)
 		return -EINVAL;
 
 	priv = kzalloc_obj(*priv);
@@ -500,7 +500,7 @@ int kvm_s390_pv_set_aside(struct kvm *kvm, u16 *rc, u16 *rrc)
 		priv->stor_var = kvm->arch.pv.stor_var;
 		priv->stor_base = kvm->arch.pv.stor_base;
 		priv->handle = kvm_s390_pv_get_handle(kvm);
-		priv->old_gmap_table = (unsigned long)dereference_asce(kvm->arch.gmap->asce);
+		priv->old_gmap_table = (unsigned long)kvm->arch.gmap->datt.table;
 		if (s390_replace_asce(kvm->arch.gmap))
 			res = -ENOMEM;
 	}
@@ -626,7 +626,8 @@ int kvm_s390_pv_deinit_cleanup_all(struct kvm *kvm, u16 *rc, u16 *rrc)
 	 * cleanup has been performed.
 	 */
 	if (need_zap && mmget_not_zero(kvm->mm)) {
-		gmap_pv_destroy_range(kvm->arch.gmap, 0, asce_end(kvm->arch.gmap->asce), false);
+		gmap_pv_destroy_range(kvm->arch.gmap, 0, dat_tables_end(kvm->arch.gmap->datt),
+				      false);
 		mmput(kvm->mm);
 	}
 
@@ -664,7 +665,7 @@ int kvm_s390_pv_deinit_aside_vm(struct kvm *kvm, u16 *rc, u16 *rrc)
 		return -EINVAL;
 
 	/* When a fatal signal is received, stop immediately */
-	if (gmap_pv_destroy_range(kvm->arch.gmap, 0, asce_end(kvm->arch.gmap->asce), true))
+	if (gmap_pv_destroy_range(kvm->arch.gmap, 0, dat_tables_end(kvm->arch.gmap->datt), true))
 		goto done;
 	if (kvm_s390_pv_dispose_one_leftover(kvm, p, rc, rrc))
 		ret = -EIO;
@@ -737,7 +738,7 @@ int kvm_s390_pv_init_vm(struct kvm *kvm, u16 *rc, u16 *rrc)
 	/* Inputs */
 	uvcb.guest_stor_origin = 0; /* MSO is 0 for KVM */
 	uvcb.guest_stor_len = kvm->arch.pv.guest_len;
-	uvcb.guest_asce = kvm->arch.gmap->asce.val;
+	uvcb.guest_asce = kvm->arch.gmap->datt.asce.val;
 	uvcb.guest_sca = virt_to_phys(kvm->arch.sca);
 	uvcb.conf_base_stor_origin =
 		virt_to_phys((void *)kvm->arch.pv.stor_base);

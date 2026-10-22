@@ -18,28 +18,20 @@
  * enum gmap_flags - Flags of a gmap.
  *
  * @GMAP_FLAG_SHADOW: The gmap is a vsie shadow gmap.
- * @GMAP_FLAG_OWNS_PAGETABLES: The gmap owns all dat levels; normally 1, is 0
- *                             only for ucontrol per-cpu gmaps, since they
- *                             share the page tables with the main gmap.
  * @GMAP_FLAG_IS_UCONTROL: The gmap is ucontrol (main gmap or per-cpu gmap).
  * @GMAP_FLAG_ALLOW_HPAGE_1M: 1M hugepages are allowed for this gmap,
  *                            independently of the page size used by userspace.
  * @GMAP_FLAG_ALLOW_HPAGE_2G: 2G hugepages are allowed for this gmap,
  *                            independently of the page size used by userspace.
  * @GMAP_FLAG_PFAULT_ENABLED: Pfault is enabled for the gmap.
- * @GMAP_FLAG_USES_SKEYS: If the guest uses storage keys.
- * @GMAP_FLAG_USES_CMM: Whether the guest uses CMMA.
  * @GMAP_FLAG_EXPORT_ON_UNMAP: Whether to export guest pages when unmapping.
  */
 enum gmap_flags {
 	GMAP_FLAG_SHADOW = 0,
-	GMAP_FLAG_OWNS_PAGETABLES,
 	GMAP_FLAG_IS_UCONTROL,
 	GMAP_FLAG_ALLOW_HPAGE_1M,
 	GMAP_FLAG_ALLOW_HPAGE_2G,
 	GMAP_FLAG_PFAULT_ENABLED,
-	GMAP_FLAG_USES_SKEYS,
-	GMAP_FLAG_USES_CMM,
 	GMAP_FLAG_EXPORT_ON_UNMAP,
 };
 
@@ -49,7 +41,7 @@ enum gmap_flags {
  * @flags: GMAP_FLAG_* flags.
  * @edat_level: The edat level of this shadow gmap.
  * @kvm: The vm.
- * @asce: The ASCE used by this gmap.
+ * @datt: The DAT tables used by this gmap.
  * @list: List head used in children gmaps for the children gmap list.
  * @children_lock: Protects children and scb_users.
  * @children: List of child gmaps of this gmap.
@@ -64,7 +56,7 @@ struct gmap {
 	unsigned char edat_level;
 	bool invalidated;
 	struct kvm *kvm;
-	union asce asce;
+	struct dat_tables datt;
 	struct list_head list;
 	spinlock_t children_lock;	/* Protects: children, scb_users */
 	struct list_head children;
@@ -116,12 +108,12 @@ void gmap_split_huge_pages(struct gmap *gmap);
 
 static inline bool uses_skeys(struct gmap *gmap)
 {
-	return test_bit(GMAP_FLAG_USES_SKEYS, &gmap->flags);
+	return has_pgstes(gmap->datt) && gmap->datt.uses_skeys;
 }
 
 static inline bool uses_cmm(struct gmap *gmap)
 {
-	return test_bit(GMAP_FLAG_USES_CMM, &gmap->flags);
+	return has_pgstes(gmap->datt) && gmap->datt.uses_cmma;
 }
 
 static inline bool pfault_enabled(struct gmap *gmap)
@@ -137,11 +129,6 @@ static inline bool is_ucontrol(struct gmap *gmap)
 static inline bool is_shadow(struct gmap *gmap)
 {
 	return test_bit(GMAP_FLAG_SHADOW, &gmap->flags);
-}
-
-static inline bool owns_page_tables(struct gmap *gmap)
-{
-	return test_bit(GMAP_FLAG_OWNS_PAGETABLES, &gmap->flags);
 }
 
 static inline struct gmap *gmap_put(struct gmap *gmap)
@@ -247,7 +234,7 @@ static inline union pgste _gmap_ptep_xchg(struct gmap *gmap, union pte *ptep, un
 	if (!ptep->s.d && newpte.s.d && !newpte.s.s)
 		SetPageDirty(pfn_to_page(newpte.h.pfra));
 	pgste.zero = 0;
-	return __dat_ptep_xchg(ptep, pgste, newpte, gfn, gmap->asce, uses_skeys(gmap));
+	return __dat_ptep_xchg(ptep, pgste, newpte, gfn, gmap->datt);
 }
 
 static inline union pgste gmap_ptep_xchg(struct gmap *gmap, union pte *ptep, union pte newpte,
@@ -305,7 +292,7 @@ static inline bool __must_check _gmap_crstep_xchg_atomic(struct gmap *gmap, unio
 			gmap_handle_vsie_unshadow_event(gmap, gfn);
 		else
 			_gmap_handle_vsie_unshadow_event(gmap, gfn);
-		if (!dat_crstep_xchg_atomic(crstep, oldcrste, newcrste, gfn, gmap->asce))
+		if (!dat_crstep_xchg_atomic(crstep, oldcrste, newcrste, gfn, gmap->datt.asce))
 			return false;
 		/*
 		 * Return false even if the swap was successful, as it only
@@ -319,7 +306,7 @@ static inline bool __must_check _gmap_crstep_xchg_atomic(struct gmap *gmap, unio
 	}
 	if (!oldcrste.s.fc1.d && newcrste.s.fc1.d && !newcrste.s.fc1.s)
 		SetPageDirty(phys_to_page(crste_origin_large(newcrste)));
-	return dat_crstep_xchg_atomic(crstep, oldcrste, newcrste, gfn, gmap->asce);
+	return dat_crstep_xchg_atomic(crstep, oldcrste, newcrste, gfn, gmap->datt.asce);
 }
 
 static inline bool __must_check gmap_crstep_xchg_atomic(struct gmap *gmap, union crste *crstep,

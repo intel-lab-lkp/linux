@@ -1232,7 +1232,8 @@ xfer_to_guest_mode_check:
 			goto xfer_to_guest_mode_check;
 		}
 		guest_timing_enter_irqoff();
-		sie_return = kvm_s390_enter_exit_sie(scb_s, vcpu->run->s.regs.gprs, sg->asce.val);
+		sie_return = kvm_s390_enter_exit_sie(scb_s, vcpu->run->s.regs.gprs,
+						     sg->datt.asce.val);
 		guest_timing_exit_irqoff();
 		local_irq_enable();
 	}
