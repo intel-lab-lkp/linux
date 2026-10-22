@@ -51,7 +51,6 @@ static DEFINE_IDA(reset_gpio_ida);
  * @triggered_count: Number of times this reset line has been reset. Currently
  *                   only used for shared resets, which means that the value
  *                   will be either 0 or 1.
- * @lock: serializes the internals of reset_control_acquire()
  */
 struct reset_control {
 	struct reset_controller_dev __rcu *rcdev;
@@ -64,7 +63,6 @@ struct reset_control {
 	bool array;
 	atomic_t deassert_count;
 	atomic_t triggered_count;
-	struct mutex lock;
 };
 
 /**
@@ -726,8 +724,6 @@ int reset_control_acquire(struct reset_control *rstc)
 	if (reset_control_is_array(rstc))
 		return reset_control_array_acquire(rstc_to_array(rstc));
 
-	guard(mutex)(&rstc->lock);
-
 	if (rstc->acquired)
 		return 0;
 
@@ -744,9 +740,9 @@ int reset_control_acquire(struct reset_control *rstc)
 					return -EBUSY;
 			}
 		}
-	}
 
-	rstc->acquired = true;
+		rstc->acquired = true;
+	}
 
 	return 0;
 }
@@ -878,7 +874,6 @@ __reset_control_get_internal(struct reset_controller_dev *rcdev,
 	list_add(&rstc->list, &rcdev->reset_control_head);
 	rstc->id = index;
 	kref_init(&rstc->refcnt);
-	mutex_init(&rstc->lock);
 	rstc->acquired = acquired;
 	rstc->shared = shared;
 	get_device(rcdev->dev);
@@ -899,8 +894,6 @@ static void __reset_control_release(struct kref *kref)
 		lockdep_assert_held(&rcdev->lock);
 		reset_controller_remove(rcdev, rstc);
 	}
-
-	mutex_destroy(&rstc->lock);
 }
 
 static void reset_control_put_internal(struct reset_control *rstc)
