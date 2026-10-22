@@ -809,24 +809,37 @@ static inline bool is_smt_on(void)
 
 void vm_create_irqchip(struct kvm_vm *vm);
 
-static inline int __vm_create_guest_memfd(struct kvm_vm *vm, u64 size,
-					  u64 flags)
+static inline int __vm_create_guest_memfd_resource(struct kvm_vm *vm, u64 size,
+						   u64 flags, int resource_fd)
 {
 	struct kvm_create_guest_memfd guest_memfd = {
 		.size = size,
 		.flags = flags,
+		.resource_fd = resource_fd,
 	};
 
 	return __vm_ioctl(vm, KVM_CREATE_GUEST_MEMFD, &guest_memfd);
 }
 
-static inline int vm_create_guest_memfd(struct kvm_vm *vm, u64 size,
-					u64 flags)
+static inline int __vm_create_guest_memfd(struct kvm_vm *vm, u64 size,
+					  u64 flags)
 {
-	int fd = __vm_create_guest_memfd(vm, size, flags);
+	return __vm_create_guest_memfd_resource(vm, size, flags, 0);
+}
+
+static inline int vm_create_guest_memfd_resource(struct kvm_vm *vm, u64 size,
+						 u64 flags, int resource_fd)
+{
+	int fd = __vm_create_guest_memfd_resource(vm, size, flags, resource_fd);
 
 	TEST_ASSERT(fd >= 0, KVM_IOCTL_ERROR(KVM_CREATE_GUEST_MEMFD, fd));
 	return fd;
+}
+
+static inline int vm_create_guest_memfd(struct kvm_vm *vm, u64 size,
+					u64 flags)
+{
+	return vm_create_guest_memfd_resource(vm, size, flags, 0);
 }
 
 void vm_set_user_memory_region(struct kvm_vm *vm, u32 slot, u32 flags,
