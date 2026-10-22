@@ -22,10 +22,20 @@
 
 static LIST_HEAD(klp_ops);
 
+/*
+ * klp_check_stack() walks klp_ops and the func_stacks from the scheduler,
+ * without klp_mutex, while a patched module can be loaded or unloaded.
+ * Changes to these lists and to obj->patched are made under this lock too.
+ */
+DEFINE_RAW_SPINLOCK(klp_ops_lock);
+
 struct klp_ops *klp_find_ops(void *old_func)
 {
 	struct klp_ops *ops;
 	struct klp_func *func;
+
+	lockdep_assert(lockdep_is_held(&klp_mutex) ||
+		       lockdep_is_held(&klp_ops_lock));
 
 	list_for_each_entry(ops, &klp_ops, node) {
 		func = list_first_entry(&ops->func_stack, struct klp_func,
@@ -147,11 +157,15 @@ static void klp_unpatch_func(struct klp_func *func)
 		WARN_ON(unregister_ftrace_function(&ops->fops));
 		WARN_ON(ftrace_set_filter_ip(&ops->fops, ftrace_loc, 1, 0));
 
+		raw_spin_lock(&klp_ops_lock);
 		list_del_rcu(&func->stack_node);
 		list_del(&ops->node);
+		raw_spin_unlock(&klp_ops_lock);
 		kfree(ops);
 	} else {
+		raw_spin_lock(&klp_ops_lock);
 		list_del_rcu(&func->stack_node);
+		raw_spin_unlock(&klp_ops_lock);
 	}
 
 	func->patched = false;
@@ -191,10 +205,12 @@ static int klp_patch_func(struct klp_func *func)
 				  FTRACE_OPS_FL_IPMODIFY |
 				  FTRACE_OPS_FL_PERMANENT;
 
-		list_add(&ops->node, &klp_ops);
-
 		INIT_LIST_HEAD(&ops->func_stack);
 		list_add_rcu(&func->stack_node, &ops->func_stack);
+
+		raw_spin_lock(&klp_ops_lock);
+		list_add(&ops->node, &klp_ops);
+		raw_spin_unlock(&klp_ops_lock);
 
 		ret = ftrace_set_filter_ip(&ops->fops, ftrace_loc, 0, 0);
 		if (ret) {
@@ -213,7 +229,9 @@ static int klp_patch_func(struct klp_func *func)
 
 
 	} else {
+		raw_spin_lock(&klp_ops_lock);
 		list_add_rcu(&func->stack_node, &ops->func_stack);
+		raw_spin_unlock(&klp_ops_lock);
 	}
 
 	func->patched = true;
@@ -221,8 +239,10 @@ static int klp_patch_func(struct klp_func *func)
 	return 0;
 
 err:
+	raw_spin_lock(&klp_ops_lock);
 	list_del_rcu(&func->stack_node);
 	list_del(&ops->node);
+	raw_spin_unlock(&klp_ops_lock);
 	kfree(ops);
 	return ret;
 }
@@ -231,6 +251,13 @@ static void __klp_unpatch_object(struct klp_object *obj, bool nops_only)
 {
 	struct klp_func *func;
 
+	/* Make klp_check_stack() skip the object before its funcs go away. */
+	if (obj->dynamic || !nops_only) {
+		raw_spin_lock(&klp_ops_lock);
+		obj->patched = false;
+		raw_spin_unlock(&klp_ops_lock);
+	}
+
 	klp_for_each_func(obj, func) {
 		if (nops_only && !func->nop)
 			continue;
@@ -238,9 +265,6 @@ static void __klp_unpatch_object(struct klp_object *obj, bool nops_only)
 		if (func->patched)
 			klp_unpatch_func(func);
 	}
-
-	if (obj->dynamic || !nops_only)
-		obj->patched = false;
 }
 
 
@@ -264,7 +288,10 @@ int klp_patch_object(struct klp_object *obj)
 			return ret;
 		}
 	}
+
+	raw_spin_lock(&klp_ops_lock);
 	obj->patched = true;
+	raw_spin_unlock(&klp_ops_lock);
 
 	return 0;
 }

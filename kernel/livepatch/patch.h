@@ -25,6 +25,8 @@ struct klp_ops {
 	struct ftrace_ops fops;
 };
 
+extern raw_spinlock_t klp_ops_lock;
+
 struct klp_ops *klp_find_ops(void *old_func);
 
 int klp_patch_object(struct klp_object *obj);

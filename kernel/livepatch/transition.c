@@ -204,10 +204,13 @@ void klp_update_patch_state(struct task_struct *task)
  */
 static int klp_check_stack_func(struct klp_func *func, unsigned long *entries,
 				unsigned int nr_entries)
+	__must_hold(&klp_ops_lock)
 {
 	unsigned long func_addr, func_size, address;
 	struct klp_ops *ops;
 	int i;
+
+	lockdep_assert_held(&klp_ops_lock);
 
 	if (klp_target_state == KLP_TRANSITION_UNPATCHED) {
 		 /*
@@ -266,14 +269,20 @@ static int klp_check_stack(struct task_struct *task, const char **oldname)
 		return -EINVAL;
 	nr_entries = ret;
 
-	klp_for_each_object(klp_transition_patch, obj) {
-		if (!obj->patched)
-			continue;
-		klp_for_each_func(obj, func) {
-			ret = klp_check_stack_func(func, entries, nr_entries);
-			if (ret) {
-				*oldname = func->old_name;
-				return -EADDRINUSE;
+	/*
+	 * The lock is taken by module load/unload and by stack checks on other
+	 * CPUs.  Do not spin on it from the scheduler, retry the task later.
+	 */
+	scoped_cond_guard(raw_spinlock_try, return -EAGAIN, &klp_ops_lock) {
+		klp_for_each_object(klp_transition_patch, obj) {
+			if (!obj->patched)
+				continue;
+			klp_for_each_func(obj, func) {
+				ret = klp_check_stack_func(func, entries, nr_entries);
+				if (ret) {
+					*oldname = func->old_name;
+					return -EADDRINUSE;
+				}
 			}
 		}
 	}
@@ -300,7 +309,7 @@ static int klp_check_and_switch_task(struct task_struct *task, void *arg)
 /*
  * Try to safely switch a task to the target patch state.  If it's currently
  * running, or it's sleeping on a to-be-patched or to-be-unpatched function, or
- * if the stack is unreliable, return false.
+ * if the stack is unreliable, or if klp_ops_lock is busy, return false.
  */
 static bool klp_try_switch_task(struct task_struct *task)
 {
@@ -343,6 +352,10 @@ static bool klp_try_switch_task(struct task_struct *task)
 	case -EADDRINUSE: /* klp_check_and_switch_task() */
 		pr_debug("%s: %s:%d is sleeping on function %s\n",
 			 __func__, task->comm, task->pid, old_name);
+		break;
+	case -EAGAIN:	/* klp_check_and_switch_task() */
+		pr_debug("%s: %s:%d could not be checked, klp_ops_lock is busy\n",
+			 __func__, task->comm, task->pid);
 		break;
 
 	default:
