@@ -123,7 +123,16 @@ static inline bool pfault_enabled(struct gmap *gmap)
 
 static inline bool is_ucontrol(struct gmap *gmap)
 {
+#ifdef CONFIG_KVM_S390_UCONTROL
 	return test_bit(GMAP_FLAG_IS_UCONTROL, &gmap->flags);
+#else
+	return 0;
+#endif
+}
+
+static inline bool export_on_unmap(struct gmap *gmap)
+{
+	return test_bit(GMAP_FLAG_EXPORT_ON_UNMAP, &gmap->flags);
 }
 
 static inline bool is_shadow(struct gmap *gmap)

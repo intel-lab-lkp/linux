@@ -115,11 +115,7 @@ static inline int is_vcpu_idle(struct kvm_vcpu *vcpu)
 
 static inline int kvm_is_ucontrol(struct kvm *kvm)
 {
-#ifdef CONFIG_KVM_S390_UCONTROL
-	return test_bit(GMAP_FLAG_IS_UCONTROL, &kvm->arch.gmap->flags);
-#else
-	return 0;
-#endif
+	return is_ucontrol(kvm->arch.gmap);
 }
 
 #define GUEST_PREFIX_SHIFT 12
