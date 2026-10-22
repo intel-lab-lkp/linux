@@ -48,18 +48,20 @@ xdrgen_encode_bool(struct xdr_stream *xdr, bool val)
 
 /*
  * De facto (non-standard but commonly implemented) signed short type:
- *  - Wire sends sign-extended 32-bit value (e.g., 0xFFFFFFFF)
- *  - be32_to_cpup() returns u32 (0xFFFFFFFF)
- *  - Explicit (s16) cast truncates to 16 bits (0xFFFF = -1)
+ * 16-bit integer sign-extended to fill one XDR_UNIT.
  */
 static inline bool
 xdrgen_decode_short(struct xdr_stream *xdr, s16 *ptr)
 {
 	__be32 *p = xdr_inline_decode(xdr, XDR_UNIT);
+	s32 val;
 
 	if (unlikely(!p))
 		return false;
-	*ptr = (s16)be32_to_cpup(p);
+	val = be32_to_cpup(p);
+	if (unlikely(val < S16_MIN || val > S16_MAX))
+		return false;
+	*ptr = val;
 	return true;
 }
 
