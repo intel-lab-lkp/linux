@@ -21,6 +21,7 @@
 #include <linux/nfs3.h>
 #include <linux/nfs_fs.h>
 #include <linux/nfsacl.h>
+#include <uapi/linux/nfsacl.h>
 #include <linux/nfs_common.h>
 
 #include "internal.h"

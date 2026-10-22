@@ -44,6 +44,7 @@
 #include <linux/xattr.h>
 #include <linux/vmalloc.h>
 #include <linux/nfsacl.h>
+#include <uapi/linux/nfsacl.h>
 
 #include <uapi/linux/xattr.h>
 

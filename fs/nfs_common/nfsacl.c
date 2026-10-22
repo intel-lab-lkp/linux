@@ -29,6 +29,8 @@
 #include <linux/nfs3.h>
 #include <linux/sort.h>
 
+#include <uapi/linux/nfsacl.h>
+
 MODULE_DESCRIPTION("NFS ACL support");
 MODULE_LICENSE("GPL");
 
