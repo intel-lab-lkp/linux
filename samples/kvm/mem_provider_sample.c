@@ -61,8 +61,6 @@ struct mps_info {
 	unsigned long base_pfn;
 	unsigned long npages;
 	struct page *cma_pages;		/* from alloc_contig_pages(), or NULL */
-	bool mmap_capable;
-	bool fixed_wb;			/* holds a ref on the fixed-region WB alias */
 
 	unsigned long *absent;		/* taken away by CTL_SET_PRESENT */
 
@@ -86,47 +84,7 @@ static struct mps_root {
 	struct page *cma_pages;
 	unsigned long *allocated;	/* pages allocated to a child */
 	struct list_head children;
-	/* Files over the fixed region that may be mapped into userspace. */
-	unsigned int fixed_wb_users;
 } mps_root;
-
-/*
- * A write-back mapping of the addr=/len= region, held while any file over it
- * may be mapped into userspace (counted by mps_root.fixed_wb_users).  Without
- * it, PAT makes the range uncached on x86, and the VMM's mapping would be
- * uncached while the guest's is write-back.  PAT may still give a weaker type
- * if the MTRRs do not mark the range write-back.
- */
-static void *mps_fixed_wb;
-
-/* A file over the fixed region whose pages the host may map. */
-static bool mps_over_fixed_mappable(struct mps_info *info)
-{
-	return addr && len && !info->cma_pages && info->mmap_capable;
-}
-
-/*
- * Hold a write-back mapping of the fixed region while any file over it may be
- * mapped into userspace.  Called under mps_root.lock.
- */
-static int mps_fixed_wb_get(void)
-{
-	if (mps_root.fixed_wb_users == 0) {
-		mps_fixed_wb = memremap(addr, len, MEMREMAP_WB);
-		if (!mps_fixed_wb)
-			return -ENOMEM;
-	}
-	mps_root.fixed_wb_users++;
-	return 0;
-}
-
-static void mps_fixed_wb_put(void)
-{
-	if (--mps_root.fixed_wb_users == 0) {
-		memunmap(mps_fixed_wb);
-		mps_fixed_wb = NULL;
-	}
-}
 
 /* Does @info have page @index now?  Called with or without info->lock. */
 static bool mps_page_present(struct mps_info *info, unsigned long index)
@@ -192,9 +150,6 @@ static int mps_mp_get_page(struct mem_provider_file *mpf, pgoff_t index,
 	}
 
 	*pfn = info->base_pfn + index;
-	/* The creator of the file decides whether the host may map it. */
-	if (!info->mmap_capable)
-		*attrs |= MEM_PROVIDER_ATTR_NO_USER_MAP;
 	return 0;
 }
 
@@ -281,13 +236,6 @@ static int mps_file_release(struct inode *inode, struct file *file)
 		bitmap_clear(mps_root.allocated, info->root_index, info->npages);
 		mutex_unlock(&mps_root.lock);
 	}
-	if (addr && len && !info->cma_pages) {
-		mutex_lock(&mps_root.lock);
-		if (info->fixed_wb)
-			mps_fixed_wb_put();
-		mutex_unlock(&mps_root.lock);
-	}
-
 	if (info->cma_pages)
 		free_contig_range(info->base_pfn, info->npages);
 	bitmap_free(info->absent);
@@ -325,7 +273,6 @@ static int mps_new_file(unsigned long base_pfn, unsigned long npages,
 	mem_provider_file_init(&info->mpf);
 	info->base_pfn = base_pfn;
 	info->npages = npages;
-	info->mmap_capable = flags & MPS_FLAG_MMAP_CAPABLE;
 	info->absent = bitmap_zalloc(npages, GFP_KERNEL);
 	if (!info->absent) {
 		ret = -ENOMEM;
@@ -449,7 +396,7 @@ static long mps_ctl_new_child(void __user *uarg)
 
 	if (copy_from_user(&nc, uarg, sizeof(nc)))
 		return -EFAULT;
-	if ((nc.flags & ~MPS_FLAG_MMAP_CAPABLE) || nc.pad)
+	if (nc.flags || nc.pad)
 		return -EINVAL;
 
 	mutex_lock(&mps_root.lock);
@@ -470,15 +417,6 @@ static long mps_ctl_new_child(void __user *uarg)
 	if (fd < 0) {
 		ret = fd;
 		goto out_unlock;
-	}
-	if (mps_over_fixed_mappable(info)) {
-		if (mps_fixed_wb_get()) {
-			put_unused_fd(fd);
-			fput(file);
-			ret = -ENOMEM;
-			goto out_unlock;
-		}
-		info->fixed_wb = true;
 	}
 
 	bitmap_set(mps_root.allocated, first, last - first);
@@ -571,8 +509,6 @@ static void __exit mps_exit(void)
 {
 	misc_deregister(&mps_dev);
 	mps_root_teardown();
-	if (mps_fixed_wb)
-		memunmap(mps_fixed_wb);
 }
 module_exit(mps_exit);
 

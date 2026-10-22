@@ -14,10 +14,6 @@
  * the ioctls below make.
  */
 
-/* Flags for struct mps_new_child */
-/* The host may map the pages; otherwise they are NO_USER_MAP */
-#define MPS_FLAG_MMAP_CAPABLE	(1u << 0)
-
 #define MPS_IOCTL_BASE		'P'
 
 /*
@@ -36,7 +32,7 @@
  * root into a new child fd. Returns the child fd.
  */
 struct mps_new_child {
-	__u32 flags;	/* MPS_FLAG_* */
+	__u32 flags;	/* Reserved, must be 0 */
 	__u32 pad;
 	__u64 offset;	/* bytes into the root, page aligned */
 	__u64 len;	/* bytes, page aligned */
