@@ -15,7 +15,7 @@ nfsd-y 			+= nfssvc.o nfsctl.o nfsfh.o vfs.o \
 			   stats.o filecache.o netlink.o \
 			   nfs3proc.o nfs3xdr.o nfs3xdr_gen.o
 nfsd-$(CONFIG_NFSD_V2) += nfsproc.o nfsxdr.o nfs2xdr_gen.o
-nfsd-$(CONFIG_NFSD_V2_ACL) += nfs2acl.o
+nfsd-$(CONFIG_NFSD_V2_ACL) += nfs2acl.o nfs_acl2xdr_gen.o
 nfsd-$(CONFIG_NFSD_V3_ACL) += nfs3acl.o
 nfsd-$(CONFIG_NFSD_V4)	+= nfs4proc.o nfs4xdr.o nfs4state.o nfs4idmap.o \
 			   nfs4acl.o nfs4callback.o nfs4recover.o nfs4xdr_gen.o
@@ -38,14 +38,19 @@ nfsd-$(CONFIG_DEBUG_FS) += debugfs.o
 .PHONY: xdrgen
 
 XDRGEN_DEFINITIONS	= ../../include/linux/sunrpc/xdrgen/nfs2.h \
+			  ../../include/linux/sunrpc/xdrgen/nfs_acl2.h \
 			  ../../include/linux/sunrpc/xdrgen/nfs3.h \
 			  ../../include/linux/sunrpc/xdrgen/nfs4_1.h
-XDRGEN_DECLARATIONS	= nfs2xdr_gen.h nfs3xdr_gen.h nfs4xdr_gen.h
-XDRGEN_SOURCE		= nfs2xdr_gen.c nfs3xdr_gen.c nfs4xdr_gen.c
+XDRGEN_DECLARATIONS	= nfs2xdr_gen.h nfs_acl2xdr_gen.h \
+			  nfs3xdr_gen.h nfs4xdr_gen.h
+XDRGEN_SOURCE		= nfs2xdr_gen.c nfs_acl2xdr_gen.c \
+			  nfs3xdr_gen.c nfs4xdr_gen.c
 
 xdrgen: $(XDRGEN_DEFINITIONS) $(XDRGEN_DECLARATIONS) $(XDRGEN_SOURCE)
 
 ../../include/linux/sunrpc/xdrgen/nfs2.h: ../../Documentation/sunrpc/xdr/nfs2.x
+	../../tools/net/sunrpc/xdrgen/xdrgen definitions $< > $@
+../../include/linux/sunrpc/xdrgen/nfs_acl2.h: ../../Documentation/sunrpc/xdr/nfs_acl2.x
 	../../tools/net/sunrpc/xdrgen/xdrgen definitions $< > $@
 ../../include/linux/sunrpc/xdrgen/nfs3.h: ../../Documentation/sunrpc/xdr/nfs3.x
 	../../tools/net/sunrpc/xdrgen/xdrgen definitions $< > $@
@@ -54,12 +59,16 @@ xdrgen: $(XDRGEN_DEFINITIONS) $(XDRGEN_DECLARATIONS) $(XDRGEN_SOURCE)
 
 nfs2xdr_gen.h: ../../Documentation/sunrpc/xdr/nfs2.x
 	../../tools/net/sunrpc/xdrgen/xdrgen declarations $< > $@
+nfs_acl2xdr_gen.h: ../../Documentation/sunrpc/xdr/nfs_acl2.x
+	../../tools/net/sunrpc/xdrgen/xdrgen declarations $< > $@
 nfs3xdr_gen.h: ../../Documentation/sunrpc/xdr/nfs3.x
 	../../tools/net/sunrpc/xdrgen/xdrgen declarations $< > $@
 nfs4xdr_gen.h: ../../Documentation/sunrpc/xdr/nfs4_1.x
 	../../tools/net/sunrpc/xdrgen/xdrgen declarations $< > $@
 
 nfs2xdr_gen.c: ../../Documentation/sunrpc/xdr/nfs2.x
+	../../tools/net/sunrpc/xdrgen/xdrgen source $< > $@
+nfs_acl2xdr_gen.c: ../../Documentation/sunrpc/xdr/nfs_acl2.x
 	../../tools/net/sunrpc/xdrgen/xdrgen source $< > $@
 nfs3xdr_gen.c: ../../Documentation/sunrpc/xdr/nfs3.x
 	../../tools/net/sunrpc/xdrgen/xdrgen source $< > $@
