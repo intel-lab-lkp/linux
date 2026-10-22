@@ -2260,6 +2260,7 @@ static __cold void io_ring_ctx_free(struct io_ring_ctx *ctx)
 	io_unregister_zcrx(ctx);
 	io_cqring_overflow_kill(ctx);
 	io_eventfd_unregister(ctx);
+	io_futex_unregister_all(ctx);
 	io_free_alloc_caches(ctx);
 	io_destroy_buffers(ctx);
 	io_free_region(ctx->user, &ctx->param_region);

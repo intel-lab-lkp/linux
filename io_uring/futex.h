@@ -16,6 +16,13 @@ bool io_futex_remove_all(struct io_ring_ctx *ctx, struct io_uring_task *tctx,
 			 bool cancel_all);
 bool io_futex_cache_init(struct io_ring_ctx *ctx);
 void io_futex_cache_free(struct io_ring_ctx *ctx);
+int io_futex_register(struct io_ring_ctx *ctx, void __user *arg,
+		      unsigned int size);
+int io_futex_register_update(struct io_ring_ctx *ctx, void __user *arg,
+			     unsigned int size);
+int io_futex_unregister(struct io_ring_ctx *ctx);
+void io_futex_unregister_all(struct io_ring_ctx *ctx);
+int io_futex_run_pending(struct io_ring_ctx *ctx);
 #else
 static inline int io_futex_cancel(struct io_ring_ctx *ctx,
 				  struct io_cancel_data *cd,
@@ -34,5 +41,26 @@ static inline bool io_futex_cache_init(struct io_ring_ctx *ctx)
 }
 static inline void io_futex_cache_free(struct io_ring_ctx *ctx)
 {
+}
+static inline int io_futex_register(struct io_ring_ctx *ctx, void __user *arg,
+				    unsigned int size)
+{
+	return -EOPNOTSUPP;
+}
+static inline int io_futex_register_update(struct io_ring_ctx *ctx,
+					   void __user *arg, unsigned int size)
+{
+	return -EOPNOTSUPP;
+}
+static inline int io_futex_unregister(struct io_ring_ctx *ctx)
+{
+	return -EOPNOTSUPP;
+}
+static inline void io_futex_unregister_all(struct io_ring_ctx *ctx)
+{
+}
+static inline int io_futex_run_pending(struct io_ring_ctx *ctx)
+{
+	return 0;
 }
 #endif

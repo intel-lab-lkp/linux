@@ -15,6 +15,7 @@
 #include "eventfd.h"
 #include "wait.h"
 #include "mpscq.h"
+#include "futex.h"
 
 static void ctx_flush_and_put(struct io_ring_ctx *ctx, io_tw_token_t tw)
 {
@@ -294,6 +295,45 @@ void io_req_normal_work_add(struct io_kiocb *req)
 	io_fallback_tw(tctx);
 }
 
+/*
+ * Tell @ctx's task, from any task, that one of its persistent futex waits
+ * was notified.  One atomic, and every caller wakes the waiter itself, so a
+ * notifier preempted between moving a wait to QUEUED and calling this
+ * delays nobody, because the next notifier calls it too.  The ring's task
+ * posts the CQEs in __io_run_local_work().
+ */
+void io_ring_futex_kick(struct io_ring_ctx *ctx)
+{
+	/*
+	 * Full barrier, pairs with the waiter's between arming ->cq_wait_nr
+	 * and looking for work, as in io_cq_wait_arm().
+	 */
+	atomic_fetch_or(1, &ctx->futex_pending);
+
+	guard(rcu)();
+	io_ctx_mark_taskrun(ctx);
+	/*
+	 * Zero and below: nobody is waiting, or this wait cycle's wake up has
+	 * been issued, or claimed by a task_work add that issues it with
+	 * preemption disabled (see io_req_local_work_add()).
+	 */
+	if (atomic_read(&ctx->cq_wait_nr) > 0)
+		wake_up_state(ctx->submitter_task, TASK_INTERRUPTIBLE);
+	/*
+	 * A task waiting outside io_uring_enter(): on an eventfd registered
+	 * with the ring, or in poll/epoll on the ring fd, which reports the
+	 * pending work as readable.  Each is tested without a lock, and takes
+	 * its wait queue's lock only when someone opted into it.  Every kicker
+	 * signals, as every kicker wakes: the first may be preempted before it
+	 * gets here.
+	 */
+	if (data_race(ctx->int_flags) & IO_RING_F_HAS_EVFD)
+		io_eventfd_signal(ctx, false, false);
+	/* whoever sets the flag wakes ->poll_wq afterwards */
+	if (data_race(ctx->int_flags) & IO_RING_F_POLL_ACTIVATED)
+		io_poll_wq_wake(ctx);
+}
+
 void io_req_task_work_add_remote(struct io_kiocb *req, unsigned flags)
 {
 	if (WARN_ON_ONCE(!(req->ctx->flags & IORING_SETUP_DEFER_TASKRUN)))
@@ -387,6 +427,10 @@ again:
 	tw.cancel = io_should_terminate_tw(ctx);
 	min_events -= ret;
 	ret = __io_run_local_work_loop(ctx, tw, max_events);
+	/* Take the flag first: a notify after this sets it again. */
+	if (atomic_read(&ctx->futex_pending) &&
+	    atomic_xchg(&ctx->futex_pending, 0))
+		ret += io_futex_run_pending(ctx);
 	loops++;
 
 	if (io_run_local_work_continue(ctx, ret, min_events))

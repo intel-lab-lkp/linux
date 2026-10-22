@@ -28,6 +28,7 @@
 #include "cancel.h"
 #include "kbuf.h"
 #include "napi.h"
+#include "futex.h"
 #include "eventfd.h"
 #include "msg_ring.h"
 #include "memmap.h"
@@ -1025,6 +1026,18 @@ static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 		if (!ret)
 			WRITE_ONCE(ctx->bpf_filters,
 				   ctx->restrictions.bpf_filters->filters);
+		break;
+	case IORING_REGISTER_FUTEX:
+		ret = io_futex_register(ctx, arg, nr_args);
+		break;
+	case IORING_UNREGISTER_FUTEX:
+		ret = -EINVAL;
+		if (arg || nr_args)
+			break;
+		ret = io_futex_unregister(ctx);
+		break;
+	case IORING_REGISTER_FUTEX_UPDATE:
+		ret = io_futex_register_update(ctx, arg, nr_args);
 		break;
 	default:
 		ret = -EINVAL;

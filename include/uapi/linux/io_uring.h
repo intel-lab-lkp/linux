@@ -137,7 +137,7 @@ struct io_uring_attr_pi {
  * direct descriptor (like openat/openat2/accept), then io_uring will allocate
  * an available direct descriptor instead of having the application pass one
  * in. The picked direct descriptor will be returned in cqe->res, or -ENFILE
- * if the space is full.
+ * if the space is full.  A persistent futex wait picks its slot the same way.
  */
 #define IORING_FILE_INDEX_ALLOC		(~0U)
 
@@ -724,6 +724,14 @@ enum io_uring_register_op {
 	/* register bpf filtering programs */
 	IORING_REGISTER_BPF_FILTER		= 37,
 
+	/*
+	 * register futex words for IORING_FUTEX_REGISTERED wakes, as
+	 * IORING_REGISTER_FILES2 and IORING_REGISTER_FILES_UPDATE2 do files
+	 */
+	IORING_REGISTER_FUTEX			= 38,
+	IORING_UNREGISTER_FUTEX			= 39,
+	IORING_REGISTER_FUTEX_UPDATE		= 40,
+
 	/* this goes last */
 	IORING_REGISTER_LAST,
 
@@ -761,6 +769,48 @@ struct io_uring_region_desc {
 enum {
 	/* expose the region as registered wait arguments */
 	IORING_MEM_REGION_REG_WAIT_ARG		= 1,
+};
+
+/*
+ * sqe->futex_flags
+ *
+ * IORING_FUTEX_PERSISTENT	IORING_OP_FUTEX_WAIT: stay armed on the word
+ *				until cancelled, in the ring's persistent wait
+ *				slot sqe->file_index names as a direct
+ *				descriptor's: index + 1, or
+ *				IORING_FILE_INDEX_ALLOC for a free one.  A
+ *				ring has as many slots as CQ entries; one in
+ *				use is -EBUSY, none free -ENFILE.  Each
+ *				wake posts one CQE with IORING_CQE_F_MORE, res
+ *				the allocated slot or 0, then the wait posts no
+ *				more until re-armed; wakes in between are kept
+ *				as one.  Only IORING_FUTEX_REGISTERED wakes
+ *				reach it, not futex(2) wakes.  Needs
+ *				IORING_SETUP_DEFER_TASKRUN; no links, no
+ *				IOSQE_CQE_SKIP_SUCCESS.
+ * IORING_FUTEX_REGISTERED	IORING_OP_FUTEX_WAKE: wake every persistent
+ *				wait on the word registered in slot
+ *				sqe->buf_index whose bitset matches sqe->addr3,
+ *				without looking up the word.  res is how many,
+ *				or -EBADF for an empty slot.
+ * IORING_FUTEX_REARM		IORING_OP_FUTEX_WAIT: re-arm the persistent
+ *				wait in the slot sqe->file_index names, index
+ *				+ 1 as for a close.
+ */
+#define IORING_FUTEX_PERSISTENT		(1U << 0)
+#define IORING_FUTEX_REGISTERED		(1U << 1)
+#define IORING_FUTEX_REARM		(1U << 2)
+
+/*
+ * A slot of IORING_REGISTER_FUTEX and IORING_REGISTER_FUTEX_UPDATE, whose
+ * struct io_uring_rsrc_register and io_uring_rsrc_update2 data point at an
+ * array of these, and whose tags must be 0.  A uaddr of 0 is an empty slot.
+ */
+struct io_uring_futex_reg {
+	__u64	uaddr;
+	__u32	futex2_flags;	/* FUTEX2_SIZE_U32, FUTEX2_PRIVATE */
+	__u32	resv;
+	__u64	resv2[2];
 };
 
 struct io_uring_mem_region_reg {

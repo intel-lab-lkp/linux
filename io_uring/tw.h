@@ -25,6 +25,7 @@ static inline bool io_should_terminate_tw(struct io_ring_ctx *ctx)
 }
 
 void io_req_task_work_add_remote(struct io_kiocb *req, unsigned flags);
+void io_ring_futex_kick(struct io_ring_ctx *ctx);
 void tctx_task_work(struct callback_head *cb);
 void io_tctx_fallback_work(struct work_struct *work);
 int io_run_local_work(struct io_ring_ctx *ctx, int min_events, int max_events);
@@ -90,7 +91,8 @@ static inline int io_run_task_work(void)
 
 static inline bool io_local_work_pending(struct io_ring_ctx *ctx)
 {
-	return !mpscq_empty(&ctx->work_list);
+	return !mpscq_empty(&ctx->work_list) ||
+	       atomic_read(&ctx->futex_pending);
 }
 
 static inline bool io_task_work_pending(struct io_ring_ctx *ctx)

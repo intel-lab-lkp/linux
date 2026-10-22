@@ -453,6 +453,8 @@ struct io_ring_ctx {
 		unsigned long		check_cq;
 		atomic_t		cq_wait_nr;
 		atomic_t		cq_timeouts;
+		/* persistent futex waits notified; see io_ring_futex_kick() */
+		atomic_t		futex_pending;
 		struct wait_queue_head	cq_wait;
 	} ____cacheline_aligned_in_smp;
 
@@ -473,6 +475,10 @@ struct io_ring_ctx {
 #ifdef CONFIG_FUTEX
 	struct hlist_head	futex_list;
 	struct io_alloc_cache	futex_cache;
+	/* IORING_REGISTER_FUTEX words; changes under uring_lock */
+	struct io_futex_table __rcu	*futex_table;
+	/* persistent futex waits' slots, from the first one on */
+	struct io_futex_ring	*futex_ring;
 #endif
 
 	const struct cred	*sq_creds;	/* cred used for __io_sq_thread() */
