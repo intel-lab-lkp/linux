@@ -35,12 +35,6 @@
 
 struct posix_acl;
 
-struct nfsd_attrstat {
-	__be32			status;
-	struct svc_fh		fh;
-	struct kstat		stat;
-};
-
 /*
  * Wrapper structures combine xdrgen types with legacy structures.
  * The xdrgen field must be first so the structure can be cast
@@ -87,6 +81,20 @@ struct SETACL2res_wrapper {
 
 static_assert(offsetof(struct SETACL2res_wrapper, xdrgen) == 0);
 
+struct GETATTR2args_wrapper {
+	struct GETATTR2args	xdrgen;
+	struct svc_fh		fh;
+};
+
+static_assert(offsetof(struct GETATTR2args_wrapper, xdrgen) == 0);
+
+struct GETATTR2res_wrapper {
+	struct GETATTR2res	xdrgen;
+	struct kstat		stat;
+};
+
+static_assert(offsetof(struct GETATTR2res_wrapper, xdrgen) == 0);
+
 struct nfsd3_accessargs {
 	struct svc_fh		fh;
 	__u32			access;
@@ -98,11 +106,6 @@ struct nfsd3_accessres {
 	__u32			access;
 	struct kstat		stat;
 };
-
-bool nfssvc_decode_fhandleargs(struct svc_rqst *rqstp, struct xdr_stream *xdr);
-bool nfssvc_encode_attrstatres(struct svc_rqst *rqstp, struct xdr_stream *xdr);
-
-void nfssvc_release_attrstat(struct svc_rqst *rqstp);
 
 bool svcxdr_decode_fhandle(struct xdr_stream *xdr, struct svc_fh *fhp);
 bool svcxdr_encode_stat(struct xdr_stream *xdr, __be32 status);
@@ -479,23 +482,36 @@ out_errno:
 	goto out;
 }
 
-/*
- * Check file attributes
+/**
+ * nfsacld_proc_getattr - GETATTR: Get the attributes of a file
+ * @rqstp: RPC transaction context
+ *
+ * Return:
+ *   %rpc_success:		RPC executed successfully
+ *
+ * RPC synopsis:
+ *   GETATTR2res ACLPROC2_GETATTR(GETATTR2args) = 3;
  */
 static __be32 nfsacld_proc_getattr(struct svc_rqst *rqstp)
 {
-	struct nfsd_fhandle *argp = rqstp->rq_argp;
-	struct nfsd_attrstat *resp = rqstp->rq_resp;
+	struct GETATTR2args_wrapper *argp = rqstp->rq_argp;
+	struct GETATTR2res_wrapper *resp = rqstp->rq_resp;
+	struct svc_fh *fhp = &argp->fh;
 
-	dprintk("nfsd: GETATTR  %s\n", SVCFH_fmt(&argp->fh));
+	nfsacld_fhandle_to_svc_fh(fhp, &argp->xdrgen.fh);
+	dprintk("nfsd: GETATTR  %s\n", SVCFH_fmt(fhp));
 
-	fh_copy(&resp->fh, &argp->fh);
-	resp->status = fh_verify(rqstp, &resp->fh, 0, NFSD_MAY_NOP);
-	if (resp->status != acl2_ok)
+	resp->xdrgen.status = fh_verify(rqstp, fhp, 0, NFSD_MAY_NOP);
+	if (resp->xdrgen.status != acl2_ok)
 		goto out;
-	resp->status = fh_getattr(&resp->fh, &resp->stat);
+	resp->xdrgen.status = fh_getattr(fhp, &resp->stat);
+
 out:
-	resp->status = nfsacld_map_status(resp->status);
+	if (resp->xdrgen.status == acl2_ok)
+		nfsacld_stat_to_fattr(rqstp, &resp->xdrgen.u.resok.attr,
+				      &resp->stat, fhp);
+	fh_put(fhp);
+	resp->xdrgen.status = nfsacld_map_status(resp->xdrgen.status);
 	return rpc_success;
 }
 
@@ -847,16 +863,15 @@ static const struct svc_procedure nfsd_acl_procedures2[5] = {
 		.pc_name	= "SETACL",
 	},
 	[ACLPROC2_GETATTR] = {
-		.pc_func = nfsacld_proc_getattr,
-		.pc_decode = nfssvc_decode_fhandleargs,
-		.pc_encode = nfssvc_encode_attrstatres,
-		.pc_release = nfssvc_release_attrstat,
-		.pc_argsize = sizeof(struct nfsd_fhandle),
-		.pc_argzero = sizeof(struct nfsd_fhandle),
-		.pc_ressize = sizeof(struct nfsd_attrstat),
-		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST+AT,
-		.pc_name = "GETATTR",
+		.pc_func	= nfsacld_proc_getattr,
+		.pc_decode	= nfs_acl_svc_decode_GETATTR2args,
+		.pc_encode	= nfs_acl_svc_encode_GETATTR2res,
+		.pc_argsize	= sizeof(struct GETATTR2args_wrapper),
+		.pc_argzero	= 0,
+		.pc_ressize	= sizeof(struct GETATTR2res_wrapper),
+		.pc_cachetype	= RC_NOCACHE,
+		.pc_xdrressize	= NFS_ACL2_GETATTR2res_sz,
+		.pc_name	= "GETATTR",
 	},
 	[ACLPROC2_ACCESS] = {
 		.pc_func = nfsacld_proc_access,
@@ -878,11 +893,11 @@ static const struct svc_procedure nfsd_acl_procedures2[5] = {
 union nfsd_acl2_xdrstore {
 	struct GETACL2args_wrapper	getaclargs;
 	struct SETACL2args_wrapper	setaclargs;
+	struct GETATTR2args_wrapper	getattrargs;
 	struct nfsd3_accessargs		accessargs;
-	struct nfsd_fhandle		fhandle;
 	struct GETACL2res_wrapper	getaclres;
 	struct SETACL2res_wrapper	setaclres;
-	struct nfsd_attrstat		attrstat;
+	struct GETATTR2res_wrapper	getattrres;
 	struct nfsd3_accessres		accessres;
 };
 
