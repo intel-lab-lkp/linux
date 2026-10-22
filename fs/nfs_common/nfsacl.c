@@ -288,10 +288,16 @@ cmp_acl_entry(const void *x, const void *y)
 		return 0;
 }
 
-/*
- * Convert from a Solaris ACL to a POSIX 1003.1e draft 17 ACL.
+/**
+ * posix_acl_from_nfsacl - Normalize a decoded Solaris ACL in place
+ * @acl: a posix_acl decoded from the NFSACL wire form, or NULL
+ *
+ * Sorts the entries into POSIX 1003.1e draft 17 order and removes the
+ * bogus ACL_MASK entry Solaris adds to a minimal ACL.
+ *
+ * Return: 0.  Always succeeds; a NULL @acl is a no-op.
  */
-static int
+int
 posix_acl_from_nfsacl(struct posix_acl *acl)
 {
 	struct posix_acl_entry *pa, *pe,
@@ -327,6 +333,7 @@ posix_acl_from_nfsacl(struct posix_acl *acl)
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(posix_acl_from_nfsacl);
 
 /**
  * nfsacl_decode - Decode an NFSv3 ACL
