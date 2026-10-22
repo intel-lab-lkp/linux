@@ -738,6 +738,30 @@ static void snd_info_clear_entries(struct snd_info_entry *entry)
 }
 
 /**
+ * snd_info_disconnect - remove proc nodes without freeing their info entries
+ * @entry: root of the info entry subtree
+ *
+ * Prevents registration of this subtree and drains its proc callbacks.
+ * The caller must serialize this with entry destruction and must not hold
+ * locks needed by the callbacks.  Entries remain for snd_info_free_entry().
+ */
+void snd_info_disconnect(struct snd_info_entry *entry)
+{
+	struct proc_dir_entry *p;
+
+	if (!entry)
+		return;
+
+	scoped_guard(mutex, &info_mutex) {
+		entry->disconnected = true;
+		p = entry->p;
+		snd_info_clear_entries(entry);
+	}
+	proc_remove(p);
+}
+EXPORT_SYMBOL(snd_info_disconnect);
+
+/**
  * snd_info_free_entry - release the info entry
  * @entry: the info entry
  *
@@ -774,11 +798,16 @@ EXPORT_SYMBOL(snd_info_free_entry);
 static int __snd_info_register(struct snd_info_entry *entry)
 {
 	struct proc_dir_entry *root, *p = NULL;
+	struct snd_info_entry *parent;
 
 	if (snd_BUG_ON(!entry))
 		return -ENXIO;
-	root = entry->parent == NULL ? snd_proc_root->p : entry->parent->p;
 	guard(mutex)(&info_mutex);
+	for (parent = entry; parent; parent = parent->parent) {
+		if (parent->disconnected)
+			return 0;
+	}
+	root = !entry->parent ? snd_proc_root->p : entry->parent->p;
 	if (entry->p || !root)
 		return 0;
 	if (S_ISDIR(entry->mode)) {

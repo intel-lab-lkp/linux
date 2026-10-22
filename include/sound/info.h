@@ -71,6 +71,7 @@ struct snd_info_entry {
 	void *private_data;
 	void (*private_free)(struct snd_info_entry *entry);
 	struct proc_dir_entry *p;
+	bool disconnected;
 	struct mutex access;
 	struct list_head children;
 	struct list_head list;
@@ -118,6 +119,7 @@ struct snd_info_entry *snd_info_create_card_entry(struct snd_card *card,
 					     const char *name,
 					     struct snd_info_entry *parent);
 void snd_info_free_entry(struct snd_info_entry *entry);
+void snd_info_disconnect(struct snd_info_entry *entry);
 
 int snd_info_card_create(struct snd_card *card);
 int snd_info_card_register(struct snd_card *card);
@@ -165,6 +167,7 @@ static inline char *snd_info_get_str(char *dest, char *src, int len) { return NU
 static inline struct snd_info_entry *snd_info_create_module_entry(struct module *module, const char *name, struct snd_info_entry *parent) { return NULL; }
 static inline struct snd_info_entry *snd_info_create_card_entry(struct snd_card *card, const char *name, struct snd_info_entry *parent) { return NULL; }
 static inline void snd_info_free_entry(struct snd_info_entry *entry) { ; }
+static inline void snd_info_disconnect(struct snd_info_entry *entry) { }
 
 static inline int snd_info_card_create(struct snd_card *card) { return 0; }
 static inline int snd_info_card_register(struct snd_card *card) { return 0; }
