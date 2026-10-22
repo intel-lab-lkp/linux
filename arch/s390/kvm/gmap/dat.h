@@ -110,6 +110,9 @@ union pte {
 #define _PAGES_PER_SEGMENT	_PAGE_ENTRIES
 #define _PAGES_PER_REGION3	(_PAGES_PER_SEGMENT * _CRST_ENTRIES)
 
+#define CRDTE_NODAT		IPTE_NODAT
+#define CRDTE_GUEST_ASCE	IPTE_GUEST_ASCE
+
 /* Soft dirty, needed as macro for atomic operations on ptes */
 #define _PAGE_SD 0x002
 
@@ -609,38 +612,62 @@ static inline bool crdte_crste(union crste *crstep, union crste old, union crste
 {
 	unsigned long dtt = 0x10 | new.h.tt << 2;
 	void *table = crste_table_start(crstep);
+	unsigned long addr = gfn_to_gpa(gfn);
 
-	return crdte(old.val, new.val, table, dtt, gfn_to_gpa(gfn), asce.val);
+	addr |= machine_has_tlb_guest() ? CRDTE_GUEST_ASCE : 0;
+	return crdte(old.val, new.val, table, dtt, addr, asce.val);
+}
+
+static inline bool crdte_pte(union pte *ptep, union pte old, union pte new, gfn_t gfn,
+			     union asce asce, bool nt)
+{
+	void *table = pte_table_start(ptep);
+	unsigned long addr = gfn_to_gpa(gfn);
+
+	if (machine_has_tlb_guest())
+		addr |= CRDTE_GUEST_ASCE | (nt ? CRDTE_NODAT : 0);
+	return crdte(old.val, new.val, table, 0, addr, asce.val);
 }
 
 /**
  * idte_crste() - invalidate a crste entry using idte
  * @crstep: pointer to the crste to be invalidated
  * @gfn: a gfn mapped by the crste
- * @opt: options for the idte instruction
  * @asce: the asce
- * @local: whether the operation is cpu-local
  */
-static __always_inline void idte_crste(union crste *crstep, gfn_t gfn, unsigned long opt,
-				       union asce asce, int local)
+static __always_inline void idte_crste(union crste *crstep, gfn_t gfn, union asce asce)
 {
 	unsigned long table_origin = __pa(crste_table_start(crstep));
 	unsigned long gaddr = gfn_to_gpa(gfn) & HPAGE_MASK;
 
-	if (__builtin_constant_p(opt) && opt == 0) {
+	table_origin |= crstep->val & _REGION_ENTRY_TYPE_MASK;
+
+	if (!machine_has_tlb_guest()) {
 		/* flush without guest asce */
-		asm volatile("idte	%[table_origin],0,%[gaddr],%[local]"
+		asm volatile("idte	%[table_origin],0,%[gaddr]"
 			: "+m" (*crstep)
-			: [table_origin] "a" (table_origin), [gaddr] "a" (gaddr),
-			  [local] "i" (local)
+			: [table_origin] "a" (table_origin), [gaddr] "a" (gaddr)
 			: "cc");
 	} else {
 		/* flush with guest asce */
-		asm volatile("idte %[table_origin],%[asce],%[gaddr_opt],%[local]"
+		asm volatile("idte %[table_origin],%[asce],%[gaddr_opt]"
 			: "+m" (*crstep)
-			: [table_origin] "a" (table_origin), [gaddr_opt] "a" (gaddr | opt),
-			  [asce] "a" (asce.val), [local] "i" (local)
+			: [table_origin] "a" (table_origin),
+			  [gaddr_opt] "a" (gaddr | IDTE_GUEST_ASCE),
+			  [asce] "a" (asce.val)
 			: "cc");
+	}
+}
+
+static __always_inline void ipte(gfn_t gfn, union pte *ptep, union asce asce, bool nt)
+{
+	unsigned long flags;
+
+	if (machine_has_tlb_guest()) {
+		flags = IPTE_GUEST_ASCE | (nt ? IPTE_NODAT : 0);
+		__ptep_ipte(gfn_to_gpa(gfn), (void *)ptep, flags, asce.val, IPTE_GLOBAL);
+	} else {
+		__ptep_ipte(gfn_to_gpa(gfn), (void *)ptep, 0, 0, IPTE_GLOBAL);
 	}
 }
 
