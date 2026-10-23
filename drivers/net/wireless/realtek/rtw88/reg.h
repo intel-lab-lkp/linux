@@ -11,6 +11,7 @@
 #define BIT_FEN_PPLL		BIT(7)
 #define BIT_FEN_PCIEA		BIT(6)
 #define BIT_FEN_DIO_PCIE	BIT(5)
+#define BIT_FEN_PCIED		BIT(8)
 #define BIT_FEN_CPUEN		BIT(2)
 #define BIT_FEN_USBA		BIT(2)
 #define BIT_FEN_BB_GLB_RST	BIT(1)
@@ -187,6 +188,8 @@
 #define BIT_USB3_USB2_TRANSITION	BIT(20)
 #define BIT_USB_MODE_U2		1
 #define BIT_USB_MODE_U3		2
+
+#define REG_PMC_DBG_CTRL2	0x00CC
 
 #define REG_EFUSE_ACCESS	0x00CF
 #define EFUSE_ACCESS_ON		0x69

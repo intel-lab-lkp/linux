@@ -144,6 +144,8 @@
 /* IMR 3 */
 #define IMR_H2CDOK		BIT(16)
 
+extern bool rtw_pci_disable_aspm;
+
 enum rtw_pci_flags {
 	RTW_PCI_FLAG_NAPI_RUNNING,
 
@@ -267,6 +269,10 @@ struct rtw_pci_info {
 extern const struct dev_pm_ops rtw_pm_ops;
 extern const struct pci_error_handlers rtw_pci_err_handler;
 extern const struct rtw_pci_gen rtw_pci_gen_new;
+
+u8 rtw_pci_get_tx_qsel(struct sk_buff *skb, enum rtw_tx_queue_type queue);
+void rtw_pci_release_rsvd_page(struct rtw_pci *rtwpci,
+			       struct rtw_pci_tx_ring *ring);
 
 int rtw_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id);
 void rtw_pci_remove(struct pci_dev *pdev);

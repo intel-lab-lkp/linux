@@ -110,7 +110,7 @@ obj-$(CONFIG_RTW88_8814AU)	+= rtw88_8814au.o
 rtw88_8814au-objs		:= rtw8814au.o
 
 obj-$(CONFIG_RTW88_PCI)		+= rtw88_pci.o
-rtw88_pci-objs			:= pci.o
+rtw88_pci-objs			:= pci.o pci_old.o
 
 obj-$(CONFIG_RTW88_SDIO)	+= rtw88_sdio.o
 rtw88_sdio-objs			:= sdio.o
