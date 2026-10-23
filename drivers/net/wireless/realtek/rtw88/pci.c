@@ -1056,6 +1056,7 @@ static u32 rtw_pci_rx_napi(struct rtw_dev *rtwdev, struct rtw_pci *rtwpci,
 	dma_addr_t dma;
 	u32 new_len;
 	u8 *rx_desc;
+	u8 *rx_buf;
 	int ret;
 
 	count = rtw_pci_get_hw_rx_ring_nr(rtwdev, rtwpci);
@@ -1068,7 +1069,8 @@ static u32 rtw_pci_rx_napi(struct rtw_dev *rtwdev, struct rtw_pci *rtwpci,
 		dma_sync_single_for_cpu(rtwdev->dev, dma, RTK_PCI_RX_BUF_SIZE,
 					DMA_FROM_DEVICE);
 		rx_desc = skb->data;
-		ret = rtw_rx_query_rx_desc(rtwdev, rx_desc,
+		rx_buf = rx_desc + pkt_desc_sz;
+		ret = rtw_rx_query_rx_desc(rtwdev, rx_desc, rx_buf,
 					   &pkt_stat, &rx_status);
 		if (ret)
 			goto next_rp;

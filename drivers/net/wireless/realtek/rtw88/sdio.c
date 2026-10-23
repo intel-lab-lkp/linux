@@ -1360,6 +1360,7 @@ static void rtw_sdio_rxfifo_recv(struct rtw_dev *rtwdev, u32 rx_len)
 	u32 pkt_offset, curr_pkt_len;
 	size_t bufsz;
 	u8 *rx_desc;
+	u8 *rx_buf;
 	int ret;
 
 	bufsz = sdio_align_size(rtwsdio->sdio_func, rx_len);
@@ -1376,7 +1377,8 @@ static void rtw_sdio_rxfifo_recv(struct rtw_dev *rtwdev, u32 rx_len)
 
 	while (true) {
 		rx_desc = skb->data;
-		ret = rtw_rx_query_rx_desc(rtwdev, rx_desc,
+		rx_buf = rx_desc + pkt_desc_sz;
+		ret = rtw_rx_query_rx_desc(rtwdev, rx_desc, rx_buf,
 					   &pkt_stat, &rx_status);
 		if (ret) {
 			dev_kfree_skb_any(skb);

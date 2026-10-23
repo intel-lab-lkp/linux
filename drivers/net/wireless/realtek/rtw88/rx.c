@@ -265,10 +265,9 @@ static void rtw_rx_fill_rx_status(struct rtw_dev *rtwdev,
 }
 
 int rtw_rx_query_rx_desc(struct rtw_dev *rtwdev, void *rx_desc8,
-			 struct rtw_rx_pkt_stat *pkt_stat,
+			 void *rx_buf, struct rtw_rx_pkt_stat *pkt_stat,
 			 struct ieee80211_rx_status *rx_status)
 {
-	u32 desc_sz = rtwdev->chip->rx_pkt_desc_sz;
 	struct rtw_rx_desc *rx_desc = rx_desc8;
 	struct ieee80211_hdr *hdr;
 	u32 enc_type, swdec;
@@ -321,7 +320,8 @@ int rtw_rx_query_rx_desc(struct rtw_dev *rtwdev, void *rx_desc8,
 	if (unlikely(pkt_stat->pkt_len <= FCS_LEN))
 		return -EINVAL;
 
-	phy_status = rx_desc8 + desc_sz + pkt_stat->shift;
+	phy_status = rx_buf + pkt_stat->shift;
+
 	hdr = phy_status + pkt_stat->drv_info_sz;
 	pkt_stat->hdr = hdr;
 

@@ -682,6 +682,7 @@ static void rtw_usb_rx_handler(struct work_struct *work)
 	u32 pkt_offset, next_pkt, skb_len;
 	int limit, ret;
 	u8 *rx_desc;
+	u8 *rx_buf;
 
 	for (limit = 0; limit < 200; limit++) {
 		rx_skb = skb_dequeue(&rtwusb->rx_queue);
@@ -697,7 +698,8 @@ static void rtw_usb_rx_handler(struct work_struct *work)
 		rx_desc = rx_skb->data;
 
 		do {
-			ret = rtw_rx_query_rx_desc(rtwdev, rx_desc,
+			rx_buf = rx_desc + pkt_desc_sz;
+			ret = rtw_rx_query_rx_desc(rtwdev, rx_desc, rx_buf,
 						   &pkt_stat, &rx_status);
 			if (ret)
 				break;
