@@ -1532,9 +1532,9 @@ static ssize_t write_flush(struct file *file, const char __user *buf,
 	 */
 
 	if (cd->flush_time >= now)
-		now = cd->flush_time + 1;
-
-	cd->flush_time = now;
+		cd->flush_time++;
+	else
+		cd->flush_time = now;
 	cd->nextcheck = now;
 	cache_flush();
 
