@@ -524,8 +524,10 @@ static int cctrng_probe(struct platform_device *pdev)
 
 	/* increment device's usage counter */
 	rc = cc_trng_pm_get(dev);
-	if (rc)
-		return dev_err_probe(dev, rc, "cc_trng_pm_get returned %x\n", rc);
+	if (rc) {
+		dev_err_probe(dev, rc, "cc_trng_pm_get returned %x\n", rc);
+		goto post_pm_err;
+	}
 
 	/* set pending_hw to verify that HW won't be triggered from read */
 	atomic_set(&drvdata->pending_hw, 1);
@@ -534,8 +536,7 @@ static int cctrng_probe(struct platform_device *pdev)
 	rc = devm_hwrng_register(dev, &drvdata->rng);
 	if (rc) {
 		dev_err(dev, "Could not register hwrng device.\n");
-		cc_trng_pm_fini(drvdata);
-		return rc;
+		goto post_pm_err;
 	}
 
 	/* trigger HW to start generate data */
@@ -548,6 +549,11 @@ static int cctrng_probe(struct platform_device *pdev)
 	dev_info(dev, "ARM cctrng device initialized\n");
 
 	return 0;
+
+post_pm_err:
+	cc_trng_pm_fini(drvdata);
+
+	return rc;
 }
 
 static void cctrng_remove(struct platform_device *pdev)
