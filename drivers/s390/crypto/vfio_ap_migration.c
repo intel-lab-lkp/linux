@@ -217,8 +217,9 @@ static const struct vfio_migration_ops vfio_ap_migration_ops;
 /**
  * vfio_ap_setup_vfio_device_migration:
  *
+ * Enable
  * Plug the object containing the function pointers to the migration callbacks
- * required to facilitate VFIO AP migration into the mdev
+ * used to facilitate migration of a vfio-ap device.
  *
  *
  * @matrix_mdev: pointer to object containing the mdev state
