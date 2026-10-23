@@ -61,6 +61,9 @@ __be32 nfsd4_preprocess_layout_stateid(struct svc_rqst *rqstp,
 		bool create, u32 layout_type, struct nfs4_layout_stateid **lsp);
 __be32 nfsd4_insert_layout(struct nfsd4_layoutget *lgp,
 		struct nfs4_layout_stateid *ls);
+void nfsd4_record_layout_grant(struct nfs4_layout_stateid *ls,
+		struct nfsd4_layout_grant *lg,
+		const struct nfsd4_compound_state *cstate);
 __be32 nfsd4_return_file_layouts(struct svc_rqst *rqstp,
 		struct nfsd4_compound_state *cstate,
 		struct nfsd4_layoutreturn *lrp);

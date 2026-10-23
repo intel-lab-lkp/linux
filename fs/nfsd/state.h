@@ -848,6 +848,15 @@ static inline struct nfs4_ol_stateid *openlockstateid(struct nfs4_stid *s)
 
 struct nfsd4_fence_script;
 
+/* A LAYOUTGET that added a layout, until its slot retires */
+struct nfsd4_layout_grant {
+	struct list_head		lg_list;
+	struct nfsd4_grant_slot		lg_slot;
+};
+
+/* The most LAYOUTGETs that a layout stateid keeps records of */
+#define NFSD4_LAYOUT_MAX_GRANTS		8
+
 struct nfs4_layout_stateid {
 	struct nfs4_stid		ls_stid;
 	struct list_head		ls_perclnt;
@@ -863,6 +872,17 @@ struct nfs4_layout_stateid {
 	bool				ls_recall_accepted;
 	bool				ls_recalled;
 	struct mutex			ls_mutex;
+	/*
+	 * The latest NFSD4_LAYOUT_MAX_GRANTS LAYOUTGETs that added a
+	 * layout to this layout stateid or merged into one, and whose
+	 * slots had not retired when last looked at. Under ls_mutex.
+	 * Until a slot retires, the client may not have processed the reply
+	 * to the LAYOUTGET it carried.
+	 */
+	struct list_head		ls_grants;
+	/* Recall state for ->done, reset in ->prepare */
+	bool				ls_recall_retired_at_send;
+	bool				ls_recall_resent;
 
 	struct delayed_work		ls_fence_work;
 	struct mutex			ls_fence_mutex; /* serializes fence shutdown */

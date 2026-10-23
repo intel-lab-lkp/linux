@@ -238,6 +238,7 @@ nfsd4_free_layout_stateid(struct nfs4_stid *stid)
 	struct nfs4_layout_stateid *ls = layoutstateid(stid);
 	struct nfs4_client *clp = ls->ls_stid.sc_client;
 	struct nfs4_file *fp = ls->ls_stid.sc_file;
+	struct nfsd4_layout_grant *lg, *next;
 
 	trace_nfsd_layoutstate_free(&ls->ls_stid.sc_stateid);
 
@@ -254,6 +255,8 @@ nfsd4_free_layout_stateid(struct nfs4_stid *stid)
 	if (ls->ls_recalled)
 		atomic_dec(&ls->ls_stid.sc_file->fi_lo_recalls);
 
+	list_for_each_entry_safe(lg, next, &ls->ls_grants, lg_list)
+		kfree(lg);
 	kmem_cache_free(nfs4_layout_stateid_cache, ls);
 }
 
@@ -310,6 +313,7 @@ nfsd4_alloc_layout_stateid(struct nfsd4_compound_state *cstate,
 	INIT_LIST_HEAD(&ls->ls_perfile);
 	spin_lock_init(&ls->ls_lock);
 	INIT_LIST_HEAD(&ls->ls_layouts);
+	INIT_LIST_HEAD(&ls->ls_grants);
 	mutex_init(&ls->ls_mutex);
 	mutex_init(&ls->ls_fence_mutex);
 	ls->ls_layout_type = layout_type;
@@ -590,6 +594,66 @@ out:
 	if (new)
 		kmem_cache_free(nfs4_layout_cache, new);
 	return nfserr;
+}
+
+/* Forget the LAYOUTGETs whose replies the client has seen. */
+static void
+nfsd4_prune_layout_grants(struct nfs4_layout_stateid *ls)
+{
+	struct nfs4_client *clp = ls->ls_stid.sc_client;
+	struct nfsd4_layout_grant *lg, *next;
+
+	lockdep_assert_held(&ls->ls_mutex);
+	list_for_each_entry_safe(lg, next, &ls->ls_grants, lg_list) {
+		if (nfsd41_grant_slot_retired(clp, &lg->lg_slot)) {
+			list_del(&lg->lg_list);
+			kfree(lg);
+		}
+	}
+}
+
+/**
+ * nfsd4_record_layout_grant - remember a LAYOUTGET that added a layout
+ * @ls: layout stateid that the LAYOUTGET added a layout to or merged into
+ * @lg: record for the LAYOUTGET, which @ls takes over
+ * @cstate: compound state of the LAYOUTGET
+ *
+ * RFC 8881 section 2.10.6.3 has a recall carry every such request until
+ * its slot retires. Keeping the latest NFSD4_LAYOUT_MAX_GRANTS instead
+ * bounds the record and the CB_LAYOUTRECALL request. Every LAYOUTGET
+ * after the first one of a layout stateid presents that layout stateid,
+ * so a layout stateid with more than one record is known to the client,
+ * which tells a reply that arrives late by its seqid (RFC 8881 section
+ * 12.5.5.2.1.2); the Linux client drops such a reply
+ * (pnfs_layout_stateid_blocked()). Past NFSD4_LAYOUT_MAX_GRANTS, the
+ * oldest record goes; that is also how records of a destroyed session,
+ * which never show as retired, leave.
+ *
+ * Context: Caller holds ls_mutex, which nfsd4_cb_layout_prepare() takes
+ * as well, so that a recall of the new layout finds the LAYOUTGET
+ * recorded. Takes nn->client_lock.
+ */
+void
+nfsd4_record_layout_grant(struct nfs4_layout_stateid *ls,
+			  struct nfsd4_layout_grant *lg,
+			  const struct nfsd4_compound_state *cstate)
+{
+	struct nfsd4_layout_grant *old;
+
+	nfsd4_prune_layout_grants(ls);
+	if (list_count_nodes(&ls->ls_grants) >= NFSD4_LAYOUT_MAX_GRANTS) {
+		old = list_first_entry(&ls->ls_grants,
+				       struct nfsd4_layout_grant, lg_list);
+		list_del(&old->lg_list);
+		kfree(old);
+	}
+	lg->lg_slot.valid = false;
+	nfsd41_record_grant_slot(&lg->lg_slot, cstate);
+	if (!lg->lg_slot.valid) {
+		kfree(lg);
+		return;
+	}
+	list_add_tail(&lg->lg_list, &ls->ls_grants);
 }
 
 static void
@@ -883,8 +947,16 @@ nfsd4_cb_layout_prepare(struct nfsd4_callback *cb)
 
 	mutex_lock(&ls->ls_mutex);
 	nfs4_inc_and_copy_stateid(&ls->ls_recall_sid, &ls->ls_stid);
+	/*
+	 * nfsd4_layoutget() records each LAYOUTGET that adds a layout
+	 * under ls_mutex. With none left whose slot has not retired, there
+	 * is no reply to wait for.
+	 */
+	nfsd4_prune_layout_grants(ls);
+	ls->ls_recall_retired_at_send = list_empty(&ls->ls_grants);
 	mutex_unlock(&ls->ls_mutex);
 	ls->ls_recall_accepted = false;
+	ls->ls_recall_resent = false;
 	return true;
 }
 
@@ -915,8 +987,10 @@ nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 		 * The poll reuses the recall's seqid, against RFC 8881
 		 * section 12.5.3, so a client returning its layouts answers
 		 * NFS4ERR_OLD_STATEID too. A client that has not taken the
-		 * recall up is past that seqid, e.g. after a LAYOUTRETURN,
-		 * and gets a new one. ls_mutex could block rpciod, so the bump
+		 * recall up is past that seqid and gets a new one: after a
+		 * LAYOUTRETURN, or when the resend below repeats the seqid of a
+		 * recall that the Linux client took in although it matched no
+		 * layout segment. ls_mutex could block rpciod, so the bump
 		 * relies on sc_lock.
 		 */
 		if (!ls->ls_recall_accepted) {
@@ -994,6 +1068,35 @@ nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 		}
 		return 1;
 	case -NFS4ERR_NOMATCHING_LAYOUT:
+		/*
+		 * The recall can reach the client before the reply to a
+		 * LAYOUTGET that added a layout, and a client that has not
+		 * processed that reply answers this way too. As the
+		 * delegation code does for NFS4ERR_BAD_STATEID, trust the
+		 * answer if the slots of the LAYOUTGETs had retired when the
+		 * recall was sent, and send the recall once more after a
+		 * delay otherwise. Unlike the delegation code, trust the
+		 * answer to that resend: not trusting it would end in fencing
+		 * the client, and an idle client leaves its slot unretired
+		 * also when it has no layout. A client that has not
+		 * processed the reply by the resend still has its layout
+		 * dropped. A client that has answered NFS4_OK to this recall
+		 * knew the layout stateid, so its answer to a poll is trusted
+		 * at once.
+		 *
+		 * The resend repeats the request with its seqid, as the polls
+		 * do, although RFC 8881 section 12.5.3 has a new one for each
+		 * request: a client that did not take the request in expects
+		 * that seqid next, and a client that did answers
+		 * NFS4ERR_OLD_STATEID, which the polls handle.
+		 */
+		if (!list_empty(&ls->ls_layouts) && !ls->ls_recall_accepted &&
+		    !ls->ls_recall_retired_at_send && !ls->ls_recall_resent) {
+			ls->ls_recall_resent = true;
+			trace_nfsd_layout_recall_resend(&ls->ls_recall_sid);
+			rpc_delay(task, 2 * HZ);
+			return 0;
+		}
 		trace_nfsd_layout_recall_done(&ls->ls_stid.sc_stateid);
 		task->tk_status = 0;
 		return 1;

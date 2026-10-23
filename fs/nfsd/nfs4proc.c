@@ -2904,6 +2904,7 @@ nfsd4_layoutget(struct svc_rqst *rqstp,
 	struct svc_fh *current_fh = &cstate->current_fh;
 	const struct nfsd4_layout_ops *ops;
 	struct nfs4_layout_stateid *ls;
+	struct nfsd4_layout_grant *lg = NULL;
 	__be32 nfserr;
 	int accmode = NFSD_MAY_READ_IF_EXEC | NFSD_MAY_OWNER_OVERRIDE;
 
@@ -2962,16 +2963,27 @@ nfsd4_layoutget(struct svc_rqst *rqstp,
 	if (atomic_read(&ls->ls_stid.sc_file->fi_lo_recalls))
 		goto out_put_stid;
 
+	/* Allocate the record first, so that every layout handed out has one */
+	nfserr = nfserr_jukebox;
+	lg = kmalloc_obj(*lg);
+	if (!lg)
+		goto out_put_stid;
+
 	nfserr = ops->proc_layoutget(rqstp, d_inode(current_fh->fh_dentry),
 				     current_fh, lgp);
 	if (nfserr)
 		goto out_put_stid;
 
 	nfserr = nfsd4_insert_layout(lgp, ls);
+	if (!nfserr) {
+		nfsd4_record_layout_grant(ls, lg, cstate);
+		lg = NULL;
+	}
 
 out_put_stid:
 	mutex_unlock(&ls->ls_mutex);
 	nfs4_put_stid(&ls->ls_stid);
+	kfree(lg);
 out:
 	return nfserr;
 }
