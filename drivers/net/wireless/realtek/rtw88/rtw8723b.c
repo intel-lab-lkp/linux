@@ -2343,7 +2343,7 @@ static void rtw8723b_cfg_ldo25(struct rtw_dev *rtwdev, bool enable)
 
 static void rtw8723b_fill_txdesc_checksum(struct rtw_dev *rtwdev,
 					  struct rtw_tx_pkt_info *pkt_info,
-					  u8 *txdesc)
+					  struct rtw_tx_desc *txdesc)
 {
 	/* Unlike the shared 8723x helper, the checksum is not inverted here. */
 	fill_txdesc_checksum_common(txdesc, 16);
