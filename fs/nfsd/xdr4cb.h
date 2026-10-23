@@ -25,8 +25,12 @@
 #define NFS4_dec_cb_recall_sz		(cb_compound_dec_hdr_sz  +      \
 					cb_sequence_dec_sz +            \
 					op_dec_sz)
+/* NFSD4_LAYOUT_MAX_GRANTS referring calls, each in a list of its own */
+#define cb_layout_sequence_enc_sz	(cb_sequence_enc_sz +		\
+					(NFSD4_LAYOUT_MAX_GRANTS - 1) *	\
+					enc_referring_call_list4_sz)
 #define NFS4_enc_cb_layout_sz		(cb_compound_enc_hdr_sz +       \
-					cb_sequence_enc_sz +            \
+					cb_layout_sequence_enc_sz +     \
 					op_enc_sz + 3 + 1 +             \
 					enc_nfs4_fh_sz + 4 +            \
 					enc_stateid_sz)

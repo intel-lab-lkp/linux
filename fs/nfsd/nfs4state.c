@@ -6329,18 +6329,21 @@ bool nfsd41_grant_slot_retired(struct nfs4_client *clp,
  *
  * Context: May sleep. Caller serializes access to @cb, as for
  * nfsd41_cb_referring_call().
+ *
+ * Return: false if memory allocation failed and @cb does not name the
+ * request, true otherwise.
  */
-void nfsd41_cb_referring_grant(struct nfsd4_callback *cb,
+bool nfsd41_cb_referring_grant(struct nfsd4_callback *cb,
 			       struct nfs4_client *clp,
 			       const struct nfsd4_grant_slot *grant)
 {
 	struct nfsd4_sessionid sid;
 
 	if (!grant->valid)
-		return;
+		return true;
 	nfsd41_grant_slot_sessionid(clp, grant, &sid);
-	nfsd41_cb_referring_call(cb, (struct nfs4_sessionid *)&sid,
-				 grant->slotid, grant->seqid);
+	return nfsd41_cb_referring_call(cb, (struct nfs4_sessionid *)&sid,
+					grant->slotid, grant->seqid);
 }
 
 static bool nfsd4_recall_grant_slot_retired(struct nfs4_delegation *dp)

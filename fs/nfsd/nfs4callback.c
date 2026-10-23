@@ -1471,14 +1471,16 @@ static void nfsd41_destroy_cb(struct nfsd4_callback *cb)
  *
  * Caller serializes access to @cb.
  *
- * NB: If memory allocation fails, the referring call is not added.
+ * Return: true if @cb names the referring call, false if memory
+ * allocation failed and the referring call was not added.
  */
-void nfsd41_cb_referring_call(struct nfsd4_callback *cb,
+bool nfsd41_cb_referring_call(struct nfsd4_callback *cb,
 			      struct nfs4_sessionid *sessionid,
 			      u32 slotid, u32 seqno)
 {
 	struct nfsd4_referring_call_list *rcl;
 	struct nfsd4_referring_call *rc;
+	bool added = true;
 	bool found;
 
 	might_sleep();
@@ -1494,7 +1496,7 @@ void nfsd41_cb_referring_call(struct nfsd4_callback *cb,
 	if (!found) {
 		rcl = kmalloc_obj(*rcl);
 		if (!rcl)
-			return;
+			return false;
 		memcpy(rcl->rcl_sessionid.data, sessionid->data,
 		       NFS4_MAX_SESSIONID_LEN);
 		rcl->__nr_referring_calls = 0;
@@ -1512,8 +1514,10 @@ void nfsd41_cb_referring_call(struct nfsd4_callback *cb,
 	}
 	if (!found) {
 		rc = kmalloc_obj(*rc);
-		if (!rc)
+		if (!rc) {
+			added = false;
 			goto out;
+		}
 		rc->rc_sequenceid = seqno;
 		rc->rc_slotid = slotid;
 		rcl->__nr_referring_calls++;
@@ -1526,6 +1530,7 @@ out:
 		list_del(&rcl->__list);
 		kfree(rcl);
 	}
+	return added;
 }
 
 /**

@@ -854,7 +854,12 @@ struct nfsd4_layout_grant {
 	struct nfsd4_grant_slot		lg_slot;
 };
 
-/* The most LAYOUTGETs that a layout stateid keeps records of */
+/*
+ * The most LAYOUTGETs that a layout stateid keeps records of. A layout
+ * recall names each as a referring call, and the CB_LAYOUTRECALL request
+ * (NFS4_enc_cb_layout_sz) has room for this many, each in a referring
+ * call list of its own.
+ */
 #define NFSD4_LAYOUT_MAX_GRANTS		8
 
 struct nfs4_layout_stateid {
@@ -877,12 +882,15 @@ struct nfs4_layout_stateid {
 	 * layout to this layout stateid or merged into one, and whose
 	 * slots had not retired when last looked at. Under ls_mutex.
 	 * Until a slot retires, the client may not have processed the reply
-	 * to the LAYOUTGET it carried.
+	 * to the LAYOUTGET it carried, and a recall names the LAYOUTGET as a
+	 * referring call (RFC 8881 section 2.10.6.3).
 	 */
 	struct list_head		ls_grants;
 	/* Recall state for ->done, reset in ->prepare */
 	bool				ls_recall_retired_at_send;
 	bool				ls_recall_resent;
+	/* The recall could not name a LAYOUTGET in ls_grants */
+	bool				ls_recall_unnamed;
 
 	struct delayed_work		ls_fence_work;
 	struct mutex			ls_fence_mutex; /* serializes fence shutdown */
@@ -968,7 +976,7 @@ extern __be32 nfs4_check_open_reclaim(struct nfs4_client *);
 extern void nfsd4_probe_callback(struct nfs4_client *clp);
 extern void nfsd4_probe_callback_sync(struct nfs4_client *clp);
 extern void nfsd4_change_callback(struct nfs4_client *clp, struct nfs4_cb_conn *);
-extern void nfsd41_cb_referring_call(struct nfsd4_callback *cb,
+extern bool nfsd41_cb_referring_call(struct nfsd4_callback *cb,
 				     struct nfs4_sessionid *sessionid,
 				     u32 slotid, u32 seqno);
 extern void nfsd41_cb_destroy_referring_call_list(struct nfsd4_callback *cb);
@@ -976,7 +984,7 @@ extern void nfsd41_record_grant_slot(struct nfsd4_grant_slot *grant,
 				     const struct nfsd4_compound_state *cstate);
 extern bool nfsd41_grant_slot_retired(struct nfs4_client *clp,
 				      const struct nfsd4_grant_slot *grant);
-extern void nfsd41_cb_referring_grant(struct nfsd4_callback *cb,
+extern bool nfsd41_cb_referring_grant(struct nfsd4_callback *cb,
 				      struct nfs4_client *clp,
 				      const struct nfsd4_grant_slot *grant);
 extern void nfsd4_init_cb(struct nfsd4_callback *cb, struct nfs4_client *clp,

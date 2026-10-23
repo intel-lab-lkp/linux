@@ -257,6 +257,8 @@ nfsd4_free_layout_stateid(struct nfs4_stid *stid)
 
 	list_for_each_entry_safe(lg, next, &ls->ls_grants, lg_list)
 		kfree(lg);
+	/* The list outlives one send of the recall. */
+	nfsd41_cb_destroy_referring_call_list(&ls->ls_recall);
 	kmem_cache_free(nfs4_layout_stateid_cache, ls);
 }
 
@@ -944,6 +946,8 @@ nfsd4_cb_layout_prepare(struct nfsd4_callback *cb)
 {
 	struct nfs4_layout_stateid *ls =
 		container_of(cb, struct nfs4_layout_stateid, ls_recall);
+	struct nfs4_client *clp = ls->ls_stid.sc_client;
+	struct nfsd4_layout_grant *lg;
 
 	mutex_lock(&ls->ls_mutex);
 	nfs4_inc_and_copy_stateid(&ls->ls_recall_sid, &ls->ls_stid);
@@ -954,6 +958,22 @@ nfsd4_cb_layout_prepare(struct nfsd4_callback *cb)
 	 */
 	nfsd4_prune_layout_grants(ls);
 	ls->ls_recall_retired_at_send = list_empty(&ls->ls_grants);
+
+	/*
+	 * The recall can reach the client before the reply to a LAYOUTGET
+	 * that handed out a layout. Name each LAYOUTGET whose slot has not
+	 * retired as a referring call (RFC 8881 section 2.10.6.3), so that
+	 * a client that honors them holds the recall back instead of
+	 * answering NFS4ERR_NOMATCHING_LAYOUT. ->prepare runs once per
+	 * recall; the list stays for the polls and the resend that follow
+	 * and is freed with @ls.
+	 */
+	ls->ls_recall_unnamed = false;
+	list_for_each_entry(lg, &ls->ls_grants, lg_list) {
+		if (!nfsd41_cb_referring_grant(&ls->ls_recall, clp,
+					       &lg->lg_slot))
+			ls->ls_recall_unnamed = true;
+	}
 	mutex_unlock(&ls->ls_mutex);
 	ls->ls_recall_accepted = false;
 	ls->ls_recall_resent = false;
@@ -970,15 +990,63 @@ static bool nfsd4_layout_fenced(struct nfs4_layout_stateid *ls)
 	return fenced;
 }
 
+/*
+ * Client gets 2 lease periods to return its layouts, counted from its
+ * first answer: the first call starts the clock. task->tk_start is reset
+ * each time the RPC task is restarted, so it cannot anchor the limit.
+ */
+static bool
+nfsd4_layout_recall_expired(struct nfs4_layout_stateid *ls)
+{
+	struct nfsd_net *nn = net_generic(ls->ls_stid.sc_client->net,
+					  nfsd_net_id);
+	ktime_t now = ktime_get_boottime();
+
+	if (!ls->ls_recall_start)
+		ls->ls_recall_start = now;
+	return !ktime_before(now, ktime_add_ns(ls->ls_recall_start,
+				(u64)nn->nfsd4_lease * NSEC_PER_SEC * 2));
+}
+
+static void
+nfsd4_cb_layout_give_up(struct nfs4_layout_stateid *ls)
+{
+	const struct nfsd4_layout_ops *ops;
+	struct nfsd_file *fl;
+
+	/*
+	 * Nothing to fence for once the layouts are gone: a
+	 * LAYOUTRETURN can return the last one while the recall is
+	 * still out.
+	 */
+	if (list_empty(&ls->ls_layouts)) {
+		trace_nfsd_layout_recall_done(&ls->ls_stid.sc_stateid);
+		return;
+	}
+	/*
+	 * Unknown error or non-responding client, we'll need to fence.
+	 */
+	trace_nfsd_layout_recall_fail(&ls->ls_stid.sc_stateid);
+	if (nfsd4_layout_fenced(ls))
+		return;
+	rcu_read_lock();
+	fl = nfsd_file_get(ls->ls_file);
+	rcu_read_unlock();
+	if (fl) {
+		ops = nfsd4_layout_ops[ls->ls_layout_type];
+		if (ops->fence_client)
+			ops->fence_client(ls, fl);
+		else
+			nfsd4_cb_layout_fail(ls, fl);
+		nfsd_file_put(fl);
+	}
+}
+
 static int
 nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 {
 	struct nfs4_layout_stateid *ls =
 		container_of(cb, struct nfs4_layout_stateid, ls_recall);
-	struct nfsd_net *nn;
-	ktime_t now, cutoff;
-	const struct nfsd4_layout_ops *ops;
-	struct nfsd_file *fl;
 
 	trace_nfsd_cb_layout_done(&ls->ls_stid.sc_stateid, task);
 	switch (task->tk_status) {
@@ -1021,77 +1089,60 @@ nfsd4_cb_layout_done(struct nfsd4_callback *cb, struct rpc_task *task)
 		}
 
 		/* Poll the client until it's done with the layout */
-		now = ktime_get_boottime();
-		nn = net_generic(ls->ls_stid.sc_client->net, nfsd_net_id);
-
-		/*
-		 * Client gets 2 lease periods to return it, counted from its
-		 * first answer. task->tk_start is reset each time the RPC task
-		 * is restarted, so it cannot anchor the limit.
-		 */
-		if (!ls->ls_recall_start)
-			ls->ls_recall_start = now;
-		cutoff = ktime_add_ns(ls->ls_recall_start,
-				      (u64)nn->nfsd4_lease * NSEC_PER_SEC * 2);
-
-		if (ktime_before(now, cutoff)) {
+		if (!nfsd4_layout_recall_expired(ls)) {
 			rpc_delay(task, HZ/100); /* 10 mili-seconds */
 			return 0;
 		}
 		fallthrough;
 	default:
-		/*
-		 * Nothing to fence for once the layouts are gone: a
-		 * LAYOUTRETURN can return the last one while the recall is
-		 * still out.
-		 */
-		if (list_empty(&ls->ls_layouts)) {
-			trace_nfsd_layout_recall_done(&ls->ls_stid.sc_stateid);
-			return 1;
-		}
-		/*
-		 * Unknown error or non-responding client, we'll need to fence.
-		 */
-		trace_nfsd_layout_recall_fail(&ls->ls_stid.sc_stateid);
-		if (nfsd4_layout_fenced(ls))
-			return 1;
-		rcu_read_lock();
-		fl = nfsd_file_get(ls->ls_file);
-		rcu_read_unlock();
-		if (fl) {
-			ops = nfsd4_layout_ops[ls->ls_layout_type];
-			if (ops->fence_client)
-				ops->fence_client(ls, fl);
-			else
-				nfsd4_cb_layout_fail(ls, fl);
-			nfsd_file_put(fl);
-		}
+		nfsd4_cb_layout_give_up(ls);
 		return 1;
 	case -NFS4ERR_NOMATCHING_LAYOUT:
 		/*
-		 * The recall can reach the client before the reply to a
-		 * LAYOUTGET that added a layout, and a client that has not
-		 * processed that reply answers this way too. As the
-		 * delegation code does for NFS4ERR_BAD_STATEID, trust the
-		 * answer if the slots of the LAYOUTGETs had retired when the
-		 * recall was sent, and send the recall once more after a
-		 * delay otherwise. Unlike the delegation code, trust the
-		 * answer to that resend: not trusting it would end in fencing
-		 * the client, and an idle client leaves its slot unretired
-		 * also when it has no layout. A client that has not
-		 * processed the reply by the resend still has its layout
+		 * A client that has not processed the reply to a LAYOUTGET
+		 * named as referring call answers this way too: one that
+		 * ignores referring calls, and one that gives up waiting for
+		 * the LAYOUTGET. As the delegation code does for
+		 * NFS4ERR_BAD_STATEID, trust the answer if the slots of the
+		 * LAYOUTGETs had retired when the recall was sent, and send
+		 * the recall once more after a delay otherwise. Unlike the
+		 * delegation code, trust the answer to that resend: not
+		 * trusting it would end in fencing the client, and an idle
+		 * client leaves its slot unretired also when it has no
+		 * layout. A client that neither holds the recall back nor
+		 * processes the reply before the resend still has its layout
 		 * dropped. A client that has answered NFS4_OK to this recall
 		 * knew the layout stateid, so its answer to a poll is trusted
 		 * at once.
+		 *
+		 * When memory ran out in ->prepare and a LAYOUTGET is not
+		 * named, the client has no way to hold the recall back, and
+		 * its answers are not trusted: the recall is sent again every
+		 * two seconds until the client answers otherwise, the last
+		 * layout is returned, the fence worker of the lease break has
+		 * run or the recall times out.
 		 *
 		 * The resend repeats the request with its seqid, as the polls
 		 * do, although RFC 8881 section 12.5.3 has a new one for each
 		 * request: a client that did not take the request in expects
 		 * that seqid next, and a client that did answers
 		 * NFS4ERR_OLD_STATEID, which the polls handle.
+		 *
+		 * Unlike the delegation code, ->done does not test the slots
+		 * again, as ls_grants needs ls_mutex: a referring call that
+		 * has completed by the resend is harmless, as the client finds
+		 * it complete, but a recall that could not name a LAYOUTGET is
+		 * not trusted even after its slots retire.
 		 */
 		if (!list_empty(&ls->ls_layouts) && !ls->ls_recall_accepted &&
-		    !ls->ls_recall_retired_at_send && !ls->ls_recall_resent) {
+		    !ls->ls_recall_retired_at_send &&
+		    (!ls->ls_recall_resent || ls->ls_recall_unnamed)) {
+			if (ls->ls_recall_unnamed &&
+			    (nfsd4_layout_fenced(ls) ||
+			     nfsd4_layout_recall_expired(ls))) {
+				nfsd4_cb_layout_give_up(ls);
+				return 1;
+			}
 			ls->ls_recall_resent = true;
 			trace_nfsd_layout_recall_resend(&ls->ls_recall_sid);
 			rpc_delay(task, 2 * HZ);
