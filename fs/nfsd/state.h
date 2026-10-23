@@ -276,6 +276,14 @@ struct nfsd4_cb_notify {
 	struct nfsd4_callback		ncn_cb;		// notify4 callback
 };
 
+/* Forward-channel slot that carried a request which created state */
+struct nfsd4_grant_slot {
+	u32			sessionid_seq;
+	u32			slotid;
+	u32			seqid;
+	bool			valid;
+};
+
 /*
  * Represents a delegation stateid. The nfs4_client holds references to these
  * and they are put when it is being destroyed or when the delegation is
@@ -315,13 +323,8 @@ struct nfs4_delegation {
 	bool			dl_setattr;
 
 	/* Forward-channel slot that carried the granting request */
-	struct {
-		u32			sessionid_seq;
-		u32			slotid;
-		u32			seqid;
-		bool			valid;
-		bool			retired_at_send;
-	} dl_recall_grant;
+	struct nfsd4_grant_slot	dl_recall_grant;
+	bool			dl_recall_retired_at_send;
 
 	union {
 		/* for CB_GETATTR */
@@ -949,6 +952,13 @@ extern void nfsd41_cb_referring_call(struct nfsd4_callback *cb,
 				     struct nfs4_sessionid *sessionid,
 				     u32 slotid, u32 seqno);
 extern void nfsd41_cb_destroy_referring_call_list(struct nfsd4_callback *cb);
+extern void nfsd41_record_grant_slot(struct nfsd4_grant_slot *grant,
+				     const struct nfsd4_compound_state *cstate);
+extern bool nfsd41_grant_slot_retired(struct nfs4_client *clp,
+				      const struct nfsd4_grant_slot *grant);
+extern void nfsd41_cb_referring_grant(struct nfsd4_callback *cb,
+				      struct nfs4_client *clp,
+				      const struct nfsd4_grant_slot *grant);
 extern void nfsd4_init_cb(struct nfsd4_callback *cb, struct nfs4_client *clp,
 		const struct nfsd4_callback_ops *ops, enum nfsd4_cb_op op);
 extern bool nfsd4_run_cb(struct nfsd4_callback *cb);
