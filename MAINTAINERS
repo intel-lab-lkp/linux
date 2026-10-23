@@ -11987,9 +11987,8 @@ F:	arch/x86/include/asm/hpet.h
 F:	arch/x86/kernel/hpet.c
 
 HPFS FILESYSTEM
-M:	Mikulas Patocka <mikulas@artax.karlin.mff.cuni.cz>
-S:	Maintained
-W:	http://artax.karlin.mff.cuni.cz/~mikulas/vyplody/hpfs/index-e.cgi
+L:	linux-fsdevel@vger.kernel.org
+S:	Orphan
 F:	fs/hpfs/
 
 HS3001 Hardware Temperature and Humidity Sensor
