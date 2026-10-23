@@ -710,7 +710,8 @@ static int xe_device_vram_alloc(struct xe_device *xe)
  */
 int xe_device_probe_early(struct xe_device *xe)
 {
-	int err;
+	int err, pcode_err;
+	bool survival_requested;
 
 	xe_wa_device_init(xe);
 	xe_wa_process_device_oob(xe);
@@ -734,20 +735,34 @@ int xe_device_probe_early(struct xe_device *xe)
 	 * initialization is complete. Until done, any MMIO or lmem access from
 	 * the driver will be blocked
 	 */
-	err = xe_pcode_probe_early(xe);
-	if (err || xe_survivability_mode_is_requested(xe)) {
-		int save_err = err;
-
+	pcode_err = xe_pcode_probe_early(xe);
+	survival_requested = xe_survivability_mode_is_requested(xe);
+	if (pcode_err || survival_requested) {
 		/*
 		 * Try to leave device in survivability mode if device is
 		 * possible, but still return the previous error for error
 		 * propagation
 		 */
-		err = xe_survivability_mode_boot_enable(xe);
-		if (err)
-			return err;
+		int survive_err = xe_survivability_mode_boot_enable(xe);
 
-		return save_err;
+		if (survive_err) {
+			if (pcode_err && survival_requested)
+				xe_err(xe, "Early pcode err(%pe), survivability requested but unavailable(%pe)\n",
+				       ERR_PTR(pcode_err), ERR_PTR(survive_err));
+			else if (!pcode_err)
+				xe_warn(xe, "Early pcode ok, survivability requested but unavailable(%pe)\n",
+					ERR_PTR(survive_err));
+			return survive_err;
+		}
+		if (pcode_err && survival_requested)
+			xe_notice(xe, "Early pcode err(%pe), survivability requested\n",
+				  ERR_PTR(pcode_err));
+		else if (!pcode_err)
+			xe_notice(xe, "Early pcode ok but survivability requested\n");
+		else
+			xe_warn(xe, "Early pcode err(%pe) but survivability not requested or unsupported\n",
+				ERR_PTR(pcode_err));
+		return pcode_err;
 	}
 
 	/*
