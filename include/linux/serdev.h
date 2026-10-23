@@ -7,7 +7,9 @@
 
 #include <linux/types.h>
 #include <linux/device.h>
+#include <linux/device-id/serdev.h>
 #include <linux/iopoll.h>
+#include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/termios.h>
 #include <linux/delay.h>
@@ -35,6 +37,10 @@ struct serdev_device_ops {
  * struct serdev_device - Basic representation of an serdev device
  * @dev:	Driver model representation of the device.
  * @nr:		Device number on serdev bus.
+ * @modalias:	Name of the driver to use with this device, or the alias
+ *		for it. Empty for devices enumerated from firmware, which
+ *		are identified through their ACPI companion or their device
+ *		tree node instead. See serdev_device_set_modalias().
  * @ctrl:	serdev controller managing this device.
  * @ops:	Device operations.
  * @write_comp:	Completion used by serdev_device_write() internally
@@ -43,6 +49,7 @@ struct serdev_device_ops {
 struct serdev_device {
 	struct device dev;
 	int nr;
+	char modalias[SERDEV_NAME_SIZE];
 	struct serdev_controller *ctrl;
 	const struct serdev_device_ops *ops;
 	struct completion write_comp;
@@ -58,12 +65,15 @@ struct serdev_device {
  * @probe:	binds this driver to a serdev device.
  * @remove:	unbinds this driver from the serdev device.
  * @shutdown:	shut down this serdev device.
+ * @id_table:	List of serdev devices supported by this driver, used to
+ *		match devices which are not enumerated from firmware.
  */
 struct serdev_device_driver {
 	struct device_driver driver;
 	int	(*probe)(struct serdev_device *);
 	void	(*remove)(struct serdev_device *);
 	void	(*shutdown)(struct serdev_device *);
+	const struct serdev_device_id *id_table;
 };
 
 #define to_serdev_device_driver(d) container_of_const(d, struct serdev_device_driver, driver)
@@ -133,6 +143,30 @@ static inline void serdev_device_set_client_ops(struct serdev_device *serdev,
 					      const struct serdev_device_ops *ops)
 {
 	serdev->ops = ops;
+}
+
+/**
+ * serdev_device_set_modalias() - set the modalias of a serdev device
+ * @serdev:	serdev device.
+ * @modalias:	non-empty modalias to use, typically KBUILD_MODNAME of the
+ *		client driver.
+ *
+ * A serdev device is identified by its ACPI companion, by its device tree
+ * node, or by a modalias set by its creator. Serdev devices which are
+ * instantiated by a driver rather than by firmware have neither of the
+ * former, so they must set a modalias before serdev_device_add() to be
+ * identifiable. Doing so reports a SERDEV_MODULE_PREFIX modalias to
+ * userspace and makes the device match an id_table entry of a serdev
+ * device driver.
+ *
+ * Devices enumerated from firmware have no modalias of their own and keep
+ * deriving their modalias and their driver match from firmware only. The
+ * device name is not affected either way.
+ */
+static inline void serdev_device_set_modalias(struct serdev_device *serdev,
+					      const char *modalias)
+{
+	strscpy(serdev->modalias, modalias);
 }
 
 static inline
