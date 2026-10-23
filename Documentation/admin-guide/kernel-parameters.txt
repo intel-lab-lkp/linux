@@ -3568,6 +3568,13 @@ Kernel parameters
 			Enable Live Update Orchestrator (LUO).
 			Default: off.
 
+	loadpin.force_enforce= [SECURITY]
+			Format: <bool>
+			Force LoadPin enforcement until reboot, even when the
+			pinned filesystem is not backed by a read-only block
+			device. Requires LoadPin to be enabled in the active LSM list.
+			Default: off.
+
 	lockd.nlm_grace_period=P  [NFS] Assign grace period.
 			Format: <integer>
 
