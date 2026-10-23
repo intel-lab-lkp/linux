@@ -336,6 +336,8 @@ nfsd4_alloc_layout_stateid(struct nfsd4_compound_state *cstate,
 	}
 
 	ls->ls_recall_start = 0;
+	ls->ls_break_pending = false;
+	ls->ls_break_time = 0;
 	ls->ls_fenced = false;
 	ls->ls_fence_inflight = false;
 	ls->ls_fence_stopped = false;
@@ -459,16 +461,42 @@ nfsd4_recall_file_layout(struct nfs4_layout_stateid *ls)
 	spin_unlock(&ls->ls_lock);
 }
 
+/* Whether the lease break comes from a request of the client of @ls */
+static bool
+nfsd4_layout_breaker_is_holder(const struct nfs4_layout_stateid *ls)
+{
+	struct svc_rqst *rqstp = nfsd_current_rqst();
+	struct nfsd_thread_local_info *ntli;
+
+	if (!nfsd_v4client(rqstp))
+		return false;
+	ntli = rqstp->rq_private;
+	return *ntli->ntli_lease_breaker == ls->ls_stid.sc_client;
+}
+
 /*
- * A layout stateid with no layouts belongs to a LAYOUTGET in progress
- * and already holds the lease. Mark the stateid recalled so that
- * nfsd4_insert_layout() fails the LAYOUTGET and the lease is released.
+ * A lease break also has to reach a LAYOUTGET in progress, whose layout
+ * stateid holds the lease but has no layouts yet. Mark the stateid
+ * recalled so that nfsd4_insert_layout() fails the LAYOUTGET and the
+ * lease is released. When the break comes from a request of the same
+ * client, as a WRITE through the metadata server that the Linux client
+ * sends next to its I/O through the layout, failing its LAYOUTGET would
+ * have it back off and fail again: note the break and its deadline
+ * instead, and let nfsd4_insert_layout() recall the layout as soon as it
+ * adds it, unless the break is past its deadline by then.
+ * ->lm_break() is not called again for a lease that is already breaking.
  */
 static void
-nfsd4_break_file_layout(struct nfs4_layout_stateid *ls)
+nfsd4_break_file_layout(struct nfs4_layout_stateid *ls,
+			unsigned long break_time)
 {
 	spin_lock(&ls->ls_lock);
-	if (!ls->ls_recalled && list_empty(&ls->ls_layouts)) {
+	if (!ls->ls_recalled && list_empty(&ls->ls_layouts) &&
+	    nfsd4_layout_breaker_is_holder(ls)) {
+		ls->ls_break_pending = true;
+		ls->ls_break_time = break_time;
+		trace_nfsd_layout_break_pending(&ls->ls_stid.sc_stateid);
+	} else if (!ls->ls_recalled && list_empty(&ls->ls_layouts)) {
 		ls->ls_recalled = true;
 		atomic_inc(&ls->ls_stid.sc_file->fi_lo_recalls);
 		trace_nfsd_layout_recall_empty(&ls->ls_stid.sc_stateid);
@@ -476,6 +504,18 @@ nfsd4_break_file_layout(struct nfs4_layout_stateid *ls)
 		nfsd4_recall_file_layout_locked(ls);
 	}
 	spin_unlock(&ls->ls_lock);
+}
+
+/*
+ * Whether the lease break noted by nfsd4_break_file_layout() is past its
+ * deadline. A layout added now would be recalled too late, whether or
+ * not time_out_leases() has noticed the timeout yet.
+ */
+static bool
+nfsd4_layout_break_expired(const struct nfs4_layout_stateid *ls)
+{
+	return ls->ls_break_pending && ls->ls_break_time &&
+	       time_after(jiffies, ls->ls_break_time);
 }
 
 static inline u64
@@ -553,7 +593,7 @@ nfsd4_insert_layout(struct nfsd4_layoutget *lgp, struct nfs4_layout_stateid *ls)
 	if (nfserr)
 		goto out;
 	spin_lock(&ls->ls_lock);
-	if (ls->ls_recalled) {
+	if (ls->ls_recalled || nfsd4_layout_break_expired(ls)) {
 		nfserr = nfserr_recallconflict;
 		goto out_unlock_ls;
 	}
@@ -575,7 +615,7 @@ nfsd4_insert_layout(struct nfsd4_layoutget *lgp, struct nfs4_layout_stateid *ls)
 	if (nfserr)
 		goto out;
 	spin_lock(&ls->ls_lock);
-	if (ls->ls_recalled) {
+	if (ls->ls_recalled || nfsd4_layout_break_expired(ls)) {
 		nfserr = nfserr_recallconflict;
 		goto out_unlock_ls;
 	}
@@ -589,6 +629,10 @@ nfsd4_insert_layout(struct nfsd4_layoutget *lgp, struct nfs4_layout_stateid *ls)
 	new = NULL;
 done:
 	nfs4_inc_and_copy_stateid(&lgp->lg_sid, &ls->ls_stid);
+	if (ls->ls_break_pending) {
+		ls->ls_break_pending = false;
+		nfsd4_recall_file_layout_locked(ls);
+	}
 out_unlock_ls:
 	spin_unlock(&ls->ls_lock);
 out:
@@ -1182,7 +1226,7 @@ nfsd4_layout_lm_break(struct file_lease *fl)
 	 * Enforce break lease timeout to prevent NFSD
 	 * thread from hanging in __break_lease.
 	 */
-	nfsd4_break_file_layout(fl->c.flc_owner);
+	nfsd4_break_file_layout(fl->c.flc_owner, fl->fl_break_time);
 	return false;
 }
 
@@ -1373,7 +1417,9 @@ dispose:
  *
  * Schedule a worker to fence the client from accessing the block device.
  * If the layout type has no fence operation, the worker runs the fence
- * script instead.
+ * script instead. If a lease break of its own client met the LAYOUTGET
+ * of a layout stateid that has no layouts yet, mark it recalled instead,
+ * so that the LAYOUTGET fails.
  *
  * This function runs under the protection of the spin_lock flc_lock.
  * At this time, the file_lease associated with the layout stateid is
@@ -1413,8 +1459,21 @@ nfsd4_layout_lm_breaker_timedout(struct file_lease *fl)
 		spin_unlock(&ls->ls_lock);
 		return false;
 	}
-	if (list_empty(&ls->ls_layouts) ||
-			!refcount_inc_not_zero(&ls->ls_stid.sc_count)) {
+	if (list_empty(&ls->ls_layouts)) {
+		/*
+		 * The lease goes away and the conflicting operation goes
+		 * ahead, so a LAYOUTGET that the break met must not add a
+		 * layout any more: fail it as nfsd4_insert_layout() fails one
+		 * on a recalled layout stateid.
+		 */
+		if (ls->ls_break_pending && !ls->ls_recalled) {
+			ls->ls_recalled = true;
+			atomic_inc(&ls->ls_stid.sc_file->fi_lo_recalls);
+		}
+		spin_unlock(&ls->ls_lock);
+		return true;
+	}
+	if (!refcount_inc_not_zero(&ls->ls_stid.sc_count)) {
 		spin_unlock(&ls->ls_lock);
 		return true;
 	}

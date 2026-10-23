@@ -876,6 +876,17 @@ struct nfs4_layout_stateid {
 	/* The client has answered NFS4_OK to the recall */
 	bool				ls_recall_accepted;
 	bool				ls_recalled;
+	/*
+	 * A lease break of this client met a LAYOUTGET in progress: recall
+	 * the layout it adds, or fail it once the break is past its time.
+	 * Under ls_lock.
+	 */
+	bool				ls_break_pending;
+	/*
+	 * fl_break_time of that break: 0 if it does not time out.
+	 * Under ls_lock.
+	 */
+	unsigned long			ls_break_time;
 	struct mutex			ls_mutex;
 	/*
 	 * The latest NFSD4_LAYOUT_MAX_GRANTS LAYOUTGETs that added a
