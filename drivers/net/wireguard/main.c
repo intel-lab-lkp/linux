@@ -32,6 +32,7 @@ static int __init wg_mod_init(void)
 		goto err_peer;
 #endif
 	wg_noise_init();
+	wg_crypt_inline_init();
 
 	ret = wg_peer_init();
 	if (ret < 0)

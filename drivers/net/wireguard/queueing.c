@@ -6,6 +6,14 @@
 #include "queueing.h"
 #include <linux/skb_array.h>
 
+DEFINE_STATIC_KEY_FALSE(wg_crypt_inline);
+
+void __init wg_crypt_inline_init(void)
+{
+	if (num_possible_cpus() == 1)
+		static_branch_enable(&wg_crypt_inline);
+}
+
 struct multicore_worker __percpu *
 wg_packet_percpu_multicore_worker_alloc(work_func_t function, void *ptr)
 {

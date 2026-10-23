@@ -12,6 +12,7 @@
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <net/ip_tunnels.h>
+#include <linux/jump_label.h>
 
 struct wg_device;
 struct wg_peer;
@@ -19,6 +20,24 @@ struct multicore_worker;
 struct crypt_queue;
 struct prev_queue;
 struct sk_buff;
+
+/* With a single possible CPU the crypt workqueue cannot add parallelism and
+ * only costs context switches, so crypto runs in the peers' NAPI polls.
+ */
+DECLARE_STATIC_KEY_FALSE(wg_crypt_inline);
+static inline bool wg_crypt_is_inline(void)
+{
+	return static_branch_unlikely(&wg_crypt_inline);
+}
+
+/* Packets the TX NAPI, or a sending task, encrypts per turn. The receive
+ * NAPI keeps the default weight: a smaller one flushes GRO more often and
+ * costs more than it saves.
+ */
+#define WG_INLINE_TX_WEIGHT 16
+/* Longest packet list queued as one entry, so one entry stays short. */
+#define WG_INLINE_TX_BATCH 8
+void wg_crypt_inline_init(void);
 
 /* queueing.c APIs: */
 int wg_packet_queue_init(struct crypt_queue *queue, work_func_t function,
@@ -48,6 +67,8 @@ void wg_packet_send_staged_packets(struct wg_peer *peer);
 /* Workqueue workers: */
 void wg_packet_handshake_send_worker(struct work_struct *work);
 void wg_packet_tx_worker(struct work_struct *work);
+/* NAPI poll function, used when wg_crypt_is_inline(): */
+int wg_packet_tx_poll(struct napi_struct *napi, int budget);
 void wg_packet_encrypt_worker(struct work_struct *work);
 
 enum packet_state {

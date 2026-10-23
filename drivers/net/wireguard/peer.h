@@ -62,7 +62,7 @@ struct wg_peer {
 	struct rcu_head rcu;
 	struct list_head peer_list;
 	struct list_head allowedips_list;
-	struct napi_struct napi;
+	struct napi_struct napi, tx_napi;
 	u64 internal_id;
 };
 

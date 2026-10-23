@@ -308,6 +308,111 @@ void wg_packet_encrypt_worker(struct work_struct *work)
 	}
 }
 
+/* Encrypt and send queued entries until about @budget packets are done. */
+static int wg_packet_tx_send(struct wg_peer *peer, int budget)
+{
+	struct noise_keypair *keypair;
+	struct sk_buff *first, *skb, *next;
+	enum packet_state state;
+	int work_done = 0;
+
+	while (work_done < budget &&
+	       (first = wg_prev_queue_peek(&peer->tx_queue)) != NULL) {
+		wg_prev_queue_drop_peeked(&peer->tx_queue);
+		keypair = PACKET_CB(first)->keypair;
+		state = PACKET_STATE_CRYPTED;
+		skb_list_walk_safe(first, skb, next) {
+			++work_done;
+			if (likely(encrypt_packet(skb, keypair))) {
+				wg_reset_packet(skb, true);
+			} else {
+				state = PACKET_STATE_DEAD;
+				break;
+			}
+		}
+		if (likely(state == PACKET_STATE_CRYPTED))
+			wg_packet_create_data_done(peer, first);
+		else
+			kfree_skb_list(first);
+		wg_noise_keypair_put(keypair, false);
+		wg_peer_put(peer);
+	}
+	return work_done;
+}
+
+int wg_packet_tx_poll(struct napi_struct *napi, int budget)
+{
+	struct wg_peer *peer = container_of(napi, struct wg_peer, tx_napi);
+	int work_done;
+
+	if (unlikely(budget <= 0))
+		return 0;
+
+	work_done = wg_packet_tx_send(peer, budget);
+	/* An entry of several packets may overrun the budget by a few. */
+	if (work_done >= budget)
+		return budget;
+	napi_complete_done(napi, work_done);
+	return work_done;
+}
+
+/* A sending task runs one budget of the TX NAPI itself, so it pays for its
+ * own encryption and is paced by it instead of outrunning softirq; the rest
+ * is left to the NAPI. A transmit nested inside, as in a routing loop, finds
+ * the NAPI owned and only queues, so encryption cannot recurse.
+ */
+static void wg_packet_tx_kick(struct wg_peer *peer)
+{
+	if (in_serving_softirq()) {
+		napi_schedule(&peer->tx_napi);
+		return;
+	}
+	if (!napi_schedule_prep(&peer->tx_napi))
+		return;
+	if (wg_packet_tx_send(peer, WG_INLINE_TX_WEIGHT) >= WG_INLINE_TX_WEIGHT)
+		__napi_schedule(&peer->tx_napi);
+	else
+		napi_complete_done(&peer->tx_napi, 0);
+}
+
+/* Queue the list in entries of at most WG_INLINE_TX_BATCH packets for the
+ * TX NAPI, which encrypts and sends them within its budget. The first entry
+ * takes over the caller's keypair and peer references.
+ */
+static void wg_packet_queue_inline(struct wg_peer *peer, struct sk_buff *first)
+{
+	struct noise_keypair *keypair = PACKET_CB(first)->keypair;
+	struct sk_buff *entry = first, *skb, *rest;
+	bool queued = false;
+	unsigned int n;
+
+	/* Keep the keypair alive until every entry has its own reference. */
+	wg_noise_keypair_get(keypair);
+	while (entry) {
+		for (skb = entry, n = 1; skb->next && n < WG_INLINE_TX_BATCH; ++n)
+			skb = skb->next;
+		rest = skb->next;
+		skb->next = NULL;
+		if (queued) {
+			PACKET_CB(entry)->keypair = wg_noise_keypair_get(keypair);
+			wg_peer_get(peer);
+		}
+		atomic_set_release(&PACKET_CB(entry)->state, PACKET_STATE_UNCRYPTED);
+		if (unlikely(!wg_prev_queue_enqueue(&peer->tx_queue, entry))) {
+			wg_noise_keypair_put(PACKET_CB(entry)->keypair, false);
+			wg_peer_put(peer);
+			kfree_skb_list(entry);
+			kfree_skb_list(rest);
+			break;
+		}
+		queued = true;
+		entry = rest;
+	}
+	if (queued)
+		wg_packet_tx_kick(peer);
+	wg_noise_keypair_put(keypair, false);
+}
+
 static void wg_packet_create_data(struct wg_peer *peer, struct sk_buff *first)
 {
 	struct wg_device *wg = peer->device;
@@ -316,6 +421,12 @@ static void wg_packet_create_data(struct wg_peer *peer, struct sk_buff *first)
 	rcu_read_lock_bh();
 	if (unlikely(READ_ONCE(peer->is_dead)))
 		goto err;
+
+	if (wg_crypt_is_inline()) {
+		wg_packet_queue_inline(peer, first);
+		rcu_read_unlock_bh();
+		return;
+	}
 
 	ret = wg_queue_enqueue_per_device_and_peer(&wg->encrypt_queue, &peer->tx_queue, first,
 						   wg->packet_crypt_wq);

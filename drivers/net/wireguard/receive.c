@@ -448,9 +448,14 @@ int wg_packet_rx_poll(struct napi_struct *napi, int budget)
 	if (unlikely(budget <= 0))
 		return 0;
 
-	while ((skb = wg_prev_queue_peek(&peer->rx_queue)) != NULL &&
-	       (state = atomic_read_acquire(&PACKET_CB(skb)->state)) !=
-		       PACKET_STATE_UNCRYPTED) {
+	while ((skb = wg_prev_queue_peek(&peer->rx_queue)) != NULL) {
+		state = atomic_read_acquire(&PACKET_CB(skb)->state);
+		if (state == PACKET_STATE_UNCRYPTED) {
+			if (!wg_crypt_is_inline())
+				break;
+			state = likely(decrypt_packet(skb, PACKET_CB(skb)->keypair)) ?
+				PACKET_STATE_CRYPTED : PACKET_STATE_DEAD;
+		}
 		wg_prev_queue_drop_peeked(&peer->rx_queue);
 		keypair = PACKET_CB(skb)->keypair;
 		free = true;
@@ -522,6 +527,16 @@ static void wg_packet_consume_data(struct wg_device *wg, struct sk_buff *skb)
 
 	if (unlikely(READ_ONCE(peer->is_dead)))
 		goto err;
+
+	if (wg_crypt_is_inline()) {
+		/* Decrypted later by the peer's NAPI poll, within its budget. */
+		atomic_set_release(&PACKET_CB(skb)->state, PACKET_STATE_UNCRYPTED);
+		if (unlikely(!wg_prev_queue_enqueue(&peer->rx_queue, skb)))
+			goto err;
+		napi_schedule(&peer->napi);
+		rcu_read_unlock_bh();
+		return;
+	}
 
 	ret = wg_queue_enqueue_per_device_and_peer(&wg->decrypt_queue, &peer->rx_queue, skb,
 						   wg->packet_crypt_wq);

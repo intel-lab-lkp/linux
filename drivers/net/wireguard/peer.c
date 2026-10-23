@@ -56,6 +56,11 @@ struct wg_peer *wg_peer_create(struct wg_device *wg,
 	set_bit(NAPI_STATE_NO_BUSY_POLL, &peer->napi.state);
 	netif_napi_add(wg->dev, &peer->napi, wg_packet_rx_poll);
 	napi_enable(&peer->napi);
+	if (wg_crypt_is_inline()) {
+		netif_napi_add_tx_weight(wg->dev, &peer->tx_napi, wg_packet_tx_poll,
+					 WG_INLINE_TX_WEIGHT);
+		napi_enable(&peer->tx_napi);
+	}
 	list_add_tail(&peer->peer_list, &wg->peer_list);
 	INIT_LIST_HEAD(&peer->allowedips_list);
 	wg_pubkey_hashtable_add(wg->peer_hashtable, peer);
@@ -141,6 +146,10 @@ static void peer_remove_after_dead(struct wg_peer *peer)
 	 * here from process context.
 	 */
 	netif_napi_del(&peer->napi);
+	if (wg_crypt_is_inline()) {
+		napi_disable(&peer->tx_napi);
+		netif_napi_del(&peer->tx_napi);
+	}
 	/* A NAPI being disabled completes after at most one more poll, which
 	 * may leave packets on rx_queue that still hold references.
 	 */
