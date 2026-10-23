@@ -77,7 +77,7 @@ union pte {
 		unsigned long u : 1; /* Page unused */
 		unsigned long s : 1; /* Special */
 		unsigned long w : 1; /* Writable */
-		unsigned long r : 1; /* Readable */
+		unsigned long prefix_notif:1; /* Guest prefix invalidation notification */
 		unsigned long d : 1; /* Dirty */
 		unsigned long y : 1; /* Young */
 		unsigned long sd: 1; /* Soft dirty */
@@ -113,8 +113,9 @@ union pte {
 #define CRDTE_NODAT		IPTE_NODAT
 #define CRDTE_GUEST_ASCE	IPTE_GUEST_ASCE
 
-/* Soft dirty, needed as macro for atomic operations on ptes */
-#define _PAGE_SD 0x002
+/* Needed as macro for atomic operations on ptes */
+#define _PAGE_PREFIX_NOTIF	0x010	/* Guest prefix invalidation notification */
+#define _PAGE_SD		0x002	/* Soft dirty */
 
 /* Needed as macro to perform atomic operations */
 #define PGSTE_PCL_BIT		0x0080000000000000UL	/* PCL lock, HW bit */
@@ -147,10 +148,9 @@ union pgste {
 		unsigned long usage        : 2;
 		unsigned long              : 8;
 		unsigned long cmma_d       : 1; /* Dirty flag for CMMA bits */
-		unsigned long prefix_notif : 1; /* Guest prefix invalidation notification */
 		unsigned long vsie_notif   : 1; /* Referenced in a shadow table */
 		unsigned long vsie_gmem    : 1; /* Contains nested guest memory */
-		unsigned long              : 4;
+		unsigned long              : 5;
 		unsigned long              : 8;
 	};
 	struct {

@@ -232,8 +232,8 @@ static inline union pgste _gmap_ptep_xchg(struct gmap *gmap, union pte *ptep, un
 	else
 		lockdep_assert_not_held(&gmap->children_lock);
 
-	if (pgste.prefix_notif && (newpte.h.p || newpte.h.i)) {
-		pgste.prefix_notif = 0;
+	if (ptep->s.prefix_notif && (newpte.h.p || newpte.h.i)) {
+		newpte.s.prefix_notif = 0;
 		gmap_unmap_prefix(gmap, gfn, gfn + 1);
 	}
 	if (pte_needs_unshadow(*ptep, newpte, pgste)) {
