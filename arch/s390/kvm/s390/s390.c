@@ -3346,10 +3346,15 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 			.flags = 0,
 		};
 
+		rc = gmap_enable_skeys(kvm->arch.gmap);
+		if (rc)
+			goto out_err;
 		/* one flat fake memslot covering the whole address-space */
 		mutex_lock(&kvm->slots_lock);
-		KVM_BUG_ON(kvm_set_internal_memslot(kvm, &fake_memslot), kvm);
+		rc = kvm_set_internal_memslot(kvm, &fake_memslot);
 		mutex_unlock(&kvm->slots_lock);
+		if (KVM_BUG_ON(rc, kvm))
+			goto out_err;
 		set_bit(GMAP_FLAG_IS_UCONTROL, &kvm->arch.gmap->flags);
 	} else {
 		struct crst_table *table = dereference_asce(kvm->arch.gmap->asce);
@@ -3369,6 +3374,8 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 
 	return 0;
 out_err:
+	if (kvm->arch.gmap)
+		kvm->arch.gmap = gmap_put(kvm->arch.gmap);
 	free_page((unsigned long)kvm->arch.sie_page2);
 	debug_unregister(kvm->arch.dbf);
 	sca_dispose(kvm);
