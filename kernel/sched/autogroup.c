@@ -215,6 +215,36 @@ void sched_autogroup_fork(struct signal_struct *sig)
 	sig->autogroup = autogroup_task_get(current);
 }
 
+/**
+ * sched_autogroup_fork_finalize - recheck a new thread's scheduler group
+ * @p: new task
+ * @kargs: clone arguments holding the pinned cgroup set
+ *
+ * The caller must hold the shared sighand lock and keep it held through
+ * thread-list publication.  The task is still TASK_NEW and has no attached
+ * scheduler load.
+ */
+void sched_autogroup_fork_finalize(struct task_struct *p,
+				   struct kernel_clone_args *kargs)
+{
+	struct task_group *tg;
+	unsigned long flags;
+
+	lockdep_assert_held(&p->sighand->siglock);
+
+	raw_spin_lock_irqsave(&p->pi_lock, flags);
+	tg = container_of(kargs->cset->subsys[cpu_cgrp_id],
+			  struct task_group, css);
+	tg = autogroup_task_group(p, tg);
+	if (tg != p->sched_task_group) {
+		p->sched_task_group = tg;
+		/* Do not let set_task_rq_fair() inspect the possibly freed cfs_rq. */
+		p->se.cfs_rq = NULL;
+		set_task_rq(p, task_cpu(p));
+	}
+	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
+}
+
 void sched_autogroup_exit(struct signal_struct *sig)
 {
 	autogroup_kref_put(sig->autogroup);

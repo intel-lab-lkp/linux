@@ -2501,6 +2501,15 @@ __latent_entropy struct task_struct *copy_process(
 	/* No more failure paths after this point. */
 
 	/*
+	 * A concurrent autogroup move can replace signal->autogroup after
+	 * sched_cgroup_fork() but before this task is on the thread list.
+	 * Recheck while holding siglock so the move either precedes this check or
+	 * observes the new thread after publication below.
+	 */
+	if (clone_flags & CLONE_THREAD)
+		sched_autogroup_fork_finalize(p, args);
+
+	/*
 	 * Copy seccomp details explicitly here, in case they were changed
 	 * before holding sighand lock.
 	 */
