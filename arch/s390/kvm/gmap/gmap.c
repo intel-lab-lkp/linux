@@ -414,7 +414,7 @@ static long _gmap_unmap_crste(union crste *crstep, gfn_t gfn, gfn_t next, struct
 	if (!old.h.fc)
 		return 0;
 
-	if (old.s.fc1.pr && test_bit(GMAP_FLAG_EXPORT_ON_UNMAP, &priv->gmap->flags))
+	if (old.s.fc1.pr && export_on_unmap(priv->gmap))
 		folio = phys_to_folio(crste_origin_large(old));
 	/*
 	 * No races should happen because kvm->mmu_lock is held in write mode,
