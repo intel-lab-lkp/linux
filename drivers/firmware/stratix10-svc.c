@@ -39,9 +39,9 @@
  *
  * SVC_NUM_CHANNEL - number of channel supported by service layer driver
  *
- * FPGA_CONFIG_DATA_CLAIM_TIMEOUT_MS - claim back the submitted buffer(s)
- * from the secure world for FPGA manager to reuse, or to free the buffer(s)
- * when all bit-stream data had be send.
+ * FPGA_CONFIG_DATA_CLAIM_TIMEOUT_MS - maximum time without a returned buffer
+ * while claiming back the submitted buffer(s) from the secure world, after
+ * which the claim is failed with SVC_STATUS_ERROR.
  *
  * FPGA_CONFIG_STATUS_TIMEOUT_SEC - overall poll budget for FPGA
  * configuration / service completion status. Service layer returns
@@ -346,7 +346,6 @@ struct stratix10_svc_chan {
  * @num_active_client: number of active service client
  * @node: list management
  * @genpool: memory pool pointing to the memory region
- * @complete_status: state for completion
  * @invoke_fn: function to issue secure monitor call or hypervisor call
  * @svc: manages the list of client svc drivers
  * @sdm_lock: only allows a single command single response to SDM
@@ -372,7 +371,6 @@ struct stratix10_svc_controller {
 	int num_active_client;
 	struct list_head node;
 	struct gen_pool *genpool;
-	struct completion complete_status;
 	svc_invoke_fn *invoke_fn;
 	struct stratix10_svc *svc;
 	struct mutex sdm_lock;
@@ -422,16 +420,22 @@ static void *svc_pa_to_va(unsigned long addr)
  *
  * Claim back the submitted buffers from the secure world and pass buffer
  * back to service client (FPGA manager, etc) for reuse.
+ *
+ * The secure world reports BUSY for as long as submitted buffers are
+ * outstanding, including after the SDM has stopped processing a bad
+ * bitstream. Give up when no buffer has been returned for
+ * FPGA_CONFIG_DATA_CLAIM_TIMEOUT_MS, or on any other status, and report
+ * SVC_STATUS_ERROR so that the client does not wait for buffers that will
+ * never come back. Stop polling without a report if the thread is asked to
+ * stop.
  */
 static void svc_thread_cmd_data_claim(struct stratix10_svc_controller *ctrl,
 				      struct stratix10_svc_data *p_data,
 				      struct stratix10_svc_cb_data *cb_data)
 {
+	unsigned long timeout = msecs_to_jiffies(FPGA_CONFIG_DATA_CLAIM_TIMEOUT_MS);
+	unsigned long deadline = jiffies + timeout;
 	struct arm_smccc_res res;
-	unsigned long timeout;
-
-	reinit_completion(&ctrl->complete_status);
-	timeout = msecs_to_jiffies(FPGA_CONFIG_DATA_CLAIM_TIMEOUT_MS);
 
 	pr_debug("%s: claim back the submitted buffer\n", __func__);
 	do {
@@ -439,10 +443,8 @@ static void svc_thread_cmd_data_claim(struct stratix10_svc_controller *ctrl,
 				0, 0, 0, 0, 0, 0, 0, &res);
 
 		if (res.a0 == INTEL_SIP_SMC_STATUS_OK) {
-			if (!res.a1) {
-				complete(&ctrl->complete_status);
-				break;
-			}
+			if (!res.a1)
+				return;
 			cb_data->status = BIT(SVC_STATUS_BUFFER_DONE);
 			/*
 			 * The firmware COMPLETED_WRITE response returns the
@@ -457,13 +459,29 @@ static void svc_thread_cmd_data_claim(struct stratix10_svc_controller *ctrl,
 					  svc_pa_to_va(res.a3 + ctrl->dma_addr_offset) : NULL;
 			p_data->chan->scl->receive_cb(p_data->chan->scl,
 						      cb_data);
-		} else {
-			pr_debug("%s: secure world busy, polling again\n",
-				 __func__);
+			deadline = jiffies + timeout;
+			continue;
 		}
-	} while (res.a0 == INTEL_SIP_SMC_STATUS_OK ||
-		 res.a0 == INTEL_SIP_SMC_STATUS_BUSY ||
-		 wait_for_completion_timeout(&ctrl->complete_status, timeout));
+
+		if (res.a0 != INTEL_SIP_SMC_STATUS_BUSY)
+			break;
+
+		usleep_range(1000, 2000);
+	} while (time_before(jiffies, deadline) && !kthread_should_stop());
+
+	/*
+	 * The client stops this thread only after it has given up on the
+	 * request, so a callback now would leave stale status behind.
+	 */
+	if (kthread_should_stop())
+		return;
+
+	pr_err("%s: buffer claim failed, status 0x%lx\n", __func__, res.a0);
+	cb_data->status = BIT(SVC_STATUS_ERROR);
+	cb_data->kaddr1 = NULL;
+	cb_data->kaddr2 = NULL;
+	cb_data->kaddr3 = NULL;
+	p_data->chan->scl->receive_cb(p_data->chan->scl, cb_data);
 }
 
 /**
@@ -2429,7 +2447,6 @@ static int stratix10_svc_drv_probe(struct platform_device *pdev)
 	controller->use_dma_mem = use_dma_mem;
 	controller->dma_addr_offset = use_dma_mem ? SVC_SDM_DMA_ADDR_OFFSET : 0;
 	INIT_LIST_HEAD(&controller->node);
-	init_completion(&controller->complete_status);
 
 	if (use_dma_mem) {
 		ret = devm_add_action_or_reset(dev, svc_data_mem_cleanup, controller);
