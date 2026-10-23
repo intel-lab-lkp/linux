@@ -276,7 +276,7 @@ static int handle_iske(struct kvm_vcpu *vcpu)
 	gaddr = kvm_s390_logical_to_effective(vcpu, gaddr);
 	gaddr = kvm_s390_real_to_abs(vcpu, gaddr);
 	scoped_guard(read_lock, &vcpu->kvm->mmu_lock)
-		rc = dat_get_storage_key(vcpu->arch.gmap->asce, gpa_to_gfn(gaddr), &key);
+		rc = dat_get_storage_key(vcpu->arch.gmap->datt, gpa_to_gfn(gaddr), &key);
 	if (rc > 0)
 		return kvm_s390_inject_program_int(vcpu, rc);
 	if (rc < 0)
@@ -308,7 +308,7 @@ static int handle_rrbe(struct kvm_vcpu *vcpu)
 	gaddr = kvm_s390_logical_to_effective(vcpu, gaddr);
 	gaddr = kvm_s390_real_to_abs(vcpu, gaddr);
 	scoped_guard(read_lock, &vcpu->kvm->mmu_lock)
-		rc = dat_reset_reference_bit(vcpu->arch.gmap->asce, gpa_to_gfn(gaddr), &skey);
+		rc = dat_reset_reference_bit(vcpu->arch.gmap->datt, gpa_to_gfn(gaddr), &skey);
 	if (rc > 0)
 		return kvm_s390_inject_program_int(vcpu, rc);
 	if (rc < 0)
@@ -360,7 +360,7 @@ static int handle_sske(struct kvm_vcpu *vcpu)
 
 	while (start != end) {
 		scoped_guard(read_lock, &vcpu->kvm->mmu_lock) {
-			rc = dat_cond_set_storage_key(vcpu->arch.mc, vcpu->arch.gmap->asce,
+			rc = dat_cond_set_storage_key(vcpu->arch.mc, vcpu->arch.gmap->datt,
 						      gpa_to_gfn(start), key, &oldkey,
 						      m3 & SSKE_NQ, m3 & SSKE_MR, m3 & SSKE_MC);
 		}
@@ -1118,7 +1118,7 @@ static int handle_pfmf(struct kvm_vcpu *vcpu)
 			if (rc)
 				return rc;
 			scoped_guard(read_lock, &vcpu->kvm->mmu_lock) {
-				rc = dat_cond_set_storage_key(vcpu->arch.mc, vcpu->arch.gmap->asce,
+				rc = dat_cond_set_storage_key(vcpu->arch.mc, vcpu->arch.gmap->datt,
 							      gpa_to_gfn(start), key,
 							      NULL, nq, mr, mc);
 			}
@@ -1167,7 +1167,7 @@ static inline int __do_essa(struct kvm_vcpu *vcpu, const int orc)
 	gfn = vcpu->run->s.regs.gprs[r2] >> PAGE_SHIFT;
 	entries = (vcpu->arch.sie_block->cbrlo & ~PAGE_MASK) >> 3;
 
-	nappended = dat_perform_essa(vcpu->arch.gmap->asce, gfn, orc, &state, &dirtied);
+	nappended = dat_perform_essa(vcpu->arch.gmap->datt, gfn, orc, &state, &dirtied);
 	vcpu->run->s.regs.gprs[r1] = state.val;
 	if (nappended < 0)
 		return 0;
@@ -1199,7 +1199,7 @@ static void _essa_clear_cbrl(struct kvm_vcpu *vcpu, unsigned long *cbrl, int len
 	lockdep_assert_held(&vcpu->kvm->mmu_lock);
 
 	for (i = 0; i < len; i++) {
-		if (dat_entry_walk(NULL, gpa_to_gfn(cbrl[i]), vcpu->arch.gmap->asce,
+		if (dat_entry_walk(NULL, gpa_to_gfn(cbrl[i]), vcpu->arch.gmap->datt,
 				   0, TABLE_TYPE_PAGE_TABLE, &crstep, &ptep))
 			continue;
 		if (!ptep || ptep->s.pr)
@@ -1238,6 +1238,7 @@ static int handle_essa(struct kvm_vcpu *vcpu)
 		return kvm_s390_inject_program_int(vcpu, PGM_SPECIFICATION);
 
 	if (!READ_ONCE(vcpu->kvm->arch.migration_mode)) {
+		WRITE_ONCE(vcpu->arch.gmap->datt.has_pgstes, true);
 		/*
 		 * CMMA is enabled in the KVM settings, but is disabled in
 		 * the SIE block and in the mm_context, and we are not doing
@@ -1247,7 +1248,7 @@ static int handle_essa(struct kvm_vcpu *vcpu)
 		 * value really needs to be written to; if the value is
 		 * already correct, we do nothing and avoid the lock.
 		 */
-		set_bit(GMAP_FLAG_USES_CMM, &vcpu->arch.gmap->flags);
+		WRITE_ONCE(vcpu->arch.gmap->datt.uses_cmma, true);
 		/*
 		 * If we are here, we are supposed to have CMMA enabled in
 		 * the SIE block. Enabling CMMA works on a per-CPU basis,

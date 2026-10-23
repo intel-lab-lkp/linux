@@ -46,8 +46,8 @@ static int gmap_limit_to_type(gfn_t limit)
  */
 struct gmap *gmap_new(struct kvm *kvm, gfn_t limit)
 {
+	struct gmap *gmap __free(kfree) = NULL;
 	struct crst_table *table;
-	struct gmap *gmap;
 	int type;
 
 	type = gmap_limit_to_type(limit);
@@ -64,27 +64,27 @@ struct gmap *gmap_new(struct kvm *kvm, gfn_t limit)
 	refcount_set(&gmap->refcount, 1);
 
 	table = dat_alloc_crst_sleepable(_CRSTE_EMPTY(type).val);
-	if (!table) {
-		kfree(gmap);
+	if (!table)
 		return NULL;
-	}
 
-	gmap->asce.val = __pa(table);
-	gmap->asce.dt = type;
-	gmap->asce.tl = _ASCE_TABLE_LENGTH;
-	gmap->asce.x = 1;
-	gmap->asce.p = 1;
-	gmap->asce.s = 1;
+	gmap->datt.table = table;
+	gmap->datt.asce.val = __pa(table);
+	gmap->datt.asce.dt = type;
+	gmap->datt.asce.tl = _ASCE_TABLE_LENGTH;
+	gmap->datt.asce.x = 1;
+	gmap->datt.asce.p = 1;
+	gmap->datt.asce.s = 1;
 	gmap->kvm = kvm;
-	set_bit(GMAP_FLAG_OWNS_PAGETABLES, &gmap->flags);
+	gmap->datt.owns_ptes = true;
+	gmap->datt.has_pgstes = KVM_S390_MANAGES_S390_GUEST && !(sclp.has_kss && cpu_has_edat2());
 
-	return gmap;
+	return_ptr(gmap);
 }
 
 static void gmap_add_child(struct gmap *parent, struct gmap *child)
 {
 	KVM_BUG_ON(is_ucontrol(parent) && parent->parent, parent->kvm);
-	KVM_BUG_ON(is_ucontrol(parent) && !owns_page_tables(parent), parent->kvm);
+	KVM_BUG_ON(is_ucontrol(parent) && !parent->datt.owns_ptes, parent->kvm);
 	KVM_BUG_ON(!refcount_read(&child->refcount), parent->kvm);
 	lockdep_assert_held(&parent->children_lock);
 
@@ -105,8 +105,11 @@ static void gmap_add_child(struct gmap *parent, struct gmap *child)
 	else
 		clear_bit(GMAP_FLAG_ALLOW_HPAGE_2G, &child->flags);
 
-	if (kvm_is_ucontrol(parent->kvm))
-		clear_bit(GMAP_FLAG_OWNS_PAGETABLES, &child->flags);
+	if (kvm_is_ucontrol(parent->kvm)) {
+		child->datt.owns_ptes = false;
+		child->datt.uses_skeys = true;
+	}
+	child->datt.has_pgstes = true;
 	list_add(&child->list, &parent->children);
 }
 
@@ -139,7 +142,7 @@ int gmap_set_limit(struct gmap *gmap, gfn_t limit)
 		if (rc)
 			return rc;
 		scoped_guard(write_lock, &gmap->kvm->mmu_lock)
-			rc = dat_set_asce_limit(mc, &gmap->asce, type);
+			rc = dat_set_asce_limit(mc, &gmap->datt, type);
 	} while (rc == -ENOMEM);
 
 	return 0;
@@ -196,15 +199,15 @@ void gmap_dispose(struct gmap *gmap)
 	/* No VSIE shadow block is allowed to use this gmap */
 	KVM_BUG_ON(!list_empty(&gmap->scb_users), gmap->kvm);
 	/* The ASCE must be valid */
-	KVM_BUG_ON(!gmap->asce.val, gmap->kvm);
+	KVM_BUG_ON(!gmap->datt.asce.val, gmap->kvm);
 	/* The refcount must be 0 */
 	KVM_BUG_ON(refcount_read(&gmap->refcount), gmap->kvm);
 
 	/* Flush tlb of all gmaps */
-	asce_flush_tlb(gmap->asce);
+	asce_flush_tlb(gmap->datt.asce);
 
 	/* Free all DAT tables. */
-	dat_free_level(dereference_asce(gmap->asce), owns_page_tables(gmap));
+	dat_free_level(gmap->datt.table, gmap->datt.owns_ptes);
 
 	/* Free additional data for a shadow gmap */
 	if (is_shadow(gmap))
@@ -232,21 +235,25 @@ void gmap_dispose(struct gmap *gmap)
 int s390_replace_asce(struct gmap *gmap)
 {
 	struct crst_table *table;
-	union asce asce;
 
 	/* Replacing segment type ASCEs would cause serious issues */
-	if (gmap->asce.dt == ASCE_TYPE_SEGMENT)
+	if (gmap->datt.asce.dt == ASCE_TYPE_SEGMENT)
 		return -EINVAL;
 
 	table = dat_alloc_crst_sleepable(0);
 	if (!table)
 		return -ENOMEM;
-	memcpy(table, dereference_asce(gmap->asce), sizeof(*table));
 
 	/* Set new table origin while preserving existing ASCE control bits */
-	asce = gmap->asce;
-	asce.rsto = virt_to_pfn(table);
-	WRITE_ONCE(gmap->asce, asce);
+	scoped_guard(write_lock, &gmap->kvm->mmu_lock) {
+		memcpy(table, gmap->datt.table, sizeof(*table));
+		if (gmap->datt.asce.dt == ASCE_TYPE_SEGMENT) {
+			dat_free_crst(table);
+			return -EINVAL;
+		}
+		gmap->datt.asce.rsto = virt_to_pfn(table);
+		gmap->datt.table = table;
+	}
 
 	return 0;
 }
@@ -308,7 +315,7 @@ static long gmap_clear_young_pte(union pte *ptep, gfn_t gfn, gfn_t end, struct d
 		new.h.p = 1;
 
 		new.s.prefix_notif = 0;
-		pgste = __dat_ptep_xchg(ptep, pgste, new, gfn, walk->asce, uses_skeys(p->gmap));
+		pgste = __dat_ptep_xchg(ptep, pgste, new, gfn, walk->datt);
 	}
 	p->young = 1;
 	pgste_set_unlock(ptep, pgste);
@@ -338,7 +345,7 @@ static long gmap_clear_young_crste(union crste *crstep, gfn_t gfn, gfn_t end, st
 			folio_set_dirty(phys_to_folio(crste_origin_large(crste)));
 		new.s.fc1.d = 0;
 		new.h.p = 1;
-	} while (!dat_crstep_xchg_atomic(crstep, crste, new, gfn, walk->asce));
+	} while (!dat_crstep_xchg_atomic(crstep, crste, new, gfn, walk->datt.asce));
 
 	priv->young = 1;
 	return 0;
@@ -365,7 +372,7 @@ bool gmap_age_gfn(struct gmap *gmap, gfn_t start, gfn_t end)
 		.young = false,
 	};
 
-	_dat_walk_gfn_range(start, end, gmap->asce, &ops, 0, &priv);
+	_dat_walk_gfn_range(start, end, gmap->datt, &ops, 0, &priv);
 
 	return priv.young;
 }
@@ -454,7 +461,7 @@ bool gmap_unmap_gfn_range(struct gmap *gmap, struct kvm_memory_slot *slot, gfn_t
 
 	lockdep_assert_held_write(&gmap->kvm->mmu_lock);
 
-	_dat_walk_gfn_range(start, end, gmap->asce, &ops, 0, &priv);
+	_dat_walk_gfn_range(start, end, gmap->datt, &ops, 0, &priv);
 	return false;
 }
 
@@ -536,7 +543,7 @@ void gmap_sync_dirty_log(struct gmap *gmap, gfn_t start, gfn_t end)
 
 	lockdep_assert_held(&gmap->kvm->mmu_lock);
 
-	_dat_walk_gfn_range(start, end, gmap->asce, &walk_ops, 0, gmap);
+	_dat_walk_gfn_range(start, end, gmap->datt, &walk_ops, 0, gmap);
 }
 
 static int gmap_handle_minor_crste_fault(struct gmap *gmap, struct guest_fault *f)
@@ -618,7 +625,7 @@ int gmap_try_fixup_minor(struct gmap *gmap, struct guest_fault *fault)
 
 	lockdep_assert_held(&gmap->kvm->mmu_lock);
 
-	rc = dat_entry_walk(NULL, fault->gfn, gmap->asce, DAT_WALK_LEAF, TABLE_TYPE_PAGE_TABLE,
+	rc = dat_entry_walk(NULL, fault->gfn, gmap->datt, DAT_WALK_LEAF, TABLE_TYPE_PAGE_TABLE,
 			    &fault->crstep, &fault->ptep);
 	/* If a PTE or a leaf CRSTE could not be reached, slow path. */
 	if (rc)
@@ -692,7 +699,7 @@ static int _gmap_link(struct kvm_s390_mmu_cache *mc, struct gmap *gmap, int leve
 	union pgste pgste;
 	int rc = 0;
 
-	rc = dat_entry_walk(mc, f->gfn, gmap->asce, DAT_WALK_ALLOC_CONTINUE, level,
+	rc = dat_entry_walk(mc, f->gfn, gmap->datt, DAT_WALK_ALLOC_CONTINUE, level,
 			    &f->crstep, &f->ptep);
 	if (rc == -ENOMEM)
 		return rc;
@@ -766,10 +773,10 @@ static int gmap_ucas_map_one(struct kvm_s390_mmu_cache *mc, struct gmap *gmap,
 	int rc;
 
 	if (force_alloc)
-		rc = dat_entry_walk(mc, p_gfn, gmap->parent->asce, DAT_WALK_ALLOC,
+		rc = dat_entry_walk(mc, p_gfn, gmap->parent->datt, DAT_WALK_ALLOC,
 				    TABLE_TYPE_PAGE_TABLE, &crstep, &ptep);
 	else
-		rc = dat_entry_walk(mc, p_gfn, gmap->parent->asce, DAT_WALK_ALLOC_CONTINUE,
+		rc = dat_entry_walk(mc, p_gfn, gmap->parent->datt, DAT_WALK_ALLOC_CONTINUE,
 				    TABLE_TYPE_SEGMENT, &crstep, &ptep);
 	if (rc)
 		return rc;
@@ -782,7 +789,7 @@ static int gmap_ucas_map_one(struct kvm_s390_mmu_cache *mc, struct gmap *gmap,
 		dat_set_ptval(pt, PTVAL_VMADDR, p_gfn >> (_SEGMENT_SHIFT - PAGE_SHIFT));
 		newcrste = _crste_fc0(virt_to_pfn(pt), TABLE_TYPE_SEGMENT);
 	}
-	rc = dat_entry_walk(mc, c_gfn, gmap->asce, DAT_WALK_ALLOC, TABLE_TYPE_SEGMENT,
+	rc = dat_entry_walk(mc, c_gfn, gmap->datt, DAT_WALK_ALLOC, TABLE_TYPE_SEGMENT,
 			    &crstep, &ptep);
 	if (rc)
 		return rc;
@@ -790,7 +797,7 @@ static int gmap_ucas_map_one(struct kvm_s390_mmu_cache *mc, struct gmap *gmap,
 		oldcrste = READ_ONCE(*crstep);
 		if (oldcrste.val == newcrste.val)
 			break;
-	} while (!dat_crstep_xchg_atomic(crstep, oldcrste, newcrste, c_gfn, gmap->asce));
+	} while (!dat_crstep_xchg_atomic(crstep, oldcrste, newcrste, c_gfn, gmap->datt.asce));
 	return 0;
 }
 
@@ -799,7 +806,7 @@ static int gmap_ucas_translate_simple(struct gmap *gmap, gpa_t *gaddr, union crs
 	union pte *ptep;
 	int rc;
 
-	rc = dat_entry_walk(NULL, gpa_to_gfn(*gaddr), gmap->asce, DAT_WALK_CONTINUE,
+	rc = dat_entry_walk(NULL, gpa_to_gfn(*gaddr), gmap->datt, DAT_WALK_CONTINUE,
 			    TABLE_TYPE_SEGMENT, crstepp, &ptep);
 	if (rc || (!ptep && !crste_is_ucas(**crstepp)))
 		return -EREMOTE;
@@ -893,10 +900,11 @@ static void gmap_ucas_unmap_one(struct gmap *gmap, gfn_t c_gfn)
 	union pte *ptep;
 	int rc;
 
-	rc = dat_entry_walk(NULL, c_gfn, gmap->asce, 0, TABLE_TYPE_SEGMENT, &crstep, &ptep);
+	rc = dat_entry_walk(NULL, c_gfn, gmap->datt, 0, TABLE_TYPE_SEGMENT, &crstep, &ptep);
 	if (rc)
 		return;
-	while (!dat_crstep_xchg_atomic(crstep, READ_ONCE(*crstep), _PMD_EMPTY, c_gfn, gmap->asce))
+	while (!dat_crstep_xchg_atomic(crstep, READ_ONCE(*crstep), _PMD_EMPTY,
+				       c_gfn, gmap->datt.asce))
 		;
 }
 
@@ -921,7 +929,7 @@ static long _gmap_split_crste(union crste *crstep, gfn_t gfn, gfn_t next, struct
 			gmap_unmap_prefix(gmap, gfn, next);
 		if (crste.s.fc1.vsie_notif)
 			gmap_handle_vsie_unshadow_event(gmap, gfn);
-		if (dat_crstep_xchg_atomic(crstep, crste, newcrste, gfn, walk->asce))
+		if (dat_crstep_xchg_atomic(crstep, crste, newcrste, gfn, walk->datt.asce))
 			break;
 		crste = READ_ONCE(*crstep);
 	}
@@ -942,7 +950,7 @@ void gmap_split_huge_pages(struct gmap *gmap)
 
 	do {
 		scoped_guard(read_lock, &gmap->kvm->mmu_lock)
-			start = _dat_walk_gfn_range(start, asce_end(gmap->asce), gmap->asce,
+			start = _dat_walk_gfn_range(start, dat_tables_end(gmap->datt), gmap->datt,
 						    &ops, DAT_WALK_IGN_HOLES, gmap);
 	} while (start);
 }
@@ -957,16 +965,17 @@ static int _gmap_enable_skeys(struct gmap *gmap)
 	if (uses_skeys(gmap))
 		return 0;
 
-	set_bit(GMAP_FLAG_USES_SKEYS, &gmap->flags);
+	gmap->datt.uses_skeys = true;
+	gmap->datt.has_pgstes = true;
 	rc = gmap_helper_disable_cow_sharing();
 	if (rc) {
-		clear_bit(GMAP_FLAG_USES_SKEYS, &gmap->flags);
+		gmap->datt.uses_skeys = false;
 		return rc;
 	}
 
 	do {
 		scoped_guard(write_lock, &gmap->kvm->mmu_lock)
-			start = dat_reset_skeys(gmap->asce, start);
+			start = dat_reset_skeys(gmap->datt, start);
 	} while (start);
 	return 0;
 }
@@ -1021,7 +1030,7 @@ int gmap_pv_destroy_range(struct gmap *gmap, gfn_t start, gfn_t end, bool interr
 
 	do {
 		scoped_guard(read_lock, &gmap->kvm->mmu_lock)
-			start = _dat_walk_gfn_range(start, end, gmap->asce, &ops,
+			start = _dat_walk_gfn_range(start, end, gmap->datt, &ops,
 						    DAT_WALK_IGN_HOLES, NULL);
 		if (interruptible && fatal_signal_pending(current))
 			return -EINTR;
@@ -1073,14 +1082,13 @@ int gmap_protect_rmap(struct kvm_s390_mmu_cache *mc, struct gmap *sg, gfn_t p_gf
 	union pgste pgste;
 	union pte *ptep;
 	union pte pte;
-	int flags, rc;
+	int rc;
 
 	if (KVM_BUG_ON(!is_shadow(sg) || level <= TABLE_TYPE_PAGE_TABLE, sg->kvm))
 		return -EINVAL;
 	lockdep_assert_held(&sg->parent->children_lock);
 
-	flags = DAT_WALK_SPLIT_ALLOC | (uses_skeys(sg->parent) ? DAT_WALK_USES_SKEYS : 0);
-	rc = dat_entry_walk(mc, p_gfn, sg->parent->asce, flags,
+	rc = dat_entry_walk(mc, p_gfn, sg->parent->datt, DAT_WALK_SPLIT_ALLOC,
 			    TABLE_TYPE_PAGE_TABLE, &crstep, &ptep);
 	if (rc)
 		return rc;
@@ -1141,8 +1149,8 @@ void _gmap_set_cmma_all(struct gmap *gmap, bool dirty)
 
 	do {
 		scoped_guard(read_lock, &gmap->kvm->mmu_lock)
-			gfn = _dat_walk_gfn_range(gfn, asce_end(gmap->asce), gmap->asce, &ops,
-						  DAT_WALK_IGN_HOLES,
+			gfn = _dat_walk_gfn_range(gfn, dat_tables_end(gmap->datt), gmap->datt,
+						  &ops, DAT_WALK_IGN_HOLES,
 						  &gmap->kvm->arch.cmma_dirty_pages);
 	} while (gfn);
 }
@@ -1160,15 +1168,15 @@ static void gmap_unshadow_level(struct gmap *sg, gfn_t r_gfn, int level)
 		align = 1UL << (11 * level + _SEGMENT_SHIFT);
 	kvm_s390_vsie_gmap_notifier(sg, ALIGN_DOWN(gaddr, align), ALIGN(gaddr + 1, align));
 	sg->invalidated = true;
-	if (dat_entry_walk(NULL, r_gfn, sg->asce, 0, level, &crstep, &ptep))
+	if (dat_entry_walk(NULL, r_gfn, sg->datt, 0, level, &crstep, &ptep))
 		return;
 	if (ptep) {
 		if (READ_ONCE(*ptep).val != _PTE_EMPTY.val)
-			dat_ptep_xchg(ptep, _PTE_EMPTY, r_gfn, sg->asce, uses_skeys(sg));
+			dat_ptep_xchg(ptep, _PTE_EMPTY, r_gfn, sg->datt);
 		return;
 	}
 
-	crste = dat_crstep_clear_atomic(crstep, r_gfn, sg->asce);
+	crste = dat_crstep_clear_atomic(crstep, r_gfn, sg->datt.asce);
 	if (crste_leaf(crste) || crste.h.i)
 		return;
 	if (is_pmd(crste))

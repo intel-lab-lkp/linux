@@ -27,9 +27,6 @@
 /* For consistency */
 #define KVM_S390_CMMA_SIZE_MAX ((u32)KVM_S390_SKEYS_MAX)
 
-#define _ASCE(x) ((union asce) { .val = (x), })
-#define NULL_ASCE _ASCE(0)
-
 enum {
 	_DAT_TOKEN_NONE = 0,
 	_DAT_TOKEN_PIC,
@@ -55,7 +52,6 @@ enum {
 #define TABLE_TYPE_PAGE_TABLE -1
 
 enum dat_walk_flags {
-	DAT_WALK_USES_SKEYS	= 0x40,
 	DAT_WALK_CONTINUE	= 0x20,
 	DAT_WALK_IGN_HOLES	= 0x10,
 	DAT_WALK_SPLIT		= 0x08,
@@ -353,6 +349,15 @@ struct page_table {
 static_assert(sizeof(struct crst_table) == _CRST_TABLE_SIZE);
 static_assert(sizeof(struct page_table) == PAGE_SIZE);
 
+struct dat_tables {
+	union asce asce;
+	struct crst_table *table;
+	bool has_pgstes;	/* Need to use the PCL lock */
+	bool owns_ptes;		/* The ptes are owned by this instance */
+	bool uses_skeys;	/* Storage keys are in use */
+	bool uses_cmma;		/* CMMA is in use */
+};
+
 struct dat_walk;
 
 typedef long (*dat_walk_op)(union crste *crste, gfn_t gfn, gfn_t next, struct dat_walk *w);
@@ -374,7 +379,7 @@ struct dat_walk {
 	const struct dat_walk_ops *ops;
 	union crste *last;
 	union pte *last_pte;
-	union asce asce;
+	struct dat_tables datt;
 	gfn_t start;
 	gfn_t end;
 	int flags;
@@ -523,52 +528,53 @@ struct guest_fault {
 #define PTVAL_VMADDR	MKPTVAL(8, 6)
 
 union pgste __must_check __dat_ptep_xchg(union pte *ptep, union pgste pgste, union pte new,
-					 gfn_t gfn, union asce asce, bool uses_skeys);
+					 gfn_t gfn, struct dat_tables datt);
 bool dat_crstep_xchg_atomic(union crste *crstep, union crste old, union crste new, gfn_t gfn,
 			    union asce asce);
-void dat_crstep_xchg(union crste *crstep, union crste new, gfn_t gfn, union asce asce);
 
-long _dat_walk_gfn_range(gfn_t start, gfn_t end, union asce asce,
+long _dat_walk_gfn_range(gfn_t start, gfn_t end, struct dat_tables datt,
 			 const struct dat_walk_ops *ops, int flags, void *priv);
 
-int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, int flags,
+int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, struct dat_tables datt, int flags,
 		   int walk_level, union crste **last, union pte **ptepp);
 void dat_free_level(struct crst_table *table, bool owns_ptes);
 struct crst_table *dat_alloc_crst_sleepable(unsigned long init);
-int dat_set_asce_limit(struct kvm_s390_mmu_cache *mc, union asce *asce, int newtype);
+int dat_set_asce_limit(struct kvm_s390_mmu_cache *mc, struct dat_tables *datt, int newtype);
 
 #if KVM_S390_MANAGES_S390_GUEST
-int dat_get_storage_key(union asce asce, gfn_t gfn, union skey *skey);
-int dat_set_storage_key(struct kvm_s390_mmu_cache *mc, union asce asce, gfn_t gfn,
+int dat_get_storage_key(struct dat_tables datt, gfn_t gfn, union skey *skey);
+int dat_set_storage_key(struct kvm_s390_mmu_cache *mc, struct dat_tables datt, gfn_t gfn,
 			union skey skey, bool nq);
-int dat_cond_set_storage_key(struct kvm_s390_mmu_cache *mmc, union asce asce, gfn_t gfn,
+int dat_cond_set_storage_key(struct kvm_s390_mmu_cache *mmc, struct dat_tables datt, gfn_t gfn,
 			     union skey skey, union skey *oldkey, bool nq, bool mr, bool mc);
-int dat_reset_reference_bit(union asce asce, gfn_t gfn, union skey *skey);
-long dat_reset_skeys(union asce asce, gfn_t start);
+int dat_reset_reference_bit(struct dat_tables datt, gfn_t gfn, union skey *skey);
+long dat_reset_skeys(struct dat_tables datt, gfn_t start);
 #endif /* KVM_S390_MANAGES_S390_GUEST */
 
 unsigned long dat_get_ptval(struct page_table *table, struct ptval_param param);
 void dat_set_ptval(struct page_table *table, struct ptval_param param, unsigned long val);
 
-int dat_set_slot(struct kvm_s390_mmu_cache *mc, union asce asce, gfn_t start, gfn_t end);
+int dat_set_slot(struct kvm_s390_mmu_cache *mc, struct dat_tables datt, gfn_t start, gfn_t end);
 
 #if KVM_S390_MANAGES_S390_GUEST
-int dat_set_prefix_notif_bit(union asce asce, gfn_t gfn);
+int dat_set_prefix_notif_bit(struct dat_tables datt, gfn_t gfn);
 #else
-static inline int dat_set_prefix_notif_bit(union asce asce, gfn_t gfn)
+static inline int dat_set_prefix_notif_bit(struct dat_tables datt, gfn_t gfn)
 {
 	return 0;
 }
 #endif /* KVM_S390_MANAGES_S390_GUEST */
 
-bool dat_test_age_gfn(union asce asce, gfn_t start, gfn_t end);
+bool dat_test_age_gfn(struct dat_tables datt, gfn_t start, gfn_t end);
 
 #if KVM_S390_MANAGES_S390_GUEST
-int dat_perform_essa(union asce asce, gfn_t gfn, int orc, union essa_state *state, bool *dirty);
-long dat_reset_cmma(union asce asce, gfn_t start_gfn);
-int dat_peek_cmma(gfn_t start, union asce asce, unsigned int *count, u8 *values);
-int dat_get_cmma(union asce asce, gfn_t *start, unsigned int *count, u8 *values, atomic64_t *rem);
-int dat_set_cmma_bits(struct kvm_s390_mmu_cache *mc, union asce asce, gfn_t gfn,
+int dat_perform_essa(struct dat_tables datt, gfn_t gfn, int orc,
+		     union essa_state *state, bool *dirty);
+long dat_reset_cmma(struct dat_tables datt, gfn_t start_gfn);
+int dat_peek_cmma(gfn_t start, struct dat_tables datt, unsigned int *count, u8 *values);
+int dat_get_cmma(struct dat_tables datt, gfn_t *start, unsigned int *count,
+		 u8 *values, atomic64_t *rem);
+int dat_set_cmma_bits(struct kvm_s390_mmu_cache *mc, struct dat_tables datt, gfn_t gfn,
 		      unsigned long count, unsigned long mask, const uint8_t *bits);
 #endif /* KVM_S390_MANAGES_S390_GUEST */
 
@@ -595,6 +601,11 @@ static inline struct vsie_rmap *kvm_s390_mmu_cache_alloc_rmap(struct kvm_s390_mm
 	if (mc->n_rmaps)
 		return mc->rmaps[--mc->n_rmaps];
 	return kzalloc_obj(struct vsie_rmap, GFP_KVM_S390_MMU_CACHE);
+}
+
+static inline bool has_pgstes(struct dat_tables datt)
+{
+	return KVM_S390_MANAGES_S390_GUEST && datt.has_pgstes;
 }
 
 static inline struct crst_table *crste_table_start(union crste *crstep)
@@ -688,6 +699,11 @@ static inline gfn_t asce_end(union asce asce)
 	return 1ULL << ((asce.dt + 1) * 11 + _SEGMENT_SHIFT - PAGE_SHIFT);
 }
 
+static inline gfn_t dat_tables_end(struct dat_tables datt)
+{
+	return asce_end(datt.asce);
+}
+
 #define _CRSTE(x) ((union crste) { .val = _Generic((x),	\
 			union pgd : (x).val,		\
 			union p4d : (x).val,		\
@@ -712,6 +728,11 @@ static inline gfn_t asce_end(union asce asce)
 static inline bool asce_contains_gfn(union asce asce, gfn_t gfn)
 {
 	return gfn < asce_end(asce);
+}
+
+static inline bool dat_tables_contain_gfn(struct dat_tables datt, gfn_t gfn)
+{
+	return asce_contains_gfn(datt.asce, gfn);
 }
 
 static inline bool is_pmd(union crste crste)
@@ -879,11 +900,6 @@ static inline struct crst_table *_dereference_crste(union crste crste)
 		union pgd : _dereference_crste(_CRSTE(x)),	\
 		union crste : _dereference_crste(_CRSTE(x))))
 
-static inline struct crst_table *dereference_asce(union asce asce)
-{
-	return phys_to_virt(asce.val & _ASCE_ORIGIN);
-}
-
 static inline void asce_flush_tlb(union asce asce)
 {
 	__tlb_flush_idte(asce.val);
@@ -920,19 +936,18 @@ static inline void pgste_set_unlock(union pte *ptep, union pgste pgste)
 	WRITE_ONCE(*pgste_of(ptep), pgste);
 }
 
-static inline void dat_ptep_xchg(union pte *ptep, union pte new, gfn_t gfn, union asce asce,
-				 bool has_skeys)
+static inline void dat_ptep_xchg(union pte *ptep, union pte new, gfn_t gfn, struct dat_tables datt)
 {
 	union pgste pgste;
 
 	pgste = pgste_get_lock(ptep);
-	pgste = __dat_ptep_xchg(ptep, pgste, new, gfn, asce, has_skeys);
+	pgste = __dat_ptep_xchg(ptep, pgste, new, gfn, datt);
 	pgste_set_unlock(ptep, pgste);
 }
 
-static inline void dat_ptep_clear(union pte *ptep, gfn_t gfn, union asce asce, bool has_skeys)
+static inline void dat_ptep_clear(union pte *ptep, gfn_t gfn, struct dat_tables datt)
 {
-	dat_ptep_xchg(ptep, _PTE_EMPTY, gfn, asce, has_skeys);
+	dat_ptep_xchg(ptep, _PTE_EMPTY, gfn, datt);
 }
 
 static inline void dat_free_pt(struct page_table *pt)
@@ -999,15 +1014,15 @@ static inline int get_level(union crste *crstep, union pte *ptep)
 	return ptep ? TABLE_TYPE_PAGE_TABLE : crstep->h.tt;
 }
 
-static inline int dat_delete_slot(union asce asce, gfn_t start, unsigned long npages)
+static inline int dat_delete_slot(struct dat_tables datt, gfn_t start, unsigned long npages)
 {
-	return dat_set_slot(NULL, asce, start, start + npages);
+	return dat_set_slot(NULL, datt, start, start + npages);
 }
 
-static inline int dat_create_slot(struct kvm_s390_mmu_cache *mc, union asce asce, gfn_t start,
-				  unsigned long npages)
+static inline int dat_create_slot(struct kvm_s390_mmu_cache *mc, struct dat_tables datt,
+				  gfn_t start, unsigned long npages)
 {
-	return dat_set_slot(mc, asce, start, start + npages);
+	return dat_set_slot(mc, datt, start, start + npages);
 }
 
 static inline bool crste_is_ucas(union crste crste)

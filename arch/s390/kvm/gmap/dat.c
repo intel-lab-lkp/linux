@@ -102,34 +102,37 @@ void dat_free_level(struct crst_table *table, bool owns_ptes)
 	dat_free_crst(table);
 }
 
-int dat_set_asce_limit(struct kvm_s390_mmu_cache *mc, union asce *asce, int newtype)
+int dat_set_asce_limit(struct kvm_s390_mmu_cache *mc, struct dat_tables *datt, int newtype)
 {
 	struct crst_table *table;
 	union crste crste;
 
-	while (asce->dt > newtype) {
-		table = dereference_asce(*asce);
+	while (datt->asce.dt > newtype) {
+		table = datt->table;
 		crste = table->crstes[0];
 		if (crste.h.fc)
 			return 0;
 		if (!crste.h.i) {
-			asce->rsto = crste.h.fc0.to;
+			datt->asce.rsto = crste.h.fc0.to;
 			dat_free_crst(table);
+			datt->table = phys_to_virt(datt->asce.val & _ASCE_ORIGIN);
 		} else {
 			crste.h.tt--;
 			crst_table_init((void *)table, crste.val);
 		}
-		asce->dt--;
+		datt->asce.dt--;
 	}
-	while (asce->dt < newtype) {
-		crste = _crste_fc0(asce->rsto, asce->dt + 1);
+	while (datt->asce.dt < newtype) {
+		crste = _crste_fc0(datt->asce.rsto, datt->asce.dt + 1);
 		table = dat_alloc_crst_noinit(mc);
 		if (!table)
 			return -ENOMEM;
 		crst_table_init((void *)table, _CRSTE_HOLE(crste.h.tt).val);
 		table->crstes[0] = crste;
-		asce->rsto = __pa(table) >> PAGE_SHIFT;
-		asce->dt++;
+
+		datt->asce.rsto = __pa(table) >> PAGE_SHIFT;
+		datt->asce.dt++;
+		datt->table = table;
 	}
 	return 0;
 }
@@ -160,7 +163,7 @@ bool __must_check dat_crstep_xchg_atomic(union crste *crstep, union crste old, u
 }
 
 union pgste __dat_ptep_xchg(union pte *ptep, union pgste pgste, union pte new, gfn_t gfn,
-			    union asce asce, bool uses_skeys)
+			    struct dat_tables datt)
 {
 	union pte old = READ_ONCE(*ptep);
 
@@ -174,12 +177,13 @@ union pgste __dat_ptep_xchg(union pte *ptep, union pgste pgste, union pte new, g
 		unsigned long opts = IPTE_GUEST_ASCE | (pgste.nodat ? IPTE_NODAT : 0);
 
 		if (machine_has_tlb_guest())
-			__ptep_ipte(gfn_to_gpa(gfn), (void *)ptep, opts, asce.val, IPTE_GLOBAL);
+			__ptep_ipte(gfn_to_gpa(gfn), (void *)ptep, opts,
+				    datt.asce.val, IPTE_GLOBAL);
 		else
 			__ptep_ipte(gfn_to_gpa(gfn), (void *)ptep, 0, 0, IPTE_GLOBAL);
 	}
 
-	if (uses_skeys) {
+	if (datt.uses_skeys) {
 		if (old.h.i && !new.h.i)
 			/* Invalid to valid: restore storage keys from PGSTE. */
 			dat_set_storage_key_from_pgste(new, pgste);
@@ -205,7 +209,7 @@ union pgste __dat_ptep_xchg(union pte *ptep, union pgste pgste, union pte new, g
  * Return: 0 in case of success, -ENOMEM if running out of memory.
  */
 static int dat_split_ste(struct kvm_s390_mmu_cache *mc, union pmd *pmdp, gfn_t gfn,
-			 union asce asce, bool uses_skeys)
+			 struct dat_tables datt)
 {
 	union pgste pgste_init;
 	struct page_table *pt;
@@ -242,13 +246,13 @@ static int dat_split_ste(struct kvm_s390_mmu_cache *mc, union pmd *pmdp, gfn_t g
 			/* No need to take locks as the page table is not installed yet. */
 			pgste_init.vsie_notif = old.s.fc1.vsie_notif;
 			pgste_init.vsie_gmem = old.s.fc1.vsie_notif;
-			pgste_init.pcl = uses_skeys && init.h.i;
+			pgste_init.pcl = datt.uses_skeys && init.h.i;
 			dat_init_pgstes(pt, pgste_init.val);
 		} else {
 			dat_init_page_table(pt, init.val, 0);
 		}
 
-		if (dat_pmdp_xchg_atomic(pmdp, old, new, gfn, asce)) {
+		if (dat_pmdp_xchg_atomic(pmdp, old, new, gfn, datt.asce)) {
 			if (!pgste_init.pcl)
 				return 0;
 			for (i = 0; i < _PAGE_ENTRIES; i++) {
@@ -274,7 +278,7 @@ static int dat_split_ste(struct kvm_s390_mmu_cache *mc, union pmd *pmdp, gfn_t g
  * Return: %0 in case of success, %-ENOMEM if running out of memory.
  */
 static int dat_split_crste(struct kvm_s390_mmu_cache *mc, union crste *crstep,
-			   gfn_t gfn, union asce asce, bool uses_skeys)
+			   gfn_t gfn, struct dat_tables datt)
 {
 	struct crst_table *table;
 	union crste old, new, init;
@@ -282,7 +286,7 @@ static int dat_split_crste(struct kvm_s390_mmu_cache *mc, union crste *crstep,
 
 	old = READ_ONCE(*crstep);
 	if (is_pmd(old))
-		return dat_split_ste(mc, &crstep->pmd, gfn, asce, uses_skeys);
+		return dat_split_ste(mc, &crstep->pmd, gfn, datt);
 
 	BUG_ON(!mc);
 
@@ -307,7 +311,7 @@ static int dat_split_crste(struct kvm_s390_mmu_cache *mc, union crste *crstep,
 		} else {
 			crst_table_init((void *)table, init.val);
 		}
-		if (dat_crstep_xchg_atomic(crstep, old, new, gfn, asce))
+		if (dat_crstep_xchg_atomic(crstep, old, new, gfn, datt.asce))
 			return 0;
 		old = READ_ONCE(*crstep);
 	}
@@ -321,7 +325,7 @@ static int dat_split_crste(struct kvm_s390_mmu_cache *mc, union crste *crstep,
  * @mc: Cache to use to allocate dat tables, if needed; can be NULL if neither
  *      %DAT_WALK_SPLIT or %DAT_WALK_ALLOC is specified in @flags.
  * @gfn: Guest frame.
- * @asce: The ASCE of the address space.
+ * @datt: The DAT tables of the address space.
  * @flags: Flags from WALK_* macros.
  * @walk_level: Level to walk to, from LEVEL_* macros.
  * @last: Will be filled the last visited non-pte DAT entry.
@@ -337,7 +341,6 @@ static int dat_split_crste(struct kvm_s390_mmu_cache *mc, union crste *crstep,
  * * %DAT_WALK_ANY: return successfully even if the requested level could not be reached
  * * %DAT_WALK_CONTINUE: walk to the requested level with the specified flags, and then try to
  *                       continue walking to ptes with only DAT_WALK_ANY
- * * %DAT_WALK_USES_SKEYS: storage keys are in use
  *
  * Context: called with kvm->mmu_lock held.
  *
@@ -350,12 +353,11 @@ static int dat_split_crste(struct kvm_s390_mmu_cache *mc, union crste *crstep,
  * * %-ENOENT if the requested level could not be reached for other reasons
  * * %-ENOMEM if running out of memory while allocating or splitting a table
  */
-int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, int flags,
+int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, struct dat_tables datt, int flags,
 		   int walk_level, union crste **last, union pte **ptepp)
 {
 	union vaddress vaddr = { .addr = gfn_to_gpa(gfn) };
 	bool continue_anyway = flags & DAT_WALK_CONTINUE;
-	bool uses_skeys = flags & DAT_WALK_USES_SKEYS;
 	bool ign_holes = flags & DAT_WALK_IGN_HOLES;
 	bool allocate = flags & DAT_WALK_ALLOC;
 	bool split = flags & DAT_WALK_SPLIT;
@@ -368,15 +370,15 @@ int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, in
 
 	*last = NULL;
 	*ptepp = NULL;
-	if (WARN_ON_ONCE(unlikely(!asce.val)))
+	if (WARN_ON_ONCE(unlikely(!datt.asce.val)))
 		return -EINVAL;
-	if (WARN_ON_ONCE(unlikely(walk_level > asce.dt)))
+	if (WARN_ON_ONCE(unlikely(walk_level > datt.asce.dt)))
 		return -EINVAL;
-	if (!asce_contains_gfn(asce, gfn))
+	if (!dat_tables_contain_gfn(datt, gfn))
 		return PGM_ADDRESSING;
 
-	table = dereference_asce(asce);
-	if (asce.dt >= ASCE_TYPE_REGION1) {
+	table = datt.table;
+	if (datt.asce.dt >= ASCE_TYPE_REGION1) {
 		*last = table->crstes + vaddr.rfx;
 		entry = READ_ONCE(**last);
 		if (WARN_ON_ONCE(entry.h.tt != TABLE_TYPE_REGION1))
@@ -388,7 +390,7 @@ int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, in
 		if (entry.pgd.h.i) {
 			if (!allocate)
 				return any ? 0 : -ENOENT;
-			rc = dat_split_crste(mc, *last, gfn, asce, uses_skeys);
+			rc = dat_split_crste(mc, *last, gfn, datt);
 			if (rc)
 				return rc;
 			entry = READ_ONCE(**last);
@@ -396,7 +398,7 @@ int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, in
 		table = dereference_crste(entry.pgd);
 	}
 
-	if (asce.dt >= ASCE_TYPE_REGION2) {
+	if (datt.asce.dt >= ASCE_TYPE_REGION2) {
 		*last = table->crstes + vaddr.rsx;
 		entry = READ_ONCE(**last);
 		if (WARN_ON_ONCE(entry.h.tt != TABLE_TYPE_REGION2))
@@ -408,7 +410,7 @@ int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, in
 		if (entry.p4d.h.i) {
 			if (!allocate)
 				return any ? 0 : -ENOENT;
-			rc = dat_split_crste(mc, *last, gfn, asce, uses_skeys);
+			rc = dat_split_crste(mc, *last, gfn, datt);
 			if (rc)
 				return rc;
 			entry = READ_ONCE(**last);
@@ -416,7 +418,7 @@ int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, in
 		table = dereference_crste(entry.p4d);
 	}
 
-	if (asce.dt >= ASCE_TYPE_REGION3) {
+	if (datt.asce.dt >= ASCE_TYPE_REGION3) {
 		*last = table->crstes + vaddr.rtx;
 		entry = READ_ONCE(**last);
 		if (WARN_ON_ONCE(entry.h.tt != TABLE_TYPE_REGION3))
@@ -433,7 +435,7 @@ int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, in
 		if (entry.pud.h.i && !entry.pud.h.fc) {
 			if (!allocate)
 				return any ? 0 : -ENOENT;
-			rc = dat_split_crste(mc, *last, gfn, asce, uses_skeys);
+			rc = dat_split_crste(mc, *last, gfn, datt);
 			if (rc)
 				return rc;
 			entry = READ_ONCE(**last);
@@ -441,7 +443,7 @@ int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, in
 		if (walk_level <= TABLE_TYPE_SEGMENT && entry.pud.h.fc) {
 			if (!split)
 				return -EFBIG;
-			rc = dat_split_crste(mc, *last, gfn, asce, uses_skeys);
+			rc = dat_split_crste(mc, *last, gfn, datt);
 			if (rc)
 				return rc;
 			entry = READ_ONCE(**last);
@@ -465,7 +467,7 @@ int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, in
 	if (entry.pmd.h.i && !entry.pmd.h.fc) {
 		if (!allocate)
 			return any ? 0 : -ENOENT;
-		rc = dat_split_ste(mc, &(*last)->pmd, gfn, asce, uses_skeys);
+		rc = dat_split_ste(mc, &(*last)->pmd, gfn, datt);
 		if (rc)
 			return rc;
 		entry = READ_ONCE(**last);
@@ -473,7 +475,7 @@ int dat_entry_walk(struct kvm_s390_mmu_cache *mc, gfn_t gfn, union asce asce, in
 	if (walk_level <= TABLE_TYPE_PAGE_TABLE && entry.pmd.h.fc) {
 		if (!split)
 			return -EFBIG;
-		rc = dat_split_ste(mc, &(*last)->pmd, gfn, asce, uses_skeys);
+		rc = dat_split_ste(mc, &(*last)->pmd, gfn, datt);
 		if (rc)
 			return rc;
 		entry = READ_ONCE(**last);
@@ -555,7 +557,7 @@ static long dat_crste_walk_range(gfn_t start, gfn_t end, struct crst_table *tabl
  * _dat_walk_gfn_range() - Walk DAT tables.
  * @start: The first guest page frame to walk.
  * @end: The guest page frame immediately after the last one to walk.
- * @asce: The ASCE of the guest mapping.
+ * @datt: The DAT tables of the guest mapping.
  * @ops: The gmap_walk_ops that will be used to perform the walk.
  * @flags: Flags from WALK_* (currently only WALK_IGN_HOLES is supported).
  * @priv: Will be passed as-is to the callbacks.
@@ -566,29 +568,28 @@ static long dat_crste_walk_range(gfn_t start, gfn_t end, struct crst_table *tabl
  *         given ASCE unless the DAT_WALK_IGN_HOLES flag is specified,
  *         otherwise it returns whatever the callbacks return.
  */
-long _dat_walk_gfn_range(gfn_t start, gfn_t end, union asce asce,
+long _dat_walk_gfn_range(gfn_t start, gfn_t end, struct dat_tables datt,
 			 const struct dat_walk_ops *ops, int flags, void *priv)
 {
-	struct crst_table *table = dereference_asce(asce);
 	struct dat_walk walk = {
 		.ops	= ops,
-		.asce	= asce,
+		.datt	= datt,
 		.priv	= priv,
 		.flags	= flags,
 		.start	= start,
 		.end	= end,
 	};
 
-	if (WARN_ON_ONCE(unlikely(!asce.val)))
+	if (WARN_ON_ONCE(unlikely(!datt.asce.val)))
 		return -EINVAL;
-	if (!asce_contains_gfn(asce, start))
+	if (!dat_tables_contain_gfn(datt, start))
 		return (flags & DAT_WALK_IGN_HOLES) ? 0 : -EFAULT;
 
-	return dat_crste_walk_range(start, min(end, asce_end(asce)), table, &walk);
+	return dat_crste_walk_range(start, min(end, dat_tables_end(datt)), datt.table, &walk);
 }
 
 #if KVM_S390_MANAGES_S390_GUEST
-int dat_get_storage_key(union asce asce, gfn_t gfn, union skey *skey)
+int dat_get_storage_key(struct dat_tables datt, gfn_t gfn, union skey *skey)
 {
 	union crste *crstep;
 	union pgste pgste;
@@ -597,7 +598,7 @@ int dat_get_storage_key(union asce asce, gfn_t gfn, union skey *skey)
 
 again:
 	skey->skey = 0;
-	rc = dat_entry_walk(NULL, gfn, asce, DAT_WALK_ANY, TABLE_TYPE_PAGE_TABLE, &crstep, &ptep);
+	rc = dat_entry_walk(NULL, gfn, datt, DAT_WALK_ANY, TABLE_TYPE_PAGE_TABLE, &crstep, &ptep);
 	if (rc)
 		return rc;
 
@@ -631,7 +632,7 @@ static void dat_update_ptep_sd(union pgste old, union pgste pgste, union pte *pt
 		__atomic64_or(_PAGE_SD, &ptep->val);
 }
 
-int dat_set_storage_key(struct kvm_s390_mmu_cache *mc, union asce asce, gfn_t gfn,
+int dat_set_storage_key(struct kvm_s390_mmu_cache *mc, struct dat_tables datt, gfn_t gfn,
 			union skey skey, bool nq)
 {
 	union pgste pgste, old;
@@ -640,7 +641,7 @@ int dat_set_storage_key(struct kvm_s390_mmu_cache *mc, union asce asce, gfn_t gf
 	int rc;
 
 again:
-	rc = dat_entry_walk(mc, gfn, asce, DAT_WALK_LEAF_ALLOC, TABLE_TYPE_PAGE_TABLE,
+	rc = dat_entry_walk(mc, gfn, datt, DAT_WALK_LEAF_ALLOC, TABLE_TYPE_PAGE_TABLE,
 			    &crstep, &ptep);
 	if (rc)
 		return rc;
@@ -693,7 +694,7 @@ static bool page_cond_set_storage_key(phys_addr_t paddr, union skey skey, union 
 	return true;
 }
 
-int dat_cond_set_storage_key(struct kvm_s390_mmu_cache *mmc, union asce asce, gfn_t gfn,
+int dat_cond_set_storage_key(struct kvm_s390_mmu_cache *mmc, struct dat_tables datt, gfn_t gfn,
 			     union skey skey, union skey *oldkey, bool nq, bool mr, bool mc)
 {
 	union pgste pgste, old;
@@ -703,7 +704,7 @@ int dat_cond_set_storage_key(struct kvm_s390_mmu_cache *mmc, union asce asce, gf
 	int rc;
 
 again:
-	rc = dat_entry_walk(mmc, gfn, asce, DAT_WALK_LEAF_ALLOC, TABLE_TYPE_PAGE_TABLE,
+	rc = dat_entry_walk(mmc, gfn, datt, DAT_WALK_LEAF_ALLOC, TABLE_TYPE_PAGE_TABLE,
 			    &crstep, &ptep);
 	if (rc)
 		return rc;
@@ -751,7 +752,7 @@ again:
 	return rc;
 }
 
-int dat_reset_reference_bit(union asce asce, gfn_t gfn, union skey *skey)
+int dat_reset_reference_bit(struct dat_tables datt, gfn_t gfn, union skey *skey)
 {
 	union pgste pgste, old;
 	union crste *crstep;
@@ -760,7 +761,7 @@ int dat_reset_reference_bit(union asce asce, gfn_t gfn, union skey *skey)
 
 	skey->skey = 0;
 again:
-	rc = dat_entry_walk(NULL, gfn, asce, DAT_WALK_ANY, TABLE_TYPE_PAGE_TABLE, &crstep, &ptep);
+	rc = dat_entry_walk(NULL, gfn, datt, DAT_WALK_ANY, TABLE_TYPE_PAGE_TABLE, &crstep, &ptep);
 	if (rc)
 		return rc;
 
@@ -828,7 +829,7 @@ static long dat_reset_skeys_crste(union crste *crstep, gfn_t gfn, gfn_t next, st
 	return 0;
 }
 
-long dat_reset_skeys(union asce asce, gfn_t start)
+long dat_reset_skeys(struct dat_tables datt, gfn_t start)
 {
 	const struct dat_walk_ops ops = {
 		.pte_entry = dat_reset_skeys_pte,
@@ -836,7 +837,8 @@ long dat_reset_skeys(union asce asce, gfn_t start)
 		.pud_entry = dat_reset_skeys_crste,
 	};
 
-	return _dat_walk_gfn_range(start, asce_end(asce), asce, &ops, DAT_WALK_IGN_HOLES, NULL);
+	return _dat_walk_gfn_range(start, dat_tables_end(datt), datt, &ops,
+				   DAT_WALK_IGN_HOLES, NULL);
 }
 #endif /* KVM_S390_MANAGES_S390_GUEST */
 
@@ -852,7 +854,7 @@ static long _dat_slot_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct dat_wal
 		return 0;
 
 	pgste = pgste_get_lock(ptep);
-	pgste = __dat_ptep_xchg(ptep, pgste, new_pte, gfn, walk->asce, false);
+	pgste = __dat_ptep_xchg(ptep, pgste, new_pte, gfn, walk->datt);
 	pgste.cmma_d = 0;
 	pgste_set_unlock(ptep, pgste);
 
@@ -872,7 +874,7 @@ static long _dat_slot_crste(union crste *crstep, gfn_t gfn, gfn_t next, struct d
 
 	/* This table entry needs to be updated. */
 	if (walk->start <= gfn && walk->end >= next) {
-		if (!dat_crstep_xchg_atomic(crstep, crste, new_crste, gfn, walk->asce))
+		if (!dat_crstep_xchg_atomic(crstep, crste, new_crste, gfn, walk->datt.asce))
 			return -EINVAL;
 		/* A lower level table was present, needs to be freed. */
 		if (!crste.h.fc && !crste.h.i) {
@@ -889,7 +891,7 @@ static long _dat_slot_crste(union crste *crstep, gfn_t gfn, gfn_t next, struct d
 		return 0;
 	/* Split (install a lower level table), and handle things there. */
 	if (mc)
-		return dat_split_crste(mc, crstep, gfn, walk->asce, false);
+		return dat_split_crste(mc, crstep, gfn, walk->datt);
 	/* A large page should never cross memslots boundaries */
 	return -EINVAL;
 }
@@ -899,9 +901,9 @@ static const struct dat_walk_ops dat_slot_ops = {
 	.crste_ops = { _dat_slot_crste, _dat_slot_crste, _dat_slot_crste, _dat_slot_crste, },
 };
 
-int dat_set_slot(struct kvm_s390_mmu_cache *mc, union asce asce, gfn_t start, gfn_t end)
+int dat_set_slot(struct kvm_s390_mmu_cache *mc, struct dat_tables datt, gfn_t start, gfn_t end)
 {
-	return _dat_walk_gfn_range(start, end, asce, &dat_slot_ops,
+	return _dat_walk_gfn_range(start, end, datt, &dat_slot_ops,
 				   DAT_WALK_IGN_HOLES | DAT_WALK_ANY, mc);
 }
 
@@ -982,7 +984,7 @@ static const struct dat_walk_ops test_age_ops = {
 
 /**
  * dat_test_age_gfn() - Test young.
- * @asce: The ASCE whose address range is to be tested.
+ * @datt: The DAT tables whose address range is to be tested.
  * @start: The first guest frame of the range to check.
  * @end: The guest frame after the last in the range.
  *
@@ -990,9 +992,9 @@ static const struct dat_walk_ops test_age_ops = {
  *
  * Return: %true if any page in the given range is young, otherwise %false.
  */
-bool dat_test_age_gfn(union asce asce, gfn_t start, gfn_t end)
+bool dat_test_age_gfn(struct dat_tables datt, gfn_t start, gfn_t end)
 {
-	return _dat_walk_gfn_range(start, end, asce, &test_age_ops, 0, NULL) > 0;
+	return _dat_walk_gfn_range(start, end, datt, &test_age_ops, 0, NULL) > 0;
 }
 
 #if KVM_S390_MANAGES_S390_GUEST
@@ -1009,7 +1011,7 @@ static long dat_set_pn_crste(union crste *crstep, gfn_t gfn, gfn_t next, struct 
 			break;
 		newcrste = oldcrste;
 		newcrste.s.fc1.prefix_notif = 1;
-	} while (!dat_crstep_xchg_atomic(crstep, oldcrste, newcrste, gfn, walk->asce));
+	} while (!dat_crstep_xchg_atomic(crstep, oldcrste, newcrste, gfn, walk->datt.asce));
 	*n = 2;
 	return 0;
 }
@@ -1029,7 +1031,7 @@ static long dat_set_pn_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct dat_wa
 	return 0;
 }
 
-int dat_set_prefix_notif_bit(union asce asce, gfn_t gfn)
+int dat_set_prefix_notif_bit(struct dat_tables datt, gfn_t gfn)
 {
 	static const struct dat_walk_ops ops = {
 		.pte_entry = dat_set_pn_pte,
@@ -1039,7 +1041,7 @@ int dat_set_prefix_notif_bit(union asce asce, gfn_t gfn)
 
 	int n = 0;
 
-	_dat_walk_gfn_range(gfn, gfn + 2, asce, &ops, DAT_WALK_IGN_HOLES, &n);
+	_dat_walk_gfn_range(gfn, gfn + 2, datt, &ops, DAT_WALK_IGN_HOLES, &n);
 	if (n != 2)
 		return -EAGAIN;
 	return 0;
@@ -1047,7 +1049,7 @@ int dat_set_prefix_notif_bit(union asce asce, gfn_t gfn)
 
 /**
  * dat_perform_essa() - Perform ESSA actions on the PGSTE.
- * @asce: The asce to operate on.
+ * @datt: The DAT tables to operate on.
  * @gfn: The guest page frame to operate on.
  * @orc: The specific action to perform, see the ESSA_SET_* macros.
  * @state: The storage attributes to be returned to the guest.
@@ -1060,14 +1062,15 @@ int dat_set_prefix_notif_bit(union asce asce, gfn_t gfn)
  * * %0 if the page state has been altered, but the page is not to be added to the CBRL
  * * %-1 if the page state has not been altered and the page is not to be added to the CBRL
  */
-int dat_perform_essa(union asce asce, gfn_t gfn, int orc, union essa_state *state, bool *dirty)
+int dat_perform_essa(struct dat_tables datt, gfn_t gfn, int orc,
+		     union essa_state *state, bool *dirty)
 {
 	union crste *crstep;
 	union pgste pgste;
 	union pte *ptep;
 	int res = 0;
 
-	if (dat_entry_walk(NULL, gfn, asce, 0, TABLE_TYPE_PAGE_TABLE, &crstep, &ptep)) {
+	if (dat_entry_walk(NULL, gfn, datt, 0, TABLE_TYPE_PAGE_TABLE, &crstep, &ptep)) {
 		*state = (union essa_state) { .exception = 1 };
 		return -1;
 	}
@@ -1155,13 +1158,13 @@ static long dat_reset_cmma_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct da
 	return 0;
 }
 
-long dat_reset_cmma(union asce asce, gfn_t start)
+long dat_reset_cmma(struct dat_tables datt, gfn_t start)
 {
 	const struct dat_walk_ops dat_reset_cmma_ops = {
 		.pte_entry = dat_reset_cmma_pte,
 	};
 
-	return _dat_walk_gfn_range(start, asce_end(asce), asce, &dat_reset_cmma_ops,
+	return _dat_walk_gfn_range(start, dat_tables_end(datt), datt, &dat_reset_cmma_ops,
 				   DAT_WALK_IGN_HOLES, NULL);
 }
 
@@ -1195,7 +1198,7 @@ static long __dat_peek_cmma_crste(union crste *crstep, gfn_t gfn, gfn_t next, st
 	return 0;
 }
 
-int dat_peek_cmma(gfn_t start, union asce asce, unsigned int *count, u8 *values)
+int dat_peek_cmma(gfn_t start, struct dat_tables datt, unsigned int *count, u8 *values)
 {
 	const struct dat_walk_ops ops = {
 		.pte_entry = __dat_peek_cmma_pte,
@@ -1207,7 +1210,7 @@ int dat_peek_cmma(gfn_t start, union asce asce, unsigned int *count, u8 *values)
 	struct dat_get_cmma_state state = { .values = values, };
 	int rc;
 
-	rc = _dat_walk_gfn_range(start, start + *count, asce, &ops, DAT_WALK_DEFAULT, &state);
+	rc = _dat_walk_gfn_range(start, start + *count, datt, &ops, DAT_WALK_DEFAULT, &state);
 	*count = state.end >= start ? state.end - start : 0;
 	/* Return success if at least one value was saved, otherwise an error. */
 	return (rc == -EFAULT && *count > 0) ? 0 : rc;
@@ -1241,7 +1244,8 @@ static long __dat_get_cmma_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct da
 	return 0;
 }
 
-int dat_get_cmma(union asce asce, gfn_t *start, unsigned int *count, u8 *values, atomic64_t *rem)
+int dat_get_cmma(struct dat_tables datt, gfn_t *start, unsigned int *count,
+		 u8 *values, atomic64_t *rem)
 {
 	const struct dat_walk_ops ops = { .pte_entry = __dat_get_cmma_pte, };
 	struct dat_get_cmma_state state = {
@@ -1251,10 +1255,10 @@ int dat_get_cmma(union asce asce, gfn_t *start, unsigned int *count, u8 *values,
 		.start = -1,
 	};
 
-	_dat_walk_gfn_range(*start, asce_end(asce), asce, &ops, DAT_WALK_IGN_HOLES, &state);
+	_dat_walk_gfn_range(*start, dat_tables_end(datt), datt, &ops, DAT_WALK_IGN_HOLES, &state);
 	/* If no dirty pages were found, wrap around and continue searching */
 	if (*start && state.start == -1)
-		_dat_walk_gfn_range(0, *start, asce, &ops, DAT_WALK_IGN_HOLES, &state);
+		_dat_walk_gfn_range(0, *start, datt, &ops, DAT_WALK_IGN_HOLES, &state);
 
 	if (state.start == -1) {
 		*count = 0;
@@ -1289,7 +1293,7 @@ static long __dat_set_cmma_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct da
 /**
  * dat_set_cmma_bits() - Set CMMA bits for a range of guest pages.
  * @mc: Cache used for allocations.
- * @asce: The ASCE of the guest.
+ * @datt: The DAT tables of the guest.
  * @gfn: The guest frame of the fist page whose CMMA bits are to set.
  * @count: How many pages need to be processed.
  * @mask: Which PGSTE bits should be set.
@@ -1304,7 +1308,7 @@ static long __dat_set_cmma_pte(union pte *ptep, gfn_t gfn, gfn_t next, struct da
  *
  * Return: %0 in case of success, a negative error value otherwise.
  */
-int dat_set_cmma_bits(struct kvm_s390_mmu_cache *mc, union asce asce, gfn_t gfn,
+int dat_set_cmma_bits(struct kvm_s390_mmu_cache *mc, struct dat_tables datt, gfn_t gfn,
 		      unsigned long count, unsigned long mask, const uint8_t *bits)
 {
 	const struct dat_walk_ops ops = { .pte_entry = __dat_set_cmma_pte, };
@@ -1315,11 +1319,11 @@ int dat_set_cmma_bits(struct kvm_s390_mmu_cache *mc, union asce asce, gfn_t gfn,
 	int rc;
 
 	for (cur = ALIGN_DOWN(gfn, _PAGE_ENTRIES); cur < gfn + count; cur += _PAGE_ENTRIES) {
-		rc = dat_entry_walk(mc, cur, asce, DAT_WALK_ALLOC, TABLE_TYPE_PAGE_TABLE,
+		rc = dat_entry_walk(mc, cur, datt, DAT_WALK_ALLOC, TABLE_TYPE_PAGE_TABLE,
 				    &crstep, &ptep);
 		if (rc)
 			return rc;
 	}
-	return _dat_walk_gfn_range(gfn, gfn + count, asce, &ops, DAT_WALK_IGN_HOLES, &state);
+	return _dat_walk_gfn_range(gfn, gfn + count, datt, &ops, DAT_WALK_IGN_HOLES, &state);
 }
 #endif /* KVM_S390_MANAGES_S390_GUEST */

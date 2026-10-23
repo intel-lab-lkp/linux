@@ -563,25 +563,23 @@ static int kvm_s390_keyop(struct kvm_s390_mmu_cache *mc, struct kvm *kvm, int op
 			  unsigned long addr, union skey skey)
 {
 	gfn_t gfn = gpa_to_gfn(addr);
-	union asce asce;
 	int r;
 
 	guard(read_lock)(&kvm->mmu_lock);
-	asce = kvm->arch.gmap->asce;
 
 	switch (op) {
 	case KVM_S390_KEYOP_SSKE:
-		r = dat_cond_set_storage_key(mc, asce, gfn, skey, &skey, 0, 0, 0);
+		r = dat_cond_set_storage_key(mc, kvm->arch.gmap->datt, gfn, skey, &skey, 0, 0, 0);
 		if (r == 0 || r == 1)
 			return skey.skey;
 		break;
 	case KVM_S390_KEYOP_ISKE:
-		r = dat_get_storage_key(asce, gfn, &skey);
+		r = dat_get_storage_key(kvm->arch.gmap->datt, gfn, &skey);
 		if (!r)
 			return skey.skey;
 		break;
 	case KVM_S390_KEYOP_RRBE:
-		r = dat_reset_reference_bit(asce, gfn, &skey);
+		r = dat_reset_reference_bit(kvm->arch.gmap->datt, gfn, &skey);
 		if (!r)
 			return skey.skey;
 		break;
@@ -1001,7 +999,7 @@ static int kvm_s390_set_mem_control(struct kvm *kvm, struct kvm_device_attr *att
 		VM_EVENT(kvm, 3, "%s", "RESET: CMMA states");
 		do {
 			scoped_guard(read_lock, &kvm->mmu_lock)
-				start_gfn = dat_reset_cmma(kvm->arch.gmap->asce, start_gfn);
+				start_gfn = dat_reset_cmma(kvm->arch.gmap->datt, start_gfn);
 		} while (start_gfn);
 		ret = 0;
 		break;
@@ -1048,7 +1046,7 @@ static int kvm_s390_set_mem_control(struct kvm *kvm, struct kvm_device_attr *att
 		if (ret)
 			break;
 		VM_EVENT(kvm, 3, "SET: max guest address: %lu", new_limit);
-		VM_EVENT(kvm, 3, "New guest asce: 0x%p", (void *)kvm->arch.gmap->asce.val);
+		VM_EVENT(kvm, 3, "New guest asce: 0x%p", (void *)kvm->arch.gmap->datt.asce.val);
 		break;
 	}
 	default:
@@ -2174,7 +2172,7 @@ static int kvm_s390_get_skeys(struct kvm *kvm, struct kvm_s390_skeys *args)
 
 	scoped_guard(read_lock, &kvm->mmu_lock) {
 		for (i = 0; i < args->count; i++) {
-			r = dat_get_storage_key(kvm->arch.gmap->asce,
+			r = dat_get_storage_key(kvm->arch.gmap->datt,
 						args->start_gfn + i, keys + i);
 			if (r)
 				break;
@@ -2241,7 +2239,7 @@ static int kvm_s390_set_skeys(struct kvm *kvm, struct kvm_s390_skeys *args)
 			break;
 		scoped_guard(read_lock, &kvm->mmu_lock) {
 			for (i = 0 ; i < args->count; i++) {
-				r = dat_set_storage_key(mc, kvm->arch.gmap->asce,
+				r = dat_set_storage_key(mc, kvm->arch.gmap->datt,
 							args->start_gfn + i, keys[i], 0);
 				if (r)
 					break;
@@ -2295,10 +2293,10 @@ static int kvm_s390_get_cmma_bits(struct kvm *kvm,
 
 	scoped_guard(read_lock, &kvm->mmu_lock) {
 		if (peek)
-			ret = dat_peek_cmma(args->start_gfn, kvm->arch.gmap->asce, &args->count,
+			ret = dat_peek_cmma(args->start_gfn, kvm->arch.gmap->datt, &args->count,
 					    values);
 		else
-			ret = dat_get_cmma(kvm->arch.gmap->asce, &args->start_gfn, &args->count,
+			ret = dat_get_cmma(kvm->arch.gmap->datt, &args->start_gfn, &args->count,
 					   values, &kvm->arch.cmma_dirty_pages);
 	}
 
@@ -2354,12 +2352,13 @@ static int kvm_s390_set_cmma_bits(struct kvm *kvm,
 		if (r)
 			return r;
 		scoped_guard(read_lock, &kvm->mmu_lock) {
-			r = dat_set_cmma_bits(mc, kvm->arch.gmap->asce, args->start_gfn,
+			r = dat_set_cmma_bits(mc, kvm->arch.gmap->datt, args->start_gfn,
 					      args->count, args->mask, bits);
 		}
 	} while (r == -ENOMEM);
 
-	set_bit(GMAP_FLAG_USES_CMM, &kvm->arch.gmap->flags);
+	WRITE_ONCE(kvm->arch.gmap->datt.has_pgstes, true);
+	WRITE_ONCE(kvm->arch.gmap->datt.uses_cmma, true);
 
 	return r <= 0 ? r : -EFAULT;
 }
@@ -3357,7 +3356,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 			goto out_err;
 		set_bit(GMAP_FLAG_IS_UCONTROL, &kvm->arch.gmap->flags);
 	} else {
-		struct crst_table *table = dereference_asce(kvm->arch.gmap->asce);
+		struct crst_table *table = kvm->arch.gmap->datt.table;
 
 		crst_table_init((void *)table, _CRSTE_HOLE(table->crstes[0].h.tt).val);
 	}
@@ -4335,7 +4334,7 @@ static int kvm_s390_fixup_prefix(struct kvm_vcpu *vcpu)
 		return rc;
 
 	scoped_guard(write_lock, &vcpu->kvm->mmu_lock)
-		rc = dat_set_prefix_notif_bit(vcpu->kvm->arch.gmap->asce, gfn);
+		rc = dat_set_prefix_notif_bit(vcpu->kvm->arch.gmap->datt, gfn);
 	return rc;
 }
 
@@ -4813,7 +4812,7 @@ xfer_to_guest_mode_check:
 
 		sie_return = kvm_s390_enter_exit_sie(vcpu->arch.sie_block,
 						     vcpu->run->s.regs.gprs,
-						     vcpu->arch.gmap->asce.val);
+						     vcpu->arch.gmap->datt.asce.val);
 
 		__enable_cpu_timer_accounting(vcpu);
 		guest_timing_exit_irqoff();
@@ -5776,7 +5775,7 @@ void kvm_s390_update_cmma_dirty(struct kvm *kvm, const struct kvm_memory_slot *o
 
 	if (kvm->arch.migration_mode && kvm->arch.use_cmma && old) {
 		_dat_walk_gfn_range(old->base_gfn, old->base_gfn + old->npages,
-				    kvm->arch.gmap->asce, &ops, DAT_WALK_IGN_HOLES,
+				    kvm->arch.gmap->datt, &ops, DAT_WALK_IGN_HOLES,
 				    &kvm->arch.cmma_dirty_pages);
 	}
 }
@@ -5842,7 +5841,7 @@ long kvm_arch_vcpu_pre_fault_memory(struct kvm_vcpu *vcpu, struct kvm_pre_fault_
 bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 {
 	scoped_guard(read_lock, &kvm->mmu_lock)
-		return dat_test_age_gfn(kvm->arch.gmap->asce, range->start, range->end);
+		return dat_test_age_gfn(kvm->arch.gmap->datt, range->start, range->end);
 }
 
 /**
