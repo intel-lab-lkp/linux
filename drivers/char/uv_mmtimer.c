@@ -154,6 +154,13 @@ static int uv_mmtimer_mmap(struct file *file, struct vm_area_struct *vma)
 	if (vma->vm_flags & VM_WRITE)
 		return -EPERM;
 
+	/*
+	 * The mmtimer page is a system-wide read-only register page.
+	 * Prevent the mapping from being upgraded to writable with
+	 * mprotect().
+	 */
+	vm_flags_clear(vma, VM_MAYWRITE);
+
 	if (PAGE_SIZE > (1 << 16))
 		return -ENOSYS;
 
