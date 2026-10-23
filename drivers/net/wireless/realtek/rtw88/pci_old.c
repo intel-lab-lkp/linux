@@ -518,5 +518,12 @@ const struct rtw_pci_gen rtw_pci_gen_old = {
 	.rx_napi = rtw_pci_old_rx_napi,
 	.clkreq_set = rtw_pci_old_clkreq_set,
 	.aspm_set = rtw_pci_old_aspm_set,
+
+	.irq_mask = { IMR_HIGHDOK | IMR_MGNTDOK | IMR_BKDOK |
+		      IMR_BEDOK | IMR_VIDOK | IMR_VODOK | IMR_ROK |
+		      IMR_BCNDMAINT_E | IMR_C2HCMD | IMR_RDU,
+		      IMR_TXFOVW | IMR_RXFOVW,
+		      0,
+		      0, }
 };
 EXPORT_SYMBOL(rtw_pci_gen_old);
