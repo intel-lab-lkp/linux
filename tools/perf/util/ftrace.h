@@ -119,6 +119,8 @@ struct ftrace_task_state {
 	int			depth;
 	int			inlined_depth;
 	int			overflow_depth;
+	u64			seq;
+	int			min_raw_indent;
 };
 
 bool ftrace_parse_retaddr(const char *str, char *sym_name, size_t sym_len, u64 *offset);
