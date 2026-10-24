@@ -8,7 +8,9 @@
 #include <linux/mutex.h>
 #include <linux/rwsem.h>
 #include <linux/srcu.h>
+#include <linux/timecounter.h>
 #include <linux/spinlock_types.h>
+#include <linux/seqlock_types.h>
 #include <linux/refcount_types.h>
 
 #include "ice_type.h"
@@ -37,12 +39,39 @@ struct ice_port_list {
 
 /**
  * struct ice_phc - PTP Hardware Clock fields
+ *
+ * Structure used for handling the timestamp extension logic for this device.
+ * Devices will either use the legacy timestamp extension logic or
+ * a timecounter, not both.
+ *
+ * For simplicity, the timecounter fields are initialized as part of creating
+ * the ice_adapter regardless of whether the device will actually use them.
+ * The PTP clock owner is responsible for setting use_timecounter and
+ * initializing the timecounter to the correct start time.
+ *
+ * Legacy timestamp extension fields:
  * @cached_time: Cached copy of the PHC time for timestamp extension
+ *
+ * struct timecounter fields:
+ * @tc: timecounter representing the current time
+ * @cc: cyclecounter underlying the timecounter
+ * @tc_lock: seqlock_t used to protect access to the timecounter
+ *
+ * General fields:
  * @update_jiffies: Jiffies when PHC was last updated
+ * @use_timecounter: if true, the device uses the timecounter
  */
 struct ice_phc {
+	/* Legacy timestamp extension fields */
 	u64 cached_time;
+
+	/* struct timecounter fields */
+	struct timecounter tc;
+	struct cyclecounter cc;
+	seqlock_t tc_lock;
+
 	unsigned long update_jiffies;
+	u8 use_timecounter : 1;
 };
 
 /**

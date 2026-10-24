@@ -6,6 +6,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/seqlock.h>
 #include <linux/srcu.h>
 #include <linux/xarray.h>
 #include "ice_adapter.h"
@@ -81,6 +82,15 @@ static struct ice_adapter *ice_adapter_new(struct pci_dev *pdev)
 	init_rwsem(&adapter->ctrl_pf_lock);
 
 	mutex_init(&adapter->ps_lock);
+
+	adapter->phc.cc.mask = CYCLECOUNTER_MASK(32);
+	adapter->phc.cc.mult = 1;
+	adapter->phc.cc.shift = 0;
+	adapter->phc.cc.read = ice_ptp_read_cycles;
+
+	timecounter_init(&adapter->phc.tc, &adapter->phc.cc, 0);
+
+	seqlock_init(&adapter->phc.tc_lock);
 
 	return adapter;
 }
