@@ -470,6 +470,60 @@ static int navi10_store_powerplay_table(struct smu_context *smu)
 	return 0;
 }
 
+static bool navi14_needs_trained_uclk(struct amdgpu_device *adev)
+{
+	struct pci_dev *pdev = adev->pdev;
+
+	return pdev->vendor == PCI_VENDOR_ID_ATI &&
+		pdev->device == 0x7340 &&
+		pdev->subsystem_vendor == PCI_VENDOR_ID_APPLE &&
+		(pdev->subsystem_device == 0x020f ||
+		 pdev->subsystem_device == 0x0210);
+}
+
+/*
+ * The pptable of these boards lists other UCLK levels than the VBIOS trained
+ * the UMC p-state sets at, and the SMU hangs switching into such a level.
+ */
+static void navi14_use_trained_uclk_levels(struct smu_context *smu)
+{
+	struct amdgpu_device *adev = smu->adev;
+	PPTable_t *pptable = smu->smu_table.driver_pptable;
+	struct atom_umc_info_v3_3 *umc_info;
+	uint16_t trained[NUM_UCLK_DPM_LEVELS];
+	uint16_t size;
+	uint8_t frev, crev;
+	int index, i;
+
+	if (!navi14_needs_trained_uclk(adev) ||
+	    pptable->DpmDescriptor[PPCLK_UCLK].NumDiscreteLevels != NUM_UCLK_DPM_LEVELS)
+		return;
+
+	index = get_index_into_master_table(atom_master_list_of_data_tables_v2_1,
+					    umc_info);
+	if (amdgpu_atombios_get_data_table(adev, index, &size, &frev, &crev,
+					   (uint8_t **)&umc_info) ||
+	    frev != 3 || crev != 3 || size < sizeof(*umc_info))
+		return;
+
+	for (i = 0; i < NUM_UCLK_DPM_LEVELS; i++) {
+		trained[i] = le32_to_cpu(umc_info->pstate_uclk_10khz[MAX_UCLK_DPM_LEVEL - i]) / 100;
+		if (!trained[i] || (i && trained[i] <= trained[i - 1]))
+			return;
+	}
+
+	for (i = 0; i < NUM_UCLK_DPM_LEVELS; i++) {
+		if (pptable->FreqTableUclk[i] == trained[i])
+			continue;
+		dev_info(adev->dev, "UCLK level %d: %u MHz -> %u MHz, as trained by the VBIOS\n",
+			 i, pptable->FreqTableUclk[i], trained[i]);
+		pptable->FreqTableUclk[i] = trained[i];
+	}
+
+	pptable->DcModeMaxFreq[PPCLK_UCLK] = min(pptable->DcModeMaxFreq[PPCLK_UCLK],
+						 trained[MAX_UCLK_DPM_LEVEL]);
+}
+
 static int navi10_setup_pptable(struct smu_context *smu)
 {
 	int ret = 0;
@@ -481,6 +535,8 @@ static int navi10_setup_pptable(struct smu_context *smu)
 	ret = navi10_store_powerplay_table(smu);
 	if (ret)
 		return ret;
+
+	navi14_use_trained_uclk_levels(smu);
 
 	ret = navi10_append_powerplay_table(smu);
 	if (ret)
