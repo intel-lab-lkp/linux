@@ -2414,12 +2414,18 @@ static int platform_profile_victus_s_get_ec(enum platform_profile_option *profil
 						       &current_gpu_slowdown_temp);
 		if (ret < 0)
 			return ret;
-		if (current_ctgp_state == 0 && current_ppab_state == 0)
+		if (current_ctgp_state == 0 && current_ppab_state == 0) {
 			*profile = PLATFORM_PROFILE_LOW_POWER;
-		else if (current_ctgp_state == 0 && current_ppab_state == 1)
+		} else if (current_ppab_state == 1) {
+			/*
+			 * cTGP stays enabled when the EC thermal profile timer
+			 * drops performance back to default, so treat it as
+			 * balanced, which the caller can set again.
+			 */
 			*profile = PLATFORM_PROFILE_BALANCED;
-		else
+		} else {
 			return -EINVAL;
+		}
 	} else {
 		return -EINVAL;
 	}
