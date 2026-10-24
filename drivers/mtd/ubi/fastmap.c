@@ -558,7 +558,7 @@ static int ubi_attach_fastmap(struct ubi_device *ubi,
 	struct ubi_fm_ec *fmec;
 	struct ubi_fm_volhdr *fmvhdr;
 	struct ubi_fm_eba *fm_eba;
-	int ret, i, j, pool_size, wl_pool_size;
+	int ret, i, j, pnum, pool_size, wl_pool_size;
 	size_t fm_pos = 0, fm_size = ubi->fm_size;
 	unsigned long long max_sqnum = 0;
 	void *fm_raw = ubi->fm_buf;
@@ -640,8 +640,13 @@ static int ubi_attach_fastmap(struct ubi_device *ubi,
 		if (fm_pos >= fm_size)
 			goto fail_bad;
 
-		ret = add_aeb(ai, &ai->free, be32_to_cpu(fmec->pnum),
-			      be32_to_cpu(fmec->ec), 0);
+		pnum = be32_to_cpu(fmec->pnum);
+		if (pnum < 0 || pnum >= ubi->peb_count) {
+			ubi_err(ubi, "bad PEB %i in fastmap free list", pnum);
+			goto fail_bad;
+		}
+
+		ret = add_aeb(ai, &ai->free, pnum, be32_to_cpu(fmec->ec), 0);
 		if (ret)
 			goto fail;
 	}
@@ -653,8 +658,13 @@ static int ubi_attach_fastmap(struct ubi_device *ubi,
 		if (fm_pos >= fm_size)
 			goto fail_bad;
 
-		ret = add_aeb(ai, &used, be32_to_cpu(fmec->pnum),
-			      be32_to_cpu(fmec->ec), 0);
+		pnum = be32_to_cpu(fmec->pnum);
+		if (pnum < 0 || pnum >= ubi->peb_count) {
+			ubi_err(ubi, "bad PEB %i in fastmap used list", pnum);
+			goto fail_bad;
+		}
+
+		ret = add_aeb(ai, &used, pnum, be32_to_cpu(fmec->ec), 0);
 		if (ret)
 			goto fail;
 	}
@@ -666,8 +676,13 @@ static int ubi_attach_fastmap(struct ubi_device *ubi,
 		if (fm_pos >= fm_size)
 			goto fail_bad;
 
-		ret = add_aeb(ai, &used, be32_to_cpu(fmec->pnum),
-			      be32_to_cpu(fmec->ec), 1);
+		pnum = be32_to_cpu(fmec->pnum);
+		if (pnum < 0 || pnum >= ubi->peb_count) {
+			ubi_err(ubi, "bad PEB %i in fastmap scrub list", pnum);
+			goto fail_bad;
+		}
+
+		ret = add_aeb(ai, &used, pnum, be32_to_cpu(fmec->ec), 1);
 		if (ret)
 			goto fail;
 	}
@@ -679,8 +694,13 @@ static int ubi_attach_fastmap(struct ubi_device *ubi,
 		if (fm_pos >= fm_size)
 			goto fail_bad;
 
-		ret = add_aeb(ai, &ai->erase, be32_to_cpu(fmec->pnum),
-			      be32_to_cpu(fmec->ec), 1);
+		pnum = be32_to_cpu(fmec->pnum);
+		if (pnum < 0 || pnum >= ubi->peb_count) {
+			ubi_err(ubi, "bad PEB %i in fastmap erase list", pnum);
+			goto fail_bad;
+		}
+
+		ret = add_aeb(ai, &ai->erase, pnum, be32_to_cpu(fmec->ec), 1);
 		if (ret)
 			goto fail;
 	}
@@ -732,7 +752,7 @@ static int ubi_attach_fastmap(struct ubi_device *ubi,
 		}
 
 		for (j = 0; j < be32_to_cpu(fm_eba->reserved_pebs); j++) {
-			int pnum = be32_to_cpu(fm_eba->pnum[j]);
+			pnum = be32_to_cpu(fm_eba->pnum[j]);
 
 			if (pnum < 0)
 				continue;
