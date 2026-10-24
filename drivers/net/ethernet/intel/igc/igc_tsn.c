@@ -2,8 +2,6 @@
 /* Copyright (c)  2019 Intel Corporation */
 
 #include "igc.h"
-#include "igc_base.h"
-#include "igc_hw.h"
 #include "igc_tsn.h"
 
 #define MIN_MULTPLIER_TX_MIN_FRAG	0

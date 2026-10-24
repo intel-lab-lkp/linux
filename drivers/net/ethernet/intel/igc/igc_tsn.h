@@ -67,4 +67,4 @@ static inline bool igc_fpe_transmitted_smd_v(union igc_adv_tx_desc *tx_desc)
 	return smd == SMD_V;
 }
 
-#endif /* _IGC_BASE_H */
+#endif /* _IGC_TSN_H */
