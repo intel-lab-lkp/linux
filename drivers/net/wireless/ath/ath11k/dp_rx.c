@@ -4656,15 +4656,13 @@ static void ath11k_hal_rx_msdu_list_get(struct ath11k *ar,
 	*num_msdus = i;
 }
 
-static u32 ath11k_dp_rx_mon_comp_ppduid(u32 msdu_ppdu_id, u32 *ppdu_id,
-					u32 *rx_bufs_used)
+static bool ath11k_dp_rx_mon_comp_ppduid(u32 msdu_ppdu_id, u32 *ppdu_id,
+					 u32 *rx_bufs_used)
 {
-	u32 ret = 0;
-
 	if ((*ppdu_id < msdu_ppdu_id) &&
 	    ((msdu_ppdu_id - *ppdu_id) < DP_NOT_PPDU_ID_WRAP_AROUND)) {
 		*ppdu_id = msdu_ppdu_id;
-		ret = msdu_ppdu_id;
+		return true;
 	} else if ((*ppdu_id > msdu_ppdu_id) &&
 		((*ppdu_id - msdu_ppdu_id) > DP_NOT_PPDU_ID_WRAP_AROUND)) {
 		/* mon_dst is behind than mon_status
@@ -4672,9 +4670,9 @@ static u32 ath11k_dp_rx_mon_comp_ppduid(u32 msdu_ppdu_id, u32 *ppdu_id,
 		 */
 		*rx_bufs_used += 1;
 		*ppdu_id = msdu_ppdu_id;
-		ret = msdu_ppdu_id;
+		return true;
 	}
-	return ret;
+	return false;
 }
 
 static void ath11k_dp_mon_get_buf_len(struct hal_rx_msdu_desc_info *info,
