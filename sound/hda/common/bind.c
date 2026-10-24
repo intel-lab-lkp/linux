@@ -145,6 +145,9 @@ static int hda_codec_driver_probe(struct device *dev)
  error_module:
 	snd_hdac_device_disable_unsol(&codec->core);
 	cancel_delayed_work_sync(&codec->jackpoll_work);
+	/* A late probe can already have published working PCM components. */
+	snd_hda_codec_disconnect_pcms(codec);
+	snd_refcount_sync(&codec->pcm_ref);
 	if (probed && driver->ops->remove)
 		driver->ops->remove(codec);
  error_module_put:
