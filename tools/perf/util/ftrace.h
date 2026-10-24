@@ -42,6 +42,8 @@ struct perf_ftrace {
 	int			graph_verbose;
 	int			graph_thresh;
 	int			graph_tail;
+	bool			use_inline;
+	struct machine		*machine;
 };
 
 struct filter_entry {
@@ -96,36 +98,18 @@ perf_ftrace__latency_cleanup_bpf(struct perf_ftrace *ftrace __maybe_unused)
 
 #endif  /* HAVE_BPF_SKEL */
 
-#define FTRACE_MAX_CPUS 4096
-#define FTRACE_MAX_STACK 256
-#define FTRACE_PID_HASH_BITS 10
-#define FTRACE_PID_HASH_SIZE (1 << FTRACE_PID_HASH_BITS)
+struct machine;
 
-#define FTRACE_IDLE_PID(cpu)       ((pid_t)(-1 - (cpu)))
-#define FTRACE_UNKNOWN_PID(cpu)    ((pid_t)(-1 - FTRACE_MAX_CPUS - (cpu)))
-
-struct ftrace_stack_frame {
-	char *name;
-	bool inlined;
-	int indent;
-	int raw_indent;
-};
-
-struct ftrace_task_state {
-	struct hlist_node	node;
-	pid_t			pid;
-	struct ftrace_stack_frame *stack;
-	int			max_stack;
-	int			depth;
-	int			inlined_depth;
-	int			overflow_depth;
-	u64			seq;
-	int			min_raw_indent;
-};
+#define FTRACE_MAX_INLINES 32
 
 bool ftrace_parse_retaddr(const char *str, char *sym_name, size_t sym_len, u64 *offset);
 void ftrace_filter_retaddr(char *str);
-void ftrace_cpu_states__clear(void);
+int ftrace_resolve_inlines(struct machine *machine,
+			   const char *sym_name, u64 offset,
+			   const char **inlined_names, int max_inlines);
 int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FILE *out);
+void ftrace_cpu_states__clear(void);
+int perf_ftrace__setup_inlines(struct perf_ftrace *ftrace);
+void perf_ftrace__cleanup_inlines(struct perf_ftrace *ftrace);
 
 #endif  /* __PERF_FTRACE_H__ */
