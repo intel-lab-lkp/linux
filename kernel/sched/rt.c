@@ -2592,8 +2592,14 @@ static int task_is_throttled_rt(struct task_struct *p, int cpu)
 	struct rt_rq *rt_rq;
 
 #ifdef CONFIG_RT_GROUP_SCHED // XXX maybe add task_rt_rq(), see also sched_rt_period_rt_rq
-	rt_rq = task_group(p)->rt_rq[cpu];
-	WARN_ON(!rt_group_sched_enabled() && rt_rq->tg != &root_task_group);
+	/*
+	 * With RT group scheduling disabled at runtime, non-root task
+	 * groups have no rt_rq; all RT tasks live on the root rt_rq.
+	 */
+	if (rt_group_sched_enabled())
+		rt_rq = task_group(p)->rt_rq[cpu];
+	else
+		rt_rq = &cpu_rq(cpu)->rt;
 #else
 	rt_rq = &cpu_rq(cpu)->rt;
 #endif
