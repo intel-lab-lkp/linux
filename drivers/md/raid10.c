@@ -4065,6 +4065,10 @@ static int raid10_run(struct mddev *mddev)
 		}
 	}
 
+	/* Do not try to resync if there is no room for redundant data. */
+	if ((conf->geo.raid_disks - mddev->degraded) * conf->copies == conf->geo.raid_disks)
+		mddev->resync_offset = MaxSector;
+
 	if (mddev->resync_offset != MaxSector)
 		pr_notice("md/raid10:%s: not clean -- starting background reconstruction\n",
 			  mdname(mddev));
