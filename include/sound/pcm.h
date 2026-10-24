@@ -543,11 +543,13 @@ struct snd_pcm {
 	struct snd_pcm_str streams[2];
 	struct mutex open_mutex;
 	wait_queue_head_t open_wait;
+	struct snd_refcount users; /* minor lookups and open files */
 	void *private_data;
 	void (*private_free) (struct snd_pcm *pcm);
 	bool internal; /* pcm is for internal use only */
 	bool nonatomic; /* whole PCM operations are in non-atomic context */
 	bool no_device_suspend; /* don't invoke device PM suspend */
+	bool disconnected; /* no new substream may be attached */
 #if IS_ENABLED(CONFIG_SND_PCM_OSS)
 	struct snd_pcm_oss oss;
 #endif
@@ -558,6 +560,13 @@ struct snd_pcm {
  */
 
 extern const struct file_operations snd_pcm_f_ops[2];
+
+struct snd_pcm *snd_pcm_get_by_minor(unsigned int minor, int type);
+
+static inline void snd_pcm_put(struct snd_pcm *pcm)
+{
+	snd_refcount_put(&pcm->users);
+}
 
 int snd_pcm_new(struct snd_card *card, const char *id, int device,
 		int playback_count, int capture_count,

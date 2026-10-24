@@ -725,6 +725,7 @@ static int _snd_pcm_new(struct snd_card *card, const char *id, int device,
 	pcm->internal = internal;
 	mutex_init(&pcm->open_mutex);
 	init_waitqueue_head(&pcm->open_wait);
+	snd_refcount_init(&pcm->users);
 	INIT_LIST_HEAD(&pcm->list);
 	if (id)
 		strscpy(pcm->id, id, sizeof(pcm->id));
@@ -862,6 +863,14 @@ static int snd_pcm_free(struct snd_pcm *pcm)
 	if (!pcm)
 		return 0;
 	if (!pcm->internal) {
+		/* Also close lookup admission for BUILD-state cleanup. */
+		scoped_guard(mutex, &register_mutex) {
+			scoped_guard(mutex, &pcm->open_mutex) {
+				pcm->disconnected = true;
+				wake_up(&pcm->open_wait);
+			}
+		}
+		snd_refcount_sync(&pcm->users);
 		scoped_guard(mutex, &register_mutex)
 			pcm_call_notify(pcm, n_unregister);
 	}
@@ -897,6 +906,8 @@ int snd_pcm_attach_substream(struct snd_pcm *pcm, int stream,
 		       stream != SNDRV_PCM_STREAM_CAPTURE))
 		return -EINVAL;
 	*rsubstream = NULL;
+	if (pcm->disconnected)
+		return -ENODEV;
 	pstr = &pcm->streams[stream];
 	if (pstr->substream == NULL || pstr->substream_count == 0)
 		return -ENODEV;
@@ -1015,6 +1026,44 @@ void snd_pcm_detach_substream(struct snd_pcm_substream *substream)
 	substream->pstr->substream_opened--;
 }
 
+static struct snd_pcm *pcm_get_from_minor(unsigned int minor, int type,
+					  void *(*lookup)(unsigned int, int))
+{
+	struct snd_pcm *pcm;
+	struct snd_card *card;
+
+	scoped_guard(mutex, &register_mutex) {
+		pcm = lookup(minor, type);
+		if (!pcm)
+			return NULL;
+		if (!pcm->disconnected) {
+			snd_refcount_get(&pcm->users);
+			return pcm;
+		}
+		card = pcm->card;
+	}
+	snd_card_unref(card);
+	return NULL;
+}
+
+/**
+ * snd_pcm_get_by_minor - look up and retain a native PCM component
+ * @minor: native ALSA minor number
+ * @type: playback or capture PCM device type
+ *
+ * The lookup holds the PCM registration mutex through reference acquisition.
+ * The caller must release both the PCM reference with snd_pcm_put() and the
+ * card reference with snd_card_unref(). An open file retains its PCM reference
+ * until release, including any mappings that keep the file alive.
+ *
+ * Return: A referenced PCM, or NULL if the minor is absent or disconnected.
+ */
+struct snd_pcm *snd_pcm_get_by_minor(unsigned int minor, int type)
+{
+	return pcm_get_from_minor(minor, type, snd_lookup_minor_data);
+}
+EXPORT_SYMBOL_GPL(snd_pcm_get_by_minor);
+
 static ssize_t pcm_class_show(struct device *dev,
 			      struct device_attribute *attr, char *buf)
 {
@@ -1081,13 +1130,16 @@ static int snd_pcm_dev_register(struct snd_device *device)
 					  &snd_pcm_f_ops[cidx], pcm,
 					  pcm->streams[cidx].dev);
 		if (err < 0) {
+			while (--cidx >= 0)
+				if (pcm->streams[cidx].substream)
+					snd_unregister_device(pcm->streams[cidx].dev);
 			list_del_init(&pcm->list);
 			return err;
 		}
-
-		for (substream = pcm->streams[cidx].substream; substream; substream = substream->next)
-			snd_pcm_timer_init(substream);
 	}
+
+	for_each_pcm_substream(pcm, cidx, substream)
+		snd_pcm_timer_init(substream);
 
 	pcm_call_notify(pcm, n_register);
 	return err;
@@ -1101,6 +1153,7 @@ static int snd_pcm_dev_disconnect(struct snd_device *device)
 
 	guard(mutex)(&register_mutex);
 	scoped_guard(mutex, &pcm->open_mutex) {
+		pcm->disconnected = true;
 		wake_up(&pcm->open_wait);
 		list_del_init(&pcm->list);
 

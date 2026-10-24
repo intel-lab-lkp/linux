@@ -2355,17 +2355,20 @@ static bool is_pcm_file(struct file *file)
 {
 	struct inode *inode = file_inode(file);
 	struct snd_pcm *pcm;
+	struct snd_card *card;
 	unsigned int minor;
 
 	if (!S_ISCHR(inode->i_mode) || imajor(inode) != snd_major)
 		return false;
 	minor = iminor(inode);
-	pcm = snd_lookup_minor_data(minor, SNDRV_DEVICE_TYPE_PCM_PLAYBACK);
+	pcm = snd_pcm_get_by_minor(minor, SNDRV_DEVICE_TYPE_PCM_PLAYBACK);
 	if (!pcm)
-		pcm = snd_lookup_minor_data(minor, SNDRV_DEVICE_TYPE_PCM_CAPTURE);
+		pcm = snd_pcm_get_by_minor(minor, SNDRV_DEVICE_TYPE_PCM_CAPTURE);
 	if (!pcm)
 		return false;
-	snd_card_unref(pcm->card);
+	card = pcm->card;
+	snd_pcm_put(pcm);
+	snd_card_unref(card);
 	return true;
 }
 
@@ -2942,11 +2945,16 @@ static int snd_pcm_playback_open(struct inode *inode, struct file *file)
 
 	nonseekable_open(inode, file);
 
-	pcm = snd_lookup_minor_data(iminor(inode),
-				    SNDRV_DEVICE_TYPE_PCM_PLAYBACK);
+	pcm = snd_pcm_get_by_minor(iminor(inode),
+				   SNDRV_DEVICE_TYPE_PCM_PLAYBACK);
 	err = snd_pcm_open(file, pcm, SNDRV_PCM_STREAM_PLAYBACK);
-	if (pcm)
-		snd_card_unref(pcm->card);
+	if (pcm) {
+		struct snd_card *card = pcm->card;
+
+		if (err < 0)
+			snd_pcm_put(pcm);
+		snd_card_unref(card);
+	}
 	return err;
 }
 
@@ -2957,11 +2965,16 @@ static int snd_pcm_capture_open(struct inode *inode, struct file *file)
 
 	nonseekable_open(inode, file);
 
-	pcm = snd_lookup_minor_data(iminor(inode),
-				    SNDRV_DEVICE_TYPE_PCM_CAPTURE);
+	pcm = snd_pcm_get_by_minor(iminor(inode),
+				   SNDRV_DEVICE_TYPE_PCM_CAPTURE);
 	err = snd_pcm_open(file, pcm, SNDRV_PCM_STREAM_CAPTURE);
-	if (pcm)
-		snd_card_unref(pcm->card);
+	if (pcm) {
+		struct snd_card *card = pcm->card;
+
+		if (err < 0)
+			snd_pcm_put(pcm);
+		snd_card_unref(card);
+	}
 	return err;
 }
 
@@ -2999,7 +3012,7 @@ static int snd_pcm_open(struct file *file, struct snd_pcm *pcm, int stream)
 		mutex_unlock(&pcm->open_mutex);
 		schedule();
 		mutex_lock(&pcm->open_mutex);
-		if (pcm->card->shutdown) {
+		if (pcm->card->shutdown || pcm->disconnected) {
 			err = -ENODEV;
 			break;
 		}
@@ -3025,6 +3038,7 @@ static int snd_pcm_open(struct file *file, struct snd_pcm *pcm, int stream)
 static int snd_pcm_release(struct inode *inode, struct file *file)
 {
 	struct snd_pcm *pcm;
+	struct snd_card *card;
 	struct snd_pcm_substream *substream;
 	struct snd_pcm_file *pcm_file;
 
@@ -3033,6 +3047,7 @@ static int snd_pcm_release(struct inode *inode, struct file *file)
 	if (snd_BUG_ON(!substream))
 		return -ENXIO;
 	pcm = substream->pcm;
+	card = pcm->card;
 
 	/* block until the device gets woken up as it may touch the hardware */
 	snd_power_wait(pcm->card);
@@ -3042,8 +3057,9 @@ static int snd_pcm_release(struct inode *inode, struct file *file)
 		kfree(pcm_file);
 	}
 	wake_up(&pcm->open_wait);
-	module_put(pcm->card->module);
-	snd_card_file_remove(pcm->card, file);
+	module_put(card->module);
+	snd_pcm_put(pcm);
+	snd_card_file_remove(card, file);
 	return 0;
 }
 
