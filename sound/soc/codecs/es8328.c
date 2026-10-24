@@ -13,6 +13,7 @@
 #include <linux/pm.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/of.h>
 #include <linux/regulator/consumer.h>
 #include <sound/core.h>
 #include <sound/initval.h>
@@ -836,7 +837,25 @@ static int es8328_component_probe(struct snd_soc_component *component)
 		goto clk_fail;
 	}
 
+	/*
+	 * The ES8388 has a single LRCK pin, so the DAC and the ADC must
+	 * share it: without SLRCK the capture path never gets a frame
+	 * clock and records digital silence while playback still works.
+	 * Bit 7 of DAC Control 21 is SLRCK on the ES8388 and LD2MO (left
+	 * DAC to the mono mixer) on the ES8328, so write it only here.
+	 */
+	if (of_device_is_compatible(component->dev->of_node,
+				    "everest,es8388")) {
+		ret = snd_soc_component_write(component, ES8328_DACCONTROL21,
+					      0x80);
+		if (ret)
+			goto err_slrck;
+	}
+
 	return 0;
+
+err_slrck:
+	clk_disable_unprepare(es8328->clk);
 
 clk_fail:
 	regulator_bulk_disable(ARRAY_SIZE(es8328->supplies),
