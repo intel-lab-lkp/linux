@@ -1064,6 +1064,21 @@ struct snd_pcm *snd_pcm_get_by_minor(unsigned int minor, int type)
 }
 EXPORT_SYMBOL_GPL(snd_pcm_get_by_minor);
 
+#if IS_ENABLED(CONFIG_SND_PCM_OSS)
+/**
+ * snd_pcm_get_by_oss_minor - look up and retain an OSS PCM component
+ * @minor: OSS minor number
+ *
+ * Returns the same PCM and card references as snd_pcm_get_by_minor().
+ */
+struct snd_pcm *snd_pcm_get_by_oss_minor(unsigned int minor)
+{
+	return pcm_get_from_minor(minor, SNDRV_OSS_DEVICE_TYPE_PCM,
+				  snd_lookup_oss_minor_data);
+}
+EXPORT_SYMBOL_GPL(snd_pcm_get_by_oss_minor);
+#endif
+
 static ssize_t pcm_class_show(struct device *dev,
 			      struct device_attribute *attr, char *buf)
 {

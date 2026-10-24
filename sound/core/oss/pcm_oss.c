@@ -2497,8 +2497,7 @@ static int snd_pcm_oss_open(struct inode *inode, struct file *file)
 
 	nonseekable_open(inode, file);
 
-	pcm = snd_lookup_oss_minor_data(iminor(inode),
-					SNDRV_OSS_DEVICE_TYPE_PCM);
+	pcm = snd_pcm_get_by_oss_minor(iminor(inode));
 	if (pcm == NULL) {
 		err = -ENODEV;
 		goto __error1;
@@ -2545,7 +2544,7 @@ static int snd_pcm_oss_open(struct inode *inode, struct file *file)
 		mutex_unlock(&pcm->open_mutex);
 		schedule();
 		mutex_lock(&pcm->open_mutex);
-		if (pcm->card->shutdown) {
+		if (pcm->card->shutdown || pcm->disconnected) {
 			err = -ENODEV;
 			break;
 		}
@@ -2566,14 +2565,19 @@ static int snd_pcm_oss_open(struct inode *inode, struct file *file)
       __error2:
       	snd_card_file_remove(pcm->card, file);
       __error1:
-	if (pcm)
-		snd_card_unref(pcm->card);
+	if (pcm) {
+		struct snd_card *card = pcm->card;
+
+		snd_pcm_put(pcm);
+		snd_card_unref(card);
+	}
 	return err;
 }
 
 static int snd_pcm_oss_release(struct inode *inode, struct file *file)
 {
 	struct snd_pcm *pcm;
+	struct snd_card *card;
 	struct snd_pcm_substream *substream;
 	struct snd_pcm_oss_file *pcm_oss_file;
 
@@ -2584,14 +2588,16 @@ static int snd_pcm_oss_release(struct inode *inode, struct file *file)
 	if (snd_BUG_ON(!substream))
 		return -ENXIO;
 	pcm = substream->pcm;
+	card = pcm->card;
 	if (!pcm->card->shutdown)
 		snd_pcm_oss_sync(pcm_oss_file);
 	mutex_lock(&pcm->open_mutex);
 	snd_pcm_oss_release_file(pcm_oss_file);
 	mutex_unlock(&pcm->open_mutex);
 	wake_up(&pcm->open_wait);
-	module_put(pcm->card->module);
-	snd_card_file_remove(pcm->card, file);
+	module_put(card->module);
+	snd_pcm_put(pcm);
+	snd_card_file_remove(card, file);
 	return 0;
 }
 
