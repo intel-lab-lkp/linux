@@ -357,9 +357,9 @@ static int read_znode(struct ubifs_info *c, struct ubifs_zbranch *zzbr,
 		}
 
 		if (znode->level)
-			continue;
-
-		type = key_type(c, &zbr->key);
+			type = UBIFS_IDX_NODE;
+		else
+			type = key_type(c, &zbr->key);
 		if (c->ranges[type].max_len == 0) {
 			if (zbr->len != c->ranges[type].len) {
 				ubifs_err(c, "bad target node (type %d) length (%d)",

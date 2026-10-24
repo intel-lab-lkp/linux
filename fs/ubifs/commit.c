@@ -696,6 +696,11 @@ int dbg_check_old_index(struct ubifs_info *c, struct ubifs_zbranch *zroot)
 		lnum = le32_to_cpu(br->lnum);
 		offs = le32_to_cpu(br->offs);
 		len = le32_to_cpu(br->len);
+		if (len < c->ranges[UBIFS_IDX_NODE].min_len ||
+		    len > c->ranges[UBIFS_IDX_NODE].max_len) {
+			err = 8;
+			goto out_dump;
+		}
 		key_read(c, &br->key, &lower_key);
 		if (iip + 1 < le16_to_cpu(idx->child_cnt)) {
 			br = ubifs_idx_branch(c, idx, iip + 1);
