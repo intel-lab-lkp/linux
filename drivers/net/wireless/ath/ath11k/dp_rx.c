@@ -4644,6 +4644,11 @@ static void ath11k_hal_rx_msdu_list_get(struct ath11k *ar,
 		msdu_list->sw_cookie[i] =
 			FIELD_GET(BUFFER_ADDR_INFO1_SW_COOKIE,
 				  msdu_details[i].buf_addr_info.info1);
+		msdu_list->paddr[i] =
+			((u64)FIELD_GET(BUFFER_ADDR_INFO1_ADDR,
+					msdu_details[i].buf_addr_info.info1) << 32) |
+			FIELD_GET(BUFFER_ADDR_INFO0_ADDR,
+				  msdu_details[i].buf_addr_info.info0);
 		tmp = FIELD_GET(BUFFER_ADDR_INFO1_RET_BUF_MGR,
 				msdu_details[i].buf_addr_info.info1);
 		msdu_list->rbm[i] = tmp;
@@ -4790,6 +4795,21 @@ u32 ath11k_dp_rx_mon_mpdu_pop(struct ath11k *ar, int mac_id,
 				goto next_msdu;
 			}
 			rxcb = ATH11K_SKB_RXCB(msdu);
+			if (unlikely(rxcb->paddr != msdu_list.paddr[i])) {
+				/* The cookie names a buffer other than the one
+				 * the device wrote, one it still holds: the
+				 * report is stale and the buf_id has been given
+				 * to a new buffer since. Leave that buffer to the
+				 * device and drop the MPDU.
+				 */
+				ath11k_dbg(ar->ab, ATH11K_DBG_DATA,
+					   "msdu_pop: buf_id %d is at %pad, not %pad\n",
+					   buf_id, &rxcb->paddr, &msdu_list.paddr[i]);
+				pmon->rx_mon_stats.dup_mon_buf_cnt++;
+				pmon->mon_last_buf_cookie = msdu_list.sw_cookie[i];
+				drop_mpdu = true;
+				continue;
+			}
 			if (!rxcb->unmapped) {
 				dma_unmap_single(ar->ab->dev, rxcb->paddr,
 						 msdu->len +

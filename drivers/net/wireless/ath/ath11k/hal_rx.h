@@ -463,6 +463,7 @@ struct hal_rx_msdu_list {
 	struct hal_rx_msdu_desc_info msdu_info[HAL_RX_NUM_MSDU_DESC];
 	u32 sw_cookie[HAL_RX_NUM_MSDU_DESC];
 	u8 rbm[HAL_RX_NUM_MSDU_DESC];
+	dma_addr_t paddr[HAL_RX_NUM_MSDU_DESC];
 };
 
 void ath11k_hal_reo_status_queue_stats(struct ath11k_base *ab, u32 *reo_desc,
