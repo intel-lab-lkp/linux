@@ -202,7 +202,7 @@ extern char _end;
 	ZERO_PGE	KSEG address of page full of zeroes, but 
 			upon entry to kernel, it can be expected
 			to hold the parameter list and possible
-			INTRD information.
+			INITRD information.
 
    These are used in the local defines below.
 */
@@ -228,7 +228,7 @@ extern char _end;
 */
 #define V_DATA_START		KERNEL_ORIGIN
 #define V_INITRD_START		(KERNEL_ORIGIN + KERNEL_Z_SIZE)
-#define V_INTRD_END		(V_INITRD_START + REAL_INITRD_SIZE)
+#define V_INITRD_END		(V_INITRD_START + REAL_INITRD_SIZE)
 #define V_DATA_END	 	V_BOOT_IMAGE_END
 
 /* KSEG addresses for the uncompressed kernel.
