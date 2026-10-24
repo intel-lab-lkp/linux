@@ -24,6 +24,7 @@
 #include "srcline.h"
 #include "symbol.h"
 #include "util/ftrace.h"
+#include "util/string2.h"
 #include <perf/threadmap.h>
 
 #define FTRACE_MAX_CPUS 4096
@@ -48,9 +49,16 @@ struct ftrace_task_state {
 	int max_stack;
 	int depth;
 	int inlined_depth;
-	int overflow_depth;
 	u64 seq;
 	int min_raw_indent;
+	u64 seq;
+	int min_raw_indent;
+	bool in_target;
+	int target_root_depth;
+	int target_root_frame_idx;
+	int target_root_indent;
+	char target_root_name[128];
+	int orphan_depth;
 };
 
 #define ftrace_cpu_state ftrace_task_state
@@ -166,6 +174,23 @@ static struct ftrace_task_state *get_task_state(pid_t pid)
 }
 
 /**
+ * reset_target_root_state - Clear graph target filter state for a task
+ * @cs: Task state to reset
+ *
+ * Reset all state tracking associated with an active graph target filter,
+ * restoring the task to an out-of-target state.
+ */
+static void reset_target_root_state(struct ftrace_task_state *cs)
+{
+	cs->in_target = false;
+	cs->target_root_depth = 0;
+	cs->target_root_frame_idx = 0;
+	cs->target_root_indent = 0;
+	cs->target_root_name[0] = '\0';
+	cs->orphan_depth = 0;
+}
+
+/**
  * ftrace_task_state__rekey - Reassign a task state to a new PID
  * @ts: The task state to re-key
  * @new_pid: The new process ID to associate with the state
@@ -236,6 +261,9 @@ static struct ftrace_task_state *ftrace_task_state__rekey(struct ftrace_task_sta
 			}
 		}
 
+		if (older->in_target && older->target_root_frame_idx >= older->depth)
+			reset_target_root_state(older);
+
 		to_copy = ts->depth;
 		if (to_copy > 0) {
 			while (existing->depth + to_copy > existing->max_stack) {
@@ -250,9 +278,42 @@ static struct ftrace_task_state *ftrace_task_state__rekey(struct ftrace_task_sta
 					existing->depth * sizeof(existing->stack[0]));
 				memcpy(&existing->stack[0], &ts->stack[0],
 				       to_copy * sizeof(existing->stack[0]));
+
+				if (ts->in_target &&
+				    ts->target_root_frame_idx < ts->depth) {
+					existing->in_target = true;
+					existing->target_root_depth =
+						ts->target_root_depth;
+					existing->target_root_frame_idx =
+						ts->target_root_frame_idx;
+					existing->target_root_indent =
+						ts->target_root_indent;
+					strlcpy(existing->target_root_name,
+						ts->target_root_name,
+						sizeof(existing->target_root_name));
+					existing->orphan_depth = ts->orphan_depth;
+				} else if (existing->in_target &&
+					   existing->target_root_frame_idx >= 0) {
+					existing->target_root_depth += to_copy;
+					existing->target_root_frame_idx += to_copy;
+				}
 			} else {
 				memcpy(&existing->stack[existing->depth], &ts->stack[0],
 				       to_copy * sizeof(existing->stack[0]));
+
+				if (!existing->in_target && ts->in_target) {
+					existing->in_target = true;
+					existing->target_root_depth =
+						existing->depth + ts->target_root_depth;
+					existing->target_root_frame_idx =
+						existing->depth + ts->target_root_frame_idx;
+					existing->target_root_indent =
+						ts->target_root_indent;
+					strlcpy(existing->target_root_name,
+						ts->target_root_name,
+						sizeof(existing->target_root_name));
+					existing->orphan_depth = ts->orphan_depth;
+				}
 			}
 
 			existing->depth += to_copy;
@@ -630,6 +691,36 @@ static void extract_exit_func_name(const char *str, char *buf, size_t size)
 }
 
 /**
+ * push_nontarget_frame - Push non-target entry frame to call stack
+ * @cs: CPU stack state
+ * @func_start: Pointer to start of function name in trace record
+ * @leading_spaces: Indentation of trace record
+ *
+ * Return: 0 on success, or negative error code on failure.
+ */
+static int push_nontarget_frame(struct ftrace_task_state *cs, const char *func_start,
+				int leading_spaces)
+{
+	char entry_name[128];
+
+	extract_entry_func_name(func_start, entry_name, sizeof(entry_name));
+	if (cs->depth >= cs->max_stack && ftrace_task_state__grow_stack(cs) < 0)
+		return -ENOMEM;
+
+	cs->stack[cs->depth].name = strdup(entry_name);
+	if (!cs->stack[cs->depth].name) {
+		pr_err("Not enough memory\n");
+		return -ENOMEM;
+	}
+	cs->stack[cs->depth].inlined = false;
+	cs->stack[cs->depth].indent = leading_spaces;
+	cs->stack[cs->depth].raw_indent = leading_spaces;
+	cs->depth++;
+	cs->min_raw_indent = -1;
+	return 0;
+}
+
+/**
  * make_blank_prefix - Create a blank prefix mirroring a trace record's context
  * @ftrace: Perf ftrace context
  * @line: The original trace record
@@ -682,6 +773,40 @@ static void make_blank_prefix(const struct perf_ftrace *ftrace, const char *line
 				*c = ' ';
 		}
 	}
+}
+
+/**
+ * parse_graph_cpu - Extract CPU number from a function_graph trace record
+ * @ftrace: Perf ftrace context
+ * @line: The trace record to parse
+ * @cpu: Pointer to store the CPU number
+ *
+ * Return: true if CPU was successfully parsed, false otherwise.
+ */
+static bool parse_graph_cpu(const struct perf_ftrace *ftrace,
+			    const char *line, int *cpu)
+{
+	const char *p = line;
+	char *endptr;
+	long val;
+
+	if (ftrace->graph_verbose) {
+		p = strchr(p, '|');
+		if (!p)
+			return false;
+		p++;
+	}
+
+	p = skip_spaces(p);
+	val = strtol(p, &endptr, 10);
+	if (endptr == p || *endptr != ')')
+		return false;
+
+	if (val < 0 || val >= FTRACE_MAX_CPUS)
+		return false;
+
+	*cpu = (int)val;
+	return true;
 }
 
 /**
@@ -802,6 +927,201 @@ static int print_line(struct perf_ftrace *ftrace, const char *line, FILE *out)
 }
 
 /**
+ * ftrace_has_graph_funcs - Test whether graph target filters are active
+ * @ftrace: Perf ftrace context
+ *
+ * Return: true if any target filter functions are configured, false otherwise.
+ */
+static inline bool ftrace_has_graph_funcs(const struct perf_ftrace *ftrace)
+{
+	return ftrace->graph_funcs.next != NULL && !list_empty(&ftrace->graph_funcs);
+}
+
+/**
+ * ftrace_is_graph_func - Check if a function matches the graph_funcs target filter
+ * @ftrace: Perf ftrace context
+ * @func_name: The function name to test
+ *
+ * Return: true if ftrace->graph_funcs is empty or @func_name matches a
+ * target filter (including glob and compiler clone matches), false otherwise.
+ */
+static bool ftrace_is_graph_func(const struct perf_ftrace *ftrace, const char *func_name)
+{
+	struct filter_entry *pos;
+	char base_name[128];
+	const char *dot;
+
+	if (!ftrace_has_graph_funcs(ftrace))
+		return true;
+
+	/* Extract base symbol name by stripping compiler clone suffixes (.isra.*, .part.*, etc.) */
+	dot = strchr(func_name, '.');
+	if (dot) {
+		size_t base_len = dot - func_name;
+
+		if (base_len < sizeof(base_name)) {
+			memcpy(base_name, func_name, base_len);
+			base_name[base_len] = '\0';
+		} else {
+			dot = NULL;
+		}
+	}
+
+	list_for_each_entry(pos, &ftrace->graph_funcs, list) {
+		/* Fast path: non-glob patterns */
+		if (!strisglob(pos->name)) {
+			size_t len = strlen(pos->name);
+
+			if (strcmp(pos->name, func_name) == 0)
+				return true;
+			if (!strncmp(pos->name, func_name, len) &&
+			    (func_name[len] == '\0' || func_name[len] == '.'))
+				return true;
+			continue;
+		}
+
+		/* Glob pattern matching */
+		if (strglobmatch(func_name, pos->name))
+			return true;
+		if (dot && strglobmatch(base_name, pos->name))
+			return true;
+	}
+
+	return false;
+}
+
+/**
+ * ftrace_reset_to_target_root - Initialise a new target root frame state
+ * @cs: Task state to update
+ * @entry_name: Function symbol name matching the graph filter
+ * @depth: Call stack depth at which the target root function entered
+ * @leading_spaces: Indentation of the target root function
+ *
+ * Mark the task as actively inside a target filter hierarchy rooted at @depth
+ * for function @entry_name, and clear any stale orphan tracking depth.
+ */
+static void ftrace_reset_to_target_root(struct ftrace_task_state *cs,
+					const char *entry_name, int depth,
+					int leading_spaces)
+{
+	cs->in_target = true;
+	cs->target_root_depth = depth;
+	cs->target_root_frame_idx = depth;
+	cs->target_root_indent = leading_spaces;
+	strlcpy(cs->target_root_name, entry_name, sizeof(cs->target_root_name));
+	cs->orphan_depth = 0;
+}
+
+/**
+ * ftrace_unwind_to_depth - Unwind call stack frames down to a specified depth
+ * @cs: Task state whose call stack is unwound
+ * @target_depth: Depth to unwind down to
+ * @blank_prefix: Column alignment prefix for synthesised closing lines
+ * @out: File stream to output to, or NULL if suppressing output
+ *
+ * Pop and free call stack frames until the stack depth reaches @target_depth.
+ * For any inlined frames encountered, decrement the inlined depth counter
+ * and, if @out is non-NULL, emit the corresponding synthesised inline closing
+ * delimiter line.
+ */
+static void ftrace_unwind_to_depth(struct ftrace_task_state *cs, int target_depth,
+				   const char *blank_prefix, FILE *out)
+{
+	while (cs->depth > target_depth) {
+		struct ftrace_stack_frame *top = &cs->stack[cs->depth - 1];
+
+		if (top->inlined) {
+			if (cs->inlined_depth > 0)
+				cs->inlined_depth--;
+			if (out)
+				fprintf(out, "%s%*s} /* %s (inline) */\n",
+					blank_prefix, top->indent, "", top->name);
+		}
+		free(top->name);
+		cs->depth--;
+	}
+}
+
+/**
+ * ftrace_check_target_caller - Validate caller of function inside target filter
+ * @ftrace: Perf ftrace context
+ * @cs: CPU stack state
+ * @func_start: Pointer to start of function name in trace record
+ * @entry_name: Function entry symbol name
+ * @is_graph_target: Whether function matches target filter
+ * @leading_spaces: Indentation of trace record
+ * @has_open_brace: Whether record opens a frame
+ * @has_semicolon: Whether record is a leaf call
+ * @has_retaddr: Whether return address comment was parsed
+ * @caller_idx: Index of caller on tracked stack, or -1 if untraced
+ * @blank_prefix: Space prefix for synthesised closing lines
+ * @out: File stream to output to
+ * @is_target_root: Pointer to target root flag to update
+ *
+ * Return: 1 if line should be dropped (orphan or non-target ancestor),
+ *         0 if entry should proceed as valid call or new target root,
+ *         negative error code on memory failure.
+ */
+static int ftrace_check_target_caller(struct perf_ftrace *ftrace,
+				      struct ftrace_task_state *cs,
+				      const char *func_start,
+				      const char *entry_name,
+				      bool is_graph_target,
+				      int leading_spaces,
+				      bool has_open_brace,
+				      bool has_semicolon,
+				      bool has_retaddr,
+				      int caller_idx,
+				      const char *blank_prefix,
+				      FILE *out,
+				      bool *is_target_root)
+{
+	if (!ftrace_has_graph_funcs(ftrace) || !cs->in_target ||
+	    cs->depth <= cs->target_root_depth)
+		return 0;
+
+	if (has_retaddr && caller_idx >= 0 && caller_idx < cs->target_root_depth) {
+		ftrace_unwind_to_depth(cs, caller_idx + 1, blank_prefix, out);
+		if (is_graph_target) {
+			ftrace_reset_to_target_root(cs, entry_name, cs->depth,
+						    leading_spaces);
+			*is_target_root = true;
+			return 0;
+		}
+		reset_target_root_state(cs);
+		if (has_open_brace && !has_semicolon &&
+		    push_nontarget_frame(cs, func_start, leading_spaces) < 0)
+			return -ENOMEM;
+		return 1;
+	}
+
+	if (leading_spaces <= cs->target_root_indent) {
+		ftrace_unwind_to_depth(cs, 0, blank_prefix, out);
+		if (is_graph_target) {
+			ftrace_reset_to_target_root(cs, entry_name, 0,
+						    leading_spaces);
+			*is_target_root = true;
+			return 0;
+		}
+		reset_target_root_state(cs);
+		if (has_open_brace && !has_semicolon &&
+		    push_nontarget_frame(cs, func_start, leading_spaces) < 0)
+			return -ENOMEM;
+		return 1;
+	}
+
+	if (has_retaddr) {
+		if (caller_idx < 0) {
+			if (has_open_brace && !has_semicolon)
+				cs->orphan_depth = 1;
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+/**
  * ftrace_process_fgraph_line - Process and output a function graph trace line
  * @ftrace: Perf ftrace context
  * @line: The trace line to process
@@ -832,15 +1152,32 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 	int active_inlines;
 	int common;
 	int match_idx;
-	int top_raw_indent;
+	int ret;
 	int i, j;
+	char entry_name[128];
 	bool is_exit;
 	bool has_open_brace;
 	bool has_semicolon;
 	bool has_retaddr = false;
+	bool has_filter = ftrace_has_graph_funcs(ftrace);
+	bool is_graph_target = false;
+	bool is_target_root = false;
+	bool was_target_root = false;
 
-	if (!ftrace->use_inline)
+	if ((!has_filter || ftrace->graph_thresh) && !ftrace->use_inline)
 		return print_line(ftrace, line, out);
+
+	if (strstr(line, "==========>") != NULL ||
+	    strstr(line, "<==========") != NULL) {
+		if (has_filter && parse_graph_cpu(ftrace, line, &cpu)) {
+			cs = get_cpu_state(ftrace, cpu);
+			if (cs && cs->in_target && cs->orphan_depth == 0)
+				print_line(ftrace, line, out);
+		} else if (!has_filter) {
+			print_line(ftrace, line, out);
+		}
+		return 0;
+	}
 
 	pipe_char = find_func_column(ftrace, line, &cpu);
 	if (!pipe_char) {
@@ -873,30 +1210,17 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 
 		extract_exit_func_name(func_start, exit_name, sizeof(exit_name));
 
-		top_raw_indent = -1;
-		for (i = cs->depth - 1; i >= 0; i--) {
-			if (!cs->stack[i].inlined) {
-				top_raw_indent = cs->stack[i].raw_indent;
-				break;
+		if (cs->orphan_depth > 0) {
+			if (has_filter && cs->in_target &&
+			    leading_spaces <= cs->target_root_indent) {
+				cs->orphan_depth = 0;
+			} else {
+				cs->orphan_depth--;
+				return 0;
 			}
 		}
 
-		/*
-		 * If currently overflowed beyond FTRACE_MAX_STACK, any exit whose
-		 * indentation is deeper than the top tracked frame belongs to the
-		 * overflow region.
-		 */
-		if (cs->overflow_depth > 0 &&
-		    (top_raw_indent < 0 || leading_spaces > top_raw_indent)) {
-			cs->overflow_depth--;
-			extra_indent = cs->inlined_depth * 2;
-			fprintf(out, "%.*s%*s%s\n",
-				(int)(pipe_char - line + 1), line,
-				leading_spaces + extra_indent, "", func_start);
-			return 0;
-		}
-
-		/* Find matching frame on stack */
+		/* Find matching frame on stack if exit is named */
 		match_idx = -1;
 		if (exit_name[0] != '\0') {
 			for (i = cs->depth - 1; i >= 0; i--) {
@@ -924,17 +1248,9 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 		}
 
 		if (match_idx >= 0) {
-			cs->overflow_depth = 0;
-		} else if (cs->overflow_depth > 0) {
-			cs->overflow_depth--;
-			extra_indent = cs->inlined_depth * 2;
-			fprintf(out, "%.*s%*s%s\n",
-				(int)(pipe_char - line + 1), line,
-				leading_spaces + extra_indent, "", func_start);
-			return 0;
-		}
+			was_target_root = (has_filter && cs->in_target &&
+					   match_idx == cs->target_root_frame_idx);
 
-		if (match_idx >= 0) {
 			/* Close all inlined and orphaned frames above match_idx */
 			while (cs->depth > 0 && cs->depth - 1 > match_idx) {
 				struct ftrace_stack_frame *top = &cs->stack[cs->depth - 1];
@@ -944,8 +1260,10 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 
 					if (cs->inlined_depth > 0)
 						cs->inlined_depth--;
-					fprintf(out, "%s%*s} /* %s (inline) */\n",
-						blank_prefix, exit_indent, "", top->name);
+					if (!has_filter || (cs->in_target &&
+					    cs->depth - 1 >= cs->target_root_depth))
+						fprintf(out, "%s%*s} /* %s (inline) */\n",
+							blank_prefix, exit_indent, "", top->name);
 				}
 				free(top->name);
 				cs->depth--;
@@ -963,9 +1281,40 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 			extra_indent = 0;
 		}
 
-		fprintf(out, "%.*s%*s%s\n",
-			(int)(pipe_char - line + 1), line,
-			leading_spaces + extra_indent, "", func_start);
+		if (!has_filter || (cs->in_target && match_idx >= cs->target_root_depth)) {
+			if (!ftrace->use_inline) {
+				print_line(ftrace, line, out);
+			} else {
+				fprintf(out, "%.*s%*s%s\n",
+					(int)(pipe_char - line + 1), line,
+					leading_spaces + extra_indent, "", func_start);
+			}
+		}
+
+		if (has_filter && cs->in_target) {
+			if (was_target_root) {
+				while (cs->depth > cs->target_root_depth &&
+				       cs->stack[cs->depth - 1].inlined) {
+					struct ftrace_stack_frame *top =
+						&cs->stack[cs->depth - 1];
+					int exit_indent = top->indent;
+
+					if (cs->inlined_depth > 0)
+						cs->inlined_depth--;
+					fprintf(out, "%s%*s} /* %s (inline) */\n",
+						blank_prefix, exit_indent, "", top->name);
+					free(top->name);
+					cs->depth--;
+				}
+				reset_target_root_state(cs);
+			} else if (cs->depth <= cs->target_root_depth) {
+				reset_target_root_state(cs);
+			} else if (leading_spaces <= cs->target_root_indent) {
+				ftrace_unwind_to_depth(cs, cs->target_root_depth,
+						       blank_prefix, out);
+				reset_target_root_state(cs);
+			}
+		}
 		return 0;
 	}
 
@@ -973,30 +1322,13 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 	has_open_brace = (strchr(func_start, '{') != NULL);
 	has_semicolon = (strchr(func_start, ';') != NULL);
 
-	top_raw_indent = -1;
-	for (i = cs->depth - 1; i >= 0; i--) {
-		if (!cs->stack[i].inlined) {
-			top_raw_indent = cs->stack[i].raw_indent;
-			break;
-		}
-	}
+	extract_entry_func_name(func_start, entry_name, sizeof(entry_name));
+	if (has_filter)
+		is_graph_target = ftrace_is_graph_func(ftrace, entry_name);
 
-	if (cs->overflow_depth > 0 && top_raw_indent >= 0 &&
-	    leading_spaces <= top_raw_indent)
-		cs->overflow_depth = 0;
-
+	caller_idx = -1;
 	if (ftrace_parse_retaddr(func_start, caller_sym, sizeof(caller_sym), &caller_offset)) {
 		has_retaddr = true;
-		num_inlines = ftrace_resolve_inlines(ftrace->machine, caller_sym,
-						      caller_offset, inlined_names,
-						      FTRACE_MAX_INLINES);
-		if (num_inlines < 0)
-			return num_inlines;
-	}
-
-	/* Determine which inlined frames are currently open above the caller */
-	caller_idx = -1;
-	if (has_retaddr && cs->overflow_depth == 0) {
 		for (i = cs->depth - 1; i >= 0; i--) {
 			if (!cs->stack[i].inlined && cs->stack[i].name &&
 			    cs->stack[i].raw_indent < leading_spaces &&
@@ -1007,11 +1339,135 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 		}
 	}
 
-	/* If caller is not on the tracked stack, do not synthesise inlines */
-	if (has_retaddr && caller_idx < 0) {
+	if (cs->orphan_depth > 0) {
+		/*
+		 * If an orphan exit was dropped by the kernel ring buffer,
+		 * check whether this entry is a new target root function
+		 * or descends directly from the target root function.
+		 */
+		if (has_filter && cs->in_target) {
+			if (leading_spaces <= cs->target_root_indent) {
+				cs->orphan_depth = 0;
+			} else if (cs->target_root_name[0] != '\0' && has_retaddr &&
+				   leading_spaces == cs->target_root_indent + 2) {
+				if (strcmp(cs->target_root_name, caller_sym) == 0)
+					cs->orphan_depth = 0;
+			}
+		}
+
+		if (cs->orphan_depth > 0) {
+			if (has_open_brace && !has_semicolon)
+				cs->orphan_depth++;
+			return 0;
+		}
+	}
+
+	if (has_filter) {
+		if (cs->depth == 0 || !cs->in_target) {
+			if (is_graph_target) {
+				if (has_retaddr && caller_idx >= 0)
+					ftrace_unwind_to_depth(cs, caller_idx + 1,
+							       blank_prefix,
+							       ftrace->use_inline ? out : NULL);
+				else
+					ftrace_unwind_to_depth(cs, 0,
+							       blank_prefix,
+							       ftrace->use_inline ? out : NULL);
+				ftrace_reset_to_target_root(cs, entry_name, cs->depth,
+							    leading_spaces);
+				is_target_root = true;
+			} else if (cs->depth == 0) {
+				reset_target_root_state(cs);
+			}
+		}
+
+		if (!cs->in_target) {
+			/* Non-matching call tree; track depth if entering scope, suppress output */
+			while (cs->depth > 0 &&
+			       cs->stack[cs->depth - 1].raw_indent >= leading_spaces) {
+				free(cs->stack[cs->depth - 1].name);
+				cs->depth--;
+			}
+			if (has_open_brace && !has_semicolon) {
+				if (push_nontarget_frame(cs, func_start, leading_spaces) < 0)
+					return -ENOMEM;
+			}
+			return 0;
+		}
+	}
+
+	if (!ftrace->use_inline) {
+		if (is_target_root) {
+			if (has_retaddr && caller_idx >= 0)
+				ftrace_unwind_to_depth(cs, caller_idx + 1, NULL, NULL);
+			else
+				ftrace_unwind_to_depth(cs, 0, NULL, NULL);
+			cs->target_root_depth = cs->depth;
+			cs->target_root_frame_idx = cs->depth;
+			cs->target_root_indent = leading_spaces;
+		}
+
+		ret = ftrace_check_target_caller(ftrace, cs, func_start, entry_name,
+						 is_graph_target, leading_spaces,
+						 has_open_brace, has_semicolon,
+						 has_retaddr, caller_idx, NULL, NULL,
+						 &is_target_root);
+		if (ret != 0)
+			return (ret < 0) ? ret : 0;
+
+		if (!is_target_root) {
+			if (has_retaddr && caller_idx >= 0) {
+				if (cs->depth > caller_idx + 1)
+					ftrace_unwind_to_depth(cs, caller_idx + 1, NULL, NULL);
+			} else if (caller_idx < 0) {
+				while (cs->depth > cs->target_root_depth &&
+				       cs->stack[cs->depth - 1].raw_indent >= leading_spaces) {
+					free(cs->stack[cs->depth - 1].name);
+					cs->depth--;
+				}
+			}
+		}
+
+		if (has_open_brace && !has_semicolon) {
+			if (is_target_root) {
+				cs->target_root_frame_idx = cs->depth;
+				cs->target_root_indent = leading_spaces;
+			}
+			if (push_nontarget_frame(cs, func_start, leading_spaces) < 0)
+				return -ENOMEM;
+		}
+		print_line(ftrace, line, out);
+		if (has_filter && cs->in_target && is_target_root &&
+		    has_semicolon && !has_open_brace) {
+			reset_target_root_state(cs);
+		}
+		return 0;
+	}
+
+	if (has_retaddr) {
+		num_inlines = ftrace_resolve_inlines(ftrace->machine, caller_sym,
+						      caller_offset, inlined_names,
+						      FTRACE_MAX_INLINES);
+		if (num_inlines < 0)
+			return num_inlines;
+
+		/* If caller is not on the tracked stack, do not synthesise inlines */
+		if (caller_idx < 0) {
+			for (i = 0; i < num_inlines; i++)
+				free((void *)inlined_names[i]);
+			num_inlines = 0;
+		}
+	}
+
+	ret = ftrace_check_target_caller(ftrace, cs, func_start, entry_name,
+					 is_graph_target, leading_spaces,
+					 has_open_brace, has_semicolon,
+					 has_retaddr, caller_idx, blank_prefix,
+					 out, &is_target_root);
+	if (ret != 0) {
 		for (i = 0; i < num_inlines; i++)
 			free((void *)inlined_names[i]);
-		num_inlines = 0;
+		return (ret < 0) ? ret : 0;
 	}
 
 	active_inlines = 0;
@@ -1036,9 +1492,6 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 	}
 
 	/* Close stale callee frames and inactive inlined frames above caller */
-	if (caller_idx >= 0)
-		cs->overflow_depth = 0;
-
 	while (caller_idx >= 0 && cs->depth > caller_idx + 1 + common) {
 		struct ftrace_stack_frame *top = &cs->stack[cs->depth - 1];
 
@@ -1047,39 +1500,50 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 
 			if (cs->inlined_depth > 0)
 				cs->inlined_depth--;
-			fprintf(out, "%s%*s} /* %s (inline) */\n",
-				blank_prefix, exit_indent, "", top->name);
+			if (!has_filter || (cs->in_target && !is_target_root))
+				fprintf(out, "%s%*s} /* %s (inline) */\n",
+					blank_prefix, exit_indent, "", top->name);
 		}
 		free(top->name);
 		cs->depth--;
 	}
 
-	if (caller_idx < 0 && cs->overflow_depth == 0) {
-		/*
-		 * If caller is not on the tracked stack, unwind any frames whose
-		 * raw indentation is greater than or equal to the new entry's
-		 * indentation (their exit events were dropped), and close any
-		 * trailing inlined frames that were left open from prior calls.
-		 */
-		while (cs->depth > 0) {
-			struct ftrace_stack_frame *top = &cs->stack[cs->depth - 1];
+	if (caller_idx < 0) {
+		if (is_target_root) {
+			ftrace_unwind_to_depth(cs, 0, blank_prefix, out);
+		} else {
+			/*
+			 * If caller is not on the tracked stack, unwind any frames whose
+			 * raw indentation is greater than or equal to the new entry's
+			 * indentation (their exit events were dropped), and close any
+			 * trailing inlined frames that were left open from prior calls.
+			 */
+			while (cs->depth > 0) {
+				struct ftrace_stack_frame *top = &cs->stack[cs->depth - 1];
 
-			if (top->inlined) {
-				int exit_indent = top->indent;
+				if (top->inlined) {
+					int exit_indent = top->indent;
 
-				if (cs->inlined_depth > 0)
-					cs->inlined_depth--;
-				fprintf(out, "%s%*s} /* %s (inline) */\n",
-					blank_prefix, exit_indent, "", top->name);
-				free(top->name);
-				cs->depth--;
-			} else if (top->raw_indent >= leading_spaces) {
-				free(top->name);
-				cs->depth--;
-			} else {
-				break;
+					if (cs->inlined_depth > 0)
+						cs->inlined_depth--;
+					if (!has_filter || (cs->in_target && !is_target_root))
+						fprintf(out, "%s%*s} /* %s (inline) */\n",
+							blank_prefix, exit_indent, "", top->name);
+					free(top->name);
+					cs->depth--;
+				} else if (top->raw_indent >= leading_spaces) {
+					free(top->name);
+					cs->depth--;
+				} else {
+					break;
+				}
 			}
 		}
+	}
+
+	if (is_target_root) {
+		cs->target_root_depth = cs->depth;
+		cs->target_root_indent = leading_spaces;
 	}
 
 	/* Open new inlined frames */
@@ -1139,14 +1603,16 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 
 	/* If non-leaf entry, push onto stack */
 	if (has_open_brace && !has_semicolon) {
-		char entry_name[128];
-
-		extract_entry_func_name(func_start, entry_name, sizeof(entry_name));
 		if (cs->depth >= cs->max_stack &&
 		    ftrace_task_state__grow_stack(cs) < 0) {
 			for (i = 0; i < num_inlines; i++)
 				free((void *)inlined_names[i]);
 			return -ENOMEM;
+		}
+
+		if (is_target_root) {
+			cs->target_root_frame_idx = cs->depth;
+			cs->target_root_indent = leading_spaces;
 		}
 
 		cs->stack[cs->depth].name = strdup(entry_name);
@@ -1161,6 +1627,25 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 		cs->stack[cs->depth].raw_indent = leading_spaces;
 		cs->depth++;
 		cs->min_raw_indent = -1;
+	}
+
+	if (has_filter && cs->in_target && is_target_root &&
+	    has_semicolon && !has_open_brace) {
+		while (cs->depth > cs->target_root_depth) {
+			struct ftrace_stack_frame *top = &cs->stack[cs->depth - 1];
+
+			if (top->inlined) {
+				int exit_indent = top->indent;
+
+				if (cs->inlined_depth > 0)
+					cs->inlined_depth--;
+				fprintf(out, "%s%*s} /* %s (inline) */\n",
+					blank_prefix, exit_indent, "", top->name);
+			}
+			free(top->name);
+			cs->depth--;
+		}
+		reset_target_root_state(cs);
 	}
 
 	for (i = 0; i < num_inlines; i++)

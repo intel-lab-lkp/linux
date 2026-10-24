@@ -12,10 +12,18 @@ struct evlist;
 struct hashamp;
 struct stats;
 
+enum perf_ftrace_subcommand {
+	PERF_FTRACE_NONE,
+	PERF_FTRACE_TRACE,
+	PERF_FTRACE_LATENCY,
+	PERF_FTRACE_PROFILE,
+};
+
 struct perf_ftrace {
 	struct evlist		*evlist;
 	struct target		target;
 	const char		*tracer;
+	enum perf_ftrace_subcommand subcmd;
 	struct list_head	filters;
 	struct list_head	notrace;
 	struct list_head	graph_funcs;
