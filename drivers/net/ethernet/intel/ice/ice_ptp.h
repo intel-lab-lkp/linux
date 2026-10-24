@@ -235,8 +235,6 @@ struct ice_ptp_pin_desc {
  * @tx_interrupt_mode: the TX interrupt mode for the PTP clock
  * @port: data for the PHY port initialization procedure
  * @work: delayed work function for periodic tasks
- * @cached_phc_time: a cached copy of the PHC time for timestamp extension
- * @cached_phc_jiffies: jiffies when cached_phc_time was last updated
  * @kworker: kwork thread for handling periodic work
  * @ext_ts_irq: the external timestamp IRQ in use
  * @pin_desc: structure defining pins
@@ -248,6 +246,7 @@ struct ice_ptp_pin_desc {
  * @tstamp_config: hardware timestamping configuration
  * @tx_refclks: bitmaps table to store the information about TX reference clocks
  * @reset_time: kernel time after clock stop on reset
+ * @phc_reset_time: PHC time at clock stop on reset
  * @tx_hwtstamp_good: number of completed Tx timestamp requests
  * @tx_hwtstamp_skipped: number of Tx time stamp requests skipped
  * @tx_hwtstamp_timeouts: number of Tx skbs discarded with no time stamp
@@ -270,8 +269,6 @@ struct ice_ptp {
 	enum ice_ptp_tx_interrupt tx_interrupt_mode;
 	struct ice_ptp_port port;
 	struct kthread_delayed_work work;
-	u64 cached_phc_time;
-	unsigned long cached_phc_jiffies;
 	struct kthread_worker *kworker;
 	u8 ext_ts_irq;
 	struct ptp_pin_desc pin_desc[ICE_N_PINS_MAX];
@@ -283,6 +280,7 @@ struct ice_ptp {
 	struct kernel_hwtstamp_config tstamp_config;
 	unsigned long tx_refclks[ICE_E825_MAX_PHYS][ICE_REF_CLK_MAX];
 	u64 reset_time;
+	u64 phc_reset_time;
 	u64 tx_hwtstamp_good;
 	u32 tx_hwtstamp_skipped;
 	u32 tx_hwtstamp_timeouts;

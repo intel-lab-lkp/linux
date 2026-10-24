@@ -221,7 +221,7 @@ enum ice_tx_ring_flags {
 };
 
 struct ice_pkt_ctx {
-	u64 cached_phctime;
+	struct ice_phc *phc;
 	__be16 vlan_proto;
 };
 
@@ -321,7 +321,7 @@ struct ice_rx_ring {
 	union {
 		struct ice_pkt_ctx pkt_ctx;
 		struct {
-			u64 cached_phctime;
+			struct ice_phc *phc;
 			__be16 vlan_proto;
 		};
 	};

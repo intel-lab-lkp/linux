@@ -1533,7 +1533,7 @@ static int ice_vsi_alloc_rings(struct ice_vsi *vsi)
 		ring->vsi = vsi;
 		ring->netdev = vsi->netdev;
 		ring->count = vsi->num_rx_desc;
-		ring->cached_phctime = pf->ptp.cached_phc_time;
+		ring->phc = &pf->adapter->phc;
 
 		if (ice_is_feature_supported(pf, ICE_F_GCS))
 			ring->flags |= ICE_RX_FLAGS_RING_GCS;

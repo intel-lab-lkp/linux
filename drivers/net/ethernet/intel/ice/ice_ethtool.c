@@ -3338,7 +3338,7 @@ process_rx:
 		/* clone ring and setup updated count */
 		rx_rings[i] = *vsi->rx_rings[i];
 		rx_rings[i].count = new_rx_cnt;
-		rx_rings[i].cached_phctime = pf->ptp.cached_phc_time;
+		rx_rings[i].phc = &pf->adapter->phc;
 		rx_rings[i].desc = NULL;
 		rx_rings[i].xdp_buf = NULL;
 		rx_rings[i].xdp_rxq = (struct xdp_rxq_info){ };

@@ -274,7 +274,7 @@ int ice_ptp_read_src_clk_reg(struct ice_pf *pf,
 
 /**
  * ice_ptp_extend_32b_ts - Convert a 32b nanoseconds timestamp to 64b
- * @cached_phc_time: recently cached copy of PHC time
+ * @phc: PTP Hardware Clock structure
  * @in_tstamp: Ingress/egress 32b nanoseconds timestamp value
  *
  * Hardware captures timestamps which contain only 32 bits of nominal
@@ -310,13 +310,17 @@ int ice_ptp_read_src_clk_reg(struct ice_pf *pf,
  * a second, and (b) discarding any Tx timestamp packet if it has waited for
  * a timestamp for more than one second.
  */
-static u64 ice_ptp_extend_32b_ts(u64 cached_phc_time, u32 in_tstamp)
+static u64 ice_ptp_extend_32b_ts(struct ice_phc *phc, u32 in_tstamp)
 {
 	u32 delta, phc_time_lo;
-	u64 ns;
+	u64 ns, cached_time;
 
-	/* Extract the lower 32 bits of the PHC time */
-	phc_time_lo = (u32)cached_phc_time;
+	cached_time = READ_ONCE(phc->cached_time);
+	/* Do not report a timestamp if we don't have a cached PHC time */
+	if (!cached_time)
+		return 0;
+
+	phc_time_lo = (u32)cached_time;
 
 	/* Calculate the delta between the lower 32bits of the cached PHC
 	 * time and the in_tstamp value
@@ -331,9 +335,9 @@ static u64 ice_ptp_extend_32b_ts(u64 cached_phc_time, u32 in_tstamp)
 	if (delta > (U32_MAX / 2)) {
 		/* reverse the delta calculation here */
 		delta = (phc_time_lo - in_tstamp);
-		ns = cached_phc_time - delta;
+		ns = cached_time - delta;
 	} else {
-		ns = cached_phc_time + delta;
+		ns = cached_time + delta;
 	}
 
 	return ns;
@@ -372,7 +376,7 @@ static u64 ice_ptp_extend_40b_ts(struct ice_pf *pf, u64 in_tstamp)
 	u64 cached_time;
 
 	/* Discard the hardware timestamp if the cached PHC time is too old */
-	discard_time = pf->ptp.cached_phc_jiffies + msecs_to_jiffies(2000);
+	discard_time = pf->adapter->phc.update_jiffies + msecs_to_jiffies(2000);
 	if (time_is_before_jiffies(discard_time)) {
 		pf->ptp.tx_hwtstamp_discarded++;
 		return 0;
@@ -382,13 +386,14 @@ static u64 ice_ptp_extend_40b_ts(struct ice_pf *pf, u64 in_tstamp)
 	 * how ice_ptp_update_cached_phctime() reports that the source clock
 	 * has become unreachable.
 	 */
-	cached_time = READ_ONCE(pf->ptp.cached_phc_time);
+	cached_time = READ_ONCE(pf->adapter->phc.cached_time);
 	if (!cached_time) {
 		pf->ptp.tx_hwtstamp_discarded++;
 		return 0;
 	}
 
-	return ice_ptp_extend_32b_ts(cached_time, (in_tstamp >> 8) & mask);
+	return ice_ptp_extend_32b_ts(&pf->adapter->phc,
+				     (in_tstamp >> 8) & mask);
 }
 
 /**
@@ -987,35 +992,26 @@ static int ice_ptp_init_tx(struct ice_pf *pf, struct ice_ptp_tx *tx, u8 port)
 }
 
 /**
- * ice_ptp_update_cached_phctime - Update the cached PHC time values
+ * ice_ptp_update_cached_phctime - Update the cached PHC time value
  * @pf: Board specific private structure
  *
- * This function updates the system time values which are cached in the PF
- * structure and the Rx rings.
+ * Update the PTP hardware clock time values which are cached in the PHC
+ * structure.
  *
- * This function must be called periodically to ensure that the cached value
- * is never more than 2 seconds old.
- *
- * Note that the cached copy in the PF PTP structure is always updated, even
- * if we can't update the copy in the Rx rings.
- *
- * Return:
- * * 0 - OK, successfully updated
- * * -EAGAIN - PF was busy, need to reschedule the update
- * * -ENODEV - no control PF owns the source clock register space
- * * -EOPNOTSUPP - PTP support is not compiled in
+ * This function must be called periodically by the clock owner to ensure that
+ * the cached value is never more than 2 seconds old.
  */
-static int ice_ptp_update_cached_phctime(struct ice_pf *pf)
+static void ice_ptp_update_cached_phctime(struct ice_pf *pf)
 {
+	struct ice_phc *phc = &pf->adapter->phc;
 	struct device *dev = ice_pf_to_dev(pf);
 	unsigned long update_before;
 	u64 systime;
-	int err, i;
+	int err;
 
-	update_before = pf->ptp.cached_phc_jiffies + msecs_to_jiffies(2000);
-	if (pf->ptp.cached_phc_time &&
-	    time_is_before_jiffies(update_before)) {
-		unsigned long time_taken = jiffies - pf->ptp.cached_phc_jiffies;
+	update_before = phc->update_jiffies + msecs_to_jiffies(2000);
+	if (phc->cached_time && time_is_before_jiffies(update_before)) {
+		unsigned long time_taken = jiffies - phc->update_jiffies;
 
 		dev_warn(dev, "%u msecs passed between update to cached PHC time\n",
 			 jiffies_to_msecs(time_taken));
@@ -1032,36 +1028,12 @@ static int ice_ptp_update_cached_phctime(struct ice_pf *pf)
 		 * longer tracks the PHC, and both treat a zero cache as
 		 * "no timestamp".
 		 */
-		systime = 0;
-		WRITE_ONCE(pf->ptp.cached_phc_time, 0);
+		WRITE_ONCE(phc->cached_time, 0);
 	} else {
-		/* Update the cached PHC time stored in the PF structure */
-		WRITE_ONCE(pf->ptp.cached_phc_time, systime);
-		WRITE_ONCE(pf->ptp.cached_phc_jiffies, jiffies);
+		/* Update the cached PHC time stored in the PHC structure */
+		WRITE_ONCE(phc->cached_time, systime);
+		WRITE_ONCE(phc->update_jiffies, jiffies);
 	}
-
-	if (test_and_set_bit(ICE_CFG_BUSY, pf->state))
-		return -EAGAIN;
-
-	ice_for_each_vsi(pf, i) {
-		struct ice_vsi *vsi = pf->vsi[i];
-		int j;
-
-		if (!vsi)
-			continue;
-
-		if (vsi->type != ICE_VSI_PF)
-			continue;
-
-		ice_for_each_rxq(vsi, j) {
-			if (!vsi->rx_rings[j])
-				continue;
-			WRITE_ONCE(vsi->rx_rings[j]->cached_phctime, systime);
-		}
-	}
-	clear_bit(ICE_CFG_BUSY, pf->state);
-
-	return err;
 }
 
 /**
@@ -1070,34 +1042,11 @@ static int ice_ptp_update_cached_phctime(struct ice_pf *pf)
  *
  * This function must be called when the cached PHC time is no longer valid,
  * such as after a time adjustment. It marks any currently outstanding Tx
- * timestamps as stale and updates the cached PHC time for both the PF and Rx
- * rings.
- *
- * If updating the PHC time cannot be done immediately, a warning message is
- * logged and the work item is scheduled immediately to minimize the window
- * with a wrong cached timestamp.
+ * timestamps as stale and updates the cached PHC time.
  */
 static void ice_ptp_reset_cached_phctime(struct ice_pf *pf)
 {
-	struct device *dev = ice_pf_to_dev(pf);
-	int err;
-
-	/* Update the cached PHC time immediately if possible, otherwise
-	 * schedule the work item to execute soon.
-	 */
-	err = ice_ptp_update_cached_phctime(pf);
-	if (err) {
-		/* If another thread is updating the Rx rings, we won't
-		 * properly reset them here. This could lead to reporting of
-		 * invalid timestamps, but there isn't much we can do.
-		 */
-		dev_warn(dev, "%s: unable to immediately update cached PHC time, err %d\n",
-			 __func__, err);
-
-		/* Queue the work item to update the Rx rings when possible */
-		kthread_queue_delayed_work(pf->ptp.kworker, &pf->ptp.work,
-					   msecs_to_jiffies(10));
-	}
+	ice_ptp_update_cached_phctime(pf);
 
 	/* Mark any outstanding timestamps as stale, since they might have
 	 * been captured in hardware before the time update. This could lead
@@ -2464,9 +2413,7 @@ u64 ice_ptp_get_rx_hwts(const union ice_32b_rx_flex_desc *rx_desc,
 	if (!(rx_desc->wb.time_stamp_low & ICE_PTP_TS_VALID))
 		return 0;
 
-	cached_time = READ_ONCE(pkt_ctx->cached_phctime);
-
-	/* Do not report a timestamp if we don't have a cached PHC time */
+	cached_time = READ_ONCE(pkt_ctx->phc->cached_time);
 	if (!cached_time)
 		return 0;
 
@@ -2477,7 +2424,7 @@ u64 ice_ptp_get_rx_hwts(const union ice_32b_rx_flex_desc *rx_desc,
 	 * bits itself.
 	 */
 	ts_high = le32_to_cpu(rx_desc->wb.flex_ts.ts_high);
-	ts_ns = ice_ptp_extend_32b_ts(cached_time, ts_high);
+	ts_ns = ice_ptp_extend_32b_ts(pkt_ctx->phc, ts_high);
 
 	ice_trace(rx_hwtstamp, cached_time, ts_high, ts_ns);
 
@@ -3078,24 +3025,20 @@ static void ice_ptp_periodic_work(struct kthread_work *work)
 {
 	struct ice_ptp *ptp = container_of(work, struct ice_ptp, work.work);
 	struct ice_pf *pf = container_of(ptp, struct ice_pf, ptp);
-	int err;
 
 	if (pf->ptp.state != ICE_PTP_READY)
 		return;
 
 	ice_ptp_tspll_monitor(pf);
 
-	err = ice_ptp_update_cached_phctime(pf);
+	if (ice_pf_src_tmr_owned(pf))
+		ice_ptp_update_cached_phctime(pf);
 
 	ice_ptp_maybe_trigger_tx_interrupt(pf);
 
-	/* Run twice a second, or retry soon if another thread was busy
-	 * updating the Rx rings. Other errors, such as a missing control PF,
-	 * do not clear up on their own and must not turn the periodic worker
-	 * into a busy loop.
-	 */
+	/* Run twice a second */
 	kthread_queue_delayed_work(ptp->kworker, &ptp->work,
-				   msecs_to_jiffies(err == -EAGAIN ? 10 : 500));
+				   msecs_to_jiffies(500));
 }
 
 /**
@@ -3190,6 +3133,8 @@ void ice_ptp_prepare_for_reset(struct ice_pf *pf, enum ice_reset_req reset_type)
 
 	/* Acquire PHC and system timer to restore after reset */
 	ptp->reset_time = ktime_get_real_ns();
+	if (ice_ptp_read_src_clk_reg(pf, NULL, &ptp->phc_reset_time))
+		ptp->phc_reset_time = 0;
 }
 
 /**
@@ -3229,13 +3174,13 @@ static int ice_ptp_rebuild_owner(struct ice_pf *pf)
 	if (err)
 		goto err_unlock;
 
-	/* Write the initial Time value to PHY and LAN using the cached PHC
-	 * time before the reset and time difference between stopping and
-	 * starting the clock.
+	/* Write the initial Time value to PHY and LAN using the PHC time
+	 * before the reset and time difference between stopping and starting
+	 * the clock.
 	 */
-	if (ptp->cached_phc_time) {
+	if (ptp->phc_reset_time) {
 		time_diff = ktime_get_real_ns() - ptp->reset_time;
-		ts = ns_to_timespec64(ptp->cached_phc_time + time_diff);
+		ts = ns_to_timespec64(ptp->phc_reset_time + time_diff);
 	} else {
 		ts = ktime_to_timespec64(ktime_get_real());
 	}

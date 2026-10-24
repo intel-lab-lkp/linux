@@ -36,6 +36,16 @@ struct ice_port_list {
 };
 
 /**
+ * struct ice_phc - PTP Hardware Clock fields
+ * @cached_time: Cached copy of the PHC time for timestamp extension
+ * @update_jiffies: Jiffies when PHC was last updated
+ */
+struct ice_phc {
+	u64 cached_time;
+	unsigned long update_jiffies;
+};
+
+/**
  * struct ice_adapter - PCI adapter resources shared across PFs
  * @refcount: Reference count. struct ice_pf objects hold the references.
  * @ptp_gltsyn_time_lock: Spinlock protecting access to the GLTSYN_TIME
@@ -44,6 +54,7 @@ struct ice_port_list {
  * @cpi_phy_lock: Per-PHY mutex serializing CPI REQ/ACK transactions.
  *               Index 0 = PHY0, index 1 = PHY1. Used on E825C devices.
  * @ps_lock: Mutex to serialize PHY port start/stop across adapter.
+ * @phc: PTP Hardware Clock fields
  * @ctrl_pf_lock: Protect control PF lifetime for sleepable users
  * @ctrl_pf: Control PF of the adapter
  * @rebuild_lock: serialize PFR recovery across PFs of the same adapter
@@ -68,6 +79,8 @@ struct ice_adapter {
 
 	/* For serializing PHY port start/stop sequences */
 	struct mutex ps_lock;
+
+	struct ice_phc phc;
 
 	struct rw_semaphore ctrl_pf_lock;
 	struct ice_pf __rcu *ctrl_pf;
