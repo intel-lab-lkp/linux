@@ -106,7 +106,6 @@ $(obj)/tools/bootpzh: $(obj)/bootpzheader $(OBJSTRIP) FORCE
 	$(call if_changed,objstrip)
 
 LDFLAGS_bootloader   := -static -T # -N -relax
-LDFLAGS_bootloader   := -static -T # -N -relax
 LDFLAGS_bootpheader  := -static -T # -N -relax
 LDFLAGS_bootpzheader := -static -T # -N -relax
 
