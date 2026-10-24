@@ -132,34 +132,3 @@ s32 igc_validate_nvm_checksum(struct igc_hw *hw)
 out:
 	return ret_val;
 }
-
-/**
- * igc_update_nvm_checksum - Update EEPROM checksum
- * @hw: pointer to the HW structure
- *
- * Updates the EEPROM checksum by reading/adding each word of the EEPROM
- * up to the checksum.  Then calculates the EEPROM checksum and writes the
- * value to the EEPROM.
- */
-s32 igc_update_nvm_checksum(struct igc_hw *hw)
-{
-	u16 checksum = 0;
-	u16 i, nvm_data;
-	s32  ret_val;
-
-	for (i = 0; i < NVM_CHECKSUM_REG; i++) {
-		ret_val = hw->nvm.ops.read(hw, i, 1, &nvm_data);
-		if (ret_val) {
-			hw_dbg("NVM Read Error while updating checksum.\n");
-			goto out;
-		}
-		checksum += nvm_data;
-	}
-	checksum = NVM_SUM - checksum;
-	ret_val = hw->nvm.ops.write(hw, NVM_CHECKSUM_REG, 1, &checksum);
-	if (ret_val)
-		hw_dbg("NVM Write Error while updating checksum.\n");
-
-out:
-	return ret_val;
-}

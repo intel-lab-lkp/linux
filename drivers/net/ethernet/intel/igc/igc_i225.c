@@ -220,7 +220,7 @@ static s32 igc_read_nvm_srrd_i225(struct igc_hw *hw, u16 offset, u16 words,
  *
  * Writes data to Shadow Ram at offset using EEWR register.
  *
- * If igc_update_nvm_checksum is not called after this function , the
+ * If igc_update_nvm_checksum_i225 is not called after this function , the
  * Shadow Ram will most likely contain an invalid checksum.
  */
 static s32 igc_write_nvm_srwr(struct igc_hw *hw, u16 offset, u16 words,
@@ -275,7 +275,7 @@ static s32 igc_write_nvm_srwr(struct igc_hw *hw, u16 offset, u16 words,
  *
  * Writes data to Shadow RAM at offset using EEWR register.
  *
- * If igc_update_nvm_checksum is not called after this function , the
+ * If igc_update_nvm_checksum_i225 is not called after this function , the
  * data will not be committed to FLASH and also Shadow RAM will most likely
  * contain an invalid checksum.
  *
