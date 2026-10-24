@@ -751,6 +751,14 @@ static inline int read_dnode(struct jffs2_sb_info *c, struct jffs2_raw_node_ref 
 			goto free_out;
 		}
 
+		if (unlikely(rd->compr == JFFS2_COMPR_NONE &&
+			     csize != je32_to_cpu(rd->dsize))) {
+			JFFS2_WARNING("uncompressed node at %#08x has csize %#x != dsize %#x\n",
+				      ref_offset(ref), csize, je32_to_cpu(rd->dsize));
+			jffs2_mark_node_obsolete(c, ref);
+			goto free_out;
+		}
+
 		if (jffs2_is_writebuffered(c) && csize != 0) {
 			/* At this point we are supposed to check the data CRC
 			 * of our unchecked node. But thus far, we do not

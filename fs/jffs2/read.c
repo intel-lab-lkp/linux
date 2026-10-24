@@ -68,13 +68,23 @@ int jffs2_read_dnode(struct jffs2_sb_info *c, struct jffs2_inode_info *f,
 		ri->csize = cpu_to_je32(0);
 	}
 
-	D1(if(ofs + len > je32_to_cpu(ri->dsize)) {
-			pr_warn("jffs2_read_dnode() asked for %d bytes at %d from %d-byte node\n",
-				len, ofs, je32_to_cpu(ri->dsize));
-		ret = -EINVAL;
+	if (ofs + len > je32_to_cpu(ri->dsize)) {
+		pr_warn("%s(): asked for %d bytes at %d from %u-byte node at 0x%08x\n",
+			__func__, len, ofs, je32_to_cpu(ri->dsize),
+			ref_offset(fd->raw));
+		ret = -EIO;
 		goto out_ri;
-	});
+	}
 
+	/* Uncompressed data is copied straight out of a csize buffer */
+	if (ri->compr == JFFS2_COMPR_NONE &&
+	    je32_to_cpu(ri->csize) != je32_to_cpu(ri->dsize)) {
+		pr_warn("Uncompressed node at 0x%08x has csize 0x%x != dsize 0x%x\n",
+			ref_offset(fd->raw), je32_to_cpu(ri->csize),
+			je32_to_cpu(ri->dsize));
+		ret = -EIO;
+		goto out_ri;
+	}
 
 	if (ri->compr == JFFS2_COMPR_ZERO) {
 		memset(buf, 0, len);
