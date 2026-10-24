@@ -126,7 +126,7 @@ static struct inode *get_cramfs_inode(struct super_block *sb,
 		break;
 	default:
 		printk(KERN_DEBUG "CRAMFS: Invalid file type 0%04o for inode %llu.\n",
-		       inode->i_mode, inode->i_ino);
+		       cramfs_inode->mode, inode->i_ino);
 		iget_failed(inode);
 		return ERR_PTR(-EIO);
 	}
