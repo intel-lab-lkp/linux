@@ -11,6 +11,7 @@
  */
 
 #include <linux/fsnotify_backend.h>
+#include <linux/dcache.h>
 #include "glob.h"
 #include "../common/smb2status.h"
 #include "connection.h"
@@ -95,6 +96,100 @@ static int ksmbd_notify_handle_inode_event(struct ksmbd_notify *notify,
 	return 0;
 }
 
+static char *ksmbd_notify_tree_name(struct ksmbd_notify *notify,
+				    const void *data, int data_type,
+				    struct inode *dir,
+				    const struct qstr *file_name,
+				    struct qstr *tree_name)
+{
+	struct dentry *root = file_dentry(notify->fp->filp);
+	struct inode *inode = fsnotify_data_inode(data, data_type);
+	struct dentry *dentry;
+	char *buf = NULL, *root_buf = NULL, *name = NULL;
+	char *path, *root_path, *relative;
+	size_t file_name_len = file_name ? file_name->len : 0;
+	size_t prefix_len, root_len, len, i;
+
+	/* Name events refer to @file_name below @dir. */
+	if (file_name && dir) {
+		dentry = d_find_alias(dir);
+	} else {
+		dentry = fsnotify_data_dentry(data, data_type);
+		if (dentry)
+			dget(dentry);
+		else
+			dentry = inode ? d_find_alias(inode) : NULL;
+	}
+	if (!dentry)
+		return ERR_PTR(-ENOENT);
+
+	/* A superblock mark also reports events outside the watched tree. */
+	if (!is_subdir(dentry, root)) {
+		name = ERR_PTR(-EXDEV);
+		goto out_dput;
+	}
+
+	buf = kmalloc(PATH_MAX, KSMBD_DEFAULT_GFP);
+	root_buf = kmalloc(PATH_MAX, KSMBD_DEFAULT_GFP);
+	if (!buf || !root_buf) {
+		name = ERR_PTR(-ENOMEM);
+		goto out_free_bufs;
+	}
+
+	path = dentry_path_raw(dentry, buf, PATH_MAX);
+	root_path = dentry_path_raw(root, root_buf, PATH_MAX);
+	if (IS_ERR(path) || IS_ERR(root_path)) {
+		name = ERR_PTR(IS_ERR(path) ? PTR_ERR(path) : PTR_ERR(root_path));
+		goto out_free_bufs;
+	}
+
+	root_len = strlen(root_path);
+	if (root_len == 1 && root_path[0] == '/') {
+		relative = path + 1;
+	} else if (!strncmp(path, root_path, root_len) &&
+		   (path[root_len] == '/' || path[root_len] == '\0')) {
+		relative = path + root_len;
+		if (*relative == '/')
+			relative++;
+	} else {
+		/* The watched directory was renamed between the two snapshots. */
+		name = ERR_PTR(-EAGAIN);
+		goto out_free_bufs;
+	}
+
+	prefix_len = strlen(relative);
+	if (prefix_len > SIZE_MAX - file_name_len - 2) {
+		name = ERR_PTR(-EOVERFLOW);
+		goto out_free_bufs;
+	}
+	len = prefix_len + file_name_len + (prefix_len && file_name ? 1 : 0);
+	name = kmalloc(len + 1, KSMBD_DEFAULT_GFP);
+	if (!name) {
+		name = ERR_PTR(-ENOMEM);
+		goto out_free_bufs;
+	}
+
+	memcpy(name, relative, prefix_len);
+	if (prefix_len && file_name)
+		name[prefix_len++] = '\\';
+	if (file_name_len)
+		memcpy(name + prefix_len, file_name->name, file_name_len);
+	name[len] = '\0';
+	for (i = 0; i < len; i++) {
+		if (name[i] == '/')
+			name[i] = '\\';
+	}
+	tree_name->name = name;
+	tree_name->len = len;
+
+out_free_bufs:
+	kfree(root_buf);
+	kfree(buf);
+out_dput:
+	dput(dentry);
+	return name;
+}
+
 static int ksmbd_notify_handle_event(struct fsnotify_group *group, u32 mask,
 				     const void *data, int data_type,
 				     struct inode *dir,
@@ -102,10 +197,32 @@ static int ksmbd_notify_handle_event(struct fsnotify_group *group, u32 mask,
 				     struct fsnotify_iter_info *iter_info)
 {
 	struct ksmbd_notify *notify = group->private;
-	struct inode *inode = fsnotify_data_inode(data, data_type);
+	struct qstr tree_name = {};
+	struct inode *inode;
+	char *name = NULL;
+	int err;
 
-	return ksmbd_notify_handle_inode_event(notify, mask, inode, dir,
+	if (!READ_ONCE(notify->watch_tree)) {
+		/* Non-tree watches accept events from the root inode mark only. */
+		if (!fsnotify_iter_inode_mark(iter_info) &&
+		    !fsnotify_iter_parent_mark(iter_info))
+			return 0;
+	} else {
+		name = ksmbd_notify_tree_name(notify, data, data_type, dir,
+					      file_name, &tree_name);
+		if (IS_ERR(name)) {
+			if (PTR_ERR(name) == -ENOMEM)
+				pr_err("Failed to allocate tree notify event name\n");
+			return 0;
+		}
+		file_name = &tree_name;
+	}
+
+	inode = fsnotify_data_inode(data, data_type);
+	err = ksmbd_notify_handle_inode_event(notify, mask, inode, dir,
 					      file_name, cookie);
+	kfree(name);
+	return err;
 }
 
 static void ksmbd_notify_free_mark(struct fsnotify_mark *mark)
@@ -149,6 +266,10 @@ err_put_mark:
 
 static void ksmbd_notify_destroy_marks(struct ksmbd_notify *notify)
 {
+	if (notify->tree_mark) {
+		fsnotify_destroy_mark(notify->tree_mark, notify->group);
+		fsnotify_put_mark(notify->tree_mark);
+	}
 	if (notify->mark) {
 		fsnotify_destroy_mark(notify->mark, notify->group);
 		fsnotify_put_mark(notify->mark);
@@ -158,10 +279,11 @@ static void ksmbd_notify_destroy_marks(struct ksmbd_notify *notify)
 }
 
 static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
+			    bool watch_tree,
 			    struct ksmbd_notify **notify_out)
 {
 	struct ksmbd_notify *notify;
-	struct fsnotify_mark *mark;
+	struct fsnotify_mark *mark, *tree_mark;
 	int err = 0;
 
 	notify = kzalloc_obj(*notify, KSMBD_DEFAULT_GFP);
@@ -175,6 +297,7 @@ static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
 	spin_lock_init(&notify->lock);
 	notify->filter = filter;
 	notify->mask = mask;
+	notify->watch_tree = watch_tree;
 
 	notify->group = fsnotify_alloc_group(&ksmbd_notify_fsnotify_ops, 0);
 	if (IS_ERR(notify->group)) {
@@ -193,11 +316,27 @@ static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
 	}
 	notify->mark = mark;
 
+	if (watch_tree) {
+		/*
+		 * FS_EVENT_ON_CHILD covers only one level. A filesystem mark
+		 * supplies recursive events; the callback limits them to the
+		 * directory rooted at fp.
+		 */
+		tree_mark = ksmbd_notify_add_mark(notify, mask,
+						  file_inode(fp->filp)->i_sb,
+						  FSNOTIFY_OBJ_TYPE_SB);
+		if (IS_ERR(tree_mark)) {
+			err = PTR_ERR(tree_mark);
+			goto err_destroy_marks;
+		}
+		notify->tree_mark = tree_mark;
+	}
+
 	*notify_out = notify;
 	ksmbd_debug(NOTIFY,
-		    "Added fsnotify mark, inode %llu, mask 0x%x, filter 0x%x\n",
+		    "Added fsnotify mark, inode %llu, mask 0x%x, filter 0x%x, watch tree %d\n",
 		    (unsigned long long)file_inode(fp->filp)->i_ino, mark->mask,
-		    filter);
+		    filter, watch_tree);
 	goto out;
 
 err_destroy_marks:
@@ -292,7 +431,9 @@ ksmbd_notify_setup_watch(struct ksmbd_file *fp,
 		ksmbd_debug(NOTIFY,
 			    "No mapped completion filter bits; request will remain pending\n");
 
-	err = ksmbd_notify_add(fp, mask, filter, &notify);
+	err = ksmbd_notify_add(fp, mask, filter,
+			       le16_to_cpu(req->Flags) & SMB2_WATCH_TREE,
+			       &notify);
 	if (err) {
 		pr_err("Failed to add notify watch, fid %llu:%llu: %d\n",
 		       fp->persistent_id, fp->volatile_id, err);

@@ -22,11 +22,13 @@ struct smb2_change_notify_rsp;
 struct ksmbd_notify {
 	struct fsnotify_group *group;
 	struct fsnotify_mark *mark;
+	struct fsnotify_mark *tree_mark;
 	struct ksmbd_file *fp;
 	/* Protects filter, rename state and the queued events. */
 	spinlock_t lock;
 	u32 filter;
 	u32 mask;
+	bool watch_tree;
 };
 
 struct ksmbd_notify_req {
