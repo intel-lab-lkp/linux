@@ -52,6 +52,7 @@
 #include "device-id/rpmsg.h"
 #include "device-id/sdio.h"
 #include "device-id/sdw.h"
+#include "device-id/serdev.h"
 #include "device-id/serio.h"
 #include "device-id/slim.h"
 #include "device-id/spi.h"

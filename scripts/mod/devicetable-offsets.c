@@ -158,6 +158,9 @@ int main(void)
 	DEVID_FIELD(slim_device_id, manf_id);
 	DEVID_FIELD(slim_device_id, prod_code);
 
+	DEVID(serdev_device_id);
+	DEVID_FIELD(serdev_device_id, name);
+
 	DEVID(spi_device_id);
 	DEVID_FIELD(spi_device_id, name);
 

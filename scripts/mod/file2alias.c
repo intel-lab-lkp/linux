@@ -886,6 +886,14 @@ static void do_slim_entry(struct module *mod, void *symval)
 	module_alias_printf(mod, false, "slim:%x:%x:*", manf_id, prod_code);
 }
 
+/* Looks like: serial:S */
+static void do_serdev_entry(struct module *mod, void *symval)
+{
+	DEF_FIELD_ADDR(symval, serdev_device_id, name);
+
+	module_alias_printf(mod, false, SERDEV_MODULE_PREFIX "%s", *name);
+}
+
 /* Looks like: spi:S */
 static void do_spi_entry(struct module *mod, void *symval)
 {
@@ -1500,6 +1508,7 @@ static const struct devtable devtable[] = {
 	{"rpmsg", SIZE_rpmsg_device_id, do_rpmsg_entry},
 	{"i2c", SIZE_i2c_device_id, do_i2c_entry},
 	{"i3c", SIZE_i3c_device_id, do_i3c_entry},
+	{"serdev", SIZE_serdev_device_id, do_serdev_entry},
 	{"slim", SIZE_slim_device_id, do_slim_entry},
 	{"spi", SIZE_spi_device_id, do_spi_entry},
 	{"dmi", SIZE_dmi_system_id, do_dmi_entry},
