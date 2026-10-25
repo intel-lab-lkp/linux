@@ -189,6 +189,7 @@ enum aclstat3 {
     ACL3ERR_SERVERFAULT = 10006,
     ACL3ERR_JUKEBOX = 10008
 };
+pragma big_endian aclstat3;
 
 /*
  * NFS_ACL version 3 procedure arguments and results
