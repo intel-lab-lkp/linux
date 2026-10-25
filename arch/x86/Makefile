@@ -161,6 +161,9 @@ else
 
 ifdef CONFIG_X86_NATIVE_CPU
         KBUILD_CFLAGS += -march=native
+        # -march=native expands to explicit -msse/-mavx/... flags that
+        # override the earlier -mno-* ones; disable FP/SIMD code again.
+        KBUILD_CFLAGS += -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -mno-avx -mno-sse4a
         # Prevent the compiler from generating EGPR use. The kernel is
         # not yet prepared for general in-kernel use.
         KBUILD_CFLAGS += $(call cc-option,-mno-apx-features=egpr)
