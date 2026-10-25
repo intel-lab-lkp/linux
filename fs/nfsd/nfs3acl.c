@@ -13,8 +13,40 @@
 #include <linux/gfp.h>
 
 #include "cache.h"
-#include "xdr3.h"
 #include "vfs.h"
+
+struct nfsd3_getaclargs {
+	struct svc_fh		fh;
+	__u32			mask;
+};
+
+struct nfsd3_getaclres {
+	__be32			status;
+	struct svc_fh		fh;
+	int			mask;
+	struct posix_acl	*acl_access;
+	struct posix_acl	*acl_default;
+	struct kstat		stat;
+};
+
+struct nfsd3_setaclargs {
+	struct svc_fh		fh;
+	__u32			mask;
+	struct posix_acl	*acl_access;
+	struct posix_acl	*acl_default;
+};
+
+struct nfsd3_attrstat {
+	__be32			status;
+	struct svc_fh		fh;
+	struct kstat            stat;
+};
+
+/* Helper functions for NFSv3 ACL code */
+bool svcxdr_decode_nfs_fh3(struct xdr_stream *xdr, struct svc_fh *fhp);
+bool svcxdr_encode_nfsstat3(struct xdr_stream *xdr, __be32 status);
+bool svcxdr_encode_post_op_attr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
+				const struct svc_fh *fhp);
 
 static __be32 nfsd3_map_status(__be32 status)
 {
