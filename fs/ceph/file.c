@@ -297,8 +297,10 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 
 /*
  * Retry cap acquisition after a stale session or a lost cap update.
+ * A forced request checks this operation's access on the MDS even when
+ * another opener already holds the requested caps.
  */
-int ceph_renew_caps(struct inode *inode, int fmode)
+int ceph_renew_caps(struct inode *inode, int fmode, bool force)
 {
 	struct ceph_mds_client *mdsc = ceph_sb_to_mdsc(inode->i_sb);
 	struct ceph_client *cl = mdsc->fsc->client;
@@ -308,9 +310,9 @@ int ceph_renew_caps(struct inode *inode, int fmode)
 
 	spin_lock(&ci->i_ceph_lock);
 	__ceph_touch_fmode(ci, mdsc, fmode);
-	wanted = __ceph_caps_file_wanted(ci);
+	wanted = force ? ceph_caps_for_mode(fmode) : __ceph_caps_file_wanted(ci);
 	issued = __ceph_caps_issued(ci, NULL);
-	if (__ceph_is_any_real_caps(ci) &&
+	if (!force && __ceph_is_any_real_caps(ci) &&
 	    (!(wanted & CEPH_CAP_ANY_WR) || ci->i_auth_cap) &&
 	    (issued & wanted) == wanted) {
 		spin_unlock(&ci->i_ceph_lock);
@@ -371,7 +373,9 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct dentry *dentry;
 	char *path;
 	bool do_sync = false;
+	bool snapshot = ceph_in_snap(inode) && ceph_snap(inode) != CEPH_SNAPDIR;
 	int mask = MAY_READ;
+	enum ceph_qstate qstate;
 	struct ceph_journal_info __ji;
 
 	ceph_blog_enter(fsc, &__ji);
@@ -380,6 +384,23 @@ int ceph_open(struct inode *inode, struct file *file)
 		boutc(cl, "file %p is already opened\n", file);
 		ceph_blog_exit(&__ji);
 		return 0;
+	}
+
+	/*
+	 * Existing caps can satisfy open without an MDS round-trip.
+	 * A short walk cannot.
+	 */
+	if (!snapshot) {
+		qstate = file->f_mode & FMODE_WRITE ?
+			ceph_inode_quarantine_write_state(inode) :
+			ceph_inode_quarantine_state(inode);
+		if (qstate == CEPH_Q_UNDER &&
+		    ceph_inode_quarantine_direct(inode)) {
+			ceph_blog_exit(&__ji);
+			return -EACCES;
+		}
+		if (qstate != CEPH_Q_CLEAR)
+			do_sync = true;
 	}
 
 	/* filter out O_CREAT|O_EXCL; vfs did that already.  yuck. */
@@ -419,6 +440,7 @@ int ceph_open(struct inode *inode, struct file *file)
 		do_sync = true;
 	} else {
 		struct ceph_path_info path_info = {0};
+
 		path = ceph_mdsc_build_path(mdsc, dentry, &path_info, 0);
 		if (IS_ERR(path)) {
 			do_sync = true;
@@ -429,7 +451,7 @@ int ceph_open(struct inode *inode, struct file *file)
 		ceph_mdsc_free_path_info(&path_info);
 		dput(dentry);
 
-		/* For none EACCES cases will let the MDS do the mds auth check */
+		/* Let the MDS handle errors other than EACCES. */
 		if (err == -EACCES) {
 			ceph_blog_exit(&__ji);
 			return err;
@@ -445,10 +467,21 @@ int ceph_open(struct inode *inode, struct file *file)
 		return -EROFS;
 	}
 
-	/* trivially open snapdir */
+	/* A synthetic snapdir must be validated through its real parent. */
 	if (ceph_snap(inode) == CEPH_SNAPDIR) {
+		err = ceph_quarantine_revalidate(inode);
 		ceph_blog_exit(&__ji);
+		if (err)
+			return err;
 		return ceph_init_file(inode, file, fmode);
+	}
+
+	if (snapshot) {
+		err = ceph_snapshot_read_auth(inode);
+		if (err) {
+			ceph_blog_exit(&__ji);
+			return err;
+		}
 	}
 
 	/*
@@ -540,6 +573,13 @@ static int try_prep_async_create(struct inode *dir, struct dentry *dentry,
 	struct ceph_dentry_info *di = ceph_dentry(dentry);
 	int got = 0, want = CEPH_CAP_FILE_EXCL | CEPH_CAP_DIR_CREATE;
 	u64 ino;
+
+	/*
+	 * Async create completes in the cache. A marked directory, or
+	 * one whose parents are not cached, has to go to the MDS.
+	 */
+	if (ceph_inode_quarantine_write_state(dir) != CEPH_Q_CLEAR)
+		return 0;
 
 	spin_lock(&ci->i_ceph_lock);
 	/* No auth cap means no chance for Dc caps */
@@ -687,6 +727,7 @@ static int ceph_finish_async_create(struct inode *dir, struct inode *inode,
 				    struct ceph_acl_sec_ctx *as_ctx,
 				    struct ceph_file_layout *lo)
 {
+	struct ceph_quarantine_splice qsplice;
 	int ret;
 	char xattr_buf[4];
 	struct ceph_mds_reply_inode in = { };
@@ -785,9 +826,9 @@ static int ceph_finish_async_create(struct inode *dir, struct inode *inode,
 		if (d_in_lookup(dentry) || d_really_is_negative(dentry)) {
 			if (!d_unhashed(dentry))
 				d_drop(dentry);
-			ceph_quarantine_splice_start(dir->i_sb);
+			ceph_quarantine_splice_start(dir->i_sb, &qsplice);
 			dn = d_splice_alias(inode, dentry);
-			ceph_quarantine_splice_finish(dir->i_sb);
+			ceph_quarantine_splice_finish(&qsplice);
 			WARN_ON_ONCE(dn && dn != dentry);
 		}
 		file->f_mode |= FMODE_CREATED;
@@ -889,6 +930,14 @@ retry:
 			err = PTR_ERR(new_inode);
 			goto out_ctx;
 		}
+		/*
+		 * LSM label reads can wait on async create completion. Quarantine
+		 * may activate after submission, so keep blob-bearing creates
+		 * synchronous even before support is negotiated.
+		 */
+		if (ceph_security_xattr_wanted(new_inode))
+			try_async = false;
+
 		/* Async create can't handle more than a page of xattrs */
 		if (as_ctx.pagelist &&
 		    !list_is_singular(&as_ctx.pagelist->head))
@@ -2971,6 +3020,27 @@ static int get_rd_wr_caps(struct file *src_filp, int *src_got,
 {
 	int ret = 0;
 	bool retrying = false;
+
+	if (ceph_in_snap(file_inode(src_filp)) &&
+	    ceph_snap(file_inode(src_filp)) != CEPH_SNAPDIR) {
+		/*
+		 * Snapshot caps have no MDS revocation state, so holding
+		 * them cannot prevent a destination cap grant. Validate
+		 * the snapshot before taking any destination references.
+		 */
+		ret = ceph_get_caps(src_filp, CEPH_CAP_FILE_RD,
+				    CEPH_CAP_FILE_SHARED, -1, src_got);
+		if (ret < 0)
+			return ret;
+		ret = ceph_get_caps(dst_filp, CEPH_CAP_FILE_WR,
+				    CEPH_CAP_FILE_BUFFER, dst_endoff, dst_got);
+		if (ret < 0) {
+			ceph_put_cap_refs(ceph_inode(file_inode(src_filp)),
+					  *src_got);
+			*src_got = 0;
+		}
+		return ret;
+	}
 
 retry_caps:
 	ret = ceph_get_caps(dst_filp, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER,

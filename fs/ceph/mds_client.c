@@ -4668,6 +4668,8 @@ skip_cap_auths:
 		mdsc->s_cap_auths = cap_auths;
 
 		session->s_features = features;
+		if (test_bit(CEPHFS_FEATURE_QUARANTINE, &session->s_features))
+			ceph_quarantine_enable(mdsc);
 		if (test_bit(CEPHFS_FEATURE_METRIC_COLLECT,
 			     &session->s_features))
 			ceph_metric_bind_session(mdsc, session);
@@ -6480,6 +6482,9 @@ int ceph_mdsc_init(struct ceph_fs_client *fsc)
 	spin_lock_init(&mdsc->stopping_lock);
 	atomic_set(&mdsc->stopping_blockers, 0);
 	atomic_set(&mdsc->quarantine_count, 0);
+	mdsc->quarantine_supported = false;
+	init_waitqueue_head(&mdsc->quarantine_waitq);
+	INIT_LIST_HEAD(&mdsc->quarantine_splice_owners);
 	atomic_set(&mdsc->quarantine_writers, 0);
 	atomic_set(&mdsc->quarantine_splices, 0);
 	atomic64_set(&mdsc->quarantine_epoch, 0);

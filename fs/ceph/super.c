@@ -1137,11 +1137,13 @@ static struct dentry *open_root_dentry(struct ceph_fs_client *fsc,
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	if (err == 0) {
 		struct inode *inode = req->r_target_inode;
+		struct ceph_quarantine_splice qsplice;
+
 		req->r_target_inode = NULL;
 		doutc(cl, "success\n");
-		ceph_quarantine_splice_start(fsc->sb);
+		ceph_quarantine_splice_start(fsc->sb, &qsplice);
 		root = d_make_root(inode);
-		ceph_quarantine_splice_finish(fsc->sb);
+		ceph_quarantine_splice_finish(&qsplice);
 		if (!root) {
 			root = ERR_PTR(-ENOMEM);
 			goto out;

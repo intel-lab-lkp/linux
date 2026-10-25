@@ -53,6 +53,7 @@ static const struct ceph_session_feature_desc ceph_session_feature_table[] = {
 	{ CEPHFS_FEATURE_HAS_OWNER_UIDGID, "HAS_OWNER_UIDGID" },
 	{ CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK, "MDS_AUTH_CAPS_CHECK" },
 	{ CEPHFS_FEATURE_SUBVOLUME_METRICS, "SUBVOLUME_METRICS" },
+	{ CEPHFS_FEATURE_QUARANTINE, "QUARANTINE" },
 };
 
 static int mdsmap_show(struct seq_file *s, void *p)

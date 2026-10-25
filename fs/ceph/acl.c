@@ -18,16 +18,43 @@
 #include "mds_client.h"
 
 static inline void ceph_set_cached_acl(struct inode *inode,
-					int type, struct posix_acl *acl)
+				       int type, struct posix_acl *acl)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
 	spin_lock(&ci->i_ceph_lock);
-	if (__ceph_caps_issued_mask_metric(ci, CEPH_CAP_XATTR_SHARED, 0))
+	if (!READ_ONCE(ceph_sb_to_mdsc(inode->i_sb)->quarantine_supported) &&
+	    __ceph_caps_issued_mask_metric(ci, CEPH_CAP_XATTR_SHARED, 0))
 		set_cached_acl(inode, type, acl);
 	else
 		forget_cached_acl(inode, type);
 	spin_unlock(&ci->i_ceph_lock);
+}
+
+void ceph_quarantine_uncache_inode_acls(struct inode *inode)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct posix_acl *acl, *default_acl;
+
+	spin_lock(&ci->i_ceph_lock);
+	acl = xchg(&inode->i_acl, ACL_DONT_CACHE);
+	default_acl = xchg(&inode->i_default_acl, ACL_DONT_CACHE);
+	spin_unlock(&ci->i_ceph_lock);
+	if (!is_uncached_acl(acl))
+		posix_acl_release(acl);
+	if (!is_uncached_acl(default_acl))
+		posix_acl_release(default_acl);
+}
+
+void ceph_quarantine_disable_acl_cache(struct super_block *sb)
+{
+	struct inode *inode;
+
+	/* Cover inodes cached before the first supporting session opened. */
+	spin_lock(&sb->s_inode_list_lock);
+	list_for_each_entry(inode, &sb->s_inodes, i_sb_list)
+		ceph_quarantine_uncache_inode_acls(inode);
+	spin_unlock(&sb->s_inode_list_lock);
 }
 
 struct posix_acl *ceph_get_acl(struct inode *inode, int type, bool rcu)
@@ -73,6 +100,8 @@ retry:
 		acl = posix_acl_from_xattr(&init_user_ns, value, size);
 	} else if (size == -ENODATA || size == 0) {
 		acl = NULL;
+	} else if (size == -EACCES) {
+		acl = ERR_PTR(-EACCES);
 	} else {
 		pr_err_ratelimited_client(cl, "%llx.%llx failed, err=%d\n",
 					  ceph_vinop(inode), size);

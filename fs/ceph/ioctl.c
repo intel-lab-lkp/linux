@@ -201,6 +201,10 @@ static long ceph_ioctl_get_dataloc(struct file *file, void __user *arg)
 	if (copy_from_user(&dl, arg, sizeof(dl)))
 		return -EFAULT;
 
+	r = ceph_do_getattr(inode, CEPH_STAT_CAP_LAYOUT, false);
+	if (r)
+		return r;
+
 	down_read(&osdc->lock);
 	ceph_calc_file_object_mapping(&ci->i_layout, dl.file_offset, 1,
 				      &dl.object_no, &dl.object_offset, &xlen);
@@ -403,10 +407,16 @@ long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ret = vet_mds_for_fscrypt(file);
 		if (ret)
 			return ret;
+		ret = ceph_quarantine_revalidate(inode);
+		if (ret)
+			return ret;
 		return fscrypt_ioctl_get_policy(file, (void __user *)arg);
 
 	case FS_IOC_GET_ENCRYPTION_POLICY_EX:
 		ret = vet_mds_for_fscrypt(file);
+		if (ret)
+			return ret;
+		ret = ceph_quarantine_revalidate(inode);
 		if (ret)
 			return ret;
 		return fscrypt_ioctl_get_policy_ex(file, (void __user *)arg);
@@ -429,6 +439,9 @@ long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case FS_IOC_GET_ENCRYPTION_NONCE:
 		ret = vet_mds_for_fscrypt(file);
+		if (ret)
+			return ret;
+		ret = ceph_quarantine_revalidate(inode);
 		if (ret)
 			return ret;
 		return fscrypt_ioctl_get_nonce(file, (void __user *)arg);

@@ -3007,10 +3007,39 @@ enum {
 	/* first 8 bits are reserved for CEPH_FILE_MODE_FOO */
 	NON_BLOCKING	= (1 << 8),
 	CHECK_FILELOCK	= (1 << 9),
+	MDS_AUTHORIZED	= (1 << 10),
 };
 
+bool ceph_quarantine_head_cap_valid(struct inode *inode)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_cap *cap;
+	bool valid;
+
+	spin_lock(&ci->i_ceph_lock);
+	cap = ci->i_auth_cap;
+	valid = cap && __cap_is_valid(ci, cap) &&
+		test_bit(CEPHFS_FEATURE_QUARANTINE, &cap->session->s_features) &&
+		(cap->issued & CEPH_CAP_AUTH_SHARED);
+	spin_unlock(&ci->i_ceph_lock);
+	return valid;
+}
+
+static bool ceph_cap_auth_valid(struct ceph_mds_client *mdsc, u64 epoch)
+{
+	/*
+	 * Order authorization and cap observations before checking the saved
+	 * generation. Moves and splices can invalidate it even with no marks.
+	 * The epoch updates in the writer and splice boundaries are ordered RMWs.
+	 */
+	smp_rmb();
+	return !(epoch & 1) &&
+	       (u64)atomic64_read_acquire(&mdsc->quarantine_epoch) == epoch &&
+	       !atomic_read(&mdsc->quarantine_splices);
+}
+
 static int try_get_cap_refs(struct inode *inode, int need, int want,
-			    loff_t endoff, int flags, int *got)
+			    loff_t endoff, int flags, u64 qepoch, int *got)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_mds_client *mdsc = ceph_inode_to_fs_client(inode)->mdsc;
@@ -3025,6 +3054,15 @@ static int try_get_cap_refs(struct inode *inode, int need, int want,
 
 again:
 	spin_lock(&ci->i_ceph_lock);
+
+	if (ceph_inode_quarantine_direct(inode)) {
+		ret = -EACCES;
+		goto out_unlock;
+	}
+	if ((flags & MDS_AUTHORIZED) && !ceph_cap_auth_valid(mdsc, qepoch)) {
+		ret = -EAGAIN;
+		goto out_unlock;
+	}
 
 	if ((flags & CHECK_FILELOCK) &&
 	    test_bit(CEPH_I_ERROR_FILELOCK_BIT, &ci->i_ceph_flags)) {
@@ -3047,6 +3085,15 @@ again:
 		}
 		__ceph_do_pending_vmtruncate(inode);
 		spin_lock(&ci->i_ceph_lock);
+		if (ceph_inode_quarantine_direct(inode)) {
+			ret = -EACCES;
+			goto out_unlock;
+		}
+		if ((flags & MDS_AUTHORIZED) &&
+		    !ceph_cap_auth_valid(mdsc, qepoch)) {
+			ret = -EAGAIN;
+			goto out_unlock;
+		}
 	}
 
 	have = __ceph_caps_issued(ci, &implemented);
@@ -3195,6 +3242,31 @@ out_unlock:
 	if (snap_rwsem_locked)
 		up_read(&mdsc->snap_rwsem);
 
+	/* References remain provisional across truncate, cap waits and lock drops. */
+	if (ret == 1) {
+		enum ceph_qstate qstate = CEPH_Q_CLEAR;
+
+		if (!(flags & MDS_AUTHORIZED) &&
+		    ceph_snapshot_needs_revalidate(inode))
+			qstate = CEPH_Q_UNKNOWN;
+		else if (!(flags & MDS_AUTHORIZED))
+			qstate = need & CEPH_CAP_FILE_WR ?
+				ceph_inode_quarantine_write_state(inode) :
+				ceph_inode_quarantine_state(inode);
+		else if (!ceph_cap_auth_valid(mdsc, qepoch))
+			qstate = CEPH_Q_UNKNOWN;
+		/* An MDS answer cannot override a new negative on this inode. */
+		if (ceph_inode_quarantine_direct(inode))
+			qstate = CEPH_Q_UNDER;
+
+		if (qstate != CEPH_Q_CLEAR) {
+			ceph_put_cap_refs(ci, *got);
+			*got = 0;
+			ret = qstate == CEPH_Q_UNDER &&
+			      ceph_inode_quarantine_direct(inode) ? -EACCES : -EAGAIN;
+		}
+	}
+
 	if (!ret)
 		ceph_update_cap_mis(&mdsc->metric);
 	else if (ret == 1)
@@ -3263,17 +3335,34 @@ int ceph_try_get_caps(struct inode *inode, int need, int want,
 	BUG_ON(want & ~(CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO |
 			CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL |
 			CEPH_CAP_ANY_DIR_OPS));
+	/* Immutable snapshot caps have no MDS revoke notifications. */
+	if (ceph_snapshot_needs_revalidate(inode))
+		return 0;
+
 	if (need) {
 		ret = ceph_pool_perm_check(inode, need);
 		if (ret < 0)
 			return ret;
 	}
 
+	switch (ceph_inode_quarantine_state(inode)) {
+	case CEPH_Q_UNDER:
+		return ceph_inode_quarantine_direct(inode) ? -EACCES : 0;
+	case CEPH_Q_UNKNOWN:
+		/*
+		 * Callers may hold locked folios or another inode's caps.
+		 * Leave blocking revalidation to ceph_get_caps().
+		 */
+		return 0;
+	default:
+		break;
+	}
+
 	flags = get_used_fmode(need | want);
 	if (nonblock)
 		flags |= NON_BLOCKING;
 
-	ret = try_get_cap_refs(inode, need, want, 0, flags, got);
+	ret = try_get_cap_refs(inode, need, want, 0, flags, 0, got);
 	/* three special error codes */
 	if (ret == -EAGAIN || ret == -EFBIG || ret == -EUCLEAN)
 		ret = 0;
@@ -3290,6 +3379,9 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_fs_client *fsc = ceph_inode_to_fs_client(inode);
+	struct ceph_mds_client *mdsc = fsc->mdsc;
+	bool snapshot = ceph_in_snap(inode) && ceph_snap(inode) != CEPH_SNAPDIR;
+	u64 qepoch = 0;
 	int ret, _got, flags;
 
 	ret = ceph_pool_perm_check(inode, need);
@@ -3304,15 +3396,71 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 
 	while (true) {
 		flags &= CEPH_FILE_MODE_MASK;
+		if (snapshot && ceph_snapshot_needs_revalidate(inode)) {
+			/*
+			 * i_snap_caps cannot be revoked, and an idle snapshot
+			 * inode may receive no quarantine notification at all.
+			 * An MDS answer authorizes only this acquisition.
+			 */
+			qepoch = atomic64_read_acquire(&mdsc->quarantine_epoch);
+			if (!ceph_cap_auth_valid(mdsc, qepoch)) {
+				ret = ceph_quarantine_wait(inode);
+				if (ret)
+					return ret;
+				continue;
+			}
+			ret = ceph_snapshot_read_auth(inode);
+			if (ret)
+				return ret;
+			flags |= MDS_AUTHORIZED;
+		} else {
+			enum ceph_qstate qstate = need & CEPH_CAP_FILE_WR ?
+				ceph_inode_quarantine_write_state(inode) :
+				ceph_inode_quarantine_state(inode);
+
+			switch (qstate) {
+			case CEPH_Q_UNDER:
+				if (ceph_inode_quarantine_direct(inode))
+					return -EACCES;
+				fallthrough;
+			case CEPH_Q_UNKNOWN:
+				if (!(need & CEPH_CAP_FILE_WR)) {
+					ret = ceph_quarantine_revalidate(inode);
+					if (ret)
+						return ret;
+					continue;
+				}
+				/* A GETATTR receipt cannot authorize writes. */
+				qepoch = atomic64_read_acquire(&mdsc->quarantine_epoch);
+				if (!ceph_cap_auth_valid(mdsc, qepoch)) {
+					ret = ceph_quarantine_wait(inode);
+					if (ret)
+						return ret;
+					continue;
+				}
+				ret = ceph_renew_caps(inode, flags, true);
+				if (ret)
+					return ret;
+				flags |= MDS_AUTHORIZED;
+				break;
+			default:
+				break;
+			}
+		}
+
 		if (vfs_inode_has_locks(inode))
 			flags |= CHECK_FILELOCK;
 		_got = 0;
 		ret = try_get_cap_refs(inode, need, want, endoff,
-				       flags, &_got);
-		WARN_ON_ONCE(ret == -EAGAIN);
+				       flags, qepoch, &_got);
+		if (ret == -EAGAIN) {
+			ret = ceph_quarantine_wait(inode);
+			if (ret)
+				return ret;
+			continue;
+		}
 		if (!ret) {
 #ifdef CONFIG_DEBUG_FS
-			struct ceph_mds_client *mdsc = fsc->mdsc;
 			struct cap_wait cw;
 #endif
 			DEFINE_WAIT_FUNC(wait, woken_wake_function);
@@ -3333,8 +3481,33 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 			add_wait_queue(&ci->i_cap_wq, &wait);
 
 			flags |= NON_BLOCKING;
-			while (!(ret = try_get_cap_refs(inode, need, want,
-							endoff, flags, &_got))) {
+			while (true) {
+				enum ceph_qstate qstate = CEPH_Q_CLEAR;
+
+				if (!(flags & MDS_AUTHORIZED))
+					qstate = need & CEPH_CAP_FILE_WR ?
+						ceph_inode_quarantine_write_state(inode) :
+						ceph_inode_quarantine_state(inode);
+				else if (!ceph_cap_auth_valid(mdsc, qepoch))
+					qstate = CEPH_Q_UNKNOWN;
+				if (ceph_inode_quarantine_direct(inode))
+					qstate = CEPH_Q_UNDER;
+				switch (qstate) {
+				case CEPH_Q_UNDER:
+					ret = ceph_inode_quarantine_direct(inode) ?
+						-EACCES : -EAGAIN;
+					break;
+				case CEPH_Q_UNKNOWN:
+					/* Revalidate outside the cap wait. */
+					ret = -EAGAIN;
+					break;
+				default:
+					ret = try_get_cap_refs(inode, need, want,
+							       endoff, flags, qepoch, &_got);
+					break;
+				}
+				if (ret)
+					break;
 				if (signal_pending(current)) {
 					ret = -ERESTARTSYS;
 					break;
@@ -3363,8 +3536,12 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 			spin_unlock(&mdsc->caps_list_lock);
 #endif
 
-			if (ret == -EAGAIN)
+			if (ret == -EAGAIN) {
+				ret = ceph_quarantine_wait(inode);
+				if (ret)
+					return ret;
 				continue;
+			}
 		}
 
 		if (fi && (fi->fmode & CEPH_FILE_MODE_WR) &&
@@ -3387,7 +3564,7 @@ int __ceph_get_caps(struct inode *inode, struct ceph_file_info *fi, int need,
 			if (ret == -EUCLEAN) {
 				/* session was killed or a waited cap
 				 * request needs a retry */
-				ret = ceph_renew_caps(inode, flags);
+				ret = ceph_renew_caps(inode, flags, false);
 				if (ret == 0)
 					continue;
 			}

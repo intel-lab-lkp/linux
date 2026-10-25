@@ -997,6 +997,7 @@ ssize_t __ceph_getxattr(struct inode *inode, const char *name, void *value,
 	struct ceph_vxattr *vxattr;
 	int req_mask;
 	ssize_t err;
+	bool ask_mds = false;
 
 	if (strncmp(name, XATTR_CEPH_PREFIX, XATTR_CEPH_PREFIX_LEN))
 		goto handle_non_vxattrs;
@@ -1034,7 +1035,19 @@ handle_non_vxattrs:
 	      ceph_vinop(inode), name, ci->i_xattrs.version,
 	      ci->i_xattrs.index_version);
 
-	if (ci->i_xattrs.version == 0 ||
+	/*
+	 * A shared cap would answer from the cache. The state check may
+	 * schedule, so drop i_ceph_lock first. A reply reading the blob
+	 * it just installed must still use that cache.
+	 */
+	if (!ceph_current_fill_trace_request()) {
+		spin_unlock(&ci->i_ceph_lock);
+		ask_mds = ceph_snapshot_needs_revalidate(inode) ||
+			  ceph_inode_quarantine_state(inode) != CEPH_Q_CLEAR;
+		spin_lock(&ci->i_ceph_lock);
+	}
+
+	if (ask_mds || ci->i_xattrs.version == 0 ||
 	    !((req_mask & CEPH_CAP_XATTR_SHARED) ||
 	      __ceph_caps_issued_mask_metric(ci, CEPH_CAP_XATTR_SHARED, 1))) {
 		spin_unlock(&ci->i_ceph_lock);
@@ -1089,6 +1102,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	struct ceph_client *cl = ceph_inode_to_client(inode);
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	bool len_only = (size == 0);
+	bool ask_mds = false;
 	u32 namelen;
 	int err;
 	struct ceph_journal_info __ji;
@@ -1100,7 +1114,15 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	      ceph_vinop(inode), ci->i_xattrs.version,
 	      ci->i_xattrs.index_version);
 
-	if (ci->i_xattrs.version == 0 ||
+	/* Same as __ceph_getxattr(): do not serve a shared cap hit. */
+	if (!ceph_current_fill_trace_request()) {
+		spin_unlock(&ci->i_ceph_lock);
+		ask_mds = ceph_snapshot_needs_revalidate(inode) ||
+			  ceph_inode_quarantine_state(inode) != CEPH_Q_CLEAR;
+		spin_lock(&ci->i_ceph_lock);
+	}
+
+	if (ask_mds || ci->i_xattrs.version == 0 ||
 	    !__ceph_caps_issued_mask_metric(ci, CEPH_CAP_XATTR_SHARED, 1)) {
 		spin_unlock(&ci->i_ceph_lock);
 		err = ceph_do_getattr(inode, CEPH_STAT_CAP_XATTR, true);
@@ -1222,6 +1244,7 @@ int __ceph_setxattr(struct inode *inode, const char *name,
 	int required_blob_size;
 	bool check_realm = false;
 	bool lock_snap_rwsem = false;
+	bool checked_quarantine = false;
 
 	if (ceph_in_snap(inode))
 		return -EROFS;
@@ -1305,7 +1328,8 @@ retry:
 		struct ceph_buffer *blob;
 
 		spin_unlock(&ci->i_ceph_lock);
-		ceph_buffer_put(old_blob); /* Shouldn't be required */
+		ceph_buffer_put(old_blob);
+		old_blob = NULL;
 		boutc(cl, " pre-allocating new blob size=%d\n",
 		      required_blob_size);
 		blob = ceph_buffer_new(required_blob_size, GFP_NOFS);
@@ -1316,6 +1340,34 @@ retry:
 		if (ci->i_xattrs.prealloc_blob)
 			old_blob = ci->i_xattrs.prealloc_blob;
 		ci->i_xattrs.prealloc_blob = blob;
+		goto retry;
+	}
+
+	/*
+	 * XATTR_EXCL applies the new blob with no MDS round trip.
+	 * The state check may schedule, so drop i_ceph_lock first.
+	 */
+	if (!checked_quarantine) {
+		enum ceph_qstate qstate;
+
+		spin_unlock(&ci->i_ceph_lock);
+		qstate = ceph_inode_quarantine_write_state(inode);
+		if (qstate == CEPH_Q_UNDER &&
+		    ceph_inode_quarantine_direct(inode)) {
+			ceph_buffer_put(old_blob);
+			old_blob = NULL;
+			if (lock_snap_rwsem)
+				up_read(&mdsc->snap_rwsem);
+			err = -EACCES;
+			goto out;
+		}
+		if (qstate != CEPH_Q_CLEAR) {
+			ceph_buffer_put(old_blob);
+			old_blob = NULL;
+			goto do_sync_unlocked;
+		}
+		checked_quarantine = true;
+		spin_lock(&ci->i_ceph_lock);
 		goto retry;
 	}
 
@@ -1331,6 +1383,7 @@ retry:
 
 	spin_unlock(&ci->i_ceph_lock);
 	ceph_buffer_put(old_blob);
+	old_blob = NULL;
 	if (lock_snap_rwsem)
 		up_read(&mdsc->snap_rwsem);
 	if (dirty)
@@ -1341,6 +1394,7 @@ retry:
 do_sync:
 	spin_unlock(&ci->i_ceph_lock);
 	ceph_buffer_put(old_blob);
+	old_blob = NULL;
 do_sync_unlocked:
 	if (lock_snap_rwsem)
 		up_read(&mdsc->snap_rwsem);
