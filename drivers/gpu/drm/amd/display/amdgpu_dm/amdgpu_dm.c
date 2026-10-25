@@ -81,6 +81,7 @@
 #include <linux/moduleparam.h>
 #include <linux/types.h>
 #include <linux/pm_runtime.h>
+#include <linux/vgaarb.h>
 #include <linux/pci.h>
 #include <linux/power_supply.h>
 #include <linux/firmware.h>
@@ -622,6 +623,10 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 		init_data.bb_from_dmub = adev->dm.bb_from_dmub;
 	else
 		init_data.bb_from_dmub = NULL;
+
+	if (amdgpu_device_has_gmux_edp(adev) &&
+	    adev->pdev != vga_default_device())
+		init_data.flags.edp_not_connected = true;
 
 	/* Display Core create. */
 	adev->dm.dc = dc_create(&init_data);
@@ -2544,6 +2549,15 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 		if (dm->hpd_rx_offload_wq)
 			dm->hpd_rx_offload_wq[aconnector->base.index].aconnector =
 				aconnector;
+
+		/* Like the resume path, skip eDP detection without a sink. */
+		if (link->connector_signal == SIGNAL_TYPE_EDP &&
+		    amdgpu_device_has_gmux_edp(adev) &&
+		    !link->edp_sink_present) {
+			drm_info(adev_to_drm(adev), "Skipping detection of inactive GMUX eDP link %d\n",
+				 i);
+			continue;
+		}
 
 		if (!dc_link_detect_connection_type(link, &new_connection_type))
 			drm_err(adev_to_drm(adev), "KMS: Failed to detect connector\n");
