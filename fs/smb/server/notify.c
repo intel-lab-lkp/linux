@@ -24,6 +24,7 @@
 #include "smb_common.h"
 #include "smb2pdu.h"
 #include "vfs_cache.h"
+#include "xattr.h"
 #include "mgmt/user_session.h"
 
 #define KSMBD_NOTIFY_BROADCAST_MSECS	1000
@@ -31,6 +32,16 @@
 #define KSMBD_NOTIFY_MOVED_FROM_MSECS	100
 #define KSMBD_NOTIFY_EVENT_MASK		(FS_ACCESS | FS_ATTRIB | FS_MODIFY | \
 					 KSMBD_NOTIFY_NAME_EVENT_MASK)
+
+/* Protect the watch list and notify->fp during event delivery. */
+static DECLARE_RWSEM(ksmbd_notify_stream_lock);
+static LIST_HEAD(ksmbd_notify_stream_watches);
+
+/* Only a hint; list traversal still needs ksmbd_notify_stream_lock. */
+bool ksmbd_notify_has_stream_watches(void)
+{
+	return !list_empty(&ksmbd_notify_stream_watches);
+}
 
 static const struct {
 	u32 notify_mask;
@@ -614,6 +625,109 @@ out_dput:
 	return name;
 }
 
+static void ksmbd_notify_stream_event(struct ksmbd_notify *notify,
+				      const struct path *path,
+				      const char *stream, size_t stream_len,
+				      u32 action, u32 filter)
+{
+	struct dentry *root = file_dentry(notify->fp->filp);
+	struct ksmbd_notify_event *event;
+	struct qstr file_name = {}, stream_name;
+	char *name, *full_name;
+
+	if (!(notify->filter & filter) || root->d_sb != path->dentry->d_sb ||
+	    d_inode(root) == d_inode(path->dentry))
+		return;
+
+	if (!notify->watch_tree) {
+		struct dentry *parent = dget_parent(path->dentry);
+		bool match = parent == root;
+
+		dput(parent);
+		if (!match)
+			return;
+	}
+
+	name = ksmbd_notify_tree_name(notify, path, FSNOTIFY_EVENT_PATH,
+				      NULL, NULL, &file_name);
+	if (IS_ERR(name)) {
+		if (PTR_ERR(name) != -EXDEV)
+			ksmbd_notify_set_overflow(notify);
+		return;
+	}
+	/* Unknown old size: cannot tell add from modify. */
+	if (!action) {
+		ksmbd_notify_set_overflow(notify);
+		goto out;
+	}
+
+	/* MS-FSA: relative file name + ':' + stream name. */
+	full_name = kasprintf(KSMBD_DEFAULT_GFP, "%s:%.*s", name,
+			      (int)stream_len, stream);
+	if (!full_name) {
+		ksmbd_notify_set_overflow(notify);
+		goto out;
+	}
+	stream_name.name = full_name;
+	stream_name.len = file_name.len + 1 + stream_len;
+	event = ksmbd_notify_alloc_event(notify, action, &stream_name,
+					 KSMBD_DEFAULT_GFP);
+	kfree(full_name);
+	if (event)
+		ksmbd_notify_queue_event(notify, event);
+out:
+	kfree(name);
+}
+
+/**
+ * ksmbd_notify_stream() - report a stream change
+ * @path: base file or directory
+ * @xattr_name: stream xattr name, including the type
+ * @old_size: old length, or -ENODATA for a new stream
+ * @new_size: new length, or -ENODATA for a deleted stream
+ *
+ * FS_ATTRIB has no xattr name or old size. Call this after a successful
+ * stream xattr change.
+ */
+void ksmbd_notify_stream(const struct path *path, const char *xattr_name,
+			 ssize_t old_size, ssize_t new_size)
+{
+	struct ksmbd_notify *notify;
+	const char *stream, *type;
+	u32 action, filter;
+
+	if (strncmp(xattr_name, XATTR_NAME_STREAM, XATTR_NAME_STREAM_LEN))
+		return;
+	stream = xattr_name + XATTR_NAME_STREAM_LEN;
+	type = strrchr(stream, ':');
+	if (!type || type == stream ||
+	    (strcasecmp(type, ":$DATA") &&
+	     strcasecmp(type, ":$INDEX_ALLOCATION")))
+		return;
+
+	if (new_size == -ENODATA) {
+		action = FILE_ACTION_REMOVED_STREAM;
+		filter = FILE_NOTIFY_CHANGE_STREAM_NAME;
+	} else if (old_size == -ENODATA) {
+		action = FILE_ACTION_ADDED_STREAM;
+		filter = FILE_NOTIFY_CHANGE_STREAM_NAME;
+	} else if (old_size < 0) {
+		action = 0;
+		filter = KSMBD_NOTIFY_STREAM_MASK;
+	} else {
+		action = FILE_ACTION_MODIFIED_STREAM;
+		filter = FILE_NOTIFY_CHANGE_STREAM_WRITE;
+		if (old_size != new_size)
+			filter |= FILE_NOTIFY_CHANGE_STREAM_SIZE;
+	}
+
+	down_read(&ksmbd_notify_stream_lock);
+	list_for_each_entry(notify, &ksmbd_notify_stream_watches, stream_list)
+		ksmbd_notify_stream_event(notify, path, stream, type - stream,
+					  action, filter);
+	up_read(&ksmbd_notify_stream_lock);
+}
+
 static int ksmbd_notify_handle_event(struct fsnotify_group *group, u32 mask,
 				     const void *data, int data_type,
 				     struct inode *dir,
@@ -744,6 +858,7 @@ static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
 	}
 
 	notify->fp = fp;
+	INIT_LIST_HEAD(&notify->stream_list);
 	spin_lock_init(&notify->lock);
 	INIT_LIST_HEAD(&notify->events);
 	notify->filter = filter;
@@ -787,6 +902,11 @@ static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
 		notify->tree_mark = tree_mark;
 	}
 
+	if (filter & KSMBD_NOTIFY_STREAM_MASK) {
+		down_write(&ksmbd_notify_stream_lock);
+		list_add_tail(&notify->stream_list, &ksmbd_notify_stream_watches);
+		up_write(&ksmbd_notify_stream_lock);
+	}
 	fp->notify = notify;
 	*notify_out = notify;
 	ksmbd_debug(NOTIFY,
@@ -821,6 +941,10 @@ void ksmbd_notify_remove(struct ksmbd_file *fp)
 	mutex_unlock(&fp->notify_lock);
 	if (!notify)
 		return;
+
+	down_write(&ksmbd_notify_stream_lock);
+	list_del_init(&notify->stream_list);
+	up_write(&ksmbd_notify_stream_lock);
 
 	ksmbd_debug(NOTIFY,
 		    "Removing fsnotify mark, inode %llu, mask 0x%x, watch tree %d\n",
@@ -1120,7 +1244,7 @@ ksmbd_notify_setup_watch(struct ksmbd_file *fp,
 
 	filter = le32_to_cpu(req->CompletionFilter);
 	mask = ksmbd_notify_map(filter);
-	if (!mask)
+	if (!mask && !(filter & KSMBD_NOTIFY_STREAM_MASK))
 		ksmbd_debug(NOTIFY,
 			    "No mapped completion filter bits; request will remain pending\n");
 

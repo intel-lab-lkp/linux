@@ -32,6 +32,7 @@ struct ksmbd_notify_event {
 };
 
 struct ksmbd_notify {
+	struct list_head stream_list;
 	struct fsnotify_group *group;
 	struct fsnotify_mark *mark;
 	struct fsnotify_mark *tree_mark;
@@ -64,10 +65,16 @@ struct ksmbd_notify_req {
 #define KSMBD_NOTIFY_MAX_BYTES		SZ_64K
 #define KSMBD_NOTIFY_NAME_EVENT_MASK	(FS_CREATE | FS_DELETE | \
 					 FS_MOVED_FROM | FS_MOVED_TO)
+#define KSMBD_NOTIFY_STREAM_MASK		(FILE_NOTIFY_CHANGE_STREAM_NAME | \
+					 FILE_NOTIFY_CHANGE_STREAM_SIZE | \
+					 FILE_NOTIFY_CHANGE_STREAM_WRITE)
 
 int ksmbd_handle_notify(struct ksmbd_work *work,
 			struct smb2_change_notify_req *req,
 			struct smb2_change_notify_rsp *rsp);
 void ksmbd_notify_remove(struct ksmbd_file *fp);
+bool ksmbd_notify_has_stream_watches(void);
+void ksmbd_notify_stream(const struct path *path, const char *xattr_name,
+			 ssize_t old_size, ssize_t new_size);
 
 #endif /* __SMB_SERVER_NOTIFY_H__ */

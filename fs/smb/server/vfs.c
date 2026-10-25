@@ -34,6 +34,7 @@
 #include "auth.h"
 #include "misc.h"
 #include "stats.h"
+#include "notify.h"
 
 #include "smb_common.h"
 #include "mgmt/share_config.h"
@@ -942,6 +943,39 @@ ssize_t ksmbd_vfs_getxattr(const struct mnt_idmap *idmap,
 	return xattr_len;
 }
 
+/*
+ * Read the old size and update the xattr under the same inode lock.
+ * Queue the notification before unlocking to keep events in order.
+ */
+static int ksmbd_vfs_set_stream_xattr(const struct mnt_idmap *idmap,
+				      const struct path *path, const char *name,
+				      void *value, size_t size, int flags)
+{
+	struct inode *inode = d_inode(path->dentry);
+	struct delegated_inode delegated_inode = {};
+	ssize_t old_size;
+	int err;
+
+retry_deleg:
+	inode_lock(inode);
+	/* A new watch may need a rescan if the old size was not read. */
+	old_size = -EAGAIN;
+	if (ksmbd_notify_has_stream_watches())
+		old_size = __vfs_getxattr(path->dentry, inode, name, NULL, 0);
+	err = __vfs_setxattr_locked(idmap, path->dentry, name, value, size,
+				    flags, &delegated_inode);
+	if (!err && ksmbd_notify_has_stream_watches())
+		ksmbd_notify_stream(path, name, old_size, size);
+	inode_unlock(inode);
+
+	if (is_delegated(&delegated_inode)) {
+		err = break_deleg_wait(&delegated_inode);
+		if (!err)
+			goto retry_deleg;
+	}
+	return err;
+}
+
 /**
  * ksmbd_vfs_setxattr() - vfs helper for smb set extended attributes value
  * @idmap:	idmap of the relevant mount
@@ -967,12 +1001,12 @@ int ksmbd_vfs_setxattr(const struct mnt_idmap *idmap,
 			return err;
 	}
 
-	err = vfs_setxattr(idmap,
-			   path->dentry,
-			   attr_name,
-			   attr_value,
-			   attr_size,
-			   flags);
+	if (!strncmp(attr_name, XATTR_NAME_STREAM, XATTR_NAME_STREAM_LEN))
+		err = ksmbd_vfs_set_stream_xattr(idmap, path, attr_name,
+						 attr_value, attr_size, flags);
+	else
+		err = vfs_setxattr(idmap, path->dentry, attr_name, attr_value,
+				   attr_size, flags);
 	if (err)
 		ksmbd_debug(VFS, "setxattr failed, err %d\n", err);
 	if (get_write == true)
@@ -1251,6 +1285,8 @@ int ksmbd_vfs_remove_xattr(const struct mnt_idmap *idmap,
 			   const struct path *path, char *attr_name,
 			   bool get_write)
 {
+	struct inode *inode = d_inode(path->dentry);
+	struct delegated_inode delegated_inode = {};
 	int err;
 
 	if (get_write == true) {
@@ -1259,8 +1295,25 @@ int ksmbd_vfs_remove_xattr(const struct mnt_idmap *idmap,
 			return err;
 	}
 
-	err = vfs_removexattr(idmap, path->dentry, attr_name);
+	if (strncmp(attr_name, XATTR_NAME_STREAM, XATTR_NAME_STREAM_LEN)) {
+		err = vfs_removexattr(idmap, path->dentry, attr_name);
+		goto out;
+	}
 
+retry_deleg:
+	inode_lock(inode);
+	err = __vfs_removexattr_locked(idmap, path->dentry, attr_name,
+				       &delegated_inode);
+	if (!err && ksmbd_notify_has_stream_watches())
+		ksmbd_notify_stream(path, attr_name, 0, -ENODATA);
+	inode_unlock(inode);
+	if (is_delegated(&delegated_inode)) {
+		err = break_deleg_wait(&delegated_inode);
+		if (!err)
+			goto retry_deleg;
+	}
+
+out:
 	if (get_write == true)
 		mnt_drop_write(path->mnt);
 
