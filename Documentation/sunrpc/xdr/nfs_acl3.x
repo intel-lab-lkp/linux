@@ -91,6 +91,8 @@ struct secattr {
     int dfaclcnt;
     aclent dfaclent<NFS_ACL_MAX_ENTRIES>;
 };
+pragma aggregate secattr aclent;
+pragma aggregate secattr dfaclent;
 
 /*
  * The values for the mask element of the secattr struct as well
