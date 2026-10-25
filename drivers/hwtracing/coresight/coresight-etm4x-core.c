@@ -30,6 +30,7 @@
 #include <linux/uaccess.h>
 #include <linux/perf_event.h>
 #include <linux/perf/arm_pmu.h>
+#include <linux/perf/arm_pmuv3.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
@@ -1399,6 +1400,29 @@ static void etm4_fixup_wrong_ccitmin(struct etmv4_caps *caps)
 	}
 }
 
+/*
+ * Whether the PMU counts each external output of this trace unit as
+ * TRCEXTOUTn. The trace unit has an external output for each of its events.
+ * Only ETE is checked: per its specification, an implemented TRCEXTOUTn event
+ * counts external output n.
+ *
+ * Must run on the CPU that owns the trace unit.
+ */
+static bool etm4_pmu_counts_extout(struct etmv4_drvdata *drvdata)
+{
+	int n;
+
+	if (!etm4x_is_ete(drvdata) || !drvdata->caps.nr_event)
+		return false;
+
+	for (n = 0; n < drvdata->caps.nr_event; n++) {
+		if (!pmuv3_event_implemented(ARMV8_PMUV3_PERFCTR_TRCEXTOUT0 + n))
+			return false;
+	}
+
+	return true;
+}
+
 static void etm4_init_arch_data(void *info)
 {
 	u32 etmidr0;
@@ -1561,6 +1585,8 @@ static void etm4_init_arch_data(void *info)
 		caps->nr_seq_ctrls = ETM_MAX_SEQ_TRANSITIONS;
 	/* NUMCNTR, bits[30:28] number of counters available for tracing */
 	caps->nr_cntr = FIELD_GET(TRCIDR5_NUMCNTR_MASK, etmidr5);
+
+	caps->trcextout = etm4_pmu_counts_extout(drvdata);
 
 	coresight_clear_self_claim_tag_unlocked(csa);
 	etm4_cs_lock(drvdata, csa);

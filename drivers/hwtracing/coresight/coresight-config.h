@@ -38,6 +38,8 @@
  * a device that matches one of its classes and has all of its capabilities.
  */
 #define CS_CFG_MATCH_CAP_MASK		GENMASK_U32(15, 8)
+/* the PMU counts the trace unit's external outputs as TRCEXTOUTn */
+#define CS_CFG_MATCH_CAP_TRCEXTOUT	BIT(8)
 
 /*
  * Limit number of presets in a configuration
