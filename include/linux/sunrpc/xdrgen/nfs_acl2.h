@@ -232,7 +232,7 @@ enum {
 #define NFS_ACL2_o_mode_sz              \
 	(XDR_unsigned_short)
 #define NFS_ACL2_aclent_sz              \
-	(XDR_int + XDR_unsigned_int + NFS_ACL2_o_mode_sz)
+	(XDR_int + NFS_ACL2_uid_sz + NFS_ACL2_o_mode_sz)
 #define NFS_ACL2_secattr_sz             \
 	(XDR_unsigned_int + XDR_int + XDR_unsigned_int + (NFS_ACL_MAX_ENTRIES * (NFS_ACL2_aclent_sz)) + XDR_int + XDR_unsigned_int + (NFS_ACL_MAX_ENTRIES * (NFS_ACL2_aclent_sz)))
 #define NFS_ACL2_ftype_sz               (XDR_int)

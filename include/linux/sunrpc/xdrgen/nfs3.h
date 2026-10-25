@@ -885,13 +885,13 @@ enum {
 	(XDR_bool + NFS3_nfs_fh3_sz)
 #define NFS3_time_how_sz                (XDR_int)
 #define NFS3_set_mode3_sz               \
-	(NFS3_time_how_sz + NFS3_mode3_sz)
+	(XDR_bool + NFS3_mode3_sz)
 #define NFS3_set_uid3_sz                \
-	(NFS3_time_how_sz + NFS3_uid3_sz)
+	(XDR_bool + NFS3_uid3_sz)
 #define NFS3_set_gid3_sz                \
-	(NFS3_time_how_sz + NFS3_gid3_sz)
+	(XDR_bool + NFS3_gid3_sz)
 #define NFS3_set_size3_sz               \
-	(NFS3_time_how_sz + NFS3_size3_sz)
+	(XDR_bool + NFS3_size3_sz)
 #define NFS3_set_atime_sz               \
 	(NFS3_time_how_sz + NFS3_nfstime3_sz)
 #define NFS3_set_mtime_sz               \
