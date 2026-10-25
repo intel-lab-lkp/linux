@@ -30,12 +30,6 @@ nfsacl_encode(struct xdr_buf *buf, unsigned int base, struct inode *inode,
 extern int
 nfsacl_decode(struct xdr_buf *buf, unsigned int base, unsigned int *aclcnt,
 	      struct posix_acl **pacl);
-extern bool
-nfs_stream_decode_acl(struct xdr_stream *xdr, unsigned int *aclcnt,
-		      struct posix_acl **pacl);
-extern bool
-nfs_stream_encode_acl(struct xdr_stream *xdr, struct inode *inode,
-		      struct posix_acl *acl, int encode_entries, int typeflag);
 extern int
 posix_acl_from_nfsacl(struct posix_acl *acl);
 
