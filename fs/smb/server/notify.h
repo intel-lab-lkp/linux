@@ -15,6 +15,7 @@
 
 #include <linux/fsnotify_backend.h>
 #include <linux/sizes.h>
+#include <linux/workqueue.h>
 
 struct ksmbd_work;
 struct ksmbd_file;
@@ -45,6 +46,10 @@ struct ksmbd_notify {
 	u32 filter;
 	u32 mask;
 	bool watch_tree;
+	struct ksmbd_notify_event *moved_from_event;
+	u32 moved_from_mask;
+	u32 moved_from_cookie;
+	struct delayed_work moved_from_work;
 };
 
 struct ksmbd_notify_req {
