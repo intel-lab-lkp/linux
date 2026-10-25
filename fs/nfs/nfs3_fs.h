@@ -11,6 +11,9 @@
  * nfs3acl.c
  */
 #ifdef CONFIG_NFS_V3_ACL
+#define NFSACL_MAXPAGES		((2*(8+12*NFS_ACL_MAX_ENTRIES) + PAGE_SIZE-1) \
+				 >> PAGE_SHIFT)
+
 extern struct posix_acl *nfs3_get_acl(struct inode *inode, int type, bool rcu);
 extern int nfs3_set_acl(const struct mnt_idmap *idmap, struct dentry *dentry,
 			struct posix_acl *acl, int type);

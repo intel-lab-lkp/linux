@@ -25,6 +25,7 @@
 #include <linux/nfs_common.h>
 
 #include "internal.h"
+#include "nfs3_fs.h"
 #include "nfstrace.h"
 
 #define NFSDBG_FACILITY		NFSDBG_XDR
