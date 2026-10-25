@@ -12,6 +12,8 @@
 
 #include <linux/fsnotify_backend.h>
 #include <linux/dcache.h>
+#include <linux/sizes.h>
+#include <linux/slab.h>
 #include "glob.h"
 #include "../common/smb2status.h"
 #include "connection.h"
@@ -21,6 +23,9 @@
 #include "smb2pdu.h"
 #include "vfs_cache.h"
 #include "mgmt/user_session.h"
+
+#define KSMBD_NOTIFY_EVENT_MASK		(FS_ACCESS | FS_ATTRIB | FS_MODIFY | \
+					 KSMBD_NOTIFY_NAME_EVENT_MASK)
 
 static const struct {
 	u32 notify_mask;
@@ -56,6 +61,69 @@ static u32 ksmbd_notify_map(u32 filter)
 	return mask;
 }
 
+static void ksmbd_notify_free_event(struct ksmbd_notify *notify,
+				    struct ksmbd_notify_event *event)
+{
+	size_t alloc_size;
+
+	if (!event)
+		return;
+	alloc_size = event->alloc_size;
+	kfree(event);
+	spin_lock(&notify->lock);
+	notify->event_bytes -= alloc_size;
+	spin_unlock(&notify->lock);
+}
+
+static void ksmbd_notify_free_events(struct ksmbd_notify *notify,
+				     struct list_head *events)
+{
+	struct ksmbd_notify_event *event, *tmp;
+
+	list_for_each_entry_safe(event, tmp, events, list) {
+		list_del(&event->list);
+		ksmbd_notify_free_event(notify, event);
+	}
+}
+
+/* The caller holds notify->lock. Keep charges until the events are freed. */
+static void ksmbd_notify_discard_events(struct ksmbd_notify *notify,
+					struct list_head *discard)
+{
+	list_splice_tail_init(&notify->events, discard);
+	notify->num_events = 0;
+}
+
+static void ksmbd_notify_set_overflow(struct ksmbd_notify *notify)
+{
+	LIST_HEAD(discard);
+
+	spin_lock(&notify->lock);
+	notify->overflow = true;
+	ksmbd_notify_discard_events(notify, &discard);
+	spin_unlock(&notify->lock);
+
+	ksmbd_notify_free_events(notify, &discard);
+}
+
+static bool ksmbd_notify_filter_match(struct ksmbd_notify *notify, u32 mask)
+{
+	u32 filter, notify_mask;
+
+	spin_lock(&notify->lock);
+	filter = notify->filter;
+	notify_mask = notify->mask;
+	spin_unlock(&notify->lock);
+
+	if (mask & KSMBD_NOTIFY_NAME_EVENT_MASK) {
+		if (mask & FS_ISDIR)
+			return filter & FILE_NOTIFY_CHANGE_DIR_NAME;
+		return filter & FILE_NOTIFY_CHANGE_FILE_NAME;
+	}
+
+	return mask & notify_mask;
+}
+
 /*
  * Cancel handler for a pending CHANGE_NOTIFY. Called either by
  * smb2_cancel() (conn->request_lock held, work->state already set to
@@ -75,14 +143,86 @@ static void smb2_notify_cancel(void **argv)
 	wake_up(&notify_req->wait);
 }
 
+static struct ksmbd_notify_event *
+ksmbd_notify_alloc_event(struct ksmbd_notify *notify, u32 action,
+			 const struct qstr *file_name, gfp_t gfp)
+{
+	struct ksmbd_notify_event *event;
+	size_t name_len = file_name ? file_name->len : 0;
+	size_t alloc_size;
+
+	if (name_len > KSMBD_NOTIFY_MAX_BYTES - sizeof(*event) - 1)
+		goto overflow;
+	alloc_size = kmalloc_size_roundup(sizeof(*event) + name_len + 1);
+
+	/* Reserve before allocating so concurrent callbacks share one budget. */
+	spin_lock(&notify->lock);
+	if (notify->overflow) {
+		spin_unlock(&notify->lock);
+		return NULL;
+	}
+	if (alloc_size > KSMBD_NOTIFY_MAX_BYTES - notify->event_bytes) {
+		spin_unlock(&notify->lock);
+		goto overflow;
+	}
+	notify->event_bytes += alloc_size;
+	spin_unlock(&notify->lock);
+
+	event = kmalloc(alloc_size, gfp);
+	if (!event) {
+		pr_err("Failed to allocate notify event, action %u, name %.*s\n",
+		       action, file_name ? file_name->len : 0,
+		       file_name ? (const char *)file_name->name : "");
+		spin_lock(&notify->lock);
+		notify->event_bytes -= alloc_size;
+		spin_unlock(&notify->lock);
+		goto overflow;
+	}
+
+	INIT_LIST_HEAD(&event->list);
+	event->action = action;
+	event->when = ktime_get_ns();
+	event->name_len = name_len;
+	event->alloc_size = alloc_size;
+	if (name_len)
+		memcpy(event->name, file_name->name, name_len);
+	event->name[name_len] = '\0';
+
+	return event;
+
+overflow:
+	ksmbd_notify_set_overflow(notify);
+	return NULL;
+}
+
+static void
+ksmbd_notify_queue_event(struct ksmbd_notify *notify,
+			 struct ksmbd_notify_event *event)
+{
+	ksmbd_debug(NOTIFY, "Queueing notify event, action %u, name %s\n",
+		    event->action, event->name);
+
+	spin_lock(&notify->lock);
+	if (notify->overflow) {
+		spin_unlock(&notify->lock);
+		ksmbd_notify_free_event(notify, event);
+		return;
+	}
+	list_add_tail(&event->list, &notify->events);
+	notify->num_events++;
+	spin_unlock(&notify->lock);
+}
+
 static int ksmbd_notify_handle_inode_event(struct ksmbd_notify *notify,
 					   u32 mask, struct inode *inode,
 					   struct inode *dir,
 					   const struct qstr *file_name,
 					   u32 cookie)
 {
+	struct ksmbd_notify_event *event;
 	struct inode *event_inode = dir ?: inode;
 	struct ksmbd_file *fp;
+	u32 action;
 
 	fp = notify->fp;
 
@@ -92,6 +232,30 @@ static int ksmbd_notify_handle_inode_event(struct ksmbd_notify *notify,
 		    event_inode ? (unsigned long long)event_inode->i_ino : 0,
 		    file_name ? file_name->len : 0,
 		    file_name ? (const char *)file_name->name : "", cookie);
+
+	if (!(mask & KSMBD_NOTIFY_EVENT_MASK)) {
+		ksmbd_debug(NOTIFY, "Ignored notify event mask 0x%x\n", mask);
+		return 0;
+	}
+
+	/* Only matching changes may consume the budget or signal overflow. */
+	if (!ksmbd_notify_filter_match(notify, mask))
+		return 0;
+
+	if (mask & FS_CREATE) {
+		action = FILE_ACTION_ADDED;
+	} else if (mask & FS_DELETE) {
+		action = FILE_ACTION_REMOVED;
+	} else {
+		action = FILE_ACTION_MODIFIED;
+	}
+
+	event = ksmbd_notify_alloc_event(notify, action, file_name,
+					 KSMBD_DEFAULT_GFP);
+	if (!event)
+		return 0;
+
+	ksmbd_notify_queue_event(notify, event);
 
 	return 0;
 }
@@ -202,6 +366,21 @@ static int ksmbd_notify_handle_event(struct fsnotify_group *group, u32 mask,
 	char *name = NULL;
 	int err;
 
+	/*
+	 * fsnotify_access() reports reads and directory enumeration as path
+	 * events, even when atime is unchanged. Keep the dentry-based FS_ACCESS
+	 * events from fsnotify_change() for explicit atime updates.
+	 */
+	if (data_type == FSNOTIFY_EVENT_PATH)
+		mask &= ~FS_ACCESS;
+	if (!(mask & KSMBD_NOTIFY_EVENT_MASK))
+		return 0;
+
+	inode = fsnotify_data_inode(data, data_type);
+	/* CHANGE_NOTIFY reports changes below the watched directory. */
+	if (inode == file_inode(notify->fp->filp))
+		return 0;
+
 	if (!READ_ONCE(notify->watch_tree)) {
 		/* Non-tree watches accept events from the root inode mark only. */
 		if (!fsnotify_iter_inode_mark(iter_info) &&
@@ -218,7 +397,6 @@ static int ksmbd_notify_handle_event(struct fsnotify_group *group, u32 mask,
 		file_name = &tree_name;
 	}
 
-	inode = fsnotify_data_inode(data, data_type);
 	err = ksmbd_notify_handle_inode_event(notify, mask, inode, dir,
 					      file_name, cookie);
 	kfree(name);
@@ -307,6 +485,7 @@ static int ksmbd_notify_add(struct ksmbd_file *fp, u32 mask, u32 filter,
 
 	notify->fp = fp;
 	spin_lock_init(&notify->lock);
+	INIT_LIST_HEAD(&notify->events);
 	notify->filter = filter;
 	notify->mask = mask;
 	notify->watch_tree = watch_tree;
@@ -384,6 +563,7 @@ void ksmbd_notify_remove(struct ksmbd_file *fp)
 		    (unsigned long long)file_inode(fp->filp)->i_ino,
 		    notify->mark->mask, notify->watch_tree);
 	ksmbd_notify_destroy_marks(notify);
+	ksmbd_notify_free_events(notify, &notify->events);
 	kfree(notify);
 }
 
