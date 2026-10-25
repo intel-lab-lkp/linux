@@ -166,28 +166,24 @@ static bool io_napi_busy_loop_should_end(void *data,
 /*
  * never report stale entries
  */
-static bool static_tracking_do_busy_loop(struct io_ring_ctx *ctx,
-					 bool (*loop_end)(void *, unsigned long),
-					 void *loop_end_arg)
+static bool static_tracking_do_busy_loop(struct io_ring_ctx *ctx)
 {
 	struct io_napi_entry *e;
 
 	list_for_each_entry_rcu(e, &ctx->napi_list, list)
-		napi_busy_loop_rcu(e->napi_id, loop_end, loop_end_arg,
+		napi_busy_loop_rcu(e->napi_id, NULL, NULL,
 				   ctx->napi_prefer_busy_poll, BUSY_POLL_BUDGET);
 	return false;
 }
 
 static bool
-dynamic_tracking_do_busy_loop(struct io_ring_ctx *ctx,
-			      bool (*loop_end)(void *, unsigned long),
-			      void *loop_end_arg)
+dynamic_tracking_do_busy_loop(struct io_ring_ctx *ctx)
 {
 	struct io_napi_entry *e;
 	bool is_stale = false;
 
 	list_for_each_entry_rcu(e, &ctx->napi_list, list) {
-		napi_busy_loop_rcu(e->napi_id, loop_end, loop_end_arg,
+		napi_busy_loop_rcu(e->napi_id, NULL, NULL,
 				   ctx->napi_prefer_busy_poll, BUSY_POLL_BUDGET);
 
 		if (time_after(jiffies, READ_ONCE(e->timeout)))
@@ -198,15 +194,13 @@ dynamic_tracking_do_busy_loop(struct io_ring_ctx *ctx,
 }
 
 static inline bool
-__io_napi_do_busy_loop(struct io_ring_ctx *ctx,
-		       bool (*loop_end)(void *, unsigned long),
-		       void *loop_end_arg)
+__io_napi_do_busy_loop(struct io_ring_ctx *ctx)
 {
 	switch (READ_ONCE(ctx->napi_track_mode)) {
 	case IO_URING_NAPI_TRACKING_STATIC:
-		return static_tracking_do_busy_loop(ctx, loop_end, loop_end_arg);
+		return static_tracking_do_busy_loop(ctx);
 	case IO_URING_NAPI_TRACKING_DYNAMIC:
-		return dynamic_tracking_do_busy_loop(ctx, loop_end, loop_end_arg);
+		return dynamic_tracking_do_busy_loop(ctx);
 	default:
 		return false;
 	}
@@ -216,24 +210,12 @@ static void io_napi_blocking_busy_loop(struct io_ring_ctx *ctx,
 				       struct io_wait_queue *iowq)
 {
 	unsigned long start_time = busy_loop_current_time();
-	bool (*loop_end)(void *, unsigned long) = NULL;
-	void *loop_end_arg = NULL;
 	bool is_stale = false;
-
-	/* Singular lists use a different napi loop end check function and are
-	 * only executed once.
-	 */
-	if (list_is_singular(&ctx->napi_list)) {
-		loop_end = io_napi_busy_loop_should_end;
-		loop_end_arg = iowq;
-	}
 
 	scoped_guard(rcu) {
 		do {
-			is_stale = __io_napi_do_busy_loop(ctx, loop_end,
-							  loop_end_arg);
-		} while (!io_napi_busy_loop_should_end(iowq, start_time) &&
-			 !loop_end_arg);
+			is_stale = __io_napi_do_busy_loop(ctx);
+		} while (!io_napi_busy_loop_should_end(iowq, start_time));
 	}
 
 	io_napi_remove_stale(ctx, is_stale);
@@ -403,7 +385,7 @@ int io_napi_sqpoll_busy_poll(struct io_ring_ctx *ctx)
 		return 0;
 
 	scoped_guard(rcu) {
-		is_stale = __io_napi_do_busy_loop(ctx, NULL, NULL);
+		is_stale = __io_napi_do_busy_loop(ctx);
 	}
 
 	io_napi_remove_stale(ctx, is_stale);
