@@ -12,6 +12,7 @@
 #include <linux/sunrpc/xdrgen/nfs3.h>
 
 #include "vfs.h"
+#include "fattr.h"
 
 #define NF3NON		(0)
 #define NF3BAD		(8)
@@ -147,8 +148,6 @@ void nfs3svc_release_readdirplusres(struct svc_rqst *rqstp);
 
 void nfs3svc_encode_cookie3(struct xdr_stream *xdr, unsigned int pos,
 			    u64 cookie);
-void nfsd3_fill_post_op_attr(struct svc_rqst *rqstp, struct post_op_attr *attr,
-			     struct svc_fh *fhp);
 void nfsd3_fill_post_op_fh3(struct post_op_fh3 *post_op_fh,
 			    const struct svc_fh *fhp, u8 *data);
 
