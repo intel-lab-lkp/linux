@@ -2041,10 +2041,13 @@ static int remove_session_caps_cb(struct inode *inode, int mds, void *arg)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *cl = ceph_inode_to_client(inode);
 	bool invalidate = false;
+	bool reset;
 	struct ceph_cap *cap;
 	int iputs = 0;
 
 	spin_lock(&ci->i_ceph_lock);
+	/* The reporter can outlive its cap; test the rank under the inode lock. */
+	reset = ci->i_qtine_mds == mds && ceph_quarantine_reset(ci);
 	cap = __get_cap_for_mds(ci, mds);
 	if (cap) {
 		boutc(cl, " removing cap %p, ci is %p, inode is %p\n",
@@ -2054,7 +2057,7 @@ static int remove_session_caps_cb(struct inode *inode, int mds, void *arg)
 	}
 	spin_unlock(&ci->i_ceph_lock);
 
-	if (cap)
+	if (cap || reset)
 		wake_up_all(&ci->i_cap_wq);
 	if (invalidate)
 		ceph_queue_invalidate(inode);
@@ -2860,6 +2863,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, int mode)
 
 	mutex_init(&req->r_fill_mutex);
 	req->r_mdsc = mdsc;
+	req->r_quarantine_epoch = atomic64_read_acquire(&mdsc->quarantine_epoch);
 	req->r_started = jiffies;
 	req->r_start_latency = ktime_get();
 	req->r_resend_mds = -1;
@@ -5009,6 +5013,7 @@ static int reconnect_caps_cb(struct inode *inode, int mds, void *arg)
 	struct ceph_path_info path_info = {0};
 	int err;
 	u64 snap_follows;
+	bool reset = false;
 
 	dentry = d_find_primary(inode);
 	if (dentry) {
@@ -5023,9 +5028,13 @@ static int reconnect_caps_cb(struct inode *inode, int mds, void *arg)
 	}
 
 	spin_lock(&ci->i_ceph_lock);
+	/* Unrelated session recovery must not demote the current reporter's mark. */
+	reset = ci->i_qtine_mds == mds && ceph_quarantine_reset(ci);
 	cap = __get_cap_for_mds(ci, mds);
 	if (!cap) {
 		spin_unlock(&ci->i_ceph_lock);
+		if (reset)
+			wake_up_all(&ci->i_cap_wq);
 		err = 0;
 		goto out_err;
 	}
@@ -5088,6 +5097,8 @@ static int reconnect_caps_cb(struct inode *inode, int mds, void *arg)
 		snap_follows = capsnap->follows;
 	}
 	spin_unlock(&ci->i_ceph_lock);
+	if (reset)
+		wake_up_all(&ci->i_cap_wq);
 
 	if (recon_state->msg_version >= 2) {
 		int num_fcntl_locks, num_flock_locks;
@@ -6468,6 +6479,11 @@ int ceph_mdsc_init(struct ceph_fs_client *fsc)
 	init_completion(&mdsc->safe_umount_waiters);
 	spin_lock_init(&mdsc->stopping_lock);
 	atomic_set(&mdsc->stopping_blockers, 0);
+	atomic_set(&mdsc->quarantine_count, 0);
+	atomic_set(&mdsc->quarantine_writers, 0);
+	atomic_set(&mdsc->quarantine_splices, 0);
+	atomic64_set(&mdsc->quarantine_epoch, 0);
+	spin_lock_init(&mdsc->quarantine_lock);
 	init_completion(&mdsc->stopping_waiter);
 	atomic64_set(&mdsc->dirty_folios, 0);
 	init_waitqueue_head(&mdsc->flush_end_wq);
@@ -7367,6 +7383,9 @@ static void mds_dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 		break;
 	case CEPH_MSG_CLIENT_QUOTA:
 		ceph_handle_quota(mdsc, s, msg);
+		break;
+	case CEPH_MSG_CLIENT_QUARANTINE_DISABLE:
+		ceph_handle_quarantine_disable(mdsc, s, msg);
 		break;
 
 	default:

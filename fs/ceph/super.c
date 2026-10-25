@@ -1139,7 +1139,9 @@ static struct dentry *open_root_dentry(struct ceph_fs_client *fsc,
 		struct inode *inode = req->r_target_inode;
 		req->r_target_inode = NULL;
 		doutc(cl, "success\n");
+		ceph_quarantine_splice_start(fsc->sb);
 		root = d_make_root(inode);
+		ceph_quarantine_splice_finish(fsc->sb);
 		if (!root) {
 			root = ERR_PTR(-ENOMEM);
 			goto out;

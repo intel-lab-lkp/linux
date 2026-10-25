@@ -15,6 +15,7 @@
 #include <linux/sort.h>
 #include <linux/iversion.h>
 #include <linux/fscrypt.h>
+#include <linux/cred.h>
 
 #include "super.h"
 #include "mds_client.h"
@@ -648,6 +649,11 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_max_bytes = 0;
 	ci->i_max_files = 0;
 	ci->i_subvolume_id = CEPH_SUBVOLUME_ID_NONE;
+	ci->i_qtine_errno = 0;
+	ci->i_qtine_mds = -1;
+	atomic64_set(&ci->i_qtag, 0);
+	atomic64_set(&ci->i_qmds, 0);
+	ci->i_qmds_cred = NULL;
 
 	memset(&ci->i_dir_layout, 0, sizeof(ci->i_dir_layout));
 	memset(&ci->i_cached_layout, 0, sizeof(ci->i_cached_layout));
@@ -730,10 +736,468 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	return &ci->netfs.inode;
 }
 
+/*
+ * quarantine_epoch is a generation shared by every mark change and every
+ * cross-directory rename. The first writer flips it odd, the last
+ * writer flips it even. Readers must not trust or publish a cache
+ * while it is odd, so a cached false cannot outlive the mutation.
+ *
+ * quarantine_lock makes the writers update and the epoch bump one
+ * step. The epoch is already odd before this returns, and it does not
+ * go even until the last writer has finished the bit change or d_move.
+ * Callers that hold i_ceph_lock take this lock after it. The lock is
+ * not held across the mutation.
+ */
+static void ceph_quarantine_write_begin(struct ceph_mds_client *mdsc)
+{
+	if (!mdsc)
+		return;
+
+	spin_lock(&mdsc->quarantine_lock);
+	if (atomic_inc_return(&mdsc->quarantine_writers) == 1)
+		atomic64_inc_return(&mdsc->quarantine_epoch);
+	spin_unlock(&mdsc->quarantine_lock);
+}
+
+static void ceph_quarantine_write_end(struct ceph_mds_client *mdsc)
+{
+	if (!mdsc)
+		return;
+
+	spin_lock(&mdsc->quarantine_lock);
+	if (atomic_dec_return(&mdsc->quarantine_writers) == 0)
+		atomic64_inc_return(&mdsc->quarantine_epoch);
+	spin_unlock(&mdsc->quarantine_lock);
+}
+
+void ceph_quarantine_set(struct ceph_inode_info *ci)
+{
+	struct ceph_mds_client *mdsc;
+
+	mdsc = ceph_sb_to_mdsc(ci->netfs.inode.i_sb);
+	/* Every accepted negative invalidates earlier requests and receipts. */
+	ceph_quarantine_write_begin(mdsc);
+	if (mdsc)
+		atomic_inc(&mdsc->quarantine_count);
+	if (test_and_set_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags)) {
+		if (mdsc)
+			atomic_dec(&mdsc->quarantine_count);
+	}
+	clear_bit(CEPH_I_QUARANTINE_PENDING_BIT, &ci->i_ceph_flags);
+	ceph_quarantine_write_end(mdsc);
+}
+
+bool ceph_quarantine_clear(struct ceph_inode_info *ci)
+{
+	struct ceph_mds_client *mdsc;
+	bool cleared;
+
+	if (!test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags))
+		return false;
+
+	mdsc = ceph_sb_to_mdsc(ci->netfs.inode.i_sb);
+	ceph_quarantine_write_begin(mdsc);
+	cleared = test_and_clear_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags);
+	if (cleared) {
+		clear_bit(CEPH_I_QUARANTINE_PENDING_BIT, &ci->i_ceph_flags);
+		WRITE_ONCE(ci->i_qtine_errno, 0);
+		WRITE_ONCE(ci->i_qtine_mds, -1);
+		if (mdsc)
+			atomic_dec(&mdsc->quarantine_count);
+	}
+	ceph_quarantine_write_end(mdsc);
+	return cleared;
+}
+
+/* Session loss requires an MDS answer without reopening cached snap caps. */
+bool ceph_quarantine_reset(struct ceph_inode_info *ci)
+{
+	struct ceph_mds_client *mdsc;
+
+	if (!test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags) ||
+	    test_bit(CEPH_I_QUARANTINE_PENDING_BIT, &ci->i_ceph_flags))
+		return false;
+
+	mdsc = ceph_sb_to_mdsc(ci->netfs.inode.i_sb);
+	ceph_quarantine_write_begin(mdsc);
+	set_bit(CEPH_I_QUARANTINE_PENDING_BIT, &ci->i_ceph_flags);
+	WRITE_ONCE(ci->i_qtine_errno, 0);
+	ceph_quarantine_write_end(mdsc);
+	return true;
+}
+
+bool ceph_inode_quarantine_direct(struct inode *inode)
+{
+	struct ceph_inode_info *ci;
+
+	if (!inode)
+		return false;
+	ci = ceph_inode(inode);
+	return !test_bit(CEPH_I_QUARANTINE_PENDING_BIT, &ci->i_ceph_flags) &&
+		(READ_ONCE(ci->i_qtine_errno) == -CEPH_EQUARANTINED ||
+		 test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags));
+}
+
+/* Low bit is the answer. The rest is quarantine_epoch, odd values excluded. */
+static u64 ceph_qtag_pack(u64 epoch, bool under)
+{
+	return epoch | (under ? 1ULL : 0);
+}
+
+static void ceph_quarantine_publish(struct ceph_inode_info *ci, bool under,
+				    u64 epoch)
+{
+	if (epoch & 1)
+		return;
+
+	/* Pairs with atomic64_read_acquire() of i_qtag. */
+	atomic64_set_release(&ci->i_qtag, ceph_qtag_pack(epoch, under));
+}
+
+static bool ceph_qtag_read(struct ceph_inode_info *ci, u64 epoch, bool *under)
+{
+	u64 packed;
+
+	if (epoch & 1)
+		return false;
+
+	/* Pairs with atomic64_set_release() in ceph_quarantine_publish(). */
+	packed = atomic64_read_acquire(&ci->i_qtag);
+	if ((packed & ~1ULL) != epoch)
+		return false;
+	*under = packed & 1ULL;
+	return true;
+}
+
+/* (epoch | 1) marks an MDS confirmation for this even epoch. */
+static bool ceph_qmds_confirmed(struct ceph_inode_info *ci, u64 epoch)
+{
+	u64 cookie;
+	bool confirmed;
+
+	if (epoch & 1)
+		return false;
+
+	/* Pairs with atomic64_set_release() in remember_clear(). */
+	if ((u64)atomic64_read_acquire(&ci->i_qmds) != (epoch | 1ULL))
+		return false;
+	/* The cookie and its immutable credentials are one locked receipt. */
+	spin_lock(&ci->i_ceph_lock);
+	cookie = atomic64_read(&ci->i_qmds);
+	confirmed = cookie == (epoch | 1ULL) &&
+		ci->i_qmds_cred == current_cred();
+	spin_unlock(&ci->i_ceph_lock);
+	return confirmed;
+}
+
+static void ceph_quarantine_forget_receipt(struct ceph_inode_info *ci)
+{
+	const struct cred *cred;
+
+	spin_lock(&ci->i_ceph_lock);
+	cred = ci->i_qmds_cred;
+	ci->i_qmds_cred = NULL;
+	atomic64_set_release(&ci->i_qmds, 0);
+	spin_unlock(&ci->i_ceph_lock);
+	put_cred(cred);
+}
+
+/* A finished walk reached a mark, an ancestor tag, or the mount root. */
+enum {
+	CEPH_QWALK_CLEAR,
+	CEPH_QWALK_UNDER,
+	CEPH_QWALK_INCOMPLETE,
+};
+
+/*
+ * Parent walk with no inode references. Caller holds rcu_read_lock().
+ * Stops at the mount root, at an MDS mark, or at an ancestor whose
+ * cached answer is for this epoch. The superblock pins its live root,
+ * which d_make_root() leaves unhashed. Other unhashed or disconnected
+ * aliases, secondary roots and the depth limit leave the walk incomplete.
+ */
+static int ceph_quarantine_walk_once(struct inode *inode, u64 epoch,
+				     bool use_cache)
+{
+	struct inode *cur = inode;
+	unsigned int depth = 0;
+	bool under = false;
+	bool done = false;
+
+	while (cur && depth++ < 256) {
+		struct ceph_inode_info *ci = ceph_inode(cur);
+		struct dentry *alias;
+		struct dentry *parent;
+		struct inode *next;
+
+		if (test_bit(CEPH_I_QUARANTINE_PENDING_BIT, &ci->i_ceph_flags))
+			break;
+		if (READ_ONCE(ci->i_qtine_errno) == -CEPH_EQUARANTINED ||
+		    test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags)) {
+			under = true;
+			done = true;
+			break;
+		}
+
+		if (use_cache && cur != inode &&
+		    ceph_qtag_read(ci, epoch, &under)) {
+			done = true;
+			break;
+		}
+
+		alias = d_find_alias_rcu(cur);
+		if (!alias)
+			break;
+
+		if (alias->d_sb != inode->i_sb ||
+		    (READ_ONCE(alias->d_flags) & DCACHE_DISCONNECTED))
+			break;
+
+		parent = READ_ONCE(alias->d_parent);
+		/*
+		 * The mount root is its own parent. A disconnected
+		 * alias from d_obtain_alias(), or a secondary root from
+		 * d_obtain_root(), has the same shape and is not a
+		 * finished walk.
+		 */
+		if (!parent || parent == alias) {
+			if (parent == alias && S_ISDIR(cur->i_mode) &&
+			    alias == READ_ONCE(inode->i_sb->s_root))
+				done = true;
+			break;
+		}
+		if (d_unhashed(alias))
+			break;
+
+		next = d_inode_rcu(parent);
+		if (!next || next == cur || next->i_sb != inode->i_sb)
+			break;
+		cur = next;
+	}
+	if (!done)
+		return CEPH_QWALK_INCOMPLETE;
+	return under ? CEPH_QWALK_UNDER : CEPH_QWALK_CLEAR;
+}
+
+/*
+ * rename_lock covers d_move(). A chain observed across that move is
+ * not an answer. A few retries, then the caller asks the MDS.
+ */
+static int ceph_quarantine_walk(struct inode *inode, u64 epoch, bool use_cache)
+{
+	unsigned int seq;
+	unsigned int tries = 0;
+	int ret = CEPH_QWALK_INCOMPLETE;
+
+	rcu_read_lock();
+	do {
+		seq = read_seqbegin(&rename_lock);
+		ret = ceph_quarantine_walk_once(inode, epoch, use_cache);
+		if (!read_seqretry(&rename_lock, seq))
+			break;
+		ret = CEPH_QWALK_INCOMPLETE;
+		cpu_relax();
+	} while (++tries < 4);
+	rcu_read_unlock();
+	return ret;
+}
+
+/*
+ * CEPH_Q_UNDER when this inode or an ancestor was marked by an MDS cap
+ * update. Ancestors cover children that have not yet received their
+ * own cap message.
+ *
+ * quarantine_count is zero unless some inode is marked, so the common
+ * path does not walk. While a mark is set, a finished walk is one word
+ * on the inode. A walk stops at an ancestor that already holds that
+ * answer. A short walk is not stored in i_qtag. Callers ask the MDS.
+ * An MDS read receipt in i_qmds overrides inherited marks for the
+ * queried inode until the next epoch bump. It does not override a
+ * definite mark on that inode or authorize cached writes.
+ *
+ * An odd quarantine_epoch is a mark or a d_move() in progress. The
+ * observation is dropped and the check is repeated. Bounded retries
+ * return UNKNOWN, so a preempted writer cannot pin the CPU.
+ */
+static enum ceph_qstate __ceph_inode_quarantine_state(struct inode *inode,
+						      bool read_confirmed)
+{
+	struct ceph_mds_client *mdsc;
+	struct ceph_inode_info *ci;
+	unsigned int retries = 0;
+	u64 epoch;
+	bool under, splicing, cached;
+
+	if (!inode)
+		return CEPH_Q_CLEAR;
+
+	mdsc = ceph_sb_to_mdsc(inode->i_sb);
+	if (!mdsc || atomic_read(&mdsc->quarantine_count) == 0)
+		return CEPH_Q_CLEAR;
+
+	ci = ceph_inode(inode);
+	for (;;) {
+		/* Bound retries across both odd writers and changing even epochs. */
+		if (++retries > 32) {
+			cond_resched();
+			return CEPH_Q_UNKNOWN;
+		}
+		/* Pairs with atomic64_inc_return() in write_begin(). */
+		epoch = (u64)atomic64_read_acquire(&mdsc->quarantine_epoch);
+		if (epoch & 1) {
+			cpu_relax();
+			cond_resched();
+			continue;
+		}
+		splicing = atomic_read_acquire(&mdsc->quarantine_splices) != 0;
+
+		if (ceph_inode_quarantine_direct(inode)) {
+			under = true;
+			cached = true;
+		} else if (read_confirmed && !splicing &&
+			   ceph_qmds_confirmed(ci, epoch)) {
+			under = false;
+			cached = true;
+		} else {
+			cached = !splicing && ceph_qtag_read(ci, epoch, &under);
+		}
+		if (cached) {
+			/* Orders the marker, receipt, and tag loads before the retry. */
+			smp_rmb();
+			if ((u64)atomic64_read(&mdsc->quarantine_epoch) == epoch &&
+			    (splicing || !atomic_read(&mdsc->quarantine_splices)))
+				return under ? CEPH_Q_UNDER : CEPH_Q_CLEAR;
+			cpu_relax();
+			cond_resched();
+			continue;
+		}
+
+		switch (ceph_quarantine_walk(inode, epoch, !splicing)) {
+		case CEPH_QWALK_UNDER:
+			under = true;
+			break;
+		case CEPH_QWALK_CLEAR:
+			under = false;
+			break;
+		default:
+			/* Orders the walk before the retry. */
+			smp_rmb();
+			if ((u64)atomic64_read(&mdsc->quarantine_epoch) == epoch &&
+			    (splicing || !atomic_read(&mdsc->quarantine_splices))) {
+				return CEPH_Q_UNKNOWN;
+			}
+			cpu_relax();
+			cond_resched();
+			continue;
+		}
+		/* Orders the walk before the retry, as in read_seqcount_retry(). */
+		smp_rmb();
+		if ((u64)atomic64_read(&mdsc->quarantine_epoch) == epoch &&
+		    (splicing || !atomic_read(&mdsc->quarantine_splices))) {
+			if (!splicing)
+				ceph_quarantine_publish(ci, under, epoch);
+			return under ? CEPH_Q_UNDER : CEPH_Q_CLEAR;
+		}
+		cpu_relax();
+		cond_resched();
+	}
+}
+
+enum ceph_qstate ceph_inode_quarantine_state(struct inode *inode)
+{
+	return __ceph_inode_quarantine_state(inode, true);
+}
+
+enum ceph_qstate ceph_inode_quarantine_write_state(struct inode *inode)
+{
+	/* GETATTR can prove read recovery access under a read-only q grant. */
+	return __ceph_inode_quarantine_state(inode, false);
+}
+
+static struct ceph_mds_client *ceph_quarantine_move_mdsc(struct inode *inode,
+							 struct inode *old_dir,
+							 struct inode *new_dir)
+{
+	if (!inode || old_dir == new_dir)
+		return NULL;
+	return ceph_sb_to_mdsc(inode->i_sb);
+}
+
+/*
+ * Bracket d_move(). The epoch is odd across the parent change, so a
+ * cached false cannot be reused against the new parent. d_move() does
+ * not sleep. Same-directory renames do not take a writer slot.
+ *
+ * Sleeping alias splices use a separate counter below.
+ */
+void ceph_quarantine_move_start(struct inode *inode, struct inode *old_dir,
+				struct inode *new_dir)
+{
+	ceph_quarantine_write_begin(ceph_quarantine_move_mdsc(inode, old_dir,
+							      new_dir));
+}
+
+void ceph_quarantine_move_finish(struct inode *inode, struct inode *old_dir,
+				 struct inode *new_dir)
+{
+	ceph_quarantine_write_end(ceph_quarantine_move_mdsc(inode, old_dir,
+							    new_dir));
+}
+
+/*
+ * d_splice_alias() and d_instantiate() can sleep in the LSM hook before
+ * changing ancestry. Keep the epoch even for that hook, but disallow
+ * all cached answers throughout the splice. A fresh walk also samples
+ * rename_lock, so it cannot accept a chain torn by a move. Bracket
+ * first attachments too: descendants may hold MDS confirmations from
+ * when the directory had no connected alias.
+ *
+ * Fully ordered atomics and quarantine_lock make the counter and epoch
+ * transitions one writer operation. Entry disables cache use before
+ * invalidating tags; exit invalidates tags before enabling cache use.
+ * Adding two preserves the parity of any concurrent mark writer.
+ */
+void ceph_quarantine_splice_start(struct super_block *sb)
+{
+	struct ceph_mds_client *mdsc = ceph_sb_to_mdsc(sb);
+
+	spin_lock(&mdsc->quarantine_lock);
+	atomic_inc_return(&mdsc->quarantine_splices);
+	atomic64_add_return(2, &mdsc->quarantine_epoch);
+	spin_unlock(&mdsc->quarantine_lock);
+}
+
+void ceph_quarantine_splice_finish(struct super_block *sb)
+{
+	struct ceph_mds_client *mdsc = ceph_sb_to_mdsc(sb);
+
+	spin_lock(&mdsc->quarantine_lock);
+	atomic64_add_return(2, &mdsc->quarantine_epoch);
+	atomic_dec_return(&mdsc->quarantine_splices);
+	spin_unlock(&mdsc->quarantine_lock);
+}
+
+static bool ceph_quarantine_reply_can_clear(struct ceph_inode_info *ci,
+					    struct ceph_mds_session *session)
+{
+	struct ceph_mds_client *mdsc = ceph_sb_to_mdsc(ci->netfs.inode.i_sb);
+	struct ceph_mds_request *req;
+	u64 epoch;
+
+	if (READ_ONCE(ci->i_qtine_mds) == session->s_mds)
+		return true;
+	/* Different ranks have independent cap sequences. */
+	req = ceph_current_mds_request(mdsc->fsc);
+	epoch = (u64)atomic64_read_acquire(&mdsc->quarantine_epoch);
+	return req && !(epoch & 1) && req->r_quarantine_epoch == epoch &&
+		!atomic_read(&mdsc->quarantine_splices);
+}
+
 void ceph_free_inode(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
+	put_cred(ci->i_qmds_cred);
 	kfree(ci->i_symlink);
 #ifdef CONFIG_FS_ENCRYPTION
 	kfree(ci->fscrypt_auth);
@@ -759,6 +1223,8 @@ void ceph_evict_inode(struct inode *inode)
 	percpu_counter_dec(&mdsc->metric.total_inodes);
 
 	ci->i_subvolume_id = CEPH_SUBVOLUME_ID_NONE;
+	ceph_quarantine_forget_receipt(ci);
+	ceph_quarantine_clear(ci);
 
 	netfs_wait_for_outstanding_io(inode);
 	truncate_inode_pages_final(&inode->i_data);
@@ -1407,7 +1873,7 @@ int ceph_fill_inode(struct inode *inode, struct folio *locked_folio,
 	/* were we issued a capability? */
 	if (info_caps) {
 		if (!ceph_in_snap(inode)) {
-			ceph_add_cap(inode, session,
+			bool cap_current = ceph_add_cap(inode, session,
 				     le64_to_cpu(info->cap.cap_id),
 				     info_caps,
 				     le32_to_cpu(info->cap.wanted),
@@ -1415,6 +1881,14 @@ int ceph_fill_inode(struct inode *inode, struct folio *locked_folio,
 				     le32_to_cpu(info->cap.mseq),
 				     le64_to_cpu(info->cap.realm),
 				     info->cap.flags, &new_cap);
+
+			/*
+			 * Caps above PIN mean quarantine has been lifted,
+			 * including when the disable message was lost.
+			 */
+			if (cap_current && (info_caps & ~CEPH_CAP_PIN) &&
+			    ceph_quarantine_reply_can_clear(ci, session))
+				ceph_quarantine_clear(ci);
 
 			/* set dir completion flag? */
 			if (S_ISDIR(inode->i_mode) &&
@@ -1618,6 +2092,7 @@ static int splice_dentry(struct dentry **pdn, struct inode *in)
 		realdn = d_find_any_alias(in);
 		if (realdn) {
 			struct ceph_dentry_info *di = ceph_dentry(realdn);
+
 			spin_lock(&realdn->d_lock);
 
 			realdn->d_op->d_prune(realdn);
@@ -1634,7 +2109,9 @@ static int splice_dentry(struct dentry **pdn, struct inode *in)
 	/* dn must be unhashed */
 	if (!d_unhashed(dn))
 		d_drop(dn);
+	ceph_quarantine_splice_start(dn->d_sb);
 	realdn = d_splice_alias(in, dn);
+	ceph_quarantine_splice_finish(dn->d_sb);
 	if (IS_ERR(realdn)) {
 		pr_err_client(cl, "error %ld %p inode %p ino %llx.%llx\n",
 			      PTR_ERR(realdn), dn, in, ceph_vinop(in));
@@ -1859,6 +2336,7 @@ retry_lookup:
 		/* rename? */
 		if (req->r_old_dentry && req->r_op == CEPH_MDS_OP_RENAME) {
 			struct inode *olddir = req->r_old_dentry_dir;
+			struct inode *moved;
 			BUG_ON(!olddir);
 
 			boutc(cl, " src %p '%s' dst %p '%s'\n",
@@ -1869,7 +2347,10 @@ retry_lookup:
 			ceph_dir_clear_ordered(dir);
 			ceph_dir_clear_ordered(olddir);
 
+			moved = d_inode(req->r_old_dentry);
+			ceph_quarantine_move_start(moved, olddir, dir);
 			d_move(req->r_old_dentry, dn);
+			ceph_quarantine_move_finish(moved, olddir, dir);
 			boutc(cl, " src %p '%s' dst %p '%s'\n",
 			      req->r_old_dentry, req->r_old_dentry->d_name.name, dn, dn->d_name.name);
 

@@ -689,11 +689,9 @@ void change_auth_cap_ses(struct ceph_inode_info *ci,
  *
  * Caller should hold session snap_rwsem (read) and ci->i_ceph_lock
  *
- * @fmode is the open file mode, if we are opening a file, otherwise
- * it is < 0.  (This is so we can atomically add the cap and add an
- * open file reference to it.)
+ * Returns false when the raw grant predates the recorded cap sequence.
  */
-void ceph_add_cap(struct inode *inode,
+bool ceph_add_cap(struct inode *inode,
 		  struct ceph_mds_session *session, u64 cap_id,
 		  unsigned issued, unsigned wanted,
 		  unsigned seq, unsigned mseq, u64 realmino, int flags,
@@ -706,6 +704,7 @@ void ceph_add_cap(struct inode *inode,
 	int mds = session->s_mds;
 	int actual_wanted;
 	u32 gen;
+	bool cap_current = true;
 
 	lockdep_assert_held(&ci->i_ceph_lock);
 
@@ -737,6 +736,7 @@ void ceph_add_cap(struct inode *inode,
 		atomic64_inc(&mdsc->metric.total_caps);
 		spin_unlock(&session->s_cap_lock);
 	} else {
+		cap_current = ceph_seq_cmp(seq, cap->seq) >= 0;
 		spin_lock(&session->s_cap_lock);
 		list_move_tail(&cap->session_caps, &session->s_caps);
 		spin_unlock(&session->s_cap_lock);
@@ -823,6 +823,7 @@ void ceph_add_cap(struct inode *inode,
 	cap->mseq = mseq;
 	cap->cap_gen = gen;
 	wake_up_all(&ci->i_cap_wq);
+	return cap_current;
 }
 
 /*
@@ -1263,6 +1264,11 @@ static void __ceph_remove_cap(struct ceph_inode_info *ci, struct ceph_cap *cap, 
 	doutc(cl, "%p from %p %llx.%llx\n", cap, inode, ceph_vinop(inode));
 
 	mdsc = ceph_inode_to_fs_client(&ci->netfs.inode)->mdsc;
+
+	/* Losing the reporting cap requires fresh MDS revalidation. */
+	if (READ_ONCE(ci->i_qtine_mds) == cap->mds &&
+	    ceph_quarantine_reset(ci))
+		wake_up_all(&ci->i_cap_wq);
 
 	/* remove from inode's cap rbtree, and clear auth cap */
 	rb_erase(&cap->ci_node, &ci->i_caps);
@@ -3729,6 +3735,9 @@ struct cap_extra_info {
 	u8 *fscrypt_auth;
 	u32 fscrypt_auth_len;
 	u64 fscrypt_file_size;
+	/* MClientCaps v14 oserrno; valid only when oserrno_valid is set */
+	s32 oserrno;
+	bool oserrno_valid;
 };
 
 /*
@@ -3758,6 +3767,46 @@ bad:
 }
 
 /*
+ * Record quarantine state carried by an MClientCaps oserrno.
+ * Caller holds i_ceph_lock. Returns true when waiters should be woken
+ * because quarantine changed or a pending reset was resolved.
+ *
+ * -EQUARANTINED refreshes the sticky flag and its reporting MDS rank.
+ * A current non-IMPORT grant above PIN with errno 0 clears that rank's mark.
+ * IMPORT may carry a default zero without assessing quarantine permission.
+ * Another rank needs a successful metadata request for the current epoch.
+ * A PIN-only update may zero qtine_errno while leaving the flag set.
+ */
+static bool ceph_apply_quarantine(struct ceph_inode_info *ci, int mds,
+				  int newcaps, int oserrno, bool is_import)
+{
+	bool was, now, pending;
+
+	was = READ_ONCE(ci->i_qtine_errno) == -CEPH_EQUARANTINED ||
+	      test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags);
+	pending = test_bit(CEPH_I_QUARANTINE_PENDING_BIT, &ci->i_ceph_flags);
+
+	if (!is_import && (newcaps & ~CEPH_CAP_PIN) && was && oserrno == 0 &&
+	    READ_ONCE(ci->i_qtine_mds) == mds)
+		ceph_quarantine_clear(ci);
+
+	if (oserrno == -CEPH_EQUARANTINED) {
+		ceph_quarantine_set(ci);
+		WRITE_ONCE(ci->i_qtine_mds, mds);
+	}
+
+	if (newcaps || was ||
+	    test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags))
+		WRITE_ONCE(ci->i_qtine_errno, oserrno);
+
+	now = READ_ONCE(ci->i_qtine_errno) == -CEPH_EQUARANTINED ||
+	      test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags);
+	return was != now ||
+	       pending != test_bit(CEPH_I_QUARANTINE_PENDING_BIT,
+				   &ci->i_ceph_flags);
+}
+
+/*
  * Handle a cap GRANT message from the MDS.  (Note that a GRANT may
  * actually be a revocation if it specifies a smaller cap set.)
  *
@@ -3781,6 +3830,7 @@ static void handle_cap_grant(struct inode *inode,
 	u64 max_size = le64_to_cpu(grant->max_size);
 	unsigned char check_caps = 0;
 	bool was_stale = cap->cap_gen < atomic_read(&session->s_cap_gen);
+	bool quarantine_current = ceph_seq_cmp(seq, cap->seq) >= 0;
 	bool wake = false;
 	bool writeback = false;
 	bool queue_trunc = false;
@@ -4126,6 +4176,17 @@ static void handle_cap_grant(struct inode *inode,
 		if (extra_info->inline_version != CEPH_INLINE_NONE &&
 		    (newcaps & (CEPH_CAP_FILE_CACHE|CEPH_CAP_FILE_LAZYIO)))
 			fill_inline = true;
+	}
+
+	/* Merged caps are not a fresh wire grant authorizing a clear. */
+	if (quarantine_current && extra_info->oserrno_valid &&
+	    ceph_apply_quarantine(ci, session->s_mds, le32_to_cpu(grant->caps),
+				  extra_info->oserrno,
+				  le32_to_cpu(grant->op) == CEPH_CAP_OP_IMPORT)) {
+		boutc(cl, "quarantine oserrno %d caps %s %llx.%llx\n",
+		      extra_info->oserrno, ceph_cap_string(newcaps),
+		      ceph_vinop(inode));
+		wake = true;
 	}
 
 	if (le32_to_cpu(grant->op) == CEPH_CAP_OP_IMPORT) {
@@ -4826,6 +4887,20 @@ void ceph_handle_caps(struct ceph_mds_session *session,
 			goto bad;
 	}
 
+	if (msg_version >= 13) {
+		/* v13: subvolume_id. The inode id is learned from replies. */
+		ceph_decode_skip_64(&p, end, bad);
+	}
+
+	if (msg_version >= 14) {
+		u32 raw_errno;
+
+		/* v14: signed oserrno, -CEPH_EQUARANTINED when quarantined */
+		ceph_decode_32_safe(&p, end, raw_errno, bad);
+		extra_info.oserrno = (s32)raw_errno;
+		extra_info.oserrno_valid = true;
+	}
+
 	/* lookup ino */
 	inode = ceph_find_inode(mdsc->fsc->sb, vino);
 	boutc(cl, " caps mds%d op %s ino %llx.%llx inode %p seq %u iseq %u mseq %u\n",
@@ -4979,6 +5054,51 @@ bad:
 	pr_err_client(cl, "corrupt message\n");
 	ceph_msg_dump(msg);
 	goto out;
+}
+
+void ceph_handle_quarantine_disable(struct ceph_mds_client *mdsc,
+				    struct ceph_mds_session *session,
+				    struct ceph_msg *msg)
+{
+	struct super_block *sb = mdsc->fsc->sb;
+	struct ceph_client *cl = mdsc->fsc->client;
+	struct ceph_mds_quarantine_disable *h = msg->front.iov_base;
+	struct ceph_vino vino;
+	struct inode *inode;
+	struct ceph_inode_info *ci;
+
+	if (!ceph_inc_mds_stopping_blocker(mdsc, session))
+		return;
+
+	if (msg->front.iov_len < sizeof(*h)) {
+		pr_err_client(cl, "corrupt quarantine_disable mds%d len %d\n",
+			      session->s_mds, (int)msg->front.iov_len);
+		ceph_msg_dump(msg);
+		goto out;
+	}
+
+	vino.ino = le64_to_cpu(h->ino);
+	vino.snap = CEPH_NOSNAP;
+	inode = ceph_find_inode(sb, vino);
+	if (!inode) {
+		doutc(cl, "quarantine disable ino %llx not cached\n", vino.ino);
+		goto out;
+	}
+
+	ci = ceph_inode(inode);
+	spin_lock(&ci->i_ceph_lock);
+	/* Another rank's disable must not erase a newer negative. */
+	if (!test_bit(CEPH_I_QUARANTINE_BIT, &ci->i_ceph_flags) ||
+	    READ_ONCE(ci->i_qtine_mds) == session->s_mds) {
+		ceph_quarantine_clear(ci);
+		WRITE_ONCE(ci->i_qtine_errno, 0);
+	}
+	spin_unlock(&ci->i_ceph_lock);
+	wake_up_all(&ci->i_cap_wq);
+	doutc(cl, "quarantine disable ino %llx\n", vino.ino);
+	iput(inode);
+out:
+	ceph_dec_mds_stopping_blocker(mdsc);
 }
 
 /*

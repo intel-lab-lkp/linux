@@ -785,7 +785,9 @@ static int ceph_finish_async_create(struct inode *dir, struct inode *inode,
 		if (d_in_lookup(dentry) || d_really_is_negative(dentry)) {
 			if (!d_unhashed(dentry))
 				d_drop(dentry);
+			ceph_quarantine_splice_start(dir->i_sb);
 			dn = d_splice_alias(inode, dentry);
+			ceph_quarantine_splice_finish(dir->i_sb);
 			WARN_ON_ONCE(dn && dn != dentry);
 		}
 		file->f_mode |= FMODE_CREATED;

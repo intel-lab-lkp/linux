@@ -375,6 +375,7 @@ struct ceph_mds_request {
 	int r_fmode;        /* file mode, if expecting cap */
 	int r_request_release_offset;
 	const struct cred *r_cred;
+	u64 r_quarantine_epoch; /* generation when the request was created */
 	struct mnt_idmap *r_mnt_idmap;
 	struct timespec64 r_stamp;
 
@@ -506,6 +507,21 @@ struct ceph_mds_client {
 	spinlock_t              stopping_lock;  /* protect snap_empty */
 	int                     stopping;      /* the stage of shutting down */
 	atomic_t                stopping_blockers;
+	/*
+	 * Inodes with CEPH_I_QUARANTINE set. Hot paths skip the
+	 * ancestor walk while this is zero.
+	 * quarantine_epoch is a seqcount: even while idle, odd while
+	 * quarantine_writers is non-zero. Writers are mark changes and
+	 * cross-directory renames. quarantine_lock covers the writers
+	 * update and the epoch bump together. Sleeping alias splices use
+	 * quarantine_splices instead: readers walk without cached answers
+	 * while it is non-zero. Each splice edge also bumps the epoch.
+	 */
+	atomic_t		quarantine_count;
+	atomic_t		quarantine_writers;
+	atomic_t		quarantine_splices;
+	atomic64_t		quarantine_epoch;
+	spinlock_t		quarantine_lock; /* writers update + epoch bump */
 	struct completion	stopping_waiter;
 
 	atomic64_t		dirty_folios;
