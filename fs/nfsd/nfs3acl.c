@@ -7,7 +7,6 @@
 
 #include <linux/gfp.h>
 #include <linux/fs.h>
-#include <linux/filelock.h>
 #include <linux/nfsacl.h>
 #include <linux/nfs4.h>
 
@@ -17,16 +16,9 @@
 #include "nfsd.h"
 #include "auth.h"
 #include "vfs.h"
+#include "fattr.h"
 
 #define NFS_ACL_MASK		(NA_ACL | NA_ACLCNT | NA_DFACL | NA_DFACLCNT)
-
-/*
- * The generated <linux/sunrpc/xdrgen/nfs_acl3.h> defines the NFSv3
- * inherited types (nfs_fh3, fattr3, post_op_attr, ...), so the native
- * NFSv3 headers that also define them cannot be included here. Define
- * the one inherited NFSv3 constant needed for symlink size clamping.
- */
-#define NFS3_MAXPATHLEN		PATH_MAX
 
 /*
  * Wrapper structures combine xdrgen types with legacy structures.
@@ -47,7 +39,6 @@ struct GETACL3res_wrapper {
 	struct posix_acl	*acl_default;
 	kuid_t			uid;
 	kgid_t			gid;
-	struct kstat		stat;
 };
 
 static_assert(offsetof(struct GETACL3res_wrapper, xdrgen) == 0);
@@ -70,7 +61,6 @@ static_assert(offsetof(struct SETACL3args_wrapper, xdrgen) == 0);
 
 struct SETACL3res_wrapper {
 	struct SETACL3res	xdrgen;
-	struct kstat		stat;
 };
 
 static_assert(offsetof(struct SETACL3res_wrapper, xdrgen) == 0);
@@ -160,72 +150,6 @@ nfs3acl_decode_fh(const struct nfs_fh3 *fh, struct svc_fh *fhp)
 	return true;
 }
 
-static u32
-nfs3acl_mode_to_ftype3(umode_t mode)
-{
-	switch (mode & S_IFMT) {
-	case S_IFREG:  return NF3REG;
-	case S_IFDIR:  return NF3DIR;
-	case S_IFBLK:  return NF3BLK;
-	case S_IFCHR:  return NF3CHR;
-	case S_IFLNK:  return NF3LNK;
-	case S_IFSOCK: return NF3SOCK;
-	case S_IFIFO:  return NF3FIFO;
-	}
-	return NF3REG;
-}
-
-static void
-nfs3acl_stat_to_fattr3(struct svc_rqst *rqstp, struct fattr3 *fattr,
-		       const struct kstat *stat, const struct svc_fh *fhp)
-{
-	struct user_namespace *userns = nfsd_user_namespace(rqstp);
-	u64 fsid;
-
-	fattr->type = nfs3acl_mode_to_ftype3(stat->mode);
-	fattr->mode = stat->mode & S_IALLUGO;
-	fattr->nlink = stat->nlink;
-	fattr->uid = from_kuid_munged(userns, stat->uid);
-	fattr->gid = from_kgid_munged(userns, stat->gid);
-	if (S_ISLNK(stat->mode) && stat->size > NFS3_MAXPATHLEN)
-		fattr->size = NFS3_MAXPATHLEN;
-	else
-		fattr->size = stat->size;
-	fattr->used = (u64)stat->blocks << 9;
-	fattr->rdev.specdata1 = MAJOR(stat->rdev);
-	fattr->rdev.specdata2 = MINOR(stat->rdev);
-
-	switch (fsid_source(fhp)) {
-	case FSIDSOURCE_FSID:
-		fsid = (u64)fhp->fh_export->ex_fsid;
-		break;
-	case FSIDSOURCE_UUID:
-		fsid = ((u64 *)fhp->fh_export->ex_uuid)[0];
-		fsid ^= ((u64 *)fhp->fh_export->ex_uuid)[1];
-		break;
-	default:
-		fsid = (u64)huge_encode_dev(fhp->fh_dentry->d_sb->s_dev);
-	}
-	fattr->fsid = fsid;
-	fattr->fileid = stat->ino;
-
-	fattr->atime.seconds = stat->atime.tv_sec;
-	fattr->atime.nseconds = stat->atime.tv_nsec;
-	fattr->mtime.seconds = stat->mtime.tv_sec;
-	fattr->mtime.nseconds = stat->mtime.tv_nsec;
-	fattr->ctime.seconds = stat->ctime.tv_sec;
-	fattr->ctime.nseconds = stat->ctime.tv_nsec;
-}
-
-static void
-nfs3acl_encode_post_op_attr(struct svc_rqst *rqstp, struct post_op_attr *attr,
-			    struct kstat *stat, const struct svc_fh *fhp)
-{
-	attr->attributes_follow = true;
-	lease_get_mtime(d_inode(fhp->fh_dentry), &stat->mtime);
-	nfs3acl_stat_to_fattr3(rqstp, &attr->u.attributes, stat, fhp);
-}
-
 /*
  * A minimal (three-entry) ACL travels as four wire entries: the
  * POSIX entries plus a synthesized NA_CLASS_OBJ mask. The wire
@@ -285,9 +209,7 @@ static __be32 nfsd3_proc_getacl(struct svc_rqst *rqstp)
 		goto out;
 	inode = d_inode(fhp->fh_dentry);
 
-	if (!fhp->fh_no_wcc && fh_getattr(fhp, &resp->stat) == acl3_ok)
-		nfs3acl_encode_post_op_attr(rqstp, &resp->xdrgen.u.resok.attr,
-					    &resp->stat, fhp);
+	nfsd3_fill_post_op_attr(rqstp, &resp->xdrgen.u.resok.attr, fhp);
 
 	if (argp->xdrgen.mask & ~NFS_ACL_MASK) {
 		resp->xdrgen.status = acl3err_inval;
@@ -412,10 +334,7 @@ out:
 	 * resok and resfail both open with a post_op_attr, so filling
 	 * the resok arm serves either status.
 	 */
-	if (!fhp->fh_no_wcc && fhp->fh_dentry &&
-	    fh_getattr(fhp, &resp->stat) == acl3_ok)
-		nfs3acl_encode_post_op_attr(rqstp, &resp->xdrgen.u.resok.attr,
-					    &resp->stat, fhp);
+	nfsd3_fill_post_op_attr(rqstp, &resp->xdrgen.u.resok.attr, fhp);
 	/* argp->acl_{access,default} are released in nfs3svc_release_setacl. */
 	fh_put(fhp);
 	resp->xdrgen.status = nfsd3_map_status(resp->xdrgen.status);

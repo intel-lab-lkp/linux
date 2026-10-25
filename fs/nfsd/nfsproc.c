@@ -15,6 +15,7 @@
 #include "cache.h"
 #include "xdr.h"
 #include "vfs.h"
+#include "fattr.h"
 #include "nfserr.h"
 #include "trace.h"
 
@@ -189,7 +190,7 @@ nfsd_mode_to_ftype(umode_t mode)
 	return NFNON;
 }
 
-static void
+void
 nfsd_stat_to_fattr(struct svc_rqst *rqstp, struct fattr *fattr,
 		   const struct kstat *stat, const struct svc_fh *fhp)
 {
