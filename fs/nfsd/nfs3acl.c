@@ -111,11 +111,17 @@ static __be32 nfsd3_map_status(__be32 status)
 	return status;
 }
 
-/*
- * NULL call.
+/**
+ * nfsd3_proc_null - NULL: Do nothing
+ * @rqstp: RPC transaction context
+ *
+ * Return:
+ *   %rpc_success:		RPC executed successfully
+ *
+ * RPC synopsis:
+ *   void ACLPROC3_NULL(void) = 0;
  */
-static __be32
-nfsd3_proc_null(struct svc_rqst *rqstp)
+static __be32 nfsd3_proc_null(struct svc_rqst *rqstp)
 {
 	return rpc_success;
 }
@@ -343,13 +349,13 @@ static void nfs3svc_release_setacl(struct svc_rqst *rqstp)
 static const struct svc_procedure nfsd_acl_procedures3[3] = {
 	[ACLPROC3_NULL] = {
 		.pc_func = nfsd3_proc_null,
-		.pc_decode = nfssvc_decode_voidarg,
-		.pc_encode = nfssvc_encode_voidres,
-		.pc_argsize = sizeof(struct nfsd_voidargs),
-		.pc_argzero = sizeof(struct nfsd_voidargs),
-		.pc_ressize = sizeof(struct nfsd_voidres),
+		.pc_decode = xdrgen_svc_decode_void,
+		.pc_encode = xdrgen_svc_encode_void,
+		.pc_argsize = XDR_void,
+		.pc_argzero = 0,
+		.pc_ressize = 0,
 		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST,
+		.pc_xdrressize = XDR_void,
 		.pc_name = "NULL",
 	},
 	[ACLPROC3_GETACL] = {
