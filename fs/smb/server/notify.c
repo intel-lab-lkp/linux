@@ -44,6 +44,7 @@ ksmbd_notify_validate_req(struct ksmbd_work *work,
 			  struct smb2_change_notify_rsp *rsp)
 {
 	struct ksmbd_file *fp;
+	int err;
 
 	if (work->next_smb2_rcv_hdr_off && req->hdr.NextCommand) {
 		pr_err("Notify request is not the last compound command\n");
@@ -61,7 +62,37 @@ ksmbd_notify_validate_req(struct ksmbd_work *work,
 		return ERR_PTR(-ENOENT);
 	}
 
+	if (le32_to_cpu(req->OutputBufferLength) >
+	    work->conn->vals->max_trans_size) {
+		pr_err("Notify output buffer length %u exceeds maximum %u\n",
+		       le32_to_cpu(req->OutputBufferLength),
+		       work->conn->vals->max_trans_size);
+		rsp->hdr.Status = STATUS_INVALID_PARAMETER;
+		err = -EINVAL;
+		goto err_put_fp;
+	}
+
+	if (!S_ISDIR(file_inode(fp->filp)->i_mode)) {
+		pr_err("Notify file id is not a directory, fid %llu:%llu\n",
+		       fp->persistent_id, fp->volatile_id);
+		rsp->hdr.Status = STATUS_INVALID_PARAMETER;
+		err = -EINVAL;
+		goto err_put_fp;
+	}
+
+	if (!(fp->daccess & FILE_LIST_DIRECTORY_LE)) {
+		pr_err("No permission to monitor directory, fid %llu:%llu\n",
+		       fp->persistent_id, fp->volatile_id);
+		rsp->hdr.Status = STATUS_ACCESS_DENIED;
+		err = -EACCES;
+		goto err_put_fp;
+	}
+
 	return fp;
+
+err_put_fp:
+	ksmbd_fd_put(work, fp);
+	return ERR_PTR(err);
 }
 
 static int ksmbd_notify_wait(struct ksmbd_work *work,
