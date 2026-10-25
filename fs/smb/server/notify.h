@@ -50,10 +50,15 @@ struct ksmbd_notify {
 	u32 moved_from_mask;
 	u32 moved_from_cookie;
 	struct delayed_work moved_from_work;
+	struct delayed_work broadcast_work;
 };
 
 struct ksmbd_notify_req {
 	wait_queue_head_t wait;
+	struct list_head events;
+	unsigned int num_events;
+	bool overflow;
+	bool notified;
 };
 
 #define KSMBD_NOTIFY_MAX_BYTES		SZ_64K
