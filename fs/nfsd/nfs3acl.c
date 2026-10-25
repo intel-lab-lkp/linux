@@ -5,15 +5,18 @@
  * Copyright (C) 2002-2003 Andreas Gruenbacher <agruen@suse.de>
  */
 
-#include "nfsd.h"
-#include "nfserr.h"
-
-#include <linux/nfsacl.h>
-#include <uapi/linux/nfsacl.h>
 #include <linux/gfp.h>
+#include <linux/fs.h>
+#include <linux/nfsacl.h>
+#include <linux/nfs4.h>
+
+#include "nfs_acl3xdr_gen.h"
 
 #include "cache.h"
+#include "nfsd.h"
 #include "vfs.h"
+
+#define NFS_ACL_MASK		(NA_ACL | NA_ACLCNT | NA_DFACL | NA_DFACLCNT)
 
 struct nfsd3_getaclargs {
 	struct svc_fh		fh;
@@ -48,14 +51,61 @@ bool svcxdr_encode_nfsstat3(struct xdr_stream *xdr, __be32 status);
 bool svcxdr_encode_post_op_attr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 				const struct svc_fh *fhp);
 
+enum {
+	acl3_ok = __constant_cpu_to_be32(ACL3_OK),
+	acl3err_perm = __constant_cpu_to_be32(ACL3ERR_PERM),
+	acl3err_noent = __constant_cpu_to_be32(ACL3ERR_NOENT),
+	acl3err_io = __constant_cpu_to_be32(ACL3ERR_IO),
+	acl3err_acces = __constant_cpu_to_be32(ACL3ERR_ACCES),
+	acl3err_inval = __constant_cpu_to_be32(ACL3ERR_INVAL),
+	acl3err_nospc = __constant_cpu_to_be32(ACL3ERR_NOSPC),
+	acl3err_rofs = __constant_cpu_to_be32(ACL3ERR_ROFS),
+	acl3err_dquot = __constant_cpu_to_be32(ACL3ERR_DQUOT),
+	acl3err_stale = __constant_cpu_to_be32(ACL3ERR_STALE),
+	acl3err_badhandle = __constant_cpu_to_be32(ACL3ERR_BADHANDLE),
+	acl3err_notsupp = __constant_cpu_to_be32(ACL3ERR_NOTSUPP),
+	acl3err_serverfault = __constant_cpu_to_be32(ACL3ERR_SERVERFAULT),
+	acl3err_jukebox = __constant_cpu_to_be32(ACL3ERR_JUKEBOX),
+};
+
+/* Ensure errno values do not leak onto the wire. */
+static __be32 nfsd3_map_errno(int errno)
+{
+	switch (errno) {
+	case 0:			return acl3_ok;
+	case -EPERM:
+	case -ENOKEY:		return acl3err_perm;
+	case -ENOENT:		return acl3err_noent;
+	case -EIO:
+	case -EREMOTEIO:
+	case -ETXTBSY:
+	case -EUCLEAN:
+	case -EBADMSG:		return acl3err_io;
+	case -EACCES:		return acl3err_acces;
+	case -EINVAL:		return acl3err_inval;
+	case -ENOSPC:		return acl3err_nospc;
+	case -EROFS:		return acl3err_rofs;
+	case -EDQUOT:		return acl3err_dquot;
+	case -EBADF:
+	case -EOPENSTALE:
+	case -ESTALE:		return acl3err_stale;
+	case -EOPNOTSUPP:	return acl3err_notsupp;
+	case -ENOMEM:
+	case -EAGAIN:
+	case -ERESTARTSYS:
+	case -ETIMEDOUT:	return acl3err_jukebox;
+	default:		return acl3err_serverfault;
+	}
+}
+
 static __be32 nfsd3_map_status(__be32 status)
 {
 	switch (status) {
-	case nfserr_nofilehandle:
-		status = nfserr_badhandle;
+	case cpu_to_be32(NFS4ERR_NOFILEHANDLE):
+		status = acl3err_badhandle;
 		break;
-	case nfserr_wrongsec:
-		status = nfserr_acces;
+	case cpu_to_be32(NFS4ERR_WRONGSEC):
+		status = acl3err_acces;
 		break;
 	}
 	return status;
@@ -83,35 +133,35 @@ static __be32 nfsd3_proc_getacl(struct svc_rqst *rqstp)
 
 	fh = fh_copy(&resp->fh, &argp->fh);
 	resp->status = fh_verify(rqstp, &resp->fh, 0, NFSD_MAY_NOP);
-	if (resp->status != nfs_ok)
+	if (resp->status != acl3_ok)
 		goto out;
 
 	inode = d_inode(fh->fh_dentry);
 
 	if (argp->mask & ~NFS_ACL_MASK) {
-		resp->status = nfserr_inval;
+		resp->status = acl3err_inval;
 		goto out;
 	}
 	resp->mask = argp->mask;
 
-	if (resp->mask & (NFS_ACL|NFS_ACLCNT)) {
+	if (resp->mask & (NA_ACL | NA_ACLCNT)) {
 		acl = get_inode_acl(inode, ACL_TYPE_ACCESS);
 		if (acl == NULL) {
 			/* Solaris returns the inode's minimum ACL. */
 			acl = posix_acl_from_mode(inode->i_mode, GFP_KERNEL);
 		}
 		if (IS_ERR(acl)) {
-			resp->status = nfserrno(PTR_ERR(acl));
+			resp->status = nfsd3_map_errno(PTR_ERR(acl));
 			goto fail;
 		}
 		resp->acl_access = acl;
 	}
-	if (resp->mask & (NFS_DFACL|NFS_DFACLCNT)) {
+	if (resp->mask & (NA_DFACL | NA_DFACLCNT)) {
 		/* Check how Solaris handles requests for the Default ACL
 		   of a non-directory! */
 		acl = get_inode_acl(inode, ACL_TYPE_DEFAULT);
 		if (IS_ERR(acl)) {
-			resp->status = nfserrno(PTR_ERR(acl));
+			resp->status = nfsd3_map_errno(PTR_ERR(acl));
 			goto fail;
 		}
 		resp->acl_default = acl;
@@ -143,7 +193,7 @@ static __be32 nfsd3_proc_setacl(struct svc_rqst *rqstp)
 
 	fh = fh_copy(&resp->fh, &argp->fh);
 	resp->status = fh_verify(rqstp, &resp->fh, 0, NFSD_MAY_SATTR);
-	if (resp->status != nfs_ok)
+	if (resp->status != acl3_ok)
 		goto out;
 
 	inode = d_inode(fh->fh_dentry);
@@ -155,13 +205,13 @@ static __be32 nfsd3_proc_setacl(struct svc_rqst *rqstp)
 	inode_lock(inode);
 
 	error = 0;
-	if (argp->mask & NFS_ACL) {
+	if (argp->mask & NA_ACL) {
 		error = set_posix_acl(&nop_mnt_idmap, fh->fh_dentry,
 				      ACL_TYPE_ACCESS, argp->acl_access);
 		if (error)
 			goto out_drop_lock;
 	}
-	if (argp->mask & NFS_DFACL) {
+	if (argp->mask & NA_DFACL) {
 		error = set_posix_acl(&nop_mnt_idmap, fh->fh_dentry,
 				      ACL_TYPE_DEFAULT, argp->acl_default);
 	}
@@ -170,7 +220,7 @@ out_drop_lock:
 	inode_unlock(inode);
 	fh_drop_write(fh);
 out_errno:
-	resp->status = nfserrno(error);
+	resp->status = nfsd3_map_errno(error);
 out:
 	/* argp->acl_{access,default} are released in nfs3svc_release_setacl. */
 	resp->status = nfsd3_map_status(resp->status);
@@ -205,10 +255,10 @@ nfs3svc_decode_setaclargs(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 		return false;
 	if (argp->mask & ~NFS_ACL_MASK)
 		return false;
-	if (!nfs_stream_decode_acl(xdr, NULL, (argp->mask & NFS_ACL) ?
+	if (!nfs_stream_decode_acl(xdr, NULL, (argp->mask & NA_ACL) ?
 				   &argp->acl_access : NULL))
 		return false;
-	if (!nfs_stream_decode_acl(xdr, NULL, (argp->mask & NFS_DFACL) ?
+	if (!nfs_stream_decode_acl(xdr, NULL, (argp->mask & NA_DFACL) ?
 				   &argp->acl_default : NULL))
 		return false;
 
@@ -230,7 +280,7 @@ nfs3svc_encode_getaclres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 	if (!svcxdr_encode_nfsstat3(xdr, resp->status))
 		return false;
 	switch (resp->status) {
-	case nfs_ok:
+	case acl3_ok:
 		inode = d_inode(dentry);
 		if (!svcxdr_encode_post_op_attr(rqstp, xdr, &resp->fh))
 			return false;
@@ -238,11 +288,11 @@ nfs3svc_encode_getaclres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 			return false;
 
 		if (!nfs_stream_encode_acl(xdr, inode, resp->acl_access,
-					   resp->mask & NFS_ACL, 0))
+					   resp->mask & NA_ACL, 0))
 			return false;
 		if (!nfs_stream_encode_acl(xdr, inode, resp->acl_default,
-					   resp->mask & NFS_DFACL,
-					   NFS_ACL_DEFAULT))
+					   resp->mask & NA_DFACL,
+					   NA_ACL_DEFAULT))
 			return false;
 		break;
 	default:
