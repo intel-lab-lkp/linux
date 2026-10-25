@@ -1815,6 +1815,39 @@ static void kbd_led_update_all(struct work_struct *work)
 	}
 }
 
+static inline int asus_kbd_led_calc_next(int cur, enum asus_hid_event event)
+{
+	switch (event) {
+	case ASUS_EV_BRTUP:
+		cur += 1;
+		break;
+	case ASUS_EV_BRTDOWN:
+		cur -= 1;
+		break;
+	case ASUS_EV_BRTTOGGLE:
+		cur = (cur >= ASUS_EV_MAX_BRIGHTNESS) ? 0 : cur + 1;
+		break;
+	default:
+		return cur;
+	}
+
+	return clamp_val(cur, 0, ASUS_EV_MAX_BRIGHTNESS);
+}
+
+static int asus_kbd_led_step(struct asus_wmi *asus, enum asus_hid_event event)
+{
+	if (!asus)
+		return -ENODEV;
+
+	scoped_guard(spinlock_irqsave, &asus_ref.lock) {
+		asus->kbd_led_wk = asus_kbd_led_calc_next(asus->kbd_led_wk, event);
+		asus->kbd_led_notify = true;
+	}
+
+	queue_work(asus->led_workqueue, &asus->kbd_led_work);
+	return 0;
+}
+
 /*
  * This function is called from hid-asus to inform asus-wmi of brightness
  * changes initiated by the keyboard backlight keys.
@@ -1822,31 +1855,13 @@ static void kbd_led_update_all(struct work_struct *work)
 int asus_hid_event(enum asus_hid_event event)
 {
 	struct asus_wmi *asus;
-	int brightness;
 
 	guard(spinlock_irqsave)(&asus_ref.lock);
 	asus = asus_ref.asus;
 	if (!asus || !asus->kbd_led_registered)
 		return -EBUSY;
 
-	brightness = asus->kbd_led_wk;
-
-	switch (event) {
-	case ASUS_EV_BRTUP:
-		brightness += 1;
-		break;
-	case ASUS_EV_BRTDOWN:
-		brightness -= 1;
-		break;
-	case ASUS_EV_BRTTOGGLE:
-		if (brightness >= ASUS_EV_MAX_BRIGHTNESS)
-			brightness = 0;
-		else
-			brightness += 1;
-		break;
-	}
-
-	asus->kbd_led_wk = clamp_val(brightness, 0, ASUS_EV_MAX_BRIGHTNESS);
+	asus->kbd_led_wk = asus_kbd_led_calc_next(asus->kbd_led_wk, event);
 	asus->kbd_led_notify = true;
 	queue_work(asus->led_workqueue, &asus->kbd_led_work);
 	return 0;
@@ -1958,15 +1973,6 @@ static int kbd_led_set(struct led_classdev *led_cdev, enum led_brightness value)
 
 	do_kbd_led_set(led_cdev, value);
 	return 0;
-}
-
-static void kbd_led_set_by_kbd(struct asus_wmi *asus, enum led_brightness value)
-{
-	scoped_guard(spinlock_irqsave, &asus_ref.lock) {
-		asus->kbd_led_wk = clamp_val(value, 0, ASUS_EV_MAX_BRIGHTNESS);
-		asus->kbd_led_notify = true;
-	}
-	queue_work(asus->led_workqueue, &asus->kbd_led_work);
 }
 
 static enum led_brightness kbd_led_get(struct led_classdev *led_cdev)
@@ -4679,7 +4685,6 @@ static int asus_wmi_get_event_code(union acpi_object *obj)
 
 static void asus_wmi_handle_event_code(int code, struct asus_wmi *asus)
 {
-	enum led_brightness led_value;
 	unsigned int key_value = 1;
 	bool autorelease = 1;
 
@@ -4696,22 +4701,16 @@ static void asus_wmi_handle_event_code(int code, struct asus_wmi *asus)
 		return;
 	}
 
-	scoped_guard(spinlock_irqsave, &asus_ref.lock)
-		led_value = asus->kbd_led_wk;
-
 	if (code == NOTIFY_KBD_BRTUP) {
-		kbd_led_set_by_kbd(asus, led_value + 1);
+		asus_kbd_led_step(asus, ASUS_EV_BRTUP);
 		return;
 	}
 	if (code == NOTIFY_KBD_BRTDWN) {
-		kbd_led_set_by_kbd(asus, led_value - 1);
+		asus_kbd_led_step(asus, ASUS_EV_BRTDOWN);
 		return;
 	}
 	if (code == NOTIFY_KBD_BRTTOGGLE) {
-		if (led_value >= ASUS_EV_MAX_BRIGHTNESS)
-			kbd_led_set_by_kbd(asus, 0);
-		else
-			kbd_led_set_by_kbd(asus, led_value + 1);
+		asus_kbd_led_step(asus, ASUS_EV_BRTTOGGLE);
 		return;
 	}
 
