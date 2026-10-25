@@ -514,7 +514,7 @@ class _XdrUnion(_XdrAst):
         if self.default:
             if self.default.arm.max_width() > max_width:
                 max_width = self.default.arm.max_width()
-        return 1 + max_width
+        return self.discriminant.max_width() + max_width
 
     def symbolic_width(self) -> List:
         """Return list containing XDR width of type's components"""
