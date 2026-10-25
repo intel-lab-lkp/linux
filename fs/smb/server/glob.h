@@ -21,10 +21,11 @@ extern int ksmbd_debug_types;
 #define KSMBD_DEBUG_IPC         BIT(4)
 #define KSMBD_DEBUG_CONN        BIT(5)
 #define KSMBD_DEBUG_RDMA        BIT(6)
+#define KSMBD_DEBUG_NOTIFY      BIT(7)
 #define KSMBD_DEBUG_ALL         (KSMBD_DEBUG_SMB | KSMBD_DEBUG_AUTH |	\
 				KSMBD_DEBUG_VFS | KSMBD_DEBUG_OPLOCK |	\
 				KSMBD_DEBUG_IPC | KSMBD_DEBUG_CONN |	\
-				KSMBD_DEBUG_RDMA)
+				KSMBD_DEBUG_RDMA | KSMBD_DEBUG_NOTIFY)
 
 #ifdef pr_fmt
 #undef pr_fmt

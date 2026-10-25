@@ -12478,7 +12478,7 @@ int smb2_notify(struct ksmbd_work *work)
 	struct smb2_change_notify_req *req;
 	struct smb2_change_notify_rsp *rsp;
 
-	ksmbd_debug(SMB, "Received smb2 notify\n");
+	ksmbd_debug(NOTIFY, "Received smb2 notify\n");
 
 	WORK_BUFFERS(work, req, rsp);
 
