@@ -67,8 +67,8 @@ static int dynamic_funnel_enable_hw(struct funnel_drvdata *drvdata, int port)
 	functl &= ~FUNNEL_HOLDTIME_MASK;
 	functl |= FUNNEL_HOLDTIME;
 	functl |= (1 << port);
-	writel_relaxed(functl, drvdata->base + FUNNEL_FUNCTL);
 	writel_relaxed(drvdata->priority, drvdata->base + FUNNEL_PRICTL);
+	writel_relaxed(functl, drvdata->base + FUNNEL_FUNCTL);
 done:
 	CS_LOCK(drvdata->base);
 	return rc;
