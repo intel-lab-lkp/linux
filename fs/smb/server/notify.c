@@ -20,6 +20,7 @@
 #include "connection.h"
 #include "ksmbd_work.h"
 #include "notify.h"
+#include "oplock.h"
 #include "smb_common.h"
 #include "smb2pdu.h"
 #include "vfs_cache.h"
@@ -432,13 +433,34 @@ static void ksmbd_notify_broadcast(struct ksmbd_notify *notify)
 	spin_unlock(&notify->lock);
 }
 
+static bool ksmbd_notify_events_pending(struct ksmbd_notify *notify)
+{
+	bool pending;
+
+	spin_lock(&notify->lock);
+	pending = notify->overflow || !list_empty(&notify->events);
+	spin_unlock(&notify->lock);
+
+	return pending;
+}
+
+/* Invalidate directory caches before making the change visible to a client. */
+static void ksmbd_notify_dispatch(struct ksmbd_notify *notify)
+{
+	if (!ksmbd_notify_events_pending(notify))
+		return;
+
+	smb_break_dir_lease(notify->fp);
+	ksmbd_notify_broadcast(notify);
+}
+
 static void ksmbd_notify_broadcast_work(struct work_struct *work)
 {
 	struct ksmbd_notify *notify;
 
 	notify = container_of(to_delayed_work(work), struct ksmbd_notify,
 			      broadcast_work);
-	ksmbd_notify_broadcast(notify);
+	ksmbd_notify_dispatch(notify);
 }
 
 static int ksmbd_notify_handle_inode_event(struct ksmbd_notify *notify,
@@ -818,6 +840,12 @@ ksmbd_notify_take_events(struct ksmbd_notify *notify,
 {
 	bool pending;
 
+	if (!ksmbd_notify_events_pending(notify))
+		return false;
+
+	/* This path bypasses broadcast_work, so break directory leases here. */
+	smb_break_dir_lease(notify->fp);
+
 	spin_lock(&notify->lock);
 	pending = notify->overflow || notify->num_events;
 	if (pending && ksmbd_notify_wake_waiter(notify))
@@ -858,7 +886,7 @@ ksmbd_notify_requeue_events(struct ksmbd_notify *notify,
 	spin_unlock(&notify->lock);
 
 	ksmbd_notify_free_events(notify, &discard);
-	ksmbd_notify_broadcast(notify);
+	ksmbd_notify_dispatch(notify);
 }
 
 static int ksmbd_notify_event_cmp(void *priv, const struct list_head *a,
@@ -1133,7 +1161,7 @@ static int ksmbd_notify_wait(struct ksmbd_work *work,
 	read_unlock(&work->sess->file_table.lock);
 
 	/* Close the race between the synchronous check and queuing the waiter. */
-	ksmbd_notify_broadcast(notify);
+	ksmbd_notify_dispatch(notify);
 
 	ksmbd_debug(NOTIFY, "Notify request pending, async id %d\n",
 		    work->async_id);
