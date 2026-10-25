@@ -97,7 +97,6 @@ void ath11k_debugfs_add_dbring_entry(struct ath11k *ar,
 void ath11k_debugfs_fw_stats_process(struct ath11k *ar, struct ath11k_fw_stats *stats)
 {
 	struct ath11k_base *ab = ar->ab;
-	bool is_end = true;
 
 	/* WMI_REQUEST_PDEV_STAT, WMI_REQUEST_RSSI_PER_CHAIN_STAT and
 	 * WMI_REQUEST_VDEV_STAT requests have been already processed.
@@ -107,18 +106,13 @@ void ath11k_debugfs_fw_stats_process(struct ath11k *ar, struct ath11k_fw_stats *
 			ath11k_warn(ab, "empty bcn stats");
 			return;
 		}
-		/* Mark end until we reached the count of all started VDEVs
-		 * within the PDEV
+		/* ath11k_open_bcn_stats() requests one vdev's beacon stats at
+		 * a time, so one reply ends a request.
 		 */
-		if (ar->num_started_vdevs)
-			is_end = ((++ar->fw_stats.num_bcn_recvd) ==
-				  ar->num_started_vdevs);
-
 		list_splice_tail_init(&stats->bcn,
 				      &ar->fw_stats.bcn);
 
-		if (is_end)
-			complete(&ar->fw_stats_done);
+		complete(&ar->fw_stats_done);
 	}
 }
 
