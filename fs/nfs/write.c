@@ -1467,6 +1467,13 @@ void nfs_writeback_update_inode(struct nfs_pgio_header *hdr)
 	struct nfs_fattr *fattr = &hdr->fattr;
 	struct inode *inode = hdr->inode;
 
+	/*
+	 * A server may report more bytes than the request asked for.  Do not
+	 * let that count extend the inode size or the attribute barrier.
+	 */
+	if (hdr->res.count > hdr->args.count)
+		hdr->res.count = hdr->args.count;
+
 	if (nfs_have_delegated_mtime(inode)) {
 		spin_lock(&inode->i_lock);
 		nfs_set_cache_invalid(inode, NFS_INO_INVALID_BLOCKS);
