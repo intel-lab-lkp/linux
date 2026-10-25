@@ -1807,8 +1807,10 @@ static void kbd_led_update_all(struct work_struct *work)
 	if (value >= 0)
 		do_kbd_led_set(&asus->kbd_led, value);
 	if (notify) {
-		scoped_guard(spinlock_irqsave, &asus_ref.lock)
+		scoped_guard(spinlock_irqsave, &asus_ref.lock) {
 			asus->kbd_led_notify = false;
+			value = asus->kbd_led_wk;
+		}
 		led_classdev_notify_brightness_hw_changed(&asus->kbd_led, value);
 	}
 }
@@ -1961,7 +1963,7 @@ static int kbd_led_set(struct led_classdev *led_cdev, enum led_brightness value)
 static void kbd_led_set_by_kbd(struct asus_wmi *asus, enum led_brightness value)
 {
 	scoped_guard(spinlock_irqsave, &asus_ref.lock) {
-		asus->kbd_led_wk = value;
+		asus->kbd_led_wk = clamp_val(value, 0, ASUS_EV_MAX_BRIGHTNESS);
 		asus->kbd_led_notify = true;
 	}
 	queue_work(asus->led_workqueue, &asus->kbd_led_work);
