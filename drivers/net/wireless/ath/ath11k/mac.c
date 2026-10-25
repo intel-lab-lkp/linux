@@ -9338,6 +9338,46 @@ ath11k_mac_update_bss_chan_survey(struct ath11k *ar,
 		ath11k_warn(ar->ab, "bss channel survey timed out\n");
 }
 
+/* The noise floor in the firmware's bss channel info event is not the
+ * channel's measured noise floor: on IPQ8074 it reads about -109 dBm on
+ * 5 GHz and -102 dBm on 2.4 GHz, and barely moves, while the measured value
+ * the firmware reports in its pdev stats is -94 and -96. Report the measured
+ * one for the channel in use, as the channel info events of a scan do for
+ * the other channels.
+ */
+static void ath11k_mac_get_chan_noise_floor(struct ath11k *ar,
+					    struct survey_info *ar_survey,
+					    struct survey_info *survey)
+{
+	struct ath11k_fw_stats_pdev *pdev;
+	s32 nf;
+
+	lockdep_assert_held(&ar->conf_mutex);
+
+	if (ar->scan.state != ATH11K_SCAN_IDLE)
+		return;
+
+	if (ath11k_mac_get_fw_stats(ar, ar->pdev->pdev_id, 0,
+				    WMI_REQUEST_PDEV_STAT))
+		return;
+
+	spin_lock_bh(&ar->data_lock);
+	pdev = list_first_entry_or_null(&ar->fw_stats.pdevs,
+					struct ath11k_fw_stats_pdev, list);
+	nf = pdev ? pdev->ch_noise_floor : 0;
+	/* keep it for the channel too, so its survey shows the last measured
+	 * value once the radio has left it
+	 */
+	if (nf < 0 && nf > -127)
+		ar_survey->noise = nf;
+	spin_unlock_bh(&ar->data_lock);
+
+	if (nf < 0 && nf > -127) {
+		survey->noise = nf;
+		survey->filled |= SURVEY_INFO_NOISE_DBM;
+	}
+}
+
 static int ath11k_mac_op_get_survey(struct ieee80211_hw *hw, int idx,
 				    struct survey_info *survey)
 {
@@ -9381,8 +9421,10 @@ static int ath11k_mac_op_get_survey(struct ieee80211_hw *hw, int idx,
 
 	survey->channel = &sband->channels[idx];
 
-	if (ar->rx_channel == survey->channel)
+	if (ar->rx_channel == survey->channel) {
 		survey->filled |= SURVEY_INFO_IN_USE;
+		ath11k_mac_get_chan_noise_floor(ar, ar_survey, survey);
+	}
 
 exit:
 	mutex_unlock(&ar->conf_mutex);
