@@ -7,6 +7,7 @@
 
 #include <linux/gfp.h>
 #include <linux/fs.h>
+#include <linux/filelock.h>
 #include <linux/nfsacl.h>
 #include <linux/nfs4.h>
 
@@ -14,9 +15,18 @@
 
 #include "cache.h"
 #include "nfsd.h"
+#include "auth.h"
 #include "vfs.h"
 
 #define NFS_ACL_MASK		(NA_ACL | NA_ACLCNT | NA_DFACL | NA_DFACLCNT)
+
+/*
+ * The generated <linux/sunrpc/xdrgen/nfs_acl3.h> defines the NFSv3
+ * inherited types (nfs_fh3, fattr3, post_op_attr, ...), so the native
+ * NFSv3 headers that also define them cannot be included here. Define
+ * the one inherited NFSv3 constant needed for symlink size clamping.
+ */
+#define NFS3_MAXPATHLEN		PATH_MAX
 
 /*
  * Wrapper structures combine xdrgen types with legacy structures.
@@ -30,15 +40,13 @@ struct GETACL3args_wrapper {
 
 static_assert(offsetof(struct GETACL3args_wrapper, xdrgen) == 0);
 
-/*
- * The ACL is encoded from the posix_acl fields below, so the
- * generated secattr (xdrgen.u.resok.acl) is left unused.
- */
 struct GETACL3res_wrapper {
 	struct GETACL3res	xdrgen;
 	int			mask;
 	struct posix_acl	*acl_access;
 	struct posix_acl	*acl_default;
+	kuid_t			uid;
+	kgid_t			gid;
 	struct kstat		stat;
 };
 
@@ -63,39 +71,6 @@ struct SETACL3args_wrapper {
 };
 
 static_assert(offsetof(struct SETACL3args_wrapper, xdrgen) == 0);
-
-struct nfsd3_getaclargs {
-	struct svc_fh		fh;
-	__u32			mask;
-};
-
-struct nfsd3_getaclres {
-	__be32			status;
-	struct svc_fh		fh;
-	int			mask;
-	struct posix_acl	*acl_access;
-	struct posix_acl	*acl_default;
-	struct kstat		stat;
-};
-
-struct nfsd3_setaclargs {
-	struct svc_fh		fh;
-	__u32			mask;
-	struct posix_acl	*acl_access;
-	struct posix_acl	*acl_default;
-};
-
-struct nfsd3_attrstat {
-	__be32			status;
-	struct svc_fh		fh;
-	struct kstat            stat;
-};
-
-/* Helper functions for NFSv3 ACL code */
-bool svcxdr_decode_nfs_fh3(struct xdr_stream *xdr, struct svc_fh *fhp);
-bool svcxdr_encode_nfsstat3(struct xdr_stream *xdr, __be32 status);
-bool svcxdr_encode_post_op_attr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
-				const struct svc_fh *fhp);
 
 enum {
 	acl3_ok = __constant_cpu_to_be32(ACL3_OK),
@@ -157,6 +132,103 @@ static __be32 nfsd3_map_status(__be32 status)
 	return status;
 }
 
+/* Legacy structures for the hand-rolled SETACL codec. */
+struct nfsd3_setaclargs {
+	struct svc_fh		fh;
+	__u32			mask;
+	struct posix_acl	*acl_access;
+	struct posix_acl	*acl_default;
+};
+
+struct nfsd3_attrstat {
+	__be32			status;
+	struct svc_fh		fh;
+	struct kstat            stat;
+};
+
+/* Helper functions for NFSv3 ACL code */
+bool svcxdr_decode_nfs_fh3(struct xdr_stream *xdr, struct svc_fh *fhp);
+bool svcxdr_encode_nfsstat3(struct xdr_stream *xdr, __be32 status);
+bool svcxdr_encode_post_op_attr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
+				const struct svc_fh *fhp);
+
+static bool
+nfs3acl_decode_fh(const struct nfs_fh3 *fh, struct svc_fh *fhp)
+{
+	if (fh->data.len == 0 || fh->data.len > NFS3_FHSIZE)
+		return false;
+	fh_init(fhp, NFS3_FHSIZE);
+	fhp->fh_handle.fh_size = fh->data.len;
+	memcpy(&fhp->fh_handle.fh_raw, fh->data.data, fh->data.len);
+	return true;
+}
+
+static u32
+nfs3acl_mode_to_ftype3(umode_t mode)
+{
+	switch (mode & S_IFMT) {
+	case S_IFREG:  return NF3REG;
+	case S_IFDIR:  return NF3DIR;
+	case S_IFBLK:  return NF3BLK;
+	case S_IFCHR:  return NF3CHR;
+	case S_IFLNK:  return NF3LNK;
+	case S_IFSOCK: return NF3SOCK;
+	case S_IFIFO:  return NF3FIFO;
+	}
+	return NF3REG;
+}
+
+static void
+nfs3acl_stat_to_fattr3(struct svc_rqst *rqstp, struct fattr3 *fattr,
+		       const struct kstat *stat, const struct svc_fh *fhp)
+{
+	struct user_namespace *userns = nfsd_user_namespace(rqstp);
+	u64 fsid;
+
+	fattr->type = nfs3acl_mode_to_ftype3(stat->mode);
+	fattr->mode = stat->mode & S_IALLUGO;
+	fattr->nlink = stat->nlink;
+	fattr->uid = from_kuid_munged(userns, stat->uid);
+	fattr->gid = from_kgid_munged(userns, stat->gid);
+	if (S_ISLNK(stat->mode) && stat->size > NFS3_MAXPATHLEN)
+		fattr->size = NFS3_MAXPATHLEN;
+	else
+		fattr->size = stat->size;
+	fattr->used = (u64)stat->blocks << 9;
+	fattr->rdev.specdata1 = MAJOR(stat->rdev);
+	fattr->rdev.specdata2 = MINOR(stat->rdev);
+
+	switch (fsid_source(fhp)) {
+	case FSIDSOURCE_FSID:
+		fsid = (u64)fhp->fh_export->ex_fsid;
+		break;
+	case FSIDSOURCE_UUID:
+		fsid = ((u64 *)fhp->fh_export->ex_uuid)[0];
+		fsid ^= ((u64 *)fhp->fh_export->ex_uuid)[1];
+		break;
+	default:
+		fsid = (u64)huge_encode_dev(fhp->fh_dentry->d_sb->s_dev);
+	}
+	fattr->fsid = fsid;
+	fattr->fileid = stat->ino;
+
+	fattr->atime.seconds = stat->atime.tv_sec;
+	fattr->atime.nseconds = stat->atime.tv_nsec;
+	fattr->mtime.seconds = stat->mtime.tv_sec;
+	fattr->mtime.nseconds = stat->mtime.tv_nsec;
+	fattr->ctime.seconds = stat->ctime.tv_sec;
+	fattr->ctime.nseconds = stat->ctime.tv_nsec;
+}
+
+static void
+nfs3acl_encode_post_op_attr(struct svc_rqst *rqstp, struct post_op_attr *attr,
+			    struct kstat *stat, const struct svc_fh *fhp)
+{
+	attr->attributes_follow = true;
+	lease_get_mtime(d_inode(fhp->fh_dentry), &stat->mtime);
+	nfs3acl_stat_to_fattr3(rqstp, &attr->u.attributes, stat, fhp);
+}
+
 /*
  * A minimal (three-entry) ACL travels as four wire entries: the
  * POSIX entries plus a synthesized NA_CLASS_OBJ mask. The wire
@@ -185,29 +257,48 @@ static __be32 nfsd3_proc_null(struct svc_rqst *rqstp)
 	return rpc_success;
 }
 
-/*
- * Get the Access and/or Default ACL of a file.
+/**
+ * nfsd3_proc_getacl - GETACL: Get the Access and/or Default ACL of a file
+ * @rqstp: RPC transaction context
+ *
+ * Return:
+ *   %rpc_success:		RPC executed successfully
+ *
+ * RPC synopsis:
+ *   GETACL3res ACLPROC3_GETACL(GETACL3args) = 1;
  */
 static __be32 nfsd3_proc_getacl(struct svc_rqst *rqstp)
 {
-	struct nfsd3_getaclargs *argp = rqstp->rq_argp;
-	struct nfsd3_getaclres *resp = rqstp->rq_resp;
+	struct GETACL3args_wrapper *argp = rqstp->rq_argp;
+	struct GETACL3res_wrapper *resp = rqstp->rq_resp;
+	struct svc_fh *fhp = &argp->fh;
 	struct posix_acl *acl;
 	struct inode *inode;
-	svc_fh *fh;
 
-	fh = fh_copy(&resp->fh, &argp->fh);
-	resp->status = fh_verify(rqstp, &resp->fh, 0, NFSD_MAY_NOP);
-	if (resp->status != acl3_ok)
+	resp->xdrgen.u.resok.attr.attributes_follow = false;
+
+	/* An unparsable handle leaves @fhp uninitialized, so skip fh_put. */
+	if (!nfs3acl_decode_fh(&argp->xdrgen.fh, fhp)) {
+		resp->xdrgen.status = acl3err_badhandle;
+		return rpc_success;
+	}
+
+	resp->xdrgen.status = fh_verify(rqstp, fhp, 0, NFSD_MAY_NOP);
+	if (resp->xdrgen.status != acl3_ok)
 		goto out;
+	inode = d_inode(fhp->fh_dentry);
 
-	inode = d_inode(fh->fh_dentry);
+	if (!fhp->fh_no_wcc && fh_getattr(fhp, &resp->stat) == acl3_ok)
+		nfs3acl_encode_post_op_attr(rqstp, &resp->xdrgen.u.resok.attr,
+					    &resp->stat, fhp);
 
-	if (argp->mask & ~NFS_ACL_MASK) {
-		resp->status = acl3err_inval;
+	if (argp->xdrgen.mask & ~NFS_ACL_MASK) {
+		resp->xdrgen.status = acl3err_inval;
 		goto out;
 	}
-	resp->mask = argp->mask;
+	resp->mask = argp->xdrgen.mask;
+	resp->uid = inode->i_uid;
+	resp->gid = inode->i_gid;
 
 	if (resp->mask & (NA_ACL | NA_ACLCNT)) {
 		acl = get_inode_acl(inode, ACL_TYPE_ACCESS);
@@ -216,25 +307,34 @@ static __be32 nfsd3_proc_getacl(struct svc_rqst *rqstp)
 			acl = posix_acl_from_mode(inode->i_mode, GFP_KERNEL);
 		}
 		if (IS_ERR(acl)) {
-			resp->status = nfsd3_map_errno(PTR_ERR(acl));
+			resp->xdrgen.status = nfsd3_map_errno(PTR_ERR(acl));
 			goto fail;
 		}
 		resp->acl_access = acl;
 	}
 	if (resp->mask & (NA_DFACL | NA_DFACLCNT)) {
-		/* Check how Solaris handles requests for the Default ACL
-		   of a non-directory! */
 		acl = get_inode_acl(inode, ACL_TYPE_DEFAULT);
 		if (IS_ERR(acl)) {
-			resp->status = nfsd3_map_errno(PTR_ERR(acl));
+			resp->xdrgen.status = nfsd3_map_errno(PTR_ERR(acl));
 			goto fail;
 		}
 		resp->acl_default = acl;
 	}
 
-	/* resp->acl_{access,default} are released in nfs3svc_release_getacl. */
+	/*
+	 * The generated secattr encoder streams the ACL entries from
+	 * the posix_acls above via the encode hooks; the proc supplies
+	 * the scalar fields.  aclcnt/dfaclcnt carry the entry count
+	 * independent of whether the matching list is requested.
+	 */
+	resp->xdrgen.u.resok.acl.mask = resp->mask;
+	resp->xdrgen.u.resok.acl.aclcnt = nfs3acl_acl_entries(resp->acl_access);
+	resp->xdrgen.u.resok.acl.dfaclcnt = nfs3acl_acl_entries(resp->acl_default);
+
 out:
-	resp->status = nfsd3_map_status(resp->status);
+	/* resp->acl_{access,default} are released in nfs3svc_release_getacl. */
+	fh_put(fhp);
+	resp->xdrgen.status = nfsd3_map_status(resp->xdrgen.status);
 	return rpc_success;
 
 fail:
@@ -297,19 +397,6 @@ out:
  */
 
 static bool
-nfs3svc_decode_getaclargs(struct svc_rqst *rqstp, struct xdr_stream *xdr)
-{
-	struct nfsd3_getaclargs *args = rqstp->rq_argp;
-
-	if (!svcxdr_decode_nfs_fh3(xdr, &args->fh))
-		return false;
-	if (xdr_stream_decode_u32(xdr, &args->mask) < 0)
-		return false;
-
-	return true;
-}
-
-static bool
 nfs3svc_decode_setaclargs(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 {
 	struct nfsd3_setaclargs *argp = rqstp->rq_argp;
@@ -333,40 +420,6 @@ nfs3svc_decode_setaclargs(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 /*
  * XDR encode functions
  */
-
-/* GETACL */
-static bool
-nfs3svc_encode_getaclres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
-{
-	struct nfsd3_getaclres *resp = rqstp->rq_resp;
-	struct dentry *dentry = resp->fh.fh_dentry;
-	struct inode *inode;
-
-	if (!svcxdr_encode_nfsstat3(xdr, resp->status))
-		return false;
-	switch (resp->status) {
-	case acl3_ok:
-		inode = d_inode(dentry);
-		if (!svcxdr_encode_post_op_attr(rqstp, xdr, &resp->fh))
-			return false;
-		if (xdr_stream_encode_u32(xdr, resp->mask) < 0)
-			return false;
-
-		if (!nfs_stream_encode_acl(xdr, inode, resp->acl_access,
-					   resp->mask & NA_ACL, 0))
-			return false;
-		if (!nfs_stream_encode_acl(xdr, inode, resp->acl_default,
-					   resp->mask & NA_DFACL,
-					   NA_ACL_DEFAULT))
-			return false;
-		break;
-	default:
-		if (!svcxdr_encode_post_op_attr(rqstp, xdr, &resp->fh))
-			return false;
-	}
-
-	return true;
-}
 
 /* SETACL */
 static bool
@@ -434,10 +487,10 @@ bool nfs_acl3_secattr_encode(struct xdrgen_aggregate_cursor *c,
 	out->type = tag | typeflag;
 	switch (tag) {
 	case ACL_USER_OBJ:
-		out->id = from_kuid(&init_user_ns, resp->stat.uid);
+		out->id = from_kuid(&init_user_ns, resp->uid);
 		break;
 	case ACL_GROUP_OBJ:
-		out->id = from_kgid(&init_user_ns, resp->stat.gid);
+		out->id = from_kgid(&init_user_ns, resp->gid);
 		break;
 	case ACL_USER:
 		out->id = from_kuid(&init_user_ns, entry->e_uid);
@@ -606,9 +659,8 @@ bool nfs_acl3_secattr_decode_end(struct xdrgen_aggregate_cursor *c, bool ok)
  */
 static void nfs3svc_release_getacl(struct svc_rqst *rqstp)
 {
-	struct nfsd3_getaclres *resp = rqstp->rq_resp;
+	struct GETACL3res_wrapper *resp = rqstp->rq_resp;
 
-	fh_put(&resp->fh);
 	posix_acl_release(resp->acl_access);
 	posix_acl_release(resp->acl_default);
 }
@@ -626,7 +678,6 @@ static void nfs3svc_release_setacl(struct svc_rqst *rqstp)
 #define ST 1		/* status*/
 #define AT 21		/* attributes */
 #define pAT (1+AT)	/* post attributes - conditional */
-#define ACL (1+NFS_ACL_MAX_ENTRIES*3)  /* Access Control List */
 
 static const struct svc_procedure nfsd_acl_procedures3[3] = {
 	[ACLPROC3_NULL] = {
@@ -642,14 +693,14 @@ static const struct svc_procedure nfsd_acl_procedures3[3] = {
 	},
 	[ACLPROC3_GETACL] = {
 		.pc_func = nfsd3_proc_getacl,
-		.pc_decode = nfs3svc_decode_getaclargs,
-		.pc_encode = nfs3svc_encode_getaclres,
+		.pc_decode = nfs_acl_svc_decode_GETACL3args,
+		.pc_encode = nfs_acl_svc_encode_GETACL3res,
 		.pc_release = nfs3svc_release_getacl,
-		.pc_argsize = sizeof(struct nfsd3_getaclargs),
-		.pc_argzero = sizeof(struct nfsd3_getaclargs),
-		.pc_ressize = sizeof(struct nfsd3_getaclres),
+		.pc_argsize = sizeof(struct GETACL3args_wrapper),
+		.pc_argzero = 0,
+		.pc_ressize = sizeof(struct GETACL3res_wrapper),
 		.pc_cachetype = RC_NOCACHE,
-		.pc_xdrressize = ST+1+2*(1+ACL),
+		.pc_xdrressize = NFS_ACL3_GETACL3res_sz,
 		.pc_name = "GETACL",
 	},
 	[ACLPROC3_SETACL] = {
@@ -670,9 +721,9 @@ static const struct svc_procedure nfsd_acl_procedures3[3] = {
  * Storage requirements for XDR arguments and results.
  */
 union nfsd_acl3_xdrstore {
-	struct nfsd3_getaclargs		getaclargs;
+	struct GETACL3args_wrapper	getaclargs;
 	struct nfsd3_setaclargs		setaclargs;
-	struct nfsd3_getaclres		getaclres;
+	struct GETACL3res_wrapper	getaclres;
 	struct nfsd3_attrstat		attrstat;
 };
 
@@ -683,4 +734,3 @@ const struct svc_version nfsd_acl_version3 = {
 	.vs_dispatch	= nfsd_dispatch,
 	.vs_xdrsize	= sizeof(union nfsd_acl3_xdrstore),
 };
-
