@@ -7800,7 +7800,11 @@ ath11k_mac_update_vif_chan(struct ath11k *ar,
 	 * should be available for the channel switch now.
 	 */
 
-	/* TODO: Update ar->rx_channel */
+	if (n_vifs) {
+		spin_lock_bh(&ar->data_lock);
+		ar->rx_channel = vifs[0].new_ctx->def.chan;
+		spin_unlock_bh(&ar->data_lock);
+	}
 
 	for (i = 0; i < n_vifs; i++) {
 		arvif = ath11k_vif_to_arvif(vifs[i].vif);
