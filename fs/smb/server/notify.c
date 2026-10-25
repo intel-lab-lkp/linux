@@ -203,21 +203,38 @@ overflow:
 }
 
 static void
-ksmbd_notify_queue_event(struct ksmbd_notify *notify,
-			 struct ksmbd_notify_event *event)
+ksmbd_notify_queue_events(struct ksmbd_notify *notify,
+			  struct ksmbd_notify_event *event,
+			  struct ksmbd_notify_event *next)
 {
-	ksmbd_debug(NOTIFY, "Queueing notify event, action %u, name %s\n",
-		    event->action, event->name);
+	if (!event && !next)
+		return;
 
 	spin_lock(&notify->lock);
 	if (notify->overflow) {
 		spin_unlock(&notify->lock);
 		ksmbd_notify_free_event(notify, event);
+		ksmbd_notify_free_event(notify, next);
 		return;
 	}
-	list_add_tail(&event->list, &notify->events);
-	notify->num_events++;
+	if (event) {
+		list_add_tail(&event->list, &notify->events);
+		notify->num_events++;
+	}
+	if (next) {
+		list_add_tail(&next->list, &notify->events);
+		notify->num_events++;
+	}
 	spin_unlock(&notify->lock);
+}
+
+static void
+ksmbd_notify_queue_event(struct ksmbd_notify *notify,
+			 struct ksmbd_notify_event *event)
+{
+	ksmbd_debug(NOTIFY, "Queueing notify event, action %u, name %s\n",
+		    event->action, event->name);
+	ksmbd_notify_queue_events(notify, event, NULL);
 }
 
 static void
@@ -284,6 +301,65 @@ static void ksmbd_notify_save_moved_from(struct ksmbd_notify *notify,
 			 msecs_to_jiffies(KSMBD_NOTIFY_MOVED_FROM_MSECS));
 }
 
+static bool
+ksmbd_notify_handle_rename(struct ksmbd_notify *notify, u32 mask,
+				 u32 cookie, const struct qstr *file_name)
+{
+	struct ksmbd_notify_event *from, *to;
+	u32 from_mask;
+
+	to = ksmbd_notify_alloc_event(notify, FILE_ACTION_RENAMED_NEW_NAME, file_name,
+				      KSMBD_DEFAULT_GFP);
+	if (!to)
+		return true;
+
+	spin_lock(&notify->lock);
+	if (!notify->moved_from_event ||
+	    notify->moved_from_cookie != cookie) {
+		spin_unlock(&notify->lock);
+		ksmbd_notify_free_event(notify, to);
+		ksmbd_debug(NOTIFY,
+			    "No rename source for destination %.*s, cookie %u\n",
+			    file_name ? file_name->len : 0,
+			    file_name ? (const char *)file_name->name : "",
+			    cookie);
+		return false;
+	}
+	from = notify->moved_from_event;
+	from_mask = notify->moved_from_mask;
+	notify->moved_from_event = NULL;
+	notify->moved_from_mask = 0;
+	notify->moved_from_cookie = 0;
+	cancel_delayed_work(&notify->moved_from_work);
+	spin_unlock(&notify->lock);
+
+	from->action = FILE_ACTION_RENAMED_OLD_NAME;
+	ksmbd_debug(NOTIFY, "Matched rename %.*s to %.*s, cookie %u\n",
+		    (int)from->name_len, from->name,
+		    file_name ? file_name->len : 0,
+		    file_name ? (const char *)file_name->name : "", cookie);
+
+	if (!ksmbd_notify_filter_match(notify, from_mask)) {
+		ksmbd_debug(NOTIFY, "Filtered rename source %.*s\n",
+			    (int)from->name_len, from->name);
+		ksmbd_notify_free_event(notify, from);
+		from = NULL;
+	}
+
+	if (!ksmbd_notify_filter_match(notify, mask)) {
+		ksmbd_debug(NOTIFY, "Filtered rename destination %.*s\n",
+			    file_name ? file_name->len : 0,
+			    file_name ? (const char *)file_name->name : "");
+		ksmbd_notify_free_event(notify, to);
+		to = NULL;
+	}
+
+	/* A waiter must not take only the first half of a rename pair. */
+	ksmbd_notify_queue_events(notify, from, to);
+
+	return true;
+}
+
 static int ksmbd_notify_handle_inode_event(struct ksmbd_notify *notify,
 					   u32 mask, struct inode *inode,
 					   struct inode *dir,
@@ -318,10 +394,12 @@ static int ksmbd_notify_handle_inode_event(struct ksmbd_notify *notify,
 		return 0;
 	}
 
-	if (mask & FS_MOVED_TO)
-		return 0;
-
-	if (mask & FS_CREATE) {
+	if (mask & FS_MOVED_TO) {
+		if (ksmbd_notify_handle_rename(notify, mask, cookie,
+					       file_name))
+			return 0;
+		action = FILE_ACTION_ADDED;
+	} else if (mask & FS_CREATE) {
 		action = FILE_ACTION_ADDED;
 	} else if (mask & FS_DELETE) {
 		action = FILE_ACTION_REMOVED;
