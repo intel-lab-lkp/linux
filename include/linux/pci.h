@@ -420,6 +420,8 @@ struct pci_dev {
 	unsigned int	no_d1d2:1;	/* D1 and D2 are forbidden */
 	unsigned int	no_d3cold:1;	/* D3cold is forbidden */
 	unsigned int	bridge_d3:1;	/* Allow D3 for bridge */
+	unsigned int	no_pcie_port:1; /* PCIE Port driver is forbidden */
+	unsigned int	ignore_access_d3:1;	/* Ignore access when device is in D3Cold */
 	unsigned int	d3cold_allowed:1;	/* D3cold is allowed by user */
 	unsigned int	mmio_always_on:1;	/* Disallow turning off io/mem
 						   decoding during BAR sizing */
@@ -2746,6 +2748,11 @@ static inline bool pci_dev_is_disconnected(const struct pci_dev *dev)
 	 * the value (e.g. inside the loop in pci_dev_wait()).
 	 */
 	return READ_ONCE(dev->error_state) == pci_channel_io_perm_failure;
+}
+
+static inline bool pci_dev_ignore_access(const struct pci_dev *dev)
+{
+	return dev->ignore_access_d3 && dev->current_state == PCI_D3cold;
 }
 
 void pci_request_acs(void);
