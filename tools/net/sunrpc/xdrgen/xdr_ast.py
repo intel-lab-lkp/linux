@@ -284,10 +284,6 @@ class _XdrOptionalData(_XdrDeclaration):
         """Return list containing XDR width of type's components"""
         return ["XDR_bool"]
 
-    def __post_init__(self):
-        structs.add(self.name)
-        pass_by_reference.add(self.name)
-
 
 @dataclass
 class _XdrBasic(_XdrDeclaration):
@@ -440,6 +436,9 @@ class _XdrTypedef(_XdrAst):
     def __post_init__(self):
         if isinstance(self.declaration, (_XdrVariableLengthOpaque, _XdrString)):
             varlen_object_typedefs[self.declaration.name] = self.declaration.maxsize
+        if isinstance(self.declaration, _XdrOptionalData):
+            structs.add(self.declaration.name)
+            pass_by_reference.add(self.declaration.name)
         if isinstance(self.declaration, _XdrBasic):
             new_type = self.declaration
             if isinstance(new_type.spec, _XdrDefinedType):
