@@ -1,0 +1,30 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+/*
+ *
+ *   SMB2 CHANGE_NOTIFY
+ *
+ *   Copyright (C) 2026 KylinSoft Co., Ltd. All rights reserved.
+ *
+ *   Author(s): ChenXiaoSong <chenxiaosong@kylinos.cn>
+ *              Gael Blivet <gael.blivet@gmail.com>
+ *
+ */
+
+#ifndef __SMB_SERVER_NOTIFY_H__
+#define __SMB_SERVER_NOTIFY_H__
+
+#include <linux/wait.h>
+
+struct ksmbd_work;
+struct smb2_change_notify_req;
+struct smb2_change_notify_rsp;
+
+struct ksmbd_notify_req {
+	wait_queue_head_t wait;
+};
+
+int ksmbd_handle_notify(struct ksmbd_work *work,
+			struct smb2_change_notify_req *req,
+			struct smb2_change_notify_rsp *rsp);
+
+#endif /* __SMB_SERVER_NOTIFY_H__ */

@@ -33,6 +33,7 @@
 #include "vfs.h"
 #include "vfs_cache.h"
 #include "misc.h"
+#include "notify.h"
 
 #include "server.h"
 #include "smb_common.h"
@@ -12466,28 +12467,6 @@ int smb2_oplock_break(struct ksmbd_work *work)
 	return 0;
 }
 
-struct ksmbd_notify_req {
-	wait_queue_head_t wait;
-};
-
-/*
- * Cancel handler for a pending CHANGE_NOTIFY. Called either by
- * smb2_cancel() (conn->request_lock held, work->state already set to
- * KSMBD_WORK_CANCELLED by the caller) or by
- * set_close_state_blocked_works() (vfs_cache.c, fp->f_lock held,
- * work->state already set to KSMBD_WORK_CLOSED by the caller) -- both
- * callers hold a spinlock across this call, so it must not sleep.
- * wake_up() only wakes the waiter in smb2_notify(); it does not touch
- * fp->blocked_works itself, matching smb2_remove_blocked_lock()'s same
- * non-mutating style for the equivalent byte-range-lock wait.
- */
-static void smb2_notify_cancel(void **argv)
-{
-	struct ksmbd_notify_req *notify_req = argv[0];
-
-	wake_up(&notify_req->wait);
-}
-
 /**
  * smb2_notify() - handler for smb2 notify request
  * @work:   smb work containing notify command buffer
@@ -12498,98 +12477,17 @@ int smb2_notify(struct ksmbd_work *work)
 {
 	struct smb2_change_notify_req *req;
 	struct smb2_change_notify_rsp *rsp;
-	struct ksmbd_notify_req notify_req;
-	struct ksmbd_file *fp = NULL;
-	void **argv = NULL;
-	bool async_work = false;
-	int err = 0;
 
 	ksmbd_debug(SMB, "Received smb2 notify\n");
 
 	WORK_BUFFERS(work, req, rsp);
 
-	if (smb2_compound_has_failed(work, &rsp->hdr))
+	if (smb2_compound_has_failed(work, &rsp->hdr)) {
+		pr_err("Failed compound notify request\n");
 		return -EACCES;
-
-	if (work->next_smb2_rcv_hdr_off && req->hdr.NextCommand) {
-		rsp->hdr.Status = STATUS_INTERNAL_ERROR;
-		err = -EIO;
-		goto out;
 	}
 
-	fp = ksmbd_lookup_fd_slow(work, req->VolatileFileId, req->PersistentFileId);
-	if (!fp) {
-		rsp->hdr.Status = STATUS_FILE_CLOSED;
-		err = -ENOENT;
-		goto out;
-	}
-
-	argv = kmalloc_obj(*argv, KSMBD_DEFAULT_GFP);
-	if (!argv) {
-		rsp->hdr.Status = STATUS_INSUFFICIENT_RESOURCES;
-		err = -ENOMEM;
-		goto out;
-	}
-	init_waitqueue_head(&notify_req.wait);
-	argv[0] = &notify_req;
-
-	err = setup_async_work(work, smb2_notify_cancel, argv);
-	if (err) {
-		rsp->hdr.Status = STATUS_INSUFFICIENT_RESOURCES;
-		goto out;
-	}
-	async_work = true;
-
-	/*
-	 * Handle close holds the file-table write lock while it marks the
-	 * handle closed and walks blocked_works.  Hold the matching read lock
-	 * across the state check and registration so close cannot finish its
-	 * walk between the lookup above and this list insertion.
-	 */
-	read_lock(&work->sess->file_table.lock);
-	if (fp->f_state != FP_INITED) {
-		read_unlock(&work->sess->file_table.lock);
-		rsp->hdr.Status = STATUS_NOTIFY_CLEANUP;
-		err = -ENOENT;
-		goto out;
-	}
-	spin_lock(&fp->f_lock);
-	list_add_tail(&work->fp_entry, &fp->blocked_works);
-	spin_unlock(&fp->f_lock);
-	read_unlock(&work->sess->file_table.lock);
-
-	smb2_send_interim_resp(work, STATUS_PENDING);
-
-	err = wait_event_interruptible(notify_req.wait,
-				       READ_ONCE(work->state) != KSMBD_WORK_ACTIVE);
-	if (err && READ_ONCE(work->state) == KSMBD_WORK_ACTIVE) {
-		/*
-		 * Woken by a signal, not a real cancel/close. There is no
-		 * notification backend yet to report anything else against,
-		 * so treat this the same as a client-side cancel.
-		 */
-		WRITE_ONCE(work->state, KSMBD_WORK_CANCELLED);
-	}
-
-	spin_lock(&fp->f_lock);
-	list_del_init(&work->fp_entry);
-	spin_unlock(&fp->f_lock);
-
-	rsp->hdr.Status = work->state == KSMBD_WORK_CLOSED ?
-			  STATUS_NOTIFY_CLEANUP : STATUS_CANCELLED;
-	smb2_send_interim_resp(work, rsp->hdr.Status);
-	work->send_no_response = 1;
-
-out:
-	if (rsp->hdr.Status != STATUS_SUCCESS && !work->send_no_response)
-		smb2_set_err_rsp(work);
-	if (async_work)
-		release_async_work(work);
-	else
-		kfree(argv);
-	if (fp)
-		ksmbd_fd_put(work, fp);
-	return err;
+	return ksmbd_handle_notify(work, req, rsp);
 }
 
 /**
