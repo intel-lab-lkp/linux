@@ -151,10 +151,5 @@ void nfsd3_fill_post_op_attr(struct svc_rqst *rqstp, struct post_op_attr *attr,
 			     struct svc_fh *fhp);
 void nfsd3_fill_post_op_fh3(struct post_op_fh3 *post_op_fh,
 			    const struct svc_fh *fhp, u8 *data);
-/* Helper functions for NFSv3 ACL code */
-bool svcxdr_decode_nfs_fh3(struct xdr_stream *xdr, struct svc_fh *fhp);
-bool svcxdr_encode_nfsstat3(struct xdr_stream *xdr, __be32 status);
-bool svcxdr_encode_post_op_attr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
-				const struct svc_fh *fhp);
 
 #endif /* _LINUX_NFSD_XDR3_H */
