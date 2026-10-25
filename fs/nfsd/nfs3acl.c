@@ -125,14 +125,28 @@ static __be32 nfsd3_map_errno(int errno)
 static __be32 nfsd3_map_status(__be32 status)
 {
 	switch (status) {
+	case acl3_ok:
+	case acl3err_perm:
+	case acl3err_noent:
+	case acl3err_io:
+	case acl3err_acces:
+	case acl3err_inval:
+	case acl3err_nospc:
+	case acl3err_rofs:
+	case acl3err_dquot:
+	case acl3err_stale:
+	case acl3err_badhandle:
+	case acl3err_notsupp:
+	case acl3err_serverfault:
+	case acl3err_jukebox:
+		return status;
 	case cpu_to_be32(NFS4ERR_NOFILEHANDLE):
-		status = acl3err_badhandle;
-		break;
+		return acl3err_badhandle;
 	case cpu_to_be32(NFS4ERR_WRONGSEC):
-		status = acl3err_acces;
-		break;
+		return acl3err_acces;
+	default:
+		return acl3err_serverfault;
 	}
-	return status;
 }
 
 static bool
