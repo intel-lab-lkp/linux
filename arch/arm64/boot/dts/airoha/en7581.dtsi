@@ -509,6 +509,12 @@
 				interrupt-controller;
 				#interrupt-cells = <2>;
 			};
+
+			en7581_pwm: pwm {
+				compatible = "airoha,en7581-pwm";
+
+				#pwm-cells = <3>;
+			};
 		};
 
 		i2c0: i2c@1fbf8000 {
