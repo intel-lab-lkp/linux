@@ -148,6 +148,12 @@ properties:
           Value in microamps of the sleep filter current for the charger.
           Value is used by the driver to derive the sleep sample current.
 
+      rockchip,gate-function-disable:
+        type: boolean
+        description:
+          Boolean value to prevent PMIC from turning off system voltage when
+          battery voltage is shut down.
+
     required:
       - monitored-battery
       - rockchip,resistor-sense-micro-ohms
@@ -381,6 +387,7 @@ examples:
 
             rk817_charger: charger {
                 monitored-battery = <&battery>;
+                rockchip,gate-function-disable;
                 rockchip,resistor-sense-micro-ohms = <10000>;
                 rockchip,sleep-enter-current-microamp = <300000>;
                 rockchip,sleep-filter-current-microamp = <100000>;
