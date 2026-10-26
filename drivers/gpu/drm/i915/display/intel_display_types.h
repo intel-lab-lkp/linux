@@ -1470,6 +1470,10 @@ struct intel_crtc_state {
 		u8 silence_period_sym_clocks;
 		u8 lfps_half_cycle_num_of_syms;
 		int switch_to_active;
+
+		/* ALPM params are valid for the mode and the sink */
+		bool aux_wake_possible;
+		bool aux_less_possible;
 	} alpm_state;
 
 	/* to track changes in plane color blocks */

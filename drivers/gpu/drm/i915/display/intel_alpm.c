@@ -426,8 +426,8 @@ static int io_buffer_wake_time(const struct intel_crtc_state *crtc_state)
 		return skl_io_buffer_wake_time();
 }
 
-bool intel_alpm_compute_params(struct intel_dp *intel_dp,
-			       struct intel_crtc_state *crtc_state)
+static bool intel_alpm_compute_params(struct intel_dp *intel_dp,
+				      struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	int io_wake_lines, io_wake_time, fast_wake_lines, fast_wake_time;
@@ -549,9 +549,8 @@ void intel_alpm_lobf_compute_config_late(struct intel_dp *intel_dp,
 			       (first_sdp_position + waketime_in_lines);
 }
 
-void intel_alpm_lobf_compute_config(struct intel_dp *intel_dp,
-				    struct intel_crtc_state *crtc_state,
-				    struct drm_connector_state *conn_state)
+static void intel_alpm_lobf_compute_config(struct intel_dp *intel_dp,
+					   struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 
@@ -579,10 +578,32 @@ void intel_alpm_lobf_compute_config(struct intel_dp *intel_dp,
 	      intel_alpm_aux_less_wake_supported(intel_dp)))
 		return;
 
+	crtc_state->has_lobf = true;
+}
+
+/*
+ * Compute the ALPM params and whether AUX wake / AUX-less ALPM is possible for
+ * the mode and the sink. PSR and Panel Replay use these to choose the feature.
+ */
+void intel_alpm_compute_config(struct intel_dp *intel_dp,
+			       struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	if (!intel_dp_is_edp(intel_dp) && !intel_alpm_is_possible(intel_dp, crtc_state))
+		return;
+
 	if (!intel_alpm_compute_params(intel_dp, crtc_state))
 		return;
 
-	crtc_state->has_lobf = true;
+	crtc_state->alpm_state.aux_wake_possible = true;
+	crtc_state->alpm_state.aux_less_possible =
+		DISPLAY_VER(display) >= 20 &&
+		(intel_dp_is_edp(intel_dp) ||
+		 (intel_alpm_is_possible(intel_dp, crtc_state) &&
+		  intel_alpm_aux_less_wake_supported(intel_dp)));
+
+	intel_alpm_lobf_compute_config(intel_dp, crtc_state);
 }
 
 static u32 get_pr_alpm_as_sdp_transmission_time(const struct intel_crtc_state *crtc_state)

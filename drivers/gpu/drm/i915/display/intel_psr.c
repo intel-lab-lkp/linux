@@ -1462,16 +1462,18 @@ static bool wake_lines_fit_into_vblank(struct intel_dp *intel_dp,
 }
 
 static bool alpm_config_valid(struct intel_dp *intel_dp,
-			      struct intel_crtc_state *crtc_state,
+			      const struct intel_crtc_state *crtc_state,
 			      bool aux_less,
 			      bool needs_panel_replay,
 			      bool needs_sel_update)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
+	bool alpm_possible = aux_less ? crtc_state->alpm_state.aux_less_possible :
+					crtc_state->alpm_state.aux_wake_possible;
 
-	if (!intel_alpm_compute_params(intel_dp, crtc_state)) {
+	if (!alpm_possible) {
 		drm_dbg_kms(display->drm,
-			    "PSR2/Panel Replay  not enabled, Unable to use long enough wake times\n");
+			    "PSR2/Panel Replay not enabled, ALPM not possible\n");
 		return false;
 	}
 
