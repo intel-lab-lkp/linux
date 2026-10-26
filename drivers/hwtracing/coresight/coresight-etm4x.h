@@ -868,6 +868,8 @@ enum etm_impdef_type {
  * @lpoverride:	If the implementation can support low-power state over.
  * @skip_power_up: Indicates if an implementation can skip powering up
  *		   the trace unit.
+ * @trcextout:	The trace unit is an ETE whose PMU counts its external
+ *		outputs as TRCEXTOUTn.
  */
 struct etmv4_caps {
 	u8	nr_pe;
@@ -907,6 +909,7 @@ struct etmv4_caps {
 	bool	atbtrig : 1;
 	bool	lpoverride : 1;
 	bool	skip_power_up : 1;
+	bool	trcextout : 1;
 };
 
 /**
