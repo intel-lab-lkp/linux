@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <sound/core.h>
 #include <sound/control.h>
+#include <sound/tlv.h>
 
 #include "usbaudio.h"
 #include "mixer.h"
@@ -31,6 +32,9 @@ enum snd_evo_type {
 	SND_EVO_TYPE_NCTYPES
 };
 
+/* Mixer matrix: -128dB (mute) to +6dB */
+static const DECLARE_TLV_DB_MINMAX_MUTE(snd_evo_tlv_mixer, -12800, 600);
+
 static const struct snd_evo_ctrl_type {
 	snd_ctl_elem_type_t type;
 	bool invert;
@@ -40,6 +44,7 @@ static const struct snd_evo_ctrl_type {
 	union {
 		int integer;
 	} max;
+	const unsigned int *tlv;
 	u16 wValue;
 	u16 wIndex;
 } snd_evo_ctypes[SND_EVO_TYPE_NCTYPES] = {
@@ -49,6 +54,7 @@ static const struct snd_evo_ctrl_type {
 		.max.integer = 127,
 		.wValue = 0x0000,
 		.wIndex = 0x3800,
+		/* no TLV here because we can't describe the cross-fader */
 	},
 	[SND_EVO_TYPE_PHANTOM] = {
 		.type = SNDRV_CTL_ELEM_TYPE_BOOLEAN,
@@ -80,6 +86,7 @@ static const struct snd_evo_ctrl_type {
 		.max.integer = 6 * 256,
 		.wValue = 0x0100,
 		.wIndex = 0x3C00,
+		.tlv = snd_evo_tlv_mixer,
 	},
 };
 
@@ -431,8 +438,6 @@ static int snd_ctl_evo_info(struct snd_kcontrol *kctl,
 	const struct snd_evo_ctrl_type *const ctype = snd_evo_kctl_type(kctl);
 
 	uinfo->type = ctype->type;
-	uinfo->access = SNDRV_CTL_ELEM_ACCESS_READWRITE
-			| SNDRV_CTL_ELEM_ACCESS_VOLATILE;
 	uinfo->count = snd_evo_kctl_channels(kctl);
 	uinfo->value.integer.min = ctype->min.integer;
 	uinfo->value.integer.max = ctype->max.integer;
@@ -454,6 +459,10 @@ static int snd_evo_add_ctrl(struct usb_mixer_interface *mixer,
 	knew.info = snd_ctl_evo_info;
 	knew.private_value = snd_evo_kctl_priv(ctrl->type, ctrl->val_offs,
 					       ctrl->hwchannels);
+	knew.tlv.p = ctype->tlv;
+	knew.access = SNDRV_CTL_ELEM_ACCESS_READWRITE
+			| SNDRV_CTL_ELEM_ACCESS_VOLATILE
+			| (ctype->tlv ? SNDRV_CTL_ELEM_ACCESS_TLV_READ : 0);
 
 	switch (ctype->type) {
 	case SNDRV_CTL_ELEM_TYPE_INTEGER:
