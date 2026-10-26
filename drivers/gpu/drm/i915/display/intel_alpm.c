@@ -204,6 +204,12 @@ static int _lnl_compute_aux_less_wake_time(struct intel_dp *intel_dp,
 			    establishment_period, 1000);
 }
 
+static int get_aux_less_wake_lines_max(struct intel_display *display)
+{
+	return DISPLAY_VER(display) >= 35 ? ALPM_CTL_AUX_LESS_WAKE_TIME_MASK_XE3LPD :
+					    ALPM_CTL_AUX_LESS_WAKE_TIME_MASK;
+}
+
 static int
 _lnl_compute_aux_less_alpm_params(struct intel_dp *intel_dp,
 				  struct intel_crtc_state *crtc_state)
@@ -220,14 +226,14 @@ _lnl_compute_aux_less_alpm_params(struct intel_dp *intel_dp,
 
 	lfps_half_cycle = get_lfps_half_cycle_clocks(crtc_state);
 
-	if (aux_less_wake_lines > ALPM_CTL_AUX_LESS_WAKE_TIME_MASK ||
+	if (aux_less_wake_lines > get_aux_less_wake_lines_max(display) ||
 	    silence_period > PORT_ALPM_CTL_SILENCE_PERIOD_MASK ||
 	    lfps_half_cycle < 1 ||
 	    lfps_half_cycle > PORT_ALPM_LFPS_CTL_LAST_LFPS_HALF_CYCLE_DURATION_MASK + 1)
 		return false;
 
 	if (display->params.psr_safest_params)
-		aux_less_wake_lines = ALPM_CTL_AUX_LESS_WAKE_TIME_MASK;
+		aux_less_wake_lines = get_aux_less_wake_lines_max(display);
 
 	crtc_state->alpm_state.aux_less_wake_lines = aux_less_wake_lines;
 	crtc_state->alpm_state.silence_period_sym_clocks = silence_period;
@@ -617,10 +623,16 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 	 * check panel support at this point.
 	 */
 	if (intel_alpm_is_alpm_aux_less(intel_dp, crtc_state)) {
+		int wake_lines = crtc_state->alpm_state.aux_less_wake_lines;
+
 		alpm_ctl = ALPM_CTL_ALPM_ENABLE |
 			ALPM_CTL_ALPM_AUX_LESS_ENABLE |
-			ALPM_CTL_AUX_LESS_SLEEP_HOLD_TIME_50_SYMBOLS |
-			ALPM_CTL_AUX_LESS_WAKE_TIME(crtc_state->alpm_state.aux_less_wake_lines);
+			ALPM_CTL_AUX_LESS_SLEEP_HOLD_TIME_50_SYMBOLS;
+
+		if (DISPLAY_VER(display) < 35)
+			alpm_ctl |= ALPM_CTL_AUX_LESS_WAKE_TIME(wake_lines);
+		else
+			alpm_ctl |= ALPM_CTL_AUX_LESS_WAKE_TIME_XE3LPD(wake_lines);
 
 		if (intel_dp->as_sdp_supported)
 			intel_alpm_configure_pr_as_sdp(intel_dp, crtc_state);
