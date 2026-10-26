@@ -904,8 +904,10 @@ int jffs2_flash_writev(struct jffs2_sb_info *c, const struct kvec *invecs,
 
 	if (jffs2_sum_active()) {
 		int res = jffs2_sum_add_kvec(c, invecs, count, (uint32_t) to);
-		if (res)
+		if (res) {
+			up_write(&c->wbuf_sem);
 			return res;
+		}
 	}
 
 	if (c->wbuf_len && ino)
