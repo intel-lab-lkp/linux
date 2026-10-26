@@ -366,6 +366,79 @@ int dma_buf_mapping_select(struct dma_buf_attachment *attach)
 	return 0;
 }
 
+/**
+ * dma_buf_mapping_map - Map an attachment with whichever type the exporter
+ *                       selects
+ * @attach: the attachment
+ * @dir: DMA direction
+ *
+ * For importers that listed more than one mapping type. The exporter picks the
+ * type from the possible matches and the result's &dma_buf_mapping.type records
+ * which was used. Must be called with the dma_resv lock held, and the lock must
+ * be held until the result has been acted on. Importers that listed a single
+ * type keep using that type's map function.
+ *
+ * Returns: a &struct dma_buf_mapping to pass to dma_buf_mapping_unmap(), or
+ * an ERR_PTR.
+ */
+struct dma_buf_mapping *dma_buf_mapping_map(struct dma_buf_attachment *attach,
+					    enum dma_data_direction dir)
+{
+	struct dma_buf_mapping *mapping;
+	int ret;
+
+	might_sleep();
+
+	if (WARN_ON(!attach || !attach->dmabuf))
+		return ERR_PTR(-EINVAL);
+
+	dma_resv_assert_held(attach->dmabuf->resv);
+
+	ret = dma_buf_mapping_select(attach);
+	if (ret)
+		return ERR_PTR(ret);
+
+	if (!attach->map_type.type->map) {
+		ret = -EOPNOTSUPP;
+		goto err_release;
+	}
+
+	mapping = attach->map_type.type->map(attach, dir);
+	if (IS_ERR(mapping)) {
+		ret = PTR_ERR(mapping);
+		goto err_release;
+	}
+
+	return mapping;
+
+err_release:
+	/* Nothing was established, so the choice may be made afresh */
+	attach->selected = false;
+	return ERR_PTR(ret);
+}
+EXPORT_SYMBOL_NS_GPL(dma_buf_mapping_map, "DMA_BUF");
+
+/**
+ * dma_buf_mapping_unmap - Release a mapping from dma_buf_mapping_map()
+ * @attach: the attachment
+ * @mapping: what dma_buf_mapping_map() returned
+ * @dir: DMA direction used for the map
+ */
+void dma_buf_mapping_unmap(struct dma_buf_attachment *attach,
+			   struct dma_buf_mapping *mapping,
+			   enum dma_data_direction dir)
+{
+	might_sleep();
+
+	if (WARN_ON(!attach || !attach->dmabuf || !mapping))
+		return;
+
+	dma_resv_assert_held(attach->dmabuf->resv);
+
+	mapping->type->unmap(attach, mapping, dir);
+}
+EXPORT_SYMBOL_NS_GPL(dma_buf_mapping_unmap, "DMA_BUF");
+
 static int dma_buf_sgt_match(struct dma_buf *dmabuf,
 			     const struct dma_buf_mapping_match *exp,
 			     const struct dma_buf_mapping_match *imp)
@@ -427,6 +500,8 @@ struct dma_buf_mapping_type dma_buf_mapping_sgt_type = {
 	.match = dma_buf_sgt_match,
 	.finish_match = dma_buf_sgt_finish_match,
 	.debugfs_dump = dma_buf_sgt_debugfs_dump,
+	.map = dma_buf_sgt_type_map,
+	.unmap = dma_buf_sgt_type_unmap,
 };
 EXPORT_SYMBOL_NS_GPL(dma_buf_mapping_sgt_type, "DMA_BUF");
 
