@@ -154,7 +154,7 @@ enum rppx1_wbmeas_mode {
  *	   @ymax_cmp is set to enabled, 24 bits
  * @max_csum: chrominance sum maximum value, 24 bits
  * @min_c: chrominance minimum value, 24 bits
- * @ccor_coeff: coefficients for color conversion matrix, signed 16 bits Q4.6
+ * @ccor_coeff: coefficients for color conversion matrix, signed 16 bits Q4.12
  * @reserved2: padding
  * @ccor_offs: R-G-B color conversion coefficients, signed 25 bits 2's complement
  * @reserved3: padding
