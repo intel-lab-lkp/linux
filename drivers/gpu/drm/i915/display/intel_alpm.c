@@ -76,6 +76,25 @@ void intel_alpm_init(struct intel_dp *intel_dp)
 	mutex_init(&intel_dp->alpm.lock);
 }
 
+bool intel_alpm_is_possible(struct intel_dp *intel_dp)
+{
+	u8 lttpr_alpm_caps;
+
+	if (!(intel_dp->alpm_dpcd & (DP_ALPM_CAP | DP_ALPM_AUX_LESS_CAP)))
+		return false;
+
+	if (drm_dp_lttpr_count(intel_dp->lttpr_common_caps) <= 0)
+		return true;
+
+	/* With LTTPRs only AUX-less ALPM is possible and LTTPRs must support it */
+	lttpr_alpm_caps =
+		intel_dp->lttpr_common_caps[DP_LTTPR_ALPM_CAPABILITIES -
+					    DP_LT_TUNABLE_PHY_REPEATER_FIELD_DATA_STRUCTURE_REV];
+
+	return intel_alpm_aux_less_wake_supported(intel_dp) &&
+	       lttpr_alpm_caps & DP_LTTPR_AUX_LESS_ALPM_SUPPORTED;
+}
+
 static int get_silence_period_symbols(const struct intel_crtc_state *crtc_state)
 {
 	return SILENCE_PERIOD_TIME * intel_dp_link_symbol_clock(crtc_state->port_clock) /
@@ -537,7 +556,7 @@ void intel_alpm_lobf_compute_config(struct intel_dp *intel_dp,
 	if (intel_dp->alpm.sink_alpm_error)
 		return;
 
-	if (!intel_dp_is_edp(intel_dp))
+	if (!intel_alpm_is_possible(intel_dp))
 		return;
 
 	if (DISPLAY_VER(display) < 20)
@@ -829,9 +848,6 @@ void intel_alpm_lobf_disable(const struct intel_crtc_state *new_crtc_state)
 
 		intel_dp = enc_to_intel_dp(encoder);
 
-		if (!intel_dp_is_edp(intel_dp))
-			continue;
-
 		mutex_lock(&intel_dp->alpm.lock);
 		intel_de_write(display, ALPM_CTL(display, cpu_transcoder), 0);
 		drm_dbg_kms(display->drm, "Link off between frames (LOBF) disabled\n");
@@ -870,10 +886,8 @@ void intel_alpm_lobf_enable(const struct intel_crtc_state *new_crtc_state)
 
 		intel_dp = enc_to_intel_dp(encoder);
 
-		if (intel_dp_is_edp(intel_dp)) {
-			intel_alpm_enable_sink(intel_dp, new_crtc_state);
-			intel_alpm_configure(intel_dp, new_crtc_state);
-		}
+		intel_alpm_enable_sink(intel_dp, new_crtc_state);
+		intel_alpm_configure(intel_dp, new_crtc_state);
 	}
 }
 
