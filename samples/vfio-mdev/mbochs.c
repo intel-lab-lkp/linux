@@ -32,6 +32,7 @@
 #include <linux/pci.h>
 #include <linux/dma-buf.h>
 #include <linux/highmem.h>
+#include <linux/dma-buf-mapping.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_rect.h>
 #include <drm/drm_modeset_lock.h>
@@ -872,7 +873,7 @@ static struct sg_table *mbochs_map_dmabuf(struct dma_buf_attachment *at,
 	if (sg_alloc_table_from_pages(sg, dmabuf->pages, dmabuf->pagecount,
 				      0, dmabuf->mode.size, GFP_KERNEL) < 0)
 		goto err2;
-	if (dma_map_sgtable(at->dev, sg, direction, 0))
+	if (dma_map_sgtable(dma_buf_sgt_dma_device(at), sg, direction, 0))
 		goto err3;
 
 	return sg;
@@ -894,7 +895,7 @@ static void mbochs_unmap_dmabuf(struct dma_buf_attachment *at,
 
 	dev_dbg(dev, "%s: %d\n", __func__, dmabuf->id);
 
-	dma_unmap_sgtable(at->dev, sg, direction, 0);
+	dma_unmap_sgtable(dma_buf_sgt_dma_device(at), sg, direction, 0);
 	sg_free_table(sg);
 	kfree(sg);
 }
@@ -918,11 +919,10 @@ static void mbochs_release_dmabuf(struct dma_buf *buf)
 	mutex_unlock(&mdev_state->ops_lock);
 }
 
-static struct dma_buf_ops mbochs_dmabuf_ops = {
-	.map_dma_buf	  = mbochs_map_dmabuf,
-	.unmap_dma_buf	  = mbochs_unmap_dmabuf,
+static const struct dma_buf_ops mbochs_dmabuf_ops = {
 	.release	  = mbochs_release_dmabuf,
 	.mmap		  = mbochs_mmap_dmabuf,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(mbochs_map_dmabuf, mbochs_unmap_dmabuf),
 };
 
 static struct mbochs_dmabuf *mbochs_dmabuf_alloc(struct mdev_state *mdev_state,

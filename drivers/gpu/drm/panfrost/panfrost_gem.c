@@ -6,6 +6,7 @@
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-mapping.h>
 
 #include <drm/panfrost_drm.h>
@@ -14,6 +15,8 @@
 #include "panfrost_drv.h"
 #include "panfrost_gem.h"
 #include "panfrost_mmu.h"
+
+MODULE_IMPORT_NS("DMA_BUF");
 
 void panfrost_gem_init(struct panfrost_device *pfdev)
 {
@@ -318,7 +321,8 @@ panfrost_gem_prime_begin_cpu_access(struct dma_buf *dma_buf,
 		struct sg_table *sgt = attach->priv;
 
 		if (sgt)
-			dma_sync_sgtable_for_cpu(attach->dev, sgt, dir);
+			dma_sync_sgtable_for_cpu(dma_buf_sgt_dma_device(attach),
+						 sgt, dir);
 	}
 	dma_resv_unlock(obj->resv);
 
@@ -339,7 +343,8 @@ panfrost_gem_prime_end_cpu_access(struct dma_buf *dma_buf,
 		struct sg_table *sgt = attach->priv;
 
 		if (sgt)
-			dma_sync_sgtable_for_device(attach->dev, sgt, dir);
+			dma_sync_sgtable_for_device(dma_buf_sgt_dma_device(attach),
+						    sgt, dir);
 	}
 
 	if (shmem->vaddr)
@@ -355,14 +360,14 @@ panfrost_gem_prime_end_cpu_access(struct dma_buf *dma_buf,
 static const struct dma_buf_ops panfrost_dma_buf_ops = {
 	.attach = drm_gem_map_attach,
 	.detach = drm_gem_map_detach,
-	.map_dma_buf = panfrost_gem_prime_map_dma_buf,
-	.unmap_dma_buf = panfrost_gem_prime_unmap_dma_buf,
 	.release = drm_gem_dmabuf_release,
 	.mmap = drm_gem_dmabuf_mmap,
 	.vmap = drm_gem_dmabuf_vmap,
 	.vunmap = drm_gem_dmabuf_vunmap,
 	.begin_cpu_access = panfrost_gem_prime_begin_cpu_access,
 	.end_cpu_access = panfrost_gem_prime_end_cpu_access,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(panfrost_gem_prime_map_dma_buf,
+				     panfrost_gem_prime_unmap_dma_buf),
 };
 
 static struct dma_buf *

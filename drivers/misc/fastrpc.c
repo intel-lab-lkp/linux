@@ -5,6 +5,7 @@
 #include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-resv.h>
 #include <linux/idr.h>
@@ -778,7 +779,8 @@ fastrpc_map_dma_buf(struct dma_buf_attachment *attachment,
 
 	table = &a->sgt;
 
-	ret = dma_map_sgtable(attachment->dev, table, dir, 0);
+	ret = dma_map_sgtable(dma_buf_sgt_dma_device(attachment), table, dir,
+			      0);
 	if (ret)
 		table = ERR_PTR(ret);
 	return table;
@@ -788,7 +790,7 @@ static void fastrpc_unmap_dma_buf(struct dma_buf_attachment *attach,
 				  struct sg_table *table,
 				  enum dma_data_direction dir)
 {
-	dma_unmap_sgtable(attach->dev, table, dir, 0);
+	dma_unmap_sgtable(dma_buf_sgt_dma_device(attach), table, dir, 0);
 }
 
 static void fastrpc_release(struct dma_buf *dmabuf)
@@ -818,7 +820,7 @@ static int fastrpc_dma_buf_attach(struct dma_buf *dmabuf,
 		return -EINVAL;
 	}
 
-	a->dev = attachment->dev;
+	a->dev = dma_buf_sgt_dma_device(attachment);
 	INIT_LIST_HEAD(&a->node);
 	attachment->priv = a;
 
@@ -866,11 +868,11 @@ static int fastrpc_mmap(struct dma_buf *dmabuf,
 static const struct dma_buf_ops fastrpc_dma_buf_ops = {
 	.attach = fastrpc_dma_buf_attach,
 	.detach = fastrpc_dma_buf_detatch,
-	.map_dma_buf = fastrpc_map_dma_buf,
-	.unmap_dma_buf = fastrpc_unmap_dma_buf,
 	.mmap = fastrpc_mmap,
 	.vmap = fastrpc_vmap,
 	.release = fastrpc_release,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(fastrpc_map_dma_buf,
+				     fastrpc_unmap_dma_buf),
 };
 
 static dma_addr_t fastrpc_compute_dma_addr(struct fastrpc_user *fl, dma_addr_t sg_dma_addr)

@@ -5,6 +5,7 @@
  */
 
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/highmem.h>
 
 #include <drm/drm_prime.h>
@@ -69,12 +70,12 @@ static int omap_gem_dmabuf_mmap(struct dma_buf *buffer,
 }
 
 static const struct dma_buf_ops omap_dmabuf_ops = {
-	.map_dma_buf = omap_gem_map_dma_buf,
-	.unmap_dma_buf = omap_gem_unmap_dma_buf,
 	.release = drm_gem_dmabuf_release,
 	.begin_cpu_access = omap_gem_dmabuf_begin_cpu_access,
 	.end_cpu_access = omap_gem_dmabuf_end_cpu_access,
 	.mmap = omap_gem_dmabuf_mmap,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(omap_gem_map_dma_buf,
+				     omap_gem_unmap_dma_buf),
 };
 
 struct dma_buf *omap_gem_prime_export(struct drm_gem_object *obj, int flags)
