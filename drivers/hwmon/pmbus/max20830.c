@@ -21,6 +21,8 @@ struct max20830_data {
 };
 
 static const char * const supported_chip_ids[] = {
+	"MAX20810B",	/* also reported by the LTM4739 module */
+	"MAX20815B",	/* also reported by the LTM4740 module */
 	"MAX20830",
 	"MAX20830C",
 	"MAX20840C",
@@ -34,7 +36,7 @@ static const char * const supported_chip_ids[] = {
  * like in1_max, in1_crit, etc. will not be available. Only in1_input (the
  * scaled output voltage) is supported.
  *
- * MAX20830 uses an external resistor divider for voltage sensing:
+ * MAX20830 family uses an external resistor divider for voltage sensing:
  * - VOUT_COMMAND and VOUT_MAX set the reference voltage at the feedback pin
  * - READ_VOUT reports the feedback voltage, which needs to be scaled for actual
  *   output voltage
