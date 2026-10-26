@@ -93,6 +93,7 @@ struct loongson2_cmc_dma_chan {
 	int irq;
 	u32 next_sg;
 	struct loongson2_cmc_dma_chan_reg chan_reg;
+	bool paused;
 };
 
 struct loongson2_cmc_dma_dev {
@@ -184,6 +185,8 @@ static void loongson2_cmc_dma_stop(struct loongson2_cmc_dma_chan *lchan)
 	loongson2_cmc_dma_write(lddev, LOONGSON2_CMCDMA_CCR, lchan->id, ccr);
 
 	loongson2_cmc_dma_irq_clear(lchan, LOONGSON2_CMCDMA_MASKI);
+
+	lchan->paused = false;
 }
 
 static int loongson2_cmc_dma_terminate_all(struct dma_chan *chan)
@@ -254,12 +257,13 @@ static void loongson2_cmc_dma_configure_next_sg(struct loongson2_cmc_dma_chan *l
 {
 	struct loongson2_cmc_dma_dev *lddev = lmdma_get_dev(lchan);
 	struct loongson2_cmc_dma_sg_req *sg_req;
+	bool keep_paused = lchan->paused;
 	u32 ccr, id = lchan->id;
 
 	if (lchan->next_sg == lchan->desc->num_sgs)
 		lchan->next_sg = 0;
 
-	/* Stop to update mem addr */
+	/* Stop to update mem addr (idempotent when already paused) */
 	ccr = loongson2_cmc_dma_read(lddev, LOONGSON2_CMCDMA_CCR, id);
 	ccr &= ~LOONGSON2_CMCDMA_CCR_EN;
 	loongson2_cmc_dma_write(lddev, LOONGSON2_CMCDMA_CCR, id, ccr);
@@ -268,9 +272,16 @@ static void loongson2_cmc_dma_configure_next_sg(struct loongson2_cmc_dma_chan *l
 	loongson2_cmc_dma_write(lddev, LOONGSON2_CMCDMA_CMAR, id, sg_req->chan_reg.cmar);
 	loongson2_cmc_dma_write(lddev, LOONGSON2_CMCDMA_CNDTR, id, sg_req->chan_reg.cndtr);
 
-	/* Start transition */
-	ccr |= LOONGSON2_CMCDMA_CCR_EN;
-	loongson2_cmc_dma_write(lddev, LOONGSON2_CMCDMA_CCR, id, ccr);
+	/*
+	 * Only re-enable when the client has not paused the channel.
+	 * A paused cyclic channel still needs its CMAR/CNDTR advanced
+	 * so that resume() starts on the right scatterlist entry, but
+	 * the enable bit must stay clear until the client asks for it.
+	 */
+	if (!keep_paused) {
+		ccr |= LOONGSON2_CMCDMA_CCR_EN;
+		loongson2_cmc_dma_write(lddev, LOONGSON2_CMCDMA_CCR, id, ccr);
+	}
 }
 
 static void loongson2_cmc_dma_handle_chan_done(struct loongson2_cmc_dma_chan *lchan)
@@ -534,6 +545,13 @@ static enum dma_status loongson2_cmc_dma_tx_status(struct dma_chan *chan, dma_co
 			/* Active descriptor: compute residue from hardware progress */
 			state->residue = loongson2_cmc_dma_desc_residue(lchan, lchan->desc,
 									lchan->next_sg);
+			/*
+			 * A paused channel still has an active descriptor but is not making
+			 * progress. Report DMA_PAUSED so clients can distinguish it from a
+			 * running transfer.
+			 */
+			if (lchan->paused && status == DMA_IN_PROGRESS)
+				status = DMA_PAUSED;
 		} else if (vdesc) {
 			/* Queued descriptor not yet started: residue is the total length */
 			struct loongson2_cmc_dma_desc *ldesc = to_lmdma_desc(vdesc);
@@ -624,6 +642,72 @@ static int loongson2_cmc_dma_of_controller_register(struct loongson2_cmc_dma_dev
 	return of_dma_controller_register(dev->of_node, loongson2_cmc_dma_of_xlate, lddev);
 }
 
+/**
+ * loongson2_cmc_dma_pause() - Stop the channel without losing state
+ * @chan: DMA channel
+ *
+ * Clears CCR.EN so the controller stops issuing requests to the
+ * peripheral. CNDTR and CMAR keep their current values, so
+ * loongson2_cmc_dma_resume() can pick up exactly where the transfer
+ * left off. The channel remains in cyclic mode; only the enable bit is
+ * dropped, so a paused cyclic channel does not advance the write
+ * pointer until resumed.
+ *
+ * Return: 0 on success.
+ */
+static int loongson2_cmc_dma_pause(struct dma_chan *chan)
+{
+	struct loongson2_cmc_dma_chan *lchan = to_lmdma_chan(chan);
+	struct loongson2_cmc_dma_dev *lddev = lmdma_get_dev(lchan);
+	u32 ccr;
+
+	guard(spinlock_irqsave)(&lchan->vchan.lock);
+
+	if (lchan->paused || !lchan->desc)
+		return 0;
+
+	lchan->paused = true;
+
+	ccr = loongson2_cmc_dma_read(lddev, LOONGSON2_CMCDMA_CCR, lchan->id);
+	ccr &= ~LOONGSON2_CMCDMA_CCR_EN;
+	loongson2_cmc_dma_write(lddev, LOONGSON2_CMCDMA_CCR, lchan->id, ccr);
+
+	return 0;
+}
+
+/**
+ * loongson2_cmc_dma_resume() - Restart a paused channel
+ * @chan: DMA channel
+ *
+ * Restores CCR.EN. CNDTR is left untouched, so the transfer continues
+ * from the exact word where the pause happened.
+ *
+ * Return: 0 on success.
+ */
+static int loongson2_cmc_dma_resume(struct dma_chan *chan)
+{
+	struct loongson2_cmc_dma_chan *lchan = to_lmdma_chan(chan);
+	struct loongson2_cmc_dma_dev *lddev = lmdma_get_dev(lchan);
+	u32 ccr;
+
+	guard(spinlock_irqsave)(&lchan->vchan.lock);
+
+	if (!lchan->paused)
+		return 0;
+
+	lchan->paused = false;
+
+	/* No descriptor: nothing left to run */
+	if (!lchan->desc)
+		return 0;
+
+	ccr = loongson2_cmc_dma_read(lddev, LOONGSON2_CMCDMA_CCR, lchan->id);
+	ccr |= LOONGSON2_CMCDMA_CCR_EN;
+	loongson2_cmc_dma_write(lddev, LOONGSON2_CMCDMA_CCR, lchan->id, ccr);
+
+	return 0;
+}
+
 static int loongson2_cmc_dma_probe(struct platform_device *pdev)
 {
 	const struct loongson2_cmc_dma_config *config;
@@ -676,6 +760,8 @@ static int loongson2_cmc_dma_probe(struct platform_device *pdev)
 	ddev->device_synchronize = loongson2_cmc_dma_synchronize;
 	ddev->device_tx_status = loongson2_cmc_dma_tx_status;
 	ddev->device_terminate_all = loongson2_cmc_dma_terminate_all;
+	ddev->device_pause = loongson2_cmc_dma_pause;
+	ddev->device_resume = loongson2_cmc_dma_resume;
 
 	ddev->max_sg_burst = LOONSON2_CMCDMA_MAX_DATA_ITEMS;
 	ddev->src_addr_widths = LOONGSON2_CMCDMA_BUSWIDTHS;
