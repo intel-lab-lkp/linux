@@ -136,6 +136,7 @@ struct ipu_property_names {
 	char remote_endpoint[16];
 	char link_frequencies[17];
 	char clock_noncontinuous[20];
+	char lens_focus[11];
 };
 
 struct ipu_node_names {
@@ -178,6 +179,11 @@ struct ipu_sensor {
 	const char *vcm_type;
 
 	struct ipu_property_names prop_names;
+	/*
+	 * The registered software nodes outlive the module, so the property
+	 * values they point at must not live in it.
+	 */
+	u64 link_freqs[MAX_NUM_LINK_FREQS];
 	struct property_entry ep_properties[IPU_BRIDGE_EP_NUM_ENTRIES];
 	struct property_entry dev_properties[5];
 	struct property_entry ipu_properties[3];
