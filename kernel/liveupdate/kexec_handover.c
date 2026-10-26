@@ -853,28 +853,32 @@ static void __init kho_reserve_bootmem(void)
 	 * next kernel
 	 */
 	size = bootmem_size_lowmem;
-	addr = memblock_phys_alloc_range(size, BOOTMEM_ALIGNMENT_BYTES, 0,
-					 ARCH_LOW_ADDRESS_LIMIT);
-	if (!addr) {
-		pr_err("Failed to reserve lowmem bootmem\n");
-		goto err_free_bootmem_desc;
-	}
+	if (size) {
+		addr = memblock_phys_alloc_range(size, BOOTMEM_ALIGNMENT_BYTES,
+						 0, ARCH_LOW_ADDRESS_LIMIT);
+		if (!addr) {
+			pr_err("Failed to reserve lowmem bootmem\n");
+			goto err_free_bootmem_desc;
+		}
 
-	kho_bootmem[i].addr = addr;
-	kho_bootmem[i].size = size;
-	i++;
+		kho_bootmem[i].addr = addr;
+		kho_bootmem[i].size = size;
+		i++;
+	}
 
 	/* reserve large contiguous area for allocations without nid */
 	size = bootmem_size_global;
-	addr = memblock_phys_alloc(size, BOOTMEM_ALIGNMENT_BYTES);
-	if (!addr) {
-		pr_err("Failed to reserve global bootmem\n");
-		goto err_free_bootmem_areas;
-	}
+	if (size) {
+		addr = memblock_phys_alloc(size, BOOTMEM_ALIGNMENT_BYTES);
+		if (!addr) {
+			pr_err("Failed to reserve global bootmem\n");
+			goto err_free_bootmem_areas;
+		}
 
-	kho_bootmem[i].addr = addr;
-	kho_bootmem[i].size = size;
-	i++;
+		kho_bootmem[i].addr = addr;
+		kho_bootmem[i].size = size;
+		i++;
+	}
 
 	/*
 	 * Loop over nodes that have both memory and are online. Skip
