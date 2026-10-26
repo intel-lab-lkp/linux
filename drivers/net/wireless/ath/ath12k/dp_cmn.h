@@ -7,6 +7,7 @@
 #define ATH12K_DP_CMN_H
 
 #include "cmn_defs.h"
+#include <linux/hashtable.h>
 
 struct ath12k_hw_group;
 
@@ -17,12 +18,21 @@ struct ath12k_hw_group;
  */
 #define MAX_DP_PEER_LIST_SIZE  16384
 
+/*
+ * The hash table supports ATH12K_MAX_DEVICES * ATH12K_MAX_CLIENTS clients;
+ * order_base_2() gives 2048 hash buckets.
+ */
+#define ATH12K_DP_PEER_HASH_BITS \
+	order_base_2(ATH12K_MAX_DEVICES * ATH12K_MAX_CLIENTS)
+
 struct ath12k_dp_hw {
 	struct ath12k_dp_peer __rcu *dp_peers[MAX_DP_PEER_LIST_SIZE];
 
-	/* Lock for protection of dp_peer_list and peers */
+	/* Lock for protection of dp_peers[] and peer_hash */
 	spinlock_t peer_lock;
-	struct list_head dp_peers_list;
+
+	/* Generic hash table for fast MAC address lookup */
+	DECLARE_HASHTABLE(peer_hash, ATH12K_DP_PEER_HASH_BITS);
 };
 
 struct ath12k_dp_hw_group {

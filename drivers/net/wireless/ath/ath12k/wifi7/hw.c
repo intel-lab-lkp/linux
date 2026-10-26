@@ -441,7 +441,7 @@ static const struct ath12k_hw_params ath12k_wifi7_hw_params[] = {
 
 		.dp_primary_link_only = true,
 		.client = {
-			.max_client_single = 512,
+			.max_client_single = ATH12K_MAX_CLIENTS,
 			.max_client_dbs = 128,
 			.max_client_dbs_sbs = 128,
 		},
@@ -537,7 +537,7 @@ static const struct ath12k_hw_params ath12k_wifi7_hw_params[] = {
 
 		.dp_primary_link_only = false,
 		.client = {
-			.max_client_single = 512,
+			.max_client_single = ATH12K_MAX_CLIENTS,
 			.max_client_dbs = 128,
 			.max_client_dbs_sbs = 128,
 		},
@@ -629,7 +629,7 @@ static const struct ath12k_hw_params ath12k_wifi7_hw_params[] = {
 
 		.dp_primary_link_only = true,
 		.client = {
-			.max_client_single = 512,
+			.max_client_single = ATH12K_MAX_CLIENTS,
 			.max_client_dbs = 128,
 			.max_client_dbs_sbs = 128,
 		},
@@ -812,7 +812,7 @@ static const struct ath12k_hw_params ath12k_wifi7_hw_params[] = {
 
 		.dp_primary_link_only = false,
 		.client = {
-			.max_client_single = 512,
+			.max_client_single = ATH12K_MAX_CLIENTS,
 			.max_client_dbs = 128,
 			.max_client_dbs_sbs = 128,
 		},
@@ -901,7 +901,7 @@ static const struct ath12k_hw_params ath12k_wifi7_hw_params[] = {
 
 		.dp_primary_link_only = true,
 		.client = {
-			.max_client_single = 512,
+			.max_client_single = ATH12K_MAX_CLIENTS,
 			.max_client_dbs = 128,
 			.max_client_dbs_sbs = 128,
 		},
