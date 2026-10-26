@@ -3274,7 +3274,9 @@ static bool intel_dp_needs_as_sdp(struct intel_dp *intel_dp,
 	if (drm_dp_is_branch(intel_dp->dpcd))
 		return false;
 
-	if (intel_psr_needs_alpm_aux_less(intel_dp, crtc_state) &&
+	/* has_alpm is not final yet, so check if AUX-less ALPM is possible */
+	if (crtc_state->has_panel_replay &&
+	    crtc_state->alpm_state.aux_less_possible &&
 	    !intel_psr_pr_async_video_timing_supported(intel_dp))
 		return true;
 

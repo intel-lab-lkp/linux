@@ -1124,7 +1124,7 @@ static bool
 intel_dp_pr_with_as_sdp_enabled(struct intel_dp *intel_dp,
 				const struct intel_crtc_state *crtc_state)
 {
-	return intel_psr_needs_alpm_aux_less(intel_dp, crtc_state) &&
+	return crtc_state->has_panel_replay && crtc_state->has_alpm &&
 		(crtc_state->infoframes.enable &
 		 intel_hdmi_infoframe_enable(DP_SDP_ADAPTIVE_SYNC));
 }
