@@ -54,7 +54,8 @@ static struct sg_table *ivpu_bo_map_attachment(struct ivpu_device *vdev, struct 
 
 	sgt = bo->base.sgt;
 	if (!sgt) {
-		sgt = dma_buf_map_attachment(bo->base.base.import_attach, DMA_BIDIRECTIONAL);
+		sgt = dma_buf_sgt_map_attachment(bo->base.base.import_attach,
+						 DMA_BIDIRECTIONAL);
 		if (IS_ERR(sgt))
 			ivpu_err(vdev, "Failed to map BO in IOMMU: %ld\n", PTR_ERR(sgt));
 		else
