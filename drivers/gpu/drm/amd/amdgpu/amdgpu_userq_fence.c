@@ -457,7 +457,6 @@ amdgpu_userq_fence_driver_force_completion(struct amdgpu_usermode_queue *userq)
 		amdgpu_userq_fence_driver_set_error(fence, -ECANCELED);
 		amdgpu_userq_fence_write(fence_drv, wptr);
 		amdgpu_userq_fence_driver_process(fence_drv);
-
 	}
 }
 
@@ -821,7 +820,6 @@ amdgpu_userq_wait_return_fence_info(struct drm_device *dev, struct drm_file *fil
 		dma_fence_put(fence);
 		if (r)
 			goto free_fences;
-
 	}
 
 	/* Lock all the GEM objects */
