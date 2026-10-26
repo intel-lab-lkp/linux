@@ -29,6 +29,7 @@ struct dma_buf;
 struct dma_buf_attachment;
 struct dma_buf_mapping_type;
 struct dma_buf_mapping_exp_ops;
+struct dma_buf_match_args;
 
 
 /*
@@ -315,6 +316,27 @@ struct dma_buf_ops {
 
 	int (*vmap)(struct dma_buf *dmabuf, struct iosys_map *map);
 	void (*vunmap)(struct dma_buf *dmabuf, struct iosys_map *map);
+
+	/**
+	 * @match_mapping:
+	 *
+	 * Called during attach, without the dma_resv lock held. Allows the
+	 * exporter to build its own exporter struct dma_buf_mapping_match[]
+	 * and call dma_buf_match_mapping() to record every mutually
+	 * acceptable type in &dma_buf_attachment.matches in the exporter's
+	 * order of preference.
+	 *
+	 * The match set is fixed for the lifetime of the attachment, so every
+	 * input to the decision must hold for that long: either static for the
+	 * dma_buf (the importer's list, PCI P2P topology, buffer creation
+	 * flags) or runtime state the exporter pins until @detach, for example
+	 * a runtime PM reference.
+	 *
+	 * It must not depend on the set of attachments or on current buffer
+	 * placement as matches are static and buffer placement can change at
+	 * any time until the final location is resolved during map/pin.
+	 */
+	int (*match_mapping)(struct dma_buf_match_args *args);
 };
 
 /**
@@ -606,6 +628,11 @@ struct dma_buf_attachment *
 dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 		       const struct dma_buf_attach_ops *importer_ops,
 		       void *importer_priv);
+struct dma_buf_attachment *dma_buf_mapping_attach(
+	struct dma_buf *dmabuf, struct dma_buf_mapping_match *importer_matches,
+	size_t match_len, const struct dma_buf_attach_ops *importer_ops,
+	void *importer_priv);
+
 void dma_buf_detach(struct dma_buf *dmabuf,
 		    struct dma_buf_attachment *attach);
 int dma_buf_pin(struct dma_buf_attachment *attach);
