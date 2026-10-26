@@ -2283,6 +2283,7 @@ enum {
 #define IXGBE_TSYNCRXCTL_TYPE_EVENT_V2	0x0A
 #define IXGBE_TSYNCRXCTL_ENABLED	0x00000010 /* Rx Timestamping enabled */
 #define IXGBE_TSYNCRXCTL_TSIP_UT_EN	0x00800000 /* Rx Timestamp in Packet */
+#define IXGBE_TSYNCRXCTL_TSIP_UP_MASK	0xFF000000 /* Rx Timestamp UP Mask */
 
 #define IXGBE_TSIM_TXTS			0x00000002
 
