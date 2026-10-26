@@ -90,15 +90,16 @@ static const struct access_masks ns_permission = {
  * check_ns_type - Check namespace use permission
  *
  * @ns: The namespace being allocated or installed.
+ * @ns_id: The namespace id to log.
  *
  * Shared check for namespace_init (creation via clone(2), unshare(2),
  * open_tree(2), or fsmount(2)) and namespace_install (use via setns(2)): denies
  * when the namespace type is not in the domain's allowed set.  At allocation
- * time @ns->ns_id is still zero and is logged as such.
+ * time the namespace isn't visible yet so @ns_id is zero.
  *
  * Return: 0 if allowed, -EPERM if denied.
  */
-static int check_ns_type(struct ns_common *const ns)
+static int check_ns_type(struct ns_common *const ns, const u64 ns_id)
 {
 	const struct landlock_cred_security *subject;
 	size_t denied_layer;
@@ -121,7 +122,7 @@ static int check_ns_type(struct ns_common *const ns)
 				    .permission =
 					    LANDLOCK_PERMISSION_NAMESPACE_USE,
 				    .audit.u.ns.ns_type = ns->ns_type,
-				    .audit.u.ns.ns_id = ns->ns_id,
+				    .audit.u.ns.ns_id = ns_id,
 				    .layer_plus_one = denied_layer,
 			    });
 	return -EPERM;
@@ -129,13 +130,13 @@ static int check_ns_type(struct ns_common *const ns)
 
 static int hook_namespace_init(struct ns_common *const ns)
 {
-	return check_ns_type(ns);
+	return check_ns_type(ns, 0);
 }
 
 static int hook_namespace_install(const struct nsset *const nsset,
 				  struct ns_common *const ns)
 {
-	return check_ns_type(ns);
+	return check_ns_type(ns, ns->ns_id);
 }
 
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
