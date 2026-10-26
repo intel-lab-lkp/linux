@@ -559,15 +559,30 @@ Description:
 		(RW) Write an endpoint decoder object name to 'targetX' where X
 		is the intended position of the endpoint device in the region
 		interleave and N is the 'interleave_ways' setting for the
-		region. ENXIO is returned if the write results in an impossible
-		to map decode scenario, like the endpoint is unreachable at that
+		region.
+
+		To remove the endpoint decoder from a position, for example to
+		replace it, write an empty string::
+
+		  echo "" > targetX
+
+		Clearing a position in a committed region also decommits the
+		region. It can be committed again after all positions are
+		filled.
+
+		ENXIO is returned if the write results in an impossible to map
+		decode scenario, like the endpoint is unreachable at that
 		position relative to the root decoder interleave. EBUSY is
-		returned if the position in the region is already occupied, or
-		if the region is not in a state to accept interleave
-		configuration changes. EINVAL is returned if the object name is
-		not an endpoint decoder. Once all positions have been
-		successfully written a final validation for decode conflicts is
-		performed before activating the region.
+		returned if the position in the region is already occupied by
+		another endpoint decoder, or if the region is not in a state to
+		accept interleave configuration changes. EINVAL is returned if
+		the object name is not an endpoint decoder.
+
+		While the region is partially populated, writing the endpoint
+		decoder already at a position succeeds without changing the
+		region. Once all positions have been successfully written a
+		final validation for decode conflicts is performed before
+		activating the region.
 
 
 What:		/sys/bus/cxl/devices/regionZ/commit
