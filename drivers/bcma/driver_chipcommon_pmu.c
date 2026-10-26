@@ -145,6 +145,39 @@ static void bcma_pmu2_pll_init0(struct bcma_drv_cc *cc, u32 xtalfreq)
 	/* TODO: Do we need to update OTP? */
 }
 
+static void bcma_pmu_4360_pll_init(struct bcma_drv_cc *cc)
+{
+	struct bcma_bus *bus = cc->core->bus;
+
+	if (bus->chipinfo.rev != 3)
+		return;
+	if (bus->chipinfo.id == BCMA_CHIP_ID_BCM4360 &&
+	    cc->status & BCMA_CC_CHIPST_4360_MODE_USB)
+		return;
+
+	/* Fractional VCO, 960.0098 MHz from a 40 MHz crystal. */
+	bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL2, 0x0c31);
+	bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL3, 0x100e);
+	bcma_pmu_set32(cc, BCMA_CC_PMU_CTL, BCMA_CC_PMU_CTL_PLL_UPD);
+}
+
+/* Returns the max resource mask to program, 0 to leave it alone. */
+static u32 bcma_pmu_4360_resources_init(struct bcma_drv_cc *cc)
+{
+	if (cc->core->bus->chipinfo.rev != 3)
+		return 0;
+
+	bcma_pmu_write32(cc, BCMA_CC_PMU_RES_TABSEL, 6);
+	bcma_pmu_write32(cc, BCMA_CC_PMU_RES_UPDNTM, 0x00200001);
+
+	if (cc->status & BCMA_CC_CHIPST_4360_RSRC_INIT_MODE0)
+		return 0;
+	bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL6, 0x09048562);
+	bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL14, 0x09048562);
+	bcma_pmu_set32(cc, BCMA_CC_PMU_CTL, BCMA_CC_PMU_CTL_PLL_UPD);
+	return 0x1ff;
+}
+
 static void bcma_pmu_pll_init(struct bcma_drv_cc *cc)
 {
 	struct bcma_bus *bus = cc->core->bus;
@@ -155,6 +188,10 @@ static void bcma_pmu_pll_init(struct bcma_drv_cc *cc)
 		if (xtalfreq == 0)
 			xtalfreq = 20000;
 		bcma_pmu2_pll_init0(cc, xtalfreq);
+		break;
+	case BCMA_CHIP_ID_BCM4352:
+	case BCMA_CHIP_ID_BCM4360:
+		bcma_pmu_4360_pll_init(cc);
 		break;
 	}
 }
@@ -187,6 +224,10 @@ static void bcma_pmu_resources_init(struct bcma_drv_cc *cc)
 			  BCMA_RES_4314_MACPHY_RET |
 			  BCMA_RES_4314_WL_CORE_READY;
 		max_msk = 0x3FFFFFFF;
+		break;
+	case BCMA_CHIP_ID_BCM4352:
+	case BCMA_CHIP_ID_BCM4360:
+		max_msk = bcma_pmu_4360_resources_init(cc);
 		break;
 	default:
 		bcma_debug(bus, "PMU resource config unknown or not needed for device 0x%04X\n",
