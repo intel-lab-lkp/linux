@@ -402,7 +402,7 @@ struct drm_gem_object *xe_gem_prime_import(struct drm_device *dev,
 		attach_ops = test->attach_ops;
 #endif
 
-	attach = dma_buf_dynamic_attach(dma_buf, dev->dev, attach_ops, obj);
+	attach = dma_buf_sgt_dynamic_attach(dma_buf, dev->dev, attach_ops, obj);
 	if (IS_ERR(attach)) {
 		xe_bo_put(gem_to_xe_bo(obj));
 		return ERR_CAST(attach);
