@@ -627,6 +627,16 @@ void write_boundary_block(struct block_device *bdev,
 void mmb_mark_buffer_dirty(struct buffer_head *bh,
 			   struct mapping_metadata_bhs *mmb)
 {
+	struct mapping_metadata_bhs *cur = READ_ONCE(bh->b_mmb);
+
+	/*
+	 * A buffer is tracked by one mmb at most. The per-mmb lock does
+	 * not cover a buffer that changes lists, and mmb_sync() clears
+	 * b_mmb for a moment under its own lock, so a filesystem that
+	 * attaches a buffer to a second mmb corrupts b_assoc_buffers
+	 * sooner or later. Name it here, before the lists do.
+	 */
+	WARN_ON_ONCE(cur && cur != mmb);
 	mark_buffer_dirty(bh);
 	if (!bh->b_mmb) {
 		spin_lock(&mmb->lock);
