@@ -1111,7 +1111,8 @@ static int ixgbe_ptp_set_timestamp_mode(struct ixgbe_adapter *adapter,
 
 	/* enable/disable RX */
 	regval = IXGBE_READ_REG(hw, IXGBE_TSYNCRXCTL);
-	regval &= ~(IXGBE_TSYNCRXCTL_ENABLED | IXGBE_TSYNCRXCTL_TYPE_MASK);
+	regval &= ~(IXGBE_TSYNCRXCTL_ENABLED | IXGBE_TSYNCRXCTL_TYPE_MASK |
+		    IXGBE_TSYNCRXCTL_TSIP_UT_EN);
 	regval |= tsync_rx_ctl;
 	IXGBE_WRITE_REG(hw, IXGBE_TSYNCRXCTL, regval);
 
