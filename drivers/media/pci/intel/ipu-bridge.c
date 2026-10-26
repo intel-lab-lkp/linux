@@ -1098,6 +1098,7 @@ static DEFINE_MUTEX(ipu_bridge_mutex);
 int ipu_bridge_init(struct device *dev,
 		    ipu_parse_sensor_fwnode_t parse_sensor_fwnode)
 {
+	const struct software_node *ipu_node;
 	struct fwnode_handle *fwnode;
 	struct ipu_bridge *bridge;
 	unsigned int i;
@@ -1107,6 +1108,27 @@ int ipu_bridge_init(struct device *dev,
 
 	if (!ipu_bridge_check_fwnode_graph(dev_fwnode(dev)))
 		return 0;
+
+	/*
+	 * The nodes registered by a previous bind are still there, but the
+	 * PCI remove/rescan cycle dropped the IPU's secondary fwnode link to
+	 * them. Registering them again would fail with -EEXIST, so reuse
+	 * them and restore just that link.
+	 */
+	ipu_node = software_node_find_by_name(NULL, IPU_HID);
+	if (ipu_node) {
+		fwnode = software_node_fwnode(ipu_node);
+		/*
+		 * The node only becomes the device's secondary fwnode here,
+		 * after device_add() has run, so software_node_notify() took
+		 * no reference on it. Keep the one from the lookup for the
+		 * swnode_put() that software_node_notify_remove() will do on
+		 * the next device_del().
+		 */
+		set_secondary_fwnode(dev, fwnode);
+		dev_dbg(dev, "Reusing the previously registered software nodes\n");
+		return 0;
+	}
 
 	if (!ipu_bridge_ivsc_is_ready())
 		return dev_err_probe(dev, -EPROBE_DEFER,
