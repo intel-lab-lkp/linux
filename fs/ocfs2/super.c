@@ -1785,6 +1785,8 @@ out_system_inodes:
 out_super_lock:
 	ocfs2_super_unlock(osb, 1);
 out_dlm:
+	/* Drain readers before the mount-error path releases the stack. */
+	debugfs_lookup_and_remove("locking_state", osb->osb_debug_root);
 	ocfs2_dlm_shutdown(osb, 0);
 out:
 	return status;
