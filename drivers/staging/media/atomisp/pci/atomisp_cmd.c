@@ -170,7 +170,6 @@ static int write_target_freq_to_hw(struct atomisp_device *isp,
 		dev_err(isp->dev, "DFS target freq is rejected by HW.\n");
 		return -EINVAL;
 	}
-
 	return 0;
 }
 
@@ -180,7 +179,8 @@ int atomisp_freq_scaling(struct atomisp_device *isp,
 {
 	const struct atomisp_dfs_config *dfs;
 	unsigned int new_freq;
-	struct atomisp_freq_scaling_rule curr_rules;
+	struct atomisp_freq_scaling_rule curr_rules = {};
+
 	int i, ret;
 	unsigned short fps = 0;
 
