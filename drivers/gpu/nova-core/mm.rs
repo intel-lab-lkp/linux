@@ -71,12 +71,12 @@ pub(super) mod vmm;
 /// GPU Memory Manager - owns all core MM components.
 ///
 /// Provides centralized ownership of memory management resources:
-/// - [`GpuBuddy`] allocator for VRAM page table allocation.
-/// - [`pramin::Pramin`] for direct VRAM access.
+/// - Optional [`GpuBuddy`] allocator for VRAM page table allocation.
+/// - Optional [`pramin::Pramin`] for direct VRAM access.
 /// - [`Tlb`] manager for translation buffer flush operations.
 pub(crate) struct GpuMm<'gpu> {
-    buddy: GpuBuddy,
-    pramin: pramin::Pramin<'gpu>,
+    buddy: Option<GpuBuddy>,
+    pramin: Option<pramin::Pramin<'gpu>>,
     tlb: Pin<KBox<Tlb<'gpu>>>,
 }
 
@@ -85,28 +85,28 @@ impl<'gpu> GpuMm<'gpu> {
     pub(crate) fn new(
         bar: Bar0<'gpu>,
         chipset: Chipset,
-        buddy_params: GpuBuddyParams,
-        total_fb_end: VramAddress,
+        buddy_params: Option<GpuBuddyParams>,
+        total_fb_end: Option<VramAddress>,
     ) -> Result<Self> {
-        // PRAMIN covers all physical VRAM (including GSP-reserved areas
-        // above the usable region, e.g. the BAR1 page directory).
-        let vram_region = VramAddress::ZERO..total_fb_end;
-
         Ok(Self {
-            buddy: GpuBuddy::new(buddy_params)?,
-            pramin: pramin::Pramin::new(bar, chipset, vram_region)?,
+            buddy: buddy_params.map(GpuBuddy::new).transpose()?,
+            // PRAMIN covers all physical VRAM, including GSP-reserved areas above
+            // the usable region, such as the BAR1 page directory.
+            pramin: total_fb_end
+                .map(|end| pramin::Pramin::new(bar, chipset, VramAddress::ZERO..end))
+                .transpose()?,
             tlb: KBox::pin_init(Tlb::new(bar), GFP_KERNEL)?,
         })
     }
 
     /// Access the [`GpuBuddy`] allocator.
-    pub(crate) fn buddy(&self) -> &GpuBuddy {
-        &self.buddy
+    pub(crate) fn buddy(&self) -> Result<&GpuBuddy> {
+        self.buddy.as_ref().ok_or(ENODEV)
     }
 
     /// Access the [`pramin::Pramin`].
-    fn pramin_mut(&mut self) -> &mut pramin::Pramin<'gpu> {
-        &mut self.pramin
+    fn pramin_mut(&mut self) -> Result<&mut pramin::Pramin<'gpu>> {
+        self.pramin.as_mut().ok_or(ENODEV)
     }
 
     /// Access the [`Tlb`] manager.
@@ -329,7 +329,7 @@ pub(crate) mod selftest {
             return Ok(());
         };
 
-        pramin::selftest::run(dev, mm.pramin_mut(), VramAddress::from_raw(base))?;
+        pramin::selftest::run(dev, mm.pramin_mut()?, VramAddress::from_raw(base))?;
         bar_user::run_self_test(dev, mm, bar_user, bar1_pdb, chipset)
     }
 }

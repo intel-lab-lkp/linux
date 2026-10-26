@@ -81,7 +81,7 @@ impl<M: MmuConfig> PtMapInner<M> {
     /// Allocate and zero a physical page table page.
     fn alloc_and_zero_page(mm: &mut GpuMm<'_>, level: PageTableLevel) -> Result<PreparedPtPage> {
         let blocks = KBox::pin_init(
-            mm.buddy().alloc_blocks(
+            mm.buddy()?.alloc_blocks(
                 GpuBuddyAllocMode::Simple,
                 SZ_4K.into_safe_cast(),
                 Alignment::new::<SZ_4K>(),
@@ -94,7 +94,7 @@ impl<M: MmuConfig> PtMapInner<M> {
 
         // Zero via PRAMIN.
         let window = mm
-            .pramin_mut()
+            .pramin_mut()?
             .window_at::<[u64; PAGE_SIZE / 8]>(page_vram)?;
         for i in 0..PAGE_SIZE / 8 {
             io_write!(window.view(), [build: i], 0);
@@ -120,7 +120,7 @@ impl<M: MmuConfig> PtMapInner<M> {
         for _ in 0..max_iter {
             let result = self
                 .walker
-                .walk_pde_levels(mm.pramin_mut(), vfn, |install_addr| {
+                .walk_pde_levels(mm.pramin_mut()?, vfn, |install_addr| {
                     pt_pages.get(&install_addr).and_then(|p| {
                         p.alloc
                             .iter()
@@ -197,7 +197,7 @@ impl<M: MmuConfig> PtMapInner<M> {
         writable: bool,
     ) -> Result {
         {
-            let pramin = mm.pramin_mut();
+            let pramin = mm.pramin_mut()?;
 
             // Drain prepared PT pages, install all pending PDEs.
             let mut cursor = pt_pages.cursor_front_mut();
@@ -255,7 +255,7 @@ impl<M: MmuConfig> PtMapInner<M> {
         let invalid_pte = M::Pte::invalid();
 
         {
-            let pramin = mm.pramin_mut();
+            let pramin = mm.pramin_mut()?;
             for i in 0..num_pages {
                 let i_u64: u64 = i.into_safe_cast();
                 let vfn = Vfn::new(vfn_start.raw() + i_u64);

@@ -564,18 +564,19 @@ impl<'gpu> Gpu<'gpu> {
 
             // Create GPU memory manager owning memory management resources.
             mm: {
-                let usable_vram = gsp_static_info.usable_fb_regions.first().ok_or(ENODEV)?;
-                let buddy_params = GpuBuddyParams {
-                    base_offset: usable_vram.start,
-                    size: usable_vram.end - usable_vram.start,
-                    chunk_size: Alignment::new::<SZ_4K>(),
-                };
+                let buddy_params = gsp_static_info.usable_fb_regions.first().map(|usable_vram| {
+                    GpuBuddyParams {
+                        base_offset: usable_vram.start,
+                        size: usable_vram.end - usable_vram.start,
+                        chunk_size: Alignment::new::<SZ_4K>(),
+                    }
+                });
 
                 GpuMm::new(
                     bar,
                     gsp_resources.spec.chipset,
                     buddy_params,
-                    VramAddress::from_raw(gsp_static_info.total_fb_end),
+                    Some(VramAddress::from_raw(gsp_static_info.total_fb_end)),
                 )?
             },
 

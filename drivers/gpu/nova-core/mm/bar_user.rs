@@ -212,14 +212,14 @@ pub(crate) fn run_self_test(
     let pdb_addr = VramAddress::from_raw(bar1_pdb);
 
     // Check if initial page tables are in VRAM.
-    if crate::mm::pagetable::check_pdb_valid(mm.pramin_mut(), pdb_addr, chipset).is_err() {
+    if crate::mm::pagetable::check_pdb_valid(mm.pramin_mut()?, pdb_addr, chipset).is_err() {
         dev_info!(dev, "MM: Self-test SKIPPED - no valid VRAM page tables\n");
         return Ok(());
     }
 
     // Set up a test page from the buddy allocator.
     let test_page_blocks = KBox::pin_init(
-        mm.buddy().alloc_blocks(
+        mm.buddy()?.alloc_blocks(
             GpuBuddyAllocMode::Simple,
             SZ_4K.into_safe_cast(),
             Alignment::new::<SZ_4K>(),
@@ -245,7 +245,7 @@ pub(crate) fn run_self_test(
     let vram_read_addr = test_vram + 0x100;
 
     // Test 1: Write via PRAMIN, read via BAR1.
-    mm.pramin_mut()
+    mm.pramin_mut()?
         .window_at::<u32>(vram_read_addr)?
         .view()
         .write_val(PATTERN_PRAMIN);
@@ -296,7 +296,7 @@ pub(crate) fn run_self_test(
 
     // Punch a 4K hole at base+16K so the subsequent 32K allocation must split.
     let _hole = KBox::pin_init(
-        mm.buddy().alloc_blocks(
+        mm.buddy()?.alloc_blocks(
             GpuBuddyAllocMode::Range(range_base + sz_16k..range_base + sz_16k + sz_4k),
             SZ_4K.into_safe_cast(),
             Alignment::new::<SZ_4K>(),
@@ -308,7 +308,7 @@ pub(crate) fn run_self_test(
     // Allocate 32K within [base, base+36K). The hole forces the allocator to return
     // split blocks whose sizes are determined by buddy alignment.
     let blocks = KBox::pin_init(
-        mm.buddy().alloc_blocks(
+        mm.buddy()?.alloc_blocks(
             GpuBuddyAllocMode::Range(range_base..range_base + sz_32k_4k),
             SZ_32K.into_safe_cast(),
             Alignment::new::<SZ_4K>(),
@@ -353,7 +353,7 @@ pub(crate) fn run_self_test(
             bar1.try_write32(PATTERN_BAR1, page_bar1_off)?;
 
             let pramin_val = mm
-                .pramin_mut()
+                .pramin_mut()?
                 .window_at::<u32>(VramAddress::from_raw(page_phys))?
                 .view()
                 .read_val();
@@ -391,7 +391,7 @@ pub(crate) fn run_self_test(
     let access = bar_user.map(mm, &[test_pfn], true)?;
 
     // Write pattern via PRAMIN, read via BarUserAccess.
-    mm.pramin_mut()
+    mm.pramin_mut()?
         .window_at::<u32>(test_vram)?
         .view()
         .write_val(PATTERN_BAR1);

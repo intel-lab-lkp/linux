@@ -172,7 +172,7 @@ impl<M: MmuConfig> PtWalkInner<M> {
     ///
     /// Returns [`WalkResult::PageTableMissing`] if intermediate tables don't exist.
     pub(super) fn walk_to_pte_lookup(&self, mm: &mut GpuMm<'_>, vfn: Vfn) -> Result<WalkResult> {
-        self.walk_to_pte_lookup_with_window(mm.pramin_mut(), vfn)
+        self.walk_to_pte_lookup_with_window(mm.pramin_mut()?, vfn)
     }
 
     /// Walk to PTE using a caller-provided PRAMIN manager (lookup only).
