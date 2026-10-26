@@ -1475,6 +1475,7 @@ struct intel_crtc_state {
 		bool aux_wake_possible;
 		bool aux_less_possible;
 	} alpm_state;
+	bool has_alpm;
 
 	/* to track changes in plane color blocks */
 	bool plane_color_changed;

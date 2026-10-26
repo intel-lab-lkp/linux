@@ -1426,6 +1426,14 @@ static bool _wake_lines_fit_into_vblank(const struct intel_crtc_state *crtc_stat
 	return true;
 }
 
+bool intel_psr_wake_lines_fit_into_vblank(const struct intel_crtc_state *crtc_state,
+					  int wake_lines)
+{
+	return _wake_lines_fit_into_vblank(crtc_state,
+					   intel_crtc_vblank_length(crtc_state),
+					   wake_lines);
+}
+
 static bool wake_lines_fit_into_vblank(struct intel_dp *intel_dp,
 				       const struct intel_crtc_state *crtc_state,
 				       bool aux_less,
@@ -4547,7 +4555,8 @@ void intel_psr_connector_debugfs_add(struct intel_connector *connector)
 				    connector, &i915_psr_status_fops);
 }
 
-bool intel_psr_needs_alpm(struct intel_dp *intel_dp, const struct intel_crtc_state *crtc_state)
+static bool intel_psr_needs_alpm(struct intel_dp *intel_dp,
+				 const struct intel_crtc_state *crtc_state)
 {
 	/*
 	 * eDP Panel Replay uses always ALPM
