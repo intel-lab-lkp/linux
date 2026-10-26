@@ -250,6 +250,31 @@ static int get_establishment_period(struct intel_dp *intel_dp,
 	return SILENCE_PERIOD_TIME + t1 + tcds;
 }
 
+static int get_switch_to_active(const struct intel_crtc_state *crtc_state)
+{
+	int switch_to_active;
+
+	if (intel_dp_is_uhbr(crtc_state)) {
+		/* link symbol clock (fLink / 32) in kHz */
+		int symbol_clock = intel_dp_link_symbol_clock(crtc_state->port_clock);
+
+		/*
+		 * tSwitch to Active = 32 * (ML_PHY_LOCK Length + 3 + 64) / fLink
+		 *		     = (ML_PHY_LOCK Length + 3 + 64) / symbol clock
+		 *
+		 * The "+ 3" term is the trailing zero padding after the
+		 * POST_LT_SCRAMBLER_RESET, the "+ 64" term represents the MTP
+		 * time slots. The result is rounded up to microseconds.
+		 */
+		switch_to_active = DIV_ROUND_UP((ML_PHY_LOCK_LEN_UHBR + 3 + 64) * 1000,
+						symbol_clock);
+	} else {
+		switch_to_active = 0;
+	}
+
+	return switch_to_active;
+}
+
 /*
  * AUX-Less Wake Time = CEILING( ((PHY P2 to P0) + tLFPS_Period, Max+
  * tSilence, Max+ tPHY Establishment + tCDS) / tline)
@@ -292,7 +317,7 @@ _lnl_compute_aux_less_alpm_params(struct intel_dp *intel_dp,
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	int aux_less_wake_time, aux_less_wake_lines, silence_period,
-		lfps_half_cycle;
+		lfps_half_cycle, switch_to_active_lines;
 
 	aux_less_wake_time =
 		_lnl_compute_aux_less_wake_time(intel_dp, crtc_state);
@@ -302,10 +327,14 @@ _lnl_compute_aux_less_alpm_params(struct intel_dp *intel_dp,
 
 	lfps_half_cycle = get_lfps_half_cycle_clocks(crtc_state);
 
+	switch_to_active_lines = intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
+							  get_switch_to_active(crtc_state));
+
 	if (aux_less_wake_lines > get_aux_less_wake_lines_max(display) ||
 	    silence_period > PORT_ALPM_CTL_SILENCE_PERIOD_MASK ||
 	    lfps_half_cycle < 1 ||
-	    lfps_half_cycle > PORT_ALPM_LFPS_CTL_LAST_LFPS_HALF_CYCLE_DURATION_MASK + 1)
+	    lfps_half_cycle > PORT_ALPM_LFPS_CTL_LAST_LFPS_HALF_CYCLE_DURATION_MASK + 1 ||
+	    switch_to_active_lines > REG_FIELD_MAX(ALPM_CTL2_SWITCH_TO_ACTIVE_LATENCY_MASK))
 		return false;
 
 	if (display->params.psr_safest_params)
@@ -314,6 +343,7 @@ _lnl_compute_aux_less_alpm_params(struct intel_dp *intel_dp,
 	crtc_state->alpm_state.aux_less_wake_lines = aux_less_wake_lines;
 	crtc_state->alpm_state.silence_period_sym_clocks = silence_period;
 	crtc_state->alpm_state.lfps_half_cycle_num_of_syms = lfps_half_cycle;
+	crtc_state->alpm_state.switch_to_active = switch_to_active_lines;
 
 	return true;
 }
@@ -731,6 +761,7 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 		lttpr_count = 0;
 
 	alpm_ctl2 = ALPM_CTL2_NUMBER_OF_LTTPR(lttpr_count);
+	alpm_ctl2 |= ALPM_CTL2_SWITCH_TO_ACTIVE_LATENCY(crtc_state->alpm_state.switch_to_active);
 
 	intel_de_write(display, ALPM_CTL2(display, cpu_transcoder), alpm_ctl2);
 	intel_de_write(display, ALPM_CTL(display, cpu_transcoder), alpm_ctl);
