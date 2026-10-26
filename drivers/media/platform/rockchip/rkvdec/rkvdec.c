@@ -1434,14 +1434,17 @@ static void rkvdec_iommu_restore(struct rkvdec_dev *rkvdec)
 	}
 }
 
-static irqreturn_t rk3399_irq_handler(struct rkvdec_ctx *ctx)
+static irqreturn_t rk3399_irq_handler(struct rkvdec_dev *rkvdec,
+				      struct rkvdec_ctx *ctx)
 {
-	struct rkvdec_dev *rkvdec = ctx->dev;
 	enum vb2_buffer_state state;
 	u32 status;
 
 	status = readl(rkvdec->regs + RKVDEC_REG_INTERRUPT);
 	writel(0, rkvdec->regs + RKVDEC_REG_INTERRUPT);
+
+	if (!ctx)
+		return IRQ_HANDLED;
 
 	if (status & RKVDEC_RDY_STA) {
 		state = VB2_BUF_STATE_DONE;
@@ -1457,15 +1460,18 @@ static irqreturn_t rk3399_irq_handler(struct rkvdec_ctx *ctx)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t vdpu381_irq_handler(struct rkvdec_ctx *ctx)
+static irqreturn_t vdpu381_irq_handler(struct rkvdec_dev *rkvdec,
+				       struct rkvdec_ctx *ctx)
 {
-	struct rkvdec_dev *rkvdec = ctx->dev;
 	enum vb2_buffer_state state;
 	bool need_reset = 0;
 	u32 status;
 
 	status = readl(rkvdec->regs + VDPU381_REG_STA_INT);
 	writel(0, rkvdec->regs + VDPU381_REG_STA_INT);
+
+	if (!ctx)
+		return IRQ_HANDLED;
 
 	if (status & VDPU381_STA_INT_DEC_RDY_STA) {
 		state = VB2_BUF_STATE_DONE;
@@ -1486,9 +1492,9 @@ static irqreturn_t vdpu381_irq_handler(struct rkvdec_ctx *ctx)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t vdpu383_irq_handler(struct rkvdec_ctx *ctx)
+static irqreturn_t vdpu383_irq_handler(struct rkvdec_dev *rkvdec,
+				       struct rkvdec_ctx *ctx)
 {
-	struct rkvdec_dev *rkvdec = ctx->dev;
 	enum vb2_buffer_state state;
 	bool need_reset = 0;
 	u32 status;
@@ -1498,6 +1504,9 @@ static irqreturn_t vdpu383_irq_handler(struct rkvdec_ctx *ctx)
 	/* On vdpu383, the interrupts must be disabled */
 	writel(FIELD_PREP_WM16(VDPU383_INT_EN_IRQ | VDPU383_INT_EN_LINE_IRQ, 0),
 	       rkvdec->link + VDPU383_LINK_INT_EN);
+
+	if (!ctx)
+		return IRQ_HANDLED;
 
 	if (status & VDPU383_STA_INT_DEC_RDY_STA) {
 		state = VB2_BUF_STATE_DONE;
@@ -1521,7 +1530,7 @@ static irqreturn_t rkvdec_irq_handler(int irq, void *priv)
 	struct rkvdec_ctx *ctx = v4l2_m2m_get_curr_priv(rkvdec->m2m_dev);
 	const struct rkvdec_variant *variant = rkvdec->variant;
 
-	return variant->ops->irq_handler(ctx);
+	return variant->ops->irq_handler(rkvdec, ctx);
 }
 
 /*
