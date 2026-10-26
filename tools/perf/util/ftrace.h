@@ -109,6 +109,12 @@ struct ftrace_stack_frame {
 	bool inlined;
 	int indent;
 	int raw_indent;
+	u64 seq;
+};
+
+struct ftrace_indent_watermark {
+	u64 seq;
+	int raw_indent;
 };
 
 struct ftrace_task_state {
@@ -119,6 +125,10 @@ struct ftrace_task_state {
 	int			depth;
 	int			inlined_depth;
 	int			overflow_depth;
+	u64			seq;
+	struct ftrace_indent_watermark *watermarks;
+	int			max_watermarks;
+	int			nr_watermarks;
 };
 
 bool ftrace_parse_retaddr(const char *str, char *sym_name, size_t sym_len, u64 *offset);
