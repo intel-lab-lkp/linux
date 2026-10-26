@@ -1490,6 +1490,14 @@ whole_folios:
 						index = start;
 						break;
 					}
+				} else {
+					/*
+					 * Splitting failed, but the part in the
+					 * range is already zeroed, so skip this
+					 * folio when restarting the scan to
+					 * avoid retrying it forever.
+					 */
+					start = max(start, folio_next_index(folio));
 				}
 			}
 			folio_unlock(folio);
