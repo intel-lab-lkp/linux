@@ -454,7 +454,7 @@ err_privd_alloc:
  */
 void ice_deinit_rdma(struct ice_pf *pf)
 {
-	if (!ice_is_rdma_ena(pf))
+	if (!ice_is_rdma_ena(pf) || !pf->cdev_info)
 		return;
 
 	xa_erase(&ice_aux_id, pf->aux_idx);
