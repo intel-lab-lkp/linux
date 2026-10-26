@@ -472,6 +472,17 @@ loongson2_cmc_dma_prep_dma_cyclic(struct dma_chan *chan, dma_addr_t buf_addr, si
 	return vchan_tx_prep(&lchan->vchan, &desc->vdesc, flags);
 }
 
+static size_t loongson2_cmc_dma_desc_total_len(struct loongson2_cmc_dma_desc *desc)
+{
+	size_t total = 0;
+	u32 i;
+
+	for (i = 0; i < desc->num_sgs; i++)
+		total += desc->sg_req[i].len;
+
+	return total;
+}
+
 static size_t loongson2_cmc_dma_desc_residue(struct loongson2_cmc_dma_chan *lchan,
 					     struct loongson2_cmc_dma_desc *desc, u32 next_sg)
 {
@@ -518,12 +529,16 @@ static enum dma_status loongson2_cmc_dma_tx_status(struct dma_chan *chan, dma_co
 
 	scoped_guard(spinlock_irqsave, &lchan->vchan.lock) {
 		vdesc = vchan_find_desc(&lchan->vchan, cookie);
-		if (lchan->desc && cookie == lchan->desc->vdesc.tx.cookie)
+		if (lchan->desc && cookie == lchan->desc->vdesc.tx.cookie) {
+			/* Active descriptor: compute residue from hardware progress */
 			state->residue = loongson2_cmc_dma_desc_residue(lchan, lchan->desc,
 									lchan->next_sg);
-		else if (vdesc)
-			state->residue = loongson2_cmc_dma_desc_residue(lchan,
-									to_lmdma_desc(vdesc), 0);
+		} else if (vdesc) {
+			/* Queued descriptor not yet started: residue is the total length */
+			struct loongson2_cmc_dma_desc *ldesc = to_lmdma_desc(vdesc);
+
+			state->residue = loongson2_cmc_dma_desc_total_len(ldesc);
+		}
 	}
 
 	return status;
