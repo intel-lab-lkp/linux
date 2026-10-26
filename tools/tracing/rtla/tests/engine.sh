@@ -41,6 +41,86 @@ reset_osnoise() {
 	popd >/dev/null
 }
 
+leftover_instances() {
+	# Count the trace instances rtla should have removed on exit.
+	local d count=0
+	for d in osnoise_top osnoise_hist timerlat_top timerlat_hist osnoise_trace
+	do
+		[ -d "/sys/kernel/tracing/instances/$d" ] && count=$((count + 1))
+	done
+	echo $count
+}
+
+check_with_action() {
+	# Same as "check", but run ACTION while rtla is running, so that a test
+	# can interrupt the tool mid-run.
+	# Arguments: test_name rtla_args action exit_code [expected [unexpected]]
+	# The output of ACTION is appended to rtla's output, and the number of
+	# leftover trace instances is always reported as LEFTOVER_INSTANCES=n.
+	# ACTION can use $RTLA_PID to signal the tool.
+	local test_name=$1 tested_command=$2 action=$3
+	local expected_exitcode=${4:-0}
+	local expected_output=$5 unexpected_output=$6
+	local result exitcode fail failbuf pid
+
+	ctr=$(($ctr + 1))
+	[ -z "$TEST_COUNT" ] && return
+
+	[ "$NO_RESET_OSNOISE" == 1 ] || reset_osnoise
+
+	tmpdir=$(mktemp -d)
+	pushd $tmpdir >/dev/null
+
+	# eval so that the test can use shell syntax in its arguments, and exec
+	# so that $! is the tool itself and not an intermediate shell: tests
+	# signal $RTLA_PID directly.  timeout forwards the signal to its child.
+	# The arguments are re-parsed by the same eval as in check(), so quoting
+	# behaves identically; only exec and the quoted $RTLA are added.
+	( eval "exec stdbuf -oL $TIMEOUT \"$RTLA\" $tested_command" ) > rtla.txt 2>&1 &
+	pid=$!
+	# The ACTION runs as a separate process, so RTLA_PID has to be exported
+	# or the helper scripts see it as unset.
+	export RTLA_PID=$pid
+
+	sleep "${ACTION_DELAY:-3}"
+	eval "$action" >> rtla.txt 2>&1
+
+	wait $pid
+	exitcode=$?
+	echo "LEFTOVER_INSTANCES=$(leftover_instances)" >> rtla.txt
+
+	result=$(cat rtla.txt)
+	failbuf=''
+	fail=0
+
+	if [ -n "$expected_output" ] && ! grep -qE "$expected_output" <<< "$result"
+	then
+		fail=1
+		failbuf+=$(printf "# Output match failed: \"%s\"" "$expected_output")
+		failbuf+=$'\n'
+	fi
+
+	if [ -n "$unexpected_output" ] && grep -qE "$unexpected_output" <<< "$result"
+	then
+		fail=1
+		failbuf+=$(printf "# Output non-match failed: \"%s\"" "$unexpected_output")
+		failbuf+=$'\n'
+	fi
+
+	if [ $exitcode -eq $expected_exitcode ] && [ $fail -eq 0 ]
+	then
+		echo "ok $ctr - $test_name"
+	else
+		echo "not ok $ctr - $test_name"
+		echo -n "$failbuf"
+		echo "$result" | col -b | while read line; do echo "# $line"; done
+		printf "#\n# exit code %s\n" $exitcode
+	fi
+
+	popd >/dev/null
+	rm -r $tmpdir
+}
+
 check() {
 	test_name=$0
 	tested_command=$1

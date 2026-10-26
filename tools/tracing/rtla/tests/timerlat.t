@@ -153,4 +153,11 @@ else
 fi
 done
 
+# Cleanup test: the tool must unwind on SIGINT without leaving its trace
+# instance behind.
+check_with_action "top exits on SIGINT" \
+	"timerlat top -q" \
+	"$testdir/scripts/check-sigint.sh" \
+	0 "SIGINT handled OK" "LEFTOVER_INSTANCES=[1-9]"
+
 test_end

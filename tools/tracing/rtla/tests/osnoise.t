@@ -99,4 +99,11 @@ check_top_q_hist "with conditional continue" \
 check_top_hist "with trace output at end" \
 	"osnoise TOOL -d 1s --on-end trace" 0 "^  Saving trace to osnoise_trace.txt$"
 
+# Cleanup test: the tool must unwind on SIGINT without leaving its trace
+# instance behind.
+check_with_action "top exits on SIGINT" \
+	"osnoise top -q" \
+	"$testdir/scripts/check-sigint.sh" \
+	0 "SIGINT handled OK" "LEFTOVER_INSTANCES=[1-9]"
+
 test_end
