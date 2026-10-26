@@ -680,7 +680,7 @@ void intel_alpm_lobf_enable(const struct intel_crtc_state *new_crtc_state)
 	}
 }
 
-static int i915_edp_lobf_info_show(struct seq_file *m, void *data)
+static int i915_lobf_info_show(struct seq_file *m, void *data)
 {
 	struct intel_connector *connector = m->private;
 	struct intel_display *display = to_intel_display(connector);
@@ -714,10 +714,10 @@ out:
 	return ret;
 }
 
-DEFINE_SHOW_ATTRIBUTE(i915_edp_lobf_info);
+DEFINE_SHOW_ATTRIBUTE(i915_lobf_info);
 
 static int
-i915_edp_lobf_debug_get(void *data, u64 *val)
+i915_lobf_debug_get(void *data, u64 *val)
 {
 	struct intel_connector *connector = data;
 	struct intel_dp *intel_dp = enc_to_intel_dp(connector->encoder);
@@ -728,7 +728,7 @@ i915_edp_lobf_debug_get(void *data, u64 *val)
 }
 
 static int
-i915_edp_lobf_debug_set(void *data, u64 val)
+i915_lobf_debug_set(void *data, u64 val)
 {
 	struct intel_connector *connector = data;
 	struct intel_dp *intel_dp = enc_to_intel_dp(connector->encoder);
@@ -738,8 +738,8 @@ i915_edp_lobf_debug_set(void *data, u64 val)
 	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(i915_edp_lobf_debug_fops,
-			i915_edp_lobf_debug_get, i915_edp_lobf_debug_set,
+DEFINE_SIMPLE_ATTRIBUTE(i915_lobf_debug_fops,
+			i915_lobf_debug_get, i915_lobf_debug_set,
 			"%llu\n");
 
 void intel_alpm_lobf_debugfs_add(struct intel_connector *connector)
@@ -747,15 +747,22 @@ void intel_alpm_lobf_debugfs_add(struct intel_connector *connector)
 	struct intel_display *display = to_intel_display(connector);
 	struct dentry *root = connector->base.debugfs_entry;
 
-	if (DISPLAY_VER(display) < 20 ||
-	    connector->base.connector_type != DRM_MODE_CONNECTOR_eDP)
+	if (DISPLAY_VER(display) < 20)
 		return;
 
-	debugfs_create_file("i915_edp_lobf_debug", 0644, root,
-			    connector, &i915_edp_lobf_debug_fops);
+	if (connector->base.connector_type != DRM_MODE_CONNECTOR_eDP &&
+	    connector->base.connector_type != DRM_MODE_CONNECTOR_DisplayPort)
+		return;
 
-	debugfs_create_file("i915_edp_lobf_info", 0444, root,
-			    connector, &i915_edp_lobf_info_fops);
+	if (connector->mst.dp ||
+	    !intel_alpm_source_supported(intel_attached_dp(connector)))
+		return;
+
+	debugfs_create_file("i915_lobf_debug", 0644, root,
+			    connector, &i915_lobf_debug_fops);
+
+	debugfs_create_file("i915_lobf_info", 0444, root,
+			    connector, &i915_lobf_info_fops);
 }
 
 void intel_alpm_disable(struct intel_dp *intel_dp)
