@@ -1665,25 +1665,6 @@ done:
 		goto out_drop;
 	}
 
-	if (unlikely(test_bit(IGC_RING_FLAG_TX_HWTSTAMP, &tx_ring->flags) &&
-		     skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
-		unsigned long flags;
-		u32 tstamp_flags;
-
-		spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
-		if (igc_request_tx_tstamp(adapter, skb, &tstamp_flags)) {
-			skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
-			tx_flags |= IGC_TX_FLAGS_TSTAMP | tstamp_flags;
-			if (skb->sk &&
-			    READ_ONCE(skb->sk->sk_tsflags) & SOF_TIMESTAMPING_BIND_PHC)
-				tx_flags |= IGC_TX_FLAGS_TSTAMP_TIMER_1;
-		} else {
-			adapter->tx_hwtstamp_skipped++;
-		}
-
-		spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
-	}
-
 	if (skb_vlan_tag_present(skb)) {
 		tx_flags |= IGC_TX_FLAGS_VLAN;
 		tx_flags |= (skb_vlan_tag_get(skb) << IGC_TX_FLAGS_VLAN_SHIFT);
@@ -1697,9 +1678,27 @@ done:
 	 * padding bytes in mCRC calculation
 	 */
 	if (tx_ring->preemptible && skb->len < ETH_ZLEN) {
-		if (skb_padto(skb, ETH_ZLEN))
+		if (__skb_put_padto(skb, ETH_ZLEN, false))
 			goto out_drop;
-		skb_put(skb, ETH_ZLEN - skb->len);
+	}
+
+	if (unlikely(test_bit(IGC_RING_FLAG_TX_HWTSTAMP, &tx_ring->flags) &&
+		     skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
+		unsigned long flags;
+		u32 tstamp_flags;
+
+		spin_lock_irqsave(&adapter->ptp_tx_lock, flags);
+		if (igc_request_tx_tstamp(adapter, skb, &tstamp_flags)) {
+			skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+			first->tx_flags |= IGC_TX_FLAGS_TSTAMP | tstamp_flags;
+			if (skb->sk &&
+			    READ_ONCE(skb->sk->sk_tsflags) & SOF_TIMESTAMPING_BIND_PHC)
+				first->tx_flags |= IGC_TX_FLAGS_TSTAMP_TIMER_1;
+		} else {
+			adapter->tx_hwtstamp_skipped++;
+		}
+
+		spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
 	}
 
 	tso = igc_tso(tx_ring, first, launch_time, first_flag, &hdr_len);
