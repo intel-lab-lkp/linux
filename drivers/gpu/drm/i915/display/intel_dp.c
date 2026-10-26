@@ -5057,10 +5057,7 @@ intel_edp_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *connector
 	 */
 	intel_dp_init_source_oui(intel_dp);
 
-	/* Read the ALPM DPCD caps */
-	ret = drm_dp_dpcd_read_byte(&intel_dp->aux, DP_RECEIVER_ALPM_CAP,
-				    &intel_dp->alpm_dpcd);
-	if (ret < 0)
+	if (intel_alpm_init_dpcd(intel_dp))
 		return false;
 
 	/*
