@@ -718,19 +718,9 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 		    || !exp_info->ops->release))
 		return ERR_PTR(-EINVAL);
 
-	if (exp_info->ops->match_mapping ||
-	    exp_info->ops->single_exporter_match) {
-		if (WARN_ON(exp_info->ops->map_dma_buf ||
-			    exp_info->ops->unmap_dma_buf))
-			return ERR_PTR(-EINVAL);
-		if (WARN_ON(exp_info->ops->match_mapping &&
-			    exp_info->ops->single_exporter_match))
-			return ERR_PTR(-EINVAL);
-	} else {
-		if (WARN_ON(!exp_info->ops->map_dma_buf ||
-			    !exp_info->ops->unmap_dma_buf))
-			return ERR_PTR(-EINVAL);
-	}
+	if (WARN_ON(!exp_info->ops->match_mapping &&
+		    !exp_info->ops->single_exporter_match))
+		return ERR_PTR(-EINVAL);
 
 	if (WARN_ON(!exp_info->ops->pin != !exp_info->ops->unpin))
 		return ERR_PTR(-EINVAL);
@@ -1082,12 +1072,8 @@ struct dma_buf_attachment *dma_buf_mapping_attach(
 		if (ret)
 			goto err_attach;
 	} else {
-		const struct dma_buf_mapping_match *exp_match =
-			dmabuf->ops->single_exporter_match;
-
-		if (!exp_match)
-			exp_match = &dma_buf_sgt_exp_compat_match;
-		ret = dma_buf_match_mapping(&match_args, exp_match, 1);
+		ret = dma_buf_match_mapping(
+			&match_args, dmabuf->ops->single_exporter_match, 1);
 		if (ret)
 			goto err_attach;
 	}
@@ -1180,7 +1166,8 @@ void dma_buf_detach(struct dma_buf *dmabuf, struct dma_buf_attachment *attach)
 		dmabuf->ops->detach(dmabuf, attach);
 
 	DMA_BUF_TRACE(trace_dma_buf_detach, dmabuf, attach,
-		dma_buf_attachment_is_dynamic(attach), attach->dev);
+		dma_buf_attachment_is_dynamic(attach),
+		dma_buf_sgt_dma_device(attach));
 
 	kfree(attach);
 }
