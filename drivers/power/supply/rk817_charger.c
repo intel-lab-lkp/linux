@@ -1148,6 +1148,15 @@ static int rk817_battery_init(struct rk817_charger *charger,
 	regmap_write_bits(rk808->regmap, RK817_PMIC_CHRG_IN, RK817_USB_ILIM_EN,
 			  (0x01 << 3));
 
+	/*
+	 * Shutdown the system voltage in bat_off mode, unless
+	 * gate-function-disable is set.
+	 */
+	if (!device_property_read_bool(charger->dev,
+				       "rockchip,gate-function-disable"))
+		regmap_clear_bits(rk808->regmap,
+				  RK817_PMIC_CHRG_TERM, RK817_SYS_CAN_SD);
+
 	return 0;
 }
 
