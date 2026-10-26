@@ -9,6 +9,7 @@
 #include <linux/miscdevice.h>
 #include <linux/mutex.h>
 #include <linux/i2c.h>
+#include <linux/kref.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <uapi/misc/amd-apml.h>
@@ -56,9 +57,13 @@ struct sbrmi_data {
 	struct regmap *regmap;
 	/* Mutex locking */
 	struct mutex lock;
+	/* Reference count; keeps @sbrmi_data alive while misc fds are open */
+	struct kref kref;
 	u32 pwr_limit_max;
 	u8 dev_static_addr;
 	u8 rev;
+	/* Set on driver unbind; open/ioctl return -ENODEV afterward */
+	bool detached;
 };
 
 int rmi_mailbox_xfer(struct sbrmi_data *data, struct apml_mbox_msg *msg);
@@ -71,4 +76,5 @@ static inline int create_hwmon_sensor_device(struct device *dev, struct sbrmi_da
 }
 #endif
 int create_misc_rmi_device(struct sbrmi_data *data, struct device *dev);
+void sbrmi_data_release(struct kref *kref);
 #endif /*_SBRMI_CORE_H_*/

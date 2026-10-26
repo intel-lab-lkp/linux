@@ -16,6 +16,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
+#include <linux/slab.h>
 #include "rmi-core.h"
 
 #define REV_TWO_BYTE_ADDR	0x21
@@ -54,17 +55,40 @@ static int sbrmi_get_max_pwr_limit(struct sbrmi_data *data)
 	return ret;
 }
 
+static void sbrmi_misc_unregister(void *arg)
+{
+	struct sbrmi_data *data = arg;
+
+	misc_deregister(&data->sbrmi_misc_dev);
+
+	mutex_lock(&data->lock);
+	data->detached = true;
+	mutex_unlock(&data->lock);
+}
+
+static void sbrmi_driver_unref(void *arg)
+{
+	struct sbrmi_data *data = arg;
+
+	kref_put(&data->kref, sbrmi_data_release);
+}
+
 static int sbrmi_common_probe(struct device *dev, struct regmap *regmap, uint8_t address)
 {
 	struct sbrmi_data *data;
 	int ret;
 
-	data = devm_kzalloc(dev, sizeof(struct sbrmi_data), GFP_KERNEL);
+	data = kzalloc_obj(*data);
 	if (!data)
 		return -ENOMEM;
 
 	data->regmap = regmap;
 	mutex_init(&data->lock);
+	kref_init(&data->kref);
+
+	ret = devm_add_action_or_reset(dev, sbrmi_driver_unref, data);
+	if (ret)
+		return ret;
 
 	/* Enable alert for SB-RMI sequence */
 	ret = sbrmi_enable_alert(data);
@@ -83,7 +107,12 @@ static int sbrmi_common_probe(struct device *dev, struct regmap *regmap, uint8_t
 	ret = create_hwmon_sensor_device(dev, data);
 	if (ret < 0)
 		return ret;
-	return create_misc_rmi_device(data, dev);
+
+	ret = create_misc_rmi_device(data, dev);
+	if (ret)
+		return ret;
+
+	return devm_add_action_or_reset(dev, sbrmi_misc_unregister, data);
 }
 
 static struct regmap_config sbrmi_regmap_config = {
@@ -128,18 +157,6 @@ static int sbrmi_i2c_probe(struct i2c_client *client)
 	return sbrmi_common_probe(dev, regmap, client->addr);
 }
 
-static void sbrmi_i2c_remove(struct i2c_client *client)
-{
-	struct sbrmi_data *data = dev_get_drvdata(&client->dev);
-
-	misc_deregister(&data->sbrmi_misc_dev);
-	/* Assign fops and parent of misc dev to NULL */
-	data->sbrmi_misc_dev.fops = NULL;
-	data->sbrmi_misc_dev.parent = NULL;
-	dev_info(&client->dev, "Removed sbrmi-i2c driver\n");
-	return;
-}
-
 static const struct i2c_device_id sbrmi_id[] = {
 	{ .name = "sbrmi-i2c" },
 	{ }
@@ -160,7 +177,6 @@ static struct i2c_driver sbrmi_driver = {
 		.of_match_table = of_match_ptr(sbrmi_of_match),
 	},
 	.probe = sbrmi_i2c_probe,
-	.remove = sbrmi_i2c_remove,
 	.id_table = sbrmi_id,
 };
 
@@ -212,13 +228,6 @@ static int sbrmi_i3c_probe(struct i3c_device *i3cdev)
 	return sbrmi_common_probe(dev, regmap, i3cdev->desc->info.dyn_addr);
 }
 
-static void sbrmi_i3c_remove(struct i3c_device *i3cdev)
-{
-	struct sbrmi_data *data = dev_get_drvdata(&i3cdev->dev);
-
-	misc_deregister(&data->sbrmi_misc_dev);
-}
-
 static const struct i3c_device_id sbrmi_i3c_id[] = {
 	/* PID for AMD SBRMI device */
 	I3C_DEVICE_EXTRA_INFO(0x112, 0x0, 0x2, NULL),
@@ -235,7 +244,6 @@ static struct i3c_driver sbrmi_i3c_driver = {
 		.name = "sbrmi-i3c",
 	},
 	.probe = sbrmi_i3c_probe,
-	.remove = sbrmi_i3c_remove,
 	.id_table = sbrmi_i3c_id,
 };
 

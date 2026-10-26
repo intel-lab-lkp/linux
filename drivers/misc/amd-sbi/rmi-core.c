@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/regmap.h>
+#include <linux/slab.h>
 #include "rmi-core.h"
 
 /* Mask for Status Register bit[1] */
@@ -193,6 +194,10 @@ static int rmi_cpuid_read(struct sbrmi_data *data,
 	u16 thread;
 
 	mutex_lock(&data->lock);
+	if (data->detached) {
+		ret = -ENODEV;
+		goto exit_unlock;
+	}
 	/* cache the rev value to identify if protocol is supported or not */
 	if (!data->rev) {
 		ret = sbrmi_get_rev(data);
@@ -307,6 +312,10 @@ static int rmi_mca_msr_read(struct sbrmi_data *data,
 	u16 thread;
 
 	mutex_lock(&data->lock);
+	if (data->detached) {
+		ret = -ENODEV;
+		goto exit_unlock;
+	}
 	/* cache the rev value to identify if protocol is supported or not */
 	if (!data->rev) {
 		ret = sbrmi_get_rev(data);
@@ -384,6 +393,10 @@ int rmi_mailbox_xfer(struct sbrmi_data *data,
 	u8 byte;
 
 	mutex_lock(&data->lock);
+	if (data->detached) {
+		ret = -ENODEV;
+		goto exit_unlock;
+	}
 
 	msg->fw_ret_code = 0;
 
@@ -475,6 +488,10 @@ static int apml_rmi_reg_xfer(struct sbrmi_data *data,
 		return -EFAULT;
 
 	mutex_lock(&data->lock);
+	if (data->detached) {
+		mutex_unlock(&data->lock);
+		return -ENODEV;
+	}
 	if (msg.rflag) {
 		ret = regmap_read(data->regmap, msg.reg_addr, &data_read);
 		if (!ret)
@@ -548,6 +565,41 @@ static int apml_mcamsr_xfer(struct sbrmi_data *data, struct apml_mcamsr_msg __us
 	return ret;
 }
 
+void sbrmi_data_release(struct kref *kref)
+{
+	struct sbrmi_data *data = container_of(kref, struct sbrmi_data, kref);
+
+	mutex_destroy(&data->lock);
+	kfree(data);
+}
+
+static int sbrmi_open(struct inode *inode, struct file *fp)
+{
+	struct sbrmi_data *data;
+
+	data = container_of(fp->private_data, struct sbrmi_data, sbrmi_misc_dev);
+
+	mutex_lock(&data->lock);
+	if (data->detached) {
+		mutex_unlock(&data->lock);
+		return -ENODEV;
+	}
+	mutex_unlock(&data->lock);
+
+	kref_get(&data->kref);
+
+	return 0;
+}
+
+static int sbrmi_release(struct inode *inode, struct file *fp)
+{
+	struct sbrmi_data *data;
+
+	data = container_of(fp->private_data, struct sbrmi_data, sbrmi_misc_dev);
+	kref_put(&data->kref, sbrmi_data_release);
+	return 0;
+}
+
 static long sbrmi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
@@ -570,6 +622,8 @@ static long sbrmi_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 static const struct file_operations sbrmi_fops = {
 	.owner		= THIS_MODULE,
+	.open		= sbrmi_open,
+	.release	= sbrmi_release,
 	.unlocked_ioctl	= sbrmi_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
 };
