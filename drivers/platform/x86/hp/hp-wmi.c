@@ -1843,7 +1843,13 @@ static int platform_profile_omen_set(struct device *dev,
 
 static int thermal_profile_get(void)
 {
-	return hp_wmi_read_int(HPWMI_THERMAL_PROFILE_QUERY);
+	int tp = hp_wmi_read_int(HPWMI_THERMAL_PROFILE_QUERY);
+
+	/*
+	 * Only the low byte is the thermal profile. Some firmware (e.g. board
+	 * 8C15) packs OEM flags and the device posture into the upper bytes.
+	 */
+	return tp < 0 ? tp : tp & 0xff;
 }
 
 static int thermal_profile_set(int thermal_profile)
