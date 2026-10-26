@@ -109,22 +109,68 @@ static int get_lfps_half_cycle_clocks(const struct intel_crtc_state *crtc_state)
 		1000 / (2 * LFPS_CYCLE_COUNT);
 }
 
+#define ML_PHY_LOCK_LEN		252
+#define ML_PHY_LOCK_LEN_UHBR	396
+
 static int get_tphy2_p2_to_p0(const struct intel_crtc_state *crtc_state)
 {
-	return 12 * 1000;
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	return HAS_LT_PHY(display) ? 20 * 1000 : 12 * 1000;
 }
 
-static int get_establishment_period(const struct intel_crtc_state *crtc_state)
+static int get_ml_phy_lock_len(const struct intel_crtc_state *crtc_state)
 {
+	return intel_dp_is_uhbr(crtc_state) ? ML_PHY_LOCK_LEN_UHBR : ML_PHY_LOCK_LEN;
+}
+
+static int get_establishment_period(struct intel_dp *intel_dp,
+				    const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
 	int t1 = 50 * 1000;
-	int tps4 = 252;
-	/* port_clock is link rate in 10kbit/s units */
-	int tml_phy_lock = 1000 * 1000 * tps4 / crtc_state->port_clock;
+	/*
+	 * port_clock is link rate in 10kbit/s units, so tML_PHY_LOCK in ns is
+	 * ML_PHY_LOCK Length * Rate Div * 100000 / port_clock
+	 */
+	int tml_phy_lock = get_ml_phy_lock_len(crtc_state) *
+		intel_dp_link_symbol_size(crtc_state->port_clock) * 100000 /
+		crtc_state->port_clock;
+	int lttpr_count = 0;
 	int num_ml_phy_lock, tcds;
 
-	num_ml_phy_lock = 7 + DIV_ROUND_UP(6500, tml_phy_lock) + 1;
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		num_ml_phy_lock = 7 + DIV_ROUND_UP(6500, tml_phy_lock) + 1;
+	} else {
+		num_ml_phy_lock = 7;
+
+		lttpr_count = drm_dp_lttpr_count(intel_dp->lttpr_common_caps);
+		if (lttpr_count < 0) {
+			drm_dbg_kms(display->drm,
+				    "Invalid LTTPR count (%pe), assuming no LTTPR\n",
+				    ERR_PTR(lttpr_count));
+			lttpr_count = 0;
+		}
+	}
+
 	tcds = num_ml_phy_lock * tml_phy_lock;
 
+	if (lttpr_count > 0) {
+		/* tlw and tcs values are taken from DP2.1 spec */
+		int tlw = 13000;
+		int tcs = 10000;
+		int tlfps_period = get_lfps_cycle_time(crtc_state);
+		int tdcs = SILENCE_PERIOD_TIME + t1 + tcs +
+			   (lttpr_count - 1) * (tlw + tlfps_period);
+		int tacds = 70000;
+		int tds = 7 * tml_phy_lock;
+
+		/* tdrl is same as tcds */
+		return tlw + tlfps_period + tdcs + tacds +
+		       (lttpr_count - 1) * tds + tcds;
+	}
+
+	/* TODO: Add a check for data realign by DPCD 0x116[3] */
 	return SILENCE_PERIOD_TIME + t1 + tcds;
 }
 
@@ -144,13 +190,15 @@ static int get_establishment_period(const struct intel_crtc_state *crtc_state)
  * adding the "+ 1" term ensures all ML_PHY_LOCK sequences that start
  * within the CDS period complete within the CDS period regardless of
  * entry into the period
- * tML_PHY_LOCK = TPS4 Length * ( 10 / (Link Rate in MHz) )
- * TPS4 Length = 252 Symbols
+ * tML_PHY_LOCK = ML_PHY_LOCK Length * ( Rate Div / (Link Rate in Mbps) )
+ * ML_PHY_LOCK Length = 252 symbols for 8b/10b, 396 super symbols for 128b/132b
+ * Rate Div = 10 for 8b/10b, 32 for 128b/132b
  */
-static int _lnl_compute_aux_less_wake_time(const struct intel_crtc_state *crtc_state)
+static int _lnl_compute_aux_less_wake_time(struct intel_dp *intel_dp,
+					   const struct intel_crtc_state *crtc_state)
 {
 	int tphy2_p2_to_p0 = get_tphy2_p2_to_p0(crtc_state);
-	int establishment_period = get_establishment_period(crtc_state);
+	int establishment_period = get_establishment_period(intel_dp, crtc_state);
 
 	return DIV_ROUND_UP(tphy2_p2_to_p0 + get_lfps_cycle_time(crtc_state) +
 			    establishment_period, 1000);
@@ -165,7 +213,7 @@ _lnl_compute_aux_less_alpm_params(struct intel_dp *intel_dp,
 		lfps_half_cycle;
 
 	aux_less_wake_time =
-		_lnl_compute_aux_less_wake_time(crtc_state);
+		_lnl_compute_aux_less_wake_time(intel_dp, crtc_state);
 	aux_less_wake_lines = intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
 						       aux_less_wake_time);
 	silence_period = get_silence_period_symbols(crtc_state);
