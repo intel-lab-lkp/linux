@@ -196,10 +196,6 @@ static const struct evo_devinfo {
 		.usb_id = USB_ID(USB_AUDIENT_VID, USB_EVO4_PID),
 		.controls = evo4_controls,
 	},
-	{
-		.usb_id = USB_ID(USB_AUDIENT_VID, USB_EVO4_PID),
-		.controls = NULL,
-	},
 	{ 0 } /* sentinel */
 };
 
