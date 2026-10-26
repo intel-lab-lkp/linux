@@ -634,6 +634,11 @@ int xe_vm_madvise_ioctl(struct drm_device *dev, void *data, struct drm_file *fil
 		goto unlock_vm;
 	}
 
+	/* Consume queued resets before publishing new advice. */
+	err = xe_svm_garbage_collect(vm);
+	if (err)
+		goto unlock_vm;
+
 	err = xe_madvise_details_init(vm, args, &details);
 	if (err)
 		goto unlock_vm;

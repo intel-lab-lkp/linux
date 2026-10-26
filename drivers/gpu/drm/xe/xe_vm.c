@@ -1279,19 +1279,12 @@ static void vma_destroy_cb(struct dma_fence *fence,
 	xe_destroy_wq_queue(&vma->destroy_work);
 }
 
-static void xe_vm_assert_write_mode_or_garbage_collector(struct xe_vm *vm)
-{
-	lockdep_assert(lockdep_is_held_type(&vm->lock, 0) ||
-		       (lockdep_is_held_type(&vm->lock, 1) &&
-			lockdep_is_held_type(&vm->svm.garbage_collector.lock, 0)));
-}
-
 static void xe_vma_destroy(struct xe_vma *vma, struct dma_fence *fence)
 {
 	struct xe_vm *vm = xe_vma_vm(vma);
 	struct xe_bo *bo = xe_vma_bo(vma);
 
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held_write(&vm->lock);
 	xe_assert(vm->xe, list_empty(&vma->combined_links.destroy));
 
 	if (xe_vma_is_userptr(vma)) {
@@ -1387,7 +1380,7 @@ static int xe_vm_insert_vma(struct xe_vm *vm, struct xe_vma *vma)
 	int err;
 
 	xe_assert(vm->xe, xe_vma_vm(vma) == vm);
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held_write(&vm->lock);
 
 	mutex_lock(&vm->snap_mutex);
 	err = drm_gpuva_insert(&vm->gpuvm, &vma->gpuva);
@@ -1400,7 +1393,7 @@ static int xe_vm_insert_vma(struct xe_vm *vm, struct xe_vma *vma)
 static void xe_vm_remove_vma(struct xe_vm *vm, struct xe_vma *vma)
 {
 	xe_assert(vm->xe, xe_vma_vm(vma) == vm);
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held_write(&vm->lock);
 
 	mutex_lock(&vm->snap_mutex);
 	drm_gpuva_remove(&vma->gpuva);
@@ -2238,7 +2231,7 @@ static int xe_vm_query_vmas(struct xe_vm *vm, u64 start, u64 end)
 	struct drm_gpuva *gpuva;
 	u32 num_vmas = 0;
 
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held(&vm->lock);
 	drm_gpuvm_for_each_va_range(gpuva, &vm->gpuvm, start, end)
 		num_vmas++;
 
@@ -2251,7 +2244,7 @@ static int get_mem_attrs(struct xe_vm *vm, u32 *num_vmas, u64 start,
 	struct drm_gpuva *gpuva;
 	int i = 0;
 
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held(&vm->lock);
 
 	drm_gpuvm_for_each_va_range(gpuva, &vm->gpuvm, start, end) {
 		struct xe_vma *vma = gpuva_to_vma(gpuva);
@@ -2300,6 +2293,12 @@ int xe_vm_query_vmas_attrs_ioctl(struct drm_device *dev, void *data, struct drm_
 	err = down_write_killable(&vm->lock);
 	if (err)
 		goto put_vm;
+
+	if (!xe_vm_is_closed_or_banned(vm)) {
+		err = xe_svm_garbage_collect(vm);
+		if (err)
+			goto unlock_vm;
+	}
 
 	attrs_user = u64_to_user_ptr(args->vector_of_mem_attr);
 
@@ -2458,7 +2457,7 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
 	u64 range_end = addr + range;
 	int err;
 
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held_write(&vm->lock);
 
 	vm_dbg(&vm->xe->drm,
 	       "op=%d, addr=0x%016llx, range=0x%016llx, bo_offset_or_userptr=0x%016llx",
@@ -2665,7 +2664,7 @@ static struct xe_vma *new_vma(struct xe_vm *vm, struct drm_gpuva_op_map *op,
 	struct xe_vma *vma;
 	int err = 0;
 
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held_write(&vm->lock);
 
 	if (bo) {
 		err = 0;
@@ -2766,7 +2765,7 @@ static int xe_vma_op_commit(struct xe_vm *vm, struct xe_vma_op *op)
 
 	switch (op->base.op) {
 	case DRM_GPUVA_OP_MAP:
-		xe_vm_assert_write_mode_or_garbage_collector(vm);
+		lockdep_assert_held_write(&vm->lock);
 
 		err |= xe_vm_insert_vma(vm, op->map.vma);
 		if (!err)
@@ -2777,7 +2776,7 @@ static int xe_vma_op_commit(struct xe_vm *vm, struct xe_vma_op *op)
 		u8 tile_present =
 			gpuva_to_vma(op->base.remap.unmap->va)->tile_present;
 
-		xe_vm_assert_write_mode_or_garbage_collector(vm);
+		lockdep_assert_held_write(&vm->lock);
 
 		prep_vma_destroy(vm, gpuva_to_vma(op->base.remap.unmap->va),
 				 true);
@@ -2813,7 +2812,7 @@ static int xe_vma_op_commit(struct xe_vm *vm, struct xe_vma_op *op)
 		break;
 	}
 	case DRM_GPUVA_OP_UNMAP:
-		xe_vm_assert_write_mode_or_garbage_collector(vm);
+		lockdep_assert_held_write(&vm->lock);
 
 		prep_vma_destroy(vm, gpuva_to_vma(op->base.unmap.va), true);
 		op->flags |= XE_VMA_OP_COMMITTED;
@@ -2860,7 +2859,7 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
 	u8 id, tile_mask = 0;
 	int err = 0;
 
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held_write(&vm->lock);
 
 	for_each_tile(tile, vm->xe, id)
 		tile_mask |= 0x1 << id;
@@ -3043,7 +3042,7 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
 
 	switch (op->base.op) {
 	case DRM_GPUVA_OP_MAP:
-		xe_vm_assert_write_mode_or_garbage_collector(vm);
+		lockdep_assert_held_write(&vm->lock);
 
 		if (op->map.vma) {
 			prep_vma_destroy(vm, op->map.vma, post_commit);
@@ -3054,7 +3053,7 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
 	{
 		struct xe_vma *vma = gpuva_to_vma(op->base.unmap.va);
 
-		xe_vm_assert_write_mode_or_garbage_collector(vm);
+		lockdep_assert_held_write(&vm->lock);
 
 		if (vma) {
 			xe_svm_notifier_lock(vm);
@@ -3069,7 +3068,7 @@ static void xe_vma_op_unwind(struct xe_vm *vm, struct xe_vma_op *op,
 	{
 		struct xe_vma *vma = gpuva_to_vma(op->base.remap.unmap->va);
 
-		xe_vm_assert_write_mode_or_garbage_collector(vm);
+		lockdep_assert_held_write(&vm->lock);
 
 		if (op->remap.prev) {
 			prep_vma_destroy(vm, op->remap.prev, prev_post_commit);
@@ -4059,6 +4058,11 @@ int xe_vm_bind_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 		goto release_vm_lock;
 	}
 
+	/* Consume queued resets before replacing VMAs. */
+	err = xe_svm_garbage_collect(vm);
+	if (err)
+		goto release_vm_lock;
+
 	for (i = 0; i < args->num_binds; ++i) {
 		u64 range = bind_ops[i].range;
 		u64 addr = bind_ops[i].addr;
@@ -4874,7 +4878,7 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
 	u16 default_pat;
 	int err;
 
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held_write(&vm->lock);
 
 	if (is_madvise)
 		ops = drm_gpuvm_madvise_ops_create(&vm->gpuvm, map_req);
@@ -5008,7 +5012,7 @@ int xe_vm_alloc_madvise_vma(struct xe_vm *vm, uint64_t start, uint64_t range)
 		.map.va.range = range,
 	};
 
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held_write(&vm->lock);
 
 	vm_dbg(&vm->xe->drm, "MADVISE_OPS_CREATE: addr=0x%016llx, size=0x%016llx", start, range);
 
@@ -5040,7 +5044,7 @@ void xe_vm_find_cpu_addr_mirror_vma_range(struct xe_vm *vm, u64 *start, u64 *end
 {
 	struct xe_vma *prev, *next;
 
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held(&vm->lock);
 
 	if (*start >= SZ_4K) {
 		prev = xe_vm_find_vma_by_addr(vm, *start - SZ_4K);
@@ -5072,7 +5076,7 @@ int xe_vm_alloc_cpu_addr_mirror_vma(struct xe_vm *vm, uint64_t start, uint64_t r
 		.map.va.range = range,
 	};
 
-	xe_vm_assert_write_mode_or_garbage_collector(vm);
+	lockdep_assert_held_write(&vm->lock);
 
 	vm_dbg(&vm->xe->drm, "CPU_ADDR_MIRROR_VMA_OPS_CREATE: addr=0x%016llx, size=0x%016llx",
 	       start, range);

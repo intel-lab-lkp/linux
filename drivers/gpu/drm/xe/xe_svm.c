@@ -355,11 +355,35 @@ static void xe_vma_set_default_attributes(struct xe_vma *vma)
 	xe_vma_mem_attr_copy(&vma->attr, &default_attr);
 }
 
+/* vm->lock keeps the VMA and its attributes stable during this check. */
+static bool xe_svm_range_needs_attr_reset(struct xe_vm *vm, u64 start)
+{
+	struct xe_vma *vma;
+	u64 end;
+
+	lockdep_assert_held(&vm->lock);
+
+	vma = xe_vm_find_vma_by_addr(vm, start);
+	if (!vma || !(vma->gpuva.flags & XE_VMA_MADV_AUTORESET))
+		return false;
+
+	if (!xe_vma_has_default_mem_attrs(vma))
+		return true;
+
+	start = xe_vma_start(vma);
+	end = xe_vma_end(vma);
+	xe_vm_find_cpu_addr_mirror_vma_range(vm, &start, &end);
+
+	return start != xe_vma_start(vma) || end != xe_vma_end(vma);
+}
+
 static int xe_svm_range_set_default_attr(struct xe_vm *vm, u64 start, u64 end)
 {
 	struct xe_vma *vma;
 	bool has_default_attr;
 	int err;
+
+	lockdep_assert_held_write(&vm->lock);
 
 	vma = xe_vm_find_vma_by_addr(vm, start);
 	if (!vma)
@@ -396,70 +420,134 @@ static int xe_svm_range_set_default_attr(struct xe_vm *vm, u64 start, u64 end)
 		return err;
 	}
 
-	/*
-	 * On call from xe_svm_handle_pagefault original VMA might be changed
-	 * signal this to lookup for VMA again.
-	 */
-	return -EAGAIN;
+	return 0;
 }
 
-static int xe_svm_garbage_collector(struct xe_vm *vm)
+/*
+ * With reset_attrs false, defer ranges requiring a VMA change and return
+ * -EAGAIN after collecting the remaining ready ranges in the batch. The
+ * caller must release all read-side state before collecting them with
+ * vm->lock held for write.
+ */
+static int xe_svm_garbage_collector(struct xe_vm *vm, bool reset_attrs)
 {
 	struct xe_svm_range *range;
-	u64 range_start;
-	u64 range_end;
-	int err, ret = 0;
+	LIST_HEAD(pending);
+	LIST_HEAD(deferred);
+	u64 range_start, range_end;
+	bool needs_reset;
+	int err = 0, ret = 0;
 
 	lockdep_assert_held(&vm->lock);
+	if (reset_attrs)
+		lockdep_assert_held_write(&vm->lock);
 
 	if (xe_vm_is_closed_or_banned(vm))
 		return -ENOENT;
 
 	guard(mutex)(&vm->svm.garbage_collector.lock);
 
+	/* Process a finite batch, excluding events queued during this pass. */
+	spin_lock(&vm->svm.garbage_collector.list_lock);
+	if (list_empty(&vm->svm.garbage_collector.range_list)) {
+		spin_unlock(&vm->svm.garbage_collector.list_lock);
+		return 0;
+	}
+	list_splice_init(&vm->svm.garbage_collector.range_list, &pending);
+	spin_unlock(&vm->svm.garbage_collector.list_lock);
+
 	for (;;) {
 		spin_lock(&vm->svm.garbage_collector.list_lock);
-		range = list_first_entry_or_null(&vm->svm.garbage_collector.range_list,
-						 typeof(*range),
+		range = list_first_entry_or_null(&pending, typeof(*range),
 						 garbage_collector_link);
-		if (!range)
+		if (!range) {
+			spin_unlock(&vm->svm.garbage_collector.list_lock);
 			break;
+		}
 
 		range_start = xe_svm_range_start(range);
 		range_end = xe_svm_range_end(range);
-
 		list_del(&range->garbage_collector_link);
 		spin_unlock(&vm->svm.garbage_collector.list_lock);
+
+		/*
+		 * Keep the backing range alive until its attributes can be
+		 * reset. The GC mutex excludes other collectors and explicit
+		 * range removal requires vm->lock for write.
+		 */
+		needs_reset = xe_svm_range_needs_attr_reset(vm, range_start);
+		if (needs_reset && !reset_attrs) {
+			spin_lock(&vm->svm.garbage_collector.list_lock);
+			list_add_tail(&range->garbage_collector_link, &deferred);
+			spin_unlock(&vm->svm.garbage_collector.list_lock);
+			ret = -EAGAIN;
+			continue;
+		}
 
 		err = __xe_svm_garbage_collector(vm, range);
 		if (err) {
 			drm_warn(&vm->xe->drm,
 				 "Garbage collection failed: %pe\n",
 				 ERR_PTR(err));
+			/* Leave the failed range in the tree for VM teardown. */
 			xe_vm_kill(vm, true);
-			return err;
+			goto out;
 		}
 
-		err = xe_svm_range_set_default_attr(vm, range_start, range_end);
-		if (err) {
-			if (err == -EAGAIN)
-				ret = -EAGAIN;
-			else
-				return err;
+		if (needs_reset) {
+			err = xe_svm_range_set_default_attr(vm, range_start, range_end);
+			if (err)
+				goto out;
 		}
 	}
+
+out:
+	/* Restore ranges not yet processed, including deferred resets. */
+	spin_lock(&vm->svm.garbage_collector.list_lock);
+	list_splice_tail_init(&pending, &vm->svm.garbage_collector.range_list);
+	list_splice_tail_init(&deferred, &vm->svm.garbage_collector.range_list);
 	spin_unlock(&vm->svm.garbage_collector.list_lock);
 
-	return ret;
+	return err ?: ret;
+}
+
+/**
+ * xe_svm_garbage_collect() - Collect SVM ranges and reset their attributes
+ * @vm: The VM, with vm->lock held for write.
+ *
+ * Process one batch of queued ranges, including attribute resets. Ranges
+ * queued during this pass are left for a later collection.
+ *
+ * Call before changing advice or bindings, or querying attributes, so the
+ * batch is reset before applying new advice or reporting attributes.
+ * No VMA pointer may be retained across this call.
+ *
+ * Return: 0 on success, negative error code on error.
+ */
+int xe_svm_garbage_collect(struct xe_vm *vm)
+{
+	lockdep_assert_held_write(&vm->lock);
+
+	if (!xe_vm_in_fault_mode(vm))
+		return 0;
+
+	return xe_svm_garbage_collector(vm, true);
 }
 
 static void xe_svm_garbage_collector_work_func(struct work_struct *w)
 {
 	struct xe_vm *vm = container_of(w, struct xe_vm,
 					svm.garbage_collector.work);
+	int err = 0;
 
-	guard(rwsem_read)(&vm->lock);
-	xe_svm_garbage_collector(vm);
+	scoped_guard(rwsem_read, &vm->lock)
+		err = xe_svm_garbage_collector(vm, false);
+
+	if (err != -EAGAIN)
+		return;
+
+	guard(rwsem_write)(&vm->lock);
+	xe_svm_garbage_collect(vm);
 }
 
 #if IS_ENABLED(CONFIG_DRM_XE_PAGEMAP)
@@ -1301,13 +1389,15 @@ retry:
 	if (range) {
 		mutex_unlock(&range->lock);
 		drm_gpusvm_range_put(&range->base);
-	}
 
-	/* Always process UNMAPs first so view SVM ranges is current */
-	err = xe_svm_garbage_collector(vm);
-	if (err) {
-		xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_SVM_GARBAGE_COLLECTOR);
-		return err;
+		/* The caller collected before the initial service attempt. */
+		err = xe_svm_garbage_collector(vm, false);
+		if (err) {
+			if (err != -EAGAIN)
+				xe_pagefault_set_error(pf,
+						      XE_PAGEFAULT_ERROR_SVM_GARBAGE_COLLECTOR);
+			return err;
+		}
 	}
 
 	dpagemap = ctx.devmem_only ? xe_tile_local_pagemap(tile) :
@@ -1467,14 +1557,28 @@ err_out:
  * Create GPU bindings for a SVM page fault. Optionally migrate to device
  * memory.
  *
- * Return: 0 on success, negative error code on error.
+ * The caller must hold vm->lock for read. On -EAGAIN, discard @vma before
+ * releasing that lock. Collect with write access, then repeat VMA lookup
+ * and permission checks before retrying.
+ *
+ * Return: 0 on success, -EAGAIN if the caller must collect with write
+ * access and repeat VMA lookup, or another negative error code on error.
  */
 int xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
 			    struct xe_pagefault *pf, struct xe_gt *gt,
 			    u64 fault_addr, bool atomic)
 {
 	int need_vram, ret;
-retry:
+
+	/* Consume older UNMAPs before reading advice or building the context. */
+	ret = xe_svm_garbage_collector(vm, false);
+	if (ret) {
+		if (ret != -EAGAIN)
+			xe_pagefault_set_error(pf,
+					       XE_PAGEFAULT_ERROR_SVM_GARBAGE_COLLECTOR);
+		return ret;
+	}
+
 	need_vram = xe_vma_need_vram_for_atomic(vm->xe, vma, atomic);
 	if (need_vram < 0) {
 		xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_SVM_NEEDS_VRAM_CHECK);
@@ -1484,18 +1588,9 @@ retry:
 	ret =  __xe_svm_handle_pagefault(vm, vma, pf, gt, fault_addr,
 					 need_vram ? true : false);
 	if (ret == -EAGAIN) {
-		/*
-		 * Retry once on -EAGAIN to re-lookup the VMA, as the original VMA
-		 * may have been split by xe_svm_range_set_default_attr.
-		 */
-		vma = xe_vm_find_vma_by_addr(vm, fault_addr);
-		if (!vma) {
-			xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_SVM_VMA_NOT_FOUND);
-			return -EINVAL;
-		}
-
+		/* Retry from the caller after collecting with write access. */
 		xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_NONE);
-		goto retry;
+		return ret;
 	}
 	if (ret && xe_pagefault_get_error(pf) == XE_PAGEFAULT_ERROR_NONE)
 		xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_SVM_SERVICE_FAILED);

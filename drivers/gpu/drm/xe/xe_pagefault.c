@@ -270,8 +270,9 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
 	struct xe_device *xe = gt_to_xe(gt);
 	struct xe_vm *vm;
 	struct xe_vma *vma = NULL;
+	enum xe_pagefault_error error;
 	int err;
-	bool atomic;
+	bool atomic, svm_relookup = false;
 	u32 asid = FIELD_GET(XE_PAGEFAULT_ASID_MASK, pf->consumer.id);
 
 	/* Producer flagged this fault to be nacked */
@@ -297,10 +298,13 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
 		goto unlock_vm;
 	}
 
+lookup_vma:
 	vma = xe_vm_find_vma_by_addr(vm, xe_pagefault_addr(pf));
 	if (!vma) {
 		err = -EINVAL;
-		xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_VMA_NOT_FOUND);
+		xe_pagefault_set_error(pf, svm_relookup ?
+				       XE_PAGEFAULT_ERROR_SVM_VMA_NOT_FOUND :
+				       XE_PAGEFAULT_ERROR_VMA_NOT_FOUND);
 		goto unlock_vm;
 	}
 
@@ -313,11 +317,36 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
 
 	atomic = xe_pagefault_access_is_atomic(pf->consumer.access_type);
 
-	if (xe_vma_is_cpu_addr_mirror(vma))
+	if (xe_vma_is_cpu_addr_mirror(vma)) {
 		err = xe_svm_handle_pagefault(vm, vma, pf, gt,
 					      xe_pagefault_addr(pf), atomic);
-	else
+		if (err == -EAGAIN) {
+			/* GC needs to change VMAs. Drop all read-side state. */
+			vma = NULL;
+			up_read(&vm->lock);
+			down_write(&vm->lock);
+
+			if (xe_vm_is_closed(vm)) {
+				err = -ENOENT;
+				error = XE_PAGEFAULT_ERROR_VM_CLOSED;
+			} else {
+				err = xe_svm_garbage_collect(vm);
+				error = XE_PAGEFAULT_ERROR_SVM_GARBAGE_COLLECTOR;
+			}
+
+			downgrade_write(&vm->lock);
+			if (err) {
+				xe_pagefault_set_error(pf, error);
+				goto unlock_vm;
+			}
+
+			xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_NONE);
+			svm_relookup = true;
+			goto lookup_vma;
+		}
+	} else {
 		err = xe_pagefault_handle_vma(gt, vma, pf, atomic);
+	}
 
 unlock_vm:
 	if (err)
