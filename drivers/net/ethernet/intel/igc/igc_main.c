@@ -1682,6 +1682,12 @@ done:
 			goto out_drop;
 	}
 
+	tso = igc_tso(tx_ring, first, launch_time, first_flag, &hdr_len);
+	if (tso < 0)
+		goto out_drop;
+	else if (!tso)
+		igc_tx_csum(tx_ring, first, launch_time, first_flag);
+
 	if (unlikely(test_bit(IGC_RING_FLAG_TX_HWTSTAMP, &tx_ring->flags) &&
 		     skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
 		unsigned long flags;
@@ -1700,12 +1706,6 @@ done:
 
 		spin_unlock_irqrestore(&adapter->ptp_tx_lock, flags);
 	}
-
-	tso = igc_tso(tx_ring, first, launch_time, first_flag, &hdr_len);
-	if (tso < 0)
-		goto out_drop;
-	else if (!tso)
-		igc_tx_csum(tx_ring, first, launch_time, first_flag);
 
 	igc_tx_map(tx_ring, first, hdr_len);
 
