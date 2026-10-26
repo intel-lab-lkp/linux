@@ -326,7 +326,7 @@ static int snd_ctl_evo_boolean_set(struct snd_kcontrol *kctl,
 		int ret;
 
 		if (ctype->invert)
-			buf ^= 0x1;
+			buf ^= cpu_to_le32(0x1);
 
 		ret = snd_evo_get_cur(mixer, value + i, index,
 				      &rbuf, sizeof(rbuf));
