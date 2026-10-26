@@ -504,12 +504,7 @@ struct mbox_chan *mbox_request_channel_byname(struct mbox_client *cl,
 }
 EXPORT_SYMBOL_GPL(mbox_request_channel_byname);
 
-/**
- * mbox_free_channel - The client relinquishes control of a mailbox
- *			channel by this call.
- * @chan: The mailbox channel to be freed.
- */
-void mbox_free_channel(struct mbox_chan *chan)
+static void __mbox_free_channel(struct mbox_chan *chan)
 {
 	if (!chan || !chan->cl)
 		return;
@@ -518,6 +513,17 @@ void mbox_free_channel(struct mbox_chan *chan)
 		chan->mbox->ops->shutdown(chan);
 
 	mbox_clean_and_put_channel(chan);
+}
+
+/**
+ * mbox_free_channel - The client relinquishes control of a mailbox
+ *			channel by this call.
+ * @chan: The mailbox channel to be freed.
+ */
+void mbox_free_channel(struct mbox_chan *chan)
+{
+	guard(mutex)(&con_mutex);
+	__mbox_free_channel(chan);
 }
 EXPORT_SYMBOL_GPL(mbox_free_channel);
 
@@ -596,7 +602,7 @@ void mbox_controller_unregister(struct mbox_controller *mbox)
 		list_del(&mbox->node);
 
 		for (i = 0; i < mbox->num_chans; i++)
-			mbox_free_channel(&mbox->chans[i]);
+			__mbox_free_channel(&mbox->chans[i]);
 
 		if (mbox->txdone_poll)
 			hrtimer_cancel(&mbox->poll_hrt);
