@@ -5,6 +5,7 @@ use kernel::{
         self,
         Registered, //
     },
+    pm::PMProfile,
     prelude::*,
     uaccess::UserSlice,
     uapi, //
@@ -37,6 +38,8 @@ impl TyrDrmFileData {
         devquery: &mut uapi::drm_panthor_dev_query,
         _file: &TyrDrmFile,
     ) -> Result<u32> {
+        // Runtime suspend called when pm_scope gets dropped
+        let _pm_scope = reg_data.pm.get(PMProfile::new())?;
         if devquery.pointer == 0 {
             match devquery.type_ {
                 uapi::drm_panthor_dev_query_type_DRM_PANTHOR_DEV_QUERY_GPU_INFO => {
