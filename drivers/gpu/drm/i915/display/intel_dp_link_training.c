@@ -2271,6 +2271,24 @@ out:
 	return passed;
 }
 
+static void intel_dp_update_lttpr_count(struct intel_dp *intel_dp)
+{
+	u8 val;
+
+	/*
+	 * Program only for DP and return if LTTPR revision is less than 0x20
+	 * where 0:3 represents minor rev and 4:7 represent major rev
+	 */
+	if (intel_dp_is_edp(intel_dp) ||
+	    intel_dp->lttpr_common_caps[0] < 0x20)
+		return;
+
+	val = intel_dp->lttpr_common_caps[DP_PHY_REPEATER_CNT -
+					  DP_LT_TUNABLE_PHY_REPEATER_FIELD_DATA_STRUCTURE_REV];
+	if (drm_dp_dpcd_write_byte(&intel_dp->aux, DP_TOTAL_LTTPR_CNT, val) < 0)
+		lt_dbg(intel_dp, DP_PHY_DPRX, "Failed to write total LTTPR count\n");
+}
+
 /**
  * intel_dp_start_link_train - start link training
  * @state: Atomic state
@@ -2309,6 +2327,8 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 		lttpr_count = 0;
 
 	intel_dp_prepare_link_train(intel_dp, crtc_state);
+
+	intel_dp_update_lttpr_count(intel_dp);
 
 	if (intel_dp_is_uhbr(crtc_state))
 		passed = intel_dp_128b132b_link_train(intel_dp, crtc_state, lttpr_count);
