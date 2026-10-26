@@ -799,6 +799,19 @@ bl_cleanup_layoutcommit(struct nfs4_layoutcommit_data *lcdata)
 }
 
 static int
+bl_sync(struct inode *inode, bool datasync)
+{
+	/* An error nobody has seen yet is not this LAYOUTCOMMIT's to return */
+	errseq_t since = READ_ONCE(inode->i_mapping->wb_err);
+	int ret;
+
+	ret = pnfs_layoutcommit_inode(inode, true);
+	if (ret)
+		return ret;
+	return filemap_check_wb_err(inode->i_mapping, since);
+}
+
+static int
 bl_set_layoutdriver(struct nfs_server *server, const struct nfs_fh *fh)
 {
 	dprintk("%s enter\n", __func__);
@@ -976,7 +989,7 @@ static struct pnfs_layoutdriver_type blocklayout_type = {
 	.free_deviceid_node		= bl_free_deviceid_node,
 	.pg_read_ops			= &bl_pg_read_ops,
 	.pg_write_ops			= &bl_pg_write_ops,
-	.sync				= pnfs_generic_sync,
+	.sync				= bl_sync,
 };
 
 static struct pnfs_layoutdriver_type scsilayout_type = {
@@ -1000,7 +1013,7 @@ static struct pnfs_layoutdriver_type scsilayout_type = {
 	.free_deviceid_node		= bl_free_deviceid_node,
 	.pg_read_ops			= &bl_pg_read_ops,
 	.pg_write_ops			= &bl_pg_write_ops,
-	.sync				= pnfs_generic_sync,
+	.sync				= bl_sync,
 };
 
 
