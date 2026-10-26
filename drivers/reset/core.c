@@ -1015,7 +1015,7 @@ static int __reset_add_reset_gpio_device(struct fwnode_handle *fwnode,
 	struct property_entry properties[3] = { };
 	unsigned int offset, flags, lflags;
 	struct reset_gpio_lookup *rgpio_dev;
-	struct device *parent;
+	struct device *parent, *aux_parent;
 	int ret, prop = 0;
 
 	/*
@@ -1093,7 +1093,15 @@ static int __reset_add_reset_gpio_device(struct fwnode_handle *fwnode,
 		goto err_put_fwnode;
 	}
 
-	ret = reset_create_gpio_aux_device(rgpio_dev, parent);
+	/*
+	 * The GPIO device goes away when its controller is unbound, which would
+	 * leave the reset-gpio device without a place in sysfs. Hang it off the
+	 * controller instead, which stays around and gets a new GPIO device
+	 * when it is bound again. gpiolib parents the GPIO device to the chip's
+	 * parent device, if any; otherwise fall back to the GPIO device itself.
+	 */
+	aux_parent = parent->parent ?: parent;
+	ret = reset_create_gpio_aux_device(rgpio_dev, aux_parent);
 	if (ret)
 		goto err_del_swnode;
 
