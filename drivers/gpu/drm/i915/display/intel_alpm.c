@@ -43,10 +43,20 @@ bool intel_alpm_is_alpm_aux_less(struct intel_dp *intel_dp,
 		(crtc_state->has_lobf && intel_alpm_aux_less_wake_supported(intel_dp));
 }
 
+static bool intel_alpm_source_supported(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	return intel_dp_is_edp(intel_dp) || DISPLAY_VER(display) >= 35;
+}
+
 int intel_alpm_init_dpcd(struct intel_dp *intel_dp)
 {
 	u8 dpcd;
 	int ret;
+
+	if (!intel_alpm_source_supported(intel_dp))
+		return 0;
 
 	ret = drm_dp_dpcd_read_byte(&intel_dp->aux, DP_RECEIVER_ALPM_CAP, &dpcd);
 	if (ret < 0)
@@ -59,6 +69,9 @@ int intel_alpm_init_dpcd(struct intel_dp *intel_dp)
 
 void intel_alpm_init(struct intel_dp *intel_dp)
 {
+	if (!intel_alpm_source_supported(intel_dp))
+		return;
+
 	mutex_init(&intel_dp->alpm.lock);
 }
 
@@ -750,7 +763,11 @@ void intel_alpm_disable(struct intel_dp *intel_dp)
 	struct intel_display *display = to_intel_display(intel_dp);
 	enum transcoder cpu_transcoder = intel_dp->alpm.transcoder;
 
-	if (DISPLAY_VER(display) < 20 || !intel_dp->alpm_dpcd)
+	/*
+	 * Don't check sink ALPM caps here, they are reset on disconnect
+	 * before the CRTC is disabled.
+	 */
+	if (DISPLAY_VER(display) < 20 || !intel_alpm_source_supported(intel_dp))
 		return;
 
 	mutex_lock(&intel_dp->alpm.lock);
