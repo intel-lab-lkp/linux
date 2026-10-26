@@ -275,6 +275,10 @@ static int snd_ctl_evo_boolean_get(struct snd_kcontrol *kctl,
 
 	int i;
 
+	CLASS(snd_usb_lock, pm)(mixer->chip);
+	if (pm.err < 0)
+		return pm.err;
+
 	for (i = 0; i < hwchan; i++) {
 		u32 buf;
 		int ret;
@@ -311,6 +315,10 @@ static int snd_ctl_evo_boolean_set(struct snd_kcontrol *kctl,
 
 	int changed = 0;
 	int i;
+
+	CLASS(snd_usb_lock, pm)(mixer->chip);
+	if (pm.err < 0)
+		return pm.err;
 
 	for (i = 0; i < hwchan; i++) {
 		u32 rbuf;
@@ -352,6 +360,10 @@ static int snd_ctl_evo_integer_get(struct snd_kcontrol *kctl,
 
 	int i;
 
+	CLASS(snd_usb_lock, pm)(mixer->chip);
+	if (pm.err < 0)
+		return pm.err;
+
 	for (i = 0; i < hwchan; i++) {
 		u16 buf;
 		s16 val;
@@ -385,6 +397,10 @@ static int snd_ctl_evo_integer_set(struct snd_kcontrol *kctl,
 
 	int changed = 0;
 	int i;
+
+	CLASS(snd_usb_lock, pm)(mixer->chip);
+	if (pm.err < 0)
+		return pm.err;
 
 	for (i = 0; i < hwchan; i++) {
 		s16 rbuf;
