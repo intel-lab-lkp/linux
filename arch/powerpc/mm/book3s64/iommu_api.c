@@ -371,6 +371,7 @@ bool mm_iommu_is_devmem(struct mm_struct *mm, unsigned long hpa,
 			 * and the caller needs to distinguish this situation.
 			 */
 			*size = min(1UL << pageshift, end - hpa);
+			rcu_read_unlock();
 			return true;
 		}
 	}
