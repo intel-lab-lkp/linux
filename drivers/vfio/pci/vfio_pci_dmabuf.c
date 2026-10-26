@@ -12,6 +12,7 @@ MODULE_IMPORT_NS("DMA_BUF");
 struct vfio_pci_dma_buf {
 	struct dma_buf *dmabuf;
 	struct vfio_pci_core_device *vdev;
+	struct pci_dev *pdev;
 	struct list_head dmabufs_elm;
 	size_t size;
 	struct phys_vec *phys_vec;
@@ -26,9 +27,6 @@ static int vfio_pci_dma_buf_attach(struct dma_buf *dmabuf,
 				   struct dma_buf_attachment *attachment)
 {
 	struct vfio_pci_dma_buf *priv = dmabuf->priv;
-
-	if (!attachment->peer2peer)
-		return -EOPNOTSUPP;
 
 	if (priv->revoked)
 		return -ENODEV;
@@ -95,15 +93,31 @@ static void vfio_pci_dma_buf_release(struct dma_buf *dmabuf)
 		up_write(&priv->vdev->memory_lock);
 		vfio_device_put_registration(&priv->vdev->vdev);
 	}
+	pci_dev_put(priv->pdev);
 	kfree(priv->phys_vec);
 	kfree(priv);
 }
 
-static const struct dma_buf_ops vfio_pci_dmabuf_ops = {
-	.attach = vfio_pci_dma_buf_attach,
+static const struct dma_buf_mapping_sgt_exp_ops vfio_pci_dma_buf_sgt_ops = {
 	.map_dma_buf = vfio_pci_dma_buf_map,
 	.unmap_dma_buf = vfio_pci_dma_buf_unmap,
+};
+
+static int vfio_pci_dma_buf_match_mapping(struct dma_buf_match_args *args)
+{
+	struct vfio_pci_dma_buf *priv = args->dmabuf->priv;
+	struct dma_buf_mapping_match sgt_match[1];
+
+	sgt_match[0] = DMA_BUF_EMAPPING_SGT_P2P(&vfio_pci_dma_buf_sgt_ops,
+						priv->pdev);
+
+	return dma_buf_match_mapping(args, sgt_match, ARRAY_SIZE(sgt_match));
+}
+
+static const struct dma_buf_ops vfio_pci_dmabuf_ops = {
+	.attach = vfio_pci_dma_buf_attach,
 	.release = vfio_pci_dma_buf_release,
+	.match_mapping = vfio_pci_dma_buf_match_mapping,
 };
 
 /*
@@ -300,6 +314,7 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 		goto err_dev_put;
 	}
 
+	priv->pdev = pci_dev_get(vdev->pdev);
 	kref_init(&priv->kref);
 	init_completion(&priv->comp);
 
