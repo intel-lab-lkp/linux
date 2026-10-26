@@ -96,7 +96,7 @@ int tegra_vde_dmabuf_cache_map(struct tegra_vde *vde,
 		goto ref;
 	}
 
-	attachment = dma_buf_attach(dmabuf, dev);
+	attachment = dma_buf_sgt_attach(dmabuf, dev);
 	if (IS_ERR(attachment)) {
 		dev_err(dev, "Failed to attach dmabuf\n");
 		err = PTR_ERR(attachment);
