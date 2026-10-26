@@ -97,6 +97,12 @@ int dma_buf_match_mapping(struct dma_buf_match_args *args,
 			  size_t exp_len);
 
 /*
+ * Internal: Selection is made by exporters through &dma_buf_ops.select_mapping
+ * in dma_buf_pin() or map paths. Importers never call this.
+ */
+int dma_buf_mapping_select(struct dma_buf_attachment *attach);
+
+/*
  * DMA Mapped Scatterlist Type
  *
  * When this type is matched the map/unmap functions are:

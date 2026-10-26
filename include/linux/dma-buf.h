@@ -337,6 +337,34 @@ struct dma_buf_ops {
 	 * any time until the final location is resolved during map/pin.
 	 */
 	int (*match_mapping)(struct dma_buf_match_args *args);
+
+	/**
+	 * @select_mapping:
+	 *
+	 * Called with the dma_resv lock held from dma_buf_pin() and from the
+	 * map functions, before the type's map callback, to choose which
+	 * entry of &dma_buf_attachment.matches this attachment is mapped
+	 * with. The exporter settles the buffer's placement here, taking all
+	 * live mappings and pinned attachments into account, and returns the
+	 * entry that placement can serve.
+	 *
+	 * The core records the choice and does not ask again, across any
+	 * number of unmaps and remaps, until the exporter has delivered
+	 * &dma_buf_attach_ops.invalidate_mappings to this attachment. The
+	 * exporter must therefore keep the recorded type servable: moving the
+	 * buffer somewhere that type cannot be produced from requires
+	 * invalidating first. Attachments that cannot be invalidated keep
+	 * their first choice for life.
+	 *
+	 * Optional. Without it the first entry of the match set, the
+	 * exporter's most preferred, is used.
+	 *
+	 * Returns: a pointer into &dma_buf_attachment.matches, or an ERR_PTR.
+	 * -EBUSY means the attachment cannot be served without disturbing a
+	 * mapping that cannot be invalidated.
+	 */
+	const struct dma_buf_mapping_match *(*select_mapping)(
+		struct dma_buf_attachment *attach);
 };
 
 /**
@@ -532,12 +560,16 @@ struct dma_buf_attach_ops {
  * @importer_ops: importer operations for this attachment, if provided
  * dma_buf_map/unmap_attachment() must be called with the dma_resv lock held.
  * @importer_priv: importer specific attachment data.
- * @map_type: The match this attachment is mapped with. Until the exporter
- *            selects otherwise it holds the exporter's default, the first
- *            entry of @matches.
+ * @map_type: The match this attachment is mapped with. Chosen by
+ *            &dma_buf_ops.select_mapping at the first pin or map and kept,
+ *            enforced by the core, until &dma_buf_attach_ops.invalidate_mappings
+ *            is delivered to this attachment. Before the first selection it
+ *            holds the exporter's default, the first entry of @matches.
  * @matches: The match set negotiated at attach time: every mapping type both
  *           sides accept, in the exporter's order of preference.
  * @nr_matches: Number of valid entries in @matches.
+ * @selected: True once @map_type has been chosen by the exporter; cleared
+ *            only by dma_buf_invalidate_mappings().
  *
  * This structure holds the attachment information between the dma_buf buffer
  * and its user device(s). The list contains one attachment struct per device
@@ -559,6 +591,7 @@ struct dma_buf_attachment {
 	struct dma_buf_mapping_match map_type;
 	struct dma_buf_mapping_match matches[DMA_BUF_MAX_MATCHES];
 	unsigned int nr_matches;
+	bool selected;
 };
 
 /**
