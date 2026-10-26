@@ -38,7 +38,8 @@ static void tegra_vde_release_entry(struct tegra_vde_cache_entry *entry)
 	if (entry->vde->domain)
 		tegra_vde_iommu_unmap(entry->vde, entry->iova);
 
-	dma_buf_unmap_attachment_unlocked(entry->a, entry->sgt, entry->dma_dir);
+	dma_buf_sgt_unmap_attachment_unlocked(entry->a, entry->sgt,
+					      entry->dma_dir);
 	dma_buf_detach(dmabuf, entry->a);
 	dma_buf_put(dmabuf);
 
@@ -152,7 +153,7 @@ ref:
 err_free:
 	kfree(entry);
 err_unmap:
-	dma_buf_unmap_attachment_unlocked(attachment, sgt, dma_dir);
+	dma_buf_sgt_unmap_attachment_unlocked(attachment, sgt, dma_dir);
 err_detach:
 	dma_buf_detach(dmabuf, attachment);
 err_unlock:

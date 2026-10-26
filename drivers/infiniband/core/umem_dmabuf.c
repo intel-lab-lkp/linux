@@ -106,8 +106,8 @@ void ib_umem_dmabuf_unmap_pages(struct ib_umem_dmabuf *umem_dmabuf)
 		umem_dmabuf->last_sg_trim = 0;
 	}
 
-	dma_buf_unmap_attachment(umem_dmabuf->attach, umem_dmabuf->sgt,
-				 DMA_BIDIRECTIONAL);
+	dma_buf_sgt_unmap_attachment(umem_dmabuf->attach, umem_dmabuf->sgt,
+				     DMA_BIDIRECTIONAL);
 
 	umem_dmabuf->sgt = NULL;
 }
