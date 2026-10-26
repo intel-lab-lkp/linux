@@ -447,10 +447,9 @@ static int sx9310_read_hysteresis(struct sx_common_data *data,
 
 	regval = FIELD_GET(SX9310_REG_PROX_CTRL10_HYST_MASK, regval);
 	if (!regval)
-		regval = 5;
-
-	/* regval is at most 5 */
-	*val = pthresh >> (5 - regval);
+		*val = 0;
+	else
+		*val = pthresh >> (5 - regval);
 
 	return IIO_VAL_INT;
 }
