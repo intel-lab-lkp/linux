@@ -471,7 +471,9 @@ void mptcp_subflow_reset(struct sock *ssk)
 	if (ssk->sk_state == TCP_CLOSE)
 		return;
 
-	/* must hold: tcp_done() could drop last reference on parent */
+	/* must hold: the parent reference owned by the subflow context is
+	 * released together with ssk, which tcp_done() can destroy
+	 */
 	sock_hold(sk);
 
 	subflow->resetting = 1;
@@ -820,6 +822,8 @@ static void subflow_ctx_destruct(struct sock *ssk)
 
 	rcu_assign_pointer(inet_csk(ssk)->icsk_ulp_data, NULL);
 	ctx->tcp_sock_destruct(ssk);
+	if (ctx->conn)
+		sock_put(ctx->conn);
 	kfree_rcu(ctx, rcu);
 }
 
@@ -2120,7 +2124,6 @@ static void subflow_ulp_release(struct sock *ssk)
 		if (!release && !test_and_set_bit(MPTCP_WORK_CLOSE_SUBFLOW,
 						  &mptcp_sk(sk)->flags))
 			mptcp_schedule_work(sk);
-		sock_put(sk);
 	}
 
 	mptcp_subflow_ops_undo_override(ssk);
