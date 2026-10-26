@@ -735,6 +735,9 @@ static int exfat_prepare_valid_range(struct inode *inode, loff_t start,
 		index = pos >> PAGE_SHIFT;
 		next = min(((loff_t)index + 1) << PAGE_SHIFT, end);
 
+		if (exfat_forced_shutdown(inode->i_sb))
+			return -EIO;
+
 		balance_dirty_pages_ratelimited(mapping);
 
 		folio = read_mapping_folio(mapping, index, NULL);

@@ -165,6 +165,9 @@ static int exfat_write_iomap_begin(struct inode *inode, loff_t offset, loff_t le
 	loff_t end;
 	int err;
 
+	if (exfat_forced_shutdown(inode->i_sb))
+		return -EIO;
+
 	err = __exfat_iomap_begin(inode, offset, length, flags, iomap, true);
 	if (err || flags & (IOMAP_DIRECT | IOMAP_FAULT) ||
 	    iomap->flags & IOMAP_F_NEW)
