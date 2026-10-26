@@ -128,7 +128,7 @@ static int rppx1_hist_fill_params(struct rpp_module *mod,
 	 * Set last measurement line for ready interrupt. Ignore the value
 	 * from the parameters as it is only useful for fast-channel switching.
 	 */
-	write(priv, mod->base + HIST_LAST_MEAS_LINE_REG, v_offs + v_size + 1);
+	write(priv, mod->base + HIST_LAST_MEAS_LINE_REG, v_offs + v_size - 1);
 
 	/* Set measurement window weights. */
 	write(priv, mod->base + HIST_WEIGHT_00TO30_REG,
