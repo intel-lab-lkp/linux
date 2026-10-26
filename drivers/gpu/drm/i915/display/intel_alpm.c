@@ -124,6 +124,42 @@ static int get_ml_phy_lock_len(const struct intel_crtc_state *crtc_state)
 	return intel_dp_is_uhbr(crtc_state) ? ML_PHY_LOCK_LEN_UHBR : ML_PHY_LOCK_LEN;
 }
 
+/*
+ * Establishment period in ns with LTTPRs, taken from the DP2.1 VESA spec.
+ * The spec values are computed with the max silence and LFPS periods and
+ * are longer than what the formula gives with LTTPRs present. Using the
+ * formula result has been seen to cause flip done timeouts, so prefer the
+ * spec values for the listed link rates.
+ */
+static const struct {
+	int port_clock;
+	int period[6];	/* indexed by LTTPR count - 1 */
+} lttpr_establishment_periods[] = {
+	{  162000, { 155670, 181160, 206650, 232140, 257620, 283110 } },	/* RBR */
+	{  270000, { 151310, 172450, 193580, 214710, 235850, 256980 } },	/* HBR */
+	{  540000, { 148050, 165910, 183780, 201650, 219510, 237380 } },	/* HBR2 */
+	{  810000, { 146960, 163740, 180510, 197290, 214070, 230850 } },	/* HBR3 */
+	{ 1000000, { 153650, 177120, 200590, 224060, 247530, 271000 } },	/* UHBR10 */
+	{ 1350000, { 151350, 172520, 193690, 214860, 236030, 257200 } },	/* UHBR13.5 */
+	{ 2000000, { 149220, 168220, 187290, 206320, 225360, 244390 } },	/* UHBR20 */
+};
+
+static int get_lttpr_establishment_period(int port_clock, int lttpr_count)
+{
+	int i;
+
+	if (lttpr_count < 1 ||
+	    lttpr_count > ARRAY_SIZE(lttpr_establishment_periods[0].period))
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(lttpr_establishment_periods); i++) {
+		if (lttpr_establishment_periods[i].port_clock == port_clock)
+			return lttpr_establishment_periods[i].period[lttpr_count - 1];
+	}
+
+	return 0;
+}
+
 static int get_establishment_period(struct intel_dp *intel_dp,
 				    const struct intel_crtc_state *crtc_state)
 {
@@ -137,7 +173,7 @@ static int get_establishment_period(struct intel_dp *intel_dp,
 		intel_dp_link_symbol_size(crtc_state->port_clock) * 100000 /
 		crtc_state->port_clock;
 	int lttpr_count = 0;
-	int num_ml_phy_lock, tcds;
+	int num_ml_phy_lock, tcds, period;
 
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
 		num_ml_phy_lock = 7 + DIV_ROUND_UP(6500, tml_phy_lock) + 1;
@@ -154,6 +190,11 @@ static int get_establishment_period(struct intel_dp *intel_dp,
 	}
 
 	tcds = num_ml_phy_lock * tml_phy_lock;
+
+	period = get_lttpr_establishment_period(crtc_state->port_clock,
+						lttpr_count);
+	if (period)
+		return period;
 
 	if (lttpr_count > 0) {
 		/* tlw and tcs values are taken from DP2.1 spec */
