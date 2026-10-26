@@ -484,7 +484,19 @@ static size_t loongson2_cmc_dma_desc_residue(struct loongson2_cmc_dma_chan *lcha
 	ndtr = loongson2_cmc_dma_read(lddev, LOONGSON2_CMCDMA_CNDTR, lchan->id);
 	residue = ndtr << width;
 
-	if (lchan->desc->cyclic && next_sg == 0)
+	/*
+	 * For a cyclic descriptor that has wrapped (next_sg == 0), the
+	 * current period only has the in-flight entry left; the entries
+	 * from sg[0] onwards belong to the next period. Adding them would
+	 * make residue exceed one period.
+	 *
+	 * Use desc->cyclic, not lchan->desc->cyclic: this helper is also
+	 * reachable with a descriptor that is not lchan->desc, and only
+	 * the active-descriptor branch passes lchan->desc today. Keying
+	 * the wrap decision on the descriptor being queried keeps the
+	 * result correct and avoids depending on lchan->desc being set.
+	 */
+	if (desc->cyclic && next_sg == 0)
 		return residue;
 
 	for (i = next_sg; i < desc->num_sgs; i++)
