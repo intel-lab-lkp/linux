@@ -76,11 +76,18 @@ void intel_alpm_init(struct intel_dp *intel_dp)
 	mutex_init(&intel_dp->alpm.lock);
 }
 
-bool intel_alpm_is_possible(struct intel_dp *intel_dp)
+bool intel_alpm_is_possible(struct intel_dp *intel_dp,
+			    const struct intel_crtc_state *crtc_state)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
 	u8 lttpr_alpm_caps;
 
 	if (!(intel_dp->alpm_dpcd & (DP_ALPM_CAP | DP_ALPM_AUX_LESS_CAP)))
+		return false;
+
+	/* DP2.1 ALPM is not supported on UHBR (128b/132b) link rates on NVL. */
+	if (DISPLAY_VER(display) == 35 && !intel_dp_is_edp(intel_dp) &&
+	    intel_dp_is_uhbr(crtc_state))
 		return false;
 
 	if (drm_dp_lttpr_count(intel_dp->lttpr_common_caps) <= 0)
@@ -556,7 +563,7 @@ void intel_alpm_lobf_compute_config(struct intel_dp *intel_dp,
 	if (intel_dp->alpm.sink_alpm_error)
 		return;
 
-	if (!intel_alpm_is_possible(intel_dp))
+	if (!intel_alpm_is_possible(intel_dp, crtc_state))
 		return;
 
 	if (DISPLAY_VER(display) < 20)
