@@ -7,6 +7,7 @@
 #include <kunit/test.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-buf-mapping.h>
+#include <linux/dma-resv.h>
 #include <linux/errno.h>
 
 /* Mock tracking state -- reset before each test */
@@ -20,6 +21,14 @@ static const struct dma_buf_match_args *mock_finish_args_arg;
 static const struct dma_buf_mapping_match *mock_finish_exp_arg;
 static const struct dma_buf_mapping_match *mock_finish_imp_arg;
 
+/* Mapping types the configurable mock exporter currently offers */
+static const struct dma_buf_mapping_match *mock_exp_offer;
+static size_t mock_exp_offer_len;
+
+/* Which match set entry the selecting mock exporter picks, or an error */
+static int mock_select_idx;
+static int mock_select_err;
+
 static int reset_mock_state(struct kunit *test)
 {
 	mock_match_called = false;
@@ -30,6 +39,10 @@ static int reset_mock_state(struct kunit *test)
 	mock_finish_args_arg = NULL;
 	mock_finish_exp_arg = NULL;
 	mock_finish_imp_arg = NULL;
+	mock_exp_offer = NULL;
+	mock_exp_offer_len = 0;
+	mock_select_idx = 0;
+	mock_select_err = 0;
 	return 0;
 }
 
@@ -357,6 +370,267 @@ static void test_mock_attach(struct kunit *test)
 	dma_buf_put(dmabuf);
 }
 
+static int mock_dmabuf_offer_match_mapping(struct dma_buf_match_args *args)
+{
+	return dma_buf_match_mapping(args, mock_exp_offer, mock_exp_offer_len);
+}
+
+static const struct dma_buf_ops mock_dmabuf_offer_ops = {
+	.release = mock_dmabuf_release,
+	.match_mapping = mock_dmabuf_offer_match_mapping,
+};
+
+/*
+ * The match set is final once attached. A later importer attaching, even one
+ * the exporter answers differently, must not change an existing attachment.
+ *
+ * Later attachments influence what the exporter selects at pin or map time,
+ * not what was previously negotiated.
+ */
+static void test_match_set_is_final(struct kunit *test)
+{
+	static const struct dma_buf_mapping_match offer_ab[] = {
+		{ .type = &mock_type_a },
+		{ .type = &mock_type_b },
+	};
+	static const struct dma_buf_mapping_match offer_b[] = {
+		{ .type = &mock_type_b },
+	};
+	struct dma_buf_mapping_match imp1[] = {
+		{ .type = &mock_type_a },
+		{ .type = &mock_type_b },
+	};
+	struct dma_buf_mapping_match imp2[] = { { .type = &mock_type_b } };
+	struct dma_buf_attachment *attach1, *attach2;
+	struct dma_buf *dmabuf;
+
+	dmabuf = mock_dmabuf_export(&mock_dmabuf_offer_ops);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dmabuf);
+
+	mock_exp_offer = offer_ab;
+	mock_exp_offer_len = ARRAY_SIZE(offer_ab);
+	attach1 = dma_buf_mapping_attach(dmabuf, imp1, ARRAY_SIZE(imp1),
+					 &mock_importer_ops, NULL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, attach1);
+	KUNIT_ASSERT_EQ(test, attach1->nr_matches, 2);
+	KUNIT_EXPECT_PTR_EQ(test, attach1->map_type.type, &mock_type_a);
+
+	/* Exporter's answer for new importers changes; attach1 does not */
+	mock_exp_offer = offer_b;
+	mock_exp_offer_len = ARRAY_SIZE(offer_b);
+	attach2 = dma_buf_mapping_attach(dmabuf, imp2, ARRAY_SIZE(imp2),
+					 &mock_importer_ops, NULL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, attach2);
+	KUNIT_ASSERT_EQ(test, attach2->nr_matches, 1);
+	KUNIT_EXPECT_PTR_EQ(test, attach2->map_type.type, &mock_type_b);
+	KUNIT_EXPECT_EQ(test, attach1->nr_matches, 2);
+	KUNIT_EXPECT_PTR_EQ(test, attach1->map_type.type, &mock_type_a);
+
+	dma_buf_detach(dmabuf, attach2);
+	KUNIT_EXPECT_EQ(test, attach1->nr_matches, 2);
+	KUNIT_EXPECT_PTR_EQ(test, attach1->map_type.type, &mock_type_a);
+
+	dma_buf_detach(dmabuf, attach1);
+	dma_buf_put(dmabuf);
+}
+
+/* Mock mapping result for the generic map path */
+struct mock_mapping {
+	struct dma_buf_mapping base;
+	const struct dma_buf_mapping_type *made_by;
+};
+
+static struct dma_buf_mapping *mock_type_map(struct dma_buf_attachment *attach,
+					     enum dma_data_direction dir)
+{
+	struct mock_mapping *m = kzalloc_obj(*m);
+
+	if (!m)
+		return ERR_PTR(-ENOMEM);
+	m->base.type = attach->map_type.type;
+	m->made_by = attach->map_type.type;
+	return &m->base;
+}
+
+static void mock_type_unmap(struct dma_buf_attachment *attach,
+			    struct dma_buf_mapping *mapping,
+			    enum dma_data_direction dir)
+{
+	kfree(container_of(mapping, struct mock_mapping, base));
+}
+
+/* Exporter choosing the match set entry the test asks for */
+static const struct dma_buf_mapping_match *
+mock_dmabuf_select_mapping(struct dma_buf_attachment *attach)
+{
+	if (mock_select_err)
+		return ERR_PTR(mock_select_err);
+	return &attach->matches[mock_select_idx];
+}
+
+static const struct dma_buf_ops mock_dmabuf_select_ops = {
+	.release = mock_dmabuf_release,
+	.match_mapping = mock_dmabuf_offer_match_mapping,
+	.select_mapping = mock_dmabuf_select_mapping,
+};
+
+/*
+ * Exporter decides type at first map from the match set. The result is tagged
+ * with it and the core holds the choice across unmap/remap until the attachment
+ * has been explicitly invalidated.
+ */
+static void test_select_at_map(struct kunit *test)
+{
+	static const struct dma_buf_mapping_match offer_ab[] = {
+		{ .type = &mock_type_a },
+		{ .type = &mock_type_b },
+	};
+	struct dma_buf_mapping_match imp[] = {
+		{ .type = &mock_type_a },
+		{ .type = &mock_type_b },
+	};
+	struct dma_buf_attachment *attach;
+	struct dma_buf_mapping *mapping;
+	struct dma_buf *dmabuf;
+
+	mock_type_a.map = mock_type_map;
+	mock_type_a.unmap = mock_type_unmap;
+	mock_type_b.map = mock_type_map;
+	mock_type_b.unmap = mock_type_unmap;
+
+	dmabuf = mock_dmabuf_export(&mock_dmabuf_select_ops);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dmabuf);
+
+	mock_exp_offer = offer_ab;
+	mock_exp_offer_len = ARRAY_SIZE(offer_ab);
+	attach = dma_buf_mapping_attach(dmabuf, imp, ARRAY_SIZE(imp),
+					&mock_importer_ops, NULL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, attach);
+	KUNIT_EXPECT_FALSE(test, attach->selected);
+	KUNIT_EXPECT_PTR_EQ(test, attach->map_type.type, &mock_type_a);
+
+	dma_resv_lock(dmabuf->resv, NULL);
+
+	/* Exporter picks the second entry (mock_type_b) */
+	mock_select_idx = 1;
+	mapping = dma_buf_mapping_map(attach, DMA_BIDIRECTIONAL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, mapping);
+	KUNIT_EXPECT_PTR_EQ(test, mapping->type, &mock_type_b);
+	KUNIT_EXPECT_PTR_EQ(test, attach->map_type.type, &mock_type_b);
+	KUNIT_EXPECT_TRUE(test, attach->selected);
+
+	/* A pin taken whilst mapping is live gets the same type */
+	mock_select_idx = 0;
+	KUNIT_EXPECT_EQ(test, dma_buf_pin(attach), 0);
+	KUNIT_EXPECT_PTR_EQ(test, attach->map_type.type, &mock_type_b);
+	dma_buf_unpin(attach);
+
+	dma_buf_mapping_unmap(attach, mapping, DMA_BIDIRECTIONAL);
+
+	/*
+	 * Unmapped the exporter would now pick A, but no invalidate has
+	 * happened so remap must get B again to avoid ping-ponging.
+	 */
+	KUNIT_EXPECT_TRUE(test, attach->selected);
+	mapping = dma_buf_mapping_map(attach, DMA_BIDIRECTIONAL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, mapping);
+	KUNIT_EXPECT_PTR_EQ(test, mapping->type, &mock_type_b);
+	dma_buf_mapping_unmap(attach, mapping, DMA_BIDIRECTIONAL);
+
+	/* Only an explicit invalidation allows the type to change */
+	dma_buf_invalidate_mappings(dmabuf);
+	KUNIT_EXPECT_FALSE(test, attach->selected);
+	/* map_type is kept for a pending unmap until the next selection */
+	KUNIT_EXPECT_PTR_EQ(test, attach->map_type.type, &mock_type_b);
+
+	mapping = dma_buf_mapping_map(attach, DMA_BIDIRECTIONAL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, mapping);
+	KUNIT_EXPECT_PTR_EQ(test, mapping->type, &mock_type_a);
+	dma_buf_mapping_unmap(attach, mapping, DMA_BIDIRECTIONAL);
+
+	/* Exporter cannot serve this importer right now */
+	dma_buf_invalidate_mappings(dmabuf);
+	mock_select_err = -EBUSY;
+	mapping = dma_buf_mapping_map(attach, DMA_BIDIRECTIONAL);
+	KUNIT_EXPECT_EQ(test, PTR_ERR(mapping), -EBUSY);
+	KUNIT_EXPECT_FALSE(test, attach->selected);
+	mock_select_err = 0;
+
+	dma_resv_unlock(dmabuf->resv);
+
+	dma_buf_detach(dmabuf, attach);
+	dma_buf_put(dmabuf);
+
+	mock_type_a.map = NULL;
+	mock_type_a.unmap = NULL;
+	mock_type_b.map = NULL;
+	mock_type_b.unmap = NULL;
+}
+
+/*
+ * Pin selects too and the choice survives map, unmap and unpin. A pinned
+ * importer that is never invalidated keeps its first type for the life of the
+ * attachment.
+ */
+static void test_select_at_pin(struct kunit *test)
+{
+	static const struct dma_buf_mapping_match offer_ab[] = {
+		{ .type = &mock_type_a },
+		{ .type = &mock_type_b },
+	};
+	struct dma_buf_mapping_match imp[] = {
+		{ .type = &mock_type_a },
+		{ .type = &mock_type_b },
+	};
+	struct dma_buf_attachment *attach;
+	struct dma_buf_mapping *mapping;
+	struct dma_buf *dmabuf;
+
+	mock_type_a.map = mock_type_map;
+	mock_type_a.unmap = mock_type_unmap;
+	mock_type_b.map = mock_type_map;
+	mock_type_b.unmap = mock_type_unmap;
+
+	dmabuf = mock_dmabuf_export(&mock_dmabuf_select_ops);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dmabuf);
+
+	mock_exp_offer = offer_ab;
+	mock_exp_offer_len = ARRAY_SIZE(offer_ab);
+	attach = dma_buf_mapping_attach(dmabuf, imp, ARRAY_SIZE(imp),
+					&mock_importer_ops, NULL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, attach);
+
+	dma_resv_lock(dmabuf->resv, NULL);
+
+	mock_select_idx = 1;
+	KUNIT_EXPECT_EQ(test, dma_buf_pin(attach), 0);
+	KUNIT_EXPECT_TRUE(test, attach->selected);
+	KUNIT_EXPECT_PTR_EQ(test, attach->map_type.type, &mock_type_b);
+
+	/* Map after pin uses the pinned type regardless of the exporter now */
+	mock_select_idx = 0;
+	mapping = dma_buf_mapping_map(attach, DMA_BIDIRECTIONAL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, mapping);
+	KUNIT_EXPECT_PTR_EQ(test, mapping->type, &mock_type_b);
+	dma_buf_mapping_unmap(attach, mapping, DMA_BIDIRECTIONAL);
+
+	KUNIT_EXPECT_PTR_EQ(test, attach->map_type.type, &mock_type_b);
+
+	dma_buf_unpin(attach);
+	KUNIT_EXPECT_TRUE(test, attach->selected);
+	KUNIT_EXPECT_PTR_EQ(test, attach->map_type.type, &mock_type_b);
+
+	dma_resv_unlock(dmabuf->resv);
+
+	dma_buf_detach(dmabuf, attach);
+	dma_buf_put(dmabuf);
+
+	mock_type_a.map = NULL;
+	mock_type_a.unmap = NULL;
+	mock_type_b.map = NULL;
+	mock_type_b.unmap = NULL;
+}
+
 static const struct dma_exporter dma_exporter_params[] = {
 	{ &mock_dmabuf_simple_sgt_ops, "simple_sgt" },
 	{ &mock_dmabuf_two_exp_ops, "two_exp" },
@@ -371,6 +645,9 @@ static struct kunit_case dma_mapping_cases[] = {
 	KUNIT_CASE(test_match_importer_priority),
 	KUNIT_CASE_PARAM(test_sgt_attach, dma_exporter_gen_params),
 	KUNIT_CASE(test_mock_attach),
+	KUNIT_CASE(test_match_set_is_final),
+	KUNIT_CASE(test_select_at_map),
+	KUNIT_CASE(test_select_at_pin),
 	{}
 };
 
