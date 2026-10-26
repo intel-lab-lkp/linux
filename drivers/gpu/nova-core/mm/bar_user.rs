@@ -184,7 +184,7 @@ impl Drop for BarUserAccess<'_> {
 pub(crate) fn run_self_test(
     dev: &device::Device<device::Bound>,
     mm: &mut GpuMm<'_>,
-    bar_user: &BarUser<'_>,
+    bar_user: Option<&BarUser<'_>>,
     bar1_pdb: u64,
     chipset: Chipset,
 ) -> Result {
@@ -200,6 +200,11 @@ pub(crate) fn run_self_test(
             SZ_4K,
             SZ_64K, //
         },
+    };
+
+    let Some(bar_user) = bar_user else {
+        dev_info!(dev, "MM: Self-test SKIPPED - no BAR1\n");
+        return Ok(());
     };
 
     // Test patterns.

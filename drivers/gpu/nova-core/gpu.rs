@@ -394,9 +394,8 @@ pub(crate) struct Gpu<'gpu> {
     /// Must be kept declared *before* `gsp_resources`, so that its components are dropped while
     /// the GSP is still operational.
     mm: GpuMm<'gpu>,
-    /// BAR1 user interface for CPU access to GPU virtual memory.
-    #[pin]
-    bar_user: BarUser<'gpu>,
+    /// BAR1 user interface for CPU access to GPU virtual memory, if the device has BAR1.
+    bar_user: Option<Pin<KBox<BarUser<'gpu>>>>,
     /// GSP and its resources.
     #[pin]
     gsp_resources: GspResources<'gpu>,
@@ -448,7 +447,7 @@ impl<'gpu> Gpu<'gpu> {
     pub(crate) fn new<'a>(
         pdev: &'gpu pci::Device<device::Core<'a>>,
         bar: Bar0<'gpu>,
-        bar1: Bar1<'gpu>,
+        bar1: Option<Bar1<'gpu>>,
     ) -> impl PinInit<Self, Error> + use<'gpu, 'a> {
         let dev = pdev.as_ref();
 
@@ -580,17 +579,23 @@ impl<'gpu> Gpu<'gpu> {
             },
 
             // Create BAR1 user interface for CPU access to GPU virtual memory.
-            bar_user <- {
-                let pdb_addr = VramAddress::from_raw(gsp_static_info.bar1_pde_base);
-                let bar1_idx = crate::driver::bar1_resource_index(pdev)?;
-                let bar1_size = pdev.resource_len(bar1_idx)?;
+            bar_user: match bar1 {
+                None => None,
+                Some(bar1) => Some({
+                    let pdb_addr = VramAddress::from_raw(gsp_static_info.bar1_pde_base);
+                    let bar1_idx = crate::driver::bar1_resource_index(pdev)?;
+                    let bar1_size = pdev.resource_len(bar1_idx)?;
 
-                BarUser::new(
-                    pdb_addr,
-                    gsp_resources.spec.chipset,
-                    bar1_size,
-                    bar1,
-                )
+                    KBox::pin_init(
+                        BarUser::new(
+                            pdb_addr,
+                            gsp_resources.spec.chipset,
+                            bar1_size,
+                            bar1,
+                        ),
+                        GFP_KERNEL,
+                    )?
+                }),
             },
         })
     }
@@ -623,7 +628,7 @@ impl<'gpu> Gpu<'gpu> {
             dev,
             this.mm,
             regions,
-            &this.bar_user,
+            this.bar_user.as_deref(),
             this.gsp_static_info.bar1_pde_base,
             this.spec.chipset,
         ) {

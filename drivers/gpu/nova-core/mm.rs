@@ -308,7 +308,7 @@ pub(crate) mod selftest {
         dev: &device::Device<device::Bound>,
         mm: &mut GpuMm<'_>,
         usable_fb_regions: &[Range<u64>],
-        bar_user: &bar_user::BarUser<'_>,
+        bar_user: Option<&bar_user::BarUser<'_>>,
         bar1_pdb: u64,
         chipset: Chipset,
     ) -> Result {

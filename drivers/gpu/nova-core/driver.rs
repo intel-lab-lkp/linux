@@ -37,7 +37,7 @@ pub(crate) struct NovaCore<'bound> {
     #[pin]
     pub(crate) gpu: Gpu<'bound>,
     bar: pci::Bar<'bound, BAR0_SIZE>,
-    bar1: pci::Bar<'bound>,
+    bar1: Option<pci::Bar<'bound>>,
 }
 
 pub(crate) struct NovaCoreDriver;
@@ -112,7 +112,11 @@ impl pci::Driver for NovaCoreDriver {
 
             bar1: {
                 let bar1_idx = bar1_resource_index(pdev)?;
-                pdev.iomap_region(bar1_idx, c"nova-core/bar1")?
+                if pdev.resource_len(bar1_idx)? == 0 {
+                    None
+                } else {
+                    Some(pdev.iomap_region(bar1_idx, c"nova-core/bar1")?)
+                }
             },
 
             // Run self-tests that do not depend on the `Gpu` instance.
@@ -135,7 +139,12 @@ impl pci::Driver for NovaCoreDriver {
                 // SAFETY: `bar` is initialized above, pinned, and outlives `gpu`.
                 unsafe { &*core::ptr::from_ref(bar) },
                 // SAFETY: `bar1` is initialized above, pinned, and outlives `gpu`.
-                unsafe { &*core::ptr::from_ref(bar1) },
+                unsafe {
+                    match bar1 {
+                        None => None,
+                        Some(bar1) => Some(&*core::ptr::from_ref(bar1)),
+                    }
+                },
             ).pin_chain(|_gpu| {
                 #[cfg(CONFIG_NOVA_CORE_SELFTESTS)]
                 _gpu.run_selftests(pdev);
