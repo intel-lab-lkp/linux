@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only OR MIT */
 /* Copyright (c) 2023 Imagination Technologies Ltd. */
 
-#ifndef PVR_ROGUE_MIPS_CHECK_H
-#define PVR_ROGUE_MIPS_CHECK_H
+#ifndef PVR_ROGUE_MIPS_INTERNAL_CHECK_H
+#define PVR_ROGUE_MIPS_INTERNAL_CHECK_H
 
 #include "pvr_check.h"
 
@@ -32,4 +32,4 @@ OFFSET_CHECK(struct rogue_mips_state, tlb, 44);
 OFFSET_CHECK(struct rogue_mips_state, remap, 300);
 SIZE_CHECK(struct rogue_mips_state, 684);
 
-#endif /* PVR_ROGUE_MIPS_CHECK_H */
+#endif /* PVR_ROGUE_MIPS_INTERNAL_CHECK_H */
