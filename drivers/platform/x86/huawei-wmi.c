@@ -31,6 +31,9 @@
 #define WMI0_EXPENSIVE_GUID "39142400-C6A3-40fa-BADB-8A2652834100"
 #define WMI0_EVENT_GUID "59142400-C6A3-40fa-BADB-8A2652834100"
 
+/* Size of the buffer returned by HWMI, byte 0 is the return status */
+#define HWMI_BUF_SIZE			0x100
+
 /* HWMI commands */
 
 enum {
@@ -39,7 +42,16 @@ enum {
 	FN_LOCK_GET			= 0x00000604, /* \GFRS */
 	FN_LOCK_SET			= 0x00000704, /* \SFRS */
 	MICMUTE_LED_SET			= 0x00000b04, /* \SMLS */
+	KBD_BACKLIGHT_GET		= 0x00000602, /* \GLIV */
+	KBD_BACKLIGHT_SET		= 0x00000702, /* \SLIV */
 };
+
+/* The EC stores the keyboard backlight level doubled: off/low/high = 0/2/4. */
+#define KBD_BACKLIGHT_MAX		2
+#define KBD_BACKLIGHT_STEP		2
+/* Level byte in the \GLIV result (KBLL) and in the \SLIV argument (SOCP) */
+#define KBD_BACKLIGHT_GET_LEVEL_OFFSET	2
+#define KBD_BACKLIGHT_SET_LEVEL_OFFSET	2
 
 union hwmi_arg {
 	u64 cmd;
@@ -50,6 +62,7 @@ struct quirk_entry {
 	bool battery_reset;
 	bool ec_micmute;
 	bool report_brightness;
+	bool kbd_backlight;
 };
 
 static struct quirk_entry *quirks;
@@ -65,6 +78,7 @@ struct huawei_wmi {
 
 	struct huawei_wmi_debug debug;
 	struct led_classdev cdev;
+	struct led_classdev kbd_cdev;
 	struct device *dev;
 
 	struct mutex wmi_lock;
@@ -126,6 +140,10 @@ static struct quirk_entry quirk_matebook_x = {
 	.report_brightness = true,
 };
 
+static struct quirk_entry quirk_kbd_backlight = {
+	.kbd_backlight = true,
+};
+
 static const struct dmi_system_id huawei_quirks[] = {
 	{
 		.callback = dmi_matched,
@@ -144,6 +162,15 @@ static const struct dmi_system_id huawei_quirks[] = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "HUAWEI MateBook X")
 		},
 		.driver_data = &quirk_matebook_x
+	},
+	{
+		.callback = dmi_matched,
+		.ident = "Huawei MACHC-WAX9",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "HUAWEI"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "MACHC-WAX9"),
+		},
+		.driver_data = &quirk_kbd_backlight
 	},
 	{  }
 };
@@ -322,11 +349,52 @@ static void huawei_wmi_leds_setup(struct device *dev)
 	devm_led_classdev_register(dev, &huawei->cdev);
 }
 
+/* Keyboard backlight */
+
+static enum led_brightness huawei_wmi_kbd_backlight_get(struct led_classdev *led_cdev)
+{
+	u8 ret[HWMI_BUF_SIZE];
+
+	if (huawei_wmi_cmd(KBD_BACKLIGHT_GET, ret, sizeof(ret)))
+		return 0;
+
+	return ret[KBD_BACKLIGHT_GET_LEVEL_OFFSET] / KBD_BACKLIGHT_STEP;
+}
+
+static int huawei_wmi_kbd_backlight_set(struct led_classdev *led_cdev,
+					enum led_brightness brightness)
+{
+	union hwmi_arg arg;
+
+	arg.cmd = KBD_BACKLIGHT_SET;
+	arg.args[KBD_BACKLIGHT_SET_LEVEL_OFFSET] = brightness * KBD_BACKLIGHT_STEP;
+
+	return huawei_wmi_cmd(arg.cmd, NULL, 0);
+}
+
+static void huawei_wmi_kbd_backlight_setup(struct device *dev)
+{
+	struct huawei_wmi *huawei = dev_get_drvdata(dev);
+
+	if (!quirks || !quirks->kbd_backlight)
+		return;
+
+	if (huawei_wmi_cmd(KBD_BACKLIGHT_GET, NULL, 0))
+		return;
+
+	huawei->kbd_cdev.name = "platform::kbd_backlight";
+	huawei->kbd_cdev.max_brightness = KBD_BACKLIGHT_MAX;
+	huawei->kbd_cdev.brightness_get = &huawei_wmi_kbd_backlight_get;
+	huawei->kbd_cdev.brightness_set_blocking = &huawei_wmi_kbd_backlight_set;
+
+	devm_led_classdev_register(dev, &huawei->kbd_cdev);
+}
+
 /* Battery protection */
 
 static int huawei_wmi_battery_get(int *start, int *end)
 {
-	u8 ret[0x100];
+	u8 ret[HWMI_BUF_SIZE];
 	int err, i;
 
 	err = huawei_wmi_cmd(BATTERY_THRESH_GET, ret, sizeof(ret));
@@ -619,7 +687,7 @@ static int huawei_acpi_fn_lock_set(int on)
 
 static int huawei_wmi_fn_lock_get(int *on)
 {
-	u8 ret[0x100] = { 0 };
+	u8 ret[HWMI_BUF_SIZE] = { 0 };
 	int err, i;
 
 	/* Newer models: use direct ACPI \GFRS method */
@@ -627,7 +695,7 @@ static int huawei_wmi_fn_lock_get(int *on)
 		return huawei_acpi_fn_lock_get(on);
 
 	/* WMI fallback */
-	err = huawei_wmi_cmd(FN_LOCK_GET, ret, 0x100);
+	err = huawei_wmi_cmd(FN_LOCK_GET, ret, sizeof(ret));
 	if (err)
 		return err;
 
@@ -915,6 +983,7 @@ static int huawei_wmi_probe(struct platform_device *pdev)
 		mutex_init(&huawei_wmi->wmi_lock);
 
 		huawei_wmi_leds_setup(&pdev->dev);
+		huawei_wmi_kbd_backlight_setup(&pdev->dev);
 		huawei_wmi_fn_lock_setup(&pdev->dev);
 		huawei_wmi_battery_setup(&pdev->dev);
 		huawei_wmi_debugfs_setup(&pdev->dev);
