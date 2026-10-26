@@ -553,8 +553,10 @@ DECLARE_PER_CPU(struct mptcp_delegated_action, mptcp_delegated_actions);
 #define MPTCP_DELEGATE_SEND		1
 #define MPTCP_DELEGATE_ACK		2
 #define MPTCP_DELEGATE_SNDBUF		3
+#define MPTCP_DELEGATE_RETIRED		4	/* unreachable ctx, NAPI frees it */
 
-#define MPTCP_DELEGATE_ACTIONS_MASK	(~BIT(MPTCP_DELEGATE_SCHEDULED))
+#define MPTCP_DELEGATE_ACTIONS_MASK	(~(BIT(MPTCP_DELEGATE_SCHEDULED) | \
+					   BIT(MPTCP_DELEGATE_RETIRED)))
 /* MPTCP subflow context */
 struct mptcp_subflow_context {
 	struct	list_head node;/* conn_list of subflows */
@@ -593,7 +595,7 @@ struct mptcp_subflow_context {
 		send_fastclose : 1,
 		send_infinite_map : 1,
 		remote_key_valid : 1,        /* received the peer key from */
-		disposable : 1,	    /* ctx can be free at ulp release time */
+		disposable : 1,	    /* ctx is no longer owned by the msk */
 		closing : 1,	    /* must not pass rx data to msk anymore */
 		valid_csum_seen : 1,        /* at least one csum validated */
 		is_mptfo : 1,	    /* subflow is doing TFO */
@@ -646,6 +648,7 @@ struct mptcp_subflow_context {
 	const	struct inet_connection_sock_af_ops *icsk_af_ops;
 	void	(*tcp_state_change)(struct sock *sk);
 	void	(*tcp_error_report)(struct sock *sk);
+	void	(*tcp_sock_destruct)(struct sock *sk);
 
 	struct	rcu_head rcu;
 };
@@ -761,6 +764,7 @@ mptcp_subflow_get_mapped_dsn(const struct mptcp_subflow_context *subflow)
 }
 
 void mptcp_subflow_process_delegated(struct sock *ssk, long actions);
+void mptcp_subflow_ctx_release(struct sock *ssk);
 
 static inline void mptcp_subflow_delegate(struct mptcp_subflow_context *subflow, int action)
 {

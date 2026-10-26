@@ -814,6 +814,33 @@ static void subflow_ulp_fallback(struct sock *sk,
 	mptcp_subflow_ops_undo_override(sk);
 }
 
+static void subflow_ctx_destruct(struct sock *ssk)
+{
+	struct mptcp_subflow_context *ctx = mptcp_subflow_ctx(ssk);
+
+	rcu_assign_pointer(inet_csk(ssk)->icsk_ulp_data, NULL);
+	ctx->tcp_sock_destruct(ssk);
+	kfree_rcu(ctx, rcu);
+}
+
+/* Retire the context of a subflow socket that is being destroyed: a
+ * delegated action, or any other holder of a socket reference, can still
+ * reach the context, so free it together with the socket.
+ *
+ * Only an unhashed, dead socket may be retired this way. TCP never clones
+ * such a socket, so the overridden destructor can't leak into a child.
+ */
+void mptcp_subflow_ctx_release(struct sock *ssk)
+{
+	struct mptcp_subflow_context *ctx = mptcp_subflow_ctx(ssk);
+
+	if (WARN_ON_ONCE(ssk->sk_destruct == subflow_ctx_destruct))
+		return;
+
+	ctx->tcp_sock_destruct = ssk->sk_destruct;
+	ssk->sk_destruct = subflow_ctx_destruct;
+}
+
 void mptcp_subflow_drop_ctx(struct sock *ssk)
 {
 	struct mptcp_subflow_context *ctx = mptcp_subflow_ctx(ssk);
@@ -826,9 +853,20 @@ void mptcp_subflow_drop_ctx(struct sock *ssk)
 		subflow_ulp_fallback(ssk, ctx);
 		if (ctx->conn)
 			sock_put(ctx->conn);
-	}
 
-	kfree_rcu(ctx, rcu);
+		/* The socket lives on as a plain TCP socket: it must keep
+		 * neither a stale ULP context nor an overridden destructor,
+		 * so the context can't be retired through sk_destruct here.
+		 * A delegated action may still be queued for it, though:
+		 * hand the context over to mptcp_napi_poll() in that case.
+		 */
+		if (!(set_mask_bits(&ctx->delegated_status, 0,
+				    BIT(MPTCP_DELEGATE_RETIRED)) &
+		      BIT(MPTCP_DELEGATE_SCHEDULED)))
+			kfree_rcu(ctx, rcu);
+	} else {
+		mptcp_subflow_ctx_release(ssk);
+	}
 }
 
 void __mptcp_subflow_fully_established(struct mptcp_sock *msk,
@@ -2087,7 +2125,7 @@ static void subflow_ulp_release(struct sock *ssk)
 
 	mptcp_subflow_ops_undo_override(ssk);
 	if (release)
-		kfree_rcu(ctx, rcu);
+		mptcp_subflow_ctx_release(ssk);
 }
 
 static void subflow_ulp_clone(const struct request_sock *req,
