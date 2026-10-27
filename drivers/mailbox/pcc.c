@@ -315,6 +315,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 {
 	struct pcc_chan_info *pchan;
 	struct mbox_chan *chan = p;
+	int ret;
 
 	pchan = chan->con_priv;
 
@@ -333,8 +334,20 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	if (!pcc_mbox_cmd_complete_check(pchan))
 		return IRQ_NONE;
 
-	if (pcc_mbox_error_check_and_clear(pchan))
-		return IRQ_NONE;
+	ret = pcc_mbox_error_check_and_clear(pchan);
+	if (ret) {
+		/*
+		 * No other interrupt arrives for this transfer, so complete
+		 * it here or the channel stalls. Skip the rx callback, as the
+		 * shared memory holds no valid response.
+		 */
+		dev_err_ratelimited(chan->mbox->dev,
+				    "PCC subspace %td: transfer error %d\n",
+				    pchan - chan_info, ret);
+		WRITE_ONCE(pchan->chan_in_use, false);
+		mbox_chan_txdone(chan, -EIO);
+		return IRQ_HANDLED;
+	}
 
 	/*
 	 * Clear this flag after updating the interrupt ack register and before
