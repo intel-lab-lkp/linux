@@ -2490,8 +2490,8 @@ static inline bool is_idmapped_mnt(const struct vfsmount *mnt)
 }
 
 int vfs_truncate(const struct path *, loff_t);
-int do_truncate(const struct mnt_idmap *, struct dentry *, loff_t start,
-		unsigned int time_attrs, struct file *filp);
+int do_truncate(const struct mnt_idmap *, const struct path *,
+		loff_t length, unsigned int time_attrs, struct file *filp);
 extern int vfs_fallocate(struct file *file, int mode, loff_t offset,
 			loff_t len);
 int do_sys_open(int dfd, const char __user *filename, int flags,
@@ -2714,7 +2714,9 @@ static inline int bmap(struct inode *inode,  sector_t *block)
 }
 #endif
 
-int notify_change(const struct mnt_idmap *, struct dentry *,
+int __notify_change(const struct mnt_idmap *, struct dentry *,
+		    struct iattr *, struct delegated_inode *);
+int notify_change(const struct mnt_idmap *, const struct path *,
 		  struct iattr *, struct delegated_inode *);
 int inode_permission(const struct mnt_idmap *, struct inode *, int);
 int generic_permission(const struct mnt_idmap *, struct inode *, int);

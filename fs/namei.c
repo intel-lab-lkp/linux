@@ -4297,9 +4297,8 @@ static int handle_truncate(const struct mnt_idmap *idmap, struct file *filp)
 
 	error = security_file_truncate(filp);
 	if (!error) {
-		error = do_truncate(idmap, path->dentry, 0,
-				    ATTR_MTIME|ATTR_CTIME|ATTR_OPEN,
-				    filp);
+		error = do_truncate(idmap, path, 0,
+				    ATTR_MTIME|ATTR_CTIME|ATTR_OPEN, filp);
 	}
 	put_write_access(inode);
 	return error;

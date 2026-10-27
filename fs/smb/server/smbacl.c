@@ -1749,7 +1749,7 @@ int set_info_sec(struct ksmbd_conn *conn, struct ksmbd_tree_connect *tcon,
 	}
 
 	inode_lock(inode);
-	rc = notify_change(idmap, path->dentry, &newattrs, NULL);
+	rc = notify_change(idmap, path, &newattrs, NULL);
 	inode_unlock(inode);
 	if (rc)
 		goto out;

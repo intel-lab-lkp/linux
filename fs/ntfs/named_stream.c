@@ -897,7 +897,7 @@ static int ntfs_stream_setattr_common(const struct mnt_idmap *idmap,
 			goto out;
 		}
 		if (base_attr.ia_valid)
-			err = notify_change(idmap, base_dentry, &base_attr,
+			err = __notify_change(idmap, base_dentry, &base_attr,
 					NULL);
 		else
 			err = 0;
