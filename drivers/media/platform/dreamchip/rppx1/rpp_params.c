@@ -110,6 +110,9 @@ int rppx1_params(struct rppx1 *rpp, struct vb2_buffer *vb, size_t max_size,
 		}
 	}
 
+	/* Trigger update of shadowed registers after frame is done. */
+	write(priv, RPPX1_RPP_HDR_UPD_REG, RPPX1_RPP_HDR_UPD_REGS_GEN_CFG_UPD);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(rppx1_params);

@@ -257,9 +257,6 @@ int rppx1_start(struct rppx1 *rpp,
 	/* Immediate commit update for shadows. */
 	rppx1_write(rpp, RPPX1_RPP_HDR_UPD_REG, RPPX1_RPP_HDR_UPD_REGS_CFG_UPD);
 
-	/* Then for operation update shadows with picture synchronization. */
-	rppx1_write(rpp, RPPX1_RPP_HDR_UPD_REG, RPPX1_RPP_HDR_UPD_REGS_GEN_CFG_UPD);
-
 	/* Clear any pending interrupts. */
 	rppx1_interrupt(rpp, NULL);
 
