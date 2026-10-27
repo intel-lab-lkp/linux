@@ -510,6 +510,7 @@ bool nfs_acl2_secattr_encode(struct xdrgen_aggregate_cursor *c,
 			     struct aclent *out)
 {
 	struct svc_rqst *rqstp = c->ctx;
+	struct user_namespace *userns = nfsd_user_namespace(rqstp);
 	struct GETACL2res_wrapper *resp = rqstp->rq_resp;
 	bool dfacl = c->member_id == NFS_ACL2_SECATTR_DFACLENT;
 	struct posix_acl *acl = dfacl ? resp->acl_default : resp->acl_access;
@@ -536,16 +537,16 @@ bool nfs_acl2_secattr_encode(struct xdrgen_aggregate_cursor *c,
 	out->type = tag | typeflag;
 	switch (tag) {
 	case ACL_USER_OBJ:
-		out->id = from_kuid(&init_user_ns, resp->stat.uid);
+		out->id = from_kuid_munged(userns, resp->stat.uid);
 		break;
 	case ACL_GROUP_OBJ:
-		out->id = from_kgid(&init_user_ns, resp->stat.gid);
+		out->id = from_kgid_munged(userns, resp->stat.gid);
 		break;
 	case ACL_USER:
-		out->id = from_kuid(&init_user_ns, entry->e_uid);
+		out->id = from_kuid_munged(userns, entry->e_uid);
 		break;
 	case ACL_GROUP:
-		out->id = from_kgid(&init_user_ns, entry->e_gid);
+		out->id = from_kgid_munged(userns, entry->e_gid);
 		break;
 	default:
 		/*
@@ -632,6 +633,7 @@ bool nfs_acl2_secattr_decode(struct xdrgen_aggregate_cursor *c,
 			     const struct aclent *in)
 {
 	struct svc_rqst *rqstp = c->ctx;
+	struct user_namespace *userns = nfsd_user_namespace(rqstp);
 	struct SETACL2args_wrapper *argp = rqstp->rq_argp;
 	bool dfacl = c->member_id == NFS_ACL2_SECATTR_DFACLENT;
 	struct posix_acl *acl = dfacl ? argp->acl_default : argp->acl_access;
@@ -651,14 +653,14 @@ bool nfs_acl2_secattr_decode(struct xdrgen_aggregate_cursor *c,
 	switch (in->type & ~NA_ACL_DEFAULT) {
 	case ACL_USER:
 		/* An id with no kernel mapping makes the ACL invalid. */
-		entry->e_uid = make_kuid(&init_user_ns, in->id);
+		entry->e_uid = make_kuid(userns, in->id);
 		if (!uid_valid(entry->e_uid)) {
 			argp->invalid = true;
 			return true;
 		}
 		break;
 	case ACL_GROUP:
-		entry->e_gid = make_kgid(&init_user_ns, in->id);
+		entry->e_gid = make_kgid(userns, in->id);
 		if (!gid_valid(entry->e_gid)) {
 			argp->invalid = true;
 			return true;
