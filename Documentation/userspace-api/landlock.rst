@@ -87,7 +87,9 @@ to be explicit about the denied-by-default access rights.
             LANDLOCK_ACCESS_FS_REFER |
             LANDLOCK_ACCESS_FS_TRUNCATE |
             LANDLOCK_ACCESS_FS_IOCTL_DEV |
-            LANDLOCK_ACCESS_FS_RESOLVE_UNIX,
+            LANDLOCK_ACCESS_FS_RESOLVE_UNIX |
+            LANDLOCK_ACCESS_FS_READ_METADATA |
+            LANDLOCK_ACCESS_FS_WRITE_METADATA,
         .handled_access_net =
             LANDLOCK_ACCESS_NET_BIND_TCP |
             LANDLOCK_ACCESS_NET_CONNECT_TCP |
@@ -159,6 +161,12 @@ version, and only use the available subset of access rights:
         ruleset_attr.handled_permissions &=
             ~(LANDLOCK_PERMISSION_NAMESPACE_USE |
               LANDLOCK_PERMISSION_CAPABILITY_USE);
+        __attribute__((fallthrough));
+    case 12:
+        /* Removes metadata rights for ABI < 13 */
+        ruleset_attr.handled_access_fs &=
+            ~(LANDLOCK_ACCESS_FS_READ_METADATA |
+              LANDLOCK_ACCESS_FS_WRITE_METADATA);
     }
 
 This enables the creation of an inclusive ruleset that will contain our rules.
@@ -669,14 +677,73 @@ for writing, sidestepping the ``LANDLOCK_ACCESS_FS_TRUNCATE`` right.
 
 The truncate right is associated with the opened file (see below).
 
+File metadata
+-------------
+
+The ``LANDLOCK_ACCESS_FS_READ_METADATA`` right governs reading file and
+directory metadata: :manpage:`stat(2)` and friends,
+:manpage:`getxattr(2)`, :manpage:`listxattr(2)` and friends, and POSIX ACL
+reads.
+
+The ``LANDLOCK_ACCESS_FS_WRITE_METADATA`` right governs explicit changes to
+file and directory metadata: :manpage:`chmod(2)` and friends,
+:manpage:`chown(2)` and friends, :manpage:`utimensat(2)`,
+:manpage:`setxattr(2)`, :manpage:`removexattr(2)` and friends, and POSIX ACL
+changes.  Both rights apply to files and directories alike.
+
+Implicit metadata changes performed by the kernel are not restricted by
+``LANDLOCK_ACCESS_FS_WRITE_METADATA``: reading a file may update its access
+time, writing a file updates its modification and change times and may change
+the file size, and writing to or truncating a file with a set-user-ID or
+set-group-ID bit clears these bits.  File size changes through
+:manpage:`truncate(2)` and friends are governed by
+``LANDLOCK_ACCESS_FS_TRUNCATE`` instead.  An explicit metadata change request
+that changes nothing, e.g. :manpage:`chown(2)` with owner and group ``-1`` on
+a file without a set-user-ID or set-group-ID bit, is not restricted either;
+the same :manpage:`chown(2)` on a file carrying such a bit explicitly
+requests clearing it, and therefore requires
+``LANDLOCK_ACCESS_FS_WRITE_METADATA``.
+
+.. warning::
+
+   Many programs read metadata as part of reading file contents or listing
+   directories (e.g. calling :manpage:`stat(2)` before or after
+   :manpage:`open(2)`), and do not expect such calls to fail with
+   ``EACCES``.  Most of the time, ``LANDLOCK_ACCESS_FS_READ_METADATA``
+   should therefore be granted together with
+   ``LANDLOCK_ACCESS_FS_READ_FILE`` and ``LANDLOCK_ACCESS_FS_READ_DIR``.
+   Conversely, denying only ``LANDLOCK_ACCESS_FS_READ_FILE`` or
+   ``LANDLOCK_ACCESS_FS_READ_DIR`` does not hide metadata: it remains
+   readable through :manpage:`stat(2)` and friends unless
+   ``LANDLOCK_ACCESS_FS_READ_METADATA`` is denied as well.  Tailored
+   programs that do not read metadata at all can still deny this right to
+   further restrict their sandbox.
+
+Both metadata rights are associated with opened files, like
+``LANDLOCK_ACCESS_FS_TRUNCATE`` (see below): metadata accesses and changes
+requested through an already opened file descriptor, e.g. with
+:manpage:`fchmod(2)`, :manpage:`fchown(2)`, :manpage:`utimensat(2)` on an
+empty path, :manpage:`fstat(2)`, :manpage:`fgetxattr(2)`,
+:manpage:`fsetxattr(2)`, :manpage:`ioctl(2)` with ``FS_IOC_GETFLAGS`` or
+``FS_IOC_SETFLAGS``, or ``file_getattr(2)`` and ``file_setattr(2)`` with
+``AT_EMPTY_PATH``, are granted according to the rights available at
+:manpage:`open(2)` time, not according to the rights of the calling thread.
+Metadata accesses requested through a path (e.g. :manpage:`chmod(2)`,
+:manpage:`stat(2)`) are always checked against the rights of the calling
+thread.  ``O_PATH`` file descriptors are not opened through the open
+permission checks: metadata accesses through them are checked against the
+rights of the calling thread as well.
+
 Rights associated with file descriptors
 ---------------------------------------
 
-When opening a file, the availability of the ``LANDLOCK_ACCESS_FS_TRUNCATE`` and
-``LANDLOCK_ACCESS_FS_IOCTL_DEV`` rights is associated with the newly created
-file descriptor and will be used for subsequent truncation and ioctl attempts
-using :manpage:`ftruncate(2)` and :manpage:`ioctl(2)`.  The behavior is similar
-to opening a file for reading or writing, where permissions are checked during
+When opening a file, the availability of the ``LANDLOCK_ACCESS_FS_TRUNCATE``,
+``LANDLOCK_ACCESS_FS_IOCTL_DEV``, ``LANDLOCK_ACCESS_FS_READ_METADATA`` and
+``LANDLOCK_ACCESS_FS_WRITE_METADATA`` rights is associated with the newly
+created file descriptor and will be used for subsequent truncation, ioctl
+and metadata attempts using :manpage:`ftruncate(2)`, :manpage:`ioctl(2)` and
+the file descriptor-based metadata system calls.  The behavior is similar to
+opening a file for reading or writing, where permissions are checked during
 :manpage:`open(2)`, but not during the subsequent :manpage:`read(2)` and
 :manpage:`write(2)` calls.
 
@@ -1050,6 +1117,19 @@ use (see :manpage:`namespaces(7)`) across creation (:manpage:`unshare(2)`,
 fd-reference acquisition (:manpage:`open_tree(2)`, :manpage:`fsmount(2)`) with
 the new ``LANDLOCK_PERMISSION_NAMESPACE_USE`` permission flag and
 ``LANDLOCK_RULE_NAMESPACE`` rule type.
+
+File metadata (ABI < 13)
+------------------------
+
+Starting with the Landlock ABI version 13, it is possible to restrict
+file metadata access with the new ``LANDLOCK_ACCESS_FS_READ_METADATA``
+and ``LANDLOCK_ACCESS_FS_WRITE_METADATA`` access rights, which control
+reading file and directory metadata (e.g. with :manpage:`stat(2)` and
+:manpage:`getxattr(2)`) and changing it (e.g. with :manpage:`chmod(2)`
+and :manpage:`setxattr(2)`).  As with ``LANDLOCK_ACCESS_FS_TRUNCATE``,
+these rights are tied to opened files: metadata accesses through an
+already opened file descriptor are granted according to the rights
+available at :manpage:`open(2)` time.
 
 .. _kernel_support:
 
