@@ -2198,10 +2198,24 @@ void o2net_stop_listening(struct o2nm_node *node)
 
 	for (i = 0; i < ARRAY_SIZE(o2net_nodes); i++) {
 		struct o2nm_node *node = o2nm_get_node_by_num(i);
+		struct o2net_node *nn = o2net_nn_from_num(i);
+
 		if (node) {
 			o2net_disconnect_node(node);
 			o2nm_node_put(node);
 		}
+
+		/*
+		 * Delayed work can be rearmed after a disconnect: a heartbeat
+		 * callback requeues it for a node that was disconnected but
+		 * not yet removed, and a running expiry handler requeues
+		 * itself and the connect work. Work waiting on its timer is
+		 * invisible to the flush below, so cancel it synchronously.
+		 * Expiry can queue connect work, so cancel it first.
+		 */
+		cancel_delayed_work_sync(&nn->nn_connect_expired);
+		cancel_delayed_work_sync(&nn->nn_connect_work);
+		cancel_delayed_work_sync(&nn->nn_still_up);
 	}
 
 	/* finish all work and tear down the work queue */
