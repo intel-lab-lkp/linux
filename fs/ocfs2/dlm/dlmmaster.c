@@ -1823,6 +1823,20 @@ int dlm_assert_master_handler(struct o2net_msg *msg, u32 len, void *data,
 				spin_unlock(&dlm->master_lock);
 				spin_unlock(&dlm->spinlock);
 				goto done;
+			} else if (!test_bit(assert->node_idx, dlm->domain_map)) {
+				/*
+				 * The target died after sending this. Recovery
+				 * has cleaned the lockres up with us as the
+				 * owner and the sender fails the attempt once
+				 * it sees the death; do not hand the lockres
+				 * over to a dead node.
+				 */
+				mlog(0, "%s:%.*s: finishing assert from dead node %u, ignoring\n",
+				     dlm->name, namelen, name, assert->node_idx);
+				__dlm_put_mle(mle);
+				spin_unlock(&dlm->master_lock);
+				spin_unlock(&dlm->spinlock);
+				goto done;
 			}
 		}
 	}
@@ -1924,6 +1938,13 @@ ok:
 				wake = 1;
 				dlm_change_lockres_owner(dlm, res, mle->new_master);
 				BUG_ON(res->state & DLM_LOCK_RES_DIRTY);
+				/*
+				 * Hand the lockres over completely while the
+				 * spinlock is held: recovery must never find
+				 * the other nodes' locks or refmap bits on a
+				 * lockres that the target owns.
+				 */
+				dlm_remove_nonlocal_locks(dlm, res);
 			} else {
 				dlm_change_lockres_owner(dlm, res, mle->master);
 			}
@@ -2525,6 +2546,34 @@ static int dlm_is_lockres_migratable(struct dlm_ctxt *dlm,
  */
 
 
+/*
+ * Drop the sender's references on a migration MLE after the attempt has
+ * failed. The finishing assert from the target may already have unlinked
+ * the MLE and consumed its base reference; decide under the locks the
+ * assert handler holds, and only drop the base reference while the MLE is
+ * still hashed. Returns true when the assert got there first: it has handed
+ * the lockres over to the target, so the attempt must not count as failed.
+ */
+static bool dlm_put_migration_mle(struct dlm_ctxt *dlm,
+				  struct dlm_master_list_entry *mle)
+{
+	bool asserted;
+
+	spin_lock(&dlm->spinlock);
+	spin_lock(&dlm->master_lock);
+	__dlm_mle_detach_hb_events(dlm, mle);
+	asserted = hlist_unhashed(&mle->master_hash_node);
+	if (!asserted) {
+		__dlm_unlink_mle(dlm, mle);
+		__dlm_put_mle(mle);
+	}
+	spin_unlock(&dlm->master_lock);
+	spin_unlock(&dlm->spinlock);
+
+	dlm_put_mle_inuse(mle);
+	return asserted;
+}
+
 static int dlm_migrate_lockres(struct dlm_ctxt *dlm,
 			       struct dlm_lock_resource *res, u8 target)
 {
@@ -2609,9 +2658,10 @@ fail:
 
 	if (ret < 0) {
 		if (mle_added) {
-			dlm_mle_detach_hb_events(dlm, mle);
-			dlm_put_mle(mle);
-			dlm_put_mle_inuse(mle);
+			if (dlm_put_migration_mle(dlm, mle)) {
+				dlm_lockres_calc_usage(dlm, res);
+				ret = 0;
+			}
 		} else if (mle) {
 			kmem_cache_free(dlm_mle_cache, mle);
 			mle = NULL;
@@ -2639,17 +2689,25 @@ fail:
 	if (ret < 0) {
 		mlog(0, "migration to node %u failed with %d\n",
 		     target, ret);
+		/*
+		 * The target may still have received everything and may
+		 * finish the migration. Give it the chance to assert, or
+		 * to die, while the MLE is still published, so that a late
+		 * assert finds the MLE instead of a lockres we still own.
+		 */
+		if (dlm_is_host_down(ret))
+			dlm_wait_for_node_death(dlm, target,
+						DLM_NODE_DEATH_WAIT_MAX);
 		/* migration failed, detach and clean up mle */
-		dlm_mle_detach_hb_events(dlm, mle);
-		dlm_put_mle(mle);
-		dlm_put_mle_inuse(mle);
+		if (dlm_put_migration_mle(dlm, mle)) {
+			dlm_lockres_calc_usage(dlm, res);
+			ret = 0;
+			goto leave;
+		}
 		spin_lock(&res->spinlock);
 		res->state &= ~DLM_LOCK_RES_MIGRATING;
 		wake = 1;
 		spin_unlock(&res->spinlock);
-		if (dlm_is_host_down(ret))
-			dlm_wait_for_node_death(dlm, target,
-						DLM_NODE_DEATH_WAIT_MAX);
 		goto leave;
 	}
 
@@ -2686,9 +2744,11 @@ fail:
 				     res->lockname.name, target);
 				ret = -EINVAL;
 				/* migration failed, detach and clean up mle */
-				dlm_mle_detach_hb_events(dlm, mle);
-				dlm_put_mle(mle);
-				dlm_put_mle_inuse(mle);
+				if (dlm_put_migration_mle(dlm, mle)) {
+					dlm_lockres_calc_usage(dlm, res);
+					ret = 0;
+					goto leave;
+				}
 				spin_lock(&res->spinlock);
 				res->state &= ~DLM_LOCK_RES_MIGRATING;
 				wake = 1;
@@ -2700,11 +2760,17 @@ fail:
 			     dlm->name, res->lockname.len, res->lockname.name);
 	}
 
-	/* all done, set the owner, clear the flag */
+	/*
+	 * All done. The finishing assert hands the lockres over under
+	 * res->spinlock; if it has not reached that point yet, do it here
+	 * in the same way, so the lockres is never left half handed over.
+	 */
 	spin_lock(&res->spinlock);
-	dlm_set_lockres_owner(dlm, res, target);
-	res->state &= ~DLM_LOCK_RES_MIGRATING;
-	dlm_remove_nonlocal_locks(dlm, res);
+	if (res->state & DLM_LOCK_RES_MIGRATING) {
+		dlm_set_lockres_owner(dlm, res, target);
+		res->state &= ~DLM_LOCK_RES_MIGRATING;
+		dlm_remove_nonlocal_locks(dlm, res);
+	}
 	spin_unlock(&res->spinlock);
 	wake_up(&res->wq);
 
