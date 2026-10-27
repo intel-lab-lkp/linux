@@ -476,7 +476,8 @@ bool intel_dp_has_joiner(struct intel_dp *intel_dp)
 		return false;
 
 	if (intel_dp_is_edp(intel_dp)) {
-		bool pipe_joiner_enable = connector->panel.vbt.edp.pipe_joiner_enable;
+		bool pipe_joiner_enable = connector->panel.vbt.edp.pipe_joiner_enable ||
+					  intel_has_quirk(display, QUIRK_ALLOW_EDP_JOINER);
 
 		if (connector->force_joined_pipes > 1)
 			pipe_joiner_enable = true;
