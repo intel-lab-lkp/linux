@@ -43,39 +43,27 @@ struct exynos_dp_device {
 	struct analogix_dp_plat_data plat_data;
 };
 
-static int exynos_dp_crtc_clock_enable(struct analogix_dp_plat_data *plat_data,
-				bool enable)
-{
-	struct exynos_dp_device *dp = to_dp(plat_data);
-	struct drm_encoder *encoder = &dp->encoder;
-
-	if (!encoder->crtc)
-		return -EPERM;
-
-	exynos_drm_pipe_clk_enable(to_exynos_crtc(encoder->crtc), enable);
-
-	return 0;
-}
-
-static int exynos_dp_poweron(struct analogix_dp_plat_data *plat_data)
-{
-	return exynos_dp_crtc_clock_enable(plat_data, true);
-}
-
-static int exynos_dp_poweroff(struct analogix_dp_plat_data *plat_data)
-{
-	return exynos_dp_crtc_clock_enable(plat_data, false);
-}
-
 static void exynos_dp_mode_set(struct drm_encoder *encoder,
 			       struct drm_display_mode *mode,
 			       struct drm_display_mode *adjusted_mode)
 {
 }
 
-static void exynos_dp_nop(struct drm_encoder *encoder)
+static void exynos_dp_crtc_clock_enable(struct drm_encoder *encoder,
+					bool enable)
 {
-	/* do nothing */
+	if (encoder->crtc)
+		exynos_drm_pipe_clk_enable(to_exynos_crtc(encoder->crtc), enable);
+}
+
+static void exynos_dp_enable(struct drm_encoder *encoder)
+{
+	exynos_dp_crtc_clock_enable(encoder, true);
+}
+
+static void exynos_dp_disable(struct drm_encoder *encoder)
+{
+	exynos_dp_crtc_clock_enable(encoder, false);
 }
 
 static const struct drm_encoder_funcs exynos_dp_encoder_funcs = {
@@ -84,8 +72,8 @@ static const struct drm_encoder_funcs exynos_dp_encoder_funcs = {
 
 static const struct drm_encoder_helper_funcs exynos_dp_encoder_helper_funcs = {
 	.mode_set = exynos_dp_mode_set,
-	.enable = exynos_dp_nop,
-	.disable = exynos_dp_nop,
+	.enable = exynos_dp_enable,
+	.disable = exynos_dp_disable,
 };
 
 static int exynos_dp_bind(struct device *dev, struct device *master, void *data)
@@ -171,8 +159,6 @@ static int exynos_dp_probe(struct platform_device *pdev)
 
 	/* The remote port can be either a panel or a bridge */
 	dp->plat_data.dev_type = EXYNOS_DP;
-	dp->plat_data.power_on = exynos_dp_poweron;
-	dp->plat_data.power_off = exynos_dp_poweroff;
 	dp->plat_data.ops = &exynos_dp_ops;
 
 	dp->adp = analogix_dp_probe(dev, &dp->plat_data);
