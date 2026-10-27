@@ -114,6 +114,8 @@ static DEFINE_MUTEX(o2net_wq_mutex);
 static DECLARE_COMPLETION(o2net_wq_destroyed);
 /* Heartbeat callbacks stay registered across local-node off/on. */
 static bool o2net_listening;
+/* set while o2net_stop_listening() quiesces the peer slots */
+static bool o2net_shutting_down;
 static struct work_struct o2net_listen_work;
 
 static struct o2hb_callback_func o2net_hb_up, o2net_hb_down;
@@ -551,11 +553,14 @@ static void o2net_set_nn_state(struct o2net_node *nn,
 		       SC_NODEF_ARGS(sc));
 	}
 
-	/* trigger the connecting worker func as long as we're not valid,
+	/*
+	 * trigger the connecting worker func as long as we're not valid,
 	 * it will back off if it shouldn't connect.  This can be called
 	 * from node config teardown and so needs to be careful about
-	 * the work queue actually being up. */
-	if (!valid && o2net_wq) {
+	 * the work queue actually being up.  Once the listener shutdown
+	 * has started cancelling, nothing may be rearmed.
+	 */
+	if (!valid && o2net_wq && !READ_ONCE(o2net_shutting_down)) {
 		unsigned long delay;
 		/* delay if we're within a RECONNECT_DELAY of the
 		 * last attempt */
@@ -1576,6 +1581,23 @@ static void o2net_sc_postpone_idle(struct o2net_sock_container *sc)
  * having a connect attempt fail, etc. This centralizes the logic which decides
  * if a connect attempt should be made or if we should give up and all future
  * transmit attempts should fail */
+/*
+ * Called with nn->nn_lock held.  See if we already have one pending or
+ * have given up.  For nn_timeout, it is set when we close the connection
+ * because of the idle time out.  So it means that we have at least
+ * connected to that node successfully once, now try to connect to it
+ * again.  Nothing may connect once the listener shutdown has started.
+ */
+static bool o2net_nn_should_connect(struct o2net_node *nn)
+{
+	unsigned int timeout = atomic_read(&nn->nn_timeout);
+
+	if (READ_ONCE(o2net_shutting_down) || nn->nn_sc)
+		return false;
+	return !nn->nn_persistent_error ||
+	       (nn->nn_persistent_error == -ENOTCONN && timeout != 0);
+}
+
 static void o2net_start_connect(struct work_struct *work)
 {
 	struct o2net_node *nn =
@@ -1585,7 +1607,6 @@ static void o2net_start_connect(struct work_struct *work)
 	struct socket *sock = NULL;
 	struct sockaddr_in myaddr = {0, }, remoteaddr = {0, };
 	int ret = 0, stop;
-	unsigned int timeout;
 	unsigned int nofs_flag;
 
 	/*
@@ -1607,17 +1628,7 @@ static void o2net_start_connect(struct work_struct *work)
 		goto out;
 
 	spin_lock(&nn->nn_lock);
-	/*
-	 * see if we already have one pending or have given up.
-	 * For nn_timeout, it is set when we close the connection
-	 * because of the idle time out. So it means that we have
-	 * at least connected to that node successfully once,
-	 * now try to connect to it again.
-	 */
-	timeout = atomic_read(&nn->nn_timeout);
-	stop = (nn->nn_sc ||
-		(nn->nn_persistent_error &&
-		(nn->nn_persistent_error != -ENOTCONN || timeout == 0)));
+	stop = !o2net_nn_should_connect(nn);
 	spin_unlock(&nn->nn_lock);
 	if (stop)
 		goto out;
@@ -1656,9 +1667,16 @@ static void o2net_start_connect(struct work_struct *work)
 	tcp_sock_set_nodelay(sc->sc_sock->sk);
 	tcp_sock_set_user_timeout(sock->sk, O2NET_TCP_USER_TIMEOUT);
 
-	o2net_register_callbacks(sc->sc_sock->sk, sc);
-
 	spin_lock(&nn->nn_lock);
+	/*
+	 * nn_lock was dropped while the socket was created.  A disconnect
+	 * or the listener shutdown in between must not gain this socket.
+	 */
+	if (!o2net_nn_should_connect(nn)) {
+		spin_unlock(&nn->nn_lock);
+		goto out;
+	}
+	o2net_register_callbacks(sc->sc_sock->sk, sc);
 	/* handshake completion will set nn->nn_sc_valid */
 	o2net_set_nn_state(nn, sc, 0, 0);
 	spin_unlock(&nn->nn_lock);
@@ -1952,6 +1970,12 @@ static int o2net_accept_one(struct socket *sock, int *more)
 	new_sock = NULL;
 
 	spin_lock(&nn->nn_lock);
+	/* a slot that is being quiesced takes no new socket */
+	if (READ_ONCE(o2net_shutting_down)) {
+		spin_unlock(&nn->nn_lock);
+		ret = -ESHUTDOWN;
+		goto out;
+	}
 	atomic_set(&nn->nn_timeout, 0);
 	o2net_set_nn_state(nn, sc, 0, 0);
 	spin_unlock(&nn->nn_lock);
@@ -2177,6 +2201,30 @@ int o2net_start_listening(struct o2nm_node *node)
 	return ret;
 }
 
+/*
+ * Called with o2net_shutting_down set.  Cancel the delayed work of a peer
+ * slot synchronously: work waiting on its timer is invisible to a flush
+ * and would be queued on the destroyed workqueue.  Then leave the slot
+ * the way a disconnect does, so that the next heartbeat-up after a
+ * restart reconnects and senders fail instead of waiting.
+ */
+static void o2net_quiesce_nn(struct o2net_node *nn)
+{
+	/* whoever takes nn_lock from now on sees o2net_shutting_down */
+	spin_lock(&nn->nn_lock);
+	spin_unlock(&nn->nn_lock);
+
+	/* expiry queues connect work, so cancel it first */
+	cancel_delayed_work_sync(&nn->nn_connect_expired);
+	cancel_delayed_work_sync(&nn->nn_connect_work);
+	cancel_delayed_work_sync(&nn->nn_still_up);
+
+	spin_lock(&nn->nn_lock);
+	atomic_set(&nn->nn_timeout, 0);
+	o2net_set_nn_state(nn, NULL, 0, -ENOTCONN);
+	spin_unlock(&nn->nn_lock);
+}
+
 /* again, o2nm_this_node() doesn't work here as we're involved in
  * tearing it down */
 void o2net_stop_listening(struct o2nm_node *node)
@@ -2188,6 +2236,7 @@ void o2net_stop_listening(struct o2nm_node *node)
 	BUG_ON(o2net_listen_sock == NULL);
 
 	WRITE_ONCE(o2net_listening, false);
+	WRITE_ONCE(o2net_shutting_down, true);
 	o2hb_synchronize_callbacks();
 
 	/* stop the listening socket from generating work */
@@ -2198,15 +2247,18 @@ void o2net_stop_listening(struct o2nm_node *node)
 
 	for (i = 0; i < ARRAY_SIZE(o2net_nodes); i++) {
 		struct o2nm_node *node = o2nm_get_node_by_num(i);
+
 		if (node) {
 			o2net_disconnect_node(node);
 			o2nm_node_put(node);
 		}
+		o2net_quiesce_nn(o2net_nn_from_num(i));
 	}
 
 	/* finish all work and tear down the work queue */
 	mlog(ML_KTHREAD, "waiting for o2net thread to exit....\n");
 	o2net_destroy_wq();
+	WRITE_ONCE(o2net_shutting_down, false);
 
 	sock_release(o2net_listen_sock);
 	o2net_listen_sock = NULL;
