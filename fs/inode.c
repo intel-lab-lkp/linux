@@ -2366,7 +2366,7 @@ static int __remove_privs(const struct mnt_idmap *idmap,
 	 * Note we call this on write, so notify_change will not
 	 * encounter any conflicting delegations:
 	 */
-	return notify_change(idmap, path, &newattrs, NULL);
+	return notify_change(idmap, path, &newattrs, NULL, NULL);
 }
 
 static int file_remove_privs_flags(struct file *file, unsigned int flags)

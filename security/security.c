@@ -1867,8 +1867,9 @@ int security_inode_permission(const struct mnt_idmap *idmap,
 /**
  * security_inode_setattr() - Check if setting file attributes is allowed
  * @idmap: idmap of the mount
- * @dentry: file
+ * @path: file (the VFS makes no guarantees with regard to @path->mnt)
  * @attr: new attributes
+ * @file: file through which the attribute change is requested, if any
  *
  * Check permission before setting file attributes.  Note that the kernel call
  * to notify_change is performed from several locations, whenever file
@@ -1878,11 +1879,12 @@ int security_inode_permission(const struct mnt_idmap *idmap,
  * Return: Returns 0 if permission is granted.
  */
 int security_inode_setattr(const struct mnt_idmap *idmap,
-			   struct dentry *dentry, struct iattr *attr)
+			   const struct path *path, struct iattr *attr,
+			   struct file *file)
 {
-	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_setattr, idmap, dentry, attr);
+	return call_int_hook(inode_setattr, idmap, path, attr, file);
 }
 EXPORT_SYMBOL_GPL(security_inode_setattr);
 

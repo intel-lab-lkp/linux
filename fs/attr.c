@@ -400,7 +400,8 @@ EXPORT_SYMBOL(may_setattr);
 static int do_notify_change(const struct path *const path,
 			    const struct mnt_idmap *const idmap,
 			    struct dentry *const dentry, struct iattr *attr,
-			    struct delegated_inode *delegated_inode)
+			    struct delegated_inode *delegated_inode,
+			    struct file *const file)
 {
 	struct inode *inode = dentry->d_inode;
 	umode_t mode = inode->i_mode;
@@ -518,7 +519,7 @@ static int do_notify_change(const struct path *const path,
 	 * filesystem, were already checked on the user-facing path.
 	 */
 	if (path) {
-		error = security_inode_setattr(idmap, dentry, attr);
+		error = security_inode_setattr(idmap, path, attr, file);
 		if (error)
 			return error;
 	}
@@ -570,7 +571,8 @@ static int do_notify_change(const struct path *const path,
 int __notify_change(const struct mnt_idmap *idmap, struct dentry *dentry,
 		    struct iattr *attr, struct delegated_inode *delegated_inode)
 {
-	return do_notify_change(NULL, idmap, dentry, attr, delegated_inode);
+	return do_notify_change(NULL, idmap, dentry, attr, delegated_inode,
+				NULL);
 }
 EXPORT_SYMBOL(__notify_change);
 
@@ -580,6 +582,7 @@ EXPORT_SYMBOL(__notify_change);
  * @path:	object affected
  * @attr:	new attributes
  * @delegated_inode: returns inode, if the inode is delegated
+ * @file:	file through which the attribute change is requested, if any
  *
  * The caller must hold the i_rwsem exclusively on the affected object.
  *
@@ -604,9 +607,10 @@ EXPORT_SYMBOL(__notify_change);
  * Return: 0 on success, or a negative error on failure.
  */
 int notify_change(const struct mnt_idmap *idmap, const struct path *path,
-		  struct iattr *attr, struct delegated_inode *delegated_inode)
+		  struct iattr *attr, struct delegated_inode *delegated_inode,
+		  struct file *file)
 {
 	return do_notify_change(path, idmap, path->dentry, attr,
-				delegated_inode);
+				delegated_inode, file);
 }
 EXPORT_SYMBOL(notify_change);

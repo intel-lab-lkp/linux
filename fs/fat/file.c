@@ -93,7 +93,7 @@ static int fat_ioctl_set_attributes(struct file *file, u32 __user *user_attr)
 	 * module, just because it maps to a file mode.
 	 */
 	err = security_inode_setattr(file_mnt_idmap(file),
-				     file->f_path.dentry, &ia);
+			     &file->f_path, &ia, file);
 	if (err)
 		goto out_unlock_inode;
 

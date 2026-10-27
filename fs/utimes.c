@@ -18,7 +18,8 @@ static bool nsec_valid(long nsec)
 	return nsec >= 0 && nsec <= 999999999;
 }
 
-int vfs_utimes(const struct path *path, struct timespec64 *times)
+int vfs_utimes(const struct path *path, struct timespec64 *times,
+	       struct file *file)
 {
 	int error;
 	struct iattr newattrs;
@@ -65,7 +66,7 @@ int vfs_utimes(const struct path *path, struct timespec64 *times)
 retry_deleg:
 	inode_lock(inode);
 	error = notify_change(mnt_idmap(path->mnt), path, &newattrs,
-			      &delegated_inode);
+			      &delegated_inode, file);
 	inode_unlock(inode);
 	if (is_delegated(&delegated_inode)) {
 		error = break_deleg_wait(&delegated_inode);
@@ -88,15 +89,25 @@ static int do_utimes_path(int dfd, const char __user *filename,
 	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH))
 		return -EINVAL;
 
+	CLASS(filename_maybe_null, name)(filename, flags);
+
+	if (!name && dfd >= 0) {
+		CLASS(fd, f)(dfd);
+
+		if (fd_empty(f))
+			return -EBADF;
+
+		return vfs_utimes(&fd_file(f)->f_path, times, fd_file(f));
+	}
+
 	if (!(flags & AT_SYMLINK_NOFOLLOW))
 		lookup_flags |= LOOKUP_FOLLOW;
 
-	CLASS(filename_uflags, name)(filename, flags);
 retry:
 	error = filename_lookup(dfd, name, lookup_flags, &path, NULL);
 	if (error)
 		return error;
-	error = vfs_utimes(&path, times);
+	error = vfs_utimes(&path, times, NULL);
 	path_put(&path);
 	if (retry_estale(error, lookup_flags)) {
 		lookup_flags |= LOOKUP_REVAL;
@@ -113,7 +124,7 @@ static int do_utimes_fd(int fd, struct timespec64 *times, int flags)
 	CLASS(fd, f)(fd);
 	if (fd_empty(f))
 		return -EBADF;
-	return vfs_utimes(&fd_file(f)->f_path, times);
+	return vfs_utimes(&fd_file(f)->f_path, times, fd_file(f));
 }
 
 /*

@@ -1267,15 +1267,18 @@ static int smack_inode_permission(const struct mnt_idmap *idmap, struct inode *i
 /**
  * smack_inode_setattr - Smack check for setting attributes
  * @idmap: idmap of the mount
- * @dentry: the object
+ * @path: the object
  * @iattr: for the force flag
+ * @file: file through which the attribute change is requested, if any
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
-			       struct iattr *iattr)
+static int smack_inode_setattr(const struct mnt_idmap *idmap,
+			       const struct path *path,
+			       struct iattr *iattr, struct file *file)
 {
 	struct smk_audit_info ad;
+	struct dentry *dentry = path->dentry;
 	int rc;
 
 	/*

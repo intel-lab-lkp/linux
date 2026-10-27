@@ -144,7 +144,7 @@ static void __init do_utime(char *filename, time64_t mtime)
 static void __init do_utime_path(const struct path *path, time64_t mtime)
 {
 	struct timespec64 t[2] = { { .tv_sec = mtime }, { .tv_sec = mtime } };
-	vfs_utimes(path, t);
+	vfs_utimes(path, t, NULL);
 }
 
 static __initdata LIST_HEAD(dir_list);

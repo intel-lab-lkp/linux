@@ -141,8 +141,16 @@ LSM_HOOK(int, 0, inode_follow_link, struct dentry *dentry, struct inode *inode,
 	 bool rcu)
 LSM_HOOK(int, 0, inode_permission, const struct mnt_idmap *idmap,
 	 struct inode *inode, int mask)
-LSM_HOOK(int, 0, inode_setattr, const struct mnt_idmap *idmap, struct dentry *dentry,
-	 struct iattr *attr)
+/*
+ * For the hooks that pass a struct path: the VFS only sanctions
+ * passing the path to VFS helpers taking a struct path (e.g.,
+ * notify_change(), the *xattr() helpers); it makes no guarantees
+ * with regard to path->mnt, whose layout and implementation details
+ * are subject to change.  Implementations must not rely on its
+ * properties.
+ */
+LSM_HOOK(int, 0, inode_setattr, const struct mnt_idmap *idmap,
+	 const struct path *path, struct iattr *attr, struct file *file)
 LSM_HOOK(void, LSM_RET_VOID, inode_post_setattr, const struct mnt_idmap *idmap,
 	 struct dentry *dentry, int ia_valid)
 LSM_HOOK(int, 0, inode_getattr, const struct path *path)

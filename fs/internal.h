@@ -201,10 +201,12 @@ struct file *file_close_fd_locked(struct files_struct *files, unsigned fd);
 int filp_close_sync(struct file *filp, fl_owner_t id);
 
 int do_ftruncate(struct file *file, loff_t length, unsigned int flags);
-int chmod_common(const struct path *path, umode_t mode);
+int chmod_common(const struct path *path, umode_t mode,
+		  struct file *file);
 int do_fchownat(int dfd, const char __user *filename, uid_t user, gid_t group,
 		int flag);
-int chown_common(const struct path *path, uid_t user, gid_t group);
+int chown_common(const struct path *path, uid_t user, gid_t group,
+		  struct file *file);
 extern int vfs_open(const struct path *, struct file *);
 int vfs_open_consume(struct path *, struct file *);
 

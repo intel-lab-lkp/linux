@@ -1818,7 +1818,8 @@ int vfs_mkobj(struct dentry *, umode_t,
 
 int vfs_fchown(struct file *file, uid_t user, gid_t group);
 int vfs_fchmod(struct file *file, umode_t mode);
-int vfs_utimes(const struct path *path, struct timespec64 *times);
+int vfs_utimes(const struct path *path, struct timespec64 *times,
+		struct file *file);
 
 #ifdef CONFIG_COMPAT
 extern long compat_ptr_ioctl(struct file *file, unsigned int cmd,
@@ -2717,7 +2718,8 @@ static inline int bmap(struct inode *inode,  sector_t *block)
 int __notify_change(const struct mnt_idmap *, struct dentry *,
 		    struct iattr *, struct delegated_inode *);
 int notify_change(const struct mnt_idmap *, const struct path *,
-		  struct iattr *, struct delegated_inode *);
+		  struct iattr *, struct delegated_inode *,
+		  struct file *);
 int inode_permission(const struct mnt_idmap *, struct inode *, int);
 int generic_permission(const struct mnt_idmap *, struct inode *, int);
 static inline int file_permission(struct file *file, int mask)

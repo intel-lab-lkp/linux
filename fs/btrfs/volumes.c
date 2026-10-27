@@ -2152,7 +2152,7 @@ static void update_dev_time(const char *device_path)
 	}
 
 	if (!err) {
-		vfs_utimes(&path, NULL);
+		vfs_utimes(&path, NULL, NULL);
 		path_put(&path);
 	}
 }

@@ -65,8 +65,13 @@ int do_truncate(const struct mnt_idmap *idmap, const struct path *path,
 	if (ret)
 		return ret;
 
-	/* Note any delegations or leases have already been broken: */
-	ret = notify_change(idmap, path, &newattrs, NULL);
+	/*
+	 * Note any delegations or leases have already been broken.  Size
+	 * changes are governed by the truncate hooks, which are checked at
+	 * ftruncate(2) time on the opened file, so no struct file is passed
+	 * to the setattr hook.
+	 */
+	ret = notify_change(idmap, path, &newattrs, NULL, NULL);
 	inode_unlock(dentry->d_inode);
 	return ret;
 }
@@ -665,7 +670,7 @@ SYSCALL_DEFINE2(fchroot, int, fd, unsigned int, flags)
 	return error;
 }
 
-int chmod_common(const struct path *path, umode_t mode)
+int chmod_common(const struct path *path, umode_t mode, struct file *file)
 {
 	struct inode *inode = path->dentry->d_inode;
 	struct delegated_inode delegated_inode = { };
@@ -685,7 +690,7 @@ retry_deleg:
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
 	error = notify_change(mnt_idmap(path->mnt), path, &newattrs,
-			      &delegated_inode);
+			      &delegated_inode, file);
 out_unlock:
 	inode_unlock(inode);
 	if (is_delegated(&delegated_inode)) {
@@ -701,7 +706,7 @@ out_mnt_unlock:
 int vfs_fchmod(struct file *file, umode_t mode)
 {
 	audit_file(file);
-	return chmod_common(&file->f_path, mode);
+	return chmod_common(&file->f_path, mode, file);
 }
 
 SYSCALL_DEFINE2(fchmod, unsigned int, fd, umode_t, mode)
@@ -724,12 +729,22 @@ static int do_fchmodat(int dfd, const char __user *filename, umode_t mode,
 	if (unlikely(flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)))
 		return -EINVAL;
 
+	CLASS(filename_maybe_null, name)(filename, flags);
+
+	if (!name && dfd >= 0) {
+		CLASS(fd, f)(dfd);
+
+		if (fd_empty(f))
+			return -EBADF;
+
+		return vfs_fchmod(fd_file(f), mode);
+	}
+
 	lookup_flags = (flags & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
-	CLASS(filename_uflags, name)(filename, flags);
 retry:
 	error = filename_lookup(dfd, name, lookup_flags, &path, NULL);
 	if (!error) {
-		error = chmod_common(&path, mode);
+		error = chmod_common(&path, mode, NULL);
 		path_put(&path);
 		if (retry_estale(error, lookup_flags)) {
 			lookup_flags |= LOOKUP_REVAL;
@@ -786,7 +801,8 @@ static inline bool setattr_vfsgid(struct iattr *attr, kgid_t kgid)
 	return true;
 }
 
-int chown_common(const struct path *path, uid_t user, gid_t group)
+int chown_common(const struct path *path, uid_t user, gid_t group,
+		 struct file *file)
 {
 	const struct mnt_idmap *idmap;
 	struct user_namespace *fs_userns;
@@ -824,7 +840,7 @@ retry_deleg:
 		from_vfsgid(idmap, fs_userns, newattrs.ia_vfsgid));
 	if (!error)
 		error = notify_change(idmap, path, &newattrs,
-				      &delegated_inode);
+				      &delegated_inode, file);
 	inode_unlock(inode);
 	if (is_delegated(&delegated_inode)) {
 		error = break_deleg_wait(&delegated_inode);
@@ -844,14 +860,24 @@ int do_fchownat(int dfd, const char __user *filename, uid_t user, gid_t group,
 	if ((flag & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) != 0)
 		return -EINVAL;
 
+	CLASS(filename_maybe_null, name)(filename, flag);
+
+	if (!name && dfd >= 0) {
+		CLASS(fd, f)(dfd);
+
+		if (fd_empty(f))
+			return -EBADF;
+
+		return vfs_fchown(fd_file(f), user, group);
+	}
+
 	lookup_flags = (flag & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
-	CLASS(filename_uflags, name)(filename, flag);
 retry:
 	error = filename_lookup(dfd, name, lookup_flags, &path, NULL);
 	if (!error) {
 		error = mnt_want_write(path.mnt);
 		if (!error) {
-			error = chown_common(&path, user, group);
+			error = chown_common(&path, user, group, NULL);
 			mnt_drop_write(path.mnt);
 		}
 		path_put(&path);
@@ -888,7 +914,7 @@ int vfs_fchown(struct file *file, uid_t user, gid_t group)
 	if (error)
 		return error;
 	audit_file(file);
-	error = chown_common(&file->f_path, user, group);
+	error = chown_common(&file->f_path, user, group, file);
 	mnt_drop_write_file(file);
 	return error;
 }

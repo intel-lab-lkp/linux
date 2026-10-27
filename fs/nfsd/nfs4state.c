@@ -10510,7 +10510,7 @@ static int cb_getattr_update_times(const struct path *path,
 
 	attrs.ia_valid |= ATTR_DELEG;
 	inode_lock(inode);
-	ret = notify_change(&nop_mnt_idmap, path, &attrs, NULL);
+	ret = notify_change(&nop_mnt_idmap, path, &attrs, NULL, NULL);
 	inode_unlock(inode);
 	return ret;
 }
@@ -10791,7 +10791,7 @@ void nfsd_update_cmtime_attr(struct file *f, unsigned int flags)
 	};
 
 	inode_lock(inode);
-	ret = notify_change(&nop_mnt_idmap, &f->f_path, &attr, NULL);
+	ret = notify_change(&nop_mnt_idmap, &f->f_path, &attr, NULL, NULL);
 	inode_unlock(inode);
 	if (ret)
 		pr_notice_ratelimited("nfsd: Unable to update timestamps on "

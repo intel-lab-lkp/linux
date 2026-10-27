@@ -822,7 +822,7 @@ static int __ecryptfs_truncate(struct dentry *dentry, const struct iattr *ia)
 set_size:
 	lower_ia.ia_valid |= ATTR_SIZE;
 	inode_lock(d_inode(lower_dentry));
-	rc = notify_change(&nop_mnt_idmap, &lower_path, &lower_ia, NULL);
+	rc = notify_change(&nop_mnt_idmap, &lower_path, &lower_ia, NULL, NULL);
 	inode_unlock(d_inode(lower_dentry));
 out:
 	ecryptfs_put_lower_file(inode);
@@ -932,7 +932,7 @@ static int ecryptfs_setattr(const struct mnt_idmap *idmap,
 
 		inode_lock(d_inode(lower_path.dentry));
 		rc = notify_change(&nop_mnt_idmap, &lower_path, &lower_ia,
-				   NULL);
+				   NULL, NULL);
 		inode_unlock(d_inode(lower_path.dentry));
 	}
 out:

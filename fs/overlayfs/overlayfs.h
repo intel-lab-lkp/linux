@@ -213,7 +213,7 @@ static inline int ovl_do_notify_change(struct ovl_fs *ofs,
 		.dentry = upperdentry,
 	};
 
-	return notify_change(ovl_upper_mnt_idmap(ofs), &path, attr, NULL);
+	return notify_change(ovl_upper_mnt_idmap(ofs), &path, attr, NULL, NULL);
 }
 
 static inline int ovl_do_rmdir(struct ovl_fs *ofs,
