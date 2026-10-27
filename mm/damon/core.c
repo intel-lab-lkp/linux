@@ -282,6 +282,32 @@ static bool damon_has_probe_weights(struct damon_ctx *c)
 }
 
 /*
+ * damon_mult_frac() - calculate @x * @n / @d without overflowing.
+ *
+ * Same as mult_frac(), but the intermediate product of the remainder does not
+ * overflow, and a result that does not fit in unsigned long is saturated to
+ * ULONG_MAX.  Returns the same value as mult_frac() when mult_frac() does not
+ * overflow.  @d must not be zero.
+ */
+static unsigned long damon_mult_frac(unsigned long x, unsigned long n,
+		unsigned long d)
+{
+	unsigned long q = x / d, r = x % d;
+	unsigned long frac;
+
+	if (n && q > ULONG_MAX / n)
+		return ULONG_MAX;
+	if (!n || r <= ULONG_MAX / n)
+		frac = r * n / d;
+	else
+		/* r < d, so the quotient is smaller than n */
+		frac = mul_u64_u64_div_u64(r, n, d);
+	if (frac > ULONG_MAX - q * n)
+		return ULONG_MAX;
+	return q * n + frac;
+}
+
+/*
  * damon_mvsum() - Returns pseudo moving sum value for a time window.
  * @current_nr:		The value of the current aggregation window.
  * @last_nr:		The value of the last aggregation window.
@@ -305,7 +331,7 @@ static bool damon_has_probe_weights(struct damon_ctx *c)
 static unsigned long damon_mvsum(unsigned long current_nr,
 		unsigned long last_nr, unsigned long left_window_bp)
 {
-	return current_nr + mult_frac(last_nr, left_window_bp, 10000);
+	return current_nr + damon_mult_frac(last_nr, left_window_bp, 10000);
 }
 
 /**
@@ -337,7 +363,7 @@ unsigned int damon_nr_accesses_mvsum(struct damon_region *r,
 	else
 		left_window = ctx->next_aggregation_sis -
 			ctx->passed_sample_intervals;
-	left_window_bp = mult_frac(left_window, 10000, window_len);
+	left_window_bp = damon_mult_frac(left_window, 10000, window_len);
 
 	if (left_window_bp == 10000)
 		return r->last_nr_accesses;
@@ -361,7 +387,7 @@ unsigned char damon_probe_hits_mvsum(int probe_idx, struct damon_region *r,
 	else
 		left_window = ctx->next_aggregation_sis -
 			ctx->passed_sample_intervals;
-	left_window_bp = mult_frac(left_window, 10000, window_len);
+	left_window_bp = damon_mult_frac(left_window, 10000, window_len);
 
 	if (left_window_bp == 10000)
 		return r->last_probe_hits[probe_idx];
@@ -990,21 +1016,24 @@ static bool damon_attrs_equals(const struct damon_attrs *attrs1,
 static unsigned int damon_age_for_new_attrs(unsigned int age,
 		struct damon_attrs *old_attrs, struct damon_attrs *new_attrs)
 {
-	return age * old_attrs->aggr_interval / new_attrs->aggr_interval;
+	return min(damon_mult_frac(age, old_attrs->aggr_interval,
+				new_attrs->aggr_interval), UINT_MAX);
 }
 
 /* convert sample ratio in bp (per 10,000) to count */
 static unsigned int damon_sample_bp_to_count(
 		unsigned int bp, struct damon_attrs *attrs)
 {
-	return bp * damon_nr_samples_per_aggr(attrs) / 10000;
+	return min(damon_mult_frac(bp, damon_nr_samples_per_aggr(attrs),
+				10000), UINT_MAX);
 }
 
 /* convert sample count to ratio in bp (per 10,000) */
 static unsigned int damon_sample_count_to_bp(
 		unsigned int count, struct damon_attrs *attrs)
 {
-	return mult_frac(count, 10000, damon_nr_samples_per_aggr(attrs));
+	return min(damon_mult_frac(count, 10000,
+				damon_nr_samples_per_aggr(attrs)), UINT_MAX);
 }
 
 static unsigned int damon_nr_samples_for_new_attrs(unsigned int nr,

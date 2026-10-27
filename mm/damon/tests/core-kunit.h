@@ -698,6 +698,64 @@ static void damon_test_update_monitoring_result(struct kunit *test)
 	damon_destroy_ctx(ctx);
 }
 
+static void damon_test_mult_frac(struct kunit *test)
+{
+	KUNIT_EXPECT_EQ(test, damon_mult_frac(7, 3, 2), 10ul);
+	KUNIT_EXPECT_EQ(test, damon_mult_frac(ULONG_MAX, 0, 1), 0ul);
+	/* the remainder product overflows on 32-bit */
+	KUNIT_EXPECT_EQ(test, damon_mult_frac(524288, 10000, 786432), 6666ul);
+	KUNIT_EXPECT_EQ(test, damon_mult_frac(500000, 10000, 1000000), 5000ul);
+	/* the remainder product overflows even on 64-bit */
+	KUNIT_EXPECT_EQ(test, damon_mult_frac(ULONG_MAX - 1, ULONG_MAX,
+				ULONG_MAX), ULONG_MAX - 1);
+	/* the quotient product overflows */
+	KUNIT_EXPECT_EQ(test, damon_mult_frac(ULONG_MAX, 10000, 1), ULONG_MAX);
+	/* the largest representable result, and one beyond it */
+	KUNIT_EXPECT_EQ(test, damon_mult_frac(ULONG_MAX - ULONG_MAX / 10000,
+				10000, 9999), ULONG_MAX);
+	KUNIT_EXPECT_EQ(test, damon_mult_frac(ULONG_MAX - ULONG_MAX / 10000 + 1,
+				10000, 9999), ULONG_MAX);
+}
+
+static void damon_test_age_for_new_attrs_large_value(struct kunit *test)
+{
+	struct damon_attrs old_attrs = {.aggr_interval = 100000};
+	struct damon_attrs new_attrs = {.aggr_interval = 50000};
+	unsigned int age;
+
+	age = damon_age_for_new_attrs(50000, &old_attrs, &new_attrs);
+	KUNIT_EXPECT_EQ(test, age, 100000u);
+
+	new_attrs.aggr_interval = 1;
+	age = damon_age_for_new_attrs(UINT_MAX, &old_attrs, &new_attrs);
+	KUNIT_EXPECT_EQ(test, age, UINT_MAX);
+
+	old_attrs.aggr_interval = ULONG_MAX;
+	age = damon_age_for_new_attrs(UINT_MAX, &old_attrs, &new_attrs);
+	KUNIT_EXPECT_EQ(test, age, UINT_MAX);
+}
+
+static void damon_test_sample_ratio_large_value(struct kunit *test)
+{
+	struct damon_attrs attrs = {
+		.sample_interval = 1000,
+		.aggr_interval = 600000000,
+	};
+
+	KUNIT_EXPECT_EQ(test, damon_sample_bp_to_count(10000, &attrs),
+			600000u);
+	KUNIT_EXPECT_EQ(test, damon_sample_count_to_bp(600000, &attrs),
+			10000u);
+	KUNIT_EXPECT_EQ(test, damon_sample_count_to_bp(500000, &attrs),
+			8333u);
+	KUNIT_EXPECT_EQ(test, damon_sample_bp_to_count(UINT_MAX, &attrs),
+			UINT_MAX);
+
+	attrs.aggr_interval = attrs.sample_interval;
+	KUNIT_EXPECT_EQ(test, damon_sample_count_to_bp(UINT_MAX, &attrs),
+			UINT_MAX);
+}
+
 static void damon_test_set_attrs(struct kunit *test)
 {
 	struct damon_ctx *c = damon_new_ctx();
@@ -735,6 +793,7 @@ static void damon_test_mvsum(struct kunit *test)
 		3, 10, 5000, 8,		/* 3 + 10 * 0.5 */
 		32, 100, 1000, 42,	/* 32 + 100 * 0.1 */
 		42, 49, 0, 42,		/* 42 + 49 * 0 */
+		0, 600000, 8333, 499980, /* 32-bit remainder product overflow */
 	};
 
 	int i;
@@ -793,6 +852,18 @@ static void damon_test_nr_accesses_mvsum(struct kunit *test)
 		KUNIT_EXPECT_EQ(test, (unsigned int)input_expects[i + 4],
 				damon_nr_accesses_mvsum(r, c));
 	}
+
+	c->attrs.sample_interval = 1000;
+	c->attrs.aggr_interval = 600000000;
+	c->passed_sample_intervals = 100000;
+	c->next_aggregation_sis = 600000;
+	r->nr_accesses = 100000;
+	r->last_nr_accesses = 600000;
+	KUNIT_EXPECT_EQ(test, damon_nr_accesses_mvsum(r, c), 599980u);
+
+	r->probe_hits[0] = 0;
+	r->last_probe_hits[0] = 100;
+	KUNIT_EXPECT_EQ(test, damon_probe_hits_mvsum(0, r, c), 83);
 
 	damon_free_region(r);
 	damon_destroy_ctx(c);
@@ -2494,6 +2565,9 @@ static struct kunit_case damon_test_cases[] = {
 	KUNIT_CASE(damon_test_set_regions),
 	KUNIT_CASE(damon_test_nr_samples_per_aggr),
 	KUNIT_CASE(damon_test_update_monitoring_result),
+	KUNIT_CASE(damon_test_mult_frac),
+	KUNIT_CASE(damon_test_age_for_new_attrs_large_value),
+	KUNIT_CASE(damon_test_sample_ratio_large_value),
 	KUNIT_CASE(damon_test_set_attrs),
 	KUNIT_CASE(damon_test_mvsum),
 	KUNIT_CASE(damon_test_nr_accesses_mvsum),
