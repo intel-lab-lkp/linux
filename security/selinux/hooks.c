@@ -3389,8 +3389,8 @@ static int selinux_inode_xattr_skipcap(const char *name)
 	return !strcmp(name, XATTR_NAME_SELINUX);
 }
 
-static int selinux_inode_setxattr(const struct mnt_idmap *idmap,
-				  const struct path *path,
+static int selinux_path_setxattr(const struct mnt_idmap *idmap,
+				 const struct path *path,
 				  const char *name, const void *value,
 				  size_t size, int flags, struct file *file)
 {
@@ -3539,24 +3539,25 @@ static void selinux_inode_post_setxattr(struct dentry *dentry, const char *name,
 	spin_unlock(&isec->lock);
 }
 
-static int selinux_inode_getxattr(const struct path *path,
-				  const char *name, struct file *file)
+static int selinux_path_getxattr(const struct path *path, const char *name,
+				 struct file *file)
 {
 	const struct cred *cred = current_cred();
 
 	return dentry_has_perm(cred, path->dentry, FILE__GETATTR);
 }
 
-static int selinux_inode_listxattr(const struct path *path, struct file *file)
+static int selinux_path_listxattr(const struct path *path,
+				  struct file *file)
 {
 	const struct cred *cred = current_cred();
 
 	return dentry_has_perm(cred, path->dentry, FILE__GETATTR);
 }
 
-static int selinux_inode_removexattr(const struct mnt_idmap *idmap,
-				     const struct path *path,
-				     const char *name, struct file *file)
+static int selinux_path_removexattr(const struct mnt_idmap *idmap,
+				    const struct path *path,
+				    const char *name, struct file *file)
 {
 	/* if not a selinux xattr, only check the ordinary setattr perm */
 	if (strcmp(name, XATTR_NAME_SELINUX))
@@ -3636,7 +3637,7 @@ static int selinux_path_notify(const struct path *path, u64 mask,
 /*
  * Copy the inode security context value to the user.
  *
- * Permission check is handled by selinux_inode_getxattr hook.
+ * Permission check is handled by selinux_path_getxattr hook.
  */
 static int selinux_inode_getsecurity(const struct mnt_idmap *idmap,
 				     struct inode *inode, const char *name,
@@ -7737,11 +7738,11 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(path_setattr, selinux_path_setattr),
 	LSM_HOOK_INIT(path_getattr, selinux_path_getattr),
 	LSM_HOOK_INIT(inode_xattr_skipcap, selinux_inode_xattr_skipcap),
-	LSM_HOOK_INIT(inode_setxattr, selinux_inode_setxattr),
+	LSM_HOOK_INIT(path_setxattr, selinux_path_setxattr),
 	LSM_HOOK_INIT(inode_post_setxattr, selinux_inode_post_setxattr),
-	LSM_HOOK_INIT(inode_getxattr, selinux_inode_getxattr),
-	LSM_HOOK_INIT(inode_listxattr, selinux_inode_listxattr),
-	LSM_HOOK_INIT(inode_removexattr, selinux_inode_removexattr),
+	LSM_HOOK_INIT(path_getxattr, selinux_path_getxattr),
+	LSM_HOOK_INIT(path_listxattr, selinux_path_listxattr),
+	LSM_HOOK_INIT(path_removexattr, selinux_path_removexattr),
 	LSM_HOOK_INIT(inode_file_getattr, selinux_inode_file_getattr),
 	LSM_HOOK_INIT(inode_file_setattr, selinux_inode_file_setattr),
 	LSM_HOOK_INIT(inode_set_acl, selinux_inode_set_acl),

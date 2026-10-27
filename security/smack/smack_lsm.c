@@ -1343,7 +1343,7 @@ static int smack_inode_xattr_skipcap(const char *name)
 }
 
 /**
- * smack_inode_setxattr - Smack check for setting xattrs
+ * smack_path_setxattr - Smack check for setting xattrs
  * @idmap: idmap of the mount
  * @path: the object
  * @name: name of the attribute
@@ -1356,8 +1356,8 @@ static int smack_inode_xattr_skipcap(const char *name)
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_setxattr(const struct mnt_idmap *idmap,
-				const struct path *path,
+static int smack_path_setxattr(const struct mnt_idmap *idmap,
+			       const struct path *path,
 				const char *name, const void *value,
 				size_t size, int flags, struct file *file)
 {
@@ -1463,15 +1463,15 @@ static void smack_inode_post_setxattr(struct dentry *dentry, const char *name,
 }
 
 /**
- * smack_inode_getxattr - Smack check on getxattr
+ * smack_path_getxattr - Smack check on getxattr
  * @path: the object
  * @name: unused
  * @file: file through which the xattr access is requested, if any
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_getxattr(const struct path *path,
-			const char *name, struct file *file)
+static int smack_path_getxattr(const struct path *path, const char *name,
+			       struct file *file)
 {
 	struct smk_audit_info ad;
 	struct dentry *dentry = path->dentry;
@@ -1486,7 +1486,7 @@ static int smack_inode_getxattr(const struct path *path,
 }
 
 /**
- * smack_inode_removexattr - Smack check on removexattr
+ * smack_path_removexattr - Smack check on removexattr
  * @idmap: idmap of the mount
  * @path: the object
  * @name: name of the attribute
@@ -1496,9 +1496,9 @@ static int smack_inode_getxattr(const struct path *path,
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_removexattr(const struct mnt_idmap *idmap,
-				   const struct path *path,
-				   const char *name, struct file *file)
+static int smack_path_removexattr(const struct mnt_idmap *idmap,
+				  const struct path *path,
+				  const char *name, struct file *file)
 {
 	struct inode_smack *isp;
 	struct smk_audit_info ad;
@@ -5201,10 +5201,10 @@ static struct security_hook_list smack_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(path_setattr, smack_path_setattr),
 	LSM_HOOK_INIT(path_getattr, smack_path_getattr),
 	LSM_HOOK_INIT(inode_xattr_skipcap, smack_inode_xattr_skipcap),
-	LSM_HOOK_INIT(inode_setxattr, smack_inode_setxattr),
+	LSM_HOOK_INIT(path_setxattr, smack_path_setxattr),
 	LSM_HOOK_INIT(inode_post_setxattr, smack_inode_post_setxattr),
-	LSM_HOOK_INIT(inode_getxattr, smack_inode_getxattr),
-	LSM_HOOK_INIT(inode_removexattr, smack_inode_removexattr),
+	LSM_HOOK_INIT(path_getxattr, smack_path_getxattr),
+	LSM_HOOK_INIT(path_removexattr, smack_path_removexattr),
 	LSM_HOOK_INIT(inode_set_acl, smack_inode_set_acl),
 	LSM_HOOK_INIT(inode_get_acl, smack_inode_get_acl),
 	LSM_HOOK_INIT(inode_remove_acl, smack_inode_remove_acl),

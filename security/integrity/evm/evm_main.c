@@ -7,8 +7,8 @@
  * Kylene Hall <kjhall@us.ibm.com>
  *
  * File: evm_main.c
- *	implements evm_inode_setxattr, evm_inode_post_setxattr,
- *	evm_inode_removexattr, evm_verifyxattr, and evm_inode_set_acl.
+ *	implements evm_path_setxattr, evm_inode_post_setxattr,
+ *	evm_path_removexattr, evm_verifyxattr, and evm_inode_set_acl.
  */
 
 #define pr_fmt(fmt) "EVM: "fmt
@@ -593,7 +593,7 @@ out:
 }
 
 /**
- * evm_inode_setxattr - protect the EVM extended attribute
+ * evm_path_setxattr - protect the EVM extended attribute
  * @idmap: idmap of the mount
  * @path: pointer to the affected object
  * @xattr_name: pointer to the affected extended attribute name
@@ -608,11 +608,11 @@ out:
  * userspace from writing HMAC value.  Writing 'security.evm' requires
  * requires CAP_SYS_ADMIN privileges.
  */
-static int evm_inode_setxattr(const struct mnt_idmap *idmap,
-			      const struct path *path,
-			      const char *xattr_name, const void *xattr_value,
-			      size_t xattr_value_len, int flags,
-			      struct file *file)
+static int evm_path_setxattr(const struct mnt_idmap *idmap,
+			     const struct path *path,
+			     const char *xattr_name, const void *xattr_value,
+			     size_t xattr_value_len, int flags,
+			     struct file *file)
 {
 	const struct evm_ima_xattr_data *xattr_data = xattr_value;
 	struct dentry *dentry = path->dentry;
@@ -635,7 +635,7 @@ static int evm_inode_setxattr(const struct mnt_idmap *idmap,
 }
 
 /**
- * evm_inode_removexattr - protect the EVM extended attribute
+ * evm_path_removexattr - protect the EVM extended attribute
  * @idmap: idmap of the mount
  * @path: pointer to the affected object
  * @xattr_name: pointer to the affected extended attribute name
@@ -644,9 +644,9 @@ static int evm_inode_setxattr(const struct mnt_idmap *idmap,
  * Removing 'security.evm' requires CAP_SYS_ADMIN privileges and that
  * the current value is valid.
  */
-static int evm_inode_removexattr(const struct mnt_idmap *idmap,
-				 const struct path *path,
-				 const char *xattr_name, struct file *file)
+static int evm_path_removexattr(const struct mnt_idmap *idmap,
+				const struct path *path,
+				const char *xattr_name, struct file *file)
 {
 	struct dentry *dentry = path->dentry;
 
@@ -1215,13 +1215,13 @@ static struct security_hook_list evm_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(path_setattr, evm_path_setattr),
 	LSM_HOOK_INIT(inode_post_setattr, evm_inode_post_setattr),
 	LSM_HOOK_INIT(inode_copy_up_xattr, evm_inode_copy_up_xattr),
-	LSM_HOOK_INIT(inode_setxattr, evm_inode_setxattr),
+	LSM_HOOK_INIT(path_setxattr, evm_path_setxattr),
 	LSM_HOOK_INIT(inode_post_setxattr, evm_inode_post_setxattr),
 	LSM_HOOK_INIT(inode_set_acl, evm_inode_set_acl),
 	LSM_HOOK_INIT(inode_post_set_acl, evm_inode_post_set_acl),
 	LSM_HOOK_INIT(inode_remove_acl, evm_inode_remove_acl),
 	LSM_HOOK_INIT(inode_post_remove_acl, evm_inode_post_remove_acl),
-	LSM_HOOK_INIT(inode_removexattr, evm_inode_removexattr),
+	LSM_HOOK_INIT(path_removexattr, evm_path_removexattr),
 	LSM_HOOK_INIT(inode_post_removexattr, evm_inode_post_removexattr),
 	LSM_HOOK_INIT(inode_init_security, evm_inode_init_security),
 	LSM_HOOK_INIT(inode_alloc_security, evm_inode_alloc_security),

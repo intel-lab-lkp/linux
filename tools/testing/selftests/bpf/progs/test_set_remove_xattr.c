@@ -32,8 +32,8 @@ static inline bool name_match_foo(const char *name)
 }
 
 /* Test bpf_set_dentry_xattr and bpf_remove_dentry_xattr */
-SEC("lsm.s/inode_getxattr")
-int BPF_PROG(test_inode_getxattr, const struct path *path, char *name,
+SEC("lsm.s/path_getxattr")
+int BPF_PROG(test_path_getxattr, const struct path *path, char *name,
 	     struct file *file)
 {
 	struct bpf_dynptr value_ptr;
@@ -87,8 +87,8 @@ bool locked_remove_security_selinux_fail;
  * not-_locked version in the BPF program. The verifier will fix them up
  * properly.
  */
-SEC("lsm.s/inode_setxattr")
-int BPF_PROG(test_inode_setxattr, const struct mnt_idmap *idmap,
+SEC("lsm.s/path_setxattr")
+int BPF_PROG(test_path_setxattr, const struct mnt_idmap *idmap,
 	     const struct path *path,
 	     const char *name, const void *value, size_t size, int flags,
 	     struct file *file)

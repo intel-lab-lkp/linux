@@ -436,10 +436,10 @@ int security_path_setattr(const struct mnt_idmap *idmap,
 void security_inode_post_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
 				 int ia_valid);
 int security_path_getattr(const struct path *path, struct file *file);
-int security_inode_setxattr(const struct mnt_idmap *idmap,
-			    const struct path *path, const char *name,
-			    const void *value, size_t size, int flags,
-			    struct file *file);
+int security_path_setxattr(const struct mnt_idmap *idmap,
+			   const struct path *path, const char *name,
+			   const void *value, size_t size, int flags,
+			   struct file *file);
 int security_inode_set_acl(const struct mnt_idmap *idmap,
 			   const struct path *path, const char *acl_name,
 			   struct posix_acl *kacl, struct file *file);
@@ -456,13 +456,13 @@ void security_inode_post_remove_acl(const struct mnt_idmap *idmap,
 				    const char *acl_name);
 void security_inode_post_setxattr(struct dentry *dentry, const char *name,
 				  const void *value, size_t size, int flags);
-int security_inode_getxattr(const struct path *path,
-			    const char *name, struct file *file);
-int security_inode_listxattr(const struct path *path,
+int security_path_getxattr(const struct path *path,
+			   const char *name, struct file *file);
+int security_path_listxattr(const struct path *path,
+			    struct file *file);
+int security_path_removexattr(const struct mnt_idmap *idmap,
+			      const struct path *path, const char *name,
 			      struct file *file);
-int security_inode_removexattr(const struct mnt_idmap *idmap,
-			       const struct path *path, const char *name,
-			       struct file *file);
 void security_inode_post_removexattr(struct dentry *dentry, const char *name);
 int security_inode_file_setattr(const struct path *path,
 				struct file_kattr *fa, struct file *file);
@@ -1022,7 +1022,7 @@ static inline int security_path_getattr(const struct path *path,
 	return 0;
 }
 
-static inline int security_inode_setxattr(const struct mnt_idmap *idmap,
+static inline int security_path_setxattr(const struct mnt_idmap *idmap,
 		const struct path *path, const char *name,
 		const void *value, size_t size, int flags,
 		struct file *file)
@@ -1069,19 +1069,19 @@ static inline void security_inode_post_setxattr(struct dentry *dentry,
 		const char *name, const void *value, size_t size, int flags)
 { }
 
-static inline int security_inode_getxattr(const struct path *path,
-			const char *name, struct file *file)
+static inline int security_path_getxattr(const struct path *path,
+					 const char *name, struct file *file)
 {
 	return 0;
 }
 
-static inline int security_inode_listxattr(const struct path *path,
-					   struct file *file)
+static inline int security_path_listxattr(const struct path *path,
+					  struct file *file)
 {
 	return 0;
 }
 
-static inline int security_inode_removexattr(const struct mnt_idmap *idmap,
+static inline int security_path_removexattr(const struct mnt_idmap *idmap,
 					     const struct path *path,
 					     const char *name,
 					     struct file *file)

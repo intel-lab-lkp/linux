@@ -46,7 +46,7 @@ int BPF_PROG(get_task_exe_file_kfunc_null)
 	return 0;
 }
 
-SEC("lsm.s/inode_getxattr")
+SEC("lsm.s/path_getxattr")
 __failure __msg("R1 type=fp expected=ptr_, trusted_ptr_, rcu_ptr_")
 int BPF_PROG(get_task_exe_file_kfunc_fp)
 {

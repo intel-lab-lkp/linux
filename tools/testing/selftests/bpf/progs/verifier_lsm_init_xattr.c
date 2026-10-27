@@ -232,7 +232,7 @@ int BPF_PROG(reject_lsm_cgroup, struct inode *inode, struct inode *dir,
 	return 0;
 }
 
-SEC("lsm/inode_setxattr")
+SEC("lsm/path_setxattr")
 __failure __msg("calling kernel function bpf_inode_init_xattr is not allowed")
 int BPF_PROG(reject_wrong_hook, const struct mnt_idmap *idmap,
 	     const struct path *path,

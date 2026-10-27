@@ -759,11 +759,11 @@ static int validate_hash_algo(struct dentry *dentry,
 	return -EACCES;
 }
 
-static int ima_inode_setxattr(const struct mnt_idmap *idmap,
-			      const struct path *path,
-			      const char *xattr_name, const void *xattr_value,
-			      size_t xattr_value_len, int flags,
-			      struct file *file)
+static int ima_path_setxattr(const struct mnt_idmap *idmap,
+			   const struct path *path,
+			   const char *xattr_name, const void *xattr_value,
+			   size_t xattr_value_len, int flags,
+			   struct file *file)
 {
 	const struct evm_ima_xattr_data *xvalue = xattr_value;
 	struct dentry *dentry = path->dentry;
@@ -806,9 +806,9 @@ static int ima_inode_set_acl(const struct mnt_idmap *idmap,
 	return 0;
 }
 
-static int ima_inode_removexattr(const struct mnt_idmap *idmap,
-				 const struct path *path,
-				 const char *xattr_name, struct file *file)
+static int ima_path_removexattr(const struct mnt_idmap *idmap,
+				const struct path *path,
+				const char *xattr_name, struct file *file)
 {
 	int result, digsig = -1;
 
@@ -832,9 +832,9 @@ static int ima_inode_remove_acl(const struct mnt_idmap *idmap,
 
 static struct security_hook_list ima_appraise_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(inode_post_setattr, ima_inode_post_setattr),
-	LSM_HOOK_INIT(inode_setxattr, ima_inode_setxattr),
+	LSM_HOOK_INIT(path_setxattr, ima_path_setxattr),
 	LSM_HOOK_INIT(inode_set_acl, ima_inode_set_acl),
-	LSM_HOOK_INIT(inode_removexattr, ima_inode_removexattr),
+	LSM_HOOK_INIT(path_removexattr, ima_path_removexattr),
 	LSM_HOOK_INIT(inode_remove_acl, ima_inode_remove_acl),
 };
 
