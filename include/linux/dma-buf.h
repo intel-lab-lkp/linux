@@ -433,6 +433,9 @@ struct dma_buf {
 
 	/** @memcg: the cgroup to which this buffer is currently attributed */
 	struct mem_cgroup *memcg;
+
+	/** @memcg_account: account buffer memory to cgroup */
+	bool memcg_account;
 };
 
 /**
@@ -505,6 +508,7 @@ struct dma_buf_attachment {
  * @flags:	mode flags for the file
  * @resv:	reservation-object, NULL to allocate default one
  * @priv:	Attach private data of allocator to this buffer
+ * @memcg_account:	account buffer memory to cgroup
  *
  * This structure holds the information required to export the buffer. Used
  * with dma_buf_export() only.
@@ -517,6 +521,7 @@ struct dma_buf_export_info {
 	int flags;
 	struct dma_resv *resv;
 	void *priv;
+	bool memcg_account;
 };
 
 /**
