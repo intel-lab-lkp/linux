@@ -440,17 +440,17 @@ int security_path_setxattr(const struct mnt_idmap *idmap,
 			   const struct path *path, const char *name,
 			   const void *value, size_t size, int flags,
 			   struct file *file);
-int security_inode_set_acl(const struct mnt_idmap *idmap,
-			   const struct path *path, const char *acl_name,
-			   struct posix_acl *kacl, struct file *file);
+int security_path_set_acl(const struct mnt_idmap *idmap,
+			  const struct path *path, const char *acl_name,
+			  struct posix_acl *kacl, struct file *file);
 void security_inode_post_set_acl(struct dentry *dentry, const char *acl_name,
 				 struct posix_acl *kacl);
-int security_inode_get_acl(const struct mnt_idmap *idmap,
-			   const struct path *path, const char *acl_name,
-			   struct file *file);
-int security_inode_remove_acl(const struct mnt_idmap *idmap,
-			      const struct path *path, const char *acl_name,
-			      struct file *file);
+int security_path_get_acl(const struct mnt_idmap *idmap,
+			  const struct path *path, const char *acl_name,
+			  struct file *file);
+int security_path_remove_acl(const struct mnt_idmap *idmap,
+			     const struct path *path, const char *acl_name,
+			     struct file *file);
 void security_inode_post_remove_acl(const struct mnt_idmap *idmap,
 				    struct dentry *dentry,
 				    const char *acl_name);
@@ -1030,11 +1030,11 @@ static inline int security_path_setxattr(const struct mnt_idmap *idmap,
 	return cap_inode_setxattr(path, name, value, size, flags, file);
 }
 
-static inline int security_inode_set_acl(const struct mnt_idmap *idmap,
-					 const struct path *path,
-					 const char *acl_name,
-					 struct posix_acl *kacl,
-					 struct file *file)
+static inline int security_path_set_acl(const struct mnt_idmap *idmap,
+				       const struct path *path,
+				       const char *acl_name,
+				       struct posix_acl *kacl,
+				       struct file *file)
 {
 	return 0;
 }
@@ -1044,18 +1044,18 @@ static inline void security_inode_post_set_acl(struct dentry *dentry,
 					       struct posix_acl *kacl)
 { }
 
-static inline int security_inode_get_acl(const struct mnt_idmap *idmap,
-					 const struct path *path,
-					 const char *acl_name,
-					 struct file *file)
+static inline int security_path_get_acl(const struct mnt_idmap *idmap,
+				       const struct path *path,
+				       const char *acl_name,
+				       struct file *file)
 {
 	return 0;
 }
 
-static inline int security_inode_remove_acl(const struct mnt_idmap *idmap,
-					    const struct path *path,
-					    const char *acl_name,
-					    struct file *file)
+static inline int security_path_remove_acl(const struct mnt_idmap *idmap,
+					  const struct path *path,
+					  const char *acl_name,
+					  struct file *file)
 {
 	return 0;
 }

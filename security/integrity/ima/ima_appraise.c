@@ -795,10 +795,10 @@ static int ima_path_setxattr(const struct mnt_idmap *idmap,
 	return result;
 }
 
-static int ima_inode_set_acl(const struct mnt_idmap *idmap,
-			     const struct path *path,
-			     const char *acl_name, struct posix_acl *kacl,
-			     struct file *file)
+static int ima_path_set_acl(const struct mnt_idmap *idmap,
+			   const struct path *path,
+			   const char *acl_name, struct posix_acl *kacl,
+			   struct file *file)
 {
 	if (evm_revalidate_status(acl_name))
 		ima_reset_appraise_flags(d_backing_inode(path->dentry), -1);
@@ -823,19 +823,19 @@ static int ima_path_removexattr(const struct mnt_idmap *idmap,
 	return result;
 }
 
-static int ima_inode_remove_acl(const struct mnt_idmap *idmap,
-				 const struct path *path,
-				 const char *acl_name, struct file *file)
+static int ima_path_remove_acl(const struct mnt_idmap *idmap,
+				const struct path *path,
+				const char *acl_name, struct file *file)
 {
-	return ima_inode_set_acl(idmap, path, acl_name, NULL, file);
+	return ima_path_set_acl(idmap, path, acl_name, NULL, file);
 }
 
 static struct security_hook_list ima_appraise_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(inode_post_setattr, ima_inode_post_setattr),
 	LSM_HOOK_INIT(path_setxattr, ima_path_setxattr),
-	LSM_HOOK_INIT(inode_set_acl, ima_inode_set_acl),
+	LSM_HOOK_INIT(path_set_acl, ima_path_set_acl),
 	LSM_HOOK_INIT(path_removexattr, ima_path_removexattr),
-	LSM_HOOK_INIT(inode_remove_acl, ima_inode_remove_acl),
+	LSM_HOOK_INIT(path_remove_acl, ima_path_remove_acl),
 };
 
 void __init init_ima_appraise_lsm(const struct lsm_id *lsmid)

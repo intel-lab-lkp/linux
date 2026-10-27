@@ -8,7 +8,7 @@
  *
  * File: evm_main.c
  *	implements evm_path_setxattr, evm_inode_post_setxattr,
- *	evm_path_removexattr, evm_verifyxattr, and evm_inode_set_acl.
+ *	evm_path_removexattr, evm_verifyxattr, and evm_path_set_acl.
  */
 
 #define pr_fmt(fmt) "EVM: "fmt
@@ -689,7 +689,7 @@ static inline int evm_inode_set_acl_change(const struct mnt_idmap *idmap,
 #endif
 
 /**
- * evm_inode_set_acl - protect the EVM extended attribute from posix acls
+ * evm_path_set_acl - protect the EVM extended attribute from posix acls
  * @idmap: idmap of the mount
  * @path: pointer to the affected object
  * @acl_name: name of the posix acl
@@ -702,10 +702,10 @@ static inline int evm_inode_set_acl_change(const struct mnt_idmap *idmap,
  *
  * Return: zero on success, -EPERM on failure.
  */
-static int evm_inode_set_acl(const struct mnt_idmap *idmap,
-			     const struct path *path,
-			     const char *acl_name, struct posix_acl *kacl,
-			     struct file *file)
+static int evm_path_set_acl(const struct mnt_idmap *idmap,
+			    const struct path *path,
+			    const char *acl_name, struct posix_acl *kacl,
+			    struct file *file)
 {
 	enum integrity_status evm_status;
 	struct dentry *dentry = path->dentry;
@@ -746,7 +746,7 @@ static int evm_inode_set_acl(const struct mnt_idmap *idmap,
 }
 
 /**
- * evm_inode_remove_acl - Protect the EVM extended attribute from posix acls
+ * evm_path_remove_acl - Protect the EVM extended attribute from posix acls
  * @idmap: idmap of the mount
  * @path: pointer to the affected object
  * @acl_name: name of the posix acl
@@ -758,11 +758,11 @@ static int evm_inode_set_acl(const struct mnt_idmap *idmap,
  *
  * Return: zero on success, -EPERM on failure.
  */
-static int evm_inode_remove_acl(const struct mnt_idmap *idmap,
-				const struct path *path,
-				const char *acl_name, struct file *file)
+static int evm_path_remove_acl(const struct mnt_idmap *idmap,
+			       const struct path *path,
+			       const char *acl_name, struct file *file)
 {
-	return evm_inode_set_acl(idmap, path, acl_name, NULL, file);
+	return evm_path_set_acl(idmap, path, acl_name, NULL, file);
 }
 
 static void evm_reset_status(struct inode *inode)
@@ -1217,9 +1217,9 @@ static struct security_hook_list evm_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(inode_copy_up_xattr, evm_inode_copy_up_xattr),
 	LSM_HOOK_INIT(path_setxattr, evm_path_setxattr),
 	LSM_HOOK_INIT(inode_post_setxattr, evm_inode_post_setxattr),
-	LSM_HOOK_INIT(inode_set_acl, evm_inode_set_acl),
+	LSM_HOOK_INIT(path_set_acl, evm_path_set_acl),
 	LSM_HOOK_INIT(inode_post_set_acl, evm_inode_post_set_acl),
-	LSM_HOOK_INIT(inode_remove_acl, evm_inode_remove_acl),
+	LSM_HOOK_INIT(path_remove_acl, evm_path_remove_acl),
 	LSM_HOOK_INIT(inode_post_remove_acl, evm_inode_post_remove_acl),
 	LSM_HOOK_INIT(path_removexattr, evm_path_removexattr),
 	LSM_HOOK_INIT(inode_post_removexattr, evm_inode_post_removexattr),
