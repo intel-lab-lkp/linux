@@ -5966,6 +5966,20 @@ STATIC_IFN_KUNIT bool should_reset_plane(struct drm_atomic_commit *state,
 }
 EXPORT_IF_KUNIT(should_reset_plane);
 
+/* FreeSync times each frame from the plane's previous flip. */
+STATIC_IFN_KUNIT void
+dm_plane_inherit_flip_time(struct dc_plane_state *dc_plane_state,
+			   struct drm_plane_state *old_plane_state,
+			   struct drm_plane_state *new_plane_state)
+{
+	struct dc_plane_state *old_dc_plane_state =
+		to_dm_plane_state(old_plane_state)->dc_state;
+
+	if (old_dc_plane_state && old_plane_state->crtc == new_plane_state->crtc)
+		dc_plane_state->time = old_dc_plane_state->time;
+}
+EXPORT_IF_KUNIT(dm_plane_inherit_flip_time);
+
 STATIC_IFN_KUNIT int
 dm_update_plane_state(struct dc *dc,
 		      struct drm_atomic_commit *state,
@@ -6076,10 +6090,8 @@ dm_update_plane_state(struct dc *dc,
 			goto out;
 		}
 
-		/* FreeSync times each frame from the plane's previous flip. */
-		if (dm_old_plane_state->dc_state &&
-		    old_plane_crtc == new_plane_crtc)
-			dc_new_plane_state->time = dm_old_plane_state->dc_state->time;
+		dm_plane_inherit_flip_time(dc_new_plane_state, old_plane_state,
+					   new_plane_state);
 
 		drm_dbg_atomic(new_plane_crtc->dev, "Enabling DRM plane: %d on DRM crtc %d\n",
 				 plane->base.id, new_plane_crtc->base.id);
