@@ -237,7 +237,7 @@ static int evm_calc_hmac_or_hash(struct dentry *dentry,
 	size_t xattr_size = 0;
 	char *xattr_value = NULL;
 	int error;
-	int size, user_space_size;
+	int size;
 	bool ima_present = false;
 	u64 i_version = 0;
 
@@ -287,12 +287,6 @@ static int evm_calc_hmac_or_hash(struct dentry *dentry,
 		if (size < 0)
 			continue;
 
-		user_space_size = vfs_getxattr(&nop_mnt_idmap, dentry,
-					       xattr->name, NULL, 0);
-		if (user_space_size != size)
-			pr_debug("file %s: xattr %s size mismatch (kernel: %d, user: %d)\n",
-				 dentry->d_name.name, xattr->name, size,
-				 user_space_size);
 		error = 0;
 		xattr_size = size;
 		crypto_shash_update(desc, (const u8 *)xattr_value, xattr_size);

@@ -472,32 +472,32 @@ int ksmbd_populate_dot_dotdot_entries(struct ksmbd_work *work, int info_level,
 	for (i = 0; i < 2; i++) {
 		struct kstat kstat;
 		struct ksmbd_kstat ksmbd_kstat;
-		struct dentry *dentry;
+		struct path path = dir->filp->f_path;
 
 		if (!dir->dot_dotdot[i]) { /* fill dot entry info */
 			if (i == 0) {
 				d_info->name = ".";
 				d_info->name_len = 1;
-				dentry = dget(dir->filp->f_path.dentry);
+				path.dentry = dget(path.dentry);
 			} else {
 				d_info->name = "..";
 				d_info->name_len = 2;
-				dentry = dget_parent(dir->filp->f_path.dentry);
+				path.dentry = dget_parent(path.dentry);
 			}
 
 			if (!match_pattern(d_info->name, d_info->name_len,
 					   search_pattern)) {
 				dir->dot_dotdot[i] = 1;
-				dput(dentry);
+				dput(path.dentry);
 				continue;
 			}
 
 			ksmbd_kstat.kstat = &kstat;
 			rc = ksmbd_vfs_fill_dentry_attrs(work,
 							 idmap,
-							 dentry,
+							 &path,
 							 &ksmbd_kstat);
-			dput(dentry);
+			dput(path.dentry);
 			if (rc)
 				break;
 

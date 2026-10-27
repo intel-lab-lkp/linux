@@ -83,7 +83,7 @@ int ovl_copy_xattr(struct super_block *sb, const struct path *oldpath, struct de
 	if (!old->d_inode->i_op->listxattr || !new->d_inode->i_op->listxattr)
 		return 0;
 
-	list_size = vfs_listxattr(old, NULL, 0);
+	list_size = vfs_listxattr(oldpath, NULL, 0);
 	if (list_size <= 0) {
 		if (list_size == -EOPNOTSUPP)
 			return 0;
@@ -94,7 +94,7 @@ int ovl_copy_xattr(struct super_block *sb, const struct path *oldpath, struct de
 	if (!buf)
 		return -ENOMEM;
 
-	list_size = vfs_listxattr(old, buf, list_size);
+	list_size = vfs_listxattr(oldpath, buf, list_size);
 	if (list_size <= 0) {
 		error = list_size;
 		goto out;

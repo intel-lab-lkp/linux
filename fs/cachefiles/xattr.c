@@ -40,7 +40,6 @@ struct cachefiles_vol_xattr {
 int cachefiles_preset_object_xattr(struct cachefiles_object *object, struct file *file)
 {
 	struct cachefiles_xattr *buf;
-	struct dentry *dentry = file->f_path.dentry;
 	unsigned int len = object->cookie->aux_len;
 	int ret;
 
@@ -55,7 +54,7 @@ int cachefiles_preset_object_xattr(struct cachefiles_object *object, struct file
 	if (ret == 0) {
 		ret = mnt_want_write_file(file);
 		if (ret == 0) {
-			ret = vfs_setxattr(&nop_mnt_idmap, dentry,
+			ret = vfs_setxattr(&nop_mnt_idmap, &file->f_path,
 					   cachefiles_xattr_cache, buf,
 					   sizeof(struct cachefiles_xattr) + len, 0);
 			mnt_drop_write_file(file);
@@ -91,7 +90,6 @@ int cachefiles_preset_object_xattr(struct cachefiles_object *object, struct file
 int cachefiles_set_object_xattr(struct cachefiles_object *object)
 {
 	struct cachefiles_xattr *buf;
-	struct dentry *dentry;
 	struct file *file = object->file;
 	unsigned int len = object->cookie->aux_len;
 	uoff_t object_size = object->cookie->object_size;
@@ -99,7 +97,6 @@ int cachefiles_set_object_xattr(struct cachefiles_object *object)
 
 	if (!file)
 		return -ESTALE;
-	dentry = file->f_path.dentry;
 
 	_enter("%x,#%d", object->debug_id, len);
 
@@ -121,7 +118,7 @@ int cachefiles_set_object_xattr(struct cachefiles_object *object)
 	if (ret == 0) {
 		ret = mnt_want_write_file(file);
 		if (ret == 0) {
-			ret = vfs_setxattr(&nop_mnt_idmap, dentry,
+			ret = vfs_setxattr(&nop_mnt_idmap, &file->f_path,
 					   cachefiles_xattr_cache, buf,
 					   sizeof(struct cachefiles_xattr) + len, 0);
 			mnt_drop_write_file(file);
@@ -160,7 +157,6 @@ int cachefiles_set_object_xattr(struct cachefiles_object *object)
 int cachefiles_check_auxdata(struct cachefiles_object *object, struct file *file)
 {
 	struct cachefiles_xattr *buf;
-	struct dentry *dentry = file->f_path.dentry;
 	struct inode *inode = file_inode(file);
 	unsigned int len = object->cookie->aux_len, tlen;
 	const void *p = fscache_get_aux(object->cookie);
@@ -177,7 +173,8 @@ int cachefiles_check_auxdata(struct cachefiles_object *object, struct file *file
 
 	xlen = cachefiles_inject_read_error();
 	if (xlen == 0)
-		xlen = vfs_getxattr(&nop_mnt_idmap, dentry, cachefiles_xattr_cache, buf, tlen);
+		xlen = vfs_getxattr(&nop_mnt_idmap, &file->f_path,
+				    cachefiles_xattr_cache, buf, tlen);
 	if (xlen != tlen) {
 		if (xlen < 0) {
 			ret = xlen;
@@ -226,6 +223,7 @@ int cachefiles_remove_object_xattr(struct cachefiles_cache *cache,
 				   struct cachefiles_object *object,
 				   struct dentry *dentry)
 {
+	struct path path = { .mnt = cache->mnt, .dentry = dentry };
 	int ret;
 
 	trace_cachefiles_coherency(object, d_inode(dentry)->i_ino, 0, NULL, 0,
@@ -235,7 +233,7 @@ int cachefiles_remove_object_xattr(struct cachefiles_cache *cache,
 	if (ret == 0) {
 		ret = mnt_want_write(cache->mnt);
 		if (ret == 0) {
-			ret = vfs_removexattr(&nop_mnt_idmap, dentry,
+			ret = vfs_removexattr(&nop_mnt_idmap, &path,
 					      cachefiles_xattr_cache);
 			mnt_drop_write(cache->mnt);
 		}
@@ -282,7 +280,8 @@ bool cachefiles_set_volume_xattr(struct cachefiles_volume *volume)
 	struct cachefiles_vol_xattr *buf;
 	unsigned int len = volume->vcookie->coherency_len;
 	const void *p = volume->vcookie->coherency;
-	struct dentry *dentry = volume->dentry;
+	struct path path = { .mnt = volume->cache->mnt,
+			     .dentry = volume->dentry };
 	int ret;
 
 	_enter("%x,#%d", volume->vcookie->debug_id, len);
@@ -298,22 +297,22 @@ bool cachefiles_set_volume_xattr(struct cachefiles_volume *volume)
 	if (ret == 0) {
 		ret = mnt_want_write(volume->cache->mnt);
 		if (ret == 0) {
-			ret = vfs_setxattr(&nop_mnt_idmap, dentry,
+			ret = vfs_setxattr(&nop_mnt_idmap, &path,
 					   cachefiles_xattr_cache,
 					   buf, len, 0);
 			mnt_drop_write(volume->cache->mnt);
 		}
 	}
 	if (ret < 0) {
-		trace_cachefiles_vfs_error(NULL, d_inode(dentry), ret,
+		trace_cachefiles_vfs_error(NULL, d_inode(path.dentry), ret,
 					   cachefiles_trace_setxattr_error);
-		trace_cachefiles_vol_coherency(volume, d_inode(dentry)->i_ino,
+		trace_cachefiles_vol_coherency(volume, d_inode(path.dentry)->i_ino,
 					       cachefiles_coherency_vol_set_fail);
 		if (ret != -ENOMEM)
 			cachefiles_io_error(
 				volume->cache, "Failed to set xattr with error %d", ret);
 	} else {
-		trace_cachefiles_vol_coherency(volume, d_inode(dentry)->i_ino,
+		trace_cachefiles_vol_coherency(volume, d_inode(path.dentry)->i_ino,
 					       cachefiles_coherency_vol_set_ok);
 	}
 
@@ -328,9 +327,10 @@ bool cachefiles_set_volume_xattr(struct cachefiles_volume *volume)
 int cachefiles_check_volume_xattr(struct cachefiles_volume *volume)
 {
 	struct cachefiles_vol_xattr *buf;
-	struct dentry *dentry = volume->dentry;
 	unsigned int len = volume->vcookie->coherency_len;
 	const void *p = volume->vcookie->coherency;
+	struct path path = { .mnt = volume->cache->mnt,
+			     .dentry = volume->dentry };
 	enum cachefiles_coherency_trace why;
 	ssize_t xlen;
 	int ret = -ESTALE;
@@ -344,11 +344,12 @@ int cachefiles_check_volume_xattr(struct cachefiles_volume *volume)
 
 	xlen = cachefiles_inject_read_error();
 	if (xlen == 0)
-		xlen = vfs_getxattr(&nop_mnt_idmap, dentry, cachefiles_xattr_cache, buf, len);
+		xlen = vfs_getxattr(&nop_mnt_idmap, &path,
+				    cachefiles_xattr_cache, buf, len);
 	if (xlen != len) {
 		if (xlen < 0) {
 			ret = xlen;
-			trace_cachefiles_vfs_error(NULL, d_inode(dentry), xlen,
+			trace_cachefiles_vfs_error(NULL, d_inode(path.dentry), xlen,
 						   cachefiles_trace_getxattr_error);
 			if (xlen == -EIO)
 				cachefiles_io_error(
@@ -365,7 +366,7 @@ int cachefiles_check_volume_xattr(struct cachefiles_volume *volume)
 		ret = 0;
 	}
 
-	trace_cachefiles_vol_coherency(volume, d_inode(dentry)->i_ino, why);
+	trace_cachefiles_vol_coherency(volume, d_inode(path.dentry)->i_ino, why);
 	kfree(buf);
 	_leave(" = %d", ret);
 	return ret;
