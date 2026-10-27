@@ -444,6 +444,7 @@ static void bcm63xx_drv_pcmcia_remove(struct platform_device *pdev)
 
 	skt = platform_get_drvdata(pdev);
 	timer_shutdown_sync(&skt->timer);
+	pcmcia_unregister_socket(&skt->socket);
 	iounmap(skt->base);
 	iounmap(skt->io_base);
 	res = skt->reg_res;
