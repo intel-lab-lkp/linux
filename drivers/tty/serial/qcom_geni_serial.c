@@ -2131,6 +2131,22 @@ static int qcom_geni_serial_resume(struct device *dev)
 	return ret;
 }
 
+/*
+ * A hibernation image is restored after a power cycle, which reset the serial
+ * engine. The kernel that loaded the image only set up the engines it used
+ * itself, so set this one up again when the port starts. A console is left as
+ * it is, since setting it up at startup would race with console output.
+ */
+static int qcom_geni_serial_restore(struct device *dev)
+{
+	struct qcom_geni_serial_port *port = dev_get_drvdata(dev);
+
+	if (!uart_console(&port->uport))
+		port->setup = false;
+
+	return qcom_geni_serial_resume(dev);
+}
+
 #if IS_ENABLED(CONFIG_SERIAL_QCOM_GENI_CONSOLE)
 static const struct qcom_geni_device_data qcom_geni_console_data = {
 	.console = true,
@@ -2168,7 +2184,12 @@ static const struct qcom_geni_device_data sa8255p_qcom_geni_uart_data = {
 static const struct dev_pm_ops qcom_geni_serial_pm_ops = {
 	SET_RUNTIME_PM_OPS(qcom_geni_serial_runtime_suspend,
 			   qcom_geni_serial_runtime_resume, NULL)
-	SYSTEM_SLEEP_PM_OPS(qcom_geni_serial_suspend, qcom_geni_serial_resume)
+	.suspend = pm_sleep_ptr(qcom_geni_serial_suspend),
+	.resume = pm_sleep_ptr(qcom_geni_serial_resume),
+	.freeze = pm_sleep_ptr(qcom_geni_serial_suspend),
+	.thaw = pm_sleep_ptr(qcom_geni_serial_resume),
+	.poweroff = pm_sleep_ptr(qcom_geni_serial_suspend),
+	.restore = pm_sleep_ptr(qcom_geni_serial_restore),
 };
 
 static void qcom_geni_serial_sys_shutdown(struct platform_device *pdev)
