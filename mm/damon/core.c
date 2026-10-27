@@ -3056,7 +3056,7 @@ static __kernel_ulong_t damos_get_node_mem_bp(
 		numerator = i.totalram - i.freeram;
 	else	/* DAMOS_QUOTA_NODE_MEM_FREE_BP */
 		numerator = i.freeram;
-	return mult_frac(numerator, 10000, i.totalram);
+	return damon_mult_frac(numerator, 10000, i.totalram);
 }
 
 static unsigned long damos_get_node_memcg_used_bp(
@@ -3102,7 +3102,7 @@ static unsigned long damos_get_node_memcg_used_bp(
 		numerator = used_pages;
 	else	/* DAMOS_QUOTA_NODE_MEMCG_FREE_BP */
 		numerator = i.totalram - used_pages;
-	return mult_frac(numerator, 10000, i.totalram);
+	return damon_mult_frac(numerator, 10000, i.totalram);
 }
 
 #ifdef CONFIG_DAMON_PADDR
@@ -3199,11 +3199,11 @@ static unsigned long damos_get_node_eligible_mem_bp(struct damon_ctx *c,
 
 	node_eligible = damos_calc_eligible_bytes(c, s, nid, &total_eligible);
 
-	if (!(unsigned long)total_eligible)
+	if (!total_eligible)
 		return 0;
 
-	return mult_frac((unsigned long)node_eligible, 10000,
-			(unsigned long)total_eligible);
+	/* node_eligible <= total_eligible, so this cannot overflow */
+	return mul_u64_u64_div_u64(node_eligible, 10000, total_eligible);
 }
 #else /* CONFIG_DAMON_PADDR */
 static unsigned long damos_get_node_eligible_mem_bp(struct damon_ctx *c,
@@ -3246,8 +3246,8 @@ static unsigned int damos_get_in_active_mem_bp(bool active_ratio)
 		global_node_page_state(NR_LRU_BASE + LRU_INACTIVE_FILE);
 	total = max(active + inactive, 1);
 	if (active_ratio)
-		return mult_frac(active, 10000, total);
-	return mult_frac(inactive, 10000, total);
+		return damon_mult_frac(active, 10000, total);
+	return damon_mult_frac(inactive, 10000, total);
 }
 
 static unsigned int damos_hugepage_mem_bp(void)
@@ -3263,7 +3263,7 @@ static unsigned int damos_hugepage_mem_bp(void)
 	thp = global_node_page_state(NR_ANON_THPS) +
 				global_node_page_state(NR_SHMEM_THPS) +
 				global_node_page_state(NR_FILE_THPS);
-	return mult_frac(thp, 10000, total_pages - free_pages);
+	return damon_mult_frac(thp, 10000, total_pages - free_pages);
 }
 
 static void damos_set_quota_goal_current_value(struct damon_ctx *c,
@@ -3329,7 +3329,7 @@ static unsigned long damos_quota_score(struct damon_ctx *c, struct damos *s)
 	damos_for_each_quota_goal(goal, quota) {
 		damos_set_quota_goal_current_value(c, s, goal);
 		highest_score = max(highest_score,
-				mult_frac(goal->current_value, 10000,
+				damon_mult_frac(goal->current_value, 10000,
 					goal->target_value));
 	}
 

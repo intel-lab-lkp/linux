@@ -756,6 +756,36 @@ static void damon_test_sample_ratio_large_value(struct kunit *test)
 			UINT_MAX);
 }
 
+static void damos_test_quota_score_large_value(struct kunit *test)
+{
+	struct damos s;
+	struct damos_quota_goal goal = {
+		.metric = DAMOS_QUOTA_USER_INPUT,
+		.current_value = 500000,
+		.target_value = 1000000,
+	};
+
+	memset(&s, 0, sizeof(s));
+	INIT_LIST_HEAD(&s.quota.goals);
+	INIT_LIST_HEAD(&goal.list);
+	damos_add_quota_goal(&s.quota, &goal);
+	KUNIT_EXPECT_EQ(test, damos_quota_score(NULL, &s), 5000ul);
+
+	goal.current_value = 1500001;
+	KUNIT_EXPECT_EQ(test, damos_quota_score(NULL, &s), 15000ul);
+
+	goal.current_value = ULONG_MAX;
+	goal.target_value = 1;
+	KUNIT_EXPECT_EQ(test, damos_quota_score(NULL, &s), ULONG_MAX);
+
+	/* the largest representable score, and one beyond it */
+	goal.current_value = ULONG_MAX - ULONG_MAX / 10000;
+	goal.target_value = 9999;
+	KUNIT_EXPECT_EQ(test, damos_quota_score(NULL, &s), ULONG_MAX);
+	goal.current_value++;
+	KUNIT_EXPECT_EQ(test, damos_quota_score(NULL, &s), ULONG_MAX);
+}
+
 static void damon_test_set_attrs(struct kunit *test)
 {
 	struct damon_ctx *c = damon_new_ctx();
@@ -2568,6 +2598,7 @@ static struct kunit_case damon_test_cases[] = {
 	KUNIT_CASE(damon_test_mult_frac),
 	KUNIT_CASE(damon_test_age_for_new_attrs_large_value),
 	KUNIT_CASE(damon_test_sample_ratio_large_value),
+	KUNIT_CASE(damos_test_quota_score_large_value),
 	KUNIT_CASE(damon_test_set_attrs),
 	KUNIT_CASE(damon_test_mvsum),
 	KUNIT_CASE(damon_test_nr_accesses_mvsum),
