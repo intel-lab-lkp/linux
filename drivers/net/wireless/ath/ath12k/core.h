@@ -850,6 +850,11 @@ struct mlo_timestamp {
 	u32 mlo_comp_timer;
 };
 
+struct ath12k_reg_freq {
+	u32 start_freq;
+	u32 end_freq;
+};
+
 struct ath12k_pdev {
 	struct ath12k *ar;
 	u32 pdev_id;
@@ -857,6 +862,13 @@ struct ath12k_pdev {
 	struct ath12k_pdev_cap cap;
 	u8 mac_addr[ETH_ALEN];
 	struct mlo_timestamp timestamp;
+
+	/* Frequency ranges covered by the reg rules last received for
+	 * this radio, per band. end_freq is 0 if no rules were received.
+	 */
+	struct ath12k_reg_freq reg_freq_2ghz;
+	struct ath12k_reg_freq reg_freq_5ghz;
+	struct ath12k_reg_freq reg_freq_6ghz;
 };
 
 struct ath12k_fw_pdev {
@@ -869,11 +881,6 @@ struct ath12k_board_data {
 	const struct firmware *fw;
 	const void *data;
 	size_t len;
-};
-
-struct ath12k_reg_freq {
-	u32 start_freq;
-	u32 end_freq;
 };
 
 struct ath12k_mlo_memory {
@@ -1147,9 +1154,6 @@ struct ath12k_base {
 	/* Denote whether MLO is possible within the device */
 	bool single_chip_mlo_support;
 
-	struct ath12k_reg_freq reg_freq_2ghz;
-	struct ath12k_reg_freq reg_freq_5ghz;
-	struct ath12k_reg_freq reg_freq_6ghz;
 	const struct ath12k_mem_profile_based_param *profile_param;
 	enum ath12k_qmi_mem_mode target_mem_mode;
 

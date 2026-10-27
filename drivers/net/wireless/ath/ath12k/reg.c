@@ -269,10 +269,11 @@ static void ath12k_copy_regd(struct ieee80211_regdomain *regd_orig,
 int ath12k_regd_update(struct ath12k *ar, bool init)
 {
 	struct ath12k_wmi_hal_reg_capabilities_ext_arg *reg_cap;
-	u32 phy_id, freq_low, freq_high, supported_bands;
+	u32 phy_id, freq_low, freq_high;
 	struct ath12k_hw *ah = ath12k_ar_to_ah(ar);
 	struct ieee80211_hw *hw = ah->hw;
 	struct ieee80211_regdomain *regd, *regd_copy = NULL;
+	struct ath12k_pdev *pdev = ar->pdev;
 	int ret, regd_len, pdev_id;
 	struct ath12k_base *ab;
 	long time_left;
@@ -288,43 +289,55 @@ int ath12k_regd_update(struct ath12k *ar, bool init)
 		 */
 	}
 
-	supported_bands = ar->pdev->cap.supported_bands;
 	reg_cap = &ab->hal_reg_cap[ar->pdev_idx];
 
 	/* Possible that due to reg change, current limits for supported
 	 * frequency changed. Update it. As a first step, reset the
 	 * previous values and then compute and set the new values.
+	 *
+	 * Only bands that this radio operates on and received reg rules
+	 * for contribute. A radio may receive rules for bands it does not
+	 * operate on, e.g. the 6 GHz radio of a split-pdev device.
 	 */
 	ar->freq_range.start_freq = 0;
 	ar->freq_range.end_freq = 0;
 
-	if (supported_bands & WMI_HOST_WLAN_2GHZ_CAP) {
+	if (ar->mac.sbands[NL80211_BAND_2GHZ].channels &&
+	    pdev->reg_freq_2ghz.end_freq) {
 		if (ab->hw_params->single_pdev_only) {
-			phy_id = ar->pdev->cap.band[WMI_HOST_WLAN_2GHZ_CAP].phy_id;
+			phy_id = pdev->cap.band[NL80211_BAND_2GHZ].phy_id;
 			reg_cap = &ab->hal_reg_cap[phy_id];
 		}
 
-		freq_low = max(reg_cap->low_2ghz_chan, ab->reg_freq_2ghz.start_freq);
-		freq_high = min(reg_cap->high_2ghz_chan, ab->reg_freq_2ghz.end_freq);
+		freq_low = max(reg_cap->low_2ghz_chan, pdev->reg_freq_2ghz.start_freq);
+		freq_high = min(reg_cap->high_2ghz_chan, pdev->reg_freq_2ghz.end_freq);
 
 		ath12k_mac_update_freq_range(ar, freq_low, freq_high);
 	}
 
-	if (supported_bands & WMI_HOST_WLAN_5GHZ_CAP && !ar->supports_6ghz) {
+	if (ar->mac.sbands[NL80211_BAND_5GHZ].channels &&
+	    pdev->reg_freq_5ghz.end_freq) {
 		if (ab->hw_params->single_pdev_only) {
-			phy_id = ar->pdev->cap.band[WMI_HOST_WLAN_5GHZ_CAP].phy_id;
+			phy_id = pdev->cap.band[NL80211_BAND_5GHZ].phy_id;
 			reg_cap = &ab->hal_reg_cap[phy_id];
 		}
 
-		freq_low = max(reg_cap->low_5ghz_chan, ab->reg_freq_5ghz.start_freq);
-		freq_high = min(reg_cap->high_5ghz_chan, ab->reg_freq_5ghz.end_freq);
+		freq_low = max(reg_cap->low_5ghz_chan, pdev->reg_freq_5ghz.start_freq);
+		freq_high = min(reg_cap->high_5ghz_chan, pdev->reg_freq_5ghz.end_freq);
 
 		ath12k_mac_update_freq_range(ar, freq_low, freq_high);
 	}
 
-	if (supported_bands & WMI_HOST_WLAN_5GHZ_CAP && ar->supports_6ghz) {
-		freq_low = max(reg_cap->low_5ghz_chan, ab->reg_freq_6ghz.start_freq);
-		freq_high = min(reg_cap->high_5ghz_chan, ab->reg_freq_6ghz.end_freq);
+	if (ar->mac.sbands[NL80211_BAND_6GHZ].channels &&
+	    pdev->reg_freq_6ghz.end_freq) {
+		/* 6 GHz is reported as part of the 5 GHz band capability */
+		if (ab->hw_params->single_pdev_only) {
+			phy_id = pdev->cap.band[NL80211_BAND_5GHZ].phy_id;
+			reg_cap = &ab->hal_reg_cap[phy_id];
+		}
+
+		freq_low = max(reg_cap->low_5ghz_chan, pdev->reg_freq_6ghz.start_freq);
+		freq_high = min(reg_cap->high_5ghz_chan, pdev->reg_freq_6ghz.end_freq);
 
 		ath12k_mac_update_freq_range(ar, freq_low, freq_high);
 	}
@@ -645,6 +658,7 @@ ath12k_reg_build_regd(struct ath12k_base *ab,
 		      enum wmi_vdev_type vdev_type,
 		      enum ieee80211_ap_reg_power power_type)
 {
+	struct ath12k_pdev *pdev = &ab->pdevs[reg_info->phy_id];
 	struct ieee80211_regdomain *new_regd = NULL;
 	struct ath12k_reg_rule *reg_rule, *reg_rule_6ghz;
 	u32 flags, reg_6ghz_number, max_bw_6ghz;
@@ -709,14 +723,15 @@ ath12k_reg_build_regd(struct ath12k_base *ab,
 		   alpha2, ath12k_reg_get_regdom_str(new_regd->dfs_region),
 		   reg_info->dfs_region, num_rules);
 
-	/* Reset start and end frequency for each band
+	/* Reset start and end frequency for each band of the radio this
+	 * event belongs to. reg_info->phy_id has already been validated.
 	 */
-	ab->reg_freq_5ghz.start_freq = INT_MAX;
-	ab->reg_freq_5ghz.end_freq = 0;
-	ab->reg_freq_2ghz.start_freq = INT_MAX;
-	ab->reg_freq_2ghz.end_freq = 0;
-	ab->reg_freq_6ghz.start_freq = INT_MAX;
-	ab->reg_freq_6ghz.end_freq = 0;
+	pdev->reg_freq_5ghz.start_freq = INT_MAX;
+	pdev->reg_freq_5ghz.end_freq = 0;
+	pdev->reg_freq_2ghz.start_freq = INT_MAX;
+	pdev->reg_freq_2ghz.end_freq = 0;
+	pdev->reg_freq_6ghz.start_freq = INT_MAX;
+	pdev->reg_freq_6ghz.end_freq = 0;
 
 	/* Update reg_rules[] below. Firmware is expected to
 	 * send these rules in order(2G rules first and then 5G)
@@ -728,7 +743,7 @@ ath12k_reg_build_regd(struct ath12k_base *ab,
 			max_bw = min_t(u16, reg_rule->max_bw,
 				       reg_info->max_bw_2g);
 			flags = ath12k_get_bw_reg_flags(reg_info->max_bw_2g);
-			ath12k_reg_update_freq_range(&ab->reg_freq_2ghz, reg_rule);
+			ath12k_reg_update_freq_range(&pdev->reg_freq_2ghz, reg_rule);
 		} else if (reg_info->num_5g_reg_rules &&
 			   (j < reg_info->num_5g_reg_rules)) {
 			reg_rule = reg_info->reg_rules_5g_ptr + j++;
@@ -743,7 +758,7 @@ ath12k_reg_build_regd(struct ath12k_base *ab,
 			 */
 			flags = NL80211_RRF_AUTO_BW |
 				ath12k_get_bw_reg_flags(reg_info->max_bw_5g);
-			ath12k_reg_update_freq_range(&ab->reg_freq_5ghz, reg_rule);
+			ath12k_reg_update_freq_range(&pdev->reg_freq_5ghz, reg_rule);
 		} else if (reg_info->is_ext_reg_event && reg_6ghz_number &&
 			   (k < reg_6ghz_number)) {
 			reg_rule = reg_rule_6ghz + k++;
@@ -752,7 +767,7 @@ ath12k_reg_build_regd(struct ath12k_base *ab,
 				ath12k_get_bw_reg_flags(max_bw_6ghz);
 			if (reg_rule->psd_flag)
 				flags |= NL80211_RRF_PSD;
-			ath12k_reg_update_freq_range(&ab->reg_freq_6ghz, reg_rule);
+			ath12k_reg_update_freq_range(&pdev->reg_freq_6ghz, reg_rule);
 		} else {
 			break;
 		}
