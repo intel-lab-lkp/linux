@@ -952,6 +952,14 @@ restore_all_switch_stack:
 
 	/* Restore user state */
 	RESTORE_REGS pop=4			# skip orig_eax/error_code
+
+	/* Assert that the IRET frame returns to user mode or vm86. */
+	testb	$USER_SEGMENT_RPL_MASK, 4(%esp)
+	jnz	.Lreturn_to_user_ok
+	testl	$X86_EFLAGS_VM, 8(%esp)
+	jnz	.Lreturn_to_user_ok
+	ud2
+.Lreturn_to_user_ok:
 	CLEAR_CPU_BUFFERS
 .Lirq_return:
 	/*
