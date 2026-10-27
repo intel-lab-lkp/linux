@@ -70,6 +70,10 @@ config KFENCE_STATIC_KEYS
 	  enabling and disabling static keys invoke IPI broadcasts, the latency
 	  and impact of which is much harder to predict than a dynamic branch.
 
+	  Sets the default for the "kfence.static_keys" boot parameter.
+	  Selecting the other mode at boot adds one extra jump to each
+	  slab allocation's KFENCE check.
+
 	  Say N if you are unsure.
 
 config KFENCE_STRESS_TEST_FAULTS

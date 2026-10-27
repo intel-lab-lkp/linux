@@ -119,6 +119,9 @@ module_param_named(deferrable, kfence_deferrable, bool, 0444);
 static bool kfence_check_on_panic __read_mostly;
 module_param_named(check_on_panic, kfence_check_on_panic, bool, 0444);
 
+static bool kfence_static_keys __ro_after_init = IS_ENABLED(CONFIG_KFENCE_STATIC_KEYS);
+module_param_named(static_keys, kfence_static_keys, bool, 0444);
+
 /* The pool of pages used for guard pages and objects. */
 char *__kfence_pool __read_mostly;
 EXPORT_SYMBOL(__kfence_pool); /* Export for test modules. */
@@ -845,7 +848,6 @@ static struct notifier_block kfence_check_canary_notifier = {
 
 static struct delayed_work kfence_timer;
 
-#ifdef CONFIG_KFENCE_STATIC_KEYS
 /* Wait queue to wake up allocation-gate timer task. */
 static DECLARE_WAIT_QUEUE_HEAD(allocation_wait);
 
@@ -878,7 +880,6 @@ static void wake_up_kfence_timer(struct irq_work *work)
 	wake_up(&allocation_wait);
 }
 static DEFINE_IRQ_WORK(wake_up_kfence_timer_work, wake_up_kfence_timer);
-#endif
 
 /*
  * Set up delayed work, which will enable and disable the static key. We need to
@@ -897,17 +898,17 @@ static void toggle_allocation_gate(struct work_struct *work)
 		return;
 
 	atomic_set(&kfence_allocation_gate, -kfence_burst);
-#ifdef CONFIG_KFENCE_STATIC_KEYS
-	/* Enable static key, and await allocation to happen. */
-	static_branch_enable(&kfence_allocation_key);
+	if (kfence_static_keys) {
+		/* Enable static key, and await allocation to happen. */
+		static_branch_enable(&kfence_allocation_key);
 
-	wait_event_idle(allocation_wait,
-			atomic_read(&kfence_allocation_gate) > 0 ||
-			!READ_ONCE(kfence_enabled));
+		wait_event_idle(allocation_wait,
+				atomic_read(&kfence_allocation_gate) > 0 ||
+				!READ_ONCE(kfence_enabled));
 
-	/* Disable static key and reset timer. */
-	static_branch_disable(&kfence_allocation_key);
-#endif
+		/* Disable static key and reset timer. */
+		static_branch_disable(&kfence_allocation_key);
+	}
 	queue_delayed_work(system_dfl_wq, &kfence_timer,
 			   msecs_to_jiffies(kfence_sample_interval));
 }
@@ -956,7 +957,7 @@ void __init kfence_alloc_pool_and_metadata(void)
 
 static void kfence_init_enable(void)
 {
-	if (!IS_ENABLED(CONFIG_KFENCE_STATIC_KEYS))
+	if (!kfence_static_keys)
 		static_branch_enable(&kfence_allocation_key);
 
 	if (kfence_deferrable)
@@ -967,21 +968,28 @@ static void kfence_init_enable(void)
 	if (kfence_check_on_panic)
 		atomic_notifier_chain_register(&panic_notifier_list, &kfence_check_canary_notifier);
 
-#ifdef CONFIG_KFENCE_STATIC_KEYS
-	register_reboot_notifier(&kfence_reboot_notifier);
-#endif
+	if (kfence_static_keys)
+		register_reboot_notifier(&kfence_reboot_notifier);
 
 	WRITE_ONCE(kfence_enabled, true);
 	queue_delayed_work(system_dfl_wq, &kfence_timer, 0);
 
-	pr_info("initialized - using %lu bytes for %d objects at 0x%p-0x%p\n", KFENCE_POOL_SIZE,
+	pr_info("initialized - using %lu bytes for %d objects at 0x%p-0x%p%s\n", KFENCE_POOL_SIZE,
 		CONFIG_KFENCE_NUM_OBJECTS, (void *)__kfence_pool,
-		(void *)(__kfence_pool + KFENCE_POOL_SIZE));
+		(void *)(__kfence_pool + KFENCE_POOL_SIZE),
+		kfence_static_keys ? ", static keys mode" : "");
 }
 
 void __init kfence_init(void)
 {
 	stack_hash_seed = get_random_u32();
+
+	/*
+	 * Without jump labels a static key is just another dynamic branch, so
+	 * static keys mode would only add the cost of toggling it.
+	 */
+	if (!IS_ENABLED(CONFIG_JUMP_LABEL))
+		kfence_static_keys = false;
 
 	/* Setting kfence_sample_interval to 0 on boot disables KFENCE. */
 	if (!kfence_sample_interval)
@@ -1175,10 +1183,10 @@ void *__kfence_alloc(struct kmem_cache *s, size_t size, gfp_t flags)
 	allocation_gate = atomic_inc_return(&kfence_allocation_gate);
 	if (allocation_gate > 1)
 		return NULL;
-#ifdef CONFIG_KFENCE_STATIC_KEYS
 	/*
 	 * waitqueue_active() is fully ordered after the update of
-	 * kfence_allocation_gate per atomic_inc_return().
+	 * kfence_allocation_gate per atomic_inc_return(). There are only ever
+	 * waiters in static keys mode.
 	 */
 	if (allocation_gate == 1 && waitqueue_active(&allocation_wait)) {
 		/*
@@ -1187,7 +1195,6 @@ void *__kfence_alloc(struct kmem_cache *s, size_t size, gfp_t flags)
 		 */
 		irq_work_queue(&wake_up_kfence_timer_work);
 	}
-#endif
 
 	if (!READ_ONCE(kfence_enabled))
 		return NULL;

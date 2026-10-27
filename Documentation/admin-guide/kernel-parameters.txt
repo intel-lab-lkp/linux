@@ -2989,6 +2989,12 @@ Kernel parameters
 			Format: <unsigned integer>
 			Default: 75
 
+	kfence.static_keys=
+			[MM,KFENCE] Whether to use static keys to set up
+			KFENCE allocations. Ignored without CONFIG_JUMP_LABEL.
+			Format: <bool>
+			Default: CONFIG_KFENCE_STATIC_KEYS
+
 	kgdbdbgp=	[KGDB,HW,EARLY] kgdb over EHCI usb debug port.
 			Format: <Controller#>[,poll interval]
 			The controller # is the number of the ehci usb debug

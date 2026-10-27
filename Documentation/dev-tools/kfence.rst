@@ -259,10 +259,11 @@ SLUB) returns a guarded allocation from the KFENCE object pool (allocation
 sizes up to PAGE_SIZE are supported). At this point, the timer is reset, and
 the next allocation is set up after the expiration of the interval.
 
-When using ``CONFIG_KFENCE_STATIC_KEYS=y``, KFENCE allocations are "gated"
-through the main allocator's fast-path by relying on static branches via the
-static keys infrastructure. The static branch is toggled to redirect the
-allocation to KFENCE. Depending on sample interval, target workloads, and
+When using static keys mode (boot parameter ``kfence.static_keys=1``, which is
+the default with ``CONFIG_KFENCE_STATIC_KEYS=y``), KFENCE allocations are
+"gated" through the main allocator's fast-path by relying on static branches
+via the static keys infrastructure. The static branch is toggled to redirect
+the allocation to KFENCE. Depending on sample interval, target workloads, and
 system architecture, this may perform better than the simple dynamic branch.
 Careful benchmarking is recommended.
 
