@@ -170,6 +170,7 @@ int damon_hot_score(struct damon_ctx *c, struct damon_region *r,
 	int age_in_log, age_subscore;
 	unsigned int freq_weight = s->quota.weight_nr_accesses;
 	unsigned int age_weight = s->quota.weight_age;
+	u64 total_weight, weighted_sum;
 	int hotness;
 
 	freq_subscore = mult_frac(damon_nr_accesses_mvsum(r, c),
@@ -197,9 +198,10 @@ int damon_hot_score(struct damon_ctx *c, struct damon_region *r,
 	age_subscore = age_in_log * DAMON_MAX_SUBSCORE /
 		DAMON_MAX_AGE_IN_LOG / 2;
 
-	hotness = (freq_weight * freq_subscore + age_weight * age_subscore);
-	if (freq_weight + age_weight)
-		hotness /= freq_weight + age_weight;
+	total_weight = (u64)freq_weight + age_weight;
+	weighted_sum = (u64)freq_weight * freq_subscore +
+			(u64)age_weight * age_subscore;
+	hotness = total_weight ? div64_u64(weighted_sum, total_weight) : 0;
 	/*
 	 * Transform it to fit in [0, DAMOS_MAX_SCORE]
 	 */
@@ -576,3 +578,5 @@ bool damon_ops_filter_match(struct damon_filter *filter, struct folio *folio)
 	}
 	return matched == filter->matching;
 }
+
+#include "tests/ops-common-kunit.h"
