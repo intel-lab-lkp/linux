@@ -7,6 +7,7 @@
 
 #include <linux/highmem.h>
 #include <linux/hugetlb.h>
+#include <linux/math64.h>
 #include <linux/mman.h>
 #include <linux/mmu_notifier.h>
 #include <linux/page_idle.h>
@@ -776,7 +777,40 @@ static bool damos_va_filter_out(struct damos *scheme, struct folio *folio,
 struct damos_va_migrate_private {
 	struct list_head *migration_lists;
 	struct damos *scheme;
+	u64 weight_total;
 };
+
+static u64 damos_va_migrate_weight_total(struct damos_migrate_dests *dests)
+{
+	u64 total = 0;
+	size_t i;
+
+	for (i = 0; i < dests->nr_dests; i++)
+		total += dests->weight_arr[i];
+	return total;
+}
+
+static int damos_va_migrate_dests_idx(struct damos_migrate_dests *dests,
+		pgoff_t ilx, u64 weight_total)
+{
+	u64 target;
+	int i;
+
+	if (!weight_total)
+		return -1;
+
+	if (weight_total <= UINT_MAX)
+		target = ilx % (unsigned int)weight_total;
+	else
+		div64_u64_rem(ilx, weight_total, &target);
+
+	for (i = 0; i < dests->nr_dests; i++) {
+		if (target < dests->weight_arr[i])
+			return i;
+		target -= dests->weight_arr[i];
+	}
+	return -1;
+}
 
 /*
  * Place the given folio in the migration_list corresponding to where the folio
@@ -786,13 +820,11 @@ struct damos_va_migrate_private {
  */
 static void damos_va_migrate_dests_add(struct folio *folio,
 		struct vm_area_struct *vma, unsigned long addr,
-		struct damos_migrate_dests *dests,
-		struct list_head *migration_lists)
+		struct damos_va_migrate_private *priv)
 {
+	struct damos_migrate_dests *dests = &priv->scheme->migrate_dests;
 	pgoff_t ilx;
 	int order;
-	unsigned int target;
-	unsigned int weight_total = 0;
 	int i;
 
 	/*
@@ -808,19 +840,9 @@ static void damos_va_migrate_dests_add(struct folio *folio,
 	ilx = vma_start_pgoff(vma) >> order;
 	ilx += linear_page_delta(vma, addr) >> order;
 
-	for (i = 0; i < dests->nr_dests; i++)
-		weight_total += dests->weight_arr[i];
-
-	/* If the total weights are somehow 0, don't migrate at all */
-	if (!weight_total)
+	i = damos_va_migrate_dests_idx(dests, ilx, priv->weight_total);
+	if (i < 0)
 		return;
-
-	target = ilx % weight_total;
-	for (i = 0; i < dests->nr_dests; i++) {
-		if (target < dests->weight_arr[i])
-			break;
-		target -= dests->weight_arr[i];
-	}
 
 	/* If the folio is already in the right node, don't do anything */
 	if (folio_nid(folio) == dests->node_id_arr[i])
@@ -831,16 +853,14 @@ isolate:
 		return;
 	node_stat_add_folio(folio, NR_ISOLATED_ANON +
 			folio_is_file_lru(folio));
-	list_add(&folio->lru, &migration_lists[i]);
+	list_add(&folio->lru, &priv->migration_lists[i]);
 }
 
 static int damos_va_migrate_pmd_entry(pmd_t *pmd, unsigned long addr,
 		unsigned long next, struct mm_walk *walk)
 {
 	struct damos_va_migrate_private *priv = walk->private;
-	struct list_head *migration_lists = priv->migration_lists;
 	struct damos *s = priv->scheme;
-	struct damos_migrate_dests *dests = &s->migrate_dests;
 	struct folio *folio;
 	spinlock_t *ptl;
 	pte_t *start_pte, *pte, ptent;
@@ -858,8 +878,7 @@ static int damos_va_migrate_pmd_entry(pmd_t *pmd, unsigned long addr,
 			goto huge_out;
 		if (damos_va_filter_out(s, folio, walk->vma, addr, NULL, pmd))
 			goto huge_out;
-		damos_va_migrate_dests_add(folio, walk->vma, addr, dests,
-				migration_lists);
+		damos_va_migrate_dests_add(folio, walk->vma, addr, priv);
 huge_out:
 		spin_unlock(ptl);
 		return 0;
@@ -883,8 +902,7 @@ huge_out:
 			continue;
 		if (damos_va_filter_out(s, folio, walk->vma, addr, pte, NULL))
 			continue;
-		damos_va_migrate_dests_add(folio, walk->vma, addr, dests,
-				migration_lists);
+		damos_va_migrate_dests_add(folio, walk->vma, addr, priv);
 		page_idx = folio_page_idx(folio, pte_page(ptent));
 		nr = folio_nr_pages(folio) - page_idx;
 	}
@@ -960,6 +978,7 @@ static unsigned long damos_va_migrate(struct damon_target *target,
 	use_target_nid = dests->nr_dests == 0;
 	nr_dests = use_target_nid ? 1 : dests->nr_dests;
 	priv.scheme = s;
+	priv.weight_total = damos_va_migrate_weight_total(dests);
 	priv.migration_lists = kmalloc_objs(*priv.migration_lists, nr_dests);
 	if (!priv.migration_lists)
 		return 0;

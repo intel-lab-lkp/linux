@@ -266,12 +266,47 @@ static void damon_test_apply_three_regions4(struct kunit *test)
 			new_three_regions, expected, ARRAY_SIZE(expected));
 }
 
+static void damon_test_migrate_dests_idx(struct kunit *test)
+{
+	unsigned int weights[] = { UINT_MAX, 1 };
+	struct damos_migrate_dests dests = {
+		.weight_arr = weights,
+		.nr_dests = ARRAY_SIZE(weights),
+	};
+	u64 total = damos_va_migrate_weight_total(&dests);
+
+	KUNIT_EXPECT_EQ(test, total, (u64)UINT_MAX + 1);
+	KUNIT_EXPECT_EQ(test, damos_va_migrate_dests_idx(&dests, 0, total), 0);
+	KUNIT_EXPECT_EQ(test, damos_va_migrate_dests_idx(&dests,
+			UINT_MAX, total), 1);
+
+	weights[1] = 2;
+	total = damos_va_migrate_weight_total(&dests);
+	KUNIT_EXPECT_EQ(test, total, (u64)UINT_MAX + 2);
+	KUNIT_EXPECT_EQ(test, damos_va_migrate_dests_idx(&dests,
+			UINT_MAX, total), 1);
+
+	weights[0] = 0;
+	weights[1] = 0;
+	total = damos_va_migrate_weight_total(&dests);
+	KUNIT_EXPECT_EQ(test, total, 0ULL);
+	KUNIT_EXPECT_EQ(test, damos_va_migrate_dests_idx(&dests, 0, total), -1);
+
+	weights[0] = 1;
+	weights[1] = 3;
+	total = damos_va_migrate_weight_total(&dests);
+	KUNIT_EXPECT_EQ(test, total, 4ULL);
+	KUNIT_EXPECT_EQ(test, damos_va_migrate_dests_idx(&dests, 1, total), 1);
+	KUNIT_EXPECT_EQ(test, damos_va_migrate_dests_idx(&dests, 4, total), 0);
+}
+
 static struct kunit_case damon_test_cases[] = {
 	KUNIT_CASE(damon_test_three_regions_in_vmas),
 	KUNIT_CASE(damon_test_apply_three_regions1),
 	KUNIT_CASE(damon_test_apply_three_regions2),
 	KUNIT_CASE(damon_test_apply_three_regions3),
 	KUNIT_CASE(damon_test_apply_three_regions4),
+	KUNIT_CASE(damon_test_migrate_dests_idx),
 	{},
 };
 
