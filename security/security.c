@@ -1905,18 +1905,19 @@ void security_inode_post_setattr(const struct mnt_idmap *idmap, struct dentry *d
 }
 
 /**
- * security_inode_getattr() - Check if getting file attributes is allowed
- * @path: file
+ * security_path_getattr() - Check if getting file attributes is allowed
+ * @path: file (the VFS makes no guarantees with regard to @path->mnt)
+ * @file: file through which the attributes are retrieved, if any
  *
  * Check permission before obtaining file attributes.
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_getattr(const struct path *path)
+int security_path_getattr(const struct path *path, struct file *file)
 {
 	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_getattr, path);
+	return call_int_hook(path_getattr, path, file);
 }
 
 /**

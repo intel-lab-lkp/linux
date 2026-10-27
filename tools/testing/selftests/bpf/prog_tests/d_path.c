@@ -158,9 +158,7 @@ static void test_d_path_basic(void)
 	if (err < 0)
 		goto cleanup;
 
-	if (CHECK(!bss->called_stat,
-		  "stat",
-		  "trampoline for security_inode_getattr was not called\n"))
+	if (!ASSERT_TRUE(bss->called_stat, "stat"))
 		goto cleanup;
 
 	if (CHECK(!bss->called_close,

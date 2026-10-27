@@ -19,7 +19,7 @@ int called_stat = 0;
 int called_close = 0;
 int path_match_fallocate = 0;
 
-SEC("fentry/security_inode_getattr")
+SEC("fentry/security_path_getattr")
 int BPF_PROG(prog_stat, struct path *path, struct kstat *stat,
 	     __u32 request_mask, unsigned int query_flags)
 {

@@ -112,13 +112,14 @@ static int tomoyo_bprm_check_security(struct linux_binprm *bprm)
 }
 
 /**
- * tomoyo_inode_getattr - Target for security_inode_getattr().
+ * tomoyo_path_getattr - Target for security_path_getattr().
  *
  * @path: Pointer to "struct path".
  *
  * Returns 0 on success, negative value otherwise.
  */
-static int tomoyo_inode_getattr(const struct path *path)
+static int tomoyo_path_getattr(const struct path *path,
+			       struct file *file)
 {
 	return tomoyo_path_perm(TOMOYO_TYPE_GETATTR, path, NULL);
 }
@@ -570,7 +571,7 @@ static struct security_hook_list tomoyo_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(path_mknod, tomoyo_path_mknod),
 	LSM_HOOK_INIT(path_link, tomoyo_path_link),
 	LSM_HOOK_INIT(path_rename, tomoyo_path_rename),
-	LSM_HOOK_INIT(inode_getattr, tomoyo_inode_getattr),
+	LSM_HOOK_INIT(path_getattr, tomoyo_path_getattr),
 	LSM_HOOK_INIT(file_ioctl, tomoyo_file_ioctl),
 	LSM_HOOK_INIT(file_ioctl_compat, tomoyo_file_ioctl),
 	LSM_HOOK_INIT(path_chmod, tomoyo_path_chmod),

@@ -172,11 +172,12 @@ EXPORT_SYMBOL_GPL(generic_fill_statx_atomic_writes);
  * @request_mask: STATX_xxx flags indicating what the caller wants
  * @query_flags: Query mode (AT_STATX_SYNC_TYPE)
  *
- * Get attributes without calling security_inode_getattr.
+ * Get attributes without calling security_path_getattr.
  *
- * Currently the only caller other than vfs_getattr is internal to the
- * filehandle lookup code, which uses only the inode number and returns no
- * attributes to any user.  Any other code probably wants vfs_getattr.
+ * Callers must call security_path_getattr() beforehand, unless they only
+ * use the attributes internally: the filehandle lookup code, for
+ * instance, uses only the inode number and returns no attributes to any
+ * user.  Code that merely holds a path probably wants vfs_getattr().
  */
 int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 		      u32 request_mask, unsigned int query_flags)
@@ -260,7 +261,7 @@ int vfs_getattr(const struct path *path, struct kstat *stat,
 {
 	int retval;
 
-	retval = security_inode_getattr(path);
+	retval = security_path_getattr(path, NULL);
 	if (unlikely(retval))
 		return retval;
 	return vfs_getattr_nosec(path, stat, request_mask, query_flags);
@@ -272,17 +273,26 @@ EXPORT_SYMBOL(vfs_getattr);
  * @fd: The file descriptor referring to the file of interest
  * @stat: The result structure to fill in.
  *
- * This function is a wrapper around vfs_getattr().  The main difference is
- * that it uses a file descriptor to determine the file location.
+ * This function is a wrapper around vfs_getattr_nosec().  The main
+ * difference is that it uses a file descriptor to determine the file
+ * location, and passes that file to security_path_getattr(), so that
+ * LSMs can later authorize the operation with the rights available at
+ * open(2) time.
  *
  * 0 will be returned on success, and a -ve error code if unsuccessful.
  */
 int vfs_fstat(int fd, struct kstat *stat)
 {
+	int error;
 	CLASS(fd_raw, f)(fd);
+
 	if (fd_empty(f))
 		return -EBADF;
-	return vfs_getattr(&fd_file(f)->f_path, stat, STATX_BASIC_STATS, 0);
+	error = security_path_getattr(&fd_file(f)->f_path, fd_file(f));
+	if (error)
+		return error;
+	return vfs_getattr_nosec(&fd_file(f)->f_path, stat,
+				  STATX_BASIC_STATS, 0);
 }
 
 static int statx_lookup_flags(int flags)
@@ -298,9 +308,14 @@ static int statx_lookup_flags(int flags)
 }
 
 static int vfs_statx_path(const struct path *path, int flags, struct kstat *stat,
-			  u32 request_mask)
+			  u32 request_mask, struct file *file)
 {
-	int error = vfs_getattr(path, stat, request_mask, flags);
+	int error = security_path_getattr(path, file);
+
+	if (error)
+		return error;
+
+	error = vfs_getattr_nosec(path, stat, request_mask, flags);
 	if (error)
 		return error;
 
@@ -324,7 +339,8 @@ static int vfs_statx_fd(int fd, int flags, struct kstat *stat,
 	CLASS(fd_raw, f)(fd);
 	if (fd_empty(f))
 		return -EBADF;
-	return vfs_statx_path(&fd_file(f)->f_path, flags, stat, request_mask);
+	return vfs_statx_path(&fd_file(f)->f_path, flags, stat, request_mask,
+			      fd_file(f));
 }
 
 /**
@@ -335,10 +351,10 @@ static int vfs_statx_fd(int fd, int flags, struct kstat *stat,
  * @stat: The result structure to fill in.
  * @request_mask: STATX_xxx flags indicating what the caller wants
  *
- * This function is a wrapper around vfs_getattr().  The main difference is
- * that it uses a filename and base directory to determine the file location.
- * Additionally, the use of AT_SYMLINK_NOFOLLOW in flags will prevent a symlink
- * at the given name from being referenced.
+ * This function is a wrapper around vfs_statx_path().  The main difference
+ * with vfs_getattr() is that it uses a filename and base directory to
+ * determine the file location.  Additionally, the use of AT_SYMLINK_NOFOLLOW
+ * in flags will prevent a symlink at the given name from being referenced.
  *
  * 0 will be returned on success, and a -ve error code if unsuccessful.
  */
@@ -357,7 +373,7 @@ retry:
 	error = filename_lookup(dfd, filename, lookup_flags, &path, NULL);
 	if (error)
 		return error;
-	error = vfs_statx_path(&path, flags, stat, request_mask);
+	error = vfs_statx_path(&path, flags, stat, request_mask, NULL);
 	path_put(&path);
 	if (retry_estale(error, lookup_flags)) {
 		lookup_flags |= LOOKUP_REVAL;

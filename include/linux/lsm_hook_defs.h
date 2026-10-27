@@ -153,7 +153,8 @@ LSM_HOOK(int, 0, inode_setattr, const struct mnt_idmap *idmap,
 	 const struct path *path, struct iattr *attr, struct file *file)
 LSM_HOOK(void, LSM_RET_VOID, inode_post_setattr, const struct mnt_idmap *idmap,
 	 struct dentry *dentry, int ia_valid)
-LSM_HOOK(int, 0, inode_getattr, const struct path *path)
+LSM_HOOK(int, 0, path_getattr, const struct path *path,
+	 struct file *file)
 LSM_HOOK(int, 0, inode_xattr_skipcap, const char *name)
 LSM_HOOK(int, 0, inode_setxattr, const struct mnt_idmap *idmap,
 	 const struct path *path, const char *name, const void *value,

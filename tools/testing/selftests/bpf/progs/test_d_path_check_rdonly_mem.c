@@ -7,7 +7,7 @@
 
 extern const int bpf_prog_active __ksym;
 
-SEC("fentry/security_inode_getattr")
+SEC("fentry/security_path_getattr")
 int BPF_PROG(d_path_check_rdonly_mem, struct path *path, struct kstat *stat,
 	     __u32 request_mask, unsigned int query_flags)
 {

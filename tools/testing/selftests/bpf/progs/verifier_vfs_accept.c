@@ -71,7 +71,7 @@ int BPF_PROG(get_task_exe_file_and_put_kfunc_from_argument,
 	return 0;
 }
 
-SEC("lsm.s/inode_getattr")
+SEC("lsm.s/path_getattr")
 __success
 int BPF_PROG(path_d_path_from_path_argument, struct path *path)
 {

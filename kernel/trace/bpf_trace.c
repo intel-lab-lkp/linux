@@ -961,7 +961,7 @@ BPF_CALL_3(bpf_d_path, const struct path *, path, char *, buf, u32, sz)
 BTF_SET_START(btf_allowlist_d_path)
 #ifdef CONFIG_SECURITY
 BTF_ID(func, security_file_permission)
-BTF_ID(func, security_inode_getattr)
+BTF_ID(func, security_path_getattr)
 BTF_ID(func, security_file_open)
 #endif
 #ifdef CONFIG_SECURITY_PATH

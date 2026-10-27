@@ -1295,12 +1295,14 @@ static int smack_inode_setattr(const struct mnt_idmap *idmap,
 }
 
 /**
- * smack_inode_getattr - Smack check for getting attributes
+ * smack_path_getattr - Smack check for getting attributes
  * @path: path to extract the info from
+ * @file: file through which the attributes are retrieved, if any
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_getattr(const struct path *path)
+static int smack_path_getattr(const struct path *path,
+			      struct file *file)
 {
 	struct smk_audit_info ad;
 	struct inode *inode = d_backing_inode(path->dentry);
@@ -5197,7 +5199,7 @@ static struct security_hook_list smack_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(inode_rename, smack_inode_rename),
 	LSM_HOOK_INIT(inode_permission, smack_inode_permission),
 	LSM_HOOK_INIT(inode_setattr, smack_inode_setattr),
-	LSM_HOOK_INIT(inode_getattr, smack_inode_getattr),
+	LSM_HOOK_INIT(path_getattr, smack_path_getattr),
 	LSM_HOOK_INIT(inode_xattr_skipcap, smack_inode_xattr_skipcap),
 	LSM_HOOK_INIT(inode_setxattr, smack_inode_setxattr),
 	LSM_HOOK_INIT(inode_post_setxattr, smack_inode_post_setxattr),
