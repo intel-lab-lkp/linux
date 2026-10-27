@@ -2775,6 +2775,7 @@ static int pl08x_probe(struct amba_device *adev, const struct amba_id *id)
 		pl08x->has_slave = true;
 		dma_cap_set(DMA_SLAVE, pl08x->slave.cap_mask);
 		dma_cap_set(DMA_CYCLIC, pl08x->slave.cap_mask);
+		dma_cap_set(DMA_PRIVATE, pl08x->slave.cap_mask);
 		pl08x->slave.dev = &adev->dev;
 		pl08x->slave.device_free_chan_resources =
 			pl08x_free_chan_resources;
