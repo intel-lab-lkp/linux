@@ -4131,7 +4131,7 @@ int security_inode_notifysecctx(struct inode *inode, void *ctx, u32 ctxlen)
 EXPORT_SYMBOL(security_inode_notifysecctx);
 
 /**
- * security_inode_setsecctx() - Change the security label of an inode
+ * security_path_setsecctx() - Change the security label of an inode
  * @path: inode (the VFS makes no guarantees with regard to @path->mnt)
  * @ctx: secctx
  * @ctxlen: length of secctx
@@ -4146,11 +4146,11 @@ EXPORT_SYMBOL(security_inode_notifysecctx);
  *
  * Return: Returns 0 on success, error on failure.
  */
-int security_inode_setsecctx(const struct path *path, void *ctx, u32 ctxlen)
+int security_path_setsecctx(const struct path *path, void *ctx, u32 ctxlen)
 {
-	return call_int_hook(inode_setsecctx, path, ctx, ctxlen);
+	return call_int_hook(path_setsecctx, path, ctx, ctxlen);
 }
-EXPORT_SYMBOL(security_inode_setsecctx);
+EXPORT_SYMBOL(security_path_setsecctx);
 
 /**
  * security_inode_getsecctx() - Get the security label of an inode
