@@ -190,6 +190,56 @@ static void test_clobber_redzone_free(struct kunit *test)
 	kmem_cache_destroy(s);
 }
 
+static void test_freelist_random(struct kunit *test)
+{
+	struct kmem_cache *s = test_kmem_cache_create("TestSlub_freelist_random",
+					64, SLAB_CONSISTENCY_CHECKS);
+	bool random = false;
+	unsigned int i, nr, nr_linear = 0;
+	void **objs, *first;
+
+#ifdef CONFIG_SLAB_FREELIST_RANDOM
+	random = slab_freelist_random;
+	KUNIT_EXPECT_EQ(test, !!s->random_seq, random);
+#endif
+	kunit_info(test, "freelist randomisation is %s\n", str_on_off(random));
+
+	/*
+	 * Caches with debug flags have no sheaves, so objects come straight
+	 * off the slab freelist.
+	 */
+	first = kmem_cache_alloc(s, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, first);
+	nr = virt_to_slab(first)->objects;
+	objs = kunit_kcalloc(test, nr, sizeof(*objs), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, objs);
+	objs[0] = first;
+
+	for (i = 1; i < nr; i++) {
+		objs[i] = kmem_cache_alloc(s, GFP_KERNEL);
+		KUNIT_ASSERT_NOT_NULL(test, objs[i]);
+	}
+
+	for (i = 1; i < nr; i++) {
+		if (virt_to_slab(objs[i]) != virt_to_slab(objs[0]))
+			break;
+		if (objs[i] == objs[i - 1] + s->size)
+			nr_linear++;
+	}
+
+	if (i == nr) {
+		/* Without randomisation, objects are handed out in address order. */
+		KUNIT_EXPECT_EQ(test, nr_linear == nr - 1, !random);
+	} else {
+		kunit_info(test, "objects were allocated from different slabs\n");
+	}
+
+	for (i = 0; i < nr; i++)
+		kmem_cache_free(s, objs[i]);
+	kmem_cache_destroy(s);
+	KUNIT_EXPECT_EQ(test, 0, slab_errors);
+}
+
 static void test_kmalloc_redzone_access(struct kunit *test)
 {
 	struct kmem_cache *s = test_kmem_cache_create("TestSlub_RZ_kmalloc", 32,
@@ -535,6 +585,7 @@ static struct kunit_case test_cases[] = {
 #endif
 
 	KUNIT_CASE(test_clobber_redzone_free),
+	KUNIT_CASE(test_freelist_random),
 	KUNIT_CASE(test_kmalloc_redzone_access),
 	KUNIT_CASE(test_kfree_rcu),
 	KUNIT_CASE(test_kfree_rcu_wq_destroy),

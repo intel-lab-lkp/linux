@@ -3424,7 +3424,8 @@ static inline struct slab *alloc_slab_page(gfp_t flags, int node,
 }
 
 #ifdef CONFIG_SLAB_FREELIST_RANDOM
-static bool slab_freelist_random __ro_after_init = true;
+VISIBLE_IF_KUNIT bool slab_freelist_random __ro_after_init = true;
+EXPORT_SYMBOL_IF_KUNIT(slab_freelist_random);
 
 static int __init setup_slab_freelist_random(char *str)
 {
