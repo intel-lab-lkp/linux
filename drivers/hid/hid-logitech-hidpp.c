@@ -4673,6 +4673,7 @@ static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	struct hidpp_device *hidpp;
 	int ret;
 	unsigned int connect_mask = HID_CONNECT_DEFAULT;
+	bool early_connect;
 
 	/* report_fixup needs drvdata to be set before we call hid_parse */
 	hidpp = devm_kzalloc(&hdev->dev, sizeof(*hidpp), GFP_KERNEL);
@@ -4734,12 +4735,31 @@ static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			 hdev->name);
 
 	/*
-	 * First call hid_hw_start(hdev, 0) to allow IO without connecting any
-	 * hid subdrivers (hid-input, hidraw). This allows retrieving the dev's
-	 * name and serial number and store these in hdev->name and hdev->uniq,
-	 * before the hid-input and hidraw drivers expose these to userspace.
+	 * hid_hw_open() below tells the transport that I/O may start. However,
+	 * Any non-HID++ input report (e.g. regular keystrokes) received before
+	 * hid-input is connected will be dropped, and over BLE the HID++
+	 * handshake below takes several hundred milliseconds.
+	 *
+	 * Bluetooth devices already get their name and serial number from the
+	 * transport, so for them there is no need to delay exposing the input
+	 * and hidraw nodes until the handshake is done: connect them right
+	 * away, like hid-generic does. hidpp_connect_event() still fetches the
+	 * HID++ name into hidpp->name (used e.g. for the battery model name).
+	 *
+	 * DELAYED_INIT devices create their input device from
+	 * hidpp_connect_event() and keep the original ordering.
 	 */
-	ret = hid_hw_start(hdev, 0);
+	early_connect = hdev->bus == BUS_BLUETOOTH &&
+			!(hidpp->quirks & HIDPP_QUIRK_DELAYED_INIT);
+
+	/*
+	 * Otherwise, first call hid_hw_start(hdev, 0) to allow IO without
+	 * connecting any hid subdrivers (hid-input, hidraw). This allows
+	 * retrieving the dev's name and serial number and store these in
+	 * hdev->name and hdev->uniq, before the hid-input and hidraw drivers
+	 * expose these to userspace.
+	 */
+	ret = hid_hw_start(hdev, early_connect ? connect_mask : 0);
 	if (ret) {
 		hid_err(hdev, "hw start failed\n");
 		goto hid_hw_start_fail;
@@ -4755,25 +4775,32 @@ static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	/* Allow incoming packets */
 	hid_device_io_start(hdev);
 
-	/* Get name + serial, store in hdev->name + hdev->uniq */
-	if (id->group == HID_GROUP_LOGITECH_DJ_DEVICE)
-		hidpp_unifying_init(hidpp);
-	else
-		hidpp_non_unifying_init(hidpp);
+	if (!early_connect) {
+		/* Get name + serial, store in hdev->name + hdev->uniq */
+		if (id->group == HID_GROUP_LOGITECH_DJ_DEVICE)
+			hidpp_unifying_init(hidpp);
+		else
+			hidpp_non_unifying_init(hidpp);
 
-	if (hidpp->quirks & HIDPP_QUIRK_DELAYED_INIT)
-		connect_mask &= ~HID_CONNECT_HIDINPUT;
+		if (hidpp->quirks & HIDPP_QUIRK_DELAYED_INIT)
+			connect_mask &= ~HID_CONNECT_HIDINPUT;
 
-	/* Now export the actual inputs and hidraw nodes to the world */
-	hid_device_io_stop(hdev);
-	ret = hid_connect(hdev, connect_mask);
-	if (ret) {
-		hid_err(hdev, "%s:hid_connect returned error %d\n", __func__, ret);
-		goto hid_hw_init_fail;
+		/* Now export the actual inputs and hidraw nodes to the world */
+		hid_device_io_stop(hdev);
+		ret = hid_connect(hdev, connect_mask);
+		if (ret) {
+			hid_err(hdev, "%s:hid_connect returned error %d\n",
+				__func__, ret);
+			goto hid_hw_init_fail;
+		}
+
+		/*
+		 * Check for connected devices now that incoming packets will
+		 * not be disabled again
+		 */
+		hid_device_io_start(hdev);
 	}
 
-	/* Check for connected devices now that incoming packets will not be disabled again */
-	hid_device_io_start(hdev);
 	schedule_work(&hidpp->work);
 	flush_work(&hidpp->work);
 
