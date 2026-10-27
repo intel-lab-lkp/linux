@@ -205,6 +205,30 @@ The ``ice`` driver implements support for flash update using the
 combined flash image that contains the ``fw.mgmt``, ``fw.undi``, and
 ``fw.netlist`` components.
 
+When firmware reports an external Root of Trust (eRoT), the image must
+also contain the ``fw.pqc_manifest`` component and all four components
+must be updated together. A single component request is rejected before
+anything is written to the device. An image that misses one of the four
+components, repeats one, or carries a component without data is
+rejected before any flash bank is erased, but by then any previously
+pending update has already been canceled. The driver queries the device
+capabilities for every flash attempt, so these restrictions follow what
+the firmware reports at that moment, including on a driver loaded while
+the firmware was already in recovery mode. Adapters whose firmware does
+not report the eRoT capability keep their previous handling, and a
+``fw.pqc_manifest`` component always requires a reported eRoT
+capability. A reported eRoT capability value other than 0 or 1 makes
+every flash update fail with ``-EIO``; update such firmware out of band.
+
+These checks reject images the adapter cannot use. They do not
+authenticate image contents and they do not make the update atomic. The
+driver cannot activate or roll back the ``fw.pqc_manifest`` component:
+the AQ activation select mask names only ``fw.mgmt``, ``fw.undi`` and
+``fw.netlist``, and no pending update capability describes a Manifest.
+If an update fails after the Manifest bank has been written, the state
+of that bank is defined by the firmware, not by the driver, and
+recovering the adapter then needs out-of-band tooling.
+
 .. list-table:: List of supported overwrite modes
    :widths: 5 95
 

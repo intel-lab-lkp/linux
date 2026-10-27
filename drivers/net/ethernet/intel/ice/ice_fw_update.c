@@ -9,6 +9,15 @@
 #include "ice_lib.h"
 #include "ice_fw_update.h"
 
+/* Bitmask values for ice_fwu_priv::seen_components */
+#define ICE_FWU_COMP_NVM		BIT(0)
+#define ICE_FWU_COMP_OROM		BIT(1)
+#define ICE_FWU_COMP_NETLIST		BIT(2)
+#define ICE_FWU_COMP_MANIFEST		BIT(3)
+/* Components an eRoT adapter requires in a single update */
+#define ICE_FWU_COMP_ALL_EROT		(ICE_FWU_COMP_NVM | ICE_FWU_COMP_OROM | \
+					 ICE_FWU_COMP_NETLIST | ICE_FWU_COMP_MANIFEST)
+
 struct ice_fwu_priv {
 	struct pldmfw context;
 
@@ -29,6 +38,10 @@ struct ice_fwu_priv {
 
 	/* Track if EMP reset is available */
 	u8 emp_reset_available;
+
+	/* Bitmask of components seen in this image (ICE_FWU_COMP_*) */
+	u8 seen_components;
+	bool erot_present;
 };
 
 /**
@@ -107,6 +120,9 @@ ice_check_component_response(struct ice_pf *pf, u16 id, u8 response, u8 code,
 		break;
 	case NVM_COMP_ID_NETLIST:
 		component = "fw.netlist";
+		break;
+	case NVM_COMP_ID_MANIFEST:
+		component = "fw.pqc_manifest";
 		break;
 	default:
 		WARN(1, "Unexpected unknown component identifier 0x%02x", id);
@@ -220,18 +236,45 @@ ice_send_component_table(struct pldmfw *context, struct pldmfw_component *compon
 	struct ice_pf *pf = priv->pf;
 	struct ice_hw *hw = &pf->hw;
 	size_t length;
+	u8 comp_bit;
 	int status;
 
 	switch (component->identifier) {
 	case NVM_COMP_ID_OROM:
+		comp_bit = ICE_FWU_COMP_OROM;
+		break;
 	case NVM_COMP_ID_NVM:
+		comp_bit = ICE_FWU_COMP_NVM;
+		break;
 	case NVM_COMP_ID_NETLIST:
+		comp_bit = ICE_FWU_COMP_NETLIST;
+		break;
+	case NVM_COMP_ID_MANIFEST:
+		if (!priv->erot_present) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Manifest component requires an eRoT capable adapter");
+			return -EOPNOTSUPP;
+		}
+		comp_bit = ICE_FWU_COMP_MANIFEST;
 		break;
 	default:
 		dev_err(dev, "Unable to update due to a firmware component with unknown ID %u\n",
 			component->identifier);
 		NL_SET_ERR_MSG_MOD(extack, "Unable to update due to unknown firmware component");
 		return -EOPNOTSUPP;
+	}
+
+	if (priv->erot_present) {
+		if (priv->seen_components & comp_bit) {
+			NL_SET_ERR_MSG_MOD(extack, "Duplicate component in PLDM image");
+			return -EINVAL;
+		}
+		/* the PLDM parser accepts a component without any data */
+		if (!component->component_size) {
+			NL_SET_ERR_MSG_MOD(extack, "Firmware component carries no data to flash");
+			return -EINVAL;
+		}
+		priv->seen_components |= comp_bit;
 	}
 
 	length = struct_size(comp_tbl, cvs, component->version_len);
@@ -624,6 +667,25 @@ ice_switch_flash_banks(struct ice_pf *pf, u8 activate_flags,
 }
 
 /**
+ * ice_fwu_check_erot - reject an eRoT update that misses a component
+ * @priv: PLDM firmware update private data
+ *
+ * An eRoT authenticates the complete NVM image, so all four components
+ * must be updated together.
+ *
+ * Returns: zero when the update may proceed, -EINVAL otherwise.
+ */
+static int ice_fwu_check_erot(struct ice_fwu_priv *priv)
+{
+	if (!priv->erot_present || priv->seen_components == ICE_FWU_COMP_ALL_EROT)
+		return 0;
+
+	NL_SET_ERR_MSG_MOD(priv->extack,
+			   "eRoT adapter requires fw.mgmt, fw.undi, fw.netlist and fw.pqc_manifest");
+	return -EINVAL;
+}
+
+/**
  * ice_flash_component - Flash a component of the NVM
  * @context: PLDM fw update structure
  * @component: the component table to program
@@ -667,6 +729,13 @@ ice_flash_component(struct pldmfw *context, struct pldmfw_component *component)
 		reset_level = NULL;
 		name = "fw.netlist";
 		break;
+	case NVM_COMP_ID_MANIFEST:
+		module = ICE_SR_PQC_MANIFEST_BANK_PTR;
+		/* the activation select mask has no bit for the manifest */
+		flag = 0;
+		reset_level = NULL;
+		name = "fw.pqc_manifest";
+		break;
 	default:
 		/* This should not trigger, since we check the id before
 		 * sending the component table to firmware.
@@ -675,6 +744,13 @@ ice_flash_component(struct pldmfw *context, struct pldmfw_component *component)
 		     component->identifier);
 		return -EINVAL;
 	}
+
+	/* every component table is sent before the first component is flashed,
+	 * so all components of the image are already known here
+	 */
+	err = ice_fwu_check_erot(priv);
+	if (err)
+		return err;
 
 	/* Mark this component for activating at the end */
 	priv->activate_flags |= flag;
@@ -705,6 +781,11 @@ static int ice_finalize_update(struct pldmfw *context)
 	struct ice_pf *pf = priv->pf;
 	struct devlink *devlink;
 	int err;
+
+	/* an image without any applicable component still reaches this point */
+	err = ice_fwu_check_erot(priv);
+	if (err)
+		return err;
 
 	/* Finally, notify firmware to activate the written NVM banks */
 	err = ice_switch_flash_banks(pf, priv->activate_flags,
@@ -844,6 +925,39 @@ static const struct pldmfw_ops ice_fwu_ops_e822 = {
 };
 
 /**
+ * ice_pending_updates_from_caps - Report the pending updates of a caps read
+ * @pf: the PF driver structure
+ * @pending: on return, bitmap of updates pending
+ * @dev_caps: device capabilities holding the pending flags
+ *
+ * Build the bitmap of flash components with an update pending, from an
+ * already read set of device capabilities.
+ */
+static void
+ice_pending_updates_from_caps(struct ice_pf *pf, u8 *pending,
+			      const struct ice_hw_dev_caps *dev_caps)
+{
+	struct device *dev = ice_pf_to_dev(pf);
+
+	*pending = 0;
+
+	if (dev_caps->common_cap.nvm_update_pending_nvm) {
+		dev_info(dev, "The fw.mgmt flash component has a pending update\n");
+		*pending |= ICE_AQC_NVM_ACTIV_SEL_NVM;
+	}
+
+	if (dev_caps->common_cap.nvm_update_pending_orom) {
+		dev_info(dev, "The fw.undi flash component has a pending update\n");
+		*pending |= ICE_AQC_NVM_ACTIV_SEL_OROM;
+	}
+
+	if (dev_caps->common_cap.nvm_update_pending_netlist) {
+		dev_info(dev, "The fw.netlist flash component has a pending update\n");
+		*pending |= ICE_AQC_NVM_ACTIV_SEL_NETLIST;
+	}
+}
+
+/**
  * ice_get_pending_updates - Check if the component has a pending update
  * @pf: the PF driver structure
  * @pending: on return, bitmap of updates pending
@@ -857,7 +971,6 @@ static const struct pldmfw_ops ice_fwu_ops_e822 = {
 int ice_get_pending_updates(struct ice_pf *pf, u8 *pending,
 			    struct netlink_ext_ack *extack)
 {
-	struct device *dev = ice_pf_to_dev(pf);
 	struct ice_hw_dev_caps *dev_caps;
 	struct ice_hw *hw = &pf->hw;
 	int err;
@@ -878,22 +991,7 @@ int ice_get_pending_updates(struct ice_pf *pf, u8 *pending,
 		return err;
 	}
 
-	*pending = 0;
-
-	if (dev_caps->common_cap.nvm_update_pending_nvm) {
-		dev_info(dev, "The fw.mgmt flash component has a pending update\n");
-		*pending |= ICE_AQC_NVM_ACTIV_SEL_NVM;
-	}
-
-	if (dev_caps->common_cap.nvm_update_pending_orom) {
-		dev_info(dev, "The fw.undi flash component has a pending update\n");
-		*pending |= ICE_AQC_NVM_ACTIV_SEL_OROM;
-	}
-
-	if (dev_caps->common_cap.nvm_update_pending_netlist) {
-		dev_info(dev, "The fw.netlist flash component has a pending update\n");
-		*pending |= ICE_AQC_NVM_ACTIV_SEL_NETLIST;
-	}
+	ice_pending_updates_from_caps(pf, pending, dev_caps);
 
 	kfree(dev_caps);
 
@@ -904,6 +1002,7 @@ int ice_get_pending_updates(struct ice_pf *pf, u8 *pending,
  * ice_cancel_pending_update - Cancel any pending update for a component
  * @pf: the PF driver structure
  * @component: if not NULL, the name of the component being updated
+ * @dev_caps: device capabilities to read the pending updates from
  * @extack: Netlink extended ACK structure
  *
  * Cancel any pending update for the specified component. If component is
@@ -913,6 +1012,7 @@ int ice_get_pending_updates(struct ice_pf *pf, u8 *pending,
  */
 static int
 ice_cancel_pending_update(struct ice_pf *pf, const char *component,
+			  const struct ice_hw_dev_caps *dev_caps,
 			  struct netlink_ext_ack *extack)
 {
 	struct devlink *devlink = priv_to_devlink(pf);
@@ -921,9 +1021,7 @@ ice_cancel_pending_update(struct ice_pf *pf, const char *component,
 	u8 pending;
 	int err;
 
-	err = ice_get_pending_updates(pf, &pending, extack);
-	if (err)
-		return err;
+	ice_pending_updates_from_caps(pf, &pending, dev_caps);
 
 	/* If the flash_update request is for a specific component, ignore all
 	 * of the other components.
@@ -981,9 +1079,10 @@ ice_cancel_pending_update(struct ice_pf *pf, const char *component,
  * formatted image that matches this device.
  *
  * Extract the device record Package Data and Component Tables and send them
- * to the firmware. Extract and write the flash data for each of the three
- * main flash components, "fw.mgmt", "fw.undi", and "fw.netlist". Notify
- * firmware once the data is written to the inactive banks.
+ * to the firmware. Extract and write the flash data for each of the main
+ * flash components, "fw.mgmt", "fw.undi", and "fw.netlist", plus
+ * "fw.pqc_manifest" on eRoT adapters. Notify firmware once the data is
+ * written to the inactive banks.
  *
  * Returns: zero on success or a negative error code on failure.
  */
@@ -994,6 +1093,7 @@ int ice_devlink_flash_update(struct devlink *devlink,
 	struct ice_pf *pf = devlink_priv(devlink);
 	struct device *dev = ice_pf_to_dev(pf);
 	struct ice_hw *hw = &pf->hw;
+	struct ice_hw_dev_caps *dev_caps;
 	struct ice_fwu_priv priv;
 	u8 preservation;
 	int err;
@@ -1013,18 +1113,52 @@ int ice_devlink_flash_update(struct devlink *devlink,
 		return -EOPNOTSUPP;
 	}
 
-	if (!hw->dev_caps.common_cap.nvm_unified_update && !ice_is_recovery_mode(hw)) {
+	dev_caps = kzalloc_obj(*dev_caps);
+	if (!dev_caps)
+		return -ENOMEM;
+
+	/* Read the most recent device capabilities from firmware. Do not use
+	 * the cached values in hw->dev_caps: a driver loaded while firmware
+	 * was already in recovery mode never reads them, and a reset may be
+	 * rebuilding them while this request runs. The same read serves the
+	 * pending update check below, so this costs one AQ command per flash
+	 * attempt, as it did before.
+	 */
+	err = ice_discover_dev_caps(hw, dev_caps);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Unable to read device capabilities");
+		kfree(dev_caps);
+		return err;
+	}
+
+	if (dev_caps->common_cap.external_pqc_rot_invalid) {
+		NL_SET_ERR_MSG_MOD(extack, "Invalid eRoT capability reported by firmware");
+		err = -EIO;
+		goto free_caps;
+	}
+
+	if (!dev_caps->common_cap.nvm_unified_update && !ice_is_recovery_mode(hw)) {
 		NL_SET_ERR_MSG_MOD(extack, "Current firmware does not support unified update");
-		return -EOPNOTSUPP;
+		err = -EOPNOTSUPP;
+		goto free_caps;
 	}
 
 	memset(&priv, 0, sizeof(priv));
+	priv.erot_present = dev_caps->common_cap.external_pqc_rot_present;
+
+	if (params->component && priv.erot_present) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "eRoT adapter does not support single component update");
+		err = -EOPNOTSUPP;
+		goto free_caps;
+	}
 
 	if (params->component && strcmp(params->component, "fw.mgmt") == 0) {
 		priv.context.mode = PLDMFW_UPDATE_MODE_SINGLE_COMPONENT;
 		priv.context.component_identifier = NVM_COMP_ID_NVM;
 	} else if (params->component) {
-		return -EOPNOTSUPP;
+		err = -EOPNOTSUPP;
+		goto free_caps;
 	}
 
 	/* the E822 device needs a slightly different ops */
@@ -1039,7 +1173,8 @@ int ice_devlink_flash_update(struct devlink *devlink,
 
 	devlink_flash_update_status_notify(devlink, "Preparing to flash", NULL, 0, 0);
 
-	err = ice_cancel_pending_update(pf, NULL, extack);
+	err = ice_cancel_pending_update(pf, NULL, dev_caps, extack);
+	kfree(dev_caps);
 	if (err)
 		return err;
 
@@ -1065,5 +1200,9 @@ int ice_devlink_flash_update(struct devlink *devlink,
 
 	ice_release_nvm(hw);
 
+	return err;
+
+free_caps:
+	kfree(dev_caps);
 	return err;
 }
