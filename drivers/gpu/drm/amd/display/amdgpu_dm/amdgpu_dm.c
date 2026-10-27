@@ -6076,6 +6076,11 @@ dm_update_plane_state(struct dc *dc,
 			goto out;
 		}
 
+		/* FreeSync times each frame from the plane's previous flip. */
+		if (dm_old_plane_state->dc_state &&
+		    old_plane_crtc == new_plane_crtc)
+			dc_new_plane_state->time = dm_old_plane_state->dc_state->time;
+
 		drm_dbg_atomic(new_plane_crtc->dev, "Enabling DRM plane: %d on DRM crtc %d\n",
 				 plane->base.id, new_plane_crtc->base.id);
 
