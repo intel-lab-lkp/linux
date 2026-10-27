@@ -9,6 +9,8 @@
 #include <linux/delay.h>
 #include <linux/perf_event.h>
 #include <linux/kprobes.h>
+#include <linux/string_choices.h>
+#include <linux/swab.h>
 #include "../mm/slab.h"
 
 static struct kunit_resource resource;
@@ -104,6 +106,54 @@ static void test_first_word(struct kunit *test)
 	validate_slab_cache(s);
 	KUNIT_EXPECT_EQ(test, 2, slab_errors);
 
+	kmem_cache_destroy(s);
+}
+
+static void test_freelist_hardened(struct kunit *test)
+{
+	struct kmem_cache *s = test_kmem_cache_create("TestSlub_freelist_hardened",
+					64, SLAB_CONSISTENCY_CHECKS);
+	bool hardened = slab_freelist_hardened_enabled();
+	unsigned long ptr_addr, raw;
+	void *a, *b, *c;
+
+	a = kmem_cache_alloc(s, GFP_KERNEL);
+	b = kmem_cache_alloc(s, GFP_KERNEL);
+	c = kmem_cache_alloc(s, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, a);
+	KUNIT_ASSERT_NOT_NULL(test, b);
+	KUNIT_ASSERT_NOT_NULL(test, c);
+
+	if (virt_to_slab(a) != virt_to_slab(b) ||
+	    virt_to_slab(b) != virt_to_slab(c)) {
+		kmem_cache_free(s, a);
+		kmem_cache_free(s, b);
+		kmem_cache_free(s, c);
+		kmem_cache_destroy(s);
+		kunit_skip(test, "objects were allocated from different slabs");
+	}
+
+	/*
+	 * Caches with debug flags have no sheaves, so a and b are pushed onto
+	 * the slab freelist in that order.
+	 */
+	kmem_cache_free(s, a);
+	kmem_cache_free(s, b);
+
+	ptr_addr = (unsigned long)b + s->offset;
+	raw = *(unsigned long *)ptr_addr;
+
+	kunit_info(test, "freelist hardening is %s\n", str_on_off(hardened));
+	KUNIT_EXPECT_EQ(test, raw == (unsigned long)a, !hardened);
+#ifdef CONFIG_SLAB_FREELIST_HARDENED
+	if (hardened)
+		KUNIT_EXPECT_EQ(test, raw,
+				(unsigned long)a ^ s->random ^ swab(ptr_addr));
+#endif
+
+	kmem_cache_free(s, c);
+	validate_slab_cache(s);
+	KUNIT_EXPECT_EQ(test, 0, slab_errors);
 	kmem_cache_destroy(s);
 }
 
@@ -480,6 +530,7 @@ static struct kunit_case test_cases[] = {
 #ifndef CONFIG_KASAN
 	KUNIT_CASE(test_next_pointer),
 	KUNIT_CASE(test_first_word),
+	KUNIT_CASE(test_freelist_hardened),
 	KUNIT_CASE(test_clobber_50th_byte),
 #endif
 
@@ -505,5 +556,6 @@ static struct kunit_suite test_suite = {
 };
 kunit_test_suite(test_suite);
 
+MODULE_IMPORT_NS("EXPORTED_FOR_KUNIT_TESTING");
 MODULE_DESCRIPTION("Kunit tests for slub allocator");
 MODULE_LICENSE("GPL");

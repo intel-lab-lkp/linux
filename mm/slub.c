@@ -46,6 +46,7 @@
 #include <linux/prandom.h>
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
+#include <kunit/visibility.h>
 #include <linux/sort.h>
 #include <linux/irq_work.h>
 #include <linux/kprobes.h>
@@ -220,6 +221,7 @@ static DEFINE_STATIC_KEY_FALSE(strict_numa);
  * so it must not change once the first slab has been populated.
  */
 DEFINE_STATIC_KEY_TRUE_RO(slab_freelist_hardened);
+EXPORT_SYMBOL_IF_KUNIT(slab_freelist_hardened);
 static bool slab_freelist_hardened_early __initdata = true;
 
 static int __init setup_slab_freelist_hardened(char *str)
