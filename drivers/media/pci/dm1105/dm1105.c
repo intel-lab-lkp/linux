@@ -1125,14 +1125,16 @@ static int dm1105_probe(struct pci_dev *pdev,
 	if (ret < 0)
 		goto err_dvb_net;
 
-	dm1105_ir_init(dev);
+	ret = dm1105_ir_init(dev);
+	if (ret)
+		goto err_dvb_net;
 
 	INIT_WORK(&dev->work, dm1105_dmx_buffer);
 	sprintf(dev->wqn, "%s/%d", dvb_adapter->name, dvb_adapter->num);
 	dev->wq = create_singlethread_workqueue(dev->wqn);
 	if (!dev->wq) {
 		ret = -ENOMEM;
-		goto err_dvb_net;
+		goto err_dm1105_ir_exit;
 	}
 
 	ret = request_irq(pdev->irq, dm1105_irq, IRQF_SHARED,
@@ -1144,6 +1146,8 @@ static int dm1105_probe(struct pci_dev *pdev,
 
 err_workqueue:
 	destroy_workqueue(dev->wq);
+err_dm1105_ir_exit:
+	dm1105_ir_exit(dev);
 err_dvb_net:
 	dvb_net_release(&dev->dvbnet);
 err_disconnect_frontend:
