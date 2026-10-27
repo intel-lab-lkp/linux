@@ -1167,7 +1167,14 @@ static u8 response_status(const struct parsed_resp *resp)
 	if (!response_token_matches(tok, OPAL_ENDLIST))
 		return DTAERROR_NO_METHOD_STATUS;
 
-	return response_get_u64(resp, resp->num - 4);
+	tok = response_get_token(resp, resp->num - 4);
+	if (IS_ERR(tok) || tok->type != OPAL_DTA_TOKENID_UINT ||
+	    (tok->width != OPAL_WIDTH_TINY &&
+	     tok->width != OPAL_WIDTH_SHORT) ||
+	    tok->stored.u > U8_MAX)
+		return DTAERROR_NO_METHOD_STATUS;
+
+	return tok->stored.u;
 }
 
 /* Parses and checks for errors */
