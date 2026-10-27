@@ -292,6 +292,14 @@ struct platform_driver {
 	 * to setup and manage their own I/O address space.
 	 */
 	bool driver_managed_dma;
+	/*
+	 * By default the PM domain of a platform device is powered on before
+	 * the driver's probe is invoked. Drivers that need to configure the
+	 * device (e.g. hold it in reset) before its PM domain can be powered
+	 * on must set this flag, and are then responsible for powering on the
+	 * PM domain themselves.
+	 */
+	bool pm_domain_no_power_on;
 };
 
 #define to_platform_driver(drv)	(container_of((drv), struct platform_driver, \
