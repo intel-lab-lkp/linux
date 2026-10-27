@@ -474,7 +474,7 @@ static void __init initramfs_test_fname_path_max(struct kunit *test)
 	struct initramfs_test_cpio c[] = { {
 		.magic = "070701",
 		.ino = 1,
-		.mode = S_IFDIR | 0777,
+		.mode = S_IFREG | 0777,
 		.nlink = 1,
 		.namesize = sizeof(tbufs->fname_oversize),
 		.fname = tbufs->fname_oversize,
@@ -495,6 +495,8 @@ static void __init initramfs_test_fname_path_max(struct kunit *test)
 	       sizeof("fname_oversize") - 1);
 	memcpy(tbufs->fname_ok, "fname_ok", sizeof("fname_ok") - 1);
 	len = fill_cpio(c, ARRAY_SIZE(c), false, tbufs->cpio_src);
+	/* keep namesize oversized, but give VFS a short pathname */
+	tbufs->cpio_src[CPIO_HDRLEN + sizeof("fname_oversize") - 1] = '\0';
 
 	/* unpack skips over fname_oversize instead of returning an error */
 	err = unpack_to_rootfs(tbufs->cpio_src, len);
