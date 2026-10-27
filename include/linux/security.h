@@ -185,10 +185,12 @@ extern int cap_capset(struct cred *new, const struct cred *old,
 		      const kernel_cap_t *inheritable,
 		      const kernel_cap_t *permitted);
 extern int cap_bprm_creds_from_file(struct linux_binprm *bprm, const struct file *file);
-int cap_inode_setxattr(struct dentry *dentry, const char *name,
-		       const void *value, size_t size, int flags);
+int cap_inode_setxattr(const struct path *path, const char *name,
+		       const void *value, size_t size, int flags,
+		       struct file *file);
 int cap_inode_removexattr(const struct mnt_idmap *idmap,
-			  struct dentry *dentry, const char *name);
+			  const struct path *path, const char *name,
+			  struct file *file);
 int cap_inode_need_killpriv(struct dentry *dentry);
 int cap_inode_killpriv(const struct mnt_idmap *idmap, struct dentry *dentry);
 int cap_inode_getsecurity(const struct mnt_idmap *idmap,
@@ -435,8 +437,9 @@ void security_inode_post_setattr(const struct mnt_idmap *idmap, struct dentry *d
 				 int ia_valid);
 int security_inode_getattr(const struct path *path);
 int security_inode_setxattr(const struct mnt_idmap *idmap,
-			    struct dentry *dentry, const char *name,
-			    const void *value, size_t size, int flags);
+			    const struct path *path, const char *name,
+			    const void *value, size_t size, int flags,
+			    struct file *file);
 int security_inode_set_acl(const struct mnt_idmap *idmap,
 			   struct dentry *dentry, const char *acl_name,
 			   struct posix_acl *kacl);
@@ -451,10 +454,13 @@ void security_inode_post_remove_acl(const struct mnt_idmap *idmap,
 				    const char *acl_name);
 void security_inode_post_setxattr(struct dentry *dentry, const char *name,
 				  const void *value, size_t size, int flags);
-int security_inode_getxattr(struct dentry *dentry, const char *name);
-int security_inode_listxattr(struct dentry *dentry);
+int security_inode_getxattr(const struct path *path,
+			    const char *name, struct file *file);
+int security_inode_listxattr(const struct path *path,
+			      struct file *file);
 int security_inode_removexattr(const struct mnt_idmap *idmap,
-			       struct dentry *dentry, const char *name);
+			       const struct path *path, const char *name,
+			       struct file *file);
 void security_inode_post_removexattr(struct dentry *dentry, const char *name);
 int security_inode_file_setattr(struct dentry *dentry,
 			      struct file_kattr *fa);
@@ -1014,10 +1020,11 @@ static inline int security_inode_getattr(const struct path *path)
 }
 
 static inline int security_inode_setxattr(const struct mnt_idmap *idmap,
-		struct dentry *dentry, const char *name, const void *value,
-		size_t size, int flags)
+		const struct path *path, const char *name,
+		const void *value, size_t size, int flags,
+		struct file *file)
 {
-	return cap_inode_setxattr(dentry, name, value, size, flags);
+	return cap_inode_setxattr(path, name, value, size, flags, file);
 }
 
 static inline int security_inode_set_acl(const struct mnt_idmap *idmap,
@@ -1056,22 +1063,24 @@ static inline void security_inode_post_setxattr(struct dentry *dentry,
 		const char *name, const void *value, size_t size, int flags)
 { }
 
-static inline int security_inode_getxattr(struct dentry *dentry,
-			const char *name)
+static inline int security_inode_getxattr(const struct path *path,
+			const char *name, struct file *file)
 {
 	return 0;
 }
 
-static inline int security_inode_listxattr(struct dentry *dentry)
+static inline int security_inode_listxattr(const struct path *path,
+					   struct file *file)
 {
 	return 0;
 }
 
 static inline int security_inode_removexattr(const struct mnt_idmap *idmap,
-					     struct dentry *dentry,
-					     const char *name)
+					     const struct path *path,
+					     const char *name,
+					     struct file *file)
 {
-	return cap_inode_removexattr(idmap, dentry, name);
+	return cap_inode_removexattr(idmap, path, name, file);
 }
 
 static inline void security_inode_post_removexattr(struct dentry *dentry,

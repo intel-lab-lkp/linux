@@ -156,14 +156,16 @@ LSM_HOOK(void, LSM_RET_VOID, inode_post_setattr, const struct mnt_idmap *idmap,
 LSM_HOOK(int, 0, inode_getattr, const struct path *path)
 LSM_HOOK(int, 0, inode_xattr_skipcap, const char *name)
 LSM_HOOK(int, 0, inode_setxattr, const struct mnt_idmap *idmap,
-	 struct dentry *dentry, const char *name, const void *value,
-	 size_t size, int flags)
+	 const struct path *path, const char *name, const void *value,
+	 size_t size, int flags, struct file *file)
 LSM_HOOK(void, LSM_RET_VOID, inode_post_setxattr, struct dentry *dentry,
 	 const char *name, const void *value, size_t size, int flags)
-LSM_HOOK(int, 0, inode_getxattr, struct dentry *dentry, const char *name)
-LSM_HOOK(int, 0, inode_listxattr, struct dentry *dentry)
+LSM_HOOK(int, 0, inode_getxattr, const struct path *path, const char *name,
+	 struct file *file)
+LSM_HOOK(int, 0, inode_listxattr, const struct path *path,
+	 struct file *file)
 LSM_HOOK(int, 0, inode_removexattr, const struct mnt_idmap *idmap,
-	 struct dentry *dentry, const char *name)
+	 const struct path *path, const char *name, struct file *file)
 LSM_HOOK(void, LSM_RET_VOID, inode_post_removexattr, struct dentry *dentry,
 	 const char *name)
 LSM_HOOK(int, 0, inode_file_setattr, struct dentry *dentry, struct file_kattr *fa)

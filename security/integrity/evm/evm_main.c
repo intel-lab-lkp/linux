@@ -595,11 +595,12 @@ out:
 /**
  * evm_inode_setxattr - protect the EVM extended attribute
  * @idmap: idmap of the mount
- * @dentry: pointer to the affected dentry
+ * @path: pointer to the affected object
  * @xattr_name: pointer to the affected extended attribute name
  * @xattr_value: pointer to the new extended attribute value
  * @xattr_value_len: pointer to the new extended attribute value length
  * @flags: flags to pass into filesystem operations
+ * @file: file through which the xattr change is requested, if any
  *
  * Before allowing the 'security.evm' protected xattr to be updated,
  * verify the existing value is valid.  As only the kernel should have
@@ -607,11 +608,14 @@ out:
  * userspace from writing HMAC value.  Writing 'security.evm' requires
  * requires CAP_SYS_ADMIN privileges.
  */
-static int evm_inode_setxattr(const struct mnt_idmap *idmap, struct dentry *dentry,
+static int evm_inode_setxattr(const struct mnt_idmap *idmap,
+			      const struct path *path,
 			      const char *xattr_name, const void *xattr_value,
-			      size_t xattr_value_len, int flags)
+			      size_t xattr_value_len, int flags,
+			      struct file *file)
 {
 	const struct evm_ima_xattr_data *xattr_data = xattr_value;
+	struct dentry *dentry = path->dentry;
 
 	/* Policy permits modification of the protected xattrs even though
 	 * there's no HMAC key loaded
@@ -633,15 +637,19 @@ static int evm_inode_setxattr(const struct mnt_idmap *idmap, struct dentry *dent
 /**
  * evm_inode_removexattr - protect the EVM extended attribute
  * @idmap: idmap of the mount
- * @dentry: pointer to the affected dentry
+ * @path: pointer to the affected object
  * @xattr_name: pointer to the affected extended attribute name
+ * @file: file through which the xattr removal is requested, if any
  *
  * Removing 'security.evm' requires CAP_SYS_ADMIN privileges and that
  * the current value is valid.
  */
-static int evm_inode_removexattr(const struct mnt_idmap *idmap, struct dentry *dentry,
-				 const char *xattr_name)
+static int evm_inode_removexattr(const struct mnt_idmap *idmap,
+				 const struct path *path,
+				 const char *xattr_name, struct file *file)
 {
+	struct dentry *dentry = path->dentry;
+
 	/* Policy permits modification of the protected xattrs even though
 	 * there's no HMAC key loaded
 	 */

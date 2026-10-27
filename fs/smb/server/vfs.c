@@ -880,7 +880,7 @@ ssize_t ksmbd_vfs_listxattr(const struct path *path, char **list)
 	ssize_t size;
 	char *vlist = NULL;
 
-	size = vfs_listxattr(path, NULL, 0);
+	size = vfs_listxattr(path, NULL, 0, NULL);
 	if (size <= 0)
 		return size;
 
@@ -889,7 +889,7 @@ ssize_t ksmbd_vfs_listxattr(const struct path *path, char **list)
 		return -ENOMEM;
 
 	*list = vlist;
-	size = vfs_listxattr(path, vlist, size);
+	size = vfs_listxattr(path, vlist, size, NULL);
 	if (size < 0) {
 		ksmbd_debug(VFS, "listxattr failed\n");
 		kvfree(vlist);
@@ -902,7 +902,7 @@ ssize_t ksmbd_vfs_listxattr(const struct path *path, char **list)
 ssize_t ksmbd_vfs_xattr_len(const struct mnt_idmap *idmap,
 			    const struct path *path, char *xattr_name)
 {
-	return vfs_getxattr(idmap, path, xattr_name, NULL, 0);
+	return vfs_getxattr(idmap, path, xattr_name, NULL, 0, NULL);
 }
 
 /**
@@ -931,7 +931,7 @@ ssize_t ksmbd_vfs_getxattr(const struct mnt_idmap *idmap,
 		return -ENOMEM;
 
 	xattr_len = vfs_getxattr(idmap, path, xattr_name,
-				 (void *)buf, xattr_len);
+				 (void *)buf, xattr_len, NULL);
 	if (xattr_len > 0)
 		*xattr_buf = buf;
 	else
@@ -968,7 +968,7 @@ int ksmbd_vfs_setxattr(const struct mnt_idmap *idmap,
 			   attr_name,
 			   attr_value,
 			   attr_size,
-			   flags);
+			   flags, NULL);
 	if (err)
 		ksmbd_debug(VFS, "setxattr failed, err %d\n", err);
 	if (get_write == true)
@@ -1255,7 +1255,7 @@ int ksmbd_vfs_remove_xattr(const struct mnt_idmap *idmap,
 			return err;
 	}
 
-	err = vfs_removexattr(idmap, path, attr_name);
+	err = vfs_removexattr(idmap, path, attr_name, NULL);
 
 	if (get_write == true)
 		mnt_drop_write(path->mnt);

@@ -3389,9 +3389,11 @@ static int selinux_inode_xattr_skipcap(const char *name)
 }
 
 static int selinux_inode_setxattr(const struct mnt_idmap *idmap,
-				  struct dentry *dentry, const char *name,
-				  const void *value, size_t size, int flags)
+				  const struct path *path,
+				  const char *name, const void *value,
+				  size_t size, int flags, struct file *file)
 {
+	struct dentry *dentry = path->dentry;
 	struct inode *inode = d_backing_inode(dentry);
 	struct inode_security_struct *isec;
 	struct superblock_security_struct *sbsec;
@@ -3533,26 +3535,29 @@ static void selinux_inode_post_setxattr(struct dentry *dentry, const char *name,
 	spin_unlock(&isec->lock);
 }
 
-static int selinux_inode_getxattr(struct dentry *dentry, const char *name)
+static int selinux_inode_getxattr(const struct path *path,
+				  const char *name, struct file *file)
 {
 	const struct cred *cred = current_cred();
 
-	return dentry_has_perm(cred, dentry, FILE__GETATTR);
+	return dentry_has_perm(cred, path->dentry, FILE__GETATTR);
 }
 
-static int selinux_inode_listxattr(struct dentry *dentry)
+static int selinux_inode_listxattr(const struct path *path, struct file *file)
 {
 	const struct cred *cred = current_cred();
 
-	return dentry_has_perm(cred, dentry, FILE__GETATTR);
+	return dentry_has_perm(cred, path->dentry, FILE__GETATTR);
 }
 
 static int selinux_inode_removexattr(const struct mnt_idmap *idmap,
-				     struct dentry *dentry, const char *name)
+				     const struct path *path,
+				     const char *name, struct file *file)
 {
 	/* if not a selinux xattr, only check the ordinary setattr perm */
 	if (strcmp(name, XATTR_NAME_SELINUX))
-		return dentry_has_perm(current_cred(), dentry, FILE__SETATTR);
+		return dentry_has_perm(current_cred(), path->dentry,
+				       FILE__SETATTR);
 
 	if (!selinux_initialized())
 		return 0;
@@ -7148,7 +7153,7 @@ static int selinux_inode_notifysecctx(struct inode *inode, void *ctx, u32 ctxlen
 static int selinux_inode_setsecctx(const struct path *path, void *ctx, u32 ctxlen)
 {
 	return __vfs_setxattr_locked(&nop_mnt_idmap, path, XATTR_NAME_SELINUX,
-				     ctx, ctxlen, 0, NULL);
+				     ctx, ctxlen, 0, NULL, NULL);
 }
 
 static int selinux_inode_getsecctx(struct inode *inode, struct lsm_context *cp)

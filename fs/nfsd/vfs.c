@@ -703,7 +703,7 @@ int nfsd4_is_junction(const struct path *path)
 	if (!(inode->i_mode & S_ISVTX))
 		return 0;
 	if (vfs_getxattr(&nop_mnt_idmap, path, NFSD_JUNCTION_XATTR_NAME,
-			 NULL, 0) <= 0)
+			 NULL, 0, NULL) <= 0)
 		return 0;
 	return 1;
 }
@@ -2668,7 +2668,7 @@ nfsd_getxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char *name,
 
 	inode_lock_shared(inode);
 
-	len = vfs_getxattr(&nop_mnt_idmap, &path, name, NULL, 0);
+	len = vfs_getxattr(&nop_mnt_idmap, &path, name, NULL, 0, NULL);
 
 	/*
 	 * Zero-length attribute, just return.
@@ -2695,7 +2695,7 @@ nfsd_getxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char *name,
 		goto out;
 	}
 
-	len = vfs_getxattr(&nop_mnt_idmap, &path, name, buf, len);
+	len = vfs_getxattr(&nop_mnt_idmap, &path, name, buf, len, NULL);
 	if (len <= 0) {
 		kvfree(buf);
 		buf = NULL;
@@ -2742,7 +2742,7 @@ nfsd_listxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char **bufp,
 
 	inode_lock_shared(inode);
 
-	len = vfs_listxattr(&path, NULL, 0);
+	len = vfs_listxattr(&path, NULL, 0, NULL);
 	if (len <= 0) {
 		err = nfsd_xattr_errno(len);
 		goto out;
@@ -2759,7 +2759,7 @@ nfsd_listxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char **bufp,
 		goto out;
 	}
 
-	len = vfs_listxattr(&path, buf, len);
+	len = vfs_listxattr(&path, buf, len, NULL);
 	if (len <= 0) {
 		kvfree(buf);
 		err = nfsd_xattr_errno(len);
@@ -2808,7 +2808,8 @@ nfsd_removexattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char *name)
 	err = fh_fill_pre_attrs(fhp);
 	if (err != nfs_ok)
 		goto out_unlock;
-	ret = __vfs_removexattr_locked(&nop_mnt_idmap, &path, name, NULL);
+	ret = __vfs_removexattr_locked(&nop_mnt_idmap, &path, name,
+				       NULL, NULL);
 	err = nfsd_xattr_errno(ret);
 	fh_fill_post_attrs(fhp);
 out_unlock:
@@ -2840,7 +2841,7 @@ nfsd_setxattr(struct svc_rqst *rqstp, struct svc_fh *fhp, char *name,
 	if (err != nfs_ok)
 		goto out_unlock;
 	ret = __vfs_setxattr_locked(&nop_mnt_idmap, &path, name, buf, len,
-				    flags, NULL);
+				    flags, NULL, NULL);
 	fh_fill_post_attrs(fhp);
 	err = nfsd_xattr_errno(ret);
 out_unlock:

@@ -1343,21 +1343,24 @@ static int smack_inode_xattr_skipcap(const char *name)
 /**
  * smack_inode_setxattr - Smack check for setting xattrs
  * @idmap: idmap of the mount
- * @dentry: the object
+ * @path: the object
  * @name: name of the attribute
  * @value: value of the attribute
  * @size: size of the value
  * @flags: unused
+ * @file: file through which the xattr change is requested, if any
  *
  * This protects the Smack attribute explicitly.
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
 static int smack_inode_setxattr(const struct mnt_idmap *idmap,
-				struct dentry *dentry, const char *name,
-				const void *value, size_t size, int flags)
+				const struct path *path,
+				const char *name, const void *value,
+				size_t size, int flags, struct file *file)
 {
 	struct smk_audit_info ad;
+	struct dentry *dentry = path->dentry;
 	struct smack_known *skp;
 	int check_priv = 0;
 	int check_import = 0;
@@ -1459,14 +1462,17 @@ static void smack_inode_post_setxattr(struct dentry *dentry, const char *name,
 
 /**
  * smack_inode_getxattr - Smack check on getxattr
- * @dentry: the object
+ * @path: the object
  * @name: unused
+ * @file: file through which the xattr access is requested, if any
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_getxattr(struct dentry *dentry, const char *name)
+static int smack_inode_getxattr(const struct path *path,
+			const char *name, struct file *file)
 {
 	struct smk_audit_info ad;
+	struct dentry *dentry = path->dentry;
 	int rc;
 
 	smk_ad_init(&ad, __func__, LSM_AUDIT_DATA_DENTRY);
@@ -1480,18 +1486,21 @@ static int smack_inode_getxattr(struct dentry *dentry, const char *name)
 /**
  * smack_inode_removexattr - Smack check on removexattr
  * @idmap: idmap of the mount
- * @dentry: the object
+ * @path: the object
  * @name: name of the attribute
+ * @file: file through which the xattr removal is requested, if any
  *
  * Removing the Smack attribute requires CAP_MAC_ADMIN
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
 static int smack_inode_removexattr(const struct mnt_idmap *idmap,
-				   struct dentry *dentry, const char *name)
+				   const struct path *path,
+				   const char *name, struct file *file)
 {
 	struct inode_smack *isp;
 	struct smk_audit_info ad;
+	struct dentry *dentry = path->dentry;
 	int rc = 0;
 
 	if (strcmp(name, XATTR_NAME_SMACK) == 0 ||
@@ -4984,7 +4993,7 @@ static int smack_inode_notifysecctx(struct inode *inode, void *ctx, u32 ctxlen)
 static int smack_inode_setsecctx(const struct path *path, void *ctx, u32 ctxlen)
 {
 	return __vfs_setxattr_locked(&nop_mnt_idmap, path, XATTR_NAME_SMACK,
-				     ctx, ctxlen, 0, NULL);
+				     ctx, ctxlen, 0, NULL, NULL);
 }
 
 static int smack_inode_getsecctx(struct inode *inode, struct lsm_context *cp)
