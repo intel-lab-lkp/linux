@@ -304,20 +304,21 @@ int import_xattr_name(struct xattr_name *kname, const char __user *name);
 int may_write_xattr(const struct mnt_idmap *idmap, struct inode *inode);
 
 #ifdef CONFIG_FS_POSIX_ACL
-int do_set_acl(const struct mnt_idmap *idmap, struct dentry *dentry,
+int do_set_acl(const struct mnt_idmap *idmap, const struct path *path,
 	       const char *acl_name, const void *kvalue, size_t size);
-ssize_t do_get_acl(const struct mnt_idmap *idmap, struct dentry *dentry,
+ssize_t do_get_acl(const struct mnt_idmap *idmap, const struct path *path,
 		   const char *acl_name, void *kvalue, size_t size);
 #else
 static inline int do_set_acl(const struct mnt_idmap *idmap,
-			     struct dentry *dentry, const char *acl_name,
+			     const struct path *path, const char *acl_name,
 			     const void *kvalue, size_t size)
 {
 	return -EOPNOTSUPP;
 }
 static inline ssize_t do_get_acl(const struct mnt_idmap *idmap,
-				 struct dentry *dentry, const char *acl_name,
-				 void *kvalue, size_t size)
+				 const struct path *path,
+				 const char *acl_name, void *kvalue,
+				 size_t size)
 {
 	return -EOPNOTSUPP;
 }
