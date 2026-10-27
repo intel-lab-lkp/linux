@@ -106,12 +106,13 @@ static inline void cache_no_acl(struct inode *inode)
 }
 
 int vfs_set_acl(const struct mnt_idmap *idmap, const struct path *path,
-		const char *acl_name, struct posix_acl *kacl);
+		const char *acl_name, struct posix_acl *kacl,
+		struct file *file);
 struct posix_acl *vfs_get_acl(const struct mnt_idmap *idmap,
 			      const struct path *path,
-			      const char *acl_name);
+			      const char *acl_name, struct file *file);
 int vfs_remove_acl(const struct mnt_idmap *idmap, const struct path *path,
-		   const char *acl_name);
+		   const char *acl_name, struct file *file);
 int posix_acl_listxattr(struct inode *inode, char **buffer,
 			ssize_t *remaining_size);
 #else
@@ -144,21 +145,22 @@ static inline void forget_all_cached_acls(struct inode *inode)
 
 static inline int vfs_set_acl(const struct mnt_idmap *idmap,
 			      const struct path *path, const char *name,
-			      struct posix_acl *acl)
+			      struct posix_acl *acl, struct file *file)
 {
 	return -EOPNOTSUPP;
 }
 
 static inline struct posix_acl *vfs_get_acl(const struct mnt_idmap *idmap,
 					    const struct path *path,
-					    const char *acl_name)
+					    const char *acl_name,
+					    struct file *file)
 {
 	return ERR_PTR(-EOPNOTSUPP);
 }
 
 static inline int vfs_remove_acl(const struct mnt_idmap *idmap,
 				 const struct path *path,
-				 const char *acl_name)
+				 const char *acl_name, struct file *file)
 {
 	return -EOPNOTSUPP;
 }

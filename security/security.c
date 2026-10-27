@@ -1970,9 +1970,10 @@ int security_inode_setxattr(const struct mnt_idmap *idmap,
 /**
  * security_inode_set_acl() - Check if setting posix acls is allowed
  * @idmap: idmap of the mount
- * @dentry: file
+ * @path: file (the VFS makes no guarantees with regard to @path->mnt)
  * @acl_name: acl name
  * @kacl: acl struct
+ * @file: file through which the posix acls are set, if any
  *
  * Check permission before setting posix acls, the posix acls in @kacl are
  * identified by @acl_name.
@@ -1980,12 +1981,13 @@ int security_inode_setxattr(const struct mnt_idmap *idmap,
  * Return: Returns 0 if permission is granted.
  */
 int security_inode_set_acl(const struct mnt_idmap *idmap,
-			   struct dentry *dentry, const char *acl_name,
-			   struct posix_acl *kacl)
+			   const struct path *path, const char *acl_name,
+			   struct posix_acl *kacl, struct file *file)
 {
-	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_set_acl, idmap, dentry, acl_name, kacl);
+	return call_int_hook(inode_set_acl, idmap, path, acl_name, kacl,
+			       file);
 }
 
 /**
@@ -2008,8 +2010,9 @@ void security_inode_post_set_acl(struct dentry *dentry, const char *acl_name,
 /**
  * security_inode_get_acl() - Check if reading posix acls is allowed
  * @idmap: idmap of the mount
- * @dentry: file
+ * @path: file (the VFS makes no guarantees with regard to @path->mnt)
  * @acl_name: acl name
+ * @file: file through which the posix acls are retrieved, if any
  *
  * Check permission before getting osix acls, the posix acls are identified by
  * @acl_name.
@@ -2017,18 +2020,20 @@ void security_inode_post_set_acl(struct dentry *dentry, const char *acl_name,
  * Return: Returns 0 if permission is granted.
  */
 int security_inode_get_acl(const struct mnt_idmap *idmap,
-			   struct dentry *dentry, const char *acl_name)
+			   const struct path *path, const char *acl_name,
+			   struct file *file)
 {
-	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_get_acl, idmap, dentry, acl_name);
+	return call_int_hook(inode_get_acl, idmap, path, acl_name, file);
 }
 
 /**
  * security_inode_remove_acl() - Check if removing a posix acl is allowed
  * @idmap: idmap of the mount
- * @dentry: file
+ * @path: file (the VFS makes no guarantees with regard to @path->mnt)
  * @acl_name: acl name
+ * @file: file through which the posix acls are removed, if any
  *
  * Check permission before removing posix acls, the posix acls are identified
  * by @acl_name.
@@ -2036,11 +2041,12 @@ int security_inode_get_acl(const struct mnt_idmap *idmap,
  * Return: Returns 0 if permission is granted.
  */
 int security_inode_remove_acl(const struct mnt_idmap *idmap,
-			      struct dentry *dentry, const char *acl_name)
+			      const struct path *path, const char *acl_name,
+			      struct file *file)
 {
-	if (unlikely(IS_PRIVATE(d_backing_inode(dentry))))
+	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_remove_acl, idmap, dentry, acl_name);
+	return call_int_hook(inode_remove_acl, idmap, path, acl_name, file);
 }
 
 /**

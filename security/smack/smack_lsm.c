@@ -1551,68 +1551,74 @@ static int smack_inode_removexattr(const struct mnt_idmap *idmap,
 /**
  * smack_inode_set_acl - Smack check for setting posix acls
  * @idmap: idmap of the mnt this request came from
- * @dentry: the object
+ * @path: the object
  * @acl_name: name of the posix acl
  * @kacl: the posix acls
+ * @file: file through which the posix acls are set, if any
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
 static int smack_inode_set_acl(const struct mnt_idmap *idmap,
-			       struct dentry *dentry, const char *acl_name,
-			       struct posix_acl *kacl)
+			       const struct path *path,
+			       const char *acl_name, struct posix_acl *kacl,
+			       struct file *file)
 {
 	struct smk_audit_info ad;
 	int rc;
 
 	smk_ad_init(&ad, __func__, LSM_AUDIT_DATA_DENTRY);
-	smk_ad_setfield_u_fs_path_dentry(&ad, dentry);
+	smk_ad_setfield_u_fs_path_dentry(&ad, path->dentry);
 
-	rc = smk_curacc(smk_of_inode(d_backing_inode(dentry)), MAY_WRITE, &ad);
-	rc = smk_bu_inode(d_backing_inode(dentry), MAY_WRITE, rc);
+	rc = smk_curacc(smk_of_inode(d_backing_inode(path->dentry)), MAY_WRITE, &ad);
+	rc = smk_bu_inode(d_backing_inode(path->dentry), MAY_WRITE, rc);
 	return rc;
 }
 
 /**
  * smack_inode_get_acl - Smack check for getting posix acls
  * @idmap: idmap of the mnt this request came from
- * @dentry: the object
+ * @path: the object
  * @acl_name: name of the posix acl
+ * @file: file through which the posix acls are retrieved, if any
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
 static int smack_inode_get_acl(const struct mnt_idmap *idmap,
-			       struct dentry *dentry, const char *acl_name)
+			       const struct path *path,
+			       const char *acl_name, struct file *file)
 {
 	struct smk_audit_info ad;
 	int rc;
 
 	smk_ad_init(&ad, __func__, LSM_AUDIT_DATA_DENTRY);
-	smk_ad_setfield_u_fs_path_dentry(&ad, dentry);
+	smk_ad_setfield_u_fs_path_dentry(&ad, path->dentry);
 
-	rc = smk_curacc(smk_of_inode(d_backing_inode(dentry)), MAY_READ, &ad);
-	rc = smk_bu_inode(d_backing_inode(dentry), MAY_READ, rc);
+	rc = smk_curacc(smk_of_inode(d_backing_inode(path->dentry)), MAY_READ, &ad);
+	rc = smk_bu_inode(d_backing_inode(path->dentry), MAY_READ, rc);
 	return rc;
 }
 
 /**
  * smack_inode_remove_acl - Smack check for getting posix acls
  * @idmap: idmap of the mnt this request came from
- * @dentry: the object
+ * @path: the object
  * @acl_name: name of the posix acl
+ * @file: file through which the posix acls are removed, if any
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
 static int smack_inode_remove_acl(const struct mnt_idmap *idmap,
-				  struct dentry *dentry, const char *acl_name)
+				  const struct path *path,
+				  const char *acl_name, struct file *file)
 {
 	struct smk_audit_info ad;
 	int rc;
 
 	smk_ad_init(&ad, __func__, LSM_AUDIT_DATA_DENTRY);
-	smk_ad_setfield_u_fs_path_dentry(&ad, dentry);
+	smk_ad_setfield_u_fs_path_dentry(&ad, path->dentry);
 
-	rc = smk_curacc(smk_of_inode(d_backing_inode(dentry)), MAY_WRITE, &ad);
-	rc = smk_bu_inode(d_backing_inode(dentry), MAY_WRITE, rc);
+	rc = smk_curacc(smk_of_inode(d_backing_inode(path->dentry)), MAY_WRITE, &ad);
+	rc = smk_bu_inode(d_backing_inode(path->dentry), MAY_WRITE, rc);
 	return rc;
 }
 

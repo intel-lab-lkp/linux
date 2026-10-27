@@ -690,10 +690,11 @@ static inline int evm_inode_set_acl_change(const struct mnt_idmap *idmap,
 
 /**
  * evm_inode_set_acl - protect the EVM extended attribute from posix acls
- * @idmap: idmap of the idmapped mount
- * @dentry: pointer to the affected dentry
+ * @idmap: idmap of the mount
+ * @path: pointer to the affected object
  * @acl_name: name of the posix acl
  * @kacl: pointer to the posix acls
+ * @file: file through which the posix acls are set, if any
  *
  * Prevent modifying posix acls causing the EVM HMAC to be re-calculated
  * and 'security.evm' xattr updated, unless the existing 'security.evm' is
@@ -701,10 +702,13 @@ static inline int evm_inode_set_acl_change(const struct mnt_idmap *idmap,
  *
  * Return: zero on success, -EPERM on failure.
  */
-static int evm_inode_set_acl(const struct mnt_idmap *idmap, struct dentry *dentry,
-			     const char *acl_name, struct posix_acl *kacl)
+static int evm_inode_set_acl(const struct mnt_idmap *idmap,
+			     const struct path *path,
+			     const char *acl_name, struct posix_acl *kacl,
+			     struct file *file)
 {
 	enum integrity_status evm_status;
+	struct dentry *dentry = path->dentry;
 
 	/* Policy permits modification of the protected xattrs even though
 	 * there's no HMAC key loaded
@@ -744,8 +748,9 @@ static int evm_inode_set_acl(const struct mnt_idmap *idmap, struct dentry *dentr
 /**
  * evm_inode_remove_acl - Protect the EVM extended attribute from posix acls
  * @idmap: idmap of the mount
- * @dentry: pointer to the affected dentry
+ * @path: pointer to the affected object
  * @acl_name: name of the posix acl
+ * @file: file through which the posix acls are removed, if any
  *
  * Prevent removing posix acls causing the EVM HMAC to be re-calculated
  * and 'security.evm' xattr updated, unless the existing 'security.evm' is
@@ -753,10 +758,11 @@ static int evm_inode_set_acl(const struct mnt_idmap *idmap, struct dentry *dentr
  *
  * Return: zero on success, -EPERM on failure.
  */
-static int evm_inode_remove_acl(const struct mnt_idmap *idmap, struct dentry *dentry,
-				const char *acl_name)
+static int evm_inode_remove_acl(const struct mnt_idmap *idmap,
+				const struct path *path,
+				const char *acl_name, struct file *file)
 {
-	return evm_inode_set_acl(idmap, dentry, acl_name, NULL);
+	return evm_inode_set_acl(idmap, path, acl_name, NULL, file);
 }
 
 static void evm_reset_status(struct inode *inode)
