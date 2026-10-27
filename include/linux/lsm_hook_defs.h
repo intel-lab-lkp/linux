@@ -149,7 +149,7 @@ LSM_HOOK(int, 0, inode_permission, const struct mnt_idmap *idmap,
  * are subject to change.  Implementations must not rely on its
  * properties.
  */
-LSM_HOOK(int, 0, inode_setattr, const struct mnt_idmap *idmap,
+LSM_HOOK(int, 0, path_setattr, const struct mnt_idmap *idmap,
 	 const struct path *path, struct iattr *attr, struct file *file)
 LSM_HOOK(void, LSM_RET_VOID, inode_post_setattr, const struct mnt_idmap *idmap,
 	 struct dentry *dentry, int ia_valid)

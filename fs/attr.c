@@ -519,7 +519,7 @@ static int do_notify_change(const struct path *const path,
 	 * filesystem, were already checked on the user-facing path.
 	 */
 	if (path) {
-		error = security_inode_setattr(idmap, path, attr, file);
+		error = security_path_setattr(idmap, path, attr, file);
 		if (error)
 			return error;
 	}
@@ -556,7 +556,7 @@ static int do_notify_change(const struct path *const path,
  * @attr:	new attributes
  * @delegated_inode: returns inode, if the inode is delegated
  *
- * Like notify_change(), but no security_inode_setattr() hook is called:
+ * Like notify_change(), but no security_path_setattr() hook is called:
  * this is the variant to use for internal forwards, where the LSM
  * checks were already performed on the user-facing path.
  *

@@ -962,7 +962,7 @@ static int evm_attr_change(const struct mnt_idmap *idmap,
 }
 
 /**
- * evm_inode_setattr - prevent updating an invalid EVM extended attribute
+ * evm_path_setattr - prevent updating an invalid EVM extended attribute
  * @idmap: idmap of the mount
  * @path: pointer to the affected object
  * @attr: iattr structure containing the new file attributes
@@ -971,7 +971,7 @@ static int evm_attr_change(const struct mnt_idmap *idmap,
  * Permit update of file attributes when files have a valid EVM signature,
  * except in the case of them having an immutable portable signature.
  */
-static int evm_inode_setattr(const struct mnt_idmap *idmap,
+static int evm_path_setattr(const struct mnt_idmap *idmap,
 			     const struct path *path,
 			     struct iattr *attr, struct file *file)
 {
@@ -1212,7 +1212,7 @@ error:
 }
 
 static struct security_hook_list evm_hooks[] __ro_after_init = {
-	LSM_HOOK_INIT(inode_setattr, evm_inode_setattr),
+	LSM_HOOK_INIT(path_setattr, evm_path_setattr),
 	LSM_HOOK_INIT(inode_post_setattr, evm_inode_post_setattr),
 	LSM_HOOK_INIT(inode_copy_up_xattr, evm_inode_copy_up_xattr),
 	LSM_HOOK_INIT(inode_setxattr, evm_inode_setxattr),

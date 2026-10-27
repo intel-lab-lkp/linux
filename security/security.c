@@ -1865,7 +1865,7 @@ int security_inode_permission(const struct mnt_idmap *idmap,
 }
 
 /**
- * security_inode_setattr() - Check if setting file attributes is allowed
+ * security_path_setattr() - Check if setting file attributes is allowed
  * @idmap: idmap of the mount
  * @path: file (the VFS makes no guarantees with regard to @path->mnt)
  * @attr: new attributes
@@ -1878,15 +1878,15 @@ int security_inode_permission(const struct mnt_idmap *idmap,
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_setattr(const struct mnt_idmap *idmap,
+int security_path_setattr(const struct mnt_idmap *idmap,
 			   const struct path *path, struct iattr *attr,
 			   struct file *file)
 {
 	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_setattr, idmap, path, attr, file);
+	return call_int_hook(path_setattr, idmap, path, attr, file);
 }
-EXPORT_SYMBOL_GPL(security_inode_setattr);
+EXPORT_SYMBOL_GPL(security_path_setattr);
 
 /**
  * security_inode_post_setattr() - Update the inode after a setattr operation
