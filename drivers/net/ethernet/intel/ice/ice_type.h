@@ -311,6 +311,9 @@ struct ice_hw_common_caps {
 	/* Post update reset restriction */
 	bool reset_restrict_support;
 	bool tx_sched_topo_comp_mode_en;
+	/* External Root of Trust (eRoT) controller present */
+	bool external_pqc_rot_present;
+	bool external_pqc_rot_invalid;
 };
 
 /* IEEE 1588 TIME_SYNC specific info */
