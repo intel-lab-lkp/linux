@@ -540,6 +540,19 @@ static inline bool kmem_cache_debug_flags(struct kmem_cache *s, slab_flags_t fla
 	return false;
 }
 
+#ifdef CONFIG_SLAB_FREELIST_HARDENED
+DECLARE_STATIC_KEY_TRUE(slab_freelist_hardened);
+#endif
+
+static inline bool slab_freelist_hardened_enabled(void)
+{
+#ifdef CONFIG_SLAB_FREELIST_HARDENED
+	return static_branch_likely(&slab_freelist_hardened);
+#else
+	return false;
+#endif
+}
+
 #if IS_ENABLED(CONFIG_SLUB_DEBUG) && IS_ENABLED(CONFIG_KUNIT)
 bool slab_in_kunit_test(void);
 #else

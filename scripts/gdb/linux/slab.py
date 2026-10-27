@@ -96,8 +96,14 @@ def swab64(x):
     ((x & 0xff00000000000000) >> 56))
     return result
 
+def freelist_hardened():
+    if not constants.LX_CONFIG_SLAB_FREELIST_HARDENED:
+        return False
+    key = gdb.parse_and_eval("slab_freelist_hardened")
+    return int(key['key']['enabled']['counter']) > 0
+
 def freelist_ptr_decode(cache, ptr, ptr_addr):
-    if constants.LX_CONFIG_SLAB_FREELIST_HARDENED:
+    if freelist_hardened():
         return ptr['v'] ^ cache['random'] ^ swab64(int(ptr_addr))
     else:
         return ptr['v']

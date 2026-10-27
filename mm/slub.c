@@ -214,6 +214,32 @@ DEFINE_STATIC_KEY_FALSE(slub_debug_enabled);
 static DEFINE_STATIC_KEY_FALSE(strict_numa);
 #endif
 
+#ifdef CONFIG_SLAB_FREELIST_HARDENED
+/*
+ * Free pointers stored inside free objects are encoded according to this key,
+ * so it must not change once the first slab has been populated.
+ */
+DEFINE_STATIC_KEY_TRUE_RO(slab_freelist_hardened);
+static bool slab_freelist_hardened_early __initdata = true;
+
+static int __init setup_slab_freelist_hardened(char *str)
+{
+	return kstrtobool(str, &slab_freelist_hardened_early);
+}
+early_param("slab_freelist_hardened", setup_slab_freelist_hardened);
+
+static void __init init_freelist_hardening(void)
+{
+	if (slab_freelist_hardened_early)
+		return;
+
+	static_branch_disable(&slab_freelist_hardened);
+	pr_info("SLUB: freelist hardening disabled\n");
+}
+#else
+static inline void init_freelist_hardening(void) { }
+#endif
+
 #ifdef CONFIG_MEM_ALLOC_PROFILING
 DEFINE_STATIC_KEY_MAYBE(CONFIG_MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT,
 			slab_obj_ext_has_codetag_key);
@@ -565,10 +591,10 @@ static inline freeptr_t freelist_ptr_encode(const struct kmem_cache *s,
 {
 	unsigned long encoded;
 
-#ifdef CONFIG_SLAB_FREELIST_HARDENED
-	encoded = (unsigned long)ptr ^ s->random ^ swab(ptr_addr);
-#else
 	encoded = (unsigned long)ptr;
+#ifdef CONFIG_SLAB_FREELIST_HARDENED
+	if (slab_freelist_hardened_enabled())
+		encoded ^= s->random ^ swab(ptr_addr);
 #endif
 	return (freeptr_t){.v = encoded};
 }
@@ -578,10 +604,10 @@ static inline void *freelist_ptr_decode(const struct kmem_cache *s,
 {
 	void *decoded;
 
-#ifdef CONFIG_SLAB_FREELIST_HARDENED
-	decoded = (void *)(ptr.v ^ s->random ^ swab(ptr_addr));
-#else
 	decoded = (void *)ptr.v;
+#ifdef CONFIG_SLAB_FREELIST_HARDENED
+	if (slab_freelist_hardened_enabled())
+		decoded = (void *)(ptr.v ^ s->random ^ swab(ptr_addr));
 #endif
 	return decoded;
 }
@@ -601,9 +627,9 @@ static inline void set_freepointer(struct kmem_cache *s, void *object, void *fp)
 {
 	unsigned long freeptr_addr = (unsigned long)object + s->offset;
 
-#ifdef CONFIG_SLAB_FREELIST_HARDENED
-	BUG_ON(object == fp); /* naive detection of double free or corruption */
-#endif
+	/* naive detection of double free or corruption */
+	if (slab_freelist_hardened_enabled())
+		BUG_ON(object == fp);
 
 	freeptr_addr = (unsigned long)kasan_reset_tag((void *)freeptr_addr);
 	*(freeptr_t *)freeptr_addr = freelist_ptr_encode(s, fp, freeptr_addr);
@@ -6730,7 +6756,7 @@ void kmem_cache_free(struct kmem_cache *s, void *x)
 
 	slab = virt_to_slab(x);
 
-	if (IS_ENABLED(CONFIG_SLAB_FREELIST_HARDENED) ||
+	if (slab_freelist_hardened_enabled() ||
 	    kmem_cache_debug_flags(s, SLAB_CONSISTENCY_CHECKS)) {
 
 		/*
@@ -8765,6 +8791,9 @@ void __init kmem_cache_init(void)
 
 	if (debug_guardpage_minorder())
 		slub_max_order = 0;
+
+	/* Must be settled before any free pointer is written. */
+	init_freelist_hardening();
 
 	/* Inform pointer hashing choice about slub debugging state. */
 	hash_pointers_finalize(__slub_debug_enabled());

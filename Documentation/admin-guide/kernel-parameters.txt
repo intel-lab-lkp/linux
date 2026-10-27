@@ -7014,6 +7014,13 @@ Kernel parameters
 			option which can be undone by adding the
 			"hash_pointers=always" option.
 
+	slab_freelist_hardened= [MM,EARLY]
+			Format: <bool>
+			Enable or disable slab freelist hardening on kernels
+			built with CONFIG_SLAB_FREELIST_HARDENED=y. Ignored
+			without that option.
+			Default: on.
+
 	slab_max_order= [MM]
 			Determines the maximum allowed order for slabs.
 			A high setting may cause OOMs due to memory

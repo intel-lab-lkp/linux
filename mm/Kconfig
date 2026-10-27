@@ -214,6 +214,9 @@ config SLAB_FREELIST_HARDENED
 	  sacrifices to harden the kernel slab allocator against common
 	  freelist exploit methods.
 
+	  The hardening is enabled by default and can be disabled at boot
+	  with "slab_freelist_hardened=0".
+
 config SLAB_BUCKETS
 	bool "Support allocation from separate kmalloc buckets"
 	depends on !SLUB_TINY
