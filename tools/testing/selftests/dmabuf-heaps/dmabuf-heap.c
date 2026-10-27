@@ -3,6 +3,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -10,11 +11,15 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
+#include <linux/limits.h>
 #include <drm/drm.h>
+#include "../pidfd/pidfd.h"
 #include "kselftest.h"
 
 #define DEVPATH "/dev/dma_heap"
@@ -320,6 +325,8 @@ static int dmabuf_heap_alloc_newer(int fd, size_t len, unsigned int flags,
 		__u32 fd;
 		__u32 fd_flags;
 		__u64 heap_flags;
+		__u32 charge_fd;
+		__u32 __padding;
 		__u64 garbage1;
 		__u64 garbage2;
 		__u64 garbage3;
@@ -328,6 +335,8 @@ static int dmabuf_heap_alloc_newer(int fd, size_t len, unsigned int flags,
 		.fd = 0,
 		.fd_flags = O_RDWR | O_CLOEXEC,
 		.heap_flags = flags,
+		.charge_fd = 0,
+		.__padding = 0,
 		.garbage1 = 0xffffffff,
 		.garbage2 = 0x88888888,
 		.garbage3 = 0x11111111,
@@ -496,6 +505,218 @@ static void test_alloc_no_fd_leak_on_efault(char *heap_name)
 	ksft_test_result(fd_before == fd_after,
 			 "fd leak on EFAULT: before=%d after=%d\n",
 			 fd_before, fd_after);
+
+out:
+	close(heap_fd);
+}
+
+static int dmabuf_heap_alloc_pidfd(int fd, size_t len, unsigned int heap_flags,
+				   unsigned int charge_fd, int *dmabuf_fd)
+{
+	struct dma_heap_allocation_data data = {
+		.len = len,
+		.fd = 0,
+		.fd_flags = O_RDWR | O_CLOEXEC,
+		.heap_flags = heap_flags,
+		.charge_fd = charge_fd,
+	};
+	int ret;
+
+	if (!dmabuf_fd)
+		return -EINVAL;
+
+	ret = ioctl(fd, DMA_HEAP_IOCTL_ALLOC, &data);
+	if (ret < 0)
+		return ret;
+	*dmabuf_fd = (int)data.fd;
+	return ret;
+}
+
+/*
+ * Probe whether the kernel honours charge_fd in DMA_HEAP_IOCTL_ALLOC.
+ */
+static bool pidfd_alloc_supported(int heap_fd)
+{
+	int devnull_fd, dmabuf_fd = -1, ret;
+
+	devnull_fd = open("/dev/null", O_RDONLY);
+	if (devnull_fd < 0)
+		return false;
+
+	ret = dmabuf_heap_alloc_pidfd(heap_fd, ONE_MEG, 0, devnull_fd, &dmabuf_fd);
+	if (dmabuf_fd >= 0) {
+		close(dmabuf_fd);
+		dmabuf_fd = -1;
+	}
+	close(devnull_fd);
+	return ret < 0;
+}
+
+/*
+ * Test: allocate charging the calling process's own cgroup via a self pidfd.
+ */
+static void test_alloc_pidfd_self(char *heap_name)
+{
+	int heap_fd = -1, pidfd = -1, dmabuf_fd = -1, ret;
+
+	heap_fd = dmabuf_heap_open(heap_name);
+
+	if (!pidfd_alloc_supported(heap_fd)) {
+		ksft_test_result_skip("charge_fd not supported by this kernel\n");
+		goto out;
+	}
+
+	pidfd = sys_pidfd_open(getpid(), 0);
+	if (pidfd < 0) {
+		ksft_test_result_skip("pidfd_open not available\n");
+		goto out;
+	}
+
+	ret = dmabuf_heap_alloc_pidfd(heap_fd, ONE_MEG, 0, pidfd, &dmabuf_fd);
+	ksft_test_result(!ret, "Allocation with self pidfd %d\n", ret);
+	if (dmabuf_fd >= 0)
+		close(dmabuf_fd);
+	close(pidfd);
+out:
+	close(heap_fd);
+}
+
+/*
+ * Test: allocate charging a child process's cgroup via a child pidfd.
+ */
+static void test_alloc_pidfd_child(char *heap_name)
+{
+	int heap_fd = -1, pidfd = -1, dmabuf_fd = -1;
+	pid_t child_pid;
+	int status, ret;
+
+	heap_fd = dmabuf_heap_open(heap_name);
+
+	if (!pidfd_alloc_supported(heap_fd)) {
+		ksft_test_result_skip("charge_fd not supported by this kernel\n");
+		goto out;
+	}
+
+	child_pid = fork();
+	if (child_pid == 0) {
+		pause();
+		_exit(0);
+	}
+	if (child_pid < 0)
+		ksft_exit_fail_msg("fork failed: %s\n", strerror(errno));
+
+	pidfd = sys_pidfd_open(child_pid, 0);
+	if (pidfd < 0) {
+		kill(child_pid, SIGTERM);
+		waitpid(child_pid, &status, 0);
+		ksft_test_result_skip("pidfd_open for child failed\n");
+		goto out;
+	}
+
+	ret = dmabuf_heap_alloc_pidfd(heap_fd, ONE_MEG, 0, pidfd, &dmabuf_fd);
+	ksft_test_result(!ret, "Allocation with child pidfd %d\n", ret);
+	if (dmabuf_fd >= 0)
+		close(dmabuf_fd);
+	close(pidfd);
+	kill(child_pid, SIGTERM);
+	waitpid(child_pid, &status, 0);
+out:
+	close(heap_fd);
+}
+
+static int open_self_cgroupfd(void)
+{
+	char cgroup_path[PATH_MAX];
+	char buf[PATH_MAX];
+	FILE *f;
+
+	f = fopen("/proc/self/cgroup", "r");
+	if (!f)
+		return -1;
+
+	cgroup_path[0] = '\0';
+	while (fgets(buf, sizeof(buf), f)) {
+		char *p = buf;
+
+		if (strncmp(p, "0::", 3) == 0) {
+			p += 3;
+			p[strcspn(p, "\n")] = '\0';
+			snprintf(cgroup_path, sizeof(cgroup_path),
+				 "/sys/fs/cgroup%s", p);
+			break;
+		}
+	}
+	fclose(f);
+
+	if (!cgroup_path[0])
+		return -1;
+
+	return open(cgroup_path, O_RDONLY | O_DIRECTORY);
+}
+
+/*
+ * Test: allocate charging the calling process's own cgroup via a cgroupfd.
+ */
+static void test_alloc_cgroupfd_self(char *heap_name)
+{
+	int heap_fd = -1, cgroup_fd = -1, dmabuf_fd = -1, ret;
+
+	heap_fd = dmabuf_heap_open(heap_name);
+
+	if (!pidfd_alloc_supported(heap_fd)) {
+		ksft_test_result_skip("charge_fd not supported by this kernel\n");
+		goto out;
+	}
+
+	cgroup_fd = open_self_cgroupfd();
+	if (cgroup_fd < 0) {
+		ksft_test_result_skip("cannot open self cgroupfd\n");
+		goto out;
+	}
+
+	ret = dmabuf_heap_alloc_pidfd(heap_fd, ONE_MEG, 0, cgroup_fd, &dmabuf_fd);
+	ksft_test_result(!ret, "Allocation with cgroupfd %d\n", ret);
+	if (dmabuf_fd >= 0)
+		close(dmabuf_fd);
+	close(cgroup_fd);
+out:
+	close(heap_fd);
+}
+
+/*
+ * Test: transfer a dma-buf's charge to self cgroup via DMA_BUF_IOCTL_XFER_CHARGE.
+ */
+static void test_xfer_charge_cgroupfd_self(char *heap_name)
+{
+	int heap_fd = -1, cgroup_fd = -1, dmabuf_fd = -1, ret;
+	struct dma_buf_transfer_charge xfer = { 0 };
+
+	heap_fd = dmabuf_heap_open(heap_name);
+
+	if (!pidfd_alloc_supported(heap_fd)) {
+		ksft_test_result_skip("charge_fd not supported by this kernel\n");
+		goto out;
+	}
+
+	ret = dmabuf_heap_alloc(heap_fd, ONE_MEG, 0, &dmabuf_fd);
+	if (ret) {
+		ksft_test_result_fail("Allocation failed %d\n", ret);
+		goto out;
+	}
+
+	cgroup_fd = open_self_cgroupfd();
+	if (cgroup_fd < 0) {
+		ksft_test_result_skip("cannot open self cgroupfd\n");
+		close(dmabuf_fd);
+		goto out;
+	}
+
+	xfer.charge_fd = cgroup_fd;
+	ret = ioctl(dmabuf_fd, DMA_BUF_IOCTL_XFER_CHARGE, &xfer);
+	ksft_test_result(!ret, "XFER_CHARGE to self cgroupfd %d\n", ret);
+
+	close(cgroup_fd);
+	close(dmabuf_fd);
 out:
 	close(heap_fd);
 }
@@ -530,7 +751,7 @@ int main(void)
 		return KSFT_SKIP;
 	}
 
-	ksft_set_plan(12 * numer_of_heaps());
+	ksft_set_plan(16 * numer_of_heaps());
 
 	while ((dir = readdir(d))) {
 		if (!strncmp(dir->d_name, ".", 2))
@@ -546,6 +767,10 @@ int main(void)
 		test_alloc_compat(dir->d_name);
 		test_alloc_errors(dir->d_name);
 		test_alloc_no_fd_leak_on_efault(dir->d_name);
+		test_alloc_pidfd_self(dir->d_name);
+		test_alloc_pidfd_child(dir->d_name);
+		test_alloc_cgroupfd_self(dir->d_name);
+		test_xfer_charge_cgroupfd_self(dir->d_name);
 	}
 	closedir(d);
 
