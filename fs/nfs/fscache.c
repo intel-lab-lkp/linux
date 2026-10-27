@@ -303,12 +303,14 @@ static void nfs_netfs_issue_read(struct netfs_io_subrequest *sreq)
 	struct inode *inode = sreq->rreq->inode;
 	struct nfs_open_context *ctx = sreq->rreq->netfs_priv;
 	struct page *page;
+	unsigned long long pos = sreq->start + sreq->transferred;
+	unsigned long long end = sreq->start + sreq->len;
 	unsigned long idx;
 	pgoff_t start, last;
 	int err;
 
-	start = (sreq->start + sreq->transferred) >> PAGE_SHIFT;
-	last = ((sreq->start + sreq->len - sreq->transferred - 1) >> PAGE_SHIFT);
+	start = pos >> PAGE_SHIFT;
+	last = ((end - 1) >> PAGE_SHIFT);
 
 	nfs_pageio_init_read(&pgio, inode, false,
 			     &nfs_async_read_completion_ops);
@@ -322,8 +324,19 @@ static void nfs_netfs_issue_read(struct netfs_io_subrequest *sreq)
 	pgio.pg_netfs = netfs; /* used in completion */
 
 	xa_for_each_range(&sreq->rreq->mapping->i_pages, idx, page, start, last) {
-		/* nfs_read_add_folio() may schedule() due to pNFS layout and other RPCs  */
-		err = nfs_read_add_folio(&pgio, ctx, page_folio(page));
+		struct folio *folio = page_folio(page);
+		unsigned long long fpos = folio_pos(folio);
+		size_t fsize = folio_size(folio);
+		size_t offset, len;
+
+		/* Read only the part of the folio the subrequest asked for. */
+		offset = pos > fpos ? pos - fpos : 0;
+		len = min(end, fpos + fsize) - (fpos + offset);
+		if (!len)
+			continue;
+
+		/* nfs_read_add_folio_range() may schedule() due to pNFS layout and other RPCs  */
+		err = nfs_read_add_folio_range(&pgio, ctx, folio, offset, len);
 		if (err < 0) {
 			netfs->error = err;
 			goto out;
