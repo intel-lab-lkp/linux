@@ -2350,12 +2350,12 @@ int ksmbd_vfs_inherit_posix_acl(const struct mnt_idmap *idmap,
 	return 0;
 }
 
-void ksmbd_vfs_update_compressed_fattr(struct dentry *dentry, __le32 *fattr)
+void ksmbd_vfs_update_compressed_fattr(struct path *path, __le32 *fattr)
 {
 	int rc;
 	struct file_kattr fa = { .flags_valid = true };
 
-	rc = vfs_fileattr_get(dentry, &fa);
+	rc = vfs_fileattr_get(path, &fa, NULL);
 	if (rc)
 		return;
 
@@ -2368,7 +2368,7 @@ int ksmbd_vfs_get_compression(struct ksmbd_file *fp, u16 *fmt)
 	struct file_kattr fa = { .flags_valid = true };
 	int rc;
 
-	rc = vfs_fileattr_get(fp->filp->f_path.dentry, &fa);
+	rc = vfs_fileattr_get(&fp->filp->f_path, &fa, fp->filp);
 	if (rc == -ENOIOCTLCMD || rc == -ENOTTY || rc == -EINVAL ||
 	    rc == -EOPNOTSUPP) {
 		if (fp->f_ci->m_fattr & FILE_ATTRIBUTE_COMPRESSED_LE)
@@ -2395,9 +2395,8 @@ static int __ksmbd_vfs_set_compression(struct ksmbd_work *work,
 				       bool check_access)
 {
 	const struct cred *saved_cred = NULL;
-	struct file_kattr fa;
-	struct dentry *dentry = fp->filp->f_path.dentry;
 	const struct mnt_idmap *idmap = file_mnt_idmap(fp->filp);
+	struct file_kattr fa;
 	u32 flags;
 	__le32 old_fattr;
 	int rc;
@@ -2415,7 +2414,7 @@ static int __ksmbd_vfs_set_compression(struct ksmbd_work *work,
 	}
 
 	saved_cred = override_creds(fp->filp->f_cred);
-	rc = vfs_fileattr_get(dentry, &fa);
+	rc = vfs_fileattr_get(&fp->filp->f_path, &fa, fp->filp);
 	if (rc == -ENOIOCTLCMD || rc == -ENOTTY || rc == -EINVAL ||
 	    rc == -EOPNOTSUPP)
 		goto update_fattr;
@@ -2436,7 +2435,8 @@ static int __ksmbd_vfs_set_compression(struct ksmbd_work *work,
 		if (rc)
 			goto out;
 
-		rc = vfs_fileattr_set(idmap, dentry, &fa);
+		rc = vfs_fileattr_set(idmap, &fp->filp->f_path, &fa,
+				      fp->filp);
 		mnt_drop_write_file(fp->filp);
 		if (rc == -ENOIOCTLCMD || rc == -ENOTTY || rc == -EINVAL ||
 		    rc == -EOPNOTSUPP)

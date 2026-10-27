@@ -608,47 +608,10 @@ static int ovl_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		return realinode->i_op->fiemap(realinode, fieinfo, start, len);
 }
 
-/*
- * Work around the fact that security_file_ioctl() takes a file argument.
- * Introducing security_inode_fileattr_get/set() hooks would solve this issue
- * properly.
- */
-static int ovl_security_fileattr(const struct path *realpath, struct file_kattr *fa,
-				 bool set)
-{
-	struct file *file;
-	unsigned int cmd;
-	int err;
-	unsigned int flags;
-
-	flags = O_RDONLY;
-	if (force_o_largefile())
-		flags |= O_LARGEFILE;
-
-	file = dentry_open(realpath, flags, current_cred());
-	if (IS_ERR(file))
-		return PTR_ERR(file);
-
-	if (set)
-		cmd = fa->fsx_valid ? FS_IOC_FSSETXATTR : FS_IOC_SETFLAGS;
-	else
-		cmd = fa->fsx_valid ? FS_IOC_FSGETXATTR : FS_IOC_GETFLAGS;
-
-	err = security_file_ioctl(file, cmd, 0);
-	fput(file);
-
-	return err;
-}
-
 int ovl_real_fileattr_set(const struct path *realpath, struct file_kattr *fa)
 {
-	int err;
-
-	err = ovl_security_fileattr(realpath, fa, true);
-	if (err)
-		return err;
-
-	return vfs_fileattr_set(mnt_idmap(realpath->mnt), realpath->dentry, fa);
+	return __vfs_fileattr_set(mnt_idmap(realpath->mnt), realpath->dentry,
+				  fa);
 }
 
 int ovl_fileattr_set(const struct mnt_idmap *idmap,
@@ -718,11 +681,7 @@ int ovl_real_fileattr_get(const struct path *realpath, struct file_kattr *fa)
 {
 	int err;
 
-	err = ovl_security_fileattr(realpath, fa, false);
-	if (err)
-		return err;
-
-	err = vfs_fileattr_get(realpath->dentry, fa);
+	err = __vfs_fileattr_get(realpath->dentry, fa);
 	if (err == -ENOIOCTLCMD)
 		err = -ENOTTY;
 	return err;

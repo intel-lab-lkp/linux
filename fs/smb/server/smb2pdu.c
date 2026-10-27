@@ -3660,7 +3660,7 @@ static bool smb2_parent_compressed(struct ksmbd_tree_connect *tcon,
 	bool compressed = false;
 	int rc;
 
-	rc = vfs_fileattr_get(parent, &fa);
+	rc = vfs_fileattr_get(&parent_path, &fa, NULL);
 	if (!rc && fa.flags & FS_COMPR_FL) {
 		compressed = true;
 		goto out;
@@ -5283,7 +5283,7 @@ resolve_path:
 		smb2_new_xattrs(tcon, &path, fp);
 	}
 
-	ksmbd_vfs_update_compressed_fattr(path.dentry, &fp->f_ci->m_fattr);
+	ksmbd_vfs_update_compressed_fattr(&path, &fp->f_ci->m_fattr);
 
 	if (created) {
 		if (fp->coption & FILE_NO_COMPRESSION_LE) {
@@ -7956,7 +7956,7 @@ static int smb2_get_info_filesystem(struct ksmbd_work *work,
 			FILE_SUPPORTS_SPARSE_FILES |
 			FILE_SUPPORTS_BLOCK_REFCOUNTING;
 
-		err = vfs_fileattr_get(path.dentry, &fa);
+		err = vfs_fileattr_get(&path, &fa, NULL);
 		/*
 		 * -EINVAL, -EOPNOTSUPP: ntfs-3g and other FUSE
 		 * filesystems that lack FS_IOC_FSGETXATTR support.

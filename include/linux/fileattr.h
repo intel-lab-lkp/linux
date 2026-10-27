@@ -73,9 +73,13 @@ static inline bool fileattr_has_fsx(const struct file_kattr *fa)
 		 fa->fsx_projid != 0 ||	fa->fsx_cowextsize != 0);
 }
 
-int vfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa);
-int vfs_fileattr_set(const struct mnt_idmap *idmap, struct dentry *dentry,
-		     struct file_kattr *fa);
+int __vfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa);
+int __vfs_fileattr_set(const struct mnt_idmap *idmap, struct dentry *dentry,
+		       struct file_kattr *fa);
+int vfs_fileattr_get(const struct path *path, struct file_kattr *fa,
+		     struct file *file);
+int vfs_fileattr_set(const struct mnt_idmap *idmap, const struct path *path,
+		     struct file_kattr *fa, struct file *file);
 int ioctl_getflags(struct file *file, unsigned int __user *argp);
 int ioctl_setflags(struct file *file, unsigned int __user *argp);
 int ioctl_fsgetxattr(struct file *file, void __user *argp);

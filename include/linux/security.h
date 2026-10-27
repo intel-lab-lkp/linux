@@ -464,10 +464,10 @@ int security_inode_removexattr(const struct mnt_idmap *idmap,
 			       const struct path *path, const char *name,
 			       struct file *file);
 void security_inode_post_removexattr(struct dentry *dentry, const char *name);
-int security_inode_file_setattr(struct dentry *dentry,
-			      struct file_kattr *fa);
-int security_inode_file_getattr(struct dentry *dentry,
-			      struct file_kattr *fa);
+int security_inode_file_setattr(const struct path *path,
+				struct file_kattr *fa, struct file *file);
+int security_inode_file_getattr(const struct path *path,
+				struct file_kattr *fa, struct file *file);
 int security_inode_need_killpriv(struct dentry *dentry);
 int security_inode_killpriv(const struct mnt_idmap *idmap, struct dentry *dentry);
 int security_inode_getsecurity(const struct mnt_idmap *idmap,
@@ -1092,14 +1092,16 @@ static inline void security_inode_post_removexattr(struct dentry *dentry,
 						   const char *name)
 { }
 
-static inline int security_inode_file_setattr(struct dentry *dentry,
-					      struct file_kattr *fa)
+static inline int security_inode_file_setattr(const struct path *path,
+					      struct file_kattr *fa,
+					      struct file *file)
 {
 	return 0;
 }
 
-static inline int security_inode_file_getattr(struct dentry *dentry,
-					      struct file_kattr *fa)
+static inline int security_inode_file_getattr(const struct path *path,
+					      struct file_kattr *fa,
+					      struct file *file)
 {
 	return 0;
 }

@@ -182,7 +182,7 @@ int ksmbd_vfs_set_init_posix_acl(const struct mnt_idmap *idmap,
 int ksmbd_vfs_inherit_posix_acl(const struct mnt_idmap *idmap,
 				const struct path *path,
 				struct inode *parent_inode);
-void ksmbd_vfs_update_compressed_fattr(struct dentry *dentry, __le32 *fattr);
+void ksmbd_vfs_update_compressed_fattr(struct path *path, __le32 *fattr);
 int ksmbd_vfs_get_compression(struct ksmbd_file *fp, u16 *fmt);
 int ksmbd_vfs_set_compression(struct ksmbd_work *work, struct ksmbd_file *fp, u16 fmt);
 int ksmbd_vfs_set_compression_create(struct ksmbd_work *work,

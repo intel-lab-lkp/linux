@@ -2984,7 +2984,7 @@ nfsd_get_case_info(struct dentry *dentry, bool *case_insensitive,
 	}
 	saved = override_creds(probe);
 
-	err = vfs_fileattr_get(cd, &fa);
+	err = __vfs_fileattr_get(cd, &fa);
 
 	put_cred(revert_creds(saved));
 out:

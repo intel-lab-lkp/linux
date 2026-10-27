@@ -3570,16 +3570,18 @@ static int selinux_inode_removexattr(const struct mnt_idmap *idmap,
 	return -EACCES;
 }
 
-static int selinux_inode_file_setattr(struct dentry *dentry,
-				      struct file_kattr *fa)
+static int selinux_inode_file_setattr(const struct path *path,
+				      struct file_kattr *fa,
+				      struct file *file)
 {
-	return dentry_has_perm(current_cred(), dentry, FILE__SETATTR);
+	return dentry_has_perm(current_cred(), path->dentry, FILE__SETATTR);
 }
 
-static int selinux_inode_file_getattr(struct dentry *dentry,
-				      struct file_kattr *fa)
+static int selinux_inode_file_getattr(const struct path *path,
+				      struct file_kattr *fa,
+				      struct file *file)
 {
-	return dentry_has_perm(current_cred(), dentry, FILE__GETATTR);
+	return dentry_has_perm(current_cred(), path->dentry, FILE__GETATTR);
 }
 
 static int selinux_path_notify(const struct path *path, u64 mask,
