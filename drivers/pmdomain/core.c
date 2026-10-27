@@ -3435,6 +3435,7 @@ err:
 /**
  * genpd_dev_pm_attach - Attach a device to its PM domain using DT.
  * @dev: Device to attach.
+ * @power_on: Whether to power on the PM domain during attach.
  *
  * Parse device's OF node to find a PM domain specifier. If such is found,
  * attaches the device to retrieved pm_domain ops.
@@ -3445,7 +3446,7 @@ err:
  * found or turned on, then return -EPROBE_DEFER to ensure that the device is
  * not probed and to re-try again later.
  */
-int genpd_dev_pm_attach(struct device *dev)
+int genpd_dev_pm_attach(struct device *dev, bool power_on)
 {
 	if (!dev->of_node)
 		return 0;
@@ -3458,7 +3459,7 @@ int genpd_dev_pm_attach(struct device *dev)
 				       "#power-domain-cells") != 1)
 		return 0;
 
-	return __genpd_dev_pm_attach(dev, dev, 0, 1, true);
+	return __genpd_dev_pm_attach(dev, dev, 0, 1, power_on);
 }
 EXPORT_SYMBOL_GPL(genpd_dev_pm_attach);
 
