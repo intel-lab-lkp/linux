@@ -256,6 +256,19 @@ void analogix_dp_set_analog_power_down(struct analogix_dp_device *dp,
 	if (dp->plat_data && analogix_dp_is_rockchip(dp->plat_data->dev_type))
 		phy_pd_addr = ANALOGIX_DP_PD;
 
+	reg = readl(dp->reg_base + phy_pd_addr);
+
+	if (dp->plat_data && (dp->plat_data->dev_type == EXYNOS_DP)) {
+		/* On exynos, register AUX_PD and CH[0-3]_PD have no effect if
+		 * DP_PHY_PD is asserted. So, when powering any of them up, we
+		 * need to deassert DP_PHY_PD first.
+		 */
+		if (!enable && (reg & DP_PHY_PD)) {
+			reg &= ~DP_PHY_PD;
+			reg |= AUX_PD | CH0_PD | CH1_PD | CH2_PD | CH3_PD;
+		}
+	}
+
 	switch (block) {
 	case AUX_BLOCK:
 		if (dp->plat_data && analogix_dp_is_rockchip(dp->plat_data->dev_type))
@@ -263,7 +276,6 @@ void analogix_dp_set_analog_power_down(struct analogix_dp_device *dp,
 		else
 			mask = AUX_PD;
 
-		reg = readl(dp->reg_base + phy_pd_addr);
 		if (enable)
 			reg |= mask;
 		else
@@ -272,7 +284,6 @@ void analogix_dp_set_analog_power_down(struct analogix_dp_device *dp,
 		break;
 	case CH0_BLOCK:
 		mask = CH0_PD;
-		reg = readl(dp->reg_base + phy_pd_addr);
 
 		if (enable)
 			reg |= mask;
@@ -282,7 +293,6 @@ void analogix_dp_set_analog_power_down(struct analogix_dp_device *dp,
 		break;
 	case CH1_BLOCK:
 		mask = CH1_PD;
-		reg = readl(dp->reg_base + phy_pd_addr);
 
 		if (enable)
 			reg |= mask;
@@ -292,7 +302,6 @@ void analogix_dp_set_analog_power_down(struct analogix_dp_device *dp,
 		break;
 	case CH2_BLOCK:
 		mask = CH2_PD;
-		reg = readl(dp->reg_base + phy_pd_addr);
 
 		if (enable)
 			reg |= mask;
@@ -302,7 +311,6 @@ void analogix_dp_set_analog_power_down(struct analogix_dp_device *dp,
 		break;
 	case CH3_BLOCK:
 		mask = CH3_PD;
-		reg = readl(dp->reg_base + phy_pd_addr);
 
 		if (enable)
 			reg |= mask;
@@ -321,7 +329,6 @@ void analogix_dp_set_analog_power_down(struct analogix_dp_device *dp,
 		else
 			mask = DP_PHY_PD;
 
-		reg = readl(dp->reg_base + phy_pd_addr);
 		if (enable)
 			reg |= mask;
 		else
