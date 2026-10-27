@@ -649,9 +649,7 @@ struct rvu {
 	int			mcs_blk_cnt;
 	int			cpt_pf_num;
 
-#ifdef CONFIG_DEBUG_FS
 	struct rvu_debugfs	rvu_dbg;
-#endif
 	struct rvu_devlink	*rvu_dl;
 
 	/* RVU switch implementation over NPC with DMAC rules */
