@@ -112,7 +112,7 @@ int vfs_fileattr_get(const struct path *path, struct file_kattr *fa,
 {
 	int error;
 
-	error = security_inode_file_getattr(path, fa, file);
+	error = security_path_file_getattr(path, fa, file);
 	if (error)
 		return error;
 
@@ -315,7 +315,7 @@ static int do_vfs_fileattr_set(const struct path *const path,
 		 * user-facing path.
 		 */
 		if (path) {
-			err = security_inode_file_setattr(path, fa, file);
+			err = security_path_file_setattr(path, fa, file);
 			if (err)
 				goto out;
 		}

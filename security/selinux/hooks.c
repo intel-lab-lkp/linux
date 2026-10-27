@@ -3572,16 +3572,16 @@ static int selinux_path_removexattr(const struct mnt_idmap *idmap,
 	return -EACCES;
 }
 
-static int selinux_inode_file_setattr(const struct path *path,
-				      struct file_kattr *fa,
-				      struct file *file)
+static int selinux_path_file_setattr(const struct path *path,
+				     struct file_kattr *fa,
+				     struct file *file)
 {
 	return dentry_has_perm(current_cred(), path->dentry, FILE__SETATTR);
 }
 
-static int selinux_inode_file_getattr(const struct path *path,
-				      struct file_kattr *fa,
-				      struct file *file)
+static int selinux_path_file_getattr(const struct path *path,
+				     struct file_kattr *fa,
+				     struct file *file)
 {
 	return dentry_has_perm(current_cred(), path->dentry, FILE__GETATTR);
 }
@@ -7743,8 +7743,8 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(path_getxattr, selinux_path_getxattr),
 	LSM_HOOK_INIT(path_listxattr, selinux_path_listxattr),
 	LSM_HOOK_INIT(path_removexattr, selinux_path_removexattr),
-	LSM_HOOK_INIT(inode_file_getattr, selinux_inode_file_getattr),
-	LSM_HOOK_INIT(inode_file_setattr, selinux_inode_file_setattr),
+	LSM_HOOK_INIT(path_file_getattr, selinux_path_file_getattr),
+	LSM_HOOK_INIT(path_file_setattr, selinux_path_file_setattr),
 	LSM_HOOK_INIT(path_set_acl, selinux_path_set_acl),
 	LSM_HOOK_INIT(path_get_acl, selinux_path_get_acl),
 	LSM_HOOK_INIT(path_remove_acl, selinux_path_remove_acl),

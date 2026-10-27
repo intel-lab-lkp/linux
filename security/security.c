@@ -2180,7 +2180,7 @@ void security_inode_post_removexattr(struct dentry *dentry, const char *name)
 }
 
 /**
- * security_inode_file_setattr() - check if setting fsxattr is allowed
+ * security_path_file_setattr() - check if setting fsxattr is allowed
  * @path: file to set filesystem extended attributes on (the VFS makes no
  *        guarantees with regard to @path->mnt)
  * @fa: extended attributes to set on the inode
@@ -2191,14 +2191,14 @@ void security_inode_post_removexattr(struct dentry *dentry, const char *name)
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_file_setattr(const struct path *path,
-				struct file_kattr *fa, struct file *file)
+int security_path_file_setattr(const struct path *path,
+			       struct file_kattr *fa, struct file *file)
 {
-	return call_int_hook(inode_file_setattr, path, fa, file);
+	return call_int_hook(path_file_setattr, path, fa, file);
 }
 
 /**
- * security_inode_file_getattr() - check if retrieving fsxattr is allowed
+ * security_path_file_getattr() - check if retrieving fsxattr is allowed
  * @path: file to retrieve filesystem extended attributes from (the VFS makes no
  *        guarantees with regard to @path->mnt)
  * @fa: extended attributes to get
@@ -2209,10 +2209,10 @@ int security_inode_file_setattr(const struct path *path,
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_file_getattr(const struct path *path,
-				struct file_kattr *fa, struct file *file)
+int security_path_file_getattr(const struct path *path,
+			       struct file_kattr *fa, struct file *file)
 {
-	return call_int_hook(inode_file_getattr, path, fa, file);
+	return call_int_hook(path_file_getattr, path, fa, file);
 }
 
 /**

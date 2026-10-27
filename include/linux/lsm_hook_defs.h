@@ -169,9 +169,9 @@ LSM_HOOK(int, 0, path_removexattr, const struct mnt_idmap *idmap,
 	 const struct path *path, const char *name, struct file *file)
 LSM_HOOK(void, LSM_RET_VOID, inode_post_removexattr, struct dentry *dentry,
 	 const char *name)
-LSM_HOOK(int, 0, inode_file_setattr, const struct path *path,
+LSM_HOOK(int, 0, path_file_setattr, const struct path *path,
 	 struct file_kattr *fa, struct file *file)
-LSM_HOOK(int, 0, inode_file_getattr, const struct path *path,
+LSM_HOOK(int, 0, path_file_getattr, const struct path *path,
 	 struct file_kattr *fa, struct file *file)
 LSM_HOOK(int, 0, path_set_acl, const struct mnt_idmap *idmap,
 	 const struct path *path, const char *acl_name,
