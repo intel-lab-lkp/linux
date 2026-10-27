@@ -31,7 +31,9 @@
 /* clang-format off */
 #define _LANDLOCK_ACCESS_FS_OPTIONAL ( \
 	LANDLOCK_ACCESS_FS_TRUNCATE | \
-	LANDLOCK_ACCESS_FS_IOCTL_DEV)
+	LANDLOCK_ACCESS_FS_IOCTL_DEV | \
+	LANDLOCK_ACCESS_FS_READ_METADATA | \
+	LANDLOCK_ACCESS_FS_WRITE_METADATA)
 /* clang-format on */
 
 typedef u32 access_mask_t;
@@ -156,11 +158,12 @@ struct layer_masks {
  * required by update_request().
  *
  * Each nibble represents the layer index of the newest layer which denied a
- * certain access right.  For file system access rights, the upper four bits are
- * the index of the layer which denies LANDLOCK_ACCESS_FS_IOCTL_DEV and the
- * lower nibble represents LANDLOCK_ACCESS_FS_TRUNCATE.
+ * certain access right.  For file system access rights, the nibbles from the
+ * least to the most significant one represent the layers which deny
+ * LANDLOCK_ACCESS_FS_TRUNCATE, LANDLOCK_ACCESS_FS_IOCTL_DEV,
+ * LANDLOCK_ACCESS_FS_READ_METADATA and LANDLOCK_ACCESS_FS_WRITE_METADATA.
  */
-typedef u8 deny_masks_t;
+typedef u16 deny_masks_t;
 
 /*
  * Makes sure all optional access rights can be tied to a layer index (cf.

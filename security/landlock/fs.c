@@ -318,6 +318,8 @@ retry:
 	LANDLOCK_ACCESS_FS_EXECUTE | \
 	LANDLOCK_ACCESS_FS_WRITE_FILE | \
 	LANDLOCK_ACCESS_FS_READ_FILE | \
+	LANDLOCK_ACCESS_FS_READ_METADATA | \
+	LANDLOCK_ACCESS_FS_WRITE_METADATA | \
 	LANDLOCK_ACCESS_FS_TRUNCATE | \
 	LANDLOCK_ACCESS_FS_IOCTL_DEV | \
 	LANDLOCK_ACCESS_FS_RESOLVE_UNIX)
@@ -1676,6 +1678,192 @@ static int hook_path_truncate(const struct path *const path)
 	return current_check_access_path(path, LANDLOCK_ACCESS_FS_TRUNCATE);
 }
 
+static int check_access_file(const struct file *const file,
+			     const access_mask_t access)
+{
+	/*
+	 * O_PATH file descriptors do not go through the open permission
+	 * checks (cf. do_dentry_open()) and therefore do not carry the
+	 * access rights stashed at open time: they are checked against the
+	 * current domain, like path-based accesses.
+	 */
+	if (unlikely(file->f_mode & FMODE_PATH))
+		return current_check_access_path(&file->f_path, access);
+
+	/*
+	 * Allows accesses if the requested access right was available at the
+	 * time of opening the file, to get a consistent access check as for
+	 * read, write and execute operations.
+	 *
+	 * Note: For checks done based on the file's Landlock allowed access,
+	 * we enforce them independently of whether the current thread is in
+	 * a Landlock domain, so that open files passed between independent
+	 * processes retain their behaviour.
+	 */
+	if (landlock_file(file)->allowed_access & access)
+		return 0;
+
+	landlock_log_denial(landlock_cred(file->f_cred), &(struct landlock_request) {
+		.type = LANDLOCK_REQUEST_FS_ACCESS,
+		.audit = {
+			.type = LSM_AUDIT_DATA_FILE,
+			.u.file = file,
+		},
+		.all_existing_optional_access = _LANDLOCK_ACCESS_FS_OPTIONAL,
+		.access = access,
+#ifdef CONFIG_SECURITY_LANDLOCK_LOG
+		.deny_masks = landlock_file(file)->deny_masks,
+		.quiet_optional_accesses = landlock_file(file)->quiet_optional_accesses,
+#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
+	});
+	return -EACCES;
+}
+
+static int check_access_path_or_file(const struct path *const path,
+				     const struct file *const file,
+				     const access_mask_t access)
+{
+	if (file)
+		return check_access_file(file, access);
+
+	return current_check_access_path(path, access);
+}
+
+static int hook_path_getattr(const struct path *const path,
+			     struct file *const file)
+{
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_READ_METADATA);
+}
+
+static int hook_path_file_getattr(const struct path *const path,
+				  struct file_kattr *const fa,
+				  struct file *const file)
+{
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_READ_METADATA);
+}
+
+static int hook_path_setattr(const struct mnt_idmap *const idmap,
+			     const struct path *const path,
+			     struct iattr *const attr,
+			     struct file *const file)
+{
+	unsigned int ia_valid = attr->ia_valid;
+
+	/*
+	 * Only explicit metadata changes are checked: implicit
+	 * timestamp updates never go through notify_change(), and size
+	 * changes (ATTR_SIZE) are governed by the truncate hooks
+	 * instead.  See the "File metadata" section in the user space
+	 * documentation for the full semantics.
+	 *
+	 * The setuid/setgid bit clearing that the kernel performs
+	 * after write(2) or truncate(2) is an implicit change as
+	 * well: it comes through __remove_privs() and do_truncate()
+	 * with ATTR_FORCE set, and do_notify_change() then adds a
+	 * synthesized ATTR_MODE (with these bits removed) before
+	 * calling this hook.  As do_notify_change() makes it a bug for
+	 * callers to pass ATTR_MODE together with a kill flag, an
+	 * ATTR_MODE seen along with ATTR_FORCE is always
+	 * kernel-synthesized and must not be checked.  An explicit
+	 * chown(2) does not set ATTR_FORCE, so the same clearing
+	 * requested through chown(2), including chown(2) with
+	 * (-1, -1) on a privileged file, is still checked through the
+	 * synthesized ATTR_MODE, matching the SELinux behavior.  A
+	 * chown(2) that changes nothing (e.g. with (-1, -1) on a file
+	 * without privilege bits) sets neither a changed attribute
+	 * nor a synthesized ATTR_MODE, and is not checked.
+	 */
+	if (ia_valid & ATTR_FORCE)
+		ia_valid &= ~(ATTR_KILL_SUID | ATTR_KILL_SGID | ATTR_MODE);
+
+	if (!(ia_valid & (ATTR_MODE | ATTR_UID | ATTR_GID |
+			  ATTR_TIMES_SET | ATTR_TOUCH)))
+		return 0;
+
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
+static int hook_path_file_setattr(const struct path *const path,
+				  struct file_kattr *const fa,
+				  struct file *const file)
+{
+	/*
+	 * The chattr(2) style flags (e.g. FS_IMMUTABLE_FL) and fsxattr
+	 * fields are metadata: writing them requires WRITE_METADATA.  The
+	 * user-facing path is checked here; stacking filesystems skip this
+	 * hook on their internal forwards because they were already
+	 * checked on the user-facing path.
+	 */
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
+static int hook_path_setxattr(const struct mnt_idmap *const idmap,
+			       const struct path *const path,
+			       const char *const name,
+			       const void *const value, const size_t size,
+			       const int flags,
+			       struct file *const file)
+{
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
+static int hook_path_getxattr(const struct path *const path,
+			      const char *const name,
+			      struct file *const file)
+{
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_READ_METADATA);
+}
+
+static int hook_path_listxattr(const struct path *const path,
+			       struct file *const file)
+{
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_READ_METADATA);
+}
+
+static int hook_path_removexattr(const struct mnt_idmap *const idmap,
+				  const struct path *const path,
+				  const char *const name,
+				  struct file *const file)
+{
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
+static int hook_path_set_acl(const struct mnt_idmap *const idmap,
+			      const struct path *const path,
+			      const char *const acl_name,
+			      struct posix_acl *const kacl,
+			      struct file *const file)
+{
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
+static int hook_path_get_acl(const struct mnt_idmap *const idmap,
+			      const struct path *const path,
+			      const char *const acl_name,
+			      struct file *const file)
+{
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_READ_METADATA);
+}
+
+static int hook_path_remove_acl(const struct mnt_idmap *const idmap,
+				const struct path *const path,
+				const char *const acl_name,
+				struct file *const file)
+{
+	return check_access_path_or_file(path, file,
+					 LANDLOCK_ACCESS_FS_WRITE_METADATA);
+}
+
 /**
  * unmask_scoped_access - Remove access right bits in @masks in all layers
  *                        where @client and @server have the same domain
@@ -1876,7 +2064,9 @@ static int hook_file_open(struct file *const file)
 	 * We look up more access than what we immediately need for open(), so
 	 * that we can later authorize operations on opened files.
 	 */
-	optional_access = LANDLOCK_ACCESS_FS_TRUNCATE;
+	optional_access = LANDLOCK_ACCESS_FS_TRUNCATE |
+			  LANDLOCK_ACCESS_FS_READ_METADATA |
+			  LANDLOCK_ACCESS_FS_WRITE_METADATA;
 	if (is_device(file))
 		optional_access |= LANDLOCK_ACCESS_FS_IOCTL_DEV;
 
@@ -1928,32 +2118,11 @@ static int hook_file_open(struct file *const file)
 static int hook_file_truncate(struct file *const file)
 {
 	/*
-	 * Allows truncation if the truncate right was available at the time of
-	 * opening the file, to get a consistent access check as for read, write
-	 * and execute operations.
-	 *
-	 * Note: For checks done based on the file's Landlock allowed access, we
-	 * enforce them independently of whether the current thread is in a
-	 * Landlock domain, so that open files passed between independent
-	 * processes retain their behaviour.
+	 * Allows truncation if the truncate right was available at the time
+	 * of opening the file, to get a consistent access check as for read,
+	 * write and execute operations.
 	 */
-	if (landlock_file(file)->allowed_access & LANDLOCK_ACCESS_FS_TRUNCATE)
-		return 0;
-
-	landlock_log_denial(landlock_cred(file->f_cred), &(struct landlock_request) {
-		.type = LANDLOCK_REQUEST_FS_ACCESS,
-		.audit = {
-			.type = LSM_AUDIT_DATA_FILE,
-			.u.file = file,
-		},
-		.all_existing_optional_access = _LANDLOCK_ACCESS_FS_OPTIONAL,
-		.access = LANDLOCK_ACCESS_FS_TRUNCATE,
-#ifdef CONFIG_SECURITY_LANDLOCK_LOG
-		.deny_masks = landlock_file(file)->deny_masks,
-		.quiet_optional_accesses = landlock_file(file)->quiet_optional_accesses,
-#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
-	});
-	return -EACCES;
+	return check_access_file(file, LANDLOCK_ACCESS_FS_TRUNCATE);
 }
 
 static int hook_file_ioctl_common(const struct file *const file,
@@ -2100,6 +2269,17 @@ static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(path_unlink, hook_path_unlink),
 	LSM_HOOK_INIT(path_rmdir, hook_path_rmdir),
 	LSM_HOOK_INIT(path_truncate, hook_path_truncate),
+	LSM_HOOK_INIT(path_getattr, hook_path_getattr),
+	LSM_HOOK_INIT(path_file_getattr, hook_path_file_getattr),
+	LSM_HOOK_INIT(path_setattr, hook_path_setattr),
+	LSM_HOOK_INIT(path_file_setattr, hook_path_file_setattr),
+	LSM_HOOK_INIT(path_setxattr, hook_path_setxattr),
+	LSM_HOOK_INIT(path_getxattr, hook_path_getxattr),
+	LSM_HOOK_INIT(path_listxattr, hook_path_listxattr),
+	LSM_HOOK_INIT(path_removexattr, hook_path_removexattr),
+	LSM_HOOK_INIT(path_set_acl, hook_path_set_acl),
+	LSM_HOOK_INIT(path_get_acl, hook_path_get_acl),
+	LSM_HOOK_INIT(path_remove_acl, hook_path_remove_acl),
 	LSM_HOOK_INIT(unix_find, hook_unix_find),
 
 	LSM_HOOK_INIT(file_alloc_security, hook_file_alloc_security),
