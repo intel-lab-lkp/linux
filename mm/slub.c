@@ -3424,11 +3424,22 @@ static inline struct slab *alloc_slab_page(gfp_t flags, int node,
 }
 
 #ifdef CONFIG_SLAB_FREELIST_RANDOM
+static bool slab_freelist_random __ro_after_init = true;
+
+static int __init setup_slab_freelist_random(char *str)
+{
+	return kstrtobool(str, &slab_freelist_random);
+}
+early_param("slab_freelist_random", setup_slab_freelist_random);
+
 /* Pre-initialize the random sequence cache */
 static int init_cache_random_seq(struct kmem_cache *s)
 {
 	unsigned int count = oo_objects(s->oo);
 	int err;
+
+	if (!slab_freelist_random)
+		return 0;
 
 	/* Bailout if already initialised */
 	if (s->random_seq)
@@ -3455,6 +3466,11 @@ static int init_cache_random_seq(struct kmem_cache *s)
 static void __init init_freelist_randomization(void)
 {
 	struct kmem_cache *s;
+
+	if (!slab_freelist_random) {
+		pr_info("SLUB: freelist randomisation disabled\n");
+		return;
+	}
 
 	mutex_lock(&slab_mutex);
 

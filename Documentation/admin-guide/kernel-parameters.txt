@@ -7021,6 +7021,13 @@ Kernel parameters
 			without that option.
 			Default: on.
 
+	slab_freelist_random= [MM,EARLY]
+			Format: <bool>
+			Enable or disable slab freelist randomisation on
+			kernels built with CONFIG_SLAB_FREELIST_RANDOM=y.
+			Ignored without that option.
+			Default: on.
+
 	slab_max_order= [MM]
 			Determines the maximum allowed order for slabs.
 			A high setting may cause OOMs due to memory
