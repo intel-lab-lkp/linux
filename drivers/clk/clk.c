@@ -1449,6 +1449,74 @@ void clk_restore_context(void)
 }
 EXPORT_SYMBOL_GPL(clk_restore_context);
 
+static int clk_fetch_parent_index(struct clk_core *core,
+				  struct clk_core *parent);
+
+/* Program the cached parent, rate and prepare/enable state into the hardware */
+static void clk_core_restore_state(struct clk_core *core)
+{
+	struct clk_core *parent = core->parent;
+	unsigned long flags;
+	int index;
+
+	lockdep_assert_held(&prepare_lock);
+
+	if (parent && core->num_parents > 1 && core->ops->set_parent) {
+		index = clk_fetch_parent_index(core, parent);
+		if (index >= 0)
+			core->ops->set_parent(core->hw, index);
+	}
+
+	if (core->rate && core->ops->set_rate)
+		core->ops->set_rate(core->hw, core->rate,
+				    parent ? parent->rate : 0);
+
+	if (core->prepare_count && core->ops->prepare)
+		core->ops->prepare(core->hw);
+
+	if (core->enable_count && core->ops->enable) {
+		flags = clk_enable_lock();
+		core->ops->enable(core->hw);
+		clk_enable_unlock(flags);
+	}
+}
+
+static void clk_core_restore_context_dev(struct clk_core *core,
+					 struct device *dev)
+{
+	struct clk_core *child;
+
+	if (core->dev == dev)
+		clk_core_restore_state(core);
+
+	hlist_for_each_entry(child, &core->children, child_node)
+		clk_core_restore_context_dev(child, dev);
+}
+
+/**
+ * clk_restore_context_dev - restore the clocks of a provider after poweroff
+ * @dev: the device that registered the clocks
+ *
+ * Program the cached state of the clocks registered by @dev back into the
+ * hardware, parents before children, after a power cycle the framework does
+ * not know about, such as a hibernation restore.
+ */
+void clk_restore_context_dev(struct device *dev)
+{
+	struct clk_core *core;
+
+	clk_prepare_lock();
+
+	hlist_for_each_entry(core, &clk_root_list, child_node)
+		clk_core_restore_context_dev(core, dev);
+
+	hlist_for_each_entry(core, &clk_orphan_list, child_node)
+		clk_core_restore_context_dev(core, dev);
+
+	clk_prepare_unlock();
+}
+EXPORT_SYMBOL_GPL(clk_restore_context_dev);
+
 /**
  * clk_enable - ungate a clock
  * @clk: the clk being ungated

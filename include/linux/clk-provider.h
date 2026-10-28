@@ -1439,6 +1439,8 @@ void clk_unregister(struct clk *clk);
 
 void clk_hw_unregister(struct clk_hw *hw);
 
+void clk_restore_context_dev(struct device *dev);
+
 /* helper functions */
 const char *__clk_get_name(const struct clk *clk);
 const char *clk_hw_get_name(const struct clk_hw *hw);
