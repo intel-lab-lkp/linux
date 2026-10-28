@@ -769,6 +769,7 @@ static inline s32 igc_read_phy_reg(struct igc_hw *hw, u32 offset, u16 *data)
 	return -EOPNOTSUPP;
 }
 
+void igc_set_rlpml(struct igc_adapter *adapter);
 void igc_reinit_locked(struct igc_adapter *);
 struct igc_nfc_rule *igc_get_nfc_rule(struct igc_adapter *adapter,
 				      u32 location);
