@@ -2359,7 +2359,10 @@ static int kvm_s390_set_cmma_bits(struct kvm *kvm,
 		}
 	} while (r == -ENOMEM);
 
-	set_bit(GMAP_FLAG_USES_CMM, &kvm->arch.gmap->flags);
+	if (!uses_cmm(kvm->arch.gmap)) {
+		set_bit(GMAP_FLAG_USES_CMM, &kvm->arch.gmap->flags);
+		gmap_allocate_all_page_tables_best_effort(kvm->arch.gmap);
+	}
 
 	return r <= 0 ? r : -EFAULT;
 }

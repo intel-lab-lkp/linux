@@ -1248,7 +1248,10 @@ static int handle_essa(struct kvm_vcpu *vcpu)
 		 * value really needs to be written to; if the value is
 		 * already correct, we do nothing and avoid the lock.
 		 */
-		set_bit(GMAP_FLAG_USES_CMM, &vcpu->arch.gmap->flags);
+		if (!uses_cmm(vcpu->arch.gmap)) {
+			set_bit(GMAP_FLAG_USES_CMM, &vcpu->arch.gmap->flags);
+			gmap_allocate_all_page_tables_best_effort(vcpu->arch.gmap);
+		}
 		/*
 		 * If we are here, we are supposed to have CMMA enabled in
 		 * the SIE block. Enabling CMMA works on a per-CPU basis,
