@@ -1035,6 +1035,27 @@ int test_file_stream_wsr(void)
 	return 0;
 }
 
+/* checks that a stream opened with <mode> is readable and writable */
+int test_fopen_rw(const char *mode)
+{
+	FILE *f;
+	char c;
+	int r;
+
+	f = fopen("/dev/null", mode);
+	if (!f)
+		return -1;
+
+	/* reading /dev/null hits end-of-file, so a write may follow */
+	errno = 0;
+	r = fread(&c, 1, 1, f) != 0 || errno || fwrite("x", 1, 1, f) != 1;
+
+	if (fclose(f) == EOF)
+		return -1;
+
+	return r ? -1 : 0;
+}
+
 enum fork_type {
 	FORK_STANDARD,
 	FORK_VFORK,
@@ -1759,6 +1780,9 @@ int run_syscall(int min, int max)
 		CASE_TEST(fdopendir_notdir);  EXPECT_SYSER(1, (uintptr_t)fdopendir(STDIN_FILENO), (uintptr_t)NULL, ENOTDIR); break;
 		CASE_TEST(file_stream);       EXPECT_SYSZR(1, test_file_stream()); break;
 		CASE_TEST(file_stream_wsr);   EXPECT_SYSZR(1, test_file_stream_wsr()); break;
+		CASE_TEST(fopen_blah);        EXPECT_PTRER(1, fopen("/proc/self/blah", "r"), NULL, ENOENT); break;
+		CASE_TEST(fopen_rb_plus);     EXPECT_SYSZR(1, test_fopen_rw("rb+")); break;
+		CASE_TEST(fopen_wb_plus);     EXPECT_SYSZR(1, test_fopen_rw("wb+")); break;
 		CASE_TEST(fork);              EXPECT_SYSZR(1, test_fork(FORK_STANDARD)); break;
 		CASE_TEST(ftruncate);         EXPECT_SYSZR(1, test_ftruncate()); break;
 		CASE_TEST(getdents64_root);   EXPECT_SYSNE(1, test_getdents64("/"), -1); break;
