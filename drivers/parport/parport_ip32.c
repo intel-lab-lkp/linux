@@ -1109,6 +1109,8 @@ static size_t parport_ip32_epp_read(void __iomem *eppreg,
 		readsb(eppreg, buf, len);
 		if (readb(priv->regs.dsr) & DSR_TIMEOUT) {
 			parport_ip32_clear_epp_timeout(p);
+			parport_ip32_data_forward(p);
+			parport_ip32_set_mode(p, ECR_MODE_PS2);
 			return -EIO;
 		}
 		got = len;
@@ -1148,6 +1150,7 @@ static size_t parport_ip32_epp_write(void __iomem *eppreg,
 		writesb(eppreg, buf, len);
 		if (readb(priv->regs.dsr) & DSR_TIMEOUT) {
 			parport_ip32_clear_epp_timeout(p);
+			parport_ip32_set_mode(p, ECR_MODE_PS2);
 			return -EIO;
 		}
 		written = len;
