@@ -6925,7 +6925,19 @@ static int e1000e_pm_thaw(struct device *dev)
 	}
 
 	netif_device_attach(netdev);
+	rtnl_unlock();
+
+	return rc;
+
 err_irq:
+	/* The interrupts could not be restored, so the interface cannot
+	 * be used. Close it while the netdev is still detached, which
+	 * makes e1000e_close() skip the hardware and interrupt teardown,
+	 * and attach the netdev afterwards so that it can be brought up
+	 * again.
+	 */
+	dev_close(netdev);
+	netif_device_attach(netdev);
 	rtnl_unlock();
 
 	return rc;
