@@ -1753,6 +1753,7 @@ static int pci_dma_configure(struct device *dev)
 	 * quirks.
 	 */
 	pci_enable_acs(to_pci_dev(dev));
+	pci_ats_check_acs(to_pci_dev(dev));
 
 	pci_put_host_bridge_device(bridge);
 
