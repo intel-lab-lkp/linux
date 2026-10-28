@@ -5783,9 +5783,12 @@ static void ath11k_mac_setup_ht_vht_cap(struct ath11k *ar,
 						    rate_cap_rx_chainmask);
 	}
 
+	/* A 6 GHz capable radio may cover 5 GHz as well, as a QCN9074 does:
+	 * its 5 GHz band, where one was registered, needs HT and VHT as much
+	 * as any other radio's.
+	 */
 	if (cap->supported_bands & WMI_HOST_WLAN_5G_CAP &&
-	    (ar->ab->hw_params.single_pdev_only ||
-	     !ar->supports_6ghz)) {
+	    ar->mac.sbands[NL80211_BAND_5GHZ].n_channels) {
 		band = &ar->mac.sbands[NL80211_BAND_5GHZ];
 		ht_cap = cap->band[NL80211_BAND_5GHZ].ht_cap_info;
 		if (ht_cap_info)
