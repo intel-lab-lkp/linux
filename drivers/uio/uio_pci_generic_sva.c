@@ -32,6 +32,9 @@ static int uio_pci_sva_open(struct uio_info *info, struct inode *inode)
 	if (!udev || !udev->pdev)
 		return -ENODEV;
 
+	if (udev->sva_handle)
+		return -EBUSY;
+
 	domain = iommu_get_domain_for_dev(&udev->pdev->dev);
 	if (domain)
 		iommu_detach_device(domain, &udev->pdev->dev);
@@ -55,6 +58,7 @@ static int uio_pci_sva_release(struct uio_info *info, struct inode *inode)
 		return -ENODEV;
 
 	iommu_sva_unbind_device(udev->sva_handle);
+	udev->sva_handle = NULL;
 
 	return 0;
 }
