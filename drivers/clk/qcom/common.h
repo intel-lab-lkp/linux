@@ -4,6 +4,7 @@
 #ifndef __QCOM_CLK_COMMON_H__
 #define __QCOM_CLK_COMMON_H__
 
+struct dev_pm_ops;
 struct platform_device;
 struct regmap_config;
 struct clk_regmap;
@@ -86,6 +87,7 @@ extern int qcom_cc_really_probe(struct device *dev,
 				struct regmap *regmap);
 extern int qcom_cc_probe(struct platform_device *pdev,
 			 const struct qcom_cc_desc *desc);
+extern const struct dev_pm_ops qcom_cc_pm_ops;
 extern int qcom_cc_probe_by_index(struct platform_device *pdev, int index,
 				  const struct qcom_cc_desc *desc);
 

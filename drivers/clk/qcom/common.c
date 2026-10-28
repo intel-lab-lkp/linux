@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
 #include <linux/clk-provider.h>
 #include <linux/interconnect-clk.h>
 #include <linux/pm_runtime.h>
@@ -26,6 +27,8 @@ struct qcom_cc {
 	struct clk_regmap **rclks;
 	size_t num_rclks;
 	struct dev_pm_domain_list *pd_list;
+	const struct qcom_cc_desc *desc;
+	struct regmap *regmap;
 };
 
 const
@@ -321,6 +324,10 @@ static void qcom_cc_clk_regs_configure(struct device *dev, const struct qcom_cc_
 		data->clk_regs_configure(dev, regmap);
 }
 
+static void qcom_cc_release(struct device *dev, void *res)
+{
+}
+
 int qcom_cc_really_probe(struct device *dev,
 			 const struct qcom_cc_desc *desc, struct regmap *regmap)
 {
@@ -333,9 +340,13 @@ int qcom_cc_really_probe(struct device *dev,
 	size_t num_clk_hws = desc->num_clk_hws;
 	struct clk_hw **clk_hws = desc->clk_hws;
 
-	cc = devm_kzalloc(dev, sizeof(*cc), GFP_KERNEL);
+	cc = devres_alloc(qcom_cc_release, sizeof(*cc), GFP_KERNEL);
 	if (!cc)
 		return -ENOMEM;
+	devres_add(dev, cc);
+
+	cc->desc = desc;
+	cc->regmap = regmap;
 
 	ret = devm_pm_domain_attach_list(dev, NULL, &cc->pd_list);
 	if (ret < 0 && ret != -EEXIST)
@@ -433,6 +444,45 @@ put_rpm:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_cc_really_probe);
+
+/* Redo the probe time setup and the cached clock state after a power cycle */
+static int qcom_cc_restore(struct device *dev)
+{
+	struct qcom_cc *cc = devres_find(dev, qcom_cc_release, NULL, NULL);
+	const struct qcom_cc_desc *desc;
+	int ret = 0;
+
+	if (!cc)
+		return 0;
+
+	desc = cc->desc;
+
+	if (desc->use_rpm) {
+		ret = pm_runtime_resume_and_get(dev);
+		if (ret)
+			return ret;
+	}
+
+	if (desc->driver_data) {
+		ret = qcom_cc_clk_pll_configure(desc->driver_data, cc->regmap);
+		if (ret)
+			goto put_rpm;
+
+		qcom_cc_clk_regs_configure(dev, desc->driver_data, cc->regmap);
+	}
+
+	clk_restore_context_dev(dev);
+
+put_rpm:
+	if (desc->use_rpm)
+		pm_runtime_put_sync(dev);
+
+	return ret;
+}
+
+EXPORT_GPL_DEV_PM_OPS(qcom_cc_pm_ops) = {
+	.restore = pm_sleep_ptr(qcom_cc_restore),
+};
 
 int qcom_cc_probe(struct platform_device *pdev, const struct qcom_cc_desc *desc)
 {
