@@ -708,6 +708,7 @@ static int mtk_spmi_bus_probe(struct platform_device *pdev,
 			      struct pmif_bus *pbus)
 {
 	struct spmi_controller *ctrl;
+	struct pmif_bus *bus_slot = pbus;
 	int err, idx, bus_id, i;
 
 	if (pdata->num_spmi_buses > 1)
@@ -780,6 +781,7 @@ static int mtk_spmi_bus_probe(struct platform_device *pdev,
 	if (pbus->dom)
 		irq_set_chained_handler_and_data(pbus->irq, mtk_spmi_handle_chained_irq, pbus);
 
+	bus_slot->ctrl = ctrl;
 	return 0;
 
 err_remove_irq:
@@ -849,6 +851,7 @@ static void mtk_spmi_remove(struct platform_device *pdev)
 		if (!pbus->ctrl)
 			continue;
 
+		pbus = spmi_controller_get_drvdata(pbus->ctrl);
 		mtk_spmi_irq_remove(pbus);
 		spmi_controller_remove(pbus->ctrl);
 		clk_bulk_disable_unprepare(pbus->nclks, pbus->clks);
