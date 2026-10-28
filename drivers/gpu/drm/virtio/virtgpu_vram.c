@@ -45,7 +45,9 @@ static int virtio_gpu_vram_mmap(struct drm_gem_object *obj,
 	if (!(bo->blob_flags & VIRTGPU_BLOB_FLAG_USE_MAPPABLE))
 		return -EINVAL;
 
-	virtio_gpu_vram_map_deferred(vram);
+	ret = virtio_gpu_vram_map_deferred(vram);
+	if (ret)
+		return ret;
 
 	if (vram->map_state == STATE_INITIALIZING)
 		virtio_gpu_notify(vgdev);
@@ -243,13 +245,17 @@ err_release_obj:
 	return ret;
 }
 
-void virtio_gpu_vram_map_deferred(struct virtio_gpu_object_vram *vram)
+int virtio_gpu_vram_map_deferred(struct virtio_gpu_object_vram *vram)
 {
+	int ret = 0;
+
 	if (!(vram->base.blob_flags & VIRTGPU_BLOB_FLAG_USE_MAPPABLE))
-		return;
+		return 0;
 
 	mutex_lock(&map_lock);
 	if (!drm_mm_node_allocated(&vram->vram_node))
-		virtio_gpu_vram_map(&vram->base);
+		ret = virtio_gpu_vram_map(&vram->base);
 	mutex_unlock(&map_lock);
+
+	return ret;
 }
