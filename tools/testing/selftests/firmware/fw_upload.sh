@@ -53,7 +53,7 @@ verify_fw() {
 	local file="$2"
 
 	echo -n "$name" > "$DIR"/config_upload_name
-	if ! cmp "$file" "$DIR"/upload_read > /dev/null 2>&1; then
+	if ! cat "$DIR"/upload_read | cmp "$file" - > /dev/null 2>&1; then
 		echo "$0: firmware compare for $name did not match" >&2
 		exit 1
 	fi
