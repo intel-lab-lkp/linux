@@ -1663,7 +1663,7 @@ static void release_copy_files(struct nfsd4_copy *copy);
 
 static void nfsd4_stop_copy(struct nfsd4_async_copy *copy)
 {
-	trace_nfsd_copy_async_cancel(&copy->cp_copy);
+	trace_nfsd_copy_async_cancel(copy->cp_stid.sc_client, &copy->cp_copy);
 	/*
 	 * Join the kthread before releasing its resources. The task_struct is
 	 * pinned in nfsd4_copy(), so kthread_stop() is safe even after the
@@ -2255,7 +2255,7 @@ static int nfsd4_do_async_copy(void *data)
 	struct nfsd4_copy *copy = &async->cp_copy;
 	__be32 nfserr = nfs_ok;
 
-	trace_nfsd_copy_async(copy);
+	trace_nfsd_copy_async(async->cp_stid.sc_client, copy);
 	if (nfsd4_ssc_is_inter(copy)) {
 		struct file *filp;
 
@@ -2290,7 +2290,7 @@ do_callback:
 	 * joining.
 	 */
 	set_bit(NFSD4_COPY_F_COMPLETED, &copy->cp_flags);
-	trace_nfsd_copy_async_done(copy);
+	trace_nfsd_copy_async_done(async->cp_stid.sc_client, copy);
 	atomic_dec(&copy->cp_nn->pending_async_copies);
 	if (copy->cp_res.wr_bytes_written > 0 && copy->attr_update)
 		nfsd_update_cmtime_attr(copy->nf_dst->nf_file, 0);
@@ -2316,7 +2316,7 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 	copy->cp_clp = cstate->clp;
 	if (nfsd4_ssc_is_inter(copy)) {
-		trace_nfsd_copy_inter(copy);
+		trace_nfsd_copy_inter(cstate->clp, copy);
 		if (!inter_copy_offload_enable || nfsd4_copy_is_sync(copy)) {
 			status = nfserr_notsupp;
 			goto out;
@@ -2327,7 +2327,7 @@ nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 			goto out;
 		}
 	} else {
-		trace_nfsd_copy_intra(copy);
+		trace_nfsd_copy_intra(cstate->clp, copy);
 		status = nfsd4_setup_intra_ssc(rqstp, cstate, copy);
 		if (status)
 			goto out;
