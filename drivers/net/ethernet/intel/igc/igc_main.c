@@ -2514,6 +2514,7 @@ struct igc_ring *igc_get_tx_ring(struct igc_adapter *adapter, int cpu)
 static int igc_xdp_xmit_back(struct igc_adapter *adapter, struct xdp_buff *xdp)
 {
 	struct xdp_frame *xdpf = xdp_convert_buff_to_frame(xdp);
+	enum xdp_mem_type mem_type = xdp->rxq->mem.type;
 	int cpu = smp_processor_id();
 	struct netdev_queue *nq;
 	struct igc_ring *ring;
@@ -2530,6 +2531,10 @@ static int igc_xdp_xmit_back(struct igc_adapter *adapter, struct xdp_buff *xdp)
 	txq_trans_cond_update(nq);
 	res = igc_xdp_init_tx_descriptor(ring, xdpf);
 	__netif_tx_unlock(nq);
+
+	if (res && mem_type == MEM_TYPE_XSK_BUFF_POOL)
+		xdp_return_frame(xdpf);
+
 	return res;
 }
 
