@@ -75,7 +75,7 @@ FILE *fopen(const char *pathname, const char *mode)
 		SET_ERRNO(EINVAL); return NULL;
 	}
 
-	if (mode[1] == '+')
+	if (strchr(mode, '+'))
 		flags = (flags & ~(O_RDONLY | O_WRONLY)) | O_RDWR;
 
 	fd = open(pathname, flags, 0666);
