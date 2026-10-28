@@ -3745,8 +3745,6 @@ static int e1000e_config_hwtstamp(struct e1000_adapter *adapter,
 		return -ERANGE;
 	}
 
-	adapter->hwtstamp_config = *config;
-
 	/* enable/disable Tx h/w time stamping */
 	regval = er32(TSYNCTXCTL);
 	regval &= ~E1000_TSYNCTXCTL_ENABLED;
@@ -3792,6 +3790,8 @@ static int e1000e_config_hwtstamp(struct e1000_adapter *adapter,
 	/* Clear TSYNCRXCTL_VALID & TSYNCTXCTL_VALID bit */
 	er32(RXSTMPH);
 	er32(TXSTMPH);
+
+	adapter->hwtstamp_config = *config;
 
 	return 0;
 }
