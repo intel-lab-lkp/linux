@@ -71,7 +71,6 @@
  * not recognised when matching.
  */
 
-#include <linux/devm-helpers.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/leds.h>
@@ -712,6 +711,11 @@ static const struct of_device_id __maybe_unused of_tca6507_leds_match[] = {
 };
 MODULE_DEVICE_TABLE(of, of_tca6507_leds_match);
 
+static void tca6507_flush_work(void *work)
+{
+	flush_work(work);
+}
+
 static int tca6507_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -738,7 +742,8 @@ static int tca6507_probe(struct i2c_client *client)
 	tca->client = client;
 	spin_lock_init(&tca->lock);
 
-	err = devm_work_autocancel(dev, &tca->work, tca6507_work);
+	INIT_WORK(&tca->work, tca6507_work);
+	err = devm_add_action_or_reset(dev, tca6507_flush_work, &tca->work);
 	if (err)
 		return err;
 
