@@ -6,6 +6,7 @@
 #include <linux/clk-provider.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
 #include <linux/regmap.h>
 
 #include <dt-bindings/clock/qcom,glymur-dispcc.h>
@@ -1968,6 +1969,7 @@ static struct platform_driver disp_cc_glymur_driver = {
 	.driver = {
 		.name = "dispcc-glymur",
 		.of_match_table = disp_cc_glymur_match_table,
+		.pm = pm_sleep_ptr(&qcom_cc_pm_ops),
 	},
 };
 
