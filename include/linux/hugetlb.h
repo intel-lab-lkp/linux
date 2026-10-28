@@ -275,6 +275,8 @@ long hugetlb_change_protection(struct vm_area_struct *vma,
 		unsigned long cp_flags);
 void hugetlb_unshare_all_pmds(struct vm_area_struct *vma);
 void fixup_hugetlb_reservations(struct vm_area_struct *vma);
+void hugetlb_folio_restore_rsv_on_unmap(struct vm_area_struct *vma,
+		struct folio *folio);
 void hugetlb_split(struct vm_area_struct *vma, unsigned long addr);
 
 unsigned int arch_hugetlb_cma_order(void);
@@ -457,6 +459,11 @@ static inline vm_fault_t hugetlb_fault(struct mm_struct *mm,
 static inline void hugetlb_unshare_all_pmds(struct vm_area_struct *vma) { }
 
 static inline void fixup_hugetlb_reservations(struct vm_area_struct *vma)
+{
+}
+
+static inline void hugetlb_folio_restore_rsv_on_unmap(struct vm_area_struct *vma,
+		struct folio *folio)
 {
 }
 
