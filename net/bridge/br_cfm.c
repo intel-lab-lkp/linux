@@ -634,6 +634,7 @@ int br_cfm_cc_config_set(struct net_bridge *br,
 {
 	struct br_cfm_peer_mep *peer_mep;
 	struct br_cfm_mep *mep;
+	bool enable;
 
 	ASSERT_RTNL();
 
@@ -648,17 +649,20 @@ int br_cfm_cc_config_set(struct net_bridge *br,
 	if (memcmp(config, &mep->cc_config, sizeof(*config)) == 0)
 		return 0;
 
-	if (config->enable && !mep->cc_config.enable)
-		/* CC is enabled */
-		hlist_for_each_entry(peer_mep, &mep->peer_mep_list, head)
-			cc_peer_enable(peer_mep);
-
 	if (!config->enable && mep->cc_config.enable)
 		/* CC is disabled */
 		hlist_for_each_entry(peer_mep, &mep->peer_mep_list, head)
 			cc_peer_disable(peer_mep);
 
+	enable = config->enable && !mep->cc_config.enable;
+
 	mep->cc_config = *config;
+
+	if (enable)
+		/* CC is enabled */
+		hlist_for_each_entry(peer_mep, &mep->peer_mep_list, head)
+			cc_peer_enable(peer_mep);
+
 	mep->ccm_rx_snumber = 0;
 	mep->ccm_tx_snumber = 1;
 
