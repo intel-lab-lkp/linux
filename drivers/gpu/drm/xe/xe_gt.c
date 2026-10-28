@@ -686,7 +686,8 @@ static int gt_init_with_all_forcewake(struct xe_gt *gt)
 	if (err)
 		return err;
 
-	return 0;
+	return xe_gt_is_main_type(gt) ?
+		xe_ggtt_init_late(gt_to_tile(gt)->mem.ggtt) : 0;
 }
 
 static void xe_gt_fini(void *arg)

@@ -15,20 +15,25 @@
 #include <drm/intel/i915_drm.h>
 #include <generated/xe_wa_oob.h>
 
+#include "instructions/xe_mi_commands.h"
 #include "regs/xe_gt_regs.h"
 #include "regs/xe_gtt_defs.h"
 #include "regs/xe_regs.h"
 #include "xe_assert.h"
+#include "xe_bb.h"
 #include "xe_bo.h"
+#include "xe_exec_queue.h"
 #include "xe_gt.h"
 #include "xe_gt_printk.h"
 #include "xe_gt_types.h"
 #include "xe_log.h"
 #include "xe_map.h"
 #include "xe_mmio.h"
+#include "xe_module.h"
 #include "xe_pat.h"
 #include "xe_pm.h"
 #include "xe_res_cursor.h"
+#include "xe_sched_job.h"
 #include "xe_sriov.h"
 #include "xe_tile_printk.h"
 #include "xe_tile_sriov_vf.h"
@@ -384,9 +389,9 @@ static void dev_fini_ggtt(void *arg)
  * @ggtt: the &xe_ggtt to be initialized
  *
  * It allows to create new mappings usable by the GuC.
- * Mappings are not usable by the HW engines, as it doesn't have scratch nor
- * initial clear done to it yet. That will happen in the regular, non-early
- * GGTT initialization.
+ * HW engines may only access explicitly mapped bootstrap buffers until the
+ * remaining holes have been cleared. Normally xe_ggtt_init() does this;
+ * the GPU clear finishes this work in xe_ggtt_init_late().
  *
  * Return: 0 on success or a negative error code on failure.
  */
@@ -456,18 +461,119 @@ ALLOW_ERROR_INJECTION(xe_ggtt_init_early, ERRNO); /* See xe_pci_probe() */
 static void xe_ggtt_invalidate(struct xe_ggtt *ggtt);
 static void xe_ggtt_invalidate_engine(struct xe_ggtt *ggtt);
 
-static void xe_ggtt_initial_clear(struct xe_ggtt *ggtt)
+static bool ggtt_use_gpu(struct xe_device *xe)
 {
-	struct drm_mm_node *hole;
-	u64 start, end;
+	return xe_modparam.ggtt_init_gpu && xe->info.platform == XE_LUNARLAKE;
+}
 
-	/* Display may have allocated inside ggtt, so be careful with clearing here */
+/*
+ * MI_UPDATE_GTT takes at most 511 inline PTEs (ACM PRM, Vol. 2a,
+ * pp. 1096-1097). Limit batches to 512K to fit the kernel batch pool.
+ */
+#define GGTT_INIT_PTES_PER_PACKET	511
+#define GGTT_INIT_BATCH_DWORDS	(128 * (2 + 2 * GGTT_INIT_PTES_PER_PACKET))
+
+static int ggtt_clear_gpu(struct xe_exec_queue *q, struct xe_bb *bb,
+			  u64 pte, u64 start, u64 end)
+{
+	while (start < end) {
+		struct xe_sched_job *job;
+		int err;
+
+		bb->len = 0;
+		while (start < end && bb->len < GGTT_INIT_BATCH_DWORDS) {
+			u32 count = min_t(u64, (end - start) >> XE_PTE_SHIFT,
+					  GGTT_INIT_PTES_PER_PACKET);
+
+			bb->cs[bb->len++] = MI_UPDATE_GTT | (2 * count);
+			bb->cs[bb->len++] = start;
+			memset64((u64 *)&bb->cs[bb->len], pte, count);
+			bb->len += 2 * count;
+			start += (u64)count << XE_PTE_SHIFT;
+		}
+
+		job = xe_bb_create_job(q, bb);
+		if (IS_ERR(job))
+			return PTR_ERR(job);
+
+		xe_sched_job_arm(job);
+		xe_sched_job_get(job);
+		xe_sched_job_push(job);
+
+		dma_fence_wait(&job->drm.s_fence->finished, false);
+		err = dma_fence_get_status(&job->drm.s_fence->finished);
+		xe_sched_job_put(job);
+		if (err < 0)
+			return err;
+	}
+
+	return 0;
+}
+
+static int xe_ggtt_initial_clear(struct xe_ggtt *ggtt, struct xe_hw_engine *hwe)
+{
+	struct xe_device *xe = tile_to_xe(ggtt->tile);
+	struct xe_exec_queue *q = NULL;
+	struct xe_bb *bb = NULL;
+	struct drm_mm_node *hole;
+	u16 pat_index = xe_cache_pat_idx(xe, XE_CACHE_WB);
+	u64 start, end, pte = 0;
+	int err = 0;
+
+	if (hwe) {
+		q = xe_exec_queue_create(xe, NULL, BIT(hwe->logical_instance), 1,
+					 hwe, EXEC_QUEUE_FLAG_KERNEL, 0);
+		if (IS_ERR(q))
+			return PTR_ERR(q);
+
+		bb = xe_bb_new(hwe->gt, GGTT_INIT_BATCH_DWORDS, false);
+		if (IS_ERR(bb)) {
+			err = PTR_ERR(bb);
+			goto put_queue;
+		}
+	}
+
+	if (ggtt->scratch)
+		pte = xe_bo_addr(ggtt->scratch, 0, XE_PAGE_SIZE) |
+		      ggtt->pt_ops->pte_encode_flags(ggtt->scratch, pat_index);
+
+	/* Preserve boot mappings and exclude allocator changes until completion. */
 	mutex_lock(&ggtt->lock);
-	drm_mm_for_each_hole(hole, &ggtt->mm, start, end)
-		xe_ggtt_clear(ggtt, ggtt->start + start, end - start);
+	drm_mm_for_each_hole(hole, &ggtt->mm, start, end) {
+		if (q)
+			err = ggtt_clear_gpu(q, bb, pte, ggtt->start + start, ggtt->start + end);
+		else
+			xe_ggtt_clear(ggtt, ggtt->start + start, end - start);
+		if (err)
+			goto unlock;
+	}
 
 	xe_ggtt_invalidate(ggtt);
+unlock:
 	mutex_unlock(&ggtt->lock);
+	xe_bb_free(bb, NULL);
+put_queue:
+	if (q)
+		xe_exec_queue_put(q);
+	return err;
+}
+
+/**
+ * xe_ggtt_init_late - Finish deferred GGTT initialization after GuC startup
+ * @ggtt: GGTT to initialize
+ *
+ * All default contexts must be recorded before waiting for a GPU clear with
+ * the GGTT mutex held, so reset recovery need not allocate context mappings.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_ggtt_init_late(struct xe_ggtt *ggtt)
+{
+	if (!ggtt_use_gpu(tile_to_xe(ggtt->tile)))
+		return 0;
+
+	return xe_ggtt_initial_clear(ggtt, xe_gt_hw_engine(ggtt->tile->primary_gt,
+							XE_ENGINE_CLASS_COPY, 0, false));
 }
 
 static void ggtt_node_fini(struct xe_ggtt_node *node)
@@ -536,6 +642,9 @@ void xe_ggtt_node_remove(struct xe_ggtt_node *node, bool invalidate)
  * xe_ggtt_init - Regular non-early GGTT initialization
  * @ggtt: the &xe_ggtt to be initialized
  *
+ * Allocate the scratch page if needed and clear unused entries, or defer
+ * the clear to xe_ggtt_init_late() when GPU initialization is enabled.
+ *
  * Return: 0 on success or a negative error code on failure.
  */
 int xe_ggtt_init(struct xe_ggtt *ggtt)
@@ -572,7 +681,8 @@ int xe_ggtt_init(struct xe_ggtt *ggtt)
 			      xe_bo_size(ggtt->scratch));
 	}
 
-	xe_ggtt_initial_clear(ggtt);
+	if (!ggtt_use_gpu(xe))
+		xe_ggtt_initial_clear(ggtt, NULL);
 
 	return devm_add_action_or_reset(xe->drm.dev, ggtt_fini, ggtt);
 err:

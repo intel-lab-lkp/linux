@@ -12,6 +12,7 @@ struct work_struct;
 
 /* Module modprobe variables */
 struct xe_modparam {
+	bool ggtt_init_gpu;
 	bool probe_display;
 	int force_vram_bar_size;
 	int guc_log_level;
