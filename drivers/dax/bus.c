@@ -627,6 +627,7 @@ static void dax_region_unregister(void *region)
 	sysfs_remove_groups(&dax_region->dev->kobj,
 			dax_region_attribute_groups);
 	release_resource(&dax_region->res);
+	dev_set_drvdata(dax_region->dev, NULL);
 	dax_region_put(dax_region);
 }
 
@@ -685,6 +686,7 @@ struct dax_region *alloc_dax_region(struct device *parent, int region_id,
 err_sysfs:
 	release_resource(&dax_region->res);
 err_res:
+	dev_set_drvdata(parent, NULL);
 	dax_region_put(dax_region);
 	return NULL;
 }
