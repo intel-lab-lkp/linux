@@ -38,6 +38,8 @@
 &ltdc {
 	/* RGB output: the pixel clock is the LTDC kernel clock */
 	clocks = <&rcc CK_KER_LTDC>, <&rcc CK_BUS_LTDC>, <&syscfg>, <&lvds>;
+	assigned-clocks = <&syscfg>;
+	assigned-clock-parents = <&rcc CK_KER_LTDC>;
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&ltdc_pins_a>;
 	pinctrl-1 = <&ltdc_sleep_pins_a>;

@@ -32,6 +32,9 @@
 };
 
 &ltdc {
+	/* LVDS output: the pixel clock is the LVDS PHY one */
+	assigned-clocks = <&syscfg>;
+	assigned-clock-parents = <&lvds>;
 	status = "okay";
 
 	port {
