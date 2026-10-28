@@ -1642,6 +1642,7 @@ static struct drm_plane *ltdc_plane_create(struct drm_device *ddev,
 	drm_plane_helper_add(plane, &ltdc_plane_helper_funcs);
 
 	drm_plane_create_alpha_property(plane);
+	drm_plane_create_blend_mode_property(plane, BIT(DRM_MODE_BLEND_COVERAGE));
 
 	drm_dbg_driver(plane->dev, "plane:%d created\n", plane->base.id);
 
