@@ -115,7 +115,7 @@ early_param(str, func##args)
 
 /*
  * Protects updates to hugepage_freelists, hugepage_activelist, nr_huge_pages,
- * free_huge_pages, and surplus_huge_pages.
+ * free_huge_pages, surplus_huge_pages, and temporary_huge_pages.
  */
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(hugetlb_lock);
 
@@ -1337,7 +1337,13 @@ static unsigned long available_huge_pages(struct hstate *h)
 
 static unsigned long persistent_huge_pages(struct hstate *h)
 {
-	return h->nr_huge_pages - h->surplus_huge_pages;
+	return h->nr_huge_pages - h->surplus_huge_pages - h->temporary_huge_pages;
+}
+
+static unsigned long persistent_huge_pages_node(struct hstate *h, int nid)
+{
+	return h->nr_huge_pages_node[nid] - h->surplus_huge_pages_node[nid] -
+	       h->temporary_huge_pages_node[nid];
 }
 
 static struct folio *dequeue_hugetlb_folio(struct hstate *h, gfp_t gfp_mask,
@@ -1421,6 +1427,10 @@ void remove_hugetlb_folio(struct hstate *h, struct folio *folio,
 	if (adjust_surplus) {
 		h->surplus_huge_pages--;
 		h->surplus_huge_pages_node[nid]--;
+	}
+	if (folio_test_hugetlb_temporary(folio)) {
+		h->temporary_huge_pages--;
+		h->temporary_huge_pages_node[nid]--;
 	}
 
 	/*
@@ -1764,9 +1774,15 @@ void free_huge_folio(struct folio *folio)
  */
 static void account_new_hugetlb_folio(struct hstate *h, struct folio *folio)
 {
+	const int nid = folio_nid(folio);
+
 	lockdep_assert_held(&hugetlb_lock);
 	h->nr_huge_pages++;
-	h->nr_huge_pages_node[folio_nid(folio)]++;
+	h->nr_huge_pages_node[nid]++;
+	if (folio_test_hugetlb_temporary(folio)) {
+		h->temporary_huge_pages++;
+		h->temporary_huge_pages_node[nid]++;
+	}
 }
 
 void init_new_hugetlb_folio(struct folio *folio)
@@ -2114,13 +2130,6 @@ static struct folio *alloc_surplus_hugetlb_folio(struct hstate *h,
 
 	spin_lock_irq(&hugetlb_lock);
 	/*
-	 * nr_huge_pages needs to be adjusted within the same lock cycle
-	 * as surplus_pages, otherwise it might confuse
-	 * persistent_huge_pages() momentarily.
-	 */
-	account_new_hugetlb_folio(h, folio);
-
-	/*
 	 * We could have raced with the pool size change.
 	 * Double check that and simply deallocate the new page
 	 * if we would end up overcommiting the surpluses. Abuse
@@ -2129,11 +2138,18 @@ static struct folio *alloc_surplus_hugetlb_folio(struct hstate *h,
 	 */
 	if (h->surplus_huge_pages >= h->nr_overcommit_huge_pages) {
 		folio_set_hugetlb_temporary(folio);
+		account_new_hugetlb_folio(h, folio);
 		spin_unlock_irq(&hugetlb_lock);
 		free_huge_folio(folio);
 		return NULL;
 	}
 
+	/*
+	 * nr_huge_pages needs to be adjusted within the same lock cycle
+	 * as surplus_pages, otherwise it might confuse
+	 * persistent_huge_pages() momentarily.
+	 */
+	account_new_hugetlb_folio(h, folio);
 	h->surplus_huge_pages++;
 	h->surplus_huge_pages_node[folio_nid(folio)]++;
 
@@ -2155,17 +2171,17 @@ static struct folio *alloc_migrate_hugetlb_folio(struct hstate *h, gfp_t gfp_mas
 	if (!folio)
 		return NULL;
 
+	/*
+	 * Count temporary folios separately so that pool resizing does not
+	 * mistake them for persistent pages.
+	 */
 	spin_lock_irq(&hugetlb_lock);
+	folio_set_hugetlb_temporary(folio);
 	account_new_hugetlb_folio(h, folio);
 	spin_unlock_irq(&hugetlb_lock);
 
 	/* fresh huge pages are frozen */
 	folio_ref_unfreeze(folio, 1);
-	/*
-	 * We do not account these pages as surplus because they are only
-	 * temporary and will be released properly on the last reference
-	 */
-	folio_set_hugetlb_temporary(folio);
 
 	return folio;
 }
@@ -3757,8 +3773,7 @@ static int adjust_pool_surplus(struct hstate *h, nodemask_t *nodes_allowed,
 		}
 	} else {
 		for_each_node_mask_to_free(h, nr_nodes, node, nodes_allowed) {
-			if (h->surplus_huge_pages_node[node] <
-					h->nr_huge_pages_node[node])
+			if (persistent_huge_pages_node(h, node))
 				goto found;
 		}
 	}
@@ -3807,9 +3822,7 @@ static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
 	if (nid != NUMA_NO_NODE) {
 		unsigned long old_count = count;
 
-		count += persistent_huge_pages(h) -
-			 (h->nr_huge_pages_node[nid] -
-			  h->surplus_huge_pages_node[nid]);
+		count += persistent_huge_pages(h) - persistent_huge_pages_node(h, nid);
 		/*
 		 * User may have specified a large count value which caused the
 		 * above calculation to overflow.  In this case, they wanted
@@ -7440,9 +7453,8 @@ void move_hugetlb_state(struct folio *old_folio, struct folio *new_folio,
 	 * be final while the old one will be freed so it takes over
 	 * the temporary status.
 	 *
-	 * Also note that we have to transfer the per-node surplus state
-	 * here as well otherwise the global surplus count will not match
-	 * the per-node's.
+	 * Transfer the per-node temporary count to the old folio's node,
+	 * and any surplus count in the opposite direction.
 	 */
 	if (folio_test_hugetlb_temporary(new_folio)) {
 		int old_nid = folio_nid(old_folio);
@@ -7451,13 +7463,14 @@ void move_hugetlb_state(struct folio *old_folio, struct folio *new_folio,
 		folio_set_hugetlb_temporary(old_folio);
 		folio_clear_hugetlb_temporary(new_folio);
 
-
 		/*
-		 * There is no need to transfer the per-node surplus state
-		 * when we do not cross the node.
+		 * There is no need to transfer the per-node state when we do
+		 * not cross the node.
 		 */
 		if (new_nid != old_nid) {
 			spin_lock_irq(&hugetlb_lock);
+			h->temporary_huge_pages_node[new_nid]--;
+			h->temporary_huge_pages_node[old_nid]++;
 			if (h->surplus_huge_pages_node[old_nid]) {
 				h->surplus_huge_pages_node[old_nid]--;
 				h->surplus_huge_pages_node[new_nid]++;
