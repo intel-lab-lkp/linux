@@ -3,18 +3,42 @@
  * Copyright 2026 Marek Vasut
  */
 
+#include <linux/auxiliary_bus.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
+
+struct stm32mp2_syscfg_data {
+	bool has_clk;
+};
 
 static int stm32mp2_syscfg_probe(struct platform_device *pdev)
 {
-	return devm_of_platform_populate(&pdev->dev);
+	const struct stm32mp2_syscfg_data *data;
+	struct device *dev = &pdev->dev;
+	int ret;
+
+	ret = devm_of_platform_populate(dev);
+	if (ret)
+		return ret;
+
+	data = device_get_match_data(dev);
+	if (data && data->has_clk &&
+	    !devm_auxiliary_device_create(dev, "clk", NULL))
+		return dev_err_probe(dev, -ENODEV,
+				     "failed to register the clock device\n");
+
+	return 0;
 }
+
+static const struct stm32mp2_syscfg_data stm32mp25_syscfg_data = {
+	.has_clk = true,
+};
 
 static const struct of_device_id stm32mp2_syscfg_ids[] = {
 	{ .compatible = "st,stm32mp23-syscfg" },
-	{ .compatible = "st,stm32mp25-syscfg" },
+	{ .compatible = "st,stm32mp25-syscfg", .data = &stm32mp25_syscfg_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, stm32mp2_syscfg_ids);
