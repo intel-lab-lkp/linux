@@ -73,6 +73,20 @@ update_vlan_tailroom_need_count(struct ieee80211_sub_if_data *sdata, int delta)
 	rcu_read_unlock();
 }
 
+/*
+ * Count a key as needing tailroom, and return whether the count went from
+ * zero to one, so that TX must be flushed before a key needing tailroom is
+ * used (see increment_tailroom_need_count()).
+ */
+static bool __increment_tailroom_need_count(struct ieee80211_sub_if_data *sdata)
+{
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
+
+	update_vlan_tailroom_need_count(sdata, 1);
+
+	return !sdata->crypto_tx_tailroom_needed_cnt++;
+}
+
 static void increment_tailroom_need_count(struct ieee80211_sub_if_data *sdata)
 {
 	/*
@@ -94,11 +108,7 @@ static void increment_tailroom_need_count(struct ieee80211_sub_if_data *sdata)
 	 * http://mid.gmane.org/1308590980.4322.19.camel@jlt3.sipsolutions.net
 	 */
 
-	lockdep_assert_wiphy(sdata->local->hw.wiphy);
-
-	update_vlan_tailroom_need_count(sdata, 1);
-
-	if (!sdata->crypto_tx_tailroom_needed_cnt++) {
+	if (__increment_tailroom_need_count(sdata)) {
 		/*
 		 * Flush all XMIT packets currently using HW encryption or no
 		 * encryption at all if the count transition is from 0 -> 1.
@@ -569,10 +579,11 @@ fail:
 	return err;
 }
 
-static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
-				 struct ieee80211_key_slot *slot,
-				 struct ieee80211_key *old,
-				 struct ieee80211_key *new)
+static int __ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
+				   struct ieee80211_key_slot *slot,
+				   struct ieee80211_key *old,
+				   struct ieee80211_key *new,
+				   bool flush)
 {
 	bool defunikey, defmultikey, defmgmtkey, defbeaconkey;
 	struct ieee80211_local *local = sdata->local;
@@ -618,6 +629,15 @@ static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
 			if (!ieee80211_key_needs_tailroom(new))
 				decrease_tailroom_need_count(sdata, 1);
 		}
+
+		/*
+		 * The new key isn't visible to TX yet. If counting it took the
+		 * tailroom count from zero to one, flush TX before it is,
+		 * unless it went to the hardware needing no tailroom and so
+		 * gave the count back.
+		 */
+		if (!ret && flush && ieee80211_key_needs_tailroom(new))
+			synchronize_net();
 	}
 
 	if (ret)
@@ -691,6 +711,14 @@ static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
 	}
 
 	return 0;
+}
+
+static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
+				 struct ieee80211_key_slot *slot,
+				 struct ieee80211_key *old,
+				 struct ieee80211_key *new)
+{
+	return __ieee80211_key_replace(sdata, slot, old, new, false);
 }
 
 struct ieee80211_key *
@@ -964,6 +992,7 @@ int ieee80211_key_link(struct ieee80211_sub_if_data *sdata,
 	static atomic_t key_color = ATOMIC_INIT(0);
 	struct ieee80211_key *old_key = NULL;
 	int idx = key->conf.keyidx;
+	bool flush = false;
 	int ret;
 
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
@@ -1031,9 +1060,19 @@ int ieee80211_key_link(struct ieee80211_sub_if_data *sdata,
 		goto out;
 	}
 
-	increment_tailroom_need_count(sdata);
+	/*
+	 * A key replacing another is counted, and TX flushed if that takes
+	 * the count from zero to one, here: the old key may drop to software
+	 * while still in use. A new key isn't used before it is published,
+	 * once it is known whether it went to the hardware without needing
+	 * tailroom, so __ieee80211_key_replace() flushes TX only if not.
+	 */
+	if (old_key)
+		increment_tailroom_need_count(sdata);
+	else
+		flush = __increment_tailroom_need_count(sdata);
 
-	ret = ieee80211_key_replace(sdata, slot, old_key, key);
+	ret = __ieee80211_key_replace(sdata, slot, old_key, key, flush);
 	if (ret) {
 		decrease_tailroom_need_count(sdata, 1);
 		key->local = NULL;
