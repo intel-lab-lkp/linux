@@ -2481,9 +2481,10 @@ TRACE_EVENT(nfsd_ctl_fh_key_set,
 
 DECLARE_EVENT_CLASS(nfsd_copy_class,
 	TP_PROTO(
+		const struct nfs4_client *clp,
 		const struct nfsd4_copy *copy
 	),
-	TP_ARGS(copy),
+	TP_ARGS(clp, copy),
 	TP_STRUCT__entry(
 		__field(bool, intra)
 		__field(bool, async)
@@ -2526,7 +2527,7 @@ DECLARE_EVENT_CLASS(nfsd_copy_class,
 		__entry->src_cp_pos = copy->cp_src_pos;
 		__entry->dst_cp_pos = copy->cp_dst_pos;
 		__entry->cp_count = copy->cp_count;
-		__assign_sockaddr(addr, &copy->cp_clp->cl_addr,
+		__assign_sockaddr(addr, &clp->cl_addr,
 				sizeof(struct sockaddr_in6));
 	),
 	TP_printk("client=%pISpc intra=%d async=%d "
@@ -2547,8 +2548,9 @@ DECLARE_EVENT_CLASS(nfsd_copy_class,
 
 #define DEFINE_COPY_EVENT(name)				\
 DEFINE_EVENT(nfsd_copy_class, nfsd_copy_##name,	\
-	TP_PROTO(const struct nfsd4_copy *copy),	\
-	TP_ARGS(copy))
+	TP_PROTO(const struct nfs4_client *clp,		\
+		 const struct nfsd4_copy *copy),	\
+	TP_ARGS(clp, copy))
 
 DEFINE_COPY_EVENT(inter);
 DEFINE_COPY_EVENT(intra);
@@ -2580,9 +2582,10 @@ TRACE_EVENT(nfsd_copy_done,
 
 DECLARE_EVENT_CLASS(nfsd_copy_async_done_class,
 	TP_PROTO(
+		const struct nfs4_client *clp,
 		const struct nfsd4_copy *copy
 	),
-	TP_ARGS(copy),
+	TP_ARGS(clp, copy),
 	TP_STRUCT__entry(
 		__field(int, status)
 		__field(bool, intra)
@@ -2627,7 +2630,7 @@ DECLARE_EVENT_CLASS(nfsd_copy_async_done_class,
 		__entry->src_cp_pos = copy->cp_src_pos;
 		__entry->dst_cp_pos = copy->cp_dst_pos;
 		__entry->cp_count = copy->cp_count;
-		__assign_sockaddr(addr, &copy->cp_clp->cl_addr,
+		__assign_sockaddr(addr, &clp->cl_addr,
 				sizeof(struct sockaddr_in6));
 	),
 	TP_printk("client=%pISpc status=%d intra=%d async=%d "
@@ -2650,8 +2653,9 @@ DECLARE_EVENT_CLASS(nfsd_copy_async_done_class,
 #define DEFINE_COPY_ASYNC_DONE_EVENT(name)		\
 DEFINE_EVENT(nfsd_copy_async_done_class,		\
 	nfsd_copy_async_##name,				\
-	TP_PROTO(const struct nfsd4_copy *copy),	\
-	TP_ARGS(copy))
+	TP_PROTO(const struct nfs4_client *clp,		\
+		 const struct nfsd4_copy *copy),	\
+	TP_ARGS(clp, copy))
 
 DEFINE_COPY_ASYNC_DONE_EVENT(done);
 DEFINE_COPY_ASYNC_DONE_EVENT(cancel);
