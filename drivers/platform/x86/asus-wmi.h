@@ -52,6 +52,9 @@ struct quirk_entry {
 	 */
 	int no_display_toggle;
 	u32 xusb2pr;
+
+	/* Ignore event 0x5e when it represents keyboard attach/detach. */
+	bool ignore_wlan_enable_event;
 };
 
 struct asus_wmi_driver {

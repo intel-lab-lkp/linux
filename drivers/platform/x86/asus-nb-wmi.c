@@ -150,6 +150,10 @@ static struct quirk_entry quirk_asus_zenbook_duo_kbd = {
 	.key_wlan_event = ASUS_WMI_KEY_IGNORE,
 };
 
+static struct quirk_entry quirk_asus_gx651ar = {
+	.ignore_wlan_enable_event = true,
+};
+
 static struct quirk_entry quirk_asus_z13 = {
 	.key_wlan_event = ASUS_WMI_KEY_ARMOURY,
 	.tablet_switch_mode = asus_wmi_kbd_dock_devid,
@@ -562,6 +566,15 @@ static const struct dmi_system_id asus_quirks[] = {
 		},
 		.driver_data = &quirk_asus_z13,
 	},
+	{
+		.callback = dmi_matched,
+		.ident = "ASUS ROG Zephyrus Duo GX651AR",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "ASUS"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "ROG Zephyrus Duo GX651AR"),
+		},
+		.driver_data = &quirk_asus_gx651ar,
+	},
 	{},
 };
 
@@ -687,7 +700,10 @@ static void asus_nb_wmi_key_filter(struct asus_wmi_driver *asus_wmi, int *code,
 	case 0x5D: /* Wireless console Toggle */
 	case 0x5E: /* Wireless console Enable / Keyboard Attach, Detach */
 	case 0x5F: /* Wireless console Disable / Special Key */
-		if (quirks->key_wlan_event)
+		/* The GX651AR reports event 0x5e on keyboard attach/detach. */
+		if (*code == 0x5E && quirks->ignore_wlan_enable_event)
+			*code = ASUS_WMI_KEY_IGNORE;
+		else if (quirks->key_wlan_event)
 			*code = quirks->key_wlan_event;
 		break;
 	}
