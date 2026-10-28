@@ -260,6 +260,7 @@ struct mtk_iommu_data {
 	struct mtk_iommu_suspend_reg	reg;
 	struct iommu_group		*m4u_group[MTK_IOMMU_GROUP_MAX];
 	bool                            enable_4GB;
+	bool				has_resumed;
 
 	struct iommu_device		iommu;
 	const struct mtk_iommu_plat_data *plat_data;
@@ -1529,8 +1530,10 @@ static int __maybe_unused mtk_iommu_runtime_resume(struct device *dev)
 	 * Uppon first resume, only enable the clk and return, since the values of the
 	 * registers are not yet set.
 	 */
-	if (!reg->wr_len_ctrl)
+	if (!data->has_resumed) {
+		data->has_resumed = true;
 		return 0;
+	}
 
 	base = data->bank[i].base;
 	writel_relaxed(reg->wr_len_ctrl, base + REG_MMU_WR_LEN_CTRL);
