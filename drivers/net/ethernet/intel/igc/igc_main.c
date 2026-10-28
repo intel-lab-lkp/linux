@@ -674,8 +674,11 @@ static void igc_configure_rx_ring(struct igc_adapter *adapter,
 	ring->next_to_clean = 0;
 	ring->next_to_use = 0;
 
+	/* igc's XDP limits MTU to 1500; all XSK RX buffers can use 2kb;
+	 * RLPML limits the receive length to fit after UMEM headroom.
+	 */
 	if (ring->xsk_pool)
-		buf_size = xsk_pool_get_rx_frame_size(ring->xsk_pool);
+		buf_size = IGC_RXBUFFER_2048;
 	else if (ring_uses_large_buffer(ring))
 		buf_size = IGC_RXBUFFER_3072;
 	else
@@ -830,6 +833,25 @@ static void igc_setup_mrqc(struct igc_adapter *adapter)
 	wr32(IGC_MRQC, mrqc);
 }
 
+void igc_set_rlpml(struct igc_adapter *adapter)
+{
+	struct igc_hw *hw = &adapter->hw;
+	u32 rlpml = MAX_JUMBO_FRAME_SIZE;
+
+#if (PAGE_SIZE < 8192)
+	if (adapter->max_frame_size <= IGC_MAX_FRAME_BUILD_SKB)
+		rlpml = IGC_MAX_FRAME_BUILD_SKB;
+#endif
+	/* igc's XDP currently does not support jumbo frames. Limit the
+	 * accepted packet size regardless of PAGE_SIZE so it fits in a 2kb
+	 * XSK chunk.
+	 */
+	if (igc_xdp_is_enabled(adapter))
+		rlpml = ETH_FRAME_LEN + VLAN_HLEN * 2 + ETH_FCS_LEN;
+
+	wr32(IGC_RLPML, rlpml);
+}
+
 /**
  * igc_setup_rctl - configure the receive control registers
  * @adapter: Board private structure
@@ -874,6 +896,7 @@ static void igc_setup_rctl(struct igc_adapter *adapter)
 			  IGC_RCTL_CFIEN); /* Disable VLAN CFIEN Filter */
 	}
 
+	igc_set_rlpml(adapter);
 	wr32(IGC_RCTL, rctl);
 }
 
@@ -4120,7 +4143,7 @@ static void igc_set_rx_mode(struct net_device *netdev)
 {
 	struct igc_adapter *adapter = netdev_priv(netdev);
 	struct igc_hw *hw = &adapter->hw;
-	u32 rctl = 0, rlpml = MAX_JUMBO_FRAME_SIZE;
+	u32 rctl = 0;
 	int count;
 
 	/* Check for Promiscuous and All Multicast modes */
@@ -4150,12 +4173,6 @@ static void igc_set_rx_mode(struct net_device *netdev)
 	/* update state of unicast and multicast */
 	rctl |= rd32(IGC_RCTL) & ~(IGC_RCTL_UPE | IGC_RCTL_MPE);
 	wr32(IGC_RCTL, rctl);
-
-#if (PAGE_SIZE < 8192)
-	if (adapter->max_frame_size <= IGC_MAX_FRAME_BUILD_SKB)
-		rlpml = IGC_MAX_FRAME_BUILD_SKB;
-#endif
-	wr32(IGC_RLPML, rlpml);
 }
 
 /**

@@ -34,6 +34,8 @@ int igc_xdp_set_prog(struct igc_adapter *adapter, struct bpf_prog *prog,
 	}
 
 	old_prog = xchg(&adapter->xdp_prog, prog);
+	if (if_running && need_update)
+		igc_set_rlpml(adapter);
 	if (old_prog)
 		bpf_prog_put(old_prog);
 
@@ -69,11 +71,12 @@ static int igc_xdp_enable_pool(struct igc_adapter *adapter,
 		return -EINVAL;
 
 	frame_size = xsk_pool_get_rx_frame_size(pool);
-	if (frame_size < ETH_FRAME_LEN + VLAN_HLEN * 2) {
+	if (frame_size < ETH_FRAME_LEN + VLAN_HLEN * 2 +
+			 ETH_FCS_LEN + IGC_TS_HDR_LEN) {
 		/* When XDP is enabled, the driver doesn't support frames that
-		 * span over multiple buffers. To avoid that, we check if xsk
-		 * frame size is big enough to fit the max ethernet frame size
-		 * + vlan double tagging.
+		 * span multiple buffers. Check the maximum supported MTU, not
+		 * current MTU, as it may change while the pool is bound. Account
+		 * for double VLAN tags, FCS and inline RX timestamping.
 		 */
 		return -EOPNOTSUPP;
 	}
