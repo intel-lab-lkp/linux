@@ -122,6 +122,8 @@ static ssize_t mdev_link_create_link_store(struct config_item *item,
 		return ret;
 	if (!tmp)
 		return count;
+	if (mdev_link->create_link && !mdev_link->destroy_link)
+		return count;
 	ret = set_config_and_add_link(mdev_link);
 	if (ret && ret != -ENODEV)
 		return ret;
