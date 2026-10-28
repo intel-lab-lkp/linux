@@ -208,7 +208,14 @@ static struct alua_port_group *alua_alloc_pg(struct scsi_device *sdev,
 	}
 	pg->group_id = group_id;
 	pg->tpgs = tpgs;
-	pg->state = SCSI_ACCESS_STATE_OPTIMAL;
+	/*
+	 * Start in the access state the SCSI core read when the device was
+	 * scanned. That is active/optimized if it did not read one, as it
+	 * was before. alua_prep_fn() then already fails I/O to a path that
+	 * is unavailable before the first RTPG of the handler completes.
+	 */
+	pg->state = FIELD_GET(SCSI_ACCESS_STATE_MASK, sdev->access_state);
+	pg->pref = FIELD_GET(SCSI_ACCESS_STATE_PREFERRED, sdev->access_state);
 	pg->valid_states = TPGS_SUPPORT_ALL;
 	if (optimize_stpg)
 		pg->flags |= ALUA_OPTIMIZE_STPG;
