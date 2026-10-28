@@ -918,6 +918,20 @@ static int vfe_match_clock_names(struct vfe_device *vfe,
 		!strcmp(clock->name, "camnoc_rt_axi"));
 }
 
+static bool vfe_match_core_clock_name(struct vfe_device *vfe,
+				      struct camss_clock *clock)
+{
+	char vfe_name[7]; /* vfeXXX\0 */
+	char vfe_lite_name[12]; /* vfe_liteXXX\0 */
+
+	snprintf(vfe_name, sizeof(vfe_name), "vfe%d", vfe->id);
+	snprintf(vfe_lite_name, sizeof(vfe_lite_name), "vfe_lite%d", vfe->id);
+
+	return (!strcmp(clock->name, vfe_name) ||
+		!strcmp(clock->name, vfe_lite_name) ||
+		!strcmp(clock->name, "vfe_lite"));
+}
+
 /*
  * vfe_check_clock_levels - Calculate and set clock rates on VFE module
  * @clock: clocks data
@@ -1001,9 +1015,14 @@ static int vfe_set_clock_rates(struct vfe_device *vfe)
 					break;
 
 			if (j == clock->nfreqs) {
-				dev_err(dev,
-					"Pixel clock is too high for VFE");
-				return -EINVAL;
+				if (vfe_match_core_clock_name(vfe, clock)) {
+					dev_err(dev,
+						"Pixel clock is too high for VFE");
+					return -EINVAL;
+				}
+
+				/* Other clocks are clamped to their highest rate */
+				j = clock->nfreqs - 1;
 			}
 
 			/* if sensor pixel clock is not available */
@@ -1045,10 +1064,23 @@ static int vfe_check_clock_rates(struct vfe_device *vfe)
 		struct camss_clock *clock = &vfe->clock[i];
 
 		if (vfe_match_clock_names(vfe, clock) && vfe_check_clock_levels(clock)) {
+			u64 req_rate = min_rate;
 			unsigned long rate;
 
+			if (!vfe_match_core_clock_name(vfe, clock)) {
+				long max_rate;
+
+				/* A clock already at its highest rate cannot go higher */
+				max_rate = clk_round_rate(clock->clk,
+							  clock->freq[clock->nfreqs - 1]);
+				if (max_rate < 0)
+					return max_rate;
+
+				req_rate = min_t(u64, min_rate, max_rate);
+			}
+
 			rate = clk_get_rate(clock->clk);
-			if (rate < min_rate)
+			if (rate < req_rate)
 				return -EBUSY;
 		}
 	}
