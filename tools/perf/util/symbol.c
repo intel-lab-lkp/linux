@@ -338,9 +338,9 @@ void symbols__fixup_end(struct rb_root_cached *symbols, bool is_kallsyms)
 		curr->end = roundup(curr->start, 4096) + 4096;
 }
 
-struct symbol *symbol__new(u64 start, u64 len, u8 binding, u8 type, const char *name)
+static struct symbol *symbol__alloc(u64 start, u64 len, u8 binding, u8 type,
+				    u16 flags, size_t namelen)
 {
-	size_t namelen = strlen(name) + 1;
 	struct symbol *sym = calloc(1, (symbol_conf.priv_size +
 					sizeof(*sym) + namelen));
 	if (sym == NULL)
@@ -357,7 +357,18 @@ struct symbol *symbol__new(u64 start, u64 len, u8 binding, u8 type, const char *
 	sym->start   = start;
 	sym->end     = len ? start + len : start;
 	atomic_init(&sym->flags, (type << SYMBOL_FLAG_TYPE_SHIFT) |
-				 (binding << SYMBOL_FLAG_BINDING_SHIFT));
+				 (binding << SYMBOL_FLAG_BINDING_SHIFT) | flags);
+	return sym;
+}
+
+struct symbol *symbol__new(u64 start, u64 len, u8 binding, u8 type, const char *name)
+{
+	size_t namelen = strlen(name) + 1;
+	struct symbol *sym = symbol__alloc(start, len, binding, type, 0, namelen);
+
+	if (sym == NULL)
+		return NULL;
+
 	sym->namelen = namelen - 1;
 
 	pr_debug4("%s: %s %#" PRIx64 "-%#" PRIx64 "\n",
@@ -368,8 +379,38 @@ struct symbol *symbol__new(u64 start, u64 len, u8 binding, u8 type, const char *
 	return sym;
 }
 
+struct symbol *symbol__new_lazy(u64 start, u64 len, u8 binding, u8 type, u64 name_off)
+{
+	struct symbol *sym = symbol__alloc(start, len, binding, type,
+					   SYMBOL_FLAG_LAZY_NAME, 0);
+
+	if (sym)
+		sym->name_off = name_off;
+	return sym;
+}
+
+/* @sym takes ownership of @name. */
+void symbol__set_lazy_name(struct symbol *sym, char *name)
+{
+	sym->namelen = strlen(name);
+	sym->name = name;
+	atomic_fetch_and(&sym->flags, ~SYMBOL_FLAG_LAZY_NAME);
+}
+
+/* The name of the symbols whose lazy name cannot be read. */
+static const char unknown_name[] = "[unknown]";
+
+void symbol__set_unknown_name(struct symbol *sym)
+{
+	symbol__set_lazy_name(sym, (char *)unknown_name);
+}
+
 void symbol__delete(struct symbol *sym)
 {
+	/* A loaded lazy name is allocated apart from the symbol. */
+	if (!symbol__has_lazy_name(sym) && sym->name != (char *)(sym + 1) &&
+	    sym->name != unknown_name)
+		free(sym->name);
 	if (symbol_conf.priv_size) {
 		if (symbol_conf.init_annotation) {
 			struct annotation *notes = symbol__annotation(sym);
@@ -463,7 +504,7 @@ void symbols__insert(struct rb_root_cached *symbols, struct symbol *sym)
 	__symbols__insert(symbols, sym);
 }
 
-static struct symbol *symbols__find(struct rb_root_cached *symbols, u64 ip)
+struct symbol *symbols__find(struct rb_root_cached *symbols, u64 ip)
 {
 	struct rb_node *n;
 
@@ -638,6 +679,16 @@ void dso__delete_symbol(struct dso *dso, struct symbol *sym)
 	dso__reset_find_symbol_cache(dso);
 }
 
+/* Return @sym with its name loaded, or NULL if the name cannot be read. */
+static struct symbol *dso__named_symbol(struct dso *dso, struct symbol *sym)
+{
+	if (sym && symbol__has_lazy_name(sym))
+		dso__load_symbol_names(dso, &sym, 1);
+	if (sym && sym->name == unknown_name)
+		return NULL;
+	return sym;
+}
+
 struct symbol *dso__find_symbol(struct dso *dso, u64 addr)
 {
 	if (dso__last_find_result_addr(dso) != addr || dso__last_find_result_symbol(dso) == NULL) {
@@ -645,22 +696,22 @@ struct symbol *dso__find_symbol(struct dso *dso, u64 addr)
 		dso__set_last_find_result_symbol(dso, symbols__find(dso__symbols(dso), addr));
 	}
 
-	return dso__last_find_result_symbol(dso);
+	return dso__named_symbol(dso, dso__last_find_result_symbol(dso));
 }
 
 struct symbol *dso__find_symbol_nocache(struct dso *dso, u64 addr)
 {
-	return symbols__find(dso__symbols(dso), addr);
+	return dso__named_symbol(dso, symbols__find(dso__symbols(dso), addr));
 }
 
 struct symbol *dso__first_symbol(struct dso *dso)
 {
-	return symbols__first(dso__symbols(dso));
+	return symbols__first(dso__named_symbols(dso));
 }
 
 struct symbol *dso__last_symbol(struct dso *dso)
 {
-	return symbols__last(dso__symbols(dso));
+	return symbols__last(dso__named_symbols(dso));
 }
 
 struct symbol *dso__next_symbol(struct symbol *sym)
@@ -692,12 +743,58 @@ struct symbol *dso__find_symbol_by_name(struct dso *dso, const char *name, size_
 	return s;
 }
 
+/*
+ * Load every lazy name. Do not delete the symbols whose name cannot be
+ * read, since address lookups search the tree without the DSO lock.
+ */
+static void __dso__load_all_symbol_names(struct dso *dso)
+{
+	struct rb_node *nd = rb_first_cached(dso__symbols(dso));
+	struct symbol *batch[512];
+
+	while (nd) {
+		size_t nr = 0;
+
+		for (; nd && nr < ARRAY_SIZE(batch); nd = rb_next(nd)) {
+			struct symbol *pos = rb_entry(nd, struct symbol, rb_node);
+
+			if (symbol__has_lazy_name(pos))
+				batch[nr++] = pos;
+		}
+		if (nr)
+			dso__load_symbol_names(dso, batch, nr);
+	}
+}
+
+/*
+ * Lazy names exist only in userspace DSOs, and are all loaded once the DSO
+ * is sorted by name. Checking that first avoids taking the DSO lock, which
+ * the callers that walk kernel symbols may hold.
+ */
+static bool dso__may_have_lazy_names(struct dso *dso)
+{
+	return symbol_conf.lazy_load_symbols && !dso__kernel(dso) &&
+	       !dso__sorted_by_name(dso);
+}
+
+struct rb_root_cached *dso__named_symbols(struct dso *dso)
+{
+	if (dso__may_have_lazy_names(dso)) {
+		mutex_lock(dso__lock(dso));
+		__dso__load_all_symbol_names(dso);
+		mutex_unlock(dso__lock(dso));
+	}
+	return dso__symbols(dso);
+}
+
 void dso__sort_by_name(struct dso *dso)
 {
 	mutex_lock(dso__lock(dso));
 	if (!dso__sorted_by_name(dso)) {
 		size_t len = 0;
 
+		if (dso__may_have_lazy_names(dso))
+			__dso__load_all_symbol_names(dso);
 		dso__set_symbol_names(dso, symbols__sort_by_name(dso__symbols(dso), &len));
 		if (dso__symbol_names(dso)) {
 			dso__set_symbol_names_len(dso, len);
