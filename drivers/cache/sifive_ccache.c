@@ -297,7 +297,9 @@ static int __init sifive_ccache_init(void)
 	unsigned long quirks __maybe_unused;
 	int rc;
 
-	np = of_find_matching_node_and_match(NULL, sifive_ccache_ids, &match);
+	for_each_matching_node_and_match(np, sifive_ccache_ids, &match)
+		if (of_device_is_available(np))
+			break;
 	if (!np)
 		return -ENODEV;
 
