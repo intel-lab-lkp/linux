@@ -233,7 +233,7 @@ int rio_request_inb_mbox(struct rio_mport *mport,
 			 void *dev_id,
 			 int mbox,
 			 int entries,
-			 void (*minb) (struct rio_mport * mport, void *dev_id, int mbox,
+			 void (*minb) (struct rio_mport *mport, void *dev_id, int mbox,
 				       int slot))
 {
 	int rc = -ENOSYS;
@@ -318,7 +318,7 @@ int rio_request_outb_mbox(struct rio_mport *mport,
 			  void *dev_id,
 			  int mbox,
 			  int entries,
-			  void (*moutb) (struct rio_mport * mport, void *dev_id, int mbox, int slot))
+			  void (*moutb) (struct rio_mport *mport, void *dev_id, int mbox, int slot))
 {
 	int rc = -ENOSYS;
 	struct resource *res;
@@ -400,7 +400,7 @@ EXPORT_SYMBOL_GPL(rio_release_outb_mbox);
  */
 static int
 rio_setup_inb_dbell(struct rio_mport *mport, void *dev_id, struct resource *res,
-		    void (*dinb) (struct rio_mport * mport, void *dev_id, u16 src, u16 dst,
+		    void (*dinb) (struct rio_mport *mport, void *dev_id, u16 src, u16 dst,
 				  u16 info))
 {
 	struct rio_dbell *dbell = kmalloc_obj(*dbell);
@@ -434,7 +434,7 @@ int rio_request_inb_dbell(struct rio_mport *mport,
 			  void *dev_id,
 			  u16 start,
 			  u16 end,
-			  void (*dinb) (struct rio_mport * mport, void *dev_id, u16 src,
+			  void (*dinb) (struct rio_mport *mport, void *dev_id, u16 src,
 					u16 dst, u16 info))
 {
 	int rc;
@@ -1380,7 +1380,7 @@ EXPORT_SYMBOL_GPL(rio_mport_get_efb);
  * 0 in case the device does not support it.
  */
 u32
-rio_mport_get_feature(struct rio_mport * port, int local, u16 destid,
+rio_mport_get_feature(struct rio_mport *port, int local, u16 destid,
 		      u8 hopcount, int ftr)
 {
 	u32 asm_info, ext_ftr_ptr, ftr_header;
