@@ -827,9 +827,9 @@ bool snp_probe_rmptable_info(void)
 			setup_clear_cpu_cap(X86_FEATURE_RMPOPT);
 			return false;
 		}
-	} else {
-		setup_clear_cpu_cap(X86_FEATURE_RMPOPT);
 	}
+
+	setup_clear_cpu_cap(X86_FEATURE_RMPOPT);
 
 	return probe_contiguous_rmptable_info();
 }
