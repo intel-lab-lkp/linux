@@ -150,12 +150,17 @@ static int slim_disconnect_port(struct slim_stream_runtime *stream,
 	struct slim_val_inf msg = {0, 1, NULL, wbuf, NULL};
 	u8 mc = SLIM_MSG_MC_DISCONNECT_PORT;
 	DEFINE_SLIM_LDEST_TXN(txn, mc, 5, stream->dev->laddr, &msg);
+	int ret;
 
 	wbuf[0] = port->id;
+	ret = slim_do_transfer(sdev->ctrl, &txn);
+	if (ret)
+		return ret;
+
 	port->ch.state = SLIM_CH_STATE_DISCONNECTED;
 	port->state = SLIM_PORT_DISCONNECTED;
 
-	return slim_do_transfer(sdev->ctrl, &txn);
+	return 0;
 }
 
 static int slim_deactivate_remove_channel(struct slim_stream_runtime *stream,
@@ -448,13 +453,22 @@ EXPORT_SYMBOL_GPL(slim_stream_disable);
  */
 int slim_stream_unprepare(struct slim_stream_runtime *stream)
 {
-	int i;
+	int ret = 0, err, i;
 
 	if (!stream->ports || !stream->num_ports)
 		return -EINVAL;
 
-	for (i = 0; i < stream->num_ports; i++)
-		slim_disconnect_port(stream, &stream->ports[i]);
+	for (i = 0; i < stream->num_ports; i++) {
+		if (stream->ports[i].state == SLIM_PORT_DISCONNECTED)
+			continue;
+
+		err = slim_disconnect_port(stream, &stream->ports[i]);
+		if (err && !ret)
+			ret = err;
+	}
+
+	if (ret)
+		return ret;
 
 	kfree(stream->ports);
 	stream->ports = NULL;
@@ -484,6 +498,7 @@ int slim_stream_free(struct slim_stream_runtime *stream)
 	list_del(&stream->node);
 	spin_unlock(&sdev->stream_list_lock);
 
+	kfree(stream->ports);
 	kfree(stream->name);
 	kfree(stream);
 
