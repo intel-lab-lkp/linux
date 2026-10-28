@@ -11,6 +11,7 @@
 #define EX_TYPE_KACCESS_ERR_ZERO	3
 #define EX_TYPE_UACCESS_CPY		4
 #define EX_TYPE_LOAD_UNALIGNED_ZEROPAD	5
+#define EX_TYPE_KACCESS_MC		6
 
 /* Data fields for EX_TYPE_UACCESS_ERR_ZERO */
 #define EX_DATA_REG_ERR_SHIFT	0
@@ -75,6 +76,14 @@
 
 	.macro		_asm_extable_uaccess_cpy, insn, fixup, uaccess_is_write
 	__ASM_EXTABLE_RAW(\insn, \fixup, EX_TYPE_UACCESS_CPY, \uaccess_is_write)
+	.endm
+
+/*
+ * Create an exception table entry for a kernel load in copy_mc_to_kernel(),
+ * which will branch to `fixup` only on a synchronous external abort.
+ */
+	.macro		_asm_extable_kaccess_mc, insn, fixup
+	__ASM_EXTABLE_RAW(\insn, \fixup, EX_TYPE_KACCESS_MC, 0)
 	.endm
 
 #else /* __ASSEMBLER__ */

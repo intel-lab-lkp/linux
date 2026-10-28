@@ -105,6 +105,7 @@
 #define ESR_ELx_VNCR		(UL(1) << ESR_ELx_VNCR_SHIFT)
 #define ESR_ELx_SET_SHIFT	(11)
 #define ESR_ELx_SET_MASK	(UL(3) << ESR_ELx_SET_SHIFT)
+#define ESR_ELx_SET_UC		(UL(2) << ESR_ELx_SET_SHIFT)
 #define ESR_ELx_FnV_SHIFT	(10)
 #define ESR_ELx_FnV		(UL(1) << ESR_ELx_FnV_SHIFT)
 #define ESR_ELx_EA_SHIFT	(9)

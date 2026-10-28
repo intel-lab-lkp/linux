@@ -105,7 +105,22 @@ bool fixup_exception(struct pt_regs *regs, unsigned long esr)
 		return ex_handler_uaccess_cpy(ex, regs, esr);
 	case EX_TYPE_LOAD_UNALIGNED_ZEROPAD:
 		return ex_handler_load_unaligned_zeropad(ex, regs);
+	case EX_TYPE_KACCESS_MC:
+		/* Only a synchronous external abort is fixed up, by fixup_exception_mc() */
+		return false;
 	}
 
 	BUG();
+}
+
+bool fixup_exception_mc(struct pt_regs *regs)
+{
+	const struct exception_table_entry *ex;
+
+	ex = search_exception_tables(instruction_pointer(regs));
+	if (!ex || ex->type != EX_TYPE_KACCESS_MC)
+		return false;
+
+	regs->pc = get_ex_fixup(ex);
+	return true;
 }

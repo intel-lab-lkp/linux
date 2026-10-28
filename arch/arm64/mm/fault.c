@@ -874,6 +874,26 @@ static int do_bad(unsigned long far, unsigned long esr, struct pt_regs *regs)
 	return 1; /* "fault" */
 }
 
+/*
+ * A kernel data abort on memory with an uncorrectable error can be recovered
+ * by copy_mc_to_kernel(). Aborts on instruction fetches or translation table
+ * walks cannot, and neither can errors the CPU reports as uncontainable.
+ */
+static bool is_el1_recoverable_sea(unsigned long esr)
+{
+	if (!is_el1_data_abort(esr))
+		return false;
+
+	if ((esr & ESR_ELx_FSC) != ESR_ELx_FSC_EXTABT)
+		return false;
+
+	if (cpus_have_cap(ARM64_HAS_RAS_EXTN) &&
+	    (esr & ESR_ELx_SET_MASK) == ESR_ELx_SET_UC)
+		return false;
+
+	return true;
+}
+
 static int do_sea(unsigned long far, unsigned long esr, struct pt_regs *regs)
 {
 	const struct fault_info *inf;
@@ -886,6 +906,19 @@ static int do_sea(unsigned long far, unsigned long esr, struct pt_regs *regs)
 		 * APEI claimed this as a firmware-first notification.
 		 * Some processing deferred to task_work before ret_to_user().
 		 */
+		return 0;
+	}
+
+	if (!user_mode(regs) && is_el1_recoverable_sea(esr) &&
+	    fixup_exception_mc(regs)) {
+		/*
+		 * copy_mc_to_kernel() read memory with an uncorrectable error.
+		 * It returns the bytes it could not copy and its caller handles
+		 * the failure, so the kernel does not need to die. Firmware-first
+		 * systems still get to record the error.
+		 */
+		apei_claim_sea(regs);
+		add_taint(TAINT_MACHINE_CHECK, LOCKDEP_STILL_OK);
 		return 0;
 	}
 

@@ -474,6 +474,10 @@ extern long strncpy_from_user(char *dest, const char __user *src, long count);
 
 extern __must_check long strnlen_user(const char __user *str, long n);
 
+unsigned long __must_check
+copy_mc_to_kernel(void *to, const void *from, size_t size);
+#define copy_mc_to_kernel copy_mc_to_kernel
+
 #ifdef CONFIG_ARCH_HAS_UACCESS_FLUSHCACHE
 extern unsigned long __must_check __copy_user_flushcache(void *to, const void __user *from, unsigned long n);
 
