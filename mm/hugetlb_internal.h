@@ -10,6 +10,17 @@
 #include <linux/hugetlb.h>
 #include <linux/hugetlb_cgroup.h>
 
+static inline unsigned long available_huge_pages(struct hstate *h)
+{
+	/*
+	 * Restored reservations may outnumber free folios until the folios
+	 * return to the pool.
+	 */
+	if (h->resv_huge_pages > h->free_huge_pages)
+		return 0;
+	return h->free_huge_pages - h->resv_huge_pages;
+}
+
 /*
  * Check if the hstate represents gigantic pages but gigantic page
  * runtime support is not available. This is a common condition used to
