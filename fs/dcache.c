@@ -1862,7 +1862,8 @@ void shrink_dcache_for_umount(struct super_block *sb)
 static enum d_walk_ret find_submount(void *_data, struct dentry *dentry)
 {
 	struct dentry **victim = _data;
-	if (d_mountpoint(dentry)) {
+	/* Skip mounted and removed but still mounted dentries. */
+	if (d_mountpoint(dentry) && !cant_mount(dentry)) {
 		*victim = dget_dlock(dentry);
 		return D_WALK_QUIT;
 	}
@@ -2779,7 +2780,7 @@ void d_delete(struct dentry * dentry)
 	if (dentry->d_lockref.count == 1) {
 		if (dentry_negative_policy)
 			__d_drop(dentry);
-		dentry->d_flags &= ~DCACHE_CANT_MOUNT;
+		dentry->d_flags &= ~(DCACHE_CANT_MOUNT | DCACHE_MOUNTED);
 		dentry_unlink_inode(dentry);
 	} else {
 		__d_drop(dentry);
