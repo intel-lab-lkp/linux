@@ -175,6 +175,7 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 	struct msm_drm_private *priv = drm->dev_private;
 	struct msm_gpu_submitqueue *queue;
 	enum drm_sched_priority sched_prio;
+	struct msm_ringbuffer *ring;
 	unsigned ring_nr;
 	int ret;
 
@@ -209,6 +210,16 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 			return ret;
 
 		queue = kzalloc_obj(*queue);
+
+		if (flags & MSM_SUBMITQUEUE_LPAC) {
+			ring_nr = priv->gpu->nr_rings;
+			ring = priv->gpu->lpac_rb;
+		} else {
+			ring = priv->gpu->rb[ring_nr];
+		}
+
+		if (!ring)
+			return -EINVAL;
 	}
 
 	if (!queue)
@@ -227,8 +238,7 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 	} else {
 		queue->ring_nr = ring_nr;
 
-		queue->entity = get_sched_entity(ctx, priv->gpu->rb[ring_nr],
-						 ring_nr, sched_prio);
+		queue->entity = get_sched_entity(ctx, ring, ring_nr, sched_prio);
 	}
 
 	if (IS_ERR(queue->entity)) {
