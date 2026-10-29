@@ -63,7 +63,7 @@ static void jfs_handle_error(struct super_block *sb)
 {
 	struct jfs_sb_info *sbi = JFS_SBI(sb);
 
-	if (sb_rdonly(sb))
+	if (sb_rdonly(sb) || sb_emergency_ro(sb))
 		return;
 
 	updateSuper(sb, FM_DIRTY);
@@ -74,7 +74,8 @@ static void jfs_handle_error(struct super_block *sb)
 	else if (sbi->flag & JFS_ERR_REMOUNT_RO) {
 		jfs_err("ERROR: (device %s): remounting filesystem as read-only",
 			sb->s_id);
-		sb->s_flags |= SB_RDONLY;
+		/* SB_RDONLY needs s_umount, see sb_set_emergency_ro(). */
+		sb_set_emergency_ro(sb);
 	}
 
 	/* nothing is done for continue beyond marking the superblock dirty */
@@ -367,6 +368,11 @@ static int jfs_reconfigure(struct fs_context *fc)
 	int flag = ctx->flag;
 	int ret;
 
+	/* Don't resize based on a block map we don't trust after an error. */
+	if (ctx->resize && sb_emergency_ro(sb))
+		return -EROFS;
+
+	/* After an error this only commits what was queued before it. */
 	sync_filesystem(sb);
 
 	/* Transfer results of parsing to the sbi */
@@ -415,6 +421,9 @@ static int jfs_reconfigure(struct fs_context *fc)
 		return ret;
 	}
 	if (!sb_rdonly(sb) && readonly) {
+		/* After an error nothing may be written, umount closes the log. */
+		if (sb_emergency_ro(sb))
+			return 0;
 		rc = dquot_suspend(sb, -1);
 		if (rc < 0)
 			return rc;
@@ -587,6 +596,15 @@ static int jfs_freeze(struct super_block *sb)
 	int rc = 0;
 
 	if (!sb_rdonly(sb)) {
+		/*
+		 * After an error leave the log open and the superblock alone.
+		 * Waiting for everything to be written home needs a quiesced
+		 * log, jfs_flush_journal() BUG()s otherwise.
+		 */
+		if (sb_emergency_ro(sb)) {
+			jfs_flush_journal(log, 1);
+			return 0;
+		}
 		txQuiesce(sb);
 		rc = lmLogShutdown(log);
 		if (rc) {
@@ -597,6 +615,7 @@ static int jfs_freeze(struct super_block *sb)
 
 			return rc;
 		}
+		set_bit(JFS_FLAGS_LOG_SHUTDOWN, &sbi->jfs_flags);
 		rc = updateSuper(sb, FM_CLEAN);
 		if (rc) {
 			jfs_err("jfs_freeze: updateSuper failed");
@@ -616,15 +635,19 @@ static int jfs_unfreeze(struct super_block *sb)
 	struct jfs_log *log = sbi->log;
 	int rc = 0;
 
-	if (!sb_rdonly(sb)) {
+	/* Undo what jfs_freeze() did, also if an error happened meanwhile. */
+	if (test_bit(JFS_FLAGS_LOG_SHUTDOWN, &sbi->jfs_flags)) {
 		rc = updateSuper(sb, FM_MOUNT);
 		if (rc) {
 			jfs_error(sb, "updateSuper failed\n");
 			goto out;
 		}
 		rc = lmLogInit(log);
-		if (rc)
+		if (rc) {
 			jfs_error(sb, "lmLogInit failed\n");
+			goto out;
+		}
+		clear_bit(JFS_FLAGS_LOG_SHUTDOWN, &sbi->jfs_flags);
 out:
 		txResume(sb);
 	}
@@ -639,6 +662,10 @@ static int jfs_get_tree(struct fs_context *fc)
 static int jfs_sync_fs(struct super_block *sb, int wait)
 {
 	struct jfs_log *log = JFS_SBI(sb)->log;
+
+	/* After an error only freeze and umount write out the log. */
+	if (sb_emergency_ro(sb))
+		return 0;
 
 	/* log == NULL indicates read-only mount */
 	if (log) {
