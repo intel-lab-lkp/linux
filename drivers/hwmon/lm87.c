@@ -955,17 +955,22 @@ static int lm87_detect(struct i2c_client *client, struct i2c_board_info *info)
 {
 	struct i2c_adapter *adapter = client->adapter;
 	const char *name;
-	u8 cid, rev;
+	int cid, rev, config;
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA))
 		return -ENODEV;
 
-	if (lm87_read_value(client, LM87_REG_CONFIG) & 0x80)
+	config = lm87_read_value(client, LM87_REG_CONFIG);
+	if (config < 0 || config & 0x80)
 		return -ENODEV;
 
 	/* Now, we do the remaining detection. */
 	cid = lm87_read_value(client, LM87_REG_COMPANY_ID);
+	if (cid < 0)
+		return -ENODEV;
 	rev = lm87_read_value(client, LM87_REG_REVISION);
+	if (rev < 0)
+		return -ENODEV;
 
 	if (cid == 0x02			/* National Semiconductor */
 	 && (rev >= 0x01 && rev <= 0x08))
@@ -989,7 +994,12 @@ static void lm87_restore_config(void *arg)
 	struct i2c_client *client = arg;
 	struct lm87_data *data = i2c_get_clientdata(client);
 
-	lm87_write_value(client, LM87_REG_CONFIG, data->config);
+	int err;
+
+	err = lm87_write_value(client, LM87_REG_CONFIG, data->config);
+	if (err < 0)
+		dev_warn(&client->dev, "Failed to restore configuration: %d\n",
+			 err);
 }
 
 static int lm87_init_client(struct i2c_client *client)
@@ -1013,16 +1023,26 @@ static int lm87_init_client(struct i2c_client *client)
 				val |= CHAN_VCC_5V;
 		}
 		data->channel = val;
-		lm87_write_value(client,
-				LM87_REG_CHANNEL_MODE, data->channel);
+		rc = lm87_write_value(client, LM87_REG_CHANNEL_MODE,
+				      data->channel);
+		if (rc < 0)
+			return rc;
 	} else if (dev_get_platdata(&client->dev)) {
 		data->channel = *(u8 *)dev_get_platdata(&client->dev);
-		lm87_write_value(client,
-				 LM87_REG_CHANNEL_MODE, data->channel);
+		rc = lm87_write_value(client, LM87_REG_CHANNEL_MODE,
+				      data->channel);
+		if (rc < 0)
+			return rc;
 	} else {
-		data->channel = lm87_read_value(client, LM87_REG_CHANNEL_MODE);
+		rc = lm87_read_value(client, LM87_REG_CHANNEL_MODE);
+		if (rc < 0)
+			return rc;
+		data->channel = rc;
 	}
-	data->config = lm87_read_value(client, LM87_REG_CONFIG) & 0x6F;
+	rc = lm87_read_value(client, LM87_REG_CONFIG);
+	if (rc < 0)
+		return rc;
+	data->config = rc & 0x6F;
 
 	rc = devm_add_action(&client->dev, lm87_restore_config, client);
 	if (rc)
@@ -1033,28 +1053,52 @@ static int lm87_init_client(struct i2c_client *client)
 
 		/* Limits are left uninitialized after power-up */
 		for (i = 1; i < 6; i++) {
-			lm87_write_value(client, LM87_REG_IN_MIN(i), 0x00);
-			lm87_write_value(client, LM87_REG_IN_MAX(i), 0xFF);
+			rc = lm87_write_value(client, LM87_REG_IN_MIN(i), 0x00);
+			if (rc < 0)
+				return rc;
+			rc = lm87_write_value(client, LM87_REG_IN_MAX(i), 0xFF);
+			if (rc < 0)
+				return rc;
 		}
 		for (i = 0; i < 2; i++) {
-			lm87_write_value(client, LM87_REG_TEMP_HIGH[i], 0x7F);
-			lm87_write_value(client, LM87_REG_TEMP_LOW[i], 0x00);
-			lm87_write_value(client, LM87_REG_AIN_MIN(i), 0x00);
-			lm87_write_value(client, LM87_REG_AIN_MAX(i), 0xFF);
+			rc = lm87_write_value(client, LM87_REG_TEMP_HIGH[i],
+					      0x7F);
+			if (rc < 0)
+				return rc;
+			rc = lm87_write_value(client, LM87_REG_TEMP_LOW[i],
+					      0x00);
+			if (rc < 0)
+				return rc;
+			rc = lm87_write_value(client, LM87_REG_AIN_MIN(i), 0x00);
+			if (rc < 0)
+				return rc;
+			rc = lm87_write_value(client, LM87_REG_AIN_MAX(i), 0xFF);
+			if (rc < 0)
+				return rc;
 		}
 		if (data->channel & CHAN_TEMP3) {
-			lm87_write_value(client, LM87_REG_TEMP_HIGH[2], 0x7F);
-			lm87_write_value(client, LM87_REG_TEMP_LOW[2], 0x00);
+			rc = lm87_write_value(client, LM87_REG_TEMP_HIGH[2],
+					      0x7F);
+			if (rc < 0)
+				return rc;
+			rc = lm87_write_value(client, LM87_REG_TEMP_LOW[2],
+					      0x00);
+			if (rc < 0)
+				return rc;
 		} else {
-			lm87_write_value(client, LM87_REG_IN_MIN(0), 0x00);
-			lm87_write_value(client, LM87_REG_IN_MAX(0), 0xFF);
+			rc = lm87_write_value(client, LM87_REG_IN_MIN(0), 0x00);
+			if (rc < 0)
+				return rc;
+			rc = lm87_write_value(client, LM87_REG_IN_MAX(0), 0xFF);
+			if (rc < 0)
+				return rc;
 		}
 	}
 
 	/* Make sure Start is set and INT#_Clear is clear */
 	if ((data->config & 0x09) != 0x01)
-		lm87_write_value(client, LM87_REG_CONFIG,
-				 (data->config & 0x77) | 0x01);
+		return lm87_write_value(client, LM87_REG_CONFIG,
+					(data->config & 0x77) | 0x01);
 	return 0;
 }
 
