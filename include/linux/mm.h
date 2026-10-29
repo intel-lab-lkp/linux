@@ -3429,6 +3429,12 @@ int get_cmdline(struct task_struct *task, char *buffer, int buflen);
 /* Whether this change only upgrades/adds permissions */
 #define  MM_CP_PERM_UPGRADE                (1UL << 6)
 
+static inline bool mm_cp_is_perm_upgrade(unsigned long cp_flags)
+{
+	return cp_flags & (MM_CP_PERM_UPGRADE | MM_CP_UFFD_WP_RESOLVE |
+			   MM_CP_UFFD_RWP_RESOLVE);
+}
+
 bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
 			     pte_t pte);
 extern long change_protection(struct mmu_gather *tlb,

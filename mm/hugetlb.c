@@ -6506,11 +6506,15 @@ long hugetlb_change_protection(struct vm_area_struct *vma,
 	long pages = 0, psize = huge_page_size(h);
 	struct mmu_notifier_range range;
 	unsigned long last_addr_mask;
+	unsigned int mn_flags = 0;
 	bool uffd_wp = cp_flags & MM_CP_UFFD_WP;
 	bool uffd_wp_resolve = cp_flags & MM_CP_UFFD_WP_RESOLVE;
 	bool uffd_rwp = cp_flags & MM_CP_UFFD_RWP;
 	bool uffd_rwp_resolve = cp_flags & MM_CP_UFFD_RWP_RESOLVE;
 	struct mmu_gather tlb;
+
+	if (mm_cp_is_perm_upgrade(cp_flags))
+		mn_flags |= MMU_NOTIFIER_RANGE_PERM_UPGRADE;
 
 	/*
 	 * In the case of shared PMDs, the area to flush could be beyond
@@ -6518,7 +6522,7 @@ long hugetlb_change_protection(struct vm_area_struct *vma,
 	 * range if PMD sharing is possible.
 	 */
 	mmu_notifier_range_init(&range, MMU_NOTIFY_PROTECTION_VMA,
-				0, mm, start, end);
+				mn_flags, mm, start, end);
 	adjust_range_if_pmd_sharing_possible(vma, &range.start, &range.end);
 
 	BUG_ON(address >= end);

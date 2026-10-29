@@ -597,8 +597,13 @@ again:
 			continue;
 
 		if (!range.start) {
+			unsigned int mn_flags = 0;
+
+			if (mm_cp_is_perm_upgrade(cp_flags))
+				mn_flags |= MMU_NOTIFIER_RANGE_PERM_UPGRADE;
+
 			mmu_notifier_range_init(&range,
-						MMU_NOTIFY_PROTECTION_VMA, 0,
+						MMU_NOTIFY_PROTECTION_VMA, mn_flags,
 						vma->vm_mm, addr, end);
 			mmu_notifier_invalidate_range_start(&range);
 		}
