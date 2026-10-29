@@ -3595,7 +3595,7 @@ static const struct file_operations client_states_fops = {
  * so the caller has a guarantee that the client's locks are gone by
  * the time the write returns:
  */
-static void force_expire_client(struct nfs4_client *clp)
+static bool force_expire_client(struct nfs4_client *clp)
 {
 	struct nfsd_net *nn = net_generic(clp->net, nfsd_net_id);
 	bool already_expired;
@@ -3608,27 +3608,40 @@ static void force_expire_client(struct nfs4_client *clp)
 	 * this client or is seen by this wait_event().
 	 */
 	spin_lock(&nn->client_lock);
+	if (list_empty(&clp->cl_lru) && clp->cl_time) {
+		spin_unlock(&nn->client_lock);
+		return false;
+	}
 	clp->cl_time = 0;
 	spin_unlock(&nn->client_lock);
 
 	wait_event(expiry_wq, atomic_read(&clp->cl_rpc_users) == 0);
+
+	mutex_lock(&nn->nfsd_mutex);
+	if (!test_bit(NFSD_NET_UP, &nn->flags)) {
+		mutex_unlock(&nn->nfsd_mutex);
+		return false;
+	}
 	spin_lock(&nn->client_lock);
 	already_expired = list_empty(&clp->cl_lru);
 	if (!already_expired)
 		unhash_client_locked(clp);
 	spin_unlock(&nn->client_lock);
-
 	if (!already_expired)
 		expire_client(clp);
-	else
+	mutex_unlock(&nn->nfsd_mutex);
+
+	if (already_expired)
 		wait_event(expiry_wq, clp->cl_nfsd_dentry == NULL);
+	return true;
 }
 
 static ssize_t client_ctl_write(struct file *file, const char __user *buf,
 				   size_t size, loff_t *pos)
 {
-	char *data;
 	struct nfs4_client *clp;
+	ssize_t ret = -ENXIO;
+	char *data;
 
 	data = simple_transaction_get(file, buf, size);
 	if (IS_ERR(data))
@@ -3638,9 +3651,10 @@ static ssize_t client_ctl_write(struct file *file, const char __user *buf,
 	clp = get_nfsdfs_clp(file_inode(file));
 	if (!clp)
 		return -ENXIO;
-	force_expire_client(clp);
+	if (force_expire_client(clp))
+		ret = 7;
 	nfsd4_put_client(clp);
-	return 7;
+	return ret;
 }
 
 static const struct file_operations client_ctl_fops = {
