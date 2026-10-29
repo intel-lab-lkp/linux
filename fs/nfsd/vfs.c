@@ -1112,8 +1112,11 @@ static u32 nfsd_eof_on_read(struct file *file, loff_t offset, ssize_t len,
 
 static __be32 nfsd_finish_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			       struct file *file, loff_t offset,
-			       unsigned long *count, u32 *eof, ssize_t host_err)
+			       unsigned long *count, u32 *eof, ssize_t host_err,
+			       u64 storage_start)
 {
+	nfsd_stats_io_read_storage_add(fhp->fh_export,
+				       nfsd_storage_read_bytes() - storage_start);
 	if (host_err >= 0) {
 		struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 
@@ -1144,12 +1147,14 @@ __be32 nfsd_splice_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			struct file *file, loff_t offset, unsigned long *count,
 			u32 *eof)
 {
+	u64 storage_start = nfsd_storage_read_bytes();
 	ssize_t host_err;
 
 	trace_nfsd_read_splice(rqstp, fhp, offset, *count);
 	host_err = vfs_splice_to_actor(file, offset, *count,
 				       nfsd_direct_splice_actor, rqstp);
-	return nfsd_finish_read(rqstp, fhp, file, offset, count, eof, host_err);
+	return nfsd_finish_read(rqstp, fhp, file, offset, count, eof, host_err,
+				storage_start);
 }
 
 /*
@@ -1167,7 +1172,7 @@ __be32 nfsd_splice_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 static noinline_for_stack __be32
 nfsd_direct_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		 struct nfsd_file *nf, loff_t offset, unsigned long *count,
-		 struct page **page, u32 *eof)
+		 struct page **page, u32 *eof, u64 storage_start)
 {
 	u64 dio_start, dio_end;
 	unsigned long v, total;
@@ -1225,7 +1230,7 @@ nfsd_direct_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	}
 
 	return nfsd_finish_read(rqstp, fhp, nf->nf_file, offset, count,
-				eof, host_err);
+				eof, host_err, storage_start);
 }
 
 static bool nfsd_direct_read_ok(struct svc_rqst *rqstp, struct svc_fh *fhp,
@@ -1321,6 +1326,7 @@ __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct page **page = buf->pages + (buf->page_len >> PAGE_SHIFT);
 	unsigned int base = buf->page_len & ~PAGE_MASK;
 	struct file *file = nf->nf_file;
+	u64 storage_start = nfsd_storage_read_bytes();
 	unsigned long v, total;
 	struct iov_iter iter;
 	struct kiocb kiocb;
@@ -1336,7 +1342,8 @@ __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		if (nfsd_direct_read_ok(rqstp, fhp, nf, offset, *count,
 					dio_ok))
 			return nfsd_direct_read(rqstp, fhp, nf, offset,
-						count, page, eof);
+						count, page, eof,
+						storage_start);
 		fallthrough;
 	case NFSD_IO_DONTCACHE:
 		if (file->f_op->fop_flags & FOP_DONTCACHE)
@@ -1365,7 +1372,8 @@ __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				  kiocb.ki_flags);
 	iov_iter_bvec(&iter, ITER_DEST, rqstp->rq_bvec, v, *count - total);
 	host_err = vfs_iocb_iter_read(file, &kiocb, &iter);
-	return nfsd_finish_read(rqstp, fhp, file, offset, count, eof, host_err);
+	return nfsd_finish_read(rqstp, fhp, file, offset, count, eof, host_err,
+				storage_start);
 }
 
 /*

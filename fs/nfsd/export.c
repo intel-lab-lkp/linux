@@ -1675,6 +1675,10 @@ static int svc_export_show(struct seq_file *m,
 			   export_stats_sum(stats, EXP_STATS_IO_READ));
 		seq_printf(m, "\tio_write: %lld\n",
 			   export_stats_sum(stats, EXP_STATS_IO_WRITE));
+		if (IS_ENABLED(CONFIG_TASK_IO_ACCOUNTING))
+			seq_printf(m, "\tio_read_storage: %lld\n",
+				   export_stats_sum(stats,
+						    EXP_STATS_IO_READ_STORAGE));
 		seq_putc(m, '\n');
 		return 0;
 	}
