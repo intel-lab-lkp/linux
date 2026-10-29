@@ -1042,12 +1042,12 @@ static inline void mddev_unlock_and_resume(struct mddev *mddev)
 	mddev_resume(mddev);
 }
 
-struct mdu_array_info_s;
+struct mdu_array_info64;
 struct mdu_disk_info64;
 
 extern int mdp_major;
 void md_autostart_arrays(int part);
-int md_set_array_info(struct mddev *mddev, struct mdu_array_info_s *info);
+int md_set_array_info(struct mddev *mddev, struct mdu_array_info64 *info);
 int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info64 *info);
 int do_md_run(struct mddev *mddev);
 #define MDDEV_STACK_INTEGRITY	(1u << 0)

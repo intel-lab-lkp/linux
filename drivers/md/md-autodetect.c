@@ -124,7 +124,7 @@ static void __init md_setup_drive(struct md_setup_args *args)
 {
 	char *devname = args->device_names;
 	dev_t devices[MD_SB_DISKS + 1], mdev;
-	struct mdu_array_info_s ainfo = { };
+	struct mdu_array_info64 ainfo = { };
 	struct mddev *mddev;
 	int err = 0, i;
 	char name[16];
