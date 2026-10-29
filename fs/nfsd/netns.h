@@ -185,11 +185,7 @@ struct nfsd_net {
 	struct completion nfsd_net_confirm_done;
 	struct completion nfsd_net_free_done;
 
-	/*
-	 * clientid and stateid data for construction of net unique COPY
-	 * stateids.
-	 */
-	u32		s2s_cp_cl_id;
+	/* stateid data for construction of net unique COPY stateids */
 	struct idr	s2s_cp_stateids;
 	spinlock_t	s2s_cp_lock;
 	atomic_t	pending_async_copies;
