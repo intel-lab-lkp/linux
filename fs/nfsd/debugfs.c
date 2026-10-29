@@ -16,6 +16,10 @@ static struct dentry *nfsd_top_dir __read_mostly;
  * The default value of this setting is zero (page splicing is
  * allowed). This setting takes immediate effect for all NFS
  * versions, all exports, and in all NFSD net namespaces.
+ *
+ * Splice is used only on exports whose effective read I/O mode is
+ * buffered, so this setting is independent of io_cache_read and
+ * read_io=.
  */
 
 static int nfsd_dsr_get(void *data, u64 *val)
@@ -27,12 +31,6 @@ static int nfsd_dsr_get(void *data, u64 *val)
 static int nfsd_dsr_set(void *data, u64 val)
 {
 	nfsd_disable_splice_read = (val > 0);
-	if (!nfsd_disable_splice_read) {
-		/*
-		 * Must use buffered I/O if splice_read is enabled.
-		 */
-		nfsd_io_cache_read = NFSD_IO_BUFFERED;
-	}
 	return 0;
 }
 
@@ -47,7 +45,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(nfsd_dsr_fops, nfsd_dsr_get, nfsd_dsr_set, "%llu\n");
  *   %2: NFS READ will use direct IO
  *
  * This setting takes immediate effect for all NFS versions,
- * all exports, and in all NFSD net namespaces.
+ * all exports without an explicit read_io= setting, and in all
+ * NFSD net namespaces.
  */
 
 static int nfsd_io_cache_read_get(void *data, u64 *val)
@@ -62,15 +61,8 @@ static int nfsd_io_cache_read_set(void *data, u64 val)
 
 	switch (val) {
 	case NFSD_IO_BUFFERED:
-		nfsd_io_cache_read = NFSD_IO_BUFFERED;
-		break;
 	case NFSD_IO_DONTCACHE:
 	case NFSD_IO_DIRECT:
-		/*
-		 * Must disable splice_read when enabling
-		 * NFSD_IO_DONTCACHE.
-		 */
-		nfsd_disable_splice_read = true;
 		nfsd_io_cache_read = val;
 		break;
 	default:
@@ -92,7 +84,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(nfsd_io_cache_read_fops, nfsd_io_cache_read_get,
  *   %1: NFS WRITE will use dontcache (buffered IO w/ dropbehind)
  *
  * This setting takes immediate effect for all NFS versions,
- * all exports, and in all NFSD net namespaces.
+ * all exports without an explicit write_io= setting, and in all
+ * NFSD net namespaces.
  */
 
 static int nfsd_io_cache_write_get(void *data, u64 *val)
