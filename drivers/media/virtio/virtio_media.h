@@ -14,6 +14,8 @@
 
 #include "uapi/linux/virtio_media.h"
 
+#define DESC_CHAIN_MAX_LEN SG_MAX_SINGLE_ALLOC
+
 #define VIRTIO_MEDIA_DEFAULT_DRIVER_NAME "virtio-media"
 
 /**
@@ -66,5 +68,12 @@ to_virtio_media(struct video_device *video_dev)
 int virtio_media_send_command(struct virtio_media *vv, struct scatterlist **sgs,
 			      const size_t out_sgs, const size_t in_sgs,
 			      size_t minimum_resp_len, size_t *resp_len);
+
+/* virtio_media_ioctls.c */
+
+long virtio_media_device_ioctl(struct file *file, unsigned int cmd,
+			       unsigned long arg);
+extern const struct v4l2_ioctl_ops virtio_media_ioctl_ops;
+
 #endif // __VIRTIO_MEDIA_H
 

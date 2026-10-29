@@ -37,10 +37,20 @@ static struct virtio_media_session *
 virtio_media_session_alloc(struct virtio_media *vv, struct file *file)
 {
 	struct virtio_media_session *session;
+	int ret;
 
 	session = kzalloc_obj(*session, GFP_KERNEL);
 	if (!session)
-		return ERR_PTR(-ENOMEM);
+		goto err_session;
+
+	session->shadow_buf = kzalloc(VIRTIO_SHADOW_BUF_SIZE, GFP_KERNEL);
+	if (!session->shadow_buf)
+		goto err_shadow_buf;
+
+	ret = sg_alloc_table(&session->command_sgs, DESC_CHAIN_MAX_LEN,
+			     GFP_KERNEL);
+	if (ret)
+		goto err_payload_sgs;
 
 	// The caller is expected to set the ID once the host assigns a value.
 	session->id = 0;
@@ -50,6 +60,13 @@ virtio_media_session_alloc(struct virtio_media *vv, struct file *file)
 	virtio_media_session_fh_add(session, file);
 
 	return session;
+
+err_payload_sgs:
+	kfree(session->shadow_buf);
+err_shadow_buf:
+	kfree(session);
+err_session:
+	return ERR_PTR(-ENOMEM);
 }
 
 /**
@@ -77,6 +94,9 @@ static void virtio_media_session_free(struct virtio_media_session *session)
 	virtio_media_session_fh_del(session);
 	v4l2_fh_exit(&session->fh);
 
+	sg_free_table(&session->command_sgs);
+
+	kfree(session->shadow_buf);
 	kfree(session);
 }
 
@@ -342,6 +362,7 @@ static const struct v4l2_file_operations virtio_media_fops = {
 	.owner = THIS_MODULE,
 	.open = virtio_media_device_open,
 	.release = virtio_media_device_close,
+	.unlocked_ioctl = virtio_media_device_ioctl,
 };
 
 static void virtio_media_release(struct v4l2_device *v4l2_dev)
@@ -394,6 +415,7 @@ static int virtio_media_probe(struct virtio_device *virtio_dev)
 
 	vd = &vv->video_dev;
 	vd->v4l2_dev = &vv->v4l2_dev;
+	vd->ioctl_ops = &virtio_media_ioctl_ops;
 	vd->fops = &virtio_media_fops;
 	vd->release = video_device_release_empty;
 	strscpy(vd->name, "virtio-media", sizeof(vd->name));
