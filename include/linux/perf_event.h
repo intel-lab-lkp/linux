@@ -1124,6 +1124,7 @@ struct perf_cpu_pmu_context {
 	raw_spinlock_t			hrtimer_lock;
 	struct hrtimer			hrtimer;
 	ktime_t				hrtimer_interval;
+	ktime_t				hrtimer_old_interval;
 	unsigned int			hrtimer_active;
 };
 

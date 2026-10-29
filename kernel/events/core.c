@@ -1279,6 +1279,7 @@ static enum hrtimer_restart perf_mux_hrtimer_handler(struct hrtimer *hr)
 {
 	struct perf_cpu_pmu_context *cpc;
 	bool rotations;
+	u64 offset;
 
 	lockdep_assert_irqs_disabled();
 
@@ -1286,6 +1287,17 @@ static enum hrtimer_restart perf_mux_hrtimer_handler(struct hrtimer *hr)
 	rotations = perf_rotate_context(cpc);
 
 	raw_spin_lock(&cpc->hrtimer_lock);
+	if (cpc->hrtimer_old_interval != cpc->hrtimer_interval) {
+		/*
+		 * Skew the timer to avoid contention on jiffies_lock in
+		 * nohz_full, whenever we change interval
+		 */
+		offset = cpc->hrtimer_interval;
+		do_div(offset, num_possible_cpus());
+		offset *= smp_processor_id(); /* we are PINNED_HARD */
+		hrtimer_set_expires(hr, offset);
+		cpc->hrtimer_old_interval = cpc->hrtimer_interval;
+	}
 	if (rotations)
 		hrtimer_forward_now(hr, cpc->hrtimer_interval);
 	else
