@@ -1911,28 +1911,17 @@ EXPORT_SYMBOL_GPL(fat_fill_super);
 
 /*
  * helper function for fat_flush_inodes.  This writes both the inode
- * and the file data blocks, waiting for in flight data blocks before
- * the start of the call.  It does not wait for any io started
- * during the call
+ * and the file data blocks, waiting for in flight data blocks and
+ * ones it starts. write_inode_now() takes I_SYNC, so the flusher
+ * does not try to write at the same time.
  */
 static int writeback_inode(struct inode *inode)
 {
-
-	int ret;
-
-	/* if we used wait=1, sync_inode_metadata waits for the io for the
-	* inode to finish.  So wait=0 is sent down to sync_inode_metadata
-	* and filemap_fdatawrite is used for the data blocks
-	*/
-	ret = sync_inode_metadata(inode, 0);
-	if (!ret)
-		ret = filemap_fdatawrite(inode->i_mapping);
-	return ret;
+	return write_inode_now(inode, 1);
 }
 
 /*
- * write data and metadata corresponding to i1 and i2.  The io is
- * started but we do not wait for any of it to finish.
+ * write data and metadata corresponding to i1 and i2 and wait for them.
  *
  * filemap_flush is used for the block device, so if there is a dirty
  * page for a block already in flight, we will not wait and start the
