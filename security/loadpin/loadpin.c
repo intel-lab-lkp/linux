@@ -45,6 +45,7 @@ static void report_load(const char *origin, struct file *file, char *operation)
 }
 
 static int enforce = IS_ENABLED(CONFIG_SECURITY_LOADPIN_ENFORCE);
+static bool force_enforce __ro_after_init;
 static char *exclude_read_files[READING_MAX_ID];
 static int ignore_read_file_id[READING_MAX_ID] __ro_after_init;
 static struct super_block *pinned_root;
@@ -60,9 +61,17 @@ static bool loadpin_root_writable;
 static int proc_handler_loadpin(const struct ctl_table *table, int dir,
 				void *buffer, size_t *lenp, loff_t *ppos)
 {
-	if (!loadpin_root_writable && SYSCTL_USER_TO_KERN(dir))
+	if ((force_enforce || !loadpin_root_writable) && SYSCTL_USER_TO_KERN(dir))
 		return -EINVAL;
 	return proc_dointvec_minmax(table, dir, buffer, lenp, ppos);
+}
+
+static int proc_handler_force_enforce(const struct ctl_table *table, int dir,
+				      void *buffer, size_t *lenp, loff_t *ppos)
+{
+	if (SYSCTL_USER_TO_KERN(dir))
+		return -EPERM;
+	return proc_dobool(table, dir, buffer, lenp, ppos);
 }
 
 static const struct ctl_table loadpin_sysctl_table[] = {
@@ -74,6 +83,13 @@ static const struct ctl_table loadpin_sysctl_table[] = {
 		.proc_handler   = proc_handler_loadpin,
 		.extra1         = SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE,
+	},
+	{
+		.procname       = "force_enforce",
+		.data           = &force_enforce,
+		.maxlen         = sizeof(force_enforce),
+		.mode           = 0444,
+		.proc_handler   = proc_handler_force_enforce,
 	},
 };
 #endif
@@ -253,6 +269,8 @@ static void __init parse_exclude(void)
 
 static int __init loadpin_init(void)
 {
+	if (force_enforce)
+		enforce = 1;
 	pr_info("ready to pin (currently %senforcing)\n",
 		enforce ? "" : "not ");
 	parse_exclude();
@@ -436,6 +454,8 @@ DEFINE_LSM(loadpin) = {
 };
 
 /* Should not be mutable after boot, so not listed in sysfs (perm == 0). */
+module_param(force_enforce, bool, 0);
+MODULE_PARM_DESC(force_enforce, "Always enforce module/firmware pinning");
 module_param(enforce, int, 0);
 MODULE_PARM_DESC(enforce, "Enforce module/firmware pinning");
 module_param_array_named(exclude, exclude_read_files, charp, NULL, 0);

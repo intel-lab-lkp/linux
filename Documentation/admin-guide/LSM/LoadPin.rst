@@ -16,9 +16,15 @@ boot ("``loadpin.enforce=0``").
 
 LoadPin starts pinning when it sees the first file loaded. If the
 block device backing the filesystem is not read-only, a sysctl is
-created to toggle pinning: ``/proc/sys/kernel/loadpin/enabled``. (Having
+created to toggle pinning: ``/proc/sys/kernel/loadpin/enforce``. (Having
 a mutable filesystem means pinning is mutable too, but having the
 sysctl allows for easy testing on systems with a mutable filesystem.)
+
+Some filesystems may appear to be mutable, but are in fact read-only.
+In this case, ``loadpin.force_enforce=1`` can be set to require enforcement
+of LoadPin on all filesystems. This is disabled by default. When LoadPin is enabled,
+``/proc/sys/kernel/loadpin/force_enforce`` reports the state of this option.
+This option selects ``loadpin.enforce=1``.
 
 It's also possible to exclude specific file types from LoadPin using kernel
 command line option "``loadpin.exclude``". By default, all files are
