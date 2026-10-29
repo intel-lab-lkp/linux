@@ -178,3 +178,19 @@ config NFSD_V4_POSIX_ACLS
 	  clients that implement this draft is required.
 
 	  If unsure, say N.
+
+config NFSD_KUNIT_TEST
+	bool "KUnit tests for NFSD state allocation" if !KUNIT_ALL_TESTS
+	depends on NFSD_V4 && KUNIT
+	depends on NFSD=m || KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  This builds the KUnit tests for the random clientid, session ID,
+	  and COPY_NOTIFY stateid generators and related state allocation in
+	  nfs4state.c. The tests run when the nfsd module is loaded and
+	  report their results in TAP format.
+
+	  For more information on KUnit and unit tests in general, refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.

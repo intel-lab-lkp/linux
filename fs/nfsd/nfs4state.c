@@ -46,6 +46,7 @@
 #include <linux/fsnotify.h>
 #include <linux/rhashtable.h>
 #include <linux/nfsd_ssc.h>
+#include <kunit/static_stub.h>
 
 #include "xdr4.h"
 #include "nfs4ctl.h"
@@ -995,6 +996,19 @@ out_free:
 	return NULL;
 }
 
+/* Wrap the random sources so nfs4state_test.c can script them. */
+static u32 nfsd4_get_random_u32(void)
+{
+	KUNIT_STATIC_STUB_REDIRECT(nfsd4_get_random_u32);
+	return get_random_u32();
+}
+
+static u64 nfsd4_get_random_u64(void)
+{
+	KUNIT_STATIC_STUB_REDIRECT(nfsd4_get_random_u64);
+	return get_random_u64();
+}
+
 /*
  * Publish a COPY_NOTIFY stateid in nn->s2s_cp_stateids and link it onto the
  * parent's sc_cp_list. That IDR holds only COPY_NOTIFY stateids.
@@ -1006,7 +1020,7 @@ static int nfs4_init_cp_state(struct nfsd_net *nn, copy_stateid_t *stid,
 
 	stid->cs_stid.si_opaque.so_clid.cl_boot = (u32)nn->boot_time;
 	/* so_id is cyclic, so this word carries the token's secret. */
-	stid->cs_stid.si_opaque.so_clid.cl_id = get_random_u32() |
+	stid->cs_stid.si_opaque.so_clid.cl_id = nfsd4_get_random_u32() |
 						NFSD4_CPNTF_CLID_BIT;
 
 	idr_preload(GFP_KERNEL);
@@ -2709,7 +2723,7 @@ static __be32 nfsd4_assign_sessionid_locked(struct net *net,
 
 	sid->clientid = *clid;
 	for (i = 0; i < NFSD4_RANDOM_RETRIES; i++) {
-		u64 value = get_random_u64();
+		u64 value = nfsd4_get_random_u64();
 
 		nfsd4_sessionid_set_rand(sid, value);
 		if (!__find_in_sessionid_hashtbl(&candidate, net)) {
@@ -3257,7 +3271,7 @@ static __be32 nfsd4_assign_clid_locked(struct nfs4_client *clp,
 		return nfs_ok;
 
 	for (i = 0; i < NFSD4_RANDOM_RETRIES; i++) {
-		id = get_random_u32() & ~NFSD4_CPNTF_CLID_BIT;
+		id = nfsd4_get_random_u32() & ~NFSD4_CPNTF_CLID_BIT;
 		if (!cl_id_in_use_locked(nn, id)) {
 			clp->cl_clientid.cl_id = id;
 			return nfs_ok;
@@ -10314,10 +10328,22 @@ set_max_delegations(void)
 	max_delegations = nr_free_buffer_pages() >> (20 - 2 - PAGE_SHIFT);
 }
 
+/*
+ * Keep boot_time strictly increasing across a restart so clientids and
+ * stateids issued before the restart stay recognizably stale.
+ */
+static time64_t nfsd4_next_boot_time(struct nfsd_net *nn)
+{
+	time64_t now = ktime_get_real_seconds();
+
+	if (now <= nn->boot_time)
+		return nn->boot_time + 1;
+	return now;
+}
+
 static int nfs4_state_create_net(struct net *net)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
-	time64_t previous_boot;
 	int i;
 
 	nn->conf_id_hashtbl = kmalloc_objs(struct list_head, CLIENT_HASH_SIZE);
@@ -10339,10 +10365,7 @@ static int nfs4_state_create_net(struct net *net)
 		INIT_LIST_HEAD(&nn->sessionid_hashtbl[i]);
 	nn->conf_name_tree = RB_ROOT;
 	nn->unconf_name_tree = RB_ROOT;
-	previous_boot = nn->boot_time;
-	nn->boot_time = ktime_get_real_seconds();
-	if (nn->boot_time <= previous_boot)
-		nn->boot_time = previous_boot + 1;
+	nn->boot_time = nfsd4_next_boot_time(nn);
 	nn->boot_time_bt = ktime_get_boottime_seconds();
 	clear_bit(NFSD_NET_GRACE_ENDED, &nn->flags);
 	clear_bit(NFSD_NET_GRACE_END_FORCED, &nn->flags);
@@ -11174,3 +11197,7 @@ nfsd_handle_dir_event(u32 mask, const struct inode *dir, const void *data,
 	nfsd_notify_event_put(evt);
 	return 0;
 }
+
+#if IS_ENABLED(CONFIG_NFSD_KUNIT_TEST)
+#include "nfs4state_test.c"
+#endif
