@@ -1084,7 +1084,7 @@
 	/* P0-P7 line 240-255 */
 	"CPU0_SLP_S5_N_R", "NFC_VEN",
 	"CPU0_SLP_S3_N_R", "",
-	"FM_CPU0_PWRGD", "",
+	"host0-ready", "",
 	"PWRGD_RMC", "",
 	"FM_RST_CPU0_RESET_N", "",
 	"FM_PWRGD_CPU0_PWROK", "",
