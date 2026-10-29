@@ -72,7 +72,11 @@ nv50_fan_pwm_get(struct nvkm_therm *therm, int line, u32 *divs, u32 *duty)
 
 	if (nvkm_rd32(device, ctrl) & (1 << line)) {
 		*divs = nvkm_rd32(device, 0x00e114 + (id * 8));
-		*duty = nvkm_rd32(device, 0x00e118 + (id * 8));
+		/*
+		 * Bit 31 is the update trigger set by pwm_set();
+		 * it can still read back as set after a write.
+		 */
+		*duty = nvkm_rd32(device, 0x00e118 + (id * 8)) & 0x7fffffff;
 		return 0;
 	}
 
