@@ -9339,23 +9339,15 @@ static const struct lock_manager_operations nfsd_posix_mng_ops  = {
 static inline void
 nfs4_set_lock_denied(struct file_lock *fl, struct nfsd4_lock_denied *deny)
 {
-	struct nfs4_lockowner *lo;
-
-	if (fl->fl_lmops == &nfsd_posix_mng_ops) {
-		lo = (struct nfs4_lockowner *) fl->c.flc_owner;
-		xdr_netobj_dup(&deny->ld_owner, &lo->lo_owner.so_owner,
-						GFP_KERNEL);
-		if (!deny->ld_owner.data)
-			/* We just don't care that much */
-			goto nevermind;
-		deny->ld_clientid = lo->lo_owner.so_client->cl_clientid;
-	} else {
-nevermind:
-		deny->ld_owner.len = 0;
-		deny->ld_owner.data = NULL;
-		deny->ld_clientid.cl_boot = 0;
-		deny->ld_clientid.cl_id = 0;
-	}
+	/*
+	 * RFC 8881 Section 18.10.3 requires the conflicting holder's
+	 * clientid here, but returning it discloses that clientid to any
+	 * client that can provoke a denial.
+	 */
+	deny->ld_owner.len = 0;
+	deny->ld_owner.data = NULL;
+	deny->ld_clientid.cl_boot = 0;
+	deny->ld_clientid.cl_id = 0;
 	deny->ld_start = fl->fl_start;
 	deny->ld_length = NFS4_MAX_UINT64;
 	if (fl->fl_end != NFS4_MAX_UINT64)
@@ -9842,14 +9834,6 @@ out:
 	return status;
 }
 
-void nfsd4_lock_release(union nfsd4_op_u *u)
-{
-	struct nfsd4_lock *lock = &u->lock;
-	struct nfsd4_lock_denied *deny = &lock->lk_denied;
-
-	kfree(deny->ld_owner.data);
-}
-
 /*
  * The NFSv4 spec allows a client to do a LOCKT without holding an OPEN,
  * so we do a temporary open here just to get an open file to pass to
@@ -9953,14 +9937,6 @@ out:
 	if (file_lock)
 		locks_free_lock(file_lock);
 	return status;
-}
-
-void nfsd4_lockt_release(union nfsd4_op_u *u)
-{
-	struct nfsd4_lockt *lockt = &u->lockt;
-	struct nfsd4_lock_denied *deny = &lockt->lt_denied;
-
-	kfree(deny->ld_owner.data);
 }
 
 __be32
