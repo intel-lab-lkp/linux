@@ -593,6 +593,25 @@ pnfs_layout_remove_lseg(struct pnfs_layout_hdr *lo,
 		set_bit(NFS_LAYOUT_INVALID_STID, &lo->plh_flags);
 }
 
+/**
+ * pnfs_layout_recall_draining - check for a recalled layout still in use
+ * @inode: inode to check
+ *
+ * Returns true while I/O on a recalled layout keeps LAYOUTGET blocked.
+ */
+bool pnfs_layout_recall_draining(struct inode *inode)
+{
+	struct pnfs_layout_hdr *lo;
+	bool ret;
+
+	spin_lock(&inode->i_lock);
+	lo = NFS_I(inode)->layout;
+	ret = lo && test_bit(NFS_LAYOUT_BULK_RECALL, &lo->plh_flags);
+	spin_unlock(&inode->i_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(pnfs_layout_recall_draining);
+
 static bool
 pnfs_cache_lseg_for_layoutreturn(struct pnfs_layout_hdr *lo,
 		struct pnfs_layout_segment *lseg)
