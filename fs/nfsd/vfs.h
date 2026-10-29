@@ -185,6 +185,8 @@ __be32		nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				unsigned long *count, u32 *eof,
 				bool dio_ok);
 bool		nfsd_read_splice_ok(struct svc_rqst *rqstp);
+int		nfsd_read_io_mode(struct svc_export *exp);
+int		nfsd_write_io_mode(struct svc_export *exp);
 __be32		nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				loff_t offset, unsigned long *count,
 				u32 *eof);
