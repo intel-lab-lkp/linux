@@ -193,6 +193,11 @@ mt7530_fdb_cmd(struct mt7530_priv *priv, enum mt7530_fdb_cmd cmd, u32 *rsp)
 	return 0;
 }
 
+static void mt7530_passthrough_port_fast_age(struct dsa_switch *ds,
+					     int port)
+{
+}
+
 static void mt7530_port_fast_age(struct dsa_switch *ds, int port)
 {
 	struct mt7530_priv *priv = ds->priv;
@@ -961,6 +966,12 @@ static void mt7530_get_eth_ctrl_stats(struct dsa_switch *ds, int port,
 }
 
 static int
+mt7530_passthrough_set_ageing_time(struct dsa_switch *ds, unsigned int msecs)
+{
+	return 0;
+}
+
+static int
 mt7530_set_ageing_time(struct dsa_switch *ds, unsigned int msecs)
 {
 	struct mt7530_priv *priv = ds->priv;
@@ -1286,13 +1297,81 @@ mt753x_trap_frames(struct mt7530_priv *priv)
 				   TO_CPU_FW_CPU_ONLY);
 }
 
+static int
+mt7530_passthrough_port_change_mtu(struct dsa_switch *ds, int port,
+				   int new_mtu)
+{
+	return 0;
+}
+
+static int
+mt7530_port_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
+{
+	struct mt7530_priv *priv = ds->priv;
+	int length;
+	u32 val;
+
+	/* When a new MTU is set, DSA always set the CPU port's MTU to the
+	 * largest MTU of the user ports. Because the switch only has a global
+	 * RX length register, only allowing CPU port here is enough.
+	 */
+	if (!dsa_is_upstream_port(ds, port))
+		return 0;
+
+	regmap_read(priv->regmap, MT7530_GMACCR, &val);
+	val &= ~MAX_RX_PKT_LEN_MASK;
+
+	/* RX length also includes Ethernet header, MTK tag, and FCS length */
+	length = new_mtu + ETH_HLEN + MTK_HDR_LEN + ETH_FCS_LEN;
+	if (length <= 1522) {
+		val |= MAX_RX_PKT_LEN_1522;
+	} else if (length <= 1536) {
+		val |= MAX_RX_PKT_LEN_1536;
+	} else if (length <= 1552) {
+		val |= MAX_RX_PKT_LEN_1552;
+	} else {
+		val &= ~MAX_RX_JUMBO_MASK;
+		val |= MAX_RX_JUMBO(DIV_ROUND_UP(length, 1024));
+		val |= MAX_RX_PKT_LEN_JUMBO;
+	}
+
+	regmap_write(priv->regmap, MT7530_GMACCR, val);
+
+	return 0;
+}
+
+/* If this switch is downstream of another switch that is in passthrough mode,
+ * the "CPU" port is actually a DSA port.
+ */
 static void
 mt753x_cpu_port_enable(struct dsa_switch *ds, int port)
 {
 	struct mt7530_priv *priv = ds->priv;
 
-	/* Enable Mediatek header mode on the cpu port */
-	regmap_write(priv->regmap, MT7530_PVC_P(port), PORT_SPEC_TAG);
+	if (priv->is_passthrough) {
+		/* Disable parsing of the DSA tag, it will be forwarded blindly
+		 * to the downstream switch.
+		 */
+		regmap_write(priv->regmap, MT7530_PVC_P(port),
+			     VLAN_ATTR(MT7530_VLAN_TRANSPARENT) |
+			     PVC_EG_TAG(MT7530_VLAN_EG_DISABLED));
+
+		/* The port is not configured to parse DSA tags, so they are
+		 * liable to be confused for length fields, so length check is
+		 * disabled.
+		 */
+		regmap_clear_bits(priv->regmap, MT753X_AGC, AGC_L2LEN_CHK);
+
+		/* In passthrough mode, MTU is only enforced downstream */
+		mt7530_port_change_mtu(ds, port, MT7530_MAX_MTU);
+
+		/* Loop detection has no value in passthrough mode */
+		regmap_set_bits(priv->regmap, MT753X_MTRAP,
+				MT7530_LOOP_DET_DISABLE);
+	} else {
+		/* Not passthrough, enable DSA tag handling on CPU port. */
+		regmap_write(priv->regmap, MT7530_PVC_P(port), PORT_SPEC_TAG);
+	}
 
 	/* Enable flooding on the CPU port */
 	regmap_set_bits(priv->regmap, MT753X_MFC,
@@ -1322,6 +1401,7 @@ static int
 mt7530_port_enable(struct dsa_switch *ds, int port,
 		   struct phy_device *phy)
 {
+	int upstream_pt = dsa_switch_upstream_port(ds);
 	struct dsa_port *dp = dsa_to_port(ds, port);
 	struct mt7530_priv *priv = ds->priv;
 
@@ -1332,13 +1412,38 @@ mt7530_port_enable(struct dsa_switch *ds, int port,
 	 * bridge.
 	 */
 	if (dsa_port_is_user(dp)) {
-		struct dsa_port *cpu_dp = dp->cpu_dp;
+		priv->ports[port].pm |= PCR_MATRIX(BIT(upstream_pt));
 
-		priv->ports[port].pm |= PCR_MATRIX(BIT(cpu_dp->index));
+	} else if (dsa_port_is_dsa(dp) && dp->index != upstream_pt) {
+		priv->ports[port].pm |= PCR_MATRIX(BIT(upstream_pt));
+
+		/* Should not happen */
+		WARN_ON_ONCE(!priv->is_passthrough);
+
+		/* We are passing through to a downstream switch so we set both
+		 * CPU and downstream link to pass traffic untouched so that
+		 * the STAG from the downstream switch will pass to the upstream.
+		 */
+		regmap_write(priv->regmap, MT7530_PVC_P(port),
+			     VLAN_ATTR(MT7530_VLAN_TRANSPARENT) |
+			     PVC_EG_TAG(MT7530_VLAN_EG_DISABLED));
+
+		/* We let the downstream switch flood */
+		regmap_set_bits(priv->regmap, MT753X_MFC, BC_FFP(BIT(port)) |
+				UNM_FFP(BIT(port)) | UNU_FFP(BIT(port)));
+
+		/* Make the upstream port able to connect to the DSA port.
+		 * This must be explicit because PORT_SPEC_TAG is unset.
+		 */
+		regmap_write(priv->regmap, MT7530_PCR_P(upstream_pt),
+			     PCR_MATRIX(BIT(port)));
 	}
 	priv->ports[port].enable = true;
-	regmap_update_bits(priv->regmap, MT7530_PCR_P(port), PCR_MATRIX_MASK,
-			   priv->ports[port].pm);
+
+	/* In passthrough mode, CPU port mask is set above. */
+	if (!(priv->is_passthrough && dp->index == upstream_pt))
+		regmap_update_bits(priv->regmap, MT7530_PCR_P(port),
+				   PCR_MATRIX_MASK, priv->ports[port].pm);
 
 	mutex_unlock(&priv->reg_mutex);
 
@@ -1380,45 +1485,14 @@ mt7530_port_disable(struct dsa_switch *ds, int port)
 }
 
 static int
-mt7530_port_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
-{
-	struct mt7530_priv *priv = ds->priv;
-	int length;
-	u32 val;
-
-	/* When a new MTU is set, DSA always set the CPU port's MTU to the
-	 * largest MTU of the user ports. Because the switch only has a global
-	 * RX length register, only allowing CPU port here is enough.
-	 */
-	if (!dsa_is_cpu_port(ds, port))
-		return 0;
-
-	regmap_read(priv->regmap, MT7530_GMACCR, &val);
-	val &= ~MAX_RX_PKT_LEN_MASK;
-
-	/* RX length also includes Ethernet header, MTK tag, and FCS length */
-	length = new_mtu + ETH_HLEN + MTK_HDR_LEN + ETH_FCS_LEN;
-	if (length <= 1522) {
-		val |= MAX_RX_PKT_LEN_1522;
-	} else if (length <= 1536) {
-		val |= MAX_RX_PKT_LEN_1536;
-	} else if (length <= 1552) {
-		val |= MAX_RX_PKT_LEN_1552;
-	} else {
-		val &= ~MAX_RX_JUMBO_MASK;
-		val |= MAX_RX_JUMBO(DIV_ROUND_UP(length, 1024));
-		val |= MAX_RX_PKT_LEN_JUMBO;
-	}
-
-	regmap_write(priv->regmap, MT7530_GMACCR, val);
-
-	return 0;
-}
-
-static int
 mt7530_port_max_mtu(struct dsa_switch *ds, int port)
 {
 	return MT7530_MAX_MTU;
+}
+
+static void
+mt7530_passthrough_stp_state_set(struct dsa_switch *ds, int port, u8 state)
+{
 }
 
 static void
@@ -1515,6 +1589,14 @@ mt7530_port_pre_bridge_flags(struct dsa_switch *ds, int port,
 }
 
 static int
+mt7530_passthrough_port_bridge_flags(struct dsa_switch *ds, int port,
+				     struct switchdev_brport_flags flags,
+				     struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
+static int
 mt7530_port_bridge_flags(struct dsa_switch *ds, int port,
 			 struct switchdev_brport_flags flags,
 			 struct netlink_ext_ack *extack)
@@ -1551,6 +1633,15 @@ mt7530_port_bridge_flags(struct dsa_switch *ds, int port,
 		mutex_unlock(&priv->reg_mutex);
 	}
 
+	return 0;
+}
+
+static int
+mt7530_passthrough_port_bridge_join(struct dsa_switch *ds, int port,
+				    struct dsa_bridge bridge,
+				    bool *tx_fwd_offload,
+				    struct netlink_ext_ack *extack)
+{
 	return 0;
 }
 
@@ -1709,6 +1800,12 @@ mt7530_port_set_vlan_aware(struct dsa_switch *ds, int port)
 }
 
 static void
+mt7530_passthrough_port_bridge_leave(struct dsa_switch *ds, int port,
+				     struct dsa_bridge bridge)
+{
+}
+
+static void
 mt7530_port_bridge_leave(struct dsa_switch *ds, int port,
 			 struct dsa_bridge bridge)
 {
@@ -1729,6 +1826,14 @@ mt7530_port_bridge_leave(struct dsa_switch *ds, int port,
 }
 
 static int
+mt7530_passthrough_port_fdb_add(struct dsa_switch *ds, int port,
+				const unsigned char *addr, u16 vid,
+				struct dsa_db db)
+{
+	return 0;
+}
+
+static int
 mt7530_port_fdb_add(struct dsa_switch *ds, int port,
 		    const unsigned char *addr, u16 vid,
 		    struct dsa_db db)
@@ -1743,6 +1848,14 @@ mt7530_port_fdb_add(struct dsa_switch *ds, int port,
 	mutex_unlock(&priv->reg_mutex);
 
 	return ret;
+}
+
+static int
+mt7530_passthrough_port_fdb_del(struct dsa_switch *ds, int port,
+				const unsigned char *addr, u16 vid,
+				struct dsa_db db)
+{
+	return 0;
 }
 
 static int
@@ -1798,6 +1911,14 @@ err:
 }
 
 static int
+mt7530_passthrough_port_mdb_add(struct dsa_switch *ds, int port,
+				const struct switchdev_obj_port_mdb *mdb,
+				struct dsa_db db)
+{
+	return 0;
+}
+
+static int
 mt7530_port_mdb_add(struct dsa_switch *ds, int port,
 		    const struct switchdev_obj_port_mdb *mdb,
 		    struct dsa_db db)
@@ -1824,6 +1945,14 @@ mt7530_port_mdb_add(struct dsa_switch *ds, int port,
 	mutex_unlock(&priv->reg_mutex);
 
 	return ret;
+}
+
+static int
+mt7530_passthrough_port_mdb_del(struct dsa_switch *ds, int port,
+				const struct switchdev_obj_port_mdb *mdb,
+				struct dsa_db db)
+{
+	return 0;
 }
 
 static int
@@ -1854,6 +1983,14 @@ mt7530_port_mdb_del(struct dsa_switch *ds, int port,
 	mutex_unlock(&priv->reg_mutex);
 
 	return ret;
+}
+
+static int
+mt7530_passthrough_port_vlan_filtering(struct dsa_switch *ds, int port,
+				       bool vlan_filtering,
+				       struct netlink_ext_ack *extack)
+{
+	return 0;
 }
 
 static int
@@ -1961,6 +2098,14 @@ mt7530_hw_vlan_update(struct mt7530_priv *priv, u16 vid,
 }
 
 static int
+mt7530_passthrough_port_vlan_add(struct dsa_switch *ds, int port,
+				 const struct switchdev_obj_port_vlan *vlan,
+				 struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
+static int
 mt7530_port_vlan_add(struct dsa_switch *ds, int port,
 		     const struct switchdev_obj_port_vlan *vlan,
 		     struct netlink_ext_ack *extack)
@@ -2016,6 +2161,13 @@ skip_vlan_table:
 }
 
 static int
+mt7530_passthrough_port_vlan_del(struct dsa_switch *ds, int port,
+				 const struct switchdev_obj_port_vlan *vlan)
+{
+	return 0;
+}
+
+static int
 mt7530_port_vlan_del(struct dsa_switch *ds, int port,
 		     const struct switchdev_obj_port_vlan *vlan)
 {
@@ -2055,6 +2207,14 @@ skip_vlan_table:
 	return 0;
 }
 
+static int
+mt753x_passthrough_port_mirror_add(struct dsa_switch *ds, int port,
+				   struct dsa_mall_mirror_tc_entry *mirror,
+				   bool ingress, struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
 static int mt753x_port_mirror_add(struct dsa_switch *ds, int port,
 				  struct dsa_mall_mirror_tc_entry *mirror,
 				  bool ingress, struct netlink_ext_ack *extack)
@@ -2091,6 +2251,11 @@ static int mt753x_port_mirror_add(struct dsa_switch *ds, int port,
 	regmap_write(priv->regmap, MT7530_PCR_P(port), val);
 
 	return 0;
+}
+
+static void mt753x_passthrough_port_mirror_del(struct dsa_switch *ds, int port,
+					       struct dsa_mall_mirror_tc_entry *mirror)
+{
 }
 
 static void mt753x_port_mirror_del(struct dsa_switch *ds, int port,
@@ -2405,11 +2570,6 @@ mt7530_setup(struct dsa_switch *ds)
 		break;
 	}
 
-	if (!dn) {
-		dev_err(ds->dev, "parent OF node of DSA conduit not found");
-		return -EINVAL;
-	}
-
 	ds->assisted_learning_on_cpu_port = true;
 	ds->untag_vlan_aware_bridge_pvid = true;
 	ds->mtu_enforcement_ingress = true;
@@ -2511,7 +2671,7 @@ mt7530_setup(struct dsa_switch *ds)
 		/* Disable learning by default on all ports */
 		regmap_set_bits(priv->regmap, MT7530_PSC_P(i), SA_DIS);
 
-		if (dsa_is_cpu_port(ds, i)) {
+		if (dsa_is_upstream_port(ds, i)) {
 			mt753x_cpu_port_enable(ds, i);
 		} else {
 			mt7530_port_disable(ds, i);
@@ -2535,7 +2695,7 @@ mt7530_setup(struct dsa_switch *ds)
 		return ret;
 
 	/* Check for PHY muxing on port 5 */
-	if (dsa_is_unused_port(ds, 5)) {
+	if (dn && dsa_is_unused_port(ds, 5)) {
 		/* Scan the ethernet nodes. Look for GMAC1, lookup the used PHY.
 		 * Set priv->p5_mode to the appropriate value if PHY muxing is
 		 * detected.
@@ -2635,7 +2795,7 @@ mt7531_setup_common(struct dsa_switch *ds)
 		regmap_set_bits(priv->regmap, MT7531_DBG_CNT(i),
 				MT7531_DIS_CLR);
 
-		if (dsa_is_cpu_port(ds, i)) {
+		if (dsa_is_upstream_port(ds, i)) {
 			mt753x_cpu_port_enable(ds, i);
 		} else {
 			mt7530_port_disable(ds, i);
@@ -3256,6 +3416,14 @@ static int mt753x_set_mac_eee(struct dsa_switch *ds, int port,
 }
 
 static int
+mt753x_passthrough_port_change_conduit(struct dsa_switch *ds, int port,
+				       struct net_device *conduit,
+				       struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
+static int
 mt753x_port_change_conduit(struct dsa_switch *ds, int port,
 			   struct net_device *conduit,
 			   struct netlink_ext_ack *extack)
@@ -3304,7 +3472,7 @@ mt753x_conduit_state_change(struct dsa_switch *ds,
 
 	/* Set the CPU port to trap frames to for MT7530. Trapped frames will be
 	 * forwarded to the numerically smallest CPU port whose conduit
-	 * interface is up.
+	 * interface is up. NOTE: "CPU port" can also mean an upstream DSA link.
 	 */
 	if (priv->id != ID_MT7530 && priv->id != ID_MT7621 &&
 	    priv->id != ID_EN7528)
@@ -3362,6 +3530,13 @@ static int mt753x_tc_setup_qdisc_tbf(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+static int mt753x_passthrough_setup_tc(struct dsa_switch *ds, int port,
+				       enum tc_setup_type type,
+				       void *type_data)
+{
+	return 0;
+}
+
 static int mt753x_setup_tc(struct dsa_switch *ds, int port,
 			   enum tc_setup_type type, void *type_data)
 {
@@ -3398,6 +3573,99 @@ static int mt7988_setup(struct dsa_switch *ds)
 
 	return mt7531_setup_common(ds);
 }
+
+/* 1 if passthrough, negative if error. */
+static int mt753x_check_passthrough(struct device *dev)
+{
+	struct device_node *ports, *port;
+	int passthrough_ports = 0;
+	int enabled_ports = 0;
+
+	ports = of_get_child_by_name(dev->of_node, "ports");
+	if (!ports)
+		ports = of_get_child_by_name(dev->of_node, "ethernet-ports");
+
+	if (!ports) {
+		dev_err(dev, "no ports child node found\n");
+		return -EINVAL;
+	}
+
+	for_each_available_child_of_node(ports, port) {
+		struct device_node *link;
+
+		enabled_ports++;
+
+		link = of_parse_phandle(port, "ethernet", 0);
+		if (!link)
+			link = of_parse_phandle(port, "link", 0);
+
+		if (!link)
+			continue;
+
+		of_node_put(link);
+
+		passthrough_ports++;
+	}
+
+	of_node_put(ports);
+
+	/*
+	 * A switch is considered passthrough if exactly two available
+	 * ports have an "ethernet" or "link" phandle.
+	 */
+	if (passthrough_ports > 2 ||
+	    (passthrough_ports == 2 && enabled_ports != 2)
+	) {
+		dev_err(dev, "Only two ports allowed in passthrough mode\n");
+		return -EINVAL;
+	}
+
+	return passthrough_ports == 2;
+}
+
+/* No manipulation of forwarding rules allowed in passthrough mode */
+static const struct dsa_switch_ops mt7530_passthrough_switch_ops = {
+	.get_tag_protocol       = mtk_get_tag_protocol,
+	.setup                  = mt753x_setup,
+	.teardown               = mt753x_teardown,
+	.preferred_default_local_cpu_port = mt753x_preferred_default_local_cpu_port,
+	.port_change_conduit	= mt753x_passthrough_port_change_conduit,
+	.get_strings            = mt7530_get_strings,
+	.get_ethtool_stats      = mt7530_get_ethtool_stats,
+	.get_sset_count         = mt7530_get_sset_count,
+	.get_eth_mac_stats      = mt7530_get_eth_mac_stats,
+	.get_rmon_stats         = mt7530_get_rmon_stats,
+	.get_eth_ctrl_stats     = mt7530_get_eth_ctrl_stats,
+	.get_stats64            = mt7530_get_stats64,
+	.set_ageing_time	= mt7530_passthrough_set_ageing_time,
+	.port_enable            = mt7530_port_enable,
+	.port_disable           = mt7530_port_disable,
+	.port_change_mtu	= mt7530_passthrough_port_change_mtu,
+	.port_max_mtu		= mt7530_port_max_mtu,
+	.port_stp_state_set	= mt7530_passthrough_stp_state_set,
+	.port_pre_bridge_flags	= mt7530_port_pre_bridge_flags,
+	.port_bridge_flags	= mt7530_passthrough_port_bridge_flags,
+	.port_bridge_join	= mt7530_passthrough_port_bridge_join,
+	.port_bridge_leave	= mt7530_passthrough_port_bridge_leave,
+	.port_fast_age		= mt7530_passthrough_port_fast_age,
+	.port_fdb_add		= mt7530_passthrough_port_fdb_add,
+	.port_fdb_del		= mt7530_passthrough_port_fdb_del,
+	.port_fdb_dump		= mt7530_port_fdb_dump,
+	.port_mdb_add		= mt7530_passthrough_port_mdb_add,
+	.port_mdb_del		= mt7530_passthrough_port_mdb_del,
+	.port_vlan_filtering	= mt7530_passthrough_port_vlan_filtering,
+	.port_vlan_add		= mt7530_passthrough_port_vlan_add,
+	.port_vlan_del		= mt7530_passthrough_port_vlan_del,
+	.port_mirror_add	= mt753x_passthrough_port_mirror_add,
+	.port_mirror_del	= mt753x_passthrough_port_mirror_del,
+	.phylink_get_caps       = mt753x_phylink_get_caps,
+	.support_eee            = dsa_supports_eee,
+	.set_mac_eee            = mt753x_set_mac_eee,
+	.conduit_state_change   = mt753x_conduit_state_change,
+	.port_setup_tc		= mt753x_passthrough_setup_tc,
+	.port_hsr_join		= dsa_port_simple_hsr_join,
+	.port_hsr_leave		= dsa_port_simple_hsr_leave,
+};
 
 static const struct dsa_switch_ops mt7530_switch_ops = {
 	.get_tag_protocol	= mtk_get_tag_protocol,
@@ -3531,7 +3799,11 @@ EXPORT_SYMBOL_GPL(mt753x_table);
 int
 mt7530_probe_common(struct mt7530_priv *priv)
 {
+	int passthrough = mt753x_check_passthrough(priv->dev);
 	struct device *dev = priv->dev;
+
+	if (passthrough < 0)
+		return passthrough;
 
 	priv->ds = devm_kzalloc(dev, sizeof(*priv->ds), GFP_KERNEL);
 	if (!priv->ds)
@@ -3550,7 +3822,14 @@ mt7530_probe_common(struct mt7530_priv *priv)
 	priv->id = priv->info->id;
 	priv->dev = dev;
 	priv->ds->priv = priv;
-	priv->ds->ops = &mt7530_switch_ops;
+
+	priv->is_passthrough = passthrough;
+
+	if (passthrough)
+		priv->ds->ops = &mt7530_passthrough_switch_ops;
+	else
+		priv->ds->ops = &mt7530_switch_ops;
+
 	priv->ds->phylink_mac_ops = &mt753x_phylink_mac_ops;
 	mutex_init(&priv->reg_mutex);
 	spin_lock_init(&priv->stats_lock);
