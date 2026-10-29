@@ -866,8 +866,7 @@ static void amd_pstate_adjust_perf(struct cpufreq_policy *policy,
 		min_perf = perf.min_limit_perf;
 
 	max_perf = perf.max_limit_perf;
-	if (max_perf < min_perf)
-		max_perf = min_perf;
+	min_perf = min(min_perf, max_perf);
 
 	amd_pstate_update(policy, min_perf, des_perf, max_perf, true,
 			policy->governor->flags);
