@@ -441,16 +441,12 @@ void ntfs_handle_error(struct super_block *sb)
 			sb->s_flags |= SB_RDONLY;
 		} else {
 			/*
-			 * Don't set SB_RDONLY: that needs sb->s_umount and a
-			 * proper remount, and setting it while the volume is
-			 * frozen makes thaw_super() leave the s_writers rwsems
-			 * locked. NV_EmergencyRO makes the volume refuse
-			 * modifications instead and NV_Errors keeps it from
-			 * being remounted read-write. The error work marks
-			 * the volume dirty on disk.
+			 * SB_RDONLY needs s_umount, see sb_set_emergency_ro().
+			 * NV_Errors keeps the volume from being remounted
+			 * read-write and the error work marks it dirty.
 			 */
 			NVolSetErrors(vol);
-			if (test_and_set_bit(NV_EmergencyRO, &vol->flags))
+			if (!sb_set_emergency_ro(sb))
 				return;
 			queue_work(ntfs_wq, &vol->error_work);
 		}
