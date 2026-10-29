@@ -283,3 +283,181 @@ Tracing:
     segment that it could not invalidate. Only a filesystem that uses
     iomap for direct IO emits it, and other fallbacks, such as ext4's
     own, are not traced.
+
+CHOOSING AN NFSD IO MODE
+========================
+
+The correct IO mode for an export depends on the workload of its
+clients. The most important question is this: does NFSD read the same
+data again before the page cache evicts it?
+
+NFS clients keep their own page cache. When a client reads the same
+data again, its own cache usually supplies the data. The READ request
+does not get to the server. Thus, the server page cache helps mostly
+in these conditions:
+
+- Different clients read the same data.
+- A client reads data that a different client wrote recently.
+- A client reads data again after its own page cache evicted the data.
+
+A low server page cache hit rate is thus normal. It does not by itself
+show that buffered IO is the wrong choice.
+
+Use buffered IO for an export when:
+
+- The working set of the export fits in server memory.
+- Many clients read the same files.
+- Clients send small or misaligned WRITEs. The page cache collects
+  these WRITEs and writes them to storage in larger units.
+
+Use dontcache IO for an export when:
+
+- Clients read or write most data only one time.
+- The working set of the export is much larger than server memory.
+- The data of the export causes the page cache to evict data of other
+  exports.
+
+If the underlying filesystem does not support dontcache, NFSD uses
+buffered IO instead. See NFSD DONTCACHE above.
+
+Use direct IO for an export when the conditions for dontcache are true,
+and also:
+
+- Clients send large, aligned READs and WRITEs.
+- Page reclaim uses a large quantity of CPU time, or makes IO stop.
+
+Change the IO mode of one export at a time. Compare the metrics below
+before and after each change.
+
+Metrics to monitor
+------------------
+
+The metrics that follow can help you choose an IO mode. Measure them
+while the export uses buffered IO.
+
+Miss ratio for each export
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``/proc/fs/nfsd/export_stats`` shows the number of bytes that NFSD read
+(``io_read``) and wrote (``io_write``) for each export and client. If the
+kernel has ``CONFIG_TASK_IO_ACCOUNTING``, it also shows the number of
+bytes that storage supplied for these READs (``io_read_storage``). This
+value includes the readahead that the READs started, and the filesystem
+metadata that they needed.
+
+The kernel adds an export to ``export_stats`` when a client first uses
+it. The counters of an export continue when mountd refreshes the export
+or when ``exportfs -r`` flushes the export cache. They restart if the
+export stays out of the export cache for an hour. The start time shows
+when the counters started.
+
+Measure ``io_read`` and ``io_read_storage`` over the same interval. Then
+divide the increase of ``io_read_storage`` by the increase of
+``io_read``. This is the miss ratio of the export.
+
+- A ratio near 1 shows that storage supplies almost all data that NFSD
+  reads. The page cache gives little benefit. Dontcache or direct IO
+  can be a better choice.
+- A ratio much smaller than 1 shows that the page cache supplies a
+  large part of the data. Buffered IO is probably the correct choice.
+- A ratio larger than 1 can show that readahead reads data that clients
+  do not request, for example with small random READs. Metadata reads
+  also increase ``io_read_storage`` without increasing ``io_read``.
+
+A READ of a hole increases ``io_read`` but not ``io_read_storage``,
+because the filesystem supplies zeros without a storage read. Thus, the
+ratio is not an exact page cache miss ratio.
+
+Without ``io_read_storage``, compare ``io_read`` with the number of bytes
+that the block device read. Field 3 of ``/sys/block/<dev>/stat`` shows
+the device reads in 512-byte sectors. You can also use iostat(1). This
+ratio is for all exports on the device. Local applications also cause
+device reads. Thus, this ratio is only an approximate value.
+
+Reads of recently evicted data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When page reclaim evicts a file page, the kernel records the eviction.
+If a task reads that page again soon, the kernel counts a refault.
+``/proc/vmstat`` shows these counters:
+
+- ``workingset_refault_file``: the number of file pages that the kernel
+  read again while it still had a record of their eviction. Some of
+  these reads come too late to count as part of the working set.
+- ``workingset_activate_file``: the number of refaulted file pages that
+  the kernel identified as part of the working set.
+- ``pgsteal_kswapd`` and ``pgsteal_direct``: the number of pages that
+  page reclaim freed.
+
+Use these counters as follows:
+
+- The ``pgsteal`` counters increase quickly, but
+  ``workingset_refault_file`` stays near zero. This shows that clients
+  read most data only one time. To find the export that causes this,
+  use the miss ratio above or cachestat(2).
+- ``workingset_refault_file`` increases quickly. This shows that clients
+  read the data again, but the page cache is too small to keep it.
+  Set dontcache or direct IO on other exports that read data only one
+  time. This gives more page cache to this workload.
+
+These counters are for the full system, not for each export. Dontcache
+IO drops pages without a record of the eviction. Direct IO does not use
+the page cache. Thus, these counters do not include READs that run as
+dontcache or direct IO. A READ that NFSD cannot run as direct IO runs
+as buffered IO and is included. A dontcache READ of a page that the
+kernel evicted earlier also counts a refault.
+
+Page cache state of a file
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The cachestat(2) system call shows the page cache state of a range in a
+file. It is available in Linux 6.5 and later. Its output includes:
+
+- ``nr_cache``: the number of pages in the page cache.
+- ``nr_dirty`` and ``nr_writeback``: the number of pages that wait for
+  writeback, or that are in writeback.
+- ``nr_evicted``: the number of pages that the kernel evicted.
+- ``nr_recently_evicted``: the number of evicted pages that the kernel
+  would still count as part of the working set if a task read them now.
+
+Use cachestat(2) on the frequently used files of an export. This gives
+data for each export. Monitor ``nr_recently_evicted`` on the files of
+one export while a different export is busy. If the value increases
+only while the busy export runs, the busy export probably causes the
+page cache to evict useful data. Local memory pressure also evicts
+pages, so confirm with the refault counters above before you set
+dontcache or direct IO on the busy export.
+
+fincore(1) shows how much of a file is in the page cache.
+
+Cost of page reclaim
+~~~~~~~~~~~~~~~~~~~~
+
+Direct IO helps most when page reclaim uses much CPU time or makes IO
+stop. Monitor these metrics:
+
+- ``/proc/pressure/memory``: the "some" and "full" lines show the
+  percentage of time that tasks waited for memory.
+- ``allocstall_*`` and ``pgscan_direct`` in ``/proc/vmstat``: direct
+  reclaim activity.
+- ``compact_stall`` in ``/proc/vmstat``: memory compaction stalls.
+- The CPU time of the kswapd and kcompactd kernel threads.
+- ``Dirty`` and ``Writeback`` in ``/proc/meminfo``, for WRITE workloads.
+
+High values can occur while NFSD moves large quantities of data that
+clients use only one time. In this condition, direct IO can decrease
+the CPU load and make IO performance more constant.
+
+Client page cache
+~~~~~~~~~~~~~~~~~
+
+On a Linux NFS client, the ``bytes:`` line in ``/proc/self/mountstats``
+shows the bytes that applications read (field 1). It also shows the
+bytes that the client read from the server (field 5). mountstats(8) and
+nfsiostat(8) also show these values.
+
+Field 5 can be much smaller than field 1. This shows that the client
+page cache supplies most reads. In this condition, the server page
+cache keeps copies of data that the clients already have. If other
+clients do not read the same data, dontcache IO on the server can be a
+better choice.
