@@ -557,6 +557,9 @@ static void nfsd_unregister_notifiers(void)
 /**
  * nfsd_destroy_serv - tear down NFSD's svc_serv for a namespace
  * @net: network namespace the NFS service is associated with
+ *
+ * Releases the reference on the nfsd module that nfsd_create_serv()
+ * took.
  */
 void nfsd_destroy_serv(struct net *net)
 {
@@ -580,6 +583,7 @@ void nfsd_destroy_serv(struct net *net)
 	svc_xprt_destroy_all(serv, net, true);
 	nfsd_shutdown_net(net);
 	svc_destroy(&serv);
+	module_put(THIS_MODULE);
 }
 
 void nfsd_reset_versions(struct nfsd_net *nn)
@@ -651,7 +655,11 @@ struct svc_rqst *nfsd_current_rqst(void)
  * @net: network namespace to operate within
  * @no_rpcbind: true if the caller registers the listeners with rpcbind
  *
- * Return: 0 on success or a negative errno.
+ * Takes a reference on the nfsd module that nfsd_destroy_serv()
+ * releases, so that the module stays loaded while the server exists.
+ *
+ * Return: 0 on success, -ENODEV if module unload has already begun,
+ * or another negative errno.
  */
 int nfsd_create_serv(struct net *net, bool no_rpcbind)
 {
@@ -663,10 +671,17 @@ int nfsd_create_serv(struct net *net, bool no_rpcbind)
 	if (nn->nfsd_serv)
 		return 0;
 
+	/*
+	 * A netlink caller does not pin the module, so unload may
+	 * already be under way.
+	 */
+	if (!try_module_get(THIS_MODULE))
+		return -ENODEV;
+
 	error = percpu_ref_init(&nn->nfsd_net_ref, nfsd_net_free,
 				0, GFP_KERNEL);
 	if (error)
-		return error;
+		goto out_put;
 	init_completion(&nn->nfsd_net_free_done);
 	init_completion(&nn->nfsd_net_confirm_done);
 
@@ -678,7 +693,8 @@ int nfsd_create_serv(struct net *net, bool no_rpcbind)
 				 nn->max_blksize, nfsd);
 	if (serv == NULL) {
 		percpu_ref_exit(&nn->nfsd_net_ref);
-		return -ENOMEM;
+		error = -ENOMEM;
+		goto out_put;
 	}
 	serv->sv_tls = true;
 
@@ -689,7 +705,7 @@ int nfsd_create_serv(struct net *net, bool no_rpcbind)
 	if (error < 0) {
 		svc_destroy(&serv);
 		percpu_ref_exit(&nn->nfsd_net_ref);
-		return error;
+		goto out_put;
 	}
 	/*
 	 * Register before publishing nn->nfsd_serv.  Namespaces are only
@@ -705,6 +721,10 @@ int nfsd_create_serv(struct net *net, bool no_rpcbind)
 
 	nfsd_reset_write_verifier(nn);
 	return 0;
+
+out_put:
+	module_put(THIS_MODULE);
+	return error;
 }
 
 int nfsd_nrpools(struct net *net)
