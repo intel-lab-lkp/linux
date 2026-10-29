@@ -13,12 +13,13 @@
 #include <uapi/linux/audit.h>
 #include <linux/sched.h>
 #include <linux/err.h>
+#include <linux/jump_label.h>
 #include <asm/thread_info.h>	/* for TS_COMPAT */
 #include <asm/unistd.h>
 
-/* This is used purely for kernel/trace/trace_syscalls.c */
 typedef long (*sys_call_ptr_t)(const struct pt_regs *);
 extern const sys_call_ptr_t sys_call_table[];
+DECLARE_STATIC_KEY_FALSE(x64_syscall_use_table);
 
 /*
  * Only the low 32 bits of orig_ax are meaningful, so we return int.

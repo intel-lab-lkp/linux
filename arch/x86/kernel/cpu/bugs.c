@@ -32,6 +32,7 @@
 #include <asm/hypervisor.h>
 #include <asm/tlbflush.h>
 #include <asm/cpu.h>
+#include <asm/syscall.h>
 
 #include "cpu.h"
 
@@ -2134,6 +2135,16 @@ static void __init bhi_apply_mitigation(void)
 	setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_VMEXIT);
 }
 
+static void __init syscall_dispatch_apply_mitigation(void)
+{
+	if (!IS_ENABLED(CONFIG_X86_64) || spectre_v2_enabled != SPECTRE_V2_NONE ||
+	    bhi_mitigation != BHI_MITIGATION_OFF)
+		return;
+
+	pr_info("BHI mitigation off, dispatching syscalls through sys_call_table\n");
+	static_branch_enable(&x64_syscall_use_table);
+}
+
 static void __init spectre_v2_select_mitigation(void)
 {
 	if ((spectre_v2_cmd == SPECTRE_V2_CMD_RETPOLINE ||
@@ -3371,6 +3382,7 @@ void __init cpu_select_mitigations(void)
 	bhi_apply_mitigation();
 	tsa_apply_mitigation();
 	vmscape_apply_mitigation();
+	syscall_dispatch_apply_mitigation();
 }
 
 #ifdef CONFIG_SYSFS

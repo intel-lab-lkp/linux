@@ -21,15 +21,19 @@
 #define __SYSCALL_NORETURN __SYSCALL
 
 /*
- * The sys_call_table[] is no longer used for system calls, but
- * kernel/trace/trace_syscalls.c still wants to know the system
- * call address.
+ * Used for dispatch only when x64_syscall_use_table is enabled;
+ * kernel/trace/trace_syscalls.c also wants the system call addresses.
  */
 #define __SYSCALL(nr, sym) __x64_##sym,
 const sys_call_ptr_t sys_call_table[] = {
 #include <asm/syscalls_64.h>
 };
 #undef  __SYSCALL
+
+/*
+ * Decide about syscall dispatch method: x64_sys_call() or sys_call_table
+ */
+DEFINE_STATIC_KEY_FALSE(x64_syscall_use_table);
 
 #define __SYSCALL(nr, sym) case nr: return __x64_##sym(regs);
 
@@ -58,7 +62,10 @@ static __always_inline bool do_syscall_x64(struct pt_regs *regs, unsigned long n
 {
 	if (likely(nr < NR_syscalls)) {
 		nr = array_index_nospec(nr, NR_syscalls);
-		regs->ax = x64_sys_call(regs, (unsigned int)nr);
+		if (static_branch_likely(&x64_syscall_use_table))
+			regs->ax = sys_call_table[nr](regs);
+		else
+			regs->ax = x64_sys_call(regs, (unsigned int)nr);
 		return true;
 	}
 	return false;
