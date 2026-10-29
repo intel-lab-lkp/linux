@@ -2389,6 +2389,19 @@ static int validate_sys_chunk_array(const struct btrfs_fs_info *fs_info,
 
 		chunk = (struct btrfs_chunk *)(sb->sys_chunk_array + cur);
 		num_stripes = btrfs_stack_chunk_num_stripes(chunk);
+		/*
+		 * btrfs_chunk_item_size() cannot represent a chunk without
+		 * stripes; such a chunk is also invalid in the system chunk
+		 * array (system chunks are never remapped).  Check before
+		 * btrfs_chunk_item_size() so a crafted super block is rejected
+		 * with -EUCLEAN instead of tripping its ASSERT().
+		 */
+		if (unlikely(num_stripes == 0)) {
+			btrfs_err(fs_info,
+				  "invalid chunk num_stripes 0 in sys_array at offset %u",
+				  cur);
+			return -EUCLEAN;
+		}
 		if (unlikely(cur + btrfs_chunk_item_size(num_stripes) > sys_array_size))
 			goto short_read;
 		type = btrfs_stack_chunk_type(chunk);
