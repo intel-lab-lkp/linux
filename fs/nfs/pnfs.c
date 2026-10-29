@@ -846,7 +846,8 @@ pnfs_layout_add_bulk_destroy_list(struct inode *inode,
 static int
 pnfs_layout_bulk_destroy_byserver_locked(struct nfs_client *clp,
 		struct nfs_server *server,
-		struct list_head *layout_list)
+		struct list_head *layout_list,
+		enum pnfs_layout_destroy_mode mode)
 	__must_hold(&clp->cl_lock)
 	__must_hold(RCU)
 {
@@ -854,7 +855,9 @@ pnfs_layout_bulk_destroy_byserver_locked(struct nfs_client *clp,
 	struct inode *inode;
 
 	list_for_each_entry_safe(lo, next, &server->layouts, plh_layouts) {
-		if (test_bit(NFS_LAYOUT_INVALID_STID, &lo->plh_flags) ||
+		if ((test_bit(NFS_LAYOUT_INVALID_STID, &lo->plh_flags) &&
+		     (mode != PNFS_LAYOUT_BULK_RETURN ||
+		      list_empty(&lo->plh_segs))) ||
 		    test_bit(NFS_LAYOUT_INODE_FREEING, &lo->plh_flags) ||
 		    !list_empty(&lo->plh_bulk_destroy))
 			continue;
@@ -933,7 +936,7 @@ restart:
 			continue;
 		if (pnfs_layout_bulk_destroy_byserver_locked(clp,
 				server,
-				&layout_list) != 0)
+				&layout_list, mode) != 0)
 			goto restart;
 	}
 	rcu_read_unlock();
@@ -943,7 +946,8 @@ restart:
 }
 
 static void pnfs_layout_build_destroy_list_byclient(struct nfs_client *clp,
-						    struct list_head *list)
+						    struct list_head *list,
+						    enum pnfs_layout_destroy_mode mode)
 {
 	struct nfs_server *server;
 
@@ -952,7 +956,7 @@ static void pnfs_layout_build_destroy_list_byclient(struct nfs_client *clp,
 restart:
 	list_for_each_entry_rcu(server, &clp->cl_superblocks, client_link) {
 		if (pnfs_layout_bulk_destroy_byserver_locked(clp, server,
-							     list) != 0)
+							     list, mode) != 0)
 			goto restart;
 	}
 	rcu_read_unlock();
@@ -963,7 +967,7 @@ static int pnfs_layout_do_destroy_byclid(struct nfs_client *clp,
 					 struct list_head *list,
 					 enum pnfs_layout_destroy_mode mode)
 {
-	pnfs_layout_build_destroy_list_byclient(clp, list);
+	pnfs_layout_build_destroy_list_byclient(clp, list, mode);
 	return pnfs_layout_free_bulk_destroy_list(list, mode);
 }
 
@@ -1000,7 +1004,7 @@ restart:
 		if (!(server->caps & NFS_CAP_REBOOT_LAYOUTRETURN))
 			continue;
 		if (pnfs_layout_bulk_destroy_byserver_locked(clp, server,
-							     list) != 0)
+					list, PNFS_LAYOUT_INVALIDATE) != 0)
 			goto restart;
 	}
 	rcu_read_unlock();
