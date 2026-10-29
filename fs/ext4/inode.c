@@ -6824,28 +6824,32 @@ int ext4_sync_inode_metadata(struct inode *inode, struct writeback_control *wbc)
 {
 	struct ext4_iloc iloc;
 	struct mapping_metadata_bhs *mmb;
+	ext4_fsblk_t block;
 	int err;
 
 	/* We should only get here in nojournal mode */
 	if (WARN_ON_ONCE(EXT4_SB(inode->i_sb)->s_journal))
 		return -EFSCORRUPTED;
 
-	err = __ext4_get_inode_loc_noinmem(inode, &iloc);
+	err = ext4_inode_loc_block(inode, &iloc, &block);
 	if (err)
 		return err;
 	mmb = READ_ONCE(EXT4_I(inode)->i_metadata_bhs);
 	if (mmb) {
 		err = mmb_sync(mmb);
 		if (err)
-			goto out;
+			return err;
 	}
+	/* A block that isn't cached is neither dirty nor under writeback. */
+	iloc.bh = sb_find_get_block_nonatomic(inode->i_sb, block);
+	if (!iloc.bh)
+		return 0;
 	sync_dirty_buffer(iloc.bh);
 	if (buffer_write_io_error(iloc.bh)) {
 		ext4_error_inode_block(inode, iloc.bh->b_blocknr, EIO,
 				       "IO error syncing inode");
 		err = -EIO;
 	}
-out:
 	brelse(iloc.bh);
 	return err;
 }
