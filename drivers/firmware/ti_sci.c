@@ -3154,6 +3154,7 @@ static int ti_sci_suspend(struct device *dev)
 {
 	struct ti_sci_info *info = dev_get_drvdata(dev);
 	struct device *cpu_dev, *cpu_dev_max = NULL;
+	struct ti_sci_pm_ops *pmops = &info->handle.ops.pm_ops;
 	s32 val, cpu_lat = 0;
 	u16 cpu_lat_ms;
 	int i, ret;
@@ -3175,9 +3176,9 @@ static int ti_sci_suspend(struct device *dev)
 			cpu_lat_ms = cpu_lat / USEC_PER_MSEC;
 			dev_dbg(cpu_dev_max, "%s: sending max CPU latency=%u ms\n", __func__,
 				cpu_lat_ms);
-			ret = ti_sci_cmd_set_latency_constraint(&info->handle,
-								cpu_lat_ms,
-								TISCI_MSG_CONSTRAINT_SET);
+			ret = pmops->set_latency_constraint(&info->handle,
+							    cpu_lat_ms,
+							    TISCI_MSG_CONSTRAINT_SET);
 			if (ret)
 				return ret;
 		}
@@ -3209,6 +3210,7 @@ static int ti_sci_resume_noirq(struct device *dev)
 	struct ti_sci_info *info = dev_get_drvdata(dev);
 	struct ti_sci_msg_req_manage_irq *irq_desc;
 	struct ti_sci_irq *irq;
+	struct ti_sci_pm_ops *pmops = &info->handle.ops.pm_ops;
 	struct hlist_node *tmp_node;
 	int ret = 0, err = 0, i;
 	u32 source;
@@ -3262,11 +3264,14 @@ static int ti_sci_resume_noirq(struct device *dev)
 		break;
 	}
 
-	ret = ti_sci_msg_cmd_lpm_wake_reason(&info->handle, &source, &time, &pin, &mode);
-	/* Do not fail to resume on error as the wake reason is not critical */
-	if (!ret)
-		dev_info(dev, "ti_sci: wakeup source:0x%x, pin:0x%x, mode:0x%x\n",
-			 source, pin, mode);
+	if (info->fw_caps & MSG_FLAG_CAPS_LPM_DM_MANAGED) {
+		ret = pmops->lpm_wake_reason(&info->handle, &source, &time, &pin,
+					     &mode);
+		/* Do not fail to resume on error as the wake reason is not critical */
+		if (!ret)
+			dev_info(dev, "ti_sci: wakeup source:0x%x, pin:0x%x, mode:0x%x\n",
+				 source, pin, mode);
+	}
 
 	return err;
 }
