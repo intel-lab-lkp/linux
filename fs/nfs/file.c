@@ -279,6 +279,9 @@ nfs_file_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 		ret = pnfs_sync_inode(inode, !!datasync);
 		if (ret != 0)
 			break;
+		ret = file_check_and_advance_wb_err(file);
+		if (ret != 0)
+			break;
 		nredirtied = atomic_long_read(&nfsi->redirtied_pages);
 		if (nredirtied == save_nredirtied)
 			break;
