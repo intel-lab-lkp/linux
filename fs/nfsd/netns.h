@@ -11,6 +11,7 @@
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
 #include <linux/filelock.h>
+#include <linux/hashtable.h>
 #include <linux/nfs4.h>
 #include <linux/percpu_counter.h>
 #include <linux/percpu-refcount.h>
@@ -76,6 +77,11 @@ struct nfsd_net {
 
 	struct cache_detail *svc_expkey_cache;
 	struct cache_detail *svc_export_cache;
+
+	/* per-export statistics, shared by export cache entries */
+	spinlock_t export_stats_lock;
+	DECLARE_HASHTABLE(export_stats_hash, 6);
+	struct delayed_work export_stats_reaper;
 
 	struct cache_detail *idtoname_cache;
 	struct cache_detail *nametoid_cache;
