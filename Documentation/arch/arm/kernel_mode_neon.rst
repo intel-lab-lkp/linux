@@ -121,6 +121,10 @@ observe the following in addition to the rules above:
 * Compile the unit containing the NEON intrinsics with '-ffreestanding' so GCC
   uses its builtin version of <stdint.h> (this is a C99 header which the kernel
   does not supply);
-* Do not include <arm_neon.h> directly: instead, include <asm/neon-intrinsics.h>,
-  which tweaks some macro definitions so that system headers can be included
-  safely.
+* Do not include <arm_neon.h> directly: instead, include <asm/neon-intrinsics.h>;
+* Do not include <linux/types.h>, or any other kernel header that includes it,
+  into the same compilation unit: some of the C99 types it defines (e.g.,
+  intptr_t) are incompatible with the ones defined by <stdint.h>. The kernel's
+  own u8, u16, u32 and u64 types are provided by <asm/neon-intrinsics.h>, and
+  can be used safely in the prototypes of functions that are called from code
+  that does include <linux/types.h>.
