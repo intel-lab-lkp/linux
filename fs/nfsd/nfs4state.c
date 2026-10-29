@@ -70,6 +70,13 @@
  */
 #define NFSD4_RANDOM_RETRIES	16
 
+/*
+ * Set in every COPY_NOTIFY token's cl_id word and cleared in every
+ * clientid, so the per-client stateid lookup never resolves a token
+ * before the IDR lookup runs.
+ */
+#define NFSD4_CPNTF_CLID_BIT	BIT(31)
+
 #define all_ones {{ ~0, ~0}, ~0}
 static const stateid_t one_stateid = {
 	.si_generation = ~0,
@@ -1000,7 +1007,9 @@ static int nfs4_init_cp_state(struct nfsd_net *nn, copy_stateid_t *stid,
 	int new_id;
 
 	stid->cs_stid.si_opaque.so_clid.cl_boot = (u32)nn->boot_time;
-	stid->cs_stid.si_opaque.so_clid.cl_id = nn->s2s_cp_cl_id;
+	/* so_id is cyclic, so this word carries the token's secret. */
+	stid->cs_stid.si_opaque.so_clid.cl_id = get_random_u32() |
+						NFSD4_CPNTF_CLID_BIT;
 
 	idr_preload(GFP_KERNEL);
 	spin_lock(&nn->s2s_cp_lock);
@@ -3226,9 +3235,7 @@ static __be32 nfsd4_assign_clid_locked(struct nfs4_client *clp,
 		return nfs_ok;
 
 	for (i = 0; i < NFSD4_RANDOM_RETRIES; i++) {
-		id = get_random_u32();
-		if (id == nn->s2s_cp_cl_id)
-			continue;
+		id = get_random_u32() & ~NFSD4_CPNTF_CLID_BIT;
 		if (!cl_id_in_use_locked(nn, id)) {
 			clp->cl_clientid.cl_id = id;
 			return nfs_ok;
@@ -5822,8 +5829,6 @@ nfsd4_init_leases_net(struct nfsd_net *nn)
 	nn->nfsd4_lease = 90;	/* default lease time */
 	nn->nfsd4_grace = 90;
 	nn->clverifier_counter = get_random_u32();
-	/* The COPY_NOTIFY sentinel clientid used by nfs4_init_cp_state() */
-	nn->s2s_cp_cl_id = 0;
 	/* So the first client directory in a fresh netns is named 2. */
 	atomic_set(&nn->client_display_counter, 1);
 
@@ -8630,18 +8635,15 @@ __be32 manage_cpntf_state(struct nfsd_net *nn, stateid_t *st,
 	copy_stateid_t *cps_t;
 	struct nfs4_cpntf_state *state = NULL;
 
-	if (st->si_opaque.so_clid.cl_id != nn->s2s_cp_cl_id)
-		return nfserr_bad_stateid;
-	/*
-	 * With a fixed sentinel clientid, the all-zero stateid and a token
-	 * from a previous nfsd instance both match cl_id, so cl_boot has
-	 * to carry the check.
-	 */
+	/* A token from a previous NFSD instance can name a live key. */
 	if (st->si_opaque.so_clid.cl_boot != (u32)nn->boot_time)
 		return nfserr_bad_stateid;
 	spin_lock(&nn->s2s_cp_lock);
 	/* s2s_cp_stateids holds only COPY_NOTIFY stateids */
 	cps_t = idr_find(&nn->s2s_cp_stateids, st->si_opaque.so_id);
+	if (cps_t && cps_t->cs_stid.si_opaque.so_clid.cl_id !=
+		     st->si_opaque.so_clid.cl_id)
+		cps_t = NULL;
 	if (cps_t) {
 		state = container_of(cps_t, struct nfs4_cpntf_state,
 				     cp_stateid);
@@ -8651,8 +8653,7 @@ __be32 manage_cpntf_state(struct nfsd_net *nn, stateid_t *st,
 				  sizeof(clientid_t))) {
 			/*
 			 * OFFLOAD_CANCEL: only the creating client may cancel.
-			 * so_id is guessable, so without this check any client
-			 * could free another's cpntf state.
+			 * The destination server holds the token too.
 			 */
 			state = NULL;
 			goto unlock;
