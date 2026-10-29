@@ -3983,9 +3983,10 @@ static struct nfs4_client *create_client(struct xdr_netobj name,
 	memcpy(&clp->cl_addr, sa, sizeof(struct sockaddr_storage));
 	RCU_INIT_POINTER(clp->cl_cb_session, NULL);
 	clp->net = net;
+	clp->cl_display_id = atomic_inc_return(&nn->client_display_counter);
 	clp->cl_nfsd_dentry = nfsd_client_mkdir(
 		nn, &clp->cl_nfsdfs,
-		clp->cl_clientid.cl_id - nn->clientid_base,
+		clp->cl_display_id,
 		client_files, dentries);
 	clp->cl_nfsd_info_dentry = dentries[0];
 	if (!clp->cl_nfsd_dentry) {
@@ -5738,6 +5739,8 @@ nfsd4_init_leases_net(struct nfsd_net *nn)
 	nn->clientid_base = get_random_u32();
 	nn->clientid_counter = nn->clientid_base + 1;
 	nn->s2s_cp_cl_id = nn->clientid_counter++;
+	/* So the first client directory in a fresh netns is named 2. */
+	atomic_set(&nn->client_display_counter, 1);
 
 	atomic_set(&nn->nfs4_client_count, 0);
 	si_meminfo(&si);

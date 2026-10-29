@@ -168,6 +168,7 @@ struct nfsd_net {
 	u32 clientid_base;
 	u32 clientid_counter;
 	u32 clverifier_counter;
+	atomic_t client_display_counter;
 
 	/*
 	 * Serializes this namespace's control plane: ->nfsd_serv and the
