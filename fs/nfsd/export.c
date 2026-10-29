@@ -838,14 +838,14 @@ static int check_export(const struct path *path, int *flags,
 static int nfsd_nl_parse_one_export(struct cache_detail *cd,
 				    struct nlattr *attr)
 {
-	struct nlattr *tb[NFSD_A_SVC_EXPORT_FSID + 1];
+	struct nlattr *tb[NFSD_A_SVC_EXPORT_WRITE_IO + 1];
 	struct auth_domain *dom = NULL;
 	struct svc_export exp = {}, *expp;
 	struct nlattr *secinfo_attr;
 	struct timespec64 boot;
 	int err, rem;
 
-	err = nla_parse_nested(tb, NFSD_A_SVC_EXPORT_FSID, attr,
+	err = nla_parse_nested(tb, NFSD_A_SVC_EXPORT_WRITE_IO, attr,
 			       nfsd_svc_export_nl_policy, NULL);
 	if (err)
 		return err;
@@ -873,6 +873,8 @@ static int nfsd_nl_parse_one_export(struct cache_detail *cd,
 	exp.cd = cd;
 	exp.ex_devid_map = NULL;
 	exp.ex_xprtsec_modes = NFSEXP_XPRTSEC_ALL;
+	exp.ex_read_io = NFSD_IO_DEFAULT;
+	exp.ex_write_io = NFSD_IO_DEFAULT;
 
 	/* expiry (required, wallclock seconds) */
 	if (!tb[NFSD_A_SVC_EXPORT_EXPIRY]) {
@@ -985,6 +987,12 @@ static int nfsd_nl_parse_one_export(struct cache_detail *cd,
 				exp.ex_xprtsec_modes |= mode;
 			}
 		}
+
+		/* read-io / write-io (optional u32) */
+		if (tb[NFSD_A_SVC_EXPORT_READ_IO])
+			exp.ex_read_io = nla_get_u32(tb[NFSD_A_SVC_EXPORT_READ_IO]);
+		if (tb[NFSD_A_SVC_EXPORT_WRITE_IO])
+			exp.ex_write_io = nla_get_u32(tb[NFSD_A_SVC_EXPORT_WRITE_IO]);
 
 		err = check_export(&exp.ex_path, &exp.ex_flags,
 				   exp.ex_uuid);
@@ -1342,6 +1350,8 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 	exp.cd = cd;
 	exp.ex_devid_map = NULL;
 	exp.ex_xprtsec_modes = NFSEXP_XPRTSEC_ALL;
+	exp.ex_read_io = NFSD_IO_DEFAULT;
+	exp.ex_write_io = NFSD_IO_DEFAULT;
 
 	/* expiry */
 	err = get_expiry(&mesg, &exp.h.expiry_time);
@@ -1462,6 +1472,12 @@ static int is_export_stats_file(struct seq_file *m)
 	return !strcmp(m->file->f_path.dentry->d_name.name, "export_stats");
 }
 
+static const char * const nfsd_io_mode_names[] = {
+	[NFSD_IO_BUFFERED]	= "buffered",
+	[NFSD_IO_DONTCACHE]	= "dontcache",
+	[NFSD_IO_DIRECT]	= "direct",
+};
+
 static int svc_export_show(struct seq_file *m,
 			   struct cache_detail *cd,
 			   struct cache_head *h)
@@ -1498,6 +1514,12 @@ static int svc_export_show(struct seq_file *m,
 	    !test_bit(CACHE_NEGATIVE, &h->flags)) {
 		exp_flags(m, exp->ex_flags, exp->ex_fsid,
 			  exp->ex_anon_uid, exp->ex_anon_gid, &exp->ex_fslocs);
+		if (exp->ex_read_io != NFSD_IO_DEFAULT)
+			seq_printf(m, ",read_io=%s",
+				   nfsd_io_mode_names[exp->ex_read_io]);
+		if (exp->ex_write_io != NFSD_IO_DEFAULT)
+			seq_printf(m, ",write_io=%s",
+				   nfsd_io_mode_names[exp->ex_write_io]);
 		if (exp->ex_uuid) {
 			int i;
 			seq_puts(m, ",uuid=");
@@ -1564,6 +1586,8 @@ static void export_update(struct cache_head *cnew, struct cache_head *citem)
 		new->ex_flavors[i] = item->ex_flavors[i];
 	}
 	new->ex_xprtsec_modes = item->ex_xprtsec_modes;
+	new->ex_read_io = item->ex_read_io;
+	new->ex_write_io = item->ex_write_io;
 }
 
 static struct cache_head *svc_export_alloc(void)

@@ -16,6 +16,7 @@
 #include <linux/sunrpc/svc_xprt.h>
 
 #include <uapi/linux/nfsd/debug.h>
+#include <uapi/linux/nfsd_netlink.h>
 
 #undef ifdebug
 #ifdef CONFIG_SUNRPC_DEBUG
@@ -134,10 +135,18 @@ extern bool nfsd_disable_splice_read __read_mostly;
 extern bool nfsd_delegts_enabled __read_mostly;
 
 enum {
-	/* Any new NFSD_IO enum value must be added at the end */
-	NFSD_IO_BUFFERED,
-	NFSD_IO_DONTCACHE,
-	NFSD_IO_DIRECT,
+	/* Values are uAPI: per-export modes are sent over netlink */
+	NFSD_IO_BUFFERED	= NFSD_IO_MODE_BUFFERED,
+	NFSD_IO_DONTCACHE	= NFSD_IO_MODE_DONTCACHE,
+	NFSD_IO_DIRECT		= NFSD_IO_MODE_DIRECT,
+	/*
+	 * Kernel-internal only: a per-export mode of NFSD_IO_DEFAULT
+	 * means "follow the global nfsd_io_cache_read/write knob".
+	 * It is never sent across the kernel-userspace interface.
+	 * It is -1 so that it stays distinct from all present and
+	 * future mode values.
+	 */
+	NFSD_IO_DEFAULT = -1,
 };
 
 extern u64 nfsd_io_cache_read __read_mostly;
