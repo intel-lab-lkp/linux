@@ -464,10 +464,10 @@ qla2x00_dfs_fce_release(struct inode *inode, struct file *file)
 	struct qla_hw_data *ha = vha->hw;
 	int rval;
 
-	if (ha->flags.fce_enabled || !ha->fce)
-		goto out;
-
 	mutex_lock(&ha->fce_mutex);
+
+	if (ha->flags.fce_enabled || !ha->fce)
+		goto unlock;
 
 	/* Re-enable FCE tracing. */
 	ha->flags.fce_enabled = 1;
@@ -480,8 +480,8 @@ qla2x00_dfs_fce_release(struct inode *inode, struct file *file)
 		ha->flags.fce_enabled = 0;
 	}
 
+unlock:
 	mutex_unlock(&ha->fce_mutex);
-out:
 	return single_release(inode, file);
 }
 
