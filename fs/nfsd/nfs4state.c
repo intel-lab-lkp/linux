@@ -10369,6 +10369,7 @@ static void
 nfs4_state_destroy_net(struct net *net)
 {
 	int i;
+	copy_stateid_t *cps_t;
 	struct nfs4_client *clp = NULL;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 
@@ -10387,6 +10388,20 @@ nfs4_state_destroy_net(struct net *net)
 			destroy_client(clp);
 		}
 	}
+
+	/*
+	 * A parent stid can outlive the client walk above. Revoking its
+	 * COPY_NOTIFY entries under s2s_cp_lock empties its sc_cp_list before
+	 * the stid's final put, so the put never reaches an IDR destroyed here
+	 * or reinitialized by the next start.
+	 */
+	spin_lock(&nn->s2s_cp_lock);
+	idr_for_each_entry(&nn->s2s_cp_stateids, cps_t, i)
+		revoke_cpntf_state_locked(nn, container_of(cps_t,
+							   struct nfs4_cpntf_state,
+							   cp_stateid));
+	idr_destroy(&nn->s2s_cp_stateids);
+	spin_unlock(&nn->s2s_cp_lock);
 
 	kfree(nn->sessionid_hashtbl);
 	kfree(nn->unconf_id_hashtbl);
