@@ -675,7 +675,7 @@ static void fat_free_eofblocks(struct inode *inode)
 		 * any corruption on the next access to the cluster
 		 * chain for the file.
 		 */
-		err = sync_inode_metadata(inode, inode_needs_sync(inode));
+		err = sync_inode_metadata(inode, 1);
 		if (err) {
 			fat_msg(inode->i_sb, KERN_WARNING, "Failed to "
 					"update on disk inode for unused "
