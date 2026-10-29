@@ -4144,8 +4144,7 @@
 
 			interrupts = <GIC_SPI 300 IRQ_TYPE_LEVEL_HIGH 0>;
 
-			iommus = <&adreno_smmu 0 0x0>,
-				 <&adreno_smmu 1 0x0>;
+			iommus = <&adreno_smmu 0 0x0>;
 
 			operating-points-v2 = <&gpu_opp_table>;
 
@@ -4157,6 +4156,12 @@
 			interconnect-names = "gfx-mem";
 
 			status = "disabled";
+
+			lpac: lpac {
+				compatible = "qcom,lpac";
+
+				iommus = <&adreno_smmu 1 0x0>;
+			};
 
 			gpu_zap_shader: zap-shader {
 				memory-region = <&gpu_micro_code_mem>;
