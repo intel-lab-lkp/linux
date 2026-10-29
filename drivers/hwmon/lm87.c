@@ -170,6 +170,7 @@ struct lm87_data {
 	u8 aout;		/* register value */
 
 	u16 alarms;		/* register values, combined */
+	u16 pending_alarms;	/* alarms read before an I2C error */
 	u8 vid;			/* register values, combined */
 	u8 vrm;
 
@@ -186,75 +187,138 @@ static inline int lm87_write_value(struct i2c_client *client, u8 reg, u8 value)
 	return i2c_smbus_write_byte_data(client, reg, value);
 }
 
+static int lm87_read_reg(struct i2c_client *client, u8 reg, u8 *value)
+{
+	int ret = lm87_read_value(client, reg);
+
+	if (ret < 0)
+		return ret;
+	*value = ret;
+	return 0;
+}
+
+static int lm87_read_temp(struct i2c_client *client, u8 reg, s8 *value)
+{
+	int ret = lm87_read_value(client, reg);
+
+	if (ret < 0)
+		return ret;
+	*value = ret;
+	return 0;
+}
+
 static struct lm87_data *lm87_update_device(struct device *dev)
 {
 	struct i2c_client *client = dev_get_drvdata(dev);
 	struct lm87_data *data = i2c_get_clientdata(client);
+	int i, j, ret;
+	u8 first, second;
 
 	mutex_lock(&data->update_lock);
 
 	if (time_after(jiffies, data->last_updated + HZ) || !data->valid) {
-		int i, j;
-
 		dev_dbg(&client->dev, "Updating data.\n");
 
 		i = (data->channel & CHAN_TEMP3) ? 1 : 0;
 		j = (data->channel & CHAN_TEMP3) ? 5 : 6;
 		for (; i < j; i++) {
-			data->in[i] = lm87_read_value(client,
-				      LM87_REG_IN(i));
-			data->in_min[i] = lm87_read_value(client,
-					  LM87_REG_IN_MIN(i));
-			data->in_max[i] = lm87_read_value(client,
-					  LM87_REG_IN_MAX(i));
+			ret = lm87_read_reg(client, LM87_REG_IN(i), &data->in[i]);
+			if (ret < 0)
+				goto error;
+			ret = lm87_read_reg(client, LM87_REG_IN_MIN(i),
+					    &data->in_min[i]);
+			if (ret < 0)
+				goto error;
+			ret = lm87_read_reg(client, LM87_REG_IN_MAX(i),
+					    &data->in_max[i]);
+			if (ret < 0)
+				goto error;
 		}
 
 		for (i = 0; i < 2; i++) {
 			if (data->channel & CHAN_NO_FAN(i)) {
-				data->in[6+i] = lm87_read_value(client,
-						LM87_REG_AIN(i));
-				data->in_max[6+i] = lm87_read_value(client,
-						    LM87_REG_AIN_MAX(i));
-				data->in_min[6+i] = lm87_read_value(client,
-						    LM87_REG_AIN_MIN(i));
-
+				ret = lm87_read_reg(client, LM87_REG_AIN(i),
+						    &data->in[6 + i]);
+				if (ret < 0)
+					goto error;
+				ret = lm87_read_reg(client, LM87_REG_AIN_MAX(i),
+						    &data->in_max[6 + i]);
+				if (ret < 0)
+					goto error;
+				ret = lm87_read_reg(client, LM87_REG_AIN_MIN(i),
+						    &data->in_min[6 + i]);
+				if (ret < 0)
+					goto error;
 			} else {
-				data->fan[i] = lm87_read_value(client,
-					       LM87_REG_FAN(i));
-				data->fan_min[i] = lm87_read_value(client,
-						   LM87_REG_FAN_MIN(i));
+				ret = lm87_read_reg(client, LM87_REG_FAN(i),
+						    &data->fan[i]);
+				if (ret < 0)
+					goto error;
+				ret = lm87_read_reg(client, LM87_REG_FAN_MIN(i),
+						    &data->fan_min[i]);
+				if (ret < 0)
+					goto error;
 			}
 		}
 
 		j = (data->channel & CHAN_TEMP3) ? 3 : 2;
 		for (i = 0 ; i < j; i++) {
-			data->temp[i] = lm87_read_value(client,
-					LM87_REG_TEMP[i]);
-			data->temp_high[i] = lm87_read_value(client,
-					     LM87_REG_TEMP_HIGH[i]);
-			data->temp_low[i] = lm87_read_value(client,
-					    LM87_REG_TEMP_LOW[i]);
+			ret = lm87_read_temp(client, LM87_REG_TEMP[i],
+					     &data->temp[i]);
+			if (ret < 0)
+				goto error;
+			ret = lm87_read_temp(client, LM87_REG_TEMP_HIGH[i],
+					     &data->temp_high[i]);
+			if (ret < 0)
+				goto error;
+			ret = lm87_read_temp(client, LM87_REG_TEMP_LOW[i],
+					     &data->temp_low[i]);
+			if (ret < 0)
+				goto error;
 		}
 
-		i = lm87_read_value(client, LM87_REG_TEMP_HW_INT_LOCK);
-		j = lm87_read_value(client, LM87_REG_TEMP_HW_INT);
-		data->temp_crit_int = min(i, j);
+		ret = lm87_read_reg(client, LM87_REG_TEMP_HW_INT_LOCK,
+				    &first);
+		if (ret < 0)
+			goto error;
+		ret = lm87_read_reg(client, LM87_REG_TEMP_HW_INT, &second);
+		if (ret < 0)
+			goto error;
+		data->temp_crit_int = min(first, second);
 
-		i = lm87_read_value(client, LM87_REG_TEMP_HW_EXT_LOCK);
-		j = lm87_read_value(client, LM87_REG_TEMP_HW_EXT);
-		data->temp_crit_ext = min(i, j);
+		ret = lm87_read_reg(client, LM87_REG_TEMP_HW_EXT_LOCK,
+				    &first);
+		if (ret < 0)
+			goto error;
+		ret = lm87_read_reg(client, LM87_REG_TEMP_HW_EXT, &second);
+		if (ret < 0)
+			goto error;
+		data->temp_crit_ext = min(first, second);
 
-		i = lm87_read_value(client, LM87_REG_VID_FAN_DIV);
-		data->fan_div[0] = (i >> 4) & 0x03;
-		data->fan_div[1] = (i >> 6) & 0x03;
-		data->vid = (i & 0x0F)
-			  | (lm87_read_value(client, LM87_REG_VID4) & 0x01)
-			     << 4;
+		ret = lm87_read_reg(client, LM87_REG_VID_FAN_DIV, &first);
+		if (ret < 0)
+			goto error;
+		data->fan_div[0] = (first >> 4) & 0x03;
+		data->fan_div[1] = (first >> 6) & 0x03;
+		ret = lm87_read_reg(client, LM87_REG_VID4, &second);
+		if (ret < 0)
+			goto error;
+		data->vid = (first & 0x0F) | (second & 0x01) << 4;
 
-		data->alarms = lm87_read_value(client, LM87_REG_ALARMS1)
-			     | (lm87_read_value(client, LM87_REG_ALARMS2)
-				<< 8);
-		data->aout = lm87_read_value(client, LM87_REG_AOUT);
+		ret = lm87_read_reg(client, LM87_REG_AOUT, &data->aout);
+		if (ret < 0)
+			goto error;
+
+		ret = lm87_read_reg(client, LM87_REG_ALARMS1, &first);
+		if (ret < 0)
+			goto error;
+		ret = lm87_read_reg(client, LM87_REG_ALARMS2, &second);
+		if (ret < 0) {
+			data->pending_alarms |= first;
+			goto error;
+		}
+		data->alarms = data->pending_alarms | first | second << 8;
+		data->pending_alarms = 0;
 
 		data->last_updated = jiffies;
 		data->valid = true;
@@ -263,6 +327,11 @@ static struct lm87_data *lm87_update_device(struct device *dev)
 	mutex_unlock(&data->update_lock);
 
 	return data;
+
+error:
+	data->valid = false;
+	mutex_unlock(&data->update_lock);
+	return ERR_PTR(ret);
 }
 
 /*
@@ -275,6 +344,9 @@ static ssize_t in_input_show(struct device *dev,
 	struct lm87_data *data = lm87_update_device(dev);
 	int nr = to_sensor_dev_attr(attr)->index;
 
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%u\n", IN_FROM_REG(data->in[nr],
 		       data->in_scale[nr]));
 }
@@ -285,6 +357,9 @@ static ssize_t in_min_show(struct device *dev, struct device_attribute *attr,
 	struct lm87_data *data = lm87_update_device(dev);
 	int nr = to_sensor_dev_attr(attr)->index;
 
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%u\n", IN_FROM_REG(data->in_min[nr],
 		       data->in_scale[nr]));
 }
@@ -294,6 +369,9 @@ static ssize_t in_max_show(struct device *dev, struct device_attribute *attr,
 {
 	struct lm87_data *data = lm87_update_device(dev);
 	int nr = to_sensor_dev_attr(attr)->index;
+
+	if (IS_ERR(data))
+		return PTR_ERR(data);
 
 	return sprintf(buf, "%u\n", IN_FROM_REG(data->in_max[nr],
 		       data->in_scale[nr]));
@@ -378,6 +456,9 @@ static ssize_t temp_input_show(struct device *dev,
 	struct lm87_data *data = lm87_update_device(dev);
 	int nr = to_sensor_dev_attr(attr)->index;
 
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%d\n", TEMP_FROM_REG(data->temp[nr]));
 }
 
@@ -386,6 +467,9 @@ static ssize_t temp_low_show(struct device *dev,
 {
 	struct lm87_data *data = lm87_update_device(dev);
 	int nr = to_sensor_dev_attr(attr)->index;
+
+	if (IS_ERR(data))
+		return PTR_ERR(data);
 
 	return sprintf(buf, "%d\n",
 		       TEMP_FROM_REG(data->temp_low[nr]));
@@ -396,6 +480,9 @@ static ssize_t temp_high_show(struct device *dev,
 {
 	struct lm87_data *data = lm87_update_device(dev);
 	int nr = to_sensor_dev_attr(attr)->index;
+
+	if (IS_ERR(data))
+		return PTR_ERR(data);
 
 	return sprintf(buf, "%d\n",
 		       TEMP_FROM_REG(data->temp_high[nr]));
@@ -463,6 +550,9 @@ static ssize_t temp1_crit_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
 	struct lm87_data *data = lm87_update_device(dev);
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%d\n", TEMP_FROM_REG(data->temp_crit_int));
 }
 
@@ -470,6 +560,9 @@ static ssize_t temp2_crit_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
 	struct lm87_data *data = lm87_update_device(dev);
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%d\n", TEMP_FROM_REG(data->temp_crit_ext));
 }
 
@@ -483,6 +576,9 @@ static ssize_t fan_input_show(struct device *dev,
 	struct lm87_data *data = lm87_update_device(dev);
 	int nr = to_sensor_dev_attr(attr)->index;
 
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%d\n", fan_from_reg(data->fan[nr],
 		       FAN_DIV_FROM_REG(data->fan_div[nr])));
 }
@@ -493,6 +589,9 @@ static ssize_t fan_min_show(struct device *dev, struct device_attribute *attr,
 	struct lm87_data *data = lm87_update_device(dev);
 	int nr = to_sensor_dev_attr(attr)->index;
 
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%d\n", fan_from_reg(data->fan_min[nr],
 		       FAN_DIV_FROM_REG(data->fan_div[nr])));
 }
@@ -502,6 +601,9 @@ static ssize_t fan_div_show(struct device *dev, struct device_attribute *attr,
 {
 	struct lm87_data *data = lm87_update_device(dev);
 	int nr = to_sensor_dev_attr(attr)->index;
+
+	if (IS_ERR(data))
+		return PTR_ERR(data);
 
 	return sprintf(buf, "%d\n",
 		       FAN_DIV_FROM_REG(data->fan_div[nr]));
@@ -613,6 +715,9 @@ static ssize_t alarms_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
 {
 	struct lm87_data *data = lm87_update_device(dev);
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%d\n", data->alarms);
 }
 static DEVICE_ATTR_RO(alarms);
@@ -621,6 +726,9 @@ static ssize_t cpu0_vid_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {
 	struct lm87_data *data = lm87_update_device(dev);
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%d\n", vid_from_reg(data->vid, data->vrm));
 }
 static DEVICE_ATTR_RO(cpu0_vid);
@@ -654,6 +762,9 @@ static ssize_t aout_output_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct lm87_data *data = lm87_update_device(dev);
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%d\n", AOUT_FROM_REG(data->aout));
 }
 static ssize_t aout_output_store(struct device *dev,
@@ -686,6 +797,9 @@ static ssize_t alarm_show(struct device *dev, struct device_attribute *attr,
 {
 	struct lm87_data *data = lm87_update_device(dev);
 	int bitnr = to_sensor_dev_attr(attr)->index;
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
 	return sprintf(buf, "%u\n", (data->alarms >> bitnr) & 1);
 }
 static SENSOR_DEVICE_ATTR_RO(in0_alarm, alarm, 0);
