@@ -5314,9 +5314,6 @@ nfsd4_destroy_clientid(struct svc_rqst *rqstp,
 			status = nfserr_clientid_busy;
 			goto out;
 		}
-		status = mark_client_expired_locked(conf);
-		if (status)
-			goto out;
 		clp = conf;
 	} else if (unconf)
 		clp = unconf;
@@ -5328,6 +5325,14 @@ nfsd4_destroy_clientid(struct svc_rqst *rqstp,
 		clp = NULL;
 		status = nfserr_wrong_cred;
 		goto out;
+	}
+	if (conf) {
+		/* Unhashes conf; expire_client() must follow */
+		status = mark_client_expired_locked(conf);
+		if (status) {
+			clp = NULL;
+			goto out;
+		}
 	}
 	trace_nfsd_clid_destroyed(&clp->cl_clientid);
 	unhash_client_locked(clp);
