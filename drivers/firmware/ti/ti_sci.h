@@ -1560,4 +1560,11 @@ struct ti_sci_msg_resp_get_status {
 	u32 status_flags;
 } __packed;
 
+int ti_sci_do_xfer(const struct ti_sci_handle *handle,
+		   u16 msg_type, u32 msg_flags,
+		   void *tx_message, size_t tx_message_size,
+		   void *rx_message, size_t rx_message_size);
+
+void ti_sci_setup_device_ops(struct ti_sci_dev_ops *dops);
+
 #endif /* __TI_SCI_H */
