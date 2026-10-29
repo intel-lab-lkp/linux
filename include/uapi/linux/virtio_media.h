@@ -158,4 +158,17 @@ struct virtio_media_resp_ioctl {
 	struct virtio_media_resp_header hdr;
 };
 
+/**
+ * struct virtio_media_sg_entry - Description of part of a scattered guest
+ *                                memory.
+ * @start: start guest address of the memory segment.
+ * @len: length of this memory segment.
+ * @__reserved: must be set to zero by the driver.
+ */
+struct virtio_media_sg_entry {
+	__le64 start;
+	__le32 len;
+	__le32 __reserved;
+};
+
 #endif // _UAPI__LINUX_VIRTIO_MEDIA_H
