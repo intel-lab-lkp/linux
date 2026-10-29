@@ -45,14 +45,12 @@ static DEFINE_MUTEX(ti_sci_list_mutex);
  * @tx_message:	Transmit message
  * @rx_buf:	Pointer to store received message
  * @rx_len:	Receive message length
- * @xfer_buf:	Preallocated buffer to store receive message
  * @done:	completion event
  */
 struct ti_sci_xfer {
 	struct ti_msgmgr_message tx_message;
 	void *rx_buf;
 	u8 rx_len;
-	u8 *xfer_buf;
 	struct completion done;
 };
 
@@ -287,7 +285,7 @@ static void ti_sci_rx_callback(struct mbox_client *cl, void *m)
 
 	ti_sci_dump_header_dbg(dev, hdr);
 	/* Take a copy to the rx buffer.. */
-	memcpy(xfer->xfer_buf, mbox_msg->buf, xfer->rx_len);
+	memcpy(xfer->rx_buf, mbox_msg->buf, xfer->rx_len);
 	complete(&xfer->done);
 }
 
@@ -522,12 +520,10 @@ static inline int ti_sci_do_xfer(const struct ti_sci_handle *handle,
 	 * state, then ensure that the response is an ACK
 	 */
 	if (response_expected && ret == 0) {
-		if (!ti_sci_is_response_ack(xfer->xfer_buf)) {
+		if (!ti_sci_is_response_ack(xfer->rx_buf)) {
 			dev_warn(dev, "Message response not acknowledged (caller: %pS)\n",
 				 caller);
 			ret = -ENODEV;
-		} else {
-			memcpy(xfer->rx_buf, xfer->xfer_buf, xfer->rx_len);
 		}
 	}
 
@@ -3326,7 +3322,6 @@ static int ti_sci_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	const struct ti_sci_desc *desc;
-	struct ti_sci_xfer *xfer;
 	struct ti_sci_info *info = NULL;
 	struct ti_sci_xfers_info *minfo;
 	struct mbox_client *cl;
@@ -3380,15 +3375,9 @@ static int ti_sci_probe(struct platform_device *pdev)
 	if (!minfo->xfer_alloc_table)
 		return -ENOMEM;
 
-	/* Pre-initialize the buffer pointer to pre-allocated buffers */
-	for (i = 0, xfer = minfo->xfer_block; i < desc->max_msgs; i++, xfer++) {
-		xfer->xfer_buf = devm_kzalloc(dev, desc->max_msg_size,
-					      GFP_KERNEL);
-		if (!xfer->xfer_buf)
-			return -ENOMEM;
-
-		init_completion(&xfer->done);
-	}
+	/* Initialize the xfer completions */
+	for (i = 0; i < desc->max_msgs; i++)
+		init_completion(&minfo->xfer_block[i].done);
 
 	ret = ti_sci_debugfs_create(pdev, info);
 	if (ret)
