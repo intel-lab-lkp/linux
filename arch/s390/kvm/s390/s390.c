@@ -2349,6 +2349,8 @@ static int kvm_s390_set_cmma_bits(struct kvm *kvm,
 	if (r)
 		return -EFAULT;
 
+	gmap_enable_cmm_already_locked(mc, kvm->arch.gmap);
+
 	do {
 		r = kvm_s390_mmu_cache_topup(mc);
 		if (r)
@@ -2358,8 +2360,6 @@ static int kvm_s390_set_cmma_bits(struct kvm *kvm,
 					      args->count, args->mask, bits);
 		}
 	} while (r == -ENOMEM);
-
-	set_bit(GMAP_FLAG_USES_CMM, &kvm->arch.gmap->flags);
 
 	return r <= 0 ? r : -EFAULT;
 }
