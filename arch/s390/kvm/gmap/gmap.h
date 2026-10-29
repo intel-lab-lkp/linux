@@ -113,6 +113,7 @@ void _gmap_handle_vsie_unshadow_event(struct gmap *parent, gfn_t gfn);
 struct gmap *gmap_create_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *gmap,
 				union asce asce, int edat_level);
 void gmap_split_huge_pages(struct gmap *gmap);
+void gmap_enable_cmm_already_locked(struct kvm_s390_mmu_cache *mc, struct gmap *gmap);
 
 static inline bool uses_skeys(struct gmap *gmap)
 {
@@ -345,4 +346,14 @@ static inline bool gmap_is_shadow_valid(struct gmap *sg, union asce asce, int ed
 	return sg->guest_asce.val == asce.val && sg->edat_level == edat_level;
 }
 
+static inline void gmap_enable_cmm(struct kvm_s390_mmu_cache *mc, struct gmap *gmap)
+{
+	/* CMMA already enabled, nothing to do */
+	if (uses_cmm(gmap))
+		return;
+
+	guard(mutex)(&gmap->kvm->slots_arch_lock);
+
+	gmap_enable_cmm_already_locked(mc, gmap);
+}
 #endif /* ARCH_KVM_GMAP_GMAP_H */

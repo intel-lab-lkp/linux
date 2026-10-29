@@ -1524,3 +1524,40 @@ struct gmap *gmap_create_shadow(struct kvm_s390_mmu_cache *mc, struct gmap *pare
 	}
 	return new;
 }
+
+/* Bail out for any allocation failure. This is only a best effort to allocate all page tables. */
+void gmap_enable_cmm_already_locked(struct kvm_s390_mmu_cache *mc, struct gmap *gmap)
+{
+	struct kvm_memory_slot *ms;
+	struct kvm_memslots *slots;
+	gfn_t gfn, start, end;
+	union crste *crstep;
+	union pte *ptep;
+	int flags, bkt;
+
+	if (uses_cmm(gmap))
+		return;
+
+	set_bit(GMAP_FLAG_USES_CMM, &gmap->flags);
+
+	slots = kvm_memslots(gmap->kvm);
+	if (!slots || kvm_memslots_empty(slots))
+		return;
+
+	flags = DAT_WALK_ALLOC | DAT_WALK_SPLIT | (uses_skeys(gmap) ? DAT_WALK_USES_SKEYS : 0);
+
+	kvm_for_each_memslot(ms, bkt, slots) {
+		start = ALIGN(ms->base_gfn, _PAGE_ENTRIES);
+		end = ALIGN_DOWN(ms->base_gfn + ms->npages, _PAGE_ENTRIES);
+
+		for (gfn = start; gfn < end; gfn += _PAGE_ENTRIES) {
+			if (kvm_s390_mmu_cache_topup(mc))
+				return;
+
+			guard(write_lock)(&gmap->kvm->mmu_lock);
+
+			dat_entry_walk(mc, gfn, gmap->asce, flags, TABLE_TYPE_PAGE_TABLE,
+				       &crstep, &ptep);
+		}
+	}
+}
