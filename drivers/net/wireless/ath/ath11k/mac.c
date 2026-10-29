@@ -7793,6 +7793,7 @@ ath11k_mac_update_vif_chan(struct ath11k *ar,
 	int ret;
 	int i;
 	bool monitor_vif = false;
+	unsigned long stopped = 0;
 
 	lockdep_assert_held(&ar->conf_mutex);
 
@@ -7801,6 +7802,33 @@ ath11k_mac_update_vif_chan(struct ath11k *ar,
 	 */
 
 	/* TODO: Update ar->rx_channel */
+
+	/* Take every vdev that is up down and stop it before any of them
+	 * starts on the new channel, as a fresh start of the radio does.
+	 * Restarting the vdevs in place, or stopping and starting them one
+	 * at a time while the others stay started, leaves the radio sending
+	 * at far lower rates on the new channel until it is restarted.
+	 */
+	for (i = 0; i < n_vifs && i < BITS_PER_LONG; i++) {
+		arvif = ath11k_vif_to_arvif(vifs[i].vif);
+
+		if (!arvif->is_started || !arvif->is_up)
+			continue;
+
+		ret = ath11k_wmi_vdev_down(ar, arvif->vdev_id);
+		if (ret)
+			ath11k_warn(ab, "failed to down vdev %d: %d\n",
+				    arvif->vdev_id, ret);
+
+		ret = ath11k_mac_vdev_stop(arvif);
+		if (ret) {
+			ath11k_warn(ab, "failed to stop vdev %d: %d\n",
+				    arvif->vdev_id, ret);
+			continue;
+		}
+
+		stopped |= BIT(i);
+	}
 
 	for (i = 0; i < n_vifs; i++) {
 		arvif = ath11k_vif_to_arvif(vifs[i].vif);
@@ -7815,7 +7843,18 @@ ath11k_mac_update_vif_chan(struct ath11k *ar,
 		 * Firmware expect vdev_restart only if vdev is up.
 		 * If vdev is down then it expect vdev_stop->vdev_start.
 		 */
-		if (arvif->is_up) {
+		if (i < BITS_PER_LONG && (stopped & BIT(i))) {
+			ret = ath11k_mac_vdev_start(arvif, vifs[i].new_ctx);
+			if (ret) {
+				ath11k_warn(ab, "failed to start vdev %d: %d\n",
+					    arvif->vdev_id, ret);
+				continue;
+			}
+
+			/* as enabling the beacon did for the first start */
+			ath11k_mac_set_he_txbf_conf(arvif);
+		} else if (arvif->is_up) {
+			/* the vdev could not be stopped */
 			ret = ath11k_mac_vdev_restart(arvif, vifs[i].new_ctx);
 			if (ret) {
 				ath11k_warn(ab, "failed to restart vdev %d: %d\n",
