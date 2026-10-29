@@ -1571,6 +1571,55 @@ TRACE_EVENT(nfs4_cb_layoutrecall_file,
 		)
 );
 
+TRACE_DEFINE_ENUM(RETURN_FSID);
+TRACE_DEFINE_ENUM(RETURN_ALL);
+
+#define show_layoutrecall_type(type) \
+	__print_symbolic(type, \
+		{ RETURN_FSID,	"FSID" }, \
+		{ RETURN_ALL,	"ALL" })
+
+TRACE_EVENT(nfs4_cb_layoutrecall_bulk,
+		TP_PROTO(
+			const struct nfs_client *clp,
+			u32 recall_type,
+			const struct nfs_fsid *fsid,
+			int error
+		),
+
+		TP_ARGS(clp, recall_type, fsid, error),
+
+		TP_STRUCT__entry(
+			__field(unsigned long, error)
+			__field(u32, recall_type)
+			__field(u64, fsid_major)
+			__field(u64, fsid_minor)
+			__string(dstaddr, clp ? clp->cl_hostname : "unknown")
+		),
+
+		TP_fast_assign(
+			__entry->error = error < 0 ? -error : 0;
+			__entry->recall_type = recall_type;
+			if (recall_type == RETURN_FSID) {
+				__entry->fsid_major = fsid->major;
+				__entry->fsid_minor = fsid->minor;
+			} else {
+				__entry->fsid_major = 0;
+				__entry->fsid_minor = 0;
+			}
+			__assign_str(dstaddr);
+		),
+
+		TP_printk(
+			"error=%ld (%s) type=%s fsid=%llx:%llx dstaddr=%s",
+			-__entry->error,
+			show_nfs4_status(__entry->error),
+			show_layoutrecall_type(__entry->recall_type),
+			__entry->fsid_major, __entry->fsid_minor,
+			__get_str(dstaddr)
+		)
+);
+
 #define show_stateid_type(type) \
 	__print_symbolic(type, \
 		{ NFS4_INVALID_STATEID_TYPE,	"INVALID" }, \
