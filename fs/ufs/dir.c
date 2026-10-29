@@ -64,6 +64,9 @@ static int ufs_handle_dirsync(struct inode *dir)
 	err = filemap_write_and_wait(dir->i_mapping);
 	if (!err)
 		err = sync_inode_metadata(dir, 1);
+	/* The change is done, an error made us read-only in the meantime. */
+	if (err == -EROFS && sb_emergency_ro(dir->i_sb))
+		err = 0;
 	return err;
 }
 
