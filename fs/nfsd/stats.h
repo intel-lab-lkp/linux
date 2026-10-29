@@ -9,6 +9,7 @@
 
 #include <uapi/linux/nfsd/stats.h>
 #include <linux/percpu_counter.h>
+#include <linux/sched.h>
 
 #include "export.h"
 #include "netns.h"
@@ -94,6 +95,38 @@ static inline void nfsd_stats_io_write_add(struct nfsd_net *nn,
 	percpu_counter_add_local(&nn->counter[NFSD_STATS_IO_WRITE], amount);
 	if (exp && exp->ex_stats)
 		percpu_counter_add_local(&exp->ex_stats->counter[EXP_STATS_IO_WRITE],
+					 amount);
+}
+
+/**
+ * nfsd_storage_read_bytes - bytes the current task has read from storage
+ *
+ * submit_bio() charges read bytes to the submitting task, so the change
+ * across a READ is what that READ, including the readahead it starts,
+ * read from storage instead of the page cache.
+ *
+ * Return: the task's storage read byte count, or zero without
+ * CONFIG_TASK_IO_ACCOUNTING.
+ */
+static inline u64 nfsd_storage_read_bytes(void)
+{
+#ifdef CONFIG_TASK_IO_ACCOUNTING
+	return current->ioac.read_bytes;
+#else
+	return 0;
+#endif
+}
+
+/**
+ * nfsd_stats_io_read_storage_add - Count storage bytes read for an NFS READ
+ * @exp: target export
+ * @amount: byte count
+ */
+static inline void nfsd_stats_io_read_storage_add(struct svc_export *exp,
+						  s64 amount)
+{
+	if (exp && exp->ex_stats && amount > 0)
+		percpu_counter_add_local(&exp->ex_stats->counter[EXP_STATS_IO_READ_STORAGE],
 					 amount);
 }
 
