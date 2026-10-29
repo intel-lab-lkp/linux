@@ -90,6 +90,9 @@ enum nvme_rdma_queue_flags {
 	NVME_RDMA_Q_TR_READY		= 2,
 };
 
+#define NVME_RDMA_OPT_NR_QUEUES(opts) ((opts)->nr_io_queues + \
+	(opts)->nr_write_queues + (opts)->nr_poll_queues + 1)
+
 struct nvme_rdma_queue {
 	struct nvme_rdma_qe	*rsp_ring;
 	int			queue_size;
@@ -576,6 +579,19 @@ out_put_dev:
 	return ret;
 }
 
+static void nvme_rdma_init_queue(struct nvme_rdma_ctrl *ctrl, int idx)
+{
+	struct nvme_rdma_queue *queue = &ctrl->queues[idx];
+
+	queue->ctrl = ctrl;
+	mutex_init(&queue->queue_lock);
+}
+
+static void nvme_rdma_exit_queue(struct nvme_rdma_ctrl *ctrl, int idx)
+{
+	mutex_destroy(&ctrl->queues[idx].queue_lock);
+}
+
 static int nvme_rdma_alloc_queue(struct nvme_rdma_queue *queue)
 {
 	struct nvme_rdma_ctrl *ctrl = queue->ctrl;
@@ -583,7 +599,6 @@ static int nvme_rdma_alloc_queue(struct nvme_rdma_queue *queue)
 	struct sockaddr *src_addr = NULL;
 	int ret;
 
-	mutex_init(&queue->queue_lock);
 	if (idx && ctrl->ctrl.max_integrity_segments)
 		queue->pi_support = true;
 	else
@@ -600,8 +615,7 @@ static int nvme_rdma_alloc_queue(struct nvme_rdma_queue *queue)
 	if (IS_ERR(queue->cm_id)) {
 		dev_info(ctrl->ctrl.device,
 			"failed to create CM ID: %ld\n", PTR_ERR(queue->cm_id));
-		ret = PTR_ERR(queue->cm_id);
-		goto out_destroy_mutex;
+		return PTR_ERR(queue->cm_id);
 	}
 
 	if (ctrl->ctrl.opts->mask & NVMF_OPT_HOST_TRADDR)
@@ -631,8 +645,6 @@ static int nvme_rdma_alloc_queue(struct nvme_rdma_queue *queue)
 out_destroy_cm_id:
 	rdma_destroy_id(queue->cm_id);
 	nvme_rdma_destroy_queue_ib(queue);
-out_destroy_mutex:
-	mutex_destroy(&queue->queue_lock);
 	return ret;
 }
 
@@ -660,7 +672,6 @@ static void nvme_rdma_free_queue(struct nvme_rdma_queue *queue)
 
 	rdma_destroy_id(queue->cm_id);
 	nvme_rdma_destroy_queue_ib(queue);
-	mutex_destroy(&queue->queue_lock);
 }
 
 static void nvme_rdma_free_io_queues(struct nvme_rdma_ctrl *ctrl)
@@ -735,7 +746,6 @@ static int nvme_rdma_setup_io_queues(struct nvme_rdma_ctrl *ctrl,
 	for (i = 0; i < nr_queues; i++) {
 		struct nvme_rdma_queue *queue = &ctrl->queues[first + i];
 
-		queue->ctrl = ctrl;
 		queue->queue_size = queue_size;
 
 		ctxs[i].queue = queue;
@@ -798,7 +808,6 @@ static int nvme_rdma_configure_admin_queue(struct nvme_rdma_ctrl *ctrl,
 	bool pi_capable = false;
 	int error;
 
-	ctrl->queues[0].ctrl = ctrl;
 	ctrl->queues[0].queue_size = NVME_AQ_DEPTH;
 	error = nvme_rdma_alloc_queue(&ctrl->queues[0]);
 	if (error)
@@ -1001,6 +1010,7 @@ static void nvme_rdma_stop_ctrl(struct nvme_ctrl *nctrl)
 static void nvme_rdma_free_ctrl(struct nvme_ctrl *nctrl)
 {
 	struct nvme_rdma_ctrl *ctrl = to_rdma_ctrl(nctrl);
+	int i, nr_queues = NVME_RDMA_OPT_NR_QUEUES(nctrl->opts);
 
 	if (list_empty_careful(&ctrl->list))
 		goto free_ctrl;
@@ -1011,6 +1021,8 @@ static void nvme_rdma_free_ctrl(struct nvme_ctrl *nctrl)
 
 	nvmf_free_options(nctrl->opts);
 free_ctrl:
+	for (i = 0; i < nr_queues; i++)
+		nvme_rdma_exit_queue(ctrl, i);
 	kfree(ctrl->queues);
 	kfree(ctrl);
 }
@@ -2284,7 +2296,7 @@ static struct nvme_rdma_ctrl *nvme_rdma_alloc_ctrl(struct device *dev,
 		struct nvmf_ctrl_options *opts)
 {
 	struct nvme_rdma_ctrl *ctrl;
-	int ret;
+	int ret, i;
 
 	ctrl = kzalloc_obj(*ctrl);
 	if (!ctrl)
@@ -2333,8 +2345,7 @@ static struct nvme_rdma_ctrl *nvme_rdma_alloc_ctrl(struct device *dev,
 	INIT_WORK(&ctrl->err_work, nvme_rdma_error_recovery_work);
 	INIT_WORK(&ctrl->ctrl.reset_work, nvme_rdma_reset_ctrl_work);
 
-	ctrl->ctrl.queue_count = opts->nr_io_queues + opts->nr_write_queues +
-				opts->nr_poll_queues + 1;
+	ctrl->ctrl.queue_count = NVME_RDMA_OPT_NR_QUEUES(opts);
 	ctrl->ctrl.sqsize = opts->queue_size - 1;
 	ctrl->ctrl.kato = opts->kato;
 
@@ -2342,6 +2353,9 @@ static struct nvme_rdma_ctrl *nvme_rdma_alloc_ctrl(struct device *dev,
 	ctrl->queues = kzalloc_objs(*ctrl->queues, ctrl->ctrl.queue_count);
 	if (!ctrl->queues)
 		goto out_free_ctrl;
+
+	for (i = 0; i < ctrl->ctrl.queue_count; i++)
+		nvme_rdma_init_queue(ctrl, i);
 
 	ret = nvme_init_ctrl(&ctrl->ctrl, dev, &nvme_rdma_ctrl_ops,
 				0 /* no quirks, we're perfect! */);
