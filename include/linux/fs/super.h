@@ -2,6 +2,7 @@
 #ifndef _LINUX_FS_SUPER_H
 #define _LINUX_FS_SUPER_H
 
+#include <linux/bitops.h>
 #include <linux/fs/super_types.h>
 #include <linux/unicode.h>
 
@@ -185,6 +186,22 @@ static inline bool sb_start_intwrite_trylock(struct super_block *sb)
 static inline bool sb_rdonly(const struct super_block *sb)
 {
 	return sb->s_flags & SB_RDONLY;
+}
+
+/*
+ * An error made the filesystem read-only. Check this wherever sb_rdonly()
+ * gates a write but never where it describes the mount, e.g. in freeze_super()
+ * and thaw_super(). It can get set while the superblock is frozen.
+ */
+static inline bool sb_emergency_ro(const struct super_block *sb)
+{
+	return test_bit(SB_STATE_EMERGENCY_RO, &sb->s_state);
+}
+
+/* True for the caller that set the state. */
+static inline bool sb_set_emergency_ro(struct super_block *sb)
+{
+	return !test_and_set_bit(SB_STATE_EMERGENCY_RO, &sb->s_state);
 }
 
 static inline bool sb_is_blkdev_sb(struct super_block *sb)

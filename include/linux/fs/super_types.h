@@ -238,6 +238,9 @@ struct super_block {
 	/* Read-only state of the superblock is being changed */
 	int					s_readonly_remount;
 
+	/* SB_STATE_* bits, set with set_bit() and never cleared */
+	unsigned long				s_state;
+
 	/* per-sb errseq_t for reporting writeback errors via syncfs */
 	errseq_t s_wb_err;
 
@@ -352,5 +355,21 @@ struct super_block {
 #define SB_I_NOIDMAP	0x00002000	/* No idmapped mounts on this superblock */
 #define SB_I_ALLOW_HSM	0x00004000	/* Allow HSM events on this superblock */
 #define SB_I_NO_DATA_INTEGRITY	0x00008000 /* fs cannot guarantee data persistence on sync */
+
+/*
+ * sb->s_state bits. Set with set_bit() from any context without s_umount and
+ * never cleared, so they can be tested without any ordering against the
+ * setter. Unlike SB_RDONLY which only changes under s_umount in
+ * reconfigure_super().
+ */
+enum {
+	/*
+	 * An error made the filesystem read-only. The VFS refuses modifications
+	 * with EROFS and a remount to read-write until umount. The filesystem
+	 * still has to refuse what doesn't pass through the VFS, including its
+	 * own writeback, see sb_emergency_ro().
+	 */
+	SB_STATE_EMERGENCY_RO,
+};
 
 #endif /* _LINUX_FS_SUPER_TYPES_H */

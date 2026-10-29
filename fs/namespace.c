@@ -396,7 +396,8 @@ out_free_cache:
  */
 bool __mnt_is_readonly(const struct vfsmount *mnt)
 {
-	return (mnt->mnt_flags & MNT_READONLY) || sb_rdonly(mnt->mnt_sb);
+	return (mnt->mnt_flags & MNT_READONLY) || sb_rdonly(mnt->mnt_sb) ||
+	       sb_emergency_ro(mnt->mnt_sb);
 }
 EXPORT_SYMBOL_GPL(__mnt_is_readonly);
 
@@ -5492,6 +5493,9 @@ static void statmount_sb_basic(struct kstatmount *s)
 	s->sm.sb_dev_minor = MINOR(sb->s_dev);
 	s->sm.sb_magic = sb->s_magic;
 	s->sm.sb_flags = sb->s_flags & (SB_RDONLY|SB_SYNCHRONOUS|SB_DIRSYNC|SB_LAZYTIME);
+	/* An error made the filesystem read-only, SB_RDONLY stays clear. */
+	if (sb_emergency_ro(sb))
+		s->sm.sb_flags |= SB_RDONLY;
 }
 
 static void statmount_mnt_parent(struct kstatmount *s, const struct mount *m)

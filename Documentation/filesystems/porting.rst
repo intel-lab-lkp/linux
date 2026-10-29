@@ -1422,3 +1422,19 @@ helpers take a const struct mnt_idmap *. mnt_idmap() and file_mnt_idmap()
 return one. The idmapping is immutable so nothing should have modified it
 anyway. References are taken and dropped via mnt_idmap_get() and
 mnt_idmap_put() as before, both accept a const pointer.
+
+---
+
+**recommended**
+
+Filesystems that set SB_RDONLY on the superblock after an error
+(errors=remount-ro) must not do that anymore. SB_RDONLY only changes under
+sb->s_umount through reconfigure_super() and freeze_super() and thaw_super()
+rely on that. Call sb_set_emergency_ro() instead. The VFS then refuses
+modifications with EROFS, refuses a remount to read-write and shows the
+superblock as read-only. The filesystem still has to refuse what
+reaches it without passing through the VFS: its own allocation and journal
+paths, the deletion of unlinked inodes in ->evict_inode() and its own
+writeback through ->write_inode(), ->writepages() and ->sync_fs(). Test
+sb_emergency_ro() for that. A remount to read-only must not write anything
+in that state either, in particular it must not mark the filesystem clean.
