@@ -434,7 +434,16 @@ pvr_power_device_idle(struct device *dev)
 	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
 	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
 
-	return pvr_power_is_idle(pvr_dev) ? 0 : -EBUSY;
+	if (pvr_power_is_idle(pvr_dev))
+		return 0;
+
+	/*
+	 * Firmware not yet idle; reject but schedule autosuspend so
+	 * runtime_idle() can be retried.
+	 */
+	pm_runtime_autosuspend(dev);
+
+	return -EBUSY;
 }
 
 static int
