@@ -432,9 +432,9 @@ struct hardware_scb {
  * each S/G element is expired, its datacnt field is checked to see
  * if the LAST_SEG flag is set.  If so, SG_LIST_NULL is set in the
  * residual sg ptr and the transfer is considered complete.  If the
- * sequencer determines that there is a residual in the tranfer, it
+ * sequencer determines that there is a residual in the transfer, it
  * will set the SG_RESID_VALID flag in sgptr and dma the scb back into
- * host memory.  To sumarize:
+ * host memory.  To summarize:
  *
  * Sequencer:
  *	o A residual has occurred if SG_FULL_RESID is set in sgptr,
@@ -499,7 +499,7 @@ struct hardware_scb {
  * the length to store additional address bits and a flag to indicate
  * that a given segment terminates the transfer.  This gives us an
  * addressable range of 512GB on machines with 64bit PCI or with chips
- * that can support dual address cycles on 32bit PCI busses.
+ * that can support dual address cycles on 32bit PCI buses.
  */
 struct ahc_dma_seg {
 	uint32_t	addr;
@@ -741,7 +741,7 @@ struct ahc_syncrate {
 #define	AHC_ULTRA2_XFER_PERIOD 0x0a
 
 /*
- * Indexes into our table of syncronous transfer rates.
+ * Indexes into our table of synchronous transfer rates.
  */
 #define AHC_SYNCRATE_DT		0
 #define AHC_SYNCRATE_ULTRA2	1
@@ -970,7 +970,7 @@ struct ahc_softc {
 
 	/*
 	 * Device instance currently on the bus awaiting a continue TIO
-	 * for a command that was not given the disconnect priveledge.
+	 * for a command that was not given the disconnect privilege.
 	 */
 	struct ahc_tmode_lstate  *pending_device;
 
