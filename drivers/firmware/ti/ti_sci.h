@@ -12,6 +12,9 @@
 #ifndef __TI_SCI_H
 #define __TI_SCI_H
 
+#include <linux/compiler_types.h>
+#include <linux/types.h>
+
 /* Generic Messages */
 #define TI_SCI_MSG_ENABLE_WDT	0x0000
 #define TI_SCI_MSG_WAKE_RESET	0x0001
