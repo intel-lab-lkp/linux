@@ -385,7 +385,10 @@ aoeblk_gdalloc(void *vp)
 	spin_lock_irqsave(&d->lock, flags);
 	WARN_ON(!(d->flags & DEVFL_GD_NOW));
 	WARN_ON(!(d->flags & DEVFL_GDALLOC));
-	WARN_ON(d->flags & DEVFL_TKILL);
+	if (d->flags & DEVFL_TKILL) {
+		spin_unlock_irqrestore(&d->lock, flags);
+		goto out_disk_cleanup;
+	}
 	WARN_ON(d->gd);
 	WARN_ON(d->flags & DEVFL_UP);
 	d->bufpool = mp;
@@ -427,7 +430,8 @@ err_mempool:
 err:
 	spin_lock_irqsave(&d->lock, flags);
 	d->flags &= ~DEVFL_GD_NOW;
-	queue_work(aoe_wq, &d->work);
+	if (!(d->flags & DEVFL_TKILL))
+		queue_work(aoe_wq, &d->work);
 	spin_unlock_irqrestore(&d->lock, flags);
 }
 

@@ -787,7 +787,8 @@ rexmit_timer(struct timer_list *timer)
 			 */
 			list_splice(&flist, &d->factive[0]);
 			d->flags |= DEVFL_DEAD;
-			queue_work(aoe_wq, &d->work);
+			if (!(d->flags & DEVFL_TKILL))
+				queue_work(aoe_wq, &d->work);
 			goto out;
 		}
 
@@ -899,6 +900,13 @@ aoecmd_sleepwork(struct work_struct *work)
 {
 	struct aoedev *d = container_of(work, struct aoedev, work);
 
+	spin_lock_irq(&d->lock);
+	if (d->flags & DEVFL_TKILL) {
+		spin_unlock_irq(&d->lock);
+		return;
+	}
+	spin_unlock_irq(&d->lock);
+
 	if (d->flags & DEVFL_DEAD)
 		aoedev_downdev(d);
 
@@ -909,7 +917,8 @@ aoecmd_sleepwork(struct work_struct *work)
 		set_capacity_and_notify(d->gd, d->ssize);
 
 		spin_lock_irq(&d->lock);
-		d->flags |= DEVFL_UP;
+		if (!(d->flags & DEVFL_TKILL))
+			d->flags |= DEVFL_UP;
 		d->flags &= ~DEVFL_NEWSIZE;
 		spin_unlock_irq(&d->lock);
 	}
@@ -974,7 +983,7 @@ ataid_complete(struct aoedev *d, struct aoetgt *t, unsigned char *id)
 			d->fw_ver, (long long)ssize);
 	d->ssize = ssize;
 	d->geo.start = 0;
-	if (d->flags & (DEVFL_GDALLOC|DEVFL_NEWSIZE))
+	if (d->flags & (DEVFL_GDALLOC | DEVFL_NEWSIZE | DEVFL_TKILL))
 		return;
 	if (d->gd != NULL)
 		d->flags |= DEVFL_NEWSIZE;
