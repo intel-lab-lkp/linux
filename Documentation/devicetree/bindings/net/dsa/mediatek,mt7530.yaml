@@ -73,6 +73,11 @@ description: |
 
       Check out example 7.
 
+  The MT7530 and MT7531 switches offer limited support for switch hierarchies,
+  particularly in the case where one or more switches have only one upstream
+  and one downstream port, and can act as blind pass-throughs to a fully
+  featured switch downstream.
+
 properties:
   compatible:
     oneOf:
