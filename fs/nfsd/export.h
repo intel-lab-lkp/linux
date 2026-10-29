@@ -11,6 +11,7 @@
 #include <linux/nfs4.h>
 
 struct knfsd_fh;
+struct nfsd_net;
 struct svc_fh;
 struct svc_rqst;
 
@@ -55,7 +56,22 @@ enum {
 	EXP_STATS_COUNTERS_NUM
 };
 
+/*
+ * Export cache entries are replaced when mountd refreshes them and are
+ * removed by a cache flush. The statistics of an export outlive its
+ * cache entries: every entry for the same export root and client shares
+ * one export_stats, which stays in nn->export_stats_hash for a time
+ * after its last entry is gone.
+ */
 struct export_stats {
+	struct hlist_node	es_node;
+	struct nfsd_net		*es_nn;
+	unsigned int		es_users;	/* under nn->export_stats_lock */
+	time64_t		es_idle_since;
+	dev_t			es_dev;
+	u64			es_ino;
+	u32			es_gen;
+	char			*es_client;
 	time64_t		start_time;
 	struct percpu_counter	counter[EXP_STATS_COUNTERS_NUM];
 };
