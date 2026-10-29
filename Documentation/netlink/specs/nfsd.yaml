@@ -56,6 +56,16 @@ definitions:
     name: nfsclnt-idmax
     value: 1024
     header: linux/nfsd/export.h
+  -
+    type: enum
+    name: io-mode
+    doc: >-
+      NFS READ/WRITE I/O mode. These values match the global io_cache_read
+      and io_cache_write debugfs settings.
+    entries:
+      - buffered
+      - dontcache
+      - direct
 
 attribute-sets:
   -
@@ -302,6 +312,20 @@ attribute-sets:
       -
         name: fsid
         type: s32
+      -
+        name: read-io
+        type: u32
+        enum: io-mode
+        doc: >-
+          Per-export NFS READ I/O mode. When absent, the export follows
+          the global io_cache_read setting.
+      -
+        name: write-io
+        type: u32
+        enum: io-mode
+        doc: >-
+          Per-export NFS WRITE I/O mode. When absent, the export follows
+          the global io_cache_write setting.
   -
     name: svc-export-reqs
     attributes:
