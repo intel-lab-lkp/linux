@@ -63,6 +63,13 @@
 
 #define NFSDDBG_FACILITY                NFSDDBG_PROC
 
+/*
+ * Bound the cl_id retries so a stuck random source cannot spin under
+ * client_lock. A random id collides about N times in 2^32 for N hashed
+ * clients, so the bound is not reached in practice.
+ */
+#define NFSD4_RANDOM_RETRIES	16
+
 #define all_ones {{ ~0, ~0}, ~0}
 static const stateid_t one_stateid = {
 	.si_generation = ~0,
@@ -3174,8 +3181,62 @@ static void gen_confirm(struct nfs4_client *clp, struct nfsd_net *nn)
 static void gen_clid(struct nfs4_client *clp, struct nfsd_net *nn)
 {
 	clp->cl_clientid.cl_boot = (u32)nn->boot_time;
-	clp->cl_clientid.cl_id = nn->clientid_counter++;
 	gen_confirm(clp, nn);
+}
+
+/*
+ * Unlike find_client_in_id_table(), compare cl_id alone: a random id
+ * that matches a hashed client of another minor version, or one marked
+ * expired but not yet unhashed, is still a collision.
+ */
+static bool cl_id_in_use_locked(struct nfsd_net *nn, u32 id)
+{
+	unsigned int idhashval = clientid_hashval(id);
+	struct nfs4_client *clp;
+
+	lockdep_assert_held(&nn->client_lock);
+
+	list_for_each_entry(clp, &nn->conf_id_hashtbl[idhashval], cl_idhash)
+		if (clp->cl_clientid.cl_id == id)
+			return true;
+	list_for_each_entry(clp, &nn->unconf_id_hashtbl[idhashval], cl_idhash)
+		if (clp->cl_clientid.cl_id == id)
+			return true;
+	return false;
+}
+
+/*
+ * The caller inserts @clp with add_to_unconfirmed() under the same
+ * hold of client_lock, so no other client can take the chosen id
+ * first. When @conf holds a verifier matching @verf, SETCLIENTID fills
+ * cl_id from @conf with copy_clid() instead, so no random id is
+ * assigned.
+ */
+static __be32 nfsd4_assign_clid_locked(struct nfs4_client *clp,
+				       struct nfsd_net *nn,
+				       struct nfs4_client *conf,
+				       nfs4_verifier *verf)
+{
+	u32 id;
+	int i;
+
+	lockdep_assert_held(&nn->client_lock);
+
+	if (conf && same_verf(&conf->cl_verifier, verf))
+		return nfs_ok;
+
+	for (i = 0; i < NFSD4_RANDOM_RETRIES; i++) {
+		id = get_random_u32();
+		if (id == nn->s2s_cp_cl_id)
+			continue;
+		if (!cl_id_in_use_locked(nn, id)) {
+			clp->cl_clientid.cl_id = id;
+			return nfs_ok;
+		}
+	}
+	pr_warn_ratelimited("NFSD: no unused clientid after %d tries\n",
+			    NFSD4_RANDOM_RETRIES);
+	return nfserr_jukebox;
 }
 
 static struct nfs4_stid *
@@ -3252,12 +3313,20 @@ static int client_info_show(struct seq_file *m, void *v)
 	struct inode *inode = file_inode(m->file);
 	struct nfsd4_session *ses;
 	struct nfs4_client *clp;
+	struct nfsd_net *nn;
 	u64 clid;
 
 	clp = get_nfsdfs_clp(inode);
 	if (!clp)
 		return -ENXIO;
+	/*
+	 * create_client() publishes this file before cl_id is assigned
+	 * under client_lock.
+	 */
+	nn = net_generic(clp->net, nfsd_net_id);
+	spin_lock(&nn->client_lock);
 	memcpy(&clid, &clp->cl_clientid, sizeof(clid));
+	spin_unlock(&nn->client_lock);
 	seq_printf(m, "clientid: 0x%llx\n", clid);
 	seq_printf(m, "address: \"%pISpc\"\n", (struct sockaddr *)&clp->cl_addr);
 
@@ -4331,6 +4400,7 @@ nfsd4_exchange_id(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfs4_client *conf, *new;
 	struct nfs4_client *unconf = NULL;
 	__be32 status;
+	bool			fresh = false;
 	char			addr_str[INET6_ADDRSTRLEN];
 	nfs4_verifier		verf = exid->verifier;
 	struct sockaddr		*sa = svc_addr(rqstp);
@@ -4438,6 +4508,9 @@ nfsd4_exchange_id(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 				trace_nfsd_clid_cred_mismatch(conf, rqstp);
 				goto out;
 			}
+			status = nfsd4_assign_clid_locked(new, nn, NULL, NULL);
+			if (status)
+				goto out;
 			goto out_new;
 		}
 		if (verfs_match) { /* case 2 */
@@ -4447,6 +4520,9 @@ nfsd4_exchange_id(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		}
 		/* case 5, client reboot */
 		trace_nfsd_clid_verf_mismatch(conf, rqstp, &verf);
+		status = nfsd4_assign_clid_locked(new, nn, NULL, NULL);
+		if (status)
+			goto out;
 		conf = NULL;
 		goto out_new;
 	}
@@ -4456,12 +4532,16 @@ nfsd4_exchange_id(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		goto out;
 	}
 
+	status = nfsd4_assign_clid_locked(new, nn, NULL, NULL);
+	if (status)
+		goto out;
+
 	unconf = find_unconfirmed_client_by_name(&exid->clname, nn);
 	if (unconf) /* case 4, possible retry or client restart */
 		unhash_client_locked(unconf);
 
 	/* case 1, new owner ID */
-	trace_nfsd_clid_fresh(new);
+	fresh = true;
 
 out_new:
 	if (conf) {
@@ -4478,6 +4558,8 @@ out_new:
 	new->cl_cs_slot.sl_status = nfserr_seq_misordered;
 
 	add_to_unconfirmed(new);
+	if (fresh)
+		trace_nfsd_clid_fresh(new);
 	swap(new, conf);
 out_copy:
 	exid->clientid.cl_boot = conf->cl_clientid.cl_boot;
@@ -5411,6 +5493,9 @@ nfsd4_setclientid(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 			goto out;
 		}
 	}
+	status = nfsd4_assign_clid_locked(new, nn, conf, &clverifier);
+	if (status)
+		goto out;
 	unconf = find_unconfirmed_client_by_name(&clname, nn);
 	if (unconf)
 		unhash_client_locked(unconf);
@@ -5421,11 +5506,12 @@ nfsd4_setclientid(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		} else
 			trace_nfsd_clid_verf_mismatch(conf, rqstp,
 						      &clverifier);
-	} else
-		trace_nfsd_clid_fresh(new);
+	}
 	new->cl_minorversion = 0;
-	gen_callback(new, setclid, rqstp);
 	add_to_unconfirmed(new);
+	gen_callback(new, setclid, rqstp);
+	if (!conf)
+		trace_nfsd_clid_fresh(new);
 	setclid->se_clientid.cl_boot = new->cl_clientid.cl_boot;
 	setclid->se_clientid.cl_id = new->cl_clientid.cl_id;
 	memcpy(setclid->se_confirm.data, new->cl_confirm.data, sizeof(setclid->se_confirm.data));
@@ -5736,9 +5822,8 @@ nfsd4_init_leases_net(struct nfsd_net *nn)
 	nn->nfsd4_lease = 90;	/* default lease time */
 	nn->nfsd4_grace = 90;
 	nn->clverifier_counter = get_random_u32();
-	nn->clientid_base = get_random_u32();
-	nn->clientid_counter = nn->clientid_base + 1;
-	nn->s2s_cp_cl_id = nn->clientid_counter++;
+	/* The COPY_NOTIFY sentinel clientid used by nfs4_init_cp_state() */
+	nn->s2s_cp_cl_id = 0;
 	/* So the first client directory in a fresh netns is named 2. */
 	atomic_set(&nn->client_display_counter, 1);
 
@@ -8546,6 +8631,13 @@ __be32 manage_cpntf_state(struct nfsd_net *nn, stateid_t *st,
 	struct nfs4_cpntf_state *state = NULL;
 
 	if (st->si_opaque.so_clid.cl_id != nn->s2s_cp_cl_id)
+		return nfserr_bad_stateid;
+	/*
+	 * With a fixed sentinel clientid, the all-zero stateid and a token
+	 * from a previous nfsd instance both match cl_id, so cl_boot has
+	 * to carry the check.
+	 */
+	if (st->si_opaque.so_clid.cl_boot != (u32)nn->boot_time)
 		return nfserr_bad_stateid;
 	spin_lock(&nn->s2s_cp_lock);
 	/* s2s_cp_stateids holds only COPY_NOTIFY stateids */
