@@ -448,19 +448,22 @@ EXPORT_SYMBOL_GPL(slim_stream_disable);
  */
 int slim_stream_unprepare(struct slim_stream_runtime *stream)
 {
-	int i;
+	int ret = 0, err, i;
 
 	if (!stream->ports || !stream->num_ports)
 		return -EINVAL;
 
-	for (i = 0; i < stream->num_ports; i++)
-		slim_disconnect_port(stream, &stream->ports[i]);
+	for (i = 0; i < stream->num_ports; i++) {
+		err = slim_disconnect_port(stream, &stream->ports[i]);
+		if (err && !ret)
+			ret = err;
+	}
 
 	kfree(stream->ports);
 	stream->ports = NULL;
 	stream->num_ports = 0;
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(slim_stream_unprepare);
 
