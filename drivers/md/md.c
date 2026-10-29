@@ -7486,7 +7486,7 @@ static int get_disk_info(struct mddev *mddev, void __user * arg)
 	return 0;
 }
 
-int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info)
+int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info64 *info)
 {
 	struct md_rdev *rdev;
 	dev_t dev = MKDEV(info->major,info->minor);
@@ -8305,6 +8305,15 @@ static bool md_ioctl_need_suspend(unsigned int cmd)
 	}
 }
 
+static void disk_info_to64(struct mdu_disk_info64 *info64, mdu_disk_info_t *info)
+{
+	info64->number = info->number;
+	info64->major = info->major;
+	info64->minor = info->minor;
+	info64->raid_disk = info->raid_disk;
+	info64->state = info->state;
+}
+
 static int __md_set_array_info(struct mddev *mddev, void __user *argp)
 {
 	mdu_array_info_t info;
@@ -8452,13 +8461,16 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 		 */
 		if (mddev->pers) {
 			mdu_disk_info_t info;
+			struct mdu_disk_info64 info64 = {0};
 			if (copy_from_user(&info, argp, sizeof(info)))
 				err = -EFAULT;
 			else if (!(info.state & (1<<MD_DISK_SYNC)))
 				/* Need to clear read-only for this */
 				break;
-			else
-				err = md_add_new_disk(mddev, &info);
+			else {
+				disk_info_to64(&info64, &info);
+				err = md_add_new_disk(mddev, &info64);
+			}
 			goto unlock;
 		}
 		break;
@@ -8493,10 +8505,13 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 	case ADD_NEW_DISK:
 	{
 		mdu_disk_info_t info;
+		struct mdu_disk_info64 info64 = {0};
 		if (copy_from_user(&info, argp, sizeof(info)))
 			err = -EFAULT;
-		else
-			err = md_add_new_disk(mddev, &info);
+		else {
+			disk_info_to64(&info64, &info);
+			err = md_add_new_disk(mddev, &info64);
+		}
 		goto unlock;
 	}
 

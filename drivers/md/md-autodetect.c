@@ -201,7 +201,7 @@ static void __init md_setup_drive(struct md_setup_args *args)
 	err = md_set_array_info(mddev, &ainfo);
 
 	for (i = 0; i <= MD_SB_DISKS && devices[i]; i++) {
-		struct mdu_disk_info_s dinfo = {
+		struct mdu_disk_info64 dinfo = {
 			.major	= MAJOR(devices[i]),
 			.minor	= MINOR(devices[i]),
 		};
