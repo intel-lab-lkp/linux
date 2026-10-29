@@ -557,10 +557,13 @@ static int copy_urb_data_to_user(u8 __user *userbuffer, struct urb *urb)
 {
 	unsigned i, len, size;
 
-	if (urb->number_of_packets > 0)		/* Isochronous */
+	if (urb->number_of_packets > 0) {	/* Isochronous */
 		len = urb->transfer_buffer_length;
-	else					/* Non-Isoc */
+	} else {				/* Non-Isoc */
 		len = urb->actual_length;
+		if (len > urb->transfer_buffer_length)
+			len = urb->transfer_buffer_length;
+	}
 
 	if (urb->num_sgs == 0) {
 		if (copy_to_user(userbuffer, urb->transfer_buffer, len))
