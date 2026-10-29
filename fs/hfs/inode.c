@@ -54,7 +54,7 @@ int hfs_write_begin(const struct kiocb *iocb, struct address_space *mapping,
 	loff_t total_capacity;
 	int ret;
 
-	if (unlikely(hfs_emergency_ro(inode->i_sb)))
+	if (unlikely(sb_emergency_ro(inode->i_sb)))
 		return -EROFS;
 
 	total_capacity = (loff_t)sbi->fs_ablocks * sbi->alloc_blksz;
@@ -143,7 +143,7 @@ static ssize_t hfs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	ssize_t ret;
 
 	if (iov_iter_rw(iter) == WRITE &&
-	    unlikely(hfs_emergency_ro(inode->i_sb)))
+	    unlikely(sb_emergency_ro(inode->i_sb)))
 		return -EROFS;
 
 	ret = blockdev_direct_IO(iocb, inode, iter, hfs_get_block);
@@ -479,11 +479,8 @@ int hfs_write_inode(struct inode *inode, struct writeback_control *wbc)
 	int res;
 
 	hfs_dbg("ino %llu\n", inode->i_ino);
-	if (unlikely(hfs_emergency_ro(inode->i_sb))) {
-		/*
-		 * Writeback still writes the b-tree nodes. Keep the headers in
-		 * sync with them so the trees on disk stay intact.
-		 */
+	if (unlikely(sb_emergency_ro(inode->i_sb))) {
+		/* Keep the headers in sync with the nodes writeback still writes. */
 		if (inode->i_ino == HFS_EXT_CNID)
 			hfs_btree_write(HFS_SB(inode->i_sb)->ext_tree);
 		else if (inode->i_ino == HFS_CAT_CNID)
@@ -640,8 +637,6 @@ void hfs_evict_inode(struct inode *inode)
 
 static int hfs_file_open(struct inode *inode, struct file *file)
 {
-	if ((file->f_mode & FMODE_WRITE) && hfs_emergency_ro(inode->i_sb))
-		return -EROFS;
 	if (HFS_IS_RSRC(inode))
 		inode = HFS_I(inode)->rsrc_inode;
 	atomic_inc(&HFS_I(inode)->opencnt);
@@ -672,9 +667,6 @@ int hfs_inode_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
 	struct inode *inode = d_inode(dentry);
 	struct hfs_sb_info *hsb = HFS_SB(inode->i_sb);
 	int error;
-
-	if (unlikely(hfs_emergency_ro(inode->i_sb)))
-		return -EROFS;
 
 	error = setattr_prepare(&nop_mnt_idmap, dentry, attr);
 	if (error)
@@ -726,10 +718,6 @@ static int hfs_file_fsync(struct file *filp, loff_t start, loff_t end,
 	struct inode *inode = filp->f_mapping->host;
 	struct super_block * sb;
 	int ret, err;
-
-	/* Inodes aren't written back after an error. */
-	if (unlikely(hfs_emergency_ro(inode->i_sb)))
-		return -EROFS;
 
 	ret = file_write_and_wait_range(filp, start, end);
 	if (ret)
