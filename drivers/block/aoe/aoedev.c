@@ -286,6 +286,7 @@ freedev(struct aoedev *d)
 		return;
 
 	timer_delete_sync(&d->timer);
+	cancel_work_sync(&d->work);
 	if (d->gd) {
 		aoedisk_rm_debugfs(d);
 		del_gendisk(d->gd);
@@ -311,6 +312,8 @@ enum flush_parms {
 	EXITING = 1,
 };
 
+static DEFINE_MUTEX(flush_mutex);
+
 static int
 flush(const char __user *str, size_t cnt, int exiting)
 {
@@ -333,6 +336,7 @@ flush(const char __user *str, size_t cnt, int exiting)
 			specified = 1;
 	}
 
+	mutex_lock(&flush_mutex);
 	flush_workqueue(aoe_wq);
 	/* pass one: do aoedev_downdev, which might sleep */
 restart1:
@@ -353,10 +357,11 @@ restart1:
 		|| d->ref)
 			goto cont;
 
+		d->flags |= DEVFL_TKILL;
 		spin_unlock(&d->lock);
 		spin_unlock_irqrestore(&devlist_lock, flags);
+		cancel_work_sync(&d->work);
 		aoedev_downdev(d);
-		d->flags |= DEVFL_TKILL;
 		goto restart1;
 cont:
 		spin_unlock(&d->lock);
@@ -397,6 +402,7 @@ restart2:
 		kfree(doomed);
 	}
 	spin_unlock_irqrestore(&devlist_lock, flags);
+	mutex_unlock(&flush_mutex);
 
 	return 0;
 }
