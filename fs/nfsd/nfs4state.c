@@ -92,8 +92,6 @@ static const stateid_t close_stateid = {
 	.si_generation = 0xffffffffU,
 };
 
-static u64 current_sessionid = 1;
-
 bool nfsd_delegts_enabled __read_mostly = true;
 
 #define ZERO_STATEID(stateid) (!memcmp((stateid), &zero_stateid, sizeof(stateid_t)))
@@ -2300,15 +2298,14 @@ void nfsd4_bump_seqid(struct nfsd4_compound_state *cstate, __be32 nfserr)
 }
 
 static void
-gen_sessionid(struct nfsd4_session *ses)
+gen_sessionid(struct nfsd4_session *ses, u64 rand)
 {
 	struct nfs4_client *clp = ses->se_client;
 	struct nfsd4_sessionid *sid;
 
 	sid = (struct nfsd4_sessionid *)ses->se_sessionid.data;
 	sid->clientid = clp->cl_clientid;
-	sid->sequence = current_sessionid++;
-	sid->reserved = 0;
+	nfsd4_sessionid_set_rand(sid, rand);
 }
 
 /*
@@ -2633,13 +2630,15 @@ nfsd_slot_shrinker_scan(struct shrinker *s, struct shrink_control *sc)
 	return freed;
 }
 
-static void init_session(struct svc_rqst *rqstp, struct nfsd4_session *new, struct nfs4_client *clp, struct nfsd4_create_session *cses)
+static void init_session(struct svc_rqst *rqstp, struct nfsd4_session *new,
+			 struct nfs4_client *clp,
+			 struct nfsd4_create_session *cses, u64 sessionid_rand)
 {
 	int idx;
 	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 
 	new->se_client = clp;
-	gen_sessionid(new);
+	gen_sessionid(new, sessionid_rand);
 
 	INIT_LIST_HEAD(&new->se_conns);
 
@@ -2698,6 +2697,29 @@ __find_in_sessionid_hashtbl(struct nfs4_sessionid *sessionid, struct net *net)
 
 	dprintk("%s: session not found\n", __func__);
 	return NULL;
+}
+
+/* A candidate need only differ from the ID of every live session. */
+static __be32 nfsd4_assign_sessionid_locked(struct net *net,
+					    const clientid_t *clid, u64 *rand)
+{
+	struct nfs4_sessionid candidate __aligned(4);
+	struct nfsd4_sessionid *sid = (struct nfsd4_sessionid *)candidate.data;
+	int i;
+
+	sid->clientid = *clid;
+	for (i = 0; i < NFSD4_RANDOM_RETRIES; i++) {
+		u64 value = get_random_u64();
+
+		nfsd4_sessionid_set_rand(sid, value);
+		if (!__find_in_sessionid_hashtbl(&candidate, net)) {
+			*rand = value;
+			return nfs_ok;
+		}
+	}
+	pr_warn_ratelimited("NFSD: no unused session ID after %d tries\n",
+			    NFSD4_RANDOM_RETRIES);
+	return nfserr_jukebox;
 }
 
 static struct nfsd4_session *
@@ -4752,6 +4774,7 @@ nfsd4_create_session(struct svc_rqst *rqstp,
 	struct nfs4_client *old = NULL;
 	struct nfsd4_session *new;
 	struct nfsd4_conn *conn;
+	u64 sessionid_rand;
 	__be32 status = 0;
 	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 
@@ -4808,6 +4831,16 @@ nfsd4_create_session(struct svc_rqst *rqstp,
 		goto out_cache_error;
 	}
 
+	/*
+	 * Assign the session ID before Phase 3 so a failure expires and
+	 * confirms nothing.
+	 */
+	status = nfsd4_assign_sessionid_locked(SVC_NET(rqstp),
+					       &cr_ses->clientid,
+					       &sessionid_rand);
+	if (status)
+		goto out_expired_error;
+
 	/* RFC 8881 Section 18.36.4 Phase 3: Client ID confirmation. */
 	if (conf) {
 		status = nfserr_wrong_cred;
@@ -4843,7 +4876,7 @@ nfsd4_create_session(struct svc_rqst *rqstp,
 	/* Report the correct number of backchannel slots */
 	cr_ses->back_channel.maxreqs = new->se_cb_highest_slot + 1;
 
-	init_session(rqstp, new, conf, cr_ses);
+	init_session(rqstp, new, conf, cr_ses, sessionid_rand);
 	nfsd4_get_session_locked(new);
 
 	memcpy(cr_ses->sessionid.data, new->se_sessionid.data,
@@ -6360,15 +6393,15 @@ bool nfsd_wait_for_delegreturn(struct svc_rqst *rqstp, struct inode *inode)
 }
 
 /*
- * gen_sessionid() composes a sessionid from the client's clientid and a
- * sequence counter, so the sequence alone identifies the granting session.
+ * gen_sessionid() composes a sessionid from the client's clientid and
+ * a 64-bit random value, so the random half alone identifies the
+ * granting session.
  */
 static void nfsd4_recall_grant_sessionid(const struct nfs4_delegation *dp,
 					 struct nfsd4_sessionid *sid)
 {
 	sid->clientid = dp->dl_stid.sc_client->cl_clientid;
-	sid->sequence = dp->dl_recall_grant.sessionid_seq;
-	sid->reserved = 0;
+	nfsd4_sessionid_set_rand(sid, dp->dl_recall_grant.sessionid_rand);
 }
 
 static bool nfsd4_recall_grant_slot_retired(struct nfs4_delegation *dp)
@@ -7135,7 +7168,7 @@ nfs4_delegation_record_grant_slot(struct nfs4_delegation *dp,
 	if (!cstate->session)
 		return;
 	sid = (struct nfsd4_sessionid *)cstate->session->se_sessionid.data;
-	dp->dl_recall_grant.sessionid_seq = sid->sequence;
+	dp->dl_recall_grant.sessionid_rand = nfsd4_sessionid_rand(sid);
 	dp->dl_recall_grant.slotid = cstate->slot->sl_index;
 	dp->dl_recall_grant.seqid = cstate->slot->sl_seqid;
 	dp->dl_recall_grant.valid = true;
