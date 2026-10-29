@@ -794,7 +794,8 @@ bl_prepare_layoutcommit(struct nfs4_layoutcommit_args *arg)
 static void
 bl_cleanup_layoutcommit(struct nfs4_layoutcommit_data *lcdata)
 {
-	ext_tree_mark_committed(&lcdata->args, lcdata->res.status);
+	ext_tree_mark_committed(&lcdata->args,
+				lcdata->res.status ?: lcdata->task.tk_status);
 }
 
 static int
