@@ -305,6 +305,7 @@ static ssize_t in_min_store(struct device *dev, struct device_attribute *attr,
 	struct i2c_client *client = dev_get_drvdata(dev);
 	struct lm87_data *data = i2c_get_clientdata(client);
 	int nr = to_sensor_dev_attr(attr)->index;
+	u8 reg;
 	long val;
 	int err;
 
@@ -312,12 +313,14 @@ static ssize_t in_min_store(struct device *dev, struct device_attribute *attr,
 	if (err)
 		return err;
 
+	reg = IN_TO_REG(val, data->in_scale[nr]);
 	mutex_lock(&data->update_lock);
-	data->in_min[nr] = IN_TO_REG(val, data->in_scale[nr]);
-	lm87_write_value(client, nr < 6 ? LM87_REG_IN_MIN(nr) :
-			 LM87_REG_AIN_MIN(nr - 6), data->in_min[nr]);
+	err = lm87_write_value(client, nr < 6 ? LM87_REG_IN_MIN(nr) :
+			       LM87_REG_AIN_MIN(nr - 6), reg);
+	if (!err)
+		data->in_min[nr] = reg;
 	mutex_unlock(&data->update_lock);
-	return count;
+	return err < 0 ? err : count;
 }
 
 static ssize_t in_max_store(struct device *dev, struct device_attribute *attr,
@@ -326,6 +329,7 @@ static ssize_t in_max_store(struct device *dev, struct device_attribute *attr,
 	struct i2c_client *client = dev_get_drvdata(dev);
 	struct lm87_data *data = i2c_get_clientdata(client);
 	int nr = to_sensor_dev_attr(attr)->index;
+	u8 reg;
 	long val;
 	int err;
 
@@ -333,12 +337,14 @@ static ssize_t in_max_store(struct device *dev, struct device_attribute *attr,
 	if (err)
 		return err;
 
+	reg = IN_TO_REG(val, data->in_scale[nr]);
 	mutex_lock(&data->update_lock);
-	data->in_max[nr] = IN_TO_REG(val, data->in_scale[nr]);
-	lm87_write_value(client, nr < 6 ? LM87_REG_IN_MAX(nr) :
-			 LM87_REG_AIN_MAX(nr - 6), data->in_max[nr]);
+	err = lm87_write_value(client, nr < 6 ? LM87_REG_IN_MAX(nr) :
+			       LM87_REG_AIN_MAX(nr - 6), reg);
+	if (!err)
+		data->in_max[nr] = reg;
 	mutex_unlock(&data->update_lock);
-	return count;
+	return err < 0 ? err : count;
 }
 
 static SENSOR_DEVICE_ATTR_RO(in0_input, in_input, 0);
@@ -402,6 +408,7 @@ static ssize_t temp_low_store(struct device *dev,
 	struct i2c_client *client = dev_get_drvdata(dev);
 	struct lm87_data *data = i2c_get_clientdata(client);
 	int nr = to_sensor_dev_attr(attr)->index;
+	u8 reg;
 	long val;
 	int err;
 
@@ -409,11 +416,13 @@ static ssize_t temp_low_store(struct device *dev,
 	if (err)
 		return err;
 
+	reg = TEMP_TO_REG(val);
 	mutex_lock(&data->update_lock);
-	data->temp_low[nr] = TEMP_TO_REG(val);
-	lm87_write_value(client, LM87_REG_TEMP_LOW[nr], data->temp_low[nr]);
+	err = lm87_write_value(client, LM87_REG_TEMP_LOW[nr], reg);
+	if (!err)
+		data->temp_low[nr] = reg;
 	mutex_unlock(&data->update_lock);
-	return count;
+	return err < 0 ? err : count;
 }
 
 static ssize_t temp_high_store(struct device *dev,
@@ -423,6 +432,7 @@ static ssize_t temp_high_store(struct device *dev,
 	struct i2c_client *client = dev_get_drvdata(dev);
 	struct lm87_data *data = i2c_get_clientdata(client);
 	int nr = to_sensor_dev_attr(attr)->index;
+	u8 reg;
 	long val;
 	int err;
 
@@ -430,11 +440,13 @@ static ssize_t temp_high_store(struct device *dev,
 	if (err)
 		return err;
 
+	reg = TEMP_TO_REG(val);
 	mutex_lock(&data->update_lock);
-	data->temp_high[nr] = TEMP_TO_REG(val);
-	lm87_write_value(client, LM87_REG_TEMP_HIGH[nr], data->temp_high[nr]);
+	err = lm87_write_value(client, LM87_REG_TEMP_HIGH[nr], reg);
+	if (!err)
+		data->temp_high[nr] = reg;
 	mutex_unlock(&data->update_lock);
-	return count;
+	return err < 0 ? err : count;
 }
 
 static SENSOR_DEVICE_ATTR_RO(temp1_input, temp_input, 0);
@@ -502,6 +514,7 @@ static ssize_t fan_min_store(struct device *dev,
 	struct i2c_client *client = dev_get_drvdata(dev);
 	struct lm87_data *data = i2c_get_clientdata(client);
 	int nr = to_sensor_dev_attr(attr)->index;
+	u8 reg;
 	long val;
 	int err;
 
@@ -510,11 +523,12 @@ static ssize_t fan_min_store(struct device *dev,
 		return err;
 
 	mutex_lock(&data->update_lock);
-	data->fan_min[nr] = FAN_TO_REG(val,
-			    FAN_DIV_FROM_REG(data->fan_div[nr]));
-	lm87_write_value(client, LM87_REG_FAN_MIN(nr), data->fan_min[nr]);
+	reg = FAN_TO_REG(val, FAN_DIV_FROM_REG(data->fan_div[nr]));
+	err = lm87_write_value(client, LM87_REG_FAN_MIN(nr), reg);
+	if (!err)
+		data->fan_min[nr] = reg;
 	mutex_unlock(&data->update_lock);
-	return count;
+	return err < 0 ? err : count;
 }
 
 /*
@@ -533,7 +547,7 @@ static ssize_t fan_div_store(struct device *dev,
 	long val;
 	int err;
 	unsigned long min;
-	u8 reg;
+	u8 reg, div, fan_min;
 
 	err = kstrtol(buf, 10, &val);
 	if (err)
@@ -545,39 +559,47 @@ static ssize_t fan_div_store(struct device *dev,
 
 	switch (val) {
 	case 1:
-		data->fan_div[nr] = 0;
+		div = 0;
 		break;
 	case 2:
-		data->fan_div[nr] = 1;
+		div = 1;
 		break;
 	case 4:
-		data->fan_div[nr] = 2;
+		div = 2;
 		break;
 	case 8:
-		data->fan_div[nr] = 3;
+		div = 3;
 		break;
 	default:
 		mutex_unlock(&data->update_lock);
 		return -EINVAL;
 	}
 
-	reg = lm87_read_value(client, LM87_REG_VID_FAN_DIV);
+	err = lm87_read_value(client, LM87_REG_VID_FAN_DIV);
+	if (err < 0)
+		goto out;
+	reg = err;
 	switch (nr) {
 	case 0:
-	    reg = (reg & 0xCF) | (data->fan_div[0] << 4);
+	    reg = (reg & 0xCF) | (div << 4);
 	    break;
 	case 1:
-	    reg = (reg & 0x3F) | (data->fan_div[1] << 6);
+	    reg = (reg & 0x3F) | (div << 6);
 	    break;
 	}
-	lm87_write_value(client, LM87_REG_VID_FAN_DIV, reg);
+	err = lm87_write_value(client, LM87_REG_VID_FAN_DIV, reg);
+	if (err < 0)
+		goto out;
+	data->fan_div[nr] = div;
 
-	data->fan_min[nr] = FAN_TO_REG(min, val);
-	lm87_write_value(client, LM87_REG_FAN_MIN(nr),
-			 data->fan_min[nr]);
+	fan_min = FAN_TO_REG(min, val);
+	err = lm87_write_value(client, LM87_REG_FAN_MIN(nr), fan_min);
+	if (!err)
+		data->fan_min[nr] = fan_min;
+out:
 	mutex_unlock(&data->update_lock);
 
-	return count;
+	return err < 0 ? err : count;
 }
 
 static SENSOR_DEVICE_ATTR_RO(fan1_input, fan_input, 0);
@@ -640,6 +662,7 @@ static ssize_t aout_output_store(struct device *dev,
 {
 	struct i2c_client *client = dev_get_drvdata(dev);
 	struct lm87_data *data = i2c_get_clientdata(client);
+	u8 reg;
 	long val;
 	int err;
 
@@ -647,11 +670,14 @@ static ssize_t aout_output_store(struct device *dev,
 	if (err)
 		return err;
 
+	reg = AOUT_TO_REG(val);
+
 	mutex_lock(&data->update_lock);
-	data->aout = AOUT_TO_REG(val);
-	lm87_write_value(client, LM87_REG_AOUT, data->aout);
+	err = lm87_write_value(client, LM87_REG_AOUT, reg);
+	if (!err)
+		data->aout = reg;
 	mutex_unlock(&data->update_lock);
-	return count;
+	return err < 0 ? err : count;
 }
 static DEVICE_ATTR_RW(aout_output);
 
