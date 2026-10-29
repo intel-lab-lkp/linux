@@ -354,6 +354,10 @@ static irqreturn_t emmaprp_irq(int irq_emma, void *data)
 		(irqst & PRP_INTR_ST_CH2WERR)) {
 			pr_err("PrP bus error occurred, this transfer is probably corrupted\n");
 			writel(PRP_CNTL_SWRST, pcdev->base_emma + PRP_CNTL);
+			v4l2_m2m_buf_done_and_job_finish(pcdev->m2m_dev,
+							 curr_ctx->fh.m2m_ctx,
+							 VB2_BUF_STATE_ERROR);
+			return IRQ_HANDLED;
 		} else if (irqst & PRP_INTR_ST_CH2B1CI) { /* buffer ready */
 			src_vb = v4l2_m2m_src_buf_remove(curr_ctx->fh.m2m_ctx);
 			dst_vb = v4l2_m2m_dst_buf_remove(curr_ctx->fh.m2m_ctx);
