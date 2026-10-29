@@ -24,8 +24,12 @@
  * @video_dev: video_device for the media device.
  * @virtio_dev: virtio device for the media device.
  * @commandq: virtio command queue.
+ * @eventq: virtio event queue.
+ * @eventq_work: work to run when events are received on @eventq.
+ * @event_buffer: buffer for event descriptors.
  * @sessions: list of active sessions on the device.
  * @sessions_lock: protects @sessions and &struct virtio_media_session.list.
+ * @events_lock: prevents concurrent processing of events.
  * @cmd: union of device-level commands. Session commands are handled by
  *       &struct virtio_media_session.
  * @resp: union of responses to device-level commands. Session responses are
@@ -39,9 +43,15 @@ struct virtio_media {
 
 	struct virtio_device *virtio_dev;
 	struct virtqueue *commandq;
+	struct virtqueue *eventq;
+	struct work_struct eventq_work;
+
+	void *event_buffer;
 
 	struct list_head sessions;
 	struct mutex sessions_lock; /* protects sessions list */
+
+	struct mutex events_lock; /* prevents concurrent event processing */
 
 	__dma_from_device_group_begin();
 	union {
@@ -68,6 +78,7 @@ to_virtio_media(struct video_device *video_dev)
 int virtio_media_send_command(struct virtio_media *vv, struct scatterlist **sgs,
 			      const size_t out_sgs, const size_t in_sgs,
 			      size_t minimum_resp_len, size_t *resp_len);
+void virtio_media_process_events(struct virtio_media *vv);
 
 /* virtio_media_ioctls.c */
 
