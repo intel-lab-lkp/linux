@@ -288,6 +288,9 @@ check_again:
 		/* pretending it was accepted by driver */
 		if (actual < 0)
 			actual = tbuf->count;
+		/* a driver cannot have accepted more than the frame */
+		if (actual > tbuf->count)
+			actual = tbuf->count;
 
 		if (actual == tbuf->count) {
 			pr_debug("frame %p completed\n", tbuf);
@@ -304,9 +307,17 @@ check_again:
 			pr_debug("frame %p pending\n", tbuf);
 
 			/*
-			 * the buffer was not accepted by driver,
-			 * return it back into tx queue
+			 * The frame was not accepted in full: return it back
+			 * into tx queue. A positive count means the driver
+			 * took that many bytes of the frame, so drop that
+			 * prefix and retry only the unsent remainder instead
+			 * of transmitting the prefix a second time.
 			 */
+			if (actual > 0) {
+				memmove(tbuf->buf, tbuf->buf + actual,
+					tbuf->count - actual);
+				tbuf->count -= actual;
+			}
 			n_hdlc_buf_return(&n_hdlc->tx_buf_list, tbuf);
 			break;
 		}
