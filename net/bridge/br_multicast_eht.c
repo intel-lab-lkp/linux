@@ -167,7 +167,14 @@ static void __eht_del_set_entry(struct net_bridge_group_eht_set_entry *set_h)
 	RB_CLEAR_NODE(&set_h->rb_node);
 	hlist_del_init(&set_h->host_list);
 	memset(&zero_addr, 0, sizeof(zero_addr));
-	if (memcmp(&set_h->h_addr, &zero_addr, sizeof(zero_addr)))
+	/* Only set entries created for a non-zero source address are counted
+	 * towards the host's budget, the auto-created zero source entry is
+	 * not (see __eht_lookup_create_set_entry()).  Check the set's source
+	 * address and not the host address: the host address can be zero as
+	 * well (IGMPv3/MLDv2 allow an unspecified report source address), but
+	 * its real source entries are still counted.
+	 */
+	if (memcmp(&set_h->eht_set->src_addr, &zero_addr, sizeof(zero_addr)))
 		eht_host->num_entries--;
 	hlist_add_head(&set_h->mcast_gc.gc_node, &set_h->br->mcast_gc_list);
 	queue_work(system_long_wq, &set_h->br->mcast_gc_work);
