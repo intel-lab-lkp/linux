@@ -1687,5 +1687,6 @@ int ti_sci_manage_irq(const struct ti_sci_handle *handle, u32 valid_params,
 		      u16 src_id, u16 src_index, u16 dst_id, u16 dst_host_irq,
 		      u16 ia_id, u16 vint, u16 global_event, u8 vint_status_bit,
 		      u8 s_host, u16 type);
+void ti_sci_setup_proc_ops(struct ti_sci_proc_ops *pops);
 
 #endif /* __TI_SCI_H */
