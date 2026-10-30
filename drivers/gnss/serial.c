@@ -203,10 +203,12 @@ void gnss_serial_deregister(struct gnss_serial *gserial)
 
 	gnss_deregister_device(gserial->gdev);
 
-	if (IS_ENABLED(CONFIG_PM))
+	if (IS_ENABLED(CONFIG_PM)) {
 		pm_runtime_disable(&serdev->dev);
-	else
-		gnss_serial_set_power(gserial, GNSS_SERIAL_OFF);
+		if (pm_runtime_status_suspended(&serdev->dev))
+			return;
+	}
+	gnss_serial_set_power(gserial, GNSS_SERIAL_OFF);
 }
 EXPORT_SYMBOL_GPL(gnss_serial_deregister);
 
