@@ -219,6 +219,7 @@ noinstr int cpuidle_enter_state(struct cpuidle_device *dev,
 				 int index)
 {
 	int entered_state;
+	s64 latency_req;
 
 	struct cpuidle_state *target_state = &drv->states[index];
 	bool broadcast = !!(target_state->flags & CPUIDLE_FLAG_TIMER_STOP);
@@ -243,6 +244,8 @@ noinstr int cpuidle_enter_state(struct cpuidle_device *dev,
 
 	if (target_state->flags & CPUIDLE_FLAG_TLB_FLUSHED)
 		leave_mm();
+
+	latency_req = cpuidle_governor_latency_req(dev->cpu);
 
 	/* Take note of the planned idle state. */
 	sched_idle_set_state(target_state);
@@ -327,7 +330,8 @@ noinstr int cpuidle_enter_state(struct cpuidle_device *dev,
 			}
 		} else if (diff > delay) {
 			for (i = entered_state + 1; i < drv->state_count; i++) {
-				if (dev->states_usage[i].disable)
+				if (dev->states_usage[i].disable ||
+				    drv->states[i].exit_latency_ns > latency_req)
 					continue;
 
 				/*
