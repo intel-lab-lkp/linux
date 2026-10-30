@@ -10,7 +10,8 @@
 #include <linux/irq.h>
 #include <linux/workqueue.h>
 #include <linux/device.h>
-#include <linux/kernel.h>
+#include <linux/bits.h>
+#include <linux/kstrtox.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/list.h>
