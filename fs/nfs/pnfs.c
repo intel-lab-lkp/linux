@@ -2766,6 +2766,36 @@ pnfs_mark_matching_lsegs_return(struct pnfs_layout_hdr *lo,
 	return -ENOENT;
 }
 
+/**
+ * pnfs_invalid_layout_busy - check for I/O on segments of an invalid layout
+ * @lo: pointer to the invalid layout header
+ * @recall_range: range being recalled
+ * @seq: seqid of the recall
+ * @cancel_io: cancel I/O on the matching segments
+ *
+ * Returns true if any segment matching the recall is still in use.
+ */
+bool pnfs_invalid_layout_busy(struct pnfs_layout_hdr *lo,
+			      const struct pnfs_layout_range *recall_range,
+			      u32 seq, bool cancel_io)
+{
+	struct nfs_server *server = NFS_SERVER(lo->plh_inode);
+	struct pnfs_layout_segment *lseg;
+	bool busy = false;
+
+	assert_spin_locked(&lo->plh_inode->i_lock);
+
+	list_for_each_entry(lseg, &lo->plh_segs, pls_list) {
+		if (!pnfs_match_lseg_recall(lseg, recall_range, seq))
+			continue;
+		busy = true;
+		if (!cancel_io)
+			break;
+		pnfs_lseg_cancel_io(server, lseg, NULL);
+	}
+	return busy;
+}
+
 static void
 pnfs_mark_layout_for_return(struct inode *inode,
 			    const struct pnfs_layout_range *range,
