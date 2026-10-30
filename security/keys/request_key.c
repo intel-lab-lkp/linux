@@ -370,18 +370,21 @@ static int construct_alloc_key(struct keyring_search_context *ctx,
 			       struct key *dest_keyring,
 			       unsigned long flags,
 			       struct key_user *user,
-			       struct key **_key)
+			       struct key **_key,
+			       bool *defer_link)
 {
 	struct assoc_array_edit *edit = NULL;
 	struct key *key;
 	key_perm_t perm;
 	key_ref_t key_ref;
+	bool link_locked = false;
 	int ret;
 
 	kenter("%s,%s,,,",
 	       ctx->index_key.type->name, ctx->index_key.description);
 
 	*_key = NULL;
+	*defer_link = false;
 	mutex_lock(&user->cons_lock);
 
 	perm = KEY_POS_VIEW | KEY_POS_SEARCH | KEY_POS_LINK | KEY_POS_SETATTR;
@@ -404,6 +407,21 @@ static int construct_alloc_key(struct keyring_search_context *ctx,
 		ret = __key_link_lock(dest_keyring, &key->index_key);
 		if (ret < 0)
 			goto link_lock_failed;
+
+		/*
+		 * A restricted keyring should not take an uninstantiated key,
+		 * the restriction has to be evaluated with the payload,
+		 * which is only available after construction. Skip the
+		 * provisional link and add the key with key_link() later,
+		 * unless the caller explicitly asked to bypass restrictions.
+		 */
+		if (dest_keyring->restrict_link &&
+		    !(flags & KEY_ALLOC_BYPASS_RESTRICTION)) {
+			__key_link_end(dest_keyring, &key->index_key, NULL);
+			*defer_link = true;
+		} else {
+			link_locked = true;
+		}
 	}
 
 	/*
@@ -424,7 +442,7 @@ static int construct_alloc_key(struct keyring_search_context *ctx,
 	if (!IS_ERR(key_ref))
 		goto key_already_present;
 
-	if (dest_keyring) {
+	if (dest_keyring && link_locked) {
 		ret = __key_link_begin(dest_keyring, &key->index_key, &edit);
 		if (ret < 0)
 			goto link_alloc_failed;
@@ -432,7 +450,7 @@ static int construct_alloc_key(struct keyring_search_context *ctx,
 	}
 
 	mutex_unlock(&key_construction_mutex);
-	if (dest_keyring)
+	if (link_locked)
 		__key_link_end(dest_keyring, &key->index_key, edit);
 	mutex_unlock(&user->cons_lock);
 	*_key = key;
@@ -446,15 +464,44 @@ key_already_present:
 	mutex_unlock(&key_construction_mutex);
 	key = key_ref_to_ptr(key_ref);
 	if (dest_keyring) {
-		ret = __key_link_begin(dest_keyring, &key->index_key, &edit);
-		if (ret < 0)
-			goto link_alloc_failed_unlocked;
-		ret = __key_link_check_live_key(dest_keyring, key);
-		if (ret == 0)
-			__key_link(dest_keyring, key, &edit);
-		__key_link_end(dest_keyring, &key->index_key, edit);
-		if (ret < 0)
+		/*
+		 * The outer search checks Link permission on a key it finds.
+		 * The second search must do the same; otherwise a key that
+		 * appeared in the race window could be linked without the
+		 * caller holding Link permission on it.
+		 */
+		ret = key_task_permission(key_ref, ctx->cred, KEY_NEED_LINK);
+		if (ret < 0) {
+			if (link_locked)
+				__key_link_end(dest_keyring, &key->index_key,
+					       NULL);
 			goto link_check_failed;
+		}
+		if (*defer_link) {
+			/*
+			 * The key may still be under construction, in which
+			 * case its payload cannot be checked yet.  Do not add
+			 * a provisional link to a restricted keyring; only an
+			 * already instantiated key can be checked here.
+			 */
+			if (!key_is_positive(key)) {
+				ret = -EPERM;
+				goto link_check_failed;
+			}
+			ret = key_link(dest_keyring, key);
+			if (ret < 0)
+				goto link_check_failed;
+		} else {
+			ret = __key_link_begin(dest_keyring, &key->index_key, &edit);
+			if (ret < 0)
+				goto link_alloc_failed_unlocked;
+			ret = __key_link_check_live_key(dest_keyring, key);
+			if (ret == 0)
+				__key_link(dest_keyring, key, &edit);
+			__key_link_end(dest_keyring, &key->index_key, edit);
+			if (ret < 0)
+				goto link_check_failed;
+		}
 	}
 	mutex_unlock(&user->cons_lock);
 	*_key = key;
@@ -495,6 +542,7 @@ static struct key *construct_key_and_link(struct keyring_search_context *ctx,
 {
 	struct key_user *user;
 	struct key *key;
+	bool defer_link;
 	int ret;
 
 	kenter("");
@@ -512,7 +560,8 @@ static struct key *construct_key_and_link(struct keyring_search_context *ctx,
 		goto error_put_dest_keyring;
 	}
 
-	ret = construct_alloc_key(ctx, dest_keyring, flags, user, &key);
+	ret = construct_alloc_key(ctx, dest_keyring, flags, user, &key,
+				  &defer_link);
 	key_user_put(user);
 
 	if (ret == 0) {
@@ -521,6 +570,30 @@ static struct key *construct_key_and_link(struct keyring_search_context *ctx,
 		if (ret < 0) {
 			kdebug("cons failed");
 			goto construction_failed;
+		}
+
+		/*
+		 * The key was not provisionally linked because the
+		 * destination keyring is restricted. Link it now that the
+		 * payload is available so the restriction can be checked.
+		 */
+		if (defer_link) {
+			/*
+			 * A helper may have negatively instantiated the key
+			 * (e.g. KEYCTL_REJECT) and returned success.  A
+			 * restricted keyring must not cache a negative key;
+			 * key_reject_and_link() rejects those too.
+			 */
+			if (!key_is_positive(key)) {
+				ret = -EPERM;
+				key_put(key);
+				goto error_put_dest_keyring;
+			}
+			ret = key_link(dest_keyring, key);
+			if (ret < 0) {
+				key_put(key);
+				goto error_put_dest_keyring;
+			}
 		}
 	} else if (ret == -EINPROGRESS) {
 		ret = 0;
