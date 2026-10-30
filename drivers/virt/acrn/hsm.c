@@ -437,6 +437,7 @@ static ssize_t remove_cpu_store(struct device *dev,
 				const char *buf, size_t count)
 {
 	u64 cpu, lapicid;
+	bool was_online;
 	int ret;
 
 	if (kstrtoull(buf, 0, &cpu) < 0)
@@ -445,8 +446,12 @@ static ssize_t remove_cpu_store(struct device *dev,
 	if (cpu >= num_possible_cpus() || cpu == 0 || !cpu_is_hotpluggable(cpu))
 		return -EINVAL;
 
-	if (cpu_online(cpu))
-		remove_cpu(cpu);
+	was_online = cpu_online(cpu);
+	if (was_online) {
+		ret = remove_cpu(cpu);
+		if (ret)
+			return ret;
+	}
 
 	lapicid = cpu_data(cpu).topo.apicid;
 	dev_dbg(dev, "Try to remove cpu %lld with lapicid %lld\n", cpu, lapicid);
@@ -459,7 +464,8 @@ static ssize_t remove_cpu_store(struct device *dev,
 	return count;
 
 fail_remove:
-	add_cpu(cpu);
+	if (was_online)
+		add_cpu(cpu);
 	return ret;
 }
 static DEVICE_ATTR_WO(remove_cpu);
