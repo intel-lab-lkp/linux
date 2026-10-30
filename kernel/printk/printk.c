@@ -2247,7 +2247,7 @@ static u16 printk_sprint(char *text, u16 size, int facility,
 static void printk_store_execution_ctx(struct printk_info *info)
 {
 	info->caller_id2 = printk_caller_id2();
-	get_task_comm(info->comm, current);
+	strscpy_pad(info->comm, current->comm);
 }
 
 static void pmsg_load_execution_ctx(struct printk_message *pmsg,
