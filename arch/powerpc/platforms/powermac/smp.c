@@ -865,7 +865,7 @@ static int smp_core99_cpu_prepare(unsigned int cpu)
 	return 0;
 }
 
-static int smp_core99_cpu_online(unsigned int cpu)
+static int smp_core99_cpu_online_prepare_down(unsigned int cpu)
 {
 	/* Close i2c bus if it was used for tb sync */
 	if (pmac_tb_clock_chip_host && smp_core99_host_open) {
@@ -893,9 +893,9 @@ static void __init smp_core99_bringup_done(void)
 #ifdef CONFIG_HOTPLUG_CPU
 	cpuhp_setup_state_nocalls(CPUHP_POWERPC_PMAC_PREPARE,
 				  "powerpc/pmac:prepare", smp_core99_cpu_prepare,
-				  NULL);
+				  smp_core99_cpu_online_prepare_down);
 	cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN, "powerpc/pmac:online",
-				  smp_core99_cpu_online, NULL);
+				  smp_core99_cpu_online_prepare_down, NULL);
 #endif
 
 	if (ppc_md.progress)
