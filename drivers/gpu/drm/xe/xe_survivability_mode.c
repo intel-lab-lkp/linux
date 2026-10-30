@@ -413,13 +413,19 @@ bool xe_survivability_mode_is_requested(struct xe_device *xe)
 
 	survivability_mode = xe_configfs_get_survivability_mode(pdev);
 	/* Enable survivability mode if set via configfs */
-	if (survivability_mode)
+	if (survivability_mode) {
+		xe_log_info(xe, SURVIVABILITY, "Boot mode requested.");
 		return true;
+	}
 
 	data = xe_mmio_read32(mmio, PCODE_SCRATCH(0));
 	survivability->boot_status = REG_FIELD_GET(BOOT_STATUS, data);
 
-	return check_boot_failure(xe);
+	if (check_boot_failure(xe)) {
+		xe_log_err_fatal(pdev, SURVIVABILITY, 0, "Boot Mode enabled!\n");
+		return true;
+	}
+	return false;
 }
 
 /**
