@@ -354,7 +354,7 @@ static int __maybe_unused sirf_suspend(struct device *dev)
 	if (!pm_runtime_suspended(dev))
 		ret = sirf_runtime_suspend(dev);
 
-	if (data->wakeup)
+	if (!ret && data->wakeup)
 		disable_irq(data->irq);
 
 	return ret;
