@@ -352,8 +352,13 @@ __be32 nfs4_callback_layoutrecall(void *argp, void *resp,
 	struct cb_layoutrecallargs *args = argp;
 	u32 res = NFS4ERR_OP_NOT_IN_SESSION;
 
-	if (cps->clp)
+	if (cps->clp) {
 		res = do_callback_layoutrecall(cps->clp, args, cps);
+		if (args->cbl_recall_type != RETURN_FILE)
+			trace_nfs4_cb_layoutrecall_bulk(cps->clp,
+							args->cbl_recall_type,
+							&args->cbl_fsid, -res);
+	}
 	return cpu_to_be32(res);
 }
 
