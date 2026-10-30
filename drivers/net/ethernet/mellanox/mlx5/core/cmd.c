@@ -1301,7 +1301,8 @@ static int mlx5_cmd_invoke(struct mlx5_core_dev *dev, struct mlx5_cmd_msg *in,
 
 	INIT_DELAYED_WORK(&ent->cb_timeout_work, cb_timeout_handler);
 	INIT_WORK(&ent->work, cmd_work_handler);
-	if (page_queue) {
+	/* A blocking caller waits for the command anyway, submit it inline */
+	if (page_queue || !callback) {
 		cmd_work_handler(&ent->work);
 	} else if (!queue_work(cmd->wq, &ent->work)) {
 		mlx5_core_warn(dev, "failed to queue work\n");
