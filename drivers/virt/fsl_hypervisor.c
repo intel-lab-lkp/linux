@@ -855,7 +855,7 @@ static int __init fsl_hypervisor_init(void)
 		if (of_device_is_compatible(np, "fsl,hv-shutdown-doorbell")) {
 			/* The shutdown doorbell gets its own ISR */
 			ret = request_irq(irq, fsl_hv_shutdown_isr, 0,
-					  np->name, NULL);
+					  np->name, dbisr);
 		} else if (of_device_is_compatible(np,
 			"fsl,hv-state-change-doorbell")) {
 			/*
