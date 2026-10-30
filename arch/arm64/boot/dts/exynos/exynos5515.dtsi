@@ -1,0 +1,178 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * Samsung Exynos 5515 SoC device tree source
+ *
+ * Copyright (c) 2026 Aiden Isik <aidenisik+git@member.fsf.org>
+ */
+
+#include <dt-bindings/clock/samsung,exynos5515-cmu.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	compatible = "samsung,exynos5515";
+	#address-cells = <2>;
+	interrupt-parent = <&gic>;
+	#size-cells = <1>;
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu-map {
+			cluster0 {
+				core0 {
+					cpu = <&cpu0>;
+				};
+
+				core1 {
+					cpu = <&cpu1>;
+				};
+			};
+		};
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a55";
+			reg = <0x0>;
+			enable-method = "psci";
+		};
+
+		cpu1: cpu@100 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a55";
+			reg = <0x100>;
+			enable-method = "psci";
+		};
+	};
+
+	oscclk: osc-clock {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-output-names = "oscclk";
+	};
+
+	pmu {
+		compatible = "arm,cortex-a55-pmu";
+		interrupt-affinity = <&cpu0>,
+				     <&cpu1>;
+		interrupts = <GIC_SPI 99 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 100 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	psci {
+		compatible = "arm,psci-1.0";
+		method = "smc";
+	};
+
+	soc: soc@0 {
+		compatible = "simple-bus";
+		ranges = <0x0 0x0 0x0 0x20000000>;
+
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		chipid@10000000 {
+			compatible = "samsung,exynos5515-chipid",
+				     "samsung,exynos850-chipid";
+			reg = <0x10000000 0x100>;
+		};
+
+		sysreg_peri: syscon@10020000 {
+			compatible = "samsung,exynos5515-peri-sysreg", "syscon";
+			reg = <0x10020000 0x10000>;
+			clocks = <&cmu_peri CLK_GOUT_PERI_SYSREG_PCLK>;
+		};
+
+		cmu_peri: clock-controller@10030000 {
+			compatible = "samsung,exynos5515-cmu-peri";
+			reg = <0x10030000 0x10000>;
+			#clock-cells = <1>;
+			clocks = <&oscclk>,
+				 <&cmu_top CLK_DOUT_CMU_PERI_BUS>,
+				 <&cmu_top CLK_DOUT_CMU_PERI_IP>,
+				 <&cmu_top CLK_DOUT_CMU_PERI_UART>;
+			clock-names = "oscclk",
+				      "bus",
+				      "ip",
+				      "uart";
+			samsung,sysreg = <&sysreg_peri>;
+		};
+
+		cmu_fsys: clock-controller@10400000 {
+			compatible = "samsung,exynos5515-cmu-fsys";
+			reg = <0x10400000 0x10000>;
+			#clock-cells = <1>;
+			clocks = <&oscclk>,
+				 <&cmu_top CLK_DOUT_CMU_FSYS_BUS>,
+				 <&cmu_top CLK_DOUT_CMU_FSYS_MMC_CARD>,
+				 <&cmu_top CLK_DOUT_CMU_FSYS_MMC_EMBD>,
+				 <&cmu_top CLK_DOUT_CMU_FSYS_USB20DRD>;
+			clock-names = "oscclk",
+				      "bus",
+				      "mmc_card",
+				      "mmc_embd",
+				      "usb20drd";
+			samsung,sysreg = <&sysreg_fsys>;
+		};
+
+		sysreg_fsys: syscon@10420000 {
+			compatible = "samsung,exynos5515-fsys-sysreg", "syscon";
+			reg = <0x10420000 0x10000>;
+			clocks = <&cmu_fsys CLK_GOUT_FSYS_SYSREG_PCLK>;
+		};
+
+		pmu_system_controller: system-controller@12860000 {
+			compatible = "samsung,exynos5515-pmu",
+				     "samsung,exynos7-pmu",
+				     "syscon";
+			reg = <0x12860000 0x10000>;
+		};
+
+		cmu_top: clock-controller@15410000 {
+			compatible = "samsung,exynos5515-cmu-top";
+			reg = <0x15410000 0x10000>;
+			#clock-cells = <1>;
+			clocks = <&oscclk>;
+			clock-names = "oscclk";
+			samsung,sysreg = <&sysreg_top>;
+		};
+
+		sysreg_top: syscon@15430000 {
+			compatible = "samsung,exynos5515-top-sysreg", "syscon";
+			reg = <0x15430000 0x10000>;
+		};
+
+		gic: interrupt-controller@15601000 {
+			compatible = "arm,gic-400";
+			reg = <0x15601000 0x1000>,
+			      <0x15602000 0x2000>,
+			      <0x15604000 0x2000>,
+			      <0x15606000 0x2000>;
+			#address-cells = <0>;
+			#interrupt-cells = <3>;
+			interrupt-controller;
+			/* VGIC maintenance interrupt is not available */
+		};
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		/*
+		 * Non-updatable, broken stock Samsung bootloader does not
+		 * configure CNTFRQ_EL0
+		 */
+		clock-frequency = <26000000>;
+		interrupts = <GIC_PPI 13
+			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 14
+			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 11
+			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 10
+			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 12
+			     (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
+	};
+};
+
+#include "arm/samsung/exynos-syscon-restart.dtsi"
