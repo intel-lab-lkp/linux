@@ -261,9 +261,21 @@ static int iter_pinctrl_assoc_update_state(struct scmi_iterator_state *st,
 					   const void *response, void *priv)
 {
 	const struct scmi_resp_pinctrl_list_assoc *r = response;
+	unsigned int nr_fit = 0;
 
 	st->num_returned = RETURNED(r->flags);
 	st->num_remaining = REMAINING(r->flags);
+
+	if (st->rx_len > sizeof(*r))
+		nr_fit = (st->rx_len - sizeof(*r)) / sizeof(r->array[0]);
+
+	if (st->num_returned > nr_fit) {
+		if (!nr_fit)
+			return -EPROTO;
+
+		st->num_remaining += st->num_returned - nr_fit;
+		st->num_returned = nr_fit;
+	}
 
 	return 0;
 }
