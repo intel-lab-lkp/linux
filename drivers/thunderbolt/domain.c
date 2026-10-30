@@ -905,7 +905,7 @@ int tb_domain_unregister_unplugged_xdomains(struct tb *tb)
 	return ctx.n;
 }
 
-int tb_domain_init(void)
+static int __init tb_domain_init(void)
 {
 	int ret;
 
@@ -931,7 +931,7 @@ err_acpi:
 	return ret;
 }
 
-void tb_domain_exit(void)
+static void __exit tb_domain_exit(void)
 {
 	bus_unregister(&tb_bus_type);
 	ida_destroy(&tb_domain_ida);
@@ -941,3 +941,9 @@ void tb_domain_exit(void)
 	tb_debugfs_exit();
 	tb_configfs_exit();
 }
+
+subsys_initcall(tb_domain_init);
+module_exit(tb_domain_exit);
+
+MODULE_DESCRIPTION("Thunderbolt/USB4 domain driver");
+MODULE_LICENSE("GPL");

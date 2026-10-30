@@ -738,7 +738,7 @@ static struct pci_device_id nhi_ids[] = {
 };
 
 MODULE_DEVICE_TABLE(pci, nhi_ids);
-MODULE_DESCRIPTION("Thunderbolt/USB4 core driver");
+MODULE_DESCRIPTION("Thunderbolt/USB4 PCI host interface driver");
 MODULE_LICENSE("GPL");
 
 static struct pci_driver nhi_driver = {
@@ -750,26 +750,4 @@ static struct pci_driver nhi_driver = {
 	.driver.pm = &nhi_pm_ops,
 };
 
-static int __init nhi_init(void)
-{
-	int ret;
-
-	ret = tb_domain_init();
-	if (ret)
-		return ret;
-
-	ret = pci_register_driver(&nhi_driver);
-	if (ret)
-		tb_domain_exit();
-
-	return ret;
-}
-
-static void __exit nhi_unload(void)
-{
-	pci_unregister_driver(&nhi_driver);
-	tb_domain_exit();
-}
-
-rootfs_initcall(nhi_init);
-module_exit(nhi_unload);
+module_pci_driver(nhi_driver);

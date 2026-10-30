@@ -1400,8 +1400,10 @@ int nhi_probe(struct tb_nhi *nhi)
 	device_wakeup_enable(dev);
 
 	pm_runtime_allow(dev);
+	device_enable_async_suspend(dev);
 	pm_runtime_set_autosuspend_delay(dev, TB_AUTOSUSPEND_DELAY);
 	pm_runtime_use_autosuspend(dev);
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	return 0;
