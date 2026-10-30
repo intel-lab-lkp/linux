@@ -22,7 +22,10 @@ pub use self::kvec::Vec;
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct AllocError;
 
-use crate::prelude::*;
+use crate::{
+    numa::NumaNode,
+    prelude::*, //
+};
 
 use core::{
     alloc::Layout,
@@ -112,31 +115,6 @@ pub mod flags {
     ///
     /// This is normally or'd with other flags.
     pub const __GFP_NOWARN: Flags = Flags(bindings::__GFP_NOWARN);
-}
-
-/// Non Uniform Memory Access (NUMA) node identifier.
-#[derive(Clone, Copy, PartialEq)]
-pub struct NumaNode(i32);
-
-impl NumaNode {
-    /// Create a new NUMA node identifier (non-negative integer).
-    ///
-    /// Returns [`EINVAL`] if a negative id or an id exceeding [`bindings::MAX_NUMNODES`] is
-    /// specified.
-    pub fn new(node: i32) -> Result<Self> {
-        // MAX_NUMNODES never exceeds 2**10 because NODES_SHIFT is 0..10.
-        if node < 0 || node >= bindings::MAX_NUMNODES as i32 {
-            return Err(EINVAL);
-        }
-        Ok(Self(node))
-    }
-}
-
-/// Specify necessary constant to pass the information to Allocator that the caller doesn't care
-/// about the NUMA node to allocate memory from.
-impl NumaNode {
-    /// No node preference.
-    pub const NO_NODE: NumaNode = NumaNode(bindings::NUMA_NO_NODE);
 }
 
 /// The kernel's [`Allocator`] trait.

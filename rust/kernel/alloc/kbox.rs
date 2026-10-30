@@ -13,12 +13,12 @@ use super::allocator::{
 use super::{
     AllocError,
     Allocator,
-    Flags,
-    NumaNode, //
+    Flags, //
 };
 
 use crate::{
     fmt,
+    numa::NumaNode,
     page::AsPageIter,
     prelude::*,
     types::ForeignOwnable, //

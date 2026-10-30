@@ -11,12 +11,12 @@
 use super::{
     AllocError,
     Allocator,
-    Flags,
-    NumaNode, //
+    Flags, //
 };
 
 use crate::{
     bindings,
+    numa::NumaNode,
     page, //
 };
 
@@ -122,7 +122,7 @@ impl ReallocFunc {
         // - Those functions provide the guarantees of this function.
         let raw_ptr = unsafe {
             // If `size == 0` and `ptr != NULL` the memory behind the pointer is freed.
-            self.0(ptr.cast(), size, layout.align(), flags.0, nid.0).cast()
+            self.0(ptr.cast(), size, layout.align(), flags.0, nid.as_raw()).cast()
         };
 
         let ptr = if size == 0 {
