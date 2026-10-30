@@ -1222,11 +1222,14 @@ ff_layout_pg_get_mirror_count_write(struct nfs_pageio_descriptor *pgio,
 			NFS_I(pgio->pg_inode)->layout,
 			pgio->pg_lseg);
 	if (NFS_I(pgio->pg_inode)->layout &&
-	    ff_layout_hdr_no_fallback_to_mds(NFS_I(pgio->pg_inode)->layout)) {
+	    ff_layout_hdr_no_fallback_to_mds(NFS_I(pgio->pg_inode)->layout) &&
+	    !pnfs_layout_recall_draining(pgio->pg_inode)) {
 		/*
 		 * FF_FLAGS_NO_IO_THRU_MDS: no current lseg but the server's
 		 * policy forbids MDS fallback.  Surface -EAGAIN so writeback
 		 * retries rather than silently issuing the WRITE via MDS.
+		 * The flag is a hint (RFC 8435 5.1.2), so don't wait for a
+		 * draining recall.
 		 */
 		pgio->pg_error = -EAGAIN;
 		goto out;
