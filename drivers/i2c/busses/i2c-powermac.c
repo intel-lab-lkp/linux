@@ -299,6 +299,18 @@ static bool i2c_powermac_get_type(struct i2c_adapter *adap,
 		}
 	}
 
+	/*
+	 * Some Apple device trees have i2c nodes with no compatible that can be
+	 * ignored. Without this the cereal node on G5 macs prints the modalias
+	 * warning below on every boot.
+	 */
+	if (!of_property_present(node, "compatible")) {
+		dev_dbg(&adap->dev,
+			"i2c-powermac: no compatible property on %pOF, skipping\n",
+			node);
+		return false;
+	}
+
 	dev_err(&adap->dev, "i2c-powermac: modalias failure on %pOF\n", node);
 	return false;
 }
