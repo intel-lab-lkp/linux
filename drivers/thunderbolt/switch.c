@@ -1842,6 +1842,11 @@ static int tb_switch_set_authorized(struct tb_switch *sw, unsigned int val)
 	if (!!sw->authorized == !!val)
 		goto unlock;
 
+	if (sw->is_unplugged) {
+		ret = -ENODEV;
+		goto unlock;
+	}
+
 	switch (val) {
 	/* Disapprove switch */
 	case 0:
