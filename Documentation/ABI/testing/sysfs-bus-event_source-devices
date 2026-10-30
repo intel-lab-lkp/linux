@@ -22,3 +22,17 @@ Description:	Performance Monitoring Unit (<pmu>)
 		uncore_imc_free_running should be treated as opening
 		the data_read event on PMU uncore_imc_free_running_0
 		and PMU uncore_imc_free_running_1.
+
+		Some PMU names contain more than one number to
+		identify an instance. For example, the NVIDIA PCIe PMU
+		of root complex <rc> on socket <socket> is named
+		nvidia_pcie_pmu_<socket>_rc_<rc>. The name alone does
+		not show that both numbers identify an instance of the
+		same PMU; in other names, an earlier number can select
+		a different PMU. Tools can treat such PMUs as
+		instances of the same PMU when they have a description
+		of the name parts, like the perf tool's json event
+		"Unit" with comma-separated parts,
+		"nvidia_pcie_pmu_,rc_", which matches PMU names with
+		an optional number after each part, like
+		nvidia_pcie_pmu_1_rc_3.
