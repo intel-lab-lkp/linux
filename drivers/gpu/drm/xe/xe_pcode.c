@@ -146,6 +146,7 @@ int xe_pcode_read(struct xe_tile *tile, u32 mbox, u32 *val0, u32 *val1)
 	return err;
 }
 
+#define __XE_MMIO_WAIT_MAX_BACKOFF_100MS (100 * USEC_PER_MSEC)
 static int pcode_try_request(struct xe_tile *tile, u32 mbox,
 			     u32 request, u32 reply_mask, u32 reply,
 			     int *status, bool atomic, int timeout_us, bool locked)
@@ -165,10 +166,11 @@ static int pcode_try_request(struct xe_tile *tile, u32 mbox,
 			return 0;
 
 		if (atomic)
-			udelay(wait);
+			udelay(min_t(int, wait, (MAX_UDELAY_MS * 1000)));
 		else
 			usleep_range(wait, wait << 1);
 		wait <<= 1;
+		wait = min_t(int, wait << 1, __XE_MMIO_WAIT_MAX_BACKOFF_100MS);
 	}
 
 	return -ETIMEDOUT;
