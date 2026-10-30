@@ -2977,7 +2977,7 @@ void evlist__uniquify_evsel_names(struct evlist *evlist, const struct perf_stat_
 		struct evsel *pos;
 
 		evlist__for_each_entry(evlist, pos)
-			evsel__uniquify_counter(pos);
+			evsel__uniquify_counter(pos, config->aggr_mode != AGGR_NONE);
 	}
 }
 

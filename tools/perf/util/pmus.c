@@ -90,6 +90,53 @@ size_t pmu_name_len_no_suffix(const char *str)
 	return orig_len;
 }
 
+/*
+ * Replace each number in pattern that differs from the number in the same
+ * place in name with '*'. A '*' already in pattern matches any number.
+ * Return false, with pattern partly changed, if the names differ in
+ * anything but numbers.
+ */
+bool pmu_name_mask_numbers(char *pattern, const char *name)
+{
+	const char *p = pattern;
+	/* Masking never lengthens pattern, so write the result in place. */
+	char *out = pattern;
+
+	while (*p || *name) {
+		size_t p_len, name_len;
+
+		/* Unless both names have a number here, the characters must match. */
+		if (!(isdigit(*p) || *p == '*') || !isdigit(*name)) {
+			if (*p != *name)
+				return false;
+
+			*out++ = *p++;
+			name++;
+			continue;
+		}
+
+		/*
+		 * Both names have a number here. A '*' in pattern is a number
+		 * that differed in an earlier name, so it stays '*'.
+		 */
+		p_len = *p == '*' ? 1 : strspn(p, "0123456789");
+		name_len = strspn(name, "0123456789");
+
+		/* Keep the number if it is the same in both names, else mask it. */
+		if (*p != '*' && p_len == name_len && !strncmp(p, name, p_len)) {
+			for (size_t i = 0; i < p_len; i++)
+				*out++ = *p++;
+		} else {
+			*out++ = '*';
+			p += p_len;
+		}
+		name += name_len;
+	}
+
+	*out = '\0';
+	return true;
+}
+
 int pmu_name_cmp(const char *lhs_pmu_name, const char *rhs_pmu_name)
 {
 	unsigned long long lhs_num = 0, rhs_num = 0;

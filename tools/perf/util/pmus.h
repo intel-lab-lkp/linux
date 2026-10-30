@@ -10,6 +10,7 @@ struct perf_pmu;
 struct print_callbacks;
 
 size_t pmu_name_len_no_suffix(const char *str);
+bool pmu_name_mask_numbers(char *pattern, const char *name);
 /* Exposed for testing only. */
 int pmu_name_cmp(const char *lhs_pmu_name, const char *rhs_pmu_name);
 

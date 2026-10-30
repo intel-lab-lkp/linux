@@ -547,6 +547,67 @@ static int test__name_cmp(struct test_suite *test __maybe_unused, int subtest __
 	return TEST_OK;
 }
 
+static int test__name_mask_numbers(struct test_suite *test __maybe_unused,
+				   int subtest __maybe_unused)
+{
+/*
+ * Check that pmu_name_mask_numbers() turns _pattern into expect after
+ * matching _name, or fails if expect is NULL.
+ */
+#define TEST_MASK(msg, _pattern, _name, _expect)				\
+	do {								\
+		const char *expect = _expect;				\
+		char buf[64];						\
+		bool ok;						\
+									\
+		snprintf(buf, sizeof(buf), "%s", _pattern);		\
+		ok = pmu_name_mask_numbers(buf, _name);			\
+		TEST_ASSERT_VAL(msg, expect ? ok && !strcmp(buf, expect) : !ok); \
+	} while (0)
+
+	TEST_MASK("Same name", "nvidia_ucf_pmu_0", "nvidia_ucf_pmu_0",
+		  "nvidia_ucf_pmu_0");
+	TEST_MASK("Differ in suffix number", "nvidia_ucf_pmu_0", "nvidia_ucf_pmu_1",
+		  "nvidia_ucf_pmu_*");
+	TEST_MASK("Differ in suffix number, with a number inside the name",
+		  "nvidia_nvlink_c2c_pmu_0", "nvidia_nvlink_c2c_pmu_1",
+		  "nvidia_nvlink_c2c_pmu_*");
+	TEST_MASK("Differ in both numbers", "nvidia_pcie_pmu_0_rc_0",
+		  "nvidia_pcie_pmu_1_rc_5", "nvidia_pcie_pmu_*_rc_*");
+	TEST_MASK("Differ in last number only", "nvidia_pcie_pmu_0_rc_0",
+		  "nvidia_pcie_pmu_0_rc_5", "nvidia_pcie_pmu_0_rc_*");
+	TEST_MASK("Differ in first number only", "nvidia_pcie_pmu_0_rc_0",
+		  "nvidia_pcie_pmu_1_rc_0", "nvidia_pcie_pmu_*_rc_0");
+	TEST_MASK("Same number length, different number", "nvidia_pcie_pmu_0_rc_10",
+		  "nvidia_pcie_pmu_0_rc_12", "nvidia_pcie_pmu_0_rc_*");
+	TEST_MASK("Longer last number in name", "nvidia_pcie_pmu_0_rc_0",
+		  "nvidia_pcie_pmu_0_rc_12", "nvidia_pcie_pmu_0_rc_*");
+	TEST_MASK("Longer first number in name", "nvidia_pcie_pmu_0_rc_0",
+		  "nvidia_pcie_pmu_10_rc_0", "nvidia_pcie_pmu_*_rc_0");
+	TEST_MASK("Longer first number in pattern", "nvidia_pcie_pmu_10_rc_0",
+		  "nvidia_pcie_pmu_0_rc_0", "nvidia_pcie_pmu_*_rc_0");
+	TEST_MASK("Same longer number after a masked one", "nvidia_pcie_pmu_10_rc_12",
+		  "nvidia_pcie_pmu_0_rc_12", "nvidia_pcie_pmu_*_rc_12");
+	TEST_MASK("Number is a prefix of the other", "nvidia_pcie_pmu_0_rc_1",
+		  "nvidia_pcie_pmu_0_rc_10", "nvidia_pcie_pmu_0_rc_*");
+	TEST_MASK("'*' matches any number", "nvidia_pcie_pmu_*_rc_*",
+		  "nvidia_pcie_pmu_1_rc_10", "nvidia_pcie_pmu_*_rc_*");
+	TEST_MASK("Numbers without _", "hisi_sccl1_ddrc0", "hisi_sccl3_ddrc0",
+		  "hisi_sccl*_ddrc0");
+	TEST_MASK("Hex suffix, differ in digits", "smmuv3_pmcg_fe0004030",
+		  "smmuv3_pmcg_fe0004620", "smmuv3_pmcg_fe*");
+	TEST_MASK("Hex suffix, differ in a letter", "smmuv3_pmcg_fe0004030",
+		  "smmuv3_pmcg_fe00053a0", NULL);
+	TEST_MASK("Differ before the numbers", "nvidia_pcie_pmu_0_rc_0",
+		  "nvidia_pcie_tgt_pmu_0_rc_0", NULL);
+	TEST_MASK("Name ends early", "nvidia_pcie_pmu_0_rc_0", "nvidia_pcie_pmu_0",
+		  NULL);
+	TEST_MASK("Name is longer", "nvidia_pcie_pmu_0", "nvidia_pcie_pmu_0_rc_0",
+		  NULL);
+#undef TEST_MASK
+	return TEST_OK;
+}
+
 /**
  * Test perf_pmu__wildcard_match() that's used to search for a PMU given a name passed
  * on the command line. The name that's passed may also be a filename type glob
@@ -706,6 +767,7 @@ static struct test_case tests__pmu[] = {
 	TEST_CASE("PMU event names", pmu_event_names),
 	TEST_CASE("PMU name combining", name_len),
 	TEST_CASE("PMU name comparison", name_cmp),
+	TEST_CASE("PMU name number masking", name_mask_numbers),
 	TEST_CASE("PMU cmdline match", pmu_match),
 	TEST_CASE("PMU instance match", pmu_instance_match),
 	TEST_CASE("PMU config helpers", pmu_config_helpers),

@@ -615,7 +615,7 @@ void evsel__remove_from_group(struct evsel *evsel, struct evsel *leader);
 bool arch_evsel__must_be_in_group(const struct evsel *evsel);
 
 bool evsel__set_needs_uniquify(struct evsel *counter, const struct perf_stat_config *config);
-void evsel__uniquify_counter(struct evsel *counter);
+void evsel__uniquify_counter(struct evsel *counter, bool merged);
 
 /*
  * Macro to swap the bit-field postition and size.

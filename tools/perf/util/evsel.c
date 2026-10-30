@@ -4911,10 +4911,84 @@ bool evsel__set_needs_uniquify(struct evsel *counter, const struct perf_stat_con
 	return false;
 }
 
-void evsel__uniquify_counter(struct evsel *counter)
+/*
+ * Check whether the PMUs merged into an uncore counter differ from its PMU
+ * only in the suffix, like nvidia_ucf_pmu_0 and nvidia_ucf_pmu_1. Set merged
+ * if any PMU is merged.
+ */
+static bool evsel__merged_pmus_suffix_only(struct evsel *counter, bool *merged)
+{
+	struct evsel *alias;
+
+	*merged = false;
+	evlist__for_each_entry(counter->evlist, alias) {
+		if (alias->first_wildcard_match != counter)
+			continue;
+
+		*merged = true;
+		if (!perf_pmu__name_no_suffix_match(alias->pmu, counter->pmu->name))
+			return false;
+	}
+
+	return true;
+}
+
+/*
+ * The PMU name of an uncore counter with each number that differs in the
+ * PMUs merged into it replaced by '*', like nvidia_pcie_pmu_*_rc_*, or NULL
+ * if the names differ in anything but numbers.
+ */
+static char *evsel__merged_pmus_mask_numbers(struct evsel *counter)
+{
+	struct evsel *alias;
+	char *name;
+
+	name = strdup(counter->pmu->name);
+	if (!name)
+		return NULL;
+
+	evlist__for_each_entry(counter->evlist, alias) {
+		if (alias->first_wildcard_match != counter)
+			continue;
+
+		if (!pmu_name_mask_numbers(name, alias->pmu->name)) {
+			free(name);
+			return NULL;
+		}
+	}
+
+	return name;
+}
+
+/*
+ * The name of the PMUs whose counts are merged into an uncore counter, or
+ * NULL if none are. It is the PMU name without the suffix if the PMUs
+ * differ only in the suffix, like nvidia_ucf_pmu, otherwise the PMU name
+ * with each number that differs replaced by '*', like
+ * nvidia_pcie_pmu_*_rc_*.
+ */
+static char *evsel__merged_pmu_name(struct evsel *counter)
+{
+	const char *pmu_name = counter->pmu->name;
+	bool merged;
+
+	if (counter->pmu->is_core)
+		return NULL;
+
+	if (evsel__merged_pmus_suffix_only(counter, &merged)) {
+		if (!merged)
+			return NULL;
+
+		return strndup(pmu_name, pmu_name_len_no_suffix(pmu_name));
+	}
+
+	return evsel__merged_pmus_mask_numbers(counter);
+}
+
+void evsel__uniquify_counter(struct evsel *counter, bool merged)
 {
 	const char *name, *pmu_name, *config;
-	char *new_name;
+	char *new_name, *merged_pmu_name;
 	int len, ret;
 
 	/* No uniquification necessary. */
@@ -4930,7 +5004,8 @@ void evsel__uniquify_counter(struct evsel *counter)
 
 	name = evsel__name(counter);
 	config = strchr(name, '/');
-	pmu_name = counter->pmu->name;
+	merged_pmu_name = merged ? evsel__merged_pmu_name(counter) : NULL;
+	pmu_name = merged_pmu_name ?: counter->pmu->name;
 
 	/* Already prefixed by the PMU name? */
 	len = pmu_name_len_no_suffix(pmu_name);
@@ -4965,6 +5040,8 @@ void evsel__uniquify_counter(struct evsel *counter)
 			ret = asprintf(&new_name, "%s/%s/", pmu_name, name);
 		}
 	}
+	free(merged_pmu_name);
+
 	if (ret > 0) {
 		free(counter->name);
 		counter->name = new_name;
