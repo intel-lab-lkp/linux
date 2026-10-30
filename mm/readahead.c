@@ -713,6 +713,17 @@ readit:
 	align = 1UL << min(ra->order, ffs(max_pages) - 1);
 	end = ra->start + ra->size;
 	aligned_end = round_down(end, align);
+	/*
+	 * Keep at least half of the window when aligning its end. A
+	 * window that starts just below a large boundary would otherwise
+	 * shrink to a few pages and cap the folio order. Use a smaller
+	 * alignment instead.
+	 */
+	while (aligned_end > ra->start &&
+	       2 * (aligned_end - ra->start) < ra->size) {
+		align >>= 1;
+		aligned_end = round_down(end, align);
+	}
 	if (aligned_end > ra->start)
 		ra->size -= end - aligned_end;
 	ra->async_size = ra->size;
