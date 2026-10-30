@@ -32,7 +32,15 @@
 #define SEAMLDR_MAX_NR_MODULE_PAGES	(SZ_1G / PAGE_SIZE)
 
 #define SEAMLDR_NR_MODULE_PA_ENTRIES	496
-#define SEAMLDR_MAX_NR_SIG_PAGES	1
+#define SEAMLDR_MAX_NR_SIG_PAGES	4
+
+/*
+ * The seamldr_params "version" field specifies the layout of the
+ * structure. Version 0 supports only 1 sigstruct page while version 1
+ * supports up to 4.
+ */
+#define SEAMLDR_PARAMS_VERSION_0	0
+#define SEAMLDR_PARAMS_VERSION_1	1
 
 /*
  * The seamldr_params "scenario" field specifies the operation mode:
@@ -66,7 +74,7 @@ struct seamldr_params {
 	u32	version;
 	u32	scenario;
 	u64	sigstruct_pages_pa_list[SEAMLDR_MAX_NR_SIG_PAGES];
-	u8	reserved[104];
+	u8	reserved[80];
 	u64	module_nr_pages;
 	u64	module_pages_pa_list[SEAMLDR_NR_MODULE_PA_ENTRIES];
 
@@ -232,7 +240,14 @@ static void populate_seamldr_params(struct seamldr_params *params,
 				    const u8 *sig, u32 sig_nr_pages,
 				    const u8 *mod, u32 mod_nr_pages)
 {
-	params->version		= 0;
+	params->version		= SEAMLDR_PARAMS_VERSION_0;
+	/*
+	 * Use version 1 only for multi-page sigstructs, to stay
+	 * compatible with old P-SEAMLDRs that lack version 1 support.
+	 */
+	if (sig_nr_pages > 1)
+		params->version	= SEAMLDR_PARAMS_VERSION_1;
+
 	params->scenario	= SEAMLDR_SCENARIO_UPDATE;
 	params->module_nr_pages	= mod_nr_pages;
 
