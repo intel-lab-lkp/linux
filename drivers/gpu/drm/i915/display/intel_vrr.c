@@ -39,11 +39,33 @@
 #define DCB_CORRECTION_AGGRESSIVENESS	1000 /* ms × 100; 10 ms */
 #define DCB_BLANK_TARGET		50
 
+/*
+ * The refresh rate range the sink supports VRR in. HDMI 2.1 sinks advertise
+ * it in the HDMI Forum VSDB, where VRRmax = 0 means "the refresh rate of the
+ * video timing" (fall back to the EDID range descriptor for the maximum).
+ */
+static void intel_vrr_sink_range(struct intel_connector *connector,
+				 int *min_vfreq, int *max_vfreq)
+{
+	const struct drm_display_info *info = &connector->base.display_info;
+	const struct drm_hdmi_vrr_cap *vrr_cap = &info->hdmi.vrr_cap;
+
+	*min_vfreq = info->monitor_range.min_vfreq;
+	*max_vfreq = info->monitor_range.max_vfreq;
+
+	if (connector->base.connector_type == DRM_MODE_CONNECTOR_HDMIA &&
+	    vrr_cap->supported) {
+		*min_vfreq = vrr_cap->vrr_min;
+		if (vrr_cap->vrr_max)
+			*max_vfreq = vrr_cap->vrr_max;
+	}
+}
+
 bool intel_vrr_is_capable(struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(connector);
-	const struct drm_display_info *info = &connector->base.display_info;
 	struct intel_dp *intel_dp;
+	int min_vfreq, max_vfreq;
 
 	if (!HAS_VRR(display))
 		return false;
@@ -78,24 +100,36 @@ bool intel_vrr_is_capable(struct intel_connector *connector)
 			return false;
 
 		break;
+	case DRM_MODE_CONNECTOR_HDMIA:
+		/*
+		 * HDMI 2.1 VRR is signalled to the sink with the VTEM, which
+		 * is sent using the EMP hardware of display version 20+.
+		 */
+		if (DISPLAY_VER(display) < 20 ||
+		    !connector->base.display_info.hdmi.vrr_cap.supported)
+			return false;
+		break;
 	default:
 		return false;
 	}
 
-	if (!info->monitor_range.min_vfreq || !info->monitor_range.max_vfreq ||
-	    info->monitor_range.min_vfreq > info->monitor_range.max_vfreq)
+	intel_vrr_sink_range(connector, &min_vfreq, &max_vfreq);
+
+	if (!min_vfreq || !max_vfreq || min_vfreq > max_vfreq)
 		return false;
 
-	return info->monitor_range.max_vfreq - info->monitor_range.min_vfreq > 10;
+	return max_vfreq - min_vfreq > 10;
 }
 
 bool intel_vrr_is_in_range(struct intel_connector *connector, int vrefresh)
 {
-	const struct drm_display_info *info = &connector->base.display_info;
+	int min_vfreq, max_vfreq;
+
+	intel_vrr_sink_range(connector, &min_vfreq, &max_vfreq);
 
 	return intel_vrr_is_capable(connector) &&
-		vrefresh >= info->monitor_range.min_vfreq &&
-		vrefresh <= info->monitor_range.max_vfreq;
+		vrefresh >= min_vfreq &&
+		vrefresh <= max_vfreq;
 }
 
 bool intel_vrr_possible(const struct intel_crtc_state *crtc_state)
@@ -413,11 +447,13 @@ static
 int intel_vrr_compute_vmax(struct intel_connector *connector,
 			   const struct drm_display_mode *adjusted_mode)
 {
-	const struct drm_display_info *info = &connector->base.display_info;
+	int min_vfreq, max_vfreq;
 	int vmax;
 
+	intel_vrr_sink_range(connector, &min_vfreq, &max_vfreq);
+
 	vmax = adjusted_mode->crtc_clock * 1000 /
-		(adjusted_mode->crtc_htotal * info->monitor_range.min_vfreq);
+		(adjusted_mode->crtc_htotal * min_vfreq);
 	vmax = max_t(int, vmax, adjusted_mode->crtc_vtotal);
 
 	return vmax;

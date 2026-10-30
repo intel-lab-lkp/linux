@@ -2490,6 +2490,8 @@ intel_hdmi_unset_edid(struct drm_connector *_connector)
 
 	drm_edid_free(connector->detect_edid);
 	connector->detect_edid = NULL;
+
+	drm_connector_set_vrr_capable_property(&connector->base, false);
 }
 
 static void
@@ -2572,6 +2574,9 @@ intel_hdmi_set_edid(struct drm_connector *_connector)
 	drm_edid_connector_update(&connector->base, drm_edid);
 
 	connector->detect_edid = drm_edid;
+
+	drm_connector_set_vrr_capable_property(&connector->base,
+					       intel_vrr_is_capable(connector));
 
 	if (drm_edid_is_digital(drm_edid)) {
 		intel_hdmi_dp_dual_mode_detect(&connector->base);
@@ -2726,6 +2731,9 @@ intel_hdmi_add_properties(struct intel_hdmi *intel_hdmi, struct drm_connector *_
 
 	if (!HAS_GMCH(display))
 		drm_connector_attach_max_bpc_property(&connector->base, 8, 12);
+
+	if (HAS_VRR(display) && DISPLAY_VER(display) >= 20)
+		drm_connector_attach_vrr_capable_property(&connector->base);
 }
 
 /*
