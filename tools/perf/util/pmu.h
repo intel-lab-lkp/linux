@@ -148,6 +148,12 @@ struct perf_pmu {
 	 * @events_table: The events table for json events in pmu-events.c.
 	 */
 	const struct pmu_events_table *events_table;
+	/**
+	 * @json_unit: The json Unit with comma-separated parts of the events
+	 * matching the PMU, NULL if none. Units without a comma are not
+	 * stored. Found by perf_pmu__is_instance_of().
+	 */
+	const char *json_unit;
 	/** @sysfs_aliases: Number of sysfs aliases loaded. */
 	uint32_t sysfs_aliases;
 	/** @cpu_json_aliases: Number of json event aliases loaded specific to the CPUID. */
@@ -166,6 +172,8 @@ struct perf_pmu {
 	 * been added?
 	 */
 	bool cpu_aliases_added;
+	/** @json_unit_checked: Has json_unit been looked up? */
+	bool json_unit_checked;
 	/** @caps_initialized: Has the list caps been initialized? */
 	bool caps_initialized;
 	/** @nr_caps: The length of the list caps. */
@@ -300,6 +308,7 @@ int perf_pmu__for_each_event(struct perf_pmu *pmu, bool skip_duplicate_pmus,
 			     void *state, pmu_event_callback cb);
 bool perf_pmu__name_wildcard_match(const struct perf_pmu *pmu, const char *to_match);
 bool perf_pmu__name_no_suffix_match(const struct perf_pmu *pmu, const char *to_match);
+bool perf_pmu__is_instance_of(struct perf_pmu *pmu, struct perf_pmu *other);
 
 /**
  * perf_pmu_is_software - is the PMU a software PMU as in it uses the

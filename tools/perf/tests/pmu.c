@@ -629,6 +629,77 @@ static int test__pmu_match(struct test_suite *test __maybe_unused, int subtest _
 	return TEST_OK;
 }
 
+static int test__pmu_instance_match(struct test_suite *test __maybe_unused,
+				    int subtest __maybe_unused)
+{
+/*
+ * Check that perf_pmu__is_instance_of() returns expect for uncore PMU _name,
+ * whose json events have the comma-separated Unit _unit (NULL if none), and
+ * uncore PMU _other.
+ */
+#define TEST_INSTANCE(msg, _name, _unit, _other, expect)			\
+	TEST_ASSERT_EQUAL(msg, perf_pmu__is_instance_of(			\
+		&(struct perf_pmu){ .name = _name, .is_uncore = true,		\
+				    .json_unit = _unit,				\
+				    .json_unit_checked = true },		\
+		&(struct perf_pmu){ .name = _other, .is_uncore = true,		\
+				    .json_unit_checked = true }),		\
+		expect)
+
+	/* No comma-separated Unit: only the suffix number is ignored. */
+	TEST_INSTANCE("Same PMU type: same name",
+		      "nvidia_ucf_pmu_0", NULL, "nvidia_ucf_pmu_0", true);
+	TEST_INSTANCE("Same PMU type: differ only in suffix number",
+		      "nvidia_ucf_pmu_0", NULL, "nvidia_ucf_pmu_1", true);
+	TEST_INSTANCE("Same PMU type: differ only in suffix number, with a number inside the name",
+		      "nvidia_nvlink_c2c_pmu_0", NULL, "nvidia_nvlink_c2c_pmu_1", true);
+	TEST_INSTANCE("Same PMU type: differ only in suffix number, with a number in the middle",
+		      "uncore_type_0_1", NULL, "uncore_type_0_2", true);
+	TEST_INSTANCE("Same PMU type: differ only in hex suffix digits",
+		      "smmuv3_pmcg_fe0004030", NULL, "smmuv3_pmcg_fe0004620", true);
+	TEST_INSTANCE("Same PMU type: differ only in hex suffix, with letters",
+		      "smmuv3_pmcg_fe0004030", NULL, "smmuv3_pmcg_fe00053a0", true);
+	TEST_INSTANCE("Different PMU types: differ before suffix number",
+		      "nvidia_ucf_pmu_0", NULL, "nvidia_nvlink_c2c_pmu_0", false);
+	TEST_INSTANCE("Different PMU types: differ in the middle number",
+		      "uncore_type_0_1", NULL, "uncore_type_1_1", false);
+	TEST_INSTANCE("Different PMU types: differ before hex suffix",
+		      "smmuv3_pmcg_fe0004030", NULL, "arm_dmc620_fe0004030", false);
+
+	/* Comma-separated Unit: an optional number after each part. */
+	TEST_INSTANCE("Same PMU type: both match comma Unit, numbers after _",
+		      "nvidia_pcie_pmu_0_rc_0", "nvidia_pcie_pmu_,rc_",
+		      "nvidia_pcie_pmu_1_rc_5", true);
+	TEST_INSTANCE("Same PMU type: both match comma Unit, numbers after _, reversed",
+		      "nvidia_pcie_pmu_1_rc_5", "nvidia_pcie_pmu_,rc_",
+		      "nvidia_pcie_pmu_0_rc_0", true);
+	TEST_INSTANCE("Same PMU type: both match comma Unit, numbers without _",
+		      "hisi_sccl1_ddrc0", "hisi_sccl,ddrc", "hisi_sccl3_ddrc2", true);
+	TEST_INSTANCE("Same PMU type: comma Unit, part without number",
+		      "hisi_sccl1_ddrc", "hisi_sccl,ddrc", "hisi_sccl3_ddrc", true);
+	TEST_INSTANCE("Same PMU type: comma Unit, one vs two numbers",
+		      "hisi_sccl1_ddrc", "hisi_sccl,ddrc", "hisi_sccl3_ddrc2", true);
+
+	/* Comma-separated Unit that doesn't match the other PMU. */
+	TEST_INSTANCE("Different PMU types: comma Unit of other type",
+		      "nvidia_pcie_pmu_0_rc_0", "nvidia_pcie_pmu_,rc_",
+		      "nvidia_pcie_tgt_pmu_1_rc_0", false);
+	TEST_INSTANCE("Different PMU types: comma Unit of other type, reversed",
+		      "nvidia_pcie_tgt_pmu_1_rc_0", "nvidia_pcie_tgt_pmu_,rc_",
+		      "nvidia_pcie_pmu_1_rc_5", false);
+	TEST_INSTANCE("Different PMU types: comma Unit part rc_ missing",
+		      "nvidia_pcie_pmu_0_rc_0", "nvidia_pcie_pmu_,rc_",
+		      "nvidia_pcie_pmu_0", false);
+	TEST_INSTANCE("Different PMU types: comma Unit part rc_ missing, reversed",
+		      "nvidia_pcie_pmu_0", NULL, "nvidia_pcie_pmu_0_rc_0", false);
+	TEST_INSTANCE("Different PMU types: comma Unit vs suffix-only name",
+		      "nvidia_pcie_pmu_0_rc_0", "nvidia_pcie_pmu_,rc_",
+		      "nvidia_ucf_pmu_0", false);
+
+#undef TEST_INSTANCE
+	return TEST_OK;
+}
+
 static struct test_case tests__pmu[] = {
 	TEST_CASE("Parsing with PMU format directory", pmu_format),
 	TEST_CASE("Parsing with PMU event", pmu_events),
@@ -636,6 +707,7 @@ static struct test_case tests__pmu[] = {
 	TEST_CASE("PMU name combining", name_len),
 	TEST_CASE("PMU name comparison", name_cmp),
 	TEST_CASE("PMU cmdline match", pmu_match),
+	TEST_CASE("PMU instance match", pmu_instance_match),
 	TEST_CASE("PMU config helpers", pmu_config_helpers),
 	{	.name = NULL, }
 };

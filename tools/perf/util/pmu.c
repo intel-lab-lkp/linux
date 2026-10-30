@@ -1120,6 +1120,13 @@ static int pmu_add_sys_aliases_iter_fn(const struct pmu_event *pe,
 				/*val_fd=*/ -1,
 				pe,
 				EVENT_SRC_SYS_JSON);
+
+		/*
+		 * Sys json events are not in pmu->events_table, so store their
+		 * comma-separated Unit here for perf_pmu__json_unit().
+		 */
+		if (!pmu->json_unit && strchr(pe->pmu, ','))
+			pmu->json_unit = pe->pmu;
 	}
 	return 0;
 }
@@ -2433,6 +2440,64 @@ bool perf_pmu__name_wildcard_match(const struct perf_pmu *pmu, const char *to_ma
 bool perf_pmu__name_no_suffix_match(const struct perf_pmu *pmu, const char *to_match)
 {
 	return perf_pmu___name_match(pmu, to_match, /*wildcard=*/false);
+}
+
+/* Look for a json Unit with comma-separated parts among the PMU's events. */
+static int pmu_json_unit_callback(const struct pmu_event *pe,
+				  const struct pmu_events_table *table __maybe_unused,
+				  void *vdata)
+{
+	const char **unit = vdata;
+
+	if (!pe->pmu || !strchr(pe->pmu, ','))
+		return 0;
+
+	*unit = pe->pmu;
+	return 1;
+}
+
+/*
+ * The json Unit with comma-separated parts matching the PMU, if any. Such a
+ * Unit, like "nvidia_pcie_pmu_,rc_", matches PMU names with an optional
+ * number after each part, like "nvidia_pcie_pmu_1_rc_3".
+ */
+static const char *perf_pmu__json_unit(struct perf_pmu *pmu)
+{
+	if (!pmu->json_unit_checked) {
+		pmu->json_unit_checked = true;
+		/* Not found in the sys json events: look in the CPU json events. */
+		if (!pmu->json_unit)
+			pmu_events_table__for_each_event(pmu->events_table, pmu,
+							 pmu_json_unit_callback,
+							 &pmu->json_unit);
+	}
+	return pmu->json_unit;
+}
+
+/**
+ * perf_pmu__is_instance_of - Check whether pmu and other are instances of
+ *                            the same PMU: either their names match
+ *                            ignoring any suffix, or both are uncore PMUs
+ *                            matching the json Unit of pmu with
+ *                            comma-separated parts.
+ * @pmu: The PMU whose name and json Unit to match.
+ * @other: The possible other instance.
+ *
+ * Only the json Unit of pmu is used. Instances of one PMU have the same
+ * json events, so the result doesn't depend on the order of the PMUs.
+ */
+bool perf_pmu__is_instance_of(struct perf_pmu *pmu, struct perf_pmu *other)
+{
+	const char *unit;
+
+	if (perf_pmu__name_no_suffix_match(pmu, other->name))
+		return true;
+
+	if (!pmu->is_uncore || !other->is_uncore)
+		return false;
+
+	unit = perf_pmu__json_unit(pmu);
+	return unit && perf_pmu__name_wildcard_match(other, unit);
 }
 
 bool perf_pmu__is_software(const struct perf_pmu *pmu)

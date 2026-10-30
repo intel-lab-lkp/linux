@@ -193,7 +193,7 @@ __add_event(struct list_head *list, int *idx,
 
 		first_wildcard_match = NULL;
 		list_for_each_entry_continue(pos, list, core.node) {
-			if (perf_pmu__name_no_suffix_match(pos->pmu, pmu->name)) {
+			if (perf_pmu__is_instance_of(pos->pmu, pmu)) {
 				first_wildcard_match = pos;
 				break;
 			}
