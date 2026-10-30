@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: (GPL-2.0-or-later OR MIT)
+/*
+ * Copyright (C) 2026 PHYTEC Messtechnik GmbH
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+&lpuart8 {
+	bluetooth {
+		compatible = "nxp,88w8987-bt";
+		fw-init-baudrate = <115200>;
+	};
+};
+
+&gpio_expander1 {
+	uart1_bt_rs_sel: bt-rs-hog {
+		gpios = <14 GPIO_ACTIVE_HIGH>;
+		gpio-hog;
+		line-name = "UART1_BT_RS_SEL";
+		output-high;
+	};
+};
