@@ -252,6 +252,28 @@ __ext_tree_remove(struct rb_root *root,
 	return 0;
 }
 
+/*
+ * Return the first extent at or after @start that a new read-only
+ * extent must not cover: an ro extent, or an rw extent before @end
+ * that reads use. An INVALID_DATA extent not yet written to does
+ * not count: reads of it use the ro extent below it (copy-on-write).
+ */
+static struct pnfs_block_extent *
+ext_tree_search_ro(struct pnfs_block_layout *bl, sector_t start, sector_t end)
+{
+	struct pnfs_block_extent *be = __ext_tree_search(&bl->bl_ext_ro, start);
+	struct pnfs_block_extent *rw;
+
+	if (be && be->be_f_offset < end)
+		end = be->be_f_offset;
+	for (rw = __ext_tree_search(&bl->bl_ext_rw, start);
+	     rw && rw->be_f_offset < end; rw = ext_tree_next(rw)) {
+		if (rw->be_state != PNFS_BLOCK_INVALID_DATA || rw->be_tag)
+			return rw;
+	}
+	return be;
+}
+
 int
 ext_tree_insert(struct pnfs_block_layout *bl, struct pnfs_block_extent *new)
 {
@@ -275,7 +297,10 @@ ext_tree_insert(struct pnfs_block_layout *bl, struct pnfs_block_extent *new)
 
 	spin_lock(&bl->bl_ext_lock);
 retry:
-	be = __ext_tree_search(root, new->be_f_offset);
+	if (root == &bl->bl_ext_ro)
+		be = ext_tree_search_ro(bl, new->be_f_offset, ext_f_end(new));
+	else
+		be = __ext_tree_search(root, new->be_f_offset);
 	if (!be || be->be_f_offset >= ext_f_end(new)) {
 		__ext_tree_insert(root, new, true);
 	} else if (new->be_f_offset >= be->be_f_offset) {
