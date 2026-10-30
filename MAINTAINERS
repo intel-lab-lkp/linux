@@ -10503,6 +10503,7 @@ M:	Alexander Koskovich <akoskovich@pm.me>
 L:	linux-input@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/input/touchscreen/focaltech,ft3683g.yaml
+F:	drivers/input/touchscreen/focaltech_ft3683g.c
 
 FOCUSRITE CONTROL PROTOCOL/SCARLETT2 MIXER DRIVERS (Scarlett Gen 2+, Clarett, and Vocaster)
 M:	Geoffrey D. Bennett <g@b4.vu>
