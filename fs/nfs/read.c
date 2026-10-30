@@ -132,7 +132,15 @@ static void nfs_readpage_release(struct nfs_page *req, int error)
 
 static void nfs_page_group_set_uptodate(struct nfs_page *req)
 {
+	struct folio *folio = nfs_page_to_folio(req);
 	bool uptodate = false;
+
+	/*
+	 * When netfs owns the folio it decides when the folio becomes
+	 * uptodate; a request may cover only part of the folio.
+	 */
+	if (!nfs_netfs_folio_unlock(folio))
+		return;
 
 	nfs_page_group_lock(req);
 	if (!test_bit(PG_READ_FAILED, &req->wb_head->wb_flags) &&
@@ -141,7 +149,7 @@ static void nfs_page_group_set_uptodate(struct nfs_page *req)
 	nfs_page_group_unlock(req);
 
 	if (uptodate)
-		folio_mark_uptodate(nfs_page_to_folio(req));
+		folio_mark_uptodate(folio);
 }
 
 static void nfs_page_group_mark_read_failed(struct nfs_page *req)
@@ -306,6 +314,31 @@ static void nfs_readpage_result(struct rpc_task *task,
 		nfs_readpage_retry(task, hdr);
 }
 
+int nfs_read_add_folio_range(struct nfs_pageio_descriptor *pgio,
+			     struct nfs_open_context *ctx,
+			     struct folio *folio,
+			     size_t offset, size_t len)
+{
+	struct nfs_page *new;
+	int error;
+
+	new = nfs_page_create_from_folio(ctx, folio, false, offset, len);
+	if (IS_ERR(new)) {
+		error = PTR_ERR(new);
+		if (nfs_netfs_folio_unlock(folio))
+			folio_unlock(folio);
+		return error;
+	}
+
+	if (!nfs_pageio_add_request(pgio, new)) {
+		nfs_list_remove_request(new);
+		error = pgio->pg_error;
+		nfs_readpage_release(new, error);
+		return error;
+	}
+	return 0;
+}
+
 int nfs_read_add_folio(struct nfs_pageio_descriptor *pgio,
 		       struct nfs_open_context *ctx,
 		       struct folio *folio)
@@ -314,9 +347,7 @@ int nfs_read_add_folio(struct nfs_pageio_descriptor *pgio,
 	struct nfs_server *server = NFS_SERVER(inode);
 	size_t fsize = folio_size(folio);
 	unsigned int rsize = server->rsize;
-	struct nfs_page *new;
 	unsigned int len, aligned_len;
-	int error;
 
 	len = nfs_folio_length(folio);
 	if (len == 0)
@@ -324,25 +355,10 @@ int nfs_read_add_folio(struct nfs_pageio_descriptor *pgio,
 
 	aligned_len = min_t(unsigned int, ALIGN(len, rsize), fsize);
 
-	new = nfs_page_create_from_folio(ctx, folio, false, 0, aligned_len);
-	if (IS_ERR(new)) {
-		error = PTR_ERR(new);
-		if (nfs_netfs_folio_unlock(folio))
-			folio_unlock(folio);
-		goto out;
-	}
-
 	if (len < fsize)
 		folio_zero_segment(folio, len, fsize);
-	if (!nfs_pageio_add_request(pgio, new)) {
-		nfs_list_remove_request(new);
-		error = pgio->pg_error;
-		nfs_readpage_release(new, error);
-		goto out;
-	}
-	return 0;
-out:
-	return error;
+
+	return nfs_read_add_folio_range(pgio, ctx, folio, 0, aligned_len);
 }
 
 /*
