@@ -20,6 +20,25 @@ static int intel_dip_get_as_sdp_transmission_line(const struct intel_crtc_state 
 		return 0;
 
 	/*
+	 * HDMI 2.1 expects the EMPs (such as the VTEM used for VRR) within
+	 * the first half of V. Blank, so send them on the 2nd line of the
+	 * V. Blank rather than at the start of the VSYNC pulse. The line
+	 * must also stay within the SCL + guardband region.
+	 */
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI) &&
+	    crtc_state->vrr.in_range) {
+		const struct drm_display_mode *mode = &crtc_state->hw.adjusted_mode;
+		int max_tl = crtc_state->set_context_latency +
+			crtc_state->vrr.guardband - 1;
+		int tl = mode->crtc_vtotal - mode->crtc_vdisplay - 1;
+
+		if (max_tl > 0)
+			tl = min(tl, max_tl);
+
+		return tl;
+	}
+
+	/*
 	 * EMP_AS_SDP_TL defines the T1 position as the default AS SDP
 	 * Transmission Line, which corresponds to the start of the
 	 * VSYNC pulse.
