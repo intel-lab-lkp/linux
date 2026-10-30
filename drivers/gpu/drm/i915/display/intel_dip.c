@@ -4,11 +4,14 @@
  *
  */
 
+#include <linux/minmax.h>
+
 #include <drm/drm_print.h>
 
 #include "intel_de.h"
 #include "intel_dip.h"
 #include "intel_dip_regs.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_hdmi.h"
 
@@ -72,6 +75,78 @@ void intel_dip_write_emp_as_sdp_tl(const struct intel_crtc_state *crtc_state)
 	intel_de_write(display,
 		       EMP_AS_SDP_TL(display, cpu_transcoder),
 		       EMP_AS_SDP_DB_TL(crtc_state->dip.emp_as_sdp_tl));
+}
+
+/* VTEM: 7 byte EM Data Set header (PB0-PB6) + 4 byte data set (MD0-MD3) */
+#define VTEM_DATA_SET_LENGTH	4
+#define VTEM_EMP_SIZE		(7 + VTEM_DATA_SET_LENGTH)
+/* Payload bytes carried by one EMP data island packet */
+#define HDMI_EMP_PACKET_BODY	28
+
+/*
+ * Tell an HDMI 2.1 sink whether VRR is active with a Class 0 (Gaming-VRR)
+ * Video Timing Extended Metadata (VTEM) packet. It is a periodic
+ * pseudo-static EM Data Set: the hardware sends it every frame until it is
+ * reprogrammed. On disable, a last VTEM with VRR_EN=0 and END set is sent,
+ * after which the hardware stops sending it.
+ */
+void intel_dip_write_hdmi_vtem(const struct intel_crtc_state *crtc_state,
+			       bool enable)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	const struct drm_display_mode *mode = &crtc_state->hw.adjusted_mode;
+	u8 vic = crtc_state->infoframes.avi.avi.video_code;
+	int base_rr = drm_mode_vrefresh(mode);
+	u8 pb[HDMI_EMP_PACKET_BODY] = {};
+	int i;
+
+	if (DISPLAY_VER(display) < 20 ||
+	    !intel_crtc_has_type(crtc_state, INTEL_OUTPUT_HDMI) ||
+	    !crtc_state->vrr.in_range)
+		return;
+
+	/* PB0-PB6: EM Data Set header (Sync = 0, DS_Type = pseudo-static) */
+	pb[0] = BIT(7) |			/* NEW */
+		BIT(2) |			/* VFR */
+		(enable ? 0 : BIT(6));		/* END */
+	pb[2] = 1;				/* Organization_ID: HDMI */
+	pb[4] = 1;				/* Data_Set_Tag: VTEM */
+	pb[6] = VTEM_DATA_SET_LENGTH;		/* Data_Set_Length */
+
+	/* PB7-PB10: MD0-MD3 (M_CONST = 0, FVA_Factor_M1 = 0, MD2 bit 2 reserved) */
+	if (enable) {
+		pb[7] = BIT(0);			/* VRR_EN */
+		/* Base_Vfront and Base_Refresh_Rate are only sent without a VIC */
+		if (!vic) {
+			pb[8] = min(mode->crtc_vsync_start - mode->crtc_vdisplay, 255);
+			pb[9] = (base_rr >> 8) & 0x3;
+			pb[10] = base_rr & 0xff;
+		}
+	}
+
+	drm_dbg_kms(display->drm,
+		    "[TRANSCODER %s] VTEM: VRR_EN=%d VIC=%u Base_Vfront=%u Base_RR=%u\n",
+		    transcoder_name(cpu_transcoder), enable, vic, pb[8],
+		    pb[9] << 8 | pb[10]);
+
+	/*
+	 * HDMI_EMP_CTL first, then the payload dwords (PB0 in bits 7:0), then
+	 * the header, whose write clock crosses the whole packet. HB0 must be
+	 * set to the EMP packet type, the hardware doesn't fill it in.
+	 */
+	intel_de_write(display, HDMI_EMP_CTL(display, cpu_transcoder),
+		       HDMI_EMP_CTL_TYPE_VTEM);
+	for (i = 0; i < ARRAY_SIZE(pb); i += 4)
+		intel_de_write(display, HDMI_EMP_DATA(display, cpu_transcoder),
+			       pb[i] | pb[i + 1] << 8 | pb[i + 2] << 16 |
+			       pb[i + 3] << 24);
+	intel_de_write(display, HDMI_EMP_HEADER(display, cpu_transcoder),
+		       HDMI_EMP_HEADER_HB0_EMP |
+		       HDMI_EMP_HEADER_DS_TYPE_PSEUDO_STATIC |
+		       (enable ? 0 : HDMI_EMP_HEADER_END) |
+		       HDMI_EMP_HEADER_NUM_PACKETS(DIV_ROUND_UP(VTEM_EMP_SIZE,
+								HDMI_EMP_PACKET_BODY)));
 }
 
 static int intel_dip_sdp_stagger_to_tl(struct intel_crtc_state *crtc_state,

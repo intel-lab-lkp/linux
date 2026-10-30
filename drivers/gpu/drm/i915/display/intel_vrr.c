@@ -1010,6 +1010,8 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 
 	if (!intel_vrr_always_use_vrr_tg(display))
 		intel_vrr_tg_enable(crtc_state);
+
+	intel_dip_write_hdmi_vtem(crtc_state, true);
 }
 
 void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)
@@ -1024,6 +1026,8 @@ void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)
 
 	intel_vrr_disable_dc_balancing(old_crtc_state);
 	intel_vrr_set_fixed_rr_timings(old_crtc_state, old_crtc_state->cpu_transcoder);
+
+	intel_dip_write_hdmi_vtem(old_crtc_state, false);
 }
 
 void intel_vrr_transcoder_enable(const struct intel_crtc_state *crtc_state)
