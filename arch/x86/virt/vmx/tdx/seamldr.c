@@ -157,13 +157,14 @@ static void populate_seamldr_params(struct seamldr_params *params,
 
 /*
  * @image points to a vmalloc()'d 'struct tdx_image'. Transform
- * it into @params which is the P-SEAMLDR ABI format.
+ * it into a newly allocated 'struct seamldr_params', which is
+ * the P-SEAMLDR ABI format.
  */
-static int init_seamldr_params(struct seamldr_params *params,
-			       const struct tdx_image *image,
-			       u32 image_len)
+static struct seamldr_params *build_seamldr_params(const struct tdx_image *image,
+						   u32 image_len)
 {
 	const struct tdx_image_header *header	= &image->header;
+	struct seamldr_params *params;
 
 	u32 sigstruct_len	= header->sigstruct_nr_pages * PAGE_SIZE;
 	u32 module_len		= header->module_nr_pages    * PAGE_SIZE;
@@ -178,25 +179,29 @@ static int init_seamldr_params(struct seamldr_params *params,
 
 	/* Check the calculated payload size against the image size. */
 	if (TDX_IMAGE_HEADER_SIZE + sigstruct_len + module_len != image_len)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	/* Reject unsupported tdx_image ABI versions. */
 	if (header->version != TDX_IMAGE_VERSION_2)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	if (header->sigstruct_nr_pages > SEAMLDR_MAX_NR_SIG_PAGES ||
 	    header->module_nr_pages    > SEAMLDR_MAX_NR_MODULE_PAGES)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	if (memcmp(header->signature, "TDX-BLOB", sizeof(header->signature)))
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	if (memchr_inv(header->reserved, 0, sizeof(header->reserved)))
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
+
+	params = kzalloc_obj(*params);
+	if (!params)
+		return ERR_PTR(-ENOMEM);
 
 	populate_seamldr_params(params, sigstruct_start, header->sigstruct_nr_pages,
 					module_start,    header->module_nr_pages);
-	return 0;
+	return params;
 }
 
 /*
@@ -321,7 +326,7 @@ int seamldr_install_module(const u8 *data, u32 data_len)
 	int ret;
 
 	/*
-	 * init_seamldr_params() reads the header early.
+	 * build_seamldr_params() reads the header early.
 	 * Ensure there is enough data to do at least that.
 	 */
 	if (data_len < TDX_IMAGE_HEADER_SIZE)
@@ -329,14 +334,10 @@ int seamldr_install_module(const u8 *data, u32 data_len)
 
 	image = (const struct tdx_image *)data;
 
-	params = kzalloc_obj(*params);
-	if (!params)
-		return -ENOMEM;
-
-	/* Populate 'params' from 'image'. */
-	ret = init_seamldr_params(params, image, data_len);
-	if (ret)
-		goto out;
+	/* Build 'params' from 'image'. */
+	params = build_seamldr_params(image, data_len);
+	if (IS_ERR(params))
+		return PTR_ERR(params);
 
 	/* Ensure a stable set of online CPUs for the update process. */
 	cpus_read_lock();
@@ -345,7 +346,6 @@ int seamldr_install_module(const u8 *data, u32 data_len)
 				      cpu_online_mask);
 	cpus_read_unlock();
 
-out:
 	kfree(params);
 	return ret;
 }
