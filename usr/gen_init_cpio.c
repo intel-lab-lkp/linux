@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
@@ -13,6 +14,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <limits.h>
+#include "../include/linux/initramfs.h"
 
 /*
  * Original work by Jeff Garzik
@@ -37,11 +39,125 @@ static bool do_file_mtime;
 static bool do_csum = false;
 static int outfd = STDOUT_FILENO;
 static unsigned int dalign;
+static char metadata_path[] = "/tmp/cpio-metadata-XXXXXX";
+static int metadata_fd = -1;
 
 struct file_handler {
 	const char *type;
 	int (*handler)(const char *line);
 };
+
+static enum metadata_types parse_metadata_type(char *arg)
+{
+	static char *metadata_type_str[TYPE__LAST] = {
+		[TYPE_NONE] = "none",
+		[TYPE_XATTR] = "xattr",
+	};
+	int i;
+
+	for (i = 0; i < TYPE__LAST; i++)
+		if (!strcmp(metadata_type_str[i], arg))
+			return i;
+
+	return TYPE_NONE;
+}
+
+static int cpio_mkfile(const char *name, const char *location,
+		       unsigned int mode, uid_t uid, gid_t gid,
+		       unsigned int nlinks);
+
+static char *cpio_replace_env(char *new_location);
+
+static int write_xattrs(const char *path)
+{
+	struct metadata_hdr hdr = { .c_version = 1, .c_type = TYPE_XATTR };
+	char str[sizeof(hdr.c_size) + 1];
+	char *xattr_list, *list_ptr;
+	char *xattr_value = NULL;
+	ssize_t list_len, name_len, value_len, len;
+	int ret = -EINVAL;
+
+	if (metadata_fd < 0)
+		return 0;
+
+	if (path == metadata_path)
+		return 0;
+
+	list_len = llistxattr(path, NULL, 0);
+	if (list_len <= 0)
+		return 0;
+
+	list_ptr = xattr_list = malloc(list_len);
+	if (!list_ptr) {
+		fprintf(stderr, "out of memory\n");
+		return ret;
+	}
+
+	len = llistxattr(path, xattr_list, list_len);
+	if (len != list_len)
+		goto out;
+
+	if (ftruncate(metadata_fd, 0))
+		goto out;
+
+	lseek(metadata_fd, 0, SEEK_SET);
+
+	while (list_ptr < xattr_list + list_len) {
+		name_len = strlen(list_ptr);
+
+		value_len = lgetxattr(path, list_ptr, NULL, 0);
+		if (value_len < 0) {
+			fprintf(stderr, "cannot get xattrs\n");
+			break;
+		}
+
+		if (value_len) {
+			xattr_value = malloc(value_len);
+			if (!xattr_value) {
+				fprintf(stderr, "out of memory\n");
+				break;
+			}
+		} else {
+			xattr_value = NULL;
+		}
+
+		len = lgetxattr(path, list_ptr, xattr_value, value_len);
+		if (len != value_len)
+			break;
+
+		snprintf(str, sizeof(str), "%.8zx",
+			 sizeof(hdr) + name_len + 1 + value_len);
+
+		memcpy(hdr.c_size, str, sizeof(hdr.c_size));
+
+		if (write(metadata_fd, &hdr, sizeof(hdr)) != sizeof(hdr))
+			break;
+
+		if (write(metadata_fd, list_ptr, name_len + 1) != name_len + 1)
+			break;
+
+		if (write(metadata_fd, xattr_value, value_len) != value_len)
+			break;
+
+		if (fsync(metadata_fd))
+			break;
+
+		list_ptr += name_len + 1;
+		free(xattr_value);
+		xattr_value = NULL;
+	}
+
+	free(xattr_value);
+out:
+	if (list_ptr != xattr_list + list_len) {
+		free(xattr_list);
+		return ret;
+	}
+
+	free(xattr_list);
+
+	return cpio_mkfile(METADATA_FILENAME, metadata_path, S_IFREG, 0, 0, 1);
+}
 
 static int push_buf(const char *name, size_t name_len)
 {
@@ -119,7 +235,8 @@ static int cpio_trailer(void)
 }
 
 static int cpio_mkslink(const char *name, const char *target,
-			 unsigned int mode, uid_t uid, gid_t gid)
+			const char *location, unsigned int mode,
+			uid_t uid, gid_t gid)
 {
 	int len;
 	unsigned int namesize, targetsize = strlen(target) + 1;
@@ -150,7 +267,8 @@ static int cpio_mkslink(const char *name, const char *target,
 	    push_buf(name, namesize) < 0 ||
 	    push_pad(padlen(offset, 4)) < 0 ||
 	    push_buf(target, targetsize) < 0 ||
-	    push_pad(padlen(offset, 4)) < 0)
+	    push_pad(padlen(offset, 4)) < 0 ||
+	    write_xattrs(location) < 0)
 		return -1;
 
 	return 0;
@@ -161,22 +279,29 @@ static int cpio_mkslink_line(const char *line)
 {
 	char name[PATH_MAX + 1];
 	char target[PATH_MAX + 1];
+	char location[PATH_MAX + 1];
 	unsigned int mode;
 	int uid;
 	int gid;
+	int nfields;
 	int rc = -1;
 
-	if (5 != sscanf(line, "%" str(PATH_MAX) "s %" str(PATH_MAX) "s %o %d %d", name, target, &mode, &uid, &gid)) {
-		fprintf(stderr, "Unrecognized dir format '%s'", line);
+	nfields = sscanf(line, "%" str(PATH_MAX) "s %" str(PATH_MAX)
+			 "s %o %d %d %" str(PATH_MAX) "s",
+			 name, target, &mode, &uid, &gid, location);
+	if (nfields < 5) {
+		fprintf(stderr, "Unrecognized slink format '%s'", line);
 		goto fail;
 	}
-	rc = cpio_mkslink(name, target, mode, uid, gid);
+	rc = cpio_mkslink(name, target,
+			  nfields == 6 ? cpio_replace_env(location) : NULL,
+			  mode, uid, gid);
  fail:
 	return rc;
 }
 
-static int cpio_mkgeneric(const char *name, unsigned int mode,
-		       uid_t uid, gid_t gid)
+static int cpio_mkgeneric(const char *name, const char *location,
+			  unsigned int mode, uid_t uid, gid_t gid)
 {
 	int len;
 	unsigned int namesize;
@@ -204,7 +329,8 @@ static int cpio_mkgeneric(const char *name, unsigned int mode,
 	offset += len;
 
 	if (len != CPIO_HDR_LEN ||
-	    push_rest(name, namesize) < 0)
+	    push_rest(name, namesize) < 0 ||
+	    write_xattrs(location) < 0)
 		return -1;
 
 	return 0;
@@ -239,18 +365,24 @@ static const struct generic_type generic_type_table[] = {
 static int cpio_mkgeneric_line(const char *line, enum generic_types gt)
 {
 	char name[PATH_MAX + 1];
+	char location[PATH_MAX + 1];
 	unsigned int mode;
 	int uid;
 	int gid;
+	int nfields;
 	int rc = -1;
 
-	if (4 != sscanf(line, "%" str(PATH_MAX) "s %o %d %d", name, &mode, &uid, &gid)) {
+	nfields = sscanf(line, "%" str(PATH_MAX) "s %o %d %d %"
+			 str(PATH_MAX) "s", name, &mode, &uid, &gid, location);
+	if (nfields < 4) {
 		fprintf(stderr, "Unrecognized %s format '%s'",
-			line, generic_type_table[gt].type);
+			generic_type_table[gt].type, line);
 		goto fail;
 	}
 	mode |= generic_type_table[gt].mode;
-	rc = cpio_mkgeneric(name, mode, uid, gid);
+	rc = cpio_mkgeneric(name,
+			   nfields == 5 ? cpio_replace_env(location) : NULL,
+			   mode, uid, gid);
  fail:
 	return rc;
 }
@@ -270,9 +402,9 @@ static int cpio_mksock_line(const char *line)
 	return cpio_mkgeneric_line(line, GT_SOCK);
 }
 
-static int cpio_mknod(const char *name, unsigned int mode,
-		       uid_t uid, gid_t gid, char dev_type,
-		       unsigned int maj, unsigned int min)
+static int cpio_mknod(const char *name, const char *location,
+		      unsigned int mode, uid_t uid, gid_t gid, char dev_type,
+		      unsigned int maj, unsigned int min)
 {
 	int len;
 	unsigned int namesize;
@@ -305,7 +437,8 @@ static int cpio_mknod(const char *name, unsigned int mode,
 	offset += len;
 
 	if (len != CPIO_HDR_LEN ||
-	    push_rest(name, namesize) < 0)
+	    push_rest(name, namesize) < 0 ||
+	    write_xattrs(location) < 0)
 		return -1;
 
 	return 0;
@@ -314,20 +447,26 @@ static int cpio_mknod(const char *name, unsigned int mode,
 static int cpio_mknod_line(const char *line)
 {
 	char name[PATH_MAX + 1];
+	char location[PATH_MAX + 1];
 	unsigned int mode;
 	int uid;
 	int gid;
 	char dev_type;
 	unsigned int maj;
 	unsigned int min;
+	int nfields;
 	int rc = -1;
 
-	if (7 != sscanf(line, "%" str(PATH_MAX) "s %o %d %d %c %u %u",
-			 name, &mode, &uid, &gid, &dev_type, &maj, &min)) {
+	nfields = sscanf(line, "%" str(PATH_MAX) "s %o %d %d %c %u %u %"
+			 str(PATH_MAX) "s", name, &mode, &uid, &gid, &dev_type,
+			 &maj, &min, location);
+	if (nfields < 7) {
 		fprintf(stderr, "Unrecognized nod format '%s'", line);
 		goto fail;
 	}
-	rc = cpio_mknod(name, mode, uid, gid, dev_type, maj, min);
+	rc = cpio_mknod(name,
+			nfields == 8 ? cpio_replace_env(location) : NULL,
+			mode, uid, gid, dev_type, maj, min);
  fail:
 	return rc;
 }
@@ -490,7 +629,7 @@ static int cpio_mkfile(const char *name, const char *location,
 		name += namesize;
 	}
 	ino++;
-	rc = 0;
+	rc = write_xattrs(location);
 
 error:
 	if (file >= 0)
@@ -570,22 +709,24 @@ static int cpio_mkfile_line(const char *line)
 static void usage(const char *prog)
 {
 	fprintf(stderr, "Usage:\n"
-		"\t%s [-t <timestamp>] [-c] [-o <output_file>] [-a <data_align>] <cpio_list>\n"
+		"\t%s [-t <timestamp>] [-c] [-o <output_file>] [-a <data_align>] [-e <type>] <cpio_list>\n"
 		"\n"
 		"<cpio_list> is a file containing newline separated entries that\n"
 		"describe the files to be included in the initramfs archive:\n"
 		"\n"
 		"# a comment\n"
 		"file <name> <location> <mode> <uid> <gid> [<hard links>]\n"
-		"dir <name> <mode> <uid> <gid>\n"
-		"nod <name> <mode> <uid> <gid> <dev_type> <maj> <min>\n"
-		"slink <name> <target> <mode> <uid> <gid>\n"
-		"pipe <name> <mode> <uid> <gid>\n"
-		"sock <name> <mode> <uid> <gid>\n"
+		"dir <name> <mode> <uid> <gid> [<location>]\n"
+		"nod <name> <mode> <uid> <gid> <dev_type> <maj> <min> [<location>]\n"
+		"slink <name> <target> <mode> <uid> <gid> [<location>]\n"
+		"pipe <name> <mode> <uid> <gid> [<location>]\n"
+		"sock <name> <mode> <uid> <gid> [<location>]\n"
 		"\n"
 		"<name>       name of the file/dir/nod/etc in the archive\n"
 		"<location>   location of the file in the current filesystem\n"
 		"             expands shell variables quoted with ${}\n"
+		"             optional for nonregular entries; used to read xattrs\n"
+		"             with -e xattr. If omitted, no xattrs are included.\n"
 		"<target>     link target\n"
 		"<mode>       mode/permissions of the file\n"
 		"<uid>        user id (0=root)\n"
@@ -611,7 +752,8 @@ static void usage(const char *prog)
 		"<output_file>: write cpio to this file instead of stdout\n"
 		"<data_align>: attempt to align file data by zero-padding the\n"
 		"filename field up to data_align. Must be a multiple of 4.\n"
-		"Alignment is best-effort; PATH_MAX limits filename padding.\n",
+		"Alignment is best-effort; PATH_MAX limits filename padding.\n"
+		"<type>: include file metadata: none (default) or xattr.\n",
 		prog);
 }
 
@@ -640,7 +782,7 @@ static const struct file_handler file_handler_table[] = {
 	}
 };
 
-#define LINE_SIZE (2 * PATH_MAX + 50)
+#define LINE_SIZE (3 * PATH_MAX + 50)
 
 int main (int argc, char *argv[])
 {
@@ -650,10 +792,11 @@ int main (int argc, char *argv[])
 	int ec = 0;
 	int line_nr = 0;
 	const char *filename;
+	enum metadata_types metadata_type = TYPE_NONE;
 
 	default_mtime = time(NULL);
 	while (1) {
-		int opt = getopt(argc, argv, "t:cho:a:");
+		int opt = getopt(argc, argv, "t:e:cho:a:");
 		char *invalid;
 
 		if (opt == -1)
@@ -668,6 +811,9 @@ int main (int argc, char *argv[])
 				exit(1);
 			}
 			do_file_mtime = true;
+			break;
+		case 'e':
+			metadata_type = parse_metadata_type(optarg);
 			break;
 		case 'c':
 			do_csum = true;
@@ -720,6 +866,13 @@ int main (int argc, char *argv[])
 			filename, strerror(errno));
 		usage(argv[0]);
 		exit(1);
+	}
+	if (metadata_type != TYPE_NONE) {
+		metadata_fd = mkstemp(metadata_path);
+		if (metadata_fd < 0) {
+			fprintf(stderr, "cannot create temporary file\n");
+			exit(1);
+		}
 	}
 
 	while (fgets(line, LINE_SIZE, cpio_list)) {
@@ -777,5 +930,12 @@ int main (int argc, char *argv[])
 	if (ec == 0)
 		ec = cpio_trailer();
 
+	if (metadata_type != TYPE_NONE) {
+		close(metadata_fd);
+		if (unlink(metadata_path))
+			fprintf(stderr,
+				"warning: cannot remove temporary file %s: %s\n",
+				metadata_path, strerror(errno));
+	}
 	exit(ec);
 }

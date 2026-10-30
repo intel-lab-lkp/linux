@@ -14,7 +14,7 @@ set -e
 usage() {
 cat << EOF
 Usage:
-$0 [-o <file>] [-l <dep_list>] [-u <uid>] [-g <gid>] {-d | <cpio_source>} ...
+$0 [-o <file>] [-l <dep_list>] [-u <uid>] [-g <gid>] {-d | <cpio_source>} [-e <type>]...
 	-o <file>      Create initramfs file named <file> by using gen_init_cpio
 	-l <dep_list>  Create dependency list named <dep_list>
 	-u <uid>       User ID to map to user ID 0 (root).
@@ -27,6 +27,7 @@ $0 [-o <file>] [-l <dep_list>] [-u <uid>] [-g <gid>] {-d | <cpio_source>} ...
 	<cpio_source>  File list or directory for cpio archive.
 		       If <cpio_source> is a .cpio file it will be used
 		       as direct input to initramfs.
+	-e <type>      File metadata type to include in the cpio archive.
 
 All options except -o and -l may be repeated and are interpreted
 sequentially and immediately.  -u and -g states are preserved across
@@ -113,14 +114,14 @@ parse() {
 
 			[ -b "${location}" ] && dev="b" || dev="c"
 
-			str="${ftype} ${name} ${str} ${dev} ${maj} ${min}"
+			str="${ftype} ${name} ${str} ${dev} ${maj} ${min} ${location}"
 			;;
 		"slink")
 			local target=`readlink "${location}"`
-			str="${ftype} ${name} ${target} ${str}"
+			str="${ftype} ${name} ${target} ${str} ${location}"
 			;;
 		*)
-			str="${ftype} ${name} ${str}"
+			str="${ftype} ${name} ${str} ${location}"
 			;;
 	esac
 
@@ -228,6 +229,10 @@ while [ $# -gt 0 ]; do
 			fi
 			shift
 			;;
+		"-e")   # file metadata type
+			metadata_arg="-e $1"
+			shift
+			;;
 		"-h")
 			usage
 			exit 0
@@ -247,4 +252,4 @@ done
 
 # If output_file is set we will generate cpio archive
 # we are careful to delete tmp files
-usr/gen_init_cpio $output $timestamp $cpio_list
+usr/gen_init_cpio $output $metadata_arg $timestamp $cpio_list
