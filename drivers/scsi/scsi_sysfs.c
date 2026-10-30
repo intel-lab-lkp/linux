@@ -811,8 +811,16 @@ store_state_field(struct device *dev, struct device_attribute *attr,
 		ret = 0;
 	} else {
 		ret = scsi_device_set_state(sdev, state);
-		if (ret == 0 && state == SDEV_RUNNING)
+		if (ret == 0 && state == SDEV_RUNNING) {
+			/*
+			 * The device may have been offlined while blocked by
+			 * its transport, so its queue can still be stopped.
+			 * The transport's unblock skips a running device and
+			 * would never restart it, so restart it here.
+			 */
+			scsi_start_queue(sdev);
 			rescan_dev = true;
+		}
 	}
 	mutex_unlock(&sdev->state_mutex);
 
