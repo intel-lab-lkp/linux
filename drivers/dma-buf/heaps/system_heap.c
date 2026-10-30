@@ -235,6 +235,9 @@ static int system_heap_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 	pgprot_t prot;
 	int i, ret;
 
+	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) == 0)
+		return -EINVAL;
+
 	prot = vma->vm_page_prot;
 	if (cc_shared_buffer(buffer))
 		prot = pgprot_decrypted(prot);
