@@ -1039,12 +1039,16 @@ static int ssi_wake_irq(struct hsi_port *port, struct platform_device *pd)
 	}
 
 	cawake_irq = gpiod_to_irq(omap_port->wake_gpio);
+	if (cawake_irq < 0)
+		return cawake_irq;
 	omap_port->wake_irq = cawake_irq;
 
 	err = devm_request_threaded_irq(&port->device, cawake_irq, NULL,
 		ssi_wake_thread,
 		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 		"SSI cawake", port);
+	if (err < 0)
+		return err;
 	err = enable_irq_wake(cawake_irq);
 	if (err < 0)
 		dev_err(&port->device, "Enable wake on the wakeline in irq %d failed %d\n",
