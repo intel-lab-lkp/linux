@@ -16,6 +16,19 @@ use core::ptr::{self, NonNull};
 
 use core::ops::{Deref, DerefMut};
 
+/// Returns the maximum number of CPUs that may be online on the system.
+///
+/// This is a count of CPUs, not a bound on CPU IDs. Possible CPUs need not occupy a contiguous
+/// range of IDs, so a CPU ID must be bounded by [`nr_cpu_ids()`] instead. That is,
+/// `num_possible_cpus() <= nr_cpu_ids()`.
+///
+/// [`nr_cpu_ids()`]: crate::cpu::nr_cpu_ids
+#[inline]
+pub fn num_possible_cpus() -> u32 {
+    // SAFETY: FFI call with no additional requirements.
+    unsafe { bindings::num_possible_cpus() }
+}
+
 /// A CPU Mask.
 ///
 /// Rust abstraction for the C `struct cpumask`.

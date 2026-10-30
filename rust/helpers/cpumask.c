@@ -81,3 +81,9 @@ void rust_helper_free_cpumask_var(cpumask_var_t mask)
 	free_cpumask_var(mask);
 }
 #endif
+
+__rust_helper
+unsigned int rust_helper_num_possible_cpus(void)
+{
+	return num_possible_cpus();
+}
