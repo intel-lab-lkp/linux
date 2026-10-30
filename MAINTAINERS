@@ -30347,8 +30347,11 @@ L:	linux-coco@lists.linux.dev
 L:	kvm@vger.kernel.org
 S:	Supported
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tip/tip.git x86/tdx
-N:	tdx
-K:	\b(tdx)
+N:	arch/x86/.*tdx
+N:	Documentation/.*tdx
+N:	drivers/virt/coco/.*tdx
+N:	include/uapi/linux/.*tdx
+N:	tools/testing/selftests/tdx
 
 X86 VDSO
 M:	Andy Lutomirski <luto@kernel.org>
