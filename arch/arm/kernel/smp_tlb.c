@@ -4,6 +4,8 @@
  *
  *  Copyright (C) 2002 ARM Limited, All Rights Reserved.
  */
+#include <linux/build_bug.h>
+#include <linux/pgtable.h>
 #include <linux/preempt.h>
 #include <linux/smp.h>
 #include <linux/uaccess.h>
@@ -234,6 +236,19 @@ void flush_tlb_range(struct vm_area_struct *vma,
 
 void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 {
+	static_assert(MAX_TLB_KERNEL_RANGE_PAGES == PTRS_PER_PTE);
+
+	/*
+	 * __purge_vmap_area_lazy() may pass a range that spans from the
+	 * modules area to the end of the vmalloc area. Invalidating such a
+	 * range page by page takes hundreds of thousands of broadcast TLB
+	 * operations, without voluntary preemption points.
+	 */
+	if (tlb_kernel_range_exceeds_max(start, end)) {
+		flush_tlb_all();
+		return;
+	}
+
 	if (tlb_ops_need_broadcast()) {
 		struct tlb_args ta;
 		ta.ta_start = start;

@@ -9,6 +9,7 @@
 
 #ifndef __ASSEMBLY__
 # include <linux/mm_types.h>
+# include <asm/page.h>
 #endif
 
 #ifdef CONFIG_MMU
@@ -597,14 +598,41 @@ static inline void clean_pmd_entry(void *pmd)
 #define local_flush_tlb_range(vma,start,end)	__cpu_flush_user_tlb_range(start,end,vma)
 #define local_flush_tlb_kernel_range(s,e)	__cpu_flush_kern_tlb_range(s,e)
 
+/*
+ * Bound the number of per-page TLB invalidations to avoid soft lock-ups and
+ * long vmap_purge_lock hold times on large ranges (not necessarily a
+ * performance improvement). Matches MAX_DVM_OPS (PTRS_PER_PTE) on arm64.
+ */
+#define MAX_TLB_KERNEL_RANGE_PAGES	512
+
+static inline bool tlb_kernel_range_exceeds_max(unsigned long start,
+						unsigned long end)
+{
+	unsigned long pages;
+
+	if (end <= start)
+		return false;
+
+	pages = ((end - 1) >> PAGE_SHIFT) - (start >> PAGE_SHIFT) + 1;
+	return pages >= MAX_TLB_KERNEL_RANGE_PAGES;
+}
+
 #ifndef CONFIG_SMP
 #define flush_tlb_all		local_flush_tlb_all
 #define flush_tlb_mm		local_flush_tlb_mm
 #define flush_tlb_page		local_flush_tlb_page
 #define flush_tlb_kernel_page	local_flush_tlb_kernel_page
 #define flush_tlb_range		local_flush_tlb_range
-#define flush_tlb_kernel_range	local_flush_tlb_kernel_range
 #define flush_bp_all		local_flush_bp_all
+
+static inline void flush_tlb_kernel_range(unsigned long start,
+					  unsigned long end)
+{
+	if (tlb_kernel_range_exceeds_max(start, end))
+		local_flush_tlb_all();
+	else
+		local_flush_tlb_kernel_range(start, end);
+}
 #else
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm(struct mm_struct *mm);
