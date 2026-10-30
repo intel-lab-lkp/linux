@@ -24,7 +24,14 @@
 #define P_SEAMLDR_INFO			0x8000000000000000
 #define P_SEAMLDR_INSTALL		0x8000000000000001
 
-#define SEAMLDR_MAX_NR_MODULE_PAGES	496
+/*
+ * Arbitrary software limit, far above the few MB of current modules.
+ * It keeps the module length within a u32, and 'struct seamldr_params'
+ * plus its chain pages within KMALLOC_MAX_SIZE.
+ */
+#define SEAMLDR_MAX_NR_MODULE_PAGES	(SZ_1G / PAGE_SIZE)
+
+#define SEAMLDR_NR_MODULE_PA_ENTRIES	496
 #define SEAMLDR_MAX_NR_SIG_PAGES	1
 
 /*
@@ -33,6 +40,19 @@
  * 1: Update existing TDX module to a compatible version
  */
 #define SEAMLDR_SCENARIO_UPDATE		1
+
+#define SEAMLDR_NR_CHAIN_PA_ENTRIES	(PAGE_SIZE / sizeof(u64) - 1)
+/*
+ * A 4KB page holding the physical addresses of the module pages that do
+ * not fit in module_pages_pa_list[]. @next_page_pa points to the next
+ * page, forming a singly linked list.
+ */
+struct chain_page {
+	u64	pa[SEAMLDR_NR_CHAIN_PA_ENTRIES];
+	u64	next_page_pa;
+} __packed;
+
+static_assert(sizeof(struct chain_page) == 4096);
 
 /*
  * This is the "SEAMLDR_PARAMS" data structure defined in the
@@ -48,10 +68,13 @@ struct seamldr_params {
 	u64	sigstruct_pages_pa_list[SEAMLDR_MAX_NR_SIG_PAGES];
 	u8	reserved[104];
 	u64	module_nr_pages;
-	u64	module_pages_pa_list[SEAMLDR_MAX_NR_MODULE_PAGES];
+	u64	module_pages_pa_list[SEAMLDR_NR_MODULE_PA_ENTRIES];
+
+	/* Hold module pages that cannot fit in module_pages_pa_list[]. */
+	struct chain_page	chain_pages[];
 } __packed;
 
-static_assert(sizeof(struct seamldr_params) == 4096);
+static_assert(offsetof(struct seamldr_params, chain_pages) == 4096);
 
 /*
  * Serialize P-SEAMLDR calls since the hardware only allows a single CPU to
@@ -143,6 +166,68 @@ static void populate_pa_list(u64 *pa_list, const u8 *vmalloc_addr, u32 vmalloc_l
 	}
 }
 
+/*
+ * Like populate_pa_list(), but skip entries pointing to the next page.
+ */
+static void populate_module_pa_list(struct seamldr_params *params,
+				    const u8 *vmalloc_addr, u32 vmalloc_len_pages)
+{
+	u64 *pa_list = params->module_pages_pa_list;
+	int i, j;
+
+	for (i = 0, j = 0; i < vmalloc_len_pages; i++, j++) {
+		unsigned long offset = i * PAGE_SIZE;
+		unsigned long pfn = vmalloc_to_pfn(&vmalloc_addr[offset]);
+
+		/*
+		 * Skip non-zero entries. They point to the next page and
+		 * are populated during allocation.
+		 */
+		if (pa_list[j])
+			j++;
+
+		pa_list[j] = pfn << PAGE_SHIFT;
+	}
+}
+
+static struct seamldr_params *alloc_seamldr_params(u32 nr_module_pages)
+{
+	struct seamldr_params *params;
+	u32 nr_chain_pages;
+	u32 nr_direct;
+	u64 *link;
+
+	/*
+	 * Number of module pages that fit directly in
+	 * module_pages_pa_list[]. Minus one as the last entry is
+	 * reserved to point to the first chain page.
+	 */
+	nr_direct = SEAMLDR_NR_MODULE_PA_ENTRIES - 1;
+
+	/* Calculate the number of extra chain pages needed. */
+	nr_chain_pages = 0;
+	if (nr_module_pages > nr_direct) {
+		u32 nr_left = nr_module_pages - nr_direct;
+
+		nr_chain_pages = DIV_ROUND_UP(nr_left, SEAMLDR_NR_CHAIN_PA_ENTRIES);
+	}
+
+	params = kzalloc_flex(*params, chain_pages, nr_chain_pages);
+	if (!params)
+		return NULL;
+
+	/* Link all the chain pages. */
+	link = &params->module_pages_pa_list[nr_direct];
+	for (int i = 0; i < nr_chain_pages; i++) {
+		struct chain_page *page = &params->chain_pages[i];
+
+		*link = __pa(page);
+		link = &page->next_page_pa;
+	}
+
+	return params;
+}
+
 static void populate_seamldr_params(struct seamldr_params *params,
 				    const u8 *sig, u32 sig_nr_pages,
 				    const u8 *mod, u32 mod_nr_pages)
@@ -152,7 +237,7 @@ static void populate_seamldr_params(struct seamldr_params *params,
 	params->module_nr_pages	= mod_nr_pages;
 
 	populate_pa_list(params->sigstruct_pages_pa_list, sig, sig_nr_pages);
-	populate_pa_list(params->module_pages_pa_list,	  mod, mod_nr_pages);
+	populate_module_pa_list(params, mod, mod_nr_pages);
 }
 
 /*
@@ -195,7 +280,7 @@ static struct seamldr_params *build_seamldr_params(const struct tdx_image *image
 	if (memchr_inv(header->reserved, 0, sizeof(header->reserved)))
 		return ERR_PTR(-EINVAL);
 
-	params = kzalloc_obj(*params);
+	params = alloc_seamldr_params(header->module_nr_pages);
 	if (!params)
 		return ERR_PTR(-ENOMEM);
 
