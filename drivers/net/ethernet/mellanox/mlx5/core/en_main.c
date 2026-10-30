@@ -169,12 +169,21 @@ static void mlx5e_update_stats_work(struct work_struct *work)
 
 void mlx5e_queue_update_stats(struct mlx5e_priv *priv)
 {
+	unsigned long last;
+
 	if (!priv->profile->update_stats)
 		return;
 
 	if (unlikely(test_bit(MLX5E_STATE_DESTROYING, &priv->state)))
 		return;
 
+	/* Stats readers may poll often, limit the rate of FW queries */
+	last = READ_ONCE(priv->update_stats_jiffies);
+	if (time_in_range(jiffies, last,
+			  last + msecs_to_jiffies(MLX5E_UPDATE_STATS_INTERVAL)))
+		return;
+
+	WRITE_ONCE(priv->update_stats_jiffies, jiffies);
 	queue_work(priv->wq, &priv->update_stats_work);
 }
 

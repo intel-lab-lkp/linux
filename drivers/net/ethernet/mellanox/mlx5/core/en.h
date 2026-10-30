@@ -151,6 +151,7 @@ struct page_pool;
 #define MLX5E_MAX_NUM_CHANNELS         256
 #define MLX5E_TX_CQ_POLL_BUDGET        128
 #define MLX5E_TX_XSK_POLL_BUDGET       64
+#define MLX5E_UPDATE_STATS_INTERVAL    200 /* msecs */
 #define MLX5E_SQ_RECOVER_MIN_INTERVAL  500 /* msecs */
 
 #define mlx5e_state_dereference(priv, p) \
@@ -928,6 +929,7 @@ struct mlx5e_priv {
 	struct work_struct         set_rx_mode_work;
 	struct work_struct         tx_timeout_work;
 	struct work_struct         update_stats_work;
+	unsigned long              update_stats_jiffies;
 	struct work_struct         monitor_counters_work;
 	struct mlx5_nb             monitor_counters_nb;
 
