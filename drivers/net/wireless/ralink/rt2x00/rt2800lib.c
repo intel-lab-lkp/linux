@@ -11047,7 +11047,7 @@ static int rt2800_validate_eeprom(struct rt2x00_dev *rt2x00dev)
 		return retval;
 
 	word = rt2800_eeprom_read(rt2x00dev, EEPROM_NIC_CONF0);
-	if (word == 0xffff) {
+	if (word == 0xffff || word == 0x0000) {
 		rt2x00_set_field16(&word, EEPROM_NIC_CONF0_RXPATH, 2);
 		rt2x00_set_field16(&word, EEPROM_NIC_CONF0_TXPATH, 1);
 		rt2x00_set_field16(&word, EEPROM_NIC_CONF0_RF_TYPE, RF2820);
