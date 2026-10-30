@@ -500,8 +500,9 @@ int tb_port_state(struct tb_port *port)
  */
 int tb_wait_for_port(struct tb_port *port, bool wait_if_unplugged)
 {
-	int retries = 10;
+	int retries = 25;
 	int state;
+
 	if (!port->cap_phy) {
 		tb_port_WARN(port, "does not have PHY\n");
 		return -EINVAL;
