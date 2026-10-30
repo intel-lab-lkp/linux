@@ -3634,6 +3634,17 @@ static void pnfs_list_write_lseg(struct inode *inode, struct list_head *listp)
 	}
 }
 
+static void pnfs_list_write_lseg_undo(struct list_head *listp)
+{
+	struct pnfs_layout_segment *lseg, *tmp;
+
+	list_for_each_entry_safe(lseg, tmp, listp, pls_lc_list) {
+		if (pnfs_layout_is_valid(lseg->pls_layout) &&
+		    !test_and_set_bit(NFS_LSEG_LAYOUTCOMMIT, &lseg->pls_flags))
+			list_del_init(&lseg->pls_lc_list);
+	}
+}
+
 static void pnfs_list_write_lseg_done(struct inode *inode, struct list_head *listp)
 {
 	struct pnfs_layout_segment *lseg, *tmp;
@@ -3763,11 +3774,18 @@ pnfs_layoutcommit_inode(struct inode *inode, bool sync)
 			if (status != -ENOSPC)
 				put_cred(data->cred);
 			spin_lock(&inode->i_lock);
-			set_bit(NFS_INO_LAYOUTCOMMIT, &nfsi->flags);
-			if (end_pos > nfsi->layout->plh_lwb)
-				nfsi->layout->plh_lwb = end_pos;
-			if (status != -ENOSPC)
-				goto out_unlock;
+			if (pnfs_layout_is_valid(nfsi->layout)) {
+				set_bit(NFS_INO_LAYOUTCOMMIT, &nfsi->flags);
+				if (end_pos > nfsi->layout->plh_lwb)
+					nfsi->layout->plh_lwb = end_pos;
+			}
+			if (status != -ENOSPC) {
+				pnfs_list_write_lseg_undo(&data->lseg_list);
+				spin_unlock(&inode->i_lock);
+				pnfs_list_write_lseg_done(inode, &data->lseg_list);
+				kfree(data);
+				goto out;
+			}
 			spin_unlock(&inode->i_lock);
 			mark_as_dirty = true;
 		}
