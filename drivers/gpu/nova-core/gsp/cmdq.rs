@@ -590,9 +590,8 @@ impl CmdqInner<'_> {
     fn wait_for_msg(&self, timeout: Delta) -> Result<GspMessage<'_>> {
         // Wait for a message to arrive from the GSP.
         let (slice_1, slice_2) = if timeout == Delta::ZERO {
-            // If `timeout == Delta::ZERO`, check the message queue once as `read_poll_timeout` can
-            // potentially sleep if the clock hasn't moved forward while the condition was being
-            // checked.
+            // If `timeout == Delta::ZERO`, check the message queue exactly once instead of calling
+            // `read_poll_timeout`, which would keep polling until the clock moves forward.
             let slices = self.gsp_mem.driver_read_area();
             if !slices.0.is_empty() {
                 Ok(slices)
@@ -603,7 +602,7 @@ impl CmdqInner<'_> {
             read_poll_timeout(
                 || Ok(self.gsp_mem.driver_read_area()),
                 |driver_area| !driver_area.0.is_empty(),
-                Delta::from_millis(1),
+                Delta::ZERO,
                 timeout,
             )
         }
