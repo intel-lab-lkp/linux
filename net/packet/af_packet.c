@@ -1233,7 +1233,8 @@ static int packet_alloc_pending(struct packet_sock *po)
 {
 	po->rx_ring.pending_refcnt = NULL;
 
-	po->tx_ring.pending_refcnt = alloc_percpu(unsigned int);
+	po->tx_ring.pending_refcnt = alloc_percpu_gfp(unsigned int,
+						      GFP_KERNEL_ACCOUNT);
 	if (unlikely(po->tx_ring.pending_refcnt == NULL))
 		return -ENOBUFS;
 
@@ -1735,7 +1736,7 @@ static int fanout_add(struct sock *sk, struct fanout_args *args)
 	if (type == PACKET_FANOUT_ROLLOVER ||
 	    (type_flags & PACKET_FANOUT_FLAG_ROLLOVER)) {
 		err = -ENOMEM;
-		rollover = kzalloc_obj(*rollover);
+		rollover = kzalloc_obj(*rollover, GFP_KERNEL_ACCOUNT);
 		if (!rollover)
 			goto out;
 		atomic_long_set(&rollover->num, 0);
@@ -1778,7 +1779,8 @@ static int fanout_add(struct sock *sk, struct fanout_args *args)
 			/* legacy PACKET_FANOUT_MAX */
 			args->max_num_members = 256;
 		err = -ENOMEM;
-		match = kvzalloc_flex(*match, arr, args->max_num_members);
+		match = kvzalloc_flex(*match, arr, args->max_num_members,
+				      GFP_KERNEL_ACCOUNT);
 		if (!match)
 			goto out;
 		write_pnet(&match->net, sock_net(sk));
@@ -3773,7 +3775,7 @@ static int packet_mc_add(struct sock *sk, struct packet_mreq_max *mreq)
 		goto done;
 
 	err = -ENOBUFS;
-	i = kmalloc_obj(*i);
+	i = kmalloc_obj(*i, GFP_KERNEL_ACCOUNT);
 	if (i == NULL)
 		goto done;
 
@@ -4494,7 +4496,7 @@ static void packet_free_tx_ring(struct sock *sk, struct pgv *pg_vec,
 static char *alloc_one_pg_vec_page(unsigned long order)
 {
 	char *buffer;
-	gfp_t gfp_flags = GFP_KERNEL | __GFP_COMP |
+	gfp_t gfp_flags = GFP_KERNEL_ACCOUNT | __GFP_COMP |
 			  __GFP_ZERO | __GFP_NOWARN | __GFP_NORETRY;
 
 	buffer = (char *) __get_free_pages(gfp_flags, order);
@@ -4502,7 +4504,8 @@ static char *alloc_one_pg_vec_page(unsigned long order)
 		return buffer;
 
 	/* __get_free_pages failed, fall back to vmalloc */
-	buffer = vzalloc(array_size((1 << order), PAGE_SIZE));
+	buffer = __vmalloc(array_size((1 << order), PAGE_SIZE),
+			   GFP_KERNEL_ACCOUNT | __GFP_ZERO);
 	if (buffer)
 		return buffer;
 
@@ -4523,7 +4526,8 @@ static struct pgv *alloc_pg_vec(struct tpacket_req *req, int order, bool tx_ring
 	struct pgv *pg_vec;
 	int i;
 
-	vec = kzalloc_flex(*vec, pg_vec, block_nr, GFP_KERNEL | __GFP_NOWARN);
+	vec = kzalloc_flex(*vec, pg_vec, block_nr,
+			   GFP_KERNEL_ACCOUNT | __GFP_NOWARN);
 	if (unlikely(!vec))
 		return NULL;
 	vec->order = order;
@@ -4532,7 +4536,7 @@ static struct pgv *alloc_pg_vec(struct tpacket_req *req, int order, bool tx_ring
 
 	if (tx_ring) {
 		vec->deferred = kzalloc_obj(*vec->deferred,
-					    GFP_KERNEL | __GFP_NOWARN);
+					    GFP_KERNEL_ACCOUNT | __GFP_NOWARN);
 		if (!vec->deferred)
 			goto out_free_pgvec;
 		vec->deferred->vec = vec;
@@ -4648,7 +4652,7 @@ static int packet_set_ring(struct sock *sk, union tpacket_req_u *req_u,
 		default:
 			if (!tx_ring) {
 				rx_owner_map = bitmap_alloc(req->tp_frame_nr,
-					GFP_KERNEL | __GFP_NOWARN | __GFP_ZERO);
+					GFP_KERNEL_ACCOUNT | __GFP_NOWARN | __GFP_ZERO);
 				if (!rx_owner_map)
 					goto out_free_pg_vec;
 			}
