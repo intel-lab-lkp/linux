@@ -11,6 +11,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/pm_wakeirq.h>
 #include <linux/slab.h>
 
 #include "nhi.h"
@@ -46,6 +47,15 @@ static int nhi_plat_init_irq(struct tb_nhi *nhi)
 	if (ret)
 		return dev_err_probe(nhi->dev, ret, "request irq failed\n");
 
+	if (nhi->wake_irq) {
+		ret = dev_pm_set_dedicated_wake_irq(nhi->dev, nhi->wake_irq);
+		if (ret) {
+			dev_err_probe(nhi->dev, ret, "set wake irq %d failed\n", nhi->wake_irq);
+			return ret;
+		}
+		dev_info(nhi->dev, "wake irq %d\n", nhi->wake_irq);
+	}
+
 	return 0;
 }
 
@@ -53,6 +63,7 @@ static void nhi_plat_exit(struct tb_nhi *nhi)
 {
 	devm_free_irq(nhi->dev, nhi->irq, nhi);
 	flush_work(&nhi->interrupt_work);
+	dev_pm_clear_wake_irq(nhi->dev);
 
 	pm_runtime_put_noidle(nhi->dev);
 	pm_runtime_disable(nhi->dev);
@@ -84,6 +95,11 @@ static int nhi_plat_probe(struct platform_device *pdev)
 	nhi->irq = platform_get_irq(pdev, 0);
 	if (nhi->irq < 0)
 		return dev_err_probe(dev, nhi->irq, "get irq failed\n");
+
+	/* ignore error */
+	nhi->wake_irq = platform_get_irq_optional(pdev, 1);
+	if (nhi->wake_irq < 0)
+		nhi->wake_irq = 0;
 
 	return nhi_probe(nhi);
 }

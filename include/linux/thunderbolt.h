@@ -532,6 +532,7 @@ struct tb_nhi {
 	bool going_away;
 	bool iommu_dma_protection;
 	int irq;
+	int wake_irq;
 	struct work_struct interrupt_work;
 	u32 hop_count;
 	unsigned long quirks;
