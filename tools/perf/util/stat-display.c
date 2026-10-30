@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <string.h>
 #include <linux/string.h>
 #include <linux/time64.h>
 #include <math.h>
@@ -23,6 +24,7 @@
 #include "pmu.h"
 #include "pmus.h"
 #include "tool_pmu.h"
+#include "metricgroup.h"
 
 #define CNTR_NOT_SUPPORTED	"<not supported>"
 #define CNTR_NOT_COUNTED	"<not counted>"
@@ -361,9 +363,33 @@ static void print_aggr_id_csv(struct perf_stat_config *config,
 	}
 }
 
+/*
+ * In no-aggregation mode, JSON output includes the PMU name of non-core and
+ * hybrid events so that events and metrics from different PMU instances, like
+ * uncore_iio_0 and uncore_iio_1, can be told apart. Tool events don't belong
+ * to a hardware PMU instance and so are not labeled.
+ */
+static const char *json_pmu_name(const struct evsel *evsel)
+{
+	if (!evsel || !evsel->pmu || evsel__is_tool(evsel))
+		return NULL;
+	if (evsel->pmu->is_core && !evsel__is_hybrid(evsel))
+		return NULL;
+	return evsel->pmu->name;
+}
+
+static bool json_pmu_name_changed(const char *name, const char *prev)
+{
+	if (!name || !prev)
+		return name != prev;
+	return strcmp(name, prev) != 0;
+}
+
 static void print_aggr_id_json(struct perf_stat_config *config, struct outstate *os,
 			       struct evsel *evsel, struct aggr_cpu_id id, int aggr_nr)
 {
+	const char *pmu_name;
+
 	switch (config->aggr_mode) {
 	case AGGR_CORE:
 		json_out(os, "\"core\" : \"S%d-D%d-C%d\", \"counters\" : %d",
@@ -397,6 +423,9 @@ static void print_aggr_id_json(struct perf_stat_config *config, struct outstate 
 			json_out(os, "\"cpu\" : \"%d\"",
 				id.cpu.cpu);
 		}
+		pmu_name = json_pmu_name(evsel);
+		if (pmu_name)
+			json_out(os, "\"pmu\" : \"%s\"", pmu_name);
 		break;
 	case AGGR_THREAD:
 		json_out(os, "\"thread\" : \"%s-%d\"",
@@ -1010,13 +1039,16 @@ static void print_counter_aggrdata(struct perf_stat_config *config,
 		fputc('\n', output);
 }
 
+/*
+ * Start a metric-only line. @evsel only provides the line prefix: the
+ * aggregation id, the PMU name in JSON (see json_pmu_name()) and the cgroup.
+ */
 static void print_metric_begin(struct perf_stat_config *config,
-			       struct evlist *evlist,
+			       struct evsel *evsel,
 			       struct outstate *os, int aggr_idx)
 {
 	struct perf_stat_aggr *aggr;
 	struct aggr_cpu_id id;
-	struct evsel *evsel;
 
 	os->first = true;
 	if (!config->metric_only)
@@ -1031,7 +1063,6 @@ static void print_metric_begin(struct perf_stat_config *config,
 		else
 			fprintf(config->output, "%s", os->timestamp);
 	}
-	evsel = evlist__first(evlist);
 	id = config->aggr_map->map[aggr_idx];
 	aggr = &evsel->stats->aggr[aggr_idx];
 	aggr_printout(config, os, evsel, id, aggr->nr);
@@ -1069,7 +1100,7 @@ static void print_aggr(struct perf_stat_config *config,
 	 * Without each counter has its own line.
 	 */
 	cpu_aggr_map__for_each_idx(aggr_idx, config->aggr_map) {
-		print_metric_begin(config, evlist, os, aggr_idx);
+		print_metric_begin(config, evlist__first(evlist), os, aggr_idx);
 
 		evlist__for_each_entry(evlist, counter) {
 			print_counter_aggrdata(config, counter, aggr_idx, os);
@@ -1095,7 +1126,7 @@ static void print_aggr_cgroup(struct perf_stat_config *config,
 		os->cgrp = evsel->cgrp;
 
 		cpu_aggr_map__for_each_idx(aggr_idx, config->aggr_map) {
-			print_metric_begin(config, evlist, os, aggr_idx);
+			print_metric_begin(config, evsel, os, aggr_idx);
 
 			evlist__for_each_entry(evlist, counter) {
 				if (counter->cgrp != os->cgrp)
@@ -1131,7 +1162,8 @@ static void print_no_aggr_metric(struct perf_stat_config *config,
 
 	perf_cpu_map__for_each_cpu(cpu, all_idx, evlist__core(evlist)->user_requested_cpus) {
 		struct evsel *counter;
-		bool first = true;
+		const char *line_pmu = NULL;
+		bool line_open = false;
 
 		evlist__for_each_entry(evlist, counter) {
 			u64 ena, run, val;
@@ -1146,12 +1178,32 @@ static void print_no_aggr_metric(struct perf_stat_config *config,
 				if (config->aggr_map->map[aggr_idx].cpu.cpu == cpu.cpu)
 					break;
 			}
+			if (aggr_idx >= config->aggr_map->nr)
+				continue;
 
 			os->evsel = counter;
 			os->id = aggr_cpu_id__cpu(cpu, /*data=*/NULL);
-			if (first) {
-				print_metric_begin(config, evlist, os, aggr_idx);
-				first = false;
+
+			/*
+			 * Only events with a metric print something in metric-only
+			 * mode, so let the first of them open the line. For JSON,
+			 * start a new line when the PMU name changes so that all
+			 * metrics on a line share the same "cpu" and "pmu" prefix.
+			 */
+			if (config->iostat_run ||
+			    metricgroup__lookup(evlist__metric_events(evlist), counter, false)) {
+				const char *pmu_name = json_pmu_name(counter);
+
+				if (line_open && config->json_output &&
+				    json_pmu_name_changed(pmu_name, line_pmu)) {
+					print_metric_end(config, os);
+					line_open = false;
+				}
+				if (!line_open) {
+					print_metric_begin(config, counter, os, aggr_idx);
+					line_pmu = pmu_name;
+					line_open = true;
+				}
 			}
 			val = ps->aggr[aggr_idx].counts.val;
 			ena = ps->aggr[aggr_idx].counts.ena;
@@ -1160,7 +1212,7 @@ static void print_no_aggr_metric(struct perf_stat_config *config,
 			uval = val * counter->scale;
 			printout(config, os, uval, run, ena, 1.0, aggr_idx);
 		}
-		if (!first)
+		if (line_open)
 			print_metric_end(config, os);
 	}
 }
@@ -1523,7 +1575,7 @@ static void print_cgroup_counter(struct perf_stat_config *config, struct evlist 
 				print_metric_end(config, os);
 
 			os->cgrp = counter->cgrp;
-			print_metric_begin(config, evlist, os, /*aggr_idx=*/0);
+			print_metric_begin(config, counter, os, /*aggr_idx=*/0);
 		}
 
 		print_counter(config, counter, os);
@@ -1573,7 +1625,7 @@ void evlist__print_counters(struct evlist *evlist, struct perf_stat_config *conf
 		} else if (config->cgroup_list) {
 			print_cgroup_counter(config, evlist, &os);
 		} else {
-			print_metric_begin(config, evlist, &os, /*aggr_idx=*/0);
+			print_metric_begin(config, evlist__first(evlist), &os, /*aggr_idx=*/0);
 			evlist__for_each_entry(evlist, counter) {
 				print_counter(config, counter, &os);
 			}
