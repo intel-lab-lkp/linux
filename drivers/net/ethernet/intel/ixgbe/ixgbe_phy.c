@@ -832,11 +832,11 @@ static int ixgbe_mii_bus_read_c22(struct mii_bus *bus, int addr, int regnum)
 /**
  *  ixgbe_mii_bus_read_c45 - Read a clause 45 register
  *  @bus: pointer to mii_bus structure which points to our driver private
- *  @devad: device address to read
  *  @addr: address
+ *  @devad: device address to read
  *  @regnum: register number
  **/
-static int ixgbe_mii_bus_read_c45(struct mii_bus *bus, int devad, int addr,
+static int ixgbe_mii_bus_read_c45(struct mii_bus *bus, int addr, int devad,
 				  int regnum)
 {
 	struct ixgbe_adapter *adapter = bus->priv;
