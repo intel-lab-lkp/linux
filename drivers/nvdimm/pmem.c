@@ -632,6 +632,8 @@ static int nd_pmem_probe(struct device *dev)
 	ret = nd_btt_probe(dev, ndns);
 	if (ret == 0)
 		return -ENXIO;
+	else if (ret != -ENODEV && ret != -ENXIO)
+		return ret;
 
 	/*
 	 * We have two failure conditions here, there is no
@@ -647,13 +649,13 @@ static int nd_pmem_probe(struct device *dev)
 	ret = nd_pfn_probe(dev, ndns);
 	if (ret == 0)
 		return -ENXIO;
-	else if (ret == -EOPNOTSUPP)
+	else if (ret != -ENODEV && ret != -ENXIO)
 		return ret;
 
 	ret = nd_dax_probe(dev, ndns);
 	if (ret == 0)
 		return -ENXIO;
-	else if (ret == -EOPNOTSUPP)
+	else if (ret != -ENODEV && ret != -ENXIO)
 		return ret;
 
 	/* probe complete, attach handles namespace enabling */
