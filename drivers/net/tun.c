@@ -60,6 +60,7 @@
 #include <linux/rcupdate.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
+#include <net/hotdata.h>
 #include <net/rtnetlink.h>
 #include <net/sock.h>
 #include <net/xdp.h>
@@ -1854,6 +1855,17 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 		iov_iter_advance(&i, copylen);
 		if (iov_iter_npages(&i, INT_MAX) <= MAX_SKB_FRAGS)
 			zerocopy = true;
+	}
+
+	/* In NAPI mode packets are queued here and processed by the NAPI
+	 * poll, possibly in a kthread or ksoftirqd. Bound that queue like
+	 * the per-CPU backlog, and drop before allocating and copying.
+	 */
+	if (tfile->napi_enabled && !frags && !msg_control &&
+	    unlikely(skb_queue_len_lockless(&tfile->sk.sk_write_queue) >=
+		     READ_ONCE(net_hotdata.max_backlog))) {
+		dev_core_stats_rx_dropped_inc(tun->dev);
+		return total_len;
 	}
 
 	if (!frags && tun_can_build_skb(tun, tfile, len, noblock, zerocopy)) {
