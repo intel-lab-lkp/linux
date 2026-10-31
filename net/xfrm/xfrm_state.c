@@ -649,10 +649,10 @@ static enum hrtimer_restart xfrm_timer_handler(struct hrtimer *me)
 	int err = 0;
 
 	spin_lock(&x->lock);
-	xfrm_dev_state_update_stats(x);
-
 	if (x->km.state == XFRM_STATE_DEAD)
 		goto out;
+
+	xfrm_dev_state_update_stats(x);
 	if (x->km.state == XFRM_STATE_EXPIRED)
 		goto expired;
 	if (x->lft.hard_add_expires_seconds) {

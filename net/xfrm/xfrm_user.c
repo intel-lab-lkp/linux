@@ -1158,7 +1158,11 @@ static void copy_to_user_state(struct xfrm_state *x, struct xfrm_usersa_info *p)
 	memcpy(&p->id, &x->id, sizeof(p->id));
 	memcpy(&p->sel, &x->sel, sizeof(p->sel));
 	memcpy(&p->lft, &x->lft, sizeof(p->lft));
-	if (x->xso.dev)
+	/* Device teardown marks the state dead under x->lock before it frees
+	 * the offload state. Callers hold x->lock, or xfrm_state_lock while
+	 * the state is still linked.
+	 */
+	if (x->xso.dev && x->km.state != XFRM_STATE_DEAD)
 		xfrm_dev_state_update_stats(x);
 	memcpy(&p->curlft, &x->curlft, sizeof(p->curlft));
 	put_unaligned(x->stats.replay_window, &p->stats.replay_window);
@@ -1612,7 +1616,9 @@ static struct sk_buff *xfrm_state_netlink(struct sk_buff *in_skb,
 	info.nlmsg_seq = seq;
 	info.nlmsg_flags = 0;
 
+	spin_lock_bh(&x->lock);
 	err = dump_one_state(x, 0, &info);
+	spin_unlock_bh(&x->lock);
 	if (err) {
 		kfree_skb(skb);
 		return ERR_PTR(err);
@@ -4132,7 +4138,9 @@ static int xfrm_notify_sa(struct xfrm_state *x, const struct km_event *c)
 
 		p = nla_data(attr);
 	}
+	spin_lock_bh(&x->lock);
 	err = copy_to_user_state_extra(x, p, skb);
+	spin_unlock_bh(&x->lock);
 	if (err)
 		goto out_free_skb;
 
