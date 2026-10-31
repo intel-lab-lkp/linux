@@ -922,6 +922,8 @@ int __ref __irq_alloc_descs(int irq, unsigned int from, unsigned int cnt, int no
 	start = irq_find_free_area(from, cnt);
 	if (irq >=0 && start != irq)
 		return -EEXIST;
+	if (start < 0)
+		return start;
 
 	if (start + cnt > total_nr_irqs) {
 		if (!irq_expand_nr_irqs(start + cnt))
