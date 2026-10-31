@@ -160,6 +160,10 @@ struct intel_vsec_platform_info {
  * @quirks:        specified quirks
  * @base_addr:     base address of entries (if specified)
  * @cap_id:        the enumerated id of the vsec feature
+ * @tbir:          PCI BAR index of the discovery tables. Valid only when
+ *                 @bar_relative is set
+ * @bar_relative:  discovery tables are located in PCI BAR @tbir. Not set for
+ *                 ACPI discovery or a supplied base address
  * @resource:      PCI discovery resources (BAR windows), one per discovery
  *                 instance. Valid only when @src == INTEL_VSEC_DISC_PCI
  */
@@ -176,6 +180,8 @@ struct intel_vsec_device {
 	unsigned long quirks;
 	u64 base_addr;
 	unsigned long cap_id;
+	u8 tbir;
+	bool bar_relative;
 	struct resource resource[] __counted_by(num_resources);
 };
 
@@ -219,6 +225,8 @@ struct pmt_feature_group {
 int intel_vsec_add_aux(struct device *parent,
 		       struct intel_vsec_device *intel_vsec_dev,
 		       const char *name);
+int intel_vsec_check_bar_resource(struct intel_vsec_device *intel_vsec_dev,
+				  unsigned int bar, const struct resource *res);
 
 static inline struct intel_vsec_device *dev_to_ivdev(struct device *dev)
 {

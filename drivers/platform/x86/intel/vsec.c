@@ -104,6 +104,76 @@ static bool intel_vsec_supported(u16 id, unsigned long caps)
 	}
 }
 
+/* Return the resource of a populated memory BAR, or NULL if there is none */
+static const struct resource *intel_vsec_mem_bar(struct pci_dev *pdev,
+						 unsigned int bar)
+{
+	if (bar >= PCI_STD_NUM_BARS)
+		return NULL;
+
+	if (!(pci_resource_flags(pdev, bar) & IORESOURCE_MEM))
+		return NULL;
+
+	return pci_resource_n(pdev, bar);
+}
+
+/**
+ * intel_vsec_check_bar_resource() - Check a resource lies within a PCI BAR
+ * @intel_vsec_dev: vsec device the resource was derived from
+ * @bar:            index of the BAR the device places @res in
+ * @res:            resource to check
+ *
+ * Discovery table locations and the tables they reference are read from the
+ * device, so ranges built from them must be checked against the BAR they
+ * claim to live in before being mapped. For a resource in the same BAR as
+ * the discovery tables, pass @intel_vsec_dev->tbir as @bar.
+ *
+ * Return: 0 if @res is within BAR @bar or the device's tables are not BAR
+ * relative, -EINVAL if @bar is not a valid memory BAR or @res is outside it.
+ */
+int intel_vsec_check_bar_resource(struct intel_vsec_device *intel_vsec_dev,
+				  unsigned int bar, const struct resource *res)
+{
+	const struct resource *bar_res;
+
+	/* ACPI tables are read from _DSD, and a supplied base is not BAR relative */
+	if (!intel_vsec_dev->bar_relative)
+		return 0;
+
+	bar_res = intel_vsec_mem_bar(to_pci_dev(intel_vsec_dev->dev), bar);
+	if (!bar_res || !resource_contains(bar_res, res))
+		return -EINVAL;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(intel_vsec_check_bar_resource, "INTEL_VSEC");
+
+/*
+ * For DVSEC/VSEC discovery the table location is read from device config
+ * space. Check that it names a memory BAR the tables can be checked against.
+ */
+static int intel_vsec_check_table_bar(struct device *dev,
+				      const struct intel_vsec_header *header,
+				      const struct intel_vsec_platform_info *info,
+				      bool *bar_relative)
+{
+	*bar_relative = false;
+
+	/* Not BAR relative: ACPI tables come from _DSD, or a base was supplied */
+	if (info->src == INTEL_VSEC_DISC_ACPI || info->base_addr || !dev_is_pci(dev))
+		return 0;
+
+	if (!intel_vsec_mem_bar(to_pci_dev(dev), header->tbir)) {
+		dev_warn(dev, "BAR %u is not a valid memory BAR for header id %d\n",
+			 header->tbir, header->id);
+		return -EINVAL;
+	}
+
+	*bar_relative = true;
+
+	return 0;
+}
+
 static void intel_vsec_remove_aux(void *data)
 {
 	auxiliary_device_delete(data);
@@ -297,7 +367,8 @@ static int intel_vsec_add_dev(struct device *dev, struct intel_vsec_header *head
 	struct resource *tmp;
 	struct device *parent;
 	unsigned long quirks = info->quirks;
-	int i;
+	bool bar_relative;
+	int i, ret;
 
 	if (info->parent)
 		parent = info->parent;
@@ -317,15 +388,22 @@ static int intel_vsec_add_dev(struct device *dev, struct intel_vsec_header *head
 		return -EINVAL;
 	}
 
+	if (quirks & VSEC_QUIRK_TABLE_SHIFT)
+		header->offset >>= TABLE_OFFSET_SHIFT;
+
+	ret = intel_vsec_check_table_bar(dev, header, info, &bar_relative);
+	if (ret)
+		return ret;
+
 	intel_vsec_dev = kzalloc_flex(*intel_vsec_dev, resource, header->num_entries);
 	if (!intel_vsec_dev)
 		return -ENOMEM;
 
 	intel_vsec_dev->num_resources = header->num_entries;
+	intel_vsec_dev->dev = dev;
+	intel_vsec_dev->tbir = header->tbir;
+	intel_vsec_dev->bar_relative = bar_relative;
 	res = intel_vsec_dev->resource;
-
-	if (quirks & VSEC_QUIRK_TABLE_SHIFT)
-		header->offset >>= TABLE_OFFSET_SHIFT;
 
 	/*
 	 * The DVSEC/VSEC contains the starting offset and count for a block of
@@ -344,6 +422,12 @@ static int intel_vsec_add_dev(struct device *dev, struct intel_vsec_header *head
 		tmp->end = tmp->start + (header->entry_size * sizeof(u32)) - 1;
 		tmp->flags = IORESOURCE_MEM;
 
+		if (intel_vsec_check_bar_resource(intel_vsec_dev, header->tbir, tmp)) {
+			dev_warn(dev, "Discovery table %d for header id %d exceeds BAR %u\n",
+				 i, header->id, header->tbir);
+			return -EINVAL;
+		}
+
 		/* Check resource is not in use */
 		if (!request_mem_region(tmp->start, resource_size(tmp), ""))
 			return -EBUSY;
@@ -351,7 +435,6 @@ static int intel_vsec_add_dev(struct device *dev, struct intel_vsec_header *head
 		release_mem_region(tmp->start, resource_size(tmp));
 	}
 
-	intel_vsec_dev->dev = dev;
 	intel_vsec_dev->quirks = info->quirks;
 	intel_vsec_dev->base_addr = info->base_addr;
 	intel_vsec_dev->priv_data = info->priv_data;
