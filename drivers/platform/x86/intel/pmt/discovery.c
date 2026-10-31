@@ -376,6 +376,7 @@ static int
 pmt_feature_get_feature_table(struct pmt_features_priv *priv,
 			      struct feature *feature,
 			      struct feature_discovery_table *disc_tbl,
+			      struct intel_vsec_device *ivdev,
 			      struct resource *disc_res)
 {
 	struct feature_table *feat_tbl = &feature->table;
@@ -404,6 +405,10 @@ pmt_feature_get_feature_table(struct pmt_features_priv *priv,
 		 */
 		res = DEFINE_RES_MEM(disc_res->end + disc_tbl->offset + 1,
 				     disc_tbl->size * sizeof(u32));
+
+		if (intel_vsec_check_bar_resource(ivdev, ivdev->tbir, &res))
+			return dev_err_probe(priv->dev, -EINVAL,
+					     "Feature table %pR outside of BAR\n", &res);
 		break;
 
 	default:
@@ -494,7 +499,7 @@ static int pmt_features_discovery(struct pmt_features_priv *priv,
 	if (ret)
 		return ret;
 
-	ret = pmt_feature_get_feature_table(priv, feature, &disc_tbl, disc_res);
+	ret = pmt_feature_get_feature_table(priv, feature, &disc_tbl, ivdev, disc_res);
 	if (ret)
 		return ret;
 
@@ -653,3 +658,4 @@ MODULE_AUTHOR("David E. Box <david.e.box@linux.intel.com>");
 MODULE_DESCRIPTION("Intel PMT Discovery driver");
 MODULE_LICENSE("GPL");
 MODULE_IMPORT_NS("INTEL_PMT");
+MODULE_IMPORT_NS("INTEL_VSEC");
