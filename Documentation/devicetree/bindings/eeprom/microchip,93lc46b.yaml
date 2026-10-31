@@ -18,6 +18,7 @@ properties:
       - atmel,at93c66
       - eeprom-93xx46
       - microchip,93lc46b
+      - microchip,93lc86c
 
   data-size:
     description: number of data bits per word
