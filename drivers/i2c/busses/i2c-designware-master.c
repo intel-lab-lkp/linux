@@ -563,7 +563,7 @@ i2c_dw_read(struct dw_i2c_dev *dev)
 		for (; len > 0 && rx_valid > 0; len--, rx_valid--) {
 			regmap_read(dev->map, DW_IC_DATA_CMD, &tmp);
 			tmp &= DW_IC_DATA_CMD_DAT;
-			/* Ensure length byte is a valid value */
+			/* Limit the extra read, but keep the raw count for i2c-core */
 			if (flags & I2C_M_RECV_LEN) {
 				/*
 				 * if IC_EMPTYFIFO_HOLD_MASTER_EN is set, which cannot be
@@ -574,10 +574,8 @@ i2c_dw_read(struct dw_i2c_dev *dev)
 				 * another byte with STOP bit set when the block data
 				 * response length is invalid to complete the transaction.
 				 */
-				if (!tmp || tmp > I2C_SMBUS_BLOCK_MAX)
-					tmp = 1;
-
-				len = i2c_dw_recv_len(dev, tmp);
+				len = i2c_dw_recv_len(dev,
+						  (!tmp || tmp > I2C_SMBUS_BLOCK_MAX) ? 1 : tmp);
 			}
 			*buf++ = tmp;
 			dev->rx_outstanding--;
