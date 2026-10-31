@@ -1672,7 +1672,8 @@ out_free_irqs:
 out_free_irq_data:
 	irq_domain_free_irq_data(virq, nr_irqs);
 out_free_desc:
-	irq_free_descs(virq, nr_irqs);
+	if (!realloc || irq_base < 0)
+		irq_free_descs(virq, nr_irqs);
 	return ret;
 }
 
