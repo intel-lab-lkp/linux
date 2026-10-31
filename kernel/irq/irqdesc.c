@@ -25,6 +25,9 @@
 static struct lock_class_key irq_desc_lock_class;
 
 #if defined(CONFIG_SMP)
+#ifdef CONFIG_CPUMASK_OFFSTACK
+static cpumask_t irq_default_affinity_fallback;
+#endif
 static int __init irq_affinity_setup(char *str)
 {
 	alloc_bootmem_cpumask_var(&irq_default_affinity);
@@ -48,8 +51,12 @@ __setup("irqaffinity=", irq_affinity_setup);
 
 static void __init init_irq_default_affinity(void)
 {
-	if (!cpumask_available(irq_default_affinity))
-		zalloc_cpumask_var(&irq_default_affinity, GFP_NOWAIT);
+	if (!cpumask_available(irq_default_affinity) &&
+	    !zalloc_cpumask_var(&irq_default_affinity, GFP_NOWAIT)) {
+#ifdef CONFIG_CPUMASK_OFFSTACK
+		irq_default_affinity = &irq_default_affinity_fallback;
+#endif
+	}
 	if (cpumask_empty(irq_default_affinity))
 		cpumask_setall(irq_default_affinity);
 }
