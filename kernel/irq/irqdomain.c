@@ -1816,6 +1816,7 @@ int irq_domain_push_irq(struct irq_domain *domain, int virq, void *arg)
 	}
 
 	irq_domain_fix_revmap(parent_irq_data);
+	domain->mapcount++;
 	irq_domain_set_mapping(domain, irq_data->hwirq, irq_data);
 error:
 	mutex_unlock(&domain->root->mutex);
@@ -1877,6 +1878,7 @@ int irq_domain_pop_irq(struct irq_domain *domain, int virq)
 
 	irq_data->parent_data = NULL;
 
+	domain->mapcount--;
 	irq_domain_clear_mapping(domain, irq_data->hwirq);
 	irq_domain_free_irqs_hierarchy(domain, virq, 1);
 
