@@ -5276,7 +5276,8 @@ static __be32 nfsd4_encode_splice_read(
 	}
 
 	/*
-	 * Prepare to encode subsequent operations.
+	 * Bound the stream at the space left in the head page so a later
+	 * xdr_reserve_space() cannot write past it.
 	 *
 	 * xdr_truncate_encode() is not safe to use after a successful
 	 * splice read has been done, so the following stream
@@ -5285,7 +5286,7 @@ static __be32 nfsd4_encode_splice_read(
 	space_left = min_t(int, (void *)xdr->end - (void *)xdr->p,
 				buf->buflen - buf->len);
 	buf->buflen = buf->len + space_left;
-	xdr->end = (__be32 *)((void *)xdr->end + space_left);
+	xdr->end = (__be32 *)((void *)xdr->p + space_left);
 
 	return nfs_ok;
 
