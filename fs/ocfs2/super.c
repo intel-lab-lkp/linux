@@ -1783,6 +1783,9 @@ static int ocfs2_mount_volume(struct super_block *sb)
 	return 0;
 
 out_system_inodes:
+	/* Drain fs_state readers before releasing their backing state. */
+	debugfs_lookup_and_remove("fs_state", osb->osb_debug_root);
+
 	if (osb->local_alloc_state == OCFS2_LA_ENABLED)
 		ocfs2_shutdown_local_alloc(osb);
 	/* Drain pending suballoc reclaim work before the journal goes away */
@@ -1811,6 +1814,9 @@ static void ocfs2_dismount_volume(struct super_block *sb, int mnt_err)
 	BUG_ON(!sb);
 	osb = OCFS2_SB(sb);
 	BUG_ON(!osb);
+
+	/* Drain fs_state readers before releasing their backing state. */
+	debugfs_lookup_and_remove("fs_state", osb->osb_debug_root);
 
 	/* Remove file check sysfs related directories/files,
 	 * and wait for the pending file check operations */
