@@ -1219,7 +1219,7 @@ static void xso_to_xuo_ifindex(const struct xfrm_dev_offload *xso, int ifindex,
 static void xso_to_xuo(const struct xfrm_dev_offload *xso,
 		       struct xfrm_user_offload *xuo)
 {
-	xso_to_xuo_ifindex(xso, xso->dev->ifindex, xuo);
+	xso_to_xuo_ifindex(xso, READ_ONCE(xso->ifindex), xuo);
 }
 #endif
 
@@ -3431,7 +3431,7 @@ static int xfrm_do_migrate_state(struct sk_buff *skb, struct nlmsghdr *nlh,
 	} else {
 		bool inherit_offload = !(um->flags & XFRM_MIGRATE_STATE_CLEAR_OFFLOAD);
 
-		if (inherit_offload && x->xso.dev) {
+		if (inherit_offload && READ_ONCE(x->xso.dev)) {
 			xso_to_xuo(&x->xso, &xuo);
 			m.xuo = &xuo;
 		}
