@@ -2649,7 +2649,10 @@ static void pci_imm_ready_init(struct pci_dev *dev)
 {
 	u16 status;
 
-	pci_read_config_word(dev, PCI_STATUS, &status);
+	if (pci_read_config_word(dev, PCI_STATUS, &status) ||
+	    PCI_POSSIBLE_ERROR(status))
+		return;
+
 	if (status & PCI_STATUS_IMM_READY)
 		dev->imm_ready = 1;
 }
