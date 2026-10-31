@@ -24,6 +24,7 @@
 #include <linux/overflow.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/stddef.h>
 #include <linux/string_choices.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
@@ -38,6 +39,9 @@
 #define DT_TBIR			GENMASK(2, 0)
 #define FEAT_ATTR_SIZE(x)	((x) * sizeof(u32))
 #define PMT_GUID_SIZE(x)	((x) * sizeof(u32))
+/* Space for attribute fields between the header and the guids pointer */
+#define FEAT_ATTR_CAPACITY	(offsetofend(struct feature_table, rmid) - \
+				 sizeof(struct feature_header))
 #define PMT_ACCESS_TYPE_RSVD	0xF
 #define SKIP_FEATURE		1
 
@@ -419,6 +423,18 @@ pmt_feature_get_feature_table(struct pmt_features_priv *priv,
 	/* Get the header */
 	header = &feat_tbl->header;
 	memcpy_fromio(header, feat_offset, sizeof(*header));
+
+	/*
+	 * The attribute fields are copied into the fixed caps and union
+	 * fields following the header. Skip, rather than fail on, a feature
+	 * whose attributes don't fit so the remaining features still probe.
+	 */
+	if (FEAT_ATTR_SIZE(header->attr_size) > FEAT_ATTR_CAPACITY) {
+		dev_warn(priv->dev, "Skipping feature %s: bad attr_size %u\n",
+			 pmt_feature_names[feature->id], header->attr_size);
+		devm_iounmap(priv->dev, feat_base);
+		return SKIP_FEATURE;
+	}
 
 	/* Validate fields fit within mapped resource */
 	size = sizeof(*header) + FEAT_ATTR_SIZE(header->attr_size) +
