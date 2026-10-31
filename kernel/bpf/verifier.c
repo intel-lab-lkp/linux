@@ -11469,6 +11469,12 @@ static int push_callback_call(struct bpf_verifier_env *env, struct bpf_insn *ins
 	if (err)
 		return err;
 
+	if (!bpf_pseudo_kfunc_call(insn) &&
+	    (insn->imm == BPF_FUNC_loop || insn->imm == BPF_FUNC_for_each_map_elem))
+		env->subprog_info[subprog].is_loop_cb = true;
+	else
+		env->subprog_info[subprog].is_called = true;
+
 	/* for callback functions enqueue entry to callback and
 	 * proceed with next instruction within current frame.
 	 */
@@ -11505,6 +11511,7 @@ static int check_static_func_call(struct bpf_verifier_env *env, int subprog,
 	int err;
 
 	caller = state->frame[state->curframe];
+	env->subprog_info[subprog].is_called = true;
 
 	/*
 	 * Track caller's total stack arg count (incoming + max outgoing).
