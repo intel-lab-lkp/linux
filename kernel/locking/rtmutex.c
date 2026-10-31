@@ -1229,7 +1229,7 @@ static int __sched task_blocks_on_rt_mutex(struct rt_mutex_base *lock,
 	 * enqueue on itself just to untangle the mess later. It's not
 	 * only an optimization. We drop the locks, so another waiter
 	 * can come in before the chain walk detects the deadlock. So
-	 * the other will detect the deadlock and return -EDEADLOCK,
+	 * the other will detect the deadlock and return -EDEADLK,
 	 * which is wrong, as the other waiter is not in a deadlock
 	 * situation.
 	 *
@@ -1684,10 +1684,10 @@ static void __sched rt_mutex_handle_deadlock(int res, int detect_deadlock,
 	__must_hold(&lock->wait_lock)
 {
 	/*
-	 * If the result is not -EDEADLOCK or the caller requested
+	 * If the result is not -EDEADLK or the caller requested
 	 * deadlock detection, nothing to do here.
 	 */
-	if (res != -EDEADLOCK || detect_deadlock)
+	if (res != -EDEADLK || detect_deadlock)
 		return;
 
 	if (build_ww_mutex() && w->ww_ctx)
