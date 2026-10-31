@@ -245,8 +245,8 @@ static int fill_stats_for_tgid(pid_t tgid, struct taskstats *stats)
 	u64 now_ns;
 
 	/*
-	 * Add additional stats from live tasks except zombie thread group
-	 * leaders who are already counted with the dead tasks
+	 * Add stats from tasks not yet included in the dead-task cache.
+	 * Accounting can finish before exit_state is set.
 	 */
 	rcu_read_lock();
 	first = find_task_by_vpid(tgid);
@@ -261,7 +261,7 @@ static int fill_stats_for_tgid(pid_t tgid, struct taskstats *stats)
 
 	now_ns = ktime_get_ns();
 	for_each_thread(first, tsk) {
-		if (tsk->exit_state)
+		if (tsk->exit_state || tsk->taskstats_tgid_accounted)
 			continue;
 
 		tgid_stats_add_task(stats, tsk, now_ns);
@@ -291,6 +291,7 @@ static void fill_tgid_exit(struct task_struct *tsk)
 
 	now_ns = ktime_get_ns();
 	tgid_stats_add_task(tsk->signal->stats, tsk, now_ns);
+	tsk->taskstats_tgid_accounted = true;
 ret:
 	spin_unlock_irqrestore(&tsk->sighand->siglock, flags);
 	return;

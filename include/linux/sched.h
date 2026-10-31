@@ -1458,6 +1458,11 @@ struct task_struct {
 	struct task_delay_info		*delays;
 #endif
 
+#ifdef CONFIG_TASKSTATS
+	/* Protected by sighand->siglock. */
+	bool				taskstats_tgid_accounted;
+#endif
+
 #ifdef CONFIG_FAULT_INJECTION
 	int				make_it_fail;
 	unsigned int			fail_nth;
