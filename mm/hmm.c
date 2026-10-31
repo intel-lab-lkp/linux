@@ -268,15 +268,22 @@ static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
 		const softleaf_t entry = softleaf_from_pte(pte);
 
 		/*
-		 * Don't fault in device private pages owned by the caller,
-		 * just report the PFN.
+		 * Don't fault in device private pages owned by the caller unless
+		 * a write fault is required.
 		 */
 		if (softleaf_is_device_private(entry) &&
 		    page_pgmap(softleaf_to_page(entry))->owner ==
 		    range->dev_private_owner) {
 			cpu_flags = HMM_PFN_VALID;
-			if (softleaf_is_device_private_write(entry))
+			if (softleaf_is_device_private_write(entry)) {
 				cpu_flags |= HMM_PFN_WRITE;
+			} else {
+				required_fault =
+					hmm_pte_need_fault(hmm_vma_walk, pfn_req_flags,
+							   cpu_flags);
+				if (required_fault)
+					goto fault;
+			}
 			new_pfn_flags = softleaf_to_pfn(entry) | cpu_flags;
 			goto out;
 		}
@@ -358,8 +365,15 @@ static int hmm_vma_handle_absent_pmd(struct mm_walk *walk, unsigned long start,
 		unsigned long pfn = softleaf_to_pfn(entry);
 		unsigned long i;
 
-		if (softleaf_is_device_private_write(entry))
+		if (softleaf_is_device_private_write(entry)) {
 			cpu_flags |= HMM_PFN_WRITE;
+		} else if ((range->default_flags | range->pfn_flags_mask) &
+			   HMM_PFN_REQ_WRITE) {
+			required_fault = hmm_range_need_fault(hmm_vma_walk,
+							      hmm_pfns, npages, cpu_flags);
+			if (required_fault)
+				return hmm_record_fault(addr, end, required_fault, walk);
+		}
 
 		/*
 		 * Fully populate the PFN list though subsequent PFNs could be
