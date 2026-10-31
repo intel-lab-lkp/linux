@@ -3346,6 +3346,13 @@ static void detach_destroy_domains(const struct cpumask *cpu_map)
 	rcu_read_unlock();
 }
 
+/* A failed domain build leaves its CPUs attached to def_root_domain. */
+static bool sched_domain_installed(const struct cpumask *cpu_map)
+{
+	return !cpumask_empty(cpu_map) &&
+	       cpu_rq(cpumask_first(cpu_map))->rd != &def_root_domain;
+}
+
 /* handle null as "default" */
 static int dattrs_equal(struct sched_domain_attr *cur, int idx_cur,
 			struct sched_domain_attr *new, int idx_new)
@@ -3422,11 +3429,13 @@ static void partition_sched_domains_locked(int ndoms_new, cpumask_var_t doms_new
 	for (i = 0; i < ndoms_cur; i++) {
 		for (j = 0; j < n && !new_topology; j++) {
 			if (cpumask_equal(doms_cur[i], doms_new[j]) &&
-			    dattrs_equal(dattr_cur, i, dattr_new, j))
+			    dattrs_equal(dattr_cur, i, dattr_new, j) &&
+			    sched_domain_installed(doms_cur[i]))
 				goto match1;
 		}
 		/* No match - a current sched domain not in new doms_new[] */
-		detach_destroy_domains(doms_cur[i]);
+		if (sched_domain_installed(doms_cur[i]))
+			detach_destroy_domains(doms_cur[i]);
 match1:
 		;
 	}
@@ -3443,7 +3452,8 @@ match1:
 	for (i = 0; i < ndoms_new; i++) {
 		for (j = 0; j < n && !new_topology; j++) {
 			if (cpumask_equal(doms_new[i], doms_cur[j]) &&
-			    dattrs_equal(dattr_new, i, dattr_cur, j)) {
+			    dattrs_equal(dattr_new, i, dattr_cur, j) &&
+			    sched_domain_installed(doms_cur[j])) {
 				/*
 				 * Reused partition has to be taken care
 				 * of here, because there could be a corner
