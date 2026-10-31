@@ -661,20 +661,20 @@ static int enable_trace_eprobe(struct trace_event_call *call,
 	} else
 		trace_probe_set_flag(tp, TP_FLAG_PROFILE);
 
-	if (enabled)
+	/* The trigger lives in the instance of the file, add it for each file */
+	if (!file && enabled)
 		return 0;
 
 	for_each_trace_eprobe_tp(ep, tp) {
 		ret = enable_eprobe(ep, file);
 		if (ret)
 			break;
-		enabled = true;
 		cnt++;
 	}
 
 	if (ret) {
 		/* Failed to enable one of them. Roll back all */
-		if (enabled) {
+		if (cnt) {
 			/*
 			 * It's a bug if one failed for something other than memory
 			 * not being available but another eprobe succeeded.
@@ -709,18 +709,11 @@ static int disable_trace_eprobe(struct trace_event_call *call,
 	if (file) {
 		if (!trace_probe_get_file_link(tp, file))
 			return -ENOENT;
-		if (!trace_probe_has_single_file(tp))
-			goto out;
-		trace_probe_clear_flag(tp, TP_FLAG_TRACE);
+		for_each_trace_eprobe_tp(ep, tp)
+			disable_eprobe(ep, file->tr);
 	} else
 		trace_probe_clear_flag(tp, TP_FLAG_PROFILE);
 
-	if (!trace_probe_is_enabled(tp)) {
-		for_each_trace_eprobe_tp(ep, tp)
-			disable_eprobe(ep, file->tr);
-	}
-
- out:
 	if (file)
 		/*
 		 * Synchronization is done in below function. For perf event,
