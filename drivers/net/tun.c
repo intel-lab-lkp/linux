@@ -58,6 +58,7 @@
 #include <linux/nsproxy.h>
 #include <linux/virtio_net.h>
 #include <linux/rcupdate.h>
+#include <net/hotdata.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
 #include <net/rtnetlink.h>
@@ -226,6 +227,15 @@ struct veth {
 
 static void tun_flow_init(struct tun_struct *tun);
 static void tun_flow_uninit(struct tun_struct *tun);
+
+/* In IFF_NAPI mode written packets wait in the tfile's sk_write_queue for the
+ * NAPI poll, which may run later in a kthread or ksoftirqd. Bound that queue
+ * like the per-CPU backlog of netif_rx().
+ */
+static bool tun_napi_queue_full(const struct sk_buff_head *queue)
+{
+	return skb_queue_len_lockless(queue) > READ_ONCE(net_hotdata.max_backlog);
+}
 
 static int tun_napi_receive(struct napi_struct *napi, int budget)
 {
@@ -1856,6 +1866,20 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 			zerocopy = true;
 	}
 
+	/* Drop before allocating and copying when the NAPI queue is full. The
+	 * check is repeated under the queue lock before queueing.
+	 */
+	if (tfile->napi_enabled &&
+	    unlikely(tun_napi_queue_full(&tfile->sk.sk_write_queue))) {
+		if (msg_control) {
+			struct ubuf_info *uarg = msg_control;
+
+			uarg->ops->complete(NULL, uarg, false);
+		}
+		dev_core_stats_rx_dropped_inc(tun->dev);
+		return total_len;
+	}
+
 	if (!frags && tun_can_build_skb(tun, tfile, len, noblock, zerocopy)) {
 		/* For the packet that is not easy to be processed
 		 * (e.g gso or jumbo packet), we will do it at after
@@ -2043,6 +2067,14 @@ napi_busy:
 			rcu_read_unlock();
 			err = -EBUSY;
 			goto free_skb;
+		}
+
+		if (unlikely(tun_napi_queue_full(queue))) {
+			spin_unlock_bh(&queue->lock);
+			rcu_read_unlock();
+			kfree_skb_reason(skb, SKB_DROP_REASON_FULL_RING);
+			dev_core_stats_rx_dropped_inc(tun->dev);
+			return total_len;
 		}
 
 		__skb_queue_tail(queue, skb);
@@ -2653,6 +2685,13 @@ build:
 			spin_unlock(&queue->lock);
 			kfree_skb(skb);
 			return -EBUSY;
+		}
+
+		if (unlikely(tun_napi_queue_full(queue))) {
+			spin_unlock(&queue->lock);
+			kfree_skb_reason(skb, SKB_DROP_REASON_FULL_RING);
+			dev_core_stats_rx_dropped_inc(tun->dev);
+			return 0;
 		}
 
 		__skb_queue_tail(queue, skb);
