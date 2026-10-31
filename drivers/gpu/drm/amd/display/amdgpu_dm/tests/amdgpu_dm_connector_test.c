@@ -9905,6 +9905,30 @@ static void dm_test_fs_caps_edp_replay_mode(struct kunit *test)
 }
 
 /**
+ * dm_test_fs_caps_dp_vsdb_version - Test a DP sink's VSDB version without replay
+ * @test: The KUnit test context
+ *
+ * The version selects the FreeSync infopacket, so it is kept for every DP sink,
+ * and a later sink without the VSDB clears it.
+ */
+static void dm_test_fs_caps_dp_vsdb_version(struct kunit *test)
+{
+	struct dm_test_fs_caps_ctx *ctx =
+		dm_test_fs_caps_ctx_alloc(test, SIGNAL_TYPE_DISPLAY_PORT);
+
+	amdgpu_dm_update_freesync_caps(&ctx->aconnector->base,
+				       dm_test_fs_edid_amd_vsdb(test, 0, 0, 0), false);
+
+	KUNIT_EXPECT_FALSE(test, ctx->aconnector->vsdb_info.replay_mode);
+	KUNIT_EXPECT_EQ(test, ctx->aconnector->vsdb_info.amd_vsdb_version, 3);
+
+	amdgpu_dm_update_freesync_caps(&ctx->aconnector->base,
+				       dm_test_fs_edid_displayid(test, 40, 144), false);
+
+	KUNIT_EXPECT_EQ(test, ctx->aconnector->vsdb_info.amd_vsdb_version, 0);
+}
+
+/**
  * dm_test_fs_caps_hdmi_vsdb - Test the HDMI AMD VSDB refresh range
  * @test: The KUnit test context
  *
@@ -10786,6 +10810,7 @@ static struct kunit_case amdgpu_dm_connector_tests[] = {
 	KUNIT_CASE(dm_test_fs_caps_dp_narrow_range),
 	KUNIT_CASE(dm_test_fs_caps_dp_msa_not_allowed),
 	KUNIT_CASE(dm_test_fs_caps_edp_replay_mode),
+	KUNIT_CASE(dm_test_fs_caps_dp_vsdb_version),
 	KUNIT_CASE(dm_test_fs_caps_hdmi_vsdb),
 	KUNIT_CASE(dm_test_fs_caps_hdmi_no_vsdb),
 	KUNIT_CASE(dm_test_fs_caps_pcon_whitelist),
