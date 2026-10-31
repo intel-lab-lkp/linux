@@ -214,6 +214,10 @@ static int pmt_resolve_access_pci(struct intel_pmt_entry *entry,
 	struct device *dev = &ivdev->auxdev.dev;
 	struct intel_pmt_header *header = &entry->header;
 	struct resource *disc_res;
+	struct resource res;
+	/* BAR the region lives in, the discovery BAR unless the device names one */
+	unsigned int bar = ivdev->tbir;
+	int ret;
 	u8 bir;
 
 	/*
@@ -258,6 +262,7 @@ static int pmt_resolve_access_pci(struct intel_pmt_entry *entry,
 				   (disc_res->start <= pci_resource_end(pci_dev, i))) {
 					entry->base_addr = pci_resource_start(pci_dev, i) +
 							   header->base_offset;
+					bar = i;
 					break;
 				}
 			if (!entry->base_addr)
@@ -280,11 +285,26 @@ static int pmt_resolve_access_pci(struct intel_pmt_entry *entry,
 		 */
 		entry->base_addr = pci_resource_start(pci_dev, bir) +
 				   GET_ADDRESS(header->base_offset);
+		bar = bir;
 		break;
 	default:
 		dev_err(dev, "Unsupported access type %d\n",
 			header->access_type);
 		return -EINVAL;
+	}
+
+	/*
+	 * The base offset and size come from the device. Make sure the region
+	 * lies within the BAR it claims to be in before it is mapped.
+	 */
+	if (header->size) {
+		res = DEFINE_RES_MEM(entry->base_addr, header->size);
+
+		ret = intel_vsec_check_bar_resource(ivdev, bar, &res);
+		if (ret) {
+			dev_err(dev, "Region %pR is outside of its BAR\n", &res);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -574,3 +594,4 @@ module_exit(pmt_class_exit);
 MODULE_AUTHOR("Alexander Duyck <alexander.h.duyck@linux.intel.com>");
 MODULE_DESCRIPTION("Intel PMT Class driver");
 MODULE_LICENSE("GPL v2");
+MODULE_IMPORT_NS("INTEL_VSEC");
