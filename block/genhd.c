@@ -657,13 +657,15 @@ static void blk_report_disk_dead(struct gendisk *disk, bool surprise)
 	rcu_read_unlock();
 }
 
-static bool __blk_mark_disk_dead(struct gendisk *disk)
+static bool __blk_mark_disk_dead(struct gendisk *disk, bool *newly_dead)
 {
 	/*
 	 * Fail any new I/O.
 	 */
 	if (test_and_set_bit(GD_DEAD, &disk->state))
 		return false;
+	if (newly_dead)
+		*newly_dead = true;
 
 	if (test_bit(GD_OWNS_QUEUE, &disk->state))
 		blk_queue_flag_set(QUEUE_FLAG_DYING, disk->queue);
@@ -688,9 +690,12 @@ static bool __blk_mark_disk_dead(struct gendisk *disk)
  */
 void blk_mark_disk_dead(struct gendisk *disk)
 {
+	bool newly_dead = false;
+
 	blk_queue_flag_set(QUEUE_FLAG_DYING, disk->queue);
-	__blk_mark_disk_dead(disk);
-	blk_report_disk_dead(disk, true);
+	__blk_mark_disk_dead(disk, &newly_dead);
+	if (newly_dead)
+		blk_report_disk_dead(disk, true);
 }
 EXPORT_SYMBOL_GPL(blk_mark_disk_dead);
 
@@ -727,7 +732,7 @@ static void __del_gendisk(struct gendisk *disk)
 	 * Drop all partitions now that the disk is marked dead.
 	 */
 	mutex_lock(&disk->open_mutex);
-	start_drain = __blk_mark_disk_dead(disk);
+	start_drain = __blk_mark_disk_dead(disk, NULL);
 	if (start_drain)
 		blk_freeze_acquire_lock(q);
 	xa_for_each_start(&disk->part_tbl, idx, part, 1)
