@@ -4455,7 +4455,12 @@ int pcie_flr(struct pci_dev *dev)
 		return ret;
 	}
 
-	pcie_capability_set_word(dev, PCI_EXP_DEVCTL, PCI_EXP_DEVCTL_BCR_FLR);
+	ret = pcie_capability_set_word(dev, PCI_EXP_DEVCTL,
+				       PCI_EXP_DEVCTL_BCR_FLR);
+	if (ret) {
+		ret = pcibios_err_to_errno(ret);
+		goto done;
+	}
 
 	if (dev->imm_ready)
 		goto done;
@@ -4532,7 +4537,11 @@ static int pci_af_flr(struct pci_dev *dev, bool probe)
 		return ret;
 	}
 
-	pci_write_config_byte(dev, pos + PCI_AF_CTRL, PCI_AF_CTRL_FLR);
+	ret = pci_write_config_byte(dev, pos + PCI_AF_CTRL, PCI_AF_CTRL_FLR);
+	if (ret) {
+		ret = pcibios_err_to_errno(ret);
+		goto done;
+	}
 
 	if (dev->imm_ready)
 		goto done;
