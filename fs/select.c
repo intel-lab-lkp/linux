@@ -1265,6 +1265,8 @@ static int do_compat_select(int n, compat_ulong_t __user *inp,
 		if (copy_from_user(&tv, tvp, sizeof(tv)))
 			return -EFAULT;
 
+		if (tv.tv_sec < 0 || tv.tv_usec < 0)
+			return -EINVAL;
 		to = &end_time;
 		if (poll_select_set_timeout(to,
 				tv.tv_sec + (tv.tv_usec / USEC_PER_SEC),
