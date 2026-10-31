@@ -371,7 +371,9 @@ int vfs_fstatat(int dfd, const char __user *filename,
 {
 	CLASS(filename_maybe_null, name)(filename, flags);
 
-	if (!name && dfd >= 0)
+	if (!name && dfd >= 0 &&
+	    !(flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
+			AT_EMPTY_PATH | AT_STATX_SYNC_TYPE)))
 		return vfs_fstat(dfd, stat);
 
 	return vfs_statx(dfd, name, flags | AT_NO_AUTOMOUNT,
@@ -812,7 +814,9 @@ SYSCALL_DEFINE5(statx,
 {
 	CLASS(filename_maybe_null, name)(filename, flags);
 
-	if (!name && dfd >= 0)
+	if (!name && dfd >= 0 &&
+	    !(flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
+			AT_EMPTY_PATH | AT_STATX_SYNC_TYPE)))
 		return do_statx_fd(dfd, flags & ~AT_NO_AUTOMOUNT, mask, buffer);
 
 	return do_statx(dfd, name, flags, mask, buffer);
