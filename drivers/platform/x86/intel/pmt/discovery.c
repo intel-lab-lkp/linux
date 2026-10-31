@@ -348,6 +348,10 @@ pmt_feature_get_disc_table(struct pmt_features_priv *priv,
 
 	devm_iounmap(priv->dev, disc_base);
 
+	/* The id is used as a bit position and array index below */
+	if (!pmt_feature_id_is_valid(disc_tbl->id))
+		return SKIP_FEATURE;
+
 	if (priv->mask & BIT(disc_tbl->id))
 		return dev_err_probe(priv->dev, -EINVAL, "Duplicate feature: %s\n",
 				     pmt_feature_names[disc_tbl->id]);
@@ -361,9 +365,6 @@ pmt_feature_get_disc_table(struct pmt_features_priv *priv,
 		return SKIP_FEATURE;
 
 	if (disc_tbl->version > MAX_FEATURE_VERSION)
-		return SKIP_FEATURE;
-
-	if (!pmt_feature_id_is_valid(disc_tbl->id))
 		return SKIP_FEATURE;
 
 	priv->mask |= BIT(disc_tbl->id);
