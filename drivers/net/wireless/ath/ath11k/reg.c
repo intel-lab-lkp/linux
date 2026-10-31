@@ -145,8 +145,16 @@ int ath11k_reg_update_chan_list(struct ath11k *ar, bool wait)
 		}
 	}
 
-	if (WARN_ON(!num_channels))
-		return -EINVAL;
+	/* A regulatory domain can leave a pdev with no usable channel, as
+	 * one without 6 GHz rules leaves a 6 GHz-only radio. There is no
+	 * list to send then; the domain that enables a channel again sends it.
+	 */
+	if (!num_channels) {
+		ath11k_dbg(ar->ab, ATH11K_DBG_REG,
+			   "no enabled channel on pdev %u, channel list not sent\n",
+			   ar->pdev->pdev_id);
+		return 0;
+	}
 
 	params = kzalloc_flex(*params, ch_param, num_channels);
 	if (!params)
