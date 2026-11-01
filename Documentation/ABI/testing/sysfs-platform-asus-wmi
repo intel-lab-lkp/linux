@@ -238,3 +238,62 @@ Description:
 		Set if the MCU can go in to low-power mode on system sleep
 			* 0 - False,
 			* 1 - True
+
+What:		/sys/class/hwmon/hwmonX/pwm[12]_enable
+Date:		Oct 2026
+KernelVersion:	5.17
+Contact:	Luke D. Jones <luke@ljones.dev>, Denis Benato <denis.benato@linux.dev>, Bartu Alev <bartualev@gmail.com>
+Description:
+		Enable or disable the custom fan curve of the CPU fan (pwm1)
+		or the GPU fan (pwm2).  Reads return 1 while the custom curve
+		is enabled and 2 while the firmware controls the fan.  Writes:
+
+		    * 1 - enable the stored curve,
+		    * 2 - disable the curve and let the firmware control the
+		      fan again,
+		    * 3 - reset the stored curve to the firmware defaults and
+		      disable it.
+
+		Enabling validates the curve: temperatures and duties must
+		not decrease from point to point, otherwise the write fails
+		with -EINVAL and the curve stays disabled.  Writing any
+		writable pwmY_auto_pointZ_temp or pwmY_auto_pointZ_pwm
+		attribute disables the curve, so a changed curve has to be
+		enabled again.
+
+What:		/sys/class/hwmon/hwmonX/pwm3_enable
+Date:		Oct 2026
+KernelVersion:	6.6
+Contact:	Luke D. Jones <luke@ljones.dev>, Denis Benato <denis.benato@linux.dev>, Bartu Alev <bartualev@gmail.com>
+Description:
+		Same as pwm1_enable and pwm2_enable, for the mid fan (pwm3)
+		of laptops whose firmware exposes a third fan curve.
+
+What:		/sys/class/hwmon/hwmonX/pwm[12]_auto_point[1-8]_temp
+What:		/sys/class/hwmon/hwmonX/pwm[12]_auto_point[1-8]_pwm
+Date:		Oct 2026
+KernelVersion:	5.17
+Contact:	Luke D. Jones <luke@ljones.dev>, Denis Benato <denis.benato@linux.dev>, Bartu Alev <bartualev@gmail.com>
+Description:
+		One point of the custom fan curve of the CPU fan (pwm1) or
+		the GPU fan (pwm2).  _temp is the temperature threshold of the
+		point in degrees Celsius, _pwm is its duty in pwm units
+		(0-255); the driver scales the duty to the percentage the
+		firmware expects when the curve is enabled.
+
+		The embedded controller binds point Z (Z = 1..8) to the
+		temperature decade [30 + 10 * (Z - 1), 39 + 10 * (Z - 1)]
+		degrees Celsius and silently clamps the threshold into that
+		decade when the curve is applied, while reads return the
+		value that was written.  On TUF series, the controller steps
+		from one point to the next without interpolating, and a point
+		is left downwards with 5 degrees Celsius of hysteresis.
+
+What:		/sys/class/hwmon/hwmonX/pwm3_auto_point[1-8]_temp
+What:		/sys/class/hwmon/hwmonX/pwm3_auto_point[1-8]_pwm
+Date:		Oct 2026
+KernelVersion:	6.6
+Contact:	Luke D. Jones <luke@ljones.dev>, Denis Benato <denis.benato@linux.dev>, Bartu Alev <bartualev@gmail.com>
+Description:
+		Same as the pwm1 and pwm2 curve points, for the mid fan
+		(pwm3) of laptops whose firmware exposes a third fan curve.
