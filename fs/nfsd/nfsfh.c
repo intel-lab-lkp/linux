@@ -471,9 +471,15 @@ __fh_verify(struct svc_rqst *rqstp,
 			&& exp->ex_path.dentry == dentry)
 		may_bypass_gss = true;
 
-	error = check_security_flavor(exp, rqstp, may_bypass_gss);
-	if (error)
-		goto out;
+	/*
+	 * SECINFO reports the export's security flavors instead of
+	 * failing on a flavor mismatch. The xprtsec= policy still applies.
+	 */
+	if (!(access & NFSD_MAY_SECINFO)) {
+		error = check_security_flavor(exp, rqstp, may_bypass_gss);
+		if (error)
+			goto out;
+	}
 
 	svc_xprt_set_valid(rqstp->rq_xprt);
 
