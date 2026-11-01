@@ -633,6 +633,8 @@ static void async_completed(struct urb *urb)
 	spin_lock_irqsave(&ps->lock, flags);
 	list_move_tail(&as->asynclist, &ps->async_completed);
 	as->status = urb->status;
+	if (urb->actual_length > urb->transfer_buffer_length)
+		urb->actual_length = urb->transfer_buffer_length;
 	signr = as->signr;
 	if (signr) {
 		errno = as->status;
