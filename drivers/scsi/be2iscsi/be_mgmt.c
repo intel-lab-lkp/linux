@@ -41,6 +41,7 @@ unsigned int mgmt_vendor_specific_fw_cmd(struct be_ctrl_info *ctrl,
 	struct iscsi_bsg_request *bsg_req = job->request;
 	struct be_bsg_vendor_cmd *req = nonemb_cmd->va;
 	unsigned short region, sector_size, sector, offset;
+	unsigned int len;
 
 	nonemb_cmd->size = job->request_payload.payload_len;
 	if (job->request_len <
@@ -66,11 +67,19 @@ unsigned int mgmt_vendor_specific_fw_cmd(struct be_ctrl_info *ctrl,
 	switch (bsg_req->rqst_data.h_vendor.vendor_cmd[0]) {
 	case BEISCSI_WRITE_FLASH:
 		offset = sector * sector_size + offset;
+		len = min(job->request_len, nonemb_cmd->size);
+		if (offset > nonemb_cmd->size ||
+		    len > nonemb_cmd->size - offset) {
+			beiscsi_log(phba, KERN_WARNING, BEISCSI_LOG_CONFIG,
+				    "BG_%d : WRITE_FLASH copy exceeds DMA buffer\n");
+			mutex_unlock(&ctrl->mbox_lock);
+			return 0;
+		}
 		be_cmd_hdr_prepare(&req->hdr, CMD_SUBSYSTEM_ISCSI,
 				   OPCODE_COMMON_WRITE_FLASH, sizeof(*req));
 		sg_copy_to_buffer(job->request_payload.sg_list,
 				  job->request_payload.sg_cnt,
-				  nonemb_cmd->va + offset, job->request_len);
+				  nonemb_cmd->va + offset, len);
 		break;
 	case BEISCSI_READ_FLASH:
 		be_cmd_hdr_prepare(&req->hdr, CMD_SUBSYSTEM_ISCSI,
