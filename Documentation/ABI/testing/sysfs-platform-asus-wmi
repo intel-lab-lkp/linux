@@ -281,6 +281,20 @@ Description:
 		(0-255); the driver scales the duty to the percentage the
 		firmware expects when the curve is enabled.
 
+		While the curve is enabled, _pwm reports the effective duty,
+		which is the higher of the stored duty and the firmware floor
+		of the point (pwmY_auto_pointZ_floor_pwm).  A disabled curve
+		reports the stored duty.  The controller works in whole
+		percent, so the reported value is an upper bound: the applied
+		duty can be up to 2.5 pwm units lower.
+
+		Reading while the curve is enabled is therefore not
+		read-modify-write safe: a curve editor that reads the points
+		and writes them back stores the effective duty as the new
+		curve, and the duty the user originally wrote is lost.  Read
+		the curve while it is disabled, or write back the values that
+		were written rather than the ones that were read.
+
 		The embedded controller binds point Z (Z = 1..8) to the
 		temperature decade [30 + 10 * (Z - 1), 39 + 10 * (Z - 1)]
 		degrees Celsius and silently clamps the threshold into that

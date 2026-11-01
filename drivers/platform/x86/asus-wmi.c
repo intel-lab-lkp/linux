@@ -324,7 +324,7 @@ struct asus_wmi {
 	bool gpu_fan_curve_available;
 	bool mid_fan_curve_available;
 	struct fan_curve_data custom_fan_curves[3];
-	/* protects custom_fan_curves[].floors */
+	/* protects custom_fan_curves[].floors and .floors_valid */
 	struct mutex fan_curve_lock;
 	struct device *fan_curve_hwmon;
 
@@ -3754,7 +3754,7 @@ static int fan_curve_load_floors(struct asus_wmi *asus, u32 fan_dev)
 	return 0;
 }
 
-static void fan_curve_notify_floors(struct asus_wmi *asus)
+static void fan_curve_notify(struct asus_wmi *asus)
 {
 	struct device *hwmon = asus->fan_curve_hwmon;
 	bool valid[ARRAY_SIZE(asus->custom_fan_curves)];
@@ -3778,6 +3778,10 @@ static void fan_curve_notify_floors(struct asus_wmi *asus)
 				 "pwm%d_auto_point%d_floor_pwm",
 				 fan + 1, point + 1);
 			sysfs_notify(&hwmon->kobj, NULL, name);
+			snprintf(name, sizeof(name),
+				 "pwm%d_auto_point%d_pwm",
+				 fan + 1, point + 1);
+			sysfs_notify(&hwmon->kobj, NULL, name);
 		}
 	}
 }
@@ -3797,7 +3801,7 @@ static void fan_curve_refresh_floors(struct asus_wmi *asus)
 	if (asus->mid_fan_curve_available)
 		fan_curve_load_floors(asus, ASUS_WMI_DEVID_MID_FAN_CURVE);
 
-	fan_curve_notify_floors(asus);
+	fan_curve_notify(asus);
 }
 
 /* Check if the capability exists, populate its defaults and read its floor table */
@@ -3855,15 +3859,28 @@ static ssize_t fan_curve_show(struct device *dev,
 	struct asus_wmi *asus = dev_get_drvdata(dev);
 	struct fan_curve_data *data;
 	int value, pwm, index;
+	bool enabled;
 
 	data = fan_curve_attr_2_select(asus, attr);
 	pwm = dev_attr->nr & FAN_CURVE_PWM_MASK;
 	index = dev_attr->index;
 
-	if (pwm)
+	if (pwm) {
+		enabled = data->enabled;
 		value = data->percents[index];
-	else
+
+		/*
+		 * The EC runs the point at the higher of the curve and the
+		 * firmware floor, so report the duty it applies.  Only the
+		 * floor table is protected by fan_curve_lock; enabled and
+		 * percents are written without it, so this is a snapshot.
+		 */
+		guard(mutex)(&asus->fan_curve_lock);
+		if (enabled && data->floors_valid)
+			value = max(value, (int)data->floors[index]);
+	} else {
 		value = data->temps[index];
+	}
 
 	return sysfs_emit(buf, "%d\n", value);
 }
@@ -4059,6 +4076,9 @@ static ssize_t fan_curve_enable_store(struct device *dev,
 			fan_curve_refresh_floors(asus);
 		}
 	}
+
+	fan_curve_notify(asus);
+
 	return count;
 }
 
