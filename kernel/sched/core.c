@@ -6413,6 +6413,9 @@ restart:
 	 */
 	max = NULL;
 	for_each_cpu_wrap(i, smt_mask, cpu) {
+		if (!cpu_online(i))
+			continue;
+
 		rq_i = cpu_rq(i);
 
 		/*
@@ -6448,6 +6451,8 @@ restart:
 	for_each_cpu(i, smt_mask) {
 		rq_i = cpu_rq(i);
 		p = rq_i->core_pick;
+		if (!p)
+			continue;
 
 		if (!cookie_equals(p, cookie)) {
 			p = NULL;
@@ -6760,6 +6765,13 @@ static inline void sched_core_cpu_dying(unsigned int cpu)
 
 	if (rq->core != rq)
 		rq->core = rq;
+
+	/*
+	 * Core-wide selections skip offline siblings and rely on a NULL
+	 * core_pick to tell them apart from participants.
+	 */
+	rq->core_pick = NULL;
+	rq->core_dl_server = NULL;
 }
 
 #else /* !CONFIG_SCHED_CORE: */
