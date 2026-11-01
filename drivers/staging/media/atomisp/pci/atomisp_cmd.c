@@ -1080,47 +1080,6 @@ static int raw_output_format_match_input(u32 input, u32 output)
 	return -EINVAL;
 }
 
-u32 atomisp_get_pixel_depth(u32 pixelformat)
-{
-	switch (pixelformat) {
-	case V4L2_PIX_FMT_YUV420:
-	case V4L2_PIX_FMT_NV12:
-	case V4L2_PIX_FMT_NV21:
-	case V4L2_PIX_FMT_YVU420:
-		return 12;
-	case V4L2_PIX_FMT_YUV422P:
-	case V4L2_PIX_FMT_YUYV:
-	case V4L2_PIX_FMT_UYVY:
-	case V4L2_PIX_FMT_NV16:
-	case V4L2_PIX_FMT_NV61:
-	case V4L2_PIX_FMT_RGB565:
-	case V4L2_PIX_FMT_SBGGR16:
-	case V4L2_PIX_FMT_SBGGR12:
-	case V4L2_PIX_FMT_SGBRG12:
-	case V4L2_PIX_FMT_SGRBG12:
-	case V4L2_PIX_FMT_SRGGB12:
-	case V4L2_PIX_FMT_SBGGR10:
-	case V4L2_PIX_FMT_SGBRG10:
-	case V4L2_PIX_FMT_SGRBG10:
-	case V4L2_PIX_FMT_SRGGB10:
-		return 16;
-	case V4L2_PIX_FMT_RGB24:
-	case V4L2_PIX_FMT_YUV444:
-		return 24;
-	case V4L2_PIX_FMT_RGBX32:
-		return 32;
-	case V4L2_PIX_FMT_JPEG:
-	case V4L2_PIX_FMT_CUSTOM_M10MO_RAW:
-	case V4L2_PIX_FMT_SBGGR8:
-	case V4L2_PIX_FMT_SGBRG8:
-	case V4L2_PIX_FMT_SGRBG8:
-	case V4L2_PIX_FMT_SRGGB8:
-		return 8;
-	default:
-		return 8 * 2;	/* raw type now */
-	}
-}
-
 bool atomisp_is_mbuscode_raw(uint32_t code)
 {
 	return code >= 0x3000 && code < 0x4000;

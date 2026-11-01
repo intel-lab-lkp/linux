@@ -284,8 +284,6 @@ void atomisp_init_raw_buffer_bitmap(struct atomisp_sub_device *asd);
 int atomisp_enable_dz_capt_pipe(struct atomisp_sub_device *asd,
 				unsigned int *enable);
 
-u32 atomisp_get_pixel_depth(u32 pixelformat);
-
 /* Function for HAL to inject a fake event to wake up poll thread */
 int atomisp_inject_a_fake_event(struct atomisp_sub_device *asd, int *event);
 
