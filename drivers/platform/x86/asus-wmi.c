@@ -3631,7 +3631,8 @@ static void fan_curve_copy_from_buf(struct fan_curve_data *data, u8 *buf)
 static int fan_curve_get_factory_default(struct asus_wmi *asus, u32 fan_dev)
 {
 	struct fan_curve_data *curves;
-	u8 buf[FAN_CURVE_BUF_LEN];
+	u8 buf[FAN_CURVE_BUF_LEN] = {};
+	size_t len;
 	int err, fan_idx;
 	u8 mode = 0;
 
@@ -3644,10 +3645,16 @@ static int fan_curve_get_factory_default(struct asus_wmi *asus, u32 fan_dev)
 		mode = 2;
 
 	err = asus_wmi_evaluate_method_buf(asus->dsts_id, fan_dev, mode, buf,
-					   FAN_CURVE_BUF_LEN, NULL);
+					   FAN_CURVE_BUF_LEN, &len);
 	if (err) {
 		pr_warn("%s (0x%08x) failed: %d\n", __func__, fan_dev, err);
 		return err;
+	}
+
+	if (len < 2 * FAN_CURVE_POINTS) {
+		pr_debug("%s (0x%08x): short reply of %zu bytes\n",
+			 __func__, fan_dev, len);
+		return -ENODATA;
 	}
 
 	fan_idx = FAN_CURVE_DEV_CPU;
