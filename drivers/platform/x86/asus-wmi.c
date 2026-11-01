@@ -3868,6 +3868,23 @@ static ssize_t fan_curve_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", value);
 }
 
+static ssize_t fan_curve_floor_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct sensor_device_attribute_2 *dev_attr = to_sensor_dev_attr_2(attr);
+	struct asus_wmi *asus = dev_get_drvdata(dev);
+	struct fan_curve_data *data = &asus->custom_fan_curves[dev_attr->nr];
+	u8 floor;
+
+	guard(mutex)(&asus->fan_curve_lock);
+	if (!data->floors_valid)
+		return -ENODATA;
+
+	floor = data->floors[dev_attr->index];
+
+	return sysfs_emit(buf, "%u\n", floor);
+}
+
 /*
  * "fan_dev" is the related WMI method such as ASUS_WMI_DEVID_CPU_FAN_CURVE.
  */
@@ -4153,6 +4170,58 @@ static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point7_pwm, fan_curve,
 static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point8_pwm, fan_curve,
 			       FAN_CURVE_DEV_MID | FAN_CURVE_PWM_MASK, 7);
 
+/* Firmware enforced minimum duty of each point, read-only */
+static SENSOR_DEVICE_ATTR_2_RO(pwm1_auto_point1_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_CPU, 0);
+static SENSOR_DEVICE_ATTR_2_RO(pwm1_auto_point2_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_CPU, 1);
+static SENSOR_DEVICE_ATTR_2_RO(pwm1_auto_point3_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_CPU, 2);
+static SENSOR_DEVICE_ATTR_2_RO(pwm1_auto_point4_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_CPU, 3);
+static SENSOR_DEVICE_ATTR_2_RO(pwm1_auto_point5_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_CPU, 4);
+static SENSOR_DEVICE_ATTR_2_RO(pwm1_auto_point6_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_CPU, 5);
+static SENSOR_DEVICE_ATTR_2_RO(pwm1_auto_point7_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_CPU, 6);
+static SENSOR_DEVICE_ATTR_2_RO(pwm1_auto_point8_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_CPU, 7);
+
+static SENSOR_DEVICE_ATTR_2_RO(pwm2_auto_point1_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_GPU, 0);
+static SENSOR_DEVICE_ATTR_2_RO(pwm2_auto_point2_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_GPU, 1);
+static SENSOR_DEVICE_ATTR_2_RO(pwm2_auto_point3_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_GPU, 2);
+static SENSOR_DEVICE_ATTR_2_RO(pwm2_auto_point4_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_GPU, 3);
+static SENSOR_DEVICE_ATTR_2_RO(pwm2_auto_point5_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_GPU, 4);
+static SENSOR_DEVICE_ATTR_2_RO(pwm2_auto_point6_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_GPU, 5);
+static SENSOR_DEVICE_ATTR_2_RO(pwm2_auto_point7_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_GPU, 6);
+static SENSOR_DEVICE_ATTR_2_RO(pwm2_auto_point8_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_GPU, 7);
+
+static SENSOR_DEVICE_ATTR_2_RO(pwm3_auto_point1_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_MID, 0);
+static SENSOR_DEVICE_ATTR_2_RO(pwm3_auto_point2_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_MID, 1);
+static SENSOR_DEVICE_ATTR_2_RO(pwm3_auto_point3_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_MID, 2);
+static SENSOR_DEVICE_ATTR_2_RO(pwm3_auto_point4_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_MID, 3);
+static SENSOR_DEVICE_ATTR_2_RO(pwm3_auto_point5_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_MID, 4);
+static SENSOR_DEVICE_ATTR_2_RO(pwm3_auto_point6_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_MID, 5);
+static SENSOR_DEVICE_ATTR_2_RO(pwm3_auto_point7_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_MID, 6);
+static SENSOR_DEVICE_ATTR_2_RO(pwm3_auto_point8_floor_pwm, fan_curve_floor,
+			       FAN_CURVE_DEV_MID, 7);
+
 static struct attribute *asus_fan_curve_attr[] = {
 	/* CPU */
 	&sensor_dev_attr_pwm1_enable.dev_attr.attr,
@@ -4211,6 +4280,37 @@ static struct attribute *asus_fan_curve_attr[] = {
 	NULL
 };
 
+static struct attribute *asus_fan_curve_floor_attr[] = {
+	/* CPU */
+	&sensor_dev_attr_pwm1_auto_point1_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point2_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point3_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point4_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point5_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point6_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point7_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point8_floor_pwm.dev_attr.attr,
+	/* GPU */
+	&sensor_dev_attr_pwm2_auto_point1_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point2_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point3_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point4_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point5_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point6_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point7_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point8_floor_pwm.dev_attr.attr,
+	/* MID */
+	&sensor_dev_attr_pwm3_auto_point1_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm3_auto_point2_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm3_auto_point3_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm3_auto_point4_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm3_auto_point5_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm3_auto_point6_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm3_auto_point7_floor_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm3_auto_point8_floor_pwm.dev_attr.attr,
+	NULL
+};
+
 static umode_t asus_fan_curve_is_visible(struct kobject *kobj,
 					 struct attribute *attr, int idx)
 {
@@ -4233,11 +4333,50 @@ static umode_t asus_fan_curve_is_visible(struct kobject *kobj,
 	return 0;
 }
 
+static bool fan_curve_available(struct asus_wmi *asus, int fan_idx)
+{
+	switch (fan_idx) {
+	case FAN_CURVE_DEV_CPU:
+		return asus->cpu_fan_curve_available;
+	case FAN_CURVE_DEV_GPU:
+		return asus->gpu_fan_curve_available;
+	case FAN_CURVE_DEV_MID:
+		return asus->mid_fan_curve_available;
+	default:
+		return false;
+	}
+}
+
+static umode_t asus_fan_curve_floor_is_visible(struct kobject *kobj,
+					       struct attribute *attr, int idx)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct asus_wmi *asus = dev_get_drvdata(dev->parent);
+	struct device_attribute *dattr =
+		container_of(attr, struct device_attribute, attr);
+	int fan = to_sensor_dev_attr_2(dattr)->nr;
+
+	if (!fan_curve_available(asus, fan))
+		return 0;
+
+	return 0444;
+}
+
 static const struct attribute_group asus_fan_curve_attr_group = {
 	.is_visible = asus_fan_curve_is_visible,
 	.attrs = asus_fan_curve_attr,
 };
-__ATTRIBUTE_GROUPS(asus_fan_curve_attr);
+
+static const struct attribute_group asus_fan_curve_floor_attr_group = {
+	.is_visible = asus_fan_curve_floor_is_visible,
+	.attrs = asus_fan_curve_floor_attr,
+};
+
+static const struct attribute_group *asus_fan_curve_attr_groups[] = {
+	&asus_fan_curve_attr_group,
+	&asus_fan_curve_floor_attr_group,
+	NULL,
+};
 
 /*
  * Must be initialised after throttle_thermal_policy_dev is set as
