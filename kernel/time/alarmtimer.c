@@ -189,7 +189,8 @@ static enum hrtimer_restart alarmtimer_fired(struct hrtimer *timer)
 	struct alarm_base *base = &alarm_bases[alarm->type];
 
 	scoped_guard(spinlock_irqsave, &base->lock)
-		alarmtimer_dequeue(base, alarm);
+		if (!hrtimer_is_queued(timer))
+			alarmtimer_dequeue(base, alarm);
 
 	if (alarm->function)
 		alarm->function(alarm, base->get_ktime());
