@@ -461,6 +461,7 @@ static void irq_kobj_release(struct kobject *kobj)
 
 	free_masks(desc);
 	free_percpu(desc->kstat_irqs);
+	kfree(desc->percpu_enabled);
 	kfree(desc);
 }
 
