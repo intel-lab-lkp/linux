@@ -602,6 +602,38 @@ void mt76_connac2_mac_write_txwi(struct mt76_dev *dev, __le32 *txwi,
 		u32 val = MT_TXD6_FIXED_BW;
 		u8 spe_idx = mt76_connac_spe_idx(mphy->antenna_mask);
 
+		/* Honour an injected HT/VHT rate and bandwidth from radiotap:
+		 * connac otherwise transmits at the basic rate picked by
+		 * mt76_connac2_mac_tx_rate_val(), so monitor injection cannot
+		 * select the modulation or channel width.
+		 */
+		if (info->control.rates[0].idx >= 0 &&
+		    (info->control.rates[0].flags &
+		     (IEEE80211_TX_RC_MCS | IEEE80211_TX_RC_VHT_MCS))) {
+			struct ieee80211_tx_rate *tr = &info->control.rates[0];
+			u8 mode, mcs, nss = 0, bw = 0;
+
+			if (tr->flags & IEEE80211_TX_RC_VHT_MCS) {
+				mode = MT_PHY_TYPE_VHT;
+				mcs = ieee80211_rate_get_vht_mcs(tr);
+				nss = ieee80211_rate_get_vht_nss(tr) - 1;
+			} else {
+				mode = MT_PHY_TYPE_HT;
+				mcs = tr->idx & 0x7;
+				nss = tr->idx >> 3;
+			}
+
+			if (tr->flags & IEEE80211_TX_RC_80_MHZ_WIDTH)
+				bw = 2;
+			else if (tr->flags & IEEE80211_TX_RC_40_MHZ_WIDTH)
+				bw = 1;
+
+			rate = FIELD_PREP(MT_TX_RATE_MODE, mode) |
+			       FIELD_PREP(MT_TX_RATE_IDX, mcs) |
+			       FIELD_PREP(MT_TX_RATE_NSS, nss);
+			val = MT_TXD6_FIXED_BW | FIELD_PREP(MT_TXD6_BW, bw);
+		}
+
 		/* hardware won't add HTC for mgmt/ctrl frame */
 		txwi[2] |= cpu_to_le32(MT_TXD2_HTC_VLD);
 
