@@ -5038,16 +5038,48 @@ struct asus_wmi_debugfs_node {
 static int show_dsts(struct seq_file *m, void *data)
 {
 	struct asus_wmi *asus = m->private;
-	int err;
-	u32 retval = -1;
+	struct bios_args args = {
+		.arg0 = asus->debug.dev_id,
+	};
+	struct acpi_buffer input = { (acpi_size) sizeof(args), &args };
+	struct acpi_buffer output = { ACPI_ALLOCATE_BUFFER, NULL };
+	union acpi_object *obj;
+	acpi_status status;
+	u32 retval;
+	int err = 0;
 
-	err = asus_wmi_get_devstate(asus, asus->debug.dev_id, &retval);
-	if (err < 0)
-		return err;
+	status = asus_wmi_evaluate_method_locked(asus->dsts_id, &input, &output);
+	if (ACPI_FAILURE(status))
+		return -EIO;
 
-	seq_printf(m, "DSTS(%#x) = %#x\n", asus->debug.dev_id, retval);
+	obj = (union acpi_object *)output.pointer;
+	if (!obj)
+		return -ENODATA;
 
-	return 0;
+	switch (obj->type) {
+	case ACPI_TYPE_BUFFER:
+		seq_printf(m, "DSTS(%#x) = %u bytes:\n", asus->debug.dev_id,
+			   obj->buffer.length);
+		seq_hex_dump(m, "  ", DUMP_PREFIX_OFFSET, 16, 1,
+			     obj->buffer.pointer, obj->buffer.length, false);
+		break;
+	case ACPI_TYPE_INTEGER:
+		retval = (u32)obj->integer.value;
+		if (retval == ASUS_WMI_UNSUPPORTED_METHOD || retval == (u32)~0)
+			err = -ENODEV;
+		else
+			seq_printf(m, "DSTS(%#x) = %#x\n", asus->debug.dev_id,
+				   retval);
+		break;
+	default:
+		seq_printf(m, "DSTS(%#x) = t:%d\n", asus->debug.dev_id,
+			   obj->type);
+		break;
+	}
+
+	kfree(obj);
+
+	return err;
 }
 
 static int show_devs(struct seq_file *m, void *data)
