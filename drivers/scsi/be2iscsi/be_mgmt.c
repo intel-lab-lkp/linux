@@ -43,6 +43,15 @@ unsigned int mgmt_vendor_specific_fw_cmd(struct be_ctrl_info *ctrl,
 	unsigned short region, sector_size, sector, offset;
 
 	nonemb_cmd->size = job->request_payload.payload_len;
+	if (job->request_len <
+	    offsetof(struct iscsi_bsg_request,
+		     rqst_data.h_vendor.vendor_cmd) + 5 * sizeof(__u32) ||
+	    nonemb_cmd->size < sizeof(*req)) {
+		beiscsi_log(phba, KERN_WARNING, BEISCSI_LOG_CONFIG,
+			    "BG_%d : Invalid vendor request or payload length\n");
+		return 0;
+	}
+
 	memset(nonemb_cmd->va, 0, nonemb_cmd->size);
 	region =  bsg_req->rqst_data.h_vendor.vendor_cmd[1];
 	sector_size =  bsg_req->rqst_data.h_vendor.vendor_cmd[2];
