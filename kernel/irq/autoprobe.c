@@ -88,7 +88,7 @@ unsigned long probe_irq_on(void)
 				desc->istate &= ~IRQS_AUTODETECT;
 				irq_shutdown_and_deactivate(desc);
 			} else if (i < 32) {
-				mask |= 1 << i;
+				mask |= 1UL << i;
 			}
 		}
 	}
