@@ -36,6 +36,35 @@
 #define gpu_buddy_assert(condition) WARN_ON(!(condition))
 #endif
 
+/**
+ * Implementations of pow_of_2 functions targeting u64:
+ *
+ * The various pow_of_2 functions in log2.h work on longs, which are 32-bit on
+ * 32-bit systems. Since the GPU address space is 64-bit even on systems with
+ * a 32-bit CPU, this causes needless truncation. Work is underway to improve
+ * the general implementations to support 64-bit types on 32-bit systems, but
+ * in the meantime, we implement our own here.
+ */
+
+static __always_inline __attribute_const__
+bool is_power_of_2_u64(u64 n)
+{
+	return n - 1 < (n ^ (n - 1));
+}
+
+static inline __attribute_const__
+u64 roundup_pow_of_two_u64(u64 n)
+{
+	return 1ULL << fls64(n - 1);
+}
+
+static inline __attribute_const__
+u64 rounddown_pow_of_two_u64(u64 n)
+{
+	return 1ULL << (fls64(n) - 1);
+}
+
+
 static struct kmem_cache *slab_blocks;
 static struct kmem_cache *slab_extents;
 
@@ -414,7 +443,7 @@ gpu_dirty_tracker_find(struct gpu_dirty_tracker *dirty_tracker,
 	struct gpu_dirty_extent *root_extent;
 	struct rb_node *parent;
 
-	if (!min_size || !is_power_of_2(min_size))
+	if (!min_size || !is_power_of_2_u64(min_size))
 		return NULL;
 
 	if (!rb)
@@ -864,7 +893,7 @@ int gpu_buddy_init(struct gpu_buddy *mm, u64 size, u64 chunk_size)
 	if (chunk_size < SZ_4K)
 		return -EINVAL;
 
-	if (!is_power_of_2(chunk_size))
+	if (!is_power_of_2_u64(chunk_size))
 		return -EINVAL;
 
 	size = round_down(size, chunk_size);
@@ -1465,7 +1494,7 @@ err_undo:
 static bool
 gpu_buddy_can_offset_align(u64 size, u64 min_block_size)
 {
-	return size < min_block_size && is_power_of_2(size);
+	return size < min_block_size && is_power_of_2_u64(size);
 }
 
 static bool gpu_buddy_subtree_can_satisfy(struct rb_node *node,
@@ -1519,12 +1548,12 @@ gpu_buddy_offset_aligned_allocation(struct gpu_buddy *mm,
 {
 	struct gpu_buddy_block *block = NULL;
 	unsigned int order, tmp, alignment;
-	unsigned long pages;
+	u64 pages;
 	int err;
 
 	alignment = ilog2(min_block_size);
 	pages = size >> ilog2(mm->chunk_size);
-	order = fls(pages) - 1;
+	order = fls64(pages) - 1;
 
 	/*
 	 * Offset-aligned allocation is a strict address-placement policy: the
@@ -1708,14 +1737,14 @@ static int __alloc_contig_try_harder(struct gpu_buddy *mm,
 	struct gpu_buddy_block *block;
 	struct rb_root *root;
 	struct rb_node *iter;
-	unsigned long pages;
+	u64 pages;
 	unsigned int order;
 	u64 modify_size;
 	int err;
 
-	modify_size = rounddown_pow_of_two(size);
+	modify_size = rounddown_pow_of_two_u64(size);
 	pages = modify_size >> ilog2(mm->chunk_size);
-	order = fls(pages) - 1;
+	order = fls64(pages) - 1;
 	if (order == 0)
 		return -ENOSPC;
 
@@ -1970,7 +1999,7 @@ int gpu_buddy_alloc_blocks(struct gpu_buddy *mm,
 	u64 original_size, original_min_size;
 	unsigned int min_order, order;
 	LIST_HEAD(allocated);
-	unsigned long pages;
+	u64 pages;
 	int err;
 
 	gpu_buddy_driver_lock_held(mm);
@@ -1981,7 +2010,7 @@ int gpu_buddy_alloc_blocks(struct gpu_buddy *mm,
 	if (min_block_size < mm->chunk_size)
 		return -EINVAL;
 
-	if (!is_power_of_2(min_block_size))
+	if (!is_power_of_2_u64(min_block_size))
 		return -EINVAL;
 
 	if (!IS_ALIGNED(start | end | size, mm->chunk_size))
@@ -2006,7 +2035,7 @@ int gpu_buddy_alloc_blocks(struct gpu_buddy *mm,
 
 	/* Roundup the size to power of 2 */
 	if (flags & GPU_BUDDY_CONTIGUOUS_ALLOCATION) {
-		size = roundup_pow_of_two(size);
+		size = roundup_pow_of_two_u64(size);
 		min_block_size = size;
 		/*
 		 * Normalize the requested size to min_block_size for regular allocations.
@@ -2017,7 +2046,7 @@ int gpu_buddy_alloc_blocks(struct gpu_buddy *mm,
 	}
 
 	pages = size >> ilog2(mm->chunk_size);
-	order = fls(pages) - 1;
+	order = fls64(pages) - 1;
 	min_order = ilog2(min_block_size) - ilog2(mm->chunk_size);
 
 	if (order > mm->max_order || size > mm->size) {
@@ -2037,7 +2066,7 @@ int gpu_buddy_alloc_blocks(struct gpu_buddy *mm,
 	}
 
 	do {
-		order = min(order, (unsigned int)fls(pages) - 1);
+		order = min(order, (unsigned int)fls64(pages) - 1);
 		BUG_ON(order > mm->max_order);
 		/*
 		 * Regular allocations must not allocate blocks smaller than min_block_size.
