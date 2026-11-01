@@ -5075,6 +5075,7 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfs4_client *clp;
 	struct nfsd4_slot *slot;
 	struct nfsd4_conn *conn;
+	bool retired = false;
 	__be32 status;
 	int buflen;
 	u32 maxlen, respsize;
@@ -5146,9 +5147,11 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	    slot->sl_generation == session->se_slot_gen &&
 	    seq->maxslots <= session->se_target_maxslots &&
 	    seq->slotid < session->se_target_maxslots &&
-	    !nfsd4_slots_inuse(session, session->se_target_maxslots))
+	    !nfsd4_slots_inuse(session, session->se_target_maxslots)) {
 		/* Client acknowledged our reduce maxreqs */
 		free_session_slots(session, session->se_target_maxslots);
+		retired = true;
+	}
 
 	buflen = (seq->cachethis) ?
 			session->se_fchannel.maxresp_cached :
@@ -5205,8 +5208,14 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	 * configured maximum, not the running thread count, so a
 	 * client resuming from idle can grow back before the pool
 	 * scales up.
+	 *
+	 * A slot rebuilt in the call that retired it carries
+	 * no cached reply for its outstanding request, so a
+	 * retransmit of that request is executed again or fails
+	 * with SEQ_MISORDERED instead of BADSLOT.
 	 */
-	if (seq->slotid == session->se_fchannel.maxreqs - 1 &&
+	if (!retired &&
+	    seq->slotid == session->se_fchannel.maxreqs - 1 &&
 	    session->se_target_maxslots >= session->se_fchannel.maxreqs) {
 		int s = session->se_fchannel.maxreqs;
 		int ceiling = min_t(int, NFSD_MAX_SLOTS_PER_SESSION,
