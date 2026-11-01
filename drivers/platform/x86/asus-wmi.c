@@ -239,6 +239,10 @@ struct fan_curve_data {
 	u32 device_id;
 	u8 temps[FAN_CURVE_POINTS];
 	u8 percents[FAN_CURVE_POINTS];
+	/* EC minimum duty per point, pwm 0-255, not percent */
+	u8 floors[FAN_CURVE_POINTS];
+	bool floors_valid;
+	bool floors_unsupported;
 };
 
 struct asus_wmi {
@@ -320,6 +324,9 @@ struct asus_wmi {
 	bool gpu_fan_curve_available;
 	bool mid_fan_curve_available;
 	struct fan_curve_data custom_fan_curves[3];
+	/* protects custom_fan_curves[].floors */
+	struct mutex fan_curve_lock;
+	struct device *fan_curve_hwmon;
 
 	struct device *ppdev;
 
@@ -466,7 +473,8 @@ static int asus_wmi_evaluate_method5(u32 method_id,
  * means that the method called is unsupported.
  */
 static int asus_wmi_evaluate_method_buf(u32 method_id,
-		u32 arg0, u32 arg1, u8 *ret_buffer, size_t size)
+		u32 arg0, u32 arg1, u8 *ret_buffer, size_t size,
+		size_t *ret_len)
 {
 	struct bios_args args = {
 		.arg0 = arg0,
@@ -478,6 +486,9 @@ static int asus_wmi_evaluate_method_buf(u32 method_id,
 	acpi_status status;
 	union acpi_object *obj;
 	int err = 0;
+
+	if (ret_len)
+		*ret_len = 0;
 
 	status = asus_wmi_evaluate_method_locked(method_id, &input, &output);
 
@@ -503,6 +514,8 @@ static int asus_wmi_evaluate_method_buf(u32 method_id,
 		}
 
 		memcpy(ret_buffer, obj->buffer.pointer, obj->buffer.length);
+		if (ret_len)
+			*ret_len = obj->buffer.length;
 		break;
 	case ACPI_TYPE_INTEGER:
 		err = (u32)obj->integer.value;
@@ -3631,7 +3644,7 @@ static int fan_curve_get_factory_default(struct asus_wmi *asus, u32 fan_dev)
 		mode = 2;
 
 	err = asus_wmi_evaluate_method_buf(asus->dsts_id, fan_dev, mode, buf,
-					   FAN_CURVE_BUF_LEN);
+					   FAN_CURVE_BUF_LEN, NULL);
 	if (err) {
 		pr_warn("%s (0x%08x) failed: %d\n", __func__, fan_dev, err);
 		return err;
@@ -3651,7 +3664,136 @@ static int fan_curve_get_factory_default(struct asus_wmi *asus, u32 fan_dev)
 	return 0;
 }
 
-/* Check if capability exists, and populate defaults */
+/*
+ * Read the firmware fan floor table. The EC enforces a minimum duty per
+ * curve point on top of the custom curve. Reading is best effort: at
+ * probe time a failed read leaves the table zeroed and invalid, and a
+ * failed refresh keeps the last table that was read.
+ */
+static int fan_curve_load_floors(struct asus_wmi *asus, u32 fan_dev)
+{
+	struct fan_curve_data *curves;
+	u8 buf[FAN_CURVE_BUF_LEN] = {};
+	size_t len;
+	int err, fan_idx, i;
+
+	switch (fan_dev) {
+	case ASUS_WMI_DEVID_CPU_FAN_CURVE:
+		fan_idx = FAN_CURVE_DEV_CPU;
+		fan_dev = ASUS_WMI_DEVID_CPU_FAN_FLOOR;
+		break;
+	case ASUS_WMI_DEVID_GPU_FAN_CURVE:
+		fan_idx = FAN_CURVE_DEV_GPU;
+		fan_dev = ASUS_WMI_DEVID_GPU_FAN_FLOOR;
+		break;
+	case ASUS_WMI_DEVID_MID_FAN_CURVE:
+		fan_idx = FAN_CURVE_DEV_MID;
+		fan_dev = ASUS_WMI_DEVID_MID_FAN_FLOOR;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	curves = &asus->custom_fan_curves[fan_idx];
+	if (curves->floors_unsupported)
+		return -ENODEV;
+
+	err = asus_wmi_evaluate_method_buf(asus->dsts_id, fan_dev, 0, buf,
+					   FAN_CURVE_BUF_LEN, &len);
+	if (err) {
+		pr_debug("%s (0x%08x) failed: %d\n", __func__, fan_dev, err);
+		/* 0xFFFFFFFE means the firmware has no such method */
+		if (err == -ENODEV)
+			curves->floors_unsupported = true;
+		return err;
+	}
+
+	if (len < FAN_CURVE_POINTS) {
+		pr_debug("%s (0x%08x): short reply of %zu bytes\n",
+			 __func__, fan_dev, len);
+		return -ENODATA;
+	}
+
+	/* A percentage above 100 would overflow the pwm scale below */
+	for (i = 0; i < FAN_CURVE_POINTS; i++) {
+		if (buf[i] > 100) {
+			pr_debug("%s (0x%08x): implausible floor table\n",
+				 __func__, fan_dev);
+			return -EINVAL;
+		}
+	}
+
+	/*
+	 * The floors observed so far do not decrease along the points, but
+	 * that is only proven on the FA507.  Do not reject a table that
+	 * does: the values are still usable as per-point minimums, and
+	 * hiding them would leave userspace no way to see what the
+	 * firmware enforces.
+	 */
+	for (i = 1; i < FAN_CURVE_POINTS; i++) {
+		if (buf[i] < buf[i - 1]) {
+			dev_warn_once(&asus->platform_device->dev,
+				      "fan curve (0x%08x): floor table decreases at point %d\n",
+				      fan_dev, i + 1);
+			break;
+		}
+	}
+
+	guard(mutex)(&asus->fan_curve_lock);
+	for (i = 0; i < FAN_CURVE_POINTS; i++)
+		curves->floors[i] = DIV_ROUND_UP(255 * buf[i], 100);
+	curves->floors_valid = true;
+
+	return 0;
+}
+
+static void fan_curve_notify_floors(struct asus_wmi *asus)
+{
+	struct device *hwmon = asus->fan_curve_hwmon;
+	bool valid[ARRAY_SIZE(asus->custom_fan_curves)];
+	char name[32];
+	int fan, point;
+
+	if (!hwmon)
+		return;
+
+	scoped_guard(mutex, &asus->fan_curve_lock) {
+		for (fan = 0; fan < ARRAY_SIZE(valid); fan++)
+			valid[fan] = asus->custom_fan_curves[fan].floors_valid;
+	}
+
+	for (fan = 0; fan < ARRAY_SIZE(valid); fan++) {
+		if (!valid[fan])
+			continue;
+
+		for (point = 0; point < FAN_CURVE_POINTS; point++) {
+			snprintf(name, sizeof(name),
+				 "pwm%d_auto_point%d_floor_pwm",
+				 fan + 1, point + 1);
+			sysfs_notify(&hwmon->kobj, NULL, name);
+		}
+	}
+}
+
+/*
+ * The EC re-runs its defaults reload when the mode byte it keys on
+ * changes, which a thermal profile switch can do.  Re-read the tables
+ * so that the exported values follow the firmware; on the FA507 the
+ * tables are profile independent, so this is defensive.
+ */
+static void fan_curve_refresh_floors(struct asus_wmi *asus)
+{
+	if (asus->cpu_fan_curve_available)
+		fan_curve_load_floors(asus, ASUS_WMI_DEVID_CPU_FAN_CURVE);
+	if (asus->gpu_fan_curve_available)
+		fan_curve_load_floors(asus, ASUS_WMI_DEVID_GPU_FAN_CURVE);
+	if (asus->mid_fan_curve_available)
+		fan_curve_load_floors(asus, ASUS_WMI_DEVID_MID_FAN_CURVE);
+
+	fan_curve_notify_floors(asus);
+}
+
+/* Check if the capability exists, populate its defaults and read its floor table */
 static int fan_curve_check_present(struct asus_wmi *asus, bool *available,
 				   u32 fan_dev)
 {
@@ -3668,6 +3810,16 @@ static int fan_curve_check_present(struct asus_wmi *asus, bool *available,
 	}
 
 	*available = true;
+
+	err = fan_curve_load_floors(asus, fan_dev);
+	if (err == -ENODEV)
+		dev_dbg(&asus->platform_device->dev,
+			"fan curve (0x%08x): no floor table\n", fan_dev);
+	else if (err)
+		dev_warn(&asus->platform_device->dev,
+			 "fan curve (0x%08x): unusable floor table (%d)\n",
+			 fan_dev, err);
+
 	return 0;
 }
 
@@ -3738,8 +3890,9 @@ static int fan_curve_write(struct asus_wmi *asus,
 }
 
 /*
- * A fan curve is a set of points the firmware interpolates between, so it
- * only makes sense if neither temperature nor PWM ever decreases along it.
+ * A fan curve is a set of points the firmware steps through, without
+ * interpolating between them, so it only makes sense if neither temperature
+ * nor PWM ever decreases along it.
  */
 static int fan_curve_validate(struct device *dev, struct fan_curve_data *data)
 {
@@ -3870,6 +4023,7 @@ static ssize_t fan_curve_enable_store(struct device *dev,
 			err = asus_fan_set_auto(asus);
 			if (err)
 				return err;
+			fan_curve_refresh_floors(asus);
 		} else {
 			/* Safeguard against fautly ACPI tables */
 			err = fan_curve_get_factory_default(asus, data->device_id);
@@ -3878,6 +4032,7 @@ static ssize_t fan_curve_enable_store(struct device *dev,
 			err = fan_curve_write(asus, data);
 			if (err)
 				return err;
+			fan_curve_refresh_floors(asus);
 		}
 	}
 	return count;
@@ -4125,6 +4280,8 @@ static int asus_wmi_custom_fan_curve_init(struct asus_wmi *asus)
 		return PTR_ERR(hwmon);
 	}
 
+	asus->fan_curve_hwmon = hwmon;
+
 	return 0;
 }
 
@@ -4194,6 +4351,8 @@ static int throttle_thermal_policy_write(struct asus_wmi *asus)
 		asus->custom_fan_curves[FAN_CURVE_DEV_GPU].enabled = false;
 	if (asus->mid_fan_curve_available)
 		asus->custom_fan_curves[FAN_CURVE_DEV_MID].enabled = false;
+
+	fan_curve_refresh_floors(asus);
 
 	return 0;
 }
@@ -5202,6 +5361,7 @@ static int asus_wmi_add(struct platform_device *pdev)
 	asus->platform_device = pdev;
 	wdrv->platform_device = pdev;
 	platform_set_drvdata(asus->platform_device, asus);
+	mutex_init(&asus->fan_curve_lock);
 
 	if (wdrv->detect_quirks)
 		wdrv->detect_quirks(asus->driver);
