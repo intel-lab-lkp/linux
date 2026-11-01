@@ -637,6 +637,8 @@ static void ath11k_dp_tx_complete_msdu(struct ath11k *ar,
 		return;
 	}
 	arsta = ath11k_sta_to_arsta(peer->sta);
+	if (ts->try_cnt > 1)
+		arsta->tx_retries += ts->try_cnt - 1;
 	status.sta = peer->sta;
 	status.skb = msdu;
 	status.info = info;
