@@ -1516,6 +1516,19 @@ int dpu_crtc_check_mode_changed(struct drm_crtc_state *old_crtc_state,
 	    (!clone_mode_requested && clone_mode_enabled))
 		new_crtc_state->mode_changed = true;
 
+	/*
+	 * DSPP blocks are reserved only when CTM or GAMMA_LUT is set (see
+	 * dpu_crtc_get_topology()), so enabling or disabling color management
+	 * changes the hardware topology. Changing resources on an active CRTC
+	 * requires a full modeset; otherwise the CTL/LM blocks get swapped
+	 * underneath a running pipeline. If userspace did not allow a modeset,
+	 * drm_atomic_check_only() rejects the commit.
+	 */
+	if (new_crtc_state->enable &&
+	    (!!(old_crtc_state->ctm || old_crtc_state->gamma_lut) !=
+	     !!(new_crtc_state->ctm || new_crtc_state->gamma_lut)))
+		new_crtc_state->mode_changed = true;
+
 	return 0;
 }
 
@@ -1534,9 +1547,15 @@ static int dpu_crtc_atomic_check(struct drm_crtc *crtc,
 
 	bool needs_dirtyfb = dpu_crtc_needs_dirtyfb(crtc_state);
 
-	/* don't reallocate resources if only ACTIVE has beeen changed */
-	if (crtc_state->mode_changed || crtc_state->connectors_changed ||
-	    crtc_state->color_mgmt_changed) {
+	/*
+	 * Don't reallocate resources if only ACTIVE or color management
+	 * values have changed. A change in DSPP requirements is turned into a
+	 * modeset by dpu_crtc_check_mode_changed(). Reallocating on a plain
+	 * color_mgmt_changed would move an active CRTC to different CTL/LM
+	 * blocks without a modeset, leaving the hardware scanning out through
+	 * stale CTL/LM state (SMMU faults, corrupted output, vblank timeouts).
+	 */
+	if (crtc_state->mode_changed || crtc_state->connectors_changed) {
 		rc = dpu_crtc_assign_resources(crtc, crtc_state);
 		if (rc < 0)
 			return rc;
