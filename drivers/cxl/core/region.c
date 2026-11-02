@@ -1764,9 +1764,6 @@ static int cxl_region_validate_position(struct cxl_region *cxlr,
 		return -ENXIO;
 	}
 
-	if (p->targets[pos] == cxled)
-		return 0;
-
 	if (p->targets[pos]) {
 		struct cxl_endpoint_decoder *cxled_target = p->targets[pos];
 		struct cxl_memdev *cxlmd_target = cxled_to_memdev(cxled_target);
@@ -2128,6 +2125,14 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 			(u64)resource_size(cxled->dpa_res), p->interleave_ways,
 			(u64)p->cache_size, (u64)resource_size(p->res));
 		return -EINVAL;
+	}
+
+	/* Already at @pos: fail before changing any region state */
+	if (pos >= 0 && pos < p->interleave_ways && p->targets[pos] == cxled) {
+		dev_dbg(&cxlr->dev, "position %d already assigned to %s:%s\n",
+			pos, dev_name(&cxlmd->dev),
+			dev_name(&cxled->cxld.dev));
+		return -EBUSY;
 	}
 
 	cxl_region_perf_data_calculate(cxlr, cxled);
