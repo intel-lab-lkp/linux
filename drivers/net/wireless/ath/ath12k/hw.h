@@ -240,6 +240,8 @@ struct ath12k_hw_params {
 
 	bool host_alloc_ml_id;
 	bool advertise_iface_mac_pool;
+
+	bool support_hw_link_id;
 };
 
 struct ath12k_hw_ops {
