@@ -13,8 +13,10 @@
 #include <errno.h>
 #include <sys/types.h>
 #include "debug.h"
+#include "evlist.h"
 #include "util/ftrace.h"
 #include "util/string2.h"
+#include <perf/threadmap.h>
 
 #define FTRACE_MAX_CPUS 4096
 #define FTRACE_MAX_STACK 256
@@ -27,12 +29,17 @@
 /*
  * Represents a single call frame on a task's function_graph stack.
  *
- * @name:   Function name extracted from the trace entry.
- * @indent: Indentation (in spaces) used to correlate entry and exit frames.
+ * @name:    Function name extracted from the trace entry.
+ * @inlined: Whether the frame represents a synthesised inlined function.
+ * @indent:  Indentation (in spaces) used to correlate entry and exit frames
+ *           (or visual indentation for synthesised inlined frames).
+ * @seq:     Monotonic event sequence number when the frame was entered.
  */
 struct ftrace_stack_frame {
 	char *name;
+	bool inlined;
 	int indent;
+	u64 seq;
 };
 
 /*
@@ -45,6 +52,9 @@ struct ftrace_stack_frame {
  * @depth:          Current number of active frames stored in @stack.
  * @overflow_depth: Nesting count of frames entered beyond @stack capacity,
  *                  preventing their exits from popping valid parent frames.
+ * @seq:            Event sequence number of the most recent trace record.
+ * @min_raw_indent: Minimum raw indentation observed on this task state, or -1 if none.
+ * @min_indent_seq: Event sequence number of the shallowest observed trace record.
  */
 struct ftrace_task_state {
 	struct hlist_node node;
@@ -53,10 +63,14 @@ struct ftrace_task_state {
 	int max_stack;
 	int depth;
 	int overflow_depth;
+	u64 seq;
+	int min_raw_indent;
+	u64 min_indent_seq;
 };
 
 static struct hlist_head ftrace_task_hash[FTRACE_PID_HASH_SIZE];
 static struct ftrace_task_state *ftrace_cpu_tasks[FTRACE_MAX_CPUS];
+static u64 ftrace_event_seq;
 
 /**
  * ftrace_cpu_states__clear - Free allocated CPU and task stack states
@@ -81,6 +95,7 @@ void ftrace_cpu_states__clear(void)
 	}
 
 	memset(ftrace_cpu_tasks, 0, sizeof(ftrace_cpu_tasks));
+	ftrace_event_seq = 0;
 }
 
 /**
@@ -153,12 +168,212 @@ static struct ftrace_task_state *get_task_state(pid_t pid)
 		free(ts);
 		return NULL;
 	}
+	ts->min_raw_indent = -1;
 
 	ts->pid = pid;
 	key = hash_32((u32)pid, FTRACE_PID_HASH_BITS);
 	head = &ftrace_task_hash[key];
 	hlist_add_head(&ts->node, head);
 	return ts;
+}
+
+/**
+ * ftrace_task_state__record_indent - Record an indentation watermark for a task
+ * @ts: Task state to update
+ * @raw_indent: Raw indentation (leading spaces) of the observed trace record
+ *
+ * Record the shallowest indentation observed on @ts along with its event
+ * sequence number so that earlier frames that have already exited can be
+ * pruned when merging task states across CPUs.
+ */
+static void ftrace_task_state__record_indent(struct ftrace_task_state *ts,
+					     int raw_indent)
+{
+	if (ts->min_raw_indent < 0 || raw_indent <= ts->min_raw_indent) {
+		ts->min_raw_indent = raw_indent;
+		ts->min_indent_seq = ts->seq;
+	}
+}
+
+/**
+ * ftrace_task_state__prune_stack - Prune frames that exited on another task state
+ * @ts: Task state whose call stack should be pruned
+ * @other: Other task state representing the same task on another CPU
+ *
+ * Remove any frames on @ts->stack that are known to have exited based on
+ * subsequent trace events recorded on @other (i.e. @other->min_indent_seq >
+ * frame->seq and @other->min_raw_indent <= frame->indent). Synthesised
+ * inline frames are retained if and only if their enclosing real frame
+ * survives.
+ */
+static void ftrace_task_state__prune_stack(struct ftrace_task_state *ts,
+					   const struct ftrace_task_state *other)
+{
+	bool keep_inlines = false;
+	bool seen_real = false;
+	int i, dst = 0;
+
+	for (i = ts->depth - 1; i >= 0; i--) {
+		struct ftrace_stack_frame *frame = &ts->stack[i];
+		int min_indent = (other->min_indent_seq > frame->seq) ?
+				 other->min_raw_indent : -1;
+		bool prune;
+
+		if (frame->inlined) {
+			if (seen_real)
+				prune = !keep_inlines;
+			else
+				prune = (min_indent >= 0);
+		} else {
+			prune = (min_indent >= 0 && frame->indent >= min_indent);
+			seen_real = true;
+			keep_inlines = !prune;
+		}
+
+		if (prune)
+			zfree(&frame->name);
+	}
+
+	for (i = 0; i < ts->depth; i++) {
+		if (ts->stack[i].name) {
+			if (dst != i)
+				ts->stack[dst] = ts->stack[i];
+			dst++;
+		}
+	}
+	ts->depth = dst;
+}
+
+/**
+ * ftrace_task_state__rekey - Reassign a task state to a new PID
+ * @ts: The task state to re-key
+ * @new_pid: The new process ID to associate with the state
+ *
+ * Rehash @ts under @new_pid. If a task state for @new_pid already exists,
+ * merge or replace it and return the unified task state.
+ *
+ * Return: A pointer to the active task state associated with @new_pid.
+ */
+static struct ftrace_task_state *ftrace_task_state__rekey(struct ftrace_task_state *ts,
+							  pid_t new_pid)
+{
+	struct ftrace_task_state *existing;
+	int orig_existing_depth;
+	int total_needed;
+	int to_copy;
+	u32 key;
+	int j;
+
+	if (ts->pid == new_pid)
+		return ts;
+
+	hlist_del_init(&ts->node);
+
+	existing = find_task_state(new_pid);
+	if (!existing) {
+		ts->pid = new_pid;
+		key = hash_32((u32)new_pid, FTRACE_PID_HASH_BITS);
+		hlist_add_head(&ts->node, &ftrace_task_hash[key]);
+		return ts;
+	}
+
+	/*
+	 * Prune frames on existing and ts that exited during subsequent
+	 * execution recorded on the other state.
+	 */
+	ftrace_task_state__prune_stack(existing, ts);
+	ftrace_task_state__prune_stack(ts, existing);
+
+	orig_existing_depth = existing->depth;
+	to_copy = ts->depth;
+	total_needed = orig_existing_depth + to_copy;
+
+	while (total_needed > existing->max_stack) {
+		if (ftrace_task_state__grow_stack(existing) < 0)
+			break;
+	}
+	if (total_needed > existing->max_stack) {
+		if (existing->max_stack > orig_existing_depth)
+			to_copy = existing->max_stack - orig_existing_depth;
+		else
+			to_copy = 0;
+	}
+
+	if (to_copy > 0) {
+		int e_idx = 0, t_idx = 0, out_idx = 0;
+
+		if (orig_existing_depth > 0) {
+			memmove(&existing->stack[to_copy],
+				&existing->stack[0],
+				orig_existing_depth * sizeof(existing->stack[0]));
+		}
+
+		while (e_idx < orig_existing_depth && t_idx < to_copy) {
+			if (existing->stack[to_copy + e_idx].seq <=
+			    ts->stack[t_idx].seq) {
+				existing->stack[out_idx++] =
+					existing->stack[to_copy + e_idx++];
+			} else {
+				existing->stack[out_idx++] =
+					ts->stack[t_idx++];
+			}
+		}
+		while (t_idx < to_copy)
+			existing->stack[out_idx++] = ts->stack[t_idx++];
+		while (e_idx < orig_existing_depth) {
+			existing->stack[out_idx++] =
+				existing->stack[to_copy + e_idx++];
+		}
+	}
+
+	for (j = to_copy; j < ts->depth; j++)
+		free(ts->stack[j].name);
+
+	existing->depth = orig_existing_depth + to_copy;
+
+	if (ts->seq > existing->seq)
+		existing->seq = ts->seq;
+
+	if (ts->min_raw_indent >= 0 &&
+	    (existing->min_raw_indent < 0 ||
+	     ts->min_raw_indent < existing->min_raw_indent ||
+	     (ts->min_raw_indent == existing->min_raw_indent &&
+	      ts->min_indent_seq > existing->min_indent_seq))) {
+		existing->min_raw_indent = ts->min_raw_indent;
+		existing->min_indent_seq = ts->min_indent_seq;
+	}
+
+	free(ts->stack);
+	free(ts);
+	return existing;
+}
+
+/**
+ * ftrace__get_single_pid - Retrieve the single target process ID being traced
+ * @ftrace: Perf ftrace context
+ *
+ * Check whether @ftrace is configured to trace a single process without
+ * child inheritance. If the thread map contains exactly one valid process
+ * ID and child task inheritance is disabled, return that PID so that
+ * initial per-CPU task states can be bound directly to the target process.
+ *
+ * Return: The target process ID if tracing a single process without
+ *         inheritance, or -1 otherwise.
+ */
+static pid_t ftrace__get_single_pid(struct perf_ftrace *ftrace)
+{
+	struct perf_thread_map *threads;
+	pid_t pid;
+
+	if (!ftrace || !ftrace->evlist || ftrace->inherit)
+		return -1;
+
+	threads = evlist__core(ftrace->evlist)->threads;
+	if (!threads || perf_thread_map__nr(threads) != 1)
+		return -1;
+
+	pid = perf_thread_map__pid(threads, 0);
+	return (pid > 0) ? pid : -1;
 }
 
 /**
@@ -169,15 +384,105 @@ static struct ftrace_task_state *get_task_state(pid_t pid)
  * Return: A pointer to the CPU's active task stack state, or NULL on error or
  * out-of-bounds CPU index.
  */
-static struct ftrace_task_state *get_cpu_state(struct perf_ftrace *ftrace __maybe_unused, int cpu)
+static struct ftrace_task_state *get_cpu_state(struct perf_ftrace *ftrace, int cpu)
 {
+	pid_t single_pid;
+
 	if (cpu < 0 || cpu >= FTRACE_MAX_CPUS)
 		return NULL;
 
-	if (!ftrace_cpu_tasks[cpu])
-		ftrace_cpu_tasks[cpu] = get_task_state(FTRACE_UNKNOWN_PID(cpu));
+	if (!ftrace_cpu_tasks[cpu]) {
+		single_pid = ftrace__get_single_pid(ftrace);
+		if (single_pid > 0)
+			ftrace_cpu_tasks[cpu] = get_task_state(single_pid);
+		else
+			ftrace_cpu_tasks[cpu] = get_task_state(FTRACE_UNKNOWN_PID(cpu));
+	}
 
 	return ftrace_cpu_tasks[cpu];
+}
+
+/**
+ * parse_context_switch - Parse context switch banner and update CPU's task
+ * @line: The trace line containing the banner
+ *
+ * Check if @line is a context switch banner (e.g. " 0) <idle>-0 => migrati-19").
+ * If so, extract the CPU number and both the outgoing and incoming task PIDs,
+ * re-key any initial unknown task state on this CPU to the outgoing PID, and
+ * update the active task mapping for that CPU to the incoming PID.
+ *
+ * Return: true if @line was a context switch banner, false otherwise.
+ */
+static bool parse_context_switch(const char *line)
+{
+	const char *arrow = strstr(line, " => ");
+	const char *p;
+	const char *next;
+	const char *hyphen;
+	const char *h;
+	char *endptr;
+	char *end_pid;
+	long cpu_val;
+	long prev_pid;
+	long next_pid;
+	pid_t real_prev;
+	pid_t real_next;
+
+	if (!arrow)
+		return false;
+
+	/* Find CPU number before ')' */
+	p = skip_spaces(line);
+	cpu_val = strtol(p, &endptr, 10);
+	if (endptr == p || *endptr != ')')
+		return false;
+
+	if (cpu_val < 0 || cpu_val >= FTRACE_MAX_CPUS)
+		return false;
+
+	/*
+	 * Parse outgoing task PID before " => " (" CPU) comm-pid => ...").
+	 * Scan backwards from arrow to find the hyphen before the numeric PID.
+	 */
+	h = arrow - 1;
+	while (h > endptr && *h == ' ')
+		h--;
+	while (h > endptr && *h != '-')
+		h--;
+	if (h <= endptr || *h != '-')
+		return false;
+
+	prev_pid = strtol(h + 1, &end_pid, 10);
+	if (end_pid == h + 1)
+		return false;
+
+	/* Parse target task PID after " => " (" => comm-pid") */
+	next = skip_spaces(arrow + 4);
+	hyphen = strrchr(next, '-');
+	if (!hyphen)
+		return false;
+
+	next_pid = strtol(hyphen + 1, &end_pid, 10);
+	if (end_pid == hyphen + 1)
+		return false;
+
+	real_prev = (prev_pid == 0) ? FTRACE_IDLE_PID(cpu_val) : (pid_t)prev_pid;
+	real_next = (next_pid == 0) ? FTRACE_IDLE_PID(cpu_val) : (pid_t)next_pid;
+
+	/*
+	 * If no context switch was seen previously on this CPU, its initial
+	 * pre-banner trace records were accumulated under an unknown synthetic
+	 * PID. Re-key that state to real_prev so the initial task's stack and
+	 * frames are preserved when it schedules back in.
+	 */
+	if (ftrace_cpu_tasks[cpu_val] &&
+	    ftrace_cpu_tasks[cpu_val]->pid == FTRACE_UNKNOWN_PID(cpu_val)) {
+		ftrace_cpu_tasks[cpu_val] =
+			ftrace_task_state__rekey(ftrace_cpu_tasks[cpu_val], real_prev);
+	}
+
+	ftrace_cpu_tasks[cpu_val] = get_task_state(real_next);
+	return true;
 }
 
 /**
@@ -349,10 +654,32 @@ static const char *find_func_column(const struct perf_ftrace *ftrace,
 	p = endptr;
 
 	if (ftrace->graph_verbose) {
+		const char *proc_start = p;
+
 		p = strchr(p, '|');
 		if (!p)
 			return NULL;
 
+		if (val >= 0 && val < FTRACE_MAX_CPUS) {
+			const char *h = p - 1;
+
+			while (h >= proc_start && *h != '-')
+				h--;
+			if (h >= proc_start && *h == '-') {
+				long pid_val = strtol(h + 1, NULL, 10);
+				pid_t task_pid = (pid_val == 0) ?
+						 FTRACE_IDLE_PID(val) :
+						 (pid_t)pid_val;
+
+				ftrace_cpu_tasks[(int)val] = get_task_state(task_pid);
+			}
+		}
+
+		/*
+		 * In verbose mode, latency-format is also enabled by
+		 * set_tracing_funcgraph_verbose(), emitting a "<lat-fmt> |"
+		 * column after the comm-pid column.
+		 */
 		p = strchr(p + 1, '|');
 		if (!p)
 			return NULL;
@@ -425,12 +752,16 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 	bool has_semicolon;
 
 	pipe_char = find_func_column(ftrace, line, &cpu);
-	if (!pipe_char)
+	if (!pipe_char) {
+		parse_context_switch(line);
 		return print_line(ftrace, line, out);
+	}
 
 	ts = get_cpu_state(ftrace, cpu);
 	if (!ts)
 		return print_line(ftrace, line, out);
+
+	ts->seq = ++ftrace_event_seq;
 
 	after_pipe = pipe_char + 1;
 	func_start = skip_spaces(after_pipe);
@@ -443,6 +774,8 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 
 	if (is_exit) {
 		char exit_name[128];
+
+		ftrace_task_state__record_indent(ts, leading_spaces);
 
 		extract_exit_func_name(func_start, exit_name, sizeof(exit_name));
 
@@ -493,6 +826,9 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 	has_open_brace = (strchr(func_start, '{') != NULL);
 	has_semicolon = (strchr(func_start, ';') != NULL);
 
+	if (has_open_brace || has_semicolon)
+		ftrace_task_state__record_indent(ts, leading_spaces);
+
 	top_indent = -1;
 	if (ts->depth > 0)
 		top_indent = ts->stack[ts->depth - 1].indent;
@@ -504,6 +840,12 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 	if (has_open_brace && !has_semicolon) {
 		char entry_name[128];
 
+		while (ts->depth > 0 &&
+		       ts->stack[ts->depth - 1].indent >= leading_spaces) {
+			free(ts->stack[ts->depth - 1].name);
+			ts->depth--;
+		}
+
 		extract_entry_func_name(func_start, entry_name, sizeof(entry_name));
 		if (ts->depth >= ts->max_stack &&
 		    ftrace_task_state__grow_stack(ts) < 0) {
@@ -514,7 +856,9 @@ int ftrace_process_fgraph_line(struct perf_ftrace *ftrace, const char *line, FIL
 				pr_err("Not enough memory\n");
 				return -ENOMEM;
 			}
+			ts->stack[ts->depth].inlined = false;
 			ts->stack[ts->depth].indent = leading_spaces;
+			ts->stack[ts->depth].seq = ts->seq;
 			ts->depth++;
 		}
 	}
