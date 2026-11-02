@@ -839,10 +839,15 @@ static void device_resume_noirq(struct device *dev, pm_message_t state, bool asy
 	 * Otherwise, the device is going to be resumed, so set its PM-runtime
 	 * status to "active" unless its power.smart_suspend flag is clear, in
 	 * which case it is not necessary to update its PM-runtime status.
+	 *
+	 * A device without system sleep callbacks is not going to be resumed
+	 * by anyone, though, so leave its PM-runtime status as is. Otherwise,
+	 * resources managed by its runtime PM callbacks, like the bus clock of
+	 * an AMBA device, would end up unbalanced on the next runtime suspend.
 	 */
 	if (skip_resume)
 		pm_runtime_set_suspended(dev);
-	else if (dev_pm_smart_suspend(dev))
+	else if (dev_pm_smart_suspend(dev) && !dev->power.no_pm_callbacks)
 		pm_runtime_set_active(dev);
 
 	if (dev->pm_domain) {
