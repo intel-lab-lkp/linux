@@ -400,7 +400,7 @@ static int binderfs_binder_ctl_create(struct super_block *sb)
 	ret = -ENOMEM;
 	inode = new_inode(sb);
 	if (!inode)
-		goto out;
+		goto out_device;
 
 	/* Reserve a new minor number for the new device. */
 	mutex_lock(&binderfs_minors_mutex);
@@ -411,7 +411,7 @@ static int binderfs_binder_ctl_create(struct super_block *sb)
 	mutex_unlock(&binderfs_minors_mutex);
 	if (minor < 0) {
 		ret = minor;
-		goto out;
+		goto out_inode;
 	}
 
 	inode->i_ino = SECOND_INODE;
@@ -427,7 +427,7 @@ static int binderfs_binder_ctl_create(struct super_block *sb)
 
 	dentry = d_alloc_name(root, "binder-control");
 	if (!dentry)
-		goto out;
+		goto out_minor;
 
 	inode->i_private = device;
 	info->control_dentry = dentry;
@@ -436,9 +436,14 @@ static int binderfs_binder_ctl_create(struct super_block *sb)
 
 	return 0;
 
-out:
-	kfree(device);
+out_minor:
+	mutex_lock(&binderfs_minors_mutex);
+	ida_free(&binderfs_minors, minor);
+	mutex_unlock(&binderfs_minors_mutex);
+out_inode:
 	iput(inode);
+out_device:
+	kfree(device);
 
 	return ret;
 }
