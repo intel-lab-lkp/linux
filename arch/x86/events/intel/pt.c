@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/device.h>
 #include <linux/kvm_types.h>
+#include <linux/syscore_ops.h>
 
 #include <asm/cpuid/api.h>
 #include <asm/perf_event.h>
@@ -33,6 +34,9 @@
 static DEFINE_PER_CPU(struct pt, pt_ctx);
 
 static struct pt_pmu pt_pmu;
+
+/* Set at shutdown, after which TraceEn must not be set */
+static bool pt_shutdown;
 
 /*
  * Capabilities of Intel PT hardware, such as number of address bits or
@@ -425,7 +429,7 @@ static void pt_config_start(struct perf_event *event)
 		return;
 
 	ctl |= RTIT_CTL_TRACEEN;
-	if (READ_ONCE(pt->vmx_on))
+	if (READ_ONCE(pt->vmx_on) || READ_ONCE(pt_shutdown))
 		perf_aux_output_flag(&pt->handle, PERF_AUX_FLAG_PARTIAL);
 	else
 		wrmsrq(MSR_IA32_RTIT_CTL, ctl);
@@ -1609,7 +1613,7 @@ void intel_pt_handle_vmx(int on)
 		                     PERF_AUX_FLAG_PARTIAL);
 
 	/* Turn PTs back on */
-	if (!on && event)
+	if (!on && event && !READ_ONCE(pt_shutdown))
 		wrmsrq(MSR_IA32_RTIT_CTL, event->hw.aux_config);
 
 	local_irq_restore(flags);
@@ -1860,6 +1864,38 @@ static int pt_event_init(struct perf_event *event)
 	return 0;
 }
 
+static void pt_shutdown_cpu(void *info)
+{
+	u64 ctl;
+
+	/*
+	 * After VMXON on CPUs without PT support in VMX operation,
+	 * TraceEn is already clear and RTIT_CTL must not be written.
+	 */
+	rdmsrq(MSR_IA32_RTIT_CTL, ctl);
+	if (ctl & RTIT_CTL_TRACEEN)
+		wrmsrq(MSR_IA32_RTIT_CTL, ctl & ~RTIT_CTL_TRACEEN);
+}
+
+/*
+ * Tracing must not continue into a kexec'ed kernel, which may reuse the
+ * trace buffer memory, so stop tracing on all CPUs and prevent it from
+ * being started again. Events are left in place, but record nothing more.
+ */
+static void pt_syscore_shutdown(void *data)
+{
+	WRITE_ONCE(pt_shutdown, true);
+	on_each_cpu(pt_shutdown_cpu, NULL, 1);
+}
+
+static const struct syscore_ops pt_syscore_ops = {
+	.shutdown	= pt_syscore_shutdown,
+};
+
+static struct syscore pt_syscore = {
+	.ops = &pt_syscore_ops,
+};
+
 void cpu_emergency_stop_pt(void)
 {
 	struct pt *pt = this_cpu_ptr(&pt_ctx);
@@ -1933,7 +1969,11 @@ static __init int pt_init(void)
 		intel_pt_validate_hw_cap(PT_CAP_num_address_ranges);
 
 	ret = perf_pmu_register(&pt_pmu.pmu, "intel_pt", -1);
+	if (ret)
+		return ret;
 
-	return ret;
+	register_syscore(&pt_syscore);
+
+	return 0;
 }
 arch_initcall(pt_init);
