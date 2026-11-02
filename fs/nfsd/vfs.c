@@ -168,7 +168,7 @@ nfsd_cross_mnt(struct svc_rqst *rqstp, struct dentry **dpp,
 			err = 0;
 	} else if (nfsd_v4client(rqstp) ||
 		(exp->ex_flags & NFSEXP_CROSSMOUNT) || EX_NOHIDE(exp2)) {
-		nfserr = check_nfsd_access(exp, rqstp);
+		nfserr = check_nfsd_access(exp2, rqstp);
 		if (nfserr == nfs_ok) {
 			/* successfully crossed mount point */
 			/*
@@ -203,11 +203,13 @@ static void follow_to_parent(struct path *path)
 	path->dentry = dp;
 }
 
-static int nfsd_lookup_parent(struct svc_rqst *rqstp, struct dentry *dparent, struct svc_export **exp, struct dentry **dentryp)
+static __be32 nfsd_lookup_parent(struct svc_rqst *rqstp, struct dentry *dparent,
+				 struct svc_export **exp, struct dentry **dentryp)
 {
 	struct svc_export *exp2;
 	struct path path = {.mnt = mntget((*exp)->ex_path.mnt),
 			    .dentry = dget(dparent)};
+	__be32 nfserr = nfs_ok;
 
 	follow_to_parent(&path);
 
@@ -215,15 +217,19 @@ static int nfsd_lookup_parent(struct svc_rqst *rqstp, struct dentry *dparent, st
 	if (PTR_ERR(exp2) == -ENOENT) {
 		*dentryp = dget(dparent);
 	} else if (IS_ERR(exp2)) {
-		path_put(&path);
-		return PTR_ERR(exp2);
+		nfserr = nfserrno(PTR_ERR(exp2));
 	} else {
-		*dentryp = dget(path.dentry);
-		exp_put(*exp);
-		*exp = exp2;
+		nfserr = check_nfsd_access(exp2, rqstp);
+		if (nfserr != nfs_ok) {
+			exp_put(exp2);
+		} else {
+			*dentryp = dget(path.dentry);
+			exp_put(*exp);
+			*exp = exp2;
+		}
 	}
 	path_put(&path);
-	return 0;
+	return nfserr;
 }
 
 /*
@@ -276,9 +282,13 @@ nfsd_lookup_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			dentry = dget(dparent); /* .. == . just like at / */
 		else {
 			/* checking mountpoint crossing is very different when stepping up */
-			host_err = nfsd_lookup_parent(rqstp, dparent, &exp, &dentry);
-			if (host_err)
-				goto out_nfserr;
+			__be32 nfserr = nfsd_lookup_parent(rqstp, dparent,
+							   &exp, &dentry);
+
+			if (nfserr) {
+				exp_put(exp);
+				return nfserr;
+			}
 		}
 	} else {
 		dentry = lookup_one_unlocked(&nop_mnt_idmap,
