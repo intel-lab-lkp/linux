@@ -712,7 +712,7 @@ nfsd_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	exp = exp_get(fhp->fh_export);
 	if (d_is_reg(dchild) &&
 	    unlikely(nfsd_mountpoint(dchild, exp))) {
-		status = nfsd_cross_mnt(rqstp, &dchild, &exp);
+		status = nfsd_cross_mnt(rqstp, &dchild, &exp, 0);
 		if (status != nfs_ok) {
 			exp_put(exp);
 			goto out;

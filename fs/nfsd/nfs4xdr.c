@@ -4676,7 +4676,7 @@ nfsd4_encode_entry4_fattr(struct nfsd4_readdir *cd, const char *name,
 		 * Different "."/".." handling?  Something else?
 		 * At least, add a comment here to explain....
 		 */
-		nfserr = nfsd_cross_mnt(cd->rd_rqstp, &dentry, &exp);
+		nfserr = nfsd_cross_mnt(cd->rd_rqstp, &dentry, &exp, 0);
 		if (nfserr)
 			goto out_put;
 		crossed = true;

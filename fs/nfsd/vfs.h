@@ -33,6 +33,7 @@
 #define NFSD_MAY_64BIT_COOKIE		0x1000 /* 64 bit readdir cookies for >= NFSv3 */
 
 #define NFSD_MAY_LOCALIO		0x2000 /* for tracing, reflects when localio used */
+#define NFSD_MAY_BYPASS_FLAVOR		0x4000 /* skip the export's sec= check */
 
 #define NFSD_MAY_CREATE		(NFSD_MAY_EXEC|NFSD_MAY_WRITE)
 #define NFSD_MAY_REMOVE		(NFSD_MAY_EXEC|NFSD_MAY_WRITE|NFSD_MAY_TRUNC)
@@ -128,12 +129,42 @@ void		nfsd_maybe_reset_write_verifier(struct nfsd_net *nn,
 						struct svc_rqst *rqstp,
 						int err);
 __be32		nfsd_cross_mnt(struct svc_rqst *rqstp, struct dentry **dpp,
-			       struct svc_export **expp);
-__be32		nfsd_lookup(struct svc_rqst *, struct svc_fh *,
-				const char *, unsigned int, struct svc_fh *);
-__be32		 nfsd_lookup_dentry(struct svc_rqst *, struct svc_fh *,
-				const char *, unsigned int,
-				struct svc_export **, struct dentry **);
+			       struct svc_export **expp, int access);
+__be32		__nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp,
+			      const char *name, unsigned int len,
+			      struct svc_fh *resfh, int access);
+
+/**
+ * nfsd_lookup - look up a single path component for nfsd
+ *
+ * @rqstp:   the request context
+ * @fhp:     the file handle of the directory
+ * @name:    the component name, or %NULL to look up parent
+ * @len:     length of name to examine
+ * @resfh:   pointer to pre-initialised filehandle to hold result.
+ *
+ * Look up one component of a pathname.
+ * N.B. After this call _both_ fhp and resfh need an fh_put
+ *
+ * If the lookup would cross a mountpoint, and the mounted filesystem
+ * is exported to the client with NFSEXP_NOHIDE, then the lookup is
+ * accepted as it stands and the mounted directory is
+ * returned. Otherwise the covered directory is returned.
+ * NOTE: this mountpoint crossing is not supported properly by all
+ *   clients and is explicitly disallowed for NFSv3
+ *
+ */
+static inline __be32 nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp,
+				 const char *name, unsigned int len,
+				 struct svc_fh *resfh)
+{
+	return __nfsd_lookup(rqstp, fhp, name, len, resfh, NFSD_MAY_EXEC);
+}
+
+__be32		nfsd_lookup_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp,
+				   const char *name, unsigned int len,
+				   struct svc_export **exp_ret,
+				   struct dentry **dentry_ret, int access);
 __be32		nfsd_setattr(struct svc_rqst *, struct svc_fh *,
 			     struct nfsd_attrs *, const struct timespec64 *);
 int nfsd_mountpoint(struct dentry *, struct svc_export *);
