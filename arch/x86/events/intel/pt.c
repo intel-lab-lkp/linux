@@ -38,6 +38,8 @@ static struct pt_pmu pt_pmu;
 /* Set at shutdown, after which TraceEn must not be set */
 static bool pt_shutdown;
 
+static bool pt_initialized __ro_after_init;
+
 /*
  * Capabilities of Intel PT hardware, such as number of address bits or
  * supported output schemes, are cached and exported to userspace as "caps"
@@ -1900,6 +1902,12 @@ void cpu_emergency_stop_pt(void)
 {
 	struct pt *pt = this_cpu_ptr(&pt_ctx);
 
+	if (!pt_initialized)
+		return;
+
+	WRITE_ONCE(pt_shutdown, true);
+	pt_shutdown_cpu(NULL);
+
 	if (pt->handle.event)
 		pt_event_stop(pt->handle.event, PERF_EF_UPDATE);
 }
@@ -1973,6 +1981,7 @@ static __init int pt_init(void)
 		return ret;
 
 	register_syscore(&pt_syscore);
+	pt_initialized = true;
 
 	return 0;
 }
