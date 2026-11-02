@@ -949,6 +949,9 @@ static void dpm_noirq_resume_devices(pm_message_t state)
 	trace_suspend_resume(TPS("dpm_resume_noirq"), state.event, false);
 }
 
+/* Whether dpm_suspend_noirq() has armed the wakeup IRQs of devices */
+static bool dpm_wake_irqs_armed;
+
 /**
  * dpm_resume_noirq - Execute "noirq resume" callbacks for all devices.
  * @state: PM transition of the system being carried out.
@@ -961,7 +964,11 @@ void dpm_resume_noirq(pm_message_t state)
 	dpm_noirq_resume_devices(state);
 
 	resume_device_irqs();
-	device_wakeup_disarm_wake_irqs();
+
+	if (dpm_wake_irqs_armed) {
+		device_wakeup_disarm_wake_irqs();
+		dpm_wake_irqs_armed = false;
+	}
 }
 
 static void async_resume_early(void *data, async_cookie_t cookie);
@@ -1685,7 +1692,17 @@ int dpm_suspend_noirq(pm_message_t state)
 {
 	int ret;
 
-	device_wakeup_arm_wake_irqs();
+	/*
+	 * Freezing devices to take a hibernation image, and quiescing them
+	 * before jumping into one, are not transitions the system can be woken
+	 * up from, as nothing goes to sleep. A wakeup IRQ of a device that
+	 * signals for attention once its link goes down, like a PCIe endpoint
+	 * asserting WAKE#, would only abort the hibernation or the restore.
+	 */
+	if (state.event != PM_EVENT_FREEZE && state.event != PM_EVENT_QUIESCE) {
+		device_wakeup_arm_wake_irqs();
+		dpm_wake_irqs_armed = true;
+	}
 	suspend_device_irqs();
 
 	ret = dpm_noirq_suspend_devices(state);
