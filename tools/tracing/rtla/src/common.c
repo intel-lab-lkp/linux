@@ -203,6 +203,19 @@ int run_tool(struct tool_ops *ops, int argc, char *argv[])
 	}
 
 
+	/*
+	 * -e, --filter and --trigger configure events of the trace instance
+	 * that --trace creates.  Without it there is no instance to put them
+	 * in, and they used to be dropped without a word.
+	 */
+	if (params->events &&
+	    !params->threshold_actions.present[ACTION_TRACE_OUTPUT] &&
+	    !params->end_actions.present[ACTION_TRACE_OUTPUT]) {
+		err_msg("-e, --filter and --trigger need --trace or --on-end trace\n");
+		retval = 1;
+		goto out_free;
+	}
+
 	if (params->threshold_actions.present[ACTION_TRACE_OUTPUT] ||
 	    params->end_actions.present[ACTION_TRACE_OUTPUT]) {
 		tool->record = osnoise_init_trace_tool(ops->tracer);
