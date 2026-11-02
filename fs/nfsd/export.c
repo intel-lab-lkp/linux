@@ -1976,8 +1976,10 @@ static struct svc_export *exp_find(struct cache_detail *cd,
  *
  * Helper function for check_nfsd_access().  Note that callers should be
  * using check_nfsd_access() instead of calling this function directly.  The
- * one exception is __fh_verify() since it has logic that may result in one
- * or both of the helpers being skipped.
+ * exceptions are __fh_verify(), which has logic that may result in one
+ * or both of the helpers being skipped, and the mount-crossing paths in
+ * nfsd_cross_mnt() and nfsd_lookup_parent(), which enforce only the
+ * transport policy when NFSD_MAY_BYPASS_FLAVOR is set.
  *
  * Return values:
  *   %nfs_ok if access is granted, or

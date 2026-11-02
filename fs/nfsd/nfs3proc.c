@@ -967,7 +967,7 @@ nfsd3_create_file(struct svc_rqst *rqstp, struct svc_fh *dirfhp,
 		 */
 		if (d_is_reg(child) &&
 		    unlikely(nfsd_mountpoint(child, exp))) {
-			status = nfsd_cross_mnt(rqstp, &mnt_child, &exp);
+			status = nfsd_cross_mnt(rqstp, &mnt_child, &exp, 0);
 			if (status != nfs_ok) {
 				dput(mnt_child);
 				exp_put(exp);
