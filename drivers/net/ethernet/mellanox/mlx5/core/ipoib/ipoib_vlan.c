@@ -109,13 +109,14 @@ int mlx5i_pkey_del_qpn(struct net_device *netdev, u32 qpn)
 	struct mlx5i_pkey_qpn_ht *ht = ipriv->qpn_htbl;
 	struct qpn_to_netdev *node;
 
+	spin_lock_bh(&ht->ht_lock);
 	node = mlx5i_find_qpn_to_netdev_node(ht->buckets, qpn);
 	if (!node) {
 		mlx5_core_warn(epriv->mdev, "QPN to netdev delete from HT failed\n");
+		spin_unlock_bh(&ht->ht_lock);
 		return -EINVAL;
 	}
 
-	spin_lock_bh(&ht->ht_lock);
 	hlist_del_init(&node->hlist);
 	spin_unlock_bh(&ht->ht_lock);
 	kfree(node);
@@ -128,9 +129,11 @@ struct net_device *mlx5i_pkey_get_netdev(struct net_device *netdev, u32 qpn)
 	struct mlx5i_priv *ipriv = netdev_priv(netdev);
 	struct qpn_to_netdev *node;
 
+	spin_lock_bh(&ipriv->qpn_htbl->ht_lock);
 	node = mlx5i_find_qpn_to_netdev_node(ipriv->qpn_htbl->buckets, qpn);
 	if (!node)
 		return NULL;
+	spin_unlock_bh(&ipriv->qpn_htbl->ht_lock);
 
 	return node->netdev;
 }
