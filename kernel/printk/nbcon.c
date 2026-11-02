@@ -84,8 +84,8 @@
  *        b) Gives up console ownership by clearing the 'prio' field.
  *
  *   3) Unsafe hostile takeover allows to take over the lock even when the
- *      console is an unsafe state. It is used only in panic() by the final
- *      attempt to flush consoles in a try and hope mode.
+ *      console is an unsafe state. It is used only on the panic CPU, in a
+ *      try and hope mode.
  *
  *      Note that separate record buffers are used in panic(). As a result,
  *      the messages can be read and formatted without any risk even after
@@ -543,7 +543,7 @@ static int nbcon_context_try_acquire_handover(struct nbcon_context *ctxt,
  * Acquire the console even in the unsafe state.
  *
  * It can be permitted by setting the 'allow_unsafe_takeover' field only
- * by the final attempt to flush messages in panic().
+ * on the panic CPU.
  *
  * Return:	0 on success. -EPERM when not allowed by the context.
  */
@@ -1653,8 +1653,9 @@ again:
  * __nbcon_atomic_flush_pending - Flush all nbcon consoles using their
  *					write_atomic() callback
  * @stop_seq:			Flush up until this record
+ * @unsafe_only:		Flush only the CON_NBCON_ATOMIC_UNSAFE consoles
  */
-static void __nbcon_atomic_flush_pending(u64 stop_seq)
+static void __nbcon_atomic_flush_pending(u64 stop_seq, bool unsafe_only)
 {
 	struct console *con;
 	int cookie;
@@ -1664,6 +1665,9 @@ static void __nbcon_atomic_flush_pending(u64 stop_seq)
 		short flags = console_srcu_read_flags(con);
 
 		if (!(flags & CON_NBCON))
+			continue;
+
+		if (unsafe_only && !(flags & CON_NBCON_ATOMIC_UNSAFE))
 			continue;
 
 		if (!console_is_usable(con, flags, true))
@@ -1688,7 +1692,15 @@ static void __nbcon_atomic_flush_pending(u64 stop_seq)
  */
 void nbcon_atomic_flush_pending(void)
 {
-	__nbcon_atomic_flush_pending(prb_next_reserve_seq(prb));
+	u64 stop_seq = prb_next_reserve_seq(prb);
+
+	__nbcon_atomic_flush_pending(stop_seq, false);
+
+	if (panic_on_this_cpu() && oops_in_progress) {
+		panic_nbcon_allow_unsafe_takeover = true;
+		__nbcon_atomic_flush_pending(stop_seq, true);
+		panic_nbcon_allow_unsafe_takeover = false;
+	}
 }
 
 /**
@@ -1701,7 +1713,7 @@ void nbcon_atomic_flush_pending(void)
 void nbcon_atomic_flush_unsafe(void)
 {
 	panic_nbcon_allow_unsafe_takeover = true;
-	__nbcon_atomic_flush_pending(prb_next_reserve_seq(prb));
+	__nbcon_atomic_flush_pending(prb_next_reserve_seq(prb), false);
 	panic_nbcon_allow_unsafe_takeover = false;
 }
 

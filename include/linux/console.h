@@ -183,7 +183,8 @@ static inline void con_debug_leave(void) { }
  * @CON_NBCON:		Console can operate outside of the legacy style console_lock
  *			constraints.
  * @CON_NBCON_ATOMIC_UNSAFE: The write_atomic() callback is not safe and is
- *			therefore only used by nbcon_atomic_flush_unsafe().
+ *			therefore only used in panic, when unsafe takeovers
+ *			are allowed.
  */
 enum cons_flags {
 	CON_PRINTBUFFER		= BIT(0),
@@ -246,8 +247,8 @@ static_assert(sizeof(struct nbcon_state) <= sizeof(int));
  * @NBCON_PRIO_MAX:		The number of priority levels
  *
  * A higher priority context can takeover the console when it is
- * in the safe state. The final attempt to flush consoles in panic()
- * can be allowed to do so even in an unsafe state (Hope and pray).
+ * in the safe state. The panic CPU can be allowed to do so even in
+ * an unsafe state (Hope and pray).
  */
 enum nbcon_prio {
 	NBCON_PRIO_NONE = 0,
