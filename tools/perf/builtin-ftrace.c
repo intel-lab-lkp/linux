@@ -744,6 +744,7 @@ static int __cmd_ftrace(struct perf_ftrace *ftrace)
 	int trace_fd;
 	char *buf = NULL;
 	struct strbuf linebuf = STRBUF_INIT;
+	int ret = 0;
 	struct pollfd pollfd = {
 		.events = POLLIN,
 	};
@@ -837,14 +838,20 @@ static int __cmd_ftrace(struct perf_ftrace *ftrace)
 				break;
 			for (int i = 0; i < n; i++) {
 				if (buf[i] == '\n') {
-					if (!ftrace->graph_retaddr)
-						ftrace_filter_retaddr(linebuf.buf);
-					if (fprintf(stdout, "%s\n", linebuf.buf) < 0)
+					if (ftrace_process_fgraph_line(ftrace,
+								       linebuf.buf,
+								       stdout) < 0) {
+						ret = -1;
+						goto out_close_fd;
+					}
+					if (ferror(stdout))
 						break;
 					strbuf_setlen(&linebuf, 0);
 				} else {
-					if (strbuf_addch(&linebuf, buf[i]) < 0)
+					if (strbuf_addch(&linebuf, buf[i]) < 0) {
+						ret = -1;
 						goto out_close_fd;
+					}
 				}
 			}
 			/* flush output since stdout is in full buffering mode due to pager */
@@ -876,22 +883,30 @@ static int __cmd_ftrace(struct perf_ftrace *ftrace)
 			break;
 		for (int i = 0; i < n; i++) {
 			if (buf[i] == '\n') {
-				if (!ftrace->graph_retaddr)
-					ftrace_filter_retaddr(linebuf.buf);
-				if (fprintf(stdout, "%s\n", linebuf.buf) < 0)
+				if (ftrace_process_fgraph_line(ftrace,
+							       linebuf.buf,
+							       stdout) < 0) {
+					ret = -1;
+					goto out_close_fd;
+				}
+				if (ferror(stdout))
 					break;
 				strbuf_setlen(&linebuf, 0);
 			} else {
-				if (strbuf_addch(&linebuf, buf[i]) < 0)
+				if (strbuf_addch(&linebuf, buf[i]) < 0) {
+					ret = -1;
 					goto out_close_fd;
+				}
 			}
 		}
 	}
 
 	if (!ferror(stdout) && linebuf.len > 0) {
-		if (!ftrace->graph_retaddr)
-			ftrace_filter_retaddr(linebuf.buf);
-		fprintf(stdout, "%s\n", linebuf.buf);
+		if (ftrace_process_fgraph_line(ftrace, linebuf.buf,
+					       stdout) < 0) {
+			ret = -1;
+			goto out_close_fd;
+		}
 		strbuf_setlen(&linebuf, 0);
 	}
 
@@ -901,9 +916,10 @@ out_free:
 	free(buf);
 	strbuf_release(&linebuf);
 out_reset:
+	ftrace_cpu_states__clear();
 	exit_tracing_instance();
 out:
-	return (done && !workload_exec_errno) ? 0 : -1;
+	return (ret == 0 && done && !workload_exec_errno) ? 0 : -1;
 }
 
 static void make_histogram(struct perf_ftrace *ftrace, int buckets[],
