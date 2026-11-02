@@ -14,6 +14,10 @@ ifneq ($(CONFIG_DEBUG_FS),)
 snd-soc-avs-y += probes.o debugfs.o
 endif
 
+ifneq ($(CONFIG_SOUNDWIRE_INTEL),)
+snd-soc-avs-y += soundwire.o
+endif
+
 obj-$(CONFIG_SND_SOC_INTEL_AVS) += snd-soc-avs.o
 
 # Machine support
