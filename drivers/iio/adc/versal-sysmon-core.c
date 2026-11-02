@@ -34,7 +34,8 @@
  */
 static const int sysmon_oversampling_avail[] = { 1, 2, 4, 8, 16 };
 
-/* TEMP hysteresis mode bit in SYSMON_TEMP_EV_CFG */
+/* Hysteresis mode bits in SYSMON_TEMP_EV_CFG (AM006 ALARM_CONFIG) */
+#define SYSMON_OT_HYST_MASK		BIT(0)
 #define SYSMON_TEMP_HYST_MASK		BIT(1)
 
 /* Compute alarm register offset from a channel address */
@@ -62,8 +63,40 @@ enum sysmon_alarm_bit {
 	SYSMON_BIT_ALARM2 = 2,
 	SYSMON_BIT_ALARM3 = 3,
 	SYSMON_BIT_ALARM4 = 4,
+	SYSMON_BIT_OT = 8,
 	SYSMON_BIT_TEMP = 9,
 };
+
+/*
+ * The two temperature comparators are identical in layout: an upper
+ * threshold, a lower threshold acting as the hysteresis floor, and a
+ * hysteresis cached in millicelsius because the hardware only stores the
+ * two thresholds. DEVICE_TEMP drives bit 9, the over-temperature alarm
+ * bit 8.
+ */
+struct sysmon_comparator {
+	unsigned int th_up;
+	unsigned int th_low;
+	int *hysteresis;
+};
+
+static bool sysmon_chan_is_ot(const struct iio_chan_spec *chan)
+{
+	return chan->address == SYSMON_OT_TH_UP;
+}
+
+static struct sysmon_comparator sysmon_get_comparator(struct sysmon *sysmon,
+						      const struct iio_chan_spec *chan)
+{
+	if (sysmon_chan_is_ot(chan))
+		return (struct sysmon_comparator){
+			SYSMON_OT_TH_UP, SYSMON_OT_TH_LOW, &sysmon->ot_hysteresis
+		};
+
+	return (struct sysmon_comparator){
+		SYSMON_TEMP_TH_UP, SYSMON_TEMP_TH_LOW, &sysmon->temp_hysteresis
+	};
+}
 
 /* Temperature event specification: rising threshold + hysteresis only */
 static const struct iio_event_spec sysmon_temp_events[] = {
@@ -221,7 +254,8 @@ static int sysmon_read_raw(struct iio_dev *indio_dev,
 static u32 sysmon_get_event_mask(const struct iio_chan_spec *chan)
 {
 	if (chan->type == IIO_TEMP)
-		return BIT(SYSMON_BIT_TEMP);
+		return sysmon_chan_is_ot(chan) ? BIT(SYSMON_BIT_OT) :
+						 BIT(SYSMON_BIT_TEMP);
 
 	return BIT(chan->address / SYSMON_ALARM_BITS_PER_REG);
 }
@@ -340,23 +374,24 @@ static int sysmon_write_event_config(struct iio_dev *indio_dev,
  * cached hysteresis. Called when either upper threshold or hysteresis
  * is written.
  */
-static int sysmon_update_temp_lower(struct sysmon *sysmon)
+static int sysmon_update_temp_lower(struct sysmon *sysmon,
+				    const struct sysmon_comparator *cmp)
 {
 	unsigned int upper_reg;
 	int upper_mc, lower_mc;
 	u32 raw_val;
 	int ret;
 
-	ret = regmap_read(sysmon->regmap, SYSMON_TEMP_TH_UP, &upper_reg);
+	ret = regmap_read(sysmon->regmap, cmp->th_up, &upper_reg);
 	if (ret)
 		return ret;
 
 	sysmon_q8p7_to_millicelsius(upper_reg, &upper_mc);
-	lower_mc = clamp(upper_mc - sysmon->temp_hysteresis,
+	lower_mc = clamp(upper_mc - *cmp->hysteresis,
 			 SYSMON_TEMP_MIN_MC, SYSMON_TEMP_MAX_MC);
 	sysmon_millicelsius_to_q8p7(&raw_val, lower_mc);
 
-	return regmap_write(sysmon->regmap, SYSMON_TEMP_TH_LOW, raw_val);
+	return regmap_write(sysmon->regmap, cmp->th_low, raw_val);
 }
 
 static int sysmon_read_event_value(struct iio_dev *indio_dev,
@@ -374,10 +409,12 @@ static int sysmon_read_event_value(struct iio_dev *indio_dev,
 	guard(mutex)(&sysmon->lock);
 
 	switch (chan->type) {
-	case IIO_TEMP:
+	case IIO_TEMP: {
+		struct sysmon_comparator cmp = sysmon_get_comparator(sysmon, chan);
+
 		switch (info) {
 		case IIO_EV_INFO_VALUE:
-			ret = regmap_read(sysmon->regmap, SYSMON_TEMP_TH_UP, &reg_val);
+			ret = regmap_read(sysmon->regmap, cmp.th_up, &reg_val);
 			if (ret)
 				return ret;
 
@@ -386,12 +423,13 @@ static int sysmon_read_event_value(struct iio_dev *indio_dev,
 			return IIO_VAL_INT;
 
 		case IIO_EV_INFO_HYSTERESIS:
-			*val = sysmon->temp_hysteresis;
+			*val = *cmp.hysteresis;
 			return IIO_VAL_INT;
 
 		default:
 			return -EINVAL;
 		}
+	}
 
 	case IIO_VOLTAGE:
 		offset = sysmon_supply_thresh_offset(chan->address, dir);
@@ -427,7 +465,9 @@ static int sysmon_write_event_value(struct iio_dev *indio_dev,
 	guard(mutex)(&sysmon->lock);
 
 	switch (chan->type) {
-	case IIO_TEMP:
+	case IIO_TEMP: {
+		struct sysmon_comparator cmp = sysmon_get_comparator(sysmon, chan);
+
 		switch (info) {
 		case IIO_EV_INFO_VALUE:
 			if (val < SYSMON_TEMP_MIN_MC || val > SYSMON_TEMP_MAX_MC)
@@ -435,24 +475,25 @@ static int sysmon_write_event_value(struct iio_dev *indio_dev,
 
 			sysmon_millicelsius_to_q8p7(&raw_val, val);
 
-			ret = regmap_write(sysmon->regmap, SYSMON_TEMP_TH_UP, raw_val);
+			ret = regmap_write(sysmon->regmap, cmp.th_up, raw_val);
 			if (ret)
 				return ret;
 
 			/* Recompute lower = upper - hysteresis */
-			return sysmon_update_temp_lower(sysmon);
+			return sysmon_update_temp_lower(sysmon, &cmp);
 
 		case IIO_EV_INFO_HYSTERESIS:
 			if (val < 0 || val > SYSMON_TEMP_MAX_MC - SYSMON_TEMP_MIN_MC)
 				return -EINVAL;
 
-			sysmon->temp_hysteresis = val;
+			*cmp.hysteresis = val;
 
-			return sysmon_update_temp_lower(sysmon);
+			return sysmon_update_temp_lower(sysmon, &cmp);
 
 		default:
 			return -EINVAL;
 		}
+	}
 
 	case IIO_VOLTAGE:
 		offset = sysmon_supply_thresh_offset(chan->address, dir);
@@ -672,6 +713,16 @@ static int sysmon_handle_event(struct iio_dev *indio_dev, u32 event)
 		sysmon->masked_temp |= BIT(SYSMON_BIT_TEMP);
 		return 0;
 
+	case SYSMON_BIT_OT:
+		sysmon_push_event(indio_dev, SYSMON_OT_TH_UP);
+
+		ret = regmap_write(sysmon->regmap, SYSMON_IDR, BIT(SYSMON_BIT_OT));
+		if (ret)
+			return ret;
+
+		sysmon->masked_temp |= BIT(SYSMON_BIT_OT);
+		return 0;
+
 	case SYSMON_BIT_ALARM0:
 	case SYSMON_BIT_ALARM1:
 	case SYSMON_BIT_ALARM2:
@@ -822,23 +873,24 @@ static int sysmon_init_interrupt(struct sysmon *sysmon,
  * Initialize the cached hysteresis for a temperature channel from the
  * current hardware threshold registers: hysteresis = upper - lower.
  */
-static int sysmon_init_hysteresis(struct sysmon *sysmon, int *hysteresis)
+static int sysmon_init_hysteresis(struct sysmon *sysmon,
+				  const struct sysmon_comparator *cmp)
 {
 	unsigned int upper_reg, lower_reg;
 	int upper_mc, lower_mc;
 	int ret;
 
-	ret = regmap_read(sysmon->regmap, SYSMON_TEMP_TH_UP, &upper_reg);
+	ret = regmap_read(sysmon->regmap, cmp->th_up, &upper_reg);
 	if (ret)
 		return ret;
 
-	ret = regmap_read(sysmon->regmap, SYSMON_TEMP_TH_LOW, &lower_reg);
+	ret = regmap_read(sysmon->regmap, cmp->th_low, &lower_reg);
 	if (ret)
 		return ret;
 
 	sysmon_q8p7_to_millicelsius(upper_reg, &upper_mc);
 	sysmon_q8p7_to_millicelsius(lower_reg, &lower_mc);
-	*hysteresis = max(upper_mc - lower_mc, 0);
+	*cmp->hysteresis = max(upper_mc - lower_mc, 0);
 
 	return 0;
 }
@@ -880,6 +932,9 @@ static int sysmon_parse_fw(struct iio_dev *indio_dev, struct device *dev, int ir
 
 	num_static = ARRAY_SIZE(temp_channels);
 	num_chan = size_add(num_temp, size_add(num_static, num_supply));
+	/* The over-temperature channel exists only when events do */
+	if (irq > 0)
+		num_chan = size_add(num_chan, 1);
 	sysmon_channels = devm_kcalloc(dev, num_chan, sizeof(*sysmon_channels), GFP_KERNEL);
 	if (!sysmon_channels)
 		return -ENOMEM;
@@ -960,6 +1015,25 @@ static int sysmon_parse_fw(struct iio_dev *indio_dev, struct device *dev, int ir
 		};
 	}
 
+	/*
+	 * Over-temperature alarm. The OT comparator watches the same
+	 * aggregate temperature as channel 0 but against its own threshold
+	 * pair, and IIO cannot express two rising thresholds on one channel.
+	 * It has no reading of its own, so only event attributes and a label
+	 * are exposed. Appended last, because io-channels phandle arguments
+	 * are raw array positions and inserting it earlier would silently
+	 * repoint every existing consumer.
+	 */
+	if (irq > 0)
+		sysmon_channels[idx++] = (struct iio_chan_spec) {
+			.type = IIO_TEMP,
+			.indexed = 1,
+			.address = SYSMON_OT_TH_UP,
+			.event_spec = sysmon_temp_events,
+			.num_event_specs = ARRAY_SIZE(sysmon_temp_events),
+			.datasheet_name = "ot",
+		};
+
 	indio_dev->num_channels = idx;
 	indio_dev->info = &sysmon_iio_info;
 
@@ -1032,14 +1106,26 @@ int devm_versal_sysmon_core_probe(struct device *dev, struct regmap *regmap)
 		return ret;
 
 	if (irq > 0) {
-		/* Set hysteresis mode for temperature threshold */
+		struct sysmon_comparator cmp;
+
+		/* Set hysteresis mode for both temperature comparators */
 		ret = regmap_set_bits(sysmon->regmap, SYSMON_TEMP_EV_CFG,
-				      SYSMON_TEMP_HYST_MASK);
+				      SYSMON_TEMP_HYST_MASK | SYSMON_OT_HYST_MASK);
 		if (ret)
 			return ret;
 
 		/* Initialize cached hysteresis from hardware registers */
-		ret = sysmon_init_hysteresis(sysmon, &sysmon->temp_hysteresis);
+		cmp = (struct sysmon_comparator){
+			SYSMON_TEMP_TH_UP, SYSMON_TEMP_TH_LOW, &sysmon->temp_hysteresis
+		};
+		ret = sysmon_init_hysteresis(sysmon, &cmp);
+		if (ret)
+			return ret;
+
+		cmp = (struct sysmon_comparator){
+			SYSMON_OT_TH_UP, SYSMON_OT_TH_LOW, &sysmon->ot_hysteresis
+		};
+		ret = sysmon_init_hysteresis(sysmon, &cmp);
 		if (ret)
 			return ret;
 
