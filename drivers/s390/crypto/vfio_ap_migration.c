@@ -13,6 +13,16 @@
 #define VFIO_AP_MIG_MAGIC			0x76666170U  /* "vfap" */
 #define VFIO_AP_MIG_VERSION			1U
 
+/* The maximum number of queues that can be installed in an s390 system */
+#define MAX_AP_QUEUES				(AP_DEVICES * AP_DOMAINS)
+
+/* The maximum size of a vfio_ap_config blob, used to pre-allocate the receive
+ * buffer on the destination host during the RESUMING phase of migration.
+ */
+#define VFIO_AP_CONFIG_MAX_SIZE \
+	(sizeof(struct vfio_ap_config) + \
+	 MAX_AP_QUEUES * sizeof(struct vfio_ap_queue_info))
+
 /**
  * struct vfio_ap_migration_file:
  *
@@ -456,6 +466,67 @@ static struct file *vfio_ap_open_file_stream(struct vfio_ap_migration_file *mig_
 	return filp;
 }
 
+static ssize_t vfio_ap_resuming_write(struct file *filp, const char __user *buf,
+				      size_t len, loff_t *pos)
+{
+	/* TODO */
+	return -EOPNOTSUPP;
+}
+
+static const struct file_operations vfio_ap_resume_fops = {
+	.owner = THIS_MODULE,
+	.write = vfio_ap_resuming_write,
+	.release = vfio_ap_release_mig_file,
+};
+
+/**
+ * vfio_ap_resuming_init
+ *
+ * Initializes the ap_config, config_sz and filp fields of a
+ * struct vfio_ap_migration_file instance:
+ *
+ * 1. Pre-allocates the maximum possible receive buffer using kvzalloc so that
+ *    vfio_ap_resuming_write() can copy directly into it without needing
+ *    to know num_queues up front.  kvzalloc falls back to vmalloc for
+ *    large allocations rather than failing a high-order kmalloc.
+ * 2. Sets num_queues to MAX_AP_QUEUES immediately after allocation so
+ *    that the __counted_by(num_queues) annotation on qinfo[] covers
+ *    the full pre-allocated buffer. Without this, fortified memcpy()
+ *    computes object size from num_queues == 0 and will fortify_panic()
+ *    on the first write chunk that reaches into qinfo[].  num_queues
+ *    will be overwritten with the correct value when the source guest's
+ *    AP configuration data is received via vfio_ap_resuming_write().
+ *
+ * @mig_file:	pointer to object that maintains the state of the migration
+ *		data stream.
+ */
+static struct file *vfio_ap_resuming_init(struct vfio_ap_migration_file *mig_file)
+{
+	struct vfio_ap_config *ap_config;
+	struct file *filp;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	ap_config = kvzalloc(VFIO_AP_CONFIG_MAX_SIZE, GFP_KERNEL_ACCOUNT);
+	if (!ap_config)
+		return ERR_PTR(-ENOMEM);
+
+	ap_config->num_queues = MAX_AP_QUEUES;
+
+	filp = vfio_ap_open_file_stream(mig_file, &vfio_ap_resume_fops, O_WRONLY);
+
+	if (IS_ERR(filp)) {
+		kvfree(ap_config);
+		return filp;
+	}
+
+	mig_file->ap_config = ap_config;
+	mig_file->config_sz = VFIO_AP_CONFIG_MAX_SIZE;
+	mig_file->filp = filp;
+
+	return filp;
+}
+
 static struct file *
 vfio_ap_transition_to_state(struct ap_matrix_mdev *matrix_mdev,
 			    enum vfio_device_mig_state new_state)
@@ -488,10 +559,19 @@ vfio_ap_transition_to_state(struct ap_matrix_mdev *matrix_mdev,
 		return filp;
 	}
 
+	/*
+	 * Begins the process of restoring the vfio device state by creating and
+	 * returning a streaming data_fd to be used to read in the internal
+	 * state of the vfio-ap device on the destination host.
+	 */
 	if (cur_state == VFIO_DEVICE_STATE_STOP &&
 	    new_state == VFIO_DEVICE_STATE_RESUMING) {
-		/* TODO */
-		return ERR_PTR(-EOPNOTSUPP);
+		struct file *filp = vfio_ap_resuming_init(&mig_data->resuming_mig_file);
+
+		if (IS_ERR(filp))
+			return ERR_CAST(filp);
+
+		return filp;
 	}
 
 	if ((cur_state == VFIO_DEVICE_STATE_RESUMING &&
