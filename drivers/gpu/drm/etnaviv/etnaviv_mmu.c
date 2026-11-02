@@ -141,9 +141,19 @@ static int etnaviv_iommu_find_iova(struct etnaviv_iommu_context *context,
 {
 	struct etnaviv_vram_mapping *free = NULL;
 	enum drm_mm_insert_mode mode = DRM_MM_INSERT_LOW;
+	u64 start = 0;
 	int ret;
 
 	lockdep_assert_held(&context->lock);
+
+	/*
+	 * MMUv1 does not reliably drop stale TLB entries on a flush, so a
+	 * freed IOVA that is handed out again right away can still be
+	 * translated to the old pages. Cycle through the address space so
+	 * recently freed IOVAs are only reused once the search wraps around.
+	 */
+	if (context->global->version == ETNAVIV_IOMMU_V1)
+		start = context->last_iova;
 
 	while (1) {
 		struct etnaviv_vram_mapping *m, *n;
@@ -152,9 +162,15 @@ static int etnaviv_iommu_find_iova(struct etnaviv_iommu_context *context,
 		bool found;
 
 		ret = drm_mm_insert_node_in_range(&context->mm, node,
-						  size, 0, 0, 0, U64_MAX, mode);
+						  size, 0, 0, start, U64_MAX, mode);
 		if (ret != -ENOSPC)
 			break;
+
+		/* Retry from the start of the address space before evicting. */
+		if (start) {
+			start = 0;
+			continue;
+		}
 
 		/* Try to retire some entries */
 		drm_mm_scan_init(&scan, &context->mm, size, 0, 0, mode);
@@ -214,6 +230,9 @@ static int etnaviv_iommu_find_iova(struct etnaviv_iommu_context *context,
 		 * succeed, retry the allocation one more time.
 		 */
 	}
+
+	if (!ret && context->global->version == ETNAVIV_IOMMU_V1)
+		context->last_iova = node->start + node->size;
 
 	return ret;
 }

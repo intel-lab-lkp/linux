@@ -75,6 +75,7 @@ struct etnaviv_iommu_context {
 	struct list_head mappings;
 	struct drm_mm mm;
 	unsigned int flush_seq;
+	u64 last_iova;
 
 	/* Not part of the context, but needs to have the same lifetime */
 	struct etnaviv_vram_mapping cmdbuf_mapping;
