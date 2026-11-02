@@ -342,7 +342,7 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		    unlikely(nfsd_mountpoint(child, fhp->fh_export))) {
 			struct svc_export *exp = exp_get(fhp->fh_export);
 
-			status = nfsd_cross_mnt(rqstp, &child, &exp);
+			status = nfsd_cross_mnt(rqstp, &child, &exp, 0);
 			if (status == nfs_ok)
 				status = fh_compose(resfhp, exp,
 						    child, fhp);
@@ -1079,7 +1079,17 @@ nfsd4_link(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	return status;
 }
 
-static __be32 nfsd4_do_lookupp(struct svc_rqst *rqstp, struct svc_fh *fh)
+/*
+ * RFC 8881 Section 2.6.3.1.1.5 forbids NFS4ERR_WRONGSEC from SECINFO.
+ * Section 18.29.3 has SECINFO report a denied lookup as NFS4ERR_ACCESS.
+ */
+static __be32 nfsd4_secinfo_status(__be32 status)
+{
+	return status == nfserr_wrongsec ? nfserr_acces : status;
+}
+
+static __be32 nfsd4_do_lookupp(struct svc_rqst *rqstp, struct svc_fh *fh,
+			       int access)
 {
 	struct svc_fh tmp_fh;
 	__be32 ret;
@@ -1093,14 +1103,14 @@ static __be32 nfsd4_do_lookupp(struct svc_rqst *rqstp, struct svc_fh *fh)
 		return nfserr_noent;
 	}
 	fh_put(&tmp_fh);
-	return nfsd_lookup(rqstp, fh, "..", 2, fh);
+	return __nfsd_lookup(rqstp, fh, "..", 2, fh, access);
 }
 
 static __be32
 nfsd4_lookupp(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	      union nfsd4_op_u *u)
 {
-	return nfsd4_do_lookupp(rqstp, &cstate->current_fh);
+	return nfsd4_do_lookupp(rqstp, &cstate->current_fh, NFSD_MAY_EXEC);
 }
 
 static __be32
@@ -1262,14 +1272,16 @@ nfsd4_secinfo(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct dentry *dentry;
 	__be32 err;
 
-	err = fh_verify(rqstp, &cstate->current_fh, S_IFDIR, NFSD_MAY_EXEC);
+	err = fh_verify(rqstp, &cstate->current_fh, S_IFDIR,
+			NFSD_MAY_EXEC | NFSD_MAY_BYPASS_FLAVOR);
 	if (err)
-		return err;
+		return nfsd4_secinfo_status(err);
 	err = nfsd_lookup_dentry(rqstp, &cstate->current_fh,
 				    secinfo->si_name, secinfo->si_namelen,
-				    &exp, &dentry);
+				    &exp, &dentry,
+				    NFSD_MAY_EXEC | NFSD_MAY_BYPASS_FLAVOR);
 	if (err)
-		return err;
+		return nfsd4_secinfo_status(err);
 	if (d_really_is_negative(dentry)) {
 		exp_put(exp);
 		err = nfserr_noent;
@@ -1290,11 +1302,16 @@ nfsd4_secinfo_no_name(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstat
 
 	switch (u->secinfo_no_name.sin_style) {
 	case NFS4_SECINFO_STYLE4_CURRENT_FH:
+		err = fh_verify(rqstp, &cstate->current_fh, 0,
+				NFSD_MAY_BYPASS_FLAVOR);
+		if (err)
+			return nfsd4_secinfo_status(err);
 		break;
 	case NFS4_SECINFO_STYLE4_PARENT:
-		err = nfsd4_do_lookupp(rqstp, &cstate->current_fh);
+		err = nfsd4_do_lookupp(rqstp, &cstate->current_fh,
+				       NFSD_MAY_EXEC | NFSD_MAY_BYPASS_FLAVOR);
 		if (err)
-			return err;
+			return nfsd4_secinfo_status(err);
 		break;
 	default:
 		return nfserr_inval;
@@ -3277,6 +3294,13 @@ static bool need_wrongsec_check(struct svc_rqst *rqstp)
 
 	if (next->opnum == OP_ILLEGAL)
 		return false;
+	/*
+	 * RFC 7530 permits NFS4ERR_WRONGSEC from PUTFH but not from
+	 * SECINFO, and NFSv4.0 SECINFO leaves the current filehandle in
+	 * place for the next operation.
+	 */
+	if (resp->cstate.minorversion == 0 && next->opnum == OP_SECINFO)
+		return true;
 	nextd = OPDESC(next);
 	/*
 	 * RFC 8881 Section 2.6.3.1.1.2: a later put-filehandle operation
