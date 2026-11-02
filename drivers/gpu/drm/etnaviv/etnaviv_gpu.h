@@ -147,6 +147,9 @@ struct etnaviv_gpu {
 	u32 hangcheck_dma_addr;
 	u32 hangcheck_primid;
 	u32 hangcheck_fence;
+	bool hangcheck_idle;
+	bool hangcheck_busy;
+	unsigned long hangcheck_busy_since;
 
 	void __iomem *mmio;
 	int irq;

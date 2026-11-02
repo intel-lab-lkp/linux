@@ -17,6 +17,9 @@ static int etnaviv_job_hang_limit = 0;
 module_param_named(job_hang_limit, etnaviv_job_hang_limit, int , 0444);
 static int etnaviv_hw_jobs_limit = 4;
 module_param_named(hw_job_limit, etnaviv_hw_jobs_limit, int , 0444);
+static unsigned int etnaviv_hang_max_ms = 30000;
+module_param_named(hang_max_ms, etnaviv_hang_max_ms, uint, 0644);
+MODULE_PARM_DESC(hang_max_ms, "Time a busy job may run without front-end progress (ms, 0 = no extension)");
 
 static struct dma_fence *etnaviv_sched_run_job(struct drm_sched_job *sched_job)
 {
@@ -36,7 +39,8 @@ static enum drm_gpu_sched_stat etnaviv_sched_timedout_job(struct drm_sched_job
 {
 	struct etnaviv_gem_submit *submit = to_etnaviv_submit(sched_job);
 	struct etnaviv_gpu *gpu = submit->gpu;
-	u32 dma_addr, primid = 0;
+	u32 dma_addr, primid = 0, mask;
+	bool idle, was_idle;
 	int change;
 
 	/*
@@ -62,6 +66,12 @@ static enum drm_gpu_sched_stat etnaviv_sched_timedout_job(struct drm_sched_job
 		primid = gpu_read(gpu, VIVS_MC_PROFILE_FE_READ);
 		mutex_unlock(&gpu->lock);
 	}
+
+	mask = gpu->idle_mask & ~(VIVS_HI_IDLE_STATE_FE | VIVS_HI_IDLE_STATE_MC);
+	idle = (gpu_read(gpu, VIVS_HI_IDLE_STATE) & mask) == mask;
+	was_idle = gpu->hangcheck_idle;
+	gpu->hangcheck_idle = idle;
+
 	if (gpu->state == ETNA_GPU_STATE_RUNNING &&
 	    (gpu->completed_fence != gpu->hangcheck_fence ||
 	     change < 0 || change > 16 ||
@@ -70,8 +80,35 @@ static enum drm_gpu_sched_stat etnaviv_sched_timedout_job(struct drm_sched_job
 		gpu->hangcheck_dma_addr = dma_addr;
 		gpu->hangcheck_primid = primid;
 		gpu->hangcheck_fence = gpu->completed_fence;
+		gpu->hangcheck_busy = false;
 		return DRM_GPU_SCHED_STAT_NO_HANG;
 	}
+
+	/*
+	 * A compute dispatch is a single FE command, so the FE does not move
+	 * while a long kernel runs. Keep the job alive as long as some unit
+	 * other than FE and MC is busy, up to hang_max_ms. All of them idle at
+	 * two ticks in a row means the FE waits for something that never
+	 * comes.
+	 */
+	if (gpu->state == ETNA_GPU_STATE_RUNNING && !(idle && was_idle)) {
+		unsigned long max = msecs_to_jiffies(READ_ONCE(etnaviv_hang_max_ms));
+
+		if (!gpu->hangcheck_busy) {
+			gpu->hangcheck_busy = true;
+			gpu->hangcheck_busy_since = jiffies;
+		}
+
+		if (time_before(jiffies, gpu->hangcheck_busy_since + max))
+			return DRM_GPU_SCHED_STAT_NO_HANG;
+
+		if (max)
+			dev_err(gpu->dev, "job busy for more than %u ms without FE progress\n",
+				jiffies_to_msecs(max));
+	}
+
+	gpu->hangcheck_idle = false;
+	gpu->hangcheck_busy = false;
 
 	/* block scheduler */
 	drm_sched_stop(&gpu->sched, sched_job);
