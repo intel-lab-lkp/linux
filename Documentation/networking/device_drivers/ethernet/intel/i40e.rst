@@ -137,6 +137,18 @@ only a source IP address, a source address plus a destination port, or any
 combination of one or more of those four fields. The raw ip4 and ip6 flows
 reject any port qualifier.
 
+NOTE: A flow type selects the packet type the hardware classifies. The i40e
+driver programs an ip4 filter for the "other IPv4" and "fragmented IPv4"
+packet types, and an ip6 filter for the "other IPv6" and "fragmented IPv6"
+packet types. A filter created with ethtool(8) in one of those two flow types
+matches only traffic the hardware did not classify as TCP, UDP or SCTP: ICMP
+and ICMPv6 frames, IPv4 and IPv6 fragments, and IP traffic with a next
+protocol the hardware does not classify. It matches no non-fragmented TCP, UDP
+or SCTP frame, even if you also add tcp4, udp4, sctp4, tcp6, udp6 or sctp6
+filters; use those flow types to steer TCP, UDP or SCTP traffic. The driver
+also rejects an l4proto qualifier on an ip4 or ip6 filter, and a tos qualifier
+on an ip4 filter.
+
 NOTE: The Linux i40e driver allows you to filter traffic based on a
 user-defined flexible two-byte pattern and offset by using the ethtool user-def
 and mask fields. Only L3 and L4 flow types are supported for user-defined
