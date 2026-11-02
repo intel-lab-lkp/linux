@@ -576,13 +576,19 @@ static int set_tracing_funcgraph_retval(struct perf_ftrace *ftrace)
 
 static int set_tracing_funcgraph_retaddr(struct perf_ftrace *ftrace)
 {
-	if (ftrace->graph_retaddr || ftrace->use_inline) {
+	bool need_retaddr = ftrace->graph_retaddr || ftrace->use_inline ||
+			    (ftrace->subcmd == PERF_FTRACE_TRACE &&
+			     !list_empty(&ftrace->graph_funcs));
+
+	if (need_retaddr) {
 		if (write_tracing_option_file("funcgraph-retaddr", "1") < 0) {
 			if (ftrace->use_inline) {
 				pr_err("failed to set funcgraph-retaddr option in tracing\n");
 				pr_err("Hint: ensure kernel is compiled with CONFIG_FUNCTION_GRAPH_RETADDR=y\n");
+				return -1;
 			}
-			return -1;
+			if (ftrace->graph_retaddr)
+				return -1;
 		}
 	}
 
@@ -1381,6 +1387,8 @@ static int parse_func_duration(struct perf_ftrace *ftrace, char *line, size_t le
 {
 	char *p;
 	char *func;
+	char *semi;
+	char *ret_str;
 	double duration;
 
 	/* skip CPU */
@@ -1423,12 +1431,21 @@ static int parse_func_duration(struct perf_ftrace *ftrace, char *line, size_t le
 	func = skip_spaces(p);
 
 	/* skip the closing bracket and the start of comment */
-	if (*func == '}')
+	if (*func == '}') {
 		func += 5;
+		ret_str = strstr(func, " ret=");
+		if (ret_str)
+			*ret_str = '\0';
+		p = func + strlen(func) - 1;
+	} else {
+		semi = strchr(func, ';');
+		if (semi)
+			*semi = '\0';
+		p = func + strlen(func) - 1;
+	}
 
-	/* remove semi-colon or end of comment at the end */
-	p = line + len - 1;
-	while (!isalnum(*p) && *p != ']') {
+	/* remove parens, semi-colon or end of comment at the end */
+	while (p > func && !isalnum(*p) && *p != ']') {
 		*p = '\0';
 		--p;
 	}
@@ -1853,12 +1870,6 @@ static int parse_sort_key(const struct option *opt, const char *str, int unset)
 	return 0;
 }
 
-enum perf_ftrace_subcommand {
-	PERF_FTRACE_NONE,
-	PERF_FTRACE_TRACE,
-	PERF_FTRACE_LATENCY,
-	PERF_FTRACE_PROFILE,
-};
 
 int cmd_ftrace(int argc, const char **argv)
 {
@@ -2013,6 +2024,8 @@ int cmd_ftrace(int argc, const char **argv)
 	if (subcmd == PERF_FTRACE_NONE)
 		subcmd = PERF_FTRACE_TRACE;
 
+	ftrace.subcmd = subcmd;
+
 	argc = parse_options(argc, argv, options, ftrace_usage,
 			    PARSE_OPT_STOP_AT_NON_OPTION);
 	if (argc < 0) {
@@ -2031,6 +2044,11 @@ int cmd_ftrace(int argc, const char **argv)
 		if (ftrace.use_inline) {
 			if (strcmp(ftrace.tracer, "function_graph") != 0) {
 				pr_err("Error: --inline option is only supported with function_graph tracer\n");
+				ret = -EINVAL;
+				goto out_delete_filters;
+			}
+			if (ftrace.graph_thresh) {
+				pr_err("Error: --inline cannot be combined with --graph-opts thresh\n");
 				ret = -EINVAL;
 				goto out_delete_filters;
 			}
