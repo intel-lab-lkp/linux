@@ -231,7 +231,7 @@ static int imx_lpcg_parse_clks_from_dt(struct platform_device *pdev,
 	ret = of_clk_parent_fill(np, parent_names, count);
 	if (ret != count) {
 		dev_err(&pdev->dev, "failed to get clock parent names\n");
-		return count;
+		return -EINVAL;
 	}
 
 	ret = of_property_read_string_array(np, "clock-output-names",
