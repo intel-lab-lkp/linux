@@ -421,6 +421,12 @@ static void cn_proc_mcast_ctl(struct cn_msg *msg,
 		return;
 	}
 
+	if (mc_op != PROC_CN_MCAST_LISTEN &&
+	    mc_op != PROC_CN_MCAST_IGNORE) {
+		err = EINVAL;
+		goto out;
+	}
+
 	ev_type = valid_event((enum proc_cn_event)ev_type);
 
 	if (ev_type == PROC_EVENT_NONE)
@@ -454,9 +460,6 @@ static void cn_proc_mcast_ctl(struct cn_msg *msg,
 			atomic_dec(&proc_event_num_listeners);
 		((struct proc_input *)(sk->sk_user_data))->event_type =
 			PROC_EVENT_NONE;
-		break;
-	default:
-		err = EINVAL;
 		break;
 	}
 
