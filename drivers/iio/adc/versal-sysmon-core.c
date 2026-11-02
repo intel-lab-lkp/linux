@@ -352,7 +352,8 @@ static int sysmon_update_temp_lower(struct sysmon *sysmon)
 		return ret;
 
 	sysmon_q8p7_to_millicelsius(upper_reg, &upper_mc);
-	lower_mc = clamp(upper_mc - sysmon->temp_hysteresis, -256000, 255992);
+	lower_mc = clamp(upper_mc - sysmon->temp_hysteresis,
+			 SYSMON_TEMP_MIN_MC, SYSMON_TEMP_MAX_MC);
 	sysmon_millicelsius_to_q8p7(&raw_val, lower_mc);
 
 	return regmap_write(sysmon->regmap, SYSMON_TEMP_TH_LOW, raw_val);
@@ -429,8 +430,7 @@ static int sysmon_write_event_value(struct iio_dev *indio_dev,
 	case IIO_TEMP:
 		switch (info) {
 		case IIO_EV_INFO_VALUE:
-			/* Q8.7 signed range: -256000 to +255992 mC */
-			if (val < -256000 || val > 255992)
+			if (val < SYSMON_TEMP_MIN_MC || val > SYSMON_TEMP_MAX_MC)
 				return -EINVAL;
 
 			sysmon_millicelsius_to_q8p7(&raw_val, val);
@@ -443,7 +443,7 @@ static int sysmon_write_event_value(struct iio_dev *indio_dev,
 			return sysmon_update_temp_lower(sysmon);
 
 		case IIO_EV_INFO_HYSTERESIS:
-			if (val < 0)
+			if (val < 0 || val > SYSMON_TEMP_MAX_MC - SYSMON_TEMP_MIN_MC)
 				return -EINVAL;
 
 			sysmon->temp_hysteresis = val;
@@ -838,7 +838,7 @@ static int sysmon_init_hysteresis(struct sysmon *sysmon, int *hysteresis)
 
 	sysmon_q8p7_to_millicelsius(upper_reg, &upper_mc);
 	sysmon_q8p7_to_millicelsius(lower_reg, &lower_mc);
-	*hysteresis = upper_mc - lower_mc;
+	*hysteresis = max(upper_mc - lower_mc, 0);
 
 	return 0;
 }

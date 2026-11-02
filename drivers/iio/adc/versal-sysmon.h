@@ -75,6 +75,10 @@ struct regmap;
 #define SYSMON_FRACTIONAL_SHIFT		7U
 #define SYSMON_SUPPLY_MANTISSA_BITS	16
 
+/* Q8.7 signed temperature range in millicelsius */
+#define SYSMON_TEMP_MIN_MC		-256000
+#define SYSMON_TEMP_MAX_MC		255992
+
 /* Bits per alarm register */
 #define SYSMON_ALARM_BITS_PER_REG	32
 
