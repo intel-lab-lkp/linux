@@ -816,7 +816,7 @@ static int vfio_ap_mdev_probe(struct mdev_device *mdev)
 		return PTR_ERR(matrix_mdev);
 
 	/*
-	 * Wet up vfio-ap device migration before calling
+	 * Setting up for vfio device migration must be done before calling
 	 * vfio_register_emulated_iommu_dev; otherwise, the VFIO core
 	 * will see mig_ops as NULL during the registration. This could
 	 * prevent the VFIO core from properly setting up migration
