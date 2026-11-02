@@ -1866,6 +1866,12 @@ static void xe_ttm_bo_release_notify(struct ttm_buffer_object *ttm_bo)
 	bo = ttm_to_xe_bo(ttm_bo);
 	xe_assert(xe_bo_device(bo), !(bo->created && kref_read(&ttm_bo->base.refcount)));
 
+	/*
+	 * The TTM BO refcount is zero, so eviction and swapout cannot
+	 * take a reference. Unmap before TTM frees the backing store.
+	 */
+	__xe_bo_vunmap(bo);
+
 	if (!xe_ttm_bo_lock_in_destructor(ttm_bo))
 		return;
 
@@ -2056,7 +2062,6 @@ static void xe_gem_object_free(struct drm_gem_object *obj)
 	 * driver ttm callbacks is allowed to use the ttm_buffer_object
 	 * refcount directly if needed.
 	 */
-	__xe_bo_vunmap(gem_to_xe_bo(obj));
 	ttm_bo_fini(container_of(obj, struct ttm_buffer_object, base));
 }
 
