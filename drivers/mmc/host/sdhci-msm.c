@@ -8,8 +8,9 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/mmc/mmc.h>
-#include <linux/pm_runtime.h>
+#include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
+#include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/iopoll.h>
 #include <linux/regulator/consumer.h>
@@ -168,6 +169,9 @@
 #define ICE_HCI_PARAM_CCI	GENMASK(7, 0)
 #define ICE_HCI_PARAM_CE	GENMASK(8, 8)
 
+#define DOMAIN_IDX_POWER	0
+#define DOMAIN_IDX_PERF		1
+
 struct sdhci_msm_offset {
 	u32 core_hc_mode;
 	u32 core_mci_data_cnt;
@@ -275,6 +279,11 @@ struct sdhci_msm_variant_info {
 	bool restore_dll_config;
 	const struct sdhci_msm_variant_ops *var_ops;
 	const struct sdhci_msm_offset *offset;
+	/*
+	 * pd_names != NULL marks this variant as firmware managed;
+	 * see fw_managed detection in sdhci_msm_probe().
+	 */
+	const struct dev_pm_domain_attach_data pd_data;
 };
 
 struct sdhci_msm_host {
@@ -285,6 +294,7 @@ struct sdhci_msm_host {
 	struct clk *xo_clk;	/* TCXO clk needed for FLL feature of cm_dll*/
 	/* core, iface, cal and sleep clocks */
 	struct clk_bulk_data bulk_clks[4];
+	struct dev_pm_domain_list *pd_list;
 #ifdef CONFIG_MMC_CRYPTO
 	struct qcom_ice *ice;
 #endif
@@ -302,6 +312,7 @@ struct sdhci_msm_host {
 	u32 caps_0;
 	bool mci_removed;
 	bool restore_dll_config;
+	bool fw_managed;
 	const struct sdhci_msm_variant_ops *var_ops;
 	const struct sdhci_msm_offset *offset;
 	bool use_cdr;
@@ -412,6 +423,45 @@ static void msm_set_clock_rate_for_bus_mode(struct sdhci_host *host,
 
 	pr_debug("%s: Setting clock at rate %lu at timing %d\n",
 		 mmc_hostname(host->mmc), achieved_rate, timing);
+}
+
+static int msm_fw_set_clock_rate_for_bus_mode(struct sdhci_host *host,
+					      unsigned int clock)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	struct device *dev = mmc_dev(host->mmc);
+	struct dev_pm_opp *opp;
+	struct device *perf_dev;
+	struct mmc_ios ios = host->mmc->ios;
+	unsigned long clock_long = (unsigned long)clock;
+	unsigned long desired_rate;
+	unsigned int mult;
+	int ret;
+
+	perf_dev = msm_host->pd_list->pd_devs[DOMAIN_IDX_PERF];
+
+	mult = msm_get_clock_mult_for_bus_mode(host, clock, ios.timing);
+	desired_rate = clock_long * mult;
+
+	/* Find the nearest OPP at or below the requested frequency. */
+	opp = dev_pm_opp_find_freq_floor(perf_dev, &desired_rate);
+	if (IS_ERR(opp)) {
+		dev_err(dev, "Failed to find OPP for freq %lu: %pe\n", clock_long, opp);
+		return PTR_ERR(opp);
+	}
+
+	ret = dev_pm_opp_set_opp(perf_dev, opp);
+	dev_pm_opp_put(opp);
+	if (ret) {
+		dev_err(dev, "Failed to set OPP for freq %lu: %d\n", clock_long, ret);
+		return ret;
+	}
+
+	/* desired_rate was rounded down by find_freq_floor to the actual OPP rate. */
+	host->mmc->actual_clock = mult ? desired_rate / mult : desired_rate;
+	msm_host->clk_rate = desired_rate;
+	return 0;
 }
 
 /* Platform specific tuning */
@@ -1253,7 +1303,10 @@ static int sdhci_msm_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	 */
 	if (host->flags & SDHCI_HS400_TUNING) {
 		sdhci_msm_hc_select_mode(host);
-		msm_set_clock_rate_for_bus_mode(host, ios.clock, ios.timing);
+		if (msm_host->fw_managed)
+			msm_fw_set_clock_rate_for_bus_mode(host, ios.clock);
+		else
+			msm_set_clock_rate_for_bus_mode(host, ios.clock, ios.timing);
 		host->flags &= ~SDHCI_HS400_TUNING;
 	}
 
@@ -1847,6 +1900,28 @@ static unsigned int sdhci_msm_get_min_clock(struct sdhci_host *host)
 	return SDHCI_MSM_MIN_CLOCK;
 }
 
+static unsigned int sdhci_msm_fw_get_max_clock(struct sdhci_host *host)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	unsigned long max_freq = ULONG_MAX;
+	struct dev_pm_opp *opp;
+	struct device *perf_dev;
+	struct device *dev = mmc_dev(host->mmc);
+
+	perf_dev = msm_host->pd_list->pd_devs[DOMAIN_IDX_PERF];
+
+	opp = dev_pm_opp_find_freq_floor(perf_dev, &max_freq);
+	if (IS_ERR(opp)) {
+		dev_err(dev, "Failed to find opp for freq %lu\n", max_freq);
+		return SDHCI_MSM_MIN_CLOCK;
+	}
+
+	dev_pm_opp_put(opp);
+
+	return max_freq;
+}
+
 /*
  * __sdhci_msm_set_clock - sdhci_msm clock control.
  *
@@ -1890,6 +1965,40 @@ static void sdhci_msm_set_clock(struct sdhci_host *host, unsigned int clock)
 	msm_set_clock_rate_for_bus_mode(host, ios.clock, ios.timing);
 out:
 	__sdhci_msm_set_clock(host, clock);
+}
+
+static void sdhci_msm_fw_set_clock(struct sdhci_host *host, unsigned int clock)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+
+	if (!clock) {
+		host->mmc->actual_clock = 0;
+		msm_host->clk_rate = 0;
+		goto out;
+	}
+
+	sdhci_msm_hc_select_mode(host);
+
+	if (msm_fw_set_clock_rate_for_bus_mode(host, clock))
+		return;
+out:
+	__sdhci_msm_set_clock(host, clock);
+}
+
+static int sdhci_msm_fw_power_state(struct device *dev, bool power_on)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	struct device *pwr_dev;
+
+	pwr_dev = msm_host->pd_list->pd_devs[DOMAIN_IDX_POWER];
+
+	if (power_on)
+		return pm_runtime_resume_and_get(pwr_dev);
+	else
+		return pm_runtime_put_sync(pwr_dev);
 }
 
 /*****************************************************************************\
@@ -2550,6 +2659,17 @@ static const struct sdhci_msm_variant_info sdhci_msm_v5_var = {
 	.offset = &sdhci_msm_v5_offset,
 };
 
+static const struct sdhci_msm_variant_info sdhci_msm_fw_v5_var = {
+	.mci_removed = true,
+	.var_ops = &v5_var_ops,
+	.offset = &sdhci_msm_v5_offset,
+	.pd_data = {
+		.pd_flags = PD_FLAG_DEV_LINK_ON,
+		.pd_names = (const char * []) { "power", "perf" },
+		.num_pd_names = 2,
+	},
+};
+
 static const struct sdhci_msm_variant_info sdm845_sdhci_var = {
 	.mci_removed = true,
 	.restore_dll_config = true,
@@ -2566,6 +2686,7 @@ static const struct of_device_id sdhci_msm_dt_match[] = {
 	{.compatible = "qcom,sdhci-msm-v5", .data = &sdhci_msm_v5_var},
 	{.compatible = "qcom,sdm670-sdhci", .data = &sdm845_sdhci_var},
 	{.compatible = "qcom,sdm845-sdhci", .data = &sdm845_sdhci_var},
+	{.compatible = "qcom,nord-sdhci", .data = &sdhci_msm_fw_v5_var},
 	{.compatible = "qcom,sc7180-sdhci", .data = &sdm845_sdhci_var},
 	{},
 };
@@ -2587,6 +2708,21 @@ static const struct sdhci_ops sdhci_msm_ops = {
 	.set_timeout = sdhci_msm_set_timeout,
 };
 
+static const struct sdhci_ops sdhci_msm_fw_ops = {
+	.reset = sdhci_and_cqhci_reset,
+	.set_clock = sdhci_msm_fw_set_clock,
+	.get_min_clock = sdhci_msm_get_min_clock,
+	.get_max_clock = sdhci_msm_fw_get_max_clock,
+	.set_bus_width = sdhci_set_bus_width,
+	.set_uhs_signaling = sdhci_msm_set_uhs_signaling,
+	.write_w = sdhci_msm_writew,
+	.write_b = sdhci_msm_writeb,
+	.irq	= sdhci_msm_cqe_irq,
+	.dump_vendor_regs = sdhci_msm_dump_vendor_regs,
+	.set_power = sdhci_set_power_noreg,
+	.set_timeout = sdhci_msm_set_timeout,
+};
+
 static const struct sdhci_pltfm_data sdhci_msm_pdata = {
 	.quirks = SDHCI_QUIRK_BROKEN_CARD_DETECTION |
 		  SDHCI_QUIRK_SINGLE_POWER_WRITE |
@@ -2595,6 +2731,16 @@ static const struct sdhci_pltfm_data sdhci_msm_pdata = {
 
 	.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN,
 	.ops = &sdhci_msm_ops,
+};
+
+static const struct sdhci_pltfm_data sdhci_msm_fw_pdata = {
+	.quirks = SDHCI_QUIRK_BROKEN_CARD_DETECTION |
+		  SDHCI_QUIRK_SINGLE_POWER_WRITE |
+		  SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN |
+		  SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12,
+
+	.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN,
+	.ops = &sdhci_msm_fw_ops,
 };
 
 static inline void sdhci_msm_get_of_property(struct platform_device *pdev,
@@ -2665,8 +2811,21 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	const struct sdhci_msm_offset *msm_offset;
 	const struct sdhci_msm_variant_info *var_info;
 	struct device_node *node = pdev->dev.of_node;
+	bool fw_managed;
 
-	host = sdhci_pltfm_init(pdev, &sdhci_msm_pdata, sizeof(*msm_host));
+	var_info = of_device_get_match_data(&pdev->dev);
+	if (!var_info)
+		return -ENODEV;
+	fw_managed = !!var_info->pd_data.pd_names;
+
+	/*
+	 * Based on variant info, differentiate platform initialization
+	 * for local and remote managed resource platforms.
+	 */
+	if (fw_managed)
+		host = sdhci_pltfm_init(pdev, &sdhci_msm_fw_pdata, sizeof(*msm_host));
+	else
+		host = sdhci_pltfm_init(pdev, &sdhci_msm_pdata, sizeof(*msm_host));
 	if (IS_ERR(host))
 		return PTR_ERR(host);
 
@@ -2684,12 +2843,11 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	 * Based on the compatible string, load the required msm host info from
 	 * the data associated with the version info.
 	 */
-	var_info = of_device_get_match_data(&pdev->dev);
-
 	msm_host->mci_removed = var_info->mci_removed;
 	msm_host->restore_dll_config = var_info->restore_dll_config;
 	msm_host->var_ops = var_info->var_ops;
 	msm_host->offset = var_info->offset;
+	msm_host->fw_managed = fw_managed;
 
 	msm_offset = msm_host->offset;
 
@@ -2697,6 +2855,32 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	sdhci_msm_get_of_property(pdev, host);
 
 	msm_host->saved_tuning_phase = INVALID_TUNING_PHASE;
+
+	if (msm_host->fw_managed) {
+		ret = dev_pm_domain_attach_list(&pdev->dev, &var_info->pd_data,
+						&msm_host->pd_list);
+		if (ret < 0)
+			return dev_err_probe(&pdev->dev, ret,
+					     "Failed to attach power domains\n");
+
+		if (ret != var_info->pd_data.num_pd_names)
+			return dev_err_probe(&pdev->dev, -ENODEV,
+					     "Expected %d power domains, got %d\n",
+					     var_info->pd_data.num_pd_names, ret);
+
+		ret = sdhci_msm_fw_power_state(&pdev->dev, true);
+		if (ret) {
+			dev_pm_domain_detach_list(msm_host->pd_list);
+			return dev_err_probe(&pdev->dev, ret,
+					     "Failed to power on domain\n");
+		}
+
+		/*
+		 * Skip initializing clocks, regulators and reset in kernel
+		 * for firmware managed platforms.
+		 */
+		goto skip_resource_init;
+	}
 
 	ret = sdhci_msm_gcc_reset(&pdev->dev, host);
 	if (ret)
@@ -2786,6 +2970,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		}
 	}
 
+skip_resource_init:
 	/* Reset the vendor spec register to power on reset state */
 	writel_relaxed(CORE_VENDOR_SPEC_POR_VAL,
 			host->ioaddr + msm_offset->core_vendor_spec);
@@ -2917,6 +3102,12 @@ clk_disable:
 bus_clk_disable:
 	if (!IS_ERR(msm_host->bus_clk))
 		clk_disable_unprepare(msm_host->bus_clk);
+fw_detach:
+	if (msm_host->fw_managed) {
+		sdhci_msm_fw_power_state(&pdev->dev, false);
+		dev_pm_domain_detach_list(msm_host->pd_list);
+		msm_host->pd_list = NULL;
+	}
 	return ret;
 }
 
@@ -2929,6 +3120,12 @@ static void sdhci_msm_remove(struct platform_device *pdev)
 		    0xffffffff);
 
 	sdhci_remove_host(host, dead);
+
+	if (msm_host->fw_managed) {
+		sdhci_msm_fw_power_state(&pdev->dev, false);
+		dev_pm_domain_detach_list(msm_host->pd_list);
+		msm_host->pd_list = NULL;
+	}
 
 	pm_runtime_get_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
@@ -2946,6 +3143,9 @@ static int sdhci_msm_runtime_suspend(struct device *dev)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 	unsigned long flags;
+
+	if (msm_host->fw_managed)
+		return sdhci_msm_fw_power_state(dev, false);
 
 	spin_lock_irqsave(&host->lock, flags);
 	host->runtime_suspended = true;
@@ -2966,6 +3166,9 @@ static int sdhci_msm_runtime_resume(struct device *dev)
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 	unsigned long flags;
 	int ret;
+
+	if (msm_host->fw_managed)
+		return sdhci_msm_fw_power_state(dev, true);
 
 	ret = clk_bulk_prepare_enable(ARRAY_SIZE(msm_host->bulk_clks),
 				       msm_host->bulk_clks);
