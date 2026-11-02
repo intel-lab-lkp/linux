@@ -6788,13 +6788,19 @@ static int of_pci_bus_find_domain_nr(struct device *parent)
 		/*
 		 * If domain is in DT, allocate it in static IDA.  This
 		 * prevents duplicate static allocations in case of errors
-		 * in DT.
+		 * in DT. Platform that legitimately reuse a domain number
+		 * across host bridges (disjoint ECAM/bus/memory/IO) opt out
+		 * of this check with "linux,pci-domain-reuse".
 		 */
 		domain_nr = of_get_pci_domain_nr(parent->of_node);
-		if (domain_nr >= 0)
+		if (domain_nr >= 0) {
+			if (of_property_read_bool(parent->of_node,
+							"linux,pci-domain-reuse"))
+				return domain_nr;
 			return ida_alloc_range(&pci_domain_nr_static_ida,
 					       domain_nr, domain_nr,
 					       GFP_KERNEL);
+		}
 	}
 
 	/*
@@ -6809,6 +6815,10 @@ static int of_pci_bus_find_domain_nr(struct device *parent)
 static void of_pci_bus_release_domain_nr(struct device *parent, int domain_nr)
 {
 	if (domain_nr < 0)
+		return;
+
+	/* Reusers never acquire the static slot, so never release it */
+	if (of_property_read_bool(parent->of_node, "linux,pci-domain-reuse"))
 		return;
 
 	/* Release domain from IDA where it was allocated. */
