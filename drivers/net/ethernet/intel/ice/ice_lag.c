@@ -2601,12 +2601,6 @@ int ice_init_lag(struct ice_pf *pf)
 	lag->notif_block.notifier_call = NULL;
 	memset(lag->sec_vf, 0, sizeof(lag->sec_vf));
 
-	err = ice_register_lag_handler(lag);
-	if (err) {
-		dev_warn(dev, "INIT LAG: Failed to register event handler\n");
-		goto lag_error;
-	}
-
 	err = ice_create_lag_recipe(&pf->hw, &lag->pf_recipe,
 				    ice_dflt_vsi_rcp, 1);
 	if (err)
@@ -2638,11 +2632,20 @@ int ice_init_lag(struct ice_pf *pf)
 		}
 	}
 
+	err = ice_register_lag_handler(lag);
+	if (err) {
+		dev_warn(dev, "INIT LAG: Failed to register event handler\n");
+		goto free_act_act_res;
+	}
+
 	ice_display_lag_info(lag);
 
 	dev_dbg(dev, "INIT LAG complete\n");
 	return 0;
 
+free_act_act_res:
+	ice_free_hw_res(&pf->hw, ICE_AQC_RES_TYPE_RECIPE, 1,
+			&lag->act_act_recipe);
 free_lport_res:
 	ice_free_hw_res(&pf->hw, ICE_AQC_RES_TYPE_RECIPE, 1,
 			&lag->lport_recipe);
