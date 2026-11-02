@@ -114,6 +114,16 @@ properties:
       Requests with Address Type (AT).
     type: boolean
 
+  linux,pci-domain-reuse:
+    description:
+      Boolean indicating that this host bridge is allowed to reuse the same
+      "linux,pci-domain" value as another host bridge on the platform. Host
+      bridges reusing the same domain must have disjoint ECAM, bus-range,
+      memory, and IO windows so that (domain, bus) tuples remain globally
+      unique. A duplicate domain on a host bridge without this property
+      remains an error.
+    type: boolean
+
 required:
   - compatible
   - reg
