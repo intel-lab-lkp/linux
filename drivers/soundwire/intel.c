@@ -1027,22 +1027,28 @@ static int intel_create_dai(struct sdw_cdns *cdns,
 	return 0;
 }
 
-static int intel_register_dai(struct sdw_intel *sdw)
+int sdw_intel_init_pdis(struct sdw_intel *sdw)
 {
-	struct sdw_cdns_dai_runtime **dai_runtime_array;
 	struct sdw_cdns_stream_config config;
-	struct sdw_cdns *cdns = &sdw->cdns;
-	struct sdw_cdns_streams *stream;
-	struct snd_soc_dai_driver *dais;
-	int num_dai, ret, off = 0;
+	int ret;
 
 	/* Read the PDI config and initialize cadence PDI */
 	intel_pdi_init(sdw, &config);
-	ret = sdw_cdns_pdi_init(cdns, config);
+	ret = sdw_cdns_pdi_init(&sdw->cdns, config);
 	if (ret)
 		return ret;
 
 	intel_pdi_stream_ch_update(sdw, &sdw->cdns.pcm);
+	return 0;
+}
+
+static int intel_register_dai(struct sdw_intel *sdw)
+{
+	struct sdw_cdns_dai_runtime **dai_runtime_array;
+	struct sdw_cdns *cdns = &sdw->cdns;
+	struct sdw_cdns_streams *stream;
+	struct snd_soc_dai_driver *dais;
+	int num_dai, ret, off = 0;
 
 	/* DAIs are created based on total number of PDIs supported */
 	num_dai = cdns->pcm.num_pdi;
