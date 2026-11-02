@@ -237,10 +237,22 @@ NOTE: This driver supports the following flow types:
 - UDPv6
 - SCTPv6
 
-Each flow type supports valid combinations of IP addresses (source or
-destination) and UDP/TCP/SCTP ports (source and destination). You can supply
-only a source IP address, a source IP address and a destination port, or any
-combination of one or more of these four parameters.
+The TCP, UDP and SCTP flow types accept valid combinations of IP addresses
+(source or destination) and UDP/TCP/SCTP ports (source and destination). You
+can supply only a source IP address, a source IP address and a destination
+port, or any combination of one or more of these four parameters. On the raw
+IPv4 and IPv6 flow types the driver rejects a port qualifier.
+
+NOTE: A flow type selects the packet type the hardware classifies. The ice
+driver programs an ip4 filter as the "other IPv4" packet type and an ip6
+filter as the "other IPv6" packet type. A filter you create with ethtool(8) in
+one of those two flow types matches only traffic the hardware did not classify
+as TCP, UDP or SCTP: ICMP and ICMPv6 frames, IPv4 and IPv6 fragments, and IPv4
+or IPv6 traffic with a next header the hardware does not classify. It matches
+no non-fragmented TCP, UDP or SCTP frame, even if you also configure a filter
+of the tcp4, udp4, sctp4, tcp6, udp6 or sctp6 flow type; use those flow types
+to steer TCP, UDP or SCTP traffic. The driver also rejects an l4proto
+qualifier on an ip4 or ip6 filter and a tos qualifier on an ip4 filter.
 
 NOTE: This driver allows you to filter traffic based on a user-defined flexible
 two-byte pattern and offset by using the ethtool user-def and mask fields. Only
@@ -283,6 +295,10 @@ To add a new filter::
     <queue> - the queue to direct traffic toward (-1 discards the
               matched traffic)
 
+  The two port parameters apply to the tcp4, udp4, sctp4, tcp6, udp6 and sctp6
+  flow types. The raw ip4 or ip6 flow rejects a port, so use tcp4 or tcp6 when
+  ports matter.
+
 To delete a filter::
 
   # ethtool -U <ethX> delete <N>
@@ -323,21 +339,22 @@ To add a TCPv4 filter with a partial mask for a source IP subnet::
 
 NOTES:
 
-For each flow-type, the programmed filters must all have the same matching
+For each flow type, the programmed filters must all have the same matching
 input set. For example, issuing the following two commands is acceptable::
 
-  # ethtool -U enp130s0 flow-type ip4 src-ip 192.168.0.1 src-port 5300 action 7
-  # ethtool -U enp130s0 flow-type ip4 src-ip 192.168.0.5 src-port 55 action 10
+  # ethtool -U enp130s0 flow-type tcp4 src-ip 192.168.0.1 src-port 5300 action 7
+  # ethtool -U enp130s0 flow-type tcp4 src-ip 192.168.0.5 src-port 55 action 10
 
 Issuing the next two commands, however, is not acceptable, since the first
 specifies src-ip and the second specifies dst-ip::
 
-  # ethtool -U enp130s0 flow-type ip4 src-ip 192.168.0.1 src-port 5300 action 7
-  # ethtool -U enp130s0 flow-type ip4 dst-ip 192.168.0.5 src-port 55 action 10
+  # ethtool -U enp130s0 flow-type tcp4 src-ip 192.168.0.1 src-port 5300 action 7
+  # ethtool -U enp130s0 flow-type tcp4 dst-ip 192.168.0.5 src-port 55 action 10
 
-The second command will fail with an error. You may program multiple filters
-with the same fields, using different values, but, on one device, you may not
-program two tcp4 filters with different matching fields.
+The second command will fail, and the driver reports "Failed to add filter.
+Flow director filters on each port must have the same input set". You may
+program multiple filters with the same fields, using different values, but on
+one port you may not program two tcp4 filters with different matching fields.
 
 The ice driver does not support matching on a subportion of a field, thus
 partial mask fields are not supported.
