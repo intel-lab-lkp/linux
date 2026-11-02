@@ -153,4 +153,20 @@ else
 fi
 done
 
+# -e, --filter and --trigger only take effect with --trace: they configure
+# events of the instance it creates.  Without it rtla used to drop them and
+# exit 0, so a typo in an event name went unnoticed.
+check "filter without a preceding -e" \
+	"timerlat top -q --filter 'prev_pid == 0' -d 1s" 129 "has no previous event to apply to"
+check "event without --trace" \
+	"timerlat top -q -e sched:sched_switch -d 1s" 1 "need --trace or --on-end trace"
+check "invalid event without --trace" \
+	"timerlat top -q -e nosuchsys:nosuchevent -d 1s" 1 "need --trace or --on-end trace"
+check "filter without --trace" \
+	"timerlat top -q -e sched:sched_switch --filter 'prev_pid == 0' -d 1s" 1 "need --trace or --on-end trace"
+check "invalid event with --trace" \
+	"timerlat top -q -e nosuchsys:nosuchevent -t -d 1s" 1 "Error enabling event"
+check "valid event with --trace" \
+	"timerlat top -q -e sched:sched_switch -t -d 1s" 0 ""
+
 test_end
