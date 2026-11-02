@@ -45,6 +45,8 @@ static DEFINE_SPINLOCK(iwpm_nlmsg_req_lock);
 static struct hlist_head *iwpm_hash_bucket;
 static DEFINE_SPINLOCK(iwpm_mapinfo_lock);
 
+static DEFINE_MUTEX(iwpm_mapinfo_mutex);
+
 static struct hlist_head *iwpm_reminfo_bucket;
 static DEFINE_SPINLOCK(iwpm_reminfo_lock);
 
@@ -159,6 +161,7 @@ int iwpm_remove_mapinfo(struct sockaddr_storage *local_sockaddr,
 	unsigned long flags;
 	int ret = -EINVAL;
 
+	mutex_lock(&iwpm_mapinfo_mutex);
 	spin_lock_irqsave(&iwpm_mapinfo_lock, flags);
 	if (iwpm_hash_bucket) {
 		hash_bucket_head = get_mapinfo_hash_bucket(
@@ -182,6 +185,7 @@ int iwpm_remove_mapinfo(struct sockaddr_storage *local_sockaddr,
 	}
 remove_mapinfo_exit:
 	spin_unlock_irqrestore(&iwpm_mapinfo_lock, flags);
+	mutex_unlock(&iwpm_mapinfo_mutex);
 	return ret;
 }
 
@@ -193,6 +197,7 @@ static void free_hash_bucket(void)
 	int i;
 
 	/* remove all the mapinfo data from the list */
+	mutex_lock(&iwpm_mapinfo_mutex);
 	spin_lock_irqsave(&iwpm_mapinfo_lock, flags);
 	for (i = 0; i < IWPM_MAPINFO_HASH_SIZE; i++) {
 		hlist_for_each_entry_safe(map_info, tmp_hlist_node,
@@ -206,6 +211,7 @@ static void free_hash_bucket(void)
 	kfree(iwpm_hash_bucket);
 	iwpm_hash_bucket = NULL;
 	spin_unlock_irqrestore(&iwpm_mapinfo_lock, flags);
+	mutex_unlock(&iwpm_mapinfo_mutex);
 }
 
 static void free_reminfo_bucket(void)
@@ -654,6 +660,7 @@ int iwpm_send_mapinfo(u8 nl_client, int iwpm_pid)
 		goto send_mapping_info_exit;
 	}
 	skb_num++;
+	mutex_lock(&iwpm_mapinfo_mutex);
 	spin_lock_irqsave(&iwpm_mapinfo_lock, flags);
 	ret = -EINVAL;
 	for (i = 0; i < IWPM_MAPINFO_HASH_SIZE; i++) {
@@ -712,17 +719,20 @@ int iwpm_send_mapinfo(u8 nl_client, int iwpm_pid)
 				skb = NULL;
 				if (ret) {
 					err_str = "Unable to send map info";
+					mutex_unlock(&iwpm_mapinfo_mutex);
 					goto send_mapping_info_exit;
 				}
 				if (skb_num == IWPM_MAPINFO_SKB_COUNT) {
 					ret = -ENOMEM;
 					err_str = "Insufficient skbs for map info";
+					mutex_unlock(&iwpm_mapinfo_mutex);
 					goto send_mapping_info_exit;
 				}
 				skb = dev_alloc_skb(NLMSG_GOODSIZE);
 				if (!skb) {
 					ret = -ENOMEM;
 					err_str = "Unable to allocate skb";
+					mutex_unlock(&iwpm_mapinfo_mutex);
 					goto send_mapping_info_exit;
 				}
 				spin_lock_irqsave(&iwpm_mapinfo_lock, flags);
@@ -731,6 +741,8 @@ int iwpm_send_mapinfo(u8 nl_client, int iwpm_pid)
 	}
 send_mapping_info_unlock:
 	spin_unlock_irqrestore(&iwpm_mapinfo_lock, flags);
+	mutex_unlock(&iwpm_mapinfo_mutex);
+
 send_mapping_info_exit:
 	if (ret) {
 		pr_warn("%s: %s (ret = %d)\n", __func__, err_str, ret);
