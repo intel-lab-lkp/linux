@@ -181,7 +181,21 @@ svm_range_dma_map_dev(struct amdgpu_device *adev, struct svm_range *prange,
 
 		page = hmm_pfn_to_page(hmm_pfns[i]);
 		if (is_zone_device_page(page)) {
-			struct amdgpu_device *bo_adev = prange->svm_bo->node->adev;
+			struct amdgpu_device *bo_adev = prange->svm_bo ?
+				prange->svm_bo->node->adev : NULL;
+
+			/*
+			 * The pgmap owner is per device or XGMI hive, so HMM
+			 * may return a page of another svm_bo, e.g. one shared
+			 * with another process after fork(). The VRAM address
+			 * below and svm_range_get_pte_flags() assume the
+			 * svm_bo device.
+			 */
+			if (!bo_adev ||
+			    page_pgmap(page) != &bo_adev->kfd.pgmap) {
+				addr[i] = 0;
+				return -EFAULT;
+			}
 
 			addr[i] = (hmm_pfns[i] << PAGE_SHIFT) +
 				   bo_adev->vm_manager.vram_base_offset -
