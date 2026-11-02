@@ -387,6 +387,20 @@ static void cn_proc_ack(int err, int rcvd_seq, int rcvd_ack)
 	send_msg(msg);
 }
 
+/* Called when a NETLINK_CONNECTOR socket is released. */
+void cn_proc_release(struct sock *sk)
+{
+	struct proc_input *input = sk->sk_user_data;
+
+	if (!input)
+		return;
+
+	if (input->mcast_op == PROC_CN_MCAST_LISTEN)
+		atomic_dec(&proc_event_num_listeners);
+	kfree(input);
+	sk->sk_user_data = NULL;
+}
+
 /**
  * cn_proc_mcast_ctl
  * @msg: message sent from userspace via the connector

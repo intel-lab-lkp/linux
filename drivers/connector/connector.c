@@ -14,6 +14,7 @@
 #include <net/netlink.h>
 #include <linux/moduleparam.h>
 #include <linux/connector.h>
+#include <linux/cn_proc.h>
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/proc_fs.h>
@@ -182,12 +183,10 @@ static int cn_bind(struct net *net, int group)
 	return -EPERM;
 }
 
+/* sk_user_data of a connector socket belongs to cn_proc. */
 static void cn_release(struct sock *sk, unsigned long *groups)
 {
-	if (groups && test_bit(CN_IDX_PROC - 1, groups)) {
-		kfree(sk->sk_user_data);
-		sk->sk_user_data = NULL;
-	}
+	cn_proc_release(sk);
 }
 
 /*
