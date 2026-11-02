@@ -3789,6 +3789,15 @@ rb_handle_head_page(struct ring_buffer_per_cpu *cpu_buffer,
 	case RB_PAGE_NORMAL:
 		/* OK */
 		break;
+	case RB_PAGE_MOVED:
+		if (type == RB_PAGE_HEAD) {
+			ret = rb_head_page_set_normal(cpu_buffer, next_page,
+						      tail_page,
+						      RB_PAGE_UPDATE);
+			if (RB_WARN_ON(cpu_buffer, ret != RB_PAGE_UPDATE))
+				return -1;
+		}
+		return 1;
 	default:
 		RB_WARN_ON(cpu_buffer, 1);
 		return -1;
