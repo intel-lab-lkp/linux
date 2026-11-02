@@ -20,6 +20,7 @@
 #include <linux/amd-iommu.h>
 #include <linux/nospec.h>
 #include <linux/workqueue.h>
+#include <linux/kmemleak.h>
 
 #include <asm/sev.h>
 #include <asm/processor.h>
@@ -361,6 +362,7 @@ static void __init free_rmp_segment_table(void)
 		kfree(desc);
 	}
 
+	kmemleak_free(rmp_segment_table);
 	free_page((unsigned long)rmp_segment_table);
 
 	rmp_segment_table = NULL;
@@ -376,6 +378,7 @@ static bool __init alloc_rmp_segment_table(void)
 		return false;
 
 	rmp_segment_table = page_address(page);
+	kmemleak_alloc(rmp_segment_table, RST_SIZE, 1, GFP_KERNEL);
 
 	return true;
 }
