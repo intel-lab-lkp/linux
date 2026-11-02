@@ -40,6 +40,8 @@ static bool pt_shutdown;
 
 static bool pt_initialized __ro_after_init;
 
+static struct perf_event *pt_suspended_event;
+
 /*
  * Capabilities of Intel PT hardware, such as number of address bits or
  * supported output schemes, are cached and exported to userspace as "caps"
@@ -1012,6 +1014,10 @@ static void pt_read_offset(struct pt_buffer *buf)
 	struct pt *pt = this_cpu_ptr(&pt_ctx);
 	struct topa_page *tp;
 
+	/* MSRs may be reset across suspend, so use saved offsets */
+	if (READ_ONCE(pt_suspended_event))
+		return;
+
 	if (!buf->single) {
 		rdmsrq(MSR_IA32_RTIT_OUTPUT_BASE, pt->output_base);
 		tp = phys_to_virt(pt->output_base);
@@ -1659,6 +1665,11 @@ static void pt_event_start(struct perf_event *event, int mode)
 	 */
 	if (!(hwc->state & PERF_HES_UPTODATE)) {
 		hwc->state &= ~PERF_HES_STOPPED;
+		/* After suspend, need to fully re-configure */
+		if (READ_ONCE(pt_suspended_event)) {
+			buf = perf_get_aux(&pt->handle);
+			goto fully_configure;
+		}
 		pt_config_enable(event);
 		return;
 	}
@@ -1675,7 +1686,11 @@ static void pt_event_start(struct perf_event *event, int mode)
 
 	hwc->state &= ~(PERF_HES_STOPPED | PERF_HES_UPTODATE);
 
+fully_configure:
 	pt_config_buffer(buf);
+	/* Output MSRs are valid again, so pt_read_offset() may read them */
+	if (unlikely(READ_ONCE(pt_suspended_event)))
+		WRITE_ONCE(pt_suspended_event, NULL);
 	pt_config(event);
 
 	return;
@@ -1866,6 +1881,49 @@ static int pt_event_init(struct perf_event *event)
 	return 0;
 }
 
+/*
+ * The CPU that stays online during system suspend may lose its PT state, so
+ * stop its event beforehand and start it again afterwards. The other CPUs
+ * were taken offline, which stopped their events.
+ */
+static int pt_syscore_suspend(void *data)
+{
+	struct pt *pt = this_cpu_ptr(&pt_ctx);
+	struct perf_event *event = pt->handle.event;
+	struct pt_buffer *buf;
+
+	if (!event)
+		return 0;
+
+	pt_event_stop(event, 0);
+
+	/*
+	 * Save the output offsets while the MSRs are still valid, for
+	 * pt_event_snapshot_aux() and for reprogramming them on resume.
+	 */
+	buf = perf_get_aux(&pt->handle);
+	if (buf && buf->snapshot)
+		pt_read_offset(buf);
+
+	WRITE_ONCE(pt_suspended_event, event);
+
+	return 0;
+}
+
+static void pt_syscore_resume(void *data)
+{
+	struct perf_event *event = pt_suspended_event;
+
+	if (!event)
+		return;
+
+	/* Guard against perf core having scheduled the event out meanwhile */
+	if (event->state == PERF_EVENT_STATE_ACTIVE)
+		pt_event_start(event, 0);
+
+	WRITE_ONCE(pt_suspended_event, NULL);
+}
+
 static void pt_shutdown_cpu(void *info)
 {
 	u64 ctl;
@@ -1891,6 +1949,8 @@ static void pt_syscore_shutdown(void *data)
 }
 
 static const struct syscore_ops pt_syscore_ops = {
+	.suspend	= pm_sleep_ptr(pt_syscore_suspend),
+	.resume		= pm_sleep_ptr(pt_syscore_resume),
 	.shutdown	= pt_syscore_shutdown,
 };
 
