@@ -122,5 +122,6 @@ struct sysmon {
 };
 
 int devm_versal_sysmon_core_probe(struct device *dev, struct regmap *regmap);
+void versal_sysmon_shutdown(struct device *dev);
 
 #endif /* _VERSAL_SYSMON_H_ */

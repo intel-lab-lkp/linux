@@ -1000,6 +1000,8 @@ int devm_versal_sysmon_core_probe(struct device *dev, struct regmap *regmap)
 	if (!indio_dev)
 		return -ENOMEM;
 
+	dev_set_drvdata(dev, indio_dev);
+
 	sysmon = iio_priv(indio_dev);
 	sysmon->regmap = regmap;
 	sysmon->temp_oversampling = 1;
@@ -1049,6 +1051,23 @@ int devm_versal_sysmon_core_probe(struct device *dev, struct regmap *regmap)
 	return devm_iio_device_register(dev, indio_dev);
 }
 EXPORT_SYMBOL_NS_GPL(devm_versal_sysmon_core_probe, "VERSAL_SYSMON");
+
+/**
+ * versal_sysmon_shutdown() - Disable SysMon interrupts on system shutdown
+ * @dev: SysMon device
+ *
+ * Interrupt teardown is a devm action, which runs on driver unbind but not
+ * on system shutdown, so disable the interrupts here as well.
+ */
+void versal_sysmon_shutdown(struct device *dev)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct sysmon *sysmon = iio_priv(indio_dev);
+
+	if (sysmon->irq > 0)
+		sysmon_disable_interrupts(sysmon);
+}
+EXPORT_SYMBOL_NS_GPL(versal_sysmon_shutdown, "VERSAL_SYSMON");
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("AMD Versal SysMon Core Driver");

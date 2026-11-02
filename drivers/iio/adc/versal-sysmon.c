@@ -71,6 +71,11 @@ static int sysmon_platform_probe(struct platform_device *pdev)
 	return devm_versal_sysmon_core_probe(dev, regmap);
 }
 
+static void sysmon_platform_shutdown(struct platform_device *pdev)
+{
+	versal_sysmon_shutdown(&pdev->dev);
+}
+
 static const struct of_device_id sysmon_of_match_table[] = {
 	{ .compatible = "xlnx,versal-sysmon" },
 	{ }
@@ -79,6 +84,7 @@ MODULE_DEVICE_TABLE(of, sysmon_of_match_table);
 
 static struct platform_driver sysmon_platform_driver = {
 	.probe = sysmon_platform_probe,
+	.shutdown = sysmon_platform_shutdown,
 	.driver = {
 		.name = "versal-sysmon",
 		.of_match_table = sysmon_of_match_table,
