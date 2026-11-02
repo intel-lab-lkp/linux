@@ -15,8 +15,9 @@ static void ice_dcbnl_devreset(struct net_device *netdev)
 {
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 
-	while (ice_is_reset_in_progress(pf->state))
-		usleep_range(1000, 2000);
+	/* waiting for a reset in flight would block it on the locks we hold */
+	if (ice_is_reset_in_progress(pf->state))
+		return;
 
 	dev_close(netdev);
 	netdev_state_change(netdev);
