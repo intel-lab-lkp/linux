@@ -2031,12 +2031,6 @@ static inline int perf_allow_tracepoint(void)
 
 #endif /* !CONFIG_PERF_EVENTS */
 
-#if defined(CONFIG_PERF_EVENTS) && defined(CONFIG_CPU_SUP_INTEL)
-extern void perf_restore_debug_store(void);
-#else
-static inline void perf_restore_debug_store(void)			{ }
-#endif
-
 #define perf_output_put(handle, x)	perf_output_copy((handle), &(x), sizeof(x))
 
 struct perf_pmu_events_attr {

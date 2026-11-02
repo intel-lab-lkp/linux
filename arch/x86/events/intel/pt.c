@@ -492,14 +492,14 @@ static u64 pt_config_filters(struct perf_event *event)
 		 */
 
 		/* avoid redundant msr writes */
-		if (pt->filters.filter[range].msr_a != filter->msr_a) {
+		if (pt->addr_a[range] != filter->msr_a) {
 			wrmsrq(pt_address_ranges[range].msr_a, filter->msr_a);
-			pt->filters.filter[range].msr_a = filter->msr_a;
+			pt->addr_a[range] = filter->msr_a;
 		}
 
-		if (pt->filters.filter[range].msr_b != filter->msr_b) {
+		if (pt->addr_b[range] != filter->msr_b) {
 			wrmsrq(pt_address_ranges[range].msr_b, filter->msr_b);
-			pt->filters.filter[range].msr_b = filter->msr_b;
+			pt->addr_b[range] = filter->msr_b;
 		}
 
 		rtit_ctl |= (u64)filter->config << pt_address_ranges[range].reg_off;
@@ -1910,6 +1910,37 @@ void cpu_emergency_stop_pt(void)
 
 	if (pt->handle.event)
 		pt_event_stop(pt->handle.event, PERF_EF_UPDATE);
+}
+
+/* Not a valid value for any of the cached Intel PT MSRs */
+#define PT_MSR_INVALID	BIT_ULL(63)
+
+/*
+ * Intel PT MSRs may have been reset, or left set by a previous kernel, so
+ * invalidate the cached copies and clear stale STATUS bits.
+ */
+void intel_pt_reset_cpu_state(void)
+{
+	struct pt *pt = this_cpu_ptr(&pt_ctx);
+	u64 status;
+	int i;
+
+	/* Can run before pt_init(), so check the feature bit */
+	if (!boot_cpu_has(X86_FEATURE_INTEL_PT))
+		return;
+
+	pt->output_base = PT_MSR_INVALID;
+	pt->output_mask = PT_MSR_INVALID;
+	for (i = 0; i < PT_FILTERS_NUM; i++) {
+		pt->addr_a[i] = PT_MSR_INVALID;
+		pt->addr_b[i] = PT_MSR_INVALID;
+	}
+
+	rdmsrq(MSR_IA32_RTIT_STATUS, status);
+	if (status & (RTIT_STATUS_ERROR | RTIT_STATUS_STOPPED)) {
+		/* Fails if a previous kernel left TraceEn set */
+		wrmsrq_safe(MSR_IA32_RTIT_STATUS, 0);
+	}
 }
 
 int is_intel_pt_event(struct perf_event *event)

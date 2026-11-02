@@ -828,6 +828,7 @@ struct x86_guest_pebs {
 extern struct perf_guest_switch_msr *perf_guest_get_msrs(int *nr,
 							 struct x86_guest_pebs *guest_pebs);
 extern void x86_perf_get_lbr(struct x86_pmu_lbr *lbr);
+extern void perf_restore_processor_state(void);
 #else
 struct perf_guest_switch_msr *perf_guest_get_msrs(int *nr,
 						  struct x86_guest_pebs *guest_pebs);
@@ -835,6 +836,8 @@ static inline void x86_perf_get_lbr(struct x86_pmu_lbr *lbr)
 {
 	memset(lbr, 0, sizeof(*lbr));
 }
+
+static inline void perf_restore_processor_state(void) { }
 #endif
 
 #ifdef CONFIG_CPU_SUP_INTEL

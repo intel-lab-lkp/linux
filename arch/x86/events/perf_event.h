@@ -1867,6 +1867,8 @@ void init_debug_store_on_cpu(int cpu);
 
 void fini_debug_store_on_cpu(int cpu);
 
+void perf_restore_debug_store(void);
+
 void release_ds_buffers(void);
 
 void reserve_ds_buffers(void);
@@ -2034,6 +2036,8 @@ u64 intel_get_arch_pebs_data_config(struct perf_event *event);
 int intel_pmu_setup_lbr_filter(struct perf_event *event);
 
 void intel_pt_interrupt(void);
+
+void intel_pt_reset_cpu_state(void);
 
 int intel_bts_interrupt(void);
 

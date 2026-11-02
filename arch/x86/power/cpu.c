@@ -29,6 +29,7 @@
 #include <asm/microcode.h>
 #include <asm/msr.h>
 #include <asm/fred.h>
+#include <asm/perf_event.h>
 
 #ifdef CONFIG_X86_32
 __visible unsigned long saved_context_ebx;
@@ -278,7 +279,7 @@ static void notrace __restore_processor_state(struct saved_context *ctxt)
 	tsc_verify_tsc_adjust(true);
 	x86_platform.restore_sched_clock_state();
 	cache_bp_restore();
-	perf_restore_debug_store();
+	perf_restore_processor_state();
 
 	c = &cpu_data(smp_processor_id());
 	if (cpu_has(c, X86_FEATURE_MSR_IA32_FEAT_CTL))

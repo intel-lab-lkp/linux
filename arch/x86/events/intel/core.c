@@ -6489,6 +6489,8 @@ static void intel_pmu_cpu_starting(int cpu)
 	int core_id = topology_core_id(cpu);
 	int i;
 
+	intel_pt_reset_cpu_state();
+
 	if (is_hybrid() && !init_hybrid_pmu(cpu))
 		return;
 
@@ -6571,6 +6573,13 @@ static void intel_pmu_cpu_starting(int cpu)
 		cpuc->excl_cntrs->core_id = core_id;
 		cpuc->excl_cntrs->refcnt++;
 	}
+}
+
+/* The boot CPU is not hotplugged across S3, hibernation or kexec jump */
+void perf_restore_processor_state(void)
+{
+	perf_restore_debug_store();
+	intel_pt_reset_cpu_state();
 }
 
 static void free_excl_cntrs(struct cpu_hw_events *cpuc)

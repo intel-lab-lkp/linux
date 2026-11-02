@@ -111,7 +111,8 @@ struct pt_filters {
 /**
  * struct pt - per-cpu pt context
  * @handle:		perf output handle
- * @filters:		last configured filters
+ * @addr_a:		cached RTIT_ADDRn_A MSR values
+ * @addr_b:		cached RTIT_ADDRn_B MSR values
  * @handle_nmi:		do handle PT PMI on this cpu, there's an active event
  * @vmx_on:		1 if VMX is ON on this cpu
  * @pause_allowed:	PERF_EF_PAUSE is allowed to stop tracing
@@ -121,7 +122,8 @@ struct pt_filters {
  */
 struct pt {
 	struct perf_output_handle handle;
-	struct pt_filters	filters;
+	u64			addr_a[PT_FILTERS_NUM];
+	u64			addr_b[PT_FILTERS_NUM];
 	int			handle_nmi;
 	int			vmx_on;
 	int			pause_allowed;
