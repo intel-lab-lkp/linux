@@ -276,6 +276,18 @@ static u32 initiate_file_draining(struct nfs_client *clp,
 		goto out;
 	}
 	pnfs_get_layout_hdr(lo);
+	if (!pnfs_layout_is_valid(lo) &&
+	    nfs4_stateid_match_other(&lo->plh_stateid, &args->cbl_stateid) &&
+	    pnfs_invalid_layout_busy(lo, &args->cbl_range,
+				     be32_to_cpu(args->cbl_stateid.seqid),
+				     args->cbl_layoutchanged &&
+				     !test_bit(NFS_LAYOUT_BULK_RECALL,
+					       &lo->plh_flags))) {
+		/* Block LAYOUTGET until I/O on the invalidated layout drains */
+		set_bit(NFS_LAYOUT_BULK_RECALL, &lo->plh_flags);
+		rv = NFS4ERR_DELAY;
+		goto unlock;
+	}
 	rv = pnfs_check_callback_stateid(lo, &args->cbl_stateid, cps);
 	if (rv != NFS_OK)
 		goto unlock;
