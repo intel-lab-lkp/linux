@@ -567,6 +567,15 @@ static void pt_config(struct perf_event *event)
 	pt_config_enable(event);
 }
 
+static bool pt_trace_enabled(void)
+{
+	u64 ctl;
+
+	rdmsrq(MSR_IA32_RTIT_CTL, ctl);
+
+	return ctl & RTIT_CTL_TRACEEN;
+}
+
 static void pt_config_stop(struct perf_event *event)
 {
 	struct pt *pt = this_cpu_ptr(&pt_ctx);
@@ -577,7 +586,12 @@ static void pt_config_stop(struct perf_event *event)
 		return;
 
 	ctl &= ~RTIT_CTL_TRACEEN;
-	if (!READ_ONCE(pt->vmx_on))
+	/*
+	 * vmx_on is set before VMXON, so tracing may not have stopped yet.
+	 * RTIT_CTL can be written until VMXON, and after VMXON TraceEn is
+	 * clear, so still write RTIT_CTL if TraceEn is set.
+	 */
+	if (!READ_ONCE(pt->vmx_on) || pt_trace_enabled())
 		wrmsrq(MSR_IA32_RTIT_CTL, ctl);
 
 	WRITE_ONCE(event->hw.aux_config, ctl);
