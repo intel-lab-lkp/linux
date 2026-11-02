@@ -555,7 +555,6 @@ void ice_dcb_rebuild(struct ice_pf *pf)
 	int ret;
 
 	rtnl_lock();
-	mutex_lock(&pf->tc_mutex);
 
 	ret = ice_query_port_ets(pf->hw.port_info, &buf, sizeof(buf), NULL);
 	if (ret) {
@@ -587,7 +586,6 @@ void ice_dcb_rebuild(struct ice_pf *pf)
 		goto dcb_error;
 	}
 
-	mutex_unlock(&pf->tc_mutex);
 	rtnl_unlock();
 
 	return;
@@ -596,7 +594,6 @@ dcb_error:
 	dev_err(dev, "Disabling DCB until new settings occur\n");
 	err_cfg = kzalloc_obj(*err_cfg);
 	if (!err_cfg) {
-		mutex_unlock(&pf->tc_mutex);
 		rtnl_unlock();
 		return;
 	}
@@ -614,7 +611,6 @@ dcb_error:
 	ice_pf_dcb_cfg(pf, err_cfg, true);
 	kfree(err_cfg);
 
-	mutex_unlock(&pf->tc_mutex);
 	rtnl_unlock();
 }
 
@@ -1077,7 +1073,6 @@ ice_dcb_process_lldp_set_mib_change(struct ice_pf *pf,
 
 	/* That a DCB change has happened is now determined */
 	rtnl_lock();
-	mutex_lock(&pf->tc_mutex);
 
 	/* store the old configuration */
 	tmp_dcbx_cfg = pi->qos_cfg.local_dcbx_cfg;
@@ -1142,7 +1137,6 @@ ice_dcb_process_lldp_set_mib_change(struct ice_pf *pf,
 	/* enable previously downed VSIs */
 	ice_dcb_ena_dis_vsi(pf, true, true);
 out:
-	mutex_unlock(&pf->tc_mutex);
 	rtnl_unlock();
 
 	/* Send Execute Pending MIB Change event if it is a Pending event */

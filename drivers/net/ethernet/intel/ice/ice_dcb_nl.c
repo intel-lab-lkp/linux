@@ -78,8 +78,6 @@ static int ice_dcbnl_setets(struct net_device *netdev, struct ieee_ets *ets)
 
 	new_cfg = &pf->hw.port_info->qos_cfg.desired_dcbx_cfg;
 
-	mutex_lock(&pf->tc_mutex);
-
 	new_cfg->etscfg.willing = ets->willing;
 	new_cfg->etscfg.cbs = ets->cbs;
 	ice_for_each_traffic_class(i) {
@@ -117,7 +115,6 @@ static int ice_dcbnl_setets(struct net_device *netdev, struct ieee_ets *ets)
 		err = ICE_DCB_HW_CHG_RST;
 
 ets_out:
-	mutex_unlock(&pf->tc_mutex);
 	return err;
 }
 
@@ -277,8 +274,6 @@ static int ice_dcbnl_setpfc(struct net_device *netdev, struct ieee_pfc *pfc)
 		return -EINVAL;
 	}
 
-	mutex_lock(&pf->tc_mutex);
-
 	new_cfg = &pf->hw.port_info->qos_cfg.desired_dcbx_cfg;
 
 	if (pfc->pfc_cap)
@@ -293,7 +288,6 @@ static int ice_dcbnl_setpfc(struct net_device *netdev, struct ieee_pfc *pfc)
 		ice_dcbnl_devreset(netdev);
 	if (err == ICE_DCB_NO_HW_CHG)
 		err = ICE_DCB_HW_CHG_RST;
-	mutex_unlock(&pf->tc_mutex);
 	return err;
 }
 
@@ -774,9 +768,6 @@ static int ice_dcbnl_setapp(struct net_device *netdev, struct dcb_app *app)
 		return -EINVAL;
 	}
 
-	/* grab TC mutex */
-	mutex_lock(&pf->tc_mutex);
-
 	new_cfg = &pf->hw.port_info->qos_cfg.desired_dcbx_cfg;
 	old_cfg = &pf->hw.port_info->qos_cfg.local_dcbx_cfg;
 
@@ -867,7 +858,6 @@ static int ice_dcbnl_setapp(struct net_device *netdev, struct dcb_app *app)
 		ret = ICE_DCB_NO_HW_CHG;
 
 setapp_out:
-	mutex_unlock(&pf->tc_mutex);
 	return ret;
 }
 
@@ -895,7 +885,6 @@ static int ice_dcbnl_delapp(struct net_device *netdev, struct dcb_app *app)
 		return -EINVAL;
 	}
 
-	mutex_lock(&pf->tc_mutex);
 	old_cfg = &pf->hw.port_info->qos_cfg.local_dcbx_cfg;
 
 	ret = dcb_ieee_delapp(netdev, app);
@@ -978,7 +967,6 @@ static int ice_dcbnl_delapp(struct net_device *netdev, struct dcb_app *app)
 		ret = ICE_DCB_HW_CHG;
 
 delapp_out:
-	mutex_unlock(&pf->tc_mutex);
 	return ret;
 }
 
@@ -1003,11 +991,8 @@ static u8 ice_dcbnl_cee_set_all(struct net_device *netdev)
 
 	new_cfg = &pf->hw.port_info->qos_cfg.desired_dcbx_cfg;
 
-	mutex_lock(&pf->tc_mutex);
-
 	err = ice_pf_dcb_cfg(pf, new_cfg, true);
 
-	mutex_unlock(&pf->tc_mutex);
 	return (err != ICE_DCB_HW_CHG_RST) ? ICE_DCB_NO_HW_CHG : err;
 }
 
