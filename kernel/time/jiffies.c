@@ -139,9 +139,20 @@ static int sysctl_k2u_int_conv_userhz(bool *negp, ulong *u_ptr, const int *k_ptr
 
 static ulong sysctl_msecs_to_jiffies(const ulong val)
 {
-	if (val > jiffies_to_msecs(MAX_JIFFY_OFFSET))
-		return MAX_JIFFY_OFFSET;
-	return msecs_to_jiffies(val);
+	ulong secs, jif;
+
+	if (val <= INT_MAX) {
+		jif = msecs_to_jiffies(val);
+	} else {
+		secs = val / MSEC_PER_SEC;
+		if (secs > MAX_JIFFY_OFFSET / HZ)
+			return MAX_JIFFY_OFFSET;
+
+		jif = secs * HZ +
+		      DIV_ROUND_UP((val % MSEC_PER_SEC) * HZ, MSEC_PER_SEC);
+	}
+
+	return min_t(ulong, jif, MAX_JIFFY_OFFSET);
 }
 
 static int sysctl_u2k_int_conv_ms(const bool *negp, const ulong *u_ptr, int *k_ptr)
