@@ -92,16 +92,15 @@ struct sk_buff *gve_rx_copy(struct net_device *dev, struct napi_struct *napi,
 void gve_dec_pagecnt_bias(struct gve_rx_slot_page_info *page_info)
 {
 	page_info->pagecnt_bias--;
-	if (page_info->pagecnt_bias == 0) {
-		int pagecount = page_count(page_info->page);
-
-		/* If we have run out of bias - set it back up to INT_MAX
-		 * minus the existing refs.
+	if (page_info->pagecnt_bias == 1) {
+		/* Refill at 1, not 0: the page's own reference is counted
+		 * in the bias, and a consumer can put the reference we just
+		 * handed off before we get here (e.g. a synchronous
+		 * XDP_REDIRECT return). At bias 0 that put would free a
+		 * page that is still mapped for the NIC.
 		 */
-		page_info->pagecnt_bias = INT_MAX - pagecount;
-
-		/* Set pagecount back up to max. */
-		page_ref_add(page_info->page, INT_MAX - pagecount);
+		page_info->pagecnt_bias = GVE_PAGECNT_BIAS;
+		page_ref_add(page_info->page, GVE_PAGECNT_BIAS - 1);
 	}
 }
 
