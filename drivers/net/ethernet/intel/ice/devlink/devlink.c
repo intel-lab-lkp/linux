@@ -705,6 +705,7 @@ void ice_tear_down_devlink_rate_tree(struct ice_pf *pf)
 	}
 	mutex_unlock(&pf->vfs.table_lock);
 
+	ice_devlink_rate_clear_tx_topology(ice_get_main_vsi(pf));
 	devl_rate_nodes_destroy(devlink);
 	devl_unlock(devlink);
 }
@@ -841,6 +842,10 @@ static void ice_clear_rate_nodes(struct ice_sched_node *node)
 void ice_devlink_rate_clear_tx_topology(struct ice_vsi *vsi)
 {
 	struct ice_port_info *pi = vsi->port_info;
+
+	/* the Tx scheduler tree is gone during a reset */
+	if (pi->port_state != ICE_SCHED_PORT_STATE_READY)
+		return;
 
 	mutex_lock(&pi->sched_lock);
 	ice_clear_rate_nodes(pi->root->children[0]);
