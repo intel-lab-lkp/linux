@@ -683,31 +683,68 @@ static int ice_devlink_tx_sched_layers_validate(struct devlink *devlink, u32 id,
 	return 0;
 }
 
+static bool ice_devlink_rate_tree_is_exported(struct ice_port_info *pi)
+{
+	struct ice_sched_node *tc_node;
+	bool exported = false;
+
+	if (pi->port_state != ICE_SCHED_PORT_STATE_READY)
+		return false;
+
+	mutex_lock(&pi->sched_lock);
+	tc_node = pi->root->children[0];
+	for (int i = 0; i < tc_node->num_children; i++) {
+		if (tc_node->children[i]->rate_node) {
+			exported = true;
+			break;
+		}
+	}
+	mutex_unlock(&pi->sched_lock);
+
+	return exported;
+}
+
 /**
  * ice_tear_down_devlink_rate_tree - removes devlink-rate exported tree
  * @pf: pf struct
  *
  * This function tears down tree exported during VF's creation.
+ *
+ * Return: 0 on success or when no tree is exported, -EAGAIN if a lock could
+ * not be taken.
  */
-void ice_tear_down_devlink_rate_tree(struct ice_pf *pf)
+int ice_tear_down_devlink_rate_tree(struct ice_pf *pf)
 {
 	struct devlink *devlink;
 	struct ice_vf *vf;
 	unsigned int bkt;
 
+	/* The tree is exported only when switchdev is running */
+	if (!ice_is_switchdev_running(pf) ||
+	    !ice_devlink_rate_tree_is_exported(pf->hw.port_info))
+		return 0;
+
+	ASSERT_RTNL();
+
 	devlink = priv_to_devlink(pf);
 
-	devl_lock(devlink);
-	mutex_lock(&pf->vfs.table_lock);
+	/* Both locks are taken before RTNL elsewhere, so only try them here */
+	if (!mutex_trylock(&pf->vfs.table_lock))
+		return -EAGAIN;
+	if (!devl_trylock(devlink)) {
+		mutex_unlock(&pf->vfs.table_lock);
+		return -EAGAIN;
+	}
 	ice_for_each_vf(pf, bkt, vf) {
 		if (vf->devlink_port.devlink_rate)
 			devl_rate_leaf_destroy(&vf->devlink_port);
 	}
-	mutex_unlock(&pf->vfs.table_lock);
-
 	ice_devlink_rate_clear_tx_topology(ice_get_main_vsi(pf));
 	devl_rate_nodes_destroy(devlink);
 	devl_unlock(devlink);
+	mutex_unlock(&pf->vfs.table_lock);
+
+	return 0;
 }
 
 /**

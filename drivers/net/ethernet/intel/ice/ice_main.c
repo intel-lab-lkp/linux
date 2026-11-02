@@ -9303,7 +9303,9 @@ static int ice_setup_tc_mqprio_qdisc(struct net_device *netdev, void *type_data)
 			dev_err(dev, "Custom Tx scheduler feature enabled, can't configure ADQ\n");
 			return -EBUSY;
 		}
-		ice_tear_down_devlink_rate_tree(pf);
+		ret = ice_tear_down_devlink_rate_tree(pf);
+		if (ret)
+			return ret;
 
 		ret = ice_validate_mqprio_qopt(vsi, mqprio_qopt);
 		if (ret) {
