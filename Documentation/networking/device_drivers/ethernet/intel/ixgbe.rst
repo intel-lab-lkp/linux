@@ -329,13 +329,36 @@ The src-ip value that is written to the filter will be 0.4.1.2, not 172.0.0.0
 as might be expected. Similarly, the dst-ip value written to the filter will be
 0.21.1.1, not 172.0.0.0.
 
+NOTE: An ip4 filter matches every IPv4 packet that matches the remaining
+fields, regardless of what the packet carries above IP: TCP, UDP, SCTP, ICMP,
+an IPv4 fragment, or IPv4 with a protocol number the hardware does not
+classify. The driver leaves the L4 packet type as a don't-care, and on every
+MAC it behaves this way; the only measurement that was done was on an Ethernet
+Controller E610. The i40e and ice drivers are the opposite: there an ip4
+filter matches only traffic the hardware did not classify as TCP, UDP or SCTP,
+and matches no non-fragmented TCP, UDP or SCTP frame.
+
+An l4proto qualifier turns an ip4 filter into a protocol specific filter:
+l4proto 6, 17 and 132 program a TCP, UDP or SCTP filter, and the driver
+rejects any other protocol number. The ports of such a filter then take part
+in the match; for SCTP this depends on hardware that programs an SCTP port
+mask. Without an l4proto qualifier the driver rejects a port on an ip4 filter.
+It accepts a tos qualifier and ignores it, because it programs no tos mask: a
+filter with a tos qualifier matches its address regardless of the tos value of
+the packet. The driver implements no IPv6 flow type and rejects ip6, tcp6,
+udp6 and sctp6 filters. Filters can be programmed while ntuple offload,
+described below, or hw-tc-offload is enabled; either one keeps the Flow
+Director in perfect mode.
+
 To enable or disable the Intel Ethernet Flow Director::
 
   # ethtool -K ethX ntuple <on|off>
 
-When disabling ntuple filters, all the user programmed filters are flushed from
-the driver cache and hardware. All needed filters must be re-added when ntuple
-is re-enabled.
+Turning the ntuple offload off does not drop the programmed filters while
+hw-tc-offload is enabled, because either feature keeps the Flow Director in
+perfect mode. With both features off, the filters stay in the driver cache and
+ixgbe programs them again in hardware when either one is turned back on, so
+they do not have to be added again after such a toggle.
 
 To add a filter that directs packet to queue 2, use -U or -N switch::
 
@@ -362,6 +385,10 @@ Where:
   <port> - the port number to match on
   <queue> - the queue to direct traffic towards (-1 discards the matched traffic)
 
+The two port parameters apply to tcp4, udp4 and sctp4, and to an ip4 filter
+that carries an l4proto qualifier. The driver rejects a port on a raw ip4
+filter without one, and it accepts no IPv6 flow type.
+
 Use the following command to delete a filter::
 
   ethtool -U <device> delete <N>
@@ -375,21 +402,26 @@ directed to 192.168.0.5, port 80, and sends it to queue 7::
   ethtool -U enp130s0 flow-type tcp4 src-ip 192.168.0.1 dst-ip 192.168.0.5 \
   src-port 5300 dst-port 80 action 7
 
-For each flow-type, the programmed filters must all have the same matching
-input set. For example, issuing the following two commands is acceptable::
+All the filters programmed on one port share a single classification mask, so
+they must all match on the same fields regardless of flow type. For example,
+issuing the following two commands is acceptable::
 
-  ethtool -U enp130s0 flow-type ip4 src-ip 192.168.0.1 src-port 5300 action 7
-  ethtool -U enp130s0 flow-type ip4 src-ip 192.168.0.5 src-port 55 action 10
+  ethtool -U enp130s0 flow-type tcp4 src-ip 192.168.0.1 src-port 5300 action 7
+  ethtool -U enp130s0 flow-type tcp4 src-ip 192.168.0.5 src-port 55 action 10
 
 Issuing the next two commands, however, is not acceptable, since the first
 specifies src-ip and the second specifies dst-ip::
 
-  ethtool -U enp130s0 flow-type ip4 src-ip 192.168.0.1 src-port 5300 action 7
-  ethtool -U enp130s0 flow-type ip4 dst-ip 192.168.0.5 src-port 55 action 10
+  ethtool -U enp130s0 flow-type tcp4 src-ip 192.168.0.1 src-port 5300 action 7
+  ethtool -U enp130s0 flow-type tcp4 dst-ip 192.168.0.5 src-port 55 action 10
 
 The second command will fail with an error. You may program multiple filters
-with the same fields, using different values, but, on one device, you may not
-program two TCP4 filters with different matching fields.
+with the same fields, using different values, but on one port you may not
+program two filters that need different fields. A plain ip4 filter needs
+different fields from the protocol specific flow types, so the driver will not
+program it on a port that already holds a tcp4, udp4 or sctp4 filter, and the
+reverse is also true. An ip4 filter that carries an l4proto qualifier is one of
+the protocol-specific filters and shares their mask.
 
 Matching on a sub-portion of a field is not supported by the ixgbe driver, thus
 partial mask fields are not supported.
