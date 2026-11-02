@@ -1737,32 +1737,39 @@ static int cs42l43_hp_ev(struct snd_soc_dapm_widget *w,
 }
 
 struct decim_info {
+	unsigned int freg;
 	unsigned int vreg;
 	unsigned int vmask;
 };
 
 struct decim_info cs42l43_decim_info[] = {
 	{
+		.freg = CS42L43_DECIM_HPF_WNF_CTRL1,
 		.vreg = CS42L43_DECIM_VOL_CTRL_CH1_CH2,
 		.vmask = CS42L43_DECIM1_VD_RAMP_MASK | CS42L43_DECIM1_MUTE_MASK,
 	},
 	{
+		.freg = CS42L43_DECIM_HPF_WNF_CTRL1,
 		.vreg = CS42L43_DECIM_VOL_CTRL_CH1_CH2,
 		.vmask = CS42L43_DECIM2_VD_RAMP_MASK | CS42L43_DECIM2_MUTE_MASK,
 	},
 	{
+		.freg = CS42L43_DECIM_HPF_WNF_CTRL2,
 		.vreg = CS42L43_DECIM_VOL_CTRL_CH1_CH2,
 		.vmask = CS42L43_DECIM1_VD_RAMP_MASK | CS42L43_DECIM1_MUTE_MASK,
 	},
 	{
+		.freg = CS42L43_DECIM_HPF_WNF_CTRL2,
 		.vreg = CS42L43_DECIM_VOL_CTRL_CH1_CH2,
 		.vmask = CS42L43_DECIM2_VD_RAMP_MASK | CS42L43_DECIM2_MUTE_MASK,
 	},
 	{
+		.freg = CS42L43_DECIM_HPF_WNF_CTRL3,
 		.vreg = CS42L43_DECIM_VOL_CTRL_CH3_CH4,
 		.vmask = CS42L43_DECIM3_VD_RAMP_MASK | CS42L43_DECIM3_MUTE_MASK,
 	},
 	{
+		.freg = CS42L43_DECIM_HPF_WNF_CTRL4,
 		.vreg = CS42L43_DECIM_VOL_CTRL_CH3_CH4,
 		.vmask = CS42L43_DECIM4_VD_RAMP_MASK | CS42L43_DECIM4_MUTE_MASK,
 	}
@@ -1770,26 +1777,32 @@ struct decim_info cs42l43_decim_info[] = {
 
 struct decim_info cs42l43b_decim_info[] = {
 	{
+		.freg = CS42L43_DECIM_HPF_WNF_CTRL1,
 		.vreg = CS42L43B_DECIM_VOL_CTRL_CH1_CH2,
 		.vmask = CS42L43_DECIM1_VD_RAMP_MASK | CS42L43_DECIM1_MUTE_MASK,
 	},
 	{
+		.freg = CS42L43_DECIM_HPF_WNF_CTRL2,
 		.vreg = CS42L43B_DECIM_VOL_CTRL_CH1_CH2,
 		.vmask = CS42L43_DECIM2_VD_RAMP_MASK | CS42L43_DECIM2_MUTE_MASK,
 	},
 	{
+		.freg = CS42L43_DECIM_HPF_WNF_CTRL3,
 		.vreg = CS42L43B_DECIM_VOL_CTRL_CH3_CH4,
 		.vmask = CS42L43_DECIM3_VD_RAMP_MASK | CS42L43_DECIM3_MUTE_MASK,
 	},
 	{
+		.freg = CS42L43_DECIM_HPF_WNF_CTRL4,
 		.vreg = CS42L43B_DECIM_VOL_CTRL_CH3_CH4,
 		.vmask = CS42L43_DECIM4_VD_RAMP_MASK | CS42L43_DECIM4_MUTE_MASK,
 	},
 	{
+		.freg = CS42L43B_DECIM_HPF_WNF_CTRL5,
 		.vreg = CS42L43B_DECIM_VOL_CTRL_CH5_CH6,
 		.vmask = CS42L43B_DECIM5_PATH1_VOL_FALL_RATE_MASK | CS42L43B_DECIM5_MUTE_MASK,
 	},
 	{
+		.freg = CS42L43B_DECIM_HPF_WNF_CTRL6,
 		.vreg = CS42L43B_DECIM_VOL_CTRL_CH5_CH6,
 		.vmask = CS42L43B_DECIM6_PATH1_VOL_FALL_RATE_MASK | CS42L43B_DECIM6_MUTE_MASK,
 	}
@@ -1802,6 +1815,8 @@ static int cs42l43_mic_ev(struct snd_soc_dapm_widget *w,
 	struct cs42l43_codec *priv = snd_soc_component_get_drvdata(component);
 	struct decim_info *info = &cs42l43_decim_info[w->shift];
 	struct cs42l43 *cs42l43 = priv->core;
+	unsigned int fmask = CS42L43_DECIM_HPF_EN_MASK | CS42L43_DECIM_HPF_CF_MASK;
+	unsigned int fval = CS42L43_DECIM_HPF_EN_MASK | 3 << CS42L43_DECIM_HPF_CF_SHIFT;
 	unsigned int vval = CS42L43_DECIM1_MUTE_MASK | CS42L43_DECIM2_MUTE_MASK;
 	int ret;
 
@@ -1810,8 +1825,10 @@ static int cs42l43_mic_ev(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		priv->decim_pre_pmu = true;
+
 		ret = regmap_read(cs42l43->regmap, info->vreg,
-				  &priv->decim_cache[w->shift]);
+				  &priv->decim_cache[w->shift][0]);
 		if (ret) {
 			dev_err(priv->dev,
 				"Failed to cache decimator settings: %d\n",
@@ -1819,11 +1836,27 @@ static int cs42l43_mic_ev(struct snd_soc_dapm_widget *w,
 			return ret;
 		}
 
+		ret = regmap_read(cs42l43->regmap, info->freg,
+				  &priv->decim_cache[w->shift][1]);
+		if (ret) {
+			dev_err(priv->dev,
+				"Failed to cache decimator filter settings: %d\n", ret);
+			return ret;
+		}
+
 		regmap_update_bits(cs42l43->regmap, info->vreg,  info->vmask, vval);
+		regmap_update_bits(cs42l43->regmap, info->freg, fmask, fval);
 		break;
 	case SND_SOC_DAPM_POST_PMU:
+		if (priv->decim_pre_pmu) {
+			msleep(150);
+			priv->decim_pre_pmu = false;
+		}
+
+		regmap_update_bits(cs42l43->regmap, info->freg, fmask,
+				   priv->decim_cache[w->shift][1]);
 		regmap_update_bits(cs42l43->regmap, info->vreg, info->vmask,
-				   priv->decim_cache[w->shift]);
+				   priv->decim_cache[w->shift][0]);
 		break;
 	default:
 		break;
