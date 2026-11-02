@@ -102,9 +102,9 @@ static struct mpam_pcc_chan *mpam_pcc_chan_get(struct device *dev,
 	/*
 	 * Timeout based on the "nominal latency" in us, from the
 	 * PCC ACPI table. tx_tout is in ms.
-	 * Add some margin here to be on the safe side.
+	 * Add some margin here to be on the safe side, and avoid using 0.
 	 */
-	cur->pcc_cl.tx_tout = DIV_ROUND_UP(cur->pcc_chan->latency * 5, 1000);
+	cur->pcc_cl.tx_tout = DIV_ROUND_UP((cur->pcc_chan->latency + 1) * 5, 1000);
 
 	mutex_init(&cur->pcc_chan_lock);
 
