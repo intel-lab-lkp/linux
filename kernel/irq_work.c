@@ -274,6 +274,18 @@ void irq_work_run_cpu(unsigned int cpu)
 	irq_work_run_list(per_cpu_ptr(&lazy_list, cpu));
 }
 
+/*
+ * Raise the self-interrupt again if irq_work is queued, because it may have
+ * been lost across system suspend.
+ */
+void irq_work_resend(void)
+{
+	lockdep_assert_preemption_disabled();
+
+	if (!llist_empty(this_cpu_ptr(&raised_list)))
+		arch_irq_work_raise();
+}
+
 void irq_work_tick(void)
 {
 	struct llist_head *raised = this_cpu_ptr(&raised_list);

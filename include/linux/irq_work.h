@@ -62,6 +62,7 @@ void irq_work_run(void);
 void irq_work_run_cpu(unsigned int cpu);
 bool irq_work_needs_cpu(void);
 void irq_work_single(void *arg);
+void irq_work_resend(void);
 
 void arch_irq_work_raise(void);
 
@@ -70,6 +71,7 @@ static inline bool irq_work_needs_cpu(void) { return false; }
 static inline void irq_work_run(void) { }
 static inline void irq_work_run_cpu(unsigned int cpu) { }
 static inline void irq_work_single(void *arg) { }
+static inline void irq_work_resend(void) { }
 #endif
 
 #endif /* _LINUX_IRQ_WORK_H */

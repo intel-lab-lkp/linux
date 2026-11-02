@@ -6,6 +6,7 @@
  */
 
 #include <linux/syscore_ops.h>
+#include <linux/irq_work.h>
 #include <linux/mutex.h>
 #include <linux/module.h>
 #include <linux/suspend.h>
@@ -81,6 +82,8 @@ int syscore_suspend(void)
 		if (syscore->ops->resume)
 			syscore->ops->resume(syscore->data);
 
+	irq_work_resend();
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(syscore_suspend);
@@ -106,6 +109,13 @@ void syscore_resume(void)
 				"Interrupts enabled after %pS\n",
 				syscore->ops->resume);
 		}
+
+	/*
+	 * A pending irq_work self-interrupt may have been lost while suspended.
+	 * Resend it now that interrupt controllers have been restored.
+	 */
+	irq_work_resend();
+
 	trace_suspend_resume(TPS("syscore_resume"), 0, false);
 }
 EXPORT_SYMBOL_GPL(syscore_resume);
