@@ -8,6 +8,8 @@
 #define __RPM_INTERNAL_H__
 
 #include <linux/bitmap.h>
+#include <linux/completion.h>
+#include <linux/refcount.h>
 #include <linux/wait.h>
 #include <soc/qcom/tcs.h>
 
@@ -59,14 +61,16 @@ struct tcs_group {
  * @cmd: the payload that will be part of the @msg
  * @completion: triggered when request is done
  * @dev: the device making the request
- * @needs_free: check to free dynamically allocated request object
+ * @refcnt: references to a request handed to rpmh_rsc_send_data(); one is
+ *          owned by the controller and dropped by rpmh_tx_done(), another
+ *          one is owned by a blocking caller waiting on @completion
  */
 struct rpmh_request {
 	struct tcs_request msg;
 	struct tcs_cmd cmd[MAX_RPMH_PAYLOAD];
-	struct completion *completion;
+	struct completion completion;
 	const struct device *dev;
-	bool needs_free;
+	refcount_t refcnt;
 };
 
 /**
