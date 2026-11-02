@@ -123,14 +123,13 @@ nfserrno(int errno)
 }
 
 /*
- * Called from nfsd_lookup and encode_dirent. Check if we have crossed
- * a mount point.
+ * Check if we have crossed a mount point.
  * Returns an nfs error leaving *dpp and *expp unchanged,
  *  or nfs_ok having possibly changed *dpp and *expp
  */
 __be32
 nfsd_cross_mnt(struct svc_rqst *rqstp, struct dentry **dpp,
-	       struct svc_export **expp)
+	       struct svc_export **expp, int access)
 {
 	struct svc_export *exp = *expp, *exp2 = NULL;
 	struct dentry *dentry = *dpp;
@@ -168,7 +167,9 @@ nfsd_cross_mnt(struct svc_rqst *rqstp, struct dentry **dpp,
 			err = 0;
 	} else if (nfsd_v4client(rqstp) ||
 		(exp->ex_flags & NFSEXP_CROSSMOUNT) || EX_NOHIDE(exp2)) {
-		nfserr = check_nfsd_access(exp2, rqstp);
+		nfserr = (access & NFSD_MAY_BYPASS_FLAVOR) ?
+			 check_xprtsec_policy(exp2, rqstp) :
+			 check_nfsd_access(exp2, rqstp);
 		if (nfserr == nfs_ok) {
 			/* successfully crossed mount point */
 			/*
@@ -204,7 +205,8 @@ static void follow_to_parent(struct path *path)
 }
 
 static __be32 nfsd_lookup_parent(struct svc_rqst *rqstp, struct dentry *dparent,
-				 struct svc_export **exp, struct dentry **dentryp)
+				 struct svc_export **exp, struct dentry **dentryp,
+				 int access)
 {
 	struct svc_export *exp2;
 	struct path path = {.mnt = mntget((*exp)->ex_path.mnt),
@@ -219,7 +221,9 @@ static __be32 nfsd_lookup_parent(struct svc_rqst *rqstp, struct dentry *dparent,
 	} else if (IS_ERR(exp2)) {
 		nfserr = nfserrno(PTR_ERR(exp2));
 	} else {
-		nfserr = check_nfsd_access(exp2, rqstp);
+		nfserr = (access & NFSD_MAY_BYPASS_FLAVOR) ?
+			 check_xprtsec_policy(exp2, rqstp) :
+			 check_nfsd_access(exp2, rqstp);
 		if (nfserr != nfs_ok) {
 			exp_put(exp2);
 		} else {
@@ -260,7 +264,8 @@ int nfsd_mountpoint(struct dentry *dentry, struct svc_export *exp)
 __be32
 nfsd_lookup_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		   const char *name, unsigned int len,
-		   struct svc_export **exp_ret, struct dentry **dentry_ret)
+		   struct svc_export **exp_ret, struct dentry **dentry_ret,
+		   int access)
 {
 	struct svc_export	*exp;
 	struct dentry		*dparent;
@@ -283,7 +288,7 @@ nfsd_lookup_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		else {
 			/* checking mountpoint crossing is very different when stepping up */
 			__be32 nfserr = nfsd_lookup_parent(rqstp, dparent,
-							   &exp, &dentry);
+							   &exp, &dentry, access);
 
 			if (nfserr) {
 				exp_put(exp);
@@ -297,7 +302,8 @@ nfsd_lookup_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		if (IS_ERR(dentry))
 			goto out_nfserr;
 		if (nfsd_mountpoint(dentry, exp)) {
-			__be32 nfserr = nfsd_cross_mnt(rqstp, &dentry, &exp);
+			__be32 nfserr = nfsd_cross_mnt(rqstp, &dentry, &exp,
+						       access);
 
 			if (nfserr) {
 				dput(dentry);
@@ -316,37 +322,31 @@ out_nfserr:
 }
 
 /**
- * nfsd_lookup - look up a single path component for nfsd
+ * __nfsd_lookup - look up a single path component for nfsd
  *
  * @rqstp:   the request context
  * @fhp:     the file handle of the directory
  * @name:    the component name, or %NULL to look up parent
  * @len:     length of name to examine
  * @resfh:   pointer to pre-initialised filehandle to hold result.
+ * @access:  NFSD_MAY_* flags for the fh_verify() of @fhp; adding
+ *	     NFSD_MAY_BYPASS_FLAVOR skips the export security flavor checks
  *
- * Look up one component of a pathname.
- * N.B. After this call _both_ fhp and resfh need an fh_put
- *
- * If the lookup would cross a mountpoint, and the mounted filesystem
- * is exported to the client with NFSEXP_NOHIDE, then the lookup is
- * accepted as it stands and the mounted directory is
- * returned. Otherwise the covered directory is returned.
- * NOTE: this mountpoint crossing is not supported properly by all
- *   clients and is explicitly disallowed for NFSv3
- *
+ * Variant of nfsd_lookup() that takes the fh_verify() access flags.
+ * The filehandle and mountpoint crossing rules are documented there.
  */
 __be32
-nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
-	    unsigned int len, struct svc_fh *resfh)
+__nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
+	      unsigned int len, struct svc_fh *resfh, int access)
 {
 	struct svc_export	*exp;
 	struct dentry		*dentry;
 	__be32 err;
 
-	err = fh_verify(rqstp, fhp, S_IFDIR, NFSD_MAY_EXEC);
+	err = fh_verify(rqstp, fhp, S_IFDIR, access);
 	if (err)
 		return err;
-	err = nfsd_lookup_dentry(rqstp, fhp, name, len, &exp, &dentry);
+	err = nfsd_lookup_dentry(rqstp, fhp, name, len, &exp, &dentry, access);
 	if (err)
 		return err;
 	/*
