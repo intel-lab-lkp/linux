@@ -385,6 +385,8 @@ static inline int ufshcd_update_ee_usr_mask(struct ufs_hba *hba,
 
 static inline int ufshcd_rpm_get_sync(struct ufs_hba *hba)
 {
+	if (!hba->ufs_device_wlun)
+		return 0;
 	return pm_runtime_get_sync(&hba->ufs_device_wlun->sdev_gendev);
 }
 
@@ -410,6 +412,8 @@ static inline int ufshcd_rpm_resume(struct ufs_hba *hba)
 
 static inline void ufshcd_rpm_put(struct ufs_hba *hba)
 {
+	if (!hba->ufs_device_wlun)
+		return;
 	pm_runtime_put(&hba->ufs_device_wlun->sdev_gendev);
 }
 

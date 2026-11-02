@@ -6868,8 +6868,9 @@ static void ufshcd_err_handling_prepare(struct ufs_hba *hba)
 	 */
 	pm_runtime_get_sync(hba->dev);
 	ufshcd_rpm_get_sync(hba);
-	if (pm_runtime_status_suspended(&hba->ufs_device_wlun->sdev_gendev) ||
-	    hba->is_sys_suspended) {
+	if (hba->ufs_device_wlun &&
+	    (pm_runtime_status_suspended(&hba->ufs_device_wlun->sdev_gendev) ||
+	     hba->is_sys_suspended)) {
 		enum ufs_pm_op pm_op;
 
 		/*
@@ -6918,7 +6919,6 @@ static void ufshcd_err_handling_unprepare(struct ufs_hba *hba)
 static inline bool ufshcd_err_handling_should_stop(struct ufs_hba *hba)
 {
 	return (!hba->is_powered || hba->shutting_down ||
-		!hba->ufs_device_wlun ||
 		hba->ufshcd_state == UFSHCD_STATE_ERROR ||
 		(!(hba->saved_err || hba->saved_uic_err || hba->force_reset ||
 		   ufshcd_is_link_broken(hba))));
@@ -6927,11 +6927,16 @@ static inline bool ufshcd_err_handling_should_stop(struct ufs_hba *hba)
 #ifdef CONFIG_PM
 static void ufshcd_recover_pm_error(struct ufs_hba *hba)
 {
-	struct scsi_target *starget = hba->ufs_device_wlun->sdev_target;
+	struct scsi_target *starget;
 	struct Scsi_Host *shost = hba->host;
 	struct scsi_device *sdev;
 	struct request_queue *q;
 	bool resume_sdev_queues = false;
+
+	/* Nothing to recover before the device W-LUN has been added */
+	if (!hba->ufs_device_wlun)
+		return;
+	starget = hba->ufs_device_wlun->sdev_target;
 
 	hba->is_sys_suspended = false;
 
