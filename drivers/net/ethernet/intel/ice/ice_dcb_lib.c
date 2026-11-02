@@ -342,6 +342,23 @@ int ice_dcb_bwchk(struct ice_pf *pf, struct ice_dcbx_cfg *dcbcfg)
 }
 
 /**
+ * ice_dcb_prep_multi_tc - prepare the Tx scheduler for more than one TC
+ * @pf: pointer to the PF struct
+ *
+ * Return: 0 on success, -EBUSY if the Tx scheduler is customized via
+ * devlink-rate, -EAGAIN if its devlink-rate export could not be torn down.
+ */
+int ice_dcb_prep_multi_tc(struct ice_pf *pf)
+{
+	if (pf->hw.port_info->is_custom_tx_enabled) {
+		dev_err(ice_pf_to_dev(pf), "Custom Tx scheduler feature enabled, can't configure DCB\n");
+		return -EBUSY;
+	}
+
+	return ice_tear_down_devlink_rate_tree(pf);
+}
+
+/**
  * ice_pf_dcb_cfg - Apply new DCB configuration
  * @pf: pointer to the PF struct
  * @new_cfg: DCBX config to apply
@@ -364,12 +381,12 @@ int ice_pf_dcb_cfg(struct ice_pf *pf, struct ice_dcbx_cfg *new_cfg, bool locked)
 
 	/* Enable DCB tagging only when more than one TC */
 	if (ice_dcb_get_num_tc(new_cfg) > 1) {
+		int err;
+
 		dev_dbg(dev, "DCB tagging enabled (num TC > 1)\n");
-		if (pf->hw.port_info->is_custom_tx_enabled) {
-			dev_err(dev, "Custom Tx scheduler feature enabled, can't configure DCB\n");
-			return -EBUSY;
-		}
-		ice_tear_down_devlink_rate_tree(pf);
+		err = ice_dcb_prep_multi_tc(pf);
+		if (err)
+			return err;
 
 		set_bit(ICE_FLAG_DCB_ENA, pf->flags);
 	} else {
