@@ -4,9 +4,9 @@
 #include "pvr_device.h"
 #include "pvr_fw.h"
 #include "pvr_gem.h"
-#define PVR_ROGUE_MIPS_INTERNAL_H_EXPLICIT_INCLUDE
-#include "pvr_rogue_mips_internal.h"
-#undef PVR_ROGUE_MIPS_INTERNAL_H_EXPLICIT_INCLUDE
+#define PVR_FW_MIPS_INTERNAL_H_EXPLICIT_INCLUDE
+#include "pvr_fw_mips_internal.h"
+#undef PVR_FW_MIPS_INTERNAL_H_EXPLICIT_INCLUDE
 #include "pvr_vm_mips.h"
 
 #include <linux/err.h>
@@ -63,7 +63,7 @@ pvr_mips_fw_process(struct pvr_device *pvr_dev, const u8 *fw,
 	const struct pvr_fw_layout_entry *boot_data_entry;
 	const struct pvr_fw_layout_entry *exception_code_entry;
 	const struct pvr_fw_layout_entry *stack_entry;
-	struct rogue_mipsfw_boot_data *boot_data;
+	struct pvr_mipsfw_boot_data *boot_data;
 	dma_addr_t dma_addr;
 	int err;
 
@@ -90,8 +90,8 @@ pvr_mips_fw_process(struct pvr_device *pvr_dev, const u8 *fw,
 	if (!stack_entry)
 		return -EINVAL;
 
-	boot_data = (struct rogue_mipsfw_boot_data *)(fw_data_ptr + boot_data_entry->alloc_offset +
-						      ROGUE_MIPSFW_BOOTLDR_CONF_OFFSET);
+	boot_data = (struct pvr_mipsfw_boot_data *)(fw_data_ptr + boot_data_entry->alloc_offset +
+						    PVR_MIPSFW_BOOTLDR_CONF_OFFSET);
 
 	WARN_ON(pvr_fw_object_get_dma_addr(fw_dev->mem.data_obj, stack_entry->alloc_offset,
 					   &dma_addr));
@@ -104,8 +104,8 @@ pvr_mips_fw_process(struct pvr_device *pvr_dev, const u8 *fw,
 	if (err)
 		return err;
 
-	boot_data->pt_log2_page_size = ROGUE_MIPSFW_LOG2_PAGE_SIZE_4K;
-	boot_data->pt_num_pages = ROGUE_MIPSFW_MAX_NUM_PAGETABLE_PAGES;
+	boot_data->pt_log2_page_size = PVR_MIPSFW_LOG2_PAGE_SIZE_4K;
+	boot_data->pt_num_pages = PVR_MIPSFW_MAX_NUM_PAGETABLE_PAGES;
 	boot_data->reserved1 = 0;
 	boot_data->reserved2 = 0;
 
@@ -116,7 +116,7 @@ static int
 pvr_mips_wrapper_init(struct pvr_device *pvr_dev)
 {
 	struct pvr_fw_mips_data *fw_data = pvr_dev->fw_dev.processor_data.mips_data.fw_data;
-	const u64 remap_settings = ROGUE_MIPSFW_BOOT_REMAP_LOG2_SEGMENT_SIZE;
+	const u64 remap_settings = PVR_MIPSFW_BOOT_REMAP_LOG2_SEGMENT_SIZE;
 	u32 phys_bus_width;
 
 	int err = PVR_FEATURE_VALUE(pvr_dev, phys_bus_width, &phys_bus_width);
@@ -129,13 +129,13 @@ pvr_mips_wrapper_init(struct pvr_device *pvr_dev)
 		return -EINVAL;
 
 	pvr_cr_write32(pvr_dev, ROGUE_CR_MIPS_WRAPPER_CONFIG,
-		       (ROGUE_MIPSFW_REGISTERS_VIRTUAL_BASE >>
-			ROGUE_MIPSFW_WRAPPER_CONFIG_REGBANK_ADDR_ALIGN) |
+		       (PVR_MIPSFW_REGISTERS_VIRTUAL_BASE >>
+			PVR_MIPSFW_WRAPPER_CONFIG_REGBANK_ADDR_ALIGN) |
 		       ROGUE_CR_MIPS_WRAPPER_CONFIG_BOOT_ISA_MODE_MICROMIPS);
 
 	/* Configure remap for boot code, boot data and exceptions code areas. */
 	pvr_cr_write64(pvr_dev, ROGUE_CR_MIPS_ADDR_REMAP1_CONFIG1,
-		       ROGUE_MIPSFW_BOOT_REMAP_PHYS_ADDR_IN |
+		       PVR_MIPSFW_BOOT_REMAP_PHYS_ADDR_IN |
 		       ROGUE_CR_MIPS_ADDR_REMAP1_CONFIG1_MODE_ENABLE_EN);
 	pvr_cr_write64(pvr_dev, ROGUE_CR_MIPS_ADDR_REMAP1_CONFIG2,
 		       (fw_data->boot_code_dma_addr &
@@ -157,14 +157,14 @@ pvr_mips_wrapper_init(struct pvr_device *pvr_dev)
 	}
 
 	pvr_cr_write64(pvr_dev, ROGUE_CR_MIPS_ADDR_REMAP2_CONFIG1,
-		       ROGUE_MIPSFW_DATA_REMAP_PHYS_ADDR_IN |
+		       PVR_MIPSFW_DATA_REMAP_PHYS_ADDR_IN |
 		       ROGUE_CR_MIPS_ADDR_REMAP2_CONFIG1_MODE_ENABLE_EN);
 	pvr_cr_write64(pvr_dev, ROGUE_CR_MIPS_ADDR_REMAP2_CONFIG2,
 		       (fw_data->boot_data_dma_addr &
 			~ROGUE_CR_MIPS_ADDR_REMAP2_CONFIG2_ADDR_OUT_CLRMSK) | remap_settings);
 
 	pvr_cr_write64(pvr_dev, ROGUE_CR_MIPS_ADDR_REMAP3_CONFIG1,
-		       ROGUE_MIPSFW_CODE_REMAP_PHYS_ADDR_IN |
+		       PVR_MIPSFW_CODE_REMAP_PHYS_ADDR_IN |
 		       ROGUE_CR_MIPS_ADDR_REMAP3_CONFIG1_MODE_ENABLE_EN);
 	pvr_cr_write64(pvr_dev, ROGUE_CR_MIPS_ADDR_REMAP3_CONFIG2,
 		       (fw_data->exception_code_dma_addr &
