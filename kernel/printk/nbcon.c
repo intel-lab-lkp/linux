@@ -1718,6 +1718,20 @@ void nbcon_atomic_flush_unsafe(void)
 }
 
 /**
+ * nbcon_atomic_unsafe_only_flush - Flush only the CON_NBCON_ATOMIC_UNSAFE
+ *	consoles, allowing unsafe hostile takeovers
+ *
+ * Like nbcon_atomic_flush_unsafe(), but consoles with a safe write_atomic()
+ * are left alone. Only effective on the panic CPU.
+ */
+void nbcon_atomic_unsafe_only_flush(void)
+{
+	panic_nbcon_allow_unsafe_takeover = true;
+	__nbcon_atomic_flush_pending(prb_next_reserve_seq(prb), true);
+	panic_nbcon_allow_unsafe_takeover = false;
+}
+
+/**
  * nbcon_cpu_emergency_enter - Enter an emergency section where printk()
  *				messages for that CPU are flushed directly
  *

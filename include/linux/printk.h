@@ -208,6 +208,7 @@ void printk_legacy_allow_panic_sync(void);
 extern bool nbcon_device_try_acquire(struct console *con);
 extern void nbcon_device_release(struct console *con);
 void nbcon_atomic_flush_unsafe(void);
+void nbcon_atomic_unsafe_only_flush(void);
 bool pr_flush(int timeout_ms, bool reset_on_progress);
 #else
 static inline __printf(1, 0)
@@ -319,6 +320,10 @@ static inline void nbcon_device_release(struct console *con)
 }
 
 static inline void nbcon_atomic_flush_unsafe(void)
+{
+}
+
+static inline void nbcon_atomic_unsafe_only_flush(void)
 {
 }
 
