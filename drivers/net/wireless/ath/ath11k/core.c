@@ -392,6 +392,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.cfr_support = false,
 		.cfr_num_stream_bufs = 0,
 		.cfr_stream_buf_size = 0,
+		.chan_info_nf_invalid = true,
 	},
 	{
 		.name = "wcn6855 hw2.0",

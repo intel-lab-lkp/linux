@@ -231,6 +231,8 @@ struct ath11k_hw_params {
 	bool cfr_support;
 	u32 cfr_num_stream_bufs;
 	u32 cfr_stream_buf_size;
+	/* chan-info's noise floor is a fixed value, not a measurement */
+	bool chan_info_nf_invalid;
 };
 
 struct ath11k_hw_ops {
