@@ -85,6 +85,7 @@ struct regmap;
  * @regmap: register map for hardware access
  * @lock: protects read-modify-write sequences on threshold registers
  *        and cached state that spans multiple regmap calls
+ * @irq: interrupt number, 0 when events are not supported
  * @irq_lock: protects interrupt mask register updates (MMIO path only)
  * @masked_temp: currently masked temperature alarm bits
  * @temp_mask: temperature interrupt configuration mask
@@ -101,6 +102,7 @@ struct sysmon {
 	 * that spans multiple regmap calls.
 	 */
 	struct mutex lock;
+	int irq;
 	/*
 	 * Protects interrupt mask register updates.  Only used on the
 	 * MMIO path (fast_io regmap); I2C has no IRQ and never reaches

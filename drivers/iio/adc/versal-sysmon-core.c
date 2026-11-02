@@ -781,12 +781,14 @@ static void sysmon_disable_interrupts(void *data)
 {
 	struct sysmon *sysmon = data;
 
-	regmap_write(sysmon->regmap, SYSMON_IDR, SYSMON_INTR_ALL_MASK);
+	disable_irq(sysmon->irq);
 
 	scoped_guard(spinlock_irq, &sysmon->irq_lock)
 		sysmon->masked_temp = 0;
 
 	cancel_delayed_work_sync(&sysmon->sysmon_unmask_work);
+
+	regmap_write(sysmon->regmap, SYSMON_IDR, SYSMON_INTR_ALL_MASK);
 }
 
 static int sysmon_init_interrupt(struct sysmon *sysmon,
@@ -807,6 +809,7 @@ static int sysmon_init_interrupt(struct sysmon *sysmon,
 	if (ret)
 		return ret;
 	sysmon->temp_mask = imr & SYSMON_TEMP_INTR_MASK;
+	sysmon->irq = irq;
 
 	ret = devm_request_irq(dev, irq, sysmon_iio_irq, 0, "sysmon-irq", indio_dev);
 	if (ret)
