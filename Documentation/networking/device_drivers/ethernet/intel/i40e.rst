@@ -130,11 +130,12 @@ The Intel Ethernet Flow Director performs the following tasks:
 - Supports multiple parameters for flexible flow classification and load
   balancing (in SFP mode only).
 
-NOTE: The Linux i40e driver supports the following flow types: IPv4, TCPv4, and
-UDPv4. For a given flow type, it supports valid combinations of IP addresses
-(source or destination) and UDP/TCP ports (source and destination). For
-example, you can supply only a source IP address, a source IP address and a
-destination port, or any combination of one or more of these four parameters.
+NOTE: The Linux i40e driver accepts the following flow types: IPv4, TCPv4,
+UDPv4, SCTPv4, IPv6, TCPv6, UDPv6 and SCTPv6. The TCP, UDP and SCTP flow types
+accept valid combinations of IP addresses and port qualifiers: you can supply
+only a source IP address, a source address plus a destination port, or any
+combination of one or more of those four fields. The raw ip4 and ip6 flows
+reject any port qualifier.
 
 NOTE: The Linux i40e driver allows you to filter traffic based on a
 user-defined flexible two-byte pattern and offset by using the ethtool user-def
@@ -193,10 +194,14 @@ new filter use the following command::
 
 Where:
   <device> - the ethernet device to program
-  <type> - can be ip4, tcp4, udp4, or sctp4
+  <type> - can be ip4, tcp4, udp4, sctp4, ip6, tcp6, udp6 or sctp6
   <ip> - the ip address to match on
   <port> - the port number to match on
   <queue> - the queue to direct traffic towards (-1 discards matching traffic)
+
+The two port fields apply to the tcp4, udp4, sctp4, tcp6, udp6 and sctp6 flow
+types. The raw ip4 or ip6 flow rejects a port field, so use tcp4 or tcp6 when
+ports matter.
 
 Use the following command to display all of the active filters::
 
@@ -218,14 +223,14 @@ directed to 192.168.0.5, port 80, and sends it to queue 7::
 For each flow-type, the programmed filters must all have the same matching
 input set. For example, issuing the following two commands is acceptable::
 
-  ethtool -U enp130s0 flow-type ip4 src-ip 192.168.0.1 src-port 5300 action 7
-  ethtool -U enp130s0 flow-type ip4 src-ip 192.168.0.5 src-port 55 action 10
+  ethtool -U enp130s0 flow-type tcp4 src-ip 192.168.0.1 src-port 5300 action 7
+  ethtool -U enp130s0 flow-type tcp4 src-ip 192.168.0.5 src-port 55 action 10
 
 Issuing the next two commands, however, is not acceptable, since the first
 specifies src-ip and the second specifies dst-ip::
 
-  ethtool -U enp130s0 flow-type ip4 src-ip 192.168.0.1 src-port 5300 action 7
-  ethtool -U enp130s0 flow-type ip4 dst-ip 192.168.0.5 src-port 55 action 10
+  ethtool -U enp130s0 flow-type tcp4 src-ip 192.168.0.1 src-port 5300 action 7
+  ethtool -U enp130s0 flow-type tcp4 dst-ip 192.168.0.5 src-port 55 action 10
 
 The second command will fail with an error. You may program multiple filters
 with the same fields, using different values, but, on one device, you may not
