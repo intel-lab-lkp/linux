@@ -537,6 +537,7 @@ void ice_dcb_rebuild(struct ice_pf *pf)
 	struct ice_dcbx_cfg *err_cfg;
 	int ret;
 
+	rtnl_lock();
 	mutex_lock(&pf->tc_mutex);
 
 	ret = ice_query_port_ets(pf->hw.port_info, &buf, sizeof(buf), NULL);
@@ -570,6 +571,7 @@ void ice_dcb_rebuild(struct ice_pf *pf)
 	}
 
 	mutex_unlock(&pf->tc_mutex);
+	rtnl_unlock();
 
 	return;
 
@@ -578,6 +580,7 @@ dcb_error:
 	err_cfg = kzalloc_obj(*err_cfg);
 	if (!err_cfg) {
 		mutex_unlock(&pf->tc_mutex);
+		rtnl_unlock();
 		return;
 	}
 
@@ -591,10 +594,11 @@ dcb_error:
 	 * Suppress the Coverity warning with the following comment...
 	 */
 	/* coverity[check_return] */
-	ice_pf_dcb_cfg(pf, err_cfg, false);
+	ice_pf_dcb_cfg(pf, err_cfg, true);
 	kfree(err_cfg);
 
 	mutex_unlock(&pf->tc_mutex);
+	rtnl_unlock();
 }
 
 /**
@@ -1055,6 +1059,7 @@ ice_dcb_process_lldp_set_mib_change(struct ice_pf *pf,
 	}
 
 	/* That a DCB change has happened is now determined */
+	rtnl_lock();
 	mutex_lock(&pf->tc_mutex);
 
 	/* store the old configuration */
@@ -1105,14 +1110,13 @@ ice_dcb_process_lldp_set_mib_change(struct ice_pf *pf,
 		pending_handled = true;
 	}
 
-	rtnl_lock();
 	/* disable VSIs affected by DCB changes */
 	ice_dcb_ena_dis_vsi(pf, false, true);
 
 	ret = ice_query_port_ets(pi, &buf, sizeof(buf), NULL);
 	if (ret) {
 		dev_err(dev, "Query Port ETS failed\n");
-		goto unlock_rtnl;
+		goto out;
 	}
 
 	/* changes in configuration update VSI */
@@ -1120,10 +1124,9 @@ ice_dcb_process_lldp_set_mib_change(struct ice_pf *pf,
 
 	/* enable previously downed VSIs */
 	ice_dcb_ena_dis_vsi(pf, true, true);
-unlock_rtnl:
-	rtnl_unlock();
 out:
 	mutex_unlock(&pf->tc_mutex);
+	rtnl_unlock();
 
 	/* Send Execute Pending MIB Change event if it is a Pending event */
 	if (!pending_handled)
