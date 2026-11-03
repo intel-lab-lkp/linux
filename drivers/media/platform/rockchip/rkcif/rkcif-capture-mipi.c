@@ -43,9 +43,16 @@
 #define RKCIF_MIPI_CTRL0_VC_ID(id)    ((id) << 8)
 #define RKCIF_MIPI_CTRL0_CAP_EN	      BIT(0)
 
+#define RKCIF_MIPI_INT_FRAME0_START(id) BIT((id) * 2 + 0)
+#define RKCIF_MIPI_INT_FRAME1_START(id) BIT((id) * 2 + 1)
 #define RKCIF_MIPI_INT_FRAME0_END(id) BIT(8 + (id) * 2 + 0)
 #define RKCIF_MIPI_INT_FRAME1_END(id) BIT(8 + (id) * 2 + 1)
 #define RKCIF_MIPI_INT_ALL_END GENMASK(15, 8)
+
+#define RKCIF_MIPI_LINE_CNT_MASK GENMASK(13, 0)
+
+/* a slipped frame boundary persists, so a second frame confirms it */
+#define RKCIF_MIPI_MISALIGNED_FRAMES 2
 
 #define RK3568_MIPI_INT_DMA_Y_FIFO_OVERFLOW BIT(16)
 #define RK3568_MIPI_INT_DMA_UV_FIFO_OVERFLOW BIT(17)
@@ -782,6 +789,41 @@ static void rkcif_mipi_debugfs_init(struct rkcif_interface *interface)
 		debugfs_create_ulong(match_data->errors[i].name, 0444,
 				     interface->debugfs_dir,
 				     &interface->error_count[i]);
+	debugfs_create_ulong("restarts", 0444, interface->debugfs_dir,
+			     &interface->restarts);
+}
+
+static u32 rkcif_mipi_line_cnt(struct rkcif_stream *stream)
+{
+	unsigned int index = RKCIF_MIPI_LINE_CNT_ID0_1 + stream->id / 2;
+	u32 val = rkcif_mipi_read(stream->interface, index);
+
+	return (val >> (stream->id % 2 * 16)) & RKCIF_MIPI_LINE_CNT_MASK;
+}
+
+/* the DMA frame boundary is a line count that only a block reset resyncs */
+static void rkcif_mipi_check_alignment(struct rkcif_stream *stream)
+{
+	u32 line;
+
+	if (!stream->streaming || stream->stopping || stream->restart_pending ||
+	    stream->realign_disabled)
+		return;
+
+	line = rkcif_mipi_line_cnt(stream);
+	if (!line) {
+		stream->misaligned_frames = 0;
+		return;
+	}
+
+	if (++stream->misaligned_frames < RKCIF_MIPI_MISALIGNED_FRAMES)
+		return;
+
+	stream->misaligned_frames = 0;
+	dev_warn(stream->rkcif->dev,
+		 "%s: frame starts at line %u, restarting the capture\n",
+		 stream->vdev.name, line);
+	rkcif_stream_restart(stream);
 }
 
 static void rkcif_mipi_queue_buffer(struct rkcif_stream *stream,
@@ -825,6 +867,8 @@ static int rkcif_mipi_start_streaming(struct rkcif_stream *stream)
 
 	ctrl1 = RKCIF_XY_COORD(width, height);
 
+	int_mask |= RKCIF_MIPI_INT_FRAME0_START(stream->id);
+	int_mask |= RKCIF_MIPI_INT_FRAME1_START(stream->id);
 	int_mask |= RKCIF_MIPI_INT_FRAME0_END(stream->id);
 	int_mask |= RKCIF_MIPI_INT_FRAME1_END(stream->id);
 	int_mask |= rkcif_mipi_error_mask(interface);
@@ -865,6 +909,8 @@ static void rkcif_mipi_stop_streaming(struct rkcif_stream *stream)
 
 	rkcif_mipi_stream_write(stream, RKCIF_MIPI_CTRL0, 0);
 
+	int_mask |= RKCIF_MIPI_INT_FRAME0_START(stream->id);
+	int_mask |= RKCIF_MIPI_INT_FRAME1_START(stream->id);
 	int_mask |= RKCIF_MIPI_INT_FRAME0_END(stream->id);
 	int_mask |= RKCIF_MIPI_INT_FRAME1_END(stream->id);
 
@@ -929,6 +975,10 @@ irqreturn_t rkcif_mipi_isr(int irq, void *ctx)
 		for (unsigned int j = 0; j < interface->streams_num; j++) {
 			struct rkcif_stream *stream = &interface->streams[j];
 
+			if (intstat & RKCIF_MIPI_INT_FRAME0_START(stream->id) ||
+			    intstat & RKCIF_MIPI_INT_FRAME1_START(stream->id))
+				rkcif_mipi_check_alignment(stream);
+
 			if (intstat & RKCIF_MIPI_INT_FRAME0_END(stream->id) ||
 			    intstat & RKCIF_MIPI_INT_FRAME1_END(stream->id)) {
 				ret = IRQ_HANDLED;
@@ -938,6 +988,9 @@ irqreturn_t rkcif_mipi_isr(int irq, void *ctx)
 					wake_up(&stream->wq_stopped);
 					continue;
 				}
+
+				if (stream->restart_pending)
+					continue;
 
 				rkcif_stream_pingpong(stream);
 			}

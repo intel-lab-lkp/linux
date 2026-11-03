@@ -14,6 +14,7 @@
 #include <linux/clk.h>
 #include <linux/mutex.h>
 #include <linux/regmap.h>
+#include <linux/workqueue.h>
 
 #include <media/media-device.h>
 #include <media/media-entity.h>
@@ -158,6 +159,12 @@ struct rkcif_stream {
 	bool stopping;
 	wait_queue_head_t wq_stopped;
 
+	bool streaming;
+	bool restart_pending;
+	bool realign_disabled;
+	unsigned int misaligned_frames;
+	struct work_struct restart_work;
+
 	/* queue of available buffers plus spinlock that protects it */
 	spinlock_t driver_queue_lock;
 	struct list_head driver_queue;
@@ -201,6 +208,7 @@ struct rkcif_interface {
 
 	struct dentry *debugfs_dir;
 	unsigned long error_count[RKCIF_MIPI_ERRORS_MAX];
+	unsigned long restarts;
 
 	/* interrupt enable and status are shared by the streams of a block */
 	spinlock_t irq_lock;

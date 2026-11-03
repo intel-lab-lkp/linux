@@ -20,6 +20,8 @@
 
 void rkcif_stream_pingpong(struct rkcif_stream *stream);
 
+void rkcif_stream_restart(struct rkcif_stream *stream);
+
 int rkcif_stream_register(struct rkcif_device *rkcif,
 			  struct rkcif_stream *stream);
 

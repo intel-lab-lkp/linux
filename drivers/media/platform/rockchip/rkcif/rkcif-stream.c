@@ -248,6 +248,60 @@ static void rkcif_stream_queue_buffer(struct vb2_buffer *vb)
 	rkcif_stream_push_buffer(stream, buffer);
 }
 
+static void rkcif_stream_restart_work(struct work_struct *work)
+{
+	struct rkcif_stream *stream =
+		container_of(work, struct rkcif_stream, restart_work);
+	struct rkcif_device *rkcif = stream->rkcif;
+	u64 mask = BIT_ULL(stream->id);
+	int ret;
+
+	mutex_lock(&stream->vlock);
+	if (!stream->streaming || !stream->restart_pending)
+		goto out;
+
+	v4l2_subdev_disable_streams(&stream->interface->sd, RKCIF_IF_PAD_SRC,
+				    mask);
+	stream->stop_streaming(stream);
+
+	/* the runtime suspend resets the block and with it the line counter */
+	pm_runtime_put_sync(rkcif->dev);
+	if (!pm_runtime_suspended(rkcif->dev)) {
+		stream->realign_disabled = true;
+		dev_warn(rkcif->dev,
+			 "%s: cannot reset the block while other streams run\n",
+			 stream->vdev.name);
+	}
+	ret = pm_runtime_resume_and_get(rkcif->dev);
+	if (ret < 0) {
+		pm_runtime_get_noresume(rkcif->dev);
+		dev_err(rkcif->dev, "failed to resume for the restart: %d\n",
+			ret);
+		goto out;
+	}
+
+	stream->frame_phase = 0;
+	stream->queue_buffer(stream, 0);
+	stream->queue_buffer(stream, 1);
+	ret = stream->start_streaming(stream);
+	if (!ret)
+		ret = v4l2_subdev_enable_streams(&stream->interface->sd,
+						 RKCIF_IF_PAD_SRC, mask);
+	if (ret)
+		dev_err(rkcif->dev, "failed to restart the capture: %d\n", ret);
+	stream->interface->restarts++;
+
+out:
+	stream->restart_pending = false;
+	mutex_unlock(&stream->vlock);
+}
+
+void rkcif_stream_restart(struct rkcif_stream *stream)
+{
+	stream->restart_pending = true;
+	schedule_work(&stream->restart_work);
+}
+
 static int rkcif_stream_start_streaming(struct vb2_queue *queue,
 					unsigned int count)
 {
@@ -258,6 +312,9 @@ static int rkcif_stream_start_streaming(struct vb2_queue *queue,
 
 	stream->frame_idx = 0;
 	stream->frame_phase = 0;
+	stream->misaligned_frames = 0;
+	stream->realign_disabled = false;
+	stream->restart_pending = false;
 
 	ret = video_device_pipeline_start(&stream->vdev, &stream->pipeline);
 	if (ret) {
@@ -287,6 +344,8 @@ static int rkcif_stream_start_streaming(struct vb2_queue *queue,
 	if (ret < 0)
 		goto err_stop_stream;
 
+	stream->streaming = true;
+
 	return 0;
 
 err_stop_stream:
@@ -307,6 +366,9 @@ static void rkcif_stream_stop_streaming(struct vb2_queue *queue)
 	struct rkcif_device *rkcif = stream->rkcif;
 	u64 mask;
 	int ret;
+
+	stream->streaming = false;
+	stream->restart_pending = false;
 
 	mask = BIT_ULL(stream->id);
 	v4l2_subdev_disable_streams(&stream->interface->sd, RKCIF_IF_PAD_SRC,
@@ -540,6 +602,7 @@ int rkcif_stream_register(struct rkcif_device *rkcif,
 	spin_lock_init(&stream->driver_queue_lock);
 
 	init_waitqueue_head(&stream->wq_stopped);
+	INIT_WORK(&stream->restart_work, rkcif_stream_restart_work);
 
 	mutex_init(&stream->vlock);
 
@@ -611,6 +674,7 @@ err_media_entity_cleanup:
 
 void rkcif_stream_unregister(struct rkcif_stream *stream)
 {
+	cancel_work_sync(&stream->restart_work);
 	video_unregister_device(&stream->vdev);
 	media_entity_cleanup(&stream->vdev.entity);
 }
