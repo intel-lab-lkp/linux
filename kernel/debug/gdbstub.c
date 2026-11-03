@@ -752,15 +752,20 @@ static void gdb_cmd_query(struct kgdb_state *ks)
 		i = 0;
 		remcom_out_buffer[0] = 'm';
 		ptr = remcom_out_buffer + 1;
-		if (remcom_in_buffer[1] == 'f') {
-			/* Each cpu is a shadow thread */
-			for_each_online_cpu(cpu) {
-				ks->thr_query = 0;
+		if (remcom_in_buffer[1] == 'f')
+			ks->thr_query = 0;
+
+		/* Each cpu is a shadow thread */
+		for_each_online_cpu(cpu) {
+			if (i >= ks->thr_query && !finished) {
 				int_to_threadref(thref, -cpu - 2);
 				ptr = pack_threadid(ptr, thref);
 				*(ptr++) = ',';
-				i++;
+				ks->thr_query++;
+				if (ks->thr_query % KGDB_MAX_THREAD_QUERY == 0)
+					finished = 1;
 			}
+			i++;
 		}
 
 		for_each_process_thread(g, p) {
