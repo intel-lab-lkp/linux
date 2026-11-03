@@ -138,6 +138,10 @@ static const struct key_entry wmi_keymap[] = {
 	{ KE_IGNORE,	0x30010001,	{ KEY_UNKNOWN }},
 	/* Change fan mode */
 	{ KE_KEY,	0x30010051,	{ KEY_PERFORMANCE }},
+	/* Super key pressed */
+	{ KE_IGNORE,    0x30020000,     { KEY_LEFTMETA }},
+	/* Super key released */
+	{ KE_IGNORE,    0x30020001,     { KEY_LEFTMETA }},
 	/* Disable camera */
 	{ KE_KEY,	0x40020000,	{ KEY_CAMERA_ACCESS_TOGGLE }},
 	/* Mute microphone */
