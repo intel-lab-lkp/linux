@@ -1100,6 +1100,21 @@ int iio_str_to_fixpoint(const char *str, int fract_mult, int *integer,
 	int *fract);
 
 /**
+ * iio_fill_val_int_64() - Fill the value fields used to represent a 64-bit integer
+ * @value: The 64-bit value to be represented
+ * @val: the lower 32 bits of @value
+ * @val2: the upper 32 bits of @value
+ *
+ * Populate @val and @val2 with the lower and upper halves of @value, as
+ * expected by IIO_VAL_INT_64.
+ */
+static inline void iio_fill_val_int_64(s64 value, int *val, int *val2)
+{
+	*val = lower_32_bits(value);
+	*val2 = upper_32_bits(value);
+}
+
+/**
  * IIO_DEGREE_TO_RAD() - Convert degree to rad
  * @deg: A value in degree
  *
