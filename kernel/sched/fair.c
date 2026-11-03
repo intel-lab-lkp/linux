@@ -1196,6 +1196,18 @@ found:
 	if (!best || (curr && entity_before(curr, best)))
 		best = curr;
 
+	/*
+	 * More than one entity is runnable, but none was eligible and curr
+	 * was cleared. Returning NULL makes the caller dereference the
+	 * result. Take the leftmost entity so schedule() can finish.
+	 * WARN_ON_ONCE records that substitution. It does not repair the
+	 * eligibility state that rejected every entity.
+	 */
+	if (unlikely(!best)) {
+		best = __pick_first_entity(cfs_rq);
+		WARN_ON_ONCE(best);
+	}
+
 	return best;
 }
 
