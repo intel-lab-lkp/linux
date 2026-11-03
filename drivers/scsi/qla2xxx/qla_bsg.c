@@ -3669,11 +3669,11 @@ static bool qla_bsg_found(struct qla_qpair *qpair, struct bsg_job *bsg_job)
 
 	spin_lock_irqsave(qpair->qp_lock_ptr, flags);
 	/*
-	 * recheck to make sure it's still the same bsg_job due to
-	 * qp_lock_ptr was released earlier.
+	 * recheck to make sure it's still the same sp due to
+	 * qp_lock_ptr was released earlier. If the slot is empty or
+	 * reused, fw has completed the sp and freed it.
 	 */
-	if (req->outstanding_cmds[cnt] &&
-	    req->outstanding_cmds[cnt]->u.bsg_job != bsg_job) {
+	if (req->outstanding_cmds[cnt] != sp) {
 		/* fw had returned the bsg */
 		spin_unlock_irqrestore(qpair->qp_lock_ptr, flags);
 		return true;
