@@ -17,7 +17,10 @@
 static void keyctl_pkey_params_free(struct kernel_pkey_params *params)
 {
 	kfree(params->info);
-	key_put(params->key);
+	if (params->key) {
+		up_read(&params->key->sem);
+		key_put(params->key);
+	}
 }
 
 enum {
@@ -100,6 +103,7 @@ static int keyctl_pkey_params_get(key_serial_t id,
 		return PTR_ERR(key_ref);
 	params->key = key_ref_to_ptr(key_ref);
 
+	down_read(&params->key->sem);
 	if (!params->key->type->asym_query)
 		return -EOPNOTSUPP;
 
