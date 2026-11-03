@@ -62,6 +62,7 @@ static int pause_on_oops;
 static int pause_on_oops_flag;
 static DEFINE_SPINLOCK(pause_on_oops_lock);
 bool crash_kexec_post_notifiers;
+static bool crash_kexec_in_memory_sys_info;
 int panic_on_warn __read_mostly;
 unsigned long panic_on_taint;
 bool panic_on_taint_nousertaint = false;
@@ -71,6 +72,7 @@ static bool panic_console_replay;
 bool panic_triggering_all_cpu_backtrace;
 static bool panic_this_cpu_backtrace_printed;
 static bool panic_all_cpu_backtrace_printed;
+static bool panic_sys_info_dumped;
 
 int panic_timeout = CONFIG_PANIC_TIMEOUT;
 EXPORT_SYMBOL_GPL(panic_timeout);
@@ -573,6 +575,31 @@ void panic_trigger_all_cpu_backtrace(void)
 	panic_triggering_all_cpu_backtrace = false;
 }
 
+/**
+ * panic_in_memory_sys_info - collect sys_info() into the printk ring buffer
+ *
+ * When crash_kexec_in_memory_sys_info is enabled, record system telemetry
+ * purely into the in-memory printk ring buffer before booting the capture
+ * kernel, suppressing synchronous console emission and pinning the ring
+ * buffer tail at the start of the primary crash output.
+ */
+void panic_in_memory_sys_info(void)
+{
+	unsigned long si_mask;
+
+	if (!crash_kexec_in_memory_sys_info || panic_sys_info_dumped)
+		return;
+
+	panic_sys_info_dumped = true;
+	si_mask = sys_info_get_mask(panic_print) ? : SYS_INFO_IN_MEMORY_DEFAULT;
+
+	local_irq_disable();
+	/* Populate log_buf in RAM without stalling on slow consoles. */
+	printk_suppress_console_flush(true);
+	printk_freeze_tail(true);
+	sys_info(si_mask);
+}
+
 /*
  * Helper that triggers the NMI backtrace (if set in panic_print)
  * and then performs the secondary CPUs shutdown - we cannot have
@@ -670,6 +697,7 @@ void vpanic(const char *fmt, va_list args)
 	if (len && buf[len - 1] == '\n')
 		buf[len - 1] = '\0';
 
+	printk_mark_panic_start();
 	pr_emerg("Kernel panic - not syncing: %s\n", buf);
 	/*
 	 * Avoid nested stack-dumping if a panic occurs during oops processing
@@ -713,7 +741,8 @@ void vpanic(const char *fmt, va_list args)
 	 */
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
 
-	sys_info(panic_print);
+	if (!panic_sys_info_dumped)
+		sys_info(panic_print);
 
 	kmsg_dump_desc(KMSG_DUMP_PANIC, buf);
 
@@ -1067,6 +1096,8 @@ void oops_enter(void)
 	/* can't trust the integrity of the kernel anymore: */
 	debug_locks_off();
 	do_oops_enter_exit();
+	if (!panic_in_progress())
+		printk_mark_panic_start();
 
 	if (sysctl_oops_all_cpu_backtrace)
 		trigger_all_cpu_backtrace();
@@ -1097,9 +1128,15 @@ struct warn_args {
 void __warn(const char *file, int line, void *caller, unsigned taint,
 	    struct pt_regs *regs, struct warn_args *args)
 {
+	bool clear_panic_start = false;
+
 	nbcon_cpu_emergency_enter();
 
 	disable_trace_on_warning();
+
+	if (!READ_ONCE(oops_in_progress) && !panic_in_progress() &&
+	    printk_mark_panic_start())
+		clear_panic_start = true;
 
 	if (file) {
 		pr_warn("WARNING: %s:%d at %pS, CPU#%d: %s/%d\n",
@@ -1137,6 +1174,9 @@ void __warn(const char *file, int line, void *caller, unsigned taint,
 	/* Just a warning, don't kill lockdep. */
 	add_taint(taint, LOCKDEP_STILL_OK);
 
+	if (clear_panic_start && !READ_ONCE(oops_in_progress) && !panic_in_progress())
+		printk_clear_panic_start();
+
 	nbcon_cpu_emergency_exit();
 }
 
@@ -1146,6 +1186,7 @@ void warn_slowpath_fmt(const char *file, int line, unsigned taint,
 		       const char *fmt, ...)
 {
 	bool rcu = warn_rcu_enter();
+	bool clear_panic_start = false;
 	struct warn_args args;
 
 	if (kunit_is_suppressed_warning(true)) {
@@ -1153,11 +1194,16 @@ void warn_slowpath_fmt(const char *file, int line, unsigned taint,
 		return;
 	}
 
+	if (!READ_ONCE(oops_in_progress) && !panic_in_progress())
+		clear_panic_start = printk_mark_panic_start();
+
 	pr_warn(CUT_HERE);
 
 	if (!fmt) {
 		__warn(file, line, __builtin_return_address(0), taint,
 		       NULL, NULL);
+		if (clear_panic_start && !READ_ONCE(oops_in_progress) && !panic_in_progress())
+			printk_clear_panic_start();
 		warn_rcu_exit(rcu);
 		return;
 	}
@@ -1166,6 +1212,8 @@ void warn_slowpath_fmt(const char *file, int line, unsigned taint,
 	va_start(args.args, fmt);
 	__warn(file, line, __builtin_return_address(0), taint, NULL, &args);
 	va_end(args.args);
+	if (clear_panic_start && !READ_ONCE(oops_in_progress) && !panic_in_progress())
+		printk_clear_panic_start();
 	warn_rcu_exit(rcu);
 }
 EXPORT_SYMBOL(warn_slowpath_fmt);
@@ -1179,6 +1227,11 @@ void __warn_printk(const char *fmt, ...)
 		warn_rcu_exit(rcu);
 		return;
 	}
+
+	current->in_warn_printk++;
+	if (!READ_ONCE(oops_in_progress) && !panic_in_progress() &&
+	    printk_mark_panic_start())
+		current->in_warn_pinned = 1;
 
 	pr_warn(CUT_HERE);
 
@@ -1240,6 +1293,7 @@ core_param(panic, panic_timeout, int, 0644);
 core_param(pause_on_oops, pause_on_oops, int, 0644);
 core_param(panic_on_warn, panic_on_warn, int, 0644);
 core_param(crash_kexec_post_notifiers, crash_kexec_post_notifiers, bool, 0644);
+core_param(crash_kexec_in_memory_sys_info, crash_kexec_in_memory_sys_info, bool, 0644);
 core_param(panic_console_replay, panic_console_replay, bool, 0644);
 
 static int panic_print_set(const char *val, const struct kernel_param *kp)

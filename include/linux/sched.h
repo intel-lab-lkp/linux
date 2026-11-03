@@ -1071,6 +1071,9 @@ struct task_struct {
 	unsigned                        in_thrashing:1;
 #endif
 	unsigned			in_nf_duplicate:1;
+	unsigned			in_warn_pinned:1;
+	u8				in_oops;
+	u8				in_warn_printk;
 #ifdef CONFIG_PREEMPT_RT
 	struct netdev_xmit		net_xmit;
 #endif

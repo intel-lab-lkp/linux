@@ -197,6 +197,7 @@ void __warn_printf(const char *fmt, struct pt_regs *regs)
 
 static enum bug_trap_type __report_bug(struct bug_entry *bug, unsigned long bugaddr, struct pt_regs *regs)
 {
+	bool clear_panic_start = false;
 	bool warning, once, done, no_cut, has_args;
 	const char *file, *fmt;
 	unsigned int line;
@@ -219,12 +220,22 @@ static enum bug_trap_type __report_bug(struct bug_entry *bug, unsigned long buga
 	no_cut   = bug->flags & BUGFLAG_NO_CUT_HERE;
 	has_args = bug->flags & BUGFLAG_ARGS;
 
+	if (warning && no_cut && current->in_warn_printk &&
+	    --current->in_warn_printk == 0) {
+		clear_panic_start = current->in_warn_pinned;
+		current->in_warn_pinned = 0;
+	}
+
 	/*
 	 * Before the once logic so suppressed warnings do not consume
 	 * the single-fire budget of WARN_ON_ONCE().
 	 */
-	if (warning && kunit_is_suppressed_warning(true))
+	if (warning && kunit_is_suppressed_warning(true)) {
+		if (clear_panic_start && !READ_ONCE(oops_in_progress) &&
+		    !panic_in_progress())
+			printk_clear_panic_start();
 		return BUG_TRAP_TYPE_WARN;
+	}
 
 	disable_trace_on_warning();
 
@@ -245,6 +256,8 @@ static enum bug_trap_type __report_bug(struct bug_entry *bug, unsigned long buga
 	 * extra debugging message it writes before triggering the handler.
 	 */
 	if (!no_cut) {
+		if (!READ_ONCE(oops_in_progress) && !panic_in_progress())
+			clear_panic_start = printk_mark_panic_start();
 		pr_info(CUT_HERE);
 		__warn_printf(fmt, has_args ? regs : NULL);
 	}
@@ -253,6 +266,9 @@ static enum bug_trap_type __report_bug(struct bug_entry *bug, unsigned long buga
 		/* this is a WARN_ON rather than BUG/BUG_ON */
 		__warn(file, line, (void *)bugaddr, BUG_GET_TAINT(bug), regs,
 		       NULL);
+		if (clear_panic_start && !READ_ONCE(oops_in_progress) &&
+		    !panic_in_progress())
+			printk_clear_panic_start();
 		return BUG_TRAP_TYPE_WARN;
 	}
 

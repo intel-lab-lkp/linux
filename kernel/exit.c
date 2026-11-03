@@ -71,6 +71,8 @@
 #include <linux/unwind_deferred.h>
 #include <linux/uaccess.h>
 #include <linux/pidfs.h>
+#include <linux/panic.h>
+#include <linux/printk.h>
 
 #include <uapi/linux/wait.h>
 
@@ -1068,6 +1070,14 @@ void __noreturn make_task_dead(int signr)
 	limit = READ_ONCE(oops_limit);
 	if (atomic_inc_return(&oops_count) >= limit && limit)
 		panic("Oopsed too often (kernel.oops_limit is %d)", limit);
+
+	while (tsk->in_oops)
+		bust_spinlocks(0);
+
+	if (!READ_ONCE(oops_in_progress) && !panic_in_progress() &&
+	    ((tsk->flags & PF_EXITING) || !is_global_init(tsk) ||
+	     atomic_read(&tsk->signal->live) > 1))
+		printk_clear_panic_start();
 
 	/*
 	 * We're taking recursive faults here in make_task_dead. Safest is to just

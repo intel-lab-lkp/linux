@@ -1009,6 +1009,9 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 #ifdef CONFIG_X86_BUS_LOCK_DETECT
 	tsk->reported_split_lock = 0;
 #endif
+	tsk->in_warn_pinned = 0;
+	tsk->in_oops = 0;
+	tsk->in_warn_printk = 0;
 
 #ifdef CONFIG_SCHED_MM_CID
 	tsk->mm_cid.cid = MM_CID_UNSET;

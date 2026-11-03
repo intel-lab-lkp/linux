@@ -58,6 +58,7 @@ bool panic_in_progress(void);
 bool panic_on_this_cpu(void);
 bool panic_on_other_cpu(void);
 void panic_trigger_all_cpu_backtrace(void);
+void panic_in_memory_sys_info(void);
 
 /*
  * Only to be used by arch init code. If the user over-wrote the default

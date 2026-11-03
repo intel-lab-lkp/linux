@@ -140,9 +140,15 @@ void __noclone __crash_kexec(struct pt_regs *regs)
 
 			crash_setup_regs(&fixed_regs, regs);
 			crash_save_vmcoreinfo();
+			if (!crash_kexec_post_notifiers)
+				panic_in_memory_sys_info();
 			machine_crash_shutdown(&fixed_regs);
 			crash_cma_clear_pending_dma();
 			machine_kexec(kexec_crash_image);
+			if (!crash_kexec_post_notifiers) {
+				printk_freeze_tail(false);
+				printk_suppress_console_flush(false);
+			}
 		}
 		kexec_unlock();
 	}

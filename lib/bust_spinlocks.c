@@ -9,8 +9,12 @@
  * and panic() information from reaching the user.
  */
 
+#include <linux/atomic.h>
 #include <linux/kernel.h>
+#include <linux/panic.h>
+#include <linux/preempt.h>
 #include <linux/printk.h>
+#include <linux/sched.h>
 #include <linux/spinlock.h>
 #include <linux/tty.h>
 #include <linux/wait.h>
@@ -19,11 +23,25 @@
 
 void bust_spinlocks(int yes)
 {
+	int old = READ_ONCE(oops_in_progress);
+
 	if (yes) {
-		++oops_in_progress;
+		if (in_task())
+			current->in_oops++;
+		do {
+		} while (!try_cmpxchg(&oops_in_progress, &old, old + 1));
+		if (!old && !panic_in_progress())
+			printk_mark_panic_start();
 	} else {
+		if (in_task() && current->in_oops)
+			current->in_oops--;
 		console_unblank();
-		if (--oops_in_progress == 0)
+		old = READ_ONCE(oops_in_progress);
+		do {
+			if (unlikely(old <= 0))
+				return;
+		} while (!try_cmpxchg(&oops_in_progress, &old, old - 1));
+		if (old == 1)
 			wake_up_klogd();
 	}
 }
