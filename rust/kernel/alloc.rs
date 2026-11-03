@@ -38,6 +38,12 @@ use core::{
 pub struct Flags(u32);
 
 impl Flags {
+    /// Creates [`Flags`] from a raw `gfp_t`.
+    #[cfg_attr(not(CONFIG_RUST_GREYBUS_ABSTRACTIONS), expect(dead_code))]
+    pub(crate) fn new(v: bindings::gfp_t) -> Self {
+        Self(v)
+    }
+
     /// Get the raw representation of this flag.
     pub(crate) fn as_raw(self) -> u32 {
         self.0
