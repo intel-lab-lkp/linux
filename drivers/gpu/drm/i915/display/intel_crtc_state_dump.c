@@ -262,6 +262,17 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 			   pipe_config->dip.pps_sdp_tl,
 			   pipe_config->dip.vsc_sdp_tl,
 			   pipe_config->dip.vsc_ext_sdp_tl);
+
+		drm_printf(&p,
+			   "dp symbol tg: %s, hactive: %d, htotal: %d, chunk size: %d, data m: 0x%016llx%016llx, data n: 0x%016llx%016llx\n",
+			   str_enabled_disabled(pipe_config->dp_symbol_tg.enable),
+			   pipe_config->dp_symbol_tg.hactive,
+			   pipe_config->dp_symbol_tg.htotal,
+			   pipe_config->dp_symbol_tg.chunk_size,
+			   pipe_config->dp_symbol_tg.data_m[1],
+			   pipe_config->dp_symbol_tg.data_m[0],
+			   pipe_config->dp_symbol_tg.data_n[1],
+			   pipe_config->dp_symbol_tg.data_n[0]);
 	}
 
 	drm_printf(&p, "audio: %i, infoframes: %i, infoframes enabled: 0x%x\n",
