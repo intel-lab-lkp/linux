@@ -47,6 +47,26 @@
 #define TAS2783_CALI_GUID EFI_GUID(0x1f52d2a1, 0xbb3a, 0x457d, 0xbc, \
 				   0x09, 0x43, 0xa3, 0xf4, 0x31, 0x0a, 0x92)
 
+#define TAS2783_MAX_FW_SECTIONS	256
+
+enum {
+	SDW_MSG_FLAG_READ = 0,
+	SDW_MSG_FLAG_WRITE,
+};
+
+struct sdw_bpt_section {
+	u32 addr;
+	u32 len;
+	u8 *buf;
+};
+
+struct sdw_bpt_msg {
+	struct sdw_bpt_section *sec;
+	int sections;
+	u8 dev_num;
+	u8 flags;
+};
+
 static const u32 tas2783_cali_reg[] = {
 	TAS2783_CAL_R0,
 	TAS2783_CAL_INVR0,
@@ -738,7 +758,103 @@ static s32 tas_fw_get_next_file(const u8 *data, struct tas_fw_file *file)
 	file->dest_addr = get_unaligned_le32(&data[16]);
 	file->fw_data = (u8 *)&data[20];
 
-	return file->length + sizeof(u32) * 5;
+	return file->length + FW_FL_HDR;
+}
+
+static int tas2783_fw_download_bpt(struct tas2783_prv *tas_dev,
+				   const struct firmware *fmw)
+{
+	struct sdw_slave *slave = tas_dev->sdw_peripheral;
+	struct sdw_bpt_section *sections = NULL;
+	struct sdw_bus *bus = slave->bus;
+	struct sdw_bpt_msg msg = {0};
+	struct tas_fw_file file;
+	struct tas_fw_hdr hdr;
+	size_t offset = FW_DL_OFFSET;
+	size_t img_sz = fmw->size;
+	const u8 *buf = fmw->data;
+	int num_sections = 0;
+	int i, ret;
+
+	if (img_sz < FW_DL_OFFSET)
+		return -EINVAL;
+
+	tas_fw_read_hdr(buf, &hdr);
+	if (hdr.size != img_sz)
+		return -EINVAL;
+
+	while (offset < (img_sz - FW_FL_HDR)) {
+		size_t adv = (size_t)tas_fw_get_next_file(&buf[offset], &file);
+
+		/*
+		 * Reject a section whose payload runs past the image. Compare
+		 * file.length (not adv) against the space left after this
+		 * section's header, so the check is immune to the size_t wrap
+		 * in tas_fw_get_next_file() on 32-bit kernels.
+		 */
+		if (file.length > img_sz - offset - FW_FL_HDR) {
+			dev_err(tas_dev->dev,
+				"Firmware section at offset %zu exceeded.\n",
+				offset);
+			return -EINVAL;
+		}
+		if (num_sections >= TAS2783_MAX_FW_SECTIONS) {
+			dev_err(tas_dev->dev,
+				"BPT fw has too many sections (max %d)\n",
+				TAS2783_MAX_FW_SECTIONS);
+			return -EINVAL;
+		}
+		offset += adv;
+		num_sections++;
+	}
+
+	if (num_sections == 0)
+		return -EINVAL;
+
+	sections = kcalloc(num_sections, sizeof(*sections), GFP_KERNEL);
+	if (!sections)
+		return -ENOMEM;
+
+	offset = FW_DL_OFFSET;
+	for (i = 0; i < num_sections && offset < (img_sz - FW_FL_HDR); i++) {
+		size_t adv = (size_t)tas_fw_get_next_file(&buf[offset], &file);
+
+		sections[i].addr = file.dest_addr;
+		sections[i].len = file.length;
+		sections[i].buf = file.fw_data;
+		offset += adv;
+
+		dev_dbg(tas_dev->dev, "BPT section %d: addr=0x%x len=%d",
+			i, file.dest_addr, file.length);
+	}
+
+	msg.sec = sections;
+	msg.sections = num_sections;
+	msg.dev_num = slave->dev_num;
+	msg.flags = SDW_MSG_FLAG_WRITE;
+
+	dev_dbg(tas_dev->dev, "BPT starting: %d sections, dev_num=%d",
+		num_sections, slave->dev_num);
+
+	ret = sdw_bpt_send_sync(bus, slave, &msg);
+
+	if (ret < 0)
+		dev_err(tas_dev->dev, "BPT firmware download failed: %d", ret);
+	else
+		dev_dbg(tas_dev->dev,
+			 "BPT firmware download complete: %d sections",
+			 num_sections);
+
+	kfree(sections);
+	return ret;
+}
+
+static bool tas2783_bpt_supported(struct tas2783_prv *tas_dev)
+{
+	struct sdw_slave *slave = tas_dev->sdw_peripheral;
+	struct sdw_bus *bus = slave->bus;
+
+	return bus && bus->ops && bus->ops->bpt_send_async;
 }
 
 static void tas2783_fw_ready(const struct firmware *fmw, void *context)
@@ -761,7 +877,7 @@ static void tas2783_fw_ready(const struct firmware *fmw, void *context)
 	if (!fmw || !fmw->data) {
 		if (!tas_dev->fw_use_fallback) {
 			tas_dev->fw_use_fallback = true;
-			dev_info(tas_dev->dev,
+			dev_dbg(tas_dev->dev,
 				"Failed to read preferred fw binary: %s, attempting fallback binary load\n",
 				tas_dev->rca_binaryname);
 		} else {
@@ -774,6 +890,30 @@ static void tas2783_fw_ready(const struct firmware *fmw, void *context)
 		goto out;
 	}
 
+	/* Try BPT first if supported, fallback to legacy method */
+	dev_dbg(tas_dev->dev, "BPT check: async=%p wait=%p",
+		 tas_dev->sdw_peripheral->bus->ops->bpt_send_async,
+		 tas_dev->sdw_peripheral->bus->ops->bpt_wait);
+	if (tas2783_bpt_supported(tas_dev)) {
+		ret = tas2783_fw_download_bpt(tas_dev, fmw);
+
+		if (ret == 0) {
+			dev_dbg(tas_dev->dev, "Firmware downloaded via BPT");
+			cur_file = 1;
+			goto calibrate;
+		}
+		/*
+		 * -ESHUTDOWN means the manager is clock-stopping the bus for
+		 * system suspend and refused the transfer. The legacy fallback
+		 * would only thrash the dying bus with command timeouts, so
+		 * bail and let the next attach cycle (on resume) reissue it.
+		 */
+		if (ret == -ESHUTDOWN)
+			goto out;
+		dev_warn(tas_dev->dev,
+			 "BPT failed (%d), falling back to legacy method",
+			 ret);
+	}
 	img_sz = fmw->size;
 	buf = fmw->data;
 	offset += tas_fw_read_hdr(buf, hdr);
@@ -834,6 +974,7 @@ static void tas2783_fw_ready(const struct firmware *fmw, void *context)
 		cur_file++;
 	}
 	mutex_unlock(&tas_dev->pde_lock);
+calibrate:
 	regcache_drop_region(tas_dev->regmap, 0, UINT_MAX);
 
 	if (cur_file == 0) {
@@ -841,6 +982,7 @@ static void tas2783_fw_ready(const struct firmware *fmw, void *context)
 		ret = -EINVAL;
 	} else {
 		tas2783_update_calibdata(tas_dev);
+		regmap_write(tas_dev->regmap, TASDEV_REG_SDW(0, 0, 7), 0x22);
 		ret = regmap_bulk_read(tas_dev->regmap, TAS2783_FW_VERSION,
 					&val, 4);
 		tas_dev->fw_version = (val[0] << 24) | (val[1] << 16) |
@@ -1216,25 +1358,32 @@ static s32 tas_fw_load(struct tas2783_prv *tas_dev, struct sdw_slave *slave)
 static s32 tas_io_init(struct device *dev, struct sdw_slave *slave)
 {
 	struct tas2783_prv *tas_dev = dev_get_drvdata(dev);
+	uint val;
 	s32 ret;
 
 	if (tas_dev->hw_init)
 		return 0;
 
-	tas_dev->fw_dl_success = false;
-
-	ret = regmap_write(tas_dev->regmap, TAS2783_SW_RESET, 0x1);
+	regmap_read(tas_dev->regmap, TASDEV_REG_SDW(0, 0, 7), &val);
+	dev_dbg(dev, "Got B0P0R7 = %02X with %d.", val, ret);
 	if (ret) {
-		dev_err(dev, "sw reset failed, err=%d", ret);
+		dev_err(dev, "Get FW download status failed, err=%d", ret);
 		return ret;
 	}
-	usleep_range(2000, 2200);
-
-	tas_dev->fw_use_fallback = false;
-	ret = tas_fw_load(tas_dev, slave);
-	if (!ret && tas_dev->fw_use_fallback)
+	if (val != 0x22) {
+		tas_dev->fw_dl_success = false;
+		ret = regmap_write(tas_dev->regmap, TAS2783_SW_RESET, 0x1);
+		if (ret) {
+			dev_err(dev, "sw reset failed, err=%d", ret);
+			return ret;
+		}
+		usleep_range(2000, 2200);
+		regcache_cache_only(tas_dev->regmap, false);
+		tas_dev->fw_use_fallback = false;
 		ret = tas_fw_load(tas_dev, slave);
-
+		if (!ret && tas_dev->fw_use_fallback)
+			ret = tas_fw_load(tas_dev, slave);
+	}
 	if (!ret) {
 		if (tas_dev->sa_func_data)
 			ret = sdca_regmap_write_init(dev, tas_dev->regmap,
@@ -1382,6 +1531,21 @@ static s32 tas_sdw_probe(struct sdw_slave *peripheral,
 	if (ret)
 		return dev_err_probe(dev, ret,
 				     "slave property read failed");
+	/*
+	 * BPT firmware download uses DP0 and relies on the SoundWire stream
+	 * framework to prepare/deprepare DP0. Ensure DP0 properties exist for
+	 * the framework prepare/deprepare sequence.
+	 */
+	if (!peripheral->prop.dp0_prop) {
+		peripheral->prop.dp0_prop = devm_kzalloc(dev,
+			sizeof(*peripheral->prop.dp0_prop), GFP_KERNEL);
+		if (!peripheral->prop.dp0_prop)
+			return dev_err_probe(dev, -ENOMEM,
+					     "dp0_prop alloc failed");
+
+		peripheral->prop.dp0_prop->simple_ch_prep_sm = true;
+		peripheral->prop.dp0_prop->ch_prep_timeout = 25;
+	}
 
 	tas_dev = devm_kzalloc(dev, sizeof(*tas_dev), GFP_KERNEL);
 	if (!tas_dev)
