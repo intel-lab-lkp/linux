@@ -37,7 +37,12 @@
 #define RK3588_MIPI_CTRL0_CROP_EN     BIT(4)
 #define RK3588_MIPI_CTRL0_PARSE(type) ((type) << 1)
 
-#define RK3588_MIPI_CTRL_CAP_EN       BIT(0)
+#define RKCIF_MIPI_CTRL_PRESS_VALUE(x) ((x) << 13)
+#define RKCIF_MIPI_CTRL_PRESS_ENABLE BIT(12)
+#define RKCIF_MIPI_CTRL_HURRY_VALUE(x) ((x) << 5)
+#define RKCIF_MIPI_CTRL_HURRY_ENABLE BIT(4)
+#define RKCIF_MIPI_CTRL_WATER_LINE_25 (0x2 << 1)
+#define RKCIF_MIPI_CTRL_WATER_LINE_ENABLE BIT(0)
 
 #define RKCIF_MIPI_CTRL0_DT_ID(id)    ((id) << 10)
 #define RKCIF_MIPI_CTRL0_VC_ID(id)    ((id) << 8)
@@ -891,12 +896,13 @@ static int rkcif_mipi_start_streaming(struct rkcif_stream *stream)
 	rkcif_mipi_stream_write(stream, RKCIF_MIPI_CTRL1, ctrl1);
 	rkcif_mipi_stream_write(stream, RKCIF_MIPI_CTRL0, ctrl0);
 
-	/*
-	 * TODO: This bit has a different meaning on the RK3568, but it is
-	 * set there by default anyway. While correct, this is not exactly
-	 * nice and shall be reworked during the next refactoring.
-	 */
-	rkcif_mipi_write(interface, RKCIF_MIPI_CTRL, RK3588_MIPI_CTRL_CAP_EN);
+	rkcif_mipi_write(interface, RKCIF_MIPI_CTRL,
+			 RKCIF_MIPI_CTRL_PRESS_VALUE(3) |
+				 RKCIF_MIPI_CTRL_PRESS_ENABLE |
+				 RKCIF_MIPI_CTRL_HURRY_VALUE(3) |
+				 RKCIF_MIPI_CTRL_HURRY_ENABLE |
+				 RKCIF_MIPI_CTRL_WATER_LINE_25 |
+				 RKCIF_MIPI_CTRL_WATER_LINE_ENABLE);
 
 	return 0;
 }
