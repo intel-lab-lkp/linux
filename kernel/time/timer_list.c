@@ -68,7 +68,15 @@ next_one:
 
 	touch_nmi_watchdog();
 
-	raw_spin_lock_irqsave(&base->cpu_base->lock, flags);
+	if (in_nmi() || oops_in_progress || panic_in_progress()) {
+		if ((!IS_ENABLED(CONFIG_SMP) && in_nmi()) ||
+		    !raw_spin_trylock_irqsave(&base->cpu_base->lock, flags)) {
+			SEQ_printf(m, "  [cpu_base lock contended]\n");
+			return;
+		}
+	} else {
+		raw_spin_lock_irqsave(&base->cpu_base->lock, flags);
+	}
 
 	curr = timerqueue_linked_first(&base->active);
 	/*
@@ -262,7 +270,8 @@ static inline void timer_list_header(struct seq_file *m, ktime_t now)
 
 void sysrq_timer_list_show(void)
 {
-	ktime_t now = ktime_get();
+	ktime_t now = (in_nmi() || oops_in_progress || panic_in_progress()) ?
+		      ns_to_ktime(ktime_get_mono_fast_ns()) : ktime_get();
 	int cpu;
 
 	timer_list_header(NULL, now);
