@@ -1342,7 +1342,7 @@ wait_for_wpdma(struct mt7603_dev *dev)
 static void mt7603_pse_reset(struct mt7603_dev *dev)
 {
 	/* Clear previous reset result */
-	if (!dev->reset_cause[RESET_CAUSE_RESET_FAILED])
+	if (!dev->failed_pse_reset_attempts)
 		mt76_clear(dev, MT_MCU_DEBUG_RESET, MT_MCU_DEBUG_RESET_PSE_S);
 
 	/* Reset PSE */
@@ -1351,15 +1351,22 @@ static void mt7603_pse_reset(struct mt7603_dev *dev)
 	if (!mt76_poll_msec(dev, MT_MCU_DEBUG_RESET,
 			    MT_MCU_DEBUG_RESET_PSE_S,
 			    MT_MCU_DEBUG_RESET_PSE_S, 500)) {
+		dev->failed_pse_reset_attempts++;
 		dev->reset_cause[RESET_CAUSE_RESET_FAILED]++;
 		mt76_clear(dev, MT_MCU_DEBUG_RESET, MT_MCU_DEBUG_RESET_PSE);
 	} else {
-		dev->reset_cause[RESET_CAUSE_RESET_FAILED] = 0;
+		dev->failed_pse_reset_attempts = 0;
 		mt76_clear(dev, MT_MCU_DEBUG_RESET, MT_MCU_DEBUG_RESET_QUEUES);
 	}
 
-	if (dev->reset_cause[RESET_CAUSE_RESET_FAILED] >= 3)
-		dev->reset_cause[RESET_CAUSE_RESET_FAILED] = 0;
+	/* Limit the number of consecutive failed PSE reset attempts.
+	 *
+	 * After 3 consecutive failed attempts, the reset limit is
+	 * reached, the counter is reset and the device will
+	 * return to normal operation.
+	 */
+	if (dev->failed_pse_reset_attempts >= 3)
+		dev->failed_pse_reset_attempts = 0;
 }
 
 void mt7603_mac_dma_start(struct mt7603_dev *dev)
@@ -1481,11 +1488,11 @@ static void mt7603_mac_watchdog_reset(struct mt7603_dev *dev)
 		mt76_queue_rx_reset(dev, i);
 	}
 
-	if (dev->reset_cause[RESET_CAUSE_RESET_FAILED] ||
+	if (dev->failed_pse_reset_attempts ||
 	    dev->cur_reset_cause == RESET_CAUSE_RX_PSE_BUSY)
 		mt7603_pse_reset(dev);
 
-	if (!dev->reset_cause[RESET_CAUSE_RESET_FAILED]) {
+	if (!dev->failed_pse_reset_attempts) {
 		mt7603_mac_dma_start(dev);
 
 		mt7603_irq_enable(dev, mask);
@@ -1920,7 +1927,7 @@ void mt7603_mac_work(struct work_struct *work)
 	    mt7603_watchdog_check(dev, &dev->mcu_hang,
 				  RESET_CAUSE_MCU_HANG,
 				  NULL) ||
-	    dev->reset_cause[RESET_CAUSE_RESET_FAILED]) {
+	    dev->failed_pse_reset_attempts) {
 		dev->beacon_check = 0;
 		dev->tx_dma_check = 0;
 		dev->tx_hang_check = 0;
