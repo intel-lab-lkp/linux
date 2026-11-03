@@ -202,6 +202,7 @@ TEST_GEN_PROGS := \
 	tap \
 	tcp_port_share \
 	tls \
+	tun_vhost \
 	udp_splice_checksum \
 # end of TEST_GEN_PROGS
 
