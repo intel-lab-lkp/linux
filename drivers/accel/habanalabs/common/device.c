@@ -2487,7 +2487,7 @@ void hl_device_fini(struct hl_device *hdev)
 	dev_info(hdev->dev, "Removing device %s\n", dev_name(&(hdev)->pdev->dev));
 
 	hdev->device_fini_pending = 1;
-	flush_delayed_work(&hdev->device_reset_work.reset_work);
+	disable_delayed_work_sync(&hdev->device_reset_work.reset_work);
 
 	if (hdev->pldm)
 		reset_sec = HL_PLDM_HARD_RESET_MAX_TIMEOUT;
