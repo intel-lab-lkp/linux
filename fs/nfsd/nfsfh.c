@@ -102,11 +102,23 @@ static bool nfsd_originating_port_ok(struct svc_rqst *rqstp,
 	return test_bit(RQ_SECURE, &rqstp->rq_flags);
 }
 
-static __be32 nfsd_setuser_and_check_port(struct svc_rqst *rqstp,
-					  struct svc_cred *cred,
-					  struct svc_export *exp)
+/**
+ * nfsd_check_port - check an export's secure-port requirement
+ * @rqstp: request being checked, or %NULL for a local caller
+ * @cred: credential whose flavor selects the export options to check
+ * @exp: export being checked
+ *
+ * Context: Process context.
+ *
+ * A GSS flavor is exempt from the port check, so a denial reports
+ * NFS4ERR_WRONGSEC to an NFSv4 client.
+ *
+ * Return: %nfs_ok if allowed, %nfserr_wrongsec for an NFSv4 client,
+ * %nfserr_perm otherwise.
+ */
+__be32 nfsd_check_port(struct svc_rqst *rqstp,
+		       struct svc_cred *cred, struct svc_export *exp)
 {
-	/* Check if the request originated from a secure port. */
 	if (rqstp && !nfsd_originating_port_ok(rqstp, cred, exp)) {
 		if (IS_ENABLED(CONFIG_SUNRPC_DEBUG)) {
 			char buf[RPC_MAX_ADDRBUFLEN];
@@ -114,8 +126,20 @@ static __be32 nfsd_setuser_and_check_port(struct svc_rqst *rqstp,
 			dprintk("nfsd: request from insecure port %s!\n",
 			        svc_print_addr(rqstp, buf, sizeof(buf)));
 		}
-		return nfserr_perm;
+		return nfsd_v4client(rqstp) ? nfserr_wrongsec : nfserr_perm;
 	}
+	return nfs_ok;
+}
+
+static __be32 nfsd_setuser_and_check_port(struct svc_rqst *rqstp,
+					  struct svc_cred *cred,
+					  struct svc_export *exp)
+{
+	__be32 status;
+
+	status = nfsd_check_port(rqstp, cred, exp);
+	if (status)
+		return status;
 
 	/* Set user creds for this exportpoint */
 	return nfserrno(nfsd_setuser(cred, exp));
