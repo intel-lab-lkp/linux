@@ -140,3 +140,26 @@ int write_stream_get_id(struct file *file, const struct write_stream_pool *pool)
 	return ws->id;
 }
 EXPORT_SYMBOL_GPL(write_stream_get_id);
+
+/**
+ * inode_set_write_stream - attach or clear the write stream of an inode
+ * @inode: inode to update
+ * @id: stream id, or WRITE_STREAM_NOT_SET to clear
+ *
+ * A write stream and a write life time hint are mutually exclusive.
+ *
+ * Return: 0, or -EBUSY if @inode has a write life time hint.
+ */
+int inode_set_write_stream(struct inode *inode, u16 id)
+{
+	spin_lock(&inode->i_lock);
+	if (id != WRITE_STREAM_NOT_SET &&
+	    inode->i_write_hint != WRITE_LIFE_NOT_SET) {
+		spin_unlock(&inode->i_lock);
+		return -EBUSY;
+	}
+	WRITE_ONCE(inode->i_write_stream, id);
+	spin_unlock(&inode->i_lock);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(inode_set_write_stream);
