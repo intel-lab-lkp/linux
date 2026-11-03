@@ -1005,11 +1005,13 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
 	struct idpf_queue_id_reg_info *chunks;
 	u32 vport_id = vport->vport_id;
 
-	if (!test_bit(IDPF_VPORT_UP, np->state))
-		return;
-
 	if (rtnl)
 		rtnl_lock();
+
+	/* IDPF_VPORT_UP should only be changed under RTNL */
+	ASSERT_RTNL();
+	if (!test_bit(IDPF_VPORT_UP, np->state))
+		goto unlock;
 
 	netif_carrier_off(vport->netdev);
 	netif_tx_disable(vport->netdev);
@@ -1036,6 +1038,7 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
 	idpf_vport_intr_rel(rsrc);
 	clear_bit(IDPF_VPORT_UP, np->state);
 
+unlock:
 	if (rtnl)
 		rtnl_unlock();
 }
@@ -1052,11 +1055,7 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
  */
 static int idpf_stop(struct net_device *netdev)
 {
-	struct idpf_netdev_priv *np = netdev_priv(netdev);
 	struct idpf_vport *vport;
-
-	if (test_bit(IDPF_REMOVE_IN_PROG, np->adapter->flags))
-		return 0;
 
 	idpf_vport_ctrl_lock(netdev);
 	vport = idpf_netdev_to_vport(netdev);
