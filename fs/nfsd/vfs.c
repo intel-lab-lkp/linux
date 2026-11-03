@@ -167,9 +167,7 @@ nfsd_cross_mnt(struct svc_rqst *rqstp, struct dentry **dpp,
 			err = 0;
 	} else if (nfsd_v4client(rqstp) ||
 		(exp->ex_flags & NFSEXP_CROSSMOUNT) || EX_NOHIDE(exp2)) {
-		nfserr = (access & NFSD_MAY_BYPASS_FLAVOR) ?
-			 check_xprtsec_policy(exp2, rqstp) :
-			 check_nfsd_access(exp2, rqstp);
+		nfserr = check_nfsd_access(exp2, rqstp, access);
 		if (nfserr == nfs_ok) {
 			/* successfully crossed mount point */
 			/*
@@ -221,9 +219,7 @@ static __be32 nfsd_lookup_parent(struct svc_rqst *rqstp, struct dentry *dparent,
 	} else if (IS_ERR(exp2)) {
 		nfserr = nfserrno(PTR_ERR(exp2));
 	} else {
-		nfserr = (access & NFSD_MAY_BYPASS_FLAVOR) ?
-			 check_xprtsec_policy(exp2, rqstp) :
-			 check_nfsd_access(exp2, rqstp);
+		nfserr = check_nfsd_access(exp2, rqstp, access);
 		if (nfserr != nfs_ok) {
 			exp_put(exp2);
 		} else {
