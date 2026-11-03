@@ -49,6 +49,7 @@
 #include "xdr4.h"
 #include "nfs4ctl.h"
 #include "vfs.h"
+#include "auth.h"
 #include "current_stateid.h"
 #include "netns.h"
 #include "acl.h"
@@ -852,14 +853,20 @@ static __be32
 nfsd4_restorefh(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
+	bool crossed;
+
 	if (!cstate->save_fh.fh_dentry)
 		return nfserr_restorefh;
 
+	crossed = cstate->current_fh.fh_export != cstate->save_fh.fh_export;
 	fh_dup2(&cstate->current_fh, &cstate->save_fh);
 	if (HAS_CSTATE_FLAG(cstate, SAVED_STATE_ID_FLAG)) {
 		memcpy(&cstate->current_stateid, &cstate->save_stateid, sizeof(stateid_t));
 		SET_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG);
 	}
+	/* RFC 8881 Section 18.27.3 does not permit NFS4ERR_DELAY here. */
+	if (crossed && nfsd_setuser(&rqstp->rq_cred, cstate->current_fh.fh_export))
+		return nfserr_serverfault;
 	return nfs_ok;
 }
 
