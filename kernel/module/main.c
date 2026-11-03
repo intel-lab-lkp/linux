@@ -960,15 +960,27 @@ bool try_module_get(struct module *module)
 }
 EXPORT_SYMBOL(try_module_get);
 
-void module_put(struct module *module)
+static __always_inline void __module_put(struct module *module)
 {
 	int ret;
 
-	if (module) {
-		ret = atomic_dec_if_positive(&module->refcnt);
-		WARN_ON(ret < 0);	/* Failed to put refcount */
+	ret = atomic_dec_if_positive(&module->refcnt);
+	WARN_ON(ret < 0);    /* Failed to put refcount */
+}
+
+void module_put(struct module *module)
+{
+	if (!module)
+		return;
+
+	if (trace_module_put_enabled()) {
+		guard(rcu)();
+		__module_put(module);
 		trace_module_put(module, _RET_IP_);
+		return;
 	}
+
+	__module_put(module);
 }
 EXPORT_SYMBOL(module_put);
 
