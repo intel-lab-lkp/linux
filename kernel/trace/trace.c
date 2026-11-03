@@ -9519,6 +9519,9 @@ static void ftrace_dump_one(struct trace_array *tr, enum ftrace_dump_mode dump_m
 	else
 		iter.cpu_file = RING_BUFFER_ALL_CPUS;
 
+	if (printk_is_tail_full())
+		goto out_enable;
+
 	if (tr == &global_trace)
 		printk(KERN_TRACE "Dumping ftrace buffer:\n");
 	else
@@ -9537,10 +9540,13 @@ static void ftrace_dump_one(struct trace_array *tr, enum ftrace_dump_mode dump_m
 	 * and then release the locks again.
 	 */
 
-	while (!trace_empty(&iter)) {
+	while (!trace_empty(&iter) && !printk_is_tail_full()) {
 
-		if (!cnt)
+		if (!cnt) {
 			printk(KERN_TRACE "---------------------------------\n");
+			if (printk_is_tail_full())
+				break;
+		}
 
 		cnt++;
 
@@ -9551,19 +9557,25 @@ static void ftrace_dump_one(struct trace_array *tr, enum ftrace_dump_mode dump_m
 			int ret;
 
 			ret = print_trace_line(&iter);
+			trace_printk_seq(&iter.seq);
+			if (printk_is_tail_full())
+				break;
+
 			if (ret != TRACE_TYPE_NO_CONSUME)
 				trace_consume(&iter);
-
-			trace_printk_seq(&iter.seq);
 		}
 		touch_nmi_watchdog();
 	}
+
+	if (printk_is_tail_full())
+		goto out_enable;
 
 	if (!cnt)
 		printk(KERN_TRACE "   (ftrace buffer empty)\n");
 	else
 		printk(KERN_TRACE "---------------------------------\n");
 
+out_enable:
 	tr->trace_flags |= old_userobj;
 
 	tracer_tracing_enable(tr);

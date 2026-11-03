@@ -377,6 +377,90 @@ static struct prb_data_block *to_block(struct prb_data_ring *data_ring,
 	return (void *)&data_ring->data[DATA_INDEX(data_ring, begin_lpos)];
 }
 
+static atomic64_t printk_panic_seq = ATOMIC64_INIT(U64_MAX);
+static bool printk_tail_frozen;
+static bool printk_tail_full;
+
+/**
+ * printk_mark_panic_start - record the ring buffer sequence at crash start
+ *
+ * Pin the next reserved sequence number at the beginning of a top-level Oops,
+ * fatal warning, or panic so subsequent tail freezing can recycle older
+ * pre-crash records without overwriting the primary crash output.
+ *
+ * Context: Any context.
+ * Return: true if this call newly pinned the crash start sequence from
+ *         U64_MAX, false if a crash start sequence was already active.
+ */
+bool printk_mark_panic_start(void)
+{
+	s64 panic_seq = atomic64_read(&printk_panic_seq);
+	u64 first_seq, next_seq;
+	bool pinned;
+
+	do {
+		first_seq = prb_first_valid_seq(prb);
+		if ((u64)panic_seq == U64_MAX) {
+			next_seq = prb_next_reserve_seq(prb);
+			pinned = true;
+		} else if ((u64)panic_seq < first_seq) {
+			next_seq = first_seq;
+			pinned = false;
+		} else {
+			return false;
+		}
+	} while (!atomic64_try_cmpxchg(&printk_panic_seq, &panic_seq, next_seq));
+
+	return pinned;
+}
+
+/**
+ * printk_clear_panic_start - clear a previously recorded crash start sequence
+ *
+ * Clear the pinned sequence number when a warning or Oops completes without
+ * triggering a kernel panic.
+ *
+ * Context: Any context.
+ */
+void printk_clear_panic_start(void)
+{
+	atomic64_set(&printk_panic_seq, U64_MAX);
+}
+
+/**
+ * printk_freeze_tail - prevent ring buffer tail from passing the crash start
+ * @freeze: true to stop tail advancement at the pinned crash sequence number,
+ *          false to restore normal ring buffer rotation
+ *
+ * Context: Any context.
+ */
+void printk_freeze_tail(bool freeze)
+{
+	if (freeze) {
+		printk_mark_panic_start();
+		WRITE_ONCE(printk_tail_full, false);
+		WRITE_ONCE(printk_tail_frozen, true);
+	} else {
+		WRITE_ONCE(printk_tail_frozen, false);
+		WRITE_ONCE(printk_tail_full, false);
+		atomic64_set(&printk_panic_seq, U64_MAX);
+	}
+}
+EXPORT_SYMBOL_GPL(printk_freeze_tail);
+
+/**
+ * printk_is_tail_full - check if the frozen ring buffer tail hit its limit
+ *
+ * Context: Any context.
+ * Return: true if tail freezing is active and the ring buffer has reached the
+ *         pinned crash sequence number, false otherwise.
+ */
+bool printk_is_tail_full(void)
+{
+	return unlikely(READ_ONCE(printk_tail_frozen) &&
+			READ_ONCE(printk_tail_full));
+}
+
 /*
  * Increase the data size to account for data block meta data plus any
  * padding so that the adjacent data block is aligned on the ID size.
@@ -591,6 +675,9 @@ static bool data_make_reusable(struct printk_ringbuffer *rb,
 	struct prb_desc desc;
 	struct prb_data_blk_lpos *blk_lpos = &desc.text_blk_lpos;
 	unsigned long id;
+	u64 seq;
+
+	*lpos_out = lpos_begin;
 
 	/* Loop until @lpos_begin has advanced to or beyond @lpos_end. */
 	while (need_more_space(data_ring, lpos_begin, lpos_end)) {
@@ -607,12 +694,20 @@ static bool data_make_reusable(struct printk_ringbuffer *rb,
 		id = blk->id; /* LMM(data_make_reusable:A) */
 
 		d_state = desc_read(desc_ring, id, &desc,
-				    NULL, NULL); /* LMM(data_make_reusable:B) */
+				    &seq, NULL); /* LMM(data_make_reusable:B) */
 
 		switch (d_state) {
 		case desc_miss:
+			return false;
 		case desc_reserved:
 		case desc_committed:
+			if (unlikely(READ_ONCE(printk_tail_frozen))) {
+				*lpos_out = lpos_begin;
+				/* Pairs with data_push_tail:D. */
+				smp_rmb();
+				if (lpos_begin == atomic_long_read(&data_ring->tail_lpos))
+					WRITE_ONCE(printk_tail_full, true);
+			}
 			return false;
 		case desc_finalized:
 			/*
@@ -621,6 +716,15 @@ static bool data_make_reusable(struct printk_ringbuffer *rb,
 			 */
 			if (blk_lpos->begin != lpos_begin)
 				return false;
+			if (unlikely(READ_ONCE(printk_tail_frozen)) &&
+			    seq >= (u64)atomic64_read(&printk_panic_seq)) {
+				*lpos_out = lpos_begin;
+				/* Pairs with data_push_tail:D. */
+				smp_rmb();
+				if (lpos_begin == atomic_long_read(&data_ring->tail_lpos))
+					WRITE_ONCE(printk_tail_full, true);
+				return false;
+			}
 			desc_make_reusable(desc_ring, id);
 			break;
 		case desc_reusable:
@@ -690,6 +794,12 @@ static bool data_push_tail(struct printk_ringbuffer *rb, unsigned long lpos)
 		 * data blocks before @lpos.
 		 */
 		if (!data_make_reusable(rb, tail_lpos, lpos, &next_lpos)) {
+			if (next_lpos != tail_lpos) {
+				if (atomic_long_try_cmpxchg(&data_ring->tail_lpos,
+							    &tail_lpos, next_lpos))
+					tail_lpos = next_lpos;
+				continue;
+			}
 			/*
 			 * 1. Guarantee the block ID loaded in
 			 *    data_make_reusable() is performed before
@@ -787,8 +897,9 @@ static bool desc_push_tail(struct printk_ringbuffer *rb,
 	struct prb_desc_ring *desc_ring = &rb->desc_ring;
 	enum desc_state d_state;
 	struct prb_desc desc;
+	u64 seq;
 
-	d_state = desc_read(desc_ring, tail_id, &desc, NULL, NULL);
+	d_state = desc_read(desc_ring, tail_id, &desc, &seq, NULL);
 
 	switch (d_state) {
 	case desc_miss:
@@ -813,6 +924,14 @@ static bool desc_push_tail(struct printk_ringbuffer *rb,
 	case desc_committed:
 		return false;
 	case desc_finalized:
+		if (unlikely(READ_ONCE(printk_tail_frozen)) &&
+		    seq >= (u64)atomic64_read(&printk_panic_seq)) {
+			/* Pairs with desc_push_tail:B. */
+			smp_rmb();
+			if (atomic_long_read(&desc_ring->tail_id) == tail_id)
+				WRITE_ONCE(printk_tail_full, true);
+			return false;
+		}
 		desc_make_reusable(desc_ring, tail_id);
 		break;
 	case desc_reusable:
@@ -881,8 +1000,11 @@ static bool desc_push_tail(struct printk_ringbuffer *rb,
 		 * not in an allowed tail state. But if the tail has since
 		 * been moved by another CPU, then it does not matter.
 		 */
-		if (atomic_long_read(&desc_ring->tail_id) == tail_id) /* LMM(desc_push_tail:D) */
+		if (atomic_long_read(&desc_ring->tail_id) == tail_id) { /* LMM(desc_push_tail:D) */
+			if (unlikely(READ_ONCE(printk_tail_frozen)))
+				WRITE_ONCE(printk_tail_full, true);
 			return false;
+		}
 	}
 
 	return true;
@@ -1428,6 +1550,9 @@ bool prb_reserve_in_last(struct prb_reserved_entry *e, struct printk_ringbuffer 
 	struct prb_desc *d;
 	unsigned long id;
 
+	if (printk_is_tail_full())
+		goto fail_reopen;
+
 	local_irq_save(e->irqflags);
 
 	/* Transition the newest descriptor back to the reserved state. */
@@ -1505,8 +1630,11 @@ bool prb_reserve_in_last(struct prb_reserved_entry *e, struct printk_ringbuffer 
 
 	return true;
 fail:
-	prb_commit(e);
-	/* prb_commit() re-enabled interrupts. */
+	if (printk_is_tail_full())
+		prb_final_commit(e);
+	else
+		prb_commit(e);
+	/* prb_commit() / prb_final_commit() re-enabled interrupts. */
 fail_reopen:
 	/* Make it clear to the caller that the re-reserve failed. */
 	memset(r, 0, sizeof(*r));
@@ -1664,6 +1792,12 @@ bool prb_reserve(struct prb_reserved_entry *e, struct printk_ringbuffer *rb,
 	if (!data_check_size(&rb->text_data_ring, r->text_buf_size))
 		goto fail;
 
+	if (printk_is_tail_full()) {
+		desc_make_final(rb, atomic_long_read(&desc_ring->head_id));
+		atomic_long_inc(&rb->fail);
+		goto fail;
+	}
+
 	/*
 	 * Descriptors in the reserved state act as blockers to all further
 	 * reservations once the desc_ring has fully wrapped. Disable
@@ -1672,7 +1806,24 @@ bool prb_reserve(struct prb_reserved_entry *e, struct printk_ringbuffer *rb,
 	 */
 	local_irq_save(e->irqflags);
 
+	if (unlikely(READ_ONCE(printk_tail_frozen)) && r->text_buf_size) {
+		struct prb_data_ring *data_ring = &rb->text_data_ring;
+		unsigned int size = to_blk_size(r->text_buf_size);
+		unsigned long begin_lpos = atomic_long_read(&data_ring->head_lpos);
+		unsigned long next_lpos = get_next_lpos(data_ring, begin_lpos, size);
+
+		if (!data_push_tail(rb, next_lpos - DATA_SIZE(data_ring))) {
+			if (printk_is_tail_full())
+				desc_make_final(rb, atomic_long_read(&desc_ring->head_id));
+			atomic_long_inc(&rb->fail);
+			local_irq_restore(e->irqflags);
+			goto fail;
+		}
+	}
+
 	if (!desc_reserve(rb, &id)) {
+		if (printk_is_tail_full())
+			desc_make_final(rb, atomic_long_read(&desc_ring->head_id));
 		/* Descriptor reservation failures are tracked. */
 		atomic_long_inc(&rb->fail);
 		local_irq_restore(e->irqflags);
@@ -1725,8 +1876,11 @@ bool prb_reserve(struct prb_reserved_entry *e, struct printk_ringbuffer *rb,
 	r->text_buf = data_alloc(rb, r->text_buf_size, &d->text_blk_lpos, id);
 	/* If text data allocation fails, a data-less record is committed. */
 	if (r->text_buf_size && !r->text_buf) {
-		prb_commit(e);
-		/* prb_commit() re-enabled interrupts. */
+		if (printk_is_tail_full())
+			prb_final_commit(e);
+		else
+			prb_commit(e);
+		/* prb_commit() / prb_final_commit() re-enabled interrupts. */
 		goto fail;
 	}
 

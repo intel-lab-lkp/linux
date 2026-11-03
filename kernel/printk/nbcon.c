@@ -1194,7 +1194,8 @@ static bool nbcon_kthread_should_wakeup(struct console *con, struct nbcon_contex
 	 * ownership in the middle of a message.
 	 */
 	if (unlikely(atomic_read(&nbcon_cpu_emergency_cnt)) ||
-	    unlikely(panic_in_progress()))
+	    unlikely(panic_in_progress()) ||
+	    unlikely(READ_ONCE(console_flush_suppressed)))
 		return false;
 
 	cookie = console_srcu_read_lock();
@@ -1253,7 +1254,8 @@ wait_for_event:
 		 * mode. See nbcon_kthread_should_wakeup() for more details.
 		 */
 		if (unlikely(atomic_read(&nbcon_cpu_emergency_cnt)) ||
-		    unlikely(panic_in_progress()))
+		    unlikely(panic_in_progress()) ||
+		    unlikely(READ_ONCE(console_flush_suppressed)))
 			goto wait_for_event;
 
 		backlog = false;
@@ -1642,7 +1644,7 @@ again:
 	 * is not available do it.
 	 */
 	printk_get_console_flush_type(&ft);
-	if (!ft.nbcon_offload &&
+	if (ft.nbcon_atomic && !ft.nbcon_offload &&
 	    prb_read_valid(prb, nbcon_seq_read(con), NULL)) {
 		stop_seq = prb_next_reserve_seq(prb);
 		goto again;
@@ -1658,6 +1660,9 @@ static void __nbcon_atomic_flush_pending(u64 stop_seq)
 {
 	struct console *con;
 	int cookie;
+
+	if (unlikely(READ_ONCE(console_flush_suppressed)))
+		return;
 
 	cookie = console_srcu_read_lock();
 	for_each_console_srcu(con) {

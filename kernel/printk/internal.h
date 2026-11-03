@@ -186,6 +186,7 @@ struct console_flush_type {
 };
 
 extern bool console_irqwork_blocked;
+extern bool console_flush_suppressed;
 
 /*
  * Identify which console flushing methods should be used in the context of
@@ -194,6 +195,9 @@ extern bool console_irqwork_blocked;
 static inline void printk_get_console_flush_type(struct console_flush_type *ft)
 {
 	memset(ft, 0, sizeof(*ft));
+
+	if (unlikely(READ_ONCE(console_flush_suppressed)))
+		return;
 
 	switch (nbcon_get_default_prio()) {
 	case NBCON_PRIO_NORMAL:

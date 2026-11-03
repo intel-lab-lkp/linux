@@ -467,6 +467,9 @@ bool legacy_allow_panic_sync;
 /* Avoid using irq_work when suspending. */
 bool console_irqwork_blocked;
 
+/* Suppress synchronous console flushing during in-memory panic dumps. */
+bool console_flush_suppressed;
+
 #ifdef CONFIG_PRINTK
 DECLARE_WAIT_QUEUE_HEAD(log_wait);
 static DECLARE_WAIT_QUEUE_HEAD(legacy_wait);
@@ -2386,6 +2389,23 @@ out:
 	return ret;
 }
 
+/**
+ * printk_suppress_console_flush - suppress console flushing in printk()
+ * @suppress: true to suppress console emission and klogd wakeups, false to
+ *            restore normal flushing behaviour
+ *
+ * Context: Any context.
+ */
+void printk_suppress_console_flush(bool suppress)
+{
+	WRITE_ONCE(console_flush_suppressed, suppress);
+	if (!suppress) {
+		printk_trigger_flush();
+		if (!console_irqwork_blocked)
+			wake_up_klogd();
+	}
+}
+
 /*
  * This acts as a one-way switch to allow legacy consoles to print from
  * the printk() caller context on a panic CPU. It also attempts to flush
@@ -2482,7 +2502,8 @@ asmlinkage int vprintk_emit(int facility, int level,
 
 	if (ft.legacy_offload)
 		defer_console_output();
-	else if (!console_irqwork_blocked)
+	else if (!console_irqwork_blocked &&
+		 !unlikely(READ_ONCE(console_flush_suppressed)))
 		wake_up_klogd();
 
 	return printed_len;
@@ -3243,6 +3264,9 @@ static bool console_flush_one_record(bool do_cond_resched, u64 *next_seq, bool *
 
 	*try_again = false;
 
+	if (unlikely(READ_ONCE(console_flush_suppressed)))
+		return false;
+
 	printk_get_console_flush_type(&ft);
 
 	cookie = console_srcu_read_lock();
@@ -3664,6 +3688,9 @@ static bool legacy_kthread_should_wakeup(void)
 
 	if (kthread_should_stop())
 		return true;
+
+	if (unlikely(READ_ONCE(console_flush_suppressed)))
+		return false;
 
 	printk_get_console_flush_type(&ft);
 

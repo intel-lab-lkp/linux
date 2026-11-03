@@ -205,6 +205,11 @@ extern asmlinkage void dump_stack(void) __cold;
 void printk_trigger_flush(void);
 void console_try_replay_all(void);
 void printk_legacy_allow_panic_sync(void);
+void printk_suppress_console_flush(bool suppress);
+bool printk_mark_panic_start(void);
+void printk_clear_panic_start(void);
+void printk_freeze_tail(bool freeze);
+bool printk_is_tail_full(void);
 extern bool nbcon_device_try_acquire(struct console *con);
 extern void nbcon_device_release(struct console *con);
 void nbcon_atomic_flush_unsafe(void);
@@ -307,6 +312,28 @@ static inline void console_try_replay_all(void)
 
 static inline void printk_legacy_allow_panic_sync(void)
 {
+}
+
+static inline void printk_suppress_console_flush(bool suppress)
+{
+}
+
+static inline bool printk_mark_panic_start(void)
+{
+	return false;
+}
+
+static inline void printk_clear_panic_start(void)
+{
+}
+
+static inline void printk_freeze_tail(bool freeze)
+{
+}
+
+static inline bool printk_is_tail_full(void)
+{
+	return false;
 }
 
 static inline bool nbcon_device_try_acquire(struct console *con)
