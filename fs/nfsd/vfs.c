@@ -40,6 +40,7 @@
 #endif /* CONFIG_NFSD_V4 */
 
 #include "nfsd.h"
+#include "auth.h"
 #include "nfserr.h"
 #include "nfs4ctl.h"
 #include "netns.h"
@@ -337,6 +338,7 @@ __nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 {
 	struct svc_export	*exp;
 	struct dentry		*dentry;
+	bool crossed;
 	__be32 err;
 
 	err = fh_verify(rqstp, fhp, S_IFDIR, access);
@@ -349,9 +351,16 @@ __nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	 * Note: we compose the file handle now, but as the
 	 * dentry may be negative, it may need to be updated.
 	 */
+	crossed = exp != fhp->fh_export;
 	err = fh_compose(resfh, exp, dentry, fhp);
 	if (!err && d_really_is_negative(dentry))
 		err = nfserr_noent;
+	/*
+	 * The crossing checked exp but did not install exp's creds, and
+	 * an NFSv4 stateid op uses the new filehandle without fh_verify().
+	 */
+	if (!err && crossed && nfsd_v4client(rqstp))
+		err = nfserrno(nfsd_setuser(&rqstp->rq_cred, exp));
 
 	dput(dentry);
 	exp_put(exp);
