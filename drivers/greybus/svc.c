@@ -1381,6 +1381,20 @@ static void gb_svc_remove_modules(struct gb_svc *svc)
 	}
 }
 
+/**
+ * gb_svc_flush - wait for received SVC requests to be processed
+ * @svc: the SVC
+ *
+ * Requests pass through the connection workqueue on their way to svc->wq, so
+ * both have to be flushed, in this order.
+ */
+void gb_svc_flush(struct gb_svc *svc)
+{
+	flush_workqueue(svc->connection->wq);
+	flush_workqueue(svc->wq);
+}
+EXPORT_SYMBOL_GPL(gb_svc_flush);
+
 void gb_svc_del(struct gb_svc *svc)
 {
 	gb_connection_disable_rx(svc->connection);
