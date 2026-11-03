@@ -510,6 +510,8 @@ What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_blue_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_concentration_co2_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_volumeflow_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_volumeflowY_scale
+What:		/sys/bus/iio/devices/iio:deviceX/in_charge_scale
+What:		/sys/bus/iio/devices/iio:deviceX/in_chargeY_scale
 KernelVersion:	2.6.35
 Contact:	linux-iio@vger.kernel.org
 Description:
@@ -1781,6 +1783,7 @@ What:		/sys/.../iio:deviceX/in_energy_en
 What:		/sys/.../iio:deviceX/in_distance_en
 What:		/sys/.../iio:deviceX/in_velocity_sqrt(x^2+y^2+z^2)_en
 What:		/sys/.../iio:deviceX/in_steps_en
+What:		/sys/.../iio:deviceX/in_charge_en
 KernelVersion:	3.19
 Contact:	linux-iio@vger.kernel.org
 Description:
@@ -2509,3 +2512,13 @@ Description:
 		Raw (unscaled) volumetric flow rate reading from the channel.
 		To convert to standard units (cubic metres per second, m^3/s)
 		apply the channel's _scale (and _offset, when present).
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_charge_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_chargeY_raw
+KernelVersion:	7.4
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Raw charge value read from the channel. The device acts as
+		a Coulomb counter by accumulating current measurements over
+		time. Units after application of scale are milliCoulombs. X
+		is the IIO index of the device.

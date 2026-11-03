@@ -55,6 +55,7 @@ enum iio_chan_type {
 	IIO_ALTCURRENT,
 	IIO_COVERAGE,
 	IIO_VOLUMEFLOW,
+	IIO_CHARGE,
 };
 
 enum iio_modifier {
