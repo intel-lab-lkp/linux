@@ -8009,7 +8009,7 @@ qla2xxx_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
 		goto out;
 	}
 
-	qla2xxx_set_affinity_nobalance(pdev, false);
+	qla2xxx_set_affinity_nobalance(pdev, true);
 
 	switch (state) {
 	case pci_channel_io_normal:
@@ -8147,7 +8147,7 @@ exit_slot_reset:
 	ql_dbg(ql_dbg_aer, base_vha, 0x900e,
 	    "Slot Reset returning %x.\n", ret);
 
-	qla2xxx_set_affinity_nobalance(pdev, true);
+	qla2xxx_set_affinity_nobalance(pdev, false);
 
 	return ret;
 }
