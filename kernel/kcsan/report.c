@@ -385,7 +385,11 @@ static void print_verbose_info(struct task_struct *task)
 
 	pr_err("\n");
 	debug_show_held_locks(task);
-	print_irqtrace_events(task);
+	/*
+	 * No emergency section: it would flush all pending messages to the
+	 * consoles while report_lock is held with interrupts disabled.
+	 */
+	__print_irqtrace_events(task);
 }
 
 static void print_report(enum kcsan_value_change value_change,

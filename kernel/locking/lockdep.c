@@ -4241,11 +4241,10 @@ check_usage_backwards(struct task_struct *curr, struct held_lock *this,
 	return 0;
 }
 
-void print_irqtrace_events(struct task_struct *curr)
+/* Like print_irqtrace_events(), but without the emergency console flush. */
+void __print_irqtrace_events(struct task_struct *curr)
 {
 	const struct irqtrace_events *trace = &curr->irqtrace;
-
-	nbcon_cpu_emergency_enter();
 
 	printk("irq event stamp: %u\n", trace->irq_events);
 	printk("hardirqs last  enabled at (%u): [<%px>] %pS\n",
@@ -4260,7 +4259,12 @@ void print_irqtrace_events(struct task_struct *curr)
 	printk("softirqs last disabled at (%u): [<%px>] %pS\n",
 		trace->softirq_disable_event, (void *)trace->softirq_disable_ip,
 		(void *)trace->softirq_disable_ip);
+}
 
+void print_irqtrace_events(struct task_struct *curr)
+{
+	nbcon_cpu_emergency_enter();
+	__print_irqtrace_events(curr);
 	nbcon_cpu_emergency_exit();
 }
 
