@@ -105,6 +105,11 @@
 };
 
 &usb {
-	dr_mode = "host";
+	dr_mode = "otg";
 	status = "okay";
+};
+
+&usbphy {
+	usb-role-switch;
+	role-switch-default-mode = "peripheral";
 };
