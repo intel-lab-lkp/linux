@@ -70,6 +70,7 @@ static bool panic_console_replay;
 
 bool panic_triggering_all_cpu_backtrace;
 static bool panic_this_cpu_backtrace_printed;
+static bool panic_all_cpu_backtrace_printed;
 
 int panic_timeout = CONFIG_PANIC_TIMEOUT;
 EXPORT_SYMBOL_GPL(panic_timeout);
@@ -451,13 +452,21 @@ bool panic_try_start(void)
 	old_cpu = PANIC_CPU_INVALID;
 	this_cpu = raw_smp_processor_id();
 
-	return atomic_try_cmpxchg(&panic_cpu, &old_cpu, this_cpu);
+	if (!atomic_try_cmpxchg(&panic_cpu, &old_cpu, this_cpu))
+		return false;
+
+	if (atomic_read(&panic_redirect_cpu) == PANIC_CPU_INVALID &&
+	    (test_taint(TAINT_DIE) || oops_in_progress))
+		panic_this_cpu_backtrace_printed = true;
+
+	return true;
 }
 EXPORT_SYMBOL(panic_try_start);
 
 void panic_reset(void)
 {
-	atomic_set(&panic_cpu, PANIC_CPU_INVALID);
+	panic_this_cpu_backtrace_printed = false;
+	atomic_set_release(&panic_cpu, PANIC_CPU_INVALID);
 }
 EXPORT_SYMBOL(panic_reset);
 
@@ -538,8 +547,21 @@ void check_panic_on_warn(const char *origin)
 		      origin, limit);
 }
 
-static void panic_trigger_all_cpu_backtrace(void)
+/**
+ * panic_trigger_all_cpu_backtrace - trigger NMI backtraces on all CPUs once
+ *
+ * Temporarily permit non-panic CPUs to emit messages into the printk ring
+ * buffer while capturing all-CPU backtraces during a panic. Subsequent calls
+ * are ignored so backtraces are not re-triggered after secondary CPUs have
+ * been shut down.
+ */
+void panic_trigger_all_cpu_backtrace(void)
 {
+	if (!panic_on_this_cpu() || panic_all_cpu_backtrace_printed)
+		return;
+
+	panic_all_cpu_backtrace_printed = true;
+
 	/* Temporary allow non-panic CPUs to write their backtraces. */
 	panic_triggering_all_cpu_backtrace = true;
 
@@ -558,8 +580,9 @@ static void panic_trigger_all_cpu_backtrace(void)
  */
 static void panic_other_cpus_shutdown(bool crash_kexec)
 {
-	if (panic_print & SYS_INFO_ALL_BT)
+	if (sys_info_get_mask(panic_print) & SYS_INFO_ALL_BT)
 		panic_trigger_all_cpu_backtrace();
+	panic_all_cpu_backtrace_printed = true;
 
 	/*
 	 * Note that smp_send_stop() is the usual SMP shutdown function,
