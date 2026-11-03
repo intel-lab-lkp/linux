@@ -1754,7 +1754,7 @@ static void epf_ntb_epc_cleanup_interface(struct epf_ntb *ntb,
 		return;
 
 	ntb_epc = ntb->epc[type];
-	cancel_delayed_work(&ntb_epc->cmd_handler);
+	cancel_delayed_work_sync(&ntb_epc->cmd_handler);
 	epf_ntb_db_mw_bar_cleanup(ntb, type);
 	epf_ntb_peer_spad_bar_clear(ntb_epc);
 	epf_ntb_config_sspad_bar_clear(ntb_epc);
