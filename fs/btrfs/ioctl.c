@@ -2442,7 +2442,8 @@ out_drop_write:
 	return ret;
 }
 
-static int btrfs_ioctl_defrag(struct file *file, void __user *argp)
+static int btrfs_ioctl_defrag(struct file *file, void __user *argp,
+			      const struct btrfs_ioctl_defrag_range_args *args)
 {
 	struct inode *inode = file_inode(file);
 	struct btrfs_root *root = BTRFS_I(inode)->root;
@@ -2487,29 +2488,31 @@ static int btrfs_ioctl_defrag(struct file *file, void __user *argp)
 			goto out;
 		}
 
-		if (argp) {
+		if (args) {
+			range = *args;
+		} else if (argp) {
 			if (copy_from_user(&range, argp, sizeof(range))) {
 				ret = -EFAULT;
 				goto out;
 			}
-			if (range.flags & ~BTRFS_DEFRAG_RANGE_FLAGS_SUPP) {
-				ret = -EOPNOTSUPP;
-				goto out;
-			}
-			if ((range.flags & BTRFS_DEFRAG_RANGE_COMPRESS) &&
-			    (range.flags & BTRFS_DEFRAG_RANGE_NOCOMPRESS)) {
-				ret = -EINVAL;
-				goto out;
-			}
-			/* Compression or no-compression require to start the IO. */
-			if ((range.flags & BTRFS_DEFRAG_RANGE_COMPRESS) ||
-			    (range.flags & BTRFS_DEFRAG_RANGE_NOCOMPRESS)) {
-				range.flags |= BTRFS_DEFRAG_RANGE_START_IO;
-				range.extent_thresh = (u32)-1;
-			}
 		} else {
 			/* the rest are all set to zero by kzalloc */
 			range.len = (u64)-1;
+		}
+		if (range.flags & ~BTRFS_DEFRAG_RANGE_FLAGS_SUPP) {
+			ret = -EOPNOTSUPP;
+			goto out;
+		}
+		if ((range.flags & BTRFS_DEFRAG_RANGE_COMPRESS) &&
+		    (range.flags & BTRFS_DEFRAG_RANGE_NOCOMPRESS)) {
+			ret = -EINVAL;
+			goto out;
+		}
+		/* Compression or no-compression require to start the IO. */
+		if ((range.flags & BTRFS_DEFRAG_RANGE_COMPRESS) ||
+		    (range.flags & BTRFS_DEFRAG_RANGE_NOCOMPRESS)) {
+			range.flags |= BTRFS_DEFRAG_RANGE_START_IO;
+			range.extent_thresh = (u32)-1;
 		}
 		ret = btrfs_defrag_file(BTRFS_I(file_inode(file)), &file->f_ra,
 					&range, BTRFS_OLDEST_GENERATION, 0);
@@ -4999,6 +5002,50 @@ out_acct:
 	return ret;
 }
 
+static int btrfs_uring_defrag(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	const size_t cmd_size = 2 * sizeof(struct io_uring_sqe) -
+				offsetof(struct io_uring_sqe, cmd);
+	const struct io_uring_sqe *sqe = cmd->sqe;
+	const struct btrfs_ioctl_defrag_range_args *args;
+	int ret;
+
+	/*
+	 * btrfs_ioctl_defrag() sleeps on the inode lock and on page reads, and
+	 * mnt_want_write_file() sleeps while the filesystem is frozen. We return
+	 * -EAGAIN so that io_uring issues the command again from io-wq.
+	 */
+	if (issue_flags & IO_URING_F_NONBLOCK)
+		return -EAGAIN;
+
+	/*
+	 * The arguments don't fit in the command area of a 64-byte SQE, so they
+	 * are passed inline in a 128-byte SQE. We don't take a pointer to the
+	 * arguments. io-wq would read them after io_uring_enter() has returned,
+	 * and the application may have reused the memory by then. io_uring
+	 * copies the SQE itself before it queues the command to io-wq.
+	 */
+	if (!(issue_flags & IO_URING_F_SQE128))
+		return -EINVAL;
+	if (sqe->addr || sqe->len || sqe->uring_cmd_flags || sqe->buf_index ||
+	    sqe->file_index)
+		return -EINVAL;
+	args = io_uring_sqe128_cmd(sqe, struct btrfs_ioctl_defrag_range_args);
+	if (memchr_inv(sqe->cmd + sizeof(*args), 0, cmd_size - sizeof(*args)))
+		return -EINVAL;
+
+	/*
+	 * The ioctl syscall calls the LSM ioctl hook before btrfs_ioctl(). We
+	 * call it too, so that a policy that denies the ioctl also denies the
+	 * command.
+	 */
+	ret = security_file_ioctl(cmd->file, BTRFS_IOC_DEFRAG_RANGE, 0);
+	if (ret)
+		return ret;
+
+	return btrfs_ioctl_defrag(cmd->file, NULL, args);
+}
+
 int btrfs_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 {
 	if (btrfs_is_shutdown(inode_to_fs_info(file_inode(cmd->file))))
@@ -5016,6 +5063,9 @@ int btrfs_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 	case BTRFS_IOC_ENCODED_WRITE_32:
 #endif
 		return btrfs_uring_encoded_write(cmd, issue_flags);
+
+	case BTRFS_IOC_DEFRAG_RANGE:
+		return btrfs_uring_defrag(cmd, issue_flags);
 	}
 
 	return -EINVAL;
@@ -5558,9 +5608,9 @@ long btrfs_ioctl(struct file *file, unsigned int
 	case BTRFS_IOC_DEFAULT_SUBVOL:
 		return btrfs_ioctl_default_subvol(file, argp);
 	case BTRFS_IOC_DEFRAG:
-		return btrfs_ioctl_defrag(file, NULL);
+		return btrfs_ioctl_defrag(file, NULL, NULL);
 	case BTRFS_IOC_DEFRAG_RANGE:
-		return btrfs_ioctl_defrag(file, argp);
+		return btrfs_ioctl_defrag(file, argp, NULL);
 	case BTRFS_IOC_RESIZE:
 		return btrfs_ioctl_resize(file, argp);
 	case BTRFS_IOC_ADD_DEV:
