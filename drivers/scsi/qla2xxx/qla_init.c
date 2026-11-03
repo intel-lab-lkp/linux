@@ -4114,7 +4114,7 @@ static void qla2xxx_print_sfp_info(struct scsi_qla_host *vha)
 	    "SFP: %.*s -> %.*s ->%s%s%s%s%s%s%s\n",
 	    (int)sizeof(a0->vendor_name), a0->vendor_name,
 	    (int)sizeof(a0->vendor_pn), a0->vendor_pn,
-	    a0->fc_sp_cc10 & FC_SP_2 ? a0->fiber_channel_speed2  &  FC_SP_64 ?
+	    a0->fc_sp_cc10 & FC_SPEED_2 ? a0->fiber_channel_speed2 & FC_SP_64 ?
 					" 64G" : "" : "",
 	    a0->fc_sp_cc10 & FC_SP_32 ? " 32G" : "",
 	    a0->fc_sp_cc10 & FC_SP_16 ? " 16G" : "",
