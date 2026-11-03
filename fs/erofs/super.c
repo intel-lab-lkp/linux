@@ -1106,6 +1106,10 @@ static int __init erofs_module_init(void)
 	if (err)
 		goto ishare_err;
 
+	err = erofs_init_fileio();
+	if (err)
+		goto fileio_err;
+
 	err = register_filesystem(&erofs_fs_type);
 	if (err)
 		goto fs_err;
@@ -1113,6 +1117,8 @@ static int __init erofs_module_init(void)
 	return 0;
 
 fs_err:
+	erofs_exit_fileio();
+fileio_err:
 	erofs_exit_ishare();
 ishare_err:
 	erofs_exit_sysfs();
@@ -1128,6 +1134,7 @@ shrinker_err:
 static void __exit erofs_module_exit(void)
 {
 	unregister_filesystem(&erofs_fs_type);
+	erofs_exit_fileio();
 	erofs_exit_ishare();
 
 	/* ensure all delayed rcu free inodes & pclusters are flushed */

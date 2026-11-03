@@ -7,12 +7,17 @@
 #include <trace/events/erofs.h>
 
 struct erofs_fileio_rq {
-	struct bio_vec bvecs[16];
-	struct bio bio;
 	struct kiocb iocb;
 	struct super_block *sb;
 	refcount_t ref;
+	/*
+	 * must be last: the fields above are the front_pad of
+	 * erofs_fileio_bioset, and inline bvecs follow the bio
+	 */
+	struct bio bio;
 };
+
+static struct bio_set erofs_fileio_bioset;
 
 struct erofs_fileio {
 	struct erofs_map_blocks map;
@@ -38,9 +43,8 @@ static void erofs_fileio_ki_complete(struct kiocb *iocb, long ret)
 		rq->bio.bi_status = errno_to_blk_status(ret);
 	}
 	bio_endio(&rq->bio);
-	bio_uninit(&rq->bio);
 	if (refcount_dec_and_test(&rq->ref))
-		kfree(rq);
+		bio_put(&rq->bio);
 }
 
 static void erofs_fileio_rq_submit(struct erofs_fileio_rq *rq)
@@ -56,22 +60,25 @@ static void erofs_fileio_rq_submit(struct erofs_fileio_rq *rq)
 	if (test_opt(&EROFS_SB(rq->sb)->opt, DIRECT_IO) &&
 	    rq->iocb.ki_filp->f_mode & FMODE_CAN_ODIRECT)
 		rq->iocb.ki_flags = IOCB_DIRECT;
-	iov_iter_bvec(&iter, ITER_DEST, rq->bvecs, rq->bio.bi_vcnt,
+	iov_iter_bvec(&iter, ITER_DEST, rq->bio.bi_io_vec, rq->bio.bi_vcnt,
 		      rq->bio.bi_iter.bi_size);
 	scoped_with_creds(rq->iocb.ki_filp->f_cred)
 		ret = vfs_iocb_iter_read(rq->iocb.ki_filp, &rq->iocb, &iter);
 	if (ret != -EIOCBQUEUED)
 		erofs_fileio_ki_complete(&rq->iocb, ret);
 	if (refcount_dec_and_test(&rq->ref))
-		kfree(rq);
+		bio_put(&rq->bio);
 }
 
 static struct erofs_fileio_rq *erofs_fileio_rq_alloc(struct super_block *sb,
-						     struct file *file)
+		struct file *file, unsigned short nr_vecs)
 {
-	struct erofs_fileio_rq *rq = kzalloc_obj(*rq, GFP_KERNEL | __GFP_NOFAIL);
+	struct bio *bio = bio_alloc_bioset(NULL, nr_vecs, REQ_OP_READ,
+					   GFP_NOIO, &erofs_fileio_bioset);
+	struct erofs_fileio_rq *rq =
+			container_of(bio, struct erofs_fileio_rq, bio);
 
-	bio_init(&rq->bio, NULL, rq->bvecs, ARRAY_SIZE(rq->bvecs), REQ_OP_READ);
+	memset(rq, 0, offsetof(struct erofs_fileio_rq, bio));
 	rq->iocb.ki_filp = file;
 	rq->sb = sb;
 	refcount_set(&rq->ref, 2);
@@ -80,7 +87,8 @@ static struct erofs_fileio_rq *erofs_fileio_rq_alloc(struct super_block *sb,
 
 struct bio *erofs_fileio_bio_alloc(struct erofs_map_dev *mdev)
 {
-	return &erofs_fileio_rq_alloc(mdev->m_sb, mdev->m_dif->file)->bio;
+	return &erofs_fileio_rq_alloc(mdev->m_sb, mdev->m_dif->file,
+				      BIO_MAX_VECS)->bio;
 }
 
 void erofs_fileio_submit_bio(struct bio *bio)
@@ -108,11 +116,14 @@ static int erofs_fileio_iomap_read_folio_range(const struct iomap_iter *iter,
 			   offset_in_folio(folio, iter->pos))) {
 		struct super_block *sb = iter_ctx->realinode->i_sb;
 		struct erofs_device_info *dif = iter->iomap.private;
+		unsigned short nr_vecs;
 
 		/* submit the existing range if there was one. */
 		if (ctx->read_ctx)
 			erofs_fileio_iomap_submit_read(iter, ctx);
-		rq = erofs_fileio_rq_alloc(sb, dif->file);
+		nr_vecs = bio_max_segs(DIV_ROUND_UP(iomap_length(iter),
+						    PAGE_SIZE));
+		rq = erofs_fileio_rq_alloc(sb, dif->file, nr_vecs);
 		rq->bio.bi_iter.bi_sector = sector;
 		bio_add_folio_nofail(&rq->bio, folio, plen,
 				offset_in_folio(folio, iter->pos));
@@ -161,10 +172,22 @@ int erofs_read_meta_folio(struct file *file, struct folio *folio)
 		}
 	}
 
-	io.rq = erofs_fileio_rq_alloc(inode->i_sb, io.dev.m_dif->file);
+	io.rq = erofs_fileio_rq_alloc(inode->i_sb, io.dev.m_dif->file, 1);
 	io.rq->bio.bi_end_io = erofs_fileio_meta_endio;
 	io.rq->bio.bi_iter.bi_sector = pos >> 9;
 	bio_add_folio_nofail(&io.rq->bio, folio, len, 0);
 	erofs_fileio_rq_submit(io.rq);
 	return 0;
+}
+
+int __init erofs_init_fileio(void)
+{
+	return bioset_init(&erofs_fileio_bioset, BIO_POOL_SIZE,
+			   offsetof(struct erofs_fileio_rq, bio),
+			   BIOSET_NEED_BVECS);
+}
+
+void erofs_exit_fileio(void)
+{
+	bioset_exit(&erofs_fileio_bioset);
 }
