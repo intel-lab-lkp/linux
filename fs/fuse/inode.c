@@ -418,7 +418,13 @@ static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr,
 		fuse_init_common(inode);
 		fuse_init_file_inode(inode, attr->flags);
 
-		if ((attr->flags & FUSE_ATTR_DAX) && !fuse_inode_vdax(inode)) {
+		/*
+		 * S_DAX and IS_DAX() compile to 0 without CONFIG_FS_DAX, so
+		 * installing fuse_dax_aops there would only strip the regular
+		 * address space operations without marking the inode.
+		 */
+		if (IS_ENABLED(CONFIG_FS_DAX) &&
+		    (attr->flags & FUSE_ATTR_DAX) && !fuse_inode_vdax(inode)) {
 			inode->i_flags |= S_DAX;
 			inode->i_data.a_ops = &fuse_dax_aops;
 		}
