@@ -11,7 +11,6 @@
  */
 
 #include <linux/security.h>
-#include <linux/export.h>
 #include <linux/lsm_hooks.h>
 #include <uapi/linux/lsm.h>
 
@@ -158,11 +157,8 @@ static const struct file_operations lockdown_ops = {
 
 static int __init lockdown_secfs_init(void)
 {
-	struct dentry *dentry;
-
-	dentry = securityfs_create_file("lockdown", 0644, NULL, NULL,
-					&lockdown_ops);
-	return PTR_ERR_OR_ZERO(dentry);
+	return PTR_ERR_OR_ZERO(securityfs_create_file("lockdown", 0644, NULL,
+						      NULL, &lockdown_ops));
 }
 
 #ifdef CONFIG_SECURITY_LOCKDOWN_LSM_EARLY
