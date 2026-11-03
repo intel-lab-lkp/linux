@@ -10,6 +10,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/mfd/syscon.h>
@@ -231,6 +232,8 @@ static int rkcif_probe(struct platform_device *pdev)
 	v4l2_async_nf_init(&rkcif->notifier, &rkcif->v4l2_dev);
 	rkcif->notifier.ops = &rkcif_notifier_ops;
 
+	rkcif->debugfs_dir = debugfs_create_dir(dev_name(dev), NULL);
+
 	ret = rkcif_register(rkcif);
 	if (ret) {
 		dev_err(dev, "failed to register media entities: %d\n", ret);
@@ -246,6 +249,7 @@ static int rkcif_probe(struct platform_device *pdev)
 err_rkcif_unregister:
 	rkcif_unregister(rkcif);
 err_notifier_cleanup:
+	debugfs_remove_recursive(rkcif->debugfs_dir);
 	v4l2_async_nf_cleanup(&rkcif->notifier);
 	media_device_unregister(&rkcif->media_dev);
 err_v4l2_dev_unregister:
@@ -262,6 +266,7 @@ static void rkcif_remove(struct platform_device *pdev)
 
 	v4l2_async_nf_unregister(&rkcif->notifier);
 	rkcif_unregister(rkcif);
+	debugfs_remove_recursive(rkcif->debugfs_dir);
 	v4l2_async_nf_cleanup(&rkcif->notifier);
 	media_device_unregister(&rkcif->media_dev);
 	v4l2_device_unregister(&rkcif->v4l2_dev);

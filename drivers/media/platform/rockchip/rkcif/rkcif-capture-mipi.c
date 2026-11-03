@@ -7,6 +7,7 @@
  * Copyright (C) 2025 Collabora, Ltd.
  */
 
+#include <linux/debugfs.h>
 #include <linux/interrupt.h>
 
 #include <media/mipi-csi2.h>
@@ -44,6 +45,35 @@
 
 #define RKCIF_MIPI_INT_FRAME0_END(id) BIT(8 + (id) * 2 + 0)
 #define RKCIF_MIPI_INT_FRAME1_END(id) BIT(8 + (id) * 2 + 1)
+#define RKCIF_MIPI_INT_ALL_END GENMASK(15, 8)
+
+#define RK3568_MIPI_INT_DMA_Y_FIFO_OVERFLOW BIT(16)
+#define RK3568_MIPI_INT_DMA_UV_FIFO_OVERFLOW BIT(17)
+#define RK3568_MIPI_INT_CONFIG_FIFO_OVERFLOW BIT(18)
+#define RK3568_MIPI_INT_BANDWIDTH_LACK BIT(19)
+#define RK3568_MIPI_INT_RX_FIFO_OVERFLOW BIT(20)
+
+#define RK3588_MIPI_INT_DMA_Y_FIFO_OVERFLOW BIT(16)
+#define RK3588_MIPI_INT_DMA_UV_FIFO_OVERFLOW BIT(17)
+#define RK3588_MIPI_INT_BANDWIDTH_LACK BIT(18)
+#define RK3588_MIPI_INT_RX_FIFO_OVERFLOW BIT(19)
+#define RK3588_MIPI_INT_SIZE_ERROR GENMASK(27, 24)
+
+static const struct rkcif_mipi_error rk3568_mipi_errors[] = {
+	{ RK3568_MIPI_INT_DMA_Y_FIFO_OVERFLOW, "dma_y_fifo_overflow" },
+	{ RK3568_MIPI_INT_DMA_UV_FIFO_OVERFLOW, "dma_uv_fifo_overflow" },
+	{ RK3568_MIPI_INT_CONFIG_FIFO_OVERFLOW, "config_fifo_overflow" },
+	{ RK3568_MIPI_INT_BANDWIDTH_LACK, "bandwidth_lack" },
+	{ RK3568_MIPI_INT_RX_FIFO_OVERFLOW, "rx_fifo_overflow" },
+};
+
+static const struct rkcif_mipi_error rk3588_mipi_errors[] = {
+	{ RK3588_MIPI_INT_DMA_Y_FIFO_OVERFLOW, "dma_y_fifo_overflow" },
+	{ RK3588_MIPI_INT_DMA_UV_FIFO_OVERFLOW, "dma_uv_fifo_overflow" },
+	{ RK3588_MIPI_INT_BANDWIDTH_LACK, "bandwidth_lack" },
+	{ RK3588_MIPI_INT_RX_FIFO_OVERFLOW, "rx_fifo_overflow" },
+	{ RK3588_MIPI_INT_SIZE_ERROR, "size_error" },
+};
 
 static const struct rkcif_output_fmt mipi_out_fmts[] = {
 	/* YUV formats */
@@ -420,10 +450,14 @@ rkcif_rk3568_mipi_ctrl0(struct rkcif_stream *stream,
 const struct rkcif_mipi_match_data rkcif_rk3568_vicap_mipi_match_data = {
 	.mipi_num = 1,
 	.mipi_ctrl0 = rkcif_rk3568_mipi_ctrl0,
+	.errors = rk3568_mipi_errors,
+	.errors_num = ARRAY_SIZE(rk3568_mipi_errors),
 	.regs = {
 		[RKCIF_MIPI_CTRL] = 0x20,
 		[RKCIF_MIPI_INTEN] = 0xa4,
 		[RKCIF_MIPI_INTSTAT] = 0xa8,
+		[RKCIF_MIPI_LINE_CNT_ID0_1] = 0xb4,
+		[RKCIF_MIPI_LINE_CNT_ID2_3] = 0xb8,
 	},
 	.regs_id = {
 		[RKCIF_ID0] = {
@@ -531,10 +565,14 @@ rkcif_rk3588_mipi_ctrl0(struct rkcif_stream *stream,
 const struct rkcif_mipi_match_data rkcif_rk3588_vicap_mipi_match_data = {
 	.mipi_num = 6,
 	.mipi_ctrl0 = rkcif_rk3588_mipi_ctrl0,
+	.errors = rk3588_mipi_errors,
+	.errors_num = ARRAY_SIZE(rk3588_mipi_errors),
 	.regs = {
 		[RKCIF_MIPI_CTRL] = 0x20,
 		[RKCIF_MIPI_INTEN] = 0x74,
 		[RKCIF_MIPI_INTSTAT] = 0x78,
+		[RKCIF_MIPI_LINE_CNT_ID0_1] = 0x84,
+		[RKCIF_MIPI_LINE_CNT_ID2_3] = 0x88,
 	},
 	.regs_id = {
 		[RKCIF_ID0] = {
@@ -699,6 +737,53 @@ rkcif_mipi_stream_read(struct rkcif_stream *stream, unsigned int index)
 	return readl(stream->rkcif->base_addr + addr);
 }
 
+static u32 rkcif_mipi_error_mask(struct rkcif_interface *interface)
+{
+	const struct rkcif_mipi_match_data *match_data =
+		interface->rkcif->match_data->mipi;
+	unsigned int i;
+	u32 mask = 0;
+
+	for (i = 0; i < match_data->errors_num; i++)
+		mask |= match_data->errors[i].mask;
+
+	return mask;
+}
+
+static void rkcif_mipi_handle_errors(struct rkcif_interface *interface,
+				     u32 intstat)
+{
+	const struct rkcif_mipi_match_data *match_data =
+		interface->rkcif->match_data->mipi;
+	unsigned int i;
+
+	intstat &= rkcif_mipi_error_mask(interface);
+	if (!intstat)
+		return;
+
+	for (i = 0; i < match_data->errors_num; i++)
+		if (intstat & match_data->errors[i].mask)
+			interface->error_count[i]++;
+
+	dev_warn_ratelimited(interface->rkcif->dev, "%s: capture errors %#x\n",
+			     interface->sd.name, intstat);
+}
+
+static void rkcif_mipi_debugfs_init(struct rkcif_interface *interface)
+{
+	const struct rkcif_mipi_match_data *match_data =
+		interface->rkcif->match_data->mipi;
+	struct dentry *parent = interface->rkcif->debugfs_dir;
+	unsigned int i;
+
+	interface->debugfs_dir = debugfs_create_dir(interface->sd.name, parent);
+
+	for (i = 0; i < match_data->errors_num; i++)
+		debugfs_create_ulong(match_data->errors[i].name, 0444,
+				     interface->debugfs_dir,
+				     &interface->error_count[i]);
+}
+
 static void rkcif_mipi_queue_buffer(struct rkcif_stream *stream,
 				    unsigned int index)
 {
@@ -742,6 +827,7 @@ static int rkcif_mipi_start_streaming(struct rkcif_stream *stream)
 
 	int_mask |= RKCIF_MIPI_INT_FRAME0_END(stream->id);
 	int_mask |= RKCIF_MIPI_INT_FRAME1_END(stream->id);
+	int_mask |= rkcif_mipi_error_mask(interface);
 
 	spin_lock_irqsave(&interface->irq_lock, flags);
 	int_temp = rkcif_mipi_read(interface, RKCIF_MIPI_INTEN);
@@ -785,6 +871,8 @@ static void rkcif_mipi_stop_streaming(struct rkcif_stream *stream)
 	spin_lock_irqsave(&interface->irq_lock, flags);
 	int_temp = rkcif_mipi_read(interface, RKCIF_MIPI_INTEN);
 	int_temp &= ~int_mask;
+	if (!(int_temp & RKCIF_MIPI_INT_ALL_END))
+		int_temp &= ~rkcif_mipi_error_mask(interface);
 	rkcif_mipi_write(interface, RKCIF_MIPI_INTEN, int_temp);
 
 	int_temp = rkcif_mipi_read(interface, RKCIF_MIPI_INTSTAT);
@@ -836,6 +924,8 @@ irqreturn_t rkcif_mipi_isr(int irq, void *ctx)
 		if (intstat)
 			ret = IRQ_HANDLED;
 
+		rkcif_mipi_handle_errors(interface, intstat);
+
 		for (unsigned int j = 0; j < interface->streams_num; j++) {
 			struct rkcif_stream *stream = &interface->streams[j];
 
@@ -879,6 +969,8 @@ int rkcif_mipi_register(struct rkcif_device *rkcif)
 		if (ret)
 			continue;
 
+		rkcif_mipi_debugfs_init(interface);
+
 		for (unsigned int j = 0; j < RKCIF_ID_MAX; j++) {
 			struct rkcif_stream *stream = &interface->streams[j];
 
@@ -906,6 +998,7 @@ err:
 		for (unsigned int j = 0; j < interface->streams_num; j++)
 			rkcif_stream_unregister(&interface->streams[j]);
 
+		debugfs_remove_recursive(interface->debugfs_dir);
 		rkcif_interface_unregister(interface);
 	}
 	return ret;
@@ -923,6 +1016,7 @@ void rkcif_mipi_unregister(struct rkcif_device *rkcif)
 		for (unsigned int j = 0; j < interface->streams_num; j++)
 			rkcif_stream_unregister(&interface->streams[j]);
 
+		debugfs_remove_recursive(interface->debugfs_dir);
 		rkcif_interface_unregister(interface);
 	}
 }

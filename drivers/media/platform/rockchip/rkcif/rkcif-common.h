@@ -28,6 +28,7 @@
 
 #define RKCIF_DRIVER_NAME "rockchip-cif"
 #define RKCIF_CLK_MAX	  5
+#define RKCIF_MIPI_ERRORS_MAX 5
 
 enum rkcif_format_type {
 	RKCIF_FMT_TYPE_INVALID,
@@ -198,10 +199,18 @@ struct rkcif_interface {
 		struct rkcif_dvp dvp;
 	};
 
+	struct dentry *debugfs_dir;
+	unsigned long error_count[RKCIF_MIPI_ERRORS_MAX];
+
 	/* interrupt enable and status are shared by the streams of a block */
 	spinlock_t irq_lock;
 
 	void (*set_crop)(struct rkcif_stream *stream, u16 left, u16 top);
+};
+
+struct rkcif_mipi_error {
+	u32 mask;
+	const char *name;
 };
 
 struct rkcif_mipi_match_data {
@@ -210,6 +219,8 @@ struct rkcif_mipi_match_data {
 	unsigned int regs_id[RKCIF_ID_MAX][RKCIF_MIPI_ID_REGISTER_MAX];
 	u32 (*mipi_ctrl0)(struct rkcif_stream *stream,
 			  const struct rkcif_output_fmt *active_out_fmt);
+	const struct rkcif_mipi_error *errors;
+	unsigned int errors_num;
 	struct {
 		unsigned int offset;
 	} blocks[RKCIF_MIPI_MAX - RKCIF_MIPI_BASE];
@@ -248,6 +259,7 @@ struct rkcif_device {
 	struct media_device media_dev;
 	struct v4l2_device v4l2_dev;
 	struct v4l2_async_notifier notifier;
+	struct dentry *debugfs_dir;
 };
 
 #endif
