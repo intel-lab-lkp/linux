@@ -58,6 +58,7 @@
 #include <linux/nsproxy.h>
 #include <linux/virtio_net.h>
 #include <linux/rcupdate.h>
+#include <net/hotdata.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
 #include <net/rtnetlink.h>
@@ -140,6 +141,8 @@ struct tun_file {
 		unsigned int ifindex;
 	};
 	struct napi_struct napi;
+	/* NAPI poll only: skbs taken off sk_write_queue, not yet received */
+	struct sk_buff_head napi_process_queue;
 	bool napi_enabled;
 	bool napi_frags_enabled;
 	struct mutex napi_mutex;	/* Protects access to the above napi */
@@ -227,29 +230,38 @@ struct veth {
 static void tun_flow_init(struct tun_struct *tun);
 static void tun_flow_uninit(struct tun_struct *tun);
 
+/* In IFF_NAPI mode written packets wait in the tfile's sk_write_queue for the
+ * NAPI poll, which may run later in a kthread or ksoftirqd. Bound that queue
+ * like the per-CPU backlog of netif_rx().
+ */
+static bool tun_napi_queue_full(const struct sk_buff_head *queue)
+{
+	return skb_queue_len_lockless(queue) >
+	       READ_ONCE(net_hotdata.max_backlog);
+}
+
 static int tun_napi_receive(struct napi_struct *napi, int budget)
 {
 	struct tun_file *tfile = container_of(napi, struct tun_file, napi);
+	struct sk_buff_head *process_queue = &tfile->napi_process_queue;
 	struct sk_buff_head *queue = &tfile->sk.sk_write_queue;
-	struct sk_buff_head process_queue;
 	struct sk_buff *skb;
 	int received = 0;
 
-	__skb_queue_head_init(&process_queue);
-
-	spin_lock(&queue->lock);
-	skb_queue_splice_tail_init(queue, &process_queue);
-	spin_unlock(&queue->lock);
-
-	while (received < budget && (skb = __skb_dequeue(&process_queue))) {
+	while (received < budget) {
+		/* Refill only when empty: leftovers are not put back on the
+		 * queue writers check, so neither queue exceeds the limit.
+		 */
+		if (skb_queue_empty(process_queue)) {
+			spin_lock(&queue->lock);
+			skb_queue_splice_tail_init(queue, process_queue);
+			spin_unlock(&queue->lock);
+			if (skb_queue_empty(process_queue))
+				break;
+		}
+		skb = __skb_dequeue(process_queue);
 		napi_gro_receive(napi, skb);
 		++received;
-	}
-
-	if (!skb_queue_empty(&process_queue)) {
-		spin_lock(&queue->lock);
-		skb_queue_splice(&process_queue, queue);
-		spin_unlock(&queue->lock);
 	}
 
 	return received;
@@ -572,6 +584,8 @@ static void tun_queue_purge(struct tun_file *tfile)
 		tun_ptr_free(ptr);
 
 	skb_queue_purge(&tfile->sk.sk_write_queue);
+	/* NAPI is disabled by now */
+	__skb_queue_purge(&tfile->napi_process_queue);
 	skb_queue_purge(&tfile->sk.sk_error_queue);
 }
 
@@ -1856,6 +1870,23 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 			zerocopy = true;
 	}
 
+	/* NAPI queue full: drop before allocating, and schedule NAPI, which a
+	 * MSG_MORE sender may not have done yet. Rechecked under the lock.
+	 */
+	if (tfile->napi_enabled &&
+	    unlikely(tun_napi_queue_full(&tfile->sk.sk_write_queue))) {
+		local_bh_disable();
+		napi_schedule(&tfile->napi);
+		local_bh_enable();
+		if (msg_control) {
+			struct ubuf_info *uarg = msg_control;
+
+			uarg->ops->complete(NULL, uarg, false);
+		}
+		dev_core_stats_rx_dropped_inc(tun->dev);
+		return total_len;
+	}
+
 	if (!frags && tun_can_build_skb(tun, tfile, len, noblock, zerocopy)) {
 		/* For the packet that is not easy to be processed
 		 * (e.g gso or jumbo packet), we will do it at after
@@ -2042,6 +2073,17 @@ napi_busy:
 			spin_unlock_bh(&queue->lock);
 			rcu_read_unlock();
 			err = -EBUSY;
+			goto free_skb;
+		}
+
+		/* NAPI queue full: drop, as above */
+		if (unlikely(tun_napi_queue_full(queue))) {
+			spin_unlock(&queue->lock);
+			napi_schedule(&tfile->napi);
+			local_bh_enable();
+			rcu_read_unlock();
+			dev_core_stats_rx_dropped_inc(tun->dev);
+			drop_reason = SKB_DROP_REASON_FULL_RING;
 			goto free_skb;
 		}
 
@@ -2653,6 +2695,17 @@ build:
 			spin_unlock(&queue->lock);
 			kfree_skb(skb);
 			return -EBUSY;
+		}
+
+		/* NAPI queue full: drop, and schedule NAPI so that it drains
+		 * even if nothing in this batch gets queued
+		 */
+		if (unlikely(tun_napi_queue_full(queue))) {
+			spin_unlock(&queue->lock);
+			napi_schedule(&tfile->napi);
+			kfree_skb_reason(skb, SKB_DROP_REASON_FULL_RING);
+			dev_core_stats_rx_dropped_inc(tun->dev);
+			return 0;
 		}
 
 		__skb_queue_tail(queue, skb);
@@ -3577,6 +3630,7 @@ static int tun_chr_open(struct inode *inode, struct file * file)
 	}
 
 	mutex_init(&tfile->napi_mutex);
+	__skb_queue_head_init(&tfile->napi_process_queue);
 	RCU_INIT_POINTER(tfile->tun, NULL);
 	tfile->flags = 0;
 	tfile->ifindex = 0;
