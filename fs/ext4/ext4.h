@@ -2624,6 +2624,14 @@ struct ext4_dirent_fid {
 };
 
 #define EXT4_LUFID_MAGIC    0xAD200907UL
+
+/*
+ * Largest LUFID payload accepted from EXT4_IOC_SET_LUFID.  do_split() needs
+ * every entry to fit in the free part of either half of a split block; with
+ * a 255-byte name, the NUL byte, a CFHASH record and 1k blocks that limits a
+ * LUFID record to about 57 bytes.  Three FIDs leave some headroom.
+ */
+#define EXT4_LUFID_MAX_DATA_LEN	(3 * sizeof(struct ext4_fid))
 struct ext4_dentry_param {
 	__u32	edp_magic;	/* EXT4_LUFID_MAGIC */
 	__u8	edp_dfid[];	/* struct ext4_dirent_fid payload */
@@ -2679,6 +2687,11 @@ static inline unsigned int ext4_dirent_rec_len(unsigned int name_len,
 {
 	unsigned int rec_len = (name_len + 8 + EXT4_DIR_ROUND);
 
+	/*
+	 * Reserve the casefold+fscrypt hash at its fixed position after the
+	 * name.  Callers whose length already includes the hash as a CFHASH
+	 * dirdata record pass a NULL @dir (see ext4_dir_entry_len()).
+	 */
 	if (dir && ext4_hash_in_dirent(dir))
 		rec_len += sizeof(struct ext4_dir_entry_hash);
 	return (rec_len & ~EXT4_DIR_ROUND);
@@ -3089,17 +3102,17 @@ extern int ext4_find_dest_de(struct inode *dir, struct buffer_head *bh,
 			     struct ext4_filename *fname,
 			     struct ext4_dir_entry_2 **dest_de,
 			     int dlen);
-void ext4_insert_dentry_data(struct inode *dir, struct inode *inode,
-			     struct ext4_dir_entry_2 *de,
-			     int buf_size,
-			     struct ext4_filename *fname,
-			     void *data);
-static inline void ext4_insert_dentry(struct inode *dir, struct inode *inode,
-				      struct ext4_dir_entry_2 *de,
-				      int buf_size,
-				      struct ext4_filename *fname)
+int ext4_insert_dentry_data(struct inode *dir, struct inode *inode,
+			    struct ext4_dir_entry_2 *de,
+			    int buf_size,
+			    struct ext4_filename *fname,
+			    void *data);
+static inline int ext4_insert_dentry(struct inode *dir, struct inode *inode,
+				     struct ext4_dir_entry_2 *de,
+				     int buf_size,
+				     struct ext4_filename *fname)
 {
-	ext4_insert_dentry_data(dir, inode, de, buf_size, fname, NULL);
+	return ext4_insert_dentry_data(dir, inode, de, buf_size, fname, NULL);
 }
 static inline void ext4_update_dx_flag(struct inode *inode)
 {
@@ -3367,6 +3380,9 @@ static inline int ext4_init_new_dir(handle_t *handle, struct inode *dir,
 }
 extern int ext4_dirblock_csum_verify(struct inode *inode,
 				     struct buffer_head *bh);
+extern int ext4_dirdata_set_lufid(struct mnt_idmap *idmap, struct inode *dir,
+			   const char *filename, int namelen,
+			   struct ext4_dentry_param *edp);
 extern int ext4_htree_fill_tree(struct file *dir_file, __u32 start_hash,
 				__u32 start_minor_hash, __u32 *next_hash);
 extern int ext4_search_dir(struct buffer_head *bh,
