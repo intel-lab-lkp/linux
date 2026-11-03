@@ -632,6 +632,12 @@ void svc_wake_up(struct svc_serv *serv)
 	struct svc_pool *pool = &serv->sv_pools[0];
 
 	set_bit(SP_TASK_PENDING, &pool->sp_flags);
+	/*
+	 * Order the flag update before the idle list and task state checks.
+	 * Pairs with set_current_state() and llist_add() in
+	 * svc_thread_wait_for_work().
+	 */
+	smp_mb__after_atomic();
 	svc_pool_wake_idle_thread(pool);
 }
 EXPORT_SYMBOL_GPL(svc_wake_up);

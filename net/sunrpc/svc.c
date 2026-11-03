@@ -784,6 +784,12 @@ svc_stop_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 	do {
 		set_bit(SP_VICTIM_REMAINS, &pool->sp_flags);
 		set_bit(SP_NEED_VICTIM, &pool->sp_flags);
+		/*
+		 * Order the flag updates before the idle list and task
+		 * state checks. Pairs with set_current_state() and
+		 * llist_add() in svc_thread_wait_for_work().
+		 */
+		smp_mb__after_atomic();
 		svc_pool_wake_idle_thread(pool);
 		wait_on_bit(&pool->sp_flags, SP_VICTIM_REMAINS, TASK_IDLE);
 		nrservs++;
