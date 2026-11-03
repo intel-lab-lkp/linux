@@ -99,6 +99,111 @@ static const struct dmi_system_id acp70_acpi_flag_override_table[] = {
 		},
 	},
 	{
+		/* HP Cashmere-A */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "HP"),
+			DMI_MATCH(DMI_BOARD_NAME, "8EF5"),
+		},
+	},
+	{
+		/* HP Sundae */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "HP"),
+			DMI_MATCH(DMI_BOARD_NAME, "8F6D"),
+		},
+	},
+	{
+		/* HP SundaeWhip UMA */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "HP"),
+			DMI_MATCH(DMI_BOARD_NAME, "8FA4"),
+		},
+	},
+	{
+		/* HP SundaeWhip DSC */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "HP"),
+			DMI_MATCH(DMI_BOARD_NAME, "8FA5"),
+		},
+	},
+	{
+		/* HP Kamo (Koki) */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "HP"),
+			DMI_MATCH(DMI_BOARD_NAME, "9012"),
+		},
+	},
+	{
+		/* HP Dominion 16 A */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "HP"),
+			DMI_MATCH(DMI_BOARD_NAME, "9028"),
+		},
+	},
+	{
+		/* HP Dominion A LW */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "HP"),
+			DMI_MATCH(DMI_BOARD_NAME, "9029"),
+		},
+	},
+	{
+		/* HP Kata-A */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "HP"),
+			DMI_MATCH(DMI_BOARD_NAME, "9056"),
+		},
+	},
+	{
+		/* ASUS HN7306 */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
+			DMI_MATCH(DMI_BOARD_NAME, "1714"),
+		},
+	},
+	{
+		/* ASUS RC74XA */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
+			DMI_MATCH(DMI_BOARD_NAME, "1954"),
+		},
+	},
+	{
+		/* ASUS RC74RA */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
+			DMI_MATCH(DMI_BOARD_NAME, "1964"),
+		},
+	},
+	{
+		/* ASUS UX3408GA */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
+			DMI_MATCH(DMI_BOARD_NAME, "1AC4"),
+		},
+	},
+	{
+		/* ASUS B7406CKA */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
+			DMI_MATCH(DMI_BOARD_NAME, "1B94"),
+		},
+	},
+	{
+		/* ASUS CHG01LA */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
+			DMI_MATCH(DMI_BOARD_NAME, "1C64"),
+		},
+	},
+	{
+		/* ASUS UX3480ZA */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
+			DMI_MATCH(DMI_BOARD_NAME, "1E54"),
+		},
+	},
+	{
 		/* Dell 14S DS14265 */
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),

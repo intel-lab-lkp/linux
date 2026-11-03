@@ -582,7 +582,7 @@ static const struct snd_soc_acpi_link_adr acp70_rt722_l0_rt1320_l1[] = {
 	},
 	{}
 };
-
+/* HP: Sundae, Cashmere-A. */
 static const struct snd_soc_acpi_adr_device tas2783_2_adr[] = {
 	{
 		/* left */
@@ -614,11 +614,176 @@ static const struct snd_soc_acpi_adr_device tas2783_2_adr[] = {
 	},
 };
 
+/* HP: Dominion 16 A */
+static const struct snd_soc_acpi_adr_device tas2783_3_1_adr[] = {
+	{
+		/* left */
+		.adr = 0x00023C0102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_l_endpoint,
+		.name_prefix = "tas2783-1",
+	},
+	{
+		/* right */
+		.adr = 0x00023D0102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_l_endpoint,
+		.name_prefix = "tas2783-2",
+	},
+};
+
+static const struct snd_soc_acpi_adr_device tas2783_3_2_adr[] = {
+	{
+		/* left */
+		.adr = 0x0003390102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_r_endpoint,
+		.name_prefix = "tas2783-3",
+	},
+	{
+		/* right */
+		.adr = 0x00033A0102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_r_endpoint,
+		.name_prefix = "tas2783-4",
+	},
+};
+
+/* HP: Dominion A LW. */
+static const struct snd_soc_acpi_adr_device tas2783_4_1_adr[] = {
+	{
+		/* left */
+		.adr = 0x00023C0102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_l_endpoint,
+		.name_prefix = "tas2783-1",
+	},
+};
+
+static const struct snd_soc_acpi_adr_device tas2783_4_2_adr[] = {
+	{
+		/* right */
+		.adr = 0x0003390102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_r_endpoint,
+		.name_prefix = "tas2783-2",
+	},
+};
+
+/* HP: Kamo (Koki). */
+static const struct snd_soc_acpi_adr_device tas2783_5_adr[] = {
+	{
+		/* left */
+		.adr = 0x00023C0102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_l_endpoint,
+		.name_prefix = "tas2783-1",
+	},
+	{
+		/* right */
+		.adr = 0x0002390102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_r_endpoint,
+		.name_prefix = "tas2783-2",
+	},
+};
+
+/* ASUS: CHG01LA, UX3408GA, UX3480ZA. */
+static const struct snd_soc_acpi_adr_device tas2783_6_adr[] = {
+	{
+		/* left */
+		.adr = 0x0000380102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_l_endpoint,
+		.name_prefix = "tas2783-1",
+	},
+	{
+		/* right */
+		.adr = 0x00003B0102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_r_endpoint,
+		.name_prefix = "tas2783-2",
+	},
+};
+
+/* ASUS: B7406CKA. */
+static const struct snd_soc_acpi_adr_device tas2783_7_adr[] = {
+	{
+		/* left */
+		.adr = 0x00003B0102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_l_endpoint,
+		.name_prefix = "tas2783-1",
+	},
+	{
+		/* right */
+		.adr = 0x00003C0102000001ull,
+		.num_endpoints = 1,
+		.endpoints = &spk_r_endpoint,
+		.name_prefix = "tas2783-2",
+	},
+};
+
 static const struct snd_soc_acpi_link_adr acp70_tas2783_2[] = {
 	{
 		.mask = BIT(0),
 		.num_adr = ARRAY_SIZE(tas2783_2_adr),
 		.adr_d = tas2783_2_adr,
+	},
+	{}
+};
+
+static const struct snd_soc_acpi_link_adr acp70_tas2783_3[] = {
+	{
+		.mask =  BIT(2),
+		.num_adr = ARRAY_SIZE(tas2783_3_1_adr),
+		.adr_d = tas2783_3_1_adr,
+	},
+	{
+		.mask =  BIT(3),
+		.num_adr = ARRAY_SIZE(tas2783_3_2_adr),
+		.adr_d = tas2783_3_2_adr,
+	},
+	{}
+};
+
+static const struct snd_soc_acpi_link_adr acp70_tas2783_4[] = {
+	{
+		.mask =  BIT(2),
+		.num_adr = ARRAY_SIZE(tas2783_4_1_adr),
+		.adr_d = tas2783_4_1_adr,
+	},
+	{
+		.mask =  BIT(3),
+		.num_adr = ARRAY_SIZE(tas2783_4_2_adr),
+		.adr_d = tas2783_4_2_adr,
+	},
+	{}
+};
+
+static const struct snd_soc_acpi_link_adr acp70_tas2783_5[] = {
+	{
+		.mask =  BIT(2),
+		.num_adr = ARRAY_SIZE(tas2783_5_adr),
+		.adr_d = tas2783_5_adr,
+	},
+	{}
+};
+
+static const struct snd_soc_acpi_link_adr acp70_tas2783_6[] = {
+	{
+		.mask =  BIT(0),
+		.num_adr = ARRAY_SIZE(tas2783_6_adr),
+		.adr_d = tas2783_6_adr,
+	},
+	{}
+};
+
+static const struct snd_soc_acpi_link_adr acp70_tas2783_7[] = {
+	{
+		.mask =  BIT(0),
+		.num_adr = ARRAY_SIZE(tas2783_7_adr),
+		.adr_d = tas2783_7_adr,
 	},
 	{}
 };
@@ -802,6 +967,31 @@ struct snd_soc_acpi_mach snd_soc_acpi_amd_acp70_sdw_machines[] = {
 	{
 		.link_mask = BIT(0),
 		.links = acp70_tas2783_2,
+		.drv_name = "amd_sdw",
+	},
+	{
+		.link_mask = BIT(2) | BIT(3),
+		.links = acp70_tas2783_3,
+		.drv_name = "amd_sdw",
+	},
+	{
+		.link_mask = BIT(2) | BIT(3),
+		.links = acp70_tas2783_4,
+		.drv_name = "amd_sdw",
+	},
+	{
+		.link_mask = BIT(2),
+		.links = acp70_tas2783_5,
+		.drv_name = "amd_sdw",
+	},
+	{
+		.link_mask = BIT(0),
+		.links = acp70_tas2783_6,
+		.drv_name = "amd_sdw",
+	},
+	{
+		.link_mask = BIT(0),
+		.links = acp70_tas2783_7,
 		.drv_name = "amd_sdw",
 	},
 	{
