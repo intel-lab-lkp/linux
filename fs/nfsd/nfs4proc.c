@@ -827,8 +827,9 @@ nfsd4_putfh(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	cstate->current_fh.fh_handle.fh_size = putfh->pf_fhlen;
 	memcpy(&cstate->current_fh.fh_handle.fh_raw, putfh->pf_fhval,
 	       putfh->pf_fhlen);
-	/* need_wrongsec_check() decides whether the flavor check applies. */
-	ret = fh_verify(rqstp, &cstate->current_fh, 0, NFSD_MAY_BYPASS_FLAVOR);
+	/* need_wrongsec_check() decides whether the bypassed checks apply. */
+	ret = fh_verify(rqstp, &cstate->current_fh, 0,
+			NFSD_MAY_BYPASS_FLAVOR | NFSD_MAY_BYPASS_PORT);
 #ifdef CONFIG_NFSD_V4_2_INTER_SSC
 	if (ret == nfserr_stale && putfh->no_verify) {
 		SET_FH_FLAG(&cstate->current_fh, NFSD4_FH_FOREIGN);
@@ -1274,13 +1275,15 @@ nfsd4_secinfo(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	__be32 err;
 
 	err = fh_verify(rqstp, &cstate->current_fh, S_IFDIR,
-			NFSD_MAY_EXEC | NFSD_MAY_BYPASS_FLAVOR);
+			NFSD_MAY_EXEC | NFSD_MAY_BYPASS_FLAVOR |
+			NFSD_MAY_BYPASS_PORT);
 	if (err)
 		return nfsd4_secinfo_status(err);
 	err = nfsd_lookup_dentry(rqstp, &cstate->current_fh,
 				    secinfo->si_name, secinfo->si_namelen,
 				    &exp, &dentry,
-				    NFSD_MAY_EXEC | NFSD_MAY_BYPASS_FLAVOR);
+				    NFSD_MAY_EXEC | NFSD_MAY_BYPASS_FLAVOR |
+				    NFSD_MAY_BYPASS_PORT);
 	if (err)
 		return nfsd4_secinfo_status(err);
 	if (d_really_is_negative(dentry)) {
@@ -1304,13 +1307,14 @@ nfsd4_secinfo_no_name(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstat
 	switch (u->secinfo_no_name.sin_style) {
 	case NFS4_SECINFO_STYLE4_CURRENT_FH:
 		err = fh_verify(rqstp, &cstate->current_fh, 0,
-				NFSD_MAY_BYPASS_FLAVOR);
+				NFSD_MAY_BYPASS_FLAVOR | NFSD_MAY_BYPASS_PORT);
 		if (err)
 			return nfsd4_secinfo_status(err);
 		break;
 	case NFS4_SECINFO_STYLE4_PARENT:
 		err = nfsd4_do_lookupp(rqstp, &cstate->current_fh,
-				       NFSD_MAY_EXEC | NFSD_MAY_BYPASS_FLAVOR);
+				       NFSD_MAY_EXEC | NFSD_MAY_BYPASS_FLAVOR |
+				       NFSD_MAY_BYPASS_PORT);
 		if (err)
 			return nfsd4_secinfo_status(err);
 		break;

@@ -2074,7 +2074,7 @@ __be32 check_security_flavor(struct svc_export *exp, struct svc_rqst *rqstp,
  * @exp: svc_export that is being accessed.
  * @rqstp: svc_rqst attempting to access @exp.
  * @access: NFSD_MAY_* flags; %NFSD_MAY_BYPASS_FLAVOR skips the security
- *	flavor check
+ *	flavor check, %NFSD_MAY_BYPASS_PORT skips the secure-port check
  *
  * Context: Process context.
  *
@@ -2089,7 +2089,7 @@ __be32 check_nfsd_access(struct svc_export *exp, struct svc_rqst *rqstp,
 {
 	__be32 status;
 
-	status = nfsd_check_port(rqstp, &rqstp->rq_cred, exp);
+	status = nfsd_check_port(rqstp, &rqstp->rq_cred, exp, access);
 	if (status != nfs_ok)
 		return status;
 	status = check_xprtsec_policy(exp, rqstp);

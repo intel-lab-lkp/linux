@@ -107,6 +107,7 @@ static bool nfsd_originating_port_ok(struct svc_rqst *rqstp,
  * @rqstp: request being checked, or %NULL for a local caller
  * @cred: credential whose flavor selects the export options to check
  * @exp: export being checked
+ * @access: NFSD_MAY_* flags; %NFSD_MAY_BYPASS_PORT skips the check
  *
  * Context: Process context.
  *
@@ -116,9 +117,11 @@ static bool nfsd_originating_port_ok(struct svc_rqst *rqstp,
  * Return: %nfs_ok if allowed, %nfserr_wrongsec for an NFSv4 client,
  * %nfserr_perm otherwise.
  */
-__be32 nfsd_check_port(struct svc_rqst *rqstp,
-		       struct svc_cred *cred, struct svc_export *exp)
+__be32 nfsd_check_port(struct svc_rqst *rqstp, struct svc_cred *cred,
+		       struct svc_export *exp, int access)
 {
+	if (access & NFSD_MAY_BYPASS_PORT)
+		return nfs_ok;
 	if (rqstp && !nfsd_originating_port_ok(rqstp, cred, exp)) {
 		if (IS_ENABLED(CONFIG_SUNRPC_DEBUG)) {
 			char buf[RPC_MAX_ADDRBUFLEN];
@@ -133,11 +136,11 @@ __be32 nfsd_check_port(struct svc_rqst *rqstp,
 
 static __be32 nfsd_setuser_and_check_port(struct svc_rqst *rqstp,
 					  struct svc_cred *cred,
-					  struct svc_export *exp)
+					  struct svc_export *exp, int access)
 {
 	__be32 status;
 
-	status = nfsd_check_port(rqstp, cred, exp);
+	status = nfsd_check_port(rqstp, cred, exp, access);
 	if (status)
 		return status;
 
@@ -226,7 +229,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 				 struct svc_cred *cred,
 				 struct auth_domain *client,
 				 struct auth_domain *gssclient,
-				 struct svc_fh *fhp)
+				 struct svc_fh *fhp, int access)
 {
 	struct knfsd_fh	*fh = &fhp->fh_handle;
 	struct fid *fid = NULL;
@@ -305,7 +308,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 					   new->cap_permitted);
 		put_cred(override_creds(new));
 	} else {
-		error = nfsd_setuser_and_check_port(rqstp, cred, exp);
+		error = nfsd_setuser_and_check_port(rqstp, cred, exp, access);
 		if (error)
 			goto out;
 	}
@@ -423,7 +426,7 @@ __fh_verify(struct svc_rqst *rqstp,
 
 	if (!fhp->fh_dentry) {
 		error = nfsd_set_fh_dentry(rqstp, net, cred, client,
-					   gssclient, fhp);
+					   gssclient, fhp, access);
 		if (error)
 			goto out;
 	}
@@ -452,7 +455,7 @@ __fh_verify(struct svc_rqst *rqstp,
 	if (error)
 		goto out;
 
-	error = nfsd_setuser_and_check_port(rqstp, cred, exp);
+	error = nfsd_setuser_and_check_port(rqstp, cred, exp, access);
 	if (error)
 		goto out;
 
