@@ -782,20 +782,25 @@ int gb_operation_request_send(struct gb_operation *operation,
 		return 0;
 	}
 
+	/*
+	 * Arm the timeout before sending: the response can arrive, and the
+	 * operation complete, before the host driver returns.
+	 */
+	if (timeout) {
+		operation->timer.expires = jiffies + msecs_to_jiffies(timeout);
+		add_timer(&operation->timer);
+	}
+
 	ret = gb_message_send(operation->request, gfp);
 	gb_operation_put_active(operation);
 	gb_operation_put(operation);
 	if (ret)
 		goto err_put_active;
 
-	if (timeout) {
-		operation->timer.expires = jiffies + msecs_to_jiffies(timeout);
-		add_timer(&operation->timer);
-	}
-
 	return 0;
 
 err_put_active:
+	timer_delete_sync(&operation->timer);
 	gb_operation_put_active(operation);
 err_put:
 	gb_operation_put(operation);
