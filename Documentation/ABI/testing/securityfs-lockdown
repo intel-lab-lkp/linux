@@ -1,0 +1,41 @@
+What:		/sys/kernel/security/lockdown
+Date:		August 2019
+KernelVersion:	5.4
+Contact:	linux-security-module@vger.kernel.org
+Description:
+		The lockdown securityfs file reports and controls the
+		lockdown state of the running kernel.  It is provided by
+		the lockdown LSM and is located at
+		/sys/kernel/security/lockdown.
+
+		The file is present only when CONFIG_SECURITY_LOCKDOWN_LSM is
+		enabled and the lockdown LSM is active: either
+		CONFIG_SECURITY_LOCKDOWN_LSM_EARLY is set, or the LSM is
+		listed in the "lsm=" kernel parameter.  Otherwise the node
+		is absent, and userspace must handle its absence.
+
+		Reading the file returns the supported lockdown levels,
+		with the currently active level enclosed in square
+		brackets.  For example, when the kernel is not locked
+		down::
+
+		  [none] integrity confidentiality
+
+		and when the kernel is in integrity mode::
+
+		  none [integrity] confidentiality
+
+		The file may be written with the name of a level to lock
+		the kernel down further.  Lockdown can only be escalated,
+		never relaxed, so writing the currently active level or a
+		lower level fails with EPERM.  Writing an unrecognized
+		level fails with EINVAL.  Successful writes return the
+		number of bytes written.
+
+		The kernel can also be locked down at boot time with the
+		"lockdown=" kernel parameter, or unconditionally at build
+		time via CONFIG_LOCK_DOWN_KERNEL_FORCE_INTEGRITY or
+		CONFIG_LOCK_DOWN_KERNEL_FORCE_CONFIDENTIALITY.
+
+Users:		fwupd and other userspace tools that query or manage
+		kernel lockdown state
