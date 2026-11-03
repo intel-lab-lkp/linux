@@ -3454,7 +3454,8 @@ static int smb2_set_ea(struct smb2_ea_info *eabuf, unsigned int buf_len,
 		if (!eabuf->EaNameLength)
 			goto next;
 
-		if (eabuf->name[eabuf->EaNameLength]) {
+		if (eabuf->name[eabuf->EaNameLength] ||
+		    memchr(eabuf->name, '\0', eabuf->EaNameLength)) {
 			rc = -EBADMSG;
 			break;
 		}
