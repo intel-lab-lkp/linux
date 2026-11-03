@@ -617,6 +617,26 @@ void nested_copy_vmcb_save_to_cache(struct vcpu_svm *svm,
 }
 
 /*
+ * Validate L1 host save state loaded on return to L1 (RSM from SMM, or via
+ * KVM_SET_NESTED_STATE).  g_pat is not checked: it may be clobbered by SMM and
+ * isn't loaded at emulated #VMEXIT.
+ */
+int nested_svm_check_l1_save(struct kvm_vcpu *vcpu, struct vmcb_save_area *save)
+{
+	struct vmcb_save_area_cached save_cached;
+
+	__nested_copy_vmcb_save_to_cache(&save_cached, save);
+	if (!(save->cr0 & X86_CR0_PG) ||
+	    !(save->cr0 & X86_CR0_PE) ||
+	    (save->rflags & X86_EFLAGS_VM) ||
+	    ((save->efer & EFER_LMA) && !(save->efer & EFER_LME)) ||
+	    !nested_vmcb_check_save(vcpu, &save_cached, false))
+		return -EINVAL;
+
+	return 0;
+}
+
+/*
  * Synchronize fields that are written by the processor, so that
  * they can be copied back into the vmcb12.
  */
@@ -1968,7 +1988,6 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
 		&user_kvm_nested_state->data.svm[0];
 	struct vmcb_control_area *ctl;
 	struct vmcb_save_area *save;
-	struct vmcb_save_area_cached save_cached;
 	struct vmcb_ctrl_area_cached ctl_cached;
 	bool use_separate_l2_pat;
 	unsigned long cr0;
@@ -2033,19 +2052,8 @@ static int svm_set_nested_state(struct kvm_vcpu *vcpu,
         if (((cr0 & X86_CR0_CD) == 0) && (cr0 & X86_CR0_NW))
 		goto out_free;
 
-	/*
-	 * Validate host state saved from before VMRUN (see
-	 * nested_svm_check_permissions). Note that the g_pat field is not
-	 * validated, because (a) it may have been clobbered by SMM before
-	 * KVM_GET_NESTED_STATE, and (b) it is not loaded at emulated
-	 * #VMEXIT.
-	 */
-	__nested_copy_vmcb_save_to_cache(&save_cached, save);
-	if (!(save->cr0 & X86_CR0_PG) ||
-	    !(save->cr0 & X86_CR0_PE) ||
-	    (save->rflags & X86_EFLAGS_VM) ||
-	    ((save->efer & EFER_LMA) && !(save->efer & EFER_LME)) ||
-	    !nested_vmcb_check_save(vcpu, &save_cached, false))
+	/* Validate host state saved from before VMRUN. */
+	if (nested_svm_check_l1_save(vcpu, save))
 		goto out_free;
 
 	/*

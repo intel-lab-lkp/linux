@@ -5225,6 +5225,13 @@ static int svm_leave_smm(struct kvm_vcpu *vcpu, const union kvm_smram *smram)
 	svm_copy_vmrun_state(vcpu, &svm->vmcb01.ptr->save, m_save.map.hva + 0x400);
 
 	/*
+	 * The HSAVE area is guest memory; validate the restored L1 state before
+	 * it is used to build the nested MMU, same as KVM_SET_NESTED_STATE.
+	 */
+	if (nested_svm_check_l1_save(vcpu, &svm->vmcb01.ptr->save))
+		return 1;
+
+	/*
 	 * Enter the nested guest now
 	 */
 
