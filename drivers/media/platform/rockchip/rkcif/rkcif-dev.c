@@ -281,6 +281,7 @@ static int rkcif_runtime_suspend(struct device *dev)
 	reset_control_assert(rkcif->reset);
 	udelay(5);
 	reset_control_deassert(rkcif->reset);
+	rkcif_mipi_irq_mask(rkcif);
 
 	clk_bulk_disable_unprepare(rkcif->clks_num, rkcif->clks);
 
@@ -297,6 +298,8 @@ static int rkcif_runtime_resume(struct device *dev)
 		dev_err(dev, "failed to enable clocks\n");
 		return ret;
 	}
+
+	rkcif_mipi_irq_mask(rkcif);
 
 	return 0;
 }

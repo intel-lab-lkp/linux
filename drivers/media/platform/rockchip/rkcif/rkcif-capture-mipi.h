@@ -21,4 +21,6 @@ void rkcif_mipi_unregister(struct rkcif_device *rkcif);
 
 irqreturn_t rkcif_mipi_isr(int irq, void *ctx);
 
+void rkcif_mipi_irq_mask(struct rkcif_device *rkcif);
+
 #endif

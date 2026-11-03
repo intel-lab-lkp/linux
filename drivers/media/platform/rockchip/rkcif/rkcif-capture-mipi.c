@@ -810,6 +810,23 @@ static void rkcif_mipi_set_crop(struct rkcif_stream *stream, u16 left, u16 top)
 	rkcif_mipi_stream_write(stream, RKCIF_MIPI_CROP_START, val);
 }
 
+void rkcif_mipi_irq_mask(struct rkcif_device *rkcif)
+{
+	if (!rkcif->match_data->mipi)
+		return;
+
+	for (unsigned int i = 0; i < rkcif->match_data->mipi->mipi_num; i++) {
+		struct rkcif_interface *interface =
+			&rkcif->interfaces[RKCIF_MIPI_BASE + i];
+
+		if (!interface->rkcif)
+			continue;
+
+		rkcif_mipi_write(interface, RKCIF_MIPI_INTEN, 0);
+		rkcif_mipi_write(interface, RKCIF_MIPI_INTSTAT, ~0);
+	}
+}
+
 irqreturn_t rkcif_mipi_isr(int irq, void *ctx)
 {
 	struct device *dev = ctx;
@@ -823,6 +840,8 @@ irqreturn_t rkcif_mipi_isr(int irq, void *ctx)
 
 		intstat = rkcif_mipi_read(interface, RKCIF_MIPI_INTSTAT);
 		rkcif_mipi_write(interface, RKCIF_MIPI_INTSTAT, intstat);
+		if (intstat)
+			ret = IRQ_HANDLED;
 
 		for (unsigned int j = 0; j < interface->streams_num; j++) {
 			struct rkcif_stream *stream = &interface->streams[j];
