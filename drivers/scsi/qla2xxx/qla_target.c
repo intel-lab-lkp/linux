@@ -4660,7 +4660,8 @@ static struct qla_tgt_cmd *qlt_get_tag(scsi_qla_host_t *vha,
 
 		cdb = kmalloc(cdb_len, GFP_ATOMIC);
 		if (unlikely(!cdb)) {
-			vha->hw->tgt.tgt_ops->free_cmd(cmd);
+			qlt_decr_num_pend_cmds(vha);
+			vha->hw->tgt.tgt_ops->rel_cmd(cmd);
 			return NULL;
 		}
 		/* CAUTION: copy CDB from atio not cmd->atio */
