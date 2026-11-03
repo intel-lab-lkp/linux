@@ -593,14 +593,35 @@ static inline unsigned dx_root_limit(struct inode *dir, unsigned infosize)
 	return entry_space / sizeof(struct dx_entry);
 }
 
-static inline unsigned dx_node_limit(struct inode *dir)
+static inline unsigned int __dx_node_limit(struct inode *dir,
+					   const struct inode *hash_dir)
 {
 	unsigned int entry_space = dir->i_sb->s_blocksize -
-			ext4_dir_rec_len(0, dir);
+			ext4_dir_rec_len(0, hash_dir);
 
 	if (ext4_has_feature_metadata_csum(dir->i_sb))
 		entry_space -= sizeof(struct dx_tail);
 	return entry_space / sizeof(struct dx_entry);
+}
+
+/*
+ * The fake dirent at the start of an index node never holds a name, so no
+ * room is reserved for a casefold+fscrypt hash in it.  This is the limit
+ * e2fsck computes and expects.
+ */
+static inline unsigned dx_node_limit(struct inode *dir)
+{
+	return __dx_node_limit(dir, NULL);
+}
+
+/*
+ * Older kernels did reserve the hash in casefolded+encrypted directories,
+ * so their index nodes have a limit one smaller.  Accept those too.
+ */
+static inline bool dx_node_limit_ok(struct inode *dir, unsigned int limit)
+{
+	return limit == dx_node_limit(dir) ||
+	       limit == __dx_node_limit(dir, dir);
 }
 
 /*
@@ -924,7 +945,7 @@ dx_probe(struct ext4_filename *fname, struct inode *dir,
 
 		entries = ((struct dx_node *) frame->bh->b_data)->entries;
 
-		if (dx_get_limit(entries) != dx_node_limit(dir)) {
+		if (!dx_node_limit_ok(dir, dx_get_limit(entries))) {
 			ext4_warning_inode(dir,
 				"dx entry: limit %u != node limit %u",
 				dx_get_limit(entries), dx_node_limit(dir));
