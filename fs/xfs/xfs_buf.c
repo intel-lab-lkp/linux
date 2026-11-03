@@ -1711,8 +1711,14 @@ xfs_buftarg_init_streams(
 	unsigned int		nr_groups)
 {
 	unsigned int		nr_streams;
+	unsigned int		hw_streams;
 
-	nr_streams = xfs_sw_write_stream_count(nr_groups);
+	hw_streams = bdev_max_write_streams(btp->bt_bdev);
+	if (hw_streams)
+		nr_streams = min3(hw_streams, nr_groups,
+				  XFS_MAX_WRITE_STREAMS);
+	else
+		nr_streams = xfs_sw_write_stream_count(nr_groups);
 	return write_stream_pool_init(&btp->bt_stream_pool, nr_streams);
 }
 
