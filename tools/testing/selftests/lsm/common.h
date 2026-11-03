@@ -31,3 +31,5 @@ static inline int lsm_list_modules(__u64 *ids, __u32 *size, __u32 flags)
 extern int read_proc_attr(const char *attr, char *value, size_t size);
 extern int read_sysfs_lsms(char *lsms, size_t size);
 int attr_lsm_count(void);
+
+extern int read_file(const char *path, char *buf, size_t size);
