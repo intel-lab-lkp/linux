@@ -353,8 +353,10 @@ int nfsacl_decode(struct xdr_buf *buf, unsigned int base, unsigned int *aclcnt,
 		return -EINVAL;
 	nfsacl_desc.desc.array_maxlen = entries;
 	err = xdr_decode_array2(buf, base + 4, &nfsacl_desc.desc);
-	if (err)
+	if (err) {
+		posix_acl_release(nfsacl_desc.acl);
 		return err;
+	}
 	if (pacl) {
 		if (entries != nfsacl_desc.desc.array_len ||
 		    posix_acl_from_nfsacl(nfsacl_desc.acl) != 0) {
