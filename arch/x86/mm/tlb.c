@@ -1679,11 +1679,47 @@ void __flush_tlb_all(void)
 }
 EXPORT_SYMBOL_FOR_KVM(__flush_tlb_all);
 
+static bool should_flush_tlb_batch(int cpu,
+				    const struct arch_tlbflush_unmap_batch *batch)
+{
+	struct mm_struct *loaded_mm = READ_ONCE(per_cpu(cpu_tlbstate.loaded_mm, cpu));
+	unsigned short i;
+
+	if (loaded_mm != LOADED_MM_SWITCHING) {
+		for (i = 0; i < batch->nr_mms; i++) {
+			if (loaded_mm == batch->mms[i])
+				goto check_lazy;
+		}
+		return false;
+	}
+
+check_lazy:
+	/*
+	 * Order 'loaded_mm' and 'is_lazy' against their write ordering in
+	 * switch_mm_irqs_off(). Ensure 'is_lazy' is at least as new as
+	 * 'loaded_mm'.
+	 */
+	smp_rmb();
+
+	return !READ_ONCE(per_cpu(cpu_tlbstate_shared.is_lazy, cpu));
+}
+
 void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 {
 	struct flush_tlb_info info;
 	bool remote_flush = false;
 	int cpu = get_cpu();
+
+	if (likely(!cpu_feature_enabled(X86_FEATURE_INVLPGB) &&
+		   batch->nr_mms && batch->nr_mms <= ARCH_TLBBATCH_MAX_MMS)) {
+		int target_cpu;
+
+		for_each_cpu(target_cpu, &batch->cpumask) {
+			if (!should_flush_tlb_batch(target_cpu, batch))
+				__cpumask_clear_cpu(target_cpu, &batch->cpumask);
+		}
+	}
+	batch->nr_mms = 0;
 
 	init_flush_tlb_info(&info, NULL, 0, TLB_FLUSH_ALL, 0, false,
 			    TLB_GENERATION_INVALID);

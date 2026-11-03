@@ -379,8 +379,22 @@ static inline void arch_tlbbatch_add_pending(struct arch_tlbflush_unmap_batch *b
 		struct mm_struct *mm, unsigned long start, unsigned long end)
 {
 	inc_mm_tlb_gen(mm);
-	if (!cpu_feature_enabled(X86_FEATURE_INVLPGB))
+	if (!cpu_feature_enabled(X86_FEATURE_INVLPGB)) {
+		unsigned short i, nr = batch->nr_mms;
+
 		cpumask_or(&batch->cpumask, &batch->cpumask, mm_cpumask(mm));
+
+		if (likely(nr <= ARCH_TLBBATCH_MAX_MMS)) {
+			for (i = nr; i > 0; i--) {
+				if (batch->mms[i - 1] == mm)
+					goto out;
+			}
+			if (likely(nr < ARCH_TLBBATCH_MAX_MMS))
+				batch->mms[nr] = mm;
+			batch->nr_mms = nr + 1;
+		}
+	}
+out:
 	batch->unmapped_pages = true;
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, 0, -1UL);
 }
