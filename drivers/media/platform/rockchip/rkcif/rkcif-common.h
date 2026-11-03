@@ -198,6 +198,9 @@ struct rkcif_interface {
 		struct rkcif_dvp dvp;
 	};
 
+	/* interrupt enable and status are shared by the streams of a block */
+	spinlock_t irq_lock;
+
 	void (*set_crop)(struct rkcif_stream *stream, u16 left, u16 top);
 };
 
