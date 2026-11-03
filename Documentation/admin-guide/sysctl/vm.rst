@@ -42,6 +42,7 @@ Currently, these files are in /proc/sys/vm:
 - lowmem_reserve_ratio
 - max_map_count
 - mem_profiling         (only if CONFIG_MEM_ALLOC_PROFILING=y)
+- memfd_write_seal_mapped
 - memory_failure_early_kill
 - memory_failure_recovery
 - min_free_kbytes
@@ -490,6 +491,26 @@ The default value depends on CONFIG_MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT.
 When CONFIG_MEM_ALLOC_PROFILING_DEBUG=y, this control is read-only to avoid
 warnings produced by allocations made while profiling is disabled and freed
 when it's enabled.
+
+
+memfd_write_seal_mapped
+=======================
+
+Controls whether ``F_SEAL_WRITE`` can be added to a memfd with file pages
+mapped into page tables (legacy).
+
+In the default mode (0), references from page-table mappings can make
+``F_SEAL_WRITE`` fail with ``EBUSY``, just like references from other kernel
+subsystems or DMA. File mappings without populated page tables do not
+prevent write sealing.
+
+Setting this to the legacy mode (1) permits write sealing with page-table
+mappings, but allows for some race conditions that can permit other kernel
+subsystems or DMA to modify file content after write-sealing through page
+references obtained before write-sealing.
+
+Shared mappings that can be made writable always prevent write sealing,
+even without populated page tables.
 
 
 memory_failure_early_kill

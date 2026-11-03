@@ -10,10 +10,12 @@
 #include <linux/vfs.h>
 #include <linux/pagemap.h>
 #include <linux/file.h>
+#include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/sched/signal.h>
 #include <linux/khugepaged.h>
 #include <linux/syscalls.h>
+#include <linux/sysctl.h>
 #include <linux/hugetlb.h>
 #include <linux/shmem_fs.h>
 #include <linux/memfd.h>
@@ -30,16 +32,29 @@
 #define MEMFD_TAG_PINNED        PAGECACHE_TAG_TOWRITE
 #define LAST_SCAN               4       /* about 150ms max */
 
+static int sysctl_memfd_write_seal_mapped __read_mostly;
+
 static bool memfd_folio_has_extra_refs(struct folio *folio)
 {
+	int expected_ref_count;
+
 	/*
-	 * Use the precise pincount where available to avoid racy refcount
-	 * comparisons.
+	 * Relevant with memfd_write_seal_mapped=1 only: use precise pincount
+	 * where available to avoid more races.
 	 */
 	if (folio_has_pincount(folio) && folio_maybe_dma_pinned(folio))
 		return true;
 
-	return folio_ref_count(folio) != folio_expected_ref_count(folio);
+	/*
+	 * Only allow page-cache references by default: disallow any page
+	 * table mappings, as they are not stable.
+	 */
+	if (READ_ONCE(sysctl_memfd_write_seal_mapped))
+		expected_ref_count = folio_expected_ref_count(folio);
+	else
+		expected_ref_count = folio_nr_pages(folio);
+
+	return folio_ref_count(folio) != expected_ref_count;
 }
 
 static void memfd_tag_pins(struct xa_state *xas)
@@ -527,3 +542,24 @@ SYSCALL_DEFINE2(memfd_create,
 	fd_flags = (flags & MFD_CLOEXEC) ? O_CLOEXEC : 0;
 	return FD_ADD(fd_flags, memfd_alloc_file(name, flags));
 }
+
+#ifdef CONFIG_SYSCTL
+static const struct ctl_table memfd_sysctl_table[] = {
+	{
+		.procname	= "memfd_write_seal_mapped",
+		.data		= &sysctl_memfd_write_seal_mapped,
+		.maxlen		= sizeof(sysctl_memfd_write_seal_mapped),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+};
+
+static int __init memfd_sysctl_init(void)
+{
+	register_sysctl_init("vm", memfd_sysctl_table);
+	return 0;
+}
+subsys_initcall(memfd_sysctl_init);
+#endif
