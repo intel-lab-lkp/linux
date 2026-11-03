@@ -38,6 +38,18 @@ config BCMA_HOST_SOC
 
 	  If unsure, say N
 
+config BCMA_HOST_SOC_BCM6362
+	bool "Support for the BCM6362 integrated WLAN backplane"
+	depends on BMIPS_GENERIC || COMPILE_TEST
+	depends on OF
+	help
+	  Host driver for the bcma backplane of the WLAN macro
+	  integrated in the Broadcom BCM6362 SoC. It powers the macro on
+	  and lets bcma enumerate the backplane, so that the 802.11 core
+	  can be driven by b43.
+
+	  If unsure, say N
+
 config BCMA_DRIVER_PCI
 	bool "BCMA Broadcom PCI core driver"
 	depends on PCI
