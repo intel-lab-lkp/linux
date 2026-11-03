@@ -367,10 +367,17 @@ static void show_free_areas(unsigned int filter, const nodemask_t *nodemask,
 			continue;
 		if (show_mem_node_skip(filter, zone_to_nid(zone), nodemask))
 			continue;
-		show_node(zone);
-		printk(KERN_CONT "%s: ", zone->name);
 
-		spin_lock_irqsave(&zone->lock, flags);
+		if (!can_spin_trylock() || in_nmi() ||
+		    oops_in_progress || panic_in_progress()) {
+			if (!can_spin_trylock() ||
+			    !spin_trylock_irqsave(&zone->lock, flags)) {
+				pr_warn("zone %s lock contended\n", zone->name);
+				continue;
+			}
+		} else {
+			spin_lock_irqsave(&zone->lock, flags);
+		}
 		for (order = 0; order < NR_PAGE_ORDERS; order++) {
 			struct free_area *area = &zone->free_area[order];
 			int type;
@@ -385,6 +392,8 @@ static void show_free_areas(unsigned int filter, const nodemask_t *nodemask,
 			}
 		}
 		spin_unlock_irqrestore(&zone->lock, flags);
+		show_node(zone);
+		printk(KERN_CONT "%s: ", zone->name);
 		for (order = 0; order < NR_PAGE_ORDERS; order++) {
 			printk(KERN_CONT "%lu*%lukB ",
 			       nr[order], K(1UL) << order);
