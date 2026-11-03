@@ -392,8 +392,23 @@ void gspca_frame_add(struct gspca_dev *gspca_dev,
 	spin_unlock_irqrestore(&gspca_dev->qlock, flags);
 
 	if (packet_type == FIRST_PACKET) {
-		/* if there is no queued buffer, discard the whole frame */
-		if (!buf) {
+		/*
+		 * If there is no queued buffer, discard the whole frame.
+		 *
+		 * Frames are also discarded until gspca_init_transfer() has
+		 * set up the transfers: the first URB can complete while the
+		 * others are still being submitted, and if a submission then
+		 * fails, start_streaming() must leave vb2's done list empty.
+		 * A completed buffer cannot be taken back, so frames that
+		 * run into that window are dropped.
+		 *
+		 * vb2_is_streaming() cannot be used for this: videobuf2 sets
+		 * q->streaming before calling start_streaming() when
+		 * VIDIOC_STREAMON comes in with fewer buffers queued than
+		 * min_queued_buffers, and start_streaming() is only called
+		 * later from vb2_core_qbuf().
+		 */
+		if (!buf || !gspca_dev->streaming_ready) {
 			gspca_dev->last_packet_type = DISCARD_PACKET;
 			gspca_dev->sequence++;
 			return;
@@ -732,6 +747,7 @@ static int create_urbs(struct gspca_dev *gspca_dev,
 static void gspca_stream_off(struct gspca_dev *gspca_dev)
 {
 	gspca_dev->streaming = false;
+	gspca_dev->streaming_ready = false;
 	gspca_dev->usb_err = 0;
 	if (gspca_dev->sd_desc->stopN)
 		gspca_dev->sd_desc->stopN(gspca_dev);
@@ -887,6 +903,9 @@ retry:
 		}
 	}
 out:
+	/* the transfers are set up now, buffers may be completed */
+	if (!ret)
+		gspca_dev->streaming_ready = true;
 	gspca_input_create_urb(gspca_dev);
 	return ret;
 }

@@ -187,6 +187,7 @@ struct gspca_dev {
 	__u8 last_packet_type;
 	__s8 empty_packet;		/* if (-1) don't check empty packets */
 	bool streaming;
+	bool streaming_ready;		/* buffers can be completed */
 
 	__u8 curr_mode;			/* current camera mode */
 	struct v4l2_pix_format pixfmt;	/* current mode parameters */
