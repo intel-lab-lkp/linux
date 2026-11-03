@@ -774,6 +774,7 @@ free:
 
 static DEFINE_MUTEX(bpmp_debugfs_root_lock);
 static struct dentry *bpmp_debugfs_root;
+static unsigned int bpmp_debugfs_root_users;
 static bool bpmp_debugfs_enabled = true;
 
 module_param_named(debugfs, bpmp_debugfs_enabled, bool, 0444);
@@ -785,18 +786,17 @@ static struct dentry *bpmp_debugfs_get_root(void)
 	guard(mutex)(&bpmp_debugfs_root_lock);
 	if (!bpmp_debugfs_root)
 		bpmp_debugfs_root = debugfs_create_dir("bpmp", NULL);
+	if (!IS_ERR(bpmp_debugfs_root))
+		bpmp_debugfs_root_users++;
 	return bpmp_debugfs_root;
 }
 
-int tegra_bpmp_init_debugfs(struct tegra_bpmp *bpmp)
+static int tegra_bpmp_populate_debugfs(struct tegra_bpmp *bpmp)
 {
 	struct dentry *root, *d;
 	char name[32];
 	bool inband;
 	int err;
-
-	if (!bpmp_debugfs_enabled)
-		return 0;
 
 	inband = tegra_bpmp_mrq_is_supported(bpmp, MRQ_DEBUG);
 
@@ -818,7 +818,11 @@ int tegra_bpmp_init_debugfs(struct tegra_bpmp *bpmp)
 		}
 	}
 
-	bpmp->debugfs_mirror = debugfs_create_dir("debug", d);
+	/*
+	 * Name the mirror "debug" only once it is complete, so that userspace
+	 * never sees an incomplete state.
+	 */
+	bpmp->debugfs_mirror = debugfs_create_dir(".debug-populating", d);
 	if (IS_ERR(bpmp->debugfs_mirror)) {
 		err = PTR_ERR(bpmp->debugfs_mirror);
 		goto out;
@@ -830,19 +834,65 @@ int tegra_bpmp_init_debugfs(struct tegra_bpmp *bpmp)
 	else
 		err = bpmp_populate_debugfs_shmem(bpmp);
 
+	if (!err)
+		err = debugfs_change_name(bpmp->debugfs_mirror, "debug");
+
 out:
 	if (err < 0) {
 		if (!IS_ERR(d))
 			debugfs_remove_recursive(d);
 
 		guard(mutex)(&bpmp_debugfs_root_lock);
+		bpmp_debugfs_root_users--;
 		if (root == d) {
 			bpmp_debugfs_root = NULL;
-		} else if (simple_empty(root)) {
+		} else if (!bpmp_debugfs_root_users) {
 			debugfs_remove(root);
 			bpmp_debugfs_root = NULL;
 		}
 	}
 
 	return err;
+}
+
+static void tegra_bpmp_debugfs_work(struct work_struct *work)
+{
+	struct tegra_bpmp *bpmp =
+		container_of(work, struct tegra_bpmp, debugfs_work);
+	int err;
+
+	err = tegra_bpmp_populate_debugfs(bpmp);
+	if (err < 0)
+		dev_err(bpmp->dev, "debugfs initialization failed: %d\n", err);
+}
+
+static void tegra_bpmp_cancel_debugfs(void *data)
+{
+	struct tegra_bpmp *bpmp = data;
+
+	cancel_work_sync(&bpmp->debugfs_work);
+}
+
+int tegra_bpmp_init_debugfs(struct tegra_bpmp *bpmp)
+{
+	int err;
+
+	if (!bpmp_debugfs_enabled)
+		return 0;
+
+	INIT_WORK(&bpmp->debugfs_work, tegra_bpmp_debugfs_work);
+
+	err = devm_add_action_or_reset(bpmp->dev, tegra_bpmp_cancel_debugfs,
+				       bpmp);
+	if (err < 0)
+		return err;
+
+	/*
+	 * Mirroring the BPMP's debugfs tree can take several seconds, so do
+	 * it asynchronously, on the freezable workqueue so that system
+	 * suspend doesn't make its requests fail.
+	 */
+	queue_work(system_freezable_wq, &bpmp->debugfs_work);
+
+	return 0;
 }

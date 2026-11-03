@@ -12,6 +12,7 @@
 #include <linux/reset-controller.h>
 #include <linux/semaphore.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 
 #include <soc/tegra/bpmp-abi.h>
 
@@ -103,6 +104,7 @@ struct tegra_bpmp {
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs_mirror;
+	struct work_struct debugfs_work;
 #endif
 
 	bool suspended;
