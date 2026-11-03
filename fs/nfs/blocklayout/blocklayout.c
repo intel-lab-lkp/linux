@@ -839,12 +839,16 @@ is_aligned_req(struct nfs_pageio_descriptor *pgio,
 static void
 bl_pg_init_read(struct nfs_pageio_descriptor *pgio, struct nfs_page *req)
 {
+	int err;
+
 	if (!is_aligned_req(pgio, req, SECTOR_SIZE, false)) {
 		nfs_pageio_reset_read_mds(pgio);
-		return;
+		goto out_commit;
 	}
 
 	pnfs_generic_pg_init_read(pgio, req);
+	if (pgio->pg_error < 0)
+		return;
 
 	if (pgio->pg_lseg &&
 		test_bit(NFS_LSEG_UNAVAILABLE, &pgio->pg_lseg->pls_flags)) {
@@ -853,6 +857,13 @@ bl_pg_init_read(struct nfs_pageio_descriptor *pgio, struct nfs_page *req)
 		pnfs_set_lo_fail(pgio->pg_lseg);
 		nfs_pageio_reset_read_mds(pgio);
 	}
+	if (pgio->pg_lseg)
+		return;
+out_commit:
+	/* The MDS may not see layout writes until LAYOUTCOMMIT. */
+	err = pnfs_layoutcommit_inode(pgio->pg_inode, true);
+	if (err < 0)
+		pgio->pg_error = err;
 }
 
 /*
