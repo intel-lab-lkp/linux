@@ -130,10 +130,8 @@ static ssize_t lockdown_write(struct file *file, const char __user *buf,
 		return PTR_ERR(state);
 
 	len = strlen(state);
-	if (len && state[len-1] == '\n') {
+	if (len && state[len-1] == '\n')
 		state[len-1] = '\0';
-		len--;
-	}
 
 	for (i = 0; i < ARRAY_SIZE(lockdown_levels); i++) {
 		enum lockdown_reason level = lockdown_levels[i];
