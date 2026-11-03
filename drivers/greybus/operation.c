@@ -766,7 +766,25 @@ int gb_operation_request_send(struct gb_operation *operation,
 	if (ret)
 		goto err_put;
 
+	/*
+	 * Completion can drop the reference and active count above while the
+	 * host driver is still sending. Hold another of each across the send, so
+	 * that cancelling the operation waits for the host driver to return.
+	 */
+	gb_operation_get(operation);
+	ret = gb_operation_get_active(operation);
+	if (ret) {
+		/*
+		 * The connection is being torn down, and the operation, which is
+		 * already on its list, will be cancelled and completed.
+		 */
+		gb_operation_put(operation);
+		return 0;
+	}
+
 	ret = gb_message_send(operation->request, gfp);
+	gb_operation_put_active(operation);
+	gb_operation_put(operation);
 	if (ret)
 		goto err_put_active;
 
