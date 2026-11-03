@@ -1419,6 +1419,15 @@ void qla2xxx_process_purls_iocb(void **pkt, struct rsp_que **rsp)
 		goto out;
 	}
 	rport = fcport->nvme_remote_port;
+	if (!rport) {
+		ql_dbg(ql_dbg_unsol, vha, 0x2113,
+		       "No NVMe remote port for sid=%06x did=%06x\n",
+		       id.b24, d_id.b24);
+		a.reason = FCNVME_RJT_RC_INV_ASSOC;
+		a.explanation = FCNVME_RJT_EXP_NONE;
+		xmt_reject = true;
+		goto out;
+	}
 	qla_rport = rport->private;
 
 	item = qla27xx_copy_multiple_pkt(vha, pkt, rsp, true, false);
