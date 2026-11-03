@@ -3870,7 +3870,7 @@ void __getparam_dl(struct task_struct *p, struct sched_attr *attr, unsigned int 
 		if (task_current(rq, p))
 			update_curr_dl(rq);
 
-		attr->sched_runtime = dl_se->runtime;
+		attr->sched_runtime = max_t(s64, dl_se->runtime, 0);
 		adj_deadline = dl_se->deadline - rq_clock(rq) + ktime_get_ns();
 		attr->sched_deadline = adj_deadline;
 	} else {
