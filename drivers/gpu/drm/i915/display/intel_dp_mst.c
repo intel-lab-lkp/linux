@@ -732,6 +732,12 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 	if (ret)
 		return ret;
 
+	/* Clears min_hblank if the symbol based timing generator gets enabled */
+	ret = intel_dp_compute_symbol_tg(connector->mst.dp,
+					 pipe_config, conn_state);
+	if (ret)
+		return ret;
+
 	return 0;
 }
 

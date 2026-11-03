@@ -26,6 +26,7 @@
  */
 
 #include <linux/export.h>
+#include <linux/gcd.h>
 #include <linux/i2c.h>
 #include <linux/iopoll.h>
 #include <linux/log2.h>
@@ -1267,6 +1268,12 @@ bool intel_dp_has_dsc(const struct intel_connector *connector)
 		return false;
 
 	return true;
+}
+
+/* The symbol based timing generator is used for 8b/10b MST and 128b/132b SST/MST */
+static bool intel_dp_has_symbol_tg(struct intel_display *display, bool is_mst, bool is_uhbr)
+{
+	return HAS_DP_SYMBOL_TG(display) && (is_mst || is_uhbr);
 }
 
 static int
@@ -3734,6 +3741,165 @@ int intel_dp_compute_min_hblank(struct intel_crtc_state *crtc_state,
 	return 0;
 }
 
+/* Number of symbols the transcoder link layer processes in a symbol cycle */
+#define LL_SYMBOLS_PER_CYCLE	4
+
+/* 64 x 64 -> 128 bit multiplication, result as {lo, hi} */
+static void intel_dp_mul_u64_u64(u64 a, u64 b, u64 res[2])
+{
+	res[0] = a * b;
+	res[1] = mul_u64_u64_shr(a, b, 64);
+}
+
+/* Compare two {lo, hi} 128 bit values */
+static int intel_dp_cmp_u128(const u64 a[2], const u64 b[2])
+{
+	if (a[1] != b[1])
+		return a[1] > b[1] ? 1 : -1;
+
+	if (a[0] != b[0])
+		return a[0] > b[0] ? 1 : -1;
+
+	return 0;
+}
+
+/* Compute the DP link layer (LL) symbol based timing generator parameters */
+int intel_dp_compute_symbol_tg(struct intel_dp *intel_dp,
+			       struct intel_crtc_state *crtc_state,
+			       const struct drm_connector_state *conn_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	const struct drm_display_mode *adjusted_mode =
+					&crtc_state->hw.adjusted_mode;
+	struct intel_connector *connector = to_intel_connector(conn_state->connector);
+	struct intel_dp_symbol_tg *tg = &crtc_state->dp_symbol_tg;
+	bool is_uhbr = intel_dp_is_uhbr(crtc_state);
+	int symbol_size = is_uhbr ? 32 : 8;
+	int hactive_cycles, hblank_cycles, chunk_cycles = 0;
+	int hblank_pixels;
+	int dsc_slices, link_bpp_x16;
+	u32 ch_num, ch_den, ssc_num, ssc_den, spread_x1000, link_rate_mbps;
+	u32 rate_gcd, ssc_gcd;
+	u64 data_m[2], data_n[2];
+	int ret;
+
+	memset(tg, 0, sizeof(*tg));
+
+	/* The symbol based timing generator is used for 8b/10b MST and 128b/132b SST/MST */
+	if (!intel_dp_has_symbol_tg(display,
+				    intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP_MST),
+				    is_uhbr))
+		return 0;
+
+	/* TODO: Support the symbol based timing generator with MSO/eDP splitter */
+	if (crtc_state->splitter.enable)
+		return 0;
+
+	ret = intel_dp_compute_dsc_slices_and_link_bpp(crtc_state, connector,
+						       &dsc_slices, &link_bpp_x16);
+	if (ret)
+		return ret;
+
+	if (crtc_state->dsc.compression_enable) {
+		int slice_width = DIV_ROUND_UP(adjusted_mode->hdisplay, dsc_slices);
+		int chunk_bytes = DIV_ROUND_UP(slice_width * link_bpp_x16, 16 * 8);
+
+		chunk_cycles = DIV_ROUND_UP(chunk_bytes * 8,
+					    LL_SYMBOLS_PER_CYCLE * symbol_size);
+		hactive_cycles = dsc_slices * (chunk_cycles + 1);
+	} else {
+		int hact_width = adjusted_mode->hdisplay;
+		int pix_bpp_x16 = link_bpp_x16;
+
+		/* YUV 4:2:0 without DSC: half the Hactive at twice the bpp */
+		if (crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR420) {
+			hact_width /= 2;
+			pix_bpp_x16 *= 2;
+		}
+
+		hactive_cycles = DIV_ROUND_UP(DIV_ROUND_UP(hact_width, LL_SYMBOLS_PER_CYCLE) *
+					      pix_bpp_x16, 16 * symbol_size);
+	}
+
+	hblank_pixels = adjusted_mode->htotal - adjusted_mode->hdisplay;
+	hblank_cycles = DIV_ROUND_UP(DIV_ROUND_UP(hblank_pixels, LL_SYMBOLS_PER_CYCLE) *
+				     link_bpp_x16, 16 * symbol_size);
+
+	/* DP 2.1: the minimum Hblank is 5 LL symbol cycles for 8b/10b, 3 for 128b/132b */
+	hblank_cycles = max(hblank_cycles, is_uhbr ? 3 : 5);
+
+	if (hactive_cycles + hblank_cycles > TRANS_LLSYM_HTOTAL_MASK + 1 ||
+	    chunk_cycles > TRANS_LLSYM_CHUNK_SIZE_MASK) {
+		drm_dbg_kms(display->drm,
+			    "LL symbol timings out of range (hactive %d, hblank %d, chunk %d), using pixel TG\n",
+			    hactive_cycles, hblank_cycles, chunk_cycles);
+		return 0;
+	}
+
+	if (is_uhbr) {
+		ch_num = 1568768;
+		ch_den = 1622115;
+	} else if (crtc_state->fec_enable) {
+		ch_num = 51200;
+		ch_den = 65537;
+	} else {
+		ch_num = 8;
+		ch_den = 10;
+	}
+
+	/*
+	 * spread_x1000 is the spread in % multiplied by 1000, so 500 means 0.5%.
+	 * ssc_den * spread_x1000 / (200 * 1000) is ssc_den * (Spread_Amount / 200).
+	 *
+	 * With 0.5% spread: 100000 * 500 / 200000 = 250, so ssc_num = 99750.
+	 * The efficiency is 99750 / 100000 = 0.9975, which equals 1 - 0.5 / 200.
+	 * With no SSC the spread is 0, so ssc_num = ssc_den and the efficiency
+	 * is 1.
+	 *
+	 * SSC is used only if both the panel/VBT policy and the sink allow it,
+	 * same as for the PHY PLL programming.
+	 */
+	ssc_den = 100000;
+	spread_x1000 = intel_panel_use_ssc(display) &&
+		       intel_dp->dpcd[DP_MAX_DOWNSPREAD] & DP_MAX_DOWNSPREAD_0_5 ? 500 : 0;
+	ssc_num = ssc_den - DIV_ROUND_CLOSEST(ssc_den * spread_x1000, 200 * 1000);
+
+	/* The link rate in Mbps, port_clock is in 10 kbps units */
+	link_rate_mbps = crtc_state->port_clock / 100;
+
+	rate_gcd = gcd(adjusted_mode->crtc_clock, link_rate_mbps);
+	ssc_gcd = gcd(ssc_num, ssc_den);
+
+	intel_dp_mul_u64_u64((u64)(adjusted_mode->crtc_clock / rate_gcd) *
+			     LL_SYMBOLS_PER_CYCLE * symbol_size * ch_den,
+			     (u64)(hactive_cycles + hblank_cycles) * (ssc_den / ssc_gcd),
+			     data_m);
+	intel_dp_mul_u64_u64((u64)(link_rate_mbps / rate_gcd) * crtc_state->lane_count *
+			     adjusted_mode->htotal * 1000,
+			     (u64)ch_num * (ssc_num / ssc_gcd),
+			     data_n);
+
+	if (intel_dp_cmp_u128(data_m, data_n) > 0) {
+		drm_dbg_kms(display->drm,
+			    "LL symbol data M/N ratio exceeds 1.0, using pixel TG\n");
+		return 0;
+	}
+
+	tg->enable = true;
+	tg->hactive = hactive_cycles;
+	tg->htotal = hactive_cycles + hblank_cycles;
+	tg->chunk_size = chunk_cycles;
+	tg->data_m[0] = data_m[0];
+	tg->data_m[1] = data_m[1];
+	tg->data_n[0] = data_n[0];
+	tg->data_n[1] = data_n[1];
+
+	/* The Min Hblank mechanism must not be used with the symbol TG */
+	crtc_state->min_hblank = 0;
+
+	return 0;
+}
+
 int
 intel_dp_compute_config(struct intel_atomic_state *state,
 			struct intel_encoder *encoder,
@@ -3831,6 +3997,11 @@ intel_dp_compute_config(struct intel_atomic_state *state,
 	}
 
 	ret = intel_dp_compute_min_hblank(pipe_config, conn_state);
+	if (ret)
+		return ret;
+
+	/* Clears min_hblank if the symbol based timing generator gets enabled */
+	ret = intel_dp_compute_symbol_tg(intel_dp, pipe_config, conn_state);
 	if (ret)
 		return ret;
 
