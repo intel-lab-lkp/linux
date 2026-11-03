@@ -1525,6 +1525,7 @@ nfsd4_verify_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		  stateid_t *src_stateid, struct nfsd_file **src,
 		  stateid_t *dst_stateid, struct nfsd_file **dst)
 {
+	bool crossed;
 	__be32 status;
 
 	if (!cstate->save_fh.fh_dentry)
@@ -1534,11 +1535,26 @@ nfsd4_verify_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	status = check_nfsd_access(cstate->save_fh.fh_export, rqstp, 0);
 	if (status)
 		return status == nfserr_wrongsec ? nfserr_acces : status;
+	crossed = cstate->save_fh.fh_export != cstate->current_fh.fh_export;
+	if (crossed) {
+		status = nfserrno(nfsd_setuser(&rqstp->rq_cred,
+					       cstate->save_fh.fh_export));
+		if (status)
+			return status;
+	}
 
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->save_fh,
 					    src_stateid, RD_STATE, src, NULL);
 	if (status)
 		goto out;
+
+	/* The destination export was checked when current_fh was set. */
+	if (crossed) {
+		status = nfserrno(nfsd_setuser(&rqstp->rq_cred,
+					       cstate->current_fh.fh_export));
+		if (status)
+			goto out_put_src;
+	}
 
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
 					    dst_stateid, WR_STATE, dst, NULL);
