@@ -669,6 +669,25 @@ impl Delta {
     }
 }
 
+impl kernel::fmt::Display for Delta {
+    /// Formats the span as a number of nanoseconds, suffixed with `ns`.
+    ///
+    /// ```
+    /// # use kernel::{prelude::fmt, str::CString, time::Delta};
+    /// let delta = Delta::from_micros(5);
+    /// let formatted = CString::try_from_fmt(fmt!("{delta}"))?;
+    /// assert_eq!(formatted.to_bytes(), b"5000ns");
+    ///
+    /// let negative = Delta::from_millis(-2);
+    /// let formatted = CString::try_from_fmt(fmt!("{negative}"))?;
+    /// assert_eq!(formatted.to_bytes(), b"-2000000ns");
+    /// # Ok::<(), kernel::error::Error>(())
+    /// ```
+    fn fmt(&self, f: &mut kernel::fmt::Formatter<'_>) -> kernel::fmt::Result {
+        write!(f, "{}ns", self.as_nanos())
+    }
+}
+
 #[cfg(CONFIG_RUST_TIME_KUNIT_TEST)]
 #[macros::kunit_tests(rust_kernel_time)]
 mod tests {
