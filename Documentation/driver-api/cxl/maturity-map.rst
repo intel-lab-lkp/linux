@@ -151,7 +151,7 @@ Memory-pooling
 * [0] Dynamic Capacity Device (DCD) Support
 
   * [1] DC partition enumeration / configuration (Get DC Config, CDAT DSMAS, event interrupts)
-  * [0] Extent add / release event handling
+  * [1] Extent add / release event handling
   * [0] DC-backed DAX regions
 
 Multi-host sharing
