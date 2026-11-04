@@ -90,7 +90,7 @@ static void *gdom_info_load_or_alloc_locked(struct xarray *xa,
 
 /*
  * This function is assigned to struct iommufd_viommu_ops.alloc_domain_nested()
- * during the call to struct iommu_ops.viommu_init().
+ * when the vIOMMU operations are selected.
  */
 struct iommu_domain *
 amd_iommu_alloc_domain_nested(struct iommufd_viommu *viommu, u32 flags,
@@ -198,7 +198,7 @@ static void set_dte_nested(struct amd_iommu *iommu, struct iommu_domain *dom,
 
 	/*
 	 * The nest parent domain is attached during the call to the
-	 * struct iommu_ops.viommu_init(), which will be stored as part
+	 * struct iommufd_viommu_ops.viommu_init(), which will be stored as part
 	 * of the struct amd_iommu_viommu.parent.
 	 */
 	if (WARN_ON(!ndom->viommu || !ndom->viommu->parent))

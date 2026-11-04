@@ -892,11 +892,14 @@ static void *tegra241_cmdqv_hw_info(struct arm_smmu_device *smmu, u32 *length,
 	return info;
 }
 
-static size_t tegra241_cmdqv_get_vintf_size(enum iommu_viommu_type viommu_type)
+static const struct iommufd_viommu_ops tegra241_cmdqv_viommu_ops;
+
+static const struct iommufd_viommu_ops *
+tegra241_cmdqv_get_viommu_ops(enum iommu_viommu_type viommu_type)
 {
 	if (viommu_type != IOMMU_VIOMMU_TYPE_TEGRA241_CMDQV)
-		return 0;
-	return VIOMMU_STRUCT_SIZE(struct tegra241_vintf, vsmmu.core);
+		return NULL;
+	return &tegra241_cmdqv_viommu_ops;
 }
 
 static struct arm_smmu_impl_ops tegra241_cmdqv_impl_ops = {
@@ -907,7 +910,7 @@ static struct arm_smmu_impl_ops tegra241_cmdqv_impl_ops = {
 	.device_remove = tegra241_cmdqv_remove,
 	/* For user-space use */
 	.hw_info = tegra241_cmdqv_hw_info,
-	.get_viommu_size = tegra241_cmdqv_get_vintf_size,
+	.get_viommu_ops = tegra241_cmdqv_get_viommu_ops,
 	.vsmmu_init = tegra241_cmdqv_init_vintf_user,
 };
 
@@ -1289,7 +1292,15 @@ static int tegra241_vintf_init_vsid(struct iommufd_vdevice *vdev)
 	return 0;
 }
 
-static struct iommufd_viommu_ops tegra241_cmdqv_viommu_ops = {
+static size_t tegra241_cmdqv_get_vintf_size(struct device *dev,
+					    enum iommu_viommu_type viommu_type)
+{
+	return VIOMMU_STRUCT_SIZE(struct tegra241_vintf, vsmmu.core);
+}
+
+static const struct iommufd_viommu_ops tegra241_cmdqv_viommu_ops = {
+	.get_viommu_size = tegra241_cmdqv_get_vintf_size,
+	.viommu_init = arm_vsmmu_init,
 	.destroy = tegra241_cmdqv_destroy_vintf_user,
 	.alloc_domain_nested = arm_vsmmu_alloc_domain_nested,
 	/* Non-accelerated commands will be still handled by the kernel */
@@ -1312,7 +1323,7 @@ tegra241_cmdqv_init_vintf_user(struct arm_vsmmu *vsmmu,
 	int ret;
 
 	/*
-	 * Unsupported type should be rejected by tegra241_cmdqv_get_vintf_size.
+	 * Unsupported type should be rejected by tegra241_cmdqv_get_viommu_ops.
 	 * Seeing one here indicates a kernel bug or some data corruption.
 	 */
 	if (WARN_ON(vsmmu->core.type != IOMMU_VIOMMU_TYPE_TEGRA241_CMDQV))
@@ -1364,7 +1375,6 @@ tegra241_cmdqv_init_vintf_user(struct arm_vsmmu *vsmmu,
 	dev_dbg(cmdqv->dev, "VINTF%u: allocated with vmid (%d)\n", vintf->idx,
 		vintf->vsmmu.vmid);
 
-	vsmmu->core.ops = &tegra241_cmdqv_viommu_ops;
 	return 0;
 
 free_mmap:
