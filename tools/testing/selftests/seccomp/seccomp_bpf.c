@@ -22,6 +22,7 @@
 
 #include <errno.h>
 #include <linux/filter.h>
+#include <linux/userfaultfd.h>
 #include <sys/epoll.h>
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
@@ -5136,6 +5137,137 @@ TEST_F(notification_restart, failed_receive)
 	ASSERT_EQ(ioctl(self->listener, SECCOMP_IOCTL_NOTIF_SEND, &resp), 0);
 	notification_result(_metadata, self, -1, EAGAIN);
 }
+
+#ifdef __NR_userfaultfd
+struct notification_receive_args {
+	struct seccomp_notif *req;
+	int listener;
+	int ret;
+	int err;
+};
+
+static void *notification_receive(void *data)
+{
+	struct notification_receive_args *args = data;
+
+	args->ret = ioctl(args->listener, SECCOMP_IOCTL_NOTIF_RECV, args->req);
+	args->err = errno;
+	return NULL;
+}
+
+/*
+ * Write-protect the range through a new userfaultfd and return it, or
+ * return -1 with a skip reason if this kernel cannot report the fault.
+ */
+static int notification_uffd_wp(struct __test_metadata *_metadata,
+				const struct uffdio_range *range,
+				char *reason, size_t reason_len)
+{
+	struct uffdio_writeprotect wp = {};
+	struct uffdio_register reg = {};
+	struct uffdio_api api = {
+		.api = UFFD_API,
+		.features = UFFD_FEATURE_PAGEFAULT_FLAG_WP,
+	};
+	int ret, uffd;
+
+	/* Kernel-originated faults require a privileged userfaultfd. */
+	uffd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+	if (uffd < 0) {
+		snprintf(reason, reason_len,
+			 "userfaultfd for kernel faults unavailable: %s",
+			 strerror(errno));
+		return -1;
+	}
+	ret = ioctl(uffd, UFFDIO_API, &api);
+	if (ret < 0 && errno == EINVAL) {
+		snprintf(reason, reason_len, "userfaultfd API is not available");
+		goto skip;
+	}
+	ASSERT_EQ(ret, 0);
+	if (!(api.features & UFFD_FEATURE_PAGEFAULT_FLAG_WP)) {
+		snprintf(reason, reason_len,
+			 "userfaultfd write protection is not available");
+		goto skip;
+	}
+
+	reg.range = *range;
+	reg.mode = UFFDIO_REGISTER_MODE_WP;
+	ASSERT_EQ(ioctl(uffd, UFFDIO_REGISTER, &reg), 0);
+	wp.range = *range;
+	wp.mode = UFFDIO_WRITEPROTECT_MODE_WP;
+	ASSERT_EQ(ioctl(uffd, UFFDIO_WRITEPROTECT, &wp), 0);
+	return uffd;
+
+skip:
+	ASSERT_EQ(close(uffd), 0);
+	return -1;
+}
+
+TEST_F(notification_restart, during_receive)
+{
+	struct notification_receive_args args = { .listener = self->listener };
+	struct seccomp_notif req = {};
+	struct seccomp_notif_resp resp = {};
+	struct uffdio_writeprotect wp = {};
+	struct uffdio_range range = {};
+	struct pollfd pfd = { .events = POLLIN };
+	struct uffd_msg msg;
+	char reason[128];
+	pthread_t thread;
+	long page_size;
+	int uffd;
+
+	page_size = sysconf(_SC_PAGESIZE);
+	ASSERT_GT(page_size, 0);
+	args.req = mmap(NULL, page_size, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	ASSERT_NE(args.req, MAP_FAILED);
+	memset(args.req, 0, page_size);
+
+	range.start = (unsigned long)args.req;
+	range.len = page_size;
+	uffd = notification_uffd_wp(_metadata, &range, reason, sizeof(reason));
+	if (uffd < 0) {
+		ASSERT_EQ(munmap(args.req, page_size), 0);
+		SKIP(return, "%s", reason);
+	}
+
+	notification_restart_child(_metadata, self);
+	notification_pending(_metadata, self->listener);
+	ASSERT_EQ(pthread_create(&thread, NULL, notification_receive, &args), 0);
+	pfd.fd = uffd;
+	ASSERT_EQ(poll(&pfd, 1, 5000), 1);
+	ASSERT_EQ(read(uffd, &msg, sizeof(msg)), sizeof(msg));
+	ASSERT_EQ(msg.event, UFFD_EVENT_PAGEFAULT);
+	ASSERT_TRUE(msg.arg.pagefault.flags & UFFD_PAGEFAULT_FLAG_WP);
+
+	/* Withdraw the notification while copy_to_user() is stalled. */
+	notification_signal(_metadata, self);
+	wp.range = range;
+	wp.mode = 0;
+	ASSERT_EQ(ioctl(uffd, UFFDIO_WRITEPROTECT, &wp), 0);
+	ASSERT_EQ(pthread_join(thread, NULL), 0);
+	ASSERT_EQ(args.ret, -1);
+	EXPECT_EQ(args.err, ENOENT);
+	EXPECT_EQ(memcmp(args.req, &req, sizeof(req)), 0);
+	ASSERT_EQ(close(uffd), 0);
+	ASSERT_EQ(munmap(args.req, page_size), 0);
+
+	if (!variant->restart) {
+		notification_result(_metadata, self, -1, EINTR);
+		return;
+	}
+
+	notification_pending(_metadata, self->listener);
+	ASSERT_EQ(ioctl(self->listener, SECCOMP_IOCTL_NOTIF_RECV,
+			&req), 0);
+	resp.id = req.id;
+	resp.flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
+	ASSERT_EQ(ioctl(self->listener, SECCOMP_IOCTL_NOTIF_SEND, &resp), 0);
+	notification_result(_metadata, self, getpid(), 0);
+}
+#endif
 
 TEST_F(notification_restart, after_receive)
 {

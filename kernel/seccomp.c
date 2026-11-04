@@ -54,6 +54,7 @@
 
 enum notify_state {
 	SECCOMP_NOTIFY_INIT,
+	SECCOMP_NOTIFY_RECEIVING,
 	SECCOMP_NOTIFY_SENT,
 	SECCOMP_NOTIFY_REPLIED,
 };
@@ -74,11 +75,12 @@ struct seccomp_knotif {
 
 	/*
 	 * Notification states. When SECCOMP_RET_USER_NOTIF is returned, a
-	 * struct seccomp_knotif is created and starts out in INIT. Once the
-	 * handler reads the notification off of an FD, it transitions to SENT.
-	 * If a signal is received the state transitions back to INIT and
-	 * another message is sent. When the userspace handler replies, state
-	 * transitions to REPLIED.
+	 * struct seccomp_knotif is created and starts out in INIT. A receiver
+	 * reserves it by moving it to RECEIVING. Once the notification has been
+	 * copied to userspace, it transitions to SENT; if copying fails, it
+	 * returns to INIT. An interrupted wait may withdraw the notification in
+	 * any state, including RECEIVING. When the userspace handler replies,
+	 * state transitions to REPLIED.
 	 */
 	enum notify_state state;
 
@@ -1225,7 +1227,7 @@ static int seccomp_do_user_notification(int this_syscall,
 			 */
 			if (!(!wait_killable && should_sleep_killable(match, &n))) {
 				if (err == -ERESTARTSYS && match->restart_before_recv &&
-				    n.state == SECCOMP_NOTIFY_INIT)
+				    n.state <= SECCOMP_NOTIFY_RECEIVING)
 					err = -ERESTARTNOINTR;
 				goto interrupted;
 			}
@@ -1600,40 +1602,35 @@ static long seccomp_notify_recv(struct seccomp_filter *filter,
 	 * when we were able to acquire the rw lock.
 	 */
 	if (!knotif) {
-		ret = -ENOENT;
-		goto out;
+		mutex_unlock(&filter->notify_lock);
+		return -ENOENT;
 	}
 
 	unotif.id = knotif->id;
 	unotif.pid = task_pid_vnr(knotif->task);
 	unotif.data = *(knotif->data);
-
-	seccomp_notify_set_sent(filter, knotif);
-	ret = 0;
-out:
+	knotif->state = SECCOMP_NOTIFY_RECEIVING;
 	mutex_unlock(&filter->notify_lock);
 
-	if (ret == 0 && copy_to_user(buf, &unotif, sizeof(unotif))) {
-		ret = -EFAULT;
+	ret = copy_to_user(buf, &unotif, sizeof(unotif)) ? -EFAULT : 0;
 
-		/*
-		 * Userspace screwed up. To make sure that we keep this
-		 * notification alive, let's reset it back to INIT. It
-		 * may have died when we released the lock, so we need to make
-		 * sure it's still around.
-		 */
-		mutex_lock(&filter->notify_lock);
-		knotif = find_notification(filter, unotif.id);
-		if (knotif) {
-			/* Reset the process to make sure it's not stuck */
-			if (should_sleep_killable(filter, knotif))
-				complete(&knotif->ready);
-			knotif->state = SECCOMP_NOTIFY_INIT;
-			atomic_inc(&filter->notif->requests);
-			wake_up_poll(&filter->wqh, EPOLLIN | EPOLLRDNORM);
-		}
-		mutex_unlock(&filter->notify_lock);
+	mutex_lock(&filter->notify_lock);
+	knotif = find_notification(filter, unotif.id);
+	if (!knotif) {
+		if (!ret)
+			ret = -ENOENT;
+	} else if (!ret) {
+		seccomp_notify_set_sent(filter, knotif);
+	} else {
+		knotif->state = SECCOMP_NOTIFY_INIT;
+		atomic_inc(&filter->notif->requests);
+		wake_up_poll(&filter->wqh, EPOLLIN | EPOLLRDNORM);
 	}
+	mutex_unlock(&filter->notify_lock);
+
+	/* Leave the buffer zeroed so that userspace can retry unchanged. */
+	if (ret == -ENOENT && clear_user(buf, sizeof(unotif)))
+		ret = -EFAULT;
 
 	return ret;
 }
