@@ -2656,13 +2656,40 @@ enum dc_status dce110_apply_ctx_to_hw(
 	struct dce_hwseq *hws = dc->hwseq;
 	struct dc_bios *dcb = dc->ctx->dc_bios;
 	enum dc_status status;
-	unsigned int i;
+	unsigned int i, n, enable_order[MAX_PIPES];
+	int primary = -1, companion = -1;
 	bool was_hpo_acquired = resource_is_hpo_acquired(dc->current_state);
 	bool is_hpo_acquired = resource_is_hpo_acquired(context);
 
 	/* reset syncd pipes from disabled pipes */
 	if (dc->config.use_pipe_ctx_sync_logic)
 		reset_syncd_pipes_from_disabled_pipes(dc, context);
+
+	for (i = 0; i < dc->res_pool->pipe_count; i++) {
+		struct pipe_ctx *pipe = &context->res_ctx.pipe_ctx[i];
+
+		enable_order[i] = i;
+		if (!dc->config.imac5K_support || !pipe->stream ||
+		    pipe->top_pipe || pipe->prev_odm_pipe)
+			continue;
+		if (pipe->stream->link->link_index == 0)
+			primary = i;
+		else if (pipe->stream->link->link_index == 1)
+			companion = i;
+	}
+	if (companion >= 0 && primary > companion) {
+		enable_order[companion] = primary;
+		enable_order[primary] = companion;
+	}
+
+	if (primary >= 0 && companion >= 0) {
+		struct pipe_ctx *old = &dc->current_state->res_ctx.pipe_ctx[primary];
+		struct dc_link *right = context->res_ctx.pipe_ctx[companion].stream->link;
+
+		if (!old->stream ||
+		    pipe_need_reprogram(old, &context->res_ctx.pipe_ctx[primary]))
+			right->link_state_valid = false;
+	}
 
 	/* Reset old context */
 	/* look up the targets that have been removed since last commit */
@@ -2705,10 +2732,12 @@ enum dc_status dce110_apply_ctx_to_hw(
 		dc->hwseq->funcs.setup_hpo_hw_control(dc->hwseq, is_hpo_acquired);
 	}
 
-	for (i = 0; i < dc->res_pool->pipe_count; i++) {
+	for (n = 0; n < dc->res_pool->pipe_count; n++) {
 		struct pipe_ctx *pipe_ctx_old =
-					&dc->current_state->res_ctx.pipe_ctx[i];
-		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+			&dc->current_state->res_ctx.pipe_ctx[enable_order[n]];
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[enable_order[n]];
+
+		i = enable_order[n];
 
 		if (pipe_ctx->stream == NULL)
 			continue;
