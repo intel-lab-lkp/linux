@@ -12,6 +12,7 @@
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
 #include <linux/pci-tsm.h>
+#include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/tsm.h>
 #include <linux/xarray.h>
@@ -292,96 +293,94 @@ static int remove_fn(struct pci_dev *pdev, void *data)
 	return 0;
 }
 
-/*
- * Note, this helper only returns an error code and takes an argument for
- * compatibility with the pci_walk_bus() callback prototype. pci_tsm_unbind()
- * always succeeds.
- */
-static int __pci_tsm_unbind(struct pci_dev *pdev, void *data)
-{
-	struct pci_tdi *tdi;
-	struct pci_tsm_pf0 *tsm_pf0;
-
-	lockdep_assert_held(&pci_tsm_rwsem);
-
-	if (!pdev->tsm)
-		return 0;
-
-	tsm_pf0 = to_pci_tsm_pf0(pdev->tsm);
-	guard(mutex)(&tsm_pf0->lock);
-
-	tdi = pdev->tsm->tdi;
-	if (!tdi)
-		return 0;
-
-	to_pci_tsm_ops(pdev->tsm)->unbind(tdi);
-	pdev->tsm->tdi = NULL;
-
-	return 0;
-}
-
-void pci_tsm_unbind(struct pci_dev *pdev)
+bool pci_tsm_is_configured(struct pci_dev *pdev)
 {
 	guard(rwsem_read)(&pci_tsm_rwsem);
-	__pci_tsm_unbind(pdev, NULL);
+
+	return !!pdev->tsm;
 }
-EXPORT_SYMBOL_GPL(pci_tsm_unbind);
+EXPORT_SYMBOL_GPL(pci_tsm_is_configured);
 
-/**
- * pci_tsm_bind() - Bind @pdev as a TDI for @kvm
- * @pdev: PCI device function to bind
- * @kvm: Private memory attach context
- * @tdi_id: Identifier (virtual BDF) for the TDI as referenced by the TSM and DSM
- *
- * Returns 0 on success, or a negative error code on failure.
- *
- * Context: Caller is responsible for constraining the bind lifetime to the
- * registered state of the device. For example, pci_tsm_bind() /
- * pci_tsm_unbind() limited to the VFIO driver bound state of the device.
- */
-int pci_tsm_bind(struct pci_dev *pdev, struct kvm *kvm, u32 tdi_id)
+struct pci_tsm_context {
+	struct pci_tsm_pf0 *pf0;
+	struct pci_dev *pdev;
+	struct pci_dev *dsm_dev;
+};
+
+struct pci_tsm_context *pci_tsm_context_get(struct pci_dev *pdev,
+					    struct tsm_dev *viommu_tsm_dev)
 {
-	struct pci_tsm_pf0 *tsm_pf0;
-	struct pci_tdi *tdi;
-
-	if (!kvm)
-		return -EINVAL;
+	struct pci_tsm_context *context;
+	struct pci_tsm_pf0 *pf0;
 
 	guard(rwsem_read)(&pci_tsm_rwsem);
+	if (!pdev->tsm || !is_link_tsm(pdev->tsm->tsm_dev))
+		return ERR_PTR(-EOPNOTSUPP);
+	/*
+	 * The vdevice can use a different PCI function from VIOMMU_ALLOC. The
+	 * module pin keeps the vIOMMU's TSM registered, but does not freeze this
+	 * function's link. Match its current TSM before pinning the link below.
+	 */
+	if (pdev->tsm->tsm_dev != viommu_tsm_dev)
+		return ERR_PTR(-EXDEV);
 
-	if (!pdev->tsm)
-		return -EINVAL;
+	pf0 = to_pci_tsm_pf0(pdev->tsm);
+	if (!pf0)
+		return ERR_PTR(-ENXIO);
 
-	if (!is_link_tsm(pdev->tsm->tsm_dev))
-		return -ENXIO;
+	context = kzalloc_obj(*context);
+	if (!context)
+		return ERR_PTR(-ENOMEM);
 
-	tsm_pf0 = to_pci_tsm_pf0(pdev->tsm);
-	guard(mutex)(&tsm_pf0->lock);
-
-	/* Resolve races to bind a TDI */
-	if (pdev->tsm->tdi) {
-		if (pdev->tsm->tdi->kvm != kvm)
-			return -EBUSY;
-		return 0;
-	}
-
-	tdi = to_pci_tsm_ops(pdev->tsm)->bind(pdev, kvm, tdi_id);
-	if (IS_ERR(tdi))
-		return PTR_ERR(tdi);
-
-	pdev->tsm->tdi = tdi;
-
-	return 0;
+	guard(mutex)(&pf0->lock);
+	pf0->context_users++;
+	context->pf0 = pf0;
+	context->pdev = pci_dev_get(pdev);
+	context->dsm_dev = pci_dev_get(pf0->base_tsm.pdev);
+	return context;
 }
-EXPORT_SYMBOL_GPL(pci_tsm_bind);
+EXPORT_SYMBOL_GPL(pci_tsm_context_get);
 
-static void pci_tsm_unbind_all(struct pci_dev *pdev)
+void pci_tsm_context_put(struct pci_tsm_context *context)
 {
-	pci_tsm_walk_fns_reverse(pdev, __pci_tsm_unbind, NULL);
-	__pci_tsm_unbind(pdev, NULL);
-}
+	struct pci_tsm_pf0 *pf0 = context->pf0;
 
-static void __pci_tsm_disconnect(struct pci_dev *pdev)
+	down_read(&pci_tsm_rwsem);
+	mutex_lock(&pf0->lock);
+	if (!WARN_ON(!pf0->context_users))
+		pf0->context_users--;
+	mutex_unlock(&pf0->lock);
+	up_read(&pci_tsm_rwsem);
+
+	pci_dev_put(context->pdev);
+	pci_dev_put(context->dsm_dev);
+	kfree(context);
+}
+EXPORT_SYMBOL_GPL(pci_tsm_context_put);
+
+struct pci_tsm_pf0 *pci_tsm_context_pf0(struct pci_tsm_context *context)
+{
+	return context->pf0;
+}
+EXPORT_SYMBOL_GPL(pci_tsm_context_pf0);
+
+struct pci_dev *pci_tsm_context_dsm_dev(struct pci_tsm_context *context)
+{
+	return context->dsm_dev;
+}
+EXPORT_SYMBOL_GPL(pci_tsm_context_dsm_dev);
+
+bool pci_tsm_context_match_device(struct pci_tsm_context *context,
+				  struct pci_dev *pdev)
+{
+	guard(rwsem_read)(&pci_tsm_rwsem);
+
+	return pdev->tsm && is_link_tsm(pdev->tsm->tsm_dev) &&
+	       to_pci_tsm_pf0(pdev->tsm) == context->pf0;
+}
+EXPORT_SYMBOL_GPL(pci_tsm_context_match_device);
+
+static int __pci_tsm_disconnect(struct pci_dev *pdev)
 {
 	struct pci_tsm_pf0 *tsm_pf0 = to_pci_tsm_pf0(pdev->tsm);
 	const struct pci_tsm_ops *ops = to_pci_tsm_ops(pdev->tsm);
@@ -389,21 +388,29 @@ static void __pci_tsm_disconnect(struct pci_dev *pdev)
 	/* disconnect() mutually exclusive with subfunction pci_tsm_init() */
 	lockdep_assert_held_write(&pci_tsm_rwsem);
 
-	pci_tsm_unbind_all(pdev);
-
 	/*
-	 * disconnect() is uninterruptible as it may be called for device
-	 * teardown
+	 * A vdevice holds a context for its lifetime. Refuse to tear down the
+	 * link until userspace destroys all dependent vdevices.
+	 *
+	 * disconnect() is uninterruptible as it may also be called for device
+	 * teardown.
 	 */
 	guard(mutex)(&tsm_pf0->lock);
+	if (tsm_pf0->context_users)
+		return -EBUSY;
 	pci_tsm_walk_fns_reverse(pdev, remove_fn, NULL);
 	ops->disconnect(pdev);
+	return 0;
 }
 
-static void pci_tsm_disconnect(struct pci_dev *pdev)
+static int pci_tsm_disconnect(struct pci_dev *pdev)
 {
-	__pci_tsm_disconnect(pdev);
+	int ret = __pci_tsm_disconnect(pdev);
+
+	if (ret)
+		return ret;
 	tsm_remove(pdev->tsm);
+	return 0;
 }
 
 static ssize_t disconnect_store(struct device *dev,
@@ -425,37 +432,12 @@ static ssize_t disconnect_store(struct device *dev,
 	if (!sysfs_streq(buf, dev_name(&tsm_dev->dev)))
 		return -EINVAL;
 
-	pci_tsm_disconnect(pdev);
+	rc = pci_tsm_disconnect(pdev);
+	if (rc)
+		return rc;
 	return len;
 }
 static DEVICE_ATTR_WO(disconnect);
-
-static ssize_t bound_show(struct device *dev,
-			  struct device_attribute *attr, char *buf)
-{
-	struct pci_dev *pdev = to_pci_dev(dev);
-	struct pci_tsm_pf0 *tsm_pf0;
-	struct pci_tsm *tsm;
-	int rc;
-
-	ACQUIRE(rwsem_read_intr, lock)(&pci_tsm_rwsem);
-	if ((rc = ACQUIRE_ERR(rwsem_read_intr, &lock)))
-		return rc;
-
-	tsm = pdev->tsm;
-	if (!tsm)
-		return sysfs_emit(buf, "\n");
-	tsm_pf0 = to_pci_tsm_pf0(tsm);
-
-	ACQUIRE(mutex_intr, ops_lock)(&tsm_pf0->lock);
-	if ((rc = ACQUIRE_ERR(mutex_intr, &ops_lock)))
-		return rc;
-
-	if (!tsm->tdi)
-		return sysfs_emit(buf, "\n");
-	return sysfs_emit(buf, "%s\n", dev_name(&tsm->tsm_dev->dev));
-}
-static DEVICE_ATTR_RO(bound);
 
 static ssize_t dsm_show(struct device *dev, struct device_attribute *attr,
 			char *buf)
@@ -511,13 +493,6 @@ static umode_t pci_tsm_attr_visible(struct kobject *kobj,
 	if (pci_tsm_link_group_visible(kobj)) {
 		struct pci_dev *pdev = to_pci_dev(kobj_to_dev(kobj));
 
-		if (attr == &dev_attr_bound.attr) {
-			if (is_pci_tsm_pf0(pdev) && has_tee(pdev))
-				return attr->mode;
-			if (pdev->tsm && has_tee(pdev->tsm->dsm_dev))
-				return attr->mode;
-		}
-
 		if (attr == &dev_attr_dsm.attr) {
 			if (is_pci_tsm_pf0(pdev))
 				return attr->mode;
@@ -544,7 +519,6 @@ DEFINE_SYSFS_GROUP_VISIBLE(pci_tsm);
 static struct attribute *pci_tsm_attrs[] = {
 	&dev_attr_connect.attr,
 	&dev_attr_disconnect.attr,
-	&dev_attr_bound.attr,
 	&dev_attr_dsm.attr,
 	NULL
 };
@@ -635,22 +609,6 @@ static struct pci_dev *find_dsm_dev(struct pci_dev *pdev)
 }
 
 /**
- * pci_tsm_tdi_constructor() - base 'struct pci_tdi' initialization for link TSMs
- * @pdev: PCI device function representing the TDI
- * @tdi: context to initialize
- * @kvm: Private memory attach context
- * @tdi_id: Identifier (virtual BDF) for the TDI as referenced by the TSM and DSM
- */
-void pci_tsm_tdi_constructor(struct pci_dev *pdev, struct pci_tdi *tdi,
-			     struct kvm *kvm, u32 tdi_id)
-{
-	tdi->pdev = pdev;
-	tdi->kvm = kvm;
-	tdi->tdi_id = tdi_id;
-}
-EXPORT_SYMBOL_GPL(pci_tsm_tdi_constructor);
-
-/**
  * pci_tsm_link_constructor() - base 'struct pci_tsm' initialization for link TSMs
  * @pdev: The PCI device
  * @tsm: context to initialize
@@ -729,12 +687,6 @@ int pci_tsm_register(struct tsm_dev *tsm_dev)
 	return 0;
 }
 
-static void pci_tsm_fn_exit(struct pci_dev *pdev)
-{
-	__pci_tsm_unbind(pdev, NULL);
-	tsm_remove(pdev->tsm);
-}
-
 /**
  * __pci_tsm_destroy() - destroy the TSM context for @pdev
  * @pdev: device to cleanup
@@ -768,10 +720,12 @@ static void __pci_tsm_destroy(struct pci_dev *pdev, struct tsm_dev *tsm_dev)
 	else if (tsm_dev != tsm->tsm_dev)
 		return;
 
-	if (is_link_tsm(tsm_dev) && is_pci_tsm_pf0(pdev))
-		pci_tsm_disconnect(pdev);
-	else
-		pci_tsm_fn_exit(pdev);
+	if (is_link_tsm(tsm_dev) && is_pci_tsm_pf0(pdev)) {
+		if (pci_tsm_disconnect(pdev))
+			pci_warn(pdev, "TSM connection is still in use\n");
+	} else {
+		tsm_remove(pdev->tsm);
+	}
 }
 
 void pci_tsm_destroy(struct pci_dev *pdev)
