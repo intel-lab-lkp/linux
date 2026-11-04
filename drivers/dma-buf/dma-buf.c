@@ -714,6 +714,7 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	struct dma_resv *resv = exp_info->resv;
 	struct file *file;
 	size_t alloc_size = sizeof(struct dma_buf);
+	unsigned int nr_pages = PAGE_ALIGN(exp_info->size) >> PAGE_SHIFT;
 	int ret;
 
 	if (WARN_ON(!exp_info->priv || !exp_info->ops
@@ -750,6 +751,7 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	dmabuf->size = exp_info->size;
 	dmabuf->exp_name = exp_info->exp_name;
 	dmabuf->owner = exp_info->owner;
+	dmabuf->memcg = exp_info->memcg;
 	spin_lock_init(&dmabuf->name_lock);
 	init_waitqueue_head(&dmabuf->poll);
 	dmabuf->cb_in.poll = dmabuf->cb_out.poll = &dmabuf->poll;
@@ -770,6 +772,9 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	__dma_buf_list_add(dmabuf);
 
 	DMA_BUF_TRACE(trace_dma_buf_export, dmabuf);
+
+	if (dmabuf->memcg)
+		mod_memcg_state(dmabuf->memcg, MEMCG_DMABUF, nr_pages);
 
 	return dmabuf;
 

@@ -505,6 +505,9 @@ struct dma_buf_attachment {
  * @flags:	mode flags for the file
  * @resv:	reservation-object, NULL to allocate default one
  * @priv:	Attach private data of allocator to this buffer
+ * @memcg:	memcg to charge for this buffer's memory. Set only for
+ *		buffers backed by system memory where @size reflects the
+ *		actual allocation in bytes.
  *
  * This structure holds the information required to export the buffer. Used
  * with dma_buf_export() only.
@@ -517,6 +520,7 @@ struct dma_buf_export_info {
 	int flags;
 	struct dma_resv *resv;
 	void *priv;
+	struct mem_cgroup *memcg;
 };
 
 /**
