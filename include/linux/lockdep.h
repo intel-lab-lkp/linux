@@ -476,8 +476,12 @@ do {								\
 #endif /* CONFIG_LOCK_STAT */
 
 #ifdef CONFIG_PROVE_LOCKING
+void __print_irqtrace_events(struct task_struct *curr);
 extern void print_irqtrace_events(struct task_struct *curr);
 #else
+static inline void __print_irqtrace_events(struct task_struct *curr)
+{
+}
 static inline void print_irqtrace_events(struct task_struct *curr)
 {
 }

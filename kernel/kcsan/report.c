@@ -385,7 +385,8 @@ static void print_verbose_info(struct task_struct *task)
 
 	pr_err("\n");
 	debug_show_held_locks(task);
-	print_irqtrace_events(task);
+	/* Not an emergency: don't force console flushing from this context. */
+	__print_irqtrace_events(task);
 }
 
 static void print_report(enum kcsan_value_change value_change,
