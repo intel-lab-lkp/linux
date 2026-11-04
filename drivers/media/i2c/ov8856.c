@@ -2462,9 +2462,8 @@ probe_power_off:
 	return ret;
 }
 
-static const struct dev_pm_ops ov8856_pm_ops = {
-	SET_RUNTIME_PM_OPS(ov8856_power_off, ov8856_power_on, NULL)
-};
+static DEFINE_RUNTIME_DEV_PM_OPS(ov8856_pm_ops, ov8856_power_off,
+				 ov8856_power_on, NULL);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id ov8856_acpi_ids[] = {
@@ -2484,7 +2483,7 @@ MODULE_DEVICE_TABLE(of, ov8856_of_match);
 static struct i2c_driver ov8856_i2c_driver = {
 	.driver = {
 		.name = "ov8856",
-		.pm = &ov8856_pm_ops,
+		.pm = pm_ptr(&ov8856_pm_ops),
 		.acpi_match_table = ACPI_PTR(ov8856_acpi_ids),
 		.of_match_table = ov8856_of_match,
 	},
