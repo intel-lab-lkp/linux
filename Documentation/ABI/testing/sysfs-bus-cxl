@@ -543,7 +543,10 @@ Description:
 		(RO) The mode of a region is established at region creation time
 		and dictates the mode of the endpoint decoder that comprise the
 		region. For more details on the possible modes see
-		/sys/bus/cxl/devices/decoderX.Y/mode
+		/sys/bus/cxl/devices/decoderX.Y/mode. A dynamic capacity
+		region reports the selector it was created with: 'dynamic_ram',
+		'dynamic_ram_shared', 'dynamic_ram_ro' or
+		'dynamic_ram_shared_ro'.
 
 
 What:		/sys/bus/cxl/devices/regionZ/resource

@@ -495,6 +495,11 @@ static int set_interleave_ways(struct cxl_region *cxlr, int val)
 	int save, rc;
 	u8 iw;
 
+	if (cxlr->mode == CXL_PARTMODE_DYNAMIC_RAM && val != 1) {
+		dev_dbg(&cxlr->dev, "Interleaving and DCD not supported\n");
+		return -EINVAL;
+	}
+
 	rc = ways_to_eiw(val, &iw);
 	if (rc)
 		return rc;
@@ -644,6 +649,8 @@ static ssize_t mode_show(struct device *dev, struct device_attribute *attr,
 		desc = "ram";
 	else if (cxlr->mode == CXL_PARTMODE_PMEM)
 		desc = "pmem";
+	else if (cxlr->mode == CXL_PARTMODE_DYNAMIC_RAM)
+		desc = cxl_dc_mode_name(cxlr->shareable, cxlr->read_only);
 	else
 		desc = "";
 
@@ -2080,6 +2087,20 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		return -EINVAL;
 	}
 
+	/* A DC region's flavor is fixed; every member partition must match */
+	if (cxlr->mode == CXL_PARTMODE_DYNAMIC_RAM) {
+		struct cxl_dpa_partition *part = &cxlds->part[cxled->part];
+
+		if (part->shareable != cxlr->shareable ||
+		    part->read_only != cxlr->read_only) {
+			dev_dbg(&cxlr->dev, "%s: partition is %s, region is %s\n",
+				dev_name(&cxled->cxld.dev),
+				cxl_dc_mode_name(part->shareable, part->read_only),
+				cxl_dc_mode_name(cxlr->shareable, cxlr->read_only));
+			return -EINVAL;
+		}
+	}
+
 	/* all full of members, or interleave config not established? */
 	if (p->state > CXL_CONFIG_INTERLEAVE_ACTIVE) {
 		dev_dbg(&cxlr->dev, "region already active\n");
@@ -2411,6 +2432,7 @@ static size_t store_targetN(struct cxl_region *cxlr, const char *buf, int pos,
 	if (sysfs_streq(buf, "\n"))
 		rc = detach_target(cxlr, pos);
 	else {
+		struct cxl_endpoint_decoder *cxled;
 		struct device *dev;
 
 		dev = bus_find_device_by_name(&cxl_bus_type, NULL, buf);
@@ -2422,8 +2444,14 @@ static size_t store_targetN(struct cxl_region *cxlr, const char *buf, int pos,
 			goto out;
 		}
 
-		rc = attach_target(cxlr, to_cxl_endpoint_decoder(dev), pos,
-				   TASK_INTERRUPTIBLE);
+		cxled = to_cxl_endpoint_decoder(dev);
+		if (cxlr->mode == CXL_PARTMODE_DYNAMIC_RAM &&
+		    !cxled_dcd_enabled(cxled)) {
+			dev_dbg(dev, "DCD not enabled\n");
+			rc = -ENXIO;
+			goto out;
+		}
+		rc = attach_target(cxlr, cxled, pos, TASK_INTERRUPTIBLE);
 out:
 		put_device(dev);
 	}
@@ -2737,6 +2765,8 @@ void kill_regions(struct cxl_root_decoder *cxlrd)
  * @cxlrd: root decoder
  * @id: memregion id to create, or memregion_free() on failure
  * @mode: mode for the endpoint decoders of this region
+ * @shareable: dynamic region: its partitions must be shareable
+ * @read_only: dynamic region: its partitions must be read-only
  * @type: select whether this is an expander or accelerator (type-2 or type-3)
  *
  * This is the second step of region initialization. Regions exist within an
@@ -2748,7 +2778,8 @@ void kill_regions(struct cxl_root_decoder *cxlrd)
 static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 					      int id,
 					      enum cxl_partition_mode mode,
-					      enum cxl_decoder_type type)
+					      enum cxl_decoder_type type,
+					      bool shareable, bool read_only)
 {
 	struct cxl_port *port = to_cxl_port(cxlrd->cxlsd.cxld.dev.parent);
 	struct cxl_region *cxlr;
@@ -2760,6 +2791,8 @@ static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 		return cxlr;
 	cxlr->mode = mode;
 	cxlr->type = type;
+	cxlr->shareable = shareable;
+	cxlr->read_only = read_only;
 
 	dev = &cxlr->dev;
 	rc = dev_set_name(dev, "region%d", id);
@@ -2803,7 +2836,8 @@ static ssize_t create_ram_region_show(struct device *dev,
 
 static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 					  enum cxl_partition_mode mode, int id,
-					  enum cxl_decoder_type target_type)
+					  enum cxl_decoder_type target_type,
+					  bool shareable, bool read_only)
 {
 	int rc;
 
@@ -2813,6 +2847,7 @@ static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 	switch (mode) {
 	case CXL_PARTMODE_RAM:
 	case CXL_PARTMODE_PMEM:
+	case CXL_PARTMODE_DYNAMIC_RAM:
 		break;
 	default:
 		dev_err(&cxlrd->cxlsd.cxld.dev, "unsupported mode %d\n", mode);
@@ -2828,7 +2863,8 @@ static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 		return ERR_PTR(-EBUSY);
 	}
 
-	return devm_cxl_add_region(cxlrd, id, mode, target_type);
+	return devm_cxl_add_region(cxlrd, id, mode, target_type, shareable,
+				   read_only);
 }
 
 static ssize_t create_region_store(struct device *dev, const char *buf,
@@ -2846,7 +2882,8 @@ static ssize_t create_region_store(struct device *dev, const char *buf,
 	if ((rc = ACQUIRE_ERR(mutex_intr, &regions_lock)))
 		return rc;
 
-	cxlr = __create_region(cxlrd, mode, id, CXL_DECODER_HOSTONLYMEM);
+	cxlr = __create_region(cxlrd, mode, id, CXL_DECODER_HOSTONLYMEM,
+			       false, false);
 	if (IS_ERR(cxlr))
 		return PTR_ERR(cxlr);
 
@@ -3808,10 +3845,18 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	if (part < 0)
 		return ERR_PTR(-EBUSY);
 
+	if (cxlds->part[part].mode == CXL_PARTMODE_DYNAMIC_RAM &&
+	    !cxled_dcd_enabled(cxled)) {
+		dev_dbg(&cxled->cxld.dev, "DCD not enabled\n");
+		return ERR_PTR(-ENXIO);
+	}
+
 	do {
 		cxlr = __create_region(cxlrd, cxlds->part[part].mode,
 				       atomic_read(&cxlrd->region_id),
-				       cxled->cxld.target_type);
+				       cxled->cxld.target_type,
+				       cxlds->part[part].shareable,
+				       cxlds->part[part].read_only);
 	} while (IS_ERR(cxlr) && PTR_ERR(cxlr) == -EBUSY);
 
 	if (IS_ERR(cxlr)) {
@@ -4262,6 +4307,7 @@ static int cxl_region_probe(struct device *dev)
 
 		return devm_cxl_add_pmem_region(cxlr);
 	case CXL_PARTMODE_RAM:
+	case CXL_PARTMODE_DYNAMIC_RAM:
 		rc = devm_cxl_region_edac_register(cxlr);
 		if (rc)
 			dev_dbg(&cxlr->dev, "CXL EDAC registration for region_id=%d failed\n",
