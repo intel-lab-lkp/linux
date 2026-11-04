@@ -40,7 +40,7 @@ int i2c_dw_reg_slave(struct i2c_client *slave)
 		return ret;
 
 	pm_runtime_get_sync(dev->dev);
-	__i2c_dw_disable_nowait(dev);
+	__i2c_dw_disable(dev);
 	dev->slave = slave;
 	i2c_dw_set_mode(dev, DW_IC_SLAVE);
 
