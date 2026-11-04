@@ -8,6 +8,8 @@
 #include <linux/uuid.h>
 #include <linux/node.h>
 #include <linux/list.h>
+#include <linux/mutex.h>
+#include <linux/workqueue.h>
 #include <cxl/event.h>
 #include <cxl/mailbox.h>
 #include "cxl.h"
@@ -431,6 +433,11 @@ static inline struct cxl_dev_state *mbox_to_cxlds(struct cxl_mailbox *cxl_mbox)
  * struct cxl_dc_event_chain - staged Dynamic Capacity event chain
  * @pending_extents: extents received so far; flushed when the chain
  *		     closes (More=0)
+ * @timeout_work: watchdog that fires if a chain is opened with
+ *		  CXL_DCD_EVENT_MORE but the closing record never arrives
+ * @lock: serialises updates to the chain state against the watchdog
+ * @armed: set when a More=1 chain opens; cleared when the chain closes
+ *	   (More=0), is aborted by cxl_dc_chain_abort(), or times out.
  * @event_type: DCD event type of the open chain (add or release)
  *
  * The records of one Dynamic Capacity operation can be chained by the
@@ -439,9 +446,17 @@ static inline struct cxl_dev_state *mbox_to_cxlds(struct cxl_mailbox *cxl_mbox)
  * chain is open at a time.  Both Add Capacity and Release Capacity chains
  * are staged here, @event_type says which.  Records are staged until
  * More=0, then the chain is processed and responded to as a whole.
+ *
+ * If a chain is opened (More=1) but the device never sends the closing
+ * record, the staged list would otherwise sit indefinitely.  @timeout_work
+ * is a defensive watchdog that drops such a chain: an add is refused with
+ * an empty response, a release is held for the device to retry.
  */
 struct cxl_dc_event_chain {
 	struct list_head pending_extents;
+	struct delayed_work timeout_work;
+	struct mutex lock;	/* chain state, against the watchdog */
+	bool armed;
 	u8 event_type;
 };
 
