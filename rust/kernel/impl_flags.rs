@@ -68,6 +68,11 @@
 /// let negated = !read_only;
 /// assert!(negated.contains(Permission::Write));
 /// assert!(!negated.contains(Permission::Read));
+///
+/// // Obtain the raw integer representation with `bits()`, which is
+/// // useful for passing the value to a C API.
+/// let raw: u32 = read_only.bits();
+/// assert_eq!(raw, Permission::Read as u32);
 /// ```
 #[macro_export]
 macro_rules! impl_flags {
@@ -269,6 +274,12 @@ macro_rules! impl_flags {
             #[inline]
             pub fn contains_all(self, flags: $flags) -> bool {
                 (self.0 & flags.0) == flags.0
+            }
+
+            /// Return a copy of the inner representation of the flags.
+            #[inline]
+            pub fn bits(self) -> $ty {
+                self.0
             }
         }
     };
