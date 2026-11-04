@@ -5235,6 +5235,13 @@ S:	Maintained
 F:	arch/arm/boot/dts/broadcom/bcm47189*
 F:	arch/arm/boot/dts/broadcom/bcm53573*
 
+BROADCOM BCM6362 WLAN BCMA HOST DRIVER
+M:	Alessio Ferri <alessio.ferri@mythread.it>
+L:	linux-wireless@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/bus/brcm,bcm6362-wlan-bus-axi.yaml
+F:	drivers/bcma/host_soc_bcm6362.c
+
 BROADCOM BCM63XX/BCM33XX UDC DRIVER
 M:	Kevin Cernekee <cernekee@gmail.com>
 L:	linux-usb@vger.kernel.org
