@@ -34,6 +34,7 @@
 #include <linux/math.h>
 #include <linux/sysfs.h>
 #include <linux/string.h>
+#include <linux/string_choices.h>
 
 static void deactivate_accelerator(struct amdgpu_device *adev);
 static int amdgpu_ualink_remote_interrupt(struct amdgpu_device *adev,
@@ -6558,7 +6559,7 @@ static int amdgpu_ualink_set_irq_state(struct amdgpu_device *adev,
 	 * interrupt driver.
 	 */
 	dev_dbg(adev->dev, "ualink interrupt %s\n",
-		state == AMDGPU_IRQ_STATE_ENABLE ? "enable" : "disable");
+		str_enable_disable(state == AMDGPU_IRQ_STATE_ENABLE));
 	return 0;
 }
 
