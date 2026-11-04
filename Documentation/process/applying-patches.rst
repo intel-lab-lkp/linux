@@ -8,8 +8,15 @@ Original by:
 
 .. note::
 
-   This document is obsolete.  In most cases, rather than using ``patch``
-   manually, you'll almost certainly want to look at using Git instead.
+   This document focuses on the legacy method of manually manipulating source
+   trees using the traditional ``patch`` and ``diff`` utilities.
+
+   For the standard Git-based workflow used in current development, including
+   how to format, apply, and send patches via Git, please refer to
+   :ref:`submitting_patches` and :ref:`howto`.
+
+   The information below is maintained as a reference for constrained
+   environments or legacy workflows where Git infrastructure is unavailable.
 
 A frequently asked question on the Linux Kernel Mailing List is how to apply
 a patch to the kernel or, more specifically, what base kernel a patch for
