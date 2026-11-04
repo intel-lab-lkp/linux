@@ -71,9 +71,6 @@ static int tsm_register_pci(struct tsm_dev *tsm_dev, struct pci_tsm_ops *pci_ops
 			"PCI/TSM registration failure: %d\n", rc);
 		return rc;
 	}
-
-	/* Notify TSM userspace that PCI/TSM operations are now possible */
-	kobject_uevent(&tsm_dev->dev.kobj, KOBJ_CHANGE);
 	return 0;
 }
 
@@ -91,15 +88,22 @@ struct tsm_dev *tsm_register(struct device *parent, struct pci_tsm_ops *pci_ops)
 	if (rc)
 		return ERR_PTR(rc);
 
-	rc = device_add(dev);
+	/* Complete PCI registration before exposing the TSM to class lookup. */
+	rc = tsm_register_pci(tsm_dev, pci_ops);
 	if (rc)
 		return ERR_PTR(rc);
 
-	rc = tsm_register_pci(tsm_dev, pci_ops);
+	rc = device_add(dev);
 	if (rc) {
-		device_del(dev);
+		if (pci_ops)
+			pci_tsm_unregister(tsm_dev);
 		return ERR_PTR(rc);
 	}
+
+	/* Notify TSM userspace that PCI/TSM operations are now possible. */
+	if (pci_ops)
+		kobject_uevent(&dev->kobj, KOBJ_CHANGE);
+
 	return no_free_ptr(tsm_dev);
 }
 EXPORT_SYMBOL_GPL(tsm_register);
