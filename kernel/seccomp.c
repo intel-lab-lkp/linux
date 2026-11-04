@@ -1125,6 +1125,15 @@ static u64 seccomp_next_notify_id(struct seccomp_filter *filter)
 	return filter->notif->next_id++;
 }
 
+/* A notification in SENT state accepts a reply; tell poll waiters. */
+static void seccomp_notify_set_sent(struct seccomp_filter *filter,
+				    struct seccomp_knotif *n)
+{
+	lockdep_assert_held(&filter->notify_lock);
+	n->state = SECCOMP_NOTIFY_SENT;
+	wake_up_poll(&filter->wqh, EPOLLOUT | EPOLLWRNORM);
+}
+
 static void seccomp_handle_addfd(struct seccomp_filter *filter,
 				 struct seccomp_kaddfd *addfd,
 				 struct seccomp_knotif *n)
@@ -1145,8 +1154,7 @@ static void seccomp_handle_addfd(struct seccomp_filter *filter,
 	if (addfd->ioctl_flags & SECCOMP_ADDFD_FLAG_SEND) {
 		/* If we fail reset and return an error to the notifier */
 		if (fd < 0) {
-			n->state = SECCOMP_NOTIFY_SENT;
-			wake_up_poll(&filter->wqh, EPOLLOUT | EPOLLWRNORM);
+			seccomp_notify_set_sent(filter, n);
 		} else {
 			/* Return the FD we just added */
 			n->flags = 0;
@@ -1600,8 +1608,7 @@ static long seccomp_notify_recv(struct seccomp_filter *filter,
 	unotif.pid = task_pid_vnr(knotif->task);
 	unotif.data = *(knotif->data);
 
-	knotif->state = SECCOMP_NOTIFY_SENT;
-	wake_up_poll(&filter->wqh, EPOLLOUT | EPOLLWRNORM);
+	seccomp_notify_set_sent(filter, knotif);
 	ret = 0;
 out:
 	mutex_unlock(&filter->notify_lock);
@@ -1824,10 +1831,8 @@ static long seccomp_notify_addfd(struct seccomp_filter *filter,
 		ret = kaddfd.ret;
 	} else {
 		list_del(&kaddfd.list);
-		if (addfd.flags & SECCOMP_ADDFD_FLAG_SEND) {
-			knotif->state = SECCOMP_NOTIFY_SENT;
-			wake_up_poll(&filter->wqh, EPOLLOUT | EPOLLWRNORM);
-		}
+		if (addfd.flags & SECCOMP_ADDFD_FLAG_SEND)
+			seccomp_notify_set_sent(filter, knotif);
 	}
 
 out_unlock:
