@@ -12,6 +12,7 @@
 #include <linux/node.h>
 #include <linux/io.h>
 #include <linux/range.h>
+#include <linux/xarray.h>
 #include <cxl/cxl.h>
 
 extern const struct nvdimm_security_ops *cxl_security_ops;
@@ -555,6 +556,14 @@ struct cxl_pmem_region {
 	struct range hpa_range;
 	int nr_mappings;
 	struct cxl_pmem_region_mapping mapping[];
+};
+
+/* See CXL r4.0 8.2.10.2.1.6 */
+enum dc_event {
+	DCD_ADD_CAPACITY,
+	DCD_RELEASE_CAPACITY,
+	DCD_FORCED_CAPACITY_RELEASE,
+	DCD_REGION_CONFIGURATION_UPDATED,
 };
 
 struct cxl_dax_region {

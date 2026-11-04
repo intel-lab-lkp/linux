@@ -7,6 +7,7 @@
 #include <linux/cdev.h>
 #include <linux/uuid.h>
 #include <linux/node.h>
+#include <linux/list.h>
 #include <cxl/event.h>
 #include <cxl/mailbox.h>
 #include "cxl.h"
@@ -427,6 +428,24 @@ static inline struct cxl_dev_state *mbox_to_cxlds(struct cxl_mailbox *cxl_mbox)
 }
 
 /**
+ * struct cxl_dc_event_chain - staged Dynamic Capacity event chain
+ * @pending_extents: extents received so far; flushed when the chain
+ *		     closes (More=0)
+ * @event_type: DCD event type of the open chain (add or release)
+ *
+ * The records of one Dynamic Capacity operation can be chained by the
+ * CXL_DCD_EVENT_MORE flag.  Chained records are contiguous in the event
+ * log and share one event type (CXL r4.0 Table 8-229), so at most one
+ * chain is open at a time.  Both Add Capacity and Release Capacity chains
+ * are staged here, @event_type says which.  Records are staged until
+ * More=0, then the chain is processed and responded to as a whole.
+ */
+struct cxl_dc_event_chain {
+	struct list_head pending_extents;
+	u8 event_type;
+};
+
+/**
  * struct cxl_memdev_state - Generic Type-3 Memory Device Class driver data
  *
  * CXL 8.1.12.1 PCI Header - Class Code Register Memory Device defines
@@ -444,6 +463,8 @@ static inline struct cxl_dev_state *mbox_to_cxlds(struct cxl_mailbox *cxl_mbox)
  * @active_volatile_bytes: sum of hard + soft volatile
  * @active_persistent_bytes: sum of hard + soft persistent
  * @dcd_supported: all DCD commands are supported
+ * @dc_chain: the open Dynamic Capacity event chain, if any
+ *	      (see &struct cxl_dc_event_chain)
  * @event: event log driver state
  * @poison: poison driver state info
  * @security: security driver state info
@@ -463,6 +484,7 @@ struct cxl_memdev_state {
 	u64 active_volatile_bytes;
 	u64 active_persistent_bytes;
 	bool dcd_supported;
+	struct cxl_dc_event_chain dc_chain;
 
 	struct cxl_event_state event;
 	struct cxl_poison_state poison;
@@ -538,6 +560,21 @@ enum cxl_opcode {
 	UUID_INIT(0x5e1819d9, 0x11a9, 0x400c, 0x81, 0x1f, 0xd6, 0x07, 0x19,     \
 		  0x40, 0x3d, 0x86)
 
+/*
+ * Add Dynamic Capacity Response
+ * CXL r4.0 Section 8.2.10.9.9.3; Table 8-350 & Table 8-351
+ */
+struct cxl_mbox_dc_response {
+	__le32 extent_list_size;
+	u8 flags;
+	u8 reserved[3];
+	struct updated_extent_list {
+		__le64 dpa_start;
+		__le64 length;
+		u8 reserved[8];
+	} __packed extent_list[] __counted_by_le(extent_list_size);
+} __packed;
+
 struct cxl_mbox_get_supported_logs {
 	__le16 entries;
 	u8 rsvd[6];
@@ -609,6 +646,14 @@ struct cxl_mbox_identify {
 		  0x6c, 0x7c, 0x65)
 
 /*
+ * Dynamic Capacity Event Record
+ * CXL r4.0 section 8.2.10.2.1; Table 8-221
+ */
+#define CXL_EVENT_DC_EVENT_UUID                                             \
+	UUID_INIT(0xca95afa7, 0xf183, 0x4018, 0x8c, 0x2f, 0x95, 0x26, 0x8e, \
+		  0x10, 0x1a, 0x2a)
+
+/*
  * Get Event Records output payload
  * CXL rev 3.0 section 8.2.9.2.2; Table 8-50
  */
@@ -633,6 +678,7 @@ enum cxl_event_log_type {
 	CXL_EVENT_TYPE_WARN,
 	CXL_EVENT_TYPE_FAIL,
 	CXL_EVENT_TYPE_FATAL,
+	CXL_EVENT_TYPE_DCD,
 	CXL_EVENT_TYPE_MAX
 };
 

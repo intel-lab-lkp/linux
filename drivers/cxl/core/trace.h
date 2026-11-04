@@ -177,7 +177,8 @@ TRACE_EVENT(cxl_aer_correctable_error,
 		{ CXL_EVENT_TYPE_INFO, "Informational" },	\
 		{ CXL_EVENT_TYPE_WARN, "Warning" },		\
 		{ CXL_EVENT_TYPE_FAIL, "Failure" },		\
-		{ CXL_EVENT_TYPE_FATAL, "Fatal" })
+		{ CXL_EVENT_TYPE_FATAL, "Fatal" },		\
+		{ CXL_EVENT_TYPE_DCD, "Dynamic Capacity" })
 
 TRACE_EVENT(cxl_overflow,
 
