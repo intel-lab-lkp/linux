@@ -24,10 +24,9 @@ struct tsm_dev;
  *		  or NULL if unsupported
  * @owner: Module providing the vIOMMU operations, if built as a module
  *
- * The vIOMMU owner holds a TSM device reference and pins the backend module
- * before querying @viommu_get_ops, releasing both after vIOMMU destruction.
- * A backend providing this callback must not unregister its TSM while the
- * module is pinned.
+ * The vIOMMU owner holds a TSM user reference, a device reference and a
+ * backend module reference before querying @viommu_get_ops, releasing them
+ * after vIOMMU destruction. TSM unregister waits for the user reference.
  *
  * This operations are mutually exclusive either a tsm_dev instance
  * manages physical link properties or it manages function security

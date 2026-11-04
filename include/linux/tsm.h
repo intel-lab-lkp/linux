@@ -2,6 +2,9 @@
 #ifndef __TSM_H
 #define __TSM_H
 
+#include <linux/completion.h>
+#include <linux/refcount.h>
+#include <linux/rwsem.h>
 #include <linux/sizes.h>
 #include <linux/types.h>
 #include <linux/uuid.h>
@@ -116,6 +119,13 @@ struct tsm_dev {
 	struct device dev;
 	int id;
 	const struct pci_tsm_ops *pci_ops;
+	/* Read side protects operations; write side protects unregister. */
+	struct rw_semaphore registration_lock;
+	/* Protected by registration_lock; prevents reuse after unregister. */
+	bool unregistering;
+	/* Incremented under registration_lock; unregister waits for zero. */
+	refcount_t users;
+	struct completion users_drain_complete;
 };
 
 DEFINE_FREE(put_tsm_dev, struct tsm_dev *,
@@ -124,10 +134,13 @@ DEFINE_FREE(put_tsm_dev, struct tsm_dev *,
 int tsm_report_register(const struct tsm_report_ops *ops, void *priv);
 int tsm_report_unregister(const struct tsm_report_ops *ops);
 struct tsm_dev *tsm_register(struct device *parent, struct pci_tsm_ops *ops);
-void tsm_unregister(struct tsm_dev *tsm_dev);
+int tsm_unregister(struct tsm_dev *tsm_dev);
 struct tsm_dev *find_tsm_dev(int id);
 
 #ifdef CONFIG_TSM
+struct tsm_dev *tsm_get(struct tsm_dev *tsm_dev);
+bool tsm_trylock_registration(struct tsm_dev *tsm_dev);
+void tsm_unlock_registration(struct tsm_dev *tsm_dev);
 struct tsm_dev *tsm_get_device(struct device *dev);
 void tsm_put_device(struct tsm_dev *tsm_dev);
 const struct iommufd_viommu_ops *tsm_viommu_get_ops(struct tsm_dev *tsm_dev,

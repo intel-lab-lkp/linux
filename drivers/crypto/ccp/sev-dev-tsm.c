@@ -392,8 +392,8 @@ error_exit:
 
 void sev_tsm_uninit(struct sev_device *sev)
 {
-	if (sev->tsmdev)
-		tsm_unregister(sev->tsmdev);
+	if (sev->tsmdev && WARN_ON(tsm_unregister(sev->tsmdev)))
+		return;
 
 	sev->tsmdev = NULL;
 }
