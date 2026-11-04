@@ -60,9 +60,6 @@ static int tsm_register_pci(struct tsm_dev *tsm_dev, struct pci_tsm_ops *pci_ops
 {
 	int rc;
 
-	if (!pci_ops)
-		return 0;
-
 	tsm_dev->pci_ops = pci_ops;
 	rc = pci_tsm_register(tsm_dev);
 	if (rc) {
@@ -80,6 +77,9 @@ struct tsm_dev *tsm_register(struct device *parent, struct pci_tsm_ops *pci_ops)
 	struct device *dev;
 	int rc;
 
+	if (!pci_ops)
+		return ERR_PTR(-EINVAL);
+
 	if (IS_ERR(tsm_dev))
 		return tsm_dev;
 
@@ -95,14 +95,12 @@ struct tsm_dev *tsm_register(struct device *parent, struct pci_tsm_ops *pci_ops)
 
 	rc = device_add(dev);
 	if (rc) {
-		if (pci_ops)
-			pci_tsm_unregister(tsm_dev);
+		pci_tsm_unregister(tsm_dev);
 		return ERR_PTR(rc);
 	}
 
 	/* Notify TSM userspace that PCI/TSM operations are now possible. */
-	if (pci_ops)
-		kobject_uevent(&dev->kobj, KOBJ_CHANGE);
+	kobject_uevent(&dev->kobj, KOBJ_CHANGE);
 
 	return no_free_ptr(tsm_dev);
 }
