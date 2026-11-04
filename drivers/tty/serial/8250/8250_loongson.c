@@ -43,6 +43,12 @@ static const struct loongson_uart_ddata ls2k1500_uart_data = {
 	.msr_invert = 0,
 };
 
+static const struct loongson_uart_ddata ls2k3000_uart_data = {
+	.has_frac = true,
+	.mcr_invert = 0,
+	.msr_invert = 0,
+};
+
 struct loongson_uart_priv {
 	struct uart_8250_port *uport;
 	struct clk *clk;
@@ -216,6 +222,7 @@ static DEFINE_SIMPLE_DEV_PM_OPS(loongson_uart_pm_ops, loongson_uart_suspend,
 static const struct of_device_id loongson_uart_of_ids[] = {
 	{ .compatible = "loongson,ls2k0500-uart", .data = &ls2k0500_uart_data },
 	{ .compatible = "loongson,ls2k1500-uart", .data = &ls2k1500_uart_data },
+	{ .compatible = "loongson,ls2k3000-uart", .data = &ls2k3000_uart_data },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, loongson_uart_of_ids);
