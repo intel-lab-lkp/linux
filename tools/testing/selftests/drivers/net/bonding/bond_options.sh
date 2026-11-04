@@ -74,6 +74,16 @@ prio_test()
 
 	# create bond
 	bond_reset "${param}"
+
+	# Keep the arp/ns link monitor fed for the duration of the test:
+	# ping a non-existent neighbor, which generates steady broadcast
+	# ARP requests sourced from the bond's own address. These egress on
+	# the active slave and are flooded onto the backup slaves' links,
+	# where they validate as RX activity. Without traffic, idle slaves
+	# are declared down by the monitor between test steps and the
+	# failover checks below race with the monitor.
+	ip netns exec ${s_ns} ping -i 0.1 -W 1 192.0.2.99 &> /dev/null &
+	local ping_pid=$!
 	# set active_slave to primary eth1 specifically
 	ip -n ${s_ns} link set bond0 type bond active_slave eth1
 
@@ -157,6 +167,9 @@ prio_test()
 		check_active_slave "eth0"
 		bond_check_connection "change slave prio"
 	fi
+
+	kill $ping_pid 2>/dev/null
+	wait $ping_pid 2>/dev/null
 }
 
 prio_miimon()
