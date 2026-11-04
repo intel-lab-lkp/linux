@@ -261,6 +261,7 @@ xprt_setup_rdma_bc(struct xprt_create *args)
 
 	xprt->prot = XPRT_TRANSPORT_BC_RDMA;
 	xprt->ops = &xprt_rdma_bc_procs;
+	xprt->xprt_class = &xprt_rdma_bc;
 
 	memcpy(&xprt->addr, args->dstaddr, args->addrlen);
 	xprt->addrlen = args->addrlen;
