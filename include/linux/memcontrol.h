@@ -10,6 +10,9 @@
 
 #ifndef _LINUX_MEMCONTROL_H
 #define _LINUX_MEMCONTROL_H
+
+struct dma_buf;
+
 #include <linux/cgroup.h>
 #include <linux/vm_event_item.h>
 #include <linux/hardirq.h>
@@ -40,6 +43,7 @@ enum memcg_stat_item {
 	MEMCG_ZSWAP_B,
 	MEMCG_ZSWAPPED,
 	MEMCG_ZSWAP_INCOMP,
+	MEMCG_DMABUF,
 	MEMCG_NR_STAT,
 };
 
@@ -667,6 +671,9 @@ int mem_cgroup_charge_hugetlb(struct folio* folio, gfp_t gfp);
 int mem_cgroup_swapin_charge_folio(struct folio *folio, unsigned short id,
 				   struct mm_struct *mm, gfp_t gfp);
 
+bool mem_cgroup_reserve_dmabuf(struct mem_cgroup *memcg, gfp_t gfp,
+			       unsigned int nr_pages);
+
 void __mem_cgroup_uncharge(struct folio *folio);
 
 /**
@@ -681,6 +688,10 @@ static inline void mem_cgroup_uncharge(struct folio *folio)
 		return;
 	__mem_cgroup_uncharge(folio);
 }
+
+void mem_cgroup_cancel_dmabuf(struct mem_cgroup *memcg, unsigned int nr_pages);
+
+void mem_cgroup_uncharge_dmabuf(struct dma_buf *dmabuf);
 
 void __mem_cgroup_uncharge_folios(struct folio_batch *folios);
 static inline void mem_cgroup_uncharge_folios(struct folio_batch *folios)
@@ -1167,7 +1178,23 @@ static inline int mem_cgroup_swapin_charge_folio(struct folio *folio,
 	return 0;
 }
 
+static inline bool mem_cgroup_reserve_dmabuf(struct mem_cgroup *memcg,
+					     gfp_t gfp,
+					     unsigned int nr_pages)
+{
+	return true;
+}
+
+static inline void mem_cgroup_cancel_dmabuf(struct mem_cgroup *memcg,
+					    unsigned int nr_pages)
+{
+}
+
 static inline void mem_cgroup_uncharge(struct folio *folio)
+{
+}
+
+static inline void mem_cgroup_uncharge_dmabuf(struct dma_buf *dmabuf)
 {
 }
 
