@@ -197,6 +197,9 @@ properties:
           - const: loongson,ls2k1500-uart
           - const: ns16550a
       - items:
+          - const: loongson,ls2k3000-uart
+          - const: ns16550a
+      - items:
           - enum:
               - aspeed,ast2600-vuart
               - aspeed,ast2700-vuart
