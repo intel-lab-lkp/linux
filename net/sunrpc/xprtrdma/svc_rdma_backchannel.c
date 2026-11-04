@@ -205,6 +205,7 @@ xprt_rdma_bc_put(struct rpc_xprt *xprt)
 {
 	xprt_rdma_free_addresses(xprt);
 	xprt_free(xprt);
+	module_put(THIS_MODULE);
 }
 
 static const struct rpc_xprt_ops xprt_rdma_bc_procs = {
@@ -240,11 +241,16 @@ xprt_setup_rdma_bc(struct xprt_create *args)
 	if (args->addrlen > sizeof(xprt->addr))
 		return ERR_PTR(-EBADF);
 
+	if (!try_module_get(THIS_MODULE))
+		return ERR_PTR(-EIO);
+
 	xprt = xprt_alloc(args->net, sizeof(*new_xprt),
 			  RPCRDMA_MAX_BC_REQUESTS,
 			  RPCRDMA_MAX_BC_REQUESTS);
-	if (!xprt)
+	if (!xprt) {
+		module_put(THIS_MODULE);
 		return ERR_PTR(-ENOMEM);
+	}
 
 	xprt->timeout = &xprt_rdma_bc_timeout;
 	xprt_set_bound(xprt);
