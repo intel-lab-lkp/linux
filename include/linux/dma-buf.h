@@ -507,7 +507,8 @@ struct dma_buf_attachment {
  * @priv:	Attach private data of allocator to this buffer
  * @memcg:	memcg to charge for this buffer's memory. Set only for
  *		buffers backed by system memory where @size reflects the
- *		actual allocation in bytes.
+ *		actual allocation in bytes. Enables charge transfer via
+ *		DMA_BUF_IOCTL_XFER_CHARGE.
  *
  * This structure holds the information required to export the buffer. Used
  * with dma_buf_export() only.

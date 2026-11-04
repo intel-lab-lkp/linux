@@ -676,6 +676,11 @@ struct mem_cgroup *mem_cgroup_get_from_fd(int fd);
 bool mem_cgroup_reserve_dmabuf(struct mem_cgroup *memcg, gfp_t gfp,
 			       unsigned int nr_pages);
 
+bool mem_cgroup_transfer_charge(struct mem_cgroup **ptr_memcg,
+				struct mem_cgroup *new_memcg,
+				enum memcg_stat_item item,
+				unsigned int nr_pages);
+
 void __mem_cgroup_uncharge(struct folio *folio);
 
 /**
@@ -1195,6 +1200,14 @@ static inline bool mem_cgroup_reserve_dmabuf(struct mem_cgroup *memcg,
 static inline void mem_cgroup_cancel_dmabuf(struct mem_cgroup *memcg,
 					    unsigned int nr_pages)
 {
+}
+
+static inline bool mem_cgroup_transfer_charge(struct mem_cgroup **ptr_memcg,
+					      struct mem_cgroup *new_memcg,
+					      enum memcg_stat_item item,
+					      unsigned int nr_pages)
+{
+	return true;
 }
 
 static inline void mem_cgroup_uncharge(struct folio *folio)

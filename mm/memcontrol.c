@@ -5753,6 +5753,48 @@ void mem_cgroup_cancel_dmabuf(struct mem_cgroup *memcg, unsigned int nr_pages)
 EXPORT_SYMBOL_GPL(mem_cgroup_cancel_dmabuf);
 
 /**
+ * mem_cgroup_transfer_charge - move a charge between memcgs
+ * @ptr_memcg: pointer to the memcg to transfer from
+ * @new_memcg: target memcg; caller must hold a reference
+ * @item: stat counter to adjust
+ * @nr_pages: number of pages to transfer
+ *
+ * Transfers @nr_pages of charge from *@ptr_memcg to @new_memcg and, on
+ * success, stores @new_memcg in *@ptr_memcg.
+ *
+ * Updates to *@ptr_memcg must be serialized by the caller.
+ * Returns %true on success, %false if the charge against @new_memcg
+ * failed.
+ */
+bool mem_cgroup_transfer_charge(struct mem_cgroup **ptr_memcg,
+				struct mem_cgroup *new_memcg,
+				enum memcg_stat_item item,
+				unsigned int nr_pages)
+{
+	struct mem_cgroup *old_memcg = *ptr_memcg;
+
+	if (!new_memcg || mem_cgroup_disabled())
+		return true;
+
+	if (try_charge(new_memcg, GFP_KERNEL, nr_pages))
+		return false;
+
+	mod_memcg_state(new_memcg, item, nr_pages);
+	css_get(&new_memcg->css);
+	*ptr_memcg = new_memcg;
+
+	if (old_memcg) {
+		/* Uncharge old cgroup */
+		mod_memcg_state(old_memcg, item, -nr_pages);
+		if (!mem_cgroup_is_root(old_memcg))
+			refill_stock(old_memcg, nr_pages);
+		mem_cgroup_put(old_memcg);
+	}
+
+	return true;
+}
+
+/**
  * mem_cgroup_uncharge_dmabuf - uncharge a dma-buf from its memcg
  * @dmabuf: buffer to uncharge
  *
