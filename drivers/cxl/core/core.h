@@ -79,6 +79,7 @@ void kill_regions(struct cxl_root_decoder *cxlrd);
 
 int cxl_add_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent,
 		   u16 seq_num);
+bool cxl_tag_already_committed(const uuid_t *tag);
 int online_tag_group(struct cxl_dc_tag_group *group);
 bool rm_tag_group(struct cxl_dc_tag_group *group);
 void discard_tag_group(struct cxl_dc_tag_group *group);
@@ -115,6 +116,11 @@ static inline void discard_tag_group(struct cxl_dc_tag_group *group) { }
 static inline int cxl_dax_untagged_add(struct cxl_dax_region *cxlr_dax)
 {
 	return 0;
+}
+
+static inline bool cxl_tag_already_committed(const uuid_t *tag)
+{
+	return false;
 }
 
 static inline
