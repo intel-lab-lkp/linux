@@ -7045,6 +7045,7 @@ static s32 wl_init_priv(struct brcmf_cfg80211_info *cfg)
 	if (err)
 		return err;
 	brcmf_register_event_handlers(cfg);
+	brcmf_awdl_register_events(cfg->pub);
 	mutex_init(&cfg->usr_sync);
 	brcmf_init_escan(cfg);
 	brcmf_init_conf(cfg->conf);

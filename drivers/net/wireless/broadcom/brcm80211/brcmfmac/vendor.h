@@ -54,6 +54,11 @@ enum brcmf_vndr_cmds {
  * @BRCMF_VNDR_EVTS_AWDL_STOPPED: the AWDL interface was removed, after
  *	%BRCMF_VNDR_CMDS_AWDL_STOP or before system sleep, with
  *	%BRCMF_AWDL_ATTR_STATUS.
+ * @BRCMF_VNDR_EVTS_AWDL_FRAME: AWDL action frame received from
+ *	%BRCMF_AWDL_ATTR_ADDR, the frame body from the category on in
+ *	%BRCMF_AWDL_ATTR_FRAME.
+ * @BRCMF_VNDR_EVTS_AWDL_ROLE: the firmware changed its AWDL role to
+ *	%BRCMF_AWDL_ATTR_ROLE.
  * @BRCMF_VNDR_EVTS_LAST: number of vendor events.
  *
  * The value of an event is its index in the vendor events and its vendor
@@ -62,6 +67,8 @@ enum brcmf_vndr_cmds {
 enum brcmf_vndr_evts {
 	BRCMF_VNDR_EVTS_AWDL_STARTED,
 	BRCMF_VNDR_EVTS_AWDL_STOPPED,
+	BRCMF_VNDR_EVTS_AWDL_FRAME,
+	BRCMF_VNDR_EVTS_AWDL_ROLE,
 	BRCMF_VNDR_EVTS_LAST
 };
 
@@ -80,6 +87,9 @@ enum brcmf_vndr_evts {
  * @BRCMF_AWDL_ATTR_IFINDEX: interface index of the AWDL interface (u32).
  * @BRCMF_AWDL_ATTR_PEER_IES: HT and VHT capabilities elements of a peer,
  *	built from the AWDL TLVs it sends, as macOS passes them.
+ * @BRCMF_AWDL_ATTR_FRAME: received action frame body.
+ * @BRCMF_AWDL_ATTR_ROLE: AWDL role of the firmware (u32), 0 slave, 1 master
+ *	not taking part in the election, 2 master.
  * @BRCMF_AWDL_ATTR_MAX: highest attribute.
  */
 enum brcmf_awdl_attrs {
@@ -94,6 +104,8 @@ enum brcmf_awdl_attrs {
 	BRCMF_AWDL_ATTR_STATUS,
 	BRCMF_AWDL_ATTR_IFINDEX,
 	BRCMF_AWDL_ATTR_PEER_IES,
+	BRCMF_AWDL_ATTR_FRAME,
+	BRCMF_AWDL_ATTR_ROLE,
 
 	__BRCMF_AWDL_ATTR_AFTER_LAST,
 	BRCMF_AWDL_ATTR_MAX = __BRCMF_AWDL_ATTR_AFTER_LAST - 1
