@@ -509,7 +509,7 @@ struct iommufd_device {
 	struct list_head group_item;
 	/* always the physical device */
 	struct device *dev;
-	/* ..and the VM file if available */
+	/* Owned reference to the VM file, if available */
 	struct file *kvm_file;
 	bool enforce_cache_coherency;
 	struct iommufd_vdevice *vdev;

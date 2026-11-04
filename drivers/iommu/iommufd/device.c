@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2021-2022, NVIDIA CORPORATION & AFFILIATES
  */
+#include <linux/file.h>
 #include <linux/iommu.h>
 #include <linux/iommufd.h>
 #include <linux/pci-ats.h>
@@ -212,6 +213,9 @@ void iommufd_device_destroy(struct iommufd_object *obj)
 	struct iommufd_device *idev =
 		container_of(obj, struct iommufd_device, obj);
 
+	if (idev->kvm_file)
+		fput(idev->kvm_file);
+
 	/* igroup is NULL when destroy called during bind error cleanup */
 	if (!idev->igroup)
 		return;
@@ -306,6 +310,9 @@ static int iommufd_bind_noiommu(struct iommufd_device *idev)
  *
  * Binding a PCI device places the entire RID under iommufd control.
  *
+ * If @kvm_file is provided, a reference is held until the device object is
+ * destroyed.
+ *
  * The caller must undo this with iommufd_device_unbind()
  */
 struct iommufd_device *iommufd_device_bind(struct iommufd_ctx *ictx,
@@ -322,8 +329,8 @@ struct iommufd_device *iommufd_device_bind(struct iommufd_ctx *ictx,
 
 	idev->ictx = ictx;
 	idev->dev = dev;
-	/* VFIO holds the file reference while the device is open. */
-	idev->kvm_file = kvm_file;
+	/* Hold the VM file for the lifetime of this object. */
+	idev->kvm_file = kvm_file ? get_file(kvm_file) : NULL;
 
 	if (!iommufd_device_is_noiommu(idev))
 		rc = iommufd_bind_iommu(idev);
