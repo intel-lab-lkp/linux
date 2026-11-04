@@ -365,6 +365,8 @@ struct bcma_bus {
 
 	/* Backplane registers, EROM included, are big-endian */
 	bool big_endian;
+	/* Cores have no DMP wrappers, the host ops handle agent accesses */
+	bool wrapperless;
 };
 
 static inline u32 bcma_read8(struct bcma_device *core, u16 offset)
