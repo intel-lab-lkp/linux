@@ -78,3 +78,21 @@ impl ThisModule {
         self.0
     }
 }
+
+/// Newtype to make `bindings::initcall_modname` [`Sync`].
+#[repr(transparent)]
+#[doc(hidden)]
+pub struct InitcallModname(crate::bindings::initcall_modname);
+
+impl InitcallModname {
+    /// Creates a new [`InitcallModname`] wrapper for `.initcall.modnames`.
+    #[doc(hidden)]
+    #[inline]
+    pub const fn new(val: crate::bindings::initcall_modname) -> Self {
+        Self(val)
+    }
+}
+
+// SAFETY: `.initcall.modnames` entries are immutable metadata only read by the
+// C initcall runner during early boot.
+unsafe impl Sync for InitcallModname {}
