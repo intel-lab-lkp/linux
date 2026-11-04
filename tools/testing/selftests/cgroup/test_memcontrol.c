@@ -19,10 +19,20 @@
 #include <errno.h>
 #include <sys/mman.h>
 
+#include <linux/dma-buf.h>
+#include <linux/dma-heap.h>
+#include <signal.h>
+#include <sys/ioctl.h>
+
+#include "../pidfd/pidfd.h"
 #include "kselftest.h"
 #include "cgroup_util.h"
 
+#define DMA_HEAP_SYSTEM		"/dev/dma_heap/system"
+#define ONE_MEG			(1024 * 1024)
+
 #define MEMCG_SOCKSTAT_WAIT_RETRIES        30
+#define MEMCG_DMABUF_WAIT_RETRIES          30
 
 static bool has_localevents;
 static bool has_recursiveprot;
@@ -1764,6 +1774,267 @@ cleanup:
 	return ret;
 }
 
+static int memcg_dmabuf_child(const char *cgroup, void *arg)
+{
+	pause();
+	return 0;
+}
+
+/*
+ * This test allocates a dma-buf via DMA_HEAP_IOCTL_ALLOC with a pidfd
+ * pointing to a child process in a separate cgroup, then checks that
+ * memory.stat[dmabuf] in the child's cgroup rises by the allocation size
+ * and returns to zero after the buffer fd is closed.
+ */
+static int test_memcg_dmabuf(const char *root)
+{
+	char *parent = NULL, *child_cg = NULL;
+	int ret = KSFT_FAIL;
+	int heap_fd = -1, dmabuf_fd = -1, pidfd = -1;
+	pid_t child_pid;
+	int child_status;
+	long dmabuf_stat;
+	struct dma_heap_allocation_data alloc = {
+		.len      = ONE_MEG,
+		.fd_flags = O_RDWR | O_CLOEXEC,
+	};
+
+	if (access(DMA_HEAP_SYSTEM, R_OK | W_OK)) {
+		ret = KSFT_SKIP;
+		goto cleanup;
+	}
+
+	parent = cg_name(root, "dmabuf_memcg_test");
+	if (!parent)
+		goto cleanup;
+
+	if (cg_create(parent))
+		goto cleanup_parent;
+
+	if (cg_write(parent, "cgroup.subtree_control", "+memory"))
+		goto cleanup_parent;
+
+	child_cg = cg_name(parent, "child");
+	if (!child_cg)
+		goto cleanup_parent;
+
+	if (cg_create(child_cg))
+		goto cleanup_parent;
+
+	child_pid = cg_run_nowait(child_cg, memcg_dmabuf_child, NULL);
+	if (child_pid < 0)
+		goto cleanup_child;
+
+	if (cg_wait_for_proc_count(child_cg, 1))
+		goto cleanup_kill;
+
+	pidfd = sys_pidfd_open(child_pid, 0);
+	if (pidfd < 0) {
+		ret = KSFT_SKIP;
+		goto cleanup_kill;
+	}
+
+	heap_fd = open(DMA_HEAP_SYSTEM, O_RDWR);
+	if (heap_fd < 0) {
+		ret = KSFT_SKIP;
+		goto cleanup_pidfd;
+	}
+
+	alloc.charge_fd = (__u32)pidfd;
+	if (ioctl(heap_fd, DMA_HEAP_IOCTL_ALLOC, &alloc) < 0)
+		goto cleanup_heap;
+	dmabuf_fd = (int)alloc.fd;
+
+	dmabuf_stat = cg_read_key_long(child_cg, "memory.stat", "dmabuf ");
+	if (dmabuf_stat == -1) {
+		ret = KSFT_SKIP;
+		goto cleanup_dmabuf;
+	}
+	if (dmabuf_stat != ONE_MEG)
+		dmabuf_stat = cg_read_key_long_poll(child_cg, "memory.stat",
+						    "dmabuf ", ONE_MEG,
+						    MEMCG_DMABUF_WAIT_RETRIES,
+						    DEFAULT_WAIT_INTERVAL_US);
+	if (dmabuf_stat != ONE_MEG) {
+		fprintf(stderr, "Expected dmabuf stat %d, got %ld\n",
+			ONE_MEG, dmabuf_stat);
+		goto cleanup_dmabuf;
+	}
+
+	close(dmabuf_fd);
+	dmabuf_fd = -1;
+
+	dmabuf_stat = cg_read_key_long_poll(child_cg, "memory.stat",
+					    "dmabuf ", 0,
+					    MEMCG_DMABUF_WAIT_RETRIES,
+					    DEFAULT_WAIT_INTERVAL_US);
+	if (dmabuf_stat != 0) {
+		fprintf(stderr, "Expected dmabuf stat 0 after close, got %ld\n",
+			dmabuf_stat);
+		goto cleanup_heap;
+	}
+
+	ret = KSFT_PASS;
+
+cleanup_dmabuf:
+	if (dmabuf_fd >= 0)
+		close(dmabuf_fd);
+cleanup_heap:
+	close(heap_fd);
+cleanup_pidfd:
+	close(pidfd);
+cleanup_kill:
+	kill(child_pid, SIGTERM);
+	waitpid(child_pid, &child_status, 0);
+cleanup_child:
+	cg_destroy(child_cg);
+	free(child_cg);
+cleanup_parent:
+	cg_destroy(parent);
+	free(parent);
+cleanup:
+	return ret;
+}
+
+/*
+ * Allocate a dma-buf in cgroup A, set memory.max on cgroup B below the
+ * buffer size, then attempt DMA_BUF_IOCTL_XFER_CHARGE to B. The transfer
+ * must fail with ENOMEM and the charge must remain in A.
+ */
+static int test_memcg_dmabuf_xfer_at_limit(const char *root)
+{
+	char *parent = NULL, *cg_a = NULL, *cg_b = NULL;
+	int ret = KSFT_FAIL;
+	int heap_fd = -1, dmabuf_fd = -1, cg_b_fd = -1;
+	pid_t child_pid;
+	int child_status;
+	long stat_a;
+	struct dma_heap_allocation_data alloc = {
+		.len      = ONE_MEG,
+		.fd_flags = O_RDWR | O_CLOEXEC,
+	};
+	struct dma_buf_transfer_charge xfer = { 0 };
+
+	if (access(DMA_HEAP_SYSTEM, R_OK | W_OK)) {
+		ret = KSFT_SKIP;
+		goto cleanup;
+	}
+
+	parent = cg_name(root, "dmabuf_xfer_limit_test");
+	if (!parent)
+		goto cleanup;
+
+	if (cg_create(parent))
+		goto cleanup_parent;
+
+	if (cg_write(parent, "cgroup.subtree_control", "+memory"))
+		goto cleanup_parent;
+
+	cg_a = cg_name(parent, "cg_a");
+	cg_b = cg_name(parent, "cg_b");
+	if (!cg_a || !cg_b)
+		goto cleanup_cgs;
+
+	if (cg_create(cg_a) || cg_create(cg_b))
+		goto cleanup_cgs;
+
+	if (cg_write(cg_b, "memory.max", "524288"))
+		goto cleanup_cgs;
+
+	child_pid = cg_run_nowait(cg_a, memcg_dmabuf_child, NULL);
+	if (child_pid < 0)
+		goto cleanup_cgs;
+
+	if (cg_wait_for_proc_count(cg_a, 1))
+		goto cleanup_kill;
+
+	heap_fd = open(DMA_HEAP_SYSTEM, O_RDWR);
+	if (heap_fd < 0) {
+		ret = KSFT_SKIP;
+		goto cleanup_kill;
+	}
+
+	alloc.charge_fd = (__u32)sys_pidfd_open(child_pid, 0);
+	if ((int)alloc.charge_fd < 0) {
+		ret = KSFT_SKIP;
+		goto cleanup_heap;
+	}
+
+	if (ioctl(heap_fd, DMA_HEAP_IOCTL_ALLOC, &alloc) < 0) {
+		close(alloc.charge_fd);
+		goto cleanup_heap;
+	}
+	close(alloc.charge_fd);
+	dmabuf_fd = (int)alloc.fd;
+
+	stat_a = cg_read_key_long(cg_a, "memory.stat", "dmabuf ");
+	if (stat_a == -1) {
+		ret = KSFT_SKIP;
+		goto cleanup_dmabuf;
+	}
+	if (stat_a != ONE_MEG)
+		stat_a = cg_read_key_long_poll(cg_a, "memory.stat",
+					       "dmabuf ", ONE_MEG,
+					       MEMCG_DMABUF_WAIT_RETRIES,
+					       DEFAULT_WAIT_INTERVAL_US);
+	if (stat_a != ONE_MEG) {
+		fprintf(stderr, "Charge not in A after alloc: expected %d, got %ld\n",
+			ONE_MEG, stat_a);
+		goto cleanup_dmabuf;
+	}
+
+	cg_b_fd = open(cg_b, O_RDONLY | O_DIRECTORY);
+	if (cg_b_fd < 0)
+		goto cleanup_dmabuf;
+
+	xfer.charge_fd = (__u32)cg_b_fd;
+	if (ioctl(dmabuf_fd, DMA_BUF_IOCTL_XFER_CHARGE, &xfer) == 0) {
+		fprintf(stderr, "xfer_charge should have failed at limit\n");
+		goto cleanup_cgfd;
+	}
+	if (errno != ENOMEM) {
+		fprintf(stderr, "Expected ENOMEM, got %s\n", strerror(errno));
+		goto cleanup_cgfd;
+	}
+
+	stat_a = cg_read_key_long_poll(cg_a, "memory.stat",
+				       "dmabuf ", ONE_MEG,
+				       MEMCG_DMABUF_WAIT_RETRIES,
+				       DEFAULT_WAIT_INTERVAL_US);
+	if (stat_a != ONE_MEG) {
+		fprintf(stderr, "Charge leaked from A: expected %d, got %ld\n",
+			ONE_MEG, stat_a);
+		goto cleanup_cgfd;
+	}
+
+	ret = KSFT_PASS;
+
+cleanup_cgfd:
+	close(cg_b_fd);
+cleanup_dmabuf:
+	if (dmabuf_fd >= 0)
+		close(dmabuf_fd);
+cleanup_heap:
+	close(heap_fd);
+cleanup_kill:
+	kill(child_pid, SIGTERM);
+	waitpid(child_pid, &child_status, 0);
+cleanup_cgs:
+	if (cg_a) {
+		cg_destroy(cg_a);
+		free(cg_a);
+	}
+	if (cg_b) {
+		cg_destroy(cg_b);
+		free(cg_b);
+	}
+cleanup_parent:
+	cg_destroy(parent);
+	free(parent);
+cleanup:
+	return ret;
+}
+
 #define T(x) { x, #x }
 struct memcg_test {
 	int (*fn)(const char *root);
@@ -1785,13 +2056,19 @@ struct memcg_test {
 	T(test_memcg_oom_group_score_events),
 	T(test_memcg_inotify_delete_file),
 	T(test_memcg_inotify_delete_dir),
+	T(test_memcg_dmabuf),
+	T(test_memcg_dmabuf_xfer_at_limit),
 };
 #undef T
 
 int main(int argc, char **argv)
 {
 	char root[PATH_MAX];
-	int i, proc_status;
+	int i, proc_status, count = ARRAY_SIZE(tests);
+	const char *filter = NULL;
+
+	if (argc > 1)
+		filter = argv[1];
 
 	page_size = sysconf(_SC_PAGE_SIZE);
 	if (page_size <= 0)
@@ -1822,8 +2099,17 @@ int main(int argc, char **argv)
 		ksft_exit_skip("Failed to query cgroup mount option\n");
 	has_localevents = proc_status;
 
-	ksft_set_plan(ARRAY_SIZE(tests));
+	if (filter) {
+		count = 0;
+		for (i = 0; i < ARRAY_SIZE(tests); i++) {
+			if (!strcmp(tests[i].name, filter))
+				count++;
+		}
+	}
+	ksft_set_plan(count);
 	for (i = 0; i < ARRAY_SIZE(tests); i++) {
+		if (filter && strcmp(tests[i].name, filter))
+			continue;
 		switch (tests[i].fn(root)) {
 		case KSFT_PASS:
 			ksft_test_result_pass("%s\n", tests[i].name);
