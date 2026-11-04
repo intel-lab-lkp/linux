@@ -47,6 +47,7 @@
 
 #define PCIE_CONTROL_LOGIC			0x0004
 #define PCIE_SOFT_RESET			BIT(0)
+#define PCIE_IGNORE_PERSTN		BIT(2)	/* 1: ignore PERST# */
 
 struct k1_pcie {
 	struct dw_pcie pci;
@@ -131,10 +132,18 @@ static int k1_pcie_init(struct dw_pcie_rp *pp)
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct k1_pcie *k1 = to_k1_pcie(pci);
 	u32 reset_ctrl;
+	u32 ctrl_logic;
 	u32 val;
 	int ret;
 
 	k1_pcie_toggle_soft_reset(k1);
+
+	/*
+	 * Ignore the PERST# signal so the controller does not reset
+	 * itself when it pulls PERST# low.
+	 */
+	ctrl_logic = k1->pmu_off + PCIE_CONTROL_LOGIC;
+	regmap_set_bits(k1->pmu, ctrl_logic, PCIE_IGNORE_PERSTN);
 
 	ret = k1_pcie_enable_resources(k1);
 	if (ret)
