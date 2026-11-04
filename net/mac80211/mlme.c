@@ -9743,7 +9743,7 @@ static int ieee80211_prep_connection(struct ieee80211_sub_if_data *sdata,
 
 	err = ieee80211_vif_set_links(sdata, new_links, 0);
 	if (err)
-		return err;
+		goto out_err;
 
 	link = sdata_dereference(sdata->link[link_id], sdata);
 	if (WARN_ON(!link)) {
