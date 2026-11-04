@@ -320,6 +320,20 @@ void brcmf_feat_attach(struct brcmf_pub *drvr)
 					BIT(BRCMF_FEAT_WOWL_GTK);
 		}
 	}
+	/* The Apple firmware for these chips lists "idauth", but in AP mode
+	 * its authenticator never completes the 4-way handshake and the
+	 * station is dropped after about 8 s. Leave the handshake to the host.
+	 */
+	switch (drvr->bus_if->chip) {
+	case BRCM_CC_4355_CHIP_ID:
+	case BRCM_CC_4364_CHIP_ID:
+	case BRCM_CC_4377_CHIP_ID:
+		ifp->drvr->feat_flags &= ~BIT(BRCMF_FEAT_FWAUTH);
+		break;
+	default:
+		break;
+	}
+
 	/* MBSS does not work for all chips */
 	switch (drvr->bus_if->chip) {
 	case BRCM_CC_4330_CHIP_ID:
