@@ -564,6 +564,13 @@ static inline int print_page_owner_memcg(char *kbuf, size_t count, int ret,
 	char name[80];
 
 	rcu_read_lock();
+	if (PageTail(page))
+		goto out_unlock;
+	/*
+	 * Order the memcg_data load after the PageTail() load. Pairs with
+	 * smp_wmb() in __split_folio_to_order().
+	 */
+	smp_rmb();
 	memcg_data = READ_ONCE(page->memcg_data);
 	if (!memcg_data || PageTail(page))
 		goto out_unlock;
