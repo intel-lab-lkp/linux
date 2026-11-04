@@ -744,6 +744,20 @@ enum drm_panthor_vm_state {
 };
 
 /**
+ * struct drm_panthor_vm_fault - Fault information of a VM.
+ */
+struct drm_panthor_vm_fault {
+	/** @status: Raw AS_FAULTSTATUS value, zero if no fault happened. */
+	__u32 status;
+
+	/** @pad: Will be zero on return. */
+	__u32 pad;
+
+	/** @address: Raw AS_FAULTADDRESS value, valid if @status is non-zero. */
+	__u64 address;
+};
+
+/**
  * struct drm_panthor_vm_get_state - Get VM state.
  */
 struct drm_panthor_vm_get_state {
@@ -756,6 +770,14 @@ struct drm_panthor_vm_get_state {
 	 * Must be one of the enum drm_panthor_vm_state values.
 	 */
 	__u32 state;
+
+	/**
+	 * @fault: Last fault on this VM.
+	 *
+	 * A new fault overwrites the previous one. It is not cleared when the
+	 * VM is re-activated or after a GPU reset.
+	 */
+	struct drm_panthor_vm_fault fault;
 };
 
 /**

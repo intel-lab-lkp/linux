@@ -11,6 +11,7 @@
 struct drm_exec;
 struct drm_sched_job;
 struct drm_memory_stats;
+struct drm_panthor_vm_fault;
 struct panthor_gem_object;
 struct panthor_heap_pool;
 struct panthor_vm;
@@ -74,6 +75,7 @@ struct panthor_vm *panthor_vm_pool_get_vm(struct panthor_vm_pool *pool, u32 hand
 
 bool panthor_vm_has_unhandled_faults(struct panthor_vm *vm);
 bool panthor_vm_is_unusable(struct panthor_vm *vm);
+void panthor_vm_get_fault(struct panthor_vm *vm, struct drm_panthor_vm_fault *fault);
 
 /*
  * PANTHOR_VM_KERNEL_AUTO_VA: Use this magic address when you want the GEM

@@ -1471,6 +1471,8 @@ static int panthor_ioctl_vm_get_state(struct drm_device *ddev, void *data,
 	else
 		args->state = DRM_PANTHOR_VM_STATE_USABLE;
 
+	panthor_vm_get_fault(vm, &args->fault);
+
 	panthor_vm_put(vm);
 	return 0;
 }

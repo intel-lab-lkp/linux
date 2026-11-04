@@ -389,6 +389,15 @@ struct panthor_vm {
 	 */
 	bool unhandled_fault;
 
+	/**
+	 * @fault: Last fault on this VM.
+	 *
+	 * A new fault overwrites the previous one. Unlike @unhandled_fault,
+	 * this is not cleared when the VM is re-activated. Protected by
+	 * panthor_mmu::as::slots_lock.
+	 */
+	struct drm_panthor_vm_fault fault;
+
 	/** @locked_region: Information about the currently locked region currently. */
 	struct {
 		/** @locked_region.start: Start of the locked region. */
@@ -660,6 +669,19 @@ static u32 panthor_mmu_fault_mask(struct panthor_device *ptdev, u32 value)
 bool panthor_vm_has_unhandled_faults(struct panthor_vm *vm)
 {
 	return vm->unhandled_fault;
+}
+
+/**
+ * panthor_vm_get_fault() - Get the last fault of a VM
+ * @vm: VM to query.
+ * @fault: Returns the last fault, with a zero status if no fault happened.
+ */
+void panthor_vm_get_fault(struct panthor_vm *vm, struct drm_panthor_vm_fault *fault)
+{
+	struct panthor_device *ptdev = vm->ptdev;
+
+	guard(mutex)(&ptdev->mmu->as.slots_lock);
+	*fault = vm->fault;
 }
 
 /**
@@ -1855,6 +1877,7 @@ static void panthor_mmu_irq_handler(struct panthor_irq *pirq, u32 status)
 	while (status) {
 		u32 as = ffs(status | (status >> 16)) - 1;
 		u32 mask = MMU_INT_AS_FAULT(as);
+		struct panthor_vm *vm;
 		u64 addr;
 		u32 fault_status;
 		u32 exception_type;
@@ -1895,8 +1918,14 @@ static void panthor_mmu_irq_handler(struct panthor_irq *pirq, u32 status)
 		 */
 		gpu_write(mmu->irq.iomem, INT_CLEAR, mask);
 
-		if (ptdev->mmu->as.slots[as].vm)
-			ptdev->mmu->as.slots[as].vm->unhandled_fault = true;
+		vm = mmu->as.slots[as].vm;
+		if (vm) {
+			vm->unhandled_fault = true;
+			vm->fault = (struct drm_panthor_vm_fault){
+				.status = fault_status,
+				.address = addr,
+			};
+		}
 
 		/* Disable the MMU to kill jobs on this AS. */
 		panthor_mmu_as_disable(ptdev, as);
