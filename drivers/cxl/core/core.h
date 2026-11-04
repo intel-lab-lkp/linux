@@ -37,6 +37,7 @@ static inline bool cxled_dcd_enabled(struct cxl_endpoint_decoder *cxled)
 
 const char *cxl_dc_mode_name(bool shareable, bool read_only);
 int cxl_dc_mode_parse(const char *buf, bool *shareable, bool *read_only);
+int cxl_process_extent_list(struct cxl_endpoint_decoder *cxled);
 
 #ifdef CONFIG_CXL_REGION
 
@@ -78,7 +79,7 @@ int devm_cxl_add_pmem_region(struct cxl_region *cxlr);
 void kill_regions(struct cxl_root_decoder *cxlrd);
 
 int cxl_add_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent,
-		   u16 seq_num);
+		   u16 seq_num, bool existing);
 int cxl_resolve_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent,
 		       struct cxl_region **cxlrp,
 		       struct cxl_dc_tag_group **groupp);
@@ -101,7 +102,8 @@ static inline u64 cxl_dpa_to_hpa(struct cxl_region *cxlr,
 }
 
 static inline int cxl_add_extent(struct cxl_memdev_state *mds,
-				 struct cxl_extent *extent, u16 seq_num)
+				 struct cxl_extent *extent, u16 seq_num,
+				 bool existing)
 {
 	return -ENXIO;
 }

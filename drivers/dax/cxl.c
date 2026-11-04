@@ -6,6 +6,12 @@
 #include "../cxl/cxl.h"
 #include "bus.h"
 
+static void cxl_dax_region_remove(struct device *dev)
+{
+	/* Refuse new adds; devres returns the held extents */
+	cxl_region_reset_extent_scan(to_cxl_dax_region(dev));
+}
+
 static int cxl_dax_region_probe(struct device *dev)
 {
 	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
@@ -15,6 +21,7 @@ static int cxl_dax_region_probe(struct device *dev)
 	struct dev_dax_data data;
 	resource_size_t dev_size;
 	unsigned long flags;
+	int rc;
 
 	if (nid == NUMA_NO_NODE)
 		nid = memory_add_physaddr_to_nid(cxlr_dax->hpa_range.start);
@@ -29,11 +36,17 @@ static int cxl_dax_region_probe(struct device *dev)
 	if (!dax_region)
 		return -ENOMEM;
 
-	if (cxlr->mode == CXL_PARTMODE_DYNAMIC_RAM)
+	if (cxlr->mode == CXL_PARTMODE_DYNAMIC_RAM) {
+		/* Recover extents the device still holds for this region */
+		rc = cxl_region_add_existing_extents(cxlr_dax);
+		if (rc)
+			goto err_remove;
+
 		/* Add empty seed dax device */
 		dev_size = 0;
-	else
+	} else {
 		dev_size = range_len(&cxlr_dax->hpa_range);
+	}
 
 	data = (struct dev_dax_data) {
 		.dax_region = dax_region,
@@ -42,12 +55,20 @@ static int cxl_dax_region_probe(struct device *dev)
 		.memmap_on_memory = true,
 	};
 
-	return PTR_ERR_OR_ZERO(devm_create_dev_dax(&data));
+	rc = PTR_ERR_OR_ZERO(devm_create_dev_dax(&data));
+	if (rc)
+		goto err_remove;
+	return 0;
+
+err_remove:
+	cxl_dax_region_remove(dev);
+	return rc;
 }
 
 static struct cxl_driver cxl_dax_region_driver = {
 	.name = "cxl_dax_region",
 	.probe = cxl_dax_region_probe,
+	.remove = cxl_dax_region_remove,
 	.id = CXL_DEVICE_DAX_REGION,
 	.drv = {
 		.suppress_bind_attrs = true,

@@ -13,6 +13,8 @@ static void cxl_dax_region_release(struct device *dev)
 {
 	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
 
+	if (cxlr_dax->cxled)
+		put_device(&cxlr_dax->cxled->cxld.dev);
 	xa_destroy(&cxlr_dax->dc_extents);
 	ida_destroy(&cxlr_dax->tag_group_ida);
 	kfree(cxlr_dax);
@@ -78,6 +80,15 @@ static struct cxl_dax_region *cxl_dax_region_alloc(struct cxl_region *cxlr)
 	ida_init(&cxlr_dax->tag_group_ida);
 	cxlr_dax->hpa_range.start = p->res->start;
 	cxlr_dax->hpa_range.end = p->res->end;
+
+	/*
+	 * DC regions are not interleaved; the probe-time scan uses this decoder
+	 * and may outlive its attachment to the region, so hold a reference.
+	 */
+	if (cxlr->mode == CXL_PARTMODE_DYNAMIC_RAM)
+		cxlr_dax->cxled = p->targets[0];
+	if (cxlr_dax->cxled)
+		get_device(&cxlr_dax->cxled->cxld.dev);
 
 	dev = &cxlr_dax->dev;
 	cxlr_dax->cxlr = cxlr;
@@ -152,6 +163,42 @@ DEFINE_FREE(unpublish_cxl_dax_region, struct cxl_dax_region *,
 		put_device(&_T->untagged);
 		put_device(&_T->dev);
 	})
+
+/*
+ * Runs from cxl_dax_region_probe().  The region's parameters may not be
+ * read here: a concurrent detach clears p->targets[] under cxl_rwsem.region
+ * before it waits for this probe.  Use the decoder recorded at allocation
+ * instead; cxlr_dax holds a reference on it.
+ */
+int cxl_region_add_existing_extents(struct cxl_dax_region *cxlr_dax)
+{
+	struct cxl_endpoint_decoder *cxled = cxlr_dax->cxled;
+	int rc;
+
+	rc = cxl_process_extent_list(cxled);
+	if (rc) {
+		dev_err(&cxled->cxld.dev, "Existing extent processing failed %d\n",
+			rc);
+		return rc;
+	}
+
+	/* Pairs with the acquire in cxl_validate_extent(); adds may proceed */
+	smp_store_release(&cxlr_dax->extents_scanned, true);
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_region_add_existing_extents, "CXL");
+
+/*
+ * Driver unbind returns the held extents to the device (devres), so refuse
+ * new adds until the next probe has read the device's list again.
+ */
+void cxl_region_reset_extent_scan(struct cxl_dax_region *cxlr_dax)
+{
+	/* Adds test the gate under cxl_rwsem.region; none is mid-flight after this */
+	guard(rwsem_write)(&cxl_rwsem.region);
+	cxlr_dax->extents_scanned = false;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_region_reset_extent_scan, "CXL");
 
 int devm_cxl_add_dax_region(struct cxl_region *cxlr)
 {

@@ -230,7 +230,7 @@ static int cxl_validate_extent(struct cxl_memdev_state *mds,
 			       struct cxl_extent *extent,
 			       struct cxl_endpoint_decoder **out_cxled,
 			       struct cxl_dax_region **out_cxlr_dax,
-			       struct range *out_ext_range)
+			       struct range *out_ext_range, bool existing)
 {
 	u64 start_dpa = le64_to_cpu(extent->start_dpa);
 	struct cxl_memdev *cxlmd = mds->cxlds.cxlmd;
@@ -270,6 +270,17 @@ static int cxl_validate_extent(struct cxl_memdev_state *mds,
 	cxlr = cxl_dpa_to_region(cxlmd, start_dpa, &cxled);
 	if (!cxlr || !cxlr->cxlr_dax)
 		return -ENXIO;
+
+	/*
+	 * New adds wait for a bound dax driver that has read the device's
+	 * pre-existing extents, so a tag already in use is never added twice.
+	 */
+	if (!existing && !smp_load_acquire(&cxlr->cxlr_dax->extents_scanned)) {
+		dev_warn_ratelimited(dev,
+				     "DC extent DPA %pra: dax driver not ready, refusing\n",
+				     &ext_range);
+		return -EBUSY;
+	}
 
 	ed_range = (struct range) {
 		.start = cxled->dpa_res->start,
@@ -406,7 +417,7 @@ static int cxlr_add_extent(struct cxl_memdev_state *mds,
  * Returns 0 for a successfully added extent and <0 on error.
  */
 int cxl_add_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent,
-		   u16 seq_num)
+		   u16 seq_num, bool existing)
 {
 	struct cxl_endpoint_decoder *cxled;
 	struct cxl_dax_region *cxlr_dax;
@@ -418,7 +429,8 @@ int cxl_add_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent,
 	lockdep_assert_held(&cxl_rwsem.region);
 	lockdep_assert_held(&cxl_rwsem.dpa);
 
-	rc = cxl_validate_extent(mds, extent, &cxled, &cxlr_dax, &ext_range);
+	rc = cxl_validate_extent(mds, extent, &cxled, &cxlr_dax, &ext_range,
+				 existing);
 	if (rc)
 		return rc;
 
