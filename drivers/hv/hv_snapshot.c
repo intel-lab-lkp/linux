@@ -456,5 +456,8 @@ void hv_vss_deinit(void)
 
 	hv_vss_cancel_work();
 
-	hvutil_transport_destroy(hvt);
+	if (hvt) {
+		hvutil_transport_destroy(hvt);
+		hvt = NULL;
+	}
 }

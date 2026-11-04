@@ -825,5 +825,8 @@ void hv_kvp_deinit(void)
 
 	hv_kvp_cancel_work();
 
-	hvutil_transport_destroy(hvt);
+	if (hvt) {
+		hvutil_transport_destroy(hvt);
+		hvt = NULL;
+	}
 }
