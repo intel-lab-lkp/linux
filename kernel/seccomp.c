@@ -1125,7 +1125,9 @@ static u64 seccomp_next_notify_id(struct seccomp_filter *filter)
 	return filter->notif->next_id++;
 }
 
-static void seccomp_handle_addfd(struct seccomp_kaddfd *addfd, struct seccomp_knotif *n)
+static void seccomp_handle_addfd(struct seccomp_filter *filter,
+				 struct seccomp_kaddfd *addfd,
+				 struct seccomp_knotif *n)
 {
 	int fd;
 
@@ -1144,6 +1146,7 @@ static void seccomp_handle_addfd(struct seccomp_kaddfd *addfd, struct seccomp_kn
 		/* If we fail reset and return an error to the notifier */
 		if (fd < 0) {
 			n->state = SECCOMP_NOTIFY_SENT;
+			wake_up_poll(&filter->wqh, EPOLLOUT | EPOLLWRNORM);
 		} else {
 			/* Return the FD we just added */
 			n->flags = 0;
@@ -1224,7 +1227,7 @@ static int seccomp_do_user_notification(int this_syscall,
 						 struct seccomp_kaddfd, list);
 		/* Check if we were woken up by a addfd message */
 		if (addfd)
-			seccomp_handle_addfd(addfd, &n);
+			seccomp_handle_addfd(match, addfd, &n);
 
 	}  while (n.state != SECCOMP_NOTIFY_REPLIED);
 
