@@ -20,6 +20,14 @@ properties:
   reg:
     maxItems: 1
 
+  ti,hpd-in-override:
+    type: boolean
+    description: |
+      Force the HPD_IN signal high through the HPDIN_OVERRIDE bit in the
+      General register while DisplayPort Alt Mode is active. This is useful
+      on boards where HPD_IN is not driven by the downstream DisplayPort
+      sink.
+
 required:
   - compatible
   - reg
@@ -39,6 +47,7 @@ examples:
 
             mode-switch;
             orientation-switch;
+            ti,hpd-in-override;
 
             port {
                 endpoint {
