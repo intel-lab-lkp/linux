@@ -1445,26 +1445,32 @@ void brcmf_msgbuf_delete_flowring(struct brcmf_pub *drvr, u16 flowid)
 	int err;
 	int retry = BRCMF_MAX_TXSTATUS_WAIT_RETRIES;
 
+	/* no need to wait or submit if firmware can not be reached */
+	if (drvr->bus_if->state != BRCMF_BUS_UP) {
+		brcmf_dbg(MSGBUF, "bus down, flowring will be removed\n");
+		brcmf_msgbuf_remove_flowring(msgbuf, flowid);
+		return;
+	}
+
 	/* make sure it is not in txflow */
 	brcmf_commonring_lock(commonring_del);
 	flow->rings[flowid]->status = RING_CLOSING;
 	brcmf_commonring_unlock(commonring_del);
 
-	/* wait for commonring txflow finished */
+	/* wait for commonring txflow finished, but bail if bus goes down */
 	while (retry && atomic_read(&commonring_del->outstanding_tx)) {
+		if (drvr->bus_if->state != BRCMF_BUS_UP) {
+			brcmf_dbg(MSGBUF, "bus went down, aborting wait\n");
+			atomic_set(&commonring_del->outstanding_tx, 0);
+			brcmf_msgbuf_remove_flowring(msgbuf, flowid);
+			return;
+		}
 		usleep_range(5000, 10000);
 		retry--;
 	}
 	if (!retry) {
 		brcmf_err("timed out waiting for txstatus\n");
 		atomic_set(&commonring_del->outstanding_tx, 0);
-	}
-
-	/* no need to submit if firmware can not be reached */
-	if (drvr->bus_if->state != BRCMF_BUS_UP) {
-		brcmf_dbg(MSGBUF, "bus down, flowring will be removed\n");
-		brcmf_msgbuf_remove_flowring(msgbuf, flowid);
-		return;
 	}
 
 	commonring = msgbuf->commonrings[BRCMF_H2D_MSGRING_CONTROL_SUBMIT];
