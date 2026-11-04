@@ -539,6 +539,8 @@ static int alloc_dev_dax_id(struct dev_dax *dev_dax)
 	return id;
 }
 
+static bool is_dev_dax(struct device *dev);
+
 static ssize_t delete_store(struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t len)
 {
@@ -554,6 +556,12 @@ static ssize_t delete_store(struct device *dev, struct device_attribute *attr,
 	victim = device_find_child_by_name(dax_region->dev, buf);
 	if (!victim)
 		return -ENXIO;
+
+	/* Tag groups and the untagged device are children of the region too */
+	if (!is_dev_dax(victim)) {
+		put_device(victim);
+		return -EINVAL;
+	}
 
 	device_lock(dev);
 	device_lock(victim);
@@ -1442,6 +1450,11 @@ static const struct device_type dev_dax_type = {
 	.release = dev_dax_release,
 	.groups = dax_attribute_groups,
 };
+
+static bool is_dev_dax(struct device *dev)
+{
+	return dev->type == &dev_dax_type;
+}
 
 /* see "strong" declaration in tools/testing/nvdimm/dax-dev.c */
 __weak phys_addr_t dax_pgoff_to_phys(struct dev_dax *dev_dax, pgoff_t pgoff,

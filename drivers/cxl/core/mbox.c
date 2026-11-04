@@ -6,6 +6,7 @@
 #include <linux/mutex.h>
 #include <linux/unaligned.h>
 #include <linux/list.h>
+#include <linux/list_sort.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
 #include <cxl.h>
@@ -1201,6 +1202,84 @@ static void delete_extent_node(struct cxl_extent_list_node *node)
 	kfree(node);
 }
 
+/* Drop every node in @group, releasing its extent. */
+static void drop_extent_group(struct list_head *group)
+{
+	struct cxl_extent_list_node *pos, *tmp;
+
+	list_for_each_entry_safe(pos, tmp, group, list)
+		delete_extent_node(pos);
+}
+
+/* Queue @r for a Release DC command */
+static int stage_release_ack(struct list_head *acks, const struct range *r)
+{
+	struct cxl_extent_list_node *node = kzalloc_obj(*node);
+	struct cxl_extent *extent;
+
+	if (!node)
+		return -ENOMEM;
+	extent = kzalloc_obj(*extent);
+	if (!extent) {
+		kfree(node);
+		return -ENOMEM;
+	}
+
+	extent->start_dpa = cpu_to_le64(r->start);
+	extent->length = cpu_to_le64(range_len(r));
+	node->extent = extent;
+	list_add_tail(&node->list, acks);
+	return 0;
+}
+
+/*
+ * Queue every member of @group on @acks.  Returns the number queued, or
+ * -ENOMEM with nothing queued.
+ */
+static int stage_group_release(struct cxl_dc_tag_group *group,
+			       struct list_head *acks)
+{
+	struct dc_extent *dc_extent;
+	LIST_HEAD(members);
+	unsigned long idx;
+	int cnt = 0, rc;
+
+	xa_for_each(&group->dc_extents, idx, dc_extent) {
+		rc = stage_release_ack(&members, &dc_extent->dpa_range);
+		if (rc) {
+			drop_extent_group(&members);
+			return rc;
+		}
+		cnt++;
+	}
+
+	list_splice_tail(&members, acks);
+	return cnt;
+}
+
+/* Give @group's capacity back to the device with a Release DC response */
+void memdev_release_group(struct cxl_dc_tag_group *group)
+{
+	unsigned long idx = 0;
+	struct dc_extent *dc_extent = xa_find(&group->dc_extents, &idx,
+					      ULONG_MAX, XA_PRESENT);
+	struct cxl_memdev_state *mds;
+	LIST_HEAD(acks);
+	int cnt;
+
+	if (!dc_extent)
+		return;
+	/* A DC region is not interleaved: every member shares one memdev */
+	mds = cxled_to_mds(dc_extent->cxled);
+
+	cnt = stage_group_release(group, &acks);
+	if (cnt < 0 ||
+	    cxl_send_dc_response(mds, CXL_MBOX_OP_RELEASE_DC, &acks, cnt))
+		dev_dbg(mds->cxlds.dev, "Failed to release tag %pUb\n",
+			&group->uuid);
+	drop_extent_group(&acks);
+}
+
 static void clear_pending_extents(void *_mds)
 {
 	struct cxl_memdev_state *mds = _mds;
@@ -1208,6 +1287,7 @@ static void clear_pending_extents(void *_mds)
 
 	list_for_each_entry_safe(pos, tmp, &mds->dc_chain.pending_extents, list)
 		delete_extent_node(pos);
+	mds->dc_chain.group = NULL;
 }
 
 /*
@@ -1315,6 +1395,168 @@ static int stage_pending_extent(struct list_head *pending,
 	return 0;
 }
 
+/*
+ * Compare two extents by shared_extn_seq (ascending).  list_sort is
+ * stable, so extents with equal keys keep their arrival order from
+ * stage_pending_extent()'s list_add_tail().
+ */
+static int extent_seq_compare(void *priv,
+			      const struct list_head *a,
+			      const struct list_head *b)
+{
+	const struct cxl_extent_list_node *ea =
+		list_entry(a, struct cxl_extent_list_node, list);
+	const struct cxl_extent_list_node *eb =
+		list_entry(b, struct cxl_extent_list_node, list);
+	u16 sa = le16_to_cpu(ea->extent->shared_extn_seq);
+	u16 sb = le16_to_cpu(eb->extent->shared_extn_seq);
+
+	if (sa < sb)
+		return -1;
+	if (sa > sb)
+		return 1;
+	return 0;
+}
+
+/*
+ * Move every pending extent whose tag matches @tag onto @group, preserving
+ * the order they appear in @pending.
+ */
+static void extract_tag_group(struct list_head *pending,
+			      const uuid_t *tag,
+			      struct list_head *group)
+{
+	struct cxl_extent_list_node *pos, *tmp;
+
+	list_for_each_entry_safe(pos, tmp, pending, list) {
+		uuid_t t;
+
+		import_uuid(&t, pos->extent->uuid);
+		if (uuid_equal(&t, tag))
+			list_move_tail(&pos->list, group);
+	}
+}
+
+/*
+ * Realize a tag @group: assign each extent its dax-side @seq_num and add it
+ * via cxl_add_extent(), then online the resulting tag group.  Returns the
+ * number of accepted extents (>= 0) with @group left holding them for the
+ * caller to splice, or a negative errno on failure with @group untouched for
+ * the caller to drop.
+ */
+static int cxl_realize_group(struct cxl_memdev_state *mds, const uuid_t *tag,
+			     struct list_head *group)
+{
+	struct device *dev = mds->cxlds.dev;
+	struct cxl_extent_list_node *pos;
+	struct cxl_dc_tag_group *tag_group;
+	int group_cnt = 0;
+	u16 seq_num;
+	int rc;
+
+	lockdep_assert_held(&cxl_rwsem.region);
+	lockdep_assert_held(&cxl_rwsem.dpa);
+
+	/* Each extent gets a dense dax-side seq_num, 0..n-1 */
+	seq_num = -1;
+	list_for_each_entry(pos, group, list) {
+		seq_num++;
+		rc = cxl_add_extent(mds, pos->extent, seq_num);
+		if (rc < 0) {
+			dev_dbg(dev,
+				"Tag %pUb: dropping group, failed to add extent DPA:%#llx LEN:%#llx\n",
+				tag,
+				le64_to_cpu(pos->extent->start_dpa),
+				le64_to_cpu(pos->extent->length));
+			goto err_discard;
+		}
+		group_cnt++;
+	}
+
+	tag_group = mds->dc_chain.group;
+	mds->dc_chain.group = NULL;
+	rc = online_tag_group(tag_group);
+	if (rc) {
+		dev_warn(dev, "Tag %pUb: failed to online tag group (%d)\n",
+			 tag, rc);
+		return rc;
+	}
+
+	return group_cnt;
+
+err_discard:
+	/*
+	 * A tag group is one allocation and sharable capacity must be
+	 * accepted all or none (CXL r4.0 8.2.10.9.9.3): unstage what was
+	 * built before the failing extent.
+	 */
+	tag_group = mds->dc_chain.group;
+	mds->dc_chain.group = NULL;
+	if (tag_group)
+		discard_tag_group(tag_group);
+	return rc;
+}
+
+/*
+ * Drive the pending Add-Capacity records through cxl_realize_group() one
+ * tag group at a time, moving each group that realizes onto the accepted
+ * list.
+ */
+static int cxl_add_pending(struct cxl_memdev_state *mds,
+			   struct list_head *pending)
+{
+	LIST_HEAD(accepted);
+	int total_accepted = 0;
+
+	/*
+	 * Held across validation, add and online so that cxlr_dax_unpublish()
+	 * excludes a whole flush; cxl_dpa_to_region() also walks every dpa_res.
+	 */
+	guard(rwsem_read)(&cxl_rwsem.region);
+	guard(rwsem_read)(&cxl_rwsem.dpa);
+
+	while (!list_empty(pending)) {
+		struct cxl_extent_list_node *first;
+		LIST_HEAD(group);
+		uuid_t tag;
+		int cnt;
+
+		first = list_first_entry(pending, struct cxl_extent_list_node,
+					 list);
+		import_uuid(&tag, first->extent->uuid);
+		/*
+		 * A null tag carries no allocation identity: surface each
+		 * untagged extent as its own single-extent group rather than
+		 * coalescing all untagged extents together.
+		 */
+		if (uuid_is_null(&tag))
+			list_move_tail(&first->list, &group);
+		else
+			extract_tag_group(pending, &tag, &group);
+
+		/*
+		 * Only a sharable allocation carries a meaningful per-extent
+		 * shared_extn_seq; order those by it.  For non-sharable groups,
+		 * the stable sort maintains arrival order.
+		 */
+		list_sort(NULL, &group, extent_seq_compare);
+
+		cnt = cxl_realize_group(mds, &tag, &group);
+		if (cnt < 0) {
+			drop_extent_group(&group);
+			continue;
+		}
+
+		list_splice_tail_init(&group, &accepted);
+		total_accepted += cnt;
+	}
+
+	list_splice(&accepted, pending);
+
+	return cxl_send_dc_response(mds, CXL_MBOX_OP_ADD_DC_RESPONSE,
+				    pending, total_accepted);
+}
+
 static int handle_dcd_chain_event(struct cxl_memdev_state *mds,
 				  struct cxl_event_dcd *event)
 {
@@ -1359,11 +1601,9 @@ static int handle_dcd_chain_event(struct cxl_memdev_state *mds,
 	chain->armed = false;
 	cancel_delayed_work(&chain->timeout_work);
 
-	/* Nothing is tracked yet: refuse every add, acknowledge every release */
 	if (event->event_type == DCD_ADD_CAPACITY)
-		rc = cxl_send_dc_response(mds, CXL_MBOX_OP_ADD_DC_RESPONSE,
-					  &chain->pending_extents, 0);
-	else
+		rc = cxl_add_pending(mds, &chain->pending_extents);
+	else	/* Nothing is tracked yet: acknowledge every release */
 		rc = cxl_send_dc_response(mds, CXL_MBOX_OP_RELEASE_DC,
 					  &chain->pending_extents,
 					  list_count_nodes(&chain->pending_extents));

@@ -40,6 +40,8 @@ int cxl_dc_mode_parse(const char *buf, bool *shareable, bool *read_only);
 
 #ifdef CONFIG_CXL_REGION
 
+int cxl_region_invalidate_memregion(struct cxl_region *cxlr);
+
 struct cxl_region_context {
 	struct cxl_endpoint_decoder *cxled;
 	struct range hpa_range;
@@ -75,12 +77,42 @@ int devm_cxl_add_dax_region(struct cxl_region *cxlr);
 int devm_cxl_add_pmem_region(struct cxl_region *cxlr);
 void kill_regions(struct cxl_root_decoder *cxlrd);
 
+int cxl_add_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent,
+		   u16 seq_num);
+int online_tag_group(struct cxl_dc_tag_group *group);
+bool rm_tag_group(struct cxl_dc_tag_group *group);
+void discard_tag_group(struct cxl_dc_tag_group *group);
+int cxl_dax_untagged_add(struct cxl_dax_region *cxlr_dax);
 #else
 static inline u64 cxl_dpa_to_hpa(struct cxl_region *cxlr,
 				 const struct cxl_memdev *cxlmd, u64 dpa)
 {
 	return ULLONG_MAX;
 }
+
+static inline int cxl_add_extent(struct cxl_memdev_state *mds,
+				 struct cxl_extent *extent, u16 seq_num)
+{
+	return -ENXIO;
+}
+
+static inline int online_tag_group(struct cxl_dc_tag_group *group)
+{
+	return 0;
+}
+
+static inline bool rm_tag_group(struct cxl_dc_tag_group *group)
+{
+	return true;
+}
+
+static inline void discard_tag_group(struct cxl_dc_tag_group *group) { }
+
+static inline int cxl_dax_untagged_add(struct cxl_dax_region *cxlr_dax)
+{
+	return 0;
+}
+
 static inline
 struct cxl_region *cxl_dpa_to_region(const struct cxl_memdev *cxlmd, u64 dpa,
 				     struct cxl_endpoint_decoder **cxled)
@@ -182,6 +214,7 @@ long cxl_pci_get_latency(struct pci_dev *pdev);
 int cxl_pci_get_bandwidth(struct pci_dev *pdev, struct access_coordinate *c);
 int cxl_port_get_switch_dport_bandwidth(struct cxl_port *port,
 					struct access_coordinate *c);
+void memdev_release_group(struct cxl_dc_tag_group *group);
 
 static inline struct device *port_to_host(struct cxl_port *port)
 {

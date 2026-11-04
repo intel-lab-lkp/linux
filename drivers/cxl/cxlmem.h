@@ -433,6 +433,7 @@ static inline struct cxl_dev_state *mbox_to_cxlds(struct cxl_mailbox *cxl_mbox)
  * struct cxl_dc_event_chain - staged Dynamic Capacity event chain
  * @pending_extents: extents received so far; flushed when the chain
  *		     closes (More=0)
+ * @group: tag group being assembled from an Add Capacity chain
  * @timeout_work: watchdog that fires if a chain is opened with
  *		  CXL_DCD_EVENT_MORE but the closing record never arrives
  * @lock: serialises updates to the chain state against the watchdog
@@ -454,6 +455,7 @@ static inline struct cxl_dev_state *mbox_to_cxlds(struct cxl_mailbox *cxl_mbox)
  */
 struct cxl_dc_event_chain {
 	struct list_head pending_extents;
+	struct cxl_dc_tag_group *group;
 	struct delayed_work timeout_work;
 	struct mutex lock;	/* chain state, against the watchdog */
 	bool armed;

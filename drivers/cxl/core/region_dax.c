@@ -13,6 +13,8 @@ static void cxl_dax_region_release(struct device *dev)
 {
 	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
 
+	xa_destroy(&cxlr_dax->dc_extents);
+	ida_destroy(&cxlr_dax->tag_group_ida);
 	kfree(cxlr_dax);
 }
 
@@ -25,6 +27,20 @@ const struct device_type cxl_dax_region_type = {
 	.name = "cxl_dax_region",
 	.release = cxl_dax_region_release,
 	.groups = cxl_dax_region_attribute_groups,
+};
+
+static void cxl_dax_untagged_release(struct device *dev)
+{
+	struct cxl_dax_region *cxlr_dax =
+		container_of(dev, struct cxl_dax_region, untagged);
+
+	/* Drop the pin taken in cxl_dax_region_alloc(). */
+	put_device(&cxlr_dax->dev);
+}
+
+static const struct device_type cxl_dax_untagged_type = {
+	.name = "untagged",
+	.release = cxl_dax_untagged_release,
 };
 
 static bool is_cxl_dax_region(struct device *dev)
@@ -49,7 +65,8 @@ static struct cxl_dax_region *cxl_dax_region_alloc(struct cxl_region *cxlr)
 	struct cxl_dax_region *cxlr_dax;
 	struct device *dev;
 
-	guard(rwsem_read)(&cxl_rwsem.region);
+	/* Publishes cxlr->cxlr_dax, which the event paths read under the read lock */
+	guard(rwsem_write)(&cxl_rwsem.region);
 	if (p->state != CXL_CONFIG_COMMIT)
 		return ERR_PTR(-ENXIO);
 
@@ -57,11 +74,14 @@ static struct cxl_dax_region *cxl_dax_region_alloc(struct cxl_region *cxlr)
 	if (!cxlr_dax)
 		return ERR_PTR(-ENOMEM);
 
+	xa_init_flags(&cxlr_dax->dc_extents, XA_FLAGS_ALLOC1);
+	ida_init(&cxlr_dax->tag_group_ida);
 	cxlr_dax->hpa_range.start = p->res->start;
 	cxlr_dax->hpa_range.end = p->res->end;
 
 	dev = &cxlr_dax->dev;
 	cxlr_dax->cxlr = cxlr;
+	cxlr->cxlr_dax = cxlr_dax;
 	device_initialize(dev);
 	lockdep_set_class(&dev->mutex, &cxl_dax_region_key);
 	device_set_pm_not_required(dev);
@@ -69,15 +89,69 @@ static struct cxl_dax_region *cxl_dax_region_alloc(struct cxl_region *cxlr)
 	dev->bus = &cxl_bus_type;
 	dev->type = &cxl_dax_region_type;
 
+	/* Parent of the untagged extents, see cxl_dax_untagged_add() */
+	dev = &cxlr_dax->untagged;
+	device_initialize(dev);
+	device_set_pm_not_required(dev);
+	dev->parent = &cxlr_dax->dev;
+	dev->type = &cxl_dax_untagged_type;
+	get_device(&cxlr_dax->dev);
+
 	return cxlr_dax;
+}
+
+/*
+ * Clearing cxlr->cxlr_dax here cannot race an Add or Release event.
+ * Event paths find cxlr_dax through cxl_dpa_to_region() and use it with
+ * cxl_rwsem.region held for read, from resolving an extent through
+ * onlining its group.  Taking the write lock waits those paths out, and
+ * later lookups find NULL, so the teardown that follows sees no events.
+ */
+static void cxlr_dax_unpublish(struct cxl_dax_region *cxlr_dax)
+{
+	guard(rwsem_write)(&cxl_rwsem.region);
+	cxlr_dax->cxlr->cxlr_dax = NULL;
 }
 
 static void cxlr_dax_unregister(void *_cxlr_dax)
 {
 	struct cxl_dax_region *cxlr_dax = _cxlr_dax;
 
+	cxlr_dax_unpublish(cxlr_dax);
+	/* Unbind first: the driver's teardown empties untagged and the groups */
+	device_release_driver(&cxlr_dax->dev);
+	if (device_is_registered(&cxlr_dax->untagged))
+		device_del(&cxlr_dax->untagged);
+	put_device(&cxlr_dax->untagged);
 	device_unregister(&cxlr_dax->dev);
 }
+
+/*
+ * The dax_region's driver may probe, and its extent scan run, before
+ * devm_cxl_add_dax_region() returns, so the untagged device is registered
+ * on first use instead.  Callers are serialized by the memdev's
+ * dc_chain.lock; a DC region has a single memdev behind it.
+ */
+int cxl_dax_untagged_add(struct cxl_dax_region *cxlr_dax)
+{
+	struct device *dev = &cxlr_dax->untagged;
+	int rc;
+
+	if (device_is_registered(dev))
+		return 0;
+
+	rc = dev_set_name(dev, "untagged");
+	if (rc)
+		return rc;
+	return device_add(dev);
+}
+
+DEFINE_FREE(unpublish_cxl_dax_region, struct cxl_dax_region *,
+	if (!IS_ERR_OR_NULL(_T)) {
+		cxlr_dax_unpublish(_T);
+		put_device(&_T->untagged);
+		put_device(&_T->dev);
+	})
 
 int devm_cxl_add_dax_region(struct cxl_region *cxlr)
 {
@@ -90,7 +164,7 @@ int devm_cxl_add_dax_region(struct cxl_region *cxlr)
 		return -EINVAL;
 	}
 
-	struct cxl_dax_region *cxlr_dax __free(put_cxl_dax_region) =
+	struct cxl_dax_region *cxlr_dax __free(unpublish_cxl_dax_region) =
 		cxl_dax_region_alloc(cxlr);
 	if (IS_ERR(cxlr_dax))
 		return PTR_ERR(cxlr_dax);
