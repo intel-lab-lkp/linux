@@ -3768,7 +3768,19 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
 		if (folio_test_swapcache(folio))
 			new_folio->swap.val = folio->swap.val + i;
 
-		/* Page flags must be visible before we make the page non-compound. */
+#ifdef CONFIG_MEMCG
+		/*
+		 * In the first tail page, memcg_data still holds
+		 * folio->_nr_pages. Lockless PFN walkers (page_cgroup_ino(),
+		 * page_owner) read memcg_data once the page is not a tail.
+		 */
+		new_folio->memcg_data = folio->memcg_data;
+#endif
+
+		/*
+		 * Page flags and memcg_data must be visible before we make the
+		 * page non-compound.
+		 */
 		smp_wmb();
 
 		/*
@@ -3803,9 +3815,6 @@ static void __split_folio_to_order(struct folio *folio, int old_order,
 			folio_set_young(new_folio);
 		if (folio_test_idle(folio))
 			folio_set_idle(new_folio);
-#ifdef CONFIG_MEMCG
-		new_folio->memcg_data = folio->memcg_data;
-#endif
 
 		folio_xchg_last_cpupid(new_folio, folio_last_cpupid(folio));
 	}

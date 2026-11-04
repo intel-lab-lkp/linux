@@ -375,12 +375,19 @@ struct cgroup_subsys_state *get_mem_cgroup_css_from_folio(const struct folio *fo
  */
 ino_t page_cgroup_ino(const struct page *page)
 {
+	const struct folio *folio;
 	struct mem_cgroup *memcg;
 	unsigned long ino = 0;
 
 	rcu_read_lock();
 	/* page_folio() is racy here, but the entire function is racy anyway */
-	memcg = folio_memcg_check(page_folio(page));
+	folio = page_folio(page);
+	/*
+	 * Order the memcg_data load after the compound_info load in
+	 * page_folio(). Pairs with smp_wmb() in __split_folio_to_order().
+	 */
+	smp_rmb();
+	memcg = folio_memcg_check(folio);
 
 	while (memcg && !css_is_online(&memcg->css))
 		memcg = parent_mem_cgroup(memcg);
