@@ -306,6 +306,10 @@ iommufd_viommu_alloc_hwpt_nested(struct iommufd_viommu *viommu, u32 flags,
 		return ERR_PTR(-EOPNOTSUPP);
 	if (!user_data->len)
 		return ERR_PTR(-EOPNOTSUPP);
+	if (!viommu->hwpt)
+		return ERR_PTR(-EOPNOTSUPP);
+	if (!viommu->iommu_dev)
+		return ERR_PTR(-EOPNOTSUPP);
 	if (!viommu->ops || !viommu->ops->alloc_domain_nested)
 		return ERR_PTR(-EOPNOTSUPP);
 
@@ -404,10 +408,12 @@ int iommufd_hwpt_alloc(struct iommufd_ucmd *ucmd)
 		struct iommufd_viommu *viommu;
 
 		viommu = container_of(pt_obj, struct iommufd_viommu, obj);
-		iommu_dev = iommufd_device_get_iommu_dev(idev);
-		if (!iommu_dev || viommu->iommu_dev != iommu_dev) {
-			rc = -EINVAL;
-			goto out_unlock;
+		if (viommu->iommu_dev) {
+			iommu_dev = iommufd_device_get_iommu_dev(idev);
+			if (!iommu_dev || viommu->iommu_dev != iommu_dev) {
+				rc = -EINVAL;
+				goto out_unlock;
+			}
 		}
 		hwpt_nested = iommufd_viommu_alloc_hwpt_nested(
 			viommu, cmd->flags, &user_data);
