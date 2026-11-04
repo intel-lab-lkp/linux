@@ -269,9 +269,6 @@ xprt_setup_rdma_bc(struct xprt_create *args)
 	xprt_get(xprt);
 	args->bc_xprt->xpt_bc_xprt = xprt;
 	xprt->bc_xprt = args->bc_xprt;
-
-	/* Final put for backchannel xprt is in __svc_rdma_free */
-	xprt_get(xprt);
 	return xprt;
 }
 
