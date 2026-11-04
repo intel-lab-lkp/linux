@@ -337,6 +337,12 @@ static ssize_t rpc_sysfs_xprt_switch_add_xprt_store(struct kobject *kobj,
 	if (!xprt)
 		goto out;
 
+	/* Backchannel setup would rebind the svc_xprt's xpt_bc_xprt. */
+	if (xprt->bc_xprt) {
+		count = -EOPNOTSUPP;
+		goto out_put_xprt;
+	}
+
 	xprt_create_args.ident = xprt->xprt_class->ident;
 	xprt_create_args.net = xprt->xprt_net;
 	xprt_create_args.dstaddr = (struct sockaddr *)&xprt->addr;
