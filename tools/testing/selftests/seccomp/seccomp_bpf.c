@@ -4485,6 +4485,7 @@ static void empty_handler(int signo)
  *      returning 0 from the trapped syscall without the FD installed.
  *   2. The supervisor can retry SECCOMP_IOCTL_NOTIF_ADDFD (or
  *      SECCOMP_IOCTL_NOTIF_SEND) instead of failing with -EINPROGRESS.
+ *   3. Poll waiters see a new EPOLLOUT edge for the notification.
  *
  * To deterministically hit the race window where the supervisor sleeps in
  * wait_for_completion_interruptible(&kaddfd.completion) after waking the
@@ -4504,7 +4505,10 @@ TEST(user_notification_addfd_send_interrupted)
 	 */
 	pid_t tracee_pid, sig_pid, parent_pid = getpid();
 	long ret;
-	int status, listener, memfd, err;
+	int epollfd, status, listener, memfd, err;
+	struct epoll_event event = {
+		.events = EPOLLOUT | EPOLLET,
+	};
 	struct seccomp_notif_addfd addfd = {};
 	struct seccomp_notif req = {};
 	struct sigaction sa = {};
@@ -4562,6 +4566,12 @@ TEST(user_notification_addfd_send_interrupted)
 
 	/* Wait for the tracee to trap in do_user_notif(). */
 	ASSERT_EQ(ioctl(listener, SECCOMP_IOCTL_NOTIF_RECV, &req), 0);
+
+	epollfd = epoll_create1(EPOLL_CLOEXEC);
+	ASSERT_GE(epollfd, 0);
+	ASSERT_EQ(epoll_ctl(epollfd, EPOLL_CTL_ADD, listener, &event), 0);
+	ASSERT_EQ(epoll_wait(epollfd, &event, 1, 1000), 1);
+	ASSERT_NE(event.events & EPOLLOUT, 0);
 
 	/*
 	 * Demote the tracee to SCHED_IDLE and promote the supervisor to
@@ -4630,6 +4640,8 @@ TEST(user_notification_addfd_send_interrupted)
 	EXPECT_EQ(waitpid(sig_pid, &status, 0), sig_pid);
 	EXPECT_EQ(true, WIFEXITED(status));
 	EXPECT_EQ(0, WEXITSTATUS(status));
+	EXPECT_EQ(epoll_wait(epollfd, &event, 1, 1000), 1);
+	EXPECT_NE(event.events & EPOLLOUT, 0);
 
 	nanosleep(&delay, NULL);
 
@@ -4645,6 +4657,7 @@ TEST(user_notification_addfd_send_interrupted)
 	EXPECT_EQ(true, WIFEXITED(status));
 	EXPECT_EQ(0, WEXITSTATUS(status));
 
+	close(epollfd);
 	close(listener);
 	close(memfd);
 }

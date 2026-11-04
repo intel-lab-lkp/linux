@@ -1824,8 +1824,10 @@ static long seccomp_notify_addfd(struct seccomp_filter *filter,
 		ret = kaddfd.ret;
 	} else {
 		list_del(&kaddfd.list);
-		if (addfd.flags & SECCOMP_ADDFD_FLAG_SEND)
+		if (addfd.flags & SECCOMP_ADDFD_FLAG_SEND) {
 			knotif->state = SECCOMP_NOTIFY_SENT;
+			wake_up_poll(&filter->wqh, EPOLLOUT | EPOLLWRNORM);
+		}
 	}
 
 out_unlock:
