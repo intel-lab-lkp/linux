@@ -6,6 +6,7 @@
 #ifndef AIROHA_OFFLOAD_H
 #define AIROHA_OFFLOAD_H
 
+#include <linux/devfreq.h>
 #include <linux/skbuff.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
@@ -167,6 +168,8 @@ struct airoha_npu {
 #if (IS_BUILTIN(CONFIG_NET_AIROHA_NPU) || IS_MODULE(CONFIG_NET_AIROHA_NPU))
 	struct device *dev;
 	struct regmap *regmap;
+	struct clk *clk;
+	struct devfreq_passive_data gov_data;
 
 	struct airoha_npu_core {
 		struct airoha_npu *npu;

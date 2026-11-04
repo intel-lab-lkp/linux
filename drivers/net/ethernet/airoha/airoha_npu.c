@@ -12,6 +12,8 @@
 #include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/regmap.h>
+#include <linux/pm_opp.h>
+#include <linux/clk.h>
 
 #include "airoha_eth.h"
 
@@ -656,6 +658,62 @@ void airoha_npu_put(struct airoha_npu *npu)
 }
 EXPORT_SYMBOL_GPL(airoha_npu_put);
 
+static int airoha_npu_devfreq_get_cur_freq(struct device *dev, unsigned long *freq)
+{
+	struct airoha_npu *npu = dev_get_drvdata(dev);
+
+	*freq = clk_get_rate(npu->clk);
+
+	return 0;
+}
+
+static int airoha_npu_devfreq_target(struct device *dev, unsigned long *freq,
+				     u32 flags)
+{
+	struct airoha_npu *npu = dev_get_drvdata(dev);
+
+	return clk_set_rate(npu->clk, *freq);
+}
+
+static int airoha_npu_devfreq_get_dev_status(struct device *dev,
+					     struct devfreq_dev_status *stat)
+{
+	struct airoha_npu *npu = dev_get_drvdata(dev);
+
+	stat->busy_time = 0;
+	stat->total_time = 0;
+	stat->current_frequency = clk_get_rate(npu->clk);
+
+	return 0;
+}
+
+static struct devfreq_dev_profile airoha_npu_devfreq_profile = {
+	.target = airoha_npu_devfreq_target,
+	.get_dev_status = airoha_npu_devfreq_get_dev_status,
+	.get_cur_freq = airoha_npu_devfreq_get_cur_freq
+};
+
+static int airoha_npu_devfreq_probe(struct device *dev)
+{
+	struct airoha_npu *npu = dev_get_drvdata(dev);
+	struct devfreq *devfreq;
+	int ret;
+
+	npu->clk = devm_clk_get_enabled(dev, NULL);
+	if (IS_ERR(npu->clk))
+		return dev_err_probe(dev, PTR_ERR(npu->clk), "failed to get clk\n");
+
+	ret = devm_pm_opp_of_add_table(dev);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to parse NPU freq thresholds\n");
+
+	npu->gov_data.parent_type = CPUFREQ_PARENT_DEV;
+	devfreq = devm_devfreq_add_device(dev, &airoha_npu_devfreq_profile,
+					  DEVFREQ_GOV_PASSIVE, &npu->gov_data);
+
+	return PTR_ERR_OR_ZERO(devfreq);
+}
+
 static const struct airoha_npu_soc_data en7581_npu_soc_data = {
 	.fw_rv32 = {
 		.name = NPU_EN7581_FIRMWARE_RV32,
@@ -803,8 +861,9 @@ static int airoha_npu_probe(struct platform_device *pdev)
 			 (val >> 16) & 0xffff, val & 0xffff);
 
 	platform_set_drvdata(pdev, npu);
+	dev_set_drvdata(dev, npu);
 
-	return 0;
+	return airoha_npu_devfreq_probe(dev);
 }
 
 static struct platform_driver airoha_npu_driver = {
