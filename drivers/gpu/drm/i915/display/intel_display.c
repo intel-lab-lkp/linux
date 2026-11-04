@@ -5515,6 +5515,17 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 
 	PIPE_CONF_CHECK_I(min_hblank);
 
+	PIPE_CONF_CHECK_BOOL(dp_symbol_tg.enable);
+	if (pipe_config->dp_symbol_tg.enable) {
+		PIPE_CONF_CHECK_I(dp_symbol_tg.hactive);
+		PIPE_CONF_CHECK_I(dp_symbol_tg.htotal);
+		PIPE_CONF_CHECK_I(dp_symbol_tg.chunk_size);
+		PIPE_CONF_CHECK_LLI(dp_symbol_tg.data_m[0]);
+		PIPE_CONF_CHECK_LLI(dp_symbol_tg.data_m[1]);
+		PIPE_CONF_CHECK_LLI(dp_symbol_tg.data_n[0]);
+		PIPE_CONF_CHECK_LLI(dp_symbol_tg.data_n[1]);
+	}
+
 	if (HAS_DOUBLE_BUFFERED_M_N(display)) {
 		if (!fastset || !pipe_config->update_m_n)
 			PIPE_CONF_CHECK_M_N(dp_m_n);
