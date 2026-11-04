@@ -13,6 +13,7 @@
 #include <net/addrconf.h>
 #include <net/ieee80211_radiotap.h>
 #include <net/ipv6.h>
+#include <brcm_hw_ids.h>
 #include <brcmu_utils.h>
 #include <brcmu_wifi.h>
 
@@ -101,6 +102,15 @@ void brcmf_configure_arp_nd_offload(struct brcmf_if *ifp, bool enable)
 	if (enable && brcmf_is_apmode_operating(ifp->drvr->wiphy)) {
 		brcmf_dbg(TRACE, "Skip ARP/ND offload enable when soft AP is running\n");
 		return;
+	}
+
+	/* With ND offload on while awake, the Apple firmware for the BCM4364
+	 * makes IPv6 downloads drop to low rates. macOS runs ARP and ND
+	 * offload only in sleep, keep both off on this chip.
+	 */
+	if (enable && ifp->drvr->bus_if->chip == BRCM_CC_4364_CHIP_ID) {
+		brcmf_dbg(TRACE, "Skip ARP/ND offload enable on BCM4364\n");
+		enable = false;
 	}
 
 	if (enable)
