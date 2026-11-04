@@ -42,10 +42,10 @@ static const struct brcmf_feat_fwcap brcmf_fwcap_map[] = {
 	{ BRCMF_FEAT_MONITOR_FLAG, "rtap" },
 	{ BRCMF_FEAT_MONITOR_FMT_RADIOTAP, "rtap" },
 	{ BRCMF_FEAT_DOT11H, "802.11h" },
-	{ BRCMF_FEAT_SAE, "sae " },
+	{ BRCMF_FEAT_SAE, "sae" },
 	{ BRCMF_FEAT_FWAUTH, "idauth" },
 	{ BRCMF_FEAT_SAE_EXT, "sae_ext" },
-	{ BRCMF_FEAT_FBT, "fbt " },
+	{ BRCMF_FEAT_FBT, "fbt" },
 	{ BRCMF_FEAT_OKC, "okc" },
 };
 
@@ -231,6 +231,7 @@ static void brcmf_feat_firmware_capabilities(struct brcmf_if *ifp)
 {
 	struct brcmf_pub *drvr = ifp->drvr;
 	char caps[MAX_CAPS_BUFFER_SIZE];
+	char *cap, *next;
 	enum brcmf_feat_id id;
 	int i, err;
 
@@ -240,10 +241,15 @@ static void brcmf_feat_firmware_capabilities(struct brcmf_if *ifp)
 		return;
 	}
 
+	caps[sizeof(caps) - 1] = '\0';
 	brcmf_dbg(INFO, "[ %s]\n", caps);
 
-	for (i = 0; i < ARRAY_SIZE(brcmf_fwcap_map); i++) {
-		if (strnstr(caps, brcmf_fwcap_map[i].fwcap_id, sizeof(caps))) {
+	/* Match whole words, "hp2p" must not enable P2P */
+	next = caps;
+	while ((cap = strsep(&next, "\n "))) {
+		for (i = 0; i < ARRAY_SIZE(brcmf_fwcap_map); i++) {
+			if (strcmp(cap, brcmf_fwcap_map[i].fwcap_id))
+				continue;
 			id = brcmf_fwcap_map[i].feature;
 			brcmf_dbg(INFO, "enabling feature: %s\n",
 				  brcmf_feat_names[id]);
