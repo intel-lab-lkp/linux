@@ -2156,6 +2156,19 @@ static int uvc_register_terms(struct uvc_device *dev,
 	return 0;
 }
 
+static int uvc_has_video_node(struct uvc_device *dev)
+{
+	struct uvc_streaming *stream;
+
+	list_for_each_entry(stream, &dev->streams, list)
+		if (video_is_registered(&stream->queue.vdev))
+			return 0;
+
+	dev_info(&dev->intf->dev,
+		 "No usable streaming interface found\n");
+	return -ENODEV;
+}
+
 static int uvc_register_chains(struct uvc_device *dev)
 {
 	struct uvc_video_chain *chain;
@@ -2174,7 +2187,7 @@ static int uvc_register_chains(struct uvc_device *dev)
 #endif
 	}
 
-	return 0;
+	return uvc_has_video_node(dev);
 }
 
 /* ------------------------------------------------------------------------
