@@ -7,12 +7,14 @@
  * Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  * Copyright (C) 2015-2018 Linaro Ltd.
  */
+#include <linux/device.h>
 #include <linux/slab.h>
 #include <media/media-entity.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-mc.h>
+#include <media/videobuf2-dma-contig.h>
 #include <media/videobuf2-dma-sg.h>
 
 #include "camss-video.h"
@@ -146,6 +148,48 @@ static int video_queue_setup(struct vb2_queue *q,
 	return 0;
 }
 
+/*
+ * The VFE write masters take a single base address per plane and write the
+ * whole plane from there, so every plane must be contiguous in the device
+ * address space. Without an IOMMU the buffers come from vb2_dma_contig, which
+ * guarantees that. With an IOMMU the scatterlist mapping may still be split
+ * in several DMA segments (max_seg_size): accept it only when the segments
+ * follow each other in the IOVA space.
+ */
+static int video_buf_plane_addr(struct camss_video *video,
+				struct vb2_buffer *vb, unsigned int plane,
+				dma_addr_t *addr)
+{
+	struct scatterlist *sg;
+	struct sg_table *sgt;
+	dma_addr_t next;
+	unsigned int i;
+
+	if (video->vb2_q.mem_ops == &vb2_dma_contig_memops) {
+		*addr = vb2_dma_contig_plane_dma_addr(vb, plane);
+		return 0;
+	}
+
+	sgt = vb2_dma_sg_plane_desc(vb, plane);
+	if (!sgt || !sgt->nents)
+		return -EFAULT;
+
+	next = sg_dma_address(sgt->sgl);
+	for_each_sgtable_dma_sg(sgt, sg, i) {
+		if (sg_dma_address(sg) != next) {
+			dev_err(video->camss->dev,
+				"Plane %u is not contiguous in DMA space\n",
+				plane);
+			return -EINVAL;
+		}
+		next += sg_dma_len(sg);
+	}
+
+	*addr = sg_dma_address(sgt->sgl);
+
+	return 0;
+}
+
 static int video_buf_init(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
@@ -154,15 +198,13 @@ static int video_buf_init(struct vb2_buffer *vb)
 						   vb);
 	const struct v4l2_pix_format_mplane *format =
 						&video->active_fmt.fmt.pix_mp;
-	struct sg_table *sgt;
 	unsigned int i;
+	int ret;
 
 	for (i = 0; i < format->num_planes; i++) {
-		sgt = vb2_dma_sg_plane_desc(vb, i);
-		if (!sgt)
-			return -EFAULT;
-
-		buffer->addr[i] = sg_dma_address(sgt->sgl);
+		ret = video_buf_plane_addr(video, vb, i, &buffer->addr[i]);
+		if (ret < 0)
+			return ret;
 	}
 
 	if (format->pixelformat == V4L2_PIX_FMT_NV12 ||
@@ -699,7 +741,15 @@ int msm_video_register(struct camss_video *video, struct v4l2_device *v4l2_dev,
 
 	q = &video->vb2_q;
 	q->drv_priv = video;
-	q->mem_ops = &vb2_dma_sg_memops;
+	/*
+	 * Without an IOMMU a scatter-gather buffer is physically scattered and
+	 * the write masters, which only take a base address, would run past
+	 * its first segment. Use physically contiguous (CMA) buffers instead.
+	 */
+	if (device_iommu_mapped(video->camss->dev))
+		q->mem_ops = &vb2_dma_sg_memops;
+	else
+		q->mem_ops = &vb2_dma_contig_memops;
 	q->ops = &msm_video_vb2_q_ops;
 	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	q->io_modes = VB2_DMABUF | VB2_MMAP | VB2_READ;
