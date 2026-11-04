@@ -744,8 +744,9 @@ ice_vfhw_mac_add(struct ice_vf *vf, struct virtchnl_ether_addr *vc_ether_addr)
  * ice_is_mc_lldp_eth_addr - check if the given MAC is a multicast LLDP address
  * @mac: address to check
  *
- * Return: true if the address is one of the three possible LLDP multicast
- *	   addresses, false otherwise.
+ * Return: true if the address is one of the LLDP multicast addresses
+ *	   handled by this driver (Nearest Bridge or Nearest Customer Bridge),
+ *	   false otherwise.
  */
 static bool ice_is_mc_lldp_eth_addr(const u8 *mac)
 {
@@ -754,7 +755,7 @@ static bool ice_is_mc_lldp_eth_addr(const u8 *mac)
 	if (memcmp(mac, lldp_mac_base, sizeof(lldp_mac_base)))
 		return false;
 
-	return (mac[5] == 0x0e || mac[5] == 0x03 || mac[5] == 0x00);
+	return (mac[5] == 0x0e || mac[5] == 0x00);
 }
 
 /**
