@@ -619,8 +619,14 @@ int cxl_dpa_free(struct cxl_endpoint_decoder *cxled)
 	return 0;
 }
 
+/*
+ * Select the first partition of @mode. For dynamic capacity the shareable
+ * and read-only flags must match exactly as well, so each selector names
+ * one kind of partition.
+ */
 int cxl_dpa_set_part(struct cxl_endpoint_decoder *cxled,
-		     enum cxl_partition_mode mode)
+		     enum cxl_partition_mode mode, bool shareable,
+		     bool read_only)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
@@ -631,9 +637,16 @@ int cxl_dpa_set_part(struct cxl_endpoint_decoder *cxled,
 	if (cxled->cxld.flags & CXL_DECODER_F_ENABLE)
 		return -EBUSY;
 
-	for (part = 0; part < cxlds->nr_partitions; part++)
-		if (cxlds->part[part].mode == mode)
-			break;
+	for (part = 0; part < cxlds->nr_partitions; part++) {
+		struct cxl_dpa_partition *p = &cxlds->part[part];
+
+		if (p->mode != mode)
+			continue;
+		if (mode == CXL_PARTMODE_DYNAMIC_RAM &&
+		    (p->shareable != shareable || p->read_only != read_only))
+			continue;
+		break;
+	}
 
 	if (part >= cxlds->nr_partitions) {
 		dev_dbg(dev, "unsupported mode: %d\n", mode);

@@ -6,6 +6,7 @@
 
 #include <cxl/mailbox.h>
 #include <linux/rwsem.h>
+#include <cxlmem.h>
 
 extern const struct device_type cxl_nvdimm_bridge_type;
 extern const struct device_type cxl_nvdimm_type;
@@ -17,6 +18,25 @@ enum cxl_detach_mode {
 	DETACH_ONLY,
 	DETACH_INVALIDATE,
 };
+
+static inline struct cxl_memdev_state *
+cxled_to_mds(struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+
+	return to_cxl_memdev_state(cxlmd->cxlds);
+}
+
+/* Type-2 devices have no memdev state; nothing else leaves @cxlds NULL here */
+static inline bool cxled_dcd_enabled(struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_memdev_state *mds = cxled_to_mds(cxled);
+
+	return mds && cxl_dcd_supported(mds);
+}
+
+const char *cxl_dc_mode_name(bool shareable, bool read_only);
+int cxl_dc_mode_parse(const char *buf, bool *shareable, bool *read_only);
 
 #ifdef CONFIG_CXL_REGION
 
@@ -104,7 +124,8 @@ void __iomem *devm_cxl_iomap_block(struct device *dev, resource_size_t addr,
 
 struct dentry *cxl_debugfs_create_dir(const char *dir);
 int cxl_dpa_set_part(struct cxl_endpoint_decoder *cxled,
-		     enum cxl_partition_mode mode);
+		     enum cxl_partition_mode mode, bool shareable,
+		     bool read_only);
 struct cxl_memdev_state;
 int cxl_mem_get_partition_info(struct cxl_memdev_state *mds);
 int cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, u64 size);

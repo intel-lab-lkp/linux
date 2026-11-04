@@ -203,6 +203,40 @@ static ssize_t target_list_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(target_list);
 
+/* Dynamic capacity selectors: the flags name one kind of DC partition */
+static const struct {
+	const char *name;
+	bool shareable;
+	bool read_only;
+} cxl_dc_modes[] = {
+	{ "dynamic_ram",		false,	false },
+	{ "dynamic_ram_shared",		true,	false },
+	{ "dynamic_ram_ro",		false,	true },
+	{ "dynamic_ram_shared_ro",	true,	true },
+};
+
+const char *cxl_dc_mode_name(bool shareable, bool read_only)
+{
+	for (int i = 0; i < ARRAY_SIZE(cxl_dc_modes); i++)
+		if (cxl_dc_modes[i].shareable == shareable &&
+		    cxl_dc_modes[i].read_only == read_only)
+			return cxl_dc_modes[i].name;
+	return "";
+}
+
+/* Map a dynamic_ram selector to its partition flags; -EINVAL if unknown */
+int cxl_dc_mode_parse(const char *buf, bool *shareable, bool *read_only)
+{
+	for (int i = 0; i < ARRAY_SIZE(cxl_dc_modes); i++) {
+		if (!sysfs_streq(buf, cxl_dc_modes[i].name))
+			continue;
+		*shareable = cxl_dc_modes[i].shareable;
+		*read_only = cxl_dc_modes[i].read_only;
+		return 0;
+	}
+	return -EINVAL;
+}
+
 static ssize_t mode_show(struct device *dev, struct device_attribute *attr,
 			 char *buf)
 {
@@ -215,6 +249,9 @@ static ssize_t mode_show(struct device *dev, struct device_attribute *attr,
 
 	if (part < 0)
 		desc = "none";
+	else if (cxlds->part[part].mode == CXL_PARTMODE_DYNAMIC_RAM)
+		desc = cxl_dc_mode_name(cxlds->part[part].shareable,
+					cxlds->part[part].read_only);
 	else
 		desc = cxlds->part[part].res.name;
 
@@ -225,17 +262,25 @@ static ssize_t mode_store(struct device *dev, struct device_attribute *attr,
 			  const char *buf, size_t len)
 {
 	struct cxl_endpoint_decoder *cxled = to_cxl_endpoint_decoder(dev);
+	bool shareable = false, read_only = false;
 	enum cxl_partition_mode mode;
 	ssize_t rc;
 
-	if (sysfs_streq(buf, "pmem"))
+	if (sysfs_streq(buf, "pmem")) {
 		mode = CXL_PARTMODE_PMEM;
-	else if (sysfs_streq(buf, "ram"))
+	} else if (sysfs_streq(buf, "ram")) {
 		mode = CXL_PARTMODE_RAM;
-	else
-		return -EINVAL;
+	} else {
+		if (cxl_dc_mode_parse(buf, &shareable, &read_only))
+			return -EINVAL;
+		mode = CXL_PARTMODE_DYNAMIC_RAM;
+	}
 
-	rc = cxl_dpa_set_part(cxled, mode);
+	/* The DC partition may outlive DCD support; refuse it when disabled */
+	if (mode == CXL_PARTMODE_DYNAMIC_RAM && !cxled_dcd_enabled(cxled))
+		return -ENXIO;
+
+	rc = cxl_dpa_set_part(cxled, mode, shareable, read_only);
 	if (rc)
 		return rc;
 
