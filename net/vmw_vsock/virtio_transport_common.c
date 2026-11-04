@@ -1468,8 +1468,8 @@ void virtio_transport_release(struct vsock_sock *vsk)
 EXPORT_SYMBOL_GPL(virtio_transport_release);
 
 static int
-virtio_transport_recv_connecting(struct sock *sk,
-				 struct sk_buff *skb)
+virtio_transport_recv_connecting(struct sock *sk, struct sk_buff *skb,
+				 struct virtio_transport *t, struct net *net)
 {
 	struct virtio_vsock_hdr *hdr = virtio_vsock_hdr(skb);
 	struct vsock_sock *vsk = vsock_sk(sk);
@@ -1478,9 +1478,14 @@ virtio_transport_recv_connecting(struct sock *sk,
 
 	switch (le16_to_cpu(hdr->op)) {
 	case VIRTIO_VSOCK_OP_RESPONSE:
-		sk->sk_state = TCP_ESTABLISHED;
+		if (!vsock_maybe_set_connected(vsk)) {
+			virtio_transport_reset_no_sock(t, skb, net);
+			skerr = ECONNRESET;
+			err = -ENETUNREACH;
+			goto close;
+		}
+
 		sk->sk_socket->state = SS_CONNECTED;
-		vsock_insert_connected(vsk);
 		sk->sk_state_change(sk);
 		break;
 	case VIRTIO_VSOCK_OP_INVALID:
@@ -1498,6 +1503,7 @@ virtio_transport_recv_connecting(struct sock *sk,
 
 destroy:
 	virtio_transport_reset(vsk, skb);
+close:
 	sk->sk_state = TCP_CLOSE;
 	sk->sk_err = skerr;
 	sk_error_report(sk);
@@ -1702,7 +1708,7 @@ static bool virtio_transport_space_update(struct sock *sk,
 /* Handle server socket */
 static int
 virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
-			     struct virtio_transport *t)
+			     struct virtio_transport *t, struct net *net)
 {
 	struct virtio_vsock_hdr *hdr = virtio_vsock_hdr(skb);
 	struct vsock_sock *vsk = vsock_sk(sk);
@@ -1711,12 +1717,12 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 	int ret;
 
 	if (le16_to_cpu(hdr->op) != VIRTIO_VSOCK_OP_REQUEST) {
-		virtio_transport_reset_no_sock(t, skb, sock_net(sk));
+		virtio_transport_reset_no_sock(t, skb, net);
 		return -EINVAL;
 	}
 
 	if (sk_acceptq_is_full(sk)) {
-		virtio_transport_reset_no_sock(t, skb, sock_net(sk));
+		virtio_transport_reset_no_sock(t, skb, net);
 		return -ENOMEM;
 	}
 
@@ -1724,19 +1730,17 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 	 * Subsequent enqueues would lead to a memory leak.
 	 */
 	if (sk->sk_shutdown == SHUTDOWN_MASK) {
-		virtio_transport_reset_no_sock(t, skb, sock_net(sk));
+		virtio_transport_reset_no_sock(t, skb, net);
 		return -ESHUTDOWN;
 	}
 
 	child = vsock_create_connected(sk);
 	if (!child) {
-		virtio_transport_reset_no_sock(t, skb, sock_net(sk));
+		virtio_transport_reset_no_sock(t, skb, net);
 		return -ENOMEM;
 	}
 
 	lock_sock_nested(child, SINGLE_DEPTH_NESTING);
-
-	child->sk_state = TCP_ESTABLISHED;
 
 	vchild = vsock_sk(child);
 	vsock_addr_init(&vchild->local_addr, le64_to_cpu(hdr->dst_cid),
@@ -1750,7 +1754,7 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 	 */
 	if (ret || vchild->transport != &t->transport) {
 		release_sock(child);
-		virtio_transport_reset_no_sock(t, skb, sock_net(sk));
+		virtio_transport_reset_no_sock(t, skb, net);
 		sock_put(child);
 		return ret;
 	}
@@ -1758,7 +1762,13 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 	if (virtio_transport_space_update(child, skb))
 		child->sk_write_space(child);
 
-	vsock_insert_connected(vchild);
+	if (!vsock_maybe_set_connected(vchild)) {
+		release_sock(child);
+		virtio_transport_reset_no_sock(t, skb, net);
+		sock_put(child);
+		return -ENETUNREACH;
+	}
+
 	vsock_enqueue_accept(sk, child);
 	virtio_transport_send_response(vchild, skb);
 
@@ -1855,11 +1865,11 @@ void virtio_transport_recv_pkt(struct virtio_transport *t,
 
 	switch (sk->sk_state) {
 	case TCP_LISTEN:
-		virtio_transport_recv_listen(sk, skb, t);
+		virtio_transport_recv_listen(sk, skb, t, net);
 		kfree_skb(skb);
 		break;
 	case TCP_SYN_SENT:
-		virtio_transport_recv_connecting(sk, skb);
+		virtio_transport_recv_connecting(sk, skb, t, net);
 		kfree_skb(skb);
 		break;
 	case TCP_ESTABLISHED:
