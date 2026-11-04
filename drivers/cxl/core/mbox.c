@@ -1747,6 +1747,109 @@ static int cxl_add_pending(struct cxl_memdev_state *mds,
 				    pending, total_accepted);
 }
 
+/*
+ * Tear @group down and queue every member on @acks.  Members are queued
+ * before rm_tag_group() frees them; on failure nothing is queued and the
+ * group stays intact for the device to retry.  Returns the number queued.
+ */
+static int cxl_release_group(struct cxl_region *cxlr,
+			     struct cxl_dc_tag_group *group,
+			     struct list_head *acks)
+{
+	LIST_HEAD(members);
+	int cnt, rc;
+
+	cnt = stage_group_release(group, &members);
+	if (cnt < 0)
+		return cnt;
+
+	rc = cxl_release_tag_group(cxlr, group);
+	if (rc) {
+		drop_extent_group(&members);
+		return rc;
+	}
+
+	list_splice_tail(&members, acks);
+	return cnt;
+}
+
+/*
+ * Flush a staged Release chain.
+ *
+ * A tag group is one logical allocation: naming any extent of a group
+ * releases the whole group, and members the chain did not name go back as
+ * an unsolicited release (CXL r4.0 9.13.3).  Each extent is decided on its
+ * own, so a group that refuses teardown, or an extent that overlaps owned
+ * capacity without naming an owned extent, is held for the device to retry
+ * while the rest proceed.  Extents the host is not tracking at all (no
+ * region, no dax region, or nothing owned in range) hold no capacity here
+ * and are acknowledged as named.
+ *
+ * Everything released is acknowledged together in the Release DC response
+ * once the chain is flushed (split across More-chained commands when the
+ * list outgrows the mailbox payload), so a sharable tag is always returned
+ * whole (CXL r4.0 8.2.10.9.9.4).
+ */
+static int cxl_rm_pending(struct cxl_memdev_state *mds)
+{
+	struct list_head *pending = &mds->dc_chain.pending_extents;
+	struct device *dev = mds->cxlds.dev;
+	struct cxl_extent_list_node *pos, *tmp;
+	LIST_HEAD(acks);
+	int cnt = 0, rc;
+
+	/* cxl_resolve_extent() -> cxl_dpa_to_region() walks every decoder's dpa_res */
+	guard(rwsem_read)(&cxl_rwsem.region);
+	guard(rwsem_read)(&cxl_rwsem.dpa);
+
+	/* Untracked first, before a teardown below makes a sibling look untracked */
+	list_for_each_entry_safe(pos, tmp, pending, list) {
+		struct cxl_dc_tag_group *group;
+		struct cxl_region *cxlr;
+
+		if (cxl_resolve_extent(mds, pos->extent, &cxlr, &group) != -ENXIO)
+			continue;
+		list_move_tail(&pos->list, &acks);
+		cnt++;
+	}
+
+	list_for_each_entry(pos, pending, list) {
+		struct cxl_dc_tag_group *group;
+		struct cxl_region *cxlr;
+		struct range r;
+
+		rc = cxl_resolve_extent(mds, pos->extent, &cxlr, &group);
+		if (rc == -ENXIO)	/* sibling of a group released above */
+			continue;
+		if (rc) {
+			r.start = le64_to_cpu(pos->extent->start_dpa);
+			r.end = r.start + le64_to_cpu(pos->extent->length) - 1;
+			dev_warn_ratelimited(dev,
+					     "DC release %pra (%pUb) names no owned extent; holding for retry\n",
+					     &r, pos->extent->uuid);
+			continue;
+		}
+
+		rc = cxl_release_group(cxlr, group, &acks);
+		if (rc < 0) {
+			dev_dbg(dev, "DC release of tag %pUb deferred: %d\n",
+				&group->uuid, rc);
+			continue;
+		}
+		cnt += rc;
+	}
+
+	/* Updated Extent List Size shall be > 0 (CXL r4.0 Table 8-352) */
+	rc = 0;
+	if (cnt)
+		rc = cxl_send_dc_response(mds, CXL_MBOX_OP_RELEASE_DC, &acks,
+					  cnt);
+
+	/* The caller frees @pending; hand the acknowledged entries back */
+	list_splice(&acks, pending);
+	return rc;
+}
+
 static int handle_dcd_chain_event(struct cxl_memdev_state *mds,
 				  struct cxl_event_dcd *event)
 {
@@ -1793,10 +1896,8 @@ static int handle_dcd_chain_event(struct cxl_memdev_state *mds,
 
 	if (event->event_type == DCD_ADD_CAPACITY)
 		rc = cxl_add_pending(mds, &chain->pending_extents);
-	else	/* Nothing is tracked yet: acknowledge every release */
-		rc = cxl_send_dc_response(mds, CXL_MBOX_OP_RELEASE_DC,
-					  &chain->pending_extents,
-					  list_count_nodes(&chain->pending_extents));
+	else
+		rc = cxl_rm_pending(mds);
 	clear_pending_extents(mds);
 	return rc;
 }
