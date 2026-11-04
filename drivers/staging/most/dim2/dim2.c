@@ -156,6 +156,10 @@ void dimcb_on_error(u8 error_id, const char *error_message)
  * @hdm_ch: channel specific data
  *
  * Transfer a buffer from pending_list if the channel is ready
+ *
+ * Return: 0 on success, -EINVAL if hdm_ch is not initialized, -EAGAIN if hdm_ch pending_list is
+ * empty, dim_channel is not ready or there is not enough DBR space, -EFAULT if first MBO bus
+ * address is 0 or dim_channel fails to start
  */
 static int try_start_dim_transfer(struct hdm_channel *hdm_ch)
 {
@@ -211,6 +215,8 @@ static int try_start_dim_transfer(struct hdm_channel *hdm_ch)
  * @data: private data
  *
  * Wait for network status and deliver it to mostcore once it is received
+ *
+ * Return: 0 when the thread stops without error.
  */
 static int deliver_netinfo_thread(void *data)
 {
@@ -392,6 +398,9 @@ static irqreturn_t dim2_task_irq(int irq, void *_dev)
  *
  * Acknowledge the interrupt and service each initialized channel,
  * if needed, in task context.
+ *
+ * Return: IRQ_WAKE_THREAD after acknowledging the interrupt and servicing each
+ * initialized channel.
  */
 static irqreturn_t dim2_ahb_isr(int irq, void *_dev)
 {
@@ -442,7 +451,11 @@ static void complete_all_mbos(struct list_head *head)
  * @ccfg: structure that holds the configuration information
  *
  * Receives configuration information from mostcore and initialize
- * the corresponding channel. Return 0 on success, negative on failure.
+ * the corresponding channel.
+ *
+ * Return: 0 on success, -EINVAL if ch_idx is negative or bigger than or equal to DMA_CHANNELS, the
+ * buffer size of ccfg is too small, sub-buffer size of ccfg is invalid or bad channel type, -EPERM
+ * if hdm_ch is initialized or -ENODEV if init_ctrl_async returns any error value.
  */
 static int configure_channel(struct most_interface *most_iface, int ch_idx,
 			     struct most_channel_config *ccfg)
@@ -561,7 +574,10 @@ static int configure_channel(struct most_interface *most_iface, int ch_idx,
  * @mbo: pointer to the buffer object
  *
  * Push the buffer into pending_list and try to transfer one buffer from
- * pending_list. Return 0 on success, negative on failure.
+ * pending_list.
+ *
+ * Return: 0 on success, -EINVAL if ch_idx is negative or bigger than or equal to DMA_CHANNELS,
+ * -EPERM if hdm_ch is not initialized or -EFAULT if MBO bus address is 0.
  */
 static int enqueue(struct most_interface *most_iface, int ch_idx,
 		   struct mbo *mbo)
@@ -637,7 +653,10 @@ static void request_netinfo(struct most_interface *most_iface, int ch_idx,
  * @ch_idx: corresponding channel ID
  *
  * Destroy a channel and complete all the buffers in both started_list &
- * pending_list. Return 0 on success, negative on failure.
+ * pending_list.
+ *
+ * Return: 0 on success, -EINVAL if ch_idx is negative or bigger than or equal to DMA_CHANNELS,
+ * -EPERM if hdm_ch is not initialized or -EFAULT if HAL failed to close channel.
  */
 static int poison_channel(struct most_interface *most_iface, int ch_idx)
 {
@@ -710,6 +729,8 @@ static struct {
  *
  * By success stores one of the CLK_{NUMBER}FS in the *val and returns 0,
  * otherwise returns -EINVAL.
+ *
+ * Return: 0 on success, -EINVAL if the string in clock_speed does not match any in clk_mt.
  */
 static int get_dim2_clk_speed(const char *clock_speed, u8 *val)
 {
@@ -746,7 +767,8 @@ static void dim2_release(struct device *d)
  * @pdev: platform device structure
  *
  * Register the dim2 interface with mostcore and initialize it.
- * Return 0 on success, negative on failure.
+ *
+ * Return: 0 on success, negative on failure.
  */
 static int dim2_probe(struct platform_device *pdev)
 {
