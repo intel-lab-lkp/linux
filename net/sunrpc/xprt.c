@@ -2076,18 +2076,29 @@ struct rpc_xprt *xprt_create_transport(struct xprt_create *args)
 {
 	struct rpc_xprt	*xprt;
 	const struct xprt_class *t;
+	char *servername;
+
+	if (strlen(args->servername) > RPC_MAXNETNAMELEN)
+		return ERR_PTR(-EINVAL);
+	servername = kstrdup(args->servername, GFP_KERNEL);
+	if (!servername)
+		return ERR_PTR(-ENOMEM);
 
 	t = xprt_class_find_by_ident(args->ident);
 	if (!t) {
 		dprintk("RPC: transport (%d) not supported\n", args->ident);
+		kfree(servername);
 		return ERR_PTR(-EIO);
 	}
 
 	xprt = t->setup(args);
 	xprt_class_release(t);
 
-	if (IS_ERR(xprt))
+	if (IS_ERR(xprt)) {
+		kfree(servername);
 		goto out;
+	}
+	xprt->servername = servername;
 	if (args->flags & XPRT_CREATE_NO_IDLE_TIMEOUT)
 		xprt->idle_timeout = 0;
 	INIT_WORK(&xprt->task_cleanup, xprt_autoclose);
@@ -2095,16 +2106,6 @@ struct rpc_xprt *xprt_create_transport(struct xprt_create *args)
 		timer_setup(&xprt->timer, xprt_init_autodisconnect, 0);
 	else
 		timer_setup(&xprt->timer, NULL, 0);
-
-	if (strlen(args->servername) > RPC_MAXNETNAMELEN) {
-		xprt_destroy(xprt);
-		return ERR_PTR(-EINVAL);
-	}
-	xprt->servername = kstrdup(args->servername, GFP_KERNEL);
-	if (xprt->servername == NULL) {
-		xprt_destroy(xprt);
-		return ERR_PTR(-ENOMEM);
-	}
 
 	rpc_xprt_debugfs_register(xprt);
 
