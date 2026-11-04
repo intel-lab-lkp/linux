@@ -2564,6 +2564,13 @@ static int __iommu_setup_intcapxt(struct amd_iommu *iommu, const char *devname,
 	int irq, ret;
 	int node = dev_to_node(&iommu->dev->dev);
 
+	/*
+	 * The IRQ domain is a cached singleton shared by all IOMMUs; a
+	 * setup failure must not remove it, otherwise the global
+	 * iommu_irqdomain is left dangling (and a shared domain could be
+	 * freed while still mapped by another IOMMU).  Leave it in place
+	 * so a later retry (e.g. resume) can use it.
+	 */
 	domain = iommu_get_irqdomain();
 	if (!domain)
 		return -ENXIO;
@@ -2574,16 +2581,13 @@ static int __iommu_setup_intcapxt(struct amd_iommu *iommu, const char *devname,
 	info.hwirq = hwirq;
 
 	irq = irq_domain_alloc_irqs(domain, 1, node, &info);
-	if (irq < 0) {
-		irq_domain_remove(domain);
+	if (irq < 0)
 		return irq;
-	}
 
 	ret = request_threaded_irq(irq, NULL, thread_fn, IRQF_ONESHOT, devname,
 				   iommu);
 	if (ret) {
 		irq_domain_free_irqs(irq, 1);
-		irq_domain_remove(domain);
 		return ret;
 	}
 
