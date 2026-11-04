@@ -422,6 +422,12 @@ void brcmf_netif_rx(struct brcmf_if *ifp, struct sk_buff *skb)
 		return;
 	}
 
+	if (ifp->awdl && brcmf_awdl_decap(skb)) {
+		ifp->ndev->stats.rx_dropped++;
+		brcmu_pkt_buf_free_skb(skb);
+		return;
+	}
+
 	ifp->ndev->stats.rx_bytes += skb->len;
 	ifp->ndev->stats.rx_packets++;
 
@@ -653,6 +659,19 @@ static int brcmf_awdl_netdev_open(struct net_device *ndev)
 	return 0;
 }
 
+static netdev_tx_t brcmf_awdl_netdev_start_xmit(struct sk_buff *skb,
+						struct net_device *ndev)
+{
+	struct brcmf_if *ifp = netdev_priv(ndev);
+
+	if (brcmf_awdl_encap(ifp, skb)) {
+		dev_kfree_skb_any(skb);
+		ndev->stats.tx_dropped++;
+		return NETDEV_TX_OK;
+	}
+	return brcmf_netdev_start_xmit(skb, ndev);
+}
+
 static int brcmf_awdl_netdev_stop(struct net_device *ndev)
 {
 	netif_stop_queue(ndev);
@@ -667,7 +686,7 @@ static int brcmf_awdl_netdev_stop(struct net_device *ndev)
 static const struct net_device_ops brcmf_netdev_ops_awdl = {
 	.ndo_open = brcmf_awdl_netdev_open,
 	.ndo_stop = brcmf_awdl_netdev_stop,
-	.ndo_start_xmit = brcmf_netdev_start_xmit,
+	.ndo_start_xmit = brcmf_awdl_netdev_start_xmit,
 };
 
 static bool brcmf_netdev_is_brcmf(struct net_device *ndev)
@@ -693,6 +712,8 @@ int brcmf_net_attach(struct brcmf_if *ifp, bool locked)
 		ndev->netdev_ops = &brcmf_netdev_ops_pri;
 
 	ndev->needed_headroom += drvr->hdrlen;
+	if (ifp->awdl)
+		ndev->needed_headroom += BRCMF_AWDL_HDR_LEN;
 	ndev->ethtool_ops = &brcmf_ethtool_ops;
 
 	/* set the mac address & netns */
