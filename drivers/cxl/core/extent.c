@@ -116,6 +116,51 @@ alloc_tag_group(struct cxl_dax_region *cxlr_dax, uuid_t *uuid)
 }
 
 /*
+ * Find the DC (Dynamic Capacity) partition that fully contains @ext_range,
+ * or NULL if the extent falls outside every DC partition on this memdev.
+ * The returned pointer is owned by mds->cxlds.part[] and lives for the
+ * lifetime of the memdev.
+ */
+const struct cxl_dpa_partition *
+cxl_extent_dc_partition(struct cxl_memdev_state *mds,
+			struct cxl_extent *extent,
+			struct range *ext_range)
+{
+	struct cxl_dev_state *cxlds = &mds->cxlds;
+	struct device *dev = mds->cxlds.dev;
+
+	/*
+	 * A device-side error could cause end < start, which range_contains()
+	 * would treat as contained in any partition.
+	 */
+	if (ext_range->end < ext_range->start) {
+		dev_err_ratelimited(dev,
+				    "DC extent DPA %pra (%pU) has invalid length (firmware bug)\n",
+				    ext_range, extent->uuid);
+		return NULL;
+	}
+
+	for (int i = 0; i < cxlds->nr_partitions; i++) {
+		struct cxl_dpa_partition *part = &cxlds->part[i];
+		struct range partition_range = {
+			.start = part->res.start,
+			.end = part->res.end,
+		};
+
+		if (part->mode != CXL_PARTMODE_DYNAMIC_RAM)
+			continue;
+
+		if (range_contains(&partition_range, ext_range))
+			return part;
+	}
+
+	dev_err_ratelimited(dev,
+			    "DC extent DPA %pra (%pU) is not in a valid DC partition\n",
+			    ext_range, extent->uuid);
+	return NULL;
+}
+
+/*
  * Stage 1 of the add pipeline: pure, no allocation.  Resolve the extent
  * to its region/endpoint decoder and ext_range, and verify the range
  * fits in the resolved endpoint decoder's DPA resource.
@@ -133,6 +178,8 @@ static int cxl_validate_extent(struct cxl_memdev_state *mds,
 {
 	u64 start_dpa = le64_to_cpu(extent->start_dpa);
 	struct cxl_memdev *cxlmd = mds->cxlds.cxlmd;
+	struct device *dev = mds->cxlds.dev;
+	const struct cxl_dpa_partition *part;
 	struct cxl_endpoint_decoder *cxled;
 	struct cxl_region *cxlr;
 	struct range ext_range = (struct range) {
@@ -140,6 +187,29 @@ static int cxl_validate_extent(struct cxl_memdev_state *mds,
 		.end = start_dpa + le64_to_cpu(extent->length) - 1,
 	};
 	struct range ed_range;
+	uuid_t uuid;
+
+	import_uuid(&uuid, extent->uuid);
+
+	part = cxl_extent_dc_partition(mds, extent, &ext_range);
+	if (!part)
+		return -ENXIO;
+	dev_dbg(dev, "DC extent DPA %pra (DCR:%pR)(%pU)\n", &ext_range,
+		&part->res, &uuid);
+
+	if (part->shareable) {
+		if (uuid_is_null(&uuid)) {
+			dev_err_ratelimited(dev,
+					    "DC extent DPA %pra: sharable-partition extent has null tag (firmware bug)\n",
+					    &ext_range);
+			return -ENXIO;
+		}
+	} else if (le16_to_cpu(extent->shared_extn_seq)) {
+		dev_err_ratelimited(dev,
+				    "DC extent DPA %pra (%pU): non-sharable partition but shared_extn_seq=%u (firmware bug)\n",
+				    &ext_range, &uuid, le16_to_cpu(extent->shared_extn_seq));
+		return -ENXIO;
+	}
 
 	cxlr = cxl_dpa_to_region(cxlmd, start_dpa, &cxled);
 	if (!cxlr || !cxlr->cxlr_dax)
