@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config SOC_TOSHIBA_TC9564_SYSCON
+	tristate "Toshiba TC9564 config system controller support"
+	depends on TC9564_PCI
+	depends on MFD_CORE
+	default TC9564_PCI
+	help
+	  This enables support for the config system controller for the
+	  TC9564 SoC.  It implements an MMIO regmap to manage access to
+	  two pages of I/O memory, and serves as a clock and reset
+	  controller for IP blocks within the chip.
