@@ -181,7 +181,8 @@ panthor_get_uobj_array(const struct drm_panthor_obj_array *in, u32 min_stride,
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_queue_submit, syncs), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_queue_create, ringbuf_size), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_vm_bind_op, syncs), \
-		 PANTHOR_UOBJ_DECL(struct drm_panthor_bo_sync_op, size))
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_bo_sync_op, size), \
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_queue_fatal, exception_info))
 
 /**
  * PANTHOR_UOBJ_SET() - Copy a kernel object to a user object.
@@ -1254,10 +1255,25 @@ out:
 static int panthor_ioctl_group_get_state(struct drm_device *ddev, void *data,
 					 struct drm_file *file)
 {
+	struct drm_panthor_queue_fatal fatals[MAX_CS_PER_CSG];
 	struct panthor_file *pfile = file->driver_priv;
 	struct drm_panthor_group_get_state *args = data;
+	u64 usr_ptr = args->queue_fatals.array;
+	u32 stride = args->queue_fatals.stride;
+	u32 count;
+	int ret;
 
-	return panthor_group_get_state(pfile, args);
+	ret = panthor_group_get_state(pfile, args, fatals, &count);
+	if (ret)
+		return ret;
+
+	for (u32 i = 0; i < count; i++) {
+		ret = PANTHOR_UOBJ_SET(usr_ptr + (u64)i * stride, stride, fatals[i]);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 static int panthor_ioctl_tiler_heap_create(struct drm_device *ddev, void *data,

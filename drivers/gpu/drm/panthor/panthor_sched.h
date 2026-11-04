@@ -14,6 +14,7 @@ struct drm_minor;
 struct drm_panthor_group_create;
 struct drm_panthor_queue_create;
 struct drm_panthor_group_get_state;
+struct drm_panthor_queue_fatal;
 struct drm_panthor_queue_submit;
 struct panthor_device;
 struct panthor_file;
@@ -26,7 +27,9 @@ int panthor_group_create(struct panthor_file *pfile,
 			 u64 drm_client_id);
 int panthor_group_destroy(struct panthor_file *pfile, u32 group_handle);
 int panthor_group_get_state(struct panthor_file *pfile,
-			    struct drm_panthor_group_get_state *get_state);
+			    struct drm_panthor_group_get_state *get_state,
+			    struct drm_panthor_queue_fatal *fatals,
+			    u32 *fatal_count);
 
 struct drm_sched_job *
 panthor_job_create(struct panthor_file *pfile,

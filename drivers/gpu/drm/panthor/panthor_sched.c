@@ -485,6 +485,15 @@ struct panthor_queue {
 		/** @profiling.seqno: Index of the next available profiling information slot. */
 		u32 seqno;
 	} profiling;
+
+	/**
+	 * @fatal: Last CS_FATAL reported on this queue.
+	 *
+	 * Never cleared, a later CS_FATAL overwrites it. A zero exception
+	 * means no CS_FATAL was reported. Protected by
+	 * panthor_scheduler::events_lock.
+	 */
+	struct drm_panthor_queue_fatal fatal;
 };
 
 /**
@@ -1412,10 +1421,20 @@ cs_slot_process_fatal_event_locked(struct panthor_device *ptdev,
 	info = cs_iface->output->fatal_info;
 
 	if (group) {
+		struct panthor_queue *queue = cs_id < group->queue_count ?
+					      group->queues[cs_id] : NULL;
+
 		drm_warn(&ptdev->base, "CS_FATAL: pid=%d, comm=%s\n",
 			 group->task_info.pid, group->task_info.comm);
 
 		atomic_or(BIT(cs_id), &group->fatal_queues);
+
+		if (queue) {
+			queue->fatal = (struct drm_panthor_queue_fatal){
+				.exception = fatal,
+				.exception_info = info,
+			};
+		}
 	}
 
 	if (CS_EXCEPTION_TYPE(fatal) == DRM_PANTHOR_EXCEPTION_CS_UNRECOVERABLE) {
@@ -3818,8 +3837,11 @@ static struct panthor_group *group_from_handle(struct panthor_group_pool *pool,
 }
 
 int panthor_group_get_state(struct panthor_file *pfile,
-			    struct drm_panthor_group_get_state *get_state)
+			    struct drm_panthor_group_get_state *get_state,
+			    struct drm_panthor_queue_fatal *fatals,
+			    u32 *fatal_count)
 {
+	struct drm_panthor_obj_array queue_fatals = get_state->queue_fatals;
 	struct panthor_group_pool *gpool = pfile->groups;
 	struct panthor_device *ptdev = pfile->ptdev;
 	struct panthor_scheduler *sched = ptdev->scheduler;
@@ -3833,6 +3855,9 @@ int panthor_group_get_state(struct panthor_file *pfile,
 		return -EINVAL;
 
 	memset(get_state, 0, sizeof(*get_state));
+	get_state->queue_fatals = queue_fatals;
+
+	*fatal_count = min(queue_fatals.count, group->queue_count);
 
 	mutex_lock(&sched->lock);
 	if (atomic_read(&group->timedout))
@@ -3844,6 +3869,11 @@ int panthor_group_get_state(struct panthor_file *pfile,
 
 	if (group->innocent)
 		get_state->state |= DRM_PANTHOR_GROUP_STATE_INNOCENT;
+
+	scoped_guard(spinlock, &sched->events_lock) {
+		for (u32 i = 0; i < *fatal_count; i++)
+			fatals[i] = group->queues[i]->fatal;
+	}
 	mutex_unlock(&sched->lock);
 
 	group_put(group);

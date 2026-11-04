@@ -1073,6 +1073,27 @@ enum drm_panthor_group_state_flags {
 };
 
 /**
+ * struct drm_panthor_queue_fatal - Fatal error of a single queue.
+ */
+struct drm_panthor_queue_fatal {
+	/**
+	 * @exception: Raw CS_FATAL value.
+	 *
+	 * Zero if no CS_FATAL was reported on this queue. A queue can be
+	 * flagged in drm_panthor_group_get_state::fatal_queues without a
+	 * CS_FATAL, for instance when the group was killed by a VM fault.
+	 * A later CS_FATAL overwrites the previous one.
+	 */
+	__u32 exception;
+
+	/** @pad: Will be zero on return. */
+	__u32 pad;
+
+	/** @exception_info: Raw CS_FATAL_INFO value, valid if @exception is non-zero. */
+	__u64 exception_info;
+};
+
+/**
  * struct drm_panthor_group_get_state - Arguments passed to DRM_IOCTL_PANTHOR_GROUP_GET_STATE
  *
  * Used to query the state of a group and decide whether a new group should be created to
@@ -1093,6 +1114,15 @@ struct drm_panthor_group_get_state {
 
 	/** @pad: MBZ */
 	__u32 pad;
+
+	/**
+	 * @queue_fatals: Array of struct drm_panthor_queue_fatal, indexed by queue.
+	 *
+	 * Entry N describes the queue at index N of the group creation array.
+	 * The driver fills at most as many entries as the group has queues and
+	 * leaves the rest untouched. A zero count skips the array.
+	 */
+	struct drm_panthor_obj_array queue_fatals;
 };
 
 /**
