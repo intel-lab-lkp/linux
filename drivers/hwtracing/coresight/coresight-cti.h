@@ -97,7 +97,7 @@ struct cti_trig_con {
 /**
  * struct cti_device - description of CTI device properties.
  *
- * @nt_trig_con: Number of external devices connected to this device.
+ * @nr_trig_con: Number of external devices connected to this device.
  * @ctm_id: which CTM this device is connected to (by default it is
  *          assumed there is a single CTM per SoC, ID 0).
  * @trig_cons: list of connections to this device.

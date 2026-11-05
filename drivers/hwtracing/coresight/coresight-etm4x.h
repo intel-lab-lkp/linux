@@ -923,6 +923,8 @@ struct etmv4_caps {
  * @syncfreq:	Controls how often trace synchronization requests occur.
  *		the TRCCCCTLR register.
  * @ccctlr:	Sets the threshold value for cycle counting.
+ * @bb_ctrl:	Controls which regions in the memory map are enabled to
+ *		use branch broadcasting.
  * @vinst_ctrl:	Controls instruction trace filtering.
  * @viiectlr:	Set or read, the address range comparators.
  * @vissctlr:	Set, or read, the single address comparators that control the
@@ -941,7 +943,6 @@ struct etmv4_caps {
  * @res_ctrl:	Controls the selection of the resources in the trace unit.
  * @ss_idx:	Single-shot index selector.
  * @ss_ctrl:	Controls the corresponding single-shot comparator resource.
- * @ss_status:	The status of the corresponding single-shot comparator.
  * @ss_pe_cmp:	Selects the PE comparator inputs for Single-shot control.
  * @addr_idx:	Address comparator index selector.
  * @addr_val:	Value for address comparator.
@@ -1051,13 +1052,12 @@ struct etmv4_save_state {
 };
 
 /**
- * struct etm4_drvdata - specifics associated to an ETM component
+ * struct etmv4_drvdata - specifics associated to an ETM component
  * @pclk:       APB clock if present, otherwise NULL
  * @atclk:      Optional clock for the core parts of the ETMv4.
  * @base:       Memory mapped base address for this component.
  * @csdev:      Component vitals needed by the framework.
  * @spinlock:   Only one at a time pls.
- * @mode:	This tracer's mode, i.e sysFS, Perf or disabled.
  * @cpu:        The cpu this component is affined to.
  * @arch:       ETM architecture version.
  * @caps:	ETM capabilities.

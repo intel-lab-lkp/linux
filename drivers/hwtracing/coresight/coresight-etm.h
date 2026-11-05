@@ -231,14 +231,14 @@ struct etm_config {
 
 /**
  * struct etm_drvdata - specifics associated to an ETM component
- * @base:	memory mapped base address for this component.
+ * @csa:	CoreSight access descriptor for this component's registers.
  * @atclk:	optional clock for the core parts of the ETM.
  * @csdev:	component vitals needed by the framework.
  * @spinlock:	only one at a time pls.
  * @cpu:	the cpu this component is affined to.
  * @arch:	ETM/PTM version number.
  * @caps:	ETM capabilities.
- * @use_cpu14:	true if management registers need to be accessed via CP14.
+ * @use_cp14:	true if management registers need to be accessed via CP14.
  * @sticky_enable: true if ETM base configuration has been done.
  * @boot_enable:true if we should start tracing at boot time.
  * @os_unlock:	true if access to management registers is allowed.

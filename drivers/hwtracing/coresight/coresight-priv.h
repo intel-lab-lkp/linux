@@ -91,7 +91,7 @@ enum etm_addr_type {
 };
 
 /**
- * struct cs_buffer - keep track of a recording session' specifics
+ * struct cs_buffers - keep track of a recording session' specifics
  * @cur:	index of the current buffer
  * @nr_pages:	max number of pages granted to us
  * @pid:	PID this cs_buffer belongs to
