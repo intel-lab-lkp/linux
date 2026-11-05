@@ -6,9 +6,9 @@ choice
 	default M686
 	help
 	  This is the processor type of your CPU. This information is
-	  used for optimizing purposes. In order to compile a kernel
-	  that can run on all supported x86 CPU types (albeit not
-	  optimally fast), you can specify "586" here.
+	  used to pick between i586-class and i686-class processors,
+	  as well as to optimize for a particular microarchitecture
+	  within the two classes.
 
 	  Note that the 386 and 486 is no longer supported, this includes
 	  AMD/Cyrix/Intel 386DX/DXL/SL/SLC/SX, Cyrix/TI 486DLC/DLC2,
@@ -164,16 +164,13 @@ config MCYRIXIII
 	  treat this chip as a generic 586. Whilst the CPU is 686 class,
 	  it lacks the cmov extension which gcc assumes is present when
 	  generating 686 code.
-	  Note that Nehemiah (Model 9) and above will not boot with this
-	  kernel due to them lacking the 3DNow! instructions used in earlier
-	  incarnations of the CPU.
 
 config MVIAC3_2
 	bool "VIA C3-2 (Nehemiah)"
 	depends on X86_32
 	help
-	  Select this for a VIA C3 "Nehemiah". Selecting this enables usage
-	  of SSE and tells gcc to treat the CPU as a 686.
+	  Select this for a VIA C3 "Nehemiah". Selecting tells gcc to treat
+	  the CPU as a 686.
 	  Note, this kernel will not boot on older (pre model 9) C3s.
 
 config MVIAC7
