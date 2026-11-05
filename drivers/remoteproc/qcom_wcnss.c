@@ -653,13 +653,13 @@ static int wcnss_probe(struct platform_device *pdev)
 	wcnss->sysmon = qcom_add_sysmon_subdev(rproc, "wcnss", WCNSS_SSCTL_ID);
 	if (IS_ERR(wcnss->sysmon)) {
 		ret = PTR_ERR(wcnss->sysmon);
-		goto detach_pds;
+		goto remove_smd_subdev;
 	}
 
 	wcnss->iris = qcom_iris_probe(&pdev->dev, &wcnss->use_48mhz_xo);
 	if (IS_ERR(wcnss->iris)) {
 		ret = PTR_ERR(wcnss->iris);
-		goto detach_pds;
+		goto remove_sysmon_subdev;
 	}
 
 	ret = rproc_add(rproc);
@@ -670,6 +670,10 @@ static int wcnss_probe(struct platform_device *pdev)
 
 remove_iris:
 	qcom_iris_remove(wcnss->iris);
+remove_sysmon_subdev:
+	qcom_remove_sysmon_subdev(wcnss->sysmon);
+remove_smd_subdev:
+	qcom_remove_smd_subdev(rproc, &wcnss->smd_subdev);
 detach_pds:
 	wcnss_release_pds(wcnss);
 
