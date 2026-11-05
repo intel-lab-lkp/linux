@@ -12,6 +12,24 @@ struct dma_buf;
 struct dma_buf_attachment;
 struct dma_buf_mapping_exp_ops;
 
+enum dma_sgt_requires_p2p {
+	DMA_SGT_NO_P2P = 0,
+	/*
+	 * Exporter: MMIO, importer must accept P2P and pci_p2pdma_distance()
+	 * from exporting_p2p_device must succeed at match time. The match runs
+	 * without the dma_resv lock whenever an importer attaches, so only use
+	 * this if exporting_p2p_device stays bound to its driver for as long as
+	 * the dma_buf exists. Importers that are not PCI devices never match.
+	 */
+	DMA_SGT_EXPORTER_REQUIRES_P2P_DISTANCE,
+	/*
+	 * Exporter: MMIO, importer must accept P2P. No distance check at match;
+	 * the exporter's map does its own, e.g. via dma_buf_phys_vec_to_sgt().
+	 */
+	DMA_SGT_EXPORTER_REQUIRES_P2P,
+	DMA_SGT_IMPORTER_ACCEPTS_P2P,
+};
+
 /* Type tag for all mapping operations */
 struct dma_buf_mapping_exp_ops {};
 
@@ -108,5 +126,114 @@ dma_buf_attach_map_type(const struct dma_buf_attachment *attach)
 {
 	return &attach->matches[0];
 }
+
+/*
+ * DMA Mapped Scatterlist Type
+ *
+ * When this type is matched the map/unmap functions are:
+ *
+ *  dma_buf_map_sgt()
+ *  dma_buf_unmap_sgt()
+ *
+ * The struct sg_table returned by those functions has only the DMA portions
+ * available. The caller must not try to use the struct page * information.
+ *
+ * importing_dma_device is the device passed to dma_buf_dynamic_attach(),
+ * recorded at match time, and is passed to the DMA API to provide the
+ * dma_addr_t's.
+ */
+extern struct dma_buf_mapping_type dma_buf_mapping_sgt_type;
+
+struct dma_buf_mapping_sgt_exp_ops {
+	struct dma_buf_mapping_exp_ops ops;
+	struct sg_table *(*map_dma_buf)(struct dma_buf_attachment *attach,
+					enum dma_data_direction dir);
+	void (*unmap_dma_buf)(struct dma_buf_attachment *attach,
+			      struct sg_table *sgt,
+			      enum dma_data_direction dir);
+};
+
+/**
+ * dma_buf_sgt_dma_device - Return the device to use for DMA mapping
+ * @attach: sgt mapping type attachment
+ *
+ * Called by the exporter to get the struct device to pass to the DMA API
+ * during map and unmap callbacks.
+ */
+static inline struct device *
+dma_buf_sgt_dma_device(struct dma_buf_attachment *attach)
+{
+	if (dma_buf_attach_map_type(attach)->type != &dma_buf_mapping_sgt_type)
+		return NULL;
+	return dma_buf_attach_map_type(attach)->sgt_data.importing_dma_device;
+}
+
+/**
+ * dma_buf_sgt_p2p_allowed - True if MMIO memory can be used peer to peer
+ * @attach: sgt mapping type attachment
+ *
+ * Should be called by exporters, returns true if the exporter's
+ * DMA_SGT_EXPORTER_REQUIRES_P2P_DISTANCE was matched.
+ */
+static inline bool dma_buf_sgt_p2p_allowed(struct dma_buf_attachment *attach)
+{
+	if (dma_buf_attach_map_type(attach)->type != &dma_buf_mapping_sgt_type)
+		return false;
+	return dma_buf_attach_map_type(attach)->sgt_data.exporter_requires_p2p ==
+	       DMA_SGT_EXPORTER_REQUIRES_P2P_DISTANCE;
+}
+
+static inline const struct dma_buf_mapping_sgt_exp_ops *
+dma_buf_get_sgt_ops(struct dma_buf_attachment *attach)
+{
+	if (dma_buf_attach_map_type(attach)->type != &dma_buf_mapping_sgt_type)
+		return NULL;
+	return container_of(dma_buf_attach_map_type(attach)->exp_ops,
+			    struct dma_buf_mapping_sgt_exp_ops, ops);
+}
+
+/*
+ * Importer SGT entry. Usable in a static table: the importing device is
+ * supplied by dma_buf_dynamic_attach() and recorded in the matched entry.
+ */
+#define DMA_BUF_IMAPPING_SGT(_importer_accepts_p2p)                         \
+	((struct dma_buf_mapping_match){                                    \
+		.type = &dma_buf_mapping_sgt_type,                          \
+		.sgt_data = { .importer_accepts_p2p = (_importer_accepts_p2p) } })
+#define DMA_BUF_EMAPPING_SGT(_exp_ops)                                      \
+	((struct dma_buf_mapping_match){ .type = &dma_buf_mapping_sgt_type, \
+					 .exp_ops = &((_exp_ops)->ops) })
+
+/*
+ * Only matches if the importing device is P2P capable and the P2P subsystem
+ * says P2P is possible from p2p_device.
+ */
+static inline struct dma_buf_mapping_match
+DMA_BUF_EMAPPING_SGT_P2P(const struct dma_buf_mapping_sgt_exp_ops *exp_ops,
+			 struct pci_dev *p2p_device)
+{
+	struct dma_buf_mapping_match match = DMA_BUF_EMAPPING_SGT(exp_ops);
+
+	match.sgt_data.exporter_requires_p2p =
+		DMA_SGT_EXPORTER_REQUIRES_P2P_DISTANCE;
+	match.sgt_data.exporting_p2p_device = p2p_device;
+	return match;
+}
+
+/*
+ * Only matches if the importer accepts P2P. Whether the importing device can
+ * actually reach the exporter's MMIO is left to the exporter's map, for
+ * exporters whose importers need not be PCI devices.
+ */
+static inline struct dma_buf_mapping_match
+DMA_BUF_EMAPPING_SGT_REQUIRES_P2P(const struct dma_buf_mapping_sgt_exp_ops *exp_ops)
+{
+	struct dma_buf_mapping_match match = DMA_BUF_EMAPPING_SGT(exp_ops);
+
+	match.sgt_data.exporter_requires_p2p = DMA_SGT_EXPORTER_REQUIRES_P2P;
+	return match;
+}
+
+extern const struct dma_buf_mapping_match dma_buf_sgt_exp_compat_match;
 
 #endif

@@ -30,6 +30,7 @@ struct dma_buf_attachment;
 struct dma_buf_mapping_type;
 struct dma_buf_mapping_exp_ops;
 
+
 /*
  * Upper bound on the number of mapping types an attachment can record as
  * mutually acceptable. An exporter offering more compatible types than this
@@ -46,7 +47,23 @@ struct dma_buf_mapping_match {
 	const struct dma_buf_mapping_type *type;
 	const struct dma_buf_mapping_exp_ops *exp_ops;
 	union {
-		/* Each mapping_type has unique match parameters here */
+		/* For dma_buf_mapping_sgt_type */
+		struct {
+			/* Filled from the attaching device, not by importers */
+			struct device *importing_dma_device;
+			/* Only used if DMA_SGT_EXPORTER_REQUIRES_P2P_DISTANCE */
+			struct pci_dev *exporting_p2p_device;
+			/*
+			 * These p2p flags are used to support the hard coded
+			 * mechanism for p2p. If an exporting device knows it
+			 * will put MMIO into the sgt then it should set
+			 * exporter_requires_p2p. Importers should set
+			 * importer_accepts_p2p unless it is known that the
+			 * importing HW never supports P2P because of HW issues.
+			 */
+			u8 importer_accepts_p2p;
+			u8 exporter_requires_p2p;
+		} sgt_data;
 	};
 };
 
