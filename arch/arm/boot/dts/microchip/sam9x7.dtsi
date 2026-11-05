@@ -8,6 +8,7 @@
  */
 
 #include <dt-bindings/clock/at91.h>
+#include <dt-bindings/clock/microchip,sam9x7-pmc.h>
 #include <dt-bindings/dma/at91.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -288,7 +289,7 @@
 			clocks = <&pmc PMC_TYPE_PERIPHERAL 35>, <&pmc PMC_TYPE_GCK 35>;
 			clock-names = "pclk", "gclk";
 			assigned-clocks = <&pmc PMC_TYPE_GCK 35>;
-			assigned-clock-parents = <&pmc PMC_TYPE_CORE PMC_PLLADIV2>;
+			assigned-clock-parents = <&pmc PMC_TYPE_CORE SAM9X7_PMC_PLLADIV2>;
 			status = "disabled";
 		};
 
@@ -500,9 +501,9 @@
 			interrupt-names = "int0", "int1";
 			clocks = <&pmc PMC_TYPE_PERIPHERAL 29>, <&pmc PMC_TYPE_GCK 29>;
 			clock-names = "hclk", "cclk";
-			assigned-clocks = <&pmc PMC_TYPE_CORE PMC_UTMI>, <&pmc PMC_TYPE_GCK 29>;
+			assigned-clocks = <&pmc PMC_TYPE_CORE SAM9X7_PMC_UPLLCK>, <&pmc PMC_TYPE_GCK 29>;
 			assigned-clock-rates = <480000000>, <40000000>;
-			assigned-clock-parents = <&pmc PMC_TYPE_CORE PMC_UTMI>, <&pmc PMC_TYPE_CORE PMC_UTMI>;
+			assigned-clock-parents = <&pmc PMC_TYPE_CORE SAM9X7_PMC_UPLLCK>, <&pmc PMC_TYPE_CORE SAM9X7_PMC_UPLLCK>;
 			bosch,mram-cfg = <0x3400 0 0 64 0 0 32 32>;
 			status = "disabled";
 		};
@@ -516,9 +517,9 @@
 			interrupt-names = "int0", "int1";
 			clocks = <&pmc PMC_TYPE_PERIPHERAL 30>, <&pmc PMC_TYPE_GCK 30>;
 			clock-names = "hclk", "cclk";
-			assigned-clocks = <&pmc PMC_TYPE_CORE PMC_UTMI>, <&pmc PMC_TYPE_GCK 30>;
+			assigned-clocks = <&pmc PMC_TYPE_CORE SAM9X7_PMC_UPLLCK>, <&pmc PMC_TYPE_GCK 30>;
 			assigned-clock-rates = <480000000>, <40000000>;
-			assigned-clock-parents = <&pmc PMC_TYPE_CORE PMC_UTMI>, <&pmc PMC_TYPE_CORE PMC_UTMI>;
+			assigned-clock-parents = <&pmc PMC_TYPE_CORE SAM9X7_PMC_UPLLCK>, <&pmc PMC_TYPE_CORE SAM9X7_PMC_UPLLCK>;
 			bosch,mram-cfg = <0x7800 0 0 64 0 0 32 32>;
 			status = "disabled";
 		};
@@ -1158,7 +1159,7 @@
 		mpddrc: mpddrc@ffffe800 {
 			compatible = "microchip,sam9x7-ddramc", "atmel,sama5d3-ddramc";
 			reg = <0xffffe800 0x200>;
-			clocks = <&pmc PMC_TYPE_SYSTEM 2>, <&pmc PMC_TYPE_CORE PMC_MCK>;
+			clocks = <&pmc PMC_TYPE_SYSTEM 2>, <&pmc PMC_TYPE_CORE SAM9X7_PMC_MCK>;
 			clock-names = "ddrck", "mpddr";
 		};
 

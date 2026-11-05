@@ -9,6 +9,7 @@
  */
 
 #include <dt-bindings/clock/at91.h>
+#include <dt-bindings/clock/microchip,sama7d65-pmc.h>
 #include <dt-bindings/dma/at91.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -30,7 +31,7 @@
 			compatible = "arm,cortex-a7";
 			reg = <0x0>;
 			device_type = "cpu";
-			clocks = <&pmc PMC_TYPE_CORE PMC_CPUPLL>;
+			clocks = <&pmc PMC_TYPE_CORE SAMA7D65_PMC_CPUPLL>;
 			clock-names = "cpu";
 			d-cache-size = <0x8000>;	// L1, 32 KB
 			i-cache-size = <0x8000>;	// L1, 32 KB
@@ -191,7 +192,7 @@
 			clock-names = "hclk", "cclk";
 			assigned-clocks = <&pmc PMC_TYPE_GCK 58>;
 			assigned-clock-rates = <40000000>;
-			assigned-clock-parents = <&pmc PMC_TYPE_CORE PMC_UTMI>;
+			assigned-clock-parents = <&pmc PMC_TYPE_CORE SAMA7D65_PMC_USBPLL>;
 			bosch,mram-cfg = <0x3400 0 0 64 0 0 32 32>;
 			status = "disabled";
 		};
@@ -207,7 +208,7 @@
 			clock-names = "hclk", "cclk";
 			assigned-clocks = <&pmc PMC_TYPE_GCK 59>;
 			assigned-clock-rates = <40000000>;
-			assigned-clock-parents = <&pmc PMC_TYPE_CORE PMC_UTMI>;
+			assigned-clock-parents = <&pmc PMC_TYPE_CORE SAMA7D65_PMC_USBPLL>;
 			bosch,mram-cfg = <0x7800 0 0 64 0 0 32 32>;
 			status = "disabled";
 		};
@@ -223,7 +224,7 @@
 			clock-names = "hclk", "cclk";
 			assigned-clocks = <&pmc PMC_TYPE_GCK 60>;
 			assigned-clock-rates = <40000000>;
-			assigned-clock-parents = <&pmc PMC_TYPE_CORE PMC_UTMI>;
+			assigned-clock-parents = <&pmc PMC_TYPE_CORE SAMA7D65_PMC_USBPLL>;
 			bosch,mram-cfg = <0xbc00 0 0 64 0 0 32 32>;
 			status = "disabled";
 		};
@@ -239,7 +240,7 @@
 			clock-names = "hclk", "cclk";
 			assigned-clocks = <&pmc PMC_TYPE_GCK 61>;
 			assigned-clock-rates = <40000000>;
-			assigned-clock-parents = <&pmc PMC_TYPE_CORE PMC_UTMI>;
+			assigned-clock-parents = <&pmc PMC_TYPE_CORE SAMA7D65_PMC_USBPLL>;
 			bosch,mram-cfg = <0x0 0 0 64 0 0 32 32>;
 			status = "disabled";
 		};
@@ -255,7 +256,7 @@
 			clock-names = "hclk", "cclk";
 			assigned-clocks = <&pmc PMC_TYPE_GCK 62>;
 			assigned-clock-rates = <40000000>;
-			assigned-clock-parents = <&pmc PMC_TYPE_CORE PMC_UTMI>;
+			assigned-clock-parents = <&pmc PMC_TYPE_CORE SAMA7D65_PMC_USBPLL>;
 			bosch,mram-cfg = <0x4400 0 0 64 0 0 32 32>;
 			status = "disabled";
 		};
@@ -279,7 +280,7 @@
 			clock-names = "hclock", "multclk";
 			assigned-clocks = <&pmc PMC_TYPE_GCK 76>;
 			assigned-clock-rates = <200000000>;
-			assigned-clock-parents = <&pmc PMC_TYPE_CORE PMC_MCK1>;
+			assigned-clock-parents = <&pmc PMC_TYPE_CORE SAMA7D65_PMC_MCK1>;
 			status = "disabled";
 		};
 

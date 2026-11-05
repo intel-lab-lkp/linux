@@ -7,6 +7,7 @@
  */
 
 #include <dt-bindings/clock/at91.h>
+#include <dt-bindings/clock/atmel,sama5d4-pmc.h>
 #include <dt-bindings/dma/at91.h>
 #include <dt-bindings/mfd/at91-usart.h>
 #include <dt-bindings/pinctrl/at91.h>
@@ -116,7 +117,7 @@
 			reg = <0x00400000 0x100000
 			       0xfc02c000 0x4000>;
 			interrupts = <47 IRQ_TYPE_LEVEL_HIGH 2>;
-			clocks = <&pmc PMC_TYPE_PERIPHERAL 47>, <&pmc PMC_TYPE_CORE PMC_UTMI>;
+			clocks = <&pmc PMC_TYPE_PERIPHERAL 47>, <&pmc PMC_TYPE_CORE SAMA5D4_PMC_UPLLCK>;
 			clock-names = "pclk", "hclk";
 			status = "disabled";
 		};
@@ -134,7 +135,7 @@
 			compatible = "atmel,at91sam9g45-ehci", "usb-ehci";
 			reg = <0x00600000 0x100000>;
 			interrupts = <46 IRQ_TYPE_LEVEL_HIGH 2>;
-			clocks = <&pmc PMC_TYPE_CORE PMC_UTMI>, <&pmc PMC_TYPE_PERIPHERAL 46>;
+			clocks = <&pmc PMC_TYPE_CORE SAMA5D4_PMC_UPLLCK>, <&pmc PMC_TYPE_PERIPHERAL 46>;
 			clock-names = "usb_clk", "ehci_clk";
 			status = "disabled";
 		};
@@ -159,7 +160,7 @@
 				  0x1 0x0 0x60000000 0x10000000
 				  0x2 0x0 0x70000000 0x10000000
 				  0x3 0x0 0x80000000 0x8000000>;
-			clocks = <&pmc PMC_TYPE_CORE PMC_MCK>;
+			clocks = <&pmc PMC_TYPE_CORE SAMA5D4_PMC_MCK>;
 			status = "disabled";
 
 			nand_controller: nand-controller {
@@ -753,7 +754,7 @@
 				compatible = "atmel,at91sam9260-pit";
 				reg = <0xfc068630 0x10>;
 				interrupts = <3 IRQ_TYPE_LEVEL_HIGH 5>;
-				clocks = <&pmc PMC_TYPE_CORE PMC_MCK2>;
+				clocks = <&pmc PMC_TYPE_CORE SAMA5D4_PMC_MCK2>;
 			};
 
 			watchdog: watchdog@fc068640 {
