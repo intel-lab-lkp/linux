@@ -3,7 +3,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/slab.h>
 
-#include <dt-bindings/clock/at91.h>
+#include <dt-bindings/clock/atmel,sama5d2-pmc.h>
 
 #include "pmc.h"
 
@@ -188,7 +188,7 @@ static void __init sama5d2_pmc_setup(struct device_node *np)
 	if (IS_ERR(regmap))
 		return;
 
-	sama5d2_pmc = pmc_data_allocate(PMC_AUDIOPINCK + 1,
+	sama5d2_pmc = pmc_data_allocate(SAMA5D2_PMC_AUDIOPINCK + 1,
 					nck(sama5d2_systemck),
 					nck(sama5d2_periph32ck),
 					nck(sama5d2_gck), 3);
@@ -213,7 +213,7 @@ static void __init sama5d2_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sama5d2_pmc->chws[PMC_MAIN] = hw;
+	sama5d2_pmc->chws[SAMA5D2_PMC_MAIN] = hw;
 
 	hw = at91_clk_register_pll(regmap, "pllack", "mainck", 0,
 				   &sama5d3_pll_layout, &plla_characteristics);
@@ -224,7 +224,7 @@ static void __init sama5d2_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sama5d2_pmc->chws[PMC_PLLACK] = hw;
+	sama5d2_pmc->chws[SAMA5D2_PMC_PLLACK] = hw;
 
 	hw = at91_clk_register_audio_pll_frac(regmap, "audiopll_fracck",
 					      "mainck");
@@ -236,14 +236,14 @@ static void __init sama5d2_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sama5d2_pmc->chws[PMC_AUDIOPINCK] = hw;
+	sama5d2_pmc->chws[SAMA5D2_PMC_AUDIOPINCK] = hw;
 
 	hw = at91_clk_register_audio_pll_pmc(regmap, "audiopll_pmcck",
 					     "audiopll_fracck");
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sama5d2_pmc->chws[PMC_AUDIOPLLCK] = hw;
+	sama5d2_pmc->chws[SAMA5D2_PMC_AUDIOPLLCK] = hw;
 
 	regmap_sfr = syscon_regmap_lookup_by_compatible("atmel,sama5d2-sfr");
 	if (IS_ERR(regmap_sfr))
@@ -253,7 +253,7 @@ static void __init sama5d2_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sama5d2_pmc->chws[PMC_UTMI] = hw;
+	sama5d2_pmc->chws[SAMA5D2_PMC_UPLLCK] = hw;
 
 	parent_names[0] = slck_name;
 	parent_names[1] = "mainck";
@@ -274,13 +274,13 @@ static void __init sama5d2_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sama5d2_pmc->chws[PMC_MCK] = hw;
+	sama5d2_pmc->chws[SAMA5D2_PMC_MCK] = hw;
 
 	hw = at91_clk_register_h32mx(regmap, "h32mxck", "masterck_div");
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sama5d2_pmc->chws[PMC_MCK2] = hw;
+	sama5d2_pmc->chws[SAMA5D2_PMC_MCK2] = hw;
 
 	parent_names[0] = "plladivck";
 	parent_names[1] = "utmick";
@@ -376,7 +376,7 @@ static void __init sama5d2_pmc_setup(struct device_node *np)
 		if (IS_ERR(hw))
 			goto err_free;
 
-		sama5d2_pmc->chws[PMC_I2S0_MUX] = hw;
+		sama5d2_pmc->chws[SAMA5D2_PMC_I2S0_MUX] = hw;
 
 		parent_names[0] = "i2s1_clk";
 		parent_names[1] = "i2s1_gclk";
@@ -385,7 +385,7 @@ static void __init sama5d2_pmc_setup(struct device_node *np)
 		if (IS_ERR(hw))
 			goto err_free;
 
-		sama5d2_pmc->chws[PMC_I2S1_MUX] = hw;
+		sama5d2_pmc->chws[SAMA5D2_PMC_I2S1_MUX] = hw;
 	}
 
 	of_clk_add_hw_provider(np, of_clk_hw_pmc_get, sama5d2_pmc);

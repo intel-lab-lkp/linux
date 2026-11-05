@@ -3,7 +3,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/slab.h>
 
-#include <dt-bindings/clock/at91.h>
+#include <dt-bindings/clock/microchip,sam9x60-pmc.h>
 
 #include "pmc.h"
 
@@ -216,7 +216,7 @@ static void __init sam9x60_pmc_setup(struct device_node *np)
 	if (IS_ERR(regmap))
 		return;
 
-	sam9x60_pmc = pmc_data_allocate(PMC_PLLACK + 1,
+	sam9x60_pmc = pmc_data_allocate(SAM9X60_PMC_PLLACK + 1,
 					nck(sam9x60_systemck),
 					nck(sam9x60_periphck),
 					nck(sam9x60_gck), 8);
@@ -239,10 +239,10 @@ static void __init sam9x60_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sam9x60_pmc->chws[PMC_MAIN] = hw;
+	sam9x60_pmc->chws[SAM9X60_PMC_MAIN] = hw;
 
 	hw = sam9x60_clk_register_frac_pll(regmap, &pmc_pll_lock, "pllack_fracck",
-					   "mainck", sam9x60_pmc->chws[PMC_MAIN],
+					   "mainck", sam9x60_pmc->chws[SAM9X60_PMC_MAIN],
 					   0, &plla_characteristics,
 					   &pll_frac_layout,
 					   /*
@@ -265,7 +265,7 @@ static void __init sam9x60_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sam9x60_pmc->chws[PMC_PLLACK] = hw;
+	sam9x60_pmc->chws[SAM9X60_PMC_PLLACK] = hw;
 
 	hw = sam9x60_clk_register_frac_pll(regmap, &pmc_pll_lock, "upllck_fracck",
 					   "main_osc", main_osc_hw, 1,
@@ -283,7 +283,7 @@ static void __init sam9x60_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sam9x60_pmc->chws[PMC_UTMI] = hw;
+	sam9x60_pmc->chws[SAM9X60_PMC_UPLLCK] = hw;
 
 	parent_names[0] = md_slck_name;
 	parent_names[1] = "mainck";
@@ -301,7 +301,7 @@ static void __init sam9x60_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sam9x60_pmc->chws[PMC_MCK] = hw;
+	sam9x60_pmc->chws[SAM9X60_PMC_MCK] = hw;
 
 	parent_names[0] = "pllack_divck";
 	parent_names[1] = "upllck_divck";

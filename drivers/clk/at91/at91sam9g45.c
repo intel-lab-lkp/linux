@@ -3,7 +3,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/slab.h>
 
-#include <dt-bindings/clock/at91.h>
+#include <dt-bindings/clock/atmel,at91sam9g45-pmc.h>
 
 #include "pmc.h"
 
@@ -115,7 +115,7 @@ static void __init at91sam9g45_pmc_setup(struct device_node *np)
 	if (IS_ERR(regmap))
 		return;
 
-	at91sam9g45_pmc = pmc_data_allocate(PMC_PLLACK + 1,
+	at91sam9g45_pmc = pmc_data_allocate(AT91SAM9G45_PMC_PLLACK + 1,
 					    nck(at91sam9g45_systemck),
 					    nck(at91sam9g45_periphck), 0, 2);
 	if (!at91sam9g45_pmc)
@@ -132,7 +132,7 @@ static void __init at91sam9g45_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	at91sam9g45_pmc->chws[PMC_MAIN] = hw;
+	at91sam9g45_pmc->chws[AT91SAM9G45_PMC_MAIN] = hw;
 
 	hw = at91_clk_register_pll(regmap, "pllack", "mainck", 0,
 				   &at91rm9200_pll_layout, &plla_characteristics);
@@ -143,13 +143,13 @@ static void __init at91sam9g45_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	at91sam9g45_pmc->chws[PMC_PLLACK] = hw;
+	at91sam9g45_pmc->chws[AT91SAM9G45_PMC_PLLACK] = hw;
 
 	hw = at91_clk_register_utmi(regmap, NULL, "utmick", "mainck", NULL);
 	if (IS_ERR(hw))
 		goto err_free;
 
-	at91sam9g45_pmc->chws[PMC_UTMI] = hw;
+	at91sam9g45_pmc->chws[AT91SAM9G45_PMC_UPLLCK] = hw;
 
 	parent_names[0] = slck_name;
 	parent_names[1] = "mainck";
@@ -172,7 +172,7 @@ static void __init at91sam9g45_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	at91sam9g45_pmc->chws[PMC_MCK] = hw;
+	at91sam9g45_pmc->chws[AT91SAM9G45_PMC_MCK] = hw;
 
 	parent_names[0] = "plladivck";
 	parent_names[1] = "utmick";

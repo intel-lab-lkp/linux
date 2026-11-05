@@ -3,7 +3,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/slab.h>
 
-#include <dt-bindings/clock/at91.h>
+#include <dt-bindings/clock/atmel,at91sam9260-pmc.h>
 
 #include "pmc.h"
 
@@ -354,7 +354,7 @@ static void __init at91sam926x_pmc_setup(struct device_node *np,
 	if (IS_ERR(regmap))
 		return;
 
-	at91sam9260_pmc = pmc_data_allocate(PMC_PLLBCK + 1,
+	at91sam9260_pmc = pmc_data_allocate(AT91SAM9260_PMC_PLLBCK + 1,
 					    ndck(data->sck, data->num_sck),
 					    ndck(data->pck, data->num_pck),
 					    0, data->num_progck);
@@ -372,7 +372,7 @@ static void __init at91sam926x_pmc_setup(struct device_node *np,
 	if (IS_ERR(hw))
 		goto err_free;
 
-	at91sam9260_pmc->chws[PMC_MAIN] = hw;
+	at91sam9260_pmc->chws[AT91SAM9260_PMC_MAIN] = hw;
 
 	if (data->has_slck) {
 		hw = clk_hw_register_fixed_rate_with_accuracy(NULL,
@@ -389,7 +389,7 @@ static void __init at91sam926x_pmc_setup(struct device_node *np,
 		if (IS_ERR(hw))
 			goto err_free;
 
-		at91sam9260_pmc->chws[PMC_SLOW] = hw;
+		at91sam9260_pmc->chws[AT91SAM9260_PMC_SLOW] = hw;
 		slck_name = "slck";
 	} else {
 		slck_name = slowxtal_name;
@@ -401,7 +401,7 @@ static void __init at91sam926x_pmc_setup(struct device_node *np,
 	if (IS_ERR(hw))
 		goto err_free;
 
-	at91sam9260_pmc->chws[PMC_PLLACK] = hw;
+	at91sam9260_pmc->chws[AT91SAM9260_PMC_PLLACK] = hw;
 
 	hw = at91_clk_register_pll(regmap, "pllbck", "mainck", 1,
 				   data->pllb_layout,
@@ -409,7 +409,7 @@ static void __init at91sam926x_pmc_setup(struct device_node *np,
 	if (IS_ERR(hw))
 		goto err_free;
 
-	at91sam9260_pmc->chws[PMC_PLLBCK] = hw;
+	at91sam9260_pmc->chws[AT91SAM9260_PMC_PLLBCK] = hw;
 
 	parent_names[0] = slck_name;
 	parent_names[1] = "mainck";
@@ -432,7 +432,7 @@ static void __init at91sam926x_pmc_setup(struct device_node *np,
 	if (IS_ERR(hw))
 		goto err_free;
 
-	at91sam9260_pmc->chws[PMC_MCK] = hw;
+	at91sam9260_pmc->chws[AT91SAM9260_PMC_MCK] = hw;
 
 	hw = at91rm9200_clk_register_usb(regmap, "usbck", "pllbck", usb_div);
 	if (IS_ERR(hw))

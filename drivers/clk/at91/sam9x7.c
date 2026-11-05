@@ -12,7 +12,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/slab.h>
 
-#include <dt-bindings/clock/at91.h>
+#include <dt-bindings/clock/microchip,sam9x7-pmc.h>
 
 #include "pmc.h"
 
@@ -225,7 +225,7 @@ static const struct {
 			.t = PLL_TYPE_DIV,
 			/* This feeds CPU. It should not be disabled */
 			.f = CLK_IS_CRITICAL | CLK_SET_RATE_GATE,
-			.eid = PMC_PLLACK,
+			.eid = SAM9X7_PMC_PLLACK,
 			.c = &plla_characteristics,
 		},
 	},
@@ -247,7 +247,7 @@ static const struct {
 			.t = PLL_TYPE_DIV,
 			.f = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE |
 			     CLK_SET_RATE_PARENT,
-			.eid = PMC_UTMI,
+			.eid = SAM9X7_PMC_UPLLCK,
 			.c = &upll_characteristics,
 		},
 	},
@@ -269,7 +269,7 @@ static const struct {
 			.f = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE |
 			     CLK_SET_RATE_PARENT,
 			.c = &audiopll_characteristics,
-			.eid = PMC_AUDIOPMCPLL,
+			.eid = SAM9X7_PMC_AUDIOPMCPLL,
 			.t = PLL_TYPE_DIV,
 		},
 
@@ -280,7 +280,7 @@ static const struct {
 			.f = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE |
 			     CLK_SET_RATE_PARENT,
 			.c = &audiopll_characteristics,
-			.eid = PMC_AUDIOIOPLL,
+			.eid = SAM9X7_PMC_AUDIOIOPLL,
 			.t = PLL_TYPE_DIV,
 		},
 	},
@@ -302,7 +302,7 @@ static const struct {
 			.f = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE |
 			     CLK_SET_RATE_PARENT,
 			.c = &lvdspll_characteristics,
-			.eid = PMC_LVDSPLL,
+			.eid = SAM9X7_PMC_LVDSPLL,
 			.t = PLL_TYPE_DIV,
 		},
 	},
@@ -318,7 +318,7 @@ static const struct {
 			 */
 			.f = CLK_IS_CRITICAL | CLK_SET_RATE_GATE,
 			.c = &plladiv2_characteristics,
-			.eid = PMC_PLLADIV2,
+			.eid = SAM9X7_PMC_PLLADIV2,
 			.t = PLL_TYPE_DIV,
 		},
 	},
@@ -746,7 +746,7 @@ static void __init sam9x7_pmc_setup(struct device_node *np)
 	if (IS_ERR(regmap))
 		return;
 
-	sam9x7_pmc = pmc_data_allocate(PMC_LVDSPLL + 1,
+	sam9x7_pmc = pmc_data_allocate(SAM9X7_PMC_LVDSPLL + 1,
 				       nck(sam9x7_systemck),
 				       nck(sam9x7_periphck),
 				       nck(sam9x7_gck), 8);
@@ -775,7 +775,7 @@ static void __init sam9x7_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sam9x7_pmc->chws[PMC_MAIN] = hw;
+	sam9x7_pmc->chws[SAM9X7_PMC_MAIN] = hw;
 
 	for (i = 0; i < PLL_ID_MAX; i++) {
 		for (j = 0; j < 3; j++) {
@@ -787,7 +787,7 @@ static void __init sam9x7_pmc_setup(struct device_node *np)
 			switch (sam9x7_plls[i][j].t) {
 			case PLL_TYPE_FRAC:
 				if (!strcmp(sam9x7_plls[i][j].p, "mainck"))
-					parent_hw = sam9x7_pmc->chws[PMC_MAIN];
+					parent_hw = sam9x7_pmc->chws[SAM9X7_PMC_MAIN];
 				else if (!strcmp(sam9x7_plls[i][j].p, "main_osc"))
 					parent_hw = main_osc_hw;
 				else
@@ -843,7 +843,7 @@ static void __init sam9x7_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sam9x7_pmc->chws[PMC_MCK] = hw;
+	sam9x7_pmc->chws[SAM9X7_PMC_MCK] = hw;
 
 	parent_names[0] = "plla_divpmcck";
 	parent_names[1] = "upll_divpmcck";

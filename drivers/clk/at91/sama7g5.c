@@ -12,7 +12,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/slab.h>
 
-#include <dt-bindings/clock/at91.h>
+#include <dt-bindings/clock/microchip,sama7g5-pmc.h>
 
 #include "pmc.h"
 
@@ -183,7 +183,7 @@ static struct sama7g5_pll {
 			.t = PLL_TYPE_DIV,
 			/* This feeds CPU. It should not be disabled. */
 			.f = CLK_IS_CRITICAL | CLK_SET_RATE_PARENT,
-			.eid = PMC_CPUPLL,
+			.eid = SAMA7G5_PMC_CPUPLL,
 			/*
 			 * Safe div=15 should be safe even for switching b/w 1GHz and
 			 * 90MHz (frac pll might go up to 1.2GHz).
@@ -218,7 +218,7 @@ static struct sama7g5_pll {
 			 * Therefore it should not be disabled.
 			 */
 			.f = CLK_IS_CRITICAL | CLK_SET_RATE_GATE,
-			.eid = PMC_SYSPLL,
+			.eid = SAMA7G5_PMC_SYSPLL,
 		},
 	},
 
@@ -306,7 +306,7 @@ static struct sama7g5_pll {
 			.t = PLL_TYPE_DIV,
 			.f = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE |
 			     CLK_SET_RATE_PARENT,
-			.eid = PMC_AUDIOPMCPLL,
+			.eid = SAMA7G5_PMC_AUDIOPMCPLL,
 		},
 
 		[PLL_COMPID_DIV1] = {
@@ -317,7 +317,7 @@ static struct sama7g5_pll {
 			.t = PLL_TYPE_DIV,
 			.f = CLK_SET_RATE_GATE | CLK_SET_PARENT_GATE |
 			     CLK_SET_RATE_PARENT,
-			.eid = PMC_AUDIOIOPLL,
+			.eid = SAMA7G5_PMC_AUDIOIOPLL,
 		},
 	},
 
@@ -381,7 +381,7 @@ static struct {
 	  .ep_mux_table = { 5, },
 	  .ep_count = 1,
 	  .ep_chg_id = INT_MIN,
-	  .eid = PMC_MCK1,
+	  .eid = SAMA7G5_PMC_MCK1,
 	  .c = 1, },
 
 	{ .n = "mck2",
@@ -997,7 +997,7 @@ static void __init sama7g5_pmc_setup(struct device_node *np)
 	if (IS_ERR(regmap))
 		return;
 
-	sama7g5_pmc = pmc_data_allocate(PMC_MCK1 + 1,
+	sama7g5_pmc = pmc_data_allocate(SAMA7G5_PMC_MCK1 + 1,
 					nck(sama7g5_systemck),
 					nck(sama7g5_periphck),
 					nck(sama7g5_gck), 8);
@@ -1030,7 +1030,7 @@ static void __init sama7g5_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sama7g5_pmc->chws[PMC_MAIN] = hw;
+	sama7g5_pmc->chws[SAMA7G5_PMC_MAIN] = hw;
 
 	for (i = 0; i < PLL_ID_MAX; i++) {
 		for (j = 0; j < PLL_COMPID_MAX; j++) {
@@ -1043,7 +1043,7 @@ static void __init sama7g5_pmc_setup(struct device_node *np)
 			case PLL_TYPE_FRAC:
 				switch (sama7g5_plls[i][j].p) {
 				case SAMA7G5_PLL_PARENT_MAINCK:
-					parent_hw = sama7g5_pmc->chws[PMC_MAIN];
+					parent_hw = sama7g5_pmc->chws[SAMA7G5_PMC_MAIN];
 					break;
 				case SAMA7G5_PLL_PARENT_MAIN_XTAL:
 					parent_hw = main_xtal_hw;
@@ -1092,11 +1092,11 @@ static void __init sama7g5_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sama7g5_mckx[PCK_PARENT_HW_MCK0].hw = sama7g5_pmc->chws[PMC_MCK] = hw;
+	sama7g5_mckx[PCK_PARENT_HW_MCK0].hw = sama7g5_pmc->chws[SAMA7G5_PMC_MCK0] = hw;
 
 	parent_hws[0] = md_slck_hw;
 	parent_hws[1] = td_slck_hw;
-	parent_hws[2] = sama7g5_pmc->chws[PMC_MAIN];
+	parent_hws[2] = sama7g5_pmc->chws[SAMA7G5_PMC_MAIN];
 	for (i = PCK_PARENT_HW_MCK1; i < ARRAY_SIZE(sama7g5_mckx); i++) {
 		u8 num_parents = 3 + sama7g5_mckx[i].ep_count;
 		struct clk_hw *tmp_parent_hws[8];
@@ -1138,11 +1138,11 @@ static void __init sama7g5_pmc_setup(struct device_node *np)
 	if (IS_ERR(hw))
 		goto err_free;
 
-	sama7g5_pmc->chws[PMC_UTMI] = hw;
+	sama7g5_pmc->chws[SAMA7G5_PMC_UTMI] = hw;
 
 	parent_hws[0] = md_slck_hw;
 	parent_hws[1] = td_slck_hw;
-	parent_hws[2] = sama7g5_pmc->chws[PMC_MAIN];
+	parent_hws[2] = sama7g5_pmc->chws[SAMA7G5_PMC_MAIN];
 	parent_hws[3] = sama7g5_plls[PLL_ID_SYS][PLL_COMPID_DIV0].hw;
 	parent_hws[4] = sama7g5_plls[PLL_ID_DDR][PLL_COMPID_DIV0].hw;
 	parent_hws[5] = sama7g5_plls[PLL_ID_IMG][PLL_COMPID_DIV0].hw;
@@ -1192,7 +1192,7 @@ static void __init sama7g5_pmc_setup(struct device_node *np)
 
 	parent_hws[0] = md_slck_hw;
 	parent_hws[1] = td_slck_hw;
-	parent_hws[2] = sama7g5_pmc->chws[PMC_MAIN];
+	parent_hws[2] = sama7g5_pmc->chws[SAMA7G5_PMC_MAIN];
 	for (i = 0; i < ARRAY_SIZE(sama7g5_gck); i++) {
 		u8 num_parents = 3 + sama7g5_gck[i].pp_count;
 		struct clk_hw *tmp_parent_hws[8];
