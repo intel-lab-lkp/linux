@@ -65,7 +65,8 @@ quiet_cmd_initfs = GEN     $@
 	$(addprefix -u , $(CONFIG_INITRAMFS_ROOT_UID)) \
 	$(addprefix -g , $(CONFIG_INITRAMFS_ROOT_GID)) \
 	$(if $(KBUILD_BUILD_TIMESTAMP), -d "$(KBUILD_BUILD_TIMESTAMP)") \
-	$(ramfs-input)
+	$(if $(filter-out "",$(CONFIG_INITRAMFS_FILE_METADATA)), \
+	  -e $(CONFIG_INITRAMFS_FILE_METADATA)) $(ramfs-input)
 
 # We rebuild initramfs_data.cpio if:
 # 1) Any included file is newer than initramfs_data.cpio
