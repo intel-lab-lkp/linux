@@ -6645,7 +6645,12 @@ static int ath11k_mac_op_start(struct ieee80211_hw *hw)
 		break;
 	case ATH11K_STATE_RESTARTING:
 		ar->state = ATH11K_STATE_RESTARTED;
+		/* The restart work takes conf_mutex (spectral deinit), so
+		 * don't hold it while waiting for that work to finish.
+		 */
+		mutex_unlock(&ar->conf_mutex);
 		ath11k_mac_wait_reconfigure(ab);
+		mutex_lock(&ar->conf_mutex);
 		break;
 	case ATH11K_STATE_RESTARTED:
 	case ATH11K_STATE_WEDGED:
