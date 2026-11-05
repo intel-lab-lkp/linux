@@ -138,6 +138,26 @@ int dma_buf_mapping_select(struct dma_buf_attachment *attach);
 void dma_buf_mapping_unselect(struct dma_buf_attachment *attach,
 			      bool was_selected);
 
+/**
+ * dma_buf_attach_accepts - Is @type in the attachment's match set
+ * @attach: the attachment
+ * @type: a mapping type
+ *
+ * Called by exporters deciding placement in pin or select_mapping to determine
+ * whether the importer could be served with @type.
+ */
+static inline bool
+dma_buf_attach_accepts(const struct dma_buf_attachment *attach,
+		       const struct dma_buf_mapping_type *type)
+{
+	unsigned int i;
+
+	for (i = 0; i < attach->nr_matches; i++)
+		if (attach->matches[i].type == type)
+			return true;
+	return false;
+}
+
 /*
  * DMA Mapped Scatterlist Type
  *
@@ -185,6 +205,10 @@ dma_buf_sgt_dma_device(struct dma_buf_attachment *attach)
  *
  * Should be called by exporters, returns true if the exporter's
  * DMA_SGT_EXPORTER_REQUIRES_P2P_DISTANCE was matched.
+ *
+ * Reflects the current selection, so is only meaningful inside the
+ * exporter's pin and map callbacks. For attachments which may be unmapped use
+ * dma_buf_attach_accepts_sgt_p2p().
  */
 static inline bool dma_buf_sgt_p2p_allowed(struct dma_buf_attachment *attach)
 {
@@ -192,6 +216,28 @@ static inline bool dma_buf_sgt_p2p_allowed(struct dma_buf_attachment *attach)
 		return false;
 	return dma_buf_attach_map_type(attach)->sgt_data.exporter_requires_p2p ==
 	       DMA_SGT_EXPORTER_REQUIRES_P2P_DISTANCE;
+}
+
+/**
+ * dma_buf_attach_accepts_sgt_p2p - Could this attachment take a P2P SGT?
+ * @attach: any attachment
+ *
+ * Like dma_buf_sgt_p2p_allowed() but valid for attachments that are not mapped.
+ * Instead determines if p2p is part of the current possible match set rather
+ * than the current selection. Called by exporters walking all attachments in
+ * their pin path.
+ */
+static inline bool
+dma_buf_attach_accepts_sgt_p2p(const struct dma_buf_attachment *attach)
+{
+	unsigned int i;
+
+	for (i = 0; i < attach->nr_matches; i++)
+		if (attach->matches[i].type == &dma_buf_mapping_sgt_type &&
+		    attach->matches[i].sgt_data.exporter_requires_p2p ==
+			    DMA_SGT_EXPORTER_REQUIRES_P2P_DISTANCE)
+			return true;
+	return false;
 }
 
 static inline const struct dma_buf_mapping_sgt_exp_ops *
