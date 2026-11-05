@@ -364,6 +364,15 @@ struct dma_buf_ops {
 	 * disturbing a mapping that cannot be invalidated.
 	 */
 	int (*select_mapping)(struct dma_buf_attachment *attach);
+
+	/**
+	 * @single_exporter_match:
+	 *
+	 * Should only be set by the DMA_BUF_SIMPLE_*_EXP_MATCH() helper macros.
+	 * Exactly one of @match_mapping or @single_exporter_match must be
+	 * provided.
+	 */
+	const struct dma_buf_mapping_match *single_exporter_match;
 };
 
 /**
