@@ -259,6 +259,9 @@ static void gen6_ppgtt_free_pd(struct gen6_ppgtt *ppgtt)
 	struct i915_page_table *pt;
 	u32 pde;
 
+	if (!pd)
+		return;
+
 	gen6_for_all_pdes(pt, pd, pde)
 		if (pt)
 			free_pt(&ppgtt->base.vm, pt);
@@ -427,6 +430,7 @@ void gen6_ppgtt_unpin(struct i915_ppgtt *base)
 
 struct i915_ppgtt *gen6_ppgtt_create(struct intel_gt *gt)
 {
+	struct i915_page_directory *pd;
 	struct i915_ggtt * const ggtt = gt->ggtt;
 	struct gen6_ppgtt *ppgtt;
 	int err;
@@ -455,11 +459,12 @@ struct i915_ppgtt *gen6_ppgtt_create(struct intel_gt *gt)
 	if (err)
 		goto err_put;
 
-	ppgtt->base.pd = gen6_alloc_top_pd(ppgtt);
-	if (IS_ERR(ppgtt->base.pd)) {
-		err = PTR_ERR(ppgtt->base.pd);
+	pd = gen6_alloc_top_pd(ppgtt);
+	if (IS_ERR(pd)) {
+		err = PTR_ERR(pd);
 		goto err_put;
 	}
+	ppgtt->base.pd = pd;
 
 	return &ppgtt->base;
 
