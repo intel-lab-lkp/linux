@@ -31,7 +31,6 @@
 struct bch_dirty_init_state;
 struct dirty_init_thrd_info {
 	struct bch_dirty_init_state	*state;
-	struct task_struct		*thread;
 };
 
 struct bch_dirty_init_state {
@@ -40,9 +39,8 @@ struct bch_dirty_init_state {
 	int				total_threads;
 	int				key_idx;
 	spinlock_t			idx_lock;
-	atomic_t			started;
 	atomic_t			enough;
-	wait_queue_head_t		wait;
+	struct completion		done;
 	struct dirty_init_thrd_info	infos[BCH_DIRTY_INIT_THRD_MAX];
 };
 

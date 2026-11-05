@@ -16,6 +16,7 @@
 #include <linux/kthread.h>
 #include <linux/sched/clock.h>
 #include <trace/events/bcache.h>
+#include <linux/completion.h>
 
 static void update_gc_after_writeback(struct cache_set *c)
 {
@@ -953,12 +954,7 @@ static int bch_dirty_init_thread(void *arg)
 	}
 
 out:
-	/* In order to wake up state->wait in time */
-	smp_mb__before_atomic();
-	if (atomic_dec_and_test(&state->started))
-		wake_up(&state->wait);
-
-	return 0;
+	kthread_complete_and_exit(&state->done, 0);
 }
 
 static int bch_btre_dirty_init_thread_nr(void)
@@ -975,8 +971,9 @@ static int bch_btre_dirty_init_thread_nr(void)
 
 void bch_sectors_dirty_init(struct bcache_device *d)
 {
-	int i;
+	int i, launched = 0;
 	struct btree *b = NULL;
+	struct task_struct *thread;
 	struct bkey *k = NULL;
 	struct btree_iter_stack iter;
 	struct sectors_dirty_init op;
@@ -1014,9 +1011,8 @@ retry_lock:
 	state.total_threads = bch_btre_dirty_init_thread_nr();
 	state.key_idx = 0;
 	spin_lock_init(&state.idx_lock);
-	atomic_set(&state.started, 0);
 	atomic_set(&state.enough, 0);
-	init_waitqueue_head(&state.wait);
+	init_completion(&state.done);
 
 	for (i = 0; i < state.total_threads; i++) {
 		/* Fetch latest state.enough earlier */
@@ -1024,23 +1020,20 @@ retry_lock:
 		if (atomic_read(&state.enough))
 			break;
 
-		atomic_inc(&state.started);
 		state.infos[i].state = &state;
-		state.infos[i].thread =
+		thread =
 			kthread_run(bch_dirty_init_thread, &state.infos[i],
 				    "bch_dirtcnt[%d]", i);
-		if (IS_ERR(state.infos[i].thread)) {
+		if (IS_ERR(thread)) {
 			pr_err("fails to run thread bch_dirty_init[%d]\n", i);
-			atomic_dec(&state.started);
-			for (--i; i >= 0; i--)
-				kthread_stop(state.infos[i].thread);
-			goto out;
+			break;
 		}
+		launched++;
 	}
 
-out:
-	/* Must wait for all threads to stop. */
-	wait_event(state.wait, atomic_read(&state.started) == 0);
+	/* Wait for all threads to finish accessing state. */
+	for (i = 0; i < launched; i++)
+		wait_for_completion(&state.done);
 	rw_unlock(0, b);
 }
 
