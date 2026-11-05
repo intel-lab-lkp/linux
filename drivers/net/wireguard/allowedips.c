@@ -411,7 +411,7 @@ struct wg_peer *wg_allowedips_lookup_src(struct allowedips *table,
 
 int __init wg_allowedips_slab_init(void)
 {
-	node_cache = KMEM_CACHE(allowedips_node, 0);
+	node_cache = KMEM_CACHE(allowedips_node, SLAB_ACCOUNT);
 	return node_cache ? 0 : -ENOMEM;
 }
 

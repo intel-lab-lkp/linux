@@ -33,7 +33,7 @@ struct wg_peer *wg_peer_create(struct wg_device *wg,
 	peer = kmem_cache_zalloc(peer_cache, GFP_KERNEL);
 	if (unlikely(!peer))
 		return ERR_PTR(ret);
-	if (unlikely(dst_cache_init(&peer->endpoint_cache, GFP_KERNEL)))
+	if (unlikely(dst_cache_init(&peer->endpoint_cache, GFP_KERNEL_ACCOUNT)))
 		goto err;
 
 	peer->device = wg;
@@ -229,7 +229,7 @@ void wg_peer_put(struct wg_peer *peer)
 
 int __init wg_peer_init(void)
 {
-	peer_cache = KMEM_CACHE(wg_peer, 0);
+	peer_cache = KMEM_CACHE(wg_peer, SLAB_ACCOUNT);
 	return peer_cache ? 0 : -ENOMEM;
 }
 
