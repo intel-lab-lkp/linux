@@ -693,7 +693,16 @@ static void fat_evict_inode(struct inode *inode)
 		inode->i_size = 0;
 		fat_truncate_blocks(inode, 0);
 	} else {
-		mmb_sync(&MSDOS_I(inode)->i_metadata_bhs);
+		/*
+		 * fsync() can't find what I_METADATA_WRITEBACK tracks once the
+		 * inode is gone. This syncs the metadata buffers as well.
+		 */
+		if (inode_state_read_once(inode) & I_METADATA_WRITEBACK)
+			fat_sync_inode_metadata(inode, &(struct writeback_control) {
+				.sync_mode = WB_SYNC_ALL,
+			});
+		else
+			mmb_sync(&MSDOS_I(inode)->i_metadata_bhs);
 		fat_free_eofblocks(inode);
 	}
 
