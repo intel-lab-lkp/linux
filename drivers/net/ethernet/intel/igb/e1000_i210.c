@@ -7,9 +7,11 @@
 
 #include <linux/bitfield.h>
 #include <linux/if_ether.h>
+#include <linux/pci.h>
 #include <linux/types.h>
 #include "e1000_hw.h"
 #include "e1000_i210.h"
+#include "igb.h"
 
 static s32 igb_update_flash_i210(struct e1000_hw *hw);
 
@@ -812,6 +814,33 @@ s32 igb_init_nvm_params_i210(struct e1000_hw *hw)
 	return 0;
 }
 
+static bool igb_set_d0_i210(struct e1000_hw *hw, u16 pci_word)
+{
+	struct igb_adapter *adapter = hw->back;
+	u16 pmcsr;
+	int i;
+
+	pci_word &= ~PCI_PM_CTRL_STATE_MASK;
+	pci_word |= PCI_D0;
+
+	/* Some host controller drivers refuse config accesses while the root
+	 * port reports link training. The root port can report link training
+	 * while the device is in D3hot, so the write that requests D0 can be
+	 * refused.
+	 */
+	for (i = 0; i < 1000; i++) {
+		igb_write_pci_cfg(hw, E1000_PCI_PMCSR, &pci_word);
+		igb_read_pci_cfg(hw, E1000_PCI_PMCSR, &pmcsr);
+		if (!PCI_POSSIBLE_ERROR(pmcsr) &&
+		    (pmcsr & PCI_PM_CTRL_STATE_MASK) == PCI_D0)
+			return true;
+		usleep_range(50, 100);
+	}
+
+	dev_err(&adapter->pdev->dev, "Device stuck in D3hot\n");
+	return false;
+}
+
 /**
  * igb_pll_workaround_i210
  * @hw: pointer to the HW structure
@@ -866,8 +895,8 @@ s32 igb_pll_workaround_i210(struct e1000_hw *hw)
 		pci_word |= E1000_PCI_PMCSR_D3;
 		igb_write_pci_cfg(hw, E1000_PCI_PMCSR, &pci_word);
 		usleep_range(1000, 2000);
-		pci_word &= ~E1000_PCI_PMCSR_D3;
-		igb_write_pci_cfg(hw, E1000_PCI_PMCSR, &pci_word);
+		if (!igb_set_d0_i210(hw, pci_word))
+			break;
 		reg_val = (E1000_INVM_AUTOLOAD << 4) | (nvm_word << 16);
 		wr32(E1000_EEARBC_I210, reg_val);
 
