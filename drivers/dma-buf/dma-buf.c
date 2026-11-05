@@ -1345,6 +1345,39 @@ struct sg_table *dma_buf_map_sgt(struct dma_buf_attachment *attach,
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_map_sgt, "DMA_BUF");
 
+/* &dma_buf_mapping_type.map / .unmap for the SGT type */
+struct dma_buf_mapping *dma_buf_sgt_type_map(struct dma_buf_attachment *attach,
+					     enum dma_data_direction dir)
+{
+	struct dma_buf_sgt_mapping *mapping;
+	int ret;
+
+	mapping = kzalloc_obj(*mapping);
+	if (!mapping)
+		return ERR_PTR(-ENOMEM);
+
+	mapping->base.type = &dma_buf_mapping_sgt_type;
+	mapping->sgt = __dma_buf_map_sgt(attach, dir);
+	if (IS_ERR(mapping->sgt)) {
+		ret = PTR_ERR(mapping->sgt);
+		kfree(mapping);
+		return ERR_PTR(ret);
+	}
+
+	return &mapping->base;
+}
+
+void dma_buf_sgt_type_unmap(struct dma_buf_attachment *attach,
+			    struct dma_buf_mapping *base,
+			    enum dma_data_direction dir)
+{
+	struct dma_buf_sgt_mapping *mapping =
+		container_of(base, struct dma_buf_sgt_mapping, base);
+
+	dma_buf_unmap_sgt(attach, mapping->sgt, dir);
+	kfree(mapping);
+}
+
 /**
  * dma_buf_map_sgt_unlocked - Returns the scatterlist table of the attachment;
  * mapped into _device_ address space. Is a wrapper for map_dma_buf() of the

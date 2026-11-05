@@ -33,6 +33,16 @@ enum dma_sgt_requires_p2p {
 /* Type tag for all mapping operations */
 struct dma_buf_mapping_exp_ops {};
 
+/**
+ * struct dma_buf_mapping - header of a mapping made with dma_buf_mapping_map()
+ * @type: The mapping type the exporter selected. Importers that listed more
+ *        than one type switch on this and use the type's accessor to get at
+ *        the type-specific result embedding this header.
+ */
+struct dma_buf_mapping {
+	const struct dma_buf_mapping_type *type;
+};
+
 /*
  * Internal struct to pass arguments from the attach function to the matching
  * function
@@ -100,7 +110,34 @@ struct dma_buf_mapping_type {
 	 */
 	void (*debugfs_dump)(struct seq_file *s,
 			     struct dma_buf_attachment *attach);
+
+	/**
+	 * @map:
+	 *
+	 * Produce a mapping of this type for @attach, for which this type has
+	 * already been selected. Called by dma_buf_mapping_map()
+	 * with the dma_resv lock held. Responsible for pin-on-map of static
+	 * importers if the type supports them. Optional; a type without it
+	 * can only be used through its own map functions.
+	 */
+	struct dma_buf_mapping *(*map)(struct dma_buf_attachment *attach,
+				       enum dma_data_direction dir);
+
+	/**
+	 * @unmap:
+	 *
+	 * Release a mapping returned by @map.
+	 */
+	void (*unmap)(struct dma_buf_attachment *attach,
+		      struct dma_buf_mapping *mapping,
+		      enum dma_data_direction dir);
 };
+
+struct dma_buf_mapping *dma_buf_mapping_map(struct dma_buf_attachment *attach,
+					    enum dma_data_direction dir);
+void dma_buf_mapping_unmap(struct dma_buf_attachment *attach,
+			   struct dma_buf_mapping *mapping,
+			   enum dma_data_direction dir);
 
 struct sg_table *dma_buf_phys_vec_to_sgt(struct dma_buf_attachment *attach,
 					 struct p2pdma_provider *provider,
@@ -158,6 +195,13 @@ dma_buf_attach_accepts(const struct dma_buf_attachment *attach,
 	return false;
 }
 
+/* Internal: &dma_buf_mapping_sgt_type.map / .unmap, implemented in dma-buf.c */
+struct dma_buf_mapping *dma_buf_sgt_type_map(struct dma_buf_attachment *attach,
+					     enum dma_data_direction dir);
+void dma_buf_sgt_type_unmap(struct dma_buf_attachment *attach,
+			    struct dma_buf_mapping *mapping,
+			    enum dma_data_direction dir);
+
 /*
  * DMA Mapped Scatterlist Type
  *
@@ -174,6 +218,25 @@ dma_buf_attach_accepts(const struct dma_buf_attachment *attach,
  * dma_addr_t's.
  */
 extern struct dma_buf_mapping_type dma_buf_mapping_sgt_type;
+
+/**
+ * struct dma_buf_sgt_mapping - dma_buf_mapping_map() result for the SGT type
+ * @base: common header, @base.type == &dma_buf_mapping_sgt_type
+ * @sgt: the DMA mapped scatterlist, as the SGT type's own map function
+ *       returns it
+ */
+struct dma_buf_sgt_mapping {
+	struct dma_buf_mapping base;
+	struct sg_table *sgt;
+};
+
+static inline struct sg_table *
+dma_buf_sgt_mapping_table(struct dma_buf_mapping *mapping)
+{
+	if (WARN_ON(mapping->type != &dma_buf_mapping_sgt_type))
+		return NULL;
+	return container_of(mapping, struct dma_buf_sgt_mapping, base)->sgt;
+}
 
 struct dma_buf_mapping_sgt_exp_ops {
 	struct dma_buf_mapping_exp_ops ops;
