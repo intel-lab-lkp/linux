@@ -91,6 +91,14 @@ void ext2_evict_inode(struct inode * inode)
 		if (inode->i_blocks)
 			ext2_truncate_blocks(inode, 0);
 		ext2_xattr_delete_inode(inode);
+	} else if (inode_state_read_once(inode) & I_METADATA_WRITEBACK) {
+		/*
+		 * fsync() can't find what I_METADATA_WRITEBACK tracks once the
+		 * inode is gone. This syncs the metadata buffers as well.
+		 */
+		ext2_sync_inode_metadata(inode, &(struct writeback_control) {
+			.sync_mode = WB_SYNC_ALL,
+		});
 	} else {
 		mmb_sync(&EXT2_I(inode)->i_metadata_bhs);
 	}
