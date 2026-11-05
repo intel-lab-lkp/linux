@@ -903,7 +903,10 @@ int ath11k_reg_handle_chan_list(struct ath11k_base *ab,
 	if (test_bit(ATH11K_FLAG_RECOVERY, &ab->dev_flags) &&
 	    ab->default_regd[pdev_idx]) {
 		spin_unlock_bh(&ab->base_lock);
-		goto retfail;
+		if (power_type != IEEE80211_REG_UNSET_AP)
+			goto retfail;
+		ath11k_reg_reset_info(reg_info);
+		return 0;
 	}
 	spin_unlock_bh(&ab->base_lock);
 
