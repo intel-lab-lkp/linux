@@ -855,7 +855,7 @@ static int mali_c55_register_cap_dev(struct mali_c55 *mali_c55,
 		goto err_destroy_mutex;
 	}
 
-	cap_dev->pad.flags = MEDIA_PAD_FL_SINK;
+	cap_dev->pad.flags = MEDIA_PAD_FL_SINK | MEDIA_PAD_FL_MUST_CONNECT;
 	ret = media_entity_pads_init(&cap_dev->vdev.entity, 1, &cap_dev->pad);
 	if (ret)
 		goto err_destroy_mutex;

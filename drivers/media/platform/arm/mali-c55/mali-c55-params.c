@@ -1014,7 +1014,7 @@ int mali_c55_register_params(struct mali_c55 *mali_c55)
 	INIT_LIST_HEAD(&params->buffers.queue);
 	spin_lock_init(&params->buffers.lock);
 
-	params->pad.flags = MEDIA_PAD_FL_SOURCE;
+	params->pad.flags = MEDIA_PAD_FL_SOURCE | MEDIA_PAD_FL_MUST_CONNECT;
 	ret = media_entity_pads_init(&params->vdev.entity, 1, &params->pad);
 	if (ret)
 		goto err_destroy_mutex;

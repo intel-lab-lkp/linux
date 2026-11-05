@@ -275,7 +275,7 @@ int mali_c55_register_stats(struct mali_c55 *mali_c55)
 	INIT_LIST_HEAD(&stats->buffers.queue);
 	spin_lock_init(&stats->buffers.lock);
 
-	stats->pad.flags = MEDIA_PAD_FL_SINK;
+	stats->pad.flags = MEDIA_PAD_FL_SINK | MEDIA_PAD_FL_MUST_CONNECT;
 	ret = media_entity_pads_init(&stats->vdev.entity, 1, &stats->pad);
 	if (ret)
 		goto err_destroy_mutex;
