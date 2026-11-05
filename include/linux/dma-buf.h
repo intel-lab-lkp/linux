@@ -338,6 +338,32 @@ struct dma_buf_ops {
 	 * any time until the final location is resolved during map/pin.
 	 */
 	int (*match_mapping)(struct dma_buf_match_args *args);
+
+	/**
+	 * @select_mapping:
+	 *
+	 * Called with the dma_resv lock held from dma_buf_pin() and from the
+	 * map functions, before the type's map callback, to choose which
+	 * entry of &dma_buf_attachment.matches this attachment is mapped
+	 * with. The exporter settles the buffer's placement here, taking all
+	 * live mappings and pinned attachments into account, and returns the
+	 * entry that placement can serve.
+	 *
+	 * The core records the choice and does not ask again until the exporter
+	 * has delivered &dma_buf_attach_ops.invalidate_mappings to this
+	 * attachment. The exporter must therefore keep the recorded type
+	 * servable: moving the buffer somewhere the selected type cannot be
+	 * produced from requires invalidating first. Attachments that cannot
+	 * be invalidated keep their first choice for life.
+	 *
+	 * Optional. Without it the first entry of the match set, the
+	 * exporter's most preferred, is used.
+	 *
+	 * Returns: the index into &dma_buf_attachment.matches to use, or a
+	 * negative errno. -EBUSY means the attachment cannot be served without
+	 * disturbing a mapping that cannot be invalidated.
+	 */
+	int (*select_mapping)(struct dma_buf_attachment *attach);
 };
 
 /**
@@ -562,6 +588,16 @@ struct dma_buf_attach_ops {
  *           entry is the exporter's default; dma_buf_attach_map_type()
  *           returns the entry the attachment is mapped with.
  * @nr_matches: Number of valid entries in @matches.
+ * @selected_idx: Index into @matches of the entry the attachment is mapped
+ *                with, chosen by &dma_buf_ops.select_mapping at the first pin
+ *                or map and kept, enforced by the core, until
+ *                &dma_buf_attach_ops.invalidate_mappings is delivered to this
+ *                attachment. Zero, the exporter's default, before the first
+ *                selection. Still valid after an invalidate so that a pending
+ *                unmap sees the type its mapping was made with.
+ * @selected: True while @selected_idx is in force, i.e. the next pin or map
+ *            must not select again; cleared only by
+ *            dma_buf_invalidate_mappings().
  *
  * This structure holds the attachment information between the dma_buf buffer
  * and its user device(s). The list contains one attachment struct per device
@@ -582,6 +618,8 @@ struct dma_buf_attachment {
 	void *priv;
 	struct dma_buf_mapping_match matches[DMA_BUF_MAX_MATCHES];
 	unsigned int nr_matches;
+	unsigned int selected_idx;
+	bool selected;
 };
 
 /**

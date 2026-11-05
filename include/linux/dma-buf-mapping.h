@@ -118,14 +118,25 @@ int dma_buf_match_mapping(struct dma_buf_match_args *args,
  * dma_buf_attach_map_type - The match this attachment is mapped with
  * @attach: the attachment
  *
- * Returns the entry of @attach->matches in force for the attachment: the
- * exporter's default, which is the first entry.
+ * Returns the entry of @attach->matches the attachment is mapped with: the
+ * one the exporter selected at the last pin or map, or the exporter's
+ * default, the first entry, before anything was selected. After
+ * dma_buf_invalidate_mappings() it still names the type a live mapping was
+ * made with, so a pending unmap can use it, until the next selection.
  */
 static inline const struct dma_buf_mapping_match *
 dma_buf_attach_map_type(const struct dma_buf_attachment *attach)
 {
-	return &attach->matches[0];
+	return &attach->matches[attach->selected_idx];
 }
+
+/*
+ * Internal: Selection is made by exporters through &dma_buf_ops.select_mapping
+ * in dma_buf_pin() or map paths. Importers never call this.
+ */
+int dma_buf_mapping_select(struct dma_buf_attachment *attach);
+void dma_buf_mapping_unselect(struct dma_buf_attachment *attach,
+			      bool was_selected);
 
 /*
  * DMA Mapped Scatterlist Type
