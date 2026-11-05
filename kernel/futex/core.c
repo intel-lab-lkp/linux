@@ -2068,19 +2068,22 @@ void futex_mm_init(struct mm_struct *mm)
 	futex_robust_unlock_init_mm(&mm->futex);
 }
 
-int futex_hash_prctl(unsigned long arg2, unsigned long arg3, unsigned long arg4)
+int futex_hash_prctl(unsigned long arg2, unsigned long arg3, unsigned long arg4,
+		     unsigned long arg5)
 {
 	unsigned int flags = FH_CUSTOM;
 	int ret;
 
 	switch (arg2) {
 	case PR_FUTEX_HASH_SET_SLOTS:
-		if (arg4)
+		if (arg4 || arg5)
 			return -EINVAL;
 		ret = futex_hash_allocate(arg3, flags);
 		break;
 
 	case PR_FUTEX_HASH_GET_SLOTS:
+		if (arg3 || arg4 || arg5)
+			return -EINVAL;
 		ret = futex_hash_get_slots();
 		break;
 

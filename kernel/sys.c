@@ -2885,7 +2885,7 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		error = posixtimer_create_prctl(arg2);
 		break;
 	case PR_FUTEX_HASH:
-		error = futex_hash_prctl(arg2, arg3, arg4);
+		error = futex_hash_prctl(arg2, arg3, arg4, arg5);
 		break;
 	case PR_RSEQ_SLICE_EXTENSION:
 		if (arg4 || arg5)
