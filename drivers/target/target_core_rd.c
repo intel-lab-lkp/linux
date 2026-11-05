@@ -117,7 +117,6 @@ static int rd_allocate_sgl_table(struct rd_dev *rd_dev, struct rd_dev_sg_table *
 				sizeof(struct scatterlist));
 	struct page *pg;
 	struct scatterlist *sg;
-	unsigned char *p;
 
 	while (total_sg_needed) {
 		unsigned int chain_entry = 0;
@@ -158,9 +157,7 @@ static int rd_allocate_sgl_table(struct rd_dev *rd_dev, struct rd_dev_sg_table *
 			sg_assign_page(&sg[j], pg);
 			sg[j].length = PAGE_SIZE;
 
-			p = kmap(pg);
-			memset(p, init_payload, PAGE_SIZE);
-			kunmap(pg);
+			memset_page(pg, 0, init_payload, PAGE_SIZE);
 		}
 
 		page_offset += sg_per_table;
