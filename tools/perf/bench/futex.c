@@ -20,7 +20,7 @@ void futex_set_nbuckets_param(struct bench_futex_parameters *params)
 	if (params->nbuckets < 0)
 		return;
 
-	ret = prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_SET_SLOTS, params->nbuckets, 0);
+	ret = prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_SET_SLOTS, params->nbuckets, 0, 0);
 	if (ret) {
 		printf("Requesting %d hash buckets failed: %d/%m\n",
 		       params->nbuckets, ret);
@@ -33,7 +33,7 @@ void futex_print_nbuckets(struct bench_futex_parameters *params)
 	char *futex_hash_mode;
 	int ret;
 
-	ret = prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_GET_SLOTS);
+	ret = prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_GET_SLOTS, 0, 0, 0);
 	if (params->nbuckets >= 0) {
 		if (ret != params->nbuckets) {
 			if (ret < 0) {

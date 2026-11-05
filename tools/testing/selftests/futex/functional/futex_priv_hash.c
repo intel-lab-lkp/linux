@@ -32,12 +32,12 @@ static int counter;
 
 static int futex_hash_slots_set(unsigned int slots)
 {
-	return prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_SET_SLOTS, slots, 0);
+	return prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_SET_SLOTS, slots, 0, 0);
 }
 
 static int futex_hash_slots_get(void)
 {
-	return prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_GET_SLOTS);
+	return prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_GET_SLOTS, 0, 0, 0);
 }
 
 static void futex_hash_slots_set_verify(struct __test_metadata *_metadata, int slots)
