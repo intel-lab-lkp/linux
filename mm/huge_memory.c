@@ -2817,6 +2817,10 @@ int change_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	if (userfaultfd_rwp(vma) && pmd_uffd(entry))
 		entry = pmd_modify(entry, PAGE_NONE);
 
+	/* See change_present_ptes(). */
+	if (mm_cp_is_perm_upgrade(cp_flags) && pmd_write(oldpmd))
+		entry = pmd_mkwrite(entry, vma);
+
 	/* See change_pte_range(). */
 	if ((cp_flags & MM_CP_TRY_CHANGE_WRITABLE) && !pmd_write(entry) &&
 	    can_change_pmd_writable(vma, addr, entry))
@@ -2893,6 +2897,9 @@ int change_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	 */
 	oldpud = pudp_invalidate(vma, addr, pudp);
 	entry = pud_modify(oldpud, newprot);
+	/* See change_present_ptes(). */
+	if (mm_cp_is_perm_upgrade(cp_flags) && pud_write(oldpud))
+		entry = pud_mkwrite(entry);
 	/* See change_pte_range(). */
 	if ((cp_flags & MM_CP_TRY_CHANGE_WRITABLE) && !pud_write(entry) &&
 	    can_change_pud_writable(vma, addr, entry))

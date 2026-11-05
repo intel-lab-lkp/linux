@@ -306,6 +306,10 @@ static __always_inline void change_present_ptes(struct mmu_gather *tlb,
 	if (userfaultfd_rwp(vma) && pte_uffd(ptent))
 		ptent = pte_modify(ptent, PAGE_NONE);
 
+	/* A permission upgrade keeps writable entries writable. */
+	if (mm_cp_is_perm_upgrade(cp_flags) && pte_write(oldpte))
+		ptent = pte_mkwrite(ptent, vma);
+
 	/*
 	 * In some writable, shared mappings, we might want
 	 * to catch actual write access -- see
