@@ -1785,6 +1785,32 @@ xfs_buftarg_flush_done(
 		;
 }
 
+/*
+ * Return true if a flush numbered above @seq has completed. All writes that
+ * completed before @seq was read are then on stable storage.
+ */
+bool
+xfs_buftarg_flushed_since(
+	struct xfs_buftarg	*btp,
+	s64			seq)
+{
+	return atomic64_read(&btp->bt_flush_completed) > seq;
+}
+
+/* Flush the device cache and record it. */
+int
+xfs_buftarg_flush(
+	struct xfs_buftarg	*btp)
+{
+	s64			seq = xfs_buftarg_flush_start(btp);
+	int			error;
+
+	error = blkdev_issue_flush(btp->bt_bdev);
+	if (!error)
+		xfs_buftarg_flush_done(btp, seq);
+	return error;
+}
+
 struct xfs_buftarg *
 xfs_alloc_buftarg(
 	struct xfs_mount	*mp,
