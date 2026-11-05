@@ -4,6 +4,7 @@
  */
 
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-heap.h>
 #include <linux/genalloc.h>
 #include <linux/module.h>
@@ -104,7 +105,7 @@ static int tee_heap_attach(struct dma_buf *dmabuf,
 		return ret;
 	}
 
-	a->dev = attachment->dev;
+	a->dev = dma_buf_sgt_dma_device(attachment);
 	attachment->priv = a;
 
 	return 0;
@@ -126,8 +127,8 @@ tee_heap_map_dma_buf(struct dma_buf_attachment *attachment,
 	struct tee_heap_attachment *a = attachment->priv;
 	int ret;
 
-	ret = dma_map_sgtable(attachment->dev, &a->table, direction,
-			      DMA_ATTR_SKIP_CPU_SYNC);
+	ret = dma_map_sgtable(dma_buf_sgt_dma_device(attachment), &a->table,
+			      direction, DMA_ATTR_SKIP_CPU_SYNC);
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -142,7 +143,7 @@ static void tee_heap_unmap_dma_buf(struct dma_buf_attachment *attachment,
 
 	WARN_ON(&a->table != table);
 
-	dma_unmap_sgtable(attachment->dev, table, direction,
+	dma_unmap_sgtable(dma_buf_sgt_dma_device(attachment), table, direction,
 			  DMA_ATTR_SKIP_CPU_SYNC);
 }
 
@@ -160,9 +161,9 @@ static void tee_heap_buf_free(struct dma_buf *dmabuf)
 static const struct dma_buf_ops tee_heap_buf_ops = {
 	.attach = tee_heap_attach,
 	.detach = tee_heap_detach,
-	.map_dma_buf = tee_heap_map_dma_buf,
-	.unmap_dma_buf = tee_heap_unmap_dma_buf,
 	.release = tee_heap_buf_free,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(tee_heap_map_dma_buf,
+				     tee_heap_unmap_dma_buf),
 };
 
 static struct dma_buf *tee_dma_heap_alloc(struct dma_heap *heap,

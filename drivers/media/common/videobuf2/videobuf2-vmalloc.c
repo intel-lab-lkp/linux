@@ -10,6 +10,7 @@
  * the Free Software Foundation.
  */
 
+#include <linux/dma-buf-mapping.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/mm.h>
@@ -261,7 +262,8 @@ static void vb2_vmalloc_dmabuf_ops_detach(struct dma_buf *dbuf,
 
 	/* release the scatterlist cache */
 	if (attach->dma_dir != DMA_NONE)
-		dma_unmap_sgtable(db_attach->dev, sgt, attach->dma_dir, 0);
+		dma_unmap_sgtable(dma_buf_sgt_dma_device(db_attach), sgt,
+				  attach->dma_dir, 0);
 	sg_free_table(sgt);
 	kfree(attach);
 	db_attach->priv = NULL;
@@ -270,6 +272,7 @@ static void vb2_vmalloc_dmabuf_ops_detach(struct dma_buf *dbuf,
 static struct sg_table *vb2_vmalloc_dmabuf_ops_map(
 	struct dma_buf_attachment *db_attach, enum dma_data_direction dma_dir)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(db_attach);
 	struct vb2_vmalloc_attachment *attach = db_attach->priv;
 	struct sg_table *sgt;
 
@@ -280,12 +283,12 @@ static struct sg_table *vb2_vmalloc_dmabuf_ops_map(
 
 	/* release any previous cache */
 	if (attach->dma_dir != DMA_NONE) {
-		dma_unmap_sgtable(db_attach->dev, sgt, attach->dma_dir, 0);
+		dma_unmap_sgtable(dma_dev, sgt, attach->dma_dir, 0);
 		attach->dma_dir = DMA_NONE;
 	}
 
 	/* mapping to the client with new direction */
-	if (dma_map_sgtable(db_attach->dev, sgt, dma_dir, 0)) {
+	if (dma_map_sgtable(dma_dev, sgt, dma_dir, 0)) {
 		pr_err("failed to map scatterlist\n");
 		return ERR_PTR(-EIO);
 	}
@@ -326,11 +329,11 @@ static int vb2_vmalloc_dmabuf_ops_mmap(struct dma_buf *dbuf,
 static const struct dma_buf_ops vb2_vmalloc_dmabuf_ops = {
 	.attach = vb2_vmalloc_dmabuf_ops_attach,
 	.detach = vb2_vmalloc_dmabuf_ops_detach,
-	.map_dma_buf = vb2_vmalloc_dmabuf_ops_map,
-	.unmap_dma_buf = vb2_vmalloc_dmabuf_ops_unmap,
 	.vmap = vb2_vmalloc_dmabuf_ops_vmap,
 	.mmap = vb2_vmalloc_dmabuf_ops_mmap,
 	.release = vb2_vmalloc_dmabuf_ops_release,
+	DMA_BUF_SIMPLE_SGT_EXP_MATCH(vb2_vmalloc_dmabuf_ops_map,
+				     vb2_vmalloc_dmabuf_ops_unmap),
 };
 
 static struct dma_buf *vb2_vmalloc_get_dmabuf(struct vb2_buffer *vb,
