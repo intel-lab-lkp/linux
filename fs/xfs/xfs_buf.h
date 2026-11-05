@@ -103,6 +103,17 @@ struct xfs_buftarg {
 	unsigned int		bt_awu_max;
 
 	struct rhashtable	bt_hash;
+
+	/*
+	 * Cache flush tracking: a flush that takes the next number from
+	 * xfs_buftarg_flush_start() before it is submitted records it here
+	 * once it completes without error, keeping the highest number. A
+	 * completed flush with a number above a snapshot taken after some
+	 * writes completed covers those writes. Flushes without a number
+	 * are not counted.
+	 */
+	atomic64_t		bt_flush_submitted;
+	atomic64_t		bt_flush_completed;
 };
 
 struct xfs_buf_map {
@@ -356,6 +367,16 @@ xfs_buf_update_cksum(struct xfs_buf *bp, unsigned long cksum_offset)
 struct xfs_buftarg *xfs_alloc_buftarg(struct xfs_mount *mp,
 		struct file *bdev_file);
 extern void xfs_free_buftarg(struct xfs_buftarg *);
+
+/* Call right before submitting a cache flush to @btp. */
+static inline s64
+xfs_buftarg_flush_start(
+	struct xfs_buftarg	*btp)
+{
+	return atomic64_inc_return(&btp->bt_flush_submitted);
+}
+
+void xfs_buftarg_flush_done(struct xfs_buftarg *btp, s64 seq);
 extern void xfs_buftarg_wait(struct xfs_buftarg *);
 extern void xfs_buftarg_drain(struct xfs_buftarg *);
 int xfs_configure_buftarg(struct xfs_buftarg *btp, unsigned int sectorsize,
