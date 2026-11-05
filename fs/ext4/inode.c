@@ -261,9 +261,19 @@ void ext4_evict_inode(struct inode *inode)
 			ext4_warning_inode(inode, "data will be lost");
 
 		truncate_inode_pages_final(&inode->i_data);
-		mmb = ext4_i_metadata_bhs(inode);
-		if (mmb)
-			mmb_sync(mmb);
+		/*
+		 * fsync() can't find what I_METADATA_WRITEBACK tracks once the
+		 * inode is gone. This syncs the metadata buffers as well.
+		 */
+		if (inode_state_read_once(inode) & I_METADATA_WRITEBACK) {
+			ext4_sync_inode_metadata(inode, &(struct writeback_control) {
+				.sync_mode = WB_SYNC_ALL,
+			});
+		} else {
+			mmb = ext4_i_metadata_bhs(inode);
+			if (mmb)
+				mmb_sync(mmb);
+		}
 		goto no_delete;
 	}
 
