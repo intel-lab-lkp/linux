@@ -796,11 +796,6 @@ pull:
 			if (unlikely(!hp))
 				return false;
 
-			if (hp->nexthdr == NEXTHDR_ROUTING) {
-				hp->nexthdr = srh_nexthdr;
-				break;
-			}
-
 			switch (nexthdr) {
 			case NEXTHDR_FRAGMENT:
 				fallthrough;
@@ -809,6 +804,11 @@ pull:
 				return false;
 			default:
 				off += ipv6_optlen(hp);
+				break;
+			}
+
+			if (hp->nexthdr == NEXTHDR_ROUTING) {
+				hp->nexthdr = srh_nexthdr;
 				break;
 			}
 
