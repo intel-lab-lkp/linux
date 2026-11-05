@@ -1826,8 +1826,11 @@ static enum scan_result set_huge_pmd(struct vm_area_struct *vma, unsigned long a
 	}
 
 	vmf.pmd = pmdp;
-	if (do_set_pmd(&vmf, folio, page))
+	if (do_set_pmd(&vmf, folio, page)) {
+		if (vmf.prealloc_pte)
+			pte_free(mm, vmf.prealloc_pte);
 		return SCAN_FAIL;
+	}
 
 	folio_get(folio);
 	return SCAN_SUCCEED;
