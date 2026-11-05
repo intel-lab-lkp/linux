@@ -12,15 +12,6 @@
 
 MODULE_IMPORT_NS("DMA_BUF");
 
-static int uverbs_dmabuf_attach(struct dma_buf *dmabuf,
-				struct dma_buf_attachment *attachment)
-{
-	if (!attachment->peer2peer)
-		return -EOPNOTSUPP;
-
-	return 0;
-}
-
 static struct sg_table *
 uverbs_dmabuf_map(struct dma_buf_attachment *attachment,
 		  enum dma_data_direction dir)
@@ -95,13 +86,30 @@ static void uverbs_dmabuf_release(struct dma_buf *dmabuf)
 	uverbs_uobject_put(&priv->uobj);
 }
 
-static const struct dma_buf_ops uverbs_dmabuf_ops = {
-	.attach = uverbs_dmabuf_attach,
+static const struct dma_buf_mapping_sgt_exp_ops uverbs_dma_buf_sgt_ops = {
 	.map_dma_buf = uverbs_dmabuf_map,
 	.unmap_dma_buf = uverbs_dmabuf_unmap,
+};
+
+static int uverbs_dmabuf_match_mapping(struct dma_buf_match_args *args)
+{
+	struct dma_buf_mapping_match sgt_match[1];
+
+	/*
+	 * MMIO, so the importer must accept P2P. The provider is only valid
+	 * under the dma_resv lock while not revoked, so the distance check is
+	 * left to dma_buf_phys_vec_to_sgt() at map time, as before.
+	 */
+	sgt_match[0] = DMA_BUF_EMAPPING_SGT_REQUIRES_P2P(&uverbs_dma_buf_sgt_ops);
+
+	return dma_buf_match_mapping(args, sgt_match, ARRAY_SIZE(sgt_match));
+}
+
+static const struct dma_buf_ops uverbs_dmabuf_ops = {
 	.pin = uverbs_dmabuf_pin,
 	.unpin = uverbs_dmabuf_unpin,
 	.release = uverbs_dmabuf_release,
+	.match_mapping = uverbs_dmabuf_match_mapping,
 };
 
 static int UVERBS_HANDLER(UVERBS_METHOD_DMABUF_ALLOC)(
