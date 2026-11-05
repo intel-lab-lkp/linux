@@ -12422,13 +12422,11 @@ ath12k_mac_op_unassign_vif_chanctx(struct ieee80211_hw *hw,
 
 	WARN_ON(!arvif->is_started);
 
-	if (ahvif->vdev_type == WMI_VDEV_TYPE_MONITOR) {
-		ret = ath12k_mac_monitor_stop(ar);
-		if (ret)
-			return;
-
-		arvif->is_started = false;
-	}
+	/* mac80211 can't fail an unassignment, so the link counts as stopped
+	 * below even if the monitor stop fails (that warns on its own).
+	 */
+	if (ahvif->vdev_type == WMI_VDEV_TYPE_MONITOR)
+		ath12k_mac_monitor_stop(ar);
 
 	if (ahvif->vdev_type != WMI_VDEV_TYPE_STA &&
 	    ahvif->vdev_type != WMI_VDEV_TYPE_MONITOR) {
