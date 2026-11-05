@@ -1117,7 +1117,12 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 		u32 addr = pctrl->phys_base[0] + reg;
 		int ret;
 
-		qcom_scm_io_readl(addr, &val);
+		ret = qcom_scm_io_readl(addr, &val);
+		if (ret) {
+			raw_spin_unlock_irqrestore(&pctrl->lock, flags);
+			return ret;
+		}
+
 		val &= ~(intr_target_mask << g->intr_target_bit);
 		val |= g->intr_target_kpss_val << g->intr_target_bit;
 
