@@ -164,6 +164,22 @@ static inline bool fsverity_active(const struct inode *inode)
 	return false;
 }
 
+/**
+ * fsverity_is_building() - is fs-verity being enabled on the inode
+ * @inode: inode to check
+ *
+ * This checks whether the inode's Merkle tree is currently being built.
+ * While this is the case the file is read-only to userspace and the only writes
+ * allowed are for the fs-verity metadata. This becomes false when fsverity
+ * metadata is fully created and written to disk or building failed.
+ *
+ * Return: true if fs-verity is being enabled on the inode
+ */
+static inline bool fsverity_is_building(const struct inode *inode)
+{
+	return inode_state_read_once((struct inode *)inode) & I_VERITY_BUILDING;
+}
+
 struct fsverity_info *__fsverity_get_info(const struct inode *inode);
 /**
  * fsverity_get_info - get fsverity information for an inode
@@ -213,6 +229,11 @@ void fsverity_fill_zerohash(struct folio *folio, size_t offset, size_t len,
 #else /* !CONFIG_FS_VERITY */
 
 static inline bool fsverity_active(const struct inode *inode)
+{
+	return false;
+}
+
+static inline bool fsverity_is_building(const struct inode *inode)
 {
 	return false;
 }
