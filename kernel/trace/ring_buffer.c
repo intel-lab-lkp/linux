@@ -3783,10 +3783,13 @@ rb_handle_head_page(struct ring_buffer_per_cpu *cpu_buffer,
 	 *            1) We really set it.
 	 *            2) A bunch of interrupts came in and moved
 	 *               the page forward again.
+	 *  MOVED  - another writer set it, then a reader on
+	 *           another CPU swapped it for its reader page.
 	 */
 	switch (ret) {
 	case RB_PAGE_HEAD:
 	case RB_PAGE_NORMAL:
+	case RB_PAGE_MOVED:
 		/* OK */
 		break;
 	default:
