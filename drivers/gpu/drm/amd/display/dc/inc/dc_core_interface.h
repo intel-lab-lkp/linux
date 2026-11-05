@@ -3,7 +3,8 @@
  * Copyright 2026 Advanced Micro Devices, Inc.
  */
 
-#pragma once
+#ifndef DC_CORE_INTERFACE_H_
+#define DC_CORE_INTERFACE_H_
 
 struct dc;
 
@@ -29,3 +30,5 @@ struct dc2_funcs {
 void legacy_hardware_init(struct dc *dc);
 void legacy_hardware_release(struct dc *dc);
 const struct dc2_funcs *dc2_legacy_funcs(void);
+
+#endif /* DC_CORE_INTERFACE_H_ */
