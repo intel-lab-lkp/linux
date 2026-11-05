@@ -16,7 +16,7 @@ use crate::{
     prelude::*,
     str::CStr,
     task::{
-        MAX_SCHEDULE_TIMEOUT,
+        self,
         TASK_FREEZABLE,
         TASK_INTERRUPTIBLE,
         TASK_UNINTERRUPTIBLE, //
@@ -104,11 +104,10 @@ impl CondVar {
         &self,
         wait_state: c_int,
         guard: &mut Guard<'_, T, B>,
-        timeout_in_jiffies: c_long,
-    ) -> c_long {
+        timeout: Jiffies,
+    ) -> Jiffies {
         self.wq.wait_once_exclusive(wait_state, || {
-            // SAFETY: Switches to another thread. The timeout can be any number.
-            guard.do_unlocked(|| unsafe { bindings::schedule_timeout(timeout_in_jiffies) })
+            guard.do_unlocked(|| task::schedule_timeout(timeout))
         })
     }
 
@@ -119,7 +118,7 @@ impl CondVar {
     /// [`CondVar::notify_one`] or [`CondVar::notify_all`]. Note that it may also wake up
     /// spuriously.
     pub fn wait<T: ?Sized, B: Backend>(&self, guard: &mut Guard<'_, T, B>) {
-        self.wait_internal(TASK_UNINTERRUPTIBLE, guard, MAX_SCHEDULE_TIMEOUT);
+        self.wait_internal(TASK_UNINTERRUPTIBLE, guard, Jiffies::MAX);
     }
 
     /// Releases the lock and waits for a notification in interruptible mode.
@@ -130,7 +129,7 @@ impl CondVar {
     /// Returns whether there is a signal pending.
     #[must_use = "wait_interruptible returns if a signal is pending, so the caller must check the return value"]
     pub fn wait_interruptible<T: ?Sized, B: Backend>(&self, guard: &mut Guard<'_, T, B>) -> bool {
-        self.wait_internal(TASK_INTERRUPTIBLE, guard, MAX_SCHEDULE_TIMEOUT);
+        self.wait_internal(TASK_INTERRUPTIBLE, guard, Jiffies::MAX);
         crate::current!().signal_pending()
     }
 
@@ -145,11 +144,7 @@ impl CondVar {
         &self,
         guard: &mut Guard<'_, T, B>,
     ) -> bool {
-        self.wait_internal(
-            TASK_INTERRUPTIBLE | TASK_FREEZABLE,
-            guard,
-            MAX_SCHEDULE_TIMEOUT,
-        );
+        self.wait_internal(TASK_INTERRUPTIBLE | TASK_FREEZABLE, guard, Jiffies::MAX);
         crate::current!().signal_pending()
     }
 
@@ -164,10 +159,9 @@ impl CondVar {
         guard: &mut Guard<'_, T, B>,
         jiffies: Jiffies,
     ) -> CondVarTimeoutResult {
-        let jiffies = jiffies.try_into().unwrap_or(MAX_SCHEDULE_TIMEOUT);
-        let res = self.wait_internal(TASK_INTERRUPTIBLE, guard, jiffies);
+        let remaining = self.wait_internal(TASK_INTERRUPTIBLE, guard, jiffies);
 
-        match (res as Jiffies, crate::current!().signal_pending()) {
+        match (remaining, current!().signal_pending()) {
             (jiffies, true) => CondVarTimeoutResult::Signal { jiffies },
             (0, false) => CondVarTimeoutResult::Timeout,
             (jiffies, false) => CondVarTimeoutResult::Woken { jiffies },
