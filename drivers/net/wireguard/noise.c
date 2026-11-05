@@ -580,13 +580,23 @@ out:
 	return ret;
 }
 
+/* Must hold handshake->lock, for reading or writing */
+static bool initiation_is_replay_or_flood(const struct noise_handshake *handshake,
+					  const u8 timestamp[NOISE_TIMESTAMP_LEN])
+{
+	return memcmp(timestamp, handshake->latest_timestamp,
+		      NOISE_TIMESTAMP_LEN) <= 0 ||
+	       (s64)handshake->last_initiation_consumption +
+			       NSEC_PER_SEC / INITIATIONS_PER_SECOND >
+		       (s64)ktime_get_coarse_boottime_ns();
+}
+
 struct wg_peer *
 wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 				      struct wg_device *wg)
 {
 	struct wg_peer *peer = NULL, *ret_peer = NULL;
 	struct noise_handshake *handshake;
-	bool replay_attack, flood_attack;
 	u8 key[NOISE_SYMMETRIC_KEY_LEN];
 	u8 chaining_key[NOISE_HASH_LEN];
 	u8 hash[NOISE_HASH_LEN];
@@ -594,6 +604,7 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 	u8 e[NOISE_PUBLIC_KEY_LEN];
 	u8 t[NOISE_TIMESTAMP_LEN];
 	u64 initiation_consumption;
+	bool reject;
 
 	down_read(&wg->static_identity.lock);
 	if (unlikely(!wg->static_identity.has_identity))
@@ -630,17 +641,21 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 		goto out;
 
 	down_read(&handshake->lock);
-	replay_attack = memcmp(t, handshake->latest_timestamp,
-			       NOISE_TIMESTAMP_LEN) <= 0;
-	flood_attack = (s64)handshake->last_initiation_consumption +
-			       NSEC_PER_SEC / INITIATIONS_PER_SECOND >
-		       (s64)ktime_get_coarse_boottime_ns();
+	reject = initiation_is_replay_or_flood(handshake, t);
 	up_read(&handshake->lock);
-	if (replay_attack || flood_attack)
+	if (reject)
 		goto out;
 
 	/* Success! Copy everything to peer */
 	down_write(&handshake->lock);
+	/* Check again, now that we have an exclusive lock, so that two threads
+	 * processing the same initiation in parallel can't both pass the check
+	 * above before either of them updates the timestamp.
+	 */
+	if (initiation_is_replay_or_flood(handshake, t)) {
+		up_write(&handshake->lock);
+		goto out;
+	}
 	memcpy(handshake->remote_ephemeral, e, NOISE_PUBLIC_KEY_LEN);
 	if (memcmp(t, handshake->latest_timestamp, NOISE_TIMESTAMP_LEN) > 0)
 		memcpy(handshake->latest_timestamp, t, NOISE_TIMESTAMP_LEN);
