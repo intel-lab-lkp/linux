@@ -3,7 +3,8 @@
  * Copyright 2026 Advanced Micro Devices, Inc.
  */
 
-#pragma once
+#ifndef DC_API_DISPATCH_API_SHIM_H_
+#define DC_API_DISPATCH_API_SHIM_H_
 
 #include "dc.h"
 #include "inc/dc_core_interface.h"
@@ -17,3 +18,5 @@ struct dc2 {
 #define TO_DC2(ptr) ((struct dc2 *)(ptr))
 
 void api_shim_construct(struct dc *dc, const struct dc_init_data *init_params);
+
+#endif /* DC_API_DISPATCH_API_SHIM_H_ */
