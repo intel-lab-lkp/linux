@@ -659,12 +659,6 @@ static void blk_report_disk_dead(struct gendisk *disk, bool surprise)
 
 static bool __blk_mark_disk_dead(struct gendisk *disk)
 {
-	/*
-	 * Fail any new I/O.
-	 */
-	if (test_and_set_bit(GD_DEAD, &disk->state))
-		return false;
-
 	if (test_bit(GD_OWNS_QUEUE, &disk->state))
 		blk_queue_flag_set(QUEUE_FLAG_DYING, disk->queue);
 
@@ -689,17 +683,19 @@ static bool __blk_mark_disk_dead(struct gendisk *disk)
 void blk_mark_disk_dead(struct gendisk *disk)
 {
 	blk_queue_flag_set(QUEUE_FLAG_DYING, disk->queue);
-	__blk_mark_disk_dead(disk);
-	blk_report_disk_dead(disk, true);
+	if (!test_and_set_bit(GD_DEAD, &disk->state)) {
+		__blk_mark_disk_dead(disk);
+		blk_report_disk_dead(disk, true);
+	}
 }
 EXPORT_SYMBOL_GPL(blk_mark_disk_dead);
 
 static void __del_gendisk(struct gendisk *disk)
 {
 	struct request_queue *q = disk->queue;
+	bool start_drain = false;
 	struct block_device *part;
 	unsigned long idx;
-	bool start_drain;
 
 	might_sleep();
 
@@ -727,9 +723,11 @@ static void __del_gendisk(struct gendisk *disk)
 	 * Drop all partitions now that the disk is marked dead.
 	 */
 	mutex_lock(&disk->open_mutex);
-	start_drain = __blk_mark_disk_dead(disk);
-	if (start_drain)
-		blk_freeze_acquire_lock(q);
+	if (!test_and_set_bit(GD_DEAD, &disk->state)) {
+		start_drain = __blk_mark_disk_dead(disk);
+		if (start_drain)
+			blk_freeze_acquire_lock(q);
+	}
 	xa_for_each_start(&disk->part_tbl, idx, part, 1)
 		drop_partition(part);
 	mutex_unlock(&disk->open_mutex);
