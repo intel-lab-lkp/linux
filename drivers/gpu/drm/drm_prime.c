@@ -593,8 +593,6 @@ static bool is_gem_map_dma_buf(struct dma_buf_attachment *attach)
 	const struct dma_buf_mapping_sgt_exp_ops *sgt_exp_ops =
 		dma_buf_get_sgt_ops(attach);
 
-	if (attach->dmabuf->ops->map_dma_buf == drm_gem_map_dma_buf)
-		return true;
 	if (sgt_exp_ops && sgt_exp_ops->map_dma_buf == drm_gem_map_dma_buf)
 		return true;
 	return false;
