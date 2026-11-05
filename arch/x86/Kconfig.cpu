@@ -274,9 +274,6 @@ config X86_HAVE_PAE
 	def_bool y
 	depends on MCRUSOE || MEFFICEON || MCYRIXIII || MPENTIUM4 || MPENTIUMM || MPENTIUMIII || MPENTIUMII || M686 || MVIAC7 || MATOM || X86_64
 
-config X86_CX8
-	def_bool y
-
 # this should be set for all -march=.. options where the compiler
 # generates cmov.
 config X86_CMOV
