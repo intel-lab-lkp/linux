@@ -67,9 +67,10 @@ additionalProperties: false
 examples:
   - |
     #include <dt-bindings/clock/at91.h>
+    #include <dt-bindings/clock/atmel,at91sam9260-pmc.h>
 
     reset-controller@fffffd00 {
         compatible = "atmel,at91sam9260-rstc";
         reg = <0xfffffd00 0x10>;
-        clocks = <&pmc PMC_TYPE_CORE PMC_SLOW>;
+        clocks = <&pmc PMC_TYPE_CORE AT91SAM9260_PMC_SLOW>;
     };

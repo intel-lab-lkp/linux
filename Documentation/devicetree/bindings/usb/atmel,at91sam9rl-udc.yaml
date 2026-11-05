@@ -61,13 +61,14 @@ examples:
   - |
     #include <dt-bindings/interrupt-controller/irq.h>
     #include <dt-bindings/clock/at91.h>
+    #include <dt-bindings/clock/atmel,at91sam9rl-pmc.h>
     #include <dt-bindings/gpio/gpio.h>
     gadget@fff78000 {
         compatible = "atmel,at91sam9g45-udc";
         reg = <0x00600000 0x80000
                0xfff78000 0x400>;
         interrupts = <27 IRQ_TYPE_LEVEL_HIGH 0>;
-        clocks = <&pmc PMC_TYPE_PERIPHERAL 27>, <&pmc PMC_TYPE_CORE PMC_UTMI>;
+        clocks = <&pmc PMC_TYPE_PERIPHERAL 27>, <&pmc PMC_TYPE_CORE AT91SAM9RL_PMC_UTMI>;
         clock-names = "pclk", "hclk";
         atmel,vbus-gpio = <&pioC 15 GPIO_ACTIVE_HIGH>;
     };
