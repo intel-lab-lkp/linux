@@ -50,6 +50,14 @@ static void minix_evict_inode(struct inode *inode)
 	if (!inode->i_nlink) {
 		inode->i_size = 0;
 		minix_truncate(inode);
+	} else if (inode_state_read_once(inode) & I_METADATA_WRITEBACK) {
+		/*
+		 * fsync() can't find what I_METADATA_WRITEBACK tracks once the
+		 * inode is gone. This syncs the metadata buffers as well.
+		 */
+		minix_sync_inode_metadata(inode, &(struct writeback_control) {
+			.sync_mode = WB_SYNC_ALL,
+		});
 	} else {
 		mmb_sync(&minix_i(inode)->i_metadata_bhs);
 	}
