@@ -646,20 +646,22 @@ static __always_inline void idte_crste(union crste *crstep, gfn_t gfn, unsigned 
 	unsigned long table_origin = __pa(crste_table_start(crstep));
 	unsigned long gaddr = gfn_to_gpa(gfn) & HPAGE_MASK;
 
+	table_origin |= crstep->val & _REGION_ENTRY_TYPE_MASK;
+
 	if (__builtin_constant_p(opt) && opt == 0) {
 		/* flush without guest asce */
 		asm volatile("idte	%[table_origin],0,%[gaddr],%[local]"
 			: "+m" (*crstep)
 			: [table_origin] "a" (table_origin), [gaddr] "a" (gaddr),
 			  [local] "i" (local)
-			: "cc");
+			: "cc", "memory");
 	} else {
 		/* flush with guest asce */
 		asm volatile("idte %[table_origin],%[asce],%[gaddr_opt],%[local]"
 			: "+m" (*crstep)
 			: [table_origin] "a" (table_origin), [gaddr_opt] "a" (gaddr | opt),
 			  [asce] "a" (asce.val), [local] "i" (local)
-			: "cc");
+			: "cc", "memory");
 	}
 }
 
