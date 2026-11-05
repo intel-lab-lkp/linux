@@ -8514,12 +8514,10 @@ ath11k_mac_op_unassign_vif_chanctx(struct ieee80211_hw *hw,
 
 	if (arvif->vdev_type == WMI_VDEV_TYPE_MONITOR) {
 		ret = ath11k_mac_monitor_stop(ar);
-		if (ret) {
+		if (ret)
+			/* continue: mac80211 has unassigned the context anyway */
 			ath11k_warn(ar->ab, "failed to stop monitor during vif channel context unassignment: %d",
 				    ret);
-			mutex_unlock(&ar->conf_mutex);
-			return;
-		}
 
 		arvif->is_started = false;
 		mutex_unlock(&ar->conf_mutex);
