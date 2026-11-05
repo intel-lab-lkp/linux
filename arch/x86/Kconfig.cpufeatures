@@ -44,13 +44,7 @@ config X86_REQUIRED_FEATURE_NOPL
 # generates cmov.
 config X86_REQUIRED_FEATURE_CMOV
 	def_bool y
-	depends on X86_CMOV
-
-# this should be set for all -march= options where the compiler
-# generates movbe.
-config X86_REQUIRED_FEATURE_MOVBE
-	def_bool y
-	depends on MATOM
+	depends on X86_MINIMUM_CPU_FAMILY >= 6
 
 config X86_REQUIRED_FEATURE_SYSFAST32
 	def_bool y
