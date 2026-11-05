@@ -533,15 +533,32 @@ void memcpy_and_pad(void *dest, size_t dest_len, const void *src, size_t count,
 })
 
 /**
+ * strprefix - string prefix
+ * @s: The string to be tested
+ * @prefix: The string to see if @s starts with
+ *
+ * Returns:
+ * *  @s+strlen(@prefix) if @s starts with @prefix
+ * *  NULL if @s does not start with @prefix
+ */
+static __always_inline char *strprefix(const char *s, const char *prefix)
+{
+	size_t len = strlen(prefix);
+	return strncmp(s, prefix, len) == 0 ? (char *) s + len : NULL;
+}
+
+/**
  * str_has_prefix - Test if a string has a given prefix
  * @str: The string to test
  * @prefix: The string to see if @str starts with
+ *
+ * DEPRECATED: Use strprefix()
  *
  * A common way to test a prefix of a string is to do:
  *  strncmp(str, prefix, sizeof(prefix) - 1)
  *
  * But this can lead to bugs due to typos, or if prefix is a pointer
- * and not a constant. Instead use str_has_prefix().
+ * and not a constant. Instead use strprefix().
  *
  * Returns:
  * * strlen(@prefix) if @str starts with @prefix
