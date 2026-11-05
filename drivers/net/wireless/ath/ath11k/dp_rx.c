@@ -5290,6 +5290,10 @@ int ath11k_dp_rx_process_mon_status(struct ath11k_base *ab, int mac_id,
 		if (log_type != ATH11K_PKTLOG_TYPE_INVALID)
 			trace_ath11k_htt_rxdesc(ar, skb->data, log_type, rx_buf_sz);
 
+		/* Each status buffer is parsed from a clear status. The last one's
+		 * stays in mon_ppdu_info: full monitor mode delivers its PPDU after
+		 * this returns, with that status (signal, TSFT, rate).
+		 */
 		memset(ppdu_info, 0, sizeof(*ppdu_info));
 		ppdu_info->peer_id = HAL_INVALID_PEERID;
 		hal_status = ath11k_hal_rx_parse_mon_status(ab, ppdu_info, skb);
@@ -5334,8 +5338,6 @@ next_skb:
 		rcu_read_unlock();
 
 		dev_kfree_skb_any(skb);
-		memset(ppdu_info, 0, sizeof(*ppdu_info));
-		ppdu_info->peer_id = HAL_INVALID_PEERID;
 	}
 exit:
 	return num_buffs_reaped;
