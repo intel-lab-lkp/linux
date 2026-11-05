@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0
-obj-m	:=
+obj-m	:= cpufreq-test_tsc.o
 
 KDIR	:= /lib/modules/$(shell uname -r)/build
 KMISC   := /lib/modules/$(shell uname -r)/cpufrequtils/
 
-ifeq ("$(CONFIG_X86_TSC)", "y")
-  obj-m	 += cpufreq-test_tsc.o
-endif
 
 default:
 	$(MAKE) -C $(KDIR) M=$(CURDIR)

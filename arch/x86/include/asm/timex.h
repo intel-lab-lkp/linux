@@ -7,8 +7,6 @@
 
 static inline unsigned long random_get_entropy(void)
 {
-	if (!cpu_feature_enabled(X86_FEATURE_TSC))
-		return random_get_entropy_fallback();
 	return rdtsc();
 }
 #define random_get_entropy random_get_entropy

@@ -76,8 +76,6 @@ extern void disable_TSC(void);
 
 static inline cycles_t get_cycles(void)
 {
-	if (!cpu_feature_enabled(X86_FEATURE_TSC))
-		return 0;
 	return rdtsc();
 }
 #define get_cycles get_cycles

@@ -541,8 +541,6 @@ static void __init xen_time_init(void)
 	xen_read_wallclock(&tp);
 	do_settimeofday64(&tp);
 
-	setup_force_cpu_cap(X86_FEATURE_TSC);
-
 	/*
 	 * We check ahead on the primary time info if this
 	 * bit is supported hence speeding up Xen clocksource.

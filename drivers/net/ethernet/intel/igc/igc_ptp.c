@@ -947,7 +947,7 @@ int igc_ptp_hwtstamp_get(struct net_device *netdev,
  */
 static bool igc_is_crosststamp_supported(struct igc_adapter *adapter)
 {
-	if (!IS_ENABLED(CONFIG_X86_TSC))
+	if (!IS_ENABLED(CONFIG_X86))
 		return false;
 
 	/* FIXME: it was noticed that enabling support for PCIe PTM in
@@ -965,7 +965,7 @@ static bool igc_is_crosststamp_supported(struct igc_adapter *adapter)
 
 static struct system_counterval_t igc_device_tstamp_to_system(u64 tstamp)
 {
-#if IS_ENABLED(CONFIG_X86_TSC) && !defined(CONFIG_UML)
+#if IS_ENABLED(CONFIG_X86) && !defined(CONFIG_UML)
 	return (struct system_counterval_t) {
 		.cs_id		= CSID_X86_ART,
 		.cycles		= tstamp,

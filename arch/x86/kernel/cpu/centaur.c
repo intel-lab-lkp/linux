@@ -140,8 +140,6 @@ static void init_centaur(struct cpuinfo_x86 *c)
 			name = "C6";
 			fcr_set = ECX8|DSMC|EDCTLB|EMMX|ERETSTK;
 			fcr_clr = DPDC;
-			pr_notice("Disabling bugged TSC.\n");
-			clear_cpu_cap(c, X86_FEATURE_TSC);
 			break;
 		case 8:
 			switch (c->x86_stepping) {
