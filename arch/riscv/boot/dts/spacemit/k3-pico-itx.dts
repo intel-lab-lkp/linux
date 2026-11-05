@@ -337,6 +337,18 @@
 	status = "okay";
 };
 
+&usb3a {
+	phys = <&usb3a_u2phy>;
+	phy-names = "usb2-phy";
+	maximum-speed = "high-speed";
+	dr_mode = "peripheral";
+	status = "okay";
+};
+
+&usb3a_u2phy {
+	status = "okay";
+};
+
 &usb3b {
 	phys = <&usb3b_u2phy>;
 	phy-names = "usb2-phy";
