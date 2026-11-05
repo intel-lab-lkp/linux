@@ -75,6 +75,19 @@ void phy_package_unlock(struct phy_device *phydev)
 }
 EXPORT_SYMBOL_GPL(phy_package_unlock);
 
+/**
+ * phy_package_unlock - get the PHY offset relative to PHY package base addr
+ * @phydev: PHY device that has joined the package
+ */
+u8 phy_package_offset(struct phy_device *phydev)
+{
+	struct phy_package_shared *shared = phydev->shared;
+	u8 base_addr = shared->base_addr;
+
+	return phydev->mdio.addr - base_addr;
+}
+EXPORT_SYMBOL_GPL(phy_package_offset);
+
 static int phy_package_address(struct phy_device *phydev,
 			       unsigned int addr_offset)
 {
@@ -178,6 +191,50 @@ int __phy_package_write_mmd(struct phy_device *phydev,
 			     regnum, val);
 }
 EXPORT_SYMBOL(__phy_package_write_mmd);
+
+/**
+ * __phy_package_modify_mmd - modify MMD reg relative to PHY package base addr
+ * @phydev: The phy_device struct
+ * @addr_offset: The offset to be added to PHY package base_addr
+ * @devad: The MMD to write to
+ * @regnum: The register on the MMD to write
+ * @mask: bit mask of bits to clear
+ * @set: new value of bits set in mask to write to @regnum
+ *
+ * Convenience helper for modifying a register of an MMD on a given PHY
+ * using the PHY package base address. The base address is added to
+ * the addr_offset value.
+ *
+ * Same calling rules as for __phy_modify_mmd();
+ *
+ * NOTE: It's assumed that the entire PHY package is either C22 or C45.
+ */
+int __phy_package_modify_mmd(struct phy_device *phydev,
+			     unsigned int addr_offset, int devad,
+			     u32 regnum, u16 mask, u16 set)
+{
+	int addr = phy_package_address(phydev, addr_offset);
+	int new, ret;
+
+	if (addr < 0)
+		return addr;
+
+	if (regnum > (u16)~0 || devad > 32)
+		return -EINVAL;
+
+	ret = __phy_package_read_mmd(phydev, addr_offset, devad, regnum);
+	if (ret < 0)
+		return ret;
+
+	new = (ret & ~mask) | set;
+	if (new == ret)
+		return 0;
+
+	ret = __phy_package_write_mmd(phydev, addr_offset, devad, regnum, new);
+
+	return ret < 0 ? ret : 0;
+}
+EXPORT_SYMBOL(__phy_package_modify_mmd);
 
 static bool __phy_package_set_once(struct phy_device *phydev, unsigned int b)
 {
