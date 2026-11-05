@@ -31,6 +31,7 @@
 #include <scsi/scsi_tcq.h>
 #include <scsi/scsi_transport_fc.h>
 #include <scsi/scsi_bsg_fc.h>
+#include <kunit/visibility.h>
 #include "ibmvfc.h"
 
 static unsigned int init_timeout = IBMVFC_INIT_TIMEOUT;
@@ -6450,11 +6451,23 @@ irq_failed:
 		hcall_rc = plpar_hcall_norets(H_FREE_SUB_CRQ, vdev->unit_address, scrq->cookie);
 	} while (hcall_rc == H_BUSY || H_IS_LONG_BUSY(hcall_rc));
 reg_failed:
+	scrq->cookie = 0;
 	LEAVE;
 	return rc;
 }
 
-static void ibmvfc_deregister_channel(struct ibmvfc_host *vhost,
+/**
+ * ibmvfc_deregister_channel - Deregister a sub-CRQ channel with the hypervisor
+ * @vhost:	ibmvfc host struct
+ * @channels:	ibmvfc channels struct containing the sub-CRQ array
+ * @index:	index into the sub-CRQ array
+ *
+ * Frees the IRQ, disposes of the IRQ mapping, and calls H_FREE_SUB_CRQ to
+ * release the sub-CRQ with the hypervisor. On success the queue message
+ * buffer is zeroed and the current index is reset. If H_FREE_SUB_CRQ fails,
+ * an error is logged but the channel resources are cleaned up regardless.
+ */
+VISIBLE_IF_KUNIT void ibmvfc_deregister_channel(struct ibmvfc_host *vhost,
 				      struct ibmvfc_channels *channels,
 				      int index)
 {
@@ -6471,20 +6484,28 @@ static void ibmvfc_deregister_channel(struct ibmvfc_host *vhost,
 		scrq->irq = 0;
 	}
 
-	do {
-		rc = plpar_hcall_norets(H_FREE_SUB_CRQ, vdev->unit_address,
-					scrq->cookie);
-	} while (rc == H_BUSY || H_IS_LONG_BUSY(rc));
+	if (scrq->cookie) {
+		do {
+			rc = plpar_hcall_norets(H_FREE_SUB_CRQ, vdev->unit_address,
+						scrq->cookie);
+		} while (rc == H_BUSY || H_IS_LONG_BUSY(rc));
 
-	if (rc)
-		dev_err(dev, "Failed to free sub-crq[%d]: rc=%ld\n", index, rc);
+		if (rc)
+			dev_err(dev, "Failed to free protocol (%d) sub-crq[%d]: rc=%ld\n",
+				channels->protocol, index, rc);
+		else
+			scrq->cookie = 0;
+	}
 
 	/* Clean out the queue */
-	memset(scrq->msgs.crq, 0, PAGE_SIZE);
-	scrq->cur = 0;
+	if (scrq->msgs.handle) {
+		memset(scrq->msgs.crq, 0, PAGE_SIZE);
+		scrq->cur = 0;
+	}
 
 	LEAVE;
 }
+EXPORT_SYMBOL_IF_KUNIT(ibmvfc_deregister_channel);
 
 static void ibmvfc_reg_sub_crqs(struct ibmvfc_host *vhost,
 				struct ibmvfc_channels *channels)
@@ -7117,6 +7138,32 @@ static void __exit ibmvfc_module_exit(void)
 	vio_unregister_driver(&ibmvfc_driver);
 	fc_release_transport(ibmvfc_transport_template);
 }
+
+#if IS_ENABLED(CONFIG_KUNIT)
+/**
+ * ibmvfc_get_first_vhost - Get the first ibmvfc host from the global list
+ *
+ * Grabs the driver spinlock and retrieves the first host adapter from the
+ * driver list. If found, increments its reference count via scsi_host_get().
+ *
+ * Return value:
+ *	struct ibmvfc_host * with reference held on success, NULL otherwise
+ **/
+VISIBLE_IF_KUNIT struct ibmvfc_host *ibmvfc_get_first_vhost(void)
+{
+	struct ibmvfc_host *vhost = NULL;
+
+	spin_lock(&ibmvfc_driver_lock);
+	if (!list_empty(&ibmvfc_head))
+		vhost = list_first_entry(&ibmvfc_head, struct ibmvfc_host, queue);
+	if (vhost)
+		if (!scsi_host_get(vhost->host))
+			vhost = NULL;
+	spin_unlock(&ibmvfc_driver_lock);
+	return vhost;
+}
+EXPORT_SYMBOL_IF_KUNIT(ibmvfc_get_first_vhost);
+#endif
 
 module_init(ibmvfc_module_init);
 module_exit(ibmvfc_module_exit);
