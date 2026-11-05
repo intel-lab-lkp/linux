@@ -47,25 +47,12 @@ int einj_cxl_available_error_type_show(struct seq_file *m, void *v)
 }
 EXPORT_SYMBOL_NS_GPL(einj_cxl_available_error_type_show, "CXL");
 
-static int cxl_dport_get_sbdf(struct pci_dev *dport_dev, u64 *sbdf)
+static u64 cxl_dport_get_sbdf(struct pci_dev *dport_dev)
 {
-	struct pci_bus *pbus;
-	struct pci_host_bridge *bridge;
-	u64 seg = 0, bus;
+	u64 seg = pci_domain_nr(dport_dev->bus);
+	u64 bus = dport_dev->bus->number;
 
-	pbus = dport_dev->bus;
-	bridge = pci_find_host_bridge(pbus);
-
-	if (!bridge)
-		return -ENODEV;
-
-	if (bridge->domain_nr != PCI_DOMAIN_NR_NOT_SET)
-		seg = bridge->domain_nr;
-
-	bus = pbus->number;
-	*sbdf = (seg << 24) | (bus << 16) | (dport_dev->devfn << 8);
-
-	return 0;
+	return (seg << 24) | (bus << 16) | (dport_dev->devfn << 8);
 }
 
 int einj_cxl_inject_rch_error(u64 rcrb, u64 type)
@@ -87,7 +74,7 @@ EXPORT_SYMBOL_NS_GPL(einj_cxl_inject_rch_error, "CXL");
 
 int einj_cxl_inject_error(struct pci_dev *dport, u64 type)
 {
-	u64 param4 = 0;
+	u64 sbdf;
 	int rc;
 
 	/* Only CXL error types can be specified */
@@ -98,11 +85,9 @@ int einj_cxl_inject_error(struct pci_dev *dport, u64 type)
 	if (rc)
 		return rc;
 
-	rc = cxl_dport_get_sbdf(dport, &param4);
-	if (rc)
-		return rc;
+	sbdf = cxl_dport_get_sbdf(dport);
 
-	return einj_error_inject(type, 0x4, 0, 0, 0, param4);
+	return einj_error_inject(type, 0x4, 0, 0, 0, sbdf);
 }
 EXPORT_SYMBOL_NS_GPL(einj_cxl_inject_error, "CXL");
 
