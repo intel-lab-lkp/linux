@@ -1185,6 +1185,9 @@ static int ath11k_mac_monitor_start(struct ath11k *ar)
 		return ret;
 	}
 
+	if (ar->ab->hw_params.full_monitor_mode)
+		ath11k_dp_rx_full_mon_reset(ar);
+
 	set_bit(ATH11K_FLAG_MONITOR_STARTED, &ar->monitor_flags);
 
 	ar->num_started_vdevs++;

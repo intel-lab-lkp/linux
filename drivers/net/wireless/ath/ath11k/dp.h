@@ -162,6 +162,7 @@ struct ath11k_mon_data {
 	bool hold_mon_dst_ring;
 	enum dp_mon_status_buf_state buf_state;
 	dma_addr_t mon_status_paddr;
+	u32 hold_status_bufs;
 	struct dp_full_mon_mpdu *mon_mpdu;
 	struct hal_sw_mon_ring_entries sw_mon_entries;
 	struct ath11k_pdev_mon_stats rx_mon_stats;

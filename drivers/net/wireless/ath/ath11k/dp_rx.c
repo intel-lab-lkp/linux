@@ -5595,6 +5595,15 @@ ath11k_dp_rx_process_full_mon_status_ring(struct ath11k_base *ab, int mac_id,
 			   pmon->buf_state == DP_MON_STATUS_LEAD) {
 			sw_mon_entries->drop_ppdu = true;
 			pmon->hold_mon_dst_ring = false;
+		} else if (quota &&
+			   ++pmon->hold_status_bufs > DP_RXDMA_MON_STATUS_RING_SIZE) {
+			/* More status buffers than the ring holds came before
+			 * this PPDU's own: it is not coming.
+			 */
+			ath11k_dbg(ab, ATH11K_DBG_DATA, "full mon: ppdu %u held past %u status buffers, dropped\n",
+				   sw_mon_entries->ppdu_id, pmon->hold_status_bufs);
+			sw_mon_entries->drop_ppdu = true;
+			pmon->hold_mon_dst_ring = false;
 		}
 
 		if (!quota)
@@ -5672,6 +5681,7 @@ static int ath11k_dp_full_mon_process_rx(struct ath11k_base *ab, int mac_id,
 		pmon->buf_state = DP_MON_STATUS_LAG;
 		pmon->mon_status_paddr = sw_mon_entries->mon_status_paddr;
 		pmon->hold_mon_dst_ring = true;
+		pmon->hold_status_bufs = 0;
 next_entry:
 		ring_entry = ath11k_hal_srng_dst_get_next_entry(ar->ab,
 								mon_dst_srng);
@@ -5695,6 +5705,71 @@ reap_status_ring:
 							  napi, budget);
 
 	return quota;
+}
+
+/* Drop what full monitor mode kept from before the monitor was stopped: a
+ * PPDU held for its status buffer and the destination ring entries behind
+ * it. While the monitor is stopped the status ring is reaped on the plain
+ * path, so their status buffers are gone, and a hold that compares its
+ * PPDU ID with what the status ring carries after the gap can wait for
+ * good. The destination ring then fills and stalls the RXDMA.
+ */
+void ath11k_dp_rx_full_mon_reset(struct ath11k *ar)
+{
+	struct ath11k_base *ab = ar->ab;
+	struct ath11k_pdev_dp *dp = &ar->dp;
+	struct ath11k_mon_data *pmon = &dp->mon_data;
+	struct hal_sw_mon_ring_entries *sw_mon_entries = &pmon->sw_mon_entries;
+	struct sk_buff *head_msdu, *tail_msdu, *msdu, *next;
+	struct hal_srng *mon_dst_srng;
+	u32 rx_bufs_used = 0, entries = 0;
+	bool held;
+	u16 ppdu_id;
+	void *ring_entry;
+
+	spin_lock_bh(&pmon->mon_lock);
+
+	held = pmon->hold_mon_dst_ring;
+	ppdu_id = sw_mon_entries->ppdu_id;
+	ath11k_dp_rx_full_mon_drop_ppdu(&ab->dp, pmon->mon_mpdu);
+
+	mon_dst_srng = &ab->hal.srng_list[dp->rxdma_mon_dst_ring.ring_id];
+	spin_lock_bh(&mon_dst_srng->lock);
+	ath11k_hal_srng_access_begin(ab, mon_dst_srng);
+	while ((ring_entry = ath11k_hal_srng_dst_peek(ab, mon_dst_srng))) {
+		head_msdu = NULL;
+		tail_msdu = NULL;
+		rx_bufs_used += ath11k_dp_rx_full_mon_mpdu_pop(ar, ring_entry,
+							       &head_msdu,
+							       &tail_msdu,
+							       sw_mon_entries);
+		for (msdu = head_msdu; msdu; msdu = next) {
+			next = msdu->next;
+			dev_kfree_skb_any(msdu);
+		}
+		entries++;
+		ath11k_hal_srng_dst_get_next_entry(ab, mon_dst_srng);
+	}
+	ath11k_hal_srng_access_end(ab, mon_dst_srng);
+	spin_unlock_bh(&mon_dst_srng->lock);
+
+	pmon->hold_mon_dst_ring = false;
+	pmon->hold_status_bufs = 0;
+	pmon->mon_status_paddr = 0;
+	pmon->mon_ppdu_status = DP_PPDU_STATUS_START;
+	memset(sw_mon_entries, 0, sizeof(*sw_mon_entries));
+
+	spin_unlock_bh(&pmon->mon_lock);
+
+	if (rx_bufs_used)
+		ath11k_dp_rxbufs_replenish(ab, dp->mac_id,
+					   &dp->rxdma_mon_buf_ring,
+					   rx_bufs_used,
+					   HAL_RX_BUF_RBM_SW3_BM);
+
+	if (held || entries)
+		ath11k_dbg(ab, ATH11K_DBG_DATA, "full mon: monitor start: dropped %s ppdu %u, %u dest ring entries\n",
+			   held ? "held" : "no held", ppdu_id, entries);
 }
 
 int ath11k_dp_rx_process_mon_rings(struct ath11k_base *ab, int mac_id,
