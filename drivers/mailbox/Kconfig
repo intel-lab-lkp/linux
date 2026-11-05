@@ -8,6 +8,17 @@ menuconfig MAILBOX
 
 if MAILBOX
 
+config AMD_PL_MAILBOX
+	tristate "AMD PL Mailbox soft IP controller"
+	depends on ARCH_ZYNQMP || COMPILE_TEST
+	depends on HAS_IOMEM
+	depends on OF
+	help
+	  Mailbox controller for the AMD Programmable Logic Mailbox soft IP.
+	  The controller exposes transmit and receive FIFO channels to mailbox
+	  clients. It supports interrupt-driven receive notification and
+	  polling-based transmit completion through the common mailbox framework.
+
 config ARM_MHU
 	tristate "ARM MHU Mailbox"
 	depends on ARM_AMBA
