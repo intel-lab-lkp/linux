@@ -29,6 +29,7 @@ struct dma_buf;
 struct dma_buf_attachment;
 struct dma_buf_mapping_type;
 struct dma_buf_mapping_exp_ops;
+struct dma_buf_match_args;
 
 
 /*
@@ -316,6 +317,27 @@ struct dma_buf_ops {
 
 	int (*vmap)(struct dma_buf *dmabuf, struct iosys_map *map);
 	void (*vunmap)(struct dma_buf *dmabuf, struct iosys_map *map);
+
+	/**
+	 * @match_mapping:
+	 *
+	 * Called during attach, without the dma_resv lock held. Allows the
+	 * exporter to build its own exporter struct dma_buf_mapping_match[]
+	 * and call dma_buf_match_mapping() to record every mutually
+	 * acceptable type in &dma_buf_attachment.matches in the exporter's
+	 * order of preference.
+	 *
+	 * The match set is fixed for the lifetime of the attachment, so every
+	 * input to the decision must hold for that long: either static for the
+	 * dma_buf (the importer's list, PCI P2P topology, buffer creation
+	 * flags) or runtime state the exporter pins until @detach, for example
+	 * a runtime PM reference.
+	 *
+	 * It must not depend on the set of attachments or on current buffer
+	 * placement as matches are static and buffer placement can change at
+	 * any time until the final location is resolved during map/pin.
+	 */
+	int (*match_mapping)(struct dma_buf_match_args *args);
 };
 
 /**
@@ -499,6 +521,30 @@ struct dma_buf_attach_ops {
 	 * required behavior.
 	 */
 	void (*invalidate_mappings)(struct dma_buf_attachment *attach);
+
+	/**
+	 * @supported_mapping_types: [optional] mapping types the importer
+	 * can use
+	 *
+	 * Array of @nr_supported_mapping_types DMA_BUF_IMAPPING_*() entries
+	 * the importer can use in priority order. Entries are static so can be
+	 * shared by all of the importer's attachments. Any required dynamic
+	 * information, such as the importing device, is passed to each type's
+	 * callbacks by dma_buf_dynamic_attach() for recording in the
+	 * negotiated entry.
+	 *
+	 * If not provided the importer supports only the SGT mapping type,
+	 * accepting P2P according to @allow_peer2peer. When provided an SGT
+	 * entry's DMA_SGT_IMPORTER_ACCEPTS_P2P flag takes the place of
+	 * @allow_peer2peer.
+	 */
+	const struct dma_buf_mapping_match *supported_mapping_types;
+
+	/**
+	 * @nr_supported_mapping_types: number of entries in
+	 * @supported_mapping_types
+	 */
+	unsigned int nr_supported_mapping_types;
 };
 
 /**

@@ -14,6 +14,7 @@
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-fence.h>
 #include <linux/dma-fence-unwrap.h>
 #include <linux/anon_inodes.h>
@@ -714,10 +715,18 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	int ret;
 
 	if (WARN_ON(!exp_info->priv || !exp_info->ops
-		    || !exp_info->ops->map_dma_buf
-		    || !exp_info->ops->unmap_dma_buf
 		    || !exp_info->ops->release))
 		return ERR_PTR(-EINVAL);
+
+	if (exp_info->ops->match_mapping) {
+		if (WARN_ON(exp_info->ops->map_dma_buf ||
+			    exp_info->ops->unmap_dma_buf))
+			return ERR_PTR(-EINVAL);
+	} else {
+		if (WARN_ON(!exp_info->ops->map_dma_buf ||
+			    !exp_info->ops->unmap_dma_buf))
+			return ERR_PTR(-EINVAL);
+	}
 
 	if (WARN_ON(!exp_info->ops->pin != !exp_info->ops->unpin))
 		return ERR_PTR(-EINVAL);
@@ -1027,12 +1036,26 @@ dma_buf_pin_on_map(struct dma_buf_attachment *attach)
  * Note that this can fail if the backing storage of @dmabuf is in a place not
  * accessible to @dev, and cannot be moved to a more suitable place. This is
  * indicated with the error code -EBUSY.
+ *
+ * The mapping types the importer supports come from
+ * &dma_buf_attach_ops.supported_mapping_types. Importers without it, which
+ * includes every dma_buf_attach() caller, support only the SGT type, with
+ * P2P according to &dma_buf_attach_ops.allow_peer2peer. This records the
+ * attachment's match set, i.e. the intersection of types supported by both
+ * importer and exporter, in &dma_buf_attachment.matches. Later attachments
+ * by other importers never change the set but may affect what type the
+ * exporter selects when the attachment is first mapped or pinned.
  */
 struct dma_buf_attachment *
 dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 		       const struct dma_buf_attach_ops *importer_ops,
 		       void *importer_priv)
 {
+	struct dma_buf_mapping_match default_match;
+	struct dma_buf_match_args match_args = {
+		.dmabuf = dmabuf,
+		.dev = dev,
+	};
 	struct dma_buf_attachment *attach;
 	int ret;
 
@@ -1043,12 +1066,41 @@ dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 	if (!attach)
 		return ERR_PTR(-ENOMEM);
 
-	attach->dev = dev;
 	attach->dmabuf = dmabuf;
-	if (importer_ops)
-		attach->peer2peer = importer_ops->allow_peer2peer;
 	attach->importer_ops = importer_ops;
 	attach->importer_priv = importer_priv;
+
+	/*
+	 * The exporter's match_mapping() may look at the importer side of the
+	 * attachment, so initialise it before the match.
+	 */
+	match_args.attach = attach;
+	if (importer_ops && importer_ops->supported_mapping_types) {
+		if (WARN_ON(!importer_ops->nr_supported_mapping_types)) {
+			ret = -EINVAL;
+			goto err_attach;
+		}
+		match_args.imp_matches = importer_ops->supported_mapping_types;
+		match_args.imp_len = importer_ops->nr_supported_mapping_types;
+	} else {
+		default_match = DMA_BUF_IMAPPING_SGT(
+			importer_ops && importer_ops->allow_peer2peer ?
+				DMA_SGT_IMPORTER_ACCEPTS_P2P :
+				DMA_SGT_NO_P2P);
+		match_args.imp_matches = &default_match;
+		match_args.imp_len = 1;
+	}
+
+	if (dmabuf->ops->match_mapping) {
+		ret = dmabuf->ops->match_mapping(&match_args);
+		if (ret)
+			goto err_attach;
+	} else {
+		ret = dma_buf_match_mapping(&match_args,
+					    &dma_buf_sgt_exp_compat_match, 1);
+		if (ret)
+			goto err_attach;
+	}
 
 	if (dmabuf->ops->attach) {
 		ret = dmabuf->ops->attach(dmabuf, attach);
