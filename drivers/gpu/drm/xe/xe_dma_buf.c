@@ -7,8 +7,7 @@
 
 #include <kunit/test.h>
 #include <linux/dma-buf.h>
-#include <linux/dynamic_debug.h>
-#include <linux/pci-p2pdma.h>
+#include <linux/dma-buf-mapping.h>
 
 #include <drm/drm_device.h>
 #include <drm/drm_prime.h>
@@ -23,33 +22,10 @@
 
 MODULE_IMPORT_NS("DMA_BUF");
 
-#if defined(CONFIG_DYNAMIC_DEBUG) || \
-	(defined(CONFIG_DYNAMIC_DEBUG_CORE) && defined(DYNAMIC_DEBUG_MODULE))
-static void xe_ddebug_flip_bool(const struct _ddebug *desc, bool *flag)
-{
-	*flag = true;
-}
-
-#define xe_dma_buf_p2p_debug_flip(flag) \
-	_dynamic_func_call("xe dma-buf p2p debug", xe_ddebug_flip_bool, flag)
-#else
-#define xe_dma_buf_p2p_debug_flip(flag) do { } while (0)
-#endif
-
 static int xe_dma_buf_attach(struct dma_buf *dmabuf,
 			     struct dma_buf_attachment *attach)
 {
 	struct drm_gem_object *obj = attach->dmabuf->priv;
-	bool verbose_p2p_dist = drm_debug_enabled(DRM_UT_DRIVER);
-
-	xe_dma_buf_p2p_debug_flip(&verbose_p2p_dist);
-
-	if (attach->peer2peer &&
-	    pci_p2pdma_distance(to_pci_dev(obj->dev->dev), attach->dev, verbose_p2p_dist) < 0)
-		attach->peer2peer = false;
-
-	if (!attach->peer2peer && !xe_bo_can_migrate(gem_to_xe_bo(obj), XE_PL_TT))
-		return -EOPNOTSUPP;
 
 	xe_pm_runtime_get(to_xe_device(obj->dev));
 	return 0;
@@ -70,13 +46,16 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
 	struct xe_bo *bo = gem_to_xe_bo(obj);
 	struct xe_device *xe = xe_bo_device(bo);
 	struct drm_exec *exec = XE_VALIDATION_UNSUPPORTED;
-	bool allow_vram = true;
+	bool allow_vram = dma_buf_sgt_p2p_allowed(attach);
 	int ret;
 
-	list_for_each_entry(attach, &dmabuf->attachments, node) {
-		if (!attach->peer2peer) {
-			allow_vram = false;
-			break;
+	if (allow_vram) {
+		/* Other attachments may be unmapped: ask what they accept */
+		list_for_each_entry(attach, &dmabuf->attachments, node) {
+			if (!dma_buf_attach_accepts_sgt_p2p(attach)) {
+				allow_vram = false;
+				break;
+			}
 		}
 	}
 
@@ -114,6 +93,8 @@ static void xe_dma_buf_unpin(struct dma_buf_attachment *attach)
 static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
 				       enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(attach);
+	bool peer2peer = dma_buf_sgt_p2p_allowed(attach);
 	struct dma_buf *dma_buf = attach->dmabuf;
 	struct drm_gem_object *obj = dma_buf->priv;
 	struct xe_bo *bo = gem_to_xe_bo(obj);
@@ -124,11 +105,11 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
 	if (xe_bo_is_purged(bo))
 		return ERR_PTR(-ENOENT);
 
-	if (!attach->peer2peer && !xe_bo_can_migrate(bo, XE_PL_TT))
+	if (!peer2peer && !xe_bo_can_migrate(bo, XE_PL_TT))
 		return ERR_PTR(-EOPNOTSUPP);
 
 	if (!xe_bo_is_pinned(bo)) {
-		if (!attach->peer2peer)
+		if (!peer2peer)
 			r = xe_bo_migrate(bo, XE_PL_TT, NULL, exec);
 		else
 			r = xe_bo_validate(bo, NULL, false, exec);
@@ -144,7 +125,7 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
 		if (IS_ERR(sgt))
 			return sgt;
 
-		if (dma_map_sgtable(attach->dev, sgt, dir,
+		if (dma_map_sgtable(dma_dev, sgt, dir,
 				    DMA_ATTR_SKIP_CPU_SYNC))
 			goto error_free;
 		break;
@@ -153,7 +134,7 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
 	case XE_PL_VRAM1:
 		r = xe_ttm_vram_mgr_alloc_sgt(xe_bo_device(bo),
 					      bo->ttm.resource, 0,
-					      bo->ttm.base.size, attach->dev,
+					      bo->ttm.base.size, dma_dev,
 					      dir, &sgt);
 		if (r)
 			return ERR_PTR(r);
@@ -174,12 +155,14 @@ static void xe_dma_buf_unmap(struct dma_buf_attachment *attach,
 			     struct sg_table *sgt,
 			     enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(attach);
+
 	if (sg_page(sgt->sgl)) {
-		dma_unmap_sgtable(attach->dev, sgt, dir, 0);
+		dma_unmap_sgtable(dma_dev, sgt, dir, 0);
 		sg_free_table(sgt);
 		kfree(sgt);
 	} else {
-		xe_ttm_vram_mgr_free_sgt(attach->dev, dir, sgt);
+		xe_ttm_vram_mgr_free_sgt(dma_dev, dir, sgt);
 	}
 }
 
@@ -225,18 +208,38 @@ static void xe_dma_buf_release(struct dma_buf *dmabuf)
 	drm_gem_dmabuf_release(dmabuf);
 }
 
+static const struct dma_buf_mapping_sgt_exp_ops xe_dma_buf_sgt_ops = {
+	.map_dma_buf = xe_dma_buf_map,
+	.unmap_dma_buf = xe_dma_buf_unmap,
+};
+
+static int xe_dma_buf_match_mapping(struct dma_buf_match_args *args)
+{
+	struct drm_gem_object *obj = args->dmabuf->priv;
+	struct dma_buf_mapping_match sgt_match[2];
+	unsigned int num_match = 0;
+
+	sgt_match[num_match++] = DMA_BUF_EMAPPING_SGT_P2P(
+		&xe_dma_buf_sgt_ops, to_pci_dev(obj->dev->dev));
+
+	if (xe_bo_can_migrate(gem_to_xe_bo(obj), XE_PL_TT))
+		sgt_match[num_match++] =
+			DMA_BUF_EMAPPING_SGT(&xe_dma_buf_sgt_ops);
+
+	return dma_buf_match_mapping(args, sgt_match, num_match);
+}
+
 static const struct dma_buf_ops xe_dmabuf_ops = {
 	.attach = xe_dma_buf_attach,
 	.detach = xe_dma_buf_detach,
 	.pin = xe_dma_buf_pin,
 	.unpin = xe_dma_buf_unpin,
-	.map_dma_buf = xe_dma_buf_map,
-	.unmap_dma_buf = xe_dma_buf_unmap,
 	.release = xe_dma_buf_release,
 	.begin_cpu_access = xe_dma_buf_begin_cpu_access,
 	.mmap = drm_gem_dmabuf_mmap,
 	.vmap = drm_gem_dmabuf_vmap,
 	.vunmap = drm_gem_dmabuf_vunmap,
+	.match_mapping = xe_dma_buf_match_mapping,
 };
 
 struct dma_buf *xe_gem_prime_export(struct drm_gem_object *obj, int flags)
