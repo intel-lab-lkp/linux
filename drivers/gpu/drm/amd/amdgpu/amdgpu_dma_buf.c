@@ -41,6 +41,7 @@
 #include <drm/amdgpu_drm.h>
 #include <drm/ttm/ttm_tt.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-buf-mapping.h>
 #include <linux/dma-fence-array.h>
 #include <linux/pci-p2pdma.h>
 #include <linux/pm_runtime.h>
@@ -79,42 +80,10 @@ static struct amdgpu_device *dma_buf_attach_adev(struct dma_buf_attachment *atta
 static int amdgpu_dma_buf_attach(struct dma_buf *dmabuf,
 				 struct dma_buf_attachment *attach)
 {
-	struct amdgpu_device *attach_adev = dma_buf_attach_adev(attach);
 	struct drm_gem_object *obj = dmabuf->priv;
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
 	int r;
-
-	/*
-	 * Disable peer-to-peer access for DCC-enabled VRAM surfaces on GFX12+.
-	 * Such buffers cannot be safely accessed over P2P due to device-local
-	 * compression metadata. Fallback to system-memory path instead.
-	 * Device supports GFX12 (GC 12.x or newer)
-	 * BO was created with the AMDGPU_GEM_CREATE_GFX12_DCC flag
-	 *
-	 */
-	if (amdgpu_ip_version(adev, GC_HWIP, 0) >= IP_VERSION(12, 0, 0) &&
-	    bo->flags & AMDGPU_GEM_CREATE_GFX12_DCC)
-		attach->peer2peer = false;
-
-	if (!amdgpu_dmabuf_is_xgmi_accessible(attach_adev, bo) &&
-	    pci_p2pdma_distance(adev->pdev, attach->dev, false) < 0)
-		attach->peer2peer = false;
-
-	/*
-	 * Only allow P2P while the exporter is active, and keep it active
-	 * until detach.  With runtime PM disabled take a plain reference so
-	 * the put in detach stays balanced.
-	 */
-	if (attach->peer2peer) {
-		struct device *dev = adev_to_drm(adev)->dev;
-		int ret = pm_runtime_get_if_active(dev);
-
-		if (!ret)
-			attach->peer2peer = false;
-		else if (ret < 0)
-			pm_runtime_get_noresume(dev);
-	}
 
 	r = dma_resv_lock(bo->tbo.base.resv, NULL);
 	if (r)
@@ -127,7 +96,8 @@ static int amdgpu_dma_buf_attach(struct dma_buf *dmabuf,
 	return 0;
 
 err_pm_put:
-	if (attach->peer2peer)
+	/* Drop the reference taken in amdgpu_dma_buf_match_mapping() */
+	if (dma_buf_attach_accepts_sgt_p2p(attach))
 		pm_runtime_put_autosuspend(adev_to_drm(adev)->dev);
 	return r;
 }
@@ -138,7 +108,7 @@ err_pm_put:
  * @dmabuf: DMA-buf where we remove the attachment from
  * @attach: the attachment to remove
  *
- * Drop the runtime PM reference taken in amdgpu_dma_buf_attach().
+ * Drop the runtime PM reference taken in amdgpu_dma_buf_match_mapping().
  */
 static void amdgpu_dma_buf_detach(struct dma_buf *dmabuf,
 				  struct dma_buf_attachment *attach)
@@ -147,7 +117,7 @@ static void amdgpu_dma_buf_detach(struct dma_buf *dmabuf,
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
 
-	if (attach->peer2peer)
+	if (dma_buf_attach_accepts_sgt_p2p(attach))
 		pm_runtime_put_autosuspend(adev_to_drm(adev)->dev);
 }
 
@@ -175,7 +145,7 @@ static int amdgpu_dma_buf_pin(struct dma_buf_attachment *attach)
 	 * notiers are enabled.
 	 */
 	list_for_each_entry(attach, &dmabuf->attachments, node)
-		if (!attach->peer2peer)
+		if (!dma_buf_attach_accepts_sgt_p2p(attach))
 			domains &= ~AMDGPU_GEM_DOMAIN_VRAM;
 
 	if (domains & AMDGPU_GEM_DOMAIN_VRAM)
@@ -218,6 +188,7 @@ static void amdgpu_dma_buf_unpin(struct dma_buf_attachment *attach)
 static struct sg_table *amdgpu_dma_buf_map(struct dma_buf_attachment *attach,
 					   enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(attach);
 	struct dma_buf *dma_buf = attach->dmabuf;
 	struct drm_gem_object *obj = dma_buf->priv;
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
@@ -231,7 +202,7 @@ static struct sg_table *amdgpu_dma_buf_map(struct dma_buf_attachment *attach,
 		unsigned int domains = AMDGPU_GEM_DOMAIN_GTT;
 
 		if (bo->preferred_domains & AMDGPU_GEM_DOMAIN_VRAM &&
-		    attach->peer2peer) {
+		    dma_buf_sgt_p2p_allowed(attach)) {
 			bo->flags |= AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED;
 			domains |= AMDGPU_GEM_DOMAIN_VRAM;
 		}
@@ -249,7 +220,7 @@ static struct sg_table *amdgpu_dma_buf_map(struct dma_buf_attachment *attach,
 		if (IS_ERR(sgt))
 			return sgt;
 
-		if (dma_map_sgtable(attach->dev, sgt, dir,
+		if (dma_map_sgtable(dma_dev, sgt, dir,
 				    DMA_ATTR_SKIP_CPU_SYNC))
 			goto error_free;
 		break;
@@ -261,7 +232,7 @@ static struct sg_table *amdgpu_dma_buf_map(struct dma_buf_attachment *attach,
 			return ERR_PTR(-EINVAL);
 
 		r = amdgpu_vram_mgr_alloc_sgt(adev, bo->tbo.resource, 0,
-					      bo->tbo.base.size, attach->dev,
+					      bo->tbo.base.size, dma_dev,
 					      dir, &sgt);
 		if (r)
 			return ERR_PTR(r);
@@ -269,7 +240,7 @@ static struct sg_table *amdgpu_dma_buf_map(struct dma_buf_attachment *attach,
 
 	case AMDGPU_PL_MMIO_REMAP:
 		r = amdgpu_ttm_mmio_remap_alloc_sgt(adev, bo->tbo.resource,
-						    attach->dev, dir, &sgt);
+						    dma_dev, dir, &sgt);
 		if (r)
 			return ERR_PTR(r);
 		break;
@@ -299,21 +270,22 @@ static void amdgpu_dma_buf_unmap(struct dma_buf_attachment *attach,
 				 struct sg_table *sgt,
 				 enum dma_data_direction dir)
 {
+	struct device *dma_dev = dma_buf_sgt_dma_device(attach);
 	struct drm_gem_object *obj = attach->dmabuf->priv;
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
 
 	if (bo->tbo.resource &&
 	    bo->tbo.resource->mem_type == AMDGPU_PL_MMIO_REMAP) {
-		amdgpu_ttm_mmio_remap_free_sgt(attach->dev, dir, sgt);
+		amdgpu_ttm_mmio_remap_free_sgt(dma_dev, dir, sgt);
 		return;
 	}
 
 	if (sg_page(sgt->sgl)) {
-		dma_unmap_sgtable(attach->dev, sgt, dir, 0);
+		dma_unmap_sgtable(dma_dev, sgt, dir, 0);
 		sg_free_table(sgt);
 		kfree(sgt);
 	} else {
-		amdgpu_vram_mgr_free_sgt(attach->dev, dir, sgt);
+		amdgpu_vram_mgr_free_sgt(dma_dev, dir, sgt);
 	}
 }
 
@@ -388,18 +360,90 @@ static void amdgpu_dma_buf_vunmap(struct dma_buf *dma_buf, struct iosys_map *map
 	amdgpu_bo_unpin(bo);
 }
 
+static const struct dma_buf_mapping_sgt_exp_ops amdgpu_dma_buf_sgt_ops = {
+	.map_dma_buf = amdgpu_dma_buf_map,
+	.unmap_dma_buf = amdgpu_dma_buf_unmap,
+};
+
+static int amdgpu_dma_buf_match_mapping(struct dma_buf_match_args *args)
+{
+	struct dma_buf_attachment *attach = args->attach;
+	struct drm_gem_object *obj = args->dmabuf->priv;
+	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
+	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
+	struct device *dev = adev_to_drm(adev)->dev;
+	struct dma_buf_mapping_match sgt_match[2];
+	unsigned int num_match = 0;
+	bool peer2peer = true;
+	int ret;
+
+	/*
+	 * Disable peer-to-peer access for DCC-enabled VRAM surfaces on GFX12+.
+	 * Such buffers cannot be safely accessed over P2P due to device-local
+	 * compression metadata. Fallback to system-memory path instead.
+	 * Device supports GFX12 (GC 12.x or newer)
+	 * BO was created with the AMDGPU_GEM_CREATE_GFX12_DCC flag
+	 *
+	 */
+	if (amdgpu_ip_version(adev, GC_HWIP, 0) >= IP_VERSION(12, 0, 0) &&
+	    bo->flags & AMDGPU_GEM_CREATE_GFX12_DCC)
+		peer2peer = false;
+
+	/*
+	 * Only allow P2P while the exporter is active, and keep it active
+	 * until detach.  With runtime PM disabled take a plain reference so
+	 * the put in detach stays balanced.
+	 */
+	if (peer2peer) {
+		ret = pm_runtime_get_if_active(dev);
+		if (!ret)
+			peer2peer = false;
+		else if (ret < 0)
+			pm_runtime_get_noresume(dev);
+	}
+
+	if (peer2peer)
+		sgt_match[num_match++] = DMA_BUF_EMAPPING_SGT_P2P(
+			&amdgpu_dma_buf_sgt_ops, adev->pdev);
+	sgt_match[num_match++] = DMA_BUF_EMAPPING_SGT(&amdgpu_dma_buf_sgt_ops);
+
+	ret = dma_buf_match_mapping(args, sgt_match, num_match);
+	if (ret)
+		goto err_pm_put;
+
+	/*
+	 * If the transfer will use XGMI then force a P2P match: the importer
+	 * reaches VRAM over XGMI, so the BO may stay there even though PCIe
+	 * P2P did not match. Rewrite the recorded match set entry, which is
+	 * what dma_buf_mapping_select() picks from at pin or map time.
+	 */
+	if (peer2peer && !dma_buf_attach_accepts_sgt_p2p(attach) &&
+	    amdgpu_dmabuf_is_xgmi_accessible(dma_buf_attach_adev(attach), bo))
+		attach->matches[0].sgt_data.exporter_requires_p2p =
+			DMA_SGT_EXPORTER_REQUIRES_P2P_DISTANCE;
+
+	/* The PM reference is only needed while P2P is actually possible. */
+	if (peer2peer && !dma_buf_attach_accepts_sgt_p2p(attach))
+		pm_runtime_put_autosuspend(dev);
+	return 0;
+
+err_pm_put:
+	if (peer2peer)
+		pm_runtime_put_autosuspend(dev);
+	return ret;
+}
+
 const struct dma_buf_ops amdgpu_dmabuf_ops = {
 	.attach = amdgpu_dma_buf_attach,
 	.detach = amdgpu_dma_buf_detach,
 	.pin = amdgpu_dma_buf_pin,
 	.unpin = amdgpu_dma_buf_unpin,
-	.map_dma_buf = amdgpu_dma_buf_map,
-	.unmap_dma_buf = amdgpu_dma_buf_unmap,
 	.release = drm_gem_dmabuf_release,
 	.begin_cpu_access = amdgpu_dma_buf_begin_cpu_access,
 	.mmap = drm_gem_dmabuf_mmap,
 	.vmap = amdgpu_dma_buf_vmap,
 	.vunmap = amdgpu_dma_buf_vunmap,
+	.match_mapping = amdgpu_dma_buf_match_mapping,
 };
 
 /**
@@ -635,7 +679,7 @@ struct drm_gem_object *amdgpu_gem_prime_import(struct drm_device *dev,
 	 * budget normally, so drop AMDGPU_GEM_CREATE_PREEMPTIBLE again.  The
 	 * BO is not published yet, so clearing the flag here is race-free.
 	 */
-	if (!attach->peer2peer)
+	if (!dma_buf_attach_accepts_sgt_p2p(attach))
 		gem_to_amdgpu_bo(obj)->flags &= ~AMDGPU_GEM_CREATE_PREEMPTIBLE;
 
 	get_dma_buf(dma_buf);
