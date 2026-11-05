@@ -108,6 +108,39 @@ static unsigned int acpi_platform_adjust_resources(struct acpi_device *adev,
 	return count;
 }
 
+static void acpi_platform_set_resource_names(struct acpi_device *adev,
+					     struct resource *resources,
+					     int count)
+{
+	const char **names;
+	int mem_count = 0, mem_idx = 0;
+	int i, num;
+
+	/* reg-names is optional; skip entirely if not present in _DSD */
+	if (!fwnode_property_present(acpi_fwnode_handle(adev), "reg-names"))
+		return;
+
+	for (i = 0; i < count; i++)
+		if (resource_type(&resources[i]) == IORESOURCE_MEM)
+			mem_count++;
+	if (mem_count == 0)
+		return;
+
+	names = kcalloc(mem_count, sizeof(*names), GFP_KERNEL);
+	if (!names)
+		return;
+
+	num = fwnode_property_read_string_array(acpi_fwnode_handle(adev),
+						"reg-names", names, mem_count);
+	if (num == mem_count) {
+		for (i = 0; i < count; i++) {
+			if (resource_type(&resources[i]) == IORESOURCE_MEM)
+				resources[i].name = names[mem_idx++];
+		}
+	}
+	kfree(names);
+}
+
 static void acpi_platform_fill_resource(struct device *parent,
 					const struct resource *src,
 					struct resource *dest)
@@ -194,6 +227,10 @@ struct platform_device *acpi_create_platform_device(struct acpi_device *adev,
 				acpi_platform_fill_resource(parent, rentry->res,
 							    &resources[count++]);
 			}
+
+			acpi_platform_set_resource_names(adev, resources,
+							 count);
+
 			acpi_dev_free_resource_list(&resource_list);
 		}
 	}
