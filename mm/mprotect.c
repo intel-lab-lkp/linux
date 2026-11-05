@@ -601,8 +601,9 @@ again:
 			continue;
 
 		if (!range.start) {
-			mmu_notifier_range_init(&range,
-						MMU_NOTIFY_PROTECTION_VMA, 0,
+			mmu_notifier_range_init(&range, MMU_NOTIFY_PROTECTION_VMA,
+						mm_cp_is_perm_upgrade(cp_flags) ?
+						MMU_NOTIFIER_RANGE_PERM_UPGRADE : 0,
 						vma->vm_mm, addr, end);
 			mmu_notifier_invalidate_range_start(&range);
 		}
