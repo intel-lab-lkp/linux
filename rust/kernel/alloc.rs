@@ -6,6 +6,7 @@ pub mod allocator;
 pub mod kbox;
 pub mod kvec;
 pub mod layout;
+pub mod ringbuffer;
 
 pub use self::kbox::Box;
 pub use self::kbox::KBox;
@@ -17,6 +18,11 @@ pub use self::kvec::KVVec;
 pub use self::kvec::KVec;
 pub use self::kvec::VVec;
 pub use self::kvec::Vec;
+
+pub use self::ringbuffer::KRingBuffer;
+pub use self::ringbuffer::KVRingBuffer;
+pub use self::ringbuffer::RingBuffer;
+pub use self::ringbuffer::VRingBuffer;
 
 /// Indicates an allocation error.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
