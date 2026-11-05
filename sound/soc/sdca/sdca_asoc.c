@@ -13,11 +13,13 @@
 #include <linux/delay.h>
 #include <linux/dev_printk.h>
 #include <linux/device.h>
+#include <linux/limits.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/overflow.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_registers.h>
 #include <linux/string_helpers.h>
 #include <linux/types.h>
@@ -1465,9 +1467,56 @@ static int get_cluster_mask(struct device *dev, struct sdca_function_data *funct
 	return 0;
 }
 
+static int get_port_masks(struct sdw_slave *sdw, unsigned int port,
+			  struct snd_pcm_substream *substream,
+			  unsigned int *word_mask, unsigned int *ch_mask)
+{
+	struct sdw_dpn_prop *prop;
+	unsigned int nprop;
+	int i, j;
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		prop = sdw->prop.sink_dpn_prop;
+		nprop = hweight32(sdw->prop.sink_ports);
+	} else {
+		prop = sdw->prop.src_dpn_prop;
+		nprop = hweight32(sdw->prop.source_ports);
+	}
+
+	*word_mask = 0;
+	*ch_mask = 0;
+
+	for (i = 0; i < nprop; i++) {
+		if (prop[i].num != port)
+			continue;
+
+		if (prop->min_word && prop->max_word) {
+			*word_mask = GENMASK(prop->min_word - 1, prop->max_word - 1);
+		} else {
+			for (j = 0; j < prop->num_words; j++)
+				*word_mask |= (1 << (prop->words[j] - 1));
+		}
+
+		/* Only handle the number of channels for constraints. */
+		if (prop->num_ch_combinations) {
+			for (j = 0; j < prop->num_ch_combinations; j++)
+				*ch_mask |= (1 << (hweight32(prop->ch_combinations[j]) - 1));
+		} else if (prop->min_ch && prop->max_ch) {
+			*ch_mask = GENMASK(prop->min_ch - 1, prop->max_ch - 1);
+		} else {
+			*ch_mask = GENMASK(0, prop->num_channels - 1);
+		}
+
+		return 0;
+	}
+
+	return -ENODEV;
+}
+
 /**
  * sdca_asoc_set_constraints - constrain channels available on a DAI
  * @dev: Pointer to the device, used for error messages.
+ * @sdw: Pointer to the SoundWire peripheral device.
  * @regmap: Pointer to the Function register map.
  * @function: Pointer to the Function information.
  * @substream: Pointer to the PCM substream.
@@ -1477,51 +1526,82 @@ static int get_cluster_mask(struct device *dev, struct sdca_function_data *funct
  *
  * Return: Returns zero on success, and a negative error code on failure.
  */
-int sdca_asoc_set_constraints(struct device *dev, struct regmap *regmap,
+int sdca_asoc_set_constraints(struct device *dev, struct sdw_slave *sdw,
+			      struct regmap *regmap,
 			      struct sdca_function_data *function,
 			      struct snd_pcm_substream *substream,
 			      struct snd_soc_dai *dai)
 {
-	static const unsigned int channel_list[] = {
+	static const unsigned int constraint_list[] = {
 		 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
 		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
 	};
 	struct sdca_entity *entity = &function->entities[dai->id];
-	struct snd_pcm_hw_constraint_list *constraint;
+	struct snd_pcm_hw_constraint_list *constraints;
+	unsigned int port_ch_mask, port_width_mask;
 	unsigned int cluster_ch_mask;
+	int port;
 	int ret;
 
-	static_assert(ARRAY_SIZE(channel_list) == SDCA_MAX_CHANNEL_COUNT);
+	static_assert(ARRAY_SIZE(constraint_list) == SDCA_MAX_CHANNEL_COUNT);
 	static_assert(sizeof(cluster_ch_mask) * BITS_PER_BYTE >= SDCA_MAX_CHANNEL_COUNT);
 
-	if (entity->type != SDCA_ENTITY_TYPE_IT)
-		return 0;
+	/* FIXME: Currently only a single unshared port is supported */
+	port = sdca_asoc_get_port(dev, regmap, function, dai);
+	if (port < 0)
+		return port;
 
-	ret = get_cluster_mask(dev, function, entity, &cluster_ch_mask);
-	if (ret)
-		return ret;
-
-	dev_dbg(dev, "%s: set channel constraint mask: %#x\n",
-		entity->label, cluster_ch_mask);
-
-	constraint = kzalloc_obj(*constraint);
-	if (!constraint)
-		return -ENOMEM;
-
-	constraint->count = ARRAY_SIZE(channel_list);
-	constraint->list = channel_list;
-	constraint->mask = cluster_ch_mask;
-
-	ret = snd_pcm_hw_constraint_list(substream->runtime, 0,
-					 SNDRV_PCM_HW_PARAM_CHANNELS,
-					 constraint);
-	if (ret) {
-		dev_err(dev, "%s: failed to add constraint: %d\n", entity->label, ret);
-		kfree(constraint);
+	ret = get_port_masks(sdw, port, substream, &port_width_mask, &port_ch_mask);
+	if (ret < 0) {
+		dev_err(dev, "%s: no properties for port %d\n", entity->label, port);
 		return ret;
 	}
 
-	snd_soc_dai_set_priv(dai, constraint);
+	/* FIXME: OTs should inherit cluster information */
+	if (entity->type == SDCA_ENTITY_TYPE_IT) {
+		ret = get_cluster_mask(dev, function, entity, &cluster_ch_mask);
+		if (ret)
+			return ret;
+	} else {
+		cluster_ch_mask = UINT_MAX;
+	}
+
+	constraints = kzalloc_objs(*constraints, 2);
+	if (!constraints)
+		return -ENOMEM;
+
+	constraints[0].count = ARRAY_SIZE(constraint_list);
+	constraints[0].list = constraint_list;
+	constraints[0].mask = cluster_ch_mask & port_ch_mask;
+
+	constraints[1].count = ARRAY_SIZE(constraint_list);
+	constraints[1].list = constraint_list;
+	constraints[1].mask = port_width_mask;
+
+	dev_dbg(dev, "%s: set constraint masks, channel: %#x, width: %#x\n",
+		entity->label, constraints[0].mask, constraints[1].mask);
+
+	ret = snd_pcm_hw_constraint_list(substream->runtime, 0,
+					 SNDRV_PCM_HW_PARAM_CHANNELS,
+					 &constraints[0]);
+	if (ret) {
+		dev_err(dev, "%s: failed to add channel constraint: %d\n",
+			entity->label, ret);
+		kfree(constraints);
+		return ret;
+	}
+
+	ret = snd_pcm_hw_constraint_list(substream->runtime, 0,
+					 SNDRV_PCM_HW_PARAM_SAMPLE_BITS,
+					 &constraints[1]);
+	if (ret) {
+		dev_err(dev, "%s: failed to add word constraint: %d\n",
+			entity->label, ret);
+		kfree(constraints);
+		return ret;
+	}
+
+	snd_soc_dai_set_priv(dai, constraints);
 
 	return 0;
 }
@@ -1537,9 +1617,9 @@ EXPORT_SYMBOL_NS(sdca_asoc_set_constraints, "SND_SOC_SDCA");
 void sdca_asoc_free_constraints(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)
 {
-	struct snd_pcm_hw_constraint_list *constraint = snd_soc_dai_to_priv(dai);
+	struct snd_pcm_hw_constraint_list *constraints = snd_soc_dai_to_priv(dai);
 
-	kfree(constraint);
+	kfree(constraints);
 }
 EXPORT_SYMBOL_NS(sdca_asoc_free_constraints, "SND_SOC_SDCA");
 
