@@ -30,6 +30,7 @@
 #define IWDG_SR		0x0C /* Status Register */
 #define IWDG_WINR	0x10 /* Windows Register */
 #define IWDG_EWCR	0x14 /* Early Wake-up Register */
+#define IWDG_ICR	0x18 /* Interrupt Clear Register */
 #define IWDG_VERR	0x3F4 /* Version Register */
 
 /* IWDG_KR register bit mask */
@@ -55,11 +56,14 @@
 #define EWCR_EWIC	BIT(14) /* Watchdog early interrupt acknowledge */
 #define EWCR_EWIE	BIT(15) /* Watchdog early interrupt enable */
 
+#define ICR_EWIC	BIT(15) /* Watchdog early interrupt acknowledge */
+
 /* IWDG_VERR register mask */
 #define VERR_MASK	GENMASK(7, 0)
 
 /* IWDG Compatibility */
 #define ONF_MIN_VER	0x31
+#define ICR_MIN_VER	0x40
 
 /* set timeout to 100000 us */
 #define TIMEOUT_US	100000
@@ -100,6 +104,15 @@ static inline u32 reg_read(void __iomem *base, u32 reg)
 
 static inline void reg_write(void __iomem *base, u32 reg, u32 val)
 {
+	writel_relaxed(val, base + reg);
+}
+
+static inline void reg_set(void __iomem *base, u32 reg, u32 set)
+{
+	u32 val;
+
+	val = readl_relaxed(base + reg);
+	val |= set;
 	writel_relaxed(val, base + reg);
 }
 
@@ -194,11 +207,11 @@ static irqreturn_t stm32_iwdg_isr(int irq, void *wdog_arg)
 {
 	struct watchdog_device *wdd = wdog_arg;
 	struct stm32_iwdg *wdt = watchdog_get_drvdata(wdd);
-	u32 reg;
 
-	reg = reg_read(wdt->regs, IWDG_EWCR);
-	reg |= EWCR_EWIC;
-	reg_write(wdt->regs, IWDG_EWCR, reg);
+	if (wdt->hw_version >= ICR_MIN_VER)
+		reg_write(wdt->regs, IWDG_ICR, ICR_EWIC);
+	else
+		reg_set(wdt->regs, IWDG_EWCR, EWCR_EWIC);
 
 	watchdog_notify_pretimeout(wdd);
 
