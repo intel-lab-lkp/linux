@@ -359,7 +359,21 @@ static int pca954x_set_idle_state(struct i2c_mux_core *muxc)
 
 static int pca954x_deselect_mux(struct i2c_mux_core *muxc, u32 chan)
 {
-	return pca954x_set_idle_state(muxc);
+	struct pca954x *data = i2c_mux_priv(muxc);
+	int ret;
+
+	ret = pca954x_set_idle_state(muxc);
+	/*
+	 * The i2c-mux core ignores the deselect return value. Report failures
+	 * since these may leave a channel connected until the next transfer
+	 * reprograms the mux.
+	 */
+	if (ret < 0)
+		dev_warn_ratelimited(&data->client->dev,
+				     "failed to deselect channel %u: %d\n",
+				     chan, ret);
+
+	return ret;
 }
 
 static ssize_t idle_state_show(struct device *dev,
