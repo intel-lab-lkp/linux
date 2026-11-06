@@ -1335,6 +1335,14 @@ ssize_t btrfs_buffered_write(struct kiocb *iocb, struct iov_iter *iter)
 		return ret;
 
 	/*
+	 * A direct write that fell back to buffered IO must not dirty folios
+	 * while direct IO is in flight: its completion fails to invalidate
+	 * them and records -EIO in the mapping.
+	 */
+	if (iocb->ki_flags & IOCB_DIRECT)
+		inode_dio_wait(inode);
+
+	/*
 	 * We can only trust the isize with inode lock held, or it can race with
 	 * other buffered writes and cause incorrect call of
 	 * pagecache_isize_extended() to overwrite existing data.
