@@ -3461,6 +3461,19 @@ config RATELIMIT_KUNIT_TEST
 
 	  If unsure, say N.
 
+config TIMERQUEUE_KUNIT_TEST
+	tristate "KUnit test for the timerqueue" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This option enables the KUnit test suite for lib/timerqueue.c,
+	  the time-ordered queue behind hrtimers and POSIX CPU timers.
+	  The tests cover ordering, the return values of the add and
+	  delete helpers, equal expiry times and the prev/next links of
+	  the linked timerqueue.
+
+	  If unsure, say N.
+
 config UUID_KUNIT_TEST
 	tristate "KUnit test for UUID" if !KUNIT_ALL_TESTS
 	depends on KUNIT
