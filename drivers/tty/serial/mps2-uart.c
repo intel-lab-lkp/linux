@@ -590,15 +590,19 @@ static int mps2_serial_probe(struct platform_device *pdev)
 
 	ret = mps2_init_port(pdev, mps_port);
 	if (ret)
-		return ret;
+		goto err_remove_id;
 
 	ret = uart_add_one_port(&mps2_uart_driver, &mps_port->port);
 	if (ret)
-		return ret;
+		goto err_remove_id;
 
 	platform_set_drvdata(pdev, mps_port);
 
 	return 0;
+
+err_remove_id:
+	idr_remove(&ports_idr, mps_port->port.line);
+	return ret;
 }
 
 #ifdef CONFIG_OF
