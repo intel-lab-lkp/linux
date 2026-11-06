@@ -1171,8 +1171,8 @@ static void __dma_async_device_channel_unregister(struct dma_device *device,
 	device->chancnt--;
 	chan->chan_dev->chan = NULL;
 	mutex_unlock(&dma_list_mutex);
-	ida_free(&device->chan_ida, chan->chan_id);
 	device_unregister(dmaengine_chan_dev(chan));
+	ida_free(&device->chan_ida, chan->chan_id);
 	free_percpu(chan->local);
 }
 
@@ -1307,8 +1307,10 @@ err_out:
 		chan->chan_dev->chan = NULL;
 		mutex_unlock(&dma_list_mutex);
 		device_unregister(dmaengine_chan_dev(chan));
+		ida_free(&device->chan_ida, chan->chan_id);
 		free_percpu(chan->local);
 	}
+	ida_free(&dma_ida, device->dev_id);
 	return rc;
 }
 EXPORT_SYMBOL(dma_async_device_register);
