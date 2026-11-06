@@ -208,6 +208,42 @@ Lifetime of a devres entry begins on devres allocation and finishes
 when it is released or destroyed (removed and freed) - no reference
 counting.
 
+Because nothing counts references, managed memory must not hold state
+that the core or the driver's file operations can still reach after the
+driver unbinds. A common case is driver state in devm_kzalloc()'d
+memory that an open file can still reach: state embedding a struct cdev
+or struct video_device, or the v4l2_device and media_device a
+video_device points to, which the core touches on every close, or a
+struct miscdevice whose file operations use the state. Unregistering
+the node in ->remove() does not close files that are already open, and
+for a cdev an open through an already cached inode can still reach the
+driver's ->open(). Allocate such state with kzalloc() and free it when
+the last reference to it is dropped:
+
+- for a cdev, from the release callback of a struct device embedded in
+  the same state, with dev->devt set, and added with cdev_device_add();
+  see its kernel-doc in fs/char_dev.c. ->remove() calls
+  cdev_device_del() and then put_device(); a probe that fails after
+  device_initialize() calls cdev_device_del() if cdev_device_add()
+  succeeded, then put_device(), never kfree().
+- for a video_device, from the release callback of its v4l2_device; see
+  Documentation/driver-api/media/v4l2-device.rst. The video_device
+  release callback runs before that and must not free the state. The
+  v4l2_device release callback is not the last access to an embedded
+  struct media_device: media request files and the media device node
+  reach it without a v4l2_device reference, and the media core gives it
+  no reference count, so its lifetime is not covered here.
+- a miscdevice has no release callback, so the driver counts the
+  references itself, for example with a kref that ->probe()
+  initializes, ->open() takes (and drops again if it then fails) and
+  ->release() drops, and that ->remove(), or a probe that fails after
+  misc_register(), drops only after misc_deregister() has returned.
+
+In each case, dropping a reference is the last access to the state by
+whoever drops it. Keeping the memory is not enough on its own: file
+operations that run after ->remove() must not touch the hardware or
+other managed resources.
+
 devres core guarantees atomicity to all basic devres operations and
 has support for single-instance devres types (atomic
 lookup-and-add-if-not-found).  Other than that, synchronizing
