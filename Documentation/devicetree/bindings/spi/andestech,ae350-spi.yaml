@@ -24,6 +24,9 @@ properties:
   clocks:
     maxItems: 1
 
+  interrupts:
+    maxItems: 1
+
   dmas:
     items:
       - description: Transmit FIFO DMA channel
@@ -33,6 +36,9 @@ properties:
     items:
       - const: tx
       - const: rx
+
+dependencies:
+  dmas: [ dma-names ]
 
 patternProperties:
   "@[0-9a-f]+$":
@@ -55,8 +61,6 @@ required:
   - compatible
   - reg
   - clocks
-  - dmas
-  - dma-names
 
 unevaluatedProperties: false
 
