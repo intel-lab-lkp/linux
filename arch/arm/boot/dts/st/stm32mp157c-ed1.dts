@@ -19,6 +19,7 @@
 
 	aliases {
 		serial0 = &uart4;
+		watchdog0 = &iwdg1;
 	};
 
 	chosen {
@@ -328,6 +329,11 @@
 };
 
 &ipcc {
+	status = "okay";
+};
+
+&iwdg1 {
+	timeout-sec = <32>;
 	status = "okay";
 };
 
