@@ -13,12 +13,21 @@
 	model = "STMicroelectronics STM32MP157C-DK2 SCMI Discovery Board";
 	compatible = "st,stm32mp157c-dk2-scmi", "st,stm32mp157";
 
+	aliases {
+		watchdog0 = &arm_wdt;
+	};
+
 	reserved-memory {
 		optee@de000000 {
 			reg = <0xde000000 0x2000000>;
 			no-map;
 		};
 	};
+};
+
+&arm_wdt {
+	timeout-sec = <32>;
+	status = "okay";
 };
 
 &cpu0 {
