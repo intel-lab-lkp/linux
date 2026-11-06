@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/riscv/metanoia.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Metanoia SoC-based boards
+
+maintainers:
+  - Jun Chang <jun.chang@metanoia-comm.com>
+
+description:
+  Metanoia SoC-based boards
+
+properties:
+  $nodename:
+    const: '/'
+  compatible:
+    oneOf:
+      - items:
+          - enum:
+              - metanoia,mt5824-evb
+          - const: metanoia,mt2824
+
+additionalProperties: true
