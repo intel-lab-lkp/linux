@@ -204,7 +204,9 @@ static bool wb_wait_for_completion_cb(struct wb_completion *done,
 	int left = atomic_read(&done->cnt);
 
 	done->progress_stamp = jiffies;
-	if (left && timeout && (waited_secs > timeout)) {
+	if (left && timeout &&
+	    time_after(jiffies, done->report_stamp + timeout * HZ)) {
+		done->report_stamp = jiffies;
 		pr_info("INFO: The task %s:%d has been waiting for writeback "
 			"completion for more than %lu seconds.\n",
 			current->comm, current->pid, waited_secs);
@@ -232,6 +234,7 @@ void wb_wait_for_completion(struct wb_completion *done,
 	unsigned long timeout, waited;
 
 	done->wait_start = jiffies;
+	done->report_stamp = done->wait_start;
 	atomic_dec(&done->cnt);		/* put down the initial count */
 	wait_event(*done->waitq, wb_wait_for_completion_cb(done, bdi));
 
