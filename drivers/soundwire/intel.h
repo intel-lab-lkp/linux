@@ -154,11 +154,18 @@ static inline void sdw_intel_debugfs_exit(struct sdw_intel *sdw)
 		SDW_INTEL_OPS(sdw, debugfs_exit)(sdw);
 }
 
+static inline int sdw_intel_init_pdis(struct sdw_intel *sdw)
+{
+	if (SDW_INTEL_CHECK_OPS(sdw, init_pdis))
+		return SDW_INTEL_OPS(sdw, init_pdis)(sdw);
+	return -ENOTSUPP;
+}
+
 static inline int sdw_intel_register_dai(struct sdw_intel *sdw)
 {
 	if (SDW_INTEL_CHECK_OPS(sdw, register_dai))
 		return SDW_INTEL_OPS(sdw, register_dai)(sdw);
-	return -ENOTSUPP;
+	return 0;
 }
 
 static inline void sdw_intel_check_clock_stop(struct sdw_intel *sdw)
