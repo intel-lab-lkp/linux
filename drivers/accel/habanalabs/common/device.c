@@ -2527,6 +2527,13 @@ void hl_device_fini(struct hl_device *hdev)
 		}
 	}
 
+	/*
+	 * in_reset is claimed now, so no new reset can be queued and the
+	 * reset thread does not re-arm with device_fini_pending set; make
+	 * sure no reset work is left pending or running during teardown.
+	 */
+	disable_delayed_work_sync(&hdev->device_reset_work.reset_work);
+
 	cancel_delayed_work_sync(&hdev->device_release_watchdog_work.reset_work);
 
 	/* Disable PCI access from device F/W so it won't send us additional
