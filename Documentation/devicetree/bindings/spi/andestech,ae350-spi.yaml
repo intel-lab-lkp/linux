@@ -15,6 +15,7 @@ properties:
       - items:
           - enum:
               - andestech,qilai-spi
+              - metanoia,mt2824-spi
           - const: andestech,ae350-spi
       - const: andestech,ae350-spi
 
