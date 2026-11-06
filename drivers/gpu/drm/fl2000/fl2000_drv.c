@@ -15,6 +15,9 @@
 #define USB_VENDOR_FRESCO_LOGIC 0x1D5C
 #define USB_PRODUCT_FL2000	0x2000
 
+#define FL2000_ALL_IFS \
+	(BIT(FL2000_USBIF_AVCONTROL) | BIT(FL2000_USBIF_STREAMING) | BIT(FL2000_USBIF_INTERRUPT))
+
 static const struct usb_device_id fl2000_id_table[] = {
 	{ USB_DEVICE_INTERFACE_CLASS(USB_VENDOR_FRESCO_LOGIC, USB_PRODUCT_FL2000, USB_CLASS_AV) },
 	{},
@@ -26,8 +29,40 @@ struct fl2000_devs {
 	struct regmap *regmap;
 	struct i2c_adapter *adapter;
 	struct i2c_client *bridge_client;
+	struct component_match *match;
 	int active_if;
+	/* The display was stopped for system sleep and has not been restarted yet */
+	bool suspended;
 };
+
+static const struct component_master_ops fl2000_master_ops = {
+	.bind = fl2000_drm_bind,
+	.unbind = fl2000_drm_unbind,
+};
+
+static int fl2000_compare(struct device *dev, void *data)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+	struct i2c_adapter *adapter = data;
+	static const char *const fl2000_supported_bridges[] = {
+		"fl2000-it66121",
+	};
+
+	/*
+	 * Only match clients sitting on this FL2000 instance's own I2C bus: a
+	 * client with a matching name may belong to another FL2000 device that
+	 * is disconnecting or re-enumerating concurrently.
+	 */
+	if (!client || client->adapter != adapter)
+		return 0;
+
+	/* Check this is a supported DRM bridge */
+	for (int i = 0; i < ARRAY_SIZE(fl2000_supported_bridges); i++)
+		if (!strncmp(fl2000_supported_bridges[i], client->name, sizeof(client->name)))
+			return 1;
+
+	return 0;
+}
 
 static struct fl2000_devs *fl2000_get_devices(struct usb_device *usb_dev)
 {
@@ -48,6 +83,8 @@ static struct fl2000_devs *fl2000_get_devices(struct usb_device *usb_dev)
 		dev_err(&usb_dev->dev, "Cannot initialize I2C adapter (%pe)\n", devs->adapter);
 		return ERR_CAST(devs->adapter);
 	}
+
+	component_match_add(&devs->adapter->dev, &devs->match, fl2000_compare, devs->adapter);
 
 	dev_set_drvdata(&usb_dev->dev, devs);
 
@@ -138,6 +175,16 @@ static int fl2000_probe(struct usb_interface *interface, const struct usb_device
 		break;
 	}
 
+	/* When all interfaces are up - proceed with registration */
+	if (devs->active_if == FL2000_ALL_IFS) {
+		ret = component_master_add_with_match(&devs->adapter->dev, &fl2000_master_ops,
+						      devs->match);
+		if (ret) {
+			dev_err(&usb_dev->dev, "Cannot register component master (%d)\n", ret);
+			return ret;
+		}
+	}
+
 	return ret;
 }
 
@@ -151,11 +198,18 @@ static void fl2000_disconnect(struct usb_interface *interface)
 		return;
 
 	/*
-	 * The IT66121 bridge is intentionally NOT destroyed here: disconnect
-	 * also runs for the transient unbind/rebind cycles of
-	 * usb_reset_device(), where the usb_device survives. Its destruction is
-	 * a devres of the usb_device, see fl2000_bridge_create().
+	 * The IT66121 bridge component is intentionally NOT destroyed here.
+	 * Disconnect also runs for the transient unbind/rebind cycles of
+	 * usb_reset_device(), where the usb_device (and the I2C adapter and
+	 * aggregate match data) survive: the component must persist across
+	 * those. Its destruction is a devres of the usb_device, see
+	 * fl2000_bridge_create(). Destroying it from the master unbind path is
+	 * also forbidden - component_del() would self-deadlock on the global
+	 * component mutex held across the unbind callback.
 	 */
+	if (devs->active_if == FL2000_ALL_IFS)
+		component_master_del(&devs->adapter->dev, &fl2000_master_ops);
+
 	switch (iface_num) {
 	case FL2000_USBIF_AVCONTROL:
 	case FL2000_USBIF_STREAMING:
@@ -170,15 +224,27 @@ static void fl2000_disconnect(struct usb_interface *interface)
 	}
 }
 
+/*
+ * System sleep. The USB core suspends the interfaces one by one, the last first, and resumes them
+ * in order once the device is awake. The display is one thing for all three: stop it at the first
+ * suspend, before any interface sleeps, and start it again at the first resume. The same callback
+ * serves a reset-resume, after which the chips are set up from scratch: without one the USB core
+ * would unbind and bind the driver again, which a running compositor sees as an unplug.
+ */
 static int fl2000_suspend(struct usb_interface *interface, pm_message_t message)
 {
 	struct usb_device *usb_dev = interface_to_usbdev(interface);
+	struct fl2000_devs *devs = dev_get_drvdata(&usb_dev->dev);
+	int ret;
 
-	/*
-	 * Nothing to save yet. Providing the callback keeps the USB core from
-	 * unbinding the driver across system sleep.
-	 */
-	dev_dbg(&usb_dev->dev, "suspend\n");
+	if (!devs || devs->suspended)
+		return 0;
+
+	ret = fl2000_drm_suspend(&devs->adapter->dev);
+	if (ret)
+		return ret;
+
+	devs->suspended = true;
 
 	return 0;
 }
@@ -186,10 +252,14 @@ static int fl2000_suspend(struct usb_interface *interface, pm_message_t message)
 static int fl2000_resume(struct usb_interface *interface)
 {
 	struct usb_device *usb_dev = interface_to_usbdev(interface);
+	struct fl2000_devs *devs = dev_get_drvdata(&usb_dev->dev);
 
-	dev_dbg(&usb_dev->dev, "resume\n");
+	if (!devs || !devs->suspended)
+		return 0;
 
-	return 0;
+	devs->suspended = false;
+
+	return fl2000_drm_resume(&devs->adapter->dev);
 }
 
 static struct usb_driver fl2000_driver = {
@@ -198,6 +268,7 @@ static struct usb_driver fl2000_driver = {
 	.disconnect = fl2000_disconnect,
 	.suspend = fl2000_suspend,
 	.resume = fl2000_resume,
+	.reset_resume = fl2000_resume,
 	.id_table = fl2000_id_table,
 	.supports_autosuspend = false,
 	.disable_hub_initiated_lpm = true,
