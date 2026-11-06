@@ -4,6 +4,7 @@
  *
  * Copyright IBM Corp. 2025
  */
+#include <linux/file.h>
 #include "vfio_ap_private.h"
 
 /* Magic number and version for the vfio_ap_config migration blob */
@@ -123,3 +124,115 @@ struct vfio_ap_config {
 	u64				adm[DIV_ROUND_UP(AP_DOMAINS, 64)];
 	struct vfio_ap_queue_info	qinfo[] __counted_by(num_queues);
 };
+
+static void
+vfio_ap_release_stop_copy_file(struct vfio_ap_migration_data *mig_data)
+{
+	kvfree(mig_data->stop_copy_mig_file.ap_config);
+	mig_data->stop_copy_mig_file.ap_config = NULL;
+	mig_data->stop_copy_mig_file.config_sz = 0;
+	mig_data->stop_copy_mig_file.filp = NULL;
+}
+
+static void vfio_ap_release_resuming_file(struct vfio_ap_migration_data *mig_data)
+{
+	kvfree(mig_data->resuming_mig_file.ap_config);
+	mig_data->resuming_mig_file.ap_config = NULL;
+	mig_data->resuming_mig_file.config_sz = 0;
+	mig_data->resuming_mig_file.filp = NULL;
+	mig_data->resuming_mig_data_complete = false;
+}
+
+/**
+ * vfio_ap_init_migration_data - initialize migration data and functions
+ *
+ * @matrix_mdev: pointer to object containing the mdev state
+ *
+ * This is called each time the vfio device is opened, and a vfio device can
+ * be opened more than once. The migration data is not freed when the device
+ * is closed; it is freed only when the vfio device is released. If it
+ * already exists because the device was opened before, it is reused as is.
+ *
+ * Return: zero if initialization is successful; otherwise, returns a error.
+ */
+int vfio_ap_init_migration_data(struct ap_matrix_mdev *matrix_mdev)
+{
+	struct vfio_ap_migration_data *mig_data;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	if (matrix_mdev->mig_data)
+		return 0;
+
+	/*
+	 * Live guest migration is not supported for SE guests, so there is no
+	 * need to initialize the migration data.
+	 */
+	if (ap_is_se_guest())
+		return 0;
+
+	mig_data = kzalloc_obj(struct vfio_ap_migration_data, GFP_KERNEL);
+	if (!mig_data)
+		return -ENOMEM;
+
+	mig_data->mig_state = VFIO_DEVICE_STATE_RUNNING;
+	mig_data->resuming_mig_data_complete = false;
+	mig_data->resuming_mig_file.matrix_mdev = matrix_mdev;
+	mutex_init(&mig_data->resuming_mig_file.lock);
+	mig_data->stop_copy_mig_file.matrix_mdev = matrix_mdev;
+	mutex_init(&mig_data->stop_copy_mig_file.lock);
+	matrix_mdev->mig_data = mig_data;
+
+	return 0;
+}
+
+/**
+ * vfio_ap_release_mig_files - reset the stop-copy and resuming migration files
+ *
+ * @matrix_mdev: The object used to maintain the state for a mediated device
+ *
+ * For each migration file, free the ap_config buffer, zero its size and set
+ * its filp to NULL so any migration FD still open from a previous use of the
+ * file is rejected when it is used. For the resuming file, also clear
+ * resuming_mig_data_complete.
+ *
+ * The vfio_ap_migration_file objects themselves are not freed. They are
+ * embedded in mig_data, which is freed by vfio_ap_release_migration_data().
+ * That function is called from the vfio device's release callback, which
+ * does not run until every registration reference on the vfio device has
+ * been dropped. Since a reference is held for as long as a migration FD is
+ * open, filp->private_data remains valid for the lifetime of the FD.
+ */
+static void vfio_ap_release_mig_files(struct ap_matrix_mdev *matrix_mdev)
+{
+	struct vfio_ap_migration_data *mig_data;
+
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	mig_data = matrix_mdev->mig_data;
+	vfio_ap_release_stop_copy_file(mig_data);
+	vfio_ap_release_resuming_file(mig_data);
+}
+
+/**
+ * vfio_ap_release_migration_data: reclaim private migration data
+ *
+ * @matrix_mdev: pointer to the object containing the state of the mdev
+ *
+ * This must only be called from the vfio device's release callback. It must
+ * not be called when the vfio device is closed because a migration FD may
+ * still be open and reference the migration data.
+ */
+void vfio_ap_release_migration_data(struct ap_matrix_mdev *matrix_mdev)
+{
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
+	if (!matrix_mdev->mig_data)
+		return;
+
+	vfio_ap_release_mig_files(matrix_mdev);
+	mutex_destroy(&matrix_mdev->mig_data->stop_copy_mig_file.lock);
+	mutex_destroy(&matrix_mdev->mig_data->resuming_mig_file.lock);
+	kfree(matrix_mdev->mig_data);
+	matrix_mdev->mig_data = NULL;
+}
