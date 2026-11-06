@@ -59,6 +59,18 @@ config NETFILTER_NETLINK_QUEUE
 	  If this option is enabled, the kernel will include support
 	  for queueing packets via NFNETLINK.
 
+config NFNETLINK_QUEUE_KUNIT_TEST
+	bool "KUnit tests for NFQUEUE packet IDs"
+	depends on KUNIT=y
+	depends on NET_NS
+	depends on NETFILTER_NETLINK_QUEUE=y
+	help
+	  Exercise cumulative verdict selection and packet ID collisions,
+	  including wraparound and gaps across the signed half-range.
+	  Uses synthetic packets and local netlink messages in private
+	  network namespaces.
+	  If unsure, say N.
+
 config NETFILTER_NETLINK_LOG
 	tristate "Netfilter LOG over NFNETLINK interface"
 	default m if NETFILTER_ADVANCED=n
