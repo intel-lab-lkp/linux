@@ -1467,7 +1467,6 @@ static int zloop_ctl_remove(struct zloop_options *opts)
 	} else if (zlo->state == Zlo_deleting) {
 		ret = -EINVAL;
 	} else {
-		idr_remove(&zloop_index_idr, zlo->id);
 		WRITE_ONCE(zlo->state, Zlo_deleting);
 	}
 
@@ -1476,6 +1475,10 @@ static int zloop_ctl_remove(struct zloop_options *opts)
 		return ret;
 
 	del_gendisk(zlo->disk);
+
+	mutex_lock(&zloop_ctl_mutex);
+	idr_remove(&zloop_index_idr, zlo->id);
+	mutex_unlock(&zloop_ctl_mutex);
 
 	if (zlo->discard_write_cache)
 		zloop_forget_cache(zlo);
