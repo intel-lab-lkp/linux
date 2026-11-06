@@ -54,6 +54,7 @@ properties:
       - items:
           - enum:
               - andestech,qilai-plic
+              - metanoia,mt2824-plic
               - renesas,r9a07g043-plic
           - const: andestech,nceplic100
       - items:
