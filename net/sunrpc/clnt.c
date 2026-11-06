@@ -32,6 +32,8 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <linux/un.h>
+#include <linux/suspend.h>
+#include <net/net_namespace.h>
 
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/addr.h>
@@ -877,6 +879,89 @@ int rpc_clnt_iterate_for_each_xprt(struct rpc_clnt *clnt,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(rpc_clnt_iterate_for_each_xprt);
+
+struct rpc_pm_xprt {
+	struct list_head	list;
+	struct rpc_xprt		*xprt;
+};
+
+/*
+ * After hibernation takes its snapshot, the kernel keeps running with the
+ * network up while it writes the image. rpciod and xprtiod are frozen by
+ * then, so no RPC is sent, but TCP still acknowledges anything the server
+ * sends, such as a reply that was in flight when the snapshot was taken.
+ * The restored image has not seen that data, and the server will not send
+ * it again, so the connection cannot make progress.
+ *
+ * Once the system has resumed, disconnect every client transport. Requests
+ * in flight are retransmitted on a new connection, and the server answers
+ * any it has already executed from its reply cache. Because nothing was
+ * sent after the snapshot, NFSv4.1 session slot sequence ids still agree.
+ */
+static int rpc_pm_notify(struct notifier_block *nb, unsigned long action,
+			 void *data)
+{
+	struct rpc_pm_xprt *entry, *tmp;
+	LIST_HEAD(xprts);
+	struct net *net;
+
+	if (action != PM_POST_HIBERNATION)
+		return NOTIFY_DONE;
+
+	/* xprt_put() may sleep, so collect references first */
+	down_read(&net_rwsem);
+	for_each_net(net) {
+		struct sunrpc_net *sn = net_generic(net, sunrpc_net_id);
+		struct rpc_clnt *clnt;
+
+		spin_lock(&sn->rpc_client_lock);
+		rcu_read_lock();
+		list_for_each_entry(clnt, &sn->all_clients, cl_clients) {
+			struct rpc_xprt_switch *xps;
+			struct rpc_xprt *xprt;
+
+			xps = rcu_dereference(clnt->cl_xpi.xpi_xpswitch);
+			if (!xps)
+				continue;
+			list_for_each_entry_rcu(xprt, &xps->xps_xprt_list,
+						xprt_switch) {
+				entry = kmalloc_obj(*entry, GFP_ATOMIC);
+				if (!entry)
+					break;
+				entry->xprt = xprt_get(xprt);
+				if (!entry->xprt) {
+					kfree(entry);
+					continue;
+				}
+				list_add(&entry->list, &xprts);
+			}
+		}
+		rcu_read_unlock();
+		spin_unlock(&sn->rpc_client_lock);
+	}
+	up_read(&net_rwsem);
+
+	list_for_each_entry_safe(entry, tmp, &xprts, list) {
+		xprt_force_disconnect(entry->xprt);
+		xprt_put(entry->xprt);
+		kfree(entry);
+	}
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block rpc_pm_nb = {
+	.notifier_call = rpc_pm_notify,
+};
+
+int rpc_pm_notifier_register(void)
+{
+	return register_pm_notifier(&rpc_pm_nb);
+}
+
+void rpc_pm_notifier_unregister(void)
+{
+	unregister_pm_notifier(&rpc_pm_nb);
+}
 
 /*
  * Kill all tasks for the given client.
