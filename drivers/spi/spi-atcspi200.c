@@ -12,6 +12,7 @@
 #include <linux/dmaengine.h>
 #include <linux/err.h>
 #include <linux/errno.h>
+#include <linux/interrupt.h>
 #include <linux/jiffies.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
@@ -20,6 +21,7 @@
 #include <linux/regmap.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/spi-mem.h>
+#include <linux/unaligned.h>
 
 /* Register definitions  */
 #define ATCSPI_TRANS_FMT	0x10	/* SPI transfer format register */
@@ -29,6 +31,8 @@
 #define ATCSPI_DATA		0x2C	/* SPI data register */
 #define ATCSPI_CTRL		0x30	/* SPI control register */
 #define ATCSPI_STATUS		0x34	/* SPI status register */
+#define ATCSPI_INTR_EN		0x38	/* SPI interrupt enable register */
+#define ATCSPI_INTR_ST		0x3C	/* SPI interrupt status register */
 #define ATCSPI_TIMING		0x40	/* SPI interface timing register */
 #define ATCSPI_CONFIG		0x7C	/* SPI configuration register */
 
@@ -62,11 +66,23 @@
 #define CTRL_TX_FIFO_RST	BIT(2)
 #define CTRL_RX_DMA_EN		BIT(3)
 #define CTRL_TX_DMA_EN		BIT(4)
+#define CTRL_TX_THRES		GENMASK(23, 16)
+#define CTRL_RX_THRES		GENMASK(15, 8)
 
 /* Status register */
 #define ATCSPI_ACTIVE		BIT(0)
 #define ATCSPI_RX_EMPTY		BIT(14)
 #define ATCSPI_TX_FULL		BIT(23)
+#define ATCSPI_RXNUM_LO(x)	FIELD_GET(GENMASK(13, 8), (x))
+#define ATCSPI_RXNUM_HI(x)	FIELD_GET(GENMASK(25, 24), (x))
+#define ATCSPI_TXNUM_LO(x)	FIELD_GET(GENMASK(21, 16), (x))
+#define ATCSPI_TXNUM_HI(x)	FIELD_GET(GENMASK(29, 28), (x))
+
+/* Interrupt enable/status registers */
+#define ATCSPI_END_INT		BIT(4)
+#define ATCSPI_TX_FIFO_INT	BIT(3)
+#define ATCSPI_RX_FIFO_INT	BIT(2)
+#define ATCSPI_INTR_ALL		GENMASK(5, 0)
 
 /* Interface timing setting */
 #define TIMING_SCLK_DIV_MASK	GENMASK(7, 0)
@@ -104,6 +120,12 @@
  *                  the current transfer.
  * @use_dma:        Enable DMA mode if ATCSPI_DMA_SUPPORT is set and DMA is
  *                  successfully configured.
+ * @irq:            The controller interrupt, or 0 when it is not wired.
+ * @xfer_done:      Completion signalled by the interrupt handler.
+ * @tx_ptr:         Current position in the transmit buffer.
+ * @tx_words:       Number of FIFO entries left to transmit.
+ * @rx_ptr:         Current position in the receive buffer.
+ * @rx_words:       Number of FIFO entries left to receive.
  */
 struct atcspi_dev {
 	struct spi_controller	*host;
@@ -119,6 +141,12 @@ struct atcspi_dev {
 	unsigned int		rxfifo_size;
 	bool			data_merge;
 	bool			use_dma;
+	int			irq;
+	struct completion	xfer_done;
+	const void		*tx_ptr;
+	unsigned int		tx_words;
+	void			*rx_ptr;
+	unsigned int		rx_words;
 };
 
 static int atcspi_wait_fifo_ready(struct atcspi_dev *spi,
@@ -141,6 +169,193 @@ static int atcspi_wait_fifo_ready(struct atcspi_dev *spi,
 	return ret;
 }
 
+static unsigned int atcspi_rx_fifo_avail(unsigned int status)
+{
+	return ATCSPI_RXNUM_LO(status) | (ATCSPI_RXNUM_HI(status) << 6);
+}
+
+static unsigned int atcspi_tx_fifo_avail(struct atcspi_dev *spi, unsigned int status)
+{
+	unsigned int n = ATCSPI_TXNUM_LO(status) | (ATCSPI_TXNUM_HI(status) << 6);
+
+	return n < spi->txfifo_size ? spi->txfifo_size - n : 0;
+}
+
+static void atcspi_fifo_read(struct atcspi_dev *spi, void *dst, unsigned int nb_words)
+{
+	unsigned int val, i;
+
+	if (spi->data_merge) {
+		unsigned int *buf = dst;
+
+		for (i = 0; i < nb_words; i++) {
+			regmap_read(spi->regmap, ATCSPI_DATA, &val);
+			put_unaligned(val, buf++);
+		}
+	} else {
+		unsigned char *buf = dst;
+
+		for (i = 0; i < nb_words; i++) {
+			regmap_read(spi->regmap, ATCSPI_DATA, &val);
+			*buf++ = (unsigned char)val;
+		}
+	}
+}
+
+static void atcspi_fifo_write(struct atcspi_dev *spi, const void *src, unsigned int nb_words)
+{
+	unsigned int val, i;
+
+	if (spi->data_merge) {
+		const unsigned int *buf = src;
+
+		for (i = 0; i < nb_words; i++) {
+			val = get_unaligned(buf++);
+			regmap_write(spi->regmap, ATCSPI_DATA, val);
+		}
+	} else {
+		const unsigned char *buf = src;
+
+		for (i = 0; i < nb_words; i++) {
+			val = *buf++;
+			regmap_write(spi->regmap, ATCSPI_DATA, val);
+		}
+	}
+}
+
+static irqreturn_t atcspi_irq(int irq, void *dev_id)
+{
+	struct atcspi_dev *spi = dev_id;
+	int num_byte = spi->data_merge ? 4 : 1;
+	unsigned int st, en, status, n;
+
+	regmap_read(spi->regmap, ATCSPI_INTR_ST, &st);
+	regmap_read(spi->regmap, ATCSPI_INTR_EN, &en);
+	st &= en;
+	if (!st)
+		return IRQ_NONE;
+
+	regmap_write(spi->regmap, ATCSPI_INTR_ST, st);
+
+	regmap_read(spi->regmap, ATCSPI_STATUS, &status);
+
+	if (st & (ATCSPI_RX_FIFO_INT | ATCSPI_END_INT)) {
+		n = min(atcspi_rx_fifo_avail(status), spi->rx_words);
+		atcspi_fifo_read(spi, spi->rx_ptr, n);
+		spi->rx_words -= n;
+		spi->rx_ptr = (unsigned char *)spi->rx_ptr + n * num_byte;
+	}
+
+	if (st & ATCSPI_TX_FIFO_INT) {
+		n = min(atcspi_tx_fifo_avail(spi, status), spi->tx_words);
+		atcspi_fifo_write(spi, spi->tx_ptr, n);
+		spi->tx_words -= n;
+		spi->tx_ptr = (unsigned char *)spi->tx_ptr + n * num_byte;
+		if (!spi->tx_words) {
+			en &= ~ATCSPI_TX_FIFO_INT;
+			regmap_write(spi->regmap, ATCSPI_INTR_EN, en);
+		}
+	}
+
+	if (st & ATCSPI_END_INT) {
+		regmap_write(spi->regmap, ATCSPI_INTR_EN, 0);
+		complete(&spi->xfer_done);
+	}
+
+	return IRQ_HANDLED;
+}
+
+static int atcspi_reset_engine(struct atcspi_dev *spi)
+{
+	unsigned int ctrl_val = CTRL_SPI_RST | CTRL_TX_FIFO_RST | CTRL_RX_FIFO_RST;
+	unsigned int val;
+
+	regmap_write(spi->regmap, ATCSPI_CTRL, ctrl_val);
+
+	return regmap_read_poll_timeout(spi->regmap,
+					ATCSPI_CTRL,
+					val,
+					!(val & ctrl_val),
+					0,
+					ATCSPI_RDY_TIMEOUT_US);
+}
+
+static int atcspi_xfer_data_irq(struct atcspi_dev *spi,
+				const struct spi_mem_op *op)
+{
+	unsigned int ctrl, en = ATCSPI_END_INT;
+	int num_byte = spi->data_merge ? 4 : 1;
+	bool has_timedout = false;
+	int timeout;
+
+	spi->rx_words = 0;
+	spi->tx_words = 0;
+	spi->rx_ptr = op->data.buf.in;
+	spi->tx_ptr = op->data.buf.out;
+
+	if (op->data.dir == SPI_MEM_DATA_IN) {
+		spi->rx_words = op->data.nbytes / num_byte;
+		en |= ATCSPI_RX_FIFO_INT;
+	} else {
+		spi->tx_words = op->data.nbytes / num_byte;
+		en |= ATCSPI_TX_FIFO_INT;
+	}
+
+	regmap_read(spi->regmap, ATCSPI_CTRL, &ctrl);
+	ctrl &= ~(CTRL_TX_THRES | CTRL_RX_THRES);
+	ctrl |= FIELD_PREP(CTRL_TX_THRES, spi->txfifo_size / 2) |
+	FIELD_PREP(CTRL_RX_THRES, spi->rxfifo_size / 2);
+	regmap_write(spi->regmap, ATCSPI_CTRL, ctrl);
+
+	reinit_completion(&spi->xfer_done);
+
+	if (spi->tx_words) {
+		unsigned int status, nb_words;
+
+		regmap_read(spi->regmap, ATCSPI_STATUS, &status);
+		nb_words = min(atcspi_tx_fifo_avail(spi, status), spi->tx_words);
+		atcspi_fifo_write(spi, spi->tx_ptr, nb_words);
+		spi->tx_words -= nb_words;
+		spi->tx_ptr = (unsigned char *)spi->tx_ptr + nb_words * num_byte;
+	}
+
+	regmap_write(spi->regmap, ATCSPI_INTR_ST, ATCSPI_INTR_ALL);
+	regmap_write(spi->regmap, ATCSPI_INTR_EN, en);
+
+	regmap_write(spi->regmap, ATCSPI_CMD, op->cmd.opcode);
+
+	timeout = msecs_to_jiffies(ATCSPI_XFER_TIMEOUT(op->data.nbytes));
+	if (!wait_for_completion_timeout(&spi->xfer_done, timeout)) {
+		regmap_write(spi->regmap, ATCSPI_INTR_EN, 0);
+		synchronize_irq(spi->irq);
+
+		if (!completion_done(&spi->xfer_done))
+			has_timedout = true;
+	}
+
+	regmap_write(spi->regmap, ATCSPI_INTR_EN, 0);
+	regmap_write(spi->regmap, ATCSPI_INTR_ST, ATCSPI_INTR_ALL);
+
+	/* Reset the SPI controller if the transfer never completed */
+	if (has_timedout) {
+		atcspi_reset_engine(spi);
+
+		return -ETIMEDOUT;
+	}
+
+	/* Reset the controller for completed but truncated transfer */
+	if (spi->rx_words || spi->tx_words) {
+		atcspi_reset_engine(spi);
+
+		return -EIO;
+	}
+
+	/* restore FIFO thresholds for other transfer paths */
+	regmap_clear_bits(spi->regmap, ATCSPI_CTRL, CTRL_TX_THRES | CTRL_RX_THRES);
+
+	return 0;
+}
+
 static int atcspi_xfer_data_poll(struct atcspi_dev *spi,
 				 const struct spi_mem_op *op)
 {
@@ -150,6 +365,8 @@ static int atcspi_xfer_data_poll(struct atcspi_dev *spi,
 	int trans_bytes = op->data.nbytes;
 	int num_byte;
 	int ret = 0;
+
+	regmap_write(spi->regmap, ATCSPI_CMD, op->cmd.opcode);
 
 	num_byte = spi->data_merge ? 4 : 1;
 	while (trans_bytes) {
@@ -249,7 +466,6 @@ static void atcspi_prepare_trans(struct atcspi_dev *spi,
 	atcspi_set_trans_ctl(spi, op);
 	if (op->addr.nbytes)
 		regmap_write(spi->regmap, ATCSPI_ADDR, op->addr.val);
-	regmap_write(spi->regmap, ATCSPI_CMD, op->cmd.opcode);
 }
 
 static int atcspi_adjust_op_size(struct spi_mem *mem, struct spi_mem_op *op)
@@ -313,6 +529,8 @@ static int atcspi_dma_trans(struct atcspi_dev *spi,
 	int timeout;
 	int ret;
 
+	regmap_write(spi->regmap, ATCSPI_CMD, op->cmd.opcode);
+
 	regmap_read(spi->regmap, ATCSPI_CTRL, &ctrl);
 	ctrl |= CTRL_TX_DMA_EN | CTRL_RX_DMA_EN;
 	regmap_write(spi->regmap, ATCSPI_CTRL, ctrl);
@@ -373,12 +591,16 @@ static int atcspi_exec_mem_op(struct spi_mem *mem, const struct spi_mem_op *op)
 	if (op->data.nbytes) {
 		if (spi->use_dma && op->data.nbytes >= ATCSPI_DMA_THRESHOLD)
 			ret = atcspi_dma_trans(spi, op);
+		else if (spi->irq)
+			ret = atcspi_xfer_data_irq(spi, op);
 		else
 			ret = atcspi_xfer_data_poll(spi, op);
 		if (ret) {
 			dev_info(spi->dev, "SPI transmission failed\n");
 			goto exec_mem_exit;
 		}
+	} else {
+		regmap_write(spi->regmap, ATCSPI_CMD, op->cmd.opcode);
 	}
 
 	ret = regmap_read_poll_timeout(spi->regmap,
@@ -403,20 +625,12 @@ static const struct spi_controller_mem_ops atcspi_mem_ops = {
 
 static int atcspi_setup(struct atcspi_dev *spi)
 {
-	unsigned int ctrl_val;
 	unsigned int val;
 	int actual_spi_sclk_f;
 	int ret;
 	unsigned char div;
 
-	ctrl_val = CTRL_TX_FIFO_RST | CTRL_RX_FIFO_RST | CTRL_SPI_RST;
-	regmap_write(spi->regmap, ATCSPI_CTRL, ctrl_val);
-	ret = regmap_read_poll_timeout(spi->regmap,
-				       ATCSPI_CTRL,
-				       val,
-				       !(val & ctrl_val),
-				       0,
-				       ATCSPI_RDY_TIMEOUT_US);
+	ret = atcspi_reset_engine(spi);
 	if (ret)
 		return dev_err_probe(spi->dev, ret,
 				     "Timed out waiting for ATCSPI_CTRL\n");
@@ -584,6 +798,27 @@ static int atcspi_probe(struct platform_device *pdev)
 				 "Failed to init DMA, fallback to PIO mode\n");
 		else
 			spi->use_dma = true;
+	}
+
+	spi->irq = platform_get_irq_optional(pdev, 0);
+	if (spi->irq == -ENXIO)
+		spi->irq = 0;
+	else if (spi->irq < 0)
+		return dev_err_probe(spi->dev, spi->irq,
+				     "Failed to get IRQ\n");
+
+	if (spi->irq) {
+		init_completion(&spi->xfer_done);
+		regmap_write(spi->regmap, ATCSPI_INTR_EN, 0);
+
+		ret = devm_request_irq(&pdev->dev, spi->irq, atcspi_irq, 0,
+				       dev_name(&pdev->dev), spi);
+		if (ret) {
+			dev_info(spi->dev,
+				 "Failed to request IRQ %d, fallback to polling\n",
+				 spi->irq);
+			spi->irq = 0;
+		}
 	}
 
 	ret = devm_spi_register_controller(&pdev->dev, host);
