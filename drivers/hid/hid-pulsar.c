@@ -162,8 +162,8 @@ static int exec_cmd(struct pulsar_data *drvdata, const u8 *payload,
 		spin_lock_irqsave(&drvdata->raw_event_lock, flags);
 		drvdata->pending_event = CMD_NONE;
 		spin_unlock_irqrestore(&drvdata->raw_event_lock, flags);
-		hid_err(hdev, "failed to send command 0x%02x: %d\n",
-			payload[1], ret);
+		hid_err(hdev, "failed to send command 0x%02x: %pe\n",
+			payload[1], ERR_PTR(ret));
 		goto out;
 	}
 
@@ -295,8 +295,8 @@ static int read_power(struct pulsar_data *drvdata)
 		if (status < 0) {
 			ret = status;
 			hid_err(drvdata->hdev,
-				"%s: failed to read status: %d\n",
-				__func__, ret);
+				"%s: failed to read status: %pe\n",
+				__func__, ERR_PTR(ret));
 			goto unlock;
 		}
 
@@ -320,8 +320,8 @@ static int read_power(struct pulsar_data *drvdata)
 
 	ret = exec_cmd(drvdata, payload, response, CMD_TIMEOUT_MSEC);
 	if (ret < 0) {
-		hid_err(drvdata->hdev, "%s: failed to read power: %d\n",
-			__func__, ret);
+		hid_err(drvdata->hdev, "%s: failed to read power: %pe\n",
+			__func__, ERR_PTR(ret));
 		goto unlock;
 	}
 
@@ -411,8 +411,8 @@ static void power_uevent_work_handler(struct work_struct *work)
 
 	ret = read_power(drvdata);
 	if (ret < 0) {
-		hid_err(drvdata->hdev, "%s: failed to read power: %d\n",
-			__func__, ret);
+		hid_err(drvdata->hdev, "%s: failed to read power: %pe\n",
+			__func__, ERR_PTR(ret));
 		return;
 	}
 
@@ -584,10 +584,11 @@ static void pulsar_init_work(struct work_struct *work)
 	}
 	if (ret < 0) {
 		if (drvdata->type == TYPE_PULSAR) {
-			hid_err(hdev, "failed to read device info: %d\n", ret);
+			hid_err(hdev, "failed to read device info: %pe\n",
+				ERR_PTR(ret));
 			return;
 		}
-		hid_dbg(hdev, "failed to read device info: %d\n", ret);
+		hid_dbg(hdev, "failed to read device info: %pe\n", ERR_PTR(ret));
 		snprintf(drvdata->battery.model,
 			 sizeof(drvdata->battery.model), "%s", hdev->name);
 		goto register_battery;
@@ -615,8 +616,8 @@ register_battery:
 	    devm_power_supply_register(&hdev->dev, &drvdata->battery.desc,
 				       &psy_cfg);
 	if (IS_ERR(drvdata->battery.ps)) {
-		hid_err(hdev, "failed to register battery: %ld\n",
-			PTR_ERR(drvdata->battery.ps));
+		hid_err(hdev, "failed to register battery: %pe\n",
+			drvdata->battery.ps);
 		drvdata->battery.ps = NULL;
 		return;
 	}
@@ -639,7 +640,7 @@ static int pulsar_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	ret = hid_parse(hdev);
 	if (ret < 0) {
-		hid_err(hdev, "hid_parse failed: %d\n", ret);
+		hid_err(hdev, "hid_parse failed: %pe\n", ERR_PTR(ret));
 		return ret;
 	}
 
