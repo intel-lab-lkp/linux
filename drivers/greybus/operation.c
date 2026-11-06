@@ -1056,6 +1056,12 @@ void gb_connection_recv(struct gb_connection *connection,
 		return;		/* XXX Should still complete operation */
 	}
 
+	if (msg_size < sizeof(header)) {
+		dev_err_ratelimited(dev, "%s: header size is too short\n",
+				    connection->name);
+		return;
+	}
+
 	if (header.type & GB_MESSAGE_TYPE_RESPONSE) {
 		gb_connection_recv_response(connection,	&header, data,
 					    msg_size);
