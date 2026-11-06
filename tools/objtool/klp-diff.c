@@ -420,7 +420,8 @@ static bool is_abs_sym(struct symbol *sym)
 static bool is_initcall_sym(struct symbol *sym)
 {
 	return strstarts(sym->name, "__initcall__") ||
-	       strstarts(sym->name, "__initstub__");
+	       strstarts(sym->name, "__initstub__") ||
+	       strstarts(sym->name, "__modname_");
 }
 
 /*
