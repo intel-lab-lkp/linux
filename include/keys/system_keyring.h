@@ -119,20 +119,6 @@ static inline int is_key_on_revocation_list(struct pkcs7_message *pkcs7)
 }
 #endif
 
-#ifdef CONFIG_IMA_BLACKLIST_KEYRING
-extern struct key *ima_blacklist_keyring;
-
-static inline struct key *get_ima_blacklist_keyring(void)
-{
-	return ima_blacklist_keyring;
-}
-#else
-static inline struct key *get_ima_blacklist_keyring(void)
-{
-	return NULL;
-}
-#endif /* CONFIG_IMA_BLACKLIST_KEYRING */
-
 #if defined(CONFIG_INTEGRITY_PLATFORM_KEYRING) && \
 	defined(CONFIG_SYSTEM_TRUSTED_KEYRING)
 extern void __init set_platform_trusted_keys(struct key *keyring);
