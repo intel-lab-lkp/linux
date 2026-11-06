@@ -24072,6 +24072,17 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/iommu/linux.git
 F:	Documentation/devicetree/bindings/iommu/riscv,iommu.yaml
 F:	drivers/iommu/riscv/
 
+RISC-V METANOIA SoC SUPPORT
+M:	Jun Chang <jun.chang@metanoia-comm.com>
+L:	linux-riscv@lists.infradead.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/phy/metanoia,usb2-phy.yaml
+F:	Documentation/devicetree/bindings/power/reset/metanoia,reboot.yaml
+F:	Documentation/devicetree/bindings/reset/metanoia,reset.yaml
+F:	Documentation/devicetree/bindings/riscv/metanoia.yaml
+F:	arch/riscv/boot/dts/metanoia/
+F:	drivers/phy/metanoia/
+
 RISC-V MICROCHIP SUPPORT
 M:	Conor Dooley <conor.dooley@microchip.com>
 R:	Valentina Fernandez <valentina.fernandezalanis@microchip.com>
