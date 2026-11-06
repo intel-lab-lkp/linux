@@ -719,3 +719,24 @@ impl CmdqInner<'_> {
         }
     }
 }
+
+/// Helper function that trims the concatenation of `slice_1` and `slice_2` to `length`.
+///
+/// Returns the truncated `(slice_1, slice_2)` pair, or `EIO` if `length > slice_1.len() +
+/// slice_2.len()`.
+fn trim_message_slice<'a>(
+    (slice_1, slice_2): (&'a [u8], &'a [u8]),
+    length: usize,
+) -> Result<(&'a [u8], &'a [u8])> {
+    // See if `slice_1` covers the whole message, take it entirely if it doesn't.
+    let slice_1 = slice_1
+        .split_at_checked(length)
+        .map(|split| split.0)
+        .unwrap_or(slice_1);
+    // `slice_2` is the remainder of the message not covered by `slice_1`.
+    let slice_2 = slice_2
+        .get(..length.saturating_sub(slice_1.len()))
+        .ok_or(EIO)?;
+
+    Ok((slice_1, slice_2))
+}
