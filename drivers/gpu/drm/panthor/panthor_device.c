@@ -229,6 +229,13 @@ int panthor_device_init(struct panthor_device *ptdev)
 		return ret;
 	}
 
+	if (ptdev->soc_data && ptdev->soc_data->needs_external_reset) {
+		ptdev->reset_control = devm_reset_control_get_exclusive(ptdev->base.dev, NULL);
+		if (IS_ERR(ptdev->reset_control))
+			return dev_err_probe(ptdev->base.dev, PTR_ERR(ptdev->reset_control),
+					     "Failed to get GPU reset\n");
+	}
+
 	ret = panthor_devfreq_init(ptdev);
 	if (ret)
 		return ret;
@@ -511,6 +518,12 @@ int panthor_device_resume(struct device *dev)
 	if (ret)
 		goto err_disable_stacks_clk;
 
+	if (ptdev->reset_control && !panthor_device_is_initialized(ptdev)) {
+		ret = reset_control_reset(ptdev->reset_control);
+		if (ret)
+			goto err_disable_coregroup_clk;
+	}
+
 	panthor_devfreq_resume(ptdev);
 
 	if (panthor_device_is_initialized(ptdev) &&
@@ -553,6 +566,8 @@ int panthor_device_resume(struct device *dev)
 
 err_suspend_devfreq:
 	panthor_devfreq_suspend(ptdev);
+
+err_disable_coregroup_clk:
 	clk_disable_unprepare(ptdev->clks.coregroup);
 
 err_disable_stacks_clk:
