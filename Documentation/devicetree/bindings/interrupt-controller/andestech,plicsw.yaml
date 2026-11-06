@@ -23,6 +23,7 @@ properties:
     items:
       - enum:
           - andestech,qilai-plicsw
+          - metanoia,mt2824-plicsw
       - const: andestech,plicsw
 
   reg:
