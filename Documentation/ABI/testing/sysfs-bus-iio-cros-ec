@@ -19,3 +19,16 @@ Description:
 		represents the sensor ID as exposed by the EC. This ID is used
 		by the Android sensor service hardware abstraction layer (sensor
 		HAL) through the Android container on ChromeOS.
+
+What:		/sys/bus/iio/devices/iio:deviceX/energy_value
+Date:		November 2026
+KernelVersion:	7.5
+Contact:	chrome-platform@lists.linux.dev, linux-iio@vger.kernel.org
+Description:
+		This read-only attribute is exposed by the ChromeOS EC power
+		monitor (cros_ec_pwrmon) driver for On-Device Power Monitoring
+		(ODPM). Reading it latches all EC power accumulators and returns
+		a snapshot timestamp followed by per-channel accumulated energy:
+
+		t=<Measurement timestamp in ms since boot>
+		CH<N>(T=<Duration in ms>)[<Rail schematic name>], <Accumulated energy in uWs>
