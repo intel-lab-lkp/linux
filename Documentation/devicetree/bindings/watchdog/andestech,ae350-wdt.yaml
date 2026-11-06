@@ -18,6 +18,7 @@ properties:
       - items:
           - enum:
               - andestech,qilai-wdt
+              - metanoia,mt2824-wdt
           - const: andestech,ae350-wdt
       - const: andestech,ae350-wdt
 
