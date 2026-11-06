@@ -1063,6 +1063,13 @@ int btrfs_write_check(struct kiocb *iocb, size_t count)
 		/* Expand hole size to cover write data, preventing empty gap */
 		loff_t end_pos = round_up(pos + count, fs_info->sectorsize);
 
+		/*
+		 * Zeroing the block at an unaligned EOF dirties its folio, so
+		 * drain in-flight direct IO first, see btrfs_buffered_write().
+		 */
+		if (!IS_ALIGNED(oldsize, fs_info->sectorsize))
+			inode_dio_wait(inode);
+
 		ret = btrfs_cont_expand(BTRFS_I(inode), oldsize, end_pos);
 		if (ret)
 			return ret;
