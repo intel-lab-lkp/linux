@@ -227,8 +227,10 @@ __enqueue_entry(struct nfqnl_instance *queue, struct nf_queue_entry *entry)
 {
 	int err;
 
-	err = rhashtable_insert_fast(&queue->nfqnl_packet_map, &entry->hash_node,
-				     nfqnl_rhashtable_params);
+	/* A wrapped ID must not alias a packet that is still queued. */
+	err = rhashtable_lookup_insert_fast(&queue->nfqnl_packet_map,
+					    &entry->hash_node,
+					    nfqnl_rhashtable_params);
 	if (unlikely(err))
 		return err;
 
