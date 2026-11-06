@@ -64,7 +64,6 @@ include $(AMD_DC)
 
 FILES =
 FILES += dc_dmub_srv.o
-FILES += dc_edid_parser.o
 FILES += dc_fused_io.o
 FILES += dc_helper.o
 FILES += dc_memory_pool.o

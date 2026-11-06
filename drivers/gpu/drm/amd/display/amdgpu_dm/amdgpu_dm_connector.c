@@ -27,7 +27,6 @@
 #include "dm_services_types.h"
 #include "dc.h"
 #include "dc/dc_dmub_srv.h"
-#include "dc/dc_edid_parser.h"
 #include "dc/dc_stat.h"
 #include "dc/dc_state.h"
 #include "dc/dc_stream.h"
