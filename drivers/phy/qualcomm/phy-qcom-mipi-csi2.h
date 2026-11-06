@@ -68,6 +68,9 @@ struct mipi_csi2phy_soc_cfg {
 	const char ** const clk_names;
 	const unsigned int num_clk;
 
+	/* 0 = derive timer rate from link_freq/4; non-zero = fixed rate */
+	unsigned long timer_rate_hz;
+
 	const struct mipi_csi2_genpd *genpds;
 	const unsigned int num_genpds;
 };
@@ -92,6 +95,7 @@ struct mipi_csi2phy_device {
 	u32 hw_version;
 };
 
+extern const struct mipi_csi2phy_soc_cfg mipi_csi2_dphy_sm8150;
 extern const struct mipi_csi2phy_soc_cfg mipi_csi2_dphy_4nm_x1e;
 
 #endif /* __PHY_QCOM_MIPI_CSI2_H__ */

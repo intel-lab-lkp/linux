@@ -68,7 +68,11 @@ phy_qcom_mipi_csi2_set_clock_rates(struct mipi_csi2phy_device *csi2phy,
 		goto unset_opp_rate;
 	}
 
-	timer_rate = clk_round_rate(csi2phy->timer_clk, link_freq / 4);
+	if (csi2phy->soc_cfg->timer_rate_hz)
+		timer_rate = clk_round_rate(csi2phy->timer_clk,
+					    csi2phy->soc_cfg->timer_rate_hz);
+	else
+		timer_rate = clk_round_rate(csi2phy->timer_clk, link_freq / 4);
 	if (timer_rate <= 0) {
 		ret = -ENODEV;
 		goto unset_opp_rate;
@@ -232,6 +236,15 @@ static int phy_qcom_mipi_csi2_attach_pm_domains(struct mipi_csi2phy_device *csi2
 	struct dev_pm_domain_attach_data pd_data = { 0 };
 	const char **pd_names;
 	int i;
+
+	/*
+	 * platform_probe() auto-attaches a single power domain during probe.
+	 * Detach it first so devm_pm_domain_attach_list() can attach all
+	 * domains by name (otherwise it returns -EEXIST for single-domain
+	 * SoCs such as SM8150).
+	 */
+	if (csi2phy->dev->pm_domain)
+		dev_pm_domain_detach(csi2phy->dev, false);
 
 	pd_names = devm_kzalloc(csi2phy->dev,
 				sizeof(char *) * csi2phy->soc_cfg->num_genpds,
@@ -443,6 +456,7 @@ static int phy_qcom_mipi_csi2_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id phy_qcom_mipi_csi2_of_match_table[] = {
+	{ .compatible	= "qcom,sm8150-csi2-phy", .data = &mipi_csi2_dphy_sm8150 },
 	{ .compatible	= "qcom,x1e80100-csi2-phy", .data = &mipi_csi2_dphy_4nm_x1e },
 	{ }
 };
