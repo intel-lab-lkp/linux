@@ -15,6 +15,7 @@
 #include <linux/wait.h>
 #include <linux/poll.h>
 #include <linux/bsearch.h>
+#include <linux/kref.h>
 #include <linux/platform_device.h>
 #include <linux/hid-sensor-hub.h>
 
@@ -54,7 +55,24 @@ struct hid_sensor_custom {
 	unsigned long misc_opened;
 	wait_queue_head_t wait;
 	struct platform_device *custom_pdev;
+	/* Held by the driver binding and by each open file. */
+	struct kref kref;
+	bool removed;
 };
+
+static void hid_sensor_custom_free(struct kref *kref)
+{
+	struct hid_sensor_custom *sensor_inst =
+		container_of(kref, struct hid_sensor_custom, kref);
+
+	kfifo_free(&sensor_inst->data_fifo);
+	kfree(sensor_inst);
+}
+
+static void hid_sensor_custom_put(struct hid_sensor_custom *sensor_inst)
+{
+	kref_put(&sensor_inst->kref, hid_sensor_custom_free);
+}
 
 /* Header for each sample to user space via dev interface */
 struct hid_sensor_sample {
@@ -658,11 +676,14 @@ static ssize_t hid_sensor_custom_read(struct file *file, char __user *buf,
 
 	do {
 		if (kfifo_is_empty(&sensor_inst->data_fifo)) {
+			if (READ_ONCE(sensor_inst->removed))
+				return -ENODEV;
 			if (file->f_flags & O_NONBLOCK)
 				return -EAGAIN;
 
 			ret = wait_event_interruptible(sensor_inst->wait,
-				!kfifo_is_empty(&sensor_inst->data_fifo));
+				!kfifo_is_empty(&sensor_inst->data_fifo) ||
+				READ_ONCE(sensor_inst->removed));
 			if (ret)
 				return ret;
 		}
@@ -684,6 +705,7 @@ static int hid_sensor_custom_release(struct inode *inode, struct file *file)
 				   struct hid_sensor_custom, custom_dev);
 
 	clear_bit(0, &sensor_inst->misc_opened);
+	hid_sensor_custom_put(sensor_inst);
 
 	return 0;
 }
@@ -697,6 +719,8 @@ static int hid_sensor_custom_open(struct inode *inode, struct file *file)
 	/* We essentially have single reader and writer */
 	if (test_and_set_bit(0, &sensor_inst->misc_opened))
 		return -EBUSY;
+
+	kref_get(&sensor_inst->kref);
 
 	return stream_open(inode, file);
 }
@@ -714,6 +738,8 @@ static __poll_t hid_sensor_custom_poll(struct file *file,
 
 	if (!kfifo_is_empty(&sensor_inst->data_fifo))
 		mask = EPOLLIN | EPOLLRDNORM;
+	else if (READ_ONCE(sensor_inst->removed))
+		mask = EPOLLHUP | EPOLLERR;
 
 	return mask;
 }
@@ -751,10 +777,9 @@ static int hid_sensor_custom_dev_if_add(struct hid_sensor_custom *sensor_inst)
 static void hid_sensor_custom_dev_if_remove(struct hid_sensor_custom
 								*sensor_inst)
 {
+	WRITE_ONCE(sensor_inst->removed, true);
 	wake_up(&sensor_inst->wait);
 	misc_deregister(&sensor_inst->custom_dev);
-	kfifo_free(&sensor_inst->data_fifo);
-
 }
 
 /*
@@ -977,10 +1002,11 @@ static int hid_sensor_custom_probe(struct platform_device *pdev)
 	int ret;
 	const struct hid_sensor_custom_match *match;
 
-	sensor_inst = devm_kzalloc(&pdev->dev, sizeof(*sensor_inst),
-				   GFP_KERNEL);
+	sensor_inst = kzalloc_obj(*sensor_inst);
 	if (!sensor_inst)
 		return -ENOMEM;
+
+	kref_init(&sensor_inst->kref);
 
 	sensor_inst->callbacks.capture_sample = hid_sensor_capture_sample;
 	sensor_inst->callbacks.send_event = hid_sensor_send_event;
@@ -999,7 +1025,7 @@ static int hid_sensor_custom_probe(struct platform_device *pdev)
 		if (ret) {
 			dev_err(&pdev->dev,
 				"register_platform_device failed\n");
-			return ret;
+			goto err_put;
 		}
 
 		return 0;
@@ -1009,7 +1035,7 @@ static int hid_sensor_custom_probe(struct platform_device *pdev)
 					   &sensor_inst->callbacks);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "callback reg failed\n");
-		return ret;
+		goto err_put;
 	}
 
 	ret = hid_sensor_custom_add_attributes(sensor_inst);
@@ -1034,6 +1060,8 @@ err_remove_attributes:
 	hid_sensor_custom_remove_attributes(sensor_inst);
 err_remove_callback:
 	sensor_hub_remove_callback(hsdev, hsdev->usage);
+err_put:
+	hid_sensor_custom_put(sensor_inst);
 
 	return ret;
 }
@@ -1045,6 +1073,7 @@ static void hid_sensor_custom_remove(struct platform_device *pdev)
 
 	if (sensor_inst->custom_pdev) {
 		platform_device_unregister(sensor_inst->custom_pdev);
+		hid_sensor_custom_put(sensor_inst);
 		return;
 	}
 
@@ -1054,6 +1083,8 @@ static void hid_sensor_custom_remove(struct platform_device *pdev)
 			   &enable_sensor_attr_group);
 	hid_sensor_custom_remove_attributes(sensor_inst);
 	sensor_hub_remove_callback(hsdev, hsdev->usage);
+	/* An open file may still hold the last reference. */
+	hid_sensor_custom_put(sensor_inst);
 }
 
 static const struct platform_device_id hid_sensor_custom_ids[] = {
