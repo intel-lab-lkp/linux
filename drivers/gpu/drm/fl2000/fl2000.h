@@ -42,6 +42,48 @@ enum fl2000_interface {
 	FL2000_USBIF_INTERRUPT = 2,
 };
 
+/* Process context only: may sleep between retries */
+static inline int fl2000_submit_urb(struct urb *urb)
+{
+	int ret;
+	int attempts = 10;
+
+	do {
+		ret = usb_submit_urb(urb, GFP_KERNEL);
+		switch (ret) {
+		case -ENXIO:
+		case -ENOMEM:
+			if (attempts--) {
+				cond_resched();
+				ret = -EAGAIN;
+			}
+			break;
+		default:
+			break;
+		}
+	} while (ret == -EAGAIN);
+
+	return ret;
+}
+
+/* Called from URB completion handlers, i.e. in atomic context */
+static inline int fl2000_urb_status(struct usb_device *usb_dev, int status)
+{
+	switch (status) {
+	case 0:
+	case -ECONNRESET:
+	case -ENOENT:
+	case -ESHUTDOWN:
+		/* Success, or the URB was unlinked / the device is going away */
+		break;
+	default:
+		dev_err_ratelimited(&usb_dev->dev, "Nonzero urb status, %d\n", status);
+		break;
+	}
+
+	return status;
+}
+
 struct fl2000_timings {
 	u32 hactive;
 	u32 htotal;
@@ -63,6 +105,31 @@ struct fl2000_pll {
 /* Polling interval and timeout in us for I2C read/write operations */
 #define I2C_RDWR_INTERVAL 200
 #define I2C_RDWR_TIMEOUT  (256 * 1000)
+
+/* Streaming transfer task */
+struct fl2000_stream;
+struct fl2000_stream *fl2000_stream_create(struct usb_device *usb_dev);
+void fl2000_stream_destroy(struct usb_device *usb_dev);
+
+/* Streaming interface */
+int fl2000_stream_mode_set(struct fl2000_stream *stream, unsigned int width,
+			   unsigned int height, u32 bytes_pix);
+struct drm_rect;
+struct iosys_map;
+void fl2000_stream_compress(struct fl2000_stream *stream, const struct iosys_map *src,
+			    bool imported, u32 format, unsigned int width, unsigned int height,
+			    unsigned int pitch, const struct drm_rect *clip);
+void fl2000_stream_note_render(struct fl2000_stream *stream, unsigned int conv_us,
+			       unsigned int damage_px);
+
+/* Largest cursor sprite the blend path accepts, advertised to userspace */
+#define FL2000_CURSOR_MAX 64
+
+void fl2000_stream_set_cursor(struct fl2000_stream *stream, const u32 *argb, unsigned int w,
+			      unsigned int h, int x, int y);
+void fl2000_stream_move_cursor(struct fl2000_stream *stream, int x, int y);
+int fl2000_stream_enable(struct fl2000_stream *stream);
+void fl2000_stream_disable(struct fl2000_stream *stream);
 
 /* I2C adapter interface creation */
 struct i2c_adapter *fl2000_i2c_init(struct usb_device *usb_dev);
