@@ -333,7 +333,8 @@ static int pca954x_select_chan(struct i2c_mux_core *muxc, u32 chan)
 	return ret;
 }
 
-static int pca954x_deselect_mux(struct i2c_mux_core *muxc, u32 chan)
+/* Program the mux into the state that corresponds to idle_state. */
+static int pca954x_set_idle_state(struct i2c_mux_core *muxc)
 {
 	struct pca954x *data = i2c_mux_priv(muxc);
 	struct i2c_client *client = data->client;
@@ -345,16 +346,20 @@ static int pca954x_deselect_mux(struct i2c_mux_core *muxc, u32 chan)
 		/* Set the mux back to a predetermined channel */
 		return pca954x_select_chan(muxc, idle_state);
 
-	if (idle_state == MUX_IDLE_DISCONNECT) {
-		/* Deselect active channel */
-		ret = pca954x_reg_write(muxc->parent, client, 0);
-		data->last_chan = ret < 0 ? -1 : 0;
-		return ret;
-	}
+	/* Leave the mux as-is unless idle_state is MUX_IDLE_DISCONNECT */
+	if (idle_state != MUX_IDLE_DISCONNECT)
+		return 0;
 
-	/* otherwise leave as-is */
+	/* Deselect active channel */
+	ret = pca954x_reg_write(muxc->parent, client, 0);
+	data->last_chan = ret < 0 ? -1 : 0;
 
-	return 0;
+	return ret;
+}
+
+static int pca954x_deselect_mux(struct i2c_mux_core *muxc, u32 chan)
+{
+	return pca954x_set_idle_state(muxc);
 }
 
 static ssize_t idle_state_show(struct device *dev,
@@ -394,7 +399,7 @@ static ssize_t idle_state_store(struct device *dev,
 	 * idle_state.
 	 */
 	if (data->last_chan != 0 || val != MUX_IDLE_DISCONNECT)
-		ret = pca954x_deselect_mux(muxc, 0);
+		ret = pca954x_set_idle_state(muxc);
 
 	i2c_unlock_bus(muxc->parent, I2C_LOCK_SEGMENT);
 
