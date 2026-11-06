@@ -30,6 +30,7 @@ properties:
     items:
       - enum:
           - andestech,qilai-ax45mp-cache
+          - metanoia,mt2824-ax45mp-cache
           - renesas,r9a07g043f-ax45mp-cache
       - const: andestech,ax45mp-cache
       - const: cache
