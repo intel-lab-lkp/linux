@@ -8324,6 +8324,13 @@ F:	include/linux/aperture.h
 F:	include/linux/sysfb.h
 F:	include/video/nomodeset.h
 
+DRM DRIVER FOR FRESCO LOGIC FL2000 USB DISPLAY ADAPTERS
+M:	Angel Gabriel Crispin Valdivia <angelcrispinvaldivia@gmail.com>
+L:	dri-devel@lists.freedesktop.org
+S:	Maintained
+T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
+F:	drivers/gpu/drm/fl2000/
+
 DRM DRIVER FOR GENERIC EDP PANELS
 R:	Douglas Anderson <dianders@chromium.org>
 F:	Documentation/devicetree/bindings/display/panel/panel-edp.yaml

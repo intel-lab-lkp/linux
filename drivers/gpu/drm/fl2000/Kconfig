@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config DRM_FL2000
+	tristate "Fresco Logic FL2000 USB display adapters"
+	depends on DRM && USB && MMU
+	depends on USB_ARCH_HAS_HCD
+	select DRM_BRIDGE_CONNECTOR
+	select DRM_CLIENT_SELECTION
+	select DRM_DISPLAY_HELPER
+	select DRM_GEM_SHMEM_HELPER
+	select DRM_KMS_HELPER
+	select I2C
+	select REGMAP
+	select REGMAP_I2C
+	help
+	  This is a KMS driver for USB display adapters based on the
+	  Fresco Logic FL2000DX USB 3.0 to VGA controller, paired with an
+	  ITE IT66121 HDMI transmitter (USB ID 1d5c:2000).
+
+	  If M is selected the module will be called fl2000.
