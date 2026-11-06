@@ -1087,6 +1087,8 @@ patternProperties:
     description: Cisco Meraki, LLC
   "^merrii,.*":
     description: Merrii Technology Co., Ltd.
+  "^metanoia,.*":
+    description: Metanoia Communications Inc.
   "^methode,.*":
     description: Methode Electronics, Inc.
   "^micrel,.*":
