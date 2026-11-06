@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2026 Metanoia Communications Inc.. All rights reserved.
+ */
+
+/dts-v1/;
+
+#include "mt2824.dtsi"
+
+/ {
+	model = "Metanoia MT5824 EVB";
+	compatible = "metanoia,mt5824-evb", "metanoia,mt2824";
+
+	aliases {
+		uart0 = &serial0;
+		uart1 = &serial1;
+		spi0 = &spi0;
+		spi1 = &spi1;
+		spi2 = &spi2;
+	};
+
+	chosen {
+		stdout-path = "uart0:115200n8";
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x80000000>,
+		      <0x1 0x00000000 0x0 0x80000000>;
+	};
+};
+
+&usb0 {
+	status = "okay";
+};
+
+&mmcsd {
+	bus-width = <8>;
+	mmc-ddr-1_8v;
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+	no-sdio;
+	disable-wp;
+	cap-mmc-hw-reset;
+	status = "okay";
+};
+
+&watchdog {
+	status = "okay";
+};
+
+&serial0 {
+	status = "okay";
+};
+
+&serial1 {
+	status = "okay";
+};
+
+&qspi {
+	status = "okay";
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		spi-rx-bus-width = <0x4>;
+		spi-tx-bus-width = <0x4>;
+		spi-max-frequency = <100000000>;
+		reg = <0x0>;
+	};
+};
+
+&spi0 {
+	status = "okay";
+};
+
+&spi1 {
+	status = "okay";
+};
+
+&spi2 {
+	status = "okay";
+};

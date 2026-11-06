@@ -4,6 +4,7 @@ subdir-y += andes
 subdir-y += anlogic
 subdir-y += canaan
 subdir-y += eswin
+subdir-y += metanoia
 subdir-y += microchip
 subdir-y += renesas
 subdir-y += sifive

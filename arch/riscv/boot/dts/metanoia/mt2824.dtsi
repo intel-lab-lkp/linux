@@ -1,0 +1,330 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2026 Metanoia Communications Inc.. All rights reserved.
+ */
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	#address-cells = <0x02>;
+	#size-cells = <0x02>;
+	compatible = "metanoia,mt2824";
+
+	cpus: cpus {
+		#address-cells = <0x01>;
+		#size-cells = <0x00>;
+		timebase-frequency = <20000000>;
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			reg = <0x00>;
+			compatible = "andestech,ax45mp", "riscv";
+			riscv,isa-base = "rv64i";
+			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
+					       "zicntr", "zicsr", "zifencei",
+					       "zihpm", "xandespmu";
+			mmu-type = "riscv,sv39";
+			clock-frequency = <900000000>;
+			i-cache-size = <0x8000>;
+			i-cache-sets = <0x100>;
+			i-cache-line-size = <0x40>;
+			i-cache-block-size = <0x40>;
+			d-cache-size = <0x8000>;
+			d-cache-sets = <0x80>;
+			d-cache-line-size = <0x40>;
+			d-cache-block-size = <0x40>;
+			next-level-cache = <&l2_cache>;
+
+			cpu0intc: interrupt-controller {
+				#interrupt-cells = <0x01>;
+				interrupt-controller;
+				compatible = "andestech,cpu-intc", "riscv,cpu-intc";
+			};
+		};
+
+		cpu1: cpu@1 {
+			device_type = "cpu";
+			reg = <0x01>;
+			compatible = "andestech,ax45mp", "riscv";
+			riscv,isa-base = "rv64i";
+			riscv,isa-extensions = "i", "m", "a", "f", "d", "c",
+					       "zicntr", "zicsr", "zifencei",
+					       "zihpm", "xandespmu";
+			mmu-type = "riscv,sv39";
+			clock-frequency = <900000000>;
+			i-cache-size = <0x8000>;
+			i-cache-sets = <0x100>;
+			i-cache-line-size = <0x40>;
+			i-cache-block-size = <0x40>;
+			d-cache-size = <0x8000>;
+			d-cache-sets = <0x80>;
+			d-cache-line-size = <0x40>;
+			d-cache-block-size = <0x40>;
+			next-level-cache = <&l2_cache>;
+
+			cpu1intc: interrupt-controller {
+				#interrupt-cells = <0x01>;
+				interrupt-controller;
+				compatible = "andestech,cpu-intc", "riscv,cpu-intc";
+			};
+		};
+	};
+
+	clocks {
+		ext_clk: ext-clk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <20000000>;
+			clock-output-names = "ext-clk";
+		};
+
+		pclk_div4: platform-clock-div4 {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <225000000>;
+			clock-output-names = "platform-clock-div4";
+		};
+
+		pll_soc_out3: pll-soc-out3 {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <180000000>;
+			clock-output-names = "pll-soc-out3";
+		};
+
+		usb_otg_ahb_clk: clock-usb-otg-ahb {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <60000000>;
+			clock-output-names = "otg";
+		};
+	};
+
+	soc: soc {
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		compatible = "simple-bus";
+		interrupt-parent = <&plic>;
+		ranges;
+
+		usb0: usb@4000000 {
+			compatible = "metanoia,mt2824-usb", "snps,dwc2";
+			reg = <0x0 0x04000000 0x0 0x100000>;
+			interrupts = <7 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&usb_otg_ahb_clk>;
+			clock-names = "otg";
+			dr_mode = "host";
+			resets = <&rst 19>, <&rst 20>;
+			reset-names = "dwc2", "dwc2-ecc";
+			phys = <&usb2phy>;
+			phy-names = "usb2-phy";
+			hnp-disable;
+			srp-disable;
+			disable-over-current;
+			status = "disabled";
+		};
+
+		mmcsd: mmc@4100000 {
+			compatible = "metanoia,mt2824-dwcmshc";
+			clocks = <&pll_soc_out3>;
+			clock-names = "core";
+			reg = <0x0 0x04100000 0x0 0x00100000>;
+			interrupts = <5 IRQ_TYPE_LEVEL_HIGH>;
+			status = "disabled";
+		};
+
+		l2_cache: cache-controller@a000000 {
+			compatible = "metanoia,mt2824-ax45mp-cache",
+				     "andestech,ax45mp-cache", "cache";
+			reg = <0x0 0x0a000000 0x0 0x40000>;
+			interrupts = <1 IRQ_TYPE_LEVEL_HIGH>;
+			cache-line-size = <64>;
+			cache-level = <2>;
+			cache-sets = <1024>;
+			cache-size = <0x40000>;
+			cache-unified;
+		};
+
+		plic: interrupt-controller@c000000 {
+			compatible = "metanoia,mt2824-plic", "andestech,nceplic100";
+			reg = <0x0 0x0c000000 0x0 0x400000>;
+			interrupts-extended = <&cpu0intc 0x0b>, <&cpu0intc 0x09>,
+					      <&cpu1intc 0x0b>, <&cpu1intc 0x09>;
+			interrupt-controller;
+			#address-cells = <0x00>;
+			#interrupt-cells = <0x02>;
+			riscv,ndev = <0x47>;
+		};
+
+		plmt: timer@c400000 {
+			compatible = "metanoia,mt2824-plmt", "andestech,plmt0";
+			reg = <0x0 0x0c400000 0x0 0x00400000>;
+			interrupts-extended = <&cpu0intc 0x07>,
+					      <&cpu1intc 0x07>;
+		};
+
+		plicsw: interrupt-controller@c800000 {
+			compatible = "metanoia,mt2824-plicsw", "andestech,plicsw";
+			reg = <0x0 0x0c800000 0x0 0x400000>;
+			interrupts-extended = <&cpu0intc 0x03>,
+					      <&cpu1intc 0x03>;
+		};
+
+		reboot: reboot@10000004 {
+			compatible = "metanoia,mt2824-reboot";
+			reg = <0x0 0x10000004 0x0 0x08>;
+		};
+
+		rst: reset-controller@1000000c {
+			#reset-cells = <1>;
+			compatible = "metanoia,mt2824-reset";
+			reg = <0x0 0x1000000c 0x0 0x04>;
+		};
+
+		watchdog: watchdog@10090000 {
+			compatible = "metanoia,mt2824-wdt", "andestech,ae350-wdt";
+			reg = <0x0 0x10090000 0x0 0x10000>;
+			clocks = <&ext_clk>;
+			andestech,clock-source = <0>;
+			timeout-sec = <10>;
+			status = "disabled";
+		};
+
+		serial0: serial@100e0000 {
+			compatible = "ns16550a";
+			reg = <0x0 0x100e0000 0x0 0x1000>;
+			interrupts = <17 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&pclk_div4>;
+			current-speed = <115200>;
+			reg-shift = <0x02>;
+			reg-offset = <0x20>;
+			reg-io-width = <0x04>;
+			no-loopback-test;
+			status = "disabled";
+		};
+
+		serial1: serial@100f0000 {
+			compatible = "ns16550a";
+			reg = <0x0 0x100f0000 0x0 0x1000>;
+			interrupts = <18 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&pclk_div4>;
+			current-speed = <115200>;
+			reg-shift = <0x02>;
+			reg-offset = <0x20>;
+			reg-io-width = <0x04>;
+			no-loopback-test;
+			status = "disabled";
+		};
+
+		qspi: spi@10120000 {
+			compatible = "metanoia,mt2824-spi", "andestech,ae350-spi";
+			reg = <0x0 0x10120000 0x0 0x10000>;
+			interrupts = <13 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			num-cs = <0x01>;
+			clocks = <&pll_soc_out3>;
+			status = "disabled";
+		};
+
+		spi0: spi@10130000 {
+			compatible = "metanoia,mt2824-spi", "andestech,ae350-spi";
+			reg = <0x0 0x10130000 0x0 0x10000>;
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			num-cs = <0x01>;
+			clocks = <&pll_soc_out3>;
+			status = "disabled";
+		};
+
+		spi1: spi@10140000 {
+			compatible = "metanoia,mt2824-spi", "andestech,ae350-spi";
+			reg = <0x0 0x10140000 0x0 0x10000>;
+			interrupts = <19 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			num-cs = <0x01>;
+			clocks = <&pll_soc_out3>;
+			status = "disabled";
+		};
+
+		spi2: spi@10150000 {
+			compatible = "metanoia,mt2824-spi", "andestech,ae350-spi";
+			reg = <0x0 0x10150000 0x0 0x10000>;
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			num-cs = <0x01>;
+			clocks = <&pll_soc_out3>;
+			status = "disabled";
+		};
+
+		spi3: spi@10160000 {
+			compatible = "metanoia,mt2824-spi", "andestech,ae350-spi";
+			reg = <0x0 0x10160000 0x0 0x10000>;
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			num-cs = <0x01>;
+			clocks = <&pll_soc_out3>;
+			status = "disabled";
+		};
+
+		spi4: spi@10170000 {
+			compatible = "metanoia,mt2824-spi", "andestech,ae350-spi";
+			reg = <0x0 0x10170000 0x0 0x10000>;
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			num-cs = <0x01>;
+			clocks = <&pll_soc_out3>;
+			status = "disabled";
+		};
+
+		spi5: spi@10180000 {
+			compatible = "metanoia,mt2824-spi", "andestech,ae350-spi";
+			reg = <0x0 0x10180000 0x0 0x10000>;
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			num-cs = <0x01>;
+			clocks = <&pll_soc_out3>;
+			status = "disabled";
+		};
+
+		spi6: spi@10190000 {
+			compatible = "metanoia,mt2824-spi", "andestech,ae350-spi";
+			reg = <0x0 0x10190000 0x0 0x10000>;
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			num-cs = <0x01>;
+			clocks = <&pll_soc_out3>;
+			status = "disabled";
+		};
+
+		spi7: spi@101a0000 {
+			compatible = "metanoia,mt2824-spi", "andestech,ae350-spi";
+			reg = <0x0 0x101a0000 0x0 0x10000>;
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			num-cs = <0x01>;
+			clocks = <&pll_soc_out3>;
+			status = "disabled";
+		};
+	};
+
+	usb2phy: usb2-phy {
+		compatible = "metanoia,mt2824-usb2-phy";
+		#phy-cells = <0>;
+		resets = <&rst 18>;
+		reset-names = "usb2-phy";
+	};
+
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		/* for the DSPs, configured as non-cacheable in openSBI */
+		rsc_table: rsc-table@81000000 {
+			reg = <0x0 0x81000000 0x0 0x10000>;
+			no-map;
+		};
+	};
+};
