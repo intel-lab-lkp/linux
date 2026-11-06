@@ -32,6 +32,7 @@
 
 static const char tbs_prefix[] = "tbs";
 static const char bin_prefix[] = "bin";
+static const char skid_prefix[] = "skid";
 
 static struct key *blacklist_keyring;
 
@@ -40,36 +41,30 @@ extern __initconst const u8 revocation_certificate_list[];
 extern __initconst const unsigned long revocation_certificate_list_size;
 #endif
 
+static bool blacklist_prefix_valid(const char *desc, size_t len)
+{
+	return (len == sizeof(tbs_prefix) - 1 &&
+		!strncmp(desc, tbs_prefix, len)) ||
+	       (len == sizeof(bin_prefix) - 1 &&
+		!strncmp(desc, bin_prefix, len)) ||
+	       (len == sizeof(skid_prefix) - 1 &&
+		!strncmp(desc, skid_prefix, len));
+}
+
 /*
- * The description must be a type prefix, a colon and then an even number of
- * hex digits.  The hash is kept in the description.
+ * The description must be a type prefix ("tbs", "bin" or "skid"), a colon and
+ * then an even number of lower-case hex digits.  The hash (or, for "skid", the
+ * Subject Key Identifier) is kept in the description.
  */
 static int blacklist_vet_description(const char *desc)
 {
-	int i, prefix_len, tbs_step = 0, bin_step = 0;
+	const char *colon = strchr(desc, ':');
+	int i;
 
-	/* The following algorithm only works if prefix lengths match. */
-	BUILD_BUG_ON(sizeof(tbs_prefix) != sizeof(bin_prefix));
-	prefix_len = sizeof(tbs_prefix) - 1;
-	for (i = 0; *desc; desc++, i++) {
-		if (*desc == ':') {
-			if (tbs_step == prefix_len)
-				goto found_colon;
-			if (bin_step == prefix_len)
-				goto found_colon;
-			return -EINVAL;
-		}
-		if (i >= prefix_len)
-			return -EINVAL;
-		if (*desc == tbs_prefix[i])
-			tbs_step++;
-		if (*desc == bin_prefix[i])
-			bin_step++;
-	}
-	return -EINVAL;
+	if (!colon || !blacklist_prefix_valid(desc, colon - desc))
+		return -EINVAL;
 
-found_colon:
-	desc++;
+	desc = colon + 1;
 	for (i = 0; *desc && i < MAX_HASH_LEN; desc++, i++) {
 		if (!isxdigit(*desc) || isupper(*desc))
 			return -EINVAL;
@@ -160,6 +155,10 @@ static char *get_raw_hash(const u8 *hash, size_t hash_len,
 		type_len = sizeof(bin_prefix) - 1;
 		type_prefix = bin_prefix;
 		break;
+	case BLACKLIST_HASH_SKID:
+		type_len = sizeof(skid_prefix) - 1;
+		type_prefix = skid_prefix;
+		break;
 	default:
 		WARN_ON_ONCE(1);
 		return ERR_PTR(-EINVAL);
@@ -243,6 +242,40 @@ int is_hash_blacklisted(const u8 *hash, size_t hash_len,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(is_hash_blacklisted);
+
+#ifdef CONFIG_ASYMMETRIC_KEY_TYPE
+/**
+ * is_key_blacklisted - Determine if a key is blacklisted by its SKID
+ * @key: The key to be checked, e.g. a trust anchor found in a keyring
+ *
+ * Unlike a "tbs:" entry, which is only compared against certificates being
+ * added or presented in a chain, this checks a key that is already loaded, so
+ * that keys that cannot be unlinked from their keyring can still be revoked.
+ * The identifier is taken from the key itself, not from the caller.
+ *
+ * Returns -EKEYREJECTED if the key's Subject Key Identifier is blacklisted,
+ * 0 if it is not (or the key has no SKID), or another negative error.
+ */
+int is_key_blacklisted(const struct key *key)
+{
+	const struct asymmetric_key_ids *kids;
+	const struct asymmetric_key_id *skid;
+
+	if (!key || key->type != &key_type_asymmetric)
+		return 0;
+
+	kids = asymmetric_key_ids(key);
+	if (!kids)
+		return 0;
+
+	skid = kids->id[1];
+	if (!skid || !skid->len)
+		return 0;
+
+	return is_hash_blacklisted(skid->data, skid->len, BLACKLIST_HASH_SKID);
+}
+EXPORT_SYMBOL_GPL(is_key_blacklisted);
+#endif
 
 int is_binary_blacklisted(const u8 *hash, size_t hash_len)
 {

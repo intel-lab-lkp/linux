@@ -15,6 +15,8 @@ enum blacklist_hash_type {
 	BLACKLIST_HASH_X509_TBS = 1,
 	/* Raw data hash */
 	BLACKLIST_HASH_BINARY = 2,
+	/* Subject Key Identifier of a key (not a hash) */
+	BLACKLIST_HASH_SKID = 3,
 };
 
 #ifdef CONFIG_SYSTEM_TRUSTED_KEYRING
@@ -87,6 +89,16 @@ static inline int is_hash_blacklisted(const u8 *hash, size_t hash_len,
 }
 
 static inline int is_binary_blacklisted(const u8 *hash, size_t hash_len)
+{
+	return 0;
+}
+#endif
+
+#if defined(CONFIG_SYSTEM_BLACKLIST_KEYRING) && \
+    defined(CONFIG_ASYMMETRIC_KEY_TYPE)
+extern int is_key_blacklisted(const struct key *key);
+#else
+static inline int is_key_blacklisted(const struct key *key)
 {
 	return 0;
 }
