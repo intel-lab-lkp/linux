@@ -10,6 +10,7 @@
 #include <linux/acpi.h>
 #include <linux/arm-smccc.h>
 #include <linux/bitfield.h>
+#include <linux/bitmap.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/dma-mapping.h>
@@ -86,8 +87,12 @@
 #define CV18XX_TUNE_STEP			1
 #define CV18XX_RETRY_TUNING_MAX			50
 
-/* Metanoia MT2824: HOST_CTRL3 sampling edge and PHY pad settings */
+/* Metanoia MT2824: HOST_CTRL3 sampling edge bits and software tuning */
 #define MT2824_HOST_CTRL3_NEGEDGE_DATAOUT	BIT(1)
+#define MT2824_AT_STAT_CENTER_PH_MASK		GENMASK(6, 0)
+#define MT2824_TUNING_PHASES			128	/* DWC_MSHC_DL_CW = 7 */
+/* narrowest passing window accepted, ~8 % of the 128-tap delay line */
+#define MT2824_TUNING_MIN_WINDOW		10
 /* 1.8 V eMMC probe attempts before falling back to the SD slot */
 #define MT2824_PROBE_ATTEMPTS			2
 /* PHY pad settings of the MT2824 pad ring */
@@ -98,6 +103,10 @@
 #define MT2824_PHY_TXSLEW_P_STROBE		0x3
 #define MT2824_PHY_SMPLDL_CNFG			0x0c
 #define MT2824_PHY_ATDL_CNFG			0x0c
+#define MT2824_PHY_DLL_CNFG1			0x20
+#define MT2824_PHY_DLLDL_CNFG			0x60
+#define MT2824_PHY_DLL_LOCKED			BIT(0)
+#define MT2824_PHY_DLL_LOCK_ERR			BIT(1)
 
 /* Rockchip specific Registers */
 #define DWCMSHC_EMMC_DLL_CTRL		0x800
@@ -245,6 +254,7 @@
 #define DLL_ERROR_STS			BIT(1)
 
 #define FLAG_IO_FIXED_1V8	BIT(0)
+#define FLAG_SW_TUNING		BIT(1)	/* MT2824: tuning scan in progress */
 
 #define BOUNDARY_OK(addr, len) \
 	((addr | (SZ_128M - 1)) == ((addr + len - 1) | (SZ_128M - 1)))
@@ -2271,6 +2281,38 @@ static int mt2824_phy_init(struct sdhci_host *host, bool v1v8)
 	return 0;
 }
 
+/* HS400 needs the PHY DLL locked on the card clock; lock it by hand */
+static void mt2824_set_dll(struct sdhci_host *host)
+{
+	u16 clk;
+	u8 status;
+	int ret;
+
+	clk = sdhci_readw(host, SDHCI_CLOCK_CONTROL);
+	clk &= ~SDHCI_CLOCK_CARD_EN;
+	sdhci_writew(host, clk, SDHCI_CLOCK_CONTROL);
+
+	sdhci_writeb(host, MT2824_PHY_DLL_CNFG1, PHY_DLL_CNFG1_R);
+	sdhci_writeb(host, MT2824_PHY_DLLDL_CNFG, PHY_DLLDL_CNFG_R);
+
+	sdhci_enable_clk(host, clk);
+	usleep_range(10, 20);
+
+	sdhci_writeb(host, PHY_DLL_CTRL_ENABLE, PHY_DLL_CTRL_R);
+	ret = read_poll_timeout(sdhci_readb, status,
+				status & MT2824_PHY_DLL_LOCKED, 10, 150000,
+				false, host, PHY_DLL_STATUS_R);
+	if (ret) {
+		dev_err(mmc_dev(host->mmc), "PHY DLL did not lock: 0x%02x\n",
+			status);
+		return;
+	}
+
+	if (status & MT2824_PHY_DLL_LOCK_ERR)
+		dev_err(mmc_dev(host->mmc), "PHY DLL locked with error: 0x%02x\n",
+			status);
+}
+
 static bool mt2824_wait_clk_stable(struct sdhci_host *host, u16 *clk,
 				   const char *what)
 {
@@ -2332,6 +2374,11 @@ static void mt2824_set_clock(struct sdhci_host *host, unsigned int clock)
 	if (clock)
 		mt2824_enable_clk(host, sdhci_calc_clk(host, clock,
 						       &mmc->actual_clock));
+
+	if (clock && host->timing == MMC_TIMING_MMC_HS400) {
+		mt2824_set_dll(host);
+		dwcmshc_reset(host, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
+	}
 }
 
 /* The controller must know that the card is an eMMC (EMMC_CTRL_R, 16 bit) */
@@ -2458,6 +2505,156 @@ static void mt2824_hw_reset(struct sdhci_host *host)
 	usleep_range(300, 1000);
 
 	sdhci_enable_clk(host, clk);
+}
+
+/*
+ * Software tuning: try every center phase code of the tuning delay line,
+ * find the longest run of phases that return a good tuning block and
+ * select its middle. The sampling clock only follows the delay line while
+ * SAMPLE_CLK_SEL (SDHCI_CTRL_TUNED_CLK) is set, so set it for the scan and
+ * keep it; SW_TUNE_EN also stays set, so the selected phase code stays in
+ * control of the delay line.
+ */
+static int mt2824_set_center_phase(struct sdhci_host *host, u32 at_stat_reg,
+				   unsigned int phase)
+{
+	u32 at_stat;
+	int ret;
+	u16 clk;
+
+	clk = sdhci_readw(host, SDHCI_CLOCK_CONTROL);
+	clk &= ~SDHCI_CLOCK_CARD_EN;
+	sdhci_writew(host, clk, SDHCI_CLOCK_CONTROL);
+
+	at_stat = sdhci_readl(host, at_stat_reg);
+	at_stat &= ~MT2824_AT_STAT_CENTER_PH_MASK;
+	at_stat |= FIELD_PREP(MT2824_AT_STAT_CENTER_PH_MASK, phase);
+	sdhci_writel(host, at_stat, at_stat_reg);
+	/*
+	 * This configuration has no DL2 busy flag: read the phase code back,
+	 * then wait for the worst case of 180 hclk cycles of the delay line
+	 * (2 us covers an hclk of 90 MHz or more).
+	 */
+	ret = read_poll_timeout(sdhci_readl, at_stat,
+				FIELD_GET(MT2824_AT_STAT_CENTER_PH_MASK, at_stat) == phase,
+				0, 100, false, host, at_stat_reg);
+	if (ret)
+		dev_err(mmc_dev(host->mmc), "tuning phase %u not taken\n", phase);
+	udelay(2);
+
+	sdhci_enable_clk(host, clk);
+
+	return ret;
+}
+
+static int mt2824_execute_tuning(struct sdhci_host *host, u32 opcode)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct dwcmshc_priv *dwc_priv = sdhci_pltfm_priv(pltfm_host);
+	u32 at_ctrl_reg = dwc_priv->vendor_specific_area1 + DWCMSHC_EMMC_ATCTRL;
+	u32 at_stat_reg = dwc_priv->vendor_specific_area1 + DWCMSHC_AT_STAT;
+	DECLARE_BITMAP(good, MT2824_TUNING_PHASES);
+	unsigned int start, end, phase, best_start = 0, best_len = 0;
+	u32 at_ctrl;
+	u16 ctrl2;
+	int ret;
+
+	/*
+	 * The controller databook names SDR104 (and HS200) as the modes that
+	 * need tuning. At DDR50 the scan fails at every phase on this
+	 * controller, while the fixed sampling clock works: do not tune.
+	 */
+	if (host->timing == MMC_TIMING_UHS_DDR50)
+		return 0;
+
+	WRITE_ONCE(dwc_priv->flags, dwc_priv->flags | FLAG_SW_TUNING);
+
+	sdhci_reset_tuning(host);
+	bitmap_zero(good, MT2824_TUNING_PHASES);
+
+	/*
+	 * AT_CTRL_R must not be written while SAMPLE_CLK_SEL is set: enable
+	 * software tuning first, then select the tuned sampling clock.
+	 */
+	at_ctrl = sdhci_readl(host, at_ctrl_reg);
+	sdhci_writel(host, at_ctrl | AT_CTRL_SW_TUNE_EN, at_ctrl_reg);
+	ctrl2 = sdhci_readw(host, SDHCI_HOST_CONTROL2);
+	sdhci_writew(host, ctrl2 | SDHCI_CTRL_TUNED_CLK, SDHCI_HOST_CONTROL2);
+	/*
+	 * That HOST_CONTROL2 write breaks the response of the next command:
+	 * send one tuning command for nothing before the scan.
+	 */
+	mmc_send_tuning(host->mmc, opcode, NULL);
+	host->ops->reset(host, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
+
+	for (phase = 0; phase < MT2824_TUNING_PHASES; phase++) {
+		ret = mt2824_set_center_phase(host, at_stat_reg, phase);
+		if (ret)
+			goto fail;
+		if (!mmc_send_tuning(host->mmc, opcode, NULL))
+			set_bit(phase, good);
+		host->ops->reset(host, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
+	}
+
+	/* the sample delay line is linear, so the phase codes do not wrap */
+	for_each_set_bitrange(start, end, good, MT2824_TUNING_PHASES) {
+		if (end - start > best_len) {
+			best_start = start;
+			best_len = end - start;
+		}
+	}
+	if (best_len < MT2824_TUNING_MIN_WINDOW) {
+		dev_err(mmc_dev(host->mmc), "tuning failed, best window %u\n",
+			best_len);
+		ret = -EIO;
+		goto fail;
+	}
+	phase = best_start + best_len / 2;
+	/* a window at an end of the delay line may be wider than measured */
+	if (!best_start || best_start + best_len == MT2824_TUNING_PHASES)
+		dev_dbg(mmc_dev(host->mmc), "tuning window %u+%u ends at the delay line end\n",
+			best_start, best_len);
+
+	ret = mt2824_set_center_phase(host, at_stat_reg, phase);
+	if (ret)
+		goto fail;
+	dev_dbg(mmc_dev(host->mmc), "tuning phase %u (window %u+%u), AT_STAT %08x\n",
+		phase, best_start, best_len, sdhci_readl(host, at_stat_reg));
+	sdhci_end_tuning(host);
+	WRITE_ONCE(dwc_priv->flags, dwc_priv->flags & ~FLAG_SW_TUNING);
+
+	return 0;
+
+fail:
+	/* clear SAMPLE_CLK_SEL before AT_CTRL_R is written again */
+	sdhci_reset_tuning(host);
+	sdhci_writel(host, at_ctrl, at_ctrl_reg);
+	host->ops->reset(host, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
+	sdhci_end_tuning(host);
+	WRITE_ONCE(dwc_priv->flags, dwc_priv->flags & ~FLAG_SW_TUNING);
+	return ret;
+}
+
+/*
+ * A tuning command at a bad phase can time out while the card still sends
+ * the tuning block. Its data interrupt then comes when no data transfer is
+ * in progress (host->data is NULL); once the request reset cleared
+ * pending_reset, sdhci counts it as an unexpected interrupt. Drop such
+ * data interrupts while the tuning scan runs. A late interrupt that comes
+ * after the next tuning command started fails that phase only.
+ */
+static u32 mt2824_irq(struct sdhci_host *host, u32 intmask)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct dwcmshc_priv *dwc_priv = sdhci_pltfm_priv(pltfm_host);
+	u32 stray = intmask & SDHCI_INT_DATA_MASK;
+
+	if (!(READ_ONCE(dwc_priv->flags) & FLAG_SW_TUNING) || host->data || !stray)
+		return intmask;
+
+	sdhci_writel(host, stray, SDHCI_INT_STATUS);
+
+	return intmask & ~stray;
 }
 
 /*
@@ -2672,6 +2869,8 @@ static const struct sdhci_ops sdhci_dwcmshc_mt2824_ops = {
 	.reset			= mt2824_reset,
 	.hw_reset		= mt2824_hw_reset,
 	.adma_write_desc	= dwcmshc_adma_write_desc,
+	.platform_execute_tuning = mt2824_execute_tuning,
+	.irq			= mt2824_irq,
 };
 
 static const struct dwcmshc_pltfm_data sdhci_dwcmshc_mt2824_pdata = {
