@@ -843,11 +843,12 @@ static void software_node_free(const struct software_node *node)
 static void software_node_release(struct kobject *kobj)
 {
 	struct swnode *swnode = kobj_to_swnode(kobj);
+	struct swnode *parent = swnode->parent;
 
 	fwnode_links_purge(&swnode->fwnode);
 
-	if (swnode->parent) {
-		ida_free(&swnode->parent->child_ids, swnode->id);
+	if (parent) {
+		ida_free(&parent->child_ids, swnode->id);
 		list_del(&swnode->entry);
 	} else {
 		ida_free(&swnode_root_ids, swnode->id);
@@ -858,6 +859,9 @@ static void software_node_release(struct kobject *kobj)
 
 	ida_destroy(&swnode->child_ids);
 	kfree(swnode);
+
+	if (parent)
+		swnode_put(parent);
 }
 
 static const struct kobj_type software_node_type = {
@@ -885,7 +889,7 @@ swnode_register(const struct software_node *node, struct swnode *parent,
 
 	swnode->id = ret;
 	swnode->node = node;
-	swnode->parent = parent;
+	swnode->parent = parent ? swnode_get(parent) : NULL;
 	swnode->kobj.kset = swnode_kset;
 	fwnode_init(&swnode->fwnode, &software_node_ops);
 
