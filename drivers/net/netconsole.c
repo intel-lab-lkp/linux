@@ -111,21 +111,10 @@ static DEFINE_MUTEX(target_cleanup_list_lock);
 
 static struct workqueue_struct *netconsole_wq;
 
-/*
- * Console driver for netconsoles.  Register only consoles that have
- * an associated target of the same type.
- */
-static struct console netconsole_ext, netconsole;
-
 struct netconsole_target_stats  {
 	u64_stats_t xmit_drop_count;
 	u64_stats_t enomem_count;
 	struct u64_stats_sync syncp;
-};
-
-enum console_type {
-	CONS_BASIC = BIT(0),
-	CONS_EXTENDED = BIT(1),
 };
 
 /* Features enabled in sysdata. Contrary to userdata, this data is populated by
@@ -214,6 +203,7 @@ struct netcons_userdata {
  *		successful netpoll_setup() / netpoll_cleanup() pair on @np.
  * @refill_wq:	Work item that asynchronously tops @skb_pool back up to
  *		MAX_SKBS after find_skb() drains an entry.
+ * @console:	Console printing to this target, registered once it is enabled.
  */
 struct netconsole_target {
 	struct list_head	list;
@@ -243,7 +233,12 @@ struct netconsole_target {
 	struct work_struct	resume_wq;
 	struct sk_buff_head	skb_pool;
 	struct work_struct	refill_wq;
+	struct console		console;
 };
+
+static void netconsole_register_console(struct netconsole_target *nt,
+					short flags);
+static void netconsole_unregister_console(struct netconsole_target *nt);
 
 #ifdef	CONFIG_NETCONSOLE_DYNAMIC
 
@@ -630,6 +625,11 @@ static void process_resume_target(struct work_struct *work)
 	list_del_init(&nt->list);
 	spin_unlock_irqrestore(&target_list_lock, flags);
 
+	/* The console registered before the deactivation may still be around,
+	 * and extended may have changed since. Drop it here, a new one is
+	 * registered below once the target is enabled again.
+	 */
+	netconsole_unregister_console(nt);
 	resume_target(nt);
 
 	/* netpoll_setup() took a net_device reference and dropped the RTNL
@@ -659,6 +659,8 @@ static void process_resume_target(struct work_struct *work)
 	list_add(&nt->list, &target_list);
 	spin_unlock_irqrestore(&target_list_lock, flags);
 	rtnl_unlock();
+
+	netconsole_register_console(nt, 0);
 
 out_unlock:
 	dynamic_netconsole_mutex_unlock();
@@ -964,33 +966,6 @@ static ssize_t sysdata_release_enabled_show(struct config_item *item,
 	return sysfs_emit(buf, "%d\n", release_enabled);
 }
 
-/* Iterate in the list of target, and make sure we don't have any console
- * register without targets of the same type
- */
-static void unregister_netcons_consoles(void)
-{
-	struct netconsole_target *nt;
-	u32 console_type_needed = 0;
-	unsigned long flags;
-
-	spin_lock_irqsave(&target_list_lock, flags);
-	list_for_each_entry(nt, &target_list, list) {
-		if (nt->extended)
-			console_type_needed |= CONS_EXTENDED;
-		else
-			console_type_needed |= CONS_BASIC;
-	}
-	spin_unlock_irqrestore(&target_list_lock, flags);
-
-	if (!(console_type_needed & CONS_EXTENDED) &&
-	    console_is_registered(&netconsole_ext))
-		unregister_console(&netconsole_ext);
-
-	if (!(console_type_needed & CONS_BASIC) &&
-	    console_is_registered(&netconsole))
-		unregister_console(&netconsole);
-}
-
 static ssize_t sysdata_msgid_enabled_show(struct config_item *item,
 					  char *buf)
 {
@@ -1037,6 +1012,9 @@ static ssize_t enabled_store(struct config_item *item,
 	if (enabled == current_enabled) {
 		pr_info("network logging has already %s\n",
 			current_enabled ? "started" : "stopped");
+		/* Interface events stop a target but keep its console */
+		if (!enabled)
+			netconsole_unregister_console(nt);
 		goto out_unlock;
 	}
 
@@ -1046,18 +1024,8 @@ static ssize_t enabled_store(struct config_item *item,
 			goto out_unlock;
 		}
 
-		if (nt->extended && !console_is_registered(&netconsole_ext)) {
-			netconsole_ext.flags |= CON_ENABLED;
-			register_console(&netconsole_ext);
-		}
-
-		/* User might be enabling the basic format target for the very
-		 * first time, make sure the console is registered.
-		 */
-		if (!nt->extended && !console_is_registered(&netconsole)) {
-			netconsole.flags |= CON_ENABLED;
-			register_console(&netconsole);
-		}
+		/* Interface events disable a target but keep its console */
+		netconsole_unregister_console(nt);
 
 		/*
 		 * Skip netconsole_parser_cmdline() -- all the attributes are
@@ -1080,6 +1048,7 @@ static ssize_t enabled_store(struct config_item *item,
 		}
 
 		nt->state = STATE_ENABLED;
+		netconsole_register_console(nt, 0);
 		pr_info("network logging started\n");
 	} else {	/* false */
 		/* We need to disable the netconsole before cleaning it up
@@ -1095,10 +1064,7 @@ static ssize_t enabled_store(struct config_item *item,
 		list_move(&nt->list, &target_cleanup_list);
 		spin_unlock_irqrestore(&target_list_lock, flags);
 		mutex_unlock(&target_cleanup_list_lock);
-		/* Unregister consoles, whose the last target of that type got
-		 * disabled.
-		 */
-		unregister_netcons_consoles();
+		netconsole_unregister_console(nt);
 	}
 
 	ret = count;
@@ -1770,6 +1736,10 @@ static struct config_group *make_netconsole_target(struct config_group *group,
 
 	/* Initialize the config_group member */
 	init_target_config_group(nt, name);
+	snprintf(nt->console.name, sizeof(nt->console.name), "netcons_%s",
+		 name);
+	/* No index, the console is named after the target */
+	nt->console.index = -1;
 
 	/* Adding, but it is disabled */
 	spin_lock_irqsave(&target_list_lock, flags);
@@ -1787,6 +1757,8 @@ static void drop_netconsole_target(struct config_group *group,
 	bool needs_cleanup;
 
 	dynamic_netconsole_mutex_lock();
+
+	netconsole_unregister_console(nt);
 
 	mutex_lock(&target_cleanup_list_lock);
 	spin_lock_irqsave(&target_list_lock, flags);
@@ -2470,50 +2442,37 @@ static void send_msg_udp(struct netconsole_target *nt, const char *msg,
 }
 
 /**
- * netconsole_write - Generic function to send a msg to all targets
+ * netconsole_write - Send a msg to the target of a console
+ * @con: console of the target
  * @wctxt: nbcon write context
- * @extended: "true" for extended console mode
  *
- * Given an nbcon write context, send the message to the netconsole targets
+ * Given an nbcon write context, send the message to the netconsole target
  */
-static void netconsole_write(struct nbcon_write_context *wctxt, bool extended)
+static void netconsole_write(struct console *con,
+			     struct nbcon_write_context *wctxt)
 {
 	struct netconsole_target *nt;
+
+	nt = container_of(con, struct netconsole_target, console);
 
 	if (oops_only && !oops_in_progress)
 		return;
 
-	list_for_each_entry(nt, &target_list, list) {
-		if (nt->extended != extended || nt->state != STATE_ENABLED ||
-		    !netif_running(nt->np.dev))
-			continue;
+	if (nt->state != STATE_ENABLED || !netif_running(nt->np.dev))
+		return;
 
-		/* If nbcon_enter_unsafe() fails, just return given netconsole
-		 * lost the ownership, and iterating over the targets will not
-		 * be able to re-acquire.
-		 */
-		if (!nbcon_enter_unsafe(wctxt))
-			return;
+	/* If nbcon_enter_unsafe() fails, just return given netconsole
+	 * lost the ownership.
+	 */
+	if (!nbcon_enter_unsafe(wctxt))
+		return;
 
-		if (extended)
-			send_ext_msg_udp(nt, wctxt);
-		else
-			send_msg_udp(nt, wctxt->outbuf, wctxt->len);
+	if (nt->extended)
+		send_ext_msg_udp(nt, wctxt);
+	else
+		send_msg_udp(nt, wctxt->outbuf, wctxt->len);
 
-		nbcon_exit_unsafe(wctxt);
-	}
-}
-
-static void netconsole_write_ext(struct console *con __always_unused,
-				 struct nbcon_write_context *wctxt)
-{
-	netconsole_write(wctxt, true);
-}
-
-static void netconsole_write_basic(struct console *con __always_unused,
-				   struct nbcon_write_context *wctxt)
-{
-	netconsole_write(wctxt, false);
+	nbcon_exit_unsafe(wctxt);
 }
 
 static void netconsole_device_lock(struct console *con __always_unused,
@@ -2670,6 +2629,9 @@ static struct netconsole_target *alloc_param_target(char *target_config,
 	} else {
 		nt->state = STATE_ENABLED;
 	}
+	/* netcons_cmdline<N> does not fit, printk shows the index after it */
+	strscpy(nt->console.name, "netcons_" NETCONSOLE_PARAM_TARGET_PREFIX);
+	nt->console.index = cmdline_count;
 	populate_configfs_item(nt, cmdline_count);
 
 	return nt;
@@ -2682,6 +2644,7 @@ fail:
 /* Cleanup netpoll for given target (from boot/module param) and free it */
 static void free_param_target(struct netconsole_target *nt)
 {
+	netconsole_unregister_console(nt);
 	cancel_work_sync(&nt->resume_wq);
 	if (nt->state == STATE_ENABLED)
 		netconsole_skb_pool_flush(nt);
@@ -2692,29 +2655,38 @@ static void free_param_target(struct netconsole_target *nt)
 	kfree(nt);
 }
 
-static struct console netconsole_ext = {
-	.name = "netcon_ext",
-	.flags = CON_ENABLED | CON_EXTENDED | CON_NBCON | CON_NBCON_ATOMIC_UNSAFE,
-	.write_thread = netconsole_write_ext,
-	.write_atomic = netconsole_write_ext,
-	.device_lock = netconsole_device_lock,
-	.device_unlock = netconsole_device_unlock,
-};
+/* Register the console of an enabled @nt, @flags can request CON_PRINTBUFFER */
+static void netconsole_register_console(struct netconsole_target *nt,
+					short flags)
+{
+	struct console *con = &nt->console;
 
-static struct console netconsole = {
-	.name = "netcon",
-	.flags = CON_ENABLED | CON_NBCON | CON_NBCON_ATOMIC_UNSAFE,
-	.write_thread = netconsole_write_basic,
-	.write_atomic = netconsole_write_basic,
-	.device_lock = netconsole_device_lock,
-	.device_unlock = netconsole_device_unlock,
-};
+	if (nt->state != STATE_ENABLED)
+		return;
+
+	con->flags = CON_ENABLED | CON_NBCON | CON_NBCON_ATOMIC_UNSAFE | flags;
+	if (nt->extended)
+		con->flags |= CON_EXTENDED;
+	con->write_thread = netconsole_write;
+	con->write_atomic = netconsole_write;
+	con->device_lock = netconsole_device_lock;
+	con->device_unlock = netconsole_device_unlock;
+
+	register_console(con);
+}
+
+static void netconsole_unregister_console(struct netconsole_target *nt)
+{
+	if (!console_is_registered(&nt->console))
+		return;
+
+	unregister_console(&nt->console);
+}
 
 static int __init init_netconsole(void)
 {
 	int err;
 	struct netconsole_target *nt, *tmp;
-	u32 console_type_needed = 0;
 	unsigned int count = 0;
 	unsigned long flags;
 	char *target_config;
@@ -2730,13 +2702,7 @@ static int __init init_netconsole(void)
 				goto fail;
 			}
 			/* Dump existing printks when we register */
-			if (nt->extended) {
-				console_type_needed |= CONS_EXTENDED;
-				netconsole_ext.flags |= CON_PRINTBUFFER;
-			} else {
-				console_type_needed |= CONS_BASIC;
-				netconsole.flags |= CON_PRINTBUFFER;
-			}
+			netconsole_register_console(nt, CON_PRINTBUFFER);
 
 			spin_lock_irqsave(&target_list_lock, flags);
 			list_add(&nt->list, &target_list);
@@ -2759,10 +2725,6 @@ static int __init init_netconsole(void)
 	if (err)
 		goto undonotifier;
 
-	if (console_type_needed & CONS_EXTENDED)
-		register_console(&netconsole_ext);
-	if (console_type_needed & CONS_BASIC)
-		register_console(&netconsole);
 	pr_info("network logging started\n");
 
 	return err;
@@ -2795,10 +2757,6 @@ static void __exit cleanup_netconsole(void)
 {
 	struct netconsole_target *nt, *tmp;
 
-	if (console_is_registered(&netconsole_ext))
-		unregister_console(&netconsole_ext);
-	if (console_is_registered(&netconsole))
-		unregister_console(&netconsole);
 	dynamic_netconsole_exit();
 	unregister_netdevice_notifier(&netconsole_netdev_notifier);
 	flush_workqueue(netconsole_wq);
