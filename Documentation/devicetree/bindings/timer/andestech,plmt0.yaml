@@ -21,6 +21,7 @@ properties:
     items:
       - enum:
           - andestech,qilai-plmt
+          - metanoia,mt2824-plmt
       - const: andestech,plmt0
 
   reg:
