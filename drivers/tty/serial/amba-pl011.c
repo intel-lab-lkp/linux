@@ -41,6 +41,7 @@
 #include <linux/sizes.h>
 #include <linux/io.h>
 #include <linux/acpi.h>
+#include <linux/nmi.h>
 
 #define UART_NR			14
 
@@ -2754,6 +2755,9 @@ pl011_console_write_atomic(struct console *co, struct nbcon_write_context *wctxt
 		pl011_write(old_cr, uap, REG_CR);
 
 	nbcon_exit_unsafe(wctxt);
+
+	/* An atomic flush may print a long backlog with IRQs disabled. */
+	touch_nmi_watchdog();
 }
 
 static void
