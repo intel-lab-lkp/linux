@@ -674,6 +674,22 @@ intel_pdi_alh_configure(struct sdw_intel *sdw, struct sdw_cdns_pdi *pdi)
 	intel_writel(alh, SDW_ALH_STRMZCFG(pdi->intel_alh_id), conf);
 }
 
+/**
+ * sdw_intel_pdi_config - Configure specified PDI
+ * @bus: SoundWire bus instance
+ * @pdi: PDI instance to configure
+ */
+void sdw_intel_pdi_config(struct sdw_bus *bus, struct sdw_cdns_pdi *pdi)
+{
+	struct sdw_cdns *cdns = bus_to_cdns(bus);
+	struct sdw_intel *sdw = cdns_to_intel(cdns);
+
+	intel_pdi_shim_configure(sdw, pdi);
+	intel_pdi_alh_configure(sdw, pdi);
+	sdw_cdns_config_stream(cdns, pdi->ch_count, pdi->dir, pdi);
+}
+EXPORT_SYMBOL(sdw_intel_pdi_config);
+
 static int intel_params_stream(struct sdw_intel *sdw,
 			       struct snd_pcm_substream *substream,
 			       struct snd_soc_dai *dai,
@@ -745,9 +761,7 @@ static int intel_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 
 	/* do run-time configurations for SHIM, ALH and PDI/PORT */
-	intel_pdi_shim_configure(sdw, pdi);
-	intel_pdi_alh_configure(sdw, pdi);
-	sdw_cdns_config_stream(cdns, ch, dir, pdi);
+	sdw_intel_pdi_config(&cdns->bus, dai_runtime->pdi);
 
 	/* store pdi and hw_params, may be needed in prepare step */
 	dai_runtime->paused = false;
@@ -823,9 +837,7 @@ static int intel_prepare(struct snd_pcm_substream *substream,
 		else
 			dir = SDW_DATA_DIR_TX;
 
-		intel_pdi_shim_configure(sdw, dai_runtime->pdi);
-		intel_pdi_alh_configure(sdw, dai_runtime->pdi);
-		sdw_cdns_config_stream(cdns, ch, dir, dai_runtime->pdi);
+		sdw_intel_pdi_config(&cdns->bus, dai_runtime->pdi);
 
 		/* Inform DSP about PDI stream number */
 		ret = intel_params_stream(sdw, substream, dai,
