@@ -15,6 +15,7 @@
 
 	aliases {
 		serial0 = &usart2;
+		watchdog0 = &arm_wdt;
 	};
 
 	chosen {
@@ -46,6 +47,11 @@
 
 &bsec {
 	bootph-all;
+};
+
+&iwdg2 {
+	timeout-sec = <32>;
+	status = "okay";
 };
 
 &usart2 {

@@ -22,6 +22,7 @@
 	aliases {
 		ethernet0 = &ethernet1;
 		serial0 = &usart2;
+		watchdog0 = &arm_wdt;
 	};
 
 	chosen {
@@ -261,6 +262,11 @@
 	/* spare dmas for other usage */
 	/delete-property/dmas;
 	/delete-property/dma-names;
+};
+
+&iwdg2 {
+	timeout-sec = <32>;
+	status = "okay";
 };
 
 &ltdc {
