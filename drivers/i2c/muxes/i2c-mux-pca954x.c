@@ -107,7 +107,7 @@ struct chip_desc {
 struct pca954x {
 	const struct chip_desc *chip;
 
-	u8 last_chan;		/* last register value */
+	s16 last_chan;		/* last register value, or -1 if unknown */
 	/* MUX_IDLE_AS_IS, MUX_IDLE_DISCONNECT or >= 0 for channel */
 	s32 idle_state;
 
@@ -327,7 +327,7 @@ static int pca954x_select_chan(struct i2c_mux_core *muxc, u32 chan)
 	/* Only select the channel if its different from the last channel */
 	if (data->last_chan != regval) {
 		ret = pca954x_reg_write(muxc->parent, client, regval);
-		data->last_chan = ret < 0 ? 0 : regval;
+		data->last_chan = ret < 0 ? -1 : regval;
 	}
 
 	return ret;
@@ -338,6 +338,7 @@ static int pca954x_deselect_mux(struct i2c_mux_core *muxc, u32 chan)
 	struct pca954x *data = i2c_mux_priv(muxc);
 	struct i2c_client *client = data->client;
 	s32 idle_state;
+	int ret;
 
 	idle_state = READ_ONCE(data->idle_state);
 	if (idle_state >= 0)
@@ -346,9 +347,9 @@ static int pca954x_deselect_mux(struct i2c_mux_core *muxc, u32 chan)
 
 	if (idle_state == MUX_IDLE_DISCONNECT) {
 		/* Deselect active channel */
-		data->last_chan = 0;
-		return pca954x_reg_write(muxc->parent, client,
-					 data->last_chan);
+		ret = pca954x_reg_write(muxc->parent, client, 0);
+		data->last_chan = ret < 0 ? -1 : 0;
+		return ret;
 	}
 
 	/* otherwise leave as-is */
@@ -392,7 +393,7 @@ static ssize_t idle_state_store(struct device *dev,
 	 * Set the mux into a state consistent with the new
 	 * idle_state.
 	 */
-	if (data->last_chan || val != MUX_IDLE_DISCONNECT)
+	if (data->last_chan != 0 || val != MUX_IDLE_DISCONNECT)
 		ret = pca954x_deselect_mux(muxc, 0);
 
 	i2c_unlock_bus(muxc->parent, I2C_LOCK_SEGMENT);
@@ -480,12 +481,13 @@ static void pca954x_cleanup(struct i2c_mux_core *muxc)
 
 static int pca954x_init(struct i2c_client *client, struct pca954x *data)
 {
+	u8 regval;
 	int ret;
 
 	if (data->idle_state >= 0)
-		data->last_chan = pca954x_regval(data, data->idle_state);
+		regval = pca954x_regval(data, data->idle_state);
 	else
-		data->last_chan = 0; /* Disconnect multiplexer */
+		regval = 0; /* Disconnect multiplexer */
 
 	if (device_is_compatible(&client->dev, "maxim,max7357")) {
 		if (i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_WRITE_BYTE_DATA)) {
@@ -505,18 +507,17 @@ static int pca954x_init(struct i2c_client *client, struct pca954x *data)
 						      "maxim,preconnection-wiggle-test-enable"))
 				conf |= MAX7357_CONF_PRECONNECT_TEST;
 
-			ret = i2c_smbus_write_byte_data(client, data->last_chan, conf);
+			ret = i2c_smbus_write_byte_data(client, regval, conf);
 		} else {
 			dev_warn(&client->dev, "Write byte data not supported."
 				 "Cannot enable enhanced mode features\n");
-			ret = i2c_smbus_write_byte(client, data->last_chan);
+			ret = i2c_smbus_write_byte(client, regval);
 		}
 	} else {
-		ret = i2c_smbus_write_byte(client, data->last_chan);
+		ret = i2c_smbus_write_byte(client, regval);
 	}
 
-	if (ret < 0)
-		data->last_chan = 0;
+	data->last_chan = ret < 0 ? -1 : regval;
 
 	return ret;
 }
