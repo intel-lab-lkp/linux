@@ -26,6 +26,7 @@ properties:
           - canaan,k230-emmc
           - canaan,k230-sdio
           - hpe,gsc-dwcmshc
+          - metanoia,mt2824-dwcmshc
           - rockchip,rk3568-dwcmshc
           - rockchip,rk3588-dwcmshc
           - snps,dwcmshc-sdhci
