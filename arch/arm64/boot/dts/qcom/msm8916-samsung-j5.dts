@@ -8,6 +8,17 @@
 	model = "Samsung Galaxy J5 (2015)";
 	compatible = "samsung,j5", "qcom,msm8916";
 	chassis-type = "handset";
+
+	reg_leda_proximity: regulator-leda-proximity {
+		compatible = "regulator-fixed";
+		regulator-name = "proximity_leda";
+
+		gpio = <&tlmm 73 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		pinctrl-0 = <&proximity_ldo_en_default>;
+		pinctrl-names = "default";
+	};
 };
 
 &accelerometer {
@@ -17,6 +28,24 @@
 
 &blsp_i2c5 {
 	status = "disabled";
+};
+
+&i2c_sensors {
+	proximity-sensor@44 {
+		compatible = "sharp,gp2ap002s00f";
+		reg = <0x44>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <113 IRQ_TYPE_EDGE_FALLING>;
+		vdd-supply = <&pm8916_l17>;
+		vio-supply = <&pm8916_l5>;
+		leda-supply = <&reg_leda_proximity>;
+
+		sharp,proximity-far-hysteresis = /bits/ 8 <0x2f>;
+		sharp,proximity-close-hysteresis = /bits/ 8 <0x0f>;
+
+		pinctrl-0 = <&proximity_int_default>;
+		pinctrl-names = "default";
+	};
 };
 
 &pm8916_codec {
@@ -29,4 +58,27 @@
 
 &usb_hs_phy {
 	qcom,init-seq = /bits/ 8 <0x1 0x19 0x2 0x0b>;
+};
+
+&pm8916_rpm_regulators {
+	pm8916_l17: l17 {
+		regulator-min-microvolt = <2850000>;
+		regulator-max-microvolt = <3100000>;
+	};
+};
+
+&tlmm {
+	proximity_ldo_en_default: proximity-ldo-en-default-state {
+		pins = "gpio73";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	proximity_int_default: proximity-int-default-state {
+		pins = "gpio113";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
 };
