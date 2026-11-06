@@ -36,6 +36,7 @@ obj-$(CONFIG_GENERIC_PHY)		+= allwinner/	\
 					   lantiq/	\
 					   marvell/	\
 					   mediatek/	\
+					   metanoia/	\
 					   microchip/	\
 					   motorola/	\
 					   mscc/	\

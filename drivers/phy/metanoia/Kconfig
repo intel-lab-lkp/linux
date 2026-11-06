@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Phy drivers for Metanoia platforms
+#
+
+config PHY_METANOIA_USB2
+	tristate "Metanoia USB2 PHY reset support"
+	depends on OF && (ARCH_METANOIA || COMPILE_TEST)
+	depends on RESET_CONTROLLER
+	select GENERIC_PHY
+	help
+	  Enable this to support the USB2 PHY reset block that is part
+	  of Metanoia SoCs.
+
+	  This driver only toggles the reset line of the PHY needed by
+	  the DWC2 USB controller.
