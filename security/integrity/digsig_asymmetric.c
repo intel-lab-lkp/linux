@@ -23,22 +23,11 @@ static struct key *request_asymmetric_key(struct key *keyring, uint32_t keyid)
 {
 	struct key *key;
 	char name[12];
+	int ret;
 
 	sprintf(name, "id:%08x", keyid);
 
 	pr_debug("key search: \"%s\"\n", name);
-
-	key = get_ima_blacklist_keyring();
-	if (key) {
-		key_ref_t kref;
-
-		kref = keyring_search(make_key_ref(key, 1),
-				      &key_type_asymmetric, name, true);
-		if (!IS_ERR(kref)) {
-			pr_err("Key '%s' is in ima_blacklist_keyring\n", name);
-			return ERR_PTR(-EKEYREJECTED);
-		}
-	}
 
 	if (keyring) {
 		/* search in specific keyring */
@@ -72,6 +61,18 @@ static struct key *request_asymmetric_key(struct key *keyring, uint32_t keyid)
 		default:
 			return key;
 		}
+	}
+
+	/*
+	 * Check the key actually selected by the lookup against the system
+	 * blacklist, so that a revoked key stops verifying even if it cannot be
+	 * removed from the keyring.  Fail closed on any error.
+	 */
+	ret = is_key_blacklisted(key);
+	if (ret) {
+		pr_err("Key '%s' is blacklisted\n", name);
+		key_put(key);
+		return ERR_PTR(ret);
 	}
 
 	pr_debug("%s() = 0 [%x]\n", __func__, key_serial(key));
