@@ -25,6 +25,7 @@ struct nf_queue_entry {
 	struct nf_hook_state	state;
 	bool			nf_ct_is_unconfirmed;
 	u16			size; /* sizeof(entry) + saved route keys */
+	u32			id_epoch; /* upper 32 bits of NFQUEUE issuance order */
 
 	/* extra space to store route keys */
 };

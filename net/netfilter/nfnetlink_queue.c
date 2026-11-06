@@ -89,7 +89,7 @@ struct nfqnl_instance {
  */
 	spinlock_t	lock	____cacheline_aligned_in_smp;
 	unsigned int	queue_total;
-	unsigned int	id_sequence;		/* 'sequence' of pkt ids */
+	u64		id_sequence;		/* full sequence of assigned ids */
 	struct list_head queue_list;		/* packets in queue */
 };
 
@@ -994,6 +994,7 @@ __nfqnl_enqueue_packet(struct net *net, struct nfqnl_instance *queue,
 	int err = -ENOBUFS;
 	__be32 *packet_id_ptr;
 	int failopen = 0;
+	u64 sequence;
 
 	nskb = nfqnl_build_packet_message(net, queue, entry, &packet_id_ptr);
 	if (nskb == NULL) {
@@ -1005,7 +1006,9 @@ __nfqnl_enqueue_packet(struct net *net, struct nfqnl_instance *queue,
 	if (queue->queue_total >= queue->queue_maxlen)
 		goto err_out_queue_drop;
 
-	entry->id = ++queue->id_sequence;
+	sequence = ++queue->id_sequence;
+	entry->id = (u32)sequence;
+	entry->id_epoch = (u32)(sequence >> 32);
 	*packet_id_ptr = htonl(entry->id);
 
 	/* Insert into hash BEFORE unicast. If failure don't send to userspace. */
@@ -1714,9 +1717,45 @@ verdicthdr_get(const struct nlattr * const nfqa[])
 	return vhdr;
 }
 
-static int nfq_id_after(unsigned int id, unsigned int max)
+/* Called under queue->lock, for a boundary absent from the packet map. */
+static int nfqnl_batch_range(struct nfqnl_instance *queue, u32 maxid,
+			     u32 *firstid, u32 *max_offset)
 {
-	return (int)(id - max) > 0;
+	struct nf_queue_entry *first;
+	u64 first_sequence, span;
+
+	if (list_empty(&queue->queue_list))
+		return -ENOENT;
+
+	first = list_first_entry(&queue->queue_list, struct nf_queue_entry,
+				 list);
+	first_sequence = ((u64)first->id_epoch << 32) | first->id;
+	span = queue->id_sequence - first_sequence;
+	if (span > U32_MAX)
+		return -ERANGE;
+
+	/*
+	 * Interpret an absent ID in the current live issuance interval. Its
+	 * unsigned offset is unique while that interval is shorter than a
+	 * complete ID cycle. Failed notifications also advance the interval.
+	 * This cannot distinguish stale requests aliasing a later ID cycle.
+	 */
+	*firstid = first->id;
+	*max_offset = maxid - *firstid;
+	if (*max_offset <= span)
+		return 0;
+
+	/*
+	 * Outside that interval, preserve ordinary before/after requests only
+	 * when the boundary and both endpoints fit a strict half-range window.
+	 * Otherwise leave every packet queued rather than guess the prefix.
+	 */
+	if (*max_offset < BIT(31))
+		return 0;
+	if ((u32)(queue->id_sequence - maxid) < BIT(31))
+		return -ENOENT;
+
+	return -ERANGE;
 }
 
 static int nfqnl_recv_verdict_batch(struct sk_buff *skb,
@@ -1725,11 +1764,13 @@ static int nfqnl_recv_verdict_batch(struct sk_buff *skb,
 {
 	struct nfnl_queue_net *q = nfnl_queue_pernet(info->net);
 	u16 queue_num = ntohs(info->nfmsg->res_id);
-	struct nf_queue_entry *entry, *tmp;
+	struct nf_queue_entry *entry, *tmp, *last;
 	struct nfqnl_msg_verdict_hdr *vhdr;
 	struct nfqnl_instance *queue;
 	unsigned int verdict, maxid;
+	u32 firstid = 0, max_offset = 0;
 	LIST_HEAD(batch_list);
+	int err = 0;
 
 	queue = verdict_instance_lookup(q, queue_num,
 					NETLINK_CB(skb).portid);
@@ -1745,14 +1786,27 @@ static int nfqnl_recv_verdict_batch(struct sk_buff *skb,
 
 	spin_lock_bh(&queue->lock);
 
+	/* A unique queued boundary identifies the prefix across large gaps. */
+	last = rhashtable_lookup_fast(&queue->nfqnl_packet_map, &maxid,
+				      nfqnl_rhashtable_params);
+	if (!last) {
+		err = nfqnl_batch_range(queue, maxid, &firstid, &max_offset);
+		if (err)
+			goto unlock;
+	}
 	list_for_each_entry_safe(entry, tmp, &queue->queue_list, list) {
-		if (nfq_id_after(entry->id, maxid))
+		if (!last && (u32)(entry->id - firstid) > max_offset)
 			break;
 		__dequeue_entry(queue, entry);
 		list_add_tail(&entry->list, &batch_list);
+		if (entry == last)
+			break;
 	}
 
+unlock:
 	spin_unlock_bh(&queue->lock);
+	if (err)
+		return err;
 
 	if (list_empty(&batch_list))
 		return -ENOENT;
@@ -2150,7 +2204,7 @@ static int seq_show(struct seq_file *s, void *v)
 		   inst->peer_portid, inst->queue_total,
 		   inst->copy_mode, inst->copy_range,
 		   inst->queue_dropped, inst->queue_user_dropped,
-		   inst->id_sequence, 1);
+		   (u32)inst->id_sequence, 1);
 	return 0;
 }
 
