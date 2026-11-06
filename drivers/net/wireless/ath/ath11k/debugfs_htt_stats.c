@@ -1235,13 +1235,12 @@ static inline void htt_print_tx_sounding_stats_tlv(const void *tag_buf,
 				 cbf_160[HTT_EXPLICIT_TXBF_MU_RBO_STEER_STATS]);
 
 		for (i = 0; i < HTT_TX_PDEV_STATS_NUM_AC_MUMIMO_USER_STATS; i++) {
+			const u32 *snd = htt_stats_buf->sounding +
+					 i * HTT_TX_PDEV_STATS_NUM_BW_COUNTERS;
+
 			len += scnprintf(buf + len, buf_len - len,
 					 "Sounding User %u = 20MHz: %u, 40MHz : %u, 80MHz: %u, 160MHz: %u\n",
-					 i,
-					 htt_stats_buf->sounding[0],
-					 htt_stats_buf->sounding[1],
-					 htt_stats_buf->sounding[2],
-					 htt_stats_buf->sounding[3]);
+					 i, snd[0], snd[1], snd[2], snd[3]);
 		}
 	} else if (htt_stats_buf->tx_sounding_mode == HTT_TX_AX_SOUNDING_MODE) {
 		len += scnprintf(buf + len, buf_len - len,
@@ -1276,13 +1275,12 @@ static inline void htt_print_tx_sounding_stats_tlv(const void *tag_buf,
 				 cbf_160[HTT_EXPLICIT_TXBF_MU_RBO_STEER_STATS]);
 
 		for (i = 0; i < HTT_TX_PDEV_STATS_NUM_AX_MUMIMO_USER_STATS; i++) {
+			const u32 *snd = htt_stats_buf->sounding +
+					 i * HTT_TX_PDEV_STATS_NUM_BW_COUNTERS;
+
 			len += scnprintf(buf + len, buf_len - len,
 					 "Sounding User %u = 20MHz: %u, 40MHz : %u, 80MHz: %u, 160MHz: %u\n",
-					 i,
-					 htt_stats_buf->sounding[0],
-					 htt_stats_buf->sounding[1],
-					 htt_stats_buf->sounding[2],
-					 htt_stats_buf->sounding[3]);
+					 i, snd[0], snd[1], snd[2], snd[3]);
 		}
 	}
 
