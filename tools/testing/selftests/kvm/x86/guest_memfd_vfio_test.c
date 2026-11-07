@@ -22,6 +22,7 @@
 
 #include "kselftest_harness.h"
 #include "kvm_util.h"
+#include "processor.h"
 
 #define PCI_VENDOR_ID_INTEL 0x8086
 #define PCI_DEVICE_ID_INTEL_82576 0x10C9
@@ -590,6 +591,62 @@ TEST_F(guest_memfd_vfio, host_vma_flags)
 	verify_smaps_vm_flags(_metadata, bar0_mmap, "io");
 	verify_smaps_vm_flags(_metadata, bar0_mmap, "pf");
 	verify_smaps_vm_flags(_metadata, bar0_mmap, "de");
+
+	ASSERT_EQ(0, munmap(bar0_mmap, bar0_info.size));
+}
+
+static void guest_memslot_cacheability_code(uint64_t bar_gpa)
+{
+	uint32_t *reg = (uint32_t *)(bar_gpa + E1000_STATUS);
+	uint32_t val;
+
+	val = READ_ONCE(*reg);
+	GUEST_ASSERT(val != 0xFFFFFFFF);
+
+	GUEST_DONE();
+}
+
+TEST_F(guest_memfd_vfio, guest_mapping)
+{
+	struct vfio_region_info bar0_info = {};
+	uint64_t bar_gpa = 0xc0000000;
+	struct kvm_vcpu *vcpu;
+	void *bar0_mmap;
+	uint64_t *pte;
+	int ret;
+
+	vfio_pci_enable_memory_and_bus_master(_metadata, self->vfio_fd);
+
+	bar0_info.argsz = sizeof(bar0_info);
+	bar0_info.index = VFIO_PCI_BAR0_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_info);
+	ASSERT_EQ(0, ret);
+	ASSERT_TRUE(bar0_info.flags & VFIO_REGION_INFO_FLAG_MMAP);
+
+	/* mmap the VFIO BAR directly into host userspace for memslot config */
+	bar0_mmap = mmap(NULL, bar0_info.size, PROT_READ | PROT_WRITE,
+			 MAP_SHARED, self->bar_fd, bar0_info.offset);
+	ASSERT_NE(MAP_FAILED, bar0_mmap);
+
+	vcpu = vm_vcpu_add(self->vm, 0, guest_memslot_cacheability_code);
+	if (variant->use_gmem)
+		vm_set_user_memory_region2(self->vm, 1, KVM_MEM_GUEST_MEMFD,
+					   bar_gpa, bar0_info.size, bar0_mmap,
+					   self->gmem_fd, bar0_info.offset);
+	else
+		vm_set_user_memory_region(self->vm, 1, 0, bar_gpa,
+					  bar0_info.size, bar0_mmap);
+
+	virt_map(self->vm, bar_gpa, bar_gpa, bar0_info.size >> self->vm->page_shift);
+
+	/* Run guest to fault in the page via stage 2, then verify S2 PTE */
+	vcpu_args_set(vcpu, 1, bar_gpa);
+	vcpu_run(vcpu);
+	ASSERT_EQ(UCALL_DONE, get_ucall(vcpu, NULL));
+
+	pte = vm_get_pte(self->vm, bar_gpa);
+	ASSERT_NE(NULL, pte);
+	ASSERT_TRUE(is_present_pte(&self->vm->mmu, pte));
 
 	ASSERT_EQ(0, munmap(bar0_mmap, bar0_info.size));
 }
