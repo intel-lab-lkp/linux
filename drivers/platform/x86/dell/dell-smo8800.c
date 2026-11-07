@@ -13,9 +13,11 @@
 #include <linux/fs.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 #include <linux/uaccess.h>
 #include "dell-smo8800-ids.h"
 
@@ -26,7 +28,21 @@ struct smo8800_device {
 	unsigned long misc_opened;   /* whether the device is open */
 	wait_queue_head_t misc_wait; /* Wait queue for the misc dev */
 	struct device *dev;          /* acpi device */
+	struct kref kref;            /* device + open file */
+	bool removed;                /* the device has been removed */
 };
+
+static void smo8800_free(struct kref *kref)
+{
+	kfree(container_of(kref, struct smo8800_device, kref));
+}
+
+static void smo8800_put(void *data)
+{
+	struct smo8800_device *smo8800 = data;
+
+	kref_put(&smo8800->kref, smo8800_free);
+}
 
 static irqreturn_t smo8800_interrupt_quick(int irq, void *data)
 {
@@ -60,10 +76,14 @@ static ssize_t smo8800_misc_read(struct file *file, char __user *buf,
 
 	atomic_set(&smo8800->counter, 0);
 	retval = wait_event_interruptible(smo8800->misc_wait,
-				(data = atomic_xchg(&smo8800->counter, 0)));
+				(data = atomic_xchg(&smo8800->counter, 0)) ||
+				READ_ONCE(smo8800->removed));
 
 	if (retval)
 		return retval;
+
+	if (!data)
+		return -ENODEV;
 
 	retval = 1;
 
@@ -84,6 +104,7 @@ static int smo8800_misc_open(struct inode *inode, struct file *file)
 		return -EBUSY; /* already open */
 
 	atomic_set(&smo8800->counter, 0);
+	kref_get(&smo8800->kref);
 	return 0;
 }
 
@@ -93,6 +114,7 @@ static int smo8800_misc_release(struct inode *inode, struct file *file)
 					 struct smo8800_device, miscdev);
 
 	clear_bit(0, &smo8800->misc_opened); /* release the device */
+	smo8800_put(smo8800);
 	return 0;
 }
 
@@ -108,11 +130,16 @@ static int smo8800_probe(struct platform_device *device)
 	int err;
 	struct smo8800_device *smo8800;
 
-	smo8800 = devm_kzalloc(&device->dev, sizeof(*smo8800), GFP_KERNEL);
+	/* An open file can outlive the device, so it holds a reference. */
+	smo8800 = kzalloc(sizeof(*smo8800), GFP_KERNEL);
 	if (!smo8800) {
 		dev_err(&device->dev, "failed to allocate device data\n");
 		return -ENOMEM;
 	}
+	kref_init(&smo8800->kref);
+	err = devm_add_action_or_reset(&device->dev, smo8800_put, smo8800);
+	if (err)
+		return err;
 
 	smo8800->dev = &device->dev;
 	smo8800->miscdev.minor = MISC_DYNAMIC_MINOR;
@@ -151,6 +178,8 @@ static int smo8800_probe(struct platform_device *device)
 
 error:
 	misc_deregister(&smo8800->miscdev);
+	WRITE_ONCE(smo8800->removed, true);
+	wake_up_interruptible(&smo8800->misc_wait);
 	return err;
 }
 
@@ -160,6 +189,8 @@ static void smo8800_remove(struct platform_device *device)
 
 	free_irq(smo8800->irq, smo8800);
 	misc_deregister(&smo8800->miscdev);
+	WRITE_ONCE(smo8800->removed, true);
+	wake_up_interruptible(&smo8800->misc_wait);
 	dev_dbg(&device->dev, "device /dev/freefall unregistered\n");
 }
 
