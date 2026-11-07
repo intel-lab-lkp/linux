@@ -665,6 +665,9 @@ static int sx9310_write_gain(struct sx_common_data *data,
 {
 	unsigned int gain, mask;
 
+	if (val <= 0 || val > 8 || !is_power_of_2(val))
+		return -EINVAL;
+
 	gain = ilog2(val);
 
 	switch (chan->channel) {
