@@ -76,4 +76,16 @@ config SND_SEQ_UMP
 config SND_SEQ_UMP_CLIENT
 	def_tristate SND_UMP && SND_SEQ_UMP
 
+config SND_SEQ_UMP_KUNIT_TEST
+	bool "KUnit tests for ALSA sequencer UMP conversion" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	depends on SND_SEQUENCER=y && SND_SEQ_UMP
+	depends on SND_UMP=y && SND_UMP_LEGACY_RAWMIDI
+	default KUNIT_ALL_TESTS
+	help
+	  Tests RPN/NRPN selector transitions through the Controller and
+	  Control14 sequencer event paths. It covers pending-data flushes,
+	  null-RPN reset, per-channel state isolation, and legacy MIDI 1.0
+	  protocol conversion. The suite requires no MIDI hardware.
+
 endif # SND_SEQUENCER

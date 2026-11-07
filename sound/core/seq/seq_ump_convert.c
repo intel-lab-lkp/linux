@@ -6,6 +6,10 @@
 #include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#if IS_ENABLED(CONFIG_SND_SEQ_UMP_KUNIT_TEST)
+#include <kunit/test.h>
+#endif
+#include <sound/asound.h>
 #include <sound/core.h>
 #include <sound/ump.h>
 #include <sound/ump_msg.h>
@@ -847,6 +851,7 @@ static int cc_ev_to_ump_midi2(const struct snd_seq_event *event,
 	switch (index) {
 	case UMP_CC_RPN_MSB:
 		ret = fill_rpn(cc, data, channel, true);
+		cc->nrpn_set = 0;
 		cc->rpn_set = 1;
 		cc->cc_rpn_msb = val;
 		if (cc->cc_rpn_msb == 0x7f && cc->cc_rpn_lsb == 0x7f)
@@ -854,6 +859,7 @@ static int cc_ev_to_ump_midi2(const struct snd_seq_event *event,
 		break;
 	case UMP_CC_RPN_LSB:
 		ret = fill_rpn(cc, data, channel, true);
+		cc->nrpn_set = 0;
 		cc->rpn_set = 1;
 		cc->cc_rpn_lsb = val;
 		if (cc->cc_rpn_msb == 0x7f && cc->cc_rpn_lsb == 0x7f)
@@ -861,11 +867,13 @@ static int cc_ev_to_ump_midi2(const struct snd_seq_event *event,
 		break;
 	case UMP_CC_NRPN_MSB:
 		ret = fill_rpn(cc, data, channel, true);
+		cc->rpn_set = 0;
 		cc->nrpn_set = 1;
 		cc->cc_nrpn_msb = val;
 		break;
 	case UMP_CC_NRPN_LSB:
 		ret = fill_rpn(cc, data, channel, true);
+		cc->rpn_set = 0;
 		cc->nrpn_set = 1;
 		cc->cc_nrpn_lsb = val;
 		break;
@@ -975,6 +983,7 @@ static int ctrl14_ev_to_ump_midi2(const struct snd_seq_event *event,
 	case UMP_CC_RPN_MSB:
 	case UMP_CC_RPN_LSB:
 		ret = fill_rpn(cc, data, channel, true);
+		cc->nrpn_set = 0;
 		cc->cc_rpn_msb = msb;
 		cc->cc_rpn_lsb = lsb;
 		cc->rpn_set = 1;
@@ -984,6 +993,7 @@ static int ctrl14_ev_to_ump_midi2(const struct snd_seq_event *event,
 	case UMP_CC_NRPN_MSB:
 	case UMP_CC_NRPN_LSB:
 		ret = fill_rpn(cc, data, channel, true);
+		cc->rpn_set = 0;
 		cc->cc_nrpn_msb = msb;
 		cc->nrpn_set = 1;
 		cc->cc_nrpn_lsb = lsb;
@@ -1310,3 +1320,268 @@ int snd_seq_ump_group_port(const struct snd_seq_event *event)
 	/* group-port number starts from 1 */
 	return ump_message_group(ump_ev->ump[0]) + 1;
 }
+
+#if IS_ENABLED(CONFIG_SND_SEQ_UMP_KUNIT_TEST)
+static void seq_ump_kunit_set_cc(struct snd_seq_event *event,
+				 unsigned char channel, unsigned char index,
+				 int value)
+{
+	memset(event, 0, sizeof(*event));
+	event->type = SNDRV_SEQ_EVENT_CONTROLLER;
+	event->data.control.channel = channel;
+	event->data.control.param = index;
+	event->data.control.value = value;
+}
+
+static void seq_ump_kunit_set_ctrl14(struct snd_seq_event *event,
+				     unsigned char channel,
+				     unsigned char index, int value)
+{
+	memset(event, 0, sizeof(*event));
+	event->type = SNDRV_SEQ_EVENT_CONTROL14;
+	event->data.control.channel = channel;
+	event->data.control.param = index;
+	event->data.control.value = value;
+}
+
+static void seq_ump_cc_selector_switch_test(struct kunit *test)
+{
+	struct snd_seq_client_port *port;
+	struct snd_seq_event event;
+	union snd_ump_midi2_msg data = {};
+
+	port = kunit_kzalloc(test, sizeof(*port), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, port);
+
+	seq_ump_kunit_set_cc(&event, 0, UMP_CC_RPN_MSB, 0x11);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+	seq_ump_kunit_set_cc(&event, 0, UMP_CC_RPN_LSB, 0x12);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+	seq_ump_kunit_set_cc(&event, 0, UMP_CC_NRPN_MSB, 0x21);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+	KUNIT_EXPECT_FALSE(test, port->midi2_bank[0].rpn_set);
+	KUNIT_EXPECT_TRUE(test, port->midi2_bank[0].nrpn_set);
+	seq_ump_kunit_set_cc(&event, 0, UMP_CC_NRPN_LSB, 0x22);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+	seq_ump_kunit_set_cc(&event, 0, UMP_CC_DATA, 0x31);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+	seq_ump_kunit_set_cc(&event, 0, UMP_CC_DATA_LSB, 0x32);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 1);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.status, UMP_MSG_STATUS_NRPN);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.bank, (unsigned char)0x21);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.index, (unsigned char)0x22);
+
+	memset(&data, 0, sizeof(data));
+	seq_ump_kunit_set_cc(&event, 1, UMP_CC_NRPN_MSB, 0x41);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+	seq_ump_kunit_set_cc(&event, 1, UMP_CC_NRPN_LSB, 0x42);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+	seq_ump_kunit_set_cc(&event, 1, UMP_CC_RPN_MSB, 0x51);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+	KUNIT_EXPECT_FALSE(test, port->midi2_bank[1].nrpn_set);
+	KUNIT_EXPECT_TRUE(test, port->midi2_bank[1].rpn_set);
+	seq_ump_kunit_set_cc(&event, 1, UMP_CC_RPN_LSB, 0x52);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+	seq_ump_kunit_set_cc(&event, 1, UMP_CC_DATA, 0x61);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+	seq_ump_kunit_set_cc(&event, 1, UMP_CC_DATA_LSB, 0x62);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 1);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.status, UMP_MSG_STATUS_RPN);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.bank, (unsigned char)0x51);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.index, (unsigned char)0x52);
+}
+
+static void seq_ump_cc_pending_flush_and_channel_test(struct kunit *test)
+{
+	struct snd_seq_client_port *port;
+	struct snd_seq_event event;
+	union snd_ump_midi2_msg data = {};
+
+	port = kunit_kzalloc(test, sizeof(*port), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, port);
+
+	seq_ump_kunit_set_cc(&event, 2, UMP_CC_RPN_MSB, 0x09);
+	cc_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	seq_ump_kunit_set_cc(&event, 2, UMP_CC_RPN_LSB, 0x08);
+	cc_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	seq_ump_kunit_set_cc(&event, 3, UMP_CC_NRPN_MSB, 0x17);
+	cc_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	seq_ump_kunit_set_cc(&event, 3, UMP_CC_NRPN_LSB, 0x18);
+	cc_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	seq_ump_kunit_set_cc(&event, 2, UMP_CC_DATA, 0x25);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+
+	seq_ump_kunit_set_cc(&event, 2, UMP_CC_NRPN_MSB, 0x29);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 1);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.status, UMP_MSG_STATUS_RPN);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.bank, (unsigned char)0x09);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.index, (unsigned char)0x08);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.data, upscale_14_to_32bit(0x25 << 7));
+	KUNIT_EXPECT_FALSE(test, port->midi2_bank[2].rpn_set);
+	KUNIT_EXPECT_TRUE(test, port->midi2_bank[2].nrpn_set);
+	KUNIT_EXPECT_TRUE(test, port->midi2_bank[3].nrpn_set);
+	KUNIT_EXPECT_EQ(test, port->midi2_bank[3].cc_nrpn_msb,
+			(unsigned char)0x17);
+}
+
+static void seq_ump_ctrl14_selector_switch_test(struct kunit *test)
+{
+	struct snd_seq_client_port *port;
+	struct snd_seq_event event;
+	union snd_ump_midi2_msg data = {};
+
+	port = kunit_kzalloc(test, sizeof(*port), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, port);
+
+	seq_ump_kunit_set_ctrl14(&event, 4, UMP_CC_RPN_MSB, (1 << 7) | 2);
+	KUNIT_EXPECT_EQ(test, ctrl14_ev_to_ump_midi2(&event, port, &data,
+						     UMP_MSG_STATUS_CC), 0);
+	seq_ump_kunit_set_ctrl14(&event, 4, UMP_CC_NRPN_MSB, (3 << 7) | 4);
+	KUNIT_EXPECT_EQ(test, ctrl14_ev_to_ump_midi2(&event, port, &data,
+						     UMP_MSG_STATUS_CC), 0);
+	KUNIT_EXPECT_FALSE(test, port->midi2_bank[4].rpn_set);
+	KUNIT_EXPECT_TRUE(test, port->midi2_bank[4].nrpn_set);
+	seq_ump_kunit_set_ctrl14(&event, 4, UMP_CC_DATA, (5 << 7) | 6);
+	KUNIT_EXPECT_EQ(test, ctrl14_ev_to_ump_midi2(&event, port, &data,
+						     UMP_MSG_STATUS_CC), 1);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.status, UMP_MSG_STATUS_NRPN);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.bank, (unsigned char)3);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.index, (unsigned char)4);
+
+	memset(&data, 0, sizeof(data));
+	seq_ump_kunit_set_ctrl14(&event, 5, UMP_CC_NRPN_MSB, (7 << 7) | 8);
+	ctrl14_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	seq_ump_kunit_set_ctrl14(&event, 5, UMP_CC_RPN_MSB, (9 << 7) | 10);
+	KUNIT_EXPECT_EQ(test, ctrl14_ev_to_ump_midi2(&event, port, &data,
+						     UMP_MSG_STATUS_CC), 0);
+	KUNIT_EXPECT_FALSE(test, port->midi2_bank[5].nrpn_set);
+	KUNIT_EXPECT_TRUE(test, port->midi2_bank[5].rpn_set);
+	seq_ump_kunit_set_ctrl14(&event, 5, UMP_CC_DATA, (11 << 7) | 12);
+	KUNIT_EXPECT_EQ(test, ctrl14_ev_to_ump_midi2(&event, port, &data,
+						     UMP_MSG_STATUS_CC), 1);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.status, UMP_MSG_STATUS_RPN);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.bank, (unsigned char)9);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.index, (unsigned char)10);
+}
+
+static void seq_ump_ctrl14_pending_flush_test(struct kunit *test)
+{
+	struct snd_seq_client_port *port;
+	struct snd_seq_event event;
+	union snd_ump_midi2_msg data = {};
+
+	port = kunit_kzalloc(test, sizeof(*port), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, port);
+
+	seq_ump_kunit_set_ctrl14(&event, 6, UMP_CC_NRPN_MSB, (2 << 7) | 3);
+	ctrl14_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	seq_ump_kunit_set_cc(&event, 6, UMP_CC_DATA, 0x35);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi2(&event, port, &data,
+						 UMP_MSG_STATUS_CC), 0);
+
+	seq_ump_kunit_set_ctrl14(&event, 6, UMP_CC_RPN_MSB, (4 << 7) | 5);
+	KUNIT_EXPECT_EQ(test, ctrl14_ev_to_ump_midi2(&event, port, &data,
+						     UMP_MSG_STATUS_CC), 1);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.status, UMP_MSG_STATUS_NRPN);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.bank, (unsigned char)2);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.index, (unsigned char)3);
+	KUNIT_EXPECT_EQ(test, (unsigned int)data.rpn.data, upscale_14_to_32bit(0x35 << 7));
+	KUNIT_EXPECT_FALSE(test, port->midi2_bank[6].nrpn_set);
+	KUNIT_EXPECT_TRUE(test, port->midi2_bank[6].rpn_set);
+}
+
+static void seq_ump_null_rpn_test(struct kunit *test)
+{
+	struct snd_seq_client_port *port;
+	struct snd_seq_event event;
+	union snd_ump_midi2_msg data = {};
+
+	port = kunit_kzalloc(test, sizeof(*port), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, port);
+
+	seq_ump_kunit_set_cc(&event, 7, UMP_CC_NRPN_MSB, 1);
+	cc_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	seq_ump_kunit_set_cc(&event, 7, UMP_CC_NRPN_LSB, 2);
+	cc_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	seq_ump_kunit_set_cc(&event, 7, UMP_CC_RPN_MSB, 0x7f);
+	cc_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	seq_ump_kunit_set_cc(&event, 7, UMP_CC_RPN_LSB, 0x7f);
+	cc_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	KUNIT_EXPECT_FALSE(test, port->midi2_bank[7].rpn_set);
+	KUNIT_EXPECT_FALSE(test, port->midi2_bank[7].nrpn_set);
+
+	seq_ump_kunit_set_ctrl14(&event, 8, UMP_CC_NRPN_MSB, (3 << 7) | 4);
+	ctrl14_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	seq_ump_kunit_set_ctrl14(&event, 8, UMP_CC_RPN_MSB, 0x3fff);
+	ctrl14_ev_to_ump_midi2(&event, port, &data, UMP_MSG_STATUS_CC);
+	KUNIT_EXPECT_FALSE(test, port->midi2_bank[8].rpn_set);
+	KUNIT_EXPECT_FALSE(test, port->midi2_bank[8].nrpn_set);
+}
+
+static void seq_ump_midi1_passthrough_test(struct kunit *test)
+{
+	struct snd_seq_client_port *port;
+	struct snd_seq_event event;
+	union snd_ump_midi1_msg seq_data = {};
+	struct ump_cvt_to_ump cvt;
+	static const unsigned char cc_messages[][3] = {
+		{ 0xb3, UMP_CC_RPN_MSB, 0x12 },
+		{ 0xb3, UMP_CC_NRPN_MSB, 0x34 },
+	};
+	int i, j;
+
+	port = kunit_kzalloc(test, sizeof(*port), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, port);
+	seq_ump_kunit_set_cc(&event, 9, 0x40, 0x22);
+	KUNIT_EXPECT_EQ(test, cc_ev_to_ump_midi1(&event, port, &seq_data,
+						 UMP_MSG_STATUS_CC), 1);
+	KUNIT_EXPECT_EQ(test, (unsigned int)seq_data.cc.status, UMP_MSG_STATUS_CC);
+	KUNIT_EXPECT_EQ(test, (unsigned int)seq_data.cc.channel, (unsigned char)9);
+	KUNIT_EXPECT_EQ(test, (unsigned int)seq_data.cc.index, (unsigned char)0x40);
+	KUNIT_EXPECT_EQ(test, (unsigned int)seq_data.cc.data, (unsigned char)0x22);
+
+	snd_ump_convert_reset(&cvt);
+	for (i = 0; i < ARRAY_SIZE(cc_messages); i++) {
+		for (j = 0; j < ARRAY_SIZE(cc_messages[i]); j++)
+			snd_ump_convert_to_ump(&cvt, 0,
+					       SNDRV_UMP_EP_INFO_PROTO_MIDI1,
+					       cc_messages[i][j]);
+		KUNIT_EXPECT_EQ(test, cvt.ump_bytes, 4);
+		KUNIT_EXPECT_EQ(test, ump_message_type(cvt.ump[0]),
+				UMP_MSG_TYPE_MIDI1_CHANNEL_VOICE);
+		KUNIT_EXPECT_FALSE(test, cvt.bank[3].rpn_set);
+		KUNIT_EXPECT_FALSE(test, cvt.bank[3].nrpn_set);
+	}
+}
+
+static struct kunit_case seq_ump_convert_test_cases[] = {
+	KUNIT_CASE(seq_ump_cc_selector_switch_test),
+	KUNIT_CASE(seq_ump_cc_pending_flush_and_channel_test),
+	KUNIT_CASE(seq_ump_ctrl14_selector_switch_test),
+	KUNIT_CASE(seq_ump_ctrl14_pending_flush_test),
+	KUNIT_CASE(seq_ump_null_rpn_test),
+	KUNIT_CASE(seq_ump_midi1_passthrough_test),
+	{}
+};
+
+static struct kunit_suite seq_ump_convert_test_suite = {
+	.name = "seq-ump-convert",
+	.test_cases = seq_ump_convert_test_cases,
+};
+
+kunit_test_suite(seq_ump_convert_test_suite);
+#endif
