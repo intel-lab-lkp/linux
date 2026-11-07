@@ -199,6 +199,9 @@ void mii_ethtool_get_link_ksettings(struct mii_if_info *mii,
 			cmd->base.speed = SPEED_10;
 			cmd->base.duplex = !!(nego & ADVERTISED_10baseT_Full);
 		}
+
+		if (!(bmsr & BMSR_LSTATUS))
+			cmd->base.speed = SPEED_UNKNOWN;
 	} else {
 		cmd->base.autoneg = AUTONEG_DISABLE;
 
@@ -212,9 +215,6 @@ void mii_ethtool_get_link_ksettings(struct mii_if_info *mii,
 
 		lp_advertising = 0;
 	}
-
-	if (!(bmsr & BMSR_LSTATUS))
-		cmd->base.speed = SPEED_UNKNOWN;
 
 	mii->full_duplex = cmd->base.duplex;
 
@@ -333,9 +333,11 @@ int mii_ethtool_set_link_ksettings(struct mii_if_info *mii,
 	struct net_device *dev = mii->dev;
 	u32 speed = cmd->base.speed;
 
+	/* Autoneg ignores speed, which is SPEED_UNKNOWN while the link is down */
 	if (speed != SPEED_10 &&
 	    speed != SPEED_100 &&
-	    speed != SPEED_1000)
+	    speed != SPEED_1000 &&
+	    !(cmd->base.autoneg == AUTONEG_ENABLE && speed == SPEED_UNKNOWN))
 		return -EINVAL;
 	if (cmd->base.duplex != DUPLEX_HALF && cmd->base.duplex != DUPLEX_FULL)
 		return -EINVAL;
