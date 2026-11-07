@@ -136,6 +136,70 @@ static void test_set_present(int dev_fd)
 	close(fd);
 }
 
+static void test_set_readonly(int dev_fd)
+{
+	size_t page_size = getpagesize();
+	uint64_t nr_pages = 4;
+	uint64_t file_size = nr_pages * page_size;
+	struct mp_set_readonly sr;
+	struct mp_stats st;
+	int ret, fd;
+
+	fd = create_provider_file(dev_fd, file_size);
+
+	/* Initially all pages are writable */
+	TEST_ASSERT(!ioctl(fd, MP_GET_STATS, &st),
+		    "MP_GET_STATS failed: %d (%s)", errno, strerror(errno));
+	TEST_ASSERT(st.readonly_pages == 0,
+		    "Initial readonly_pages mismatch: expected 0, got %llu",
+		    st.readonly_pages);
+
+	/* Mark page 1 read-only */
+	memset(&sr, 0, sizeof(sr));
+	sr.value = 1;
+	sr.offset = page_size;
+	sr.len = page_size;
+	ret = ioctl(fd, MP_SET_READONLY, &sr);
+	TEST_ASSERT(!ret, "MP_SET_READONLY (read-only) failed: %d (%s)",
+		    errno, strerror(errno));
+
+	TEST_ASSERT(!ioctl(fd, MP_GET_STATS, &st),
+		    "MP_GET_STATS failed: %d (%s)", errno, strerror(errno));
+	TEST_ASSERT(st.size == file_size,
+		    "size changed unexpectedly: 0x%llx", st.size);
+	TEST_ASSERT(st.readonly_pages == 1,
+		    "readonly_pages mismatch after read-only: expected 1, got %llu",
+		    st.readonly_pages);
+
+	/* Mark page 1 back to writable */
+	sr.value = 0;
+	ret = ioctl(fd, MP_SET_READONLY, &sr);
+	TEST_ASSERT(!ret, "MP_SET_READONLY (writable) failed: %d (%s)",
+		    errno, strerror(errno));
+
+	TEST_ASSERT(!ioctl(fd, MP_GET_STATS, &st),
+		    "MP_GET_STATS failed: %d (%s)", errno, strerror(errno));
+	TEST_ASSERT(st.readonly_pages == 0,
+		    "readonly_pages mismatch after writable: expected 0, got %llu",
+		    st.readonly_pages);
+
+	/* Mark all pages read-only */
+	sr.value = 1;
+	sr.offset = 0;
+	sr.len = file_size;
+	ret = ioctl(fd, MP_SET_READONLY, &sr);
+	TEST_ASSERT(!ret, "MP_SET_READONLY (all read-only) failed: %d (%s)",
+		    errno, strerror(errno));
+
+	TEST_ASSERT(!ioctl(fd, MP_GET_STATS, &st),
+		    "MP_GET_STATS failed: %d (%s)", errno, strerror(errno));
+	TEST_ASSERT(st.readonly_pages == nr_pages,
+		    "readonly_pages mismatch after all read-only: expected %lu, got %llu",
+		    nr_pages, st.readonly_pages);
+
+	close(fd);
+}
+
 int main(int argc, char *argv[])
 {
 	int dev_fd;
@@ -144,6 +208,7 @@ int main(int argc, char *argv[])
 
 	test_lifecycle_and_creation(dev_fd);
 	test_set_present(dev_fd);
+	test_set_readonly(dev_fd);
 
 	close(dev_fd);
 	return 0;
