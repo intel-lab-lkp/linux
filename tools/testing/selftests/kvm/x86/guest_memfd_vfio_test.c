@@ -443,4 +443,90 @@ TEST_F(guest_memfd_vfio, device_reset)
 	ASSERT_EQ(0, munmap(bar0, bar0_info.size));
 }
 
+TEST_F(guest_memfd_vfio, low_power_bar_revocation)
+{
+	struct vfio_device_feature feat = {};
+	struct vfio_region_info bar0_info = {};
+	ssize_t ret_bytes;
+	uint32_t val;
+	void *bar0;
+	int ret;
+
+	vfio_pci_enable_memory_and_bus_master(_metadata, self->vfio_fd);
+
+	bar0_info.argsz = sizeof(bar0_info);
+	bar0_info.index = VFIO_PCI_BAR0_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_info);
+	ASSERT_EQ(0, ret);
+	ASSERT_TRUE(bar0_info.flags & VFIO_REGION_INFO_FLAG_MMAP);
+
+	bar0 = mmap(NULL, bar0_info.size, PROT_READ | PROT_WRITE, MAP_SHARED,
+		    self->bar_fd, bar0_info.offset);
+	ASSERT_NE(MAP_FAILED, bar0);
+
+	/* Probe support for VFIO_DEVICE_FEATURE_LOW_POWER_ENTRY */
+	feat.argsz = sizeof(feat);
+	feat.flags = VFIO_DEVICE_FEATURE_PROBE |
+		     VFIO_DEVICE_FEATURE_SET |
+		     VFIO_DEVICE_FEATURE_LOW_POWER_ENTRY;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_FEATURE, &feat);
+	if (ret != 0) {
+		ASSERT_EQ(0, munmap(bar0, bar0_info.size));
+		SKIP(return, "LOW_POWER_ENTRY feature not supported on device");
+	}
+
+	/* Populate mapping and write test pattern to scratch register */
+	WRITE_ONCE(*(uint32_t *)((char *)bar0 + E1000_RAL0), 0xdeadbeef);
+	val = READ_ONCE(*(uint32_t *)((char *)bar0 + E1000_RAL0));
+	ASSERT_EQ(0xdeadbeef, val);
+
+	/* Enter low-power D3hot state */
+	feat.argsz = sizeof(feat);
+	feat.flags = VFIO_DEVICE_FEATURE_SET |
+		     VFIO_DEVICE_FEATURE_LOW_POWER_ENTRY;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_FEATURE, &feat);
+	ASSERT_EQ(0, ret);
+
+	/*
+	 * In low-power state, BARs are marked unavailable and mappings are
+	 * revoked.
+	 *
+	 * - Host mmap accesses trigger SIGBUS because page tables were zapped
+	 *   and get_pfn fails with -EFAULT while in low power state.
+	 * - Host pread() and pwrite() on the BAR descriptor fail with -EIO.
+	 */
+	TEST_EXPECT_SIGBUS((void)READ_ONCE(*(uint32_t *)((char *)bar0 + E1000_RAL0)));
+	TEST_EXPECT_SIGBUS(WRITE_ONCE(*(uint32_t *)((char *)bar0 + E1000_RAL0), 0x12345678));
+
+	val = 0;
+	ret_bytes = pread(self->bar_fd, &val, sizeof(val), bar0_info.offset + E1000_STATUS);
+	ASSERT_EQ(-1, ret_bytes);
+	ASSERT_EQ(EIO, errno);
+
+	val = 0x12345678;
+	ret_bytes = pwrite(self->bar_fd, &val, sizeof(val), bar0_info.offset + E1000_RAL0);
+	ASSERT_EQ(-1, ret_bytes);
+	ASSERT_EQ(EIO, errno);
+
+	/* Exit low-power state back to D0 */
+	feat.argsz = sizeof(feat);
+	feat.flags = VFIO_DEVICE_FEATURE_SET |
+		     VFIO_DEVICE_FEATURE_LOW_POWER_EXIT;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_FEATURE, &feat);
+	ASSERT_EQ(0, ret);
+
+	/*
+	 * Access must succeed again after returning to active D0.
+	 */
+	val = READ_ONCE(*(uint32_t *)((char *)bar0 + E1000_RAL0));
+	ASSERT_EQ(0xdeadbeef, val);
+
+	val = 0;
+	ret_bytes = pread(self->bar_fd, &val, sizeof(val), bar0_info.offset + E1000_STATUS);
+	ASSERT_EQ(sizeof(val), ret_bytes);
+	ASSERT_NE(0xFFFFFFFF, val);
+
+	ASSERT_EQ(0, munmap(bar0, bar0_info.size));
+}
+
 TEST_HARNESS_MAIN
