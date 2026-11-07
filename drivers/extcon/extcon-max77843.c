@@ -960,11 +960,7 @@ static struct platform_driver max77843_muic_driver = {
 	.id_table	= max77843_muic_id,
 };
 
-static int __init max77843_muic_init(void)
-{
-	return platform_driver_register(&max77843_muic_driver);
-}
-subsys_initcall(max77843_muic_init);
+subsys_platform_driver(max77843_muic_driver);
 
 MODULE_DESCRIPTION("Maxim MAX77843 Extcon driver");
 MODULE_AUTHOR("Jaewon Kim <jaewon02.kim@samsung.com>");
