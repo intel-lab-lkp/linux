@@ -565,11 +565,40 @@ static bool kvm_gmem_supports_mmap(struct inode *inode)
 	return GMEM_I(inode)->flags & GUEST_MEMFD_FLAG_MMAP;
 }
 
+/*
+ * In PFN mode, physical frame attributes are constant for the lifetime of the
+ * mapping. If a page was inserted read-only, it was because the provider
+ * reported a read-only PFN attribute, and write upgrades are never permitted.
+ * Write faults on such pages must fail with SIGBUS.
+ */
+static vm_fault_t kvm_gmem_pfn_mkwrite(struct vm_fault *vmf)
+{
+	return VM_FAULT_SIGBUS;
+}
+
+static vm_fault_t gmem_insert_pfn(struct vm_fault *vmf, kvm_pfn_t pfn,
+				 u64 pfn_attrs)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	vm_flags_t flags = vma->vm_flags;
+
+	if (pfn_attrs & GUEST_MEMFD_PFN_ATTRS_READONLY)
+		flags &= ~VM_WRITE;
+
+	if ((vmf->flags & FAULT_FLAG_WRITE) && !(flags & VM_WRITE))
+		return VM_FAULT_SIGBUS;
+
+	return vmf_insert_pfn_prot(vma, vmf->address, pfn,
+				   vm_get_page_prot(flags));
+}
+
 static vm_fault_t kvm_gmem_fault_user_mapping(struct vm_fault *vmf)
 {
 	struct inode *inode = file_inode(vmf->vma->vm_file);
+	struct gmem_inode *gi = GMEM_I(inode);
 	vm_fault_t ret = VM_FAULT_LOCKED;
 	struct folio *folio = NULL;
+	kvm_pfn_t pfn;
 	int r = 0;
 
 	if (((loff_t)vmf->pgoff << PAGE_SHIFT) >= i_size_read(inode))
@@ -578,6 +607,12 @@ static vm_fault_t kvm_gmem_fault_user_mapping(struct vm_fault *vmf)
 	filemap_invalidate_lock_shared(inode->i_mapping);
 	if (!kvm_gmem_is_shared_mem(inode, vmf->pgoff)) {
 		r = -EACCES;
+	} else if (kvm_gmem_is_pfn_mode(gi)) {
+		u64 pfn_attrs;
+
+		r = gmem_provider_get_pfn(gi, vmf->pgoff, &pfn, NULL, &pfn_attrs);
+		if (!r)
+			ret = gmem_insert_pfn(vmf, pfn, pfn_attrs);
 	} else {
 		folio = kvm_gmem_get_folio(inode, vmf->pgoff);
 		if (IS_ERR(folio))
@@ -591,6 +626,9 @@ static vm_fault_t kvm_gmem_fault_user_mapping(struct vm_fault *vmf)
 
 		return vmf_error(r);
 	}
+
+	if (kvm_gmem_is_pfn_mode(gi))
+		return ret;
 
 	if (WARN_ON_ONCE(folio_test_large(folio))) {
 		ret = VM_FAULT_SIGBUS;
@@ -650,6 +688,15 @@ static const struct vm_operations_struct kvm_gmem_vm_ops = {
 #endif
 };
 
+static const struct vm_operations_struct kvm_gmem_pfn_vm_ops = {
+	.fault		= kvm_gmem_fault_user_mapping,
+	.pfn_mkwrite	= kvm_gmem_pfn_mkwrite,
+#ifdef CONFIG_NUMA
+	.get_policy	= kvm_gmem_get_policy,
+	.set_policy	= kvm_gmem_set_policy,
+#endif
+};
+
 static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct gmem_inode *gi = GMEM_I(file_inode(file));
@@ -665,7 +712,10 @@ static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 	if (kvm_gmem_is_pfn_mode(gi))
 		vm_flags_set(vma, VM_PFNMAP);
 
-	vma->vm_ops = &kvm_gmem_vm_ops;
+	if (kvm_gmem_is_pfn_mode(gi))
+		vma->vm_ops = &kvm_gmem_pfn_vm_ops;
+	else
+		vma->vm_ops = &kvm_gmem_vm_ops;
 
 	return 0;
 }
