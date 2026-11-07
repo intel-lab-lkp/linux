@@ -3,6 +3,7 @@
 #include <linux/backing-dev.h>
 #include <linux/falloc.h>
 #include <linux/fs.h>
+#include <linux/guest_memfd.h>
 #include <linux/kvm_host.h>
 #include <linux/maple_tree.h>
 #include <linux/mempolicy.h>
@@ -35,6 +36,9 @@ struct gmem_inode {
 	struct inode vfs_inode;
 	struct list_head gmem_file_list;
 
+	void *provider;
+	const struct guest_memfd_provider_operations *provider_ops;
+
 	u64 flags;
 	/*
 	 * Every index in this inode, whether memory is populated or
@@ -48,6 +52,65 @@ struct gmem_inode {
 static __always_inline struct gmem_inode *GMEM_I(struct inode *inode)
 {
 	return container_of(inode, struct gmem_inode, vfs_inode);
+}
+
+static void *gmem_native_attach(struct inode *gmem_inode,
+				struct file *resource_file)
+{
+	return GMEM_I(gmem_inode);
+}
+
+static struct folio *gmem_native_alloc_folio(void *provider, pgoff_t index,
+					     struct mempolicy *mpol)
+{
+	struct gmem_inode *gi = provider;
+	struct folio *folio;
+	gfp_t gfp;
+
+	gfp = mapping_gfp_mask(gi->vfs_inode.i_mapping);
+	folio = filemap_alloc_folio(gfp, 0, mpol);
+	if (!folio)
+		return ERR_PTR(-ENOMEM);
+
+	return folio;
+}
+
+static const struct guest_memfd_provider_operations gmem_native_provider_ops = {
+	.attach = gmem_native_attach,
+	.alloc_folio = gmem_native_alloc_folio,
+};
+
+#define GMEM_RESOURCE_FD_NATIVE (-1)
+
+static int kvm_gmem_attach_resource(struct inode *inode, int resource_fd)
+{
+	const struct guest_memfd_provider_operations *ops = NULL;
+	struct file *resource_file = NULL;
+	void *provider;
+
+	if (resource_fd == GMEM_RESOURCE_FD_NATIVE)
+		ops = &gmem_native_provider_ops;
+	else
+		return -EOPNOTSUPP;
+
+	provider = ops->attach(inode, resource_file);
+	if (IS_ERR(provider))
+		return PTR_ERR(provider);
+
+	GMEM_I(inode)->provider = provider;
+	GMEM_I(inode)->provider_ops = ops;
+
+	return 0;
+}
+
+static struct folio *gmem_provider_alloc_folio(struct gmem_inode *gi,
+					       pgoff_t index,
+					       struct mempolicy *mpol)
+{
+	if (gi->provider_ops && gi->provider_ops->alloc_folio)
+		return gi->provider_ops->alloc_folio(gi->provider, index, mpol);
+
+	return ERR_PTR(-EOPNOTSUPP);
 }
 
 #define kvm_gmem_for_each_file(f, inode) \
@@ -143,11 +206,10 @@ retry:
 		return folio;
 
 	policy = mpol_shared_policy_lookup(&GMEM_I(inode)->policy, index);
-	folio = filemap_alloc_folio(mapping_gfp_mask(inode->i_mapping), 0,
-				    policy);
+	folio = gmem_provider_alloc_folio(GMEM_I(inode), index, policy);
 	mpol_cond_put(policy);
-	if (!folio)
-		return ERR_PTR(-ENOMEM);
+	if (IS_ERR(folio))
+		return folio;
 
 	r = filemap_add_folio(inode->i_mapping, folio, index, GFP_KERNEL);
 	if (r) {
@@ -996,6 +1058,20 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	xa_init(&f->bindings);
 	list_add(&f->entry, &GMEM_I(inode)->gmem_file_list);
 
+	/*
+	 * Ensure all inode and file initialization (such as gmem_file_list and
+	 * bindings) is globally visible before exposing the inode to the
+	 * provider in ->attach().
+	 */
+	smp_wmb();
+
+	err = kvm_gmem_attach_resource(inode, GMEM_RESOURCE_FD_NATIVE);
+	if (err) {
+		fput(file);
+		put_unused_fd(fd);
+		return err;
+	}
+
 	fd_install(fd, file);
 	return fd;
 
@@ -1355,6 +1431,8 @@ static struct inode *kvm_gmem_alloc_inode(struct super_block *sb)
 	mt_init_flags(&gi->attributes, MT_FLAGS_LOCK_EXTERN | MT_FLAGS_USE_RCU);
 
 	gi->flags = 0;
+	gi->provider = NULL;
+	gi->provider_ops = NULL;
 	INIT_LIST_HEAD(&gi->gmem_file_list);
 	return &gi->vfs_inode;
 }
