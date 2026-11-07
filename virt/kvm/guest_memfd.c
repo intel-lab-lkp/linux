@@ -85,15 +85,26 @@ static const struct guest_memfd_provider_operations gmem_native_provider_ops = {
 static int kvm_gmem_attach_resource(struct inode *inode, int resource_fd)
 {
 	const struct guest_memfd_provider_operations *ops = NULL;
+	void *provider = ERR_PTR(-EOPNOTSUPP);
 	struct file *resource_file = NULL;
-	void *provider;
 
-	if (resource_fd == GMEM_RESOURCE_FD_NATIVE)
+	if (resource_fd == GMEM_RESOURCE_FD_NATIVE) {
 		ops = &gmem_native_provider_ops;
-	else
-		return -EOPNOTSUPP;
+	} else {
+		resource_file = fget_raw(resource_fd);
+		if (!resource_file)
+			return -EBADF;
 
-	provider = ops->attach(inode, resource_file);
+		if (resource_file->f_op)
+			ops = resource_file->f_op->gmem_provider_ops;
+	}
+
+	if (ops && ops->attach && ops->alloc_folio)
+		provider = ops->attach(inode, resource_file);
+
+	if (resource_file)
+		fput(resource_file);
+
 	if (IS_ERR(provider))
 		return PTR_ERR(provider);
 
@@ -118,6 +129,12 @@ static void gmem_provider_invalidate_folio(struct gmem_inode *gi,
 {
 	if (gi->provider_ops && gi->provider_ops->invalidate_folio)
 		gi->provider_ops->invalidate_folio(gi->provider, folio);
+}
+
+static void gmem_provider_release(struct gmem_inode *gi)
+{
+	if (gi->provider_ops && gi->provider_ops->release)
+		gi->provider_ops->release(gi->provider);
 }
 
 #define kvm_gmem_for_each_file(f, inode) \
@@ -1033,7 +1050,7 @@ static int kvm_gmem_init_inode(struct inode *inode, loff_t size, u64 flags)
 	return r;
 }
 
-static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
+static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags, int resource_fd)
 {
 	static const char *name = "[kvm-gmem]";
 	struct gmem_file *f;
@@ -1088,7 +1105,7 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	 */
 	smp_wmb();
 
-	err = kvm_gmem_attach_resource(inode, GMEM_RESOURCE_FD_NATIVE);
+	err = kvm_gmem_attach_resource(inode, resource_fd);
 	if (err) {
 		fput(file);
 		put_unused_fd(fd);
@@ -1111,6 +1128,7 @@ err_fd:
 
 int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 {
+	int resource_fd = GMEM_RESOURCE_FD_NATIVE;
 	loff_t size = args->size;
 	u64 flags = args->flags;
 
@@ -1120,7 +1138,15 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 	if (size <= 0 || !PAGE_ALIGNED(size))
 		return -EINVAL;
 
-	return __kvm_gmem_create(kvm, size, flags);
+	if (flags & GUEST_MEMFD_FLAG_USE_RESOURCE) {
+		if (args->resource_fd < 0)
+			return -EBADF;
+		resource_fd = args->resource_fd;
+	} else if (args->resource_fd) {
+		return -EINVAL;
+	}
+
+	return __kvm_gmem_create(kvm, size, flags, resource_fd);
 }
 
 int kvm_gmem_prepare_memory_region(struct kvm *kvm, struct kvm_memory_slot *slot,
@@ -1463,6 +1489,8 @@ static struct inode *kvm_gmem_alloc_inode(struct super_block *sb)
 static void kvm_gmem_destroy_inode(struct inode *inode)
 {
 	struct gmem_inode *gi = GMEM_I(inode);
+
+	gmem_provider_release(gi);
 
 	mpol_free_shared_policy(&gi->policy);
 
