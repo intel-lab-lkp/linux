@@ -27,4 +27,19 @@ struct mp_new_file {
 #define MP_NEW_FILE \
 	_IOW(MP_IOCTL_BASE, 5, struct mp_new_file)
 
+/*
+ * ioctl on a provider fd: SET_PRESENT on [@offset, @offset + @len).
+ * @value is the present value (1 = present, 0 = absent), and @offset
+ * and @len are a byte range within the file, page aligned.
+ */
+struct mp_set_present {
+	__u32 value;
+	__u32 pad;
+	__u64 offset;	/* bytes into the file, page aligned */
+	__u64 len;	/* bytes, page aligned */
+};
+
+#define MP_SET_PRESENT \
+	_IOW(MP_IOCTL_BASE, 12, struct mp_set_present)
+
 #endif /* _SAMPLES_KVM_MEMORY_PROVIDER_H */

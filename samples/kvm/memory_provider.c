@@ -6,18 +6,21 @@
  *
  * The control device /dev/memory_provider creates provider files.
  * Each file allocates its own contiguous memory from alloc_contig_pages().
+ * Pages can be dynamically marked present or absent.
  * See memory_provider.h.
  *
  * Confidential VMs are not supported.
  */
 
 #include <linux/anon_inodes.h>
+#include <linux/bitmap.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
@@ -30,7 +33,39 @@ struct mp_info {
 	unsigned long base_pfn;
 	unsigned long npages;
 	struct page *cma_pages;		/* from alloc_contig_pages() */
+
+	struct mutex lock;		/* the bitmaps */
+	unsigned long *absent;		/* taken away by MP_SET_PRESENT */
 };
+
+/* Byte range [offset, offset + len) of @info as page indices. */
+static int mp_range(struct mp_info *info, u64 offset, u64 len,
+		    unsigned long *start, unsigned long *end)
+{
+	if (!len || !PAGE_ALIGNED(offset) || !PAGE_ALIGNED(len))
+		return -EINVAL;
+
+	*start = offset >> PAGE_SHIFT;
+	*end = *start + (len >> PAGE_SHIFT);
+
+	if (*end > info->npages || *end < *start)
+		return -EINVAL;
+
+	return 0;
+}
+
+static void mp_set_present(struct mp_info *info, unsigned long start,
+			   unsigned long end, bool present)
+{
+	mutex_lock(&info->lock);
+
+	if (present)
+		bitmap_clear(info->absent, start, end - start);
+	else
+		bitmap_set(info->absent, start, end - start);
+
+	mutex_unlock(&info->lock);
+}
 
 static int mp_file_release(struct inode *inode, struct file *file)
 {
@@ -38,13 +73,48 @@ static int mp_file_release(struct inode *inode, struct file *file)
 
 	if (info->cma_pages)
 		free_contig_range(info->base_pfn, info->npages);
+	bitmap_free(info->absent);
 	kfree(info);
 	return 0;
+}
+
+static long mp_file_set_present(struct mp_info *info, void __user *uarg)
+{
+	struct mp_set_present sp;
+	unsigned long start, end;
+	int ret;
+
+	if (copy_from_user(&sp, uarg, sizeof(sp)))
+		return -EFAULT;
+	if (sp.value > 1 || sp.pad)
+		return -EINVAL;
+
+	ret = mp_range(info, sp.offset, sp.len, &start, &end);
+	if (!ret)
+		mp_set_present(info, start, end, sp.value);
+
+	return ret;
+}
+
+static long mp_file_ioctl(struct file *file, unsigned int cmd,
+			  unsigned long arg)
+{
+	struct mp_info *info = file->private_data;
+	void __user *uarg = (void __user *)arg;
+
+	switch (cmd) {
+	case MP_SET_PRESENT:
+		return mp_file_set_present(info, uarg);
+	default:
+		return -ENOTTY;
+	}
 }
 
 static const struct file_operations mp_file_fops = {
 	.owner		= THIS_MODULE,
 	.release	= mp_file_release,
+	.unlocked_ioctl	= mp_file_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
 };
 
 static long mp_ctl_new_file(void __user *uarg)
@@ -64,21 +134,30 @@ static long mp_ctl_new_file(void __user *uarg)
 		return -EINVAL;
 
 	npages = nf.size >> PAGE_SHIFT;
+	if (npages > KMALLOC_MAX_SIZE * BITS_PER_BYTE)
+		return -EINVAL;
 
 	info = kzalloc_obj(*info);
 	if (!info)
 		return -ENOMEM;
 
+	info->absent = bitmap_zalloc(npages, GFP_KERNEL);
+	if (!info->absent) {
+		ret = -ENOMEM;
+		goto err_free_info;
+	}
+
 	pages = alloc_contig_pages(npages, GFP_KERNEL | __GFP_ZERO,
 				   numa_node_id(), NULL);
 	if (!pages) {
 		ret = -ENOMEM;
-		goto err_free_info;
+		goto err_free_absent;
 	}
 
 	info->cma_pages = pages;
 	info->base_pfn = page_to_pfn(pages);
 	info->npages = npages;
+	mutex_init(&info->lock);
 
 	fd = get_unused_fd_flags(O_CLOEXEC);
 	if (fd < 0) {
@@ -99,6 +178,8 @@ static long mp_ctl_new_file(void __user *uarg)
 
 err_free_pages:
 	free_contig_range(page_to_pfn(pages), npages);
+err_free_absent:
+	bitmap_free(info->absent);
 err_free_info:
 	kfree(info);
 	return ret;
