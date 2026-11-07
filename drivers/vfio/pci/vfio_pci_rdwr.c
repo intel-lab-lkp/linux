@@ -91,34 +91,34 @@ VFIO_IOREAD(32)
 VFIO_IOREAD(64)
 
 #define VFIO_IORDWR(size)						\
-static int vfio_pci_iordwr##size(struct vfio_pci_core_device *vdev,\
-				bool iswrite, bool test_mem,		\
-				void __iomem *io, char __user *buf,	\
-				loff_t off, size_t *filled)		\
-{									\
-	u##size val;							\
-	int ret;							\
-									\
-	if (iswrite) {							\
-		if (copy_from_user(&val, buf, sizeof(val)))		\
-			return -EFAULT;					\
-									\
-		ret = vfio_pci_core_iowrite##size(vdev, test_mem,	\
-						  val, io + off);	\
-		if (ret)						\
-			return ret;					\
-	} else {							\
-		ret = vfio_pci_core_ioread##size(vdev, test_mem,	\
-						 &val, io + off);	\
-		if (ret)						\
-			return ret;					\
-									\
-		if (copy_to_user(buf, &val, sizeof(val)))		\
-			return -EFAULT;					\
-	}								\
-									\
-	*filled = sizeof(val);						\
-	return 0;							\
+static int vfio_pci_iordwr##size(struct vfio_pci_core_device *vdev,		\
+				bool iswrite, bool test_mem,			\
+				void __iomem *io, struct iov_iter *iter,	\
+				loff_t off, size_t *filled)			\
+{										\
+	u##size val;								\
+	int ret;								\
+										\
+	if (iswrite) {								\
+		if (!copy_from_iter_full(&val, sizeof(val), iter))		\
+			return -EFAULT;						\
+										\
+		ret = vfio_pci_core_iowrite##size(vdev, test_mem,		\
+						  val, io + off);		\
+		if (ret)							\
+			return ret;						\
+	} else {								\
+		ret = vfio_pci_core_ioread##size(vdev, test_mem,		\
+						 &val, io + off);		\
+		if (ret)							\
+			return ret;						\
+										\
+		if (!copy_to_iter_full(&val, sizeof(val), iter))		\
+			return -EFAULT;						\
+	}									\
+										\
+	*filled = sizeof(val);							\
+	return 0;								\
 }									\
 
 VFIO_IORDWR(8)
@@ -132,11 +132,12 @@ VFIO_IORDWR(64)
  * reads with -1.  This is intended for handling MSI-X vector tables and
  * leftover space for ROM BARs.
  */
-ssize_t vfio_pci_core_do_io_rw(struct vfio_pci_core_device *vdev, bool test_mem,
-			       void __iomem *io, char __user *buf,
-			       loff_t off, size_t count, size_t x_start,
-			       size_t x_end, bool iswrite,
-			       enum vfio_pci_io_width max_width)
+static ssize_t __vfio_pci_core_do_io_rw(struct vfio_pci_core_device *vdev,
+					bool test_mem, void __iomem *io,
+					struct iov_iter *iter, loff_t off,
+					size_t count, size_t x_start,
+					size_t x_end, bool iswrite,
+					enum vfio_pci_io_width max_width)
 {
 	ssize_t done = 0;
 	int ret;
@@ -153,25 +154,25 @@ ssize_t vfio_pci_core_do_io_rw(struct vfio_pci_core_device *vdev, bool test_mem,
 
 		if (fillable >= 8 && !(off % 8) && max_width >= 8) {
 			ret = vfio_pci_iordwr64(vdev, iswrite, test_mem,
-						io, buf, off, &filled);
+						io, iter, off, &filled);
 			if (ret)
 				return ret;
 
 		} else if (fillable >= 4 && !(off % 4) && max_width >= 4) {
 			ret = vfio_pci_iordwr32(vdev, iswrite, test_mem,
-						io, buf, off, &filled);
+						io, iter, off, &filled);
 			if (ret)
 				return ret;
 
 		} else if (fillable >= 2 && !(off % 2) && max_width >= 2) {
 			ret = vfio_pci_iordwr16(vdev, iswrite, test_mem,
-						io, buf, off, &filled);
+						io, iter, off, &filled);
 			if (ret)
 				return ret;
 
 		} else if (fillable) {
 			ret = vfio_pci_iordwr8(vdev, iswrite, test_mem,
-					       io, buf, off, &filled);
+					       io, iter, off, &filled);
 			if (ret)
 				return ret;
 
@@ -179,22 +180,44 @@ ssize_t vfio_pci_core_do_io_rw(struct vfio_pci_core_device *vdev, bool test_mem,
 			/* Fill reads with -1, drop writes */
 			filled = min(count, (size_t)(x_end - off));
 			if (!iswrite) {
-				u8 val = 0xFF;
-				size_t i;
+				static const u8 ff_buf[64] = { [0 ... 63] = 0xFF };
+				size_t cur = filled;
 
-				for (i = 0; i < filled; i++)
-					if (copy_to_user(buf + i, &val, 1))
+				while (cur) {
+					size_t step = min(cur, sizeof(ff_buf));
+
+					if (!copy_to_iter_full(ff_buf, step, iter))
 						return -EFAULT;
+					cur -= step;
+				}
+			} else {
+				iov_iter_advance(iter, filled);
 			}
 		}
 
 		count -= filled;
 		done += filled;
 		off += filled;
-		buf += filled;
 	}
 
 	return done;
+}
+
+ssize_t vfio_pci_core_do_io_rw(struct vfio_pci_core_device *vdev, bool test_mem,
+			       void __iomem *io, char __user *buf,
+			       loff_t off, size_t count, size_t x_start,
+			       size_t x_end, bool iswrite,
+			       enum vfio_pci_io_width max_width)
+{
+	struct iov_iter iter;
+	int ret;
+
+	ret = import_ubuf(iswrite ? ITER_SOURCE : ITER_DEST, buf, count, &iter);
+	if (ret)
+		return ret;
+
+	return __vfio_pci_core_do_io_rw(vdev, test_mem, io, &iter, off, count,
+					x_start, x_end, iswrite, max_width);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_do_io_rw);
 
