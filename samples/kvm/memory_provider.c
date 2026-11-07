@@ -58,10 +58,15 @@ static int mp_range(struct mp_info *info, u64 offset, u64 len,
 	return 0;
 }
 
-static void mp_set_readonly(struct mp_info *info, unsigned long start,
+static int mp_set_readonly(struct mp_info *info, unsigned long start,
 			    unsigned long end, bool readonly)
 {
 	mutex_lock(&info->lock);
+
+	if (info->gmem_inode) {
+		mutex_unlock(&info->lock);
+		return -EBUSY;
+	}
 
 	if (readonly)
 		bitmap_set(info->readonly, start, end - start);
@@ -69,6 +74,7 @@ static void mp_set_readonly(struct mp_info *info, unsigned long start,
 		bitmap_clear(info->readonly, start, end - start);
 
 	mutex_unlock(&info->lock);
+	return 0;
 }
 
 static void mp_set_present(struct mp_info *info, unsigned long start,
@@ -123,7 +129,7 @@ static long mp_file_set_readonly(struct mp_info *info, void __user *uarg)
 
 	ret = mp_range(info, sr.offset, sr.len, &start, &end);
 	if (!ret)
-		mp_set_readonly(info, start, end, sr.value);
+		ret = mp_set_readonly(info, start, end, sr.value);
 
 	return ret;
 }
