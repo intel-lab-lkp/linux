@@ -43,6 +43,19 @@ struct mp_info {
 	struct inode *gmem_inode;
 };
 
+static void mp_zero_range(struct mp_info *info, pgoff_t index,
+			   size_t nr_pages)
+{
+	size_t i;
+
+	if (index >= info->npages)
+		return;
+
+	nr_pages = min_t(size_t, nr_pages, info->npages - index);
+	for (i = 0; i < nr_pages; i++)
+		clear_highpage(info->cma_pages + index + i);
+}
+
 /* Byte range [offset, offset + len) of @info as page indices. */
 static int mp_range(struct mp_info *info, u64 offset, u64 len,
 		    unsigned long *start, unsigned long *end)
@@ -82,12 +95,17 @@ static void mp_set_present(struct mp_info *info, unsigned long start,
 			   unsigned long end, bool present)
 {
 	mutex_lock(&info->lock);
-
-	if (present)
+	if (present) {
 		bitmap_clear(info->absent, start, end - start);
-	else
+	} else {
 		bitmap_set(info->absent, start, end - start);
+		if (info->gmem_inode) {
+			unsigned long pfn = info->base_pfn + start;
 
+			kvm_gmem_revoke(info->gmem_inode, start, end - start, &pfn);
+			mp_zero_range(info, start, end - start);
+		}
+	}
 	mutex_unlock(&info->lock);
 }
 
@@ -203,15 +221,8 @@ static void mp_gmem_put_pfn_range(void *provider, pgoff_t index,
 				   size_t nr_pages)
 {
 	struct file *resource_file = provider;
-	struct mp_info *info = resource_file->private_data;
-	size_t i;
 
-	if (index >= info->npages)
-		return;
-
-	nr_pages = min_t(size_t, nr_pages, info->npages - index);
-	for (i = 0; i < nr_pages; i++)
-		clear_highpage(info->cma_pages + index + i);
+	mp_zero_range(resource_file->private_data, index, nr_pages);
 }
 
 static int mp_gmem_get_pfn(void *provider, pgoff_t index, unsigned long *pfn,
