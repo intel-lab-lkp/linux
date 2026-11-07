@@ -178,6 +178,7 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 int vfio_pci_ioctl_get_region_info(struct vfio_device *core_vdev,
 				   struct vfio_region_info *info,
 				   struct vfio_info_cap *caps);
+bool vfio_pci_core_is_ctrl_plane(struct vfio_device *core_vdev, loff_t ppos);
 ssize_t vfio_pci_core_read(struct vfio_device *core_vdev, char __user *buf,
 		size_t count, loff_t *ppos);
 ssize_t vfio_pci_core_write(struct vfio_device *core_vdev, const char __user *buf,

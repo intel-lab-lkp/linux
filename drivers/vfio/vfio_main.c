@@ -1231,8 +1231,23 @@ vfio_ioctl_device_feature_logging_report(struct vfio_device *device,
 	return ret;
 }
 
+static bool vfio_feature_ctrl_only_allowed(u32 flags)
+{
+	switch (flags & VFIO_DEVICE_FEATURE_MASK) {
+	case VFIO_DEVICE_FEATURE_PCI_VF_TOKEN:
+	case VFIO_DEVICE_FEATURE_LOW_POWER_ENTRY:
+	case VFIO_DEVICE_FEATURE_LOW_POWER_ENTRY_WITH_WAKEUP:
+	case VFIO_DEVICE_FEATURE_LOW_POWER_EXIT:
+	case VFIO_DEVICE_FEATURE_BUS_MASTER:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static int vfio_ioctl_device_feature(struct vfio_device *device,
-				     struct vfio_device_feature __user *arg)
+				     struct vfio_device_feature __user *arg,
+				     bool ctrl_only)
 {
 	size_t minsz = offsetofend(struct vfio_device_feature, flags);
 	struct vfio_device_feature feature;
@@ -1254,6 +1269,9 @@ static int vfio_ioctl_device_feature(struct vfio_device *device,
 	    (feature.flags & VFIO_DEVICE_FEATURE_SET) &&
 	    (feature.flags & VFIO_DEVICE_FEATURE_GET))
 		return -EINVAL;
+
+	if (ctrl_only && !vfio_feature_ctrl_only_allowed(feature.flags))
+		return -EOPNOTSUPP;
 
 	switch (feature.flags & VFIO_DEVICE_FEATURE_MASK) {
 	case VFIO_DEVICE_FEATURE_MIGRATION:
@@ -1337,20 +1355,63 @@ out_free:
 	return ret;
 }
 
+static bool vfio_ioctl_ctrl_only_allowed(unsigned int cmd)
+{
+	switch (cmd) {
+	case VFIO_DEVICE_ATTACH_IOMMUFD_PT:
+	case VFIO_DEVICE_DETACH_IOMMUFD_PT:
+	case VFIO_DEVICE_FEATURE:
+	case VFIO_DEVICE_GET_INFO:
+	case VFIO_DEVICE_GET_REGION_INFO:
+	case VFIO_DEVICE_GET_IRQ_INFO:
+	case VFIO_DEVICE_SET_IRQS:
+	case VFIO_DEVICE_RESET:
+	case VFIO_DEVICE_GET_PCI_HOT_RESET_INFO:
+	case VFIO_DEVICE_PCI_HOT_RESET:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static int vfio_df_check_full_access(struct vfio_device_file *df)
+{
+	/* Paired with smp_store_release() following vfio_df_open() */
+	switch (smp_load_acquire(&df->access_mode)) {
+	case VFIO_DF_ACCESS_NONE:
+		return -EINVAL;
+	case VFIO_DF_ACCESS_CTRL_ONLY:
+		return -EOPNOTSUPP;
+	case VFIO_DF_ACCESS_FULL:
+		return 0;
+	}
+	return -EINVAL;
+}
+
 static long vfio_device_fops_unl_ioctl(struct file *filep,
 				       unsigned int cmd, unsigned long arg)
 {
 	struct vfio_device_file *df = filep->private_data;
 	struct vfio_device *device = df->device;
 	void __user *uptr = (void __user *)arg;
+	bool ctrl_only = false;
 	int ret;
 
 	if (cmd == VFIO_DEVICE_BIND_IOMMUFD)
 		return vfio_df_ioctl_bind_iommufd(df, uptr);
 
 	/* Paired with smp_store_release() following vfio_df_open() */
-	if (smp_load_acquire(&df->access_mode) == VFIO_DF_ACCESS_NONE)
+	switch (smp_load_acquire(&df->access_mode)) {
+	case VFIO_DF_ACCESS_NONE:
 		return -EINVAL;
+	case VFIO_DF_ACCESS_CTRL_ONLY:
+		if (!vfio_ioctl_ctrl_only_allowed(cmd))
+			return -EOPNOTSUPP;
+		ctrl_only = true;
+		break;
+	case VFIO_DF_ACCESS_FULL:
+		break;
+	}
 
 	ret = vfio_device_pm_runtime_get(device);
 	if (ret)
@@ -1371,7 +1432,7 @@ static long vfio_device_fops_unl_ioctl(struct file *filep,
 
 	switch (cmd) {
 	case VFIO_DEVICE_FEATURE:
-		ret = vfio_ioctl_device_feature(device, uptr);
+		ret = vfio_ioctl_device_feature(device, uptr, ctrl_only);
 		break;
 
 	case VFIO_DEVICE_GET_REGION_INFO:
@@ -1390,15 +1451,33 @@ out:
 	return ret;
 }
 
+static int vfio_df_check_rw_access(struct vfio_device_file *df, loff_t pos)
+{
+	/* Paired with smp_store_release() following vfio_df_open() */
+	switch (smp_load_acquire(&df->access_mode)) {
+	case VFIO_DF_ACCESS_NONE:
+		return -EINVAL;
+	case VFIO_DF_ACCESS_CTRL_ONLY:
+		if (!df->device->ops->is_ctrl_plane ||
+		    !df->device->ops->is_ctrl_plane(df->device, pos))
+			return -EINVAL;
+		return 0;
+	case VFIO_DF_ACCESS_FULL:
+		return 0;
+	}
+	return -EINVAL;
+}
+
 static ssize_t vfio_device_fops_read(struct file *filep, char __user *buf,
 				     size_t count, loff_t *ppos)
 {
 	struct vfio_device_file *df = filep->private_data;
 	struct vfio_device *device = df->device;
+	int ret;
 
-	/* Paired with smp_store_release() following vfio_df_open() */
-	if (smp_load_acquire(&df->access_mode) == VFIO_DF_ACCESS_NONE)
-		return -EINVAL;
+	ret = vfio_df_check_rw_access(df, *ppos);
+	if (ret)
+		return ret;
 
 	if (unlikely(!device->ops->read))
 		return -EINVAL;
@@ -1412,10 +1491,11 @@ static ssize_t vfio_device_fops_write(struct file *filep,
 {
 	struct vfio_device_file *df = filep->private_data;
 	struct vfio_device *device = df->device;
+	int ret;
 
-	/* Paired with smp_store_release() following vfio_df_open() */
-	if (smp_load_acquire(&df->access_mode) == VFIO_DF_ACCESS_NONE)
-		return -EINVAL;
+	ret = vfio_df_check_rw_access(df, *ppos);
+	if (ret)
+		return ret;
 
 	if (unlikely(!device->ops->write))
 		return -EINVAL;
@@ -1427,10 +1507,11 @@ static int vfio_device_fops_mmap(struct file *filep, struct vm_area_struct *vma)
 {
 	struct vfio_device_file *df = filep->private_data;
 	struct vfio_device *device = df->device;
+	int ret;
 
-	/* Paired with smp_store_release() following vfio_df_open() */
-	if (smp_load_acquire(&df->access_mode) == VFIO_DF_ACCESS_NONE)
-		return -EINVAL;
+	ret = vfio_df_check_full_access(df);
+	if (ret)
+		return ret;
 
 	if (unlikely(!device->ops->mmap))
 		return -EINVAL;

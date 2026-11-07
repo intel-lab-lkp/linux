@@ -155,6 +155,7 @@ static const struct vfio_device_ops vfio_pci_ops = {
 	.ioctl		= vfio_pci_core_ioctl,
 	.get_region_info_caps = vfio_pci_ioctl_get_region_info,
 	.device_feature = vfio_pci_core_ioctl_feature,
+	.is_ctrl_plane	= vfio_pci_core_is_ctrl_plane,
 	.read		= vfio_pci_core_read,
 	.write		= vfio_pci_core_write,
 	.mmap		= vfio_pci_core_mmap,

@@ -926,12 +926,19 @@ struct vfio_device_feature {
  * be provided the same token as VFIO_DEVICE_FEATURE_PCI_VF_TOKEN provided to
  * the PF.
  *
+ * VFIO_DEVICE_BIND_FLAG_CTRL_ONLY restricts the bound device fd to
+ * control-plane ioctls and non-mappable region read/write access (such as PCI
+ * configuration space), rejecting mmap(), read/write to mmap-supported BARs,
+ * and all other ioctls or device features with -EOPNOTSUPP. This should be used
+ * to prepare the device fd for attachment to guest_memfd.
+ *
  * Return: 0 on success, -errno on failure.
  */
 struct vfio_device_bind_iommufd {
 	__u32		argsz;
 	__u32		flags;
 #define VFIO_DEVICE_BIND_FLAG_TOKEN (1 << 0)
+#define VFIO_DEVICE_BIND_FLAG_CTRL_ONLY (1 << 1)
 	__s32		iommufd;
 	__u32		out_devid;
 	__aligned_u64	token_uuid_ptr;

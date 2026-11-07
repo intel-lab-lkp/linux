@@ -18,6 +18,7 @@ struct vfio_container;
 
 enum vfio_df_access_mode {
 	VFIO_DF_ACCESS_NONE = 0,
+	VFIO_DF_ACCESS_CTRL_ONLY,
 	VFIO_DF_ACCESS_FULL,
 };
 

@@ -1680,6 +1680,19 @@ static ssize_t vfio_pci_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 	return ret;
 }
 
+bool vfio_pci_core_is_ctrl_plane(struct vfio_device *core_vdev, loff_t ppos)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	unsigned int index = VFIO_PCI_OFFSET_TO_INDEX(ppos);
+
+	if (index < PCI_STD_NUM_BARS && vdev->bar_mmap_supported[index])
+		return false;
+
+	return true;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_is_ctrl_plane);
+
 ssize_t vfio_pci_core_read(struct vfio_device *core_vdev, char __user *buf,
 		size_t count, loff_t *ppos)
 {

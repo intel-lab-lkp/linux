@@ -92,7 +92,9 @@ static int vfio_df_check_token(struct vfio_device *device,
 long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 				struct vfio_device_bind_iommufd __user *arg)
 {
-	const u32 VALID_FLAGS = VFIO_DEVICE_BIND_FLAG_TOKEN;
+	const u32 VALID_FLAGS = VFIO_DEVICE_BIND_FLAG_TOKEN |
+				VFIO_DEVICE_BIND_FLAG_CTRL_ONLY;
+	enum vfio_df_access_mode access_mode;
 	struct vfio_device *device = df->device;
 	struct vfio_device_bind_iommufd bind;
 	unsigned long minsz;
@@ -159,11 +161,14 @@ long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 		goto out_close_device;
 
 	device->cdev_opened = true;
+	access_mode = (bind.flags & VFIO_DEVICE_BIND_FLAG_CTRL_ONLY) ?
+			      VFIO_DF_ACCESS_CTRL_ONLY :
+			      VFIO_DF_ACCESS_FULL;
 	/*
 	 * Paired with smp_load_acquire() in vfio_device_fops::ioctl/
 	 * read/write/mmap
 	 */
-	smp_store_release(&df->access_mode, VFIO_DF_ACCESS_FULL);
+	smp_store_release(&df->access_mode, access_mode);
 	mutex_unlock(&device->dev_set->lock);
 	return 0;
 
