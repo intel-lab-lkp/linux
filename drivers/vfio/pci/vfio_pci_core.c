@@ -2731,6 +2731,44 @@ void vfio_pci_core_gmem_release(struct vfio_device *core_vdev)
 	up_write(&vdev->memory_lock);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_release);
+
+int vfio_pci_core_gmem_get_pfn(struct vfio_device *core_vdev, pgoff_t index,
+			       unsigned long *pfn, int *max_order,
+			       u64 *pfn_attrs)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	struct pci_dev *pdev = vdev->pdev;
+	unsigned int bar;
+	u64 pgoff;
+
+	/*
+	 * Lockless check: if memory decoding is disabled or the device is in
+	 * low-power D3, fail immediately without blocking on memory_lock.
+	 */
+	if (!smp_load_acquire(&vdev->bars_available))
+		return -EFAULT;
+
+	bar = index >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
+	pgoff = index & ((1ULL << (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT)) - 1);
+
+	if (bar >= PCI_STD_NUM_BARS || !vdev->bar_mmap_supported[bar])
+		return -EINVAL;
+
+	if (pgoff >= (pci_resource_len(pdev, bar) >> PAGE_SHIFT))
+		return -EINVAL;
+
+	*pfn = (pci_resource_start(pdev, bar) >> PAGE_SHIFT) + pgoff;
+
+	if (max_order)
+		*max_order = 0;
+
+	if (pfn_attrs)
+		*pfn_attrs = GUEST_MEMFD_PFN_ATTRS_CACHE_UC_ALLOW_WC;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_get_pfn);
 #endif
 
 module_init(vfio_pci_core_init);

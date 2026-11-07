@@ -171,6 +171,7 @@ static const struct vfio_device_ops vfio_pci_ops = {
 #ifdef CONFIG_KVM_GUEST_MEMFD
 	.gmem_attach	= vfio_pci_core_gmem_attach,
 	.gmem_release	= vfio_pci_core_gmem_release,
+	.gmem_get_pfn	= vfio_pci_core_gmem_get_pfn,
 #endif
 };
 

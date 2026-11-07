@@ -172,6 +172,9 @@ void vfio_pci_core_unregister_device(struct vfio_pci_core_device *vdev);
 #ifdef CONFIG_KVM_GUEST_MEMFD
 int vfio_pci_core_gmem_attach(struct vfio_device *core_vdev);
 void vfio_pci_core_gmem_release(struct vfio_device *core_vdev);
+int vfio_pci_core_gmem_get_pfn(struct vfio_device *core_vdev, pgoff_t index,
+			       unsigned long *pfn, int *max_order,
+			       u64 *pfn_attrs);
 #endif
 extern const struct pci_error_handlers vfio_pci_core_err_handlers;
 int vfio_pci_core_sriov_configure(struct vfio_pci_core_device *vdev,
