@@ -54,6 +54,11 @@ static __always_inline struct gmem_inode *GMEM_I(struct inode *inode)
 	return container_of(inode, struct gmem_inode, vfs_inode);
 }
 
+static bool kvm_gmem_is_pfn_mode(struct gmem_inode *gi)
+{
+	return gi->flags & GUEST_MEMFD_FLAG_PFN_MODE;
+}
+
 static void *gmem_native_attach(struct inode *gmem_inode,
 				struct file *resource_file)
 {
@@ -122,6 +127,26 @@ static struct folio *gmem_provider_alloc_folio(struct gmem_inode *gi,
 		return gi->provider_ops->alloc_folio(gi->provider, index, mpol);
 
 	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static int gmem_provider_get_pfn(struct gmem_inode *gi, pgoff_t index,
+				 kvm_pfn_t *pfn, int *max_order,
+				 u64 *pfn_attrs)
+{
+	unsigned long raw_pfn;
+	u64 __attrs = 0;
+	int r;
+
+	pfn_attrs = pfn_attrs ?: &__attrs;
+	*pfn_attrs = 0;
+
+	r = gi->provider_ops->get_pfn(gi->provider, index, &raw_pfn, max_order,
+				      pfn_attrs);
+	if (r)
+		return r;
+
+	*pfn = raw_pfn;
+	return 0;
 }
 
 static void gmem_provider_invalidate_folio(struct gmem_inode *gi,
@@ -1270,15 +1295,17 @@ void kvm_gmem_unbind(struct kvm_memory_slot *slot)
 	filemap_invalidate_unlock(file->f_mapping);
 }
 
-/* Returns a locked folio on success.  */
+/* On success, return a locked folio in folio mode and NULL in PFN mode. */
 static struct folio *__kvm_gmem_get_pfn(struct file *file,
 					struct kvm_memory_slot *slot,
 					pgoff_t index, kvm_pfn_t *pfn,
 					int *max_order, u64 *pfn_attrs)
 {
 	struct file *slot_file = READ_ONCE(slot->gmem.file);
+	struct gmem_inode *gi = GMEM_I(file_inode(file));
 	struct gmem_file *f = file->private_data;
 	struct folio *folio;
+	int r;
 
 	if (file != slot_file) {
 		WARN_ON_ONCE(slot_file);
@@ -1288,6 +1315,13 @@ static struct folio *__kvm_gmem_get_pfn(struct file *file,
 	if (xa_load(&f->bindings, index) != slot) {
 		WARN_ON_ONCE(xa_load(&f->bindings, index));
 		return ERR_PTR(-EIO);
+	}
+
+	if (kvm_gmem_is_pfn_mode(gi)) {
+		r = gmem_provider_get_pfn(gi, index, pfn, max_order, pfn_attrs);
+		if (r)
+			return ERR_PTR(r);
+		return NULL;
 	}
 
 	folio = kvm_gmem_get_folio(file_inode(file), index);
@@ -1355,8 +1389,10 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 					       (kvm_pfn_t)1 << *max_order);
 
 out_put_folio:
-	folio_unlock(folio);
-	folio_put(folio);
+	if (folio) {
+		folio_unlock(folio);
+		folio_put(folio);
+	}
 
 out:
 	filemap_invalidate_unlock_shared(file_inode(file)->i_mapping);
@@ -1384,7 +1420,8 @@ static long __kvm_gmem_populate(struct kvm *kvm, struct kvm_memory_slot *slot,
 		goto out_unlock;
 	}
 
-	folio_unlock(folio);
+	if (folio)
+		folio_unlock(folio);
 
 	/* Populating pages initializes private memory, which cannot be read-only. */
 	if (pfn_attrs & GUEST_MEMFD_PFN_ATTRS_READONLY) {
@@ -1400,7 +1437,8 @@ static long __kvm_gmem_populate(struct kvm *kvm, struct kvm_memory_slot *slot,
 	ret = post_populate(kvm, gfn, pfn, src_page, opaque);
 
 out_put_folio:
-	folio_put(folio);
+	if (folio)
+		folio_put(folio);
 out_unlock:
 	filemap_invalidate_unlock(file->f_mapping);
 	return ret;
