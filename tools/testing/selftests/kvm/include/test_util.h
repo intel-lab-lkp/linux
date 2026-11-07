@@ -244,4 +244,6 @@ char *strdup_printf(const char *fmt, ...) __attribute__((format(printf, 1, 2), n
 
 char *sys_get_cur_clocksource(void);
 
+int create_tmpfs_pool_fd(const char *huge, bool noswap, size_t size);
+
 #endif /* SELFTEST_KVM_TEST_UTIL_H */
