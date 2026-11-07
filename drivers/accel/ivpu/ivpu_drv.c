@@ -859,6 +859,7 @@ static int ivpu_dev_init(struct ivpu_device *vdev)
 	return 0;
 
 err_ipc_fini:
+	ivpu_pm_disable_recovery(vdev);
 	ivpu_ipc_fini(vdev);
 err_fw_fini:
 	ivpu_fw_fini(vdev);
