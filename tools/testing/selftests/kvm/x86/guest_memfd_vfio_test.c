@@ -764,4 +764,54 @@ TEST_F(guest_memfd_vfio, ioeventfd_creation)
 	close(efd);
 }
 
+TEST_F(guest_memfd_vfio, conversions)
+{
+	struct vfio_region_info bar0_info = {};
+	struct vfio_region_info bar3_info = {};
+	uint64_t err_offset = 0;
+	int ret;
+
+	if (!variant->use_gmem)
+		SKIP(return, "Attribute conversions only apply to guest_memfd");
+
+	bar0_info.argsz = sizeof(bar0_info);
+	bar0_info.index = VFIO_PCI_BAR0_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_info);
+	ASSERT_EQ(0, ret);
+
+	bar3_info.argsz = sizeof(bar3_info);
+	bar3_info.index = VFIO_PCI_BAR3_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar3_info);
+	ASSERT_EQ(0, ret);
+
+	/*
+	 * BAR0 is an operational MMIO register space with no MSI-X table.
+	 * Converting its pages to private should succeed.
+	 */
+	ret = __gmem_set_private(self->gmem_fd, bar0_info.offset,
+				 bar0_info.size, &err_offset);
+	ASSERT_EQ(0, ret);
+
+	/* Converting back to shared should succeed. */
+	ret = __gmem_set_shared(self->gmem_fd, bar0_info.offset,
+				bar0_info.size, &err_offset);
+	ASSERT_EQ(0, ret);
+
+	/*
+	 * BAR3 contains the MSI-X vector table and PBA. Private conversion
+	 * must be rejected by check_set_attributes to prevent host kernel
+	 * writes to interrupt tables from triggering fatal protection faults.
+	 */
+	ret = __gmem_set_private(self->gmem_fd, bar3_info.offset,
+				 bar3_info.size, &err_offset);
+	ASSERT_LT(ret, 0);
+	ASSERT_EQ(EINVAL, errno);
+	ASSERT_EQ(bar3_info.offset, err_offset);
+
+	/* Shared conversion on BAR3 should be permitted. */
+	ret = __gmem_set_shared(self->gmem_fd, bar3_info.offset,
+				bar3_info.size, &err_offset);
+	ASSERT_EQ(0, ret);
+}
+
 TEST_HARNESS_MAIN
