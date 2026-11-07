@@ -16,6 +16,7 @@
 #include <linux/eventfd.h>
 #include <linux/file.h>
 #include <linux/guest_memfd.h>
+#include <linux/kvm_host.h>
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
 #include <linux/module.h>
@@ -2769,6 +2770,39 @@ int vfio_pci_core_gmem_get_pfn(struct vfio_device *core_vdev, pgoff_t index,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_get_pfn);
+
+int vfio_pci_core_gmem_check_set_attributes(struct vfio_device *core_vdev,
+					    pgoff_t index, size_t nr_pages,
+					    u64 attributes)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	pgoff_t bar_pgoff;
+	size_t size;
+	loff_t pos;
+	int bar;
+
+	if (!(attributes & KVM_MEMORY_ATTRIBUTE_PRIVATE))
+		return 0;
+
+	/*
+	 * Prevent private conversion of pages containing the MSI-X vector
+	 * table. The host kernel directly programs MSI-X table entries to
+	 * configure and mask interrupts; converting these pages to private
+	 * would cause host kernel writes to trigger fatal hardware protection
+	 * faults (e.g. RMP or GPT violations) on confidential compute platforms.
+	 */
+	bar = index >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
+	bar_pgoff = index & ((1ULL << (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT)) - 1);
+	pos = (loff_t)bar_pgoff << PAGE_SHIFT;
+	size = nr_pages << PAGE_SHIFT;
+
+	if (vfio_pci_range_overlaps_msix(vdev, bar, pos, size))
+		return -EINVAL;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_check_set_attributes);
 #endif
 
 module_init(vfio_pci_core_init);

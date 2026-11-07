@@ -23,6 +23,16 @@ struct vfio_pci_ioeventfd {
 	bool			test_mem;
 };
 
+static inline bool vfio_pci_range_overlaps_msix(struct vfio_pci_core_device *vdev,
+						int bar, loff_t pos, size_t count)
+{
+	if (vdev->msix_bar == 0xFF || bar != vdev->msix_bar)
+		return false;
+
+	return !(pos + count <= vdev->msix_offset ||
+		 pos >= vdev->msix_offset + vdev->msix_size);
+}
+
 bool vfio_pci_intx_mask(struct vfio_pci_core_device *vdev);
 void vfio_pci_intx_unmask(struct vfio_pci_core_device *vdev);
 

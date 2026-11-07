@@ -175,6 +175,9 @@ void vfio_pci_core_gmem_release(struct vfio_device *core_vdev);
 int vfio_pci_core_gmem_get_pfn(struct vfio_device *core_vdev, pgoff_t index,
 			       unsigned long *pfn, int *max_order,
 			       u64 *pfn_attrs);
+int vfio_pci_core_gmem_check_set_attributes(struct vfio_device *core_vdev,
+					    pgoff_t index, size_t nr_pages,
+					    u64 attributes);
 #endif
 extern const struct pci_error_handlers vfio_pci_core_err_handlers;
 int vfio_pci_core_sriov_configure(struct vfio_pci_core_device *vdev,
