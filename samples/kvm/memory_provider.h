@@ -28,6 +28,21 @@ struct mp_new_file {
 	_IOW(MP_IOCTL_BASE, 5, struct mp_new_file)
 
 /*
+ * ioctl on a provider fd: SET_READONLY on [@offset, @offset + @len).
+ * @value is the read-only value (1 = read-only, 0 = writable), and @offset
+ * and @len are a byte range within the file, page aligned.
+ */
+struct mp_set_readonly {
+	__u32 value;
+	__u32 pad;
+	__u64 offset;	/* bytes into the file, page aligned */
+	__u64 len;	/* bytes, page aligned */
+};
+
+#define MP_SET_READONLY \
+	_IOW(MP_IOCTL_BASE, 11, struct mp_set_readonly)
+
+/*
  * ioctl on a provider fd: SET_PRESENT on [@offset, @offset + @len).
  * @value is the present value (1 = present, 0 = absent), and @offset
  * and @len are a byte range within the file, page aligned.

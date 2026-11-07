@@ -36,6 +36,7 @@ struct mp_info {
 
 	struct mutex lock;		/* the bitmaps */
 	unsigned long *absent;		/* taken away by MP_SET_PRESENT */
+	unsigned long *readonly;	/* marked read-only by MP_SET_READONLY */
 };
 
 /* Byte range [offset, offset + len) of @info as page indices. */
@@ -52,6 +53,19 @@ static int mp_range(struct mp_info *info, u64 offset, u64 len,
 		return -EINVAL;
 
 	return 0;
+}
+
+static void mp_set_readonly(struct mp_info *info, unsigned long start,
+			    unsigned long end, bool readonly)
+{
+	mutex_lock(&info->lock);
+
+	if (readonly)
+		bitmap_set(info->readonly, start, end - start);
+	else
+		bitmap_clear(info->readonly, start, end - start);
+
+	mutex_unlock(&info->lock);
 }
 
 static void mp_set_present(struct mp_info *info, unsigned long start,
@@ -73,9 +87,28 @@ static int mp_file_release(struct inode *inode, struct file *file)
 
 	if (info->cma_pages)
 		free_contig_range(info->base_pfn, info->npages);
+	bitmap_free(info->readonly);
 	bitmap_free(info->absent);
 	kfree(info);
 	return 0;
+}
+
+static long mp_file_set_readonly(struct mp_info *info, void __user *uarg)
+{
+	struct mp_set_readonly sr;
+	unsigned long start, end;
+	int ret;
+
+	if (copy_from_user(&sr, uarg, sizeof(sr)))
+		return -EFAULT;
+	if (sr.value > 1 || sr.pad)
+		return -EINVAL;
+
+	ret = mp_range(info, sr.offset, sr.len, &start, &end);
+	if (!ret)
+		mp_set_readonly(info, start, end, sr.value);
+
+	return ret;
 }
 
 static long mp_file_set_present(struct mp_info *info, void __user *uarg)
@@ -105,6 +138,8 @@ static long mp_file_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case MP_SET_PRESENT:
 		return mp_file_set_present(info, uarg);
+	case MP_SET_READONLY:
+		return mp_file_set_readonly(info, uarg);
 	default:
 		return -ENOTTY;
 	}
@@ -147,11 +182,17 @@ static long mp_ctl_new_file(void __user *uarg)
 		goto err_free_info;
 	}
 
+	info->readonly = bitmap_zalloc(npages, GFP_KERNEL);
+	if (!info->readonly) {
+		ret = -ENOMEM;
+		goto err_free_absent;
+	}
+
 	pages = alloc_contig_pages(npages, GFP_KERNEL | __GFP_ZERO,
 				   numa_node_id(), NULL);
 	if (!pages) {
 		ret = -ENOMEM;
-		goto err_free_absent;
+		goto err_free_readonly;
 	}
 
 	info->cma_pages = pages;
@@ -178,6 +219,8 @@ static long mp_ctl_new_file(void __user *uarg)
 
 err_free_pages:
 	free_contig_range(page_to_pfn(pages), npages);
+err_free_readonly:
+	bitmap_free(info->readonly);
 err_free_absent:
 	bitmap_free(info->absent);
 err_free_info:
