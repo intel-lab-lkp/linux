@@ -2871,6 +2871,42 @@ int vfio_pci_core_gmem_lookup_pfn_range(struct vfio_device *core_vdev,
 	return -ENOENT;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_lookup_pfn_range);
+
+static ssize_t vfio_pci_core_gmem_rw(struct vfio_device *core_vdev,
+				     void *kbuf, size_t count,
+				     loff_t *ppos, bool iswrite)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	unsigned int index = VFIO_PCI_OFFSET_TO_INDEX(*ppos);
+
+	if (!count)
+		return 0;
+
+	if (index >= PCI_STD_NUM_BARS || !vdev->bar_mmap_supported[index])
+		return -EINVAL;
+
+	/* Lockless check on availability of BARs. */
+	if (!vfio_pci_get_bars_available(vdev))
+		return -EIO;
+
+	return vfio_pci_bar_rw_kbuf(vdev, kbuf, count, ppos, iswrite, false);
+}
+
+ssize_t vfio_pci_core_gmem_read(struct vfio_device *core_vdev, void *buf,
+				size_t count, loff_t *ppos)
+{
+	return vfio_pci_core_gmem_rw(core_vdev, buf, count, ppos, false);
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_read);
+
+ssize_t vfio_pci_core_gmem_write(struct vfio_device *core_vdev,
+				 const void *buf, size_t count,
+				 loff_t *ppos)
+{
+	return vfio_pci_core_gmem_rw(core_vdev, (void *)buf, count, ppos, true);
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_write);
 #endif
 
 module_init(vfio_pci_core_init);

@@ -181,6 +181,11 @@ int vfio_pci_core_gmem_check_set_attributes(struct vfio_device *core_vdev,
 int vfio_pci_core_gmem_lookup_pfn_range(struct vfio_device *core_vdev,
 					pgoff_t index, unsigned long *pfn,
 					size_t *nr_pages);
+ssize_t vfio_pci_core_gmem_read(struct vfio_device *core_vdev, void *buf,
+				size_t count, loff_t *ppos);
+ssize_t vfio_pci_core_gmem_write(struct vfio_device *core_vdev,
+				 const void *buf, size_t count,
+				 loff_t *ppos);
 static inline void vfio_pci_set_bars_available(struct vfio_pci_core_device *vdev,
 					       bool available)
 {

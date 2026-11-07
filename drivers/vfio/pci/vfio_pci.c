@@ -174,6 +174,8 @@ static const struct vfio_device_ops vfio_pci_ops = {
 	.gmem_get_pfn		= vfio_pci_core_gmem_get_pfn,
 	.gmem_lookup_pfn_range	= vfio_pci_core_gmem_lookup_pfn_range,
 	.gmem_check_set_attributes = vfio_pci_core_gmem_check_set_attributes,
+	.gmem_read		= vfio_pci_core_gmem_read,
+	.gmem_write		= vfio_pci_core_gmem_write,
 #endif
 };
 
