@@ -149,6 +149,7 @@ struct vfio_pci_core_device {
 	struct notifier_block	nb;
 	struct rw_semaphore	memory_lock;
 	struct list_head	dmabufs;
+	bool			bars_available;
 };
 
 enum vfio_pci_io_width {
@@ -168,6 +169,10 @@ int vfio_pci_core_init_dev(struct vfio_device *core_vdev);
 void vfio_pci_core_release_dev(struct vfio_device *core_vdev);
 int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev);
 void vfio_pci_core_unregister_device(struct vfio_pci_core_device *vdev);
+#ifdef CONFIG_KVM_GUEST_MEMFD
+int vfio_pci_core_gmem_attach(struct vfio_device *core_vdev);
+void vfio_pci_core_gmem_release(struct vfio_device *core_vdev);
+#endif
 extern const struct pci_error_handlers vfio_pci_core_err_handlers;
 int vfio_pci_core_sriov_configure(struct vfio_pci_core_device *vdev,
 				  int nr_virtfn);

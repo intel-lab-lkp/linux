@@ -168,6 +168,10 @@ static const struct vfio_device_ops vfio_pci_ops = {
 	.detach_ioas	= vfio_iommufd_physical_detach_ioas,
 	.pasid_attach_ioas	= vfio_iommufd_physical_pasid_attach_ioas,
 	.pasid_detach_ioas	= vfio_iommufd_physical_pasid_detach_ioas,
+#ifdef CONFIG_KVM_GUEST_MEMFD
+	.gmem_attach	= vfio_pci_core_gmem_attach,
+	.gmem_release	= vfio_pci_core_gmem_release,
+#endif
 };
 
 static const struct vfio_pci_device_ops vfio_pci_dev_ops = {

@@ -15,6 +15,7 @@
 #include <linux/device.h>
 #include <linux/eventfd.h>
 #include <linux/file.h>
+#include <linux/guest_memfd.h>
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
 #include <linux/module.h>
@@ -2695,6 +2696,42 @@ static int __init vfio_pci_core_init(void)
 	/* Allocate shared config space permission data used by all devices */
 	return vfio_pci_init_perm_bits();
 }
+
+#ifdef CONFIG_KVM_GUEST_MEMFD
+int vfio_pci_core_gmem_attach(struct vfio_device *core_vdev)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	bool bars_available;
+
+	down_write(&vdev->memory_lock);
+
+	bars_available = __vfio_pci_memory_enabled(vdev) &&
+			 !vdev->pm_runtime_engaged;
+
+	/* Pairs with smp_load_acquire() in provider operations */
+	smp_store_release(&vdev->bars_available, bars_available);
+
+	up_write(&vdev->memory_lock);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_attach);
+
+void vfio_pci_core_gmem_release(struct vfio_device *core_vdev)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+
+	down_write(&vdev->memory_lock);
+
+	/* Pairs with smp_load_acquire() in provider operations */
+	smp_store_release(&vdev->bars_available, false);
+
+	up_write(&vdev->memory_lock);
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_release);
+#endif
 
 module_init(vfio_pci_core_init);
 module_exit(vfio_pci_core_cleanup);
