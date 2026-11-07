@@ -331,4 +331,49 @@ TEST_F(guest_memfd_vfio, bar_mmap)
 	ASSERT_EQ(0, munmap(bar0, bar0_info.size));
 }
 
+TEST_F(guest_memfd_vfio, device_reset)
+{
+	struct vfio_region_info bar0_info = {};
+	uint32_t val;
+	void *bar0;
+	int retries = 20;
+	int ret;
+
+	vfio_pci_enable_memory_and_bus_master(_metadata, self->vfio_fd);
+
+	bar0_info.argsz = sizeof(bar0_info);
+	bar0_info.index = VFIO_PCI_BAR0_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_info);
+	ASSERT_EQ(0, ret);
+
+	bar0 = mmap(NULL, bar0_info.size, PROT_READ | PROT_WRITE, MAP_SHARED,
+		    self->vfio_fd, bar0_info.offset);
+	ASSERT_NE(MAP_FAILED, bar0);
+
+	/* Write scratch test pattern to RAL0 */
+	WRITE_ONCE(*(uint32_t *)((char *)bar0 + E1000_RAL0), 0xdeadbeef);
+	val = READ_ONCE(*(uint32_t *)((char *)bar0 + E1000_RAL0));
+	ASSERT_EQ(0xdeadbeef, val);
+
+	/* Trigger VFIO_DEVICE_RESET, handling possible lock contention (-EAGAIN) */
+	do {
+		ret = ioctl(self->vfio_fd, VFIO_DEVICE_RESET, NULL);
+		if (ret != 0 && errno == EAGAIN)
+			usleep(10000);
+	} while (ret != 0 && errno == EAGAIN && retries-- > 0);
+	ASSERT_EQ(0, ret);
+
+	/*
+	 * After device reset, PCI Command register memory decode is cleared by
+	 * hardware. Re-enable it to access BAR0 registers again.
+	 */
+	vfio_pci_enable_memory_and_bus_master(_metadata, self->vfio_fd);
+
+	/* Verify RAL0 was reset and reverted from scratch pattern */
+	val = READ_ONCE(*(uint32_t *)((char *)bar0 + E1000_RAL0));
+	ASSERT_NE(0xdeadbeef, val);
+
+	ASSERT_EQ(0, munmap(bar0, bar0_info.size));
+}
+
 TEST_HARNESS_MAIN
