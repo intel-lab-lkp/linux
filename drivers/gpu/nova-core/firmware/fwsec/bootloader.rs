@@ -103,14 +103,15 @@ pub(crate) struct FwsecFirmwareWithBl<'a> {
 }
 
 impl<'a> FwsecFirmwareWithBl<'a> {
-    /// Loads the bootloader firmware for `dev` and `chipset`, and wrap `firmware` so it can be
-    /// loaded using it.
+    /// Loads the bootloader firmware for `dev` and `chipset`, placed at the top of `falcon`'s IMEM,
+    /// and wraps `firmware` so it can be loaded using it.
     pub(crate) fn new(
         firmware: FwsecFirmware,
         dev: &'a Device<device::Bound>,
         chipset: Chipset,
+        falcon: &Falcon<'_, Gsp>,
     ) -> Result<Self> {
-        let bootloader = GenericBootloader::new(dev, chipset)?;
+        let bootloader = GenericBootloader::new(dev, chipset, falcon)?;
 
         // `BootloaderDmemDescV2` expects the source to be a mirror image of the destination and
         // uses the same offset parameter for both.
