@@ -2325,11 +2325,7 @@ static struct platform_driver gpi_driver = {
 	},
 };
 
-static int __init gpi_init(void)
-{
-	return platform_driver_register(&gpi_driver);
-}
-subsys_initcall(gpi_init)
+subsys_platform_driver(gpi_driver);
 
 MODULE_DESCRIPTION("QCOM GPI DMA engine driver");
 MODULE_LICENSE("GPL v2");
