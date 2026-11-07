@@ -28,8 +28,13 @@ struct mempolicy;
  *           @pfn with uniform @pfn_attrs in @max_order. Once @get_pfn succeeds,
  *           the provider must keep the @index-to-@pfn mapping and @pfn_attrs
  *           constant, and the memory accessible, until guest_memfd stops using
- *           this page. Returns a negative error code on failure. The provider
- *           must define @lookup_pfn_range when @get_pfn is defined.
+ *           this page. Do not take locks held across kvm_gmem_revoke().
+ *           Returns a negative error code on failure. The provider must define
+ *           @lookup_pfn_range when @get_pfn is defined.
+ * @mmap: Optional callback to set up user mappings. Called when userspace calls
+ *        mmap() on guest_memfd. The provider can customize VMA flags,
+ *        cacheability/protections, or reject the mapping. If not defined,
+ *        guest_memfd falls back to default mapping behavior.
  * @lookup_pfn_range: Look up the PFN for a given index. This only checks for
  *                    the existence of backing pages and should not allocate
  *                    memory. Returns 0 on success with the physical frame
@@ -41,15 +46,18 @@ struct mempolicy;
  *                    constant until guest_memfd stops using the range. If
  *                    backing memory is not available at @index, return -ENOENT
  *                    with @nr_pages set to the number of consecutive indices
- *                    starting from @index that have no entry. Return a negative
- *                    error code on other failure. The provider must define
- *                    @get_pfn when @lookup_pfn_range is defined.
+ *                    starting from @index that have no entry. Do not take locks
+ *                    held across kvm_gmem_revoke(). Return a negative error
+ *                    code on other failure. The provider must define @get_pfn
+ *                    when @lookup_pfn_range is defined.
  * @put_pfn_range: Release a range of PFNs previously obtained for a given
  *                 index. Called with the exclusive filemap invalidate lock held.
  *                 This indicates to the provider that guest_memfd is no longer
  *                 using the memory range. The provider does not need to ensure
  *                 that backing memory is present; if backing memory is not
- *                 available, the provider should skip the unbacked range.
+ *                 available, the provider should skip the unbacked range. Not
+ *                 called on kvm_gmem_revoke(). Do not take locks held across
+ *                 kvm_gmem_revoke().
  *
  * Used by filesystems and device drivers that provide memory for guest_memfd.
  */
@@ -65,5 +73,16 @@ struct guest_memfd_provider_operations {
 				unsigned long *pfn, size_t *nr_pages);
 	void (*put_pfn_range)(void *provider, pgoff_t index, size_t nr_pages);
 };
+
+#ifdef CONFIG_KVM_GUEST_MEMFD
+int kvm_gmem_revoke(struct inode *inode, pgoff_t start, size_t nr_pages,
+		    const unsigned long *pfn);
+#else
+static inline int kvm_gmem_revoke(struct inode *inode, pgoff_t start, size_t nr_pages,
+				  const unsigned long *pfn)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 
 #endif /* _LINUX_GUEST_MEMFD_H */
