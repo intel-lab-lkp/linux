@@ -1643,6 +1643,16 @@ static const struct guest_memfd_provider_operations vfio_device_gmem_provider_op
 	.mmap                 = vfio_device_gmem_mmap,
 	.check_set_attributes = vfio_device_gmem_check_set_attributes,
 };
+
+int vfio_device_gmem_revoke(struct vfio_device *device, pgoff_t start,
+			    size_t nr_pages, const unsigned long *pfn)
+{
+	if (!device->gmem_inode)
+		return 0;
+
+	return kvm_gmem_revoke(device->gmem_inode, start, nr_pages, pfn);
+}
+EXPORT_SYMBOL_GPL(vfio_device_gmem_revoke);
 #endif
 
 const struct file_operations vfio_device_fops = {

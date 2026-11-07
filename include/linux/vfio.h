@@ -394,6 +394,18 @@ bool vfio_file_is_valid(struct file *file);
 bool vfio_file_enforced_coherent(struct file *file);
 void vfio_file_set_kvm(struct file *vfio_file, struct file *kvm);
 
+#ifdef CONFIG_KVM_GUEST_MEMFD
+int vfio_device_gmem_revoke(struct vfio_device *device, pgoff_t start,
+			    size_t nr_pages, const unsigned long *pfn);
+#else
+static inline int vfio_device_gmem_revoke(struct vfio_device *device,
+					  pgoff_t start, size_t nr_pages,
+					  const unsigned long *pfn)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
 #define VFIO_PIN_PAGES_MAX_ENTRIES	(PAGE_SIZE/sizeof(unsigned long))
 
 int vfio_pin_pages(struct vfio_device *device, dma_addr_t iova,
