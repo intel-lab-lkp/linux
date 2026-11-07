@@ -1678,8 +1678,12 @@ static long __kvm_gmem_populate(struct kvm *kvm, struct kvm_memory_slot *slot,
 	if (folio)
 		folio_unlock(folio);
 
-	/* Populating pages initializes private memory, which cannot be read-only. */
-	if (pfn_attrs & GUEST_MEMFD_PFN_ATTRS_READONLY) {
+	/*
+	 * Populating pages initializes private memory, which cannot be
+	 * read-only or non-cacheable.
+	 */
+	if ((pfn_attrs & GUEST_MEMFD_PFN_ATTRS_READONLY) ||
+	    !kvm_gmem_pfn_is_cacheable(pfn_attrs)) {
 		ret = -EPERM;
 		goto out_put_folio;
 	}

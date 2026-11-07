@@ -4695,6 +4695,14 @@ static int kvm_mmu_faultin_pfn_gmem(struct kvm_vcpu *vcpu,
 		kvm_mmu_prepare_memory_fault_exit(vcpu, fault);
 		return -EFAULT;
 	}
+
+	/*
+	 * TODO: Perhaps resolve stage-2 cacheability from pfn_attrs instead of
+	 * relying on host MMIO PFN heuristics when constructing SPTEs?
+	 */
+	WARN_ON_ONCE(__kvm_is_mmio_pfn(fault->pfn) !=
+		     !kvm_gmem_pfn_is_cacheable(pfn_attrs));
+
 	fault->max_level = kvm_max_level_for_order(max_order);
 
 	return RET_PF_CONTINUE;

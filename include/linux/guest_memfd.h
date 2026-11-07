@@ -2,6 +2,7 @@
 #ifndef _LINUX_GUEST_MEMFD_H
 #define _LINUX_GUEST_MEMFD_H
 
+#include <linux/bits.h>
 #include <linux/types.h>
 
 struct file;
@@ -9,7 +10,33 @@ struct folio;
 struct inode;
 struct mempolicy;
 
-#define GUEST_MEMFD_PFN_ATTRS_READONLY	(1ULL << 0)
+#define GUEST_MEMFD_PFN_ATTRS_READONLY		(1ULL << 0)
+
+/*
+ * Cacheability attributes for physical frames returned by providers
+ * (columns show x86 / arm64 memory types):
+ *
+ * Attribute                               | Host PTE       | Stage-2 PTE
+ * ----------------------------------------+----------------+---------------
+ * GUEST_MEMFD_PFN_ATTRS_CACHE_WB          | WB / Normal    | WB / Normal
+ * GUEST_MEMFD_PFN_ATTRS_CACHE_UC          | UC / Device    | UC / Device
+ * GUEST_MEMFD_PFN_ATTRS_CACHE_UC_ALLOW_WC | UC / Device    | UC / Normal-NC
+ * GUEST_MEMFD_PFN_ATTRS_CACHE_WC          | WC / Normal-NC | UC / Normal-NC
+ *
+ * GUEST_MEMFD_PFN_ATTRS_CACHE_WB is 0 so normal cacheable memory is the
+ * default when no cacheability bits are set.
+ */
+#define GUEST_MEMFD_PFN_ATTRS_CACHE_MASK	GENMASK_ULL(2, 1)
+#define GUEST_MEMFD_PFN_ATTRS_CACHE_WB		(0ULL << 1)
+#define GUEST_MEMFD_PFN_ATTRS_CACHE_UC		(1ULL << 1)
+#define GUEST_MEMFD_PFN_ATTRS_CACHE_UC_ALLOW_WC	(2ULL << 1)
+#define GUEST_MEMFD_PFN_ATTRS_CACHE_WC		(3ULL << 1)
+
+static inline bool kvm_gmem_pfn_is_cacheable(u64 pfn_attrs)
+{
+	return (pfn_attrs & GUEST_MEMFD_PFN_ATTRS_CACHE_MASK) ==
+	       GUEST_MEMFD_PFN_ATTRS_CACHE_WB;
+}
 
 /**
  * struct guest_memfd_provider_operations - Operations for external memory providers

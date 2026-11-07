@@ -1789,14 +1789,40 @@ static int gmem_abort(const struct kvm_s2_fault_desc *s2fd,
 		return ret ?: -EFAULT;
 	}
 
+	if (!kvm_gmem_pfn_is_cacheable(pfn_attrs) && exec_fault) {
+		kfree(mapping);
+		return -ENOEXEC;
+	}
+
 	if (writable)
 		prot |= KVM_PGTABLE_PROT_W;
 
 	if (s2fd->nested)
 		prot = adjust_nested_fault_perms(s2fd->nested, prot);
 
-	if (exec_fault || cpus_have_final_cap(ARM64_HAS_CACHE_DIC))
-		prot |= KVM_PGTABLE_PROT_X;
+	switch (pfn_attrs & GUEST_MEMFD_PFN_ATTRS_CACHE_MASK) {
+	case GUEST_MEMFD_PFN_ATTRS_CACHE_WB:
+		if (!pfn_is_map_memory(s2vi.pfn) &&
+		    !kvm_supports_cacheable_pfnmap()) {
+			if (!result)
+				kvm_prepare_memory_fault_exit(
+					s2fd->vcpu, gfn_to_gpa(canonical_gfn),
+					s2vi.vma_pagesize, write_fault,
+					exec_fault, false);
+			kfree(mapping);
+			return -EFAULT;
+		}
+		if (exec_fault || cpus_have_final_cap(ARM64_HAS_CACHE_DIC))
+			prot |= KVM_PGTABLE_PROT_X;
+		break;
+	case GUEST_MEMFD_PFN_ATTRS_CACHE_UC:
+		prot |= KVM_PGTABLE_PROT_DEVICE;
+		break;
+	case GUEST_MEMFD_PFN_ATTRS_CACHE_UC_ALLOW_WC:
+	case GUEST_MEMFD_PFN_ATTRS_CACHE_WC:
+		prot |= KVM_PGTABLE_PROT_NORMAL_NC;
+		break;
+	}
 
 	if (s2fd->nested)
 		prot = adjust_nested_exec_perms(kvm, s2fd->nested, prot);

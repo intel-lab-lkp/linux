@@ -1633,6 +1633,11 @@ static int kvm_translate_vncr(struct kvm_vcpu *vcpu, bool *is_gmem)
 						      true, false, false);
 			return -EFAULT;
 		}
+
+		if (!kvm_gmem_pfn_is_cacheable(pfn_attrs)) {
+			fail_s1_walk(&vt->wr, ESR_ELx_FSC_EXTABT, false);
+			return -EINVAL;
+		}
 	}
 
 	/*

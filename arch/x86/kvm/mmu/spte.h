@@ -557,6 +557,7 @@ static inline u64 get_mmio_spte_generation(u64 spte)
 	return gen;
 }
 
+bool __kvm_is_mmio_pfn(kvm_pfn_t pfn);
 bool spte_needs_atomic_update(u64 spte);
 
 bool make_spte(struct kvm_vcpu *vcpu, struct kvm_mmu_page *sp,
