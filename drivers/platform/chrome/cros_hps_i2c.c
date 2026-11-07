@@ -36,17 +36,26 @@ static int hps_open(struct inode *inode, struct file *file)
 	struct hps_drvdata *hps = container_of(file->private_data,
 					       struct hps_drvdata, misc_device);
 	struct device *dev = &hps->client->dev;
+	int ret;
 
-	return pm_runtime_resume_and_get(dev);
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret)
+		return ret;
+
+	/*
+	 * hps is freed when the driver is unbound, which can happen before
+	 * release(), so release() uses only the device, held here.
+	 */
+	file->private_data = get_device(dev);
+	return 0;
 }
 
 static int hps_release(struct inode *inode, struct file *file)
 {
-	struct hps_drvdata *hps = container_of(file->private_data,
-					       struct hps_drvdata, misc_device);
-	struct device *dev = &hps->client->dev;
+	struct device *dev = file->private_data;
 
 	pm_runtime_put(dev);
+	put_device(dev);
 
 	return 0;
 }
