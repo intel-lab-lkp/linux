@@ -80,9 +80,25 @@ static struct folio *gmem_native_alloc_folio(void *provider, pgoff_t index,
 	return folio;
 }
 
+static ssize_t gmem_native_read(void *provider, void *buf, size_t count,
+				loff_t *ppos)
+{
+	/* TODO: Support reading from native provider folios. */
+	return -EINVAL;
+}
+
+static ssize_t gmem_native_write(void *provider, const void *buf,
+				 size_t count, loff_t *ppos)
+{
+	/* TODO: Support writing to native provider folios. */
+	return -EINVAL;
+}
+
 static const struct guest_memfd_provider_operations gmem_native_provider_ops = {
 	.attach = gmem_native_attach,
 	.alloc_folio = gmem_native_alloc_folio,
+	.read = gmem_native_read,
+	.write = gmem_native_write,
 };
 
 static bool gmem_provider_ops_valid(struct gmem_inode *gi,
@@ -208,6 +224,25 @@ static int gmem_provider_mmap(struct gmem_inode *gi, struct vm_area_struct *vma)
 		return gi->provider_ops->mmap(gi->provider, vma);
 
 	return 0;
+}
+
+static ssize_t gmem_provider_read(struct gmem_inode *gi, void *buf,
+				  size_t count, loff_t *ppos)
+{
+	if (gi->provider_ops && gi->provider_ops->read)
+		return gi->provider_ops->read(gi->provider, buf, count, ppos);
+
+	return -EINVAL;
+}
+
+static ssize_t gmem_provider_write(struct gmem_inode *gi,
+				   const void *buf, size_t count,
+				   loff_t *ppos)
+{
+	if (gi->provider_ops && gi->provider_ops->write)
+		return gi->provider_ops->write(gi->provider, buf, count, ppos);
+
+	return -EINVAL;
 }
 
 static int gmem_provider_check_set_attributes(struct gmem_inode *gi, pgoff_t index,
@@ -1204,7 +1239,86 @@ static long kvm_gmem_ioctl(struct file *file, unsigned int ioctl,
 	}
 }
 
+static ssize_t kvm_gmem_rw(struct file *file, void __user *buf, size_t count,
+			   loff_t *ppos, bool is_write)
+{
+	struct inode *inode = file_inode(file);
+	struct gmem_inode *gi = GMEM_I(inode);
+	size_t total_done = 0;
+	loff_t isize;
+
+	if (!count)
+		return 0;
+
+	if (*ppos < 0)
+		return -EINVAL;
+
+	isize = i_size_read(inode);
+	if (*ppos >= isize)
+		return 0;
+
+	count = min_t(size_t, count, isize - *ppos);
+
+	while (count) {
+		u8 bounce[256];
+		size_t chunk = min_t(size_t, count, sizeof(bounce));
+		pgoff_t start = *ppos >> PAGE_SHIFT;
+		pgoff_t end = (*ppos + chunk - 1) >> PAGE_SHIFT;
+		pgoff_t nr_pages = end - start + 1;
+		ssize_t ret;
+
+		if (is_write) {
+			if (copy_from_user(bounce, (const char __user *)buf + total_done, chunk))
+				return total_done ?: -EFAULT;
+		}
+
+		filemap_invalidate_lock_shared(inode->i_mapping);
+
+		if (!kvm_gmem_range_has_attributes(inode, start, nr_pages, 0)) {
+			filemap_invalidate_unlock_shared(inode->i_mapping);
+			return total_done ?: -EFAULT;
+		}
+
+		if (is_write)
+			ret = gmem_provider_write(gi, bounce, chunk, ppos);
+		else
+			ret = gmem_provider_read(gi, bounce, chunk, ppos);
+
+		filemap_invalidate_unlock_shared(inode->i_mapping);
+
+		if (ret < 0)
+			return total_done ?: ret;
+
+		if (!ret)
+			break;
+
+		if (!is_write) {
+			if (copy_to_user((char __user *)buf + total_done, bounce, ret))
+				return total_done ?: -EFAULT;
+		}
+
+		total_done += ret;
+		count -= ret;
+	}
+
+	return total_done;
+}
+
+static ssize_t kvm_gmem_read(struct file *file, char __user *buf, size_t count,
+			     loff_t *ppos)
+{
+	return kvm_gmem_rw(file, buf, count, ppos, false);
+}
+
+static ssize_t kvm_gmem_write(struct file *file, const char __user *buf,
+			      size_t count, loff_t *ppos)
+{
+	return kvm_gmem_rw(file, (void __user *)buf, count, ppos, true);
+}
+
 static struct file_operations kvm_gmem_fops = {
+	.read		= kvm_gmem_read,
+	.write		= kvm_gmem_write,
 	.mmap		= kvm_gmem_mmap,
 	.open		= generic_file_open,
 	.release	= kvm_gmem_release,
@@ -1395,6 +1509,7 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags, int resour
 		goto err_inode;
 	}
 
+	file->f_mode |= FMODE_PREAD | FMODE_PWRITE;
 	file->f_flags |= O_LARGEFILE;
 	file->private_data = f;
 

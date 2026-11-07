@@ -113,6 +113,10 @@ struct guest_memfd_provider_operations {
 				unsigned long *pfn, size_t *nr_pages);
 	void (*put_pfn_range)(void *provider, pgoff_t index, size_t nr_pages);
 	int (*mmap)(void *provider, struct vm_area_struct *vma);
+	ssize_t (*read)(void *provider, void *buf, size_t count,
+			loff_t *ppos);
+	ssize_t (*write)(void *provider, const void *buf, size_t count,
+			 loff_t *ppos);
 	int (*check_set_attributes)(void *provider, pgoff_t index,
 				    size_t nr_pages, u64 attributes);
 };
