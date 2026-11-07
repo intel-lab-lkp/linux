@@ -27,6 +27,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/module.h>
+#include <linux/cleanup.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -133,7 +134,7 @@ static int omap_wdt_start(struct watchdog_device *wdog)
 	struct omap_wdt_dev *wdev = to_omap_wdt_dev(wdog);
 	void __iomem *base = wdev->base;
 
-	mutex_lock(&wdev->lock);
+	guard(mutex)(&wdev->lock);
 
 	wdev->omap_wdt_users = true;
 
@@ -158,8 +159,6 @@ static int omap_wdt_start(struct watchdog_device *wdog)
 	omap_wdt_reload(wdev); /* trigger loading of new timeout value */
 	omap_wdt_enable(wdev);
 
-	mutex_unlock(&wdev->lock);
-
 	return 0;
 }
 
@@ -167,11 +166,11 @@ static int omap_wdt_stop(struct watchdog_device *wdog)
 {
 	struct omap_wdt_dev *wdev = to_omap_wdt_dev(wdog);
 
-	mutex_lock(&wdev->lock);
+	guard(mutex)(&wdev->lock);
 	omap_wdt_disable(wdev);
 	pm_runtime_put_sync(wdev->dev);
 	wdev->omap_wdt_users = false;
-	mutex_unlock(&wdev->lock);
+
 	return 0;
 }
 
@@ -179,9 +178,8 @@ static int omap_wdt_ping(struct watchdog_device *wdog)
 {
 	struct omap_wdt_dev *wdev = to_omap_wdt_dev(wdog);
 
-	mutex_lock(&wdev->lock);
+	guard(mutex)(&wdev->lock);
 	omap_wdt_reload(wdev);
-	mutex_unlock(&wdev->lock);
 
 	return 0;
 }
@@ -191,13 +189,12 @@ static int omap_wdt_set_timeout(struct watchdog_device *wdog,
 {
 	struct omap_wdt_dev *wdev = to_omap_wdt_dev(wdog);
 
-	mutex_lock(&wdev->lock);
+	guard(mutex)(&wdev->lock);
 	omap_wdt_disable(wdev);
 	omap_wdt_set_timer(wdev, timeout);
 	omap_wdt_enable(wdev);
 	omap_wdt_reload(wdev);
 	wdog->timeout = timeout;
-	mutex_unlock(&wdev->lock);
 
 	return 0;
 }
@@ -298,12 +295,11 @@ static void omap_wdt_shutdown(struct platform_device *pdev)
 {
 	struct omap_wdt_dev *wdev = platform_get_drvdata(pdev);
 
-	mutex_lock(&wdev->lock);
+	guard(mutex)(&wdev->lock);
 	if (wdev->omap_wdt_users) {
 		omap_wdt_disable(wdev);
 		pm_runtime_put_sync(wdev->dev);
 	}
-	mutex_unlock(&wdev->lock);
 }
 
 static void omap_wdt_remove(struct platform_device *pdev)
@@ -324,12 +320,11 @@ static int omap_wdt_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct omap_wdt_dev *wdev = platform_get_drvdata(pdev);
 
-	mutex_lock(&wdev->lock);
+	guard(mutex)(&wdev->lock);
 	if (wdev->omap_wdt_users) {
 		omap_wdt_disable(wdev);
 		pm_runtime_put_sync(wdev->dev);
 	}
-	mutex_unlock(&wdev->lock);
 
 	return 0;
 }
@@ -338,13 +333,12 @@ static int omap_wdt_resume(struct platform_device *pdev)
 {
 	struct omap_wdt_dev *wdev = platform_get_drvdata(pdev);
 
-	mutex_lock(&wdev->lock);
+	guard(mutex)(&wdev->lock);
 	if (wdev->omap_wdt_users) {
 		pm_runtime_get_sync(wdev->dev);
 		omap_wdt_enable(wdev);
 		omap_wdt_reload(wdev);
 	}
-	mutex_unlock(&wdev->lock);
 
 	return 0;
 }
