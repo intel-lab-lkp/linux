@@ -128,6 +128,8 @@ struct vfio_device_ops {
 	int (*gmem_check_set_attributes)(struct vfio_device *device,
 					 pgoff_t index, size_t nr_pages,
 					 u64 attributes);
+	int (*gmem_lookup_pfn_range)(struct vfio_device *device, pgoff_t index,
+				     unsigned long *pfn, size_t *nr_pages);
 	char	*name;
 	int	(*init)(struct vfio_device *vdev);
 	void	(*release)(struct vfio_device *vdev);
