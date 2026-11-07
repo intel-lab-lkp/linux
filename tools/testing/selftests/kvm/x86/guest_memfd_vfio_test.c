@@ -236,4 +236,62 @@ TEST_F(guest_memfd_vfio, get_irq_info)
 	}
 }
 
+static void vfio_pci_enable_memory_and_bus_master(struct __test_metadata *_metadata,
+						  int vfio_fd)
+{
+	struct vfio_region_info cfg_info = {};
+	ssize_t ret_bytes;
+	uint16_t cmd;
+	int ret;
+
+	cfg_info.argsz = sizeof(cfg_info);
+	cfg_info.index = VFIO_PCI_CONFIG_REGION_INDEX;
+	ret = ioctl(vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &cfg_info);
+	ASSERT_EQ(0, ret);
+
+	/* Enable Memory Space and Bus Master in PCI Command register */
+	ret_bytes = pread(vfio_fd, &cmd, sizeof(cmd), cfg_info.offset + PCI_COMMAND);
+	ASSERT_EQ(sizeof(cmd), ret_bytes);
+	cmd |= (PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
+	ret_bytes = pwrite(vfio_fd, &cmd, sizeof(cmd), cfg_info.offset + PCI_COMMAND);
+	ASSERT_EQ(sizeof(cmd), ret_bytes);
+}
+
+TEST_F(guest_memfd_vfio, bar_rw)
+{
+	struct vfio_region_info bar0_info = {};
+	ssize_t ret_bytes;
+	uint32_t val;
+	int ret;
+
+	vfio_pci_enable_memory_and_bus_master(_metadata, self->vfio_fd);
+
+	bar0_info.argsz = sizeof(bar0_info);
+	bar0_info.index = VFIO_PCI_BAR0_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_info);
+	ASSERT_EQ(0, ret);
+
+	/*
+	 * Read Device Status (E1000_STATUS) via pread() at BAR0 offset.
+	 * Confirm device is readable and does not return 0xFFFFFFFF.
+	 */
+	val = 0;
+	ret_bytes = pread(self->vfio_fd, &val, sizeof(val), bar0_info.offset + E1000_STATUS);
+	ASSERT_EQ(sizeof(val), ret_bytes);
+	ASSERT_NE(0xFFFFFFFF, val);
+
+	/*
+	 * Write a distinct scratch test pattern to RAL0 via pwrite() and read
+	 * it back via pread().
+	 */
+	val = 0xdeadbeef;
+	ret_bytes = pwrite(self->vfio_fd, &val, sizeof(val), bar0_info.offset + E1000_RAL0);
+	ASSERT_EQ(sizeof(val), ret_bytes);
+
+	val = 0;
+	ret_bytes = pread(self->vfio_fd, &val, sizeof(val), bar0_info.offset + E1000_RAL0);
+	ASSERT_EQ(sizeof(val), ret_bytes);
+	ASSERT_EQ(0xdeadbeef, val);
+}
+
 TEST_HARNESS_MAIN
