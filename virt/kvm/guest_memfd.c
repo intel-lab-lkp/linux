@@ -210,6 +210,16 @@ static int gmem_provider_mmap(struct gmem_inode *gi, struct vm_area_struct *vma)
 	return 0;
 }
 
+static int gmem_provider_check_set_attributes(struct gmem_inode *gi, pgoff_t index,
+					      size_t nr_pages, u64 attributes)
+{
+	if (gi->provider_ops && gi->provider_ops->check_set_attributes)
+		return gi->provider_ops->check_set_attributes(gi->provider, index,
+							      nr_pages, attributes);
+
+	return 0;
+}
+
 #define kvm_gmem_for_each_file(f, inode) \
 	list_for_each_entry(f, &GMEM_I(inode)->gmem_file_list, entry)
 
@@ -1082,6 +1092,12 @@ static int __kvm_gmem_set_attributes(struct inode *inode, pgoff_t start,
 
 	if (kvm_gmem_range_has_attributes(inode, start, nr_pages, attrs))
 		goto out;
+
+	r = gmem_provider_check_set_attributes(gi, start, nr_pages, attrs);
+	if (r) {
+		*err_index = start;
+		goto out;
+	}
 
 	mas_init(&mas, mt, start);
 	r = kvm_gmem_mas_preallocate(&mas, attrs, start, nr_pages);

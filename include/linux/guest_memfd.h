@@ -88,6 +88,16 @@ static inline bool kvm_gmem_pfn_is_cacheable(u64 pfn_attrs)
  * @mmap: Optional callback to set up user mappings. Called when userspace calls
  *        mmap() on guest_memfd. The provider can customize VMA flags, or reject
  *        the mapping.
+ * @check_set_attributes: Optional callback to validate attribute changes on a
+ *                        range of indices before they are committed. Called
+ *                        with the exclusive filemap invalidate lock held. The
+ *                        provider can inspect the requested attributes and
+ *                        offset range and return 0 to allow the transition or
+ *                        a negative error code (e.g. -EINVAL or -EPERM) to
+ *                        reject it. Once @check_set_attributes succeeds, the
+ *                        provider must ensure this result stays valid and
+ *                        constant until guest_memfd stops using the range. Do
+ *                        not take locks held across kvm_gmem_revoke().
  *
  * Used by filesystems and device drivers that provide memory for guest_memfd.
  */
@@ -103,6 +113,8 @@ struct guest_memfd_provider_operations {
 				unsigned long *pfn, size_t *nr_pages);
 	void (*put_pfn_range)(void *provider, pgoff_t index, size_t nr_pages);
 	int (*mmap)(void *provider, struct vm_area_struct *vma);
+	int (*check_set_attributes)(void *provider, pgoff_t index,
+				    size_t nr_pages, u64 attributes);
 };
 
 #ifdef CONFIG_KVM_GUEST_MEMFD
