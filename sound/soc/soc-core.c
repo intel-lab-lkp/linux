@@ -859,7 +859,7 @@ component_dai_empty:
 	return -EINVAL;
 }
 
-#define MAX_DEFAULT_CH_MAP_SIZE 8
+#define MAX_DEFAULT_CH_MAP_SIZE 12
 static struct snd_soc_dai_link_ch_map default_ch_map_sync[MAX_DEFAULT_CH_MAP_SIZE] = {
 	{ .cpu = 0, .codec = 0 },
 	{ .cpu = 1, .codec = 1 },
@@ -869,6 +869,10 @@ static struct snd_soc_dai_link_ch_map default_ch_map_sync[MAX_DEFAULT_CH_MAP_SIZ
 	{ .cpu = 5, .codec = 5 },
 	{ .cpu = 6, .codec = 6 },
 	{ .cpu = 7, .codec = 7 },
+	{ .cpu = 8, .codec = 8 },
+	{ .cpu = 9, .codec = 9 },
+	{ .cpu = 10, .codec = 10 },
+	{ .cpu = 11, .codec = 11 },
 };
 static struct snd_soc_dai_link_ch_map default_ch_map_1cpu[MAX_DEFAULT_CH_MAP_SIZE] = {
 	{ .cpu = 0, .codec = 0 },
@@ -879,6 +883,10 @@ static struct snd_soc_dai_link_ch_map default_ch_map_1cpu[MAX_DEFAULT_CH_MAP_SIZ
 	{ .cpu = 0, .codec = 5 },
 	{ .cpu = 0, .codec = 6 },
 	{ .cpu = 0, .codec = 7 },
+	{ .cpu = 0, .codec = 8 },
+	{ .cpu = 0, .codec = 9 },
+	{ .cpu = 0, .codec = 10 },
+	{ .cpu = 0, .codec = 11 },
 };
 static struct snd_soc_dai_link_ch_map default_ch_map_1codec[MAX_DEFAULT_CH_MAP_SIZE] = {
 	{ .cpu = 0, .codec = 0 },
@@ -889,6 +897,10 @@ static struct snd_soc_dai_link_ch_map default_ch_map_1codec[MAX_DEFAULT_CH_MAP_S
 	{ .cpu = 5, .codec = 0 },
 	{ .cpu = 6, .codec = 0 },
 	{ .cpu = 7, .codec = 0 },
+	{ .cpu = 8, .codec = 0 },
+	{ .cpu = 9, .codec = 0 },
+	{ .cpu = 10, .codec = 0 },
+	{ .cpu = 11, .codec = 0 },
 };
 static int snd_soc_compensate_channel_connection_map(struct snd_soc_card *card,
 						     struct snd_soc_dai_link *dai_link)
@@ -2021,6 +2033,47 @@ struct snd_kcontrol *snd_soc_cnew(const struct snd_kcontrol_new *_template,
 }
 EXPORT_SYMBOL_GPL(snd_soc_cnew);
 
+/*
+ * Two controls that write part of the same register field each change the
+ * other. Identical fields are allowed, as some drivers expose one field
+ * under two names.
+ */
+static void soc_check_control_overlap(struct snd_card *card,
+				      struct device *dev,
+				      struct snd_kcontrol *new)
+{
+	struct snd_soc_control_field a[2], b[2];
+	struct snd_kcontrol *kctl;
+	int na, nb, i, j;
+
+	na = snd_soc_control_fields(new, a);
+	if (!na)
+		return;
+
+	guard(rwsem_read)(&card->controls_rwsem);
+
+	list_for_each_entry(kctl, &card->controls, list) {
+		if (kctl->private_data != new->private_data)
+			continue;
+
+		nb = snd_soc_control_fields(kctl, b);
+		for (i = 0; i < na; i++) {
+			for (j = 0; j < nb; j++) {
+				if (a[i].reg != b[j].reg ||
+				    a[i].reg == SND_SOC_NOPM ||
+				    !(a[i].mask & b[j].mask) ||
+				    a[i].mask == b[j].mask)
+					continue;
+
+				dev_warn(dev,
+					 "ASoC: %s (%#x) overlaps %s (%#x) in register %#x\n",
+					 new->id.name, a[i].mask, kctl->id.name,
+					 b[j].mask, a[i].reg);
+			}
+		}
+	}
+}
+
 int snd_soc_add_controls(struct snd_card *card, struct device *dev,
 			 const struct snd_kcontrol_new *controls, int num_controls,
 			 const char *prefix, void *data)
@@ -2029,8 +2082,14 @@ int snd_soc_add_controls(struct snd_card *card, struct device *dev,
 
 	for (i = 0; i < num_controls; i++) {
 		const struct snd_kcontrol_new *control = &controls[i];
-		int err = snd_ctl_add(card, snd_soc_cnew(control, data,
-							 control->name, prefix));
+		struct snd_kcontrol *kctl;
+		int err;
+
+		kctl = snd_soc_cnew(control, data, control->name, prefix);
+		if (kctl)
+			soc_check_control_overlap(card, dev, kctl);
+
+		err = snd_ctl_add(card, kctl);
 		if (err < 0) {
 			dev_err(dev, "ASoC: Failed to add %s: %d\n",
 				control->name, err);
