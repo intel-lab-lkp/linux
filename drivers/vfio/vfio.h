@@ -16,11 +16,16 @@ struct iommufd_ctx;
 struct iommu_group;
 struct vfio_container;
 
+enum vfio_df_access_mode {
+	VFIO_DF_ACCESS_NONE = 0,
+	VFIO_DF_ACCESS_FULL,
+};
+
 struct vfio_device_file {
 	struct vfio_device *device;
 	struct vfio_group *group;
 
-	u8 access_granted;
+	enum vfio_df_access_mode access_mode;
 	u32 devid; /* only valid when iommufd is valid */
 	spinlock_t kvm_ref_lock; /* protect kvm field */
 	struct file *kvm;

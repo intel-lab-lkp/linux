@@ -125,7 +125,7 @@ long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 
 	mutex_lock(&device->dev_set->lock);
 	/* one device cannot be bound twice */
-	if (df->access_granted) {
+	if (df->access_mode != VFIO_DF_ACCESS_NONE) {
 		ret = -EINVAL;
 		goto out_unlock;
 	}
@@ -163,7 +163,7 @@ long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 	 * Paired with smp_load_acquire() in vfio_device_fops::ioctl/
 	 * read/write/mmap
 	 */
-	smp_store_release(&df->access_granted, true);
+	smp_store_release(&df->access_mode, VFIO_DF_ACCESS_FULL);
 	mutex_unlock(&device->dev_set->lock);
 	return 0;
 
@@ -185,10 +185,10 @@ void vfio_df_unbind_iommufd(struct vfio_device_file *df)
 
 	/*
 	 * In the time of close, there is no contention with another one
-	 * changing this flag.  So read df->access_granted without lock
+	 * changing this mode.  So read df->access_mode without lock
 	 * and no smp_load_acquire() is ok.
 	 */
-	if (!df->access_granted)
+	if (df->access_mode == VFIO_DF_ACCESS_NONE)
 		return;
 
 	mutex_lock(&device->dev_set->lock);

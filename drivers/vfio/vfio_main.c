@@ -1349,7 +1349,7 @@ static long vfio_device_fops_unl_ioctl(struct file *filep,
 		return vfio_df_ioctl_bind_iommufd(df, uptr);
 
 	/* Paired with smp_store_release() following vfio_df_open() */
-	if (!smp_load_acquire(&df->access_granted))
+	if (smp_load_acquire(&df->access_mode) == VFIO_DF_ACCESS_NONE)
 		return -EINVAL;
 
 	ret = vfio_device_pm_runtime_get(device);
@@ -1397,7 +1397,7 @@ static ssize_t vfio_device_fops_read(struct file *filep, char __user *buf,
 	struct vfio_device *device = df->device;
 
 	/* Paired with smp_store_release() following vfio_df_open() */
-	if (!smp_load_acquire(&df->access_granted))
+	if (smp_load_acquire(&df->access_mode) == VFIO_DF_ACCESS_NONE)
 		return -EINVAL;
 
 	if (unlikely(!device->ops->read))
@@ -1414,7 +1414,7 @@ static ssize_t vfio_device_fops_write(struct file *filep,
 	struct vfio_device *device = df->device;
 
 	/* Paired with smp_store_release() following vfio_df_open() */
-	if (!smp_load_acquire(&df->access_granted))
+	if (smp_load_acquire(&df->access_mode) == VFIO_DF_ACCESS_NONE)
 		return -EINVAL;
 
 	if (unlikely(!device->ops->write))
@@ -1429,7 +1429,7 @@ static int vfio_device_fops_mmap(struct file *filep, struct vm_area_struct *vma)
 	struct vfio_device *device = df->device;
 
 	/* Paired with smp_store_release() following vfio_df_open() */
-	if (!smp_load_acquire(&df->access_granted))
+	if (smp_load_acquire(&df->access_mode) == VFIO_DF_ACCESS_NONE)
 		return -EINVAL;
 
 	if (unlikely(!device->ops->mmap))

@@ -217,7 +217,7 @@ static int vfio_df_group_open(struct vfio_device_file *df)
 	 * Paired with smp_load_acquire() in vfio_device_fops::ioctl/
 	 * read/write/mmap and vfio_file_has_device_access()
 	 */
-	smp_store_release(&df->access_granted, true);
+	smp_store_release(&df->access_mode, VFIO_DF_ACCESS_FULL);
 
 	mutex_unlock(&device->dev_set->lock);
 	mutex_unlock(&device->group->group_lock);
