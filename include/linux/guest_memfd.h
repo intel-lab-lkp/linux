@@ -28,7 +28,22 @@ struct mempolicy;
  *           @pfn with uniform @pfn_attrs in @max_order. Once @get_pfn succeeds,
  *           the provider must keep the @index-to-@pfn mapping and @pfn_attrs
  *           constant, and the memory accessible, until guest_memfd stops using
- *           this page. Returns a negative error code on failure.
+ *           this page. Returns a negative error code on failure. The provider
+ *           must define @lookup_pfn_range when @get_pfn is defined.
+ * @lookup_pfn_range: Look up the PFN for a given index. This only checks for
+ *                    the existence of backing pages and should not allocate
+ *                    memory. Returns 0 on success with the physical frame
+ *                    number in @pfn and the number of physically contiguous
+ *                    pages in @nr_pages (@nr_pages need not be reduced for
+ *                    pages with different PFN attributes). Once
+ *                    @lookup_pfn_range succeeds, the provider must keep the
+ *                    existence of the pages and the @index-to-@pfn mapping
+ *                    constant until guest_memfd stops using the range. If
+ *                    backing memory is not available at @index, return -ENOENT
+ *                    with @nr_pages set to the number of consecutive indices
+ *                    starting from @index that have no entry. Return a negative
+ *                    error code on other failure. The provider must define
+ *                    @get_pfn when @lookup_pfn_range is defined.
  *
  * Used by filesystems and device drivers that provide memory for guest_memfd.
  */
@@ -40,6 +55,8 @@ struct guest_memfd_provider_operations {
 	void (*invalidate_folio)(void *provider, struct folio *folio);
 	int (*get_pfn)(void *provider, pgoff_t index, unsigned long *pfn,
 		       int *max_order, u64 *pfn_attrs);
+	int (*lookup_pfn_range)(void *provider, pgoff_t index,
+				unsigned long *pfn, size_t *nr_pages);
 };
 
 #endif /* _LINUX_GUEST_MEMFD_H */
