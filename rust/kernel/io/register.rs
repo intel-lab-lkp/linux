@@ -194,6 +194,14 @@ impl<T: RegisterArray> RegisterArrayLoc<T> {
     }
 }
 
+impl<T: RegisterArray> Clone for RegisterArrayLoc<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: RegisterArray> Copy for RegisterArrayLoc<T> {}
+
 impl<Base: ?Sized, T> IoLoc<Base, T> for RegisterArrayLoc<T>
 where
     T: RegisterArray<Base = Base>,
