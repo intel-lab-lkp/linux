@@ -529,4 +529,69 @@ TEST_F(guest_memfd_vfio, low_power_bar_revocation)
 	ASSERT_EQ(0, munmap(bar0, bar0_info.size));
 }
 
+
+static void verify_smaps_vm_flags(struct __test_metadata *_metadata,
+				  void *addr, const char *flag_substr)
+{
+	unsigned long vma_start, vma_end;
+	bool found_flag = false;
+	bool in_vma = false;
+	char *line = NULL;
+	size_t size = 0;
+	FILE *file;
+
+	file = fopen("/proc/self/smaps", "r");
+	ASSERT_NE(NULL, file);
+
+	while (getline(&line, &size, file) > 0) {
+		if (sscanf(line, "%lx-%lx", &vma_start, &vma_end) == 2) {
+			if ((unsigned long)addr >= vma_start &&
+			    (unsigned long)addr < vma_end)
+				in_vma = true;
+			else
+				in_vma = false;
+			continue;
+		}
+
+		if (in_vma && !strncmp(line, "VmFlags:", 8)) {
+			if (strstr(line, flag_substr))
+				found_flag = true;
+			break;
+		}
+	}
+
+	free(line);
+	fclose(file);
+
+	ASSERT_TRUE(found_flag);
+}
+
+TEST_F(guest_memfd_vfio, host_vma_flags)
+{
+	struct vfio_region_info bar0_info = {};
+	void *bar0_mmap;
+	int ret;
+
+	bar0_info.argsz = sizeof(bar0_info);
+	bar0_info.index = VFIO_PCI_BAR0_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_info);
+	ASSERT_EQ(0, ret);
+	ASSERT_TRUE(bar0_info.flags & VFIO_REGION_INFO_FLAG_MMAP);
+
+	/* mmap the VFIO BAR directly into host userspace */
+	bar0_mmap = mmap(NULL, bar0_info.size, PROT_READ | PROT_WRITE,
+			 MAP_SHARED, self->bar_fd, bar0_info.offset);
+	ASSERT_NE(MAP_FAILED, bar0_mmap);
+
+	/*
+	 * Verify host VMA configuration in /proc/self/smaps:
+	 * VFIO MMIO mappings must have io, pf, and de flags set.
+	 */
+	verify_smaps_vm_flags(_metadata, bar0_mmap, "io");
+	verify_smaps_vm_flags(_metadata, bar0_mmap, "pf");
+	verify_smaps_vm_flags(_metadata, bar0_mmap, "de");
+
+	ASSERT_EQ(0, munmap(bar0_mmap, bar0_info.size));
+}
+
 TEST_HARNESS_MAIN
