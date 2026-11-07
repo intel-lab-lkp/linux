@@ -439,17 +439,7 @@ static struct platform_driver twl6030_usb_driver = {
 	},
 };
 
-static int __init twl6030_usb_init(void)
-{
-	return platform_driver_register(&twl6030_usb_driver);
-}
-subsys_initcall(twl6030_usb_init);
-
-static void __exit twl6030_usb_exit(void)
-{
-	platform_driver_unregister(&twl6030_usb_driver);
-}
-module_exit(twl6030_usb_exit);
+subsys_platform_driver(twl6030_usb_driver);
 
 MODULE_ALIAS("platform:twl6030_usb");
 MODULE_AUTHOR("Hema HK <hemahk@ti.com>");
