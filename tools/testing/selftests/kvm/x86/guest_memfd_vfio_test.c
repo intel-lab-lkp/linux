@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/eventfd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/types.h>
@@ -723,6 +724,44 @@ TEST_F(guest_memfd_vfio, dmabuf_creation)
 	}
 
 	free(feat);
+}
+
+TEST_F(guest_memfd_vfio, ioeventfd_creation)
+{
+	struct vfio_device_ioeventfd ioeventfd = {};
+	struct vfio_region_info bar0_info = {};
+	int ret;
+	int efd;
+
+	bar0_info.argsz = sizeof(bar0_info);
+	bar0_info.index = VFIO_PCI_BAR0_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_info);
+	ASSERT_EQ(0, ret);
+
+	efd = eventfd(0, EFD_CLOEXEC);
+	ASSERT_GE(efd, 0);
+
+	/* Register ioeventfd on BAR0 targeting RAL0 with 4-byte width */
+	ioeventfd.argsz = sizeof(ioeventfd);
+	ioeventfd.flags = VFIO_DEVICE_IOEVENTFD_32;
+	ioeventfd.offset = bar0_info.offset + E1000_RAL0;
+	ioeventfd.data = 0xdeadbeef;
+	ioeventfd.fd = efd;
+
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_IOEVENTFD, &ioeventfd);
+	if (variant->use_gmem) {
+		ASSERT_LT(ret, 0);
+		ASSERT_EQ(EOPNOTSUPP, errno);
+	} else {
+		ASSERT_EQ(0, ret);
+
+		/* Unregister ioeventfd by passing fd = -1 with identical match criteria */
+		ioeventfd.fd = -1;
+		ret = ioctl(self->vfio_fd, VFIO_DEVICE_IOEVENTFD, &ioeventfd);
+		ASSERT_EQ(0, ret);
+	}
+
+	close(efd);
 }
 
 TEST_HARNESS_MAIN
