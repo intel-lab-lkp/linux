@@ -652,6 +652,8 @@ static const struct vm_operations_struct kvm_gmem_vm_ops = {
 
 static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 {
+	struct gmem_inode *gi = GMEM_I(file_inode(file));
+
 	if (!kvm_gmem_supports_mmap(file_inode(file)))
 		return -ENODEV;
 
@@ -659,6 +661,9 @@ static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 	    (VM_SHARED | VM_MAYSHARE)) {
 		return -EINVAL;
 	}
+
+	if (kvm_gmem_is_pfn_mode(gi))
+		vm_flags_set(vma, VM_PFNMAP);
 
 	vma->vm_ops = &kvm_gmem_vm_ops;
 
