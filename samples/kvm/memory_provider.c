@@ -198,9 +198,34 @@ static void mp_gmem_release(void *provider)
 	fput(resource_file);
 }
 
+static int mp_gmem_get_pfn(void *provider, pgoff_t index, unsigned long *pfn,
+			   int *max_order, u64 *pfn_attrs)
+{
+	struct file *resource_file = provider;
+	struct mp_info *info = resource_file->private_data;
+
+	if (index >= info->npages)
+		return -EINVAL;
+
+	if (test_bit(index, info->absent))
+		return -EFAULT;
+
+	*pfn = info->base_pfn + index;
+	if (max_order)
+		*max_order = 0;
+	if (pfn_attrs) {
+		*pfn_attrs = 0;
+		if (test_bit(index, info->readonly))
+			*pfn_attrs |= GUEST_MEMFD_PFN_ATTRS_READONLY;
+	}
+
+	return 0;
+}
+
 static const struct guest_memfd_provider_operations mp_gmem_provider_ops = {
 	.attach		= mp_gmem_attach,
 	.release	= mp_gmem_release,
+	.get_pfn	= mp_gmem_get_pfn,
 };
 
 static const struct file_operations mp_file_fops = {
