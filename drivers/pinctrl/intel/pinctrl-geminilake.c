@@ -456,17 +456,7 @@ static struct platform_driver glk_pinctrl_driver = {
 	},
 };
 
-static int __init glk_pinctrl_init(void)
-{
-	return platform_driver_register(&glk_pinctrl_driver);
-}
-subsys_initcall(glk_pinctrl_init);
-
-static void __exit glk_pinctrl_exit(void)
-{
-	platform_driver_unregister(&glk_pinctrl_driver);
-}
-module_exit(glk_pinctrl_exit);
+subsys_platform_driver(glk_pinctrl_driver);
 
 MODULE_AUTHOR("Mika Westerberg <mika.westerberg@linux.intel.com>");
 MODULE_DESCRIPTION("Intel Gemini Lake SoC pinctrl/GPIO driver");
