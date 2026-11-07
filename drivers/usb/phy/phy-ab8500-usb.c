@@ -988,17 +988,7 @@ static struct platform_driver ab8500_usb_driver = {
 	},
 };
 
-static int __init ab8500_usb_init(void)
-{
-	return platform_driver_register(&ab8500_usb_driver);
-}
-subsys_initcall(ab8500_usb_init);
-
-static void __exit ab8500_usb_exit(void)
-{
-	platform_driver_unregister(&ab8500_usb_driver);
-}
-module_exit(ab8500_usb_exit);
+subsys_platform_driver(ab8500_usb_driver);
 
 MODULE_AUTHOR("ST-Ericsson AB");
 MODULE_DESCRIPTION("AB8500 family usb transceiver driver");
