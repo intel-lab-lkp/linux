@@ -2829,6 +2829,48 @@ int vfio_pci_core_gmem_check_set_attributes(struct vfio_device *core_vdev,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_check_set_attributes);
+
+int vfio_pci_core_gmem_lookup_pfn_range(struct vfio_device *core_vdev,
+					pgoff_t index, unsigned long *pfn,
+					size_t *nr_pages)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	struct pci_dev *pdev = vdev->pdev;
+	u64 pgoff, bar_pages;
+	unsigned long bar;
+
+	bar = index >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
+	pgoff = index & ((1ULL << (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT)) - 1);
+
+	if (bar < PCI_STD_NUM_BARS) {
+		bar_pages = pci_resource_len(pdev, bar) >> PAGE_SHIFT;
+		if (vdev->bar_mmap_supported[bar] && pgoff < bar_pages) {
+			*pfn = (pci_resource_start(pdev, bar) >> PAGE_SHIFT) +
+			       pgoff;
+			*nr_pages = bar_pages - pgoff;
+			return 0;
+		}
+
+		for (bar++; bar < PCI_STD_NUM_BARS; bar++) {
+			pgoff_t next_start;
+
+			if (!vdev->bar_mmap_supported[bar] ||
+			    !(pci_resource_len(pdev, bar) >> PAGE_SHIFT))
+				continue;
+
+			next_start = VFIO_PCI_INDEX_TO_OFFSET(bar) >>
+				     PAGE_SHIFT;
+			*nr_pages = next_start - index;
+			return -ENOENT;
+		}
+	}
+
+	/* No backed standard BARs remain at or above @index */
+	*nr_pages = max_t(size_t, ULONG_MAX - index, 1);
+	return -ENOENT;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_gmem_lookup_pfn_range);
 #endif
 
 module_init(vfio_pci_core_init);
