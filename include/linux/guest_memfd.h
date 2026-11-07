@@ -44,6 +44,12 @@ struct mempolicy;
  *                    starting from @index that have no entry. Return a negative
  *                    error code on other failure. The provider must define
  *                    @get_pfn when @lookup_pfn_range is defined.
+ * @put_pfn_range: Release a range of PFNs previously obtained for a given
+ *                 index. Called with the exclusive filemap invalidate lock held.
+ *                 This indicates to the provider that guest_memfd is no longer
+ *                 using the memory range. The provider does not need to ensure
+ *                 that backing memory is present; if backing memory is not
+ *                 available, the provider should skip the unbacked range.
  *
  * Used by filesystems and device drivers that provide memory for guest_memfd.
  */
@@ -57,6 +63,7 @@ struct guest_memfd_provider_operations {
 		       int *max_order, u64 *pfn_attrs);
 	int (*lookup_pfn_range)(void *provider, pgoff_t index,
 				unsigned long *pfn, size_t *nr_pages);
+	void (*put_pfn_range)(void *provider, pgoff_t index, size_t nr_pages);
 };
 
 #endif /* _LINUX_GUEST_MEMFD_H */
