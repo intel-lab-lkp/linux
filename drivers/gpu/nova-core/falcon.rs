@@ -571,7 +571,7 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         //
         // For untagged DMEM in a DMA object, the start offset is folded into the DMA base. For a
         // framebuffer address, the DMA engine adds the start offset to the address.
-        let (fb_offset, dma_base) = match src {
+        let (fb_offset, dma_base, fbif_target) = match src {
             FalconDmaSource::Sysmem(dma_obj) => {
                 let (fb_offset, base_offset) = match target_mem {
                     FalconMem::ImemSecure
@@ -592,9 +592,12 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
                 (
                     fb_offset,
                     io_project!(dma_obj, [try: base_offset..dma_end]).dma_address(),
+                    FalconFbifTarget::CoherentSysmem,
                 )
             }
-            FalconDmaSource::Framebuffer { base } => (load_offsets.src_start, base),
+            FalconDmaSource::Framebuffer { base } => {
+                (load_offsets.src_start, base, FalconFbifTarget::LocalFb)
+            }
         };
 
         if dma_base % DmaAddress::from(DMA_LEN) > 0 {
@@ -621,6 +624,12 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         let cmd = regs::NV_PFALCON_FALCON_DMATRFCMD::zeroed()
             .with_size(DmaTrfCmdSize::Size256B)
             .with_falcon_mem(target_mem);
+
+        self.pfalcon
+            .update(regs::NV_PFALCON_FBIF_TRANSCFG::at(0), |v| {
+                v.with_target(fbif_target)
+                    .with_mem_type(FalconFbifMemType::Physical)
+            });
 
         for pos in (0..num_transfers).map(|i| i * DMA_LEN) {
             // Perform a transfer of size `DMA_LEN`.
@@ -671,11 +680,6 @@ impl<'a, E: FalconEngine + 'static> Falcon<'a, E> {
         };
 
         self.dma_reset();
-        self.pfalcon
-            .update(regs::NV_PFALCON_FBIF_TRANSCFG::at(0), |v| {
-                v.with_target(FalconFbifTarget::CoherentSysmem)
-                    .with_mem_type(FalconFbifMemType::Physical)
-            });
 
         self.dma_wr(
             FalconDmaSource::Sysmem(&dma_obj),
