@@ -249,10 +249,34 @@ static int mp_gmem_get_pfn(void *provider, pgoff_t index, unsigned long *pfn,
 	return 0;
 }
 
+static int mp_gmem_lookup_pfn_range(void *provider, pgoff_t index,
+				     unsigned long *pfn, size_t *nr_pages)
+{
+	struct file *resource_file = provider;
+	struct mp_info *info = resource_file->private_data;
+
+	if (index >= info->npages)
+		return -EINVAL;
+
+	if (test_bit(index, info->absent)) {
+		unsigned long next_present;
+
+		next_present = find_next_zero_bit(info->absent, info->npages,
+						  index + 1);
+		*nr_pages = next_present - index;
+		return -ENOENT;
+	}
+
+	*pfn = info->base_pfn + index;
+	*nr_pages = find_next_bit(info->absent, info->npages, index + 1) - index;
+	return 0;
+}
+
 static const struct guest_memfd_provider_operations mp_gmem_provider_ops = {
 	.attach		= mp_gmem_attach,
 	.release	= mp_gmem_release,
 	.get_pfn	= mp_gmem_get_pfn,
+	.lookup_pfn_range = mp_gmem_lookup_pfn_range,
 	.put_pfn_range	= mp_gmem_put_pfn_range,
 };
 
