@@ -221,8 +221,9 @@ ssize_t vfio_pci_core_do_io_rw(struct vfio_pci_core_device *vdev, bool test_mem,
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_do_io_rw);
 
-ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
-			size_t count, loff_t *ppos, bool iswrite)
+static ssize_t __vfio_pci_bar_rw(struct vfio_pci_core_device *vdev,
+				 struct iov_iter *iter, size_t count,
+				 loff_t *ppos, bool iswrite, bool test_mem)
 {
 	struct pci_dev *pdev = vdev->pdev;
 	loff_t pos = *ppos & VFIO_PCI_OFFSET_MASK;
@@ -284,8 +285,9 @@ ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 		x_end = vdev->msix_offset + vdev->msix_size;
 	}
 
-	done = vfio_pci_core_do_io_rw(vdev, res->flags & IORESOURCE_MEM, io, buf, pos,
-				      count, x_start, x_end, iswrite, max_width);
+	done = __vfio_pci_core_do_io_rw(vdev, test_mem && (res->flags & IORESOURCE_MEM),
+					io, iter, pos, count, x_start, x_end,
+					iswrite, max_width);
 
 	if (done >= 0)
 		*ppos += done;
@@ -299,6 +301,30 @@ ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 
 out:
 	return done;
+}
+
+ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
+			size_t count, loff_t *ppos, bool iswrite)
+{
+	struct iov_iter iter;
+	int ret;
+
+	ret = import_ubuf(iswrite ? ITER_SOURCE : ITER_DEST, buf, count, &iter);
+	if (ret)
+		return ret;
+
+	return __vfio_pci_bar_rw(vdev, &iter, count, ppos, iswrite, true);
+}
+
+ssize_t vfio_pci_bar_rw_kbuf(struct vfio_pci_core_device *vdev, void *kbuf,
+			     size_t count, loff_t *ppos, bool iswrite,
+			     bool test_mem)
+{
+	struct kvec kvec = { .iov_base = kbuf, .iov_len = count };
+	struct iov_iter iter;
+
+	iov_iter_kvec(&iter, iswrite ? ITER_SOURCE : ITER_DEST, &kvec, 1, count);
+	return __vfio_pci_bar_rw(vdev, &iter, count, ppos, iswrite, test_mem);
 }
 
 #ifdef CONFIG_VFIO_PCI_VGA

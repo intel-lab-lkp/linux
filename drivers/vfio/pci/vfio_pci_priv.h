@@ -53,6 +53,9 @@ ssize_t vfio_pci_config_rw_single(struct vfio_pci_core_device *vdev,
 
 ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 			size_t count, loff_t *ppos, bool iswrite);
+ssize_t vfio_pci_bar_rw_kbuf(struct vfio_pci_core_device *vdev, void *kbuf,
+			     size_t count, loff_t *ppos, bool iswrite,
+			     bool test_mem);
 
 #ifdef CONFIG_VFIO_PCI_VGA
 ssize_t vfio_pci_vga_rw(struct vfio_pci_core_device *vdev, char __user *buf,
