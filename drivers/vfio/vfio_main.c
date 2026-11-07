@@ -1621,21 +1621,6 @@ static int vfio_device_gmem_mmap(void *provider, struct vm_area_struct *vma)
 	return vfio_device_mmap(df->device, vma);
 }
 
-static int vfio_device_gmem_check_set_attributes(void *provider, pgoff_t index,
-						 size_t nr_pages,
-						 u64 attributes)
-{
-	struct file *file = provider;
-	struct vfio_device_file *df = file->private_data;
-	struct vfio_device *device = df->device;
-
-	if (!device->ops->gmem_check_set_attributes)
-		return 0;
-
-	return device->ops->gmem_check_set_attributes(device, index, nr_pages,
-						      attributes);
-}
-
 static int vfio_device_gmem_lookup_pfn_range(void *provider, pgoff_t index,
 					     unsigned long *pfn,
 					     size_t *nr_pages)
@@ -1692,7 +1677,6 @@ static const struct guest_memfd_provider_operations vfio_device_gmem_provider_op
 	.read                 = vfio_device_gmem_read,
 	.write                = vfio_device_gmem_write,
 	.mmap                 = vfio_device_gmem_mmap,
-	.check_set_attributes = vfio_device_gmem_check_set_attributes,
 };
 
 int vfio_device_gmem_revoke(struct vfio_device *device, pgoff_t start,

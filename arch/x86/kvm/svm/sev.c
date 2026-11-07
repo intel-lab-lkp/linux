@@ -4100,7 +4100,8 @@ static void __sev_snp_reload_vmsa(struct kvm_vcpu *vcpu, gpa_t gpa)
 	if (kvm_gmem_get_pfn(vcpu->kvm, slot, gfn, &pfn, NULL, &pfn_attrs))
 		return;
 
-	if ((pfn_attrs & GUEST_MEMFD_PFN_ATTRS_READONLY) ||
+	if ((pfn_attrs & (GUEST_MEMFD_PFN_ATTRS_READONLY |
+			  GUEST_MEMFD_PFN_ATTRS_NO_PRIVATE)) ||
 	    !kvm_gmem_pfn_is_cacheable(pfn_attrs))
 		return;
 
@@ -5107,6 +5108,12 @@ void sev_handle_rmp_fault(struct kvm_vcpu *vcpu, gpa_t gpa, u64 error_code)
 
 	if (pfn_attrs & GUEST_MEMFD_PFN_ATTRS_READONLY) {
 		pr_warn_ratelimited("SEV: Unexpected RMP fault, read-only backing page for GPA 0x%llx\n",
+				    gpa);
+		return;
+	}
+
+	if (pfn_attrs & GUEST_MEMFD_PFN_ATTRS_NO_PRIVATE) {
+		pr_warn_ratelimited("SEV: Unexpected RMP fault, shared-only backing page for GPA 0x%llx\n",
 				    gpa);
 		return;
 	}
