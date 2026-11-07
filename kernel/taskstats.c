@@ -245,8 +245,8 @@ static int fill_stats_for_tgid(pid_t tgid, struct taskstats *stats)
 	u64 now_ns;
 
 	/*
-	 * Add additional stats from live tasks except zombie thread group
-	 * leaders who are already counted with the dead tasks
+	 * Add stats from tasks not yet included in the dead-task cache.
+	 * Accounting can finish before exit_state is set.
 	 */
 	rcu_read_lock();
 	first = find_task_by_vpid(tgid);
@@ -261,7 +261,7 @@ static int fill_stats_for_tgid(pid_t tgid, struct taskstats *stats)
 
 	now_ns = ktime_get_ns();
 	for_each_thread(first, tsk) {
-		if (tsk->exit_state)
+		if (task_tgid_stats_accounted(tsk))
 			continue;
 
 		tgid_stats_add_task(stats, tsk, now_ns);
@@ -280,20 +280,48 @@ out:
 	return rc;
 }
 
-static void fill_tgid_exit(struct task_struct *tsk)
+static bool tgid_stats_complete(struct task_struct *tsk)
 {
+	struct task_struct *thread;
+	bool complete = true;
+
+	if (atomic_read(&tsk->signal->live))
+		return false;
+
+	rcu_read_lock();
+	for_each_thread(tsk, thread) {
+		if (!task_tgid_stats_accounted(thread) &&
+		    !task_tgid_stats_skipped(thread)) {
+			complete = false;
+			break;
+		}
+	}
+	rcu_read_unlock();
+
+	return complete;
+}
+
+static struct sk_buff *finish_tgid_exit(struct task_struct *tsk, bool account,
+					struct listener_list **pending_listeners)
+{
+	struct sk_buff *pending = NULL;
 	unsigned long flags;
-	u64 now_ns;
 
 	spin_lock_irqsave(&tsk->sighand->siglock, flags);
-	if (!tsk->signal->stats)
-		goto ret;
-
-	now_ns = ktime_get_ns();
-	tgid_stats_add_task(tsk->signal->stats, tsk, now_ns);
-ret:
+	if (account) {
+		tgid_stats_add_task(tsk->signal->stats, tsk, ktime_get_ns());
+		task_set_tgid_stats_accounted(tsk);
+	} else {
+		task_set_tgid_stats_skipped(tsk);
+	}
+	if (tgid_stats_complete(tsk)) {
+		pending = tsk->signal->taskstats_pending_skb;
+		*pending_listeners = tsk->signal->taskstats_pending_listeners;
+		tsk->signal->taskstats_pending_skb = NULL;
+		tsk->signal->taskstats_pending_listeners = NULL;
+	}
 	spin_unlock_irqrestore(&tsk->sighand->siglock, flags);
-	return;
+	return pending;
 }
 
 static int add_del_listener(pid_t pid, const struct cpumask *mask, int isadd)
@@ -581,13 +609,34 @@ static struct taskstats *taskstats_tgid_alloc(struct task_struct *tsk)
 	return stats;
 }
 
+static void send_tgid_notification(struct sk_buff *skb,
+				   struct task_struct *tsk,
+				   struct listener_list *listeners)
+{
+	struct taskstats *stats;
+
+	stats = mk_reply(skb, TASKSTATS_TYPE_TGID,
+			 task_tgid_nr_ns(tsk, &init_pid_ns));
+	if (!stats) {
+		nlmsg_free(skb);
+		return;
+	}
+
+	memcpy(stats, tsk->signal->stats, sizeof(*stats));
+	stats->version = TASKSTATS_VERSION;
+	send_cpu_listeners(skb, listeners);
+}
+
 /* Send pid data out on exit */
 void taskstats_exit(struct task_struct *tsk, int group_dead)
 {
 	int rc;
 	struct listener_list *listeners;
 	struct taskstats *stats;
-	struct sk_buff *rep_skb;
+	struct sk_buff *rep_skb, *pending = NULL;
+	struct listener_list *pending_listeners = NULL;
+	unsigned long flags;
+	bool complete;
 	size_t size;
 	int is_thread_group;
 
@@ -603,17 +652,17 @@ void taskstats_exit(struct task_struct *tsk, int group_dead)
 	if (is_thread_group) {
 		/* PID + STATS + TGID + STATS */
 		size = 2 * size;
-		/* fill the tsk->signal->stats structure */
-		fill_tgid_exit(tsk);
 	}
+	/* A failed cache allocation must not hold a pending TGID reply forever. */
+	pending = finish_tgid_exit(tsk, is_thread_group, &pending_listeners);
 
 	listeners = raw_cpu_ptr(&listener_array);
 	if (list_empty(&listeners->list))
-		return;
+		goto out_pending;
 
 	rc = prepare_reply(NULL, TASKSTATS_CMD_NEW, &rep_skb, size);
 	if (rc < 0)
-		return;
+		goto out_pending;
 
 	stats = mk_reply(rep_skb, TASKSTATS_TYPE_PID,
 			 task_pid_nr_ns(tsk, &init_pid_ns));
@@ -630,19 +679,28 @@ void taskstats_exit(struct task_struct *tsk, int group_dead)
 	if (!is_thread_group || !group_dead)
 		goto send;
 
-	stats = mk_reply(rep_skb, TASKSTATS_TYPE_TGID,
-			 task_tgid_nr_ns(tsk, &init_pid_ns));
-	if (!stats)
-		goto err;
+	spin_lock_irqsave(&tsk->sighand->siglock, flags);
+	complete = tgid_stats_complete(tsk);
+	if (!complete) {
+		tsk->signal->taskstats_pending_skb = rep_skb;
+		tsk->signal->taskstats_pending_listeners = listeners;
+	}
+	spin_unlock_irqrestore(&tsk->sighand->siglock, flags);
+	if (!complete)
+		goto out_pending;
 
-	memcpy(stats, tsk->signal->stats, sizeof(*stats));
-	stats->version = TASKSTATS_VERSION;
+	send_tgid_notification(rep_skb, tsk, listeners);
+	goto out_pending;
 
 send:
 	send_cpu_listeners(rep_skb, listeners);
+out_pending:
+	if (pending)
+		send_tgid_notification(pending, tsk, pending_listeners);
 	return;
 err:
 	nlmsg_free(rep_skb);
+	goto out_pending;
 }
 
 static const struct genl_ops taskstats_ops[] = {

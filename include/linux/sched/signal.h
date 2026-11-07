@@ -14,6 +14,9 @@
 #include <linux/mm_types.h>
 #include <asm/ptrace.h>
 
+struct listener_list;
+struct sk_buff;
+
 /*
  * Types defining task->signal and task->sighand and APIs using them:
  */
@@ -221,6 +224,8 @@ struct signal_struct {
 #endif
 #ifdef CONFIG_TASKSTATS
 	struct taskstats *stats;
+	struct sk_buff *taskstats_pending_skb;
+	struct listener_list *taskstats_pending_listeners;
 #endif
 #ifdef CONFIG_AUDIT
 	unsigned audit_tty;
