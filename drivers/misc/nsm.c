@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 #include <linux/interrupt.h>
 #include <linux/hw_random.h>
+#include <linux/kref.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -55,6 +56,8 @@ struct nsm {
 	struct miscdevice     misc;
 	struct hwrng          hwrng;
 	struct work_struct    misc_init;
+	struct kref           kref;
+	bool                  removed;	/* protected by lock */
 	struct nsm_msg        msg;
 };
 
@@ -372,6 +375,12 @@ static long nsm_dev_ioctl(struct file *file, unsigned int cmd,
 
 	mutex_lock(&nsm->lock);
 
+	/* The device may have been removed while the file was open */
+	if (nsm->removed) {
+		r = -ENODEV;
+		goto out;
+	}
+
 	/* Convert kernel argument struct to device request */
 	r = fill_req_raw(nsm, &nsm->msg.req, &raw);
 	if (r)
@@ -413,8 +422,31 @@ static int nsm_device_init_vq(struct virtio_device *vdev)
 	return 0;
 }
 
+static void nsm_free(struct kref *kref)
+{
+	kfree(container_of(kref, struct nsm, kref));
+}
+
+/*
+ * misc_open() calls this under misc_mtx, which misc_deregister() also takes,
+ * so the device's own reference is still held here.
+ */
+static int nsm_dev_open(struct inode *inode, struct file *file)
+{
+	kref_get(&file_to_nsm(file)->kref);
+	return 0;
+}
+
+static int nsm_dev_release(struct inode *inode, struct file *file)
+{
+	kref_put(&file_to_nsm(file)->kref, nsm_free);
+	return 0;
+}
+
 static const struct file_operations nsm_dev_fops = {
 	.owner = THIS_MODULE,
+	.open = nsm_dev_open,
+	.release = nsm_dev_release,
 	.unlocked_ioctl = nsm_dev_ioctl,
 	.compat_ioctl = compat_ptr_ioctl,
 };
@@ -426,9 +458,11 @@ static int nsm_device_probe(struct virtio_device *vdev)
 	struct nsm *nsm;
 	int rc;
 
-	nsm = devm_kzalloc(&vdev->dev, sizeof(*nsm), GFP_KERNEL);
+	nsm = kzalloc(sizeof(*nsm), GFP_KERNEL);
 	if (!nsm)
 		return -ENOMEM;
+
+	kref_init(&nsm->kref);
 
 	vdev->priv = nsm;
 	nsm->vdev = vdev;
@@ -478,6 +512,7 @@ err_hwrng:
 	virtio_reset_device(vdev);
 	vdev->config->del_vqs(vdev);
 err_init_vq:
+	kfree(nsm);
 	return rc;
 }
 
@@ -488,8 +523,14 @@ static void nsm_device_remove(struct virtio_device *vdev)
 
 	hwrng_unregister(&nsm->hwrng);
 
+	/* Wait for an ioctl in progress, and fail later ones */
+	mutex_lock(&nsm->lock);
+	nsm->removed = true;
 	vdev->config->del_vqs(vdev);
+	mutex_unlock(&nsm->lock);
+
 	misc_deregister(&nsm->misc);
+	kref_put(&nsm->kref, nsm_free);
 }
 
 /* NSM device configuration structure */
