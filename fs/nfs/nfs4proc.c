@@ -6664,9 +6664,16 @@ int nfs4_proc_setclientid(struct nfs_client *clp, u32 program,
 
 	status = nfs4_call_sync_custom(&task_setup_data);
 	if (setclientid.sc_cred) {
-		kfree(clp->cl_acceptor);
-		clp->cl_acceptor = rpcauth_stringify_acceptor(setclientid.sc_cred);
+		char *acceptor, *old;
+
+		acceptor = rpcauth_stringify_acceptor(setclientid.sc_cred);
 		put_rpccred(setclientid.sc_cred);
+		/* Serialize updates to cl_acceptor */
+		spin_lock(&clp->cl_lock);
+		old = rcu_replace_pointer(clp->cl_acceptor, acceptor,
+					  lockdep_is_held(&clp->cl_lock));
+		spin_unlock(&clp->cl_lock);
+		kfree_rcu_mightsleep(old);
 	}
 
 	if (status == 0)

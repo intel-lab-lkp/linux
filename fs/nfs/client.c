@@ -265,7 +265,7 @@ void nfs_free_client(struct nfs_client *clp)
 	put_net_track(clp->cl_net, &clp->cl_ns_tracker);
 	put_nfs_version(clp->cl_nfs_mod);
 	kfree(clp->cl_hostname);
-	kfree(clp->cl_acceptor);
+	kfree(rcu_access_pointer(clp->cl_acceptor));
 	kfree_rcu(clp, rcu);
 }
 EXPORT_SYMBOL_GPL(nfs_free_client);

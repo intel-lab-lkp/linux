@@ -289,8 +289,18 @@ check_gss_callback_principal(struct nfs_client *clp, struct svc_rqst *rqstp)
 	 * Did we get the acceptor from userland during the SETCLIENID
 	 * negotiation?
 	 */
-	if (clp->cl_acceptor)
-		return !strcmp(p, clp->cl_acceptor);
+	{
+		const char *acceptor;
+		bool match = false;
+
+		rcu_read_lock();
+		acceptor = rcu_dereference(clp->cl_acceptor);
+		if (acceptor)
+			match = !strcmp(p, acceptor);
+		rcu_read_unlock();
+		if (acceptor)
+			return match;
+	}
 
 	/*
 	 * Otherwise try to verify it using the cl_hostname. Note that this
