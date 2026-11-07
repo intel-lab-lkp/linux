@@ -17,6 +17,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
+#include <linux/highmem.h>
 #include <linux/guest_memfd.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
@@ -198,6 +199,21 @@ static void mp_gmem_release(void *provider)
 	fput(resource_file);
 }
 
+static void mp_gmem_put_pfn_range(void *provider, pgoff_t index,
+				   size_t nr_pages)
+{
+	struct file *resource_file = provider;
+	struct mp_info *info = resource_file->private_data;
+	size_t i;
+
+	if (index >= info->npages)
+		return;
+
+	nr_pages = min_t(size_t, nr_pages, info->npages - index);
+	for (i = 0; i < nr_pages; i++)
+		clear_highpage(info->cma_pages + index + i);
+}
+
 static int mp_gmem_get_pfn(void *provider, pgoff_t index, unsigned long *pfn,
 			   int *max_order, u64 *pfn_attrs)
 {
@@ -226,6 +242,7 @@ static const struct guest_memfd_provider_operations mp_gmem_provider_ops = {
 	.attach		= mp_gmem_attach,
 	.release	= mp_gmem_release,
 	.get_pfn	= mp_gmem_get_pfn,
+	.put_pfn_range	= mp_gmem_put_pfn_range,
 };
 
 static const struct file_operations mp_file_fops = {
