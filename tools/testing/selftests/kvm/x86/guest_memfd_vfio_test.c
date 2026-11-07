@@ -798,17 +798,19 @@ TEST_F(guest_memfd_vfio, conversions)
 	ASSERT_EQ(0, ret);
 
 	/*
-	 * BAR3 contains the MSI-X vector table and PBA. Private conversion
-	 * must be rejected by check_set_attributes to prevent host kernel
-	 * writes to interrupt tables from triggering fatal protection faults.
+	 * BAR3 contains the MSI-X vector table and PBA. Disallowing private
+	 * mappings of the MSI-X table is enforced lazily via NO_PRIVATE PFN
+	 * attributes rather than eagerly rejecting software attribute conversion.
+	 * Converting BAR3 attributes to private in guest_memfd succeeds, but
+	 * attempting to fault the MSI-X page into the guest as private is
+	 * rejected with -EFAULT in kvm_gmem_get_pfn(), causing KVM to exit with
+	 * KVM_EXIT_MEMORY_FAULT.
 	 */
 	ret = __gmem_set_private(self->gmem_fd, bar3_info.offset,
 				 bar3_info.size, &err_offset);
-	ASSERT_LT(ret, 0);
-	ASSERT_EQ(EINVAL, errno);
-	ASSERT_EQ(bar3_info.offset, err_offset);
+	ASSERT_EQ(0, ret);
 
-	/* Shared conversion on BAR3 should be permitted. */
+	/* Shared conversion on BAR3 should also succeed. */
 	ret = __gmem_set_shared(self->gmem_fd, bar3_info.offset,
 				bar3_info.size, &err_offset);
 	ASSERT_EQ(0, ret);
