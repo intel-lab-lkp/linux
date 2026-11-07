@@ -1131,6 +1131,9 @@ static blk_status_t sd_setup_write_same10_cmnd(struct scsi_cmnd *cmd,
 	u32 data_len = sdp->sector_size;
 	blk_status_t ret;
 
+	if (lba > 0xffffffff || nr_blocks > 0xffff)
+		return BLK_STS_NOTSUPP;
+
 	if (!sd_set_special_bvec(cmd, data_len))
 		return BLK_STS_RESOURCE;
 
