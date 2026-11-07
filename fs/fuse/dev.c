@@ -1265,9 +1265,10 @@ int fuse_copy_folio(struct fuse_copy_state *cs, struct folio **foliop,
 		if (cs->write && cs->pipebufs && folio) {
 			/*
 			 * Can't control lifetime of pipe buffers, so always
-			 * copy user pages.
+			 * copy user pages. Also copy folios at their refcount limit.
 			 */
-			if (cs->req->args->user_pages) {
+			if (cs->req->args->user_pages ||
+			    unlikely(folio_ref_count_over_limit(folio))) {
 				err = fuse_copy_fill(cs);
 				if (err)
 					return err;

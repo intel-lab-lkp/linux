@@ -956,6 +956,7 @@ static ssize_t do_splice_read(struct file *in, loff_t *ppos,
 			      unsigned int flags)
 {
 	unsigned int p_space;
+	ssize_t ret;
 
 	if (unlikely(!(in->f_mode & FMODE_READ)))
 		return -EBADF;
@@ -977,7 +978,12 @@ static ssize_t do_splice_read(struct file *in, loff_t *ppos,
 	 */
 	if ((in->f_flags & O_DIRECT) || IS_DAX(in->f_mapping->host))
 		return copy_splice_read(in, ppos, pipe, len, flags);
-	return in->f_op->splice_read(in, ppos, pipe, len, flags);
+	ret = in->f_op->splice_read(in, ppos, pipe, len, flags);
+
+	/* Fallback to copying when hitting folio refcount limits. */
+	if (unlikely(ret == -EOVERFLOW) && in->f_op->read_iter)
+		ret = copy_splice_read(in, ppos, pipe, len, flags);
+	return ret;
 }
 
 /**
