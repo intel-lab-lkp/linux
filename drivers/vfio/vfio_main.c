@@ -1535,6 +1535,66 @@ static void vfio_device_show_fdinfo(struct seq_file *m, struct file *filep)
 }
 #endif
 
+#ifdef CONFIG_KVM_GUEST_MEMFD
+static void *vfio_device_gmem_attach(struct inode *inode, struct file *file)
+{
+	struct vfio_device_file *df = file->private_data;
+	struct vfio_device *device = df->device;
+	int ret;
+
+	/*
+	 * Attachment is only permitted if the device descriptor was bound
+	 * with VFIO_DEVICE_BIND_FLAG_CTRL_ONLY, ensuring direct region
+	 * accesses (read, write, mmap) and side-channel exports (such as
+	 * dma-buf or ioeventfd) were disabled from the outset.
+	 */
+	if (smp_load_acquire(&df->access_mode) != VFIO_DF_ACCESS_CTRL_ONLY)
+		return ERR_PTR(-EINVAL);
+
+	if (!device->ops->gmem_attach)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	mutex_lock(&device->dev_set->lock);
+	if (device->gmem_inode) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	ret = device->ops->gmem_attach(device);
+	if (ret)
+		goto out_unlock;
+
+	device->gmem_inode = inode;
+out_unlock:
+	mutex_unlock(&device->dev_set->lock);
+
+	return ret ? ERR_PTR(ret) : get_file(file);
+}
+
+static void vfio_device_gmem_release(void *provider)
+{
+	struct file *file = provider;
+	struct vfio_device_file *df = file->private_data;
+	struct vfio_device *device = df->device;
+
+	mutex_lock(&device->dev_set->lock);
+
+	if (device->ops->gmem_release)
+		device->ops->gmem_release(device);
+
+	device->gmem_inode = NULL;
+
+	mutex_unlock(&device->dev_set->lock);
+
+	fput(file);
+}
+
+static const struct guest_memfd_provider_operations vfio_device_gmem_provider_ops = {
+	.attach  = vfio_device_gmem_attach,
+	.release = vfio_device_gmem_release,
+};
+#endif
+
 const struct file_operations vfio_device_fops = {
 	.owner		= THIS_MODULE,
 	.open		= vfio_device_fops_cdev_open,
@@ -1546,6 +1606,9 @@ const struct file_operations vfio_device_fops = {
 	.mmap		= vfio_device_fops_mmap,
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo	= vfio_device_show_fdinfo,
+#endif
+#ifdef CONFIG_KVM_GUEST_MEMFD
+	.gmem_provider_ops = &vfio_device_gmem_provider_ops,
 #endif
 };
 

@@ -74,6 +74,9 @@ struct vfio_device {
 #endif
 	u8 cdev_opened:1;
 	u8 noiommu:1;
+#ifdef CONFIG_KVM_GUEST_MEMFD
+	struct inode *gmem_inode;
+#endif
 	/*
 	 * debug_root is a static property of the vfio_device
 	 * which must be set prior to registering the vfio_device.
@@ -114,7 +117,11 @@ struct vfio_device {
  *             this device is attached to.
  * @device_feature: Optional, fill in the VFIO_DEVICE_FEATURE ioctl
  */
+struct guest_memfd_provider_operations;
+
 struct vfio_device_ops {
+	int (*gmem_attach)(struct vfio_device *device);
+	void (*gmem_release)(struct vfio_device *device);
 	char	*name;
 	int	(*init)(struct vfio_device *vdev);
 	void	(*release)(struct vfio_device *vdev);
