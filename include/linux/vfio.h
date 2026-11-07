@@ -130,6 +130,10 @@ struct vfio_device_ops {
 					 u64 attributes);
 	int (*gmem_lookup_pfn_range)(struct vfio_device *device, pgoff_t index,
 				     unsigned long *pfn, size_t *nr_pages);
+	ssize_t (*gmem_read)(struct vfio_device *device, void *buf,
+			     size_t count, loff_t *ppos);
+	ssize_t (*gmem_write)(struct vfio_device *device, const void *buf,
+			      size_t count, loff_t *ppos);
 	char	*name;
 	int	(*init)(struct vfio_device *vdev);
 	void	(*release)(struct vfio_device *vdev);

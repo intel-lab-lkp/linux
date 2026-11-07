@@ -1650,11 +1650,47 @@ static int vfio_device_gmem_lookup_pfn_range(void *provider, pgoff_t index,
 	return device->ops->gmem_lookup_pfn_range(device, index, pfn, nr_pages);
 }
 
+static ssize_t vfio_device_gmem_read(void *provider, void *buf,
+				     size_t count, loff_t *ppos)
+{
+	struct file *file = provider;
+	struct vfio_device_file *df = file->private_data;
+	struct vfio_device *device = df->device;
+
+	if (!device->ops->gmem_read)
+		return -EINVAL;
+
+	if (device->ops->is_ctrl_plane &&
+	    device->ops->is_ctrl_plane(device, *ppos))
+		return -EINVAL;
+
+	return device->ops->gmem_read(device, buf, count, ppos);
+}
+
+static ssize_t vfio_device_gmem_write(void *provider, const void *buf,
+				      size_t count, loff_t *ppos)
+{
+	struct file *file = provider;
+	struct vfio_device_file *df = file->private_data;
+	struct vfio_device *device = df->device;
+
+	if (!device->ops->gmem_write)
+		return -EINVAL;
+
+	if (device->ops->is_ctrl_plane &&
+	    device->ops->is_ctrl_plane(device, *ppos))
+		return -EINVAL;
+
+	return device->ops->gmem_write(device, buf, count, ppos);
+}
+
 static const struct guest_memfd_provider_operations vfio_device_gmem_provider_ops = {
 	.attach               = vfio_device_gmem_attach,
 	.release              = vfio_device_gmem_release,
 	.get_pfn              = vfio_device_gmem_get_pfn,
 	.lookup_pfn_range     = vfio_device_gmem_lookup_pfn_range,
+	.read                 = vfio_device_gmem_read,
+	.write                = vfio_device_gmem_write,
 	.mmap                 = vfio_device_gmem_mmap,
 	.check_set_attributes = vfio_device_gmem_check_set_attributes,
 };
