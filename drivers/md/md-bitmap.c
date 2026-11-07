@@ -2493,7 +2493,7 @@ static int __bitmap_resize(struct bitmap *bitmap, sector_t blocks,
 				/* restore some fields from old_counts */
 				bitmap->counts.bp = old_counts.bp;
 				bitmap->counts.pages = old_counts.pages;
-				bitmap->counts.missing_pages = old_counts.pages;
+				bitmap->counts.missing_pages = old_counts.missing_pages;
 				bitmap->counts.chunkshift = old_counts.chunkshift;
 				bitmap->counts.chunks = old_counts.chunks;
 				bitmap->mddev->bitmap_info.chunksize =
