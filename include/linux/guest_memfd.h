@@ -9,6 +9,8 @@ struct folio;
 struct inode;
 struct mempolicy;
 
+#define GUEST_MEMFD_PFN_ATTRS_READONLY	(1ULL << 0)
+
 /**
  * struct guest_memfd_provider_operations - Operations for external memory providers
  * @attach: Attach to a resource file, perform filesystem-specific validation,

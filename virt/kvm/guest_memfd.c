@@ -1274,7 +1274,7 @@ void kvm_gmem_unbind(struct kvm_memory_slot *slot)
 static struct folio *__kvm_gmem_get_pfn(struct file *file,
 					struct kvm_memory_slot *slot,
 					pgoff_t index, kvm_pfn_t *pfn,
-					int *max_order)
+					int *max_order, u64 *pfn_attrs)
 {
 	struct file *slot_file = READ_ONCE(slot->gmem.file);
 	struct gmem_file *f = file->private_data;
@@ -1308,18 +1308,23 @@ static struct folio *__kvm_gmem_get_pfn(struct file *file,
 	*pfn = folio_file_pfn(folio, index);
 	if (max_order)
 		*max_order = 0;
+	if (pfn_attrs)
+		*pfn_attrs = 0;
 
 	return folio;
 }
 
 int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
-		     gfn_t gfn, kvm_pfn_t *pfn, int *max_order)
+		     gfn_t gfn, kvm_pfn_t *pfn, int *max_order,
+		     u64 *pfn_attrs)
 {
 	pgoff_t index = kvm_gmem_get_index(slot, gfn);
 	struct folio *folio;
 	int r = 0, __order;
+	u64 __attrs;
 
 	max_order = max_order ?: &__order;
+	pfn_attrs = pfn_attrs ?: &__attrs;
 
 	CLASS(gmem_get_file, file)(slot);
 	if (!file)
@@ -1327,10 +1332,21 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 
 	filemap_invalidate_lock_shared(file_inode(file)->i_mapping);
 
-	folio = __kvm_gmem_get_pfn(file, slot, index, pfn, max_order);
+	folio = __kvm_gmem_get_pfn(file, slot, index, pfn, max_order,
+				   pfn_attrs);
 	if (IS_ERR(folio)) {
 		r = PTR_ERR(folio);
 		goto out;
+	}
+
+	/*
+	 * Private memory requires exclusive, writable guest ownership and
+	 * cannot be backed by a read-only frame.
+	 */
+	if (kvm_gmem_is_private_mem(file_inode(file), index) &&
+	    (*pfn_attrs & GUEST_MEMFD_PFN_ATTRS_READONLY)) {
+		r = -EFAULT;
+		goto out_put_folio;
 	}
 
 	if (kvm_arch_has_gmem_convert() &&
@@ -1338,6 +1354,7 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 		r = kvm_arch_gmem_make_private(kvm, gfn, *pfn,
 					       (kvm_pfn_t)1 << *max_order);
 
+out_put_folio:
 	folio_unlock(folio);
 	folio_put(folio);
 
@@ -1355,18 +1372,25 @@ static long __kvm_gmem_populate(struct kvm *kvm, struct kvm_memory_slot *slot,
 {
 	pgoff_t index = kvm_gmem_get_index(slot, gfn);
 	struct folio *folio;
+	u64 pfn_attrs;
 	kvm_pfn_t pfn;
 	int ret;
 
 	filemap_invalidate_lock(file->f_mapping);
 
-	folio = __kvm_gmem_get_pfn(file, slot, index, &pfn, NULL);
+	folio = __kvm_gmem_get_pfn(file, slot, index, &pfn, NULL, &pfn_attrs);
 	if (IS_ERR(folio)) {
 		ret = PTR_ERR(folio);
 		goto out_unlock;
 	}
 
 	folio_unlock(folio);
+
+	/* Populating pages initializes private memory, which cannot be read-only. */
+	if (pfn_attrs & GUEST_MEMFD_PFN_ATTRS_READONLY) {
+		ret = -EPERM;
+		goto out_put_folio;
+	}
 
 	if (!kvm_is_private_gfn(kvm, gfn)) {
 		ret = -EINVAL;

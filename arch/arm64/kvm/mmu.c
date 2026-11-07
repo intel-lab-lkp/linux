@@ -1738,6 +1738,7 @@ static int gmem_abort(const struct kvm_s2_fault_desc *s2fd,
 {
 	bool write_fault, exec_fault;
 	bool perm_fault = kvm_s2_fault_is_perm(s2fd);
+	bool writable;
 	enum kvm_pgtable_walk_flags flags = KVM_PGTABLE_WALK_SHARED;
 	enum kvm_pgtable_prot prot = KVM_PGTABLE_PROT_R;
 	struct kvm_pgtable *pgt = s2fd->mmu->pgt;
@@ -1746,6 +1747,7 @@ static int gmem_abort(const struct kvm_s2_fault_desc *s2fd,
 	struct kvm *kvm = s2fd->vcpu->kvm;
 	void *memcache = NULL;
 	gfn_t canonical_gfn;
+	u64 pfn_attrs = 0;
 	int ret;
 
 	if (!perm_fault) {
@@ -1773,18 +1775,21 @@ static int gmem_abort(const struct kvm_s2_fault_desc *s2fd,
 	/* Pairs with the smp_wmb() in kvm_mmu_invalidate_end(). */
 	smp_rmb();
 
-	ret = kvm_gmem_get_pfn(kvm, s2fd->memslot, canonical_gfn, &s2vi.pfn, NULL);
-	if (ret) {
+	ret = kvm_gmem_get_pfn(kvm, s2fd->memslot, canonical_gfn, &s2vi.pfn, NULL,
+			       &pfn_attrs);
+	writable = !(s2fd->memslot->flags & KVM_MEM_READONLY) &&
+		   !(pfn_attrs & GUEST_MEMFD_PFN_ATTRS_READONLY);
+	if (ret || (write_fault && !writable)) {
 		/* If result is non-NULL this is a synthetic fault. */
 		if (!result)
 			kvm_prepare_memory_fault_exit(s2fd->vcpu, gfn_to_gpa(canonical_gfn),
 						      s2vi.vma_pagesize, write_fault, exec_fault,
 						      false);
 		kfree(mapping);
-		return ret;
+		return ret ?: -EFAULT;
 	}
 
-	if (!(s2fd->memslot->flags & KVM_MEM_READONLY))
+	if (writable)
 		prot |= KVM_PGTABLE_PROT_W;
 
 	if (s2fd->nested)

@@ -1615,14 +1615,24 @@ static int kvm_translate_vncr(struct kvm_vcpu *vcpu, bool *is_gmem)
 			return -EFAULT;
 		}
 	} else {
-		ret = kvm_gmem_get_pfn(vcpu->kvm, memslot, gfn, &pfn, NULL);
+		u64 pfn_attrs;
+
+		ret = kvm_gmem_get_pfn(vcpu->kvm, memslot, gfn, &pfn, NULL,
+				       &pfn_attrs);
 		if (ret) {
 			kvm_prepare_memory_fault_exit(vcpu, vt->wr.pa, PAGE_SIZE,
 					      write_fault, false, false);
 			return ret;
 		}
 
-		writable = !(memslot->flags & KVM_MEM_READONLY);
+		writable = !(memslot->flags & KVM_MEM_READONLY) &&
+			   !(pfn_attrs & GUEST_MEMFD_PFN_ATTRS_READONLY);
+		/* TODO: Explain why vt->wr.pw needs to be checked. */
+		if (write_fault && vt->wr.pw && !writable) {
+			kvm_prepare_memory_fault_exit(vcpu, vt->wr.pa, PAGE_SIZE,
+						      true, false, false);
+			return -EFAULT;
+		}
 	}
 
 	/*
