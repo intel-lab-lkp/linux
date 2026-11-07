@@ -21,6 +21,7 @@
 #include <linux/vfio.h>
 
 #include "kselftest_harness.h"
+#include "kvm_util.h"
 
 #define PCI_VENDOR_ID_INTEL 0x8086
 #define PCI_DEVICE_ID_INTEL_82576 0x10C9
@@ -96,16 +97,37 @@ static char *find_igb_cdev_path(void)
 	return NULL;
 }
 
+#define VFIO_PCI_OFFSET_SHIFT 40
+
 FIXTURE(guest_memfd_vfio) {
 	char *cdev_path;
+	struct kvm_vm *vm;
+	int gmem_fd;
 	int iommufd;
 	int vfio_fd;
+	int bar_fd;
+};
+
+FIXTURE_VARIANT(guest_memfd_vfio) {
+	bool use_gmem;
+};
+
+FIXTURE_VARIANT_ADD(guest_memfd_vfio, direct) {
+	.use_gmem = false,
+};
+
+FIXTURE_VARIANT_ADD(guest_memfd_vfio, guest_memfd) {
+	.use_gmem = true,
 };
 
 FIXTURE_SETUP(guest_memfd_vfio)
 {
 	struct vfio_device_bind_iommufd bind_args = {};
 	int ret;
+
+	self->vm = NULL;
+	self->gmem_fd = -1;
+	self->bar_fd = -1;
 
 	self->cdev_path = find_igb_cdev_path();
 	if (!self->cdev_path)
@@ -123,12 +145,50 @@ FIXTURE_SETUP(guest_memfd_vfio)
 
 	bind_args.argsz = sizeof(bind_args);
 	bind_args.iommufd = self->iommufd;
+	if (variant->use_gmem)
+		bind_args.flags = VFIO_DEVICE_BIND_FLAG_CTRL_ONLY;
+
 	ret = ioctl(self->vfio_fd, VFIO_DEVICE_BIND_IOMMUFD, &bind_args);
 	ASSERT_EQ(0, ret);
+
+	/*
+	 * Create a SW_PROTECTED_VM with 1 runnable vCPU allocated for memslot0
+	 * and stack/page table allocation, so guest_mapping can execute vCPUs
+	 * and FIXTURE_TEARDOWN uniformly cleans up self->vm across both variants.
+	 */
+	self->vm = __vm_create((struct vm_shape){ .mode = VM_MODE_DEFAULT,
+						  .type = KVM_X86_SW_PROTECTED_VM },
+			       1, 0);
+
+	if (variant->use_gmem) {
+		uint64_t gmem_flags = GUEST_MEMFD_FLAG_USE_RESOURCE |
+				      GUEST_MEMFD_FLAG_PFN_MODE |
+				      GUEST_MEMFD_FLAG_MMAP |
+				      GUEST_MEMFD_FLAG_INIT_SHARED;
+		uint64_t gmem_size = (uint64_t)VFIO_PCI_NUM_REGIONS << VFIO_PCI_OFFSET_SHIFT;
+
+		/*
+		 * guest_memfd providers (including VFIO) is only intended to be
+		 * used with gmem_in_place_conversion.
+		 */
+		TEST_REQUIRE(kvm_has_gmem_attributes);
+
+		self->gmem_fd = vm_create_guest_memfd_resource(self->vm, gmem_size,
+							       gmem_flags,
+							       self->vfio_fd);
+		ASSERT_GE(self->gmem_fd, 0);
+		self->bar_fd = self->gmem_fd;
+	} else {
+		self->bar_fd = self->vfio_fd;
+	}
 }
 
 FIXTURE_TEARDOWN(guest_memfd_vfio)
 {
+	if (self->gmem_fd >= 0)
+		close(self->gmem_fd);
+	if (self->vm)
+		kvm_vm_free(self->vm);
 	if (self->vfio_fd >= 0)
 		close(self->vfio_fd);
 	if (self->iommufd >= 0)
@@ -236,6 +296,13 @@ TEST_F(guest_memfd_vfio, get_irq_info)
 	}
 }
 
+/*
+ * PCI Command register configuration belongs to the PCI configuration space
+ * region (VFIO_PCI_CONFIG_REGION_INDEX), which is accessed via the underlying
+ * VFIO device descriptor (vfio_fd). In guest_memfd mode, bar_fd refers to the
+ * guest_memfd descriptor representing memory BARs and cannot be used to read or
+ * write PCI configuration space.
+ */
 static void vfio_pci_enable_memory_and_bus_master(struct __test_metadata *_metadata,
 						  int vfio_fd)
 {
@@ -276,7 +343,7 @@ TEST_F(guest_memfd_vfio, bar_rw)
 	 * Confirm device is readable and does not return 0xFFFFFFFF.
 	 */
 	val = 0;
-	ret_bytes = pread(self->vfio_fd, &val, sizeof(val), bar0_info.offset + E1000_STATUS);
+	ret_bytes = pread(self->bar_fd, &val, sizeof(val), bar0_info.offset + E1000_STATUS);
 	ASSERT_EQ(sizeof(val), ret_bytes);
 	ASSERT_NE(0xFFFFFFFF, val);
 
@@ -285,11 +352,11 @@ TEST_F(guest_memfd_vfio, bar_rw)
 	 * it back via pread().
 	 */
 	val = 0xdeadbeef;
-	ret_bytes = pwrite(self->vfio_fd, &val, sizeof(val), bar0_info.offset + E1000_RAL0);
+	ret_bytes = pwrite(self->bar_fd, &val, sizeof(val), bar0_info.offset + E1000_RAL0);
 	ASSERT_EQ(sizeof(val), ret_bytes);
 
 	val = 0;
-	ret_bytes = pread(self->vfio_fd, &val, sizeof(val), bar0_info.offset + E1000_RAL0);
+	ret_bytes = pread(self->bar_fd, &val, sizeof(val), bar0_info.offset + E1000_RAL0);
 	ASSERT_EQ(sizeof(val), ret_bytes);
 	ASSERT_EQ(0xdeadbeef, val);
 }
@@ -310,7 +377,7 @@ TEST_F(guest_memfd_vfio, bar_mmap)
 	ASSERT_TRUE(bar0_info.flags & VFIO_REGION_INFO_FLAG_MMAP);
 
 	bar0 = mmap(NULL, bar0_info.size, PROT_READ | PROT_WRITE, MAP_SHARED,
-		    self->vfio_fd, bar0_info.offset);
+		    self->bar_fd, bar0_info.offset);
 	ASSERT_NE(MAP_FAILED, bar0);
 
 	/*
@@ -347,7 +414,7 @@ TEST_F(guest_memfd_vfio, device_reset)
 	ASSERT_EQ(0, ret);
 
 	bar0 = mmap(NULL, bar0_info.size, PROT_READ | PROT_WRITE, MAP_SHARED,
-		    self->vfio_fd, bar0_info.offset);
+		    self->bar_fd, bar0_info.offset);
 	ASSERT_NE(MAP_FAILED, bar0);
 
 	/* Write scratch test pattern to RAL0 */
