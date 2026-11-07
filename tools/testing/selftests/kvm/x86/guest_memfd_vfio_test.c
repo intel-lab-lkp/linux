@@ -651,4 +651,78 @@ TEST_F(guest_memfd_vfio, guest_mapping)
 	ASSERT_EQ(0, munmap(bar0_mmap, bar0_info.size));
 }
 
+TEST_F(guest_memfd_vfio, dmabuf_creation)
+{
+	struct vfio_device_feature_dma_buf *dmabuf_feature;
+	struct vfio_device_feature probe_feat = {};
+	struct vfio_region_info bar0_info = {};
+	struct vfio_device_feature *feat;
+	size_t feat_size;
+	int dmabuf_fd;
+	int ret;
+
+	/*
+	 * Probe support for VFIO_DEVICE_FEATURE_DMA_BUF. This requires kernel
+	 * support for CONFIG_VFIO_PCI_DMABUF (CONFIG_PCI_P2PDMA). In guest_memfd
+	 * mode, VFIO_DEVICE_BIND_FLAG_CTRL_ONLY is active, so the probe itself
+	 * is rejected with -EOPNOTSUPP by the control-only allowlist.
+	 */
+	probe_feat.argsz = sizeof(probe_feat);
+	probe_feat.flags = VFIO_DEVICE_FEATURE_PROBE |
+			   VFIO_DEVICE_FEATURE_GET |
+			   VFIO_DEVICE_FEATURE_DMA_BUF;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_FEATURE, &probe_feat);
+	if (variant->use_gmem) {
+		ASSERT_LT(ret, 0);
+		ASSERT_EQ(EOPNOTSUPP, errno);
+	} else if (ret != 0) {
+		SKIP(return, "Kernel lacks CONFIG_VFIO_PCI_DMABUF support\n");
+	}
+
+	bar0_info.argsz = sizeof(bar0_info);
+	bar0_info.index = VFIO_PCI_BAR0_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_info);
+	ASSERT_EQ(0, ret);
+
+	/*
+	 * Allocate vfio_device_feature with trailing vfio_device_feature_dma_buf
+	 * containing one dma_range covering BAR0.
+	 */
+	feat_size = sizeof(*feat) + sizeof(*dmabuf_feature) +
+		    sizeof(struct vfio_region_dma_range);
+	feat = calloc(1, feat_size);
+	ASSERT_NE(NULL, feat);
+
+	feat->argsz = feat_size;
+	feat->flags = VFIO_DEVICE_FEATURE_GET | VFIO_DEVICE_FEATURE_DMA_BUF;
+
+	dmabuf_feature = (struct vfio_device_feature_dma_buf *)feat->data;
+	dmabuf_feature->region_index = VFIO_PCI_BAR0_REGION_INDEX;
+	dmabuf_feature->open_flags = O_RDWR | O_CLOEXEC;
+	dmabuf_feature->nr_ranges = 1;
+	dmabuf_feature->dma_ranges[0].offset = 0;
+	dmabuf_feature->dma_ranges[0].length = bar0_info.size;
+
+	dmabuf_fd = ioctl(self->vfio_fd, VFIO_DEVICE_FEATURE, feat);
+	if (variant->use_gmem) {
+		ASSERT_LT(dmabuf_fd, 0);
+		ASSERT_EQ(EOPNOTSUPP, errno);
+	} else {
+		ASSERT_GE(dmabuf_fd, 0);
+
+		/*
+		 * VFIO PCI dmabufs are intended for peer-to-peer kernel DMA and
+		 * do not implement mmap or read operations. Verify mmap returns
+		 * -EINVAL.
+		 */
+		ASSERT_EQ(MAP_FAILED, mmap(NULL, bar0_info.size,
+					   PROT_READ | PROT_WRITE,
+					   MAP_SHARED, dmabuf_fd, 0));
+		ASSERT_EQ(EINVAL, errno);
+		close(dmabuf_fd);
+	}
+
+	free(feat);
+}
+
 TEST_HARNESS_MAIN
