@@ -1164,7 +1164,10 @@ static blk_status_t sd_setup_write_zeroes_cmnd(struct scsi_cmnd *cmd)
 		case SD_ZERO_WS16_UNMAP:
 			return sd_setup_write_same16_cmnd(cmd, true);
 		case SD_ZERO_WS10_UNMAP:
-			return sd_setup_write_same10_cmnd(cmd, true);
+			if (lba <= 0xffffffff && nr_blocks <= 0xffff)
+				return sd_setup_write_same10_cmnd(cmd, true);
+			/* Unmapping is optional for write zeroes. */
+			break;
 		}
 	}
 
@@ -1220,6 +1223,11 @@ static void sd_config_write_same(struct scsi_disk *sdkp,
 		sdkp->zeroing_mode = SD_ZERO_WS;
 	else
 		sdkp->zeroing_mode = SD_ZERO_WRITE;
+
+	/* Split large requests so they can still unmap. */
+	if (sdkp->zeroing_mode == SD_ZERO_WS10_UNMAP)
+		sdkp->max_ws_blocks = min(sdkp->max_ws_blocks,
+					  (u32)SD_MAX_WS10_BLOCKS);
 
 	if (sdkp->max_ws_blocks &&
 	    sdkp->physical_block_size > logical_block_size) {
