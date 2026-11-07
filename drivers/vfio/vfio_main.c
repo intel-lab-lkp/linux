@@ -1503,20 +1503,25 @@ static ssize_t vfio_device_fops_write(struct file *filep,
 	return device->ops->write(device, buf, count, ppos);
 }
 
+static int vfio_device_mmap(struct vfio_device *device,
+			    struct vm_area_struct *vma)
+{
+	if (unlikely(!device->ops->mmap))
+		return -EOPNOTSUPP;
+
+	return device->ops->mmap(device, vma);
+}
+
 static int vfio_device_fops_mmap(struct file *filep, struct vm_area_struct *vma)
 {
 	struct vfio_device_file *df = filep->private_data;
-	struct vfio_device *device = df->device;
 	int ret;
 
 	ret = vfio_df_check_full_access(df);
 	if (ret)
 		return ret;
 
-	if (unlikely(!device->ops->mmap))
-		return -EINVAL;
-
-	return device->ops->mmap(device, vma);
+	return vfio_device_mmap(df->device, vma);
 }
 
 #ifdef CONFIG_PROC_FS
@@ -1604,10 +1609,23 @@ static int vfio_device_gmem_get_pfn(void *provider, pgoff_t index,
 					 pfn_attrs);
 }
 
+static int vfio_device_gmem_mmap(void *provider, struct vm_area_struct *vma)
+{
+	struct file *file = provider;
+	struct vfio_device_file *df = file->private_data;
+
+	/*
+	 * No control- vs. data-plane filtering is required because
+	 * vfio_device_mmap() already only allows mmap-ing the data plane.
+	 */
+	return vfio_device_mmap(df->device, vma);
+}
+
 static const struct guest_memfd_provider_operations vfio_device_gmem_provider_ops = {
 	.attach  = vfio_device_gmem_attach,
 	.release = vfio_device_gmem_release,
 	.get_pfn = vfio_device_gmem_get_pfn,
+	.mmap    = vfio_device_gmem_mmap,
 };
 #endif
 
