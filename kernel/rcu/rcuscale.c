@@ -159,7 +159,7 @@ struct rcu_scale_ops {
 	const char *name;
 };
 
-static struct rcu_scale_ops *cur_ops;
+static const struct rcu_scale_ops *cur_ops;
 
 /*
  * Definitions for rcu scalability testing.
@@ -185,7 +185,7 @@ static void rcu_sync_scale_init(void)
 {
 }
 
-static struct rcu_scale_ops rcu_ops = {
+static const struct rcu_scale_ops rcu_ops = {
 	.ptype		= RCU_FLAVOR,
 	.init		= rcu_sync_scale_init,
 	.readlock	= rcu_scale_read_lock,
@@ -247,7 +247,7 @@ static void srcu_scale_synchronize_expedited(void)
 	synchronize_srcu_expedited(srcu_ctlp);
 }
 
-static struct rcu_scale_ops srcu_ops = {
+static const struct rcu_scale_ops srcu_ops = {
 	.ptype		= SRCU_FLAVOR,
 	.init		= rcu_sync_scale_init,
 	.readlock	= srcu_scale_read_lock,
@@ -276,7 +276,7 @@ static void srcu_sync_scale_cleanup(void)
 	cleanup_srcu_struct(srcu_ctlp);
 }
 
-static struct rcu_scale_ops srcud_ops = {
+static const struct rcu_scale_ops srcud_ops = {
 	.ptype		= SRCU_FLAVOR,
 	.init		= srcu_sync_scale_init,
 	.cleanup	= srcu_sync_scale_cleanup,
@@ -313,7 +313,7 @@ static void rcu_tasks_scale_stats(void)
 	rcu_tasks_torture_stats_print(scale_type, SCALE_FLAG);
 }
 
-static struct rcu_scale_ops tasks_ops = {
+static const struct rcu_scale_ops tasks_ops = {
 	.ptype		= RCU_TASKS_FLAVOR,
 	.init		= rcu_sync_scale_init,
 	.readlock	= tasks_scale_read_lock,
@@ -357,7 +357,7 @@ static void rcu_tasks_rude_scale_stats(void)
 	rcu_tasks_rude_torture_stats_print(scale_type, SCALE_FLAG);
 }
 
-static struct rcu_scale_ops tasks_rude_ops = {
+static const struct rcu_scale_ops tasks_rude_ops = {
 	.ptype		= RCU_TASKS_RUDE_FLAVOR,
 	.init		= rcu_sync_scale_init,
 	.readlock	= tasks_rude_scale_read_lock,
@@ -396,7 +396,7 @@ static void tasks_trace_scale_read_unlock(int idx)
 	rcu_read_unlock_trace();
 }
 
-static struct rcu_scale_ops tasks_tracing_ops = {
+static const struct rcu_scale_ops tasks_tracing_ops = {
 	.ptype		= RCU_TASKS_FLAVOR,
 	.init		= rcu_sync_scale_init,
 	.readlock	= tasks_trace_scale_read_lock,
@@ -693,7 +693,7 @@ rcu_scale_writer(void *arg)
 }
 
 static void
-rcu_scale_print_module_parms(struct rcu_scale_ops *cur_ops, const char *tag)
+rcu_scale_print_module_parms(const struct rcu_scale_ops *cur_ops, const char *tag)
 {
 	pr_alert("%s" SCALE_FLAG
 		 "--- %s: gp_async=%d gp_async_max=%d gp_exp=%d holdoff=%d minruntime=%d nreaders=%d nwriters=%d nexp=%d exp_interval=%d writer_holdoff=%d writer_holdoff_jiffies=%d verbose=%d shutdown_secs=%d\n",
@@ -1109,7 +1109,7 @@ rcu_scale_init(void)
 	int firsterr = 0;
 	long i;
 	long j;
-	static struct rcu_scale_ops *scale_ops[] = {
+	static const struct rcu_scale_ops *scale_ops[] = {
 		&rcu_ops, &srcu_ops, &srcud_ops, TASKS_OPS TASKS_RUDE_OPS TASKS_TRACING_OPS
 	};
 
