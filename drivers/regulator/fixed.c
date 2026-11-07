@@ -389,17 +389,7 @@ static struct platform_driver regulator_fixed_voltage_driver = {
 	},
 };
 
-static int __init regulator_fixed_voltage_init(void)
-{
-	return platform_driver_register(&regulator_fixed_voltage_driver);
-}
-subsys_initcall(regulator_fixed_voltage_init);
-
-static void __exit regulator_fixed_voltage_exit(void)
-{
-	platform_driver_unregister(&regulator_fixed_voltage_driver);
-}
-module_exit(regulator_fixed_voltage_exit);
+subsys_platform_driver(regulator_fixed_voltage_driver);
 
 MODULE_AUTHOR("Mark Brown <broonie@opensource.wolfsonmicro.com>");
 MODULE_DESCRIPTION("Fixed voltage regulator");
