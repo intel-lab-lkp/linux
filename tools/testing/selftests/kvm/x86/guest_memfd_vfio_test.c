@@ -188,4 +188,52 @@ TEST_F(guest_memfd_vfio, get_region_info)
 				    VFIO_REGION_INFO_FLAG_WRITE));
 }
 
+TEST_F(guest_memfd_vfio, get_irq_info)
+{
+	struct vfio_irq_info irq_info = {};
+	int ret;
+
+	/*
+	 * Test MSI-X interrupts (VFIO_PCI_MSIX_IRQ_INDEX):
+	 * Intel 82576 supports up to 10 MSI-X vectors.
+	 */
+	irq_info.argsz = sizeof(irq_info);
+	irq_info.index = VFIO_PCI_MSIX_IRQ_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_IRQ_INFO, &irq_info);
+	ASSERT_EQ(0, ret);
+	ASSERT_GT(irq_info.count, 0);
+	ASSERT_TRUE(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
+
+	/*
+	 * Test MSI interrupts (VFIO_PCI_MSI_IRQ_INDEX):
+	 * Should report eventfd capability.
+	 */
+	memset(&irq_info, 0, sizeof(irq_info));
+	irq_info.argsz = sizeof(irq_info);
+	irq_info.index = VFIO_PCI_MSI_IRQ_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_IRQ_INFO, &irq_info);
+	ASSERT_EQ(0, ret);
+	ASSERT_GT(irq_info.count, 0);
+	ASSERT_TRUE(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
+
+	/*
+	 * Test legacy INTx interrupts (VFIO_PCI_INTX_IRQ_INDEX):
+	 * Must support eventfd and masking when present.
+	 */
+	memset(&irq_info, 0, sizeof(irq_info));
+	irq_info.argsz = sizeof(irq_info);
+	irq_info.index = VFIO_PCI_INTX_IRQ_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_IRQ_INFO, &irq_info);
+	ASSERT_EQ(0, ret);
+	ASSERT_LE(irq_info.count, 1);
+	if (irq_info.count == 1) {
+		ASSERT_EQ(VFIO_IRQ_INFO_EVENTFD |
+			  VFIO_IRQ_INFO_MASKABLE |
+			  VFIO_IRQ_INFO_AUTOMASKED,
+			  irq_info.flags & (VFIO_IRQ_INFO_EVENTFD |
+					    VFIO_IRQ_INFO_MASKABLE |
+					    VFIO_IRQ_INFO_AUTOMASKED));
+	}
+}
+
 TEST_HARNESS_MAIN
