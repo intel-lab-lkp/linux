@@ -329,17 +329,7 @@ static struct platform_driver usb_phy_generic_driver = {
 	},
 };
 
-static int __init usb_phy_generic_init(void)
-{
-	return platform_driver_register(&usb_phy_generic_driver);
-}
-subsys_initcall(usb_phy_generic_init);
-
-static void __exit usb_phy_generic_exit(void)
-{
-	platform_driver_unregister(&usb_phy_generic_driver);
-}
-module_exit(usb_phy_generic_exit);
+subsys_platform_driver(usb_phy_generic_driver);
 
 MODULE_ALIAS("platform:usb_phy_generic");
 MODULE_AUTHOR("Texas Instruments Inc");
