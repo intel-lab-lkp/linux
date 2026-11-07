@@ -1589,9 +1589,25 @@ static void vfio_device_gmem_release(void *provider)
 	fput(file);
 }
 
+static int vfio_device_gmem_get_pfn(void *provider, pgoff_t index,
+				    unsigned long *pfn, int *max_order,
+				    u64 *pfn_attrs)
+{
+	struct file *file = provider;
+	struct vfio_device_file *df = file->private_data;
+	struct vfio_device *device = df->device;
+
+	if (!device->ops->gmem_get_pfn)
+		return -EOPNOTSUPP;
+
+	return device->ops->gmem_get_pfn(device, index, pfn, max_order,
+					 pfn_attrs);
+}
+
 static const struct guest_memfd_provider_operations vfio_device_gmem_provider_ops = {
 	.attach  = vfio_device_gmem_attach,
 	.release = vfio_device_gmem_release,
+	.get_pfn = vfio_device_gmem_get_pfn,
 };
 #endif
 

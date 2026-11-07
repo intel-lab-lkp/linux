@@ -122,6 +122,9 @@ struct guest_memfd_provider_operations;
 struct vfio_device_ops {
 	int (*gmem_attach)(struct vfio_device *device);
 	void (*gmem_release)(struct vfio_device *device);
+	int (*gmem_get_pfn)(struct vfio_device *device, pgoff_t index,
+			    unsigned long *pfn, int *max_order,
+			    u64 *pfn_attrs);
 	char	*name;
 	int	(*init)(struct vfio_device *vdev);
 	void	(*release)(struct vfio_device *vdev);
