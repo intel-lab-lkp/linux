@@ -464,8 +464,10 @@ static void vfio_pci_runtime_pm_exit(struct vfio_pci_core_device *vdev)
 	 */
 	down_write(&vdev->memory_lock);
 	__vfio_pci_runtime_pm_exit(vdev);
-	if (__vfio_pci_memory_enabled(vdev))
+	if (__vfio_pci_memory_enabled(vdev)) {
 		vfio_pci_dma_buf_move(vdev, false);
+		vfio_pci_set_bars_available(vdev, true);
+	}
 	up_write(&vdev->memory_lock);
 }
 
@@ -1337,8 +1339,10 @@ static int vfio_pci_ioctl_reset(struct vfio_pci_core_device *vdev,
 
 	vfio_pci_dma_buf_move(vdev, true);
 	ret = pci_try_reset_function(vdev->pdev);
-	if (__vfio_pci_memory_enabled(vdev))
+	if (__vfio_pci_memory_enabled(vdev)) {
 		vfio_pci_dma_buf_move(vdev, false);
+		vfio_pci_set_bars_available(vdev, true);
+	}
 	up_write(&vdev->memory_lock);
 
 	return ret;
@@ -1727,8 +1731,31 @@ static void vfio_pci_zap_bars(struct vfio_pci_core_device *vdev)
 	loff_t start = VFIO_PCI_INDEX_TO_OFFSET(VFIO_PCI_BAR0_REGION_INDEX);
 	loff_t end = VFIO_PCI_INDEX_TO_OFFSET(VFIO_PCI_ROM_REGION_INDEX);
 	loff_t len = end - start;
+	int i;
 
 	unmap_mapping_range(core_vdev->inode->i_mapping, start, len, true);
+
+#ifdef CONFIG_KVM_GUEST_MEMFD
+	if (vfio_pci_get_bars_available(vdev)) {
+		vfio_pci_set_bars_available(vdev, false);
+
+		for (i = 0; i < PCI_STD_NUM_BARS; i++) {
+			pgoff_t gmem_start;
+			unsigned long pfn;
+			size_t nr_pages;
+
+			if (!vdev->bar_mmap_supported[i])
+				continue;
+
+			gmem_start = VFIO_PCI_INDEX_TO_OFFSET(i) >> PAGE_SHIFT;
+			nr_pages = pci_resource_len(vdev->pdev, i) >> PAGE_SHIFT;
+			pfn = pci_resource_start(vdev->pdev, i) >> PAGE_SHIFT;
+
+			vfio_device_gmem_revoke(&vdev->vdev, gmem_start,
+						nr_pages, &pfn);
+		}
+	}
+#endif
 }
 
 void vfio_pci_zap_and_down_write_memory_lock(struct vfio_pci_core_device *vdev)
@@ -2621,8 +2648,10 @@ static int vfio_pci_dev_set_hot_reset(struct vfio_device_set *dev_set,
 err_undo:
 	list_for_each_entry_from_reverse(vdev, &dev_set->device_list,
 					 vdev.dev_set_list) {
-		if (vdev->vdev.open_count && __vfio_pci_memory_enabled(vdev))
+		if (vdev->vdev.open_count && __vfio_pci_memory_enabled(vdev)) {
 			vfio_pci_dma_buf_move(vdev, false);
+			vfio_pci_set_bars_available(vdev, true);
+		}
 		up_write(&vdev->memory_lock);
 	}
 
@@ -2709,9 +2738,7 @@ int vfio_pci_core_gmem_attach(struct vfio_device *core_vdev)
 
 	bars_available = __vfio_pci_memory_enabled(vdev) &&
 			 !vdev->pm_runtime_engaged;
-
-	/* Pairs with smp_load_acquire() in provider operations */
-	smp_store_release(&vdev->bars_available, bars_available);
+	vfio_pci_set_bars_available(vdev, bars_available);
 
 	up_write(&vdev->memory_lock);
 
@@ -2726,8 +2753,7 @@ void vfio_pci_core_gmem_release(struct vfio_device *core_vdev)
 
 	down_write(&vdev->memory_lock);
 
-	/* Pairs with smp_load_acquire() in provider operations */
-	smp_store_release(&vdev->bars_available, false);
+	vfio_pci_set_bars_available(vdev, false);
 
 	up_write(&vdev->memory_lock);
 }
@@ -2747,7 +2773,7 @@ int vfio_pci_core_gmem_get_pfn(struct vfio_device *core_vdev, pgoff_t index,
 	 * Lockless check: if memory decoding is disabled or the device is in
 	 * low-power D3, fail immediately without blocking on memory_lock.
 	 */
-	if (!smp_load_acquire(&vdev->bars_available))
+	if (!vfio_pci_get_bars_available(vdev))
 		return -EFAULT;
 
 	bar = index >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);

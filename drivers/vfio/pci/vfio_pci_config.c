@@ -630,8 +630,10 @@ static int vfio_basic_config_write(struct vfio_pci_core_device *vdev, int pos,
 		*virt_cmd &= cpu_to_le16(~mask);
 		*virt_cmd |= cpu_to_le16(new_cmd & mask);
 
-		if (__vfio_pci_memory_enabled(vdev))
+		if (__vfio_pci_memory_enabled(vdev)) {
 			vfio_pci_dma_buf_move(vdev, false);
+			vfio_pci_set_bars_available(vdev, true);
+		}
 		up_write(&vdev->memory_lock);
 	}
 
@@ -720,8 +722,10 @@ static void vfio_lock_and_set_power_state(struct vfio_pci_core_device *vdev,
 	}
 
 	vfio_pci_set_power_state(vdev, state);
-	if (__vfio_pci_memory_enabled(vdev))
+	if (__vfio_pci_memory_enabled(vdev)) {
 		vfio_pci_dma_buf_move(vdev, false);
+		vfio_pci_set_bars_available(vdev, true);
+	}
 	up_write(&vdev->memory_lock);
 }
 
@@ -911,8 +915,10 @@ static int vfio_exp_config_write(struct vfio_pci_core_device *vdev, int pos,
 			vfio_pci_zap_and_down_write_memory_lock(vdev);
 			vfio_pci_dma_buf_move(vdev, true);
 			pci_try_reset_function(vdev->pdev);
-			if (__vfio_pci_memory_enabled(vdev))
+			if (__vfio_pci_memory_enabled(vdev)) {
 				vfio_pci_dma_buf_move(vdev, false);
+				vfio_pci_set_bars_available(vdev, true);
+			}
 			up_write(&vdev->memory_lock);
 		}
 	}
@@ -996,8 +1002,10 @@ static int vfio_af_config_write(struct vfio_pci_core_device *vdev, int pos,
 			vfio_pci_zap_and_down_write_memory_lock(vdev);
 			vfio_pci_dma_buf_move(vdev, true);
 			pci_try_reset_function(vdev->pdev);
-			if (__vfio_pci_memory_enabled(vdev))
+			if (__vfio_pci_memory_enabled(vdev)) {
 				vfio_pci_dma_buf_move(vdev, false);
+				vfio_pci_set_bars_available(vdev, true);
+			}
 			up_write(&vdev->memory_lock);
 		}
 	}
