@@ -202,6 +202,14 @@ static void gmem_provider_release(struct gmem_inode *gi)
 		gi->provider_ops->release(gi->provider);
 }
 
+static int gmem_provider_mmap(struct gmem_inode *gi, struct vm_area_struct *vma)
+{
+	if (gi->provider_ops && gi->provider_ops->mmap)
+		return gi->provider_ops->mmap(gi->provider, vma);
+
+	return 0;
+}
+
 #define kvm_gmem_for_each_file(f, inode) \
 	list_for_each_entry(f, &GMEM_I(inode)->gmem_file_list, entry)
 
@@ -860,6 +868,7 @@ static const struct vm_operations_struct kvm_gmem_pfn_vm_ops = {
 static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct gmem_inode *gi = GMEM_I(file_inode(file));
+	int ret;
 
 	if (!kvm_gmem_supports_mmap(file_inode(file)))
 		return -ENODEV;
@@ -868,6 +877,10 @@ static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 	    (VM_SHARED | VM_MAYSHARE)) {
 		return -EINVAL;
 	}
+
+	ret = gmem_provider_mmap(gi, vma);
+	if (ret)
+		return ret;
 
 	if (kvm_gmem_is_pfn_mode(gi))
 		vm_flags_set(vma, VM_PFNMAP);

@@ -85,6 +85,9 @@ static inline bool kvm_gmem_pfn_is_cacheable(u64 pfn_attrs)
  *                 available, the provider should skip the unbacked range. Not
  *                 called on kvm_gmem_revoke(). Do not take locks held across
  *                 kvm_gmem_revoke().
+ * @mmap: Optional callback to set up user mappings. Called when userspace calls
+ *        mmap() on guest_memfd. The provider can customize VMA flags, or reject
+ *        the mapping.
  *
  * Used by filesystems and device drivers that provide memory for guest_memfd.
  */
@@ -99,6 +102,7 @@ struct guest_memfd_provider_operations {
 	int (*lookup_pfn_range)(void *provider, pgoff_t index,
 				unsigned long *pfn, size_t *nr_pages);
 	void (*put_pfn_range)(void *provider, pgoff_t index, size_t nr_pages);
+	int (*mmap)(void *provider, struct vm_area_struct *vma);
 };
 
 #ifdef CONFIG_KVM_GUEST_MEMFD
