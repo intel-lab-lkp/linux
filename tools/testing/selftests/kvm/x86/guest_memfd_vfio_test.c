@@ -150,4 +150,42 @@ TEST_F(guest_memfd_vfio, get_device_info)
 	ASSERT_GT(dev_info.num_irqs, 0);
 }
 
+TEST_F(guest_memfd_vfio, get_region_info)
+{
+	struct vfio_region_info reg_info = {};
+	int ret;
+
+	/* Test BAR0: 128 KiB MMIO register space */
+	reg_info.argsz = sizeof(reg_info);
+	reg_info.index = VFIO_PCI_BAR0_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &reg_info);
+	ASSERT_EQ(0, ret);
+	ASSERT_EQ(0x20000, reg_info.size);
+	ASSERT_EQ(VFIO_REGION_INFO_FLAG_READ |
+		  VFIO_REGION_INFO_FLAG_WRITE |
+		  VFIO_REGION_INFO_FLAG_MMAP,
+		  reg_info.flags & (VFIO_REGION_INFO_FLAG_READ |
+				    VFIO_REGION_INFO_FLAG_WRITE |
+				    VFIO_REGION_INFO_FLAG_MMAP));
+
+	/* Test BAR3: 16 KiB MSI-X table and PBA */
+	memset(&reg_info, 0, sizeof(reg_info));
+	reg_info.argsz = sizeof(reg_info);
+	reg_info.index = VFIO_PCI_BAR3_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &reg_info);
+	ASSERT_EQ(0, ret);
+	ASSERT_EQ(0x4000, reg_info.size);
+
+	/* Test PCIe Config Space: 4096 bytes extended config */
+	memset(&reg_info, 0, sizeof(reg_info));
+	reg_info.argsz = sizeof(reg_info);
+	reg_info.index = VFIO_PCI_CONFIG_REGION_INDEX;
+	ret = ioctl(self->vfio_fd, VFIO_DEVICE_GET_REGION_INFO, &reg_info);
+	ASSERT_EQ(0, ret);
+	ASSERT_EQ(PCI_CFG_SPACE_EXP_SIZE, reg_info.size);
+	ASSERT_EQ(VFIO_REGION_INFO_FLAG_READ | VFIO_REGION_INFO_FLAG_WRITE,
+		  reg_info.flags & (VFIO_REGION_INFO_FLAG_READ |
+				    VFIO_REGION_INFO_FLAG_WRITE));
+}
+
 TEST_HARNESS_MAIN
