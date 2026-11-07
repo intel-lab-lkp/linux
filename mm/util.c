@@ -798,6 +798,9 @@ bool __folio_ref_count_over_limit(unsigned int ref_count)
 	/* Background threads must not consume admin reserves. */
 	if (current->flags & PF_KTHREAD)
 		return true;
+	/* Capability checks are not safe with IRQs disabled. */
+	if (irqs_disabled())
+		return true;
 	/* Use the task's credentials, which filesystem overrides cannot change. */
 	return !has_capability_noaudit(current, CAP_SYS_RESOURCE);
 }
