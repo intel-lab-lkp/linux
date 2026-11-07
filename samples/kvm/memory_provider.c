@@ -17,6 +17,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
+#include <linux/guest_memfd.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
@@ -34,9 +35,11 @@ struct mp_info {
 	unsigned long npages;
 	struct page *cma_pages;		/* from alloc_contig_pages() */
 
-	struct mutex lock;		/* the bitmaps */
+	struct mutex lock;		/* the bitmaps and gmem_inode */
 	unsigned long *absent;		/* taken away by MP_SET_PRESENT */
 	unsigned long *readonly;	/* marked read-only by MP_SET_READONLY */
+
+	struct inode *gmem_inode;
 };
 
 /* Byte range [offset, offset + len) of @info as page indices. */
@@ -161,11 +164,45 @@ static long mp_file_ioctl(struct file *file, unsigned int cmd,
 	}
 }
 
+static void *mp_gmem_attach(struct inode *gmem_inode,
+			    struct file *resource_file)
+{
+	struct mp_info *info = resource_file->private_data;
+
+	mutex_lock(&info->lock);
+	if (info->gmem_inode) {
+		mutex_unlock(&info->lock);
+		return ERR_PTR(-EBUSY);
+	}
+	info->gmem_inode = gmem_inode;
+	mutex_unlock(&info->lock);
+
+	return get_file(resource_file);
+}
+
+static void mp_gmem_release(void *provider)
+{
+	struct file *resource_file = provider;
+	struct mp_info *info = resource_file->private_data;
+
+	mutex_lock(&info->lock);
+	info->gmem_inode = NULL;
+	mutex_unlock(&info->lock);
+
+	fput(resource_file);
+}
+
+static const struct guest_memfd_provider_operations mp_gmem_provider_ops = {
+	.attach		= mp_gmem_attach,
+	.release	= mp_gmem_release,
+};
+
 static const struct file_operations mp_file_fops = {
 	.owner		= THIS_MODULE,
 	.release	= mp_file_release,
 	.unlocked_ioctl	= mp_file_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
+	.gmem_provider_ops = &mp_gmem_provider_ops,
 };
 
 static long mp_ctl_new_file(void __user *uarg)
