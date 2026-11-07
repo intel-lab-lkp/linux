@@ -27,6 +27,16 @@ struct mp_new_file {
 #define MP_NEW_FILE \
 	_IOW(MP_IOCTL_BASE, 5, struct mp_new_file)
 
+/* ioctl on a provider fd: read the file's state, for tests. */
+struct mp_stats {
+	__u64 size;
+	__u64 absent_pages;	/* pages taken away by MP_SET_PRESENT */
+	__u64 readonly_pages;	/* pages marked read-only by MP_SET_READONLY */
+};
+
+#define MP_GET_STATS \
+	_IOR(MP_IOCTL_BASE, 10, struct mp_stats)
+
 /*
  * ioctl on a provider fd: SET_READONLY on [@offset, @offset + @len).
  * @value is the read-only value (1 = read-only, 0 = writable), and @offset

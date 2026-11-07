@@ -81,6 +81,20 @@ static void mp_set_present(struct mp_info *info, unsigned long start,
 	mutex_unlock(&info->lock);
 }
 
+static long mp_get_stats(struct mp_info *info, void __user *uarg)
+{
+	struct mp_stats st = {
+		.size = (u64)info->npages << PAGE_SHIFT,
+	};
+
+	mutex_lock(&info->lock);
+	st.absent_pages = bitmap_weight(info->absent, info->npages);
+	st.readonly_pages = bitmap_weight(info->readonly, info->npages);
+	mutex_unlock(&info->lock);
+
+	return copy_to_user(uarg, &st, sizeof(st)) ? -EFAULT : 0;
+}
+
 static int mp_file_release(struct inode *inode, struct file *file)
 {
 	struct mp_info *info = file->private_data;
@@ -136,6 +150,8 @@ static long mp_file_ioctl(struct file *file, unsigned int cmd,
 	void __user *uarg = (void __user *)arg;
 
 	switch (cmd) {
+	case MP_GET_STATS:
+		return mp_get_stats(info, uarg);
 	case MP_SET_PRESENT:
 		return mp_file_set_present(info, uarg);
 	case MP_SET_READONLY:
