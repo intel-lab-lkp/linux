@@ -632,28 +632,25 @@ static int nd_pmem_probe(struct device *dev)
 	ret = nd_btt_probe(dev, ndns);
 	if (ret == 0)
 		return -ENXIO;
+	else if (ret != -ENODEV && ret != -ENXIO)
+		return ret;
 
 	/*
-	 * We have two failure conditions here, there is no
-	 * info reserver block or we found a valid info reserve block
-	 * but failed to initialize the pfn superblock.
-	 *
-	 * For the first case consider namespace as a raw pmem namespace
-	 * and attach a disk.
-	 *
-	 * For the latter, consider this a success and advance the namespace
-	 * seed.
+	 * An absent or unreadable PFN/DAX info block allows probing the
+	 * next personality or falling back to raw PMEM. Other errors
+	 * are propagated, including -EOPNOTSUPP, which causes
+	 * nvdimm_bus_probe() to advance the namespace seed.
 	 */
 	ret = nd_pfn_probe(dev, ndns);
 	if (ret == 0)
 		return -ENXIO;
-	else if (ret == -EOPNOTSUPP)
+	else if (ret != -ENODEV && ret != -ENXIO)
 		return ret;
 
 	ret = nd_dax_probe(dev, ndns);
 	if (ret == 0)
 		return -ENXIO;
-	else if (ret == -EOPNOTSUPP)
+	else if (ret != -ENODEV && ret != -ENXIO)
 		return ret;
 
 	/* probe complete, attach handles namespace enabling */

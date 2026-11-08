@@ -349,7 +349,9 @@ int nd_btt_probe(struct device *dev, struct nd_namespace_common *ndns)
 	if (!btt_dev)
 		return -ENOMEM;
 	btt_sb = devm_kzalloc(dev, sizeof(*btt_sb), GFP_KERNEL);
-	rc = __nd_btt_probe(to_nd_btt(btt_dev), ndns, btt_sb);
+	rc = -ENOMEM;
+	if (btt_sb)
+		rc = __nd_btt_probe(to_nd_btt(btt_dev), ndns, btt_sb);
 	dev_dbg(dev, "btt: %s\n", rc == 0 ? dev_name(btt_dev) : "<none>");
 	if (rc < 0) {
 		struct nd_btt *nd_btt = to_nd_btt(btt_dev);

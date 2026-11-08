@@ -637,7 +637,9 @@ int nd_pfn_probe(struct device *dev, struct nd_namespace_common *ndns)
 	pfn_sb = devm_kmalloc(dev, sizeof(*pfn_sb), GFP_KERNEL);
 	nd_pfn = to_nd_pfn(pfn_dev);
 	nd_pfn->pfn_sb = pfn_sb;
-	rc = nd_pfn_validate(nd_pfn, PFN_SIG);
+	rc = -ENOMEM;
+	if (pfn_sb)
+		rc = nd_pfn_validate(nd_pfn, PFN_SIG);
 	dev_dbg(dev, "pfn: %s\n", rc == 0 ? dev_name(pfn_dev) : "<none>");
 	if (rc < 0) {
 		nd_detach_ndns(pfn_dev, &nd_pfn->ndns);
