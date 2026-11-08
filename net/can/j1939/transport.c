@@ -1849,14 +1849,43 @@ static void j1939_xtp_rx_dpo_one(struct j1939_session *session,
 				 struct sk_buff *skb)
 {
 	const u8 *dat = skb->data;
+	unsigned int dpo;
 
 	if (j1939_xtp_rx_cmd_bad_pgn(session, skb))
 		return;
 
 	netdev_dbg(session->priv->ndev, "%s: 0x%p\n", __func__, session);
 
+	dpo = j1939_etp_ctl_to_packet(dat);
+
+	/* ETP.CM_DPO is peer controlled.  j1939_xtp_rx_dat_one() places data at
+	 * "dat[0] - 1 + pkt.dpo", so a value at or past pkt.total moves pkt.dpo
+	 * beyond the reassembled buffer.  The transfer still completes: with
+	 * pkt.dpo == pkt.total a closing ETP.DT with dat[0] == 0 evaluates to
+	 * the last in-order packet, so pkt.rx reaches pkt.total and the receiver
+	 * emits its own EOMA.  The loopback of that EOMA runs
+	 * j1939_session_completed(), which asks j1939_session_skb_get() for a
+	 * packet past the end of the queued skb, gets NULL, and passes it to
+	 * j1939_sk_recv().
+	 *
+	 * pkt.total is a packet count, so the last valid packet is
+	 * pkt.total - 1 and the check has to be ">=".
+	 */
+	if (dpo >= session->pkt.total) {
+		if (session->transmission) {
+			/* A transmitter only builds an EDPO from pkt.tx_acked,
+			 * which comes from the responder's ETP.CM_CTS, so an
+			 * out-of-range value there is an oversized CTS.
+			 */
+			j1939_session_cancel(session, J1939_XTP_ABORT_ECTS_TOO_BIG);
+		} else {
+			j1939_session_cancel(session, J1939_XTP_ABORT_BAD_EDPO_OFFSET);
+		}
+		return;
+	}
+
 	/* transmitted without problems */
-	session->pkt.dpo = j1939_etp_ctl_to_packet(skb->data);
+	session->pkt.dpo = dpo;
 	session->last_cmd = dat[0];
 	j1939_tp_set_rxtimeout(session, 750);
 
