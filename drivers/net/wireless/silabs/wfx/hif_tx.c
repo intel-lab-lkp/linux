@@ -38,7 +38,9 @@ static void wfx_fill_header(struct wfx_hif_msg *hif, int if_id, unsigned int cmd
 
 static void *wfx_alloc_hif(size_t body_len, struct wfx_hif_msg **hif)
 {
-	*hif = kzalloc(sizeof(struct wfx_hif_msg) + body_len, GFP_KERNEL);
+	/* The kzalloc() also zeroes the bus alignment slack */
+	*hif = kzalloc(sizeof(struct wfx_hif_msg) + body_len +
+		       WFX_BUS_ALIGN_SLACK, GFP_KERNEL);
 	if (*hif)
 		return (*hif)->body;
 	else

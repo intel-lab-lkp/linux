@@ -255,9 +255,14 @@ static ssize_t wfx_send_hif_msg_write(struct file *file, const char __user *user
 	 * memory pattern may help user.
 	 */
 	memset(context->reply, 0xFF, sizeof(context->reply));
-	request = memdup_user(user_buf, count);
-	if (IS_ERR(request))
-		return PTR_ERR(request);
+	/* Reserve room for the bus alignment slack */
+	request = kzalloc(count + WFX_BUS_ALIGN_SLACK, GFP_KERNEL);
+	if (!request)
+		return -ENOMEM;
+	if (copy_from_user(request, user_buf, count)) {
+		kfree(request);
+		return -EFAULT;
+	}
 	if (le16_to_cpu(request->len) != count) {
 		kfree(request);
 		return -EINVAL;

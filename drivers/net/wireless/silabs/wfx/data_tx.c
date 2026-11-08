@@ -357,8 +357,22 @@ static int wfx_tx_inner(struct wfx_vif *wvif, struct ieee80211_sta *sta, struct 
 	WARN(skb_headroom(skb) < wmsg_len, "not enough space in skb");
 	WARN(offset & 1, "attempt to transmit an unaligned frame");
 	skb_put(skb, tx_priv->icv_size);
+	/*
+	 * The bus layer pads the transfer up to the bus alignment and
+	 * the padding is transferred from the skb.  Guarantee tailroom
+	 * for the slack, uncloning the skb if needed: the memset below
+	 * must not write into a shared buffer.
+	 */
+	if (skb_cloned(skb) || skb_tailroom(skb) < WFX_BUS_ALIGN_SLACK) {
+		int ntail = WFX_BUS_ALIGN_SLACK - skb_tailroom(skb);
+
+		if (pskb_expand_head(skb, 0, max(ntail, 0), GFP_ATOMIC))
+			return -ENOMEM;
+	}
+	memset(skb_tail_pointer(skb), 0, WFX_BUS_ALIGN_SLACK);
 	skb_push(skb, wmsg_len);
 	memset(skb->data, 0, wmsg_len);
+	hdr = (struct ieee80211_hdr *)(skb->data + wmsg_len);
 	hif_msg = (struct wfx_hif_msg *)skb->data;
 	hif_msg->len = cpu_to_le16(skb->len);
 	hif_msg->id = HIF_REQ_ID_TX;

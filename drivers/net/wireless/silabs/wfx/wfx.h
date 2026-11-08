@@ -25,6 +25,14 @@
 #define USEC_PER_TXOP 32 /* see struct ieee80211_tx_queue_params */
 #define USEC_PER_TU 1024
 
+/*
+ * The bus layer pads TX transfers up to the bus alignment and the
+ * padding is transferred from the message buffer, so every buffer
+ * handed to tx_helper() must carry this much zeroed slack (the SDIO
+ * block size is 64 bytes, SPI transfers are aligned to 4).
+ */
+#define WFX_BUS_ALIGN_SLACK 64
+
 struct wfx_hwbus_ops;
 
 struct wfx_dev {
