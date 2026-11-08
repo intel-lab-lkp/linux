@@ -7874,7 +7874,7 @@ sub process {
 	# If we have no input at all, then there is nothing to report on
 	# so just keep quiet.
 	if ($#rawlines == -1) {
-		exit(0);
+		return 1;
 	}
 
 	# In mailback mode only produce a report in the negative, for
