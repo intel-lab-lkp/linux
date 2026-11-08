@@ -7886,7 +7886,7 @@ sub process {
 	# This is not a patch, and we are in 'no-patch' mode so
 	# just keep quiet.
 	if (!$chk_patch && !$is_patch) {
-		exit(0);
+		return 1;
 	}
 
 	if (!$is_patch && $filename !~ /cover-letter\.patch$/) {
