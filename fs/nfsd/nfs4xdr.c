@@ -5308,7 +5308,8 @@ static __be32 nfsd4_encode_readv(struct nfsd4_compoundres *resp,
 	__be32 nfserr;
 
 	nfserr = nfsd_iter_read(resp->rqstp, read->rd_fhp, read->rd_nf,
-				read->rd_offset, &maxcount, &read->rd_eof);
+				read->rd_offset, &maxcount, &read->rd_eof,
+				read->rd_dio_ok);
 	read->rd_length = maxcount;
 	if (nfserr)
 		return nfserr;
