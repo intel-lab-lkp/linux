@@ -23,6 +23,8 @@ struct ath11k_base;
 
 struct ath11k_ahb {
 	struct rproc *tgt_rproc;
+	/* protects the CE interrupt enable registers, shared by all CEs */
+	spinlock_t ce_ie_lock;
 	struct {
 		struct device *dev;
 		struct iommu_domain *iommu_domain;
