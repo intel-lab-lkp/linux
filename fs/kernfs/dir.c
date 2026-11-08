@@ -94,6 +94,14 @@ static struct kernfs_node *kernfs_common_ancestor(struct kernfs_node *a,
 	return a;
 }
 
+static void kernfs_reverse_path(char *buf, size_t len)
+{
+	size_t i;
+
+	for (i = 0; i < len / 2; i++)
+		swap(buf[i], buf[len - i - 1]);
+}
+
 /**
  * kernfs_path_from_node_locked - find a pseudo-absolute path to @kn_to,
  * where kn_from is treated as root of the path.
@@ -130,9 +138,14 @@ static int kernfs_path_from_node_locked(struct kernfs_node *kn_to,
 {
 	struct kernfs_node *kn, *common;
 	const char parent_str[] = "/..";
-	size_t depth_from, depth_to, len = 0;
+	size_t depth_from, len = 0, end, pos, room, n;
+	bool wrapped = false;
+	const char *name;
 	ssize_t copied;
-	int i, j;
+	int i;
+
+	if (!buflen)
+		return -E2BIG;
 
 	if (!kn_to)
 		return strscpy(buf, "(null)", buflen);
@@ -147,7 +160,6 @@ static int kernfs_path_from_node_locked(struct kernfs_node *kn_to,
 	if (WARN_ON(!common))
 		return -EINVAL;
 
-	depth_to = kernfs_depth(common, kn_to);
 	depth_from = kernfs_depth(common, kn_from);
 
 	buf[0] = '\0';
@@ -159,18 +171,43 @@ static int kernfs_path_from_node_locked(struct kernfs_node *kn_to,
 		len += copied;
 	}
 
-	/* Calculate how many bytes we need for the rest */
-	for (i = depth_to - 1; i >= 0; i--) {
-		const char *name;
+	/*
+	 * We can only walk towards the root. Fill from the end and wrap
+	 * so that if the path is too long we keep its first bytes.
+	 */
+	end = buflen - 1;
+	room = end - len;
+	if (!room)
+		return len;
 
-		for (kn = kn_to, j = 0; j < i; j++)
-			kn = rcu_dereference(kn->__parent);
-
+	pos = end;
+	buf[end] = '\0';
+	for (kn = kn_to; kn != common; kn = rcu_dereference(kn->__parent)) {
 		name = rcu_dereference(kn->name);
-		len += scnprintf(buf + len, buflen - len, "/%s", name);
+		n = min(strlen(name), room - 1);
+		if (n + 1 > pos - len) {
+			size_t head = pos - len;
+
+			memcpy(buf + len, name + n - head, head);
+			n -= head;
+			pos = end;
+			wrapped = true;
+		}
+		pos -= n;
+		memcpy(buf + pos, name, n);
+		buf[--pos] = '/';
 	}
 
-	return len;
+	if (wrapped) {
+		/* Rotate the two pieces into path order. */
+		kernfs_reverse_path(buf + len, pos - len);
+		kernfs_reverse_path(buf + pos, end - pos);
+		kernfs_reverse_path(buf + len, room);
+		return end;
+	}
+
+	memmove(buf + len, buf + pos, end - pos + 1);
+	return len + (end - pos);
 }
 
 /**
