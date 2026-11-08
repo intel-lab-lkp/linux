@@ -168,12 +168,6 @@ struct tpm1_get_random_out {
 /* TPM2 specific constants. */
 #define TPM2_SPACE_BUFFER_SIZE		16384 /* 16 kB */
 
-enum tpm2_session_types {
-	TPM2_SE_HMAC	= 0x00,
-	TPM2_SE_POLICY	= 0x01,
-	TPM2_SE_TRIAL	= 0x02,
-};
-
 enum tpm2_timeouts {
 	TPM2_TIMEOUT_A		= 750,
 	TPM2_TIMEOUT_B		= 4000,

@@ -1043,7 +1043,7 @@ int tpm2_start_auth_session(struct tpm_chip *chip)
 		return rc;
 	}
 	/* session type (HMAC, audit or policy) */
-	tpm_buf_append_u8(buf, TPM2_SE_HMAC);
+	tpm_buf_append_u8(buf, 0x00 /* HMAC */);
 
 	/* symmetric encryption parameters */
 	/* symmetric algorithm */
