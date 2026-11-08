@@ -1380,7 +1380,7 @@ ath11k_update_per_peer_tx_stats(struct ath11k *ar,
 	u8 flags, mcs, nss, bw, sgi, dcm, rate_idx = 0;
 	u32 succ_bytes = 0;
 	u16 rate = 0, succ_pkts = 0;
-	u32 tx_duration = 0;
+	u32 tx_duration = 0, airtime = 0;
 	u8 tid = HTT_PPDU_STATS_NON_QOS_TID;
 	bool is_ampdu = false;
 
@@ -1496,6 +1496,9 @@ ath11k_update_per_peer_tx_stats(struct ath11k *ar,
 	 * So skip peer stats update for mgmt packets.
 	 */
 	if (tid < HTT_PPDU_STATS_NON_QOS_TID) {
+		/* the users of an MU PPDU share its frame exchange */
+		airtime = tx_duration / max_t(u8, common->num_users, 1);
+
 		memset(peer_stats, 0, sizeof(*peer_stats));
 		peer_stats->succ_pkts = succ_pkts;
 		peer_stats->succ_bytes = succ_bytes;
@@ -1510,6 +1513,10 @@ ath11k_update_per_peer_tx_stats(struct ath11k *ar,
 	}
 
 	spin_unlock_bh(&ab->base_lock);
+
+	if (airtime)
+		ieee80211_sta_register_airtime(sta, tid, airtime, 0);
+
 	rcu_read_unlock();
 }
 
