@@ -32,7 +32,14 @@ static struct tty_ldisc_ops null_ldisc = {
 
 static int __init n_null_init(void)
 {
-	BUG_ON(tty_register_ldisc(&null_ldisc));
+	int ret;
+
+	ret = tty_register_ldisc(&null_ldisc);
+	if (ret) {
+		pr_err("n_null: failed to register line discipline (%d)\n", ret);
+		return ret;
+	}
+
 	return 0;
 }
 
