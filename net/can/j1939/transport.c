@@ -1504,6 +1504,15 @@ j1939_xtp_rx_cts_one(struct j1939_session *session, struct sk_buff *skb)
 		goto out_session_cancel;
 	else if (dat[1] > session->pkt.block /* 0xff for etp */)
 		goto out_session_cancel;
+	else if (pkt > session->pkt.total) {
+		/* The responder asks for more packets than the message has.
+		 * pkt - 1 becomes pkt.tx_acked below, and the transmitter
+		 * reports that value in an ETP.CM_DPO, where it would name a
+		 * packet past the end of the message.
+		 */
+		err = J1939_XTP_ABORT_ECTS_TOO_BIG;
+		goto out_session_cancel;
+	}
 
 	/* set packet counters only when not CTS(0) */
 	session->pkt.tx_acked = pkt - 1;
