@@ -4586,6 +4586,18 @@ static void ieee80211_end_cac(struct wiphy *wiphy,
 	}
 }
 
+static const void *
+ieee80211_dup_tail_elem(const struct cfg80211_beacon_data *old,
+			const struct cfg80211_beacon_data *new, const void *elem)
+{
+	const u8 *pos = elem;
+
+	if (!pos || pos < old->tail || pos >= old->tail + old->tail_len)
+		return NULL;
+
+	return new->tail + (pos - old->tail);
+}
+
 static struct cfg80211_beacon_data *
 cfg80211_beacon_dup(struct cfg80211_beacon_data *beacon)
 {
@@ -4639,6 +4651,16 @@ cfg80211_beacon_dup(struct cfg80211_beacon_data *beacon)
 		new_beacon->tail = pos;
 		memcpy(pos, beacon->tail, beacon->tail_len);
 		pos += beacon->tail_len;
+
+		/* nl80211 found the operation elements in the tail */
+		new_beacon->ht_oper = ieee80211_dup_tail_elem(beacon, new_beacon,
+							      beacon->ht_oper);
+		new_beacon->vht_oper = ieee80211_dup_tail_elem(beacon, new_beacon,
+							       beacon->vht_oper);
+		new_beacon->he_oper = ieee80211_dup_tail_elem(beacon, new_beacon,
+							      beacon->he_oper);
+		new_beacon->eht_oper = ieee80211_dup_tail_elem(beacon, new_beacon,
+							       beacon->eht_oper);
 	}
 	if (beacon->beacon_ies_len) {
 		new_beacon->beacon_ies_len = beacon->beacon_ies_len;
