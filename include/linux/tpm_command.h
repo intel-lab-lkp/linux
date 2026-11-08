@@ -171,7 +171,7 @@ struct tpm1_get_random_out {
 enum tpm2_session_types {
 	TPM2_SE_HMAC	= 0x00,
 	TPM2_SE_POLICY	= 0x01,
-	TPM2_SE_TRIAL	= 0x02,
+	TPM2_SE_TRIAL	= 0x03,
 };
 
 enum tpm2_timeouts {
