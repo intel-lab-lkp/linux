@@ -14575,35 +14575,44 @@ bnxt_restart_timer:
 	mod_timer(&bp->timer, jiffies + bp->current_interval);
 }
 
+static bool bnxt_in_sp_task(struct bnxt *bp)
+{
+	return current_work() == &bp->sp_task;
+}
+
 static void bnxt_lock_sp(struct bnxt *bp)
 {
-	/* We are called from bnxt_sp_task which has BNXT_STATE_IN_SP_TASK
-	 * set.  If the device is being closed, bnxt_close() may be holding
+	/* If we are called from bnxt_sp_task, BNXT_STATE_IN_SP_TASK is set.
+	 * If the device is being closed, bnxt_close() may be holding
 	 * netdev instance lock and waiting for BNXT_STATE_IN_SP_TASK to clear.
 	 * So we must clear BNXT_STATE_IN_SP_TASK before holding netdev
 	 * instance lock.
 	 */
-	clear_bit(BNXT_STATE_IN_SP_TASK, &bp->state);
+	if (bnxt_in_sp_task(bp))
+		clear_bit(BNXT_STATE_IN_SP_TASK, &bp->state);
 	netdev_lock(bp->dev);
 }
 
 static void bnxt_unlock_sp(struct bnxt *bp)
 {
-	set_bit(BNXT_STATE_IN_SP_TASK, &bp->state);
+	if (bnxt_in_sp_task(bp))
+		set_bit(BNXT_STATE_IN_SP_TASK, &bp->state);
 	netdev_unlock(bp->dev);
 }
 
 /* Same as bnxt_lock_sp() with additional rtnl_lock */
 static void bnxt_rtnl_lock_sp(struct bnxt *bp)
 {
-	clear_bit(BNXT_STATE_IN_SP_TASK, &bp->state);
+	if (bnxt_in_sp_task(bp))
+		clear_bit(BNXT_STATE_IN_SP_TASK, &bp->state);
 	rtnl_lock();
 	netdev_lock(bp->dev);
 }
 
 static void bnxt_rtnl_unlock_sp(struct bnxt *bp)
 {
-	set_bit(BNXT_STATE_IN_SP_TASK, &bp->state);
+	if (bnxt_in_sp_task(bp))
+		set_bit(BNXT_STATE_IN_SP_TASK, &bp->state);
 	netdev_unlock(bp->dev);
 	rtnl_unlock();
 }
@@ -14860,9 +14869,12 @@ void bnxt_fw_reset(struct bnxt *bp)
 		if (n < 0) {
 			netdev_err(bp->dev, "Firmware reset aborted, rc = %d\n",
 				   n);
+			netdev_unlock(bp->dev);
+			bnxt_rtnl_lock_sp(bp);
 			clear_bit(BNXT_STATE_IN_FW_RESET, &bp->state);
 			netif_close(bp->dev);
-			goto fw_reset_exit;
+			bnxt_rtnl_unlock_sp(bp);
+			return;
 		} else if (n > 0) {
 			u16 vf_tmo_dsecs = n * 10;
 
@@ -15547,9 +15559,8 @@ static void bnxt_fw_reset_task(struct work_struct *work)
 		bp->fw_reset_timestamp = jiffies;
 		netdev_lock(bp->dev);
 		if (test_bit(BNXT_STATE_ABORT_ERR, &bp->state)) {
-			bnxt_fw_reset_abort(bp, rc);
 			netdev_unlock(bp->dev);
-			goto ulp_start;
+			goto fw_reset_abort;
 		}
 		bnxt_fw_reset_close(bp);
 		if (bp->fw_cap & BNXT_FW_CAP_ERR_RECOVER_RELOAD) {
@@ -15682,9 +15693,11 @@ fw_reset_abort_status:
 		netdev_err(bp->dev, "fw_health_status 0x%x\n", sts);
 	}
 fw_reset_abort:
+	rtnl_lock();
 	netdev_lock(bp->dev);
 	bnxt_fw_reset_abort(bp, rc);
 	netdev_unlock(bp->dev);
+	rtnl_unlock();
 ulp_start:
 	if (!rc)
 		bnxt_ulp_start(bp);
