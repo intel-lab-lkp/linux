@@ -1269,9 +1269,19 @@ static void j1939_session_completed(struct j1939_session *session)
 
 	if (!session->transmission) {
 		se_skb = j1939_session_skb_get(session);
-		/* distribute among j1939 receivers */
-		j1939_sk_recv(session->priv, se_skb);
-		consume_skb(se_skb);
+
+		/* Defense in depth: pkt.dpo is range checked when an EDPO is
+		 * received, so the lookup should always find the skb.  Drop the
+		 * message rather than hand a NULL skb to j1939_sk_recv() if the
+		 * offset arithmetic ever regresses.  The only other caller of
+		 * j1939_session_skb_get(), j1939_simple_txnext(), already does
+		 * this.
+		 */
+		if (se_skb) {
+			/* distribute among j1939 receivers */
+			j1939_sk_recv(session->priv, se_skb);
+			consume_skb(se_skb);
+		}
 	}
 
 	j1939_session_deactivate_activate_next(session);
