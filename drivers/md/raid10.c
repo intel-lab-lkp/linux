@@ -4393,7 +4393,8 @@ static int raid10_start_reshape(struct mddev *mddev)
 			spin_unlock_irq(&conf->device_lock);
 			pr_warn("md/raid10:%s: array size must be reduce before number of disks\n",
 				mdname(mddev));
-			return -EINVAL;
+			ret = -EINVAL;
+			goto abort;
 		}
 		mddev->resync_max_sectors = size;
 		conf->reshape_progress = size;
