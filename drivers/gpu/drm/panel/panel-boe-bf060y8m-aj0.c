@@ -168,7 +168,7 @@ static int boe_bf060y8m_aj0_unprepare(struct drm_panel *panel)
 }
 
 static const struct drm_display_mode boe_bf060y8m_aj0_mode = {
-	.clock = 165268,
+	.clock = (1080 + 36 + 24 + 96) * (2160 + 16 + 1 + 15) * 60 / 1000,
 	.hdisplay = 1080,
 	.hsync_start = 1080 + 36,
 	.hsync_end = 1080 + 36 + 24,
