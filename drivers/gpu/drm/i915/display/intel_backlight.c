@@ -793,6 +793,35 @@ static void __intel_backlight_enable(const struct intel_crtc_state *crtc_state,
 		panel->backlight.device->props.power = BACKLIGHT_POWER_ON;
 }
 
+#if IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE)
+/*
+ * The gmux of dual GPU T2 MacBook Pros falls back to its default brightness
+ * whenever the panel is powered off and raises no interrupt for it. Its
+ * backlight device still holds the level userspace set, so apply that level
+ * again once the panel is back on.
+ */
+static void intel_backlight_restore_gmux(struct intel_display *display)
+{
+	struct backlight_device *bd;
+
+	if (!intel_has_quirk(display, QUIRK_GMUX_RESETS_BRIGHTNESS))
+		return;
+
+	bd = backlight_device_get_by_name("gmux_backlight");
+	if (!bd)
+		return;
+
+	drm_dbg_kms(display->drm, "restoring gmux brightness %d\n",
+		    bd->props.brightness);
+	backlight_update_status(bd);
+	put_device(&bd->dev);
+}
+#else
+static void intel_backlight_restore_gmux(struct intel_display *display)
+{
+}
+#endif
+
 void intel_backlight_enable(const struct intel_crtc_state *crtc_state,
 			    const struct drm_connector_state *conn_state)
 {
@@ -811,6 +840,8 @@ void intel_backlight_enable(const struct intel_crtc_state *crtc_state,
 	__intel_backlight_enable(crtc_state, conn_state);
 
 	mutex_unlock(&display->backlight.lock);
+
+	intel_backlight_restore_gmux(display);
 }
 
 #if IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE)

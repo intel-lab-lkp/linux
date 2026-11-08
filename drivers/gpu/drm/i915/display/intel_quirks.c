@@ -100,6 +100,13 @@ static void quirk_disable_psr2(struct intel_display *display)
 	drm_info(display->drm, "PSR2 support not currently available for this setup, applying disable PSR2 quirk\n");
 }
 
+/* The gmux of dual GPU T2 MacBook Pros resets the brightness on panel power off */
+static void quirk_gmux_resets_brightness(struct intel_display *display)
+{
+	intel_set_quirk(display, QUIRK_GMUX_RESETS_BRIGHTNESS);
+	drm_info(display->drm, "Applying gmux brightness restore quirk\n");
+}
+
 static void quirk_enable_dpcd_backlight(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
@@ -195,6 +202,36 @@ static const struct intel_dmi_quirk intel_dmi_quirks[] = {
 			{ }
 		},
 		.hook = quirk_no_pps_backlight_power_hook,
+	},
+	{
+		.dmi_id_list = &(const struct dmi_system_id[]) {
+			{
+				.ident = "MacBookPro15,1",
+				.matches = {DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
+					    DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "MacBookPro15,1"),
+				},
+			},
+			{
+				.ident = "MacBookPro15,3",
+				.matches = {DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
+					    DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "MacBookPro15,3"),
+				},
+			},
+			{
+				.ident = "MacBookPro16,1",
+				.matches = {DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
+					    DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "MacBookPro16,1"),
+				},
+			},
+			{
+				.ident = "MacBookPro16,4",
+				.matches = {DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
+					    DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "MacBookPro16,4"),
+				},
+			},
+			{ }
+		},
+		.hook = quirk_gmux_resets_brightness,
 	},
 };
 
