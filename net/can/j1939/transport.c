@@ -1161,12 +1161,38 @@ static void __j1939_session_cancel(struct j1939_session *session,
 static void j1939_session_cancel(struct j1939_session *session,
 				 enum j1939_xtp_abort err)
 {
+	bool abort_sent = false;
+
+	/* Cancel the abort timer before taking the list lock.
+	 *
+	 * hrtimer_cancel() waits for a callback that is already running, and
+	 * j1939_tp_rxtimer() takes the same lock, so cancelling the timer while
+	 * holding active_session_list_lock can deadlock: the lock holder waits
+	 * for the callback, the callback waits for the lock.
+	 */
+	j1939_session_rxtimer_cancel(session);
+
 	j1939_session_list_lock(session->priv);
 
 	if (session->state >= J1939_SESSION_ACTIVE &&
 	    session->state < J1939_SESSION_WAITING_ABORT) {
-		j1939_tp_set_rxtimeout(session, J1939_XTP_ABORT_TIMEOUT_MS);
 		__j1939_session_cancel(session, err);
+		abort_sent = true;
+	}
+
+	/* Re-arm under the lock, whether the abort frame just went out or the
+	 * session is already in WAITING_ABORT and only needs its timer back.
+	 *
+	 * hrtimer_start() does not wait for a running callback, so arming here
+	 * cannot deadlock, and taking the lock closes the window against
+	 * j1939_tp_set_rxtimeout(), which rearms the same timer from the
+	 * receive path without holding it.
+	 */
+	if (abort_sent || session->state == J1939_SESSION_WAITING_ABORT) {
+		j1939_session_get(session);
+		hrtimer_start(&session->rxtimer,
+			      ms_to_ktime(J1939_XTP_ABORT_TIMEOUT_MS),
+			      HRTIMER_MODE_REL_SOFT);
 	}
 
 	j1939_session_list_unlock(session->priv);
