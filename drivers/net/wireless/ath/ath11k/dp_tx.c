@@ -303,11 +303,11 @@ static void ath11k_dp_tx_free_txbuf(struct ath11k_base *ab, u8 mac_id,
 	}
 
 	skb_cb = ATH11K_SKB_CB(msdu);
+	ar = ab->pdevs[mac_id].ar;
 
 	dma_unmap_single(ab->dev, skb_cb->paddr, msdu->len, DMA_TO_DEVICE);
-	dev_kfree_skb_any(msdu);
+	ieee80211_free_txskb(ar->hw, msdu);
 
-	ar = ab->pdevs[mac_id].ar;
 	if (atomic_dec_and_test(&ar->dp.num_tx_pending))
 		wake_up(&ar->dp.tx_empty_waitq);
 }

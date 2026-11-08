@@ -1013,11 +1013,17 @@ static int ath11k_dp_tx_pending_cleanup(int buf_id, void *skb, void *ctx)
 {
 	struct ath11k_base *ab = ctx;
 	struct sk_buff *msdu = skb;
+	struct ath11k_skb_cb *skb_cb = ATH11K_SKB_CB(msdu);
 
-	dma_unmap_single(ab->dev, ATH11K_SKB_CB(msdu)->paddr, msdu->len,
-			 DMA_TO_DEVICE);
+	dma_unmap_single(ab->dev, skb_cb->paddr, msdu->len, DMA_TO_DEVICE);
 
-	dev_kfree_skb_any(msdu);
+	/* In a crash recovery mac80211 keeps its stations: hand the frames
+	 * back, so that their TX status and pending airtime are reported.
+	 */
+	if (skb_cb->ar && test_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags))
+		ieee80211_free_txskb(skb_cb->ar->hw, msdu);
+	else
+		dev_kfree_skb_any(msdu);
 
 	return 0;
 }
