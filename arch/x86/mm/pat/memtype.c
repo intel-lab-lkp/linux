@@ -613,7 +613,7 @@ int memtype_free(u64 start, u64 end)
 		return 0;
 
 	start = sanitize_phys(start);
-	end = sanitize_phys(end);
+	end = sanitize_phys(end - 1) + 1;
 
 	/* Low ISA region is always mapped WB. No need to track */
 	if (x86_platform.is_untracked_pat_range(start, end))
