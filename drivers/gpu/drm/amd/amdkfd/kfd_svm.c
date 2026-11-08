@@ -106,16 +106,21 @@ static void svm_range_unlink(struct svm_range *prange)
 		interval_tree_remove(&prange->it_node, &prange->svms->objects);
 }
 
-static void
+static int
 svm_range_add_notifier_locked(struct mm_struct *mm, struct svm_range *prange)
 {
+	int r;
+
 	pr_debug("svms 0x%p prange 0x%p [0x%lx 0x%lx]\n", prange->svms,
 		 prange, prange->start, prange->last);
 
-	mmu_interval_notifier_insert_locked(&prange->notifier, mm,
+	r = mmu_interval_notifier_insert_locked(&prange->notifier, mm,
 				     prange->start << PAGE_SHIFT,
 				     prange->npages << PAGE_SHIFT,
 				     &svm_range_mn_ops);
+	if (r)
+		prange->notifier.mm = NULL;
+	return r;
 }
 
 /**
@@ -2257,6 +2262,7 @@ svm_range_split_new(struct svm_range_list *svms, uint64_t start, uint64_t last,
 /**
  * svm_range_add - add svm range and handle overlap
  * @p: the range add to this process svms
+ * @mm: the process address space, write locked by the caller
  * @start: page size aligned
  * @size: page size aligned
  * @nattr: number of attributes
@@ -2285,7 +2291,8 @@ svm_range_split_new(struct svm_range_list *svms, uint64_t start, uint64_t last,
  * 0 - OK, otherwise error code
  */
 static int
-svm_range_add(struct kfd_process *p, uint64_t start, uint64_t size,
+svm_range_add(struct kfd_process *p, struct mm_struct *mm,
+	      uint64_t start, uint64_t size,
 	      uint32_t nattr, struct kfd_ioctl_svm_attribute *attrs,
 	      struct list_head *update_list, struct list_head *insert_list,
 	      struct list_head *remove_list, struct list_head *remap_list)
@@ -2373,17 +2380,38 @@ svm_range_add(struct kfd_process *p, uint64_t start, uint64_t size,
 	}
 
 	/* add a final range at the end if needed */
-	if (start <= last)
+	if (start <= last) {
 		r = svm_range_split_new(svms, start, last,
 					READ_ONCE(max_svm_range_pages),
 					&new_list, update_list);
+		if (r)
+			goto out;
+	}
+
+	/* Register all notifiers before publishing any of the new ranges. */
+	list_for_each_entry(prange, &new_list, list) {
+		r = svm_range_add_notifier_locked(mm, prange);
+		if (r)
+			goto out;
+	}
+	list_for_each_entry(prange, insert_list, list) {
+		r = svm_range_add_notifier_locked(mm, prange);
+		if (r)
+			goto out;
+	}
 
 out:
 	if (r) {
-		list_for_each_entry_safe(prange, tmp, insert_list, list)
+		list_for_each_entry_safe(prange, tmp, insert_list, list) {
+			if (prange->notifier.mm)
+				mmu_interval_notifier_remove(&prange->notifier);
 			svm_range_free(prange, false);
-		list_for_each_entry_safe(prange, tmp, &new_list, list)
+		}
+		list_for_each_entry_safe(prange, tmp, &new_list, list) {
+			if (prange->notifier.mm)
+				mmu_interval_notifier_remove(&prange->notifier);
 			svm_range_free(prange, true);
+		}
 	} else {
 		list_splice(&new_list, insert_list);
 	}
@@ -3011,8 +3039,12 @@ svm_range *svm_range_create_unregistered_range(struct kfd_node *node,
 	if (is_heap_stack)
 		prange->preferred_loc = KFD_IOCTL_SVM_LOCATION_SYSMEM;
 
+	r = svm_range_add_notifier_locked(mm, prange);
+	if (r) {
+		svm_range_free(prange, true);
+		return ERR_PTR(r);
+	}
 	svm_range_add_to_svms(prange);
-	svm_range_add_notifier_locked(mm, prange);
 
 	return prange;
 }
@@ -3203,11 +3235,11 @@ retry_write_locked:
 			goto retry_write_locked;
 		}
 		prange = svm_range_create_unregistered_range(node, p, mm, addr);
-		if (!prange) {
+		if (IS_ERR_OR_NULL(prange)) {
 			pr_debug("failed to create unregistered range svms 0x%p address [0x%llx]\n",
 				 svms, addr);
 			mmap_write_downgrade(mm);
-			r = -EFAULT;
+			r = prange ? PTR_ERR(prange) : -EFAULT;
 			goto out_unlock_svms;
 		}
 	}
@@ -3839,7 +3871,7 @@ svm_range_set_attr(struct kfd_process *p, struct mm_struct *mm,
 	mutex_lock(&svms->lock);
 
 	/* Add new range and split existing ranges as needed */
-	r = svm_range_add(p, start, size, nattr, attrs, &update_list,
+	r = svm_range_add(p, mm, start, size, nattr, attrs, &update_list,
 			  &insert_list, &remove_list, &remap_list);
 	if (r) {
 		mutex_unlock(&svms->lock);
@@ -3847,10 +3879,8 @@ svm_range_set_attr(struct kfd_process *p, struct mm_struct *mm,
 		goto out;
 	}
 	/* Apply changes as a transaction */
-	list_for_each_entry_safe(prange, next, &insert_list, list) {
+	list_for_each_entry_safe(prange, next, &insert_list, list)
 		svm_range_add_to_svms(prange);
-		svm_range_add_notifier_locked(mm, prange);
-	}
 
 	list_for_each_entry(prange, &update_list, update_list)
 		svm_range_apply_attrs(p, prange, nattr, attrs, &update_mapping);
