@@ -15,10 +15,12 @@
 #include <linux/errno.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/kref.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/uio.h>
@@ -62,6 +64,8 @@ struct pfrt_log_device {
 	struct pfrt_log_info info;
 	struct device *parent_dev;
 	struct miscdevice miscdev;
+	struct kref kref;
+	bool removed;
 };
 
 /* pfrt_guid is the parameter for _DSM method */
@@ -247,6 +251,9 @@ static long pfrt_log_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 	void __user *p;
 	int ret = 0;
 
+	if (READ_ONCE(pfrt_log_dev->removed))
+		return -ENODEV;
+
 	p = (void __user *)arg;
 
 	switch (cmd) {
@@ -303,13 +310,16 @@ pfrt_log_mmap(struct file *file, struct vm_area_struct *vma)
 	phys_addr_t base_addr;
 	int ret;
 
+	pfrt_log_dev = to_pfrt_log_dev(file);
+
+	if (READ_ONCE(pfrt_log_dev->removed))
+		return -ENODEV;
+
 	if (vma->vm_flags & VM_WRITE)
 		return -EROFS;
 
 	/* changing from read to write with mprotect is not allowed */
 	vm_flags_clear(vma, VM_MAYWRITE);
-
-	pfrt_log_dev = to_pfrt_log_dev(file);
 
 	ret = get_pfrt_log_data_info(&info, pfrt_log_dev);
 	if (ret)
@@ -337,8 +347,39 @@ pfrt_log_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
+static void pfrt_log_free(struct kref *kref)
+{
+	struct pfrt_log_device *pfrt_log_dev =
+		container_of(kref, struct pfrt_log_device, kref);
+
+	put_device(pfrt_log_dev->parent_dev);
+	kfree(pfrt_log_dev);
+}
+
+static void pfrt_log_put(void *data)
+{
+	struct pfrt_log_device *pfrt_log_dev = data;
+
+	kref_put(&pfrt_log_dev->kref, pfrt_log_free);
+}
+
+/* misc_open() holds misc_mtx here, and misc_deregister() takes it. */
+static int pfrt_log_open(struct inode *inode, struct file *file)
+{
+	kref_get(&to_pfrt_log_dev(file)->kref);
+	return 0;
+}
+
+static int pfrt_log_release(struct inode *inode, struct file *file)
+{
+	pfrt_log_put(to_pfrt_log_dev(file));
+	return 0;
+}
+
 static const struct file_operations acpi_pfrt_log_fops = {
 	.owner		= THIS_MODULE,
+	.open		= pfrt_log_open,
+	.release	= pfrt_log_release,
 	.mmap		= pfrt_log_mmap,
 	.unlocked_ioctl = pfrt_log_ioctl,
 	.llseek		= noop_llseek,
@@ -349,6 +390,7 @@ static void acpi_pfrt_log_remove(struct platform_device *pdev)
 	struct pfrt_log_device *pfrt_log_dev = platform_get_drvdata(pdev);
 
 	misc_deregister(&pfrt_log_dev->miscdev);
+	WRITE_ONCE(pfrt_log_dev->removed, true);
 }
 
 static void pfrt_log_put_idx(void *data)
@@ -373,9 +415,15 @@ static int acpi_pfrt_log_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	pfrt_log_dev = devm_kzalloc(&pdev->dev, sizeof(*pfrt_log_dev), GFP_KERNEL);
+	pfrt_log_dev = kzalloc(sizeof(*pfrt_log_dev), GFP_KERNEL);
 	if (!pfrt_log_dev)
 		return -ENOMEM;
+
+	kref_init(&pfrt_log_dev->kref);
+	pfrt_log_dev->parent_dev = get_device(&pdev->dev);
+	ret = devm_add_action_or_reset(&pdev->dev, pfrt_log_put, pfrt_log_dev);
+	if (ret)
+		return ret;
 
 	ret = ida_alloc(&pfrt_log_ida, GFP_KERNEL);
 	if (ret < 0)
@@ -387,7 +435,6 @@ static int acpi_pfrt_log_probe(struct platform_device *pdev)
 		return ret;
 
 	pfrt_log_dev->info.log_revid = PFRT_DEFAULT_REV_ID;
-	pfrt_log_dev->parent_dev = &pdev->dev;
 
 	pfrt_log_dev->miscdev.minor = MISC_DYNAMIC_MINOR;
 	pfrt_log_dev->miscdev.name = devm_kasprintf(&pdev->dev, GFP_KERNEL,
