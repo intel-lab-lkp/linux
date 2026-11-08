@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/i2c/ti,tvp514x.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments TVP514x video decoders
+
+maintainers:
+  - Vaibhav Hiremath <hvaibhav@ti.com>
+  - Mauro Carvalho Chehab <mchehab@kernel.org>
+
+description:
+  The TVP5146/TVP5146m2/TVP5147/TVP5147m1 device is high quality, single-chip
+  digital video decoder that digitizes and decodes all popular baseband analog
+  video formats into digital video component. The tvp514x decoder supports
+  analog- to-digital (A/D) conversion of component RGB and YPbPr signals as
+  well as A/D conversion and decoding of NTSC, PAL and SECAM composite and
+  S-video into component YCbCr.
+
+properties:
+  compatible:
+    enum:
+      - ti,tvp5146
+      - ti,tvp5146m2
+      - ti,tvp5147
+      - ti,tvp5147m1
+
+  reg:
+    maxItems: 1
+
+  port:
+    $ref: /schemas/graph.yaml#/$defs/port-base
+    unevaluatedProperties: false
+
+    properties:
+      endpoint:
+        $ref: /schemas/media/video-interfaces.yaml#
+        unevaluatedProperties: false
+        required:
+          - hsync-active
+          - vsync-active
+          - pclk-sample
+
+    required:
+      - endpoint
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        video-decoder@5c {
+            compatible = "ti,tvp5146m2";
+            reg = <0x5c>;
+
+            port {
+                endpoint {
+                    hsync-active = <1>;
+                    vsync-active = <1>;
+                    pclk-sample = <0>;
+                };
+            };
+        };
+    };
