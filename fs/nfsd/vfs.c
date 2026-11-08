@@ -1234,6 +1234,8 @@ nfsd_direct_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
  * @offset: starting byte offset
  * @count: IN: requested number of bytes; OUT: number of bytes read
  * @eof: OUT: set non-zero if operation reached the end of the file
+ * @dio_ok: false forces a buffered read even when the export selects
+ *	    direct I/O
  *
  * Some filesystems or situations cannot use nfsd_splice_read. This
  * function is the slightly less-performant fallback for those cases.
@@ -1241,12 +1243,17 @@ nfsd_direct_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
  * records. On return, @rqstp->rq_next_page points past the last page
  * offered to the read.
  *
+ * A direct read leaves its alignment pad at the front of the pages and
+ * records the pad length in @rqstp->rq_res.page_base. The xdr_stream
+ * encoder does not account for page_base, so pass @dio_ok false when
+ * more XDR items follow the payload in the pages.
+ *
  * Returns nfs_ok on success, otherwise an nfserr stat value is
  * returned.
  */
 __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		      struct nfsd_file *nf, loff_t offset, unsigned long *count,
-		      u32 *eof)
+		      u32 *eof, bool dio_ok)
 {
 	struct xdr_buf *buf = &rqstp->rq_res;
 	struct page **page = buf->pages + (buf->page_len >> PAGE_SHIFT);
@@ -1265,7 +1272,8 @@ __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		break;
 	case NFSD_IO_DIRECT:
 		/* When dio_read_offset_align is zero, dio is not supported */
-		if (nf->nf_dio_read_offset_align && !rqstp->rq_res.page_len)
+		if (dio_ok && nf->nf_dio_read_offset_align &&
+		    !rqstp->rq_res.page_len)
 			return nfsd_direct_read(rqstp, fhp, nf, offset,
 						count, page, eof);
 		fallthrough;
@@ -1649,7 +1657,8 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (file->f_op->splice_read && nfsd_read_splice_ok(rqstp))
 		err = nfsd_splice_read(rqstp, fhp, file, offset, count, eof);
 	else
-		err = nfsd_iter_read(rqstp, fhp, nf, offset, count, eof);
+		err = nfsd_iter_read(rqstp, fhp, nf, offset, count, eof,
+				     true);
 
 	nfsd_file_put(nf);
 	trace_nfsd_read_done(rqstp, fhp, offset, *count);

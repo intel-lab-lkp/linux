@@ -1143,6 +1143,8 @@ nfsd4_read(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 		argp->splice_ok = false;
 	}
+	/* The xdr_stream encoder does not account for rq_res.page_base */
+	read->rd_dio_ok = nfsd4_last_compound_op(rqstp);
 
 	/* check stateid */
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
