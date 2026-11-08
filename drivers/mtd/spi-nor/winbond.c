@@ -406,6 +406,8 @@ static const struct flash_info winbond_nor_parts[] = {
 		/* W25Q512NW-Q/N */
 		.id = SNOR_ID(0xef, 0x60, 0x20),
 		.name = "w25q512nwq",
+		.flags = SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB | SPI_NOR_TB_SR_BIT6 |
+			 SPI_NOR_4BIT_BP | SPI_NOR_HAS_CMP,
 		.otp = SNOR_OTP(256, 3, 0x1000, 0x1000),
 	}, {
 		/* W25Q01NW-Q/N */
@@ -500,6 +502,8 @@ static const struct flash_info winbond_nor_parts[] = {
 		/* W25Q512NW-M */
 		.id = SNOR_ID(0xef, 0x80, 0x20),
 		.name = "w25q512nwm",
+		.flags = SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB | SPI_NOR_TB_SR_BIT6 |
+			 SPI_NOR_4BIT_BP | SPI_NOR_HAS_CMP,
 		.otp = SNOR_OTP(256, 3, 0x1000, 0x1000),
 	}, {
 		/* W25Q01NW-M */
