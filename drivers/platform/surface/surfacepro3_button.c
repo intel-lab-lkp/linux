@@ -148,7 +148,14 @@ static int surface_button_resume(struct device *dev)
 /*
  * Surface Pro 4 and Surface Book 2 / Surface Pro 2017 use the same device
  * ID (MSHW0040) for the power/volume buttons. Make sure this is the right
- * device by checking for the _DSM method and OEM Platform Revision.
+ * device by checking whether the OEM Platform Revision _DSM function is
+ * implemented, which function 0 of that _DSM advertises.
+ *
+ * The returned revision cannot be used for this: 0 is a valid revision, and
+ * the AMD variants of the Surface Laptop 3 and 4 report it while needing
+ * soc_button_array instead. The devices handled here do not advertise the
+ * function at all: the Surface Pro 4 has no _DSM on this device, and the
+ * Surface Book 1 has one that advertises functions 0 and 1 only.
  *
  * Returns true if the driver should bind to this device, i.e. the device is
  * either MSWH0028 (Pro 3) or MSHW0040 on a Pro 4 or Book 1.
@@ -156,21 +163,17 @@ static int surface_button_resume(struct device *dev)
 static bool surface_button_check_MSHW0040(struct device *dev, acpi_handle handle)
 {
 	union acpi_object *result;
-	u64 oem_platform_rev = 0;	// valid revisions are nonzero
+	u64 oem_platform_rev = 0;
 
-	// get OEM platform revision
+	if (!acpi_check_dsm(handle, &MSHW0040_DSM_UUID, MSHW0040_DSM_REVISION,
+			    BIT(MSHW0040_DSM_GET_OMPR)))
+		return true;
+
+	/* Fetch the revision separately, it is only used for debugging. */
 	result = acpi_evaluate_dsm_typed(handle, &MSHW0040_DSM_UUID,
 					 MSHW0040_DSM_REVISION,
-					 MSHW0040_DSM_GET_OMPR,
-					 NULL, ACPI_TYPE_INTEGER);
-
-	/*
-	 * If evaluating the _DSM fails, the method is not present. This means
-	 * that we have either MSHW0028 or MSHW0040 on Pro 4 or Book 1, so we
-	 * should use this driver. We use revision 0 indicating it is
-	 * unavailable.
-	 */
-
+					 MSHW0040_DSM_GET_OMPR, NULL,
+					 ACPI_TYPE_INTEGER);
 	if (result) {
 		oem_platform_rev = result->integer.value;
 		ACPI_FREE(result);
@@ -178,7 +181,7 @@ static bool surface_button_check_MSHW0040(struct device *dev, acpi_handle handle
 
 	dev_dbg(dev, "OEM Platform Revision %llu\n", oem_platform_rev);
 
-	return oem_platform_rev == 0;
+	return false;
 }
 
 
