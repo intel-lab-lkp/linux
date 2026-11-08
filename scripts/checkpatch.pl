@@ -1346,6 +1346,12 @@ for my $filename (@ARGV) {
 		open($FILE, '-|', "git format-patch -M --stdout -1 $filename") ||
 			die "$P: $filename: git format-patch failed - $!\n";
 	} elsif ($file) {
+		# diff failing to read the file would look like an empty file
+		if ($filename ne '-') {
+			open(my $fh, '<', $filename) ||
+				die "$P: $filename: open failed - $!\n";
+			close($fh);
+		}
 		open($FILE, '-|', "diff -u /dev/null $filename") ||
 			die "$P: $filename: diff failed - $!\n";
 	} elsif ($filename eq '-') {
