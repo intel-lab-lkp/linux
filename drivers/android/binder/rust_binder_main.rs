@@ -163,6 +163,10 @@ trait DeliverToRead: ListArcSafe + Send + Sync {
     /// Generally only set to true for non-oneway transactions.
     fn should_sync_wakeup(&self) -> bool;
 
+    /// Returns the maximum size in bytes that [`DeliverToRead::do_work`] may write to the read
+    /// buffer.
+    fn size(&self) -> usize;
+
     fn debug_print(&self, m: &SeqFile, prefix: &str, transaction_prefix: &str) -> Result;
 }
 
@@ -277,6 +281,10 @@ impl DeliverToRead for DeliverCode {
 
     fn should_sync_wakeup(&self) -> bool {
         false
+    }
+
+    fn size(&self) -> usize {
+        size_of::<u32>()
     }
 
     fn debug_print(&self, m: &SeqFile, prefix: &str, _tprefix: &str) -> Result {

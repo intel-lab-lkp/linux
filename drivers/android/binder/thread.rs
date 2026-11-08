@@ -1599,13 +1599,20 @@ impl Thread {
             UserSlice::new(UserPtr::from_addr(read_start as usize), read_len as usize).writer(),
             self,
         );
-        let (in_pool, has_transaction, thread_todo, use_proc_queue) = {
+        let (in_pool, has_transaction, thread_todo, use_proc_queue, mut deferred_size) = {
             let inner = self.inner.lock();
+            let use_proc_queue = inner.should_use_process_work_queue();
+            let deferred_size = if use_proc_queue {
+                inner.work_list.iter().map(|w| w.size()).sum()
+            } else {
+                0
+            };
             (
                 inner.is_looper(),
                 inner.current_transaction.is_some(),
                 !inner.work_list.is_empty(),
-                inner.should_use_process_work_queue(),
+                use_proc_queue,
+                deferred_size,
             )
         };
 
@@ -1630,15 +1637,20 @@ impl Thread {
 
         // Loop doing work while there is room in the buffer.
         let initial_len = writer.len();
-        while writer.len() >= size_of::<uapi::binder_transaction_data_secctx>() + 4 {
+        while writer.len() >= size_of::<uapi::binder_transaction_data_secctx>() + 4 + deferred_size
+        {
             match getter(self, wait && initial_len == writer.len()) {
-                Ok(Some(work)) => match work.into_arc().do_work(self, &mut writer) {
-                    Ok(true) => {}
-                    Ok(false) => break,
-                    Err(err) => {
-                        return Err(err);
+                Ok(Some(work)) => {
+                    let work = work.into_arc();
+                    deferred_size = deferred_size.saturating_sub(work.size());
+                    match work.do_work(self, &mut writer) {
+                        Ok(true) => {}
+                        Ok(false) => break,
+                        Err(err) => {
+                            return Err(err);
+                        }
                     }
-                },
+                }
                 Ok(None) => {
                     break;
                 }
@@ -1796,6 +1808,10 @@ impl DeliverToRead for ThreadError {
 
     fn should_sync_wakeup(&self) -> bool {
         false
+    }
+
+    fn size(&self) -> usize {
+        size_of::<u32>()
     }
 
     fn debug_print(&self, m: &SeqFile, prefix: &str, _tprefix: &str) -> Result {
