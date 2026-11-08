@@ -5556,11 +5556,11 @@ exit:
 }
 
 static struct ieee80211_sta_ht_cap
-ath11k_create_ht_cap(struct ath11k *ar, u32 ar_ht_cap, u32 rate_cap_rx_chainmask)
+ath11k_create_ht_cap(struct ath11k *ar, u32 ar_ht_cap, u32 ar_vht_cap,
+		     u32 rate_cap_rx_chainmask)
 {
 	int i;
 	struct ieee80211_sta_ht_cap ht_cap = {};
-	u32 ar_vht_cap = ar->pdev->cap.vht_cap;
 
 	if (!(ar_ht_cap & WMI_HT_CAP_ENABLED))
 		return ht_cap;
@@ -5769,7 +5769,7 @@ static void ath11k_mac_setup_ht_vht_cap(struct ath11k *ar,
 	struct ieee80211_supported_band *band;
 	u32 rate_cap_tx_chainmask;
 	u32 rate_cap_rx_chainmask;
-	u32 ht_cap;
+	u32 ht_cap, vht_cap;
 
 	rate_cap_tx_chainmask = ar->cfg_tx_chainmask >> cap->tx_chain_mask_shift;
 	rate_cap_rx_chainmask = ar->cfg_rx_chainmask >> cap->rx_chain_mask_shift;
@@ -5777,9 +5777,14 @@ static void ath11k_mac_setup_ht_vht_cap(struct ath11k *ar,
 	if (cap->supported_bands & WMI_HOST_WLAN_2G_CAP) {
 		band = &ar->mac.sbands[NL80211_BAND_2GHZ];
 		ht_cap = cap->band[NL80211_BAND_2GHZ].ht_cap_info;
+		/* A pdev without 5 GHz has no VHT capabilities of its own, but
+		 * the firmware reports them for 2 GHz too: use those for the
+		 * max A-MSDU length.
+		 */
+		vht_cap = cap->vht_cap ?: cap->band[NL80211_BAND_2GHZ].vht_cap_info;
 		if (ht_cap_info)
 			*ht_cap_info = ht_cap;
-		band->ht_cap = ath11k_create_ht_cap(ar, ht_cap,
+		band->ht_cap = ath11k_create_ht_cap(ar, ht_cap, vht_cap,
 						    rate_cap_rx_chainmask);
 	}
 
@@ -5790,7 +5795,7 @@ static void ath11k_mac_setup_ht_vht_cap(struct ath11k *ar,
 		ht_cap = cap->band[NL80211_BAND_5GHZ].ht_cap_info;
 		if (ht_cap_info)
 			*ht_cap_info = ht_cap;
-		band->ht_cap = ath11k_create_ht_cap(ar, ht_cap,
+		band->ht_cap = ath11k_create_ht_cap(ar, ht_cap, cap->vht_cap,
 						    rate_cap_rx_chainmask);
 		band->vht_cap = ath11k_create_vht_cap(ar, rate_cap_tx_chainmask,
 						      rate_cap_rx_chainmask);

@@ -454,6 +454,7 @@ ath11k_pull_mac_phy_cap_svc_ready_ext(struct ath11k_pdev_wmi *wmi_handle,
 		cap_band->phy_id = mac_phy_caps->phy_id;
 		cap_band->max_bw_supported = mac_phy_caps->max_bw_supported_2g;
 		cap_band->ht_cap_info = mac_phy_caps->ht_cap_info_2g;
+		cap_band->vht_cap_info = mac_phy_caps->vht_cap_info_2g;
 		cap_band->he_cap_info[0] = mac_phy_caps->he_cap_info_2g;
 		cap_band->he_cap_info[1] = mac_phy_caps->he_cap_info_2g_ext;
 		cap_band->he_mcs = mac_phy_caps->he_supp_mcs_2g;
