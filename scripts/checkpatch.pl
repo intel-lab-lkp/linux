@@ -7880,7 +7880,7 @@ sub process {
 	# In mailback mode only produce a report in the negative, for
 	# things that appear to be patches.
 	if ($mailback && ($clean == 1 || !$is_patch)) {
-		exit(0);
+		return 1;
 	}
 
 	# This is not a patch, and we are in 'no-patch' mode so
