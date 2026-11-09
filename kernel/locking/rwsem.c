@@ -392,6 +392,7 @@ bool __rwsem_del_waiter(struct rw_semaphore *sem, struct rwsem_waiter *waiter)
  */
 static inline bool
 rwsem_del_waiter(struct rw_semaphore *sem, struct rwsem_waiter *waiter)
+	__must_hold(&sem->wait_lock)
 {
 	lockdep_assert_held(&sem->wait_lock);
 	if (__rwsem_del_waiter(sem, waiter))
@@ -429,6 +430,7 @@ struct rwsem_waiter *next_waiter(const struct rw_semaphore *sem,
 static void rwsem_mark_wake(struct rw_semaphore *sem,
 			    enum rwsem_wake_type wake_type,
 			    struct wake_q_head *wake_q)
+	__must_hold(&sem->wait_lock)
 {
 	struct rwsem_waiter *waiter, *next;
 	long oldcount, woken = 0, adjustment = 0;
@@ -995,6 +997,7 @@ rwsem_spin_on_owner(struct rw_semaphore *sem)
  */
 static inline void rwsem_cond_wake_waiter(struct rw_semaphore *sem, long count,
 					  struct wake_q_head *wake_q)
+	__must_hold(&sem->wait_lock)
 {
 	enum rwsem_wake_type wake_type;
 
