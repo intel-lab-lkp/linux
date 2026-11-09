@@ -1259,7 +1259,7 @@ static int __sched task_blocks_on_rt_mutex(struct rt_mutex_base *lock,
 
 		/* Check whether the waiter should back out immediately */
 		rtm = container_of(lock, struct rt_mutex, rtmutex);
-		__assume_ctx_lock(&rtm->rtmutex.wait_lock);
+		lockdep_assume_ctx_held(&rtm->rtmutex.wait_lock);
 		res = __ww_mutex_add_waiter(waiter, rtm, ww_ctx, wake_q);
 		if (res) {
 			raw_spin_lock(&task->pi_lock);
@@ -1634,7 +1634,7 @@ static int __sched rt_mutex_slowlock_block(struct rt_mutex_base *lock,
 	struct task_struct *owner;
 	int ret = 0;
 
-	__assume_ctx_lock(&rtm->rtmutex.wait_lock);
+	lockdep_assume_ctx_held(&rtm->rtmutex.wait_lock);
 
 	lockevent_inc(rtmutex_slow_block);
 	for (;;) {
@@ -1724,8 +1724,7 @@ static int __sched __rt_mutex_slowlock(struct rt_mutex_base *lock,
 	struct ww_mutex *ww = ww_container_of(rtm);
 	int ret;
 
-	__assume_ctx_lock(&rtm->rtmutex.wait_lock);
-	lockdep_assert_held(&lock->wait_lock);
+	lockdep_assume_ctx_held(&rtm->rtmutex.wait_lock);
 	lockevent_inc(rtmutex_slowlock);
 
 	/* Try to acquire the lock again: */

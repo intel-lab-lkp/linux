@@ -111,12 +111,18 @@ checking): either with a ``context_unsafe(var = init)`` expression, or by
 marking small initialization functions with the ``__context_unsafe(init)``
 attribute.
 
-Lockdep assertions, such as `lockdep_assert_held()`, inform the compiler's
-context analysis that the associated synchronization primitive is held after
-the assertion. This avoids false positives in complex control-flow scenarios
-and encourages the use of Lockdep where static analysis is limited. For
-example, this is useful when a function doesn't *always* require a lock, making
-`__must_hold()` inappropriate.
+`lockdep_assume_ctx_held()` and `lockdep_assume_shared_ctx_held()` inform the
+compiler's context analysis that the associated synchronization primitive is
+held and verify this at runtime via Lockdep. This avoids false positives in
+complex control-flow scenarios while still checking lock ownership with Lockdep
+where static analysis is limited. For example, this is useful when a function
+doesn't *always* require a lock, making `__must_hold()` inappropriate.
+
+Lockdep assertions, such as `lockdep_assert_held()`, only perform a runtime
+check and do not inform the compiler's context analysis that a lock is held.
+For context locks that are not tracked by Lockdep, e.g. bit spinlocks, use
+`__assume_ctx_lock()` or `__assume_shared_ctx_lock()` instead. These only
+inform the compiler's context analysis and do not perform a runtime check.
 
 Keywords
 ~~~~~~~~

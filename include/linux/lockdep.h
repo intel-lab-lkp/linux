@@ -285,16 +285,16 @@ extern u32 lock_sequence(struct lockdep_map *lock);
 	do { WARN_ON_ONCE(debug_locks && !(cond)); } while (0)
 
 #define lockdep_assert_held(l)		\
-	do { lockdep_assert(lockdep_is_held(l) != LOCK_STATE_NOT_HELD); __assume_ctx_lock(l); } while (0)
+	lockdep_assert(lockdep_is_held(l) != LOCK_STATE_NOT_HELD)
 
 #define lockdep_assert_not_held(l)	\
 	lockdep_assert(lockdep_is_held(l) != LOCK_STATE_HELD)
 
 #define lockdep_assert_held_write(l)	\
-	do { lockdep_assert(lockdep_is_held_type(l, 0)); __assume_ctx_lock(l); } while (0)
+	lockdep_assert(lockdep_is_held_type(l, 0))
 
 #define lockdep_assert_held_read(l)	\
-	do { lockdep_assert(lockdep_is_held_type(l, 1)); __assume_shared_ctx_lock(l); } while (0)
+	lockdep_assert(lockdep_is_held_type(l, 1))
 
 #define lockdep_assert_held_once(l)		\
 	lockdep_assert_once(lockdep_is_held(l) != LOCK_STATE_NOT_HELD)
@@ -392,10 +392,10 @@ extern int lockdep_is_held(const void *);
 #define lockdep_assert(c)			do { } while (0)
 #define lockdep_assert_once(c)			do { } while (0)
 
-#define lockdep_assert_held(l)			__assume_ctx_lock(l)
+#define lockdep_assert_held(l)			do { (void)(l); } while (0)
 #define lockdep_assert_not_held(l)		do { (void)(l); } while (0)
-#define lockdep_assert_held_write(l)		__assume_ctx_lock(l)
-#define lockdep_assert_held_read(l)		__assume_shared_ctx_lock(l)
+#define lockdep_assert_held_write(l)		do { (void)(l); } while (0)
+#define lockdep_assert_held_read(l)		do { (void)(l); } while (0)
 #define lockdep_assert_held_once(l)		do { (void)(l); } while (0)
 #define lockdep_assert_none_held_once()	do { } while (0)
 
@@ -436,6 +436,9 @@ extern int lockdep_is_held(const void *);
  * has a dep_map member. For context locks that are not tracked by lockdep,
  * e.g. bit spinlocks and the RCU context tokens, use
  * __assume_ctx_lock() instead.
+ *
+ * Note: lockdep_assert_held() does not inform the compiler's context
+ * analysis that a lock is held. Use this macro if that is needed.
  */
 #define lockdep_assume_ctx_held(var)					\
 	_lockdep_assume_ctx_held(var, __UNIQUE_ID(ctx_lock))
@@ -462,6 +465,9 @@ extern int lockdep_is_held(const void *);
  * @var must point at a lock object that is tracked by lockdep, i.e. that
  * has a dep_map member. For context locks that are not tracked by lockdep,
  * e.g. the RCU context tokens, use __assume_shared_ctx_lock() instead.
+ *
+ * Note: lockdep_assert_held_read() does not inform the compiler's context
+ * analysis that a lock is held. Use this macro if that is needed.
  */
 #define lockdep_assume_shared_ctx_held(var)				\
 	_lockdep_assume_shared_ctx_held(var, __UNIQUE_ID(ctx_lock))
