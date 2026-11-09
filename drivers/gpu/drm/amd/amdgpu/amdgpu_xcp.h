@@ -227,26 +227,4 @@ amdgpu_get_next_xcp(struct amdgpu_xcp_mgr *xcp_mgr, int *from)
 	for (i = 0, xcp = amdgpu_get_next_xcp(xcp_mgr, &i); xcp; \
 	     ++i, xcp = amdgpu_get_next_xcp(xcp_mgr, &i))
 
-static inline int amdgpu_xcp_get_num_xcc(struct amdgpu_xcp_mgr *xcp_mgr,
-					 int xcp_id)
-{
-	struct amdgpu_xcp *xcp;
-	uint32_t xcc_mask;
-	int i, r;
-
-	if (!xcp_mgr || xcp_id == AMDGPU_XCP_NO_PARTITION)
-		return 1;
-	for_each_xcp(xcp_mgr, xcp, i) {
-		if (xcp->id == xcp_id) {
-			r = amdgpu_xcp_get_inst_details(xcp, AMDGPU_XCP_GFX,
-							&xcc_mask);
-			if (unlikely(r))
-				return 1;
-			else
-				return hweight32(xcc_mask);
-		}
-	}
-
-	return 1;
-}
 #endif
