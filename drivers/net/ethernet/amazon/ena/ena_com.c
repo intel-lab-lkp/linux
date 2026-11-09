@@ -2000,6 +2000,8 @@ int ena_com_admin_init(struct ena_com_dev *ena_dev,
 
 	spin_lock_init(&admin_queue->q_lock);
 
+	admin_queue->ena_dev = ena_dev;
+
 	ret = ena_com_init_comp_ctxt(admin_queue);
 	if (ret)
 		goto error;
@@ -2045,7 +2047,6 @@ int ena_com_admin_init(struct ena_com_dev *ena_dev,
 	if (ret)
 		goto error;
 
-	admin_queue->ena_dev = ena_dev;
 	admin_queue->running_state = true;
 
 	return 0;
