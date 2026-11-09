@@ -1167,17 +1167,7 @@ nfsd4_read(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 	read->rd_rqstp = rqstp;
 	read->rd_fhp = &cstate->current_fh;
-	if (status)
-		return status;
-
-	/* Nothing is yet encoded behind a direct READ's payload */
-	read->rd_dio_ok = nfsd4_last_compound_op(rqstp);
-	if (!read->rd_dio_ok &&
-	    nfsd_read_io_mode(read->rd_fhp->fh_export) == NFSD_IO_DIRECT)
-		trace_nfsd_read_dio_not_last_op(rqstp, read->rd_fhp,
-						read->rd_offset, read->rd_length,
-						read->rd_nf->nf_dio_read_offset_align);
-	return nfs_ok;
+	return status;
 }
 
 
