@@ -49,6 +49,21 @@
 #include "internal.h"
 #include "swap.h"
 
+#ifdef CONFIG_XSWAP
+/* Batch size for the fallback unmap; keeps the stack array small. */
+#define XSWAP_UNMAP_BATCH_PAGES		16
+#define XSWAP_UNMAP_BATCH_CLUSTERS					\
+	max_t(unsigned long,						\
+	      ((XSWAP_UNMAP_BATCH_PAGES * PAGE_SIZE) /		\
+	       sizeof(struct swap_cluster_info)), 16)
+
+static int xswap_map_clusters(struct swap_info_struct *si,
+			      unsigned long start_idx, unsigned long nr);
+static void xswap_unmap_clusters(struct swap_info_struct *si,
+				 unsigned long start_idx, unsigned long nr);
+static int xswap_mapped_end(pte_t *pte, unsigned long addr, void *data);
+#endif
+
 static void swap_range_alloc(struct swap_info_struct *si,
 			     unsigned int nr_entries);
 static bool folio_swapcache_freeable(struct folio *folio);
@@ -3661,6 +3676,222 @@ static unsigned long read_swap_header(struct swap_info_struct *si,
 
 	return maxpages;
 }
+
+#ifdef CONFIG_XSWAP
+static int __maybe_unused xswap_map_clusters(struct swap_info_struct *si,
+			      unsigned long start_idx, unsigned long nr)
+{
+	unsigned long start_addr = (unsigned long)si->cluster_info +
+				   (size_t)start_idx * sizeof(struct swap_cluster_info);
+	unsigned long end_addr = start_addr + (size_t)nr * sizeof(struct swap_cluster_info);
+	unsigned long vm_start = PAGE_ALIGN(start_addr);
+	unsigned long vm_end = PAGE_ALIGN(end_addr);
+	unsigned int noreclaim_flags;
+	unsigned long mapped_end;
+	unsigned long npages;
+	struct page **pages;
+	unsigned long i;
+	int err;
+
+	mutex_lock(&si->xswap_lock);
+
+	/* Refuse a stale range: the boundary moved since the caller read it. */
+	if (start_idx != READ_ONCE(si->nr_clusters_mapped)) {
+		mutex_unlock(&si->xswap_lock);
+		return -EAGAIN;
+	}
+	if (start_idx + nr > si->nr_clusters_max) {
+		mutex_unlock(&si->xswap_lock);
+		return -EAGAIN;
+	}
+
+	/*
+	 * Page-granular mapping can cover clusters past the previous chunk.
+	 * Find the already-mapped prefix and map only the rest.
+	 */
+	mapped_end = vm_start;
+	if (vm_start < vm_end)
+		apply_to_existing_page_range(&init_mm, vm_start,
+					     vm_end - vm_start,
+					     xswap_mapped_end, &mapped_end);
+	if (vm_start >= vm_end || mapped_end == vm_end)
+		goto mapped;
+	vm_start = mapped_end;
+
+	npages = (vm_end - vm_start) >> PAGE_SHIFT;
+
+	/* Prevent recursive reclaim during vmap page table allocation. */
+	noreclaim_flags = memalloc_noreclaim_save();
+
+	pages = kmalloc_array(npages, sizeof(*pages),
+			      __GFP_HIGH | __GFP_NOMEMALLOC | GFP_KERNEL);
+	if (!pages) {
+		memalloc_noreclaim_restore(noreclaim_flags);
+		mutex_unlock(&si->xswap_lock);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < npages; i++) {
+		/* __GFP_ZERO: cluster_info pointer fields must start NULL. */
+		pages[i] = alloc_page(__GFP_HIGH | __GFP_NOMEMALLOC |
+				      GFP_KERNEL | __GFP_ZERO);
+		if (!pages[i])
+			goto fail;
+	}
+
+	err = vm_area_map_pages(si->cluster_vm, vm_start, vm_end, pages);
+	if (err) {
+		i = npages;
+		goto fail;
+	}
+
+	for (i = start_idx; i < start_idx + nr; i++)
+		spin_lock_init(&si->cluster_info[i].lock);
+
+	kfree(pages);
+	memalloc_noreclaim_restore(noreclaim_flags);
+
+	/*
+	 * Publish the new mappings and cluster lock initialization before
+	 * the count; walkers without xswap_lock use smp_load_acquire().
+	 */
+	smp_store_release(&si->nr_clusters_mapped, start_idx + nr);
+	mutex_unlock(&si->xswap_lock);
+	return 0;
+
+mapped:
+	for (i = start_idx; i < start_idx + nr; i++)
+		spin_lock_init(&si->cluster_info[i].lock);
+
+	/* Publish the advanced count. */
+	smp_store_release(&si->nr_clusters_mapped, start_idx + nr);
+	mutex_unlock(&si->xswap_lock);
+	return 0;
+
+fail:
+	/* Clear PTEs vm_area_map_pages() may have left before freeing pages. */
+	vm_area_unmap_pages(si->cluster_vm, vm_start, vm_end);
+	while (i > 0) {
+		i--;
+		if (pages[i])
+			__free_page(pages[i]);
+	}
+	memalloc_noreclaim_restore(noreclaim_flags);
+	kfree(pages);
+	mutex_unlock(&si->xswap_lock);
+	return -ENOMEM;
+}
+
+struct xswap_page_data {
+	struct page **pages;
+	unsigned long nr;
+	unsigned long max;
+};
+
+static int xswap_collect_page(pte_t *pte, unsigned long addr, void *data)
+{
+	struct xswap_page_data *xpd = data;
+	pte_t pteval = ptep_get(pte);
+
+	if (!pte_present(pteval))
+		return 0;
+	if (WARN_ON_ONCE(xpd->nr >= xpd->max))
+		return 0;
+	xpd->pages[xpd->nr++] = pte_page(pteval);
+	return 0;
+}
+
+/*
+ * Free the backing pages mapped in [vm_start, vm_end) and clear the PTEs.
+ * @pages must have room for @max pointers.
+ */
+static void xswap_unmap_range(struct swap_info_struct *si,
+			      unsigned long vm_start, unsigned long vm_end,
+			      struct page **pages, unsigned long max)
+{
+	struct xswap_page_data xpd = {
+		.pages	= pages,
+		.max	= max,
+	};
+	unsigned long i;
+
+	apply_to_existing_page_range(&init_mm, vm_start, vm_end - vm_start,
+				     xswap_collect_page, &xpd);
+	vm_area_unmap_pages(si->cluster_vm, vm_start, vm_end);
+
+	for (i = 0; i < xpd.nr; i++)
+		__free_page(pages[i]);
+}
+
+/* Caller must hold si->xswap_lock.  Cannot fail. */
+static void __maybe_unused xswap_unmap_clusters(struct swap_info_struct *si,
+				 unsigned long start_idx, unsigned long nr)
+{
+	unsigned long start_addr = (unsigned long)si->cluster_info +
+				   (size_t)start_idx * sizeof(struct swap_cluster_info);
+	unsigned long end_addr = start_addr +
+				 (size_t)nr * sizeof(struct swap_cluster_info);
+	unsigned long vm_start = PAGE_ALIGN(start_addr);
+	unsigned long vm_end = PAGE_ALIGN(end_addr);
+	struct page **pages;
+	unsigned int noreclaim_flags;
+	unsigned long npages, idx;
+
+	mutex_lock(&si->xswap_lock);
+
+	if (vm_start >= vm_end) {
+		WRITE_ONCE(si->nr_clusters_mapped, start_idx);
+		mutex_unlock(&si->xswap_lock);
+		return;
+	}
+
+	npages = (vm_end - vm_start) >> PAGE_SHIFT;
+
+	if (npages <= totalram_pages()) {
+		/* Reclaim here would re-enter xswap_map_clusters() and its lock. */
+		noreclaim_flags = memalloc_noreclaim_save();
+		pages = kvmalloc_array(npages, sizeof(*pages),
+				       GFP_KERNEL | __GFP_NOMEMALLOC);
+		memalloc_noreclaim_restore(noreclaim_flags);
+		if (pages) {
+			xswap_unmap_range(si, vm_start, vm_end, pages, npages);
+			kvfree(pages);
+			goto out_store;
+		}
+	}
+
+	/* No memory for the array, or too large: unmap in bounded batches. */
+	for (idx = start_idx; idx < start_idx + nr; idx += XSWAP_UNMAP_BATCH_CLUSTERS) {
+		unsigned long batch = min(start_idx + nr - idx,
+					  XSWAP_UNMAP_BATCH_CLUSTERS);
+		unsigned long addr = (unsigned long)si->cluster_info +
+				     (size_t)idx * sizeof(struct swap_cluster_info);
+		unsigned long bstart = PAGE_ALIGN(addr);
+		unsigned long bend = PAGE_ALIGN(addr + (size_t)batch *
+					       sizeof(struct swap_cluster_info));
+		struct page *batch_pages[XSWAP_UNMAP_BATCH_PAGES + 1];
+
+		if (bstart < bend)
+			xswap_unmap_range(si, bstart, bend, batch_pages,
+					  ARRAY_SIZE(batch_pages));
+	}
+out_store:
+	WRITE_ONCE(si->nr_clusters_mapped, start_idx);
+	mutex_unlock(&si->xswap_lock);
+}
+
+/* Track the end of the run of pages that is already mapped. */
+static int xswap_mapped_end(pte_t *pte, unsigned long addr, void *data)
+{
+	unsigned long *mapped_end = data;
+
+	/* The mapped range is a prefix, so the first hole ends it. */
+	if (!pte_present(ptep_get(pte)))
+		return 1;
+	*mapped_end = addr + PAGE_SIZE;
+	return 0;
+}
+#endif /* CONFIG_XSWAP */
 
 static int setup_swap_clusters_info(struct swap_info_struct *si,
 				    union swap_header *swap_header,
