@@ -1834,6 +1834,7 @@ static int svcauth_gss_wrap_integ(struct svc_rqst *rqstp)
 	if (maj_stat != GSS_S_COMPLETE)
 		goto bad_mic;
 
+	svcxdr_restore_auth_slack(rqstp);
 	if (xdr_stream_encode_opaque(xdr, checksum.data, checksum.len) < 0)
 		goto wrap_failed;
 	xdr_commit_encode(xdr);
