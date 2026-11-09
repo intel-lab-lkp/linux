@@ -18,6 +18,7 @@
 #include <linux/sizes.h>
 #include <linux/user.h>
 #include <linux/syscalls.h>
+#include <linux/prctl.h>
 #include <asm/msr.h>
 #include <asm/fpu/xstate.h>
 #include <asm/fpu/types.h>
@@ -629,4 +630,83 @@ int shstk_update_last_frame(unsigned long val)
 bool shstk_is_enabled(void)
 {
 	return features_enabled(ARCH_SHSTK_SHSTK);
+}
+
+/* Handles the generic prctl interface for PR_SET_SHADOW_STACK_STATUS and its feature bits */
+int arch_set_shadow_stack_status(struct task_struct *t, unsigned long status)
+{
+	int rc;
+	bool shstk_was_enabled = features_enabled(ARCH_SHSTK_SHSTK);
+
+	/*
+	 * Enable/disable the full feature set and preserve the original state for rollback.
+	 * Only act on changed features, since shstk_prctl() checks locked bits before checking
+	 * feature status.
+	 */
+	switch (status) {
+	case 0:
+		/*
+		 * Do not explicitly disable WRSS. Disabling shadow stack also
+		 * disables WRSS, and a locked WRSS must not prevent this.
+		 */
+		return shstk_was_enabled ?
+			shstk_prctl(t, ARCH_SHSTK_DISABLE, ARCH_SHSTK_SHSTK) : 0;
+
+	case PR_SHADOW_STACK_ENABLE:
+		if (!shstk_was_enabled) {
+			rc = shstk_prctl(t, ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK);
+			if (rc)
+				return rc;
+		}
+
+		if (features_enabled(ARCH_SHSTK_WRSS)) {
+			rc = shstk_prctl(t, ARCH_SHSTK_DISABLE, ARCH_SHSTK_WRSS);
+			if (rc && !shstk_was_enabled)
+				shstk_prctl(t, ARCH_SHSTK_DISABLE, ARCH_SHSTK_SHSTK);
+			return rc;
+		}
+
+		return 0;
+
+	case PR_SHADOW_STACK_ENABLE|PR_SHADOW_STACK_WRITE:
+		if (!shstk_was_enabled) {
+			rc = shstk_prctl(t, ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK);
+			if (rc)
+				return rc;
+		}
+
+		if (!features_enabled(ARCH_SHSTK_WRSS)) {
+			rc = shstk_prctl(t, ARCH_SHSTK_ENABLE, ARCH_SHSTK_WRSS);
+			if (rc && !shstk_was_enabled)
+				shstk_prctl(t, ARCH_SHSTK_DISABLE, ARCH_SHSTK_SHSTK);
+
+			return rc;
+		}
+
+		return 0;
+
+	/*
+	 * Unknown bit mapping, unsupported PR_SHADOW_STACK_PUSH or *only*
+	 * PR_SHADOW_STACK_WRITE.
+	 */
+	default:
+		return -EINVAL;
+	}
+}
+
+/* Handles the generic prctl interface for PR_LOCK_SHADOW_STACK_STATUS and its feature bits */
+int arch_lock_shadow_stack_status(struct task_struct *t, unsigned long status)
+{
+	return shstk_prctl(t, ARCH_SHSTK_LOCK, status);
+}
+
+/*
+ * We assume the prctl() feature bits line up with the arch_prctl() specific ones. If not,
+ * the flags returned via arch_get_shadow_stack_status will be mapped wrong.
+ */
+static_assert(PR_SHADOW_STACK_ENABLE == ARCH_SHSTK_SHSTK);
+static_assert(PR_SHADOW_STACK_WRITE  == ARCH_SHSTK_WRSS);
+int arch_get_shadow_stack_status(struct task_struct *t, unsigned long __user *status)
+{
+	return shstk_prctl(t, ARCH_SHSTK_STATUS, (unsigned long)status);
 }
