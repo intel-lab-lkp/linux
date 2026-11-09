@@ -8,6 +8,7 @@
  *
  */
 
+#include <linux/bitfield.h>
 #include <linux/cc_platform.h>
 #include <linux/printk.h>
 #include <linux/mm_types.h>
@@ -124,8 +125,6 @@ static void *rmp_bookkeeping __ro_after_init;
 #define PFN_PMD_MASK	GENMASK_ULL(63, PMD_SHIFT - PAGE_SHIFT)
 
 static u64 probed_rmp_base, probed_rmp_size;
-
-static u64 rmpopt_pa_start, rmpopt_pa_end;
 
 enum rmpopt_op_type {
 	RMPOPT_OP_VERIFY_AND_REPORT_STATUS,
@@ -618,11 +617,18 @@ static void rmpopt(u64 pa)
 		     : "memory", "cc");
 }
 
+/* A core can only RMPOPT within its own window, [base, base + size). */
 static void rmpopt_scan_range(void *arg)
 {
-	u64 pa;
+	u64 msr, base, end, pa;
+	unsigned int size_gb;
 
-	for (pa = rmpopt_pa_start; pa < rmpopt_pa_end; pa += SZ_1G)
+	rdmsrq(MSR_AMD64_RMPOPT_BASE, msr);
+	base = msr & MSR_AMD64_RMPOPT_BASE_ADDR;
+	size_gb = FIELD_GET(MSR_AMD64_RMPOPT_TABLE_SIZE, msr);
+	end = min_t(u64, base + (u64)size_gb * SZ_1G, ALIGN(PFN_PHYS(max_pfn), SZ_1G));
+
+	for (pa = base; pa < end; pa += SZ_1G)
 		rmpopt(pa);
 }
 
@@ -650,12 +656,6 @@ static int __init rmpopt_init(void)
 
 	INIT_DELAYED_WORK(&rmpopt_delayed_work, do_rmpopt_work);
 
-	/* The optimization range is fixed at boot; compute it once. */
-	rmpopt_pa_start = ALIGN_DOWN(PFN_PHYS(min_low_pfn), SZ_1G);
-	rmpopt_pa_end = ALIGN(PFN_PHYS(max_pfn), SZ_1G);
-	if ((rmpopt_pa_end - rmpopt_pa_start) > SZ_2T)
-		rmpopt_pa_end = rmpopt_pa_start + SZ_2T;
-
 	pr_info("RMPOPT optimizations enabled\n");
 
 	rmpopt_soft_init = true;
@@ -665,7 +665,7 @@ static int __init rmpopt_init(void)
 
 void snp_enable_rmpopt(void)
 {
-	u64 base;
+	u64 base, pa_start;
 	int cpu;
 
 	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP))
@@ -678,14 +678,15 @@ void snp_enable_rmpopt(void)
 		return;
 
 	/*
-	 * Per-CPU RMPOPT tables cover at most 2 TB.  Program each core's
-	 * RMPOPT_BASE with the start of RAM to optimize up to 2 TB.
+	 * A core's RMPOPT_BASE covers at most 2 TB.  Program every core with
+	 * the start of RAM to optimize up to 2 TB.
 	 */
+	pa_start = ALIGN_DOWN(PFN_PHYS(min_low_pfn), SZ_1G);
 	rdmsrq(MSR_AMD64_RMPOPT_BASE, base);
 	if (!(base & MSR_AMD64_RMPOPT_ENABLE))
 		for_each_cpu(cpu, cpu_primary_thread_mask)
 			wrmsrq_on_cpu(cpu, MSR_AMD64_RMPOPT_BASE,
-				      rmpopt_pa_start | MSR_AMD64_RMPOPT_ENABLE);
+				      pa_start | MSR_AMD64_RMPOPT_ENABLE);
 
 	mod_delayed_work(rmpopt_wq, &rmpopt_delayed_work,
 			 msecs_to_jiffies(RMPOPT_WORK_TIMEOUT));
