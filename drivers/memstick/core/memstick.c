@@ -562,10 +562,10 @@ void memstick_remove_host(struct memstick_host *host)
 	host->set_param(host, MEMSTICK_POWER, MEMSTICK_POWER_OFF);
 	mutex_unlock(&host->lock);
 
+	device_del(&host->dev);
 	spin_lock(&memstick_host_lock);
 	idr_remove(&memstick_host_idr, host->id);
 	spin_unlock(&memstick_host_lock);
-	device_del(&host->dev);
 }
 EXPORT_SYMBOL(memstick_remove_host);
 
