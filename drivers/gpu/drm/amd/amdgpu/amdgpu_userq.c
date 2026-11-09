@@ -35,7 +35,7 @@
 #include "amdgpu_hmm.h"
 #include "amdgpu_userq_fence.h"
 #include "amdgpu_trace.h"
-#include "amdgpu_trap.h"
+#include "amdgpu_cwsr.h"
 
 u32 amdgpu_userq_get_supported_ip_mask(struct amdgpu_device *adev)
 {
@@ -266,8 +266,9 @@ int amdgpu_userq_input_va_validate(struct amdgpu_device *adev,
 	return -EINVAL;
 }
 
-int amdgpu_userq_input_trap_params_validate(struct amdgpu_usermode_queue *queue,
-					    struct amdgpu_trap_params *trap_params)
+int amdgpu_userq_input_cwsr_params_validate(
+	struct amdgpu_usermode_queue *queue,
+	struct amdgpu_cwsr_params *cwsr_params)
 {
 	struct amdgpu_fpriv *fpriv = uq_mgr_to_fpriv(queue->userq_mgr);
 	struct amdgpu_device *adev = queue->userq_mgr->adev;
@@ -276,16 +277,16 @@ int amdgpu_userq_input_trap_params_validate(struct amdgpu_usermode_queue *queue,
 	int r;
 
 	num_xcc = amdgpu_xcp_get_num_xcc(adev->xcp_mgr, fpriv->xcp_id);
-	r = amdgpu_trap_validate_params(queue->userq_mgr->adev, trap_params,
+	r = amdgpu_cwsr_validate_params(queue->userq_mgr->adev, cwsr_params,
 					num_xcc);
 	if (r)
 		return r;
-	cwsr_size = amdgpu_trap_size_needed(queue->userq_mgr->adev, num_xcc);
+	cwsr_size = amdgpu_cwsr_size_needed(queue->userq_mgr->adev, num_xcc);
 	if (!cwsr_size)
 		return -EOPNOTSUPP;
 
 	return amdgpu_userq_input_va_validate(
-		adev, queue, trap_params->ctx_save_area_address, cwsr_size,
+		adev, queue, cwsr_params->ctx_save_area_address, cwsr_size,
 		&queue->userq_vas.va.cwsr);
 }
 

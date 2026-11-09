@@ -27,7 +27,7 @@
 #include "mes_userqueue.h"
 #include "amdgpu_userq_fence.h"
 #include "amdgpu_trace.h"
-#include "amdgpu_trap.h"
+#include "amdgpu_cwsr.h"
 
 #define AMDGPU_USERQ_PROC_CTX_SZ PAGE_SIZE
 #define AMDGPU_USERQ_GANG_CTX_SZ PAGE_SIZE
@@ -153,10 +153,10 @@ static int mes_userq_map(struct amdgpu_usermode_queue *queue)
 	queue_input.page_table_base_addr = amdgpu_gmc_pd_addr(queue->vm->root.bo);
 	queue_input.wptr_mc_addr = queue->wptr_obj.gpu_addr;
 
-	if (fpriv->trap_obj) {
-		queue_input.tba_addr = fpriv->trap_obj->tba_gpu_va_addr;
-		queue_input.tma_addr = fpriv->trap_obj->tma_gpu_va_addr;
-		queue_input.trap_en = !amdgpu_trap_has_dbg_wa(adev);
+	if (fpriv->cwsr_trap) {
+		queue_input.tba_addr = fpriv->cwsr_trap->tba_gpu_va_addr;
+		queue_input.tma_addr = fpriv->cwsr_trap->tma_gpu_va_addr;
+		queue_input.trap_en = !amdgpu_cwsr_has_dbg_wa(adev);
 	}
 
 	if (mes->use_rs64mem) {
@@ -420,7 +420,7 @@ static int mes_userq_mqd_create(struct amdgpu_usermode_queue *queue,
 
 	if (queue->queue_type == AMDGPU_HW_IP_COMPUTE) {
 		struct drm_amdgpu_userq_mqd_compute_gfx11 *compute_mqd;
-		struct amdgpu_trap_params trap_params;
+		struct amdgpu_cwsr_params cwsr_params;
 
 		if (mqd_user->mqd_size != sizeof(*compute_mqd)) {
 			DRM_ERROR("Invalid compute IP MQD size\n");
@@ -458,16 +458,16 @@ static int mes_userq_mqd_create(struct amdgpu_usermode_queue *queue,
 		userq_props->tmz_queue =
 			mqd_user->flags & AMDGPU_USERQ_CREATE_FLAGS_QUEUE_SECURE;
 
-		if (amdgpu_trap_is_enabled(adev)) {
+		if (amdgpu_cwsr_is_enabled(adev)) {
 			struct amdgpu_fpriv *fpriv =
 				uq_mgr_to_fpriv(queue->userq_mgr);
 			int num_xcc;
 
 			num_xcc = amdgpu_xcp_get_num_xcc(adev->xcp_mgr,
 							 fpriv->xcp_id);
-			trap_params.ctx_save_area_address =
+			cwsr_params.ctx_save_area_address =
 				compute_mqd->ctx_save_area_va;
-			trap_params.cwsr_sz =
+			cwsr_params.cwsr_sz =
 				compute_mqd->ctx_save_area_size;
 
 			r = amdgpu_bo_reserve(queue->vm->root.bo, false);
@@ -476,8 +476,8 @@ static int mes_userq_mqd_create(struct amdgpu_usermode_queue *queue,
 				goto free_mqd;
 			}
 
-			r = amdgpu_userq_input_trap_params_validate(
-				queue, &trap_params);
+			r = amdgpu_userq_input_cwsr_params_validate(
+				queue, &cwsr_params);
 			amdgpu_bo_unreserve(queue->vm->root.bo);
 			if (r) {
 				kfree(compute_mqd);
@@ -489,7 +489,7 @@ static int mes_userq_mqd_create(struct amdgpu_usermode_queue *queue,
 			userq_props->ctx_save_area_size =
 				compute_mqd->ctx_save_area_size;
 			userq_props->ctl_stack_size =
-				adev->trap_info->cwsr.xcc_ctl_stack_sz * num_xcc;
+				adev->cwsr_info->xcc_ctl_stack_sz * num_xcc;
 		}
 
 		kfree(compute_mqd);
