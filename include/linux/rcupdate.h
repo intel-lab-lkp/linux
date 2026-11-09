@@ -403,8 +403,7 @@ static inline void rcu_preempt_sleep_check(void) { }
 
 // See RCU_LOCKDEP_WARN() for an explanation of the double call to
 // debug_lockdep_rcu_enabled().
-static __always_inline bool lockdep_assert_rcu_helper(bool c, const struct __ctx_lock_RCU *ctx)
-	__assumes_shared_ctx_lock(RCU) __assumes_shared_ctx_lock(ctx)
+static inline bool lockdep_assert_rcu_helper(bool c)
 {
 	return debug_lockdep_rcu_enabled() &&
 	       (c || !rcu_is_watching() || !rcu_lockdep_current_cpu_online()) &&
@@ -417,7 +416,7 @@ static __always_inline bool lockdep_assert_rcu_helper(bool c, const struct __ctx
  * Splats if lockdep is enabled and there is no rcu_read_lock() in effect.
  */
 #define lockdep_assert_in_rcu_read_lock() \
-	WARN_ON_ONCE(lockdep_assert_rcu_helper(!lock_is_held(&rcu_lock_map), RCU))
+	WARN_ON_ONCE(lockdep_assert_rcu_helper(!lock_is_held(&rcu_lock_map)))
 
 /**
  * lockdep_assert_in_rcu_read_lock_bh - WARN if not protected by rcu_read_lock_bh()
@@ -427,7 +426,7 @@ static __always_inline bool lockdep_assert_rcu_helper(bool c, const struct __ctx
  * actual rcu_read_lock_bh() is required.
  */
 #define lockdep_assert_in_rcu_read_lock_bh() \
-	WARN_ON_ONCE(lockdep_assert_rcu_helper(!lock_is_held(&rcu_bh_lock_map), RCU_BH))
+	WARN_ON_ONCE(lockdep_assert_rcu_helper(!lock_is_held(&rcu_bh_lock_map)))
 
 /**
  * lockdep_assert_in_rcu_read_lock_sched - WARN if not protected by rcu_read_lock_sched()
@@ -437,7 +436,7 @@ static __always_inline bool lockdep_assert_rcu_helper(bool c, const struct __ctx
  * instead an actual rcu_read_lock_sched() is required.
  */
 #define lockdep_assert_in_rcu_read_lock_sched() \
-	WARN_ON_ONCE(lockdep_assert_rcu_helper(!lock_is_held(&rcu_sched_lock_map), RCU_SCHED))
+	WARN_ON_ONCE(lockdep_assert_rcu_helper(!lock_is_held(&rcu_sched_lock_map)))
 
 /**
  * lockdep_assert_in_rcu_reader - WARN if not within some type of RCU reader
@@ -455,19 +454,82 @@ static __always_inline bool lockdep_assert_rcu_helper(bool c, const struct __ctx
 	WARN_ON_ONCE(lockdep_assert_rcu_helper(!lock_is_held(&rcu_lock_map) &&			\
 					       !lock_is_held(&rcu_bh_lock_map) &&		\
 					       !lock_is_held(&rcu_sched_lock_map) &&		\
-					       preemptible(), RCU))
+					       preemptible()))
 
 #else /* #ifdef CONFIG_PROVE_RCU */
 
 #define RCU_LOCKDEP_WARN(c, s) do { } while (0 && (c))
 #define rcu_sleep_check() do { } while (0)
 
-#define lockdep_assert_in_rcu_read_lock() __assume_shared_ctx_lock(RCU)
-#define lockdep_assert_in_rcu_read_lock_bh() __assume_shared_ctx_lock(RCU_BH)
-#define lockdep_assert_in_rcu_read_lock_sched() __assume_shared_ctx_lock(RCU_SCHED)
-#define lockdep_assert_in_rcu_reader() __assume_shared_ctx_lock(RCU)
+#define lockdep_assert_in_rcu_read_lock() do { } while (0)
+#define lockdep_assert_in_rcu_read_lock_bh() do { } while (0)
+#define lockdep_assert_in_rcu_read_lock_sched() do { } while (0)
+#define lockdep_assert_in_rcu_reader() do { } while (0)
 
 #endif /* #else #ifdef CONFIG_PROVE_RCU */
+
+/**
+ * lockdep_assume_in_rcu_read_lock() - assume and verify RCU protection
+ *
+ * Instruct the compiler's context analysis to assume that the RCU read lock
+ * is held from this point on and verify at runtime with
+ * lockdep_assert_in_rcu_read_lock() that rcu_read_lock() is in effect. Use
+ * this macro in functions that are called with rcu_read_lock() held but for
+ * which a __must_hold_shared(RCU) annotation is not appropriate.
+ */
+#define lockdep_assume_in_rcu_read_lock()		\
+	do {						\
+		__assume_shared_ctx_lock(RCU);		\
+		lockdep_assert_in_rcu_read_lock();	\
+	} while (0)
+
+/**
+ * lockdep_assume_in_rcu_read_lock_bh() - assume and verify RCU-bh protection
+ *
+ * Instruct the compiler's context analysis to assume that both RCU and
+ * RCU_BH are held from this point on and verify at runtime with
+ * lockdep_assert_in_rcu_read_lock_bh() that rcu_read_lock_bh() is in
+ * effect. RCU is assumed too because rcu_read_lock_bh() acquires both RCU
+ * and RCU_BH, and because __rcu_guarded pointers are guarded by RCU.
+ */
+#define lockdep_assume_in_rcu_read_lock_bh()		\
+	do {						\
+		__assume_shared_ctx_lock(RCU);		\
+		__assume_shared_ctx_lock(RCU_BH);	\
+		lockdep_assert_in_rcu_read_lock_bh();	\
+	} while (0)
+
+/**
+ * lockdep_assume_in_rcu_read_lock_sched() - assume and verify RCU-sched
+ *
+ * Instruct the compiler's context analysis to assume that both RCU and
+ * RCU_SCHED are held from this point on and verify at runtime with
+ * lockdep_assert_in_rcu_read_lock_sched() that rcu_read_lock_sched() is in
+ * effect. RCU is assumed too because rcu_read_lock_sched() acquires both
+ * RCU and RCU_SCHED, and because __rcu_guarded pointers are guarded by RCU.
+ */
+#define lockdep_assume_in_rcu_read_lock_sched()			\
+	do {							\
+		__assume_shared_ctx_lock(RCU);			\
+		__assume_shared_ctx_lock(RCU_SCHED);		\
+		lockdep_assert_in_rcu_read_lock_sched();	\
+	} while (0)
+
+/**
+ * lockdep_assume_in_rcu_reader() - assume and verify any RCU reader
+ *
+ * Instruct the compiler's context analysis to assume that the RCU read lock
+ * is held from this point on and verify at runtime with
+ * lockdep_assert_in_rcu_reader() that some type of RCU reader is in effect.
+ * Unlike lockdep_assume_in_rcu_read_lock(), this macro also accepts regions of
+ * code in which preemption, softirqs or interrupts are disabled, since such
+ * regions also qualify as RCU readers.
+ */
+#define lockdep_assume_in_rcu_reader()			\
+	do {						\
+		__assume_shared_ctx_lock(RCU);		\
+		lockdep_assert_in_rcu_reader();		\
+	} while (0)
 
 /*
  * Helper functions for rcu_dereference_check(), rcu_dereference_protected()
