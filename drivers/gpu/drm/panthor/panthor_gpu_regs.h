@@ -116,4 +116,6 @@
 #define   GPU_COHERENCY_ACE				1
 #define   GPU_COHERENCY_NONE				31
 
+#define GPU_SYSC_ALLOC(n)				(0x340 + (n) * 4)
+
 #endif /* __PANTHOR_GPU_REGS_H__ */

@@ -63,6 +63,19 @@ static void panthor_gpu_coherency_set(struct panthor_device *ptdev)
 		  ptdev->gpu_info.selected_coherency);
 }
 
+static void panthor_gpu_sysc_config_set(struct panthor_device *ptdev)
+{
+	const struct panthor_sysc_config *config;
+	unsigned int i;
+
+	if (!ptdev->soc_data || !ptdev->soc_data->sysc_config)
+		return;
+
+	config = ptdev->soc_data->sysc_config;
+	for (i = 0; i < ARRAY_SIZE(config->alloc); i++)
+		gpu_write(ptdev->gpu->iomem, GPU_SYSC_ALLOC(i), config->alloc[i]);
+}
+
 static void panthor_gpu_l2_config_set(struct panthor_device *ptdev)
 {
 	struct panthor_gpu *gpu = ptdev->gpu;
@@ -317,6 +330,7 @@ int panthor_gpu_l2_power_on(struct panthor_device *ptdev)
 	}
 
 	/* Set the desired coherency mode and L2 config before the power up of L2 */
+	panthor_gpu_sysc_config_set(ptdev);
 	panthor_gpu_coherency_set(ptdev);
 	panthor_gpu_l2_config_set(ptdev);
 

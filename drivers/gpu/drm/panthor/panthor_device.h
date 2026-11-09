@@ -19,6 +19,8 @@
 #include <drm/gpu_scheduler.h>
 #include <drm/panthor_drm.h>
 
+struct reset_control;
+
 struct panthor_csf;
 struct panthor_csf_ctx;
 struct panthor_device;
@@ -35,9 +37,23 @@ struct panthor_vm;
 struct panthor_vm_pool;
 
 /**
+ * struct panthor_sysc_config - GPU system-cache configuration
+ */
+struct panthor_sysc_config {
+	/** @alloc: System-cache allocation policies for GPU access types. */
+	u32 alloc[8];
+};
+
+/**
  * struct panthor_soc_data - Panthor SoC Data
  */
 struct panthor_soc_data {
+	/** @skip_devfreq: Keep the firmware clock settings without devfreq. */
+	bool skip_devfreq;
+
+	/** @sysc_config: System-cache configuration, or NULL to keep defaults. */
+	const struct panthor_sysc_config *sysc_config;
+
 	/** @asn_hash_enable: True if GPU_L2_CONFIG_ASN_HASH_ENABLE must be set. */
 	bool asn_hash_enable;
 
@@ -137,6 +153,9 @@ struct panthor_device {
 
 	/** @soc_data: Optional SoC data. */
 	const struct panthor_soc_data *soc_data;
+
+	/** @reset_control: Optional external GPU reset. */
+	struct reset_control *reset_control;
 
 	/** @phys_addr: Physical address of the iomem region. */
 	phys_addr_t phys_addr;

@@ -1872,12 +1872,26 @@ static struct attribute *panthor_attrs[] = {
 
 ATTRIBUTE_GROUPS(panthor);
 
+static const struct panthor_sysc_config sysc_config_cix_sky1 = {
+	/* Sky1 needs these SYSC_ALLOC policies for correct display of GPU output. */
+	.alloc = {
+		0x00230000, 0x00000023, 0x00000000, 0x00000000,
+		0x00523222, 0x00523200, 0x00000022, 0x00000032,
+	},
+};
+
+static const struct panthor_soc_data soc_data_cix_sky1 = {
+	.skip_devfreq = true,
+	.sysc_config = &sysc_config_cix_sky1,
+};
+
 static const struct panthor_soc_data soc_data_mediatek_mt8196 = {
 	.asn_hash_enable = true,
 	.asn_hash = { 0xb, 0xe, 0x0, },
 };
 
 static const struct of_device_id dt_match[] = {
+	{ .compatible = "cix,sky1-mali", .data = &soc_data_cix_sky1 },
 	{ .compatible = "mediatek,mt8196-mali", .data = &soc_data_mediatek_mt8196, },
 	{ .compatible = "rockchip,rk3588-mali" },
 	{ .compatible = "arm,mali-valhall-csf" },

@@ -154,6 +154,12 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 
 	ptdev->devfreq = pdevfreq;
 
+	/* Keep the firmware clock settings until Sky1 devfreq is supported. */
+	if (ptdev->soc_data && ptdev->soc_data->skip_devfreq) {
+		ptdev->fast_rate = clk_get_rate(ptdev->clks.core);
+		return 0;
+	}
+
 	/*
 	 * The power domain associated with the GPU may have already added an
 	 * OPP table, complete with OPPs, as part of the platform bus
@@ -323,8 +329,11 @@ unsigned long panthor_devfreq_get_freq(struct panthor_device *ptdev)
 	unsigned long freq = 0;
 	int ret;
 
-	if (!pdevfreq->devfreq)
+	if (!pdevfreq->devfreq) {
+		if (ptdev->soc_data && ptdev->soc_data->skip_devfreq)
+			return clk_get_rate(ptdev->clks.core);
 		return 0;
+	}
 
 	ret = pdevfreq->devfreq->profile->get_cur_freq(ptdev->base.dev, &freq);
 	if (ret)
