@@ -498,6 +498,44 @@ static struct pci_dev_ser *pci_flb_alloc_dev_ser(struct pci_flb_outgoing *outgoi
 	return dev_ser;
 }
 
+/*
+ * Start preserving @dev by allocating its struct pci_dev_ser. The caller is
+ * responsible for taking a reference on it.
+ */
+static struct pci_dev_ser *pci_liveupdate_alloc_dev_ser(
+		struct pci_flb_outgoing *outgoing, struct pci_dev *dev)
+{
+	struct pci_dev_ser *dev_ser;
+
+	dev_ser = pci_flb_alloc_dev_ser(outgoing);
+	if (IS_ERR(dev_ser))
+		return dev_ser;
+
+	pci_info(dev, "Device will be preserved across next Live Update\n");
+	outgoing->ser->nr_devices++;
+	outgoing->ser->devices = kho_block_set_head_pa(&outgoing->block_set);
+
+	dev_ser->domain = pci_domain_nr(dev->bus);
+	dev_ser->bdf = pci_dev_id(dev);
+	dev->liveupdate.outgoing = dev_ser;
+	return dev_ser;
+}
+
+/*
+ * Stop preserving @dev by releasing its struct pci_dev_ser. The caller must
+ * have dropped the last reference on it.
+ */
+static void pci_liveupdate_free_dev_ser(struct pci_flb_outgoing *outgoing,
+					struct pci_dev *dev)
+{
+	struct pci_dev_ser *dev_ser = dev->liveupdate.outgoing;
+
+	pci_info(dev, "Device will no longer be preserved across next Live Update\n");
+	outgoing->ser->nr_devices--;
+	memset(dev_ser, 0, sizeof(*dev_ser));
+	dev->liveupdate.outgoing = NULL;
+}
+
 static int pci_liveupdate_unpreserve_device(struct pci_flb_outgoing *outgoing,
 					    struct pci_dev *dev)
 {
@@ -521,10 +559,7 @@ static int pci_liveupdate_unpreserve_device(struct pci_flb_outgoing *outgoing,
 	if (--dev_ser->refcount)
 		return 0;
 
-	pci_info(dev, "Device will no longer be preserved across next Live Update\n");
-	outgoing->ser->nr_devices--;
-	memset(dev_ser, 0, sizeof(*dev_ser));
-	dev->liveupdate.outgoing = NULL;
+	pci_liveupdate_free_dev_ser(outgoing, dev);
 	return 0;
 }
 
@@ -544,6 +579,8 @@ static void pci_liveupdate_unpreserve_path(struct pci_flb_outgoing *outgoing,
 static int pci_liveupdate_preserve_device(struct pci_flb_outgoing *outgoing,
 					  struct pci_dev *dev)
 {
+	struct pci_dev_ser *dev_ser = dev->liveupdate.outgoing;
+
 	if (dev->is_virtfn) {
 		pci_warn(dev, "Cannot preserve Virtual Functions\n");
 		return -EINVAL;
@@ -559,43 +596,32 @@ static int pci_liveupdate_preserve_device(struct pci_flb_outgoing *outgoing,
 		return -EINVAL;
 	}
 
-	/*
-	 * Endpoint devices should not be preserved more than once.
-	 * Bridges are preserved once for every downstream device that
-	 * is preserved.
-	 */
-	if (dev->liveupdate.outgoing && !dev->subordinate) {
-		pci_warn(dev, "Device is already preserved\n");
-		return -EBUSY;
-	}
-
-	if (dev->liveupdate.outgoing && !dev->liveupdate.outgoing->refcount) {
-		pci_WARN(dev, 1, "Preserved device with 0 refcount!\n");
-		return -EINVAL;
-	}
-
 	if (dev->liveupdate.frozen) {
 		pci_warn(dev, "Cannot preserve device after it is frozen!\n");
 		return -EINVAL;
 	}
 
-	if (!dev->liveupdate.outgoing) {
-		struct pci_dev_ser *dev_ser;
+	if (dev_ser) {
+		/*
+		 * Endpoint devices can only be preserved once. Bridges are
+		 * preserved once for every preserved device below them.
+		 */
+		if (!dev->subordinate) {
+			pci_warn(dev, "Device is already preserved\n");
+			return -EBUSY;
+		}
 
-		dev_ser = pci_flb_alloc_dev_ser(outgoing);
+		if (!dev_ser->refcount) {
+			pci_WARN(dev, 1, "Preserved device with 0 refcount!\n");
+			return -EINVAL;
+		}
+	} else {
+		dev_ser = pci_liveupdate_alloc_dev_ser(outgoing, dev);
 		if (IS_ERR(dev_ser))
 			return PTR_ERR(dev_ser);
-
-		pci_info(dev, "Device will be preserved across next Live Update\n");
-		outgoing->ser->nr_devices++;
-		outgoing->ser->devices = kho_block_set_head_pa(&outgoing->block_set);
-
-		dev_ser->domain = pci_domain_nr(dev->bus);
-		dev_ser->bdf = pci_dev_id(dev);
-		dev->liveupdate.outgoing = dev_ser;
 	}
 
-	dev->liveupdate.outgoing->refcount++;
+	dev_ser->refcount++;
 	return 0;
 }
 
