@@ -5414,8 +5414,8 @@ nfsd4_encode_readlink(struct nfsd4_compoundres *resp, __be32 nfserr,
 		nfserr = nfserr_inval;
 	if (nfserr)
 		goto out_err;
-	status = svc_encode_result_payload(readlink->rl_rqstp, length_offset,
-					   maxcount);
+	status = svc_encode_result_payload(readlink->rl_rqstp,
+					   length_offset + XDR_UNIT, maxcount);
 	if (status) {
 		nfserr = nfserrno(status);
 		goto out_err;
