@@ -209,14 +209,14 @@ static int ulpi_read_id(struct ulpi *ulpi)
 	/* Test the interface */
 	ret = ulpi_write(ulpi, ULPI_SCRATCH, 0xaa);
 	if (ret < 0)
-		goto err;
+		goto err_access;
 
 	ret = ulpi_read(ulpi, ULPI_SCRATCH);
 	if (ret < 0)
 		return ret;
 
 	if (ret != 0xaa)
-		goto err;
+		goto err_access;
 
 	ulpi->id.vendor = ulpi_read(ulpi, ULPI_VENDOR_ID_LOW);
 	ulpi->id.vendor |= ulpi_read(ulpi, ULPI_VENDOR_ID_HIGH) << 8;
@@ -230,6 +230,13 @@ static int ulpi_read_id(struct ulpi *ulpi)
 
 	request_module("ulpi:v%04xp%04x", ulpi->id.vendor, ulpi->id.product);
 	return 0;
+err_access:
+	/*
+	 * A PHY described in DT may not be powered yet and is matched via OF
+	 * instead.  Without a DT node nothing else can identify it, so say so.
+	 */
+	if (!ulpi->dev.of_node)
+		dev_warn(&ulpi->dev, "PHY registers not accessible, PHY not identified\n");
 err:
 	of_request_module(ulpi->dev.of_node);
 	return 0;
