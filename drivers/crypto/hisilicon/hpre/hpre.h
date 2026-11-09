@@ -5,10 +5,12 @@
 
 #include <linux/list.h>
 #include <linux/hisi_acc_qm.h>
+#include <crypto/engine.h>
 
 #define HPRE_SQE_SIZE			sizeof(struct hpre_sqe)
 #define HPRE_PF_DEF_Q_NUM		64
 #define HPRE_PF_DEF_Q_BASE		0
+#define HPRE_MAX_CRYPTO_ENGINE		64
 
 /*
  * type used in qm sqc DW6.
@@ -70,6 +72,8 @@ struct hpre_debug {
 struct hpre {
 	struct hisi_qm qm;
 	struct hpre_debug debug;
+	struct crypto_engine *engine[HPRE_MAX_CRYPTO_ENGINE];
+	u32 engine_num;
 };
 
 enum hpre_alg_type {

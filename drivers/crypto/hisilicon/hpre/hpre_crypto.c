@@ -4,6 +4,7 @@
 #include <crypto/dh.h>
 #include <crypto/ecc_curve.h>
 #include <crypto/ecdh.h>
+#include <crypto/engine.h>
 #include <crypto/rng.h>
 #include <crypto/internal/akcipher.h>
 #include <crypto/internal/kpp.h>
@@ -118,6 +119,7 @@ struct hpre_ctx {
 	/* for high performance core */
 	u8 enable_hpcore;
 	bool fallback;
+	struct crypto_engine *engine;
 };
 
 struct hpre_asym_request {
@@ -336,7 +338,12 @@ static void hpre_dh_cb(struct hpre_ctx *ctx, void *resp)
 		atomic64_inc(&dfx[HPRE_OVER_THRHLD_CNT].value);
 
 	hpre_hw_data_clr_all(ctx, req, areq->dst, areq->src);
-	kpp_request_complete(areq, ret);
+	local_bh_disable();
+	if (areq->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG)
+		crypto_finalize_kpp_request(ctx->engine, areq, ret);
+	else
+		kpp_request_complete(areq, ret);
+	local_bh_enable();
 	atomic64_inc(&dfx[HPRE_RECV_CNT].value);
 }
 
@@ -357,7 +364,12 @@ static void hpre_rsa_cb(struct hpre_ctx *ctx, void *resp)
 	areq = req->areq.rsa;
 	areq->dst_len = ctx->key_sz;
 	hpre_hw_data_clr_all(ctx, req, areq->dst, areq->src);
-	akcipher_request_complete(areq, ret);
+	local_bh_disable();
+	if (areq->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG)
+		crypto_finalize_akcipher_request(ctx->engine, areq, ret);
+	else
+		akcipher_request_complete(areq, ret);
+	local_bh_enable();
 	atomic64_inc(&dfx[HPRE_RECV_CNT].value);
 }
 
@@ -386,10 +398,20 @@ static int hpre_ctx_init(struct hpre_ctx *ctx, u8 type)
 		return -ENODEV;
 	}
 
+	hpre = container_of(qp->qm, struct hpre, qm);
+	if (!hpre->engine_num) {
+		hisi_qm_free_qps(&qp, 1);
+		return -ENODEV;
+	}
+	ctx->engine = hpre->engine[qp->qp_id % hpre->engine_num];
+	if (!ctx->engine) {
+		hisi_qm_free_qps(&qp, 1);
+		return -ENODEV;
+	}
+
 	qp->req_cb = hpre_alg_cb;
 	ctx->qp = qp;
 	ctx->dev = &qp->qm->pdev->dev;
-	hpre = container_of(ctx->qp->qm, struct hpre, qm);
 	ctx->hpre = hpre;
 	ctx->key_sz = 0;
 	ctx->crt_g2_mode = false;
@@ -448,25 +470,29 @@ static int hpre_msg_request_set(struct hpre_ctx *ctx, void *req, bool is_rsa)
 	return 0;
 }
 
-static int hpre_send(struct hpre_ctx *ctx, struct hpre_sqe *msg)
+static int hpre_alg_send_message_retry(struct hpre_asym_request *hpre_req)
 {
-	struct hpre_dfx *dfx = ctx->hpre->debug.dfx;
-	int ctr = 0;
+	struct hpre_dfx *dfx = hpre_req->ctx->hpre->debug.dfx;
+	struct hisi_qp *qp = hpre_req->ctx->qp;
+	int cnt = 0;
 	int ret;
 
 	do {
-		atomic64_inc(&dfx[HPRE_SEND_CNT].value);
-		ret = hisi_qp_send(ctx->qp, msg);
+		ret = hisi_qp_send(qp, &hpre_req->req);
 		if (ret != -EBUSY)
 			break;
 		atomic64_inc(&dfx[HPRE_SEND_BUSY_CNT].value);
-	} while (ctr++ < HPRE_TRY_SEND_TIMES);
+	} while (cnt++ < HPRE_TRY_SEND_TIMES);
 
-	if (likely(!ret))
-		return ret;
+	if (ret == -EBUSY)
+		return -ENOSPC;
 
-	if (ret != -EBUSY)
-		atomic64_inc(&dfx[HPRE_SEND_FAIL_CNT].value);
+	if (likely(!ret)) {
+		atomic64_inc(&dfx[HPRE_SEND_CNT].value);
+		return -EINPROGRESS;
+	}
+
+	atomic64_inc(&dfx[HPRE_SEND_FAIL_CNT].value);
 
 	return ret;
 }
@@ -501,11 +527,16 @@ static int hpre_dh_compute_value(struct kpp_request *req)
 	else
 		msg->dw0 = cpu_to_le32(le32_to_cpu(msg->dw0) | HPRE_ALG_DH);
 
-	/* success */
-	ret = hpre_send(ctx, msg);
-	if (likely(!ret))
-		return -EINPROGRESS;
+	if (req->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG) {
+		ret = crypto_transfer_kpp_request_to_engine(ctx->engine, req);
+		if (ret == -EINPROGRESS || ret == -EBUSY)
+			return ret;
+		goto clear_all;
+	}
 
+	ret = hpre_alg_send_message_retry(hpre_req);
+	if (ret == -EINPROGRESS)
+		return ret;
 clear_all:
 	hpre_hw_data_clr_all(ctx, hpre_req, req->dst, req->src);
 
@@ -779,10 +810,16 @@ static int hpre_rsa_enc(struct akcipher_request *req)
 	if (unlikely(ret))
 		goto clear_all;
 
-	/* success */
-	ret = hpre_send(ctx, msg);
-	if (likely(!ret))
-		return -EINPROGRESS;
+	if (req->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG) {
+		ret = crypto_transfer_akcipher_request_to_engine(ctx->engine, req);
+		if (ret == -EINPROGRESS || ret == -EBUSY)
+			return ret;
+		goto clear_all;
+	}
+
+	ret = hpre_alg_send_message_retry(hpre_req);
+	if (ret == -EINPROGRESS)
+		return ret;
 
 clear_all:
 	hpre_hw_data_clr_all(ctx, hpre_req, req->dst, req->src);
@@ -832,11 +869,16 @@ static int hpre_rsa_dec(struct akcipher_request *req)
 	if (unlikely(ret))
 		goto clear_all;
 
-	/* success */
-	ret = hpre_send(ctx, msg);
-	if (likely(!ret))
-		return -EINPROGRESS;
+	if (req->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG) {
+		ret = crypto_transfer_akcipher_request_to_engine(ctx->engine, req);
+		if (ret == -EINPROGRESS || ret == -EBUSY)
+			return ret;
+		goto clear_all;
+	}
 
+	ret = hpre_alg_send_message_retry(hpre_req);
+	if (ret == -EINPROGRESS)
+		return ret;
 clear_all:
 	hpre_hw_data_clr_all(ctx, hpre_req, req->dst, req->src);
 
@@ -1433,8 +1475,12 @@ static void hpre_ecdh_cb(struct hpre_ctx *ctx, void *resp)
 	p = sg_virt(areq->dst);
 	memmove(p, p + ctx->key_sz - curve_sz, curve_sz);
 	memmove(p + curve_sz, p + areq->dst_len - curve_sz, curve_sz);
-
-	kpp_request_complete(areq, ret);
+	local_bh_disable();
+	if (areq->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG)
+		crypto_finalize_kpp_request(ctx->engine, areq, ret);
+	else
+		kpp_request_complete(areq, ret);
+	local_bh_enable();
 
 	atomic64_inc(&dfx[HPRE_RECV_CNT].value);
 }
@@ -1561,9 +1607,16 @@ static int hpre_ecdh_compute_value(struct kpp_request *req)
 	msg->dw0 = cpu_to_le32(le32_to_cpu(msg->dw0) | HPRE_ALG_ECC_MUL);
 	msg->resv1 = ctx->enable_hpcore << HPRE_ENABLE_HPCORE_SHIFT;
 
-	ret = hpre_send(ctx, msg);
-	if (likely(!ret))
-		return -EINPROGRESS;
+	if (req->base.flags & CRYPTO_TFM_REQ_MAY_BACKLOG) {
+		ret = crypto_transfer_kpp_request_to_engine(ctx->engine, req);
+		if (ret == -EINPROGRESS || ret == -EBUSY)
+			return ret;
+		goto clear_all;
+	}
+
+	ret = hpre_alg_send_message_retry(hpre_req);
+	if (ret == -EINPROGRESS)
+		return ret;
 
 clear_all:
 	hpre_ecdh_hw_data_clr_all(ctx, hpre_req, req->dst, req->src);
@@ -1679,86 +1732,176 @@ static void hpre_ecdh_exit_tfm(struct crypto_kpp *tfm)
 	hpre_ecc_clear_ctx(ctx, true);
 }
 
-static struct akcipher_alg rsa = {
-	.encrypt = hpre_rsa_enc,
-	.decrypt = hpre_rsa_dec,
-	.set_pub_key = hpre_rsa_setpubkey,
-	.set_priv_key = hpre_rsa_setprivkey,
-	.max_size = hpre_rsa_max_size,
-	.init = hpre_rsa_init_tfm,
-	.exit = hpre_rsa_exit_tfm,
+static int hpre_alg_send_message(struct hpre_asym_request *hpre_req)
+{
+	struct hpre_dfx *dfx = hpre_req->ctx->hpre->debug.dfx;
+	struct hisi_qp *qp = hpre_req->ctx->qp;
+	int ret;
+
+	ret = hisi_qp_send(qp, &hpre_req->req);
+	if (ret == -EBUSY) {
+		atomic64_inc(&dfx[HPRE_SEND_BUSY_CNT].value);
+		return -ENOSPC;
+	}
+
+	if (likely(!ret)) {
+		atomic64_inc(&dfx[HPRE_SEND_CNT].value);
+		return 0;
+	}
+
+	atomic64_inc(&dfx[HPRE_SEND_FAIL_CNT].value);
+
+	return ret;
+}
+
+static int hpre_dh_do_one_request(struct crypto_engine *engine, void *areq)
+{
+	struct kpp_request *kreq = container_of(areq, struct kpp_request, base);
+	void *tmp = kpp_request_ctx(kreq);
+	struct hpre_asym_request *hpre_req = PTR_ALIGN(tmp, hpre_align_sz());
+	int ret;
+
+	ret = hpre_alg_send_message(hpre_req);
+	if (ret && ret != -ENOSPC)
+		hpre_hw_data_clr_all(hpre_req->ctx, hpre_req, kreq->dst, kreq->src);
+
+	return ret;
+}
+
+static int hpre_ecdh_do_one_request(struct crypto_engine *engine, void *areq)
+{
+	struct kpp_request *kreq = container_of(areq, struct kpp_request, base);
+	void *tmp = kpp_request_ctx(kreq);
+	struct hpre_asym_request *hpre_req = PTR_ALIGN(tmp, hpre_align_sz());
+	int ret;
+
+	ret = hpre_alg_send_message(hpre_req);
+	if (ret && ret != -ENOSPC)
+		hpre_ecdh_hw_data_clr_all(hpre_req->ctx, hpre_req, kreq->dst, kreq->src);
+
+	return ret;
+}
+
+static int hpre_rsa_do_one_request(struct crypto_engine *engine, void *areq)
+{
+	struct akcipher_request *akreq =
+	    container_of(areq, struct akcipher_request, base);
+	void *tmp = akcipher_request_ctx(akreq);
+	struct hpre_asym_request *hpre_req = PTR_ALIGN(tmp, hpre_align_sz());
+	int ret;
+
+	ret = hpre_alg_send_message(hpre_req);
+	if (ret && ret != -ENOSPC)
+		hpre_hw_data_clr_all(hpre_req->ctx, hpre_req, akreq->dst, akreq->src);
+
+	return ret;
+}
+
+static struct akcipher_engine_alg rsa = {
 	.base = {
-		.cra_ctxsize = sizeof(struct hpre_ctx),
-		.cra_priority = HPRE_CRYPTO_ALG_PRI,
-		.cra_name = "rsa",
-		.cra_driver_name = "hpre-rsa",
-		.cra_module = THIS_MODULE,
-		.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
+		.encrypt = hpre_rsa_enc,
+		.decrypt = hpre_rsa_dec,
+		.set_pub_key = hpre_rsa_setpubkey,
+		.set_priv_key = hpre_rsa_setprivkey,
+		.max_size = hpre_rsa_max_size,
+		.init = hpre_rsa_init_tfm,
+		.exit = hpre_rsa_exit_tfm,
+		.base = {
+			.cra_ctxsize = sizeof(struct hpre_ctx),
+			.cra_priority = HPRE_CRYPTO_ALG_PRI,
+			.cra_name = "rsa",
+			.cra_driver_name = "hpre-rsa",
+			.cra_module = THIS_MODULE,
+			.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
+		},
+	},
+	.op = {
+		.do_one_request = hpre_rsa_do_one_request,
 	},
 };
 
-static struct kpp_alg dh = {
-	.set_secret = hpre_dh_set_secret,
-	.generate_public_key = hpre_dh_generate_public_key,
-	.compute_shared_secret = hpre_dh_compute_shared_secret,
-	.max_size = hpre_dh_max_size,
-	.init = hpre_dh_init_tfm,
-	.exit = hpre_dh_exit_tfm,
+static struct kpp_engine_alg dh = {
 	.base = {
-		.cra_ctxsize = sizeof(struct hpre_ctx),
-		.cra_priority = HPRE_CRYPTO_ALG_PRI,
-		.cra_name = "dh",
-		.cra_driver_name = "hpre-dh",
-		.cra_module = THIS_MODULE,
-		.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
+		.set_secret = hpre_dh_set_secret,
+		.generate_public_key = hpre_dh_generate_public_key,
+		.compute_shared_secret = hpre_dh_compute_shared_secret,
+		.max_size = hpre_dh_max_size,
+		.init = hpre_dh_init_tfm,
+		.exit = hpre_dh_exit_tfm,
+		.base = {
+			.cra_ctxsize = sizeof(struct hpre_ctx),
+			.cra_priority = HPRE_CRYPTO_ALG_PRI,
+			.cra_name = "dh",
+			.cra_driver_name = "hpre-dh",
+			.cra_module = THIS_MODULE,
+			.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
+		},
+	},
+	.op = {
+		.do_one_request = hpre_dh_do_one_request,
 	},
 };
 
-static struct kpp_alg ecdh_curves[] = {
+static struct kpp_engine_alg ecdh_curves[] = {
 	{
-		.set_secret = hpre_ecdh_set_secret,
-		.generate_public_key = hpre_ecdh_generate_public_key,
-		.compute_shared_secret = hpre_ecdh_compute_shared_secret,
-		.max_size = hpre_ecdh_max_size,
-		.init = hpre_ecdh_nist_p192_init_tfm,
-		.exit = hpre_ecdh_exit_tfm,
 		.base = {
-			.cra_ctxsize = sizeof(struct hpre_ctx),
-			.cra_priority = HPRE_CRYPTO_ALG_PRI,
-			.cra_name = "ecdh-nist-p192",
-			.cra_driver_name = "hpre-ecdh-nist-p192",
-			.cra_module = THIS_MODULE,
-			.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
+			.set_secret = hpre_ecdh_set_secret,
+			.generate_public_key = hpre_ecdh_generate_public_key,
+			.compute_shared_secret = hpre_ecdh_compute_shared_secret,
+			.max_size = hpre_ecdh_max_size,
+			.init = hpre_ecdh_nist_p192_init_tfm,
+			.exit = hpre_ecdh_exit_tfm,
+			.base = {
+				.cra_ctxsize = sizeof(struct hpre_ctx),
+				.cra_priority = HPRE_CRYPTO_ALG_PRI,
+				.cra_name = "ecdh-nist-p192",
+				.cra_driver_name = "hpre-ecdh-nist-p192",
+				.cra_module = THIS_MODULE,
+				.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
+			},
+		},
+		.op = {
+			.do_one_request = hpre_ecdh_do_one_request,
 		},
 	}, {
-		.set_secret = hpre_ecdh_set_secret,
-		.generate_public_key = hpre_ecdh_generate_public_key,
-		.compute_shared_secret = hpre_ecdh_compute_shared_secret,
-		.max_size = hpre_ecdh_max_size,
-		.init = hpre_ecdh_nist_p256_init_tfm,
-		.exit = hpre_ecdh_exit_tfm,
 		.base = {
-			.cra_ctxsize = sizeof(struct hpre_ctx),
-			.cra_priority = HPRE_CRYPTO_ALG_PRI,
-			.cra_name = "ecdh-nist-p256",
-			.cra_driver_name = "hpre-ecdh-nist-p256",
-			.cra_module = THIS_MODULE,
-			.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
+			.set_secret = hpre_ecdh_set_secret,
+			.generate_public_key = hpre_ecdh_generate_public_key,
+			.compute_shared_secret = hpre_ecdh_compute_shared_secret,
+			.max_size = hpre_ecdh_max_size,
+			.init = hpre_ecdh_nist_p256_init_tfm,
+			.exit = hpre_ecdh_exit_tfm,
+			.base = {
+				.cra_ctxsize = sizeof(struct hpre_ctx),
+				.cra_priority = HPRE_CRYPTO_ALG_PRI,
+				.cra_name = "ecdh-nist-p256",
+				.cra_driver_name = "hpre-ecdh-nist-p256",
+				.cra_module = THIS_MODULE,
+				.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
+			},
+		},
+		.op = {
+			.do_one_request = hpre_ecdh_do_one_request,
 		},
 	}, {
-		.set_secret = hpre_ecdh_set_secret,
-		.generate_public_key = hpre_ecdh_generate_public_key,
-		.compute_shared_secret = hpre_ecdh_compute_shared_secret,
-		.max_size = hpre_ecdh_max_size,
-		.init = hpre_ecdh_nist_p384_init_tfm,
-		.exit = hpre_ecdh_exit_tfm,
 		.base = {
-			.cra_ctxsize = sizeof(struct hpre_ctx),
-			.cra_priority = HPRE_CRYPTO_ALG_PRI,
-			.cra_name = "ecdh-nist-p384",
-			.cra_driver_name = "hpre-ecdh-nist-p384",
-			.cra_module = THIS_MODULE,
-			.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
+			.set_secret = hpre_ecdh_set_secret,
+			.generate_public_key = hpre_ecdh_generate_public_key,
+			.compute_shared_secret = hpre_ecdh_compute_shared_secret,
+			.max_size = hpre_ecdh_max_size,
+			.init = hpre_ecdh_nist_p384_init_tfm,
+			.exit = hpre_ecdh_exit_tfm,
+			.base = {
+				.cra_ctxsize = sizeof(struct hpre_ctx),
+				.cra_priority = HPRE_CRYPTO_ALG_PRI,
+				.cra_name = "ecdh-nist-p384",
+				.cra_driver_name = "hpre-ecdh-nist-p384",
+				.cra_module = THIS_MODULE,
+				.cra_flags = CRYPTO_ALG_NEED_FALLBACK,
+			},
+		},
+		.op = {
+			.do_one_request = hpre_ecdh_do_one_request,
 		},
 	}
 };
@@ -1770,8 +1913,7 @@ static int hpre_register_rsa(struct hisi_qm *qm)
 	if (!hpre_check_alg_support(qm, HPRE_DRV_RSA_MASK_CAP))
 		return 0;
 
-	rsa.base.cra_flags = 0;
-	ret = crypto_register_akcipher(&rsa);
+	ret = crypto_engine_register_akcipher(&rsa);
 	if (ret)
 		dev_err(&qm->pdev->dev, "failed to register rsa (%d)!\n", ret);
 
@@ -1783,7 +1925,7 @@ static void hpre_unregister_rsa(struct hisi_qm *qm)
 	if (!hpre_check_alg_support(qm, HPRE_DRV_RSA_MASK_CAP))
 		return;
 
-	crypto_unregister_akcipher(&rsa);
+	crypto_engine_unregister_akcipher(&rsa);
 }
 
 static int hpre_register_dh(struct hisi_qm *qm)
@@ -1793,7 +1935,7 @@ static int hpre_register_dh(struct hisi_qm *qm)
 	if (!hpre_check_alg_support(qm, HPRE_DRV_DH_MASK_CAP))
 		return 0;
 
-	ret = crypto_register_kpp(&dh);
+	ret = crypto_engine_register_kpp(&dh);
 	if (ret)
 		dev_err(&qm->pdev->dev, "failed to register dh (%d)!\n", ret);
 
@@ -1805,7 +1947,7 @@ static void hpre_unregister_dh(struct hisi_qm *qm)
 	if (!hpre_check_alg_support(qm, HPRE_DRV_DH_MASK_CAP))
 		return;
 
-	crypto_unregister_kpp(&dh);
+	crypto_engine_unregister_kpp(&dh);
 }
 
 static int hpre_register_ecdh(struct hisi_qm *qm)
@@ -1816,10 +1958,10 @@ static int hpre_register_ecdh(struct hisi_qm *qm)
 		return 0;
 
 	for (i = 0; i < ARRAY_SIZE(ecdh_curves); i++) {
-		ret = crypto_register_kpp(&ecdh_curves[i]);
+		ret = crypto_engine_register_kpp(&ecdh_curves[i]);
 		if (ret) {
 			dev_err(&qm->pdev->dev, "failed to register %s (%d)!\n",
-				ecdh_curves[i].base.cra_name, ret);
+				ecdh_curves[i].base.base.cra_name, ret);
 			goto unreg_kpp;
 		}
 	}
@@ -1828,7 +1970,7 @@ static int hpre_register_ecdh(struct hisi_qm *qm)
 
 unreg_kpp:
 	for (--i; i >= 0; --i)
-		crypto_unregister_kpp(&ecdh_curves[i]);
+		crypto_engine_unregister_kpp(&ecdh_curves[i]);
 
 	return ret;
 }
@@ -1841,17 +1983,76 @@ static void hpre_unregister_ecdh(struct hisi_qm *qm)
 		return;
 
 	for (i = ARRAY_SIZE(ecdh_curves) - 1; i >= 0; --i)
-		crypto_unregister_kpp(&ecdh_curves[i]);
+		crypto_engine_unregister_kpp(&ecdh_curves[i]);
+}
+
+static void hpre_free_crypto_engine(struct hisi_qm *qm)
+{
+	struct hpre *hpre = container_of(qm, struct hpre, qm);
+	u32 i;
+
+	for (i = 0; i < hpre->engine_num; i++) {
+		if (hpre->engine[i])
+			crypto_engine_exit(hpre->engine[i]);
+	}
+
+	hpre->engine_num = 0;
+}
+
+static int hpre_alloc_crypto_engine(struct hisi_qm *qm)
+{
+	u32 engine_num = min_t(u32, qm->qp_num, HPRE_MAX_CRYPTO_ENGINE);
+	struct hpre *hpre = container_of(qm, struct hpre, qm);
+	struct device *dev = &qm->pdev->dev;
+	u16 qlen = qm->qp_array[0].sq_depth;
+	int ret;
+	u32 i;
+
+	for (i = 0; i < engine_num; i++) {
+		hpre->engine[i] =
+			crypto_engine_alloc_init_and_set(dev, true,
+							 false, qlen);
+		if (!hpre->engine[i]) {
+			dev_err(dev, "failed to alloc crypto engine.\n");
+			ret = -ENOMEM;
+			goto free_engine;
+		}
+
+		ret = crypto_engine_start(hpre->engine[i]);
+		if (ret) {
+			dev_err(dev, "failed to start crypto engine.\n");
+			crypto_engine_exit(hpre->engine[i]);
+			hpre->engine[i] = NULL;
+			goto free_engine;
+		}
+	}
+
+	hpre->engine_num = engine_num;
+
+	return 0;
+
+free_engine:
+	for (i = 0; i < engine_num; i++) {
+		if (hpre->engine[i])
+			crypto_engine_exit(hpre->engine[i]);
+	}
+
+	return ret;
 }
 
 int hpre_algs_register(struct hisi_qm *qm)
 {
-	int ret = 0;
+	int ret;
+
+	ret = hpre_alloc_crypto_engine(qm);
+	if (ret)
+		return ret;
 
 	mutex_lock(&hpre_algs_lock);
 	if (hpre_available_devs) {
 		hpre_available_devs++;
-		goto unlock;
+		mutex_unlock(&hpre_algs_lock);
+		return 0;
 	}
 
 	ret = hpre_register_rsa(qm);
@@ -1877,6 +2078,8 @@ unreg_rsa:
 	hpre_unregister_rsa(qm);
 unlock:
 	mutex_unlock(&hpre_algs_lock);
+	hpre_free_crypto_engine(qm);
+
 	return ret;
 }
 
@@ -1892,4 +2095,5 @@ void hpre_algs_unregister(struct hisi_qm *qm)
 
 unlock:
 	mutex_unlock(&hpre_algs_lock);
+	hpre_free_crypto_engine(qm);
 }
