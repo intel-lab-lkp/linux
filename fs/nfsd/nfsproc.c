@@ -601,6 +601,9 @@ static __be32 nfsd_proc_read(struct svc_rqst *rqstp)
 		if (resp->status == nfs_ok)
 			nfsd_stat_to_fattr(rqstp, &resok->attributes, &stat,
 					   fhp);
+		else
+			/* A spliced payload is already in rq_res */
+			rqstp->rq_res.page_len = 0;
 	}
 	if (resp->status == nfserr_jukebox)
 		set_bit(RQ_DROPME, &rqstp->rq_flags);
