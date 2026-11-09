@@ -326,6 +326,8 @@ static DEFINE_SPINLOCK(swap_lock);
 static unsigned int nr_swapfiles;
 atomic_long_t nr_swap_pages;
 atomic_t nr_real_swapfiles;
+/* Active xswap devices, as in nr_real_swapfiles. */
+static atomic_t nr_xswap_files;
 /*
  * Some modules use swappable objects and may try to swap them out under
  * memory pressure (via the shrinker). Before doing so, they may wish to
@@ -1519,7 +1521,9 @@ static void del_from_avail_list(struct swap_info_struct *si, bool swapoff)
 		lockdep_assert_held(&si->lock);
 		si->flags &= ~SWP_WRITEOK;
 		/* Count active devices, not merely those on the avail list. */
-		if (!(si->flags & SWP_XSWAP))
+		if (si->flags & SWP_XSWAP)
+			atomic_sub(1, &nr_xswap_files);
+		else
 			atomic_sub(1, &nr_real_swapfiles);
 		atomic_long_or(SWAP_USAGE_OFFLIST_BIT, &si->inuse_pages);
 	} else {
@@ -1558,7 +1562,9 @@ static void add_to_avail_list(struct swap_info_struct *si, bool swapon)
 		 * Count the device here, not after adding it to the list: a
 		 * full device is still active and skips the add below.
 		 */
-		if (!(si->flags & SWP_XSWAP))
+		if (si->flags & SWP_XSWAP)
+			atomic_add(1, &nr_xswap_files);
+		else
 			atomic_add(1, &nr_real_swapfiles);
 	} else {
 		if (!(READ_ONCE(si->flags) & SWP_WRITEOK))
@@ -1682,7 +1688,7 @@ static bool get_swap_device_info(struct swap_info_struct *si)
  * Fast path try to get swap entries with specified order from current
  * CPU's swap entry pool (a cluster).
  */
-static bool swap_alloc_fast(struct folio *folio)
+static bool swap_alloc_fast(struct folio *folio, bool may_zswap)
 {
 	unsigned int order = folio_order(folio);
 	struct swap_cluster_info *ci;
@@ -1722,6 +1728,11 @@ static bool swap_alloc_fast(struct folio *folio)
 		}
 	}
 #endif
+	if (!may_zswap && (si->flags & SWP_XSWAP)) {
+		put_swap_device(si);
+		rcu_read_unlock();
+		return false;
+	}
 
 	ci = swap_cluster_lock(si, offset);
 	if (cluster_is_usable(ci, order)) {
@@ -1738,13 +1749,19 @@ static bool swap_alloc_fast(struct folio *folio)
 }
 
 /* Rotate the device and switch to a new cluster */
-static void swap_alloc_slow(struct folio *folio)
+static void swap_alloc_slow(struct folio *folio, bool may_zswap)
 {
 	struct swap_info_struct *si, *next;
 
 	spin_lock(&swap_avail_lock);
 start_over:
 	plist_for_each_entry_safe(si, next, &swap_avail_head, avail_list) {
+		/*
+		 * Do not rotate a skipped device: the walk follows the
+		 * rotation and would spin forever.
+		 */
+		if (!may_zswap && (si->flags & SWP_XSWAP))
+			continue;
 		/* Rotate the device and switch to a new cluster */
 		plist_requeue(&si->avail_list, &swap_avail_head);
 		spin_unlock(&swap_avail_lock);
@@ -2067,6 +2084,17 @@ failed:
 	return err;
 }
 
+/* Can the folio's cgroup take another zswap page? */
+static bool folio_may_zswap(struct folio *folio)
+{
+	struct obj_cgroup *objcg = get_obj_cgroup_from_folio(folio);
+	bool may_zswap = !objcg || obj_cgroup_may_zswap(objcg);
+
+	if (objcg)
+		obj_cgroup_put(objcg);
+	return may_zswap;
+}
+
 /**
  * folio_alloc_swap - allocate swap space for a folio
  * @folio: folio we want to move to swap
@@ -2083,9 +2111,22 @@ int folio_alloc_swap(struct folio *folio)
 {
 	unsigned int order = folio_order(folio);
 	unsigned int size = 1 << order;
+	/* True unless the gate below finds an xswap device to route away from. */
+	bool may_zswap = true;
+	bool zswap_checked = false;
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 	VM_BUG_ON_FOLIO(!folio_test_uptodate(folio), folio);
+
+	/*
+	 * A folio that zswap will not take must not get an xswap slot. With
+	 * no xswap device to route away from, skip the lookup; a device that
+	 * appears before we pick one is handled after the allocation.
+	 */
+	if (atomic_read(&nr_xswap_files)) {
+		may_zswap = folio_may_zswap(folio);
+		zswap_checked = true;
+	}
 
 	if (order) {
 		/*
@@ -2107,13 +2148,29 @@ int folio_alloc_swap(struct folio *folio)
 
 again:
 	local_lock(&percpu_swap_cluster.lock);
-	if (!swap_alloc_fast(folio))
-		swap_alloc_slow(folio);
+	if (!swap_alloc_fast(folio, may_zswap))
+		swap_alloc_slow(folio, may_zswap);
 	local_unlock(&percpu_swap_cluster.lock);
 
 	if (!order && unlikely(!folio_test_swapcache(folio))) {
 		if (swap_sync_discard())
 			goto again;
+	}
+
+	/*
+	 * The xswap gate was skipped because there was no device when we
+	 * looked. One may have appeared since; check before keeping the
+	 * xswap slot the allocator may have picked.
+	 */
+	if (unlikely(!zswap_checked && atomic_read(&nr_xswap_files) &&
+		     folio_test_swapcache(folio) &&
+		     (__swap_entry_to_info(folio->swap)->flags & SWP_XSWAP))) {
+		zswap_checked = true;
+		may_zswap = folio_may_zswap(folio);
+		if (!may_zswap) {
+			swap_cache_del_folio(folio);
+			goto again;
+		}
 	}
 
 	/* Need to call this even if allocation failed, for MEMCG_SWAP_FAIL. */
