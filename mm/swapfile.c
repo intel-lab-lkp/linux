@@ -3736,10 +3736,17 @@ out_dput:
  */
 static int swap_info_remove(struct swap_info_struct *p)
 {
-	if (!security_vm_enough_memory_mm(current->mm, p->pages))
-		vm_unacct_memory(p->pages);
-	else
-		return -ENOMEM;
+	/*
+	 * The device's pages are its address space, not backing storage.
+	 * The commit limit it added may have been committed against, so
+	 * skip the probe until the limit stops counting that space.
+	 */
+	if (!(p->flags & SWP_XSWAP)) {
+		if (!security_vm_enough_memory_mm(current->mm, p->pages))
+			vm_unacct_memory(p->pages);
+		else
+			return -ENOMEM;
+	}
 
 	spin_lock(&p->lock);
 	del_from_avail_list(p, true);
