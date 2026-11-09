@@ -219,6 +219,10 @@ Tracing:
       nfsd_read_dio_pages_in_use  an earlier operation in the same
                                   COMPOUND already put data in the
                                   reply's pages
+      nfsd_read_dio_head_full     an NFSv4 READ whose offset is not a
+                                  multiple of four bytes, when the
+                                  reply's head has no room for the
+                                  payload's XDR pad
       nfsd_read_dio_not_last_op   an NFSv4 READ that is not the last
                                   operation of its COMPOUND
 
