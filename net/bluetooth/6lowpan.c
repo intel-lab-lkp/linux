@@ -1019,7 +1019,7 @@ static int get_l2cap_conn(char *buf, bdaddr_t *addr, u8 *addr_type,
 		return -ENOENT;
 	}
 
-	lockdep_assert_held(&hcon->hdev->lock);
+	lockdep_assume_ctx_held(&hcon->hdev->lock);
 
 	*conn = l2cap_conn_hold_unless_zero(hcon->l2cap_data);
 

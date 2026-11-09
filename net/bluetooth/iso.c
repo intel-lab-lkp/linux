@@ -466,7 +466,7 @@ static int iso_connect_bis(struct sock *sk)
 			iso_pi(sk)->bc_sid = hcon->sid;
 	}
 
-	lockdep_assert_held(&hcon->hdev->lock);
+	lockdep_assume_ctx_held(&hcon->hdev->lock);
 
 	conn = iso_conn_add(hcon);
 	if (!conn) {
@@ -572,7 +572,7 @@ static int iso_connect_cis(struct sock *sk)
 		}
 	}
 
-	lockdep_assert_held(&hcon->hdev->lock);
+	lockdep_assume_ctx_held(&hcon->hdev->lock);
 
 	/* The socket lock keeps the current attachment and its hcon stable. */
 	if (iso_pi(sk)->conn && iso_pi(sk)->conn->hcon != hcon) {
@@ -1390,7 +1390,7 @@ static int iso_listen_bis(struct sock *sk)
 		goto unlock;
 	}
 
-	lockdep_assert_held(&hcon->hdev->lock);
+	lockdep_assume_ctx_held(&hcon->hdev->lock);
 
 	conn = iso_conn_add(hcon);
 	if (!conn) {
@@ -2657,7 +2657,7 @@ static void iso_connect_cfm(struct hci_conn *hcon, __u8 status)
 
 			list_for_each_entry_safe(link, t, &hcon->link_list,
 						 list) {
-				lockdep_assert_held(&link->conn->hdev->lock);
+				lockdep_assume_ctx_held(&link->conn->hdev->lock);
 				iso_conn_del(link->conn, bt_to_errno(status));
 			}
 

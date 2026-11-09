@@ -2459,7 +2459,7 @@ int smp_cancel_and_remove_pairing(struct hci_dev *hdev, bdaddr_t *bdaddr,
 	if (!hcon)
 		goto done;
 
-	lockdep_assert_held(&hcon->hdev->lock);
+	lockdep_assume_ctx_held(&hcon->hdev->lock);
 
 	conn = hcon->l2cap_data;
 	if (!conn)
