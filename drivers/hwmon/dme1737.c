@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/string_choices.h>
 #include <linux/jiffies.h>
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
@@ -2314,13 +2315,13 @@ static int dme1737_init_device(struct device *dev)
 
 	dev_info(dev,
 		 "Optional features: pwm3=%s, pwm5=%s, pwm6=%s, fan3=%s, fan4=%s, fan5=%s, fan6=%s.\n",
-		 (data->has_features & HAS_PWM(2)) ? "yes" : "no",
-		 (data->has_features & HAS_PWM(4)) ? "yes" : "no",
-		 (data->has_features & HAS_PWM(5)) ? "yes" : "no",
-		 (data->has_features & HAS_FAN(2)) ? "yes" : "no",
-		 (data->has_features & HAS_FAN(3)) ? "yes" : "no",
-		 (data->has_features & HAS_FAN(4)) ? "yes" : "no",
-		 (data->has_features & HAS_FAN(5)) ? "yes" : "no");
+		 str_yes_no(data->has_features & HAS_PWM(2)),
+		 str_yes_no(data->has_features & HAS_PWM(4)),
+		 str_yes_no(data->has_features & HAS_PWM(5)),
+		 str_yes_no(data->has_features & HAS_FAN(2)),
+		 str_yes_no(data->has_features & HAS_FAN(3)),
+		 str_yes_no(data->has_features & HAS_FAN(4)),
+		 str_yes_no(data->has_features & HAS_FAN(5)));
 
 	reg = dme1737_read(data, DME1737_REG_TACH_PWM);
 	/* Inform if fan-to-pwm mapping differs from the default */
