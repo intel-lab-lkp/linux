@@ -247,6 +247,7 @@ struct swap_info_struct {
 	u64			xswap_id;	/* stable id, shown to userspace */
 	unsigned long		nr_clusters_max;/* total clusters in the xswap address space */
 	unsigned long		nr_clusters_mapped; /* currently mapped cluster count */
+	struct work_struct	xswap_shrink_work; /* deferred shrink trigger */
 	struct mutex		xswap_lock;	/* serialize map/unmap operations */
 	struct dentry		*xswap_debugfs;	/* mapped range and counters */
 	atomic_long_t		xswap_grows;	/* grow operations so far */
