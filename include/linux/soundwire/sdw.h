@@ -289,8 +289,8 @@ struct sdw_dp0_prop {
  * @ch_prep_timeout: Port-specific timeout value, in milliseconds
  * @imp_def_interrupts: If set, each bit corresponds to support for
  * implementation-defined interrupts
- * @max_ch: Maximum channels supported
- * @min_ch: Minimum channels supported
+ * @max_ch: Index of the maximum channel supported
+ * @min_ch: Index of the minimum channel supported
  * @num_channels: Number of discrete channels supported
  * @num_ch_combinations: Number of channel combinations supported
  * @channels: Discrete channels supported
