@@ -223,6 +223,10 @@ Tracing:
                                   multiple of four bytes, when the
                                   reply's head has no room for the
                                   payload's XDR pad
+      nfsd_read_dio_reply_full    an NFSv4 READ whose offset is a
+                                  multiple of four bytes, when its
+                                  payload and alignment pad would not
+                                  fit in the reply's pages
       nfsd_read_dio_not_last_op   an NFSv4 READ that is not the last
                                   operation of its COMPOUND
 
