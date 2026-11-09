@@ -95,11 +95,10 @@ u32 bnx2x_send_unload_req(struct bnx2x *bp, int unload_mode);
 void bnx2x_send_unload_done(struct bnx2x *bp, bool keep_link);
 
 /**
- * bnx2x_config_rss_pf - configure RSS parameters in a PF.
+ * bnx2x_rss() - configure RSS parameters.
  *
  * @bp:			driver handle
  * @rss_obj:		RSS object to use
- * @ind_table:		indirection table to configure
  * @config_hash:	re-configure RSS hash keys configuration
  * @enable:		enabled or disabled configuration
  */
