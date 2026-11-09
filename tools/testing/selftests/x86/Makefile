@@ -20,7 +20,7 @@ TARGETS_C_32BIT_ONLY := entry_from_vm86 test_syscall_vdso unwind_vdso \
 			vdso_restorer
 TARGETS_C_64BIT_ONLY := fsgsbase sysret_rip syscall_numbering \
 			corrupt_xstate_header amx lam test_shadow_stack avx apx \
-			sigframe_fpu_portability
+			sigframe_fpu_portability test_shadow_stack test_shadow_stack_prctl
 # Some selftests require 32bit support enabled also on 64bit systems
 TARGETS_C_32BIT_NEEDED := ldt_gdt ptrace_syscall
 
@@ -128,6 +128,8 @@ $(eval $(call extra-files,sysret_rip_64,clang_helpers_64.S))
 $(eval $(call extra-files,amx_64,xstate.c))
 $(eval $(call extra-files,avx_64,xstate.c))
 $(eval $(call extra-files,apx_64,xstate.c))
+$(eval $(call extra-files,test_shadow_stack_64,shadow_stack.c shadow_stack.h))
+$(eval $(call extra-files,test_shadow_stack_prctl_64,shadow_stack.c shadow_stack.h))
 
 # check_initial_reg_state is special: it needs a custom entry, and it
 # needs to be static so that its interpreter doesn't destroy its initial
