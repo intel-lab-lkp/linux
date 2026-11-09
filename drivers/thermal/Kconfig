@@ -522,6 +522,7 @@ config LOONGSON2_THERMAL
 	tristate "Loongson-2 SoC series thermal driver"
 	depends on LOONGARCH || COMPILE_TEST
 	depends on OF
+	depends on MFD_SYSCON
 	help
 	  Support for Thermal driver found on Loongson-2 SoC series platforms.
 	  The thermal driver realizes get_temp and set_trips function, which
