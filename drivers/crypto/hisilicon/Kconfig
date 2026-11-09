@@ -45,6 +45,7 @@ config CRYPTO_DEV_HISI_ZIP
 	select CRYPTO_DEV_HISI_QM
 	select CRYPTO_DEFLATE
 	select CRYPTO_LZ4
+	select CRYPTO_ENGINE
 	help
 	  Support for HiSilicon ZIP Driver
 

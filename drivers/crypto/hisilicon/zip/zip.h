@@ -8,6 +8,9 @@
 
 #include <linux/list.h>
 #include <linux/hisi_acc_qm.h>
+#include <crypto/engine.h>
+
+#define HZIP_MAX_CRYPTO_ENGINE	64
 
 enum hisi_zip_error_type {
 	/* negative compression */
@@ -27,6 +30,8 @@ struct hisi_zip {
 	struct hisi_qm qm;
 	struct hisi_zip_ctrl *ctrl;
 	struct hisi_zip_dfx dfx;
+	struct crypto_engine *engine[HZIP_MAX_CRYPTO_ENGINE];
+	u32 engine_num;
 };
 
 struct hisi_zip_sqe {
