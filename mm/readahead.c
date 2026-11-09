@@ -491,6 +491,8 @@ void page_cache_ra_order(struct readahead_control *ractl,
 	int err = 0;
 	gfp_t gfp = readahead_gfp_mask(mapping);
 	unsigned int new_order = ra->order;
+	bool align_end = false;
+	unsigned long last_nr = 0;
 
 	trace_page_cache_ra_order(mapping->host, start, ra);
 	if (!mapping_large_folio_support(mapping)) {
@@ -501,6 +503,8 @@ void page_cache_ra_order(struct readahead_control *ractl,
 	if (limit > index + ra->size - 1) {
 		limit = index + ra->size - 1;
 		mark = index + ra->size - ra->async_size;
+		/* Only a window that ends before EOF may be cut short */
+		align_end = ractl->_align_end;
 	} else {
 		/* We've reached the end, so don't set a readahead marker. */
 		mark = ULONG_MAX;
@@ -529,6 +533,19 @@ void page_cache_ra_order(struct readahead_control *ractl,
 		/* Align with smaller pages if needed */
 		if (index & ((1UL << order) - 1))
 			order = __ffs(index);
+		/*
+		 * The caller lets us cut the window short. Stop at the
+		 * first folio that does not fit before the window end,
+		 * once the rest of the window is no larger than the folio
+		 * added last. The next window then starts on a boundary
+		 * of that folio.
+		 */
+		if (align_end && index + (1UL << order) - 1 > limit &&
+		    limit - index < last_nr) {
+			ra->size = index - start;
+			ra->async_size = min(ra->async_size, ra->size);
+			break;
+		}
 		/* Don't allocate pages past EOF */
 		while (order > min_order && index + (1UL << order) - 1 > limit)
 			order--;
@@ -536,6 +553,7 @@ void page_cache_ra_order(struct readahead_control *ractl,
 		if (err)
 			break;
 		index += 1UL << order;
+		last_nr = 1UL << order;
 	}
 
 	read_pages(ractl);
@@ -656,7 +674,7 @@ void page_cache_async_ra(struct readahead_control *ractl,
 	unsigned long max_pages;
 	struct file_ra_state *ra = ractl->ra;
 	pgoff_t index = readahead_index(ractl);
-	pgoff_t expected, start, end, aligned_end, align;
+	pgoff_t expected, start;
 
 	/* no readahead */
 	if (!ra->ra_pages)
@@ -710,13 +728,9 @@ void page_cache_async_ra(struct readahead_control *ractl,
 	ra->size = get_next_ra_size(ra, max_pages);
 readit:
 	ra->order += 2;
-	align = 1UL << min(ra->order, ffs(max_pages) - 1);
-	end = ra->start + ra->size;
-	aligned_end = round_down(end, align);
-	if (aligned_end > ra->start)
-		ra->size -= end - aligned_end;
 	ra->async_size = ra->size;
 	ractl->_index = ra->start;
+	ractl->_align_end = true;
 	page_cache_ra_order(ractl, ra);
 }
 EXPORT_SYMBOL_GPL(page_cache_async_ra);
