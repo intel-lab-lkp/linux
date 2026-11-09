@@ -246,9 +246,6 @@ unregister_dev:
 	return NULL;
 
 put_dev:
-	mutex_lock(&iscsi_ep_idr_mutex);
-	idr_remove(&iscsi_ep_idr, id);
-	mutex_unlock(&iscsi_ep_idr_mutex);
 	put_device(&ep->dev);
 	return NULL;
 free_ep:
