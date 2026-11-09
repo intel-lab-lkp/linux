@@ -11,6 +11,7 @@
 
 #include "bcma_private.h"
 #include <linux/export.h>
+#include <linux/math64.h>
 #include <linux/bcma/bcma.h>
 
 u32 bcma_chipco_pll_read(struct bcma_drv_cc *cc, u32 offset)
@@ -145,6 +146,78 @@ static void bcma_pmu2_pll_init0(struct bcma_drv_cc *cc, u32 xtalfreq)
 	/* TODO: Do we need to update OTP? */
 }
 
+static void bcma_pmu_4360_pll_init(struct bcma_drv_cc *cc)
+{
+	struct bcma_bus *bus = cc->core->bus;
+	const u32 xtal_hz = 40000000, vco_hz = 960009800;
+	u32 ctl2;
+
+	if (bus->chipinfo.rev < 3)
+		return;
+	/* The backplane may be running from the BBPLL. */
+	if (bcma_cc_read32(cc, BCMA_CLKCTLST) & BCMA_CLKCTLST_HAVEHT)
+		return;
+	if (bcma_pmu_get_alp_clock(cc) != xtal_hz) {
+		bcma_warn(bus, "No 40 MHz crystal, BBPLL left as is\n");
+		return;
+	}
+
+	ctl2 = (vco_hz / xtal_hz) << BCMA_CC_PMU4360_NDIV_INT_SHIFT |
+	       BCMA_CC_PMU4360_NDIV_MODE_FRAC << BCMA_CC_PMU4360_NDIV_MODE_SHIFT |
+	       1 << BCMA_CC_PMU4360_P1DIV_SHIFT;
+	bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL2, ctl2);
+	bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL3,
+			      div_u64((u64)(vco_hz % xtal_hz) << 24, xtal_hz));
+	bcma_pmu_set32(cc, BCMA_CC_PMU_CTL, BCMA_CC_PMU_CTL_PLL_UPD);
+}
+
+/* Up/down times of resources 0-8 on chip rev 4 and later */
+static const u32 bcma_pmu_4360b1_res_updown[] = {
+	0x00000001, 0x00000001, 0x00000001, 0x00000001, 0x00860002,
+	0x00000000, 0x00020001, 0x00080001, 0x00000000,
+};
+
+static void bcma_pmu_4360_resources_init(struct bcma_drv_cc *cc,
+					 u32 *min_msk, u32 *max_msk)
+{
+	u8 rev = cc->core->bus->chipinfo.rev;
+	bool init_mode0 = cc->status & BCMA_CC_CHIPST_4360_RSRC_INIT_MODE0;
+	unsigned int i;
+
+	if (rev < 4) {
+		bcma_pmu_write32(cc, BCMA_CC_PMU_RES_TABSEL, 6);
+		bcma_pmu_write32(cc, BCMA_CC_PMU_RES_UPDNTM, 0x00200001);
+	} else {
+		for (i = 0; i < ARRAY_SIZE(bcma_pmu_4360b1_res_updown); i++) {
+			bcma_pmu_write32(cc, BCMA_CC_PMU_RES_TABSEL, i);
+			bcma_pmu_write32(cc, BCMA_CC_PMU_RES_UPDNTM,
+					 bcma_pmu_4360b1_res_updown[i]);
+		}
+		*min_msk = 0x103;
+		/* The max mask must cover the min mask before it is written. */
+		bcma_pmu_set32(cc, BCMA_CC_PMU_MAXRES_MSK, *min_msk);
+	}
+
+	if (init_mode0)
+		return;
+
+	if (rev < 4) {
+		bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL6, 0x09048562);
+		bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL14, 0x09048562);
+	} else {
+		bcma_chipco_chipctl_maskset(cc, 1, ~0,
+					    BCMA_CHIPCTL1_4360_REFCLK_EN);
+		bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL6, 0x080004e2);
+		bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL7, 0xe);
+		bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL14, 0x080004e2);
+		bcma_chipco_pll_write(cc, BCMA_CC_PMU_PLL_CTL15, 0xe);
+	}
+	bcma_pmu_set32(cc, BCMA_CC_PMU_CTL, BCMA_CC_PMU_CTL_PLL_UPD);
+
+	if (rev >= 3)
+		*max_msk = 0x1ff;
+}
+
 static void bcma_pmu_pll_init(struct bcma_drv_cc *cc)
 {
 	struct bcma_bus *bus = cc->core->bus;
@@ -155,6 +228,10 @@ static void bcma_pmu_pll_init(struct bcma_drv_cc *cc)
 		if (xtalfreq == 0)
 			xtalfreq = 20000;
 		bcma_pmu2_pll_init0(cc, xtalfreq);
+		break;
+	case BCMA_CHIP_ID_BCM4352:
+	case BCMA_CHIP_ID_BCM4360:
+		bcma_pmu_4360_pll_init(cc);
 		break;
 	}
 }
@@ -187,6 +264,10 @@ static void bcma_pmu_resources_init(struct bcma_drv_cc *cc)
 			  BCMA_RES_4314_MACPHY_RET |
 			  BCMA_RES_4314_WL_CORE_READY;
 		max_msk = 0x3FFFFFFF;
+		break;
+	case BCMA_CHIP_ID_BCM4352:
+	case BCMA_CHIP_ID_BCM4360:
+		bcma_pmu_4360_resources_init(cc, &min_msk, &max_msk);
 		break;
 	default:
 		bcma_debug(bus, "PMU resource config unknown or not needed for device 0x%04X\n",
