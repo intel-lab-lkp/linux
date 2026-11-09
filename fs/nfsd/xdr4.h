@@ -853,6 +853,37 @@ bool nfsd4_mach_creds_match(struct nfs4_client *cl, struct svc_rqst *rqstp);
 bool nfs4svc_decode_compoundargs(struct svc_rqst *rqstp, struct xdr_stream *xdr);
 bool nfs4svc_encode_compoundres(struct svc_rqst *rqstp, struct xdr_stream *xdr);
 __be32 nfsd4_check_resp_size(struct nfsd4_compoundres *, u32);
+
+/**
+ * nfsd4_reply_buflen_with_pad - Reply buflen once a pad is in the pages
+ * @rqstp: RPC transaction
+ * @pad: bytes a direct READ skips at the front of the Reply pages
+ *
+ * rq_res.buflen bounds rq_res.len, and len never counts the pad a direct
+ * READ leaves at the front of its payload, yet the pad occupies Reply pages.
+ * Once the pad is in place, buflen has to leave room for it in the page
+ * array. A session's maxresp_sz bound on buflen is a wire-byte budget that
+ * the pad does not consume, so a buflen below the page array's size is left
+ * alone.
+ *
+ * The auth slack comes off the page array as well: the security
+ * flavor restores it to buflen after the Reply is encoded, and that
+ * restored space has to be pages the pad does not already occupy.
+ *
+ * Context: Any context.
+ *
+ * Return: the page array's size less @pad and the auth slack, or the
+ * current buflen when that is smaller.
+ */
+static inline unsigned int nfsd4_reply_buflen_with_pad(struct svc_rqst *rqstp,
+						       unsigned int pad)
+{
+	const struct xdr_buf *buf = &rqstp->rq_res;
+	s64 pages = (s64)PAGE_SIZE * (rqstp->rq_page_end - buf->pages) -
+		    pad - rqstp->rq_auth_slack;
+
+	return min_t(s64, buf->buflen, max_t(s64, pages, 0));
+}
 void nfsd4_encode_operation(struct nfsd4_compoundres *, struct nfsd4_op *);
 void nfsd4_encode_replay(struct xdr_stream *xdr, struct nfsd4_op *op);
 __be32 nfsd4_encode_fattr_to_buf(__be32 **p, int words,

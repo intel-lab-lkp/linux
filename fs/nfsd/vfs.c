@@ -1321,9 +1321,9 @@ int nfsd_write_io_mode(struct svc_export *exp)
  * offered to the read.
  *
  * A direct read leaves its alignment pad at the front of the pages and
- * records the pad length in @rqstp->rq_res.page_base. The xdr_stream
- * encoder does not account for page_base, so pass @dio_ok false when
- * more XDR items follow the payload in the pages.
+ * records the pad length in @rqstp->rq_res.page_base. A caller whose
+ * reply-space accounting ignores page_base passes @dio_ok false when more
+ * XDR items follow the payload in the pages.
  *
  * Returns nfs_ok on success, otherwise an nfserr stat value is
  * returned.
