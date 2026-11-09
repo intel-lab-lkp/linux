@@ -1316,8 +1316,8 @@ int nfsd_write_io_mode(struct svc_export *exp)
  *
  * Some filesystems or situations cannot use nfsd_splice_read. This
  * function is the slightly less-performant fallback for those cases.
- * File data lands in @rqstp->rq_res.pages at the offset .page_len
- * records. On return, @rqstp->rq_next_page points past the last page
+ * File data lands in @rqstp->rq_res.pages at offset .page_base +
+ * .page_len. On return, @rqstp->rq_next_page points past the last page
  * offered to the read.
  *
  * A direct read leaves its alignment pad at the front of the pages and
@@ -1333,8 +1333,9 @@ __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		      u32 *eof, bool dio_ok)
 {
 	struct xdr_buf *buf = &rqstp->rq_res;
-	struct page **page = buf->pages + (buf->page_len >> PAGE_SHIFT);
-	unsigned int base = buf->page_len & ~PAGE_MASK;
+	unsigned int next = buf->page_base + buf->page_len;
+	struct page **page = buf->pages + (next >> PAGE_SHIFT);
+	unsigned int base = next & ~PAGE_MASK;
 	struct file *file = nf->nf_file;
 	u64 storage_start = nfsd_storage_read_bytes();
 	unsigned long v, total;
