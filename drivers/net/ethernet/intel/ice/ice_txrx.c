@@ -1026,14 +1026,19 @@ payload:
 		if (ice_is_non_eop(rx_ring, rx_desc) || unlikely(!xdp->data))
 			continue;
 
+		/* Account for Rx bytes here, before ice_run_xdp() may free the
+		 * buffer and clear xdp->data; the XDP and skb paths share the
+		 * same length.
+		 */
+		total_rx_bytes += xdp_get_buff_len(&xdp->base);
+		total_rx_pkts++;
+
 		xdp_verdict = ice_run_xdp(rx_ring, xdp, xdp_prog, xdp_ring, rx_desc);
 		if (xdp_verdict == ICE_XDP_PASS)
 			goto construct_skb;
 
 		if (xdp_verdict & (ICE_XDP_TX | ICE_XDP_REDIR))
 			xdp_xmit |= xdp_verdict;
-		total_rx_bytes += xdp_get_buff_len(&xdp->base);
-		total_rx_pkts++;
 
 		xdp->data = NULL;
 		continue;
@@ -1049,18 +1054,12 @@ construct_skb:
 			continue;
 		}
 
-		/* probably a little skewed due to removing CRC */
-		total_rx_bytes += skb->len;
-
 		/* populate checksum, VLAN, and protocol */
 		ice_process_skb_fields(rx_ring, rx_desc, skb);
 
 		ice_trace(clean_rx_irq_indicate, rx_ring, rx_desc, skb);
 		/* send completed skb up the stack */
 		napi_gro_receive(&rx_ring->q_vector->napi, skb);
-
-		/* update budget accounting */
-		total_rx_pkts++;
 	}
 
 	rx_ring->next_to_clean = ntc;
