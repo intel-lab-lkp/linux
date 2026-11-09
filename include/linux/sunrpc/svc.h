@@ -690,12 +690,14 @@ static inline bool svcxdr_decode_opaque_payload(struct xdr_stream *xdr,
 }
 
 /**
- * svcxdr_set_auth_slack -
+ * svcxdr_set_auth_slack - Set aside space for the security flavor's trailer
  * @rqstp: RPC transaction
  * @slack: buffer space to reserve for the transaction's security flavor
  *
- * Set the request's slack space requirement, and set aside that much
- * space in the rqstp's rq_res.head for use when the auth wraps the Reply.
+ * Record the slack in @rqstp and take it off rq_res.buflen and the end
+ * of the head, so the Reply leaves room for the flavor's trailer. A
+ * flavor that encodes its trailer through rq_res_stream calls
+ * svcxdr_restore_auth_slack() first to get the space back.
  */
 static inline void svcxdr_set_auth_slack(struct svc_rqst *rqstp, int slack)
 {
@@ -710,6 +712,46 @@ static inline void svcxdr_set_auth_slack(struct svc_rqst *rqstp, int slack)
 
 	WARN_ON(xdr->iov != resv);
 	WARN_ON(xdr->p > xdr->end);
+}
+
+/**
+ * svcxdr_restore_auth_slack - Return the auth slack to the Reply buffer
+ * @rqstp: RPC transaction
+ *
+ * Give back the space svcxdr_set_auth_slack() set aside, so the
+ * security flavor can encode its trailer after the Reply.
+ *
+ * Context: Process context. Call at most once per Reply, after the
+ * Reply has been encoded.
+ */
+static inline void svcxdr_restore_auth_slack(struct svc_rqst *rqstp)
+{
+	struct xdr_stream *xdr = &rqstp->rq_res_stream;
+	struct xdr_buf *buf = &rqstp->rq_res;
+	void *page_end, *end;
+	int left;
+
+	buf->buflen += rqstp->rq_auth_slack;
+
+	/*
+	 * A zero-byte xdr_reserve_space_vec() leaves iov NULL with end == p
+	 * in the head. Extending end here would put the trailer in the head
+	 * but charge it to page_len.
+	 */
+	if (!xdr->iov && !buf->page_len)
+		return;
+
+	/* The head and the tail both sit in the head page */
+	if (xdr->iov) {
+		xdr->end += XDR_QUADLEN(rqstp->rq_auth_slack);
+		return;
+	}
+
+	/* p on a page boundary still belongs to *page_ptr */
+	page_end = page_address(*xdr->page_ptr) + PAGE_SIZE;
+	left = buf->buflen - buf->len;
+	end = (void *)xdr->p + max(left, 0);
+	xdr->end = end < page_end ? end : page_end;
 }
 
 /**

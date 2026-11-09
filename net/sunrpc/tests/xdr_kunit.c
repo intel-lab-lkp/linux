@@ -19,6 +19,7 @@
 struct xdr_test_fixture {
 	/* [0] is the head, then the Reply pages, then the canary */
 	struct page		*respages[XDR_TEST_NPAGES + 2];
+	struct svc_rqst		*rqstp;
 };
 
 static const unsigned int xdr_test_bases[] = {
@@ -77,6 +78,7 @@ static struct xdr_stream *xdr_test_setup(struct kunit *test,
 
 	rqstp = kunit_kzalloc(test, sizeof(*rqstp), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, rqstp);
+	f->rqstp = rqstp;
 	test->priv = f;
 
 	rqstp->rq_page_end = &f->respages[XDR_TEST_NPAGES + 1];
@@ -355,6 +357,123 @@ static void xdr_test_straddle(struct kunit *test)
 	xdr_test_check_stream(test, xdr);
 }
 
+/* Set the auth slack aside as svcauth_gss_accept() does for krb5i */
+static void xdr_test_set_slack(struct kunit *test, struct xdr_stream *xdr)
+{
+	struct xdr_test_fixture *f = test->priv;
+	unsigned int buflen = xdr->buf->buflen;
+	__be32 *end = xdr->end;
+
+	svcxdr_set_auth_slack(f->rqstp, RPC_MAX_AUTH_SIZE);
+	KUNIT_EXPECT_EQ(test, xdr->buf->buflen, buflen - RPC_MAX_AUTH_SIZE);
+	KUNIT_EXPECT_PTR_EQ(test, xdr->end, end - XDR_QUADLEN(RPC_MAX_AUTH_SIZE));
+}
+
+/* Restoring the slack while still in the head gives the head its end back */
+static void xdr_test_restore_slack_head(struct kunit *test)
+{
+	struct xdr_test_fixture *f;
+	struct xdr_stream *xdr;
+	unsigned int buflen;
+	__be32 *end;
+
+	xdr = xdr_test_setup(test, 0);
+	f = test->priv;
+	buflen = xdr->buf->buflen;
+	end = xdr->end;
+
+	xdr_test_set_slack(test, xdr);
+	svcxdr_restore_auth_slack(f->rqstp);
+	KUNIT_EXPECT_EQ(test, xdr->buf->buflen, buflen);
+	KUNIT_EXPECT_PTR_EQ(test, xdr->end, end);
+	KUNIT_EXPECT_PTR_EQ(test, xdr->iov, &xdr->buf->head[0]);
+}
+
+/*
+ * After a zero-byte xdr_reserve_space_vec(), the restore leaves end at p
+ * so the next reserve enters the pages.
+ */
+static void xdr_test_restore_slack_zero_vec(struct kunit *test)
+{
+	unsigned int base = *(const unsigned int *)test->param_value;
+	struct xdr_test_fixture *f;
+	struct xdr_stream *xdr;
+	unsigned int buflen;
+
+	xdr = xdr_test_setup(test, base);
+	f = test->priv;
+	buflen = xdr->buf->buflen;
+
+	xdr_test_set_slack(test, xdr);
+	KUNIT_ASSERT_EQ(test, xdr_reserve_space_vec(xdr, 0), 0);
+	KUNIT_EXPECT_NULL(test, xdr->iov);
+	KUNIT_EXPECT_PTR_EQ(test, xdr->end, xdr->p);
+
+	svcxdr_restore_auth_slack(f->rqstp);
+	KUNIT_EXPECT_EQ(test, xdr->buf->buflen, buflen);
+	KUNIT_EXPECT_PTR_EQ(test, xdr->end, xdr->p);
+
+	xdr_test_encode_two_words(test, xdr);
+	xdr_test_check_two_words(test, xdr->buf, XDR_TEST_HEAD_LEN);
+}
+
+/*
+ * A payload that fills the reduced buflen ends mid-page. The restore
+ * re-seats end so exactly the slack fits after the payload.
+ */
+static void xdr_test_restore_slack_pages(struct kunit *test)
+{
+	unsigned int base = *(const unsigned int *)test->param_value;
+	unsigned int room = XDR_TEST_NPAGES * PAGE_SIZE -
+			    XDR_TEST_HEAD_LEN - base - RPC_MAX_AUTH_SIZE;
+	struct xdr_test_fixture *f;
+	struct xdr_stream *xdr;
+
+	xdr = xdr_test_setup(test, base);
+	f = test->priv;
+
+	xdr_test_set_slack(test, xdr);
+	KUNIT_ASSERT_EQ(test, xdr_reserve_space_vec(xdr, room), 0);
+	KUNIT_EXPECT_NULL(test, xdr_reserve_space(xdr, XDR_UNIT));
+	xdr_test_check_stream(test, xdr);
+
+	svcxdr_restore_auth_slack(f->rqstp);
+	KUNIT_EXPECT_EQ(test, xdr_reserve_space_vec(xdr, RPC_MAX_AUTH_SIZE), 0);
+	KUNIT_EXPECT_EQ(test, xdr->buf->page_len, room + RPC_MAX_AUTH_SIZE);
+	KUNIT_EXPECT_EQ(test, xdr->buf->len, xdr->buf->buflen);
+	KUNIT_EXPECT_NULL(test, xdr_reserve_space(xdr, XDR_UNIT));
+	xdr_test_check_stream(test, xdr);
+}
+
+/*
+ * A payload ending on a page boundary leaves p in the page it fills.
+ * The restore caps end at that page, so the next reserve steps
+ * page_ptr forward rather than writing past the page.
+ */
+static void xdr_test_restore_slack_page_boundary(struct kunit *test)
+{
+	unsigned int base = *(const unsigned int *)test->param_value;
+	unsigned int count = PAGE_SIZE - offset_in_page(base);
+	struct xdr_test_fixture *f;
+	struct xdr_stream *xdr;
+	struct page **page_ptr;
+
+	xdr = xdr_test_setup(test, base);
+	f = test->priv;
+
+	xdr_test_set_slack(test, xdr);
+	KUNIT_ASSERT_EQ(test, xdr_reserve_space_vec(xdr, count), 0);
+	KUNIT_EXPECT_EQ(test, offset_in_page(xdr->p), 0);
+	page_ptr = xdr->page_ptr;
+
+	svcxdr_restore_auth_slack(f->rqstp);
+	KUNIT_EXPECT_PTR_EQ(test, xdr->end, xdr->p);
+
+	xdr_test_encode_two_words(test, xdr);
+	KUNIT_EXPECT_PTR_EQ(test, xdr->page_ptr, page_ptr + 1);
+	xdr_test_check_two_words(test, xdr->buf, XDR_TEST_HEAD_LEN + count);
+}
+
 static struct kunit_case xdr_test_cases[] = {
 	KUNIT_CASE_PARAM(xdr_test_payload, xdr_test_base_gen_params),
 	KUNIT_CASE_PARAM(xdr_test_exact_fit, xdr_test_base_gen_params),
@@ -365,6 +484,13 @@ static struct kunit_case xdr_test_cases[] = {
 	KUNIT_CASE(xdr_test_unaligned_base),
 	KUNIT_CASE_PARAM(xdr_test_second_payload, xdr_test_base_gen_params),
 	KUNIT_CASE(xdr_test_straddle),
+	KUNIT_CASE(xdr_test_restore_slack_head),
+	KUNIT_CASE_PARAM(xdr_test_restore_slack_zero_vec,
+			 xdr_test_base_gen_params),
+	KUNIT_CASE_PARAM(xdr_test_restore_slack_pages,
+			 xdr_test_base_gen_params),
+	KUNIT_CASE_PARAM(xdr_test_restore_slack_page_boundary,
+			 xdr_test_base_gen_params),
 	{}
 };
 
