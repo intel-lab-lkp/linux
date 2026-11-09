@@ -4245,8 +4245,6 @@ void print_irqtrace_events(struct task_struct *curr)
 {
 	const struct irqtrace_events *trace = &curr->irqtrace;
 
-	nbcon_cpu_emergency_enter();
-
 	printk("irq event stamp: %u\n", trace->irq_events);
 	printk("hardirqs last  enabled at (%u): [<%px>] %pS\n",
 		trace->hardirq_enable_event, (void *)trace->hardirq_enable_ip,
@@ -4260,8 +4258,6 @@ void print_irqtrace_events(struct task_struct *curr)
 	printk("softirqs last disabled at (%u): [<%px>] %pS\n",
 		trace->softirq_disable_event, (void *)trace->softirq_disable_ip,
 		(void *)trace->softirq_disable_ip);
-
-	nbcon_cpu_emergency_exit();
 }
 
 static int HARDIRQ_verbose(struct lock_class *class)
@@ -5797,8 +5793,11 @@ static noinstr void check_flags(unsigned long flags)
 	}
 #endif
 
-	if (!debug_locks)
+	if (!debug_locks) {
+		nbcon_cpu_emergency_enter();
 		print_irqtrace_events(current);
+		nbcon_cpu_emergency_exit();
+	}
 
 	instrumentation_end();
 #endif
