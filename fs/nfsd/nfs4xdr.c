@@ -5270,14 +5270,19 @@ static __be32 nfsd4_encode_splice_read(
 	read->rd_length = maxcount;
 	if (nfserr)
 		goto out_err;
-	svcxdr_encode_opaque_pages(read->rd_rqstp, xdr, buf->pages,
-				   buf->page_base, maxcount);
+
+	/*
+	 * Fail before the pages go in: xdr_truncate_encode() in the
+	 * caller warns when it has to drop an XDR pad from the tail.
+	 */
 	status = svc_encode_result_payload(read->rd_rqstp,
 					   buf->head[0].iov_len, maxcount);
 	if (status) {
 		nfserr = nfserrno(status);
 		goto out_err;
 	}
+	svcxdr_encode_opaque_pages(read->rd_rqstp, xdr, buf->pages,
+				   buf->page_base, maxcount);
 
 	/*
 	 * Bound the stream at the space left in the head page so a later
