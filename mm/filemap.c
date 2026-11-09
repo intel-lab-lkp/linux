@@ -3403,8 +3403,33 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 		 * Do we miss much more than hit in this file? If so,
 		 * stop bothering with read-ahead. It will only hurt.
 		 */
-		if (mmap_miss > MMAP_LOTSAMISS)
+		if (mmap_miss > MMAP_LOTSAMISS) {
+			struct folio *prev = NULL;
+
+			/*
+			 * Nothing is read ahead now, so mmap_miss stays high
+			 * forever.  If the previous page is cached, this may be
+			 * a sequential read: read the next page as well and
+			 * mark it, so that async readahead, which does not
+			 * check mmap_miss, restarts when the mark is hit.  The
+			 * pages it reads then count as hits and lower
+			 * mmap_miss.  A random reader rarely has the previous
+			 * page cached and keeps reading one page per fault.
+			 */
+			if (!force_thp_readahead && vmf->pgoff)
+				prev = xa_load(&mapping->i_pages,
+					       vmf->pgoff - 1);
+			if (prev && !xa_is_value(prev)) {
+				fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+				ra->start = vmf->pgoff;
+				ra->size = 2;
+				ra->async_size = 1;
+				ra->order = 0;
+				ractl._index = ra->start;
+				page_cache_ra_order(&ractl, ra);
+			}
 			return fpin;
+		}
 	}
 
 	if (force_thp_readahead) {
