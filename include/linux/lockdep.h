@@ -412,6 +412,60 @@ extern int lockdep_is_held(const void *);
 
 #endif /* !LOCKDEP */
 
+#define _lockdep_assume_ctx_held(var, uniq)				\
+	do {								\
+		__auto_type uniq = (var);				\
+									\
+		__assume_ctx_lock(uniq);				\
+		lockdep_assert_held(uniq);				\
+	} while (0)
+
+/**
+ * lockdep_assume_ctx_held() - assume and verify that a context lock is held
+ * @var: context lock instance pointer
+ *
+ * Instruct the compiler's context analysis to assume that @var is held
+ * exclusively from this point on and verify at runtime with
+ * lockdep_assert_held() that @var is held. Use this macro in code paths
+ * where lock ownership cannot be proven at compile time, e.g. because the
+ * lock is accessed through an alias the analysis cannot resolve or because
+ * a function does not always require the lock, making __must_hold()
+ * inappropriate. @var is evaluated only once.
+ *
+ * @var must point at a lock object that is tracked by lockdep, i.e. that
+ * has a dep_map member. For context locks that are not tracked by lockdep,
+ * e.g. bit spinlocks and the RCU context tokens, use
+ * __assume_ctx_lock() instead.
+ */
+#define lockdep_assume_ctx_held(var)					\
+	_lockdep_assume_ctx_held(var, __UNIQUE_ID(ctx_lock))
+
+#define _lockdep_assume_shared_ctx_held(var, uniq)			\
+	do {								\
+		__auto_type uniq = (var);				\
+									\
+		__assume_shared_ctx_lock(uniq);				\
+		lockdep_assert_held_read(uniq);				\
+	} while (0)
+
+/**
+ * lockdep_assume_shared_ctx_held() - assume and verify shared lock ownership
+ * @var: context lock instance pointer
+ *
+ * Instruct the compiler's context analysis to assume that @var is held with
+ * shared access from this point on and verify at runtime with
+ * lockdep_assert_held_read() that @var is held for reading. Use this macro
+ * for reader-writer locks, e.g. rwlock_t and struct rw_semaphore, in code
+ * paths where shared lock ownership cannot be proven at compile time. @var
+ * is evaluated only once.
+ *
+ * @var must point at a lock object that is tracked by lockdep, i.e. that
+ * has a dep_map member. For context locks that are not tracked by lockdep,
+ * e.g. the RCU context tokens, use __assume_shared_ctx_lock() instead.
+ */
+#define lockdep_assume_shared_ctx_held(var)				\
+	_lockdep_assume_shared_ctx_held(var, __UNIQUE_ID(ctx_lock))
+
 #ifdef CONFIG_PROVE_LOCKING
 void lockdep_set_lock_cmp_fn(struct lockdep_map *, lock_cmp_fn, lock_print_fn);
 
