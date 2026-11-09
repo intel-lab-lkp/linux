@@ -3118,6 +3118,9 @@ restart:
 		msleep(task_delay);
 	}
 
+	/* The mailbox is up, give the next reset a fresh retry budget */
+	adapter->mb_wait_count = 0;
+
 	if (idpf_is_cap_ena(adapter, IDPF_OTHER_CAPS, VIRTCHNL2_CAP_LAN_MEMORY_REGIONS)) {
 		err = idpf_cfg_lan_memory_regions(adapter);
 		if (err) {
