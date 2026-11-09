@@ -18,6 +18,7 @@
 #include <linux/mempool.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
+#include <linux/uaccess.h>
 
 #include <trace/events/block.h>
 
@@ -2781,6 +2782,53 @@ int bdev_report_storage_elements(struct block_device *bdev,
 }
 EXPORT_SYMBOL_GPL(bdev_report_storage_elements);
 
+static int blkdev_ioctl_report_storage_elements(struct block_device *bdev,
+						void __user *argp)
+{
+	struct gendisk *disk = bdev->bd_disk;
+	struct blk_se_report *rep;
+	int ret = 0;
+
+	/*
+	 * Allocate the report header with an array of elements, assuming that
+	 * we need the maximum number of storage elements. In practice, we may
+	 * need less than that, but this potentially unnecessary preallocation
+	 * simplifies the code.
+	 */
+	rep = kzalloc_flex(*rep, elements, disk->nr_storage_elements);
+	if (!rep)
+		return -ENOMEM;
+
+	if (copy_from_user(rep, argp, sizeof(struct blk_se_report))) {
+		ret = -EFAULT;
+		goto free_rep;
+	}
+
+	if (rep->reserved) {
+		ret = -EINVAL;
+		goto free_rep;
+	}
+
+	rep->nr_reported_elements =
+		min(rep->nr_elements, disk->nr_storage_elements);
+	rep->nr_elements = disk->nr_storage_elements;
+
+	if (rep->nr_reported_elements) {
+		ret = bdev_report_storage_elements(bdev, rep->elements,
+						   &rep->nr_reported_elements);
+		if (ret)
+			goto free_rep;
+	}
+
+	if (copy_to_user(argp, rep,
+			struct_size(rep, elements, rep->nr_reported_elements)))
+		ret = -EFAULT;
+
+free_rep:
+	kfree(rep);
+	return ret;
+}
+
 /**
  * bdev_remove_storage_element - Remove (depopulate) a storage element of a
  *				 zoned block device
@@ -2843,6 +2891,62 @@ int bdev_remove_storage_element(struct block_device *bdev,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(bdev_remove_storage_element);
+
+static int blkdev_ioctl_remove_storage_element(struct block_device *bdev,
+					       blk_mode_t mode,
+					       unsigned int __user *argp)
+{
+	unsigned int element_id;
+	int ret;
+
+	/*
+	 * Note: we require an O_EXCL open here so that a user cannot trigger
+	 * a storage element removal from user space under a mounted file system.
+	 * An FS that wants to manage storage element can do so using the
+	 * function bdev_remove_storage_element() from kernel context.
+	 */
+	if (!(mode & BLK_OPEN_EXCL))
+		return -EBADF;
+	if (!(mode & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (bdev_read_only(bdev))
+		return -EPERM;
+
+	if (get_user(element_id, argp))
+		return -EFAULT;
+
+	/*
+	 * Sync the device dirty data, flush the volatile write cache, and
+	 * invalidate all cached data so that reads do not return old data for
+	 * zones that went offline.
+	 * Since a user can only successfully write to sequential zones of a
+	 * zoned devices using direct IOs, the sync should only handle dirty
+	 * data from buffered writes to conventional zones, for devices that
+	 * have such zones.
+	 */
+	ret = sync_blockdev(bdev);
+	if (ret)
+		return ret;
+
+	inode_lock(bdev->bd_mapping->host);
+	filemap_invalidate_lock(bdev->bd_mapping);
+
+	ret = blkdev_issue_flush(bdev->bd_disk->part0);
+	if (ret)
+		goto unlock;
+
+	ret = truncate_bdev_range(bdev, mode, 0, bdev_nr_bytes(bdev) - 1);
+	if (ret)
+		goto unlock;
+
+	ret = bdev_remove_storage_element(bdev, element_id);
+
+unlock:
+	filemap_invalidate_unlock(bdev->bd_mapping);
+	inode_unlock(bdev->bd_mapping->host);
+
+	return ret;
+}
 
 /**
  * bdev_restore_storage_elements - Restore all depopulated storage elements of
@@ -2909,6 +3013,42 @@ int bdev_restore_storage_elements(struct block_device *bdev)
 }
 EXPORT_SYMBOL_GPL(bdev_restore_storage_elements);
 
+static int blkdev_ioctl_restore_storage_elements(struct block_device *bdev,
+						 blk_mode_t mode)
+{
+	int ret;
+
+	/*
+	 * Note: because restoring storage elements is a destructive operation
+	 * equivalent to reformatting the device, we require an O_EXCL open here
+	 * so that a user cannot trigger with another active user (e.g. a
+	 * mounted file system).
+	 */
+	if (!(mode & BLK_OPEN_EXCL))
+		return -EBADF;
+	if (!(mode & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (bdev_read_only(bdev))
+		return -EPERM;
+
+	inode_lock(bdev->bd_mapping->host);
+	filemap_invalidate_lock(bdev->bd_mapping);
+
+	/*
+	 * Storage element restoration is a destructive operation that will
+	 * reset all zones. So invalidate all cached data that we may have so
+	 * that old data cannot be read once the operation completes.
+	 */
+	ret = truncate_bdev_range(bdev, mode, 0, bdev_nr_bytes(bdev) - 1);
+	if (!ret)
+		ret = bdev_restore_storage_elements(bdev);
+
+	filemap_invalidate_unlock(bdev->bd_mapping);
+	inode_unlock(bdev->bd_mapping->host);
+
+	return ret;
+}
+
 int disk_init_storage_element_mgmt(struct gendisk *disk)
 {
 	int ret;
@@ -2940,4 +3080,27 @@ int disk_init_storage_element_mgmt(struct gendisk *disk)
 		disk->nr_storage_elements = 0;
 
 	return 0;
+}
+
+int blk_ioctl_zone_storage_elements(struct block_device *bdev,
+				    blk_mode_t mode, unsigned int cmd,
+				    void __user *argp)
+{
+	struct gendisk *disk = bdev->bd_disk;
+
+	if (!disk->nr_storage_elements)
+		return -ENOTTY;
+
+	switch (cmd) {
+	case BLKREPORTSTORELEMS:
+		return blkdev_ioctl_report_storage_elements(bdev, argp);
+	case BLKREMOVESTORELEM:
+		return blkdev_ioctl_remove_storage_element(bdev, mode, argp);
+	case BLKRESTORESTORELEMS:
+		return blkdev_ioctl_restore_storage_elements(bdev, mode);
+	default:
+		break;
+	}
+
+	return -ENOTTY;
 }
