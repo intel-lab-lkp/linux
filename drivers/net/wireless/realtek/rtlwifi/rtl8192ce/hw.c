@@ -952,7 +952,7 @@ int rtl92ce_hw_init(struct ieee80211_hw *hw)
 	rtl92c_phy_mac_config(hw);
 	/* because last function modify RCR, so we update
 	 * rcr var here, or TP will unstable for receive_config
-	 * is wrong, RX RCR_ACRC32 will cause TP unstabel & Rx
+	 * is wrong, RX RCR_ACRC32 will cause TP unstable & Rx
 	 * RCR_APP_ICV will cause mac80211 unassoc for cisco 1252*/
 	rtlpci->receive_config = rtl_read_dword(rtlpriv, REG_RCR);
 	rtlpci->receive_config &= ~(RCR_ACRC32 | RCR_AICV);
@@ -1487,22 +1487,9 @@ _rtl92ce_read_txpower_info_from_hwpg(struct ieee80211_hw *hw,
 			rtlefuse->txpwrlevel_ht40_1s[rf_path][i] =
 			    rtlefuse->
 			    eeprom_chnlarea_txpwr_ht40_1s[rf_path][index];
-
-			if ((rtlefuse->
-			     eeprom_chnlarea_txpwr_ht40_1s[rf_path][index] -
-			     rtlefuse->
-			     eprom_chnl_txpwr_ht40_2sdf[rf_path][index])
-			    > 0) {
-				rtlefuse->txpwrlevel_ht40_2s[rf_path][i] =
-				    rtlefuse->
-				    eeprom_chnlarea_txpwr_ht40_1s[rf_path]
-				    [index] -
-				    rtlefuse->
-				    eprom_chnl_txpwr_ht40_2sdf[rf_path]
-				    [index];
-			} else {
-				rtlefuse->txpwrlevel_ht40_2s[rf_path][i] = 0;
-			}
+			rtlefuse->txpwrlevel_ht40_2s[rf_path][i] =
+				max(rtlefuse->eeprom_chnlarea_txpwr_ht40_1s[rf_path][index] -
+				    rtlefuse->eprom_chnl_txpwr_ht40_2sdf[rf_path][index], 0);
 		}
 
 		for (i = 0; i < 14; i++) {

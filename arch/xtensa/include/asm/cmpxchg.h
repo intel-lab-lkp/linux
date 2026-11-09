@@ -11,7 +11,7 @@
 #ifndef _XTENSA_CMPXCHG_H
 #define _XTENSA_CMPXCHG_H
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 #include <linux/bits.h>
 #include <linux/stringify.h>
@@ -76,6 +76,7 @@ __cmpxchg(volatile void *ptr, unsigned long old, unsigned long new, int size)
 {
 	switch (size) {
 	case 1:  return cmpxchg_emu_u8(ptr, old, new);
+	case 2:  return cmpxchg_emu_u16(ptr, old, new);
 	case 4:  return __cmpxchg_u32(ptr, old, new);
 	default: __cmpxchg_called_with_bad_pointer();
 		 return old;
@@ -220,6 +221,6 @@ __arch_xchg(unsigned long x, volatile void * ptr, int size)
 	}
 }
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 #endif /* _XTENSA_CMPXCHG_H */

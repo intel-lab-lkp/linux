@@ -37,6 +37,9 @@ struct svc_xprt_class {
 	struct list_head	xcl_list;
 	u32			xcl_max_payload;
 	int			xcl_ident;
+	u32			xcl_flags;
+/* Set only on classes whose xpo_has_wspace() reads xpt_reserved */
+#define SVC_XPRT_FLAG_WSPACE_RESERVE	BIT(0)
 };
 
 /*
@@ -59,7 +62,7 @@ struct svc_xprt {
 	unsigned long		xpt_flags;
 
 	struct svc_serv		*xpt_server;	/* service for transport */
-	atomic_t    	    	xpt_reserved;	/* space on outq that is rsvd */
+	atomic_t		xpt_reserved;	/* outq space rsvd, UDP only */
 	atomic_t		xpt_nr_rqsts;	/* Number of requests */
 	struct mutex		xpt_mutex;	/* to serialize sending data */
 	spinlock_t		xpt_lock;	/* protects sk_deferred
@@ -103,6 +106,9 @@ enum {
 	XPT_PEER_VALID,		/* peer has presented a filehandle that
 				 * it has access to.  It is NOT counted
 				 * in ->sv_tmpcnt.
+				 */
+	XPT_RPCB_UNREG,		/* transport that needs unregistering
+				 * with rpcbind (TCP, UDP) on destroy
 				 */
 };
 
@@ -165,7 +171,8 @@ int	svc_xprt_create(struct svc_serv *serv, const char *xprt_name,
 			struct net *net, const int family,
 			const unsigned short port, int flags,
 			const struct cred *cred);
-void	svc_xprt_destroy_all(struct svc_serv *serv, struct net *net);
+void	svc_xprt_destroy_all(struct svc_serv *serv, struct net *net,
+			     bool unregister);
 void	svc_xprt_received(struct svc_xprt *xprt);
 void	svc_xprt_enqueue(struct svc_xprt *xprt);
 void	svc_xprt_put(struct svc_xprt *xprt);

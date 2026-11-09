@@ -28,7 +28,6 @@ struct psci_pd_provider {
 };
 
 static LIST_HEAD(psci_pd_providers);
-static bool psci_pd_allow_domain_state;
 
 static int psci_pd_power_off(struct generic_pm_domain *pd)
 {
@@ -37,9 +36,6 @@ static int psci_pd_power_off(struct generic_pm_domain *pd)
 
 	if (!state->data)
 		return 0;
-
-	if (!psci_pd_allow_domain_state)
-		return -EBUSY;
 
 	/* OSI mode is enabled, set the corresponding domain state. */
 	pd_state = state->data;
@@ -59,7 +55,7 @@ static int psci_pd_init(struct device_node *np, bool use_osi)
 	if (!pd)
 		goto out;
 
-	pd_provider = kzalloc(sizeof(*pd_provider), GFP_KERNEL);
+	pd_provider = kzalloc_obj(*pd_provider);
 	if (!pd_provider)
 		goto free_pd;
 
@@ -72,9 +68,8 @@ static int psci_pd_init(struct device_node *np, bool use_osi)
 	 */
 	if (use_osi) {
 		pd->power_off = psci_pd_power_off;
-		pd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
-		if (IS_ENABLED(CONFIG_PREEMPT_RT))
-			pd->flags |= GENPD_FLAG_RPM_ALWAYS_ON;
+		pd->flags |= GENPD_FLAG_ACTIVE_WAKEUP | GENPD_FLAG_POWER_UNKNOWN;
+		pd->state_idx = pd->state_count ? pd->state_count - 1 : 0;
 	} else {
 		pd->flags |= GENPD_FLAG_ALWAYS_ON;
 	}
@@ -82,7 +77,7 @@ static int psci_pd_init(struct device_node *np, bool use_osi)
 	/* Use governor for CPU PM domains if it has some states to manage. */
 	pd_gov = pd->states ? &pm_domain_cpu_gov : NULL;
 
-	ret = pm_genpd_init(pd, pd_gov, false);
+	ret = pm_genpd_init(pd, pd_gov, use_osi);
 	if (ret)
 		goto free_pd_prov;
 
@@ -124,15 +119,6 @@ static void psci_pd_remove(void)
 		list_del(&pd_provider->link);
 		kfree(pd_provider);
 	}
-}
-
-static void psci_cpuidle_domain_sync_state(struct device *dev)
-{
-	/*
-	 * All devices have now been attached/probed to the PM domain topology,
-	 * hence it's fine to allow domain states to be picked.
-	 */
-	psci_pd_allow_domain_state = true;
 }
 
 static const struct of_device_id psci_of_match[] = {
@@ -195,7 +181,6 @@ static struct platform_driver psci_cpuidle_domain_driver = {
 	.driver = {
 		.name = "psci-cpuidle-domain",
 		.of_match_table = psci_of_match,
-		.sync_state = psci_cpuidle_domain_sync_state,
 	},
 };
 

@@ -29,12 +29,19 @@ static int em_text_match(struct sk_buff *skb, struct tcf_ematch *m,
 			 struct tcf_pkt_info *info)
 {
 	struct text_match *tm = EM_TEXT_PRIV(m);
+	unsigned char *ptr;
 	int from, to;
 
-	from = tcf_get_base_ptr(skb, tm->from_layer) - skb->data;
+	ptr = tcf_get_base_ptr(skb, tm->from_layer);
+	if (!ptr)
+		return 0;
+	from = ptr - skb->data;
 	from += tm->from_offset;
 
-	to = tcf_get_base_ptr(skb, tm->to_layer) - skb->data;
+	ptr = tcf_get_base_ptr(skb, tm->to_layer);
+	if (!ptr)
+		return 0;
+	to = ptr - skb->data;
 	to += tm->to_offset;
 
 	return skb_find_text(skb, from, to, tm->config) != UINT_MAX;
@@ -49,6 +56,9 @@ static int em_text_change(struct net *net, void *data, int len,
 	int flags = 0;
 
 	if (len < sizeof(*conf) || len < (sizeof(*conf) + conf->pattern_len))
+		return -EINVAL;
+
+	if (!memchr(conf->algo, '\0', sizeof(conf->algo)))
 		return -EINVAL;
 
 	if (conf->from_layer > conf->to_layer)
@@ -77,7 +87,7 @@ retry:
 		return -EAGAIN;
 	}
 
-	tm = kmalloc(sizeof(*tm), GFP_KERNEL);
+	tm = kmalloc_obj(*tm);
 	if (tm == NULL) {
 		textsearch_destroy(ts_conf);
 		return -ENOBUFS;
@@ -106,7 +116,7 @@ static void em_text_destroy(struct tcf_ematch *m)
 static int em_text_dump(struct sk_buff *skb, struct tcf_ematch *m)
 {
 	struct text_match *tm = EM_TEXT_PRIV(m);
-	struct tcf_em_text conf;
+	struct tcf_em_text conf = {};
 
 	strscpy(conf.algo, tm->config->ops->name);
 	conf.from_offset = tm->from_offset;

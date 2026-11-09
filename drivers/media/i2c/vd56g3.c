@@ -493,7 +493,6 @@ static int vd56g3_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	}
 
-	pm_runtime_mark_last_busy(sensor->dev);
 	pm_runtime_put_autosuspend(sensor->dev);
 
 	return ret;
@@ -577,7 +576,6 @@ static int vd56g3_s_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	}
 
-	pm_runtime_mark_last_busy(sensor->dev);
 	pm_runtime_put_autosuspend(sensor->dev);
 
 	return ret;
@@ -825,6 +823,7 @@ static void vd56g3_update_img_pad_format(struct vd56g3 *sensor,
 }
 
 static int vd56g3_set_pad_fmt(struct v4l2_subdev *sd,
+			      const struct v4l2_subdev_client_info *ci,
 			      struct v4l2_subdev_state *sd_state,
 			      struct v4l2_subdev_format *sd_fmt)
 {
@@ -860,6 +859,7 @@ static int vd56g3_set_pad_fmt(struct v4l2_subdev *sd,
 }
 
 static int vd56g3_get_selection(struct v4l2_subdev *sd,
+				const struct v4l2_subdev_client_info *ci,
 				struct v4l2_subdev_state *sd_state,
 				struct v4l2_subdev_selection *sel)
 {
@@ -1021,7 +1021,6 @@ static int vd56g3_disable_streams(struct v4l2_subdev *sd,
 	__v4l2_ctrl_grab(sensor->vflip_ctrl, false);
 	__v4l2_ctrl_grab(sensor->patgen_ctrl, false);
 
-	pm_runtime_mark_last_busy(sensor->dev);
 	pm_runtime_put_autosuspend(sensor->dev);
 
 	return ret;
@@ -1041,7 +1040,7 @@ static int vd56g3_init_state(struct v4l2_subdev *sd,
 		},
 	};
 
-	return vd56g3_set_pad_fmt(sd, sd_state, &fmt);
+	return vd56g3_set_pad_fmt(sd, NULL, sd_state, &fmt);
 }
 
 static const struct v4l2_subdev_video_ops vd56g3_video_ops = {
@@ -1474,7 +1473,7 @@ static int vd56g3_probe(struct i2c_client *client)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get regulators\n");
 
-	sensor->xclk = devm_clk_get(dev, NULL);
+	sensor->xclk = devm_v4l2_sensor_clk_get(dev, NULL);
 	if (IS_ERR(sensor->xclk))
 		return dev_err_probe(dev, PTR_ERR(sensor->xclk),
 				     "Failed to get xclk\n");
@@ -1527,7 +1526,6 @@ static int vd56g3_probe(struct i2c_client *client)
 	}
 
 	/* Sensor could now be powered off (after the autosuspend delay) */
-	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	dev_dbg(dev, "Successfully probe %s sensor\n",

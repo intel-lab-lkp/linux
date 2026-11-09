@@ -12,7 +12,6 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/minmax.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/pwm.h>
@@ -294,7 +293,6 @@ static int ad4851_scale_fill(struct iio_dev *indio_dev)
 }
 
 static int ad4851_set_oversampling_ratio(struct iio_dev *indio_dev,
-					 const struct iio_chan_spec *chan,
 					 unsigned int osr)
 {
 	struct ad4851_state *st = iio_priv(indio_dev);
@@ -321,7 +319,8 @@ static int ad4851_set_oversampling_ratio(struct iio_dev *indio_dev,
 			return ret;
 	}
 
-	ret = iio_backend_oversampling_ratio_set(st->back, osr);
+	/* Channel is ignored by the backend being used here */
+	ret = iio_backend_oversampling_ratio_set(st->back, 0, osr);
 	if (ret)
 		return ret;
 
@@ -444,10 +443,12 @@ static int ad4851_setup(struct ad4851_state *st)
 	if (ret)
 		return ret;
 
-	ret = regmap_write(st->regmap, AD4851_REG_INTERFACE_CONFIG_A,
-			   AD4851_SDO_ENABLE);
-	if (ret)
-		return ret;
+	if (!(st->spi->mode & SPI_3WIRE)) {
+		ret = regmap_write(st->regmap, AD4851_REG_INTERFACE_CONFIG_A,
+				   AD4851_SDO_ENABLE);
+		if (ret)
+			return ret;
+	}
 
 	ret = regmap_read(st->regmap, AD4851_REG_PRODUCT_ID_L, &product_id);
 	if (ret)
@@ -831,7 +832,7 @@ static int ad4851_write_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_CALIBBIAS:
 		return ad4851_set_calibbias(st, chan->channel, val);
 	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
-		return ad4851_set_oversampling_ratio(indio_dev, chan, val);
+		return ad4851_set_oversampling_ratio(indio_dev, val);
 	default:
 		return -EINVAL;
 	}
@@ -1284,15 +1285,15 @@ static const struct of_device_id ad4851_of_match[] = {
 };
 
 static const struct spi_device_id ad4851_spi_id[] = {
-	{ "ad4851", (kernel_ulong_t)&ad4851_info },
-	{ "ad4852", (kernel_ulong_t)&ad4852_info },
-	{ "ad4853", (kernel_ulong_t)&ad4853_info },
-	{ "ad4854", (kernel_ulong_t)&ad4854_info },
-	{ "ad4855", (kernel_ulong_t)&ad4855_info },
-	{ "ad4856", (kernel_ulong_t)&ad4856_info },
-	{ "ad4857", (kernel_ulong_t)&ad4857_info },
-	{ "ad4858", (kernel_ulong_t)&ad4858_info },
-	{ "ad4858i", (kernel_ulong_t)&ad4858i_info },
+	{ .name = "ad4851", .driver_data = (kernel_ulong_t)&ad4851_info },
+	{ .name = "ad4852", .driver_data = (kernel_ulong_t)&ad4852_info },
+	{ .name = "ad4853", .driver_data = (kernel_ulong_t)&ad4853_info },
+	{ .name = "ad4854", .driver_data = (kernel_ulong_t)&ad4854_info },
+	{ .name = "ad4855", .driver_data = (kernel_ulong_t)&ad4855_info },
+	{ .name = "ad4856", .driver_data = (kernel_ulong_t)&ad4856_info },
+	{ .name = "ad4857", .driver_data = (kernel_ulong_t)&ad4857_info },
+	{ .name = "ad4858", .driver_data = (kernel_ulong_t)&ad4858_info },
+	{ .name = "ad4858i", .driver_data = (kernel_ulong_t)&ad4858i_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad4851_spi_id);

@@ -31,6 +31,7 @@ struct mmc_bus_ops {
 	int (*sw_reset)(struct mmc_host *);
 	bool (*cache_enabled)(struct mmc_host *);
 	int (*flush_cache)(struct mmc_host *);
+	int (*handle_undervoltage)(struct mmc_host *host);
 };
 
 void mmc_attach_bus(struct mmc_host *host, const struct mmc_bus_ops *ops);
@@ -59,6 +60,10 @@ void mmc_power_off(struct mmc_host *host);
 void mmc_power_cycle(struct mmc_host *host, u32 ocr);
 void mmc_set_initial_state(struct mmc_host *host);
 u32 mmc_vddrange_to_ocrmask(int vdd_min, int vdd_max);
+int mmc_handle_undervoltage(struct mmc_host *host);
+void mmc_regulator_register_undervoltage_notifier(struct mmc_host *host);
+void mmc_regulator_unregister_undervoltage_notifier(struct mmc_host *host);
+void mmc_undervoltage_workfn(struct work_struct *work);
 
 static inline void mmc_delay(unsigned int ms)
 {
@@ -66,6 +71,14 @@ static inline void mmc_delay(unsigned int ms)
 		usleep_range(ms * 1000, ms * 1250);
 	else
 		msleep(ms);
+}
+
+static inline void mmc_delay_us(unsigned int us)
+{
+	if (us == 0)
+		return;
+
+	fsleep(us);
 }
 
 void mmc_rescan(struct work_struct *work);
@@ -123,6 +136,7 @@ bool mmc_card_can_trim(struct mmc_card *card);
 bool mmc_card_can_discard(struct mmc_card *card);
 bool mmc_card_can_sanitize(struct mmc_card *card);
 bool mmc_card_can_secure_erase_trim(struct mmc_card *card);
+bool mmc_card_can_cmd23(struct mmc_card *card);
 int mmc_erase_group_aligned(struct mmc_card *card, sector_t from, unsigned int nr);
 unsigned int mmc_calc_max_discard(struct mmc_card *card);
 
@@ -156,7 +170,7 @@ int mmc_cqe_recovery(struct mmc_host *host);
  *	@host: MMC host to prepare command
  *	@mrq: MMC request to prepare for
  *
- *	mmc_pre_req() is called in prior to mmc_start_req() to let
+ *	mmc_pre_req() is called in prior to mmc_start_request() to let
  *	host prepare for the new request. Preparation of a request may be
  *	performed while another request is running on the host.
  */

@@ -546,13 +546,15 @@ out_err:
  * tpm_cr50_i2c_tis_send() - TPM transmission callback.
  * @chip:	A TPM chip.
  * @buf:	Buffer to send.
- * @len:	Buffer length.
+ * @bufsiz:	Buffer size.
+ * @len:	Command length.
  *
  * Return:
  * - 0:		Success.
  * - -errno:	A POSIX error code.
  */
-static int tpm_cr50_i2c_tis_send(struct tpm_chip *chip, u8 *buf, size_t len)
+static int tpm_cr50_i2c_tis_send(struct tpm_chip *chip, u8 *buf, size_t bufsiz,
+				 size_t len)
 {
 	size_t burstcnt, limit, sent = 0;
 	u8 tpm_go[4] = { TPM_STS_GO };
@@ -747,13 +749,10 @@ static int tpm_cr50_i2c_probe(struct i2c_client *client)
 
 	if (client->irq > 0) {
 		rc = devm_request_irq(dev, client->irq, tpm_cr50_i2c_int_handler,
-				      IRQF_TRIGGER_FALLING | IRQF_ONESHOT |
-				      IRQF_NO_AUTOEN,
+				      IRQF_TRIGGER_FALLING | IRQF_NO_AUTOEN,
 				      dev->driver->name, chip);
-		if (rc < 0) {
-			dev_err(dev, "Failed to probe IRQ %d\n", client->irq);
+		if (rc < 0)
 			return rc;
-		}
 
 		priv->irq = client->irq;
 	} else {
@@ -817,14 +816,14 @@ static void tpm_cr50_i2c_remove(struct i2c_client *client)
 	tpm_chip_unregister(chip);
 }
 
-static SIMPLE_DEV_PM_OPS(cr50_i2c_pm, tpm_pm_suspend, tpm_pm_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(cr50_i2c_pm, tpm_pm_suspend, tpm_pm_resume);
 
 static struct i2c_driver cr50_i2c_driver = {
 	.probe = tpm_cr50_i2c_probe,
 	.remove = tpm_cr50_i2c_remove,
 	.driver = {
 		.name = "cr50_i2c",
-		.pm = &cr50_i2c_pm,
+		.pm = pm_sleep_ptr(&cr50_i2c_pm),
 		.acpi_match_table = ACPI_PTR(cr50_i2c_acpi_id),
 		.of_match_table = of_match_ptr(of_cr50_i2c_match),
 	},

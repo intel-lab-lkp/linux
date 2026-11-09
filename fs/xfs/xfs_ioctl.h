@@ -10,20 +10,18 @@ struct xfs_bstat;
 struct xfs_ibulk;
 struct xfs_inogrp;
 
-int
-xfs_ioc_swapext(
-	xfs_swapext_t	*sxp);
+int xfs_swapext(struct xfs_swapext *sxp);
 
 extern int
 xfs_fileattr_get(
 	struct dentry		*dentry,
-	struct fileattr		*fa);
+	struct file_kattr	*fa);
 
 extern int
 xfs_fileattr_set(
-	struct mnt_idmap	*idmap,
+	const struct mnt_idmap	*idmap,
 	struct dentry		*dentry,
-	struct fileattr		*fa);
+	struct file_kattr	*fa);
 
 extern long
 xfs_file_ioctl(

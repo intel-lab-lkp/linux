@@ -9,8 +9,6 @@
  *
  * These are the low level assembler for performing cache and TLB
  * functions on the arm922.
- *
- *  CONFIG_CPU_ARM922_CPU_IDLE -> nohlt
  */
 #include <linux/linkage.h>
 #include <linux/init.h>
@@ -182,7 +180,7 @@ SYM_FUNC_END(arm922_flush_user_cache_range)
  *	- end	- virtual end address
  */
 SYM_TYPED_FUNC_START(arm922_coherent_kern_range)
-#ifdef CONFIG_CFI_CLANG /* Fallthrough if !CFI */
+#ifdef CONFIG_CFI /* Fallthrough if !CFI */
 	b	arm922_coherent_user_range
 #endif
 SYM_FUNC_END(arm922_coherent_kern_range)

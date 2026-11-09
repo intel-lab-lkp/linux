@@ -159,7 +159,7 @@ static int mt8173_rt5650_hdmi_init(struct snd_soc_pcm_runtime *rtd)
 {
 	int ret;
 
-	ret = snd_soc_card_jack_new(rtd->card, "HDMI Jack", SND_JACK_LINEOUT,
+	ret = snd_soc_card_jack_new(rtd->card, "HDMI Jack", SND_JACK_AVOUT,
 				    &mt8173_rt5650_hdmi_jack);
 	if (ret)
 		return ret;
@@ -315,7 +315,7 @@ static int mt8173_rt5650_dev_probe(struct platform_device *pdev)
 					       &mt8173_rt5650_priv.pll_from);
 		if (ret) {
 			dev_err(&pdev->dev,
-				"%s snd_soc_register_card fail %d\n",
+				"%s device_property_read_u32() fail %d\n",
 				__func__, ret);
 		}
 	}

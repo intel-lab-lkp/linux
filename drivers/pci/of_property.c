@@ -95,9 +95,13 @@ static int of_pci_prop_bus_range(struct pci_dev *pdev,
 				 struct of_changeset *ocs,
 				 struct device_node *np)
 {
-	u32 bus_range[] = { pdev->subordinate->busn_res.start,
-			    pdev->subordinate->busn_res.end };
+	u32 bus_range[2];
 
+	if (!pdev->subordinate)
+		return 0;
+
+	bus_range[0] = pdev->subordinate->busn_res.start;
+	bus_range[1] = pdev->subordinate->busn_res.end;
 	return of_changeset_add_prop_u32_array(ocs, np, "bus-range", bus_range,
 					       ARRAY_SIZE(bus_range));
 }
@@ -119,7 +123,7 @@ static int of_pci_prop_ranges(struct pci_dev *pdev, struct of_changeset *ocs,
 		res = &pdev->resource[PCI_STD_RESOURCES];
 	}
 
-	rp = kcalloc(num, sizeof(*rp), GFP_KERNEL);
+	rp = kzalloc_objs(*rp, num);
 	if (!rp)
 		return -ENOMEM;
 
@@ -220,6 +224,9 @@ static int of_pci_prop_intr_map(struct pci_dev *pdev, struct of_changeset *ocs,
 	int ret;
 	u8 pin;
 
+	if (!pdev->subordinate)
+		return 0;
+
 	pnode = pci_device_to_OF_node(pdev->bus->self);
 	if (!pnode)
 		pnode = pci_bus_to_OF_node(pdev->bus);
@@ -279,13 +286,21 @@ static int of_pci_prop_intr_map(struct pci_dev *pdev, struct of_changeset *ocs,
 			mapp++;
 			*mapp = out_irq[i].np->phandle;
 			mapp++;
-			if (addr_sz[i]) {
-				ret = of_property_read_u32_array(out_irq[i].np,
-								 "reg", mapp,
-								 addr_sz[i]);
-				if (ret)
-					goto failed;
-			}
+
+			/*
+			 * A device address does not affect the device <->
+			 * interrupt-controller HW connection for all
+			 * modern interrupt controllers; moreover, the
+			 * kernel (i.e., of_irq_parse_raw()) ignores the
+			 * values in the parent unit address cells while
+			 * parsing the interrupt-map property because they
+			 * are irrelevant for interrupt mapping in modern
+			 * systems.
+			 *
+			 * Leave the parent unit address initialized to 0 --
+			 * just take into account the #address-cells size
+			 * to build the property properly.
+			 */
 			mapp += addr_sz[i];
 			memcpy(mapp, out_irq[i].args,
 			       out_irq[i].args_count * sizeof(u32));

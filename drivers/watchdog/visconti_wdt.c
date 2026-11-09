@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/stringify.h>
 #include <linux/watchdog.h>
 
 #define WDT_CNT			0x00
@@ -29,7 +30,7 @@ static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(
 	nowayout,
-	"Watchdog cannot be stopped once started (default=" __MODULE_STRING(WATCHDOG_NOWAYOUT)")");
+	"Watchdog cannot be stopped once started (default=" __stringify(WATCHDOG_NOWAYOUT)")");
 
 struct visconti_wdt_priv {
 	struct watchdog_device wdev;
@@ -118,7 +119,6 @@ static int visconti_wdt_probe(struct platform_device *pdev)
 	struct visconti_wdt_priv *priv;
 	struct device *dev = &pdev->dev;
 	struct clk *clk;
-	int ret;
 	unsigned long clk_freq;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
@@ -153,9 +153,7 @@ static int visconti_wdt_probe(struct platform_device *pdev)
 	watchdog_stop_on_unregister(wdev);
 
 	/* This overrides the default timeout only if DT configuration was found */
-	ret = watchdog_init_timeout(wdev, 0, dev);
-	if (ret)
-		dev_warn(dev, "Specified timeout value invalid, using default\n");
+	watchdog_init_timeout(wdev, 0, dev);
 
 	return devm_watchdog_register_device(dev, wdev);
 }

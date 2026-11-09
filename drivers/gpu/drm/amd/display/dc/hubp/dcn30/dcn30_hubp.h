@@ -243,7 +243,8 @@
 	HUBP_SF(HUBPREQ0_FLIP_PARAMETERS_6, REFCYC_PER_META_CHUNK_FLIP_C, mask_sh),\
 	HUBP_SF(HUBPREQ0_VBLANK_PARAMETERS_5, REFCYC_PER_VM_GROUP_VBLANK, mask_sh),\
 	HUBP_SF(HUBPREQ0_VBLANK_PARAMETERS_6, REFCYC_PER_VM_REQ_VBLANK, mask_sh),\
-	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG, VM_GROUP_SIZE, mask_sh)
+	HUBP_SF(HUBP0_DCHUBP_REQ_SIZE_CONFIG, VM_GROUP_SIZE, mask_sh),\
+	HUBP_SF(HUBPRET0_HUBPRET_READ_LINE_VALUE, PIPE_READ_LINE, mask_sh)
 
 bool hubp3_construct(
 		struct dcn20_hubp *hubp2,
@@ -259,7 +260,8 @@ void hubp3_set_vm_system_aperture_settings(struct hubp *hubp,
 bool hubp3_program_surface_flip_and_addr(
 	struct hubp *hubp,
 	const struct dc_plane_address *address,
-	bool flip_immediate);
+	bool flip_immediate,
+	bool dcc);
 
 void hubp3_program_surface_config(
 	struct hubp *hubp,
@@ -295,9 +297,16 @@ void hubp3_dmdata_set_attributes(
 
 void hubp3_read_state(struct hubp *hubp);
 
+void hubp3_read_reg_state(struct hubp *hubp, struct dcn_hubp_reg_state *reg_state);
+
 void hubp3_init(struct hubp *hubp);
 
 void hubp3_clear_tiling(struct hubp *hubp);
+
+uint32_t hubp3_get_current_read_line(struct hubp *hubp);
+
+uint32_t hubp3_get_underflow_status(struct hubp *hubp);
+
 
 #endif /* __DC_HUBP_DCN30_H__ */
 

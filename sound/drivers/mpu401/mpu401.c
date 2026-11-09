@@ -46,7 +46,7 @@ module_param_array(uart_enter, bool, NULL, 0444);
 MODULE_PARM_DESC(uart_enter, "Issue UART_ENTER command at open.");
 
 static struct platform_device *platform_devices[SNDRV_CARDS];
-static int pnp_registered;
+static int pnp_registered __ro_after_init;
 static unsigned int snd_mpu401_devices;
 
 static int snd_mpu401_create(struct device *devptr, int dev,
@@ -63,8 +63,8 @@ static int snd_mpu401_create(struct device *devptr, int dev,
 				0, &card);
 	if (err < 0)
 		return err;
-	strcpy(card->driver, "MPU-401 UART");
-	strcpy(card->shortname, card->driver);
+	strscpy(card->driver, "MPU-401 UART");
+	strscpy(card->shortname, card->driver);
 	sprintf(card->longname, "%s at %#lx, ", card->shortname, port[dev]);
 	if (irq[dev] >= 0) {
 		sprintf(card->longname + strlen(card->longname), "irq %d", irq[dev]);
@@ -88,6 +88,12 @@ static int snd_mpu401_probe(struct platform_device *devptr)
 	int dev = devptr->id;
 	int err;
 	struct snd_card *card;
+
+	if (dev < 0 || dev >= SNDRV_CARDS) {
+		dev_warn(&devptr->dev,
+			 "Invalid card index %d, using default 0\n", dev);
+		dev = 0;
+	}
 
 	if (port[dev] == SNDRV_AUTO_PORT) {
 		dev_err(&devptr->dev, "specify port\n");
@@ -123,7 +129,7 @@ static struct platform_driver snd_mpu401_driver = {
 
 static const struct pnp_device_id snd_mpu401_pnpids[] = {
 	{ .id = "PNPb006" },
-	{ .id = "" }
+	{ }
 };
 
 MODULE_DEVICE_TABLE(pnp, snd_mpu401_pnpids);

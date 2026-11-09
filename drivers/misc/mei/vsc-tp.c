@@ -18,6 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 
 #include "vsc-tp.h"
 
@@ -76,12 +77,12 @@ struct vsc_tp {
 
 	atomic_t assert_cnt;
 	wait_queue_head_t xfer_wait;
+	struct work_struct event_work;
 
 	vsc_tp_event_cb_t event_notify;
 	void *event_notify_context;
-
-	/* used to protect command download */
-	struct mutex mutex;
+	struct mutex event_notify_mutex;	/* protects event_notify + context */
+	struct mutex mutex;			/* protects command download */
 };
 
 /* GPIO resources */
@@ -106,17 +107,19 @@ static irqreturn_t vsc_tp_isr(int irq, void *data)
 
 	wake_up(&tp->xfer_wait);
 
-	return IRQ_WAKE_THREAD;
+	schedule_work(&tp->event_work);
+
+	return IRQ_HANDLED;
 }
 
-static irqreturn_t vsc_tp_thread_isr(int irq, void *data)
+static void vsc_tp_event_work(struct work_struct *work)
 {
-	struct vsc_tp *tp = data;
+	struct vsc_tp *tp = container_of(work, struct vsc_tp, event_work);
+
+	guard(mutex)(&tp->event_notify_mutex);
 
 	if (tp->event_notify)
 		tp->event_notify(tp->event_notify_context);
-
-	return IRQ_HANDLED;
 }
 
 /* wakeup firmware and wait for response */
@@ -290,7 +293,7 @@ int vsc_tp_xfer(struct vsc_tp *tp, u8 cmd, const void *obuf, size_t olen,
 	pkt->hdr.seq = cpu_to_le32(++tp->seq);
 	memcpy(pkt->buf, obuf, olen);
 
-	crc = ~crc32(~0, (u8 *)pkt, sizeof(pkt) + olen);
+	crc = ~crc32(~0, (u8 *)pkt, sizeof(pkt->hdr) + olen);
 	memcpy(pkt->buf + olen, &crc, sizeof(crc));
 
 	ret = vsc_tp_wakeup_request(tp);
@@ -399,43 +402,14 @@ EXPORT_SYMBOL_NS_GPL(vsc_tp_need_read, "VSC_TP");
 int vsc_tp_register_event_cb(struct vsc_tp *tp, vsc_tp_event_cb_t event_cb,
 			    void *context)
 {
+	guard(mutex)(&tp->event_notify_mutex);
+
 	tp->event_notify = event_cb;
 	tp->event_notify_context = context;
 
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(vsc_tp_register_event_cb, "VSC_TP");
-
-/**
- * vsc_tp_request_irq - request irq for vsc_tp device
- * @tp: vsc_tp device handle
- */
-int vsc_tp_request_irq(struct vsc_tp *tp)
-{
-	struct spi_device *spi = tp->spi;
-	struct device *dev = &spi->dev;
-	int ret;
-
-	irq_set_status_flags(spi->irq, IRQ_DISABLE_UNLAZY);
-	ret = request_threaded_irq(spi->irq, vsc_tp_isr, vsc_tp_thread_isr,
-				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				   dev_name(dev), tp);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-EXPORT_SYMBOL_NS_GPL(vsc_tp_request_irq, "VSC_TP");
-
-/**
- * vsc_tp_free_irq - free irq for vsc_tp device
- * @tp: vsc_tp device handle
- */
-void vsc_tp_free_irq(struct vsc_tp *tp)
-{
-	free_irq(tp->spi->irq, tp);
-}
-EXPORT_SYMBOL_NS_GPL(vsc_tp_free_irq, "VSC_TP");
 
 /**
  * vsc_tp_intr_synchronize - synchronize vsc_tp interrupt
@@ -522,28 +496,30 @@ static int vsc_tp_probe(struct spi_device *spi)
 	init_waitqueue_head(&tp->xfer_wait);
 	tp->spi = spi;
 
+	mutex_init(&tp->mutex);
+	mutex_init(&tp->event_notify_mutex);
+	INIT_WORK(&tp->event_work, vsc_tp_event_work);
+
 	irq_set_status_flags(spi->irq, IRQ_DISABLE_UNLAZY);
-	ret = request_threaded_irq(spi->irq, vsc_tp_isr, vsc_tp_thread_isr,
+	ret = request_threaded_irq(spi->irq, NULL, vsc_tp_isr,
 				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				   dev_name(dev), tp);
 	if (ret)
-		return ret;
-
-	mutex_init(&tp->mutex);
+		goto err_destroy_lock;
 
 	/* only one child acpi device */
 	ret = acpi_dev_for_each_child(ACPI_COMPANION(dev),
 				      vsc_tp_match_any, &adev);
 	if (!ret) {
 		ret = -ENODEV;
-		goto err_destroy_lock;
+		goto err_free_irq;
 	}
 
 	pinfo.fwnode = acpi_fwnode_handle(adev);
 	pdev = platform_device_register_full(&pinfo);
 	if (IS_ERR(pdev)) {
 		ret = PTR_ERR(pdev);
-		goto err_destroy_lock;
+		goto err_free_irq;
 	}
 
 	tp->pdev = pdev;
@@ -551,51 +527,44 @@ static int vsc_tp_probe(struct spi_device *spi)
 
 	return 0;
 
-err_destroy_lock:
-	mutex_destroy(&tp->mutex);
-
+err_free_irq:
 	free_irq(spi->irq, tp);
+
+err_destroy_lock:
+	cancel_work_sync(&tp->event_work);
+	mutex_destroy(&tp->event_notify_mutex);
+	mutex_destroy(&tp->mutex);
 
 	return ret;
 }
 
+/* Note this is also used for shutdown */
 static void vsc_tp_remove(struct spi_device *spi)
 {
 	struct vsc_tp *tp = spi_get_drvdata(spi);
 
 	platform_device_unregister(tp->pdev);
 
-	mutex_destroy(&tp->mutex);
-
 	free_irq(spi->irq, tp);
-}
 
-static void vsc_tp_shutdown(struct spi_device *spi)
-{
-	struct vsc_tp *tp = spi_get_drvdata(spi);
-
-	platform_device_unregister(tp->pdev);
-
+	cancel_work_sync(&tp->event_work);
+	mutex_destroy(&tp->event_notify_mutex);
 	mutex_destroy(&tp->mutex);
-
-	vsc_tp_reset(tp);
-
-	free_irq(spi->irq, tp);
 }
 
 static const struct acpi_device_id vsc_tp_acpi_ids[] = {
-	{ "INTC1009" }, /* Raptor Lake */
-	{ "INTC1058" }, /* Tiger Lake */
-	{ "INTC1094" }, /* Alder Lake */
-	{ "INTC10D0" }, /* Meteor Lake */
-	{}
+	{ .id = "INTC1009" }, /* Raptor Lake */
+	{ .id = "INTC1058" }, /* Tiger Lake */
+	{ .id = "INTC1094" }, /* Alder Lake */
+	{ .id = "INTC10D0" }, /* Meteor Lake */
+	{ }
 };
 MODULE_DEVICE_TABLE(acpi, vsc_tp_acpi_ids);
 
 static struct spi_driver vsc_tp_driver = {
 	.probe = vsc_tp_probe,
 	.remove = vsc_tp_remove,
-	.shutdown = vsc_tp_shutdown,
+	.shutdown = vsc_tp_remove,
 	.driver = {
 		.name = "vsc-tp",
 		.acpi_match_table = vsc_tp_acpi_ids,

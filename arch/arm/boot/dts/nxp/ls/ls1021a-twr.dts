@@ -61,6 +61,7 @@
 
 	panel: panel {
 		compatible = "nec,nl4827hc19-05b";
+		power-supply = <&reg_3p3v>;
 
 		port {
 			panel_in: endpoint {
@@ -151,7 +152,7 @@
 	ranges = <0x0 0x0 0x0 0x60000000 0x08000000>;
 	status = "okay";
 
-	nor@0,0 {
+	flash@0,0 {
 		#address-cells = <1>;
 		#size-cells = <1>;
 		compatible = "cfi-flash";
@@ -190,7 +191,7 @@
 };
 
 &esdhc {
-        status = "okay";
+	status = "okay";
 };
 
 &qspi {

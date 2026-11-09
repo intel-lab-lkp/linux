@@ -243,10 +243,8 @@ static int dln2_gpio_set_direction(struct gpio_chip *chip, unsigned offset,
 	if (ret < 0)
 		return ret;
 
-	if (dir == DLN2_GPIO_DIRECTION_OUT)
-		set_bit(offset, dln2->output_enabled);
-	else
-		clear_bit(offset, dln2->output_enabled);
+	assign_bit(offset, dln2->output_enabled,
+		   dir == DLN2_GPIO_DIRECTION_OUT);
 
 	return ret;
 }
@@ -469,7 +467,7 @@ static int dln2_gpio_probe(struct platform_device *pdev)
 	dln2->gpio.base = -1;
 	dln2->gpio.ngpio = pins;
 	dln2->gpio.can_sleep = true;
-	dln2->gpio.set_rv = dln2_gpio_set;
+	dln2->gpio.set = dln2_gpio_set;
 	dln2->gpio.get = dln2_gpio_get;
 	dln2->gpio.request = dln2_gpio_request;
 	dln2->gpio.free = dln2_gpio_free;

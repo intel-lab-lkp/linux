@@ -36,19 +36,23 @@
 
 struct imx8m_chip_data {
 	void __iomem *dap;
-	struct regmap *regmap;
 	struct reset_control *run_stall;
 };
 
 static int imx8_shutdown(struct snd_sof_dev *sdev)
 {
+	int ret;
 	/*
 	 * Force the DSP to stall. After the firmware image is loaded,
 	 * the stall will be removed during run() by a matching
 	 * imx_sc_pm_cpu_start() call.
 	 */
-	imx_sc_pm_cpu_start(get_chip_pdata(sdev), IMX_SC_R_DSP, false,
-			    RESET_VECTOR_VADDR);
+	ret = imx_sc_pm_cpu_start(get_chip_pdata(sdev), IMX_SC_R_DSP, false,
+				  RESET_VECTOR_VADDR);
+	if (ret < 0) {
+		dev_err(sdev->dev, "Error stalling DSP core %d\n", ret);
+		return ret;
+	}
 
 	return 0;
 }
@@ -89,8 +93,12 @@ static int imx8x_run(struct snd_sof_dev *sdev)
 		return ret;
 	}
 
-	imx_sc_pm_cpu_start(get_chip_pdata(sdev), IMX_SC_R_DSP, true,
-			    RESET_VECTOR_VADDR);
+	ret = imx_sc_pm_cpu_start(get_chip_pdata(sdev), IMX_SC_R_DSP, true,
+				  RESET_VECTOR_VADDR);
+	if (ret < 0) {
+		dev_err(sdev->dev, "Error starting DSP %d\n", ret);
+		return ret;
+	}
 
 	return 0;
 }
@@ -106,8 +114,12 @@ static int imx8_run(struct snd_sof_dev *sdev)
 		return ret;
 	}
 
-	imx_sc_pm_cpu_start(get_chip_pdata(sdev), IMX_SC_R_DSP, true,
-			    RESET_VECTOR_VADDR);
+	ret = imx_sc_pm_cpu_start(get_chip_pdata(sdev), IMX_SC_R_DSP, true,
+				  RESET_VECTOR_VADDR);
+	if (ret < 0) {
+		dev_err(sdev->dev, "Error starting DSP %d\n", ret);
+		return ret;
+	}
 
 	return 0;
 }
@@ -171,8 +183,7 @@ static int imx8m_probe(struct snd_sof_dev *sdev)
 
 	chip = devm_kzalloc(sdev->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
-		return dev_err_probe(sdev->dev, -ENOMEM,
-				     "failed to allocate chip data\n");
+		return -ENOMEM;
 
 	chip->dap = devm_ioremap(sdev->dev, IMX8M_DAP_DEBUG, IMX8M_DAP_DEBUG_SIZE);
 	if (!chip->dap)

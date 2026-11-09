@@ -5,7 +5,10 @@
 #ifndef SELFTEST_KVM_PMU_H
 #define SELFTEST_KVM_PMU_H
 
-#include <stdint.h>
+#include <stdbool.h>
+
+#include <linux/types.h>
+#include <linux/bits.h>
 
 #define KVM_PMU_EVENT_FILTER_MAX_EVENTS			300
 
@@ -35,6 +38,12 @@
 #define ARCH_PERFMON_EVENTSEL_INV		BIT_ULL(23)
 #define ARCH_PERFMON_EVENTSEL_CMASK		GENMASK_ULL(31, 24)
 
+/*
+ * These are AMD-specific bits.
+ */
+#define AMD64_EVENTSEL_GUESTONLY		BIT_ULL(40)
+#define AMD64_EVENTSEL_HOSTONLY			BIT_ULL(41)
+
 /* RDPMC control flags, Intel only. */
 #define INTEL_RDPMC_METRICS			BIT_ULL(29)
 #define INTEL_RDPMC_FIXED			BIT_ULL(30)
@@ -61,6 +70,11 @@
 #define	INTEL_ARCH_BRANCHES_RETIRED		RAW_EVENT(0xc4, 0x00)
 #define	INTEL_ARCH_BRANCHES_MISPREDICTED	RAW_EVENT(0xc5, 0x00)
 #define	INTEL_ARCH_TOPDOWN_SLOTS		RAW_EVENT(0xa4, 0x01)
+#define	INTEL_ARCH_TOPDOWN_BE_BOUND		RAW_EVENT(0xa4, 0x02)
+#define	INTEL_ARCH_TOPDOWN_BAD_SPEC		RAW_EVENT(0x73, 0x00)
+#define	INTEL_ARCH_TOPDOWN_FE_BOUND		RAW_EVENT(0x9c, 0x01)
+#define	INTEL_ARCH_TOPDOWN_RETIRING		RAW_EVENT(0xc2, 0x02)
+#define	INTEL_ARCH_LBR_INSERTS			RAW_EVENT(0xe4, 0x01)
 
 #define	AMD_ZEN_CORE_CYCLES			RAW_EVENT(0x76, 0x00)
 #define	AMD_ZEN_INSTRUCTIONS_RETIRED		RAW_EVENT(0xc0, 0x00)
@@ -80,6 +94,11 @@ enum intel_pmu_architectural_events {
 	INTEL_ARCH_BRANCHES_RETIRED_INDEX,
 	INTEL_ARCH_BRANCHES_MISPREDICTED_INDEX,
 	INTEL_ARCH_TOPDOWN_SLOTS_INDEX,
+	INTEL_ARCH_TOPDOWN_BE_BOUND_INDEX,
+	INTEL_ARCH_TOPDOWN_BAD_SPEC_INDEX,
+	INTEL_ARCH_TOPDOWN_FE_BOUND_INDEX,
+	INTEL_ARCH_TOPDOWN_RETIRING_INDEX,
+	INTEL_ARCH_LBR_INSERTS_INDEX,
 	NR_INTEL_ARCH_EVENTS,
 };
 
@@ -91,7 +110,21 @@ enum amd_pmu_zen_events {
 	NR_AMD_ZEN_EVENTS,
 };
 
-extern const uint64_t intel_pmu_arch_events[];
-extern const uint64_t amd_pmu_zen_events[];
+extern const u64 intel_pmu_arch_events[];
+extern const u64 amd_pmu_zen_events[];
+
+enum pmu_errata {
+	INSTRUCTIONS_RETIRED_OVERCOUNT,
+	BRANCHES_RETIRED_OVERCOUNT,
+};
+
+extern u64 pmu_errata_mask;
+
+void kvm_init_pmu_errata(void);
+
+static inline bool this_pmu_has_errata(enum pmu_errata errata)
+{
+	return pmu_errata_mask & BIT_ULL(errata);
+}
 
 #endif /* SELFTEST_KVM_PMU_H */

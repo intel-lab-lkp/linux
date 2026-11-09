@@ -461,7 +461,7 @@ static int fsmc_correct_ecc1(struct nand_chip *chip,
 				      chip->ecc.size, sm_order);
 }
 
-/* Count the number of 0's in buff upto a max of max_bits */
+/* Count the number of 0's in buff up to a max of max_bits */
 static int count_written_bits(u8 *buff, int size, int max_bits)
 {
 	int k, written_bits = 0;
@@ -503,6 +503,8 @@ static int dma_xfer(struct fsmc_nand_data *host, void *buffer, int len,
 
 	dma_dev = chan->device;
 	dma_addr = dma_map_single(dma_dev->dev, buffer, len, direction);
+	if (dma_mapping_error(dma_dev->dev, dma_addr))
+		return -EINVAL;
 
 	if (direction == DMA_TO_DEVICE) {
 		dma_src = dma_addr;
@@ -522,7 +524,7 @@ static int dma_xfer(struct fsmc_nand_data *host, void *buffer, int len,
 
 	tx->callback = dma_complete;
 	tx->callback_param = host;
-	cookie = tx->tx_submit(tx);
+	cookie = dmaengine_submit(tx);
 
 	ret = dma_submit_error(cookie);
 	if (ret) {
@@ -874,10 +876,14 @@ static int fsmc_nand_probe_config_dt(struct platform_device *pdev,
 	if (!of_property_read_u32(np, "bank-width", &val)) {
 		if (val == 2) {
 			nand->options |= NAND_BUSWIDTH_16;
-		} else if (val != 1) {
+		} else if (val == 1) {
+			nand->options |= NAND_BUSWIDTH_AUTO;
+		} else {
 			dev_err(&pdev->dev, "invalid bank-width %u\n", val);
 			return -EINVAL;
 		}
+	} else {
+		nand->options |= NAND_BUSWIDTH_AUTO;
 	}
 
 	if (of_property_read_bool(np, "nand-skip-bbtscan"))

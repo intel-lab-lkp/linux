@@ -6,7 +6,7 @@
 #ifndef __UM_PTRACE_GENERIC_H
 #define __UM_PTRACE_GENERIC_H
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 #include <sysdep/ptrace.h>
 
@@ -28,6 +28,12 @@ struct pt_regs {
 #define instruction_pointer(regs) PT_REGS_IP(regs)
 
 #define PTRACE_OLDSETOPTIONS 21
+
+#ifdef CONFIG_BINFMT_ELF_FDPIC
+#define PTRACE_GETFDPIC		31
+#define PTRACE_GETFDPIC_EXEC	0
+#define PTRACE_GETFDPIC_INTERP	1
+#endif
 
 struct task_struct;
 

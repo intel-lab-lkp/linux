@@ -85,7 +85,7 @@ static const struct x86_cpu_id tpmi_cpu_ids[] = {
 	X86_MATCH_VFM(INTEL_ATOM_CRESTMONT,	NULL),
 	X86_MATCH_VFM(INTEL_ATOM_DARKMONT_X,	NULL),
 	X86_MATCH_VFM(INTEL_GRANITERAPIDS_D,	NULL),
-	X86_MATCH_VFM(INTEL_PANTHERCOVE_X,	NULL),
+	X86_MATCH_VFM(INTEL_DIAMONDRAPIDS_X,	NULL),
 	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, tpmi_cpu_ids);
@@ -139,6 +139,13 @@ cpumask_t *tpmi_get_power_domain_mask(int cpu_no)
 	cpumask_t *mask;
 	int index;
 
+	/*
+	 * When built in, this stays callable after tpmi_init() failed
+	 * before allocating the array.
+	 */
+	if (!tpmi_power_domain_mask)
+		return NULL;
+
 	if (cpu_no >= num_possible_cpus())
 		return NULL;
 
@@ -156,6 +163,13 @@ EXPORT_SYMBOL_NS_GPL(tpmi_get_power_domain_mask, "INTEL_TPMI_POWER_DOMAIN");
 
 int tpmi_get_linux_die_id(int pkg_id, int domain_id)
 {
+	/*
+	 * When built in, this stays callable after tpmi_init() failed
+	 * before allocating the map.
+	 */
+	if (!domain_die_map)
+		return -ENODEV;
+
 	if (pkg_id >= topology_max_packages() || domain_id >= MAX_POWER_DOMAINS)
 		return -EINVAL;
 
@@ -178,7 +192,7 @@ static int tpmi_get_logical_id(unsigned int cpu, struct tpmi_cpu_info *info)
 
 	info->punit_thread_id = FIELD_GET(LP_ID_MASK, data);
 	info->punit_core_id = FIELD_GET(MODULE_ID_MASK, data);
-	info->pkg_id = topology_physical_package_id(cpu);
+	info->pkg_id = topology_logical_package_id(cpu);
 	info->linux_cpu = cpu;
 
 	return 0;
@@ -221,8 +235,8 @@ static int __init tpmi_init(void)
 	if (ret)
 		return ret;
 
-	tpmi_power_domain_mask = kcalloc(size_mul(topology_max_packages(), MAX_POWER_DOMAINS),
-					 sizeof(*tpmi_power_domain_mask), GFP_KERNEL);
+	tpmi_power_domain_mask = kzalloc_objs(*tpmi_power_domain_mask,
+					      size_mul(topology_max_packages(), MAX_POWER_DOMAINS));
 	if (!tpmi_power_domain_mask)
 		return -ENOMEM;
 
@@ -245,9 +259,11 @@ static int __init tpmi_init(void)
 
 free_domain_map:
 	kfree(domain_die_map);
+	domain_die_map = NULL;
 
 free_domain_mask:
 	kfree(tpmi_power_domain_mask);
+	tpmi_power_domain_mask = NULL;
 
 	return ret;
 }
@@ -257,7 +273,9 @@ static void __exit tpmi_exit(void)
 {
 	cpuhp_remove_state(tpmi_hp_state);
 	kfree(tpmi_power_domain_mask);
+	tpmi_power_domain_mask = NULL;
 	kfree(domain_die_map);
+	domain_die_map = NULL;
 }
 module_exit(tpmi_exit)
 

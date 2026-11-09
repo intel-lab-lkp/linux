@@ -7,9 +7,11 @@
 #ifndef _ASM_RISCV_SBI_H
 #define _ASM_RISCV_SBI_H
 
+#include <linux/args.h>
 #include <linux/types.h>
 #include <linux/cpumask.h>
 #include <linux/jump_label.h>
+#include <linux/tracepoint-defs.h>
 
 #ifdef CONFIG_RISCV_SBI
 enum sbi_ext_id {
@@ -36,6 +38,8 @@ enum sbi_ext_id {
 	SBI_EXT_STA = 0x535441,
 	SBI_EXT_NACL = 0x4E41434C,
 	SBI_EXT_FWFT = 0x46574654,
+	SBI_EXT_MPXY = 0x4D505859,
+	SBI_EXT_DBTR = 0x44425452,
 
 	/* Experimentals extensions must lie within this range */
 	SBI_EXT_EXPERIMENTAL_START = 0x08000000,
@@ -136,6 +140,7 @@ enum sbi_ext_pmu_fid {
 	SBI_EXT_PMU_COUNTER_FW_READ,
 	SBI_EXT_PMU_COUNTER_FW_READ_HI,
 	SBI_EXT_PMU_SNAPSHOT_SET_SHMEM,
+	SBI_EXT_PMU_EVENT_GET_INFO,
 };
 
 union sbi_pmu_ctr_info {
@@ -159,9 +164,20 @@ struct riscv_pmu_snapshot_data {
 	u64 reserved[447];
 };
 
+struct riscv_pmu_event_info {
+	u32 event_idx;
+	u32 output;
+	u64 event_data;
+};
+
+#define RISCV_PMU_EVENT_INFO_OUTPUT_MASK 0x01
+
 #define RISCV_PMU_RAW_EVENT_MASK GENMASK_ULL(47, 0)
 #define RISCV_PMU_PLAT_FW_EVENT_MASK GENMASK_ULL(61, 0)
+/* SBI v3.0 allows extended hpmeventX width value */
+#define RISCV_PMU_RAW_EVENT_V2_MASK GENMASK_ULL(55, 0)
 #define RISCV_PMU_RAW_EVENT_IDX 0x20000
+#define RISCV_PMU_RAW_EVENT_V2_IDX 0x30000
 #define RISCV_PLAT_FW_EVENT	0xFFFF
 
 /** General pmu event codes specified in SBI PMU extension */
@@ -219,6 +235,7 @@ enum sbi_pmu_event_type {
 	SBI_PMU_EVENT_TYPE_HW = 0x0,
 	SBI_PMU_EVENT_TYPE_CACHE = 0x1,
 	SBI_PMU_EVENT_TYPE_RAW = 0x2,
+	SBI_PMU_EVENT_TYPE_RAW_V2 = 0x3,
 	SBI_PMU_EVENT_TYPE_FW = 0xf,
 };
 
@@ -430,6 +447,95 @@ enum sbi_fwft_feature_t {
 
 #define SBI_FWFT_SET_FLAG_LOCK			BIT(0)
 
+enum sbi_ext_mpxy_fid {
+	SBI_EXT_MPXY_GET_SHMEM_SIZE,
+	SBI_EXT_MPXY_SET_SHMEM,
+	SBI_EXT_MPXY_GET_CHANNEL_IDS,
+	SBI_EXT_MPXY_READ_ATTRS,
+	SBI_EXT_MPXY_WRITE_ATTRS,
+	SBI_EXT_MPXY_SEND_MSG_WITH_RESP,
+	SBI_EXT_MPXY_SEND_MSG_WITHOUT_RESP,
+	SBI_EXT_MPXY_GET_NOTIFICATION_EVENTS,
+};
+
+enum sbi_mpxy_attribute_id {
+	/* Standard channel attributes managed by MPXY framework */
+	SBI_MPXY_ATTR_MSG_PROT_ID		= 0x00000000,
+	SBI_MPXY_ATTR_MSG_PROT_VER		= 0x00000001,
+	SBI_MPXY_ATTR_MSG_MAX_LEN		= 0x00000002,
+	SBI_MPXY_ATTR_MSG_SEND_TIMEOUT		= 0x00000003,
+	SBI_MPXY_ATTR_MSG_COMPLETION_TIMEOUT	= 0x00000004,
+	SBI_MPXY_ATTR_CHANNEL_CAPABILITY	= 0x00000005,
+	SBI_MPXY_ATTR_SSE_EVENT_ID		= 0x00000006,
+	SBI_MPXY_ATTR_MSI_CONTROL		= 0x00000007,
+	SBI_MPXY_ATTR_MSI_ADDR_LO		= 0x00000008,
+	SBI_MPXY_ATTR_MSI_ADDR_HI		= 0x00000009,
+	SBI_MPXY_ATTR_MSI_DATA			= 0x0000000A,
+	SBI_MPXY_ATTR_EVENTS_STATE_CONTROL	= 0x0000000B,
+	SBI_MPXY_ATTR_STD_ATTR_MAX_IDX,
+	/*
+	 * Message protocol specific attributes, managed by
+	 * the message protocol specification.
+	 */
+	SBI_MPXY_ATTR_MSGPROTO_ATTR_START	= 0x80000000,
+	SBI_MPXY_ATTR_MSGPROTO_ATTR_END		= 0xffffffff
+};
+
+/* Possible values of MSG_PROT_ID attribute as-per SBI v3.0 (or higher) */
+enum sbi_mpxy_msgproto_id {
+	SBI_MPXY_MSGPROTO_RPMI_ID = 0x0,
+};
+
+/* RPMI message protocol specific MPXY attributes */
+enum sbi_mpxy_rpmi_attribute_id {
+	SBI_MPXY_RPMI_ATTR_SERVICEGROUP_ID = SBI_MPXY_ATTR_MSGPROTO_ATTR_START,
+	SBI_MPXY_RPMI_ATTR_SERVICEGROUP_VERSION,
+	SBI_MPXY_RPMI_ATTR_IMPL_ID,
+	SBI_MPXY_RPMI_ATTR_IMPL_VERSION,
+	SBI_MPXY_RPMI_ATTR_MAX_ID
+};
+
+/* Encoding of MSG_PROT_VER attribute */
+#define SBI_MPXY_MSG_PROT_VER_MAJOR(__ver)	upper_16_bits(__ver)
+#define SBI_MPXY_MSG_PROT_VER_MINOR(__ver)	lower_16_bits(__ver)
+#define SBI_MPXY_MSG_PROT_MKVER(__maj, __min)	(((u32)(__maj) << 16) | (u16)(__min))
+
+/* Capabilities available through CHANNEL_CAPABILITY attribute */
+#define SBI_MPXY_CHAN_CAP_MSI			BIT(0)
+#define SBI_MPXY_CHAN_CAP_SSE			BIT(1)
+#define SBI_MPXY_CHAN_CAP_EVENTS_STATE		BIT(2)
+#define SBI_MPXY_CHAN_CAP_SEND_WITH_RESP	BIT(3)
+#define SBI_MPXY_CHAN_CAP_SEND_WITHOUT_RESP	BIT(4)
+#define SBI_MPXY_CHAN_CAP_GET_NOTIFICATIONS	BIT(5)
+
+/* SBI debug triggers function IDs */
+enum sbi_ext_dbtr_fid {
+	SBI_EXT_DBTR_NUM_TRIGGERS = 0,
+	SBI_EXT_DBTR_SETUP_SHMEM,
+	SBI_EXT_DBTR_TRIG_READ,
+	SBI_EXT_DBTR_TRIG_INSTALL,
+	SBI_EXT_DBTR_TRIG_UPDATE,
+	SBI_EXT_DBTR_TRIG_UNINSTALL,
+	SBI_EXT_DBTR_TRIG_ENABLE,
+	SBI_EXT_DBTR_TRIG_DISABLE,
+};
+
+struct sbi_dbtr_data_msg {
+	unsigned long tstate;
+	unsigned long tdata1;
+	unsigned long tdata2;
+	unsigned long tdata3;
+};
+
+struct sbi_dbtr_id_msg {
+	unsigned long idx;
+};
+
+union sbi_dbtr_shmem_entry {
+	struct sbi_dbtr_data_msg data;
+	struct sbi_dbtr_id_msg id;
+};
+
 /* SBI spec version fields */
 #define SBI_SPEC_VERSION_DEFAULT	0x1
 #define SBI_SPEC_VERSION_MAJOR_SHIFT	24
@@ -459,14 +565,81 @@ struct sbiret {
 	long value;
 };
 
+#ifdef CONFIG_TRACEPOINTS
+DECLARE_TRACEPOINT(sbi_call);
+DECLARE_TRACEPOINT(sbi_return);
+extern void do_trace_sbi_call(int ext, int fid);
+extern void do_trace_sbi_return(int ext, long error, long value);
+#else
+static inline void do_trace_sbi_call(int ext, int fid) {};
+static inline void do_trace_sbi_return(int ext, long error, long value) {};
+#endif
+
 void sbi_init(void);
 long __sbi_base_ecall(int fid);
-struct sbiret __sbi_ecall(unsigned long arg0, unsigned long arg1,
-			  unsigned long arg2, unsigned long arg3,
-			  unsigned long arg4, unsigned long arg5,
-			  int fid, int ext);
-#define sbi_ecall(e, f, a0, a1, a2, a3, a4, a5)	\
-		__sbi_ecall(a0, a1, a2, a3, a4, a5, f, e)
+
+#define __sbi_ecall_args2(e, f) \
+	uintptr_t __ta7 = (uintptr_t)(e); \
+	uintptr_t __ta6 = (uintptr_t)(f)
+#define __sbi_ecall_args3(e, f, a0) \
+	__sbi_ecall_args2(e, f); uintptr_t __ta0 = (uintptr_t)(a0)
+#define __sbi_ecall_args4(e, f, a0, a1) \
+	__sbi_ecall_args3(e, f, a0); uintptr_t __ta1 = (uintptr_t)(a1)
+#define __sbi_ecall_args5(e, f, a0, a1, a2) \
+	__sbi_ecall_args4(e, f, a0, a1); uintptr_t __ta2 = (uintptr_t)(a2)
+#define __sbi_ecall_args6(e, f, a0, a1, a2, a3) \
+	__sbi_ecall_args5(e, f, a0, a1, a2); uintptr_t __ta3 = (uintptr_t)(a3)
+#define __sbi_ecall_args7(e, f, a0, a1, a2, a3, a4) \
+	__sbi_ecall_args6(e, f, a0, a1, a2, a3); uintptr_t __ta4 = (uintptr_t)(a4)
+#define __sbi_ecall_args8(e, f, a0, a1, a2, a3, a4, a5) \
+	__sbi_ecall_args7(e, f, a0, a1, a2, a3, a4); uintptr_t __ta5 = (uintptr_t)(a5)
+
+#define __sbi_ecall_regs2 \
+	register uintptr_t __a7 asm ("a7") = __ta7; \
+	register uintptr_t __a6 asm ("a6") = __ta6
+#define __sbi_ecall_regs3  __sbi_ecall_regs2; register uintptr_t __a0 asm ("a0") = __ta0
+#define __sbi_ecall_regs4  __sbi_ecall_regs3; register uintptr_t __a1 asm ("a1") = __ta1
+#define __sbi_ecall_regs5  __sbi_ecall_regs4; register uintptr_t __a2 asm ("a2") = __ta2
+#define __sbi_ecall_regs6  __sbi_ecall_regs5; register uintptr_t __a3 asm ("a3") = __ta3
+#define __sbi_ecall_regs7  __sbi_ecall_regs6; register uintptr_t __a4 asm ("a4") = __ta4
+#define __sbi_ecall_regs8  __sbi_ecall_regs7; register uintptr_t __a5 asm ("a5") = __ta5
+
+#define __sbi_ecall_constraints1                            "r" (__a7)
+#define __sbi_ecall_constraints2  __sbi_ecall_constraints1, "r" (__a6)
+#define __sbi_ecall_constraints3  __sbi_ecall_constraints2, "r" (__a0)
+#define __sbi_ecall_constraints4  __sbi_ecall_constraints3, "r" (__a1)
+#define __sbi_ecall_constraints5  __sbi_ecall_constraints4, "r" (__a2)
+#define __sbi_ecall_constraints6  __sbi_ecall_constraints5, "r" (__a3)
+#define __sbi_ecall_constraints7  __sbi_ecall_constraints6, "r" (__a4)
+#define __sbi_ecall_constraints8  __sbi_ecall_constraints7, "r" (__a5)
+
+#define __sbi_ecall_trace_call() \
+	if (tracepoint_enabled(sbi_call)) \
+		do_trace_sbi_call(__ta7, __ta6)
+
+#define __sbi_ecall_trace_return() \
+	if (tracepoint_enabled(sbi_return)) \
+		do_trace_sbi_return(__ta7, __ret.error, __ret.value)
+
+/*
+ * Clear a1 to avoid leaking unrelated kernel state through tracepoints in case
+ * the register doesn't get overwritten by the ecall nor the arguments.
+ */
+#define sbi_ecall(A...) \
+({ \
+	CONCATENATE(__sbi_ecall_args, COUNT_ARGS(A))(A); \
+	__sbi_ecall_trace_call(); \
+	register uintptr_t __r0 asm ("a0"); \
+	register uintptr_t __r1 asm ("a1") = 0; \
+	CONCATENATE(__sbi_ecall_regs, COUNT_ARGS(A)); \
+	asm volatile ("ecall" \
+			: "=r" (__r0), "=r" (__r1) \
+			: CONCATENATE(__sbi_ecall_constraints, COUNT_ARGS(A)) \
+			: "memory"); \
+	struct sbiret __ret = {.error = __r0, .value = __r1}; \
+	__sbi_ecall_trace_return(); \
+	__ret; \
+})
 
 #ifdef CONFIG_RISCV_SBI_V01
 void sbi_console_putchar(int ch);

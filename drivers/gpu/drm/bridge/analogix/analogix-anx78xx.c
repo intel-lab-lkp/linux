@@ -937,7 +937,8 @@ anx78xx_bridge_mode_valid(struct drm_bridge *bridge,
 	return MODE_OK;
 }
 
-static void anx78xx_bridge_disable(struct drm_bridge *bridge)
+static void anx78xx_bridge_disable(struct drm_bridge *bridge,
+				   struct drm_atomic_commit *commit)
 {
 	struct anx78xx *anx78xx = bridge_to_anx78xx(bridge);
 
@@ -975,7 +976,8 @@ unlock:
 	mutex_unlock(&anx78xx->lock);
 }
 
-static void anx78xx_bridge_enable(struct drm_bridge *bridge)
+static void anx78xx_bridge_enable(struct drm_bridge *bridge,
+				  struct drm_atomic_commit *commit)
 {
 	struct anx78xx *anx78xx = bridge_to_anx78xx(bridge);
 	int err;
@@ -992,12 +994,15 @@ static void anx78xx_bridge_enable(struct drm_bridge *bridge)
 }
 
 static const struct drm_bridge_funcs anx78xx_bridge_funcs = {
+	.atomic_create_state = drm_atomic_helper_bridge_create_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.attach = anx78xx_bridge_attach,
 	.detach = anx78xx_bridge_detach,
 	.mode_valid = anx78xx_bridge_mode_valid,
-	.disable = anx78xx_bridge_disable,
+	.atomic_disable = anx78xx_bridge_disable,
 	.mode_set = anx78xx_bridge_mode_set,
-	.enable = anx78xx_bridge_enable,
+	.atomic_enable = anx78xx_bridge_enable,
 };
 
 static irqreturn_t anx78xx_hpd_threaded_handler(int irq, void *data)
@@ -1193,9 +1198,10 @@ static int anx78xx_i2c_probe(struct i2c_client *client)
 	bool found = false;
 	int err;
 
-	anx78xx = devm_kzalloc(&client->dev, sizeof(*anx78xx), GFP_KERNEL);
-	if (!anx78xx)
-		return -ENOMEM;
+	anx78xx = devm_drm_bridge_alloc(&client->dev, struct anx78xx, bridge,
+					&anx78xx_bridge_funcs);
+	if (IS_ERR(anx78xx))
+		return PTR_ERR(anx78xx);
 
 	pdata = &anx78xx->pdata;
 
@@ -1305,8 +1311,6 @@ static int anx78xx_i2c_probe(struct i2c_client *client)
 		DRM_ERROR("Failed to request INTP threaded IRQ: %d\n", err);
 		goto err_poweroff;
 	}
-
-	anx78xx->bridge.funcs = &anx78xx_bridge_funcs;
 
 	drm_bridge_add(&anx78xx->bridge);
 

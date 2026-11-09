@@ -25,6 +25,7 @@
  */
 
 #include "amdgpu.h"
+#include "amdgpu_ip.h"
 #include "amdgpu_jpeg.h"
 #include "amdgpu_pm.h"
 #include "soc15d.h"
@@ -121,10 +122,12 @@ static void amdgpu_jpeg_idle_work_handler(struct work_struct *work)
 			fences += amdgpu_fence_count_emitted(&adev->jpeg.inst[i].ring_dec[j]);
 	}
 
-	if (!fences && !atomic_read(&adev->jpeg.total_submission_cnt))
+	if (!fences && !atomic_read(&adev->jpeg.total_submission_cnt)) {
+		mutex_lock(&adev->jpeg.jpeg_pg_lock);
 		amdgpu_device_ip_set_powergating_state(adev, AMD_IP_BLOCK_TYPE_JPEG,
 						       AMD_PG_STATE_GATE);
-	else
+		mutex_unlock(&adev->jpeg.jpeg_pg_lock);
+	} else
 		schedule_delayed_work(&adev->jpeg.idle_work, JPEG_IDLE_TIMEOUT);
 }
 
@@ -132,8 +135,8 @@ void amdgpu_jpeg_ring_begin_use(struct amdgpu_ring *ring)
 {
 	struct amdgpu_device *adev = ring->adev;
 
-	atomic_inc(&adev->jpeg.total_submission_cnt);
-	cancel_delayed_work_sync(&adev->jpeg.idle_work);
+	if (!atomic_fetch_inc(&adev->jpeg.total_submission_cnt))
+		cancel_delayed_work_sync(&adev->jpeg.idle_work);
 
 	mutex_lock(&adev->jpeg.jpeg_pg_lock);
 	amdgpu_device_ip_set_powergating_state(adev, AMD_IP_BLOCK_TYPE_JPEG,
@@ -143,8 +146,9 @@ void amdgpu_jpeg_ring_begin_use(struct amdgpu_ring *ring)
 
 void amdgpu_jpeg_ring_end_use(struct amdgpu_ring *ring)
 {
-	atomic_dec(&ring->adev->jpeg.total_submission_cnt);
-	schedule_delayed_work(&ring->adev->jpeg.idle_work, JPEG_IDLE_TIMEOUT);
+	if (atomic_dec_and_test(&ring->adev->jpeg.total_submission_cnt))
+		schedule_delayed_work(&ring->adev->jpeg.idle_work,
+				      JPEG_IDLE_TIMEOUT);
 }
 
 int amdgpu_jpeg_dec_ring_test_ring(struct amdgpu_ring *ring)
@@ -194,7 +198,9 @@ static int amdgpu_jpeg_dec_set_reg(struct amdgpu_ring *ring, uint32_t handle,
 	int i, r;
 
 	r = amdgpu_job_alloc_with_ib(ring->adev, NULL, NULL, ib_size_dw * 4,
-				     AMDGPU_IB_POOL_DIRECT, &job);
+				     AMDGPU_IB_POOL_DIRECT,
+				     AMDGPU_KERNEL_JOB_ID_VCN_RING_TEST,
+				     &job);
 	if (r)
 		return r;
 
@@ -368,7 +374,7 @@ static int amdgpu_debugfs_jpeg_sched_mask_set(void *data, u64 val)
 	for (i = 0; i < adev->jpeg.num_jpeg_inst; ++i) {
 		for (j = 0; j < adev->jpeg.num_jpeg_rings; ++j) {
 			ring = &adev->jpeg.inst[i].ring_dec[j];
-			if (val & (1 << ((i * adev->jpeg.num_jpeg_rings) + j)))
+			if (val & (BIT_ULL((i * adev->jpeg.num_jpeg_rings) + j)))
 				ring->sched.ready = true;
 			else
 				ring->sched.ready = false;
@@ -460,10 +466,11 @@ void amdgpu_jpeg_sysfs_reset_mask_fini(struct amdgpu_device *adev)
 int amdgpu_jpeg_reg_dump_init(struct amdgpu_device *adev,
 			       const struct amdgpu_hwip_reg_entry *reg, u32 count)
 {
-	adev->jpeg.ip_dump = kcalloc(adev->jpeg.num_jpeg_inst * count,
-				     sizeof(uint32_t), GFP_KERNEL);
+	adev->jpeg.ip_dump = kzalloc_objs(*adev->jpeg.ip_dump,
+					  adev->jpeg.num_jpeg_inst * count);
 	if (!adev->jpeg.ip_dump) {
-		DRM_ERROR("Failed to allocate memory for JPEG IP Dump\n");
+		dev_err(adev->dev,
+			"Failed to allocate memory for JPEG IP Dump\n");
 		return -ENOMEM;
 	}
 	adev->jpeg.reg_list = reg;
@@ -535,4 +542,107 @@ void amdgpu_jpeg_print_ip_state(struct amdgpu_ip_block *ip_block, struct drm_pri
 		} else
 			drm_printf(p, "\nInactive Instance:JPEG%d\n", i);
 	}
+}
+
+static inline bool amdgpu_jpeg_reg_valid(u32 reg)
+{
+	if (reg < JPEG_REG_RANGE_START || reg > JPEG_REG_RANGE_END ||
+	    (reg >= JPEG_ATOMIC_RANGE_START && reg <= JPEG_ATOMIC_RANGE_END))
+		return false;
+	else
+		return true;
+}
+
+/**
+ * amdgpu_jpeg_dec_parse_cs - command submission parser
+ *
+ * @parser: Command submission parser context
+ * @job: the job to parse
+ * @ib: the IB to parse
+ *
+ * Parse the command stream, return -EINVAL for invalid packet,
+ * 0 otherwise
+ */
+
+int amdgpu_jpeg_dec_parse_cs(struct amdgpu_cs_parser *parser,
+			      struct amdgpu_job *job,
+			      struct amdgpu_ib *ib)
+{
+	u32 i, reg, res, cond, type;
+	struct amdgpu_device *adev = parser->adev;
+
+	for (i = 0; i < ib->length_dw ; i += 2) {
+		reg  = CP_PACKETJ_GET_REG(ib->ptr[i]);
+		res  = CP_PACKETJ_GET_RES(ib->ptr[i]);
+		cond = CP_PACKETJ_GET_COND(ib->ptr[i]);
+		type = CP_PACKETJ_GET_TYPE(ib->ptr[i]);
+
+		if (res) /* only support 0 at the moment */
+			return -EINVAL;
+
+		switch (type) {
+		case PACKETJ_TYPE0:
+			if (cond != PACKETJ_CONDITION_CHECK0 ||
+			    !amdgpu_jpeg_reg_valid(reg)) {
+				dev_err(adev->dev, "Invalid packet [0x%08x]!\n", ib->ptr[i]);
+				return -EINVAL;
+			}
+			break;
+		case PACKETJ_TYPE3:
+			if (cond != PACKETJ_CONDITION_CHECK3 ||
+			    !amdgpu_jpeg_reg_valid(reg)) {
+				dev_err(adev->dev, "Invalid packet [0x%08x]!\n", ib->ptr[i]);
+				return -EINVAL;
+			}
+			break;
+		case PACKETJ_TYPE6:
+			if (ib->ptr[i] == CP_PACKETJ_NOP)
+				continue;
+			dev_err(adev->dev, "Invalid packet [0x%08x]!\n", ib->ptr[i]);
+			return -EINVAL;
+		default:
+			dev_err(adev->dev, "Unknown packet type %d !\n", type);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * amdgpu_jpeg_is_shared_inv_eng - Check if a ring is a JPEG ring that shares a VM invalidation
+ * engine
+ * @adev: Pointer to the AMDGPU device structure
+ * @ring: Pointer to the ring structure to check
+ *
+ * All decode rings within one JPEG instance share a single VM invalidation
+ * engine (see amdgpu_jpeg_set_shared_inv_eng()). This returns true for every
+ * ring in the instance except the first (ring->pipe == 0), which owns the
+ * engine allocated by amdgpu_gmc_allocate_vm_inv_eng().
+ */
+bool amdgpu_jpeg_is_shared_inv_eng(struct amdgpu_device *adev, struct amdgpu_ring *ring)
+{
+	return ring->funcs->type == AMDGPU_RING_TYPE_VCN_JPEG && ring->pipe != 0;
+}
+
+/**
+ * amdgpu_jpeg_set_shared_inv_eng - Propagate a VM invalidation engine to the rest of a JPEG
+ * instance
+ * @adev: Pointer to the AMDGPU device structure
+ * @ring: Pointer to the ring that just had a VM invalidation engine allocated
+ *
+ * No-op unless @ring is the owner (ring->pipe == 0) of a JPEG instance.
+ * When it is, mirrors its freshly allocated vm_inv_eng onto the rest of the
+ * rings in that instance, so the whole instance shares one engine instead of
+ * consuming one per ring.
+ */
+void amdgpu_jpeg_set_shared_inv_eng(struct amdgpu_device *adev, struct amdgpu_ring *ring)
+{
+	int j;
+
+	if (ring->funcs->type != AMDGPU_RING_TYPE_VCN_JPEG || ring->pipe != 0)
+		return;
+
+	for (j = 1; j < adev->jpeg.num_jpeg_rings; j++)
+		adev->jpeg.inst[ring->me].ring_dec[j].vm_inv_eng = ring->vm_inv_eng;
 }

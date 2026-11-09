@@ -21,7 +21,6 @@
 #include "libbpf.h"
 #include "libbpf_internal.h"
 #include "bpf.h"
-#include "str_error.h"
 
 struct ring {
 	ring_buffer_sample_fn sample_cb;
@@ -245,7 +244,7 @@ static int64_t ringbuf_process_ring(struct ring *r, size_t n)
 	do {
 		got_new_data = false;
 		prod_pos = smp_load_acquire(r->producer_pos);
-		while (cons_pos < prod_pos) {
+		while (prod_pos - cons_pos > 0) {
 			len_ptr = r->data + (cons_pos & r->mask);
 			len = smp_load_acquire(len_ptr);
 

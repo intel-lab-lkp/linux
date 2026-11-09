@@ -73,7 +73,7 @@ static const char * const	sym_regex_kernel[S_NSYMTYPES] = {
 	"^(__init_(begin|end)|"
 	"__x86_cpu_dev_(start|end)|"
 	"__alt_instructions(_end)?|"
-	"(__iommu_table|__apicdrivers|__smp_locks)(_end)?|"
+	"(__iommu_table|__apicdrivers)(_end)?|"
 	"__(start|end)_pci_.*|"
 #if CONFIG_FW_LOADER
 	"__(start|end)_builtin_fw|"
@@ -740,10 +740,10 @@ static void walk_relocs(int (*process)(struct section *sec, Elf_Rel *rel,
 static int do_reloc64(struct section *sec, Elf_Rel *rel, ElfW(Sym) *sym,
 		      const char *symname)
 {
-	int headtext = !strcmp(sec_name(sec->shdr.sh_info), ".head.text");
 	unsigned r_type = ELF64_R_TYPE(rel->r_info);
 	ElfW(Addr) offset = rel->r_offset;
 	int shn_abs = (sym->st_shndx == SHN_ABS) && !is_reloc(S_REL, symname);
+
 	if (sym->st_shndx == SHN_UNDEF)
 		return 0;
 
@@ -780,12 +780,6 @@ static int do_reloc64(struct section *sec, Elf_Rel *rel, ElfW(Sym) *sym,
 				break;
 
 			die("Invalid absolute %s relocation: %s\n", rel_type(r_type), symname);
-			break;
-		}
-
-		if (headtext) {
-			die("Absolute reference to symbol '%s' not permitted in .head.text\n",
-			    symname);
 			break;
 		}
 

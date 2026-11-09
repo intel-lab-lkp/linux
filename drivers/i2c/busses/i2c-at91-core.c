@@ -255,6 +255,7 @@ static int at91_twi_probe(struct platform_device *pdev)
 	if (rc) {
 		pm_runtime_disable(dev->dev);
 		pm_runtime_set_suspended(dev->dev);
+		at91_twi_dma_release(dev);
 
 		return rc;
 	}
@@ -269,6 +270,8 @@ static void at91_twi_remove(struct platform_device *pdev)
 	struct at91_twi_dev *dev = platform_get_drvdata(pdev);
 
 	i2c_del_adapter(&dev->adapter);
+
+	at91_twi_dma_release(dev);
 
 	pm_runtime_disable(dev->dev);
 	pm_runtime_set_suspended(dev->dev);
@@ -313,7 +316,6 @@ static int __maybe_unused at91_twi_resume_noirq(struct device *dev)
 			return ret;
 	}
 
-	pm_runtime_mark_last_busy(dev);
 	pm_request_autosuspend(dev);
 
 	at91_init_twi_bus(twi_dev);

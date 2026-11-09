@@ -185,8 +185,11 @@ static int xgpu_ai_send_access_requests(struct amdgpu_device *adev,
 	} else if (req == IDH_REQ_GPU_INIT_DATA){
 		/* Dummy REQ_GPU_INIT_DATA handling */
 		r = xgpu_ai_poll_msg(adev, IDH_REQ_GPU_INIT_DATA_READY);
-		/* version set to 0 since dummy */
-		adev->virt.req_init_data_ver = 0;	
+		/*
+		 * AI uses the GPU_CRIT_REGION_V1 layout in practice, so fix the
+		 * dummy version value to match the actual init-data format.
+		 */
+		adev->virt.req_init_data_ver = GPU_CRIT_REGION_V1;
 	}
 
 	return 0;
@@ -292,14 +295,32 @@ static void xgpu_ai_mailbox_flr_work(struct work_struct *work)
 	}
 }
 
-static void xgpu_ai_mailbox_bad_pages_work(struct work_struct *work)
+static void xgpu_ai_mailbox_req_bad_pages_work(struct work_struct *work)
 {
-	struct amdgpu_virt *virt = container_of(work, struct amdgpu_virt, bad_pages_work);
+	struct amdgpu_virt *virt = container_of(work, struct amdgpu_virt, req_bad_pages_work);
 	struct amdgpu_device *adev = container_of(virt, struct amdgpu_device, virt);
 
 	if (down_read_trylock(&adev->reset_domain->sem)) {
 		amdgpu_virt_fini_data_exchange(adev);
 		amdgpu_virt_request_bad_pages(adev);
+		up_read(&adev->reset_domain->sem);
+	}
+}
+
+/**
+ * xgpu_ai_mailbox_handle_bad_pages_work - Reinitialize the data exchange region to get fresh bad page information
+ * @work: pointer to the work_struct
+ *
+ * This work handler is triggered when bad pages are ready, and it reinitializes
+ * the data exchange region to retrieve updated bad page information from the host.
+ */
+static void xgpu_ai_mailbox_handle_bad_pages_work(struct work_struct *work)
+{
+	struct amdgpu_virt *virt = container_of(work, struct amdgpu_virt, handle_bad_pages_work);
+	struct amdgpu_device *adev = container_of(virt, struct amdgpu_device, virt);
+
+	if (down_read_trylock(&adev->reset_domain->sem)) {
+		amdgpu_virt_fini_data_exchange(adev);
 		amdgpu_virt_init_data_exchange(adev);
 		up_read(&adev->reset_domain->sem);
 	}
@@ -327,10 +348,15 @@ static int xgpu_ai_mailbox_rcv_irq(struct amdgpu_device *adev,
 	struct amdgpu_ras *ras = amdgpu_ras_get_context(adev);
 
 	switch (event) {
+	case IDH_RAS_BAD_PAGES_READY:
+		xgpu_ai_mailbox_send_ack(adev);
+		if (amdgpu_sriov_runtime(adev))
+			schedule_work(&adev->virt.handle_bad_pages_work);
+		break;
 	case IDH_RAS_BAD_PAGES_NOTIFICATION:
 		xgpu_ai_mailbox_send_ack(adev);
 		if (amdgpu_sriov_runtime(adev))
-			schedule_work(&adev->virt.bad_pages_work);
+			schedule_work(&adev->virt.req_bad_pages_work);
 		break;
 	case IDH_UNRECOV_ERR_NOTIFICATION:
 		xgpu_ai_mailbox_send_ack(adev);
@@ -415,7 +441,8 @@ int xgpu_ai_mailbox_get_irq(struct amdgpu_device *adev)
 	}
 
 	INIT_WORK(&adev->virt.flr_work, xgpu_ai_mailbox_flr_work);
-	INIT_WORK(&adev->virt.bad_pages_work, xgpu_ai_mailbox_bad_pages_work);
+	INIT_WORK(&adev->virt.req_bad_pages_work, xgpu_ai_mailbox_req_bad_pages_work);
+	INIT_WORK(&adev->virt.handle_bad_pages_work, xgpu_ai_mailbox_handle_bad_pages_work);
 
 	return 0;
 }

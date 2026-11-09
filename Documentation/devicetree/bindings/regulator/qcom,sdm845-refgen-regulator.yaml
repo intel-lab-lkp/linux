@@ -13,9 +13,6 @@ description:
   The REFGEN (reference voltage generator) regulator provides reference
   voltage for on-chip IPs (like PHYs) on some Qualcomm SoCs.
 
-allOf:
-  - $ref: regulator.yaml#
-
 properties:
   compatible:
     oneOf:
@@ -23,11 +20,14 @@ properties:
           - enum:
               - qcom,sc7180-refgen-regulator
               - qcom,sc8180x-refgen-regulator
+              - qcom,sdm670-refgen-regulator
               - qcom,sm8150-refgen-regulator
           - const: qcom,sdm845-refgen-regulator
 
       - items:
           - enum:
+              - qcom,qcs8300-refgen-regulator
+              - qcom,sa8775p-refgen-regulator
               - qcom,sc7280-refgen-regulator
               - qcom,sc8280xp-refgen-regulator
               - qcom,sm6350-refgen-regulator
@@ -36,15 +36,43 @@ properties:
           - const: qcom,sm8250-refgen-regulator
 
       - enum:
+          - qcom,ipq9650-refgen-regulator
           - qcom,sdm845-refgen-regulator
           - qcom,sm8250-refgen-regulator
 
   reg:
     maxItems: 1
 
+  clocks:
+    items:
+      - description: Core reference clock
+      - description: AHB interface clock
+
+  clock-names:
+    items:
+      - const: core
+      - const: hclk
+
 required:
   - compatible
   - reg
+
+allOf:
+  - $ref: regulator.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,ipq9650-refgen-regulator
+    then:
+      required:
+        - clocks
+        - clock-names
+    else:
+      properties:
+        clocks: false
+        clock-names: false
 
 unevaluatedProperties: false
 

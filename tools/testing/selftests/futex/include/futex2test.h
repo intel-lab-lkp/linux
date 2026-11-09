@@ -4,7 +4,10 @@
  *
  * Copyright 2021 Collabora Ltd.
  */
+#include <linux/time_types.h>
+#include <errno.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define u64_to_ptr(x) ((void *)(uintptr_t)(x))
 
@@ -65,7 +68,12 @@ struct futex32_numa {
 static inline int futex_waitv(volatile struct futex_waitv *waiters, unsigned long nr_waiters,
 			      unsigned long flags, struct timespec *timo, clockid_t clockid)
 {
-	return syscall(__NR_futex_waitv, waiters, nr_waiters, flags, timo, clockid);
+		struct __kernel_timespec ts = {
+			.tv_sec = timo->tv_sec,
+			.tv_nsec = timo->tv_nsec,
+		};
+
+		return syscall(__NR_futex_waitv, waiters, nr_waiters, flags, &ts, clockid);
 }
 
 /*
@@ -89,4 +97,12 @@ static inline int futex2_wait(void *uaddr, long val, unsigned int flags,
 static inline int futex2_wake(void *uaddr, int nr, unsigned int flags)
 {
 	return syscall(__NR_futex_wake, uaddr, ~0U, nr, flags);
+}
+
+static inline bool is_futex_waitv_supported(void)
+{
+	struct timespec ts = {0, 0};
+	int res = futex_waitv(NULL, 0, 0, &ts, CLOCK_MONOTONIC);
+
+	return !(res < 0 && errno == ENOSYS);
 }

@@ -8,6 +8,7 @@
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
+#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 
 #include <video/mipi_display.h>
@@ -687,9 +688,11 @@ static int s6e88a0_ams427ap24_probe(struct mipi_dsi_device *dsi)
 	struct s6e88a0_ams427ap24 *ctx;
 	int ret;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	ctx = devm_drm_panel_alloc(dev, struct s6e88a0_ams427ap24, panel,
+				   &s6e88a0_ams427ap24_panel_funcs,
+				   DRM_MODE_CONNECTOR_DSI);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	ret = devm_regulator_bulk_get_const(dev,
 				      ARRAY_SIZE(s6e88a0_ams427ap24_supplies),
@@ -711,8 +714,6 @@ static int s6e88a0_ams427ap24_probe(struct mipi_dsi_device *dsi)
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
 			  MIPI_DSI_MODE_NO_EOT_PACKET | MIPI_DSI_MODE_VIDEO_NO_HFP;
 
-	drm_panel_init(&ctx->panel, dev, &s6e88a0_ams427ap24_panel_funcs,
-		       DRM_MODE_CONNECTOR_DSI);
 	ctx->panel.prepare_prev_first = true;
 
 	ctx->flip_horizontal = device_property_read_bool(dev, "flip-horizontal");
@@ -721,28 +722,17 @@ static int s6e88a0_ams427ap24_probe(struct mipi_dsi_device *dsi)
 	if (ret < 0)
 		return ret;
 
-	drm_panel_add(&ctx->panel);
+	ret = devm_drm_panel_add(dev, &ctx->panel);
+	if (ret)
+		return ret;
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(dev, dsi);
 	if (ret < 0) {
 		dev_err(dev, "Failed to attach to DSI host: %d\n", ret);
-		drm_panel_remove(&ctx->panel);
 		return ret;
 	}
 
 	return 0;
-}
-
-static void s6e88a0_ams427ap24_remove(struct mipi_dsi_device *dsi)
-{
-	struct s6e88a0_ams427ap24 *ctx = mipi_dsi_get_drvdata(dsi);
-	int ret;
-
-	ret = mipi_dsi_detach(dsi);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to detach from DSI host: %d\n", ret);
-
-	drm_panel_remove(&ctx->panel);
 }
 
 static const struct of_device_id s6e88a0_ams427ap24_of_match[] = {
@@ -753,7 +743,6 @@ MODULE_DEVICE_TABLE(of, s6e88a0_ams427ap24_of_match);
 
 static struct mipi_dsi_driver s6e88a0_ams427ap24_driver = {
 	.probe = s6e88a0_ams427ap24_probe,
-	.remove = s6e88a0_ams427ap24_remove,
 	.driver = {
 		.name = "panel-s6e88a0-ams427ap24",
 		.of_match_table = s6e88a0_ams427ap24_of_match,

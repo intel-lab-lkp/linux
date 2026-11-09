@@ -331,6 +331,7 @@ enum hnae3_dbg_cmd {
 	HNAE3_DBG_CMD_TX_QUEUE_INFO,
 	HNAE3_DBG_CMD_FD_TCAM,
 	HNAE3_DBG_CMD_FD_COUNTER,
+	HNAE3_DBG_CMD_FD_RULE,
 	HNAE3_DBG_CMD_MAC_TNL_STATUS,
 	HNAE3_DBG_CMD_SERV_INFO,
 	HNAE3_DBG_CMD_UMV_INFO,
@@ -338,6 +339,10 @@ enum hnae3_dbg_cmd {
 	HNAE3_DBG_CMD_COAL_INFO,
 	HNAE3_DBG_CMD_UNKNOWN,
 };
+
+#define hnae3_seq_file_to_ae_dev(s)	(dev_get_drvdata((s)->private))
+#define hnae3_seq_file_to_handle(s)	\
+		(((struct hnae3_ae_dev *)hnae3_seq_file_to_ae_dev(s))->handle)
 
 enum hnae3_tc_map_mode {
 	HNAE3_TC_MAP_MODE_PRIO,
@@ -434,7 +439,10 @@ struct hnae3_ae_dev {
 	u32 dev_version;
 	DECLARE_BITMAP(caps, HNAE3_DEV_CAPS_MAX_NUM);
 	void *priv;
+	struct hnae3_handle *handle;
 };
+
+typedef int (*read_func)(struct seq_file *s, void *data);
 
 /* This struct defines the operation on the handle.
  *
@@ -580,8 +588,6 @@ struct hnae3_ae_dev {
  *   Delete clsflower rule
  * cls_flower_active
  *   Check if any cls flower rule exist
- * dbg_read_cmd
- *   Execute debugfs read command.
  * set_tx_hwts_info
  *   Save information for 1588 tx packet
  * get_rx_hwts
@@ -594,6 +600,12 @@ struct hnae3_ae_dev {
  *   Get wake on lan info
  * set_wol
  *   Config wake on lan
+ * dbg_get_read_func
+ *   Return the read func for debugfs seq file
+ * set_pfc_prevention_tout
+ *   Set PFC storm prevention timeout
+ * get_pfc_prevention_tout
+ *   Get PFC storm prevention timeout
  */
 struct hnae3_ae_ops {
 	int (*init_ae_dev)(struct hnae3_ae_dev *ae_dev);
@@ -748,8 +760,6 @@ struct hnae3_ae_ops {
 	void (*enable_fd)(struct hnae3_handle *handle, bool enable);
 	int (*add_arfs_entry)(struct hnae3_handle *handle, u16 queue_id,
 			      u16 flow_id, struct flow_keys *fkeys);
-	int (*dbg_read_cmd)(struct hnae3_handle *handle, enum hnae3_dbg_cmd cmd,
-			    char *buf, int len);
 	pci_ers_result_t (*handle_hw_ras_error)(struct hnae3_ae_dev *ae_dev);
 	bool (*get_hw_reset_stat)(struct hnae3_handle *handle);
 	bool (*ae_dev_resetting)(struct hnae3_handle *handle);
@@ -773,7 +783,7 @@ struct hnae3_ae_ops {
 				 u32 len, u8 *data);
 	bool (*get_cmdq_stat)(struct hnae3_handle *handle);
 	int (*add_cls_flower)(struct hnae3_handle *handle,
-			      struct flow_cls_offload *cls_flower, int tc);
+			      struct flow_cls_offload *cls_flower);
 	int (*del_cls_flower)(struct hnae3_handle *handle,
 			      struct flow_cls_offload *cls_flower);
 	bool (*cls_flower_active)(struct hnae3_handle *handle);
@@ -796,6 +806,16 @@ struct hnae3_ae_ops {
 			struct ethtool_wolinfo *wol);
 	int (*set_wol)(struct hnae3_handle *handle,
 		       struct ethtool_wolinfo *wol);
+	int (*dbg_get_read_func)(struct hnae3_handle *handle,
+				 enum hnae3_dbg_cmd cmd,
+				 read_func *func);
+	int (*hwtstamp_get)(struct hnae3_handle *handle,
+			    struct kernel_hwtstamp_config *config);
+	int (*hwtstamp_set)(struct hnae3_handle *handle,
+			    struct kernel_hwtstamp_config *config,
+			    struct netlink_ext_ack *extack);
+	int (*set_pfc_prevention_tout)(struct hnae3_handle *handle, u16 times);
+	int (*get_pfc_prevention_tout)(struct hnae3_handle *handle, u16 *times);
 };
 
 struct hnae3_dcb_ops {
@@ -875,6 +895,14 @@ struct hnae3_roce_private_info {
 	unsigned long reset_state;
 	unsigned long instance_state;
 	unsigned long state;
+};
+
+struct hnae3_pfc_storm_para {
+	u32 dir;
+	u32 enable;
+	u32 period_ms;
+	u32 times;
+	u32 recovery_period_ms;
 };
 
 #define HNAE3_SUPPORT_APP_LOOPBACK    BIT(0)

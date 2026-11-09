@@ -13,10 +13,10 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/bitops.h>
 #include <linux/bitrev.h>
 #include <linux/clk-provider.h>
 #include <linux/i2c.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
@@ -164,15 +164,17 @@ static unsigned long si521xx_diff_recalc_rate(struct clk_hw *hw,
 	return (unsigned long)rate;
 }
 
-static long si521xx_diff_round_rate(struct clk_hw *hw, unsigned long rate,
-				    unsigned long *prate)
+static int si521xx_diff_determine_rate(struct clk_hw *hw,
+				       struct clk_rate_request *req)
 {
 	unsigned long best_parent;
 
-	best_parent = (rate / SI521XX_DIFF_MULT) * SI521XX_DIFF_DIV;
-	*prate = clk_hw_round_rate(clk_hw_get_parent(hw), best_parent);
+	best_parent = (req->rate / SI521XX_DIFF_MULT) * SI521XX_DIFF_DIV;
+	req->best_parent_rate = clk_hw_round_rate(clk_hw_get_parent(hw), best_parent);
 
-	return (*prate / SI521XX_DIFF_DIV) * SI521XX_DIFF_MULT;
+	req->rate = (req->best_parent_rate / SI521XX_DIFF_DIV) * SI521XX_DIFF_MULT;
+
+	return 0;
 }
 
 static int si521xx_diff_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -208,7 +210,7 @@ static void si521xx_diff_unprepare(struct clk_hw *hw)
 }
 
 static const struct clk_ops si521xx_diff_clk_ops = {
-	.round_rate	= si521xx_diff_round_rate,
+	.determine_rate = si521xx_diff_determine_rate,
 	.set_rate	= si521xx_diff_set_rate,
 	.recalc_rate	= si521xx_diff_recalc_rate,
 	.prepare	= si521xx_diff_prepare,
@@ -254,18 +256,24 @@ static void si521xx_diff_idx_to_reg_bit(const u16 chip_info, const int idx,
 					struct si_clk *clk)
 {
 	unsigned long mask;
-	int oe, b, ctr = 0;
+	unsigned int bit;
+	int oe = 1;
 
-	for (oe = 1; oe <= 2; oe++) {
-		mask = bitrev8(SI521XX_OE_MAP_GET_OE(oe, chip_info));
-		for_each_set_bit(b, &mask, 8) {
-			if (ctr++ != idx)
-				continue;
-			clk->reg = SI521XX_REG_OE(oe);
-			clk->bit = 7 - b;
-			return;
-		}
-	}
+	mask = bitrev8(SI521XX_OE_MAP_GET_OE(1, chip_info));
+	bit = fns(mask, idx);
+	if (bit < 8)
+		goto out;
+
+	oe = 2;
+	bit = idx - hweight8(mask);
+	mask = bitrev8(SI521XX_OE_MAP_GET_OE(2, chip_info));
+	bit = fns(mask, bit);
+	if (bit >= 8)
+		return;
+
+out:
+	clk->reg = SI521XX_REG_OE(oe);
+	clk->bit = 7 - bit;
 }
 
 static struct clk_hw *
@@ -340,7 +348,7 @@ static int si521xx_probe(struct i2c_client *client)
 	return ret;
 }
 
-static int __maybe_unused si521xx_suspend(struct device *dev)
+static int si521xx_suspend(struct device *dev)
 {
 	struct si521xx *si = dev_get_drvdata(dev);
 
@@ -350,22 +358,24 @@ static int __maybe_unused si521xx_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused si521xx_resume(struct device *dev)
+static int si521xx_resume(struct device *dev)
 {
 	struct si521xx *si = dev_get_drvdata(dev);
 	int ret;
 
 	regcache_cache_only(si->regmap, false);
 	ret = regcache_sync(si->regmap);
-	if (ret)
+	if (ret) {
+		regcache_cache_only(si->regmap, true);
 		dev_err(dev, "Failed to restore register map: %d\n", ret);
+	}
 	return ret;
 }
 
 static const struct i2c_device_id si521xx_id[] = {
-	{ "si52144", .driver_data = SI521XX_OE_MAP(0x5, 0xc0) },
-	{ "si52146", .driver_data = SI521XX_OE_MAP(0x15, 0xe0) },
-	{ "si52147", .driver_data = SI521XX_OE_MAP(0x17, 0xf8) },
+	{ .name = "si52144", .driver_data = SI521XX_OE_MAP(0x5, 0xc0) },
+	{ .name = "si52146", .driver_data = SI521XX_OE_MAP(0x15, 0xe0) },
+	{ .name = "si52147", .driver_data = SI521XX_OE_MAP(0x17, 0xf8) },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, si521xx_id);
@@ -373,17 +383,17 @@ MODULE_DEVICE_TABLE(i2c, si521xx_id);
 static const struct of_device_id clk_si521xx_of_match[] = {
 	{ .compatible = "skyworks,si52144", .data = (void *)SI521XX_OE_MAP(0x5, 0xc0) },
 	{ .compatible = "skyworks,si52146", .data = (void *)SI521XX_OE_MAP(0x15, 0xe0) },
-	{ .compatible = "skyworks,si52147", .data = (void *)SI521XX_OE_MAP(0x15, 0xf8) },
+	{ .compatible = "skyworks,si52147", .data = (void *)SI521XX_OE_MAP(0x17, 0xf8) },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, clk_si521xx_of_match);
 
-static SIMPLE_DEV_PM_OPS(si521xx_pm_ops, si521xx_suspend, si521xx_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(si521xx_pm_ops, si521xx_suspend, si521xx_resume);
 
 static struct i2c_driver si521xx_driver = {
 	.driver = {
 		.name = "clk-si521xx",
-		.pm	= &si521xx_pm_ops,
+		.pm	= pm_sleep_ptr(&si521xx_pm_ops),
 		.of_match_table = clk_si521xx_of_match,
 	},
 	.probe		= si521xx_probe,

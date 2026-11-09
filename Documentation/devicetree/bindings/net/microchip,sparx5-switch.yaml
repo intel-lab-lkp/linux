@@ -55,12 +55,14 @@ properties:
           - const: microchip,lan9691-switch
 
   reg:
+    minItems: 2
     items:
       - description: cpu target
       - description: devices target
       - description: general control block target
 
   reg-names:
+    minItems: 2
     items:
       - const: cpu
       - const: devices
@@ -149,9 +151,22 @@ properties:
 
         required:
           - reg
-          - phys
           - phy-mode
           - microchip,bandwidth
+
+        if:
+          not:
+            properties:
+              phy-mode:
+                contains:
+                  enum:
+                    - rgmii
+                    - rgmii-id
+                    - rgmii-rxid
+                    - rgmii-txid
+        then:
+          required:
+            - phys
 
         oneOf:
           - required:
@@ -168,6 +183,26 @@ required:
   - interrupt-names
   - ethernet-ports
 
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - microchip,lan9691-switch
+    then:
+      properties:
+        reg:
+          maxItems: 2
+        reg-names:
+          maxItems: 2
+    else:
+      properties:
+        reg:
+          minItems: 3
+        reg-names:
+          minItems: 3
+
 additionalProperties: false
 
 examples:
@@ -175,9 +210,9 @@ examples:
     #include <dt-bindings/interrupt-controller/arm-gic.h>
     switch: switch@600000000 {
       compatible = "microchip,sparx5-switch";
-      reg =  <0 0x401000>,
-             <0x10004000 0x7fc000>,
-             <0x11010000 0xaf0000>;
+      reg = <0 0x401000>,
+            <0x10004000 0x7fc000>,
+            <0x11010000 0xaf0000>;
       reg-names = "cpu", "devices", "gcb";
       interrupts = <GIC_SPI 30 IRQ_TYPE_LEVEL_HIGH>;
       interrupt-names = "xtr";
@@ -245,4 +280,3 @@ examples:
     };
 
 ...
-#  vim: set ts=2 sw=2 sts=2 tw=80 et cc=80 ft=yaml :

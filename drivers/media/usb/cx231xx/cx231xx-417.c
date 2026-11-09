@@ -1499,7 +1499,7 @@ static int vidioc_g_selection(struct file *file, void *priv,
 	return 0;
 }
 
-static int vidioc_g_std(struct file *file, void *fh0, v4l2_std_id *norm)
+static int vidioc_g_std(struct file *file, void *priv, v4l2_std_id *norm)
 {
 	struct cx231xx *dev = video_drvdata(file);
 
@@ -1666,7 +1666,7 @@ static int cx231xx_s_video_encoding(struct cx2341x_handler *cxhdl, u32 val)
 	format.format.width = cxhdl->width / (is_mpeg1 ? 2 : 1);
 	format.format.height = cxhdl->height;
 	format.format.code = MEDIA_BUS_FMT_FIXED;
-	v4l2_subdev_call(dev->sd_cx25840, pad, set_fmt, NULL, &format);
+	v4l2_subdev_call(dev->sd_cx25840, pad, set_fmt, NULL, NULL, &format);
 	return 0;
 }
 

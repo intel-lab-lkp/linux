@@ -7,6 +7,7 @@
  *		 Martin Schwidefsky (schwidefsky@de.ibm.com)
  */
 
+#include <linux/export.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/io.h>
@@ -168,6 +169,9 @@ __recover_lost_chpids(struct subchannel *sch, int old_lpm)
 {
 	int mask, i;
 	struct chp_id chpid;
+
+	if (!sch->schib.pmcw.dnv)
+		return;
 
 	chp_id_init(&chpid);
 	for (i = 0; i<8; i++) {

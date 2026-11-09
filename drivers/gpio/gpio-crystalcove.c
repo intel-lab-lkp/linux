@@ -349,7 +349,7 @@ static int crystalcove_gpio_probe(struct platform_device *pdev)
 	cg->chip.direction_input = crystalcove_gpio_dir_in;
 	cg->chip.direction_output = crystalcove_gpio_dir_out;
 	cg->chip.get = crystalcove_gpio_get;
-	cg->chip.set_rv = crystalcove_gpio_set;
+	cg->chip.set = crystalcove_gpio_set;
 	cg->chip.base = -1;
 	cg->chip.ngpio = CRYSTALCOVE_VGPIO_NUM;
 	cg->chip.can_sleep = true;
@@ -396,3 +396,4 @@ module_platform_driver(crystalcove_gpio_driver);
 MODULE_AUTHOR("Yang, Bin <bin.yang@intel.com>");
 MODULE_DESCRIPTION("Intel Crystal Cove GPIO Driver");
 MODULE_LICENSE("GPL v2");
+MODULE_ALIAS("platform:crystal_cove_gpio");

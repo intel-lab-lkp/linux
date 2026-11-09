@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright 2015 Intel Deutschland GmbH
- * Copyright (C) 2022-2024 Intel Corporation
+ * Copyright (C) 2022-2025 Intel Corporation
  */
 #include <net/mac80211.h>
 #include "ieee80211_i.h"
@@ -476,8 +476,12 @@ void drv_link_info_changed(struct ieee80211_local *local,
 	if (WARN_ON_ONCE(sdata->vif.type == NL80211_IFTYPE_P2P_DEVICE ||
 			 sdata->vif.type == NL80211_IFTYPE_NAN ||
 			 (sdata->vif.type == NL80211_IFTYPE_MONITOR &&
-			  !sdata->vif.bss_conf.mu_mimo_owner &&
-			  !(changed & BSS_CHANGED_TXPOWER))))
+			  changed & ~(BSS_CHANGED_TXPOWER |
+				      BSS_CHANGED_MU_GROUPS))))
+		return;
+
+	if (WARN_ON_ONCE(changed & BSS_CHANGED_MU_GROUPS &&
+			 !sdata->vif.bss_conf.mu_mimo_owner))
 		return;
 
 	if (!check_sdata_in_driver(sdata))
@@ -514,6 +518,9 @@ int drv_set_key(struct ieee80211_local *local,
 	if (WARN_ON(key->link_id >= 0 && sdata->vif.active_links &&
 		    !(sdata->vif.active_links & BIT(key->link_id))))
 		return -ENOLINK;
+
+	if (fips_enabled)
+		return -EOPNOTSUPP;
 
 	trace_drv_set_key(local, cmd, sdata, sta, key);
 	ret = local->ops->set_key(&local->hw, cmd, &sdata->vif, sta, key);
@@ -623,6 +630,82 @@ int drv_change_sta_links(struct ieee80211_local *local,
 						     lockdep_is_held(&local->hw.wiphy->mtx));
 		ieee80211_link_sta_debugfs_drv_add(link_sta);
 	}
+
+	return 0;
+}
+
+int drv_sta_statistics(struct ieee80211_local *local,
+		       struct ieee80211_sub_if_data *sdata,
+		       struct ieee80211_sta *sta,
+		       struct station_info *sinfo,
+		       bool locked)
+{
+	int ret;
+
+	sdata = get_bss_sdata(sdata);
+	if (!check_sdata_in_driver(sdata))
+		return 0;
+
+	trace_drv_sta_statistics(local, sdata, sta);
+
+	if (locked) {
+		might_sleep();
+		lockdep_assert_wiphy(local->hw.wiphy);
+
+		ret = 0;
+
+		if (local->ops->sta_statistics)
+			local->ops->sta_statistics(&local->hw,
+						   &sdata->vif,
+						   sta, sinfo);
+	} else {
+		ret = -EAGAIN;
+
+		if (local->ops->sta_statistics_atomic)
+			ret = local->ops->sta_statistics_atomic(&local->hw,
+								&sdata->vif,
+								sta, sinfo);
+	}
+
+	trace_drv_return_int(local, ret);
+
+	return ret;
+}
+
+int drv_link_sta_statistics(struct ieee80211_local *local,
+			    struct ieee80211_sub_if_data *sdata,
+			    struct ieee80211_link_sta *link_sta,
+			    struct link_station_info *link_sinfo,
+			    bool locked)
+{
+	int ret;
+
+	sdata = get_bss_sdata(sdata);
+	if (!check_sdata_in_driver(sdata))
+		return 0;
+
+	if (locked) {
+		might_sleep();
+		lockdep_assert_wiphy(local->hw.wiphy);
+
+		ret = 0;
+
+		if (local->ops->link_sta_statistics)
+			local->ops->link_sta_statistics(&local->hw,
+							&sdata->vif,
+							link_sta,
+							link_sinfo);
+	} else {
+		ret = -EAGAIN;
+
+		if (local->ops->sta_statistics_atomic)
+			ret = local->ops->link_sta_statistics_atomic(&local->hw,
+								     &sdata->vif,
+								     link_sta,
+								     link_sinfo);
+	}
+
+	trace_drv_return_int(local, ret);
 
 	return 0;
 }

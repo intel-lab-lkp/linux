@@ -15,7 +15,6 @@
 #include <linux/err.h>
 #include <linux/gpio/consumer.h>
 #include <linux/math64.h>
-#include <linux/mod_devicetable.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
@@ -731,6 +730,7 @@ static void gc05a2_update_pad_format(struct gc05a2 *gc08a3,
 }
 
 static int gc05a2_set_format(struct v4l2_subdev *sd,
+			     const struct v4l2_subdev_client_info *ci,
 			     struct v4l2_subdev_state *state,
 			     struct v4l2_subdev_format *fmt)
 {
@@ -762,6 +762,7 @@ static int gc05a2_set_format(struct v4l2_subdev *sd,
 }
 
 static int gc05a2_get_selection(struct v4l2_subdev *sd,
+				const struct v4l2_subdev_client_info *ci,
 				struct v4l2_subdev_state *state,
 				struct v4l2_subdev_selection *sel)
 {
@@ -796,7 +797,7 @@ static int gc05a2_init_state(struct v4l2_subdev *sd,
 		},
 	};
 
-	gc05a2_set_format(sd, state, &fmt);
+	gc05a2_set_format(sd, NULL, state, &fmt);
 
 	return 0;
 }
@@ -1235,15 +1236,11 @@ static int gc05a2_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(gc05a2->regmap),
 				     "failed to init CCI\n");
 
-	gc05a2->xclk = devm_clk_get(dev, NULL);
+	gc05a2->xclk = devm_v4l2_sensor_clk_get_legacy(dev, NULL, true,
+						       GC05A2_DEFAULT_CLK_FREQ);
 	if (IS_ERR(gc05a2->xclk))
 		return dev_err_probe(dev, PTR_ERR(gc05a2->xclk),
 				     "failed to get xclk\n");
-
-	ret = clk_set_rate(gc05a2->xclk, GC05A2_DEFAULT_CLK_FREQ);
-	if (ret)
-		return dev_err_probe(dev, ret,
-				     "failed to set xclk frequency\n");
 
 	ret = gc05a2_get_regulators(dev, gc05a2);
 	if (ret < 0)

@@ -26,27 +26,25 @@ static inline void poly1305_core_init(struct poly1305_state *state)
 
 void poly1305_core_blocks(struct poly1305_state *state,
 			  const struct poly1305_core_key *key, const void *src,
-			  unsigned int nblocks, u32 hibit);
+			  size_t nblocks, u32 hibit);
 void poly1305_core_emit(const struct poly1305_state *state, const u32 nonce[4],
 			void *dst);
 
-void poly1305_block_init_arch(struct poly1305_block_state *state,
-			      const u8 raw_key[POLY1305_BLOCK_SIZE]);
-void poly1305_block_init_generic(struct poly1305_block_state *state,
-				 const u8 raw_key[POLY1305_BLOCK_SIZE]);
-void poly1305_blocks_arch(struct poly1305_block_state *state, const u8 *src,
-			  unsigned int len, u32 padbit);
+static inline void
+poly1305_block_init_generic(struct poly1305_block_state *desc,
+			    const u8 raw_key[POLY1305_BLOCK_SIZE])
+{
+	poly1305_core_init(&desc->h);
+	poly1305_core_setkey(&desc->core_r, raw_key);
+}
 
 static inline void poly1305_blocks_generic(struct poly1305_block_state *state,
-					   const u8 *src, unsigned int len,
+					   const u8 *src, size_t len,
 					   u32 padbit)
 {
 	poly1305_core_blocks(&state->h, &state->core_r, src,
 			     len / POLY1305_BLOCK_SIZE, padbit);
 }
-
-void poly1305_emit_arch(const struct poly1305_state *state,
-			u8 digest[POLY1305_DIGEST_SIZE], const u32 nonce[4]);
 
 static inline void poly1305_emit_generic(const struct poly1305_state *state,
 					 u8 digest[POLY1305_DIGEST_SIZE],

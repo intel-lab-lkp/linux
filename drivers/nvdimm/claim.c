@@ -34,11 +34,10 @@ void nd_detach_ndns(struct device *dev,
 
 	if (!ndns)
 		return;
-	get_device(&ndns->dev);
-	nvdimm_bus_lock(&ndns->dev);
+
+	struct device *ndev __free(put_device) = get_device(&ndns->dev);
+	guard(nvdimm_bus)(ndev);
 	__nd_detach_ndns(dev, _ndns);
-	nvdimm_bus_unlock(&ndns->dev);
-	put_device(&ndns->dev);
 }
 
 bool __nd_attach_ndns(struct device *dev, struct nd_namespace_common *attach,
@@ -264,7 +263,7 @@ static int nsio_rw_bytes(struct nd_namespace_common *ndns,
 			might_sleep();
 			cleared = nvdimm_clear_poison(&ndns->dev,
 					nsio->res.start + offset, size);
-			if (cleared < size)
+			if (cleared < 0 || cleared < size)
 				rc = -EIO;
 			if (cleared > 0 && cleared / 512) {
 				cleared /= 512;

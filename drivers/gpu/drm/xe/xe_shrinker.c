@@ -5,6 +5,7 @@
 
 #include <linux/shrinker.h>
 
+#include <drm/drm_managed.h>
 #include <drm/ttm/ttm_backup.h>
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_tt.h>
@@ -53,37 +54,120 @@ xe_shrinker_mod_pages(struct xe_shrinker *shrinker, long shrinkable, long purgea
 	write_unlock(&shrinker->lock);
 }
 
-static s64 xe_shrinker_walk(struct xe_device *xe,
-			    struct ttm_operation_ctx *ctx,
-			    const struct xe_bo_shrink_flags flags,
-			    unsigned long to_scan, unsigned long *scanned)
+static bool __xe_shrinker_runtime_pm_get(struct xe_shrinker *shrinker)
 {
+	struct xe_device *xe = shrinker->xe;
+
+	if (xe_pm_runtime_get_if_active(xe))
+		return true;
+
+	if (xe_rpm_reclaim_safe(xe) && !ttm_bo_shrink_avoid_wait()) {
+		xe_pm_runtime_get(xe);
+		return true;
+	}
+
+	queue_work(xe->unordered_wq, &shrinker->pm_worker);
+
+	return false;
+}
+
+static void xe_shrinker_runtime_pm_put(struct xe_shrinker *shrinker, bool runtime_pm)
+{
+	if (runtime_pm)
+		xe_pm_runtime_put(shrinker->xe);
+}
+
+static int __xe_shrinker_walk(struct xe_shrinker *shrinker,
+			      struct ttm_operation_ctx *ctx,
+			      const struct xe_bo_shrink_flags flags,
+			      unsigned long to_scan, unsigned long *scanned,
+			      unsigned long *freed)
+{
+	struct xe_device *xe = shrinker->xe;
 	unsigned int mem_type;
-	s64 freed = 0, lret;
+	bool rpm = false;
+	int ret = 0;
+	s64 lret;
 
 	for (mem_type = XE_PL_SYSTEM; mem_type <= XE_PL_TT; ++mem_type) {
 		struct ttm_resource_manager *man = ttm_manager_type(&xe->ttm, mem_type);
 		struct ttm_bo_lru_cursor curs;
 		struct ttm_buffer_object *ttm_bo;
+		struct ttm_lru_walk_arg arg = {
+			.ctx = ctx,
+			.trylock_only = true,
+		};
 
 		if (!man || !man->use_tt)
 			continue;
 
-		ttm_bo_lru_for_each_reserved_guarded(&curs, man, ctx, ttm_bo) {
+		if (mem_type != XE_PL_SYSTEM && !rpm &&
+		    xe_device_is_l2_flush_optimized(xe)) {
+			if (!__xe_shrinker_runtime_pm_get(shrinker))
+				break;
+			rpm = true;
+		}
+
+		ttm_bo_lru_for_each_reserved_guarded(&curs, man, &arg, ttm_bo) {
 			if (!ttm_bo_shrink_suitable(ttm_bo, ctx))
 				continue;
 
 			lret = xe_bo_shrink(ctx, ttm_bo, flags, scanned);
-			if (lret < 0)
-				return lret;
+			if (lret < 0) {
+				ret = lret;
+				goto out;
+			}
 
-			freed += lret;
+			*freed += lret;
 			if (*scanned >= to_scan)
-				break;
+				goto out;
 		}
+		/* Trylocks should never error, just fail. */
+		xe_assert(xe, !IS_ERR(ttm_bo));
 	}
 
-	return freed;
+out:
+	xe_shrinker_runtime_pm_put(shrinker, rpm);
+
+	return ret;
+}
+
+/*
+ * Try shrinking idle objects without writeback first, then if not sufficient,
+ * try also non-idle objects and finally if that's not sufficient either,
+ * add writeback. This avoids stalls and explicit writebacks with light or
+ * moderate memory pressure.
+ */
+static int xe_shrinker_walk(struct xe_shrinker *shrinker,
+			    struct ttm_operation_ctx *ctx,
+			    const struct xe_bo_shrink_flags flags,
+			    unsigned long to_scan, unsigned long *scanned,
+			    unsigned long *freed)
+{
+	bool no_wait_gpu = true;
+	struct xe_bo_shrink_flags save_flags = flags;
+	int ret;
+
+	swap(no_wait_gpu, ctx->no_wait_gpu);
+	save_flags.writeback = false;
+	ret = __xe_shrinker_walk(shrinker, ctx, save_flags, to_scan, scanned,
+				 freed);
+	swap(no_wait_gpu, ctx->no_wait_gpu);
+	if (ret || *scanned >= to_scan)
+		return ret;
+
+	if (!ctx->no_wait_gpu) {
+		ret = __xe_shrinker_walk(shrinker, ctx, save_flags, to_scan, scanned,
+					 freed);
+		if (ret || *scanned >= to_scan)
+			return ret;
+	}
+
+	if (flags.writeback)
+		ret = __xe_shrinker_walk(shrinker, ctx, flags, to_scan, scanned,
+					 freed);
+
+	return ret;
 }
 
 static unsigned long
@@ -131,22 +215,7 @@ static bool xe_shrinker_runtime_pm_get(struct xe_shrinker *shrinker, bool force,
 			return false;
 	}
 
-	if (!xe_pm_runtime_get_if_active(xe)) {
-		if (xe_rpm_reclaim_safe(xe) && !ttm_bo_shrink_avoid_wait()) {
-			xe_pm_runtime_get(xe);
-			return true;
-		}
-		queue_work(xe->unordered_wq, &shrinker->pm_worker);
-		return false;
-	}
-
-	return true;
-}
-
-static void xe_shrinker_runtime_pm_put(struct xe_shrinker *shrinker, bool runtime_pm)
-{
-	if (runtime_pm)
-		xe_pm_runtime_put(shrinker->xe);
+	return __xe_shrinker_runtime_pm_get(shrinker);
 }
 
 static unsigned long xe_shrinker_scan(struct shrinker *shrink, struct shrink_control *sc)
@@ -165,7 +234,6 @@ static unsigned long xe_shrinker_scan(struct shrinker *shrink, struct shrink_con
 	bool runtime_pm;
 	bool purgeable;
 	bool can_backup = !!(sc->gfp_mask & __GFP_FS);
-	s64 lret;
 
 	nr_to_scan = sc->nr_to_scan;
 
@@ -176,12 +244,9 @@ static unsigned long xe_shrinker_scan(struct shrinker *shrink, struct shrink_con
 	/* Might need runtime PM. Try to wake early if it looks like it. */
 	runtime_pm = xe_shrinker_runtime_pm_get(shrinker, false, nr_to_scan, can_backup);
 
-	if (purgeable && nr_scanned < nr_to_scan) {
-		lret = xe_shrinker_walk(shrinker->xe, &ctx, shrink_flags,
-					nr_to_scan, &nr_scanned);
-		if (lret >= 0)
-			freed += lret;
-	}
+	if (purgeable && nr_scanned < nr_to_scan)
+		xe_shrinker_walk(shrinker, &ctx, shrink_flags,
+				 nr_to_scan, &nr_scanned, &freed);
 
 	sc->nr_scanned = nr_scanned;
 	if (nr_scanned >= nr_to_scan || !can_backup)
@@ -192,10 +257,9 @@ static unsigned long xe_shrinker_scan(struct shrinker *shrink, struct shrink_con
 		runtime_pm = xe_shrinker_runtime_pm_get(shrinker, true, 0, can_backup);
 
 	shrink_flags.purge = false;
-	lret = xe_shrinker_walk(shrinker->xe, &ctx, shrink_flags,
-				nr_to_scan, &nr_scanned);
-	if (lret >= 0)
-		freed += lret;
+
+	xe_shrinker_walk(shrinker, &ctx, shrink_flags,
+			 nr_to_scan, &nr_scanned, &freed);
 
 	sc->nr_scanned = nr_scanned;
 out:
@@ -213,24 +277,34 @@ static void xe_shrinker_pm(struct work_struct *work)
 	xe_pm_runtime_put(shrinker->xe);
 }
 
+static void xe_shrinker_fini(struct drm_device *drm, void *arg)
+{
+	struct xe_shrinker *shrinker = arg;
+
+	xe_assert(shrinker->xe, !shrinker->shrinkable_pages);
+	xe_assert(shrinker->xe, !shrinker->purgeable_pages);
+	shrinker_free(shrinker->shrink);
+	flush_work(&shrinker->pm_worker);
+	kfree(shrinker);
+}
+
 /**
  * xe_shrinker_create() - Create an xe per-device shrinker
  * @xe: Pointer to the xe device.
  *
- * Returns: A pointer to the created shrinker on success,
- * Negative error code on failure.
+ * Return: %0 on success. Negative error code on failure.
  */
-struct xe_shrinker *xe_shrinker_create(struct xe_device *xe)
+int xe_shrinker_create(struct xe_device *xe)
 {
-	struct xe_shrinker *shrinker = kzalloc(sizeof(*shrinker), GFP_KERNEL);
+	struct xe_shrinker *shrinker = kzalloc_obj(*shrinker);
 
 	if (!shrinker)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
 	shrinker->shrink = shrinker_alloc(0, "drm-xe_gem:%s", xe->drm.unique);
 	if (!shrinker->shrink) {
 		kfree(shrinker);
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 	}
 
 	INIT_WORK(&shrinker->pm_worker, xe_shrinker_pm);
@@ -240,19 +314,7 @@ struct xe_shrinker *xe_shrinker_create(struct xe_device *xe)
 	shrinker->shrink->scan_objects = xe_shrinker_scan;
 	shrinker->shrink->private_data = shrinker;
 	shrinker_register(shrinker->shrink);
+	xe->mem.shrinker = shrinker;
 
-	return shrinker;
-}
-
-/**
- * xe_shrinker_destroy() - Destroy an xe per-device shrinker
- * @shrinker: Pointer to the shrinker to destroy.
- */
-void xe_shrinker_destroy(struct xe_shrinker *shrinker)
-{
-	xe_assert(shrinker->xe, !shrinker->shrinkable_pages);
-	xe_assert(shrinker->xe, !shrinker->purgeable_pages);
-	shrinker_free(shrinker->shrink);
-	flush_work(&shrinker->pm_worker);
-	kfree(shrinker);
+	return drmm_add_action_or_reset(&xe->drm, xe_shrinker_fini, shrinker);
 }

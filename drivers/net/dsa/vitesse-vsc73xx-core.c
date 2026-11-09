@@ -1664,7 +1664,7 @@ static int vsc73xx_port_vlan_add(struct dsa_switch *ds, int port,
 	vsc73xx_vlan = vsc73xx_bridge_vlan_find(vsc, vlan->vid);
 
 	if (!vsc73xx_vlan) {
-		vsc73xx_vlan = kzalloc(sizeof(*vsc73xx_vlan), GFP_KERNEL);
+		vsc73xx_vlan = kzalloc_obj(*vsc73xx_vlan);
 		if (!vsc73xx_vlan)
 			return -ENOMEM;
 
@@ -2317,7 +2317,7 @@ static int vsc73xx_gpio_probe(struct vsc73xx *vsc)
 	vsc->gc.parent = vsc->dev;
 	vsc->gc.base = -1;
 	vsc->gc.get = vsc73xx_gpio_get;
-	vsc->gc.set_rv = vsc73xx_gpio_set;
+	vsc->gc.set = vsc73xx_gpio_set;
 	vsc->gc.direction_input = vsc73xx_gpio_direction_input;
 	vsc->gc.direction_output = vsc73xx_gpio_direction_output;
 	vsc->gc.get_direction = vsc73xx_gpio_get_direction;

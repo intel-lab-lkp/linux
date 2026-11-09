@@ -10,6 +10,7 @@
 #include <linux/fileattr.h>
 #include <linux/fsverity.h>
 
+#include <linux/slab.h>
 #define FUSE_VERITY_ENABLE_ARG_MAX_PAGES 256
 
 static ssize_t fuse_send_ioctl(struct fuse_mount *fm, struct fuse_args *args,
@@ -128,9 +129,6 @@ static int fuse_setup_measure_verity(unsigned long arg, struct iovec *iov)
 
 	if (copy_from_user(&digest_size, &uarg->digest_size, sizeof(digest_size)))
 		return -EFAULT;
-
-	if (digest_size > SIZE_MAX - sizeof(struct fsverity_digest))
-		return -EINVAL;
 
 	iov->iov_len = sizeof(struct fsverity_digest) + digest_size;
 
@@ -252,7 +250,7 @@ long fuse_do_ioctl(struct file *file, unsigned int cmd, unsigned long arg,
 
 	err = -ENOMEM;
 	ap.folios = fuse_folios_alloc(fm->fc->max_pages, GFP_KERNEL, &ap.descs);
-	iov_page = (struct iovec *) __get_free_page(GFP_KERNEL);
+	iov_page = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!ap.folios || !iov_page)
 		goto out;
 
@@ -400,7 +398,7 @@ long fuse_do_ioctl(struct file *file, unsigned int cmd, unsigned long arg,
 	}
 	err = 0;
  out:
-	free_page((unsigned long) iov_page);
+	kfree(iov_page);
 	while (ap.num_folios)
 		folio_put(ap.folios[--ap.num_folios]);
 	kfree(ap.folios);
@@ -502,7 +500,7 @@ static void fuse_priv_ioctl_cleanup(struct inode *inode, struct fuse_file *ff)
 	fuse_file_release(inode, ff, O_RDONLY, NULL, S_ISDIR(inode->i_mode));
 }
 
-int fuse_fileattr_get(struct dentry *dentry, struct fileattr *fa)
+int fuse_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 {
 	struct inode *inode = d_inode(dentry);
 	struct fuse_file *ff;
@@ -539,8 +537,8 @@ cleanup:
 	return err;
 }
 
-int fuse_fileattr_set(struct mnt_idmap *idmap,
-		      struct dentry *dentry, struct fileattr *fa)
+int fuse_fileattr_set(const struct mnt_idmap *idmap,
+		      struct dentry *dentry, struct file_kattr *fa)
 {
 	struct inode *inode = d_inode(dentry);
 	struct fuse_file *ff;

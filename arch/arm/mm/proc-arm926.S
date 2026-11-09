@@ -8,8 +8,6 @@
  *
  * These are the low level assembler for performing cache and TLB
  * functions on the arm926.
- *
- *  CONFIG_CPU_ARM926_CPU_IDLE -> nohlt
  */
 #include <linux/linkage.h>
 #include <linux/init.h>
@@ -192,7 +190,7 @@ SYM_FUNC_END(arm926_flush_user_cache_range)
  *	- end	- virtual end address
  */
 SYM_TYPED_FUNC_START(arm926_coherent_kern_range)
-#ifdef CONFIG_CFI_CLANG /* Fallthrough if !CFI */
+#ifdef CONFIG_CFI /* Fallthrough if !CFI */
 	b	arm926_coherent_user_range
 #endif
 SYM_FUNC_END(arm926_coherent_kern_range)

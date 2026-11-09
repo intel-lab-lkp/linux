@@ -99,6 +99,76 @@ const char *soc15_ih_clientid_name[] = {
 	"MP1"
 };
 
+const char *soc_v1_0_ih_clientid_name[] = {
+	"IH",
+	"Reserved",
+	"ATHUB",
+	"BIF",
+	"Reserved",
+	"Reserved",
+	"Reserved",
+	"RLC",
+	"Reserved",
+	"Reserved",
+	"GFX",
+	"IMU",
+	"Reserved",
+	"Reserved",
+	"VCN1 or UVD1",
+	"THM",
+	"VCN or UVD",
+	"Reserved",
+	"VMC",
+	"Reserved",
+	"GRBM_CP",
+	"GC_AID",
+	"ROM_SMUIO",
+	"DF",
+	"Reserved",
+	"PWR",
+	"LSDMA",
+	"GC_UTCL2",
+	"nHT",
+	"Reserved",
+	"MP0",
+	"MP1",
+};
+
+const char *soc_v2_0_ih_clientid_name[] = {
+	"IH",
+	"Reserved",
+	"ATHUB",
+	"BIF",
+	"DCN",
+	"Reserved",
+	"Reserved",
+	"RLC",
+	"Reserved",
+	"Reserved",
+	"GFX",
+	"IMU",
+	"NVE",
+	"Reserved",
+	"Reserved",
+	"THM",
+	"UMSCH_VCN",
+	"Reserved",
+	"VMC",
+	"Reserved",
+	"GRBM_CP",
+	"Reserved",
+	"Reserved",
+	"DF",
+	"VPE",
+	"SMUIO",
+	"Reserved",
+	"GC_UTCL2",
+	"Reserved",
+	"Reserved",
+	"MPASP",
+	"MP1",
+};
+
 const int node_id_to_phys_map[NODEID_MAX] = {
 	[AID0_NODEID] = 0,
 	[XCD0_NODEID] = 0,
@@ -142,8 +212,9 @@ void amdgpu_irq_disable_all(struct amdgpu_device *adev)
 				r = src->funcs->set(adev, src, k,
 						    AMDGPU_IRQ_STATE_DISABLE);
 				if (r)
-					DRM_ERROR("error disabling interrupt (%d)\n",
-						  r);
+					dev_err(adev->dev,
+						"error disabling interrupt (%d)\n",
+						r);
 			}
 		}
 	}
@@ -221,6 +292,22 @@ static void amdgpu_irq_handle_ih_soft(struct work_struct *work)
 	amdgpu_ih_process(adev, &adev->irq.ih_soft);
 }
 
+static void amdgpu_irq_handle_ih_psp(struct work_struct *work)
+{
+	struct amdgpu_device *adev = container_of(work, struct amdgpu_device,
+						  irq.ih_psp_work);
+
+	amdgpu_ih_process(adev, &adev->irq.ih_psp);
+}
+	
+static void amdgpu_irq_handle_ih_ualink(struct work_struct *work)
+{
+	struct amdgpu_device *adev = container_of(work, struct amdgpu_device,
+						  irq.ih_ualink_work);
+
+	amdgpu_ih_process(adev, &adev->irq.ih_ualink);
+}
+
 /**
  * amdgpu_msi_ok - check whether MSI functionality is enabled
  *
@@ -242,7 +329,7 @@ static bool amdgpu_msi_ok(struct amdgpu_device *adev)
 	return true;
 }
 
-static void amdgpu_restore_msix(struct amdgpu_device *adev)
+void amdgpu_restore_msix(struct amdgpu_device *adev)
 {
 	u16 ctrl;
 
@@ -273,8 +360,6 @@ int amdgpu_irq_init(struct amdgpu_device *adev)
 	unsigned int irq, flags;
 	int r;
 
-	spin_lock_init(&adev->irq.lock);
-
 	/* Enable MSI if not disabled by module parameter */
 	adev->irq.msi_enabled = false;
 
@@ -298,6 +383,8 @@ int amdgpu_irq_init(struct amdgpu_device *adev)
 	INIT_WORK(&adev->irq.ih1_work, amdgpu_irq_handle_ih1);
 	INIT_WORK(&adev->irq.ih2_work, amdgpu_irq_handle_ih2);
 	INIT_WORK(&adev->irq.ih_soft_work, amdgpu_irq_handle_ih_soft);
+	INIT_WORK(&adev->irq.ih_psp_work, amdgpu_irq_handle_ih_psp);
+	INIT_WORK(&adev->irq.ih_ualink_work, amdgpu_irq_handle_ih_ualink);
 
 	/* Use vector 0 for MSI-X. */
 	r = pci_irq_vector(adev->pdev, 0);
@@ -315,7 +402,7 @@ int amdgpu_irq_init(struct amdgpu_device *adev)
 	adev->irq.irq = irq;
 	adev_to_drm(adev)->max_vblank_count = 0x00ffffff;
 
-	DRM_DEBUG("amdgpu: irq initialized.\n");
+	dev_dbg(adev->dev, "irq initialized.\n");
 	return 0;
 
 free_vectors:
@@ -336,6 +423,7 @@ void amdgpu_irq_fini_hw(struct amdgpu_device *adev)
 	}
 
 	amdgpu_ih_ring_fini(adev, &adev->irq.ih_soft);
+	amdgpu_ih_ring_fini(adev, &adev->irq.ih_psp);
 	amdgpu_ih_ring_fini(adev, &adev->irq.ih);
 	amdgpu_ih_ring_fini(adev, &adev->irq.ih1);
 	amdgpu_ih_ring_fini(adev, &adev->irq.ih2);
@@ -400,9 +488,8 @@ int amdgpu_irq_add_id(struct amdgpu_device *adev,
 
 	if (!adev->irq.client[client_id].sources) {
 		adev->irq.client[client_id].sources =
-			kcalloc(AMDGPU_MAX_IRQ_SRC_ID,
-				sizeof(struct amdgpu_irq_src *),
-				GFP_KERNEL);
+			kzalloc_objs(struct amdgpu_irq_src *,
+				     AMDGPU_MAX_IRQ_SRC_ID);
 		if (!adev->irq.client[client_id].sources)
 			return -ENOMEM;
 	}
@@ -413,8 +500,7 @@ int amdgpu_irq_add_id(struct amdgpu_device *adev,
 	if (source->num_types && !source->enabled_types) {
 		atomic_t *types;
 
-		types = kcalloc(source->num_types, sizeof(atomic_t),
-				GFP_KERNEL);
+		types = kzalloc_objs(atomic_t, source->num_types);
 		if (!types)
 			return -ENOMEM;
 
@@ -461,10 +547,10 @@ void amdgpu_irq_dispatch(struct amdgpu_device *adev,
 	src_id = entry.src_id;
 
 	if (client_id >= AMDGPU_IRQ_CLIENTID_MAX) {
-		DRM_DEBUG("Invalid client_id in IV: %d\n", client_id);
+		dev_dbg(adev->dev, "Invalid client_id in IV: %d\n", client_id);
 
 	} else	if (src_id >= AMDGPU_MAX_IRQ_SRC_ID) {
-		DRM_DEBUG("Invalid src_id in IV: %d\n", src_id);
+		dev_dbg(adev->dev, "Invalid src_id in IV: %d\n", src_id);
 
 	} else if (((client_id == AMDGPU_IRQ_CLIENTID_LEGACY) ||
 		    (client_id == SOC15_IH_CLIENTID_ISP)) &&
@@ -472,18 +558,21 @@ void amdgpu_irq_dispatch(struct amdgpu_device *adev,
 		generic_handle_domain_irq(adev->irq.domain, src_id);
 
 	} else if (!adev->irq.client[client_id].sources) {
-		DRM_DEBUG("Unregistered interrupt client_id: %d src_id: %d\n",
-			  client_id, src_id);
+		dev_dbg(adev->dev,
+			"Unregistered interrupt client_id: %d src_id: %d\n",
+			client_id, src_id);
 
 	} else if ((src = adev->irq.client[client_id].sources[src_id])) {
 		r = src->funcs->process(adev, src, &entry);
 		if (r < 0)
-			DRM_ERROR("error processing interrupt (%d)\n", r);
+			dev_err(adev->dev, "error processing interrupt (%d)\n",
+				r);
 		else if (r)
 			handled = true;
 
 	} else {
-		DRM_DEBUG("Unregistered interrupt src_id: %d of client_id:%d\n",
+		dev_dbg(adev->dev,
+			"Unregistered interrupt src_id: %d of client_id:%d\n",
 			src_id, client_id);
 	}
 
@@ -510,7 +599,23 @@ void amdgpu_irq_delegate(struct amdgpu_device *adev,
 			 unsigned int num_dw)
 {
 	amdgpu_ih_ring_write(adev, &adev->irq.ih_soft, entry->iv_entry, num_dw);
-	schedule_work(&adev->irq.ih_soft_work);
+	queue_work(system_dfl_wq, &adev->irq.ih_soft_work);
+}
+
+void amdgpu_irq_psp_delegate(struct amdgpu_device *adev,
+			     struct amdgpu_iv_entry *entry,
+			     unsigned int num_dw)
+{
+	amdgpu_ih_ring_write(adev, &adev->irq.ih_psp, entry->iv_entry, num_dw);
+	schedule_work(&adev->irq.ih_psp_work);
+}
+
+void amdgpu_irq_ualink_delegate(struct amdgpu_device *adev,
+				struct amdgpu_iv_entry *entry,
+				unsigned int num_dw)
+{
+	amdgpu_ih_ring_write(adev, &adev->irq.ih_ualink, entry->iv_entry, num_dw);
+	schedule_work(&adev->irq.ih_ualink_work);
 }
 
 /**
@@ -620,7 +725,7 @@ int amdgpu_irq_put(struct amdgpu_device *adev, struct amdgpu_irq_src *src,
 		   unsigned int type)
 {
 	/* When the threshold is reached,the interrupt source may not be enabled.return -EINVAL */
-	if (amdgpu_ras_is_rma(adev))
+	if (amdgpu_ras_is_rma(adev) && !amdgpu_irq_enabled(adev, src, type))
 		return -EINVAL;
 
 	if (!adev->irq.installed)
@@ -732,7 +837,7 @@ int amdgpu_irq_add_domain(struct amdgpu_device *adev)
 	adev->irq.domain = irq_domain_create_linear(NULL, AMDGPU_MAX_IRQ_SRC_ID,
 						    &amdgpu_hw_irqdomain_ops, adev);
 	if (!adev->irq.domain) {
-		DRM_ERROR("GPU irq add domain failed\n");
+		dev_err(adev->dev, "GPU irq add domain failed\n");
 		return -ENODEV;
 	}
 

@@ -384,6 +384,7 @@ static int lt6911uxe_disable_streams(struct v4l2_subdev *sd,
 }
 
 static int lt6911uxe_set_format(struct v4l2_subdev *sd,
+				const struct v4l2_subdev_client_info *ci,
 				struct v4l2_subdev_state *sd_state,
 				struct v4l2_subdev_format *fmt)
 {
@@ -439,7 +440,7 @@ static int lt6911uxe_init_state(struct v4l2_subdev *sd,
 		: V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
 
-	return lt6911uxe_set_format(sd, sd_state, &fmt);
+	return lt6911uxe_set_format(sd, NULL, sd_state, &fmt);
 }
 
 static const struct v4l2_subdev_video_ops lt6911uxe_video_ops = {
@@ -562,7 +563,7 @@ static irqreturn_t lt6911uxe_threaded_irq_fn(int irq, void *dev_id)
 	 * As a HDMI to CSI2 bridge, it needs to update the format in time
 	 * when the HDMI source changes.
 	 */
-	lt6911uxe_set_format(sd, state, &fmt);
+	lt6911uxe_set_format(sd, NULL, state, &fmt);
 	v4l2_subdev_unlock_state(state);
 
 	return IRQ_HANDLED;
@@ -600,7 +601,7 @@ static int lt6911uxe_probe(struct i2c_client *client)
 
 	v4l2_i2c_subdev_init(&lt6911uxe->sd, client, &lt6911uxe_subdev_ops);
 
-	lt6911uxe->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_IN);
+	lt6911uxe->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(lt6911uxe->reset_gpio))
 		return dev_err_probe(dev, PTR_ERR(lt6911uxe->reset_gpio),
 				     "failed to get reset gpio\n");

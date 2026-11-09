@@ -1801,10 +1801,8 @@ static const struct mtk_pin_reg_calc mt8196_reg_cals[PINCTRL_PIN_REG_MAX] = {
 };
 
 static const char * const mt8196_pinctrl_register_base_names[] = {
-	"iocfg0", "iocfg_rt", "iocfg_rm1", "iocfg_rm2",
-	"iocfg_rb", "iocfg_bm1", "iocfg_bm2", "iocfg_bm3",
-	"iocfg_lt", "iocfg_lm1", "iocfg_lm2", "iocfg_lb1",
-	"iocfg_lb2", "iocfg_tm1", "iocfg_tm2", "iocfg_tm3",
+	"base", "rt", "rm1", "rm2", "rb", "bm1", "bm2", "bm3",
+	"lt", "lm1", "lm2", "lb1", "lb2", "tm1", "tm2", "tm3",
 };
 
 static const struct mtk_eint_hw mt8196_eint_hw = {
@@ -1841,6 +1839,7 @@ static const struct of_device_id mt8196_pinctrl_of_match[] = {
 	{ .compatible = "mediatek,mt8196-pinctrl", .data = &mt8196_data },
 	{ /* sentinel */ }
 };
+MODULE_DEVICE_TABLE(of, mt8196_pinctrl_of_match);
 
 static struct platform_driver mt8196_pinctrl_driver = {
 	.driver = {
@@ -1858,3 +1857,4 @@ static int __init mt8196_pinctrl_init(void)
 arch_initcall(mt8196_pinctrl_init);
 
 MODULE_DESCRIPTION("MediaTek MT8196 Pinctrl Driver");
+MODULE_LICENSE("GPL v2");

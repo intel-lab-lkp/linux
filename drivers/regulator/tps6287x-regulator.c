@@ -8,7 +8,6 @@
 
 #include <linux/err.h>
 #include <linux/i2c.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/regulator/of_regulator.h>
@@ -27,10 +26,17 @@
 #define TPS6287X_CTRL3		0x03
 #define TPS6287X_STATUS		0x04
 
+static bool tps6287x_volatile_reg(struct device *dev, unsigned int reg)
+{
+	return reg == TPS6287X_STATUS;
+}
+
 static const struct regmap_config tps6287x_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = TPS6287X_STATUS,
+	.cache_type = REGCACHE_MAPLE,
+	.volatile_reg = tps6287x_volatile_reg,
 };
 
 static const struct linear_range tps6287x_voltage_ranges[] = {
@@ -222,11 +228,11 @@ static const struct of_device_id tps6287x_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, tps6287x_dt_ids);
 
 static const struct i2c_device_id tps6287x_i2c_id[] = {
-	{ "tps62870" },
-	{ "tps62871" },
-	{ "tps62872" },
-	{ "tps62873" },
-	{}
+	{ .name = "tps62870" },
+	{ .name = "tps62871" },
+	{ .name = "tps62872" },
+	{ .name = "tps62873" },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(i2c, tps6287x_i2c_id);

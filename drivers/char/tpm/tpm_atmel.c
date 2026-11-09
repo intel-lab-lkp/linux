@@ -148,7 +148,8 @@ static int tpm_atml_recv(struct tpm_chip *chip, u8 *buf, size_t count)
 	return size;
 }
 
-static int tpm_atml_send(struct tpm_chip *chip, u8 *buf, size_t count)
+static int tpm_atml_send(struct tpm_chip *chip, u8 *buf, size_t bufsiz,
+			 size_t count)
 {
 	struct tpm_atmel_priv *priv = dev_get_drvdata(&chip->dev);
 	int i;
@@ -204,12 +205,12 @@ static void atml_plat_remove(void)
 	platform_device_unregister(pdev);
 }
 
-static SIMPLE_DEV_PM_OPS(tpm_atml_pm, tpm_pm_suspend, tpm_pm_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(tpm_atml_pm, tpm_pm_suspend, tpm_pm_resume);
 
 static struct platform_driver atml_drv = {
 	.driver = {
 		.name = "tpm_atmel",
-		.pm		= &tpm_atml_pm,
+		.pm		= pm_sleep_ptr(&tpm_atml_pm),
 	},
 };
 

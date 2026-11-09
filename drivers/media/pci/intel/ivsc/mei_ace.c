@@ -420,6 +420,7 @@ static int mei_ace_setup_dev_link(struct mei_ace *ace)
 		goto err_put;
 	}
 
+	put_device(csi_dev);
 	ace->csi_dev = csi_dev;
 
 	return 0;
@@ -522,12 +523,13 @@ static void mei_ace_remove(struct mei_cl_device *cldev)
 	cancel_work_sync(&ace->work);
 
 	device_link_del(ace->csi_link);
-	put_device(ace->csi_dev);
 
 	pm_runtime_disable(&cldev->dev);
 	pm_runtime_set_suspended(&cldev->dev);
 
 	ace_set_camera_owner(ace, ACE_CAMERA_IVSC);
+
+	mei_cldev_disable(cldev);
 
 	mutex_destroy(&ace->lock);
 }
@@ -574,7 +576,7 @@ static struct mei_cl_driver mei_ace_driver = {
 
 module_mei_cl_driver(mei_ace_driver);
 
-MODULE_AUTHOR("Wentong Wu <wentong.wu@intel.com>");
+MODULE_AUTHOR("Wentong Wu");
 MODULE_AUTHOR("Zhifeng Wang <zhifeng.wang@intel.com>");
 MODULE_DESCRIPTION("Device driver for IVSC ACE");
 MODULE_LICENSE("GPL");

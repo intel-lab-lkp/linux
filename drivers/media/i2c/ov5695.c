@@ -805,6 +805,7 @@ ov5695_find_best_fit(struct v4l2_subdev_format *fmt)
 }
 
 static int ov5695_set_fmt(struct v4l2_subdev *sd,
+			  const struct v4l2_subdev_client_info *ci,
 			  struct v4l2_subdev_state *sd_state,
 			  struct v4l2_subdev_format *fmt)
 {
@@ -1264,16 +1265,12 @@ static int ov5695_probe(struct i2c_client *client)
 	ov5695->client = client;
 	ov5695->cur_mode = &supported_modes[0];
 
-	ov5695->xvclk = devm_clk_get(dev, "xvclk");
-	if (IS_ERR(ov5695->xvclk)) {
-		dev_err(dev, "Failed to get xvclk\n");
-		return -EINVAL;
-	}
-	ret = clk_set_rate(ov5695->xvclk, OV5695_XVCLK_FREQ);
-	if (ret < 0) {
-		dev_err(dev, "Failed to set xvclk rate (24MHz)\n");
-		return ret;
-	}
+	ov5695->xvclk = devm_v4l2_sensor_clk_get_legacy(dev, "xvclk", true,
+							OV5695_XVCLK_FREQ);
+	if (IS_ERR(ov5695->xvclk))
+		return dev_err_probe(dev, PTR_ERR(ov5695->xvclk),
+				     "Failed to get xvclk\n");
+
 	if (clk_get_rate(ov5695->xvclk) != OV5695_XVCLK_FREQ)
 		dev_warn(dev, "xvclk mismatched, modes are based on 24MHz\n");
 

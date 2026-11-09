@@ -776,7 +776,7 @@ struct i915_vma * __must_check
 i915_gem_object_pin_to_display_plane(struct drm_i915_gem_object *obj,
 				     struct i915_gem_ww_ctx *ww,
 				     u32 alignment, unsigned int guard,
-				     const struct i915_gtt_view *view,
+				     const struct intel_gtt_view *view,
 				     unsigned int flags);
 
 void i915_gem_object_make_unshrinkable(struct drm_i915_gem_object *obj);
@@ -795,6 +795,7 @@ static inline void __start_cpu_write(struct drm_i915_gem_object *obj)
 
 void i915_gem_fence_wait_priority(struct dma_fence *fence,
 				  const struct i915_sched_attr *attr);
+void i915_gem_fence_wait_priority_display(struct dma_fence *fence);
 
 int i915_gem_object_wait(struct drm_i915_gem_object *obj,
 			 unsigned int flags,

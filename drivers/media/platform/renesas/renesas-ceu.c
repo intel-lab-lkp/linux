@@ -841,12 +841,13 @@ static int __ceu_try_fmt(struct ceu_device *ceudev, struct v4l2_format *v4l2_fmt
 	 * time.
 	 */
 	sd_format.format.code = mbus_code;
-	ret = v4l2_subdev_call(v4l2_sd, pad, set_fmt, &pad_state, &sd_format);
+	ret = v4l2_subdev_call(v4l2_sd, pad, set_fmt, NULL, &pad_state,
+			       &sd_format);
 	if (ret) {
 		if (ret == -EINVAL) {
 			/* fallback */
 			sd_format.format.code = mbus_code_old;
-			ret = v4l2_subdev_call(v4l2_sd, pad, set_fmt,
+			ret = v4l2_subdev_call(v4l2_sd, pad, set_fmt, NULL,
 					       &pad_state, &sd_format);
 		}
 
@@ -900,7 +901,7 @@ static int ceu_set_fmt(struct ceu_device *ceudev, struct v4l2_format *v4l2_fmt)
 
 	format.format.code = mbus_code;
 	v4l2_fill_mbus_format_mplane(&format.format, &v4l2_fmt->fmt.pix_mp);
-	ret = v4l2_subdev_call(v4l2_sd, pad, set_fmt, NULL, &format);
+	ret = v4l2_subdev_call(v4l2_sd, pad, set_fmt, NULL, NULL, &format);
 	if (ret)
 		return ret;
 
@@ -1048,7 +1049,7 @@ static int ceu_init_mbus_fmt(struct ceu_device *ceudev)
 /*
  * ceu_runtime_resume() - soft-reset the interface and turn sensor power on.
  */
-static int __maybe_unused ceu_runtime_resume(struct device *dev)
+static int ceu_runtime_resume(struct device *dev)
 {
 	struct ceu_device *ceudev = dev_get_drvdata(dev);
 	struct v4l2_subdev *v4l2_sd = ceudev->sd->v4l2_sd;
@@ -1064,7 +1065,7 @@ static int __maybe_unused ceu_runtime_resume(struct device *dev)
  * ceu_runtime_suspend() - disable capture and interrupts and soft-reset.
  *			   Turn sensor power off.
  */
-static int __maybe_unused ceu_runtime_suspend(struct device *dev)
+static int ceu_runtime_suspend(struct device *dev)
 {
 	struct ceu_device *ceudev = dev_get_drvdata(dev);
 	struct v4l2_subdev *v4l2_sd = ceudev->sd->v4l2_sd;
@@ -1616,7 +1617,7 @@ static int ceu_probe(struct platform_device *pdev)
 	int num_subdevs;
 	int ret;
 
-	ceudev = kzalloc(sizeof(*ceudev), GFP_KERNEL);
+	ceudev = kzalloc_obj(*ceudev);
 	if (!ceudev)
 		return -ENOMEM;
 
@@ -1709,15 +1710,13 @@ static void ceu_remove(struct platform_device *pdev)
 }
 
 static const struct dev_pm_ops ceu_pm_ops = {
-	SET_RUNTIME_PM_OPS(ceu_runtime_suspend,
-			   ceu_runtime_resume,
-			   NULL)
+	RUNTIME_PM_OPS(ceu_runtime_suspend, ceu_runtime_resume, NULL)
 };
 
 static struct platform_driver ceu_driver = {
 	.driver		= {
 		.name	= DRIVER_NAME,
-		.pm	= &ceu_pm_ops,
+		.pm	= pm_ptr(&ceu_pm_ops),
 		.of_match_table = of_match_ptr(ceu_of_match),
 	},
 	.probe		= ceu_probe,

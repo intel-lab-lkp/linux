@@ -12,6 +12,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/hex.h>
 #include <linux/kernel.h>
 #include <linux/bsg-lib.h>
 #include <scsi/scsi_device.h>
@@ -441,18 +442,12 @@ static int fc_host_setup(struct transport_container *tc, struct device *dev,
 	fc_host->next_vport_number = 0;
 	fc_host->npiv_vports_inuse = 0;
 
-	fc_host->work_q = alloc_workqueue("fc_wq_%d", 0, 0, shost->host_no);
+	fc_host->work_q = alloc_workqueue("fc_wq_%d", WQ_PERCPU, 0,
+					  shost->host_no);
 	if (!fc_host->work_q)
 		return -ENOMEM;
 
 	fc_host->dev_loss_tmo = fc_dev_loss_tmo;
-	fc_host->devloss_work_q = alloc_workqueue("fc_dl_%d", 0, 0,
-					shost->host_no);
-	if (!fc_host->devloss_work_q) {
-		destroy_workqueue(fc_host->work_q);
-		fc_host->work_q = NULL;
-		return -ENOMEM;
-	}
 
 	fc_bsg_hostadd(shost, fc_host);
 	/* ignore any bsg add error - we just can't do sgio */
@@ -650,19 +645,19 @@ fc_find_rport_by_wwpn(struct Scsi_Host *shost, u64 wwpn)
 	struct fc_rport *rport;
 	unsigned long flags;
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 
 	list_for_each_entry(rport, &fc_host_rports(shost), peers) {
 		if (rport->port_state != FC_PORTSTATE_ONLINE)
 			continue;
 
 		if (rport->port_name == wwpn) {
-			spin_unlock_irqrestore(shost->host_lock, flags);
+			spin_unlock_irqrestore(&shost->host_lock, flags);
 			return rport;
 		}
 	}
 
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 	return NULL;
 }
 EXPORT_SYMBOL(fc_find_rport_by_wwpn);
@@ -742,6 +737,37 @@ fc_cn_stats_update(u16 event_type, struct fc_fpin_stats *stats)
 	}
 }
 
+static void
+fc_fpin_pname_stats_update(struct Scsi_Host *shost,
+			   struct fc_rport *attach_rport, u16 event_type,
+			   u32 desc_len, u32 fixed_len, u32 pname_count,
+			   __be64 *pname_list,
+			   void (*stats_update)(u16 event_type,
+						struct fc_fpin_stats *stats))
+{
+	u32 i;
+	struct fc_rport *rport;
+	u64 wwpn;
+
+	if (desc_len < fixed_len)
+		pname_count = 0;
+	else
+		pname_count = min(pname_count, (desc_len - fixed_len) /
+				   sizeof(pname_list[0]));
+
+	for (i = 0; i < pname_count; i++) {
+		wwpn = be64_to_cpu(pname_list[i]);
+		rport = fc_find_rport_by_wwpn(shost, wwpn);
+		if (rport &&
+		    (rport->roles & FC_PORT_ROLE_FCP_TARGET ||
+		     rport->roles & FC_PORT_ROLE_NVME_TARGET)) {
+			if (rport == attach_rport)
+				continue;
+			stats_update(event_type, &rport->fpin_stats);
+		}
+	}
+}
+
 /*
  * fc_fpin_li_stats_update - routine to update Link Integrity
  * event statistics.
@@ -752,13 +778,11 @@ fc_cn_stats_update(u16 event_type, struct fc_fpin_stats *stats)
 static void
 fc_fpin_li_stats_update(struct Scsi_Host *shost, struct fc_tlv_desc *tlv)
 {
-	u8 i;
 	struct fc_rport *rport = NULL;
 	struct fc_rport *attach_rport = NULL;
 	struct fc_host_attrs *fc_host = shost_to_fc_host(shost);
 	struct fc_fn_li_desc *li_desc = (struct fc_fn_li_desc *)tlv;
 	u16 event_type = be16_to_cpu(li_desc->event_type);
-	u64 wwpn;
 
 	rport = fc_find_rport_by_wwpn(shost,
 				      be64_to_cpu(li_desc->attached_wwpn));
@@ -769,22 +793,11 @@ fc_fpin_li_stats_update(struct Scsi_Host *shost, struct fc_tlv_desc *tlv)
 		fc_li_stats_update(event_type, &attach_rport->fpin_stats);
 	}
 
-	if (be32_to_cpu(li_desc->pname_count) > 0) {
-		for (i = 0;
-		    i < be32_to_cpu(li_desc->pname_count);
-		    i++) {
-			wwpn = be64_to_cpu(li_desc->pname_list[i]);
-			rport = fc_find_rport_by_wwpn(shost, wwpn);
-			if (rport &&
-			    (rport->roles & FC_PORT_ROLE_FCP_TARGET ||
-			    rport->roles & FC_PORT_ROLE_NVME_TARGET)) {
-				if (rport == attach_rport)
-					continue;
-				fc_li_stats_update(event_type,
-						   &rport->fpin_stats);
-			}
-		}
-	}
+	fc_fpin_pname_stats_update(shost, attach_rport, event_type,
+				   be32_to_cpu(li_desc->desc_len),
+				   FC_TLV_DESC_LENGTH_FROM_SZ(*li_desc),
+				   be32_to_cpu(li_desc->pname_count),
+				   li_desc->pname_list, fc_li_stats_update);
 
 	if (fc_host->port_name == be64_to_cpu(li_desc->attached_wwpn))
 		fc_li_stats_update(event_type, &fc_host->fpin_stats);
@@ -832,13 +845,11 @@ static void
 fc_fpin_peer_congn_stats_update(struct Scsi_Host *shost,
 				struct fc_tlv_desc *tlv)
 {
-	u8 i;
 	struct fc_rport *rport = NULL;
 	struct fc_rport *attach_rport = NULL;
 	struct fc_fn_peer_congn_desc *pc_desc =
 	    (struct fc_fn_peer_congn_desc *)tlv;
 	u16 event_type = be16_to_cpu(pc_desc->event_type);
-	u64 wwpn;
 
 	rport = fc_find_rport_by_wwpn(shost,
 				      be64_to_cpu(pc_desc->attached_wwpn));
@@ -849,22 +860,11 @@ fc_fpin_peer_congn_stats_update(struct Scsi_Host *shost,
 		fc_cn_stats_update(event_type, &attach_rport->fpin_stats);
 	}
 
-	if (be32_to_cpu(pc_desc->pname_count) > 0) {
-		for (i = 0;
-		    i < be32_to_cpu(pc_desc->pname_count);
-		    i++) {
-			wwpn = be64_to_cpu(pc_desc->pname_list[i]);
-			rport = fc_find_rport_by_wwpn(shost, wwpn);
-			if (rport &&
-			    (rport->roles & FC_PORT_ROLE_FCP_TARGET ||
-			     rport->roles & FC_PORT_ROLE_NVME_TARGET)) {
-				if (rport == attach_rport)
-					continue;
-				fc_cn_stats_update(event_type,
-						   &rport->fpin_stats);
-			}
-		}
-	}
+	fc_fpin_pname_stats_update(shost, attach_rport, event_type,
+				   be32_to_cpu(pc_desc->desc_len),
+				   FC_TLV_DESC_LENGTH_FROM_SZ(*pc_desc),
+				   be32_to_cpu(pc_desc->pname_count),
+				   pc_desc->pname_list, fc_cn_stats_update);
 }
 
 /*
@@ -1334,6 +1334,46 @@ store_fc_rport_fast_io_fail_tmo(struct device *dev,
 static FC_DEVICE_ATTR(rport, fast_io_fail_tmo, S_IRUGO | S_IWUSR,
 	show_fc_rport_fast_io_fail_tmo, store_fc_rport_fast_io_fail_tmo);
 
+#define fc_rport_encryption(name)							\
+static ssize_t fc_rport_encinfo_##name(struct device *cd,				\
+				       struct device_attribute *attr,			\
+				       char *buf)					\
+{											\
+	struct fc_rport *rport = transport_class_to_rport(cd);				\
+	struct Scsi_Host *shost = rport_to_shost(rport);				\
+	struct fc_internal *i = to_fc_internal(shost->transportt);			\
+	struct fc_encryption_info *info;						\
+	ssize_t ret = -ENOENT;								\
+	u32 data;									\
+											\
+	if (i->f->get_fc_rport_enc_info) {						\
+		info = (i->f->get_fc_rport_enc_info)(rport);				\
+		if (info) {								\
+			data = info->name;						\
+			if (!strcmp(#name, "status")) {					\
+				ret = scnprintf(buf,					\
+						FC_RPORT_ENCRYPTION_STATUS_MAX_LEN,	\
+						"%s\n",					\
+						data ? "Encrypted" : "Unencrypted");	\
+			}								\
+		}									\
+	}										\
+	return ret;									\
+}											\
+static FC_DEVICE_ATTR(rport, encryption_##name, 0444, fc_rport_encinfo_##name, NULL)	\
+
+fc_rport_encryption(status);
+
+static struct attribute *fc_rport_encryption_attrs[] = {
+	&device_attr_rport_encryption_status.attr,
+	NULL
+};
+
+static struct attribute_group fc_rport_encryption_group = {
+	.name = "encryption",
+	.attrs = fc_rport_encryption_attrs,
+};
+
 #define fc_rport_fpin_statistic(name)					\
 static ssize_t fc_rport_fpinstat_##name(struct device *cd,		\
 				  struct device_attribute *attr,	\
@@ -1678,13 +1718,13 @@ store_fc_vport_delete(struct device *dev, struct device_attribute *attr,
 	struct Scsi_Host *shost = vport_to_shost(vport);
 	unsigned long flags;
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	if (vport->flags & (FC_VPORT_DEL | FC_VPORT_CREATING)) {
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 		return -EBUSY;
 	}
 	vport->flags |= FC_VPORT_DELETING;
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	fc_queue_work(shost, &vport->vport_delete_work);
 	return count;
@@ -2012,7 +2052,7 @@ store_fc_private_host_tgtid_bind_type(struct device *dev,
 
 	/* if changing bind type, purge all unused consistent bindings */
 	if (val != fc_host_tgtid_bind_type(shost)) {
-		spin_lock_irqsave(shost->host_lock, flags);
+		spin_lock_irqsave(&shost->host_lock, flags);
 		while (!list_empty(&fc_host_rport_bindings(shost))) {
 			get_list_head_entry(rport,
 				&fc_host_rport_bindings(shost), peers);
@@ -2020,7 +2060,7 @@ store_fc_private_host_tgtid_bind_type(struct device *dev,
 			rport->port_state = FC_PORTSTATE_DELETED;
 			fc_queue_work(shost, &rport->rport_delete_work);
 		}
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 	}
 
 	fc_host_tgtid_bind_type(shost) = val;
@@ -2067,10 +2107,10 @@ store_fc_private_host_dev_loss_tmo(struct device *dev,
 		return rc;
 
 	fc_host_dev_loss_tmo(shost) = val;
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	list_for_each_entry(rport, &fc_host->rports, peers)
 		fc_rport_set_dev_loss_tmo(rport, val);
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 	return count;
 }
 
@@ -2377,7 +2417,7 @@ store_fc_host_vport_delete(struct device *dev, struct device_attribute *attr,
 	if (stat)
 		return stat;
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	match = 0;
 	/* we only allow support on Channel 0 !!! */
 	list_for_each_entry(vport, &fc_host->vports, peers) {
@@ -2390,7 +2430,7 @@ store_fc_host_vport_delete(struct device *dev, struct device_attribute *attr,
 			break;
 		}
 	}
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	if (!match)
 		return -ENODEV;
@@ -2550,7 +2590,7 @@ fc_user_scan_tgt(struct Scsi_Host *shost, uint channel, uint id, u64 lun)
 	struct fc_rport *rport;
 	unsigned long flags;
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 
 	list_for_each_entry(rport, &fc_host_rports(shost), peers) {
 		if (rport->scsi_target_id == -1)
@@ -2562,14 +2602,14 @@ fc_user_scan_tgt(struct Scsi_Host *shost, uint channel, uint id, u64 lun)
 
 		if ((channel == rport->channel) &&
 		    (id == rport->scsi_target_id)) {
-			spin_unlock_irqrestore(shost->host_lock, flags);
+			spin_unlock_irqrestore(&shost->host_lock, flags);
 			scsi_scan_target(&rport->dev, channel, id, lun,
 					 SCSI_SCAN_MANUAL);
 			return;
 		}
 	}
 
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 }
 
 /*
@@ -2616,8 +2656,7 @@ struct scsi_transport_template *
 fc_attach_transport(struct fc_function_template *ft)
 {
 	int count;
-	struct fc_internal *i = kzalloc(sizeof(struct fc_internal),
-					GFP_KERNEL);
+	struct fc_internal *i = kzalloc_obj(struct fc_internal);
 
 	if (unlikely(!i))
 		return NULL;
@@ -2639,6 +2678,8 @@ fc_attach_transport(struct fc_function_template *ft)
 	i->rport_attr_cont.ac.attrs = &i->rport_attrs[0];
 	i->rport_attr_cont.ac.class = &fc_rport_class.class;
 	i->rport_attr_cont.ac.match = fc_rport_match;
+	if (ft->get_fc_rport_enc_info)
+		i->rport_attr_cont.encryption = &fc_rport_encryption_group;
 	i->rport_attr_cont.statistics = &fc_rport_statistics_group;
 	transport_container_register(&i->rport_attr_cont);
 
@@ -2814,6 +2855,7 @@ fc_flush_work(struct Scsi_Host *shost)
 /**
  * fc_queue_devloss_work - Schedule work for the fc_host devloss workqueue.
  * @shost:	Pointer to Scsi_Host bound to fc_host.
+ * @rport:	rport associated with the devloss work
  * @work:	Work to queue for execution.
  * @delay:	jiffies to delay the work queuing
  *
@@ -2821,10 +2863,10 @@ fc_flush_work(struct Scsi_Host *shost)
  * 	1 on success / 0 already queued / < 0 for error
  */
 static int
-fc_queue_devloss_work(struct Scsi_Host *shost, struct delayed_work *work,
-				unsigned long delay)
+fc_queue_devloss_work(struct Scsi_Host *shost, struct fc_rport *rport,
+		      struct delayed_work *work, unsigned long delay)
 {
-	if (unlikely(!fc_host_devloss_work_q(shost))) {
+	if (unlikely(!rport->devloss_work_q)) {
 		printk(KERN_ERR
 			"ERROR: FC host '%s' attempted to queue work, "
 			"when no workqueue created.\n", shost->hostt->name);
@@ -2833,17 +2875,18 @@ fc_queue_devloss_work(struct Scsi_Host *shost, struct delayed_work *work,
 		return -EINVAL;
 	}
 
-	return queue_delayed_work(fc_host_devloss_work_q(shost), work, delay);
+	return queue_delayed_work(rport->devloss_work_q, work, delay);
 }
 
 /**
  * fc_flush_devloss - Flush a fc_host's devloss workqueue.
  * @shost:	Pointer to Scsi_Host bound to fc_host.
+ * @rport:	rport associated with the devloss work
  */
 static void
-fc_flush_devloss(struct Scsi_Host *shost)
+fc_flush_devloss(struct Scsi_Host *shost, struct fc_rport *rport)
 {
-	if (!fc_host_devloss_work_q(shost)) {
+	if (unlikely(!rport->devloss_work_q)) {
 		printk(KERN_ERR
 			"ERROR: FC host '%s' attempted to flush work, "
 			"when no workqueue created.\n", shost->hostt->name);
@@ -2851,7 +2894,7 @@ fc_flush_devloss(struct Scsi_Host *shost)
 		return;
 	}
 
-	flush_workqueue(fc_host_devloss_work_q(shost));
+	flush_workqueue(rport->devloss_work_q);
 }
 
 
@@ -2879,7 +2922,7 @@ fc_remove_host(struct Scsi_Host *shost)
 	struct fc_host_attrs *fc_host = shost_to_fc_host(shost);
 	unsigned long flags;
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 
 	/* Remove any vports */
 	list_for_each_entry_safe(vport, next_vport, &fc_host->vports, peers) {
@@ -2902,7 +2945,7 @@ fc_remove_host(struct Scsi_Host *shost)
 		fc_queue_work(shost, &rport->rport_delete_work);
 	}
 
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	/* flush all scan work items */
 	scsi_flush_work(shost);
@@ -2911,13 +2954,6 @@ fc_remove_host(struct Scsi_Host *shost)
 	if (fc_host->work_q) {
 		work_q = fc_host->work_q;
 		fc_host->work_q = NULL;
-		destroy_workqueue(work_q);
-	}
-
-	/* flush all devloss work items, then kill it  */
-	if (fc_host->devloss_work_q) {
-		work_q = fc_host->devloss_work_q;
-		fc_host->devloss_work_q = NULL;
 		destroy_workqueue(work_q);
 	}
 }
@@ -2967,6 +3003,7 @@ fc_rport_final_delete(struct work_struct *work)
 	struct device *dev = &rport->dev;
 	struct Scsi_Host *shost = rport_to_shost(rport);
 	struct fc_internal *i = to_fc_internal(shost->transportt);
+	struct workqueue_struct *work_q;
 	unsigned long flags;
 	int do_callback = 0;
 
@@ -2984,18 +3021,18 @@ fc_rport_final_delete(struct work_struct *work)
 	 * only when rmmod'ing the LLDD and we're asking for
 	 * immediate termination of the rports
 	 */
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	if (rport->flags & FC_RPORT_DEVLOSS_PENDING) {
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 		if (!cancel_delayed_work(&rport->fail_io_work))
-			fc_flush_devloss(shost);
+			fc_flush_devloss(shost, rport);
 		if (!cancel_delayed_work(&rport->dev_loss_work))
-			fc_flush_devloss(shost);
+			fc_flush_devloss(shost, rport);
 		cancel_work_sync(&rport->scan_work);
-		spin_lock_irqsave(shost->host_lock, flags);
+		spin_lock_irqsave(&shost->host_lock, flags);
 		rport->flags &= ~FC_RPORT_DEVLOSS_PENDING;
 	}
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	/* Delete SCSI target and sdevs */
 	if (rport->scsi_target_id != -1)
@@ -3008,18 +3045,24 @@ fc_rport_final_delete(struct work_struct *work)
 	 * Avoid this call if we already called it when we preserved the
 	 * rport for the binding.
 	 */
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	if (!(rport->flags & FC_RPORT_DEVLOSS_CALLBK_DONE) &&
 	    (i->f->dev_loss_tmo_callbk)) {
 		rport->flags |= FC_RPORT_DEVLOSS_CALLBK_DONE;
 		do_callback = 1;
 	}
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	if (do_callback)
 		i->f->dev_loss_tmo_callbk(rport);
 
 	fc_bsg_remove(rport->rqst_q);
+
+	if (rport->devloss_work_q) {
+		work_q = rport->devloss_work_q;
+		rport->devloss_work_q = NULL;
+		destroy_workqueue(work_q);
+	}
 
 	transport_remove_device(dev);
 	device_del(dev);
@@ -3080,7 +3123,7 @@ fc_remote_port_create(struct Scsi_Host *shost, int channel,
 	INIT_WORK(&rport->stgt_delete_work, fc_starget_delete);
 	INIT_WORK(&rport->rport_delete_work, fc_rport_final_delete);
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 
 	rport->number = fc_host->next_rport_number++;
 	if ((rport->roles & FC_PORT_ROLE_FCP_TARGET) ||
@@ -3091,7 +3134,23 @@ fc_remote_port_create(struct Scsi_Host *shost, int channel,
 	list_add_tail(&rport->peers, &fc_host->rports);
 	scsi_host_get(shost);			/* for fc_host->rport list */
 
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
+
+	rport->devloss_work_q = alloc_workqueue("fc_dl_%d_%d", WQ_PERCPU, 0,
+						shost->host_no, rport->number);
+	if (!rport->devloss_work_q) {
+		printk(KERN_ERR "FC Remote Port alloc_workqueue failed\n");
+/*
+ * Note that we have not yet called device_initialize() / get_device()
+ * Cannot reclaim incremented rport->number because we released host_lock
+ */
+		spin_lock_irqsave(&shost->host_lock, flags);
+		list_del(&rport->peers);
+		scsi_host_put(shost);			/* for fc_host->rport list */
+		spin_unlock_irqrestore(&shost->host_lock, flags);
+		kfree(rport);
+		return NULL;
+	}
 
 	dev = &rport->dev;
 	device_initialize(dev);			/* takes self reference */
@@ -3122,10 +3181,10 @@ fc_remote_port_create(struct Scsi_Host *shost, int channel,
 
 delete_rport:
 	transport_destroy_device(dev);
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	list_del(&rport->peers);
 	scsi_host_put(shost);			/* for fc_host->rport list */
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 	put_device(dev->parent);
 	kfree(rport);
 	return NULL;
@@ -3187,7 +3246,7 @@ fc_remote_port_add(struct Scsi_Host *shost, int channel,
 	 * deleted, but we've held off the real delete while the target
 	 * is in a "blocked" state.
 	 */
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 
 	list_for_each_entry(rport, &fc_host->rports, peers) {
 
@@ -3222,7 +3281,7 @@ fc_remote_port_add(struct Scsi_Host *shost, int channel,
 				rport->port_state = FC_PORTSTATE_ONLINE;
 				rport->roles = ids->roles;
 
-				spin_unlock_irqrestore(shost->host_lock, flags);
+				spin_unlock_irqrestore(&shost->host_lock, flags);
 
 				if (fci->f->dd_fcrport_size)
 					memset(rport->dd_data, 0,
@@ -3255,28 +3314,28 @@ fc_remote_port_add(struct Scsi_Host *shost, int channel,
 				 * be checked and will NOOP the function.
 				 */
 				if (!cancel_delayed_work(&rport->fail_io_work))
-					fc_flush_devloss(shost);
+					fc_flush_devloss(shost, rport);
 				if (!cancel_delayed_work(&rport->dev_loss_work))
-					fc_flush_devloss(shost);
+					fc_flush_devloss(shost, rport);
 
-				spin_lock_irqsave(shost->host_lock, flags);
+				spin_lock_irqsave(&shost->host_lock, flags);
 
 				rport->flags &= ~(FC_RPORT_FAST_FAIL_TIMEDOUT |
 						  FC_RPORT_DEVLOSS_PENDING |
 						  FC_RPORT_DEVLOSS_CALLBK_DONE);
 
-				spin_unlock_irqrestore(shost->host_lock, flags);
+				spin_unlock_irqrestore(&shost->host_lock, flags);
 
 				/* if target, initiate a scan */
 				if (rport->scsi_target_id != -1) {
 					scsi_target_unblock(&rport->dev,
 							    SDEV_RUNNING);
-					spin_lock_irqsave(shost->host_lock,
+					spin_lock_irqsave(&shost->host_lock,
 							  flags);
 					rport->flags |= FC_RPORT_SCAN_PENDING;
 					scsi_queue_work(shost,
 							&rport->scan_work);
-					spin_unlock_irqrestore(shost->host_lock,
+					spin_unlock_irqrestore(&shost->host_lock,
 							flags);
 				}
 
@@ -3335,14 +3394,14 @@ fc_remote_port_add(struct Scsi_Host *shost, int channel,
 			if (fci->f->dd_fcrport_size)
 				memset(rport->dd_data, 0,
 						fci->f->dd_fcrport_size);
-			spin_unlock_irqrestore(shost->host_lock, flags);
+			spin_unlock_irqrestore(&shost->host_lock, flags);
 
 			fc_remote_port_rolechg(rport, ids->roles);
 			return rport;
 		}
 	}
 
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	/* No consistent binding found - create new remote port entry */
 	rport = fc_remote_port_create(shost, channel, ids);
@@ -3419,11 +3478,11 @@ fc_remote_port_delete(struct fc_rport  *rport)
 	 * there's still a scan pending.
 	 */
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 
 	if ((rport->port_state != FC_PORTSTATE_ONLINE) &&
 		(rport->port_state != FC_PORTSTATE_MARGINAL)) {
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 		return;
 	}
 
@@ -3444,18 +3503,19 @@ fc_remote_port_delete(struct fc_rport  *rport)
 
 	rport->flags |= FC_RPORT_DEVLOSS_PENDING;
 
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	scsi_block_targets(shost, &rport->dev);
 
 	/* see if we need to kill io faster than waiting for device loss */
 	if ((rport->fast_io_fail_tmo != -1) &&
 	    (rport->fast_io_fail_tmo < timeout))
-		fc_queue_devloss_work(shost, &rport->fail_io_work,
-					rport->fast_io_fail_tmo * HZ);
+		fc_queue_devloss_work(shost, rport, &rport->fail_io_work,
+				      rport->fast_io_fail_tmo * HZ);
 
 	/* cap the length the devices can be blocked until they are deleted */
-	fc_queue_devloss_work(shost, &rport->dev_loss_work, timeout * HZ);
+	fc_queue_devloss_work(shost, rport, &rport->dev_loss_work,
+			      timeout * HZ);
 }
 EXPORT_SYMBOL(fc_remote_port_delete);
 
@@ -3487,7 +3547,7 @@ fc_remote_port_rolechg(struct fc_rport  *rport, u32 roles)
 	unsigned long flags;
 	int create = 0;
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	if (roles & FC_PORT_ROLE_FCP_TARGET) {
 		if (rport->scsi_target_id == -1) {
 			rport->scsi_target_id = fc_host->next_target_id++;
@@ -3498,7 +3558,7 @@ fc_remote_port_rolechg(struct fc_rport  *rport, u32 roles)
 
 	rport->roles = roles;
 
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	if (create) {
 		/*
@@ -3514,25 +3574,25 @@ fc_remote_port_rolechg(struct fc_rport  *rport, u32 roles)
 		 * transaction.
 		 */
 		if (!cancel_delayed_work(&rport->fail_io_work))
-			fc_flush_devloss(shost);
+			fc_flush_devloss(shost, rport);
 		if (!cancel_delayed_work(&rport->dev_loss_work))
-			fc_flush_devloss(shost);
+			fc_flush_devloss(shost, rport);
 
-		spin_lock_irqsave(shost->host_lock, flags);
+		spin_lock_irqsave(&shost->host_lock, flags);
 		rport->flags &= ~(FC_RPORT_FAST_FAIL_TIMEDOUT |
 				  FC_RPORT_DEVLOSS_PENDING |
 				  FC_RPORT_DEVLOSS_CALLBK_DONE);
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 
 		/* ensure any stgt delete functions are done */
 		fc_flush_work(shost);
 
 		scsi_target_unblock(&rport->dev, SDEV_RUNNING);
 		/* initiate a scan of the target */
-		spin_lock_irqsave(shost->host_lock, flags);
+		spin_lock_irqsave(&shost->host_lock, flags);
 		rport->flags |= FC_RPORT_SCAN_PENDING;
 		scsi_queue_work(shost, &rport->scan_work);
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 	}
 }
 EXPORT_SYMBOL(fc_remote_port_rolechg);
@@ -3555,7 +3615,7 @@ fc_timeout_deleted_rport(struct work_struct *work)
 	unsigned long flags;
 	int do_callback = 0;
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 
 	rport->flags &= ~FC_RPORT_DEVLOSS_PENDING;
 
@@ -3571,7 +3631,7 @@ fc_timeout_deleted_rport(struct work_struct *work)
 		dev_printk(KERN_ERR, &rport->dev,
 			"blocked FC remote port time out: no longer"
 			" a FCP target, removing starget\n");
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 		scsi_target_unblock(&rport->dev, SDEV_TRANSPORT_OFFLINE);
 		fc_queue_work(shost, &rport->stgt_delete_work);
 		return;
@@ -3579,7 +3639,7 @@ fc_timeout_deleted_rport(struct work_struct *work)
 
 	/* NOOP state - we're flushing workq's */
 	if (rport->port_state != FC_PORTSTATE_BLOCKED) {
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 		dev_printk(KERN_ERR, &rport->dev,
 			"blocked FC remote port time out: leaving"
 			" rport%s alone\n",
@@ -3596,7 +3656,7 @@ fc_timeout_deleted_rport(struct work_struct *work)
 			" rport%s\n",
 			(rport->scsi_target_id != -1) ?  " and starget" : "");
 		fc_queue_work(shost, &rport->rport_delete_work);
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 		return;
 	}
 
@@ -3626,10 +3686,10 @@ fc_timeout_deleted_rport(struct work_struct *work)
 	 * item to teardown the starget. (FCOE libFC folks prefer this
 	 * and to have the rport_port_id still set when it's done).
 	 */
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 	fc_terminate_rport_io(rport);
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 
 	if (rport->port_state == FC_PORTSTATE_NOTPRESENT) {	/* still missing */
 
@@ -3662,7 +3722,7 @@ fc_timeout_deleted_rport(struct work_struct *work)
 		do_callback = 1;
 	}
 
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	/*
 	 * Notify the driver that the rport is now dead. The LLDD will
@@ -3717,9 +3777,9 @@ fc_scsi_scan_rport(struct work_struct *work)
 				 SCSI_SCAN_RESCAN);
 	}
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	rport->flags &= ~FC_RPORT_SCAN_PENDING;
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 }
 
 /**
@@ -3741,14 +3801,14 @@ int fc_block_rport(struct fc_rport *rport)
 	struct Scsi_Host *shost = rport_to_shost(rport);
 	unsigned long flags;
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	while (rport->port_state == FC_PORTSTATE_BLOCKED &&
 	       !(rport->flags & FC_RPORT_FAST_FAIL_TIMEDOUT)) {
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 		msleep(1000);
-		spin_lock_irqsave(shost->host_lock, flags);
+		spin_lock_irqsave(&shost->host_lock, flags);
 	}
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	if (rport->flags & FC_RPORT_FAST_FAIL_TIMEDOUT)
 		return FAST_IO_FAIL;
@@ -3856,10 +3916,10 @@ fc_vport_setup(struct Scsi_Host *shost, int channel, struct device *pdev,
 	vport->flags = FC_VPORT_CREATING;
 	INIT_WORK(&vport->vport_delete_work, fc_vport_sched_delete);
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 
 	if (fc_host->npiv_vports_inuse >= fc_host->max_npiv_vports) {
-		spin_unlock_irqrestore(shost->host_lock, flags);
+		spin_unlock_irqrestore(&shost->host_lock, flags);
 		kfree(vport);
 		return -ENOSPC;
 	}
@@ -3868,7 +3928,7 @@ fc_vport_setup(struct Scsi_Host *shost, int channel, struct device *pdev,
 	list_add_tail(&vport->peers, &fc_host->vports);
 	scsi_host_get(shost);			/* for fc_host->vport list */
 
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	dev = &vport->dev;
 	device_initialize(dev);			/* takes self reference */
@@ -3905,9 +3965,9 @@ fc_vport_setup(struct Scsi_Host *shost, int channel, struct device *pdev,
 				"%s, err=%d\n",
 				__func__, dev_name(dev), error);
 	}
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	vport->flags &= ~FC_VPORT_CREATING;
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	dev_printk(KERN_NOTICE, pdev,
 			"%s created via shost%d channel %d\n", dev_name(dev),
@@ -3922,11 +3982,11 @@ delete_vport_all:
 	device_del(dev);
 delete_vport:
 	transport_destroy_device(dev);
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	list_del(&vport->peers);
 	scsi_host_put(shost);			/* for fc_host->vport list */
 	fc_host->npiv_vports_inuse--;
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 	put_device(dev->parent);
 	kfree(vport);
 
@@ -3981,7 +4041,7 @@ fc_vport_terminate(struct fc_vport *vport)
 	else
 		stat = -ENOENT;
 
-	spin_lock_irqsave(shost->host_lock, flags);
+	spin_lock_irqsave(&shost->host_lock, flags);
 	vport->flags &= ~FC_VPORT_DELETING;
 	if (!stat) {
 		vport->flags |= FC_VPORT_DELETED;
@@ -3989,7 +4049,7 @@ fc_vport_terminate(struct fc_vport *vport)
 		fc_host->npiv_vports_inuse--;
 		scsi_host_put(shost);		/* for fc_host->vport list */
 	}
-	spin_unlock_irqrestore(shost->host_lock, flags);
+	spin_unlock_irqrestore(&shost->host_lock, flags);
 
 	if (stat)
 		return stat;
@@ -4285,7 +4345,8 @@ fc_bsg_hostadd(struct Scsi_Host *shost, struct fc_host_attrs *fc_host)
 	scsi_init_limits(shost, &lim);
 	lim.max_segments = min_not_zero(lim.max_segments, i->f->max_bsg_segments);
 	q = bsg_setup_queue(dev, bsg_name, &lim, fc_bsg_dispatch,
-			fc_bsg_job_timeout, i->f->dd_bsg_size);
+			fc_bsg_job_timeout, i->f->dd_bsg_size,
+			SCSI_SENSE_BUFFERSIZE);
 	if (IS_ERR(q)) {
 		dev_err(dev,
 			"fc_host%d: bsg interface failed to initialize - setup queue\n",
@@ -4318,7 +4379,8 @@ fc_bsg_rportadd(struct Scsi_Host *shost, struct fc_rport *rport)
 	scsi_init_limits(shost, &lim);
 	lim.max_segments = min_not_zero(lim.max_segments, i->f->max_bsg_segments);
 	q = bsg_setup_queue(dev, dev_name(dev), &lim, fc_bsg_dispatch_prep,
-				fc_bsg_job_timeout, i->f->dd_bsg_size);
+				fc_bsg_job_timeout, i->f->dd_bsg_size,
+				SCSI_SENSE_BUFFERSIZE);
 	if (IS_ERR(q)) {
 		dev_err(dev, "failed to setup bsg queue\n");
 		return PTR_ERR(q);

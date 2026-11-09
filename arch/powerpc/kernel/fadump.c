@@ -333,7 +333,7 @@ static __init u64 fadump_calculate_reserve_size(void)
 	 * memory at a predefined offset.
 	 */
 	ret = parse_crashkernel(boot_command_line, memblock_phys_mem_size(),
-				&size, &base, NULL, NULL);
+				&size, &base, NULL, NULL, NULL);
 	if (ret == 0 && size > 0) {
 		unsigned long max_size;
 
@@ -775,24 +775,12 @@ void __init fadump_update_elfcore_header(char *bufp)
 
 static void *__init fadump_alloc_buffer(unsigned long size)
 {
-	unsigned long count, i;
-	struct page *page;
-	void *vaddr;
-
-	vaddr = alloc_pages_exact(size, GFP_KERNEL | __GFP_ZERO);
-	if (!vaddr)
-		return NULL;
-
-	count = PAGE_ALIGN(size) / PAGE_SIZE;
-	page = virt_to_page(vaddr);
-	for (i = 0; i < count; i++)
-		mark_page_reserved(page + i);
-	return vaddr;
+	return  alloc_pages_exact(size, GFP_KERNEL | __GFP_ZERO);
 }
 
 static void fadump_free_buffer(unsigned long vaddr, unsigned long size)
 {
-	free_reserved_area((void *)vaddr, (void *)(vaddr + size), -1, NULL);
+	free_pages_exact((void *)vaddr, size);
 }
 
 s32 __init fadump_setup_cpu_notes_buf(u32 num_cpus)
@@ -1373,14 +1361,11 @@ static void fadump_free_elfcorehdr_buf(void)
 
 static void fadump_invalidate_release_mem(void)
 {
-	mutex_lock(&fadump_mutex);
-	if (!fw_dump.dump_active) {
-		mutex_unlock(&fadump_mutex);
-		return;
+	scoped_guard(mutex, &fadump_mutex) {
+		if (!fw_dump.dump_active)
+			return;
+		fadump_cleanup();
 	}
-
-	fadump_cleanup();
-	mutex_unlock(&fadump_mutex);
 
 	fadump_free_elfcorehdr_buf();
 	fadump_release_memory(fw_dump.boot_mem_top, memblock_end_of_DRAM());
@@ -1437,7 +1422,7 @@ static ssize_t enabled_show(struct kobject *kobj,
 			    struct kobj_attribute *attr,
 			    char *buf)
 {
-	return sprintf(buf, "%d\n", fw_dump.fadump_enabled);
+	return sysfs_emit(buf, "%d\n", fw_dump.fadump_enabled);
 }
 
 /*
@@ -1449,28 +1434,28 @@ static ssize_t hotplug_ready_show(struct kobject *kobj,
 				      struct kobj_attribute *attr,
 				      char *buf)
 {
-	return sprintf(buf, "%d\n", 1);
+	return sysfs_emit(buf, "%d\n", 1);
 }
 
 static ssize_t mem_reserved_show(struct kobject *kobj,
 				 struct kobj_attribute *attr,
 				 char *buf)
 {
-	return sprintf(buf, "%ld\n", fw_dump.reserve_dump_area_size);
+	return sysfs_emit(buf, "%ld\n", fw_dump.reserve_dump_area_size);
 }
 
 static ssize_t registered_show(struct kobject *kobj,
 			       struct kobj_attribute *attr,
 			       char *buf)
 {
-	return sprintf(buf, "%d\n", fw_dump.dump_registered);
+	return sysfs_emit(buf, "%d\n", fw_dump.dump_registered);
 }
 
 static ssize_t bootargs_append_show(struct kobject *kobj,
 				   struct kobj_attribute *attr,
 				   char *buf)
 {
-	return sprintf(buf, "%s\n", (char *)__va(fw_dump.param_area));
+	return sysfs_emit(buf, "%s\n", (char *)__va(fw_dump.param_area));
 }
 
 static ssize_t bootargs_append_store(struct kobject *kobj,
@@ -1750,6 +1735,9 @@ void __init fadump_setup_param_area(void)
 {
 	phys_addr_t range_start, range_end;
 
+	if (!fw_dump.fadump_enabled)
+		return;
+
 	if (!fw_dump.param_area_supported || fw_dump.dump_active)
 		return;
 
@@ -1771,10 +1759,10 @@ void __init fadump_setup_param_area(void)
 		 * 2. The range should be between MIN_RMA and RMA size (ppc64_rma_size)
 		 * 3. It must not overlap with the fadump reserved area.
 		 */
-		if (ppc64_rma_size < MIN_RMA*1024*1024)
+		if (ppc64_rma_size < MIN_RMA)
 			return;
 
-		range_start = MIN_RMA * 1024 * 1024;
+		range_start = MIN_RMA;
 		range_end = min(ppc64_rma_size, fw_dump.boot_mem_top);
 	}
 

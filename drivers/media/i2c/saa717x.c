@@ -10,7 +10,7 @@
  * Changes by T.Adachi (tadachi@tadachi-net.com)
  *    - support audio, video scaler etc, and checked the initialize sequence.
  *
- * Cleaned up by Hans Verkuil <hverkuil@xs4all.nl>
+ * Cleaned up by Hans Verkuil <hverkuil@kernel.org>
  *
  * Note: this is a reversed engineered driver based on captures from
  * the I2C bus under Windows. This chip is very similar to the saa7134,
@@ -980,6 +980,7 @@ static int saa717x_s_register(struct v4l2_subdev *sd, const struct v4l2_dbg_regi
 #endif
 
 static int saa717x_set_fmt(struct v4l2_subdev *sd,
+		const struct v4l2_subdev_client_info *ci,
 		struct v4l2_subdev_state *sd_state,
 		struct v4l2_subdev_format *format)
 {
@@ -1334,7 +1335,7 @@ static void saa717x_remove(struct i2c_client *client)
 /* ----------------------------------------------------------------------- */
 
 static const struct i2c_device_id saa717x_id[] = {
-	{ "saa717x" },
+	{ .name = "saa717x" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, saa717x_id);

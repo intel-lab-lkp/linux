@@ -11,7 +11,6 @@
 #ifndef	_LINUX_CDROM_H
 #define	_LINUX_CDROM_H
 
-#include <linux/fs.h>		/* not really needed, later.. */
 #include <linux/list.h>
 #include <linux/blkdev.h>
 #include <scsi/scsi_common.h>
@@ -62,7 +61,6 @@ struct cdrom_device_info {
 	__u8 last_sense;
 	__u8 media_written;		/* dirty flag, DVD+RW bookkeeping */
 	unsigned short mmc3_profile;	/* current MMC3 profile */
-	int (*exit)(struct cdrom_device_info *);
 	int mrw_mode_page;
 	bool opened_for_data;
 	__s64 last_media_change_ms;
@@ -109,6 +107,7 @@ int cdrom_ioctl(struct cdrom_device_info *cdi, struct block_device *bdev,
 extern unsigned int cdrom_check_events(struct cdrom_device_info *cdi,
 				       unsigned int clearing);
 
+extern void cdrom_probe_write_features(struct cdrom_device_info *cdi);
 extern int register_cdrom(struct gendisk *disk, struct cdrom_device_info *cdi);
 extern void unregister_cdrom(struct cdrom_device_info *cdi);
 

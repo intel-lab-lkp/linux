@@ -51,9 +51,6 @@ enum batadv_dbg_level {
 	/** @BATADV_DBG_DAT: ARP snooping and DAT related messages */
 	BATADV_DBG_DAT		= BIT(4),
 
-	/** @BATADV_DBG_NC: network coding related messages */
-	BATADV_DBG_NC		= BIT(5),
-
 	/** @BATADV_DBG_MCAST: multicast related messages */
 	BATADV_DBG_MCAST	= BIT(6),
 
@@ -79,7 +76,7 @@ __printf(2, 3);
 #define _batadv_dbg(type, bat_priv, ratelimited, fmt, arg...)		\
 	do {								\
 		struct batadv_priv *__batpriv = (bat_priv);		\
-		if (atomic_read(&__batpriv->log_level) & (type) &&	\
+		if (READ_ONCE(__batpriv->log_level) & (type) &&	\
 		    (!(ratelimited) || net_ratelimit()))		\
 			batadv_debug_log(__batpriv, fmt, ## arg);	\
 	}								\
@@ -120,8 +117,12 @@ static inline void _batadv_dbg(int type __always_unused,
  */
 #define batadv_info(net_dev, fmt, arg...)				\
 	do {								\
-		struct net_device *_netdev = (net_dev);                 \
-		struct batadv_priv *_batpriv = netdev_priv(_netdev);    \
+		struct batadv_priv *_batpriv;				\
+		struct net_device *_netdev;				\
+									\
+		_netdev = (net_dev);					\
+		_batpriv = netdev_priv(_netdev);			\
+									\
 		batadv_dbg(BATADV_DBG_ALL, _batpriv, fmt, ## arg);	\
 		pr_info("%s: " fmt, _netdev->name, ## arg);		\
 	} while (0)
@@ -134,8 +135,12 @@ static inline void _batadv_dbg(int type __always_unused,
  */
 #define batadv_err(net_dev, fmt, arg...)				\
 	do {								\
-		struct net_device *_netdev = (net_dev);                 \
-		struct batadv_priv *_batpriv = netdev_priv(_netdev);    \
+		struct batadv_priv *_batpriv;				\
+		struct net_device *_netdev;				\
+									\
+		_netdev = (net_dev);					\
+		_batpriv = netdev_priv(_netdev);			\
+									\
 		batadv_dbg(BATADV_DBG_ALL, _batpriv, fmt, ## arg);	\
 		pr_err("%s: " fmt, _netdev->name, ## arg);		\
 	} while (0)

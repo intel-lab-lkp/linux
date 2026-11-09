@@ -803,9 +803,9 @@ Retry_Sense:
 			     temp_result);
 		usb_stor_dbg(us, "-- code: 0x%x, key: 0x%x, ASC: 0x%x, ASCQ: 0x%x\n",
 			     sshdr.response_code, sshdr.sense_key,
-			     sshdr.asc, sshdr.ascq);
+			     scsi_sense_asc(&sshdr), scsi_sense_ascq(&sshdr));
 #ifdef CONFIG_USB_STORAGE_DEBUG
-		usb_stor_show_sense(us, sshdr.sense_key, sshdr.asc, sshdr.ascq);
+		usb_stor_show_sense(us, &sshdr);
 #endif
 
 		/* set the result so the higher layers expect this data */
@@ -820,7 +820,8 @@ Retry_Sense:
 		 * everything worked or that there was an unspecified
 		 * problem.  We have to decide which.
 		 */
-		if (sshdr.sense_key == 0 && sshdr.asc == 0 && sshdr.ascq == 0 &&
+		if (sshdr.sense_key == NO_SENSE &&
+		    sshdr.sense_code == NO_ADDITIONAL_SENSE_INFORMATION &&
 		    fm_ili == 0) {
 			/*
 			 * If things are really okay, then let's show that.
@@ -1200,7 +1201,23 @@ int usb_stor_Bulk_transport(struct scsi_cmnd *srb, struct us_data *us)
 						US_BULK_CS_WRAP_LEN &&
 					bcs->Signature ==
 						cpu_to_le32(US_BULK_CS_SIGN)) {
+				unsigned char buf[US_BULK_CS_WRAP_LEN];
+
 				usb_stor_dbg(us, "Device skipped data phase\n");
+
+				/*
+				 * Devices skipping data phase might leave CSW data in srb's
+				 * transfer buffer. Zero it to prevent USB protocol leakage.
+				 */
+				sg = NULL;
+				offset = 0;
+				memset(buf, 0, sizeof(buf));
+				if (usb_stor_access_xfer_buf(buf,
+						US_BULK_CS_WRAP_LEN, srb, &sg,
+						&offset, TO_XFER_BUF) !=
+							US_BULK_CS_WRAP_LEN)
+					usb_stor_dbg(us, "Failed to clear CSW data\n");
+
 				scsi_set_resid(srb, transfer_length);
 				goto skipped_data_phase;
 			}

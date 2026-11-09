@@ -9,6 +9,9 @@
 #include "bpf_misc.h"
 #include "errno.h"
 
+#define PAGE_SIZE_64K 65536
+#define TEST_SKB_LINEAR_SIZE (sizeof(struct ethhdr) + sizeof(struct iphdr))
+
 char _license[] SEC("license") = "GPL";
 
 int pid, err, val;
@@ -206,6 +209,114 @@ int test_dynptr_skb_data(struct __sk_buff *skb)
 		return 1;
 	}
 
+	return 1;
+}
+
+SEC("?tc")
+int test_dynptr_skb_slice_non_linear(struct __sk_buff *skb)
+{
+	struct bpf_dynptr ptr;
+	void *data;
+
+	if (bpf_dynptr_from_skb(skb, 0, &ptr)) {
+		err = 1;
+		return 1;
+	}
+
+	/* Ensure we cannot read past the end of the buffer. */
+	data = bpf_dynptr_slice(&ptr, TEST_SKB_LINEAR_SIZE + 1, NULL, 1);
+	if (data)
+		err = 2;
+
+	return 1;
+}
+
+/*
+ * The tcp header is not in the linear part: the slice is the buffer, and a store
+ * through the slice is seen in the buffer. As in the documentation, the stores
+ * come before the compare with the buffer: after it a compiler may use one
+ * pointer in place of the other.
+ */
+SEC("?tc")
+int test_dynptr_skb_slice_rdwr_buffer(struct __sk_buff *skb)
+{
+	struct tcphdr buffer = {}, *tcp;
+	struct bpf_dynptr ptr;
+
+	bpf_dynptr_from_skb(skb, 0, &ptr);
+	tcp = bpf_dynptr_slice_rdwr(&ptr, TEST_SKB_LINEAR_SIZE, &buffer, sizeof(buffer));
+	if (!tcp) {
+		err = 1;
+		return 1;
+	}
+
+	tcp->source = 0x1234;
+	if (buffer.source != 0x1234) {
+		err = 2;
+		return 1;
+	}
+	/* a read of the buffer does not invalidate the slice */
+	tcp->dest = 0x5678;
+	if (tcp != &buffer)
+		err = 3;
+	else if (bpf_dynptr_write(&ptr, TEST_SKB_LINEAR_SIZE, &buffer, sizeof(buffer), 0))
+		err = 4;
+
+	return 1;
+}
+
+SEC("?tc")
+int test_dynptr_skb_meta_data(struct __sk_buff *skb)
+{
+	struct bpf_dynptr meta;
+	__u8 *md;
+	int ret;
+
+	err = 1;
+	ret = bpf_dynptr_from_skb_meta(skb, 0, &meta);
+	if (ret)
+		return 1;
+
+	/* This should return NULL. Must use bpf_dynptr_slice API */
+	err = 2;
+	md = bpf_dynptr_data(&meta, 0, sizeof(*md));
+	if (md)
+		return 1;
+
+	err = 0;
+	return 1;
+}
+
+/* Check that skb metadata dynptr ops don't accept any flags. */
+SEC("?tc")
+int test_dynptr_skb_meta_flags(struct __sk_buff *skb)
+{
+	const __u64 INVALID_FLAGS = ~0ULL;
+	struct bpf_dynptr meta;
+	__u8 buf;
+	int ret;
+
+	err = 1;
+	ret = bpf_dynptr_from_skb_meta(skb, INVALID_FLAGS, &meta);
+	if (ret != -EINVAL)
+		return 1;
+
+	err = 2;
+	ret = bpf_dynptr_from_skb_meta(skb, 0, &meta);
+	if (ret)
+		return 1;
+
+	err = 3;
+	ret = bpf_dynptr_read(&buf, 0, &meta, 0, INVALID_FLAGS);
+	if (ret != -EINVAL)
+		return 1;
+
+	err = 4;
+	ret = bpf_dynptr_write(&meta, 0, &buf, 0, INVALID_FLAGS);
+	if (ret != -EINVAL)
+		return 1;
+
+	err = 0;
 	return 1;
 }
 
@@ -611,11 +722,12 @@ int test_dynptr_copy_xdp(struct xdp_md *xdp)
 	struct bpf_dynptr ptr_buf, ptr_xdp;
 	char data[] = "qwertyuiopasdfghjkl";
 	char buf[32] = {'\0'};
-	__u32 len = sizeof(data);
+	__u32 len = sizeof(data), xdp_data_size;
 	int i, chunks = 200;
 
 	/* ptr_xdp is backed by non-contiguous memory */
 	bpf_dynptr_from_xdp(xdp, 0, &ptr_xdp);
+	xdp_data_size = bpf_dynptr_size(&ptr_xdp);
 	bpf_ringbuf_reserve_dynptr(&ringbuf, len * chunks, 0, &ptr_buf);
 
 	/* Destination dynptr is backed by non-contiguous memory */
@@ -673,11 +785,268 @@ int test_dynptr_copy_xdp(struct xdp_md *xdp)
 			goto out;
 	}
 
-	if (bpf_dynptr_copy(&ptr_xdp, 2000, &ptr_xdp, 0, len * chunks) != -E2BIG)
+	if (bpf_dynptr_copy(&ptr_xdp, xdp_data_size - 3000, &ptr_xdp, 0, len * chunks) != -E2BIG)
 		err = 1;
 
 out:
 	bpf_ringbuf_discard_dynptr(&ptr_buf, 0);
+	return XDP_DROP;
+}
+
+static __always_inline int fill_xdp(struct bpf_dynptr *ptr, __u32 start, __u32 n)
+{
+	__u8 b;
+	int i;
+
+	bpf_for(i, 0, n) {
+		b = (start + i) % 251;
+		if (bpf_dynptr_write(ptr, start + i, &b, 1, 0))
+			return 1;
+	}
+	return 0;
+}
+
+static __always_inline int check_xdp(struct bpf_dynptr *ptr, __u32 at, __u32 n, __u32 from)
+{
+	__u8 b;
+	int i;
+
+	bpf_for(i, 0, n) {
+		if (bpf_dynptr_read(&b, 1, ptr, at + i, 0))
+			return 1;
+		if (b != (__u8)((from + i) % 251))
+			return 1;
+	}
+	return 0;
+}
+
+SEC("?xdp")
+int test_dynptr_copy_xdp_overlap(struct xdp_md *xdp)
+{
+	void *data_end = (void *)(long)xdp->data_end;
+	void *data = (void *)(long)xdp->data;
+	__u32 off = data_end - data - 1000;
+	struct bpf_dynptr ptr;
+
+	bpf_dynptr_from_xdp(xdp, 0, &ptr);
+	if (fill_xdp(&ptr, off, 1300)) {
+		err = 1;
+		return XDP_DROP;
+	}
+	err = bpf_dynptr_copy(&ptr, off + 100, &ptr, off, 1200);
+	if (err)
+		return XDP_DROP;
+	if (check_xdp(&ptr, off + 100, 1200, off))
+		err = 2;
+	return XDP_DROP;
+}
+
+SEC("?xdp")
+int test_dynptr_copy_xdp_overlap_src_linear(struct xdp_md *xdp)
+{
+	void *data_end = (void *)(long)xdp->data_end;
+	void *data = (void *)(long)xdp->data;
+	__u32 lin = data_end - data;
+	struct bpf_dynptr ptr;
+
+	bpf_dynptr_from_xdp(xdp, 0, &ptr);
+	if (fill_xdp(&ptr, lin - 64, 118)) {
+		err = 1;
+		return XDP_DROP;
+	}
+	err = bpf_dynptr_copy(&ptr, lin - 10, &ptr, lin - 64, 64);
+	if (err)
+		return XDP_DROP;
+	if (check_xdp(&ptr, lin - 10, 64, lin - 64))
+		err = 2;
+	return XDP_DROP;
+}
+
+SEC("?xdp")
+int test_dynptr_copy_xdp_overlap_dst_frag(struct xdp_md *xdp)
+{
+	void *data_end = (void *)(long)xdp->data_end;
+	void *data = (void *)(long)xdp->data;
+	__u32 lin = data_end - data;
+	struct bpf_dynptr ptr;
+
+	bpf_dynptr_from_xdp(xdp, 0, &ptr);
+	if (fill_xdp(&ptr, lin - 10, 84)) {
+		err = 1;
+		return XDP_DROP;
+	}
+	err = bpf_dynptr_copy(&ptr, lin + 10, &ptr, lin - 10, 64);
+	if (err)
+		return XDP_DROP;
+	if (check_xdp(&ptr, lin + 10, 64, lin - 10))
+		err = 2;
+	return XDP_DROP;
+}
+
+char memset_zero_data[] = "data to be zeroed";
+
+SEC("?tp/syscalls/sys_enter_nanosleep")
+int test_dynptr_memset_zero(void *ctx)
+{
+	__u32 data_sz = sizeof(memset_zero_data);
+	char zeroes[32] = {'\0'};
+	struct bpf_dynptr ptr;
+
+	err = bpf_dynptr_from_mem(memset_zero_data, data_sz, 0, &ptr);
+	err = err ?: bpf_dynptr_memset(&ptr, 0, data_sz, 0);
+	err = err ?: bpf_memcmp(zeroes, memset_zero_data, data_sz);
+
+	return 0;
+}
+
+#define DYNPTR_MEMSET_VAL 42
+
+char memset_notzero_data[] = "data to be overwritten";
+
+SEC("?tp/syscalls/sys_enter_nanosleep")
+int test_dynptr_memset_notzero(void *ctx)
+{
+	u32 data_sz = sizeof(memset_notzero_data);
+	struct bpf_dynptr ptr;
+	char expected[32];
+
+	__builtin_memset(expected, DYNPTR_MEMSET_VAL, data_sz);
+
+	err = bpf_dynptr_from_mem(memset_notzero_data, data_sz, 0, &ptr);
+	err = err ?: bpf_dynptr_memset(&ptr, 0, data_sz, DYNPTR_MEMSET_VAL);
+	err = err ?: bpf_memcmp(expected, memset_notzero_data, data_sz);
+
+	return 0;
+}
+
+char memset_zero_offset_data[] = "data to be zeroed partially";
+
+SEC("?tp/syscalls/sys_enter_nanosleep")
+int test_dynptr_memset_zero_offset(void *ctx)
+{
+	char expected[] = "data to \0\0\0\0eroed partially";
+	__u32 data_sz = sizeof(memset_zero_offset_data);
+	struct bpf_dynptr ptr;
+
+	err = bpf_dynptr_from_mem(memset_zero_offset_data, data_sz, 0, &ptr);
+	err = err ?: bpf_dynptr_memset(&ptr, 8, 4, 0);
+	err = err ?: bpf_memcmp(expected, memset_zero_offset_data, data_sz);
+
+	return 0;
+}
+
+char memset_zero_adjusted_data[] = "data to be zeroed partially";
+
+SEC("?tp/syscalls/sys_enter_nanosleep")
+int test_dynptr_memset_zero_adjusted(void *ctx)
+{
+	char expected[] = "data\0\0\0\0be zeroed partially";
+	__u32 data_sz = sizeof(memset_zero_adjusted_data);
+	struct bpf_dynptr ptr;
+
+	err = bpf_dynptr_from_mem(memset_zero_adjusted_data, data_sz, 0, &ptr);
+	err = err ?: bpf_dynptr_adjust(&ptr, 4, 8);
+	err = err ?: bpf_dynptr_memset(&ptr, 0, bpf_dynptr_size(&ptr), 0);
+	err = err ?: bpf_memcmp(expected, memset_zero_adjusted_data, data_sz);
+
+	return 0;
+}
+
+char memset_overflow_data[] = "memset overflow data";
+
+SEC("?tp/syscalls/sys_enter_nanosleep")
+int test_dynptr_memset_overflow(void *ctx)
+{
+	__u32 data_sz = sizeof(memset_overflow_data);
+	struct bpf_dynptr ptr;
+	int ret;
+
+	err = bpf_dynptr_from_mem(memset_overflow_data, data_sz, 0, &ptr);
+	ret = bpf_dynptr_memset(&ptr, 0, data_sz + 1, 0);
+	if (ret != -E2BIG)
+		err = 1;
+
+	return 0;
+}
+
+SEC("?tp/syscalls/sys_enter_nanosleep")
+int test_dynptr_memset_overflow_offset(void *ctx)
+{
+	__u32 data_sz = sizeof(memset_overflow_data);
+	struct bpf_dynptr ptr;
+	int ret;
+
+	err = bpf_dynptr_from_mem(memset_overflow_data, data_sz, 0, &ptr);
+	ret = bpf_dynptr_memset(&ptr, 1, data_sz, 0);
+	if (ret != -E2BIG)
+		err = 1;
+
+	return 0;
+}
+
+SEC("?cgroup_skb/egress")
+int test_dynptr_memset_readonly(struct __sk_buff *skb)
+{
+	struct bpf_dynptr ptr;
+	int ret;
+
+	err = bpf_dynptr_from_skb(skb, 0, &ptr);
+
+	/* cgroup skbs are read only, memset should fail */
+	ret = bpf_dynptr_memset(&ptr, 0, bpf_dynptr_size(&ptr), 0);
+	if (ret != -EINVAL)
+		err = 1;
+
+	return 0;
+}
+
+#define min_t(type, x, y) ({		\
+	type __x = (x);			\
+	type __y = (y);			\
+	__x < __y ? __x : __y; })
+
+SEC("xdp")
+int test_dynptr_memset_xdp_chunks(struct xdp_md *xdp)
+{
+	u32 data_sz, chunk_sz, offset = 0;
+	const int max_chunks = 200;
+	struct bpf_dynptr ptr_xdp;
+	char expected_buf[32];
+	char buf[32];
+	int i;
+
+	__builtin_memset(expected_buf, DYNPTR_MEMSET_VAL, sizeof(expected_buf));
+
+	/* ptr_xdp is backed by non-contiguous memory */
+	bpf_dynptr_from_xdp(xdp, 0, &ptr_xdp);
+	data_sz = bpf_dynptr_size(&ptr_xdp);
+
+	err = bpf_dynptr_memset(&ptr_xdp, 0, data_sz, DYNPTR_MEMSET_VAL);
+	if (err) {
+		/* bpf_dynptr_memset() eventually called bpf_xdp_pointer()
+		 * where if data_sz is greater than 0xffff, -EFAULT will be
+		 * returned. For 64K page size, data_sz is greater than
+		 * 64K, so error is expected and let us zero out error and
+		 * return success.
+		 */
+		if (data_sz >= PAGE_SIZE_64K)
+			err = 0;
+		goto out;
+	}
+
+	bpf_for(i, 0, max_chunks) {
+		offset = i * sizeof(buf);
+		if (offset >= data_sz)
+			goto out;
+		chunk_sz = min_t(u32, sizeof(buf), data_sz - offset);
+		err = bpf_dynptr_read(&buf, chunk_sz, &ptr_xdp, offset, 0);
+		if (err)
+			goto out;
+		err = bpf_memcmp(buf, expected_buf, sizeof(buf));
+		if (err)
+			goto out;
+	}
+out:
 	return XDP_DROP;
 }
 
@@ -689,8 +1058,8 @@ void *user_ptr;
 char expected_str[384];
 __u32 test_len[7] = {0/* placeholder */, 0, 1, 2, 255, 256, 257};
 
-typedef int (*bpf_read_dynptr_fn_t)(struct bpf_dynptr *dptr, u32 off,
-				    u32 size, const void *unsafe_ptr);
+typedef int (*bpf_read_dynptr_fn_t)(const struct bpf_dynptr *dptr, u64 off,
+				    u64 size, const void *unsafe_ptr);
 
 /* Returns the offset just before the end of the maximum sized xdp fragment.
  * Any write larger than 32 bytes will be split between 2 fragments.
@@ -881,16 +1250,16 @@ int test_copy_from_user_str_dynptr(void *ctx)
 	return 0;
 }
 
-static int bpf_copy_data_from_user_task(struct bpf_dynptr *dptr, u32 off,
-					u32 size, const void *unsafe_ptr)
+static int bpf_copy_data_from_user_task(const struct bpf_dynptr *dptr, u64 off,
+					u64 size, const void *unsafe_ptr)
 {
 	struct task_struct *task = bpf_get_current_task_btf();
 
 	return bpf_copy_from_user_task_dynptr(dptr, off, size, unsafe_ptr, task);
 }
 
-static int bpf_copy_data_from_user_task_str(struct bpf_dynptr *dptr, u32 off,
-					    u32 size, const void *unsafe_ptr)
+static int bpf_copy_data_from_user_task_str(const struct bpf_dynptr *dptr, u64 off,
+					    u64 size, const void *unsafe_ptr)
 {
 	struct task_struct *task = bpf_get_current_task_btf();
 

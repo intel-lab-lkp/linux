@@ -61,10 +61,15 @@ struct selinux_audit_data {
 
 void __init avc_init(void);
 
-static inline u32 avc_audit_required(u32 requested, struct av_decision *avd,
-				     int result, u32 auditdeny, u32 *deniedp)
+static inline u32 avc_audit_required(u32 requested,
+				     const struct av_decision *avd, int result,
+				     u32 auditdeny, u32 *deniedp)
 {
 	u32 denied, audited;
+
+	if (avd->flags & AVD_FLAGS_NEVERAUDIT)
+		return 0;
+
 	denied = requested & ~avd->allowed;
 	if (unlikely(denied)) {
 		audited = denied & avd->auditdeny;
@@ -117,7 +122,7 @@ int slow_avc_audit(u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited,
  * before calling the auditing code.
  */
 static inline int avc_audit(u32 ssid, u32 tsid, u16 tclass, u32 requested,
-			    struct av_decision *avd, int result,
+			    const struct av_decision *avd, int result,
 			    struct common_audit_data *a)
 {
 	u32 audited, denied;

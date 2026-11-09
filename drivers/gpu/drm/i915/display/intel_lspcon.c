@@ -23,16 +23,18 @@
  *
  */
 
+#include <linux/iopoll.h>
+
 #include <drm/display/drm_dp_dual_mode_helper.h>
 #include <drm/display/drm_hdmi_helper.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_print.h>
 
-#include "i915_reg.h"
-#include "i915_utils.h"
 #include "intel_de.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
+#include "intel_display_utils.h"
 #include "intel_dp.h"
 #include "intel_hdmi.h"
 #include "intel_lspcon.h"
@@ -135,11 +137,10 @@ bool intel_lspcon_detect_hdr_capability(struct intel_digital_port *dig_port)
 	u8 hdr_caps;
 	int ret;
 
-	ret = drm_dp_dpcd_read(&intel_dp->aux, get_hdr_status_reg(lspcon),
-			       &hdr_caps, 1);
-
+	ret = drm_dp_dpcd_read_byte(&intel_dp->aux, get_hdr_status_reg(lspcon), &hdr_caps);
 	if (ret < 0) {
-		drm_dbg_kms(display->drm, "HDR capability detection failed\n");
+		drm_dbg_kms(display->drm, "HDR capability detection failed (%pe)\n",
+			    ERR_PTR(ret));
 		lspcon->hdr_supported = false;
 	} else if (hdr_caps & 0x1) {
 		drm_dbg_kms(display->drm, "LSPCON capable of HDR\n");
@@ -181,6 +182,8 @@ static enum drm_lspcon_mode lspcon_wait_mode(struct intel_lspcon *lspcon,
 	struct intel_dp *intel_dp = lspcon_to_intel_dp(lspcon);
 	struct intel_display *display = to_intel_display(intel_dp);
 	enum drm_lspcon_mode current_mode;
+	int timeout_us;
+	int ret;
 
 	current_mode = lspcon_get_current_mode(lspcon);
 	if (current_mode == mode)
@@ -189,9 +192,12 @@ static enum drm_lspcon_mode lspcon_wait_mode(struct intel_lspcon *lspcon,
 	drm_dbg_kms(display->drm, "Waiting for LSPCON mode %s to settle\n",
 		    lspcon_mode_name(mode));
 
-	wait_for((current_mode = lspcon_get_current_mode(lspcon)) == mode,
-		 lspcon_get_mode_settle_timeout(lspcon));
-	if (current_mode != mode)
+	timeout_us = lspcon_get_mode_settle_timeout(lspcon) * 1000;
+
+	ret = poll_timeout_us(current_mode = lspcon_get_current_mode(lspcon),
+			      current_mode == mode,
+			      5000, timeout_us, false);
+	if (ret)
 		drm_err(display->drm, "LSPCON mode hasn't settled\n");
 
 out:
@@ -237,11 +243,12 @@ static bool lspcon_wake_native_aux_ch(struct intel_lspcon *lspcon)
 {
 	struct intel_dp *intel_dp = lspcon_to_intel_dp(lspcon);
 	struct intel_display *display = to_intel_display(intel_dp);
+	int ret;
 	u8 rev;
 
-	if (drm_dp_dpcd_readb(&lspcon_to_intel_dp(lspcon)->aux, DP_DPCD_REV,
-			      &rev) != 1) {
-		drm_dbg_kms(display->drm, "Native AUX CH down\n");
+	ret = drm_dp_dpcd_read_byte(&lspcon_to_intel_dp(lspcon)->aux, DP_DPCD_REV, &rev);
+	if (ret < 0) {
+		drm_dbg_kms(display->drm, "Native AUX CH down (%pe)\n", ERR_PTR(ret));
 		return false;
 	}
 
@@ -324,17 +331,17 @@ static bool lspcon_parade_fw_ready(struct drm_dp_aux *aux)
 {
 	u8 avi_if_ctrl;
 	u8 retry;
-	ssize_t ret;
+	int ret;
 
 	/* Check if LSPCON FW is ready for data */
 	for (retry = 0; retry < 5; retry++) {
 		if (retry)
 			usleep_range(200, 300);
 
-		ret = drm_dp_dpcd_read(aux, LSPCON_PARADE_AVI_IF_CTRL,
-				       &avi_if_ctrl, 1);
+		ret = drm_dp_dpcd_read_byte(aux, LSPCON_PARADE_AVI_IF_CTRL, &avi_if_ctrl);
 		if (ret < 0) {
-			drm_err(aux->drm_dev, "Failed to read AVI IF control\n");
+			drm_err(aux->drm_dev, "Failed to read AVI IF control (%pe)\n",
+				ERR_PTR(ret));
 			return false;
 		}
 
@@ -364,10 +371,10 @@ static bool _lspcon_parade_write_infoframe_blocks(struct drm_dp_aux *aux,
 
 		reg = LSPCON_PARADE_AVI_IF_WRITE_OFFSET;
 		data = avi_buf + block_count * 8;
-		ret = drm_dp_dpcd_write(aux, reg, data, 8);
+		ret = drm_dp_dpcd_write_data(aux, reg, data, 8);
 		if (ret < 0) {
-			drm_err(aux->drm_dev, "Failed to write AVI IF block %d\n",
-				block_count);
+			drm_err(aux->drm_dev, "Failed to write AVI IF block %d (%pe)\n",
+				block_count, ERR_PTR(ret));
 			return false;
 		}
 
@@ -379,10 +386,10 @@ static bool _lspcon_parade_write_infoframe_blocks(struct drm_dp_aux *aux,
 		 */
 		reg = LSPCON_PARADE_AVI_IF_CTRL;
 		avi_if_ctrl = LSPCON_PARADE_AVI_IF_KICKOFF | block_count;
-		ret = drm_dp_dpcd_write(aux, reg, &avi_if_ctrl, 1);
+		ret = drm_dp_dpcd_write_byte(aux, reg, avi_if_ctrl);
 		if (ret < 0) {
-			drm_err(aux->drm_dev, "Failed to update (0x%x), block %d\n",
-				reg, block_count);
+			drm_err(aux->drm_dev, "Failed to update (0x%x), block %d (%pe)\n",
+				reg, block_count, ERR_PTR(ret));
 			return false;
 		}
 
@@ -428,35 +435,38 @@ static bool _lspcon_write_avi_infoframe_parade(struct drm_dp_aux *aux,
 static bool _lspcon_write_avi_infoframe_mca(struct drm_dp_aux *aux,
 					    const u8 *buffer, ssize_t len)
 {
-	int ret;
-	u32 val = 0;
+	int ret, written = 0;
 	u32 retry;
 	u16 reg;
 	const u8 *data = buffer;
+	u8 val;
 
 	reg = LSPCON_MCA_AVI_IF_WRITE_OFFSET;
-	while (val < len) {
+	while (written < len) {
 		/* DPCD write for AVI IF can fail on a slow FW day, so retry */
 		for (retry = 0; retry < 5; retry++) {
-			ret = drm_dp_dpcd_write(aux, reg, (void *)data, 1);
-			if (ret == 1) {
+			ret = drm_dp_dpcd_write_byte(aux, reg, *data);
+			if (!ret) {
 				break;
 			} else if (retry < 4) {
 				mdelay(50);
 				continue;
 			} else {
-				drm_err(aux->drm_dev, "DPCD write failed at:0x%x\n", reg);
+				drm_err(aux->drm_dev, "DPCD write failed at:0x%x (%pe)\n",
+					reg, ERR_PTR(ret));
 				return false;
 			}
 		}
-		val++; reg++; data++;
+		written++;
+		reg++;
+		data++;
 	}
 
-	val = 0;
 	reg = LSPCON_MCA_AVI_IF_CTRL;
-	ret = drm_dp_dpcd_read(aux, reg, &val, 1);
+	ret = drm_dp_dpcd_read_byte(aux, reg, &val);
 	if (ret < 0) {
-		drm_err(aux->drm_dev, "DPCD read failed, address 0x%x\n", reg);
+		drm_err(aux->drm_dev, "DPCD read failed, address 0x%x (%pe)\n",
+			reg, ERR_PTR(ret));
 		return false;
 	}
 
@@ -464,16 +474,17 @@ static bool _lspcon_write_avi_infoframe_mca(struct drm_dp_aux *aux,
 	val &= ~LSPCON_MCA_AVI_IF_HANDLED;
 	val |= LSPCON_MCA_AVI_IF_KICKOFF;
 
-	ret = drm_dp_dpcd_write(aux, reg, &val, 1);
+	ret = drm_dp_dpcd_write_byte(aux, reg, val);
 	if (ret < 0) {
-		drm_err(aux->drm_dev, "DPCD read failed, address 0x%x\n", reg);
+		drm_err(aux->drm_dev, "DPCD write failed at:0x%x (%pe)\n",
+			reg, ERR_PTR(ret));
 		return false;
 	}
 
-	val = 0;
-	ret = drm_dp_dpcd_read(aux, reg, &val, 1);
+	ret = drm_dp_dpcd_read_byte(aux, reg, &val);
 	if (ret < 0) {
-		drm_err(aux->drm_dev, "DPCD read failed, address 0x%x\n", reg);
+		drm_err(aux->drm_dev, "DPCD read failed, address 0x%x (%pe)\n",
+			reg, ERR_PTR(ret));
 		return false;
 	}
 
@@ -605,12 +616,13 @@ void lspcon_set_infoframes(struct intel_encoder *encoder,
 static bool _lspcon_read_avi_infoframe_enabled_mca(struct drm_dp_aux *aux)
 {
 	int ret;
-	u32 val = 0;
 	u16 reg = LSPCON_MCA_AVI_IF_CTRL;
+	u8 val;
 
-	ret = drm_dp_dpcd_read(aux, reg, &val, 1);
+	ret = drm_dp_dpcd_read_byte(aux, reg, &val);
 	if (ret < 0) {
-		drm_err(aux->drm_dev, "DPCD read failed, address 0x%x\n", reg);
+		drm_err(aux->drm_dev, "DPCD read failed, address 0x%x (%pe)\n",
+			reg, ERR_PTR(ret));
 		return false;
 	}
 
@@ -620,12 +632,13 @@ static bool _lspcon_read_avi_infoframe_enabled_mca(struct drm_dp_aux *aux)
 static bool _lspcon_read_avi_infoframe_enabled_parade(struct drm_dp_aux *aux)
 {
 	int ret;
-	u32 val = 0;
 	u16 reg = LSPCON_PARADE_AVI_IF_CTRL;
+	u8 val;
 
-	ret = drm_dp_dpcd_read(aux, reg, &val, 1);
+	ret = drm_dp_dpcd_read_byte(aux, reg, &val);
 	if (ret < 0) {
-		drm_err(aux->drm_dev, "DPCD read failed, address 0x%x\n", reg);
+		drm_err(aux->drm_dev, "DPCD read failed, address 0x%x (%pe)\n",
+			reg, ERR_PTR(ret));
 		return false;
 	}
 

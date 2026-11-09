@@ -15,6 +15,7 @@
 #define DAE_REG_RD_TMOUT_US		USEC_PER_SEC
 
 #define DAE_ALG_NAME			"hashagg"
+#define DAE_V5_ALG_NAME			"hashagg\nudma\nhashjoin\ngather"
 
 /* error */
 #define DAE_AXI_CFG_OFFSET		0x331000
@@ -38,6 +39,8 @@
 #define DAE_AM_RETURN_MASK		0x3
 #define DAE_AXI_CFG_OFFSET		0x331000
 #define DAE_AXI_SHUTDOWN_EN_MASK	(BIT(0) | BIT(5))
+#define DAE_AUTO_CG_EN_OFFSET		0x331070
+#define DAE_AUTO_CG_EN_MASK		(~(BIT_ULL(4) | BIT_ULL(18) | BIT_ULL(19)))
 
 struct hisi_dae_hw_error {
 	u32 int_msk;
@@ -60,6 +63,17 @@ static inline bool dae_is_support(struct hisi_qm *qm)
 	return false;
 }
 
+static void hisi_dae_set_clock_gating(struct hisi_qm *qm, bool enable)
+{
+	if (qm->ver < QM_HW_V5)
+		return;
+
+	if (enable)
+		writeq(DAE_AUTO_CG_EN_MASK, qm->io_base + DAE_AUTO_CG_EN_OFFSET);
+	else
+		writeq(0, qm->io_base + DAE_AUTO_CG_EN_OFFSET);
+}
+
 int hisi_dae_set_user_domain(struct hisi_qm *qm)
 {
 	u32 val;
@@ -68,20 +82,27 @@ int hisi_dae_set_user_domain(struct hisi_qm *qm)
 	if (!dae_is_support(qm))
 		return 0;
 
+	hisi_dae_set_clock_gating(qm, false);
+
 	val = readl(qm->io_base + DAE_MEM_START_OFFSET);
 	val |= DAE_MEM_START_MASK;
 	writel(val, qm->io_base + DAE_MEM_START_OFFSET);
 	ret = readl_relaxed_poll_timeout(qm->io_base + DAE_MEM_DONE_OFFSET, val,
 					 val & DAE_MEM_DONE_MASK,
 					 DAE_REG_RD_INTVRL_US, DAE_REG_RD_TMOUT_US);
-	if (ret)
+	if (ret) {
 		pci_err(qm->pdev, "failed to init dae memory!\n");
+		return ret;
+	}
 
-	return ret;
+	hisi_dae_set_clock_gating(qm, true);
+
+	return 0;
 }
 
 int hisi_dae_set_alg(struct hisi_qm *qm)
 {
+	const char *alg_name;
 	size_t len;
 
 	if (!dae_is_support(qm))
@@ -90,9 +111,14 @@ int hisi_dae_set_alg(struct hisi_qm *qm)
 	if (!qm->uacce)
 		return 0;
 
+	if (qm->ver >= QM_HW_V5)
+		alg_name = DAE_V5_ALG_NAME;
+	else
+		alg_name = DAE_ALG_NAME;
+
 	len = strlen(qm->uacce->algs);
 	/* A line break may be required */
-	if (len + strlen(DAE_ALG_NAME) + 1 >= QM_DEV_ALG_MAX_LEN) {
+	if (len + strlen(alg_name) + 1 >= QM_DEV_ALG_MAX_LEN) {
 		pci_err(qm->pdev, "algorithm name is too long!\n");
 		return -EINVAL;
 	}
@@ -100,7 +126,7 @@ int hisi_dae_set_alg(struct hisi_qm *qm)
 	if (len)
 		strcat((char *)qm->uacce->algs, "\n");
 
-	strcat((char *)qm->uacce->algs, DAE_ALG_NAME);
+	strcat((char *)qm->uacce->algs, alg_name);
 
 	return 0;
 }
@@ -168,6 +194,12 @@ static void hisi_dae_disable_error_report(struct hisi_qm *qm, u32 err_type)
 	writel(DAE_ERR_NFE_MASK & (~err_type), qm->io_base + DAE_ERR_NFE_OFFSET);
 }
 
+static void hisi_dae_enable_error_report(struct hisi_qm *qm)
+{
+	writel(DAE_ERR_CE_MASK, qm->io_base + DAE_ERR_CE_OFFSET);
+	writel(DAE_ERR_NFE_MASK, qm->io_base + DAE_ERR_NFE_OFFSET);
+}
+
 static void hisi_dae_log_hw_error(struct hisi_qm *qm, u32 err_type)
 {
 	const struct hisi_dae_hw_error *err = dae_hw_error;
@@ -209,6 +241,8 @@ enum acc_err_result hisi_dae_get_err_result(struct hisi_qm *qm)
 		return ACC_ERR_NEED_RESET;
 	}
 	hisi_dae_clear_hw_err_status(qm, err_status);
+	/* Avoid firmware disable error report, re-enable. */
+	hisi_dae_enable_error_report(qm);
 
 	return ACC_ERR_RECOVERED;
 }

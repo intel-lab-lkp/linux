@@ -7,11 +7,13 @@
  */
 
 #include <linux/device.h>
+#include <linux/export.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/err.h>
+#include <linux/cleanup.h>
 #include <asm/eadm.h>
 #include "chsc.h"
 
@@ -206,7 +208,7 @@ static int scm_add(struct chsc_scm_info *scm_info, size_t num)
 			put_device(&scmdev->dev);
 			continue;
 		}
-		scmdev = kzalloc(sizeof(*scmdev), GFP_KERNEL);
+		scmdev = kzalloc_obj(*scmdev);
 		if (!scmdev)
 			return -ENODEV;
 		scmdev_setup(scmdev, sale, scm_info->is, scm_info->mbc);
@@ -223,12 +225,12 @@ static int scm_add(struct chsc_scm_info *scm_info, size_t num)
 
 int scm_update_information(void)
 {
-	struct chsc_scm_info *scm_info;
+	struct chsc_scm_info *scm_info __free(kfree) = NULL;
 	u64 token = 0;
 	size_t num;
 	int ret;
 
-	scm_info = (void *)__get_free_page(GFP_KERNEL);
+	scm_info = kmalloc(PAGE_SIZE, GFP_KERNEL | GFP_DMA);
 	if (!scm_info)
 		return -ENOMEM;
 
@@ -248,8 +250,6 @@ int scm_update_information(void)
 
 		token = scm_info->restok;
 	} while (token);
-
-	free_page((unsigned long)scm_info);
 
 	return ret;
 }

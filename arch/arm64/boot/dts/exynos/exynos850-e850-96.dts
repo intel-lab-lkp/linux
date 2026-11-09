@@ -21,6 +21,7 @@
 	compatible = "winlink,e850-96", "samsung,exynos850";
 
 	aliases {
+		ethernet0 = &ethernet;
 		mmc0 = &mmc_0;
 		serial0 = &serial_0;
 	};
@@ -177,7 +178,6 @@
 };
 
 &mmc_0 {
-	status = "okay";
 	mmc-hs200-1_8v;
 	mmc-hs400-1_8v;
 	cap-mmc-highspeed;
@@ -194,6 +194,8 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&sd0_clk_pins &sd0_cmd_pins &sd0_rdqs_pins &sd0_nreset_pins
 		     &sd0_bus1_pins &sd0_bus4_pins &sd0_bus8_pins>;
+
+	status = "okay";
 };
 
 &oscclk {
@@ -223,27 +225,44 @@
 };
 
 &rtc {
-	status = "okay";
 	clocks = <&cmu_apm CLK_GOUT_RTC_PCLK>, <&rtcclk>;
 	clock-names = "rtc", "rtc_src";
+
+	status = "okay";
 };
 
 &serial_0 {
-	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart1_pins>;
+
+	status = "okay";
 };
 
 &usbdrd {
-	status = "okay";
 	vdd10-supply = <&reg_dummy>;
 	vdd33-supply = <&reg_dummy>;
+
+	status = "okay";
 };
 
 &usbdrd_dwc3 {
+	#address-cells = <1>;
+	#size-cells = <0>;
 	dr_mode = "otg";
 	usb-role-switch;
 	role-switch-default-mode = "host";
+
+	hub@1 {
+		compatible = "usb424,9514";
+		reg = <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ethernet: ethernet@1 {
+			compatible = "usb424,ec00";
+			reg = <1>;
+		};
+	};
 
 	port {
 		usb1_drd_sw: endpoint {
@@ -258,6 +277,7 @@
 
 &usi_uart {
 	samsung,clkreq-on; /* needed for UART mode */
+
 	status = "okay";
 };
 

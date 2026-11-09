@@ -18,13 +18,14 @@
 #include <linux/watchdog.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
+#include <linux/stringify.h>
 #include "sch56xx-common.h"
 
 /* Insmod parameters */
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
-	__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
+	__stringify(WATCHDOG_NOWAYOUT) ")");
 
 #define SIO_SCH56XX_LD_EM	0x0C	/* Embedded uController Logical Dev */
 #define SIO_UNLOCK_KEY		0x55	/* Key to enable Super-I/O */
@@ -330,7 +331,7 @@ struct regmap *devm_regmap_init_sch56xx(struct device *dev, struct mutex *lock, 
 	if (config->reg_bits != 16 && config->val_bits != 8)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	context = kzalloc(sizeof(*context), GFP_KERNEL);
+	context = kzalloc_obj(*context);
 	if (!context)
 		return ERR_PTR(-ENOMEM);
 
@@ -544,10 +545,8 @@ void sch56xx_watchdog_register(struct device *parent, u16 addr, u32 revision,
 
 	watchdog_set_drvdata(&data->wddev, data);
 	err = devm_watchdog_register_device(parent, &data->wddev);
-	if (err) {
-		pr_err("Registering watchdog chardev: %d\n", err);
+	if (err)
 		devm_kfree(parent, data);
-	}
 }
 EXPORT_SYMBOL(sch56xx_watchdog_register);
 

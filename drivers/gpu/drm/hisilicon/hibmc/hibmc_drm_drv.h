@@ -31,11 +31,17 @@ struct hibmc_vdac {
 	struct drm_connector connector;
 	struct i2c_adapter adapter;
 	struct i2c_algo_bit_data bit_data;
+	int phys_status;
 };
 
 struct hibmc_drm_private {
 	/* hw */
 	void __iomem   *mmio;
+
+	/* vram */
+	void __iomem *vram;
+	resource_size_t	vram_base;
+	resource_size_t	vram_size;
 
 	/* drm */
 	struct drm_device dev;
@@ -69,6 +75,7 @@ int hibmc_de_init(struct hibmc_drm_private *priv);
 int hibmc_vdac_init(struct hibmc_drm_private *priv);
 
 int hibmc_ddc_create(struct drm_device *drm_dev, struct hibmc_vdac *connector);
+void hibmc_ddc_del(struct hibmc_vdac *vdac);
 
 int hibmc_dp_init(struct hibmc_drm_private *priv);
 

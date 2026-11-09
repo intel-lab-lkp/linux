@@ -340,9 +340,9 @@ static inline int omap2_onenand_dma_transfer(struct omap2_onenand *c,
 	tx->callback = omap2_onenand_dma_complete_func;
 	tx->callback_param = &c->dma_done;
 
-	cookie = tx->tx_submit(tx);
+	cookie = dmaengine_submit(tx);
 	if (dma_submit_error(cookie)) {
-		dev_err(&c->pdev->dev, "Failed to do DMA tx_submit\n");
+		dev_err(&c->pdev->dev, "Failed to do dmaengine_submit\n");
 		return -EIO;
 	}
 
@@ -603,7 +603,6 @@ static struct platform_driver omap2_onenand_driver = {
 
 module_platform_driver(omap2_onenand_driver);
 
-MODULE_ALIAS("platform:" DRIVER_NAME);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jarkko Lavinen <jarkko.lavinen@nokia.com>");
 MODULE_DESCRIPTION("Glue layer for OneNAND flash on OMAP2 / OMAP3");

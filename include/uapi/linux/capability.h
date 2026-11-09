@@ -6,9 +6,10 @@
  * Alexander Kjeldaas <astor@guardian.no>
  * with help from Aleph1, Roland Buresund and Andrew Main.
  *
- * See here for the libcap library ("POSIX draft" compliance):
+ * See here for the libcap2 library (compliant with Section 25 of
+ * the withdrawn POSIX 1003.1e Draft 17):
  *
- * ftp://www.kernel.org/pub/linux/libs/security/linux-privs/kernel-2.6/
+ * https://www.kernel.org/pub/linux/libs/security/linux-privs/libcap2/
  */
 
 #ifndef _UAPI_LINUX_CAPABILITY_H
@@ -103,9 +104,9 @@ struct vfs_ns_cap_data {
 #endif
 
 
-/**
- ** POSIX-draft defined capabilities.
- **/
+/*
+ * POSIX-draft defined capabilities.
+ */
 
 /* In a system with the [_POSIX_CHOWN_RESTRICTED] option defined, this
    overrides the restriction of changing file ownership and group
@@ -158,9 +159,9 @@ struct vfs_ns_cap_data {
 #define CAP_SETUID           7
 
 
-/**
- ** Linux-specific capabilities
- **/
+/*
+ * Linux-specific capabilities
+ */
 
 /* Without VFS support for capabilities:
  *   Transfer any capability in your permitted set to any pid,

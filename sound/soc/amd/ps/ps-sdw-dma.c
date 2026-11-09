@@ -269,6 +269,7 @@ static int acp63_configure_sdw_ringbuffer(void __iomem *acp_base, u32 stream_id,
 		break;
 	case ACP70_PCI_REV:
 	case ACP71_PCI_REV:
+	case ACP72_PCI_REV:
 		switch (manager_instance) {
 		case ACP_SDW0:
 			reg_dma_size = acp70_sdw0_dma_reg[stream_id].reg_dma_size;
@@ -317,7 +318,7 @@ static int acp63_sdw_dma_open(struct snd_soc_component *component,
 	runtime = substream->runtime;
 	cpu_dai = snd_soc_rtd_to_cpu(prtd, 0);
 	amd_manager = snd_soc_dai_get_drvdata(cpu_dai);
-	stream = kzalloc(sizeof(*stream), GFP_KERNEL);
+	stream = kzalloc_obj(*stream);
 	if (!stream)
 		return -ENOMEM;
 
@@ -336,7 +337,13 @@ static int acp63_sdw_dma_open(struct snd_soc_component *component,
 	stream->stream_id = cpu_dai->id;
 	stream->instance = amd_manager->instance;
 	runtime->private_data = stream;
-	return ret;
+
+	/*
+	 * ASoC only marks the component as opened when .open() returns 0.
+	 * Since snd_pcm_hw_constraint_integer() may return 1, explicitly
+	 * return 0 to ensure .close() is not skipped on rollback.
+	 */
+	return 0;
 }
 
 static int acp63_sdw_dma_hw_params(struct snd_soc_component *component,
@@ -382,6 +389,7 @@ static int acp63_sdw_dma_hw_params(struct snd_soc_component *component,
 		break;
 	case ACP70_PCI_REV:
 	case ACP71_PCI_REV:
+	case ACP72_PCI_REV:
 		switch (stream->instance) {
 		case ACP_SDW0:
 			sdw_data->acp70_sdw0_dma_stream[stream_id] = substream;
@@ -451,6 +459,7 @@ static u64 acp63_sdw_get_byte_count(struct acp_sdw_dma_stream *stream, void __io
 		break;
 	case ACP70_PCI_REV:
 	case ACP71_PCI_REV:
+	case ACP72_PCI_REV:
 		switch (stream->instance) {
 		case ACP_SDW0:
 			pos_low_reg = acp70_sdw0_dma_reg[stream->stream_id].pos_low_reg;
@@ -529,6 +538,7 @@ static int acp63_sdw_dma_close(struct snd_soc_component *component,
 		break;
 	case ACP70_PCI_REV:
 	case ACP71_PCI_REV:
+	case ACP72_PCI_REV:
 		switch (stream->instance) {
 		case ACP_SDW0:
 			sdw_data->acp70_sdw0_dma_stream[stream->stream_id] = NULL;
@@ -574,6 +584,7 @@ static int acp63_sdw_dma_enable(struct snd_pcm_substream *substream,
 		break;
 	case ACP70_PCI_REV:
 	case ACP71_PCI_REV:
+	case ACP72_PCI_REV:
 		switch (stream->instance) {
 		case ACP_SDW0:
 			sdw_dma_en_reg = acp70_sdw0_dma_enable_reg[stream_id];
@@ -629,7 +640,7 @@ static const struct snd_soc_component_driver acp63_sdw_component = {
 	.hw_params	= acp63_sdw_dma_hw_params,
 	.trigger	= acp63_sdw_dma_trigger,
 	.pointer	= acp63_sdw_dma_pointer,
-	.pcm_construct	= acp63_sdw_dma_new,
+	.pcm_new	= acp63_sdw_dma_new,
 	.use_dai_pcm_id = true,
 
 };

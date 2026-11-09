@@ -1688,6 +1688,7 @@ static int __maybe_unused hi846_resume(struct device *dev)
 }
 
 static int hi846_set_format(struct v4l2_subdev *sd,
+			    const struct v4l2_subdev_client_info *ci,
 			    struct v4l2_subdev_state *sd_state,
 			    struct v4l2_subdev_format *format)
 {
@@ -1840,6 +1841,7 @@ static int hi846_enum_frame_size(struct v4l2_subdev *sd,
 }
 
 static int hi846_get_selection(struct v4l2_subdev *sd,
+			       const struct v4l2_subdev_client_info *ci,
 			       struct v4l2_subdev_state *sd_state,
 			       struct v4l2_subdev_selection *sel)
 {
@@ -2052,12 +2054,11 @@ static int hi846_probe(struct i2c_client *client)
 		return ret;
 	}
 
-	hi846->clock = devm_clk_get(&client->dev, NULL);
-	if (IS_ERR(hi846->clock)) {
-		dev_err(&client->dev, "failed to get clock: %pe\n",
-			hi846->clock);
-		return PTR_ERR(hi846->clock);
-	}
+	hi846->clock = devm_v4l2_sensor_clk_get(&client->dev, NULL);
+	if (IS_ERR(hi846->clock))
+		return dev_err_probe(&client->dev, PTR_ERR(hi846->clock),
+				     "failed to get clock: %pe\n",
+				     hi846->clock);
 
 	mclk_freq = clk_get_rate(hi846->clock);
 	if (mclk_freq != 25000000)

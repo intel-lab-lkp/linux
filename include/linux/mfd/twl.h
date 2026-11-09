@@ -205,27 +205,6 @@ int twl_get_hfclk_rate(void);
 int twl6030_interrupt_unmask(u8 bit_mask, u8 offset);
 int twl6030_interrupt_mask(u8 bit_mask, u8 offset);
 
-/* Card detect Configuration for MMC1 Controller on OMAP4 */
-#ifdef CONFIG_TWL4030_CORE
-int twl6030_mmc_card_detect_config(void);
-#else
-static inline int twl6030_mmc_card_detect_config(void)
-{
-	pr_debug("twl6030_mmc_card_detect_config not supported\n");
-	return 0;
-}
-#endif
-
-/* MMC1 Controller on OMAP4 uses Phoenix irq for Card detect */
-#ifdef CONFIG_TWL4030_CORE
-int twl6030_mmc_card_detect(struct device *dev, int slot);
-#else
-static inline int twl6030_mmc_card_detect(struct device *dev, int slot)
-{
-	pr_debug("Call back twl6030_mmc_card_detect not supported\n");
-	return -EIO;
-}
-#endif
 /*----------------------------------------------------------------------*/
 
 /*
@@ -760,7 +739,7 @@ int twl4030_sih_setup(struct device *dev, int module, int irq_base);
 #define TWL4030_REG_VUSB3V1	19
 
 /* TWL6030 SMPS/LDO's */
-/* EXTERNAL dc-to-dc buck convertor controllable via SR */
+/* EXTERNAL dc-to-dc buck converter controllable via SR */
 #define TWL6030_REG_VDD1	30
 #define TWL6030_REG_VDD2	31
 #define TWL6030_REG_VDD3	32

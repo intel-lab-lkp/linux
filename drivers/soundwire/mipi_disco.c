@@ -19,7 +19,6 @@
 
 #include <linux/device.h>
 #include <linux/property.h>
-#include <linux/mod_devicetable.h>
 #include <linux/soundwire/sdw.h>
 #include "bus.h"
 
@@ -451,10 +450,10 @@ int sdw_slave_read_prop(struct sdw_slave *slave)
 			"mipi-sdw-highPHY-capable");
 
 	prop->paging_support = mipi_device_property_read_bool(dev,
-			"mipi-sdw-paging-support");
+			"mipi-sdw-paging-supported");
 
 	prop->bank_delay_support = mipi_device_property_read_bool(dev,
-			"mipi-sdw-bank-delay-support");
+			"mipi-sdw-bank-delay-supported");
 
 	device_property_read_u32(dev,
 			"mipi-sdw-port15-read-behavior", &prop->p15_behave);
@@ -470,6 +469,12 @@ int sdw_slave_read_prop(struct sdw_slave *slave)
 
 	device_property_read_u32(dev, "mipi-sdw-sdca-interrupt-register-list",
 				 &prop->sdca_interrupt_register_list);
+
+	device_property_read_u32(dev, "mipi-sdw-bra-mode-block-alignment",
+				 &prop->bra_block_alignment);
+
+	device_property_read_u32(dev, "mipi-sdw-bra-mode-max-data-per-frame",
+				 &prop->bra_max_data_per_frame);
 
 	prop->commit_register_supported = mipi_device_property_read_bool(dev,
 			"mipi-sdw-commit-register-supported");

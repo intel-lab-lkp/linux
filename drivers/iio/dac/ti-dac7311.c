@@ -242,10 +242,8 @@ static int ti_dac_probe(struct spi_device *spi)
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*ti_dac));
-	if (!indio_dev) {
-		dev_err(dev, "can not allocate iio device\n");
+	if (!indio_dev)
 		return -ENOMEM;
-	}
 
 	spi->mode = SPI_MODE_1;
 	spi->bits_per_word = 16;
@@ -313,9 +311,9 @@ static const struct of_device_id ti_dac_of_id[] = {
 MODULE_DEVICE_TABLE(of, ti_dac_of_id);
 
 static const struct spi_device_id ti_dac_spi_id[] = {
-	{ "dac5311", ID_DAC5311  },
-	{ "dac6311", ID_DAC6311 },
-	{ "dac7311", ID_DAC7311 },
+	{ .name = "dac5311", .driver_data = ID_DAC5311 },
+	{ .name = "dac6311", .driver_data = ID_DAC6311 },
+	{ .name = "dac7311", .driver_data = ID_DAC7311 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ti_dac_spi_id);

@@ -9,8 +9,8 @@
  * TODO: IR LED characteristics
  */
 
+#include <linux/array_size.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/i2c.h>
 #include <linux/err.h>
 #include <linux/delay.h>
@@ -23,8 +23,6 @@
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/triggered_buffer.h>
-
-#define LTR501_DRV_NAME "ltr501"
 
 #define LTR501_ALS_CONTR 0x80 /* ALS operation mode, SW reset */
 #define LTR501_PS_CONTR 0x81 /* PS operation mode */
@@ -65,8 +63,6 @@
 #define LTR501_ALS_DEF_PERIOD 500000
 #define LTR501_PS_DEF_PERIOD 100000
 
-#define LTR501_REGMAP_NAME "ltr501_regmap"
-
 #define LTR501_LUX_CONV(vis_coeff, vis_data, ir_coeff, ir_data) \
 			((vis_coeff * vis_data) - (ir_coeff * ir_data))
 
@@ -95,10 +91,11 @@ struct ltr501_samp_table {
 #define LTR501_RESERVED_GAIN -1
 
 enum {
-	ltr501 = 0,
-	ltr559,
 	ltr301,
 	ltr303,
+	ltr329,
+	ltr501,
+	ltr559,
 };
 
 struct ltr501_gain {
@@ -145,6 +142,7 @@ struct ltr501_chip_info {
 	u8 als_mode_active;
 	u8 als_gain_mask;
 	u8 als_gain_shift;
+	bool no_irq_support;
 	struct iio_chan_spec const *channels;
 	const int no_channels;
 	const struct iio_info *info;
@@ -182,6 +180,11 @@ static const struct ltr501_samp_table ltr501_ps_samp_table[] = {
 			{500000, 2000000}, {500000, 2000000},
 			{500000, 2000000}
 };
+
+static bool ltr501_has_irq_support(const struct ltr501_chip_info *info)
+{
+	return !info->no_irq_support;
+}
 
 static int ltr501_match_samp_freq(const struct ltr501_samp_table *tab,
 					   int len, int val, int val2)
@@ -483,7 +486,7 @@ static int ltr501_write_intr_prst(struct ltr501_data *data,
 		if (ret < 0)
 			return ret;
 
-		/* period should be atleast equal to sampling period */
+		/* period should be at least equal to sampling period */
 		if (period < samp_period)
 			return -EINVAL;
 
@@ -503,7 +506,7 @@ static int ltr501_write_intr_prst(struct ltr501_data *data,
 		if (ret < 0)
 			return ret;
 
-		/* period should be atleast equal to rate */
+		/* period should be at least equal to rate */
 		if (period < samp_period)
 			return -EINVAL;
 
@@ -758,7 +761,7 @@ static int ltr501_get_gain_index(const struct ltr501_gain *gain, int size,
 		if (val == gain[i].scale && val2 == gain[i].uscale)
 			return i;
 
-	return -1;
+	return -EINVAL;
 }
 
 static int __ltr501_write_raw(struct iio_dev *indio_dev,
@@ -777,7 +780,7 @@ static int __ltr501_write_raw(struct iio_dev *indio_dev,
 						  info->als_gain_tbl_size,
 						  val, val2);
 			if (i < 0)
-				return -EINVAL;
+				return i;
 
 			data->als_contr &= ~info->als_gain_mask;
 			data->als_contr |= i << info->als_gain_shift;
@@ -789,7 +792,7 @@ static int __ltr501_write_raw(struct iio_dev *indio_dev,
 						  info->ps_gain_tbl_size,
 						  val, val2);
 			if (i < 0)
-				return -EINVAL;
+				return i;
 
 			data->ps_contr &= ~LTR501_CONTR_PS_GAIN_MASK;
 			data->ps_contr |= i << LTR501_CONTR_PS_GAIN_SHIFT;
@@ -826,6 +829,9 @@ static int __ltr501_write_raw(struct iio_dev *indio_dev,
 			if (ret < 0)
 				return ret;
 
+			if (!ltr501_has_irq_support(info))
+				return ret;
+
 			/* update persistence count when changing frequency */
 			ret = ltr501_write_intr_prst(data, chan->type,
 						     0, data->als_period);
@@ -843,6 +849,9 @@ static int __ltr501_write_raw(struct iio_dev *indio_dev,
 
 			ret = ltr501_ps_write_samp_freq(data, val, val2);
 			if (ret < 0)
+				return ret;
+
+			if (!ltr501_has_irq_support(info))
 				return ret;
 
 			/* update persistence count when changing frequency */
@@ -1210,6 +1219,42 @@ static const struct iio_info ltr301_info = {
 };
 
 static const struct ltr501_chip_info ltr501_chip_info_tbl[] = {
+	[ltr301] = {
+		.partid = 0x08,
+		.als_gain = ltr501_als_gain_tbl,
+		.als_gain_tbl_size = ARRAY_SIZE(ltr501_als_gain_tbl),
+		.als_mode_active = BIT(0) | BIT(1),
+		.als_gain_mask = BIT(3),
+		.als_gain_shift = 3,
+		.info = &ltr301_info,
+		.info_no_irq = &ltr301_info_no_irq,
+		.channels = ltr301_channels,
+		.no_channels = ARRAY_SIZE(ltr301_channels),
+	},
+	[ltr303] = {
+		.partid = 0x0A,
+		.als_gain = ltr559_als_gain_tbl,
+		.als_gain_tbl_size = ARRAY_SIZE(ltr559_als_gain_tbl),
+		.als_mode_active = BIT(0),
+		.als_gain_mask = BIT(2) | BIT(3) | BIT(4),
+		.als_gain_shift = 2,
+		.info = &ltr301_info,
+		.info_no_irq = &ltr301_info_no_irq,
+		.channels = ltr301_channels,
+		.no_channels = ARRAY_SIZE(ltr301_channels),
+	},
+	[ltr329] = {
+		.partid = 0x0A,
+		.als_gain = ltr559_als_gain_tbl,
+		.als_gain_tbl_size = ARRAY_SIZE(ltr559_als_gain_tbl),
+		.als_mode_active = BIT(0),
+		.als_gain_mask = BIT(2) | BIT(3) | BIT(4),
+		.als_gain_shift = 2,
+		.no_irq_support = true,
+		.info_no_irq = &ltr301_info_no_irq,
+		.channels = ltr301_channels,
+		.no_channels = ARRAY_SIZE(ltr301_channels),
+	},
 	[ltr501] = {
 		.partid = 0x08,
 		.als_gain = ltr501_als_gain_tbl,
@@ -1238,30 +1283,6 @@ static const struct ltr501_chip_info ltr501_chip_info_tbl[] = {
 		.channels = ltr501_channels,
 		.no_channels = ARRAY_SIZE(ltr501_channels),
 	},
-	[ltr301] = {
-		.partid = 0x08,
-		.als_gain = ltr501_als_gain_tbl,
-		.als_gain_tbl_size = ARRAY_SIZE(ltr501_als_gain_tbl),
-		.als_mode_active = BIT(0) | BIT(1),
-		.als_gain_mask = BIT(3),
-		.als_gain_shift = 3,
-		.info = &ltr301_info,
-		.info_no_irq = &ltr301_info_no_irq,
-		.channels = ltr301_channels,
-		.no_channels = ARRAY_SIZE(ltr301_channels),
-	},
-	[ltr303] = {
-		.partid = 0x0A,
-		.als_gain = ltr559_als_gain_tbl,
-		.als_gain_tbl_size = ARRAY_SIZE(ltr559_als_gain_tbl),
-		.als_mode_active = BIT(0),
-		.als_gain_mask = BIT(2) | BIT(3) | BIT(4),
-		.als_gain_shift = 2,
-		.info = &ltr301_info,
-		.info_no_irq = &ltr301_info_no_irq,
-		.channels = ltr301_channels,
-		.no_channels = ARRAY_SIZE(ltr301_channels),
-	},
 };
 
 static int ltr501_write_contr(struct ltr501_data *data, u8 als_val, u8 ps_val)
@@ -1283,13 +1304,11 @@ static irqreturn_t ltr501_trigger_handler(int irq, void *p)
 	struct {
 		u16 channels[3];
 		aligned_s64 ts;
-	} scan;
+	} scan = { };
 	__le16 als_buf[2];
 	u8 mask = 0;
 	int j = 0;
 	int ret, psdata;
-
-	memset(&scan, 0, sizeof(scan));
 
 	/* figure out which data needs to be ready */
 	if (test_bit(0, indio_dev->active_scan_mask) ||
@@ -1321,8 +1340,8 @@ static irqreturn_t ltr501_trigger_handler(int irq, void *p)
 		scan.channels[j++] = psdata & LTR501_PS_DATA_MASK;
 	}
 
-	iio_push_to_buffers_with_timestamp(indio_dev, &scan,
-					   iio_get_time_ns(indio_dev));
+	iio_push_to_buffers_with_ts(indio_dev, &scan, sizeof(scan),
+				    iio_get_time_ns(indio_dev));
 
 done:
 	iio_trigger_notify_done(indio_dev->trig);
@@ -1376,13 +1395,15 @@ static int ltr501_init(struct ltr501_data *data)
 
 	data->ps_contr = status | LTR501_CONTR_ACTIVE;
 
-	ret = ltr501_read_intr_prst(data, IIO_INTENSITY, &data->als_period);
-	if (ret < 0)
-		return ret;
+	if (ltr501_has_irq_support(data->chip_info)) {
+		ret = ltr501_read_intr_prst(data, IIO_INTENSITY, &data->als_period);
+		if (ret < 0)
+			return ret;
 
-	ret = ltr501_read_intr_prst(data, IIO_PROXIMITY, &data->ps_period);
-	if (ret < 0)
-		return ret;
+		ret = ltr501_read_intr_prst(data, IIO_PROXIMITY, &data->ps_period);
+		if (ret < 0)
+			return ret;
+	}
 
 	return ltr501_write_contr(data, data->als_contr, data->ps_contr);
 }
@@ -1404,11 +1425,11 @@ static bool ltr501_is_volatile_reg(struct device *dev, unsigned int reg)
 }
 
 static const struct regmap_config ltr501_regmap_config = {
-	.name =  LTR501_REGMAP_NAME,
+	.name = "ltr501_regmap",
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = LTR501_MAX_REG,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 	.volatile_reg = ltr501_is_volatile_reg,
 };
 
@@ -1537,6 +1558,11 @@ static int ltr501_probe(struct i2c_client *client)
 	if (ret < 0)
 		return ret;
 
+	if (!ltr501_has_irq_support(data->chip_info) && client->irq > 0) {
+		client->irq = 0;
+		dev_warn(&client->dev, "chip doesn't support IRQ");
+	}
+
 	if (client->irq > 0) {
 		ret = devm_request_threaded_irq(&client->dev, client->irq,
 						NULL, ltr501_interrupt_handler,
@@ -1544,11 +1570,8 @@ static int ltr501_probe(struct i2c_client *client)
 						IRQF_ONESHOT,
 						"ltr501_thresh_event",
 						indio_dev);
-		if (ret) {
-			dev_err(&client->dev, "request irq (%d) failed\n",
-				client->irq);
-			return ret;
-		}
+		if (ret)
+			goto powerdown_on_error;
 	} else {
 		indio_dev->info = data->chip_info->info_no_irq;
 	}
@@ -1607,26 +1630,28 @@ static const struct acpi_device_id ltr_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, ltr_acpi_match);
 
 static const struct i2c_device_id ltr501_id[] = {
-	{ "ltr501", ltr501 },
-	{ "ltr559", ltr559 },
-	{ "ltr301", ltr301 },
-	{ "ltr303", ltr303 },
+	{ .name = "ltr301", .driver_data = ltr301 },
+	{ .name = "ltr303", .driver_data = ltr303 },
+	{ .name = "ltr329", .driver_data = ltr329 },
+	{ .name = "ltr501", .driver_data = ltr501 },
+	{ .name = "ltr559", .driver_data = ltr559 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ltr501_id);
 
 static const struct of_device_id ltr501_of_match[] = {
-	{ .compatible = "liteon,ltr501", },
-	{ .compatible = "liteon,ltr559", },
 	{ .compatible = "liteon,ltr301", },
 	{ .compatible = "liteon,ltr303", },
+	{ .compatible = "liteon,ltr329", },
+	{ .compatible = "liteon,ltr501", },
+	{ .compatible = "liteon,ltr559", },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, ltr501_of_match);
 
 static struct i2c_driver ltr501_driver = {
 	.driver = {
-		.name   = LTR501_DRV_NAME,
+		.name   = "ltr501",
 		.of_match_table = ltr501_of_match,
 		.pm	= pm_sleep_ptr(&ltr501_pm_ops),
 		.acpi_match_table = ltr_acpi_match,

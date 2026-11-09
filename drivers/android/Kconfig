@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0
 menu "Android"
 
-config ANDROID_BINDER_IPC
+config ANDROID_BINDER_IPC_RUST
 	bool "Android Binder IPC Driver"
 	depends on MMU
+	depends on NET
+	depends on RUST
 	default n
 	help
 	  Binder is used in Android for both communication between processes,
@@ -13,21 +15,9 @@ config ANDROID_BINDER_IPC
 	  Android process, using Binder to identify, invoke and pass arguments
 	  between said processes.
 
-config ANDROID_BINDERFS
-	bool "Android Binderfs filesystem"
-	depends on ANDROID_BINDER_IPC
-	default n
-	help
-	  Binderfs is a pseudo-filesystem for the Android Binder IPC driver
-	  which can be mounted per-ipc namespace allowing to run multiple
-	  instances of Android.
-	  Each binderfs mount initially only contains a binder-control device.
-	  It can be used to dynamically allocate new binder IPC devices via
-	  ioctls.
-
 config ANDROID_BINDER_DEVICES
 	string "Android Binder devices"
-	depends on ANDROID_BINDER_IPC
+	depends on ANDROID_BINDER_IPC_RUST
 	default "binder,hwbinder,vndbinder"
 	help
 	  Default value for the binder.devices parameter.
@@ -36,15 +26,5 @@ config ANDROID_BINDER_DEVICES
 	  that specifies the names of the binder device nodes that will be
 	  created. Each binder device has its own context manager, and is
 	  therefore logically separated from the other devices.
-
-config ANDROID_BINDER_IPC_SELFTEST
-	bool "Android Binder IPC Driver Selftest"
-	depends on ANDROID_BINDER_IPC
-	help
-	  This feature allows binder selftest to run.
-
-	  Binder selftest checks the allocation and free of binder buffers
-	  exhaustively with combinations of various buffer sizes and
-	  alignments.
 
 endmenu

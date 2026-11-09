@@ -5,8 +5,8 @@
  * Copyright (c) 2016, Intel Corporation.
  *
  */
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/pm.h>
 #include <linux/regmap.h>
 #include <linux/spi/spi.h>
 
@@ -34,8 +34,8 @@ static int bmi160_spi_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id bmi160_spi_id[] = {
-	{"bmi120", 0},
-	{"bmi160", 0},
+	{ .name = "bmi120" },
+	{ .name = "bmi160" },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, bmi160_spi_id);
@@ -61,6 +61,7 @@ static struct spi_driver bmi160_spi_driver = {
 		.acpi_match_table	= bmi160_acpi_match,
 		.of_match_table		= bmi160_of_match,
 		.name			= "bmi160_spi",
+		.pm			= pm_ptr(&bmi160_core_pm_ops),
 	},
 };
 module_spi_driver(bmi160_spi_driver);

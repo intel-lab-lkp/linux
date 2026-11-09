@@ -306,7 +306,7 @@ static const struct super_operations orangefs_s_ops = {
 	.free_inode = orangefs_free_inode,
 	.destroy_inode = orangefs_destroy_inode,
 	.write_inode = orangefs_write_inode,
-	.drop_inode = generic_delete_inode,
+	.drop_inode = inode_just_drop,
 	.statfs = orangefs_statfs,
 	.show_options = orangefs_show_options,
 };
@@ -383,6 +383,24 @@ static int orangefs_unmount(int id, __s32 fs_id, const char *devname)
 {
 	struct orangefs_kernel_op_s *op;
 	int r;
+
+	/*
+	 * If someone reboots linux without unmounting orangefs first,
+	 * don't bother firing off an unmount service operation that
+	 * will never complete, or the whole system shutdown
+	 * stalls for ORANGEFS_DEFAULT_OP_TIMEOUT_SECS.
+	 */
+
+	if (!__is_daemon_in_service() ||
+		system_state == SYSTEM_HALT ||
+		system_state == SYSTEM_POWER_OFF ||
+		system_state == SYSTEM_RESTART) {
+			gossip_debug(GOSSIP_SUPER_DEBUG,
+				"%s: dirty unmount.\n",
+				__func__);
+			return 0;
+	}
+
 	op = op_alloc(ORANGEFS_VFS_OP_FS_UMOUNT);
 	if (!op)
 		return -ENOMEM;
@@ -416,7 +434,7 @@ static int orangefs_fill_sb(struct super_block *sb,
 	sb->s_xattr = orangefs_xattr_handlers;
 	sb->s_magic = ORANGEFS_SUPER_MAGIC;
 	sb->s_op = &orangefs_s_ops;
-	sb->s_d_op = &orangefs_dentry_operations;
+	set_default_d_op(sb, &orangefs_dentry_operations);
 
 	sb->s_blocksize = PAGE_SIZE;
 	sb->s_blocksize_bits = PAGE_SHIFT;
@@ -578,7 +596,7 @@ int orangefs_init_fs_context(struct fs_context *fc)
 {
 	struct orangefs_sb_info_s *osi;
 
-	osi = kzalloc(sizeof(struct orangefs_sb_info_s), GFP_KERNEL);
+	osi = kzalloc_obj(struct orangefs_sb_info_s);
 	if (!osi)
 		return -ENOMEM;
 

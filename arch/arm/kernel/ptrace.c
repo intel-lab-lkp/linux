@@ -677,7 +677,7 @@ enum arm_regset {
 
 static const struct user_regset arm_regsets[] = {
 	[REGSET_GPR] = {
-		.core_note_type = NT_PRSTATUS,
+		USER_REGSET_NOTE_TYPE(PRSTATUS),
 		.n = ELF_NGREG,
 		.size = sizeof(u32),
 		.align = sizeof(u32),
@@ -689,7 +689,7 @@ static const struct user_regset arm_regsets[] = {
 		 * For the FPA regs in fpstate, the real fields are a mixture
 		 * of sizes, so pretend that the registers are word-sized:
 		 */
-		.core_note_type = NT_PRFPREG,
+		USER_REGSET_NOTE_TYPE(PRFPREG),
 		.n = sizeof(struct user_fp) / sizeof(u32),
 		.size = sizeof(u32),
 		.align = sizeof(u32),
@@ -702,7 +702,7 @@ static const struct user_regset arm_regsets[] = {
 		 * Pretend that the VFP regs are word-sized, since the FPSCR is
 		 * a single word dangling at the end of struct user_vfp:
 		 */
-		.core_note_type = NT_ARM_VFP,
+		USER_REGSET_NOTE_TYPE(ARM_VFP),
 		.n = ARM_VFPREGS_SIZE / sizeof(u32),
 		.size = sizeof(u32),
 		.align = sizeof(u32),
@@ -840,7 +840,7 @@ static void report_syscall(struct pt_regs *regs, enum ptrace_syscall_dir dir)
 
 	if (dir == PTRACE_SYSCALL_EXIT)
 		ptrace_report_syscall_exit(regs, 0);
-	else if (ptrace_report_syscall_entry(regs))
+	else if (!ptrace_report_syscall_permit_entry(regs))
 		current_thread_info()->abi_syscall = -1;
 
 	regs->ARM_ip = ip;
@@ -855,7 +855,7 @@ asmlinkage int syscall_trace_enter(struct pt_regs *regs)
 
 	/* Do seccomp after ptrace; syscall may have changed. */
 #ifdef CONFIG_HAVE_ARCH_SECCOMP_FILTER
-	if (secure_computing() == -1)
+	if (!seccomp_permit_syscall())
 		return -1;
 #else
 	/* XXX: remove this once OABI gets fixed */

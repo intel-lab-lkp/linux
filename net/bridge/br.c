@@ -12,8 +12,6 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/init.h>
-#include <linux/llc.h>
-#include <net/llc.h>
 #include <net/stp.h>
 #include <net/switchdev.h>
 
@@ -37,6 +35,11 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 	int err;
 
 	if (netif_is_bridge_master(dev)) {
+		struct net_bridge *br = netdev_priv(dev);
+
+		if (event == NETDEV_REGISTER)
+			br_fdb_change_mac_address(br, dev->dev_addr);
+
 		err = br_vlan_bridge_event(dev, event, ptr);
 		if (err)
 			return notifier_from_errno(err);
@@ -74,9 +77,9 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 		if (br->dev->addr_assign_type == NET_ADDR_SET)
 			break;
 		prechaddr_info = ptr;
-		err = dev_pre_changeaddr_notify(br->dev,
-						prechaddr_info->dev_addr,
-						extack);
+		err = netif_pre_changeaddr_notify(br->dev,
+						  prechaddr_info->dev_addr,
+						  extack);
 		if (err)
 			return notifier_from_errno(err);
 		break;
@@ -197,7 +200,7 @@ static int br_switchdev_event(struct notifier_block *unused,
 	case SWITCHDEV_FDB_FLUSH_TO_BRIDGE:
 		fdb_info = ptr;
 		/* Don't delete static entries */
-		br_fdb_delete_by_port(br, p, fdb_info->vid, 0);
+		br_fdb_cleanup_by_dst(br, br_port_to_dst(p), fdb_info->vid, 0);
 		break;
 	}
 
@@ -259,6 +262,23 @@ static struct notifier_block br_switchdev_blocking_notifier = {
 	.notifier_call = br_switchdev_blocking_event,
 };
 
+static int
+br_toggle_fdb_local_vlan_0(struct net_bridge *br, bool on,
+			   struct netlink_ext_ack *extack)
+{
+	int err;
+
+	if (br_opt_get(br, BROPT_FDB_LOCAL_VLAN_0) == on)
+		return 0;
+
+	err = br_fdb_toggle_local_vlan_0(br, on, extack);
+	if (err)
+		return err;
+
+	br_opt_toggle(br, BROPT_FDB_LOCAL_VLAN_0, on);
+	return 0;
+}
+
 /* br_boolopt_toggle - change user-controlled boolean option
  *
  * @br: bridge device
@@ -287,6 +307,9 @@ int br_boolopt_toggle(struct net_bridge *br, enum br_boolopt_id opt, bool on,
 	case BR_BOOLOPT_MDB_OFFLOAD_FAIL_NOTIFICATION:
 		br_opt_toggle(br, BROPT_MDB_OFFLOAD_FAIL_NOTIFICATION, on);
 		break;
+	case BR_BOOLOPT_FDB_LOCAL_VLAN_0:
+		err = br_toggle_fdb_local_vlan_0(br, on, extack);
+		break;
 	default:
 		/* shouldn't be called with unsupported options */
 		WARN_ON(1);
@@ -307,6 +330,8 @@ int br_boolopt_get(const struct net_bridge *br, enum br_boolopt_id opt)
 		return br_opt_get(br, BROPT_MST_ENABLED);
 	case BR_BOOLOPT_MDB_OFFLOAD_FAIL_NOTIFICATION:
 		return br_opt_get(br, BROPT_MDB_OFFLOAD_FAIL_NOTIFICATION);
+	case BR_BOOLOPT_FDB_LOCAL_VLAN_0:
+		return br_opt_get(br, BROPT_FDB_LOCAL_VLAN_0);
 	default:
 		/* shouldn't be called with unsupported options */
 		WARN_ON(1);
@@ -323,6 +348,13 @@ int br_boolopt_multi_toggle(struct net_bridge *br,
 	unsigned long bitmap = bm->optmask;
 	int err = 0;
 	int opt_id;
+
+	opt_id = find_next_bit(&bitmap, BITS_PER_LONG, BR_BOOLOPT_MAX);
+	if (opt_id != BITS_PER_LONG) {
+		NL_SET_ERR_MSG_FMT_MOD(extack, "Unknown boolean option %d",
+				       opt_id);
+		return -EINVAL;
+	}
 
 	for_each_set_bit(opt_id, &bitmap, BR_BOOLOPT_MAX) {
 		bool on = !!(bm->optval & BIT(opt_id));
@@ -362,10 +394,7 @@ void br_opt_toggle(struct net_bridge *br, enum net_bridge_opts opt, bool on)
 	if (cur == on)
 		return;
 
-	if (on)
-		set_bit(opt, &br->options);
-	else
-		clear_bit(opt, &br->options);
+	assign_bit(opt, &br->options, on);
 }
 
 static void __net_exit br_net_exit_rtnl(struct net *net,
@@ -430,10 +459,6 @@ static int __init br_init(void)
 
 	brioctl_set(br_ioctl_stub);
 
-#if IS_ENABLED(CONFIG_ATM_LANE)
-	br_fdb_test_addr_hook = br_fdb_test_addr;
-#endif
-
 #if IS_MODULE(CONFIG_BRIDGE_NETFILTER)
 	pr_info("bridge: filtering via arp/ip/ip6tables is no longer available "
 		"by default. Update your scripts to load br_netfilter if you "
@@ -472,9 +497,6 @@ static void __exit br_deinit(void)
 	rcu_barrier(); /* Wait for completion of call_rcu()'s */
 
 	br_nf_core_fini();
-#if IS_ENABLED(CONFIG_ATM_LANE)
-	br_fdb_test_addr_hook = NULL;
-#endif
 	br_fdb_fini();
 }
 
@@ -484,3 +506,4 @@ MODULE_LICENSE("GPL");
 MODULE_VERSION(BR_VERSION);
 MODULE_ALIAS_RTNL_LINK("bridge");
 MODULE_DESCRIPTION("Ethernet bridge driver");
+MODULE_IMPORT_NS("NETDEV_INTERNAL");

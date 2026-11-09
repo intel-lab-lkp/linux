@@ -13,6 +13,7 @@
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/acpi.h>
+#include <linux/kstrtox.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/math64.h>
@@ -735,7 +736,6 @@ static int inv_mpu6050_read_channel_data(struct iio_dev *indio_dev,
 		break;
 	}
 
-	pm_runtime_mark_last_busy(pdev);
 	pm_runtime_put_autosuspend(pdev);
 
 	return ret;
@@ -938,7 +938,6 @@ static int inv_mpu6050_write_raw(struct iio_dev *indio_dev,
 		break;
 	}
 
-	pm_runtime_mark_last_busy(pdev);
 	pm_runtime_put_autosuspend(pdev);
 error_write_raw_unlock:
 	mutex_unlock(&st->lock);
@@ -1146,14 +1145,12 @@ static int inv_mpu6050_enable_wom(struct inv_mpu6050_state *st, bool en)
 			st->chip_config.wom_en = false;
 		}
 
-		pm_runtime_mark_last_busy(pdev);
 		pm_runtime_put_autosuspend(pdev);
 	}
 
 	return result;
 
 error_suspend:
-	pm_runtime_mark_last_busy(pdev);
 	pm_runtime_put_autosuspend(pdev);
 	return result;
 }
@@ -1249,7 +1246,6 @@ static int inv_mpu6050_write_event_value(struct iio_dev *indio_dev,
 	value = (u64)val * 1000000ULL + (u64)val2;
 	result = inv_mpu6050_set_wom_threshold(st, value, INV_MPU6050_FREQ_DIVIDER(st));
 
-	pm_runtime_mark_last_busy(pdev);
 	pm_runtime_put_autosuspend(pdev);
 
 	return result;
@@ -1308,8 +1304,9 @@ inv_mpu6050_fifo_rate_store(struct device *dev, struct device_attribute *attr,
 	struct inv_mpu6050_state *st = iio_priv(indio_dev);
 	struct device *pdev = regmap_get_device(st->map);
 
-	if (kstrtoint(buf, 10, &fifo_rate))
-		return -EINVAL;
+	result = kstrtoint(buf, 10, &fifo_rate);
+	if (result)
+		return result;
 	if (fifo_rate < INV_MPU6050_MIN_FIFO_RATE ||
 	    fifo_rate > INV_MPU6050_MAX_FIFO_RATE)
 		return -EINVAL;
@@ -1357,7 +1354,6 @@ inv_mpu6050_fifo_rate_store(struct device *dev, struct device_attribute *attr,
 	if (result)
 		goto fifo_rate_fail_power_off;
 
-	pm_runtime_mark_last_busy(pdev);
 fifo_rate_fail_power_off:
 	pm_runtime_put_autosuspend(pdev);
 fifo_rate_fail_unlock:
@@ -1382,7 +1378,7 @@ inv_fifo_rate_show(struct device *dev, struct device_attribute *attr,
 	fifo_rate = INV_MPU6050_DIVIDER_TO_FIFO_RATE(st->chip_config.divider);
 	mutex_unlock(&st->lock);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n", fifo_rate);
+	return sysfs_emit(buf, "%u\n", fifo_rate);
 }
 
 /*
@@ -1409,8 +1405,7 @@ static ssize_t inv_attr_show(struct device *dev, struct device_attribute *attr,
 	case ATTR_ACCL_MATRIX:
 		m = st->plat_data.orientation;
 
-		return scnprintf(buf, PAGE_SIZE,
-			"%d, %d, %d; %d, %d, %d; %d, %d, %d\n",
+		return sysfs_emit(buf, "%d, %d, %d; %d, %d, %d; %d, %d, %d\n",
 			m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8]);
 	default:
 		return -EINVAL;
@@ -1950,6 +1945,14 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 			irq_type);
 		return -EINVAL;
 	}
+
+	/*
+	 * Acking interrupts by status register does not work reliably
+	 * but seem to work when this bit is set.
+	 */
+	if (st->chip_type == INV_MPU9150)
+		st->irq_mask |= INV_MPU6050_INT_RD_CLEAR;
+
 	device_set_wakeup_capable(dev, true);
 
 	st->vdd_supply = devm_regulator_get(dev, "vdd");

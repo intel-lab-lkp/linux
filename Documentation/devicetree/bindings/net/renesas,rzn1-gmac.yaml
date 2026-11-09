@@ -30,10 +30,22 @@ properties:
       - const: renesas,rzn1-gmac
       - const: snps,dwmac
 
+  interrupts:
+    maxItems: 3
+
+  interrupt-names:
+    items:
+      - const: macirq
+      - const: eth_wake_irq
+      - const: eth_lpi
+
   pcs-handle:
     description:
       phandle pointing to a PCS sub-node compatible with
       renesas,rzn1-miic.yaml#
+
+  power-domains:
+    maxItems: 1
 
 required:
   - compatible

@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
+#include <linux/stringify.h>
 #include <linux/watchdog.h>
 
 #define INTEL_OC_WDT_TOV		GENMASK(9, 0)
@@ -41,18 +42,19 @@
 struct intel_oc_wdt {
 	struct watchdog_device wdd;
 	struct resource *ctrl_res;
+	struct watchdog_info info;
 	bool locked;
 };
 
 static int heartbeat;
 module_param(heartbeat, uint, 0);
 MODULE_PARM_DESC(heartbeat, "Watchdog heartbeats in seconds. (default="
-		 __MODULE_STRING(WDT_HEARTBEAT) ")");
+		 __stringify(WDT_HEARTBEAT) ")");
 
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
-		 __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
+		 __stringify(WATCHDOG_NOWAYOUT) ")");
 
 static int intel_oc_wdt_start(struct watchdog_device *wdd)
 {
@@ -115,7 +117,6 @@ static const struct watchdog_ops intel_oc_wdt_ops = {
 
 static int intel_oc_wdt_setup(struct intel_oc_wdt *oc_wdt)
 {
-	struct watchdog_info *info;
 	unsigned long val;
 
 	val = inl(INTEL_OC_WDT_CTRL_REG(oc_wdt));
@@ -134,7 +135,6 @@ static int intel_oc_wdt_setup(struct intel_oc_wdt *oc_wdt)
 		set_bit(WDOG_HW_RUNNING, &oc_wdt->wdd.status);
 
 		if (oc_wdt->locked) {
-			info = (struct watchdog_info *)&intel_oc_wdt_info;
 			/*
 			 * Set nowayout unconditionally as we cannot stop
 			 * the watchdog.
@@ -145,7 +145,7 @@ static int intel_oc_wdt_setup(struct intel_oc_wdt *oc_wdt)
 			 * and inform the core we can't change it.
 			 */
 			oc_wdt->wdd.timeout = (val & INTEL_OC_WDT_TOV) + 1;
-			info->options &= ~WDIOF_SETTIMEOUT;
+			oc_wdt->info.options &= ~WDIOF_SETTIMEOUT;
 
 			dev_info(oc_wdt->wdd.parent,
 				 "Register access locked, heartbeat fixed at: %u s\n",
@@ -193,7 +193,8 @@ static int intel_oc_wdt_probe(struct platform_device *pdev)
 	wdd->min_timeout = INTEL_OC_WDT_MIN_TOV;
 	wdd->max_timeout = INTEL_OC_WDT_MAX_TOV;
 	wdd->timeout = INTEL_OC_WDT_DEF_TOV;
-	wdd->info = &intel_oc_wdt_info;
+	oc_wdt->info = intel_oc_wdt_info;
+	wdd->info = &oc_wdt->info;
 	wdd->ops = &intel_oc_wdt_ops;
 	wdd->parent = dev;
 

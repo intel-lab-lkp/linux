@@ -29,8 +29,8 @@ struct uid_gid_map { /* 64 bytes -- 1 cache line */
 			u32 nr_extents;
 		};
 		struct {
-			struct uid_gid_extent *forward;
-			struct uid_gid_extent *reverse;
+			struct uid_gid_extent *forward __counted_by_ptr(nr_extents);
+			struct uid_gid_extent *reverse __counted_by_ptr(nr_extents);
 		};
 	};
 };
@@ -57,6 +57,9 @@ enum ucount_type {
 #ifdef CONFIG_FANOTIFY
 	UCOUNT_FANOTIFY_GROUPS,
 	UCOUNT_FANOTIFY_MARKS,
+#endif
+#if IS_ENABLED(CONFIG_BINFMT_MISC)
+	UCOUNT_BINFMT_MISC_INTERPRETERS,
 #endif
 	UCOUNT_COUNTS,
 };
@@ -166,12 +169,17 @@ static inline void set_userns_rlimit_max(struct user_namespace *ns,
 	ns->rlimit_max[type] = max <= LONG_MAX ? max : LONG_MAX;
 }
 
+static inline struct user_namespace *to_user_ns(struct ns_common *ns)
+{
+	return container_of(ns, struct user_namespace, ns);
+}
+
 #ifdef CONFIG_USER_NS
 
 static inline struct user_namespace *get_user_ns(struct user_namespace *ns)
 {
 	if (ns)
-		refcount_inc(&ns->ns.count);
+		ns_ref_inc(ns);
 	return ns;
 }
 
@@ -181,7 +189,7 @@ extern void __put_user_ns(struct user_namespace *ns);
 
 static inline void put_user_ns(struct user_namespace *ns)
 {
-	if (ns && refcount_dec_and_test(&ns->ns.count))
+	if (ns && ns_ref_put(ns))
 		__put_user_ns(ns);
 }
 
@@ -199,6 +207,13 @@ extern bool in_userns(const struct user_namespace *ancestor,
 		       const struct user_namespace *child);
 extern bool current_in_userns(const struct user_namespace *target_ns);
 struct ns_common *ns_get_owner(struct ns_common *ns);
+
+#if IS_ENABLED(CONFIG_KUNIT)
+extern int uid_gid_map_insert_extent(struct uid_gid_map *map,
+				     struct uid_gid_extent *extent);
+extern int uid_gid_map_sort(struct uid_gid_map *map);
+#endif /* CONFIG_KUNIT */
+
 #else
 
 static inline struct user_namespace *get_user_ns(struct user_namespace *ns)

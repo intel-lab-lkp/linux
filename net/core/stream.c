@@ -23,9 +23,13 @@
 
 /**
  * sk_stream_write_space - stream socket write_space callback.
- * @sk: socket
+ * @sk: pointer to the socket structure
  *
- * FIXME: write proper description
+ * This function is invoked when there's space available in the socket's
+ * send buffer for writing. It first checks if the socket is writable,
+ * clears the SOCK_NOSPACE flag indicating that memory for writing
+ * is now available, wakes up any processes waiting for write operations
+ * and sends asynchronous notifications if needed.
  */
 void sk_stream_write_space(struct sock *sk)
 {
@@ -33,7 +37,7 @@ void sk_stream_write_space(struct sock *sk)
 	struct socket_wq *wq;
 
 	if (__sk_stream_is_writeable(sk, 1) && sock) {
-		clear_bit(SOCK_NOSPACE, &sock->flags);
+		sk_clear_nospace(sk);
 
 		rcu_read_lock();
 		wq = rcu_dereference(sk->sk_wq);
@@ -108,7 +112,6 @@ void sk_stream_wait_close(struct sock *sk, long timeout)
 		remove_wait_queue(sk_sleep(sk), &wait);
 	}
 }
-EXPORT_SYMBOL(sk_stream_wait_close);
 
 /**
  * sk_stream_wait_memory - Wait for more memory for a socket
@@ -130,7 +133,7 @@ int sk_stream_wait_memory(struct sock *sk, long *timeo_p)
 	while (1) {
 		sk_set_bit(SOCKWQ_ASYNC_NOSPACE, sk);
 
-		if (sk->sk_err || (sk->sk_shutdown & SEND_SHUTDOWN))
+		if (READ_ONCE(sk->sk_err) || (sk->sk_shutdown & SEND_SHUTDOWN))
 			goto do_error;
 		if (!*timeo_p)
 			goto do_eagain;
@@ -140,7 +143,7 @@ int sk_stream_wait_memory(struct sock *sk, long *timeo_p)
 		if (sk_stream_memory_free(sk) && !vm_wait)
 			break;
 
-		set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+		sk_set_nospace(sk);
 		sk->sk_write_pending++;
 		ret = sk_wait_event(sk, &current_timeo, READ_ONCE(sk->sk_err) ||
 				    (READ_ONCE(sk->sk_shutdown) & SEND_SHUTDOWN) ||
@@ -174,7 +177,7 @@ do_eagain:
 	 * When TCP receives ACK packets that make room, tcp_check_space()
 	 * only calls tcp_new_space() if SOCK_NOSPACE is set.
 	 */
-	set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+	sk_set_nospace(sk);
 	err = -EAGAIN;
 	goto out;
 do_interrupted:

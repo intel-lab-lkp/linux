@@ -9,6 +9,7 @@
 #include <asm/errno.h>
 
 #include "adf_accel_devices.h"
+#include "adf_bank_state.h"
 #include "adf_common_drv.h"
 #include "adf_gen4_hw_data.h"
 #include "adf_gen4_pfvf.h"
@@ -58,7 +59,7 @@ static int adf_gen4_vfmig_open_device(struct qat_mig_dev *mdev)
 
 	vf_info = &accel_dev->pf.vf_info[mdev->vf_id];
 
-	vfmig = kzalloc(sizeof(*vfmig), GFP_KERNEL);
+	vfmig = kzalloc_obj(*vfmig);
 	if (!vfmig)
 		return -ENOMEM;
 
@@ -358,7 +359,7 @@ static int adf_gen4_vfmig_load_etr_regs(struct adf_mstate_mgr *sub_mgr,
 
 	pf_bank_nr = vf_bank_info->bank_nr + vf_bank_info->vf_nr * hw_data->num_banks_per_vf;
 	ret = hw_data->bank_state_restore(accel_dev, pf_bank_nr,
-					  (struct bank_state *)state);
+					  (struct adf_bank_state *)state);
 	if (ret) {
 		dev_err(&GET_DEV(accel_dev),
 			"Failed to load regs for vf%d bank%d\n",
@@ -585,7 +586,7 @@ static int adf_gen4_vfmig_save_etr_regs(struct adf_mstate_mgr *subs, u8 *state,
 	pf_bank_nr += vf_bank_info->vf_nr * hw_data->num_banks_per_vf;
 
 	ret = hw_data->bank_state_save(accel_dev, pf_bank_nr,
-				       (struct bank_state *)state);
+				       (struct adf_bank_state *)state);
 	if (ret) {
 		dev_err(&GET_DEV(accel_dev),
 			"Failed to save regs for vf%d bank%d\n",
@@ -593,7 +594,7 @@ static int adf_gen4_vfmig_save_etr_regs(struct adf_mstate_mgr *subs, u8 *state,
 		return ret;
 	}
 
-	return sizeof(struct bank_state);
+	return sizeof(struct adf_bank_state);
 }
 
 static int adf_gen4_vfmig_save_etr_bank(struct adf_accel_dev *accel_dev,
@@ -836,6 +837,9 @@ static int adf_gen4_vfmig_save_state(struct qat_mig_dev *mdev)
 		return ret;
 	}
 
+	memset(mdev->state + mdev->setup_size, 0,
+	       mdev->state_size - mdev->setup_size);
+
 	adf_mstate_mgr_init(vfmig->mstate_mgr, mdev->state + mdev->setup_size,
 			    mdev->state_size - mdev->setup_size);
 	if (!adf_mstate_preamble_add(vfmig->mstate_mgr))
@@ -932,6 +936,8 @@ static int adf_gen4_vfmig_save_setup(struct qat_mig_dev *mdev)
 
 	if (mdev->setup_size)
 		return 0;
+
+	memset(mdev->state, 0, mdev->state_size);
 
 	adf_mstate_mgr_init(vfmig->mstate_mgr, mdev->state, mdev->state_size);
 	if (!adf_mstate_preamble_add(vfmig->mstate_mgr))

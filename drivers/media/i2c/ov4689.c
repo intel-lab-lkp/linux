@@ -330,6 +330,7 @@ static void ov4689_fill_fmt(const struct ov4689_mode *mode,
 }
 
 static int ov4689_set_fmt(struct v4l2_subdev *sd,
+			  const struct v4l2_subdev_client_info *ci,
 			  struct v4l2_subdev_state *sd_state,
 			  struct v4l2_subdev_format *fmt)
 {
@@ -385,6 +386,7 @@ static int ov4689_enable_test_pattern(struct ov4689 *ov4689, u32 pattern)
 }
 
 static int ov4689_get_selection(struct v4l2_subdev *sd,
+				const struct v4l2_subdev_client_info *ci,
 				struct v4l2_subdev_state *state,
 				struct v4l2_subdev_selection *sel)
 {
@@ -497,7 +499,6 @@ static int ov4689_s_stream(struct v4l2_subdev *sd, int on)
 	} else {
 		cci_write(ov4689->regmap, OV4689_REG_CTRL_MODE,
 			  OV4689_MODE_SW_STANDBY, NULL);
-		pm_runtime_mark_last_busy(dev);
 		pm_runtime_put_autosuspend(dev);
 	}
 
@@ -702,7 +703,6 @@ static int ov4689_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	}
 
-	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	return ret;
@@ -909,20 +909,12 @@ static int ov4689_probe(struct i2c_client *client)
 
 	ov4689->cur_mode = &supported_modes[OV4689_MODE_2688_1520];
 
-	ov4689->xvclk = devm_clk_get_optional(dev, NULL);
+	ov4689->xvclk = devm_v4l2_sensor_clk_get(dev, NULL);
 	if (IS_ERR(ov4689->xvclk))
 		return dev_err_probe(dev, PTR_ERR(ov4689->xvclk),
 				     "Failed to get external clock\n");
 
-	if (!ov4689->xvclk) {
-		dev_dbg(dev,
-			"No clock provided, using clock-frequency property\n");
-		device_property_read_u32(dev, "clock-frequency",
-					 &ov4689->clock_rate);
-	} else {
-		ov4689->clock_rate = clk_get_rate(ov4689->xvclk);
-	}
-
+	ov4689->clock_rate = clk_get_rate(ov4689->xvclk);
 	if (ov4689->clock_rate != OV4689_XVCLK_FREQ) {
 		dev_err(dev,
 			"External clock rate mismatch: got %d Hz, expected %d Hz\n",
@@ -999,7 +991,6 @@ static int ov4689_probe(struct i2c_client *client)
 		goto err_clean_subdev_pm;
 	}
 
-	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	return 0;

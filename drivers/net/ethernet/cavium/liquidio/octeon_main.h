@@ -157,7 +157,7 @@ err_release_region:
 	    response of the request.
  *          0: the request will wait until its response gets back
  *	       from the firmware within LIO_SC_MAX_TMO_MS milli sec.
- *	       It the response does not return within
+ *	       If the response does not return within
  *	       LIO_SC_MAX_TMO_MS milli sec, lio_process_ordered_list()
  *	       will move the request to zombie response list.
  *
@@ -166,7 +166,7 @@ err_release_region:
  * errno -EINTR: user abort the command.
  * errno -ETIME: user spefified timeout value has been expired.
  * errno -EBUSY: the response of the request does not return in
- *               resonable time (LIO_SC_MAX_TMO_MS).
+ *               reasonable time (LIO_SC_MAX_TMO_MS).
  *               the sc wll be move to zombie response list by
  *               lio_process_ordered_list()
  *

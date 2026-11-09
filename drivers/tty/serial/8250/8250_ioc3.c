@@ -5,10 +5,11 @@
  * Copyright (C) 2019 Thomas Bogendoerfer <tbogendoerfer@suse.de>
  *
  * based on code Copyright (C) 2005 Stanislaw Skowronek <skylark@unaligned.org>
- *               Copyright (C) 2014 Joshua Kinard <kumba@gentoo.org>
+ *               Copyright (C) 2014 Joshua Kinard <linux@kumba.dev>
  */
 
 #include <linux/module.h>
+#include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/io.h>
 #include <linux/platform_device.h>
@@ -17,35 +18,26 @@
 
 #define IOC3_UARTCLK (22000000 / 3)
 
-struct ioc3_8250_data {
-	int line;
-};
-
-static unsigned int ioc3_serial_in(struct uart_port *p, int offset)
+static u32 ioc3_serial_in(struct uart_port *p, unsigned int offset)
 {
 	return readb(p->membase + (offset ^ 3));
 }
 
-static void ioc3_serial_out(struct uart_port *p, int offset, int value)
+static void ioc3_serial_out(struct uart_port *p, unsigned int offset, u32 value)
 {
 	writeb(value, p->membase + (offset ^ 3));
 }
 
 static int serial8250_ioc3_probe(struct platform_device *pdev)
 {
-	struct ioc3_8250_data *data;
-	struct uart_8250_port up;
+	struct uart_8250_port *uport, up;
 	struct resource *r;
 	void __iomem *membase;
-	int irq, line;
+	int irq;
 
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!r)
 		return -ENODEV;
-
-	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
 
 	membase = devm_ioremap(&pdev->dev, r->start, resource_size(r));
 	if (!membase)
@@ -67,19 +59,19 @@ static int serial8250_ioc3_probe(struct platform_device *pdev)
 	up.port.mapbase = r->start;
 	up.port.serial_in = ioc3_serial_in;
 	up.port.serial_out = ioc3_serial_out;
-	line = serial8250_register_8250_port(&up);
-	if (line < 0)
-		return line;
+	uport = serial8250_register_8250_port(&up);
+	if (IS_ERR(uport))
+		return PTR_ERR(uport);
 
-	platform_set_drvdata(pdev, data);
+	platform_set_drvdata(pdev, uport);
 	return 0;
 }
 
 static void serial8250_ioc3_remove(struct platform_device *pdev)
 {
-	struct ioc3_8250_data *data = platform_get_drvdata(pdev);
+	struct uart_8250_port *uport = platform_get_drvdata(pdev);
 
-	serial8250_unregister_port(data->line);
+	serial8250_unregister_port(uport);
 }
 
 static struct platform_driver serial8250_ioc3_driver = {

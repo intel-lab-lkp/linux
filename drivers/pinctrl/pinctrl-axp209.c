@@ -192,7 +192,7 @@ static int axp20x_gpio_get_direction(struct gpio_chip *chip,
 static int axp20x_gpio_output(struct gpio_chip *chip, unsigned int offset,
 			      int value)
 {
-	return chip->set_rv(chip, offset, value);
+	return chip->set(chip, offset, value);
 }
 
 static int axp20x_gpio_set(struct gpio_chip *chip, unsigned int offset,
@@ -442,9 +442,6 @@ static int axp20x_pctl_probe(struct platform_device *pdev)
 	struct pinctrl_desc *pctrl_desc;
 	int ret;
 
-	if (!of_device_is_available(pdev->dev.of_node))
-		return -ENODEV;
-
 	if (!axp20x) {
 		dev_err(&pdev->dev, "Parent drvdata not set\n");
 		return -EINVAL;
@@ -463,7 +460,7 @@ static int axp20x_pctl_probe(struct platform_device *pdev)
 	pctl->chip.owner		= THIS_MODULE;
 	pctl->chip.get			= axp20x_gpio_get;
 	pctl->chip.get_direction	= axp20x_gpio_get_direction;
-	pctl->chip.set_rv		= axp20x_gpio_set;
+	pctl->chip.set			= axp20x_gpio_set;
 	pctl->chip.direction_input	= pinctrl_gpio_direction_input;
 	pctl->chip.direction_output	= axp20x_gpio_output;
 

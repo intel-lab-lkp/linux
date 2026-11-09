@@ -7,6 +7,9 @@
  */
 
 #include <crypto/hash_info.h>
+#include <crypto/sha1.h>
+#include <crypto/utils.h>
+#include <linux/hex.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/parser.h>
@@ -14,78 +17,99 @@
 #include <linux/err.h>
 #include <keys/trusted-type.h>
 #include <linux/key-type.h>
-#include <linux/crypto.h>
-#include <crypto/hash.h>
-#include <crypto/sha1.h>
 #include <linux/tpm.h>
-#include <linux/tpm_command.h>
 
 #include <keys/trusted_tpm.h>
 
-static const char hmac_alg[] = "hmac(sha1)";
-static const char hash_alg[] = "sha1";
 static struct tpm_chip *chip;
 static struct tpm_digest *digests;
 
-struct sdesc {
-	struct shash_desc shash;
-	char ctx[];
+/* implementation specific TPM constants */
+#define TPM_SIZE_OFFSET			2
+#define TPM_RETURN_OFFSET		6
+#define TPM_DATA_OFFSET			10
+
+#define LOAD32(buffer, offset)	(ntohl(*(uint32_t *)&buffer[offset]))
+#define LOAD32N(buffer, offset)	(*(uint32_t *)&buffer[offset])
+#define LOAD16(buffer, offset)	(ntohs(*(uint16_t *)&buffer[offset]))
+
+struct osapsess {
+	uint32_t handle;
+	unsigned char secret[SHA1_DIGEST_SIZE];
+	unsigned char enonce[TPM_NONCE_SIZE];
 };
 
-static struct crypto_shash *hashalg;
-static struct crypto_shash *hmacalg;
+/* discrete values, but have to store in uint16_t for TPM use */
+enum {
+	SEAL_keytype = 1,
+	SRK_keytype = 4
+};
 
-static struct sdesc *init_sdesc(struct crypto_shash *alg)
+#ifdef CONFIG_TRUSTED_KEYS_DEBUG
+static inline void dump_options(struct trusted_key_options *o)
 {
-	struct sdesc *sdesc;
-	int size;
+	struct trusted_key_tpm *private = o->private;
 
-	size = sizeof(struct shash_desc) + crypto_shash_descsize(alg);
-	sdesc = kmalloc(size, GFP_KERNEL);
-	if (!sdesc)
-		return ERR_PTR(-ENOMEM);
-	sdesc->shash.tfm = alg;
-	return sdesc;
+	if (!trusted_debug)
+		return;
+
+	pr_debug("sealing key type %d\n", o->keytype);
+	pr_debug("sealing key handle %0X\n", private->keyhandle);
+	pr_debug("pcrlock %d\n", private->pcrlock);
+	pr_debug("pcrinfo %d\n", private->pcrinfo_len);
+	print_hex_dump_debug("pcrinfo ", DUMP_PREFIX_NONE,
+			     16, 1, private->pcrinfo, private->pcrinfo_len, 0);
 }
 
-static int TSS_sha1(const unsigned char *data, unsigned int datalen,
-		    unsigned char *digest)
+static inline void dump_sess(struct osapsess *s)
 {
-	struct sdesc *sdesc;
-	int ret;
+	if (!trusted_debug)
+		return;
 
-	sdesc = init_sdesc(hashalg);
-	if (IS_ERR(sdesc)) {
-		pr_info("can't alloc %s\n", hash_alg);
-		return PTR_ERR(sdesc);
-	}
-
-	ret = crypto_shash_digest(&sdesc->shash, data, datalen, digest);
-	kfree_sensitive(sdesc);
-	return ret;
+	print_hex_dump_debug("trusted-key: handle ", DUMP_PREFIX_NONE,
+			     16, 1, &s->handle, 4, 0);
+	pr_debug("secret:\n");
+	print_hex_dump_debug("", DUMP_PREFIX_NONE,
+			     16, 1, &s->secret, SHA1_DIGEST_SIZE, 0);
+	pr_debug("trusted-key: enonce:\n");
+	print_hex_dump_debug("", DUMP_PREFIX_NONE,
+			     16, 1, &s->enonce, SHA1_DIGEST_SIZE, 0);
 }
+
+static inline void dump_tpm_buf(unsigned char *buf)
+{
+	int len;
+
+	if (!trusted_debug)
+		return;
+	pr_debug("\ntpm buffer\n");
+	len = LOAD32(buf, TPM_SIZE_OFFSET);
+	print_hex_dump_debug("", DUMP_PREFIX_NONE, 16, 1, buf, len, 0);
+}
+#else
+static inline void dump_options(struct trusted_key_options *o)
+{
+}
+
+static inline void dump_sess(struct osapsess *s)
+{
+}
+
+static inline void dump_tpm_buf(unsigned char *buf)
+{
+}
+#endif
 
 static int TSS_rawhmac(unsigned char *digest, const unsigned char *key,
 		       unsigned int keylen, ...)
 {
-	struct sdesc *sdesc;
+	struct hmac_sha1_ctx hmac_ctx __cleanup(hmac_sha1_zeroize_ctx);
 	va_list argp;
 	unsigned int dlen;
 	unsigned char *data;
-	int ret;
+	int ret = 0;
 
-	sdesc = init_sdesc(hmacalg);
-	if (IS_ERR(sdesc)) {
-		pr_info("can't alloc %s\n", hmac_alg);
-		return PTR_ERR(sdesc);
-	}
-
-	ret = crypto_shash_setkey(hmacalg, key, keylen);
-	if (ret < 0)
-		goto out;
-	ret = crypto_shash_init(&sdesc->shash);
-	if (ret < 0)
-		goto out;
+	hmac_sha1_init_usingrawkey(&hmac_ctx, key, keylen);
 
 	va_start(argp, keylen);
 	for (;;) {
@@ -97,46 +121,34 @@ static int TSS_rawhmac(unsigned char *digest, const unsigned char *key,
 			ret = -EINVAL;
 			break;
 		}
-		ret = crypto_shash_update(&sdesc->shash, data, dlen);
-		if (ret < 0)
-			break;
+		hmac_sha1_update(&hmac_ctx, data, dlen);
 	}
 	va_end(argp);
 	if (!ret)
-		ret = crypto_shash_final(&sdesc->shash, digest);
-out:
-	kfree_sensitive(sdesc);
+		hmac_sha1_final(&hmac_ctx, digest);
 	return ret;
 }
 
 /*
  * calculate authorization info fields to send to TPM
  */
-int TSS_authhmac(unsigned char *digest, const unsigned char *key,
+static int TSS_authhmac(unsigned char *digest, const unsigned char *key,
 			unsigned int keylen, unsigned char *h1,
 			unsigned char *h2, unsigned int h3, ...)
 {
 	unsigned char paramdigest[SHA1_DIGEST_SIZE];
-	struct sdesc *sdesc;
+	struct sha1_ctx sha_ctx;
 	unsigned int dlen;
 	unsigned char *data;
 	unsigned char c;
-	int ret;
+	int ret = 0;
 	va_list argp;
 
 	if (!chip)
 		return -ENODEV;
 
-	sdesc = init_sdesc(hashalg);
-	if (IS_ERR(sdesc)) {
-		pr_info("can't alloc %s\n", hash_alg);
-		return PTR_ERR(sdesc);
-	}
-
 	c = !!h3;
-	ret = crypto_shash_init(&sdesc->shash);
-	if (ret < 0)
-		goto out;
+	sha1_init(&sha_ctx);
 	va_start(argp, h3);
 	for (;;) {
 		dlen = va_arg(argp, unsigned int);
@@ -147,27 +159,22 @@ int TSS_authhmac(unsigned char *digest, const unsigned char *key,
 			ret = -EINVAL;
 			break;
 		}
-		ret = crypto_shash_update(&sdesc->shash, data, dlen);
-		if (ret < 0)
-			break;
+		sha1_update(&sha_ctx, data, dlen);
 	}
 	va_end(argp);
 	if (!ret)
-		ret = crypto_shash_final(&sdesc->shash, paramdigest);
+		sha1_final(&sha_ctx, paramdigest);
 	if (!ret)
 		ret = TSS_rawhmac(digest, key, keylen, SHA1_DIGEST_SIZE,
 				  paramdigest, TPM_NONCE_SIZE, h1,
 				  TPM_NONCE_SIZE, h2, 1, &c, 0, 0);
-out:
-	kfree_sensitive(sdesc);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(TSS_authhmac);
 
 /*
  * verify the AUTH1_COMMAND (Seal) result from TPM
  */
-int TSS_checkhmac1(unsigned char *buffer,
+static int TSS_checkhmac1(unsigned char *buffer,
 			  const uint32_t command,
 			  const unsigned char *ononce,
 			  const unsigned char *key,
@@ -182,7 +189,7 @@ int TSS_checkhmac1(unsigned char *buffer,
 	unsigned char *authdata;
 	unsigned char testhmac[SHA1_DIGEST_SIZE];
 	unsigned char paramdigest[SHA1_DIGEST_SIZE];
-	struct sdesc *sdesc;
+	struct sha1_ctx sha_ctx;
 	unsigned int dlen;
 	unsigned int dpos;
 	va_list argp;
@@ -203,51 +210,30 @@ int TSS_checkhmac1(unsigned char *buffer,
 	continueflag = authdata - 1;
 	enonce = continueflag - TPM_NONCE_SIZE;
 
-	sdesc = init_sdesc(hashalg);
-	if (IS_ERR(sdesc)) {
-		pr_info("can't alloc %s\n", hash_alg);
-		return PTR_ERR(sdesc);
-	}
-	ret = crypto_shash_init(&sdesc->shash);
-	if (ret < 0)
-		goto out;
-	ret = crypto_shash_update(&sdesc->shash, (const u8 *)&result,
-				  sizeof result);
-	if (ret < 0)
-		goto out;
-	ret = crypto_shash_update(&sdesc->shash, (const u8 *)&ordinal,
-				  sizeof ordinal);
-	if (ret < 0)
-		goto out;
+	sha1_init(&sha_ctx);
+	sha1_update(&sha_ctx, (const u8 *)&result, sizeof(result));
+	sha1_update(&sha_ctx, (const u8 *)&ordinal, sizeof(ordinal));
 	va_start(argp, keylen);
 	for (;;) {
 		dlen = va_arg(argp, unsigned int);
 		if (dlen == 0)
 			break;
 		dpos = va_arg(argp, unsigned int);
-		ret = crypto_shash_update(&sdesc->shash, buffer + dpos, dlen);
-		if (ret < 0)
-			break;
+		sha1_update(&sha_ctx, buffer + dpos, dlen);
 	}
 	va_end(argp);
-	if (!ret)
-		ret = crypto_shash_final(&sdesc->shash, paramdigest);
-	if (ret < 0)
-		goto out;
+	sha1_final(&sha_ctx, paramdigest);
 
 	ret = TSS_rawhmac(testhmac, key, keylen, SHA1_DIGEST_SIZE, paramdigest,
 			  TPM_NONCE_SIZE, enonce, TPM_NONCE_SIZE, ononce,
 			  1, continueflag, 0, 0);
 	if (ret < 0)
-		goto out;
+		return ret;
 
-	if (memcmp(testhmac, authdata, SHA1_DIGEST_SIZE))
-		ret = -EINVAL;
-out:
-	kfree_sensitive(sdesc);
-	return ret;
+	if (crypto_memneq(testhmac, authdata, SHA1_DIGEST_SIZE))
+		return -EINVAL;
+	return 0;
 }
-EXPORT_SYMBOL_GPL(TSS_checkhmac1);
 
 /*
  * verify the AUTH2_COMMAND (unseal) result from TPM
@@ -273,7 +259,7 @@ static int TSS_checkhmac2(unsigned char *buffer,
 	unsigned char testhmac1[SHA1_DIGEST_SIZE];
 	unsigned char testhmac2[SHA1_DIGEST_SIZE];
 	unsigned char paramdigest[SHA1_DIGEST_SIZE];
-	struct sdesc *sdesc;
+	struct sha1_ctx sha_ctx;
 	unsigned int dlen;
 	unsigned int dpos;
 	va_list argp;
@@ -296,22 +282,9 @@ static int TSS_checkhmac2(unsigned char *buffer,
 	enonce1 = continueflag1 - TPM_NONCE_SIZE;
 	enonce2 = continueflag2 - TPM_NONCE_SIZE;
 
-	sdesc = init_sdesc(hashalg);
-	if (IS_ERR(sdesc)) {
-		pr_info("can't alloc %s\n", hash_alg);
-		return PTR_ERR(sdesc);
-	}
-	ret = crypto_shash_init(&sdesc->shash);
-	if (ret < 0)
-		goto out;
-	ret = crypto_shash_update(&sdesc->shash, (const u8 *)&result,
-				  sizeof result);
-	if (ret < 0)
-		goto out;
-	ret = crypto_shash_update(&sdesc->shash, (const u8 *)&ordinal,
-				  sizeof ordinal);
-	if (ret < 0)
-		goto out;
+	sha1_init(&sha_ctx);
+	sha1_update(&sha_ctx, (const u8 *)&result, sizeof(result));
+	sha1_update(&sha_ctx, (const u8 *)&ordinal, sizeof(ordinal));
 
 	va_start(argp, keylen2);
 	for (;;) {
@@ -319,44 +292,34 @@ static int TSS_checkhmac2(unsigned char *buffer,
 		if (dlen == 0)
 			break;
 		dpos = va_arg(argp, unsigned int);
-		ret = crypto_shash_update(&sdesc->shash, buffer + dpos, dlen);
-		if (ret < 0)
-			break;
+		sha1_update(&sha_ctx, buffer + dpos, dlen);
 	}
 	va_end(argp);
-	if (!ret)
-		ret = crypto_shash_final(&sdesc->shash, paramdigest);
-	if (ret < 0)
-		goto out;
+	sha1_final(&sha_ctx, paramdigest);
 
 	ret = TSS_rawhmac(testhmac1, key1, keylen1, SHA1_DIGEST_SIZE,
 			  paramdigest, TPM_NONCE_SIZE, enonce1,
 			  TPM_NONCE_SIZE, ononce, 1, continueflag1, 0, 0);
 	if (ret < 0)
-		goto out;
-	if (memcmp(testhmac1, authdata1, SHA1_DIGEST_SIZE)) {
-		ret = -EINVAL;
-		goto out;
-	}
+		return ret;
+	if (crypto_memneq(testhmac1, authdata1, SHA1_DIGEST_SIZE))
+		return -EINVAL;
 	ret = TSS_rawhmac(testhmac2, key2, keylen2, SHA1_DIGEST_SIZE,
 			  paramdigest, TPM_NONCE_SIZE, enonce2,
 			  TPM_NONCE_SIZE, ononce, 1, continueflag2, 0, 0);
 	if (ret < 0)
-		goto out;
-	if (memcmp(testhmac2, authdata2, SHA1_DIGEST_SIZE))
-		ret = -EINVAL;
-out:
-	kfree_sensitive(sdesc);
-	return ret;
+		return ret;
+	if (crypto_memneq(testhmac2, authdata2, SHA1_DIGEST_SIZE))
+		return -EINVAL;
+	return 0;
 }
 
 /*
  * For key specific tpm requests, we will generate and send our
  * own TPM command packets using the drivers send function.
  */
-int trusted_tpm_send(unsigned char *cmd, size_t buflen)
+static int trusted_tpm_send(struct tpm_buf *buf)
 {
-	struct tpm_buf buf;
 	int rc;
 
 	if (!chip)
@@ -366,12 +329,9 @@ int trusted_tpm_send(unsigned char *cmd, size_t buflen)
 	if (rc)
 		return rc;
 
-	buf.flags = 0;
-	buf.length = buflen;
-	buf.data = cmd;
-	dump_tpm_buf(cmd);
-	rc = tpm_transmit_cmd(chip, &buf, 4, "sending data");
-	dump_tpm_buf(cmd);
+	dump_tpm_buf(buf->data);
+	rc = tpm_transmit_cmd(chip, buf, 4, "sending data");
+	dump_tpm_buf(buf->data);
 
 	if (rc > 0)
 		/* TPM error */
@@ -380,7 +340,6 @@ int trusted_tpm_send(unsigned char *cmd, size_t buflen)
 	tpm_put_ops(chip);
 	return rc;
 }
-EXPORT_SYMBOL_GPL(trusted_tpm_send);
 
 /*
  * Lock a trusted key, by extending a selected PCR.
@@ -418,7 +377,7 @@ static int osap(struct tpm_buf *tb, struct osapsess *s,
 	tpm_buf_append_u32(tb, handle);
 	tpm_buf_append(tb, ononce, TPM_NONCE_SIZE);
 
-	ret = trusted_tpm_send(tb->data, tb->length);
+	ret = trusted_tpm_send(tb);
 	if (ret < 0)
 		return ret;
 
@@ -434,7 +393,7 @@ static int osap(struct tpm_buf *tb, struct osapsess *s,
 /*
  * Create an object independent authorisation protocol (oiap) session
  */
-int oiap(struct tpm_buf *tb, uint32_t *handle, unsigned char *nonce)
+static int oiap(struct tpm_buf *tb, uint32_t *handle, unsigned char *nonce)
 {
 	int ret;
 
@@ -442,7 +401,7 @@ int oiap(struct tpm_buf *tb, uint32_t *handle, unsigned char *nonce)
 		return -ENODEV;
 
 	tpm_buf_reset(tb, TPM_TAG_RQU_COMMAND, TPM_ORD_OIAP);
-	ret = trusted_tpm_send(tb->data, tb->length);
+	ret = trusted_tpm_send(tb);
 	if (ret < 0)
 		return ret;
 
@@ -451,7 +410,6 @@ int oiap(struct tpm_buf *tb, uint32_t *handle, unsigned char *nonce)
 	       TPM_NONCE_SIZE);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(oiap);
 
 struct tpm_digests {
 	unsigned char encauth[SHA1_DIGEST_SIZE];
@@ -485,7 +443,7 @@ static int tpm_seal(struct tpm_buf *tb, uint16_t keytype,
 	int i;
 
 	/* alloc some work space for all the hashes */
-	td = kmalloc(sizeof *td, GFP_KERNEL);
+	td = kmalloc_obj(*td);
 	if (!td)
 		return -ENOMEM;
 
@@ -498,9 +456,7 @@ static int tpm_seal(struct tpm_buf *tb, uint16_t keytype,
 	/* calculate encrypted authorization value */
 	memcpy(td->xorwork, sess.secret, SHA1_DIGEST_SIZE);
 	memcpy(td->xorwork + SHA1_DIGEST_SIZE, sess.enonce, SHA1_DIGEST_SIZE);
-	ret = TSS_sha1(td->xorwork, SHA1_DIGEST_SIZE * 2, td->xorhash);
-	if (ret < 0)
-		goto out;
+	sha1(td->xorwork, SHA1_DIGEST_SIZE * 2, td->xorhash);
 
 	ret = tpm_get_random(chip, td->nonceodd, TPM_NONCE_SIZE);
 	if (ret < 0)
@@ -554,7 +510,7 @@ static int tpm_seal(struct tpm_buf *tb, uint16_t keytype,
 	tpm_buf_append_u8(tb, cont);
 	tpm_buf_append(tb, td->pubauth, SHA1_DIGEST_SIZE);
 
-	ret = trusted_tpm_send(tb->data, tb->length);
+	ret = trusted_tpm_send(tb);
 	if (ret < 0)
 		goto out;
 
@@ -645,7 +601,7 @@ static int tpm_unseal(struct tpm_buf *tb,
 	tpm_buf_append_u8(tb, cont);
 	tpm_buf_append(tb, authdata2, SHA1_DIGEST_SIZE);
 
-	ret = trusted_tpm_send(tb->data, tb->length);
+	ret = trusted_tpm_send(tb);
 	if (ret < 0) {
 		pr_info("authhmac failed (%d)\n", ret);
 		return ret;
@@ -672,23 +628,25 @@ static int tpm_unseal(struct tpm_buf *tb,
 static int key_seal(struct trusted_key_payload *p,
 		    struct trusted_key_options *o)
 {
-	struct tpm_buf tb;
+	struct trusted_key_tpm *private = o->private;
 	int ret;
 
-	ret = tpm_buf_init(&tb, 0, 0);
-	if (ret)
-		return ret;
+	struct tpm_buf *tb __free(kfree) = kzalloc(TPM_BUFSIZE, GFP_KERNEL);
+	if (!tb)
+		return -ENOMEM;
+
+	tpm_buf_init(tb, TPM_BUFSIZE);
 
 	/* include migratable flag at end of sealed key */
 	p->key[p->key_len] = p->migratable;
 
-	ret = tpm_seal(&tb, o->keytype, o->keyhandle, o->keyauth,
+	ret = tpm_seal(tb, o->keytype, private->keyhandle, private->keyauth,
 		       p->key, p->key_len + 1, p->blob, &p->blob_len,
-		       o->blobauth, o->pcrinfo, o->pcrinfo_len);
+		       private->blobauth, private->pcrinfo,
+		       private->pcrinfo_len);
 	if (ret < 0)
 		pr_info("srkseal failed (%d)\n", ret);
 
-	tpm_buf_destroy(&tb);
 	return ret;
 }
 
@@ -698,22 +656,23 @@ static int key_seal(struct trusted_key_payload *p,
 static int key_unseal(struct trusted_key_payload *p,
 		      struct trusted_key_options *o)
 {
-	struct tpm_buf tb;
+	struct trusted_key_tpm *private = o->private;
 	int ret;
 
-	ret = tpm_buf_init(&tb, 0, 0);
-	if (ret)
-		return ret;
+	struct tpm_buf *tb __free(kfree) = kzalloc(TPM_BUFSIZE, GFP_KERNEL);
+	if (!tb)
+		return -ENOMEM;
 
-	ret = tpm_unseal(&tb, o->keyhandle, o->keyauth, p->blob, p->blob_len,
-			 o->blobauth, p->key, &p->key_len);
+	tpm_buf_init(tb, TPM_BUFSIZE);
+
+	ret = tpm_unseal(tb, private->keyhandle, private->keyauth, p->blob,
+			 p->blob_len, private->blobauth, p->key, &p->key_len);
 	if (ret < 0)
 		pr_info("srkunseal failed (%d)\n", ret);
 	else
 		/* pull migratable flag out of sealed key */
 		p->migratable = p->key[--p->key_len];
 
-	tpm_buf_destroy(&tb);
 	return ret;
 }
 
@@ -741,8 +700,9 @@ static const match_table_t key_tokens = {
 
 /* can have zero or more token= options */
 static int getoptions(char *c, struct trusted_key_payload *pay,
-		      struct trusted_key_options *opt)
+		      struct trusted_key_options *opt, bool is_tpm2)
 {
+	struct trusted_key_tpm *private = opt->private;
 	substring_t args[MAX_OPT_ARGS];
 	char *p = c;
 	int token;
@@ -752,13 +712,8 @@ static int getoptions(char *c, struct trusted_key_payload *pay,
 	unsigned long token_mask = 0;
 	unsigned int digest_len;
 	int i;
-	int tpm2;
 
-	tpm2 = tpm_is_tpm2(chip);
-	if (tpm2 < 0)
-		return tpm2;
-
-	opt->hash = tpm2 ? HASH_ALGO_SHA256 : HASH_ALGO_SHA1;
+	private->hash = is_tpm2 ? HASH_ALGO_SHA256 : HASH_ALGO_SHA1;
 
 	if (!c)
 		return 0;
@@ -772,11 +727,11 @@ static int getoptions(char *c, struct trusted_key_payload *pay,
 
 		switch (token) {
 		case Opt_pcrinfo:
-			opt->pcrinfo_len = strlen(args[0].from) / 2;
-			if (opt->pcrinfo_len > MAX_PCRINFO_SIZE)
+			private->pcrinfo_len = strlen(args[0].from) / 2;
+			if (private->pcrinfo_len > MAX_PCRINFO_SIZE)
 				return -EINVAL;
-			res = hex2bin(opt->pcrinfo, args[0].from,
-				      opt->pcrinfo_len);
+			res = hex2bin(private->pcrinfo, args[0].from,
+				      private->pcrinfo_len);
 			if (res < 0)
 				return -EINVAL;
 			break;
@@ -785,12 +740,12 @@ static int getoptions(char *c, struct trusted_key_payload *pay,
 			if (res < 0)
 				return -EINVAL;
 			opt->keytype = SEAL_keytype;
-			opt->keyhandle = handle;
+			private->keyhandle = handle;
 			break;
 		case Opt_keyauth:
 			if (strlen(args[0].from) != 2 * SHA1_DIGEST_SIZE)
 				return -EINVAL;
-			res = hex2bin(opt->keyauth, args[0].from,
+			res = hex2bin(private->keyauth, args[0].from,
 				      SHA1_DIGEST_SIZE);
 			if (res < 0)
 				return -EINVAL;
@@ -801,21 +756,23 @@ static int getoptions(char *c, struct trusted_key_payload *pay,
 			 * hex strings.  TPM 2.0 authorizations are simple
 			 * passwords (although it can take a hash as well)
 			 */
-			opt->blobauth_len = strlen(args[0].from);
+			private->blobauth_len = strlen(args[0].from);
 
-			if (opt->blobauth_len == 2 * TPM_DIGEST_SIZE) {
-				res = hex2bin(opt->blobauth, args[0].from,
+			if (private->blobauth_len == 2 * TPM_DIGEST_SIZE) {
+				res = hex2bin(private->blobauth, args[0].from,
 					      TPM_DIGEST_SIZE);
 				if (res < 0)
 					return -EINVAL;
 
-				opt->blobauth_len = TPM_DIGEST_SIZE;
+				private->blobauth_len = TPM_DIGEST_SIZE;
 				break;
 			}
 
-			if (tpm2 && opt->blobauth_len <= sizeof(opt->blobauth)) {
-				memcpy(opt->blobauth, args[0].from,
-				       opt->blobauth_len);
+			if (is_tpm2 &&
+			    private->blobauth_len <=
+			    sizeof(private->blobauth)) {
+				memcpy(private->blobauth, args[0].from,
+				       private->blobauth_len);
 				break;
 			}
 
@@ -833,41 +790,42 @@ static int getoptions(char *c, struct trusted_key_payload *pay,
 			res = kstrtoul(args[0].from, 10, &lock);
 			if (res < 0)
 				return -EINVAL;
-			opt->pcrlock = lock;
+			private->pcrlock = lock;
 			break;
 		case Opt_hash:
 			if (test_bit(Opt_policydigest, &token_mask))
 				return -EINVAL;
 			for (i = 0; i < HASH_ALGO__LAST; i++) {
 				if (!strcmp(args[0].from, hash_algo_name[i])) {
-					opt->hash = i;
+					private->hash = i;
 					break;
 				}
 			}
 			if (i == HASH_ALGO__LAST)
 				return -EINVAL;
-			if  (!tpm2 && i != HASH_ALGO_SHA1) {
+			if (!is_tpm2 && i != HASH_ALGO_SHA1) {
 				pr_info("TPM 1.x only supports SHA-1.\n");
 				return -EINVAL;
 			}
 			break;
 		case Opt_policydigest:
-			digest_len = hash_digest_size[opt->hash];
-			if (!tpm2 || strlen(args[0].from) != (2 * digest_len))
+			digest_len = hash_digest_size[private->hash];
+			if (!is_tpm2 ||
+			    strlen(args[0].from) != (2 * digest_len))
 				return -EINVAL;
-			res = hex2bin(opt->policydigest, args[0].from,
+			res = hex2bin(private->policydigest, args[0].from,
 				      digest_len);
 			if (res < 0)
 				return -EINVAL;
-			opt->policydigest_len = digest_len;
+			private->policydigest_len = digest_len;
 			break;
 		case Opt_policyhandle:
-			if (!tpm2)
+			if (!is_tpm2)
 				return -EINVAL;
 			res = kstrtoul(args[0].from, 16, &handle);
 			if (res < 0)
 				return -EINVAL;
-			opt->policyhandle = handle;
+			private->policyhandle = handle;
 			break;
 		default:
 			return -EINVAL;
@@ -876,29 +834,33 @@ static int getoptions(char *c, struct trusted_key_payload *pay,
 	return 0;
 }
 
-static struct trusted_key_options *trusted_options_alloc(void)
+static struct trusted_key_options *trusted_options_alloc(bool is_tpm2)
 {
+	struct trusted_key_tpm *private;
 	struct trusted_key_options *options;
-	int tpm2;
 
-	tpm2 = tpm_is_tpm2(chip);
-	if (tpm2 < 0)
-		return NULL;
-
-	options = kzalloc(sizeof *options, GFP_KERNEL);
+	options = kzalloc_obj(*options);
 	if (options) {
 		/* set any non-zero defaults */
 		options->keytype = SRK_keytype;
 
-		if (!tpm2)
-			options->keyhandle = SRKHANDLE;
+		private = kzalloc_obj(*private);
+		if (!private) {
+			kfree_sensitive(options);
+			options = NULL;
+		} else {
+			if (!is_tpm2)
+				private->keyhandle = SRKHANDLE;
+			options->private = private;
+		}
 	}
 	return options;
 }
 
 static int trusted_tpm_seal(struct trusted_key_payload *p, char *datablob)
 {
-	struct trusted_key_options *options = NULL;
+	struct trusted_key_options *options __free(kfree_sensitive) = NULL;
+	struct trusted_key_tpm *private __free(kfree_sensitive) = NULL;
 	int ret = 0;
 	int tpm2;
 
@@ -906,19 +868,19 @@ static int trusted_tpm_seal(struct trusted_key_payload *p, char *datablob)
 	if (tpm2 < 0)
 		return tpm2;
 
-	options = trusted_options_alloc();
+	options = trusted_options_alloc(tpm2);
 	if (!options)
 		return -ENOMEM;
 
-	ret = getoptions(datablob, p, options);
+	private = options->private;
+
+	ret = getoptions(datablob, p, options, tpm2);
 	if (ret < 0)
-		goto out;
+		return ret;
 	dump_options(options);
 
-	if (!options->keyhandle && !tpm2) {
-		ret = -EINVAL;
-		goto out;
-	}
+	if (!private->keyhandle && !tpm2)
+		return -EINVAL;
 
 	if (tpm2)
 		ret = tpm2_seal_trusted(chip, p, options);
@@ -926,24 +888,24 @@ static int trusted_tpm_seal(struct trusted_key_payload *p, char *datablob)
 		ret = key_seal(p, options);
 	if (ret < 0) {
 		pr_info("key_seal failed (%d)\n", ret);
-		goto out;
+		return ret;
 	}
 
-	if (options->pcrlock) {
-		ret = pcrlock(options->pcrlock);
+	if (private->pcrlock) {
+		ret = pcrlock(private->pcrlock);
 		if (ret < 0) {
 			pr_info("pcrlock failed (%d)\n", ret);
-			goto out;
+			return ret;
 		}
 	}
-out:
-	kfree_sensitive(options);
+
 	return ret;
 }
 
 static int trusted_tpm_unseal(struct trusted_key_payload *p, char *datablob)
 {
-	struct trusted_key_options *options = NULL;
+	struct trusted_key_options *options __free(kfree_sensitive) = NULL;
+	struct trusted_key_tpm *private __free(kfree_sensitive) = NULL;
 	int ret = 0;
 	int tpm2;
 
@@ -951,36 +913,36 @@ static int trusted_tpm_unseal(struct trusted_key_payload *p, char *datablob)
 	if (tpm2 < 0)
 		return tpm2;
 
-	options = trusted_options_alloc();
+	options = trusted_options_alloc(tpm2);
 	if (!options)
 		return -ENOMEM;
+	private = options->private;
 
-	ret = getoptions(datablob, p, options);
+	ret = getoptions(datablob, p, options, tpm2);
 	if (ret < 0)
-		goto out;
+		return ret;
 	dump_options(options);
 
-	if (!options->keyhandle && !tpm2) {
-		ret = -EINVAL;
-		goto out;
-	}
+	if (!private->keyhandle && !tpm2)
+		return -EINVAL;
 
 	if (tpm2)
 		ret = tpm2_unseal_trusted(chip, p, options);
 	else
 		ret = key_unseal(p, options);
-	if (ret < 0)
+	if (ret < 0) {
 		pr_info("key_unseal failed (%d)\n", ret);
+		return ret;
+	}
 
-	if (options->pcrlock) {
-		ret = pcrlock(options->pcrlock);
+	if (private->pcrlock) {
+		ret = pcrlock(private->pcrlock);
 		if (ret < 0) {
 			pr_info("pcrlock failed (%d)\n", ret);
-			goto out;
+			return ret;
 		}
 	}
-out:
-	kfree_sensitive(options);
+
 	return ret;
 }
 
@@ -989,46 +951,11 @@ static int trusted_tpm_get_random(unsigned char *key, size_t key_len)
 	return tpm_get_random(chip, key, key_len);
 }
 
-static void trusted_shash_release(void)
-{
-	if (hashalg)
-		crypto_free_shash(hashalg);
-	if (hmacalg)
-		crypto_free_shash(hmacalg);
-}
-
-static int __init trusted_shash_alloc(void)
-{
-	int ret;
-
-	hmacalg = crypto_alloc_shash(hmac_alg, 0, 0);
-	if (IS_ERR(hmacalg)) {
-		pr_info("could not allocate crypto %s\n",
-			hmac_alg);
-		return PTR_ERR(hmacalg);
-	}
-
-	hashalg = crypto_alloc_shash(hash_alg, 0, 0);
-	if (IS_ERR(hashalg)) {
-		pr_info("could not allocate crypto %s\n",
-			hash_alg);
-		ret = PTR_ERR(hashalg);
-		goto hashalg_fail;
-	}
-
-	return 0;
-
-hashalg_fail:
-	crypto_free_shash(hmacalg);
-	return ret;
-}
-
 static int __init init_digests(void)
 {
 	int i;
 
-	digests = kcalloc(chip->nr_allocated_banks, sizeof(*digests),
-			  GFP_KERNEL);
+	digests = kzalloc_objs(*digests, chip->nr_allocated_banks);
 	if (!digests)
 		return -ENOMEM;
 
@@ -1049,15 +976,10 @@ static int __init trusted_tpm_init(void)
 	ret = init_digests();
 	if (ret < 0)
 		goto err_put;
-	ret = trusted_shash_alloc();
-	if (ret < 0)
-		goto err_free;
 	ret = register_key_type(&key_type_trusted);
 	if (ret < 0)
-		goto err_release;
+		goto err_free;
 	return 0;
-err_release:
-	trusted_shash_release();
 err_free:
 	kfree(digests);
 err_put:
@@ -1068,10 +990,9 @@ err_put:
 static void trusted_tpm_exit(void)
 {
 	if (chip) {
+		unregister_key_type(&key_type_trusted);
 		put_device(&chip->dev);
 		kfree(digests);
-		trusted_shash_release();
-		unregister_key_type(&key_type_trusted);
 	}
 }
 

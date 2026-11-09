@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2025 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2026 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -99,10 +99,14 @@ static int iwl_mvm_create_skb(struct iwl_mvm *mvm, struct sk_buff *skb,
 	u8 mic_crc_len = u8_get_bits(desc->mac_flags1,
 				     IWL_RX_MPDU_MFLG1_MIC_CRC_LEN_MASK) << 1;
 
-	if (desc->mac_flags2 & IWL_RX_MPDU_MFLG2_PAD) {
-		len -= 2;
-		pad_len = 2;
-	}
+	pad_len = desc->mac_flags2 & IWL_RX_MPDU_MFLG2_PAD ? 2 : 0;
+
+	if (IWL_FW_CHECK(mvm, len < hdrlen + crypt_len + pad_len + mic_crc_len,
+			 "invalid len (%d): hdrlen=%u, crypt_len=%u, pad_len=%u, mic_crc_len=%u\n",
+			 len, hdrlen, crypt_len, pad_len, mic_crc_len))
+		return -EINVAL;
+
+	len -= pad_len;
 
 	/*
 	 * For non monitor interface strip the bytes the RADA might not have
@@ -110,7 +114,7 @@ static int iwl_mvm_create_skb(struct iwl_mvm *mvm, struct sk_buff *skb,
 	 * interface cannot exist with other interfaces, this removal is safe
 	 * and sufficient, in monitor mode there's no decryption being done.
 	 */
-	if (len > mic_crc_len && !ieee80211_hw_check(mvm->hw, RX_INCLUDES_FCS))
+	if (!ieee80211_hw_check(mvm->hw, RX_INCLUDES_FCS))
 		len -= mic_crc_len;
 
 	/* If frame is small enough to fit in skb->head, pull it completely.
@@ -243,16 +247,65 @@ static void iwl_mvm_pass_packet_to_mac80211(struct iwl_mvm *mvm,
 		return;
 	}
 
-	ieee80211_rx_napi(mvm->hw, sta, skb, napi);
+	ieee80211_rx_napi(mvm->hw, sta ? &sta->deflink : NULL, skb, napi);
+}
+
+static bool iwl_mvm_used_average_energy(struct iwl_mvm *mvm,
+					struct iwl_rx_mpdu_desc *desc,
+					struct ieee80211_hdr *hdr,
+					struct ieee80211_rx_status *rx_status)
+{
+	struct iwl_mvm_vif *mvm_vif;
+	struct ieee80211_vif *vif;
+	u32 id;
+
+	if (unlikely(!hdr || !desc))
+		return false;
+
+	if (likely(!ieee80211_is_beacon(hdr->frame_control)))
+		return false;
+
+	/* for the link conf lookup */
+	guard(rcu)();
+
+	/* MAC or link ID depending on FW, but driver has them equal */
+	id = u8_get_bits(desc->mac_phy_band,
+			 IWL_RX_MPDU_MAC_PHY_BAND_MAC_MASK);
+
+	/* >= means AUX MAC/link ID, no energy correction needed then */
+	if (id >= ARRAY_SIZE(mvm->vif_id_to_mac))
+		return false;
+
+	vif = iwl_mvm_rcu_dereference_vif_id(mvm, id, true);
+	if (!vif)
+		return false;
+
+	mvm_vif = iwl_mvm_vif_from_mac80211(vif);
+
+	/*
+	 * If we know the MAC by MAC or link ID then the frame was
+	 * received for the link, so by filtering it means it was
+	 * from the AP the link is connected to.
+	 */
+
+	/* skip also in case we don't have it (yet) */
+	if (!mvm_vif->deflink.average_beacon_energy)
+		return false;
+
+	IWL_DEBUG_STATS(mvm, "energy override by average %d\n",
+			mvm_vif->deflink.average_beacon_energy);
+	rx_status->signal = -mvm_vif->deflink.average_beacon_energy;
+	return true;
 }
 
 static void iwl_mvm_get_signal_strength(struct iwl_mvm *mvm,
+					struct iwl_rx_mpdu_desc *desc,
+					struct ieee80211_hdr *hdr,
 					struct ieee80211_rx_status *rx_status,
 					u32 rate_n_flags, int energy_a,
 					int energy_b)
 {
 	int max_energy;
-	u32 rate_flags = rate_n_flags;
 
 	energy_a = energy_a ? -energy_a : S8_MIN;
 	energy_b = energy_b ? -energy_b : S8_MIN;
@@ -261,9 +314,11 @@ static void iwl_mvm_get_signal_strength(struct iwl_mvm *mvm,
 	IWL_DEBUG_STATS(mvm, "energy In A %d B %d, and max %d\n",
 			energy_a, energy_b, max_energy);
 
+	if (iwl_mvm_used_average_energy(mvm, desc, hdr, rx_status))
+		return;
+
 	rx_status->signal = max_energy;
-	rx_status->chains =
-		(rate_flags & RATE_MCS_ANT_AB_MSK) >> RATE_MCS_ANT_POS;
+	rx_status->chains = u32_get_bits(rate_n_flags, RATE_MCS_ANT_AB_MSK);
 	rx_status->chain_signal[0] = energy_a;
 	rx_status->chain_signal[1] = energy_b;
 }
@@ -281,6 +336,7 @@ static int iwl_mvm_rx_mgmt_prot(struct ieee80211_sta *sta,
 	struct ieee80211_key_conf *key;
 	u32 len = le16_to_cpu(desc->mpdu_len);
 	const u8 *frame = (void *)hdr;
+	const u8 *mmie;
 
 	if ((status & IWL_RX_MPDU_STATUS_SEC_MASK) == IWL_RX_MPDU_STATUS_SEC_NONE)
 		return 0;
@@ -324,11 +380,15 @@ static int iwl_mvm_rx_mgmt_prot(struct ieee80211_sta *sta,
 			goto report;
 	}
 
-	if (len < key->icv_len + IEEE80211_GMAC_PN_LEN + 2)
+	if (len < key->icv_len)
 		goto report;
 
 	/* get the real key ID */
-	keyid = frame[len - key->icv_len - IEEE80211_GMAC_PN_LEN - 2];
+	mmie = frame + (len - key->icv_len);
+
+	/* the position of the key_id in ieee80211_mmie_16 is the same */
+	keyid = le16_to_cpu(((const struct ieee80211_mmie *) mmie)->key_id);
+
 	/* and if that's the other key, look it up */
 	if (keyid != key->keyidx) {
 		/*
@@ -854,10 +914,15 @@ static bool iwl_mvm_reorder(struct iwl_mvm *mvm,
 	 * already ahead and it will be dropped.
 	 * If the last sub-frame is not on this queue - we will get frame
 	 * release notification with up to date NSSN.
+	 * If this is the first frame that is stored in the buffer, the head_sn
+	 * may be outdated. Update it based on the last NSSN to make sure it
+	 * will be released when the frame release notification arrives.
 	 */
 	if (!amsdu || last_subframe)
 		iwl_mvm_release_frames(mvm, sta, napi, baid_data,
 				       buffer, nssn);
+	else if (buffer->num_stored == 1)
+		buffer->head_sn = nssn;
 
 	spin_unlock_bh(&buffer->lock);
 	return true;
@@ -1906,8 +1971,11 @@ static void iwl_mvm_rx_get_sta_block_tx(void *data, struct ieee80211_sta *sta)
 /*
  * Note: requires also rx_status->band to be prefilled, as well
  * as phy_data (apart from phy_data->info_type)
+ * Note: desc/hdr may be NULL
  */
 static void iwl_mvm_rx_fill_status(struct iwl_mvm *mvm,
+				   struct iwl_rx_mpdu_desc *desc,
+				   struct ieee80211_hdr *hdr,
 				   struct sk_buff *skb,
 				   struct iwl_mvm_rx_phy_data *phy_data,
 				   int queue)
@@ -1962,7 +2030,7 @@ static void iwl_mvm_rx_fill_status(struct iwl_mvm *mvm,
 
 	rx_status->freq = ieee80211_channel_to_frequency(phy_data->channel,
 							 rx_status->band);
-	iwl_mvm_get_signal_strength(mvm, rx_status, rate_n_flags,
+	iwl_mvm_get_signal_strength(mvm, desc, hdr, rx_status, rate_n_flags,
 				    phy_data->energy_a, phy_data->energy_b);
 
 	/* using TLV format and must be after all fixed len fields */
@@ -2040,7 +2108,6 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 	struct ieee80211_sta *sta = NULL;
 	struct sk_buff *skb;
 	u8 crypt_len = 0;
-	u8 sta_id = le32_get_bits(desc->status, IWL_RX_MPDU_STATUS_STA_ID);
 	size_t desc_size;
 	struct iwl_mvm_rx_phy_data phy_data = {};
 	u32 format;
@@ -2101,7 +2168,17 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 	phy_data.phy_info = le16_to_cpu(desc->phy_info);
 	phy_data.d4 = desc->phy_data4;
 
+	if (IWL_FW_CHECK(mvm, len < sizeof(hdr->frame_control),
+			 "MPDU len (%u) is smaller than frame control\n",
+			 len))
+		return;
+
 	hdr = (void *)(pkt->data + desc_size);
+	if (IWL_FW_CHECK(mvm, len < ieee80211_hdrlen(hdr->frame_control),
+			 "MPDU len (%u) is smaller than header length (%u)\n",
+			 len, ieee80211_hdrlen(hdr->frame_control)))
+		return;
+
 	/* Dont use dev_alloc_skb(), we'll have enough headroom once
 	 * ieee80211_hdr pulled.
 	 */
@@ -2187,18 +2264,13 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 	rcu_read_lock();
 
 	if (desc->status & cpu_to_le32(IWL_RX_MPDU_STATUS_SRC_STA_FOUND)) {
-		if (!WARN_ON_ONCE(sta_id >= mvm->fw->ucode_capa.num_stations)) {
-			struct ieee80211_link_sta *link_sta;
+		u8 sta_id = le32_get_bits(desc->status,
+					  IWL_RX_MPDU_STATUS_STA_ID);
 
+		if (!WARN_ON_ONCE(sta_id >= mvm->fw->ucode_capa.num_stations)) {
 			sta = rcu_dereference(mvm->fw_id_to_mac_id[sta_id]);
 			if (IS_ERR(sta))
 				sta = NULL;
-			link_sta = rcu_dereference(mvm->fw_id_to_link_sta[sta_id]);
-
-			if (sta && sta->valid_links && link_sta) {
-				rx_status->link_valid = 1;
-				rx_status->link_id = link_sta->link_id;
-			}
 		}
 	} else if (!is_multicast_ether_addr(hdr->addr2)) {
 		/*
@@ -2215,7 +2287,7 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 		goto out;
 	}
 
-	iwl_mvm_rx_fill_status(mvm, skb, &phy_data, queue);
+	iwl_mvm_rx_fill_status(mvm, desc, hdr, skb, &phy_data, queue);
 
 	if (sta) {
 		struct iwl_mvm_sta *mvmsta = iwl_mvm_sta_from_mac80211(sta);
@@ -2227,7 +2299,7 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 		struct iwl_fw_dbg_trigger_tlv *trig;
 		struct ieee80211_vif *vif = mvmsta->vif;
 
-		if (!mvm->tcm.paused && len >= sizeof(*hdr) &&
+		if (!mvm->tcm.paused &&
 		    !is_multicast_ether_addr(hdr->addr1) &&
 		    ieee80211_is_data(hdr->frame_control) &&
 		    time_after(jiffies, mvm->tcm.ts + MVM_TCM_PERIOD))
@@ -2314,16 +2386,6 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 
 			iwl_mvm_agg_rx_received(mvm, reorder_data, baid);
 		}
-
-		if (ieee80211_is_data(hdr->frame_control)) {
-			u8 sub_frame_idx = desc->amsdu_info &
-				IWL_RX_MPDU_AMSDU_SUBFRAME_IDX_MASK;
-
-			/* 0 means not an A-MSDU, and 1 means a new A-MSDU */
-			if (!sub_frame_idx || sub_frame_idx == 1)
-				iwl_mvm_count_mpdu(mvmsta, sta_id, 1, false,
-						   queue);
-		}
 	}
 
 	/* management stuff on default queue */
@@ -2365,7 +2427,6 @@ void iwl_mvm_rx_monitor_no_data(struct iwl_mvm *mvm, struct napi_struct *napi,
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
 	struct iwl_rx_no_data_ver_3 *desc = (void *)pkt->data;
 	u32 rssi;
-	struct ieee80211_sta *sta = NULL;
 	struct sk_buff *skb;
 	struct iwl_mvm_rx_phy_data phy_data;
 	u32 format;
@@ -2445,7 +2506,7 @@ void iwl_mvm_rx_monitor_no_data(struct iwl_mvm *mvm, struct napi_struct *napi,
 	rx_status->band = phy_data.channel > 14 ? NL80211_BAND_5GHZ :
 		NL80211_BAND_2GHZ;
 
-	iwl_mvm_rx_fill_status(mvm, skb, &phy_data, queue);
+	iwl_mvm_rx_fill_status(mvm, NULL, NULL, skb, &phy_data, queue);
 
 	/* no more radio tap info should be put after this point.
 	 *
@@ -2479,9 +2540,7 @@ void iwl_mvm_rx_monitor_no_data(struct iwl_mvm *mvm, struct napi_struct *napi,
 				      RX_NO_DATA_RX_VEC2_EHT_NSTS_MSK) + 1;
 	}
 
-	rcu_read_lock();
-	ieee80211_rx_napi(mvm->hw, sta, skb, napi);
-	rcu_read_unlock();
+	ieee80211_rx_napi(mvm->hw, NULL, skb, napi);
 }
 
 void iwl_mvm_rx_frame_release(struct iwl_mvm *mvm, struct napi_struct *napi,
@@ -2547,4 +2606,29 @@ void iwl_mvm_rx_bar_frame_release(struct iwl_mvm *mvm, struct napi_struct *napi,
 	iwl_mvm_release_frames_from_notif(mvm, napi, baid, nssn, queue);
 out:
 	rcu_read_unlock();
+}
+
+void iwl_mvm_rx_beacon_filter_notif(struct iwl_mvm *mvm,
+				    struct iwl_rx_cmd_buffer *rxb)
+{
+	struct iwl_rx_packet *pkt = rxb_addr(rxb);
+	/* MAC or link ID in v1/v2, but driver has the IDs equal */
+	struct iwl_beacon_filter_notif *notif = (void *)pkt->data;
+	u32 id = le32_to_cpu(notif->link_id);
+	struct iwl_mvm_vif *mvm_vif;
+	struct ieee80211_vif *vif;
+
+	/* >= means AUX MAC/link ID, no energy correction needed then */
+	if (IWL_FW_CHECK(mvm, id >= ARRAY_SIZE(mvm->vif_id_to_mac),
+			 "invalid link ID %d\n", id))
+		return;
+
+	vif = iwl_mvm_rcu_dereference_vif_id(mvm, id, false);
+	if (!vif)
+		return;
+
+	mvm_vif = iwl_mvm_vif_from_mac80211(vif);
+
+	mvm_vif->deflink.average_beacon_energy =
+		le32_to_cpu(notif->average_energy);
 }

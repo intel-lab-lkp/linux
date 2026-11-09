@@ -49,7 +49,11 @@ instance to be released.
 The control APIs are not idempotent. Control API calls are safe against
 concurrent use of datapath APIs but an incorrect sequence of control API
 calls may result in crashes, deadlocks, or race conditions. For example,
-calling napi_disable() multiple times in a row will deadlock.
+calling napi_disable() multiple times in a row will hang waiting for
+ownership of the NAPI instance to be released.
+
+Drivers using the netdev instance lock may need to use the ``_locked()``
+variants of the control APIs when that lock is already held.
 
 Datapath API
 ------------
@@ -190,7 +194,8 @@ User API
 ========
 
 User interactions with NAPI depend on NAPI instance ID. The instance IDs
-are only visible to the user thru the ``SO_INCOMING_NAPI_ID`` socket option.
+are visible to the user through the ``SO_INCOMING_NAPI_ID`` socket option
+and the netdev Netlink API.
 
 Users can query NAPI IDs for a device or device queue using netlink. This can
 be done programmatically in a user application or by using a script included in
@@ -263,7 +268,9 @@ are not well known).
 Busy polling is enabled by either setting ``SO_BUSY_POLL`` on
 selected sockets or using the global ``net.core.busy_poll`` and
 ``net.core.busy_read`` sysctls. An io_uring API for NAPI busy polling
-also exists.
+also exists. Threaded polling of NAPI also has a mode to busy poll for
+packets (:ref:`threaded busy polling<threaded_busy_poll>`) using the NAPI
+processing kthread.
 
 epoll-based busy polling
 ------------------------
@@ -369,7 +376,7 @@ To use this mechanism:
      the application has stalled. This value should be chosen so that it covers
      the amount of time the user application needs to process data from its
      call to epoll_wait, noting that applications can control how much data
-     they retrieve by setting ``max_events`` when calling epoll_wait.
+     they retrieve by setting ``maxevents`` when calling epoll_wait.
 
   2. The sysfs parameter or per-NAPI config parameters ``gro_flush_timeout``
      and ``napi_defer_hard_irqs`` can be set to low values. They will be used
@@ -426,6 +433,52 @@ Therefore, setting ``gro_flush_timeout`` and ``napi_defer_hard_irqs`` is
 the recommended usage, because otherwise setting ``irq-suspend-timeout``
 might not have any discernible effect.
 
+.. _threaded_busy_poll:
+
+Threaded NAPI busy polling
+--------------------------
+
+Threaded NAPI busy polling extends threaded NAPI and adds support to do
+continuous busy polling of the NAPI. This can be useful for forwarding or
+AF_XDP applications.
+
+Threaded NAPI busy polling can be enabled on per NIC queue basis using Netlink.
+
+For example, using the following script:
+
+.. code-block:: bash
+
+  $ ynl --family netdev --do napi-set \
+            --json='{"id": 66, "threaded": "busy-poll"}'
+
+The kernel will create a kthread that busy polls on this NAPI.
+
+The user may elect to set the CPU affinity of this kthread to an unused CPU
+core to improve how often the NAPI is polled at the expense of wasted CPU
+cycles. Note that this will keep the CPU core busy with 100% usage.
+
+Once threaded busy polling is enabled for a NAPI, PID of the kthread can be
+retrieved using Netlink so the affinity of the kthread can be set up.
+
+For example, the following script can be used to fetch the PID:
+
+.. code-block:: bash
+
+  $ ynl --family netdev --do napi-get --json='{"id": 66}'
+
+This will output something like following, the pid `258` is the PID of the
+kthread that is polling this NAPI.
+
+.. code-block:: bash
+
+  $ {'defer-hard-irqs': 0,
+     'gro-flush-timeout': 0,
+     'id': 66,
+     'ifindex': 2,
+     'irq-suspend-timeout': 0,
+     'pid': 258,
+     'threaded': 'busy-poll'}
+
 .. _threaded:
 
 Threaded NAPI
@@ -433,9 +486,8 @@ Threaded NAPI
 
 Threaded NAPI is an operating mode that uses dedicated kernel
 threads rather than software IRQ context for NAPI processing.
-The configuration is per netdevice and will affect all
-NAPI instances of that device. Each NAPI instance will spawn a separate
-thread (called ``napi/${ifc-name}-${napi-id}``).
+Each threaded NAPI instance will spawn a separate thread
+(called ``napi/${ifc-name}-${napi-id}``).
 
 It is recommended to pin each kernel thread to a single CPU, the same
 CPU as the CPU which services the interrupt. Note that the mapping
@@ -444,7 +496,14 @@ dependent). The NAPI instance IDs will be assigned in the opposite
 order than the process IDs of the kernel threads.
 
 Threaded NAPI is controlled by writing 0/1 to the ``threaded`` file in
-netdev's sysfs directory.
+netdev's sysfs directory. It can also be enabled for a specific NAPI using
+netlink interface.
+
+For example, using the script:
+
+.. code-block:: bash
+
+  $ ynl --family netdev --do napi-set --json='{"id": 66, "threaded": 1}'
 
 .. rubric:: Footnotes
 

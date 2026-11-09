@@ -10,7 +10,6 @@
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
@@ -974,7 +973,6 @@ static int gc0308_s_ctrl(struct v4l2_ctrl *ctrl)
 	if (ret)
 		dev_err(gc0308->dev, "failed to set control: %d\n", ret);
 
-	pm_runtime_mark_last_busy(gc0308->dev);
 	pm_runtime_put_autosuspend(gc0308->dev);
 
 	return ret;
@@ -1045,6 +1043,7 @@ static void gc0308_update_pad_format(const struct gc0308_frame_size *mode,
 }
 
 static int gc0308_set_format(struct v4l2_subdev *sd,
+			     const struct v4l2_subdev_client_info *ci,
 			     struct v4l2_subdev_state *sd_state,
 			     struct v4l2_subdev_format *fmt)
 {
@@ -1157,14 +1156,12 @@ static int gc0308_start_stream(struct gc0308 *gc0308)
 	return 0;
 
 disable_pm:
-	pm_runtime_mark_last_busy(gc0308->dev);
 	pm_runtime_put_autosuspend(gc0308->dev);
 	return ret;
 }
 
 static int gc0308_stop_stream(struct gc0308 *gc0308)
 {
-	pm_runtime_mark_last_busy(gc0308->dev);
 	pm_runtime_put_autosuspend(gc0308->dev);
 	return 0;
 }

@@ -228,7 +228,7 @@ out:
 
 /**
  * ecryptfs_write_begin
- * @file: The eCryptfs file
+ * @iocb: I/O control block for the eCryptfs file
  * @mapping: The eCryptfs object
  * @pos: The file offset at which to start writing
  * @len: Length of the write
@@ -239,7 +239,7 @@ out:
  *
  * Returns zero on success; non-zero otherwise
  */
-static int ecryptfs_write_begin(struct file *file,
+static int ecryptfs_write_begin(const struct kiocb *iocb,
 			struct address_space *mapping,
 			loff_t pos, unsigned len,
 			struct folio **foliop, void **fsdata)
@@ -322,7 +322,7 @@ static int ecryptfs_write_begin(struct file *file,
 	 * Note, this will increase i_size. */
 	if (index != 0) {
 		if (prev_page_end_size > i_size_read(mapping->host)) {
-			rc = ecryptfs_truncate(file->f_path.dentry,
+			rc = ecryptfs_truncate(iocb->ki_filp->f_path.dentry,
 					       prev_page_end_size);
 			if (rc) {
 				printk(KERN_ERR "%s: Error on attempt to "
@@ -355,24 +355,17 @@ out:
  */
 static int ecryptfs_write_inode_size_to_header(struct inode *ecryptfs_inode)
 {
-	char *file_size_virt;
+	__be64 file_size;
 	int rc;
 
-	file_size_virt = kmalloc(sizeof(u64), GFP_KERNEL);
-	if (!file_size_virt) {
-		rc = -ENOMEM;
-		goto out;
-	}
-	put_unaligned_be64(i_size_read(ecryptfs_inode), file_size_virt);
-	rc = ecryptfs_write_lower(ecryptfs_inode, file_size_virt, 0,
-				  sizeof(u64));
-	kfree(file_size_virt);
+	file_size = cpu_to_be64(i_size_read(ecryptfs_inode));
+	rc = ecryptfs_write_lower(ecryptfs_inode, (char *)&file_size, 0,
+				  sizeof(file_size));
 	if (rc < 0)
 		printk(KERN_ERR "%s: Error writing file size to header; "
 		       "rc = [%d]\n", __func__, rc);
 	else
 		rc = 0;
-out:
 	return rc;
 }
 
@@ -429,7 +422,7 @@ int ecryptfs_write_inode_size_to_metadata(struct inode *ecryptfs_inode)
 
 /**
  * ecryptfs_write_end
- * @file: The eCryptfs file object
+ * @iocb: I/O control block for the eCryptfs file
  * @mapping: The eCryptfs object
  * @pos: The file position
  * @len: The length of the data (unused)
@@ -437,7 +430,7 @@ int ecryptfs_write_inode_size_to_metadata(struct inode *ecryptfs_inode)
  * @folio: The eCryptfs folio
  * @fsdata: The fsdata (unused)
  */
-static int ecryptfs_write_end(struct file *file,
+static int ecryptfs_write_end(const struct kiocb *iocb,
 			struct address_space *mapping,
 			loff_t pos, unsigned len, unsigned copied,
 			struct folio *folio, void *fsdata)
@@ -510,21 +503,8 @@ static sector_t ecryptfs_bmap(struct address_space *mapping, sector_t block)
 	return block;
 }
 
-#include <linux/buffer_head.h>
-
 const struct address_space_operations ecryptfs_aops = {
-	/*
-	 * XXX: This is pretty broken for multiple reasons: ecryptfs does not
-	 * actually use buffer_heads, and ecryptfs will crash without
-	 * CONFIG_BLOCK.  But it matches the behavior before the default for
-	 * address_space_operations without the ->dirty_folio method was
-	 * cleaned up, so this is the best we can do without maintainer
-	 * feedback.
-	 */
-#ifdef CONFIG_BLOCK
-	.dirty_folio	= block_dirty_folio,
-	.invalidate_folio = block_invalidate_folio,
-#endif
+	.dirty_folio	= filemap_dirty_folio,
 	.writepages = ecryptfs_writepages,
 	.read_folio = ecryptfs_read_folio,
 	.write_begin = ecryptfs_write_begin,

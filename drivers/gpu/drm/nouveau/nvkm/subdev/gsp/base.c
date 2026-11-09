@@ -20,6 +20,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #include "priv.h"
+#include <nvif/cl0080.h>
 
 int
 nvkm_gsp_intr_nonstall(struct nvkm_gsp *gsp, enum nvkm_subdev_type type, int inst)
@@ -47,8 +48,17 @@ nvkm_gsp_intr_stall(struct nvkm_gsp *gsp, enum nvkm_subdev_type type, int inst)
 	return -ENOENT;
 }
 
+int
+nvkm_gsp_gcx_ready(struct nvkm_gsp *gsp)
+{
+	if (!gsp->rm->api->gsp->gcx_ready)
+		return NV_DEVICE_GC6_READY | NV_DEVICE_GCOFF_READY;
+
+	return gsp->rm->api->gsp->gcx_ready(gsp);
+}
+
 static int
-nvkm_gsp_fini(struct nvkm_subdev *subdev, bool suspend)
+nvkm_gsp_fini(struct nvkm_subdev *subdev, enum nvkm_suspend_state suspend)
 {
 	struct nvkm_gsp *gsp = nvkm_gsp(subdev);
 
@@ -132,21 +142,23 @@ nvkm_gsp_new_(const struct nvkm_gsp_fwif *fwif, struct nvkm_device *device,
 {
 	struct nvkm_gsp *gsp;
 
-	if (!(gsp = *pgsp = kzalloc(sizeof(*gsp), GFP_KERNEL)))
+	if (!(gsp = *pgsp = kzalloc_obj(*gsp)))
 		return -ENOMEM;
 
 	nvkm_subdev_ctor(&nvkm_gsp, device, type, inst, &gsp->subdev);
 
 	fwif = nvkm_firmware_load(&gsp->subdev, fwif, "Gsp", gsp);
-	if (IS_ERR(fwif))
+	if (IS_ERR(fwif)) {
+		nvkm_error(&gsp->subdev, "Failed to load required firmware for device.");
 		return PTR_ERR(fwif);
+	}
 
 	gsp->func = fwif->func;
 
 	if (fwif->rm) {
 		nvkm_info(&gsp->subdev, "RM version: %s\n", fwif->ver);
 
-		gsp->rm = kzalloc(sizeof(*gsp->rm), GFP_KERNEL);
+		gsp->rm = kzalloc_obj(*gsp->rm);
 		if (!gsp->rm)
 			return -ENOMEM;
 

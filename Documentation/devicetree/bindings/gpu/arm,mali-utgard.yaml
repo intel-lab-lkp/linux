@@ -47,6 +47,7 @@ properties:
               - hisilicon,hi6220-mali
               - mediatek,mt7623-mali
               - rockchip,rk3328-mali
+              - rockchip,rk3528-mali
           - const: arm,mali-450
 
       # "arm,mali-300"
@@ -111,7 +112,13 @@ properties:
     maxItems: 1
 
   resets:
-    maxItems: 1
+    minItems: 1
+    maxItems: 2
+
+  reset-names:
+    items:
+      - const: ao_g3d
+      - const: media_g3d
 
   operating-points-v2: true
 
@@ -133,6 +140,23 @@ allOf:
       properties:
         compatible:
           contains:
+            const: hisilicon,hi6220-mali
+    then:
+      properties:
+        resets:
+          minItems: 2
+      required:
+        - reset-names
+    else:
+      properties:
+        resets:
+          maxItems: 1
+        reset-names: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
             enum:
               - allwinner,sun4i-a10-mali
               - allwinner,sun7i-a20-mali
@@ -148,6 +172,7 @@ allOf:
               - rockchip,rk3188-mali
               - rockchip,rk3228-mali
               - rockchip,rk3328-mali
+              - rockchip,rk3528-mali
     then:
       required:
         - resets

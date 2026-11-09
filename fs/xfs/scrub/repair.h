@@ -18,14 +18,6 @@ static inline int xrep_notsupported(struct xfs_scrub *sc)
 
 #ifdef CONFIG_XFS_ONLINE_REPAIR
 
-/*
- * This is the maximum number of deferred extent freeing item extents (EFIs)
- * that we'll attach to a transaction without rolling the transaction to avoid
- * overrunning a tr_itruncate reservation.
- */
-#define XREP_MAX_ITRUNCATE_EFIS	(128)
-
-
 /* Repair helpers */
 
 int xrep_attempt(struct xfs_scrub *sc, struct xchk_stats_run *run);
@@ -89,6 +81,7 @@ int xrep_setup_xfbtree(struct xfs_scrub *sc, const char *descr);
 int xrep_ino_ensure_extent_count(struct xfs_scrub *sc, int whichfork,
 		xfs_extnum_t nextents);
 int xrep_reset_perag_resv(struct xfs_scrub *sc);
+void xrep_reset_fork_to_extents(struct xfs_scrub *sc, int whichfork);
 int xrep_bmap(struct xfs_scrub *sc, int whichfork, bool allow_unwritten);
 int xrep_metadata_inode_forks(struct xfs_scrub *sc);
 int xrep_setup_ag_rmapbt(struct xfs_scrub *sc);
@@ -108,18 +101,17 @@ int xrep_setup_ag_allocbt(struct xfs_scrub *sc);
 struct xfs_imap;
 int xrep_setup_inode(struct xfs_scrub *sc, const struct xfs_imap *imap);
 
-void xrep_ag_btcur_init(struct xfs_scrub *sc, struct xchk_ag *sa);
-int xrep_ag_init(struct xfs_scrub *sc, struct xfs_perag *pag,
-		struct xchk_ag *sa);
+void xrep_ag_btcur_init(struct xfs_scrub *sc);
+int xrep_ag_init(struct xfs_scrub *sc, struct xfs_perag *pag);
 #ifdef CONFIG_XFS_RT
 int xrep_rtgroup_init(struct xfs_scrub *sc, struct xfs_rtgroup *rtg,
-		struct xchk_rt *sr, unsigned int rtglock_flags);
-void xrep_rtgroup_btcur_init(struct xfs_scrub *sc, struct xchk_rt *sr);
+		unsigned int rtglock_flags);
+void xrep_rtgroup_btcur_init(struct xfs_scrub *sc);
 int xrep_require_rtext_inuse(struct xfs_scrub *sc, xfs_rgblock_t rgbno,
 		xfs_filblks_t len);
 xfs_extlen_t xrep_calc_rtgroup_resblks(struct xfs_scrub *sc);
 #else
-# define xrep_rtgroup_init(sc, rtg, sr, lockflags)	(-ENOSYS)
+# define xrep_rtgroup_init(sc, rtg, lockflags)		(-ENOSYS)
 # define xrep_calc_rtgroup_resblks(sc)			(0)
 #endif /* CONFIG_XFS_RT */
 
@@ -179,10 +171,6 @@ int xrep_quotacheck(struct xfs_scrub *sc);
 
 int xrep_reinit_pagf(struct xfs_scrub *sc);
 int xrep_reinit_pagi(struct xfs_scrub *sc);
-
-int xrep_trans_alloc_hook_dummy(struct xfs_mount *mp, void **cookiep,
-		struct xfs_trans **tpp);
-void xrep_trans_cancel_hook_dummy(void **cookiep, struct xfs_trans *tp);
 
 bool xrep_buf_verify_struct(struct xfs_buf *bp, const struct xfs_buf_ops *ops);
 void xrep_inode_set_nblocks(struct xfs_scrub *sc, int64_t new_blocks);
@@ -251,7 +239,7 @@ xrep_setup_nothing(
 #define xrep_setup_rtrmapbt		xrep_setup_nothing
 #define xrep_setup_rtrefcountbt		xrep_setup_nothing
 
-#define xrep_setup_inode(sc, imap)	((void)0)
+#define xrep_setup_inode(sc, imap)	(0)
 
 static inline int xrep_setup_symlink(struct xfs_scrub *sc, unsigned int *x)
 {

@@ -9,9 +9,9 @@
 #include <linux/module.h>
 #include <linux/mfd/syscon.h>
 #include <linux/delay.h>
-#include <linux/of_gpio.h>
 #include <linux/of_device.h>
 #include <linux/clk.h>
+#include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
@@ -378,19 +378,9 @@ static void rockchip_sai_xfer_start(struct rk_sai_dev *sai, int stream)
 static void rockchip_sai_xfer_stop(struct rk_sai_dev *sai, int stream)
 {
 	unsigned int msk = 0, val = 0, clr = 0;
-	bool playback;
-	bool capture;
-
-	if (stream < 0) {
-		playback = true;
-		capture = true;
-	} else if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		playback = true;
-		capture = false;
-	} else {
-		playback = true;
-		capture = false;
-	}
+	bool capture = stream == SNDRV_PCM_STREAM_CAPTURE || stream < 0;
+	bool playback = stream == SNDRV_PCM_STREAM_PLAYBACK || stream < 0;
+	/* could be <= 0 but we don't want to depend on enum values */
 
 	if (playback) {
 		msk |= SAI_XFER_TXS_MASK;
@@ -497,7 +487,9 @@ static int rockchip_sai_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	unsigned long flags;
 	int ret = 0;
 
-	pm_runtime_get_sync(dai->dev);
+	ret = pm_runtime_resume_and_get(dai->dev);
+	if (ret)
+		return ret;
 
 	mask = SAI_CKR_MSS_MASK;
 	switch (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
@@ -638,6 +630,10 @@ static int rockchip_sai_hw_params(struct snd_pcm_substream *substream,
 	spin_lock_irqsave(&sai->xfer_lock, flags);
 
 	regmap_update_bits(sai->regmap, reg, SAI_XCR_VDW_MASK | SAI_XCR_CSR_MASK, val);
+
+	if (!sai->is_tdm)
+		regmap_update_bits(sai->regmap, reg, SAI_XCR_SBW_MASK,
+				   SAI_XCR_SBW(params_physical_width(params)));
 
 	regmap_read(sai->regmap, reg, &val);
 
@@ -963,16 +959,29 @@ static int rockchip_sai_set_sysclk(struct snd_soc_dai *dai, int stream,
 	return 0;
 }
 
+static const u64 rockchip_sai_selectable_formats =
+	SND_SOC_POSSIBLE_DAIFMT_I2S	|
+	SND_SOC_POSSIBLE_DAIFMT_RIGHT_J	|
+	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
+	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
+	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
+	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
+	SND_SOC_POSSIBLE_DAIFMT_NB_IF	|
+	SND_SOC_POSSIBLE_DAIFMT_IB_NF	|
+	SND_SOC_POSSIBLE_DAIFMT_IB_IF;
+
 static const struct snd_soc_dai_ops rockchip_sai_dai_ops = {
-	.probe = rockchip_sai_dai_probe,
-	.startup = rockchip_sai_startup,
-	.shutdown = rockchip_sai_shutdown,
-	.hw_params = rockchip_sai_hw_params,
-	.set_fmt = rockchip_sai_set_fmt,
-	.set_sysclk = rockchip_sai_set_sysclk,
-	.prepare = rockchip_sai_prepare,
-	.trigger = rockchip_sai_trigger,
-	.set_tdm_slot = rockchip_sai_set_tdm_slot,
+	.probe				= rockchip_sai_dai_probe,
+	.startup			= rockchip_sai_startup,
+	.shutdown			= rockchip_sai_shutdown,
+	.hw_params			= rockchip_sai_hw_params,
+	.set_fmt			= rockchip_sai_set_fmt,
+	.set_sysclk			= rockchip_sai_set_sysclk,
+	.prepare			= rockchip_sai_prepare,
+	.trigger			= rockchip_sai_trigger,
+	.set_tdm_slot			= rockchip_sai_set_tdm_slot,
+	.auto_selectable_formats	= &rockchip_sai_selectable_formats,
+	.num_auto_selectable_formats	= 1,
 };
 
 static const struct snd_soc_dai_driver rockchip_sai_dai = {
@@ -1238,7 +1247,7 @@ static int rockchip_sai_wait_time_info(struct snd_kcontrol *kcontrol,
 static int rockchip_sai_rd_wait_time_get(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct rk_sai_dev *sai = snd_soc_component_get_drvdata(component);
 
 	ucontrol->value.integer.value[0] = sai->wait_time[SNDRV_PCM_STREAM_CAPTURE];
@@ -1249,7 +1258,7 @@ static int rockchip_sai_rd_wait_time_get(struct snd_kcontrol *kcontrol,
 static int rockchip_sai_rd_wait_time_put(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct rk_sai_dev *sai = snd_soc_component_get_drvdata(component);
 
 	if (ucontrol->value.integer.value[0] > WAIT_TIME_MS_MAX)
@@ -1263,7 +1272,7 @@ static int rockchip_sai_rd_wait_time_put(struct snd_kcontrol *kcontrol,
 static int rockchip_sai_wr_wait_time_get(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct rk_sai_dev *sai = snd_soc_component_get_drvdata(component);
 
 	ucontrol->value.integer.value[0] = sai->wait_time[SNDRV_PCM_STREAM_PLAYBACK];
@@ -1274,7 +1283,7 @@ static int rockchip_sai_wr_wait_time_get(struct snd_kcontrol *kcontrol,
 static int rockchip_sai_wr_wait_time_put(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct rk_sai_dev *sai = snd_soc_component_get_drvdata(component);
 
 	if (ucontrol->value.integer.value[0] > WAIT_TIME_MS_MAX)
@@ -1434,46 +1443,36 @@ static int rockchip_sai_probe(struct platform_device *pdev)
 				     "Failed to initialize regmap\n");
 
 	irq = platform_get_irq_optional(pdev, 0);
+	if (irq == -EPROBE_DEFER)
+		return irq;
 	if (irq > 0) {
 		ret = devm_request_irq(&pdev->dev, irq, rockchip_sai_isr,
 				       IRQF_SHARED, node->name, sai);
-		if (ret) {
-			return dev_err_probe(&pdev->dev, ret,
-					     "Failed to request irq %d\n", irq);
-		}
+		if (ret)
+			return ret;
 	} else {
 		dev_dbg(&pdev->dev, "Asked for an IRQ but got %d\n", irq);
 	}
 
 	sai->mclk = devm_clk_get(&pdev->dev, "mclk");
-	if (IS_ERR(sai->mclk)) {
+	if (IS_ERR(sai->mclk))
 		return dev_err_probe(&pdev->dev, PTR_ERR(sai->mclk),
 				     "Failed to get mclk\n");
-	}
 
-	sai->hclk = devm_clk_get(&pdev->dev, "hclk");
-	if (IS_ERR(sai->hclk)) {
+	sai->hclk = devm_clk_get_enabled(&pdev->dev, "hclk");
+	if (IS_ERR(sai->hclk))
 		return dev_err_probe(&pdev->dev, PTR_ERR(sai->hclk),
 				     "Failed to get hclk\n");
-	}
-
-	ret = clk_prepare_enable(sai->hclk);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "Failed to enable hclk\n");
 
 	regmap_read(sai->regmap, SAI_VERSION, &sai->version);
 
 	ret = rockchip_sai_init_dai(sai, res, &dai);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to initialize DAI: %d\n", ret);
-		goto err_disable_hclk;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Failed to initialize DAI\n");
 
 	ret = rockchip_sai_parse_paths(sai, node);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to parse paths: %d\n", ret);
-		goto err_disable_hclk;
-	}
+	if (ret)
+		return ret;
 
 	/*
 	 * From here on, all register accesses need to be wrapped in
@@ -1484,24 +1483,18 @@ static int rockchip_sai_probe(struct platform_device *pdev)
 	devm_pm_runtime_enable(&pdev->dev);
 	pm_runtime_get_noresume(&pdev->dev);
 	ret = rockchip_sai_runtime_resume(&pdev->dev);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to resume device: %pe\n", ERR_PTR(ret));
-		goto err_disable_hclk;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Failed to resume device\n");
 
 	ret = devm_snd_dmaengine_pcm_register(&pdev->dev, NULL, 0);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to register PCM: %d\n", ret);
+	if (ret)
 		goto err_runtime_suspend;
-	}
 
 	ret = devm_snd_soc_register_component(&pdev->dev,
 					      &rockchip_sai_component,
 					      dai, 1);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to register component: %d\n", ret);
+	if (ret)
 		goto err_runtime_suspend;
-	}
 
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_put(&pdev->dev);
@@ -1511,11 +1504,10 @@ static int rockchip_sai_probe(struct platform_device *pdev)
 	return 0;
 
 err_runtime_suspend:
-	/* If we're !CONFIG_PM, we get -ENOSYS and disable manually */
-	if (pm_runtime_put(&pdev->dev))
+	if (IS_ENABLED(CONFIG_PM))
+		pm_runtime_put(&pdev->dev);
+	else
 		rockchip_sai_runtime_suspend(&pdev->dev);
-err_disable_hclk:
-	clk_disable_unprepare(sai->hclk);
 
 	return ret;
 }

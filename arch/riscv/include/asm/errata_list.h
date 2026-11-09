@@ -5,31 +5,14 @@
 #ifndef ASM_ERRATA_LIST_H
 #define ASM_ERRATA_LIST_H
 
-#include <asm/alternative.h>
 #include <asm/csr.h>
 #include <asm/insn-def.h>
 #include <asm/hwcap.h>
 #include <asm/vendorid_list.h>
+#include <asm/errata_list_vendors.h>
+#include <asm/vendor_extensions/mips.h>
 
-#ifdef CONFIG_ERRATA_ANDES
-#define ERRATA_ANDES_NO_IOCP 0
-#define ERRATA_ANDES_NUMBER 1
-#endif
-
-#ifdef CONFIG_ERRATA_SIFIVE
-#define	ERRATA_SIFIVE_CIP_453 0
-#define	ERRATA_SIFIVE_CIP_1200 1
-#define	ERRATA_SIFIVE_NUMBER 2
-#endif
-
-#ifdef CONFIG_ERRATA_THEAD
-#define	ERRATA_THEAD_MAE 0
-#define	ERRATA_THEAD_PMU 1
-#define	ERRATA_THEAD_GHOSTWRITE 2
-#define	ERRATA_THEAD_NUMBER 3
-#endif
-
-#ifdef __ASSEMBLY__
+#ifdef __ASSEMBLER__
 
 #define ALT_INSN_FAULT(x)						\
 ALTERNATIVE(__stringify(RISCV_PTR do_trap_insn_fault),			\
@@ -42,7 +25,17 @@ ALTERNATIVE(__stringify(RISCV_PTR do_page_fault),			\
 	    __stringify(RISCV_PTR sifive_cip_453_page_fault_trp),	\
 	    SIFIVE_VENDOR_ID, ERRATA_SIFIVE_CIP_453,			\
 	    CONFIG_ERRATA_SIFIVE_CIP_453)
-#else /* !__ASSEMBLY__ */
+
+#ifdef CONFIG_ERRATA_MIPS_P8700_WFI
+#define ALT_WFI								\
+ALTERNATIVE("wfi; .rept 7; nop; .endr;",				\
+	".rept 8; .4byte 0x00501013; .endr;", MIPS_VENDOR_ID,		\
+	ERRATA_MIPS_P8700_WFI, CONFIG_ERRATA_MIPS_P8700_WFI)
+#else
+#define ALT_WFI	wfi
+#endif
+
+#else /* !__ASSEMBLER__ */
 
 #define ALT_SFENCE_VMA_ASID(asid)					\
 asm(ALTERNATIVE("sfence.vma x0, %0", "sfence.vma", SIFIVE_VENDOR_ID,	\
@@ -58,6 +51,44 @@ asm(ALTERNATIVE("sfence.vma %0", "sfence.vma", SIFIVE_VENDOR_ID,	\
 asm(ALTERNATIVE("sfence.vma %0, %1", "sfence.vma", SIFIVE_VENDOR_ID,	\
 		ERRATA_SIFIVE_CIP_1200, CONFIG_ERRATA_SIFIVE_CIP_1200)	\
 		: : "r" (addr), "r" (asid) : "memory")
+
+#define ALT_RISCV_PAUSE()					\
+asm(ALTERNATIVE(	\
+		RISCV_PAUSE, /* Original RISC‑V pause insn */	\
+		MIPS_PAUSE, /* Replacement for MIPS P8700 */	\
+		MIPS_VENDOR_ID, /* Vendor ID to match */	\
+		ERRATA_MIPS_P8700_PAUSE_OPCODE, /* patch_id */	\
+		CONFIG_ERRATA_MIPS_P8700_PAUSE_OPCODE)	\
+	: /* no outputs */	\
+	: /* no inputs */	\
+	: "memory")
+
+#ifdef CONFIG_ERRATA_MIPS_P8700_WFI
+/*
+ * A WFI instruction after a mispredicted branch can result in erroneous address translation
+ * on the MIPS P8700.
+ * The number of MIPS_PAUSE instructions required was determined by measuring
+ * Coremark performance on a one-core, two-hart configuration. Eight PAUSE instructions matched
+ * the latency of a single WFI instruction.
+ * Usually, the maximum number of cycles per PAUSE instruction is 63. Exceptionally, if the hart's
+ * LR reservation bit is set, the maximum number of cycles is extended to 255
+ * (and the hart is woken up once it is cleared). This case should not affect the patched sites.
+ */
+#define ALT_RISCV_WFI()										\
+asm volatile(ALTERNATIVE(									\
+		"wfi\n" /* Original RISC-V wfi insn */						\
+		__nops(7),									\
+		".rept 8;" MIPS_PAUSE ".endr;\n", /* Replacement: mips.pause for P8700 */	\
+		MIPS_VENDOR_ID, /* Vendor ID to match */					\
+		ERRATA_MIPS_P8700_WFI, /* patch_id */						\
+		CONFIG_ERRATA_MIPS_P8700_WFI)							\
+		: /* no outputs */								\
+		: /* no inputs */								\
+		: "memory")
+#else
+#define ALT_RISCV_WFI()		\
+	__asm__ __volatile__ ("wfi")
+#endif
 
 /*
  * _val is marked as "will be overwritten", so need to set it to 0
@@ -123,6 +154,6 @@ asm volatile(ALTERNATIVE(						\
 #define THEAD_C9XX_RV_IRQ_PMU			17
 #define THEAD_C9XX_CSR_SCOUNTEROF		0x5c5
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 #endif

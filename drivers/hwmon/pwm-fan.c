@@ -10,7 +10,6 @@
 #include <linux/delay.h>
 #include <linux/hwmon.h>
 #include <linux/interrupt.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
@@ -64,6 +63,7 @@ struct pwm_fan_ctx {
 
 	u64 pwm_duty_cycle_from_stopped;
 	u32 pwm_usec_from_stopped;
+	u8 pwm_shutdown;
 };
 
 /* This handler assumes self resetting edge triggered interrupt. */
@@ -483,10 +483,21 @@ static void pwm_fan_cleanup(void *__ctx)
 {
 	struct pwm_fan_ctx *ctx = __ctx;
 
-	timer_delete_sync(&ctx->rpm_timer);
-	/* Switch off everything */
-	ctx->enable_mode = pwm_disable_reg_disable;
-	pwm_fan_power_off(ctx, true);
+	if (ctx->pwm_shutdown) {
+		ctx->enable_mode = pwm_enable_reg_enable;
+		__set_pwm(ctx, ctx->pwm_shutdown);
+	} else {
+		/* Switch off everything */
+		ctx->enable_mode = pwm_disable_reg_disable;
+		pwm_fan_power_off(ctx, true);
+	}
+}
+
+static void pwm_fan_timer_cleanup(void *__ctx)
+{
+	struct pwm_fan_ctx *ctx = __ctx;
+
+	timer_shutdown_sync(&ctx->rpm_timer);
 }
 
 static int pwm_fan_probe(struct platform_device *pdev)
@@ -498,6 +509,7 @@ static int pwm_fan_probe(struct platform_device *pdev)
 	int ret;
 	const struct hwmon_channel_info **channels;
 	u32 initial_pwm, pwm_min_from_stopped = 0;
+	u32 pwm_shutdown_percent = 0;
 	u32 *fan_channel_config;
 	int channel_count = 1;	/* We always have a PWM channel. */
 	int i;
@@ -607,7 +619,7 @@ static int pwm_fan_probe(struct platform_device *pdev)
 	}
 
 	channels = devm_kcalloc(dev, channel_count + 1,
-				sizeof(struct hwmon_channel_info *), GFP_KERNEL);
+				sizeof(*channels), GFP_KERNEL);
 	if (!channels)
 		return -ENOMEM;
 
@@ -622,12 +634,8 @@ static int pwm_fan_probe(struct platform_device *pdev)
 		if (tach->irq > 0) {
 			ret = devm_request_irq(dev, tach->irq, pulse_handler,
 					       IRQF_NO_THREAD, pdev->name, tach);
-			if (ret) {
-				dev_err(dev,
-					"Failed to request interrupt: %d\n",
-					ret);
+			if (ret)
 				return ret;
-			}
 		}
 
 		if (!ctx->pulses_per_revolution[i]) {
@@ -642,11 +650,20 @@ static int pwm_fan_probe(struct platform_device *pdev)
 	}
 
 	if (ctx->tach_count > 0) {
+		ret = devm_add_action_or_reset(dev, pwm_fan_timer_cleanup, ctx);
+		if (ret)
+			return ret;
+
 		ctx->sample_start = ktime_get();
 		mod_timer(&ctx->rpm_timer, jiffies + HZ);
 
 		channels[1] = &ctx->fan_channel;
 	}
+
+	ret = device_property_read_u32(dev, "fan-shutdown-percent",
+				       &pwm_shutdown_percent);
+	if (!ret && pwm_shutdown_percent)
+		ctx->pwm_shutdown = (clamp(pwm_shutdown_percent, 0, 100) * 255) / 100;
 
 	ret = device_property_read_u32(dev, "fan-stop-to-start-percent",
 				       &pwm_min_from_stopped);
@@ -673,8 +690,9 @@ static int pwm_fan_probe(struct platform_device *pdev)
 
 	ctx->pwm_fan_state = ctx->pwm_fan_max_state;
 	if (IS_ENABLED(CONFIG_THERMAL)) {
-		cdev = devm_thermal_of_cooling_device_register(dev,
-			dev->of_node, "pwm-fan", ctx, &pwm_fan_cooling_ops);
+		cdev = devm_thermal_of_child_cooling_device_register(dev, dev->of_node,
+								     "pwm-fan", ctx,
+								     &pwm_fan_cooling_ops);
 		if (IS_ERR(cdev)) {
 			ret = PTR_ERR(cdev);
 			dev_err(dev,
@@ -692,6 +710,7 @@ static void pwm_fan_shutdown(struct platform_device *pdev)
 {
 	struct pwm_fan_ctx *ctx = platform_get_drvdata(pdev);
 
+	pwm_fan_timer_cleanup(ctx);
 	pwm_fan_cleanup(ctx);
 }
 

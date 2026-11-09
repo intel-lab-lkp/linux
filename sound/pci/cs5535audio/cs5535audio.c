@@ -176,9 +176,10 @@ static int snd_cs5535audio_mixer(struct cs5535audio *cs5535au)
 static void process_bm0_irq(struct cs5535audio *cs5535au)
 {
 	u8 bm_stat;
-	spin_lock(&cs5535au->reg_lock);
-	bm_stat = cs_readb(cs5535au, ACC_BM0_STATUS);
-	spin_unlock(&cs5535au->reg_lock);
+
+	scoped_guard(spinlock, &cs5535au->reg_lock) {
+		bm_stat = cs_readb(cs5535au, ACC_BM0_STATUS);
+	}
 	if (bm_stat & EOP) {
 		snd_pcm_period_elapsed(cs5535au->playback_substream);
 	} else {
@@ -191,9 +192,10 @@ static void process_bm0_irq(struct cs5535audio *cs5535au)
 static void process_bm1_irq(struct cs5535audio *cs5535au)
 {
 	u8 bm_stat;
-	spin_lock(&cs5535au->reg_lock);
-	bm_stat = cs_readb(cs5535au, ACC_BM1_STATUS);
-	spin_unlock(&cs5535au->reg_lock);
+
+	scoped_guard(spinlock, &cs5535au->reg_lock) {
+		bm_stat = cs_readb(cs5535au, ACC_BM1_STATUS);
+	}
 	if (bm_stat & EOP)
 		snd_pcm_period_elapsed(cs5535au->capture_substream);
 }
@@ -281,11 +283,11 @@ static int snd_cs5535audio_create(struct snd_card *card,
 	return 0;
 }
 
-static int __snd_cs5535audio_probe(struct pci_dev *pci,
-				   const struct pci_device_id *pci_id)
+static int snd_cs5535audio_probe(struct pci_dev *pci,
+				 const struct pci_device_id *pci_id)
 {
 	static int dev;
-	struct snd_card *card;
+	struct snd_card *card __free(snd_card_free) = NULL;
 	struct cs5535audio *cs5535au;
 	int err;
 
@@ -315,9 +317,9 @@ static int __snd_cs5535audio_probe(struct pci_dev *pci,
 	if (err < 0)
 		return err;
 
-	strcpy(card->driver, DRIVER_NAME);
+	strscpy(card->driver, DRIVER_NAME);
 
-	strcpy(card->shortname, "CS5535 Audio");
+	strscpy(card->shortname, "CS5535 Audio");
 	sprintf(card->longname, "%s %s at 0x%lx, irq %i",
 		card->shortname, card->driver,
 		cs5535au->port, cs5535au->irq);
@@ -327,14 +329,9 @@ static int __snd_cs5535audio_probe(struct pci_dev *pci,
 		return err;
 
 	pci_set_drvdata(pci, card);
+	card = NULL; /* probe succeeded, don't release as error */
 	dev++;
 	return 0;
-}
-
-static int snd_cs5535audio_probe(struct pci_dev *pci,
-				 const struct pci_device_id *pci_id)
-{
-	return snd_card_free_on_error(&pci->dev, __snd_cs5535audio_probe(pci, pci_id));
 }
 
 static struct pci_driver cs5535audio_driver = {

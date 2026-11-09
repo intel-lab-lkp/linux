@@ -404,6 +404,7 @@ static int csi2_init_state(struct v4l2_subdev *sd,
 }
 
 static int csi2_pad_set_fmt(struct v4l2_subdev *sd,
+			    const struct v4l2_subdev_client_info *ci,
 			    struct v4l2_subdev_state *state,
 			    struct v4l2_subdev_format *format)
 {
@@ -492,7 +493,7 @@ static int csi2_set_routing(struct v4l2_subdev *sd,
 		const struct v4l2_subdev_route *route = &routing->routes[i];
 
 		if (route->source_stream != 0)
-			return -EINVAL;
+			return -ENXIO;
 	}
 
 	ret = v4l2_subdev_set_routing_with_fmt(sd, state, routing,
@@ -525,7 +526,7 @@ static const struct v4l2_subdev_internal_ops csi2_internal_ops = {
 
 int csi2_init(struct csi2_device *csi2, struct dentry *debugfs)
 {
-	unsigned int ret;
+	int ret;
 
 	spin_lock_init(&csi2->errors_lock);
 

@@ -4,7 +4,6 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/pm.h>
 #include <linux/regmap.h>
@@ -94,7 +93,7 @@ static int al3000a_init(struct al3000a_data *data)
 
 	ret = devm_add_action_or_reset(dev, al3000a_set_pwr_off, data);
 	if (ret)
-		return dev_err_probe(dev, ret, "failed to add action\n");
+		return ret;
 
 	ret = regmap_write(data->regmap, AL3000A_REG_SYSTEM, AL3000A_CONFIG_RESET);
 	if (ret)
@@ -183,7 +182,7 @@ static int al3000a_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(al3000a_pm_ops, al3000a_suspend, al3000a_resume);
 
 static const struct i2c_device_id al3000a_id[] = {
-	{ "al3000a" },
+	{ .name = "al3000a" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, al3000a_id);

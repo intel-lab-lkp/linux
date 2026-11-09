@@ -163,11 +163,24 @@
 #define HGATP_MODE_SHIFT	HGATP32_MODE_SHIFT
 #endif
 
-/* VSIP & HVIP relation */
+/*
+ * VSIP & HVIP relation
+ *
+ * The bit positions are same between VSIP and HVIP for interrupt
+ * numbers 13-63, where there's a shift for the SSI, STI and SEI.
+ */
 #define VSIP_TO_HVIP_SHIFT	(IRQ_VS_SOFT - IRQ_S_SOFT)
-#define VSIP_VALID_MASK		((_AC(1, UL) << IRQ_S_SOFT) | \
+#define VSIP_BIAS_MASK		((_AC(1, UL) << IRQ_S_SOFT) | \
 				 (_AC(1, UL) << IRQ_S_TIMER) | \
 				 (_AC(1, UL) << IRQ_S_EXT))
+#define VSIP_NO_BIAS_MASK	(_AC(1, UL) << IRQ_PMU_OVF)
+#define VSIP_VALID_MASK		(VSIP_BIAS_MASK | VSIP_NO_BIAS_MASK)
+#define vsip_to_hvip(_vsip)	((((_vsip) & VSIP_BIAS_MASK) << \
+				  VSIP_TO_HVIP_SHIFT) | \
+				 ((_vsip) & VSIP_NO_BIAS_MASK))
+#define hvip_to_vsip(_hvip)	((((_hvip) >> VSIP_TO_HVIP_SHIFT) & \
+				  VSIP_BIAS_MASK) | \
+				 ((_hvip) & VSIP_NO_BIAS_MASK))
 
 /* AIA CSR bits */
 #define TOPI_IID_SHIFT		16
@@ -280,7 +293,7 @@
 #define CSR_HPMCOUNTER30H	0xc9e
 #define CSR_HPMCOUNTER31H	0xc9f
 
-#define CSR_SSCOUNTOVF		0xda0
+#define CSR_SCOUNTOVF		0xda0
 
 #define CSR_SSTATUS		0x100
 #define CSR_SIE			0x104
@@ -468,13 +481,13 @@
 #define IE_TIE		(_AC(0x1, UL) << RV_IRQ_TIMER)
 #define IE_EIE		(_AC(0x1, UL) << RV_IRQ_EXT)
 
-#ifdef __ASSEMBLY__
+#ifdef __ASSEMBLER__
 #define __ASM_STR(x)    x
 #else
 #define __ASM_STR(x)    #x
 #endif
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 #define csr_swap(csr, val)					\
 ({								\
@@ -536,6 +549,6 @@
 			      : "memory");			\
 })
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 #endif /* _ASM_RISCV_CSR_H */

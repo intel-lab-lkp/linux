@@ -19,7 +19,7 @@ this uses bootconfig file to describe tracing feature programming.
 Options in the Boot Config
 ==========================
 
-Here is the list of available options list for boot time tracing in
+Here is the list of available options for boot time tracing in
 boot config file [1]_. All options are under "ftrace." or "kernel."
 prefix. See kernel parameters for the options which starts
 with "kernel." prefix [2]_.
@@ -121,9 +121,21 @@ ftrace.[instance.INSTANCE.]event.synthetic.EVENT.fields = FIELD[, FIELD2[...]]
    Defines new synthetic event with FIELDs. Each field should be
    "type varname".
 
-Note that kprobe and synthetic event definitions can be written under
-instance node, but those are also visible from other instances. So please
-take care for event name conflict.
+ftrace.[instance.INSTANCE.]event.eprobes.EVENT.probes = PROBE[, PROBE2[...]]
+   Defines new event probe based on PROBEs. This option is available only
+   for the event which group name is "eprobes".
+
+ftrace.[instance.INSTANCE.]event.fprobes.EVENT.probes = PROBE[, PROBE2[...]]
+   Defines new fprobe event based on PROBEs. This option is available only
+   for the event which group name is "fprobes".
+
+ftrace.[instance.INSTANCE.]event.tracepoints.EVENT.probes = PROBE[, PROBE2[...]]
+   Defines new tracepoint probe based on PROBEs. This option is available only
+   for the event which group name is "tracepoints" or "tprobes".
+
+Note that dynamic event definitions can be written under instance node, but
+those are also visible from other instances. So please take care for event
+name conflict.
 
 Ftrace Histogram Options
 ------------------------
@@ -198,8 +210,8 @@ Most of the subsystems and architecture dependent drivers will be initialized
 after that (arch_initcall or subsys_initcall). Thus, you can trace those with
 boot-time tracing.
 If you want to trace events before core_initcall, you can use the options
-starting with ``kernel``. Some of them will be enabled eariler than the initcall
-processing (for example,. ``kernel.ftrace=function`` and ``kernel.trace_event``
+starting with ``kernel``. Some of them will be enabled earlier than the initcall
+processing (for example, ``kernel.ftrace=function`` and ``kernel.trace_event``
 will start before the initcall.)
 
 

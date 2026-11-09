@@ -116,7 +116,7 @@ static int rx51_battery_read_temperature(struct rx51_device_info *di)
 		int mid = (max + min) / 2;
 		if (rx51_temp_table2[mid] <= raw)
 			min = mid;
-		else if (rx51_temp_table2[mid] > raw)
+		else
 			max = mid;
 		if (rx51_temp_table2[mid] == raw)
 			break;
@@ -246,3 +246,4 @@ MODULE_ALIAS("platform:rx51-battery");
 MODULE_AUTHOR("Pali Rohár <pali@kernel.org>");
 MODULE_DESCRIPTION("Nokia RX-51 battery driver");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS("IIO_CONSUMER");

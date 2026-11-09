@@ -18,7 +18,7 @@
 #include <linux/uaccess.h>
 #include <linux/fileattr.h>
 
-int ext2_fileattr_get(struct dentry *dentry, struct fileattr *fa)
+int ext2_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 {
 	struct ext2_inode_info *ei = EXT2_I(d_inode(dentry));
 
@@ -27,8 +27,8 @@ int ext2_fileattr_get(struct dentry *dentry, struct fileattr *fa)
 	return 0;
 }
 
-int ext2_fileattr_set(struct mnt_idmap *idmap,
-		      struct dentry *dentry, struct fileattr *fa)
+int ext2_fileattr_set(const struct mnt_idmap *idmap,
+		      struct dentry *dentry, struct file_kattr *fa)
 {
 	struct inode *inode = d_inode(dentry);
 	struct ext2_inode_info *ei = EXT2_I(inode);

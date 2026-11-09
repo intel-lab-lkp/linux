@@ -14,7 +14,9 @@
 
 #include <linux/gfp.h>
 #include <linux/ptrace.h>
+#include <linux/task_work.h>
 
+#include "include/path.h"
 #include "include/audit.h"
 #include "include/cred.h"
 #include "include/policy.h"
@@ -86,6 +88,32 @@ int aa_replace_current_label(struct aa_label *label)
 
 	commit_creds(new);
 	return 0;
+}
+
+static void aa_replace_stale_label_tw_func(struct callback_head *tw)
+{
+	struct aa_task_ctx *ctx = task_ctx(current);
+	struct aa_label *label;
+
+	ctx->label_replacement_pending = false;
+	label = aa_current_raw_label();
+	if (!label_is_stale(label))
+		return;
+	label = aa_get_newest_label(label);
+	aa_replace_current_label(label);
+	aa_put_label(label);
+}
+
+/* replace the current task's stale label on syscall return */
+void aa_schedule_stale_label_replacement(void)
+{
+	struct aa_task_ctx *ctx = task_ctx(current);
+
+	if (ctx->label_replacement_pending)
+		return;
+	init_task_work(&ctx->label_replacement_tw, aa_replace_stale_label_tw_func);
+	if (task_work_add(current, &ctx->label_replacement_tw, TWA_RESUME) == 0)
+		ctx->label_replacement_pending = true;
 }
 
 
@@ -228,8 +256,7 @@ static int profile_ptrace_perm(const struct cred *cred,
 			       struct aa_label *peer, u32 request,
 			       struct apparmor_audit_data *ad)
 {
-	struct aa_ruleset *rules = list_first_entry(&profile->rules,
-						    typeof(*rules), list);
+	struct aa_ruleset *rules = profile->label.rules[0];
 	struct aa_perms perms = { };
 
 	ad->subj_cred = cred;
@@ -246,7 +273,7 @@ static int profile_tracee_perm(const struct cred *cred,
 			       struct apparmor_audit_data *ad)
 {
 	if (profile_unconfined(tracee) || unconfined(tracer) ||
-	    !ANY_RULE_MEDIATES(&tracee->rules, AA_CLASS_PTRACE))
+	    !label_mediates(&tracee->label, AA_CLASS_PTRACE))
 		return 0;
 
 	return profile_ptrace_perm(cred, tracee, tracer, request, ad);
@@ -260,7 +287,7 @@ static int profile_tracer_perm(const struct cred *cred,
 	if (profile_unconfined(tracer))
 		return 0;
 
-	if (ANY_RULE_MEDIATES(&tracer->rules, AA_CLASS_PTRACE))
+	if (label_mediates(&tracer->label, AA_CLASS_PTRACE))
 		return profile_ptrace_perm(cred, tracer, tracee, request, ad);
 
 	/* profile uses the old style capability check for ptrace */
@@ -301,16 +328,47 @@ int aa_may_ptrace(const struct cred *tracer_cred, struct aa_label *tracer,
 					    xrequest, &sa));
 }
 
+static const char *get_current_exe_path(char *buffer, int buffer_size)
+{
+	struct file *exe_file;
+	struct path p;
+	const char *path_str;
+
+	exe_file = get_task_exe_file(current);
+	if (!exe_file)
+		return ERR_PTR(-ENOENT);
+	p = exe_file->f_path;
+	path_get(&p);
+
+	if (aa_path_name(&p, FLAG_VIEW_SUBNS, buffer, &path_str, NULL, NULL))
+		path_str = ERR_PTR(-ENOMEM);
+
+	fput(exe_file);
+	path_put(&p);
+
+	return path_str;
+}
+
 /* call back to audit ptrace fields */
 static void audit_ns_cb(struct audit_buffer *ab, void *va)
 {
 	struct apparmor_audit_data *ad = aad_of_va(va);
+	char *buffer;
+	const char *path;
 
 	if (ad->request & AA_USERNS_CREATE)
 		audit_log_format(ab, " requested=\"userns_create\"");
 
 	if (ad->denied & AA_USERNS_CREATE)
 		audit_log_format(ab, " denied=\"userns_create\"");
+
+	buffer = aa_get_buffer(false);
+	if (!buffer)
+		return; // OOM
+	path = get_current_exe_path(buffer, aa_g_path_max);
+	if (!IS_ERR(path))
+		audit_log_format(ab, " execpath=\"%s\"", path);
+	aa_put_buffer(buffer);
 }
 
 int aa_profile_ns_perm(struct aa_profile *profile,
@@ -324,9 +382,7 @@ int aa_profile_ns_perm(struct aa_profile *profile,
 	ad->request = request;
 
 	if (!profile_unconfined(profile)) {
-		struct aa_ruleset *rules = list_first_entry(&profile->rules,
-							    typeof(*rules),
-							    list);
+		struct aa_ruleset *rules = profile->label.rules[0];
 		aa_state_t state;
 
 		state = RULE_MEDIATES(rules, ad->class);

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2024-2025 Intel Corporation
+ * Copyright (C) 2024-2026 Intel Corporation
  * Copyright (C) 2012-2014, 2018-2022 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
@@ -56,7 +56,8 @@ enum iwl_data_path_subcmd_ids {
 	RFH_QUEUE_CONFIG_CMD = 0xD,
 
 	/**
-	 * @TLC_MNG_CONFIG_CMD: &struct iwl_tlc_config_cmd_v4
+	 * @TLC_MNG_CONFIG_CMD: &struct iwl_tlc_config_cmd_v4 or
+	 *	&struct iwl_tlc_config_cmd.
 	 */
 	TLC_MNG_CONFIG_CMD = 0xF,
 
@@ -91,10 +92,11 @@ enum iwl_data_path_subcmd_ids {
 	SEC_KEY_CMD = 0x18,
 
 	/**
-	 * @OMI_SEND_STATUS_NOTIF: notification after OMI was sent
-	 *	uses &struct iwl_omi_send_status_notif
+	 * @RSC_NOTIF: notification to update each Rx queue with the RSC. This
+	 *	notification is sent after resume and uses
+	 *	&struct iwl_wowlan_all_rsc_tsc_v5.
 	 */
-	OMI_SEND_STATUS_NOTIF = 0xF2,
+	RSC_NOTIF = 0xF1,
 
 	/**
 	 * @ESR_MODE_NOTIF: notification to recommend/force a wanted esr mode,
@@ -123,6 +125,16 @@ enum iwl_data_path_subcmd_ids {
 	 * @TLC_MNG_UPDATE_NOTIF: &struct iwl_tlc_update_notif
 	 */
 	TLC_MNG_UPDATE_NOTIF = 0xF7,
+
+	/**
+	 * @BEACON_FILTER_IN_NOTIF: &struct iwl_beacon_filter_notif
+	 */
+	BEACON_FILTER_IN_NOTIF = 0xF8,
+
+	/**
+	 * @PHY_AIR_SNIFFER_NOTIF: &struct iwl_rx_phy_air_sniffer_ntfy
+	 */
+	PHY_AIR_SNIFFER_NOTIF = 0xF9,
 
 	/**
 	 * @STA_PM_NOTIF: &struct iwl_mvm_pm_state_notification
@@ -510,16 +522,33 @@ struct iwl_rx_baid_cfg_cmd_alloc {
 } __packed; /* RX_BAID_ALLOCATION_ADD_CMD_API_S_VER_1 */
 
 /**
- * struct iwl_rx_baid_cfg_cmd_modify - BAID modification data
+ * struct iwl_rx_baid_cfg_cmd_modify_v2 - BAID modification data
  * @old_sta_id_mask: old station ID mask
  * @new_sta_id_mask: new station ID mask
  * @tid: TID of the BAID
  */
-struct iwl_rx_baid_cfg_cmd_modify {
+struct iwl_rx_baid_cfg_cmd_modify_v2 {
 	__le32 old_sta_id_mask;
 	__le32 new_sta_id_mask;
 	__le32 tid;
 } __packed; /* RX_BAID_ALLOCATION_MODIFY_CMD_API_S_VER_2 */
+
+/**
+ * struct iwl_rx_baid_cfg_cmd_modify - BAID modification data
+ * @old_sta_id_mask: old station ID mask
+ * @new_sta_id_mask: new station ID mask
+ * @tid: TID of the BAID
+ * @reserved: reserved
+ * @win_size: RX BA session window size to apply to the modified BAID,
+ *	0 means keep the current one
+ */
+struct iwl_rx_baid_cfg_cmd_modify {
+	__le32 old_sta_id_mask;
+	__le32 new_sta_id_mask;
+	u8 tid;
+	u8 reserved;
+	__le16 win_size;
+} __packed; /* RX_BAID_ALLOCATION_MODIFY_CMD_API_S_VER_3 */
 
 /**
  * struct iwl_rx_baid_cfg_cmd_remove_v1 - BAID removal data
@@ -543,7 +572,8 @@ struct iwl_rx_baid_cfg_cmd_remove {
  * struct iwl_rx_baid_cfg_cmd - BAID allocation/config command
  * @action: the action, from &enum iwl_rx_baid_action
  * @alloc: allocation data
- * @modify: modify data
+ * @modify_v2: modify data (version 2)
+ * @modify: modify data (version 3)
  * @remove_v1: remove data (version 1)
  * @remove: remove data
  */
@@ -551,11 +581,12 @@ struct iwl_rx_baid_cfg_cmd {
 	__le32 action;
 	union {
 		struct iwl_rx_baid_cfg_cmd_alloc alloc;
+		struct iwl_rx_baid_cfg_cmd_modify_v2 modify_v2;
 		struct iwl_rx_baid_cfg_cmd_modify modify;
 		struct iwl_rx_baid_cfg_cmd_remove_v1 remove_v1;
 		struct iwl_rx_baid_cfg_cmd_remove remove;
-	}; /* RX_BAID_ALLOCATION_OPERATION_API_U_VER_2 */
-} __packed; /* RX_BAID_ALLOCATION_CONFIG_CMD_API_S_VER_2 */
+	}; /* RX_BAID_ALLOCATION_OPERATION_API_U_VER_3 */
+} __packed; /* RX_BAID_ALLOCATION_CONFIG_CMD_API_S_VER_3 */
 
 /**
  * struct iwl_rx_baid_cfg_resp - BAID allocation response
@@ -578,6 +609,16 @@ enum iwl_scd_queue_cfg_operation {
 };
 
 /**
+ * enum iwl_scd_queue_modify_flags - scheduler queue modify flags
+ * @IWL_SCD_QUEUE_MODIFY_FLAG_RD_PTR: update the read pointer
+ * @IWL_SCD_QUEUE_MODIFY_FLAG_STA_MSK: update the station mask
+ */
+enum iwl_scd_queue_modify_flags {
+	IWL_SCD_QUEUE_MODIFY_FLAG_RD_PTR	= BIT(0),
+	IWL_SCD_QUEUE_MODIFY_FLAG_STA_MSK	= BIT(1),
+};
+
+/**
  * struct iwl_scd_queue_cfg_cmd - scheduler queue allocation command
  * @operation: the operation, see &enum iwl_scd_queue_cfg_operation
  * @u: union depending on command usage
@@ -594,6 +635,8 @@ enum iwl_scd_queue_cfg_operation {
  * @u.modify.old_sta_mask: old station mask for modify
  * @u.modify.tid: TID of queue to modify
  * @u.modify.new_sta_mask: new station mask for modify
+ * @u.modify.rd_ptr: new read pointer to set for the queue (version 4)
+ * @u.modify.flags: &enum iwl_scd_queue_modify_flags (version 4)
  */
 struct iwl_scd_queue_cfg_cmd {
 	__le32 operation;
@@ -615,9 +658,11 @@ struct iwl_scd_queue_cfg_cmd {
 			__le32 old_sta_mask;
 			__le32 tid;
 			__le32 new_sta_mask;
-		} __packed modify; /* TX_QUEUE_CFG_CMD_MODIFY_API_S_VER_1 */
-	} __packed u; /* TX_QUEUE_CFG_CMD_OPERATION_API_U_VER_1 */
-} __packed; /* TX_QUEUE_CFG_CMD_API_S_VER_3 */
+			__le16 rd_ptr;
+			__le16 flags;
+		} __packed modify; /* TX_QUEUE_CFG_CMD_MODIFY_API_S_VER_1, _VER_2 */
+	} __packed u; /* TX_QUEUE_CFG_CMD_OPERATION_API_U_VER_1, _VER_2 */
+} __packed; /* TX_QUEUE_CFG_CMD_API_S_VER_3, _VER_4 */
 
 /**
  * enum iwl_sec_key_flags - security key command key flags
@@ -631,6 +676,7 @@ struct iwl_scd_queue_cfg_cmd {
  * @IWL_SEC_KEY_FLAG_MFP: MFP is in used for this key
  * @IWL_SEC_KEY_FLAG_MCAST_KEY: this is a multicast key
  * @IWL_SEC_KEY_FLAG_SPP_AMSDU: SPP A-MSDU should be used
+ * @IWL_SEC_KEY_FLAG_ASSOC_ENC: use this key for (Re)Assoc Req/Resp encryption
  */
 enum iwl_sec_key_flags {
 	IWL_SEC_KEY_FLAG_CIPHER_MASK	= 0x07,
@@ -643,6 +689,7 @@ enum iwl_sec_key_flags {
 	IWL_SEC_KEY_FLAG_MFP		= 0x20,
 	IWL_SEC_KEY_FLAG_MCAST_KEY	= 0x40,
 	IWL_SEC_KEY_FLAG_SPP_AMSDU	= 0x80,
+	IWL_SEC_KEY_FLAG_ASSOC_ENC	= 0x200,
 };
 
 #define IWL_SEC_WEP_KEY_OFFSET	3
@@ -693,14 +740,5 @@ struct iwl_sec_key_cmd {
 		} __packed remove; /* SEC_KEY_REMOVE_CMD_API_S_VER_1 */
 	} __packed u; /* SEC_KEY_OPERATION_API_U_VER_1 */
 } __packed; /* SEC_KEY_CMD_API_S_VER_1 */
-
-/**
- * struct iwl_omi_send_status_notif - OMI status notification
- * @success: indicates that the OMI was sent successfully
- *	(currently always set)
- */
-struct iwl_omi_send_status_notif {
-	__le32 success;
-} __packed; /* OMI_SEND_STATUS_NTFY_API_S_VER_1 */
 
 #endif /* __iwl_fw_api_datapath_h__ */

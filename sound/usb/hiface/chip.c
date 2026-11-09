@@ -63,18 +63,15 @@ static int hiface_chip_create(struct usb_interface *intf,
 		return ret;
 	}
 
-	strscpy(card->driver, DRIVER_NAME, sizeof(card->driver));
+	strscpy(card->driver, DRIVER_NAME);
 
 	if (quirk && quirk->device_name)
-		strscpy(card->shortname, quirk->device_name, sizeof(card->shortname));
+		strscpy(card->shortname, quirk->device_name);
 	else
-		strscpy(card->shortname, "M2Tech generic audio", sizeof(card->shortname));
+		strscpy(card->shortname, "M2Tech generic audio");
 
-	strlcat(card->longname, card->shortname, sizeof(card->longname));
-	len = strlcat(card->longname, " at ", sizeof(card->longname));
-	if (len < sizeof(card->longname))
-		usb_make_path(device, card->longname + len,
-			      sizeof(card->longname) - len);
+	len = scnprintf(card->longname, sizeof(card->longname), "%s at ", card->shortname);
+	usb_make_path(device, card->longname + len, sizeof(card->longname) - len);
 
 	chip = card->private_data;
 	chip->dev = device;
@@ -101,7 +98,7 @@ static int hiface_chip_probe(struct usb_interface *intf,
 
 	/* check whether the card is already registered */
 	chip = NULL;
-	mutex_lock(&register_mutex);
+	guard(mutex)(&register_mutex);
 
 	for (i = 0; i < SNDRV_CARDS; i++)
 		if (enable[i])
@@ -109,13 +106,12 @@ static int hiface_chip_probe(struct usb_interface *intf,
 
 	if (i >= SNDRV_CARDS) {
 		dev_err(&device->dev, "no available " CARD_NAME " audio device\n");
-		ret = -ENODEV;
-		goto err;
+		return -ENODEV;
 	}
 
 	ret = hiface_chip_create(intf, device, i, quirk, &chip);
 	if (ret < 0)
-		goto err;
+		return ret;
 
 	ret = hiface_pcm_init(chip, quirk ? quirk->extra_freq : 0);
 	if (ret < 0)
@@ -127,15 +123,11 @@ static int hiface_chip_probe(struct usb_interface *intf,
 		goto err_chip_destroy;
 	}
 
-	mutex_unlock(&register_mutex);
-
 	usb_set_intfdata(intf, chip);
 	return 0;
 
 err_chip_destroy:
 	snd_card_free(chip->card);
-err:
-	mutex_unlock(&register_mutex);
 	return ret;
 }
 

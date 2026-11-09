@@ -16,7 +16,6 @@
 #define CAP_FILE_PERMISSION		0444
 #define HPRE_CTRL_CNT_CLR_CE_BIT	BIT(0)
 #define HPRE_CTRL_CNT_CLR_CE		0x301000
-#define HPRE_FSM_MAX_CNT		0x301008
 #define HPRE_VFG_AXQOS			0x30100c
 #define HPRE_VFG_AXCACHE		0x301010
 #define HPRE_RDCHN_INI_CFG		0x301014
@@ -39,8 +38,8 @@
 #define HPRE_HAC_RAS_NFE_ENB		0x301414
 #define HPRE_HAC_RAS_FE_ENB		0x301418
 #define HPRE_HAC_INT_SET		0x301500
+#define HPRE_AXI_ERROR_MASK		GENMASK(21, 10)
 #define HPRE_RNG_TIMEOUT_NUM		0x301A34
-#define HPRE_CORE_INT_ENABLE		0
 #define HPRE_RDCHN_INI_ST		0x301a00
 #define HPRE_CLSTR_BASE			0x302000
 #define HPRE_CORE_EN_OFFSET		0x04
@@ -54,12 +53,12 @@
 #define HPRE_RAS_FE_ENB			0x301418
 #define HPRE_OOO_SHUTDOWN_SEL		0x301a3c
 #define HPRE_HAC_RAS_FE_ENABLE		0
+#define HPRE_RAS_MASK_ALL		GENMASK(31, 0)
+#define HPRE_RAS_CLEAR_ALL		GENMASK(31, 0)
 
 #define HPRE_CORE_ENB		(HPRE_CLSTR_BASE + HPRE_CORE_EN_OFFSET)
 #define HPRE_CORE_INI_CFG	(HPRE_CLSTR_BASE + HPRE_CORE_INI_CFG_OFFSET)
 #define HPRE_CORE_INI_STATUS (HPRE_CLSTR_BASE + HPRE_CORE_INI_STATUS_OFFSET)
-#define HPRE_HAC_ECC1_CNT		0x301a04
-#define HPRE_HAC_ECC2_CNT		0x301a08
 #define HPRE_HAC_SOURCE_INT		0x301600
 #define HPRE_CLSTR_ADDR_INTRVL		0x1000
 #define HPRE_CLUSTER_INQURY		0x100
@@ -78,6 +77,11 @@
 #define HPRE_PREFETCH_ENABLE		(~(BIT(0) | BIT(30)))
 #define HPRE_PREFETCH_DISABLE		BIT(30)
 #define HPRE_SVA_DISABLE_READY		(BIT(4) | BIT(8))
+#define HPRE_SVA_PREFTCH_DFX4		0x301144
+#define HPRE_WAIT_SVA_READY		500000
+#define HPRE_READ_SVA_STATUS_TIMES	3
+#define HPRE_WAIT_US_MIN		10
+#define HPRE_WAIT_US_MAX		20
 
 /* clock gate */
 #define HPRE_CLKGATE_CTL		0x301a10
@@ -114,6 +118,8 @@
 #define HPRE_DFX_COMMON1_LEN		0x41
 #define HPRE_DFX_COMMON2_LEN		0xE
 #define HPRE_DFX_CORE_LEN		0x43
+
+#define HPRE_MAX_CHANNEL_NUM		2
 
 static const char hpre_name[] = "hisi_hpre";
 static struct dentry *hpre_debugfs_root;
@@ -364,7 +370,20 @@ static struct dfx_diff_registers hpre_diff_regs[] = {
 	},
 };
 
+static const char *hpre_channel_name[HPRE_MAX_CHANNEL_NUM] = {
+	"RSA",
+	"ECC",
+};
+
 static const struct hisi_qm_err_ini hpre_err_ini;
+
+static inline u8 hpre_get_clusters_num(struct hisi_qm *qm)
+{
+	u32 cap = qm->cap_tables.dev_cap_table[HPRE_CORE_INFO].cap_val;
+
+	return (cap >> hpre_basic_info[HPRE_CLUSTER_NUM_CAP].shift) &
+		hpre_basic_info[HPRE_CLUSTER_NUM_CAP].mask;
+}
 
 bool hpre_check_alg_support(struct hisi_qm *qm, u32 alg)
 {
@@ -459,11 +478,38 @@ struct hisi_qp *hpre_create_qp(u8 type)
 	 * type: 0 - RSA/DH. algorithm supported in V2,
 	 *       1 - ECC algorithm in V3.
 	 */
-	ret = hisi_qm_alloc_qps_node(&hpre_devices, 1, type, node, &qp);
+	ret = hisi_qm_alloc_qps_node(&hpre_devices, 1, &type, node, &qp);
 	if (!ret)
 		return qp;
 
 	return NULL;
+}
+
+static int hpre_wait_sva_ready(struct hisi_qm *qm)
+{
+	u32 val, try_times = 0;
+	u8 count = 0;
+
+	/*
+	 * Read the register value every 10-20us. If the value is 0 for three
+	 * consecutive times, the SVA module is ready.
+	 */
+	do {
+		val = readl(qm->io_base + HPRE_SVA_PREFTCH_DFX4);
+		if (val)
+			count = 0;
+		else if (++count == HPRE_READ_SVA_STATUS_TIMES)
+			break;
+
+		usleep_range(HPRE_WAIT_US_MIN, HPRE_WAIT_US_MAX);
+	} while (++try_times < HPRE_WAIT_SVA_READY);
+
+	if (try_times == HPRE_WAIT_SVA_READY) {
+		pci_err(qm->pdev, "failed to wait sva prefetch ready\n");
+		return -ETIMEDOUT;
+	}
+
+	return 0;
 }
 
 static void hpre_config_pasid(struct hisi_qm *qm)
@@ -515,15 +561,12 @@ static int hpre_set_cluster(struct hisi_qm *qm)
 	struct device *dev = &qm->pdev->dev;
 	u32 cluster_core_mask;
 	unsigned long offset;
-	u32 hpre_core_info;
 	u8 clusters_num;
 	u32 val = 0;
 	int ret, i;
 
 	cluster_core_mask = qm->cap_tables.dev_cap_table[HPRE_CORE_EN].cap_val;
-	hpre_core_info = qm->cap_tables.dev_cap_table[HPRE_CORE_INFO].cap_val;
-	clusters_num = (hpre_core_info >> hpre_basic_info[HPRE_CLUSTER_NUM_CAP].shift) &
-			hpre_basic_info[HPRE_CLUSTER_NUM_CAP].mask;
+	clusters_num = hpre_get_clusters_num(qm);
 	for (i = 0; i < clusters_num; i++) {
 		offset = i * HPRE_CLSTR_ADDR_INTRVL;
 
@@ -563,27 +606,6 @@ static void disable_flr_of_bme(struct hisi_qm *qm)
 	writel(PEH_AXUSER_CFG_ENABLE, qm->io_base + QM_PEH_AXUSER_CFG_ENABLE);
 }
 
-static void hpre_open_sva_prefetch(struct hisi_qm *qm)
-{
-	u32 val;
-	int ret;
-
-	if (!test_bit(QM_SUPPORT_SVA_PREFETCH, &qm->caps))
-		return;
-
-	/* Enable prefetch */
-	val = readl_relaxed(qm->io_base + HPRE_PREFETCH_CFG);
-	val &= HPRE_PREFETCH_ENABLE;
-	writel(val, qm->io_base + HPRE_PREFETCH_CFG);
-
-	ret = readl_relaxed_poll_timeout(qm->io_base + HPRE_PREFETCH_CFG,
-					 val, !(val & HPRE_PREFETCH_DISABLE),
-					 HPRE_REG_RD_INTVRL_US,
-					 HPRE_REG_RD_TMOUT_US);
-	if (ret)
-		pci_err(qm->pdev, "failed to open sva prefetch\n");
-}
-
 static void hpre_close_sva_prefetch(struct hisi_qm *qm)
 {
 	u32 val;
@@ -602,13 +624,42 @@ static void hpre_close_sva_prefetch(struct hisi_qm *qm)
 					 HPRE_REG_RD_TMOUT_US);
 	if (ret)
 		pci_err(qm->pdev, "failed to close sva prefetch\n");
+
+	(void)hpre_wait_sva_ready(qm);
+}
+
+static void hpre_open_sva_prefetch(struct hisi_qm *qm)
+{
+	u32 val;
+	int ret;
+
+	if (!test_bit(QM_SUPPORT_SVA_PREFETCH, &qm->caps))
+		return;
+
+	/* Enable prefetch */
+	val = readl_relaxed(qm->io_base + HPRE_PREFETCH_CFG);
+	val &= HPRE_PREFETCH_ENABLE;
+	writel(val, qm->io_base + HPRE_PREFETCH_CFG);
+
+	ret = readl_relaxed_poll_timeout(qm->io_base + HPRE_PREFETCH_CFG,
+					 val, !(val & HPRE_PREFETCH_DISABLE),
+					 HPRE_REG_RD_INTVRL_US,
+					 HPRE_REG_RD_TMOUT_US);
+	if (ret) {
+		pci_err(qm->pdev, "failed to open sva prefetch\n");
+		hpre_close_sva_prefetch(qm);
+		return;
+	}
+
+	ret = hpre_wait_sva_ready(qm);
+	if (ret)
+		hpre_close_sva_prefetch(qm);
 }
 
 static void hpre_enable_clock_gate(struct hisi_qm *qm)
 {
 	unsigned long offset;
 	u8 clusters_num, i;
-	u32 hpre_core_info;
 	u32 val;
 
 	if (qm->ver < QM_HW_V3)
@@ -622,9 +673,7 @@ static void hpre_enable_clock_gate(struct hisi_qm *qm)
 	val |= HPRE_PEH_CFG_AUTO_GATE_EN;
 	writel(val, qm->io_base + HPRE_PEH_CFG_AUTO_GATE);
 
-	hpre_core_info = qm->cap_tables.dev_cap_table[HPRE_CORE_INFO].cap_val;
-	clusters_num = (hpre_core_info >> hpre_basic_info[HPRE_CLUSTER_NUM_CAP].shift) &
-			hpre_basic_info[HPRE_CLUSTER_NUM_CAP].mask;
+	clusters_num = hpre_get_clusters_num(qm);
 	for (i = 0; i < clusters_num; i++) {
 		offset = (unsigned long)i * HPRE_CLSTR_ADDR_INTRVL;
 		val = readl(qm->io_base + offset + HPRE_CLUSTER_DYN_CTL);
@@ -641,7 +690,6 @@ static void hpre_disable_clock_gate(struct hisi_qm *qm)
 {
 	unsigned long offset;
 	u8 clusters_num, i;
-	u32 hpre_core_info;
 	u32 val;
 
 	if (qm->ver < QM_HW_V3)
@@ -655,9 +703,7 @@ static void hpre_disable_clock_gate(struct hisi_qm *qm)
 	val &= ~HPRE_PEH_CFG_AUTO_GATE_EN;
 	writel(val, qm->io_base + HPRE_PEH_CFG_AUTO_GATE);
 
-	hpre_core_info = qm->cap_tables.dev_cap_table[HPRE_CORE_INFO].cap_val;
-	clusters_num = (hpre_core_info >> hpre_basic_info[HPRE_CLUSTER_NUM_CAP].shift) &
-			hpre_basic_info[HPRE_CLUSTER_NUM_CAP].mask;
+	clusters_num = hpre_get_clusters_num(qm);
 	for (i = 0; i < clusters_num; i++) {
 		offset = (unsigned long)i * HPRE_CLSTR_ADDR_INTRVL;
 		val = readl(qm->io_base + offset + HPRE_CLUSTER_DYN_CTL);
@@ -721,6 +767,7 @@ static int hpre_set_user_domain_and_cache(struct hisi_qm *qm)
 
 	/* Config data buffer pasid needed by Kunpeng 920 */
 	hpre_config_pasid(qm);
+	hpre_open_sva_prefetch(qm);
 
 	hpre_enable_clock_gate(qm);
 
@@ -730,14 +777,11 @@ static int hpre_set_user_domain_and_cache(struct hisi_qm *qm)
 static void hpre_cnt_regs_clear(struct hisi_qm *qm)
 {
 	unsigned long offset;
-	u32 hpre_core_info;
 	u8 clusters_num;
 	int i;
 
 	/* clear clusterX/cluster_ctrl */
-	hpre_core_info = qm->cap_tables.dev_cap_table[HPRE_CORE_INFO].cap_val;
-	clusters_num = (hpre_core_info >> hpre_basic_info[HPRE_CLUSTER_NUM_CAP].shift) &
-			hpre_basic_info[HPRE_CLUSTER_NUM_CAP].mask;
+	clusters_num = hpre_get_clusters_num(qm);
 	for (i = 0; i < clusters_num; i++) {
 		offset = HPRE_CLSTR_BASE + i * HPRE_CLSTR_ADDR_INTRVL;
 		writel(0x0, qm->io_base + offset + HPRE_CLUSTER_INQURY);
@@ -756,8 +800,7 @@ static void hpre_master_ooo_ctrl(struct hisi_qm *qm, bool enable)
 	val1 = readl(qm->io_base + HPRE_AM_OOO_SHUTDOWN_ENB);
 	if (enable) {
 		val1 |= HPRE_AM_OOO_SHUTDOWN_ENABLE;
-		val2 = hisi_qm_get_hw_info(qm, hpre_basic_info,
-					   HPRE_OOO_SHUTDOWN_MASK_CAP, qm->cap_ver);
+		val2 = qm->err_info.dev_err.shutdown_mask;
 	} else {
 		val1 &= ~HPRE_AM_OOO_SHUTDOWN_ENABLE;
 		val2 = 0x0;
@@ -771,38 +814,30 @@ static void hpre_master_ooo_ctrl(struct hisi_qm *qm, bool enable)
 
 static void hpre_hw_error_disable(struct hisi_qm *qm)
 {
-	u32 ce, nfe;
-
-	ce = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_CE_MASK_CAP, qm->cap_ver);
-	nfe = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_NFE_MASK_CAP, qm->cap_ver);
-
 	/* disable hpre hw error interrupts */
-	writel(ce | nfe | HPRE_HAC_RAS_FE_ENABLE, qm->io_base + HPRE_INT_MASK);
+	writel(HPRE_RAS_MASK_ALL, qm->io_base + HPRE_INT_MASK);
 	/* disable HPRE block master OOO when nfe occurs on Kunpeng930 */
 	hpre_master_ooo_ctrl(qm, false);
 }
 
 static void hpre_hw_error_enable(struct hisi_qm *qm)
 {
-	u32 ce, nfe, err_en;
-
-	ce = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_CE_MASK_CAP, qm->cap_ver);
-	nfe = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_NFE_MASK_CAP, qm->cap_ver);
+	struct hisi_qm_err_mask *dev_err = &qm->err_info.dev_err;
+	u32 err_mask = dev_err->ce | dev_err->nfe | dev_err->fe;
 
 	/* clear HPRE hw error source if having */
-	writel(ce | nfe | HPRE_HAC_RAS_FE_ENABLE, qm->io_base + HPRE_HAC_SOURCE_INT);
+	writel(HPRE_RAS_CLEAR_ALL, qm->io_base + HPRE_HAC_SOURCE_INT);
 
 	/* configure error type */
-	writel(ce, qm->io_base + HPRE_RAS_CE_ENB);
-	writel(nfe, qm->io_base + HPRE_RAS_NFE_ENB);
-	writel(HPRE_HAC_RAS_FE_ENABLE, qm->io_base + HPRE_RAS_FE_ENB);
+	writel(dev_err->ce, qm->io_base + HPRE_RAS_CE_ENB);
+	writel(dev_err->nfe, qm->io_base + HPRE_RAS_NFE_ENB);
+	writel(dev_err->fe, qm->io_base + HPRE_RAS_FE_ENB);
 
 	/* enable HPRE block master OOO when nfe occurs on Kunpeng930 */
 	hpre_master_ooo_ctrl(qm, true);
 
 	/* enable hpre hw error interrupts */
-	err_en = ce | nfe | HPRE_HAC_RAS_FE_ENABLE;
-	writel(~err_en, qm->io_base + HPRE_INT_MASK);
+	writel(~err_mask, qm->io_base + HPRE_INT_MASK);
 }
 
 static inline struct hisi_qm *hpre_file_to_qm(struct hpre_debugfs_file *file)
@@ -1029,13 +1064,10 @@ static int hpre_cluster_debugfs_init(struct hisi_qm *qm)
 	char buf[HPRE_DBGFS_VAL_MAX_LEN];
 	struct debugfs_regset32 *regset;
 	struct dentry *tmp_d;
-	u32 hpre_core_info;
 	u8 clusters_num;
 	int i, ret;
 
-	hpre_core_info = qm->cap_tables.dev_cap_table[HPRE_CORE_INFO].cap_val;
-	clusters_num = (hpre_core_info >> hpre_basic_info[HPRE_CLUSTER_NUM_CAP].shift) &
-			hpre_basic_info[HPRE_CLUSTER_NUM_CAP].mask;
+	clusters_num = hpre_get_clusters_num(qm);
 	for (i = 0; i < clusters_num; i++) {
 		ret = snprintf(buf, HPRE_DBGFS_VAL_MAX_LEN, "cluster%d", i);
 		if (ret >= HPRE_DBGFS_VAL_MAX_LEN)
@@ -1171,7 +1203,7 @@ static int hpre_pre_store_cap_reg(struct hisi_qm *qm)
 	size_t i, size;
 
 	size = ARRAY_SIZE(hpre_cap_query_info);
-	hpre_cap = devm_kzalloc(dev, sizeof(*hpre_cap) * size, GFP_KERNEL);
+	hpre_cap = devm_kcalloc(dev, size, sizeof(*hpre_cap), GFP_KERNEL);
 	if (!hpre_cap)
 		return -ENOMEM;
 
@@ -1191,10 +1223,20 @@ static int hpre_pre_store_cap_reg(struct hisi_qm *qm)
 		return -EINVAL;
 	}
 
-	qm->cap_tables.dev_cap_table = hpre_cap;
 	qm->cap_tables.dev_cap_size = size;
+	qm->cap_tables.dev_cap_table = hpre_cap;
 
 	return 0;
+}
+
+static void hpre_set_channels(struct hisi_qm *qm)
+{
+	struct qm_channel *channel_data = &qm->channel_data;
+	int i;
+
+	channel_data->channel_num = HPRE_MAX_CHANNEL_NUM;
+	for (i = 0; i < HPRE_MAX_CHANNEL_NUM; i++)
+		channel_data->channel_name[i] = hpre_channel_name[i];
 }
 
 static int hpre_qm_init(struct hisi_qm *qm, struct pci_dev *pdev)
@@ -1230,6 +1272,7 @@ static int hpre_qm_init(struct hisi_qm *qm, struct pci_dev *pdev)
 		return ret;
 	}
 
+	hpre_set_channels(qm);
 	/* Fetch and save the value of capability registers */
 	ret = hpre_pre_store_cap_reg(qm);
 	if (ret) {
@@ -1254,13 +1297,10 @@ static int hpre_show_last_regs_init(struct hisi_qm *qm)
 	int com_dfx_regs_num = ARRAY_SIZE(hpre_com_dfx_regs);
 	struct qm_debug *debug = &qm->debug;
 	void __iomem *io_base;
-	u32 hpre_core_info;
 	u8 clusters_num;
 	int i, j, idx;
 
-	hpre_core_info = qm->cap_tables.dev_cap_table[HPRE_CORE_INFO].cap_val;
-	clusters_num = (hpre_core_info >> hpre_basic_info[HPRE_CLUSTER_NUM_CAP].shift) &
-			hpre_basic_info[HPRE_CLUSTER_NUM_CAP].mask;
+	clusters_num = hpre_get_clusters_num(qm);
 	debug->last_words = kcalloc(cluster_dfx_regs_num * clusters_num +
 			com_dfx_regs_num, sizeof(unsigned int), GFP_KERNEL);
 	if (!debug->last_words)
@@ -1300,7 +1340,6 @@ static void hpre_show_last_dfx_regs(struct hisi_qm *qm)
 	struct qm_debug *debug = &qm->debug;
 	struct pci_dev *pdev = qm->pdev;
 	void __iomem *io_base;
-	u32 hpre_core_info;
 	u8 clusters_num;
 	int i, j, idx;
 	u32 val;
@@ -1316,9 +1355,7 @@ static void hpre_show_last_dfx_regs(struct hisi_qm *qm)
 			  hpre_com_dfx_regs[i].name, debug->last_words[i], val);
 	}
 
-	hpre_core_info = qm->cap_tables.dev_cap_table[HPRE_CORE_INFO].cap_val;
-	clusters_num = (hpre_core_info >> hpre_basic_info[HPRE_CLUSTER_NUM_CAP].shift) &
-			hpre_basic_info[HPRE_CLUSTER_NUM_CAP].mask;
+	clusters_num = hpre_get_clusters_num(qm);
 	for (i = 0; i < clusters_num; i++) {
 		io_base = qm->io_base + hpre_cluster_offsets[i];
 		for (j = 0; j <  cluster_dfx_regs_num; j++) {
@@ -1357,10 +1394,18 @@ static void hpre_clear_hw_err_status(struct hisi_qm *qm, u32 err_sts)
 
 static void hpre_disable_error_report(struct hisi_qm *qm, u32 err_type)
 {
-	u32 nfe_mask;
+	u32 nfe_mask = qm->err_info.dev_err.nfe;
 
-	nfe_mask = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_NFE_MASK_CAP, qm->cap_ver);
 	writel(nfe_mask & (~err_type), qm->io_base + HPRE_RAS_NFE_ENB);
+}
+
+static void hpre_enable_error_report(struct hisi_qm *qm)
+{
+	u32 nfe_mask = qm->err_info.dev_err.nfe;
+	u32 ce_mask = qm->err_info.dev_err.ce;
+
+	writel(nfe_mask, qm->io_base + HPRE_RAS_NFE_ENB);
+	writel(ce_mask, qm->io_base + HPRE_RAS_CE_ENB);
 }
 
 static void hpre_open_axi_master_ooo(struct hisi_qm *qm)
@@ -1380,16 +1425,18 @@ static enum acc_err_result hpre_get_err_result(struct hisi_qm *qm)
 
 	err_status = hpre_get_hw_err_status(qm);
 	if (err_status) {
-		if (err_status & qm->err_info.ecc_2bits_mask)
+		if (err_status & qm->err_info.dev_err.ecc_2bits_mask)
 			qm->err_status.is_dev_ecc_mbit = true;
 		hpre_log_hw_error(qm, err_status);
 
-		if (err_status & qm->err_info.dev_reset_mask) {
+		if (err_status & qm->err_info.dev_err.reset_mask) {
 			/* Disable the same error reporting until device is recovered. */
 			hpre_disable_error_report(qm, err_status);
 			return ACC_ERR_NEED_RESET;
 		}
 		hpre_clear_hw_err_status(qm, err_status);
+		/* Avoid firmware disable error report, re-enable. */
+		hpre_enable_error_report(qm);
 	}
 
 	return ACC_ERR_RECOVERED;
@@ -1400,28 +1447,64 @@ static bool hpre_dev_is_abnormal(struct hisi_qm *qm)
 	u32 err_status;
 
 	err_status = hpre_get_hw_err_status(qm);
-	if (err_status & qm->err_info.dev_shutdown_mask)
+	if (err_status & qm->err_info.dev_err.shutdown_mask)
 		return true;
 
 	return false;
 }
 
+static void hpre_disable_axi_error(struct hisi_qm *qm)
+{
+	struct hisi_qm_err_mask *dev_err = &qm->err_info.dev_err;
+	u32 err_mask = dev_err->ce | dev_err->nfe | dev_err->fe;
+	u32 val;
+
+	val = ~(err_mask & (~HPRE_AXI_ERROR_MASK));
+	writel(val, qm->io_base + HPRE_INT_MASK);
+
+	if (qm->ver > QM_HW_V2)
+		writel(dev_err->shutdown_mask & (~HPRE_AXI_ERROR_MASK),
+		       qm->io_base + HPRE_OOO_SHUTDOWN_SEL);
+}
+
+static void hpre_enable_axi_error(struct hisi_qm *qm)
+{
+	struct hisi_qm_err_mask *dev_err = &qm->err_info.dev_err;
+	u32 err_mask = dev_err->ce | dev_err->nfe | dev_err->fe;
+
+	/* clear axi error source */
+	writel(HPRE_AXI_ERROR_MASK, qm->io_base + HPRE_HAC_SOURCE_INT);
+
+	writel(~err_mask, qm->io_base + HPRE_INT_MASK);
+
+	if (qm->ver > QM_HW_V2)
+		writel(dev_err->shutdown_mask, qm->io_base + HPRE_OOO_SHUTDOWN_SEL);
+}
+
 static void hpre_err_info_init(struct hisi_qm *qm)
 {
 	struct hisi_qm_err_info *err_info = &qm->err_info;
+	struct hisi_qm_err_mask *qm_err = &err_info->qm_err;
+	struct hisi_qm_err_mask *dev_err = &err_info->dev_err;
 
-	err_info->fe = HPRE_HAC_RAS_FE_ENABLE;
-	err_info->ce = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_QM_CE_MASK_CAP, qm->cap_ver);
-	err_info->nfe = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_QM_NFE_MASK_CAP, qm->cap_ver);
-	err_info->ecc_2bits_mask = HPRE_CORE_ECC_2BIT_ERR | HPRE_OOO_ECC_2BIT_ERR;
-	err_info->dev_shutdown_mask = hisi_qm_get_hw_info(qm, hpre_basic_info,
-			HPRE_OOO_SHUTDOWN_MASK_CAP, qm->cap_ver);
-	err_info->qm_shutdown_mask = hisi_qm_get_hw_info(qm, hpre_basic_info,
-			HPRE_QM_OOO_SHUTDOWN_MASK_CAP, qm->cap_ver);
-	err_info->qm_reset_mask = hisi_qm_get_hw_info(qm, hpre_basic_info,
-			HPRE_QM_RESET_MASK_CAP, qm->cap_ver);
-	err_info->dev_reset_mask = hisi_qm_get_hw_info(qm, hpre_basic_info,
-			HPRE_RESET_MASK_CAP, qm->cap_ver);
+	qm_err->fe = HPRE_HAC_RAS_FE_ENABLE;
+	qm_err->ce = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_QM_CE_MASK_CAP, qm->cap_ver);
+	qm_err->nfe = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_QM_NFE_MASK_CAP, qm->cap_ver);
+	qm_err->shutdown_mask = hisi_qm_get_hw_info(qm, hpre_basic_info,
+						    HPRE_QM_OOO_SHUTDOWN_MASK_CAP, qm->cap_ver);
+	qm_err->reset_mask = hisi_qm_get_hw_info(qm, hpre_basic_info,
+						 HPRE_QM_RESET_MASK_CAP, qm->cap_ver);
+	qm_err->ecc_2bits_mask = QM_ECC_MBIT;
+
+	dev_err->fe = HPRE_HAC_RAS_FE_ENABLE;
+	dev_err->ce = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_CE_MASK_CAP, qm->cap_ver);
+	dev_err->nfe = hisi_qm_get_hw_info(qm, hpre_basic_info, HPRE_NFE_MASK_CAP, qm->cap_ver);
+	dev_err->shutdown_mask = hisi_qm_get_hw_info(qm, hpre_basic_info,
+						     HPRE_OOO_SHUTDOWN_MASK_CAP, qm->cap_ver);
+	dev_err->reset_mask = hisi_qm_get_hw_info(qm, hpre_basic_info,
+						  HPRE_RESET_MASK_CAP, qm->cap_ver);
+	dev_err->ecc_2bits_mask = HPRE_CORE_ECC_2BIT_ERR | HPRE_OOO_ECC_2BIT_ERR;
+
 	err_info->msi_wr_port = HPRE_WR_MSI_PORT;
 	err_info->acpi_rst = "HRST";
 }
@@ -1439,6 +1522,8 @@ static const struct hisi_qm_err_ini hpre_err_ini = {
 	.err_info_init		= hpre_err_info_init,
 	.get_err_result		= hpre_get_err_result,
 	.dev_is_abnormal	= hpre_dev_is_abnormal,
+	.disable_axi_error	= hpre_disable_axi_error,
+	.enable_axi_error	= hpre_enable_axi_error,
 };
 
 static int hpre_pf_probe_init(struct hpre *hpre)
@@ -1449,8 +1534,6 @@ static int hpre_pf_probe_init(struct hpre *hpre)
 	ret = hpre_set_user_domain_and_cache(qm);
 	if (ret)
 		return ret;
-
-	hpre_open_sva_prefetch(qm);
 
 	hisi_qm_dev_err_init(qm);
 	ret = hpre_show_last_regs_init(qm);
@@ -1530,12 +1613,10 @@ static int hpre_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_qm_del_list;
 	}
 
-	if (qm->uacce) {
-		ret = uacce_register(qm->uacce);
-		if (ret) {
-			pci_err(pdev, "failed to register uacce (%d)!\n", ret);
-			goto err_with_alg_register;
-		}
+	ret = hisi_qm_register_uacce(qm);
+	if (ret) {
+		pci_err(pdev, "failed to register uacce (%d)!\n", ret);
+		goto err_with_alg_register;
 	}
 
 	if (qm->fun_type == QM_HW_PF && vfs_num) {

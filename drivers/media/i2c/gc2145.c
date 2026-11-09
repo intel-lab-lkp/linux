@@ -709,6 +709,7 @@ static int gc2145_init_state(struct v4l2_subdev *sd,
 }
 
 static int gc2145_get_selection(struct v4l2_subdev *sd,
+				const struct v4l2_subdev_client_info *ci,
 				struct v4l2_subdev_state *sd_state,
 				struct v4l2_subdev_selection *sel)
 {
@@ -774,6 +775,7 @@ static int gc2145_enum_frame_size(struct v4l2_subdev *sd,
 }
 
 static int gc2145_set_pad_format(struct v4l2_subdev *sd,
+				 const struct v4l2_subdev_client_info *ci,
 				 struct v4l2_subdev_state *sd_state,
 				 struct v4l2_subdev_format *fmt)
 {
@@ -963,7 +965,6 @@ static int gc2145_enable_streams(struct v4l2_subdev *sd,
 	return 0;
 
 err_rpm_put:
-	pm_runtime_mark_last_busy(&client->dev);
 	pm_runtime_put_autosuspend(&client->dev);
 	return ret;
 }
@@ -985,7 +986,6 @@ static int gc2145_disable_streams(struct v4l2_subdev *sd,
 	if (ret)
 		dev_err(&client->dev, "%s failed to write regs\n", __func__);
 
-	pm_runtime_mark_last_busy(&client->dev);
 	pm_runtime_put_autosuspend(&client->dev);
 
 	return ret;
@@ -1193,7 +1193,6 @@ static int gc2145_s_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	}
 
-	pm_runtime_mark_last_busy(&client->dev);
 	pm_runtime_put_autosuspend(&client->dev);
 
 	return ret;
@@ -1334,7 +1333,7 @@ static int gc2145_probe(struct i2c_client *client)
 		return -EINVAL;
 
 	/* Get system clock (xclk) */
-	gc2145->xclk = devm_clk_get(dev, NULL);
+	gc2145->xclk = devm_v4l2_sensor_clk_get(dev, NULL);
 	if (IS_ERR(gc2145->xclk))
 		return dev_err_probe(dev, PTR_ERR(gc2145->xclk),
 				     "failed to get xclk\n");

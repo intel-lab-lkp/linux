@@ -246,11 +246,6 @@ static struct sun4i_dma_contract *to_sun4i_dma_contract(struct virt_dma_desc *vd
 	return container_of(vd, struct sun4i_dma_contract, vd);
 }
 
-static struct device *chan2dev(struct dma_chan *chan)
-{
-	return &chan->dev->device;
-}
-
 static void set_dst_data_width_a10(u32 *p_cfg, s8 data_width)
 {
 	*p_cfg |= SUN4I_DMA_CFG_DST_DATA_WIDTH(data_width);
@@ -428,7 +423,7 @@ static int __execute_vchan_pending(struct sun4i_dma_dev *priv,
 	 * has already submitted some work, we can't do anything else
 	 */
 	if (vchan->processing) {
-		dev_dbg(chan2dev(&vchan->vc.chan),
+		dev_dbg(vchan_chan_dev(&vchan->vc),
 			"processing something to this endpoint already\n");
 		ret = -EBUSY;
 		goto release_pchan;
@@ -438,7 +433,7 @@ static int __execute_vchan_pending(struct sun4i_dma_dev *priv,
 		/* Figure out which contract we're working with today */
 		vd = vchan_next_desc(&vchan->vc);
 		if (!vd) {
-			dev_dbg(chan2dev(&vchan->vc.chan),
+			dev_dbg(vchan_chan_dev(&vchan->vc),
 				"No pending contract found");
 			ret = 0;
 			goto release_pchan;
@@ -449,7 +444,7 @@ static int __execute_vchan_pending(struct sun4i_dma_dev *priv,
 			/* The contract has been completed so mark it as such */
 			list_del(&contract->vd.node);
 			vchan_cookie_complete(&contract->vd);
-			dev_dbg(chan2dev(&vchan->vc.chan),
+			dev_dbg(vchan_chan_dev(&vchan->vc),
 				"Empty contract found and marked complete");
 		}
 	} while (list_empty(&contract->demands));
@@ -532,7 +527,7 @@ generate_ndma_promise(struct dma_chan *chan, dma_addr_t src, dma_addr_t dest,
 	if (ret)
 		return NULL;
 
-	promise = kzalloc(sizeof(*promise), GFP_NOWAIT);
+	promise = kzalloc_obj(*promise, GFP_NOWAIT);
 	if (!promise)
 		return NULL;
 
@@ -542,7 +537,7 @@ generate_ndma_promise(struct dma_chan *chan, dma_addr_t src, dma_addr_t dest,
 	promise->cfg = SUN4I_DMA_CFG_LOADING |
 		SUN4I_NDMA_CFG_BYTE_COUNT_MODE_REMAIN;
 
-	dev_dbg(chan2dev(chan),
+	dev_dbg(dmaengine_chan_dev(chan),
 		"src burst %d, dst burst %d, src buswidth %d, dst buswidth %d",
 		sconfig->src_maxburst, sconfig->dst_maxburst,
 		sconfig->src_addr_width, sconfig->dst_addr_width);
@@ -595,7 +590,7 @@ generate_ddma_promise(struct dma_chan *chan, dma_addr_t src, dma_addr_t dest,
 	struct sun4i_dma_promise *promise;
 	int ret;
 
-	promise = kzalloc(sizeof(*promise), GFP_NOWAIT);
+	promise = kzalloc_obj(*promise, GFP_NOWAIT);
 	if (!promise)
 		return NULL;
 
@@ -648,7 +643,7 @@ static struct sun4i_dma_contract *generate_dma_contract(void)
 {
 	struct sun4i_dma_contract *contract;
 
-	contract = kzalloc(sizeof(*contract), GFP_NOWAIT);
+	contract = kzalloc_obj(*contract, GFP_NOWAIT);
 	if (!contract)
 		return NULL;
 
@@ -769,7 +764,7 @@ sun4i_dma_prep_dma_cyclic(struct dma_chan *chan, dma_addr_t buf, size_t len,
 	u8 ram_type, io_mode, linear_mode;
 
 	if (!is_slave_direction(dir)) {
-		dev_err(chan2dev(chan), "Invalid DMA direction\n");
+		dev_err(dmaengine_chan_dev(chan), "Invalid DMA direction\n");
 		return NULL;
 	}
 
@@ -894,7 +889,7 @@ sun4i_dma_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 		return NULL;
 
 	if (!is_slave_direction(dir)) {
-		dev_err(chan2dev(chan), "Invalid DMA direction\n");
+		dev_err(dmaengine_chan_dev(chan), "Invalid DMA direction\n");
 		return NULL;
 	}
 
@@ -1249,11 +1244,10 @@ static int sun4i_dma_probe(struct platform_device *pdev)
 	if (priv->irq < 0)
 		return priv->irq;
 
-	priv->clk = devm_clk_get(&pdev->dev, NULL);
-	if (IS_ERR(priv->clk)) {
-		dev_err(&pdev->dev, "No clock specified\n");
-		return PTR_ERR(priv->clk);
-	}
+	priv->clk = devm_clk_get_enabled(&pdev->dev, NULL);
+	if (IS_ERR(priv->clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(priv->clk),
+				     "Couldn't start the clock\n");
 
 	if (priv->cfg->has_reset) {
 		priv->rst = devm_reset_control_get_exclusive_deasserted(&pdev->dev, NULL);
@@ -1328,12 +1322,6 @@ static int sun4i_dma_probe(struct platform_device *pdev)
 		vchan_init(&vchan->vc, &priv->slave);
 	}
 
-	ret = clk_prepare_enable(priv->clk);
-	if (ret) {
-		dev_err(&pdev->dev, "Couldn't enable the clock\n");
-		return ret;
-	}
-
 	/*
 	 * Make sure the IRQs are all disabled and accounted for. The bootloader
 	 * likes to leave these dirty
@@ -1343,33 +1331,23 @@ static int sun4i_dma_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(&pdev->dev, priv->irq, sun4i_dma_interrupt,
 			       0, dev_name(&pdev->dev), priv);
-	if (ret) {
-		dev_err(&pdev->dev, "Cannot request IRQ\n");
-		goto err_clk_disable;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Cannot request IRQ\n");
 
-	ret = dma_async_device_register(&priv->slave);
-	if (ret) {
-		dev_warn(&pdev->dev, "Failed to register DMA engine device\n");
-		goto err_clk_disable;
-	}
+	ret = dmaenginem_async_device_register(&priv->slave);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "Failed to register DMA engine device\n");
 
 	ret = of_dma_controller_register(pdev->dev.of_node, sun4i_dma_of_xlate,
 					 priv);
-	if (ret) {
-		dev_err(&pdev->dev, "of_dma_controller_register failed\n");
-		goto err_dma_unregister;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "Failed to register translation function\n");
 
 	dev_dbg(&pdev->dev, "Successfully probed SUN4I_DMA\n");
 
 	return 0;
-
-err_dma_unregister:
-	dma_async_device_unregister(&priv->slave);
-err_clk_disable:
-	clk_disable_unprepare(priv->clk);
-	return ret;
 }
 
 static void sun4i_dma_remove(struct platform_device *pdev)
@@ -1380,9 +1358,6 @@ static void sun4i_dma_remove(struct platform_device *pdev)
 	disable_irq(priv->irq);
 
 	of_dma_controller_free(pdev->dev.of_node);
-	dma_async_device_unregister(&priv->slave);
-
-	clk_disable_unprepare(priv->clk);
 }
 
 static struct sun4i_dma_config sun4i_a10_dma_cfg = {

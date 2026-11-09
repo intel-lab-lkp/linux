@@ -41,7 +41,7 @@ static int check_child_tag_inheritance(char *ptr, int size, int mode)
 	} else if (child == 0) {
 		mte_initialize_current_context(mode, (uintptr_t)ptr, size);
 		/* Do copy on write */
-		memset(ptr, '1', size);
+		memset_safe(ptr, '1', size);
 		mte_wait_after_trig();
 		if (cur_mte_cxt.fault_valid == true) {
 			fault = 1;
@@ -56,14 +56,14 @@ static int check_child_tag_inheritance(char *ptr, int size, int mode)
 			}
 		}
 		mte_initialize_current_context(mode, (uintptr_t)ptr, -UNDERFLOW);
-		memset(ptr - UNDERFLOW, '2', UNDERFLOW);
+		memset_safe(ptr - UNDERFLOW, '2', UNDERFLOW);
 		mte_wait_after_trig();
 		if (cur_mte_cxt.fault_valid == false) {
 			fault = 1;
 			goto check_child_tag_inheritance_err;
 		}
 		mte_initialize_current_context(mode, (uintptr_t)ptr, size + OVERFLOW);
-		memset(ptr + size, '3', OVERFLOW);
+		memset_safe(ptr + size, '3', OVERFLOW);
 		mte_wait_after_trig();
 		if (cur_mte_cxt.fault_valid == false) {
 			fault = 1;
@@ -88,7 +88,7 @@ static int check_child_memory_mapping(int mem_type, int mode, int mapping)
 	int item = ARRAY_SIZE(sizes);
 
 	item = ARRAY_SIZE(sizes);
-	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG);
+	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG, false);
 	for (run = 0; run < item; run++) {
 		ptr = (char *)mte_allocate_memory_tag_range(sizes[run], mem_type, mapping,
 							    UNDERFLOW, OVERFLOW);
@@ -109,7 +109,7 @@ static int check_child_file_mapping(int mem_type, int mode, int mapping)
 	int run, fd, map_size, result = KSFT_PASS;
 	int total = ARRAY_SIZE(sizes);
 
-	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG);
+	mte_switch_mode(mode, MTE_ALLOW_NON_ZERO_TAG, false);
 	for (run = 0; run < total; run++) {
 		fd = create_temp_file();
 		if (fd == -1)
@@ -146,6 +146,8 @@ int main(int argc, char *argv[])
 	int err;
 	int item = ARRAY_SIZE(sizes);
 
+	ksft_print_header();
+
 	page_size = getpagesize();
 	if (!page_size) {
 		ksft_print_msg("ERR: Unable to get page size\n");
@@ -160,8 +162,8 @@ int main(int argc, char *argv[])
 		return err;
 
 	/* Register SIGSEGV handler */
-	mte_register_signal(SIGSEGV, mte_default_handler);
-	mte_register_signal(SIGBUS, mte_default_handler);
+	mte_register_signal(SIGSEGV, mte_default_handler, false);
+	mte_register_signal(SIGBUS, mte_default_handler, false);
 
 	/* Set test plan */
 	ksft_set_plan(12);

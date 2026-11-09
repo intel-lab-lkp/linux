@@ -279,8 +279,8 @@ static const struct gpio_chip template_chip = {
 	.get_direction		= mcp_get_direction,
 	.direction_input	= mcp_direction_input,
 	.direction_output	= mcp_direction_output,
-	.set_rv			= mcp_set,
-	.set_multiple_rv	= mcp_set_multiple,
+	.set			= mcp_set,
+	.set_multiple		= mcp_set_multiple,
 	.get			= mcp_get,
 	.get_multiple		= mcp_get_multiple,
 	.base			= -1,
@@ -301,6 +301,11 @@ static int mcp2200_raw_event(struct hid_device *hdev, struct hid_report *report,
 
 	switch (data[0]) {
 	case READ_ALL:
+		if (size < sizeof(*all_resp)) {
+			mcp->status = -EPROTO;
+			break;
+		}
+
 		all_resp = (struct mcp_read_all_resp *) data;
 		mcp->status = 0;
 		mcp->gpio_inval = all_resp->io_port_val_bmap;

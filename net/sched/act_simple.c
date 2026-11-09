@@ -72,12 +72,17 @@ static int reset_policy(struct tc_action *a, const struct nlattr *defdata,
 	d = to_defact(a);
 	spin_lock_bh(&d->tcf_lock);
 	goto_ch = tcf_action_set_ctrlact(a, p->action, goto_ch);
-	memset(d->tcfd_defdata, 0, SIMP_MAX_DATA);
 	nla_strscpy(d->tcfd_defdata, defdata, SIMP_MAX_DATA);
 	spin_unlock_bh(&d->tcf_lock);
 	if (goto_ch)
 		tcf_chain_put_by_act(goto_ch);
 	return 0;
+}
+
+static size_t tcf_simp_get_fill_size(const struct tc_action *act)
+{
+	return nla_total_size(sizeof(struct tc_defact)) /* TCA_DEF_PARMS */
+		+ nla_total_size(SIMP_MAX_DATA); /* TCA_DEF_DATA */
 }
 
 static const struct nla_policy simple_policy[TCA_DEF_MAX + 1] = {
@@ -205,6 +210,7 @@ static struct tc_action_ops act_simp_ops = {
 	.owner		=	THIS_MODULE,
 	.act		=	tcf_simp_act,
 	.dump		=	tcf_simp_dump,
+	.get_fill_size	=	tcf_simp_get_fill_size,
 	.cleanup	=	tcf_simp_release,
 	.init		=	tcf_simp_init,
 	.size		=	sizeof(struct tcf_defact),

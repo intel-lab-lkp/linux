@@ -23,7 +23,7 @@ struct xfer_on_bus {
 static bool find_dest_adap(struct vivid_dev *dev,
 			   struct cec_adapter *adap, u8 dest)
 {
-	unsigned int i, j;
+	unsigned int i;
 
 	if (dest >= 0xf)
 		return false;
@@ -33,13 +33,12 @@ static bool find_dest_adap(struct vivid_dev *dev,
 	    cec_has_log_addr(dev->cec_rx_adap, dest))
 		return true;
 
-	for (i = 0, j = 0; i < dev->num_inputs; i++) {
+	for (i = 0; i < dev->num_inputs; i++) {
 		unsigned int menu_idx =
 			dev->input_is_connected_to_output[i];
 
 		if (dev->input_type[i] != HDMI)
 			continue;
-		j++;
 		if (menu_idx < FIXED_MENU_ITEMS)
 			continue;
 
@@ -113,7 +112,7 @@ static void adjust_sfts(struct vivid_dev *dev)
 int vivid_cec_bus_thread(void *_dev)
 {
 	u32 last_sft;
-	unsigned int i, j;
+	unsigned int i;
 	unsigned int dest;
 	ktime_t start, end;
 	s64 delta_us, retry_us;
@@ -210,13 +209,12 @@ int vivid_cec_bus_thread(void *_dev)
 		if (first_status == CEC_TX_STATUS_OK) {
 			if (xfers_on_bus[first_idx].adap != dev->cec_rx_adap)
 				cec_received_msg(dev->cec_rx_adap, &first_msg);
-			for (i = 0, j = 0; i < dev->num_inputs; i++) {
+			for (i = 0; i < dev->num_inputs; i++) {
 				unsigned int menu_idx =
 					dev->input_is_connected_to_output[i];
 
 				if (dev->input_type[i] != HDMI)
 					continue;
-				j++;
 				if (menu_idx < FIXED_MENU_ITEMS)
 					continue;
 
@@ -327,7 +325,7 @@ static int vivid_received(struct cec_adapter *adap, struct cec_msg *msg)
 		char osd[14];
 
 		if (!cec_is_sink(adap))
-			return -ENOMSG;
+			break;
 		cec_ops_set_osd_string(msg, &disp_ctl, osd);
 		switch (disp_ctl) {
 		case CEC_OP_DISP_CTL_DEFAULT:
@@ -348,7 +346,7 @@ static int vivid_received(struct cec_adapter *adap, struct cec_msg *msg)
 			cec_transmit_msg(adap, &reply, false);
 			break;
 		}
-		break;
+		return 0;
 	}
 	case CEC_MSG_VENDOR_COMMAND_WITH_ID: {
 		u32 vendor_id;
@@ -379,7 +377,7 @@ static int vivid_received(struct cec_adapter *adap, struct cec_msg *msg)
 		if (size == 1) {
 			// Ignore even op values
 			if (!(vendor_cmd[0] & 1))
-				break;
+				return 0;
 			reply.len = msg->len;
 			memcpy(reply.msg + 1, msg->msg + 1, msg->len - 1);
 			reply.msg[msg->len - 1]++;
@@ -388,12 +386,10 @@ static int vivid_received(struct cec_adapter *adap, struct cec_msg *msg)
 					      CEC_OP_ABORT_INVALID_OP);
 		}
 		cec_transmit_msg(adap, &reply, false);
-		break;
+		return 0;
 	}
-	default:
-		return -ENOMSG;
 	}
-	return 0;
+	return -ENOMSG;
 }
 
 static const struct cec_adap_ops vivid_cec_adap_ops = {

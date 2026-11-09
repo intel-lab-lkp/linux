@@ -8,6 +8,7 @@
 
 #include <linux/clk.h>
 #include <linux/console.h>
+#include <linux/err.h>
 #include <linux/io.h>
 #include <linux/libfdt.h>
 #include <linux/module.h>
@@ -29,7 +30,7 @@ struct ingenic_uart_config {
 struct ingenic_uart_data {
 	struct clk	*clk_module;
 	struct clk	*clk_baud;
-	int		line;
+	struct uart_8250_port *uport;
 };
 
 static const struct of_device_id of_match[];
@@ -168,9 +169,9 @@ OF_EARLYCON_DECLARE(jz4780_uart, "ingenic,jz4780-uart",
 OF_EARLYCON_DECLARE(x1000_uart, "ingenic,x1000-uart",
 		    ingenic_early_console_setup);
 
-static void ingenic_uart_serial_out(struct uart_port *p, int offset, int value)
+static void ingenic_uart_serial_out(struct uart_port *p, unsigned int offset, u32 value)
 {
-	int ier;
+	u32 ier;
 
 	switch (offset) {
 	case UART_FCR:
@@ -206,9 +207,9 @@ static void ingenic_uart_serial_out(struct uart_port *p, int offset, int value)
 	writeb(value, p->membase + (offset << p->regshift));
 }
 
-static unsigned int ingenic_uart_serial_in(struct uart_port *p, int offset)
+static u32 ingenic_uart_serial_in(struct uart_port *p, unsigned int offset)
 {
-	unsigned int value;
+	u8 value;
 
 	value = readb(p->membase + (offset << p->regshift));
 
@@ -297,9 +298,9 @@ static int ingenic_uart_probe(struct platform_device *pdev)
 	}
 	uart.port.uartclk = clk_get_rate(data->clk_baud);
 
-	data->line = serial8250_register_8250_port(&uart);
-	if (data->line < 0) {
-		err = data->line;
+	data->uport = serial8250_register_8250_port(&uart);
+	if (IS_ERR(data->uport)) {
+		err = PTR_ERR(data->uport);
 		goto out_disable_baudclk;
 	}
 
@@ -318,7 +319,7 @@ static void ingenic_uart_remove(struct platform_device *pdev)
 {
 	struct ingenic_uart_data *data = platform_get_drvdata(pdev);
 
-	serial8250_unregister_port(data->line);
+	serial8250_unregister_port(data->uport);
 	clk_disable_unprepare(data->clk_module);
 	clk_disable_unprepare(data->clk_baud);
 }

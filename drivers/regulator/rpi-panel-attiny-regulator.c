@@ -249,7 +249,13 @@ static int attiny_i2c_read(struct i2c_client *client, u8 reg, unsigned int *buf)
 	msgs[0].len = ARRAY_SIZE(addr_buf);
 	msgs[0].buf = addr_buf;
 
+	/*
+	 * The first transfer after a power-up of the host usually fails on
+	 * (at least) some TI boards, so retry the transfer on failure.
+	 */
 	ret = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
+	if (ret != ARRAY_SIZE(msgs))
+		ret = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
 	if (ret != ARRAY_SIZE(msgs))
 		return -EIO;
 
@@ -351,7 +357,7 @@ static int attiny_i2c_probe(struct i2c_client *i2c)
 	state->gc.base = -1;
 	state->gc.ngpio = NUM_GPIO;
 
-	state->gc.set_rv = attiny_gpio_set;
+	state->gc.set = attiny_gpio_set;
 	state->gc.get_direction = attiny_gpio_get_direction;
 	state->gc.can_sleep = true;
 

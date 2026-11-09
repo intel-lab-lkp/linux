@@ -269,9 +269,11 @@ static int hx83112a_probe(struct mipi_dsi_device *dsi)
 	struct hx83112a_panel *ctx;
 	int ret;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	ctx = devm_drm_panel_alloc(dev, struct hx83112a_panel, panel,
+				   &hx83112a_panel_funcs,
+				   DRM_MODE_CONNECTOR_DSI);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	ctx->supplies[0].supply = "vdd1";
 	ctx->supplies[1].supply = "vsn";
@@ -295,36 +297,21 @@ static int hx83112a_probe(struct mipi_dsi_device *dsi)
 			  MIPI_DSI_MODE_VIDEO_HSE |
 			  MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
-	drm_panel_init(&ctx->panel, dev, &hx83112a_panel_funcs,
-		       DRM_MODE_CONNECTOR_DSI);
 	ctx->panel.prepare_prev_first = true;
 
 	ret = drm_panel_of_backlight(&ctx->panel);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get backlight\n");
 
-	drm_panel_add(&ctx->panel);
-
-	ret = mipi_dsi_attach(dsi);
-	if (ret < 0) {
-		dev_err_probe(dev, ret, "Failed to attach to DSI host\n");
-		drm_panel_remove(&ctx->panel);
+	ret = devm_drm_panel_add(dev, &ctx->panel);
+	if (ret)
 		return ret;
-	}
+
+	ret = devm_mipi_dsi_attach(dev, dsi);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Failed to attach to DSI host\n");
 
 	return 0;
-}
-
-static void hx83112a_remove(struct mipi_dsi_device *dsi)
-{
-	struct hx83112a_panel *ctx = mipi_dsi_get_drvdata(dsi);
-	int ret;
-
-	ret = mipi_dsi_detach(dsi);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to detach from DSI host: %d\n", ret);
-
-	drm_panel_remove(&ctx->panel);
 }
 
 static const struct of_device_id hx83112a_of_match[] = {
@@ -335,7 +322,6 @@ MODULE_DEVICE_TABLE(of, hx83112a_of_match);
 
 static struct mipi_dsi_driver hx83112a_driver = {
 	.probe = hx83112a_probe,
-	.remove = hx83112a_remove,
 	.driver = {
 		.name = "panel-himax-hx83112a",
 		.of_match_table = hx83112a_of_match,

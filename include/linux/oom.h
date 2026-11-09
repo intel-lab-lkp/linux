@@ -30,7 +30,7 @@ struct oom_control {
 	struct zonelist *zonelist;
 
 	/* Used to determine mempolicy */
-	nodemask_t *nodemask;
+	const nodemask_t *nodemask;
 
 	/* Memory cgroup in which oom is invoked, or NULL for global oom */
 	struct mem_cgroup *memcg;
@@ -91,7 +91,7 @@ static inline bool tsk_is_oom_victim(struct task_struct * tsk)
  */
 static inline vm_fault_t check_stable_address_space(struct mm_struct *mm)
 {
-	if (unlikely(test_bit(MMF_UNSTABLE, &mm->flags)))
+	if (unlikely(mm_flags_test(MMF_UNSTABLE, mm)))
 		return VM_FAULT_SIGBUS;
 	return 0;
 }

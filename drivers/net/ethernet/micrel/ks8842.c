@@ -242,7 +242,7 @@ static void ks8842_reset(struct ks8842_adapter *adapter)
 		msleep(10);
 		iowrite16(0, adapter->hw_addr + REG_GRR);
 	} else {
-		/* The KS8842 goes haywire when doing softare reset
+		/* The KS8842 goes haywire when doing software reset
 		* a work around in the timberdale IP is implemented to
 		* do a hardware reset instead
 		ks8842_write16(adapter, 3, 1, REG_GRR);
@@ -312,7 +312,7 @@ static void ks8842_reset_hw(struct ks8842_adapter *adapter)
 	/* aggressive back off in half duplex */
 	ks8842_enable_bits(adapter, 32, 1 << 8, REG_SGCR1);
 
-	/* enable no excessive collison drop */
+	/* enable no excessive collision drop */
 	ks8842_enable_bits(adapter, 32, 1 << 3, REG_SGCR2);
 
 	/* Enable port 1 force flow control / back pressure / transmit / recv */
@@ -335,7 +335,7 @@ static void ks8842_reset_hw(struct ks8842_adapter *adapter)
 		/* When running in DMA Mode the RX interrupt is not enabled in
 		   timberdale because RX data is received by DMA callbacks
 		   it must still be enabled in the KS8842 because it indicates
-		   to timberdale when there is RX data for it's DMA FIFOs */
+		   to timberdale when there is RX data for its DMA FIFOs */
 		iowrite16(ENABLED_IRQS_DMA_IP, adapter->hw_addr + REG_TIMB_IER);
 		ks8842_write16(adapter, 18, ENABLED_IRQS_DMA, REG_IER);
 	} else {
@@ -455,7 +455,7 @@ static int ks8842_tx_frame_dma(struct sk_buff *skb, struct net_device *netdev)
 
 	ctl->adesc->callback_param = netdev;
 	ctl->adesc->callback = ks8842_dma_tx_cb;
-	ctl->adesc->tx_submit(ctl->adesc);
+	dmaengine_submit(ctl->adesc);
 
 	netdev->stats.tx_bytes += skb->len;
 
@@ -569,7 +569,7 @@ static int __ks8842_start_new_rx_dma(struct net_device *netdev)
 
 		ctl->adesc->callback_param = netdev;
 		ctl->adesc->callback = ks8842_dma_rx_cb;
-		ctl->adesc->tx_submit(ctl->adesc);
+		dmaengine_submit(ctl->adesc);
 	} else {
 		err = -ENOMEM;
 		sg_dma_address(sg) = 0;

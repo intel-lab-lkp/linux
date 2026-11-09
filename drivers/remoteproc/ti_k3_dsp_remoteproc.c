@@ -7,11 +7,8 @@
  */
 
 #include <linux/io.h>
-#include <linux/mailbox_client.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_reserved_mem.h>
-#include <linux/omap-mailbox.h>
 #include <linux/platform_device.h>
 #include <linux/remoteproc.h>
 #include <linux/reset.h>
@@ -154,6 +151,10 @@ static int k3_dsp_rproc_probe(struct platform_device *pdev)
 		dev_info(dev, "configured DSP for remoteproc mode\n");
 	}
 
+	ret = dma_coerce_mask_and_coherent(&rproc->dev, DMA_BIT_MASK(48));
+	if (ret)
+		dev_warn(dev, "Failed to set DMA mask (%d)\n", ret);
+
 	ret = devm_rproc_add(dev, rproc);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to add register device with remoteproc core\n");
@@ -175,8 +176,6 @@ static void k3_dsp_rproc_remove(struct platform_device *pdev)
 		if (ret)
 			dev_err(dev, "failed to detach proc (%pe)\n", ERR_PTR(ret));
 	}
-
-	mbox_free_channel(kproc->mbox);
 }
 
 static const struct k3_rproc_mem_data c66_mems[] = {

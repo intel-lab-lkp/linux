@@ -19,6 +19,7 @@
 #include <linux/i2c.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
+#include <linux/kstrtox.h>
 #include <linux/unaligned.h>
 
 /*
@@ -88,6 +89,7 @@
 #define PAC1934_VPOWER_3_ADDR			0x19
 #define PAC1934_VPOWER_4_ADDR			0x1A
 #define PAC1934_REFRESH_V_REG_ADDR		0x1F
+#define PAC1934_SLOW_REG_ADDR			0x20
 #define PAC1934_CTRL_STAT_REGS_ADDR		0x1C
 #define PAC1934_PID_REG_ADDR			0xFD
 #define PAC1934_MID_REG_ADDR			0xFE
@@ -493,11 +495,13 @@ static ssize_t pac1934_shunt_value_store(struct device *dev,
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct pac1934_chip_info *info = iio_priv(indio_dev);
 	struct iio_dev_attr *this_attr = to_iio_dev_attr(attr);
-	int sh_val;
+	unsigned int sh_val;
+	int ret;
 
-	if (kstrtouint(buf, 10, &sh_val)) {
+	ret = kstrtouint(buf, 10, &sh_val);
+	if (ret) {
 		dev_err(dev, "Shunt value is not valid\n");
-		return -EINVAL;
+		return ret;
 	}
 
 	scoped_guard(mutex, &info->lock)
@@ -664,9 +668,9 @@ static int pac1934_reg_snapshot(struct pac1934_chip_info *info,
 			/* add the power_acc field */
 			curr_energy += inc;
 
-			clamp(curr_energy, PAC_193X_MIN_POWER_ACC, PAC_193X_MAX_POWER_ACC);
-
-			reg_data->energy_sec_acc[cnt] = curr_energy;
+			reg_data->energy_sec_acc[cnt] = clamp(curr_energy,
+							      PAC_193X_MIN_POWER_ACC,
+							      PAC_193X_MAX_POWER_ACC);
 		}
 
 		offset_reg_data_p += PAC1934_VPOWER_ACC_REG_LEN;
@@ -767,7 +771,7 @@ static int pac1934_retrieve_data(struct pac1934_chip_info *info,
 		 * Re-schedule the work for the read registers on timeout
 		 * (to prevent chip registers saturation)
 		 */
-		mod_delayed_work(system_wq, &info->work_chip_rfsh,
+		mod_delayed_work(system_percpu_wq, &info->work_chip_rfsh,
 				 msecs_to_jiffies(PAC1934_MAX_RFSH_LIMIT_MS));
 	}
 
@@ -1107,6 +1111,10 @@ static int pac1934_acpi_parse_channel_config(struct i2c_client *client,
 			devm_kmemdup(dev, rez->package.elements[i].string.pointer,
 				     (size_t)rez->package.elements[i].string.length + 1,
 				     GFP_KERNEL);
+		if (!info->labels[idx]) {
+			ACPI_FREE(rez);
+			return -ENOMEM;
+		}
 		info->labels[idx][rez->package.elements[i].string.length] = '\0';
 		info->shunts[idx] = rez->package.elements[i + 1].integer.value * 1000;
 		info->active_channels[idx] = (info->shunts[idx] != 0);
@@ -1265,8 +1273,23 @@ static int pac1934_chip_configure(struct pac1934_chip_info *info)
 	/* no SLOW triggered REFRESH, clear POR */
 	regs[PAC1934_SLOW_REG_OFF] = 0;
 
-	ret =  i2c_smbus_write_block_data(client, PAC1934_CTRL_STAT_REGS_ADDR,
-					  ARRAY_SIZE(regs), (u8 *)regs);
+	/*
+	 * Write the three bytes sequentially, as the device does not support
+	 * block write.
+	 */
+	ret = i2c_smbus_write_byte_data(client, PAC1934_CTRL_STAT_REGS_ADDR,
+					regs[PAC1934_CHANNEL_DIS_REG_OFF]);
+	if (ret)
+		return ret;
+
+	ret = i2c_smbus_write_byte_data(client,
+					PAC1934_CTRL_STAT_REGS_ADDR + PAC1934_NEG_PWR_REG_OFF,
+					regs[PAC1934_NEG_PWR_REG_OFF]);
+	if (ret)
+		return ret;
+
+	ret = i2c_smbus_write_byte_data(client, PAC1934_SLOW_REG_ADDR,
+					regs[PAC1934_SLOW_REG_OFF]);
 	if (ret)
 		return ret;
 
@@ -1335,7 +1358,7 @@ static int pac1934_prep_iio_channels(struct pac1934_chip_info *info, struct iio_
 
 	dyn_ch_struct = devm_kzalloc(dev, channel_size, GFP_KERNEL);
 	if (!dyn_ch_struct)
-		return -EINVAL;
+		return -ENOMEM;
 
 	tmp_data = dyn_ch_struct;
 
@@ -1455,13 +1478,6 @@ static int pac1934_prep_custom_attributes(struct pac1934_chip_info *info,
 	return 0;
 }
 
-static void pac1934_mutex_destroy(void *data)
-{
-	struct mutex *lock = data;
-
-	mutex_destroy(lock);
-}
-
 static const struct iio_info pac1934_info = {
 	.read_raw = pac1934_read_raw,
 	.write_raw = pac1934_write_raw,
@@ -1520,9 +1536,7 @@ static int pac1934_probe(struct i2c_client *client)
 		return dev_err_probe(dev, ret,
 				     "parameter parsing returned an error\n");
 
-	mutex_init(&info->lock);
-	ret = devm_add_action_or_reset(dev, pac1934_mutex_destroy,
-				       &info->lock);
+	ret = devm_mutex_init(dev, &info->lock);
 	if (ret < 0)
 		return ret;
 

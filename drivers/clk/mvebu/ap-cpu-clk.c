@@ -210,19 +210,21 @@ static int ap_cpu_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 	return 0;
 }
 
-static long ap_cpu_clk_round_rate(struct clk_hw *hw, unsigned long rate,
-				  unsigned long *parent_rate)
+static int ap_cpu_clk_determine_rate(struct clk_hw *hw,
+				     struct clk_rate_request *req)
 {
-	int divider = *parent_rate / rate;
+	int divider = req->best_parent_rate / req->rate;
 
 	divider = min(divider, APN806_MAX_DIVIDER);
 
-	return *parent_rate / divider;
+	req->rate = req->best_parent_rate / divider;
+
+	return 0;
 }
 
 static const struct clk_ops ap_cpu_clk_ops = {
 	.recalc_rate	= ap_cpu_clk_recalc_rate,
-	.round_rate	= ap_cpu_clk_round_rate,
+	.determine_rate = ap_cpu_clk_determine_rate,
 	.set_rate	= ap_cpu_clk_set_rate,
 };
 
@@ -282,9 +284,11 @@ static int ap_cpu_clock_probe(struct platform_device *pdev)
 	if (!ap_cpu_data)
 		return -ENOMEM;
 
+	ap_cpu_data->num = nclusters;
+
 	for_each_of_cpu_node(dn) {
 		char *clk_name = "cpu-cluster-0";
-		struct clk_init_data init;
+		struct clk_init_data init = {};
 		const char *parent_name;
 		struct clk *parent;
 		u64 cpu;
@@ -330,8 +334,6 @@ static int ap_cpu_clock_probe(struct platform_device *pdev)
 		}
 		ap_cpu_data->hws[cluster_index] = &ap_cpu_clk[cluster_index].hw;
 	}
-
-	ap_cpu_data->num = cluster_index + 1;
 
 	ret = of_clk_add_hw_provider(np, of_clk_hw_onecell_get, ap_cpu_data);
 	if (ret)

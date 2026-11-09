@@ -1280,7 +1280,7 @@ static u32 sdhci_tegra_cqhci_irq(struct sdhci_host *host, u32 intmask)
 	if (!sdhci_cqe_irq(host, intmask, &cmd_error, &data_error))
 		return intmask;
 
-	cqhci_irq(host->mmc, intmask, cmd_error, data_error);
+	cqhci_irq(host->mmc, cmd_error, data_error);
 
 	return 0;
 }
@@ -1572,7 +1572,37 @@ static const struct sdhci_tegra_soc_data soc_data_tegra234 = {
 	.max_tap_delay = 111,
 };
 
+static const struct sdhci_tegra_soc_data soc_data_tegra264 = {
+	.pdata = &sdhci_tegra186_pdata,
+	.dma_mask = DMA_BIT_MASK(39),
+	.nvquirks = NVQUIRK_NEEDS_PAD_CONTROL |
+		    NVQUIRK_HAS_PADCALIB |
+		    NVQUIRK_DIS_CARD_CLK_CONFIG_TAP |
+		    NVQUIRK_ENABLE_SDR50 |
+		    NVQUIRK_ENABLE_SDR104 |
+		    NVQUIRK_PROGRAM_STREAMID |
+		    NVQUIRK_HAS_TMCLK,
+	.min_tap_delay = 95,
+	.max_tap_delay = 111,
+};
+
+static const struct sdhci_tegra_soc_data soc_data_tegra238 = {
+	.pdata = &sdhci_tegra186_pdata,
+	.dma_mask = DMA_BIT_MASK(39),
+	.nvquirks = NVQUIRK_NEEDS_PAD_CONTROL |
+		    NVQUIRK_HAS_PADCALIB |
+		    NVQUIRK_DIS_CARD_CLK_CONFIG_TAP |
+		    NVQUIRK_ENABLE_SDR50 |
+		    NVQUIRK_ENABLE_SDR104 |
+		    NVQUIRK_PROGRAM_STREAMID |
+		    NVQUIRK_HAS_TMCLK,
+	.min_tap_delay = 95,
+	.max_tap_delay = 111,
+};
+
 static const struct of_device_id sdhci_tegra_dt_match[] = {
+	{ .compatible = "nvidia,tegra264-sdhci", .data = &soc_data_tegra264 },
+	{ .compatible = "nvidia,tegra238-sdhci", .data = &soc_data_tegra238 },
 	{ .compatible = "nvidia,tegra234-sdhci", .data = &soc_data_tegra234 },
 	{ .compatible = "nvidia,tegra194-sdhci", .data = &soc_data_tegra194 },
 	{ .compatible = "nvidia,tegra186-sdhci", .data = &soc_data_tegra186 },
@@ -1693,7 +1723,7 @@ static int sdhci_tegra_probe(struct platform_device *pdev)
 
 	rc = mmc_of_parse(host->mmc);
 	if (rc)
-		goto err_parse_dt;
+		return rc;
 
 	if (tegra_host->soc_data->nvquirks & NVQUIRK_ENABLE_DDR50)
 		host->mmc->caps |= MMC_CAP_1_8V_DDR;
@@ -1739,7 +1769,7 @@ static int sdhci_tegra_probe(struct platform_device *pdev)
 		if (IS_ERR(clk)) {
 			rc = PTR_ERR(clk);
 			if (rc == -EPROBE_DEFER)
-				goto err_power_req;
+				return rc;
 
 			dev_warn(&pdev->dev, "failed to get tmclk: %d\n", rc);
 			clk = NULL;
@@ -1750,7 +1780,7 @@ static int sdhci_tegra_probe(struct platform_device *pdev)
 		if (rc) {
 			dev_err(&pdev->dev,
 				"failed to enable tmclk: %d\n", rc);
-			goto err_power_req;
+			return rc;
 		}
 
 		tegra_host->tmclk = clk;
@@ -1811,8 +1841,6 @@ err_rst_get:
 err_clk_get:
 	clk_disable_unprepare(tegra_host->tmclk);
 err_power_req:
-err_parse_dt:
-	sdhci_pltfm_free(pdev);
 	return rc;
 }
 
@@ -1831,10 +1859,9 @@ static void sdhci_tegra_remove(struct platform_device *pdev)
 	pm_runtime_force_suspend(&pdev->dev);
 
 	clk_disable_unprepare(tegra_host->tmclk);
-	sdhci_pltfm_free(pdev);
 }
 
-static int __maybe_unused sdhci_tegra_runtime_suspend(struct device *dev)
+static int sdhci_tegra_runtime_suspend(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -1844,7 +1871,7 @@ static int __maybe_unused sdhci_tegra_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused sdhci_tegra_runtime_resume(struct device *dev)
+static int sdhci_tegra_runtime_resume(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -1852,7 +1879,6 @@ static int __maybe_unused sdhci_tegra_runtime_resume(struct device *dev)
 	return clk_prepare_enable(pltfm_host->clk);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int sdhci_tegra_suspend(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
@@ -1913,12 +1939,10 @@ disable_clk:
 	pm_runtime_force_suspend(dev);
 	return ret;
 }
-#endif
 
 static const struct dev_pm_ops sdhci_tegra_dev_pm_ops = {
-	SET_RUNTIME_PM_OPS(sdhci_tegra_runtime_suspend, sdhci_tegra_runtime_resume,
-			   NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(sdhci_tegra_suspend, sdhci_tegra_resume)
+	RUNTIME_PM_OPS(sdhci_tegra_runtime_suspend, sdhci_tegra_runtime_resume, NULL)
+	SYSTEM_SLEEP_PM_OPS(sdhci_tegra_suspend, sdhci_tegra_resume)
 };
 
 static struct platform_driver sdhci_tegra_driver = {
@@ -1926,7 +1950,7 @@ static struct platform_driver sdhci_tegra_driver = {
 		.name	= "sdhci-tegra",
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		.of_match_table = sdhci_tegra_dt_match,
-		.pm	= &sdhci_tegra_dev_pm_ops,
+		.pm	= pm_ptr(&sdhci_tegra_dev_pm_ops),
 	},
 	.probe		= sdhci_tegra_probe,
 	.remove		= sdhci_tegra_remove,

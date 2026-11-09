@@ -11,6 +11,7 @@
 #include <crypto/xts.h>
 #include <crypto/gcm.h>
 #include <crypto/scatterwalk.h>
+#include <crypto/utils.h>
 #include <linux/sort.h>
 #include <linux/module.h>
 #include "otx2_cptvf.h"
@@ -90,9 +91,9 @@ static inline int validate_hmac_cipher_null(struct otx2_cpt_req_info *cpt_req)
 	req = container_of(cpt_req->areq, struct aead_request, base);
 	tfm = crypto_aead_reqtfm(req);
 	rctx = aead_request_ctx_dma(req);
-	if (memcmp(rctx->fctx.hmac.s.hmac_calc,
-		   rctx->fctx.hmac.s.hmac_recv,
-		   crypto_aead_authsize(tfm)) != 0)
+	if (crypto_memneq(rctx->fctx.hmac.s.hmac_calc,
+			  rctx->fctx.hmac.s.hmac_recv,
+			  crypto_aead_authsize(tfm)))
 		return -EBADMSG;
 
 	return 0;
@@ -384,7 +385,8 @@ static inline int cpt_enc_dec(struct skcipher_request *req, u32 enc)
 	req_info->req_type = OTX2_CPT_ENC_DEC_REQ;
 	req_info->is_enc = enc;
 	req_info->is_trunc_hmac = false;
-	req_info->ctrl.s.grp = otx2_cpt_get_kcrypto_eng_grp_num(pdev);
+	req_info->ctrl.s.grp = otx2_cpt_get_eng_grp_num(pdev,
+							OTX2_CPT_SE_TYPES);
 
 	req_info->req.cptr = ctx->er_ctx.hw_ctx;
 	req_info->req.cptr_dma = ctx->er_ctx.cptr_dma;
@@ -881,8 +883,7 @@ static int aead_hmac_init(struct crypto_aead *cipher,
 	ipad = ctx->ipad;
 	opad = ctx->opad;
 
-	memcpy(ipad, ctx->key, authkeylen);
-	memset(ipad + authkeylen, 0, bs - authkeylen);
+	memcpy_and_pad(ipad, bs, ctx->key, authkeylen, 0);
 	memcpy(opad, ipad, bs);
 
 	for (icount = 0; icount < bs; icount++) {
@@ -1288,7 +1289,8 @@ static int cpt_aead_enc_dec(struct aead_request *req, u8 reg_type, u8 enc)
 	if (status)
 		return status;
 
-	req_info->ctrl.s.grp = otx2_cpt_get_kcrypto_eng_grp_num(pdev);
+	req_info->ctrl.s.grp = otx2_cpt_get_eng_grp_num(pdev,
+							OTX2_CPT_SE_TYPES);
 
 	/*
 	 * We perform an asynchronous send and once

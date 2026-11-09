@@ -52,9 +52,9 @@
 #ifdef CONFIG_PNP
 
 static const struct pnp_device_id pnp_dev_table[] = {
-	{ "WEC0517", 0 },
-	{ "WEC0518", 0 },
-	{ "", 0 },
+	{ .id = "WEC0517" },
+	{ .id = "WEC0518" },
+	{ }
 };
 
 MODULE_DEVICE_TABLE(pnp, pnp_dev_table);
@@ -1190,7 +1190,7 @@ static int wbsd_alloc_mmc(struct device *dev)
 	/*
 	 * Allocate MMC structure.
 	 */
-	mmc = mmc_alloc_host(sizeof(struct wbsd_host), dev);
+	mmc = devm_mmc_alloc_host(dev, sizeof(*host));
 	if (!mmc)
 		return -ENOMEM;
 
@@ -1262,8 +1262,6 @@ static void wbsd_free_mmc(struct device *dev)
 	BUG_ON(host == NULL);
 
 	timer_delete_sync(&host->ignore_timer);
-
-	mmc_free_host(mmc);
 }
 
 /*

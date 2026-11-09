@@ -97,7 +97,8 @@ static void mmc_should_fail_request(struct mmc_host *host,
 		return;
 
 	data->error = data_errors[get_random_u32_below(ARRAY_SIZE(data_errors))];
-	data->bytes_xfered = get_random_u32_below(data->bytes_xfered >> 9) << 9;
+	data->bytes_xfered = get_random_u32_below(data->bytes_xfered >> SECTOR_SHIFT)
+						  << SECTOR_SHIFT;
 }
 
 #else /* CONFIG_FAIL_MMC_REQUEST */
@@ -588,8 +589,8 @@ EXPORT_SYMBOL(mmc_cqe_recovery);
  *	mmc_is_req_done() is used with requests that have
  *	mrq->cap_cmd_during_tfr = true. mmc_is_req_done() must be called after
  *	starting a request and before waiting for it to complete. That is,
- *	either in between calls to mmc_start_req(), or after mmc_wait_for_req()
- *	and before mmc_wait_for_req_done(). If it is called at other times the
+ *	after mmc_start_request() or mmc_wait_for_req() and before
+ *	mmc_wait_for_req_done(). If it is called at other times the
  *	result is not meaningful.
  */
 bool mmc_is_req_done(struct mmc_host *host, struct mmc_request *mrq)
@@ -882,7 +883,6 @@ void mmc_put_card(struct mmc_card *card, struct mmc_ctx *ctx)
 	WARN_ON(ctx && host->claimer != ctx);
 
 	mmc_release_host(host);
-	pm_runtime_mark_last_busy(&card->dev);
 	pm_runtime_put_autosuspend(&card->dev);
 }
 EXPORT_SYMBOL(mmc_put_card);
@@ -1388,7 +1388,7 @@ void mmc_power_off(struct mmc_host *host)
 	 * XO-1.5, require a short delay after poweroff before the card
 	 * can be successfully turned on again.
 	 */
-	mmc_delay(1);
+	mmc_delay_us(host->ios.power_off_delay_us);
 }
 
 void mmc_power_cycle(struct mmc_host *host, u32 ocr)
@@ -1397,6 +1397,29 @@ void mmc_power_cycle(struct mmc_host *host, u32 ocr)
 	/* Wait at least 1 ms according to SD spec */
 	mmc_delay(1);
 	mmc_power_up(host, ocr);
+}
+
+/**
+ * mmc_handle_undervoltage - Handle an undervoltage event on the MMC bus
+ * @host: The MMC host that detected the undervoltage condition
+ *
+ * This function is called when an undervoltage event is detected on one of
+ * the MMC regulators.
+ *
+ * Returns: 0 on success or a negative error code on failure.
+ */
+int mmc_handle_undervoltage(struct mmc_host *host)
+{
+	/* Stop the host to prevent races with card removal */
+	__mmc_stop_host(host);
+
+	if (!host->bus_ops || !host->bus_ops->handle_undervoltage)
+		return 0;
+
+	dev_warn(mmc_dev(host), "%s: Undervoltage detected, initiating emergency stop\n",
+		 mmc_hostname(host));
+
+	return host->bus_ops->handle_undervoltage(host);
 }
 
 /*
@@ -1876,6 +1899,15 @@ bool mmc_card_can_secure_erase_trim(struct mmc_card *card)
 }
 EXPORT_SYMBOL(mmc_card_can_secure_erase_trim);
 
+bool mmc_card_can_cmd23(struct mmc_card *card)
+{
+	return ((mmc_card_mmc(card) &&
+		 card->csd.mmca_vsn >= CSD_SPEC_VER_3) ||
+		(mmc_card_sd(card) && !mmc_card_ult_capacity(card) &&
+		 card->scr.cmds & SD_SCR_CMD23_SUPPORT));
+}
+EXPORT_SYMBOL(mmc_card_can_cmd23);
+
 int mmc_erase_group_aligned(struct mmc_card *card, sector_t from,
 			    unsigned int nr)
 {
@@ -1972,7 +2004,7 @@ unsigned int mmc_calc_max_discard(struct mmc_card *card)
 
 	/*
 	 * Without erase_group_def set, MMC erase timeout depends on clock
-	 * frequence which can change.  In that case, the best choice is
+	 * frequency which can change.  In that case, the best choice is
 	 * just the preferred erase size.
 	 */
 	if (mmc_card_mmc(card) && !(card->ext_csd.erase_group_def & 1))

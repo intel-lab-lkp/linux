@@ -85,9 +85,8 @@ static void virtsnd_event_notify_cb(struct virtqueue *vqueue)
 	struct virtio_snd_queue *queue = virtsnd_event_queue(snd);
 	struct virtio_snd_event *event;
 	u32 length;
-	unsigned long flags;
 
-	spin_lock_irqsave(&queue->lock, flags);
+	guard(spinlock_irqsave)(&queue->lock);
 	do {
 		virtqueue_disable_cb(vqueue);
 		while ((event = virtqueue_get_buf(vqueue, &length))) {
@@ -95,7 +94,6 @@ static void virtsnd_event_notify_cb(struct virtqueue *vqueue)
 			virtsnd_event_send(vqueue, event, true, GFP_ATOMIC);
 		}
 	} while (!virtqueue_enable_cb(vqueue));
-	spin_unlock_irqrestore(&queue->lock, flags);
 }
 
 /**
@@ -139,8 +137,7 @@ static int virtsnd_find_vqs(struct virtio_snd *snd)
 
 	n = virtqueue_get_vring_size(vqs[VIRTIO_SND_VQ_EVENT]);
 
-	snd->event_msgs = kmalloc_array(n, sizeof(*snd->event_msgs),
-					GFP_KERNEL);
+	snd->event_msgs = kmalloc_objs(*snd->event_msgs, n);
 	if (!snd->event_msgs)
 		return -ENOMEM;
 
@@ -176,14 +173,12 @@ static void virtsnd_disable_event_vq(struct virtio_snd *snd)
 	struct virtio_snd_queue *queue = virtsnd_event_queue(snd);
 	struct virtio_snd_event *event;
 	u32 length;
-	unsigned long flags;
 
 	if (queue->vqueue) {
-		spin_lock_irqsave(&queue->lock, flags);
+		guard(spinlock_irqsave)(&queue->lock);
 		virtqueue_disable_cb(queue->vqueue);
 		while ((event = virtqueue_get_buf(queue->vqueue, &length)))
 			virtsnd_event_dispatch(snd, event);
-		spin_unlock_irqrestore(&queue->lock, flags);
 	}
 }
 
@@ -359,8 +354,8 @@ static void virtsnd_remove(struct virtio_device *vdev)
 	if (snd->card)
 		snd_card_free(snd->card);
 
-	vdev->config->del_vqs(vdev);
 	virtio_reset_device(vdev);
+	vdev->config->del_vqs(vdev);
 
 	for (i = 0; snd->substreams && i < snd->nsubstreams; ++i) {
 		struct virtio_pcm_substream *vss = &snd->substreams[i];
@@ -388,8 +383,8 @@ static int virtsnd_freeze(struct virtio_device *vdev)
 	virtsnd_disable_event_vq(snd);
 	virtsnd_ctl_msg_cancel_all(snd);
 
-	vdev->config->del_vqs(vdev);
 	virtio_reset_device(vdev);
+	vdev->config->del_vqs(vdev);
 
 	for (i = 0; i < snd->nsubstreams; ++i)
 		cancel_work_sync(&snd->substreams[i].elapsed_period);

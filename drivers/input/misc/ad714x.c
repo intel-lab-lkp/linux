@@ -6,6 +6,7 @@
  */
 
 #include <linux/device.h>
+#include <linux/export.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/slab.h>
@@ -1045,7 +1046,6 @@ struct ad714x_chip *ad714x_probe(struct device *dev, u16 bus_type, int irq,
 			input->id.product = ad714x->product;
 			input->id.version = ad714x->version;
 			input->name = "ad714x_captouch_slider";
-			input->dev.parent = dev;
 
 			error = input_register_device(input);
 			if (error)
@@ -1075,7 +1075,6 @@ struct ad714x_chip *ad714x_probe(struct device *dev, u16 bus_type, int irq,
 			input->id.product = ad714x->product;
 			input->id.version = ad714x->version;
 			input->name = "ad714x_captouch_wheel";
-			input->dev.parent = dev;
 
 			error = input_register_device(input);
 			if (error)
@@ -1108,7 +1107,6 @@ struct ad714x_chip *ad714x_probe(struct device *dev, u16 bus_type, int irq,
 			input->id.product = ad714x->product;
 			input->id.version = ad714x->version;
 			input->name = "ad714x_captouch_pad";
-			input->dev.parent = dev;
 
 			error = input_register_device(input);
 			if (error)
@@ -1138,7 +1136,6 @@ struct ad714x_chip *ad714x_probe(struct device *dev, u16 bus_type, int irq,
 		input->id.product = ad714x->product;
 		input->id.version = ad714x->version;
 		input->name = "ad714x_captouch_button";
-		input->dev.parent = dev;
 
 		error = input_register_device(input);
 		if (error)

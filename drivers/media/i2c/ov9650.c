@@ -1226,6 +1226,7 @@ static void __ov965x_try_frame_size(struct v4l2_mbus_framefmt *mf,
 }
 
 static int ov965x_set_fmt(struct v4l2_subdev *sd,
+			  const struct v4l2_subdev_client_info *ci,
 			  struct v4l2_subdev_state *sd_state,
 			  struct v4l2_subdev_format *fmt)
 {
@@ -1494,9 +1495,10 @@ static int ov965x_probe(struct i2c_client *client)
 	}
 
 	if (dev_fwnode(&client->dev)) {
-		ov965x->clk = devm_clk_get(&client->dev, NULL);
+		ov965x->clk = devm_v4l2_sensor_clk_get(&client->dev, NULL);
 		if (IS_ERR(ov965x->clk))
-			return PTR_ERR(ov965x->clk);
+			return dev_err_probe(&client->dev, PTR_ERR(ov965x->clk),
+					     "failed to get the clock\n");
 		ov965x->mclk_frequency = clk_get_rate(ov965x->clk);
 
 		ret = ov965x_configure_gpios(ov965x);
@@ -1566,8 +1568,8 @@ static void ov965x_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id ov965x_id[] = {
-	{ "OV9650" },
-	{ "OV9652" },
+	{ .name = "OV9650" },
+	{ .name = "OV9652" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(i2c, ov965x_id);

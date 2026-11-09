@@ -291,7 +291,7 @@ static const struct user_regset sh_regsets[] = {
 	 *	PC, PR, SR, GBR, MACH, MACL, TRA
 	 */
 	[REGSET_GENERAL] = {
-		.core_note_type	= NT_PRSTATUS,
+		USER_REGSET_NOTE_TYPE(PRSTATUS),
 		.n		= ELF_NGREG,
 		.size		= sizeof(long),
 		.align		= sizeof(long),
@@ -301,7 +301,7 @@ static const struct user_regset sh_regsets[] = {
 
 #ifdef CONFIG_SH_FPU
 	[REGSET_FPU] = {
-		.core_note_type	= NT_PRFPREG,
+		USER_REGSET_NOTE_TYPE(PRFPREG),
 		.n		= sizeof(struct user_fpu_struct) / sizeof(long),
 		.size		= sizeof(long),
 		.align		= sizeof(long),
@@ -455,12 +455,12 @@ long arch_ptrace(struct task_struct *child, long request,
 asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 {
 	if (test_thread_flag(TIF_SYSCALL_TRACE) &&
-	    ptrace_report_syscall_entry(regs)) {
+	    !ptrace_report_syscall_permit_entry(regs)) {
 		regs->regs[0] = -ENOSYS;
 		return -1;
 	}
 
-	if (secure_computing() == -1)
+	if (!seccomp_permit_syscall())
 		return -1;
 
 	if (unlikely(test_thread_flag(TIF_SYSCALL_TRACEPOINT)))

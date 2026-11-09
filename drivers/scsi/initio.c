@@ -2507,9 +2507,9 @@ static irqreturn_t i91u_intr(int irqno, void *dev_id)
 	unsigned long flags;
 	int r;
 	
-	spin_lock_irqsave(dev->host_lock, flags);
+	spin_lock_irqsave(&dev->host_lock, flags);
 	r = initio_isr((struct initio_host *)dev->hostdata);
-	spin_unlock_irqrestore(dev->host_lock, flags);
+	spin_unlock_irqrestore(&dev->host_lock, flags);
 	if (r)
 		return IRQ_HANDLED;
 	else
@@ -2606,7 +2606,7 @@ static void initio_build_scb(struct initio_host * host, struct scsi_ctrl_blk * c
  *	zero if successful or indicate a host busy condition if not (which
  *	will cause the mid layer to call us again later with the command)
  */
-static int i91u_queuecommand_lck(struct scsi_cmnd *cmd)
+static enum scsi_qc_status i91u_queuecommand_lck(struct scsi_cmnd *cmd)
 {
 	struct initio_host *host = (struct initio_host *) cmd->device->host->hostdata;
 	struct scsi_ctrl_blk *cmnd;
@@ -2635,9 +2635,9 @@ static int i91u_bus_reset(struct scsi_cmnd * cmnd)
 
 	host = (struct initio_host *) cmnd->device->host->hostdata;
 
-	spin_lock_irq(cmnd->device->host->host_lock);
+	spin_lock_irq(&cmnd->device->host->host_lock);
 	initio_reset_scsi(host, 0);
-	spin_unlock_irq(cmnd->device->host->host_lock);
+	spin_unlock_irq(&cmnd->device->host->host_lock);
 
 	return SUCCESS;
 }
@@ -2645,7 +2645,7 @@ static int i91u_bus_reset(struct scsi_cmnd * cmnd)
 /**
  *	i91u_biosparam			-	return the "logical geometry
  *	@sdev: SCSI device
- *	@dev: Matching block device
+ *	@unused: Matching gendisk
  *	@capacity: Sector size of drive
  *	@info_array: Return space for BIOS geometry
  *
@@ -2655,7 +2655,7 @@ static int i91u_bus_reset(struct scsi_cmnd * cmnd)
  *	FIXME: limited to 2^32 sector devices.
  */
 
-static int i91u_biosparam(struct scsi_device *sdev, struct block_device *dev,
+static int i91u_biosparam(struct scsi_device *sdev, struct gendisk *unused,
 		sector_t capacity, int *info_array)
 {
 	struct initio_host *host;		/* Point to Host adapter control block */

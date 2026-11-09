@@ -10,7 +10,6 @@
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
@@ -2990,7 +2989,6 @@ static int ov64a40_start_streaming(struct ov64a40 *ov64a40,
 	return 0;
 
 error_power_off:
-	pm_runtime_mark_last_busy(ov64a40->dev);
 	pm_runtime_put_autosuspend(ov64a40->dev);
 
 	return ret;
@@ -3000,7 +2998,6 @@ static int ov64a40_stop_streaming(struct ov64a40 *ov64a40,
 				  struct v4l2_subdev_state *state)
 {
 	cci_update_bits(ov64a40->cci, OV64A40_REG_SMIA, BIT(0), 0, NULL);
-	pm_runtime_mark_last_busy(ov64a40->dev);
 	pm_runtime_put_autosuspend(ov64a40->dev);
 
 	__v4l2_ctrl_grab(ov64a40->link_freq, false);
@@ -3109,6 +3106,7 @@ static int ov64a40_enum_frame_size(struct v4l2_subdev *sd,
 }
 
 static int ov64a40_get_selection(struct v4l2_subdev *sd,
+				 const struct v4l2_subdev_client_info *ci,
 				 struct v4l2_subdev_state *state,
 				 struct v4l2_subdev_selection *sel)
 {
@@ -3140,6 +3138,7 @@ static int ov64a40_get_selection(struct v4l2_subdev *sd,
 }
 
 static int ov64a40_set_format(struct v4l2_subdev *sd,
+			      const struct v4l2_subdev_client_info *ci,
 			      struct v4l2_subdev_state *state,
 			      struct v4l2_subdev_format *fmt)
 {
@@ -3329,10 +3328,8 @@ static int ov64a40_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	}
 
-	if (pm_status > 0) {
-		pm_runtime_mark_last_busy(ov64a40->dev);
+	if (pm_status > 0)
 		pm_runtime_put_autosuspend(ov64a40->dev);
-	}
 
 	return ret;
 }
@@ -3550,7 +3547,7 @@ static int ov64a40_probe(struct i2c_client *client)
 		return PTR_ERR(ov64a40->cci);
 	}
 
-	ov64a40->xclk = devm_clk_get(&client->dev, NULL);
+	ov64a40->xclk = devm_v4l2_sensor_clk_get(&client->dev, NULL);
 	if (IS_ERR(ov64a40->xclk))
 		return dev_err_probe(&client->dev, PTR_ERR(ov64a40->xclk),
 				     "Failed to get clock\n");
@@ -3622,7 +3619,6 @@ static int ov64a40_probe(struct i2c_client *client)
 		goto error_subdev_cleanup;
 	}
 
-	pm_runtime_mark_last_busy(&client->dev);
 	pm_runtime_put_autosuspend(&client->dev);
 
 	return 0;

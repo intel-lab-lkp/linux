@@ -200,7 +200,7 @@ void perf_mmap__read_done(struct perf_mmap *map)
 	/*
 	 * Check if event was unmapped due to a POLLHUP/POLLERR.
 	 */
-	if (!refcount_read(&map->refcnt))
+	if (!refcount_read(&map->refcnt) || !map->overwrite)
 		return;
 
 	map->prev = perf_mmap__read_head(map);
@@ -508,7 +508,7 @@ int perf_mmap__read_self(struct perf_mmap *map, struct perf_counts_values *count
 		idx = READ_ONCE(pc->index);
 		cnt = READ_ONCE(pc->offset);
 		if (pc->cap_user_rdpmc && idx) {
-			s64 evcnt = read_perf_counter(idx - 1);
+			u64 evcnt = read_perf_counter(idx - 1);
 			u16 width = READ_ONCE(pc->pmc_width);
 
 			evcnt <<= 64 - width;

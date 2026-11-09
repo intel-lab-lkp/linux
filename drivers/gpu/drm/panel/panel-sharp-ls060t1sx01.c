@@ -193,9 +193,11 @@ static int sharp_ls060_probe(struct mipi_dsi_device *dsi)
 	struct sharp_ls060 *ctx;
 	int ret;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	ctx = devm_drm_panel_alloc(dev, struct sharp_ls060, panel,
+				   &sharp_ls060_panel_funcs,
+				   DRM_MODE_CONNECTOR_DSI);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	ctx->vddi_supply = devm_regulator_get(dev, "vddi");
 	if (IS_ERR(ctx->vddi_supply))
@@ -227,35 +229,21 @@ static int sharp_ls060_probe(struct mipi_dsi_device *dsi)
 			  MIPI_DSI_MODE_NO_EOT_PACKET |
 			  MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
-	drm_panel_init(&ctx->panel, dev, &sharp_ls060_panel_funcs,
-		       DRM_MODE_CONNECTOR_DSI);
-
 	ret = drm_panel_of_backlight(&ctx->panel);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get backlight\n");
 
-	drm_panel_add(&ctx->panel);
+	ret = devm_drm_panel_add(dev, &ctx->panel);
+	if (ret)
+		return ret;
 
-	ret = mipi_dsi_attach(dsi);
+	ret = devm_mipi_dsi_attach(dev, dsi);
 	if (ret < 0) {
 		dev_err(dev, "Failed to attach to DSI host: %d\n", ret);
-		drm_panel_remove(&ctx->panel);
 		return ret;
 	}
 
 	return 0;
-}
-
-static void sharp_ls060_remove(struct mipi_dsi_device *dsi)
-{
-	struct sharp_ls060 *ctx = mipi_dsi_get_drvdata(dsi);
-	int ret;
-
-	ret = mipi_dsi_detach(dsi);
-	if (ret < 0)
-		dev_err(&dsi->dev, "Failed to detach from DSI host: %d\n", ret);
-
-	drm_panel_remove(&ctx->panel);
 }
 
 static const struct of_device_id sharp_ls060t1sx01_of_match[] = {
@@ -266,7 +254,6 @@ MODULE_DEVICE_TABLE(of, sharp_ls060t1sx01_of_match);
 
 static struct mipi_dsi_driver sharp_ls060_driver = {
 	.probe = sharp_ls060_probe,
-	.remove = sharp_ls060_remove,
 	.driver = {
 		.name = "panel-sharp-ls060t1sx01",
 		.of_match_table = sharp_ls060t1sx01_of_match,

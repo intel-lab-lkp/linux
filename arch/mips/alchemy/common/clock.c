@@ -150,11 +150,11 @@ static const struct clk_ops alchemy_clkops_cpu = {
 static struct clk __init *alchemy_clk_setup_cpu(const char *parent_name,
 						int ctype)
 {
-	struct clk_init_data id;
+	struct clk_init_data id = {};
 	struct clk_hw *h;
 	struct clk *clk;
 
-	h = kzalloc(sizeof(*h), GFP_KERNEL);
+	h = kzalloc_obj(*h);
 	if (!h)
 		return ERR_PTR(-ENOMEM);
 
@@ -211,41 +211,45 @@ static int alchemy_clk_aux_setr(struct clk_hw *hw,
 	return 0;
 }
 
-static long alchemy_clk_aux_roundr(struct clk_hw *hw,
-					    unsigned long rate,
-					    unsigned long *parent_rate)
+static int alchemy_clk_aux_determine_rate(struct clk_hw *hw,
+					  struct clk_rate_request *req)
 {
 	struct alchemy_auxpll_clk *a = to_auxpll_clk(hw);
 	unsigned long mult;
 
-	if (!rate || !*parent_rate)
-		return 0;
+	if (!req->rate || !req->best_parent_rate) {
+		req->rate = 0;
 
-	mult = rate / (*parent_rate);
+		return 0;
+	}
+
+	mult = req->rate / req->best_parent_rate;
 
 	if (mult && (mult < 7))
 		mult = 7;
 	if (mult > a->maxmult)
 		mult = a->maxmult;
 
-	return (*parent_rate) * mult;
+	req->rate = req->best_parent_rate * mult;
+
+	return 0;
 }
 
 static const struct clk_ops alchemy_clkops_aux = {
 	.recalc_rate	= alchemy_clk_aux_recalc,
 	.set_rate	= alchemy_clk_aux_setr,
-	.round_rate	= alchemy_clk_aux_roundr,
+	.determine_rate = alchemy_clk_aux_determine_rate,
 };
 
 static struct clk __init *alchemy_clk_setup_aux(const char *parent_name,
 						char *name, int maxmult,
 						unsigned long reg)
 {
-	struct clk_init_data id;
+	struct clk_init_data id = {};
 	struct clk *c;
 	struct alchemy_auxpll_clk *a;
 
-	a = kzalloc(sizeof(*a), GFP_KERNEL);
+	a = kzalloc_obj(*a);
 	if (!a)
 		return ERR_PTR(-ENOMEM);
 
@@ -750,7 +754,7 @@ static const char * const alchemy_clk_fgen_names[] = {
 static int __init alchemy_clk_init_fgens(int ctype)
 {
 	struct clk *c;
-	struct clk_init_data id;
+	struct clk_init_data id = {};
 	struct alchemy_fgcs_clk *a;
 	unsigned long v;
 	int i, ret;
@@ -771,7 +775,7 @@ static int __init alchemy_clk_init_fgens(int ctype)
 	}
 	id.flags = CLK_SET_RATE_PARENT | CLK_GET_RATE_NOCACHE;
 
-	a = kcalloc(6, sizeof(*a), GFP_KERNEL);
+	a = kzalloc_objs(*a, 6);
 	if (!a)
 		return -ENOMEM;
 
@@ -955,9 +959,9 @@ static int alchemy_csrc_dt2[] = { 1, 4, 3, 2 };	/* Au1300 */
 
 static int __init alchemy_clk_setup_imux(int ctype)
 {
+	struct clk_init_data id = {};
 	struct alchemy_fgcs_clk *a;
 	const char * const *names;
-	struct clk_init_data id;
 	unsigned long v;
 	int i, ret, *dt;
 	struct clk *c;
@@ -992,7 +996,7 @@ static int __init alchemy_clk_setup_imux(int ctype)
 		return -ENODEV;
 	}
 
-	a = kcalloc(6, sizeof(*a), GFP_KERNEL);
+	a = kzalloc_objs(*a, 6);
 	if (!a)
 		return -ENOMEM;
 

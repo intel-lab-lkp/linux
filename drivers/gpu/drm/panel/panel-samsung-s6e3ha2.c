@@ -681,9 +681,11 @@ static int s6e3ha2_probe(struct mipi_dsi_device *dsi)
 	struct s6e3ha2 *ctx;
 	int ret;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	ctx = devm_drm_panel_alloc(dev, struct s6e3ha2, panel,
+				   &s6e3ha2_drm_funcs,
+				   DRM_MODE_CONNECTOR_DSI);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	mipi_dsi_set_drvdata(dsi, ctx);
 
@@ -720,8 +722,8 @@ static int s6e3ha2_probe(struct mipi_dsi_device *dsi)
 		return PTR_ERR(ctx->enable_gpio);
 	}
 
-	ctx->bl_dev = backlight_device_register("s6e3ha2", dev, ctx,
-						&s6e3ha2_bl_ops, NULL);
+	ctx->bl_dev = devm_backlight_device_register(dev, "s6e3ha2", dev, ctx,
+						     &s6e3ha2_bl_ops, NULL);
 	if (IS_ERR(ctx->bl_dev)) {
 		dev_err(dev, "failed to register backlight device\n");
 		return PTR_ERR(ctx->bl_dev);
@@ -731,32 +733,13 @@ static int s6e3ha2_probe(struct mipi_dsi_device *dsi)
 	ctx->bl_dev->props.brightness = S6E3HA2_DEFAULT_BRIGHTNESS;
 	ctx->bl_dev->props.power = BACKLIGHT_POWER_OFF;
 
-	drm_panel_init(&ctx->panel, dev, &s6e3ha2_drm_funcs,
-		       DRM_MODE_CONNECTOR_DSI);
 	ctx->panel.prepare_prev_first = true;
 
-	drm_panel_add(&ctx->panel);
+	ret = devm_drm_panel_add(dev, &ctx->panel);
+	if (ret)
+		return ret;
 
-	ret = mipi_dsi_attach(dsi);
-	if (ret < 0)
-		goto remove_panel;
-
-	return ret;
-
-remove_panel:
-	drm_panel_remove(&ctx->panel);
-	backlight_device_unregister(ctx->bl_dev);
-
-	return ret;
-}
-
-static void s6e3ha2_remove(struct mipi_dsi_device *dsi)
-{
-	struct s6e3ha2 *ctx = mipi_dsi_get_drvdata(dsi);
-
-	mipi_dsi_detach(dsi);
-	drm_panel_remove(&ctx->panel);
-	backlight_device_unregister(ctx->bl_dev);
+	return devm_mipi_dsi_attach(dev, dsi);
 }
 
 static const struct of_device_id s6e3ha2_of_match[] = {
@@ -768,7 +751,6 @@ MODULE_DEVICE_TABLE(of, s6e3ha2_of_match);
 
 static struct mipi_dsi_driver s6e3ha2_driver = {
 	.probe = s6e3ha2_probe,
-	.remove = s6e3ha2_remove,
 	.driver = {
 		.name = "panel-samsung-s6e3ha2",
 		.of_match_table = s6e3ha2_of_match,

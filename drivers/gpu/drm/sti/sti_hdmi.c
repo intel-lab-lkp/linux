@@ -168,6 +168,11 @@ struct sti_hdmi_connector {
 #define to_sti_hdmi_connector(x) \
 	container_of(x, struct sti_hdmi_connector, drm_connector)
 
+static struct sti_hdmi *drm_bridge_to_sti_hdmi(struct drm_bridge *bridge)
+{
+	return container_of(bridge, struct sti_hdmi, bridge);
+}
+
 static const struct drm_prop_enum_list colorspace_mode_names[] = {
 	{ HDMI_COLORSPACE_RGB, "rgb" },
 	{ HDMI_COLORSPACE_YUV422, "yuv422" },
@@ -747,9 +752,10 @@ static void hdmi_debugfs_init(struct sti_hdmi *hdmi, struct drm_minor *minor)
 				 minor->debugfs_root, minor);
 }
 
-static void sti_hdmi_disable(struct drm_bridge *bridge)
+static void sti_hdmi_disable(struct drm_bridge *bridge,
+			     struct drm_atomic_commit *commit)
 {
-	struct sti_hdmi *hdmi = bridge->driver_private;
+	struct sti_hdmi *hdmi = drm_bridge_to_sti_hdmi(bridge);
 
 	u32 val = hdmi_read(hdmi, HDMI_CFG);
 
@@ -879,9 +885,10 @@ static int hdmi_audio_configure(struct sti_hdmi *hdmi)
 	return hdmi_audio_infoframe_config(hdmi);
 }
 
-static void sti_hdmi_pre_enable(struct drm_bridge *bridge)
+static void sti_hdmi_pre_enable(struct drm_bridge *bridge,
+				struct drm_atomic_commit *commit)
 {
-	struct sti_hdmi *hdmi = bridge->driver_private;
+	struct sti_hdmi *hdmi = drm_bridge_to_sti_hdmi(bridge);
 
 	DRM_DEBUG_DRIVER("\n");
 
@@ -936,7 +943,7 @@ static void sti_hdmi_set_mode(struct drm_bridge *bridge,
 			      const struct drm_display_mode *mode,
 			      const struct drm_display_mode *adjusted_mode)
 {
-	struct sti_hdmi *hdmi = bridge->driver_private;
+	struct sti_hdmi *hdmi = drm_bridge_to_sti_hdmi(bridge);
 	int ret;
 
 	DRM_DEBUG_DRIVER("\n");
@@ -959,16 +966,20 @@ static void sti_hdmi_set_mode(struct drm_bridge *bridge,
 	}
 }
 
-static void sti_hdmi_bridge_nope(struct drm_bridge *bridge)
+static void sti_hdmi_bridge_nope(struct drm_bridge *bridge,
+				 struct drm_atomic_commit *commit)
 {
 	/* do nothing */
 }
 
 static const struct drm_bridge_funcs sti_hdmi_bridge_funcs = {
-	.pre_enable = sti_hdmi_pre_enable,
-	.enable = sti_hdmi_bridge_nope,
-	.disable = sti_hdmi_disable,
-	.post_disable = sti_hdmi_bridge_nope,
+	.atomic_create_state = drm_atomic_helper_bridge_create_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
+	.atomic_pre_enable = sti_hdmi_pre_enable,
+	.atomic_enable = sti_hdmi_bridge_nope,
+	.atomic_disable = sti_hdmi_disable,
+	.atomic_post_disable = sti_hdmi_bridge_nope,
 	.mode_set = sti_hdmi_set_mode,
 };
 
@@ -1273,7 +1284,6 @@ static int sti_hdmi_bind(struct device *dev, struct device *master, void *data)
 	struct sti_hdmi_connector *connector;
 	struct cec_connector_info conn_info;
 	struct drm_connector *drm_connector;
-	struct drm_bridge *bridge;
 	int err;
 
 	/* Set the drm device handle */
@@ -1289,13 +1299,7 @@ static int sti_hdmi_bind(struct device *dev, struct device *master, void *data)
 
 	connector->hdmi = hdmi;
 
-	bridge = devm_kzalloc(dev, sizeof(*bridge), GFP_KERNEL);
-	if (!bridge)
-		return -EINVAL;
-
-	bridge->driver_private = hdmi;
-	bridge->funcs = &sti_hdmi_bridge_funcs;
-	drm_bridge_attach(encoder, bridge, NULL, 0);
+	drm_bridge_attach(encoder, &hdmi->bridge, NULL, 0);
 
 	connector->encoder = encoder;
 
@@ -1385,9 +1389,9 @@ static int sti_hdmi_probe(struct platform_device *pdev)
 
 	DRM_INFO("%s\n", __func__);
 
-	hdmi = devm_kzalloc(dev, sizeof(*hdmi), GFP_KERNEL);
-	if (!hdmi)
-		return -ENOMEM;
+	hdmi = devm_drm_bridge_alloc(dev, struct sti_hdmi, bridge, &sti_hdmi_bridge_funcs);
+	if (IS_ERR(hdmi))
+		return PTR_ERR(hdmi);
 
 	ddc = of_parse_phandle(pdev->dev.of_node, "ddc", 0);
 	if (ddc) {
@@ -1461,6 +1465,7 @@ static int sti_hdmi_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, hdmi);
 
+	drm_bridge_add(&hdmi->bridge);
 	return component_add(&pdev->dev, &sti_hdmi_ops);
 
  release_adapter:
@@ -1477,6 +1482,7 @@ static void sti_hdmi_remove(struct platform_device *pdev)
 	if (hdmi->audio_pdev)
 		platform_device_unregister(hdmi->audio_pdev);
 	component_del(&pdev->dev, &sti_hdmi_ops);
+	drm_bridge_remove(&hdmi->bridge);
 }
 
 struct platform_driver sti_hdmi_driver = {

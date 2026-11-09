@@ -400,7 +400,8 @@ static int rtw8814a_mac_init(struct rtw_dev *rtwdev)
 	rtw_write16(rtwdev, REG_RETRY_LIMIT, 0x3030);
 
 	rtw_write16(rtwdev, REG_RXFLTMAP0, 0xffff);
-	rtw_write16(rtwdev, REG_RXFLTMAP1, 0x0400);
+	rtwdev->hal.rxfltmap1 = 0x0400;
+	rtw_write16(rtwdev, REG_RXFLTMAP1, rtwdev->hal.rxfltmap1);
 	rtw_write16(rtwdev, REG_RXFLTMAP2, 0xffff);
 
 	rtw_write8(rtwdev, REG_MAX_AGGR_NUM, 0x36);
@@ -2055,6 +2056,7 @@ static const struct rtw_chip_ops rtw8814a_ops = {
 	.query_phy_status	= rtw8814a_query_phy_status,
 	.set_channel		= rtw8814a_set_channel,
 	.mac_init		= rtw8814a_mac_init,
+	.mac_postinit		= NULL,
 	.read_rf		= rtw_phy_read_rf,
 	.write_rf		= rtw_phy_write_rf_reg_sipi,
 	.set_tx_power_index	= rtw8814a_set_tx_power_index,

@@ -72,8 +72,7 @@ struct urb *usb_alloc_urb(int iso_packets, gfp_t mem_flags)
 {
 	struct urb *urb;
 
-	urb = kmalloc(struct_size(urb, iso_frame_desc, iso_packets),
-		      mem_flags);
+	urb = kmalloc_flex(*urb, iso_frame_desc, iso_packets, mem_flags);
 	if (!urb)
 		return NULL;
 	usb_init_urb(urb);
@@ -255,6 +254,14 @@ EXPORT_SYMBOL_GPL(usb_urb_ep_type_check);
  * request.  The completion handler may then immediately free or reuse that
  * URB.
  *
+ * The USB core makes no guarantees at all about the context in which
+ * the complete() callback is invoked.  It may be in process context,
+ * interrupt context, BH context, or anything else.  Also, local interrupts
+ * may be enabled or disabled.  To deal with this, the callback routine
+ * must always use the _irqsave and _irqrestore variants of things like
+ * spin_lock(), and it must always use GFP_ATOMIC for its memory
+ * allocation flags.
+ *
  * With few exceptions, USB device drivers should never access URB fields
  * provided by usbcore or the HCD until its complete() is called.
  * The exceptions relate to periodic transfer scheduling.  For both
@@ -372,6 +379,7 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 	struct usb_host_endpoint	*ep;
 	int				is_out;
 	unsigned int			allowed;
+	bool				is_eusb2_isoch_double;
 
 	if (!urb || !urb->complete)
 		return -EINVAL;
@@ -434,7 +442,8 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 		return -ENODEV;
 
 	max = usb_endpoint_maxp(&ep->desc);
-	if (max <= 0) {
+	is_eusb2_isoch_double = usb_endpoint_is_hs_isoc_double(dev, ep);
+	if (!max && !is_eusb2_isoch_double) {
 		dev_dbg(&dev->dev,
 			"bogus endpoint ep%d%s in %s (bad maxpacket %d)\n",
 			usb_endpoint_num(&ep->desc), is_out ? "out" : "in",
@@ -467,9 +476,13 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 			max = le32_to_cpu(isoc_ep_comp->dwBytesPerInterval);
 		}
 
-		/* "high bandwidth" mode, 1-3 packets/uframe? */
-		if (dev->speed == USB_SPEED_HIGH)
-			max *= usb_endpoint_maxp_mult(&ep->desc);
+		/* High speed, 1-3 packets/uframe, max 6 for eUSB2 double bw */
+		if (dev->speed == USB_SPEED_HIGH) {
+			if (is_eusb2_isoch_double)
+				max = le32_to_cpu(ep->eusb2_isoc_ep_comp.dwBytesPerInterval);
+			else
+				max *= usb_endpoint_maxp_mult(&ep->desc);
+		}
 
 		if (urb->number_of_packets <= 0)
 			return -EINVAL;
@@ -500,7 +513,7 @@ int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 
 	/* Check that the pipe's type matches the endpoint's type */
 	if (usb_pipe_type_check(urb->dev, urb->pipe))
-		dev_WARN(&dev->dev, "BOGUS urb xfer, pipe %x != type %x\n",
+		dev_warn_once(&dev->dev, "BOGUS urb xfer, pipe %x != type %x\n",
 			usb_pipetype(urb->pipe), pipetypes[xfertype]);
 
 	/* Check against a simple/standard policy */
@@ -597,10 +610,9 @@ EXPORT_SYMBOL_GPL(usb_submit_urb);
  * code).
  *
  * Drivers should not call this routine or related routines, such as
- * usb_kill_urb() or usb_unlink_anchored_urbs(), after their disconnect
- * method has returned.  The disconnect function should synchronize with
- * a driver's I/O routines to insure that all URB-related activity has
- * completed before it returns.
+ * usb_kill_urb(), after their disconnect method has returned. The
+ * disconnect function should synchronize with a driver's I/O routines
+ * to insure that all URB-related activity has completed before it returns.
  *
  * This request is asynchronous, however the HCD might call the ->complete()
  * callback during unlink. Therefore when drivers call usb_unlink_urb(), they
@@ -890,28 +902,6 @@ void usb_unpoison_anchored_urbs(struct usb_anchor *anchor)
 	spin_unlock_irqrestore(&anchor->lock, flags);
 }
 EXPORT_SYMBOL_GPL(usb_unpoison_anchored_urbs);
-/**
- * usb_unlink_anchored_urbs - asynchronously cancel transfer requests en masse
- * @anchor: anchor the requests are bound to
- *
- * this allows all outstanding URBs to be unlinked starting
- * from the back of the queue. This function is asynchronous.
- * The unlinking is just triggered. It may happen after this
- * function has returned.
- *
- * This routine should not be called by a driver after its disconnect
- * method has returned.
- */
-void usb_unlink_anchored_urbs(struct usb_anchor *anchor)
-{
-	struct urb *victim;
-
-	while ((victim = usb_get_from_anchor(anchor)) != NULL) {
-		usb_unlink_urb(victim);
-		usb_put_urb(victim);
-	}
-}
-EXPORT_SYMBOL_GPL(usb_unlink_anchored_urbs);
 
 /**
  * usb_anchor_suspend_wakeups
@@ -969,8 +959,8 @@ EXPORT_SYMBOL_GPL(usb_wait_anchor_empty_timeout);
  * usb_get_from_anchor - get an anchor's oldest urb
  * @anchor: the anchor whose urb you want
  *
- * This will take the oldest urb from an anchor,
- * unanchor and return it
+ * This will take the oldest urb from an anchor, unanchor and return it with
+ * a reference held.
  *
  * Return: The oldest urb from @anchor, or %NULL if @anchor has no
  * urbs associated with it.
