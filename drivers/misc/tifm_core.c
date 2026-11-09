@@ -223,10 +223,10 @@ void tifm_remove_adapter(struct tifm_adapter *fm)
 			device_unregister(&fm->sockets[cnt]->dev);
 	}
 
+	device_del(&fm->dev);
 	spin_lock(&tifm_adapter_lock);
 	idr_remove(&tifm_adapter_idr, fm->id);
 	spin_unlock(&tifm_adapter_lock);
-	device_del(&fm->dev);
 }
 EXPORT_SYMBOL(tifm_remove_adapter);
 
