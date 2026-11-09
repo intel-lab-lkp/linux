@@ -624,7 +624,8 @@ static inline void svcxdr_encode_opaque_pages(struct svc_rqst *rqstp,
  * Return:
  *   %true: Success
  *   %false: The reply head cannot hold the length prefix and XDR
- *   padding, or the transport could not accommodate the result payload
+ *   padding, or the transport could not accommodate the result
+ *   payload. The page_len of @xdr->buf is reset to zero.
  */
 static inline bool svcxdr_encode_opaque_payload(struct xdr_stream *xdr, u32 len)
 {
@@ -638,13 +639,21 @@ static inline bool svcxdr_encode_opaque_payload(struct xdr_stream *xdr, u32 len)
 	 * pad word does not fit.
 	 */
 	if ((xdr->end - xdr->p) * XDR_UNIT < XDR_UNIT + xdr_pad_size(len))
-		return false;
+		goto out_err;
 	if (xdr_stream_encode_u32(xdr, len) < 0)
-		return false;
-	svcxdr_encode_opaque_pages(rqstp, xdr, buf->pages, buf->page_base, len);
+		goto out_err;
 	if (svc_encode_result_payload(rqstp, buf->head->iov_len, len) < 0)
-		return false;
+		goto out_err;
+	svcxdr_encode_opaque_pages(rqstp, xdr, buf->pages, buf->page_base, len);
 	return true;
+
+out_err:
+	/*
+	 * A splice read sets page_len but not buf->len. Clear page_len, or
+	 * xdr_truncate_encode() takes the page branch.
+	 */
+	buf->page_len = 0;
+	return false;
 }
 
 /**
