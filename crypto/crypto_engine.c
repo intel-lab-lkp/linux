@@ -7,6 +7,7 @@
  * Author: Baolin Wang <baolin.wang@linaro.org>
  */
 
+#include <crypto/internal/acompress.h>
 #include <crypto/internal/aead.h>
 #include <crypto/internal/akcipher.h>
 #include <crypto/internal/engine.h>
@@ -221,6 +222,19 @@ static int crypto_transfer_request_to_engine(struct crypto_engine *engine,
 }
 
 /**
+ * crypto_transfer_acomp_request_to_engine - transfer one acomp_request
+ * to list into the engine queue
+ * @engine: the hardware engine
+ * @req: the request need to be listed into the engine queue
+ */
+int crypto_transfer_acomp_request_to_engine(struct crypto_engine *engine,
+					    struct acomp_req *req)
+{
+	return crypto_transfer_request_to_engine(engine, &req->base);
+}
+EXPORT_SYMBOL_GPL(crypto_transfer_acomp_request_to_engine);
+
+/**
  * crypto_transfer_aead_request_to_engine - transfer one aead_request
  * to list into the engine queue
  * @engine: the hardware engine
@@ -284,6 +298,20 @@ int crypto_transfer_skcipher_request_to_engine(struct crypto_engine *engine,
 	return crypto_transfer_request_to_engine(engine, &req->base);
 }
 EXPORT_SYMBOL_GPL(crypto_transfer_skcipher_request_to_engine);
+
+/**
+ * crypto_finalize_acomp_request - finalize one acomp_request if
+ * the request is done
+ * @engine: the hardware engine
+ * @req: the request need to be finalized
+ * @err: error number
+ */
+void crypto_finalize_acomp_request(struct crypto_engine *engine,
+				   struct acomp_req *req, int err)
+{
+	return crypto_finalize_request(engine, &req->base, err);
+}
+EXPORT_SYMBOL_GPL(crypto_finalize_acomp_request);
 
 /**
  * crypto_finalize_aead_request - finalize one aead_request if
@@ -503,6 +531,20 @@ void crypto_engine_exit(struct crypto_engine *engine)
 	kthread_destroy_worker(engine->kworker);
 }
 EXPORT_SYMBOL_GPL(crypto_engine_exit);
+
+int crypto_engine_register_acomp(struct acomp_engine_alg *alg)
+{
+	if (!alg->op.do_one_request)
+		return -EINVAL;
+	return crypto_register_acomp(&alg->base);
+}
+EXPORT_SYMBOL_GPL(crypto_engine_register_acomp);
+
+void crypto_engine_unregister_acomp(struct acomp_engine_alg *alg)
+{
+	crypto_unregister_acomp(&alg->base);
+}
+EXPORT_SYMBOL_GPL(crypto_engine_unregister_acomp);
 
 int crypto_engine_register_aead(struct aead_engine_alg *alg)
 {

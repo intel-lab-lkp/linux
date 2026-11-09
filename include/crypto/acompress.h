@@ -123,6 +123,39 @@ struct crypto_acomp {
 struct comp_alg_common COMP_ALG_COMMON;
 
 /**
+ * struct acomp_alg - asynchronous compression algorithm
+ *
+ * @compress:	Function performs a compress operation
+ * @decompress:	Function performs a de-compress operation
+ * @init:	Initialize the cryptographic transformation object.
+ *		This function is used to initialize the cryptographic
+ *		transformation object. This function is called only once at
+ *		the instantiation time, right after the transformation context
+ *		was allocated. In case the cryptographic hardware has some
+ *		special requirements which need to be handled by software, this
+ *		function shall check for the precise requirement of the
+ *		transformation and put any software fallbacks in place.
+ * @exit:	Deinitialize the cryptographic transformation object. This is a
+ *		counterpart to @init, used to remove various changes set in
+ *		@init.
+ *
+ * @base:	Common crypto API algorithm data structure
+ * @calg:	Common algorithm data structure shared with scomp
+ * @COMP_ALG_COMMON: see struct comp_alg_common
+ */
+struct acomp_alg {
+	int (*compress)(struct acomp_req *req);
+	int (*decompress)(struct acomp_req *req);
+	int (*init)(struct crypto_acomp *tfm);
+	void (*exit)(struct crypto_acomp *tfm);
+
+	union {
+		struct COMP_ALG_COMMON;
+		struct comp_alg_common calg;
+	};
+};
+
+/**
  * DOC: Asynchronous Compression API
  *
  * The Asynchronous Compression API is used with the algorithms of type

@@ -7,6 +7,7 @@
 #ifndef _CRYPTO_ENGINE_H
 #define _CRYPTO_ENGINE_H
 
+#include <crypto/acompress.h>
 #include <crypto/aead.h>
 #include <crypto/akcipher.h>
 #include <crypto/hash.h>
@@ -24,6 +25,11 @@ struct device;
 struct crypto_engine_op {
 	int (*do_one_request)(struct crypto_engine *engine,
 			      void *areq);
+};
+
+struct acomp_engine_alg {
+	struct acomp_alg base;
+	struct crypto_engine_op op;
 };
 
 struct aead_engine_alg {
@@ -51,6 +57,8 @@ struct skcipher_engine_alg {
 	struct crypto_engine_op op;
 };
 
+int crypto_transfer_acomp_request_to_engine(struct crypto_engine *engine,
+					    struct acomp_req *req);
 int crypto_transfer_aead_request_to_engine(struct crypto_engine *engine,
 					   struct aead_request *req);
 int crypto_transfer_akcipher_request_to_engine(struct crypto_engine *engine,
@@ -61,6 +69,8 @@ int crypto_transfer_kpp_request_to_engine(struct crypto_engine *engine,
 					  struct kpp_request *req);
 int crypto_transfer_skcipher_request_to_engine(struct crypto_engine *engine,
 					       struct skcipher_request *req);
+void crypto_finalize_acomp_request(struct crypto_engine *engine,
+				   struct acomp_req *req, int err);
 void crypto_finalize_aead_request(struct crypto_engine *engine,
 				  struct aead_request *req, int err);
 void crypto_finalize_akcipher_request(struct crypto_engine *engine,
@@ -78,6 +88,9 @@ struct crypto_engine *crypto_engine_alloc_init_and_set(struct device *dev,
 						       bool retry_support,
 						       bool rt, int qlen);
 void crypto_engine_exit(struct crypto_engine *engine);
+
+int crypto_engine_register_acomp(struct acomp_engine_alg *alg);
+void crypto_engine_unregister_acomp(struct acomp_engine_alg *alg);
 
 int crypto_engine_register_aead(struct aead_engine_alg *alg);
 void crypto_engine_unregister_aead(struct aead_engine_alg *alg);
