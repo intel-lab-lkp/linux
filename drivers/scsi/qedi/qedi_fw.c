@@ -339,7 +339,7 @@ static void qedi_get_rq_bdq_buf(struct qedi_ctx *qedi,
 	}
 
 	QEDI_INFO(&qedi->dbg_ctx, QEDI_LOG_CONN,
-		  "rqe_opaque [0x%p], idx [%d]\n", cqe->rqe_opaque, idx);
+		  "rqe_opaque [0x%x], idx [%d]\n", cqe->rqe_opaque, idx);
 
 	QEDI_INFO(&qedi->dbg_ctx, QEDI_LOG_CONN,
 		  "unsol_cqe_type = %d\n", cqe->unsol_cqe_type);
@@ -378,7 +378,7 @@ static void qedi_put_rq_bdq_buf(struct qedi_ctx *qedi,
 	pbl->address.hi = cpu_to_le32(QEDI_U64_HI(qedi->bdq[idx].buf_dma));
 	pbl->address.lo = cpu_to_le32(QEDI_U64_LO(qedi->bdq[idx].buf_dma));
 	QEDI_INFO(&qedi->dbg_ctx, QEDI_LOG_CONN,
-		  "pbl [0x%p] pbl->address hi [0x%llx] lo [0x%llx] idx [%d]\n",
+		  "pbl [0x%p] pbl->address hi [0x%x] lo [0x%x] idx [%d]\n",
 		  pbl, pbl->address.hi, pbl->address.lo, idx);
 	pbl->opaque.iscsi_opaque.reserved_zero[0] = 0;
 	pbl->opaque.iscsi_opaque.reserved_zero[1] = 0;

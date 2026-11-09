@@ -1128,7 +1128,7 @@ void qedi_schedule_hw_err_handler(void *dev,
 		qedi->qedi_err_flags = qedi_flags_override;
 
 	QEDI_INFO(&qedi->dbg_ctx, QEDI_LOG_INFO,
-		  "HW error handler scheduled, err=%d err_flags=0x%x\n",
+		  "HW error handler scheduled, err=%d err_flags=0x%lx\n",
 		  err_type, qedi->qedi_err_flags);
 
 	switch (err_type) {
@@ -1581,7 +1581,7 @@ static int qedi_alloc_bdq(struct qedi_ctx *qedi)
 		pbl->address.lo =
 				cpu_to_le32(QEDI_U64_LO(qedi->bdq[i].buf_dma));
 		QEDI_INFO(&qedi->dbg_ctx, QEDI_LOG_CONN,
-			  "pbl [0x%p] pbl->address hi [0x%llx] lo [0x%llx], idx [%d]\n",
+			  "pbl [0x%p] pbl->address hi [0x%x] lo [0x%x], idx [%d]\n",
 			  pbl, pbl->address.hi, pbl->address.lo, i);
 		pbl->opaque.iscsi_opaque.reserved_zero[0] = 0;
 		pbl->opaque.iscsi_opaque.reserved_zero[1] = 0;
