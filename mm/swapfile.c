@@ -1239,6 +1239,9 @@ static unsigned long alloc_swap_scan_cluster(struct swap_info_struct *si,
 	lockdep_assert_held(&ci->lock);
 	VM_WARN_ON(!cluster_is_usable(ci, order));
 
+	/* ci is used without ci->lock; an xswap unmap waits for this. */
+	rcu_read_lock();
+
 	if (end < nr_pages || ci->count + nr_pages > SWAPFILE_CLUSTER)
 		goto out;
 
@@ -1267,6 +1270,7 @@ static unsigned long alloc_swap_scan_cluster(struct swap_info_struct *si,
 out:
 	relocate_cluster(si, ci);
 	swap_cluster_unlock(ci);
+	rcu_read_unlock();
 	if (si->flags & SWP_SOLIDSTATE) {
 		this_cpu_write(percpu_swap_cluster.offset[order], next);
 		this_cpu_write(percpu_swap_cluster.si[order], si);
@@ -1310,6 +1314,9 @@ static void swap_reclaim_full_clusters(struct swap_info_struct *si, bool force)
 		to_scan = swap_usage_in_pages(si) / SWAPFILE_CLUSTER;
 
 	while ((ci = isolate_lock_cluster(si, &si->full_clusters))) {
+		/* As in alloc_swap_scan_cluster(). */
+		rcu_read_lock();
+
 		offset = cluster_offset(si, ci);
 		end = min(si->max, offset + SWAPFILE_CLUSTER);
 		to_scan--;
@@ -1334,6 +1341,7 @@ static void swap_reclaim_full_clusters(struct swap_info_struct *si, bool force)
 			relocate_cluster(si, ci);
 
 		swap_cluster_unlock(ci);
+		rcu_read_unlock();
 		if (to_scan <= 0)
 			break;
 
@@ -1664,11 +1672,36 @@ static bool swap_alloc_fast(struct folio *folio)
 	/*
 	 * Once allocated, swap_info_struct will never be completely freed,
 	 * so checking it's liveness by get_swap_device_info is enough.
+	 *
+	 * The cached offset indexes si->cluster_info, which xswap can
+	 * unmap; cover both the read and the use with RCU.
 	 */
+	rcu_read_lock();
 	si = this_cpu_read(percpu_swap_cluster.si[order]);
 	offset = this_cpu_read(percpu_swap_cluster.offset[order]);
-	if (!si || !offset || !get_swap_device_info(si))
+	if (!si || !offset || !get_swap_device_info(si)) {
+		rcu_read_unlock();
 		return false;
+	}
+#ifdef CONFIG_XSWAP
+	if (si->flags & SWP_XSWAP) {
+		/*
+		 * The cached offset can outlive a shrink that did not see
+		 * it, and the cluster_info page it indexes may be unmapped.
+		 * Fail the fast path; the slow path picks a live cluster.
+		 */
+		unsigned long mapped;
+
+		/* Pairs with the release store in xswap_unmap_clusters(). */
+		mapped = smp_load_acquire(&si->nr_clusters_mapped);
+
+		if (offset / SWAPFILE_CLUSTER >= mapped) {
+			put_swap_device(si);
+			rcu_read_unlock();
+			return false;
+		}
+	}
+#endif
 
 	ci = swap_cluster_lock(si, offset);
 	if (cluster_is_usable(ci, order)) {
@@ -1680,6 +1713,7 @@ static bool swap_alloc_fast(struct folio *folio)
 	}
 
 	put_swap_device(si);
+	rcu_read_unlock();
 	return folio_test_swapcache(folio);
 }
 
@@ -2472,8 +2506,11 @@ swp_entry_t swap_alloc_hibernation_slot(int type)
 	/*
 	 * Try the local cluster first if it matches the device. If
 	 * not, try grab a new cluster and override local cluster.
+	 *
+	 * Same RCU requirement as swap_alloc_fast().
 	 */
 	local_lock(&percpu_swap_cluster.lock);
+	rcu_read_lock();
 	pcp_si = this_cpu_read(percpu_swap_cluster.si[0]);
 	pcp_offset = this_cpu_read(percpu_swap_cluster.offset[0]);
 	if (pcp_si == si && pcp_offset) {
@@ -2483,6 +2520,7 @@ swp_entry_t swap_alloc_hibernation_slot(int type)
 		else
 			swap_cluster_unlock(ci);
 	}
+	rcu_read_unlock();
 	if (!offset)
 		offset = cluster_alloc_swap_entry(si, NULL);
 	local_unlock(&percpu_swap_cluster.lock);
@@ -3445,7 +3483,13 @@ static void wait_for_allocation(struct swap_info_struct *si)
 
 #ifdef CONFIG_XSWAP
 	if (si->flags & SWP_XSWAP) {
-		/* Pairs with the smp_store_release() in xswap_map_clusters(). */
+		/*
+		 * Pairs with the smp_store_release() in xswap_map_clusters().
+		 * A grow may publish after this read, but no slot comes from
+		 * those clusters once WRITEOK is clear.  Cached clusters are
+		 * inside the range; try_to_unuse()'s rescan catches any slot
+		 * taken after the walk.
+		 */
 		end = min(end, smp_load_acquire(&si->nr_clusters_mapped) *
 			  SWAPFILE_CLUSTER);
 	}
@@ -3527,9 +3571,9 @@ static void flush_percpu_swap_cluster(struct swap_info_struct *si)
 	for_each_possible_cpu(cpu) {
 		pcp_si = per_cpu_ptr(percpu_swap_cluster.si, cpu);
 		/*
-		 * Invalidate the percpu swap cluster cache, si->users
-		 * is dead, so no new user will point to it, just flush
-		 * any existing user.
+		 * Invalidate the per-cpu swap cluster cache.  Any reader that
+		 * has already loaded an entry is waited out by the caller's
+		 * synchronize_rcu().
 		 */
 		for (i = 0; i < SWAP_NR_ORDERS; i++)
 			cmpxchg(&pcp_si[i], si, NULL);
@@ -4289,11 +4333,32 @@ static void xswap_unmap_clusters(struct swap_info_struct *si,
 
 	mutex_lock(&si->xswap_lock);
 
+	/*
+	 * Publish the smaller range before its memory goes away.  Readers
+	 * that use nr_clusters_mapped without xswap_lock pair with this
+	 * store using smp_load_acquire().
+	 */
+	smp_store_release(&si->nr_clusters_mapped, start_idx);
+
 	if (vm_start >= vm_end) {
-		WRITE_ONCE(si->nr_clusters_mapped, start_idx);
+		/*
+		 * The clusters sit inside one page that the preceding
+		 * cluster shares, so there is nothing to unmap.  The page
+		 * goes away with that cluster; publishing the smaller
+		 * cluster count is still correct.
+		 */
 		mutex_unlock(&si->xswap_lock);
 		return;
 	}
+
+	/*
+	 * A per-cpu cluster cache can still hold an offset in this range.
+	 * Invalidate those references, then wait out the readers that have
+	 * already loaded one, so that nobody can dereference cluster_info
+	 * past this point.  swapoff() needs the same before it releases.
+	 */
+	flush_percpu_swap_cluster(si);
+	synchronize_rcu();
 
 	npages = (vm_end - vm_start) >> PAGE_SHIFT;
 
@@ -4306,7 +4371,7 @@ static void xswap_unmap_clusters(struct swap_info_struct *si,
 		if (pages) {
 			xswap_unmap_range(si, vm_start, vm_end, pages, npages);
 			kvfree(pages);
-			goto out_store;
+			goto out_unlock;
 		}
 	}
 
@@ -4325,8 +4390,7 @@ static void xswap_unmap_clusters(struct swap_info_struct *si,
 			xswap_unmap_range(si, bstart, bend, batch_pages,
 					  ARRAY_SIZE(batch_pages));
 	}
-out_store:
-	WRITE_ONCE(si->nr_clusters_mapped, start_idx);
+out_unlock:
 	mutex_unlock(&si->xswap_lock);
 }
 
