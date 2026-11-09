@@ -1170,7 +1170,7 @@ nfsd4_read(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	if (status)
 		return status;
 
-	/* The xdr_stream encoder does not account for rq_res.page_base */
+	/* The NFSv4 reply-space checks do not account for rq_res.page_base */
 	read->rd_dio_ok = nfsd4_last_compound_op(rqstp);
 	if (!read->rd_dio_ok &&
 	    nfsd_read_io_mode(read->rd_fhp->fh_export) == NFSD_IO_DIRECT)
