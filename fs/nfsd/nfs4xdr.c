@@ -5327,6 +5327,57 @@ out_err:
 	return nfserr;
 }
 
+/*
+ * Reply-buffer checks that nfsd_direct_read_ok() cannot make: the
+ * payload's placement depends on the alignment pad, and the pad on the
+ * READ offset.
+ */
+static bool nfsd4_direct_read_fits(struct nfsd4_compoundres *resp,
+				   struct nfsd4_read *read,
+				   unsigned long count)
+{
+	struct svc_rqst *rqstp = resp->rqstp;
+	struct xdr_stream *xdr = resp->xdr;
+	u32 offset_align = read->rd_nf->nf_dio_read_offset_align;
+	loff_t offset = read->rd_offset;
+	unsigned int pad;
+
+	/*
+	 * nfsd_iter_read() reads the I/O mode again. Refuse here so that a
+	 * switch to direct mode in between cannot bypass the checks below.
+	 */
+	if (nfsd_read_io_mode(read->rd_fhp->fh_export) != NFSD_IO_DIRECT)
+		return false;
+	/* nfsd_direct_read_ok() refuses and traces these */
+	if (!offset_align || count < offset_align || rqstp->rq_res.page_len)
+		return true;
+
+	pad = offset - round_down(offset, offset_align);
+	if (pad & (XDR_UNIT - 1)) {
+		/*
+		 * The XDR pad goes in the tail, and moving the stream
+		 * there takes a word of room in the head.
+		 */
+		if (!nfsd4_pad_fits_in_head(xdr)) {
+			trace_nfsd_read_dio_head_full(rqstp, read->rd_fhp,
+						      offset, count,
+						      offset_align);
+			return false;
+		}
+	} else {
+		s64 space = (s64)nfsd4_reply_buflen_with_pad(rqstp, pad) -
+			    rqstp->rq_res.len;
+
+		if ((s64)xdr_align_size(count) > space) {
+			trace_nfsd_read_dio_reply_full(rqstp, read->rd_fhp,
+						       offset, count,
+						       offset_align);
+			return false;
+		}
+	}
+	return true;
+}
+
 static __be32 nfsd4_encode_readv(struct nfsd4_compoundres *resp,
 				 struct nfsd4_read *read,
 				 unsigned long maxcount)
@@ -5337,20 +5388,8 @@ static __be32 nfsd4_encode_readv(struct nfsd4_compoundres *resp,
 	__be32 zero = xdr_zero;
 	__be32 nfserr;
 
-	/*
-	 * A direct read at an offset that is not a multiple of XDR_UNIT puts
-	 * its XDR pad in the tail. Moving the stream there takes a word of
-	 * room in the head. nfsd_direct_read_ok() traces the other reasons
-	 * a direct read is refused, so test only what it cannot see.
-	 */
-	if (dio_ok && (read->rd_offset & (XDR_UNIT - 1)) &&
-	    nfsd_read_io_mode(read->rd_fhp->fh_export) == NFSD_IO_DIRECT &&
-	    !xdr->buf->page_len && !nfsd4_pad_fits_in_head(xdr)) {
-		trace_nfsd_read_dio_head_full(resp->rqstp, read->rd_fhp,
-					      read->rd_offset, maxcount,
-					      read->rd_nf->nf_dio_read_offset_align);
+	if (dio_ok && !nfsd4_direct_read_fits(resp, read, maxcount))
 		dio_ok = false;
-	}
 
 	nfserr = nfsd_iter_read(resp->rqstp, read->rd_fhp, read->rd_nf,
 				read->rd_offset, &maxcount, &read->rd_eof,
