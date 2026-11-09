@@ -5278,7 +5278,7 @@ static __be32 nfsd4_encode_splice_read(
 	status = svc_encode_result_payload(read->rd_rqstp,
 					   buf->head[0].iov_len, maxcount);
 	if (status) {
-		nfserr = nfserrno(status);
+		nfserr = nfserr_io;
 		goto out_err;
 	}
 	svcxdr_encode_opaque_pages(read->rd_rqstp, xdr, buf->pages,
@@ -5422,7 +5422,7 @@ nfsd4_encode_readlink(struct nfsd4_compoundres *resp, __be32 nfserr,
 	status = svc_encode_result_payload(readlink->rl_rqstp,
 					   length_offset + XDR_UNIT, maxcount);
 	if (status) {
-		nfserr = nfserrno(status);
+		nfserr = nfserr_io;
 		goto out_err;
 	}
 
