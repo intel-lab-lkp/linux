@@ -760,8 +760,7 @@ static int pci_pasid_table_teardown(struct pci_dev *pdev, u16 alias, void *data)
 {
 	struct device *dev = data;
 
-	if (dev == &pdev->dev)
-		device_pasid_table_teardown(dev, PCI_BUS_NUM(alias), alias & 0xff);
+	device_pasid_table_teardown(dev, PCI_BUS_NUM(alias), alias & 0xff);
 
 	return 0;
 }
@@ -896,9 +895,6 @@ static int device_pasid_table_setup(struct device *dev, u8 bus, u8 devfn)
 static int pci_pasid_table_setup(struct pci_dev *pdev, u16 alias, void *data)
 {
 	struct device *dev = data;
-
-	if (dev != &pdev->dev)
-		return 0;
 
 	return device_pasid_table_setup(dev, PCI_BUS_NUM(alias), alias & 0xff);
 }
