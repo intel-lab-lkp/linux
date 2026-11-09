@@ -5367,6 +5367,16 @@ static __be32 nfsd4_encode_readv(struct nfsd4_compoundres *resp,
 	if (xdr->buf->page_base & (XDR_UNIT - 1))
 		return nfsd4_encode_page_payload(resp, maxcount);
 
+	/* A direct READ's pad occupies pages that buf->len never counts */
+	if (xdr->buf->page_base) {
+		unsigned int buflen;
+
+		buflen = nfsd4_reply_buflen_with_pad(resp->rqstp,
+						     xdr->buf->page_base);
+		if (xdr_restrict_buflen(xdr, buflen))
+			return nfserr_resource;
+	}
+
 	/*
 	 * svcxdr_encode_opaque_pages() is not used here because
 	 * we don't want to encode subsequent results in this
@@ -6859,8 +6869,7 @@ status:
 release:
 	/*
 	 * Account for pages consumed while encoding this operation. The
-	 * xdr_stream primitives don't manage rq_next_page, and
-	 * xdr->page_ptr does not account for page_base. XDR padding can
+	 * xdr_stream primitives don't manage rq_next_page. XDR padding can
 	 * carry page_base + page_len past rq_page_end.
 	 */
 	next_page = xdr->buf->pages +
