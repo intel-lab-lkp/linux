@@ -286,7 +286,7 @@ kfence_report_error(unsigned long address, bool is_write, struct pt_regs *regs,
 	stack_trace_print(stack_entries + skipnr, num_stack_entries - skipnr, 0);
 
 	if (meta) {
-		lockdep_assert_held(&meta->lock);
+		lockdep_assume_ctx_held(&meta->lock);
 		pr_err("\n");
 		kfence_print_object(NULL, meta);
 	}
