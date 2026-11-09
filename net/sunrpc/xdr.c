@@ -1218,21 +1218,48 @@ EXPORT_SYMBOL_GPL(__xdr_commit_encode);
 static noinline __be32 *xdr_get_next_encode_buffer(struct xdr_stream *xdr,
 						   size_t nbytes)
 {
+	struct xdr_buf *buf = xdr->buf;
+	unsigned int base = 0, offset = 0;
 	int space_left;
 	int frag1bytes, frag2bytes;
 	void *p;
 
 	if (nbytes > PAGE_SIZE)
 		goto out_overflow; /* Bigger buffers require special handling */
-	if (xdr->buf->len + nbytes > xdr->buf->buflen)
+	if (buf->len + nbytes > buf->buflen)
 		goto out_overflow; /* Sorry, we're totally out of space */
+
+	/*
+	 * A direct READ leaves page_base bytes of alignment pad at the front of
+	 * the reply pages, so the stream enters the pages past the pad. The pad
+	 * is already taken off buflen, so the capacity check above stands.
+	 */
+	if (unlikely(buf->page_base) && xdr->iov != buf->tail) {
+		if (!xdr->xdrgen_ctx)
+			WARN_ON_ONCE(!buf->page_len);
+		else if (WARN_ON_ONCE(buf->page_base & (XDR_UNIT - 1)))
+			goto out_overflow;
+		else
+			base = buf->page_base;
+	}
 	frag1bytes = (xdr->end - xdr->p) << 2;
 	frag2bytes = nbytes - frag1bytes;
+	if (base && !buf->page_len) {
+		/* __xdr_commit_encode() moves a fragment to offset 0 only */
+		if (WARN_ON_ONCE(frag1bytes))
+			goto out_overflow;
+		offset = offset_in_page(base);
+		/* A reservation cannot span two pages */
+		if (nbytes > PAGE_SIZE - offset)
+			goto out_overflow;
+		xdr->page_ptr = buf->pages + (base >> PAGE_SHIFT);
+	} else {
+		xdr->page_ptr++;
+	}
 	if (xdr->iov)
 		xdr->iov->iov_len += frag1bytes;
 	else
-		xdr->buf->page_len += frag1bytes;
-	xdr->page_ptr++;
+		buf->page_len += frag1bytes;
 	xdr->iov = NULL;
 
 	/*
@@ -1248,16 +1275,16 @@ static noinline __be32 *xdr_get_next_encode_buffer(struct xdr_stream *xdr,
 	 * xdr->p is where the next encode will start after
 	 * xdr_commit_encode() has shifted this one back:
 	 */
-	p = page_address(*xdr->page_ptr);
+	p = page_address(*xdr->page_ptr) + offset;
 	xdr->p = p + frag2bytes;
-	space_left = xdr->buf->buflen - xdr->buf->len;
-	if (space_left - frag1bytes >= PAGE_SIZE)
-		xdr->end = p + PAGE_SIZE;
+	space_left = buf->buflen - buf->len;
+	if (space_left - frag1bytes >= PAGE_SIZE - offset)
+		xdr->end = p + PAGE_SIZE - offset;
 	else
 		xdr->end = p + space_left - frag1bytes;
 
-	xdr->buf->page_len += frag2bytes;
-	xdr->buf->len += nbytes;
+	buf->page_len += frag2bytes;
+	buf->len += nbytes;
 	return p;
 out_overflow:
 	trace_rpc_xdr_overflow(xdr, nbytes);
@@ -1330,7 +1357,8 @@ int xdr_reserve_space_vec(struct xdr_stream *xdr, size_t nbytes)
 
 	/* XXX: Let's find a way to make this more efficient */
 	while (nbytes) {
-		thislen = xdr->buf->page_len % PAGE_SIZE;
+		thislen = (xdr->buf->page_base + xdr->buf->page_len) %
+			  PAGE_SIZE;
 		thislen = min_t(size_t, nbytes, PAGE_SIZE - thislen);
 
 		p = xdr_reserve_space(xdr, thislen);
@@ -1402,10 +1430,11 @@ void xdr_truncate_encode(struct xdr_stream *xdr, size_t len)
 		WARN_ON_ONCE(xdr->iov);
 		return;
 	}
-	if (fraglen)
+	if (fraglen || !xdr->iov)
 		xdr->end = head->iov_base + head->iov_len;
 	/* (otherwise assume xdr->end is already set) */
-	xdr->page_ptr--;
+	xdr->page_ptr = buf->pages - 1;
+	buf->page_base = 0;
 	head->iov_len = len;
 	buf->len = len;
 	xdr->p = head->iov_base + head->iov_len;
