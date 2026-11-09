@@ -5164,7 +5164,7 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 				    nfserr_rep_too_big;
 	if (buflen < rqstp->rq_auth_slack)
 		goto out_put_session;
-	maxlen = buflen - rqstp->rq_auth_slack;
+	maxlen = round_down(buflen - rqstp->rq_auth_slack, XDR_UNIT);
 
 	/*
 	 * A SEQUENCE result too large for maxlen never reaches
