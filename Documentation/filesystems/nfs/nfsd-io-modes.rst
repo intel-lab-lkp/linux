@@ -220,15 +220,18 @@ Tracing:
                                   COMPOUND already put data in the
                                   reply's pages
       nfsd_read_dio_head_full     an NFSv4 READ whose offset is not a
-                                  multiple of four bytes, when the
-                                  reply's head has no room for the
-                                  payload's XDR pad
+                                  multiple of four bytes, when the XDR
+                                  stream has left the reply's head or
+                                  the head has no room for the payload's
+                                  XDR pad
       nfsd_read_dio_reply_full    an NFSv4 READ whose offset is a
                                   multiple of four bytes, when its
                                   payload and alignment pad would not
                                   fit in the reply's pages
-      nfsd_read_dio_not_last_op   an NFSv4 READ that is not the last
-                                  operation of its COMPOUND
+      nfsd_read_dio_not_last_op   an NFSv4 READ whose offset is not a
+                                  multiple of four bytes and that is
+                                  not the last operation of its
+                                  COMPOUND
 
     This combination of trace events is useful for READs::
 
