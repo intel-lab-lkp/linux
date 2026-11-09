@@ -131,6 +131,17 @@ config XSWAP
 	  array is backed by a sparse vmalloc area that is mapped lazily
 	  in chunks, avoiding static pre-allocation overhead.
 
+config XSWAP_DEFAULT_MAX
+	string "Default maximum size of a new xswap device"
+	depends on XSWAP
+	default "200%"
+	help
+	  The maximum size of a newly created xswap device. It accepts a
+	  percentage of RAM (for example "200%"), a size (for example "2T"),
+	  or "max" for the largest size the device can address.
+
+	  xswap.max= on the kernel command line overrides this value.
+
 config ZSMALLOC
 	tristate
 

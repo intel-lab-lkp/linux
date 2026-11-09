@@ -136,3 +136,12 @@ selected.
 A debugfs interface is provided for various statistic about pool size, number
 of pages stored, same-value filled pages and various counters for the reasons
 pages are rejected.
+
+xswap devices
+-------------
+
+An xswap device is a file-less swap device backed by zswap.  While such a
+device exists, do not disable zswap at runtime (``enabled=0``) or set
+``max_pool_percent`` to 0.  The device would have no backing: pages already
+in zswap can still be read, but new pages cannot be stored.  Destroy the
+xswap devices first.

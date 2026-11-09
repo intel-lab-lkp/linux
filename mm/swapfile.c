@@ -161,9 +161,12 @@ static bool xswap_size_max;
 static bool xswap_size_set;	/* xswap.max= was given */
 
 /*
- * Parse "200%", "2T" or "max".  @str is not modified.
+ * Parse "200%", "2T" or "max". @str is not modified. @cmdline tells an
+ * explicit xswap.max= from the build-time default, which is clamped
+ * instead of refused when it is too large.
  */
-static int __init xswap_parse_size(const char *str, const char *what)
+static int __init xswap_parse_size(const char *str, const char *what,
+				   bool cmdline)
 {
 	const char *pct;
 	char buf[16];
@@ -192,12 +195,16 @@ static int __init xswap_parse_size(const char *str, const char *what)
 		bytes = memparse(str, &end);
 		if (*end || bytes < PAGE_SIZE)
 			goto bad;
+		/* A default below one cluster would fail every create. */
+		if (!cmdline && bytes < (unsigned long)SWAPFILE_CLUSTER * PAGE_SIZE)
+			goto bad;
 		xswap_size_bytes = bytes;
 		xswap_size_pct = 0;
 		xswap_size_max = false;
 	}
 
-	xswap_size_set = true;
+	if (cmdline)
+		xswap_size_set = true;
 	return 0;
 bad:
 	pr_err("xswap: bad %s=%s\n", what, str);
@@ -206,7 +213,7 @@ bad:
 
 static int __init xswap_max_setup(char *str)
 {
-	xswap_parse_size(str, "xswap.max");
+	xswap_parse_size(str, "xswap.max", true);
 	return 1;
 }
 __setup("xswap.max=", xswap_max_setup);
@@ -4829,6 +4836,13 @@ void __folio_throttle_swaprate(struct folio *folio, gfp_t gfp)
 static int __init swapfile_init(void)
 {
 	swapfile_maximum_size = arch_max_swapfile_size();
+
+#ifdef CONFIG_XSWAP
+	/* xswap.max= on the command line overrides the build-time default. */
+	if (!xswap_size_set)
+		xswap_parse_size(CONFIG_XSWAP_DEFAULT_MAX,
+				 "CONFIG_XSWAP_DEFAULT_MAX", false);
+#endif
 
 	/*
 	 * Once a cluster is freed, it's swap table content is read

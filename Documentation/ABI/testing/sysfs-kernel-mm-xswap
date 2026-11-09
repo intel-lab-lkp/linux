@@ -1,0 +1,38 @@
+What:		/sys/kernel/mm/xswap/
+Date:		October 2026
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	File-less swap devices backed by zswap.
+
+		An xswap device has no backing file.  Its slots are backed
+		by the zswap pool, and the device size is set at boot with
+		xswap.max= or CONFIG_XSWAP_DEFAULT_MAX.  The size is fixed
+		for the lifetime of the device.
+
+		The name shown in /proc/swaps, xswap<id>, is synthetic and
+		is not a path.  It cannot be passed to swapoff(2), so
+		swapoff -a reports an error for these entries.  Use the
+		destroy attribute instead.
+
+		An xswap device requires zswap.  Disabling zswap at runtime
+		(enabled=0, or max_pool_percent=0) while xswap devices
+		exist leaves them without backing: existing entries can
+		still be read, but new pages cannot be stored.  Destroy the
+		xswap devices before disabling zswap.
+
+What:		/sys/kernel/mm/xswap/create
+Date:		October 2026
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	Create an xswap device.
+
+		Write an optional priority (0..32767), or write nothing for
+		the default priority.  The write fails if zswap is disabled
+		or if the configured size is smaller than one cluster.
+
+What:		/sys/kernel/mm/xswap/destroy
+Date:		October 2026
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	Destroy an xswap device.
+
+		Write the device's stable id.  The id is the number after
+		"xswap" in /proc/swaps, for example 1 for xswap1.  It is
+		not a swap type and is never reused.
