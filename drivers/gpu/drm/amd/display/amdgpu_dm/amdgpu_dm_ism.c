@@ -276,6 +276,32 @@ bool dm_ism_trigger_event(struct amdgpu_dm_ism *ism,
 EXPORT_IF_KUNIT(dm_ism_trigger_event);
 
 
+/*
+ * Idle optimizations are HW-wide, but each CRTC runs its own ISM. Only allow
+ * them once every active CRTC's ISM has reached an optimized idle state, so a
+ * static CRTC cannot enable idle optimizations while another CRTC is still busy
+ * (e.g. receiving cursor updates without a vblank reference). Otherwise every
+ * cursor update on the busy CRTC must exit and re-enter idle through DMUB.
+ */
+static bool dm_ism_all_crtcs_idle(struct amdgpu_display_manager *dm)
+{
+	struct drm_crtc *crtc;
+
+	drm_for_each_crtc(crtc, adev_to_drm(dm->adev)) {
+		struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
+		struct dm_crtc_state *state = to_dm_crtc_state(crtc->state);
+
+		if (!state || !state->stream)
+			continue;
+
+		if (acrtc->ism.current_state != DM_ISM_STATE_OPTIMIZED_IDLE &&
+		    acrtc->ism.current_state != DM_ISM_STATE_OPTIMIZED_IDLE_SSO)
+			return false;
+	}
+
+	return true;
+}
+
 static void dm_ism_commit_idle_optimization_state(struct amdgpu_dm_ism *ism,
 					     struct dc_stream_state *stream,
 					     bool vblank_enabled,
@@ -326,7 +352,8 @@ static void dm_ism_commit_idle_optimization_state(struct amdgpu_dm_ism *ism,
 	 * optimizations at the start of this func -- we should disallow
 	 * whenever there's *an* active CRTC.
 	 */
-	if (!vblank_enabled && dm->active_vblank_irq_count == 0) {
+	if (!vblank_enabled && dm->active_vblank_irq_count == 0 &&
+	    dm_ism_all_crtcs_idle(dm)) {
 		dc_post_update_surfaces_to_stream(dm->dc);
 		dc_allow_idle_optimizations(dm->dc, true);
 	}
