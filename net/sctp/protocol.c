@@ -603,6 +603,7 @@ static void sctp_addr_wq_timeout_handler(struct timer_list *t)
 	struct net *net = timer_container_of(net, t, sctp.addr_wq_timer);
 	struct sctp_sockaddr_entry *addrw, *temp;
 	struct sctp_sock *sp;
+	bool retry = false;
 
 	spin_lock_bh(&net->sctp.addr_wq_lock);
 
@@ -624,15 +625,12 @@ static void sctp_addr_wq_timeout_handler(struct timer_list *t)
 			in6 = (struct in6_addr *)&addrw->a.v6.sin6_addr;
 			if (ipv6_chk_addr(net, in6, NULL, 0) == 0 &&
 			    addrw->state == SCTP_ADDR_NEW) {
-				unsigned long timeo_val;
 
 				pr_debug("%s: this is on DAD, trying %d sec "
 					 "later\n", __func__,
 					 SCTP_ADDRESS_TICK_DELAY);
 
-				timeo_val = jiffies;
-				timeo_val += msecs_to_jiffies(SCTP_ADDRESS_TICK_DELAY);
-				mod_timer(&net->sctp.addr_wq_timer, timeo_val);
+				retry = true;
 				break;
 			}
 		}
@@ -645,16 +643,27 @@ static void sctp_addr_wq_timeout_handler(struct timer_list *t)
 			if (!sctp_is_ep_boundall(sk))
 				continue;
 			bh_lock_sock(sk);
+			if (sock_owned_by_user(sk)) {
+				bh_unlock_sock(sk);
+				retry = true;
+				break;
+			}
 			if (sctp_asconf_mgmt(sp, addrw) < 0)
 				pr_debug("%s: sctp_asconf_mgmt failed\n", __func__);
 			bh_unlock_sock(sk);
 		}
+		if (retry)
+			break;
 #if IS_ENABLED(CONFIG_IPV6)
 free_next:
 #endif
 		list_del(&addrw->list);
 		kfree(addrw);
 	}
+
+	if (retry)
+		mod_timer(&net->sctp.addr_wq_timer,
+			jiffies + msecs_to_jiffies(SCTP_ADDRESS_TICK_DELAY));
 	spin_unlock_bh(&net->sctp.addr_wq_lock);
 }
 
