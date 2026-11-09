@@ -5355,13 +5355,21 @@ static bool nfsd4_direct_read_fits(struct nfsd4_compoundres *resp,
 	pad = offset - round_down(offset, offset_align);
 	if (pad & (XDR_UNIT - 1)) {
 		/*
-		 * The XDR pad goes in the tail, and moving the stream
-		 * there takes a word of room in the head.
+		 * The XDR pad goes in the tail, and moving the stream there
+		 * takes a word of room in the head. Like a splice read, this
+		 * READ has to be the last operation: the stream cannot
+		 * continue in the pages behind such a pad.
 		 */
 		if (!nfsd4_pad_fits_in_head(xdr)) {
 			trace_nfsd_read_dio_head_full(rqstp, read->rd_fhp,
 						      offset, count,
 						      offset_align);
+			return false;
+		}
+		if (!nfsd4_last_compound_op(rqstp)) {
+			trace_nfsd_read_dio_not_last_op(rqstp, read->rd_fhp,
+							offset, count,
+							offset_align);
 			return false;
 		}
 	} else {
@@ -5384,16 +5392,12 @@ static __be32 nfsd4_encode_readv(struct nfsd4_compoundres *resp,
 {
 	struct xdr_stream *xdr = resp->xdr;
 	unsigned int starting_len = xdr->buf->len;
-	bool dio_ok = read->rd_dio_ok;
 	__be32 zero = xdr_zero;
 	__be32 nfserr;
 
-	if (dio_ok && !nfsd4_direct_read_fits(resp, read, maxcount))
-		dio_ok = false;
-
 	nfserr = nfsd_iter_read(resp->rqstp, read->rd_fhp, read->rd_nf,
 				read->rd_offset, &maxcount, &read->rd_eof,
-				dio_ok);
+				nfsd4_direct_read_fits(resp, read, maxcount));
 	read->rd_length = maxcount;
 	if (nfserr)
 		return nfserr;
