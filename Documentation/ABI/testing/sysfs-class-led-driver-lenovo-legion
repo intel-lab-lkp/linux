@@ -1,0 +1,20 @@
+What:		/sys/class/leds/<led>/lighting_mode
+Date:		November 2026
+KernelVersion:	7.5
+Contact:	Ciro Pedrini <ciro.pedrini@gmail.com>
+Description:	(RW) Who drives the keyboard and chassis LEDs of a Lenovo
+		Legion laptop whose lighting is an ITE keyboard controller
+		plus a HID LampArray (e.g. Legion Pro 7 Gen 10):
+
+		- firmware: the keyboard controller's own effects (the
+		  default). The driver doesn't touch the LEDs, so userspace
+		  may drive the LampArray itself through hidraw.
+		- color: every lamp shows the colour in multi_intensity.
+
+		Writing a new colour to multi_intensity also switches to
+		"color". In both modes, brightness is the controller's
+		hardware brightness (0..9).
+
+		Access: Read/Write
+
+		Valid values: firmware, color

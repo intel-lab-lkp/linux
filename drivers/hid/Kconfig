@@ -652,6 +652,19 @@ config HID_LENOVO_GO_S
 	S. Say M here to compile this driver as a module. The module will be called
 	hid-lenovo-go-s.
 
+config HID_LENOVO_LEGION
+	tristate "Lenovo Legion laptop keyboard lighting"
+	depends on USB_HID
+	depends on LEDS_CLASS_MULTICOLOR
+	help
+	Support for the keyboard and chassis lighting of 2025 Lenovo Legion
+	laptops (Legion Pro 7 Gen 10): the backlight brightness of the ITE
+	keyboard controller and one colour for every lamp of its HID LampArray,
+	as a multicolor kbd_backlight LED.
+
+	Say M here to compile this driver as a module. The module will be called
+	hid-lenovo-legion.
+
 config HID_LETSKETCH
 	tristate "Letsketch WP9620N tablets"
 	depends on USB_HID
