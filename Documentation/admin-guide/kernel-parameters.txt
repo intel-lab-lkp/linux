@@ -8738,3 +8738,10 @@ Kernel parameters
 				memory, and other data can't be written using
 				xmon commands.
 			off	xmon is disabled.
+
+	xswap.max=	[KNL,SWAP]
+			Maximum size of a new xswap device. The value is a
+			size in bytes with an optional KMGTPE suffix, a
+			percentage of RAM, or "max" for the largest size
+			the device can address.
+			Format: <size>[KMGTPE] | <percent>% | max
