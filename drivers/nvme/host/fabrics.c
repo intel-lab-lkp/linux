@@ -644,6 +644,7 @@ EXPORT_SYMBOL_GPL(nvmf_unregister_transport);
 
 static struct nvmf_transport_ops *nvmf_lookup_transport(
 		struct nvmf_ctrl_options *opts)
+	__must_hold_shared(&nvmf_transports_rwsem)
 {
 	struct nvmf_transport_ops *ops;
 
