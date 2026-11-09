@@ -9,9 +9,14 @@ Description:	File-less swap devices backed by zswap.
 		for the lifetime of the device.
 
 		The name shown in /proc/swaps, xswap<id>, is synthetic and
-		is not a path.  It cannot be passed to swapoff(2), so
-		swapoff -a reports an error for these entries.  Use the
-		destroy attribute instead.
+		is not a path. swapoff(2) accepts it, so both "swapoff
+		xswap<id>" and swapoff -a tear the device down. A real
+		file or directory with that name takes precedence: if it
+		opens, it is looked up as a swap file and the synthetic
+		device is not used. Only a name that cannot be opened
+		because it does not exist, including a dangling symlink,
+		is treated as an xswap device. Use the destroy attribute
+		for an unambiguous teardown.
 
 		An xswap device requires zswap.  Disabling zswap at runtime
 		(enabled=0, or max_pool_percent=0) while xswap devices

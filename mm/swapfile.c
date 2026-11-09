@@ -34,6 +34,7 @@
 #include <linux/backing-dev.h>
 #include <linux/mutex.h>
 #include <linux/capability.h>
+#include <linux/ctype.h>
 #include <linux/syscalls.h>
 #include <linux/memcontrol.h>
 #include <linux/poll.h>
@@ -88,6 +89,7 @@ static int xswap_mapped_end(pte_t *pte, unsigned long addr, void *data);
 
 static int xswap_create(int prio);
 static int xswap_destroy(u64 id);
+static int xswap_destroy_by_name(const char *name);
 
 /* Stable device id, assigned at create and never reused. */
 static atomic64_t xswap_id_counter = ATOMIC64_INIT(0);
@@ -274,6 +276,11 @@ static void xswap_sysfs_init(void)
 #else /* !CONFIG_XSWAP */
 static inline void xswap_sysfs_init(void)
 {
+}
+
+static inline int xswap_destroy_by_name(const char *name)
+{
+	return -ENOENT;
 }
 #endif /* CONFIG_XSWAP */
 
@@ -3513,8 +3520,21 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 
 	CLASS(filename, pathname)(specialfile);
 	victim = file_open_name(pathname, O_RDWR|O_LARGEFILE, 0);
-	if (IS_ERR(victim))
-		return PTR_ERR(victim);
+	if (IS_ERR(victim)) {
+		/*
+		 * An xswap device has no file, so /proc/swaps shows a name
+		 * that cannot be opened. Accept it here so swapoff -a works.
+		 * Only a missing name is taken for a device; a real file or
+		 * directory that failed for another reason must not match.
+		 */
+		if (PTR_ERR(victim) != -ENOENT)
+			return PTR_ERR(victim);
+
+		err = xswap_destroy_by_name(pathname->name);
+		if (err == -ENOENT)
+			return PTR_ERR(victim);
+		return err;
+	}
 
 	mapping = victim->f_mapping;
 	spin_lock(&swap_lock);
@@ -4503,6 +4523,38 @@ static int xswap_destroy(u64 id)
 		return err;
 
 	return __swapoff(p);
+}
+
+static int xswap_destroy_by_name(const char *name)
+{
+	const char *p;
+	char buf[24];
+	u64 id;
+	int err;
+
+	/* Strictly "xswap<digits>": no sign, no trailing newline. */
+	if (strncmp(name, "xswap", 5))
+		return -ENOENT;
+
+	p = name + 5;
+	if (!isdigit((unsigned char)*p))
+		return -ENOENT;
+	while (isdigit((unsigned char)*p))
+		p++;
+	if (*p)
+		return -ENOENT;
+
+	if (strscpy(buf, name + 5, sizeof(buf)) < 0)
+		return -ENOENT;
+
+	err = kstrtou64(buf, 10, &id);
+	if (err)
+		return -ENOENT;
+
+	err = xswap_destroy(id);
+	if (err == -ENODEV)
+		return -ENOENT;
+	return err;
 }
 #endif /* CONFIG_XSWAP */
 
