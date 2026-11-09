@@ -6823,6 +6823,8 @@ nfsd4_encode_operation(struct nfsd4_compoundres *resp, struct nfsd4_op *op)
 	unsigned int op_status_offset;
 	struct page **next_page;
 	nfsd4_enc encoder;
+	__be32 nfserr;
+	bool overflow;
 
 	/*
 	 * nfsd4_proc_compound() stops the COMPOUND early only
@@ -6847,7 +6849,8 @@ nfsd4_encode_operation(struct nfsd4_compoundres *resp, struct nfsd4_op *op)
 	BUG_ON(op->opnum >= ARRAY_SIZE(nfsd4_enc_ops) ||
 	       !nfsd4_enc_ops[op->opnum]);
 	encoder = nfsd4_enc_ops[op->opnum];
-	op->status = encoder(resp, op->status, &op->u);
+	nfserr = op->status;
+	op->status = encoder(resp, nfserr, &op->u);
 	if (op->status)
 		trace_nfsd_compound_encode_err(rqstp, op->opnum, op->status);
 	xdr_commit_encode(xdr);
@@ -6859,6 +6862,7 @@ nfsd4_encode_operation(struct nfsd4_compoundres *resp, struct nfsd4_op *op)
 			space_needed = COMPOUND_ERR_SLACK_SPACE;
 		op->status = nfsd4_check_resp_size(resp, space_needed);
 	}
+	overflow = op->status != nfserr;
 	if (op->status == nfserr_resource && nfsd4_has_session(&resp->cstate)) {
 		struct nfsd4_slot *slot = resp->cstate.slot;
 
@@ -6867,15 +6871,17 @@ nfsd4_encode_operation(struct nfsd4_compoundres *resp, struct nfsd4_op *op)
 		else
 			op->status = nfserr_rep_too_big;
 	}
-	if (op->status == nfserr_resource ||
-	    op->status == nfserr_rep_too_big ||
-	    op->status == nfserr_rep_too_big_to_cache) {
+	if (overflow &&
+	    (op->status == nfserr_resource ||
+	     op->status == nfserr_rep_too_big ||
+	     op->status == nfserr_rep_too_big_to_cache)) {
 		/*
-		 * The operation may have already been encoded or
-		 * partially encoded.  No op returns anything additional
-		 * in the case of one of these three errors, so we can
-		 * just truncate back to after the status.  But it's a
-		 * bug if we had to do this on a non-idempotent op:
+		 * The encoder ran out of reply space, so nothing past the
+		 * status word is valid. Truncate back to after the status. An
+		 * operation that returned one of these errors itself is not
+		 * truncated: its error form can carry a body (SETATTR's
+		 * bitmap) and is already encoded in full. Truncating a
+		 * non-idempotent op is a bug:
 		 */
 		warn_on_nonidempotent_op(op);
 		xdr_truncate_encode(xdr, op_status_offset + XDR_UNIT);
