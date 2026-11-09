@@ -115,7 +115,7 @@ endif
 # the dependencies ("header3.h"), because clang, unlike gcc, will not accept
 # header files as an input to the compiler invocation.
 define extra-files
-$(OUTPUT)/$(1): EXTRA_FILES := $(2)
+$(OUTPUT)/$(1): EXTRA_FILES := $(filter-out %.h,$(2))
 $(OUTPUT)/$(1): $(2)
 endef
 
