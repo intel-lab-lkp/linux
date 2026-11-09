@@ -552,14 +552,6 @@ struct amdgpu_mqd_prop {
 	uint32_t cu_mask_count;
 	uint32_t cu_flags;
 	bool is_user_cu_masked;
-	bool aql_queue;
-	uint32_t queue_percentage;
-	/* used in gfx9 and gfx12.1 */
-	uint32_t pm4_target_xcc;
-	/* cwsr params */
-	uint64_t ctx_save_area_addr;
-	uint32_t ctx_save_area_size;
-	uint32_t ctl_stack_size;
 };
 
 struct amdgpu_mqd {

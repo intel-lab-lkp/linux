@@ -79,10 +79,4 @@ uint32_t amdgpu_cwsr_size_needed(struct amdgpu_device *adev, int num_xcc);
 int amdgpu_cwsr_validate_params(struct amdgpu_device *adev,
 				struct amdgpu_cwsr_params *cwsr_params,
 				int num_xcc);
-static inline bool amdgpu_cwsr_has_dbg_wa(struct amdgpu_device *adev)
-{
-	uint32_t gc_ver = amdgpu_ip_version(adev, GC_HWIP, 0);
-
-	return gc_ver >= IP_VERSION(11, 0, 0) && gc_ver <= IP_VERSION(11, 0, 3);
-}
 #endif

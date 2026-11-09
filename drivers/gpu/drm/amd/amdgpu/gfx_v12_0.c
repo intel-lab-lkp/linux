@@ -3237,20 +3237,6 @@ static int gfx_v12_0_compute_mqd_init(struct amdgpu_device *adev, void *m,
 	/* set CU mask */
 	gfx_v12_0_compute_mqd_set_cu_mask(adev, mqd, prop);
 
-	/* If non-zero, assume cwsr is enabled */
-	if (prop->ctx_save_area_addr) {
-		mqd->cp_hqd_persistent_state |=
-			(1 << CP_HQD_PERSISTENT_STATE__QSWITCH_MODE__SHIFT);
-		mqd->cp_hqd_ctx_save_base_addr_lo =
-			lower_32_bits(prop->ctx_save_area_addr);
-		mqd->cp_hqd_ctx_save_base_addr_hi =
-			upper_32_bits(prop->ctx_save_area_addr);
-		mqd->cp_hqd_ctx_save_size = prop->ctx_save_area_size;
-		mqd->cp_hqd_cntl_stack_size = prop->ctl_stack_size;
-		mqd->cp_hqd_cntl_stack_offset = prop->ctl_stack_size;
-		mqd->cp_hqd_wg_state_offset = prop->ctl_stack_size;
-	}
-
 	return 0;
 }
 

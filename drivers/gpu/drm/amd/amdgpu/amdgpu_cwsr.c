@@ -395,7 +395,6 @@ int amdgpu_cwsr_alloc(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 
 	if (!amdgpu_cwsr_is_enabled(adev))
 		return -EOPNOTSUPP;
-
 	if (!vm || !trap_obj)
 		return -EINVAL;
 
@@ -404,15 +403,12 @@ int amdgpu_cwsr_alloc(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 		return -ENOMEM;
 
 	bo = adev->cwsr_info->isa_bo;
-
 	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
 	drm_exec_until_all_locked(&exec) {
 		r = amdgpu_vm_lock_pd(vm, &exec, 0);
 		if (likely(!r))
 			r = drm_exec_lock_obj(&exec, &bo->tbo.base);
-
 		drm_exec_retry_on_contention(&exec);
-
 		if (unlikely(r)) {
 			dev_err(adev->dev,
 				"failed to reserve for CWSR allocs: err=%d\n",
@@ -459,21 +455,17 @@ int amdgpu_cwsr_alloc(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 	}
 
 	drm_exec_fini(&exec);
-
 	*trap_obj = cwsr;
 	return 0;
 
 err_kmap:
 	amdgpu_bo_kunmap(cwsr->tma_bo);
-
 err_tma:
 	amdgpu_bo_unref(&cwsr->tma_bo);
-
 err_exec:
 	drm_exec_fini(&exec);
 	kfree(cwsr);
 	*trap_obj = NULL;
-
 	return r;
 }
 

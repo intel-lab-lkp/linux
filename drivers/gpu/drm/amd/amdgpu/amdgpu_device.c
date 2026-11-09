@@ -81,7 +81,6 @@
 #include "amdgpu_reset.h"
 #include "amdgpu_virt.h"
 #include "amdgpu_dev_coredump.h"
-#include "amdgpu_cwsr.h"
 
 #include <linux/suspend.h>
 #include <drm/task_barrier.h>
@@ -2573,14 +2572,6 @@ static int amdgpu_device_ip_init(struct amdgpu_device *adev)
 	amdgpu_fru_get_product_info(adev);
 
 	r = amdgpu_cper_init(adev);
-	if (r)
-		goto init_failed;
-
-	r = amdgpu_cwsr_init(adev);
-	if (r == -EOPNOTSUPP)
-		r = 0;
-	else if (r)
-		goto init_failed;
 
 init_failed:
 
@@ -2986,7 +2977,6 @@ static int amdgpu_device_ip_fini(struct amdgpu_device *adev)
 {
 	int i, r;
 
-	amdgpu_cwsr_fini(adev);
 	amdgpu_cper_fini(adev);
 
 	if (amdgpu_sriov_vf(adev) && adev->virt.ras_init_done)
