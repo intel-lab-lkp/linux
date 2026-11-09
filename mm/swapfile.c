@@ -86,7 +86,10 @@ static void xswap_unmap_clusters(struct swap_info_struct *si,
 static int xswap_mapped_end(pte_t *pte, unsigned long addr, void *data);
 
 static int xswap_create(int prio);
-static int xswap_destroy(int type);
+static int xswap_destroy(u64 id);
+
+/* Stable device id, assigned at create and never reused. */
+static atomic64_t xswap_id_counter = ATOMIC64_INIT(0);
 
 static ssize_t xswap_create_store(struct kobject *kobj,
 				  struct kobj_attribute *attr,
@@ -121,19 +124,17 @@ static ssize_t xswap_destroy_store(struct kobject *kobj,
 				   struct kobj_attribute *attr,
 				   const char *buf, size_t count)
 {
-	unsigned long type;
+	u64 id;
 	int err;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	err = kstrtoul(buf, 0, &type);
+	err = kstrtoull(buf, 0, &id);
 	if (err)
 		return err;
-	if (type >= MAX_SWAPFILES)
-		return -EINVAL;
 
-	err = xswap_destroy(type);
+	err = xswap_destroy(id);
 	if (err)
 		return err;
 
@@ -3657,9 +3658,15 @@ static int swap_show(struct seq_file *swap, void *v)
 	if (file)
 		len = seq_file_path(swap, file, " \t\n\\");
 	else {
-		char name[16];
+		char name[32];
 
+#ifdef CONFIG_XSWAP
+		len = scnprintf(name, sizeof(name), "xswap%llu",
+				(unsigned long long)si->xswap_id);
+#else
+		/* CONFIG_XSWAP=n has no file-less devices; keep the type. */
 		len = scnprintf(name, sizeof(name), "xswap%d", si->type);
+#endif
 		seq_puts(swap, name);
 	}
 	seq_printf(swap, "%*s%s\t%lu\t%s%lu\t%s%d\n",
@@ -4296,6 +4303,11 @@ static int xswap_create(int prio)
 	si->max = maxpages;
 	si->pages = maxpages - 1;
 	/*
+	 * Set before the device is enabled, for debugfs; destroy only matches
+	 * a WRITEOK device, so the create window is not reachable.
+	 */
+	si->xswap_id = atomic64_inc_return(&xswap_id_counter);
+	/*
 	 * No backing file: setup_swap_extents() is only reachable from the
 	 * file-backed swapon() path, so set ops here.  Only ops->flags is
 	 * used, by may_enter_fs(); the IO methods are never called because
@@ -4316,8 +4328,8 @@ static int xswap_create(int prio)
 	si->list.prio = -si->prio;
 	si->avail_list.prio = -si->prio;
 	enable_swap_info(si);
-	pr_info("xswap: adding extendable swap type %d (prio %d, %lu pages)\n",
-		si->type, prio, si->pages);
+	pr_info("xswap: adding extendable swap device xswap%llu (prio %d, %lu pages)\n",
+		(unsigned long long)si->xswap_id, prio, si->pages);
 	mutex_unlock(&swapon_mutex);
 	atomic_inc(&proc_poll_event);
 	wake_up_interruptible(&proc_poll_wait);
@@ -4336,20 +4348,31 @@ bad_swap:
 	return error;
 }
 
-/* Tear down a file-less xswap device by its swap type. */
-static int xswap_destroy(int type)
+/* Tear down a file-less xswap device by its stable id. */
+static int xswap_destroy(u64 id)
 {
-	struct swap_info_struct *p;
+	struct swap_info_struct *p = NULL;
+	unsigned int type;
 	int err;
 
-	p = swap_type_to_info(type);
-	if (!p)
-		return -EINVAL;
-
 	spin_lock(&swap_lock);
-	if (!(p->flags & SWP_WRITEOK) || !(p->flags & SWP_XSWAP)) {
+	/*
+	 * Match only a device that is fully enabled: one still being created
+	 * is not WRITEOK yet, and one being destroyed has lost it. Neither
+	 * is a valid target, so both read as "no such device".
+	 */
+	for (type = 0; type < nr_swapfiles; type++) {
+		struct swap_info_struct *q = swap_info[type];
+
+		if (q && (q->flags & (SWP_XSWAP | SWP_WRITEOK)) ==
+			 (SWP_XSWAP | SWP_WRITEOK) && q->xswap_id == id) {
+			p = q;
+			break;
+		}
+	}
+	if (!p) {
 		spin_unlock(&swap_lock);
-		return -EINVAL;
+		return -ENODEV;
 	}
 	/* Refuse swapoff while the device is pinned for hibernation */
 	if (p->flags & SWP_HIBERNATION) {
