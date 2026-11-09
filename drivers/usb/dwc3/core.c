@@ -1371,8 +1371,6 @@ int dwc3_core_init(struct dwc3 *dwc)
 		dwc->ulpi_ready = true;
 	}
 
-	dwc3_ulpi_setup(dwc);
-
 	if (!dwc->phys_ready) {
 		ret = dwc3_core_get_phy(dwc);
 		if (ret)
@@ -1533,6 +1531,9 @@ int dwc3_core_init(struct dwc3 *dwc)
 		reg |= DWC3_GUCTL3_USB20_RETRY_DISABLE;
 		dwc3_writel(dwc, DWC3_GUCTL3, reg);
 	}
+
+	/* XCVRDLY must not be asserted across PHY init, so set it last. */
+	dwc3_ulpi_setup(dwc);
 
 	return 0;
 
