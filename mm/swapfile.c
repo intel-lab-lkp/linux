@@ -1692,7 +1692,7 @@ static bool swap_alloc_fast(struct folio *folio)
 		 */
 		unsigned long mapped;
 
-		/* Pairs with the release store in xswap_unmap_clusters(). */
+		/* Pairs with the release store in xswap_unmap_clusters_locked(). */
 		mapped = smp_load_acquire(&si->nr_clusters_mapped);
 
 		if (offset / SWAPFILE_CLUSTER >= mapped) {
@@ -4318,8 +4318,8 @@ static unsigned long xswap_grow(struct swap_info_struct *si)
 }
 
 /* Caller must hold si->xswap_lock.  Cannot fail. */
-static void xswap_unmap_clusters(struct swap_info_struct *si,
-				 unsigned long start_idx, unsigned long nr)
+static void xswap_unmap_clusters_locked(struct swap_info_struct *si,
+					unsigned long start_idx, unsigned long nr)
 {
 	unsigned long start_addr = (unsigned long)si->cluster_info +
 				   (size_t)start_idx * sizeof(struct swap_cluster_info);
@@ -4330,8 +4330,6 @@ static void xswap_unmap_clusters(struct swap_info_struct *si,
 	struct page **pages;
 	unsigned int noreclaim_flags;
 	unsigned long npages, idx;
-
-	mutex_lock(&si->xswap_lock);
 
 	/*
 	 * Publish the smaller range before its memory goes away.  Readers
@@ -4347,7 +4345,6 @@ static void xswap_unmap_clusters(struct swap_info_struct *si,
 		 * goes away with that cluster; publishing the smaller
 		 * cluster count is still correct.
 		 */
-		mutex_unlock(&si->xswap_lock);
 		return;
 	}
 
@@ -4362,6 +4359,11 @@ static void xswap_unmap_clusters(struct swap_info_struct *si,
 
 	npages = (vm_end - vm_start) >> PAGE_SHIFT;
 
+	/*
+	 * vm_area_unmap_pages() refuses a range above totalram_pages() and
+	 * returns without clearing the PTEs.  Freeing those pages would
+	 * leave dangling mappings, so use the batch path for that case.
+	 */
 	if (npages <= totalram_pages()) {
 		/* Reclaim here would re-enter xswap_map_clusters() and its lock. */
 		noreclaim_flags = memalloc_noreclaim_save();
@@ -4371,11 +4373,11 @@ static void xswap_unmap_clusters(struct swap_info_struct *si,
 		if (pages) {
 			xswap_unmap_range(si, vm_start, vm_end, pages, npages);
 			kvfree(pages);
-			goto out_unlock;
+			return;
 		}
 	}
 
-	/* No memory for the array, or too large: unmap in bounded batches. */
+	/* No memory for the array, or too large a range: unmap in batches. */
 	for (idx = start_idx; idx < start_idx + nr; idx += XSWAP_UNMAP_BATCH_CLUSTERS) {
 		unsigned long batch = min(start_idx + nr - idx,
 					  XSWAP_UNMAP_BATCH_CLUSTERS);
@@ -4390,7 +4392,13 @@ static void xswap_unmap_clusters(struct swap_info_struct *si,
 			xswap_unmap_range(si, bstart, bend, batch_pages,
 					  ARRAY_SIZE(batch_pages));
 	}
-out_unlock:
+}
+
+static void xswap_unmap_clusters(struct swap_info_struct *si,
+				 unsigned long start_idx, unsigned long nr)
+{
+	mutex_lock(&si->xswap_lock);
+	xswap_unmap_clusters_locked(si, start_idx, nr);
 	mutex_unlock(&si->xswap_lock);
 }
 
