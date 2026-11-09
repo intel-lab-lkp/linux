@@ -470,17 +470,6 @@ struct drm_amdgpu_userq_mqd_compute_gfx11 {
 	 * to get the size.
 	 */
 	__u64   eop_va;
-	/**
-	 * @ctx_save_area_va: Virtual address of the GPU memory for save/restore buffer.
-	 * This must be from a separate GPU object, and use AMDGPU_INFO IOCTL
-	 * to get the size. This includes control stack, wave context and debugger memory.
-	 */
-	__u64 ctx_save_area_va;
-	/**
-	 * @ctx_save_area_size: Total size (in bytes) allocated for save/restore buffer.
-	 * Use AMDGPU_INFO IOCTL to get the size.
-	 */
-	__u32 ctx_save_area_size;
 };
 
 /* userq signal/wait ioctl */
@@ -1300,8 +1289,6 @@ struct drm_amdgpu_cs_chunk_cp_gfx_shadow {
 #define AMDGPU_INFO_GPUVM_FAULT			0x23
 /* query FW object size and alignment */
 #define AMDGPU_INFO_UQ_FW_AREAS			0x24
-/* query CWSR size and alignment */
-#define AMDGPU_INFO_CWSR			0x25
 
 #define AMDGPU_INFO_MMR_SE_INDEX_SHIFT	0
 #define AMDGPU_INFO_MMR_SE_INDEX_MASK	0xff
@@ -1679,20 +1666,6 @@ struct drm_amdgpu_info_uq_metadata {
 		struct drm_amdgpu_info_uq_metadata_compute compute;
 		struct drm_amdgpu_info_uq_metadata_sdma sdma;
 	};
-};
-
-/**
- * struct drm_amdgpu_info_cwsr - cwsr information
- *
- * Gives cwsr related size details. User needs to allocate buffer based on this.
- */
-struct drm_amdgpu_info_cwsr {
-	/* Control stack size */
-	__u32 ctl_stack_size;
-	/* Debug memory area size */
-	__u32 dbg_mem_size;
-	/* Minimum save area size required */
-	__u32 min_save_area_size;
 };
 
 /*

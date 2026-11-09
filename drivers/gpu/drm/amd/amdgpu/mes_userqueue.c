@@ -466,9 +466,11 @@ static int mes_userq_mqd_create(struct amdgpu_usermode_queue *queue,
 			num_xcc = amdgpu_xcp_get_num_xcc(adev->xcp_mgr,
 							 fpriv->xcp_id);
 			cwsr_params.ctx_save_area_address =
-				compute_mqd->ctx_save_area_va;
+				userq_props->ctx_save_area_addr;
 			cwsr_params.cwsr_sz =
-				compute_mqd->ctx_save_area_size;
+				userq_props->ctx_save_area_size;
+			userq_props->ctl_stack_size =
+				adev->cwsr_info->xcc_ctl_stack_sz * num_xcc;
 
 			r = amdgpu_bo_reserve(queue->vm->root.bo, false);
 			if (r) {
@@ -483,13 +485,6 @@ static int mes_userq_mqd_create(struct amdgpu_usermode_queue *queue,
 				kfree(compute_mqd);
 				goto free_mqd;
 			}
-
-			userq_props->ctx_save_area_addr =
-				compute_mqd->ctx_save_area_va;
-			userq_props->ctx_save_area_size =
-				compute_mqd->ctx_save_area_size;
-			userq_props->ctl_stack_size =
-				adev->cwsr_info->xcc_ctl_stack_sz * num_xcc;
 		}
 
 		kfree(compute_mqd);
