@@ -134,6 +134,9 @@ enum rmpopt_op_type {
 static struct workqueue_struct *rmpopt_wq;
 static struct delayed_work rmpopt_delayed_work;
 
+/* Per-node warm-up work, used to warm each node's window in parallel (>2TB). */
+static struct work_struct *rmpopt_node_work;
+
 /* Software RMPOPT facilities initialized */
 static bool rmpopt_soft_init;
 
@@ -145,6 +148,9 @@ static bool rmpopt_soft_init;
  * re-optimization latency against scanning too eagerly.
  */
 #define RMPOPT_WORK_TIMEOUT	(10 * MSEC_PER_SEC)
+
+#define RMPOPT_GB_WINDOW_SIZE	(SZ_2T / SZ_1G)		/* 2 TB, in 1 GB units */
+#define RMPOPT_EMPTY_DISTANCE	255			/* SLIT "unreachable" */
 
 static LIST_HEAD(snp_leaked_pages_list);
 static DEFINE_SPINLOCK(snp_leaked_pages_list_lock);
@@ -632,19 +638,125 @@ static void rmpopt_scan_range(void *arg)
 		rmpopt(pa);
 }
 
+/* NUMA node backing the 1 GB region at index @gb, or NUMA_NO_NODE if empty. */
+static int rmpopt_gb_to_node(u64 gb)
+{
+	u64 pfn = (gb * SZ_1G) >> PAGE_SHIFT;
+	int nid;
+
+	for_each_online_node(nid) {
+		if (pfn >= node_start_pfn(nid) && pfn < node_end_pfn(nid))
+			return nid;
+	}
+
+	return NUMA_NO_NODE;
+}
+
+/* NUMA distance from @node to the 1 GB region at index @gb. */
+static unsigned int rmpopt_gb_distance(int node, u64 gb)
+{
+	int nid = rmpopt_gb_to_node(gb);
+
+	return nid == NUMA_NO_NODE ? RMPOPT_EMPTY_DISTANCE
+				   : node_distance(node, nid);
+}
+
+/* True when all of RAM fits in one window, so every node shares it. */
+static bool rmpopt_single_window(void)
+{
+	u64 first_gb = ALIGN_DOWN(PFN_PHYS(min_low_pfn), SZ_1G) / SZ_1G;
+	u64 last_gb = ALIGN(PFN_PHYS(max_pfn), SZ_1G) / SZ_1G;
+
+	return last_gb - first_gb <= RMPOPT_GB_WINDOW_SIZE;
+}
+
+/*
+ * Return the 1 GB-aligned RMPOPT_BASE for @node: slide a window across physical
+ * memory and keep the base whose window covers the most of @node's own memory.
+ * When all of RAM fits in one window, use the start of RAM.
+ */
+static u64 rmpopt_find_best_window(int node)
+{
+	u64 first_gb = ALIGN_DOWN(PFN_PHYS(min_low_pfn), SZ_1G) / SZ_1G;
+	unsigned long own = 0, dist = 0, best_own, best_dist;
+	u64 base_gb, best_base_gb, gb, last_gb;
+
+	if (rmpopt_single_window())
+		return first_gb * SZ_1G;
+
+	last_gb = ALIGN(PFN_PHYS(max_pfn), SZ_1G) / SZ_1G;
+
+	/* Prime the first window. */
+	for (gb = first_gb; gb < first_gb + RMPOPT_GB_WINDOW_SIZE; gb++) {
+		if (rmpopt_gb_to_node(gb) == node)
+			own++;
+		dist += rmpopt_gb_distance(node, gb);
+	}
+	best_own = own;
+	best_dist = dist;
+	best_base_gb = first_gb;
+
+	for (base_gb = first_gb + 1; base_gb < last_gb; base_gb++) {
+		/*
+		 * Sliding-window optimization: the window advanced by 1 GB, so
+		 * rather than rescan it, drop the region at @leave that fell off
+		 * the bottom and add the region at @enter that came in at the top.
+		 */
+		u64 leave = base_gb - 1;
+		u64 enter = base_gb + RMPOPT_GB_WINDOW_SIZE - 1;
+
+		if (rmpopt_gb_to_node(leave) == node)
+			own--;
+		if (rmpopt_gb_to_node(enter) == node)
+			own++;
+		dist -= rmpopt_gb_distance(node, leave);
+		dist += rmpopt_gb_distance(node, enter);
+
+		if (own > best_own || (own == best_own && dist < best_dist)) {
+			best_own = own;
+			best_dist = dist;
+			best_base_gb = base_gb;
+		}
+	}
+
+	return best_base_gb * SZ_1G;
+}
+
+static void rmpopt_warmup_fn(struct work_struct *work)
+{
+	rmpopt_scan_range(NULL);
+}
+
 static void do_rmpopt_work(struct work_struct *work)
 {
+	unsigned int cpu;
+	int nid;
+
 	/*
-	 * Warm up the RMPOPT cache on this pinned per-CPU worker with interrupts
-	 * enabled, so the IRQ-disabled fan-out below only issues cache-hit RMPOPTs.
+	 * Warm up each window on a node-local core with interrupts enabled, so
+	 * the expensive first (uncached) pass never runs in the interrupts-
+	 * disabled fan-out below.  A <=2TB system shares one window and is warmed
+	 * once; a >2TB system warms each node's window in parallel.
 	 */
-	rmpopt_scan_range(NULL);
+	if (rmpopt_single_window()) {
+		rmpopt_scan_range(NULL);
+	} else {
+		for_each_online_node(nid) {
+			cpu = cpumask_first_and(cpu_primary_thread_mask, cpumask_of_node(nid));
+			if (cpu < nr_cpu_ids)
+				schedule_work_on(cpu, &rmpopt_node_work[nid]);
+		}
+		for_each_online_node(nid)
+			flush_work(&rmpopt_node_work[nid]);
+	}
 
 	on_each_cpu_mask(cpu_primary_thread_mask, rmpopt_scan_range, NULL, true);
 }
 
 static int __init rmpopt_init(void)
 {
+	int nid;
+
 	if (!cpu_feature_enabled(X86_FEATURE_RMPOPT))
 		return -ENODEV;
 
@@ -653,6 +765,14 @@ static int __init rmpopt_init(void)
 		pr_err("Failed to allocate RMPOPT workqueue\n");
 		return -ENOMEM;
 	}
+
+	rmpopt_node_work = kcalloc(nr_node_ids, sizeof(*rmpopt_node_work), GFP_KERNEL);
+	if (!rmpopt_node_work) {
+		destroy_workqueue(rmpopt_wq);
+		return -ENOMEM;
+	}
+	for_each_online_node(nid)
+		INIT_WORK(&rmpopt_node_work[nid], rmpopt_warmup_fn);
 
 	INIT_DELAYED_WORK(&rmpopt_delayed_work, do_rmpopt_work);
 
@@ -665,8 +785,9 @@ static int __init rmpopt_init(void)
 
 void snp_enable_rmpopt(void)
 {
-	u64 base, pa_start;
-	int cpu;
+	unsigned int cpu;
+	u64 base;
+	int nid;
 
 	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP))
 		return;
@@ -678,15 +799,19 @@ void snp_enable_rmpopt(void)
 		return;
 
 	/*
-	 * A core's RMPOPT_BASE covers at most 2 TB.  Program every core with
-	 * the start of RAM to optimize up to 2 TB.
+	 * A core's RMPOPT_BASE covers at most 2 TB.  Give each NUMA node the
+	 * window that best covers its own memory and program it on that node's
+	 * cores; for <=2TB systems every node resolves to the start of RAM.
 	 */
-	pa_start = ALIGN_DOWN(PFN_PHYS(min_low_pfn), SZ_1G);
 	rdmsrq(MSR_AMD64_RMPOPT_BASE, base);
-	if (!(base & MSR_AMD64_RMPOPT_ENABLE))
-		for_each_cpu(cpu, cpu_primary_thread_mask)
-			wrmsrq_on_cpu(cpu, MSR_AMD64_RMPOPT_BASE,
-				      pa_start | MSR_AMD64_RMPOPT_ENABLE);
+	if (!(base & MSR_AMD64_RMPOPT_ENABLE)) {
+		for_each_online_node(nid) {
+			u64 nbase = rmpopt_find_best_window(nid) | MSR_AMD64_RMPOPT_ENABLE;
+
+			for_each_cpu_and(cpu, cpu_primary_thread_mask, cpumask_of_node(nid))
+				wrmsrq_on_cpu(cpu, MSR_AMD64_RMPOPT_BASE, nbase);
+		}
+	}
 
 	mod_delayed_work(rmpopt_wq, &rmpopt_delayed_work,
 			 msecs_to_jiffies(RMPOPT_WORK_TIMEOUT));
