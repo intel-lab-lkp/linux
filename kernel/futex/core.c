@@ -1503,7 +1503,7 @@ void futex_exit_recursive(struct task_struct *tsk)
 {
 	/* If the state is FUTEX_STATE_EXITING then futex_exit_mutex is held */
 	if (tsk->futex.state == FUTEX_STATE_EXITING) {
-		__assume_ctx_lock(&tsk->futex.exit_mutex);
+		lockdep_assume_ctx_held(&tsk->futex.exit_mutex);
 		mutex_unlock(&tsk->futex.exit_mutex);
 	}
 	tsk->futex.state = FUTEX_STATE_DEAD;
