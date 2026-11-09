@@ -37,7 +37,7 @@ static inline bool pm_clk_no_clocks(struct device *dev)
 }
 
 extern void pm_clk_init(struct device *dev);
-extern int pm_clk_create(struct device *dev);
+extern int __pm_clk_create(struct device *dev, struct lock_class_key *key);
 extern void pm_clk_destroy(struct device *dev);
 extern int pm_clk_add(struct device *dev, const char *con_id);
 extern int pm_clk_add_clk(struct device *dev, struct clk *clk);
@@ -45,7 +45,22 @@ extern int of_pm_clk_add_clks(struct device *dev);
 extern void pm_clk_remove_clk(struct device *dev, struct clk *clk);
 extern int pm_clk_suspend(struct device *dev);
 extern int pm_clk_resume(struct device *dev);
-extern int devm_pm_clk_create(struct device *dev);
+extern int __devm_pm_clk_create(struct device *dev, struct lock_class_key *key);
+
+/* Per-call-site lockdep class, as clock mutexes of different devices nest */
+#define pm_clk_create(dev)						\
+({									\
+	static struct lock_class_key __key;				\
+									\
+	__pm_clk_create(dev, &__key);					\
+})
+
+#define devm_pm_clk_create(dev)						\
+({									\
+	static struct lock_class_key __key;				\
+									\
+	__devm_pm_clk_create(dev, &__key);				\
+})
 #else
 static inline bool pm_clk_no_clocks(struct device *dev)
 {

@@ -398,17 +398,26 @@ void pm_clk_init(struct device *dev)
 EXPORT_SYMBOL_GPL(pm_clk_init);
 
 /**
- * pm_clk_create - Create and initialize a device's list of PM clocks.
+ * __pm_clk_create - Create and initialize a device's list of PM clocks.
  * @dev: Device to create and initialize the list of PM clocks for.
+ * @key: Lockdep class key for the clock mutex.
  *
  * Allocate a struct pm_subsys_data object, initialize its lock and clock_list
  * members and make the @dev's power.subsys_data field point to it.
  */
-int pm_clk_create(struct device *dev)
+int __pm_clk_create(struct device *dev, struct lock_class_key *key)
 {
-	return dev_pm_get_subsys_data(dev);
+	int ret;
+
+	ret = dev_pm_get_subsys_data(dev);
+	if (ret)
+		return ret;
+
+	lockdep_set_class_and_name(&dev_to_psd(dev)->clock_mutex, key,
+				   "&psd->clock_mutex");
+	return 0;
 }
-EXPORT_SYMBOL_GPL(pm_clk_create);
+EXPORT_SYMBOL_GPL(__pm_clk_create);
 
 /**
  * pm_clk_destroy - Destroy a device's list of power management clocks.
@@ -451,17 +460,17 @@ static void pm_clk_destroy_action(void *data)
 	pm_clk_destroy(data);
 }
 
-int devm_pm_clk_create(struct device *dev)
+int __devm_pm_clk_create(struct device *dev, struct lock_class_key *key)
 {
 	int ret;
 
-	ret = pm_clk_create(dev);
+	ret = __pm_clk_create(dev, key);
 	if (ret)
 		return ret;
 
 	return devm_add_action_or_reset(dev, pm_clk_destroy_action, dev);
 }
-EXPORT_SYMBOL_GPL(devm_pm_clk_create);
+EXPORT_SYMBOL_GPL(__devm_pm_clk_create);
 
 /**
  * pm_clk_suspend - Disable clocks in a device's PM clock list.
