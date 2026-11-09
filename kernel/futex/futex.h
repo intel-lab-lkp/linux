@@ -394,7 +394,8 @@ extern int futex_lock_pi_atomic(u32 __user *uaddr, struct futex_hash_bucket *hb,
 extern int refill_pi_state_cache(void);
 extern void get_pi_state(struct futex_pi_state *pi_state);
 extern void put_pi_state(struct futex_pi_state *pi_state);
-extern int fixup_pi_owner(u32 __user *uaddr, struct futex_q *q, int locked);
+extern int fixup_pi_owner(u32 __user *uaddr, struct futex_q *q, int locked)
+	__must_hold(q->lock_ptr);
 
 /*
  * Express the locking dependencies for lockdep:

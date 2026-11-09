@@ -420,6 +420,7 @@ static int handle_exit_race(u32 __user *uaddr, u32 uval)
 
 static void __attach_to_pi_owner(struct task_struct *p, union futex_key *key,
 				 struct futex_pi_state **ps)
+	__must_hold(&p->pi_lock)
 {
 	/*
 	 * No existing pi state. First waiter. [2]
@@ -912,6 +913,7 @@ handle_err:
 
 static int fixup_pi_state_owner(u32 __user *uaddr, struct futex_q *q,
 				struct task_struct *argowner)
+	__must_hold(q->lock_ptr)
 {
 	struct futex_pi_state *pi_state = q->pi_state;
 	int ret;
@@ -940,6 +942,7 @@ static int fixup_pi_state_owner(u32 __user *uaddr, struct futex_q *q,
  *  - <0 - on error (-EFAULT)
  */
 int fixup_pi_owner(u32 __user *uaddr, struct futex_q *q, int locked)
+	__must_hold(q->lock_ptr)
 {
 	if (locked) {
 		/*
