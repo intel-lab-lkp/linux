@@ -687,6 +687,7 @@ config BRANCH_PROFILE_NONE
 
 config PROFILE_ANNOTATED_BRANCHES
 	bool "Trace likely/unlikely profiler"
+	depends on !COMPILE_TEST
 	select TRACE_BRANCH_PROFILING
 	help
 	  This tracer profiles all likely and unlikely macros
@@ -698,7 +699,7 @@ config PROFILE_ANNOTATED_BRANCHES
 	  on if you need to profile the system's use of these macros.
 
 config PROFILE_ALL_BRANCHES
-	bool "Profile all if conditionals" if !FORTIFY_SOURCE
+	bool "Profile all if conditionals" if !FORTIFY_SOURCE && !COMPILE_TEST
 	select TRACE_BRANCH_PROFILING
 	help
 	  This tracer profiles all branch conditions. Every if ()
