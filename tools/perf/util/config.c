@@ -1091,8 +1091,13 @@ static int perf_config_scan_cb(const char *var, const char *value, void *data)
 {
 	struct perf_config_scan_data *d = data;
 
-	if (!strcmp(var, d->name))
-		d->ret = vsscanf(value, d->fmt, d->args);
+	if (!strcmp(var, d->name)) {
+		va_list args;
+
+		va_copy(args, d->args);
+		d->ret = vsscanf(value, d->fmt, args);
+		va_end(args);
+	}
 
 	return 0;
 }
