@@ -82,6 +82,7 @@ static void crypto_pump_requests(struct crypto_engine *engine,
 	if (!engine->retry_support && engine->cur_req)
 		goto out;
 
+check_idle:
 	/* Check if the engine queue is idle */
 	if (!crypto_queue_len(&engine->queue) || !engine->running) {
 		if (!engine->busy)
@@ -98,7 +99,6 @@ static void crypto_pump_requests(struct crypto_engine *engine,
 		goto out;
 	}
 
-start_request:
 	/* Get the fist request from the engine queue to handle */
 	backlog = crypto_get_backlog(&engine->queue);
 	async_req = crypto_dequeue_request(&engine->queue);
@@ -161,7 +161,7 @@ retry:
 	/* If retry mechanism is supported, send new requests to engine */
 	if (engine->retry_support) {
 		spin_lock_irqsave(&engine->queue_lock, flags);
-		goto start_request;
+		goto check_idle;
 	}
 	return;
 
