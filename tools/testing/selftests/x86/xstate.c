@@ -14,6 +14,7 @@
 
 #include "helpers.h"
 #include "xstate.h"
+#include "coredump.h"
 
 /*
  * The userspace xstate test suite is designed to be generic and operates
@@ -243,28 +244,10 @@ static struct xsave_buffer *stashed_xbuf;
  * Ptrace test for the ABI format as described in arch/x86/include/asm/user.h
  */
 
-/*
- * Make sure the ptracee has the expanded kernel buffer on the first use.
- * Then, initialize the state before performing the state injection from
- * the ptracer. For non-dynamic states, this is benign.
- */
-static inline void ptracee_touch_xstate(void)
-{
-	load_rand_xstate(&xstate, stashed_xbuf);
-	load_init_xstate(&xstate, stashed_xbuf);
-}
-
-static bool validate_ptracer_xstate(pid_t target, struct iovec iov,
-				    struct xsave_buffer *xbuf,
-				    struct xsave_buffer *expected)
+static bool validate_abi_xstate(struct xsave_buffer *xbuf,
+				struct xsave_buffer *expected)
 {
 	unsigned int failed = 0;
-
-	if (ptrace(PTRACE_SETREGSET, target, (uint32_t)NT_X86_XSTATE, &iov))
-		ksft_exit_fail_msg("PTRACE_SETREGSET failed\n");
-
-	if (ptrace(PTRACE_GETREGSET, target, (uint32_t)NT_X86_XSTATE, &iov))
-		ksft_exit_fail_msg("PTRACE_GETREGSET failed\n");
 
 	/*
 	 * To track this whole result only, use printf() for skipping sub-test
@@ -293,6 +276,30 @@ static bool validate_ptracer_xstate(pid_t target, struct iovec iov,
 	}
 
 	return failed == 0;
+}
+
+/*
+ * Make sure the ptracee has the expanded kernel buffer on the first use.
+ * Then, initialize the state before performing the state injection from
+ * the ptracer. For non-dynamic states, this is benign.
+ */
+static inline void ptracee_touch_xstate(void)
+{
+	load_rand_xstate(&xstate, stashed_xbuf);
+	load_init_xstate(&xstate, stashed_xbuf);
+}
+
+static bool validate_ptracer_xstate(pid_t target, struct iovec iov,
+				    struct xsave_buffer *xbuf,
+				    struct xsave_buffer *expected)
+{
+	if (ptrace(PTRACE_SETREGSET, target, (uint32_t)NT_X86_XSTATE, &iov))
+		ksft_exit_fail_msg("PTRACE_SETREGSET failed\n");
+
+	if (ptrace(PTRACE_GETREGSET, target, (uint32_t)NT_X86_XSTATE, &iov))
+		ksft_exit_fail_msg("PTRACE_GETREGSET failed\n");
+
+	return validate_abi_xstate(xbuf, expected);
 }
 
 /*
@@ -386,6 +393,57 @@ static void test_ptrace(void)
 		ksft_exit_fail_msg("ptracee exit error\n");
 
 	free(stashed_xbuf);
+}
+
+static void test_coredump(void)
+{
+	struct xsave_buffer *xbuf, *corefile_xbuf;
+	pid_t child;
+	int status;
+
+	if (!coredump_prepare())
+		return;
+
+	ksft_print_msg("[RUN]\t%s: validate coredump.\n", xstate.name);
+
+	/*
+	 * Use a shared buffer to retain the expected XSTATE across fork() and
+	 * compare it against the XSTATE saved in the core dump.
+	 */
+	xbuf = mmap(NULL, get_xbuf_size(),
+		    PROT_READ | PROT_WRITE,
+		    MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if (xbuf == MAP_FAILED)
+		coredump_exit_fail_msg("mmap() for the shared xsave buffer failed.");
+
+	child = fork();
+	if (child < 0)
+		coredump_exit_fail_msg("fork() failed.");
+
+	if (!child) {
+		if (chdir(core_dir)) {
+			printf("\tchdir() failed.\n");
+			_exit(1);
+		}
+		load_rand_xstate(&xstate, xbuf);
+		coredump_trigger();
+		_exit(1);
+	}
+
+	if (waitpid(child, &status, 0) != child ||
+	    !WIFSIGNALED(status) || WTERMSIG(status) != SIGSEGV)
+		coredump_exit_fail_msg("Child didn't SIGSEGV successfully.");
+
+	corefile_map(child);
+	corefile_xbuf = (struct xsave_buffer *)retrieve_corefile_xbuf();
+
+	if (validate_abi_xstate(corefile_xbuf, xbuf))
+		ksft_test_result_pass("%s for %s\n", __func__, xstate.name);
+	else
+		ksft_test_result_fail("%s for %s\n", __func__, xstate.name);
+
+	munmap(xbuf, get_xbuf_size());
+	coredump_cleanup();
 }
 
 /*
@@ -511,6 +569,7 @@ static struct test_info {
 	{ .nr = 1, .fn = test_context_switch, },
 	{ .nr = 2, .fn = test_ptrace, },
 	{ .nr = 2, .fn = test_signal, },
+	{ .nr = 1, .fn = test_coredump, },
 };
 
 int test_xstate(uint32_t feature_num)
