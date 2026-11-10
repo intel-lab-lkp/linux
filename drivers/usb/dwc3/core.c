@@ -16,6 +16,7 @@
 #include <linux/spinlock.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/suspend.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/io.h>
@@ -2539,6 +2540,29 @@ assert_reset:
 	return ret;
 }
 
+/*
+ * In host mode, system suspend suspends the bus: xhci-plat puts the root ports
+ * and with them every attached device into U3/suspend, and the USB core
+ * expects them to keep that power session (see
+ * Documentation/driver-api/usb/persist.rst). Tearing the core down here ends
+ * all power sessions: the devices then have to go through a reset-resume, and
+ * a device that takes longer than the USB core allows to come back (it has to
+ * recover its link from scratch, a hub behind the port is reset and switches
+ * its own ports off) is disconnected, e.g. with a mounted filesystem.
+ *
+ * Only do that when the core will lose its state anyway or the system goes
+ * into a state that powers it down: keep it for wakeup, and for
+ * suspend-to-idle, where nothing is powered off behind the drivers' back.
+ */
+static bool dwc3_host_core_exit_needed(struct dwc3 *dwc)
+{
+	if (dwc->needs_full_reinit)
+		return true;
+	if (device_may_wakeup(dwc->dev))
+		return false;
+	return pm_suspend_target_state != PM_SUSPEND_TO_IDLE;
+}
+
 static int dwc3_suspend_common(struct dwc3 *dwc, pm_message_t msg)
 {
 	u32 reg;
@@ -2569,11 +2593,19 @@ static int dwc3_suspend_common(struct dwc3 *dwc, pm_message_t msg)
 		dwc3_core_exit(dwc);
 		break;
 	case DWC3_GCTL_PRTCAP_HOST:
-		if (!PMSG_IS_AUTO(msg) &&
-		    (!device_may_wakeup(dwc->dev) || dwc->needs_full_reinit)) {
+		dwc->host_core_exited = false;
+		if (!PMSG_IS_AUTO(msg) && dwc3_host_core_exit_needed(dwc)) {
 			dwc3_core_exit(dwc);
+			dwc->host_core_exited = true;
 			break;
 		}
+
+		/*
+		 * The core and its PHYs stay powered to keep the suspended bus:
+		 * keep the power domain on as well.
+		 */
+		if (!PMSG_IS_AUTO(msg))
+			device_set_awake_path(dwc->dev);
 
 		/* Let controller to suspend HSPHY before PHY driver suspends */
 		if (dwc->dis_u2_susphy_quirk ||
@@ -2633,8 +2665,8 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 		dwc3_gadget_resume(dwc);
 		break;
 	case DWC3_GCTL_PRTCAP_HOST:
-		if (!PMSG_IS_AUTO(msg) &&
-		    (!device_may_wakeup(dwc->dev) || dwc->needs_full_reinit)) {
+		if (!PMSG_IS_AUTO(msg) && dwc->host_core_exited) {
+			dwc->host_core_exited = false;
 			ret = dwc3_core_init_for_resume(dwc);
 			if (ret)
 				return ret;
