@@ -33,4 +33,8 @@
 
 &sfc {
 	status = "okay";
+
+	flash@0 {
+		vcc-supply = <&vcc_1v8_s3>;
+	};
 };
