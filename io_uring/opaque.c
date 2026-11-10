@@ -1884,7 +1884,6 @@ int io_opaque_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	    READ_ONCE(sqe->buf_index) || READ_ONCE(sqe->__pad2[0]) ||
 	    cmd > IORING_OPAQUE_AVAILABLE ||
 	    cmd == IORING_OPAQUE_COMPACT || cmd == IORING_OPAQUE_SET_POLICY ||
-	    cmd == IORING_OPAQUE_CREATE ||
 	    (req->flags & (REQ_F_CQE_SKIP | REQ_F_FIXED_FILE)))
 		return -EINVAL;
 	op = io_opaque_req_alloc(req, store);
@@ -1899,6 +1898,21 @@ int io_opaque_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	op->offset = READ_ONCE(sqe->off);
 	op->length = READ_ONCE(sqe->len);
 	op->addr = u64_to_user_ptr(READ_ONCE(sqe->addr3));
+	if (cmd == IORING_OPAQUE_CREATE) {
+		u64 pointer = READ_ONCE(sqe->addr3);
+
+		if (op->handle || op->offset || !op->length ||
+		    op->length > INT_MAX || !pointer)
+			return -EINVAL;
+		if (op->length > store->config.max_object_size ||
+		    ALIGN((u64)op->length, PAGE_SIZE) > io_opaque_rx_limit(store))
+			return -EMSGSIZE;
+		if (check_add_overflow(pointer, (u64)op->length, &end) ||
+		    pointer > ULONG_MAX || end > ULONG_MAX ||
+		    !access_ok(op->addr, op->length))
+			return -EFAULT;
+		return 0;
+	}
 	if (check_add_overflow(op->offset, (u64)op->length, &end))
 		return -EOVERFLOW;
 	if (cmd <= IORING_OPAQUE_READ_OBJECT || cmd == IORING_OPAQUE_AVAILABLE) {
@@ -2046,12 +2060,110 @@ static int io_opaque_stat(struct io_opaque_req *op)
 	return io_opaque_stat_copy(op, &stat, sizeof(stat));
 }
 
+/* Construction is synchronous under the ring lock, like READ_OBJECT copies. */
+static int io_opaque_create_build(struct io_opaque_req *op)
+{
+	struct io_opaque_store *store = op->store;
+	struct mem_cgroup *old = set_active_memcg(store->memcg);
+	u64 done = 0;
+	int ret = 0;
+
+	while (done < op->length) {
+		u64 pages_left = DIV_ROUND_UP_ULL(op->length - done, PAGE_SIZE);
+		struct io_opaque_extent *extent;
+		unsigned int order;
+		struct page *page;
+		u32 chunk, written = 0;
+
+		page = io_opaque_dest_page(store, pages_left, &order);
+		if (!page) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		chunk = min_t(u64, op->length - done, PAGE_SIZE << order);
+		extent = io_opaque_extent_new(store, page, 0, chunk, done, true);
+		if (IS_ERR(extent)) {
+			put_page(page);
+			ret = PTR_ERR(extent);
+			goto out;
+		}
+		op->create_reserved -= page_size(page);
+		extent->backing->copied = true;
+		list_add_tail(&extent->list, &op->data->extents);
+		while (written < chunk) {
+			u32 bytes = min_t(u32, chunk - written, PAGE_SIZE);
+			unsigned long left;
+			void *mapped;
+
+			mapped = kmap_local_page(page + (written >> PAGE_SHIFT));
+			left = copy_from_user(mapped, op->addr + done + written, bytes);
+			kunmap_local(mapped);
+			atomic64_add(bytes - left, &store->copied);
+			if (left) {
+				ret = -EFAULT;
+				goto out;
+			}
+			written += bytes;
+		}
+		done += chunk;
+		op->data->length = done;
+		cond_resched();
+	}
+	ret = io_opaque_vector(op->data);
+	if (!ret)
+		op->data->dense = true;
+out:
+	set_active_memcg(old);
+	return ret;
+}
+
+static int io_opaque_create(struct io_opaque_req *op, unsigned int issue_flags)
+{
+	struct io_ring_ctx *ctx = op->req->ctx;
+	u64 charge = ALIGN((u64)op->length, PAGE_SIZE);
+	u64 object_flags = 0;
+	struct mem_cgroup *old;
+	int ret;
+
+	io_ring_submit_lock(ctx, issue_flags);
+	if (READ_ONCE(op->store->dead)) {
+		ret = -ESHUTDOWN;
+		goto unlock;
+	}
+	old = set_active_memcg(op->store->memcg);
+	op->data = io_opaque_data_alloc();
+	set_active_memcg(old);
+	if (!op->data) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
+	ret = io_opaque_slot_reserve(op);
+	if (ret)
+		goto unlock;
+	if (!io_opaque_charge(op->store, charge, true)) {
+		ret = -ENOBUFS;
+		goto unlock;
+	}
+	op->create_reserved = charge;
+	ret = io_opaque_create_build(op);
+	if (!ret)
+		ret = io_opaque_publish(op, &object_flags);
+unlock:
+	io_req_set_res32(op->req, ret, 0, ret >= 0 ? op->handle : 0, object_flags);
+	if (ret < 0)
+		req_set_fail(op->req);
+	io_ring_submit_unlock(ctx, issue_flags);
+	return IOU_COMPLETE;
+}
+
 int io_opaque_issue(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_opaque_req *op = req->async_data;
 	struct io_opaque_store *store = op->store;
 	int ret;
 
+	if (op->op == IORING_OPAQUE_CREATE)
+		return io_opaque_create(op, issue_flags);
 	io_ring_submit_lock(req->ctx, issue_flags);
 	/* Pair with the cancellation search before any opaque wait enrollment. */
 	if (io_wq_cancel_seen(req, issue_flags)) {
@@ -2224,6 +2336,16 @@ bool io_opaque_cancel_all(struct io_ring_ctx *ctx, struct io_uring_task *tctx,
 	return found;
 }
 
+static void io_opaque_create_release(struct io_opaque_req *op)
+{
+	io_opaque_data_put(op->store, op->data);
+	op->data = NULL;
+	if (op->create_reserved) {
+		io_opaque_uncharge(op->store, op->create_reserved);
+		op->create_reserved = 0;
+	}
+}
+
 void io_opaque_cleanup(struct io_kiocb *req)
 {
 	struct io_opaque_req *op = req->async_data;
@@ -2287,7 +2409,10 @@ void io_opaque_cleanup(struct io_kiocb *req)
 	}
 	if (unlikely(op->vec))
 		io_opaque_vec_cleanup(op);
-	io_opaque_data_put(store, op->data);
+	if (op->op == IORING_OPAQUE_CREATE)
+		io_opaque_create_release(op);
+	else
+		io_opaque_data_put(store, op->data);
 	io_opaque_stream_put(op->stream);
 	lockdep_assert_held(&req->ctx->uring_lock);
 	io_opaque_req_free(req->ctx, op);
