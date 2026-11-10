@@ -17,6 +17,7 @@
 struct kvm_lifecycle_testdef {
 	const char *name;
 	bool (*test)(void);
+	const char *skip_reason;
 };
 
 struct kvm_parameters {
@@ -28,7 +29,14 @@ struct kvm_parameters {
 	struct kvm_s390_irq *irq;
 	struct kvm_s390_irq_state *irq_state;
 	struct {
+		struct kvm_s390_sie_block *sie_block;
+		struct kvm_s390_ucas_mapping map;
 		bool immediate_exit_condition;
+		void *vm_mem;
+		int run_size;
+		int vcpu_fd;
+		int kvm_fd;
+		int vm_fd;
 	} manual_parameters;
 };
 

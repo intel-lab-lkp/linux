@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <linux/capability.h>
 #include "test_util.h"
 #include "kvm_util.h"
 #include "kselftest.h"
@@ -21,12 +22,21 @@
 #include "ucall_common.h"
 #include "sie.h"
 #include "kvm_lifecycle.h"
+#include <linux/sizes.h>
+
+/* capget() is used to check CAP_SYS_ADMIN without a libcap dependency */
+int capget(cap_user_header_t header, cap_user_data_t data);
 
 #define NUM_GPRS 16
 #define DIAG_ASSEMBLY_CODE 0x501
 #define IPA_DIAG 0x83
 #define PSW_MASK_64BIT_DAT_OFF  0x0000000180000000ULL
 #define PGM_CODE_SEGMENT_TRANSLATION 0x10
+#define CODE_GPA (3 * SZ_1M)
+#define MEM_SIZE (4 * SZ_1M)
+#define STSI_IPA 0xb27d
+#define TSCH_IPA 0xb235
+#define STSCH_IPA 0xb234
 #define PSW_WAIT_BIT_MASK (1ULL << (63 - 14))
 #define PGM_CODE_GPA_ADDRESS 0x8e
 #define PGM_CODE_MASK        0x7f
@@ -51,6 +61,96 @@ static void compare_regs(struct kvm_regs *regs, struct kvm_sync_regs *sregs)
 
 	for (register_number = 0; register_number < NUM_GPRS; register_number++)
 		TEST_ASSERT_EQ(regs->gprs[register_number], sregs->gprs[register_number]);
+}
+
+static struct kvm_parameters manual_kvm_creation_execution(struct kvm_parameters param)
+{
+	int rc;
+
+	param.manual_parameters.kvm_fd = open_kvm_dev_path_or_exit();
+	param.manual_parameters.vm_fd = ioctl(param.manual_parameters.kvm_fd,
+					      KVM_CREATE_VM, KVM_VM_S390_UCONTROL);
+
+	TEST_ASSERT(param.manual_parameters.vm_fd >= 0, "KVM_CREATE_VM failed (%d)", errno);
+	param.manual_parameters.vcpu_fd = ioctl(param.manual_parameters.vm_fd, KVM_CREATE_VCPU, 0);
+	TEST_ASSERT(param.manual_parameters.vcpu_fd >= 0, "KVM_CREATE_VCPU failed (%d)", errno);
+
+	param.manual_parameters.vm_mem = aligned_alloc(SZ_1M, MEM_SIZE);
+	TEST_ASSERT(param.manual_parameters.vm_mem, "aligned_alloc failed (%d)", errno);
+
+	param.manual_parameters.map.user_addr = (uintptr_t)param.manual_parameters.vm_mem;
+	param.manual_parameters.map.vcpu_addr = 0;
+	param.manual_parameters.map.length = MEM_SIZE;
+	rc = ioctl(param.manual_parameters.vcpu_fd, KVM_S390_UCAS_MAP,
+		   &param.manual_parameters.map);
+	TEST_ASSERT(rc == 0, "KVM_S390_UCAS_MAP failed (%d)", errno);
+
+	rc = ioctl(param.manual_parameters.vcpu_fd, KVM_S390_VCPU_FAULT, (void *)0);
+	TEST_ASSERT(rc == 0, "KVM_S390_VCPU_FAULT failed (%d)", errno);
+
+	/* Copy guest code to physical GPA */
+	memcpy((void *)((uintptr_t)param.manual_parameters.vm_mem + CODE_GPA),
+	       param.guest_code, PAGE_SIZE);
+
+	/* Map kvm_run */
+	param.manual_parameters.run_size = ioctl(param.manual_parameters.kvm_fd,
+						 KVM_GET_VCPU_MMAP_SIZE, NULL);
+	TEST_ASSERT(param.manual_parameters.run_size >= (int)sizeof(struct kvm_run),
+		    "KVM_GET_VCPU_MMAP_SIZE returned (%d) expected >= %zu",
+		    param.manual_parameters.run_size, sizeof(struct kvm_run));
+	param.run = mmap(NULL, param.manual_parameters.run_size,
+			 PROT_READ | PROT_WRITE, MAP_SHARED,
+			 param.manual_parameters.vcpu_fd, 0);
+	TEST_ASSERT(param.run != MAP_FAILED, "mmap kvm_run failed (%d)", errno);
+
+	/* Map SIE block and clear STOPPED flag - required for ucontrol VMs */
+	param.manual_parameters.sie_block = mmap(NULL, PAGE_SIZE,
+						 PROT_READ | PROT_WRITE, MAP_SHARED,
+						 param.manual_parameters.vcpu_fd,
+						 KVM_S390_SIE_PAGE_OFFSET << PAGE_SHIFT);
+	TEST_ASSERT(param.manual_parameters.sie_block != MAP_FAILED,
+		    "mmap sie_block failed (%d)", errno);
+	param.manual_parameters.sie_block->cpuflags &= ~CPUSTAT_STOPPED;
+
+	/* DAT off + 64-bit mode; PSW address = physical code GPA */
+	param.run->psw_mask = PSW_MASK_64BIT_DAT_OFF;
+	param.run->psw_addr = CODE_GPA;
+	param.run->kvm_dirty_regs |= KVM_SYNC_ARCH0;
+
+	/* Point r15 at a valid guest stack below the code page */
+	param.run->s.regs.gprs[15] = CODE_GPA - 160;
+	param.run->kvm_dirty_regs |= KVM_SYNC_GPRS;
+
+	rc = ioctl(param.manual_parameters.vcpu_fd, KVM_RUN, NULL);
+	TEST_ASSERT(rc == 0, "KVM_RUN failed (%d)", errno);
+
+	return param;
+}
+
+static void manual_cleanup(struct kvm_parameters param)
+{
+	munmap(param.manual_parameters.sie_block, PAGE_SIZE);
+	munmap(param.run, param.manual_parameters.run_size);
+	close(param.manual_parameters.vcpu_fd);
+	close(param.manual_parameters.vm_fd);
+	close(param.manual_parameters.kvm_fd);
+	free(param.manual_parameters.vm_mem);
+}
+
+static bool ucontrol_available(void)
+{
+	struct __user_cap_data_struct data[_LINUX_CAPABILITY_U32S_3];
+	struct __user_cap_header_struct hdr = {
+		.version = _LINUX_CAPABILITY_VERSION_3,
+	};
+	int rc;
+
+	rc = capget(&hdr, data);
+	if (rc < 0)
+		return false;
+	if (!(data->effective & CAP_TO_MASK(CAP_SYS_ADMIN)))
+		return false;
+	return kvm_has_cap(KVM_CAP_S390_UCONTROL);
 }
 
 static void guestcode_instruction_intercept(void)
@@ -378,6 +478,113 @@ static bool test_vm_create_and_destroy(void)
 	return true;
 }
 
+/* Tests below require KVM_CAP_S390_UCONTROL and are skipped if absent. */
+
+static void guestcode_system_information_calls(void)
+{
+	static uint8_t stsi_buf[4096] __aligned(4096);
+
+	register uint8_t *ptr asm("r1") = stsi_buf;
+
+	asm volatile(
+		"lghi %%r0, 0x0302\n"
+		"stsi 0(%%r1)\n"
+		:
+		: "d"(ptr)
+		: "r0", "memory"
+	);
+	GUEST_DONE();
+}
+
+static bool test_system_information_calls(void)
+{
+	struct kvm_parameters parameters = {
+		.guest_code = guestcode_system_information_calls,
+		.manual_parameters.immediate_exit_condition = false,
+	};
+
+	if (!ucontrol_available())
+		return false;
+
+	ksft_print_msg("Testing System Information Call Exits\n");
+
+	parameters = manual_kvm_creation_execution(parameters);
+
+	TEST_ASSERT(parameters.run->exit_reason == KVM_EXIT_S390_SIEIC,
+		    "Expected KVM_EXIT_S390_SIEIC, got %u\n", parameters.run->exit_reason);
+	TEST_ASSERT(parameters.run->s390_sieic.icptcode == ICPT_INST,
+		    "Failed with icptcode of 0x%x\n", parameters.run->s390_sieic.icptcode);
+	TEST_ASSERT(parameters.run->s390_sieic.ipa == STSI_IPA,
+		    "Expected STSI opcode 0xb27d, got 0x%x\n", parameters.run->s390_sieic.ipa);
+	manual_cleanup(parameters);
+	return true;
+}
+
+static void guestcode_tsch(void)
+{
+	register uint64_t buf asm("r2") = 0x3000;
+
+	asm volatile(
+		"lgfi  %%r1, 0x00010000\n"
+		"tsch  0(%%r2)\n"
+		:
+		: "d"(buf)
+		: "r1"
+	);
+}
+
+static void guestcode_stsch(void)
+{
+	register uint64_t buffer asm("r2") = 0x3000;
+
+	asm volatile(
+		"lgfi  %%r1, 0x00010000\n"
+		"stsch 0(%%r2)\n"
+		:
+		: "d"(buffer)
+		: "r1"
+	);
+}
+
+static const struct {
+	void (*guest_code)(void);
+	uint16_t expected_ipa;
+} io_tests[] = {
+	{guestcode_tsch, TSCH_IPA},
+	{guestcode_stsch, STSCH_IPA},
+};
+
+static bool test_io_instruction_code(void)
+{
+	int i;
+
+	if (!ucontrol_available())
+		return false;
+
+	ksft_print_msg("Testing IO Instruction Exit for TSCH and STSCH\n");
+	for (i = 0; i < ARRAY_SIZE(io_tests); i++) {
+		struct kvm_parameters parameter = {
+			.guest_code = io_tests[i].guest_code,
+			.manual_parameters.immediate_exit_condition = false,
+		};
+
+		parameter = manual_kvm_creation_execution(parameter);
+
+		TEST_ASSERT(parameter.run->exit_reason == KVM_EXIT_S390_SIEIC,
+			    "Expected KVM_EXIT_S390_SIEIC, got %u\n",
+			    parameter.run->exit_reason);
+		TEST_ASSERT(parameter.run->s390_sieic.icptcode == ICPT_INST,
+			    "Failed with icptcode of 0x%x\n",
+			    parameter.run->s390_sieic.icptcode);
+		TEST_ASSERT(parameter.run->s390_sieic.ipa == io_tests[i].expected_ipa,
+			    "Expected opcode 0x%x, got 0x%x\n",
+			    io_tests[i].expected_ipa,
+			    parameter.run->s390_sieic.ipa);
+		manual_cleanup(parameter);
+	}
+	return true;
+}
+
 static void test(void)
 {
 	int i;
@@ -414,6 +621,16 @@ static void test(void)
 			.name = "Testing VM Create and Destroy",
 			.test = test_vm_create_and_destroy,
 		},
+		{
+			.name = "Testing System Information Calls",
+			.test = test_system_information_calls,
+			.skip_reason = "KVM_CAP_S390_UCONTROL unavailable or insufficient privilege"
+		},
+		{
+			.name = "Testing IO Instruction Exits",
+			.test = test_io_instruction_code,
+			.skip_reason = "KVM_CAP_S390_UCONTROL unavailable or insufficient privilege"
+		},
 	};
 
 	ksft_print_header();
@@ -423,7 +640,8 @@ static void test(void)
 		if (testlist[i].test())
 			ksft_test_result_pass("%s\n", testlist[i].name);
 		else
-			ksft_test_result_skip("%s\n", testlist[i].name);
+			ksft_test_result_skip("%s (%s)\n", testlist[i].name,
+					      testlist[i].skip_reason ?: "unsupported");
 	}
 }
 
