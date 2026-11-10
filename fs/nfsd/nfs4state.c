@@ -46,6 +46,8 @@
 #include <linux/fsnotify.h>
 #include <linux/rhashtable.h>
 #include <linux/nfsd_ssc.h>
+#include <kunit/static_stub.h>
+#include <kunit/visibility.h>
 
 #include "xdr4.h"
 #include "nfs4ctl.h"
@@ -62,20 +64,6 @@
 #include "trace.h"
 
 #define NFSDDBG_FACILITY                NFSDDBG_PROC
-
-/*
- * Bound the cl_id retries so a stuck random source cannot spin under
- * client_lock. A random id collides about N times in 2^32 for N hashed
- * clients, so the bound is not reached in practice.
- */
-#define NFSD4_RANDOM_RETRIES	16
-
-/*
- * Set in every COPY_NOTIFY token's cl_id word and cleared in every
- * clientid, so the per-client stateid lookup never resolves a token
- * before the IDR lookup runs.
- */
-#define NFSD4_CPNTF_CLID_BIT	BIT(31)
 
 #define all_ones {{ ~0, ~0}, ~0}
 static const stateid_t one_stateid = {
@@ -994,19 +982,36 @@ out_free:
 	kmem_cache_free(slab, stid);
 	return NULL;
 }
+EXPORT_SYMBOL_IF_KUNIT(nfs4_alloc_stid);
+
+/* Wrap the random sources so the nfsd_state KUnit suite can script them. */
+VISIBLE_IF_KUNIT u32 nfsd4_get_random_u32(void)
+{
+	KUNIT_STATIC_STUB_REDIRECT(nfsd4_get_random_u32);
+	return get_random_u32();
+}
+EXPORT_SYMBOL_IF_KUNIT(nfsd4_get_random_u32);
+
+VISIBLE_IF_KUNIT u64 nfsd4_get_random_u64(void)
+{
+	KUNIT_STATIC_STUB_REDIRECT(nfsd4_get_random_u64);
+	return get_random_u64();
+}
+EXPORT_SYMBOL_IF_KUNIT(nfsd4_get_random_u64);
 
 /*
  * Publish a COPY_NOTIFY stateid in nn->s2s_cp_stateids and link it onto the
  * parent's sc_cp_list. That IDR holds only COPY_NOTIFY stateids.
  */
-static int nfs4_init_cp_state(struct nfsd_net *nn, copy_stateid_t *stid,
-			      struct nfs4_stid *p_stid)
+VISIBLE_IF_KUNIT int nfs4_init_cp_state(struct nfsd_net *nn,
+					copy_stateid_t *stid,
+					struct nfs4_stid *p_stid)
 {
 	int new_id;
 
 	stid->cs_stid.si_opaque.so_clid.cl_boot = (u32)nn->boot_time;
 	/* so_id is cyclic, so this word carries the token's secret. */
-	stid->cs_stid.si_opaque.so_clid.cl_id = get_random_u32() |
+	stid->cs_stid.si_opaque.so_clid.cl_id = nfsd4_get_random_u32() |
 						NFSD4_CPNTF_CLID_BIT;
 
 	idr_preload(GFP_KERNEL);
@@ -1033,6 +1038,7 @@ static int nfs4_init_cp_state(struct nfsd_net *nn, copy_stateid_t *stid,
 		return 0;
 	return 1;
 }
+EXPORT_SYMBOL_IF_KUNIT(nfs4_init_cp_state);
 
 /* sc_free for a copy offload stateid; runs from nfs4_put_stid(). */
 static void nfsd4_free_async_copy_stid(struct nfs4_stid *stid)
@@ -1658,10 +1664,11 @@ out:
  * SETCLIENTID state
  */
 
-static unsigned int clientid_hashval(u32 id)
+VISIBLE_IF_KUNIT unsigned int clientid_hashval(u32 id)
 {
 	return id & CLIENT_HASH_MASK;
 }
+EXPORT_SYMBOL_IF_KUNIT(clientid_hashval);
 
 static unsigned int clientstr_hashval(struct xdr_netobj name)
 {
@@ -2700,8 +2707,9 @@ __find_in_sessionid_hashtbl(struct nfs4_sessionid *sessionid, struct net *net)
 }
 
 /* A candidate need only differ from the ID of every live session. */
-static __be32 nfsd4_assign_sessionid_locked(struct net *net,
-					    const clientid_t *clid, u64 *rand)
+VISIBLE_IF_KUNIT __be32 nfsd4_assign_sessionid_locked(struct net *net,
+						      const clientid_t *clid,
+						      u64 *rand)
 {
 	struct nfs4_sessionid candidate __aligned(4);
 	struct nfsd4_sessionid *sid = (struct nfsd4_sessionid *)candidate.data;
@@ -2709,7 +2717,7 @@ static __be32 nfsd4_assign_sessionid_locked(struct net *net,
 
 	sid->clientid = *clid;
 	for (i = 0; i < NFSD4_RANDOM_RETRIES; i++) {
-		u64 value = get_random_u64();
+		u64 value = nfsd4_get_random_u64();
 
 		nfsd4_sessionid_set_rand(sid, value);
 		if (!__find_in_sessionid_hashtbl(&candidate, net)) {
@@ -2721,6 +2729,7 @@ static __be32 nfsd4_assign_sessionid_locked(struct net *net,
 			    NFSD4_RANDOM_RETRIES);
 	return nfserr_jukebox;
 }
+EXPORT_SYMBOL_IF_KUNIT(nfsd4_assign_sessionid_locked);
 
 static struct nfsd4_session *
 find_in_sessionid_hashtbl(struct nfs4_sessionid *sessionid, struct net *net,
@@ -3074,8 +3083,8 @@ static void copy_verf(struct nfs4_client *target, nfs4_verifier *source)
 
 static void copy_clid(struct nfs4_client *target, struct nfs4_client *source)
 {
-	target->cl_clientid.cl_boot = source->cl_clientid.cl_boot; 
-	target->cl_clientid.cl_id = source->cl_clientid.cl_id; 
+	target->cl_clientid.cl_boot = source->cl_clientid.cl_boot;
+	target->cl_clientid.cl_id = source->cl_clientid.cl_id;
 }
 
 static int copy_cred(struct svc_cred *target, struct svc_cred *source)
@@ -3220,7 +3229,7 @@ static void gen_clid(struct nfs4_client *clp, struct nfsd_net *nn)
  * that matches a hashed client of another minor version, or one marked
  * expired but not yet unhashed, is still a collision.
  */
-static bool cl_id_in_use_locked(struct nfsd_net *nn, u32 id)
+VISIBLE_IF_KUNIT bool cl_id_in_use_locked(struct nfsd_net *nn, u32 id)
 {
 	unsigned int idhashval = clientid_hashval(id);
 	struct nfs4_client *clp;
@@ -3235,6 +3244,7 @@ static bool cl_id_in_use_locked(struct nfsd_net *nn, u32 id)
 			return true;
 	return false;
 }
+EXPORT_SYMBOL_IF_KUNIT(cl_id_in_use_locked);
 
 /*
  * The caller inserts @clp with add_to_unconfirmed() under the same
@@ -3243,10 +3253,10 @@ static bool cl_id_in_use_locked(struct nfsd_net *nn, u32 id)
  * cl_id from @conf with copy_clid() instead, so no random id is
  * assigned.
  */
-static __be32 nfsd4_assign_clid_locked(struct nfs4_client *clp,
-				       struct nfsd_net *nn,
-				       struct nfs4_client *conf,
-				       nfs4_verifier *verf)
+VISIBLE_IF_KUNIT __be32 nfsd4_assign_clid_locked(struct nfs4_client *clp,
+						 struct nfsd_net *nn,
+						 struct nfs4_client *conf,
+						 nfs4_verifier *verf)
 {
 	u32 id;
 	int i;
@@ -3257,7 +3267,7 @@ static __be32 nfsd4_assign_clid_locked(struct nfs4_client *clp,
 		return nfs_ok;
 
 	for (i = 0; i < NFSD4_RANDOM_RETRIES; i++) {
-		id = get_random_u32() & ~NFSD4_CPNTF_CLID_BIT;
+		id = nfsd4_get_random_u32() & ~NFSD4_CPNTF_CLID_BIT;
 		if (!cl_id_in_use_locked(nn, id)) {
 			clp->cl_clientid.cl_id = id;
 			return nfs_ok;
@@ -3267,6 +3277,7 @@ static __be32 nfsd4_assign_clid_locked(struct nfs4_client *clp,
 			    NFSD4_RANDOM_RETRIES);
 	return nfserr_jukebox;
 }
+EXPORT_SYMBOL_IF_KUNIT(nfsd4_assign_clid_locked);
 
 static struct nfs4_stid *
 find_stateid_locked(struct nfs4_client *cl, stateid_t *t)
@@ -8712,6 +8723,7 @@ unlock:
 		*cps = state;
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(manage_cpntf_state);
 
 static __be32 nfs4_check_io_stateid(struct svc_fh *fhp, stateid_t *stateid,
 				    struct nfs4_stid *s, int flags, bool has_session)
@@ -10358,10 +10370,23 @@ set_max_delegations(void)
 	max_delegations = nr_free_buffer_pages() >> (20 - 2 - PAGE_SHIFT);
 }
 
+/*
+ * Keep boot_time strictly increasing across a restart so clientids and
+ * stateids issued before the restart stay recognizably stale.
+ */
+VISIBLE_IF_KUNIT time64_t nfsd4_next_boot_time(struct nfsd_net *nn)
+{
+	time64_t now = ktime_get_real_seconds();
+
+	if (now <= nn->boot_time)
+		return nn->boot_time + 1;
+	return now;
+}
+EXPORT_SYMBOL_IF_KUNIT(nfsd4_next_boot_time);
+
 static int nfs4_state_create_net(struct net *net)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
-	time64_t previous_boot;
 	int i;
 
 	nn->conf_id_hashtbl = kmalloc_objs(struct list_head, CLIENT_HASH_SIZE);
@@ -10383,10 +10408,7 @@ static int nfs4_state_create_net(struct net *net)
 		INIT_LIST_HEAD(&nn->sessionid_hashtbl[i]);
 	nn->conf_name_tree = RB_ROOT;
 	nn->unconf_name_tree = RB_ROOT;
-	previous_boot = nn->boot_time;
-	nn->boot_time = ktime_get_real_seconds();
-	if (nn->boot_time <= previous_boot)
-		nn->boot_time = previous_boot + 1;
+	nn->boot_time = nfsd4_next_boot_time(nn);
 	nn->boot_time_bt = ktime_get_boottime_seconds();
 	clear_bit(NFSD_NET_GRACE_ENDED, &nn->flags);
 	clear_bit(NFSD_NET_GRACE_END_FORCED, &nn->flags);
