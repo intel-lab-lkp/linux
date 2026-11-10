@@ -373,16 +373,54 @@ static void rk_iommu_zap_lines(struct rk_iommu *iommu, dma_addr_t iova_start,
 	}
 }
 
+/*
+ * The banks of one IOMMU are commanded together but don't always share one
+ * state: a reset of the master, or a FORCE_RESET that times out, can put one
+ * bank into bypass and leave another one translating. The helpers below look
+ * at every bank on its own, so that no command is skipped for a bank only
+ * because another one is in a different state.
+ */
+
+/* Every bank that translates is stalled (a bank in bypass cannot stall). */
 static bool rk_iommu_is_stall_active(struct rk_iommu *iommu)
 {
-	bool active = true;
+	u32 status;
+	int i;
+
+	for (i = 0; i < iommu->num_mmu; i++) {
+		status = rk_iommu_read(iommu->bases[i], RK_MMU_STATUS);
+		if ((status & RK_MMU_STATUS_PAGING_ENABLED) &&
+		    !(status & RK_MMU_STATUS_STALL_ACTIVE))
+			return false;
+	}
+
+	return true;
+}
+
+/* No bank is stalled. */
+static bool rk_iommu_is_stall_inactive(struct rk_iommu *iommu)
+{
 	int i;
 
 	for (i = 0; i < iommu->num_mmu; i++)
-		active &= !!(rk_iommu_read(iommu->bases[i], RK_MMU_STATUS) &
-					   RK_MMU_STATUS_STALL_ACTIVE);
+		if (rk_iommu_read(iommu->bases[i], RK_MMU_STATUS) &
+		    RK_MMU_STATUS_STALL_ACTIVE)
+			return false;
 
-	return active;
+	return true;
+}
+
+/* No bank translates. */
+static bool rk_iommu_is_paging_disabled(struct rk_iommu *iommu)
+{
+	int i;
+
+	for (i = 0; i < iommu->num_mmu; i++)
+		if (rk_iommu_read(iommu->bases[i], RK_MMU_STATUS) &
+		    RK_MMU_STATUS_PAGING_ENABLED)
+			return false;
+
+	return true;
 }
 
 static bool rk_iommu_is_paging_enabled(struct rk_iommu *iommu)
@@ -413,11 +451,8 @@ static int rk_iommu_enable_stall(struct rk_iommu *iommu)
 	int ret, i;
 	bool val;
 
+	/* Stall can only be enabled on the banks that translate */
 	if (rk_iommu_is_stall_active(iommu))
-		return 0;
-
-	/* Stall can only be enabled if paging is enabled */
-	if (!rk_iommu_is_paging_enabled(iommu))
 		return 0;
 
 	/*
@@ -451,13 +486,13 @@ static int rk_iommu_disable_stall(struct rk_iommu *iommu)
 	int ret, i;
 	bool val;
 
-	if (!rk_iommu_is_stall_active(iommu))
+	if (rk_iommu_is_stall_inactive(iommu))
 		return 0;
 
 	rk_iommu_command(iommu, RK_MMU_CMD_DISABLE_STALL);
 
-	ret = readx_poll_timeout(rk_iommu_is_stall_active, iommu, val,
-				 !val, RK_MMU_POLL_PERIOD_US,
+	ret = readx_poll_timeout(rk_iommu_is_stall_inactive, iommu, val,
+				 val, RK_MMU_POLL_PERIOD_US,
 				 RK_MMU_POLL_TIMEOUT_US);
 	if (ret)
 		for (i = 0; i < iommu->num_mmu; i++)
@@ -493,13 +528,13 @@ static int rk_iommu_disable_paging(struct rk_iommu *iommu)
 	int ret, i;
 	bool val;
 
-	if (!rk_iommu_is_paging_enabled(iommu))
+	if (rk_iommu_is_paging_disabled(iommu))
 		return 0;
 
 	rk_iommu_command(iommu, RK_MMU_CMD_DISABLE_PAGING);
 
-	ret = readx_poll_timeout(rk_iommu_is_paging_enabled, iommu, val,
-				 !val, RK_MMU_POLL_PERIOD_US,
+	ret = readx_poll_timeout(rk_iommu_is_paging_disabled, iommu, val,
+				 val, RK_MMU_POLL_PERIOD_US,
 				 RK_MMU_POLL_TIMEOUT_US);
 	if (ret)
 		for (i = 0; i < iommu->num_mmu; i++)
