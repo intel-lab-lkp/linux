@@ -997,9 +997,6 @@ static int parse_user_sigframe(struct user_ctxs *user,
 		if (size < sizeof(*head))
 			goto invalid;
 
-		if (limit - offset < size)
-			goto invalid;
-
 		offset += size;
 	}
 
