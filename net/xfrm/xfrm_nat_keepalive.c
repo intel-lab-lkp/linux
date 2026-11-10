@@ -288,7 +288,10 @@ void xfrm_nat_keepalive_state_updated(struct xfrm_state *x)
 		return;
 
 	net = xs_net(x);
-	schedule_delayed_work(&net->xfrm.nat_keepalive_work, 0);
+	if (x->km.state == XFRM_STATE_DEAD)
+		schedule_delayed_work(&net->xfrm.nat_keepalive_work, 0);
+	else
+		mod_delayed_work(system_wq, &net->xfrm.nat_keepalive_work, 0);
 }
 
 int __net_init xfrm_nat_keepalive_net_init(struct net *net)
