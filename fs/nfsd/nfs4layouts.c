@@ -1125,7 +1125,6 @@ static void nfsd4_layout_fence_worker(struct work_struct *work)
 	struct nfsd_file *nf;
 	struct block_device *bdev;
 	struct nfs4_client *clp;
-	struct nfsd_net *nn;
 
 	spin_lock(&ls->ls_lock);
 	if (ls->ls_fence_stopped || list_empty(&ls->ls_layouts)) {
@@ -1143,7 +1142,6 @@ dispose:
 		goto dispose;
 
 	clp = ls->ls_stid.sc_client;
-	nn = net_generic(clp->net, nfsd_net_id);
 	bdev = nf->nf_file->f_path.mnt->mnt_sb->s_bdev;
 	ops = nfsd4_layout_ops[ls->ls_layout_type];
 	if (!ops->fence_client) {
@@ -1173,9 +1171,9 @@ dispose:
 	if (ops->fence_client(ls, nf)) {
 		/* fenced ok */
 		nfsd_file_put(nf);
-		pr_warn("%s: FENCED client[%pISpc] clid[%d] to device[%s]\n",
+		pr_warn("%s: FENCED client[%pISpc] clid[%u] to device[%s]\n",
 			__func__, (struct sockaddr *)&clp->cl_addr,
-			clp->cl_clientid.cl_id - nn->clientid_base,
+			clp->cl_display_id,
 			bdev->bd_disk->disk_name);
 		goto dispose;
 	}
@@ -1183,9 +1181,9 @@ dispose:
 	nfsd_file_put(nf);
 
 	if (!clp->cl_fence_retry_warn) {
-		pr_warn("%s: FENCE failed client[%pISpc] clid[%d] device[%s]\n",
+		pr_warn("%s: FENCE failed client[%pISpc] clid[%u] device[%s]\n",
 			__func__, (struct sockaddr *)&clp->cl_addr,
-			clp->cl_clientid.cl_id - nn->clientid_base,
+			clp->cl_display_id,
 			bdev->bd_disk->disk_name);
 		clp->cl_fence_retry_warn = true;
 	}
