@@ -981,8 +981,12 @@ static void gpi_process_imed_data_event(struct gchan *gchan,
 		result.result = DMA_TRANS_NOERROR;
 	result.residue = gpi_desc->len - imed_event->length;
 
-	dma_cookie_complete(&vd->tx);
-	dmaengine_desc_get_callback_invoke(&vd->tx, &result);
+	spin_lock_irqsave(&gchan->vc.lock, flags);
+	list_del(&vd->node);
+	vd->tx_result = result;
+	vchan_cookie_complete(vd);
+	spin_unlock_irqrestore(&gchan->vc.lock, flags);
+	return;
 
 gpi_free_desc:
 	spin_lock_irqsave(&gchan->vc.lock, flags);
@@ -1060,8 +1064,12 @@ static void gpi_process_xfer_compl_event(struct gchan *gchan,
 	result.residue = gpi_desc->len - compl_event->length;
 	dev_dbg(gpii->gpi_dev->dev, "Residue %d\n", result.residue);
 
-	dma_cookie_complete(&vd->tx);
-	dmaengine_desc_get_callback_invoke(&vd->tx, &result);
+	spin_lock_irqsave(&gchan->vc.lock, flags);
+	list_del(&vd->node);
+	vd->tx_result = result;
+	vchan_cookie_complete(vd);
+	spin_unlock_irqrestore(&gchan->vc.lock, flags);
+	return;
 
 gpi_free_desc:
 	spin_lock_irqsave(&gchan->vc.lock, flags);
@@ -1983,6 +1991,13 @@ exit_gpi_init:
 }
 
 /* release all channel resources */
+static void gpi_synchronize(struct dma_chan *chan)
+{
+	struct gchan *gchan = to_gchan(chan);
+
+	vchan_synchronize(&gchan->vc);
+}
+
 static void gpi_free_chan_resources(struct dma_chan *chan)
 {
 	struct gchan *gchan = to_gchan(chan);
@@ -2009,6 +2024,9 @@ static void gpi_free_chan_resources(struct dma_chan *chan)
 
 		gpi_reset_chan(gchan, GPI_CH_CMD_DE_ALLOC);
 	}
+
+	/* drain deferred completions before the ring goes away */
+	vchan_synchronize(&gchan->vc);
 
 	/* free all allocated memory */
 	gpi_free_ring(&gchan->ch_ring, gpii);
@@ -2279,6 +2297,7 @@ static int gpi_probe(struct platform_device *pdev)
 	gpi_dev->dma_device.device_prep_slave_sg = gpi_prep_slave_sg;
 	gpi_dev->dma_device.device_config = gpi_peripheral_config;
 	gpi_dev->dma_device.device_terminate_all = gpi_terminate_all;
+	gpi_dev->dma_device.device_synchronize = gpi_synchronize;
 	gpi_dev->dma_device.dev = gpi_dev->dev;
 	gpi_dev->dma_device.device_pause = gpi_pause;
 	gpi_dev->dma_device.device_resume = gpi_resume;
