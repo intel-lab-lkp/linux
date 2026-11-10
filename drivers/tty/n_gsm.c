@@ -273,6 +273,7 @@ struct gsm_mux {
 	struct tty_struct *tty;		/* The tty our ldisc is bound to */
 	spinlock_t lock;
 	struct mutex mutex;
+	struct mutex config_mutex;	/* Serializes mux configuration ioctls */
 	unsigned int num;
 	struct kref ref;
 
@@ -3219,6 +3220,7 @@ static void gsm_free_mux(struct gsm_mux *gsm)
 			break;
 		}
 	}
+	mutex_destroy(&gsm->config_mutex);
 	mutex_destroy(&gsm->mutex);
 	kfree(gsm->txframe);
 	kfree(gsm->buf);
@@ -3290,6 +3292,7 @@ static struct gsm_mux *gsm_alloc_mux(void)
 	}
 	spin_lock_init(&gsm->lock);
 	mutex_init(&gsm->mutex);
+	mutex_init(&gsm->config_mutex);
 	kref_init(&gsm->ref);
 	INIT_LIST_HEAD(&gsm->tx_ctrl_list);
 	INIT_LIST_HEAD(&gsm->tx_data_list);
@@ -3328,6 +3331,7 @@ static struct gsm_mux *gsm_alloc_mux(void)
 	}
 	spin_unlock(&gsm_mux_lock);
 	if (i == MAX_MUX) {
+		mutex_destroy(&gsm->config_mutex);
 		mutex_destroy(&gsm->mutex);
 		kfree(gsm->txframe);
 		kfree(gsm->buf);
@@ -3341,6 +3345,8 @@ static struct gsm_mux *gsm_alloc_mux(void)
 static void gsm_copy_config_values(struct gsm_mux *gsm,
 				   struct gsm_config *c)
 {
+	guard(mutex)(&gsm->config_mutex);
+
 	memset(c, 0, sizeof(*c));
 	c->adaption = gsm->adaption;
 	c->encapsulation = gsm->encoding;
@@ -3384,6 +3390,10 @@ static int gsm_config(struct gsm_mux *gsm, struct gsm_config *c)
 		return -EINVAL;
 	if (c->i == 0 || c->i > 2)	/* UIH and UI only */
 		return -EINVAL;
+
+	/* gsm_cleanup_mux() takes gsm->mutex, so use a separate lock. */
+	guard(mutex)(&gsm->config_mutex);
+
 	/*
 	 * See what is needed for reconfiguration
 	 */
@@ -3451,6 +3461,8 @@ static int gsm_config(struct gsm_mux *gsm, struct gsm_config *c)
 static void gsm_copy_config_ext_values(struct gsm_mux *gsm,
 				       struct gsm_config_ext *ce)
 {
+	guard(mutex)(&gsm->config_mutex);
+
 	memset(ce, 0, sizeof(*ce));
 	ce->wait_config = gsm->wait_config ? 1 : 0;
 	ce->keep_alive = gsm->keep_alive;
@@ -3470,6 +3482,8 @@ static int gsm_config_ext(struct gsm_mux *gsm, struct gsm_config_ext *ce)
 			return -EINVAL;
 	if (ce->flags & ~GSM_FL_RESTART)
 		return -EINVAL;
+
+	guard(mutex)(&gsm->config_mutex);
 
 	/* Requires care */
 	if (ce->flags & GSM_FL_RESTART)
