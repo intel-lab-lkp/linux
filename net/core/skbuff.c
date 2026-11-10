@@ -7550,6 +7550,75 @@ static void skb_splice_csum_range(struct sk_buff *skb, struct page *page,
 	}
 }
 
+/*
+ * Splice from an ITER_BVEC by walking its segments: there is no page array
+ * to fill.  Direct-mapped folio runs are split only at representation
+ * boundaries; CONFIG_HIGHMEM builds retain page-bounded fragments.
+ */
+static ssize_t skb_splice_from_bvec(struct sk_buff *skb, struct iov_iter *iter,
+				    ssize_t maxsize, size_t frag_limit)
+{
+	const struct bio_vec *bv = iter->bvec;
+	size_t skip = iter->iov_offset;
+	ssize_t spliced = 0, ret = 0;
+	unsigned long seg;
+
+	if (maxsize <= 0)
+		return 0;
+	maxsize = min_t(size_t, maxsize, iter->count);
+	for (seg = 0; seg < iter->nr_segs && maxsize > 0; seg++, skip = 0) {
+		size_t boff = bv[seg].bv_offset + skip;
+		size_t blen = min_t(size_t, bv[seg].bv_len - skip, maxsize);
+
+		while (blen) {
+			struct page *page, *fpage;
+			struct folio *folio;
+			size_t foff, part;
+
+			page = bv[seg].bv_page + (boff >> PAGE_SHIFT);
+			folio = page_folio(page);
+			if (IS_ENABLED(CONFIG_HIGHMEM)) {
+				fpage = page;
+				foff = offset_in_page(boff);
+				part = min_t(size_t, blen, PAGE_SIZE - foff);
+			} else {
+				struct skb_splice_frag range;
+				u64 pos = ((u64)folio_page_idx(folio, page) << PAGE_SHIFT) +
+					  offset_in_page(boff);
+
+				part = min_t(u64, blen, folio_size(folio) - pos);
+				range = skb_splice_frag_normalize(pos, part);
+				fpage = folio_page(folio, range.anchor >> PAGE_SHIFT);
+				foff = range.offset;
+				part = range.len;
+			}
+
+			ret = -EIO;
+			if (WARN_ON_ONCE(!sendpage_ok(fpage)))
+				goto out;
+
+			ret = skb_append_pagefrags(skb, fpage, foff, part, frag_limit);
+			if (ret < 0)
+				goto out;
+
+			if (skb->ip_summed == CHECKSUM_NONE)
+				skb_splice_csum_range(skb, page,
+						      offset_in_page(boff),
+						      part, skb->len + spliced);
+
+			boff += part;
+			blen -= part;
+			spliced += part;
+			maxsize -= part;
+		}
+	}
+
+out:
+	iov_iter_advance(iter, spliced);
+	skb_len_add(skb, spliced);
+	return spliced ?: ret;
+}
+
 /**
  * skb_splice_from_iter - Splice (or copy) pages to skbuff
  * @skb: The buffer to add pages to
@@ -7564,6 +7633,7 @@ static void skb_splice_csum_range(struct sk_buff *skb, struct page *page,
  * or a tail page of that folio and holds one reference on the folio either
  * way.  On CONFIG_HIGHMEM builds a fragment stays within one actual page
  * of the folio, because kmap_local_page() maps only one page.
+ * A bvec iterator is walked directly, without extracting a page array.
  *
  * Returns the amount of data spliced/copied or -EMSGSIZE if there's
  * insufficient space in the buffer to transfer anything.
@@ -7578,6 +7648,9 @@ ssize_t skb_splice_from_iter(struct sk_buff *skb, struct iov_iter *iter,
 
 	if (!maxsize)
 		return 0;
+
+	if (iov_iter_is_bvec(iter))
+		return skb_splice_from_bvec(skb, iter, maxsize, frag_limit);
 
 	while (iter->count > 0) {
 		ssize_t space, nr, len;
