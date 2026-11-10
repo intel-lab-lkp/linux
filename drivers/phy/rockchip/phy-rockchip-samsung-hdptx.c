@@ -1768,9 +1768,24 @@ static int rk_hdptx_phy_power_on(struct phy *phy)
 	return ret;
 }
 
+static void rk_hdptx_lane_disable(struct rk_hdptx_phy *hdptx)
+{
+	regmap_update_bits(hdptx->regmap, LNTOP_REG(0207), LANE_EN_MASK,
+			   FIELD_PREP(LANE_EN_MASK, 0));
+	reset_control_assert(hdptx->rsts[RST_LANE].rstc);
+}
+
 static int rk_hdptx_phy_power_off(struct phy *phy)
 {
 	struct rk_hdptx_phy *hdptx = phy_get_drvdata(phy);
+
+	/*
+	 * The lanes are owned by the PHY consumer alone, hence shut them
+	 * down right away.  The PLL is shared with the clock consumers, so
+	 * leave its fate to the usage count.
+	 */
+	if (phy_get_mode(phy) != PHY_MODE_DP)
+		rk_hdptx_lane_disable(hdptx);
 
 	return rk_hdptx_phy_consumer_put(hdptx, false);
 }
