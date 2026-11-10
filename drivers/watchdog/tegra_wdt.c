@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/stringify.h>
@@ -57,11 +58,35 @@
 #define TIMER_PTV			0x0
 #define TIMER_EN			(1 << 31)
 #define TIMER_PERIODIC			(1 << 30)
+#define TIMER_PTV_MAX			GENMASK(28, 0)
+#define TIMER_PCR			0x4
+#define TIMER_PCR_INTR_CLR		(1 << 30)
+
+/*
+ * Tegra20 has no watchdog block. Instead, the clock and reset controller can
+ * reset the system when the interrupt of timer 1 or 2 fires while the previous
+ * one is still pending. This is controlled by its RST_SOURCE register.
+ */
+#define T20_WDT_TIMER_BASE		0x0
+#define T20_RST_SOURCE			0x0
+#define T20_RST_SOURCE_WDT_EN		(1 << 5)
+#define T20_RST_SOURCE_WDT_SEL_TMR2	(1 << 4)
+#define T20_RST_SOURCE_WDT_SYS_RST_EN	(1 << 2)
+#define T20_RST_SOURCE_WDT_MASK		(T20_RST_SOURCE_WDT_EN | \
+					 T20_RST_SOURCE_WDT_SEL_TMR2 | \
+					 T20_RST_SOURCE_WDT_SYS_RST_EN)
+
+/*
+ * The reset occurs on the second expiry of the timer, so its period is half
+ * of the timeout. The timer has a fixed 1 MHz clock and counts PTV + 1 ticks.
+ */
+#define T20_MAX_WDT_TIMEOUT		((TIMER_PTV_MAX + 1ull) * 2 / USEC_PER_SEC)
 
 struct tegra_wdt {
 	struct watchdog_device	wdd;
 	void __iomem		*wdt_regs;
 	void __iomem		*tmr_regs;
+	void __iomem		*rst_source;	/* Tegra20 only */
 };
 
 struct tegra_wdt_soc {
@@ -197,6 +222,131 @@ static int tegra30_wdt_init(struct platform_device *pdev, struct tegra_wdt *wdt,
 	return 0;
 }
 
+static int tegra20_wdt_start(struct watchdog_device *wdd)
+{
+	struct tegra_wdt *wdt = watchdog_get_drvdata(wdd);
+	u32 period = wdd->timeout * USEC_PER_SEC / 2;
+	u32 val;
+
+	writel(TIMER_EN | TIMER_PERIODIC | (period - 1),
+	       wdt->tmr_regs + TIMER_PTV);
+
+	/*
+	 * Clear an interrupt left pending by an earlier use of the timer,
+	 * which would otherwise reset the system on the first expiry.
+	 */
+	writel(TIMER_PCR_INTR_CLR, wdt->tmr_regs + TIMER_PCR);
+
+	val = readl(wdt->rst_source);
+	val &= ~T20_RST_SOURCE_WDT_MASK;
+	val |= T20_RST_SOURCE_WDT_EN | T20_RST_SOURCE_WDT_SYS_RST_EN;
+	writel(val, wdt->rst_source);
+
+	return 0;
+}
+
+static int tegra20_wdt_stop(struct watchdog_device *wdd)
+{
+	struct tegra_wdt *wdt = watchdog_get_drvdata(wdd);
+	u32 val;
+
+	val = readl(wdt->rst_source);
+	val &= ~T20_RST_SOURCE_WDT_MASK;
+	writel(val, wdt->rst_source);
+
+	writel(0, wdt->tmr_regs + TIMER_PTV);
+	writel(TIMER_PCR_INTR_CLR, wdt->tmr_regs + TIMER_PCR);
+
+	return 0;
+}
+
+static int tegra20_wdt_ping(struct watchdog_device *wdd)
+{
+	struct tegra_wdt *wdt = watchdog_get_drvdata(wdd);
+
+	/*
+	 * Clearing the interrupt alone doesn't restart the timer's period, so
+	 * the reset could follow as soon as half the timeout after the ping.
+	 * Rewriting the timer setting restarts the period. The interrupt is
+	 * cleared afterwards, so one fired in between doesn't count.
+	 */
+	writel(readl(wdt->tmr_regs + TIMER_PTV), wdt->tmr_regs + TIMER_PTV);
+	writel(TIMER_PCR_INTR_CLR, wdt->tmr_regs + TIMER_PCR);
+
+	return 0;
+}
+
+static int tegra20_wdt_set_timeout(struct watchdog_device *wdd,
+				   unsigned int timeout)
+{
+	wdd->timeout = timeout;
+
+	/* starting again reprograms the running watchdog */
+	if (watchdog_active(wdd))
+		return tegra20_wdt_start(wdd);
+
+	return 0;
+}
+
+static const struct watchdog_ops tegra20_wdt_ops = {
+	.owner = THIS_MODULE,
+	.start = tegra20_wdt_start,
+	.stop = tegra20_wdt_stop,
+	.ping = tegra20_wdt_ping,
+	.set_timeout = tegra20_wdt_set_timeout,
+};
+
+static int tegra20_wdt_init(struct platform_device *pdev, struct tegra_wdt *wdt,
+			    void __iomem *regs)
+{
+	struct device *dev = &pdev->dev;
+	struct device_node *np;
+	struct resource res;
+	int ret;
+
+	/*
+	 * RST_SOURCE belongs to the clock and reset controller, whose driver
+	 * doesn't use it. Map only this register, without requesting it, as
+	 * the region belongs to the clock and reset controller.
+	 */
+	np = of_find_compatible_node(NULL, NULL, "nvidia,tegra20-car");
+	if (!np)
+		return dev_err_probe(dev, -ENODEV,
+				     "clock and reset controller not found\n");
+
+	ret = of_address_to_resource(np, 0, &res);
+	of_node_put(np);
+	if (ret)
+		return ret;
+
+	wdt->rst_source = devm_ioremap(dev, res.start + T20_RST_SOURCE,
+				       sizeof(u32));
+	if (!wdt->rst_source)
+		return -ENOMEM;
+
+	wdt->tmr_regs = regs + T20_WDT_TIMER_BASE;
+
+	/*
+	 * The bootloader may leave the watchdog running. Take it over with
+	 * our own timeout and timer 1, and let the core ping it until user
+	 * space opens the device.
+	 */
+	if (readl(wdt->rst_source) & T20_RST_SOURCE_WDT_EN) {
+		dev_info(dev, "watchdog left running by the bootloader, taking it over (timeout %u sec)\n",
+			 wdt->wdd.timeout);
+		tegra20_wdt_start(&wdt->wdd);
+		set_bit(WDOG_HW_RUNNING, &wdt->wdd.status);
+	}
+
+	return 0;
+}
+
+static const struct tegra_wdt_soc tegra20_wdt_soc = {
+	.ops = &tegra20_wdt_ops,
+	.max_timeout = T20_MAX_WDT_TIMEOUT,
+	.init = tegra20_wdt_init,
+};
+
 static const struct tegra_wdt_soc tegra30_wdt_soc = {
 	.ops = &tegra_wdt_ops,
 	.max_timeout = MAX_WDT_TIMEOUT,
@@ -258,11 +408,16 @@ static int tegra_wdt_probe(struct platform_device *pdev)
 	return 0;
 }
 
+/*
+ * The watchdog may also run without user space having opened it, when it was
+ * taken over from the bootloader, so check whether the hardware runs. Calling
+ * the stop operation directly leaves WDOG_HW_RUNNING set for the resume.
+ */
 static int tegra_wdt_suspend(struct device *dev)
 {
 	struct tegra_wdt *wdt = dev_get_drvdata(dev);
 
-	if (watchdog_active(&wdt->wdd))
+	if (watchdog_hw_running(&wdt->wdd))
 		wdt->wdd.ops->stop(&wdt->wdd);
 
 	return 0;
@@ -272,14 +427,19 @@ static int tegra_wdt_resume(struct device *dev)
 {
 	struct tegra_wdt *wdt = dev_get_drvdata(dev);
 
-	if (watchdog_active(&wdt->wdd))
+	if (watchdog_hw_running(&wdt->wdd))
 		wdt->wdd.ops->start(&wdt->wdd);
 
 	return 0;
 }
 
+/*
+ * Tegra30 and later list "nvidia,tegra20-timer" as well, but match their more
+ * specific compatible string.
+ */
 static const struct of_device_id tegra_wdt_of_match[] = {
 	{ .compatible = "nvidia,tegra30-timer", .data = &tegra30_wdt_soc },
+	{ .compatible = "nvidia,tegra20-timer", .data = &tegra20_wdt_soc },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, tegra_wdt_of_match);
