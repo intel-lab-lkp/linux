@@ -24,6 +24,7 @@
 #include <linux/syscalls.h>
 #include <linux/fcntl.h>
 #include <linux/memcontrol.h>
+#include <linux/mempolicy.h>
 #include <linux/watch_queue.h>
 #include <linux/sysctl.h>
 #include <linux/sort.h>
@@ -876,6 +877,16 @@ bool pipe_is_unprivileged_user(void)
 	return !capable(CAP_SYS_RESOURCE) && !capable(CAP_SYS_ADMIN);
 }
 
+/* Prefer the policy node over remote partial slabs, retaining fallback. */
+static int pipe_slab_node(void)
+{
+#ifdef CONFIG_NUMA
+	return mempolicy_slab_node();
+#else
+	return NUMA_NO_NODE;
+#endif
+}
+
 struct pipe_inode_info *alloc_pipe_info(void)
 {
 	struct pipe_inode_info *pipe;
@@ -883,8 +894,9 @@ struct pipe_inode_info *alloc_pipe_info(void)
 	struct user_struct *user = get_current_user();
 	unsigned long user_bufs;
 	unsigned int max_size = READ_ONCE(pipe_max_size);
+	int node = pipe_slab_node();
 
-	pipe = kzalloc_obj(struct pipe_inode_info, GFP_KERNEL_ACCOUNT);
+	pipe = kzalloc_node(sizeof(*pipe), GFP_KERNEL_ACCOUNT, node);
 	if (pipe == NULL)
 		goto out_free_uid;
 
@@ -901,8 +913,8 @@ struct pipe_inode_info *alloc_pipe_info(void)
 	if (too_many_pipe_buffers_hard(user_bufs) && pipe_is_unprivileged_user())
 		goto out_revert_acct;
 
-	pipe->bufs = kzalloc_objs(struct pipe_buffer, pipe_bufs,
-				  GFP_KERNEL_ACCOUNT);
+	pipe->bufs = kcalloc_node(pipe_bufs, sizeof(*pipe->bufs),
+				  GFP_KERNEL_ACCOUNT, node);
 
 	if (pipe->bufs) {
 		init_waitqueue_head(&pipe->rd_wait);
@@ -1377,12 +1389,18 @@ int pipe_resize_ring(struct pipe_inode_info *pipe, unsigned int nr_slots)
 {
 	struct pipe_buffer *bufs;
 	unsigned int head, tail, mask, n;
+	int node = NUMA_NO_NODE;
 
 	/* nr_slots larger than limits of pipe->{head,tail} */
 	if (unlikely(nr_slots > (pipe_index_t)-1u))
 		return -EINVAL;
 
-	bufs = kzalloc_objs(*bufs, nr_slots, GFP_KERNEL_ACCOUNT | __GFP_NOWARN);
+	/* Keep the policy nodemask for allocations that bypass slab caches. */
+	if (nr_slots <= KMALLOC_MAX_CACHE_SIZE / sizeof(*bufs))
+		node = pipe_slab_node();
+
+	bufs = kcalloc_node(nr_slots, sizeof(*bufs),
+			    GFP_KERNEL_ACCOUNT | __GFP_NOWARN, node);
 	if (unlikely(!bufs))
 		return -ENOMEM;
 
