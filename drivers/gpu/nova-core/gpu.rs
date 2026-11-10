@@ -342,15 +342,15 @@ struct GspResources<'gpu> {
 /// The two drop as a unit, the handler first, on the drop of [`Gpu`] and on the error path of
 /// its constructor alike, so that the subtree is disabled only after the handler is freed.
 #[pin_data]
-struct GspSubtree<'a> {
+struct GspSubtree<'a, 'gpu> {
     #[pin]
-    irq: GspIrq<'a>,
+    irq: GspIrq<'a, 'gpu>,
     /// Must be kept declared *after* `irq`. A handler still in flight enables the subtree again
     /// through its rearm.
     _top: TopEnableGuard<'a>,
 }
 
-impl<'a> GspSubtree<'a> {
+impl<'a, 'gpu: 'a> GspSubtree<'a, 'gpu> {
     /// Returns an initializer that registers the GSP event handler and then enables its subtree at
     /// `TOP`.
     ///
@@ -362,7 +362,7 @@ impl<'a> GspSubtree<'a> {
         pdev: &'a pci::Device<device::Bound>,
         tree: &'a Tree<'a>,
         falcon: &'a Falcon<'a, GspFalcon>,
-        cmdq: &'a Cmdq<'a>,
+        cmdq: &'a Cmdq<'gpu>,
     ) -> impl PinInit<Self, Error> + 'a {
         try_pin_init!(Self {
             // SAFETY: this function's caller must not leak the `GspSubtree` that owns this
@@ -383,7 +383,8 @@ pub(crate) struct Gpu<'gpu> {
     /// any in-flight run of it has finished, before the command queue that it drains and the
     /// falcon that it reads are freed, and before the GSP is unloaded.
     #[pin]
-    _gsp_subtree: GspSubtree<'gpu>,
+    #[uses('tree)]
+    _gsp_subtree: GspSubtree<'gsp_resources, 'gpu>,
     /// Static GPU information as provided by the GSP.
     pub(crate) gsp_static_info: GetGspStaticInfoReply,
     /// GPU memory manager owning memory management resources.
@@ -403,9 +404,6 @@ pub(crate) struct Gpu<'gpu> {
     /// Must be kept declared *after* `gsp_resources`, as the latter's `PinnedDrop` implementation
     /// requires the sysmem flush page to be in place.
     sysmem_flush: SysmemFlush<'gpu>,
-    /// Borrow of `tree` that `_gsp_subtree` holds. A field that borrows a sibling field is
-    /// self-referential, which `pin_init` cannot express, so the borrow is taken by hand.
-    tree_ref: &'gpu Tree<'gpu>,
     /// The GIN CPU interrupt tree and the PCI vectors that deliver it.
     ///
     /// Must be kept declared *after* `_gsp_subtree`, which holds a borrow of it.
@@ -455,10 +453,6 @@ impl<'gpu> Gpu<'gpu> {
             })?,
 
             tree: Tree::new(pdev, bar, spec.chipset, irq::gsp::GSP_SUBTREE.into())?,
-
-            // SAFETY: `tree` is initialized above, is pinned at a stable address, and is dropped
-            // after every field that uses `tree_ref` (struct field drop order).
-            tree_ref: unsafe { &*core::ptr::from_ref(tree.as_ref().get_ref()) },
 
             _: {
                 let dma_mask = hal::gpu_hal(spec.chipset).dma_mask();
@@ -513,19 +507,17 @@ impl<'gpu> Gpu<'gpu> {
             }),
 
             _: {
-                irq::gsp::quiesce(tree_ref, &gsp_resources.gsp_falcon);
+                irq::gsp::quiesce(tree.get_ref(), &gsp_resources.gsp_falcon);
             },
 
-            // SAFETY: the GSP falcon and the command queue are fields of `gsp_resources`, which
-            // is initialized above and pinned, so both references outlive the registration. The
-            // registration is a field of `Gpu` and is never leaked, so its `Drop` runs, and field
-            // drop order runs it before either is freed.
+            // SAFETY: The registration is owned by `Gpu`, which is dropped when the device is
+            // unbound, so the registration's `Drop` runs.
             _gsp_subtree <- unsafe {
                 GspSubtree::new(
                     pdev,
-                    tree_ref,
-                    &*core::ptr::from_ref(&gsp_resources.gsp_falcon),
-                    &*core::ptr::from_ref(&gsp_resources.gsp.cmdq),
+                    tree.get_ref(),
+                    &gsp_resources.get_ref().gsp_falcon,
+                    &gsp_resources.get_ref().gsp.cmdq,
                 )
             },
 

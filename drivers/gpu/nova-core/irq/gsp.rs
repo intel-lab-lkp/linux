@@ -50,15 +50,16 @@ pub(crate) fn quiesce(tree: &Tree<'_>, falcon: &Falcon<'_, GspFalcon>) {
 }
 
 /// Threaded IRQ handler for the GSP event.
-pub(crate) struct GspInterrupt<'a> {
+pub(crate) struct GspInterrupt<'a, 'gpu> {
     falcon: &'a Falcon<'a, GspFalcon>,
-    cmdq: &'a Cmdq<'a>,
+    // `Cmdq` is invariant in `'gpu`; the handler borrows it for the shorter `'a`.
+    cmdq: &'a Cmdq<'gpu>,
     tree: &'a Tree<'a>,
     /// For logging.
     dev: &'a device::Device,
 }
 
-impl GspInterrupt<'_> {
+impl GspInterrupt<'_, '_> {
     /// Clears the latch of every host-routed cause in `status` other than SWGEN0, and logs them.
     ///
     /// Returns the causes still set after the clear. A cause driven from outside the falcon stays
@@ -83,7 +84,7 @@ impl GspInterrupt<'_> {
     }
 }
 
-impl irq::ThreadedHandler for GspInterrupt<'_> {
+impl irq::ThreadedHandler for GspInterrupt<'_, '_> {
     /// Top half, in hard interrupt context. Services the GSP vector only, so another vector
     /// pending in the same leaf stays pending.
     fn handle(&self) -> irq::ThreadedIrqReturn {
@@ -145,13 +146,13 @@ impl irq::ThreadedHandler for GspInterrupt<'_> {
 /// The declaration order is the drop order, and it is required: the vector is disabled before
 /// `free_irq` runs. See "Enabling the GSP event" in `Documentation/gpu/nova/core/interrupts.rst`.
 #[pin_data]
-pub(crate) struct GspIrq<'a> {
+pub(crate) struct GspIrq<'a, 'gpu> {
     _leaf_guard: LeafEnableGuard<'a>,
     #[pin]
-    reg: irq::ThreadedRegistration<'a, GspInterrupt<'a>>,
+    reg: irq::ThreadedRegistration<'a, GspInterrupt<'a, 'gpu>>,
 }
 
-impl<'a> GspIrq<'a> {
+impl<'a, 'gpu: 'a> GspIrq<'a, 'gpu> {
     /// Returns an initializer that registers the threaded handler and then enables the GSP
     /// vector at its leaf.
     ///
@@ -171,7 +172,7 @@ impl<'a> GspIrq<'a> {
         pdev: &'a pci::Device<device::Bound>,
         tree: &'a Tree<'a>,
         falcon: &'a Falcon<'a, GspFalcon>,
-        cmdq: &'a Cmdq<'a>,
+        cmdq: &'a Cmdq<'gpu>,
     ) -> impl PinInit<Self, Error> + 'a {
         let dev = pdev.as_ref();
 

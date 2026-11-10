@@ -22,9 +22,25 @@ use crate::{
 };
 
 /// API handle for the auxiliary bus child drivers to interact with nova-core.
-pub struct NovaCoreApi<'bound> {
-    pub(crate) gpu: Pin<&'bound Gpu<'bound>>,
+#[pin_data]
+pub struct NovaCoreApi<'bound>
+where
+    // `Gpu` is invariant in its resource lifetime, which outlives this API borrow.
+    exists<'gpu_resources>: 'bound,
+{
+    #[uses('gpu_resources: invariant)]
+    gpu: Pin<&'bound Gpu<'gpu_resources>>,
     pub(crate) pdev: &'bound pci::Device<Bound>,
+}
+
+impl<'bound> NovaCoreApi<'bound> {
+    /// Creates an API handle.
+    pub(crate) fn new<'gpu: 'bound>(
+        pdev: &'bound pci::Device<Bound>,
+        gpu: Pin<&'bound Gpu<'gpu>>,
+    ) -> impl PinInit<Self> + use<'bound, 'gpu> {
+        pin_init!(Self { gpu, pdev })
+    }
 }
 
 impl NovaCoreApi<'_> {
@@ -36,12 +52,12 @@ impl NovaCoreApi<'_> {
 
     /// Returns the GPU [`GetGspStaticInfoReply`].
     pub fn gsp_static_info(&self) -> &GetGspStaticInfoReply {
-        &self.gpu.gsp_static_info
+        self.with_gpu(|gpu| &gpu.gsp_static_info)
     }
 
     /// Returns the GPU [`Spec`].
     pub fn spec(&self) -> &Spec {
-        &self.gpu.spec
+        self.with_gpu(|gpu| &gpu.spec)
     }
 
     /// Returns the size of the PCIe BAR used for accessing VRAM, typically
