@@ -2266,6 +2266,10 @@ static int tb_disconnect_pci(struct tb *tb, struct tb_switch *sw)
 	struct tb_tunnel *tunnel;
 	struct tb_port *up;
 
+	/* If the switch has already been unplugged, tunnels are already freed */
+	if (sw->is_unplugged)
+		return 0;
+
 	up = tb_switch_find_port(sw, TB_TYPE_PCIE_UP);
 	if (WARN_ON(!up))
 		return -ENODEV;
@@ -2287,6 +2291,9 @@ static int tb_tunnel_pci(struct tb *tb, struct tb_switch *sw)
 	struct tb_port *up, *down, *port;
 	struct tb_cm *tcm = tb_priv(tb);
 	struct tb_tunnel *tunnel;
+
+	if (sw->is_unplugged)
+		return -ENODEV;
 
 	up = tb_switch_find_port(sw, TB_TYPE_PCIE_UP);
 	if (!up)
