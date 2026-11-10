@@ -7428,7 +7428,6 @@ static void igc_remove(struct pci_dev *pdev)
 
 	igc_ptp_stop(adapter);
 
-	pci_disable_ptm(pdev);
 	pci_clear_master(pdev);
 
 	set_bit(__IGC_DOWN, &adapter->state);
@@ -7448,6 +7447,17 @@ static void igc_remove(struct pci_dev *pdev)
 	 */
 	igc_release_hw_control(adapter);
 	unregister_netdev(netdev);
+
+	/* After a PTM dialog, I225/I226 can send a PTM Request at the next
+	 * CTRL.RST, even with PTM disabled on the device. Reset the device
+	 * while PTM is still enabled on the upstream port, so that the
+	 * request gets a response. unregister_netdev() resets the device
+	 * only if the interface was up. Then disable PTM.
+	 */
+	if (!pci_channel_offline(pdev))
+		adapter->hw.mac.ops.reset_hw(&adapter->hw);
+
+	pci_disable_ptm(pdev);
 
 	igc_clear_interrupt_scheme(adapter);
 	pci_iounmap(pdev, adapter->io_addr);
