@@ -63,6 +63,13 @@ properties:
 
   msi-parent: true
 
+  clocks:
+    minItems: 1
+    maxItems: 4
+    description:
+      Clocks needed to access the SMMU registers and to keep its translation
+      units running, if they are not managed by firmware.
+
   power-domains:
     maxItems: 1
 
