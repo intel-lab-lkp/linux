@@ -412,6 +412,9 @@ struct io_ring_ctx {
 		struct io_alloc_cache	netmsg_cache;
 		struct io_alloc_cache	rw_cache;
 		struct io_alloc_cache	cmd_cache;
+#ifdef CONFIG_IO_URING_OPAQUE_OBJ
+		struct io_alloc_cache	opaque_cache;
+#endif
 
 		int (*loop_step)(struct iou_ctx *,
 				 struct iou_loop_params *);
@@ -421,6 +424,9 @@ struct io_ring_ctx {
 		 * ->uring_cmd() by io_uring_cmd_insert_cancelable()
 		 */
 		struct hlist_head	cancelable_uring_cmd;
+#ifdef CONFIG_IO_URING_OPAQUE_OBJ
+		struct list_head	opaque_waits;
+#endif
 		/*
 		 * For Hybrid IOPOLL, runtime in hybrid polling, without
 		 * scheduling time
@@ -491,6 +497,10 @@ struct io_ring_ctx {
 
 	/* Stores zcrx object pointers of type struct io_zcrx_ifq */
 	struct xarray			zcrx_ctxs;
+#ifdef CONFIG_IO_URING_OPAQUE_OBJ
+	struct xarray			opaque_stores;
+	bool				opaque_stores_dying;
+#endif
 
 	/* Used for accounting references on pages in registered buffers */
 	struct xarray		hpage_acct;
