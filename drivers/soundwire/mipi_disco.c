@@ -279,12 +279,6 @@ static int sdw_slave_read_dpn(struct sdw_slave *slave,
 				"mipi-sdw-imp-def-dpn-interrupts-supported",
 				&dpn[i].imp_def_interrupts);
 
-		fwnode_property_read_u32(node, "mipi-sdw-min-channel-number",
-					 &dpn[i].min_ch);
-
-		fwnode_property_read_u32(node, "mipi-sdw-max-channel-number",
-					 &dpn[i].max_ch);
-
 		nval = fwnode_property_count_u32(node, "mipi-sdw-channel-number-list");
 		if (nval > 0) {
 			dpn[i].num_channels = nval;
@@ -302,6 +296,14 @@ static int sdw_slave_read_dpn(struct sdw_slave *slave,
 			if (ret < 0)
 				return ret;
 		}
+
+		fwnode_property_read_u32(node, "mipi-sdw-min-channel-number",
+					 &dpn[i].min_ch);
+
+		ret = fwnode_property_read_u32(node, "mipi-sdw-max-channel-number",
+					       &dpn[i].max_ch);
+		if (ret && !dpn[i].num_channels)
+			dpn[i].max_ch = 7;
 
 		nval = fwnode_property_count_u32(node, "mipi-sdw-channel-combination-list");
 		if (nval > 0) {
