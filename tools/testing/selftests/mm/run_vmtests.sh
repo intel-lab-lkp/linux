@@ -373,6 +373,17 @@ then
 	CATEGORY="pkey" run_test ./protection_keys_64
 fi
 
+# pkey_coredump tests
+if [ -x ./pkey_coredump_tests_32 ]
+then
+	CATEGORY="pkey" run_test ./pkey_coredump_tests_32
+fi
+
+if [ -x ./pkey_coredump_tests_64 ]
+then
+	CATEGORY="pkey" run_test ./pkey_coredump_tests_64
+fi
+
 CATEGORY="soft_dirty" run_test ./soft-dirty
 
 CATEGORY="pagemap" run_test ./pagemap_ioctl
