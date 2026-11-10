@@ -612,10 +612,13 @@ static enum link_result hdmi_frl_perform_link_training(struct ddc_service *ddc_s
 
 		FRL_INFO("FRL LINK TRAINING:  Poll for FLT_UPDATE.\n");
 		/*LTS:3: Start Link Training*/
-		/*Start FLT Timer = 200 ms, or 300ms if link rate >= 16Gbps*/
+		/*
+		 * Start FLT Timer. Some sinks need longer than the nominal 200 ms
+		 * (300 ms at 16 Gbps and above) to answer an LTP request, so wait
+		 * up to 1 s before giving up on this rate.
+		 */
 		num_polls = 0;
-		if (link_settings->frl_link_rate >= HDMI_FRL_LINK_RATE_16GBPS)
-			poll_timeout_ns = 320 * 1000 * 1000;
+		poll_timeout_ns = 1000 * 1000 * 1000;
 
 		flt_poll_start = dm_get_timestamp(ddc_service->ctx);
 		uint8_t prev_flt_update = 0;
