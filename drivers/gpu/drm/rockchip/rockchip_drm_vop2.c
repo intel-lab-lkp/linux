@@ -1231,6 +1231,98 @@ static int vop2_plane_atomic_check(struct drm_plane *plane,
 	return 0;
 }
 
+static bool vop2_win_axi_ids_clash(const struct vop2_win *a, const struct vop2_win *b)
+{
+	u8 ida[] = { a->data->axi_yrgb_r_id, a->data->axi_uv_r_id };
+	u8 idb[] = { b->data->axi_yrgb_r_id, b->data->axi_uv_r_id };
+	int i, j;
+
+	for (i = 0; i < ARRAY_SIZE(ida); i++)
+		for (j = 0; j < ARRAY_SIZE(idb); j++)
+			if (ida[i] == idb[j])
+				return true;
+
+	return false;
+}
+
+/*
+ * The VOP2 on RK3588 has two AXI read ports. Each window has a default port
+ * (&vop2_win_data.axi_bus_id), but the port is selected by a per window
+ * register, so any window can fetch through either one as long as its read
+ * IDs are unique on that port.
+ *
+ * A single port can't sustain much more than one full screen 4K@120Hz
+ * layer: two such layers on the same port (e.g. Cluster0 and Esmart0, the
+ * default primary and overlay planes of video port 0) make the window
+ * line buffers run dry, the fetch rate collapses and the video port
+ * reports POST_BUF_EMPTY on most lines, which scrambles the picture. The
+ * same layers fetched through different ports are fine. Raising ACLK or
+ * the NoC priority of the VOP doesn't help, the limit is per port.
+ *
+ * So pick the port of a window when it starts fetching: use the port that
+ * leaves the busier of the two ports least loaded, preferring the default
+ * one, and never a port on which another active window already uses one of
+ * its read IDs. A window keeps its port while it stays enabled.
+ */
+static u8 vop2_win_get_axi_bus(struct vop2_win *win, u64 load)
+{
+	struct vop2 *vop2 = win->vop2;
+	u64 bus_load[VOP2_SYS_AXI_BUS_NUM] = { };
+	bool clash[VOP2_SYS_AXI_BUS_NUM] = { };
+	u8 def = win->data->axi_bus_id;
+	unsigned long flags;
+	u8 bus = def;
+	int i;
+
+	if (!(vop2->data->feature & VOP2_FEATURE_AXI_BALANCE))
+		return def;
+
+	spin_lock_irqsave(&vop2->axi_lock, flags);
+
+	if (win->axi_active) {
+		win->axi_load = load;
+		bus = win->axi_bus;
+		goto out;
+	}
+
+	for (i = 0; i < vop2->registered_num_wins; i++) {
+		struct vop2_win *w = &vop2->win[i];
+
+		if (w == win || !w->axi_active)
+			continue;
+
+		bus_load[w->axi_bus] += w->axi_load;
+		if (vop2_win_axi_ids_clash(win, w))
+			clash[w->axi_bus] = true;
+	}
+
+	if (!clash[def ^ 1] &&
+	    (clash[def] || max(bus_load[def ^ 1] + load, bus_load[def]) <
+			   max(bus_load[def] + load, bus_load[def ^ 1])))
+		bus = def ^ 1;
+
+	WARN_ON_ONCE(clash[bus]);
+
+	win->axi_bus = bus;
+	win->axi_load = load;
+	win->axi_active = true;
+out:
+	spin_unlock_irqrestore(&vop2->axi_lock, flags);
+
+	return bus;
+}
+
+static void vop2_win_put_axi_bus(struct vop2_win *win)
+{
+	struct vop2 *vop2 = win->vop2;
+	unsigned long flags;
+
+	spin_lock_irqsave(&vop2->axi_lock, flags);
+	win->axi_active = false;
+	win->axi_load = 0;
+	spin_unlock_irqrestore(&vop2->axi_lock, flags);
+}
+
 static void vop2_plane_atomic_disable(struct drm_plane *plane,
 				      struct drm_atomic_commit *state)
 {
@@ -1240,6 +1332,8 @@ static void vop2_plane_atomic_disable(struct drm_plane *plane,
 	struct vop2_video_port *vp;
 
 	drm_dbg(vop2->drm, "%s disable\n", win->data->name);
+
+	vop2_win_put_axi_bus(win);
 
 	if (state)
 		old_pstate = drm_atomic_get_old_plane_state(state, plane);
@@ -1416,7 +1510,9 @@ static void vop2_plane_atomic_update(struct drm_plane *plane,
 		afbc_en ? "AFBC" : "", &yrgb_mst);
 
 	if (vop2->version > VOP_VERSION_RK3568) {
-		vop2_win_write(win, VOP2_WIN_AXI_BUS_ID, win->data->axi_bus_id);
+		u64 load = (u64)src_w * src_h * bpp / 8 * drm_mode_vrefresh(adjusted_mode);
+
+		vop2_win_write(win, VOP2_WIN_AXI_BUS_ID, vop2_win_get_axi_bus(win, load));
 		vop2_win_write(win, VOP2_WIN_AXI_YRGB_R_ID, win->data->axi_yrgb_r_id);
 		vop2_win_write(win, VOP2_WIN_AXI_UV_R_ID, win->data->axi_uv_r_id);
 	}
@@ -3005,6 +3101,7 @@ static int vop2_bind(struct device *dev, struct device *master, void *data)
 
 	mutex_init(&vop2->vop2_lock);
 	mutex_init(&vop2->ovl_lock);
+	spin_lock_init(&vop2->axi_lock);
 
 	ret = devm_request_irq(dev, vop2->irq, vop2_isr, IRQF_SHARED, dev_name(dev), vop2);
 	if (ret)

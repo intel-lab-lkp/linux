@@ -29,6 +29,7 @@
 #define VOP2_FEATURE_HAS_VO1_GRF	BIT(2)
 #define VOP2_FEATURE_HAS_VOP_GRF	BIT(3)
 #define VOP2_FEATURE_HAS_SYS_PMU	BIT(4)
+#define VOP2_FEATURE_AXI_BALANCE	BIT(5)
 
 #define WIN_FEATURE_AFBDC		BIT(0)
 #define WIN_FEATURE_CLUSTER		BIT(1)
@@ -219,6 +220,16 @@ struct vop2_win {
 	u32 offset;
 
 	enum drm_plane_type type;
+
+	/**
+	 * @axi_bus: AXI read port the window currently fetches through,
+	 * protected by &vop2.axi_lock.
+	 */
+	u8 axi_bus;
+	/** @axi_active: the window is fetching, protected by &vop2.axi_lock */
+	bool axi_active;
+	/** @axi_load: estimated fetch rate in bytes/s, protected by &vop2.axi_lock */
+	u64 axi_load;
 };
 
 struct vop2_video_port_data {
@@ -355,6 +366,9 @@ struct vop2 {
 	 * take effect in sequence.
 	 */
 	struct mutex ovl_lock;
+
+	/* protects the AXI port assignment of all windows (&vop2_win.axi_bus) */
+	spinlock_t axi_lock;
 
 	/* must be put at the end of the struct */
 	struct vop2_win win[];
