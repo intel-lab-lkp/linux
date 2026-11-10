@@ -1753,6 +1753,8 @@ out:
 int tcp_read_sock(struct sock *sk, read_descriptor_t *desc,
 		  sk_read_actor_t recv_actor)
 {
+	if (sock_rx_owner_conflict(sk, desc, recv_actor))
+		return -EBUSY;
 	return __tcp_read_sock(sk, desc, recv_actor, false,
 			       &tcp_sk(sk)->copied_seq);
 }
@@ -1762,6 +1764,8 @@ int tcp_read_sock_noack(struct sock *sk, read_descriptor_t *desc,
 			sk_read_actor_t recv_actor, bool noack,
 			u32 *copied_seq)
 {
+	if (sock_rx_owner_conflict(sk, desc, recv_actor))
+		return -EBUSY;
 	return __tcp_read_sock(sk, desc, recv_actor, noack, copied_seq);
 }
 
@@ -1770,6 +1774,8 @@ int tcp_read_skb(struct sock *sk, skb_read_actor_t recv_actor)
 	struct sk_buff *skb;
 	int copied = 0;
 
+	if (sock_rx_owned(sk))
+		return -EBUSY;
 	if (sk->sk_state == TCP_LISTEN)
 		return -ENOTCONN;
 
@@ -2224,6 +2230,8 @@ static int tcp_zerocopy_receive(struct sock *sk,
 
 	zc->copybuf_len = 0;
 	zc->msg_flags = 0;
+	if (sock_rx_owned(sk))
+		return -EBUSY;
 
 	if (address & (PAGE_SIZE - 1) || address != zc->address)
 		return -EINVAL;
@@ -2678,6 +2686,8 @@ static int tcp_recvmsg_locked(struct sock *sk, struct msghdr *msg, size_t len,
 	u32 peek_offset = 0;
 	u32 urg_hole = 0;
 
+	if (sock_rx_owned(sk))
+		return -EBUSY;
 	err = -ENOTCONN;
 	if (sk->sk_state == TCP_LISTEN)
 		goto out;
@@ -2717,6 +2727,11 @@ static int tcp_recvmsg_locked(struct sock *sk, struct msghdr *msg, size_t len,
 	do {
 		u32 offset;
 
+		/* Ownership may have changed while this reader slept for data. */
+		if (sock_rx_owned(sk)) {
+			copied = copied ?: -EBUSY;
+			break;
+		}
 		/* Are we at urgent data? Stop if we have read anything or have SIGURG pending. */
 		if (unlikely(tp->urg_data) && tp->urg_seq == *seq) {
 			if (copied)
@@ -3374,6 +3389,9 @@ int tcp_disconnect(struct sock *sk, int flags)
 	struct request_sock *req;
 	u32 seq;
 
+	if (sock_rx_owned(sk))
+		return -EBUSY;
+
 	if (old_state != TCP_CLOSE)
 		tcp_set_state(sk, TCP_CLOSE);
 
@@ -3988,7 +4006,9 @@ int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 		break;
 
 	case TCP_REPAIR:
-		if (!tcp_can_repair_sock(sk))
+		if (sock_rx_owned(sk))
+			err = -EBUSY;
+		else if (!tcp_can_repair_sock(sk))
 			err = -EPERM;
 		else if (val == TCP_REPAIR_ON) {
 			tp->repair = 1;

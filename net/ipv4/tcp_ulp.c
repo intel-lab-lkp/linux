@@ -164,6 +164,8 @@ int tcp_set_ulp(struct sock *sk, const char *name)
 
 	sock_owned_by_me(sk);
 
+	if (sock_rx_owned(sk))
+		return -EBUSY;
 	ulp_ops = __tcp_ulp_find_autoload(name);
 	if (!ulp_ops)
 		return -ENOENT;

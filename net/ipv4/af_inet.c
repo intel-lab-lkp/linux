@@ -649,6 +649,8 @@ int __inet_stream_connect(struct socket *sock, struct sockaddr_unsized *uaddr,
 			return -EINVAL;
 
 		if (uaddr->sa_family == AF_UNSPEC) {
+			if (sock_rx_owned(sk))
+				return -EBUSY;
 			sk->sk_disconnects++;
 			err = sk->sk_prot->disconnect(sk, flags);
 			sock->state = err ? SS_DISCONNECTING : SS_UNCONNECTED;

@@ -26,6 +26,13 @@ menuconfig NET
 
 if NET
 
+config SOCK_RX_OWNER
+	bool
+	depends on INET
+	help
+	  Allow a TCP stream actor to claim exclusive receive sequence access.
+	  Receive paths reject competing readers while the claim is held.
+
 config WANT_COMPAT_NETLINK_MESSAGES
 	bool
 	help

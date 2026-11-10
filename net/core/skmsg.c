@@ -754,6 +754,10 @@ struct sk_psock *sk_psock_init(struct sock *sk, int node)
 
 	write_lock_bh(&sk->sk_callback_lock);
 
+	if (sock_rx_owned(sk)) {
+		psock = ERR_PTR(-EBUSY);
+		goto out;
+	}
 	if (sk_is_inet(sk) && inet_csk_has_ulp(sk)) {
 		psock = ERR_PTR(-EINVAL);
 		goto out;

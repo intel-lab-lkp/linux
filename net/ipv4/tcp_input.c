@@ -5637,6 +5637,7 @@ err:
 
 void tcp_data_ready(struct sock *sk)
 {
+	sock_rx_owner_data_ready(sk);
 	if (tcp_epollin_ready(sk, sk->sk_rcvlowat) || sock_flag(sk, SOCK_DONE))
 		READ_ONCE(sk->sk_data_ready)(sk);
 }

@@ -2614,6 +2614,9 @@ struct sock *sk_clone(const struct sock *sk, const gfp_t priority,
 	 */
 	if (sk_user_data_is_nocopy(newsk))
 		newsk->sk_user_data = NULL;
+#ifdef CONFIG_SOCK_RX_OWNER
+	newsk->sk_rx_owner = NULL;
+#endif
 
 	newsk->sk_err	   = 0;
 	newsk->sk_err_soft = 0;
@@ -3389,7 +3392,8 @@ int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
 
 	add_wait_queue(sk_sleep(sk), &wait);
 	sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-	rc = sk_wait_event(sk, timeo, skb_peek_tail(&sk->sk_receive_queue) != skb, &wait);
+	rc = sk_wait_event(sk, timeo, sock_rx_owned(sk) ||
+			   skb_peek_tail(&sk->sk_receive_queue) != skb, &wait);
 	sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
 	remove_wait_queue(sk_sleep(sk), &wait);
 	return rc;

@@ -230,6 +230,14 @@ struct sk_buff;
 struct proto_accept_arg;
 typedef int (*sk_read_actor_t)(read_descriptor_t *, struct sk_buff *,
 			       unsigned int, size_t);
+
+/* Published under socket and callback locks; controls the receive sequence. */
+struct sock_rx_owner {
+	sk_read_actor_t actor;
+	void *data;
+	/* TCP receive context, under sk_callback_lock: must not sleep. */
+	void (*data_ready)(struct sock *sk, void *data);
+};
 typedef int (*skb_read_actor_t)(struct sock *, struct sk_buff *);
 
 
