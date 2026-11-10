@@ -1047,4 +1047,33 @@ struct nfsd4_get_dir_delegation;
 struct nfs4_delegation *nfsd_get_dir_deleg(struct nfsd4_compound_state *cstate,
 						struct nfsd4_get_dir_delegation *gdd,
 						struct nfsd_file *nf);
+
+/*
+ * Bound the cl_id retries so a stuck random source cannot spin under
+ * client_lock. A random id collides about N times in 2^32 for N hashed
+ * clients, so the bound is not reached in practice.
+ */
+#define NFSD4_RANDOM_RETRIES	16
+
+/*
+ * Set in every COPY_NOTIFY token's cl_id word and cleared in every
+ * clientid, so the per-client stateid lookup never resolves a token
+ * before the IDR lookup runs.
+ */
+#define NFSD4_CPNTF_CLID_BIT	BIT(31)
+
+#if IS_ENABLED(CONFIG_KUNIT)
+/* nfs4state.c helpers exported for tests/nfsd_state_kunit.c */
+u32 nfsd4_get_random_u32(void);
+u64 nfsd4_get_random_u64(void);
+int nfs4_init_cp_state(struct nfsd_net *nn, copy_stateid_t *stid,
+		       struct nfs4_stid *p_stid);
+unsigned int clientid_hashval(u32 id);
+__be32 nfsd4_assign_sessionid_locked(struct net *net, const clientid_t *clid,
+				     u64 *rand);
+bool cl_id_in_use_locked(struct nfsd_net *nn, u32 id);
+__be32 nfsd4_assign_clid_locked(struct nfs4_client *clp, struct nfsd_net *nn,
+				struct nfs4_client *conf, nfs4_verifier *verf);
+time64_t nfsd4_next_boot_time(struct nfsd_net *nn);
+#endif
 #endif   /* NFSD4_STATE_H */

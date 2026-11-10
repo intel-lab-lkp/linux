@@ -26,6 +26,8 @@ nfsd-$(CONFIG_NFSD_FLEXFILELAYOUT) += flexfilelayout.o flexfilelayoutxdr.o
 nfsd-$(CONFIG_NFS_LOCALIO) += localio.o
 nfsd-$(CONFIG_DEBUG_FS) += debugfs.o
 
+obj-$(CONFIG_NFSD_STATE_KUNIT_TEST) += tests/
+
 #
 # XDR code generation (requires Python and additional packages)
 #
