@@ -316,7 +316,7 @@ struct nfs4_delegation {
 
 	/* Forward-channel slot that carried the granting request */
 	struct {
-		u32			sessionid_seq;
+		u64			sessionid_rand;
 		u32			slotid;
 		u32			seqid;
 		bool			valid;
@@ -499,6 +499,19 @@ struct nfsd4_sessionid {
 	u32		sequence;
 	u32		reserved;
 };
+
+/* The sequence and reserved words together hold one 64-bit random value */
+static inline void nfsd4_sessionid_set_rand(struct nfsd4_sessionid *sid,
+					    u64 rand)
+{
+	sid->sequence = lower_32_bits(rand);
+	sid->reserved = upper_32_bits(rand);
+}
+
+static inline u64 nfsd4_sessionid_rand(const struct nfsd4_sessionid *sid)
+{
+	return ((u64)sid->reserved << 32) | sid->sequence;
+}
 
 /*
  *       State                Meaning                  Where set
