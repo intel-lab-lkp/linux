@@ -157,14 +157,9 @@ struct gss_api_mech * gss_mech_get_by_name(const char *name)
 	return gm;
 }
 
-struct gss_api_mech *gss_mech_get_by_OID(struct rpcsec_gss_oid *obj)
+static struct gss_api_mech *_gss_mech_get_by_OID(struct rpcsec_gss_oid *obj)
 {
 	struct gss_api_mech	*pos, *gm = NULL;
-	char buf[32];
-
-	if (sprint_oid(obj->data, obj->len, buf, sizeof(buf)) < 0)
-		return NULL;
-	request_module("rpc-auth-gss-%s", buf);
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(pos, &registered_mechs, gm_list) {
@@ -177,6 +172,22 @@ struct gss_api_mech *gss_mech_get_by_OID(struct rpcsec_gss_oid *obj)
 		}
 	}
 	rcu_read_unlock();
+	return gm;
+}
+
+struct gss_api_mech *gss_mech_get_by_OID(struct rpcsec_gss_oid *obj)
+{
+	struct gss_api_mech *gm;
+	char buf[32];
+
+	if (sprint_oid(obj->data, obj->len, buf, sizeof(buf)) < 0)
+		return NULL;
+
+	gm = _gss_mech_get_by_OID(obj);
+	if (!gm) {
+		request_module("rpc-auth-gss-%s", buf);
+		gm = _gss_mech_get_by_OID(obj);
+	}
 	if (!gm)
 		trace_rpcgss_oid_to_mech(buf);
 	return gm;
