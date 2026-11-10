@@ -14,9 +14,7 @@
 #include <linux/usb/hcd.h>
 #include <linux/bitfield.h>
 
-#include "../host/xhci-port.h"
-#include "../host/xhci-ext-caps.h"
-#include "../host/xhci-caps.h"
+#include "../host/xhci.h"
 #include "../host/xhci-plat.h"
 #include "core.h"
 
@@ -222,6 +220,31 @@ err:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(dwc3_host_init);
+
+/**
+ * dwc3_host_resume - tell xhci-plat whether the controller lost its state
+ * @dwc: pointer to our controller context structure
+ * @power_lost: true if the core was re-initialised during system resume
+ *
+ * When the core is torn down in system suspend (dwc3_core_exit()) and
+ * initialised again on resume, the xHCI registers are back at their reset
+ * values. xhci_resume() must then reset and re-initialise the host instead
+ * of trying to restore its saved register state with CRS, which fails
+ * (USBSTS.SRE) on a freshly reset controller.
+ */
+void dwc3_host_resume(struct dwc3 *dwc, bool power_lost)
+{
+	struct usb_hcd *hcd;
+
+	if (!dwc->xhci)
+		return;
+
+	hcd = platform_get_drvdata(dwc->xhci);
+	if (!hcd)
+		return;
+
+	hcd_to_xhci_priv(hcd)->power_lost = power_lost;
+}
 
 void dwc3_host_exit(struct dwc3 *dwc)
 {
