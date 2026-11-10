@@ -16,6 +16,9 @@ struct io_uring_opaque_register {
 	__u64 __resv[2];
 };
 
+#define IORING_OPAQUE_REG_IMPORT	(1U << 0)
+#define IORING_OPAQUE_REG_EXPORT	(1U << 1)
+
 /* config/config_size select a size-versioned configuration on creation. */
 struct io_uring_opaque_config {
 	__u64 hard_limit;
