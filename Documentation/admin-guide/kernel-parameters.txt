@@ -7571,6 +7571,18 @@ Kernel parameters
 
 	tdfx=		[HW,DRM]
 
+	tegra_pmc.vde_always_on=
+			[HW,ARM] Never power off the VDE power partition.
+			After a warm reset, which doesn't reset the PMC, the
+			boot ROM of Tegra20 hangs if the partition is off.
+			The VDE driver powers it on when the system shuts
+			down for a regular reboot, but a watchdog reset
+			doesn't go through the shutdown and hangs. Keeping
+			the partition on makes watchdog resets work, at the
+			cost of its idle power.
+			Format: <bool>
+			Default: false
+
 	test_suspend=	[SUSPEND]
 			Format: { "mem" | "standby" | "freeze" }[,N]
 			Specify "mem" (for Suspend-to-RAM) or "standby" (for
