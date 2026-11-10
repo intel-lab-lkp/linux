@@ -258,6 +258,10 @@
 #define YTPHY_WCR_INTR_SEL			BIT(6)
 #define YTPHY_WCR_ENABLE			BIT(3)
 
+#define YTPHY_LED_GENERAL_CFG_REG		0xA00B
+#define YTPHY_LED_FORCE_MODE(x)			BIT((x) * 3)
+#define YTPHY_LED_FORCE_EN(x)			BIT((x) * 3 + 2)
+
 /* 2b00 84ms
  * 2b01 168ms  *default*
  * 2b10 336ms
@@ -1775,6 +1779,31 @@ err_restore_page:
 	return phy_restore_page(phydev, old_page, ret);
 }
 
+static int yt8521_led_brightness_set(struct phy_device *phydev, u8 index,
+				     enum led_brightness value)
+{
+	u16 regs;
+	int ret;
+
+	if (index >= YT8521_MAX_LEDS)
+		return -EINVAL;
+
+	/* clear HW LED setup */
+	ret = ytphy_write_ext(phydev, YT8521_LED0_CFG_REG + index, 0);
+	if (ret < 0)
+		return ret;
+
+	regs = ytphy_read_ext(phydev, YTPHY_LED_GENERAL_CFG_REG);
+	if (value != LED_OFF)
+		regs |= YTPHY_LED_FORCE_EN(index) |
+			YTPHY_LED_FORCE_MODE(index);
+	else
+		regs &= ~(YTPHY_LED_FORCE_EN(index) |
+			  YTPHY_LED_FORCE_MODE(index));
+
+	return ytphy_write_ext(phydev, YTPHY_LED_GENERAL_CFG_REG, regs);
+}
+
 static const unsigned long supported_trgs = (BIT(TRIGGER_NETDEV_FULL_DUPLEX) |
 					     BIT(TRIGGER_NETDEV_HALF_DUPLEX) |
 					     BIT(TRIGGER_NETDEV_LINK)        |
@@ -3266,6 +3295,7 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 		.soft_reset	= yt8521_soft_reset,
 		.suspend	= yt8521_suspend,
 		.resume		= yt8521_resume,
+		.led_brightness_set = yt8521_led_brightness_set,
 		.led_hw_is_supported = yt8521_led_hw_is_supported,
 		.led_hw_control_set = yt8521_led_hw_control_set,
 		.led_hw_control_get = yt8521_led_hw_control_get,
@@ -3288,6 +3318,7 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 		.get_wol	= ytphy_get_wol,
 		.set_wol	= yt8531_set_wol,
 		.link_change_notify = yt8531_link_change_notify,
+		.led_brightness_set = yt8521_led_brightness_set,
 		.led_hw_is_supported = yt8521_led_hw_is_supported,
 		.led_hw_control_set = yt8521_led_hw_control_set,
 		.led_hw_control_get = yt8521_led_hw_control_get,
