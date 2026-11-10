@@ -649,10 +649,39 @@ static int match_location(struct usb_device *peer_hdev, void *p)
 	return 0;
 }
 
+struct usb_connector_peer {
+	struct usb_port *port_dev;
+	struct device_node *np;
+	u32 port1;
+};
+
+/*
+ * Check whether @peer_hdev is the hub that firmware describes as providing
+ * the other half of the port's connector, and link the two ports if it is.
+ */
+static int match_connector_peer(struct usb_device *peer_hdev, void *p)
+{
+	struct usb_connector_peer *cp = p;
+	struct usb_hub *peer_hub = usb_hub_to_struct_hub(peer_hdev);
+	struct usb_port *peer;
+
+	if (!peer_hub || peer_hdev->dev.of_node != cp->np ||
+	    hub_is_superspeed(peer_hdev) == cp->port_dev->is_superspeed ||
+	    cp->port1 > peer_hdev->maxchild)
+		return 0;
+
+	peer = peer_hub->ports[cp->port1 - 1];
+	if (!peer || peer->connect_type == USB_PORT_NOT_USED)
+		return 0;
+
+	link_peers_report(cp->port_dev, peer);
+	return 1; /* done */
+}
+
 /*
  * Find the peer port either via explicit platform firmware "location"
- * data, the peer hcd for root hubs, or the upstream peer relationship
- * for all other hubs.
+ * data, a connector described in the device tree, the peer hcd for root
+ * hubs, or the upstream peer relationship for all other hubs.
  */
 static void find_and_link_peer(struct usb_hub *hub, int port1)
 {
@@ -660,6 +689,7 @@ static void find_and_link_peer(struct usb_hub *hub, int port1)
 	struct usb_device *hdev = hub->hdev;
 	struct usb_device *peer_hdev;
 	struct usb_hub *peer_hub;
+	struct usb_connector_peer cp;
 
 	/*
 	 * If location data is available then we can only peer this port
@@ -671,7 +701,23 @@ static void find_and_link_peer(struct usb_hub *hub, int port1)
 		/* we link the peer in match_location() if found */
 		usb_for_each_dev(port_dev, match_location);
 		return;
-	} else if (!hdev->parent) {
+	}
+
+	/*
+	 * If a connector routes the two halves of this port to different
+	 * hubs or host controllers, the connector alone decides the peer.
+	 */
+	cp.np = usb_of_get_connector_peer(hdev, port1,
+					  port_dev->is_superspeed, &cp.port1);
+	if (cp.np) {
+		cp.port_dev = port_dev;
+		port_dev->connector_peer = 1;
+		usb_for_each_dev(&cp, match_connector_peer);
+		of_node_put(cp.np);
+		return;
+	}
+
+	if (!hdev->parent) {
 		struct usb_hcd *hcd = bus_to_hcd(hdev->bus);
 		struct usb_hcd *peer_hcd = hcd->shared_hcd;
 
@@ -703,7 +749,7 @@ static void find_and_link_peer(struct usb_hub *hub, int port1)
 	 * does not have location data
 	 */
 	peer = peer_hub->ports[port1 - 1];
-	if (peer && peer->location == 0)
+	if (peer && peer->location == 0 && !peer->connector_peer)
 		link_peers_report(port_dev, peer);
 }
 
