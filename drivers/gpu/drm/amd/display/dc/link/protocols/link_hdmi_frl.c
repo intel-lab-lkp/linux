@@ -818,8 +818,13 @@ enum link_result hdmi_frl_perform_link_training_with_fallback(
 	enum clock_source_id frl_phy_clock_source_id)
 {
 	enum link_result status = LINK_RESULT_UNKNOWN;
+	unsigned int retries = 0;
+	unsigned int max_retries = 3;
 
 	DC_LOGGER_INIT(link->ctx->logger);
+
+	if (link->preferred_hdmi_frl_settings.valid)
+		max_retries = link->preferred_hdmi_frl_settings.max_retries;
 
 	/* FRL Link Training */
 	while (status != LINK_RESULT_FALLBACK) {
@@ -845,6 +850,15 @@ enum link_result hdmi_frl_perform_link_training_with_fallback(
 
 		if (status == LINK_RESULT_SUCCESS)
 			break;
+
+		/*
+		 * A sink that is still waking up may not answer at all. Retry the
+		 * same rate before going lower, as many times as link enable does.
+		 */
+		if (status == LINK_RESULT_TIMEOUT && retries < max_retries) {
+			retries++;
+			continue;
+		}
 
 		link->frl_link_settings.frl_link_rate--;
 		if (link->frl_link_settings.frl_link_rate <
