@@ -58,10 +58,25 @@ struct ovl_readdir_data {
 	bool in_xwhiteouts_dir;
 };
 
+/*
+ * An impure dir entry with origin that the caller of the previous getdents
+ * did not take. The real dir may return it first in the next call, even
+ * after it was removed or replaced.
+ */
+struct ovl_dir_next {
+	u64 version;		/* dir version when it was refused */
+	u64 real_ino;
+	u64 ino;		/* d_ino to report */
+	bool gone;		/* removed since, skip it */
+	int len;
+	char name[];
+};
+
 struct ovl_dir_file {
 	bool is_real;
 	bool is_upper;
 	struct ovl_dir_cache *cache;
+	struct ovl_dir_next *next;
 	struct list_head *cursor;
 	struct file *realfile;
 	struct file *upperfile;
@@ -413,6 +428,8 @@ static void ovl_dir_reset(struct file *file)
 		od->cache = NULL;
 		od->cursor = NULL;
 	}
+	kfree(od->next);
+	od->next = NULL;
 	is_real = ovl_dir_is_real(inode);
 	if (od->is_real != is_real) {
 		/* is_real can only become false when dir is copied up */
@@ -767,6 +784,10 @@ static struct ovl_dir_cache *ovl_cache_get_impure(struct file *file)
 struct ovl_readdir_translate {
 	struct dir_context *orig_ctx;
 	struct ovl_dir_cache *cache;
+	struct ovl_dir_next *next;		/* refused before */
+	struct ovl_cache_entry *refused;	/* refused in this call */
+	u64 refused_ino;			/* its d_ino from the real dir */
+	bool next_refused;
 	struct dir_context ctx;
 	u64 parent_ino;
 	int fsid;
@@ -781,13 +802,24 @@ static bool ovl_fill_real(struct dir_context *ctx, const char *name,
 	struct ovl_readdir_translate *rdt =
 		container_of(ctx, struct ovl_readdir_translate, ctx);
 	struct dir_context *orig_ctx = rdt->orig_ctx;
+	struct ovl_dir_next *next = rdt->next;
+	struct ovl_cache_entry *p = NULL;
+	u64 real_ino = ino;
+	bool is_next = false;
 	bool res;
 
-	if (rdt->parent_ino && name_is_dotdot(name, namelen)) {
+	if (next && next->real_ino == ino && next->len == namelen &&
+	    !memcmp(next->name, name, namelen)) {
+		/* Looked up before this call if the dir changed */
+		if (next->gone) {
+			rdt->next = NULL;
+			return true;
+		}
+		ino = next->ino;
+		is_next = true;
+	} else if (rdt->parent_ino && name_is_dotdot(name, namelen)) {
 		ino = rdt->parent_ino;
 	} else if (rdt->cache) {
-		struct ovl_cache_entry *p;
-
 		p = ovl_cache_entry_find(&rdt->cache->root, name, namelen);
 		if (p)
 			ino = p->ino;
@@ -798,8 +830,61 @@ static bool ovl_fill_real(struct dir_context *ctx, const char *name,
 
 	res = orig_ctx->actor(orig_ctx, name, namelen, offset, ino, d_type);
 	ctx->count = orig_ctx->count;
+	if (!res) {
+		if (is_next) {
+			rdt->next_refused = true;
+		} else {
+			rdt->refused = p;
+			rdt->refused_ino = real_ino;
+		}
+	}
 
 	return res;
+}
+
+/*
+ * The dir changed since the previous call refused this entry. Look the name
+ * up as ovl_cache_update() does, and report what stat() would return now.
+ */
+static int ovl_dir_next_update(const struct path *path,
+			       struct ovl_dir_next *next)
+{
+	struct path statpath = *path;
+	struct dentry *this;
+	struct kstat stat;
+	int err = 0;
+
+	this = lookup_one(mnt_idmap(path->mnt), &QSTR_LEN(next->name, next->len),
+			  path->dentry);
+	if (IS_ERR(this))
+		return PTR_ERR(this);
+	if (!this->d_inode) {
+		next->gone = true;
+	} else {
+		statpath.dentry = this;
+		err = vfs_getattr(&statpath, &stat, STATX_INO, 0);
+		if (!err)
+			next->ino = stat.ino;
+	}
+	dput(this);
+	return err;
+}
+
+static struct ovl_dir_next *ovl_dir_next_new(struct ovl_cache_entry *p,
+					     u64 real_ino, u64 version)
+{
+	struct ovl_dir_next *next;
+
+	next = kmalloc_flex(*next, name, p->len);
+	if (!next)
+		return NULL;
+	next->version = version;
+	next->real_ino = real_ino;
+	next->ino = p->ino;
+	next->gone = false;
+	next->len = p->len;
+	memcpy(next->name, p->name, p->len);
+	return next;
 }
 
 static bool ovl_is_impure_dir(struct file *file)
@@ -863,8 +948,31 @@ static int ovl_iterate_real(struct file *file, struct dir_context *ctx)
 			return PTR_ERR(rdt.cache);
 	}
 
+	/* Even if no longer impure: od->next was its last origin entry */
+	if (od->next) {
+		u64 version = ovl_inode_version_get(d_inode(dir));
+
+		if (od->next->version != version) {
+			err = ovl_dir_next_update(&file->f_path, od->next);
+			if (err)
+				return err;
+			od->next->version = version;
+		}
+		rdt.next = od->next;
+	}
+
 	err = iterate_dir(od->realfile, &rdt.ctx);
 	ctx->pos = rdt.ctx.pos;
+
+	if (!rdt.next_refused) {
+		u64 version = ovl_inode_version_get(d_inode(dir));
+
+		kfree(od->next);
+		od->next = NULL;
+		if (rdt.refused)
+			od->next = ovl_dir_next_new(rdt.refused,
+						    rdt.refused_ino, version);
+	}
 
 	return err;
 }
@@ -908,6 +1016,7 @@ static int ovl_iterate_merged(struct file *file, struct dir_context *ctx)
 
 static bool ovl_need_adjust_d_ino(struct file *file)
 {
+	struct ovl_dir_file *od = file->private_data;
 	struct dentry *dentry = file->f_path.dentry;
 	struct ovl_fs *ofs = OVL_FS(dentry->d_sb);
 	struct dentry *parent;
@@ -923,6 +1032,10 @@ static bool ovl_need_adjust_d_ino(struct file *file)
 
 	/* If dir is impure then need to adjust d_ino for copied up entries */
 	if (ovl_is_impure_dir(file))
+		return true;
+
+	/* An entry the previous call refused may still need adjusting */
+	if (od->next)
 		return true;
 
 	/* If parent is merge, then need to adjust d_ino for '..' */
@@ -1073,6 +1186,7 @@ static int ovl_dir_release(struct inode *inode, struct file *file)
 		ovl_cache_put(od, inode);
 		inode_unlock(inode);
 	}
+	kfree(od->next);
 	fput(od->realfile);
 	if (od->upperfile)
 		fput(od->upperfile);
