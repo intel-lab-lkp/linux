@@ -9347,12 +9347,22 @@ static const struct lock_manager_operations nfsd_posix_mng_ops  = {
 };
 
 static inline void
-nfs4_set_lock_denied(struct file_lock *fl, struct nfsd4_lock_denied *deny)
+nfs4_set_lock_denied(struct file_lock *fl, struct nfs4_client *clp,
+		     struct nfsd4_lock_denied *deny)
 {
 	struct nfs4_lockowner *lo;
 
 	if (fl->fl_lmops == &nfsd_posix_mng_ops) {
 		lo = (struct nfs4_lockowner *) fl->c.flc_owner;
+		/*
+		 * RFC 8881 Sections 18.10.3 and 18.11.3 require the lock
+		 * holder's clientid in a denial. Return the clientid and
+		 * owner only to the client that holds the lock. Any other
+		 * client could use the clientid to forge the holder's NFSv4.0
+		 * stateids.
+		 */
+		if (lo->lo_owner.so_client != clp)
+			goto nevermind;
 		xdr_netobj_dup(&deny->ld_owner, &lo->lo_owner.so_owner,
 						GFP_KERNEL);
 		if (!deny->ld_owner.data)
@@ -9798,7 +9808,7 @@ nfsd4_lock(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	case -EAGAIN:		/* conflock holds conflicting lock */
 		status = nfserr_denied;
 		dprintk("NFSD: nfsd4_lock: conflicting lock found!\n");
-		nfs4_set_lock_denied(conflock, &lock->lk_denied);
+		nfs4_set_lock_denied(conflock, cstate->clp, &lock->lk_denied);
 		break;
 	case -EDEADLK:
 		status = nfserr_deadlock;
@@ -9955,7 +9965,7 @@ nfsd4_lockt(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 	if (file_lock->c.flc_type != F_UNLCK) {
 		status = nfserr_denied;
-		nfs4_set_lock_denied(file_lock, &lockt->lt_denied);
+		nfs4_set_lock_denied(file_lock, cstate->clp, &lockt->lt_denied);
 	}
 out:
 	if (lo)
