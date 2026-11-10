@@ -1721,7 +1721,177 @@ static void netmem_ref_test_tcp_devmem_recv(struct kunit *test)
 #endif
 #endif
 
+/* skb_splice_from_iter() */
+
+#include <linux/bvec.h>
+#include <net/checksum.h>
+#include <net/hotdata.h>
+
+struct splice_basic {
+	struct sk_buff *skb;
+	struct folio *folio;
+};
+
+static void splice_basic_free_skb(struct splice_basic *c)
+{
+	int refs, nr;
+
+	if (!c->skb)
+		return;
+	nr = skb_shinfo(c->skb)->nr_frags;
+	refs = folio_ref_count(c->folio);
+	/* Keep the owner alive during cleanup of a missing-reference failure. */
+	if (refs <= nr)
+		folio_ref_add(c->folio, nr + 1 - refs);
+	kfree_skb(c->skb);
+	c->skb = NULL;
+}
+
+static void splice_basic_release(void *data)
+{
+	struct splice_basic *c = data;
+
+	splice_basic_free_skb(c);
+	if (c->folio)
+		folio_put(c->folio);
+}
+
+static struct splice_basic *splice_basic_new(struct kunit *test)
+{
+	struct splice_basic *c = kunit_kzalloc(test, sizeof(*c), GFP_KERNEL);
+
+	KUNIT_ASSERT_NOT_NULL(test, c);
+	KUNIT_ASSERT_EQ(test,
+			kunit_add_action_or_reset(test, splice_basic_release, c), 0);
+	c->folio = folio_alloc(GFP_KERNEL | __GFP_ZERO, 1);
+	KUNIT_ASSERT_NOT_NULL(test, c->folio);
+	c->skb = alloc_skb(64, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, c->skb);
+	return c;
+}
+
+static void splice_basic_iter(struct iov_iter *iter, struct bio_vec *bv,
+			      struct kvec *kv, unsigned int nr, bool bvec)
+{
+	size_t len = 0;
+	unsigned int i;
+
+	for (i = 0; i < nr; i++) {
+		kv[i].iov_base = page_address(bv[i].bv_page) + bv[i].bv_offset;
+		kv[i].iov_len = bv[i].bv_len;
+		len += bv[i].bv_len;
+	}
+	if (bvec)
+		iov_iter_bvec(iter, ITER_SOURCE, bv, nr, len);
+	else
+		iov_iter_kvec(iter, ITER_SOURCE, kv, nr, len);
+}
+
+static void splice_basic_expect_iter(struct kunit *test, struct iov_iter *iter,
+				     const struct iov_iter *want)
+{
+	KUNIT_EXPECT_EQ(test, iov_iter_count(iter), iov_iter_count(want));
+	KUNIT_EXPECT_EQ(test, iter->iov_offset, want->iov_offset);
+	KUNIT_EXPECT_EQ(test, iter->nr_segs, want->nr_segs);
+	KUNIT_EXPECT_PTR_EQ(test,
+			    iov_iter_is_bvec(iter) ? (const void *)iter->bvec : iter->kvec,
+			    iov_iter_is_bvec(want) ? (const void *)want->bvec : want->kvec);
+}
+
+static void skb_splice_basic_append(struct kunit *test)
+{
+	unsigned int bvec;
+
+	if (IS_ENABLED(CONFIG_HIGHMEM) &&
+	    READ_ONCE(net_hotdata.sysctl_max_skb_frags) < 2)
+		kunit_skip(test, "two page-bounded fragments need two slots");
+	for (bvec = 0; bvec < 2; bvec++) {
+		struct splice_basic *c = splice_basic_new(test);
+		size_t len = PAGE_SIZE + 64, first = PAGE_SIZE - 27;
+		unsigned int nr = IS_ENABLED(CONFIG_HIGHMEM) ? 2 : 1;
+		u8 *data = folio_address(c->folio) + 17;
+		u8 *copy = kunit_kmalloc(test, len, GFP_KERNEL);
+		struct bio_vec bv[2];
+		struct iov_iter iter;
+		struct kvec kv[2];
+		size_t i;
+
+		KUNIT_ASSERT_NOT_NULL(test, copy);
+		for (i = 0; i < len; i++)
+			data[i] = (u8)(i * 13 + 7);
+		bvec_set_page(&bv[0], &c->folio->page, PAGE_SIZE - 17, 17);
+		bvec_set_page(&bv[1], folio_page(c->folio, 1), 81, 0);
+		splice_basic_iter(&iter, bv, kv, 2, bvec);
+		KUNIT_ASSERT_EQ(test, skb_splice_from_iter(c->skb, &iter, first),
+				(ssize_t)first);
+		KUNIT_EXPECT_EQ(test, iov_iter_count(&iter), len - first);
+		KUNIT_ASSERT_EQ(test, skb_splice_from_iter(c->skb, &iter, len),
+				(ssize_t)(len - first));
+		KUNIT_EXPECT_EQ(test, iov_iter_count(&iter), 0UL);
+		KUNIT_EXPECT_EQ(test, c->skb->len, (unsigned int)len);
+		KUNIT_EXPECT_EQ(test, skb_shinfo(c->skb)->nr_frags, nr);
+		KUNIT_EXPECT_EQ(test, folio_ref_count(c->folio), (int)nr + 1);
+		KUNIT_ASSERT_EQ(test, skb_copy_bits(c->skb, 0, copy, len), 0);
+		KUNIT_EXPECT_MEMEQ(test, copy, data, len);
+		KUNIT_EXPECT_EQ(test, (__force u16)csum_fold(c->skb->csum),
+				(__force u16)csum_fold(csum_partial(data, len, 0)));
+		splice_basic_free_skb(c);
+		KUNIT_EXPECT_EQ(test, folio_ref_count(c->folio), 1);
+	}
+}
+
+static void skb_splice_basic_progress(struct kunit *test)
+{
+	unsigned int bvec;
+
+	for (bvec = 0; bvec < 2; bvec++) {
+		struct splice_basic *c = splice_basic_new(test);
+		void *bad = kunit_kmalloc(test, 16, GFP_KERNEL);
+		struct bio_vec bv[2];
+		struct iov_iter iter, expected;
+		struct kvec kv[2];
+		ssize_t ret = 0;
+
+		KUNIT_ASSERT_NOT_NULL(test, bad);
+		KUNIT_ASSERT_TRUE(test, PageSlab(virt_to_page(bad)));
+		bvec_set_page(&bv[0], &c->folio->page, PAGE_SIZE, 0);
+		splice_basic_iter(&iter, bv, kv, 1, bvec);
+		expected = iter;
+		KUNIT_EXPECT_EQ(test, skb_splice_from_iter(c->skb, &iter, 0), 0);
+		splice_basic_expect_iter(test, &iter, &expected);
+		KUNIT_EXPECT_EQ(test, c->skb->len, 0U);
+		KUNIT_EXPECT_EQ(test, folio_ref_count(c->folio), 1);
+
+		bvec_set_page(&bv[0], virt_to_page(bad), 16, offset_in_page(bad));
+		splice_basic_iter(&iter, bv, kv, 1, bvec);
+		expected = iter;
+		kunit_warning_suppress(test) {
+			ret = skb_splice_from_iter(c->skb, &iter, 16);
+		}
+		KUNIT_EXPECT_EQ(test, ret, (ssize_t)-EIO);
+		splice_basic_expect_iter(test, &iter, &expected);
+		KUNIT_ASSERT_EQ(test, skb_shinfo(c->skb)->nr_frags, 0);
+
+		bvec_set_page(&bv[0], &c->folio->page, PAGE_SIZE, 0);
+		bvec_set_page(&bv[1], virt_to_page(bad), 16, offset_in_page(bad));
+		splice_basic_iter(&iter, bv, kv, 2, bvec);
+		expected = iter;
+		iov_iter_advance(&expected, PAGE_SIZE);
+		kunit_warning_suppress(test) {
+			ret = skb_splice_from_iter(c->skb, &iter, PAGE_SIZE + 16);
+		}
+		KUNIT_EXPECT_EQ(test, ret, (ssize_t)PAGE_SIZE);
+		splice_basic_expect_iter(test, &iter, &expected);
+		KUNIT_EXPECT_EQ(test, c->skb->len, (unsigned int)PAGE_SIZE);
+		KUNIT_EXPECT_EQ(test, folio_ref_count(c->folio), 2);
+		splice_basic_free_skb(c);
+		KUNIT_EXPECT_EQ(test, folio_ref_count(c->folio), 1);
+	}
+}
+
 static struct kunit_case net_test_cases[] = {
+	KUNIT_CASE(skb_splice_basic_append),
+	KUNIT_CASE(skb_splice_basic_progress),
 	KUNIT_CASE_PARAM(gso_test_func, gso_test_gen_params),
 	KUNIT_CASE_PARAM(ip_tunnel_flags_test_run,
 			 ip_tunnel_flags_test_gen_params),
