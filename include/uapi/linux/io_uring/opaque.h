@@ -92,6 +92,7 @@ struct io_uring_opaque_frame {
 #define IORING_OPAQUE_OBJECT_F_COMPACTING	(1U << 1)
 #define IORING_OPAQUE_OBJECT_F_FORWARD_ONLY (1U << 2)
 #define IORING_OPAQUE_STREAM_F_EOF		(1U << 0)
+#define IORING_OPAQUE_POLICY_F_AUTO_COMPACT	(1U << 0)
 
 enum io_uring_opaque_memory_mode {
 	IORING_OPAQUE_MEMORY_NORMAL,

@@ -14,6 +14,7 @@ struct io_uring_opaque_config;
 #ifdef CONFIG_IO_URING_OPAQUE_OBJ
 struct io_opaque_stream;
 struct io_opaque_data;
+struct io_opaque_handoff;
 struct io_opaque_tx;
 struct io_opaque_vec;
 
@@ -74,6 +75,11 @@ struct io_opaque_req {
 		};
 		struct {
 			struct io_opaque_data *replacement;
+			/* Private pin retained after the table takes the replacement. */
+			struct io_opaque_data *published;
+			struct io_opaque_handoff *handoff;
+			bool copy_committed;
+			bool copy_reserved;
 			u64 reserved;
 			u64 transient;
 		};

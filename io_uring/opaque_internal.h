@@ -7,6 +7,7 @@
 #include <linux/bvec.h>
 #include <linux/net.h>
 #include <linux/sizes.h>
+#include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <uapi/linux/io_uring/opaque.h>
 
@@ -44,8 +45,22 @@
 /* The head of its queue, still to take its references. */
 #define IO_OPAQUE_TX_SETTLE	2
 
+/* One copy's deferred source credits; mutable fields use transient_lock. */
+struct io_opaque_handoff {
+	refcount_t refs;
+	u64 released;
+	unsigned int pending;
+	bool active;
+	wait_queue_head_t wait;
+};
+
 struct io_opaque_backing {
 	refcount_t refs;
+	/* Owns a handoff reference until retagged or physically released. */
+	struct io_opaque_handoff *handoff;
+	/* Prepared extent puts keep metadata alive through physical release. */
+	unsigned int pending;
+	bool released;
 	struct page *page;
 	u64 charge;
 	u32 filled;
@@ -214,7 +229,7 @@ struct io_opaque_store {
 	 * that move bytes and transient together are one seqcount write.
 	 */
 	atomic64_t transient;
-	/* Serializes transient_seq writers. */
+	/* Transient writers, backing handoffs and potential last-version drops. */
 	spinlock_t transient_lock;
 	seqcount_spinlock_t transient_seq;
 	atomic_t extents;
@@ -269,4 +284,12 @@ struct io_opaque_slot *io_opaque_lookup(struct io_opaque_store *store,
 					u64 handle);
 void io_opaque_wait(struct io_opaque_req *op, enum io_opaque_phase phase);
 void io_opaque_queue_ready(struct io_opaque_req *op, int result);
+int io_opaque_compact_reserve(struct io_opaque_req *op, u64 charge);
+int io_opaque_compact_publish(struct io_opaque_req *op);
+void io_opaque_compact_end(struct io_opaque_req *op);
+void io_opaque_compact_work(struct work_struct *work);
+int io_opaque_compact_start(struct io_opaque_req *op);
+int io_opaque_policy_prep(struct io_opaque_req *op);
+int io_opaque_set_policy(struct io_opaque_req *op);
+
 #endif

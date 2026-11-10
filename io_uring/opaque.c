@@ -282,17 +282,30 @@ bool io_opaque_charge_transient(struct io_opaque_store *store, u64 bytes, u64 li
 	return charged;
 }
 
-/* Uncharge and stop excluding transient bytes; the two amounts may differ. */
-void io_opaque_release_transient(struct io_opaque_store *store, u64 uncharge,
-				 u64 transient)
+static void io_opaque_release_transient_locked(struct io_opaque_store *store,
+					       u64 uncharge, u64 transient)
 {
-	spin_lock(&store->transient_lock);
+	lockdep_assert_held(&store->transient_lock);
 	write_seqcount_begin(&store->transient_seq);
 	atomic64_sub(uncharge, &store->bytes);
 	atomic64_sub(transient, &store->transient);
 	write_seqcount_end(&store->transient_seq);
+}
+
+static void io_opaque_release_transient_quiet(struct io_opaque_store *store,
+					      u64 uncharge, u64 transient)
+{
+	spin_lock(&store->transient_lock);
+	io_opaque_release_transient_locked(store, uncharge, transient);
 	spin_unlock(&store->transient_lock);
 	io_opaque_memory_mode(store);
+}
+
+/* Uncharge and stop excluding transient bytes; the two amounts may differ. */
+void io_opaque_release_transient(struct io_opaque_store *store, u64 uncharge,
+				 u64 transient)
+{
+	io_opaque_release_transient_quiet(store, uncharge, transient);
 	if (uncharge)
 		io_opaque_wake_budget(store);
 }
@@ -396,6 +409,157 @@ no_space:
 	return ERR_PTR(-ENOBUFS);
 }
 
+static void io_opaque_handoff_put(struct io_opaque_handoff *handoff)
+{
+	if (handoff && refcount_dec_and_test(&handoff->refs))
+		kfree(handoff);
+}
+
+/* Wake outside transient_lock, with a reference spanning a racing settler. */
+static void io_opaque_handoff_wake(struct io_opaque_handoff *handoff)
+{
+	if (handoff) {
+		wake_up_all(&handoff->wait);
+		io_opaque_handoff_put(handoff);
+	}
+}
+
+/* A failed setup owns no physical source free: its version pin is still held. */
+static void io_opaque_compact_unreserve(struct io_opaque_req *op)
+{
+	struct io_opaque_store *store = op->store;
+	struct io_opaque_handoff *handoff = op->handoff;
+	struct io_opaque_extent *extent;
+
+	if (op->data) {
+		list_for_each_entry(extent, &op->data->extents, list) {
+			struct io_opaque_backing *backing = extent->backing;
+			bool put = false;
+
+			spin_lock(&store->transient_lock);
+			if (backing->handoff == handoff) {
+				handoff->pending -= backing->pending;
+				backing->handoff = NULL;
+				put = true;
+			}
+			spin_unlock(&store->transient_lock);
+			if (put)
+				io_opaque_handoff_put(handoff);
+		}
+	}
+	op->handoff = NULL;
+	io_opaque_handoff_put(handoff);
+}
+
+/* Tag while the source pin still owns every backing, before allocating a copy. */
+int io_opaque_compact_reserve(struct io_opaque_req *op, u64 charge)
+{
+	struct io_opaque_store *store = op->store;
+	struct io_opaque_handoff *handoff;
+	struct io_opaque_extent *extent;
+	struct mem_cgroup *old;
+
+	old = set_active_memcg(store->memcg);
+	handoff = kzalloc_obj(*handoff, GFP_KERNEL_ACCOUNT);
+	set_active_memcg(old);
+	if (!handoff)
+		return -ENOMEM;
+	refcount_set(&handoff->refs, 1);
+	init_waitqueue_head(&handoff->wait);
+	handoff->active = true;
+	op->handoff = handoff;
+	if (op->data) {
+		list_for_each_entry(extent, &op->data->extents, list) {
+			struct io_opaque_backing *backing = extent->backing;
+			struct io_opaque_handoff *previous;
+
+			spin_lock(&store->transient_lock);
+			previous = backing->handoff;
+			/* The dispatcher settles each copy before starting the next. */
+			if (previous != handoff) {
+				refcount_inc(&handoff->refs);
+				backing->handoff = handoff;
+				handoff->pending += backing->pending;
+			}
+			spin_unlock(&store->transient_lock);
+			if (previous != handoff)
+				io_opaque_handoff_put(previous);
+			cond_resched();
+		}
+	}
+	if (!io_opaque_charge_transient(store, charge,
+					store->config.hard_limit - store->config.reply_reserve)) {
+		io_opaque_compact_unreserve(op);
+		return -ENOBUFS;
+	}
+	op->transient = charge;
+	op->reserved = charge;
+	return 0;
+}
+
+static void io_opaque_backing_release(struct io_opaque_store *store,
+				      struct io_opaque_backing *backing)
+{
+	if (backing->accounted)
+		io_opaque_memcg_uncharge(store, backing->charge);
+	put_page(backing->page);
+}
+
+/*
+ * Finish one prepared put. Its pending count keeps backing metadata alive even
+ * if another put releases the last physical reference before this one returns.
+ */
+static u64 io_opaque_backing_done(struct io_opaque_store *store,
+				  struct io_opaque_backing *backing, bool released)
+{
+	struct io_opaque_handoff *handoff, *wake = NULL;
+	u64 charge = released ? backing->charge : 0;
+	bool free;
+
+	spin_lock(&store->transient_lock);
+	handoff = backing->handoff;
+	if (released)
+		backing->released = true;
+	if (handoff && handoff->active) {
+		handoff->released += charge;
+		charge = 0;
+		if (!--handoff->pending) {
+			refcount_inc(&handoff->refs);
+			wake = handoff;
+		}
+	}
+	free = !--backing->pending && backing->released;
+	spin_unlock(&store->transient_lock);
+	io_opaque_handoff_wake(wake);
+	if (free) {
+		io_opaque_handoff_put(handoff);
+		kfree(container_of(backing, struct io_opaque_chunk, backing));
+	}
+	return charge;
+}
+
+/* Register even without a tag: a later copy adopts already-started releases. */
+static void io_opaque_extent_release_begin(struct io_opaque_store *store,
+					   struct io_opaque_extent *extent)
+{
+	struct io_opaque_handoff *handoff;
+
+	guard(spinlock)(&store->transient_lock);
+	extent->backing->pending++;
+	handoff = extent->backing->handoff;
+	if (handoff && handoff->active)
+		handoff->pending++;
+}
+
+static void io_opaque_extents_release_begin(struct io_opaque_store *store,
+					    struct list_head *list)
+{
+	struct io_opaque_extent *extent;
+
+	list_for_each_entry(extent, list, list)
+		io_opaque_extent_release_begin(store, extent);
+}
+
 /*
  * Let go of @extent, and of its backing if it was the last to use it. Returns
  * the charge of the backing that went, for the caller to give back to the
@@ -405,32 +569,44 @@ no_space:
 static u64 io_opaque_extent_release(struct io_opaque_store *store, struct io_opaque_extent *extent)
 {
 	struct io_opaque_backing *backing = extent->backing;
-	u64 charge = 0;
+	bool last = false;
 
 	list_del(&extent->list);
 	if (!extent->embedded)
 		kfree(extent);
 	atomic_dec(&store->extents);
-	if (refcount_dec_and_test(&backing->refs)) {
-		charge = backing->charge;
-
-		if (backing->accounted)
-			io_opaque_memcg_uncharge(store, charge);
-		put_page(backing->page);
-		kfree(container_of(backing, struct io_opaque_chunk, backing));
+	if (!refcount_dec_not_one(&backing->refs)) {
+		spin_lock(&store->transient_lock);
+		last = refcount_dec_and_test(&backing->refs);
+		spin_unlock(&store->transient_lock);
 	}
-	return charge;
+	if (last)
+		io_opaque_backing_release(store, backing);
+	return io_opaque_backing_done(store, backing, last);
 }
 
 static void io_opaque_extent_free(struct io_opaque_store *store,
 				  struct io_opaque_extent *extent)
 {
-	u64 charge = io_opaque_extent_release(store, extent);
+	u64 charge;
 
+	io_opaque_extent_release_begin(store, extent);
+	charge = io_opaque_extent_release(store, extent);
 	if (charge)
 		io_opaque_uncharge(store, charge);
 	else
 		io_opaque_wake_budget(store);
+}
+
+/* Release physical backing, retaining its store reservation until the caller settles it. */
+static u64 io_opaque_extents_release(struct io_opaque_store *store, struct list_head *list)
+{
+	struct io_opaque_extent *extent, *next;
+	u64 charge = 0;
+
+	list_for_each_entry_safe(extent, next, list, list)
+		charge += io_opaque_extent_release(store, extent);
+	return charge;
 }
 
 /*
@@ -444,14 +620,11 @@ static void io_opaque_extent_free(struct io_opaque_store *store,
 static void io_opaque_extents_free(struct io_opaque_store *store,
 				   struct list_head *list)
 {
-	struct io_opaque_extent *extent, *next;
-	bool any = false;
-	u64 charge = 0;
+	bool any = !list_empty(list);
+	u64 charge;
 
-	list_for_each_entry_safe(extent, next, list, list) {
-		charge += io_opaque_extent_release(store, extent);
-		any = true;
-	}
+	io_opaque_extents_release_begin(store, list);
+	charge = io_opaque_extents_release(store, list);
 	if (charge)
 		io_opaque_uncharge_quiet(store, charge);
 	if (any)
@@ -469,14 +642,122 @@ struct io_opaque_data *io_opaque_data_alloc(void)
 	return data;
 }
 
+static u64 io_opaque_data_free(struct io_opaque_store *store,
+			       struct io_opaque_data *data, bool *extents)
+{
+	u64 charge;
+
+	*extents |= !list_empty(&data->extents);
+	charge = io_opaque_extents_release(store, &data->extents);
+	kvfree(data->bvec);
+	kfree(data);
+	return charge;
+}
+
+static u64 io_opaque_data_release(struct io_opaque_store *store,
+				  struct io_opaque_data *data, bool *extents)
+{
+	bool last;
+
+retry:
+	if (!data || refcount_dec_not_one(&data->refs))
+		return 0;
+	/* Announce the entire underway release before exposing version ref zero. */
+	io_opaque_extents_release_begin(store, &data->extents);
+	/* Serialize potential final drops with the published copy's private pin. */
+	spin_lock(&store->transient_lock);
+	last = refcount_dec_if_one(&data->refs);
+	spin_unlock(&store->transient_lock);
+	if (last) {
+		smp_acquire__after_ctrl_dep();
+		return io_opaque_data_free(store, data, extents);
+	}
+	/* A reference acquired during preparation keeps the version live. */
+	{
+		struct io_opaque_extent *extent;
+
+		list_for_each_entry(extent, &data->extents, list)
+			io_opaque_backing_done(store, extent->backing, false);
+	}
+	goto retry;
+}
+
 void io_opaque_data_put(struct io_opaque_store *store,
 			struct io_opaque_data *data)
 {
-	if (data && refcount_dec_and_test(&data->refs)) {
-		io_opaque_extents_free(store, &data->extents);
-		kvfree(data->bvec);
-		kfree(data);
+	bool extents = false;
+	u64 charge = io_opaque_data_release(store, data, &extents);
+
+	if (charge)
+		io_opaque_uncharge_quiet(store, charge);
+	if (extents)
+		io_opaque_wake_budget_all(store);
+}
+
+static u64 io_opaque_compact_source_release(struct io_opaque_req *op,
+					    bool *extents)
+{
+	u64 charge;
+
+	charge = io_opaque_data_release(op->store, op->data, extents);
+	op->data = NULL;
+	return charge;
+}
+
+static bool io_opaque_handoff_idle(struct io_opaque_handoff *handoff)
+{
+	return !READ_ONCE(handoff->pending);
+}
+
+static void io_opaque_handoff_wait(struct io_opaque_handoff *handoff)
+{
+	wait_event(handoff->wait, io_opaque_handoff_idle(handoff));
+}
+
+/* Settle source credits, replacement ownership and its exclusion together. */
+void io_opaque_compact_end(struct io_opaque_req *op)
+{
+	struct io_opaque_store *store = op->store;
+	struct io_opaque_handoff *handoff = op->handoff;
+	bool extents = false;
+	u64 charge = op->reserved;
+
+	charge += io_opaque_compact_source_release(op, &extents);
+	charge += io_opaque_data_release(store, op->replacement, &extents);
+	op->replacement = NULL;
+	for (;;) {
+		struct io_opaque_data *published = op->published;
+
+		spin_lock(&store->transient_lock);
+		if (handoff && handoff->pending) {
+			spin_unlock(&store->transient_lock);
+			io_opaque_handoff_wait(handoff);
+			continue;
+		}
+		if (published) {
+			op->published = NULL;
+			if (!refcount_dec_not_one(&published->refs)) {
+				spin_unlock(&store->transient_lock);
+				charge += io_opaque_data_release(store, published, &extents);
+				continue;
+			}
+		}
+		if (handoff) {
+			charge += handoff->released;
+			handoff->active = false;
+		}
+		io_opaque_release_transient_locked(store, charge, op->transient);
+		spin_unlock(&store->transient_lock);
+		break;
 	}
+	if (charge || op->transient)
+		io_opaque_memory_mode(store);
+	op->handoff = NULL;
+	io_opaque_handoff_put(handoff);
+	op->reserved = 0;
+	op->transient = 0;
+	if (charge || extents)
+		io_opaque_wake_budget_all(store);
 }
 
 /*
@@ -705,6 +986,7 @@ struct io_opaque_store *io_opaque_alloc(struct io_ring_ctx *ctx,
 	for (i = 0; i < cfg.max_objects; i++)
 		INIT_LIST_HEAD(&store->objects[i].candidate);
 	INIT_DELAYED_WORK(&store->retry_work, io_opaque_retry_work);
+	INIT_DELAYED_WORK(&store->compact_work, io_opaque_compact_work);
 	return store;
 free_store:
 	bitmap_free(store->stream_used);
@@ -729,6 +1011,7 @@ void io_opaque_stop(struct io_opaque_store *store)
 			return;
 		WRITE_ONCE(store->dead, 1);
 	}
+	flush_delayed_work(&store->compact_work);
 	cancel_delayed_work_sync(&store->retry_work);
 	for (i = 0; i < store->config.max_streams; i++) {
 		struct io_opaque_stream *stream;
@@ -777,6 +1060,8 @@ void io_opaque_free(struct io_opaque_store *store)
 	if (!store)
 		return;
 	io_opaque_stop(store);
+	/* The dispatcher can requeue itself while stop flushes it. */
+	cancel_delayed_work_sync(&store->compact_work);
 	WARN_ON_ONCE(atomic64_read(&store->bytes));
 	WARN_ON_ONCE(atomic_read(&store->extents));
 	io_opaque_txs_free(store);
@@ -1817,6 +2102,12 @@ static int io_opaque_publish(struct io_opaque_req *op, u64 *object_flags)
 	op->slot_reserved = false;
 	slot->born = jiffies;
 	slot->retry = jiffies;
+	if (!slot->data->dense && !slot->data->forward_only &&
+	    (store->policy.flags & IORING_OPAQUE_POLICY_F_AUTO_COMPACT)) {
+		list_add_tail(&slot->candidate, &store->candidates);
+		queue_delayed_work(system_dfl_wq, &store->compact_work,
+				   msecs_to_jiffies(100));
+	}
 	return op->length;
 }
 
@@ -1831,7 +2122,8 @@ static void io_opaque_ready(struct io_tw_req tw_req, io_tw_token_t tw)
 	io_tw_lock(req->ctx, tw);
 	list_del_init(&op->cancel);
 	op->phase = IO_OPAQUE_IDLE;
-	if (tw.cancel || READ_ONCE(op->canceled) || READ_ONCE(store->dead))
+	if ((tw.cancel || READ_ONCE(op->canceled) || READ_ONCE(store->dead)) &&
+	    !(op->op == IORING_OPAQUE_COMPACT && op->copy_committed))
 		ret = -ECANCELED;
 	if (ret >= 0 && op->op == IORING_OPAQUE_INSPECT)
 		ret = io_opaque_copy(op->data, 0, op->data->length, op->addr);
@@ -1883,7 +2175,6 @@ int io_opaque_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	if (READ_ONCE(sqe->fd) != -1 || READ_ONCE(sqe->rw_flags) ||
 	    READ_ONCE(sqe->buf_index) || READ_ONCE(sqe->__pad2[0]) ||
 	    cmd > IORING_OPAQUE_AVAILABLE ||
-	    cmd == IORING_OPAQUE_COMPACT || cmd == IORING_OPAQUE_SET_POLICY ||
 	    (req->flags & (REQ_F_CQE_SKIP | REQ_F_FIXED_FILE)))
 		return -EINVAL;
 	op = io_opaque_req_alloc(req, store);
@@ -1931,14 +2222,17 @@ int io_opaque_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	} else if (op->offset) {
 		return -EINVAL;
 	}
-	if (cmd == IORING_OPAQUE_FREE || cmd == IORING_OPAQUE_STREAM_CLOSE) {
+	if (cmd == IORING_OPAQUE_FREE || cmd == IORING_OPAQUE_STREAM_CLOSE ||
+	    cmd == IORING_OPAQUE_COMPACT) {
 		if (op->length || op->addr)
 			return -EINVAL;
 	}
-	if (cmd == IORING_OPAQUE_STAT) {
+	if (cmd == IORING_OPAQUE_STAT || cmd == IORING_OPAQUE_SET_POLICY) {
 		if (op->handle || !op->addr)
 			return -EINVAL;
 	}
+	if (cmd == IORING_OPAQUE_SET_POLICY)
+		return io_opaque_policy_prep(op);
 	return 0;
 }
 
@@ -2251,6 +2545,12 @@ int io_opaque_issue(struct io_kiocb *req, unsigned int issue_flags)
 			ret = -ESTALE;
 		}
 		break;
+	case IORING_OPAQUE_COMPACT:
+		ret = io_opaque_compact_start(op);
+		break;
+	case IORING_OPAQUE_SET_POLICY:
+		ret = io_opaque_set_policy(op);
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -2274,7 +2574,8 @@ static bool io_opaque_cancel_req(struct io_opaque_req *op)
 		mutex_lock(&op->stream->lock);
 	spin_lock(&op->store->wait_lock);
 	phase = op->phase;
-	if (op->canceled || phase == IO_OPAQUE_IDLE) {
+	if (op->canceled || phase == IO_OPAQUE_IDLE ||
+	    (op->op == IORING_OPAQUE_COMPACT && op->copy_committed)) {
 		spin_unlock(&op->store->wait_lock);
 		if (op->stream)
 			mutex_unlock(&op->stream->lock);
@@ -2411,6 +2712,8 @@ void io_opaque_cleanup(struct io_kiocb *req)
 		io_opaque_vec_cleanup(op);
 	if (op->op == IORING_OPAQUE_CREATE)
 		io_opaque_create_release(op);
+	else if (op->op == IORING_OPAQUE_COMPACT)
+		io_opaque_compact_end(op);
 	else
 		io_opaque_data_put(store, op->data);
 	io_opaque_stream_put(op->stream);
