@@ -1452,7 +1452,7 @@ impl IoBackend for SysMemBackend {
         ptr: *mut U,
     ) -> Self::View<'a, U> {
         // INVARIANT: Per safety requirement, `ptr` is projection from `view`, so it is also a valid
-        // kernel accessible memory region.
+        // kernel accessible memory region that is free of plain accesses.
         SysMem {
             ptr,
             phantom: PhantomData,
@@ -1470,8 +1470,9 @@ macro_rules! impl_sysmem_io_capable {
                 // SAFETY:
                 // - Per type invariant, `ptr` is valid and aligned.
                 // - Using read_volatile() here so that race with hardware is well-defined.
-                // - Using read_volatile() here is not sound if it races with other CPU per Rust
-                //   rules, but this is allowed per LKMM.
+                // - Per type invariant, no plain access races with this read. Racing with atomic
+                //   or volatile accesses from other CPUs is not sound per Rust rules, but this is
+                //   allowed per LKMM.
                 // - The macro is only used on primitives so all bit patterns are valid.
                 unsafe { view.ptr.read_volatile() }
             }
@@ -1481,8 +1482,9 @@ macro_rules! impl_sysmem_io_capable {
                 // SAFETY:
                 // - Per type invariant, `ptr` is valid and aligned.
                 // - Using write_volatile() here so that race with hardware is well-defined.
-                // - Using write_volatile() here is not sound if it races with other CPU per Rust
-                //   rules, but this is allowed per LKMM.
+                // - Per type invariant, no plain access races with this write. Racing with atomic
+                //   or volatile accesses from other CPUs is not sound per Rust rules, but this is
+                //   allowed per LKMM.
                 unsafe { view.ptr.write_volatile(value) }
             }
         }
@@ -1519,8 +1521,9 @@ impl IoCopyable for SysMemBackend {
         // SAFETY:
         // - Per type invariant, `ptr` is valid and aligned.
         // - Using read_volatile() here so that race with hardware is well-defined.
-        // - Using read_volatile() here is not sound if it races with other CPU per Rust
-        //   rules, but this is allowed per LKMM.
+        // - Per type invariant, no plain access races with this read. Racing with atomic or
+        //   volatile accesses from other CPUs is not sound per Rust rules, but this is allowed
+        //   per LKMM.
         // - `T: FromBytes` so all bit patterns are valid.
         unsafe { view.ptr.read_volatile() }
     }
@@ -1530,22 +1533,31 @@ impl IoCopyable for SysMemBackend {
         // SAFETY:
         // - Per type invariant, `ptr` is valid and aligned.
         // - Using write_volatile() here so that race with hardware is well-defined.
-        // - Using write_volatile() here is not sound if it races with other CPU per Rust
-        //   rules, but this is allowed per LKMM.
+        // - Per type invariant, no plain access races with this write. Racing with atomic or
+        //   volatile accesses from other CPUs is not sound per Rust rules, but this is allowed
+        //   per LKMM.
         unsafe { view.ptr.write_volatile(value) }
     }
 }
 
 /// A view of a system memory region.
 ///
-/// Provides `Io` trait implementation for kernel virtual address ranges,
-/// using volatile read/write to safely access shared memory that may be
-/// concurrently accessed by external hardware.
+/// Provides `Io` trait implementation for kernel virtual address ranges, using volatile or
+/// byte-wise atomic accesses to safely access shared memory that may be concurrently accessed by
+/// external actors, such as hardware or user space threads, or by other kernel code using atomic or
+/// volatile accesses.
+///
+/// Accesses through a `SysMem` are never plain accesses. A plain access is a non-atomic,
+/// non-volatile access performed by kernel code, whether in C or in Rust. A plain access that
+/// races with any other access to the same memory is a data race, and therefore undefined
+/// behavior. Accesses performed by hardware or by user space are not plain accesses in this sense.
+/// Racing with them is well-defined, but the data observed may be arbitrary.
 ///
 /// # Invariants
 ///
-/// `self.ptr.addr() .. self.ptr.addr() + KnownSize::size(self.ptr)` is valid and aligned kernel
-/// accessible memory region for the lifetime `'a`.
+/// - `self.ptr.addr() .. self.ptr.addr() + KnownSize::size(self.ptr)` is valid and aligned kernel
+///   accessible memory region for the lifetime `'a`.
+/// - No plain access to that memory region is performed for the lifetime `'a`.
 pub struct SysMem<'a, T: ?Sized> {
     ptr: *mut T,
     phantom: PhantomData<&'a ()>,
@@ -1570,8 +1582,10 @@ impl<'a, T: ?Sized> SysMem<'a, T> {
     ///
     /// # Safety
     ///
-    /// `ptr.addr() .. ptr.addr() + KnownSize::size(ptr)` must be valid and aligned kernel
-    /// accessible memory region for the lifetime `'a`.
+    /// - `ptr.addr() .. ptr.addr() + KnownSize::size(ptr)` must be valid and aligned kernel
+    ///   accessible memory region for the lifetime `'a`.
+    /// - No plain access (see [`SysMem`]) to that memory region may be performed for the lifetime
+    ///   `'a`.
     #[inline]
     pub unsafe fn new(ptr: *mut T) -> Self {
         // INVARIANT: Per safety requirement.
