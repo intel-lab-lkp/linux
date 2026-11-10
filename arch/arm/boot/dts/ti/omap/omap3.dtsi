@@ -396,31 +396,91 @@
 			clock-frequency = <48000000>;
 		};
 
-		i2c1: i2c@48070000 {
-			compatible = "ti,omap3-i2c";
-			reg = <0x48070000 0x80>;
-			interrupts = <56>;
+		i2c1_target: target-module@48070000 {
+			compatible = "ti,sysc-omap2", "ti,sysc";
+			reg = <0x48070000 0x4>,
+			      <0x48070020 0x4>,
+			      <0x48070010 0x4>;
+			reg-names = "rev", "sysc", "syss";
+			ti,sysc-mask = <(SYSC_OMAP2_CLOCKACTIVITY |
+					 SYSC_OMAP2_ENAWAKEUP |
+					 SYSC_OMAP2_SOFTRESET |
+					 SYSC_OMAP2_AUTOIDLE)>;
+			ti-sysc-sidle = <SYSC_IDLE_FORCE>,
+					<SYSC_IDLE_NO>,
+					<SYSC_IDLE_SMART>;
+			ti,syss-mask = <1>;
+			clocks = <&i2c1_fck>, <&i2c1_ick>;
+			clock-names = "fck", "ick";
 			#address-cells = <1>;
-			#size-cells = <0>;
-			ti,hwmods = "i2c1";
+			#size-cells = <1>;
+			ranges = <0 0x48070000 0x1000>;
+
+			i2c1: i2c@0 {
+				compatible = "ti,omap3-i2c";
+				reg = <0x0 0x80>;
+				interrupts = <56>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
 		};
 
-		i2c2: i2c@48072000 {
-			compatible = "ti,omap3-i2c";
-			reg = <0x48072000 0x80>;
-			interrupts = <57>;
+		i2c2_target: target-module@48072000 {
+			compatible = "ti,sysc-omap2", "ti,sysc";
+			reg = <0x48072000 0x4>,
+			      <0x48072020 0x4>,
+			      <0x48072010 0x4>;
+			reg-names = "rev", "sysc", "syss";
+			ti,sysc-mask = <(SYSC_OMAP2_CLOCKACTIVITY |
+					 SYSC_OMAP2_ENAWAKEUP |
+					 SYSC_OMAP2_SOFTRESET |
+					 SYSC_OMAP2_AUTOIDLE)>;
+			ti-sysc-sidle = <SYSC_IDLE_FORCE>,
+					<SYSC_IDLE_NO>,
+					<SYSC_IDLE_SMART>;
+			ti,syss-mask = <1>;
+			clocks = <&i2c2_fck>, <&i2c2_ick>;
+			clock-names = "fck", "ick";
 			#address-cells = <1>;
-			#size-cells = <0>;
-			ti,hwmods = "i2c2";
+			#size-cells = <1>;
+			ranges = <0 0x48072000 0x1000>;
+
+			i2c2: i2c@0 {
+				compatible = "ti,omap3-i2c";
+				reg = <0x0 0x80>;
+				interrupts = <57>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
 		};
 
-		i2c3: i2c@48060000 {
-			compatible = "ti,omap3-i2c";
-			reg = <0x48060000 0x80>;
-			interrupts = <61>;
+		i2c3_target: target-module@48060000 {
+			compatible = "ti,sysc-omap2", "ti,sysc";
+			reg = <0x48060000 0x4>,
+			      <0x48060020 0x4>,
+			      <0x48060010 0x4>;
+			reg-names = "rev", "sysc", "syss";
+			ti,sysc-mask = <(SYSC_OMAP2_CLOCKACTIVITY |
+					 SYSC_OMAP2_ENAWAKEUP |
+					 SYSC_OMAP2_SOFTRESET |
+					 SYSC_OMAP2_AUTOIDLE)>;
+			ti-sysc-sidle = <SYSC_IDLE_FORCE>,
+					<SYSC_IDLE_NO>,
+					<SYSC_IDLE_SMART>;
+			ti,syss-mask = <1>;
+			clocks = <&i2c3_fck>, <&i2c3_ick>;
+			clock-names = "fck", "ick";
 			#address-cells = <1>;
-			#size-cells = <0>;
-			ti,hwmods = "i2c3";
+			#size-cells = <1>;
+			ranges = <0 0x48060000 0x1000>;
+
+			i2c3: i2c@0 {
+				compatible = "ti,omap3-i2c";
+				reg = <0x0 0x80>;
+				interrupts = <61>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+			};
 		};
 
 		mailbox: mailbox@48094000 {
