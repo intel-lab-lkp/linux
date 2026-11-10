@@ -736,4 +736,5 @@ static struct pci_driver nhi_driver = {
 	.shutdown = nhi_pci_shutdown,
 	.driver.pm = &tb_nhi_pm_ops,
 };
+
 module_pci_driver(nhi_driver);

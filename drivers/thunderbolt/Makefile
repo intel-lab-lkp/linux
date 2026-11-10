@@ -8,6 +8,9 @@ thunderbolt-objs += usb4_port.o nvm.o retimer.o quirks.o clx.o
 obj-${CONFIG_USB4_PCI} += thunderbolt_pci.o
 thunderbolt_pci-y := pci.o icm.o
 
+obj-${CONFIG_USB4_PLATFORM} += thunderbolt_platform.o
+thunderbolt_platform-y := platform.o
+
 thunderbolt-${CONFIG_ACPI} += acpi.o
 thunderbolt-$(CONFIG_DEBUG_FS) += debugfs.o
 thunderbolt-$(CONFIG_USB4_CONFIGFS) += configfs.o
