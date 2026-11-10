@@ -1601,8 +1601,27 @@ impl Thread {
             UserSlice::new(UserPtr::from_addr(read_start as usize), read_len as usize).writer(),
             self,
         );
+        // Reserve some room at the beginning of the read buffer so that we can send a
+        // BR_SPAWN_LOOPER if we need to.
+        let mut has_noop_placeholder = false;
+        if req.read_consumed == 0 {
+            if let Err(err) = writer.write_code(BR_NOOP) {
+                pr_warn_ratelimited!("Failure when writing BR_NOOP at beginning of buffer.\n");
+                return Err(err);
+            }
+            has_noop_placeholder = true;
+        }
+
         let (in_pool, has_transaction, thread_todo, use_proc_queue) = {
-            let inner = self.inner.lock();
+            let mut inner = self.inner.lock();
+            if inner.should_use_process_work_queue() {
+                let deferred_size: usize = inner.work_list.iter().map(|w| w.size()).sum();
+                if writer.len()
+                    < size_of::<uapi::binder_transaction_data_secctx>() + 4 + deferred_size
+                {
+                    inner.process_work_list = !inner.work_list.is_empty();
+                }
+            }
             (
                 inner.is_looper(),
                 inner.current_transaction.is_some(),
@@ -1618,17 +1637,6 @@ impl Thread {
         } else {
             Self::get_work_local
         };
-
-        // Reserve some room at the beginning of the read buffer so that we can send a
-        // BR_SPAWN_LOOPER if we need to.
-        let mut has_noop_placeholder = false;
-        if req.read_consumed == 0 {
-            if let Err(err) = writer.write_code(BR_NOOP) {
-                pr_warn_ratelimited!("Failure when writing BR_NOOP at beginning of buffer.\n");
-                return Err(err);
-            }
-            has_noop_placeholder = true;
-        }
 
         // Loop doing work while there is room in the buffer.
         let initial_len = writer.len();
@@ -1798,6 +1806,10 @@ impl DeliverToRead for ThreadError {
 
     fn should_sync_wakeup(&self) -> bool {
         false
+    }
+
+    fn size(&self) -> usize {
+        size_of::<u32>()
     }
 
     fn debug_print(&self, m: &SeqFile, prefix: &str, _tprefix: &str) -> Result {
