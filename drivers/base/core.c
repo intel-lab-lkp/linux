@@ -2241,8 +2241,20 @@ static int fw_devlink_create_devlink(struct device *con,
 		}
 
 		if (con != sup_dev && !device_link_add(con, sup_dev, flags)) {
-			dev_err(con, "Failed to create device link (0x%x) with supplier %s for %pfwf\n",
-				flags, dev_name(sup_dev), link->consumer);
+			/*
+			 * A SYNC_STATE_ONLY link only orders sync_state() and
+			 * is refused once the consumer has probed. That is
+			 * expected when a consumer that probes early (e.g. a
+			 * power domain provider referencing a regulator
+			 * supplier that is added later) is linked to a late
+			 * supplier, so don't report it as an error.
+			 */
+			if (device_link_flag_is_sync_state_only(flags))
+				dev_dbg(con, "Not creating sync_state-only device link (0x%x) with supplier %s for %pfwf\n",
+					flags, dev_name(sup_dev), link->consumer);
+			else
+				dev_err(con, "Failed to create device link (0x%x) with supplier %s for %pfwf\n",
+					flags, dev_name(sup_dev), link->consumer);
 			ret = -EINVAL;
 		}
 
