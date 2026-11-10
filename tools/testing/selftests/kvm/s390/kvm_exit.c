@@ -37,6 +37,10 @@ int capget(cap_user_header_t header, cap_user_data_t data);
 #define STSI_IPA 0xb27d
 #define TSCH_IPA 0xb235
 #define STSCH_IPA 0xb234
+#define EXPECTED_STORAGE_KEY 0x20
+#define IPA_SUBOPCODE_MASK_SKEY 0xff
+#define SSKE_SUBOPCODE 0x2b
+#define SSKE_OPCODE 0xb2
 #define PSW_WAIT_BIT_MASK (1ULL << (63 - 14))
 #define PGM_CODE_GPA_ADDRESS 0x8e
 #define PGM_CODE_MASK        0x7f
@@ -120,6 +124,15 @@ static struct kvm_parameters manual_kvm_creation_execution(struct kvm_parameters
 	/* Point r15 at a valid guest stack below the code page */
 	param.run->s.regs.gprs[15] = CODE_GPA - 160;
 	param.run->kvm_dirty_regs |= KVM_SYNC_GPRS;
+
+	if (param.manual_parameters.immediate_exit_condition) {
+		param.run->immediate_exit = 1;
+		param.run->s.regs.gprs[3] = 0xdead;
+		param.run->kvm_dirty_regs |= KVM_SYNC_GPRS;
+		rc = ioctl(param.manual_parameters.vcpu_fd, KVM_RUN, NULL);
+		TEST_ASSERT(rc == -1 && errno == EINTR, "KVM_RUN failed (%d)", errno);
+		return param;
+	}
 
 	rc = ioctl(param.manual_parameters.vcpu_fd, KVM_RUN, NULL);
 	TEST_ASSERT(rc == 0, "KVM_RUN failed (%d)", errno);
@@ -585,6 +598,90 @@ static bool test_io_instruction_code(void)
 	return true;
 }
 
+static void guestcode_storage_key(void)
+{
+	asm volatile(
+		"lghi %%r3, 0\n"
+		"lghi %%r2, %[skey]\n"
+		"sske %%r2, %%r3\n"
+		:
+		: [skey] "i" (EXPECTED_STORAGE_KEY)
+		: "r3", "r2"
+	);
+}
+
+static bool test_storage_key_interrupt(void)
+{
+	struct kvm_parameters parameters = {
+		.guest_code = guestcode_storage_key,
+		.manual_parameters.immediate_exit_condition = false,
+	};
+
+	if (!ucontrol_available())
+		return false;
+
+	ksft_print_msg("Testing Storage Key Interrupt KVM Exit\n");
+	parameters = manual_kvm_creation_execution(parameters);
+
+	/* Skip on hosts where sclp.has_kss is false. */
+	if (!(parameters.manual_parameters.sie_block->cpuflags & CPUSTAT_KSS)) {
+		manual_cleanup(parameters);
+		return false;
+	}
+
+	TEST_ASSERT(parameters.run->exit_reason == KVM_EXIT_S390_SIEIC,
+		    "Expected KVM_EXIT_S390_SIEIC, got %u\n", parameters.run->exit_reason);
+	TEST_ASSERT(parameters.run->s390_sieic.icptcode == ICPT_KSS,
+		    "Failed with Unexpected Exit Reason of %u and icptcode of 0x%x\n",
+		    parameters.run->exit_reason, parameters.run->s390_sieic.icptcode);
+	TEST_ASSERT((parameters.run->s390_sieic.ipa & IPA_SUBOPCODE_MASK_SKEY) == SSKE_SUBOPCODE,
+		    "Expected SSKE Sub Opcode of 0x2B, Result of 0x%x\n",
+		    parameters.run->s390_sieic.ipa & IPA_SUBOPCODE_MASK_SKEY);
+	TEST_ASSERT((parameters.run->s390_sieic.ipa >> 8) == SSKE_OPCODE,
+		    "Expected SSKE Opcode of 0xb2, Actual of 0x%x\n",
+		    parameters.run->s390_sieic.ipa >> 8);
+	TEST_ASSERT(parameters.run->s.regs.gprs[2] == EXPECTED_STORAGE_KEY,
+		    "Storage Key not stored correctly, got 0x%llx\n",
+		    parameters.run->s.regs.gprs[2]);
+
+	manual_cleanup(parameters);
+	return true;
+}
+
+static void guestcode_immediate_exit(void)
+{
+	asm volatile(
+		"lghi %%r3, 0x3333\n"
+		:
+		:
+		: "r3"
+	);
+}
+
+static bool test_immediate_exit(void)
+{
+	struct kvm_parameters parameters = {
+		.guest_code = guestcode_immediate_exit,
+		.manual_parameters.immediate_exit_condition = true,
+	};
+
+	if (!ucontrol_available())
+		return false;
+
+	ksft_print_msg("Testing KVM Immediate Exit\n");
+	parameters = manual_kvm_creation_execution(parameters);
+
+	TEST_ASSERT(parameters.run->exit_reason == KVM_EXIT_UNKNOWN,
+		    "Expected KVM_EXIT_UNKNOWN (0), got %u\n",
+		    parameters.run->exit_reason);
+	TEST_ASSERT(parameters.run->s.regs.gprs[3] == 0xdead,
+		    "Guest code executed when it should not have: r3=0x%llx\n",
+			parameters.run->s.regs.gprs[3]);
+
+	manual_cleanup(parameters);
+	return true;
+}
+
 static void test(void)
 {
 	int i;
@@ -629,6 +726,16 @@ static void test(void)
 		{
 			.name = "Testing IO Instruction Exits",
 			.test = test_io_instruction_code,
+			.skip_reason = "KVM_CAP_S390_UCONTROL unavailable or insufficient privilege"
+		},
+		{
+			.name = "Testing Storage Key Interrupts",
+			.test = test_storage_key_interrupt,
+			.skip_reason = "KVM_CAP_S390_UCONTROL, privilege or KSS unavailable"
+		},
+		{
+			.name = "Testing Immediate Exit",
+			.test = test_immediate_exit,
 			.skip_reason = "KVM_CAP_S390_UCONTROL unavailable or insufficient privilege"
 		},
 	};
