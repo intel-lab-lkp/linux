@@ -203,12 +203,13 @@ static bool wb_wait_for_completion_cb(struct wb_completion *done,
 	unsigned long waited_secs = (jiffies - done->wait_start) / HZ;
 	int left = atomic_read(&done->cnt);
 
-	done->progress_stamp = jiffies;
-	if (left && timeout && (waited_secs > timeout))
+	if (left && timeout &&
+	    time_after(jiffies, done->progress_stamp + timeout * HZ))
 		pr_info("INFO: The task %s:%d has been waiting for writeback "
 			"completion for more than %lu seconds (bdi %s, work items left: %d).\n",
 			current->comm, current->pid, waited_secs,
 			bdi_dev_name(bdi), left);
+	done->progress_stamp = jiffies;
 
 	return !left;
 }
@@ -230,6 +231,7 @@ void wb_wait_for_completion(struct wb_completion *done,
 	unsigned long timeout, waited;
 
 	done->wait_start = jiffies;
+	done->progress_stamp = done->wait_start;
 	atomic_dec(&done->cnt);		/* put down the initial count */
 	wait_event(*done->waitq, wb_wait_for_completion_cb(done, bdi));
 
@@ -2135,7 +2137,7 @@ static long writeback_sb_inodes(struct super_block *sb,
 
 		/* Report progress to inform the hung task detector of the progress. */
 		if (work->done && work->done->progress_stamp && timeout &&
-		   (jiffies - work->done->progress_stamp) > HZ * timeout / 2)
+		   (jiffies - work->done->progress_stamp) > HZ * timeout)
 			wake_up_all(work->done->waitq);
 
 		wbc_detach_inode(&wbc);
