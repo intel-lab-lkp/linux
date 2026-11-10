@@ -14,13 +14,17 @@
 #include <linux/lsm_hooks.h>
 #include <uapi/linux/lsm.h>
 
+static const char lockdown_label_none[] = "none";
+static const char lockdown_label_integrity[] = "integrity";
+static const char lockdown_label_confidentiality[] = "confidentiality";
+
 /*
  * These are descriptions of the reasons that can be passed to the
  * security_locked_down() LSM hook, used for the denial message and the
  * securityfs status file.
  */
 static const char *const lockdown_reasons[LOCKDOWN_CONFIDENTIALITY_MAX + 1] = {
-	[LOCKDOWN_NONE] = "none",
+	[LOCKDOWN_NONE] = lockdown_label_none,
 	[LOCKDOWN_MODULE_SIGNATURE] = "unsigned module loading",
 	[LOCKDOWN_DEV_MEM] = "/dev/mem,kmem,port",
 	[LOCKDOWN_EFI_TEST] = "/dev/efi_test access",
@@ -41,7 +45,7 @@ static const char *const lockdown_reasons[LOCKDOWN_CONFIDENTIALITY_MAX + 1] = {
 	[LOCKDOWN_DBG_WRITE_KERNEL] = "use of kgdb/kdb to write kernel RAM",
 	[LOCKDOWN_RTAS_ERROR_INJECTION] = "RTAS error injection",
 	[LOCKDOWN_XEN_USER_ACTIONS] = "Xen guest user action",
-	[LOCKDOWN_INTEGRITY_MAX] = "integrity",
+	[LOCKDOWN_INTEGRITY_MAX] = lockdown_label_integrity,
 	[LOCKDOWN_KCORE] = "/proc/kcore access",
 	[LOCKDOWN_KPROBES] = "use of kprobes",
 	[LOCKDOWN_BPF_READ_KERNEL] = "use of bpf to read kernel RAM",
@@ -50,7 +54,7 @@ static const char *const lockdown_reasons[LOCKDOWN_CONFIDENTIALITY_MAX + 1] = {
 	[LOCKDOWN_TRACEFS] = "use of tracefs",
 	[LOCKDOWN_XMON_RW] = "xmon read and write access",
 	[LOCKDOWN_XFRM_SECRET] = "xfrm SA secret",
-	[LOCKDOWN_CONFIDENTIALITY_MAX] = "confidentiality",
+	[LOCKDOWN_CONFIDENTIALITY_MAX] = lockdown_label_confidentiality,
 };
 
 static enum lockdown_reason kernel_locked_down;
@@ -137,6 +141,16 @@ static ssize_t lockdown_read(struct file *filp, char __user *buf, size_t count,
 	char temp[80] = "";
 	int i, offset = 0;
 
+	/*
+	 * Size the buffer for the worst case: the active level is
+	 * confidentiality, with brackets and trailing spaces, plus the
+	 * terminating NUL.  The label sizeof() values include their own
+	 * NULs, so only three more bytes are needed.
+	 */
+	BUILD_BUG_ON(sizeof(temp) < sizeof(lockdown_label_none) +
+				    sizeof(lockdown_label_integrity) +
+				    sizeof(lockdown_label_confidentiality) + 3);
+
 	for (i = 0; i < ARRAY_SIZE(lockdown_levels); i++) {
 		enum lockdown_reason level = lockdown_levels[i];
 
@@ -144,9 +158,13 @@ static ssize_t lockdown_read(struct file *filp, char __user *buf, size_t count,
 			const char *label = lockdown_reasons[level];
 
 			if (kernel_locked_down == level)
-				offset += sprintf(temp+offset, "[%s] ", label);
+				offset += scnprintf(temp + offset,
+						    sizeof(temp) - offset,
+						    "[%s] ", label);
 			else
-				offset += sprintf(temp+offset, "%s ", label);
+				offset += scnprintf(temp + offset,
+						    sizeof(temp) - offset,
+						    "%s ", label);
 		}
 	}
 
