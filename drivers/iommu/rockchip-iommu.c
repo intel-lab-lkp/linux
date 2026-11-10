@@ -564,6 +564,17 @@ static void log_iova(struct rk_iommu *iommu, int index, dma_addr_t iova)
 	mmu_dte_addr = rk_iommu_read(base, RK_MMU_DTE_ADDR);
 	mmu_dte_addr_phys = iommu->rk_ops->pt_address(mmu_dte_addr);
 
+	/*
+	 * A reset of the master can reset its IOMMU too, between the fault and
+	 * this handler: DTE_ADDR then reads 0. Don't walk a directory that
+	 * isn't in memory; the caller still acknowledges the fault.
+	 */
+	if (!mmu_dte_addr || !pfn_valid(PHYS_PFN(mmu_dte_addr_phys))) {
+		dev_err(iommu->dev, "iova = %pad: fault while page table lost to reset (MMU_DTE_ADDR %#08x)\n",
+			&iova, mmu_dte_addr);
+		return;
+	}
+
 	dte_addr_phys = mmu_dte_addr_phys + (4 * dte_index);
 	dte_addr = phys_to_virt(dte_addr_phys);
 	dte = *dte_addr;
