@@ -672,7 +672,7 @@ static int restore_zt_context(struct user_ctxs *user)
 	u16 nregs;
 
 	/* ZA must be restored first for this check to be valid */
-	if (!thread_za_enabled(&current->thread))
+	if (!user->za || !thread_za_enabled(&current->thread))
 		return -EINVAL;
 
 	if (user->zt_size != ZT_SIG_CONTEXT_SIZE(1))
