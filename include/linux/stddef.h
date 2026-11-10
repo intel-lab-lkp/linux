@@ -194,4 +194,16 @@ enum {
 #define TRAILING_OVERLAP(TYPE, NAME, FAM, MEMBERS)				\
 	__TRAILING_OVERLAP(TYPE, NAME, FAM, /* no attrs */, MEMBERS)
 
+/**
+ * const_cast() - Drop const in the left-most derivation of a pointer
+ *
+ * @T: Type for the cast.
+ * @p: Pointer to be casted.
+ *
+ * If @p is of type const @T, then it is casted to @T.
+ * Otherwise, @p is returned without any casts.
+ * This avoids mistakes that change anything other than 'const' in a cast.
+ */
+#define const_cast(T, p)  _Generic(p, const T: (T) (p), default: (p))
+
 #endif
