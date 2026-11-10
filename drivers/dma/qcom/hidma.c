@@ -155,6 +155,13 @@ static void hidma_process_completed(struct hidma_chan *mchan)
 	}
 }
 
+static void hidma_chan_bh(struct dma_chan *chan)
+{
+	struct hidma_chan *mchan = to_hidma_chan(chan);
+
+	hidma_process_completed(mchan);
+}
+
 /*
  * Called once for each submitted descriptor.
  * PM is locked once for each descriptor that is currently
@@ -181,7 +188,7 @@ static void hidma_callback(void *data)
 	}
 	spin_unlock_irqrestore(&mchan->lock, irqflags);
 
-	hidma_process_completed(mchan);
+	dmaengine_schedule_bh(&mchan->chan);
 
 	if (queued) {
 		pm_runtime_mark_last_busy(dmadev->ddev.dev);
@@ -203,6 +210,7 @@ static int hidma_chan_init(struct hidma_dev *dmadev, u32 dma_sig)
 	mchan->dmadev = dmadev;
 	mchan->chan.device = ddev;
 	dma_cookie_init(&mchan->chan);
+	dmaengine_init_bh(&mchan->chan, hidma_chan_bh);
 
 	INIT_LIST_HEAD(&mchan->free);
 	INIT_LIST_HEAD(&mchan->prepared);
@@ -529,6 +537,11 @@ static int hidma_terminate_all(struct dma_chan *chan)
 	return rc;
 }
 
+static void hidma_synchronize(struct dma_chan *dmach)
+{
+	dmaengine_kill_bh(dmach);
+}
+
 static void hidma_free_chan_resources(struct dma_chan *dmach)
 {
 	struct hidma_chan *mchan = to_hidma_chan(dmach);
@@ -539,6 +552,9 @@ static void hidma_free_chan_resources(struct dma_chan *dmach)
 
 	/* terminate running transactions and free descriptors */
 	hidma_terminate_channel(dmach);
+
+	/* drain completion work before the descriptors go away */
+	dmaengine_kill_bh(dmach);
 
 	spin_lock_irqsave(&mchan->lock, irqflags);
 
@@ -813,6 +829,7 @@ static int hidma_probe(struct platform_device *pdev)
 	dmadev->ddev.device_pause = hidma_pause;
 	dmadev->ddev.device_resume = hidma_resume;
 	dmadev->ddev.device_terminate_all = hidma_terminate_all;
+	dmadev->ddev.device_synchronize = hidma_synchronize;
 	dmadev->ddev.copy_align = 8;
 
 	/*
@@ -913,6 +930,7 @@ static void hidma_shutdown(struct platform_device *pdev)
 static void hidma_remove(struct platform_device *pdev)
 {
 	struct hidma_dev *dmadev = platform_get_drvdata(pdev);
+	struct dma_chan *chan;
 
 	pm_runtime_get_sync(dmadev->ddev.dev);
 	dma_async_device_unregister(&dmadev->ddev);
@@ -922,6 +940,10 @@ static void hidma_remove(struct platform_device *pdev)
 		hidma_free_msis(dmadev);
 
 	tasklet_kill(&dmadev->task);
+	/* the low-level completion tasklet schedules the channel BH */
+	tasklet_kill(&dmadev->lldev->task);
+	list_for_each_entry(chan, &dmadev->ddev.channels, device_node)
+		dmaengine_kill_bh(chan);
 	hidma_sysfs_uninit(dmadev);
 	hidma_debug_uninit(dmadev);
 	hidma_ll_uninit(dmadev->lldev);
