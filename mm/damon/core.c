@@ -3993,14 +3993,12 @@ static int kdamond_wait_activation(struct damon_ctx *ctx)
 
 	while (!kdamond_need_stop(ctx)) {
 		unsigned long min_wait_time = 0;
-		bool init_wait_time = false;
 
 		damon_for_each_scheme(s, ctx) {
 			wait_time = damos_wmark_wait_us(s);
-			if (!init_wait_time || wait_time < min_wait_time) {
-				init_wait_time = true;
+			if (list_is_first(&s->list, &ctx->schemes) ||
+			    wait_time < min_wait_time)
 				min_wait_time = wait_time;
-			}
 		}
 		if (!min_wait_time)
 			return 0;
