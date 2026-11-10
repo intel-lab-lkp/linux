@@ -461,13 +461,11 @@ struct d40_base;
  * @lock: A spinlock to protect this struct.
  * @log_num: The logical number, if any of this channel.
  * @pending_tx: The number of pending transfers. Used between interrupt handler
- * and tasklet.
+ * and bottom half.
  * @busy: Set to true when transfer is ongoing on this channel.
  * @phy_chan: Pointer to physical channel which this instance runs on. If this
  * point is NULL, then the channel is not allocated.
  * @chan: DMA engine handle.
- * @tasklet: Tasklet that gets scheduled from interrupt context to complete a
- * transfer and call client callback.
  * @client: Cliented owned descriptor list.
  * @pending_queue: Submitted jobs, to be issued by issue_pending()
  * @active: Active descriptor.
@@ -494,7 +492,6 @@ struct d40_chan {
 	bool				 busy;
 	struct d40_phy_res		*phy_chan;
 	struct dma_chan			 chan;
-	struct tasklet_struct		 tasklet;
 	struct list_head		 client;
 	struct list_head		 pending_queue;
 	struct list_head		 active;
@@ -1646,7 +1643,7 @@ static struct d40_desc *d40_queue_start(struct d40_chan *d40c)
 					d40c->pending_tx++;
 					d40d = d40_first_queued(d40c);
 				} while (d40d);
-				tasklet_schedule(&d40c->tasklet);
+				dmaengine_schedule_bh(&d40c->chan);
 				return ERR_PTR(err);
 			}
 			d40c->busy = true;
@@ -1670,7 +1667,7 @@ static struct d40_desc *d40_queue_start(struct d40_chan *d40c)
 			d40c->pending_tx++;
 			d40c->busy = false;
 			pm_runtime_put_autosuspend(d40c->base->dev);
-			tasklet_schedule(&d40c->tasklet);
+			dmaengine_schedule_bh(&d40c->chan);
 			return ERR_PTR(err);
 		}
 	}
@@ -1730,13 +1727,13 @@ static void dma_tc_handle(struct d40_chan *d40c)
 	}
 
 	d40c->pending_tx += callbacks;
-	tasklet_schedule(&d40c->tasklet);
+	dmaengine_schedule_bh(&d40c->chan);
 
 }
 
-static void dma_tasklet(struct tasklet_struct *t)
+static void dma_tasklet(struct dma_chan *chan)
 {
-	struct d40_chan *d40c = from_tasklet(d40c, t, tasklet);
+	struct d40_chan *d40c = container_of(chan, struct d40_chan, chan);
 	struct d40_desc *d40d;
 	unsigned long flags;
 	bool callback_active;
@@ -1786,7 +1783,7 @@ static void dma_tasklet(struct tasklet_struct *t)
 	d40c->pending_tx--;
 
 	if (d40c->pending_tx)
-		tasklet_schedule(&d40c->tasklet);
+		dmaengine_schedule_bh(&d40c->chan);
 
 	spin_unlock_irqrestore(&d40c->lock, flags);
 
@@ -3076,14 +3073,14 @@ static void __init d40_chan_init(struct d40_base *base, struct dma_device *dma,
 		INIT_LIST_HEAD(&d40c->client);
 		INIT_LIST_HEAD(&d40c->prepare_queue);
 
-		tasklet_setup(&d40c->tasklet, dma_tasklet);
+		dmaengine_init_bh(&d40c->chan, dma_tasklet);
 
 		list_add_tail(&d40c->chan.device_node,
 			      &dma->channels);
 	}
 }
 
-static void d40_kill_tasklets(void *data)
+static void d40_kill_bh(void *data)
 {
 	struct dma_device *dma = data;
 	struct d40_chan *d40c;
@@ -3091,7 +3088,7 @@ static void d40_kill_tasklets(void *data)
 
 	list_for_each_entry(chan, &dma->channels, device_node) {
 		d40c = container_of(chan, struct d40_chan, chan);
-		tasklet_kill(&d40c->tasklet);
+		dmaengine_kill_bh(&d40c->chan);
 	}
 }
 
@@ -3141,7 +3138,7 @@ static int __init d40_dmaengine_init(struct d40_base *base,
 
 	d40_ops_init(base, &base->dma_slave);
 
-	err = devm_add_action(base->dev, d40_kill_tasklets,
+	err = devm_add_action(base->dev, d40_kill_bh,
 			      &base->dma_slave);
 	if (err)
 		goto exit;
@@ -3161,7 +3158,7 @@ static int __init d40_dmaengine_init(struct d40_base *base,
 
 	d40_ops_init(base, &base->dma_memcpy);
 
-	err = devm_add_action(base->dev, d40_kill_tasklets,
+	err = devm_add_action(base->dev, d40_kill_bh,
 			      &base->dma_memcpy);
 	if (err)
 		goto exit;
@@ -3184,7 +3181,7 @@ static int __init d40_dmaengine_init(struct d40_base *base,
 
 	d40_ops_init(base, &base->dma_both);
 
-	err = devm_add_action(base->dev, d40_kill_tasklets,
+	err = devm_add_action(base->dev, d40_kill_bh,
 			      &base->dma_both);
 	if (err)
 		goto exit;
