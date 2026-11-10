@@ -61,6 +61,18 @@ enum io_uring_opaque_op {
 
 /* IORING_OP_OPAQUE_OBJ_SEND: sqe->ioprio contains these flags. */
 #define IORING_OPAQUE_SEND_LAST	(1U << 0)
+/* addr points at len struct io_uring_opaque_send_entry, off is zero: one send, many ranges. */
+#define IORING_OPAQUE_SEND_VECTOR	(1U << 1)
+/* Entries of one vectored send, as many as SEND_ZC takes iovecs (UIO_MAXIOV). */
+#define IORING_OPAQUE_SEND_VEC_MAX	1024
+
+/* One range of a vectored send, named as addr, off and len name it in a single one. */
+struct io_uring_opaque_send_entry {
+	__u64 handle;
+	__u64 off;
+	__u32 len;
+	__u32 __resv;
+};
 
 /* Optional SEND sqe->addr3 framing; size includes zero reserved extensions. */
 struct io_uring_opaque_frame {

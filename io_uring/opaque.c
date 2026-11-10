@@ -29,13 +29,23 @@ bool io_opaque_cache_init(struct io_ring_ctx *ctx)
 				   sizeof(struct io_opaque_req), sizeof(struct io_opaque_req));
 }
 
+/* Frees a request left in the cache, with the vector block it may carry. */
+static void io_opaque_req_destroy(const void *entry)
+{
+	const struct io_opaque_req *op = entry;
+
+	kvfree(op->vec);
+	kfree(entry);
+}
+
 void io_opaque_cache_free(struct io_ring_ctx *ctx)
 {
-	io_alloc_cache_free(&ctx->opaque_cache, kfree);
+	io_alloc_cache_free(&ctx->opaque_cache, io_opaque_req_destroy);
 }
 
 static void io_opaque_resume(struct io_tw_req tw_req, io_tw_token_t tw);
 static void io_opaque_ready(struct io_tw_req tw_req, io_tw_token_t tw);
+static void io_opaque_vec_cleanup(struct io_opaque_req *op);
 static void io_opaque_stream_close(struct io_opaque_stream *stream);
 static void io_opaque_tx_put(struct io_opaque_req *op);
 
@@ -783,7 +793,8 @@ static struct io_opaque_req *io_opaque_req_alloc(struct io_kiocb *req,
 	op = io_uring_alloc_async_data(&req->ctx->opaque_cache, req);
 	if (!op)
 		return ERR_PTR(-ENOMEM);
-	memset(op, 0, sizeof(*op));
+	/* Not the vector block, which a recycled request brings along. */
+	memset(op, 0, offsetof(struct io_opaque_req, vec));
 	op->op = U16_MAX;
 	op->req = req;
 	op->store = store;
@@ -792,6 +803,18 @@ static struct io_opaque_req *io_opaque_req_alloc(struct io_kiocb *req,
 	INIT_LIST_HEAD(&op->cancel);
 	req->flags |= REQ_F_NEED_CLEANUP;
 	return op;
+}
+
+/*
+ * A finished request goes back to its ring's cache, with the vector block it
+ * carries, or is freed with it when the cache is full.
+ */
+static void io_opaque_req_free(struct io_ring_ctx *ctx, struct io_opaque_req *op)
+{
+	if (!io_alloc_cache_put(&ctx->opaque_cache, op)) {
+		kvfree(op->vec);
+		kvfree(op);
+	}
 }
 
 /* The ring lock protects enrollment; wait_lock arbitrates remote wakeups. */
@@ -1675,10 +1698,12 @@ void io_opaque_cleanup(struct io_kiocb *req)
 		if (op->frame_charge)
 			io_opaque_uncharge_frame(store, op->frame_charge, op->frame_reserved);
 	}
+	if (unlikely(op->vec))
+		io_opaque_vec_cleanup(op);
 	io_opaque_data_put(store, op->data);
 	io_opaque_stream_put(op->stream);
 	lockdep_assert_held(&req->ctx->uring_lock);
-	io_cache_free(&req->ctx->opaque_cache, op);
+	io_opaque_req_free(req->ctx, op);
 	io_req_async_data_clear(req, 0);
 }
 
@@ -1777,16 +1802,153 @@ static void io_opaque_send_resolve(struct io_opaque_req *op)
 }
 
 /*
+ * Check @nr entries copied from user memory; return the body they add up to.
+ * A handle may repeat, and a range may too.
+ */
+static int io_opaque_vec_check(const struct io_uring_opaque_send_entry *ent, u32 nr,
+			       u32 *total)
+{
+	u64 sum = 0, end;
+	u32 i;
+
+	BUILD_BUG_ON(sizeof(*ent) != 24);
+	if (!nr || nr > IORING_OPAQUE_SEND_VEC_MAX)
+		return -EINVAL;
+	for (i = 0; i < nr; i++) {
+		if (ent[i].__resv || !ent[i].len ||
+		    check_add_overflow(ent[i].off, (u64)ent[i].len, &end))
+			return -EINVAL;
+		sum += ent[i].len;
+		if (sum > INT_MAX)
+			return -EINVAL;
+	}
+	*total = sum;
+	return 0;
+}
+
+/*
+ * Make room in the request's block for @nr entries and @segs segments, keeping
+ * its first @keep entries. A block that is big enough stays as it is. This
+ * allocates, so tables must not be held, and the send must hold no reference
+ * yet: what admission recorded about the versions is not carried over.
+ */
+static int io_opaque_vec_grow(struct io_opaque_req *op, u32 nr, u32 segs, u32 keep)
+{
+	struct io_opaque_vec *old = op->vec, *vec;
+
+	lockdep_assert_not_held(&op->store->tables);
+	if (old) {
+		WARN_ON_ONCE(old->pinned);
+		if (old->cap_nr >= nr && old->cap_segs >= segs)
+			return 0;
+		nr = max(nr, old->cap_nr);
+		segs = max(segs, old->cap_segs);
+	}
+	vec = kvmalloc(size_add(sizeof(*vec),
+				size_add(array_size(nr, sizeof(*vec->ent) + sizeof(*vec->pin) +
+						       sizeof(*vec->start)),
+					 array_size(segs, sizeof(*vec->bv)))),
+		       GFP_KERNEL_ACCOUNT);
+	if (!vec)
+		return -ENOMEM;
+	vec->cap_nr = nr;
+	vec->cap_segs = segs;
+	vec->ent = (void *)(vec + 1);
+	vec->pin = (void *)(vec->ent + nr);
+	vec->start = (void *)(vec->pin + nr);
+	vec->bv = (void *)(vec->start + nr);
+	vec->pinned = 0;
+	if (old) {
+		vec->nr = old->nr;
+		memcpy(vec->ent, old->ent, array_size(keep, sizeof(*vec->ent)));
+		kvfree(old);
+	} else {
+		vec->nr = 0;
+	}
+	op->vec = vec;
+	return 0;
+}
+
+/*
+ * The @nr entries are in the block: validate them and make the request what
+ * its length and offset say about a send, a body of their total at no offset.
+ */
+static int io_opaque_vec_commit(struct io_opaque_req *op, u32 nr)
+{
+	struct io_opaque_vec *vec = op->vec;
+	u32 total;
+	int ret;
+
+	ret = io_opaque_vec_check(vec->ent, nr, &total);
+	if (ret)
+		return ret;
+	vec->nr = nr;
+	vec->pinned = 0;
+	op->handle = 0;
+	op->offset = 0;
+	op->length = total;
+	return 0;
+}
+
+/*
+ * Whether entry @i of an admitted vector holds a reference of its own. A LAST
+ * vector takes one per entry. Any other takes one per run of entries that name
+ * the same handle: within one hold of tables the same handle is the same
+ * version, so the rest of the run shares the first entry's pin. This looks at
+ * the entries, which never change, and not at the pins, which may be freed by
+ * the time the run's owner has been released.
+ */
+static bool io_opaque_vec_owns(const struct io_opaque_req *op, u32 i)
+{
+	const struct io_opaque_vec *vec = op->vec;
+
+	return (op->send_flags & IORING_OPAQUE_SEND_LAST) || !i ||
+	       vec->ent[i].handle != vec->ent[i - 1].handle;
+}
+
+/* Drop every version reference the send holds; one that took none drops none. */
+static void io_opaque_vec_release(struct io_opaque_req *op)
+{
+	struct io_opaque_vec *vec = op->vec;
+	u32 i;
+
+	for (i = 0; i < vec->pinned; i++)
+		if (io_opaque_vec_owns(op, i))
+			io_opaque_data_put(op->store, vec->pin[i]);
+	vec->pinned = 0;
+}
+
+/*
+ * Request cleanup: release what a vectored send pinned and let go of the block
+ * unless the request takes it back to the cache. A big block is not worth
+ * keeping, and under KASAN an entry in the cache is cleared when it is taken,
+ * which would leak it.
+ */
+static void io_opaque_vec_cleanup(struct io_opaque_req *op)
+{
+	struct io_opaque_vec *vec = op->vec;
+
+	io_opaque_vec_release(op);
+	if (IS_ENABLED(CONFIG_KASAN) || vec->cap_nr > IO_VEC_CACHE_SOFT_CAP ||
+	    vec->cap_segs > IO_VEC_CACHE_SOFT_CAP) {
+		kvfree(vec);
+		op->vec = NULL;
+	}
+}
+
+/*
  * Find the segment of @data that holds byte @off, and return how far into it
  * @off is. @seg is a segment of the object that starts @pos bytes in and not
  * after the one wanted: the walk goes on from there, and leaves @seg and @pos
  * at the start of the segment it found.
  *
- * A segment within IO_OPAQUE_SEEK_STRIDE steps is walked to. A farther one
+ * A segment within IO_OPAQUE_SEEK_STRIDE steps is walked to, which is all that
+ * a range after the previous one in the same object ever takes. A farther one
  * is reached by jumping to the last anchor that is at or before @off, if that
  * is ahead of where the walk is, and walking on from it: under a stride more.
  * No seek takes more than two strides and a binary search over the anchors,
- * wherever it starts, however large the object is.
+ * wherever it starts, however large the object is, and so a vector of any
+ * ranges keeps tables for a time that its entries bound.
  */
 static u32 io_opaque_vec_seek(const struct io_opaque_data *data, u64 off, u32 *seg, u64 *pos)
 {
@@ -1822,6 +1984,39 @@ static u32 io_opaque_vec_seek(const struct io_opaque_data *data, u64 off, u32 *s
 	return off - at;
 }
 
+/*
+ * The segments of the range of @len bytes that starts @skip bytes into segment
+ * @seg of @data, as a cursor over the whole object would visit them: the first
+ * starts inside its extent, the last ends inside its own. They are stored at
+ * @bv, and all of them counted, unless it is NULL: then only the count is
+ * wanted, and it stops at @room + 1, since a caller that has room for no more
+ * has no use for how many more there are. The range must lie within the
+ * object.
+ */
+static u32 io_opaque_vec_span(const struct io_opaque_data *data, u32 seg, u32 skip, u32 len,
+			      struct bio_vec *bv, u64 room)
+{
+	const struct bio_vec *src = data->bvec;
+	u32 n = 0;
+
+	while (len && seg < data->nr) {
+		u32 take = min(src[seg].bv_len - skip, len);
+
+		if (bv) {
+			bv[n] = src[seg];
+			bv[n].bv_offset += skip;
+			bv[n].bv_len = take;
+		}
+		n++;
+		if (!bv && n > room)
+			break;
+		len -= take;
+		skip = 0;
+		seg++;
+	}
+	return n;
+}
+
 /* The handle must hold a version, and the range must lie within it. */
 static int io_opaque_send_range(const struct io_opaque_slot *slot, u64 off, u32 len)
 {
@@ -1849,6 +2044,8 @@ static struct io_opaque_data *io_opaque_send_pin(struct io_opaque_store *store,
 /* Drop the references a send took at admission; a no-op when it took none. */
 static void io_opaque_send_unpin(struct io_opaque_req *op)
 {
+	if (op->send_flags & IORING_OPAQUE_SEND_VECTOR)
+		io_opaque_vec_release(op);
 	io_opaque_data_put(op->store, op->data);
 	op->data = NULL;
 }
@@ -1861,11 +2058,28 @@ static void io_opaque_send_unpin(struct io_opaque_req *op)
  * last reference frees the version, every extent of it, and that is not for
  * the lock to wait out. Nobody can take a reference on a version whose count
  * is one, which is not in the table, so the last one is still the last then.
+ * A vector's entries that were put are cleared, so that the rest cannot put
+ * them again.
  */
 static bool io_opaque_send_unpin_cheap(struct io_opaque_req *op)
 {
 	bool left = false;
 
+	if (op->send_flags & IORING_OPAQUE_SEND_VECTOR) {
+		struct io_opaque_vec *vec = op->vec;
+		u32 i;
+
+		for (i = 0; i < vec->pinned; i++) {
+			if (!vec->pin[i] || !io_opaque_vec_owns(op, i))
+				continue;
+			if (refcount_dec_not_one(&vec->pin[i]->refs))
+				vec->pin[i] = NULL;
+			else
+				left = true;
+		}
+		if (!left)
+			vec->pinned = 0;
+	}
 	if (op->data) {
 		if (refcount_dec_not_one(&op->data->refs))
 			op->data = NULL;
@@ -1887,15 +2101,129 @@ static void io_opaque_send_iter(struct io_opaque_req *op, const struct bio_vec *
 	iov_iter_truncate(&op->iter, op->length);
 }
 
-/* Resolve what a send names, take its references and set its cursor, under tables. */
+/*
+ * Admission of a vectored send, under tables; every entry sees the versions
+ * as they are in this one hold, and nothing in here sleeps. Pass one resolves
+ * and counts, and fails without having pinned or detached anything, so a
+ * vector that cannot go consumes nothing. It finds where each range starts by
+ * walking the segments of its version, and an entry that follows another in
+ * the same version, not before the segment that one started in, walks on from
+ * there instead of from the first: ranges in ascending order walk each object
+ * once. One that is more than a stride from where the walk is jumps to the
+ * version's anchors (see io_opaque_vec_seek()), so that ranges that go back
+ * or alternate between large objects cost a few dozen steps each, not an
+ * object. Counting the segments of the ranges stops as soon as the limit is
+ * passed. What tables is held for is therefore bounded by the entries and the
+ * limit, whatever the ranges. A block with too few segments is not grown here,
+ * as that allocates; the number needed is returned, and io_opaque_vec_finish()
+ * grows the block and asks again. Pass two takes the references and looks
+ * nothing up: pass one recorded every version in pin[], and tables has been
+ * held since. A LAST vector detaches each handle at its first entry, and an
+ * entry that repeats the handle takes one more reference on the version it
+ * found. Any other vector takes one reference for each run of entries that
+ * name the same handle (see io_opaque_vec_owns()), so eight ranges of one
+ * object cost one reference, and a handle that returns after another one pins
+ * again. Nothing can fail from there on. The cursor over the combined segments
+ * is io_opaque_vec_build()'s, once tables is dropped.
+ */
+static int io_opaque_vec_acquire(struct io_opaque_req *op)
+{
+	struct io_opaque_store *store = op->store;
+	bool last = op->send_flags & IORING_OPAQUE_SEND_LAST;
+	struct io_opaque_vec *vec = op->vec;
+	const struct io_opaque_data *prev = NULL;
+	u64 segs = 0, pos = 0;
+	u32 i, seg = 0;
+	int ret;
+
+	if (store->dead)
+		return -ESHUTDOWN;
+	for (i = 0; i < vec->nr; i++) {
+		const struct io_uring_opaque_send_entry *ent = &vec->ent[i];
+		struct io_opaque_slot *slot = io_opaque_lookup(store, ent->handle);
+		struct io_opaque_data *data;
+		u32 skip, n;
+
+		ret = io_opaque_send_range(slot, ent->off, ent->len);
+		if (ret)
+			return ret;
+		data = slot->data;
+		if (data != prev || ent->off < pos) {
+			prev = data;
+			seg = 0;
+			pos = 0;
+		}
+		skip = io_opaque_vec_seek(data, ent->off, &seg, &pos);
+		vec->start[i].seg = seg;
+		vec->start[i].skip = skip;
+		n = io_opaque_vec_span(data, seg, skip, ent->len, NULL,
+				       IO_OPAQUE_SEND_VEC_SEGS - segs);
+		segs += n;
+		if (segs > IO_OPAQUE_SEND_VEC_SEGS)
+			return -EMSGSIZE;
+		/* Not yet a reference: pass two takes it, and a repeated handle needs it. */
+		vec->pin[i] = data;
+	}
+	/* Within the limit, so it fits an int. */
+	if (segs > vec->cap_segs)
+		return segs;
+	for (i = 0; i < vec->nr; i++) {
+		struct io_opaque_slot *slot;
+
+		if (!last) {
+			if (io_opaque_vec_owns(op, i))
+				refcount_inc(&vec->pin[i]->refs);
+			continue;
+		}
+		slot = io_opaque_lookup(store, vec->ent[i].handle);
+		if (!slot->data)
+			refcount_inc(&vec->pin[i]->refs);
+		else
+			vec->pin[i] = io_opaque_send_pin(store, slot, true);
+	}
+	vec->pinned = vec->nr;
+	if (last)
+		op->consumed = true;
+	return 0;
+}
+
+/*
+ * The cursor over the combined segments, from the starts that admission
+ * recorded. It takes no lock and is done without tables, which is the point of
+ * it: each version is held by the send's own reference, and the segments of a
+ * version never change.
+ */
+static void io_opaque_vec_build(struct io_opaque_req *op)
+{
+	struct io_opaque_vec *vec = op->vec;
+	u32 i, filled = 0;
+
+	lockdep_assert_not_held(&op->store->tables);
+	for (i = 0; i < vec->nr; i++)
+		filled += io_opaque_vec_span(vec->pin[i], vec->start[i].seg, vec->start[i].skip,
+					     vec->ent[i].len, vec->bv + filled, U64_MAX);
+	io_opaque_send_iter(op, vec->bv, filled, op->length, 0);
+}
+
+/*
+ * Resolve what a send names and take its references, under tables. A send of
+ * one range also gets its cursor. A vector returns 0 with its references taken,
+ * a negative errno with none taken and nothing removed, or the number of
+ * segments its ranges span when its block holds fewer, to be settled by
+ * io_opaque_vec_finish() once tables is dropped.
+ */
 static int io_opaque_send_acquire(struct io_opaque_req *op)
 {
 	struct io_opaque_store *store = op->store;
 	bool last = op->send_flags & IORING_OPAQUE_SEND_LAST;
-	struct io_opaque_slot *slot = io_opaque_lookup(store, op->handle);
+	struct io_opaque_slot *slot;
 	u64 pos = 0;
 	u32 seg = 0, skip;
 	int ret;
+
+	if (unlikely(op->send_flags & IORING_OPAQUE_SEND_VECTOR))
+		return io_opaque_vec_acquire(op);
+	slot = io_opaque_lookup(store, op->handle);
 
 	if (store->dead)
 		return -ESHUTDOWN;
@@ -1907,11 +2235,56 @@ static int io_opaque_send_acquire(struct io_opaque_req *op)
 	op->data = io_opaque_send_pin(store, slot, last);
 	if (last)
 		op->consumed = true;
-	/* The cursor starts at the segment that holds the range. */
+	/* The cursor starts at the segment that holds the range, found as a vector's are. */
 	skip = io_opaque_vec_seek(op->data, op->offset, &seg, &pos);
 	io_opaque_send_iter(op, op->data->bvec + seg, op->data->nr - seg, op->data->length - pos,
 			    skip);
 	return 0;
+}
+
+/*
+ * What admission of a vector does without tables, after the hold in which
+ * io_opaque_send_acquire() returned @ret. A block with too few segments (@ret
+ * of them are needed) is grown here, where allocating is fine, and the vector
+ * is resolved again in a new hold: nothing was pinned, and the versions may
+ * have changed meanwhile, so every entry is looked at again. Once the vector
+ * is admitted, the cursor is built.
+ */
+static int io_opaque_vec_finish(struct io_opaque_req *op, int ret)
+{
+	while (ret > 0) {
+		ret = io_opaque_vec_grow(op, op->vec->nr, ret, op->vec->nr);
+		if (ret)
+			return ret;
+		scoped_guard(mutex, &op->store->tables)
+			ret = io_opaque_send_acquire(op);
+	}
+	if (!ret)
+		io_opaque_vec_build(op);
+	return ret;
+}
+
+/*
+ * A vectored send: addr names len entries and off is zero. They are copied
+ * now, like SEND_ZC's iovecs, and the array need not stay valid. The request
+ * still holds the SQE's addr, off and len in handle, offset and length; the
+ * commit turns them into the body, whose handle and offset are none.
+ */
+static int io_opaque_send_vec_prep(struct io_opaque_req *op)
+{
+	u32 nr = op->length;
+	int ret;
+
+	if (op->offset || !nr || nr > IORING_OPAQUE_SEND_VEC_MAX)
+		return -EINVAL;
+	/* Every entry spans a segment; admission grows the block if some span more. */
+	ret = io_opaque_vec_grow(op, nr, nr, 0);
+	if (ret)
+		return ret;
+	if (copy_from_user(op->vec->ent, u64_to_user_ptr(op->handle),
+			   array_size(nr, sizeof(*op->vec->ent))))
+		return -EFAULT;
+	return io_opaque_vec_commit(op, nr);
 }
 
 int io_opaque_send_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
@@ -1925,7 +2298,7 @@ int io_opaque_send_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 
 	if (!store)
 		return -ENXIO;
-	if ((send_flags & ~IORING_OPAQUE_SEND_LAST) ||
+	if ((send_flags & ~(IORING_OPAQUE_SEND_LAST | IORING_OPAQUE_SEND_VECTOR)) ||
 	    ((send_flags & IORING_OPAQUE_SEND_LAST) && (req->flags & REQ_F_CQE_SKIP)) ||
 	    READ_ONCE(sqe->buf_index) || READ_ONCE(sqe->__pad2[0]) ||
 	    (msg_flags & ~(MSG_MORE | MSG_DONTWAIT)))
@@ -1943,6 +2316,11 @@ int io_opaque_send_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	op->msg_flags = msg_flags;
 	if (op->msg_flags & MSG_DONTWAIT)
 		req->flags |= REQ_F_NOWAIT;
+	if (unlikely(send_flags & IORING_OPAQUE_SEND_VECTOR)) {
+		ret = io_opaque_send_vec_prep(op);
+		if (ret)
+			return ret;
+	}
 	if ((!op->length && !op->addr) || op->length > INT_MAX ||
 	    check_add_overflow(op->offset, (u64)op->length, &end))
 		return -EINVAL;
@@ -2036,13 +2414,20 @@ static struct io_opaque_tx *io_opaque_tx_alloc(struct io_opaque_store *store,
 	return kzalloc_obj(struct io_opaque_tx, gfp);
 }
 
-/* Resolve what a send names and take its references, under tables. */
+/*
+ * Resolve what @op names and take its references: the handles under tables,
+ * and then, without it, the block and the cursor. A vector leaves tables once
+ * its references are taken; one whose block is too small leaves it earlier, to
+ * grow the block, and is resolved again.
+ */
 static int io_opaque_tx_acquire(struct io_opaque_req *op)
 {
 	int ret;
 
 	scoped_guard(mutex, &op->store->tables)
 		ret = io_opaque_send_acquire(op);
+	if (unlikely(op->send_flags & IORING_OPAQUE_SEND_VECTOR))
+		ret = io_opaque_vec_finish(op, ret);
 	return ret;
 }
 
