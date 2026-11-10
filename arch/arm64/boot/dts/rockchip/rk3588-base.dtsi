@@ -560,6 +560,7 @@
 			     <GIC_SPI 367 IRQ_TYPE_EDGE_RISING 0>;
 		interrupt-names = "eventq", "gerror", "priq", "cmdq-sync";
 		#iommu-cells = <1>;
+		power-domains = <&power RK3588_PD_PCIE>;
 	};
 
 	mmu600_php: iommu@fcb00000 {
