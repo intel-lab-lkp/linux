@@ -299,18 +299,6 @@ static struct omap_hwmod_class_sysconfig omap3xxx_wd_timer_sysc = {
 	.sysc_fields    = &omap_hwmod_sysc_type1,
 };
 
-/* I2C common */
-static struct omap_hwmod_class_sysconfig i2c_sysc = {
-	.rev_offs	= 0x00,
-	.sysc_offs	= 0x20,
-	.syss_offs	= 0x10,
-	.sysc_flags	= (SYSC_HAS_CLOCKACTIVITY | SYSC_HAS_SIDLEMODE |
-			   SYSC_HAS_ENAWAKEUP | SYSC_HAS_SOFTRESET |
-			   SYSC_HAS_AUTOIDLE | SYSS_HAS_RESET_STATUS),
-	.idlemodes	= (SIDLE_FORCE | SIDLE_NO | SIDLE_SMART),
-	.sysc_fields    = &omap_hwmod_sysc_type1,
-};
-
 static struct omap_hwmod_class omap3xxx_wd_timer_hwmod_class = {
 	.name		= "wd_timer",
 	.sysc		= &omap3xxx_wd_timer_sysc,
@@ -429,12 +417,6 @@ static struct omap_hwmod am35xx_uart4_hwmod = {
 	.opt_clks_cnt	= ARRAY_SIZE(am35xx_uart4_opt_clks),
 	.flags		= HWMOD_CONTROL_OPT_CLKS_IN_RESET,
 	.class		= &omap2_uart_class,
-};
-
-static struct omap_hwmod_class i2c_class = {
-	.name	= "i2c",
-	.sysc	= &i2c_sysc,
-	.reset	= &omap_i2c_reset,
 };
 
 /* dss */
@@ -590,51 +572,6 @@ static struct omap_hwmod omap3xxx_dss_venc_hwmod = {
 	.opt_clks	= dss_venc_opt_clks,
 	.opt_clks_cnt	= ARRAY_SIZE(dss_venc_opt_clks),
 	.flags		= HWMOD_NO_IDLEST,
-};
-
-/* I2C1 */
-static struct omap_hwmod omap3xxx_i2c1_hwmod = {
-	.name		= "i2c1",
-	.flags		= HWMOD_16BIT_REG | HWMOD_SET_DEFAULT_CLOCKACT,
-	.main_clk	= "i2c1_fck",
-	.prcm		= {
-		.omap2 = {
-			.module_offs = CORE_MOD,
-			.idlest_reg_id = 1,
-			.idlest_idle_bit = OMAP3430_ST_I2C1_SHIFT,
-		},
-	},
-	.class		= &i2c_class,
-};
-
-/* I2C2 */
-static struct omap_hwmod omap3xxx_i2c2_hwmod = {
-	.name		= "i2c2",
-	.flags		= HWMOD_16BIT_REG | HWMOD_SET_DEFAULT_CLOCKACT,
-	.main_clk	= "i2c2_fck",
-	.prcm		= {
-		.omap2 = {
-			.module_offs = CORE_MOD,
-			.idlest_reg_id = 1,
-			.idlest_idle_bit = OMAP3430_ST_I2C2_SHIFT,
-		},
-	},
-	.class		= &i2c_class,
-};
-
-/* I2C3 */
-static struct omap_hwmod omap3xxx_i2c3_hwmod = {
-	.name		= "i2c3",
-	.flags		= HWMOD_16BIT_REG | HWMOD_SET_DEFAULT_CLOCKACT,
-	.main_clk	= "i2c3_fck",
-	.prcm		= {
-		.omap2 = {
-			.module_offs = CORE_MOD,
-			.idlest_reg_id = 1,
-			.idlest_idle_bit = OMAP3430_ST_I2C3_SHIFT,
-		},
-	},
-	.class		= &i2c_class,
 };
 
 /*
@@ -1605,52 +1542,6 @@ static struct omap_hwmod_ocp_if am35xx_l4_core__uart4 = {
 	.user		= OCP_USER_MPU | OCP_USER_SDMA,
 };
 
-/* L4 CORE -> I2C1 interface */
-static struct omap_hwmod_ocp_if omap3_l4_core__i2c1 = {
-	.master		= &omap3xxx_l4_core_hwmod,
-	.slave		= &omap3xxx_i2c1_hwmod,
-	.clk		= "i2c1_ick",
-	.fw = {
-		.omap2 = {
-			.l4_fw_region  = OMAP3_L4_CORE_FW_I2C1_REGION,
-			.l4_prot_group = 7,
-			.flags	= OMAP_FIREWALL_L4,
-		},
-	},
-	.user		= OCP_USER_MPU | OCP_USER_SDMA,
-};
-
-/* L4 CORE -> I2C2 interface */
-static struct omap_hwmod_ocp_if omap3_l4_core__i2c2 = {
-	.master		= &omap3xxx_l4_core_hwmod,
-	.slave		= &omap3xxx_i2c2_hwmod,
-	.clk		= "i2c2_ick",
-	.fw = {
-		.omap2 = {
-			.l4_fw_region  = OMAP3_L4_CORE_FW_I2C2_REGION,
-			.l4_prot_group = 7,
-			.flags = OMAP_FIREWALL_L4,
-		},
-	},
-	.user		= OCP_USER_MPU | OCP_USER_SDMA,
-};
-
-/* L4 CORE -> I2C3 interface */
-
-static struct omap_hwmod_ocp_if omap3_l4_core__i2c3 = {
-	.master		= &omap3xxx_l4_core_hwmod,
-	.slave		= &omap3xxx_i2c3_hwmod,
-	.clk		= "i2c3_ick",
-	.fw = {
-		.omap2 = {
-			.l4_fw_region  = OMAP3_L4_CORE_FW_I2C3_REGION,
-			.l4_prot_group = 7,
-			.flags = OMAP_FIREWALL_L4,
-		},
-	},
-	.user		= OCP_USER_MPU | OCP_USER_SDMA,
-};
-
 /* L4 CORE -> SR1 interface */
 static struct omap_hwmod_ocp_if omap34xx_l4_core__sr1 = {
 	.master		= &omap3xxx_l4_core_hwmod,
@@ -2300,9 +2191,6 @@ static struct omap_hwmod_ocp_if *omap3xxx_hwmod_ocp_ifs[] __initdata = {
 	&omap3_l4_core__uart1,
 	&omap3_l4_core__uart2,
 	&omap3_l4_per__uart3,
-	&omap3_l4_core__i2c1,
-	&omap3_l4_core__i2c2,
-	&omap3_l4_core__i2c3,
 	&omap3xxx_l4_wkup__l4_sec,
 	&omap3xxx_l4_per__timer3,
 	&omap3xxx_l4_per__timer4,
