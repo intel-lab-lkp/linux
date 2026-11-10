@@ -2639,8 +2639,10 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 			if (ret)
 				return ret;
 			dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_HOST, true);
+			dwc3_host_resume(dwc, true);
 			break;
 		}
+		dwc3_host_resume(dwc, false);
 		/* Restore GUSB2PHYCFG bits that were modified in suspend */
 		for (i = 0; i < dwc->num_usb2_ports; i++) {
 			reg = dwc3_readl(dwc, DWC3_GUSB2PHYCFG(i));
@@ -2672,6 +2674,7 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 		dwc3_otg_init(dwc);
 		if (dwc->current_otg_role == DWC3_OTG_ROLE_HOST) {
 			dwc3_otg_host_init(dwc);
+			dwc3_host_resume(dwc, true);
 		} else if (dwc->current_otg_role == DWC3_OTG_ROLE_DEVICE) {
 			dwc3_gadget_resume(dwc);
 		}
