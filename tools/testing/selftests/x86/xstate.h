@@ -212,6 +212,6 @@ static inline void set_rand_data(struct xstate_info *xstate, struct xsave_buffer
 }
 
 /* Testing kernel's context switching and ABI support for the xstate. */
-void test_xstate(uint32_t feature_num);
+int test_xstate(uint32_t feature_num);
 
 #endif /* __SELFTESTS_X86_XSTATE_H */

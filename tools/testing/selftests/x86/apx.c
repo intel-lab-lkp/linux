@@ -6,5 +6,5 @@
 
 int main(void)
 {
-	test_xstate(XFEATURE_APX);
+	return test_xstate(XFEATURE_APX);
 }

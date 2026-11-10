@@ -198,15 +198,16 @@ static void affinitize_cpu0(void)
 		ksft_exit_fail_msg("sched_setaffinity to CPU 0 failed\n");
 }
 
-static void test_context_switch(uint32_t num_threads, uint32_t iterations)
+static void test_context_switch(void)
 {
+	const unsigned int num_threads = 5, iterations = 10;
 	struct futex_info *finfo;
 
 	/* Affinitize to one CPU to force context switches */
 	affinitize_cpu0();
 
-	printf("[RUN]\t%s: check context switches, %d iterations, %d threads.\n",
-	       xstate.name, iterations, num_threads);
+	ksft_print_msg("[RUN]\t%s: check context switches, %d iterations, %d threads.\n",
+		       xstate.name, iterations, num_threads);
 
 	finfo = malloc(sizeof(*finfo) * num_threads);
 	if (!finfo)
@@ -228,9 +229,9 @@ static void test_context_switch(uint32_t num_threads, uint32_t iterations)
 
 	/* Wait for all the threads to finish: */
 	if (checkout_threads(num_threads, finfo))
-		printf("[OK]\tNo incorrect case was found.\n");
+		ksft_test_result_pass("%s for %s\n", __func__, xstate.name);
 	else
-		printf("[FAIL]\tFailed with context switching test.\n");
+		ksft_test_result_fail("%s for %s\n", __func__, xstate.name);
 
 	free(finfo);
 }
@@ -254,6 +255,40 @@ static inline void ptracee_touch_xstate(void)
 	load_init_xstate(&xstate, xbuf);
 
 	free(xbuf);
+}
+
+static bool validate_ptracer_xstate(pid_t target, struct iovec iov,
+				    struct xsave_buffer *xbuf,
+				    struct xsave_buffer *expected)
+{
+	unsigned int failed = 0;
+
+	if (ptrace(PTRACE_SETREGSET, target, (uint32_t)NT_X86_XSTATE, &iov))
+		ksft_exit_fail_msg("PTRACE_SETREGSET failed\n");
+
+	if (ptrace(PTRACE_GETREGSET, target, (uint32_t)NT_X86_XSTATE, &iov))
+		ksft_exit_fail_msg("PTRACE_GETREGSET failed\n");
+
+	/*
+	 * To track this whole result only, use printf() for skipping sub-test
+	 * counting.
+	 */
+
+	if (*(uint64_t *)get_fpx_sw_bytes(xbuf) == xgetbv(0)) {
+		printf("#\tok\tSW reserved area\n");
+	} else {
+		printf("#\tnot ok\tSW reserved area\n");
+		failed++;
+	}
+
+	if (validate_xstate_same(xbuf, expected)) {
+		printf("#\tok\txstate area\n");
+	} else {
+		printf("#\tnot ok\txstate area\n");
+		failed++;
+	}
+
+	return failed == 0;
 }
 
 /*
@@ -281,26 +316,15 @@ static void ptracer_inject_xstate(pid_t target)
 	if (ptrace(PTRACE_GETREGSET, target, (uint32_t)NT_X86_XSTATE, &iov))
 		ksft_exit_fail_msg("PTRACE_GETREGSET failed\n");
 
-	printf("[RUN]\t%s: inject xstate via ptrace().\n", xstate.name);
+	ksft_print_msg("[RUN]\t%s: inject xstate via ptrace().\n", xstate.name);
 
 	load_rand_xstate(&xstate, xbuf1);
 	copy_xstate(xbuf2, xbuf1);
 
-	if (ptrace(PTRACE_SETREGSET, target, (uint32_t)NT_X86_XSTATE, &iov))
-		ksft_exit_fail_msg("PTRACE_SETREGSET failed\n");
-
-	if (ptrace(PTRACE_GETREGSET, target, (uint32_t)NT_X86_XSTATE, &iov))
-		ksft_exit_fail_msg("PTRACE_GETREGSET failed\n");
-
-	if (*(uint64_t *)get_fpx_sw_bytes(xbuf1) == xgetbv(0))
-		printf("[OK]\t'xfeatures' in SW reserved area was correctly written\n");
+	if (validate_ptracer_xstate(target, iov, xbuf1, xbuf2))
+		ksft_test_result_pass("%s for %s\n", __func__, xstate.name);
 	else
-		printf("[FAIL]\t'xfeatures' in SW reserved area was not correctly written\n");
-
-	if (validate_xstate_same(xbuf2, xbuf1))
-		printf("[OK]\txstate was correctly updated.\n");
-	else
-		printf("[FAIL]\txstate was not correctly updated.\n");
+		ksft_test_result_fail("%s for %s\n", __func__, xstate.name);
 
 	free(xbuf1);
 	free(xbuf2);
@@ -347,11 +371,24 @@ static void test_ptrace(void)
  */
 #define SIGNAL_BUF_LEN 1000
 static char signal_message_buffer[SIGNAL_BUF_LEN];
-static void sig_print(char *msg)
+static inline void sig_print(char *msg)
 {
 	int left = SIGNAL_BUF_LEN - strlen(signal_message_buffer) - 1;
 
 	strncat(signal_message_buffer, msg, left);
+}
+
+static unsigned int sig_failed;
+
+static inline void sig_print_pass(char *msg)
+{
+	sig_print(msg);
+}
+
+static inline void sig_print_fail(char *msg)
+{
+	sig_failed++;
+	sig_print(msg);
 }
 
 static struct xsave_buffer *stashed_xbuf;
@@ -368,30 +405,30 @@ static void validate_sigfpstate(int sig, siginfo_t *si, void *ctx_void)
 
 	sw_bytes = get_fpx_sw_bytes(xbuf);
 	if (sw_bytes->magic1 == FP_XSTATE_MAGIC1)
-		sig_print("[OK]\t'magic1' is valid\n");
+		sig_print_pass("#\tok\tmagic1\n");
 	else
-		sig_print("[FAIL]\t'magic1' is not valid\n");
+		sig_print_fail("#\tnot ok\tmagic1\n");
 
 	if (get_fpx_sw_bytes_features(xbuf) & xstate.mask)
-		sig_print("[OK]\t'xfeatures' in SW reserved area is valid\n");
+		sig_print_pass("#\tok\tSW reserved area\n");
 	else
-		sig_print("[FAIL]\t'xfeatures' in SW reserved area is not valid\n");
+		sig_print_fail("#\tnot ok\tSW reserved area\n");
 
 	if (get_xstatebv(xbuf) & xstate.mask)
-		sig_print("[OK]\t'xfeatures' in XSAVE header is valid\n");
+		sig_print_pass("#\tok\tXSTATE_BV\n");
 	else
-		sig_print("[FAIL]\t'xfeatures' in XSAVE header is not valid\n");
+		sig_print_fail("#\tnot ok\tXSTATE_BV\n");
 
 	if (validate_xstate_same(stashed_xbuf, xbuf))
-		sig_print("[OK]\txstate delivery was successful\n");
+		sig_print_pass("#\tok\txstate area\n");
 	else
-		sig_print("[FAIL]\txstate delivery was not successful\n");
+		sig_print_fail("#\tnot ok\txstate area\n");
 
 	magic2 = *(uint32_t *)(xbuf + sw_bytes->xstate_size);
 	if (magic2 == FP_XSTATE_MAGIC2)
-		sig_print("[OK]\t'magic2' is valid\n");
+		sig_print_pass("#\tok\tmagic2\n");
 	else
-		sig_print("[FAIL]\t'magic2' is not valid\n");
+		sig_print_fail("#\tnot ok\tmagic2\n");
 
 	set_rand_data(&xstate, xbuf);
 	copy_xstate(stashed_xbuf, xbuf);
@@ -399,7 +436,7 @@ static void validate_sigfpstate(int sig, siginfo_t *si, void *ctx_void)
 
 static void test_signal(void)
 {
-	bool valid_xstate;
+	bool sigreturn_failed;
 
 	/*
 	 * The signal handler will access this to verify xstate context
@@ -409,49 +446,62 @@ static void test_signal(void)
 	if (!stashed_xbuf)
 		ksft_exit_fail_msg("unable to allocate XSAVE buffer\n");
 
-	printf("[RUN]\t%s: load xstate and raise SIGUSR1\n", xstate.name);
+	ksft_print_msg("[RUN]\t%s: validate signal delivery\n", xstate.name);
 
 	sethandler(SIGUSR1, validate_sigfpstate, 0);
 
 	load_rand_xstate(&xstate, stashed_xbuf);
 
+	sig_failed = 0;
 	raise(SIGUSR1);
 
 	/*
 	 * Immediately record the test result, deferring printf() to
 	 * prevent unintended state contamination by that.
 	 */
-	valid_xstate = validate_xregs_same(stashed_xbuf);
+	sigreturn_failed = !validate_xregs_same(stashed_xbuf);
 	printf("%s", signal_message_buffer);
-
-	printf("[RUN]\t%s: load new xstate from sighandler and check it after sigreturn\n",
-	       xstate.name);
-
-	if (valid_xstate)
-		printf("[OK]\txstate was restored correctly\n");
+	if (!sig_failed)
+		ksft_test_result_pass("%s (delivery) for %s\n", __func__, xstate.name);
 	else
-		printf("[FAIL]\txstate restoration failed\n");
+		ksft_test_result_fail("%s (delivery) for %s\n", __func__, xstate.name);
+
+	ksft_print_msg("[RUN]\t%s: update xstate on sigframe, then validate xstate on sigreturn\n",
+		       xstate.name);
+
+	if (!sigreturn_failed)
+		ksft_test_result_pass("%s (return) for %s\n", __func__, xstate.name);
+	else
+		ksft_test_result_fail("%s (return) for %s\n", __func__, xstate.name);
 
 	clearhandler(SIGUSR1);
 	free(stashed_xbuf);
 }
 
-void test_xstate(uint32_t feature_num)
+static struct test_info {
+	void (*fn)(void);
+	unsigned int nr;
+} tests[] = {
+	{ .nr = 1, .fn = test_context_switch, },
+	{ .nr = 1, .fn = test_ptrace, },
+	{ .nr = 2, .fn = test_signal, },
+};
+
+int test_xstate(uint32_t feature_num)
 {
-	const unsigned int ctxtsw_num_threads = 5, ctxtsw_iterations = 10;
 	unsigned long features;
-	long rc;
+	long rc, i, nr = 0;
 
 	if (!(XFEATURE_MASK_TEST_SUPPORTED & (1 << feature_num))) {
 		ksft_print_msg("The xstate test does not fully support the component %u, yet.\n",
 			       feature_num);
-		return;
+		return KSFT_SKIP;
 	}
 
 	rc = syscall(SYS_arch_prctl, ARCH_GET_XCOMP_SUPP, &features);
 	if (rc || !(features & (1 << feature_num))) {
 		ksft_print_msg("The kernel does not support feature number: %u\n", feature_num);
-		return;
+		return KSFT_SKIP;
 	}
 
 	xstate = get_xstate_info(feature_num);
@@ -460,7 +510,18 @@ void test_xstate(uint32_t feature_num)
 				   xstate.size, xstate.xbuf_offset);
 	}
 
-	test_context_switch(ctxtsw_num_threads, ctxtsw_iterations);
-	test_ptrace();
-	test_signal();
+	ksft_reset_state();
+	ksft_print_header();
+
+	for (i = 0; i < ARRAY_SIZE(tests); i++)
+		nr += tests[i].nr;
+
+	ksft_set_plan(nr);
+
+	for (i = 0; i < ARRAY_SIZE(tests); i++)
+		tests[i].fn();
+
+	ksft_print_cnts();
+
+	return (ksft_cnt.ksft_fail == 0) ? KSFT_PASS : KSFT_FAIL;
 }

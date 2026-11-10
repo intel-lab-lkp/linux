@@ -482,6 +482,7 @@ int main(void)
 {
 	unsigned long features;
 	long rc;
+	int ret;
 
 	rc = syscall(SYS_arch_prctl, ARCH_GET_XCOMP_SUPP, &features);
 	if (rc || (features & XFEATURE_MASK_XTILE) != XFEATURE_MASK_XTILE) {
@@ -509,10 +510,10 @@ int main(void)
 	 * Perform generic xstate tests for context switching, ptrace,
 	 * and signal.
 	 */
-	test_xstate(XFEATURE_XTILEDATA);
+	ret = test_xstate(XFEATURE_XTILEDATA);
 
 	clearhandler(SIGILL);
 	free_stashed_xsave();
 
-	return 0;
+	return ret;
 }
