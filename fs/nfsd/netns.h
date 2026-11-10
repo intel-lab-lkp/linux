@@ -165,8 +165,6 @@ struct nfsd_net {
 	 */
 	unsigned int max_blksize;
 
-	u32 clientid_base;
-	u32 clientid_counter;
 	u32 clverifier_counter;
 	atomic_t client_display_counter;
 
