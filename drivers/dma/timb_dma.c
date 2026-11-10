@@ -433,6 +433,8 @@ static void td_free_chan_resources(struct dma_chan *chan)
 
 	dev_dbg(dmaengine_chan_dev(chan), "%s: Entry\n", __func__);
 
+	dmaengine_kill_bh(&td_chan->chan);
+
 	/* check that all descriptors are free */
 	BUG_ON(!list_empty(&td_chan->active_list));
 	BUG_ON(!list_empty(&td_chan->queue));
@@ -575,15 +577,40 @@ static void td_tasklet(struct tasklet_struct *t)
 	for (i = 0; i < td->dma.chancnt; i++)
 		if (ipr & (1 << i)) {
 			struct timb_dma_chan *td_chan = td->channels + i;
-			spin_lock(&td_chan->lock);
-			__td_finish(td_chan);
-			if (!list_empty(&td_chan->queue))
-				__td_start_next(td_chan);
-			spin_unlock(&td_chan->lock);
+			dmaengine_schedule_bh(&td_chan->chan);
 		}
 
 	ier = __td_ier_mask(td);
 	iowrite32(ier, td->membase + TIMBDMA_IER);
+}
+
+static void timb_dma_chan_bh(struct dma_chan *chan)
+{
+	struct timb_dma_chan *td_chan = container_of(chan, struct timb_dma_chan,
+						     chan);
+	struct timb_dma *td = tdchantotd(td_chan);
+	u32 ier;
+
+	spin_lock(&td_chan->lock);
+	__td_finish(td_chan);
+	if (!list_empty(&td_chan->queue))
+		__td_start_next(td_chan);
+	spin_unlock(&td_chan->lock);
+
+	/*
+	 * The controller tasklet re-armed IER before this channel was
+	 * finished. Recompute it now that the channel state has changed.
+	 */
+	ier = __td_ier_mask(td);
+	iowrite32(ier, td->membase + TIMBDMA_IER);
+}
+
+static void td_kill_chan_bh(struct timb_dma *td, int nr_channels)
+{
+	int i;
+
+	for (i = 0; i < nr_channels; i++)
+		dmaengine_kill_bh(&td->channels[i].chan);
 }
 
 
@@ -692,6 +719,7 @@ static int td_probe(struct platform_device *pdev)
 		INIT_LIST_HEAD(&td_chan->active_list);
 		INIT_LIST_HEAD(&td_chan->queue);
 		INIT_LIST_HEAD(&td_chan->free_list);
+		dmaengine_init_bh(&td_chan->chan, timb_dma_chan_bh);
 
 		td_chan->descs = pchan->descriptors;
 		td_chan->desc_elems = pchan->descriptor_elements;
@@ -724,6 +752,7 @@ err_free_irq:
 	free_irq(irq, td);
 err_tasklet_kill:
 	tasklet_kill(&td->tasklet);
+	td_kill_chan_bh(td, pdata->nr_channels);
 	iounmap(td->membase);
 err_free_mem:
 	kfree(td);
@@ -736,6 +765,7 @@ err_release_region:
 
 static void td_remove(struct platform_device *pdev)
 {
+	struct timb_dma_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	struct timb_dma *td = platform_get_drvdata(pdev);
 	struct resource *iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	int irq = platform_get_irq(pdev, 0);
@@ -743,6 +773,7 @@ static void td_remove(struct platform_device *pdev)
 	dma_async_device_unregister(&td->dma);
 	free_irq(irq, td);
 	tasklet_kill(&td->tasklet);
+	td_kill_chan_bh(td, pdata->nr_channels);
 	iounmap(td->membase);
 	kfree(td);
 	release_mem_region(iomem->start, resource_size(iomem));
