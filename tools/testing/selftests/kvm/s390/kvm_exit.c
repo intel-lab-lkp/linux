@@ -27,6 +27,7 @@
 #define IPA_DIAG 0x83
 #define PSW_MASK_64BIT_DAT_OFF  0x0000000180000000ULL
 #define PGM_CODE_SEGMENT_TRANSLATION 0x10
+#define PSW_WAIT_BIT_MASK (1ULL << (63 - 14))
 #define PGM_CODE_GPA_ADDRESS 0x8e
 #define PGM_CODE_MASK        0x7f
 #define PGM_NEW_PSW_GPA 0x1d0
@@ -308,6 +309,75 @@ static bool test_translation_exceptions(void)
 	return true;
 }
 
+static uint64_t psw_save[2] __aligned(16);
+
+static void guestcode_wait_state(void)
+{
+	register uint64_t *psw_ptr asm("r4") = psw_save;
+
+	asm volatile(
+		"lghi  %%r3, 0x3333\n"
+		"lgrl  %%r7, 1f\n"
+		"stg   %%r7, 0(%%r4)\n"
+		"xgr   %%r5, %%r5\n"
+		"stg   %%r5, 8(%%r4)\n"
+		"lpswe 0(%%r4)\n"
+		".align 8\n"
+		"1: .quad 0x0002000180000000\n"
+		:
+		: "d"(psw_ptr)
+		: "r3", "r5", "r7", "memory"
+	);
+}
+
+static bool test_wait_state(void)
+{
+	struct kvm_parameters param = {};
+	struct kvm_regs regs;
+
+	ksft_print_msg("Testing Wait State Exit\n");
+	param.guest_code = guestcode_wait_state;
+	param = create_vm_kvm_exit(param);
+	vcpu_run(param.vcpu);
+	param.run = param.vcpu->run;
+	TEST_ASSERT(param.run->exit_reason == KVM_EXIT_S390_SIEIC,
+		    "Expected KVM_EXIT_S390_SIEIC, got %u\n",
+		    param.run->exit_reason);
+	TEST_ASSERT(param.run->s390_sieic.icptcode == ICPT_WAIT,
+		    "Failed with Unexpected Exit Reason of %u and icptcode of 0x%x\n",
+		    param.run->exit_reason, param.run->s390_sieic.icptcode);
+	vcpu_regs_get(param.vcpu, &regs);
+	TEST_ASSERT(regs.gprs[3] == 0x3333,
+		    "Expected 0x3333 but got 0x%llx\n", regs.gprs[3]);
+	/* Check PSW wait bit (bit 14 from MSB = bit 63-14 from LSB) */
+	TEST_ASSERT((param.run->psw_mask & PSW_WAIT_BIT_MASK) != 0,
+		    "PSW wait bit not set, PSW Mask = 0x%llx\n",
+		    param.run->psw_mask);
+	cleanup_kvm(&param);
+	return true;
+}
+
+static void guestcode_nop(void)
+{
+	GUEST_DONE();
+}
+
+static bool test_vm_create_and_destroy(void)
+{
+	struct kvm_parameters parameters = {.guest_code = guestcode_nop};
+
+	ksft_print_msg("Testing VM Closure without Running vCPU\n");
+	parameters = create_vm_kvm_exit(parameters);
+	TEST_ASSERT(parameters.vcpu->run->exit_reason == KVM_EXIT_UNKNOWN,
+		    "Unexpected Exit Reason Before vCPU Execution: %u\n",
+		    parameters.vcpu->run->exit_reason);
+	TEST_ASSERT(parameters.vcpu->run->immediate_exit == 0,
+		    "Immediate Exit Unexpected Behavior: %d\n",
+		    parameters.vcpu->run->immediate_exit);
+	cleanup_kvm(&parameters);
+	return true;
+}
+
 static void test(void)
 {
 	int i;
@@ -335,6 +405,14 @@ static void test(void)
 		{
 			.name = "Testing Translation Exceptions",
 			.test = test_translation_exceptions,
+		},
+		{
+			.name = "Testing Wait State",
+			.test = test_wait_state,
+		},
+		{
+			.name = "Testing VM Create and Destroy",
+			.test = test_vm_create_and_destroy,
 		},
 	};
 
