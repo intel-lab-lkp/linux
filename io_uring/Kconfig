@@ -30,3 +30,13 @@ config IO_URING_BPF_OPS
 	def_bool y
 	depends on IO_URING
 	depends on BPF_SYSCALL && BPF_JIT && DEBUG_INFO_BTF
+
+config IO_URING_OPAQUE_OBJ_KUNIT_TEST
+	bool "KUnit smoke tests for opaque objects" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y && IO_URING_OPAQUE_OBJ
+	default KUNIT_ALL_TESTS
+	help
+	  Check receive-budget admission and watermark transitions, and the
+	  vector representation and reference lifetime of an immutable version.
+	  The tests call internal helpers without a userspace ring or TCP socket.
+	  They are a small smoke test, not a pressure or concurrency suite.
