@@ -153,6 +153,7 @@ struct sysc {
 	struct ti_sysc_cookie cookie;
 	const char *name;
 	u32 revision;
+	bool revision_doubleword;
 	u32 sysconfig;
 	unsigned int reserved:1;
 	unsigned int enabled:1;
@@ -179,7 +180,8 @@ static void sysc_write(struct sysc *ddata, int offset, u32 value)
 
 		/* Only i2c revision has LO and HI register with stride of 4 */
 		if (ddata->offsets[SYSC_REVISION] >= 0 &&
-		    offset == ddata->offsets[SYSC_REVISION]) {
+		    offset == ddata->offsets[SYSC_REVISION] &&
+		    ddata->revision_doubleword) {
 			u16 hi = value >> 16;
 
 			writew_relaxed(hi, ddata->module_va + offset + 4);
@@ -200,7 +202,8 @@ static u32 sysc_read(struct sysc *ddata, int offset)
 
 		/* Only i2c revision has LO and HI register with stride of 4 */
 		if (ddata->offsets[SYSC_REVISION] >= 0 &&
-		    offset == ddata->offsets[SYSC_REVISION]) {
+		    offset == ddata->offsets[SYSC_REVISION] &&
+		    ddata->revision_doubleword) {
 			u16 tmp = readw_relaxed(ddata->module_va + offset + 4);
 
 			val |= tmp << 16;
@@ -761,8 +764,10 @@ static void sysc_check_children(struct sysc *ddata)
  */
 static void sysc_check_quirk_16bit(struct sysc *ddata, struct resource *res)
 {
-	if (resource_size(res) == 8)
+	if (resource_size(res) == 8) {
 		ddata->cfg.quirks |= SYSC_QUIRK_16BIT | SYSC_QUIRK_USE_CLOCKACT;
+		ddata->revision_doubleword = true;
+	}
 }
 
 /**
@@ -1527,9 +1532,11 @@ static const struct sysc_revision_quirk sysc_revision_quirks[] = {
 	SYSC_QUIRK("i2c", 0, 0, 0x20, 0x10, 0x00000036, 0x000000ff,
 		   SYSC_MODULE_QUIRK_I2C | SYSC_MODULE_QUIRK_ENA_RESETDONE),
 	SYSC_QUIRK("i2c", 0, 0, 0x20, 0x10, 0x0000003c, 0x000000ff,
-		   SYSC_MODULE_QUIRK_I2C | SYSC_MODULE_QUIRK_ENA_RESETDONE),
+		   SYSC_MODULE_QUIRK_I2C | SYSC_MODULE_QUIRK_ENA_RESETDONE |
+		   SYSC_QUIRK_16BIT | SYSC_QUIRK_USE_CLOCKACT),
 	SYSC_QUIRK("i2c", 0, 0, 0x20, 0x10, 0x00000040, 0x000000ff,
-		   SYSC_MODULE_QUIRK_I2C | SYSC_MODULE_QUIRK_ENA_RESETDONE),
+		   SYSC_MODULE_QUIRK_I2C | SYSC_MODULE_QUIRK_ENA_RESETDONE |
+		   SYSC_QUIRK_16BIT | SYSC_QUIRK_USE_CLOCKACT),
 	SYSC_QUIRK("i2c", 0, 0, 0x10, 0x90, 0x5040000a, 0xfffff0f0,
 		   SYSC_MODULE_QUIRK_I2C | SYSC_MODULE_QUIRK_ENA_RESETDONE),
 	SYSC_QUIRK("gpu", 0x50000000, 0x14, -ENODEV, -ENODEV, 0x00010201, 0xffffffff, 0),
@@ -1872,7 +1879,7 @@ static void sysc_clk_quirk_i2c(struct sysc *ddata, bool enable)
 	u16 val;
 
 	/* I2C_CON, omap2/3 is different from omap4 and later */
-	if ((ddata->revision & 0xffffff00) == 0x001f0000)
+	if (!ddata->revision_doubleword)
 		offset = 0x24;
 	else
 		offset = 0xa4;
