@@ -4009,7 +4009,8 @@ static inline bool skb_can_coalesce_netmem(struct sk_buff *skb, int i,
 		const skb_frag_t *frag = &skb_shinfo(skb)->frags[i - 1];
 
 		return netmem == skb_frag_netmem(frag) &&
-		       off == skb_frag_off(frag) + skb_frag_size(frag);
+		       (u64)(unsigned int)off ==
+		       (u64)skb_frag_off(frag) + skb_frag_size(frag);
 	}
 	return false;
 }

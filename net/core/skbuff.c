@@ -98,6 +98,7 @@
 #include "devmem.h"
 #include "net-sysfs.h"
 #include "netmem_priv.h"
+#include "skbuff_splice.h"
 
 #ifdef CONFIG_SKB_EXTENSIONS
 static struct kmem_cache *skbuff_ext_cache __ro_after_init;
@@ -7532,6 +7533,23 @@ static void skb_splice_csum_page(struct sk_buff *skb, struct page *page,
 	skb->csum = csum_block_add(skb->csum, csum, csum_offset);
 }
 
+/* Add the checksum of @len bytes at @offset in @page to skb->csum; the range
+ * may run on into the pages that follow @page.
+ */
+static void skb_splice_csum_range(struct sk_buff *skb, struct page *page,
+				  size_t offset, size_t len,
+				  unsigned int csum_offset)
+{
+	while (len) {
+		size_t part = min_t(size_t, PAGE_SIZE - offset, len);
+
+		skb_splice_csum_page(skb, page++, offset, part, csum_offset);
+		csum_offset += part;
+		len -= part;
+		offset = 0;
+	}
+}
+
 /**
  * skb_splice_from_iter - Splice (or copy) pages to skbuff
  * @skb: The buffer to add pages to
@@ -7540,8 +7558,12 @@ static void skb_splice_csum_page(struct sk_buff *skb, struct page *page,
  *
  * This is a common helper function for supporting MSG_SPLICE_PAGES.  It
  * extracts pages from an iterator and adds them to the socket buffer if
- * possible, copying them to fragments if not possible (such as if they're slab
- * pages).
+ * possible.  Pages that cannot be sent (such as slab pages) are rejected
+ * with -EIO, not copied.  Consecutive pages of one folio are grouped within
+ * the fragment representation limits.  A fragment is anchored at the head
+ * or a tail page of that folio and holds one reference on the folio either
+ * way.  On CONFIG_HIGHMEM builds a fragment stays within one actual page
+ * of the folio, because kmap_local_page() maps only one page.
  *
  * Returns the amount of data spliced/copied or -EMSGSIZE if there's
  * insufficient space in the buffer to transfer anything.
@@ -7552,7 +7574,7 @@ ssize_t skb_splice_from_iter(struct sk_buff *skb, struct iov_iter *iter,
 	size_t frag_limit = READ_ONCE(net_hotdata.sysctl_max_skb_frags);
 	struct page *pages[8], **ppages = pages;
 	ssize_t spliced = 0, ret = 0;
-	unsigned int i;
+	unsigned int i, nr_pages;
 
 	if (!maxsize)
 		return 0;
@@ -7575,29 +7597,52 @@ ssize_t skb_splice_from_iter(struct sk_buff *skb, struct iov_iter *iter,
 			break;
 		}
 
+		nr_pages = DIV_ROUND_UP(off + len, PAGE_SIZE);
 		i = 0;
 		do {
 			struct page *page = pages[i++];
+			struct folio *folio = page_folio(page);
+			struct page *fpage = page;
+			size_t foff = off;
 			size_t part = min_t(size_t, PAGE_SIZE - off, len);
+			unsigned int first = i - 1;
+
+			if (!IS_ENABLED(CONFIG_HIGHMEM)) {
+				struct skb_splice_frag range;
+				u64 pos = ((u64)folio_page_idx(folio, page) << PAGE_SHIFT) + off;
+
+				range = skb_splice_frag_normalize(pos, len);
+				fpage = folio_page(folio, range.anchor >> PAGE_SHIFT);
+				foff = range.offset;
+				part = min_t(size_t, part, range.len);
+				/* A tail anchor also takes/drops a folio reference. */
+				while (i < nr_pages && part < range.len &&
+				       pages[i] == pages[i - 1] + 1 &&
+				       page_folio(pages[i]) == folio) {
+					part += min_t(size_t, PAGE_SIZE, range.len - part);
+					i++;
+				}
+			}
 
 			ret = -EIO;
-			if (WARN_ON_ONCE(!sendpage_ok(page))) {
+			if (WARN_ON_ONCE(!sendpage_ok(fpage))) {
 				iov_iter_revert(iter, len);
 				goto out;
 			}
 
-			ret = skb_append_pagefrags(skb, page, off, part,
-						   frag_limit);
+			ret = skb_append_pagefrags(skb, fpage, foff, part, frag_limit);
 			if (ret < 0) {
 				iov_iter_revert(iter, len);
 				goto out;
 			}
 
 			if (skb->ip_summed == CHECKSUM_NONE)
-				skb_splice_csum_page(skb, page, off, part,
-						     skb->len + spliced);
+				skb_splice_csum_range(skb, pages[first], off, part,
+						      skb->len + spliced);
 
-			off = 0;
+			off += part;
+			i = first + (off >> PAGE_SHIFT);
+			off = offset_in_page(off);
 			spliced += part;
 			maxsize -= part;
 			len -= part;
