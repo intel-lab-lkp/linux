@@ -330,6 +330,24 @@ static void ptracer_inject_xstate(pid_t target)
 	else
 		ksft_test_result_fail("%s for %s\n", __func__, xstate.name);
 
+	ksft_print_msg("[RUN]\t%s: reset xstate via ptrace().\n", xstate.name);
+
+	/* Reset the feature bit in XSTATE_BV only, expecting init-state back */
+	set_xstatebv(xbuf1, get_xstatebv(xbuf1) & ~xstate.mask);
+
+	/*
+	 * Prepare reference data. Note not every XSAVE implementation resets
+	 * the XSTATE_BV bit even though the component is in init-state.
+	 */
+	load_init_xstate(&xstate, xbuf2);
+	xsave(xbuf2, xstate.mask);
+	set_xstatebv(xbuf2, get_xstatebv(xbuf2) & ~xstate.mask);
+
+	if (validate_ptracer_xstate(target, iov, xbuf1, xbuf2))
+		ksft_test_result_pass("%s (reset) for %s\n", __func__, xstate.name);
+	else
+		ksft_test_result_fail("%s (reset) for %s\n", __func__, xstate.name);
+
 	free(xbuf1);
 	free(xbuf2);
 }
@@ -491,7 +509,7 @@ static struct test_info {
 	unsigned int nr;
 } tests[] = {
 	{ .nr = 1, .fn = test_context_switch, },
-	{ .nr = 1, .fn = test_ptrace, },
+	{ .nr = 2, .fn = test_ptrace, },
 	{ .nr = 2, .fn = test_signal, },
 };
 
