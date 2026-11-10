@@ -19,6 +19,7 @@
 #include <linux/sunrpc/svc.h>
 #include <linux/module.h>
 #include <linux/fsnotify.h>
+#include <kunit/visibility.h>
 #include <linux/nfslocalio.h>
 #include <linux/sunrpc/xdrgen/nfs3.h>
 
@@ -1366,6 +1367,7 @@ static int create_proc_exports_entry(void)
 #endif
 
 unsigned int nfsd_net_id;
+EXPORT_SYMBOL_IF_KUNIT(nfsd_net_id);
 
 struct nfsd_genl_rqstp {
 	struct sockaddr_storage	rq_daddr;
