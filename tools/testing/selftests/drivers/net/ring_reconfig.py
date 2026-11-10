@@ -37,6 +37,18 @@ def _channels_get_or_skip(cfg, ehdr):
         raise
 
 
+def _channels_set_or_skip(cfg, req, restore):
+    """ Set the channel config, skip the test if the device can't. """
+    undo = defer(cfg.eth.channels_set, restore)
+    try:
+        cfg.eth.channels_set(req)
+    except NlError as e:
+        if e.error == errno.EOPNOTSUPP:
+            undo.cancel()
+            raise KsftSkipEx("device does not support changing channels") from e
+        raise
+
+
 def channels(cfg) -> None:
     """
     Twiddle channel counts in various combinations of parameters.
@@ -338,16 +350,16 @@ def reconfig_tx_stall(cfg) -> None:
     other_queue = 0
 
     ehdr = {'header': {'dev-index': cfg.ifindex}}
-    chans = cfg.eth.channels_get(ehdr)
+    chans = _channels_get_or_skip(cfg, ehdr)
 
     if "combined-max" not in chans:
         raise KsftSkipEx("device does not support combined channels")
     if chans.get("combined-max", 0) < 2:
         raise KsftSkipEx("device does not support 2+ combined channels")
     if chans["combined-count"] < 2:
-        defer(cfg.eth.channels_set,
-              ehdr | {"combined-count": chans["combined-count"]})
-        cfg.eth.channels_set(ehdr | {"combined-count": 2})
+        _channels_set_or_skip(
+            cfg, ehdr | {"combined-count": 2},
+            ehdr | {"combined-count": chans["combined-count"]})
 
     rings = cfg.eth.rings_get(ehdr)
     if 'rx' not in rings or 'tx' not in rings:
