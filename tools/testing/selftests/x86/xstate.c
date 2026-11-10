@@ -62,6 +62,7 @@ static inline void load_init_xstate(struct xstate_info *xstate, struct xsave_buf
 
 static inline void copy_xstate(struct xsave_buffer *xbuf_dst, struct xsave_buffer *xbuf_src)
 {
+	memcpy(xbuf_dst->header, xbuf_src->header, XSAVE_HDR_SIZE);
 	memcpy(&xbuf_dst->bytes[xstate.xbuf_offset],
 	       &xbuf_src->bytes[xstate.xbuf_offset],
 	       xstate.size);
@@ -274,6 +275,13 @@ static bool validate_ptracer_xstate(pid_t target, struct iovec iov,
 		printf("#\tok\tSW reserved area\n");
 	} else {
 		printf("#\tnot ok\tSW reserved area\n");
+		failed++;
+	}
+
+	if ((xstate.mask & get_xstatebv(xbuf)) == (xstate.mask & get_xstatebv(expected))) {
+		printf("#\tok\tXSTATE_BV\n");
+	} else {
+		printf("#\tnot ok\tXSTATE_BV\n");
 		failed++;
 	}
 
