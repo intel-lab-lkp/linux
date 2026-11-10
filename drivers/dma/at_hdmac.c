@@ -1944,7 +1944,7 @@ static void at_dma_cleanup_channels(struct at_dma *atdma)
 			device_node) {
 		/* Disable interrupts */
 		atc_disable_chan_irq(atdma, i++);
-		tasklet_kill(&to_at_dma_chan(chan)->vc.task);
+		dmaengine_kill_bh(chan);
 		list_del(&chan->device_node);
 	}
 }

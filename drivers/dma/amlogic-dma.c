@@ -707,10 +707,10 @@ static void aml_dma_remove(struct platform_device *pdev)
 	for (i = 0; i < MAX_CHAN_ID; i++) {
 		aml_chan = aml_dma->aml_rch[i];
 		if (aml_chan)
-			tasklet_kill(&aml_chan->vchan.task);
+			dmaengine_kill_bh(&aml_chan->vchan.chan);
 		aml_chan = aml_dma->aml_wch[i];
 		if (aml_chan)
-			tasklet_kill(&aml_chan->vchan.task);
+			dmaengine_kill_bh(&aml_chan->vchan.chan);
 	}
 	destroy_workqueue(aml_dma->free_wq);
 }
