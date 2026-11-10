@@ -9,6 +9,10 @@
 #include <linux/hashtable.h>
 #include <linux/io_uring.h>
 
+#ifdef CONFIG_SOCK_RX_OWNER
+#include <net/sock.h>
+#endif
+
 #include <trace/events/io_uring.h>
 
 #include <uapi/linux/io_uring.h>
@@ -21,6 +25,7 @@
 #include "kbuf.h"
 #include "poll.h"
 #include "cancel.h"
+#include "opaque.h"
 
 struct io_poll_update {
 	struct file			*file;
@@ -40,6 +45,47 @@ struct io_poll_table {
 	/* output value, set only if arm poll returns >0 */
 	__poll_t result_mask;
 };
+
+static bool io_poll_rx_owned(struct io_kiocb *req)
+{
+#ifdef CONFIG_SOCK_RX_OWNER
+	struct socket *sock;
+
+	/* Error-queue receives do not encounter the payload-owner refusal. */
+	if (req->flags & REQ_F_CLEAR_POLLIN)
+		return false;
+	switch (req->opcode) {
+	case IORING_OP_READ:
+	case IORING_OP_READV:
+	case IORING_OP_READ_FIXED:
+	case IORING_OP_READV_FIXED:
+	case IORING_OP_READ_MULTISHOT:
+	case IORING_OP_RECV:
+	case IORING_OP_RECVMSG:
+	case IORING_OP_RECV_ZC:
+		break;
+	default:
+		return false;
+	}
+	sock = sock_from_file(req->file);
+	return sock && sock->sk && sock_rx_owned(sock->sk);
+#else
+	return false;
+#endif
+}
+
+static __poll_t io_poll_mask(struct io_kiocb *req, struct poll_table_struct *pt)
+{
+	/* Enroll before checking persistent readiness: a later change must wake us. */
+	__poll_t mask = vfs_poll(req->file, pt);
+
+	if (req->opcode == IORING_OP_OPAQUE_COLLECT)
+		mask |= io_opaque_collect_poll(req);
+	else if (io_poll_rx_owned(req))
+		/* A coalesced claim wake must still issue the real receive handler. */
+		mask |= EPOLLIN | EPOLLRDNORM;
+	return mask;
+}
 
 #define IO_POLL_CANCEL_FLAG	BIT(31)
 #define IO_POLL_RETRY_FLAG	BIT(30)
@@ -283,7 +329,7 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 			__poll_t events = req->apoll_events;
 			struct poll_table_struct pt = { ._key = events };
 
-			req->cqe.res = vfs_poll(req->file, &pt) & events;
+			req->cqe.res = io_poll_mask(req, &pt) & events;
 			/*
 			 * We got woken with a mask, but someone else got to
 			 * it first. The above vfs_poll() doesn't add us back
@@ -416,6 +462,14 @@ static int io_poll_wake(struct wait_queue_entry *wait, unsigned mode, int sync,
 
 	if (unlikely(mask & POLLFREE))
 		return io_pollfree_wake(req, poll);
+
+	if (mask & POLL_RX_OWNER) {
+		if (req->opcode != IORING_OP_OPAQUE_COLLECT &&
+		    !io_poll_rx_owned(req))
+			return 0;
+		/* Recheck current ownership/readiness, never cache a private event. */
+		mask = 0;
+	}
 
 	/* for instances that support it check for an event match first */
 	if (mask && !(mask & (poll->events & ~IO_ASYNC_POLL_COMMON)))
@@ -597,7 +651,7 @@ static int __io_arm_poll_handler(struct io_kiocb *req,
 	if (poll->events & EPOLLEXCLUSIVE)
 		req->flags |= REQ_F_POLL_NO_LAZY;
 
-	mask = vfs_poll(req->file, &ipt->pt) & poll->events;
+	mask = io_poll_mask(req, &ipt->pt) & poll->events;
 
 	if (unlikely(ipt->error || !ipt->nr_entries)) {
 		io_poll_remove_entries(req);

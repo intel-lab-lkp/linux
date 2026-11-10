@@ -102,6 +102,7 @@ void io_opaque_stop(struct io_opaque_store *store);
 void io_opaque_free(struct io_opaque_store *store);
 int io_opaque_recv_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe);
 int io_opaque_recv(struct io_kiocb *req, unsigned int issue_flags);
+__poll_t io_opaque_collect_poll(struct io_kiocb *req);
 int io_opaque_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe);
 int io_opaque_issue(struct io_kiocb *req, unsigned int issue_flags);
 int io_opaque_send_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe);
@@ -113,6 +114,11 @@ int io_opaque_cancel(struct io_ring_ctx *ctx, struct io_cancel_data *cd,
 bool io_opaque_cancel_all(struct io_ring_ctx *ctx, struct io_uring_task *tctx,
 			  bool cancel_all);
 #else
+static inline __poll_t io_opaque_collect_poll(struct io_kiocb *req)
+{
+	return 0;
+}
+
 static inline bool io_opaque_cache_init(struct io_ring_ctx *ctx)
 {
 	return false;

@@ -2,6 +2,7 @@
 #ifndef IO_URING_OPAQUE_INTERNAL_H
 #define IO_URING_OPAQUE_INTERNAL_H
 
+#include <linux/atomic.h>
 #include <linux/bitmap.h>
 #include <linux/bvec.h>
 #include <linux/net.h>
@@ -148,6 +149,8 @@ struct io_opaque_vec {
 
 struct io_opaque_stream {
 	refcount_t refs;
+	/* Consumed only on entry to a collector pass, never by native poll. */
+	atomic_t collect_ready;
 	/* Extents, range decisions and collector state. */
 	struct mutex lock;
 	struct io_opaque_store *store;

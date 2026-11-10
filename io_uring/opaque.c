@@ -8,6 +8,7 @@
 #include <linux/overflow.h>
 #include <linux/rbtree.h>
 #include <linux/sched/mm.h>
+#include <linux/security.h>
 #include <linux/skbuff.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
@@ -48,6 +49,38 @@ static void io_opaque_ready(struct io_tw_req tw_req, io_tw_token_t tw);
 static void io_opaque_vec_cleanup(struct io_opaque_req *op);
 static void io_opaque_stream_close(struct io_opaque_stream *stream);
 static void io_opaque_tx_put(struct io_opaque_req *op);
+
+/*
+ * Publish before waking; native poll enrolls before reading collect_ready.
+ * This is not TCP readiness: only COLLECT and receive-owner-affected apoll
+ * recheck their predicates. Ordinary poll and output apoll ignore the key.
+ */
+static void io_opaque_collect_wake(struct io_opaque_stream *stream)
+{
+	struct socket *sock = sock_from_file(stream->file);
+
+	atomic_set(&stream->collect_ready, 1);
+	wake_up_interruptible_poll(sk_sleep(sock->sk), POLL_RX_OWNER);
+}
+
+static void io_opaque_data_ready(struct sock *sk, void *data)
+{
+	struct io_opaque_stream *stream = data;
+
+	/* sk_callback_lock pins stream; do not take stream or socket locks here. */
+	atomic_set(&stream->collect_ready, 1);
+	wake_up_interruptible_poll(sk_sleep(sk), POLL_RX_OWNER);
+}
+
+__poll_t io_opaque_collect_poll(struct io_kiocb *req)
+{
+	struct io_opaque_req *op = req->async_data;
+
+	/* io-wq may poll before the first issue, including a trailing link. */
+	if (!op->stream)
+		return op->collect_flags & IORING_RECVSEND_POLL_FIRST ? 0 : EPOLLIN;
+	return atomic_read(&op->stream->collect_ready) ? EPOLLIN : 0;
+}
 
 static bool io_opaque_budget_ready(struct io_opaque_req *op, unsigned long now)
 {
@@ -103,8 +136,6 @@ static bool io_opaque_wake_budget(struct io_opaque_store *store)
 	guard(spinlock)(&store->wait_lock);
 	stopped = READ_ONCE(store->dead);
 	list_for_each_entry_safe(op, next, &store->budget_waits, wait) {
-		struct socket *sock = sock_from_file(op->req->file);
-
 		if (!stopped && !READ_ONCE(op->stream->closed)) {
 			if (time_before(now, op->retry_at)) {
 				delay = min(delay, op->retry_at - now);
@@ -122,7 +153,7 @@ static bool io_opaque_wake_budget(struct io_opaque_store *store)
 		/* A wake is not a reservation; the collector rechecks on entry. */
 		woken++;
 		/* Native multishot polling also observes FIN, RST and urgent data. */
-		wake_up_interruptible_poll(sk_sleep(sock->sk), EPOLLIN);
+		io_opaque_collect_wake(op->stream);
 	}
 	if (!stopped && delay != MAX_JIFFY_OFFSET)
 		queue_delayed_work(system_dfl_wq, &store->retry_work, delay);
@@ -147,7 +178,6 @@ static void io_opaque_retry_work(struct work_struct *work)
 static void io_opaque_wake_stream(struct io_opaque_stream *stream)
 {
 	struct io_opaque_req *op = stream->collector;
-	struct socket *sock = sock_from_file(stream->file);
 
 	lockdep_assert_held(&stream->lock);
 	if (!op)
@@ -158,7 +188,7 @@ static void io_opaque_wake_stream(struct io_opaque_stream *stream)
 			return;
 		list_del_init(&op->wait);
 	}
-	wake_up_interruptible_poll(sk_sleep(sock->sk), EPOLLIN);
+	io_opaque_collect_wake(stream);
 }
 
 int io_opaque_memory_mode(struct io_opaque_store *store)
@@ -1158,6 +1188,269 @@ static void io_opaque_stream_process(struct io_opaque_stream *stream)
 	}
 }
 
+/* Only the earliest undecided range is consulted on the capture hot path. */
+static struct io_opaque_req *io_opaque_next_decision(struct io_opaque_stream *stream)
+{
+	struct rb_node *node = rb_first_cached(&stream->decisions);
+
+	return node ? rb_entry(node, struct io_opaque_req, decision) : NULL;
+}
+
+/* Undecided bytes are collected only when nothing is pending or a request needs later bytes. */
+static bool io_opaque_collect_demand(struct io_opaque_stream *stream)
+{
+	struct io_opaque_req *op = io_opaque_next_decision(stream);
+
+	lockdep_assert_held(&stream->lock);
+	return !stream->undecided || !list_empty(&stream->reads) ||
+	       (op && op->offset > stream->next);
+}
+
+static struct io_opaque_req *io_opaque_capture_keep(struct io_opaque_stream *stream)
+{
+	struct io_opaque_req *op = io_opaque_next_decision(stream);
+
+	if (op && op->op == IORING_OPAQUE_RECV_OBJECT && stream->next >= op->offset &&
+	    stream->next < op->offset + op->length)
+		return op;
+	return NULL;
+}
+
+static struct io_opaque_extent *io_opaque_capture_tail(struct io_opaque_stream *stream)
+{
+	struct io_opaque_req *op = io_opaque_capture_keep(stream);
+	struct list_head *list = op ? &op->data->extents : &stream->extents;
+
+	return list_last_entry_or_null(list, struct io_opaque_extent, list);
+}
+
+static int io_opaque_append(struct io_opaque_stream *stream, struct page *page,
+			    u32 offset, u32 length, bool take_ref, bool copied)
+{
+	struct io_opaque_req *op = io_opaque_capture_keep(stream);
+	struct list_head *list = &stream->extents;
+	struct io_opaque_extent *extent, *tail;
+	u64 start = stream->next;
+	bool new_backing = false;
+
+	if (op) {
+		list = &op->data->extents;
+		start -= op->offset;
+	}
+	tail = list_last_entry_or_null(list, struct io_opaque_extent, list);
+	offset += (page - compound_head(page)) * PAGE_SIZE;
+	page = compound_head(page);
+	if (tail && tail->backing->page == page) {
+		if (tail->start + tail->length == start &&
+		    tail->offset + tail->length == offset) {
+			tail->length += length;
+			extent = tail;
+			goto accounted;
+		}
+	}
+	stream->need_bytes = page_size(page);
+	if (atomic_read(&stream->store->extents) >= stream->store->config.max_extents - 2)
+		return -ENOBUFS;
+	if (tail && tail->backing->page == page) {
+		if (!io_opaque_extent_reserve(stream->store))
+			return -ENOBUFS;
+		extent = kmalloc_obj(*extent, GFP_KERNEL_ACCOUNT);
+		if (!extent) {
+			io_opaque_extent_unreserve(stream->store, 0);
+			return -ENOMEM;
+		}
+		*extent = (struct io_opaque_extent) {
+			.backing = tail->backing, .start = start,
+			.offset = offset, .length = length,
+		};
+		refcount_inc(&extent->backing->refs);
+	} else {
+		u64 left = op ? ALIGN(op->length - op->progress - length, PAGE_SIZE) : 0;
+
+		/* Leave room for dense copies of a private KEEP's remaining bytes. */
+		if (!copied && op && op->data->charge + stream->need_bytes + left >
+		    io_opaque_rx_limit(stream->store))
+			return -ENOBUFS;
+		extent = io_opaque_extent_new(stream->store, page, offset, length, start, copied);
+		if (IS_ERR(extent))
+			return PTR_ERR(extent);
+		if (take_ref)
+			get_page(page);
+		extent->backing->copied = copied;
+		new_backing = true;
+	}
+	list_add_tail(&extent->list, list);
+accounted:
+	if (op) {
+		op->progress += length;
+		op->data->length += length;
+		if (new_backing)
+			op->data->charge += extent->backing->charge;
+	} else {
+		stream->undecided += length;
+	}
+	if (copied) {
+		extent->backing->filled = offset + length;
+		atomic64_add(length, &stream->store->copied);
+	}
+	return length;
+}
+
+static int io_opaque_capture(struct io_opaque_stream *stream,
+			     const struct sk_buff *skb, u32 offset, u32 len,
+			     bool shared)
+{
+	u32 consumed = 0, head = skb_headlen(skb), start = head;
+	bool copy_frags;
+	struct sk_buff *child;
+	u64 retain_limit = io_opaque_rx_limit(stream->store);
+	u32 chunk;
+	int i, ret = -EFAULT;
+
+	shared |= skb_shared(skb);
+	copy_frags = shared || skb_cloned(skb) || skb_has_shared_frag(skb);
+	if (!skb_frags_readable(skb))
+		return -EIO;
+	if (offset < head) {
+		chunk = min(head - offset, len);
+		if (!shared && !skb_head_is_locked(skb)) {
+			void *data = skb->data + offset;
+			struct page *page = virt_to_page(data);
+
+			/* A compound allocation larger than the limit can never fit. */
+			if (page_size(compound_head(page)) > retain_limit)
+				goto copy;
+			ret = io_opaque_append(stream, page, offset_in_page(data),
+					       chunk, true, false);
+		} else {
+			goto copy;
+		}
+		if (ret == -ENOBUFS)
+			goto copy;
+		goto head_done;
+	}
+	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
+		const skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
+		u32 size = skb_frag_size(frag);
+
+		if (offset >= start + size) {
+			start += size;
+			continue;
+		}
+		chunk = min(start + size - offset, len);
+		if (copy_frags || page_size(compound_head(skb_frag_page(frag))) > retain_limit)
+			goto copy;
+		ret = io_opaque_append(stream, skb_frag_page(frag),
+				       skb_frag_off(frag) + offset - start, chunk, true, false);
+		if (ret == -ENOBUFS)
+			goto copy;
+		goto head_done;
+	}
+	skb_walk_frags(skb, child) {
+		if (offset >= start + child->len) {
+			start += child->len;
+			continue;
+		}
+		return io_opaque_capture(stream, child, offset - start,
+					 min(start + child->len - offset, len), copy_frags);
+	}
+	return -EFAULT;
+copy:
+	{
+		struct io_opaque_extent *tail = io_opaque_capture_tail(stream);
+		struct page *page;
+		u32 pos = 0;
+		bool allocated = true;
+		void *mapped;
+
+		if (tail && tail->backing->copied && tail->backing->filled < PAGE_SIZE &&
+		    tail->offset + tail->length == tail->backing->filled) {
+			page = tail->backing->page;
+			pos = tail->backing->filled;
+			allocated = false;
+		} else {
+			stream->need_bytes = PAGE_SIZE;
+			if (!io_opaque_charge(stream->store, PAGE_SIZE, true))
+				return -ENOBUFS;
+			page = alloc_page(GFP_KERNEL_ACCOUNT);
+			if (!page) {
+				io_opaque_uncharge(stream->store, PAGE_SIZE);
+				return -ENOMEM;
+			}
+		}
+		chunk = min_t(u32, chunk, PAGE_SIZE - pos);
+		mapped = kmap_local_page(page);
+		ret = skb_copy_bits(skb, offset, mapped + pos, chunk);
+		kunmap_local(mapped);
+		if (!ret)
+			ret = io_opaque_append(stream, page, pos, chunk, false, true);
+		if (ret < 0 && allocated) {
+			put_page(page);
+			io_opaque_uncharge(stream->store, PAGE_SIZE);
+		}
+	}
+head_done:
+	if (ret > 0)
+		consumed += ret;
+	return consumed ?: ret;
+}
+
+static int io_opaque_actor(read_descriptor_t *desc, struct sk_buff *skb,
+			   unsigned int offset, size_t length)
+{
+	struct io_opaque_stream *stream = desc->arg.data;
+	u32 consumed = 0;
+	int ret = 0;
+
+	/* The first capture error ends the pass; later bytes wait for the next one. */
+	if (desc->error)
+		return 0;
+	length = min(length, desc->count);
+	length = min_t(u64, length, U64_MAX - stream->next);
+	while (length) {
+		struct io_opaque_req *op = io_opaque_next_decision(stream);
+		u32 chunk = length;
+
+		if (op && stream->next >= op->offset) {
+			chunk = min_t(u64, chunk, op->offset + op->length - stream->next);
+			if (op->op == IORING_OPAQUE_DISCARD) {
+				op->progress += chunk;
+				ret = chunk;
+				goto consumed;
+			}
+		} else {
+			/*
+			 * Undecided bytes stay on the socket until someone asks for them.
+			 * A decision further in the stream asks for the gap before it,
+			 * including one that became the earliest during this pass.
+			 */
+			if (stream->hold_undecided && !op)
+				break;
+			if (op)
+				chunk = min_t(u64, chunk, op->offset - stream->next);
+		}
+		ret = io_opaque_capture(stream, skb, offset, chunk, false);
+		if (ret <= 0) {
+			desc->error = ret;
+			break;
+		}
+consumed:
+		stream->next += ret;
+		consumed += ret;
+		offset += ret;
+		length -= ret;
+		desc->count -= ret;
+		if (op && op->progress == op->length) {
+			rb_erase_cached(&op->decision, &stream->decisions);
+			RB_CLEAR_NODE(&op->decision);
+			io_opaque_queue_ready(op, op->length);
+		}
+	}
+	if (!length && stream->next == U64_MAX)
+		stream->error = -EOVERFLOW;
+	return consumed ?: ret;
+}
+
 static void io_opaque_stream_close(struct io_opaque_stream *stream)
 {
 	struct socket *sock = sock_from_file(stream->file);
@@ -1174,8 +1467,297 @@ static void io_opaque_stream_close(struct io_opaque_stream *stream)
 	io_opaque_extents_free(stream->store, &stream->extents);
 	stream->undecided = 0;
 	io_opaque_stream_process(stream);
-	wake_up_interruptible_poll(sk_sleep(sock->sk), EPOLLIN);
+	io_opaque_collect_wake(stream);
 	io_opaque_wake_budget(stream->store);
+}
+
+int io_opaque_recv_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+{
+	struct io_opaque_store *store = xa_load(&req->ctx->opaque_stores,
+						READ_ONCE(sqe->opaque_store_id));
+	struct io_opaque_req *op;
+	u16 flags = READ_ONCE(sqe->ioprio);
+
+	if (!store)
+		return -ENXIO;
+	if (READ_ONCE(sqe->addr) || READ_ONCE(sqe->off) || READ_ONCE(sqe->addr3) ||
+	    READ_ONCE(sqe->len) || READ_ONCE(sqe->msg_flags) ||
+	    READ_ONCE(sqe->buf_index) || READ_ONCE(sqe->__pad2[0]) ||
+	    (flags & ~IORING_RECVSEND_POLL_FIRST) ||
+	    (req->flags & (REQ_F_CQE_SKIP | REQ_F_FORCE_ASYNC)))
+		return -EINVAL;
+	op = io_opaque_req_alloc(req, store);
+	if (IS_ERR(op))
+		return PTR_ERR(op);
+	op->op = U16_MAX - 1;
+	op->collect_flags = flags;
+	/* One native poll task-work enqueue may produce several range CQEs. */
+	req->flags |= REQ_F_APOLL_MULTISHOT | REQ_F_POLL_NO_LAZY;
+	return 0;
+}
+
+/*
+ * Make @op the collector of its socket. The socket is taken before tables,
+ * which is the order a send admits in, with the socket owned. Nothing may wait
+ * for a socket lock while it holds tables.
+ */
+static int io_opaque_attach(struct io_opaque_req *op)
+{
+	struct io_opaque_store *store = op->store;
+	struct io_opaque_stream *stream;
+	struct socket *sock = sock_from_file(op->req->file);
+	struct msghdr msg = { .msg_flags = MSG_DONTWAIT };
+	struct io_uring_cqe cqe[2] = {};
+	u32 i;
+	int ret;
+
+	if (!sock || sock->type != SOCK_STREAM || sock->sk->sk_protocol != IPPROTO_TCP)
+		return -EOPNOTSUPP;
+	/* Authorize the collector's lifetime before taking the socket lock. */
+	ret = security_socket_recvmsg(sock, &msg, 0, MSG_DONTWAIT);
+	if (ret)
+		return ret;
+	stream = kzalloc_obj(*stream, GFP_KERNEL_ACCOUNT);
+	if (!stream)
+		return -ENOMEM;
+	refcount_set(&stream->refs, 1);
+	atomic_set(&stream->collect_ready, 0);
+	mutex_init(&stream->lock);
+	INIT_LIST_HEAD(&stream->extents);
+	INIT_LIST_HEAD(&stream->reads);
+	stream->decisions = RB_ROOT_CACHED;
+	stream->store = store;
+	stream->file = get_file(op->req->file);
+	stream->owner.actor = io_opaque_actor;
+	stream->owner.data = stream;
+	stream->owner.data_ready = io_opaque_data_ready;
+	stream->collector = op;
+	lock_sock(sock->sk);
+	mutex_lock(&store->tables);
+	if (sock->sk->sk_rx_owner || sock->sk->sk_prot != sock->sk->sk_prot_creator ||
+	    tcp_sk(sock->sk)->repair || tcp_sk(sock->sk)->urg_data) {
+		ret = -EBUSY;
+		goto unlock;
+	}
+	if (sock->sk->sk_state != TCP_ESTABLISHED && sock->sk->sk_state != TCP_CLOSE_WAIT) {
+		ret = -ENOTCONN;
+		goto unlock;
+	}
+	ret = -ENOSPC;
+	for (;;) {
+		struct io_opaque_stream_slot *slot;
+
+		i = io_opaque_find_slot(store->stream_used, store->config.max_streams,
+					&store->stream_cursor);
+		if (i >= store->config.max_streams)
+			break;
+		slot = &store->streams[i];
+		if (slot->generation == IO_OPAQUE_GENERATION_MAX) {
+			__set_bit(i, store->stream_used);
+			continue;
+		}
+		write_lock_bh(&sock->sk->sk_callback_lock);
+		if (sock->sk->sk_user_data) {
+			write_unlock_bh(&sock->sk->sk_callback_lock);
+			ret = -EBUSY;
+			break;
+		}
+		slot->generation++;
+		stream->token = io_opaque_handle(i, slot->generation) | IO_OPAQUE_TOKEN_TAG;
+		cqe[0].user_data = op->req->cqe.user_data;
+		cqe[0].flags = IORING_CQE_F_MORE | ctx_cqe32_flags(op->req->ctx);
+		memcpy(&cqe[1], &stream->token, sizeof(stream->token));
+		if (!io_req_post_cqe32(op->req, cqe)) {
+			write_unlock_bh(&sock->sk->sk_callback_lock);
+			ret = -ENOSPC;
+			break;
+		}
+		WRITE_ONCE(sock->sk->sk_rx_owner, &stream->owner);
+		write_unlock_bh(&sock->sk->sk_callback_lock);
+		slot->stream = stream;
+		__set_bit(i, store->stream_used);
+		store->nr_streams++;
+		refcount_inc(&stream->refs);
+		op->stream = stream;
+		ret = 0;
+		break;
+	}
+unlock:
+	mutex_unlock(&store->tables);
+	release_sock(sock->sk);
+	/* Ownership publication is not an ordinary TCP readiness event either. */
+	if (!ret)
+		wake_up_interruptible_poll(sk_sleep(sock->sk), POLL_RX_OWNER);
+	if (ret)
+		io_opaque_stream_put(stream);
+	return ret;
+}
+
+/* Report a budget stall once per unread offset, without ending collection. */
+static int io_opaque_budget_cqe(struct io_opaque_req *op)
+{
+	struct io_opaque_stream *stream = op->stream;
+	struct io_uring_cqe cqe[2] = {};
+	u64 extra[2] = { stream->token, stream->next };
+
+	if (op->budget_reported && op->offset == stream->next)
+		return 0;
+	cqe[0].res = -ENOBUFS;
+	cqe[0].flags = IORING_CQE_F_MORE | ctx_cqe32_flags(op->req->ctx);
+	memcpy(&cqe[1], extra, sizeof(extra));
+	if (!io_req_post_cqe32(op->req, cqe))
+		return -ENOSPC;
+	op->budget_reported = true;
+	op->offset = stream->next;
+	return 0;
+}
+
+static void io_opaque_budget_wait(struct io_opaque_req *op, int error)
+{
+	lockdep_assert_held(&op->stream->lock);
+	scoped_guard(spinlock, &op->store->wait_lock) {
+		op->need_bytes = error == -ENOMEM ? 0 : op->stream->need_bytes;
+		if (error == -ENOMEM && !time_before(jiffies, op->retry_at))
+			op->retry_at = jiffies + msecs_to_jiffies(IO_OPAQUE_ALLOC_RETRY_MS);
+		else if (error == -ENOBUFS)
+			op->retry_at = jiffies;
+		op->phase = IO_OPAQUE_BUDGET_POLL;
+		list_add_tail(&op->wait, &op->store->budget_waits);
+	}
+	/* Recheck after enrollment to close the release/enrollment race. */
+	io_opaque_wake_budget(op->store);
+}
+
+int io_opaque_recv(struct io_kiocb *req, unsigned int issue_flags)
+{
+	struct io_opaque_req *op = req->async_data;
+	struct io_opaque_stream *stream;
+	struct socket *sock = sock_from_file(req->file);
+	read_descriptor_t desc = { .count = IO_OPAQUE_RX_BATCH };
+	struct mem_cgroup *old;
+	bool blocked;
+	int ret;
+
+	io_ring_submit_lock(req->ctx, issue_flags);
+	if (!(req->flags & REQ_F_POLLED) &&
+	    (op->collect_flags & IORING_RECVSEND_POLL_FIRST)) {
+		ret = -EAGAIN;
+		goto out;
+	}
+	if (!op->stream && (issue_flags & IO_URING_F_UNLOCKED)) {
+		io_req_task_queue(req);
+		ret = IOU_ISSUE_SKIP_COMPLETE;
+		goto out;
+	}
+	if (!op->stream) {
+		ret = io_opaque_attach(op);
+		if (ret)
+			goto out;
+	}
+	stream = op->stream;
+	mutex_lock(&stream->lock);
+	/* A concurrent data wake after this exchange belongs to the next pass. */
+	atomic_xchg(&stream->collect_ready, 0);
+	if (stream->closed || READ_ONCE(op->store->dead)) {
+		ret = -ECANCELED;
+		goto unlock_stream;
+	}
+	scoped_guard(spinlock, &op->store->wait_lock) {
+		blocked = io_opaque_collect_blocked(op);
+		if (blocked) {
+			/* Capacity may have been taken since the wake removed us. */
+			if (list_empty(&op->wait))
+				list_add_tail(&op->wait, &op->store->budget_waits);
+		} else {
+			list_del_init(&op->wait);
+			op->phase = IO_OPAQUE_IDLE;
+		}
+	}
+	desc.arg.data = stream;
+	old = set_active_memcg(op->store->memcg);
+	if (!blocked) {
+		/* Retained prefixes precede bytes captured directly into a TAKE. */
+		io_opaque_stream_process(stream);
+		stream->hold_undecided = !io_opaque_collect_demand(stream);
+	}
+	lock_sock(sock->sk);
+	if (tcp_sk(sock->sk)->urg_data) {
+		ret = -EOPNOTSUPP;
+	} else if (blocked) {
+		ret = 0;
+		if (sock->sk->sk_shutdown & RCV_SHUTDOWN) {
+			/* Consume a FIN-only skb, never payload, while out of budget. */
+			desc.count = 0;
+			ret = tcp_read_sock(sock->sk, &desc, io_opaque_actor);
+		}
+	} else {
+		ret = tcp_read_sock(sock->sk, &desc, io_opaque_actor);
+	}
+	if (desc.error)
+		ret = desc.error;
+	if (sock->sk->sk_err)
+		stream->error = sock_error(sock->sk);
+	if ((sock->sk->sk_shutdown & RCV_SHUTDOWN) &&
+	    skb_queue_empty(&sock->sk->sk_receive_queue))
+		stream->eof = true;
+	release_sock(sock->sk);
+	set_active_memcg(old);
+	if (ret < 0 && ret != -ENOBUFS && ret != -ENOMEM)
+		stream->error = ret;
+	if (blocked && !stream->error && !stream->eof) {
+		/* Close release/reenrollment races without retrying TCP capture. */
+		io_opaque_wake_budget(op->store);
+		ret = IOU_RETRY;
+		goto unlock_stream;
+	}
+	if (blocked) {
+		guard(spinlock)(&op->store->wait_lock);
+
+		list_del_init(&op->wait);
+		op->phase = IO_OPAQUE_IDLE;
+	}
+	io_opaque_stream_process(stream);
+	if (ret == -ENOBUFS) {
+		struct io_opaque_req *keep = io_opaque_capture_keep(stream);
+
+		/* A private prefix must not pin quota indefinitely awaiting itself. */
+		if (keep && keep->progress) {
+			rb_erase_cached(&keep->decision, &stream->decisions);
+			RB_CLEAR_NODE(&keep->decision);
+			io_opaque_restore(keep);
+			io_opaque_queue_ready(keep, -ENOBUFS);
+		}
+	}
+	if (ret == -ENOBUFS && !stream->error && !stream->eof) {
+		int err = io_opaque_budget_cqe(op);
+
+		if (err) {
+			/* Retain the token and captured prefix for explicit recovery. */
+			stream->error = err;
+			io_opaque_stream_process(stream);
+		}
+	}
+	if (stream->error || stream->eof) {
+		ret = stream->error;
+	} else if (ret == -ENOBUFS || ret == -ENOMEM) {
+		io_opaque_budget_wait(op, ret);
+		ret = IOU_RETRY;
+	} else if (!desc.count) {
+		/* Also retain the next pass when the initial issue exhausts a batch. */
+		atomic_set(&stream->collect_ready, 1);
+		ret = issue_flags & IO_URING_F_MULTISHOT ? IOU_REQUEUE : IOU_RETRY;
+	} else {
+		ret = IOU_RETRY;
+	}
+unlock_stream:
+	mutex_unlock(&stream->lock);
+out:
+	if (ret >= 0 && ret != IOU_ISSUE_SKIP_COMPLETE) {
+		io_req_set_res(req, ret, 0);
+		ret = IOU_COMPLETE;
+	}
+	io_ring_submit_unlock(req->ctx, issue_flags);
+	return ret;
 }
 
 static int io_opaque_copy(struct io_opaque_data *data, u64 off, u32 length,
@@ -1679,6 +2261,11 @@ void io_opaque_cleanup(struct io_kiocb *req)
 		}
 		if (op->stream->collector == op) {
 			op->stream->collector = NULL;
+			/*
+			 * Native poll setup failure may cancel COLLECT too. As for
+			 * explicit cancellation, closing discards undecided capture;
+			 * a token is not a promise of recovery after this failure.
+			 */
 			close = !op->stream->eof && !op->stream->closed && !op->stream->error;
 		}
 		mutex_unlock(&op->stream->lock);

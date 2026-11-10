@@ -12,6 +12,9 @@
 #include <uapi/linux/poll.h>
 #include <uapi/linux/eventpoll.h>
 
+/* Wake-only receive-owner notification, not file readiness or a UAPI event. */
+#define POLL_RX_OWNER	((__force __poll_t)(1U << 26))
+
 /* ~832 bytes of stack space used max in sys_select/sys_poll before allocating
    additional memory. */
 #define MAX_STACK_ALLOC 832
