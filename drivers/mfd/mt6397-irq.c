@@ -171,6 +171,7 @@ static int mt6397_irq_pm_notifier(struct notifier_block *notifier,
 
 int mt6397_irq_init(struct mt6397_chip *chip)
 {
+	unsigned int irq_num;
 	int ret;
 
 	mutex_init(&chip->irqlock);
@@ -181,6 +182,7 @@ int mt6397_irq_init(struct mt6397_chip *chip)
 		chip->int_con[1] = MT6323_INT_CON1;
 		chip->int_status[0] = MT6323_INT_STATUS0;
 		chip->int_status[1] = MT6323_INT_STATUS1;
+		irq_num = MT6323_IRQ_STATUS_NR;
 		break;
 	case MT6328_CHIP_ID:
 		chip->int_con[0] = MT6328_INT_CON0;
@@ -189,12 +191,14 @@ int mt6397_irq_init(struct mt6397_chip *chip)
 		chip->int_status[0] = MT6328_INT_STATUS0;
 		chip->int_status[1] = MT6328_INT_STATUS1;
 		chip->int_status[2] = MT6328_INT_STATUS2;
+		irq_num = MT6328_IRQ_STATUS_NR;
 		break;
 	case MT6331_CHIP_ID:
 		chip->int_con[0] = MT6331_INT_CON0;
 		chip->int_con[1] = MT6331_INT_CON1;
 		chip->int_status[0] = MT6331_INT_STATUS_CON0;
 		chip->int_status[1] = MT6331_INT_STATUS_CON1;
+		irq_num = MT6331_IRQ_STATUS_NR;
 		break;
 	case MT6391_CHIP_ID:
 	case MT6397_CHIP_ID:
@@ -202,6 +206,7 @@ int mt6397_irq_init(struct mt6397_chip *chip)
 		chip->int_con[1] = MT6397_INT_CON1;
 		chip->int_status[0] = MT6397_INT_STATUS0;
 		chip->int_status[1] = MT6397_INT_STATUS1;
+		irq_num = MT6397_IRQ_NR;
 		break;
 
 	default:
@@ -216,7 +221,7 @@ int mt6397_irq_init(struct mt6397_chip *chip)
 		regmap_write(chip->regmap, chip->int_con[2], 0x0);
 
 	chip->pm_nb.notifier_call = mt6397_irq_pm_notifier;
-	chip->irq_domain = irq_domain_create_linear(dev_fwnode(chip->dev), MT6397_IRQ_NR,
+	chip->irq_domain = irq_domain_create_linear(dev_fwnode(chip->dev), irq_num,
 						    &mt6397_irq_domain_ops, chip);
 	if (!chip->irq_domain) {
 		dev_err(chip->dev, "could not create irq domain\n");
