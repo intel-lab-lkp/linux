@@ -7554,6 +7554,9 @@ ssize_t skb_splice_from_iter(struct sk_buff *skb, struct iov_iter *iter,
 	ssize_t spliced = 0, ret = 0;
 	unsigned int i;
 
+	if (!maxsize)
+		return 0;
+
 	while (iter->count > 0) {
 		ssize_t space, nr, len;
 		size_t off;
@@ -7578,8 +7581,10 @@ ssize_t skb_splice_from_iter(struct sk_buff *skb, struct iov_iter *iter,
 			size_t part = min_t(size_t, PAGE_SIZE - off, len);
 
 			ret = -EIO;
-			if (WARN_ON_ONCE(!sendpage_ok(page)))
+			if (WARN_ON_ONCE(!sendpage_ok(page))) {
+				iov_iter_revert(iter, len);
 				goto out;
+			}
 
 			ret = skb_append_pagefrags(skb, page, off, part,
 						   frag_limit);
