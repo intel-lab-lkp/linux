@@ -15187,6 +15187,7 @@ F:	Documentation/ABI/testing/sysfs-driver-hid-lenovo-go
 F:	Documentation/ABI/testing/sysfs-driver-hid-lenovo-go-s
 F:	drivers/hid/hid-lenovo-go-s.c
 F:	drivers/hid/hid-lenovo-go.c
+F:	drivers/hid/hid-lenovo-legion.c
 F:	drivers/hid/hid-lenovo.c
 
 LENOVO YOGA BOOK 9 KEYBOARD DOCK DRIVER
