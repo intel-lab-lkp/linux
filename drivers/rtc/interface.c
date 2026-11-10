@@ -535,18 +535,39 @@ int rtc_set_alarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 		rtc_timer_remove(rtc, &rtc->aie_timer);
 
 	alarm_time = rtc_tm_to_ktime(alarm->time);
-	/*
-	 * Round down so we never miss a deadline, checking for past deadline is
-	 * done in __rtc_set_alarm
-	 */
-	if (test_bit(RTC_FEATURE_ALARM_RES_MINUTE, rtc->features))
-		alarm_time = ktime_sub_ns(alarm_time, (u64)alarm->time.tm_sec * NSEC_PER_SEC);
+	if (test_bit(RTC_FEATURE_ALARM_RES_MINUTE, rtc->features) &&
+	    alarm->time.tm_sec) {
+		ktime_t down = ktime_sub_ns(alarm_time,
+					    (u64)alarm->time.tm_sec * NSEC_PER_SEC);
+		struct rtc_time tm;
+		ktime_t now;
+
+		err = __rtc_read_time(rtc, &tm);
+		if (err)
+			goto unlock;
+		now = rtc_tm_to_ktime(tm);
+
+		/*
+		 * Round down so we never miss a deadline. If that puts an alarm
+		 * that is still in the future into the past, the timer would
+		 * expire right away and the hardware alarm would never be
+		 * armed: whoever relies on it, e.g. to wake the system from
+		 * suspend, would wait forever. Round up to the next minute
+		 * instead. An alarm already in the past is left alone, it is
+		 * handled by __rtc_set_alarm.
+		 */
+		if (ktime_after(down, now) || !ktime_after(alarm_time, now))
+			alarm_time = down;
+		else
+			alarm_time = ktime_add_ns(down, 60 * NSEC_PER_SEC);
+	}
 
 	rtc->aie_timer.node.expires = alarm_time;
 	rtc->aie_timer.period = 0;
 	if (alarm->enabled)
 		err = rtc_timer_enqueue(rtc, &rtc->aie_timer);
 
+unlock:
 	mutex_unlock(&rtc->ops_lock);
 
 	return err;
