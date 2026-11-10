@@ -597,6 +597,28 @@ out:
 
 #define NUM_FAULT_PAGES (SZ_2M / PAGE_SIZE)
 
+static void panfrost_heap_put_chunk(struct page **pages, pgoff_t start,
+				    pgoff_t end)
+{
+	pgoff_t pg = start;
+
+	while (pg < end) {
+		struct folio *folio;
+		pgoff_t n;
+
+		if (!pages[pg]) {
+			pg++;
+			continue;
+		}
+
+		folio = page_folio(pages[pg]);
+		n = folio_nr_pages(folio);
+		for (pgoff_t i = 0; i < n && pg < end; i++)
+			pages[pg++] = NULL;
+		folio_put(folio);
+	}
+}
+
 static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 				       u64 addr)
 {
@@ -671,7 +693,7 @@ static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 		folio = shmem_read_folio(mapping, pg);
 		if (IS_ERR(folio)) {
 			ret = PTR_ERR(folio);
-			goto err_unlock;
+			goto err_put_chunk;
 		}
 
 		pg &= ~(folio_nr_pages(folio) - 1);
@@ -693,7 +715,7 @@ static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 	ret = sg_alloc_table_from_pages(sgt, pages + page_offset,
 					NUM_FAULT_PAGES, 0, SZ_2M, GFP_KERNEL);
 	if (ret)
-		goto err_unlock;
+		goto err_put_chunk;
 
 	ret = dma_map_sgtable(pfdev->base.dev, sgt, DMA_BIDIRECTIONAL, 0);
 	if (ret)
@@ -720,6 +742,14 @@ err_mmu_map_sg:
 	dma_unmap_sgtable(pfdev->base.dev, sgt, DMA_BIDIRECTIONAL, 0);
 err_map:
 	sg_free_table(sgt);
+err_put_chunk:
+	/*
+	 * Give back the folios read for this chunk, so that the next fault in
+	 * it (the chunk has no sg table yet) starts from an empty page range
+	 * instead of finding it partly owned.
+	 */
+	panfrost_heap_put_chunk(pages, page_offset,
+				min_t(pgoff_t, page_offset + NUM_FAULT_PAGES, nr_pages));
 err_unlock:
 	dma_resv_unlock(obj->resv);
 err_bo:
