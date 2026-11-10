@@ -25,6 +25,12 @@
 #define NUM_GPRS 16
 #define DIAG_ASSEMBLY_CODE 0x501
 #define IPA_DIAG 0x83
+#define PSW_MASK_64BIT_DAT_OFF  0x0000000180000000ULL
+#define PGM_CODE_SEGMENT_TRANSLATION 0x10
+#define PGM_CODE_GPA_ADDRESS 0x8e
+#define PGM_CODE_MASK        0x7f
+#define PGM_NEW_PSW_GPA 0x1d0
+#define PSW_DISABLED_WAIT 0x0002000180000000ULL
 
 static struct kvm_parameters create_vm_kvm_exit(struct kvm_parameters parameters)
 {
@@ -174,6 +180,134 @@ static bool test_diagnose_conditional_code(void)
 	return true;
 }
 
+/*
+ * Make a program interrupt end in a disabled wait, which KVM reports to
+ * userspace as ICPT_WAIT. This does not depend on how KVM handles
+ * repeated operation exceptions.
+ */
+static void set_pgm_new_psw_disabled_wait(struct kvm_vm *vm)
+{
+	uint64_t *new_psw = addr_gpa2hva(vm, PGM_NEW_PSW_GPA);
+
+	new_psw[0] = PSW_DISABLED_WAIT;
+	new_psw[1] = 0;
+}
+
+static void guestcode_sigp(void)
+{
+	asm volatile(
+		"lghi %%r3, 0\n"
+		"sigp %%r1, %%r3, 0x05\n"
+		:
+		:
+		: "r1", "r3"
+	);
+	GUEST_DONE();
+}
+
+static bool test_sigp_signals(void)
+{
+	struct kvm_parameters param = {
+		.guest_code = guestcode_sigp,
+		.manual_parameters.immediate_exit_condition = false,
+	};
+	struct kvm_mp_state mp_state = { .mp_state = KVM_MP_STATE_OPERATING };
+	struct kvm_vcpu *vcpu1;
+	struct kvm_regs regs;
+
+	ksft_print_msg("Testing SIGP KVM Exit\n");
+	param = create_vm_kvm_exit(param);
+	vcpu1 = vm_vcpu_add(param.vm, 1, guestcode_sigp);
+	/* New vCPUs are stopped, and KVM ignores a SIGP STOP sent to one */
+	vcpu_mp_state_set(param.vcpu, &mp_state);
+	vcpu_mp_state_set(vcpu1, &mp_state);
+	vcpu_regs_get(param.vcpu, &regs);
+	regs.gprs[3] = 0x3333;
+	vcpu_regs_set(param.vcpu, &regs);
+	vcpu_run(vcpu1);
+	/* vcpu1 exits after GUEST_DONE() ucall */
+	TEST_ASSERT_KVM_EXIT_REASON(vcpu1, KVM_EXIT_S390_SIEIC);
+	vcpu_run(param.vcpu);
+	param.run = param.vcpu->run;
+	TEST_ASSERT_KVM_EXIT_REASON(param.vcpu, KVM_EXIT_S390_SIEIC);
+	TEST_ASSERT_EQ(param.run->s390_sieic.icptcode, ICPT_STOP);
+	/*
+	 * The pending SIGP STOP stops vcpu0 before it runs any guest code
+	 * (the guest would clear r3), so r3 keeps the marker value.
+	 */
+	TEST_ASSERT_EQ(param.run->s.regs.gprs[3], 0x3333);
+	cleanup_kvm(&param);
+	return true;
+}
+
+static void guestcode_address_exception(void)
+{
+	asm volatile(
+		"lghi %%r1, 0x1\n"
+		"sllg %%r1, %%r1, 0x28\n"
+		"lg %%r2, 0(%%r1)\n"
+		:
+		:
+		: "r1", "r2"
+	);
+}
+
+static bool test_address_exceptions(void)
+{
+	struct kvm_parameters param = {};
+	uint16_t pgm_code;
+
+	ksft_print_msg("Testing Address Exception Exit\n");
+	param.guest_code = guestcode_address_exception;
+	param = create_vm_kvm_exit(param);
+	set_pgm_new_psw_disabled_wait(param.vm);
+	param.vcpu->run->psw_mask &= PSW_MASK_64BIT_DAT_OFF;
+	/* The guest runs with DAT off, so the entry point must be a GPA */
+	param.vcpu->run->psw_addr = addr_gva2gpa(param.vm, param.vcpu->run->psw_addr);
+	param.vcpu->run->kvm_dirty_regs |= KVM_SYNC_ARCH0;
+	vcpu_run(param.vcpu);
+	param.run = param.vcpu->run;
+	TEST_ASSERT_KVM_EXIT_REASON(param.vcpu, KVM_EXIT_S390_SIEIC);
+	TEST_ASSERT_EQ(param.run->s390_sieic.icptcode, ICPT_WAIT);
+	pgm_code = *(uint16_t *)addr_gpa2hva(param.vm, PGM_CODE_GPA_ADDRESS);
+	TEST_ASSERT((pgm_code & PGM_CODE_MASK) == 0x05,
+		    "Expected PGM code 0x05 (addressing), got 0x%x\n", pgm_code);
+	cleanup_kvm(&param);
+	return true;
+}
+
+static void guestcode_translation_exception(void)
+{
+	asm volatile(
+		"lghi %%r1, 0x1\n"
+		"sllg %%r1, %%r1, 0x14\n"
+		"lg %%r2, 0(%%r1)\n"
+		:
+		:
+		: "r1", "r2"
+	);
+}
+
+static bool test_translation_exceptions(void)
+{
+	struct kvm_parameters param = {};
+	uint16_t pgm_code;
+
+	ksft_print_msg("Testing Translation Exception KVM Exit\n");
+	param.guest_code = guestcode_translation_exception;
+	param = create_vm_kvm_exit(param);
+	set_pgm_new_psw_disabled_wait(param.vm);
+	vcpu_run(param.vcpu);
+	param.run = param.vcpu->run;
+	TEST_ASSERT_KVM_EXIT_REASON(param.vcpu, KVM_EXIT_S390_SIEIC);
+	TEST_ASSERT_EQ(param.run->s390_sieic.icptcode, ICPT_WAIT);
+	pgm_code = *(uint16_t *)addr_gpa2hva(param.vm, PGM_CODE_GPA_ADDRESS);
+	TEST_ASSERT((pgm_code & PGM_CODE_MASK) == PGM_CODE_SEGMENT_TRANSLATION,
+		    "Expected PGM code 0x10 (segment translation), got 0x%x\n", pgm_code);
+	cleanup_kvm(&param);
+	return true;
+}
+
 static void test(void)
 {
 	int i;
@@ -189,6 +323,18 @@ static void test(void)
 		{
 			.name = "Testing Conditional DIAG Code",
 			.test = test_diagnose_conditional_code,
+		},
+		{
+			.name = "Testing SIGP Exits",
+			.test = test_sigp_signals,
+		},
+		{
+			.name = "Testing Address Exceptions",
+			.test = test_address_exceptions,
+		},
+		{
+			.name = "Testing Translation Exceptions",
+			.test = test_translation_exceptions,
 		},
 	};
 
