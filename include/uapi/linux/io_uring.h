@@ -91,6 +91,7 @@ struct io_uring_sqe {
 		__s32	splice_fd_in;
 		__u32	file_index;
 		__u32	zcrx_ifq_idx;
+		__u32	opaque_store_id;
 		__u32	optlen;
 		struct {
 			__u16	addr_len;
@@ -319,6 +320,7 @@ enum io_uring_op {
 	IORING_OP_PIPE,
 	IORING_OP_NOP128,
 	IORING_OP_URING_CMD128,
+	IORING_OP_OPAQUE_OBJ,
 
 	/* this goes last, obviously */
 	IORING_OP_LAST,
@@ -723,6 +725,9 @@ enum io_uring_register_op {
 
 	/* register bpf filtering programs */
 	IORING_REGISTER_BPF_FILTER		= 37,
+
+	/* register, import or export a kernel opaque object store */
+	IORING_REGISTER_OPAQUE_STORE	= 38,
 
 	/* this goes last */
 	IORING_REGISTER_LAST,

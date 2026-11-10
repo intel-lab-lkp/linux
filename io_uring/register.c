@@ -32,6 +32,7 @@
 #include "msg_ring.h"
 #include "memmap.h"
 #include "zcrx.h"
+#include "opaque.h"
 #include "query.h"
 #include "bpf_filter.h"
 
@@ -1012,6 +1013,12 @@ static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 		break;
 	case IORING_REGISTER_QUERY:
 		ret = io_query(arg, nr_args);
+		break;
+	case IORING_REGISTER_OPAQUE_STORE:
+		ret = -EINVAL;
+		if (!arg || nr_args != 1)
+			break;
+		ret = io_register_opaque(ctx, arg);
 		break;
 	case IORING_REGISTER_ZCRX_CTRL:
 		ret = io_zcrx_ctrl(ctx, arg, nr_args);

@@ -19,6 +19,7 @@
 #include "waitid.h"
 #include "futex.h"
 #include "cancel.h"
+#include "opaque.h"
 #include "wait.h"
 
 struct io_cancel {
@@ -130,6 +131,9 @@ int io_try_cancel(struct io_uring_task *tctx, struct io_cancel_data *cd,
 		cd->running = true;
 
 	ret = io_poll_cancel(ctx, cd, issue_flags);
+	if (ret != -ENOENT)
+		return ret;
+	ret = io_opaque_cancel(ctx, cd, issue_flags);
 	if (ret != -ENOENT)
 		return ret;
 
@@ -582,6 +586,7 @@ __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 	mutex_lock(&ctx->uring_lock);
 	ret |= io_cancel_defer_files(ctx, tctx, cancel_all);
 	ret |= io_poll_remove_all(ctx, tctx, cancel_all);
+	ret |= io_opaque_cancel_all(ctx, tctx, cancel_all);
 	ret |= io_waitid_remove_all(ctx, tctx, cancel_all);
 	ret |= io_futex_remove_all(ctx, tctx, cancel_all);
 	ret |= io_uring_try_cancel_uring_cmd(ctx, tctx);
