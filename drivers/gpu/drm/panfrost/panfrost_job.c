@@ -415,6 +415,17 @@ static struct dma_fence *panfrost_job_run(struct drm_sched_job *sched_job)
 	if (!job->jc)
 		return NULL;
 
+	/* A soft-stopped job carries its progress in the job header and the
+	 * GPU caches, which a GPU reset throws away. Resumed from JS_TAIL after
+	 * a reset it would complete with the results of the tasks since the
+	 * last cache write-back missing, and no error. Fail it instead, as the
+	 * Arm driver fails every atom that was on the hardware at a reset.
+	 */
+	if (job->stopped && job->stop_reset_count != pfdev->reset.count) {
+		dma_fence_set_error(&job->base.s_fence->finished, -ECANCELED);
+		return NULL;
+	}
+
 	fence = panfrost_fence_create(pfdev, slot);
 	if (IS_ERR(fence))
 		return fence;
@@ -475,6 +486,8 @@ static void panfrost_job_handle_err(struct panfrost_device *pfdev,
 		/* Update the job head so we can resume */
 		job->jc = job_read(pfdev, JS_TAIL_LO(js)) |
 			  ((u64)job_read(pfdev, JS_TAIL_HI(js)) << 32);
+		job->stopped = true;
+		job->stop_reset_count = pfdev->reset.count;
 
 		/* The job will be resumed, don't signal the fence */
 		signal_fence = false;
@@ -728,6 +741,7 @@ panfrost_reset(struct panfrost_device *pfdev,
 			panfrost_devfreq_record_idle(&pfdev->pfdevfreq);
 		}
 	}
+	pfdev->reset.count++;
 	memset(pfdev->jobs, 0, sizeof(pfdev->jobs));
 	spin_unlock(&pfdev->js->job_lock);
 

@@ -167,6 +167,11 @@ struct panfrost_device {
 		struct work_struct work;
 		struct rw_semaphore lock;
 		atomic_t pending;
+		/* Bumped by every GPU reset. A soft-stopped job may only be
+		 * resumed while this still reads what it did when the job was
+		 * stopped (see panfrost_job_run()).
+		 */
+		unsigned int count;
 	} reset;
 
 	struct mutex shrinker_lock;

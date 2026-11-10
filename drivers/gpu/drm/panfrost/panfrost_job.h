@@ -27,6 +27,14 @@ struct panfrost_job {
 	__u32 requirements;
 	__u32 flush_id;
 
+	/* Set once the job has been soft-stopped: jc then points into a partly
+	 * executed chain whose progress lives in the job header and the GPU
+	 * caches, and is only valid while the GPU has not been reset since
+	 * (pfdev->reset.count at the time of the stop).
+	 */
+	bool stopped;
+	unsigned int stop_reset_count;
+
 	struct panfrost_gem_mapping **mappings;
 	struct drm_gem_object **bos;
 	u32 bo_count;
