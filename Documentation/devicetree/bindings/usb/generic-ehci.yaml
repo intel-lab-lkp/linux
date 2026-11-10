@@ -160,6 +160,19 @@ properties:
       - host
       - otg
 
+  ports:
+    $ref: /schemas/graph.yaml#/properties/ports
+    description:
+      The root hub's downstream facing ports, linked to the connectors they
+      are wired to. Needed when a connector's SuperSpeed lanes go to a
+      different host controller, which then pairs with the root hub port
+      through the connector.
+
+    patternProperties:
+      "^port@[1-9a-f][0-9a-f]*$":
+        $ref: /schemas/graph.yaml#/properties/port
+        description: Root hub port, numbered from 1.
+
 required:
   - compatible
   - reg
