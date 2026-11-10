@@ -3233,6 +3233,40 @@ static inline size_t seek_folio_size(struct xa_state *xas, struct folio *folio)
 	return folio_size(folio);
 }
 
+static inline struct folio *seek_get_entry(struct xa_state *xas, pgoff_t index,
+					   pgoff_t max)
+{
+	struct folio *folio;
+
+	if (!xas_valid(xas) || xas->xa_index + 1 != index)
+		goto restart;
+
+	/*
+	 * A lookup within a multi-index entry can leave xa_offset at its
+	 * first slot. Restore the slot corresponding to xa_index before
+	 * advancing.
+	 */
+	xas_advance(xas, xas->xa_index);
+	folio = xas_next(xas);
+
+	/*
+	 * A concurrent collapse can replace the next slot with a sibling entry
+	 * referring back to the slot holding the folio.
+	 */
+	if (!folio || xa_is_internal(folio))
+		goto restart;
+	if (xa_is_value(folio))
+		return folio;
+	if (!folio_try_get(folio))
+		goto restart;
+	if (folio == xas_reload(xas))
+		return folio;
+	folio_put(folio);
+restart:
+	xas_set(xas, index);
+	return find_get_entry(xas, max, XA_PRESENT);
+}
+
 /**
  * mapping_seek_hole_data - Seek for SEEK_DATA / SEEK_HOLE in the page cache.
  * @mapping: Address space to search.
@@ -3263,7 +3297,7 @@ loff_t mapping_seek_hole_data(struct address_space *mapping, loff_t start,
 		return -ENXIO;
 
 	rcu_read_lock();
-	while ((folio = find_get_entry(&xas, max, XA_PRESENT))) {
+	while ((folio = seek_get_entry(&xas, start >> PAGE_SHIFT, max))) {
 		loff_t pos = (u64)xas.xa_index << PAGE_SHIFT;
 		size_t seek_size;
 		u64 next;
@@ -3286,8 +3320,6 @@ loff_t mapping_seek_hole_data(struct address_space *mapping, loff_t start,
 			goto unlock;
 		if (start >= end)
 			break;
-		if (seek_size > PAGE_SIZE)
-			xas_set(&xas, pos >> PAGE_SHIFT);
 		if (!xa_is_value(folio))
 			folio_put(folio);
 	}
