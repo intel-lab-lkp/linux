@@ -236,6 +236,8 @@ static void test_context_switch(void)
 	free(finfo);
 }
 
+static struct xsave_buffer *stashed_xbuf;
+
 /*
  * Ptrace test for the ABI format as described in arch/x86/include/asm/user.h
  */
@@ -247,14 +249,8 @@ static void test_context_switch(void)
  */
 static inline void ptracee_touch_xstate(void)
 {
-	struct xsave_buffer *xbuf;
-
-	xbuf = alloc_xbuf();
-
-	load_rand_xstate(&xstate, xbuf);
-	load_init_xstate(&xstate, xbuf);
-
-	free(xbuf);
+	load_rand_xstate(&xstate, stashed_xbuf);
+	load_init_xstate(&xstate, stashed_xbuf);
 }
 
 static bool validate_ptracer_xstate(pid_t target, struct iovec iov,
@@ -335,6 +331,10 @@ static void test_ptrace(void)
 	pid_t child;
 	int status;
 
+	stashed_xbuf = alloc_xbuf();
+	if (!stashed_xbuf)
+		ksft_exit_fail_msg("unable to allocate XSAVE buffer\n");
+
 	child = fork();
 	if (child < 0) {
 		ksft_exit_fail_msg("fork() failed\n");
@@ -358,6 +358,8 @@ static void test_ptrace(void)
 	wait(&status);
 	if (!WIFEXITED(status) || WEXITSTATUS(status))
 		ksft_exit_fail_msg("ptracee exit error\n");
+
+	free(stashed_xbuf);
 }
 
 /*
@@ -390,8 +392,6 @@ static inline void sig_print_fail(char *msg)
 	sig_failed++;
 	sig_print(msg);
 }
-
-static struct xsave_buffer *stashed_xbuf;
 
 static void validate_sigfpstate(int sig, siginfo_t *si, void *ctx_void)
 {
