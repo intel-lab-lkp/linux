@@ -56,6 +56,38 @@
 		};
 	};
 
+	/*
+	 * The upper Type-A port: its USB 2.0 lines go to USB 2.0 host 1
+	 * (EHCI/OHCI), its SuperSpeed lanes to the SuperSpeed-only USB 3.0
+	 * host 2 (xHCI).
+	 */
+	usb3_con: connector-usb3 {
+		compatible = "usb-a-connector";
+		label = "USB3";
+		vbus-supply = <&vcc5v0_sys>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				usb3_con_hs: endpoint {
+					remote-endpoint = <&usb_host1_ehci_port1>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				usb3_con_ss: endpoint {
+					remote-endpoint = <&usb_host2_xhci_ss>;
+				};
+			};
+		};
+	};
+
 	vbus_typec: regulator-vbus-typec {
 		compatible = "regulator-fixed";
 		enable-active-high;
@@ -229,8 +261,36 @@
 	};
 };
 
+&usb_host1_ehci {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@1 {
+			reg = <1>;
+
+			usb_host1_ehci_port1: endpoint {
+				remote-endpoint = <&usb3_con_hs>;
+			};
+		};
+	};
+};
+
 &usb_host2_xhci {
 	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@1 {
+			reg = <1>;
+
+			usb_host2_xhci_ss: endpoint {
+				remote-endpoint = <&usb3_con_ss>;
+			};
+		};
+	};
 };
 
 &usbdp_phy0 {
