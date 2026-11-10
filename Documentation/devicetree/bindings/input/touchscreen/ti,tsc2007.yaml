@@ -9,6 +9,9 @@ title: Texas Instruments tsc2007 touchscreen controller
 maintainers:
   - Frank Li <Frank.Li@nxp.com>
 
+allOf:
+  - $ref: touchscreen.yaml#
+
 properties:
   compatible:
     const: ti,tsc2007
@@ -61,7 +64,7 @@ required:
   - reg
   - ti,x-plate-ohms
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
