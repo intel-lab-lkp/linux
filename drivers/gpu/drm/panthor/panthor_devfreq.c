@@ -60,20 +60,56 @@ static void panthor_devfreq_update_utilization(struct panthor_devfreq *pdevfreq)
 	pdevfreq->time_last_update = now;
 }
 
+/*
+ * Whether a new rate can be applied to the hardware now.
+ *
+ * From the start of panthor_device_suspend() until panthor_device_resume()
+ * has enabled the clocks again, the GPU clocks are about to be disabled
+ * or are off, and the GPU power domain may be down. devfreq can still
+ * call ->target() in that window: sysfs
+ * min_freq/max_freq writes, thermal cooling and PM QoS requests all end
+ * up in update_devfreq() whatever the device state.
+ *
+ * Changing the rate then is pointless, and harmful where the core clock
+ * is managed by firmware: on RK3588, setting SCMI_CLK_GPU to a PVTPLL
+ * rate with the GPU power domain off makes TF-A access the powered-down
+ * GPU GRF, which ends in an asynchronous SError. So while the device is
+ * suspending only the suspend frequency, applied by
+ * devfreq_suspend_device(), reaches the hardware, and nothing does
+ * while it is suspended. devfreq records the other requests: they are
+ * applied on resume or at the next governor update.
+ */
+static bool panthor_devfreq_can_set_rate(struct panthor_device *ptdev,
+					 unsigned long freq)
+{
+	struct devfreq *devfreq = ptdev->devfreq ? ptdev->devfreq->devfreq : NULL;
+
+	switch (atomic_read(&ptdev->pm.state)) {
+	case PANTHOR_DEVICE_PM_STATE_SUSPENDED:
+		return false;
+	case PANTHOR_DEVICE_PM_STATE_SUSPENDING:
+		return devfreq && devfreq->suspend_freq &&
+		       freq == devfreq->suspend_freq;
+	default:
+		return true;
+	}
+}
+
 static int panthor_devfreq_target(struct device *dev, unsigned long *freq,
 				  u32 flags)
 {
+	struct panthor_device *ptdev = dev_get_drvdata(dev);
 	struct dev_pm_opp *opp;
-	int err;
 
 	opp = devfreq_recommended_opp(dev, freq, flags);
 	if (IS_ERR(opp))
 		return PTR_ERR(opp);
 	dev_pm_opp_put(opp);
 
-	err = dev_pm_opp_set_rate(dev, *freq);
+	if (!panthor_devfreq_can_set_rate(ptdev, *freq))
+		return 0;
 
-	return err;
+	return dev_pm_opp_set_rate(dev, *freq);
 }
 
 static void panthor_devfreq_reset(struct panthor_devfreq *pdevfreq)
