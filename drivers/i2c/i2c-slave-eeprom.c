@@ -20,6 +20,7 @@
 #include <linux/firmware.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/slab.h>
@@ -203,9 +204,28 @@ static const struct i2c_device_id i2c_slave_eeprom_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, i2c_slave_eeprom_id);
 
+/*
+ * A backend instantiated from the device tree, with the I2C id as
+ * compatible and I2C_OWN_SLAVE_ADDRESS in reg, announces an of: modalias.
+ * List the same names here so that the module autoloads for it.
+ */
+static const struct of_device_id i2c_slave_eeprom_of_match[] = {
+	{ .compatible = "slave-24c02" },
+	{ .compatible = "slave-24c02ro" },
+	{ .compatible = "slave-24c32" },
+	{ .compatible = "slave-24c32ro" },
+	{ .compatible = "slave-24c64" },
+	{ .compatible = "slave-24c64ro" },
+	{ .compatible = "slave-24c512" },
+	{ .compatible = "slave-24c512ro" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, i2c_slave_eeprom_of_match);
+
 static struct i2c_driver i2c_slave_eeprom_driver = {
 	.driver = {
 		.name = "i2c-slave-eeprom",
+		.of_match_table = i2c_slave_eeprom_of_match,
 	},
 	.probe = i2c_slave_eeprom_probe,
 	.remove = i2c_slave_eeprom_remove,
