@@ -23,6 +23,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/ratelimit.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string_choices.h>
@@ -116,6 +117,7 @@ struct rk_iommu {
 	struct list_head node; /* entry in rk_iommu_domain.iommus */
 	struct iommu_domain *domain; /* domain to which iommu is attached */
 	const struct rk_iommu_ops *rk_ops;
+	struct ratelimit_state fault_rs; /* for the fault reports */
 };
 
 struct rk_iommudata {
@@ -608,6 +610,7 @@ static irqreturn_t rk_iommu_irq(int irq, void *dev_id)
 	u32 int_status;
 	dma_addr_t iova;
 	irqreturn_t ret = IRQ_NONE;
+	bool print;
 	int i, err;
 
 	err = pm_runtime_get_if_in_use(iommu->dev);
@@ -632,11 +635,22 @@ static irqreturn_t rk_iommu_irq(int irq, void *dev_id)
 			flags = (status & RK_MMU_STATUS_PAGE_FAULT_IS_WRITE) ?
 					IOMMU_FAULT_WRITE : IOMMU_FAULT_READ;
 
-			dev_err(iommu->dev, "Page fault at %pad of type %s\n",
-				&iova,
-				str_write_read(flags == IOMMU_FAULT_WRITE));
-
-			log_iova(iommu, i, iova);
+			/*
+			 * PAGE_FAULT_DONE below lets the master go on, and a
+			 * master that keeps accessing unmapped addresses faults
+			 * again at once, until its own driver stops it. Printing
+			 * every one of those faults from this handler keeps the
+			 * CPU in hard interrupt context for as long as the
+			 * console takes to print them. The trace event of
+			 * report_iommu_fault() still records every fault.
+			 */
+			print = __ratelimit(&iommu->fault_rs);
+			if (print) {
+				dev_err(iommu->dev, "Page fault at %pad of type %s\n",
+					&iova,
+					str_write_read(flags == IOMMU_FAULT_WRITE));
+				log_iova(iommu, i, iova);
+			}
 
 			/*
 			 * Report page fault to any installed handlers.
@@ -646,14 +660,15 @@ static irqreturn_t rk_iommu_irq(int irq, void *dev_id)
 			if (iommu->domain != &rk_identity_domain)
 				report_iommu_fault(iommu->domain, iommu->dev, iova,
 						   flags);
-			else
+			else if (print)
 				dev_err(iommu->dev, "Page fault while iommu not attached to domain?\n");
 
 			rk_iommu_base_command(iommu->bases[i], RK_MMU_CMD_ZAP_CACHE);
 			rk_iommu_base_command(iommu->bases[i], RK_MMU_CMD_PAGE_FAULT_DONE);
 		}
 
-		if (int_status & RK_MMU_IRQ_BUS_ERROR)
+		if ((int_status & RK_MMU_IRQ_BUS_ERROR) &&
+		    __ratelimit(&iommu->fault_rs))
 			dev_err(iommu->dev, "BUS_ERROR occurred at %pad\n", &iova);
 
 		if (int_status & ~RK_MMU_IRQ_MASK)
@@ -1270,6 +1285,8 @@ static int rk_iommu_probe(struct platform_device *pdev)
 
 	iommu->reset_disabled = device_property_read_bool(dev,
 					"rockchip,disable-mmu-reset");
+	ratelimit_state_init(&iommu->fault_rs, DEFAULT_RATELIMIT_INTERVAL,
+			     DEFAULT_RATELIMIT_BURST);
 
 	/*
 	 * Take every clock the devicetree provides.  Most IOMMU instances
