@@ -874,11 +874,13 @@ static const struct iommu_ops sun50i_iommu_ops = {
 };
 
 static void sun50i_iommu_report_fault(struct sun50i_iommu *iommu,
-				      unsigned master, phys_addr_t iova,
-				      unsigned prot)
+				      int master, phys_addr_t iova,
+				      unsigned int prot, const char *type,
+				      u32 status)
 {
-	dev_err(iommu->dev, "Page fault for %pad (master %d, dir %s)\n",
-		&iova, master, (prot == IOMMU_FAULT_WRITE) ? "wr" : "rd");
+	dev_err(iommu->dev, "Page fault for %pad (master %d, dir %s, %s, status %#x)\n",
+		&iova, master, (prot == IOMMU_FAULT_WRITE) ? "wr" : "rd",
+		type, status);
 
 	if (iommu->domain)
 		report_iommu_fault(iommu->domain, iommu->dev, iova, prot);
@@ -890,10 +892,11 @@ static void sun50i_iommu_report_fault(struct sun50i_iommu *iommu,
 
 static phys_addr_t sun50i_iommu_handle_pt_irq(struct sun50i_iommu *iommu,
 					      unsigned addr_reg,
-					      unsigned blame_reg)
+					      unsigned int blame_reg,
+					      const char *level)
 {
 	phys_addr_t iova;
-	unsigned master;
+	int master = -1;
 	u32 blame;
 
 	assert_spin_locked(&iommu->iommu_lock);
@@ -909,19 +912,21 @@ static phys_addr_t sun50i_iommu_handle_pt_irq(struct sun50i_iommu *iommu,
 	 * stalled or cached, so there is nothing to report, reset or zap.
 	 */
 	if ((blame & IOMMU_PG_INT_PREFETCH) && !(blame & IOMMU_INT_MASTER_MASK)) {
-		dev_dbg_ratelimited(iommu->dev, "page table prefetch of unmapped %pad\n",
-				    &iova);
+		dev_dbg_ratelimited(iommu->dev, "%s prefetch of unmapped %pad\n",
+				    level, &iova);
 		return iova;
 	}
 
-	master = ilog2(blame & IOMMU_INT_MASTER_MASK);
+	if (blame & IOMMU_INT_MASTER_MASK)
+		master = ilog2(blame & IOMMU_INT_MASTER_MASK);
 
 	/*
 	 * If the address is not in the page table, we can't get what
 	 * operation triggered the fault. Assume it's a read
 	 * operation.
 	 */
-	sun50i_iommu_report_fault(iommu, master, iova, IOMMU_FAULT_READ);
+	sun50i_iommu_report_fault(iommu, master, iova, IOMMU_FAULT_READ, level,
+				  blame);
 
 	return iova;
 }
@@ -976,7 +981,7 @@ static phys_addr_t sun50i_iommu_handle_perm_irq(struct sun50i_iommu *iommu)
 	 * operation triggered the fault. Assume it's a read
 	 * operation.
 	 */
-	sun50i_iommu_report_fault(iommu, master, iova, dir);
+	sun50i_iommu_report_fault(iommu, master, iova, dir, "permission", blame);
 
 	return iova;
 }
@@ -1000,11 +1005,11 @@ static irqreturn_t sun50i_iommu_irq(int irq, void *dev_id)
 	if (status & IOMMU_INT_INVALID_L2PG)
 		sun50i_iommu_handle_pt_irq(iommu,
 					    IOMMU_INT_ERR_ADDR_L2_REG,
-					    IOMMU_L2PG_INT_REG);
+					    IOMMU_L2PG_INT_REG, "L2 page table");
 	else if (status & IOMMU_INT_INVALID_L1PG)
 		sun50i_iommu_handle_pt_irq(iommu,
 					   IOMMU_INT_ERR_ADDR_L1_REG,
-					   IOMMU_L1PG_INT_REG);
+					   IOMMU_L1PG_INT_REG, "L1 page table");
 	else
 		sun50i_iommu_handle_perm_irq(iommu);
 
