@@ -1609,8 +1609,8 @@ static int _regmap_raw_write_impl(struct regmap *map, unsigned int reg,
 	unsigned long flags;
 	void *work_val;
 	void *buf;
-	int ret = -ENOTSUPP;
 	size_t len;
+	int ret;
 	int i;
 
 	/* Check for unwritable or noinc registers in range
