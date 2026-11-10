@@ -692,15 +692,12 @@ const char *fwnode_get_name_prefix(const struct fwnode_handle *fwnode)
 bool fwnode_name_eq(const struct fwnode_handle *fwnode, const char *name)
 {
 	const char *node_name;
-	ptrdiff_t len;
 
 	node_name = fwnode_get_name(fwnode);
 	if (!node_name)
 		return false;
 
-	len = strchrnul(node_name, '@') - node_name;
-
-	return str_has_prefix(node_name, name) == len;
+	return strprefix(node_name, name) == strchrnul(node_name, '@');
 }
 EXPORT_SYMBOL_GPL(fwnode_name_eq);
 
