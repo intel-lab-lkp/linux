@@ -535,7 +535,7 @@ static void ring_clear_msix(const struct tb_ring *ring)
 			  4 * (ring->nhi->hop_count / 32));
 }
 
-irqreturn_t ring_msix(int irq, void *data)
+irqreturn_t tb_ring_msix(int irq, void *data)
 {
 	struct tb_ring *ring = data;
 
@@ -935,7 +935,7 @@ void tb_ring_free(struct tb_ring *ring)
 
 	/*
 	 * ring->work can no longer be scheduled (it is scheduled only
-	 * by nhi_interrupt_work, ring_stop and ring_msix). Wait for it
+	 * by nhi_interrupt_work, ring_stop and tb_ring_msix). Wait for it
 	 * to finish before freeing the ring.
 	 */
 	flush_work(&ring->work);
@@ -1072,7 +1072,7 @@ void nhi_interrupt_work(struct work_struct *work)
 	spin_unlock_irq(&nhi->lock);
 }
 
-irqreturn_t nhi_msi(int irq, void *data)
+irqreturn_t tb_nhi_isr(int irq, void *data)
 {
 	struct tb_nhi *nhi = data;
 	schedule_work(&nhi->interrupt_work);
@@ -1216,7 +1216,7 @@ static int nhi_runtime_resume(struct device *dev)
 	return tb_domain_runtime_resume(tb);
 }
 
-void nhi_shutdown(struct tb_nhi *nhi)
+void tb_nhi_shutdown(struct tb_nhi *nhi)
 {
 	int i;
 
@@ -1306,7 +1306,7 @@ static struct tb *nhi_select_cm(struct tb_nhi *nhi)
 	return tb;
 }
 
-int nhi_probe(struct tb_nhi *nhi)
+int tb_nhi_probe(struct tb_nhi *nhi)
 {
 	struct device *dev = nhi->dev;
 	struct tb *tb;
@@ -1368,7 +1368,7 @@ int nhi_probe(struct tb_nhi *nhi)
 		 */
 		tb_domain_put(tb);
 		wait_for_completion(&nhi->domain_released);
-		nhi_shutdown(nhi);
+		tb_nhi_shutdown(nhi);
 		return dev_err_probe(dev, res, "failed to add domain\n");
 	}
 	dev_set_drvdata(dev, tb);
@@ -1388,7 +1388,7 @@ int nhi_probe(struct tb_nhi *nhi)
  * the tunnels asap. A corresponding pci quirk blocks the downstream bridges
  * resume_noirq until we are done.
  */
-const struct dev_pm_ops nhi_pm_ops = {
+const struct dev_pm_ops tb_nhi_pm_ops = {
 	.suspend_noirq = nhi_suspend_noirq,
 	.resume_noirq = nhi_resume_noirq,
 	.freeze_noirq = nhi_freeze_noirq,  /*
