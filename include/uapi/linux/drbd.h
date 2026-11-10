@@ -1,10 +1,11 @@
-/* SPDX-License-Identifier: GPL-2.0-or-later WITH Linux-syscall-note */
+/* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
  * Copyright (C) 2014, LINBIT HA-Solutions GmbH.
  */
 
-#ifndef _UAPI_LINUX_DRBD_H
-#define _UAPI_LINUX_DRBD_H
+#ifndef DRBD_H
+#define DRBD_H
+
 #include <linux/types.h>
 #include <asm/byteorder.h>
 
@@ -14,8 +15,7 @@ enum drbd_io_error_p {
 	EP_DETACH
 };
 
-enum drbd_fencing_p {
-	FP_NOT_AVAIL = -1, /* Not a policy */
+enum drbd_fencing_policy {
 	FP_DONT_CARE = 0,
 	FP_RESOURCE,
 	FP_STONITH
@@ -38,12 +38,24 @@ enum drbd_after_sb_p {
 	ASB_CONSENSUS,
 	ASB_DISCARD_SECONDARY,
 	ASB_CALL_HELPER,
-	ASB_VIOLENTLY
+	ASB_VIOLENTLY,
+	ASB_RETRY_CONNECT,
+	ASB_AUTO_DISCARD,
 };
 
 enum drbd_on_no_data {
 	OND_IO_ERROR,
 	OND_SUSPEND_IO
+};
+
+enum drbd_on_no_quorum {
+	ONQ_IO_ERROR = OND_IO_ERROR,
+	ONQ_SUSPEND_IO = OND_SUSPEND_IO
+};
+
+enum drbd_on_susp_primary_outdated {
+	SPO_DISCONNECT,
+	SPO_FORCE_SECONDARY,
 };
 
 enum drbd_on_congestion {
@@ -65,6 +77,11 @@ enum drbd_read_balancing {
 	RB_512K_STRIPING,
 	RB_1M_STRIPING,
 };
+
+/* Windows km/dderror.h has that a 0L */
+#ifdef NO_ERROR
+#undef NO_ERROR
+#endif
 
 /* KEEP the order, do not delete or insert. Only append. */
 enum drbd_ret_code {
@@ -109,7 +126,7 @@ enum drbd_ret_code {
 	ERR_CSUMS_ALG_ND	= 145, /* DRBD 8.2 only */
 	ERR_VERIFY_ALG		= 146, /* DRBD 8.2 only */
 	ERR_VERIFY_ALG_ND	= 147, /* DRBD 8.2 only */
-	ERR_CSUMS_RESYNC_RUNNING= 148, /* DRBD 8.2 only */
+	ERR_CSUMS_RESYNC_RUNNING = 148, /* DRBD 8.2 only */
 	ERR_VERIFY_RUNNING	= 149, /* DRBD 8.2 only */
 	ERR_DATA_NOT_CURRENT	= 150,
 	ERR_CONNECTED		= 151, /* DRBD 8.3 only */
@@ -132,6 +149,13 @@ enum drbd_ret_code {
 	ERR_MD_LAYOUT_TOO_SMALL = 168,
 	ERR_MD_LAYOUT_NO_FIT    = 169,
 	ERR_IMPLICIT_SHRINK     = 170,
+	ERR_INVALID_PEER_NODE_ID = 171,
+	ERR_CREATE_TRANSPORT    = 172,
+	ERR_LOCAL_AND_PEER_ADDR = 173,
+	ERR_ALREADY_EXISTS	= 174,
+	ERR_APV_TOO_LOW         = 175,
+	ERR_PATH_COLLISION      = 176,
+
 	/* insert new ones above this line */
 	AFTER_LAST_ERR_CODE
 };
@@ -148,54 +172,65 @@ enum drbd_role {
 };
 
 /* The order of these constants is important.
- * The lower ones (<C_WF_REPORT_PARAMS) indicate
+ * The lower ones (< C_CONNECTED) indicate
  * that there is no socket!
- * >=C_WF_REPORT_PARAMS ==> There is a socket
+ * >= C_CONNECTED ==> There is a socket
  */
-enum drbd_conns {
+enum drbd_conn_state {
 	C_STANDALONE,
-	C_DISCONNECTING,  /* Temporal state on the way to StandAlone. */
+	C_DISCONNECTING,  /* Temporary state on the way to C_STANDALONE. */
 	C_UNCONNECTED,    /* >= C_UNCONNECTED -> inc_net() succeeds */
 
-	/* These temporal states are all used on the way
-	 * from >= C_CONNECTED to Unconnected.
+	/* These temporary states are used on the way
+	 * from C_CONNECTED to C_UNCONNECTED.
 	 * The 'disconnect reason' states
-	 * I do not allow to change between them. */
+	 * I do not allow to change between them.
+	 */
 	C_TIMEOUT,
 	C_BROKEN_PIPE,
 	C_NETWORK_FAILURE,
 	C_PROTOCOL_ERROR,
 	C_TEAR_DOWN,
 
-	C_WF_CONNECTION,
-	C_WF_REPORT_PARAMS, /* we have a socket */
-	C_CONNECTED,      /* we have introduced each other */
-	C_STARTING_SYNC_S,  /* starting full sync by admin request. */
-	C_STARTING_SYNC_T,  /* starting full sync by admin request. */
-	C_WF_BITMAP_S,
-	C_WF_BITMAP_T,
-	C_WF_SYNC_UUID,
+	C_CONNECTING,
+
+	C_CONNECTED, /* we have a socket */
+
+	C_MASK = 31,
+};
+
+enum drbd_repl_state {
+	L_NEGOTIATING = C_CONNECTED, /* used for peer_device->negotiation_result only */
+	L_OFF = C_CONNECTED,
+
+	L_ESTABLISHED,      /* we have introduced each other */
+	L_STARTING_SYNC_S,  /* starting full sync by admin request. */
+	L_STARTING_SYNC_T,  /* starting full sync by admin request. */
+	L_WF_BITMAP_S,
+	L_WF_BITMAP_T,
+	L_WF_SYNC_UUID,
 
 	/* All SyncStates are tested with this comparison
-	 * xx >= C_SYNC_SOURCE && xx <= C_PAUSED_SYNC_T */
-	C_SYNC_SOURCE,
-	C_SYNC_TARGET,
-	C_VERIFY_S,
-	C_VERIFY_T,
-	C_PAUSED_SYNC_S,
-	C_PAUSED_SYNC_T,
+	 * xx >= L_SYNC_SOURCE && xx <= L_PAUSED_SYNC_T
+	 */
+	L_SYNC_SOURCE,
+	L_SYNC_TARGET,
+	L_VERIFY_S,
+	L_VERIFY_T,
+	L_PAUSED_SYNC_S,
+	L_PAUSED_SYNC_T,
 
-	C_AHEAD,
-	C_BEHIND,
-
-	C_MASK = 31
+	L_AHEAD,
+	L_BEHIND,
+	L_NEG_NO_RESULT = L_BEHIND,  /* used for peer_device->negotiation_result only */
 };
 
 enum drbd_disk_state {
 	D_DISKLESS,
 	D_ATTACHING,      /* In the process of reading the meta-data */
+	D_DETACHING,      /* Added in protocol version 110 */
 	D_FAILED,         /* Becomes D_DISKLESS as soon as we told it the peer */
-			  /* when >= D_FAILED it is legal to access mdev->ldev */
+			  /* when >= D_FAILED it is legal to access device->ldev */
 	D_NEGOTIATING,    /* Late attaching state, we need to talk to the peer */
 	D_INCONSISTENT,
 	D_OUTDATED,
@@ -216,31 +251,33 @@ union drbd_state {
  */
 	struct {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
-		unsigned role:2 ;   /* 3/4	 primary/secondary/unknown */
-		unsigned peer:2 ;   /* 3/4	 primary/secondary/unknown */
-		unsigned conn:5 ;   /* 17/32	 cstates */
-		unsigned disk:4 ;   /* 8/16	 from D_DISKLESS to D_UP_TO_DATE */
-		unsigned pdsk:4 ;   /* 8/16	 from D_DISKLESS to D_UP_TO_DATE */
-		unsigned susp:1 ;   /* 2/2	 IO suspended no/yes (by user) */
-		unsigned aftr_isp:1 ; /* isp .. imposed sync pause */
-		unsigned peer_isp:1 ;
-		unsigned user_isp:1 ;
-		unsigned susp_nod:1 ; /* IO suspended because no data */
-		unsigned susp_fen:1 ; /* IO suspended because fence peer handler runs*/
-		unsigned _pad:9;   /* 0	 unused */
+		unsigned role:2;   /* 3/4	 primary/secondary/unknown */
+		unsigned peer:2;   /* 3/4	 primary/secondary/unknown */
+		unsigned conn:5;   /* 17/32	 cstates */
+		unsigned disk:4;   /* 8/16	 from D_DISKLESS to D_UP_TO_DATE */
+		unsigned pdsk:4;   /* 8/16	 from D_DISKLESS to D_UP_TO_DATE */
+		unsigned susp:1;   /* 2/2	 IO suspended no/yes (by user) */
+		unsigned aftr_isp:1; /* isp .. imposed sync pause */
+		unsigned peer_isp:1;
+		unsigned user_isp:1;
+		unsigned susp_nod:1; /* IO suspended because no data */
+		unsigned susp_fen:1; /* IO suspended because fence peer handler runs*/
+		unsigned quorum:1;
+		unsigned _pad:8;   /* 0	 unused */
 #elif defined(__BIG_ENDIAN_BITFIELD)
-		unsigned _pad:9;
-		unsigned susp_fen:1 ;
-		unsigned susp_nod:1 ;
-		unsigned user_isp:1 ;
-		unsigned peer_isp:1 ;
-		unsigned aftr_isp:1 ; /* isp .. imposed sync pause */
-		unsigned susp:1 ;   /* 2/2	 IO suspended  no/yes */
-		unsigned pdsk:4 ;   /* 8/16	 from D_DISKLESS to D_UP_TO_DATE */
-		unsigned disk:4 ;   /* 8/16	 from D_DISKLESS to D_UP_TO_DATE */
-		unsigned conn:5 ;   /* 17/32	 cstates */
-		unsigned peer:2 ;   /* 3/4	 primary/secondary/unknown */
-		unsigned role:2 ;   /* 3/4	 primary/secondary/unknown */
+		unsigned _pad:8;
+		unsigned quorum:1;
+		unsigned susp_fen:1;
+		unsigned susp_nod:1;
+		unsigned user_isp:1;
+		unsigned peer_isp:1;
+		unsigned aftr_isp:1; /* isp .. imposed sync pause */
+		unsigned susp:1;   /* 2/2	 IO suspended  no/yes */
+		unsigned pdsk:4;   /* 8/16	 from D_DISKLESS to D_UP_TO_DATE */
+		unsigned disk:4;   /* 8/16	 from D_DISKLESS to D_UP_TO_DATE */
+		unsigned conn:5;   /* 17/32	 cstates */
+		unsigned peer:2;   /* 3/4	 primary/secondary/unknown */
+		unsigned role:2;   /* 3/4	 primary/secondary/unknown */
 #else
 # error "this endianness is not supported"
 #endif
@@ -267,29 +304,76 @@ enum drbd_state_rv {
 	SS_DEVICE_IN_USE = -12,
 	SS_NO_NET_CONFIG = -13,
 	SS_NO_VERIFY_ALG = -14,       /* drbd-8.2 only */
-	SS_NEED_CONNECTION = -15,    /* drbd-8.2 only */
+	SS_NEED_CONNECTION = -15, /* Need connection this state change affects to be connected */
 	SS_LOWER_THAN_OUTDATED = -16,
-	SS_NOT_SUPPORTED = -17,      /* drbd-8.2 only */
+	SS_NOT_SUPPORTED = -17,
 	SS_IN_TRANSIENT_STATE = -18,  /* Retry after the next state change */
 	SS_CONCURRENT_ST_CHG = -19,   /* Concurrent cluster side state change! */
 	SS_O_VOL_PEER_PRI = -20,
-	SS_OUTDATE_WO_CONN = -21,
-	SS_AFTER_LAST_ERROR = -22,    /* Keep this at bottom */
+	SS_INTERRUPTED = -21,	/* interrupted in stable_state_change() */
+	SS_PRIMARY_READER = -22,
+	SS_TIMEOUT = -23,
+	SS_WEAKLY_CONNECTED = -24,
+	SS_NO_QUORUM = -25,
+	SS_ATTACH_NO_BITMAP = -26,
+	SS_HANDSHAKE_DISCONNECT = -27,
+	SS_HANDSHAKE_RETRY = -28,
+	SS_AFTER_LAST_ERROR = -29,    /* Keep this at bottom */
 };
 
 #define SHARED_SECRET_MAX 64
 
-#define MDF_CONSISTENT		(1 << 0)
-#define MDF_PRIMARY_IND		(1 << 1)
-#define MDF_CONNECTED_IND	(1 << 2)
-#define MDF_FULL_SYNC		(1 << 3)
-#define MDF_WAS_UP_TO_DATE	(1 << 4)
-#define MDF_PEER_OUT_DATED	(1 << 5)
-#define MDF_CRASHED_PRIMARY	(1 << 6)
-#define MDF_AL_CLEAN		(1 << 7)
-#define MDF_AL_DISABLED		(1 << 8)
+/* Meta data feature flags */
+#define DRBD_MDFF_DIVERGENCE_BITMAP (1ULL << 0)
+#define DRBD_MDFF_BITMAP_AUTHORITATIVE (1ULL << 1) /* MDF_PEER_BITMAP_AUTHORITATIVE is maintained */
+#define DRBD_MDFF_CBT (1ULL << 2) /* struct cbt_bookmark_on_disk_9 is maintained */
 
-#define MAX_PEERS 32
+/* Flags of the changed block tracking bookmark in the meta data */
+#define CBT_BOOKMARK_IN_USE	(1U << 0)
+#define CBT_BOOKMARK_INVALID	(1U << 1)
+#define CBT_BOOKMARK_FLUSHED	(1U << 2) /* the bitmap on disk holds every write up to now */
+
+enum mdf_flag {
+	MDF_CONSISTENT =	1 << 0,
+	MDF_PRIMARY_IND =	1 << 1,
+	MDF_WAS_UP_TO_DATE =	1 << 4,
+	MDF_CRASHED_PRIMARY =	1 << 6,
+	MDF_AL_CLEAN =		1 << 7,
+	MDF_AL_DISABLED =       1 << 8,
+	MDF_PRIMARY_LOST_QUORUM = 1 << 9,
+	MDF_HAVE_QUORUM =       1 << 10,
+};
+
+/* Bit numbers, for the atomic bit operations on struct drbd_peer_md flags.
+ * Maximum value 31 because the flags are persisted as be32.
+ */
+enum mdf_peer_flag_bit {
+	__MDF_PEER_CONNECTED =	0,
+	__MDF_PEER_OUTDATED =	1,
+	__MDF_PEER_FENCING =	2,
+	__MDF_PEER_FULL_SYNC =	3,
+	__MDF_PEER_DEVICE_SEEN = 4,
+	__MDF_PEER_DIVERGENCE_BITMAP = 5, /* bitmap fully records divergence; safe to copy from */
+	__MDF_PEER_BITMAP_AUTHORITATIVE = 6, /* out-of-sync bits were set for blocks the peer lacks, not by a resync or an invalidate */
+	__MDF_NODE_EXISTS =	16,
+	__MDF_HAVE_BITMAP =	31,  /* For in core use; no meaning when persisted */
+};
+
+/* Masks, for the on-disk and netlink representations. */
+enum mdf_peer_flag {
+	MDF_PEER_CONNECTED =	1U << __MDF_PEER_CONNECTED,
+	MDF_PEER_OUTDATED =	1U << __MDF_PEER_OUTDATED,
+	MDF_PEER_FENCING =	1U << __MDF_PEER_FENCING,
+	MDF_PEER_FULL_SYNC =	1U << __MDF_PEER_FULL_SYNC,
+	MDF_PEER_DEVICE_SEEN =	1U << __MDF_PEER_DEVICE_SEEN,
+	MDF_PEER_DIVERGENCE_BITMAP = 1U << __MDF_PEER_DIVERGENCE_BITMAP,
+	MDF_PEER_BITMAP_AUTHORITATIVE = 1U << __MDF_PEER_BITMAP_AUTHORITATIVE,
+	MDF_NODE_EXISTS =       1U << __MDF_NODE_EXISTS,
+	MDF_HAVE_BITMAP =       1U << __MDF_HAVE_BITMAP,
+};
+
+#define DRBD_PEERS_MAX 32
+#define DRBD_NODE_ID_MAX DRBD_PEERS_MAX
 
 enum drbd_uuid_index {
 	UI_CURRENT,
@@ -301,15 +385,32 @@ enum drbd_uuid_index {
 	UI_EXTENDED_SIZE   /* Everything. */
 };
 
-#define HISTORY_UUIDS MAX_PEERS
+#define HISTORY_UUIDS_V08 (UI_HISTORY_END - UI_HISTORY_START + 1)
+#define HISTORY_UUIDS DRBD_PEERS_MAX
+#define HISTORY_UUIDS_SIZE (HISTORY_UUIDS * sizeof(__u64))
 
+/*
+ * Wire sizes of the uuid attributes of the "drbd" netlink family at
+ * version 1, as served by drbd_nl_84.c. Same values as the 8.4 driver's:
+ * UI_SIZE and HISTORY_UUIDS are identical in 8.4 and 9.
+ */
 #define DRBD_NL_UUIDS_SIZE		(UI_SIZE * sizeof(__u64))
-#define DRBD_NL_HISTORY_UUIDS_SIZE	(HISTORY_UUIDS * sizeof(__u64))
+#define DRBD_NL_HISTORY_UUIDS_SIZE	HISTORY_UUIDS_SIZE
 
 enum drbd_timeout_flag {
 	UT_DEFAULT      = 0,
 	UT_DEGRADED     = 1,
 	UT_PEER_OUTDATED = 2,
+};
+
+#define UUID_JUST_CREATED ((__u64)4)
+#define UUID_PRIMARY ((__u64)1)
+
+enum write_ordering_e {
+	WO_NONE,
+	WO_DRAIN_IO,
+	WO_BDEV_FLUSH,
+	WO_BIO_BARRIER
 };
 
 enum drbd_notification_type {
@@ -319,26 +420,19 @@ enum drbd_notification_type {
 	NOTIFY_DESTROY,
 	NOTIFY_CALL,
 	NOTIFY_RESPONSE,
+	NOTIFY_RENAME,
 
 	NOTIFY_CONTINUES = 0x8000,
 	NOTIFY_FLAGS = NOTIFY_CONTINUES,
 };
 
+/* These values are part of the ABI! */
 enum drbd_peer_state {
 	P_INCONSISTENT = 3,
 	P_OUTDATED = 4,
 	P_DOWN = 5,
 	P_PRIMARY = 6,
 	P_FENCING = 7,
-};
-
-#define UUID_JUST_CREATED ((__u64)4)
-
-enum write_ordering_e {
-	WO_NONE,
-	WO_DRAIN_IO,
-	WO_BDEV_FLUSH,
-	WO_BIO_BARRIER
 };
 
 /* magic numbers used in meta data and network packets */
@@ -349,18 +443,24 @@ enum write_ordering_e {
 #define DRBD_MD_MAGIC_07   (DRBD_MAGIC+3)
 #define DRBD_MD_MAGIC_08   (DRBD_MAGIC+4)
 #define DRBD_MD_MAGIC_84_UNCLEAN	(DRBD_MAGIC+5)
-
-
-/* how I came up with this magic?
- * base64 decode "actlog==" ;) */
-#define DRBD_AL_MAGIC 0x69cb65a2
+#define DRBD_MD_MAGIC_09   (DRBD_MAGIC+6)
 
 /* these are of type "int" */
 #define DRBD_MD_INDEX_INTERNAL -1
 #define DRBD_MD_INDEX_FLEX_EXT -2
 #define DRBD_MD_INDEX_FLEX_INT -3
 
-#define DRBD_CPU_MASK_SIZE 32
+/*
+ * This is the maximum string length accepted by drbdadm.
+ * It allows a full mask for up to 908 CPUs.
+ */
+#define DRBD_CPU_MASK_SIZE 256
+
+#define DRBD_MAX_BIO_SIZE (1U << 20)
+
+#define QOU_OFF 0
+#define QOU_MAJORITY 1024
+#define QOU_ALL 1025
 
 /**
  * struct drbd_genlmsghdr - DRBD specific header used in NETLINK_GENERIC requests
@@ -373,19 +473,13 @@ enum write_ordering_e {
  *     is used instead.
  * @flags: possible operation modifiers (relevant only for user->kernel):
  *     DRBD_GENL_F_SET_DEFAULTS
- * @volume:
- *     When creating a new minor (adding it to a resource), the resource needs
- *     to know which volume number within the resource this is supposed to be.
- *     The volume number corresponds to the same volume number on the remote side,
- *     whereas the minor number on the remote side may be different
- *     (union with flags).
  * @ret_code: kernel->userland unicast cfg reply return code (union with flags);
  */
 struct drbd_genlmsghdr {
 	__u32 minor;
 	union {
-		__u32 flags;
-		__s32 ret_code;
+	__u32 flags;
+	__s32 ret_code;
 	};
 };
 
@@ -394,12 +488,11 @@ enum {
 	DRBD_GENL_F_SET_DEFAULTS = 1,
 };
 
-enum drbd_state_info_bcast_reason {
-	SIB_GET_STATUS_REPLY = 1,
-	SIB_STATE_CHANGE = 2,
-	SIB_HELPER_PRE = 3,
-	SIB_HELPER_POST = 4,
-	SIB_SYNC_PROGRESS = 5,
-};
+/*
+ * DRBD_GENLA_F_MANDATORY: netlink ignores attributes it does not know
+ * about by default. This flag in nlattr->nla_type indicates that this
+ * attribute must not be ignored. Checked and stripped in pre_doit.
+ */
+#define DRBD_GENLA_F_MANDATORY (1 << 14)
 
-#endif /* _UAPI_LINUX_DRBD_H */
+#endif
