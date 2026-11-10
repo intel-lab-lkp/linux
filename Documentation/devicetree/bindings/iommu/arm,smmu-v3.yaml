@@ -63,6 +63,9 @@ properties:
 
   msi-parent: true
 
+  power-domains:
+    maxItems: 1
+
   nvidia,cmdqv:
     description: |
       A phandle to its pairing CMDQV extension for an implementation on NVIDIA
