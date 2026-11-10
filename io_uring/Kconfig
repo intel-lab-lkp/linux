@@ -15,6 +15,17 @@ config IO_URING_BPF
 	depends on BPF
 	depends on NET
 
+config IO_URING_OPAQUE_OBJ
+	bool "io_uring opaque TCP payload objects"
+	default n
+	depends on IO_URING && INET
+	select SOCK_RX_OWNER
+	help
+	  Retain immutable TCP payloads as kernel-resident objects that can
+	  be inspected, transmitted and compacted through io_uring. No network
+	  device zerocopy support or mapped receive area is required.
+	  Applications manage payload lifetime through generation handles.
+
 config IO_URING_BPF_OPS
 	def_bool y
 	depends on IO_URING
