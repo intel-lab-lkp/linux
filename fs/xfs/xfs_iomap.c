@@ -848,8 +848,11 @@ xfs_bmap_hw_atomic_write_possible(
 	 * atomic writes are required to be naturally aligned for disk blocks,
 	 * which ensures that we adhere to block layer rules that we won't
 	 * straddle any boundary or violate write alignment requirement.
+	 * Check the disk address: br_startblock carries the group number in
+	 * its high bits, so it can be aligned when the disk address is not.
 	 */
-	if (!IS_ALIGNED(imap->br_startblock, imap->br_blockcount))
+	if (!IS_ALIGNED(xfs_fsb_to_db(ip, imap->br_startblock),
+			XFS_FSB_TO_BB(mp, imap->br_blockcount)))
 		return false;
 
 	/*
