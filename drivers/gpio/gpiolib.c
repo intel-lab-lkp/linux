@@ -2702,24 +2702,23 @@ void gpiod_free_commit(struct gpio_desc *desc)
 #ifdef CONFIG_GPIO_CDEV
 		WRITE_ONCE(desc->debounce_period_us, 0);
 #endif
-
-		clear_bit(GPIOD_FLAG_ACTIVE_LOW, &flags);
-		clear_bit(GPIOD_FLAG_REQUESTED, &flags);
-		clear_bit(GPIOD_FLAG_OPEN_DRAIN, &flags);
-		clear_bit(GPIOD_FLAG_OPEN_SOURCE, &flags);
-		clear_bit(GPIOD_FLAG_PULL_UP, &flags);
-		clear_bit(GPIOD_FLAG_PULL_DOWN, &flags);
-		clear_bit(GPIOD_FLAG_BIAS_DISABLE, &flags);
-		clear_bit(GPIOD_FLAG_EDGE_RISING, &flags);
-		clear_bit(GPIOD_FLAG_EDGE_FALLING, &flags);
-		clear_bit(GPIOD_FLAG_EVENT_CLOCK_REALTIME, &flags);
-		clear_bit(GPIOD_FLAG_EVENT_CLOCK_HTE, &flags);
-		clear_bit(GPIOD_FLAG_IS_HOGGED, &flags);
 #ifdef CONFIG_OF_DYNAMIC
 		WRITE_ONCE(desc->hog, NULL);
 #endif
 		desc_set_label(desc, NULL);
-		WRITE_ONCE(desc->flags, flags);
+		set_mask_bits(&desc->flags,
+			      BIT(GPIOD_FLAG_ACTIVE_LOW) |
+			      BIT(GPIOD_FLAG_REQUESTED) |
+			      BIT(GPIOD_FLAG_OPEN_DRAIN) |
+			      BIT(GPIOD_FLAG_OPEN_SOURCE) |
+			      BIT(GPIOD_FLAG_PULL_UP) |
+			      BIT(GPIOD_FLAG_PULL_DOWN) |
+			      BIT(GPIOD_FLAG_BIAS_DISABLE) |
+			      BIT(GPIOD_FLAG_EDGE_RISING) |
+			      BIT(GPIOD_FLAG_EDGE_FALLING) |
+			      BIT(GPIOD_FLAG_EVENT_CLOCK_REALTIME) |
+			      BIT(GPIOD_FLAG_EVENT_CLOCK_HTE) |
+			      BIT(GPIOD_FLAG_IS_HOGGED), 0);
 		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_RELEASED);
 	}
 }
