@@ -965,6 +965,40 @@ static int ice_dpll_phase_offset_monitor_get(const struct dpll_device *dpll,
 }
 
 /**
+ * ice_dpll_pin_state_to_enable - translate a requested pin state
+ * @state: pin state requested by the user
+ * @on_state: the state that enables the pin
+ * @enable: on success true to enable the pin, false to disable it
+ * @extack: error reporting
+ *
+ * A pin is enabled by exactly one state: selectable for an input of the
+ * EEC and PPS DPLLs, which select their reference automatically, and
+ * connected for an output and for a recovered clock on its parent pin.
+ * Disconnected disables the pin. No other state has a meaning for the
+ * pin, so it is refused rather than taken for one of the two.
+ *
+ * Return:
+ * * 0 - success, @enable is set
+ * * -EINVAL - @state is not valid for the pin
+ */
+static int
+ice_dpll_pin_state_to_enable(enum dpll_pin_state state,
+			     enum dpll_pin_state on_state, bool *enable,
+			     struct netlink_ext_ack *extack)
+{
+	if (state != on_state && state != DPLL_PIN_STATE_DISCONNECTED) {
+		NL_SET_ERR_MSG_FMT(extack,
+				   "pin state must be %s or disconnected",
+				   on_state == DPLL_PIN_STATE_SELECTABLE ?
+				   "selectable" : "connected");
+		return -EINVAL;
+	}
+	*enable = state == on_state;
+
+	return 0;
+}
+
+/**
  * ice_dpll_pin_state_set - set pin's state on dpll
  * @pin: pointer to a pin
  * @pin_priv: private data pointer passed on pin registration
@@ -1030,12 +1064,15 @@ ice_dpll_output_state_set(const struct dpll_pin *pin, void *pin_priv,
 			  enum dpll_pin_state state,
 			  struct netlink_ext_ack *extack)
 {
-	bool enable = state == DPLL_PIN_STATE_CONNECTED;
 	struct ice_dpll_pin *p = pin_priv;
 	struct ice_dpll *d = dpll_priv;
+	bool enable;
+	int ret;
 
-	if (state == DPLL_PIN_STATE_SELECTABLE)
-		return -EINVAL;
+	ret = ice_dpll_pin_state_to_enable(state, DPLL_PIN_STATE_CONNECTED,
+					   &enable, extack);
+	if (ret)
+		return ret;
 	if (!enable && p->state[d->dpll_idx] == DPLL_PIN_STATE_DISCONNECTED)
 		return 0;
 
@@ -1065,7 +1102,13 @@ ice_dpll_input_state_set(const struct dpll_pin *pin, void *pin_priv,
 			 enum dpll_pin_state state,
 			 struct netlink_ext_ack *extack)
 {
-	bool enable = state == DPLL_PIN_STATE_SELECTABLE;
+	bool enable;
+	int ret;
+
+	ret = ice_dpll_pin_state_to_enable(state, DPLL_PIN_STATE_SELECTABLE,
+					   &enable, extack);
+	if (ret)
+		return ret;
 
 	return ice_dpll_pin_state_set(pin, pin_priv, dpll, dpll_priv, enable,
 				      extack, ICE_DPLL_PIN_TYPE_INPUT);
@@ -2524,18 +2567,24 @@ ice_dpll_rclk_state_on_pin_set(const struct dpll_pin *pin, void *pin_priv,
 			       enum dpll_pin_state state,
 			       struct netlink_ext_ack *extack)
 {
-	bool enable = state == DPLL_PIN_STATE_CONNECTED;
 	struct ice_dpll_pin *p = pin_priv;
 	struct ice_pf *pf = p->pf;
 	struct ice_hw *hw;
-	int ret = -EINVAL;
+	bool enable;
 	int hw_idx;
+	int ret;
 
 	hw = &pf->hw;
 
 	if (ice_dpll_is_reset(pf, extack))
 		return -EBUSY;
 
+	ret = ice_dpll_pin_state_to_enable(state, DPLL_PIN_STATE_CONNECTED,
+					   &enable, extack);
+	if (ret)
+		return ret;
+
+	ret = -EINVAL;
 	mutex_lock(&pf->dplls.lock);
 	hw_idx = ice_dpll_pin_get_parent_idx(p, parent_pin);
 	if (hw_idx < 0)
