@@ -172,11 +172,16 @@ config SUN4I_TIMER
 	  Enables support for the Sun4i timer.
 
 config SUN5I_HSTIMER
-	bool "Sun5i timer driver" if COMPILE_TEST
+	bool "Sun5i timer driver" if COMPILE_TEST || ARCH_SUNXI
 	select CLKSRC_MMIO
 	depends on COMMON_CLK
 	help
 	  Enables support the Sun5i timer.
+
+	  The 32-bit sunxi platforms that have this timer select it. On
+	  64-bit (ARM64, RISC-V) sunxi SoCs such as the H616 and D1 it
+	  registers an additional clocksource and clockevent device, rated
+	  below the ones the kernel already uses there.
 
 config TEGRA_TIMER
 	bool "Tegra timer driver" if COMPILE_TEST
