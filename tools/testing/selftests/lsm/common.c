@@ -7,6 +7,7 @@
 
 #define _GNU_SOURCE
 #include <linux/lsm.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
@@ -50,21 +51,37 @@ int read_proc_attr(const char *attr, char *value, size_t size)
 	return 0;
 }
 
+int read_file(const char *path, char *buf, size_t size)
+{
+	ssize_t len;
+	int fd;
+
+	if (!size) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return -1;
+
+	len = read(fd, buf, size - 1);
+	if (len < 0) {
+		int err = errno;
+
+		close(fd);
+		errno = err;
+		return -1;
+	}
+
+	close(fd);
+	buf[len] = '\0';
+	return 0;
+}
+
 int read_sysfs_lsms(char *lsms, size_t size)
 {
-	FILE *fp;
-	size_t red;
-
-	fp = fopen("/sys/kernel/security/lsm", "r");
-	if (fp == NULL)
-		return -1;
-	red = fread(lsms, 1, size, fp);
-	fclose(fp);
-
-	if (red <= 0 || red == size)
-		return -1;
-	lsms[red] = '\0';
-	return 0;
+	return read_file("/sys/kernel/security/lsm", lsms, size);
 }
 
 int attr_lsm_count(void)
