@@ -640,26 +640,6 @@ static enum link_result hdmi_frl_perform_link_training(struct ddc_service *ddc_s
 				prev_flt_update = scdc_update.fields.FLT_UPDATE;
 			}
 
-			/*Set TxFFE = TxFFE0*/
-			/*Program FFE_Levels - scdc_config has this field at 0 */
-			if (override_FFE) {
-				if (current_FFE == 0)
-					dio_link_enc->funcs->prog_eq_setting(dio_link_enc, current_FFE,
-							test_req.fields.TXFFE_DEEMPHASIS,
-							test_req.fields.TXFFE_PRESHOOT,
-							test_req.fields.TXFFE_NOFFE,
-							link_settings);
-				else {
-					if (scdc_update.fields.FLT_UPDATE)
-						dio_link_enc->funcs->prog_eq_setting(dio_link_enc, current_FFE,
-								test_req.fields.TXFFE_DEEMPHASIS,
-								test_req.fields.TXFFE_PRESHOOT,
-								test_req.fields.TXFFE_NOFFE,
-								link_settings);
-				}
-				FRL_INFO("FRL LINK TRAINING:  TxFFE = %d.\n", current_FFE);
-				override_FFE = false;
-			}
 			if (scdc_update.fields.FLT_UPDATE) {
 				offset = HDMI_SCDC_LTP_REQ;
 				link_query_ddc_data(ddc_service, slave_address,
@@ -749,6 +729,19 @@ static enum link_result hdmi_frl_perform_link_training(struct ddc_service *ddc_s
 					ln1_pattern = pre_ln1_pattern;
 					ln2_pattern = pre_ln2_pattern;
 					ln3_pattern = pre_ln3_pattern;
+
+					/*
+					 * The sink re-evaluates the link as soon as FLT_update
+					 * is cleared, so program the requested level now.
+					 */
+					dio_link_enc->funcs->prog_eq_setting(dio_link_enc,
+							current_FFE,
+							test_req.fields.TXFFE_DEEMPHASIS,
+							test_req.fields.TXFFE_PRESHOOT,
+							test_req.fields.TXFFE_NOFFE,
+							link_settings);
+					FRL_INFO("FRL LINK TRAINING:  TxFFE = %d.\n", current_FFE);
+					override_FFE = false;
 				}
 
 				FRL_INFO("FRL LINK TRAINING:  Setting Training Pattern [ln0,ln1,ln2,ln3] = [%d,%d,%d,%d].\n",
