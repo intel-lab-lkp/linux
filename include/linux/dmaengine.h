@@ -12,7 +12,7 @@
 #include <linux/scatterlist.h>
 #include <linux/bitmap.h>
 #include <linux/types.h>
-#include <linux/interrupt.h>
+#include <linux/workqueue.h>
 #include <asm/page.h>
 
 /**
@@ -342,9 +342,9 @@ struct dma_router {
  * @router: pointer to the DMA router structure
  * @route_data: channel specific data for the router
  * @private: private data for certain client-channel associations
- * @bh_tasklet: bottom-half tasklet stored per-channel
- * @bh_work_fn: callback executed when @bh_tasklet runs
- * @bh_work_initialized: indicates whether @bh_tasklet has been initialized
+ * @bh_work: bottom-half work item stored per-channel
+ * @bh_work_fn: callback executed when @bh_work runs
+ * @bh_work_initialized: indicates whether @bh_work has been initialized
  */
 struct dma_chan {
 	struct dma_device *device;
@@ -383,7 +383,7 @@ struct dma_chan {
 	void *route_data;
 
 	void *private;
-	struct tasklet_struct bh_tasklet;
+	struct work_struct bh_work;
 	dmaengine_bh_work_fn bh_work_fn;
 	bool bh_work_initialized;
 };
