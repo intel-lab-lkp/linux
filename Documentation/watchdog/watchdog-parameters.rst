@@ -600,6 +600,11 @@ tegra_wdt:
     nowayout:
 	Watchdog cannot be stopped once started
 	(default=kernel config parameter)
+    stop_on_vde_off:
+	Tegra20: stop the watchdog for good when the VDE partition is
+	powered off, as a reset would hang the boot ROM. Booting with
+	tegra_pmc.vde_always_on=1 keeps the partition, and with it the
+	watchdog, usable (default=1)
 
 -------------------------------------------------
 
