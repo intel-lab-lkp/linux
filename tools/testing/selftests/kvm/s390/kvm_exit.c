@@ -42,6 +42,8 @@ int capget(cap_user_header_t header, cap_user_data_t data);
 #define SSKE_SUBOPCODE 0x2b
 #define SSKE_OPCODE 0xb2
 #define PSW_WAIT_BIT_MASK (1ULL << (63 - 14))
+#define PSW_CLOCK_WAIT 0x0102000180000000ULL
+#define CLK_COMPARATOR_MASK_BIT (1ULL << 11)
 #define PGM_CODE_GPA_ADDRESS 0x8e
 #define PGM_CODE_MASK        0x7f
 #define PGM_NEW_PSW_GPA 0x1d0
@@ -682,6 +684,73 @@ static bool test_immediate_exit(void)
 	return true;
 }
 
+static void guestcode_clock_comparator(void)
+{
+	asm volatile(
+		/* Set SCKC to the maximum value so it cannot expire on its own */
+		"lghi %%r7, -1\n"
+		"stg  %%r7, 0(%%r15)\n"
+		"sckc 0(%%r15)\n"
+		/* Enable clock comparator interrupt in CR0 (bit 52) */
+		"stctg %%c0, %%c0, 0(%%r15)\n"
+		"oi    6(%%r15), 0x8\n"
+		"lctlg %%c0, %%c0, 0(%%r15)\n"
+		/* Load enabled wait PSW: 64-bit, DAT off, wait bit, external interrupt enabled */
+		"larl  %%r8, 1f\n"
+		"lpswe 0(%%r8)\n"
+		".align 8\n"
+		"1: .quad %[wait_psw], 0\n"
+		:
+		: [wait_psw] "i" (PSW_CLOCK_WAIT)
+		: "r7", "r8", "memory"
+	);
+	GUEST_DONE();
+}
+
+static bool test_clock_comparator_interrupt(void)
+{
+	struct kvm_parameters param = {
+		.guest_code = guestcode_clock_comparator,
+		.manual_parameters.immediate_exit_condition = false,
+	};
+	struct kvm_s390_irq irq = {};
+	int rc;
+
+	if (!ucontrol_available())
+		return false;
+
+	ksft_print_msg("Testing Clock Comparator Interrupt Exit\n");
+	param = manual_kvm_creation_execution(param);
+
+	/* On a ucontrol VM, the guest's enabled wait exits to userspace as ICPT_WAIT. */
+	TEST_ASSERT(param.run->exit_reason == KVM_EXIT_S390_SIEIC,
+		    "Expected SIEIC, got %u\n", param.run->exit_reason);
+	TEST_ASSERT(param.run->s390_sieic.icptcode == ICPT_WAIT,
+		    "Expected ICPT_WAIT (0x1c), got 0x%x\n",
+		    param.run->s390_sieic.icptcode);
+	TEST_ASSERT((param.run->s.regs.crs[0] & CLK_COMPARATOR_MASK_BIT) != 0,
+		    "CR0 clock comparator bit not set, cr0=0x%llx\n",
+		    param.run->s.regs.crs[0]);
+
+	/* Inject clock comparator interrupt as a ucontrol VMM would */
+	irq.type = KVM_S390_INT_CLOCK_COMP;
+	rc = ioctl(param.manual_parameters.vcpu_fd, KVM_S390_IRQ, &irq);
+	TEST_ASSERT(rc == 0, "KVM_S390_IRQ (clock comp) failed (%d)", errno);
+
+	/* With the interrupt pending and external interrupts enabled, expect ICPT_EXTREQ. */
+	rc = ioctl(param.manual_parameters.vcpu_fd, KVM_RUN, NULL);
+	TEST_ASSERT(rc == 0, "KVM_RUN (2) failed (%d)", errno);
+	TEST_ASSERT(param.run->exit_reason == KVM_EXIT_S390_SIEIC,
+		    "Expected SIEIC on second run, got %u\n",
+		    param.run->exit_reason);
+	TEST_ASSERT(param.run->s390_sieic.icptcode == ICPT_EXTREQ,
+		    "Expected ICPT_EXTREQ (0x10), got 0x%x\n",
+		    param.run->s390_sieic.icptcode);
+
+	manual_cleanup(param);
+	return true;
+}
+
 static void test(void)
 {
 	int i;
@@ -736,6 +805,11 @@ static void test(void)
 		{
 			.name = "Testing Immediate Exit",
 			.test = test_immediate_exit,
+			.skip_reason = "KVM_CAP_S390_UCONTROL unavailable or insufficient privilege"
+		},
+		{
+			.name = "Testing Clock Comparator External Interrupts",
+			.test = test_clock_comparator_interrupt,
 			.skip_reason = "KVM_CAP_S390_UCONTROL unavailable or insufficient privilege"
 		},
 	};
