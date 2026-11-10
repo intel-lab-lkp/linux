@@ -603,6 +603,20 @@ const struct io_issue_def io_issue_defs[] = {
 		.prep			= io_eopnotsupp_prep,
 #endif
 	},
+	[IORING_OP_OPAQUE_OBJ_SEND] = {
+		.audit_skip		= 1,
+		.ioprio			= 1,
+		.needs_file		= 1,
+		.unbound_nonreg_file	= 1,
+		.pollout			= 1,
+#ifdef CONFIG_IO_URING_OPAQUE_OBJ
+		.async_size		= sizeof(struct io_opaque_req),
+		.prep			= io_opaque_send_prep,
+		.issue			= io_opaque_send,
+#else
+		.prep			= io_eopnotsupp_prep,
+#endif
+	},
 };
 
 const struct io_cold_def io_cold_defs[] = {
@@ -864,6 +878,13 @@ const struct io_cold_def io_cold_defs[] = {
 	[IORING_OP_OPAQUE_OBJ] = {
 		.name			= "OPAQUE_OBJ",
 		.cleanup		= io_opaque_cleanup,
+	},
+	[IORING_OP_OPAQUE_OBJ_SEND] = {
+		.name			= "OPAQUE_OBJ_SEND",
+		.cleanup		= io_opaque_cleanup,
+#ifdef CONFIG_IO_URING_OPAQUE_OBJ
+		.fail			= io_opaque_fail,
+#endif
 	},
 };
 

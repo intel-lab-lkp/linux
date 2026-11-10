@@ -59,6 +59,9 @@ enum io_uring_opaque_op {
 	IORING_OPAQUE_AVAILABLE,
 };
 
+/* IORING_OP_OPAQUE_OBJ_SEND: sqe->ioprio contains these flags. */
+#define IORING_OPAQUE_SEND_LAST	(1U << 0)
+
 /* Optional SEND sqe->addr3 framing; size includes zero reserved extensions. */
 struct io_uring_opaque_frame {
 	__u32 size;
