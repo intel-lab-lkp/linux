@@ -1133,6 +1133,7 @@ struct dwc3_glue_ops {
  * @usb3_lpm_capable: set if hadrware supports Link Power Management
  * @usb2_lpm_disable: set to disable usb2 lpm for host
  * @usb2_gadget_lpm_disable: set to disable usb2 lpm for gadget
+ * @host_core_exited: the host-mode core was torn down in system suspend
  * @needs_full_reinit: set to indicate the core may lose power and need full
  *			initialization during system pm
  * @disable_scramble_quirk: set if we enable the disable scramble quirk
@@ -1403,6 +1404,7 @@ struct dwc3 {
 	unsigned		usb2_lpm_disable:1;
 	unsigned		usb2_gadget_lpm_disable:1;
 	unsigned		needs_full_reinit:1;
+	unsigned		host_core_exited:1;
 
 	unsigned		disable_scramble_quirk:1;
 	unsigned		u2exit_lfps_quirk:1;
