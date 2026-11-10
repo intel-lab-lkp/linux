@@ -732,6 +732,22 @@ static int gdb_cmd_reboot(struct kgdb_state *ks)
 	return 0;
 }
 
+static void append_threadid(struct kgdb_state *ks, char **ptr, int *i,
+			    int *finished, int threadid)
+{
+	unsigned char thref[BUF_THREAD_ID_SIZE];
+
+	if (*i >= ks->thr_query && !*finished) {
+		int_to_threadref(thref, threadid);
+		*ptr = pack_threadid(*ptr, thref);
+		*(*ptr)++ = ',';
+		ks->thr_query++;
+		if (ks->thr_query % KGDB_MAX_THREAD_QUERY == 0)
+			*finished = 1;
+	}
+	(*i)++;
+}
+
 /* Handle the 'q' query packets */
 static void gdb_cmd_query(struct kgdb_state *ks)
 {
@@ -752,28 +768,15 @@ static void gdb_cmd_query(struct kgdb_state *ks)
 		i = 0;
 		remcom_out_buffer[0] = 'm';
 		ptr = remcom_out_buffer + 1;
-		if (remcom_in_buffer[1] == 'f') {
-			/* Each cpu is a shadow thread */
-			for_each_online_cpu(cpu) {
-				ks->thr_query = 0;
-				int_to_threadref(thref, -cpu - 2);
-				ptr = pack_threadid(ptr, thref);
-				*(ptr++) = ',';
-				i++;
-			}
-		}
+		if (remcom_in_buffer[1] == 'f')
+			ks->thr_query = 0;
 
-		for_each_process_thread(g, p) {
-			if (i >= ks->thr_query && !finished) {
-				int_to_threadref(thref, p->pid);
-				ptr = pack_threadid(ptr, thref);
-				*(ptr++) = ',';
-				ks->thr_query++;
-				if (ks->thr_query % KGDB_MAX_THREAD_QUERY == 0)
-					finished = 1;
-			}
-			i++;
-		}
+		/* Each cpu is a shadow thread */
+		for_each_online_cpu(cpu)
+			append_threadid(ks, &ptr, &i, &finished, -cpu - 2);
+
+		for_each_process_thread(g, p)
+			append_threadid(ks, &ptr, &i, &finished, p->pid);
 
 		*(--ptr) = '\0';
 		break;
