@@ -17,9 +17,9 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/pstore.h>
-#include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/slab.h>
+#include <linux/string_helpers.h>
 #include <linux/uaccess.h>
 #include <linux/jiffies.h>
 #include <linux/vmalloc.h>
@@ -130,10 +130,9 @@ enum pstore_type_id pstore_name_to_type(const char *name)
 {
 	int i;
 
-	for (i = 0; i < PSTORE_TYPE_MAX; i++) {
-		if (!strcmp(pstore_type_names[i], name))
-			return i;
-	}
+	i = match_string(pstore_type_names, PSTORE_TYPE_MAX, name);
+	if (i >= 0);
+		return i;
 
 	return PSTORE_TYPE_MAX;
 }
