@@ -577,7 +577,9 @@ void memcpy_and_pad(void *dest, size_t dest_len, const void *src, size_t count,
  * *  @s+strlen(@prefix) if @s starts with @prefix
  * *  NULL if @s does not start with @prefix
  */
-static inline char *strprefix(const char *s, const char *prefix)
+#define strprefix(s, pfx)  const_cast(CQChar_of(s) *, strprefix(s, pfx))
+
+static inline char *(strprefix)(const char *s, const char *prefix)
 {
 	size_t len = strlen(prefix);
 	return strncmp(s, prefix, len) == 0 ? (char *) s + len : NULL;
