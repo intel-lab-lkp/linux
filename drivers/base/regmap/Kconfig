@@ -5,14 +5,6 @@
 
 config REGMAP
 	bool
-	help
-	  Enable support for the Register Map (regmap) access API.
-
-	  Usually, this option is automatically selected when needed.
-	  However, you may want to enable it manually for running the regmap
-	  KUnit tests.
-
-	  If unsure, say N.
 
 config REGMAP_KUNIT
 	tristate "KUnit tests for regmap"
