@@ -67,7 +67,7 @@ static int imx9_soc_probe(struct platform_device *pdev)
 	if (!attr->serial_number)
 		return -ENOMEM;
 
-	sdev = soc_device_register(attr);
+	sdev = devm_soc_device_register(dev, attr);
 	if (IS_ERR(sdev))
 		return dev_err_probe(dev, PTR_ERR(sdev),
 				     "%s failed to register SoC as a device\n", __func__);
