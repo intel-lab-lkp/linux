@@ -91,6 +91,9 @@ sysfs Interfaces
 ``/sys/kernel/kexec/kho_incoming/state``
     Status of the incoming KHO handover.
 
+``/sys/kernel/kexec/kho_incoming/preserved_size`` and ``restored_size``
+    Bytes preserved by the previous kernel and bytes restored through KHO.
+
 See Documentation/ABI/testing/sysfs-kernel-kexec-kdump for the sysfs ABI.
 
 debugfs Interfaces

@@ -79,3 +79,13 @@ Description:	read only
 		           the walk of its preserved memory map.
 		"failed"   The kernel rejected the handover.
 User:		system monitoring
+
+What:		/sys/kernel/kexec/kho_incoming/preserved_size
+What:		/sys/kernel/kexec/kho_incoming/restored_size
+Date:		Nov 2026
+Contact:	kexec@lists.infradead.org
+Description:	read only
+		Bytes preserved by the previous kernel and bytes restored
+		through KHO, respectively. Both are 0 unless the incoming
+		state is "revived".
+User:		system monitoring
