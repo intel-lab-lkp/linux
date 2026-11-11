@@ -84,7 +84,7 @@ static int wmt_socinfo_probe(struct platform_device *pdev)
 	if (!attrs->revision || !attrs->soc_id)
 		return -ENOMEM;
 
-	soc_dev = soc_device_register(attrs);
+	soc_dev = devm_soc_device_register(&pdev->dev, attrs);
 	if (IS_ERR(soc_dev))
 		return PTR_ERR(soc_dev);
 
@@ -94,15 +94,7 @@ static int wmt_socinfo_probe(struct platform_device *pdev)
 		 attrs->revision,
 		 attrs->soc_id);
 
-	platform_set_drvdata(pdev, soc_dev);
 	return 0;
-}
-
-static void wmt_socinfo_remove(struct platform_device *pdev)
-{
-	struct soc_device *soc_dev = platform_get_drvdata(pdev);
-
-	soc_device_unregister(soc_dev);
 }
 
 static const struct of_device_id wmt_socinfo_ids[] = {
@@ -112,7 +104,6 @@ static const struct of_device_id wmt_socinfo_ids[] = {
 
 static struct platform_driver wmt_socinfo = {
 	.probe = wmt_socinfo_probe,
-	.remove = wmt_socinfo_remove,
 	.driver = {
 		.name = "wmt-socinfo",
 		.of_match_table = wmt_socinfo_ids,
