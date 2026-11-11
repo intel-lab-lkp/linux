@@ -18,7 +18,28 @@ static int mount_filesystems(void)
 	if (mount("debugfs", "/debugfs", "debugfs", 0, NULL) < 0)
 		return -1;
 
+	if (mount("sysfs", "/sys", "sysfs", 0, NULL) < 0)
+		return -1;
+
 	return mount("proc", "/proc", "proc", 0, NULL);
+}
+
+static int check_bootmem_size(void)
+{
+	char buf[32];
+	ssize_t len;
+	int fd;
+
+	fd = open("/sys/kernel/kexec/kho_bootmem_size", O_RDONLY);
+	if (fd < 0)
+		return -1;
+
+	len = read(fd, buf, sizeof(buf));
+	close(fd);
+	if (len <= 0)
+		return -1;
+
+	return buf[0] == '0' ? -1 : 0;
 }
 
 static long kexec_file_load(int kernel_fd, int initrd_fd,
@@ -59,6 +80,9 @@ static int kexec_load(void)
 int main(int argc, char *argv[])
 {
 	if (mount_filesystems())
+		goto err_reboot;
+
+	if (check_bootmem_size())
 		goto err_reboot;
 
 	if (kexec_load())
