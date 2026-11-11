@@ -13,7 +13,6 @@
 #include <linux/platform_device.h>
 
 static struct soc_device_attribute soc_dev_attr;
-static struct soc_device *soc_dev;
 
 /*
  * Global Utility Registers.
@@ -95,6 +94,7 @@ static int loongson2_guts_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np = pdev->dev.of_node;
 	const struct loongson2_soc_die_attr *soc_die;
+	struct soc_device *soc_dev;
 	const char *machine;
 	u32 svr;
 
@@ -136,7 +136,7 @@ static int loongson2_guts_probe(struct platform_device *pdev)
 	if (!soc_dev_attr.revision)
 		return -ENOMEM;
 
-	soc_dev = soc_device_register(&soc_dev_attr);
+	soc_dev = devm_soc_device_register(dev, &soc_dev_attr);
 	if (IS_ERR(soc_dev))
 		return PTR_ERR(soc_dev);
 
@@ -146,11 +146,6 @@ static int loongson2_guts_probe(struct platform_device *pdev)
 		soc_dev_attr.soc_id, soc_dev_attr.revision);
 
 	return 0;
-}
-
-static void loongson2_guts_remove(struct platform_device *dev)
-{
-	soc_device_unregister(soc_dev);
 }
 
 /*
@@ -169,7 +164,6 @@ static struct platform_driver loongson2_guts_driver = {
 		.of_match_table = loongson2_guts_of_match,
 	},
 	.probe = loongson2_guts_probe,
-	.remove = loongson2_guts_remove,
 };
 
 static int __init loongson2_guts_init(void)
