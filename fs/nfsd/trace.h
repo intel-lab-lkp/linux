@@ -661,6 +661,7 @@ DEFINE_EVENT(nfsd_read_dio_class, nfsd_read_dio_##name,		\
 DEFINE_NFSD_READ_DIO_EVENT(no_alignment);
 DEFINE_NFSD_READ_DIO_EVENT(too_small);
 DEFINE_NFSD_READ_DIO_EVENT(pages_in_use);
+DEFINE_NFSD_READ_DIO_EVENT(range_too_large);
 DEFINE_NFSD_READ_DIO_EVENT(head_full);
 DEFINE_NFSD_READ_DIO_EVENT(reply_full);
 DEFINE_NFSD_READ_DIO_EVENT(not_last_op);

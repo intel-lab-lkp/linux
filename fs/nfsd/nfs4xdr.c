@@ -5327,11 +5327,6 @@ out_err:
 	return nfserr;
 }
 
-/*
- * Reply-buffer checks that nfsd_direct_read_ok() cannot make: the
- * payload's placement depends on the alignment pad, and the pad on the
- * READ offset.
- */
 static bool nfsd4_direct_read_fits(struct nfsd4_compoundres *resp,
 				   struct nfsd4_read *read,
 				   unsigned long count)
