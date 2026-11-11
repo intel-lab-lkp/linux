@@ -2600,6 +2600,9 @@ static void pl011_console_get_options(struct uart_amba_port *uap, int *baud,
 		clkdiv = 64 * ibrd + fbrd;
 	}
 
+	if (!clkdiv)
+		return;
+
 	*baud = uap->port.uartclk * 4 / clkdiv;
 
 	if (uap->vendor->oversampling &&
