@@ -1192,6 +1192,19 @@ config FUEL_GAUGE_MM8013
 	  the state of charge, temperature, cycle count, actual and design
 	  capacity, etc.
 
+config BATTERY_SM5714
+	tristate "Silicon Mitus SM5714 fuel gauge driver"
+	depends on I2C
+	depends on IIO
+	select REGMAP_I2C
+	help
+	  Say Y here to enable the driver for the fuel gauge of the Silicon
+	  Mitus SM5714 power management chip. It reports the battery state of
+	  charge, voltage, current and temperature.
+
+	  This driver can also be built as a module. If so, the module will be
+	  called sm5714_fuel_gauge.
+
 config MACSMC_POWER
 	tristate "Apple SMC Battery and Power Driver"
 	depends on MFD_MACSMC

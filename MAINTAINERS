@@ -25750,6 +25750,13 @@ S:	Supported
 F:	Documentation/devicetree/bindings/net/wireless/silabs,wfx.yaml
 F:	drivers/net/wireless/silabs/
 
+SILICON MITUS SM5714 FUEL GAUGE DRIVER
+M:	Asdlerto Korry <korryasdlerto@gmail.com>
+L:	linux-pm@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/power/supply/siliconmitus,sm5714-fuelgauge.yaml
+F:	drivers/power/supply/sm5714_fuel_gauge.c
+
 SILICON MOTION SM712 FRAME BUFFER DRIVER
 M:	Sudip Mukherjee <sudipm.mukherjee@gmail.com>
 M:	Teddy Wang <teddy.wang@siliconmotion.com>
