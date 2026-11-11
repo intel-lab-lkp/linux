@@ -197,12 +197,35 @@ impl<T: Driver> Adapter<T> {
         let table = Self::i2c_id_table()?;
 
         // SAFETY:
-        // - `table` has static lifetime, hence it's valid for reads
         // - `dev` is guaranteed to be valid while it's alive, and so is `dev.as_raw()`.
-        let raw_id = unsafe { bindings::i2c_match_id(table.as_ptr(), dev.as_raw()) };
+        // - `name` is filled with `strscpy()` when the client is created, so it is NUL-terminated,
+        //    and it is not modified for the lifetime of the client.
+        let client_name = unsafe { CStr::from_char_ptr((*dev.as_raw()).name.as_ptr()) };
 
-        if raw_id.is_null() {
-            return None;
+        // Get the raw pointer to the start of the C array
+        // It is never null as it points at the start of a static `IdArray`.
+        let mut raw_id = table.as_ptr();
+
+        // Iterate until hitting the sentinel entry or matching the client name
+        loop {
+            // SAFETY: `raw_id` points to an entry of `table`, which is terminated by a zeroed
+            // sentinel entry. We never advance past the sentinel (see below), so `raw_id` is
+            // valid for reads. `name` is NUL-terminated for every entry, including the
+            // sentinel, which is all zeroes.
+            let id_name = unsafe { CStr::from_char_ptr((*raw_id).name.as_ptr()) };
+
+            // An empty name is the sentinel: no match.
+            if id_name.is_empty() {
+                return None;
+            }
+
+            if id_name == client_name {
+                break;
+            }
+
+            // SAFETY: the current entry is not the sentinel, so the next entry is still
+            // within `table`.
+            raw_id = unsafe { raw_id.add(1) };
         }
 
         // SAFETY: `DeviceId` is a `#[repr(transparent)` wrapper of `struct i2c_device_id` and
