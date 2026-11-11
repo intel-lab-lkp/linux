@@ -3044,8 +3044,9 @@ static int tb_start(struct tb *tb, bool reset)
 	 * implement the necessary router operations.
 	 */
 	tb->root_switch->no_nvm_upgrade = !tb_switch_is_usb4(tb->root_switch);
-	/* All USB4 routers support runtime PM */
-	tb->root_switch->rpm = tb_switch_is_usb4(tb->root_switch);
+	/* All USB4 routers support runtime PM. Ice Lake also supports RTD3 */
+	tb->root_switch->rpm = tb_switch_is_usb4(tb->root_switch) ||
+			       tb_switch_is_ice_lake(tb->root_switch);
 
 	ret = tb_switch_configure(tb->root_switch);
 	if (ret) {
