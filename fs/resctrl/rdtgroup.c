@@ -1992,6 +1992,27 @@ static bool rdtgroup_mode_test_exclusive(struct rdtgroup *rdtgrp)
 	return true;
 }
 
+/* True when @rdtgrp or one of its monitor groups backs the kernel mode. */
+static bool rdtgroup_has_kmode_global(struct rdtgroup *rdtgrp)
+{
+	struct rdtgroup *child;
+
+	if (!resctrl_kmode.rdtgrp)
+		return false;
+
+	if (resctrl_kmode.rdtgrp == rdtgrp)
+		return true;
+
+	if (rdtgrp->type != RDTCTRL_GROUP)
+		return false;
+
+	list_for_each_entry(child, &rdtgrp->mon.crdtgrp_list, mon.crdtgrp_list)
+		if (child == resctrl_kmode.rdtgrp)
+			return true;
+
+	return false;
+}
+
 /*
  * rdtgroup_mode_write - Modify the resource group's mode
  */
@@ -2028,6 +2049,12 @@ static ssize_t rdtgroup_mode_write(struct kernfs_open_file *of,
 
 	if (mode == RDT_MODE_PSEUDO_LOCKED) {
 		rdt_last_cmd_puts("Cannot change pseudo-locked group\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (rdtgroup_has_kmode_global(rdtgrp)) {
+		rdt_last_cmd_puts("Cannot change mode for kernel mode backing group\n");
 		ret = -EINVAL;
 		goto out;
 	}
@@ -4921,6 +4948,19 @@ static int rdtgroup_rename(struct kernfs_node *kn,
 	if (!cpumask_empty(&rdtgrp->cpu_mask) &&
 	    rdtgrp->mon.parent != new_prdtgrp) {
 		rdt_last_cmd_puts("Cannot move a MON group that monitors CPUs\n");
+		ret = -EPERM;
+		goto out;
+	}
+
+	/*
+	 * Changing the parent of a group backing the active kernel mode changes
+	 * the effective CLOSID and/or RMID configuration applied to kernel work.
+	 * Reject such moves and require kernel mode to be reconfigured explicitly
+	 * instead.
+	 */
+	if (rdtgrp == resctrl_kmode.rdtgrp &&
+	    rdtgrp->mon.parent != new_prdtgrp) {
+		rdt_last_cmd_puts("Cannot move a group that backs kernel mode\n");
 		ret = -EPERM;
 		goto out;
 	}
