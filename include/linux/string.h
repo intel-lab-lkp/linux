@@ -561,6 +561,10 @@ static inline char *strprefix(const char *s, const char *prefix)
  * This is similar to strprefix(), but returns an offset instead of
  * a pointer.
  *
+ * Unlike for strprefix(), if the prefix is an empty string, the
+ * behavior is undefined.  If you need to support arbitrary prefixes,
+ * use strprefix().
+ *
  * Returns:
  * * strlen(@prefix) if @str starts with @prefix
  * * 0 if @str does not start with @prefix
@@ -568,6 +572,7 @@ static inline char *strprefix(const char *s, const char *prefix)
 static __always_inline size_t str_has_prefix(const char *str, const char *prefix)
 {
 	size_t len = strlen(prefix);
+	WARN_ON_ONCE(len == 0);
 	return strncmp(str, prefix, len) == 0 ? len : 0;
 }
 
