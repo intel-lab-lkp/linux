@@ -1124,6 +1124,7 @@ properties:
           - enum:
               - motorola,dubai
               - nothing,spacewar
+              - samsung,m52xq
               - xiaomi,lisa
               - xiaomi,taoyao
           - const: qcom,sm7325
