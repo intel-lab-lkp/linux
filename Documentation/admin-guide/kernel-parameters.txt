@@ -6722,6 +6722,19 @@ Kernel parameters
 		fcfi	Disable user forward CFI ABI to userspace even if the
 			landing pad extension is available.
 
+	riscv_novstateopt [RISCV,EARLY]
+			Disable the vector state optimization. By default the
+			kernel keeps Vector enabled while running in kernel
+			space, rather than toggling sstatus.VS on every use of
+			the kernel-mode vector, and skips nulling the vector
+			registers for user space. Pass this option to restore the
+			conservative behavior, which catches illegal use of
+			Vector in kernel code. The optimization roughly cuts
+			30 ns of getpid() latency on a Blackhole x280 and gives
+			a 4.09% request throughput improvement for an nginx
+			workload serving a 2KB web page on a four-core
+			Ascalon-S.
+
 	ro		[KNL] Mount root device read-only on boot
 
 	rodata=		[KNL,EARLY]

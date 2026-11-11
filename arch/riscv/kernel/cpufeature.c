@@ -1295,6 +1295,19 @@ void riscv_clear_hypervisor_csr(void)
 }
 
 /*
+ * Leaving Vector enabled while in the kernel relies on the vstate alternatives
+ * being patched in. It can be turned off on the command line to catch illegal
+ * use of Vector in kernel code.
+ */
+bool riscv_v_vstate_opt = true;
+static int __init riscv_novstateopt_setup(char *__unused)
+{
+	riscv_v_vstate_opt = false;
+	return 0;
+}
+early_param("riscv_novstateopt", riscv_novstateopt_setup);
+
+/*
  * Alternative patch sites consider 48 bits when determining when to patch
  * the old instruction sequence with the new. These bits are broken into a
  * 16-bit vendor ID and a 32-bit patch ID. A non-zero vendor ID means the
@@ -1322,6 +1335,11 @@ static bool riscv_cpufeature_patch_check(u16 id, u16 value)
 		 * then the alternative cannot be applied.
 		 */
 		return riscv_cboz_block_size <= (1U << value);
+	case RISCV_ISA_EXT_ZVE32X:
+		if (value == RISCV_CPUFEAT_VSTATEOPT)
+			return riscv_v_vstate_opt;
+
+		return true;
 	}
 
 	return false;
