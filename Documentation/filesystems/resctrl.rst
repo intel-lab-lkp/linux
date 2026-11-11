@@ -593,6 +593,46 @@ The top level of the "info" directory contains the following file(s):
 		[inherit_user]
 		global_enable_per_cpu:ctrl=assign;mon=assign;group=//
 
+	Writes use the same line format as reads, without square brackets and
+	with a trailing newline. Errors are reported in "info/last_cmd_status".
+
+	"inherit_user":
+		Written without parameters.
+
+	"global_enable_per_cpu":
+		"ctrl=", "mon=", and "group=" are optional.
+
+		An omitted "ctrl=", "mon=" and "group=" keeps the default values.
+
+		If "mon=inherit", or monitoring is unsupported, "group=" must
+		reference a CTRL_MON group.
+
+		The "ctrl=inherit" together with "mon=inherit" is rejected.
+
+		A MON group requires "mon=assign".
+
+		"group=" must be the last parameter. The group must be in shareable mode.
+
+		Selecting a new kernel mode, parameter, or group replaces the active
+		mode and updates "kmode_cpus" to include all online CPUs.
+
+		Empty values are rejected.
+
+		Example::
+
+			# mkdir ctrl1
+			# echo "global_enable_per_cpu:ctrl=assign;mon=assign;group=ctrl1//" \
+				> info/kernel_mode
+
+			# cat info/kernel_mode
+			inherit_user
+			[global_enable_per_cpu:ctrl=assign;mon=assign;group=ctrl1//]
+
+			# echo "inherit_user" > info/kernel_mode
+			# cat info/kernel_mode
+			[inherit_user]
+			global_enable_per_cpu:ctrl=assign;mon=assign;group=//
+
 Resource alloc and monitor groups
 =================================
 

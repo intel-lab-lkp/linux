@@ -1199,6 +1199,277 @@ static void rdtgroup_kmode_global_deactivate(struct rdtgroup *rdtgrp)
 	resctrl_kmode.mon = KMODE_ASSIGN;
 }
 
+/* Program @rdtgrp on every online CPU and show its kmode_cpus files. */
+static void rdtgroup_kmode_global_activate(struct rdtgroup *rdtgrp,
+					   enum resctrl_kernel_mode mode,
+					   enum kmode_state ctrl,
+					   enum kmode_state mon)
+{
+	resctrl_kmode.active = mode;
+	resctrl_kmode.ctrl = ctrl;
+	resctrl_kmode.mon = mon;
+	resctrl_kmode.rdtgrp = rdtgrp;
+
+	cpumask_copy(&rdtgrp->kmode_cpu_mask, cpu_online_mask);
+	resctrl_configure_kmode_global(&rdtgrp->kmode_cpu_mask, rdtgrp, true);
+}
+
+static int resctrl_kmode_parse_state(char *val, enum kmode_state *state)
+{
+	if (!strcmp(val, "assign")) {
+		*state = KMODE_ASSIGN;
+		return 0;
+	}
+	if (!strcmp(val, "inherit")) {
+		*state = KMODE_INHERIT;
+		return 0;
+	}
+	return -EINVAL;
+}
+
+/*
+ * group is "<CTRL_MON>/" or "<CTRL_MON>/<MON>/". The MON component is
+ * optional: mon=inherit and systems without monitoring do not require it.
+ * An empty name selects the default CTRL_MON group. Names are not trimmed;
+ * "/" cannot appear in a resource group name.
+ */
+static int resctrl_kmode_parse_group(char *group, struct rdtgroup **rdtgrp)
+{
+	struct rdtgroup *rdtg, *parent = &rdtgroup_default;
+	char *mon = NULL, *slash;
+	size_t len;
+
+	len = strlen(group);
+	if (!len || group[len - 1] != '/') {
+		rdt_last_cmd_puts("Group must be <CTRL_MON>/ or <CTRL_MON>/<MON>/\n");
+		return -EINVAL;
+	}
+	group[len - 1] = '\0';
+
+	slash = strchr(group, '/');
+	if (slash) {
+		*slash = '\0';
+		mon = slash + 1;
+		if (strchr(mon, '/')) {
+			rdt_last_cmd_puts("Group must be <CTRL_MON>/ or <CTRL_MON>/<MON>/\n");
+			return -EINVAL;
+		}
+	}
+
+	if (group[0] != '\0') {
+		parent = NULL;
+		list_for_each_entry(rdtg, &rdt_all_groups, rdtgroup_list) {
+			if (!strcmp(rdt_kn_name(rdtg->kn), group)) {
+				parent = rdtg;
+				break;
+			}
+		}
+	}
+	if (!parent)
+		goto not_found;
+
+	if (!mon || mon[0] == '\0') {
+		*rdtgrp = parent;
+		return 0;
+	}
+
+	list_for_each_entry(rdtg, &parent->mon.crdtgrp_list, mon.crdtgrp_list) {
+		if (!strcmp(rdt_kn_name(rdtg->kn), mon)) {
+			*rdtgrp = rdtg;
+			return 0;
+		}
+	}
+
+not_found:
+	rdt_last_cmd_puts("Group not found\n");
+	return -EINVAL;
+}
+
+static int resctrl_kmode_parse_parameters(char *params, enum kmode_state *ctrl,
+					  enum kmode_state *mon,
+					  struct rdtgroup **rdtgrp)
+{
+	char *key, *tok;
+
+	while ((tok = strsep(&params, ";"))) {
+		key = strsep(&tok, "=");
+		if (!tok) {
+			if (strim(key)[0] == '\0')
+				continue;
+			rdt_last_cmd_puts("Missing '=' in kernel mode parameter\n");
+			return -EINVAL;
+		}
+		key = strim(key);
+		if (key[0] == '\0') {
+			rdt_last_cmd_puts("Empty kernel mode parameters\n");
+			return -EINVAL;
+		}
+
+		/*
+		 * group= is the last parameter and may contain ';'.
+		 * Restore it if stripped.
+		 */
+		if (!strcmp(key, "group") && params)
+			params[-1] = ';';
+
+		tok = strim(tok);
+		if (tok[0] == '\0') {
+			rdt_last_cmd_puts("Empty kernel mode parameters\n");
+			return -EINVAL;
+		}
+
+		if (!strcmp(key, "group"))
+			return resctrl_kmode_parse_group(tok, rdtgrp);
+
+		if (!strcmp(key, "ctrl")) {
+			if (!resctrl_arch_alloc_capable()) {
+				rdt_last_cmd_puts("ctrl= is not supported\n");
+				return -EINVAL;
+			}
+			if (resctrl_kmode_parse_state(tok, ctrl)) {
+				rdt_last_cmd_puts("Invalid ctrl= parameter\n");
+				return -EINVAL;
+			}
+		} else if (!strcmp(key, "mon")) {
+			if (!resctrl_arch_mon_capable()) {
+				rdt_last_cmd_puts("mon= is not supported\n");
+				return -EINVAL;
+			}
+			if (resctrl_kmode_parse_state(tok, mon)) {
+				rdt_last_cmd_puts("Invalid mon= parameter\n");
+				return -EINVAL;
+			}
+		} else {
+			rdt_last_cmd_puts("Unsupported kernel mode parameter\n");
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+static int resctrl_kmode_global_validate(struct rdtgroup *rdtgrp,
+					 enum kmode_state ctrl,
+					 enum kmode_state mon)
+{
+	if (ctrl == KMODE_ASSIGN && !resctrl_arch_alloc_capable()) {
+		rdt_last_cmd_puts("ctrl=assign is not supported\n");
+		return -EINVAL;
+	}
+	if (mon == KMODE_ASSIGN && !resctrl_arch_mon_capable()) {
+		rdt_last_cmd_puts("mon=assign is not supported\n");
+		return -EINVAL;
+	}
+	if (mon == KMODE_INHERIT && rdtgrp->type == RDTMON_GROUP) {
+		rdt_last_cmd_puts("A monitor group requires mon=assign parameter\n");
+		return -EINVAL;
+	}
+	if (rdtgrp->mode != RDT_MODE_SHAREABLE) {
+		rdt_last_cmd_puts("The group is not in shareable mode\n");
+		return -EINVAL;
+	}
+	if (rdtgrp->type == RDTMON_GROUP &&
+	    rdtgrp->mon.parent->mode != RDT_MODE_SHAREABLE) {
+		rdt_last_cmd_puts("The parent group is not in shareable mode\n");
+		return -EINVAL;
+	}
+	if (ctrl == KMODE_INHERIT && mon == KMODE_INHERIT) {
+		rdt_last_cmd_puts("ctrl=inherit and mon=inherit is not supported\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/**
+ * resctrl_kernel_mode_write() - Set the active kernel mode
+ * @of:		kernfs open file
+ * @buf:	Kernel mode line written by user space
+ * @nbytes:	length of @buf
+ * @off:	unused
+ *
+ * Return: @nbytes on success, negative errno on error.
+ */
+static ssize_t resctrl_kernel_mode_write(struct kernfs_open_file *of,
+					 char *buf, size_t nbytes, loff_t off)
+{
+	enum resctrl_kernel_mode mode;
+	enum kmode_state ctrl, mon;
+	char *mode_str, *params;
+	struct rdtgroup *rdtgrp;
+	int ret = 0;
+
+	if (!info_kn_lock(of->kn))
+		return -ENOENT;
+
+	rdt_last_cmd_clear();
+
+	if (nbytes == 0 || buf[nbytes - 1] != '\n') {
+		rdt_last_cmd_puts("kernel_mode: Invalid input\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+	buf[nbytes - 1] = '\0';
+
+	mode_str = strsep(&buf, ":");
+	mode_str = strim(mode_str);
+	params = buf;
+
+	for (mode = 0; mode < RESCTRL_NUM_KERNEL_MODES; mode++) {
+		if (!strcmp(mode_str, resctrl_kmode_str[mode]))
+			break;
+	}
+	if (mode == RESCTRL_NUM_KERNEL_MODES) {
+		rdt_last_cmd_puts("Unknown kernel mode\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+	if (!test_bit(mode, resctrl_kmode.supported)) {
+		rdt_last_cmd_puts("Kernel mode not available\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	if (mode == RESCTRL_INHERIT_USER) {
+		/* "inherit_user" does not support parameters */
+		if (params && strim(params)[0] != '\0') {
+			rdt_last_cmd_puts("Unsupported parameter\n");
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+		if (resctrl_kmode.active == RESCTRL_GLOBAL_ENABLE_PER_CPU)
+			rdtgroup_kmode_global_deactivate(resctrl_kmode.rdtgrp);
+		goto out_unlock;
+	}
+
+	/* Initialize the default values */
+	ctrl = resctrl_arch_alloc_capable() ? KMODE_ASSIGN : KMODE_INHERIT;
+	mon = resctrl_arch_mon_capable() ? KMODE_ASSIGN : KMODE_INHERIT;
+	rdtgrp = &rdtgroup_default;
+
+	if (params) {
+		ret = resctrl_kmode_parse_parameters(params, &ctrl, &mon, &rdtgrp);
+		if (ret)
+			goto out_unlock;
+	}
+
+	ret = resctrl_kmode_global_validate(rdtgrp, ctrl, mon);
+	if (ret)
+		goto out_unlock;
+
+	if (resctrl_kmode.active == mode && resctrl_kmode.rdtgrp == rdtgrp &&
+	    resctrl_kmode.ctrl == ctrl && resctrl_kmode.mon == mon)
+		goto out_unlock;
+
+	if (resctrl_kmode.active == RESCTRL_GLOBAL_ENABLE_PER_CPU)
+		rdtgroup_kmode_global_deactivate(resctrl_kmode.rdtgrp);
+
+	rdtgroup_kmode_global_activate(rdtgrp, mode, ctrl, mon);
+
+out_unlock:
+	info_kn_unlock(of->kn);
+	return ret ?: nbytes;
+}
+
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
 {
 	/*
@@ -2186,9 +2457,10 @@ static struct rftype res_common_files[] = {
 	},
 	{
 		.name		= "kernel_mode",
-		.mode		= 0444,
+		.mode		= 0644,
 		.kf_ops		= &rdtgroup_kf_single_ops,
 		.seq_show	= resctrl_kernel_mode_show,
+		.write		= resctrl_kernel_mode_write,
 		.fflags		= RFTYPE_TOP_INFO,
 	},
 	{
