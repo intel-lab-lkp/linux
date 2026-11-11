@@ -1085,6 +1085,7 @@ static void ath12k_wifi7_mac_op_tx(struct ieee80211_hw *hw,
 	u8 link_id;
 	int ret;
 	struct ath12k_dp *tmp_dp;
+	u8 keyidx;
 
 	if (ahvif->vdev_type == WMI_VDEV_TYPE_MONITOR) {
 		ieee80211_free_txskb(hw, skb);
@@ -1275,7 +1276,10 @@ static void ath12k_wifi7_mac_op_tx(struct ieee80211_hw *hw,
 				continue;
 			}
 
-			key = peer->dp_peer->keys[peer->dp_peer->mcast_keyidx];
+			keyidx = READ_ONCE(peer->dp_peer->mcast_keyidx);
+			key = (keyidx <= WMI_MAX_KEY_INDEX) ?
+				rcu_dereference(peer->dp_peer->keys[keyidx]) :
+				NULL;
 			if (key) {
 				skb_cb->cipher = key->cipher;
 				skb_cb->flags |= ATH12K_SKB_CIPHER_SET;
@@ -1335,6 +1339,7 @@ static const struct ieee80211_ops ath12k_ops_wifi7 = {
 	.set_key                        = ath12k_mac_op_set_key,
 	.set_rekey_data	                = ath12k_mac_op_set_rekey_data,
 	.sta_state                      = ath12k_mac_op_sta_state,
+	.sta_pre_rcu_remove             = ath12k_mac_op_sta_pre_rcu_remove,
 	.sta_set_txpwr			= ath12k_mac_op_sta_set_txpwr,
 	.link_sta_rc_update		= ath12k_mac_op_link_sta_rc_update,
 	.sta_set_4addr                  = ath12k_mac_op_sta_set_4addr,

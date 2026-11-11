@@ -251,6 +251,9 @@ int ath12k_mac_op_sta_state(struct ieee80211_hw *hw,
 			    struct ieee80211_sta *sta,
 			    enum ieee80211_sta_state old_state,
 			    enum ieee80211_sta_state new_state);
+void ath12k_mac_op_sta_pre_rcu_remove(struct ieee80211_hw *hw,
+				      struct ieee80211_vif *vif,
+				      struct ieee80211_sta *sta);
 int ath12k_mac_op_sta_set_txpwr(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif,
 				struct ieee80211_sta *sta);

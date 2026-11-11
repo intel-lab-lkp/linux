@@ -342,8 +342,10 @@ static int ath12k_wifi7_dp_rx_h_mpdu(struct ath12k_pdev_dp *dp_pdev,
 	bool is_decrypted = false;
 	struct ieee80211_hdr *hdr;
 	struct ath12k_dp_peer *peer;
+	struct ieee80211_key_conf *key_conf = NULL;
 	struct ieee80211_rx_status *rx_status = rx_info->rx_status;
 	u32 err_bitmap = rx_info->err_bitmap;
+	u8 key_idx;
 
 	RCU_LOCKDEP_WARN(!rcu_read_lock_held(),
 			 "dp_rx_h_mpdu called without rcu lock");
@@ -374,10 +376,12 @@ static int ath12k_wifi7_dp_rx_h_mpdu(struct ath12k_pdev_dp *dp_pdev,
 		 */
 		rxcb->is_mcbc = rxcb->is_mcbc && !peer->ucast_ra_only;
 
-		if (rxcb->is_mcbc)
-			enctype = peer->sec_type_grp;
-		else
-			enctype = peer->sec_type;
+		key_idx = rxcb->is_mcbc ? READ_ONCE(peer->mcast_keyidx) :
+				 READ_ONCE(peer->ucast_keyidx);
+		if (key_idx <= WMI_MAX_KEY_INDEX)
+			key_conf = rcu_dereference(peer->keys[key_idx]);
+		enctype = key_conf ? ath12k_dp_tx_get_encrypt_type(key_conf->cipher)
+				: HAL_ENCRYPT_TYPE_OPEN;
 	} else {
 		enctype = HAL_ENCRYPT_TYPE_OPEN;
 	}
@@ -1031,11 +1035,16 @@ static int ath12k_wifi7_dp_rx_h_verify_tkip_mic(struct ath12k_pdev_dp *dp_pdev,
 	tail_len = IEEE80211_CCMP_MIC_LEN + IEEE80211_TKIP_ICV_LEN + FCS_LEN;
 
 	if (!is_multicast_ether_addr(hdr->addr1))
-		key_idx = peer->ucast_keyidx;
+		key_idx = READ_ONCE(peer->ucast_keyidx);
 	else
-		key_idx = peer->mcast_keyidx;
+		key_idx = READ_ONCE(peer->mcast_keyidx);
 
-	key_conf = peer->keys[key_idx];
+	if (key_idx > WMI_MAX_KEY_INDEX)
+		goto mic_fail;
+
+	key_conf = rcu_dereference(peer->keys[key_idx]);
+	if (!key_conf)
+		goto mic_fail;
 
 	data = msdu->data + head_len;
 	data_len = msdu->len - head_len - tail_len;

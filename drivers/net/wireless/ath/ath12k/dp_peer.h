@@ -133,11 +133,8 @@ struct ath12k_dp_peer {
 
 	u8 hw_links[ATH12K_GROUP_MAX_RADIO];
 
-	u16 sec_type_grp;
-	u16 sec_type;
-
 	/* Info used in MMIC verification of * RX fragments */
-	struct ieee80211_key_conf *keys[WMI_MAX_KEY_INDEX + 1];
+	struct ieee80211_key_conf __rcu *keys[WMI_MAX_KEY_INDEX + 1];
 	unsigned long link_peers_map;
 	struct ath12k_dp_link_peer __rcu *link_peers[ATH12K_NUM_MAX_LINKS];
 	struct ath12k_reoq_buf reoq_bufs[IEEE80211_NUM_TIDS + 1];
@@ -192,4 +189,10 @@ ath12k_dp_link_peer_get_sta(const struct ath12k_dp_link_peer *link_peer)
 	return link_peer && link_peer->dp_peer ?
 		link_peer->dp_peer->sta : NULL;
 }
+
+int ath12k_dp_peer_set_key_config(struct ath12k_dp_hw *dp_hw,
+				  const u8 *peer_addr,
+				  enum set_key_cmd cmd,
+				  struct ieee80211_key_conf *key,
+				  struct ieee80211_sta *sta);
 #endif

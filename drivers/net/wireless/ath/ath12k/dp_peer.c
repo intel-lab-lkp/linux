@@ -331,6 +331,55 @@ struct ath12k_dp_peer *ath12k_dp_peer_find_by_addr(struct ath12k_dp_hw *dp_hw, u
 }
 EXPORT_SYMBOL(ath12k_dp_peer_find_by_addr);
 
+int ath12k_dp_peer_set_key_config(struct ath12k_dp_hw *dp_hw,
+				  const u8 *peer_addr,
+				  enum set_key_cmd cmd,
+				  struct ieee80211_key_conf *key,
+				  struct ieee80211_sta *sta)
+{
+	struct ath12k_dp_peer *dp_peer;
+
+	guard(spinlock_bh)(&dp_hw->peer_lock);
+
+	if (sta)
+		dp_peer = ath12k_dp_peer_find_by_addr_and_sta(dp_hw, (u8 *)peer_addr,
+							      sta);
+	else
+		dp_peer = ath12k_dp_peer_find_by_addr(dp_hw, (u8 *)peer_addr);
+
+	if (!dp_peer) {
+		/* No peer means no key to disable. */
+		if (cmd == DISABLE_KEY)
+			return 0;
+
+		return -ENOENT;
+	}
+
+	switch (cmd) {
+	case SET_KEY:
+		rcu_assign_pointer(dp_peer->keys[key->keyidx], key);
+		if (key->flags & IEEE80211_KEY_FLAG_PAIRWISE)
+			WRITE_ONCE(dp_peer->ucast_keyidx, key->keyidx);
+		else
+			WRITE_ONCE(dp_peer->mcast_keyidx, key->keyidx);
+		return 0;
+	case DISABLE_KEY:
+		rcu_assign_pointer(dp_peer->keys[key->keyidx], NULL);
+		if (key->flags & IEEE80211_KEY_FLAG_PAIRWISE) {
+			if (READ_ONCE(dp_peer->ucast_keyidx) == key->keyidx)
+				WRITE_ONCE(dp_peer->ucast_keyidx,
+					   WMI_INVALID_KEY_INDEX);
+		} else {
+			if (READ_ONCE(dp_peer->mcast_keyidx) == key->keyidx)
+				WRITE_ONCE(dp_peer->mcast_keyidx,
+					   WMI_INVALID_KEY_INDEX);
+		}
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 struct ath12k_dp_peer *ath12k_dp_peer_find_by_addr_and_sta(struct ath12k_dp_hw *dp_hw,
 							   u8 *addr,
 							   struct ieee80211_sta *sta)
@@ -455,8 +504,8 @@ int ath12k_dp_peer_create(struct ath12k_dp_hw *dp_hw, u8 *addr,
 	dp_peer->peer_id = params->is_mlo ? params->peer_id : ATH12K_DP_PEER_ID_INVALID;
 	dp_peer->ucast_ra_only = params->ucast_ra_only;
 
-	dp_peer->sec_type = HAL_ENCRYPT_TYPE_OPEN;
-	dp_peer->sec_type_grp = HAL_ENCRYPT_TYPE_OPEN;
+	dp_peer->ucast_keyidx = WMI_INVALID_KEY_INDEX;
+	dp_peer->mcast_keyidx = WMI_INVALID_KEY_INDEX;
 
 	spin_lock_bh(&dp_hw->peer_lock);
 

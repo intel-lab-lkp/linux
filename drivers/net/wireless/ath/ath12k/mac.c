@@ -6034,55 +6034,32 @@ out:
 	return ret;
 }
 
-static int ath12k_clear_peer_keys(struct ath12k_link_vif *arvif,
-				  const u8 *addr)
+static int ath12k_mac_clear_peer_keys(struct ath12k_link_vif *arvif,
+				      struct ieee80211_sta *sta)
 {
 	struct ath12k *ar = arvif->ar;
-	struct ath12k_base *ab = ar->ab;
-	struct ath12k_dp_link_peer *peer;
-	int first_errno = 0;
-	int ret;
-	int i, len;
-	u32 flags = 0;
-	struct ath12k_dp *dp = ath12k_ab_to_dp(ab);
-	struct ieee80211_key_conf *keys[WMI_MAX_KEY_INDEX + 1] = {};
+	struct ath12k_dp_hw *dp_hw = &ar->ah->dp_hw;
+	struct ath12k_dp_peer *dp_peer;
+	int i;
 
 	lockdep_assert_wiphy(ath12k_ar_to_hw(ar)->wiphy);
 
-	spin_lock_bh(&dp->dp_lock);
-	peer = ath12k_dp_link_peer_find_by_vdev_and_addr(dp, arvif->vdev_id, addr);
-	if (!peer || !peer->dp_peer) {
-		spin_unlock_bh(&dp->dp_lock);
+	spin_lock_bh(&dp_hw->peer_lock);
+	dp_peer = ath12k_dp_peer_find_by_addr_and_sta(dp_hw,
+						      (u8 *)sta->addr, sta);
+	if (!dp_peer) {
+		spin_unlock_bh(&dp_hw->peer_lock);
 		return -ENOENT;
 	}
 
-	len = ARRAY_SIZE(peer->dp_peer->keys);
-	for (i = 0; i < len; i++) {
-		if (!peer->dp_peer->keys[i])
-			continue;
+	for (i = 0; i < ARRAY_SIZE(dp_peer->keys); i++)
+		rcu_assign_pointer(dp_peer->keys[i], NULL);
 
-		keys[i] = peer->dp_peer->keys[i];
-		peer->dp_peer->keys[i] = NULL;
-	}
+	WRITE_ONCE(dp_peer->ucast_keyidx, WMI_INVALID_KEY_INDEX);
+	WRITE_ONCE(dp_peer->mcast_keyidx, WMI_INVALID_KEY_INDEX);
+	spin_unlock_bh(&dp_hw->peer_lock);
 
-	spin_unlock_bh(&dp->dp_lock);
-
-	for (i = 0; i < len; i++) {
-		if (!keys[i])
-			continue;
-
-		/* key flags are not required to delete the key */
-		ret = ath12k_install_key(arvif, keys[i],
-					 DISABLE_KEY, addr, flags);
-		if (ret < 0 && first_errno == 0)
-			first_errno = ret;
-
-		if (ret < 0)
-			ath12k_warn(ab, "failed to remove peer key %d: %d\n",
-				    i, ret);
-	}
-
-	return first_errno;
+	return 0;
 }
 
 static int ath12k_mac_set_key(struct ath12k *ar, enum set_key_cmd cmd,
@@ -6092,12 +6069,12 @@ static int ath12k_mac_set_key(struct ath12k *ar, enum set_key_cmd cmd,
 {
 	struct ieee80211_sta *sta = NULL;
 	struct ath12k_base *ab = ar->ab;
-	struct ath12k_dp_link_peer *peer;
 	struct ath12k_sta *ahsta;
+	const u8 *dp_peer_addr;
 	const u8 *peer_addr;
+	struct ath12k_dp_peer *dp_peer;
 	int ret;
 	u32 flags = 0;
-	struct ath12k_dp *dp = ath12k_ab_to_dp(ab);
 
 	lockdep_assert_wiphy(ath12k_ar_to_hw(ar)->wiphy);
 
@@ -6107,40 +6084,45 @@ static int ath12k_mac_set_key(struct ath12k *ar, enum set_key_cmd cmd,
 	if (test_bit(ATH12K_FLAG_HW_CRYPTO_DISABLED, &ab->dev_flags))
 		return 1;
 
-	if (sta)
+	if (sta) {
 		peer_addr = arsta->addr;
-	else
+		dp_peer_addr = sta->addr;
+	} else {
 		peer_addr = arvif->bssid;
-
-	key->hw_key_idx = key->keyidx;
-
-	/* the peer should not disappear in mid-way (unless FW goes awry) since
-	 * we already hold wiphy lock. we just make sure its there now.
-	 */
-	spin_lock_bh(&dp->dp_lock);
-	peer = ath12k_dp_link_peer_find_by_vdev_and_addr(dp, arvif->vdev_id,
-							 peer_addr);
-	if (!peer || !peer->dp_peer) {
-		spin_unlock_bh(&dp->dp_lock);
-
-		if (cmd == SET_KEY) {
-			ath12k_warn(ab, "cannot install key for non-existent peer %pM\n",
-				    peer_addr);
-			return -EOPNOTSUPP;
-		}
-
-		/* if the peer doesn't exist there is no key to disable
-		 * anymore
+		/*
+		 * For STA vifs the dp_peer is indexed by the AP MLD address
+		 * (vif->cfg.ap_addr), not the per-link BSSID in arvif->bssid.
 		 */
-		return 0;
+		if (arvif->ahvif->vdev_type == WMI_VDEV_TYPE_STA)
+			dp_peer_addr = arvif->ahvif->vif->cfg.ap_addr;
+		else
+			dp_peer_addr = peer_addr;
 	}
 
-	spin_unlock_bh(&dp->dp_lock);
+	key->hw_key_idx = key->keyidx;
 
 	if (key->flags & IEEE80211_KEY_FLAG_PAIRWISE)
 		flags = WMI_KEY_PAIRWISE;
 	else
 		flags = WMI_KEY_GROUP;
+
+	/* Avoid sending DISABLE_KEY for an already deleted peer. */
+	spin_lock_bh(&ar->ah->dp_hw.peer_lock);
+	if (sta)
+		dp_peer = ath12k_dp_peer_find_by_addr_and_sta(&ar->ah->dp_hw,
+							      (u8 *)dp_peer_addr, sta);
+	else
+		dp_peer = ath12k_dp_peer_find_by_addr(&ar->ah->dp_hw,
+						      (u8 *)dp_peer_addr);
+	spin_unlock_bh(&ar->ah->dp_hw.peer_lock);
+	if (!dp_peer) {
+		if (cmd == SET_KEY) {
+			ath12k_warn(ab, "cannot install key for non-existent peer %pM\n",
+				    peer_addr);
+			return -EOPNOTSUPP;
+		}
+		return 0;
+	}
 
 	ret = ath12k_install_key(arvif, key, cmd, peer_addr, flags);
 	if (ret) {
@@ -6154,29 +6136,10 @@ static int ath12k_mac_set_key(struct ath12k *ar, enum set_key_cmd cmd,
 		return ret;
 	}
 
-	spin_lock_bh(&dp->dp_lock);
-	peer = ath12k_dp_link_peer_find_by_vdev_and_addr(dp, arvif->vdev_id,
-							 peer_addr);
-	if (peer && peer->dp_peer && cmd == SET_KEY) {
-		peer->dp_peer->keys[key->keyidx] = key;
-		if (key->flags & IEEE80211_KEY_FLAG_PAIRWISE) {
-			peer->dp_peer->ucast_keyidx = key->keyidx;
-			peer->dp_peer->sec_type =
-					ath12k_dp_tx_get_encrypt_type(key->cipher);
-		} else {
-			peer->dp_peer->mcast_keyidx = key->keyidx;
-			peer->dp_peer->sec_type_grp =
-					ath12k_dp_tx_get_encrypt_type(key->cipher);
-		}
-	} else if (peer && peer->dp_peer && cmd == DISABLE_KEY) {
-		peer->dp_peer->keys[key->keyidx] = NULL;
-		if (key->flags & IEEE80211_KEY_FLAG_PAIRWISE)
-			peer->dp_peer->ucast_keyidx = 0;
-		else
-			peer->dp_peer->mcast_keyidx = 0;
-	} else if (!peer)
-		/* impossible unless FW goes crazy */
-		ath12k_warn(ab, "peer %pM disappeared!\n", peer_addr);
+	ret = ath12k_dp_peer_set_key_config(&ar->ah->dp_hw, dp_peer_addr,
+					    cmd, key, sta);
+	if (ret)
+		return ret;
 
 	if (sta) {
 		ahsta = ath12k_sta_to_ahsta(sta);
@@ -6197,8 +6160,6 @@ static int ath12k_mac_set_key(struct ath12k *ar, enum set_key_cmd cmd,
 			break;
 		}
 	}
-
-	spin_unlock_bh(&dp->dp_lock);
 
 	return 0;
 }
@@ -7040,30 +7001,13 @@ static void ath12k_mac_station_post_remove(struct ath12k *ar,
 	spin_unlock_bh(&dp->dp_lock);
 }
 
-static int ath12k_mac_station_unauthorize(struct ath12k *ar,
-					  struct ath12k_link_vif *arvif,
-					  struct ath12k_link_sta *arsta)
+static void ath12k_mac_station_unauthorize(struct ath12k *ar,
+					   struct ath12k_link_vif *arvif,
+					   struct ath12k_link_sta *arsta)
 {
-	int ret;
-
 	lockdep_assert_wiphy(ath12k_ar_to_hw(ar)->wiphy);
 
 	arsta->ahsta->is_authorized = false;
-
-	/* Driver must clear the keys during the state change from
-	 * IEEE80211_STA_AUTHORIZED to IEEE80211_STA_ASSOC, since after
-	 * returning from here, mac80211 is going to delete the keys
-	 * in __sta_info_destroy_part2(). This will ensure that the driver does
-	 * not retain stale key references after mac80211 deletes the keys.
-	 */
-	ret = ath12k_clear_peer_keys(arvif, arsta->addr);
-	if (ret) {
-		ath12k_warn(ar->ab, "failed to clear all peer keys for vdev %i: %d\n",
-			    arvif->vdev_id, ret);
-		return ret;
-	}
-
-	return 0;
 }
 
 static int ath12k_mac_station_authorize(struct ath12k *ar,
@@ -7749,6 +7693,40 @@ static int ath12k_mac_select_links(struct ath12k_base *ab,
 
 	return 0;
 }
+
+/*
+ * Clear cached key references before mac80211's station-removal grace
+ * period, so it also protects readers until ieee80211_free_sta_keys().
+ */
+void ath12k_mac_op_sta_pre_rcu_remove(struct ieee80211_hw *hw,
+				      struct ieee80211_vif *vif,
+				      struct ieee80211_sta *sta)
+{
+	struct ath12k_vif *ahvif = ath12k_vif_to_ahvif(vif);
+	struct ath12k_sta *ahsta = ath12k_sta_to_ahsta(sta);
+	unsigned long links = ahsta->links_map;
+	struct ath12k_link_vif *arvif;
+	struct ath12k_link_sta *arsta;
+	u8 link_id;
+	int ret;
+
+	lockdep_assert_wiphy(hw->wiphy);
+
+	for_each_set_bit(link_id, &links, IEEE80211_MLD_MAX_NUM_LINKS) {
+		arvif = wiphy_dereference(hw->wiphy, ahvif->link[link_id]);
+		arsta = wiphy_dereference(hw->wiphy, ahsta->link[link_id]);
+
+		if (WARN_ON(!arvif || !arsta || !arvif->ar))
+			continue;
+
+		ret = ath12k_mac_clear_peer_keys(arvif, sta);
+		if (ret && ret != -ENOENT)
+			ath12k_warn(arvif->ar->ab,
+				    "failed to clear peer keys for %pM link %u: %d\n",
+				    arsta->addr, link_id, ret);
+	}
+}
+EXPORT_SYMBOL(ath12k_mac_op_sta_pre_rcu_remove);
 
 int ath12k_mac_op_sta_state(struct ieee80211_hw *hw,
 			    struct ieee80211_vif *vif,

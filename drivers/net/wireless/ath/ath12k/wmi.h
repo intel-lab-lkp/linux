@@ -4948,8 +4948,9 @@ enum wmi_ap_ps_peer_param {
 
 #define DISABLE_SIFS_RESPONSE_TRIGGER 0
 
-#define WMI_MAX_KEY_INDEX   7
-#define WMI_MAX_KEY_LEN     32
+#define WMI_MAX_KEY_INDEX     7
+#define WMI_INVALID_KEY_INDEX (WMI_MAX_KEY_INDEX + 1)
+#define WMI_MAX_KEY_LEN       32
 
 enum wmi_key_type {
 	WMI_KEY_PAIRWISE = 0,
