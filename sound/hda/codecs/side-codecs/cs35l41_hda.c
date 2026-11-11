@@ -1012,7 +1012,7 @@ static int cs35l41_system_resume(struct device *dev)
 
 	if (cs35l41->request_fw_load && !cs35l41->fw_request_ongoing) {
 		cs35l41->fw_request_ongoing = true;
-		schedule_work(&cs35l41->fw_load_work);
+		queue_work(system_freezable_wq, &cs35l41->fw_load_work);
 	}
 
 	return ret;
