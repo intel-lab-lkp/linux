@@ -931,7 +931,7 @@ static int qcom_socinfo_probe(struct platform_device *pdev)
 			return -ENOMEM;
 	}
 
-	qs->soc_dev = soc_device_register(&qs->attr);
+	qs->soc_dev = devm_soc_device_register(&pdev->dev, &qs->attr);
 	if (IS_ERR(qs->soc_dev))
 		return PTR_ERR(qs->soc_dev);
 
@@ -948,8 +948,6 @@ static int qcom_socinfo_probe(struct platform_device *pdev)
 static void qcom_socinfo_remove(struct platform_device *pdev)
 {
 	struct qcom_socinfo *qs = platform_get_drvdata(pdev);
-
-	soc_device_unregister(qs->soc_dev);
 
 	socinfo_debugfs_exit(qs);
 }
