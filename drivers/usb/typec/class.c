@@ -641,10 +641,13 @@ typec_register_altmode(struct device *parent,
 		       const struct typec_altmode_desc *desc,
 		       const struct device_type *type)
 {
-	unsigned int id = altmode_id_get(parent);
+	int id = altmode_id_get(parent);
 	bool is_port = is_typec_port(parent);
 	struct altmode *alt;
 	int ret;
+
+	if (id < 0)
+		return ERR_PTR(id);
 
 	alt = kzalloc_obj(*alt);
 	if (!alt) {
