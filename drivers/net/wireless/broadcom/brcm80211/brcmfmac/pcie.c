@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/firmware.h>
 #include <linux/pci.h>
+#include <linux/suspend.h>
 #include <linux/vmalloc.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
@@ -2843,6 +2844,15 @@ static int brcmf_pcie_pm_leave_D3(struct device *dev)
 	bus = dev_get_drvdata(dev);
 	devinfo = bus->bus_priv.pcie->devinfo;
 	brcmf_dbg(PCIE, "Enter, dev=%p, bus=%p\n", dev, bus);
+
+	/*
+	 * Without WoWL the device is powered off when the platform firmware
+	 * handles the system sleep, as with ACPI S3, and comes back without
+	 * its firmware. Its registers can still read back nonzero, so probe
+	 * it again.
+	 */
+	if (pm_resume_via_firmware() && !devinfo->wowl_enabled)
+		goto cleanup;
 
 	/* Check if device is still up and running, if so we are ready */
 	if (brcmf_pcie_read_pcie32(devinfo, devinfo->reginfo->intmask) != 0) {
