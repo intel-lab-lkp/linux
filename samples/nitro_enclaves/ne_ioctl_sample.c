@@ -744,6 +744,7 @@ static int ne_start_enclave_check_booted(int enclave_fd)
 		printf("Read %d instead of %d\n", recv_buf,
 		       NE_IMAGE_LOAD_HEARTBEAT_VALUE);
 
+		rc = -EINVAL;
 		goto out;
 	}
 
