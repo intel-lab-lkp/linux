@@ -466,11 +466,29 @@ static int tpm_add_legacy_sysfs(struct tpm_chip *chip)
 	return 0;
 }
 
+#define TPM_HWRNG_MAX_FAILURES	60	/* ~10 minutes of retries */
+
 static int tpm_hwrng_read(struct hwrng *rng, void *data, size_t max, bool wait)
 {
 	struct tpm_chip *chip = container_of(rng, struct tpm_chip, hwrng);
+	int rc;
 
-	return tpm_get_random(chip, data, max);
+	rc = tpm_get_random(chip, data, max);
+	if (rc > 0) {
+		chip->hwrng_failures = 0;
+		return rc;
+	}
+
+	if (++chip->hwrng_failures == TPM_HWRNG_MAX_FAILURES &&
+	    !(chip->flags & TPM_CHIP_FLAG_DISABLE)) {
+		dev_err(&chip->dev, "hwrng: %u reads failed in a row, disabling the TPM\n",
+			chip->hwrng_failures);
+		mutex_lock(&chip->tpm_mutex);
+		chip->flags |= TPM_CHIP_FLAG_DISABLE;
+		mutex_unlock(&chip->tpm_mutex);
+	}
+
+	return rc;
 }
 
 static bool tpm_is_hwrng_enabled(struct tpm_chip *chip)

@@ -129,6 +129,7 @@ struct tpm_chip {
 
 	char hwrng_name[64];
 	struct hwrng hwrng;
+	unsigned int hwrng_failures;	/* consecutive failed reads */
 
 	struct mutex tpm_mutex;	/* tpm is processing */
 	unsigned int nr_timeouts;	/* consecutive command timeouts */
