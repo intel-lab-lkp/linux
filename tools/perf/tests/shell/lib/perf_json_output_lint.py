@@ -65,6 +65,7 @@ def check_json_output(expected_count):
       'metricgroup': lambda x: True,
       'node': lambda x: True,
       'pcnt-running': isfloat,
+      'pmu': lambda x: True,
       'socket': lambda x: True,
       'thread': lambda x: True,
       'unit': lambda x: True,
