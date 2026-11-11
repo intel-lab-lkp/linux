@@ -1134,6 +1134,24 @@ static int resctrl_kernel_mode_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/* Show or hide kmode_cpus and kmode_cpus_list on @kn. */
+static void resctrl_kmode_global_files_show(struct rdtgroup *rdtgrp, bool show)
+{
+	struct kernfs_node *kn_file;
+
+	kn_file = kernfs_find_and_get(rdtgrp->kn, "kmode_cpus");
+	if (kn_file) {
+		kernfs_show(kn_file, show);
+		kernfs_put(kn_file);
+	}
+
+	kn_file = kernfs_find_and_get(rdtgrp->kn, "kmode_cpus_list");
+	if (kn_file) {
+		kernfs_show(kn_file, show);
+		kernfs_put(kn_file);
+	}
+}
+
 /*
  * resctrl_kmode_global_online_cpu() - Program kernel mode association for @cpu
  * @cpu: CPU that has just been brought online
@@ -1192,6 +1210,7 @@ static void rdtgroup_kmode_global_deactivate(struct rdtgroup *rdtgrp)
 
 	resctrl_configure_kmode_global(&rdtgrp->kmode_cpu_mask, rdtgrp, false);
 	cpumask_clear(&rdtgrp->kmode_cpu_mask);
+	resctrl_kmode_global_files_show(rdtgrp, false);
 
 	resctrl_kmode.rdtgrp = NULL;
 	resctrl_kmode.active = RESCTRL_INHERIT_USER;
@@ -1212,6 +1231,7 @@ static void rdtgroup_kmode_global_activate(struct rdtgroup *rdtgrp,
 
 	cpumask_copy(&rdtgrp->kmode_cpu_mask, cpu_online_mask);
 	resctrl_configure_kmode_global(&rdtgrp->kmode_cpu_mask, rdtgrp, true);
+	resctrl_kmode_global_files_show(rdtgrp, true);
 }
 
 static int resctrl_kmode_parse_state(char *val, enum kmode_state *state)
