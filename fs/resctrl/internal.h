@@ -314,6 +314,33 @@ struct mbm_state {
 	u32	prev_bw;
 };
 
+/**
+ * enum kmode_state - Kernel mode association state.
+ * @KMODE_INHERIT:    Inherit the CLOSID or RMID from the user task.
+ * @KMODE_ASSIGN:     Use the CLOSID or RMID from the backing resource group.
+ */
+enum kmode_state {
+	KMODE_INHERIT,
+	KMODE_ASSIGN
+};
+
+/**
+ * struct resctrl_kmode_cfg - Kernel mode configuration
+ * @supported:	Bitmap of supported kernel modes.
+ * @active:	Currently active kernel mode.
+ * @ctrl:	CLOSID assign or inherit in %RESCTRL_GLOBAL_ENABLE_PER_CPU.
+ * @mon:	RMID assign or inherit in %RESCTRL_GLOBAL_ENABLE_PER_CPU.
+ * @rdtgrp:	Resource group backing %RESCTRL_GLOBAL_ENABLE_PER_CPU.
+ *		%NULL while the mode is not selected.
+ */
+struct resctrl_kmode_cfg {
+	DECLARE_BITMAP(supported, RESCTRL_NUM_KERNEL_MODES);
+	enum resctrl_kernel_mode	active;
+	enum kmode_state		ctrl;
+	enum kmode_state		mon;
+	struct rdtgroup			*rdtgrp;
+};
+
 extern struct mutex rdtgroup_mutex;
 
 static inline const char *rdt_kn_name(const struct kernfs_node *kn)
