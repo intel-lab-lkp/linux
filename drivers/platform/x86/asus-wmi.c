@@ -315,6 +315,8 @@ struct asus_wmi {
 
 	u8 throttle_thermal_policy_mode;
 	u32 throttle_thermal_policy_dev;
+	/* the firmware is known to be in throttle_thermal_policy_mode */
+	bool throttle_thermal_policy_synced;
 
 	bool cpu_fan_curve_available;
 	bool gpu_fan_curve_available;
@@ -4183,9 +4185,11 @@ static int throttle_thermal_policy_write(struct asus_wmi *asus)
 			"throttle_thermal_policy");
 
 	if (err) {
+		asus->throttle_thermal_policy_synced = false;
 		pr_warn("Failed to set throttle thermal policy: %d\n", err);
 		return err;
 	}
+	asus->throttle_thermal_policy_synced = true;
 
 	/* Must set to disabled if mode is toggled */
 	if (asus->cpu_fan_curve_available)
@@ -4301,6 +4305,16 @@ static int asus_wmi_platform_profile_set(struct device *dev,
 	default:
 		return -EOPNOTSUPP;
 	}
+
+	/*
+	 * Write the mode only when it changes. The firmware applies its whole
+	 * power table for a mode each time the mode is written, replacing
+	 * package power limits tuned since then (ROG Flow Z13 GZ302EA), and
+	 * userspace re-asserts the current profile on power-supply events.
+	 */
+	if (asus->throttle_thermal_policy_synced &&
+	    asus->throttle_thermal_policy_mode == tp)
+		return 0;
 
 	asus->throttle_thermal_policy_mode = tp;
 	return throttle_thermal_policy_write(asus);
@@ -5403,6 +5417,9 @@ static int asus_hotk_restore(struct device *device)
 {
 	struct asus_wmi *asus = dev_get_drvdata(device);
 	int bl;
+
+	/* The firmware booted afresh; the next profile write must reach it. */
+	asus->throttle_thermal_policy_synced = false;
 
 	/* Refresh both wlan rfkill state and pci hotplug */
 	if (asus->wlan.rfkill)
