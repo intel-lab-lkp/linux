@@ -51,6 +51,7 @@
 #include "intel_cx0_phy.h"
 #include "intel_ddi.h"
 #include "intel_de.h"
+#include "intel_dip.h"
 #include "intel_display_driver.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
@@ -524,6 +525,15 @@ void hsw_write_infoframe(struct intel_encoder *encoder,
 	const u32 *data = frame;
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	intel_reg_t ctl_reg = HSW_TVIDEO_DIP_CTL(display, cpu_transcoder);
+	/*
+	 * On platforms with the SDP transmission line registers some of the
+	 * packets are double buffered in the transcoder clock domain, and the
+	 * packet is clock crossed on the write of the header (dword 0). Program
+	 * the payload first and the header last, so that the whole packet gets
+	 * crossed. Packets double buffered in the core display clock domain
+	 * have no ordering requirement, so use the same order for all of them.
+	 */
+	bool header_last = HAS_EMP_AS_SDP_TL(display);
 	int data_size;
 	int i;
 	u32 val = intel_de_read(display, ctl_reg);
@@ -535,17 +545,20 @@ void hsw_write_infoframe(struct intel_encoder *encoder,
 	val &= ~hsw_infoframe_enable(type);
 	intel_de_write(display, ctl_reg, val);
 
-	for (i = 0; i < len; i += 4) {
+	for (i = header_last ? 4 : 0; i < len; i += 4)
 		intel_de_write(display,
 			       hsw_dip_data_reg(display, cpu_transcoder, type, i >> 2),
-			       *data);
-		data++;
-	}
+			       data[i >> 2]);
 	/* Write every possible data byte to force correct ECC calculation. */
 	for (; i < data_size; i += 4)
 		intel_de_write(display,
 			       hsw_dip_data_reg(display, cpu_transcoder, type, i >> 2),
 			       0);
+
+	if (header_last)
+		intel_de_write(display,
+			       hsw_dip_data_reg(display, cpu_transcoder, type, 0),
+			       data[0]);
 
 	/* Wa_14013475917 */
 	if (!(IS_DISPLAY_VER(display, 13, 14) && crtc_state->has_psr &&
