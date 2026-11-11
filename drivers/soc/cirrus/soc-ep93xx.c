@@ -199,7 +199,7 @@ static int __init ep93xx_syscon_probe(struct platform_device *pdev)
 	attrs->family = "Cirrus Logic EP93xx";
 	attrs->revision = ep93xx_get_soc_rev(rev);
 
-	soc_dev = soc_device_register(attrs);
+	soc_dev = devm_soc_device_register(dev, attrs);
 	if (IS_ERR(soc_dev))
 		return PTR_ERR(soc_dev);
 
