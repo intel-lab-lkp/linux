@@ -418,15 +418,15 @@ int swsusp_arch_suspend(void)
  * Memory allocated by get_safe_page() will be dealt with by the hibernate code,
  * we don't need to free it here.
  */
-int __nocfi swsusp_arch_resume(void)
+int swsusp_arch_resume(void)
 {
 	int rc;
 	void *zero_page;
 	size_t exit_size;
 	pgd_t *tmp_pg_dir;
 	phys_addr_t el2_vectors;
-	void __noreturn (*hibernate_exit)(phys_addr_t, phys_addr_t, void *,
-					  void *, phys_addr_t, phys_addr_t);
+	phys_addr_t exit_page;
+	typeof(swsusp_arch_suspend_exit) *hibernate_exit;
 	struct trans_pgd_info trans_info = {
 		.trans_alloc_page	= hibernate_page_alloc,
 		.trans_alloc_arg	= (__force void *)GFP_ATOMIC,
@@ -463,14 +463,18 @@ int __nocfi swsusp_arch_resume(void)
 	exit_size = __hibernate_exit_text_end - __hibernate_exit_text_start;
 	/*
 	 * Copy swsusp_arch_suspend_exit() to a safe page. This will generate
-	 * a new set of ttbr0 page tables and load them.
+	 * a new set of ttbr0 page tables and load them. The whole section is
+	 * copied: a kCFI hash may precede the entry point.
 	 */
 	rc = create_safe_exec_page(__hibernate_exit_text_start, exit_size,
-				   (phys_addr_t *)&hibernate_exit);
+				   &exit_page);
 	if (rc) {
 		pr_err("Failed to create safe executable page for hibernate_exit code.\n");
 		return rc;
 	}
+	hibernate_exit = (void *)(exit_page +
+				  ((unsigned long)swsusp_arch_suspend_exit -
+				   (unsigned long)__hibernate_exit_text_start));
 
 	/*
 	 * KASLR will cause the el2 vectors to be in a different location in

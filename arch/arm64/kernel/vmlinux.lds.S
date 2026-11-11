@@ -412,8 +412,9 @@ ASSERT(__idmap_text_end - (__idmap_text_start & ~(SZ_4K - 1)) <= SZ_4K,
 #ifdef CONFIG_HIBERNATION
 ASSERT(__hibernate_exit_text_end - __hibernate_exit_text_start <= SZ_4K,
        "Hibernate exit text is bigger than 4 KiB")
-ASSERT(__hibernate_exit_text_start == swsusp_arch_suspend_exit,
-       "Hibernate exit text does not start with swsusp_arch_suspend_exit")
+ASSERT(swsusp_arch_suspend_exit >= __hibernate_exit_text_start &&
+       swsusp_arch_suspend_exit < __hibernate_exit_text_end,
+       "Hibernate exit text does not contain swsusp_arch_suspend_exit")
 #endif
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 ASSERT((__entry_tramp_text_end - __entry_tramp_text_start) <= 3*PAGE_SIZE,

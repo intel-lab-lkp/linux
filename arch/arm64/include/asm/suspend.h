@@ -45,6 +45,11 @@ void _cpu_resume(void);
 
 int swsusp_arch_suspend(void);
 int swsusp_arch_resume(void);
+void __noreturn swsusp_arch_suspend_exit(phys_addr_t tmp_pg_dir,
+					 phys_addr_t ttbr1_el1,
+					 void *reenter_kernel, void *pblist,
+					 phys_addr_t hyp_stub_vectors,
+					 phys_addr_t zero_page);
 int arch_hibernation_header_save(void *addr, unsigned int max_size);
 int arch_hibernation_header_restore(void *addr);
 

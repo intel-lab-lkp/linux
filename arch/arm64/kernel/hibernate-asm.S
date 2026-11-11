@@ -6,6 +6,7 @@
  * Author:	James Morse <james.morse@arm.com>
  */
 #include <linux/linkage.h>
+#include <linux/cfi_types.h>
 #include <linux/errno.h>
 
 #include <asm/asm-offsets.h>
@@ -31,6 +32,8 @@
  * switches to a copy of the linear map in ttbr1, performs the restore, then
  * switches ttbr1 to the original kernel's swapper_pg_dir.
  *
+ * Called indirectly by swsusp_arch_resume(), this code needs a kCFI type hash.
+ *
  * All of memory gets written to, including code. We need to clean the kernel
  * text to the Point of Coherence (PoC) before secondary cores can be booted.
  * Because the kernel modules and executable pages mapped to user space are
@@ -45,7 +48,7 @@
  * x5: physical address of a  zero page that remains zero after resume
  */
 .pushsection    ".hibernate_exit.text", "ax"
-SYM_CODE_START(swsusp_arch_suspend_exit)
+SYM_TYPED_FUNC_START(swsusp_arch_suspend_exit)
 	/*
 	 * We execute from ttbr0, change ttbr1 to our copied linear map tables
 	 * with a break-before-make via the zero page
@@ -93,5 +96,5 @@ alternative_insn "dc cvau, x4",  "dc civac, x4",  ARM64_WORKAROUND_CLEAN_CACHE
 	mov	x0, #HVC_SET_VECTORS
 	hvc	#0
 3:	ret
-SYM_CODE_END(swsusp_arch_suspend_exit)
+SYM_FUNC_END(swsusp_arch_suspend_exit)
 .popsection
