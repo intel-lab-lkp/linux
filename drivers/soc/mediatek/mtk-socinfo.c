@@ -30,7 +30,6 @@ struct mtk_socinfo {
 	struct device *dev;
 	struct name_data *name_data;
 	struct socinfo_data *socinfo_data;
-	struct soc_device *soc_dev;
 };
 
 struct socinfo_data {
@@ -71,6 +70,7 @@ static int mtk_socinfo_create_socinfo_node(struct mtk_socinfo *mtk_socinfop)
 	struct soc_device_attribute *attrs;
 	struct socinfo_data *data = mtk_socinfop->socinfo_data;
 	static const char *soc_manufacturer = "MediaTek";
+	struct soc_device *soc_dev;
 
 	attrs = devm_kzalloc_obj(mtk_socinfop->dev, *attrs);
 	if (!attrs)
@@ -91,9 +91,9 @@ static int mtk_socinfo_create_socinfo_node(struct mtk_socinfo *mtk_socinfop)
 	 * name from board DTS (if available).
 	 **/
 
-	mtk_socinfop->soc_dev = soc_device_register(attrs);
-	if (IS_ERR(mtk_socinfop->soc_dev))
-		return PTR_ERR(mtk_socinfop->soc_dev);
+	soc_dev = devm_soc_device_register(mtk_socinfop->dev, attrs);
+	if (IS_ERR(soc_dev))
+		return PTR_ERR(soc_dev);
 
 	dev_info(mtk_socinfop->dev, "%s (%s) SoC detected.\n", attrs->family, attrs->soc_id);
 	return 0;
@@ -191,20 +191,11 @@ static int mtk_socinfo_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(mtk_socinfop->dev, ret, "Cannot create node\n");
 
-	platform_set_drvdata(pdev, mtk_socinfop);
 	return 0;
-}
-
-static void mtk_socinfo_remove(struct platform_device *pdev)
-{
-	struct mtk_socinfo *mtk_socinfop = platform_get_drvdata(pdev);
-
-	soc_device_unregister(mtk_socinfop->soc_dev);
 }
 
 static struct platform_driver mtk_socinfo = {
 	.probe = mtk_socinfo_probe,
-	.remove = mtk_socinfo_remove,
 	.driver = {
 		.name = "mtk-socinfo",
 	},
