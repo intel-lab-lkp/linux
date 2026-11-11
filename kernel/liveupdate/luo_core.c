@@ -75,6 +75,8 @@ static struct {
  */
 DECLARE_RWSEM(luo_register_rwlock);
 
+struct luo_incoming_stats luo_incoming_stats;
+
 static int __init early_liveupdate_param(char *buf)
 {
 	return kstrtobool(buf, &luo_global.enabled);
@@ -423,11 +425,59 @@ static const struct file_operations luo_fops = {
 	.unlocked_ioctl	= luo_ioctl,
 };
 
+static const char * const luo_incoming_state_names[] = {
+	[LUO_INCOMING_NONE]		= "none",
+	[LUO_INCOMING_PENDING]		= "pending",
+	[LUO_INCOMING_DESERIALIZED]	= "deserialized",
+	[LUO_INCOMING_FAILED]		= "failed",
+};
+
+static ssize_t state_show(struct device *dev, struct device_attribute *attr,
+			  char *buf)
+{
+	enum luo_incoming_state state = READ_ONCE(luo_incoming_stats.state);
+
+	return sysfs_emit(buf, "%s\n", luo_incoming_state_names[state]);
+}
+static DEVICE_ATTR_RO(state);
+
+#define LUO_INCOMING_ATTR_RO(_name)					\
+static ssize_t _name##_show(struct device *dev,				\
+			    struct device_attribute *attr, char *buf)	\
+{									\
+	return sysfs_emit(buf, "%ld\n",					\
+			  atomic_long_read(&luo_incoming_stats._name));	\
+}									\
+static DEVICE_ATTR_RO(_name)
+
+LUO_INCOMING_ATTR_RO(sessions);
+LUO_INCOMING_ATTR_RO(files);
+LUO_INCOMING_ATTR_RO(files_retrieved);
+LUO_INCOMING_ATTR_RO(files_failed);
+LUO_INCOMING_ATTR_RO(files_dropped);
+
+static struct attribute *luo_incoming_attrs[] = {
+	&dev_attr_state.attr,
+	&dev_attr_sessions.attr,
+	&dev_attr_files.attr,
+	&dev_attr_files_retrieved.attr,
+	&dev_attr_files_failed.attr,
+	&dev_attr_files_dropped.attr,
+	NULL
+};
+
+static const struct attribute_group luo_incoming_group = {
+	.name	= "incoming",
+	.attrs	= luo_incoming_attrs,
+};
+__ATTRIBUTE_GROUPS(luo_incoming);
+
 static struct luo_device_state luo_dev = {
 	.miscdev = {
 		.minor = MISC_DYNAMIC_MINOR,
 		.name  = "liveupdate",
 		.fops  = &luo_fops,
+		.groups = luo_incoming_groups,
 	},
 	.in_use = ATOMIC_INIT(0),
 };

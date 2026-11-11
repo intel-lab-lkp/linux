@@ -45,6 +45,13 @@ For details, see:
 - `sd_pid_notify_with_fds(3)
   <https://www.freedesktop.org/software/systemd/man/latest/sd_pid_notify_with_fds.html>`_
 
+Monitoring
+==========
+
+Read ``/sys/class/misc/liveupdate/incoming/`` to monitor incoming
+sessions and file retrievals without opening ``/dev/liveupdate``.
+See Documentation/ABI/testing/sysfs-class-misc-liveupdate for the sysfs ABI.
+
 See Also
 ========
 

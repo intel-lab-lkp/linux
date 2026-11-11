@@ -77,6 +77,40 @@ struct luo_session {
 
 extern struct rw_semaphore luo_register_rwlock;
 
+/**
+ * enum luo_incoming_state - Deserialization state of incoming sessions
+ * @LUO_INCOMING_NONE: No incoming sessions.
+ * @LUO_INCOMING_PENDING: Deserialization has not finished.
+ * @LUO_INCOMING_DESERIALIZED: Sessions are ready to retrieve.
+ * @LUO_INCOMING_FAILED: Deserialization failed.
+ */
+enum luo_incoming_state {
+	LUO_INCOMING_NONE,
+	LUO_INCOMING_PENDING,
+	LUO_INCOMING_DESERIALIZED,
+	LUO_INCOMING_FAILED,
+};
+
+/**
+ * struct luo_incoming_stats - Incoming session and file counters
+ * @state: Deserialization state.
+ * @sessions: Sessions deserialized.
+ * @files: Files in deserialized sessions.
+ * @files_retrieved: Files retrieved.
+ * @files_failed: Permanent retrieve failures.
+ * @files_dropped: Files discarded without a retrieve outcome.
+ */
+struct luo_incoming_stats {
+	enum luo_incoming_state state;
+	atomic_long_t sessions;
+	atomic_long_t files;
+	atomic_long_t files_retrieved;
+	atomic_long_t files_failed;
+	atomic_long_t files_dropped;
+};
+
+extern struct luo_incoming_stats luo_incoming_stats;
+
 static inline struct liveupdate_session *luo_session_from_file_set(struct luo_file_set *file_set)
 {
 	struct luo_session *session;

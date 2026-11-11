@@ -1,0 +1,44 @@
+What:		/sys/class/misc/liveupdate/incoming/
+Date:		Nov 2026
+Contact:	kexec@lists.infradead.org
+Description:
+		Incoming Live Update Orchestrator (LUO) state and counters.
+		Present when live update is enabled. Each attribute is read
+		independently.
+Users:		system monitoring
+
+What:		/sys/class/misc/liveupdate/incoming/state
+Date:		Nov 2026
+Contact:	kexec@lists.infradead.org
+Description:	read only
+		Status of incoming LUO sessions:
+
+		"none"          No sessions were handed over.
+		"pending"       Deserialization has not finished. It
+		                starts on the first open of /dev/liveupdate.
+		"deserialized"  The sessions can be retrieved.
+		"failed"        Deserialization failed. Opening
+		                /dev/liveupdate returns -EIO.
+Users:		system monitoring
+
+What:		/sys/class/misc/liveupdate/incoming/sessions
+What:		/sys/class/misc/liveupdate/incoming/files
+Date:		Nov 2026
+Contact:	kexec@lists.infradead.org
+Description:	read only
+		Number of sessions deserialized and number of files in
+		those sessions, respectively. Counts can be partial while
+		state is "pending" or after it changes to "failed".
+Users:		system monitoring
+
+What:		/sys/class/misc/liveupdate/incoming/files_retrieved
+What:		/sys/class/misc/liveupdate/incoming/files_failed
+What:		/sys/class/misc/liveupdate/incoming/files_dropped
+Date:		Nov 2026
+Contact:	kexec@lists.infradead.org
+Description:	read only
+		Number of successful retrieves, permanent retrieve failures,
+		and files discarded at session finish without a recorded
+		retrieve outcome, respectively. Retrieves and failures are
+		counted when they occur.
+Users:		system monitoring

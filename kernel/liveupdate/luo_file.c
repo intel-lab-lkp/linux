@@ -543,6 +543,16 @@ void luo_file_unfreeze(struct luo_file_set *file_set,
 	memset(file_set_ser, 0, sizeof(*file_set_ser));
 }
 
+/* Record the first retrieve result. A negative status is permanent. */
+static void luo_file_set_retrieve_status(struct luo_file *luo_file, int status)
+{
+	luo_file->retrieve_status = status;
+	if (status > 0)
+		atomic_long_inc(&luo_incoming_stats.files_retrieved);
+	else
+		atomic_long_inc(&luo_incoming_stats.files_failed);
+}
+
 /**
  * luo_retrieve_file - Restores a preserved file from a file_set by its token.
  * @file_set: The file_set from which to retrieve the file.
@@ -611,7 +621,7 @@ int luo_retrieve_file(struct luo_file_set *file_set, u64 token,
 	err = luo_file->fh->ops->retrieve(&args);
 	if (err) {
 		/* Keep the error code for later use. */
-		luo_file->retrieve_status = err;
+		luo_file_set_retrieve_status(luo_file, err);
 		return err;
 	}
 
@@ -624,7 +634,7 @@ int luo_retrieve_file(struct luo_file_set *file_set, u64 token,
 			  luo_file->file, GFP_KERNEL));
 
 	*filep = luo_file->file;
-	luo_file->retrieve_status = 1;
+	luo_file_set_retrieve_status(luo_file, 1);
 
 	return 0;
 }
@@ -719,6 +729,8 @@ int luo_file_finish(struct luo_file_set *file_set)
 					   struct luo_file, list);
 
 		luo_file_finish_one(file_set, luo_file);
+		if (!luo_file->retrieve_status)
+			atomic_long_inc(&luo_incoming_stats.files_dropped);
 
 		if (luo_file->file) {
 			xa_erase(&luo_preserved_files,

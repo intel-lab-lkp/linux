@@ -549,6 +549,7 @@ int __init luo_session_setup_incoming(u64 sessions_pa)
 		return err;
 
 	sh->active = true;
+	luo_incoming_stats.state = LUO_INCOMING_PENDING;
 	return 0;
 }
 
@@ -582,6 +583,9 @@ static int luo_session_deserialize_one(struct luo_session_header *sh,
 			session->name, ERR_PTR(err));
 		return err;
 	}
+
+	atomic_long_inc(&luo_incoming_stats.sessions);
+	atomic_long_add(session->file_set.count, &luo_incoming_stats.files);
 
 	return 0;
 }
@@ -626,12 +630,14 @@ int luo_session_deserialize(void)
 	}
 
 	kho_block_set_destroy(&sh->block_set);
+	WRITE_ONCE(luo_incoming_stats.state, LUO_INCOMING_DESERIALIZED);
 
 	return 0;
 
 save_err:
 	kho_block_set_destroy(&sh->block_set);
 	saved_err = err;
+	WRITE_ONCE(luo_incoming_stats.state, LUO_INCOMING_FAILED);
 	return err;
 }
 
