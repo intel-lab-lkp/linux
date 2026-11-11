@@ -748,6 +748,34 @@ enum resctrl_kernel_mode {
 
 #define RESCTRL_NUM_KERNEL_MODES (RESCTRL_KMODE_LAST + 1)
 
+/**
+ * resctrl_arch_configure_kmode_global() - Program RESCTRL_GLOBAL_ENABLE_PER_CPU
+ *
+ * @cpu_mask:	Online CPUs on which to update the CLOSID and/or RMID.
+ * @closid:	CLOSID of the resource group backing %RESCTRL_GLOBAL_ENABLE_PER_CPU
+ *		mode. Always provided, even when @assign_ctrl is false.
+ * @assign_ctrl: true to update the @closid for kernel mode; false to inherit the
+ *		CLOSID from the user task.
+ * @rmid:	RMID of the resource group backing %RESCTRL_GLOBAL_ENABLE_PER_CPU
+ *		mode. Always provided, even when @assign_mon is false.
+ * @assign_mon:	true to update the @rmid for kernel mode; false to inherit the
+ *		RMID from the user task.
+ * @enable:	true to enable %RESCTRL_GLOBAL_ENABLE_PER_CPU on CPUs in @cpu_mask;
+ *		false to disable @RESCTRL_GLOBAL_ENABLE_PER_CPU and reset the
+ *		kernel mode to %RESCTRL_INHERIT_USER.
+ *
+ * The callback programs %RESCTRL_GLOBAL_ENABLE_PER_CPU. A configuration starts
+ * when %RESCTRL_GLOBAL_ENABLE_PER_CPU is activated and ends when the mode is
+ * deactivated or userspace changes the backing resource group, @assign_ctrl, or
+ * @assign_mon. Each call for a given configuration uses the same @closid,
+ * @assign_ctrl, @rmid, and @assign_mon; only @cpu_mask and @enable differ.
+ * Before a configuration ends, it is disabled on every CPU where it is enabled.
+ */
+void resctrl_arch_configure_kmode_global(const struct cpumask *cpu_mask,
+					 u32 closid, bool assign_ctrl,
+					 u32 rmid, bool assign_mon,
+					 bool enable);
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 
