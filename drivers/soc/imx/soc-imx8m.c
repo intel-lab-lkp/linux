@@ -209,11 +209,6 @@ static __maybe_unused const struct of_device_id imx8_soc_match[] = {
 	devm_kasprintf((dev), GFP_KERNEL, "%d.%d", ((soc_rev) >> 4) & 0xf, (soc_rev) & 0xf) : \
 	"unknown"
 
-static void imx8m_unregister_soc(void *data)
-{
-	soc_device_unregister(data);
-}
-
 static void imx8m_unregister_cpufreq(void *data)
 {
 	platform_device_unregister(data);
@@ -284,13 +279,9 @@ static int imx8m_soc_probe(struct platform_device *pdev)
 	if (!soc_dev_attr->serial_number)
 		return -ENOMEM;
 
-	soc_dev = soc_device_register(soc_dev_attr);
+	soc_dev = devm_soc_device_register(dev, soc_dev_attr);
 	if (IS_ERR(soc_dev))
 		return PTR_ERR(soc_dev);
-
-	ret = devm_add_action(dev, imx8m_unregister_soc, soc_dev);
-	if (ret)
-		return ret;
 
 	pr_info("SoC: %s revision %s\n", soc_dev_attr->soc_id,
 		soc_dev_attr->revision);
