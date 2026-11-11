@@ -425,6 +425,7 @@ bool cs42l43_precious_register(struct device *dev, unsigned int reg)
 	case CS42L43_RX_DATA:
 	case CS42L43_DECIM_INT ... CS42L43_HPOUT_INT:
 	case CS42L43_MCU_SW_REV ... CS42L43_MCU_RAM_MAX:
+	case CS42L43B_LOAD_DET_SEL:
 		return true;
 	default:
 		return false;
