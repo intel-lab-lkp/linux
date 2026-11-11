@@ -579,6 +579,9 @@ The top level of the "info" directory contains the following file(s):
 			When "mon=inherit", or monitoring is unsupported, a CTRL_MON group
 			is shown as "<CTRL_MON>/".
 
+			Removing the backing group deactivates the current kernel mode and
+			restores to "inherit_user".
+
 		When the mode is not active, the output lists the supported parameters
 		and their default values, which are used if the mode is activated
 		without new values.
