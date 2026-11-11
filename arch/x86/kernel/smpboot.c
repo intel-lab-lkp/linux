@@ -1251,16 +1251,6 @@ void __init native_smp_prepare_cpus(unsigned int max_cpus)
 	snp_set_wakeup_secondary_cpu();
 }
 
-void arch_thaw_secondary_cpus_begin(void)
-{
-	set_cache_aps_delayed_init(true);
-}
-
-void arch_thaw_secondary_cpus_end(void)
-{
-	cache_aps_init();
-}
-
 /*
  * Early setup to make printk work.
  */
