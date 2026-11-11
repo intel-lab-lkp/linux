@@ -601,6 +601,24 @@ static inline void napi_schedule_irqoff(struct napi_struct *n)
  */
 bool napi_complete_done(struct napi_struct *n, int work_done);
 
+/**
+ * napi_complete_done_with_irq_mask - complete with an ordered IRQ mask callback
+ * @n: NAPI context
+ * @work_done: number of packets processed
+ * @mask: non-sleeping, idempotent device interrupt mask callback
+ * @data: callback argument
+ *
+ * Like napi_complete_done(), but call @mask on false-return paths before
+ * releasing NAPI ownership. Drivers which prepare interrupt rearming before
+ * completion must not mask interrupts after ownership has been released.
+ * The callback must not modify NAPI state and may run more than once if the
+ * state update is retried.
+ *
+ * Return: false if device interrupts have been masked by the callback.
+ */
+bool napi_complete_done_with_irq_mask(struct napi_struct *n, int work_done,
+				      void (*mask)(void *data), void *data);
+
 static inline bool napi_complete(struct napi_struct *n)
 {
 	return napi_complete_done(n, 0);
