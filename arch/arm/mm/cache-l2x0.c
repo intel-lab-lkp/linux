@@ -778,6 +778,26 @@ static const struct l2c_init_data l2c310_init_fns __initconst = {
 	},
 };
 
+/* Number of ways, from the cache ID and the auxiliary control register */
+static unsigned int __init l2c_num_ways(u32 cache_id, u32 aux)
+{
+	switch (cache_id & L2X0_CACHE_ID_PART_MASK) {
+	case L2X0_CACHE_ID_PART_L310:
+		return aux & L310_AUX_CTRL_ASSOCIATIVITY_16 ? 16 : 8;
+
+	case L2X0_CACHE_ID_PART_L210:
+	case L2X0_CACHE_ID_PART_L220:
+		return (aux >> 13) & 0xf;
+
+	case AURORA_CACHE_ID:
+		return 2 << ((((aux >> 13) & 0xf) + 1) >> 2);
+
+	default:
+		/* Assume unknown chips have 8 ways */
+		return 8;
+	}
+}
+
 static int __init __l2c_init(const struct l2c_init_data *data,
 			     u32 aux_val, u32 aux_mask, u32 cache_id, bool nosync)
 {
@@ -809,33 +829,11 @@ static int __init __l2c_init(const struct l2c_init_data *data,
 		pr_warn("L2C: DT/platform modifies aux control register: 0x%08x -> 0x%08x\n",
 		        old_aux, aux);
 
-	/* Determine the number of ways */
-	switch (cache_id & L2X0_CACHE_ID_PART_MASK) {
-	case L2X0_CACHE_ID_PART_L310:
-		if ((aux_val | ~aux_mask) & (L2C_AUX_CTRL_WAY_SIZE_MASK | L310_AUX_CTRL_ASSOCIATIVITY_16))
-			pr_warn("L2C: DT/platform tries to modify or specify cache size\n");
-		if (aux & (1 << 16))
-			ways = 16;
-		else
-			ways = 8;
-		break;
+	if ((cache_id & L2X0_CACHE_ID_PART_MASK) == L2X0_CACHE_ID_PART_L310 &&
+	    (aux_val | ~aux_mask) & (L2C_AUX_CTRL_WAY_SIZE_MASK | L310_AUX_CTRL_ASSOCIATIVITY_16))
+		pr_warn("L2C: DT/platform tries to modify or specify cache size\n");
 
-	case L2X0_CACHE_ID_PART_L210:
-	case L2X0_CACHE_ID_PART_L220:
-		ways = (aux >> 13) & 0xf;
-		break;
-
-	case AURORA_CACHE_ID:
-		ways = (aux >> 13) & 0xf;
-		ways = 2 << ((ways + 1) >> 2);
-		break;
-
-	default:
-		/* Assume unknown chips have 8 ways */
-		ways = 8;
-		break;
-	}
-
+	ways = l2c_num_ways(cache_id, aux);
 	l2x0_way_mask = (1 << ways) - 1;
 
 	/*
