@@ -909,8 +909,9 @@ static acpi_status lwmi_acpi_match(acpi_handle handle, u32 lvl,
  * lwmi_om_psy_ext_init() - Hooks power supply extension to device battery
  * @priv: Pointer to the lwmi_om_priv drvdata.
  *
- * Checks if the ideapad_laptop driver is going to manage charge attributes first,
- * then if not, hooks the battery to our WMI methods if they are supported.
+ * Checks if the thinkpad_acpi or ideapad_laptop driver is going to manage
+ * charge attributes first, then if not, hooks the battery to our WMI methods
+ * if they are supported.
  */
 static void lwmi_om_psy_ext_init(struct lwmi_om_priv *priv)
 {
@@ -927,6 +928,15 @@ static void lwmi_om_psy_ext_init(struct lwmi_om_priv *priv)
 		return;
 	if (force_load_psy_ext)
 		goto load_psy_ext;
+
+	/* Deconflict thinkpad_acpi driver */
+	if (IS_ENABLED(CONFIG_THINKPAD_ACPI) &&
+	    (acpi_dev_present("LEN0268", NULL, -1) ||
+	     acpi_dev_present("LEN0068", NULL, -1) ||
+	     acpi_dev_present("IBM0068", NULL, -1))) {
+		dev_dbg(&priv->wdev->dev, "thinkpad_acpi driver manages battery for device\n");
+		return;
+	}
 
 	/* Deconflict ideapad_laptop driver */
 	ret = acpi_get_devices(ideapad_hid, lwmi_acpi_match, &handle, NULL);
