@@ -534,6 +534,62 @@ The top level of the "info" directory contains the following file(s):
 		# cat info/last_cmd_status
 		mask f7 has non-consecutive 1-bits
 
+"kernel_mode":
+	Lists the kernel modes supported by the system, one per line, with
+	the active mode enclosed in square brackets.
+
+	A task running on a CPU is associated with an allocation and
+	monitoring ID pair (ctrl_hw_id, mon_hw_id), which determines the
+	resource allocation and monitoring applied to that task. Kernel
+	modes allow the CPU's allocation and/or monitoring association to
+	change during the transition from user mode to kernel mode.
+
+	Possible kernel modes are:
+
+	"inherit_user":
+		Default mode at boot. Kernel work uses the allocation
+		and monitoring of the user task on whose behalf it runs.
+
+	"global_enable_per_cpu":
+		Kernel work uses the allocation and/or monitoring of a backing
+		CTRL_MON or MON group. The mode can be enabled or disabled
+		per-CPU. The line contains group= and whichever of ctrl= and
+		mon= the platform supports::
+
+		  global_enable_per_cpu:ctrl=<assign|inherit>;mon=<assign|inherit>;group=<CTRL_MON>/<MON>/
+
+		"ctrl":
+			"assign" if kernel work uses the resource group's
+			allocation, or "inherit" if it uses the user task's
+			allocation. Present only on systems that support allocation.
+
+		"mon":
+			"assign" if kernel work uses the resource group's monitoring,
+			or "inherit" if it uses the user task's monitoring. Present
+			only on systems that support monitoring.
+
+		"group":
+			Path of the backing resource group, relative to the resctrl
+			mount point.
+
+			A MON group is shown as "<CTRL_MON>/<MON>/".
+
+			A CTRL_MON group is shown as "<CTRL_MON>//" when "mon=assign".
+
+			When "mon=inherit", or monitoring is unsupported, a CTRL_MON group
+			is shown as "<CTRL_MON>/".
+
+		When the mode is not active, the output lists the supported parameters
+		and their default values, which are used if the mode is activated
+		without new values.
+
+	Example of a system that supports allocation and monitoring, with default mode
+	set to inherit_user::
+
+		# cat info/kernel_mode
+		[inherit_user]
+		global_enable_per_cpu:ctrl=assign;mon=assign;group=//
+
 Resource alloc and monitor groups
 =================================
 
