@@ -5,6 +5,7 @@
  */
 
 #include <linux/linkage.h>
+#include <linux/cfi_types.h>
 #include <linux/stringify.h>
 #include <asm/alternative.h>
 #include <asm/page_types.h>
@@ -59,9 +60,23 @@ SYM_DATA_END(kexec_debug_idt)
 
 	.section .text..relocate_kernel,"ax";
 	.code64
-SYM_CODE_START_NOALIGN(relocate_kernel)
+/*
+ * The kCFI preamble in front of this entry is copied to the control page
+ * with the code, in the form boot-time patching left it, so it must stay
+ * position independent. FineIBT+BHI adds a CALL to a preamble only if it
+ * records arguments, and __CFI_TYPE() records none whatever the prototype.
+ */
+SYM_TYPED_START(relocate_kernel, SYM_L_GLOBAL, SYM_A_NONE)
 	UNWIND_HINT_END_OF_STACK
+#ifdef CONFIG_FINEIBT
+	/*
+	 * IBT is off by now, see cet_disable(), but FineIBT only rewrites the
+	 * preamble of a function that starts with ENDBR.
+	 */
+	ENDBR
+#else
 	ANNOTATE_NOENDBR
+#endif
 	/*
 	 * %rdi indirection_page
 	 * %rsi pa_control_page

@@ -96,9 +96,8 @@
  */
 #define ANNOTATE_REACHABLE(label)	ASM_ANNOTATE_LABEL(label, ANNOTYPE_REACHABLE)
 /*
- * This should not be used; it annotates away CFI violations. There are a few
- * valid use cases like kexec handover to the next kernel image, and there is
- * no security concern there.
+ * This should not be used; it annotates away CFI violations. The valid use
+ * case is a test that violates CFI on purpose, like LKDTM.
  *
  * There are also a few real issues annotated away, like EFI because we can't
  * control the EFI code.
