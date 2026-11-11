@@ -514,18 +514,25 @@ with the following files:
 The upper bound for how many "CTRL_MON" + "MON" can be created
 is the smaller of the L3_MON and PERF_PKG_MON "num_rmids" values.
 
-Finally, in the top level of the "info" directory there is a file
-named "last_cmd_status". This is reset with every "command" issued
-via the file system (making new directories or writing to any of the
-control files). If the command was successful, it will read as "ok".
-If the command failed, it will provide more information that can be
-conveyed in the error returns from file operations. E.g.
-::
+Top level files
+---------------
 
-	# echo L3:0=f7 > schemata
-	bash: echo: write error: Invalid argument
-	# cat info/last_cmd_status
-	mask f7 has non-consecutive 1-bits
+The top level of the "info" directory contains the following file(s):
+
+"last_cmd_status":
+	Status of the last command executed by the resctrl subsystem.
+
+	This file is reset with every "command" issued via the file
+	system (making new directories or writing to any of the control
+	files). If the command was successful, it will read as "ok".
+	If the command failed, it will provide more information that
+	can be conveyed in the error returns from file operations.
+	For example::
+
+		# echo L3:0=f7 > schemata
+		bash: echo: write error: Invalid argument
+		# cat info/last_cmd_status
+		mask f7 has non-consecutive 1-bits
 
 Resource alloc and monitor groups
 =================================
