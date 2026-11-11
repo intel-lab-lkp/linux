@@ -189,6 +189,29 @@ void soc_device_unregister(struct soc_device *soc_dev)
 }
 EXPORT_SYMBOL_GPL(soc_device_unregister);
 
+static void devm_soc_device_unregister(void *soc_dev)
+{
+	soc_device_unregister(soc_dev);
+}
+
+struct soc_device *devm_soc_device_register(struct device *dev,
+					    struct soc_device_attribute *soc_dev_attr)
+{
+	struct soc_device *soc_dev;
+	int ret;
+
+	soc_dev = soc_device_register(soc_dev_attr);
+	if (IS_ERR_OR_NULL(soc_dev))
+		return soc_dev;
+
+	ret = devm_add_action_or_reset(dev, devm_soc_device_unregister, soc_dev);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return soc_dev;
+}
+EXPORT_SYMBOL_GPL(devm_soc_device_register);
+
 static int __init soc_bus_register(void)
 {
 	struct soc_device *soc_dev;

@@ -37,6 +37,22 @@ struct soc_device *soc_device_register(
 void soc_device_unregister(struct soc_device *soc_dev);
 
 /**
+ * devm_soc_device_register - Resource-managed soc_device_register()
+ * @dev:		Device to register soc_dev for.
+ * @soc_plat_dev_attr: Attributes passed from platform to be attributed to a SoC
+ *
+ * Managed soc_device_register. soc_dev registered with this function is
+ * automatically unregistered on driver detach.
+ *
+ * Returns:
+ * - %NULL if the SoC bus is not yet registered;
+ * - on success, the newly allocated &struct soc_device pointer;
+ * - on failure, a negative error code as an ERR_PTR().
+ */
+struct soc_device *devm_soc_device_register(struct device *dev,
+					    struct soc_device_attribute *soc_dev_attr);
+
+/**
  * soc_device_to_device - helper function to fetch struct device
  * @soc: Previously registered SoC device container
  *
