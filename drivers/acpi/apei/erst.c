@@ -457,11 +457,13 @@ struct erst_record_id_cache {
 	int len;
 	int size;
 	int refcount;
+	u64 missing_id;
 };
 
 static struct erst_record_id_cache erst_record_id_cache = {
 	.lock = __MUTEX_INITIALIZER(erst_record_id_cache.lock),
 	.refcount = 0,
+	.missing_id = APEI_ERST_INVALID_RECORD_ID,
 };
 
 static int __erst_get_next_record_id(u64 *record_id)
@@ -522,6 +524,10 @@ retry:
 	if (first_id == APEI_ERST_INVALID_RECORD_ID)
 		first_id = id;
 	prev_id = id;
+
+	/* The firmware may keep handing out a record it reported missing */
+	if (id == erst_record_id_cache.missing_id)
+		goto retry;
 
 	entries = erst_record_id_cache.entries;
 	for (i = 0; i < erst_record_id_cache.len; i++) {
@@ -639,6 +645,9 @@ void erst_get_record_id_end(void)
 	mutex_lock(&erst_record_id_cache.lock);
 	erst_record_id_cache.refcount--;
 	BUG_ON(erst_record_id_cache.refcount < 0);
+	/* The next walk retries it, a new record may reuse the ID */
+	if (!erst_record_id_cache.refcount)
+		erst_record_id_cache.missing_id = APEI_ERST_INVALID_RECORD_ID;
 	__erst_record_id_cache_compact();
 	mutex_unlock(&erst_record_id_cache.lock);
 }
@@ -900,6 +909,7 @@ static void erst_clear_cache(u64 record_id)
 		if (entries[i] == record_id)
 			entries[i] = APEI_ERST_INVALID_RECORD_ID;
 	}
+	erst_record_id_cache.missing_id = record_id;
 	__erst_record_id_cache_compact();
 
 	mutex_unlock(&erst_record_id_cache.lock);
