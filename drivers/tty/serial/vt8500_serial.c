@@ -90,7 +90,6 @@
 
 #define VT8500_RECOMMENDED_CLK		12000000
 #define VT8500_OVERSAMPLING_DIVISOR	13
-#define VT8500_MAX_PORTS	6
 
 struct vt8500_port {
 	struct uart_port	uart;
@@ -100,13 +99,6 @@ struct vt8500_port {
 	unsigned int		ier;
 	unsigned int		vt8500_uart_flags;
 };
-
-/*
- * we use this variable to keep track of which ports
- * have been allocated as we can't use pdev->id in
- * devicetree
- */
-static DECLARE_BITMAP(vt8500_ports_in_use, VT8500_MAX_PORTS);
 
 static inline void vt8500_write(struct uart_port *port, unsigned int val,
 			     unsigned int off)
@@ -611,27 +603,14 @@ static int vt8500_serial_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	if (np) {
-		port = of_alias_get_id(np, "serial");
-		if (port >= VT8500_MAX_PORTS)
-			port = -1;
-	} else {
-		port = -1;
-	}
+	port = np ? of_alias_get_id(np, "serial") : -ENODEV;
+	if (port < 0 || port >= vt8500_uart_driver.nr) {
+		for (port = 0; port < vt8500_uart_driver.nr; port++)
+			if (!vt8500_uart_driver.state[port].uart_port)
+				break;
 
-	if (port < 0) {
-		/* calculate the port id */
-		port = find_first_zero_bit(vt8500_ports_in_use,
-					   VT8500_MAX_PORTS);
-	}
-
-	if (port >= VT8500_MAX_PORTS)
-		return -ENODEV;
-
-	/* reserve the port id */
-	if (test_and_set_bit(port, vt8500_ports_in_use)) {
-		/* port already in use - shouldn't really happen */
-		return -EBUSY;
+		if (port == vt8500_uart_driver.nr)
+			return -ENODEV;
 	}
 
 	vt8500_port = devm_kzalloc_obj(&pdev->dev, struct vt8500_port);
