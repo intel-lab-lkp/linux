@@ -325,6 +325,7 @@ struct brcmf_pcie_shared_info {
 	dma_addr_t ringupd_dmahandle;
 	u8 version;
 	bool mb_via_ctl;
+	bool hostrdy;
 };
 
 #define BRCMF_OTP_MAX_PARAM_LEN 16
@@ -1599,7 +1600,13 @@ static int brcmf_pcie_preinit(struct device *dev)
 	brcmf_dbg(PCIE, "Enter\n");
 
 	brcmf_pcie_intr_enable(buspub->devinfo);
-	brcmf_pcie_hostready(buspub->devinfo);
+	/*
+	 * Once the host capabilities enable host ready, the firmware takes the
+	 * doorbell as the exit from D3 only. The BCM4364 firmware halts on it
+	 * here.
+	 */
+	if (!buspub->devinfo->shared.hostrdy)
+		brcmf_pcie_hostready(buspub->devinfo);
 
 	return 0;
 }
@@ -1806,8 +1813,10 @@ brcmf_pcie_init_share_ram_info(struct brcmf_pciedev_info *devinfo,
 			!(shared->flags & BRCMF_PCIE_SHARED_USE_MAILBOX);
 
 		host_cap = shared->version;
-		if (shared->flags & BRCMF_PCIE_SHARED_HOSTRDY_DB1)
+		if (shared->flags & BRCMF_PCIE_SHARED_HOSTRDY_DB1) {
 			host_cap |= BRCMF_HOSTCAP_H2D_ENABLE_HOSTRDY;
+			shared->hostrdy = true;
+		}
 		if (shared->flags & BRCMF_PCIE_SHARED_DAR)
 			host_cap |= BRCMF_HOSTCAP_H2D_DAR;
 		host_cap |= BRCMF_HOSTCAP_DS_NO_OOB_DW;
