@@ -4762,27 +4762,22 @@ static void mem_cgroup_exit(struct task_struct *task)
 	task->objcg = NULL;
 }
 
-#ifdef CONFIG_LRU_GEN
+#ifdef CONFIG_LRU_GEN_WALKS_MMU
 static void mem_cgroup_lru_gen_attach(struct cgroup_taskset *tset)
 {
 	struct task_struct *task;
 	struct cgroup_subsys_state *css;
 
-	/* find the first leader if there is any */
-	cgroup_taskset_for_each_leader(task, css, tset)
-		break;
-
-	if (!task)
-		return;
-
-	task_lock(task);
-	if (task->mm && READ_ONCE(task->mm->owner) == task)
-		lru_gen_migrate_mm(task->mm);
-	task_unlock(task);
+	cgroup_taskset_for_each(task, css, tset) {
+		task_lock(task);
+		if (task->mm && READ_ONCE(task->mm->owner) == task)
+			lru_gen_migrate_mm(task->mm);
+		task_unlock(task);
+	}
 }
 #else
 static void mem_cgroup_lru_gen_attach(struct cgroup_taskset *tset) {}
-#endif /* CONFIG_LRU_GEN */
+#endif /* CONFIG_LRU_GEN_WALKS_MMU */
 
 static void mem_cgroup_kmem_attach(struct cgroup_taskset *tset)
 {
