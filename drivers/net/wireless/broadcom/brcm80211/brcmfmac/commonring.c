@@ -28,6 +28,16 @@ void brcmf_commonring_register_cb(struct brcmf_commonring *commonring,
 }
 
 
+/* Both run outside the ring lock and may sleep */
+void brcmf_commonring_register_pm_cb(struct brcmf_commonring *commonring,
+				     void (*cr_wake)(void *ctx),
+				     void (*cr_idle)(void *ctx))
+{
+	commonring->cr_wake = cr_wake;
+	commonring->cr_idle = cr_idle;
+}
+
+
 void brcmf_commonring_config(struct brcmf_commonring *commonring, u16 depth,
 			     u16 item_len, void *buf_addr)
 {
@@ -53,6 +63,8 @@ void brcmf_commonring_lock(struct brcmf_commonring *commonring)
 {
 	unsigned long flags;
 
+	if (commonring->cr_wake)
+		commonring->cr_wake(commonring->cr_ctx);
 	spin_lock_irqsave(&commonring->lock, flags);
 	commonring->flags = flags;
 }
@@ -62,6 +74,8 @@ void brcmf_commonring_unlock(struct brcmf_commonring *commonring)
 		__releases(&commonring->lock)
 {
 	spin_unlock_irqrestore(&commonring->lock, commonring->flags);
+	if (commonring->cr_idle)
+		commonring->cr_idle(commonring->cr_ctx);
 }
 
 

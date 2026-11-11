@@ -20,6 +20,8 @@ struct brcmf_commonring {
 	int (*cr_update_wptr)(void *ctx);
 	int (*cr_write_rptr)(void *ctx);
 	int (*cr_write_wptr)(void *ctx);
+	void (*cr_wake)(void *ctx);
+	void (*cr_idle)(void *ctx);
 
 	void *cr_ctx;
 
@@ -38,6 +40,9 @@ void brcmf_commonring_register_cb(struct brcmf_commonring *commonring,
 				  int (*cr_update_wptr)(void *ctx),
 				  int (*cr_write_rptr)(void *ctx),
 				  int (*cr_write_wptr)(void *ctx), void *ctx);
+void brcmf_commonring_register_pm_cb(struct brcmf_commonring *commonring,
+				     void (*cr_wake)(void *ctx),
+				     void (*cr_idle)(void *ctx));
 void brcmf_commonring_config(struct brcmf_commonring *commonring, u16 depth,
 			     u16 item_len, void *buf_addr);
 void brcmf_commonring_lock(struct brcmf_commonring *commonring);
