@@ -723,6 +723,31 @@ int resctrl_arch_io_alloc_enable(struct rdt_resource *r, bool enable);
  */
 bool resctrl_arch_get_io_alloc_enabled(struct rdt_resource *r);
 
+/**
+ * enum resctrl_kernel_mode - Kernel modes
+ *
+ * @RESCTRL_INHERIT_USER:
+ *     Kernel work inherits the CLOSID and RMID of the user task.
+ *
+ * @RESCTRL_GLOBAL_ENABLE_PER_CPU:
+ *     All kernel work uses the CLOSID and/or RMID of a single resource
+ *     group, which may also have user tasks assigned to it. The mode can
+ *     be enabled/disabled per-CPU, all online CPUs are enabled by default.
+ *     When the mode is disabled on a CPU then the kernel work on that CPU
+ *     inherits the CLOSID and RMID from the user task, effectively the
+ *     kernel mode becomes RESCTRL_INHERIT_USER on that CPU.
+ *
+ *     On x86, CLOSID and RMID are configured independently; either or both
+ *     may differ from the user task.
+ */
+enum resctrl_kernel_mode {
+	RESCTRL_INHERIT_USER,
+	RESCTRL_GLOBAL_ENABLE_PER_CPU,
+	RESCTRL_KMODE_LAST = RESCTRL_GLOBAL_ENABLE_PER_CPU
+};
+
+#define RESCTRL_NUM_KERNEL_MODES (RESCTRL_KMODE_LAST + 1)
+
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
 
