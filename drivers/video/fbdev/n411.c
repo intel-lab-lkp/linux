@@ -165,6 +165,11 @@ static int __init n411_init(void)
 	if (!n411_device)
 		return -ENOMEM;
 
+	if (!devm_request_region(&n411_device->dev, dio_addr, 1, "n411") ||
+		!devm_request_region(&n411_device->dev, cio_addr, 1, "n411") ||
+		!devm_request_region(&n411_device->dev, c2io_addr, 1, "n411"))
+		return -EBUSY;
+
 	ret = platform_device_add_data(n411_device, &n411_board,
 				       sizeof(n411_board));
 	if (ret)

@@ -481,6 +481,14 @@ static int arcfb_probe(struct platform_device *dev)
 		printk(KERN_WARNING "no IO addresses supplied\n");
 		goto err_addr;
 	}
+
+	if (!devm_request_region(&dev->dev, dio_addr, 1, "arcfb") ||
+		!devm_request_region(&dev->dev, cio_addr, 1, "arcfb") ||
+		!devm_request_region(&dev->dev, c2io_addr, 1, "arcfb")) {
+		retval = -EBUSY;
+		goto err_addr;
+	}
+
 	par->dio_addr = dio_addr;
 	par->cio_addr = cio_addr;
 	par->c2io_addr = c2io_addr;
