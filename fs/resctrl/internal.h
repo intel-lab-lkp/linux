@@ -283,6 +283,7 @@ extern int max_name_width;
  * @kf_ops:	File operations
  * @flags:	File specific RFTYPE_FLAGS_* flags
  * @fflags:	File specific RFTYPE_* flags
+ * @hidden:	Hide file at creation; visibility may be restored later
  * @seq_show:	Show content of the file
  * @write:	Write to the file
  */
@@ -292,6 +293,7 @@ struct rftype {
 	const struct kernfs_ops	*kf_ops;
 	unsigned long		flags;
 	unsigned long		fflags;
+	bool			hidden;
 
 	int (*seq_show)(struct kernfs_open_file *of,
 			struct seq_file *sf, void *v);

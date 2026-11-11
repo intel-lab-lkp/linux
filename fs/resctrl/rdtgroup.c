@@ -313,6 +313,9 @@ static int rdtgroup_add_file(struct kernfs_node *parent_kn, struct rftype *rft)
 		return ret;
 	}
 
+	if (rft->hidden)
+		kernfs_show(kn, false);
+
 	return 0;
 }
 
