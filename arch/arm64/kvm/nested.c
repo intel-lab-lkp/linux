@@ -140,6 +140,8 @@ int kvm_vcpu_init_nested(struct kvm_vcpu *vcpu)
 		kvm->arch.nested_mmus_size += S2_MMU_PER_VCPU;
 	}
 
+	vcpu->arch.hw_mmu = NULL;
+
 	return 0;
 }
 
