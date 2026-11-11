@@ -343,6 +343,7 @@ free_and_exit:
  *
  *   [<domain>:]<bus>:<device>.<func>[/<device>.<func>]*
  *   pci:<vendor>:<device>[:<subvendor>:<subdevice>]
+ *   pci:<vendor>:<device>[:<subvendor>:<subdevice>]@<path>
  *
  * The first format specifies a PCI bus/device/function address which
  * may change if new hardware is inserted, if motherboard firmware changes,
@@ -358,6 +359,12 @@ free_and_exit:
  * in-kernel code that uses PCI_ANY_ID which is ~0; this is for
  * legacy reasons and convenience so users don't have to specify
  * FFFFFFFFs on the command line.)
+ *
+ * The third format combines the first two: the device must match the IDs
+ * and also be at the address given by <path>, which takes the first
+ * format.  This allows a parameter written for a device at a known
+ * address on one system to have no effect on another system where that
+ * address is occupied by a different device.
  *
  * Returns 1 if the string matches the device, 0 if it does not and
  * a negative error code if the string cannot be parsed.
@@ -385,12 +392,21 @@ static int pci_dev_str_match(struct pci_dev *dev, const char *p,
 
 		p += count;
 
-		if ((!vendor || vendor == dev->vendor) &&
-		    (!device || device == dev->device) &&
-		    (!subsystem_vendor ||
-			    subsystem_vendor == dev->subsystem_vendor) &&
-		    (!subsystem_device ||
-			    subsystem_device == dev->subsystem_device))
+		ret = (!vendor || vendor == dev->vendor) &&
+		      (!device || device == dev->device) &&
+		      (!subsystem_vendor ||
+		       subsystem_vendor == dev->subsystem_vendor) &&
+		      (!subsystem_device ||
+		       subsystem_device == dev->subsystem_device);
+
+		/* Third format: the device must also be at <path> */
+		if (ret && *p == '@')
+			ret = pci_dev_str_match_path(dev, p + 1, &p);
+		else if (*p == '@')
+			p = strchrnul(p, ';');
+		if (ret < 0)
+			return ret;
+		if (ret)
 			goto found;
 	} else {
 		/*

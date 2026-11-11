@@ -5038,6 +5038,7 @@ Kernel parameters
 
 				[<domain>:]<bus>:<dev>.<func>[/<dev>.<func>]*
 				pci:<vendor>:<device>[:<subvendor>:<subdevice>]
+				pci:<vendor>:<device>[:<subvendor>:<subdevice>]@<path>
 
 				Note: the first format specifies a PCI
 				bus/device/function address which may change
@@ -5052,7 +5053,14 @@ Kernel parameters
 				renumbering issues).  The second format
 				selects devices using IDs from the
 				configuration space which may match multiple
-				devices in the system.
+				devices in the system.  The third format
+				combines the first two: the device must
+				match the IDs and also be at the address
+				given by <path>, which takes the first
+				format.  This allows an entry written for a
+				device on one system to have no effect on
+				another system where the same address is
+				occupied by a different device.
 
 		earlydump	dump PCI config space before the kernel
 				changes anything
