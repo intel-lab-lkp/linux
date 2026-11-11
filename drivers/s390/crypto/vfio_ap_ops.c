@@ -1899,20 +1899,25 @@ static void vfio_ap_mdev_dma_unmap(struct vfio_device *vdev, u64 iova,
  * by @matrix_mdev.
  *
  * @matrix_mdev: a matrix mediated device
+ *
+ * The locks acquired by get_update_locks_for_kvm() for the KVM guest
+ * @matrix_mdev->kvm must be held by the caller.
  */
 static void vfio_ap_mdev_unset_kvm(struct ap_matrix_mdev *matrix_mdev)
 {
 	struct kvm *kvm = matrix_mdev->kvm;
 
+	lockdep_assert_held(&matrix_dev->mdevs_lock);
+
 	if (kvm && kvm->arch.crypto.crycbd) {
-		get_update_locks_for_kvm(kvm);
+		lockdep_assert_held(&kvm->lock);
+		lockdep_assert_held_write(&kvm->arch.crypto.pqap_hook_rwsem);
+
 		kvm->arch.crypto.pqap_hook = NULL;
 
 		kvm_arch_crypto_clear_masks(kvm);
 		vfio_ap_mdev_reset_queues(matrix_mdev);
 		matrix_mdev->kvm = NULL;
-
-		release_update_locks_for_kvm(kvm);
 	}
 }
 
@@ -2098,8 +2103,16 @@ static void vfio_ap_mdev_close_device(struct vfio_device *vdev)
 {
 	struct ap_matrix_mdev *matrix_mdev =
 		container_of(vdev, struct ap_matrix_mdev, vdev);
+	/*
+	 * Save the KVM pointer because vfio_ap_mdev_unset_kvm() clears it and
+	 * the same pointer is needed to release the locks.
+	 */
+	struct kvm *kvm = matrix_mdev->kvm;
 
+	get_update_locks_for_kvm(kvm);
 	vfio_ap_mdev_unset_kvm(matrix_mdev);
+	vfio_ap_reset_migration_state(matrix_mdev);
+	release_update_locks_for_kvm(kvm);
 }
 
 static void vfio_ap_mdev_request(struct vfio_device *vdev, unsigned int count)
@@ -2316,6 +2329,17 @@ static ssize_t vfio_ap_mdev_ioctl(struct vfio_device *vdev,
 		break;
 	case VFIO_DEVICE_RESET:
 		ret = vfio_ap_mdev_reset_queues(matrix_mdev);
+		/*
+		 * Reset the migration state unconditionally, regardless of
+		 * whether the hardware queue reset succeeded. The migration
+		 * state tracks the AP configuration transfer lifecycle and is
+		 * independent of the hardware queue reset outcome. The VFIO
+		 * migration spec designates VFIO_DEVICE_RESET as the mechanism
+		 * to return device_state to RUNNING (e.g. to recover from
+		 * ERROR), so the migration state must be cleaned up even when
+		 * one or more queues fail to reset.
+		 */
+		vfio_ap_reset_migration_state(matrix_mdev);
 		break;
 	case VFIO_DEVICE_GET_IRQ_INFO:
 		ret = vfio_ap_get_irq_info(arg);
