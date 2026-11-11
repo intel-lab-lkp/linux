@@ -30,6 +30,8 @@
 
 #include "tpm.h"
 
+#define TPM_UNRESPONSIVE_TIMEOUT	(10 * 60 * HZ)
+
 /*
  * Bug workaround - some TPM's don't flush the most
  * recently changed pcr on suspend, so force the flush
@@ -206,6 +208,31 @@ out_sync:
 	return rc ? rc : len;
 }
 
+/*
+ * Disable the TPM once commands keep timing out for TPM_UNRESPONSIVE_TIMEOUT.
+ * A few timeouts are not enough: some TPMs stall for half a minute and recover.
+ */
+static void tpm_check_unresponsive(struct tpm_chip *chip, ssize_t ret)
+{
+	if (ret >= 0) {
+		chip->nr_timeouts = 0;
+		return;
+	}
+	if (ret != -ETIME || (chip->flags & TPM_CHIP_FLAG_DISABLE))
+		return;
+	if (!chip->nr_timeouts++) {
+		chip->first_timeout = jiffies;
+		return;
+	}
+	if (time_before(jiffies,
+			chip->first_timeout + TPM_UNRESPONSIVE_TIMEOUT))
+		return;
+
+	dev_err(&chip->dev, "%u commands timed out in %lu seconds, disabling the TPM\n",
+		chip->nr_timeouts, (jiffies - chip->first_timeout) / HZ);
+	chip->flags |= TPM_CHIP_FLAG_DISABLE;
+}
+
 /**
  * tpm_transmit - Internal kernel interface to transmit TPM commands.
  * @chip:	a TPM chip to use
@@ -268,6 +295,8 @@ ssize_t tpm_transmit(struct tpm_chip *chip, u8 *buf, size_t bufsiz)
 		delay_msec *= 2;
 		memcpy(buf, save, save_size);
 	}
+
+	tpm_check_unresponsive(chip, ret);
 	return ret;
 }
 
