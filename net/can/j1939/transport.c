@@ -721,13 +721,40 @@ void j1939_tp_schedule_txtimer(struct j1939_session *session, int msec)
 		      HRTIMER_MODE_REL_SOFT);
 }
 
-static inline void j1939_tp_set_rxtimeout(struct j1939_session *session,
-					  int msec)
+/*
+ * Rearm the receive timer as one step under active_session_list_lock.
+ *
+ * j1939_tp_set_rxtimeout() is called from receive handlers that do not hold
+ * the session list lock, while j1939_session_cancel() is called from the
+ * transmit timer path.  If the cancel and the rearm are not serialized, a
+ * concurrent caller can start the timer after this one cancelled it and
+ * before this one starts it again: hrtimer_start() on an already armed timer
+ * reprograms it without dropping the reference taken by that caller, and the
+ * session leaks together with its netdev reference.
+ *
+ * hrtimer_try_to_cancel() does not wait for a running callback, so it can be
+ * called with the lock held even though j1939_tp_rxtimer() takes the same
+ * lock; a callback that is already running drops its own reference.  For the
+ * same reason the return value is only 1 when the timer was queued: when this
+ * runs from j1939_tp_rxtimer() itself, the timer is no longer queued and 0 is
+ * the expected result.
+ */
+static void j1939_tp_arm_rxtimer_locked(struct j1939_session *session, int msec)
 {
-	j1939_session_rxtimer_cancel(session);
+	if (hrtimer_try_to_cancel(&session->rxtimer) == 1)
+		j1939_session_put(session);
+
 	j1939_session_get(session);
 	hrtimer_start(&session->rxtimer, ms_to_ktime(msec),
 		      HRTIMER_MODE_REL_SOFT);
+}
+
+static inline void j1939_tp_set_rxtimeout(struct j1939_session *session,
+					  int msec)
+{
+	j1939_session_list_lock(session->priv);
+	j1939_tp_arm_rxtimer_locked(session, msec);
+	j1939_session_list_unlock(session->priv);
 }
 
 static int j1939_session_tx_rts(struct j1939_session *session)
@@ -1161,18 +1188,29 @@ static void __j1939_session_cancel(struct j1939_session *session,
 static void j1939_session_cancel(struct j1939_session *session,
 				 enum j1939_xtp_abort err)
 {
+	bool waiting;
+
 	j1939_session_list_lock(session->priv);
 
+	waiting = session->state == J1939_SESSION_WAITING_ABORT;
 	if (session->state >= J1939_SESSION_ACTIVE &&
 	    session->state < J1939_SESSION_WAITING_ABORT) {
-		j1939_tp_set_rxtimeout(session, J1939_XTP_ABORT_TIMEOUT_MS);
 		__j1939_session_cancel(session, err);
+		j1939_tp_arm_rxtimer_locked(session, J1939_XTP_ABORT_TIMEOUT_MS);
 	}
 
 	j1939_session_list_unlock(session->priv);
 
 	if (!session->sk)
 		j1939_sk_errqueue(session, J1939_ERRQUEUE_RX_ABORT);
+
+	/* The abort already went out on an earlier call, so this one armed no
+	 * timer.  Several callers cancel the timers before calling here, which
+	 * would otherwise leave the session on the list with nothing to finish
+	 * it off, so deactivate it now.
+	 */
+	if (waiting)
+		j1939_session_deactivate_activate_next(session);
 }
 
 static enum hrtimer_restart j1939_tp_txtimer(struct hrtimer *hrtimer)
@@ -1279,10 +1317,8 @@ static enum hrtimer_restart j1939_tp_rxtimer(struct hrtimer *hrtimer)
 		    session->state < J1939_SESSION_ACTIVE_MAX) {
 			netdev_alert(priv->ndev, "%s: 0x%p: rx timeout, send abort\n",
 				     __func__, session);
-			j1939_session_get(session);
-			hrtimer_start(&session->rxtimer,
-				      ms_to_ktime(J1939_XTP_ABORT_TIMEOUT_MS),
-				      HRTIMER_MODE_REL_SOFT);
+			j1939_tp_arm_rxtimer_locked(session,
+						    J1939_XTP_ABORT_TIMEOUT_MS);
 			__j1939_session_cancel(session, J1939_XTP_ABORT_TIMEOUT);
 		}
 		j1939_session_list_unlock(session->priv);
@@ -1729,16 +1765,10 @@ static int j1939_xtp_rx_rts_session_active(struct j1939_session *session,
 
 		j1939_session_timers_cancel(session);
 		j1939_session_cancel(session, J1939_XTP_ABORT_BUSY);
-		if (session->transmission) {
-			j1939_session_deactivate_activate_next(session);
-		} else if (session->state == J1939_SESSION_WAITING_ABORT) {
-			/* Force deactivation for the receiver.
-			 * If we rely on the timer starting in j1939_session_cancel,
-			 * a second RTS call here will cancel that timer and fail
-			 * to restart it because the state is already WAITING_ABORT.
-			 */
-			j1939_session_deactivate_activate_next(session);
-		}
+		/* Both roles: the peer is restarting the transfer, so free the
+		 * slot now rather than wait out the abort timeout.
+		 */
+		j1939_session_deactivate_activate_next(session);
 
 		return -EBUSY;
 	}
