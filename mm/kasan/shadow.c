@@ -32,7 +32,7 @@ bool __kasan_check_read(const volatile void *p, unsigned int size)
 }
 EXPORT_SYMBOL(__kasan_check_read);
 
-bool __kasan_check_write(const volatile void *p, unsigned int size)
+bool __kasan_check_write(volatile void *p, unsigned int size)
 {
 	return kasan_check_range((void *)p, size, true, _RET_IP_);
 }

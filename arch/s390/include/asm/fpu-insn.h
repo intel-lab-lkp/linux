@@ -359,7 +359,7 @@ static __always_inline void fpu_vsrlb(u8 v1, u8 v2, u8 v3)
 
 #ifdef CONFIG_CC_HAS_ASM_AOR_FORMAT_FLAGS
 
-static __always_inline void fpu_vst(u8 v1, const void *vxr)
+static __always_inline void fpu_vst(u8 v1, void *vxr)
 {
 	instrument_write(vxr, sizeof(__vector128));
 	asm volatile("VST	%[v1],%O[vxr],,%R[vxr]"
@@ -370,7 +370,7 @@ static __always_inline void fpu_vst(u8 v1, const void *vxr)
 
 #else /* CONFIG_CC_HAS_ASM_AOR_FORMAT_FLAGS */
 
-static __always_inline void fpu_vst(u8 v1, const void *vxr)
+static __always_inline void fpu_vst(u8 v1, void *vxr)
 {
 	instrument_write(vxr, sizeof(__vector128));
 	asm volatile(
@@ -385,7 +385,7 @@ static __always_inline void fpu_vst(u8 v1, const void *vxr)
 
 #ifdef CONFIG_CC_HAS_ASM_AOR_FORMAT_FLAGS
 
-static __always_inline void fpu_vstl(u8 v1, u32 index, const void *vxr)
+static __always_inline void fpu_vstl(u8 v1, u32 index, void *vxr)
 {
 	unsigned int size;
 
@@ -400,7 +400,7 @@ static __always_inline void fpu_vstl(u8 v1, u32 index, const void *vxr)
 
 #else /* CONFIG_CC_HAS_ASM_AOR_FORMAT_FLAGS */
 
-static __always_inline void fpu_vstl(u8 v1, u32 index, const void *vxr)
+static __always_inline void fpu_vstl(u8 v1, u32 index, void *vxr)
 {
 	unsigned int size;
 

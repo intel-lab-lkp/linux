@@ -36,7 +36,7 @@ static __always_inline void instrument_read(const volatile void *v, size_t size)
  * Instrument a regular write access. The instrumentation should be inserted
  * before the actual write happens.
  */
-static __always_inline void instrument_write(const volatile void *v, size_t size)
+static __always_inline void instrument_write(volatile void *v, size_t size)
 {
 	kasan_check_write(v, size);
 	kcsan_check_write(v, size);
@@ -50,7 +50,7 @@ static __always_inline void instrument_write(const volatile void *v, size_t size
  * Instrument a regular write access. The instrumentation should be inserted
  * before the actual write happens.
  */
-static __always_inline void instrument_read_write(const volatile void *v, size_t size)
+static __always_inline void instrument_read_write(volatile void *v, size_t size)
 {
 	kasan_check_write(v, size);
 	kcsan_check_read_write(v, size);
@@ -92,7 +92,7 @@ static __always_inline void instrument_atomic_read(const volatile void *v, size_
  * Instrument an atomic write access. The instrumentation should be inserted
  * before the actual write happens.
  */
-static __always_inline void instrument_atomic_write(const volatile void *v, size_t size)
+static __always_inline void instrument_atomic_write(volatile void *v, size_t size)
 {
 	kasan_check_write(v, size);
 	kcsan_check_atomic_write(v, size);
@@ -107,7 +107,7 @@ static __always_inline void instrument_atomic_write(const volatile void *v, size
  * Instrument an atomic read-write access. The instrumentation should be
  * inserted before the actual write happens.
  */
-static __always_inline void instrument_atomic_read_write(const volatile void *v, size_t size)
+static __always_inline void instrument_atomic_read_write(volatile void *v, size_t size)
 {
 	kasan_check_write(v, size);
 	kcsan_check_atomic_read_write(v, size);
@@ -141,7 +141,7 @@ instrument_copy_to_user(void __user *to, const void *from, unsigned long n)
  * variants). The instrumentation should be inserted before the accesses.
  */
 static __always_inline void
-instrument_copy_from_user_before(const void *to, const void __user *from, unsigned long n)
+instrument_copy_from_user_before(void *to, const void __user *from, unsigned long n)
 {
 	kasan_check_write(to, n);
 	kcsan_check_write(to, n);
