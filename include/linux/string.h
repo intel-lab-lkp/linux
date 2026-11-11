@@ -14,6 +14,36 @@
 #include <linux/stdarg.h>
 #include <uapi/linux/string.h>
 
+/**
+ * QVoid_of - qualified void of
+ *
+ * @p: Pointer to test for qualifiers
+ *
+ * This macro produces the type name 'void',
+ * qualified with any qualifiers present in the element of @p.
+ */
+#define QVoid_of(p)       typeof(*(__QVoidptr_of(p)){0})
+#define __QVoidptr_of(p)  typeof(1?(p):(void*){0})
+
+/**
+ * QChar_of - qualified char of
+ *
+ * @Q: Qualifier to test.
+ * @p: Pointer to test for the @Q qualifier
+ *
+ * This macro produces the type name 'char',
+ * @Q-qualified iff the input pointer points to a @Q-qualified element.
+ */
+#define QChar_of(Q, p)  typeof                                        \
+(                                                                     \
+	_Generic((QVoid_of(p) *){0},                                  \
+		Q void *:  (Q char){0},                               \
+		void *:    (  char){0}                                \
+	)                                                             \
+)
+// CQChar_of - const qualified char of
+#define CQChar_of(p)  QChar_of(const, p)
+
 extern char *strndup_user(const char __user *, long);
 extern void *memdup_user(const void __user *, size_t) __realloc_size(2);
 extern void *vmemdup_user(const void __user *, size_t) __realloc_size(2);
