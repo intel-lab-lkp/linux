@@ -942,6 +942,21 @@ err_disable_kho:
 	kho_enable = false;
 }
 
+phys_addr_t kho_bootmem_size(void)
+{
+	phys_addr_t size = 0;
+	unsigned int i;
+
+	/* kho_init() can disable KHO without clearing kho_bootmem_cnt. */
+	if (!kho_enable)
+		return 0;
+
+	for (i = 0; i < kho_bootmem_cnt; i++)
+		size += kho_bootmem[i].size;
+
+	return size;
+}
+
 /*
  * Look for free blocks of 1G. This is a heuristic chosen to work efficiently
  * with large systems with hundreds of gigabytes of memory. It will work poorly

@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/kexec.h>
+#include <linux/kexec_handover.h>
 #include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/liveupdate.h>
@@ -1324,6 +1325,15 @@ static struct kobj_attribute crash_elfcorehdr_size_attr = __ATTR_RO(crash_elfcor
 #endif /* CONFIG_CRASH_HOTPLUG */
 #endif /* CONFIG_CRASH_DUMP */
 
+#ifdef CONFIG_KEXEC_HANDOVER
+static ssize_t kho_bootmem_size_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%llu\n", (unsigned long long)kho_bootmem_size());
+}
+static struct kobj_attribute kho_bootmem_size_attr = __ATTR_RO(kho_bootmem_size);
+#endif
+
 static struct attribute *kexec_attrs[] = {
 	&loaded_attr.attr,
 #ifdef CONFIG_CRASH_DUMP
@@ -1335,6 +1345,9 @@ static struct attribute *kexec_attrs[] = {
 #ifdef CONFIG_CRASH_HOTPLUG
 	&crash_elfcorehdr_size_attr.attr,
 #endif
+#endif
+#ifdef CONFIG_KEXEC_HANDOVER
+	&kho_bootmem_size_attr.attr,
 #endif
 	NULL
 };

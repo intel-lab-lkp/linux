@@ -59,3 +59,11 @@ Description:	read only
 		to the crash (kdump) kernel. It lists the start and end physical
 		addresses of CMA regions assigned for crashkernel use.
 User:		kdump service
+
+What:		/sys/kernel/kexec/kho_bootmem_size
+Date:		Nov 2026
+Contact:	kexec@lists.infradead.org
+Description:	read only
+		Total size of the KHO bootmem regions in bytes. Returns 0
+		when KHO is disabled.
+User:		system monitoring

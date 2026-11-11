@@ -40,6 +40,7 @@ void kho_populate(phys_addr_t fdt_phys, u64 fdt_len, phys_addr_t bootmem_phys,
 		  u64 bootmem_len);
 
 bool kho_bootmem_overlap(phys_addr_t phys, size_t size);
+phys_addr_t kho_bootmem_size(void);
 
 static inline enum migratetype kho_bootmem_migratetype(unsigned long pfn,
 						       enum migratetype mt)

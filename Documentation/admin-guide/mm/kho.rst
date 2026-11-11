@@ -81,6 +81,15 @@ At scale, correlating crashes to the previous kernel version enables
 faster root cause analysis when issues only occur in specific kernel
 transition scenarios.
 
+sysfs Interfaces
+================
+
+``/sys/kernel/kexec/kho_bootmem_size``
+    Total size of the KHO bootmem regions in bytes, or 0 when KHO is
+    disabled.
+
+See Documentation/ABI/testing/sysfs-kernel-kexec-kdump for the sysfs ABI.
+
 debugfs Interfaces
 ==================
 
