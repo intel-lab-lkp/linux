@@ -76,6 +76,14 @@ static void rdtgroup_destroy_root(void);
 
 struct dentry *debugfs_resctrl;
 
+static struct resctrl_kmode_cfg resctrl_kmode = {
+	.supported = { BIT(RESCTRL_INHERIT_USER) },
+	.active = RESCTRL_INHERIT_USER,
+	.ctrl = KMODE_ASSIGN,
+	.mon = KMODE_ASSIGN,
+	.rdtgrp = NULL,
+};
+
 /*
  * Memory bandwidth monitoring event to use for the default CTRL_MON group
  * and each new CTRL_MON group created by the user.  Only relevant when
@@ -2293,6 +2301,12 @@ static void io_alloc_init(void)
 		resctrl_file_fflags_init("io_alloc_cbm",
 					 RFTYPE_CTRL_INFO | RFTYPE_RES_CACHE);
 	}
+}
+
+void resctrl_set_kmode_support(enum resctrl_kernel_mode kmode)
+{
+	if (kmode < RESCTRL_NUM_KERNEL_MODES)
+		__set_bit(kmode, resctrl_kmode.supported);
 }
 
 void resctrl_file_fflags_init(const char *config, unsigned long fflags)
