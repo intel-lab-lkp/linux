@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/supply/siliconmitus,sm5714-fuelgauge.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Silicon Mitus SM5714 fuel gauge
+
+maintainers:
+  - Asdlerto Korry <korryasdlerto@gmail.com>
+
+description:
+  The SM5714 is a power management chip for mobile phones with a charger,
+  a USB Type-C port controller, a MUIC and a fuel gauge, each on its own
+  I2C address. This binding describes the fuel gauge, which reports the
+  battery state of charge, voltage and current.
+
+allOf:
+  - $ref: power-supply.yaml#
+
+properties:
+  compatible:
+    const: siliconmitus,sm5714-fuelgauge
+
+  reg:
+    maxItems: 1
+
+  io-channels:
+    maxItems: 1
+    description:
+      ADC channel that reports the temperature of the battery thermistor.
+      The temperature measured by the fuel gauge itself rises with the
+      charge current, so the battery temperature is taken from this
+      channel when it is present.
+
+required:
+  - compatible
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      fuel-gauge@71 {
+        compatible = "siliconmitus,sm5714-fuelgauge";
+        reg = <0x71>;
+        io-channels = <&pmk8350_vadc 0x14b>;
+      };
+    };
