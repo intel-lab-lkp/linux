@@ -78,6 +78,8 @@ enum tb_security_level {
  * @index: Linux assigned domain number
  * @security_level: Current security level
  * @nboot_acl: Number of boot ACLs the domain supports
+ * @kept_running: The domain was left running through the current
+ *		  suspend-to-idle, its tunnels intact
  * @privdata: Private connection manager specific data
  */
 struct tb {
@@ -91,6 +93,7 @@ struct tb {
 	int index;
 	enum tb_security_level security_level;
 	size_t nboot_acl;
+	bool kept_running;
 	unsigned long privdata[];
 };
 

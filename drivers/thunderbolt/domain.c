@@ -535,7 +535,7 @@ int tb_domain_suspend_noirq(struct tb *tb)
 	mutex_lock(&tb->lock);
 	if (tb->cm_ops->suspend_noirq)
 		ret = tb->cm_ops->suspend_noirq(tb);
-	if (!ret)
+	if (!ret && !tb->kept_running)
 		tb_ctl_stop(tb->ctl);
 	mutex_unlock(&tb->lock);
 
@@ -556,7 +556,8 @@ int tb_domain_resume_noirq(struct tb *tb)
 	int ret = 0;
 
 	mutex_lock(&tb->lock);
-	tb_ctl_start(tb->ctl);
+	if (!tb->kept_running)
+		tb_ctl_start(tb->ctl);
 	if (tb->cm_ops->resume_noirq)
 		ret = tb->cm_ops->resume_noirq(tb);
 	mutex_unlock(&tb->lock);

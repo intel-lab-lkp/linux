@@ -9,8 +9,10 @@
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
+#include <linux/moduleparam.h>
 #include <linux/pm_runtime.h>
 #include <linux/stringify.h>
+#include <linux/suspend.h>
 
 #include "tb.h"
 #include "tb_regs.h"
@@ -3106,9 +3108,44 @@ static int tb_start(struct tb *tb, bool reset)
 	return 0;
 }
 
+static bool s2idle_keep_pcie;
+module_param(s2idle_keep_pcie, bool, 0644);
+MODULE_PARM_DESC(s2idle_keep_pcie,
+		 "keep a domain with PCIe tunnels running through suspend-to-idle so the devices behind them stay connected (default: false)");
+
+/*
+ * Putting the routers to sleep takes every tunnel down, and the PCIe
+ * devices behind a tunnel then disappear from the bus until it is
+ * re-created on resume. A device that cannot lose its link while its
+ * driver holds it (an external GPU driving a display) does not survive
+ * that. For suspend-to-idle the domain can instead keep running: the
+ * routers stay awake, the links and tunnels stay up and the devices
+ * behind them go through an ordinary PCI suspend and resume.
+ */
+static bool tb_keep_running_s2idle(struct tb *tb)
+{
+	struct tb_cm *tcm = tb_priv(tb);
+	struct tb_tunnel *tunnel;
+
+	if (!s2idle_keep_pcie || pm_suspend_target_state != PM_SUSPEND_TO_IDLE)
+		return false;
+
+	list_for_each_entry(tunnel, &tcm->tunnel_list, list) {
+		if (tb_tunnel_is_pci(tunnel))
+			return true;
+	}
+	return false;
+}
+
 static int tb_suspend_noirq(struct tb *tb)
 {
 	struct tb_cm *tcm = tb_priv(tb);
+
+	if (tb_keep_running_s2idle(tb)) {
+		tb_dbg(tb, "PCIe tunnels active, keeping the domain running\n");
+		tb->kept_running = true;
+		return 0;
+	}
 
 	tb_dbg(tb, "suspending...\n");
 	tb_disconnect_and_release_dp(tb);
@@ -3176,6 +3213,12 @@ static int tb_resume_noirq(struct tb *tb)
 	struct tb_tunnel *tunnel, *n;
 	unsigned int usb3_delay = 0;
 	LIST_HEAD(tunnels);
+
+	if (tb->kept_running) {
+		tb->kept_running = false;
+		tb_dbg(tb, "domain kept running, tunnels intact\n");
+		return 0;
+	}
 
 	tb_dbg(tb, "resuming...\n");
 
