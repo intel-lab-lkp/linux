@@ -41,6 +41,7 @@
 
 #include <linux/memblock.h>
 #include <linux/err.h>
+#include <linux/math64.h>
 #include <linux/sizes.h>
 #include <linux/dma-map-ops.h>
 #include <linux/cma.h>
@@ -135,45 +136,132 @@ EXPORT_SYMBOL_GPL(dev_get_cma_area);
 static struct cma *dma_contiguous_numa_area[MAX_NUMNODES];
 static phys_addr_t numa_cma_size[MAX_NUMNODES] __initdata;
 static phys_addr_t pernuma_size_bytes __initdata;
+static unsigned int numa_cma_pct[MAX_NUMNODES] __initdata;
+static unsigned int pernuma_pct __initdata;
+static phys_addr_t numa_cma_sub[MAX_NUMNODES] __initdata;
+static phys_addr_t pernuma_sub __initdata;
 static bool numa_cma_configured __initdata;
 
-static int __init early_numa_cma(char *p)
+/*
+ * What numa_cma_parse() does with a string it accepts: NUMA_CMA_CHECK leaves
+ * everything outside the function as it is, so a caller can validate the
+ * whole string before NUMA_CMA_APPLY lets any part of it take effect.
+ */
+enum numa_cma_action {
+	NUMA_CMA_CHECK,
+	NUMA_CMA_APPLY,
+};
+
+/*
+ * Parse one numa_cma= string: a comma separated list of <node>:<size>, where
+ * <size> is a size or <percent>%[-<size>]. Anything else fails the parse.
+ */
+static int __init numa_cma_parse(char *p, enum numa_cma_action action)
 {
 	int nid, count = 0;
 	unsigned long node;
-	phys_addr_t size;
-	char *s = p;
+	phys_addr_t size, sub;
+	char *s = p, *start;
 
 	while (*s) {
-		if (sscanf(s, "%lu%n", &node, &count) != 1)
-			break;
+		if (sscanf(s, "%lu%n", &node, &count) != 1 || s[count] != ':' ||
+		    node >= MAX_NUMNODES)
+			return -EINVAL;
+		nid = array_index_nospec(node, MAX_NUMNODES);
 
-		if (s[count] == ':') {
-			if (node >= MAX_NUMNODES)
-				break;
-			nid = array_index_nospec(node, MAX_NUMNODES);
+		start = s + count + 1;
+		size = memparse(start, &s);
+		if (s == start)
+			return -EINVAL;
 
-			s += count + 1;
-			size = memparse(s, &s);
+		if (*s == '%') {
+			s++;
+			if (size > 100) {
+				pr_warn("numa_cma: node %d percentage %llu%% > 100\n",
+					nid, (unsigned long long)size);
+				return -EINVAL;
+			}
+			sub = 0;
+			if (*s == '-') {
+				start = ++s;
+				sub = memparse(start, &s);
+				if (s == start)
+					return -EINVAL;
+			}
+			if (action == NUMA_CMA_APPLY) {
+				numa_cma_pct[nid] = size;
+				numa_cma_sub[nid] = sub;
+			}
+		} else if (action == NUMA_CMA_APPLY) {
 			numa_cma_size[nid] = size;
+		}
 
-			if (*s == ',')
-				s++;
-			else
-				break;
-		} else
-			break;
+		if (*s == ',')
+			s++;
+		else if (*s)
+			return -EINVAL;
 	}
 
-	numa_cma_configured = true;
 	return 0;
+}
+
+static int __init early_numa_cma(char *p)
+{
+	int rc;
+
+	/*
+	 * Per-node CMA is configured either way. Leaving the flag clear on a
+	 * string this rejects would tell dma_numa_cma_reserve() that nobody
+	 * asked for per-node areas, and on a CMA_SIZE_PERNUMA kernel it would
+	 * then clone the default area onto every node.
+	 */
+	numa_cma_configured = true;
+
+	rc = numa_cma_parse(p, NUMA_CMA_CHECK);
+	if (rc)
+		return rc;
+
+	return numa_cma_parse(p, NUMA_CMA_APPLY);
 }
 early_param("numa_cma", early_numa_cma);
 
 static int __init early_cma_pernuma(char *p)
 {
-	pernuma_size_bytes = memparse(p, &p);
+	phys_addr_t val, sub;
+	char *start;
+
+	/* See early_numa_cma(): a rejected string still counts as configured. */
 	numa_cma_configured = true;
+
+	start = p;
+	val = memparse(start, &p);
+	if (p == start)
+		return -EINVAL;
+
+	if (*p == '%') {
+		p++;
+		if (val > 100) {
+			pr_warn("cma_pernuma: percentage %llu%% > 100\n",
+				(unsigned long long)val);
+			return -EINVAL;
+		}
+		sub = 0;
+		if (*p == '-') {
+			start = ++p;
+			sub = memparse(start, &p);
+			if (p == start)
+				return -EINVAL;
+		}
+		if (*p)
+			return -EINVAL;
+		pernuma_pct = val;
+		pernuma_sub = sub;
+	} else {
+		if (*p)
+			return -EINVAL;
+		pernuma_size_bytes = val;
+	}
+
 	return 0;
 }
 early_param("cma_pernuma", early_cma_pernuma);
@@ -198,6 +286,33 @@ static inline __maybe_unused phys_addr_t cma_early_percent_memory(void)
 #endif
 
 #ifdef CONFIG_DMA_NUMA_CMA
+static phys_addr_t __init numa_cma_node_size(int nid)
+{
+	unsigned long spfn, epfn;
+	phys_addr_t total = 0;
+	int i;
+
+	for_each_mem_pfn_range(i, nid, &spfn, &epfn, NULL)
+		total += (u64)(epfn - spfn) << PAGE_SHIFT;
+
+	return total;
+}
+
+/*
+ * A percentage of the node, less the size the boot line asked to keep back.
+ * Keeping back more than the percentage came to reserves nothing.
+ */
+static phys_addr_t __init numa_cma_pct_size(int nid, unsigned int pct,
+					    phys_addr_t sub)
+{
+	phys_addr_t size = mul_u64_u32_div(numa_cma_node_size(nid), pct, 100);
+
+	if (size <= sub)
+		return 0;
+
+	return size - sub;
+}
+
 static void __init dma_numa_cma_reserve(void)
 {
 	int nid;
@@ -214,15 +329,36 @@ static void __init dma_numa_cma_reserve(void)
 		int ret;
 
 		if (!node_online(nid)) {
-			if (pernuma_size_bytes || numa_cma_size[nid])
+			if (pernuma_size_bytes || pernuma_pct ||
+			    numa_cma_size[nid] || numa_cma_pct[nid])
 				pr_warn("invalid node %d specified\n", nid);
 			continue;
 		}
 
 		/* per-node numa setting has the priority */
-		size = numa_cma_size[nid] ?: pernuma_size_bytes;
-		if (!size)
+		if (numa_cma_size[nid])
+			size = numa_cma_size[nid];
+		else if (numa_cma_pct[nid])
+			size = numa_cma_pct_size(nid, numa_cma_pct[nid],
+						 numa_cma_sub[nid]);
+		else if (pernuma_size_bytes)
+			size = pernuma_size_bytes;
+		else if (pernuma_pct)
+			size = numa_cma_pct_size(nid, pernuma_pct, pernuma_sub);
+		else
 			continue;
+
+		/*
+		 * A percentage of a memoryless online node, and a percentage
+		 * entirely consumed by the size kept back, resolve to nothing
+		 * to reserve. Say so, since the operator asked for memory.
+		 */
+		if (!size) {
+			if (numa_cma_pct[nid] || pernuma_pct)
+				pr_warn("node %d percentage reserves nothing\n",
+					nid);
+			continue;
+		}
 
 		cma = &dma_contiguous_numa_area[nid];
 		snprintf(name, sizeof(name), "numa%d", nid);

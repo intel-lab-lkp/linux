@@ -862,10 +862,13 @@ Kernel parameters
 			contiguous memory allocations and optionally the
 			placement constraint by the physical address range of
 			memory allocations. A value of 0 disables CMA
-			altogether. For more information, see
+			altogether. The size is absolute; the percentage form
+			is accepted by 'cma_pernuma=' and 'numa_cma=' only, and
+			CONFIG_CMA_SIZE_PERCENTAGE sizes this area as a fraction
+			of memory instead. For more information, see
 			kernel/dma/contiguous.c
 
-	cma_pernuma=nn[MG]
+	cma_pernuma=nn[MG]|nn%[-nn[MG]]
 			[KNL,CMA,EARLY]
 			Sets the size of kernel per-numa memory area for
 			contiguous memory allocations. A value of 0 disables
@@ -875,14 +878,61 @@ Kernel parameters
 			first try to allocate buffer from the pernuma area
 			which is located in node nid, if the allocation fails,
 			they will fallback to the global default memory area.
+			The size may also be given as a percentage (nn%) of
+			each node's memory present at boot as seen by memblock;
+			hot-added memory is not counted. It is evaluated at
+			reservation time.
+			A percentage of 0 reserves nothing, like an absolute
+			size of 0. A value that does not parse, such as a
+			missing size, text after the value or a percentage
+			above 100, makes the whole parameter invalid: no node
+			takes a size from it, and
+			it does not fall back to mirroring the default area
+			onto every node either. An absolute size takes
+			priority over a percentage whichever order the two
+			were given in. A 'numa_cma=' on the same command line
+			still applies.
 
-	numa_cma=<node>:nn[MG][,<node>:nn[MG]]
+			A percentage may be followed by a size to keep back
+			from it, so cma_pernuma=95%-1G reserves 95% of each
+			node less 1G. Keeping back at least as much as the
+			percentage came to reserves nothing on that node, and
+			warns as any other percentage resolving to nothing
+			does. The size kept back belongs to the percentage: a
+			later 'cma_pernuma=' percentage given without one
+			keeps nothing back.
+
+	numa_cma=<node>:nn[MG]|nn%[-nn[MG]][,<node>:nn[MG]|nn%[-nn[MG]]]
 			[KNL,CMA,EARLY]
 			Sets the size of kernel numa memory area for
 			contiguous memory allocations. It will reserve CMA
-			area for the specified node.
+			area for the specified node. A per-node size may also
+			be given as a percentage (nn%) of that node's memory
+			present at boot as seen by memblock; hot-added memory
+			is not counted. It is evaluated at reservation time.
+			A size of 0, absolute or percentage, is the same as not
+			naming the node at all, so the node falls back to
+			'cma_pernuma=' when that is given. An entry that does
+			not parse, such as a node number of MAX_NUMNODES or
+			more, a missing size, text after a size or a
+			percentage above 100, makes the whole parameter
+			invalid: no node named
+			here gets an area, and there is no fall-back to
+			mirroring the default area onto every node either. A
+			'cma_pernuma=' on the same command line still applies.
 
-			If it is setup together with upper 'cmd_pernuma='
+			A node may be named more than once. The last value of
+			each form is the one kept, and an absolute size takes
+			priority over a percentage for that node whichever
+			order the two were given in, so numa_cma=0:4G,0:50%
+			reserves 4G on node 0.
+
+			A percentage may be followed by a size to keep back
+			from it, per node, so numa_cma=0:95%-1G reserves 95%
+			of node 0 less 1G; see 'cma_pernuma=' above for what
+			keeping back more than the percentage came to does.
+
+			If it is set up together with upper 'cma_pernuma='
 			(unlikely), its size setting takes priority for the
 			specified numa nodes.
 
