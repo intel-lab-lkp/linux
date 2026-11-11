@@ -250,10 +250,20 @@ static inline bool nfsd4_create_is_exclusive(int createmode)
 		createmode == NFS4_CREATE_EXCLUSIVE4_1;
 }
 
+static bool nfsd4_create_verf_matches(struct dentry *child, const u32 *verf)
+{
+	struct inode *inode = d_inode(child);
+
+	return inode_get_mtime_sec(inode) == verf[0] &&
+	       inode_get_atime_sec(inode) == verf[1] &&
+	       inode->i_size == 0;
+}
+
 static struct file *do_lookup_open(struct path *parent,
 				   struct qstr *name,
 				   unsigned int oflags,
-				   umode_t mode)
+				   umode_t mode,
+				   const u32 *verf)
 {
 	struct file *filp = NULL;
 	struct path path;
@@ -272,13 +282,18 @@ static struct file *do_lookup_open(struct path *parent,
 
 	if (d_really_is_positive(child)) {
 		/*
-		 * open the file so that we consistently have a valid
-		 * op_filp and consequently a valid ->f_path.dentry.
+		 * Open an existing file so that op_filp and its ->f_path.dentry
+		 * are valid. Skip the open for a create that fails with
+		 * EEXIST. dentry_open() would break a lease, and with
+		 * O_NONBLOCK could return EWOULDBLOCK in place of EEXIST.
 		 */
 		int err = nfsd_check_obj_isreg(child);
 
 		if (err)
 			filp = ERR_PTR(err);
+		else if ((oflags & O_EXCL) ||
+			 (verf && !nfsd4_create_verf_matches(child, verf)))
+			filp = ERR_PTR(-EEXIST);
 		else
 			filp = dentry_open(&path, oflags, current_cred());
 	} else if (!(oflags & O_CREAT)) {
@@ -289,6 +304,9 @@ static struct file *do_lookup_open(struct path *parent,
 		filp = dentry_create(&path, oflags, mode, current_cred());
 		child = path.dentry;
 	}
+	/* O_NONBLOCK is for break_lease(). Keep it out of the cached file. */
+	if (!IS_ERR(filp))
+		filp->f_flags &= ~O_NONBLOCK;
 	end_creating(child);
 out:
 	if (!want_write_err)
@@ -312,13 +330,13 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		.na_iattr	= iap,
 		.na_seclabel	= &open->op_label,
 	};
-	int oflags = O_CREAT | O_LARGEFILE;
+	int oflags = O_CREAT | O_LARGEFILE | O_NONBLOCK;
 	struct dentry *child = ERR_PTR(-EINVAL);
 	struct path parent = {
 		.mnt = fhp->fh_export->ex_path.mnt,
 		.dentry = fhp->fh_dentry,
 	};
-	__u32 v_mtime, v_atime;
+	u32 verf[2] = {};
 	__be32 status, create_status;
 	int want_write_err;
 
@@ -395,8 +413,6 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		attrs.na_pacl = posix_acl_dup(open->op_pacl);
 	}
 
-	v_mtime = 0;
-	v_atime = 0;
 	if (nfsd4_create_is_exclusive(open->op_createmode)) {
 		u32 *verifier = (u32 *)open->op_verf.data;
 
@@ -405,16 +421,16 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		 * the high bit set, as do xfs filesystems without the
 		 * "bigtime" feature. So just clear the high bits. If this
 		 * is ever changed to use different attrs for storing the
-		 * verifier, then do_open_lookup() will also need to be
-		 * fixed accordingly.
+		 * verifier, then nfsd4_create_verf_matches() will also need to
+		 * be fixed accordingly.
 		 */
-		v_mtime = verifier[0] & 0x7fffffff;
-		v_atime = verifier[1] & 0x7fffffff;
+		verf[0] = verifier[0] & 0x7fffffff;
+		verf[1] = verifier[1] & 0x7fffffff;
 
 		iap->ia_valid |= ATTR_MTIME | ATTR_ATIME |
 				 ATTR_MTIME_SET|ATTR_ATIME_SET;
-		iap->ia_mtime.tv_sec = v_mtime;
-		iap->ia_atime.tv_sec = v_atime;
+		iap->ia_mtime.tv_sec = verf[0];
+		iap->ia_atime.tv_sec = verf[1];
 		iap->ia_mtime.tv_nsec = 0;
 		iap->ia_atime.tv_nsec = 0;
 	}
@@ -428,7 +444,9 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				       &QSTR_LEN(open->op_fname,
 						 open->op_fnamelen),
 				       oflags,
-				       open->op_iattr.ia_mode);
+				       open->op_iattr.ia_mode,
+				       nfsd4_create_is_exclusive(open->op_createmode) ?
+				       verf : NULL);
 	if (IS_ERR(open->op_filp)) {
 		int hosterr = PTR_ERR(open->op_filp);
 
@@ -456,9 +474,7 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	if (!open->op_created &&
 	    nfsd4_create_is_exclusive(open->op_createmode) &&
-	    inode_get_mtime_sec(d_inode(child)) == v_mtime &&
-	    inode_get_atime_sec(d_inode(child)) == v_atime &&
-	    d_inode(child)->i_size == 0)
+	    nfsd4_create_verf_matches(child, verf))
 		open->op_created = true;
 
 	if (!open->op_created) {
