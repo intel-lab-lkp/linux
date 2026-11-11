@@ -146,11 +146,6 @@ static struct regmap *exynos_chipid_get_efuse_regmap(struct platform_device *pde
 	return devm_regmap_init_mmio_clk(&pdev->dev, "pclk", base, &reg_config);
 }
 
-static void exynos_chipid_unregister_soc(void *data)
-{
-	soc_device_unregister(data);
-}
-
 static int exynos_chipid_probe(struct platform_device *pdev)
 {
 	const struct exynos_chipid_variant *drv_data;
@@ -200,15 +195,10 @@ static int exynos_chipid_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, -ENODEV, "Unknown SoC\n");
 
 	/* please note that the actual registration will be deferred */
-	soc_dev = soc_device_register(soc_dev_attr);
+	soc_dev = devm_soc_device_register(dev, soc_dev_attr);
 	if (IS_ERR(soc_dev))
 		return dev_err_probe(dev, PTR_ERR(soc_dev),
 				     "failed to register to the soc interface\n");
-
-	ret = devm_add_action_or_reset(dev, exynos_chipid_unregister_soc,
-				       soc_dev);
-	if (ret)
-		return dev_err_probe(dev, ret, "failed to add devm action\n");
 
 	ret = exynos_asv_init(dev, regmap);
 	if (ret)
