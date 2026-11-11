@@ -735,6 +735,9 @@ static void clear_closid_rmid(int cpu)
 	state->cur_closid = RESCTRL_RESERVED_CLOSID;
 	state->cur_rmid = RESCTRL_RESERVED_RMID;
 	wrmsrq(MSR_IA32_PQR_ASSOC, val.q);
+
+	if (boot_cpu_has(X86_FEATURE_PLZA))
+		wrmsrq(MSR_IA32_PQR_PLZA_ASSOC, 0);
 }
 
 static int resctrl_arch_online_cpu(unsigned int cpu)

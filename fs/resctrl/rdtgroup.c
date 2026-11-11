@@ -416,6 +416,17 @@ static int rdtgroup_kmode_cpus_show(struct kernfs_open_file *of,
 	return ret;
 }
 
+static void resctrl_configure_kmode_global(const struct cpumask *mask,
+					   struct rdtgroup *rdtgrp,
+					   bool enable)
+{
+	resctrl_arch_configure_kmode_global(mask, rdtgrp->closid,
+					    resctrl_kmode.ctrl == KMODE_ASSIGN,
+					    rdtgrp->mon.rmid,
+					    resctrl_kmode.mon == KMODE_ASSIGN,
+					    enable);
+}
+
 /*
  * Update the PGR_ASSOC MSR on all cpus in @cpu_mask,
  *
@@ -1121,6 +1132,48 @@ static int resctrl_kernel_mode_show(struct kernfs_open_file *of,
 	info_kn_unlock(of->kn);
 
 	return 0;
+}
+
+/*
+ * resctrl_kmode_global_online_cpu() - Program kernel mode association for @cpu
+ * @cpu: CPU that has just been brought online
+ *
+ * When RESCTRL_GLOBAL_ENABLE_PER_CPU is active, add @cpu to the active kernel
+ * mode and program the corresponding CLOSID and/or RMID association.
+ */
+static void resctrl_kmode_global_online_cpu(unsigned int cpu)
+{
+	struct rdtgroup *rdtgrp = resctrl_kmode.rdtgrp;
+
+	if (resctrl_kmode.active != RESCTRL_GLOBAL_ENABLE_PER_CPU || !rdtgrp)
+		return;
+
+	resctrl_configure_kmode_global(cpumask_of(cpu), rdtgrp, true);
+
+	cpumask_set_cpu(cpu, &rdtgrp->kmode_cpu_mask);
+}
+
+/*
+ * resctrl_kmode_global_offline_cpu() - Clear kernel mode association for @cpu
+ * @cpu: CPU being taken offline.
+ *
+ * When RESCTRL_GLOBAL_ENABLE_PER_CPU is active and @cpu is in kmode_cpu_mask,
+ * the association is disabled on @cpu and @cpu is removed from that mask.
+ * A CPU outside the mask is left unchanged.
+ */
+static void resctrl_kmode_global_offline_cpu(unsigned int cpu)
+{
+	struct rdtgroup *rdtgrp = resctrl_kmode.rdtgrp;
+
+	if (resctrl_kmode.active != RESCTRL_GLOBAL_ENABLE_PER_CPU || !rdtgrp)
+		return;
+
+	if (!cpumask_test_cpu(cpu, &rdtgrp->kmode_cpu_mask))
+		return;
+
+	cpumask_clear_cpu(cpu, &rdtgrp->kmode_cpu_mask);
+
+	resctrl_configure_kmode_global(cpumask_of(cpu), rdtgrp, false);
 }
 
 void *rdt_kn_parent_priv(struct kernfs_node *kn)
@@ -4885,6 +4938,7 @@ void resctrl_online_cpu(unsigned int cpu)
 	mutex_lock(&rdtgroup_mutex);
 	/* The CPU is set in default rdtgroup after online. */
 	cpumask_set_cpu(cpu, &rdtgroup_default.cpu_mask);
+	resctrl_kmode_global_online_cpu(cpu);
 	mutex_unlock(&rdtgroup_mutex);
 }
 
@@ -4927,6 +4981,8 @@ void resctrl_offline_cpu(unsigned int cpu)
 			break;
 		}
 	}
+
+	resctrl_kmode_global_offline_cpu(cpu);
 
 	if (!l3->mon_capable)
 		goto out_unlock;
