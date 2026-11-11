@@ -78,7 +78,7 @@ static int rz_sysc_soc_init(struct rz_sysc *sysc, const struct of_device_id *mat
 			 soc_dev_attr->family, soc_dev_attr->soc_id, soc_dev_attr->revision);
 	}
 
-	soc_dev = soc_device_register(soc_dev_attr);
+	soc_dev = devm_soc_device_register(sysc->dev, soc_dev_attr);
 	if (IS_ERR(soc_dev))
 		return PTR_ERR(soc_dev);
 
