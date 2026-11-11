@@ -600,11 +600,24 @@ nf_nat_ipv4_pre_routing(void *priv, struct sk_buff *skb,
 #ifdef CONFIG_XFRM
 static int nf_xfrm_me_harder(struct net *net, struct sk_buff *skb, unsigned int family)
 {
+	const struct netns_xfrm *xfrm = &net->xfrm;
 	struct sock *sk = skb->sk;
 	struct dst_entry *dst;
 	unsigned int hh_len;
 	struct flowi fl;
 	int err;
+
+	/* Without any outbound policy, global or per socket, and with the
+	 * default outbound policy accepting, the lookup below cannot change
+	 * the route unless the dst is already a bundle: skip it, and the
+	 * session decode it needs.
+	 */
+	if (!READ_ONCE(xfrm->policy_count[XFRM_POLICY_OUT]) &&
+	    !READ_ONCE(xfrm->policy_count[XFRM_POLICY_MAX + XFRM_POLICY_OUT]) &&
+	    READ_ONCE(xfrm->policy_default[XFRM_POLICY_OUT]) ==
+	    XFRM_USERPOLICY_ACCEPT &&
+	    !skb_dst(skb)->xfrm)
+		return 0;
 
 	err = xfrm_decode_session(net, skb, &fl, family);
 	if (err < 0)
