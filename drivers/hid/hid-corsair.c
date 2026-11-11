@@ -507,6 +507,7 @@ static int k90_init_macro_functions(struct hid_device *dev)
 
 fail_sysfs:
 	k90->record_led.removed = true;
+	cancel_work_sync(&k90->record_led.work);
 	led_classdev_unregister(&k90->record_led.cdev);
 	cancel_work_sync(&k90->record_led.work);
 fail_record_led:
