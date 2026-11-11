@@ -218,7 +218,7 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 	of_property_read_string(node, "model", &soc_dev_attr->machine);
 	of_node_put(node);
 
-	soc_dev = soc_device_register(soc_dev_attr);
+	soc_dev = devm_soc_device_register(dev, soc_dev_attr);
 	if (IS_ERR(soc_dev)) {
 		ret = PTR_ERR(soc_dev);
 		goto err_free_rev;
