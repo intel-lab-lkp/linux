@@ -381,29 +381,45 @@ enum cpc_ffh_ctr_id {
 	CPC_FFH_CTR_CONST = 0x1,
 };
 
-static void cpu_read_corecnt(void *val)
+static inline void cpu_read_corecnt(void *val)
 {
-	/*
-	 * A value of 0 can be returned if the current CPU does not support AMUs
-	 * or if the counter is disabled for this CPU. A return value of 0 at
-	 * counter read is properly handled as an error case by the users of the
-	 * counter.
-	 */
-	*(u64 *)val = this_cpu_has_cap(ARM64_WORKAROUND_BROKEN_AMU_CORECNT) ?
-		0UL : read_corecnt();
+	*(u64 *)val = read_corecnt();
 }
 
-static void cpu_read_constcnt(void *val)
+static void cpu_try_read_corecnt(void *val)
 {
-	/*
-	 * Return 0 if the current CPU is affected by a HW erratum.
-	 * A value of 0 is also returned if the current CPU does not
-	 * support AMUs or if the counter is disabled. A return
-	 * value of 0 at counter read is properly handled as an error
-	 * case by the users of the counter.
-	 */
-	*(u64 *)val = this_cpu_has_cap(ARM64_WORKAROUND_BROKEN_AMU_CONSTCNT) ?
-		      0UL : read_constcnt();
+	if (!this_cpu_has_cap(ARM64_WORKAROUND_BROKEN_AMU_CORECNT)) {
+		cpu_read_corecnt(val);
+	} else {
+		/*
+		 * A value of 0 can be returned if the current CPU does not support AMUs
+		 * or if the counter is disabled for this CPU. A return value of 0 at
+		 * counter read is properly handled as an error case by the users of the
+		 * counter.
+		 */
+		*(u64 *)val = 0UL;
+	}
+}
+
+static inline void cpu_read_constcnt(void *val)
+{
+	*(u64 *)val = read_constcnt();
+}
+
+static void cpu_try_read_constcnt(void *val)
+{
+	if (!this_cpu_has_cap(ARM64_WORKAROUND_BROKEN_AMU_CONSTCNT)) {
+		cpu_read_constcnt(val);
+	} else {
+		/*
+		 * Return 0 if the current CPU is affected by a HW erratum.
+		 * A value of 0 is also returned if the current CPU does not
+		 * support AMUs or if the counter is disabled. A return
+		 * value of 0 at counter read is properly handled as an error
+		 * case by the users of the counter.
+		 */
+		*(u64 *)val = 0UL;
+	}
 }
 
 static inline
@@ -461,14 +477,20 @@ static void amu_read_core_const_ctrs(void *val)
 {
 	struct amu_ffh_ctrs *ctrs = val;
 
-	/*
-	 * cpu_read_constcnt() incurs slight latency due to the
-	 * ARM64_WORKAROUND_BROKEN_AMU_CONSTCNT check.
-	 * Read it first to minimize the sampling skew between the const
-	 * and core counters.
-	 */
-	cpu_read_constcnt(&ctrs->constcnt);
 	cpu_read_corecnt(&ctrs->corecnt);
+	cpu_read_constcnt(&ctrs->constcnt);
+
+	/*
+	 * Return 0 if the current CPU is affected by a HW erratum.
+	 * A value of 0 is also returned if the current CPU does not
+	 * support AMUs or if the counter is disabled. A return
+	 * value of 0 at counter read is properly handled as an error
+	 * case by the users of the counter.
+	 */
+	if (this_cpu_has_cap(ARM64_WORKAROUND_BROKEN_AMU_CORECNT))
+		ctrs->corecnt = 0UL;
+	if (this_cpu_has_cap(ARM64_WORKAROUND_BROKEN_AMU_CONSTCNT))
+		ctrs->constcnt = 0UL;
 }
 
 static bool cpc_ffh_reg_valid(const struct cpc_reg *reg)
@@ -543,10 +565,10 @@ int cpc_read_ffh(int cpu, struct cpc_reg *reg, u64 *val)
 
 	switch ((u64)reg->address) {
 	case CPC_FFH_CTR_CORE:
-		ret = counters_read_on_cpu(cpu, cpu_read_corecnt, val);
+		ret = counters_read_on_cpu(cpu, cpu_try_read_corecnt, val);
 		break;
 	case CPC_FFH_CTR_CONST:
-		ret = counters_read_on_cpu(cpu, cpu_read_constcnt, val);
+		ret = counters_read_on_cpu(cpu, cpu_try_read_constcnt, val);
 		break;
 	}
 
