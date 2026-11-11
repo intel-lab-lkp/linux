@@ -1516,7 +1516,7 @@ static const struct of_device_id dt_match[] = {
 MODULE_DEVICE_TABLE(of, dt_match);
 
 static const struct dev_pm_ops pvr_pm_ops = {
-	RUNTIME_PM_OPS(pvr_power_device_suspend, pvr_power_device_resume, pvr_power_device_idle)
+	RUNTIME_PM_OPS(pvr_power_device_suspend, pvr_power_device_resume, NULL)
 };
 
 static struct platform_driver pvr_driver = {

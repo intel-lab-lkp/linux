@@ -378,6 +378,18 @@ pvr_power_device_suspend(struct device *dev)
 	if (!drm_dev_enter(drm_dev, &idx))
 		return -EIO;
 
+	if (READ_ONCE(pvr_dev->fw_dev.initialised) && !pvr_power_is_idle(pvr_dev)) {
+		/*
+		 * The firmware has not drained the GPU yet. Refresh last_busy so
+		 * the PM core reschedules the autosuspend and retries this callback
+		 * until the firmware becomes idle.
+		 */
+		pm_runtime_mark_last_busy(dev);
+		drm_dev_exit(idx);
+
+		return -EBUSY;
+	}
+
 	if (READ_ONCE(pvr_dev->fw_dev.initialised)) {
 		err = pvr_power_fw_disable(pvr_dev, false, true);
 		if (err)
@@ -425,16 +437,6 @@ err_drm_dev_exit:
 	drm_dev_exit(idx);
 
 	return err;
-}
-
-int
-pvr_power_device_idle(struct device *dev)
-{
-	struct platform_device *plat_dev = to_platform_device(dev);
-	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
-	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
-
-	return pvr_power_is_idle(pvr_dev) ? 0 : -EBUSY;
 }
 
 static int
