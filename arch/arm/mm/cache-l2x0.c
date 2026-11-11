@@ -1757,6 +1757,34 @@ static const struct of_device_id l2x0_ids[] __initconst = {
 	{}
 };
 
+/*
+ * The device tree marks the cache as disabled.  Leave it off; if the
+ * firmware enabled it, clean, invalidate and disable it rather than leave
+ * it running without any cache maintenance.
+ */
+static void __init l2c_of_disabled(void __iomem *base)
+{
+	u32 cache_id, aux;
+	unsigned int sync;
+
+	if (!(readl_relaxed(base + L2X0_CTRL) & L2X0_CTRL_EN)) {
+		pr_info("L2C: disabled by the device tree\n");
+		return;
+	}
+
+	pr_warn("L2C: disabled by the device tree but enabled by the firmware, disabling it\n");
+	cache_id = readl_relaxed(base + L2X0_CACHE_ID);
+	aux = readl_relaxed(base + L2X0_AUX_CTRL);
+	sync = (cache_id & L2X0_CACHE_ID_PART_MASK) == AURORA_CACHE_ID ?
+		AURORA_SYNC_REG : L2X0_CACHE_SYNC;
+	l2x0_way_mask = (1 << l2c_num_ways(cache_id, aux)) - 1;
+	__l2c_op_way(base + L2X0_CLEAN_INV_WAY);
+	writel_relaxed(0, base + sync);
+	l2c_wait_mask(base + sync, 1);
+	l2c_write_sec(0, base, L2X0_CTRL);
+	dsb(st);
+}
+
 int __init l2x0_of_init(u32 aux_val, u32 aux_mask)
 {
 	const struct l2c_init_data *data;
@@ -1778,6 +1806,13 @@ int __init l2x0_of_init(u32 aux_val, u32 aux_mask)
 		return -ENOMEM;
 
 	l2x0_saved_regs.phy_base = res.start;
+
+	if (!of_device_is_available(np)) {
+		l2c_of_disabled(l2x0_base);
+		iounmap(l2x0_base);
+		l2x0_base = NULL;
+		return -ENODEV;
+	}
 
 	data = of_match_node(l2x0_ids, np)->data;
 
