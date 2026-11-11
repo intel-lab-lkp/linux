@@ -1317,6 +1317,28 @@ static const struct vfio_migration_ops vfio_ap_migration_ops = {
 };
 
 /**
+ * vfio_ap_setup_vfio_device_migration:
+ *
+ * Plug the object containing the function pointers to the migration callbacks
+ * used to facilitate migration into the vfio device and set the flags
+ * indicating migration states STOP, STOP_COPY and RESUMING are supported.
+ *
+ * @matrix_mdev: pointer to object containing the vfio device (vdev)
+ */
+void vfio_ap_setup_vfio_device_migration(struct ap_matrix_mdev *matrix_mdev)
+{
+	/*
+	 * Live guest migration is not supported for SE guests, so there is no
+	 * need to initialize the migration capabilities.
+	 */
+	if (ap_is_se_guest())
+		return;
+
+	matrix_mdev->vdev.migration_flags = VFIO_MIGRATION_STOP_COPY;
+	matrix_mdev->vdev.mig_ops = &vfio_ap_migration_ops;
+}
+
+/**
  * vfio_ap_init_migration_data - initialize migration data and functions
  *
  * @matrix_mdev: pointer to object containing the mdev state
