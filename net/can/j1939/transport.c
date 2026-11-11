@@ -1853,14 +1853,42 @@ static void j1939_xtp_rx_dpo_one(struct j1939_session *session,
 				 struct sk_buff *skb)
 {
 	const u8 *dat = skb->data;
+	unsigned int dpo;
 
 	if (j1939_xtp_rx_cmd_bad_pgn(session, skb))
 		return;
 
 	netdev_dbg(session->priv->ndev, "%s: 0x%p\n", __func__, session);
 
+	dpo = j1939_etp_ctl_to_packet(dat);
+
+	/* EDPO is peer controlled.  j1939_xtp_rx_dat_one() places data at
+	 * "dat[0] - 1 + pkt.dpo", so a value at or past pkt.total moves
+	 * pkt.dpo past the reassembled buffer, and the ETP completion path
+	 * then looks up an offset no queued skb covers.
+	 *
+	 * This bounds the receiver-side writer only.  j1939_session_tx_dpo()
+	 * copies pkt.tx_acked, which comes from an ETP.CM_CTS packet number
+	 * that the responder controls, and 4/4 bounds it where it is parsed.
+	 */
+	if (dpo >= session->pkt.total) {
+		netdev_warn(session->priv->ndev,
+			    "%s: 0x%p: EDPO %u out of range (total %u), aborting\n",
+			    __func__, session, dpo, session->pkt.total);
+		j1939_session_timers_cancel(session);
+		/* The transmitter only sees this on the echo of an EDPO it built
+		 * from an oversized ETP.CM_CTS packet number, so it is the
+		 * responder's CTS that is too big, not the EDPO offset.
+		 */
+		j1939_session_cancel(session,
+				     session->transmission ?
+				     J1939_XTP_ABORT_ECTS_TOO_BIG :
+				     J1939_XTP_ABORT_BAD_EDPO_OFFSET);
+		return;
+	}
+
 	/* transmitted without problems */
-	session->pkt.dpo = j1939_etp_ctl_to_packet(skb->data);
+	session->pkt.dpo = dpo;
 	session->last_cmd = dat[0];
 	j1939_tp_set_rxtimeout(session, 750);
 
