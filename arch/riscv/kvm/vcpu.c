@@ -650,7 +650,6 @@ csr_restore_done:
 	kvm_riscv_vcpu_guest_fp_restore(&vcpu->arch.guest_context,
 					vcpu->arch.isa);
 	get_cpu_vector_context();
-	kvm_riscv_vcpu_host_vector_save(&vcpu->arch.host_context);
 	kvm_riscv_vcpu_guest_vector_restore(&vcpu->arch.guest_context,
 					    vcpu->arch.isa);
 	put_cpu_vector_context();
@@ -677,7 +676,7 @@ void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 	get_cpu_vector_context();
 	kvm_riscv_vcpu_guest_vector_save(&vcpu->arch.guest_context,
 					 vcpu->arch.isa);
-	kvm_riscv_vcpu_host_vector_restore(&vcpu->arch.host_context);
+	kvm_riscv_vcpu_host_vector_restore();
 	put_cpu_vector_context();
 
 	if (kvm_riscv_nacl_available()) {

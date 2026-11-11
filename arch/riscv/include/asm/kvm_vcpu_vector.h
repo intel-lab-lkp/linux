@@ -35,8 +35,7 @@ void kvm_riscv_vcpu_guest_vector_save(struct kvm_cpu_context *cntx,
 				      unsigned long *isa);
 void kvm_riscv_vcpu_guest_vector_restore(struct kvm_cpu_context *cntx,
 					 unsigned long *isa);
-void kvm_riscv_vcpu_host_vector_save(struct kvm_cpu_context *cntx);
-void kvm_riscv_vcpu_host_vector_restore(struct kvm_cpu_context *cntx);
+void kvm_riscv_vcpu_host_vector_restore(void);
 int kvm_riscv_vcpu_alloc_vector_context(struct kvm_vcpu *vcpu);
 void kvm_riscv_vcpu_free_vector_context(struct kvm_vcpu *vcpu);
 void kvm_riscv_register_vctx_callback(void (*func)(void));
@@ -77,11 +76,7 @@ static inline void kvm_riscv_vcpu_guest_vector_restore(struct kvm_cpu_context *c
 {
 }
 
-static inline void kvm_riscv_vcpu_host_vector_save(struct kvm_cpu_context *cntx)
-{
-}
-
-static inline void kvm_riscv_vcpu_host_vector_restore(struct kvm_cpu_context *cntx)
+static inline void kvm_riscv_vcpu_host_vector_restore(void)
 {
 }
 
