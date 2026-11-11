@@ -5,6 +5,7 @@ config IDPF
 	tristate "Intel(R) Infrastructure Data Path Function Support"
 	depends on PCI_MSI
 	depends on PTP_1588_CLOCK_OPTIONAL
+	select AUXILIARY_BUS
 	select DIMLIB
 	select LIBIE_CP
 	select LIBETH_XDP
