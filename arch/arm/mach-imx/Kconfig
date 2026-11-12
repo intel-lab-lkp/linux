@@ -33,7 +33,7 @@ config HAVE_IMX_MMDC
 
 config HAVE_IMX_SRC
 	def_bool y if SMP
-	select ARCH_HAS_RESET_CONTROLLER
+	select RESET_CONTROLLER
 
 if ARCH_MULTI_V6
 

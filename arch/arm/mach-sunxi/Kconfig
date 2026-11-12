@@ -2,7 +2,6 @@
 menuconfig ARCH_SUNXI
 	bool "Allwinner SoCs"
 	depends on (CPU_LITTLE_ENDIAN && ARCH_MULTI_V5) || ARCH_MULTI_V7
-	select ARCH_HAS_RESET_CONTROLLER
 	select CLKSRC_MMIO
 	select GPIOLIB
 	select PINCTRL
