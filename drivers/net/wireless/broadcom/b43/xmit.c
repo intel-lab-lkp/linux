@@ -1160,7 +1160,27 @@ bool b43_fill_txstatus_report(struct b43_wldev *dev,
 			frame_success = false;
 		}
 	}
-	if (status->frame_count == 0) {
+	if (report->flags & IEEE80211_TX_CTL_AMPDU) {
+		/*
+		 * minstrel_ht ignores session frames without this; one report
+		 * per MPDU
+		 */
+		report->flags |= IEEE80211_TX_STAT_AMPDU;
+		report->status.ampdu_len = 1;
+		report->status.ampdu_ack_len = status->acked ? 1 : 0;
+	}
+	if ((report->flags & IEEE80211_TX_CTL_AMPDU) &&
+	    (report->status.rates[0].flags &
+	     (IEEE80211_TX_RC_MCS | IEEE80211_TX_RC_VHT_MCS))) {
+		/* Sent with two rate blocks: attempts at each */
+		report->status.rates[0].count = status->frame_count;
+		if (status->fb_count && report->status.rates[1].idx >= 0 &&
+		    (report->status.rates[1].flags &
+		     (IEEE80211_TX_RC_MCS | IEEE80211_TX_RC_VHT_MCS)))
+			report->status.rates[1].count = status->fb_count;
+		else
+			report->status.rates[1].idx = -1;
+	} else if (status->frame_count == 0) {
 		/* The frame was not transmitted at all. */
 		report->status.rates[0].count = 0;
 	} else if (status->rts_count > dev->wl->hw->conf.short_frame_max_tx_count) {

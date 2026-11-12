@@ -412,9 +412,11 @@ static inline u8 b43_kidx_to_raw(struct b43_wldev *dev, u8 firmware_kidx)
  * The structure is placed in (struct ieee80211_tx_info *)->rate_driver_data
  *
  * @bouncebuffer: DMA Bouncebuffer (if used)
+ * @requeues: times the frame was put back on the ring (AC-PHY A-MPDU)
  */
 struct b43_private_tx_info {
 	void *bouncebuffer;
+	u8 requeues;
 };
 
 static inline struct b43_private_tx_info *

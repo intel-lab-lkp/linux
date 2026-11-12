@@ -34,6 +34,9 @@
  * into separate slots. */
 #define TX_SLOTS_PER_FRAME	2
 
+/* Times an unacknowledged A-MPDU session frame is put back on the ring */
+#define B43_AC_AMPDU_REQUEUE	4
+
 static u32 b43_dma_address(struct b43_dma *dma, dma_addr_t dmaaddr,
 			   enum b43_addrtype addrtype)
 {
@@ -1342,6 +1345,7 @@ int b43_dma_tx(struct b43_wldev *dev, struct sk_buff *skb)
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 
 	hdr = (struct ieee80211_hdr *)skb->data;
+	b43_get_priv_tx_info(info)->requeues = 0;
 	if (info->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM) {
 		/* The multicast ring will be sent after the DTIM */
 		ring = dev->dma.tx_ring_mcast;
@@ -1430,6 +1434,7 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 	static const struct b43_txstatus fake; /* filled with 0 */
 	const struct b43_txstatus *txstat;
 	int slot, firstused;
+	struct sk_buff *requeue = NULL;
 	bool frame_succeed;
 	int skip;
 	static u8 err_out1;
@@ -1532,6 +1537,29 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 			else
 				txstat = status;
 
+			/* A session frame the microcode gave up on goes back
+			 * on the ring, as the stock driver requeues it; the
+			 * block ack window lets it follow later frames.
+			 */
+			if (!skip && !txstat->acked &&
+			    (info->flags & IEEE80211_TX_CTL_AMPDU) &&
+			    !(info->flags & IEEE80211_TX_CTL_NO_ACK)) {
+				struct b43_private_tx_info *pi =
+					b43_get_priv_tx_info(info);
+
+				if (pi->requeues < B43_AC_AMPDU_REQUEUE) {
+					struct ieee80211_hdr *hdr =
+						(void *)meta->skb->data;
+
+					pi->requeues++;
+					hdr->frame_control |= cpu_to_le16(
+						IEEE80211_FCTL_RETRY);
+					requeue = meta->skb;
+					meta->skb = B43_DMA_PTR_POISON;
+					ring->used_slots--;
+					break;
+				}
+			}
 			frame_succeed = b43_fill_txstatus_report(dev, info,
 								 txstat);
 #ifdef CONFIG_B43_DEBUG
@@ -1569,6 +1597,26 @@ void b43_dma_handle_txstatus(struct b43_wldev *dev,
 		slot = next_slot(ring, slot);
 		if (skip > 0)
 			--skip;
+	}
+	if (requeue) {
+		if (dma_tx_fragment(ring, requeue)) {
+			struct ieee80211_tx_info *info =
+				IEEE80211_SKB_CB(requeue);
+
+			b43_fill_txstatus_report(dev, info, status);
+			ieee80211_tx_status_skb(dev->wl->hw, requeue);
+		} else if (free_slots(ring) < TX_SLOTS_PER_FRAME) {
+			/* The requeued frame took the slots this status freed:
+			 * the ring is still full, keep the queue stopped.
+			 */
+			if (!ring->stopped) {
+				b43_stop_queue(dev, ring->queue_prio);
+				dev->wl->tx_queue_stopped[ring->queue_prio] =
+					true;
+				ring->stopped = true;
+			}
+			return;
+		}
 	}
 	if (ring->stopped) {
 		B43_WARN_ON(free_slots(ring) < TX_SLOTS_PER_FRAME);
