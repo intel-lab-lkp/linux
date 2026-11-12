@@ -8,6 +8,7 @@
 #define _ROCKCHIP_DRM_VOP2_H
 
 #include <linux/regmap.h>
+#include <drm/drm_atomic.h>
 #include <drm/drm_modes.h>
 #include <dt-bindings/soc/rockchip,vop2.h>
 #include "rockchip_drm_drv.h"
@@ -29,6 +30,7 @@
 #define VOP2_FEATURE_HAS_VO1_GRF	BIT(2)
 #define VOP2_FEATURE_HAS_VOP_GRF	BIT(3)
 #define VOP2_FEATURE_HAS_SYS_PMU	BIT(4)
+#define VOP2_FEATURE_AXI_BALANCE	BIT(5)
 
 #define WIN_FEATURE_AFBDC		BIT(0)
 #define WIN_FEATURE_CLUSTER		BIT(1)
@@ -221,6 +223,40 @@ struct vop2_win {
 	enum drm_plane_type type;
 };
 
+/**
+ * struct vop2_axi_win - AXI read port use of a window
+ * @load: estimated fetch rate in bytes/s, 0 if the window doesn't fetch
+ * @bus: AXI read port the window fetches through, or last fetched through
+ * @active: the window fetches
+ */
+struct vop2_axi_win {
+	u64 load;
+	u8 bus;
+	bool active;
+};
+
+/**
+ * struct vop2_axi_state - AXI read port assignment of all windows
+ * @base: private object state
+ * @win: one entry per window, indexed like &vop2.win
+ */
+struct vop2_axi_state {
+	struct drm_private_state base;
+	struct vop2_axi_win win[];
+};
+
+/**
+ * struct vop2_plane_state - plane state of a window
+ * @base: DRM plane state
+ * @axi_bus: AXI read port the window fetches through, the default one of
+ *	the window unless the atomic check assigned one
+ *	(VOP2_FEATURE_AXI_BALANCE)
+ */
+struct vop2_plane_state {
+	struct drm_plane_state base;
+	u8 axi_bus;
+};
+
 struct vop2_video_port_data {
 	unsigned int id;
 	u32 feature;
@@ -355,6 +391,12 @@ struct vop2 {
 	 * take effect in sequence.
 	 */
 	struct mutex ovl_lock;
+
+	/**
+	 * @axi_obj: AXI read port assignment of the windows (&struct
+	 * vop2_axi_state), with VOP2_FEATURE_AXI_BALANCE only
+	 */
+	struct drm_private_obj axi_obj;
 
 	/* must be put at the end of the struct */
 	struct vop2_win win[];
