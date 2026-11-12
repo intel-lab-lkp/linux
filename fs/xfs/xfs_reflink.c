@@ -445,14 +445,17 @@ xfs_reflink_fill_cow_hole(
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp;
 	xfs_filblks_t		resaligned;
+	xfs_extlen_t		cowextsz;
 	unsigned int		seq_before = READ_ONCE(ip->i_df.if_seq);
 	unsigned int		dblocks = 0, rblocks = 0;
 	int			nimaps;
 	int			error;
 	bool			found;
 
+retry:
+	cowextsz = xfs_get_cowextsz_hint(ip);
 	resaligned = xfs_aligned_fsb_count(imap->br_startoff,
-		imap->br_blockcount, xfs_get_cowextsz_hint(ip));
+		imap->br_blockcount, cowextsz);
 	if (XFS_IS_REALTIME_INODE(ip)) {
 		dblocks = XFS_DIOSTRAT_SPACE_RES(mp, 0);
 		rblocks = resaligned;
@@ -470,6 +473,15 @@ xfs_reflink_fill_cow_hole(
 		return error;
 
 	*lockmode = XFS_ILOCK_EXCL;
+
+	/*
+	 * A write fault doesn't hold the IOLOCK, so the hint that sized the
+	 * reservation may have changed while we dropped the ILOCK.
+	 */
+	if (cowextsz != xfs_get_cowextsz_hint(ip)) {
+		xfs_trans_cancel(tp);
+		goto retry;
+	}
 
 	/*
 	 * The data fork mapping may have changed while we dropped the ILOCK
