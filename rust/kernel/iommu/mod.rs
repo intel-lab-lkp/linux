@@ -2,6 +2,8 @@
 
 //! Rust support related to IOMMU.
 
+#[cfg(CONFIG_IOMMU_API)]
+pub mod domain;
 pub mod pgtable;
 
 /// Protection flags used with IOMMU mappings.
