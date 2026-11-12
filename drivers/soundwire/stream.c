@@ -1475,21 +1475,26 @@ static int _sdw_prepare_stream(struct sdw_stream_runtime *stream,
 			       bool update_params)
 {
 	struct sdw_master_runtime *m_rt;
+	struct sdw_slave_runtime *s_rt;
+	struct sdw_port_runtime *p_rt;
 	struct sdw_bus *bus;
 	struct sdw_master_prop *prop;
-	struct sdw_bus_params params;
 	int ret;
+
+	/* Pre-pass: snapshot original bus parameters for all masters */
+	list_for_each_entry(m_rt, &stream->master_list, stream_node)
+		m_rt->params_backup = m_rt->bus->params;
 
 	/* Prepare  Master(s) and Slave(s) port(s) associated with stream */
 	list_for_each_entry(m_rt, &stream->master_list, stream_node) {
 		bus = m_rt->bus;
 		prop = &bus->prop;
-		memcpy(&params, &bus->params, sizeof(params));
 
 		/* TODO: Support Asynchronous mode */
 		if ((prop->max_clk_freq % stream->params.rate) != 0) {
 			dev_err(bus->dev, "Async mode not supported\n");
-			return -EINVAL;
+			ret = -EINVAL;
+			goto restore_params;
 		}
 
 		if (update_params) {
@@ -1540,7 +1545,34 @@ static int _sdw_prepare_stream(struct sdw_stream_runtime *stream,
 	return ret;
 
 restore_params:
-	memcpy(&bus->params, &params, sizeof(params));
+	/*
+	 * Revert all managers to their snapshotted original parameters.
+	 * Any manager that was not modified will safely revert to its own original state.
+	 */
+	list_for_each_entry(m_rt, &stream->master_list, stream_node) {
+		enum sdw_reg_bank curr_bank = m_rt->bus->params.curr_bank;
+		enum sdw_reg_bank next_bank = m_rt->bus->params.next_bank;
+
+		m_rt->bus->params = m_rt->params_backup;
+		/* The hardware bank may already have been switched */
+		m_rt->bus->params.curr_bank = curr_bank;
+		m_rt->bus->params.next_bank = next_bank;
+
+		/*
+		 * The lane_used_bandwidth of this stream was reverted above, so clear its
+		 * lanes too; a stale lane would be used by other streams' port computation.
+		 */
+		if (!update_params)
+			continue;
+
+		list_for_each_entry(p_rt, &m_rt->port_list, port_node)
+			p_rt->lane = 0;
+
+		list_for_each_entry(s_rt, &m_rt->slave_rt_list, m_rt_node)
+			list_for_each_entry(p_rt, &s_rt->port_list, port_node)
+				p_rt->lane = 0;
+	}
+
 	return ret;
 }
 
