@@ -295,13 +295,13 @@ static void rsi_rx_done_handler(struct urb *urb)
 	status = 0;
 
 out:
-	if (rsi_rx_urb_submit(dev->priv, rx_cb->ep_num, GFP_ATOMIC))
-		rsi_dbg(ERR_ZONE, "%s: Failed in urb submission", __func__);
-
 	if (status) {
 		dev_kfree_skb(rx_cb->rx_skb);
 		rx_cb->rx_skb = NULL;
 	}
+
+	if (rsi_rx_urb_submit(dev->priv, rx_cb->ep_num, GFP_ATOMIC))
+		rsi_dbg(ERR_ZONE, "%s: Failed in urb submission", __func__);
 }
 
 static void rsi_rx_urb_kill(struct rsi_hw *adapter, u8 ep_num)
