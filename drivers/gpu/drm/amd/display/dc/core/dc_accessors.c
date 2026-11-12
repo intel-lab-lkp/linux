@@ -57,6 +57,12 @@ const struct dc_config *dc_get_config(const struct dc *dc)
 	return &dc->config;
 }
 
+void dc_set_allow_edp_hotplug_detection(struct dc *dc,
+		enum dc_hpd_enable_select hpd_select)
+{
+	dc->config.allow_edp_hotplug_detection = hpd_select;
+}
+
 const struct dc_debug_options *dc_get_debug_options(const struct dc *dc)
 {
 	return &dc->debug;

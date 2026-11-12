@@ -1028,9 +1028,9 @@ static int replay_capability_show(struct seq_file *m, void *data)
 		struct dc *dc = link->ctx->dc;
 
 		sink_support_replay = amdgpu_dm_link_supports_replay(link, aconnector);
-		if (dc->ctx->dmub_srv && dc->ctx->dmub_srv->dmub)
+		if (dc_get_ctx(dc)->dmub_srv && dc_get_ctx(dc)->dmub_srv->dmub)
 			driver_support_replay =
-				(bool)dc->ctx->dmub_srv->dmub->feature_caps.replay_supported;
+				(bool)dc_get_ctx(dc)->dmub_srv->dmub->feature_caps.replay_supported;
 	}
 
 	seq_printf(m, "Sink support: %s\n", str_yes_no(sink_support_replay));
@@ -1295,7 +1295,7 @@ static int max_downscale_src_width_show(struct seq_file *m, void *unused)
 	if (!link)
 		return -ENODEV;
 
-	seq_printf(m, "%d\n", link->dc->debug.max_downscale_src_width);
+	seq_printf(m, "%d\n", dc_get_debug_options(link->dc)->max_downscale_src_width);
 
 	return 0;
 }
@@ -1313,7 +1313,7 @@ static int odm_combine_segments_show(struct seq_file *m, void *unused)
 	int i, segments = -EOPNOTSUPP;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == link)
 			break;
@@ -1594,7 +1594,7 @@ static ssize_t dp_dsc_clock_en_read(struct file *f, char __user *buf,
 		return -ENOMEM;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -1696,7 +1696,7 @@ static ssize_t dp_dsc_clock_en_write(struct file *f, const char __user *buf,
 	}
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -1780,7 +1780,7 @@ static ssize_t dp_dsc_slice_width_read(struct file *f, char __user *buf,
 		return -ENOMEM;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -1880,7 +1880,7 @@ static ssize_t dp_dsc_slice_width_write(struct file *f, const char __user *buf,
 	}
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -1964,7 +1964,7 @@ static ssize_t dp_dsc_slice_height_read(struct file *f, char __user *buf,
 		return -ENOMEM;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -2064,7 +2064,7 @@ static ssize_t dp_dsc_slice_height_write(struct file *f, const char __user *buf,
 	}
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -2144,7 +2144,7 @@ static ssize_t dp_dsc_bits_per_pixel_read(struct file *f, char __user *buf,
 		return -ENOMEM;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -2241,7 +2241,7 @@ static ssize_t dp_dsc_bits_per_pixel_write(struct file *f, const char __user *bu
 	}
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -2319,7 +2319,7 @@ static ssize_t dp_dsc_pic_width_read(struct file *f, char __user *buf,
 		return -ENOMEM;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -2373,7 +2373,7 @@ static ssize_t dp_dsc_pic_height_read(struct file *f, char __user *buf,
 		return -ENOMEM;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -2442,7 +2442,7 @@ static ssize_t dp_dsc_chunk_size_read(struct file *f, char __user *buf,
 		return -ENOMEM;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -2511,7 +2511,7 @@ static ssize_t dp_dsc_slice_bpg_offset_read(struct file *f, char __user *buf,
 		return -ENOMEM;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &aconnector->dc_link->dc->current_state->res_ctx.pipe_ctx[i];
+		pipe_ctx = &dc_get_current_state(aconnector->dc_link->dc)->res_ctx.pipe_ctx[i];
 		if (pipe_ctx->stream &&
 		    pipe_ctx->stream->link == aconnector->dc_link &&
 		    pipe_ctx->stream->sink &&
@@ -2701,15 +2701,15 @@ static int ips_status_show(struct seq_file *m, void *unused)
 	struct dc *dc = adev->dm.dc;
 	struct dc_dmub_srv *dc_dmub_srv;
 
-	seq_printf(m, "IPS config: %d\n", dc->config.disable_ips);
-	seq_printf(m, "Idle optimization: %d\n", dc->idle_optimizations_allowed);
+	seq_printf(m, "IPS config: %d\n", dc_get_config(dc)->disable_ips);
+	seq_printf(m, "Idle optimization: %d\n", dc_is_idle_optimizations_allowed(dc));
 
 	if (adev->dm.idle_workqueue) {
 		seq_printf(m, "Idle workqueue - enabled: %d\n", adev->dm.idle_workqueue->enable);
 		seq_printf(m, "Idle workqueue - running: %d\n", adev->dm.idle_workqueue->running);
 	}
 
-	dc_dmub_srv = dc->ctx->dmub_srv;
+	dc_dmub_srv = dc_get_ctx(dc)->dmub_srv;
 	if (dc_dmub_srv && dc_dmub_srv->dmub) {
 		uint32_t rcg_count, ips1_count, ips2_count;
 		volatile const struct dmub_shared_state_ips_fw *ips_fw =
@@ -2752,7 +2752,7 @@ static int ips_residency_show(struct seq_file *m, void *unused)
 	mutex_lock(&adev->dm.dc_lock);
 
 	mode = IPS_RESIDENCY__IPS1_RCG;
-	if (!dc_dmub_srv_ips_query_residency_info(dc->ctx, panel_inst, &info, mode)) {
+	if (!dc_dmub_srv_ips_query_residency_info(dc_get_ctx(dc), panel_inst, &info, mode)) {
 		seq_printf(m, "ISP query failed\n");
 	} else {
 		unsigned int pct, frac;
@@ -2785,7 +2785,7 @@ static int ips_residency_cntl_set(void *data, u64 val)
 	int ret = 0;
 
 	mutex_lock(&adev->dm.dc_lock);
-	if (!dc_dmub_srv_ips_residency_cntl(dc->ctx, panel_inst, !!val))
+	if (!dc_dmub_srv_ips_residency_cntl(dc_get_ctx(dc), panel_inst, !!val))
 		ret = -EIO;
 	mutex_unlock(&adev->dm.dc_lock);
 
@@ -3231,7 +3231,7 @@ static int replay_get_state(void *data, u64 *val)
 
 	mutex_lock(&adev->dm.dc_lock);
 
-	if (dc->idle_optimizations_allowed) {
+	if (dc_is_idle_optimizations_allowed(dc)) {
 		dc_allow_idle_optimizations(dc, false);
 		reallow_idle = true;
 	}
@@ -3263,12 +3263,12 @@ static int replay_set_residency(void *data, u64 val)
 
 	mutex_lock(&adev->dm.dc_lock);
 
-	if (dc->idle_optimizations_allowed) {
+	if (dc_is_idle_optimizations_allowed(dc)) {
 		dc_allow_idle_optimizations(dc, false);
 		reallow_idle = true;
 	}
 
-	link->dc->link_srv->edp_replay_residency(link, &residency, is_start, PR_RESIDENCY_MODE_PHY);
+	dc_link_edp_replay_residency(link, &residency, is_start, PR_RESIDENCY_MODE_PHY);
 
 	if (reallow_idle)
 		dc_allow_idle_optimizations(dc, true);
@@ -3292,12 +3292,12 @@ static int replay_get_residency(void *data, u64 *val)
 
 	mutex_lock(&adev->dm.dc_lock);
 
-	if (dc->idle_optimizations_allowed) {
+	if (dc_is_idle_optimizations_allowed(dc)) {
 		dc_allow_idle_optimizations(dc, false);
 		reallow_idle = true;
 	}
 
-	link->dc->link_srv->edp_replay_residency(link, &residency, false, PR_RESIDENCY_MODE_PHY);
+	dc_link_edp_replay_residency(link, &residency, false, PR_RESIDENCY_MODE_PHY);
 
 	if (reallow_idle)
 		dc_allow_idle_optimizations(dc, true);
@@ -3323,7 +3323,7 @@ static int psr_get(void *data, u64 *val)
 
 	mutex_lock(&adev->dm.dc_lock);
 
-	if (dc->idle_optimizations_allowed) {
+	if (dc_is_idle_optimizations_allowed(dc)) {
 		dc_allow_idle_optimizations(dc, false);
 		reallow_idle = true;
 	}
@@ -3354,12 +3354,12 @@ static int psr_read_residency(void *data, u64 *val)
 
 	mutex_lock(&adev->dm.dc_lock);
 
-	if (dc->idle_optimizations_allowed) {
+	if (dc_is_idle_optimizations_allowed(dc)) {
 		dc_allow_idle_optimizations(dc, false);
 		reallow_idle = true;
 	}
 
-	link->dc->link_srv->edp_get_psr_residency(link, &residency, PSR_RESIDENCY_MODE_PHY);
+	dc_link_edp_get_psr_residency(link, &residency, PSR_RESIDENCY_MODE_PHY);
 
 	if (reallow_idle)
 		dc_allow_idle_optimizations(dc, true);
@@ -3379,7 +3379,7 @@ static int allow_edp_hotplug_detection_get(void *data, u64 *val)
 	struct drm_device *dev = connector->dev;
 	struct amdgpu_device *adev = drm_to_adev(dev);
 
-	*val = adev->dm.dc->config.allow_edp_hotplug_detection;
+	*val = dc_get_config(adev->dm.dc)->allow_edp_hotplug_detection;
 
 	return 0;
 }
@@ -3392,7 +3392,7 @@ static int allow_edp_hotplug_detection_set(void *data, u64 val)
 	struct drm_device *dev = connector->dev;
 	struct amdgpu_device *adev = drm_to_adev(dev);
 
-	adev->dm.dc->config.allow_edp_hotplug_detection = (uint32_t) val;
+	dc_set_allow_edp_hotplug_detection(adev->dm.dc, (enum dc_hpd_enable_select)val);
 
 	return 0;
 }
@@ -3532,10 +3532,10 @@ static int dmub_trace_mask_set(void *data, u64 val)
 	u32 res;
 	int i;
 
-	if (!adev->dm.dc || !adev->dm.dc->ctx || !adev->dm.dc->ctx->dmub_srv)
+	if (!adev->dm.dc || !dc_get_ctx(adev->dm.dc) || !dc_get_ctx(adev->dm.dc)->dmub_srv)
 		return -EINVAL;
 
-	dc_dmub_srv = adev->dm.dc->ctx->dmub_srv;
+	dc_dmub_srv = dc_get_ctx(adev->dm.dc)->dmub_srv;
 	srv = dc_dmub_srv->dmub;
 	if (!srv || !srv->fw_version)
 		return -EINVAL;
@@ -3558,7 +3558,8 @@ static int dmub_trace_mask_set(void *data, u64 val)
 			break;
 		}
 
-		if (!dc_wake_and_execute_gpint(adev->dm.dc->ctx, cmd, res, NULL, DM_DMUB_WAIT_TYPE_WAIT))
+		if (!dc_wake_and_execute_gpint(dc_get_ctx(adev->dm.dc), cmd, res,
+					      NULL, DM_DMUB_WAIT_TYPE_WAIT))
 			return -EIO;
 
 		usleep_range(100, 1000);
@@ -3581,10 +3582,10 @@ static int dmub_trace_mask_show(void *data, u64 *val)
 	u64 res = 0;
 	int i = 0;
 
-	if (!adev->dm.dc || !adev->dm.dc->ctx || !adev->dm.dc->ctx->dmub_srv)
+	if (!adev->dm.dc || !dc_get_ctx(adev->dm.dc) || !dc_get_ctx(adev->dm.dc)->dmub_srv)
 		return -EINVAL;
 
-	dc_dmub_srv = adev->dm.dc->ctx->dmub_srv;
+	dc_dmub_srv = dc_get_ctx(adev->dm.dc)->dmub_srv;
 	srv = dc_dmub_srv->dmub;
 	if (!srv || !srv->fw_version)
 		return -EINVAL;
@@ -3592,7 +3593,9 @@ static int dmub_trace_mask_show(void *data, u64 *val)
 	while (i < 4) {
 		uint32_t response;
 
-		if (!dc_wake_and_execute_gpint(adev->dm.dc->ctx, cmd, 0, &response, DM_DMUB_WAIT_TYPE_WAIT_WITH_REPLY))
+		if (!dc_wake_and_execute_gpint(dc_get_ctx(adev->dm.dc), cmd, 0,
+					      &response,
+					      DM_DMUB_WAIT_TYPE_WAIT_WITH_REPLY))
 			return -EIO;
 
 		raw = response;
@@ -3715,12 +3718,12 @@ static int cacp_ace_curve_area_show(struct seq_file *m, void *unused)
 
 	mutex_lock(&adev->dm.dc_lock);
 
-	if (dc->idle_optimizations_allowed) {
+	if (dc_is_idle_optimizations_allowed(dc)) {
 		dc_allow_idle_optimizations(dc, false);
 		reallow_idle = true;
 	}
 
-	if (!dc_wake_and_execute_dmub_cmd(dc->ctx, &cmd,
+	if (!dc_wake_and_execute_dmub_cmd(dc_get_ctx(dc), &cmd,
 					  DM_DMUB_WAIT_TYPE_WAIT_WITH_REPLY) ||
 	    cmd.cacp_get_ace_curve_area.header.ret_status)
 		ret = -EIO;
@@ -4243,10 +4246,8 @@ static ssize_t dtn_log_read(
 	if (!buf || !size)
 		return -EINVAL;
 
-	if (!dc->hwss.log_hw_state)
+	if (!dc_log_hw_state(dc, &log_ctx))
 		return 0;
-
-	dc->hwss.log_hw_state(dc, &log_ctx);
 
 	if (*pos < log_ctx.pos) {
 		size_t to_copy = log_ctx.pos - *pos;
@@ -4281,8 +4282,7 @@ static ssize_t dtn_log_write(
 	if (size == 0)
 		return 0;
 
-	if (dc->hwss.log_hw_state)
-		dc->hwss.log_hw_state(dc, NULL);
+	dc_log_hw_state(dc, NULL);
 
 	return size;
 }
@@ -4459,18 +4459,17 @@ static int capabilities_show(struct seq_file *m, void *unused)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)m->private;
 	struct dc *dc = adev->dm.dc;
-	bool mall_supported = dc->caps.mall_size_total;
-	bool subvp_supported = dc->caps.subvp_fw_processing_delay_us;
+	bool mall_supported = dc_get_caps(dc)->mall_size_total;
+	bool subvp_supported = dc_get_caps(dc)->subvp_fw_processing_delay_us;
 	unsigned int mall_in_use = false;
 	unsigned int subvp_in_use = false;
 
-	struct hubbub *hubbub = dc->res_pool->hubbub;
+	struct hubbub *hubbub = dc_get_res_pool(dc)->hubbub;
 
 	if (hubbub && hubbub->funcs->get_mall_en)
 		hubbub->funcs->get_mall_en(hubbub, &mall_in_use);
 
-	if (dc->cap_funcs.get_subvp_en)
-		subvp_in_use = dc->cap_funcs.get_subvp_en(dc, dc->current_state);
+	subvp_in_use = dc_get_subvp_en(dc, dc_get_current_state(dc));
 
 	seq_printf(m, "mall supported: %s, enabled: %s\n",
 			   mall_supported ? "yes" : "no", mall_in_use ? "yes" : "no");
@@ -4490,7 +4489,7 @@ static int dp_force_sst_set(void *data, u64 val)
 {
 	struct amdgpu_device *adev = data;
 
-	adev->dm.dc->debug.set_mst_en_for_sst = val;
+	dc_get_debug_options_mutable(adev->dm.dc)->set_mst_en_for_sst = val;
 
 	return 0;
 }
@@ -4499,7 +4498,7 @@ static int dp_force_sst_get(void *data, u64 *val)
 {
 	struct amdgpu_device *adev = data;
 
-	*val = adev->dm.dc->debug.set_mst_en_for_sst;
+	*val = dc_get_debug_options(adev->dm.dc)->set_mst_en_for_sst;
 
 	return 0;
 }
@@ -4514,7 +4513,7 @@ static int dp_ignore_cable_id_set(void *data, u64 val)
 {
 	struct amdgpu_device *adev = data;
 
-	adev->dm.dc->debug.ignore_cable_id = val;
+	dc_get_debug_options_mutable(adev->dm.dc)->ignore_cable_id = val;
 
 	return 0;
 }
@@ -4523,7 +4522,7 @@ static int dp_ignore_cable_id_get(void *data, u64 *val)
 {
 	struct amdgpu_device *adev = data;
 
-	*val = adev->dm.dc->debug.ignore_cable_id;
+	*val = dc_get_debug_options(adev->dm.dc)->ignore_cable_id;
 
 	return 0;
 }
@@ -4538,7 +4537,7 @@ static int visual_confirm_set(void *data, u64 val)
 {
 	struct amdgpu_device *adev = data;
 
-	adev->dm.dc->debug.visual_confirm = (enum visual_confirm)val;
+	dc_get_debug_options_mutable(adev->dm.dc)->visual_confirm = (enum visual_confirm)val;
 
 	return 0;
 }
@@ -4551,7 +4550,7 @@ static int visual_confirm_get(void *data, u64 *val)
 {
 	struct amdgpu_device *adev = data;
 
-	*val = adev->dm.dc->debug.visual_confirm;
+	*val = dc_get_debug_options(adev->dm.dc)->visual_confirm;
 
 	return 0;
 }
@@ -4570,9 +4569,9 @@ static int skip_detection_link_training_set(void *data, u64 val)
 	struct amdgpu_device *adev = data;
 
 	if (val == 0)
-		adev->dm.dc->debug.skip_detection_link_training = false;
+		dc_get_debug_options_mutable(adev->dm.dc)->skip_detection_link_training = false;
 	else
-		adev->dm.dc->debug.skip_detection_link_training = true;
+		dc_get_debug_options_mutable(adev->dm.dc)->skip_detection_link_training = true;
 
 	return 0;
 }
@@ -4585,7 +4584,7 @@ static int skip_detection_link_training_get(void *data, u64 *val)
 {
 	struct amdgpu_device *adev = data;
 
-	*val = adev->dm.dc->debug.skip_detection_link_training;
+	*val = dc_get_debug_options(adev->dm.dc)->skip_detection_link_training;
 
 	return 0;
 }
@@ -4610,7 +4609,7 @@ static ssize_t dcc_en_bits_read(
 	const uint32_t rd_buf_size = 32;
 	uint32_t result = 0;
 	int offset = 0;
-	int num_pipes = dc->res_pool->pipe_count;
+	int num_pipes = dc_get_res_pool(dc)->pipe_count;
 	int *dcc_en_bits;
 	int i, r;
 
@@ -4618,12 +4617,10 @@ static ssize_t dcc_en_bits_read(
 	if (!dcc_en_bits)
 		return -ENOMEM;
 
-	if (!dc->hwss.get_dcc_en_bits) {
+	if (!dc_get_dcc_en_bits(dc, dcc_en_bits)) {
 		kfree(dcc_en_bits);
 		return 0;
 	}
-
-	dc->hwss.get_dcc_en_bits(dc, dcc_en_bits);
 
 	rd_buf = kcalloc(rd_buf_size, sizeof(char), GFP_KERNEL);
 	if (!rd_buf) {
@@ -4714,7 +4711,7 @@ void dtn_debugfs_init(struct amdgpu_device *adev)
 	debugfs_create_file_unsafe("amdgpu_dm_disable_hpd", 0644, root, adev,
 				   &disable_hpd_ops);
 
-	if (adev->dm.dc->caps.ips_support) {
+	if (dc_get_caps(adev->dm.dc)->ips_support) {
 		debugfs_create_file_unsafe("amdgpu_dm_ips_status", 0644, root, adev,
 					   &ips_status_fops);
 
