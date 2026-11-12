@@ -326,7 +326,8 @@ out_nfserr:
  * @len:     length of name to examine
  * @resfh:   pointer to pre-initialised filehandle to hold result.
  * @access:  NFSD_MAY_* flags for the fh_verify() of @fhp; adding
- *	     NFSD_MAY_BYPASS_FLAVOR skips the export security flavor checks
+ *	     NFSD_MAY_BYPASS_FLAVOR skips the export security flavor checks,
+ *	     NFSD_MAY_BYPASS_PORT the export's secure-port check
  *
  * Variant of nfsd_lookup() that takes the fh_verify() access flags.
  * The filehandle and mountpoint crossing rules are documented there.

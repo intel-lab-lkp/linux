@@ -34,6 +34,7 @@
 
 #define NFSD_MAY_LOCALIO		0x2000 /* for tracing, reflects when localio used */
 #define NFSD_MAY_BYPASS_FLAVOR		0x4000 /* skip the export's sec= check */
+#define NFSD_MAY_BYPASS_PORT		0x8000 /* skip the export's secure-port check */
 
 #define NFSD_MAY_CREATE		(NFSD_MAY_EXEC|NFSD_MAY_WRITE)
 #define NFSD_MAY_REMOVE		(NFSD_MAY_EXEC|NFSD_MAY_WRITE|NFSD_MAY_TRUNC)
