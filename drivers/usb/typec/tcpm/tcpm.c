@@ -8987,18 +8987,29 @@ out_destroy_wq:
 }
 EXPORT_SYMBOL_GPL(tcpm_register_port);
 
+static void tcpm_cancel_timers(struct tcpm_port *port)
+{
+	hrtimer_cancel(&port->vdm_discovery_timer);
+	hrtimer_cancel(&port->enable_frs_timer);
+	hrtimer_cancel(&port->vdm_state_machine_timer);
+	hrtimer_cancel(&port->state_machine_timer);
+}
+
 void tcpm_unregister_port(struct tcpm_port *port)
 {
 	int i;
 
 	port->registered = false;
+	/*
+	 * A timer handler that saw port->registered still set may queue
+	 * work: wait for it before the worker goes away. Works that run
+	 * while the worker is flushed may start a timer again, so cancel
+	 * the timers once more afterwards.
+	 */
+	tcpm_cancel_timers(port);
 	kthread_destroy_worker(port->wq);
 	port->wq = NULL;
-
-	hrtimer_cancel(&port->vdm_discovery_timer);
-	hrtimer_cancel(&port->enable_frs_timer);
-	hrtimer_cancel(&port->vdm_state_machine_timer);
-	hrtimer_cancel(&port->state_machine_timer);
+	tcpm_cancel_timers(port);
 
 	power_supply_put_system_batteries(port->fixed_batt, port->fixed_batt_cnt);
 	tcpm_reset_port(port);
