@@ -150,6 +150,22 @@ static void drm_fb_helper_dpms(struct fb_info *info, int dpms_mode)
 	mutex_unlock(&fb_helper->lock);
 }
 
+/*
+ * Turning a display on sends it the framebuffer: first get there what was
+ * drawn in fbdev, still pending in deferred I/O or damage handling, else the
+ * display shows the framebuffer as it was before for a moment.
+ */
+static void drm_fb_helper_flush_damage(struct fb_info *info)
+{
+	struct drm_fb_helper *helper = info->par;
+
+#ifdef CONFIG_FB_DEFERRED_IO
+	if (info->fbdefio)
+		flush_delayed_work(&info->deferred_work);
+#endif
+	flush_work(&helper->damage_work);
+}
+
 /**
  * drm_fb_helper_blank - implementation for &fb_ops.fb_blank
  * @blank: desired blanking state
@@ -163,6 +179,7 @@ int drm_fb_helper_blank(int blank, struct fb_info *info)
 	switch (blank) {
 	/* Display: On; HSync: On, VSync: On */
 	case FB_BLANK_UNBLANK:
+		drm_fb_helper_flush_damage(info);
 		drm_fb_helper_dpms(info, DRM_MODE_DPMS_ON);
 		break;
 	/* Display: Off; HSync: On, VSync: On */
