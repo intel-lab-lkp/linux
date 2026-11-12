@@ -31,14 +31,6 @@
 //!         dev: &'bound Device<device::Core<'_>>,
 //!         id_info: &'bound Self::IdInfo,
 //!     ) -> impl PinInit<Self::Data<'bound>, Error> + 'bound;
-//!
-//!     /// Driver unbind (optional).
-//!     fn unbind<'bound>(
-//!         dev: &'bound Device<device::Core<'_>>,
-//!         this: Pin<&Self::Data<'bound>>,
-//!     ) {
-//!         let _ = (dev, this);
-//!     }
 //! }
 //! ```
 //!
@@ -57,9 +49,12 @@
 //! [`Device`] infrastructure provides common helpers for this purpose on its
 //! [`Device<CoreInternal>`] implementation.
 //!
-//! All driver callbacks should provide a reference to the driver's private data. Once the driver
-//! is unbound from the device, the bus abstraction should take back the ownership of the driver's
-//! private data from the corresponding [`Device`] and [`drop`] it.
+//! All driver callbacks should provide a reference to the driver's private data. The generic
+//! [`Registration`] infrastructure drops the driver's private data during unbind cleanup.
+//!
+//! Device teardown should be performed in [`Drop`] or [`PinnedDrop`](pin_init::PinnedDrop) for the
+//! driver's private data. The `'bound` lifetime allows the data to retain device resources and a
+//! [`Device<Bound>`] reference for use during teardown.
 //!
 //! All driver callbacks should provide a [`Device<Core>`] reference (see also [`device::Core`]).
 //!
@@ -98,6 +93,7 @@
 //!
 //! [`Core`]: device::Core
 //! [`Device`]: device::Device
+//! [`Device<Bound>`]: device::Device<device::Bound>
 //! [`Device<Core>`]: device::Device<device::Core>
 //! [`Device<CoreInternal>`]: device::Device<device::CoreInternal>
 //! [`DeviceContext`]: device::DeviceContext
