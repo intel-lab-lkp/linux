@@ -1976,10 +1976,8 @@ static struct svc_export *exp_find(struct cache_detail *cd,
  *
  * Helper function for check_nfsd_access().  Note that callers should be
  * using check_nfsd_access() instead of calling this function directly.  The
- * exceptions are __fh_verify(), which has logic that may result in one
- * or both of the helpers being skipped, and the mount-crossing paths in
- * nfsd_cross_mnt() and nfsd_lookup_parent(), which enforce only the
- * transport policy when NFSD_MAY_BYPASS_FLAVOR is set.
+ * one exception is __fh_verify() since it has logic that may result in one
+ * or both of the helpers being skipped.
  *
  * Return values:
  *   %nfs_ok if access is granted, or
@@ -2075,18 +2073,30 @@ __be32 check_security_flavor(struct svc_export *exp, struct svc_rqst *rqstp,
  * check_nfsd_access - check if access to export is allowed.
  * @exp: svc_export that is being accessed.
  * @rqstp: svc_rqst attempting to access @exp.
+ * @access: NFSD_MAY_* flags; %NFSD_MAY_BYPASS_FLAVOR skips the security
+ *	flavor check
+ *
+ * Context: Process context.
  *
  * Return values:
- *   %nfs_ok if access is granted, or
- *   %nfserr_wrongsec if access is denied
+ *   %nfs_ok if access is granted,
+ *   %nfserr_wrongsec if access is denied, or
+ *   %nfserr_perm if the secure-port check denies an NFSv2 or NFSv3
+ *   request
  */
-__be32 check_nfsd_access(struct svc_export *exp, struct svc_rqst *rqstp)
+__be32 check_nfsd_access(struct svc_export *exp, struct svc_rqst *rqstp,
+			 int access)
 {
 	__be32 status;
 
+	status = nfsd_check_port(rqstp, &rqstp->rq_cred, exp);
+	if (status != nfs_ok)
+		return status;
 	status = check_xprtsec_policy(exp, rqstp);
 	if (status != nfs_ok)
 		return status;
+	if (access & NFSD_MAY_BYPASS_FLAVOR)
+		return nfs_ok;
 	return check_security_flavor(exp, rqstp, false);
 }
 
