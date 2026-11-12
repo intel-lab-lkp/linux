@@ -176,15 +176,12 @@ impl pci::Driver for SampleDriver {
             index: *info,
         })
     }
-
-    fn unbind<'bound>(_pdev: &'bound pci::Device<Core<'_>>, this: Pin<&Self::Data<'bound>>) {
-        this.bar
-            .write_reg(regs::TEST::zeroed().with_index(this.index));
-    }
 }
 
 impl Drop for SampleDriverData<'_> {
     fn drop(&mut self) {
+        self.bar
+            .write_reg(regs::TEST::zeroed().with_index(self.index));
         dev_dbg!(self.pdev, "Remove Rust PCI driver sample.\n");
     }
 }
