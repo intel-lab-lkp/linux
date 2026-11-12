@@ -23,7 +23,11 @@ use crate::{
         from_err_ptr,
         to_result, //
     },
-    prelude::*, //
+    prelude::*,
+    scatterlist::{
+        Owned,
+        SGTable, //
+    }, //
 };
 
 /// An IOMMU paging domain.
@@ -39,6 +43,76 @@ use crate::{
 ///
 /// `ptr` points to a paging domain allocated by `iommu_paging_domain_alloc_flags()` and owned by
 /// this object.
+///
+/// # Examples
+///
+/// Two clients share one device. Each has its own domain, and the device is switched from one
+/// to the other between jobs.
+///
+/// ```
+/// use kernel::{
+///     device::{
+///         Bound,
+///         Device, //
+///     },
+///     dma,
+///     iommu::{
+///         domain::{
+///             Domain,
+///             MapSource, //
+///         },
+///         prot, //
+///     },
+///     page,
+///     prelude::*,
+///     scatterlist::SGTable, //
+/// };
+///
+/// fn new_buffer(dev: &Device<Bound>) -> Result<impl MapSource + 'static> {
+///     let pages = VVec::<u8>::with_capacity(4 * page::PAGE_SIZE, GFP_KERNEL)?;
+///
+///     KBox::pin_init(
+///         SGTable::new(dev, pages, dma::DataDirection::Bidirectional, GFP_KERNEL),
+///         GFP_KERNEL,
+///     )
+/// }
+///
+/// fn test(dev: &Device<Bound>) -> Result {
+///     // SAFETY: The IOMMU driver that `dev` is behind meets the requirements of `Domain::new()`.
+///     let domain_a = unsafe { Domain::new(dev)? };
+///     // SAFETY: The IOMMU driver that `dev` is behind meets the requirements of `Domain::new()`.
+///     let domain_b = unsafe { Domain::new(dev)? };
+///
+///     // Both clients map their buffer at the same IOVA.
+///     let iova = 0xdead_0000;
+///
+///     // SAFETY: We are the driver bound to `dev`. The attachment is dropped below, after `dev`
+///     // has stopped.
+///     let attachment = unsafe { domain_a.attach(dev)? };
+///
+///     let buffer = new_buffer(dev)?;
+///     // SAFETY: `domain_a` has no other mapping, and nothing else uses it.
+///     let _mapping_a = unsafe { domain_a.map(iova, buffer, prot::READ | prot::WRITE)? };
+///
+///     // Run a job of the first client, then stop the device.
+///
+///     // `attach()` allows one domain on a device at a time, so `domain_a` is detached first.
+///     drop(attachment);
+///
+///     // SAFETY: We are the driver bound to `dev`. The attachment is dropped when this function
+///     // returns, after `dev` has stopped.
+///     let _attachment = unsafe { domain_b.attach(dev)? };
+///
+///     let buffer = new_buffer(dev)?;
+///     // SAFETY: `domain_b` has no other mapping, and nothing else uses it.
+///     let _mapping_b = unsafe { domain_b.map(iova, buffer, prot::READ | prot::WRITE)? };
+///
+///     // Run a job of the second client, then stop the device. With `domain_b` attached, `iova`
+///     // leads to the second buffer.
+///
+///     Ok(())
+/// }
+/// ```
 pub struct Domain<'a> {
     ptr: NonNull<bindings::iommu_domain>,
     _dev: PhantomData<&'a Device<Bound>>,
@@ -50,6 +124,8 @@ unsafe impl<'a> Send for Domain<'a> {}
 // SAFETY: `&Domain` allows the following from several threads at once:
 // - Attaching and detaching the domain. `iommu_attach_device()` and `iommu_detach_device()` may
 //   be called concurrently for the same domain.
+// - Mapping and unmapping ranges. `iommu_map_sg()` and `iommu_unmap()` may be called concurrently
+//   for the same domain, except in the cases that the safety requirements of `map()` exclude.
 unsafe impl<'a> Sync for Domain<'a> {}
 
 impl<'a> Domain<'a> {
@@ -98,6 +174,60 @@ impl<'a> Domain<'a> {
         // INVARIANT: The domain is attached to `dev`.
         Ok(Attachment { domain: self, dev })
     }
+
+    /// Maps the pages of `source` at `iova` with the protection flags `prot` (see [`prot`]).
+    ///
+    /// The returned [`Mapping`] owns `source` and unmaps the range when it is dropped. A leaked
+    /// [`Mapping`] leaves its range mapped. Its source is leaked with it and must keep the pages
+    /// allocated, so `S` cannot borrow them and has to be `'static`.
+    ///
+    /// This performs no cache coherency operations on the pages. It may sleep.
+    ///
+    /// [`prot`]: super::prot
+    ///
+    /// # Safety
+    ///
+    /// - The range must not overlap any other mapping in the domain.
+    /// - No other operation on the domain may access the range while this function runs.
+    pub unsafe fn map<'d, S: MapSource + 'static>(
+        &'d self,
+        iova: usize,
+        source: S,
+        prot: u32,
+    ) -> Result<Mapping<'d, S>> {
+        let sgt = source.sg_table().as_raw();
+
+        // SAFETY: `sgt` points to the table of `source`, which is valid.
+        let (sgl, nents) = unsafe { ((*sgt).sgl, (*sgt).orig_nents) };
+
+        // SAFETY:
+        // - By the type invariant, `self.ptr` is a valid domain.
+        // - `sgl` has `nents` entries. By the safety requirements of `MapSource`, they describe
+        //   pages that stay allocated for as long as the returned `Mapping` owns `source`.
+        // - The caller meets the safety requirements of this function.
+        let ret = unsafe {
+            bindings::iommu_map_sg(
+                self.ptr.as_ptr(),
+                iova,
+                sgl,
+                nents,
+                prot as i32,
+                GFP_KERNEL.as_raw(),
+            )
+        };
+        if ret < 0 {
+            return Err(Error::from_errno(ret as i32));
+        }
+
+        // INVARIANT: `iommu_map_sg()` mapped `[iova, iova + ret)`, and only the returned object
+        // unmaps it.
+        Ok(Mapping {
+            domain: self,
+            iova,
+            size: ret as usize,
+            _source: source,
+        })
+    }
 }
 
 impl<'a> Drop for Domain<'a> {
@@ -129,5 +259,55 @@ impl<'d> Drop for Attachment<'d> {
         // `Domain::attach()` is the driver bound to `self.dev`, and promised that the device
         // stopped using the domain.
         unsafe { bindings::iommu_detach_device(self.domain.ptr.as_ptr(), self.dev.as_raw()) };
+    }
+}
+
+/// A source of pages that can be mapped into a [`Domain`].
+///
+/// # Safety
+///
+/// Every entry of the table that [`MapSource::sg_table`] returns must describe pages. The table
+/// must not change and its pages must stay allocated for as long as `self` exists.
+pub unsafe trait MapSource {
+    /// Returns the table describing the pages to map.
+    fn sg_table(&self) -> &SGTable;
+}
+
+// SAFETY: An `SGTable<Owned<P>>` is built from pages, and keeps them and its table until it is
+// dropped.
+unsafe impl<P> MapSource for Pin<KBox<SGTable<Owned<P>>>> {
+    fn sg_table(&self) -> &SGTable {
+        self
+    }
+}
+
+/// Pages mapped into a [`Domain`].
+///
+/// Dropping a mapping unmaps its range, then drops its source.
+///
+/// # Invariants
+///
+/// `[iova, iova + size)` is mapped in `domain`, and only this object unmaps it.
+#[must_use = "the range is unmapped when the mapping is dropped"]
+pub struct Mapping<'d, S> {
+    domain: &'d Domain<'d>,
+    iova: usize,
+    size: usize,
+    _source: S,
+}
+
+impl<'d, S> Mapping<'d, S> {
+    /// Returns the first IOVA of the mapping.
+    #[inline]
+    pub fn iova(&self) -> usize {
+        self.iova
+    }
+}
+
+impl<'d, S> Drop for Mapping<'d, S> {
+    fn drop(&mut self) {
+        // SAFETY: By the type invariant, `[self.iova, self.iova + self.size)` is mapped in
+        // `self.domain`, and nothing else unmaps it.
+        unsafe { bindings::iommu_unmap(self.domain.ptr.as_ptr(), self.iova, self.size) };
     }
 }
