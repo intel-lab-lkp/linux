@@ -1656,7 +1656,7 @@ STATIC_IFN_KUNIT void dmub_hpd_callback(struct amdgpu_device *adev,
 		return;
 	}
 
-	if (notify->link_index > adev->dm.dc->link_count) {
+	if (notify->link_index > dc_get_link_count(adev->dm.dc)) {
 		drm_err(adev_to_drm(adev), "DMUB HPD index (%u)is abnormal", notify->link_index);
 		return;
 	}

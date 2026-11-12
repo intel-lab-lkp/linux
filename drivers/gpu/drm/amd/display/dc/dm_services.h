@@ -263,6 +263,22 @@ void dm_perf_trace_timestamp(const char *func_name, unsigned int line, struct dc
 #define PERF_TRACE_CTX(__CTX)	dm_perf_trace_timestamp(__func__, __LINE__, __CTX)
 
 /*
+ * These macros dereference a dc-local variable and are therefore only
+ * usable from DC-internal code.
+ */
+#define PERFORMANCE_TRACE_START() \
+	unsigned long long perf_trc_start_stmp = dm_get_timestamp(dc->ctx)
+
+#define PERFORMANCE_TRACE_END() \
+	do { \
+		unsigned long long perf_trc_end_stmp = dm_get_timestamp(dc->ctx); \
+		if (dc->debug.performance_trace) { \
+			DC_LOG_PERF_TRACE("%s duration: %lld ticks\n", __func__, \
+				perf_trc_end_stmp - perf_trc_start_stmp); \
+		} \
+	} while (0)
+
+/*
  * SMU message tracing
  */
 void dm_trace_smu_enter(uint32_t msg_id, uint32_t param_in, unsigned int delay, struct dc_context *ctx);

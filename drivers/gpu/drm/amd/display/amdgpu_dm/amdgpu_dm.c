@@ -1160,7 +1160,7 @@ static void amdgpu_dm_boot_time_crc_init(struct amdgpu_device *adev)
 	int ret = 0;
 	const uint32_t fb_size = 3 * 1024 * 1024;	/* 3MB for DCC pattern */
 
-	if (!adev || !adev->dm.dc || !adev->dm.dc->ctx ||
+	if (!adev || !adev->dm.dc || !dc_get_ctx(adev->dm.dc) ||
 		!dc_get_ctx(adev->dm.dc)->dmub_srv) {
 		return;
 	}

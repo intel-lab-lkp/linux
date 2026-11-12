@@ -125,18 +125,6 @@ void context_clock_trace(
 #define DTN_INFO_END() \
 	dm_dtn_log_end(dc_ctx, log_ctx)
 
-#define PERFORMANCE_TRACE_START() \
-	unsigned long long perf_trc_start_stmp = dm_get_timestamp(dc->ctx)
-
-#define PERFORMANCE_TRACE_END() \
-	do { \
-		unsigned long long perf_trc_end_stmp = dm_get_timestamp(dc->ctx); \
-		if (dc->debug.performance_trace) { \
-			DC_LOG_PERF_TRACE("%s duration: %lld ticks\n", __func__, \
-				perf_trc_end_stmp - perf_trc_start_stmp); \
-		} \
-	} while (0)
-
 #define DISPLAY_STATS_BEGIN(entry) (void)(entry)
 
 #define DISPLAY_STATS(msg, ...) DC_LOG_PERF_TRACE(msg, __VA_ARGS__)

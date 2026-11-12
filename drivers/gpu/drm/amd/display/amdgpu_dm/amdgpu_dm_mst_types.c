@@ -1239,7 +1239,7 @@ STATIC_IFN_KUNIT bool get_conv_frl_bw(struct amdgpu_dm_connector *aconnector,
 	unsigned int dsc_max_sink_bw_in_kbps = 0;
 
 	if (aconnector->dc_sink &&
-	    aconnector->dc_link->dc->caps.dp_hdmi21_pcon_support &&
+	    dc_get_caps(aconnector->dc_link->dc)->dp_hdmi21_pcon_support &&
 	    aconnector->mst_downstream_port_caps.bytes.byte0.bits.DWN_STRM_PORTX_TYPE == DOWN_STREAM_DETAILED_HDMI) {
 		max_conv_bw_in_kbps = dc_link_bw_kbps_from_raw_frl_link_rate_data(
 				aconnector->dc_link->dc,
@@ -1399,7 +1399,8 @@ static int compute_mst_dsc_configs_for_link(struct drm_atomic_commit *state,
 			build_frl_mst_dsc_params(aconnector, stream, &dsc_policy, &params[count], frl_conv_dsc_bw_in_kbps);
 		if (!dc_dsc_compute_bandwidth_range(
 				stream->sink->ctx->dc,
-				stream->sink->ctx->dc->debug.dsc_min_slice_height_override,
+				dc_get_debug_options(
+					stream->sink->ctx->dc)->dsc_min_slice_height_override,
 				min_target_bpp_x16,
 				max_target_bpp_x16,
 				&stream->sink->dsc_caps.dsc_dec_caps,
@@ -1593,13 +1594,13 @@ STATIC_IFN_KUNIT bool is_dsc_need_re_compute(
 	}
 
 	DRM_DEBUG_DRIVER("%s: MST_DSC check on %d streams in current dc_state\n",
-			 __func__, dc->current_state->stream_count);
+			 __func__, dc_get_current_state(dc)->stream_count);
 
 	/* check current_state if there stream on link but it is not in
 	 * new request state
 	 */
-	for (i = 0; i < dc->current_state->stream_count; i++) {
-		stream = dc->current_state->streams[i];
+	for (i = 0; i < dc_get_current_state(dc)->stream_count; i++) {
+		stream = dc_get_current_state(dc)->streams[i];
 		/* only check stream on the mst hub */
 		if (stream->link != dc_link)
 			continue;
@@ -1943,12 +1944,15 @@ static bool is_dsc_common_config_possible(struct dc_stream_state *stream,
 	bool is_dsc_possible;
 
 	dc_dsc_get_policy_for_timing(&stream->timing, 0, &dsc_policy, dc_link_get_highest_encoding_format(stream->link));
-	is_dsc_possible = dc_dsc_compute_bandwidth_range(stream->sink->ctx->dc,
-							 stream->sink->ctx->dc->debug.dsc_min_slice_height_override,
-							 dsc_policy.min_target_bpp * 16,
-							 dsc_policy.max_target_bpp * 16,
-							 &stream->sink->dsc_caps.dsc_dec_caps,
-							 &stream->timing, dc_link_get_highest_encoding_format(stream->link), bw_range);
+	is_dsc_possible = dc_dsc_compute_bandwidth_range(
+			stream->sink->ctx->dc,
+			dc_get_debug_options(
+				stream->sink->ctx->dc)->dsc_min_slice_height_override,
+			dsc_policy.min_target_bpp * 16,
+			dsc_policy.max_target_bpp * 16,
+			&stream->sink->dsc_caps.dsc_dec_caps,
+			&stream->timing,
+			dc_link_get_highest_encoding_format(stream->link), bw_range);
 
 	return is_dsc_possible;
 }

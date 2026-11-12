@@ -831,7 +831,7 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 	 * both is rejected.
 	 */
 	has_degamma = dc_get_caps(dm->adev->dm.dc)->color.dpp.dcn_arch &&
-		      dm->adev->dm.dc->ctx->dce_version != DCN_VERSION_4_01;
+		      dc_get_dce_version(dm->adev->dm.dc) != DCN_VERSION_4_01;
 
 	drm_crtc_enable_color_mgmt(&acrtc->base, has_degamma ? MAX_COLOR_LUT_ENTRIES : 0,
 				   true, MAX_COLOR_LUT_ENTRIES);
