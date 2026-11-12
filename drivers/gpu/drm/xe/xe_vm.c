@@ -1594,6 +1594,7 @@ static const struct xe_pt_ops xelp_pt_ops = {
 	.pde_encode_bo = xelp_pde_encode_bo,
 };
 
+static void vm_close_work_func(struct work_struct *w);
 static void vm_destroy_work_func(struct work_struct *w);
 
 /**
@@ -1737,6 +1738,10 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags, struct xe_file *xef)
 	ttm_lru_bulk_move_init(&vm->lru_bulk_move);
 
 	INIT_WORK(&vm->destroy_work, vm_destroy_work_func);
+	atomic_set(&vm->close.num_exec_queues, 0);
+	init_waitqueue_head(&vm->close.wq);
+	spin_lock_init(&vm->close.lock);
+	INIT_WORK(&vm->close.work, vm_close_work_func);
 
 	INIT_LIST_HEAD(&vm->preempt.exec_queues);
 	for (id = 0; id < XE_MAX_TILES_PER_DEVICE * XE_MAX_GT_PER_TILE; ++id)
@@ -1982,19 +1987,7 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 	if (xe_vm_in_fault_mode(vm))
 		xe_svm_close(vm);
 
-	if (vm->q) {
-		int i;
-
-		down_write(&vm->lock);
-		xe_exec_queue_last_fence_put(vm->q, vm);
-		for_each_tlb_inval(vm->q, i)
-			xe_exec_queue_tlb_inval_last_fence_put(vm->q, vm, i);
-		up_write(&vm->lock);
-
-		xe_exec_queue_kill(vm->q);
-		xe_exec_queue_put(vm->q);
-		vm->q = NULL;
-	}
+	xe_vm_kill_bind_queues(vm);
 
 	down_write(&vm->lock);
 	xe_vm_lock(vm, false);
@@ -2064,6 +2057,140 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 	xe_vm_put(vm);
 }
 
+static void vm_close_work_func(struct work_struct *w)
+{
+	struct xe_vm *vm = container_of(w, struct xe_vm, close.work);
+	struct xe_device *xe = vm->xe;
+	int idx;
+
+	/* Keep the VM and device alive until the PM and unplug guards unwind. */
+	xe_vm_get(vm);
+
+	if (drm_dev_enter(&xe->drm, &idx)) {
+		xe_pm_runtime_get(xe);
+		xe_vm_close_and_put(vm);
+		xe_pm_runtime_put(xe);
+		drm_dev_exit(idx);
+	} else {
+		/*
+		 * The device is gone. Drop the VM without a runtime PM reference.
+		 * xe_vm_close() guards its own register access.
+		 */
+		xe_vm_close_and_put(vm);
+	}
+
+	xe_vm_put(vm);
+}
+
+/**
+ * xe_vm_kill_bind_queues() - Kill and release the VM bind queue
+ * @vm: The VM whose bind queue should be stopped
+ *
+ * Callers must serialize teardown of @vm. Later calls are harmless because
+ * the first call clears the VM bind queue pointer.
+ */
+void xe_vm_kill_bind_queues(struct xe_vm *vm)
+{
+	struct xe_exec_queue *q;
+	int i;
+
+	if (!vm->q)
+		return;
+
+	down_write(&vm->lock);
+	q = vm->q;
+	vm->q = NULL;
+	xe_exec_queue_last_fence_put(q, vm);
+	for_each_tlb_inval(q, i)
+		xe_exec_queue_tlb_inval_last_fence_put(q, vm, i);
+	up_write(&vm->lock);
+
+	xe_exec_queue_kill(q);
+	xe_exec_queue_put(q);
+}
+
+/**
+ * xe_vm_add_close_queue() - Track an exec queue using the VM
+ * @vm: The VM used by the exec queue
+ *
+ * The queue is tracked until its asynchronous destruction completes.
+ */
+void xe_vm_add_close_queue(struct xe_vm *vm)
+{
+	atomic_inc(&vm->close.num_exec_queues);
+}
+
+/**
+ * xe_vm_remove_close_queue() - Stop tracking an exec queue
+ * @vm: The VM used by the exec queue
+ *
+ * If this is the last tracked queue and VM close was deferred, schedule
+ * the deferred VM close.
+ */
+void xe_vm_remove_close_queue(struct xe_vm *vm)
+{
+	bool queue_close = false;
+
+	if (!atomic_dec_and_test(&vm->close.num_exec_queues))
+		return;
+
+	wake_up_all(&vm->close.wq);
+
+	spin_lock(&vm->close.lock);
+	if (vm->close.deferred) {
+		vm->close.deferred = false;
+		queue_close = true;
+	}
+	spin_unlock(&vm->close.lock);
+
+	if (queue_close)
+		xe_destroy_wq_queue(&vm->close.work);
+}
+
+/**
+ * xe_vm_close_and_put_deferred() - Close a VM immediately or defer the close
+ * @vm: The VM reference to consume
+ * @timeout: Maximum time to wait for VM queues, in jiffies
+ *
+ * The VM must already be marked closing, and callers must serialize teardown.
+ * Release the VM-owned bind queues before waiting for queue cleanup. Callers
+ * may release them earlier to start cleanup for several VMs before waiting.
+ *
+ * If queues remain after @timeout, keep the mappings and finish VM close
+ * after the last tracked queue is freed. This consumes the caller's VM
+ * reference on both the immediate and deferred paths.
+ *
+ * Return: %true if VM close was deferred, or %false if it completed now.
+ */
+bool xe_vm_close_and_put_deferred(struct xe_vm *vm, unsigned long timeout)
+{
+	bool queue_close = false;
+
+	/* Drop VM-owned queue references before waiting for their final free. */
+	xe_vm_kill_bind_queues(vm);
+
+	if (!atomic_read(&vm->close.num_exec_queues) ||
+	    wait_event_timeout(vm->close.wq,
+			       !atomic_read(&vm->close.num_exec_queues),
+			       timeout)) {
+		xe_vm_close_and_put(vm);
+		return false;
+	}
+
+	spin_lock(&vm->close.lock);
+	vm->close.deferred = true;
+	if (!atomic_read(&vm->close.num_exec_queues)) {
+		vm->close.deferred = false;
+		queue_close = true;
+	}
+	spin_unlock(&vm->close.lock);
+
+	if (queue_close)
+		xe_destroy_wq_queue(&vm->close.work);
+
+	return true;
+}
+
 static void vm_destroy_work_func(struct work_struct *w)
 {
 	struct xe_vm *vm =
@@ -2110,7 +2237,7 @@ static void xe_vm_free(struct drm_gpuvm *gpuvm)
 	drm_dev_get(&vm->xe->drm);
 
 	/* To destroy the VM we need to be able to sleep */
-	queue_work(vm->xe->destroy_wq, &vm->destroy_work);
+	xe_destroy_wq_queue(&vm->destroy_work);
 }
 
 struct xe_vm *xe_vm_lookup(struct xe_file *xef, u32 id)
@@ -2256,7 +2383,12 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
 
 	if (!err) {
 		xe_vm_close_start(vm);
-		xe_vm_close_and_put(vm);
+
+		/*
+		 * User exec queues can outlive the VM handle. Do not wait for
+		 * queues which this ioctl does not destroy.
+		 */
+		xe_vm_close_and_put_deferred(vm, 0);
 	}
 
 	return err;
