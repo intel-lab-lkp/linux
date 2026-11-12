@@ -19600,6 +19600,10 @@ F:	samples/pktgen/
 F:	tools/net/
 F:	tools/testing/selftests/net/
 X:	Documentation/networking/batman-adv.rst
+X:	Documentation/networking/can.rst
+X:	Documentation/networking/device_drivers/can/can327.rst
+X:	Documentation/networking/iso15765-2.rst
+X:	Documentation/networking/j1939.rst
 X:	Documentation/networking/mac80211-injection.rst
 X:	Documentation/networking/mac80211_hwsim/
 X:	Documentation/networking/regulatory.rst
