@@ -105,17 +105,36 @@ void dc_test_set_idle_optimizations_allowed(struct dc *dc, bool allowed)
 }
 EXPORT_SYMBOL(dc_test_set_idle_optimizations_allowed);
 
+void dc_test_set_disable_ips(struct dc *dc, unsigned int disable_ips)
+{
+	dc->config.disable_ips = disable_ips;
+}
+EXPORT_SYMBOL(dc_test_set_disable_ips);
+
+void dc_test_set_enable_frl(struct dc *dc, bool enable)
+{
+	dc->config.enable_frl = enable;
+}
+EXPORT_SYMBOL(dc_test_set_enable_frl);
+
+void dc_test_set_consolidated_dpia_dp_lt(struct dc *dc, bool enable)
+{
+	dc->config.consolidated_dpia_dp_lt = enable;
+}
+EXPORT_SYMBOL(dc_test_set_consolidated_dpia_dp_lt);
+
+void dc_test_set_usb4_bw_alloc_support(struct dc *dc, bool enable)
+{
+	dc->config.usb4_bw_alloc_support = enable;
+}
+EXPORT_SYMBOL(dc_test_set_usb4_bw_alloc_support);
+
 struct dc_caps *dc_test_caps(struct dc *dc)
 {
 	return &dc->caps;
 }
 EXPORT_SYMBOL(dc_test_caps);
 
-struct dc_config *dc_test_config(struct dc *dc)
-{
-	return &dc->config;
-}
-EXPORT_SYMBOL(dc_test_config);
 
 struct dc_debug_options *dc_test_debug_options(struct dc *dc)
 {

@@ -57,15 +57,36 @@ const struct dc_caps *dc_get_caps(const struct dc *dc)
 	return &dc->caps;
 }
 
-const struct dc_config *dc_get_config(const struct dc *dc)
+unsigned int dc_get_disable_ips(const struct dc *dc)
 {
-	return &dc->config;
+	return dc->config.disable_ips;
+}
+EXPORT_IF_KUNIT(dc_get_disable_ips);
+
+bool dc_get_enable_frl(const struct dc *dc)
+{
+	return dc->config.enable_frl;
+}
+
+bool dc_get_consolidated_dpia_dp_lt(const struct dc *dc)
+{
+	return dc->config.consolidated_dpia_dp_lt;
+}
+
+bool dc_get_usb4_bw_alloc_support(const struct dc *dc)
+{
+	return dc->config.usb4_bw_alloc_support;
 }
 
 void dc_set_allow_edp_hotplug_detection(struct dc *dc,
 		enum dc_hpd_enable_select hpd_select)
 {
 	dc->config.allow_edp_hotplug_detection = hpd_select;
+}
+
+unsigned int dc_get_allow_edp_hotplug_detection(const struct dc *dc)
+{
+	return dc->config.allow_edp_hotplug_detection;
 }
 
 const struct dc_debug_options *dc_get_debug_options(const struct dc *dc)

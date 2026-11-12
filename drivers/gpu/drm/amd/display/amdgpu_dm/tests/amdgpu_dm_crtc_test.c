@@ -1194,7 +1194,7 @@ static void dm_test_crtc_enable_vblank_ips_restore(struct kunit *test)
 
 	/* IPS enabled and not fully disabled -> first restore condition holds. */
 	dc_test_caps(adev->dm.dc)->ips_support = true;
-	dc_test_config(adev->dm.dc)->disable_ips = DMUB_IPS_ENABLE;
+	dc_test_set_disable_ips(adev->dm.dc, DMUB_IPS_ENABLE);
 
 	/* Supported PSR version makes self-refresh supported. */
 	link = acrtc_state->stream->link;
@@ -1241,7 +1241,7 @@ static void dm_test_crtc_enable_vblank_ips_restore_replay(struct kunit *test)
 
 	/* IPS enabled and not fully disabled -> first restore condition holds. */
 	dc_test_caps(adev->dm.dc)->ips_support = true;
-	dc_test_config(adev->dm.dc)->disable_ips = DMUB_IPS_ENABLE;
+	dc_test_set_disable_ips(adev->dm.dc, DMUB_IPS_ENABLE);
 
 	/*
 	 * PSR unsupported but replay supported -> sr_supported is driven by the

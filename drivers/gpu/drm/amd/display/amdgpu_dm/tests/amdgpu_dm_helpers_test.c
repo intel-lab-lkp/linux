@@ -435,7 +435,7 @@ static void dm_test_parse_edid_caps_hdmi_frl(struct kunit *test)
 	dc = dm_kunit_alloc_dc(test);
 
 	link->dc = dc;
-	dc_test_config(dc)->enable_frl = true;
+	dc_test_set_enable_frl(dc, true);
 
 	dm_test_fill_base_edid(dc_edid, true);
 
@@ -477,7 +477,7 @@ static void dm_test_parse_edid_caps_hdmi_frl_dsc(struct kunit *test)
 	dc = dm_kunit_alloc_dc(test);
 
 	link->dc = dc;
-	dc_test_config(dc)->enable_frl = true;
+	dc_test_set_enable_frl(dc, true);
 
 	dm_test_fill_base_edid(dc_edid, true);
 

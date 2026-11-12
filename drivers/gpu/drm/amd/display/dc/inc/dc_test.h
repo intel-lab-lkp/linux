@@ -69,9 +69,13 @@ void dc_test_set_link(struct dc *dc, unsigned int index, struct dc_link *link);
 void dc_test_set_link_count(struct dc *dc, unsigned int count);
 void dc_test_set_idle_optimizations_allowed(struct dc *dc, bool allowed);
 
+void dc_test_set_disable_ips(struct dc *dc, unsigned int disable_ips);
+void dc_test_set_enable_frl(struct dc *dc, bool enable);
+void dc_test_set_consolidated_dpia_dp_lt(struct dc *dc, bool enable);
+void dc_test_set_usb4_bw_alloc_support(struct dc *dc, bool enable);
+
 /* Mutable views of embedded sub-structures, for test faking only. */
 struct dc_caps *dc_test_caps(struct dc *dc);
-struct dc_config *dc_test_config(struct dc *dc);
 struct dc_debug_options *dc_test_debug_options(struct dc *dc);
 struct dc_cap_funcs *dc_test_cap_funcs(struct dc *dc);
 struct hw_sequencer_funcs *dc_test_hwss(struct dc *dc);

@@ -761,7 +761,7 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	}
 
 	if (dc_get_caps(adev->dm.dc)->ips_support &&
-	    dc_get_config(adev->dm.dc)->disable_ips != DMUB_IPS_DISABLE_ALL)
+	    dc_get_disable_ips(adev->dm.dc) != DMUB_IPS_DISABLE_ALL)
 		adev->dm.idle_workqueue = idle_create_workqueue(adev);
 
 	if (dc_get_caps(adev->dm.dc)->max_links > 0 && adev->family >= AMDGPU_FAMILY_RV) {

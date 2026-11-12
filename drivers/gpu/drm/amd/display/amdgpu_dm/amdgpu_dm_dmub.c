@@ -340,11 +340,11 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 		dc_get_usb4_dpia_count(dc) != 0 &&
 		!dc_get_debug_options(dc)->dpia_debug.bits.disable_dpia) {
 		hw_params.dpia_supported = true;
-		hw_params.disable_dpia = dc_get_debug_options(dc)->dpia_debug.bits.disable_dpia;
+		hw_params.disable_dpia =
+			dc_get_debug_options(dc)->dpia_debug.bits.disable_dpia;
 		hw_params.dpia_hpd_int_enable_supported = false;
-		hw_params.enable_non_transparent_setconfig =
-			dc_get_config(dc)->consolidated_dpia_dp_lt;
-		hw_params.disable_dpia_bw_allocation = !dc_get_config(dc)->usb4_bw_alloc_support;
+		hw_params.enable_non_transparent_setconfig = dc_get_consolidated_dpia_dp_lt(dc);
+		hw_params.disable_dpia_bw_allocation = !dc_get_usb4_bw_alloc_support(dc);
 	}
 
 	switch (amdgpu_ip_version(adev, DCE_HWIP, 0)) {
@@ -399,14 +399,16 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 	case IP_VERSION(3, 1, 3):
 		if (adev->dm.dmcub_fw_version &&
 		    adev->dm.dmcub_fw_version >= DMUB_FW_VERSION(4, 0, 0) &&
-		    adev->dm.dmcub_fw_version < DMUB_FW_VERSION(4, 0, 59))
+		    adev->dm.dmcub_fw_version < DMUB_FW_VERSION(4, 0, 59)) {
 			dc_get_debug_options_mutable(adev->dm.dc)->sanity_checks = true;
+		}
 		break;
 	case IP_VERSION(3, 1, 4):
 		if (adev->dm.dmcub_fw_version &&
 		    adev->dm.dmcub_fw_version >= DMUB_FW_VERSION(4, 0, 0) &&
-		    adev->dm.dmcub_fw_version < DMUB_FW_VERSION(8, 0, 16))
+		    adev->dm.dmcub_fw_version < DMUB_FW_VERSION(8, 0, 16)) {
 			dc_get_debug_options_mutable(adev->dm.dc)->sanity_checks = true;
+		}
 		break;
 	default:
 		break;
