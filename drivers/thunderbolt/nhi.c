@@ -1089,6 +1089,17 @@ static int __nhi_suspend_noirq(struct device *dev, bool wakeup)
 	if (ret)
 		return ret;
 
+	if (tb->kept_running) {
+		/*
+		 * Saving the state here keeps the PCI core from putting the
+		 * host router into D3, which would take the tunnels down;
+		 * for suspend-to-idle it then skips the bus PM of this
+		 * device on resume as well.
+		 */
+		pci_save_state(to_pci_dev(dev));
+		return 0;
+	}
+
 	if (nhi->ops->suspend_noirq) {
 		ret = nhi->ops->suspend_noirq(tb->nhi, wakeup);
 		if (ret)
@@ -1152,7 +1163,7 @@ static int nhi_resume_noirq(struct device *dev)
 	 */
 	if ((nhi->ops->is_present && !nhi->ops->is_present(nhi))) {
 		nhi->going_away = true;
-	} else if (nhi->ops->resume_noirq) {
+	} else if (!tb->kept_running && nhi->ops->resume_noirq) {
 		ret = nhi->ops->resume_noirq(nhi);
 		if (ret)
 			return ret;

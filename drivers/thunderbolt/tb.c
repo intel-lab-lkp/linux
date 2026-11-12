@@ -9,8 +9,10 @@
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
+#include <linux/moduleparam.h>
 #include <linux/pm_runtime.h>
 #include <linux/stringify.h>
+#include <linux/suspend.h>
 
 #include "tb.h"
 #include "tb_regs.h"
@@ -59,6 +61,9 @@ MODULE_PARM_DESC(asym_threshold,
  *		    after cfg has been paused.
  * @remove_work: Work used to remove any unplugged routers after
  *		 runtime resume
+ * @rescan_on_complete: The domain was kept running through
+ *			suspend-to-idle, so look for routers plugged in
+ *			meanwhile once the system has resumed
  * @groups: Bandwidth groups used in this domain.
  */
 struct tb_cm {
@@ -66,6 +71,7 @@ struct tb_cm {
 	struct list_head dp_resources;
 	bool hotplug_active;
 	struct delayed_work remove_work;
+	bool rescan_on_complete;
 	struct tb_bandwidth_group groups[MAX_GROUPS];
 };
 
@@ -3106,9 +3112,93 @@ static int tb_start(struct tb *tb, bool reset)
 	return 0;
 }
 
+static bool s2idle_keep_pcie;
+module_param(s2idle_keep_pcie, bool, 0644);
+MODULE_PARM_DESC(s2idle_keep_pcie,
+		 "keep a domain with PCIe tunnels running through suspend-to-idle so the devices behind them stay connected (default: false)");
+
+/*
+ * Putting the routers to sleep takes every tunnel down, and the PCIe
+ * devices behind a tunnel then disappear from the bus until it is
+ * re-created on resume. A device that cannot lose its link while its
+ * driver holds it (an external GPU driving a display) does not survive
+ * that. For suspend-to-idle the routers, links and tunnels can instead
+ * stay up, as they do across freeze, and the devices behind them go
+ * through an ordinary PCI suspend and resume.
+ */
+static bool tb_keep_running_s2idle(struct tb *tb)
+{
+	struct tb_cm *tcm = tb_priv(tb);
+	struct tb_tunnel *tunnel;
+
+	if (!s2idle_keep_pcie || pm_suspend_target_state != PM_SUSPEND_TO_IDLE)
+		return false;
+
+	list_for_each_entry(tunnel, &tcm->tunnel_list, list) {
+		if (tb_tunnel_is_pci(tunnel))
+			return true;
+	}
+	return false;
+}
+
+/*
+ * Hotplug events were not handled while the domain was kept running
+ * through suspend-to-idle. Mark the routers and XDomains that went away
+ * or were replaced meanwhile as unplugged, without reconfiguring those
+ * still present, whose tunnels are in use.
+ */
+static void tb_check_kept_running(struct tb_switch *sw)
+{
+	struct tb_port *port;
+
+	tb_switch_for_each_port(sw, port) {
+		struct tb_switch *child;
+		u64 uid;
+		int ret;
+
+		if (!tb_port_is_null(port))
+			continue;
+
+		if (port->xdomain) {
+			if (tb_wait_for_port(port, false) <= 0)
+				port->xdomain->is_unplugged = true;
+			continue;
+		}
+
+		if (!tb_port_has_remote(port))
+			continue;
+
+		child = port->remote->sw;
+		ret = tb_cfg_get_upstream_port(sw->tb->ctl, tb_route(child));
+		if (ret >= 0 && child->uid) {
+			if (tb_switch_is_usb4(child))
+				ret = usb4_switch_read_uid(child, &uid);
+			else
+				ret = tb_drom_read_uid_only(child, &uid);
+			if (!ret && uid != child->uid)
+				ret = -ENODEV;
+		}
+		if (ret < 0) {
+			tb_port_warn(port, "lost during suspend, disconnecting\n");
+			tb_sw_set_unplugged(child);
+			continue;
+		}
+
+		tb_check_kept_running(child);
+	}
+}
+
 static int tb_suspend_noirq(struct tb *tb)
 {
 	struct tb_cm *tcm = tb_priv(tb);
+
+	if (tb_keep_running_s2idle(tb)) {
+		tb_dbg(tb, "PCIe tunnels active, keeping the domain running\n");
+		/* As for freeze, no hotplug handling until resume */
+		tcm->hotplug_active = false;
+		tb->kept_running = true;
+		return 0;
+	}
 
 	tb_dbg(tb, "suspending...\n");
 	tb_disconnect_and_release_dp(tb);
@@ -3176,6 +3266,17 @@ static int tb_resume_noirq(struct tb *tb)
 	struct tb_tunnel *tunnel, *n;
 	unsigned int usb3_delay = 0;
 	LIST_HEAD(tunnels);
+
+	if (tb->kept_running) {
+		tb->kept_running = false;
+		tb_dbg(tb, "domain kept running, checking for changes\n");
+		tb_check_kept_running(tb->root_switch);
+		tb_free_invalid_tunnels(tb);
+		tb_free_unplugged_children(tb->root_switch);
+		tcm->rescan_on_complete = true;
+		tcm->hotplug_active = true;
+		return 0;
+	}
 
 	tb_dbg(tb, "resuming...\n");
 
@@ -3250,12 +3351,17 @@ static int tb_thaw_noirq(struct tb *tb)
 
 static void tb_complete(struct tb *tb)
 {
+	struct tb_cm *tcm = tb_priv(tb);
+	bool rescan = tcm->rescan_on_complete;
+
+	tcm->rescan_on_complete = false;
+
 	/*
 	 * Unregister unplugged XDomains and if there is a case where
 	 * another domain is swapped in place of unplugged XDomain we
 	 * need to run another rescan.
 	 */
-	if (tb_domain_unregister_unplugged_xdomains(tb)) {
+	if (tb_domain_unregister_unplugged_xdomains(tb) || rescan) {
 		scoped_guard(mutex, &tb->lock)
 			tb_scan_switch(tb->root_switch);
 	}
