@@ -413,6 +413,17 @@ void b43_phy_take_out_of_reset(struct b43_wldev *dev)
 	}
 }
 
+/*
+ * The 11ac chanspec of a primary channel as the AC microcode takes it in
+ * SHM and in the TX and RX headers: channel, 0x1000 for 20 MHz, 0xc000 on
+ * 5 GHz.
+ */
+u16 b43_ac_chanspec(struct b43_wldev *dev, unsigned int channel)
+{
+	return channel | 0x1000 |
+	       (b43_current_band(dev->wl) == NL80211_BAND_5GHZ ? 0xc000 : 0);
+}
+
 int b43_switch_channel(struct b43_wldev *dev, unsigned int new_channel)
 {
 	struct b43_phy *phy = &(dev->phy);
@@ -428,6 +439,8 @@ int b43_switch_channel(struct b43_wldev *dev, unsigned int new_channel)
 	/* FIXME: set 40Mhz flag if required */
 	if (0)
 		channelcookie |= B43_SHM_SH_CHAN_40MHZ;
+	if (b43_ucode_is_ac(dev))
+		channelcookie = b43_ac_chanspec(dev, new_channel);
 	savedcookie = b43_shm_read16(dev, B43_SHM_SHARED, B43_SHM_SH_CHAN);
 	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_CHAN, channelcookie);
 

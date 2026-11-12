@@ -390,6 +390,13 @@ void b43_phy_take_out_of_reset(struct b43_wldev *dev);
  */
 int b43_switch_channel(struct b43_wldev *dev, unsigned int new_channel);
 
+/*
+ * 11ac chanspec of the AC microcode, and the centre channel of the 80 MHz block
+ * of a 5 GHz primary (0: none)
+ */
+u16 b43_ac_chanspec(struct b43_wldev *dev, unsigned int channel);
+unsigned int b43_ac_80mhz_centre(unsigned int channel);
+
 /**
  * b43_software_rfkill - Turn the radio ON or OFF in software.
  */
