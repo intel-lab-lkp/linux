@@ -64,7 +64,6 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
         unsafe {
             (*adrv.get()).name = name.as_char_ptr();
             (*adrv.get()).probe = Some(Self::probe_callback);
-            (*adrv.get()).remove = Some(Self::remove_callback);
             (*adrv.get()).id_table = T::ID_TABLE.as_ptr();
         }
 
@@ -104,21 +103,6 @@ impl<T: Driver> Adapter<T> {
             adev.as_ref().set_drvdata(data)?;
             Ok(0)
         })
-    }
-
-    extern "C" fn remove_callback(adev: *mut bindings::auxiliary_device) {
-        // SAFETY: The auxiliary bus only ever calls the probe callback with a valid pointer to a
-        // `struct auxiliary_device`.
-        //
-        // INVARIANT: `adev` is valid for the duration of `remove_callback()`.
-        let adev = unsafe { &*adev.cast::<Device<device::CoreInternal<'_>>>() };
-
-        // SAFETY: `remove_callback` is only ever called after a successful call to
-        // `probe_callback`, hence it's guaranteed that `Device::set_drvdata()` has been called
-        // and stored a `Pin<KBox<T::Data<'_>>>`.
-        let data = unsafe { adev.as_ref().drvdata_borrow::<T::Data<'_>>() };
-
-        T::unbind(adev, data);
     }
 }
 
@@ -205,6 +189,10 @@ pub trait Driver {
     type IdInfo: 'static;
 
     /// The type of the driver's bus device private data.
+    ///
+    /// Device teardown should be performed in [`Drop`] or [`PinnedDrop`](pin_init::PinnedDrop)
+    /// for this type. The `'bound` lifetime allows the data to retain device resources and a
+    /// [`Device<device::Bound>`] reference for use during teardown.
     type Data<'bound>: Send + 'bound;
 
     /// The table of device ids supported by the driver.
@@ -217,20 +205,6 @@ pub trait Driver {
         dev: &'bound Device<device::Core<'_>>,
         id_info: &'bound Self::IdInfo,
     ) -> impl PinInit<Self::Data<'bound>, Error> + 'bound;
-
-    /// Auxiliary driver unbind.
-    ///
-    /// Called when a [`Device`] is unbound from its bound [`Driver`]. Implementing this callback
-    /// is optional.
-    ///
-    /// This callback serves as a place for drivers to perform teardown operations that require a
-    /// `&Device<Core>` or `&Device<Bound>` reference. For instance, drivers may try to perform I/O
-    /// operations to gracefully tear down the device.
-    ///
-    /// Otherwise, release operations for driver resources should be performed in `Drop`.
-    fn unbind<'bound>(dev: &'bound Device<device::Core<'_>>, this: Pin<&Self::Data<'bound>>) {
-        let _ = (dev, this);
-    }
 }
 
 /// The auxiliary device representation.
