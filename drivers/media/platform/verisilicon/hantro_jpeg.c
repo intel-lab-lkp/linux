@@ -14,6 +14,7 @@
 #include <media/v4l2-jpeg.h>
 #include "hantro_jpeg.h"
 #include "hantro.h"
+#include "hantro_hw.h"
 
 #define LUMA_QUANT_OFF		25
 #define CHROMA_QUANT_OFF	90
@@ -242,4 +243,40 @@ void hantro_jpeg_header_assemble(struct hantro_jpeg_ctx *ctx)
 	memcpy(buf + HUFF_CHROMA_AC_OFF, v4l2_jpeg_ref_table_chroma_ac_ht, V4L2_JPEG_REF_HT_AC_LEN);
 
 	jpeg_set_quality(ctx);
+}
+
+/*
+ * Check that the formats describe a frame the JPEG encoders can be
+ * programmed with: the coded size may only crop the OUTPUT frame inside
+ * the right-most and bottom-most macroblocks, and the CAPTURE buffer
+ * must have room for the header and some payload. The V4L2 ioctls are
+ * expected to guarantee this, but programming the hardware with
+ * anything else makes it access memory outside the buffers, so refuse
+ * the job instead.
+ */
+int hantro_jpeg_enc_check_job(struct hantro_ctx *ctx,
+			      struct vb2_buffer *dst_buf)
+{
+	const struct v4l2_pix_format_mplane *src = &ctx->src_fmt;
+	const struct v4l2_pix_format_mplane *dst = &ctx->dst_fmt;
+
+	if (!dst->width || !dst->height ||
+	    !IS_ALIGNED(src->width, MB_DIM) ||
+	    !IS_ALIGNED(src->height, MB_DIM) ||
+	    dst->width > src->width || dst->height > src->height ||
+	    src->width - dst->width >= MB_DIM ||
+	    src->height - dst->height >= MB_DIM ||
+	    !IS_ALIGNED(src->width - dst->width, 4)) {
+		vpu_err("inconsistent geometry: OUTPUT %ux%u, CAPTURE %ux%u\n",
+			src->width, src->height, dst->width, dst->height);
+		return -EINVAL;
+	}
+
+	if (vb2_plane_size(dst_buf, 0) <= ctx->vpu_dst_fmt->header_size) {
+		vpu_err("CAPTURE buffer too small: %lu bytes\n",
+			vb2_plane_size(dst_buf, 0));
+		return -EINVAL;
+	}
+
+	return 0;
 }

@@ -135,9 +135,18 @@ int rockchip_vpu2_jpeg_enc_run(struct hantro_ctx *ctx)
 	struct vb2_v4l2_buffer *src_buf, *dst_buf;
 	struct hantro_jpeg_ctx jpeg_ctx;
 	u32 reg;
+	int ret;
 
 	src_buf = hantro_get_src_buf(ctx);
 	dst_buf = hantro_get_dst_buf(ctx);
+
+	ret = hantro_jpeg_enc_check_job(ctx, &dst_buf->vb2_buf);
+	if (ret) {
+		/* Complete the controls of the request, the job is not run */
+		v4l2_ctrl_request_complete(src_buf->vb2_buf.req_obj.req,
+					   &ctx->ctrl_handler);
+		return ret;
+	}
 
 	hantro_start_prepare_run(ctx);
 
