@@ -153,6 +153,7 @@ int drm_gem_plane_helper_prepare_fb(struct drm_plane *plane,
 			struct dma_fence_chain *chain = dma_fence_chain_alloc();
 
 			if (!chain) {
+				dma_fence_put(new);
 				ret = -ENOMEM;
 				goto error;
 			}
