@@ -1195,7 +1195,6 @@ bool tmigr_requires_handle_remote(void)
 	if (tmigr_is_not_available(tmc))
 		return ret;
 
-	data.now = get_jiffies_update(&jif);
 	data.childmask = tmc->groupmask;
 	data.firstexp = KTIME_MAX;
 	data.check = false;
@@ -1208,10 +1207,20 @@ bool tmigr_requires_handle_remote(void)
 	 * set only by the local CPU.
 	 */
 	if (!tmc->idle) {
+		/*
+		 * Bail out early when not the migrator, to avoid reading
+		 * jiffies_seq, which the timekeeper writes on every tick.
+		 */
+		if (!tmigr_check_migrator(tmc->tmgroup, data.childmask))
+			return false;
+
+		data.now = get_jiffies_update(&jif);
 		__walk_groups(&tmigr_requires_handle_remote_up, &data, tmc);
 
 		return data.check;
 	}
+
+	data.now = get_jiffies_update(&jif);
 
 	/*
 	 * When the CPU is idle, compare @tmc->wakeup with @data.now. The lock
