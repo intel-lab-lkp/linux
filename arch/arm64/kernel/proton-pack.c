@@ -638,7 +638,7 @@ void spectre_v4_enable_mitigation(const struct arm64_cpu_capabilities *__unused)
 	WARN_ON(preemptible());
 
 	state = spectre_v4_enable_hw_mitigation();
-	if (state == SPECTRE_VULNERABLE)
+	if (state == SPECTRE_VULNERABLE && !this_cpu_has_cap(ARM64_SSBS))
 		state = spectre_v4_enable_fw_mitigation();
 
 	update_mitigation_state(&spectre_v4_state, state);
