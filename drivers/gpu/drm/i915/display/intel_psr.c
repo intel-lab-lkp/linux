@@ -228,6 +228,9 @@ static bool psr_global_enabled(struct intel_dp *intel_dp)
 
 	switch (intel_dp->psr.debug & I915_PSR_DEBUG_MODE_MASK) {
 	case I915_PSR_DEBUG_DEFAULT:
+		if (intel_has_dpcd_quirk(intel_dp, QUIRK_APPLE_PSR_HANDSHAKE))
+			return true;
+
 		return intel_dp_is_edp(intel_dp) ?
 			connector->panel.vbt.psr.enable : true;
 	case I915_PSR_DEBUG_DISABLE:
@@ -667,7 +670,8 @@ static void _psr_init_dpcd(struct intel_dp *intel_dp, struct intel_connector *co
 	drm_dbg_kms(display->drm, "eDP panel supports PSR version %x\n",
 		    connector->dp.psr_caps.dpcd[0]);
 
-	if (drm_dp_has_quirk(&intel_dp->desc, DP_DPCD_QUIRK_NO_PSR)) {
+	if (drm_dp_has_quirk(&intel_dp->desc, DP_DPCD_QUIRK_NO_PSR) &&
+	    !intel_has_dpcd_quirk(intel_dp, QUIRK_APPLE_PSR_HANDSHAKE)) {
 		drm_dbg_kms(display->drm,
 			    "PSR support not currently available for this panel\n");
 		return;
@@ -807,11 +811,28 @@ static void _panel_replay_enable_sink(struct intel_dp *intel_dp,
 	drm_dp_dpcd_write_byte(&intel_dp->aux, PANEL_REPLAY_CONFIG3, panel_replay_config_3);
 }
 
+/* Undocumented Apple eDP sink registers */
+#define APPLE_PSR_SETUP_1	0x321
+#define APPLE_PSR_SETUP_2	0x4d2
+#define APPLE_PSR_SETUP_3	0x4d1
+#define APPLE_PSR_TRIGGER	0x4d4
+
+static void psr_apple_prepare_sink(struct intel_dp *intel_dp)
+{
+	drm_dp_dpcd_write_byte(&intel_dp->aux, APPLE_PSR_SETUP_1, 0x3c);
+	drm_dp_dpcd_write_byte(&intel_dp->aux, APPLE_PSR_SETUP_2, 0x01);
+	drm_dp_dpcd_write_byte(&intel_dp->aux, APPLE_PSR_SETUP_3, 0x03);
+}
+
 static void _psr_enable_sink(struct intel_dp *intel_dp,
 			     const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
+	bool apple_psr = intel_has_dpcd_quirk(intel_dp, QUIRK_APPLE_PSR_HANDSHAKE);
 	u8 val = 0;
+
+	if (apple_psr)
+		psr_apple_prepare_sink(intel_dp);
 
 	if (crtc_state->has_sel_update) {
 		val |= DP_PSR_ENABLE_PSR2 | DP_PSR_IRQ_HPD_WITH_CRC_ERRORS;
@@ -819,7 +840,7 @@ static void _psr_enable_sink(struct intel_dp *intel_dp,
 		if (intel_dp->psr.link_standby)
 			val |= DP_PSR_MAIN_LINK_ACTIVE;
 
-		if (DISPLAY_VER(display) >= 8)
+		if (DISPLAY_VER(display) >= 8 && !apple_psr)
 			val |= DP_PSR_CRC_VERIFICATION;
 	}
 
@@ -835,6 +856,9 @@ static void _psr_enable_sink(struct intel_dp *intel_dp,
 
 	val |= DP_PSR_ENABLE;
 	drm_dp_dpcd_write_byte(&intel_dp->aux, DP_PSR_EN_CFG, val);
+
+	if (apple_psr)
+		drm_dp_dpcd_write_byte(&intel_dp->aux, APPLE_PSR_TRIGGER, 0x01);
 }
 
 static void intel_psr_enable_sink(struct intel_dp *intel_dp,

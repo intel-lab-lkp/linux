@@ -9,6 +9,7 @@
 
 #include "intel_display_core.h"
 #include "intel_display_types.h"
+#include "intel_dp.h"
 #include "intel_quirks.h"
 
 static void intel_set_quirk(struct intel_display *display, enum intel_quirk_id quirk)
@@ -98,6 +99,25 @@ static void quirk_disable_psr2(struct intel_display *display)
 {
 	intel_set_quirk(display, QUIRK_DISABLE_PSR2);
 	drm_info(display->drm, "PSR2 support not currently available for this setup, applying disable PSR2 quirk\n");
+}
+
+static void quirk_apple_psr_handshake(struct intel_dp *intel_dp)
+{
+	static const struct pci_device_id t2_ids[] = {
+		/* Apple T2 */
+		{PCI_DEVICE(PCI_VENDOR_ID_APPLE, 0x1801)},
+		{}
+	};
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	if (!intel_dp_is_edp(intel_dp))
+		return;
+
+	if (!pci_dev_present(t2_ids))
+		return;
+
+	intel_set_dpcd_quirk(intel_dp, QUIRK_APPLE_PSR_HANDSHAKE);
+	drm_info(display->drm, "Applying Apple PSR handshake quirk\n");
 }
 
 struct intel_quirk {
@@ -288,6 +308,14 @@ static const struct intel_dpcd_quirk intel_dpcd_quirks[] = {
 		.subsystem_device = 0x0dba,
 		.sink_oui = SINK_OUI(0x00, 0x22, 0xb9),
 		.hook = quirk_disable_edp_panel_replay,
+	},
+	/* Apple T2 eDP panels */
+	{
+		.device = DEVICE_ID_ANY,
+		.subsystem_vendor = PCI_VENDOR_ID_APPLE,
+		.subsystem_device = PCI_ANY_ID,
+		.sink_oui = SINK_OUI(0x00, 0x10, 0xfa),
+		.hook = quirk_apple_psr_handshake,
 	},
 };
 
