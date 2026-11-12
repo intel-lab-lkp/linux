@@ -78,7 +78,7 @@ use kernel::{
     sync::aref::ARef, //
 };
 
-#[pin_data]
+#[pin_data(PinnedDrop)]
 struct SampleDriver {
     parent_dev: ARef<platform::Device>,
     #[pin]
@@ -127,13 +127,13 @@ impl platform::Driver for SampleDriver {
             }
         })
     }
+}
 
-    fn unbind<'bound>(
-        pdev: &'bound platform::Device<device::Core<'_>>,
-        _this: Pin<&Self::Data<'bound>>,
-    ) {
+#[pinned_drop]
+impl PinnedDrop for SampleDriver {
+    fn drop(self: Pin<&mut Self>) {
         dev_info!(
-            pdev.as_ref(),
+            self.parent_dev,
             "Unbind Rust I2C Client registration sample.\n"
         );
     }
