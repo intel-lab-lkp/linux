@@ -1111,6 +1111,14 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	e1000_check_options(adapter);
 
+	/* The XsumRX option (enabled by default) decides whether RX checksum
+	 * offload starts enabled. Reflect it in the features so that ethtool
+	 * reports the real state and e1000_set_features() sees a change when
+	 * the user turns it off.
+	 */
+	if (hw->mac_type >= e1000_82543 && adapter->rx_csum)
+		netdev->features |= NETIF_F_RXCSUM;
+
 	/* Initial Wake on LAN setting
 	 * If APM wake is enabled in the EEPROM,
 	 * enable the ACPI Magic Packet filter
