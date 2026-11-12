@@ -35,6 +35,9 @@ struct fl2000_devs {
 	struct regmap *regmap;
 	struct i2c_adapter *adapter;
 	struct drm_bridge *bridge;
+	struct fl2000_device *fdev;
+	/* The display was stopped for system sleep or a reset and has not been restarted yet */
+	bool suspended;
 };
 
 /* Interface 0 is what the driver is probing: claim the others */
@@ -116,10 +119,20 @@ static int fl2000_probe(struct usb_interface *interface, const struct usb_device
 	if (ret)
 		goto err_destroy_bridge;
 
+	devs->fdev = fl2000_drm_create(interface, devs->regmap, devs->adapter, devs->bridge);
+	if (IS_ERR(devs->fdev)) {
+		ret = PTR_ERR(devs->fdev);
+		goto err_release_interfaces;
+	}
+
 	usb_set_intfdata(interface, devs);
 
 	return 0;
 
+err_release_interfaces:
+	for (int i = FL2000_USBIF_AVCONTROL + 1; i < FL2000_USBIF_NUM; i++)
+		usb_set_intfdata(usb_ifnum_to_if(usb_dev, i), NULL);
+	fl2000_release_interfaces(usb_dev, interface);
 err_destroy_bridge:
 	it66121_destroy(devs->bridge);
 
@@ -138,26 +151,52 @@ static void fl2000_disconnect(struct usb_interface *interface)
 	for (int i = 0; i < FL2000_USBIF_NUM; i++)
 		usb_set_intfdata(usb_ifnum_to_if(usb_dev, i), NULL);
 
+	fl2000_drm_destroy(devs->fdev);
 	it66121_destroy(devs->bridge);
 
 	/* Last, as devs goes with interface 0, which may be one of these */
 	fl2000_release_interfaces(usb_dev, interface);
 }
 
+/*
+ * System sleep. The USB core suspends the interfaces one by one, the last first, and resumes them
+ * in order once the device is awake. The display is one thing for all three: stop it at the first
+ * suspend, before any interface sleeps, and start it again at the first resume. The same callback
+ * serves a reset-resume, after which the chips are set up from scratch: without one the USB core
+ * would unbind and bind the driver again, which a running compositor sees as an unplug.
+ */
 static int fl2000_suspend(struct usb_interface *interface, pm_message_t message)
 {
-	/*
-	 * Nothing to save yet. Providing the callback keeps the USB core from
-	 * unbinding the driver across system sleep.
-	 */
-	dev_dbg(&interface->dev, "suspend\n");
+	struct fl2000_devs *devs = usb_get_intfdata(interface);
 
-	return 0;
+	if (!devs || devs->suspended)
+		return 0;
+
+	/* Even if this fails: the USB core ignores the error during system sleep and goes on */
+	devs->suspended = true;
+
+	return fl2000_drm_suspend(devs->fdev);
 }
 
 static int fl2000_resume(struct usb_interface *interface)
 {
-	dev_dbg(&interface->dev, "resume\n");
+	struct fl2000_devs *devs = usb_get_intfdata(interface);
+
+	if (!devs || !devs->suspended)
+		return 0;
+
+	devs->suspended = false;
+
+	return fl2000_drm_resume(devs->fdev);
+}
+
+/*
+ * A reset of the USB device (the storage function of the adapter asks for one when it times out)
+ * is the same as far as the display goes. Nonzero would make the USB core unbind the driver.
+ */
+static int fl2000_pre_reset(struct usb_interface *interface)
+{
+	fl2000_suspend(interface, PMSG_SUSPEND);
 
 	return 0;
 }
@@ -168,6 +207,9 @@ static struct usb_driver fl2000_driver = {
 	.disconnect = fl2000_disconnect,
 	.suspend = fl2000_suspend,
 	.resume = fl2000_resume,
+	.reset_resume = fl2000_resume,
+	.pre_reset = fl2000_pre_reset,
+	.post_reset = fl2000_resume,
 	.id_table = fl2000_id_table,
 	.supports_autosuspend = false,
 	.disable_hub_initiated_lpm = true,

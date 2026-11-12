@@ -100,6 +100,30 @@ void fl2000_stream_note_render(struct fl2000_stream *stream, unsigned int conv_u
 int fl2000_stream_enable(struct fl2000_stream *stream);
 void fl2000_stream_disable(struct fl2000_stream *stream);
 
+/* Interrupt polling task */
+struct fl2000_intr;
+struct fl2000_intr *fl2000_intr_create(struct usb_device *usb_dev, struct regmap *regmap,
+				       struct drm_device *drm);
+void fl2000_intr_quiesce(struct fl2000_intr *intr);
+void fl2000_intr_suspend(struct fl2000_intr *intr);
+int fl2000_intr_start(struct fl2000_intr *intr);
+int fl2000_intr_monitor_connected(struct fl2000_intr *intr);
+void fl2000_intr_destroy(struct fl2000_intr *intr);
+
+/* VGA output: a DAC encoder and connector next to the HDMI ones, on the same CRTC */
+struct fl2000_vga {
+	struct drm_encoder encoder;
+	struct drm_connector connector;
+	struct i2c_adapter *adapter;
+	struct fl2000_intr *intr;
+	/* The HDMI transmitter shares the chip's monitor sense with this output */
+	struct drm_bridge *hdmi_bridge;
+};
+
+int fl2000_vga_init(struct drm_device *drm, struct fl2000_vga *vga, struct drm_crtc *crtc,
+		    struct drm_encoder *hdmi_encoder, struct i2c_adapter *adapter,
+		    struct fl2000_intr *intr);
+
 /* I2C adapter interface creation */
 struct i2c_adapter *fl2000_i2c_init(struct usb_interface *interface, struct regmap *regmap);
 int fl2000_ddc_read_block(struct i2c_adapter *adapter, u8 *buf, unsigned int block, size_t len);
@@ -122,5 +146,14 @@ int fl2000_enable_sink_interrupts(struct regmap *regmap);
 int fl2000_stream_interrupts(struct regmap *regmap, bool enable);
 int fl2000_read_status(struct regmap *regmap, u32 *status);
 int fl2000_i2c_dword(struct regmap *regmap, bool read, u16 addr, u8 offset, u32 *data);
+
+/* DRM device creation */
+struct fl2000_device;
+struct fl2000_device *fl2000_drm_create(struct usb_interface *interface, struct regmap *regmap,
+					struct i2c_adapter *adapter, struct drm_bridge *bridge);
+void fl2000_drm_destroy(struct fl2000_device *fdev);
+void fl2000_drm_hotplug(struct drm_device *drm, u32 events);
+int fl2000_drm_suspend(struct fl2000_device *fdev);
+int fl2000_drm_resume(struct fl2000_device *fdev);
 
 #endif /* FL2000_H */
