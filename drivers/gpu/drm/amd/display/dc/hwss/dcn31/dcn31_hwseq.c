@@ -55,6 +55,7 @@
 #include "dce/dmub_abm_lcd.h"
 #include "dio/dcn10/dcn10_dio.h"
 #include "dce/dmub_abm_cacp.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER_INIT(logger)
 

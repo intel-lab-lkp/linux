@@ -25,6 +25,7 @@
 
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "core_types.h"
 #include "dce60_hwseq.h"
 

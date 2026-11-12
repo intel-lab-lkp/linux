@@ -28,6 +28,7 @@
 #include "dcn401_dccg.h"
 #include "dcn31/dcn31_dccg.h"
 #include "dcn20/dcn20_dccg.h"
+#include "dc_priv.h"
 
 /*
 #include "dmub_common.h"

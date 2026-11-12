@@ -36,6 +36,7 @@
 #include "dc_state_priv.h"
 #include "link_enc_cfg.h"
 #include "dio/dcn10/dcn10_dio.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER_INIT(logger)
 

@@ -5,6 +5,7 @@
 
 
 #include "dc.h"
+#include "dc_priv.h"
 #include "dcn42_resource_fpu.h"
 
 #define DC_LOGGER_INIT(logger)

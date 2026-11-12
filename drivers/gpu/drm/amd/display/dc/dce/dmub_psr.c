@@ -25,6 +25,7 @@
 
 #include "dmub_psr.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "dc_dmub_srv.h"
 #include "dmub/dmub_srv.h"
 #include "core_types.h"

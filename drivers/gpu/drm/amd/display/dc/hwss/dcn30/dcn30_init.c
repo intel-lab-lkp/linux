@@ -30,6 +30,7 @@
 #include "dcn30/dcn30_hwseq.h"
 
 #include "dcn30_init.h"
+#include "dc_priv.h"
 
 static const struct hw_sequencer_funcs dcn30_funcs = {
 	.program_gamut_remap = dcn30_program_gamut_remap,

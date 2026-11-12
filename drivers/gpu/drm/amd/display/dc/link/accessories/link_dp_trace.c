@@ -24,6 +24,7 @@
  */
 #include "link_dp_trace.h"
 #include "link/protocols/link_dpcd.h"
+#include "dc_priv.h"
 
 void dp_trace_init(struct dc_link *link)
 {

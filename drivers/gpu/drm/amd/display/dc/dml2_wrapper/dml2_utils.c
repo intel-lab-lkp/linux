@@ -30,6 +30,7 @@
 #include "dml2_internal_types.h"
 #include "dml2_translation_helper.h"
 #include "dml2_utils.h"
+#include "dc_priv.h"
 
 void dml2_util_copy_dml_timing(struct dml_timing_cfg_st *dml_timing_array, unsigned int dst_index, unsigned int src_index)
 {

@@ -31,6 +31,7 @@
  * mapping stays obvious and auditable.
  */
 #include "dc.h"
+#include "dc_priv.h"
 #include "dm_helpers.h"	/* EXPORT_IF_KUNIT */
 
 uint8_t dc_get_link_count(const struct dc *dc)

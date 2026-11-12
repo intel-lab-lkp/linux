@@ -40,6 +40,7 @@
 #include "clk/clk_10_0_2_offset.h"
 #include "clk/clk_10_0_2_sh_mask.h"
 #include "renoir_ip_offset.h"
+#include "dc_priv.h"
 
 
 /* Constants */

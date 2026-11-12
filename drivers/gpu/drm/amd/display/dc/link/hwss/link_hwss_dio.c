@@ -25,6 +25,7 @@
 #include "link_hwss_dio.h"
 #include "core_types.h"
 #include "link_enc_cfg.h"
+#include "dc_priv.h"
 
 /**
  * DOC: overview

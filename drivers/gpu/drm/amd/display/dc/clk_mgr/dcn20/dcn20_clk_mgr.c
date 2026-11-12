@@ -37,6 +37,7 @@
 #include "dcn/dcn_2_0_0_sh_mask.h"
 #include "clk/clk_11_0_0_offset.h"
 #include "clk/clk_11_0_0_sh_mask.h"
+#include "dc_priv.h"
 
 
 #undef FN

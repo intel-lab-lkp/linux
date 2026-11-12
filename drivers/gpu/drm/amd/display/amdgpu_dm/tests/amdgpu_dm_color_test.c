@@ -1758,7 +1758,7 @@ dm_test_verify_lut3d_alloc_adev(struct kunit *test, bool has_3dlut)
 {
 	struct amdgpu_device *adev = dm_kunit_alloc_adev(test);
 
-	adev->dm.dc = kunit_kzalloc(test, sizeof(*adev->dm.dc), GFP_KERNEL);
+	adev->dm.dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc);
 	dc_test_caps(adev->dm.dc)->color.dpp.hw_3d_lut = has_3dlut;
 
@@ -2060,7 +2060,7 @@ dm_test_color_update_setup(struct kunit *test)
 	struct dm_test_color_update_fixture f = {0};
 
 	f.adev = dm_kunit_alloc_adev(test);
-	f.adev->dm.dc = kunit_kzalloc(test, sizeof(*f.adev->dm.dc), GFP_KERNEL);
+	f.adev->dm.dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, f.adev->dm.dc);
 
 	f.state = kunit_kzalloc(test, sizeof(*f.state), GFP_KERNEL);

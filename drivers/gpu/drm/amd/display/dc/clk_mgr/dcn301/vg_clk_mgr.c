@@ -45,6 +45,7 @@
 #include "vangogh_ip_offset.h"
 #include "clk/clk_11_5_0_offset.h"
 #include "clk/clk_11_5_0_sh_mask.h"
+#include "dc_priv.h"
 
 /* Constants */
 

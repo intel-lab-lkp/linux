@@ -35,6 +35,7 @@
 #include "ivsrcid/ivsrcid_vislands30.h"
 
 #include "dc.h"
+#include "dc_priv.h"
 #include "core_types.h"
 #define DC_LOGGER \
 	irq_service->ctx->logger

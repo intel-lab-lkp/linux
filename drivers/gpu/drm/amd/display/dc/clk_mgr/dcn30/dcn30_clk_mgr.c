@@ -44,6 +44,7 @@
 #include "mmhub/mmhub_2_0_0_offset.h"
 #include "mmhub/mmhub_2_0_0_sh_mask.h"
 #include "dcn30_smu11_driver_if.h"
+#include "dc_priv.h"
 
 #undef FN
 #define FN(reg_name, field_name) \

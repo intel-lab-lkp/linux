@@ -53,6 +53,7 @@
 #include "../dcn20/dcn20_hwseq.h"
 #include "dc_state_priv.h"
 #include "dio/dcn10/dcn10_dio.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER_INIT(logger)
 

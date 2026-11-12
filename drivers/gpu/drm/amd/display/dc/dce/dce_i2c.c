@@ -24,6 +24,7 @@
  */
 #include "dce_i2c.h"
 #include "reg_helper.h"
+#include "dc_priv.h"
 
 bool dce_i2c_oem_device_present(
 	struct resource_pool *pool,

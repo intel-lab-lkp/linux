@@ -25,6 +25,7 @@
 #include "link_hwss_dio.h"
 #include "link_hwss_dio_fixed_vs_pe_retimer.h"
 #include "link_enc_cfg.h"
+#include "dc_priv.h"
 
 uint8_t dp_dio_fixed_vs_pe_retimer_lane_cfg_to_hw_cfg(struct dc_link *link)
 {

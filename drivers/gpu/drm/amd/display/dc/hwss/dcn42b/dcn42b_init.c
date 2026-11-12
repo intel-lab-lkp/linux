@@ -8,6 +8,7 @@
 #include "dcn42/dcn42_init.h"
 #include "dcn42b_hwseq.h"
 #include "dcn42b_init.h"
+#include "dc_priv.h"
 
 void dcn42b_hw_sequencer_init_functions(struct dc *dc)
 {

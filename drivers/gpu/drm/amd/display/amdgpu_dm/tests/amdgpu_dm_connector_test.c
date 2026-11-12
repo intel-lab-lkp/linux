@@ -3041,7 +3041,7 @@ static struct dm_test_fbc_ctx *dm_test_fbc_ctx_alloc(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, ctx->adev);
 	ctx->aconnector = kunit_kzalloc(test, sizeof(*ctx->aconnector), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->aconnector);
-	ctx->dc = kunit_kzalloc(test, sizeof(*ctx->dc), GFP_KERNEL);
+	ctx->dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->dc);
 	ctx->link = kunit_kzalloc(test, sizeof(*ctx->link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->link);
@@ -5073,7 +5073,7 @@ static struct dm_test_poll_ctx *dm_test_poll_ctx_alloc(struct kunit *test)
 				    DRM_MODE_CONNECTOR_VGA, NULL), 0);
 	mutex_init(&ctx->aconnector->hpd_lock);
 
-	ctx->dc = kunit_kzalloc(test, sizeof(*ctx->dc), GFP_KERNEL);
+	ctx->dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->dc);
 	ctx->link_srv = kunit_kzalloc(test, sizeof(*ctx->link_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->link_srv);
@@ -6458,7 +6458,7 @@ static struct dm_test_i2c_ctx *dm_test_i2c_setup(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, ctx->ddc);
 	ctx->dc_ctx = kunit_kzalloc(test, sizeof(*ctx->dc_ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->dc_ctx);
-	ctx->dc = kunit_kzalloc(test, sizeof(*ctx->dc), GFP_KERNEL);
+	ctx->dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->dc);
 	ctx->link = kunit_kzalloc(test, sizeof(*ctx->link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->link);
@@ -7382,7 +7382,7 @@ static struct dm_test_cvs_dc *dm_test_cvs_dc_alloc(struct kunit *test)
 	pool->timing_generators[0] = tg;
 	pool->timing_generator_count = 0;
 
-	c->dc = kunit_kzalloc(test, sizeof(*c->dc), GFP_KERNEL);
+	c->dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, c->dc);
 	dc_test_set_ctx(c->dc, dcc);
 	dc_test_set_res_pool(c->dc, pool);
@@ -8476,7 +8476,7 @@ dm_test_gm_ctx_alloc(struct kunit *test, int connector_type)
 					   &ctx->aenc->base);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
-	ctx->dc = kunit_kzalloc(test, sizeof(*ctx->dc), GFP_KERNEL);
+	ctx->dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->dc);
 	ctx->link_srv = kunit_kzalloc(test, sizeof(*ctx->link_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->link_srv);
@@ -9072,7 +9072,7 @@ static struct dm_test_frl_ctx *dm_test_frl_ctx_alloc(struct kunit *test)
 
 	ctx->dm = kunit_kzalloc(test, sizeof(*ctx->dm), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->dm);
-	ctx->dc = kunit_kzalloc(test, sizeof(*ctx->dc), GFP_KERNEL);
+	ctx->dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->dc);
 	ctx->link_srv = kunit_kzalloc(test, sizeof(*ctx->link_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->link_srv);

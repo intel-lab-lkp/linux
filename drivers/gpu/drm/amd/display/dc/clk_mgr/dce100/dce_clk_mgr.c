@@ -42,6 +42,7 @@
  */
 #include "dce/dce_8_0_d.h"
 #include "dce/dce_8_0_sh_mask.h"
+#include "dc_priv.h"
 
 #define REG(reg) \
 	(clk_mgr->regs->reg)

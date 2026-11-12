@@ -27,6 +27,7 @@
 #include "dcn10/dcn10_hubp.h"
 #include "dcn10_hubbub.h"
 #include "reg_helper.h"
+#include "dc_priv.h"
 
 #define CTX \
 	hubbub1->base.ctx

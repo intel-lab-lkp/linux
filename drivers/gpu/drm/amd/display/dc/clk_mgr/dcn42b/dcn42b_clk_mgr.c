@@ -36,6 +36,7 @@
 #include "dcn/dcn_4_2_1_sh_mask.h"
 
 #include <linux/power_supply.h>
+#include "dc_priv.h"
 
 #define DCN_BASE__INST0_SEG0                       0x00000012
 #define DCN_BASE__INST0_SEG1                       0x000000C0

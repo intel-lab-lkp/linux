@@ -42,6 +42,7 @@
 #include "dccg.h"
 
 #include "dml/dml1_frl_cap_chk.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	dc_logger

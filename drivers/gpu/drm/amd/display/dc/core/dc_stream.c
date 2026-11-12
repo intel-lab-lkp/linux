@@ -27,6 +27,7 @@
 #include "dm_helpers.h"
 #include "basics/dc_common.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "core_types.h"
 #include "resource.h"
 #include "ipp.h"

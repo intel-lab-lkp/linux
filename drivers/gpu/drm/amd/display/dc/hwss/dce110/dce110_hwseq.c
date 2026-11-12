@@ -25,6 +25,7 @@
 
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "dc_bios_types.h"
 #include "core_types.h"
 #include "core_status.h"

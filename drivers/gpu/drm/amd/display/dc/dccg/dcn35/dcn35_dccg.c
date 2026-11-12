@@ -41,6 +41,7 @@
 #define CTX \
 	dccg_dcn->base.ctx
 #include "logger_types.h"
+#include "dc_priv.h"
 #define DC_LOGGER \
 	dccg->ctx->logger
 

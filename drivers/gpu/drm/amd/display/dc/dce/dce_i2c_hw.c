@@ -27,6 +27,7 @@
 #include "dce_i2c_hw.h"
 #include "reg_helper.h"
 #include "include/gpio_service_interface.h"
+#include "dc_priv.h"
 
 #define CTX \
 	dce_i2c_hw->ctx

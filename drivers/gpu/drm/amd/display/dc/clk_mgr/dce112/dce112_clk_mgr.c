@@ -32,6 +32,7 @@
 #include "dce110/dce110_clk_mgr.h"
 #include "dce112_clk_mgr.h"
 #include "dal_asic_id.h"
+#include "dc_priv.h"
 
 /* set register offset */
 #define SR(reg_name)\

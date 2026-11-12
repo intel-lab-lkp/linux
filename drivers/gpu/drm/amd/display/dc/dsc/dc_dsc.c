@@ -27,6 +27,7 @@
 #include "dc_hw_types.h"
 #include "dsc.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "rc_calc.h"
 #include "fixed31_32.h"
 

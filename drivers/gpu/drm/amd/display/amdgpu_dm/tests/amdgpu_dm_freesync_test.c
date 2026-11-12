@@ -851,7 +851,7 @@ static void dm_test_handle_vrr_transition_round_trip(struct kunit *test)
 	vblank = drm_crtc_vblank_crtc(&acrtc->base);
 	adev->ddev.vblank[0].enabled = true;
 	adev->dm.adev = adev;
-	adev->dm.dc = kunit_kzalloc(test, sizeof(*adev->dm.dc), GFP_KERNEL);
+	adev->dm.dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc);
 	mutex_init(&adev->dm.dc_lock);
 

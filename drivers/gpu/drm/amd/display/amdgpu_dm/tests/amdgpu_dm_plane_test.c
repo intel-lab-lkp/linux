@@ -87,7 +87,7 @@ static void dm_test_init_validate_dcc_inputs(struct amdgpu_device **adev,
 					     struct kunit *test)
 {
 	*adev = kunit_kzalloc(test, sizeof(**adev), GFP_KERNEL);
-	*dc = kunit_kzalloc(test, sizeof(**dc), GFP_KERNEL);
+	*dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, *adev);
 	KUNIT_ASSERT_NOT_NULL(test, *dc);
 

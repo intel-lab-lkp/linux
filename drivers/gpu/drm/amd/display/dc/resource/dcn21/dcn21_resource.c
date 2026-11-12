@@ -28,6 +28,7 @@
 
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #include "dcn21/dcn21_init.h"
 

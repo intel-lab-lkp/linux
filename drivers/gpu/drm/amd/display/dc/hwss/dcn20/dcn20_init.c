@@ -28,6 +28,7 @@
 #include "dcn20/dcn20_hwseq.h"
 
 #include "dcn20_init.h"
+#include "dc_priv.h"
 
 static const struct hw_sequencer_funcs dcn20_funcs = {
 	.program_gamut_remap = dcn10_program_gamut_remap,

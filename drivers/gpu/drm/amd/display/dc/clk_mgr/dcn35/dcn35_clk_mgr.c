@@ -46,6 +46,7 @@
 #include "dc_dmub_srv.h"
 #include "link_service.h"
 #include "logger_types.h"
+#include "dc_priv.h"
 
 #undef DC_LOGGER
 #define DC_LOGGER \

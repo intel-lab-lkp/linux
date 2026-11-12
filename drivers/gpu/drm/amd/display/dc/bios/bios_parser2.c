@@ -43,6 +43,7 @@
 #include "bios_parser_interface.h"
 
 #include "bios_parser_common.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	bp->base.ctx->logger

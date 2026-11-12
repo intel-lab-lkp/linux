@@ -36,6 +36,7 @@
 #include "dcn35/dcn35_hwseq.h"
 #include "dcn42/dcn42_hwseq.h"
 #include "dio/dcn10/dcn10_dio.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	ctx->logger

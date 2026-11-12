@@ -30,6 +30,7 @@
 #include "dcn31/dcn31_dccg.h"
 #include "dcn314_dccg.h"
 #include "dcn20/dcn20_dccg.h"
+#include "dc_priv.h"
 
 #define TO_DCN_DCCG(dccg)\
 	container_of(dccg, struct dcn_dccg, base)

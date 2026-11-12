@@ -27,6 +27,7 @@
 #include "dcn20_hubbub.h"
 #include "reg_helper.h"
 #include "clk_mgr.h"
+#include "dc_priv.h"
 
 #define REG(reg)\
 	hubbub1->regs->reg

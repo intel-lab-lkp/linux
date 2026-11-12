@@ -6,6 +6,7 @@
 #include "dm_services.h"
 #include "reg_helper.h"
 #include "fixed31_32.h"
+#include "dc_priv.h"
 
 #define CTX \
 	hubbub2->base.ctx

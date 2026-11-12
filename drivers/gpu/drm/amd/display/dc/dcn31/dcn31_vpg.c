@@ -28,6 +28,7 @@
 #include "dcn31_vpg.h"
 #include "reg_helper.h"
 #include "dc/dc.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 		vpg31->base.ctx->logger

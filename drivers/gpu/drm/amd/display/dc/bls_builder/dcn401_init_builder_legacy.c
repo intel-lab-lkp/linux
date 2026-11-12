@@ -23,6 +23,7 @@
 #include "dcn32/dcn32_resource.h"
 #include "bls_builder/dcn401_init_builder.h"
 #include "bls_builder/dcn401_init_builder_legacy.h"
+#include "dc_priv.h"
 
 /*
  * DC2_DC1_Wrapped: dcn401_init_hw as BLS entries, built one stage per

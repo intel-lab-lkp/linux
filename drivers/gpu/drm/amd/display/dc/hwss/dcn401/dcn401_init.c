@@ -12,6 +12,7 @@
 #include "dcn35/dcn35_hwseq.h"
 #include "dcn401/dcn401_hwseq.h"
 #include "dcn401_init.h"
+#include "dc_priv.h"
 
 static const struct hw_sequencer_funcs dcn401_funcs = {
 	.program_gamut_remap = dcn401_program_gamut_remap,

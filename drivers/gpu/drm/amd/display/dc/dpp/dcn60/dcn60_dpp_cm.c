@@ -4,6 +4,7 @@
 #include "dcn60/dcn60_dpp.h"
 #include "dcn30/dcn30_cm_common.h"
 #include "basics/conversion.h"
+#include "dc_priv.h"
 
 #define REG(reg) \
 	dpp->tf_regs->reg

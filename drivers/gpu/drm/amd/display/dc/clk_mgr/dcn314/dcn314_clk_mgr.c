@@ -53,6 +53,7 @@
 
 
 #include "logger_types.h"
+#include "dc_priv.h"
 
 
 #define MAX_INSTANCE                                        7

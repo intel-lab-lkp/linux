@@ -57,6 +57,7 @@
 #include "link_hwss.h"
 #include "link_service.h"
 #include "dc_state_priv.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	dc_logger

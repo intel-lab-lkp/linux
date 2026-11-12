@@ -29,6 +29,7 @@
 #include "reg_helper.h"
 #include "hw_shared.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 		enc1->base.ctx->logger

@@ -58,6 +58,7 @@
 
 #include "dce100/dce100_resource.h"
 #include "dce112_resource.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER				\
 		dc->ctx->logger

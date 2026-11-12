@@ -28,6 +28,7 @@
 
 #include "link_resource.h"
 #include "protocols/link_dp_capability.h"
+#include "dc_priv.h"
 
 void link_get_cur_link_res(const struct dc_link *link,
 		struct link_resource *link_res)

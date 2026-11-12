@@ -50,6 +50,7 @@
 #include "link_enc_cfg.h"
 #include "dc_dmub_srv.h"
 #include "gpio_service_interface.h"
+#include "dc_priv.h"
 
 #define DC_TRACE_LEVEL_MESSAGE(...) /* do nothing */
 

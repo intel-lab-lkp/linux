@@ -27,6 +27,7 @@
 #include "dm_services.h"
 #include "dcn10_opp.h"
 #include "reg_helper.h"
+#include "dc_priv.h"
 
 #define REG(reg) \
 	(oppn10->regs->reg)

@@ -26,6 +26,7 @@
 
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #include "dcn32/dcn32_init.h"
 

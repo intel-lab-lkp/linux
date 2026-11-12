@@ -5,6 +5,7 @@
 
 #include "dm_services.h"
 #include "bls_builder/bls_builder_internal.h"
+#include "dc_priv.h"
 
 const struct bls_builder *bls_builder_create(struct dc *dc,
 		enum bls_builder_name name)

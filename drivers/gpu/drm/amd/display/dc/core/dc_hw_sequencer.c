@@ -42,6 +42,7 @@
 #include "dce/dmub_hw_lock_mgr.h"
 #include "link_service.h"
 #include "custom_float.h"
+#include "dc_priv.h"
 
 static union dmub_inbox0_cmd_lock_hw hwss_build_dmub_lock_command(bool lock)
 {

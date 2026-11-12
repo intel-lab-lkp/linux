@@ -77,6 +77,7 @@
 #include "nbio/nbio_2_3_offset.h"
 
 #include "dml/dcn303/dcn303_fpu.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	dc->ctx->logger

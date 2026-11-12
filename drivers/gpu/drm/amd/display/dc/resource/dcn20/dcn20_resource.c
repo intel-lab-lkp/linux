@@ -26,6 +26,7 @@
 
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #include "dcn20/dcn20_init.h"
 

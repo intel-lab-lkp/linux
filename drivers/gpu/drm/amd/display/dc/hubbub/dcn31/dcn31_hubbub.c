@@ -28,6 +28,7 @@
 #include "dcn31_hubbub.h"
 #include "dm_services.h"
 #include "reg_helper.h"
+#include "dc_priv.h"
 
 
 #define CTX \

@@ -57,6 +57,7 @@ static const struct IP_BASE MP0_BASE = { { { { 0x00016000, 0x00DC0000, 0x00E0000
 	FD(reg_name##__##field)
 
 #include "logger_types.h"
+#include "dc_priv.h"
 #undef DC_LOGGER
 #define DC_LOGGER \
 	CTX->logger

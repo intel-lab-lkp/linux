@@ -31,6 +31,7 @@
 #include "stream_encoder.h"
 #include "dc_bios_types.h"
 #include "gpio_service_interface.h"
+#include "dc_priv.h"
 
 #define CTX \
 	enc10->base.ctx

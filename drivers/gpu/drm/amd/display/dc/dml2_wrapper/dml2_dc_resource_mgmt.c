@@ -30,6 +30,7 @@
 #include "dml2_internal_types.h"
 #include "dml2_utils.h"
 #include "dml2_dc_resource_mgmt.h"
+#include "dc_priv.h"
 
 #define MAX_ODM_FACTOR 4
 #define MAX_MPCC_FACTOR 4

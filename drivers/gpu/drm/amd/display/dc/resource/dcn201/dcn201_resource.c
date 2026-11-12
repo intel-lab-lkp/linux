@@ -25,6 +25,7 @@
 
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #include "dcn201/dcn201_init.h"
 #include "dml/dcn20/dcn20_fpu.h"

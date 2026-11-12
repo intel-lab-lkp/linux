@@ -8,6 +8,7 @@
 #include "link_encoder.h"
 #include "dcn35/dcn35_dio_link_encoder.h"
 #include "dcn42_dio_link_encoder.h"
+#include "dc_priv.h"
 
 #ifndef MIN
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))

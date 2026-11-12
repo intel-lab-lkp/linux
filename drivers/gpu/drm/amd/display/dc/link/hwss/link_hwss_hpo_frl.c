@@ -25,6 +25,7 @@
 #include "link_hwss_hpo_frl.h"
 #include "core_types.h"
 #include "link/hwss/link_hwss_virtual.h"
+#include "dc_priv.h"
 
 static void setup_hpo_frl_stream_attribute(struct pipe_ctx *pipe_ctx)
 {

@@ -41,6 +41,7 @@
 #include "abm.h"
 #include "resource.h"
 #include "link_dp_panel_replay.h"
+#include "dc_priv.h"
 #define DC_LOGGER \
 	link->ctx->logger
 #define DC_LOGGER_INIT(logger)

@@ -27,6 +27,7 @@
 #include "display_mode_core.h"
 #include "dml2_internal_types.h"
 #include "dml2_translation_helper.h"
+#include "dc_priv.h"
 
 #define NUM_DCFCLK_STAS 5
 #define NUM_DCFCLK_STAS_NEW 8

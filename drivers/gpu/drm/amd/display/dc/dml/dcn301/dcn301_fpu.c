@@ -30,6 +30,7 @@
 
 #include "dml/dcn20/dcn20_fpu.h"
 #include "dcn301_fpu.h"
+#include "dc_priv.h"
 
 #define TO_DCN301_RES_POOL(pool)\
 	container_of(pool, struct dcn301_resource_pool, base)

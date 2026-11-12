@@ -33,6 +33,7 @@
 
 #include "dce/dce_mem_input.h"
 #include "dce110_mem_input_v.h"
+#include "dc_priv.h"
 
 static void set_flip_control(
 	struct dce_mem_input *mem_input110,

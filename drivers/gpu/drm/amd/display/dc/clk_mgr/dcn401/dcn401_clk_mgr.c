@@ -22,6 +22,7 @@
 
 #include "dcn/dcn_4_1_0_offset.h"
 #include "dcn/dcn_4_1_0_sh_mask.h"
+#include "dc_priv.h"
 
 #define DCN_BASE__INST0_SEG1                       0x000000C0
 

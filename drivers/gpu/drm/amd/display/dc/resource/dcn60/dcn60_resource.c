@@ -5,6 +5,7 @@
 #include "dm_services.h"
 #include "dm_helpers.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #include "dcn32/dcn32_init.h"
 #include "dcn401/dcn401_init.h"

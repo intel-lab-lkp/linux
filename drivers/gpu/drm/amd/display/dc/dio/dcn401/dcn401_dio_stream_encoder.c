@@ -34,6 +34,7 @@
 #include "hw_shared.h"
 #include "link_service.h"
 #include "dpcd_defs.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 		enc1->base.ctx->logger

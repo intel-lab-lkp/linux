@@ -33,6 +33,7 @@
 #include "protocols/link_dp_dpia_bw.h"
 #include "protocols/link_hdmi_frl.h"
 #include "resource.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER_INIT(logger)
 

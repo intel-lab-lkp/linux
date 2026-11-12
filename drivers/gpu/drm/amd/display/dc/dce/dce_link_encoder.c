@@ -36,6 +36,7 @@
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 #include "dce/dce_11_0_enum.h"
+#include "dc_priv.h"
 
 #ifndef DMU_MEM_PWR_CNTL__DMCU_IRAM_MEM_PWR_STATE__SHIFT
 #define DMU_MEM_PWR_CNTL__DMCU_IRAM_MEM_PWR_STATE__SHIFT 0xa

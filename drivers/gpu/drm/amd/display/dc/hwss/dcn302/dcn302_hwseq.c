@@ -29,6 +29,7 @@
 
 #include "reg_helper.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER_INIT(logger)
 

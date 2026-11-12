@@ -25,6 +25,7 @@
 #include "link_enc_cfg.h"
 #include "resource.h"
 #include "link_service.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER dc->ctx->logger
 

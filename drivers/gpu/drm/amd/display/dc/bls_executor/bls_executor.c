@@ -22,6 +22,7 @@
 #include "hwss/hw_sequencer_private.h"
 #include "bls_executor/bls_executor.h"
 #include "dmub_messenger/dmub_messenger.h"
+#include "dc_priv.h"
 
 static noinline_for_stack bool dc2_bls_step_supported(const struct dc2 *dc2,
 		const struct block_sequence *step)

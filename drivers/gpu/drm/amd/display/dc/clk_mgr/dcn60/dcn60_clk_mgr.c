@@ -25,6 +25,7 @@
 
 #include "dcn/dcn_6_0_0_offset.h"
 #include "dcn/dcn_6_0_0_sh_mask.h"
+#include "dc_priv.h"
 
 #undef DC_LOGGER
 #define DC_LOGGER \

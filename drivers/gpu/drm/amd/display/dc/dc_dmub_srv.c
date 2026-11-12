@@ -25,6 +25,7 @@
 
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "dc_dmub_srv.h"
 #include "../dmub/dmub_srv.h"
 #include "dm_helpers.h"

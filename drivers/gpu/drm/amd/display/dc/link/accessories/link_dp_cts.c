@@ -35,6 +35,7 @@
 #include "dc_dmub_srv.h"
 #include "dce/dmub_hw_lock_mgr.h"
 #include "clk_mgr.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	link->ctx->logger

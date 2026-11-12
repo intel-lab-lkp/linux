@@ -58,6 +58,7 @@
 #include "clk_mgr.h"
 #include "atomfirmware.h"
 #include "vpg.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	dc_logger

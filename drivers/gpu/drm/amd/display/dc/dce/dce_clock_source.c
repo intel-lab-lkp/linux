@@ -38,6 +38,7 @@
 #include "dccg.h"
 
 #include "reg_helper.h"
+#include "dc_priv.h"
 
 #define REG(reg)\
 	(clk_src->regs->reg)

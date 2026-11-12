@@ -4,6 +4,7 @@
 
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #include "dcn31/dcn31_init.h"
 #include "dcn351/dcn351_init.h"

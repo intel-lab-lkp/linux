@@ -26,6 +26,7 @@
 #include "core_types.h"
 #include "link_hwss_dio.h"
 #include "link_enc_cfg.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	link->ctx->logger

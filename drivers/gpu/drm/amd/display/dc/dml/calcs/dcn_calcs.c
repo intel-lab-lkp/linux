@@ -26,6 +26,7 @@
 
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "dcn_calcs.h"
 #include "dcn_calc_auto.h"
 #include "dal_asic_id.h"

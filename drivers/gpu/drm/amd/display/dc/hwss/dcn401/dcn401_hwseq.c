@@ -41,6 +41,7 @@
 #include "../hw_sequencer.h"
 #include "dio/dcn10/dcn10_dio.h"
 #include "gpio_service_interface.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER_INIT(logger)
 

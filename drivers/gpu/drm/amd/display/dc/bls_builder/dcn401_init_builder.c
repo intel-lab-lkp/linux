@@ -13,6 +13,7 @@
 #include "bls_builder/bls_builder_internal.h"
 #include "bls_builder/dcn401_init_builder.h"
 #include "bls_builder/dcn401_init_builder_legacy.h"
+#include "dc_priv.h"
 
 static const enum block_sequence_func dcn401_dc2_init_sequence[] = {
 	LEGACY_CLK_MGR_INIT_CLOCKS,

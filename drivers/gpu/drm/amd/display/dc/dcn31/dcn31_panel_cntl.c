@@ -29,6 +29,7 @@
 #include "dc_dmub_srv.h"
 #include "dcn31_panel_cntl.h"
 #include "atom.h"
+#include "dc_priv.h"
 
 #define TO_DCN31_PANEL_CNTL(panel_cntl)\
 	container_of(panel_cntl, struct dcn31_panel_cntl, base)

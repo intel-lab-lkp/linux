@@ -28,6 +28,7 @@
 #include "resource.h"
 #include "dcn351_hwseq.h"
 #include "dcn35/dcn35_hwseq.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER_INIT(logger) \
 	struct dal_logger *dc_logger = logger

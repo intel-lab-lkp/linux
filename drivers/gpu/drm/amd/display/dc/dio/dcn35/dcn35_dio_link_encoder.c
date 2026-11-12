@@ -29,6 +29,7 @@
 #include "dcn31/dcn31_dio_link_encoder.h"
 #include "dcn35_dio_link_encoder.h"
 #include "dc_dmub_srv.h"
+#include "dc_priv.h"
 #define CTX \
 	enc10->base.ctx
 #define DC_LOGGER \

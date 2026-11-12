@@ -6,6 +6,7 @@
 #include "core_types.h"
 #include "dal_asic_id.h"
 #include "dcn10_clk_mgr.h"
+#include "dc_priv.h"
 
 unsigned int dcn10_dentist_get_divider_from_did(unsigned int did)
 {

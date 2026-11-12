@@ -53,6 +53,7 @@
 
 
 #include "yellow_carp_offset.h"
+#include "dc_priv.h"
 #undef DC_LOGGER
 #define DC_LOGGER \
 	clk_mgr->base.base.ctx->logger

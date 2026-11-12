@@ -12,6 +12,7 @@
 #include "dml21_wrapper/dml21_wrapper_fpu.h"
 
 #include "dc_fpu.h"
+#include "dc_priv.h"
 
 #if !defined(DC_RUN_WITH_PREEMPTION_ENABLED)
 #define DC_RUN_WITH_PREEMPTION_ENABLED(code) code

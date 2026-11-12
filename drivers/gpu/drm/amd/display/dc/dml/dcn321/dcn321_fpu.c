@@ -30,6 +30,7 @@
 #include "dcn32/dcn32_resource.h"
 #include "dcn321/dcn321_resource.h"
 #include "dml/dcn32/display_mode_vba_util_32.h"
+#include "dc_priv.h"
 
 #define DCN3_2_DEFAULT_DET_SIZE 256
 

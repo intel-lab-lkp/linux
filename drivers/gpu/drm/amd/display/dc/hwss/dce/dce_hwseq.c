@@ -27,6 +27,7 @@
 #include "reg_helper.h"
 #include "hw_sequencer_private.h"
 #include "core_types.h"
+#include "dc_priv.h"
 
 #define CTX \
 	hws->ctx

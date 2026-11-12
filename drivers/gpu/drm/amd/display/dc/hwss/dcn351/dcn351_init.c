@@ -35,6 +35,7 @@
 #include "dcn351/dcn351_hwseq.h"
 
 #include "dcn351_init.h"
+#include "dc_priv.h"
 
 static const struct hw_sequencer_funcs dcn351_funcs = {
 	.program_gamut_remap = dcn30_program_gamut_remap,

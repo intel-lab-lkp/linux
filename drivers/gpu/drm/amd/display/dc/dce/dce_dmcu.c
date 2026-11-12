@@ -30,6 +30,7 @@
 #include "reg_helper.h"
 #include "fixed31_32.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #define TO_DCE_DMCU(dmcu)\
 	container_of(dmcu, struct dce_dmcu, base)

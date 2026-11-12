@@ -27,6 +27,7 @@
 #include "core_types.h"
 #include "dccg.h"
 #include "clk_mgr.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER link->ctx->logger
 

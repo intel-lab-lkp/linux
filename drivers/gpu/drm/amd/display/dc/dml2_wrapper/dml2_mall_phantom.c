@@ -29,6 +29,7 @@
 #include "dml2_internal_types.h"
 #include "dml2_utils.h"
 #include "dml2_mall_phantom.h"
+#include "dc_priv.h"
 
 unsigned int dml2_helper_calculate_num_ways_for_subvp(struct dml2_context *ctx, struct dc_state *context)
 {

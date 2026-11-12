@@ -29,6 +29,7 @@
 #include "dcn10/dcn10_clk_mgr.h"
 #include "rv1_clk_mgr_vbios_smu.h"
 #include "rv1_clk_mgr_clk.h"
+#include "dc_priv.h"
 
 static void rv1_init_clocks(struct clk_mgr *clk_mgr)
 {

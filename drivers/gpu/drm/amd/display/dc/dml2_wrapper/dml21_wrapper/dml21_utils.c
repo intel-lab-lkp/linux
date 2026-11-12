@@ -10,6 +10,7 @@
 #include "dml2_dc_resource_mgmt.h"
 
 #include "dml2_core_dcn4_calcs.h"
+#include "dc_priv.h"
 
 int dml21_helper_find_dml_pipe_idx_by_stream_id(struct dml2_context *ctx, unsigned int stream_id)
 {

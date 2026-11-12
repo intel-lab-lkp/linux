@@ -5,6 +5,7 @@
 #include "dcn401/dcn401_hubp.h"
 #include "dcn42_hubp.h"
 #include "reg_helper.h"
+#include "dc_priv.h"
 
 #define REG(reg) \
 	hubp2->hubp_regs->reg

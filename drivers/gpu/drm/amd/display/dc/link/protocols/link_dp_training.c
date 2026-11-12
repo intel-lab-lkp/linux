@@ -47,6 +47,7 @@
 #include "link_enc_cfg.h"
 #include "resource.h"
 #include "dm_helpers.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	link->ctx->logger

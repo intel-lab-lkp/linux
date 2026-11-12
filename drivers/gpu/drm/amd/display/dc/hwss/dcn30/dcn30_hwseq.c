@@ -54,6 +54,7 @@
 #include "link_service.h"
 #include "dc_state_priv.h"
 #include "dio/dcn10/dcn10_dio.h"
+#include "dc_priv.h"
 
 #define TO_DCN_DCCG(dccg)\
 	container_of(dccg, struct dcn_dccg, base)

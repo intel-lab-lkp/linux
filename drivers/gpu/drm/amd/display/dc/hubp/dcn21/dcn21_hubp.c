@@ -30,6 +30,7 @@
 #include "reg_helper.h"
 
 #include "dc_dmub_srv.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	ctx->logger

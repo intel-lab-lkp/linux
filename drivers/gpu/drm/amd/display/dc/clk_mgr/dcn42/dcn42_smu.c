@@ -38,6 +38,7 @@
 	FD(reg_name##__##field)
 
 #include "logger_types.h"
+#include "dc_priv.h"
 #undef DC_LOGGER
 #define DC_LOGGER \
 	CTX->logger

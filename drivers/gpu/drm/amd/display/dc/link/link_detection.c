@@ -48,6 +48,7 @@
 #include "link_enc_cfg.h"
 #include "dm_helpers.h"
 #include "clk_mgr.h"
+#include "dc_priv.h"
 
  // Offset DPCD 050Eh == 0x5A
 #define MST_HUB_ID_0x5A  0x5A

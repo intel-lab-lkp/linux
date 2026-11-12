@@ -30,6 +30,7 @@
 #include "reg_helper.h"
 #include "dcn10/dcn10_dpp.h"
 #include "basics/conversion.h"
+#include "dc_priv.h"
 
 
 #define NUM_PHASES    64

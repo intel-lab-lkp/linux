@@ -33,6 +33,7 @@
 #include "link_service.h"
 #include "dcn20_fpu.h"
 #include "dc_state_priv.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	dc->ctx->logger

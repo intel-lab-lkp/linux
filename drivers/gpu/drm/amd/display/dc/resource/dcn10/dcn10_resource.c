@@ -26,6 +26,7 @@
 #include "core_status.h"
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #include "dcn10/dcn10_init.h"
 

@@ -64,6 +64,7 @@
 #endif
 
 #include "dce80/dce80_resource.h"
+#include "dc_priv.h"
 
 #ifndef mmDP_DPHY_INTERNAL_CTRL
 #define mmDP_DPHY_INTERNAL_CTRL                         0x1CDE

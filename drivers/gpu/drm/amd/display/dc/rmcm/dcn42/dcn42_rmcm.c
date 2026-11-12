@@ -25,6 +25,7 @@
 
 #include "reg_helper.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "dcn42_rmcm.h"
 #include "dcn10/dcn10_cm_common.h"
 #include "basics/conversion.h"

@@ -33,6 +33,7 @@
 #include "dcn401/dcn401_hwseq.h"
 #include "dml/dcn32/dcn32_fpu.h"
 #include "dcn32_init.h"
+#include "dc_priv.h"
 
 static const struct hw_sequencer_funcs dcn32_funcs = {
 	.program_gamut_remap = dcn30_program_gamut_remap,

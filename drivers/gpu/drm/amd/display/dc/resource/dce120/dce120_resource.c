@@ -68,6 +68,7 @@
 
 #include "dce100/dce100_resource.h"
 #include "link_service.h"
+#include "dc_priv.h"
 
 #ifndef mmDP0_DP_DPHY_INTERNAL_CTRL
 	#define mmDP0_DP_DPHY_INTERNAL_CTRL		0x210f

@@ -35,6 +35,7 @@
  */
 #include "link_service.h"
 #include "dce/dce_i2c.h"
+#include "dc_priv.h"
 
 struct dc_link *dc_get_link_at_index(struct dc *dc, uint32_t link_index)
 {

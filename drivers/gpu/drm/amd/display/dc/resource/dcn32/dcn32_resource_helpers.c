@@ -30,6 +30,7 @@
 #include "dml/dcn32/dcn32_fpu.h"
 #include "dc_state_priv.h"
 #include "dc_stream_priv.h"
+#include "dc_priv.h"
 
 static bool is_dual_plane(enum surface_pixel_format format)
 {

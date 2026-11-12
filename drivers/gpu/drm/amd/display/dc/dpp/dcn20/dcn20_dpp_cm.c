@@ -32,6 +32,7 @@
 #include "basics/conversion.h"
 
 #include "dcn10/dcn10_cm_common.h"
+#include "dc_priv.h"
 
 #define REG(reg)\
 	dpp->tf_regs->reg

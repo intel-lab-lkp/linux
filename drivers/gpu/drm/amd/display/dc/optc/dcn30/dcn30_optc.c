@@ -26,6 +26,7 @@
 #include "reg_helper.h"
 #include "dcn30_optc.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "dcn_calc_math.h"
 #include "dc_dmub_srv.h"
 

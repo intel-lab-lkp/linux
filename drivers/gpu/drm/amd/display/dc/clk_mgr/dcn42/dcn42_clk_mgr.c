@@ -35,6 +35,7 @@
 #include "clk/clk_15_0_0_sh_mask.h"
 #include "dcn/dcn_4_2_0_offset.h"
 #include "dcn/dcn_4_2_0_sh_mask.h"
+#include "dc_priv.h"
 
 
 #undef DC_LOGGER

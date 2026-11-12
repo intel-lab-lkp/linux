@@ -28,6 +28,7 @@
 #include "core_types.h"
 #include "dcn35_pg_cntl.h"
 #include "dccg.h"
+#include "dc_priv.h"
 
 #define TO_DCN_PG_CNTL(pg_cntl)\
 	container_of(pg_cntl, struct dcn_pg_cntl, base)

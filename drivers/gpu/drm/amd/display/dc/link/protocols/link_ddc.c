@@ -38,6 +38,7 @@
 #include "link_dpcd.h"
 #include "dm_helpers.h"
 #include "atomfirmware.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	ddc_service->ctx->logger

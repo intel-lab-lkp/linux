@@ -60,6 +60,7 @@
 #include "dcn31/dcn31_hwseq.h"
 #include "dcn20/dcn20_hwseq.h"
 #include "dc_state_priv.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	dc_ctx->logger

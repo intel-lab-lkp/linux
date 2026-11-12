@@ -40,6 +40,7 @@
 #include "dm_helpers.h"
 #include "dc_dmub_srv.h"
 #include "link_service.h"
+#include "dc_priv.h"
 
 // DCN316 this is CLK1 instance
 #define MAX_INSTANCE                                        7

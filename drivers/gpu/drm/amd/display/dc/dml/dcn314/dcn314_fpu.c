@@ -32,6 +32,7 @@
 #include "dml/dcn31/dcn31_fpu.h"
 #include "dml/display_mode_vba.h"
 #include "dml/dml_inline_defs.h"
+#include "dc_priv.h"
 
 struct _vcs_dpi_ip_params_st dcn3_14_ip = {
 	.VBlankNomDefaultUS = 668,

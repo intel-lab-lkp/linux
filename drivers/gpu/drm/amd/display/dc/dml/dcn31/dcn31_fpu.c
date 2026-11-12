@@ -31,6 +31,7 @@
 
 #include "dml/dcn20/dcn20_fpu.h"
 #include "dcn31_fpu.h"
+#include "dc_priv.h"
 
 /**
  * DOC: DCN31x FPU manipulation Overview

@@ -38,6 +38,7 @@
 #include "dcn/dcn_2_0_1_sh_mask.h"
 #include "clk/clk_11_0_1_offset.h"
 #include "clk/clk_11_0_1_sh_mask.h"
+#include "dc_priv.h"
 
 #define REG(reg) \
 	(clk_mgr->regs->reg)

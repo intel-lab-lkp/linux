@@ -24,6 +24,7 @@
  */
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "core_types.h"
 #include "clk_mgr.h"
 #include "dce100_hwseq.h"

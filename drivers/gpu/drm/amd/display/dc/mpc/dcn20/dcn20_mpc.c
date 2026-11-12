@@ -27,6 +27,7 @@
 
 #include "reg_helper.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "mem_input.h"
 #include "dcn10/dcn10_cm_common.h"
 

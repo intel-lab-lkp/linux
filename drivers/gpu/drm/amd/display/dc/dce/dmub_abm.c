@@ -27,6 +27,7 @@
 #include "dmub_abm_lcd.h"
 #include "dmub_abm_cacp.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "core_types.h"
 #include "dmub_cmd.h"
 #include "dc_dmub_srv.h"

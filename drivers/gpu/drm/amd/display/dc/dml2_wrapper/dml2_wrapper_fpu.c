@@ -35,6 +35,7 @@
 #include "dml2_wrapper_fpu.h"
 #include "dml21_wrapper/dml21_wrapper.h"
 #include "dml21_wrapper/dml21_wrapper_fpu.h"
+#include "dc_priv.h"
 
 void initialize_dml2_ip_params(struct dml2_context *dml2, const struct dc *in_dc, struct ip_params_st *out)
 {

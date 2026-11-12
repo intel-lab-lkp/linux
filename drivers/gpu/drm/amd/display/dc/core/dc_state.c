@@ -26,6 +26,7 @@
 #include "core_types.h"
 #include "core_status.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "dc_state.h"
 #include "dc_state_priv.h"
 #include "dc_stream_priv.h"

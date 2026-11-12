@@ -30,6 +30,7 @@
 #include "dce/dce_11_0_sh_mask.h"
 #include "dce110_clk_mgr.h"
 #include "../clk_mgr/dce100/dce_clk_mgr.h"
+#include "dc_priv.h"
 
 /* set register offset */
 #define SR(reg_name)\

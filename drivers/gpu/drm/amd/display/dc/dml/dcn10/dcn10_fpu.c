@@ -28,6 +28,7 @@
 
 #include "dcn10_fpu.h"
 #include "resource.h"
+#include "dc_priv.h"
 
 /**
  * DOC: DCN10 FPU manipulation Overview

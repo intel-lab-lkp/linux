@@ -78,6 +78,7 @@
 #include "dcn321/dcn321_resource.h"
 #include "dcn35/dcn35_resource.h"
 #include "dcn351/dcn351_resource.h"
+#include "dc_priv.h"
 #include "dcn36/dcn36_resource.h"
 #include "dcn401/dcn401_resource.h"
 #include "dcn42/dcn42_resource.h"

@@ -2550,7 +2550,7 @@ static void dm_test_dmub_aux_transfer_sync_hpd_connected(struct kunit *test)
 
 	adev = dm_kunit_alloc_adev(test);
 	KUNIT_ASSERT_NOT_NULL(test, adev);
-	ctx = dm_kunit_alloc_dc_with_ctx(test)->ctx;
+	ctx = dc_get_ctx(dm_kunit_alloc_dc_with_ctx(test));
 	link = dm_kunit_alloc_link(test);
 
 	ctx->driver_context = adev;
@@ -4454,7 +4454,7 @@ static struct dm_test_local_edid dm_test_setup_local_edid(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, fixture.ctx);
 	fixture.sink = kunit_kzalloc(test, sizeof(*fixture.sink), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, fixture.sink);
-	fixture.dc = kunit_kzalloc(test, sizeof(*fixture.dc), GFP_KERNEL);
+	fixture.dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, fixture.dc);
 	fixture.link = dm_kunit_alloc_link(test);
 	dc_edid = kunit_kzalloc(test, sizeof(*dc_edid), GFP_KERNEL);

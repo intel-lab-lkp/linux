@@ -30,6 +30,7 @@
 #include "dm_helpers.h"
 #include "dc/dc_dmub_srv.h"
 #include "dce/dmub_replay.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	link->ctx->logger

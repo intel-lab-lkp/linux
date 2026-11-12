@@ -15,6 +15,7 @@
 #include "dc_bios_types.h"
 
 #include "gpio_service_interface.h"
+#include "dc_priv.h"
 
 #ifndef MIN
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))

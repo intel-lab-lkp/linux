@@ -53,6 +53,7 @@
 #include "dcn42/dcn42_clk_mgr.h"
 #include "dcn42b/dcn42b_clk_mgr.h"
 #include "dcn60/dcn60_clk_mgr.h"
+#include "dc_priv.h"
 
 int clk_mgr_helper_get_active_display_cnt(
 		struct dc *dc,

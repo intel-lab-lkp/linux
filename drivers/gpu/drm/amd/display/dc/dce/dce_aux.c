@@ -46,6 +46,7 @@
 #define LOG_FLAG_I2cAux_DceAux LOG_I2C_AUX
 
 #include "reg_helper.h"
+#include "dc_priv.h"
 
 #undef FN
 #define FN(reg_name, field_name) \

@@ -26,6 +26,7 @@
 #include "dce110_transform_v.h"
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 

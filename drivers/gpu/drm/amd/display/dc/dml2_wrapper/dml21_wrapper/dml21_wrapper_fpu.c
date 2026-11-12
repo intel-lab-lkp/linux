@@ -13,6 +13,7 @@
 #include "dml2_wrapper_fpu.h"
 #include "dml21_wrapper.h"
 #include "dml21_wrapper_fpu.h"
+#include "dc_priv.h"
 
 #define INVALID -1
 

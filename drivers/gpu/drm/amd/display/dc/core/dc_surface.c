@@ -26,6 +26,7 @@
 /* DC interface (public) */
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 /* DC core (private) */
 #include "core_types.h"

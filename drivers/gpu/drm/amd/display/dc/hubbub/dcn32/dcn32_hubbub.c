@@ -29,6 +29,7 @@
 #include "dm_services.h"
 #include "reg_helper.h"
 #include "dal_asic_id.h"
+#include "dc_priv.h"
 
 
 #define CTX \

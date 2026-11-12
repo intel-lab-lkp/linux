@@ -30,6 +30,7 @@
 
 #include "dml/dcn20/dcn20_fpu.h"
 #include "dcn302_fpu.h"
+#include "dc_priv.h"
 
 struct _vcs_dpi_ip_params_st dcn3_02_ip = {
 		.use_min_dcfclk = 0,

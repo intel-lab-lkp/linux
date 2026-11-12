@@ -37,6 +37,7 @@
 #include "dc_dmub_srv.h"
 #include "abm.h"
 #include "link_service.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER_INIT(logger)
 

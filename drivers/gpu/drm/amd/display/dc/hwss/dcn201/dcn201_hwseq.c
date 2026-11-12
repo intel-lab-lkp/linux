@@ -41,6 +41,7 @@
 #include "reg_helper.h"
 #include "dcn10/dcn10_hubbub.h"
 #include "dio/dcn10/dcn10_dio.h"
+#include "dc_priv.h"
 
 
 #define CTX \

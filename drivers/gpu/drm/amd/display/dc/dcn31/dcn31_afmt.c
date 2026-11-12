@@ -29,6 +29,7 @@
 #include "dcn31_afmt.h"
 #include "reg_helper.h"
 #include "dc/dc.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 		afmt31->base.ctx->logger

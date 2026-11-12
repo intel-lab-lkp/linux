@@ -31,6 +31,7 @@
 #include "dcn32/dcn32_optc.h"
 #include "reg_helper.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "dcn_calc_math.h"
 #include "dc_dmub_srv.h"
 

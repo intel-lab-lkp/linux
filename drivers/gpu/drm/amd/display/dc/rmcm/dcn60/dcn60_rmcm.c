@@ -25,6 +25,7 @@
 
 #include "dm_services.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "reg_helper.h"
 
 #include "dcn/dcn_6_0_0_offset.h"

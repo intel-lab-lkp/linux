@@ -26,6 +26,7 @@
 #include "dce_mem_input.h"
 #include "reg_helper.h"
 #include "basics/conversion.h"
+#include "dc_priv.h"
 
 #define CTX \
 	dce_mi->base.ctx

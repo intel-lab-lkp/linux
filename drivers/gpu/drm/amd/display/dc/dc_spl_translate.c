@@ -6,6 +6,7 @@
 #include "dcn20/dcn20_dpp.h"
 #include "dcn32/dcn32_dpp.h"
 #include "dcn401/dcn401_dpp.h"
+#include "dc_priv.h"
 
 static struct spl_callbacks dcn2_spl_callbacks = {
 	.spl_calc_lb_num_partitions = dscl2_spl_calc_lb_num_partitions,

@@ -34,6 +34,7 @@
 #include "dcn30_fpu.h"
 
 #include "../dml1_frl_cap_chk.h"
+#include "dc_priv.h"
 
 #define REG(reg)\
 	optc1->tg_regs->reg

@@ -27,6 +27,7 @@
 #include "dm_services.h"
 #include "dce_calcs.h"
 #include "dc.h"
+#include "dc_priv.h"
 #include "core_types.h"
 #include "dal_asic_id.h"
 #include "calcs_logger.h"

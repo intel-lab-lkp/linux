@@ -28,6 +28,7 @@
 #include "opp.h"
 #include "basics/conversion.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #define REG(reg) \
 	(xfm_dce->regs->reg)

@@ -7,6 +7,7 @@
 #include "dcn42_pg_cntl.h"
 #include "dccg.h"
 #include "resource.h"
+#include "dc_priv.h"
 
 #define TO_DCN_PG_CNTL(pg_cntl)\
 	container_of(pg_cntl, struct dcn_pg_cntl, base)

@@ -6,6 +6,7 @@
 #include "soc_and_ip_translator/dcn401/dcn401_soc_and_ip_translator.h"
 #include "bounding_boxes/dcn6_soc_bb.h"
 #include "dal_asic_id.h"
+#include "dc_priv.h"
 
 /* soc_and_ip_translator component used to get up-to-date values for bounding box.
  * Bounding box values are stored in several locations and locations can vary with DCN revision.

@@ -54,6 +54,7 @@
 #include "dsc.h"
 #include "dcn20/dcn20_optc.h"
 #include "dcn30/dcn30_cm_common.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER_INIT(logger)
 

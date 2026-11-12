@@ -29,6 +29,7 @@
 #include "dcn30_hpo_frl_link_encoder.h"
 #include "reg_helper.h"
 #include "dcn10/dcn10_link_encoder.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER enc3->base.ctx->logger
 

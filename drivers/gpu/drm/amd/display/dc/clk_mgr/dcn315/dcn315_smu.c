@@ -30,6 +30,7 @@
 #include "dcn315_smu.h"
 #include "mp/mp_13_0_5_offset.h"
 #include "logger_types.h"
+#include "dc_priv.h"
 
 #define MAX_INSTANCE                                        6
 #define MAX_SEGMENT                                         6

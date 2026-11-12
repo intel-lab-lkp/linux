@@ -31,6 +31,7 @@
 #include "link_service.h"
 #include "link_hwss.h"
 #include "link/protocols/link_dpcd.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	link->ctx->logger

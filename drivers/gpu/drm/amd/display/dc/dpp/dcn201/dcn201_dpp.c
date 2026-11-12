@@ -30,6 +30,7 @@
 #include "reg_helper.h"
 #include "dcn201/dcn201_dpp.h"
 #include "basics/conversion.h"
+#include "dc_priv.h"
 
 #define REG(reg)\
 	dpp->tf_regs->reg

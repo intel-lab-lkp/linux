@@ -38,6 +38,7 @@
 #include "resource.h"
 #include "link_enc_cfg.h"
 #include "atomfirmware.h"
+#include "dc_priv.h"
 #define DC_LOGGER \
 	link->ctx->logger
 

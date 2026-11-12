@@ -46,6 +46,7 @@
 #include "protocols/link_hpd.h"
 #include "gpio_service_interface.h"
 #include "atomfirmware.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	dc_ctx->logger

@@ -32,6 +32,7 @@
 #include "dml/dml_inline_defs.h"
 
 #include "link_service.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER_INIT(logger)
 

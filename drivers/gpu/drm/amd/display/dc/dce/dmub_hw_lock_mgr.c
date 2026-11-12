@@ -27,6 +27,7 @@
 #include "dc_dmub_srv.h"
 #include "dc_types.h"
 #include "core_types.h"
+#include "dc_priv.h"
 
 static bool dmub_hw_lock_has_inbox0_lock(const struct dc *dc)
 {

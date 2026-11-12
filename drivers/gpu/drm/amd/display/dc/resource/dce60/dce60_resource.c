@@ -66,6 +66,7 @@
 #ifndef mmMC_HUB_RDREQ_DMIF_LIMIT
 #include "gmc/gmc_6_0_d.h"
 #include "gmc/gmc_6_0_sh_mask.h"
+#include "dc_priv.h"
 #endif
 
 #ifndef mmDP_DPHY_INTERNAL_CTRL

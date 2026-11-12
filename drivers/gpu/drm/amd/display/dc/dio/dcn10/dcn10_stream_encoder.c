@@ -31,6 +31,7 @@
 #include "link_service.h"
 #include "dpcd_defs.h"
 #include "dcn30/dcn30_afmt.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 		enc1->base.ctx->logger

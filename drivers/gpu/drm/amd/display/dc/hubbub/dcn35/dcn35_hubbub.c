@@ -32,6 +32,7 @@
 #include "dm_services.h"
 #include "reg_helper.h"
 #include "dc_dmub_srv.h"
+#include "dc_priv.h"
 
 
 #define CTX \

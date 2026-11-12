@@ -29,6 +29,7 @@
 #include "link_dp_dpia_bw.h"
 #include "link_dpcd.h"
 #include "dc_dmub_srv.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	link->ctx->logger

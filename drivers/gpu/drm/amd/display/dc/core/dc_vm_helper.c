@@ -25,6 +25,7 @@
 
 #include "vm_helper.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 void vm_helper_mark_vmid_used(struct vm_helper *vm_helper, unsigned int pos, uint8_t hubp_idx)
 {

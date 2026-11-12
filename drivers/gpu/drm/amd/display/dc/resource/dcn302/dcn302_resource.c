@@ -78,6 +78,7 @@
 #include "dpcs/dpcs_3_0_0_sh_mask.h"
 #include "nbio/nbio_7_4_offset.h"
 #include "amdgpu_socbb.h"
+#include "dc_priv.h"
 
 #define DC_LOGGER \
 	dc->ctx->logger

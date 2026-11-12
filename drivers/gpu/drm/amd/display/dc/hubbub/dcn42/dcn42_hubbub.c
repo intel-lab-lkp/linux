@@ -10,6 +10,7 @@
 #include "dcn42/dcn42_hubbub.h"
 #include "dm_services.h"
 #include "reg_helper.h"
+#include "dc_priv.h"
 
 #define DCN42_CRB_SEGMENT_SIZE_KB 64
 

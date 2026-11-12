@@ -809,7 +809,7 @@ static void dm_test_commit_audio_notifies_added_connector(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, dm_crtc_state);
 	KUNIT_ASSERT_NOT_NULL(test, stream);
 
-	adev->dm.dc = kunit_kzalloc(test, sizeof(*adev->dm.dc), GFP_KERNEL);
+	adev->dm.dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc);
 	dc_test_set_current_state(adev->dm.dc, kunit_kzalloc(test,
 							 sizeof(*dc_get_current_state(adev->dm.dc)),
@@ -967,7 +967,7 @@ static void dm_test_commit_audio_skips_without_stream_status(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, dm_crtc_state);
 	KUNIT_ASSERT_NOT_NULL(test, stream);
 
-	adev->dm.dc = kunit_kzalloc(test, sizeof(*adev->dm.dc), GFP_KERNEL);
+	adev->dm.dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc);
 	dc_test_set_current_state(adev->dm.dc, kunit_kzalloc(test,
 							 sizeof(*dc_get_current_state(adev->dm.dc)),
@@ -1172,7 +1172,7 @@ static void dm_test_commit_audio_skips_writeback_addition(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, dm_crtc_state);
 	KUNIT_ASSERT_NOT_NULL(test, stream);
 
-	adev->dm.dc = kunit_kzalloc(test, sizeof(*adev->dm.dc), GFP_KERNEL);
+	adev->dm.dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc);
 	dc_test_set_current_state(adev->dm.dc, kunit_kzalloc(test,
 							 sizeof(*dc_get_current_state(adev->dm.dc)),

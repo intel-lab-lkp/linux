@@ -47,6 +47,7 @@
 	clk_mgr->base.base.ctx->logger
 
 #include "link_service.h"
+#include "dc_priv.h"
 
 #define TO_CLK_MGR_DCN315(clk_mgr)\
 	container_of(clk_mgr, struct clk_mgr_dcn315, base)

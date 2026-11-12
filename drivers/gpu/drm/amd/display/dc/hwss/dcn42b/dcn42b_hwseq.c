@@ -16,6 +16,7 @@
 #include "opp.h"
 #include "mpc.h"
 #include "dcn42b_hwseq.h"
+#include "dc_priv.h"
 
 #define CTX \
 	hws->ctx

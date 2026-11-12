@@ -31,6 +31,7 @@
 #include "dce120_clk_mgr.h"
 #include "dce100/dce_clk_mgr.h"
 #include "dce120/dce120_hwseq.h"
+#include "dc_priv.h"
 
 /**
  * dce121_clock_patch_xgmi_ss_info() - Save XGMI spread spectrum info

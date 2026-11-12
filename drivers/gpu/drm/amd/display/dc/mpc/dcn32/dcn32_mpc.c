@@ -30,6 +30,7 @@
 #include "basics/conversion.h"
 #include "dcn10/dcn10_cm_common.h"
 #include "dc.h"
+#include "dc_priv.h"
 
 #define REG(reg)\
 	mpc30->mpc_regs->reg

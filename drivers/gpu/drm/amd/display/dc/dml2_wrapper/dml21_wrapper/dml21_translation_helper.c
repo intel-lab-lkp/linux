@@ -9,6 +9,7 @@
 #include "dml21_utils.h"
 #include "dml21_translation_helper.h"
 #include "soc_and_ip_translator.h"
+#include "dc_priv.h"
 
 static void dml21_populate_pmo_options(struct dml2_pmo_options *pmo_options,
 		const struct dc *in_dc,

@@ -121,7 +121,7 @@ static struct dm_test_crc_dc_fixture *dm_test_alloc_crc_dc_fixture(struct kunit 
 
 	fixture->dm_state = kunit_kzalloc(test, sizeof(*fixture->dm_state), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, fixture->dm_state);
-	fixture->dc = kunit_kzalloc(test, sizeof(*fixture->dc), GFP_KERNEL);
+	fixture->dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, fixture->dc);
 	fixture->dc_ctx = kunit_kzalloc(test, sizeof(*fixture->dc_ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, fixture->dc_ctx);

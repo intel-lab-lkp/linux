@@ -25,6 +25,7 @@
 #include "link_hwss_hpo_dp.h"
 #include "link_hwss_hpo_fixed_vs_pe_retimer_dp.h"
 #include "link_hwss_dio_fixed_vs_pe_retimer.h"
+#include "dc_priv.h"
 
 static void dp_hpo_fixed_vs_pe_retimer_set_tx_ffe(struct dc_link *link,
 		const struct dc_lane_settings *hw_lane_settings)

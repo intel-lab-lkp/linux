@@ -32,6 +32,7 @@
 #include <linux/export.h>
 
 #include "dc.h"
+#include "dc_priv.h"
 #include "dc_test.h"
 
 struct dc *dc_test_create(void)

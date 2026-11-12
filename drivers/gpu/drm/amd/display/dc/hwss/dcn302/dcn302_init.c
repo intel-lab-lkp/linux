@@ -28,6 +28,7 @@
 #include "dcn30/dcn30_init.h"
 
 #include "dc.h"
+#include "dc_priv.h"
 
 #include "dcn302_init.h"
 
