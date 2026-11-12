@@ -81,7 +81,6 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
         unsafe {
             (*sdrv.get()).driver.name = name.as_char_ptr();
             (*sdrv.get()).probe = Some(Self::probe_callback);
-            (*sdrv.get()).remove = Some(Self::remove_callback);
             (*sdrv.get()).driver.of_match_table = of_table;
             (*sdrv.get()).driver.acpi_match_table = acpi_table;
         }
@@ -208,29 +207,6 @@ impl<T: Driver> Adapter<T> {
                 0
             })
         })
-    }
-
-    extern "C" fn remove_callback(sdev: *mut bindings::serdev_device) {
-        // SAFETY: The serial device bus only ever calls the remove callback with a valid pointer
-        // to a `struct serdev_device`.
-        //
-        // INVARIANT: `sdev` is valid for the duration of `remove_callback()`.
-        let sdev = unsafe { &*sdev.cast::<Device<device::CoreInternal<'_>>>() };
-
-        // SAFETY: `remove_callback` is only ever called after a successful call to
-        // `probe_callback`, hence it's guaranteed that `Device::set_drvdata()` has been called
-        // and stored a `Pin<KBox<PrivateData<'_, T>>>`.
-        let private_data = unsafe { sdev.as_ref().drvdata_borrow::<PrivateData<'_, T>>() };
-
-        // SAFETY: No one has exclusive access to `private_data.driver`.
-        let data = unsafe { &*private_data.driver.get() };
-        // SAFETY:
-        // - `private_data.driver` is pinned.
-        // - `remove_callback` is only ever called after a successful call to `probe_callback`,
-        //   hence it's guaranteed that `private_data.driver` was initialized.
-        let data_pinned = unsafe { Pin::new_unchecked(data.assume_init_ref()) };
-
-        T::unbind(sdev, data_pinned);
     }
 
     extern "C" fn receive_buf_callback(
@@ -365,6 +341,10 @@ pub trait Driver {
     type IdInfo: 'static;
 
     /// The type of the driver's bus device private data.
+    ///
+    /// Device teardown should be performed in [`Drop`] or [`PinnedDrop`](pin_init::PinnedDrop)
+    /// for this type. The `'bound` lifetime allows the data to retain device resources and a
+    /// [`Device<device::Bound>`] reference for use during teardown.
     type Data<'bound>: Send + Sync + 'bound;
 
     /// The table of OF device ids supported by the driver.
@@ -381,19 +361,6 @@ pub trait Driver {
         sdev: &'bound Device<device::Core<'_>>,
         id_info: Option<&'bound Self::IdInfo>,
     ) -> impl PinInit<Self::Data<'bound>, Error> + 'bound;
-
-    /// Serial device bus device driver unbind.
-    ///
-    /// Called when a [`Device`] is unbound from its bound [`Driver`]. Implementing this callback
-    /// is optional.
-    ///
-    /// This callback serves as a place for drivers to perform teardown operations that require a
-    /// `&Device<Core>` or `&Device<Bound>` reference. For instance.
-    ///
-    /// Otherwise, release operations for driver resources should be performed in `Drop`.
-    fn unbind<'bound>(sdev: &'bound Device<device::Core<'_>>, this: Pin<&Self::Data<'bound>>) {
-        let _ = (sdev, this);
-    }
 
     /// Serial device bus device data receive callback.
     ///
