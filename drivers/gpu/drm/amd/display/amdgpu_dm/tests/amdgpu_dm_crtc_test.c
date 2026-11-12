@@ -732,7 +732,6 @@ static void dm_test_idle_worker_enabled_runs_body(struct kunit *test)
 	dc_get_ctx(adev->dm.dc)->logger = logger;
 	/* dc_allow() only flips the flag when clk_mgr and apply() are present. */
 	dc_test_set_clk_mgr(adev->dm.dc, dm_kunit_alloc_clk_mgr(test));
-	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dc_get_clk_mgr(adev->dm.dc));
 	dc_test_hwss(adev->dm.dc)->apply_idle_power_optimizations = dm_test_idle_apply_flip;
 
 	idle_work = kunit_kzalloc(test, sizeof(*idle_work), GFP_KERNEL);

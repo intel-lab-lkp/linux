@@ -1559,7 +1559,6 @@ bool dm_helpers_dp_handle_test_pattern_request(
 	struct amdgpu_dm_connector *aconnector = link->priv;
 	struct drm_device *dev = aconnector->base.dev;
 	struct dc_state *dc_state = dc_get_current_state(ctx->dc);
-	struct clk_mgr *clk_mgr = dc_get_clk_mgr(ctx->dc);
 	int i;
 
 	for (i = 0; i < MAX_PIPES; i++) {
@@ -1661,14 +1660,7 @@ bool dm_helpers_dp_handle_test_pattern_request(
 	pipe_ctx->stream->test_pattern.color_space = test_pattern_color_space;
 
 	/* Temp W/A for compliance test failure */
-	dc_state->bw_ctx.bw.dcn.clk.p_state_change_support = false;
-	dc_state->bw_ctx.bw.dcn.clk.dramclk_khz = clk_mgr->dc_mode_softmax_enabled ?
-		clk_mgr->bw_params->dc_mode_softmax_memclk : clk_mgr->bw_params->max_memclk_mhz;
-	dc_state->bw_ctx.bw.dcn.clk.idle_dramclk_khz = dc_state->bw_ctx.bw.dcn.clk.dramclk_khz;
-	dc_get_clk_mgr(ctx->dc)->funcs->update_clocks(
-			dc_get_clk_mgr(ctx->dc),
-			dc_state,
-			false);
+	dc_force_max_dramclk(ctx->dc, dc_state);
 
 	dc_link_dp_set_test_pattern(
 		(struct dc_link *) link,

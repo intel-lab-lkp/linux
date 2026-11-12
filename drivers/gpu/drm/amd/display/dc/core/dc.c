@@ -7358,6 +7358,29 @@ void dc_set_edp_power(const struct dc *dc, struct dc_link *edp_link,
 }
 
 /**
+ * dc_force_max_dramclk() - raise the memory clock for DP compliance tests
+ * @dc: Current DC state
+ * @context: The state whose clocks are programmed
+ *
+ * Temporary workaround for DP compliance test failures: disallow p-state
+ * switching for the given state, raise the memory clock to the maximum
+ * supported level and apply the resulting clocks immediately.
+ */
+void dc_force_max_dramclk(struct dc *dc, struct dc_state *context)
+{
+	context->bw_ctx.bw.dcn.clk.p_state_change_support = false;
+	context->bw_ctx.bw.dcn.clk.dramclk_khz =
+			dc->clk_mgr->dc_mode_softmax_enabled ?
+			dc->clk_mgr->bw_params->dc_mode_softmax_memclk :
+			dc->clk_mgr->bw_params->max_memclk_mhz;
+	context->bw_ctx.bw.dcn.clk.idle_dramclk_khz =
+			context->bw_ctx.bw.dcn.clk.dramclk_khz;
+
+	if (dc->clk_mgr && dc->clk_mgr->funcs->update_clocks)
+		dc->clk_mgr->funcs->update_clocks(dc->clk_mgr, context, false);
+}
+
+/**
  * dc_get_power_profile_for_dc_state() - extracts power profile from dc state
  *
  * Called when DM wants to make power policy decisions based on dc_state

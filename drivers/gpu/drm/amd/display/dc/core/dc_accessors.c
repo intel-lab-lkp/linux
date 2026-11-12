@@ -94,11 +94,6 @@ struct resource_pool *dc_get_res_pool(const struct dc *dc)
 }
 EXPORT_IF_KUNIT(dc_get_res_pool);
 
-struct clk_mgr *dc_get_clk_mgr(struct dc *dc)
-{
-	return dc->clk_mgr;
-}
-EXPORT_IF_KUNIT(dc_get_clk_mgr);
 
 bool dc_get_dcc_compression_cap(const struct dc *dc,
 		const struct dc_dcc_surface_param *input,

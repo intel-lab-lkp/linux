@@ -2382,8 +2382,12 @@ bool dc_is_idle_optimizations_allowed(const struct dc *dc);
  */
 struct resource_pool *dc_get_res_pool(const struct dc *dc);
 
-/* The clock manager. Interim accessor. */
-struct clk_mgr *dc_get_clk_mgr(struct dc *dc);
+/*
+ * Temporary workaround for DP compliance test failures: disallow p-state
+ * switching for the given state, raise the memory clock to the maximum
+ * supported level and apply the resulting clocks immediately.
+ */
+void dc_force_max_dramclk(struct dc *dc, struct dc_state *context);
 
 /*
  * Query DCC compression support for a surface.
