@@ -5661,14 +5661,15 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev,
 {
 	struct device *dev = &pdev->dev;
 	u32 cells;
-	int ret = -EINVAL;
 
-	if (of_property_read_u32(dev->of_node, "#iommu-cells", &cells))
+	if (of_property_read_u32(dev->of_node, "#iommu-cells", &cells)) {
 		dev_err(dev, "missing #iommu-cells property\n");
-	else if (cells != 1)
+		return -EINVAL;
+	}
+	if (cells != 1) {
 		dev_err(dev, "invalid #iommu-cells value (%d)\n", cells);
-	else
-		ret = 0;
+		return -EINVAL;
+	}
 
 	parse_driver_options(smmu);
 
@@ -5680,7 +5681,7 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev,
 		static_branch_enable(&arm_smmu_erratum_repeat_tlbi_cfgi_key);
 	}
 
-	return ret;
+	return 0;
 }
 
 static unsigned long arm_smmu_resource_size(struct arm_smmu_device *smmu)
