@@ -4063,12 +4063,6 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.cipher = __VECS(adiantum_xchacha20_aes_tv_template)
 		},
 	}, {
-		.alg = "aegis128",
-		.test = alg_test_aead,
-		.suite = {
-			.aead = __VECS(aegis128_tv_template)
-		}
-	}, {
 		.alg = "authenc(hmac(md5),cbc(aes))",
 		.generic_driver = "authenc(hmac-md5-lib,cbc(aes-lib))",
 		.test = alg_test_aead,

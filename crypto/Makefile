@@ -96,26 +96,6 @@ obj-$(CONFIG_CRYPTO_ADIANTUM) += adiantum.o
 obj-$(CONFIG_CRYPTO_GCM) += gcm.o
 obj-$(CONFIG_CRYPTO_CCM) += ccm.o
 obj-$(CONFIG_CRYPTO_CHACHA20POLY1305) += chacha20poly1305.o
-obj-$(CONFIG_CRYPTO_AEGIS128) += aegis128.o
-aegis128-y := aegis128-core.o
-
-CFLAGS_aegis128-neon-inner.o += $(CC_FLAGS_FPU)
-CFLAGS_REMOVE_aegis128-neon-inner.o += $(CC_FLAGS_NO_FPU)
-ifeq ($(ARCH),arm)
-CFLAGS_aegis128-neon-inner.o += -march=armv8-a -mfpu=crypto-neon-fp-armv8
-aegis128-$(CONFIG_CRYPTO_AEGIS128_SIMD) += aegis128-neon.o aegis128-neon-inner.o
-endif
-ifeq ($(ARCH),arm64)
-aegis128-cflags-y := -mcpu=generic+crypto
-aegis128-cflags-$(CONFIG_CC_IS_GCC) += -ffixed-q16 -ffixed-q17 -ffixed-q18 \
-				       -ffixed-q19 -ffixed-q20 -ffixed-q21 \
-				       -ffixed-q22 -ffixed-q23 -ffixed-q24 \
-				       -ffixed-q25 -ffixed-q26 -ffixed-q27 \
-				       -ffixed-q28 -ffixed-q29 -ffixed-q30 \
-				       -ffixed-q31
-CFLAGS_aegis128-neon-inner.o += $(aegis128-cflags-y)
-aegis128-$(CONFIG_CRYPTO_AEGIS128_SIMD) += aegis128-neon.o aegis128-neon-inner.o
-endif
 
 obj-$(CONFIG_CRYPTO_PCRYPT) += pcrypt.o
 obj-$(CONFIG_CRYPTO_CRYPTD) += cryptd.o

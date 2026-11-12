@@ -2138,13 +2138,6 @@ static int do_test(const char *alg, u32 type, u32 mask, int m, u32 num_mb)
 				  speed_template_16_24_32);
 		break;
 
-	case 221:
-		test_aead_speed("aegis128", ENCRYPT, sec,
-				NULL, 0, 16, 8, speed_template_16);
-		test_aead_speed("aegis128", DECRYPT, sec,
-				NULL, 0, 16, 8, speed_template_16);
-		break;
-
 	case 222:
 		test_aead_speed("gcm(sm4)", ENCRYPT, sec,
 				NULL, 0, 16, 8, speed_template_16);
