@@ -63,6 +63,17 @@ properties:
 
   msi-parent: true
 
+  clocks:
+    maxItems: 1
+    description:
+      Clock of the SMMU's register and memory interfaces, on SoCs where the
+      OS has to keep it running.
+
+  resets:
+    maxItems: 1
+    description:
+      Reset of the SMMU, on SoCs where it is controlled by the OS.
+
   nvidia,cmdqv:
     description: |
       A phandle to its pairing CMDQV extension for an implementation on NVIDIA
