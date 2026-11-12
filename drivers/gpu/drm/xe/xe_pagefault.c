@@ -291,7 +291,7 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
 
 	down_read(&vm->lock);
 
-	if (xe_vm_is_closed(vm)) {
+	if (xe_vm_is_closed_or_banned(vm)) {
 		err = -ENOENT;
 		xe_pagefault_set_error(pf, XE_PAGEFAULT_ERROR_VM_CLOSED);
 		goto unlock_vm;
@@ -678,6 +678,7 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 
 	while (xe_pagefault_queue_pop(pf_queue, &pf, pf_work->id)) {
 		const struct xe_pagefault_ops *ops = pf->producer.ops;
+		struct xe_vm *ack_vm = NULL;
 		void *private = pf->producer.private;
 		struct xe_gt *gt = pf->gt;
 		u32 asid = FIELD_GET(XE_PAGEFAULT_ASID_MASK, pf->consumer.id);
@@ -711,6 +712,31 @@ static void xe_pagefault_queue_work(struct work_struct *w)
 		}
 
 ack_fault:
+		/*
+		 * Cache hits bypass fault service. Serialize successful replies
+		 * with VM close, including replies to matching chained faults.
+		 * Take vm->lock before ack_fault_begin() takes the CT lock and
+		 * hold it until ack_fault_end() flushes the reply batch.
+		 */
+		if (!err) {
+			ack_vm = xe_pagefault_asid_to_vm(pf, asid);
+			if (IS_ERR(ack_vm)) {
+				err = PTR_ERR(ack_vm);
+				ack_vm = NULL;
+			} else {
+				down_read(&ack_vm->lock);
+				if (xe_vm_is_closed_or_banned(ack_vm)) {
+					err = -ENOENT;
+					up_read(&ack_vm->lock);
+					xe_vm_put(ack_vm);
+					ack_vm = NULL;
+				}
+			}
+
+			if (err)
+				xe_pagefault_cache_start_invalidate(cache_start);
+		}
+
 		xe_assert(xe, pf->consumer.alloc_state ==
 			  XE_PAGEFAULT_ALLOC_STATE_ACTIVE);
 		xe_assert(xe, pf == pf_work->cache.pf);
@@ -751,6 +777,11 @@ ack_fault:
 			spin_unlock_irq(&pf_queue->lock);
 		}
 		ops->ack_fault_end(private);
+
+		if (ack_vm) {
+			up_read(&ack_vm->lock);
+			xe_vm_put(ack_vm);
+		}
 
 		if (time_after(jiffies, threshold)) {
 			queue_work(xe->usm.pagefault_wq, w);
