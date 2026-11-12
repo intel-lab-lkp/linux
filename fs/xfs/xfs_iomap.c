@@ -1903,6 +1903,16 @@ xfs_buffered_write_iomap_begin(
 		goto out_unlock;
 	}
 
+	/*
+	 * A write fault doesn't hold the IOLOCK, so the inode may have got an
+	 * extent size hint since the test above.
+	 */
+	if (xfs_get_extsz_hint(ip)) {
+		xfs_iunlock(ip, lockmode);
+		return xfs_direct_write_iomap_begin(inode, offset, count,
+				flags, iomap, srcmap);
+	}
+
 	if (XFS_IS_CORRUPT(mp, !xfs_ifork_has_extents(&ip->i_df)) ||
 	    XFS_TEST_ERROR(mp, XFS_ERRTAG_BMAPIFORMAT)) {
 		xfs_bmap_mark_sick(ip, XFS_DATA_FORK);
