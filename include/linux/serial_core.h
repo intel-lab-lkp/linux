@@ -1135,6 +1135,10 @@ void uart_console_write(struct uart_port *port, const char *s,
 /*
  * Port/driver registration/removal
  */
+
+/* Set uart_port.line to this to have uart_add_one_port() pick a free line */
+#define UART_LINE_AUTO		UINT_MAX
+
 int uart_register_driver(struct uart_driver *uart);
 void uart_unregister_driver(struct uart_driver *uart);
 int uart_add_one_port(struct uart_driver *reg, struct uart_port *port);

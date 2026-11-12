@@ -3351,15 +3351,72 @@ static int serial_core_port_device_add(struct serial_ctrl_device *ctrl_dev,
 	return 0;
 }
 
+/* Whether an enabled device claims @line through a "serial" alias */
+static bool serial_core_line_is_aliased(unsigned int line)
+{
+	char alias[sizeof("serial") + 10];
+	struct device_node *np;
+	bool available;
+
+	snprintf(alias, sizeof(alias), "serial%u", line);
+	np = of_find_node_by_path(alias);
+	available = of_device_is_available(np);
+	of_node_put(np);
+
+	return available;
+}
+
+/*
+ * Pick a line for a port registered with UART_LINE_AUTO. Skip lines that an
+ * enabled device claims through a "serial" alias, so that the device still
+ * finds its line free if it probes later, and hand one of them out only when
+ * no other line is free. Caller must hold port_mutex, which serialises every
+ * change to the driver's state table.
+ */
+static int serial_core_alloc_line(struct uart_driver *drv,
+				  struct uart_port *port)
+{
+	unsigned int line, fallback = drv->nr;
+
+	lockdep_assert_held(&port_mutex);
+
+	for (line = 0; line < drv->nr; line++) {
+		if (drv->state[line].uart_port)
+			continue;
+
+		if (!serial_core_line_is_aliased(line))
+			break;
+
+		if (fallback == drv->nr)
+			fallback = line;
+	}
+
+	if (line == drv->nr)
+		line = fallback;
+	if (line == drv->nr)
+		return -ENOSPC;
+
+	port->line = line;
+
+	return 0;
+}
+
 /*
  * Initialize a serial core port device, and a controller device if needed.
  */
 int serial_core_register_port(struct uart_driver *drv, struct uart_port *port)
 {
 	struct serial_ctrl_device *ctrl_dev, *new_ctrl_dev = NULL;
+	bool auto_line = port->line == UART_LINE_AUTO;
 	int ret;
 
 	guard(mutex)(&port_mutex);
+
+	if (auto_line) {
+		ret = serial_core_alloc_line(drv, port);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * Prevent serial_port_runtime_resume() from trying to use the port
@@ -3371,8 +3428,10 @@ int serial_core_register_port(struct uart_driver *drv, struct uart_port *port)
 	ctrl_dev = serial_core_ctrl_find(drv, port->dev, port->ctrl_id);
 	if (!ctrl_dev) {
 		new_ctrl_dev = serial_core_ctrl_device_add(port);
-		if (IS_ERR(new_ctrl_dev))
-			return PTR_ERR(new_ctrl_dev);
+		if (IS_ERR(new_ctrl_dev)) {
+			ret = PTR_ERR(new_ctrl_dev);
+			goto err_free_line;
+		}
 		ctrl_dev = new_ctrl_dev;
 	}
 
@@ -3401,6 +3460,11 @@ err_unregister_port_dev:
 
 err_unregister_ctrl_dev:
 	serial_base_ctrl_device_remove(new_ctrl_dev);
+
+err_free_line:
+	/* Let a retry with the same port pick a line afresh */
+	if (auto_line)
+		port->line = UART_LINE_AUTO;
 
 	return ret;
 }
