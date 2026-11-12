@@ -24,6 +24,9 @@ description: |+
     early secure boot code. Thus no need to deal with their configuration
     in the kernel at all.
 
+  Note 2: A node with status = "disabled" is not touched by the kernel at
+    all: the firmware must leave the cache disabled.
+
 allOf:
   - $ref: /schemas/cache-controller.yaml#
 
