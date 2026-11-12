@@ -66,6 +66,41 @@ Description:
 		can be determined from an XML file of specified GUID for the
 		parent device.
 
+What:		/sys/class/intel_pmt/crashlog<x>
+Date:		November 2026
+KernelVersion:	7.5
+Contact:	David Box <david.e.box@linux.intel.com>
+Description:
+		The driver emits a KOBJ_CHANGE uevent for the crashlog<x>
+		device with the following environment variable:
+
+		INTEL_PMT_CRASHLOG_COMPLETE
+			The crashlog complete status at the end of a check:
+			1 if set, 0 if not. It reports the status only, not
+			what caused the crashlog to be captured.
+
+		The event is currently sent when a completed crashlog is
+		found at probe, and after a write of 1 to trigger. It
+		returns 1 when the crashlog completes, or 0 for trigger if
+		it has not completed within the poll time. Writing 0 to
+		trigger, writing clear or rearm, or disabling the crashlog
+		while polling ends the poll without an event.
+
+		The status may have changed by the time the event is
+		received, the same crashlog may be reported more than
+		once, and events sent in quick succession may be merged
+		into one carrying the latest status. Consumers should read
+		the status attributes before acting. Consumers that start
+		after the device was probed should check the complete
+		status of existing devices, for example when handling a
+		coldplug add event, since an event emitted before the
+		uevent listener starts is not replayed.
+
+		Other KOBJ_CHANGE events may be added in the future with
+		different variables. Consumers should match on
+		INTEL_PMT_CRASHLOG_COMPLETE and ignore variables they do not
+		recognize.
+
 What:		/sys/class/intel_pmt/crashlog<x>/crashlog
 Date:		October 2020
 KernelVersion:	5.10
