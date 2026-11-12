@@ -1702,13 +1702,12 @@ static struct sk_buff *tun_build_skb(struct tun_struct *tun,
 	int pad = TUN_RX_PAD;
 	int metasize = 0;
 	int err = 0;
+	bool xdp;
 
-	rcu_read_lock();
-	xdp_prog = rcu_dereference(tun->xdp_prog);
-	if (xdp_prog)
+	xdp = rcu_access_pointer(tun->xdp_prog);
+	if (xdp)
 		pad += XDP_PACKET_HEADROOM;
 	buflen += SKB_DATA_ALIGN(len + pad);
-	rcu_read_unlock();
 
 	alloc_frag->offset = ALIGN((u64)alloc_frag->offset, SMP_CACHE_BYTES);
 	if (unlikely(!skb_page_frag_refill(buflen, alloc_frag, GFP_KERNEL)))
@@ -1725,7 +1724,7 @@ static struct sk_buff *tun_build_skb(struct tun_struct *tun,
 	 * of xdp_prog above, this should be rare and for simplicity
 	 * we do XDP on skb in case the headroom is not enough.
 	 */
-	if (hdr->gso_type || !xdp_prog) {
+	if (hdr->gso_type || !xdp) {
 		*skb_xdp = 1;
 		return __tun_build_skb(tfile, alloc_frag, buf, buflen, len,
 				       pad, metasize);
@@ -1962,7 +1961,10 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 	skb_reset_network_header(skb);
 	skb_record_rx_queue(skb, tfile->queue_index);
 
-	if (skb_xdp) {
+	/* Only TAP devices can have an XDP program: don't disable BHs and
+	 * enter an RCU section for every packet just to find out it's unset.
+	 */
+	if (skb_xdp && rcu_access_pointer(tun->xdp_prog)) {
 		struct bpf_prog *xdp_prog;
 		int ret;
 
