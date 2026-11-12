@@ -2,17 +2,23 @@
 
 #define _GNU_SOURCE
 
+#include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
+#include <linux/ethtool.h>
+#include <linux/sockios.h>
 #include <linux/if_tun.h>
 #include <netinet/tcp.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/mount.h>
 
 #include "kselftest_harness.h"
 #include "tuntap_helpers.h"
@@ -1129,5 +1135,291 @@ XFAIL_ADD(tun_vnet_udptnl, 4in4_over_maxbytes, recv_gso_packet);
 XFAIL_ADD(tun_vnet_udptnl, 6in4_over_maxbytes, recv_gso_packet);
 XFAIL_ADD(tun_vnet_udptnl, 4in6_over_maxbytes, recv_gso_packet);
 XFAIL_ADD(tun_vnet_udptnl, 6in6_over_maxbytes, recv_gso_packet);
+
+/*
+ * Forward ordinary Geneve/TCP frames through a NAPI TAP and bridge to a
+ * second TAP, which exports the still-encapsulated packet with virtio headers.
+ * GRO must retain the outer UDP offset.
+ */
+#define GRO_PACKETS 8
+#define GRO_PAYLOAD 200
+#define GRO_SEQ 0x12345678
+#define GRO_BUFFER_SIZE 4096
+#define GRO_RECEIVE_TIMEOUT_MS 3000
+
+FIXTURE(tun_vnet_gro)
+{
+	char ifname[2][IFNAMSIZ];
+	int fd[2];
+};
+
+FIXTURE_VARIANT(tun_vnet_gro)
+{
+	bool gro;
+};
+
+FIXTURE_VARIANT_ADD(tun_vnet_gro, gro_off)
+{
+	.gro = false,
+};
+
+FIXTURE_VARIANT_ADD(tun_vnet_gro, gro_on)
+{
+	.gro = true,
+};
+
+static int gro_sysfs(const char *dev, const char *attribute, const char *value)
+{
+	char path[128];
+	int fd, ret;
+
+	snprintf(path, sizeof(path), "/sys/class/net/%s/%s", dev, attribute);
+	fd = open(path, O_WRONLY);
+	if (fd < 0)
+		return -1;
+	ret = write(fd, value, strlen(value)) == strlen(value) ? 0 : -1;
+	close(fd);
+	return ret;
+}
+
+FIXTURE_SETUP(tun_vnet_gro)
+{
+	int flags = IFF_TAP | IFF_NO_PI | IFF_VNET_HDR | IFF_NAPI;
+	int features = TUN_F_CSUM | TUN_F_TSO4 | TUN_F_UDP_TUNNEL_GSO |
+		       TUN_F_UDP_TUNNEL_GSO_CSUM;
+	struct ethtool_value value = { .cmd = ETHTOOL_SGRO };
+	struct ifreq ifr = {};
+	int i, sk, little_endian = 1;
+
+	self->fd[0] = -1;
+	self->fd[1] = -1;
+	if (unshare(CLONE_NEWNET | CLONE_NEWNS))
+		SKIP(return, "Cannot create network/mount namespaces: %s",
+		     strerror(errno));
+	ASSERT_EQ(mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL), 0);
+	ASSERT_EQ(mount("sysfs", "/sys", "sysfs", 0, NULL), 0);
+	for (i = 0; i < 2; i++) {
+		self->fd[i] = tun_open(self->ifname[i], flags, TUN_VNET_TNL_SIZE,
+				       features, NULL);
+		ASSERT_GE(self->fd[i], 0);
+		ASSERT_EQ(ioctl(self->fd[i], TUNSETVNETLE, &little_endian), 0);
+		ASSERT_EQ(fcntl(self->fd[i], F_SETFL, O_NONBLOCK), 0);
+	}
+	sk = socket(AF_INET, SOCK_DGRAM, 0);
+	ASSERT_GE(sk, 0);
+	ASSERT_EQ(ioctl(sk, SIOCBRADDBR, "gro-br"), 0);
+	strcpy(ifr.ifr_name, "gro-br");
+	for (i = 0; i < 2; i++) {
+		ifr.ifr_ifindex = if_nametoindex(self->ifname[i]);
+		ASSERT_GT(ifr.ifr_ifindex, 0);
+		ASSERT_EQ(ioctl(sk, SIOCBRADDIF, &ifr), 0);
+	}
+	ifr.ifr_flags = IFF_UP;
+	ASSERT_EQ(ioctl(sk, SIOCSIFFLAGS, &ifr), 0);
+	strcpy(ifr.ifr_name, self->ifname[0]);
+	value.data = variant->gro;
+	ifr.ifr_data = (void *)&value;
+	ASSERT_EQ(ioctl(sk, SIOCETHTOOL, &ifr), 0);
+	close(sk);
+	/* Register the Geneve UDP GRO handler in this network namespace. */
+	ASSERT_EQ(geneve_create(param_dev_geneve_name, AF_INET,
+				&param_ipaddr4_outer_dst, param_hwaddr_inner_src), 0);
+	/* Defer NAPI flushing for 20 ms so ordinary writes can aggregate. */
+	ASSERT_EQ(gro_sysfs(self->ifname[0], "gro_flush_timeout", "20000000"), 0);
+	ASSERT_EQ(gro_sysfs(self->ifname[0], "napi_defer_hard_irqs", "1"), 0);
+}
+
+FIXTURE_TEARDOWN(tun_vnet_gro)
+{
+	int i;
+
+	for (i = 0; i < 2; i++)
+		if (self->fd[i] >= 0)
+			close(self->fd[i]);
+}
+
+static int gro_build_packet(uint8_t *buf, unsigned int index)
+{
+	uint8_t *cur = buf + TUN_VNET_TNL_SIZE;
+	struct iphdr *outer, *inner;
+	struct udphdr *udp;
+	struct tcphdr *tcp;
+	unsigned int i, len;
+	uint32_t sum;
+
+	memset(buf, 0, GRO_BUFFER_SIZE);
+	cur += build_eth(cur, ETH_P_IP, param_hwaddr_outer_src,
+			 param_hwaddr_outer_dst);
+	outer = (void *)cur;
+	cur += sizeof(*outer);
+	udp = (void *)cur;
+	cur += sizeof(*udp);
+	cur += build_geneve_header(cur, VN_ID);
+	cur += build_eth(cur, ETH_P_IP, param_hwaddr_inner_src,
+			 param_hwaddr_inner_dst);
+	inner = (void *)cur;
+	cur += sizeof(*inner);
+	tcp = (void *)cur;
+	tcp->source = htons(49152);
+	tcp->dest = htons(5201);
+	tcp->seq = htonl(GRO_SEQ + index * GRO_PAYLOAD);
+	tcp->ack_seq = htonl(1);
+	tcp->doff = sizeof(*tcp) / 4;
+	tcp->ack = 1;
+	tcp->psh = index == GRO_PACKETS - 1;
+	tcp->window = htons(32768);
+	cur += sizeof(*tcp);
+	for (i = 0; i < GRO_PAYLOAD; i++)
+		*cur++ = (index * GRO_PAYLOAD + i) & 0xff;
+	len = cur - (uint8_t *)tcp;
+	build_ipv4_header((void *)inner, IPPROTO_TCP, len,
+			  &param_ipaddr4_inner_src, &param_ipaddr4_inner_dst);
+	inner->id = htons(index + 1);
+	inner->check = 0;
+	inner->check = build_ip_csum((void *)inner, sizeof(*inner), 0);
+	sum = add_csum((void *)&inner->saddr, 2 * sizeof(inner->saddr));
+	sum += htons(IPPROTO_TCP) + htons(len);
+	tcp->check = build_ip_csum((void *)tcp, len, sum);
+	len = cur - (uint8_t *)udp;
+	build_udp_header((void *)udp, 49152, VN_PORT, len - sizeof(*udp));
+	build_ipv4_header((void *)outer, IPPROTO_UDP, len,
+			  &param_ipaddr4_outer_src, &param_ipaddr4_outer_dst);
+	outer->id = htons(index + 1);
+	outer->check = 0;
+	outer->check = build_ip_csum((void *)outer, sizeof(*outer), 0);
+	sum = add_csum((void *)&outer->saddr, 2 * sizeof(outer->saddr));
+	sum += htons(IPPROTO_UDP) + htons(len);
+	udp->check = build_ip_csum((void *)udp, len, sum);
+	if (!udp->check)
+		udp->check = 0xffff;
+	return cur - buf;
+}
+
+static int64_t gro_milliseconds(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000;
+}
+
+TEST_F(tun_vnet_gro, outer_transport_header)
+{
+	uint8_t input[GRO_BUFFER_SIZE], output[GRO_BUFFER_SIZE];
+	unsigned int seen = 0, aggregates = 0, records = 0;
+	/* Bound the wait even if forwarding fails or packets are lost. */
+	int64_t deadline = gro_milliseconds() + GRO_RECEIVE_TIMEOUT_MS;
+	struct pollfd pfd = { .fd = self->fd[1], .events = POLLIN };
+	int i, len, frame_len, ready;
+
+	/* Input virtio headers are zero: only ordinary packets enter GRO. */
+	for (i = 0; i < GRO_PACKETS; i++) {
+		len = gro_build_packet(input, i);
+		ASSERT_EQ(write(self->fd[0], input, len), len);
+	}
+	while (gro_milliseconds() < deadline) {
+		struct virtio_net_hdr_v1_hash_tunnel *tunnel = (void *)output;
+		struct virtio_net_hdr_v1 *vh = &tunnel->hash_hdr.hdr;
+		uint8_t *frame = output + TUN_VNET_TNL_SIZE;
+		struct iphdr outer, inner;
+		struct tcphdr tcp;
+		struct udphdr udp;
+		unsigned int outer_th, inner_nh, inner_th, header_len;
+		unsigned int offset, payload, first, segments, bit;
+
+		ready = poll(&pfd, 1, 50);
+		ASSERT_GE(ready, 0);
+		if (!ready) {
+			if (seen == (1U << GRO_PACKETS) - 1)
+				break;
+			continue;
+		}
+		ASSERT_NE(pfd.revents & POLLIN, 0);
+		ASSERT_LT(records++, 128);
+		len = read(self->fd[1], output, sizeof(output));
+		ASSERT_GE(len, TUN_VNET_TNL_SIZE + ETH_HLEN);
+		frame_len = len - TUN_VNET_TNL_SIZE;
+		if (memcmp(frame, param_hwaddr_outer_dst, ETH_ALEN) ||
+		    memcmp(frame + ETH_ALEN, param_hwaddr_outer_src, ETH_ALEN))
+			continue;
+		ASSERT_EQ(((struct ethhdr *)frame)->h_proto, htons(ETH_P_IP));
+		ASSERT_GE(frame_len, ETH_HLEN + sizeof(outer));
+		memcpy(&outer, frame + ETH_HLEN, sizeof(outer));
+		ASSERT_EQ((int)outer.version, 4);
+		ASSERT_GE(outer.ihl * 4, sizeof(outer));
+		ASSERT_EQ(outer.protocol, IPPROTO_UDP);
+		outer_th = ETH_HLEN + outer.ihl * 4;
+		ASSERT_GE(frame_len, outer_th + sizeof(udp) + GENEVE_HLEN);
+		memcpy(&udp, frame + outer_th, sizeof(udp));
+		ASSERT_EQ(udp.dest, htons(VN_PORT));
+		ASSERT_EQ(ntohs(outer.tot_len), frame_len - ETH_HLEN);
+		ASSERT_EQ(build_ip_csum(frame + ETH_HLEN, outer.ihl * 4, 0), 0);
+		ASSERT_EQ(ntohs(udp.len), frame_len - outer_th);
+		offset = outer_th + sizeof(udp);
+		ASSERT_EQ(frame[offset] >> 6, 0);
+		ASSERT_EQ(frame[offset + 2], ETH_P_TEB >> 8);
+		ASSERT_EQ(frame[offset + 3], ETH_P_TEB & 0xff);
+		offset += GENEVE_HLEN + (frame[offset] & 0x3f) * 4;
+		inner_nh = offset + ETH_HLEN;
+		ASSERT_GE(frame_len, inner_nh + sizeof(inner));
+		ASSERT_EQ(((struct ethhdr *)(frame + offset))->h_proto,
+			  htons(ETH_P_IP));
+		memcpy(&inner, frame + inner_nh, sizeof(inner));
+		ASSERT_EQ((int)inner.version, 4);
+		ASSERT_GE(inner.ihl * 4, sizeof(inner));
+		ASSERT_EQ(inner.protocol, IPPROTO_TCP);
+		ASSERT_EQ(ntohs(inner.tot_len), frame_len - inner_nh);
+		inner_th = inner_nh + inner.ihl * 4;
+		ASSERT_GE(frame_len, inner_th + sizeof(tcp));
+		ASSERT_EQ(build_ip_csum(frame + inner_nh, inner.ihl * 4, 0), 0);
+		memcpy(&tcp, frame + inner_th, sizeof(tcp));
+		ASSERT_GE(tcp.doff * 4, sizeof(tcp));
+		header_len = inner_th + tcp.doff * 4;
+		ASSERT_GE(frame_len, header_len);
+		payload = frame_len - header_len;
+		ASSERT_GT(payload, 0);
+		ASSERT_EQ(payload % GRO_PAYLOAD, 0);
+		offset = ntohl(tcp.seq) - GRO_SEQ;
+		ASSERT_EQ(offset % GRO_PAYLOAD, 0);
+		ASSERT_LT(offset, GRO_PACKETS * GRO_PAYLOAD);
+		ASSERT_LE(offset + payload, GRO_PACKETS * GRO_PAYLOAD);
+		for (i = 0; i < payload; i++)
+			ASSERT_EQ(frame[header_len + i], (offset + i) & 0xff);
+		first = offset / GRO_PAYLOAD;
+		segments = payload / GRO_PAYLOAD;
+		for (bit = first; bit < first + segments; bit++) {
+			ASSERT_EQ(seen & (1U << bit), 0);
+			seen |= 1U << bit;
+		}
+		if (!variant->gro || vh->gso_type == VIRTIO_NET_HDR_GSO_NONE) {
+			ASSERT_EQ(vh->gso_type, VIRTIO_NET_HDR_GSO_NONE);
+			ASSERT_EQ(segments, 1);
+			ASSERT_EQ(le16toh(vh->gso_size), 0);
+			ASSERT_EQ(gro_build_packet(input, first), len);
+			ASSERT_EQ(memcmp(frame, input + TUN_VNET_TNL_SIZE, frame_len), 0);
+			continue;
+		}
+		ASSERT_EQ(vh->gso_type, VIRTIO_NET_HDR_GSO_TCPV4 |
+			  VIRTIO_NET_HDR_GSO_UDP_TUNNEL_IPV4);
+		ASSERT_EQ(le16toh(vh->gso_size), GRO_PAYLOAD);
+		if (segments > 1)
+			aggregates++;
+		TH_LOG("segments=%u outer_th=%u expected=%u inner_nh=%u",
+		       segments, le16toh(tunnel->outer_th_offset), outer_th,
+		       le16toh(tunnel->inner_nh_offset));
+		EXPECT_EQ(le16toh(tunnel->outer_th_offset), outer_th);
+		EXPECT_EQ(le16toh(tunnel->inner_nh_offset), inner_nh);
+		EXPECT_EQ(le16toh(vh->csum_start), inner_th);
+		EXPECT_EQ(le16toh(vh->csum_offset), offsetof(struct tcphdr, check));
+		/* hdr_len may include the payload kept in the linear head. */
+		EXPECT_GE(le16toh(vh->hdr_len), header_len);
+		EXPECT_LE(le16toh(vh->hdr_len), frame_len);
+		EXPECT_EQ(vh->flags & VIRTIO_NET_HDR_F_NEEDS_CSUM,
+			  VIRTIO_NET_HDR_F_NEEDS_CSUM);
+	}
+	ASSERT_EQ(seen, (1U << GRO_PACKETS) - 1);
+	if (variant->gro && !aggregates && _metadata->exit_code != KSFT_FAIL)
+		SKIP(return, "No multi-segment GRO aggregate observed");
+}
 
 TEST_HARNESS_MAIN
