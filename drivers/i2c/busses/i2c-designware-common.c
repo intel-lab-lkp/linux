@@ -619,6 +619,50 @@ err_release_lock:
 	return ret;
 }
 
+/*
+ * DW_IC_ENABLE_ABORT only aborts master transfers. If the adapter is acting
+ * as a slave and holding SCL low waiting for TX data (SLAVE_HOLD_TX_FIFO_EMPTY),
+ * hardware refuses to disable (IC_ENABLE_STATUS[0] stays 1) until a byte is
+ * written to DW_IC_DATA_CMD.
+ *
+ * Mask interrupts and temporarily set DW_IC_ENABLE_ENABLE so the APB interface
+ * accepts writes to the TX/RX FIFOs without racing with the slave ISR, clear
+ * pending RD_REQ/TX_ABRT interrupts, feed a dummy 0xff byte to release SCL
+ * (or drain any pending RX byte), and immediately request disable again via
+ * __i2c_dw_disable_nowait() so the controller initiates disable upon
+ * completing the current byte.
+ */
+static void i2c_dw_release_slave_hold(struct dw_i2c_dev *dev)
+{
+	unsigned int status, dummy;
+	bool tx_hold, rx_pending;
+
+	if (!IS_ENABLED(CONFIG_I2C_DESIGNWARE_SLAVE) || dev->mode != DW_IC_SLAVE)
+		return;
+
+	regmap_read(dev->map, DW_IC_STATUS, &status);
+
+	tx_hold = status & DW_IC_STATUS_SLAVE_HOLD_TX_FIFO_EMPTY;
+	rx_pending = (status & DW_IC_STATUS_SLAVE_ACTIVITY) &&
+		     (status & DW_IC_STATUS_RFNE);
+
+	if (!tx_hold && !rx_pending)
+		return;
+
+	regmap_write(dev->map, DW_IC_INTR_MASK, 0);
+	regmap_write(dev->map, DW_IC_ENABLE, DW_IC_ENABLE_ENABLE);
+
+	if (tx_hold) {
+		regmap_read(dev->map, DW_IC_CLR_RD_REQ, &dummy);
+		regmap_read(dev->map, DW_IC_CLR_TX_ABRT, &dummy);
+		regmap_write(dev->map, DW_IC_DATA_CMD, 0xff);
+	}
+	if (rx_pending)
+		regmap_read(dev->map, DW_IC_DATA_CMD, &dummy);
+
+	__i2c_dw_disable_nowait(dev);
+}
+
 void __i2c_dw_disable(struct dw_i2c_dev *dev)
 {
 	struct i2c_timings *t = &dev->timings;
@@ -675,6 +719,8 @@ void __i2c_dw_disable(struct dw_i2c_dev *dev)
 		regmap_read(dev->map, DW_IC_ENABLE_STATUS, &status);
 		if (!(status & 1))
 			return;
+
+		i2c_dw_release_slave_hold(dev);
 
 		/*
 		 * Wait 10 times the signaling period of the highest I2C
