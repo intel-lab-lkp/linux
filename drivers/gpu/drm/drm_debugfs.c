@@ -569,7 +569,12 @@ static ssize_t edid_write(struct file *file, const char __user *ubuf,
 	if (IS_ERR(buf))
 		return PTR_ERR(buf);
 
-	if (len == 5 && !strncmp(buf, "reset", 5))
+	/*
+	 * An EDID is at least 128 bytes, so "reset" with the trailing newline
+	 * that "echo reset" adds can't be mistaken for one.
+	 */
+	if ((len == 5 || (len == 6 && buf[5] == '\n')) &&
+	    !strncmp(buf, "reset", 5))
 		ret = drm_edid_override_reset(connector);
 	else
 		ret = drm_edid_override_set(connector, buf, len);
