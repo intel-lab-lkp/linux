@@ -136,7 +136,8 @@ STATIC_IFN_KUNIT void apply_edid_quirks(struct dc_link *link, struct edid *edid,
 		if (dc_is_embedded_signal(link->connector_signal)) {
 			drm_dbg_driver(dev, "Force PHY power down/up level 2 on panel id %X\n",
 				       panel_id);
-			link->ctx->dc->debug.psr_phy_force_phy_power_down_up_level_2 = true;
+			dc_get_debug_options_mutable(link->ctx->dc)->
+					psr_phy_force_phy_power_down_up_level_2 = true;
 		}
 		break;
 	/* Workaround for monitors that get corrupted by the PHY SSC reduction */
@@ -227,7 +228,9 @@ enum dc_edid_status dm_helpers_parse_edid_caps(
 
 	if (edid_caps->edid_hdmi) {
 		edid_caps->qs_bit = connector->display_info.rgb_quant_range_selectable;
-		populate_hdmi_info_from_connector(link->dc->config.enable_frl, &connector->display_info.hdmi, edid_caps);
+		populate_hdmi_info_from_connector(
+			dc_get_config(link->dc)->enable_frl,
+			&connector->display_info.hdmi, edid_caps);
 		drm_dbg_driver(connector->dev, "%s: HDMI_FRL [%s] max_frl_rate %d\n", __func__, connector->name, edid_caps->max_frl_rate);
 		if (edid_caps->frl_dsc_support)
 			drm_dbg_driver(connector->dev, "%s: HDMI_FRL_DSC [%s] frl_dsc_10bpc %d, frl_dsc_12bpc %d, frl_dsc_all_bpp %d, frl_dsc_native_420 %d, frl_dsc_max_slices %d, frl_dsc_max_frl_rate %d, frl_dsc_total_chunk_kbytes %d\n",
@@ -236,8 +239,8 @@ enum dc_edid_status dm_helpers_parse_edid_caps(
 					edid_caps->frl_dsc_max_frl_rate, edid_caps->frl_dsc_total_chunk_kbytes);
 		if (aconnector->hdmi_comp_auto) {
 			edid_caps->panel_patch.hdmi_comp_auto = true;
-			link->ctx->dc->debug.force_frl_max = true;
-			link->ctx->dc->debug.force_frl_dsc = true;
+			dc_get_debug_options_mutable(link->ctx->dc)->force_frl_max = true;
+			dc_get_debug_options_mutable(link->ctx->dc)->force_frl_dsc = true;
 			drm_dbg_driver(connector->dev, "%s: HDMI_FRL [%s] hdmi_comp_auto --> enabled\n", __func__, connector->name);
 		}
 	}
@@ -1291,8 +1294,7 @@ enum dc_edid_status dm_helpers_read_local_edid(
 	else
 		ddc = &aconnector->i2c->base;
 
-	if (link->dc->hwss.prepare_ddc)
-		link->dc->hwss.prepare_ddc(link);
+	dc_prepare_ddc(link);
 
 	dm_helpers_wait_for_edid_ready(link, ddc);
 
@@ -1552,12 +1554,12 @@ bool dm_helpers_dp_handle_test_pattern_request(
 			DP_TEST_PATTERN_COLOR_SPACE_UNDEFINED;
 	enum dc_color_depth requestColorDepth = COLOR_DEPTH_UNDEFINED;
 	enum dc_pixel_encoding requestPixelEncoding = PIXEL_ENCODING_UNDEFINED;
-	struct pipe_ctx *pipes = link->dc->current_state->res_ctx.pipe_ctx;
+	struct pipe_ctx *pipes = dc_get_current_state(link->dc)->res_ctx.pipe_ctx;
 	struct pipe_ctx *pipe_ctx = NULL;
 	struct amdgpu_dm_connector *aconnector = link->priv;
 	struct drm_device *dev = aconnector->base.dev;
-	struct dc_state *dc_state = ctx->dc->current_state;
-	struct clk_mgr *clk_mgr = ctx->dc->clk_mgr;
+	struct dc_state *dc_state = dc_get_current_state(ctx->dc);
+	struct clk_mgr *clk_mgr = dc_get_clk_mgr(ctx->dc);
 	int i;
 
 	for (i = 0; i < MAX_PIPES; i++) {
@@ -1663,8 +1665,8 @@ bool dm_helpers_dp_handle_test_pattern_request(
 	dc_state->bw_ctx.bw.dcn.clk.dramclk_khz = clk_mgr->dc_mode_softmax_enabled ?
 		clk_mgr->bw_params->dc_mode_softmax_memclk : clk_mgr->bw_params->max_memclk_mhz;
 	dc_state->bw_ctx.bw.dcn.clk.idle_dramclk_khz = dc_state->bw_ctx.bw.dcn.clk.dramclk_khz;
-	ctx->dc->clk_mgr->funcs->update_clocks(
-			ctx->dc->clk_mgr,
+	dc_get_clk_mgr(ctx->dc)->funcs->update_clocks(
+			dc_get_clk_mgr(ctx->dc),
 			dc_state,
 			false);
 

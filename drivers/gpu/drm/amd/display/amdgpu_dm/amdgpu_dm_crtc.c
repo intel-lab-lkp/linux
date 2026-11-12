@@ -180,7 +180,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_idle_worker(struct work_struct *work)
 	while (idle_work->enable) {
 		fsleep(HPD_DETECTION_PERIOD_uS);
 		mutex_lock(&idle_work->dm->dc_lock);
-		if (!idle_work->dm->dc->idle_optimizations_allowed) {
+		if (!dc_is_idle_optimizations_allowed(idle_work->dm->dc)) {
 			mutex_unlock(&idle_work->dm->dc_lock);
 			break;
 		}
@@ -308,8 +308,8 @@ static inline int amdgpu_dm_crtc_set_vblank(struct drm_crtc *crtc, bool enable)
 		 * Call this function to estimate missed vblanks by using timestamps and
 		 * update the vblank counter in DRM.
 		 */
-		if (dc->caps.ips_support &&
-			dc->config.disable_ips != DMUB_IPS_DISABLE_ALL &&
+		if (dc_get_caps(dc)->ips_support &&
+			dc_get_config(dc)->disable_ips != DMUB_IPS_DISABLE_ALL &&
 			sr_supported && vblank->config.disable_immediate)
 			drm_crtc_vblank_restore(crtc);
 	}
@@ -327,7 +327,7 @@ static inline int amdgpu_dm_crtc_set_vblank(struct drm_crtc *crtc, bool enable)
 			rc = amdgpu_irq_put(adev, &adev->vupdate_irq, irq_type);
 			drm_dbg_vbl(crtc->dev, "Put vupdate_irq ret=%d\n", rc);
 		}
-	} else if (dc_supports_vrr(dm->dc->ctx->dce_version)) {
+	} else if (dc_supports_vrr(dc_get_dce_version(dm->dc))) {
 		if (enable) {
 			/* vblank irq on -> Only need vupdate irq in vrr mode
 			 * Not ref-counted since we need explicit enable/disable
@@ -530,7 +530,7 @@ dm_crtc_additional_color_mgmt(struct drm_crtc *crtc)
 {
 	struct amdgpu_device *adev = drm_to_adev(crtc->dev);
 
-	if (adev->dm.dc->caps.color.mpc.ogam_ram)
+	if (dc_get_caps(adev->dm.dc)->color.mpc.ogam_ram)
 		drm_object_attach_property(&crtc->base,
 					   adev->mode_info.regamma_tf_property,
 					   AMDGPU_TRANSFER_FUNCTION_DEFAULT);
@@ -813,8 +813,8 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 		acrtc->base.state = crtc_state;
 	}
 
-	acrtc->max_cursor_width = dm->adev->dm.dc->caps.max_cursor_size;
-	acrtc->max_cursor_height = dm->adev->dm.dc->caps.max_cursor_size;
+	acrtc->max_cursor_width = dc_get_caps(dm->adev->dm.dc)->max_cursor_size;
+	acrtc->max_cursor_height = dc_get_caps(dm->adev->dm.dc)->max_cursor_size;
 
 	acrtc->crtc_id = crtc_index;
 	acrtc->base.enabled = false;
@@ -830,7 +830,7 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 	 * or the COLOR_PIPELINE property. An atomic commit which attempts to enable
 	 * both is rejected.
 	 */
-	has_degamma = dm->adev->dm.dc->caps.color.dpp.dcn_arch &&
+	has_degamma = dc_get_caps(dm->adev->dm.dc)->color.dpp.dcn_arch &&
 		      dm->adev->dm.dc->ctx->dce_version != DCN_VERSION_4_01;
 
 	drm_crtc_enable_color_mgmt(&acrtc->base, has_degamma ? MAX_COLOR_LUT_ENTRIES : 0,

@@ -306,9 +306,6 @@ STATIC_IFN_KUNIT int amdgpu_dm_plane_validate_dcc(struct amdgpu_device *adev,
 	    format >= SURFACE_PIXEL_FORMAT_VIDEO_BEGIN)
 		return -EINVAL;
 
-	if (!dc->cap_funcs.get_dcc_compression_cap)
-		return -EINVAL;
-
 	input.format = format;
 	input.surface_size.width = plane_size->surface_size.width;
 	input.surface_size.height = plane_size->surface_size.height;
@@ -319,7 +316,7 @@ STATIC_IFN_KUNIT int amdgpu_dm_plane_validate_dcc(struct amdgpu_device *adev,
 	else if (rotation == ROTATION_ANGLE_90 || rotation == ROTATION_ANGLE_270)
 		input.scan = SCAN_DIRECTION_VERTICAL;
 
-	if (!dc->cap_funcs.get_dcc_compression_cap(dc, &input, &output))
+	if (!dc_get_dcc_compression_cap(dc, &input, &output))
 		return -EINVAL;
 
 	if (!output.capable)
@@ -1337,7 +1334,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_plane_get_min_max_dc_plane_scaling(struct drm_de
 	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct dc *dc = adev->dm.dc;
 	/* Caps for all supported planes are the same on DCE and DCN 1 - 3 */
-	struct dc_plane_cap *plane_cap = &dc->caps.planes[0];
+	const struct dc_plane_cap *plane_cap = &dc_get_caps(dc)->planes[0];
 
 	switch (fb->format->format) {
 	case DRM_FORMAT_P010:
@@ -1697,7 +1694,7 @@ void amdgpu_dm_plane_handle_cursor_update(struct drm_plane *plane,
 	 * legacy gamma setup.
 	 */
 	if (crtc_state->cm_is_degamma_srgb &&
-	    adev->dm.dc->caps.color.dpp.gamma_corr)
+	    dc_get_caps(adev->dm.dc)->color.dpp.gamma_corr)
 		attributes.attribute_flags.bits.ENABLE_CURSOR_DEGAMMA = 1;
 
 	if (afb)
@@ -1977,7 +1974,7 @@ dm_atomic_plane_attach_color_mgmt_properties(struct amdgpu_display_manager *dm,
 					     struct drm_plane *plane)
 {
 	struct amdgpu_mode_info mode_info = dm->adev->mode_info;
-	struct dpp_color_caps dpp_color_caps = dm->dc->caps.color.dpp;
+	struct dpp_color_caps dpp_color_caps = dc_get_caps(dm->dc)->color.dpp;
 
 	/* Check HW color pipeline capabilities on DPP block (pre-blending)
 	 * before exposing related properties.
@@ -1999,11 +1996,11 @@ dm_atomic_plane_attach_color_mgmt_properties(struct amdgpu_display_manager *dm,
 				   AMDGPU_HDR_MULT_DEFAULT);
 
 	/* Only enable plane CTM if both DPP and MPC gamut remap is available. */
-	if (dm->dc->caps.color.mpc.gamut_remap)
+	if (dc_get_caps(dm->dc)->color.mpc.gamut_remap)
 		drm_object_attach_property(&plane->base,
 					   dm->adev->mode_info.plane_ctm_property, 0);
 
-	if (dpp_color_caps.hw_3d_lut || dm->dc->caps.color.mpc.preblend) {
+	if (dpp_color_caps.hw_3d_lut || dc_get_caps(dm->dc)->color.mpc.preblend) {
 		drm_object_attach_property(&plane->base,
 					   mode_info.plane_shaper_lut_property, 0);
 		drm_object_attach_property(&plane->base,
@@ -2019,7 +2016,7 @@ dm_atomic_plane_attach_color_mgmt_properties(struct amdgpu_display_manager *dm,
 					   MAX_COLOR_3DLUT_SIZE);
 	}
 
-	if (dpp_color_caps.ogam_ram || dm->dc->caps.color.mpc.preblend) {
+	if (dpp_color_caps.ogam_ram || dc_get_caps(dm->dc)->color.mpc.preblend) {
 		drm_object_attach_property(&plane->base,
 					   mode_info.plane_blend_lut_property, 0);
 		drm_object_attach_property(&plane->base,
@@ -2171,7 +2168,7 @@ dm_plane_init_colorops(struct drm_plane *plane)
 		return 0;
 
 	/* initialize pipeline */
-	if (dc->ctx->dce_version >= DCN_VERSION_3_0) {
+	if (dc_get_dce_version(dc) >= DCN_VERSION_3_0) {
 		ret = amdgpu_dm_initialize_default_pipeline(plane, &pipelines[len]);
 		if (ret) {
 			drm_err(plane->dev, "Failed to create color pipeline for plane %d: %pe\n",
@@ -2218,7 +2215,7 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 	int res = -EPERM;
 	unsigned int supported_rotations;
 	uint64_t *modifiers = NULL;
-	unsigned int primary_zpos = dm->dc->caps.max_slave_planes;
+	unsigned int primary_zpos = dc_get_caps(dm->dc)->max_slave_planes;
 
 	num_formats = amdgpu_dm_plane_get_plane_formats(plane, plane_cap, formats,
 							ARRAY_SIZE(formats));
