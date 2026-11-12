@@ -855,6 +855,7 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 	u32 macstat;
 	u16 chanid;
 	int padding, rate_idx;
+	s8 ac_signal = 0;
 
 	memset(&status, 0, sizeof(status));
 
@@ -874,6 +875,31 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 		chanstat = le16_to_cpu(rxhdr->format_351.channel);
 		break;
 	}
+	if (b43_ucode_is_ac(dev)) {
+		/* AC ucode (rev 40+) header: RxStatus1 @0x10, TSF @0x14,
+		 * 11ac-style chanspec @0x16, per-antenna power @0x09/0x0a.
+		 */
+		const u8 *h = _rxhdr;
+		u16 cs = get_unaligned_le16(h + 0x16);
+		s8 p0 = h[0x09], p1 = h[0x0a];
+
+		macstat = get_unaligned_le16(h + 0x10);
+		mactime = get_unaligned_le16(h + 0x14);
+		/* 80 MHz chanspec: centre channel and the primary's position */
+		if ((cs & 0x3800) == 0x2000)
+			cs = (cs & 0xff00) |
+			     ((cs & 0xff) - 6 + 4 * ((cs >> 8) & 0x7));
+		chanstat = ((cs & 0xff) << B43_RX_CHAN_ID_SHIFT) |
+			   B43_PHYTYPE_N;
+		if ((cs & 0xc000) == 0xc000)
+			chanstat |= B43_RX_CHAN_5GHZ;
+		if (p0 == -128)
+			ac_signal = p1;
+		else if (p1 == -128)
+			ac_signal = p0;
+		else
+			ac_signal = max(p0, p1);
+	}
 
 	if (unlikely(macstat & B43_RX_MAC_FCSERR)) {
 		dev->wl->ieee_stats.dot11FCSErrorCount++;
@@ -884,10 +910,19 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 	if (phystat0 & B43_RX_PHYST0_SHORTPRMBL)
 		status.enc_flags |= RX_ENC_FLAG_SHORTPRE;
 	if (macstat & B43_RX_MAC_DECERR) {
-		/* Decryption with the given key failed.
-		 * Drop the packet. We also won't be able to decrypt it with
-		 * the key in software. */
-		goto drop;
+		/* The AC ucode sets this bit on frames it never decrypted: this
+		 * port programs no hardware keys on AC, and it shows up even on
+		 * unprotected EAPOL frames. Dropping here killed
+		 * 4-way handshake message 3 and DHCP replies; mac80211's own
+		 * software decryption still rejects anything really corrupt.
+		 */
+		if (b43_ucode_is_ac(dev)) {
+			b43dbg(dev->wl,
+			       "RX: DECERR passed up (len %u, macstat %04x)\n",
+			       skb->len, macstat);
+		} else {
+			goto drop;
+		}
 	}
 
 	/* Skip PLCP and padding */
@@ -931,7 +966,11 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 	}
 
 	/* Link quality statistics */
-	switch (chanstat & B43_RX_CHAN_PHYTYPE) {
+	switch (b43_ucode_is_ac(dev) ? B43_PHYTYPE_AC :
+		(chanstat & B43_RX_CHAN_PHYTYPE)) {
+	case B43_PHYTYPE_AC:
+		status.signal = ac_signal;
+		break;
 	case B43_PHYTYPE_HT:
 		/* TODO: is max the right choice? */
 		status.signal = max_t(__s8,
@@ -955,7 +994,47 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 		break;
 	}
 
-	if (phystat0 & B43_RX_PHYST0_OFDM)
+	if (b43_ucode_is_ac(dev) &&
+	    (phystat0 & B43_RX_PHYST0_FTYPE) == B43_RX_PHYST0_PRE_N) {
+		/* HT frame: the six bytes before the frame are HT-SIG: MCS and
+		 * 40 MHz bit in byte 0, coding/STBC/short GI in byte 3.
+		 */
+		const u8 *sig = plcp->raw;
+
+		status.encoding = RX_ENC_HT;
+		if (sig[0] & 0x80)
+			status.bw = RATE_INFO_BW_40;
+		if (sig[3] & 0x80)
+			status.enc_flags |= RX_ENC_FLAG_SHORT_GI;
+		if (sig[3] & 0x40)
+			status.enc_flags |= RX_ENC_FLAG_LDPC;
+		status.enc_flags |= ((sig[3] >> 4) & 0x3)
+				    << RX_ENC_FLAG_STBC_SHIFT;
+		rate_idx = (sig[0] & 0x7f) <= 15 ? sig[0] & 0x7f : -1;
+	} else if (b43_ucode_is_ac(dev) &&
+		   (phystat0 & B43_RX_PHYST0_FTYPE) == B43_RX_PHYST0_STD_N) {
+		/* VHT: the six bytes are VHT-SIG-A1/A2 */
+		const u8 *p = plcp->raw;
+		u32 a1 = p[0] | (p[1] << 8) | (p[2] << 16);
+		u32 a2 = p[3] | (p[4] << 8) | (p[5] << 16);
+		u8 nsts = ((a1 >> 10) & 0x7) + 1;
+
+		status.encoding = RX_ENC_VHT;
+		if ((a1 & 0x3) == 1)
+			status.bw = RATE_INFO_BW_40;
+		else if ((a1 & 0x3) == 2)
+			status.bw = RATE_INFO_BW_80;
+		if (a1 & 0x8) {
+			status.enc_flags |= 1 << RX_ENC_FLAG_STBC_SHIFT;
+			nsts /= 2;
+		}
+		status.nss = max_t(u8, nsts, 1);
+		if (a2 & 0x1)
+			status.enc_flags |= RX_ENC_FLAG_SHORT_GI;
+		if (a2 & 0x4)
+			status.enc_flags |= RX_ENC_FLAG_LDPC;
+		rate_idx = ((a2 >> 4) & 0xf) <= 9 ? (a2 >> 4) & 0xf : -1;
+	} else if (phystat0 & B43_RX_PHYST0_OFDM)
 		rate_idx = b43_plcp_get_bitrate_idx_ofdm(plcp,
 					!!(chanstat & B43_RX_CHAN_5GHZ));
 	else
