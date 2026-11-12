@@ -6,6 +6,18 @@ test_begin
 set_timeout 2m
 timerlat_sample_event='/sys/kernel/tracing/events/osnoise/timerlat_sample'
 
+# Pick a CPU that can be offlined without taking cpu0 down.  A hotplug test
+# needs one whose "online" file is writable, plus at least one other CPU so
+# the tool can still run; otherwise skip the case.
+hotplug_cpu=''
+for c in /sys/devices/system/cpu/cpu[1-9]*/online; do
+	[ -w "$c" ] || continue
+	hotplug_cpu=${c#/sys/devices/system/cpu/cpu}
+	hotplug_cpu=${hotplug_cpu%/online}
+	[ "$(cat /sys/devices/system/cpu/online)" != "$hotplug_cpu" ] || continue
+	break
+done
+
 if ldd $RTLA | grep libbpf >/dev/null && [ -d "$timerlat_sample_event" ]
 then
 	# rtla build with BPF and system supports BPF mode
@@ -154,5 +166,35 @@ else
 		1 "BPF actions are not supported in tracefs-only mode"
 fi
 done
+
+# Hotplug test: timerlat in user-space mode samples from the user thread and
+# has no workload kthread.  Onlining a CPU mid-run must not install one; if
+# it does, stopping the trace tears that kthread down through the
+# user-thread path, which warns and then faults.
+#
+# The helper drives rtla itself, because the kthread is only torn down after
+# rtla exits, so there is no "rtla arguments" string to hand to check().
+if [ -n "$hotplug_cpu" ]; then
+	ctr=$((ctr + 1))
+	if [ -n "$TEST_COUNT" ]; then
+		[ "$NO_RESET_OSNOISE" == 1 ] || reset_osnoise
+		tmpdir=$(mktemp -d)
+		pushd "$tmpdir" >/dev/null
+
+		result=$("$testdir"/scripts/check-hotplug.sh "$RTLA" "$hotplug_cpu" 2>&1)
+		exitcode=$?
+
+		if [ "$exitcode" -eq 0 ] && grep -q '^HOTPLUG_OK' <<< "$result"; then
+			echo "ok $ctr - top survives a CPU hotplug cycle"
+		else
+			echo "not ok $ctr - top survives a CPU hotplug cycle"
+			echo "$result" | while read -r line; do echo "# $line"; done
+			printf "#\n# exit code %s\n" "$exitcode"
+		fi
+
+		popd >/dev/null
+		rm -r "$tmpdir"
+	fi
+fi
 
 test_end
