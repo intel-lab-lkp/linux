@@ -256,6 +256,12 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 		return ret;
 	}
 
+	/*
+	 * The GPU stays suspended until the first panthor_device_resume(),
+	 * which resumes devfreq. Suspend devfreq to match.
+	 */
+	panthor_devfreq_suspend(ptdev);
+
 	cooling = devfreq_cooling_em_register(pdevfreq->devfreq, NULL);
 	if (IS_ERR(cooling))
 		DRM_DEV_INFO(dev, "Failed to register cooling device\n");
