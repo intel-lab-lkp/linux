@@ -1235,6 +1235,24 @@ static void b43_bcma_phy_reset(struct b43_wldev *dev)
 {
 	u32 flags;
 
+	if (b43_is_ac_core(dev)) {
+		flags = bcma_aread32(dev->dev->bdev, BCMA_IOCTL);
+		flags |= B43_BCMA_IOCTL_PHY_RESET |
+			 B43_BCMA_IOCTL_PHY_BW_20MHZ | BCMA_IOCTL_FGC |
+			 B43_BCMA_IOCTL_PHY_CLKEN;
+		bcma_awrite32(dev->dev->bdev, BCMA_IOCTL, flags);
+		udelay(2);
+		bcma_awrite32(dev->dev->bdev, BCMA_IOCTL, flags);
+		flags &= ~(B43_BCMA_IOCTL_PHY_RESET | BCMA_IOCTL_FGC |
+			   B43_BCMA_IOCTL_PHY_CLKEN);
+		bcma_awrite32(dev->dev->bdev, BCMA_IOCTL, flags);
+		udelay(1);
+		flags |= B43_BCMA_IOCTL_PHY_CLKEN;
+		bcma_awrite32(dev->dev->bdev, BCMA_IOCTL, flags);
+		udelay(1);
+		return;
+	}
+
 	/* Put PHY into reset */
 	flags = bcma_aread32(dev->dev->bdev, BCMA_IOCTL);
 	flags |= B43_BCMA_IOCTL_PHY_RESET;
@@ -2914,6 +2932,18 @@ static int b43_gpio_init(struct b43_wldev *dev)
 	switch (dev->dev->bus_type) {
 #ifdef CONFIG_B43_BCMA
 	case B43_BUS_BCMA:
+		if (b43_is_ac_core(dev)) {
+			struct bcma_drv_cc *cc = &dev->dev->bdev->bus->drv_cc;
+
+			/*
+			 * the vendor driver keeps the pins host-driven with
+			 * GPIO1+2 high (front-end control on MacBookAir6,1).
+			 */
+			bcma_chipco_gpio_control(cc, mask | 0xa7, 0);
+			bcma_chipco_gpio_out(cc, 0xa7, 0x06);
+			bcma_chipco_gpio_outen(cc, 0xa7, 0xa7);
+			break;
+		}
 		bcma_chipco_gpio_control(&dev->dev->bdev->bus->drv_cc, mask, set);
 		break;
 #endif
@@ -3245,6 +3275,53 @@ static void b43_chip_exit(struct b43_wldev *dev)
 /* Initialize the chip
  * https://bcm-specs.sipsolutions.net/ChipInit
  */
+/*
+ * rev 40+ MAC: carve template/TX FIFOs out of MAC memory and set up the TX
+ * queue table (as the vendor driver does it).
+ */
+
+static void b43_ac_fifo_init(struct b43_wldev *dev)
+{
+	static const u8 fifos[] = { 7, 0, 1, 2, 3, 4, 5 };
+	u16 total = (b43_read32(dev, 0x15c) >> 1) & 0xffc;
+	const u16 tpl = 0x2a, fifo_sz = 0x20, blk = 0xb;
+	unsigned int i;
+	int t;
+
+	b43_write16(dev, 0x542, total);
+	b43_write16(dev, 0x540, 5);
+	for (t = 0; t < 20 && (b43_read16(dev, 0x540) & 1); t++)
+		udelay(10);
+	for (i = 0; i < ARRAY_SIZE(fifos); i++) {
+		if (fifos[i] == 7) {
+			b43_write16(dev, 0x54a, tpl);
+			b43_write16(dev, 0x54c, tpl);
+			b43_write16(dev, 0x520, tpl);
+			b43_write16(dev, 0x54e, ((tpl - 4) << 8) | tpl);
+		} else {
+			b43_write16(dev, 0x54a, total - tpl);
+			b43_write16(dev, 0x54c, fifo_sz);
+			b43_write16(dev, 0x520, blk);
+			b43_write16(dev, 0x54e,
+				    ((blk * 2 - 4) << 8) | (blk * 2));
+		}
+		b43_write16(dev, 0x550, 0x740c);
+		b43_write16(dev, 0x548, fifos[i] | 0x10);
+	}
+	for (i = 0; i < 0x2a; i++) {
+		u16 end = min_t(u16, i + 2, 0x29);
+
+		b43_write16(dev, 0x534, i);
+		b43_write16(dev, 0x536, end);
+		b43_write16(dev, 0x532, end + 1 - i);
+		b43_write16(dev, 0x530, (i << 4) | 0x8007);
+		for (t = 0; t < 20 && b43_read16(dev, 0x530); t++)
+			udelay(10);
+	}
+	b43dbg(dev->wl, "AC FIFO init: total %#x, 0x540=%04x 0x530=%04x\n",
+	       total, b43_read16(dev, 0x540), b43_read16(dev, 0x530));
+}
+
 static int b43_chip_init(struct b43_wldev *dev)
 {
 	struct b43_phy *phy = &dev->phy;
@@ -3253,7 +3330,10 @@ static int b43_chip_init(struct b43_wldev *dev)
 	u16 value16;
 
 	/* Initialize the MAC control */
-	macctl = B43_MACCTL_IHR_ENABLED | B43_MACCTL_SHM_ENABLED;
+	macctl = B43_MACCTL_IHR_ENABLED;
+	/* The vendor driver never sets SHM_ENABLED on AC-PHY cores. */
+	if (!b43_is_ac_core(dev))
+		macctl |= B43_MACCTL_SHM_ENABLED;
 	if (dev->phy.gmode)
 		macctl |= B43_MACCTL_GMODE;
 	macctl |= B43_MACCTL_INFRA;
@@ -3274,6 +3354,9 @@ static int b43_chip_init(struct b43_wldev *dev)
 	err = b43_upload_initvals_band(dev);
 	if (err)
 		goto err_gpio_clean;
+
+	if (b43_is_ac_core(dev))
+		b43_ac_fifo_init(dev);
 
 	/* Turn the Analog on and initialize the PHY. */
 	phy->ops->switch_analog(dev, 1);
@@ -3325,6 +3408,10 @@ static int b43_chip_init(struct b43_wldev *dev)
 	b43_write32(dev, B43_MMIO_DMA3_IRQ_MASK, 0x0001DC00);
 	b43_write32(dev, B43_MMIO_DMA4_IRQ_MASK, 0x0000DC00);
 	b43_write32(dev, B43_MMIO_DMA5_IRQ_MASK, 0x0000DC00);
+	if (b43_is_ac_core(dev)) {
+		/* intrcvlazy0: raise the RX interrupt after every frame. */
+		b43_write32(dev, 0x100, 1 << 24);
+	}
 
 	b43_mac_phy_clock_set(dev, true);
 
@@ -3529,6 +3616,15 @@ error:
 
 static void b43_security_init(struct b43_wldev *dev)
 {
+	/*
+	 * rev 40+ (AC) ucode has no key table pointer at the legacy KTP word:
+	 * it reads 0 there, so clearing the "key table" zeroed SHM 0x000-0x3a0
+	 * (rate maps, ACK/CTS PHY control, ucode state) on every core init. AC
+	 * has no hardware crypto support yet, so leave the key memory alone.
+	 */
+	if (b43_ucode_is_ac(dev))
+		return;
+
 	dev->ktp = b43_shm_read16(dev, B43_SHM_SHARED, B43_SHM_SH_KTP);
 	/* KTP is a word address, but we address SHM bytewise.
 	 * So multiply by two.
@@ -4178,6 +4274,9 @@ static int b43_op_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 
 	if (modparam_nohwcrypt)
 		return -ENOSPC; /* User disabled HW-crypto */
+	if (b43_ucode_is_ac(wl->current_dev))
+		/* no AC key table yet, see b43_security_init */
+		return -EOPNOTSUPP;
 
 	if ((vif->type == NL80211_IFTYPE_ADHOC ||
 	     vif->type == NL80211_IFTYPE_MESH_POINT) &&

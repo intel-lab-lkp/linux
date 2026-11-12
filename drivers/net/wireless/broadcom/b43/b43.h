@@ -1030,6 +1030,14 @@ static inline void b43_device_disable(struct b43_wldev *wldev,
 	wldev->dev->device_disable(wldev->dev, core_specific_flags);
 }
 
+/* Microcode of the AC cores (revisions 784, 832 and 928). Valid once the
+ * microcode is loaded; only revision 832 has been tested.
+ */
+static inline bool b43_ucode_is_ac(struct b43_wldev *dev)
+{
+	return dev->fw.rev >= 784;
+}
+
 static inline u16 b43_read16(struct b43_wldev *dev, u16 offset)
 {
 	return dev->dev->read16(dev->dev, offset);
