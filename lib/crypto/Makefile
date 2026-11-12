@@ -23,6 +23,10 @@ libcryptoutils-y				:= memneq.o utils.o
 
 obj-$(CONFIG_CRYPTO_LIB_AEGIS128X4) += libaegis128x4.o
 libaegis128x4-y := aegis128x4.o
+ifeq ($(CONFIG_CRYPTO_LIB_AEGIS128X4_ARCH),y)
+CFLAGS_aegis128x4.o += -I$(src)/$(SRCARCH)
+libaegis128x4-$(CONFIG_X86) += x86/aegis128x4-vaes-avx512.o
+endif
 
 ################################################################################
 
