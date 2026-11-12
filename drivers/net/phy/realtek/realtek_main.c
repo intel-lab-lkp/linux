@@ -351,6 +351,7 @@ struct rtl821x_priv {
 	bool enable_rxc_ssc;
 	bool enable_sysclk_ssc;
 	struct clk *clk;
+	bool clk_enabled;
 	/* rtl8211f */
 	u16 iner;
 };
@@ -732,19 +733,40 @@ static int rtl8261x_config_init(struct phy_device *phydev)
 	return 0;
 }
 
+static void rtl821x_clk_disable(void *data)
+{
+	struct rtl821x_priv *priv = data;
+
+	if (!priv->clk_enabled)
+		return;
+
+	clk_disable_unprepare(priv->clk);
+	priv->clk_enabled = false;
+}
+
 static int rtl821x_probe(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
 	struct rtl821x_priv *priv;
+	int ret;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
-	priv->clk = devm_clk_get_optional_enabled(dev, NULL);
+	priv->clk = devm_clk_get_optional(dev, NULL);
 	if (IS_ERR(priv->clk))
 		return dev_err_probe(dev, PTR_ERR(priv->clk),
 				     "failed to get phy clock\n");
+
+	ret = clk_prepare_enable(priv->clk);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to enable phy clock\n");
+
+	priv->clk_enabled = true;
+	ret = devm_add_action_or_reset(dev, rtl821x_clk_disable, priv);
+	if (ret)
+		return ret;
 
 	priv->enable_aldps = of_property_read_bool(dev->of_node,
 						   "realtek,aldps-enable");
@@ -1333,7 +1355,7 @@ static int rtl821x_suspend(struct phy_device *phydev)
 		if (ret)
 			return ret;
 
-		clk_disable_unprepare(priv->clk);
+		rtl821x_clk_disable(priv);
 	}
 
 	return ret;
@@ -1388,23 +1410,39 @@ err:
 static int rtl821x_resume(struct phy_device *phydev)
 {
 	struct rtl821x_priv *priv = phydev->priv;
+	bool clk_reenabled = false;
 	int ret;
 
-	if (!phydev->wol_enabled)
-		clk_prepare_enable(priv->clk);
+	if (!priv->clk_enabled) {
+		ret = clk_prepare_enable(priv->clk);
+		if (ret)
+			return ret;
+		priv->clk_enabled = true;
+		clk_reenabled = true;
+	}
 
 	ret = genphy_resume(phydev);
 	if (ret < 0)
-		return ret;
+		goto err_disable_clk;
 
 	msleep(20);
 
-	return rtl8211f_config_rgmii_delay(phydev);
+	ret = rtl8211f_config_rgmii_delay(phydev);
+	if (ret < 0)
+		goto err_disable_clk;
+
+	return 0;
+
+err_disable_clk:
+	if (clk_reenabled)
+		rtl821x_clk_disable(priv);
+	return ret;
 }
 
 static int rtl8211f_resume(struct phy_device *phydev)
 {
 	struct rtl821x_priv *priv = phydev->priv;
+	bool clk_was_enabled = priv->clk_enabled;
 	int ret;
 
 	ret = rtl821x_resume(phydev);
@@ -1414,8 +1452,11 @@ static int rtl8211f_resume(struct phy_device *phydev)
 	/* If the device was programmed for a PME event, restore the interrupt
 	 * enable so phylib can receive link state interrupts.
 	 */
-	if (device_may_wakeup(&phydev->mdio.dev))
+	if (device_may_wakeup(&phydev->mdio.dev)) {
 		ret = phy_write_paged(phydev, 0xa42, RTL821x_INER, priv->iner);
+		if (ret < 0 && !clk_was_enabled)
+			rtl821x_clk_disable(priv);
+	}
 
 	return ret;
 }
