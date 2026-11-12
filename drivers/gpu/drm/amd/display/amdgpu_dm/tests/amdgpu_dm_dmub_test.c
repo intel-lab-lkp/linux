@@ -731,11 +731,14 @@ static void dm_test_dmub_hw_init_auto_load_timeout(struct kunit *test)
  */
 static void dm_test_dmub_hw_init_apu_dpia_dcn35(struct kunit *test)
 {
+	struct resource_pool *res_pool;
+
 	struct amdgpu_device *adev = dm_test_alloc_adev_with_dmub(test);
 
 	adev->ip_versions[DCE_HWIP][0] = IP_VERSION(3, 5, 0);
 	dc_test_caps(adev->dm.dc)->is_apu = true;
-	dc_get_res_pool(adev->dm.dc)->usb4_dpia_count = 1;
+	res_pool = dm_kunit_alloc_res_pool(test, adev->dm.dc);
+	res_pool->usb4_dpia_count = 1;
 
 	KUNIT_EXPECT_EQ(test, dm_dmub_hw_init(adev), 0);
 	KUNIT_EXPECT_TRUE(test, adev->dm.dmub_srv->hw_init);
@@ -787,6 +790,8 @@ static void dm_test_dmub_hw_init_sanity_checks_dcn314(struct kunit *test)
  */
 static void dm_test_dmub_hw_init_dmcu_abm(struct kunit *test)
 {
+	struct resource_pool *res_pool;
+
 	struct amdgpu_device *adev = dm_test_alloc_adev_with_dmub(test);
 	struct dmcu *dmcu;
 	struct abm *abm;
@@ -799,8 +804,9 @@ static void dm_test_dmub_hw_init_dmcu_abm(struct kunit *test)
 
 	dmcu->funcs = &dm_test_dmcu_funcs;
 	dmcu->psp_version = 0x12345678;
-	dc_get_res_pool(adev->dm.dc)->dmcu = dmcu;
-	dc_get_res_pool(adev->dm.dc)->abm = abm;
+	res_pool = dm_kunit_alloc_res_pool(test, adev->dm.dc);
+	res_pool->dmcu = dmcu;
+	res_pool->abm = abm;
 
 	KUNIT_EXPECT_EQ(test, dm_dmub_hw_init(adev), 0);
 	KUNIT_EXPECT_TRUE(test, abm->dmcu_is_running);

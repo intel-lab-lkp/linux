@@ -136,6 +136,19 @@ struct dc_state *dm_kunit_alloc_dc_state(struct kunit *test)
 }
 EXPORT_SYMBOL(dm_kunit_alloc_dc_state);
 
+struct resource_pool *dm_kunit_alloc_res_pool(struct kunit *test, struct dc *dc)
+{
+	struct resource_pool *res_pool;
+
+	res_pool = kunit_kzalloc(test, sizeof(*res_pool), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, res_pool);
+
+	dc_test_set_res_pool(dc, res_pool);
+
+	return res_pool;
+}
+EXPORT_SYMBOL(dm_kunit_alloc_res_pool);
+
 struct clk_mgr *dm_kunit_alloc_clk_mgr(struct kunit *test)
 {
 	struct clk_mgr *clk_mgr;

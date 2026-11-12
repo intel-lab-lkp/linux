@@ -2783,6 +2783,8 @@ static const struct dsc_funcs dm_mst_test_dsc_funcs = {
 /* Install the DSC encoder fake and matching sink decoder capabilities. */
 static void dm_mst_test_setup_dsc_caps(struct kunit *test, struct dc *dc, struct dc_sink *sink)
 {
+	struct resource_pool *res_pool;
+
 	struct dsc_dec_dpcd_caps *dec = &sink->dsc_caps.dsc_dec_caps;
 	struct display_stream_compressor *dsc;
 
@@ -2791,7 +2793,8 @@ static void dm_mst_test_setup_dsc_caps(struct kunit *test, struct dc *dc, struct
 
 	dsc->funcs = &dm_mst_test_dsc_funcs;
 	dsc->ctx = dc_get_ctx(dc);
-	dc_get_res_pool(dc)->dscs[0] = dsc;
+	res_pool = dm_kunit_alloc_res_pool(test, dc);
+	res_pool->dscs[0] = dsc;
 
 	dec->is_dsc_supported = true;
 	dec->dsc_version = 0x21;

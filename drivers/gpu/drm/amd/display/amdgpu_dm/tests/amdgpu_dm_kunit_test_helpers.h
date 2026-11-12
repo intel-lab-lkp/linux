@@ -28,6 +28,8 @@ struct dc_link *dm_kunit_alloc_link_with_ctx(struct kunit *test);
 struct amdgpu_display_manager *dm_kunit_alloc_dm(struct kunit *test);
 struct drm_device *dm_kunit_alloc_drm_with_connector_list(struct kunit *test);
 struct dc_state *dm_kunit_alloc_dc_state(struct kunit *test);
+struct resource_pool;
+struct resource_pool *dm_kunit_alloc_res_pool(struct kunit *test, struct dc *dc);
 struct clk_mgr *dm_kunit_alloc_clk_mgr(struct kunit *test);
 struct dc_stream_state *dm_kunit_alloc_stream(struct kunit *test,
 					      struct dc_link *link);

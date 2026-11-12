@@ -232,9 +232,6 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 	struct dmub_srv_fb_info *fb_info = adev->dm.dmub_fb_info;
 	const struct firmware *dmub_fw = adev->dm.dmub_fw;
 	struct dc *dc = adev->dm.dc;
-	struct resource_pool *res_pool = dc_get_res_pool(dc);
-	struct dmcu *dmcu = res_pool->dmcu;
-	struct abm *abm = res_pool->abm;
 	struct dc_context *ctx = dc_get_ctx(adev->dm.dc);
 	struct dmub_srv_hw_params hw_params;
 	enum dmub_status status;
@@ -333,14 +330,14 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 	if (adev->firmware.load_type != AMDGPU_FW_LOAD_PSP)
 		hw_params.load_inst_const = true;
 
-	if (dmcu)
-		hw_params.psp_version = dmcu->psp_version;
+	if (dc_has_dmcu(dc))
+		hw_params.psp_version = dc_get_dmcu_psp_version(dc);
 
 	hw_params.fb_info = fb_info;
 
 	/* Enable usb4 dpia in the FW APU */
 	if (dc_get_caps(dc)->is_apu &&
-		dc_get_res_pool(dc)->usb4_dpia_count != 0 &&
+		dc_get_usb4_dpia_count(dc) != 0 &&
 		!dc_get_debug_options(dc)->dpia_debug.bits.disable_dpia) {
 		hw_params.dpia_supported = true;
 		hw_params.disable_dpia = dc_get_debug_options(dc)->dpia_debug.bits.disable_dpia;
@@ -375,10 +372,7 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 		drm_warn(adev_to_drm(adev), "Wait for DMUB auto-load failed: %d\n", status);
 
 	/* Init DMCU and ABM if available. */
-	if (dmcu && abm) {
-		dmcu->funcs->dmcu_init(dmcu);
-		abm->dmcu_is_running = dmcu->funcs->is_dmcu_initialized(dmcu);
-	}
+	dc_dmcu_init_abm(dc);
 
 	if (!dc_get_ctx(adev->dm.dc)->dmub_srv)
 		dc_get_ctx(adev->dm.dc)->dmub_srv = dc_dmub_srv_create(adev->dm.dc, dmub_srv);

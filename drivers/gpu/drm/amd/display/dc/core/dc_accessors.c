@@ -32,6 +32,8 @@
  */
 #include "dc.h"
 #include "dc_priv.h"
+#include "core_types.h"
+#include "hw/dchubbub.h"
 #include "dm_helpers.h"	/* EXPORT_IF_KUNIT */
 
 uint8_t dc_get_link_count(const struct dc *dc)
@@ -88,11 +90,47 @@ bool dc_is_idle_optimizations_allowed(const struct dc *dc)
 }
 EXPORT_IF_KUNIT(dc_is_idle_optimizations_allowed);
 
-struct resource_pool *dc_get_res_pool(const struct dc *dc)
+unsigned int dc_get_audio_instances(const struct dc *dc,
+		unsigned int *inst_array)
 {
-	return dc->res_pool;
+	unsigned int i;
+
+	for (i = 0; i < dc->res_pool->audio_count; i++)
+		inst_array[i] = dc->res_pool->audios[i]->inst;
+
+	return dc->res_pool->audio_count;
 }
-EXPORT_IF_KUNIT(dc_get_res_pool);
+EXPORT_IF_KUNIT(dc_get_audio_instances);
+
+unsigned int dc_get_pipe_count(const struct dc *dc)
+{
+	return dc->res_pool->pipe_count;
+}
+EXPORT_IF_KUNIT(dc_get_pipe_count);
+
+unsigned int dc_get_usb4_dpia_count(const struct dc *dc)
+{
+	return dc->res_pool->usb4_dpia_count;
+}
+EXPORT_IF_KUNIT(dc_get_usb4_dpia_count);
+
+unsigned int dc_get_dmcu_psp_version(const struct dc *dc)
+{
+	if (!dc->res_pool || !dc->res_pool->dmcu)
+		return 0;
+
+	return dc->res_pool->dmcu->psp_version;
+}
+
+void dc_get_mall_en(struct dc *dc, unsigned int *mall_in_use)
+{
+	struct hubbub *hubbub = dc->res_pool ? dc->res_pool->hubbub : NULL;
+
+	*mall_in_use = false;
+
+	if (hubbub && hubbub->funcs->get_mall_en)
+		hubbub->funcs->get_mall_en(hubbub, mall_in_use);
+}
 
 
 bool dc_get_dcc_compression_cap(const struct dc *dc,

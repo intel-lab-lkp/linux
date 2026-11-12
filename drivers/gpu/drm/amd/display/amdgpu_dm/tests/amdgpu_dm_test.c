@@ -3388,8 +3388,7 @@ static void dm_test_oem_i2c_hw_init_no_device(struct kunit *test)
 	struct amdgpu_device *adev = dm_kunit_alloc_adev(test);
 	struct dc *dc = dm_kunit_alloc_dc_with_ctx(test);
 
-	dc_test_set_res_pool(dc, kunit_kzalloc(test, sizeof(*dc_get_res_pool(dc)), GFP_KERNEL));
-	KUNIT_ASSERT_NOT_NULL(test, dc_get_res_pool(dc));
+	dm_kunit_alloc_res_pool(test, dc);
 	adev->dm.dc = dc;
 
 	KUNIT_EXPECT_EQ(test, dm_oem_i2c_hw_init(adev), 0);
@@ -4981,8 +4980,7 @@ static struct amdgpu_device *dm_test_late_init_adev(struct kunit *test)
 	struct amdgpu_device *adev = dm_kunit_alloc_adev(test);
 	struct dc *dc = dm_kunit_alloc_dc_with_ctx(test);
 
-	dc_test_set_res_pool(dc, kunit_kzalloc(test, sizeof(*dc_get_res_pool(dc)), GFP_KERNEL));
-	KUNIT_ASSERT_NOT_NULL(test, dc_get_res_pool(dc));
+	dm_kunit_alloc_res_pool(test, dc);
 	adev->dm.dc = dc;
 
 	return adev;

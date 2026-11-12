@@ -6349,3 +6349,13 @@ bool resource_is_hpo_acquired(struct dc_state *context)
 
 	return false;
 }
+
+enum dc_status dc_remove_stream_from_ctx(struct dc *dc,
+		struct dc_state *context, struct dc_stream_state *stream)
+{
+	if (dc->res_pool->funcs->remove_stream_from_ctx)
+		return dc->res_pool->funcs->remove_stream_from_ctx(
+				dc, context, stream);
+
+	return DC_OK;
+}

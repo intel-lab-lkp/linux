@@ -4188,7 +4188,7 @@ static void dm_test_crtc_high_irq_writeback_disables(struct kunit *test)
 	adev = dm_kunit_alloc_adev(test);
 	KUNIT_ASSERT_EQ(test, drm_vblank_init(&adev->ddev, 1), 0);
 
-	/* dc_stream_fc_disable_writeback() dereferences dc_get_res_pool(dc). */
+	/* dc_stream_fc_disable_writeback() dereferences the DC resource pool. */
 	dc = dm_test_alloc_dc_with_irq_service(test,
 					       &dm_test_irq_service_funcs_dcn10);
 	adev->dm.dc = dc;

@@ -4464,10 +4464,7 @@ static int capabilities_show(struct seq_file *m, void *unused)
 	unsigned int mall_in_use = false;
 	unsigned int subvp_in_use = false;
 
-	struct hubbub *hubbub = dc_get_res_pool(dc)->hubbub;
-
-	if (hubbub && hubbub->funcs->get_mall_en)
-		hubbub->funcs->get_mall_en(hubbub, &mall_in_use);
+	dc_get_mall_en(dc, &mall_in_use);
 
 	subvp_in_use = dc_get_subvp_en(dc, dc_get_current_state(dc));
 
@@ -4609,7 +4606,7 @@ static ssize_t dcc_en_bits_read(
 	const uint32_t rd_buf_size = 32;
 	uint32_t result = 0;
 	int offset = 0;
-	int num_pipes = dc_get_res_pool(dc)->pipe_count;
+	int num_pipes = dc_get_pipe_count(dc);
 	int *dcc_en_bits;
 	int i, r;
 

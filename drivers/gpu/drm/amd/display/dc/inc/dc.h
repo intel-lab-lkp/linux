@@ -2377,12 +2377,6 @@ struct dc_state *dc_get_current_state(const struct dc *dc);
 bool dc_is_idle_optimizations_allowed(const struct dc *dc);
 
 /*
- * The hardware resource pool (DSC engines, audio instances, DMCU/ABM...).
- * Interim accessor; prefer purpose-built DC interfaces where available.
- */
-struct resource_pool *dc_get_res_pool(const struct dc *dc);
-
-/*
  * Temporary workaround for DP compliance test failures: disallow p-state
  * switching for the given state, raise the memory clock to the maximum
  * supported level and apply the resulting clocks immediately.
@@ -2430,6 +2424,38 @@ bool dc_abm_set_event(struct dc *dc, unsigned int full_screen,
 /* Set the ABM strength for a panel instance. */
 bool dc_abm_set_strength(struct dc *dc, unsigned int strength,
 		unsigned int panel_inst);
+
+/*
+ * Fill inst_array with the instance ids of the DIO audio blocks and
+ * return their count. inst_array must have room for MAX_AUDIOS entries.
+ */
+unsigned int dc_get_audio_instances(const struct dc *dc,
+		unsigned int *inst_array);
+
+/* Number of pipes available for rendering. */
+unsigned int dc_get_pipe_count(const struct dc *dc);
+
+/* Number of USB4 DPIA endpoints. */
+unsigned int dc_get_usb4_dpia_count(const struct dc *dc);
+
+/* Read the DMCU PSP version; 0 when there is no DMCU. */
+unsigned int dc_get_dmcu_psp_version(const struct dc *dc);
+
+/*
+ * Initialize the DMCU and update the ABM "DMCU running" state.
+ * No-op when the ASIC has no DMCU or ABM.
+ */
+void dc_dmcu_init_abm(struct dc *dc);
+
+/* Whether MALL is currently enabled. */
+void dc_get_mall_en(struct dc *dc, unsigned int *mall_in_use);
+
+/*
+ * Remove the resources assigned to a stream in the given state.
+ * Returns DC_OK when the ASIC does not implement the removal.
+ */
+enum dc_status dc_remove_stream_from_ctx(struct dc *dc,
+		struct dc_state *context, struct dc_stream_state *stream);
 
 /*
  * Query DCC compression support for a surface.

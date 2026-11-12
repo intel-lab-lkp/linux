@@ -119,3 +119,14 @@ unsigned int dc_get_dmcu_abm_version(const struct dc *dc)
 
 	return dc->res_pool->dmcu->dmcu_version.abm_version;
 }
+
+void dc_dmcu_init_abm(struct dc *dc)
+{
+	struct dmcu *dmcu = dc->res_pool ? dc->res_pool->dmcu : NULL;
+	struct abm *abm = dc->res_pool ? dc->res_pool->abm : NULL;
+
+	if (dmcu && abm) {
+		dmcu->funcs->dmcu_init(dmcu);
+		abm->dmcu_is_running = dmcu->funcs->is_dmcu_initialized(dmcu);
+	}
+}
