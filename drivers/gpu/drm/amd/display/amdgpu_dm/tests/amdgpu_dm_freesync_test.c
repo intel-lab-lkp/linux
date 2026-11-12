@@ -13,6 +13,7 @@
 #include <drm/drm_vblank.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "inc/core_types.h"
 #include "amd_shared.h"
 #include "amdgpu.h"
@@ -594,7 +595,7 @@ static void dm_test_update_freesync_state_pre_ai_active(struct kunit *test)
 	stream->timing.v_total = 1125;
 	adev->dm.adev = adev;
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
-	adev->dm.dc->current_state = dm_kunit_alloc_dc_state(test);
+	dc_test_set_current_state(adev->dm.dc, dm_kunit_alloc_dc_state(test));
 
 	amdgpu_dm_update_freesync_state_on_stream(&adev->dm, &crtc_state, stream, surface, 0);
 

@@ -15,6 +15,7 @@
 #include <drm/display/drm_dp_helper.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "inc/core_types.h"
 #include "inc/hw/timing_generator.h"
 #include "irq/irq_service.h"
@@ -444,7 +445,7 @@ static struct dc *dm_test_alloc_dc_with_irq_service(struct kunit *test,
 	irqs->funcs = funcs;
 	irqs->info = info;
 	res_pool->irqs = irqs;
-	dc->res_pool = res_pool;
+	dc_test_set_res_pool(dc, res_pool);
 
 	return dc;
 }
@@ -1532,9 +1533,8 @@ static void dm_test_hpd_rx_irq_create_workqueue(struct kunit *test)
 
 	adev = dm_kunit_alloc_adev(test);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
-	dc->caps.max_links = 4;
+	dc = dm_kunit_alloc_dc(test);
+	dc_test_caps(dc)->max_links = 4;
 	adev->dm.dc = dc;
 
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
@@ -1542,10 +1542,10 @@ static void dm_test_hpd_rx_irq_create_workqueue(struct kunit *test)
 
 	ctx->wq = amdgpu_dm_hpd_rx_irq_create_workqueue(adev);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->wq);
-	ctx->count = dc->caps.max_links;
+	ctx->count = dc_test_caps(dc)->max_links;
 	KUNIT_ASSERT_EQ(test, kunit_add_action_or_reset(test, dm_test_destroy_hpd_rx_wq, ctx), 0);
 
-	for (i = 0; i < dc->caps.max_links; i++)
+	for (i = 0; i < dc_test_caps(dc)->max_links; i++)
 		KUNIT_EXPECT_TRUE(test, ctx->wq[i].wq != NULL);
 }
 
@@ -1578,9 +1578,8 @@ static void dm_test_hpd_rx_irq_work_suspend_flushes(struct kunit *test)
 
 	adev = dm_kunit_alloc_adev(test);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
-	dc->caps.max_links = 2;
+	dc = dm_kunit_alloc_dc(test);
+	dc_test_caps(dc)->max_links = 2;
 	adev->dm.dc = dc;
 
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
@@ -1588,7 +1587,7 @@ static void dm_test_hpd_rx_irq_work_suspend_flushes(struct kunit *test)
 
 	ctx->wq = amdgpu_dm_hpd_rx_irq_create_workqueue(adev);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->wq);
-	ctx->count = dc->caps.max_links;
+	ctx->count = dc_test_caps(dc)->max_links;
 	KUNIT_ASSERT_EQ(test, kunit_add_action_or_reset(test, dm_test_destroy_hpd_rx_wq, ctx), 0);
 
 	adev->dm.hpd_rx_offload_wq = ctx->wq;
@@ -1756,12 +1755,12 @@ static void dm_test_set_crtc_irq_state_allows_idle(struct kunit *test)
 	logger = kunit_kzalloc(test, sizeof(*logger), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, logger);
 	logger->dev = &adev->ddev;
-	dc->ctx->logger = logger;
+	dc_get_ctx(dc)->logger = logger;
 
-	dc->caps.ips_support = true;
-	dc->idle_optimizations_allowed = true;
+	dc_test_caps(dc)->ips_support = true;
+	dc_test_set_idle_optimizations_allowed(dc, true);
 	/* Keep dc_allow_idle_optimizations() a safe early return. */
-	dc->debug.disable_idle_power_optimizations = true;
+	dc_test_debug_options(dc)->disable_idle_power_optimizations = true;
 	adev->dm.dc = dc;
 
 	acrtc->otg_inst = 0;
@@ -2052,8 +2051,8 @@ static void dm_test_hpd_init_empty_connectors(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, link);
 	link->irq_source_hpd = DC_IRQ_SOURCE_HPD1;
 	link->irq_source_hpd_rx = DC_IRQ_SOURCE_HPD1RX;
-	dc->links[0] = link;
-	dc->link_count = 1;
+	dc_test_set_link(dc, 0, link);
+	dc_test_set_link_count(dc, 1);
 
 	amdgpu_dm_hpd_init(adev);
 }
@@ -2118,8 +2117,8 @@ static void dm_test_hpd_init_fini_with_connectors(struct kunit *test)
 	link->irq_source_hpd = DC_IRQ_SOURCE_HPD1;
 	link->irq_source_hpd_rx = DC_IRQ_SOURCE_HPD1RX;
 	aconn->dc_link = link;
-	dc->links[0] = link;
-	dc->link_count = 1;
+	dc_test_set_link(dc, 0, link);
+	dc_test_set_link_count(dc, 1);
 
 	/* The irq service stubs accept the HW writes without register access. */
 	amdgpu_dm_hpd_init(adev);
@@ -2159,8 +2158,8 @@ static void dm_test_hpd_init_fini_analog_connector(struct kunit *test)
 	/* An analog connector id makes the loop request polling. */
 	link->link_id.id = CONNECTOR_ID_VGA;
 	aconn->dc_link = link;
-	dc->links[0] = link;
-	dc->link_count = 1;
+	dc_test_set_link(dc, 0, link);
+	dc_test_set_link_count(dc, 1);
 
 	/* use_polling becomes true, so init must enable KMS polling. */
 	amdgpu_dm_hpd_init(adev);
@@ -2210,8 +2209,8 @@ static void dm_test_hpd_init_fini_irq_ref(struct kunit *test)
 	link->irq_source_hpd = DC_IRQ_SOURCE_HPD1;
 	link->irq_source_hpd_rx = DC_IRQ_SOURCE_INVALID;
 	aconn->dc_link = link;
-	dc->links[0] = link;
-	dc->link_count = 1;
+	dc_test_set_link(dc, 0, link);
+	dc_test_set_link_count(dc, 1);
 
 	amdgpu_dm_hpd_init(adev);
 	amdgpu_dm_hpd_fini(adev);
@@ -2310,8 +2309,7 @@ dm_test_setup_hpd_rx_offload_work(struct kunit *test,
 	mutex_init(&aconn->hpd_lock);
 	offload_wq->aconnector = aconn;
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
@@ -2320,8 +2318,8 @@ dm_test_setup_hpd_rx_offload_work(struct kunit *test,
 	KUNIT_ASSERT_NOT_NULL(test, link);
 
 	link_srv->detect_connection_type = dm_test_detect_connection_single;
-	dc->link_srv = link_srv;
-	dc->ctx = ctx;
+	dc_test_install_link_service(dc, link_srv);
+	dc_test_set_ctx(dc, ctx);
 	ctx->dc = dc;
 	link->dc = dc;
 	link->ctx = ctx;
@@ -2542,8 +2540,7 @@ static struct amdgpu_dm_connector *dm_test_setup_hdmi_debounce(struct kunit *tes
 	INIT_DELAYED_WORK(&aconn->hdmi_hpd_debounce_work,
 			  amdgpu_dm_hdmi_hpd_debounce_work);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
@@ -2552,8 +2549,8 @@ static struct amdgpu_dm_connector *dm_test_setup_hdmi_debounce(struct kunit *tes
 	KUNIT_ASSERT_NOT_NULL(test, link);
 
 	link_srv->detect_link = dm_test_detect_link_false;
-	dc->ctx = ctx;
-	dc->link_srv = link_srv;
+	dc_test_set_ctx(dc, ctx);
+	dc_test_install_link_service(dc, link_srv);
 	ctx->dc = dc;
 	link->dc = dc;
 	link->ctx = ctx;
@@ -2607,13 +2604,13 @@ static void dm_test_hdmi_hpd_debounce_reallow_idle(struct kunit *test)
 
 	/* DC_LOG_* dereferences ctx->logger->dev, so wire a real drm device. */
 	logger->dev = aconn->base.dev;
-	dc->ctx->logger = logger;
+	dc_get_ctx(dc)->logger = logger;
 
 	/* Make reallow_idle true and keep dc_allow_idle*() a safe early return. */
 	dmub_srv->idle_allowed = true;
-	dc->ctx->dmub_srv = dmub_srv;
-	dc->caps.ips_support = true;
-	dc->debug.disable_idle_power_optimizations = true;
+	dc_get_ctx(dc)->dmub_srv = dmub_srv;
+	dc_test_caps(dc)->ips_support = true;
+	dc_test_debug_options(dc)->disable_idle_power_optimizations = true;
 
 	/* A cached previous sink must be released and cleared. */
 	aconn->hdmi_prev_sink = dm_test_sink_create(aconn->dc_link);
@@ -2707,14 +2704,13 @@ static void dm_test_handle_hpd_irq_disabled(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, state);
 	aconn->base.state = &state->base;
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link);
 
-	dc->ctx = ctx;
+	dc_test_set_ctx(dc, ctx);
 	ctx->dc = dc;
 	link->ctx = ctx;
 	aconn->dc_link = link;
@@ -2756,8 +2752,7 @@ static struct amdgpu_dm_connector *dm_test_setup_hpd_irq_helper(struct kunit *te
 	KUNIT_ASSERT_NOT_NULL(test, state);
 	aconn->base.state = &state->base;
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
@@ -2766,8 +2761,8 @@ static struct amdgpu_dm_connector *dm_test_setup_hpd_irq_helper(struct kunit *te
 	KUNIT_ASSERT_NOT_NULL(test, link);
 
 	link_srv->detect_connection_type = dm_test_detect_connection_none;
-	dc->ctx = ctx;
-	dc->link_srv = link_srv;
+	dc_test_set_ctx(dc, ctx);
+	dc_test_install_link_service(dc, link_srv);
 	ctx->dc = dc;
 	link->dc = dc;
 	link->ctx = ctx;
@@ -3017,8 +3012,7 @@ static void dm_test_handle_hpd_rx_irq_disabled(struct kunit *test)
 
 	aconn = dm_kunit_alloc_connector(test, adev, NULL);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
@@ -3027,8 +3021,8 @@ static void dm_test_handle_hpd_rx_irq_disabled(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, link);
 
 	link_srv->dp_handle_hpd_rx_irq = dm_test_handle_hpd_rx_no_work;
-	dc->ctx = ctx;
-	dc->link_srv = link_srv;
+	dc_test_set_ctx(dc, ctx);
+	dc_test_install_link_service(dc, link_srv);
 	ctx->dc = dc;
 	link->dc = dc;
 	link->ctx = ctx;
@@ -3101,8 +3095,7 @@ static struct amdgpu_dm_connector *dm_test_setup_hpd_rx_irq(struct kunit *test,
 	mutex_init(&aconn->hpd_lock);
 	aconn->mst_mgr.mst_state = true;
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
@@ -3110,8 +3103,8 @@ static struct amdgpu_dm_connector *dm_test_setup_hpd_rx_irq(struct kunit *test,
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link);
 
-	dc->ctx = ctx;
-	dc->link_srv = link_srv;
+	dc_test_set_ctx(dc, ctx);
+	dc_test_install_link_service(dc, link_srv);
 	ctx->dc = dc;
 	link->dc = dc;
 	link->ctx = ctx;
@@ -3332,8 +3325,7 @@ static void dm_test_dmub_hpd_callback_invalid_index(struct kunit *test)
 	struct dc *dc;
 
 	adev = dm_kunit_alloc_adev(test);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	adev->dm.dc = dc;
 	notify.link_index = 1;
 
@@ -3351,11 +3343,10 @@ static void dm_test_dmub_hpd_callback_empty_connectors(struct kunit *test)
 	struct dc *dc;
 
 	adev = dm_kunit_alloc_adev(test);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	adev->dm.dc = dc;
 	adev->dm.ddev = &adev->ddev;
-	dc->link_count = 1;
+	dc_test_set_link_count(dc, 1);
 	notify.type = DMUB_NOTIFICATION_HPD_SENSE_NOTIFY;
 
 	dmub_hpd_callback(adev, &notify);
@@ -3376,11 +3367,10 @@ static void dm_test_dmub_hpd_callback_suspend_skip(struct kunit *test)
 	struct dc *dc;
 
 	adev = dm_kunit_alloc_adev(test);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	adev->dm.dc = dc;
 	adev->in_suspend = true;
-	dc->link_count = 1;
+	dc_test_set_link_count(dc, 1);
 	notify.type = DMUB_NOTIFICATION_HPD;
 
 	/* adev->dm.ddev is left NULL: reaching the connector walk would crash. */
@@ -3408,15 +3398,14 @@ static void dm_test_dmub_hpd_callback_unknown_type_match(struct kunit *test)
 	struct dc *dc;
 
 	adev = dm_kunit_alloc_adev(test);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	adev->dm.dc = dc;
 	adev->dm.ddev = &adev->ddev;
-	dc->link_count = 1;
+	dc_test_set_link_count(dc, 1);
 
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link);
-	dc->links[0] = link;
+	dc_test_set_link(dc, 0, link);
 
 	/* A writeback connector must be skipped by the loop. */
 	wbconn = kunit_kzalloc(test, sizeof(*wbconn), GFP_KERNEL);
@@ -3463,8 +3452,7 @@ static void dm_test_dmub_hpd_callback_hpd_type(struct kunit *test)
 	adev = dm_kunit_alloc_adev(test);
 	mutex_init(&adev->dm.dc_lock);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
@@ -3474,16 +3462,16 @@ static void dm_test_dmub_hpd_callback_hpd_type(struct kunit *test)
 
 	link_srv->detect_connection_type = dm_test_detect_connection_none;
 	link_srv->detect_link = dm_test_detect_link_false;
-	dc->ctx = ctx;
-	dc->link_srv = link_srv;
+	dc_test_set_ctx(dc, ctx);
+	dc_test_install_link_service(dc, link_srv);
 	ctx->dc = dc;
 	link->dc = dc;
 	link->ctx = ctx;
 
 	adev->dm.dc = dc;
 	adev->dm.ddev = &adev->ddev;
-	dc->link_count = 1;
-	dc->links[0] = link;
+	dc_test_set_link_count(dc, 1);
+	dc_test_set_link(dc, 0, link);
 
 	aconn = kunit_kzalloc(test, sizeof(*aconn), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, aconn);
@@ -3532,8 +3520,7 @@ static void dm_test_dmub_hpd_callback_hpd_irq_type(struct kunit *test)
 	spin_lock_init(&offload_wq->offload_lock);
 	adev->dm.hpd_rx_offload_wq = offload_wq;
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
@@ -3542,8 +3529,8 @@ static void dm_test_dmub_hpd_callback_hpd_irq_type(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, link);
 
 	link_srv->dp_handle_hpd_rx_irq = dm_test_handle_hpd_rx_no_work;
-	dc->ctx = ctx;
-	dc->link_srv = link_srv;
+	dc_test_set_ctx(dc, ctx);
+	dc_test_install_link_service(dc, link_srv);
 	ctx->dc = dc;
 	link->dc = dc;
 	link->ctx = ctx;
@@ -3552,8 +3539,8 @@ static void dm_test_dmub_hpd_callback_hpd_irq_type(struct kunit *test)
 
 	adev->dm.dc = dc;
 	adev->dm.ddev = &adev->ddev;
-	dc->link_count = 1;
-	dc->links[0] = link;
+	dc_test_set_link_count(dc, 1);
+	dc_test_set_link(dc, 0, link);
 
 	aconn = kunit_kzalloc(test, sizeof(*aconn), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, aconn);
@@ -3584,8 +3571,7 @@ static void dm_test_register_hpd_handlers_empty(struct kunit *test)
 	struct dc *dc;
 
 	adev = dm_kunit_alloc_adev(test);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	adev->dm.dc = dc;
 
 	KUNIT_EXPECT_EQ(test, amdgpu_dm_register_hpd_handlers(adev), 0);
@@ -3609,8 +3595,7 @@ static void dm_test_register_hpd_handlers_valid(struct kunit *test)
 
 	adev = dm_kunit_alloc_adev(test);
 	KUNIT_ASSERT_EQ(test, amdgpu_dm_irq_init(adev), 0);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	adev->dm.dc = dc;
 
 	wbconn = kunit_kzalloc(test, sizeof(*wbconn), GFP_KERNEL);
@@ -3656,8 +3641,7 @@ static void dm_test_register_hpd_handlers_invalid_hpd(struct kunit *test)
 
 	adev = dm_kunit_alloc_adev(test);
 	KUNIT_ASSERT_EQ(test, amdgpu_dm_irq_init(adev), 0);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	adev->dm.dc = dc;
 
 	aconn = kunit_kzalloc(test, sizeof(*aconn), GFP_KERNEL);
@@ -3691,8 +3675,7 @@ static void dm_test_register_hpd_handlers_invalid_hpd_rx(struct kunit *test)
 
 	adev = dm_kunit_alloc_adev(test);
 	KUNIT_ASSERT_EQ(test, amdgpu_dm_irq_init(adev), 0);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	adev->dm.dc = dc;
 
 	aconn = kunit_kzalloc(test, sizeof(*aconn), GFP_KERNEL);
@@ -3732,8 +3715,8 @@ static void dm_test_register_hpd_handlers_dmub_outbox(struct kunit *test)
 	adev->dm.dc = dc;
 
 	/* Make dc_is_dmub_outbox_supported() return true. */
-	dc->caps.dmcub_support = true;
-	dc->ctx->asic_id.chip_family = AMDGPU_FAMILY_GC_11_0_1;
+	dc_test_caps(dc)->dmcub_support = true;
+	dc_get_ctx(dc)->asic_id.chip_family = AMDGPU_FAMILY_GC_11_0_1;
 
 	KUNIT_EXPECT_EQ(test, amdgpu_dm_register_hpd_handlers(adev), 0);
 	KUNIT_EXPECT_PTR_EQ(test, adev->dm.dmub_callback[DMUB_NOTIFICATION_HPD],
@@ -3843,18 +3826,18 @@ static struct amdgpu_crtc *dm_test_setup_vrr_pflip_crtc(struct kunit *test,
 	KUNIT_ASSERT_EQ(test, drm_vblank_init(&adev->ddev, 1), 0);
 
 	dc = dm_kunit_alloc_dc_with_ctx(test);
-	dc->current_state = kunit_kzalloc(test, sizeof(*dc->current_state),
-					  GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc->current_state);
+	dc_test_set_current_state(dc, kunit_kzalloc(test, sizeof(*dc_get_current_state(dc)),
+					  GFP_KERNEL));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_current_state(dc));
 	adev->dm.dc = dc;
 
 	link = dm_kunit_alloc_link(test);
 	stream = dm_kunit_alloc_stream(test, link);
-	stream->ctx = dc->ctx;
+	stream->ctx = dc_get_ctx(dc);
 
 	if (tg) {
-		dc->current_state->res_ctx.pipe_ctx[0].stream = stream;
-		dc->current_state->res_ctx.pipe_ctx[0].stream_res.tg = tg;
+		dc_get_current_state(dc)->res_ctx.pipe_ctx[0].stream = stream;
+		dc_get_current_state(dc)->res_ctx.pipe_ctx[0].stream_res.tg = tg;
 	}
 
 	acrtc = dm_test_add_crtc(test, adev);
@@ -4056,9 +4039,9 @@ static struct amdgpu_crtc *dm_test_setup_vmin_vmax_crtc(struct kunit *test,
 	KUNIT_ASSERT_EQ(test, amdgpu_dm_irq_init(adev), 0);
 
 	dc = dm_kunit_alloc_dc_with_ctx(test);
-	dc->current_state = kunit_kzalloc(test, sizeof(*dc->current_state),
-					  GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc->current_state);
+	dc_test_set_current_state(dc, kunit_kzalloc(test, sizeof(*dc_get_current_state(dc)),
+					  GFP_KERNEL));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_current_state(dc));
 	adev->dm.dc = dc;
 
 	link = dm_kunit_alloc_link(test);
@@ -4205,7 +4188,7 @@ static void dm_test_crtc_high_irq_writeback_disables(struct kunit *test)
 	adev = dm_kunit_alloc_adev(test);
 	KUNIT_ASSERT_EQ(test, drm_vblank_init(&adev->ddev, 1), 0);
 
-	/* dc_stream_fc_disable_writeback() dereferences dc->res_pool. */
+	/* dc_stream_fc_disable_writeback() dereferences dc_get_res_pool(dc). */
 	dc = dm_test_alloc_dc_with_irq_service(test,
 					       &dm_test_irq_service_funcs_dcn10);
 	adev->dm.dc = dc;
@@ -4384,7 +4367,7 @@ static void dm_test_dmub_outbox1_low_irq_empty(struct kunit *test)
 
 	dmub->hw_funcs.get_outbox0_wptr = dm_test_dmub_get_outbox0_wptr;
 	dc_dmub_srv->dmub = dmub;
-	dc->ctx->dmub_srv = dc_dmub_srv;
+	dc_get_ctx(dc)->dmub_srv = dc_dmub_srv;
 	adev->dm.dc = dc;
 	params.adev = adev;
 	params.irq_src = DC_IRQ_SOURCE_DMCUB_OUTBOX;
@@ -4422,7 +4405,7 @@ static void dm_test_dmub_outbox1_low_irq_drains_trace(struct kunit *test)
 	dmub->outbox0_rb.capacity = DM_TEST_OUTBOX0_RB_SIZE;
 	dmub->hw_funcs.get_outbox0_wptr = dm_test_dmub_get_outbox0_wptr_full;
 	dc_dmub_srv->dmub = dmub;
-	dc->ctx->dmub_srv = dc_dmub_srv;
+	dc_get_ctx(dc)->dmub_srv = dc_dmub_srv;
 	adev->dm.dc = dc;
 	params.adev = adev;
 	params.irq_src = DC_IRQ_SOURCE_DMCUB_OUTBOX;
@@ -4460,11 +4443,11 @@ static struct amdgpu_device *dm_test_alloc_adev_outbox_notify(struct kunit *test
 	dmub->hw_funcs.get_outbox0_wptr = dm_test_dmub_get_outbox0_wptr;
 	dmub->hw_funcs.get_outbox1_wptr = dm_test_dmub_get_outbox1_wptr;
 	dc_dmub_srv->dmub = dmub;
-	dc->ctx->dmub_srv = dc_dmub_srv;
+	dc_get_ctx(dc)->dmub_srv = dc_dmub_srv;
 
 	/* Make dc_enable_dmub_notifications() return true. */
-	dc->caps.dmcub_support = true;
-	dc->ctx->asic_id.chip_family = AMDGPU_FAMILY_GC_11_0_1;
+	dc_test_caps(dc)->dmcub_support = true;
+	dc_get_ctx(dc)->asic_id.chip_family = AMDGPU_FAMILY_GC_11_0_1;
 
 	adev->dm.dc = dc;
 
@@ -4578,8 +4561,8 @@ static struct amdgpu_device *dm_test_setup_irq_regs(struct kunit *test,
 	KUNIT_ASSERT_EQ(test, kunit_add_action_or_reset(test, dm_test_free_irq_sources,
 							 adev), 0);
 	dc = dm_test_alloc_dc_with_irq_service(test, funcs);
-	dc->ctx->dce_version = DCE_VERSION_11_0;
-	dc->caps.max_otg_num = 1;
+	dc_get_ctx(dc)->dce_version = DCE_VERSION_11_0;
+	dc_test_caps(dc)->max_otg_num = 1;
 	adev->dm.dc = dc;
 	adev->mode_info.num_crtc = 1;
 	adev->mode_info.num_hpd = 1;
@@ -4663,7 +4646,7 @@ static void dm_test_dce110_register_irq_handlers_crtc_add_id_fails(struct kunit 
 
 	adev = dm_kunit_alloc_adev(test);
 	dc = dm_test_alloc_dc_with_irq_service(test, &dm_test_irq_service_funcs_dce110);
-	dc->ctx->dce_version = DCE_VERSION_11_0;
+	dc_get_ctx(dc)->dce_version = DCE_VERSION_11_0;
 	adev->dm.dc = dc;
 	adev->mode_info.num_crtc = 1;
 
@@ -4917,7 +4900,7 @@ static void dm_test_register_outbox_irq_handlers_add_id_fails(struct kunit *test
  * dm_test_register_outbox_irq_handlers_with_dmub - Test outbox registration with DMUB
  * @test: The KUnit test context
  *
- * Exercises the dc->ctx->dmub_srv branch which maps the outbox source and
+ * Exercises the dc_get_ctx(dc)->dmub_srv branch which maps the outbox source and
  * registers dm_dmub_outbox1_low_irq in the low IRQ context table.
  */
 static void dm_test_register_outbox_irq_handlers_with_dmub(struct kunit *test)
@@ -4933,7 +4916,7 @@ static void dm_test_register_outbox_irq_handlers_with_dmub(struct kunit *test)
 	dc = dm_test_alloc_dc_with_irq_service(test, &dm_test_irq_service_funcs_dcn10);
 	dc_dmub_srv = kunit_kzalloc(test, sizeof(*dc_dmub_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dc_dmub_srv);
-	dc->ctx->dmub_srv = dc_dmub_srv;
+	dc_get_ctx(dc)->dmub_srv = dc_dmub_srv;
 	adev->dm.dc = dc;
 	amdgpu_dm_set_irq_funcs(adev);
 	KUNIT_ASSERT_EQ(test, amdgpu_dm_irq_init(adev), 0);
@@ -5086,9 +5069,9 @@ static void dm_test_handle_vmin_vmax_update(struct kunit *test)
 	mutex_init(&adev->dm.dc_lock);
 
 	dc = dm_kunit_alloc_dc_with_ctx(test);
-	dc->current_state = kunit_kzalloc(test, sizeof(*dc->current_state),
-					  GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc->current_state);
+	dc_test_set_current_state(dc, kunit_kzalloc(test, sizeof(*dc_get_current_state(dc)),
+					  GFP_KERNEL));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_current_state(dc));
 	adev->dm.dc = dc;
 
 	stream = kunit_kzalloc(test, sizeof(*stream), GFP_KERNEL);

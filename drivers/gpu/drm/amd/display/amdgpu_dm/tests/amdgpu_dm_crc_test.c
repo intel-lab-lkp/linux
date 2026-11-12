@@ -16,6 +16,7 @@
 #include <drm/drm_vblank.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "core_types.h"
 #include "logger_types.h"
 #include "opp.h"
@@ -137,8 +138,8 @@ static struct dm_test_crc_dc_fixture *dm_test_alloc_crc_dc_fixture(struct kunit 
 
 	mutex_init(&adev->dm.dc_lock);
 	adev->dm.dc = fixture->dc;
-	fixture->dc->ctx = fixture->dc_ctx;
-	fixture->dc->current_state = fixture->dc_state;
+	dc_test_set_ctx(fixture->dc, fixture->dc_ctx);
+	dc_test_set_current_state(fixture->dc, fixture->dc_state);
 	fixture->dc_ctx->dc = fixture->dc;
 	fixture->dc_ctx->logger = fixture->logger;
 	fixture->link->dc = fixture->dc;

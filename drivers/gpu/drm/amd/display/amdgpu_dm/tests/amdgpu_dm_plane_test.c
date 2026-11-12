@@ -18,6 +18,7 @@
 #include <drm/drm_mode_config.h>
 #include <drm/drm_plane.h>
 #include <drm/drm_property.h>
+#include "dc_test.h"
 
 struct dm_test_dcc_cap_ctx {
 	bool callback_ret;
@@ -364,19 +365,19 @@ static void dm_test_get_min_max_dc_plane_scaling(struct kunit *test)
 	int max_upscale = 0;
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	fb = kunit_kzalloc(test, sizeof(*fb), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev);
 	KUNIT_ASSERT_NOT_NULL(test, dc);
 	KUNIT_ASSERT_NOT_NULL(test, fb);
 
 	adev->dm.dc = dc;
-	dc->caps.planes[0].max_upscale_factor.nv12 = 1;
-	dc->caps.planes[0].max_downscale_factor.nv12 = 1;
-	dc->caps.planes[0].max_upscale_factor.argb8888 = 1600;
-	dc->caps.planes[0].max_downscale_factor.argb8888 = 250;
-	dc->caps.planes[0].max_upscale_factor.fp16 = 2000;
-	dc->caps.planes[0].max_downscale_factor.fp16 = 500;
+	dc_test_caps(dc)->planes[0].max_upscale_factor.nv12 = 1;
+	dc_test_caps(dc)->planes[0].max_downscale_factor.nv12 = 1;
+	dc_test_caps(dc)->planes[0].max_upscale_factor.argb8888 = 1600;
+	dc_test_caps(dc)->planes[0].max_downscale_factor.argb8888 = 250;
+	dc_test_caps(dc)->planes[0].max_upscale_factor.fp16 = 2000;
+	dc_test_caps(dc)->planes[0].max_downscale_factor.fp16 = 500;
 
 	fb->format = drm_format_info(DRM_FORMAT_NV12);
 	KUNIT_ASSERT_NOT_NULL(test, fb->format);
@@ -688,7 +689,7 @@ static void dm_test_validate_dcc_rejects_from_cap(struct kunit *test)
 		dm_test_init_validate_dcc_inputs(&adev, &dc, &tiling_info, &dcc, &address,
 						 &plane_size, test);
 		dcc.independent_64b_blks = cases[i].independent_64b_blks;
-		dc->cap_funcs.get_dcc_compression_cap = dm_test_get_dcc_compression_cap;
+		dc_test_cap_funcs(dc)->get_dcc_compression_cap = dm_test_get_dcc_compression_cap;
 		dm_test_dcc_ctx = &ctx;
 
 		ret = amdgpu_dm_plane_validate_dcc(adev, SURFACE_PIXEL_FORMAT_GRPH_ARGB8888,
@@ -723,7 +724,7 @@ static void dm_test_validate_dcc_success_and_scan_mapping(struct kunit *test)
 
 	dm_test_init_validate_dcc_inputs(&adev, &dc, &tiling_info, &dcc, &address,
 					 &plane_size, test);
-	dc->cap_funcs.get_dcc_compression_cap = dm_test_get_dcc_compression_cap;
+	dc_test_cap_funcs(dc)->get_dcc_compression_cap = dm_test_get_dcc_compression_cap;
 	dm_test_dcc_ctx = &ctx;
 
 	KUNIT_EXPECT_EQ(test,
@@ -1103,7 +1104,7 @@ static void dm_test_setup_gfx9_dcc_device(struct amdgpu_device *adev,
 	adev->gfx.config.gb_addr_config_fields.num_pipes = 2;
 	adev->gfx.config.gb_addr_config_fields.num_pkrs = 2;
 	adev->ip_versions[GC_HWIP][0] = IP_VERSION(10, 3, 0);
-	dc->cap_funcs.get_dcc_compression_cap = dm_test_get_dcc_compression_cap;
+	dc_test_cap_funcs(dc)->get_dcc_compression_cap = dm_test_get_dcc_compression_cap;
 	ctx->callback_ret = true;
 	ctx->capable = true;
 	ctx->output_independent_64b_blks = output_independent_64b_blks;
@@ -1406,7 +1407,7 @@ static void dm_test_fill_gfx9_plane_attributes_dcc(struct kunit *test)
 	int ret;
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	afb = kunit_kzalloc(test, sizeof(*afb), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev);
 	KUNIT_ASSERT_NOT_NULL(test, dc);
@@ -1417,7 +1418,7 @@ static void dm_test_fill_gfx9_plane_attributes_dcc(struct kunit *test)
 	adev->gfx.config.gb_addr_config_fields.num_pipes = 2;
 	adev->gfx.config.gb_addr_config_fields.num_pkrs = 2;
 	adev->ip_versions[GC_HWIP][0] = IP_VERSION(10, 3, 0);
-	dc->cap_funcs.get_dcc_compression_cap = dm_test_get_dcc_compression_cap;
+	dc_test_cap_funcs(dc)->get_dcc_compression_cap = dm_test_get_dcc_compression_cap;
 	dm_test_dcc_ctx = &ctx;
 
 	afb->base.pitches[1] = 256;
@@ -1460,7 +1461,7 @@ static void dm_test_fill_gfx9_plane_attributes_validate_fails(struct kunit *test
 	int ret;
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	afb = kunit_kzalloc(test, sizeof(*afb), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev);
 	KUNIT_ASSERT_NOT_NULL(test, dc);
@@ -1511,7 +1512,7 @@ static void dm_test_fill_gfx9_plane_attributes_dcc_ind_blk(struct kunit *test)
 	unsigned int i;
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	afb = kunit_kzalloc(test, sizeof(*afb), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev);
 	KUNIT_ASSERT_NOT_NULL(test, dc);
@@ -1575,7 +1576,7 @@ static void dm_test_fill_gfx12_plane_attributes_dcc_blocks(struct kunit *test)
 	unsigned int i;
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	afb = kunit_kzalloc(test, sizeof(*afb), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev);
 	KUNIT_ASSERT_NOT_NULL(test, dc);
@@ -1583,7 +1584,7 @@ static void dm_test_fill_gfx12_plane_attributes_dcc_blocks(struct kunit *test)
 
 	adev->family = AMDGPU_FAMILY_GC_12_0_0;
 	adev->dm.dc = dc;
-	dc->cap_funcs.get_dcc_compression_cap = dm_test_get_dcc_compression_cap;
+	dc_test_cap_funcs(dc)->get_dcc_compression_cap = dm_test_get_dcc_compression_cap;
 	plane_size.surface_size.width = 1920;
 	plane_size.surface_size.height = 1080;
 
@@ -1635,7 +1636,7 @@ static void dm_test_fill_gfx12_plane_attributes_validate_fails(struct kunit *tes
 	int ret;
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	afb = kunit_kzalloc(test, sizeof(*afb), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev);
 	KUNIT_ASSERT_NOT_NULL(test, dc);
@@ -1726,7 +1727,7 @@ static void dm_test_fill_plane_buffer_attributes_gfx12(struct kunit *test)
 	int ret;
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	afb = kunit_kzalloc(test, sizeof(*afb), GFP_KERNEL);
 	tiling_info = (struct dc_tiling_info){0};
 	plane_size = (struct plane_size){0};
@@ -1772,7 +1773,7 @@ static void dm_test_helper_check_state_scaling_caps(struct kunit *test)
 	struct drm_framebuffer *fb;
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	plane = kunit_kzalloc(test, sizeof(*plane), GFP_KERNEL);
 	state = kunit_kzalloc(test, sizeof(*state), GFP_KERNEL);
 	crtc = kunit_kzalloc(test, sizeof(*crtc), GFP_KERNEL);
@@ -1787,8 +1788,8 @@ static void dm_test_helper_check_state_scaling_caps(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, fb);
 
 	adev->dm.dc = dc;
-	dc->caps.planes[0].max_upscale_factor.argb8888 = 1;
-	dc->caps.planes[0].max_downscale_factor.argb8888 = 1;
+	dc_test_caps(dc)->planes[0].max_upscale_factor.argb8888 = 1;
+	dc_test_caps(dc)->planes[0].max_downscale_factor.argb8888 = 1;
 
 	plane->type = DRM_PLANE_TYPE_OVERLAY;
 	plane->dev = &adev->ddev;
@@ -1873,7 +1874,7 @@ static void dm_test_fill_dc_scaling_info_plane_caps(struct kunit *test)
 	struct dc_scaling_info info = {0};
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	plane = kunit_kzalloc(test, sizeof(*plane), GFP_KERNEL);
 	state = kunit_kzalloc(test, sizeof(*state), GFP_KERNEL);
 	fb = kunit_kzalloc(test, sizeof(*fb), GFP_KERNEL);
@@ -1884,8 +1885,8 @@ static void dm_test_fill_dc_scaling_info_plane_caps(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, fb);
 
 	adev->dm.dc = dc;
-	dc->caps.planes[0].max_upscale_factor.argb8888 = 16000;
-	dc->caps.planes[0].max_downscale_factor.argb8888 = 250;
+	dc_test_caps(dc)->planes[0].max_upscale_factor.argb8888 = 16000;
+	dc_test_caps(dc)->planes[0].max_downscale_factor.argb8888 = 250;
 
 	plane->dev = &adev->ddev;
 	fb->format = drm_format_info(DRM_FORMAT_XRGB8888);
@@ -2025,7 +2026,7 @@ static struct amdgpu_device *dm_test_init_atomic_check_state(struct kunit *test,
 	struct drm_crtc *crtc;
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	*state = kunit_kzalloc(test, sizeof(**state), GFP_KERNEL);
 	planes = kunit_kzalloc(test, sizeof(*planes), GFP_KERNEL);
 	crtcs = kunit_kzalloc(test, sizeof(*crtcs), GFP_KERNEL);
@@ -2048,10 +2049,10 @@ static struct amdgpu_device *dm_test_init_atomic_check_state(struct kunit *test,
 	KUNIT_ASSERT_NOT_NULL(test, *fb);
 
 	adev->dm.dc = dc;
-	dc->caps.planes[0].max_upscale_factor.argb8888 = 1000;
-	dc->caps.planes[0].max_downscale_factor.argb8888 = 1000;
-	dc->caps.planes[0].max_upscale_factor.nv12 = 1000;
-	dc->caps.planes[0].max_downscale_factor.nv12 = 1000;
+	dc_test_caps(dc)->planes[0].max_upscale_factor.argb8888 = 1000;
+	dc_test_caps(dc)->planes[0].max_downscale_factor.argb8888 = 1000;
+	dc_test_caps(dc)->planes[0].max_upscale_factor.nv12 = 1000;
+	dc_test_caps(dc)->planes[0].max_downscale_factor.nv12 = 1000;
 
 	(*plane)->dev = &adev->ddev;
 	(*plane)->index = 0;
@@ -3009,7 +3010,7 @@ static void dm_test_atomic_check_success(struct kunit *test)
 	res_pool->funcs = kunit_kzalloc(test, sizeof(*res_pool->funcs), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, res_pool->funcs);
 
-	adev->dm.dc->res_pool = res_pool;
+	dc_test_set_res_pool(adev->dm.dc, res_pool);
 
 	dm_plane_state->dc_state->src_rect.width = 100;
 	dm_plane_state->dc_state->src_rect.height = 100;
@@ -3107,7 +3108,7 @@ static void dm_test_handle_cursor_update_no_stream(struct kunit *test)
 	struct dm_test_cursor_ctx *ctx = dm_test_alloc_cursor_ctx(test);
 
 	ctx->crtc_state->cm_is_degamma_srgb = true;
-	ctx->adev->dm.dc->caps.color.dpp.gamma_corr = true;
+	dc_test_caps(ctx->adev->dm.dc)->color.dpp.gamma_corr = true;
 
 	amdgpu_dm_plane_handle_cursor_update(ctx->plane, &ctx->old_state);
 
@@ -3153,11 +3154,11 @@ static void dm_test_panic_flush_disables_dcc(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, res_pool);
 
 	dc = dm_kunit_alloc_dc_with_ctx(test);
-	dc->current_state = dm_kunit_alloc_dc_state(test);
-	dc->hwss.clear_surface_dcc_and_tiling = dm_test_clear_surface_dcc_and_tiling;
+	dc_test_set_current_state(dc, dm_kunit_alloc_dc_state(test));
+	dc_test_hwss(dc)->clear_surface_dcc_and_tiling = dm_test_clear_surface_dcc_and_tiling;
 	res_pool->pipe_count = 1;
-	dc->res_pool = res_pool;
-	dc_plane_state->ctx = dc->ctx;
+	dc_test_set_res_pool(dc, res_pool);
+	dc_plane_state->ctx = dc_get_ctx(dc);
 
 	fb->modifier = AMD_FMT_MOD;
 	dm_plane_state->base.fb = fb;
@@ -3231,7 +3232,7 @@ static void dm_test_plane_init_creates_color_pipeline(struct kunit *test)
 	struct drm_plane *plane;
 
 	plane = dm_test_alloc_init_plane(test, &adev);
-	adev->dm.dc->ctx->dce_version = DCN_VERSION_3_0;
+	dc_get_ctx(adev->dm.dc)->dce_version = DCN_VERSION_3_0;
 
 	KUNIT_ASSERT_EQ(test, amdgpu_dm_plane_init(&adev->dm, plane, 1, NULL), 0);
 

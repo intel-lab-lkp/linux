@@ -11,6 +11,7 @@
 #include <drm/drm_managed.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "core_types.h"
 #include "clk_mgr.h"
 #include "amdgpu.h"
@@ -47,18 +48,29 @@ struct dc_link *dm_kunit_alloc_link(struct kunit *test)
 }
 EXPORT_SYMBOL(dm_kunit_alloc_link);
 
+struct dc *dm_kunit_alloc_dc(struct kunit *test)
+{
+	struct dc *dc;
+
+	dc = dc_test_create();
+	KUNIT_ASSERT_NOT_NULL(test, dc);
+	kunit_add_action(test, (kunit_action_t *)dc_test_destroy, dc);
+
+	return dc;
+}
+EXPORT_SYMBOL(dm_kunit_alloc_dc);
+
 struct dc *dm_kunit_alloc_dc_with_ctx(struct kunit *test)
 {
 	struct dc_context *ctx;
 	struct dc *dc;
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 
-	dc->ctx = ctx;
+	dc_test_set_ctx(dc, ctx);
 	ctx->dc = dc;
 
 	return dc;
@@ -72,7 +84,7 @@ struct dc_link *dm_kunit_alloc_link_with_ctx(struct kunit *test)
 
 	link = dm_kunit_alloc_link(test);
 	dc = dm_kunit_alloc_dc_with_ctx(test);
-	link->ctx = dc->ctx;
+	link->ctx = dc_get_ctx(dc);
 
 	return link;
 }
@@ -87,14 +99,12 @@ struct amdgpu_display_manager *dm_kunit_alloc_dm(struct kunit *test)
 	dm = kunit_kzalloc(test, sizeof(*dm), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dm);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
-
+	dc = dm_kunit_alloc_dc(test);
 	state = kunit_kzalloc(test, sizeof(*state), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, state);
 
 	dm->dc = dc;
-	dc->current_state = state;
+	dc_test_set_current_state(dc, state);
 
 	return dm;
 }

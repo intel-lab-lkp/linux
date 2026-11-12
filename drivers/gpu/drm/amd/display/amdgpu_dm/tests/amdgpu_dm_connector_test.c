@@ -22,6 +22,7 @@
 #include <linux/i2c.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "amdgpu.h"
 #include "amdgpu_mode.h"
 #include "amdgpu_display.h"
@@ -3052,9 +3053,9 @@ static struct dm_test_fbc_ctx *dm_test_fbc_ctx_alloc(struct kunit *test)
 
 	/* Default to the fully-enabled path so each test only flips one knob */
 	ctx->link->connector_signal = SIGNAL_TYPE_EDP;
-	ctx->dc->fbc_compressor =
-		(struct compressor *)kunit_kzalloc(test, sizeof(void *), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, ctx->dc->fbc_compressor);
+	dc_test_set_fbc_compressor(ctx->dc,
+		(struct compressor *)kunit_kzalloc(test, sizeof(void *), GFP_KERNEL));
+	KUNIT_ASSERT_TRUE(test, dc_is_fbc_compressor_available(ctx->dc));
 
 	return ctx;
 }
@@ -3067,7 +3068,7 @@ static void dm_test_fbc_init_no_compressor(struct kunit *test)
 {
 	struct dm_test_fbc_ctx *ctx = dm_test_fbc_ctx_alloc(test);
 
-	ctx->dc->fbc_compressor = NULL;
+	dc_test_set_fbc_compressor(ctx->dc, NULL);
 
 	amdgpu_dm_fbc_init(&ctx->aconnector->base);
 
@@ -5076,7 +5077,7 @@ static struct dm_test_poll_ctx *dm_test_poll_ctx_alloc(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, ctx->dc);
 	ctx->link_srv = kunit_kzalloc(test, sizeof(*ctx->link_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->link_srv);
-	ctx->dc->link_srv = ctx->link_srv;
+	dc_test_install_link_service(ctx->dc, ctx->link_srv);
 
 	ctx->dc_ctx = kunit_kzalloc(test, sizeof(*ctx->dc_ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->dc_ctx);
@@ -5676,7 +5677,7 @@ static void dm_test_atomic_check_mst_scaffold(struct kunit *test,
 
 	/* Fake DC link so dm_mst_get_pbn_divider() yields a non-zero divider. */
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link_srv);
 	KUNIT_ASSERT_NOT_NULL(test, dc);
@@ -5685,7 +5686,7 @@ static void dm_test_atomic_check_mst_scaffold(struct kunit *test,
 		dm_test_atomic_check_dp_get_verified_link_cap;
 	link_srv->dp_link_bandwidth_kbps =
 		dm_test_atomic_check_dp_link_bandwidth_kbps;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 	link->dc = dc;
 	s->mst_root->dc_link = link;
 
@@ -6016,7 +6017,7 @@ static enum dc_status dm_test_vs_validate_mode_timing_ok(
 static void dm_test_validate_stream_dc_ok_no_pipe(struct kunit *test)
 {
 	struct drm_device *drm = dm_test_alloc_drm(test);
-	struct dc *dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	struct dc *dc = dm_kunit_alloc_dc(test);
 	struct dc_context *ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	struct dal_logger *logger = kunit_kzalloc(test, sizeof(*logger), GFP_KERNEL);
 	struct resource_pool *pool = kunit_kzalloc(test, sizeof(*pool), GFP_KERNEL);
@@ -6057,9 +6058,9 @@ static void dm_test_validate_stream_dc_ok_no_pipe(struct kunit *test)
 
 	link_srv->validate_mode_timing = dm_test_vs_validate_mode_timing_ok;
 
-	dc->ctx = ctx;
-	dc->res_pool = pool;
-	dc->link_srv = link_srv;
+	dc_test_set_ctx(dc, ctx);
+	dc_test_set_res_pool(dc, pool);
+	dc_test_install_link_service(dc, link_srv);
 
 	link->ep_type = DISPLAY_ENDPOINT_UNKNOWN;
 	stream->link = link;
@@ -6472,7 +6473,7 @@ static struct dm_test_i2c_ctx *dm_test_i2c_setup(struct kunit *test)
 	ctx->dc_ctx->dc = ctx->dc;
 	ctx->link->link_index = 0;
 	ctx->link->ddc = link_ddc;
-	ctx->dc->links[0] = ctx->link;
+	dc_test_set_link(ctx->dc, 0, ctx->link);
 	ctx->i2c->ddc_service = ctx->ddc;
 	i2c_set_adapdata(&ctx->i2c->base, ctx->i2c);
 
@@ -6517,7 +6518,7 @@ static void dm_test_i2c_xfer_oem_no_device(struct kunit *test)
 
 	pool = kunit_kzalloc(test, sizeof(*pool), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, pool);
-	ctx->dc->res_pool = pool;
+	dc_test_set_res_pool(ctx->dc, pool);
 	ctx->i2c->oem = true;
 
 	KUNIT_EXPECT_EQ(test, amdgpu_dm_i2c_xfer(&ctx->i2c->base, msgs, 1), -EIO);
@@ -7383,9 +7384,9 @@ static struct dm_test_cvs_dc *dm_test_cvs_dc_alloc(struct kunit *test)
 
 	c->dc = kunit_kzalloc(test, sizeof(*c->dc), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, c->dc);
-	c->dc->ctx = dcc;
-	c->dc->res_pool = pool;
-	c->dc->link_srv = c->link_srv;
+	dc_test_set_ctx(c->dc, dcc);
+	dc_test_set_res_pool(c->dc, pool);
+	dc_test_install_link_service(c->dc, c->link_srv);
 	c->adev->dm.dc = c->dc;
 
 	c->dm_state = kunit_kzalloc(test, sizeof(*c->dm_state), GFP_KERNEL);
@@ -8310,12 +8311,11 @@ static void dm_test_ces_setup(struct kunit *test, struct dm_test_edid_ctx *ctx,
 	i2c->base.lock_ops = &dm_test_force_edid_lock_ops;
 	ctx->aconnector->i2c = i2c;
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link_srv);
 	link_srv->add_remote_sink = dm_test_ces_add_remote_sink;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 
 	ctx->link->dc = dc;
 	ctx->link->aux_mode = false;
@@ -8484,7 +8484,7 @@ dm_test_gm_ctx_alloc(struct kunit *test, int connector_type)
 	KUNIT_ASSERT_NOT_NULL(test, ctx->link);
 
 	ctx->link_srv->dp_get_encoding_format = dm_test_gm_enc_8b10b;
-	ctx->dc->link_srv = ctx->link_srv;
+	dc_test_install_link_service(ctx->dc, ctx->link_srv);
 	ctx->adev->dm.dc = ctx->dc;
 	ctx->link->dc = ctx->dc;
 	ctx->aconnector->dc_link = ctx->link;
@@ -9079,7 +9079,7 @@ static struct dm_test_frl_ctx *dm_test_frl_ctx_alloc(struct kunit *test)
 
 	ctx->link_srv->hdmi_frl_poll_status_flag = dm_test_frl_poll_true;
 	ctx->link_srv->detect_link = dm_test_frl_detect;
-	ctx->dc->link_srv = ctx->link_srv;
+	dc_test_install_link_service(ctx->dc, ctx->link_srv);
 	ctx->dm->dc = ctx->dc;
 	mutex_init(&ctx->dm->dc_lock);
 	INIT_DELAYED_WORK(&ctx->dm->hdmi_frl_status_polling_work, hdmi_frl_status_polling_work);
@@ -9099,7 +9099,7 @@ static struct dc_link *dm_test_frl_add_link(struct kunit *test, struct dm_test_f
 
 	KUNIT_ASSERT_NOT_NULL(test, link);
 	link->dc = ctx->dc;
-	ctx->dc->links[0] = link;
+	dc_test_set_link(ctx->dc, 0, link);
 
 	return link;
 }
@@ -9760,10 +9760,9 @@ dm_test_fs_caps_ctx_alloc(struct kunit *test, enum signal_type sink_signal)
 	ctx->pool = kunit_kzalloc(test, sizeof(*ctx->pool), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->pool);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
-	dc->ctx = dc_ctx;
-	dc->res_pool = ctx->pool;
+	dc = dm_kunit_alloc_dc(test);
+	dc_test_set_ctx(dc, dc_ctx);
+	dc_test_set_res_pool(dc, ctx->pool);
 	ctx->adev->dm.dc = dc;
 
 	ctx->adev->dm.freesync_module =
@@ -10036,10 +10035,9 @@ dm_test_conn_init_ctx_alloc(struct kunit *test, enum signal_type signal)
 	KUNIT_ASSERT_NOT_NULL(test, link_srv);
 	link_srv->dp_get_encoding_format = dm_test_gm_enc_8b10b;
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
-	dc->ctx = dc_ctx;
-	dc->link_srv = link_srv;
+	dc = dm_kunit_alloc_dc(test);
+	dc_test_set_ctx(dc, dc_ctx);
+	dc_test_install_link_service(dc, link_srv);
 
 	ctx->link = kunit_kzalloc(test, sizeof(*ctx->link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx->link);
@@ -10054,8 +10052,8 @@ dm_test_conn_init_ctx_alloc(struct kunit *test, enum signal_type signal)
 	ddc->link = ctx->link;
 	ctx->link->ddc = ddc;
 
-	dc->links[0] = ctx->link;
-	dc->link_count = 1;
+	dc_test_set_link(dc, 0, ctx->link);
+	dc_test_set_link_count(dc, 1);
 	ctx->dm->dc = dc;
 
 	/* amdgpu_dm_connector_destroy() and amdgpu_dm_encoder_destroy() kfree() these. */

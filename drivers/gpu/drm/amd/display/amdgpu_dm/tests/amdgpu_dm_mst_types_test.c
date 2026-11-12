@@ -23,6 +23,7 @@
 #include <drm/display/drm_dp_mst_helper.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "dpcd_defs.h"
 #include "dmub_cmd.h"
 #include "amdgpu.h"
@@ -83,7 +84,7 @@ static void dm_mst_test_setup_dm_aux(struct amdgpu_dm_dp_aux *dm_aux,
 	dm_mst_test_aux_transfer_raw_reply = 0;
 	dm_mst_test_aux_transfer_raw_operation_result = AUX_RET_SUCCESS;
 	link_srv->aux_transfer_raw = dm_mst_test_aux_transfer_raw;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 	link->dc = dc;
 	ctx->driver_context = adev;
 	ddc->link = link;
@@ -137,7 +138,7 @@ static struct amdgpu_dm_connector *dm_mst_test_alloc_sideband_connector(struct k
 	aconnector = kunit_kzalloc(test, sizeof(*aconnector), GFP_KERNEL);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, aconnector);
 	KUNIT_ASSERT_NOT_NULL(test, link_srv);
 	KUNIT_ASSERT_NOT_NULL(test, link);
@@ -145,7 +146,7 @@ static struct amdgpu_dm_connector *dm_mst_test_alloc_sideband_connector(struct k
 
 	mutex_init(&aconnector->handle_mst_msg_ready);
 	link_srv->get_status = dm_mst_test_get_status;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 	link->dc = dc;
 	link->dpcd_caps.dpcd_rev.raw = DPCD_REV_14;
 	link->link_status.dpcd_caps = &link->dpcd_caps;
@@ -341,14 +342,14 @@ static void dm_mst_test_pbn_divider_uses_link_bandwidth(struct kunit *test)
 
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	KUNIT_ASSERT_NOT_NULL(test, link_srv);
 	KUNIT_ASSERT_NOT_NULL(test, link);
 	KUNIT_ASSERT_NOT_NULL(test, dc);
 
 	link_srv->dp_get_verified_link_cap = dm_mst_test_dp_get_verified_link_cap;
 	link_srv->dp_link_bandwidth_kbps = dm_mst_test_dp_link_bandwidth_kbps;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 	link->dc = dc;
 
 	KUNIT_EXPECT_EQ(test, dm_mst_get_pbn_divider(link),
@@ -624,7 +625,7 @@ static void dm_mst_test_aux_transfer_native_read(struct kunit *test)
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
 	ddc = kunit_kzalloc(test, sizeof(*ddc), GFP_KERNEL);
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dm_aux);
@@ -675,7 +676,7 @@ static void dm_mst_test_aux_transfer_native_write(struct kunit *test)
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
 	ddc = kunit_kzalloc(test, sizeof(*ddc), GFP_KERNEL);
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dm_aux);
@@ -727,7 +728,7 @@ static void dm_mst_test_aux_transfer_partial_write(struct kunit *test)
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
 	ddc = kunit_kzalloc(test, sizeof(*ddc), GFP_KERNEL);
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dm_aux);
@@ -771,7 +772,7 @@ static void dm_mst_test_aux_transfer_error_result(struct kunit *test)
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
 	ddc = kunit_kzalloc(test, sizeof(*ddc), GFP_KERNEL);
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dm_aux);
@@ -816,7 +817,7 @@ static void dm_mst_test_aux_transfer_hpd_discon_quirk(struct kunit *test)
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
 	ddc = kunit_kzalloc(test, sizeof(*ddc), GFP_KERNEL);
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dm_aux);
@@ -870,7 +871,7 @@ static void dm_mst_test_aux_transfer_non_ack_reply(struct kunit *test)
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
 	ddc = kunit_kzalloc(test, sizeof(*ddc), GFP_KERNEL);
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dm_aux);
@@ -1196,14 +1197,14 @@ static void dm_mst_test_initialize_dp_connector_mst(struct kunit *test)
 
 	ddc = kunit_kzalloc(test, sizeof(*ddc), GFP_KERNEL);
 	link = dm_kunit_alloc_link(test);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ddc);
 	KUNIT_ASSERT_NOT_NULL(test, dc);
 	KUNIT_ASSERT_NOT_NULL(test, link_srv);
 
 	link_srv->dp_get_max_link_enc_cap = dm_mst_test_dp_get_max_link_enc_cap;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 	link->dc = dc;
 	link->ddc = ddc;
 
@@ -1656,7 +1657,7 @@ static void dm_mst_test_init_child(struct kunit *test, struct dm_mst_test_child 
 	ret = drmm_mode_config_init(&adev->ddev);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	child->port = kunit_kzalloc(test, sizeof(*child->port), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dc);
@@ -1665,7 +1666,7 @@ static void dm_mst_test_init_child(struct kunit *test, struct dm_mst_test_child 
 
 	link_srv->add_remote_sink = dm_mst_test_add_remote_sink;
 	link_srv->remove_remote_sink = dm_mst_test_remove_remote_sink;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 
 	child->adev = adev;
 	child->link = dm_kunit_alloc_link(test);
@@ -2519,7 +2520,7 @@ static void dm_mst_test_init_dsc_ctx(struct kunit *test, struct dm_mst_test_dsc_
 
 	dc = dm_kunit_alloc_dc_with_ctx(test);
 	ctx->link = dm_kunit_alloc_link(test);
-	ctx->link->ctx = dc->ctx;
+	ctx->link->ctx = dc_get_ctx(dc);
 
 	ctx->port = dm_mst_test_alloc_mgr_port(test);
 	ctx->port->parent = branch;
@@ -2680,14 +2681,14 @@ static void dm_mst_test_init_port_mode_ctx(struct kunit *test,
 	link_srv->dp_link_bandwidth_kbps = dm_mst_test_root_bandwidth_kbps;
 
 	ctx->dc = dm_kunit_alloc_dc_with_ctx(test);
-	ctx->dc->link_srv = link_srv;
-	ctx->dc->res_pool = res_pool;
+	dc_test_install_link_service(ctx->dc, link_srv);
+	dc_test_set_res_pool(ctx->dc, res_pool);
 
 	ctx->link = dm_kunit_alloc_link(test);
 	ctx->link->dc = ctx->dc;
-	ctx->link->ctx = ctx->dc->ctx;
+	ctx->link->ctx = dc_get_ctx(ctx->dc);
 
-	ctx->sink->ctx = ctx->dc->ctx;
+	ctx->sink->ctx = dc_get_ctx(ctx->dc);
 	ctx->port = dm_mst_test_alloc_mgr_port(test);
 	ctx->port->full_pbn = full_pbn;
 
@@ -2789,8 +2790,8 @@ static void dm_mst_test_setup_dsc_caps(struct kunit *test, struct dc *dc, struct
 	KUNIT_ASSERT_NOT_NULL(test, dsc);
 
 	dsc->funcs = &dm_mst_test_dsc_funcs;
-	dsc->ctx = dc->ctx;
-	dc->res_pool->dscs[0] = dsc;
+	dsc->ctx = dc_get_ctx(dc);
+	dc_get_res_pool(dc)->dscs[0] = dsc;
 
 	dec->is_dsc_supported = true;
 	dec->dsc_version = 0x21;
@@ -3026,8 +3027,8 @@ static struct amdgpu_dm_connector *dm_mst_test_alloc_frl_connector(struct kunit 
 	link_srv->bw_kbps_from_raw_frl_link_rate_data = dm_mst_test_bw_kbps_from_raw_frl;
 
 	dc = dm_kunit_alloc_dc_with_ctx(test);
-	dc->link_srv = link_srv;
-	dc->caps.dp_hdmi21_pcon_support = pcon_support;
+	dc_test_install_link_service(dc, link_srv);
+	dc_test_caps(dc)->dp_hdmi21_pcon_support = pcon_support;
 
 	link = dm_kunit_alloc_link(test);
 	link->dc = dc;
@@ -3314,7 +3315,7 @@ static void dm_mst_test_init_recompute_ctx(struct kunit *test,
 	ctx->adev->ddev.mode_config.num_crtc = 1;
 
 	ctx->dc = dm_kunit_alloc_dc_with_ctx(test);
-	ctx->dc->current_state = dm_kunit_alloc_dc_state(test);
+	dc_test_set_current_state(ctx->dc, dm_kunit_alloc_dc_state(test));
 	ctx->dc_state = dm_kunit_alloc_dc_state(test);
 
 	ctx->link = dm_kunit_alloc_link(test);
@@ -3444,7 +3445,7 @@ static void dm_mst_test_recompute_unchanged_stream(struct kunit *test)
 
 	dm_mst_test_init_recompute_ctx(test, &ctx);
 	dm_mst_test_add_link_stream(test, ctx.dc_state, ctx.link, ctx.aconnector);
-	dm_mst_test_add_link_stream(test, ctx.dc->current_state, ctx.link, ctx.aconnector);
+	dm_mst_test_add_link_stream(test, dc_get_current_state(ctx.dc), ctx.link, ctx.aconnector);
 	ctx.crtc_state->enable = true;
 	ctx.crtc_state->active = true;
 
@@ -3466,7 +3467,7 @@ static void dm_mst_test_recompute_stream_removed(struct kunit *test)
 	dm_mst_test_init_recompute_ctx(test, &ctx);
 	gone = dm_kunit_alloc_connector(test, ctx.adev, ctx.link);
 	dm_mst_test_add_link_stream(test, ctx.dc_state, ctx.link, ctx.aconnector);
-	dm_mst_test_add_link_stream(test, ctx.dc->current_state, ctx.link, gone);
+	dm_mst_test_add_link_stream(test, dc_get_current_state(ctx.dc), ctx.link, gone);
 	ctx.crtc_state->enable = true;
 	ctx.crtc_state->active = true;
 
@@ -3500,7 +3501,7 @@ static void dm_mst_test_recompute_connector_without_crtc(struct kunit *test)
 
 	dm_mst_test_init_recompute_ctx(test, &ctx);
 	dm_mst_test_add_link_stream(test, ctx.dc_state, ctx.link, ctx.aconnector);
-	dm_mst_test_add_link_stream(test, ctx.dc->current_state, ctx.link, ctx.aconnector);
+	dm_mst_test_add_link_stream(test, dc_get_current_state(ctx.dc), ctx.link, ctx.aconnector);
 	ctx.conn_state->crtc = NULL;
 
 	KUNIT_EXPECT_FALSE(test, is_dsc_need_re_compute(ctx.state, ctx.dc_state, ctx.link));
@@ -3544,13 +3545,13 @@ dm_mst_test_add_mst_dsc_stream(struct kunit *test, struct dm_mst_test_recompute_
 
 	funcs->remove_stream_from_ctx = remove_stream;
 	res_pool->funcs = funcs;
-	ctx->dc->res_pool = res_pool;
+	dc_test_set_res_pool(ctx->dc, res_pool);
 	sink->dsc_caps.dsc_dec_caps.is_dsc_supported = true;
 	ctx->aconnector->dc_sink = sink;
 	ctx->aconnector->mst_output_port = port;
 
 	stream = dm_mst_test_add_link_stream(test, ctx->dc_state, ctx->link, ctx->aconnector);
-	stream->ctx = ctx->dc->ctx;
+	stream->ctx = dc_get_ctx(ctx->dc);
 	stream->signal = SIGNAL_TYPE_DISPLAY_PORT_MST;
 
 	return stream;
@@ -3568,7 +3569,7 @@ static void dm_mst_test_compute_configs_skips_sst(struct kunit *test)
 
 	dm_mst_test_init_recompute_ctx(test, &ctx);
 	stream = dm_mst_test_add_link_stream(test, ctx.dc_state, ctx.link, ctx.aconnector);
-	stream->ctx = ctx.dc->ctx;
+	stream->ctx = dc_get_ctx(ctx.dc);
 	stream->signal = SIGNAL_TYPE_DISPLAY_PORT;
 
 	KUNIT_EXPECT_EQ(test, compute_mst_dsc_configs_for_state(ctx.state, ctx.dc_state, vars), 0);
@@ -3589,7 +3590,7 @@ static void dm_mst_test_compute_configs_skips_incomplete(struct kunit *test)
 
 	dm_mst_test_init_recompute_ctx(test, &ctx);
 	stream = dm_mst_test_add_link_stream(test, ctx.dc_state, ctx.link, ctx.aconnector);
-	stream->ctx = ctx.dc->ctx;
+	stream->ctx = dc_get_ctx(ctx.dc);
 	stream->signal = SIGNAL_TYPE_DISPLAY_PORT_MST;
 
 	KUNIT_EXPECT_EQ(test, compute_mst_dsc_configs_for_state(ctx.state, ctx.dc_state, vars), 0);
@@ -3663,7 +3664,7 @@ static void dm_mst_test_pre_compute_configs_skips_sst(struct kunit *test)
 
 	dm_mst_test_init_recompute_ctx(test, &ctx);
 	stream = dm_mst_test_add_link_stream(test, ctx.dc_state, ctx.link, ctx.aconnector);
-	stream->ctx = ctx.dc->ctx;
+	stream->ctx = dc_get_ctx(ctx.dc);
 	stream->signal = SIGNAL_TYPE_DISPLAY_PORT;
 
 	KUNIT_EXPECT_EQ(test, pre_compute_mst_dsc_configs_for_state(ctx.state, ctx.dc_state, vars), 0);
@@ -3681,7 +3682,7 @@ static void dm_mst_test_pre_compute_configs_skips_incomplete(struct kunit *test)
 
 	dm_mst_test_init_recompute_ctx(test, &ctx);
 	stream = dm_mst_test_add_link_stream(test, ctx.dc_state, ctx.link, ctx.aconnector);
-	stream->ctx = ctx.dc->ctx;
+	stream->ctx = dc_get_ctx(ctx.dc);
 	stream->signal = SIGNAL_TYPE_DISPLAY_PORT_MST;
 
 	KUNIT_EXPECT_EQ(test, pre_compute_mst_dsc_configs_for_state(ctx.state, ctx.dc_state, vars), 0);
@@ -3846,16 +3847,16 @@ dm_mst_test_alloc_dsc_link_ctx(struct kunit *test, int total_avail_slots)
 	link_srv->mst_decide_link_encoding_format = dm_mst_test_mst_encoding_format;
 
 	dc = dm_kunit_alloc_dc_with_ctx(test);
-	dc->link_srv = link_srv;
-	dc->res_pool = res_pool;
-	dc->current_state = dm_kunit_alloc_dc_state(test);
+	dc_test_install_link_service(dc, link_srv);
+	dc_test_set_res_pool(dc, res_pool);
+	dc_test_set_current_state(dc, dm_kunit_alloc_dc_state(test));
 
 	link = dm_kunit_alloc_link(test);
 	link->dc = dc;
-	link->ctx = dc->ctx;
+	link->ctx = dc_get_ctx(dc);
 	link->type = dc_connection_mst_branch;
 
-	sink->ctx = dc->ctx;
+	sink->ctx = dc_get_ctx(dc);
 	dm_mst_test_setup_dsc_caps(test, dc, sink);
 
 	/* The payload allocation takes a reference, so start above zero. */
@@ -3870,7 +3871,7 @@ dm_mst_test_alloc_dsc_link_ctx(struct kunit *test, int total_avail_slots)
 
 	ctx->dc_state = dm_kunit_alloc_dc_state(test);
 	ctx->stream = dm_kunit_alloc_stream(test, link);
-	ctx->stream->ctx = dc->ctx;
+	ctx->stream->ctx = dc_get_ctx(dc);
 	ctx->stream->sink = sink;
 	ctx->stream->dm_stream_context = ctx->aconnector;
 	ctx->stream->signal = SIGNAL_TYPE_DISPLAY_PORT_MST;

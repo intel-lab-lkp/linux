@@ -31,6 +31,7 @@
  * mapping stays obvious and auditable.
  */
 #include "dc.h"
+#include "dm_helpers.h"	/* EXPORT_IF_KUNIT */
 
 uint8_t dc_get_link_count(const struct dc *dc)
 {
@@ -41,6 +42,7 @@ struct dc_context *dc_get_ctx(const struct dc *dc)
 {
 	return dc->ctx;
 }
+EXPORT_IF_KUNIT(dc_get_ctx);
 
 enum dce_version dc_get_dce_version(const struct dc *dc)
 {
@@ -77,21 +79,25 @@ struct dc_state *dc_get_current_state(const struct dc *dc)
 {
 	return dc->current_state;
 }
+EXPORT_IF_KUNIT(dc_get_current_state);
 
 bool dc_is_idle_optimizations_allowed(const struct dc *dc)
 {
 	return dc->idle_optimizations_allowed;
 }
+EXPORT_IF_KUNIT(dc_is_idle_optimizations_allowed);
 
 struct resource_pool *dc_get_res_pool(const struct dc *dc)
 {
 	return dc->res_pool;
 }
+EXPORT_IF_KUNIT(dc_get_res_pool);
 
 struct clk_mgr *dc_get_clk_mgr(struct dc *dc)
 {
 	return dc->clk_mgr;
 }
+EXPORT_IF_KUNIT(dc_get_clk_mgr);
 
 bool dc_get_dcc_compression_cap(const struct dc *dc,
 		const struct dc_dcc_surface_param *input,
@@ -139,6 +145,7 @@ bool dc_is_fbc_compressor_available(const struct dc *dc)
 {
 	return dc->fbc_compressor != NULL;
 }
+EXPORT_IF_KUNIT(dc_is_fbc_compressor_available);
 
 void dc_set_fbc_gpu_addr(struct dc *dc, uint64_t gpu_addr)
 {

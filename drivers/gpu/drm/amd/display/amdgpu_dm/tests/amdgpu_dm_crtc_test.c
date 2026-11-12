@@ -13,6 +13,7 @@
 #include <linux/debugfs.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "inc/core_types.h"
 #include "irq/irq_service.h"
 #include "inc/hw/timing_generator.h"
@@ -532,7 +533,7 @@ static void dm_test_crtc_set_vupdate_irq_enable(struct kunit *test)
 
 	irqs->info = info;
 	res_pool->irqs = irqs;
-	dc->res_pool = res_pool;
+	dc_test_set_res_pool(dc, res_pool);
 	adev->dm.dc = dc;
 
 	acrtc->base.dev = &adev->ddev;
@@ -619,7 +620,7 @@ static void dm_test_idle_worker_enabled_breaks_when_idle_disallowed(struct kunit
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, adev->dm.dc);
 	/* First loop iteration breaks before any dc_allow_idle_optimizations(). */
-	adev->dm.dc->idle_optimizations_allowed = false;
+	dc_test_set_idle_optimizations_allowed(adev->dm.dc, false);
 
 	idle_work = kunit_kzalloc(test, sizeof(*idle_work), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, idle_work);
@@ -658,12 +659,12 @@ static void dm_test_idle_worker_enabled_breaks_when_not_headless(struct kunit *t
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, adev->dm.dc);
 	/* Allow idle so the first branch is skipped and dc_allow() is exercised. */
-	adev->dm.dc->idle_optimizations_allowed = true;
+	dc_test_set_idle_optimizations_allowed(adev->dm.dc, true);
 	/* is_apu path avoids DC_LOG_DC()'s NULL-logger dereference. */
-	adev->dm.dc->caps.is_apu = true;
+	dc_test_caps(adev->dm.dc)->is_apu = true;
 	/* Empty stream list -> amdgpu_dm_psr_is_active_allowed() returns false. */
-	adev->dm.dc->current_state = dm_kunit_alloc_dc_state(test);
-	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, adev->dm.dc->current_state);
+	dc_test_set_current_state(adev->dm.dc, dm_kunit_alloc_dc_state(test));
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dc_get_current_state(adev->dm.dc));
 
 	/* A connected display makes amdgpu_dm_is_headless() false. */
 	display = kunit_kzalloc(test, sizeof(*display), GFP_KERNEL);
@@ -684,7 +685,7 @@ static void dm_test_idle_worker_enabled_breaks_when_not_headless(struct kunit *t
 
 /*
  * Report success only when disabling idle. dc_allow_idle_optimizations() then
- * clears dc->idle_optimizations_allowed on the disable call but leaves it clear
+ * clears dc_is_idle_optimizations_allowed(dc) on the disable call but leaves it clear
  * on the re-enable call inside the worker's enable-body, so the next loop
  * iteration breaks at the first branch instead of looping forever.
  */
@@ -721,18 +722,18 @@ static void dm_test_idle_worker_enabled_runs_body(struct kunit *test)
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, adev->dm.dc);
 	/* Allow idle so the first branch is skipped and dc_allow() is exercised. */
-	adev->dm.dc->idle_optimizations_allowed = true;
+	dc_test_set_idle_optimizations_allowed(adev->dm.dc, true);
 	/* is_apu path avoids DC_LOG_DC()'s NULL-logger dereference. */
-	adev->dm.dc->caps.is_apu = true;
+	dc_test_caps(adev->dm.dc)->is_apu = true;
 	/* dc_allow() logs via DC_LOG_DEBUG() when it flips the flag. */
 	logger = kunit_kzalloc(test, sizeof(*logger), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, logger);
 	logger->dev = &adev->ddev;
-	adev->dm.dc->ctx->logger = logger;
+	dc_get_ctx(adev->dm.dc)->logger = logger;
 	/* dc_allow() only flips the flag when clk_mgr and apply() are present. */
-	adev->dm.dc->clk_mgr = dm_kunit_alloc_clk_mgr(test);
-	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, adev->dm.dc->clk_mgr);
-	adev->dm.dc->hwss.apply_idle_power_optimizations = dm_test_idle_apply_flip;
+	dc_test_set_clk_mgr(adev->dm.dc, dm_kunit_alloc_clk_mgr(test));
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dc_get_clk_mgr(adev->dm.dc));
+	dc_test_hwss(adev->dm.dc)->apply_idle_power_optimizations = dm_test_idle_apply_flip;
 
 	idle_work = kunit_kzalloc(test, sizeof(*idle_work), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, idle_work);
@@ -743,7 +744,7 @@ static void dm_test_idle_worker_enabled_runs_body(struct kunit *test)
 	amdgpu_dm_idle_worker(&idle_work->work);
 
 	/* Enable-body ran, then the next iteration disabled idle and stopped. */
-	KUNIT_EXPECT_FALSE(test, adev->dm.dc->idle_optimizations_allowed);
+	KUNIT_EXPECT_FALSE(test, dc_is_idle_optimizations_allowed(adev->dm.dc));
 	KUNIT_EXPECT_FALSE(test, idle_work->running);
 }
 
@@ -963,7 +964,7 @@ dm_test_crtc_setup_enable(struct kunit *test, struct amdgpu_device **adev_out,
 
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, adev->dm.dc);
-	adev->dm.dc->ctx->dce_version = dce_version;
+	dc_get_ctx(adev->dm.dc)->dce_version = dce_version;
 
 	/* crtc_id 0 maps to a valid IRQ type only when a CRTC is registered. */
 	adev->mode_info.num_crtc = 1;
@@ -1066,7 +1067,7 @@ static void dm_test_crtc_enable_vblank_vupdate_busy(struct kunit *test)
 
 	irqs->info = info;
 	res_pool->irqs = irqs;
-	adev->dm.dc->res_pool = res_pool;
+	dc_test_set_res_pool(adev->dm.dc, res_pool);
 
 	KUNIT_EXPECT_EQ(test,
 			amdgpu_dm_crtc_enable_vblank(&acrtc->base), -EBUSY);
@@ -1193,8 +1194,8 @@ static void dm_test_crtc_enable_vblank_ips_restore(struct kunit *test)
 	acrtc->base.funcs = &dm_test_crtc_funcs;
 
 	/* IPS enabled and not fully disabled -> first restore condition holds. */
-	adev->dm.dc->caps.ips_support = true;
-	adev->dm.dc->config.disable_ips = DMUB_IPS_ENABLE;
+	dc_test_caps(adev->dm.dc)->ips_support = true;
+	dc_test_config(adev->dm.dc)->disable_ips = DMUB_IPS_ENABLE;
 
 	/* Supported PSR version makes self-refresh supported. */
 	link = acrtc_state->stream->link;
@@ -1240,8 +1241,8 @@ static void dm_test_crtc_enable_vblank_ips_restore_replay(struct kunit *test)
 	acrtc->base.funcs = &dm_test_crtc_funcs;
 
 	/* IPS enabled and not fully disabled -> first restore condition holds. */
-	adev->dm.dc->caps.ips_support = true;
-	adev->dm.dc->config.disable_ips = DMUB_IPS_ENABLE;
+	dc_test_caps(adev->dm.dc)->ips_support = true;
+	dc_test_config(adev->dm.dc)->disable_ips = DMUB_IPS_ENABLE;
 
 	/*
 	 * PSR unsupported but replay supported -> sr_supported is driven by the
@@ -2002,7 +2003,7 @@ static void dm_test_crtc_disable_vblank_no_irq_installed(struct kunit *test)
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, adev->dm.dc);
 	/* DCE_VERSION_6_0 has no VRR, so the vupdate-irq branch is skipped. */
-	adev->dm.dc->ctx->dce_version = DCE_VERSION_6_0;
+	dc_get_ctx(adev->dm.dc)->dce_version = DCE_VERSION_6_0;
 	adev->dm.active_vblank_irq_count = 0;
 
 	/* No CRTCs registered and IRQs not installed -> irq_put returns early. */
@@ -2039,7 +2040,7 @@ static void dm_test_crtc_disable_vblank_vrr(struct kunit *test)
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, adev->dm.dc);
 	/* DCE_VERSION_8_0 supports VRR -> the vupdate-irq branch is walked. */
-	adev->dm.dc->ctx->dce_version = DCE_VERSION_8_0;
+	dc_get_ctx(adev->dm.dc)->dce_version = DCE_VERSION_8_0;
 
 	adev->mode_info.num_crtc = 1;
 	adev->irq.installed = true;
@@ -2089,7 +2090,7 @@ static void dm_test_crtc_disable_vblank_queues_work(struct kunit *test)
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, adev->dm.dc);
 	/* DCE_VERSION_6_0 has no VRR, so the vupdate-irq branch is skipped. */
-	adev->dm.dc->ctx->dce_version = DCE_VERSION_6_0;
+	dc_get_ctx(adev->dm.dc)->dce_version = DCE_VERSION_6_0;
 	adev->dm.active_vblank_irq_count = 2;
 
 	adev->mode_info.num_crtc = 1;
@@ -2187,7 +2188,7 @@ static void dm_test_crtc_init_registers_crtc(struct kunit *test)
 
 	dc = dm_kunit_alloc_dc_with_ctx(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dc);
-	dc->caps.max_cursor_size = 256;
+	dc_test_caps(dc)->max_cursor_size = 256;
 
 	adev->dm.adev = adev;
 	adev->dm.ddev = &adev->ddev;
@@ -2249,8 +2250,8 @@ static void dm_test_crtc_init_enables_degamma(struct kunit *test)
 	dc = dm_kunit_alloc_dc_with_ctx(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dc);
 	/* DCN DPP with a non-4.01 ASIC selects the degamma-enabled path. */
-	dc->caps.color.dpp.dcn_arch = 1;
-	dc->ctx->dce_version = DCN_VERSION_3_0;
+	dc_test_caps(dc)->color.dpp.dcn_arch = 1;
+	dc_get_ctx(dc)->dce_version = DCN_VERSION_3_0;
 
 	adev->dm.adev = adev;
 	adev->dm.ddev = &adev->ddev;
@@ -2520,12 +2521,12 @@ static void dm_test_crtc_atomic_check_valid_stream_passes(struct kunit *test)
 	tg_funcs->validate_timing = dm_test_atomic_check_validate_timing_ok;
 	tg->funcs = tg_funcs;
 	res_pool->timing_generators[0] = tg;
-	dc->res_pool = res_pool;
+	dc_test_set_res_pool(dc, res_pool);
 
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link_srv);
 	link_srv->validate_mode_timing = dm_test_atomic_check_validate_mode_timing_ok;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 	adev->dm.dc = dc;
 
 	link = dm_kunit_alloc_link(test);
@@ -2588,7 +2589,7 @@ static void dm_test_crtc_atomic_check_invalid_stream_fails(struct kunit *test)
 	tg_funcs->validate_timing = dm_test_atomic_check_validate_timing_fail;
 	tg->funcs = tg_funcs;
 	res_pool->timing_generators[0] = tg;
-	dc->res_pool = res_pool;
+	dc_test_set_res_pool(dc, res_pool);
 	adev->dm.dc = dc;
 
 	link = dm_kunit_alloc_link(test);

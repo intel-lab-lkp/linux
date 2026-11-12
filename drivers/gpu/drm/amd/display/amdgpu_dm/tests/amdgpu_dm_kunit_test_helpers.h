@@ -21,6 +21,7 @@ struct dc_stream_state;
 struct drm_device;
 
 struct amdgpu_device *dm_kunit_alloc_adev(struct kunit *test);
+struct dc *dm_kunit_alloc_dc(struct kunit *test);
 struct dc *dm_kunit_alloc_dc_with_ctx(struct kunit *test);
 struct dc_link *dm_kunit_alloc_link(struct kunit *test);
 struct dc_link *dm_kunit_alloc_link_with_ctx(struct kunit *test);

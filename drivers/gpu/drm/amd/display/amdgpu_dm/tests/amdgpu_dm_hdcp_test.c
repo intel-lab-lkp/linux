@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/i2c.h>
+#include "dc_test.h"
 
 #include <drm/display/drm_dp_helper.h>
 
@@ -1161,7 +1162,7 @@ static void dm_test_hdcp_update_display_disable_resets_status_and_cancels_valida
  * dm_test_hdcp_create_workqueue_zero_max_links_returns_null - zero-link creation fails early
  * @test: KUnit test context
  *
- * When dc->caps.max_links is zero, hdcp_create_workqueue() should fail
+ * When dc_test_caps(dc)->max_links is zero, hdcp_create_workqueue() should fail
  * the initial allocation path and return NULL.
  */
 static void dm_test_hdcp_create_workqueue_zero_max_links_returns_null(struct kunit *test)
@@ -1170,10 +1171,9 @@ static void dm_test_hdcp_create_workqueue_zero_max_links_returns_null(struct kun
 	struct dc *dc;
 	struct hdcp_workqueue *work;
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
-	dc->caps.max_links = 0;
+	dc_test_caps(dc)->max_links = 0;
 
 	work = hdcp_create_workqueue(NULL, &cp_psp, dc);
 
@@ -1200,9 +1200,9 @@ static void dm_test_hdcp_create_workqueue_initializes_work(struct kunit *test)
 
 	/* sysfs_create_bin_file() needs a real device kobject. */
 	adev->dev = adev->ddev.dev;
-	dc->caps.max_links = 1;
+	dc_test_caps(dc)->max_links = 1;
 	/* DCE_VERSION_UNKNOWN (0) is not in the DTM v3 list. */
-	dc->ctx->dce_version = DCE_VERSION_UNKNOWN;
+	dc_get_ctx(dc)->dce_version = DCE_VERSION_UNKNOWN;
 
 	work = hdcp_create_workqueue(adev, &cp_psp, dc);
 
@@ -1236,8 +1236,8 @@ static void dm_test_hdcp_create_workqueue_sets_dtm_v3_for_dcn31(struct kunit *te
 	struct hdcp_workqueue *work;
 
 	adev->dev = adev->ddev.dev;
-	dc->caps.max_links = 1;
-	dc->ctx->dce_version = DCN_VERSION_3_1;
+	dc_test_caps(dc)->max_links = 1;
+	dc_get_ctx(dc)->dce_version = DCN_VERSION_3_1;
 
 	work = hdcp_create_workqueue(adev, &cp_psp, dc);
 
@@ -1264,8 +1264,8 @@ static void dm_test_hdcp_create_workqueue_initializes_all_links(struct kunit *te
 	int i;
 
 	adev->dev = adev->ddev.dev;
-	dc->caps.max_links = 3;
-	dc->ctx->dce_version = DCN_VERSION_3_1;
+	dc_test_caps(dc)->max_links = 3;
+	dc_get_ctx(dc)->dce_version = DCN_VERSION_3_1;
 
 	work = hdcp_create_workqueue(adev, &cp_psp, dc);
 
@@ -2089,8 +2089,7 @@ static struct amdgpu_dm_connector *alloc_test_connector(struct kunit *test,
 	KUNIT_ASSERT_NOT_NULL(test, aconnector);
 	dc_link = kunit_kzalloc(test, sizeof(*dc_link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dc_link);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	kref_init(&aconnector->base.base.refcount);
 	aconnector->base.index = index;

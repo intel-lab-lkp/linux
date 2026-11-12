@@ -92,5 +92,9 @@ FILES += bls_executor/bls_executor.o
 FILES += workaround_manager/workaround_manager.o
 FILES += dmub_messenger/dmub_messenger.o
 
+ifneq ($(CONFIG_DRM_AMD_DC_KUNIT_TEST),)
+FILES += core/dc_test.o
+endif
+
 AMD_DISPLAY_FILES += $(addprefix $(AMDDALPATH)/dc/, $(FILES))
 

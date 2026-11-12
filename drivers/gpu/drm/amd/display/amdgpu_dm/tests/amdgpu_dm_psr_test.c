@@ -8,6 +8,7 @@
 #include <kunit/test.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "core_types.h"
 #include "amdgpu_mode.h"
 #include "amdgpu_dm.h"
@@ -50,7 +51,7 @@ static struct dc_link *alloc_test_psrsu_link(struct kunit *test)
 	struct dc_context *ctx = link->ctx;
 	struct dc *dc = ctx->dc;
 
-	dc->caps.dmcub_support = true;
+	dc_test_caps(dc)->dmcub_support = true;
 	ctx->dce_version = DCN_VERSION_3_1;
 	link->dpcd_caps.edp_rev = DP_EDP_14;
 	link->dpcd_caps.psr_info.psr_version = DP_PSR2_WITH_Y_COORD_ET_SUPPORTED;
@@ -64,7 +65,7 @@ static struct dc_link *alloc_test_psr_caps_link(struct kunit *test)
 {
 	struct dc_link *link = alloc_test_psrsu_link(test);
 
-	link->ctx->dc->caps.dmub_caps.psr = true;
+	dc_test_caps(link->ctx->dc)->dmub_caps.psr = true;
 	link->connector_signal = SIGNAL_TYPE_EDP;
 	link->type = dc_connection_single;
 
@@ -91,7 +92,7 @@ static void dm_test_link_supports_psrsu_no_dmcub(struct kunit *test)
 {
 	struct dc_link *link = alloc_test_psrsu_link(test);
 
-	link->ctx->dc->caps.dmcub_support = false;
+	dc_test_caps(link->ctx->dc)->dmcub_support = false;
 
 	KUNIT_EXPECT_FALSE(test, link_supports_psrsu(link));
 }
@@ -232,7 +233,7 @@ static void dm_test_set_psr_caps_no_dmub_psr(struct kunit *test)
 	struct amdgpu_dm_connector *aconnector = alloc_test_aconnector(test);
 
 	link->psr_settings.psr_version = DC_PSR_VERSION_1;
-	link->ctx->dc->caps.dmub_caps.psr = false;
+	dc_test_caps(link->ctx->dc)->dmub_caps.psr = false;
 
 	KUNIT_EXPECT_FALSE(test, amdgpu_dm_set_psr_caps(link, aconnector));
 	KUNIT_EXPECT_EQ(test, link->psr_settings.psr_version,
@@ -293,9 +294,9 @@ static void dm_test_set_psr_caps_edp1_disabled(struct kunit *test)
 	struct dc *dc = link->ctx->dc;
 
 	edp0->connector_signal = SIGNAL_TYPE_EDP;
-	dc->links[0] = edp0;
-	dc->links[1] = link;
-	dc->link_count = 2;
+	dc_test_set_link(dc, 0, edp0);
+	dc_test_set_link(dc, 1, link);
+	dc_test_set_link_count(dc, 2);
 
 	KUNIT_EXPECT_FALSE(test, amdgpu_dm_set_psr_caps(link, aconnector));
 }
@@ -647,7 +648,7 @@ static void dm_test_psr_is_active_allowed_no_streams(struct kunit *test)
 static void dm_test_psr_is_active_allowed_null_link(struct kunit *test)
 {
 	struct amdgpu_display_manager *dm = dm_kunit_alloc_dm(test);
-	struct dc_state *state = dm->dc->current_state;
+	struct dc_state *state = dc_get_current_state(dm->dc);
 
 	dm_kunit_add_stream_to_state(test, state, 0, NULL);
 
@@ -662,7 +663,7 @@ static void dm_test_psr_is_active_allowed_null_link(struct kunit *test)
 static void dm_test_psr_is_active_allowed_requires_enabled_and_allowed(struct kunit *test)
 {
 	struct amdgpu_display_manager *dm = dm_kunit_alloc_dm(test);
-	struct dc_state *state = dm->dc->current_state;
+	struct dc_state *state = dc_get_current_state(dm->dc);
 	struct dc_link *link = dm_kunit_alloc_link(test);
 
 	dm_kunit_add_stream_to_state(test, state, 0, link);
@@ -682,7 +683,7 @@ static void dm_test_psr_is_active_allowed_requires_enabled_and_allowed(struct ku
 static void dm_test_psr_is_active_allowed_any_stream(struct kunit *test)
 {
 	struct amdgpu_display_manager *dm = dm_kunit_alloc_dm(test);
-	struct dc_state *state = dm->dc->current_state;
+	struct dc_state *state = dc_get_current_state(dm->dc);
 	struct dc_link *disabled_link = dm_kunit_alloc_link(test);
 	struct dc_link *allowed_link = dm_kunit_alloc_link(test);
 

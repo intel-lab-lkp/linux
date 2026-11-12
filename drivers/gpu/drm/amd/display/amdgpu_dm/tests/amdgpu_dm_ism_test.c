@@ -8,6 +8,7 @@
 #include <kunit/test.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "amdgpu.h"
 #include "amdgpu_mode.h"
 #include "amdgpu_dm.h"
@@ -1191,9 +1192,9 @@ static void dm_test_ism_dispatch_optimized_idle_defers_sso(struct kunit *test)
  * ===== Behavioural tests for dm_ism_commit_idle_optimization_state =====
  *
  * The commit path runs the real DC calls. dc_allow_idle_optimizations() only
- * reaches hardware through dc->hwss.apply_idle_power_optimizations(), so the
+ * reaches hardware through dc_test_hwss(dc)->apply_idle_power_optimizations(), so the
  * spy is installed there — DC's own seam — and the outcome is read back from
- * dc->idle_optimizations_allowed. The callback fires only on an actual
+ * dc_is_idle_optimizations_allowed(dc). The callback fires only on an actual
  * transition, so the call count is the number of idle state changes requested.
  */
 
@@ -1236,12 +1237,12 @@ static struct dc_stream_state *setup_commit_test(struct kunit *test,
 	logger = kunit_kzalloc(test, sizeof(*logger), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, logger);
 	logger->dev = &adev->ddev;
-	dc->ctx->logger = logger;
+	dc_get_ctx(dc)->logger = logger;
 	/* is_apu path avoids DC_LOG_DC()'s NULL-logger dereference. */
-	dc->caps.is_apu = true;
+	dc_test_caps(dc)->is_apu = true;
 	/* dc_allow() only calls apply() when clk_mgr is present. */
-	dc->clk_mgr = dm_kunit_alloc_clk_mgr(test);
-	dc->hwss.apply_idle_power_optimizations = dm_ism_test_apply_idle;
+	dc_test_set_clk_mgr(dc, dm_kunit_alloc_clk_mgr(test));
+	dc_test_hwss(dc)->apply_idle_power_optimizations = dm_ism_test_apply_idle;
 	dm_ism_test_idle = (typeof(dm_ism_test_idle)){ };
 
 	amdgpu_dm_ism_init(&acrtc->ism, config);
@@ -1281,7 +1282,7 @@ static void dm_test_ism_commit_allows_idle_on_optimized_idle(struct kunit *test)
 		/* vblank disabled + no SSO -> a single allow-idle transition. */
 		KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 1);
 		KUNIT_EXPECT_TRUE(test, dm_ism_test_idle.last_allow);
-		KUNIT_EXPECT_TRUE(test, adev->dm.dc->idle_optimizations_allowed);
+		KUNIT_EXPECT_TRUE(test, dc_is_idle_optimizations_allowed(adev->dm.dc));
 
 		cancel_delayed_work(&acrtc->ism.sso_delayed_work);
 	}
@@ -1308,7 +1309,7 @@ static void dm_test_ism_commit_enables_sso_on_optimized_idle_sso(struct kunit *t
 	};
 
 	setup_commit_test(test, acrtc, &config);
-	adev->dm.dc->idle_optimizations_allowed = true;
+	dc_test_set_idle_optimizations_allowed(adev->dm.dc, true);
 
 	scoped_guard(mutex, &adev->dm.dc_lock) {
 		amdgpu_dm_ism_commit_event(&acrtc->ism,
@@ -1320,7 +1321,7 @@ static void dm_test_ism_commit_enables_sso_on_optimized_idle_sso(struct kunit *t
 		/* SSO engagement disallows idle, then re-allows it. */
 		KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 2);
 		KUNIT_EXPECT_TRUE(test, dm_ism_test_idle.last_allow);
-		KUNIT_EXPECT_TRUE(test, adev->dm.dc->idle_optimizations_allowed);
+		KUNIT_EXPECT_TRUE(test, dc_is_idle_optimizations_allowed(adev->dm.dc));
 	}
 
 	amdgpu_dm_ism_flush(&acrtc->ism);
@@ -1351,7 +1352,7 @@ static void dm_test_ism_commit_disallows_idle_on_timer_aborted(struct kunit *tes
 
 	stream = setup_commit_test(test, acrtc, &config);
 	setup_idle_delay_history(&acrtc->ism, stream);
-	adev->dm.dc->idle_optimizations_allowed = true;
+	dc_test_set_idle_optimizations_allowed(adev->dm.dc, true);
 
 	scoped_guard(mutex, &adev->dm.dc_lock) {
 		/* Non-zero delay parks the FSM in HYSTERESIS_WAITING. */
@@ -1369,7 +1370,7 @@ static void dm_test_ism_commit_disallows_idle_on_timer_aborted(struct kunit *tes
 		/* TIMER_ABORTED commit runs with vblank_enabled=true. */
 		KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 1);
 		KUNIT_EXPECT_FALSE(test, dm_ism_test_idle.last_allow);
-		KUNIT_EXPECT_FALSE(test, adev->dm.dc->idle_optimizations_allowed);
+		KUNIT_EXPECT_FALSE(test, dc_is_idle_optimizations_allowed(adev->dm.dc));
 	}
 
 	amdgpu_dm_ism_flush(&acrtc->ism);
@@ -1409,7 +1410,7 @@ static void dm_test_ism_exit_from_optimized_idle_disallows_idle(struct kunit *te
 		/* Allow on entry, disallow on exit. */
 		KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 2);
 		KUNIT_EXPECT_FALSE(test, dm_ism_test_idle.last_allow);
-		KUNIT_EXPECT_FALSE(test, adev->dm.dc->idle_optimizations_allowed);
+		KUNIT_EXPECT_FALSE(test, dc_is_idle_optimizations_allowed(adev->dm.dc));
 		/* The idle period was recorded on the way out. */
 		KUNIT_EXPECT_EQ(test, acrtc->ism.next_record_idx, 1);
 	}
@@ -1449,7 +1450,7 @@ static void dm_test_ism_exit_from_sso_disallows_idle(struct kunit *test)
 
 		KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 2);
 		KUNIT_EXPECT_FALSE(test, dm_ism_test_idle.last_allow);
-		KUNIT_EXPECT_FALSE(test, adev->dm.dc->idle_optimizations_allowed);
+		KUNIT_EXPECT_FALSE(test, dc_is_idle_optimizations_allowed(adev->dm.dc));
 		KUNIT_EXPECT_EQ(test, acrtc->ism.next_record_idx, 1);
 	}
 
@@ -1495,7 +1496,7 @@ static void dm_test_ism_delayed_work_runs_timer_elapsed(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, (int)acrtc->ism.current_state,
 			(int)DM_ISM_STATE_OPTIMIZED_IDLE_SSO);
 	KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 1);
-	KUNIT_EXPECT_TRUE(test, adev->dm.dc->idle_optimizations_allowed);
+	KUNIT_EXPECT_TRUE(test, dc_is_idle_optimizations_allowed(adev->dm.dc));
 
 	amdgpu_dm_ism_flush(&acrtc->ism);
 }
@@ -1533,7 +1534,7 @@ static void dm_test_ism_sso_delayed_work_runs_sso_elapsed(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, (int)acrtc->ism.current_state,
 			(int)DM_ISM_STATE_OPTIMIZED_IDLE_SSO);
 	KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 3);
-	KUNIT_EXPECT_TRUE(test, adev->dm.dc->idle_optimizations_allowed);
+	KUNIT_EXPECT_TRUE(test, dc_is_idle_optimizations_allowed(adev->dm.dc));
 
 	amdgpu_dm_ism_flush(&acrtc->ism);
 }

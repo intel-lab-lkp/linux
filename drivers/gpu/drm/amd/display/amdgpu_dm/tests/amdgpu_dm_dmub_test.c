@@ -9,6 +9,8 @@
 #include <linux/firmware.h>
 
 #include "dc.h"
+#include "dc_test.h"
+#include "amdgpu_dm_kunit_test_helpers.h"
 #include "dc/inc/core_types.h"
 #include "dc/inc/hw/dmcu.h"
 #include "dc/inc/hw/abm.h"
@@ -524,8 +526,7 @@ static struct amdgpu_device *dm_test_alloc_adev_with_dc(struct kunit *test)
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	res_pool = kunit_kzalloc(test, sizeof(*res_pool), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, res_pool);
@@ -533,8 +534,8 @@ static struct amdgpu_device *dm_test_alloc_adev_with_dc(struct kunit *test)
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 
-	dc->res_pool = res_pool;
-	dc->ctx = ctx;
+	dc_test_set_res_pool(dc, res_pool);
+	dc_test_set_ctx(dc, ctx);
 	ctx->dc = dc;
 	ctx->driver_context = adev;
 	adev->dm.dc = dc;
@@ -647,7 +648,7 @@ static void dm_test_dmub_hw_init_success_fake_dmub(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, dm_dmub_hw_init(adev), 0);
 	KUNIT_EXPECT_TRUE(test, adev->dm.dmub_srv->hw_init);
-	KUNIT_EXPECT_NOT_NULL(test, adev->dm.dc->ctx->dmub_srv);
+	KUNIT_EXPECT_NOT_NULL(test, dc_get_ctx(adev->dm.dc)->dmub_srv);
 }
 
 /**
@@ -664,7 +665,7 @@ static void dm_test_dmub_hw_init_no_hw_support(struct kunit *test)
 	adev->dm.dmub_srv->hw_funcs.is_supported = dm_test_dmub_unsupported;
 
 	KUNIT_EXPECT_EQ(test, dm_dmub_hw_init(adev), 0);
-	KUNIT_EXPECT_NULL(test, adev->dm.dc->ctx->dmub_srv);
+	KUNIT_EXPECT_NULL(test, dc_get_ctx(adev->dm.dc)->dmub_srv);
 }
 
 /**
@@ -717,7 +718,7 @@ static void dm_test_dmub_hw_init_auto_load_timeout(struct kunit *test)
 	adev->dm.dmub_srv->hw_funcs.get_fw_status = dm_test_dmub_fw_not_ready;
 
 	KUNIT_EXPECT_EQ(test, dm_dmub_hw_init(adev), 0);
-	KUNIT_EXPECT_NOT_NULL(test, adev->dm.dc->ctx->dmub_srv);
+	KUNIT_EXPECT_NOT_NULL(test, dc_get_ctx(adev->dm.dc)->dmub_srv);
 }
 
 /**
@@ -733,8 +734,8 @@ static void dm_test_dmub_hw_init_apu_dpia_dcn35(struct kunit *test)
 	struct amdgpu_device *adev = dm_test_alloc_adev_with_dmub(test);
 
 	adev->ip_versions[DCE_HWIP][0] = IP_VERSION(3, 5, 0);
-	adev->dm.dc->caps.is_apu = true;
-	adev->dm.dc->res_pool->usb4_dpia_count = 1;
+	dc_test_caps(adev->dm.dc)->is_apu = true;
+	dc_get_res_pool(adev->dm.dc)->usb4_dpia_count = 1;
 
 	KUNIT_EXPECT_EQ(test, dm_dmub_hw_init(adev), 0);
 	KUNIT_EXPECT_TRUE(test, adev->dm.dmub_srv->hw_init);
@@ -755,7 +756,7 @@ static void dm_test_dmub_hw_init_sanity_checks_dcn31(struct kunit *test)
 	adev->dm.dmcub_fw_version = DMUB_FW_VERSION(4, 0, 10);
 
 	KUNIT_EXPECT_EQ(test, dm_dmub_hw_init(adev), 0);
-	KUNIT_EXPECT_TRUE(test, adev->dm.dc->debug.sanity_checks);
+	KUNIT_EXPECT_TRUE(test, dc_test_debug_options(adev->dm.dc)->sanity_checks);
 }
 
 /**
@@ -773,7 +774,7 @@ static void dm_test_dmub_hw_init_sanity_checks_dcn314(struct kunit *test)
 	adev->dm.dmcub_fw_version = DMUB_FW_VERSION(4, 0, 10);
 
 	KUNIT_EXPECT_EQ(test, dm_dmub_hw_init(adev), 0);
-	KUNIT_EXPECT_TRUE(test, adev->dm.dc->debug.sanity_checks);
+	KUNIT_EXPECT_TRUE(test, dc_test_debug_options(adev->dm.dc)->sanity_checks);
 }
 
 /**
@@ -798,8 +799,8 @@ static void dm_test_dmub_hw_init_dmcu_abm(struct kunit *test)
 
 	dmcu->funcs = &dm_test_dmcu_funcs;
 	dmcu->psp_version = 0x12345678;
-	adev->dm.dc->res_pool->dmcu = dmcu;
-	adev->dm.dc->res_pool->abm = abm;
+	dc_get_res_pool(adev->dm.dc)->dmcu = dmcu;
+	dc_get_res_pool(adev->dm.dc)->abm = abm;
 
 	KUNIT_EXPECT_EQ(test, dm_dmub_hw_init(adev), 0);
 	KUNIT_EXPECT_TRUE(test, abm->dmcu_is_running);
@@ -857,7 +858,7 @@ static void dm_test_dmub_hw_resume_full_init(struct kunit *test)
 
 	dm_dmub_hw_resume(adev);
 
-	KUNIT_EXPECT_NOT_NULL(test, adev->dm.dc->ctx->dmub_srv);
+	KUNIT_EXPECT_NOT_NULL(test, dc_get_ctx(adev->dm.dc)->dmub_srv);
 }
 
 /**
@@ -999,7 +1000,7 @@ static void dm_test_execute_dmub_cmd_null_dmub_srv(struct kunit *test)
  * dm_test_process_dmub_aux_transfer_sync_engine_acquire - Test AUX transfer engine-acquire failure
  * @test: The KUnit test context
  *
- * With dc->link_count == 0, dc_process_dmub_aux_transfer_async() rejects the
+ * With dc_get_link_count(dc) == 0, dc_process_dmub_aux_transfer_async() rejects the
  * link index and amdgpu_dm_process_dmub_aux_transfer_sync() reports an
  * engine-acquire error and returns -1.
  */
@@ -1019,8 +1020,7 @@ static void dm_test_process_dmub_aux_transfer_sync_engine_acquire(struct kunit *
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	payload = kunit_kzalloc(test, sizeof(*payload), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, payload);
@@ -1028,7 +1028,7 @@ static void dm_test_process_dmub_aux_transfer_sync_engine_acquire(struct kunit *
 	notify = kunit_kzalloc(test, sizeof(*notify), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, notify);
 
-	dc->link_count = 0;
+	dc_test_set_link_count(dc, 0);
 	ctx->dc = dc;
 	ctx->driver_context = adev;
 	adev->dm.dmub_notify = notify;
@@ -1071,8 +1071,7 @@ static void dm_test_process_dmub_aux_transfer_sync_protocol_error(struct kunit *
 	dc_ctx = kunit_kzalloc(test, sizeof(*dc_ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dc_ctx);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link);
@@ -1087,9 +1086,9 @@ static void dm_test_process_dmub_aux_transfer_sync_protocol_error(struct kunit *
 	KUNIT_ASSERT_NOT_NULL(test, notify);
 
 	link->ddc = ddc;
-	dc->ctx = dc_ctx;
-	dc->link_count = 1;
-	dc->links[0] = link;
+	dc_test_set_ctx(dc, dc_ctx);
+	dc_test_set_link_count(dc, 1);
+	dc_test_set_link(dc, 0, link);
 	dc_ctx->dc = dc;
 	dc_ctx->driver_context = adev;
 	dc_ctx->dmub_srv = NULL;
@@ -1139,8 +1138,7 @@ static void dm_test_process_dmub_aux_transfer_sync_copies_data(struct kunit *tes
 	dc_ctx = kunit_kzalloc(test, sizeof(*dc_ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dc_ctx);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link);
@@ -1155,9 +1153,9 @@ static void dm_test_process_dmub_aux_transfer_sync_copies_data(struct kunit *tes
 	KUNIT_ASSERT_NOT_NULL(test, notify);
 
 	link->ddc = ddc;
-	dc->ctx = dc_ctx;
-	dc->link_count = 1;
-	dc->links[0] = link;
+	dc_test_set_ctx(dc, dc_ctx);
+	dc_test_set_link_count(dc, 1);
+	dc_test_set_link(dc, 0, link);
 	dc_ctx->dc = dc;
 	dc_ctx->driver_context = adev;
 	dc_ctx->dmub_srv = NULL;
@@ -1220,8 +1218,7 @@ static void dm_test_process_dmub_aux_transfer_sync_zero_length(struct kunit *tes
 	dc_ctx = kunit_kzalloc(test, sizeof(*dc_ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dc_ctx);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link);
@@ -1236,9 +1233,9 @@ static void dm_test_process_dmub_aux_transfer_sync_zero_length(struct kunit *tes
 	KUNIT_ASSERT_NOT_NULL(test, notify);
 
 	link->ddc = ddc;
-	dc->ctx = dc_ctx;
-	dc->link_count = 1;
-	dc->links[0] = link;
+	dc_test_set_ctx(dc, dc_ctx);
+	dc_test_set_link_count(dc, 1);
+	dc_test_set_link(dc, 0, link);
 	dc_ctx->dc = dc;
 	dc_ctx->driver_context = adev;
 	dc_ctx->dmub_srv = NULL;
@@ -1294,8 +1291,7 @@ static void dm_test_process_dmub_set_config_sync_unknown_error(struct kunit *tes
 	dc_ctx = kunit_kzalloc(test, sizeof(*dc_ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dc_ctx);
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link);
@@ -1306,9 +1302,9 @@ static void dm_test_process_dmub_set_config_sync_unknown_error(struct kunit *tes
 	notify = kunit_kzalloc(test, sizeof(*notify), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, notify);
 
-	dc->ctx = dc_ctx;
+	dc_test_set_ctx(dc, dc_ctx);
 	dc_ctx->dmub_srv = NULL;
-	dc->links[0] = link;
+	dc_test_set_link(dc, 0, link);
 	ctx->dc = dc;
 	ctx->driver_context = adev;
 	adev->dm.dmub_notify = notify;
@@ -1534,8 +1530,8 @@ static void dm_test_dmub_reg_write_then_read(struct kunit *test)
 	perf_trace = kunit_kzalloc(test, sizeof(*perf_trace), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, perf_trace);
 
-	adev->dm.dc->ctx->cgs_device = &dm_test_cgs.dev;
-	adev->dm.dc->ctx->perf_trace = perf_trace;
+	dc_get_ctx(adev->dm.dc)->cgs_device = &dm_test_cgs.dev;
+	dc_get_ctx(adev->dm.dc)->perf_trace = perf_trace;
 
 	amdgpu_dm_dmub_reg_write(adev, 0x1234, 0x0BADF00D);
 

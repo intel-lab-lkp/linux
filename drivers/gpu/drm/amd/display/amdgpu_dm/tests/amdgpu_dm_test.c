@@ -22,6 +22,7 @@
 #include <drm/drm_writeback.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "dc/dc_dmub_srv.h"
 #include "dal_asic_id.h"
 #include "dm_services_types.h"
@@ -1279,13 +1280,13 @@ static void dm_test_crtc_with_stream(struct kunit *test,
 	logger = kunit_kzalloc(test, sizeof(*logger), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, logger);
 	logger->dev = &adev->ddev;
-	dc->ctx->logger = logger;
+	dc_get_ctx(dc)->logger = logger;
 
-	dc->current_state = dm_kunit_alloc_dc_state(test);
-	KUNIT_ASSERT_NOT_NULL(test, dc->current_state);
+	dc_test_set_current_state(dc, dm_kunit_alloc_dc_state(test));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_current_state(dc));
 
 	stream = dm_kunit_alloc_stream(test, NULL);
-	stream->ctx = dc->ctx;
+	stream->ctx = dc_get_ctx(dc);
 
 	adev->dm.dc = dc;
 	adev->mode_info.num_crtc = 1;
@@ -1337,8 +1338,8 @@ static void dm_test_crtc_get_scanoutpos_exits_idle(struct kunit *test)
 	u32 position = 0;
 
 	dm_test_crtc_with_stream(test, adev, dc);
-	dc->caps.ips_support = true;
-	dc->idle_optimizations_allowed = true;
+	dc_test_caps(dc)->ips_support = true;
+	dc_test_set_idle_optimizations_allowed(dc, true);
 
 	KUNIT_EXPECT_EQ(test, dm_crtc_get_scanoutpos(adev, 0, &vbl, &position), 0);
 }
@@ -2940,8 +2941,8 @@ static struct dc_link *dm_test_dc_with_link(struct kunit *test,
 	struct dc *dc = dm_kunit_alloc_dc_with_ctx(test);
 	struct dc_link *link = dm_kunit_alloc_link(test);
 
-	dc->links[0] = link;
-	dc->link_count = 1;
+	dc_test_set_link(dc, 0, link);
+	dc_test_set_link_count(dc, 1);
 	adev->dm.dc = dc;
 
 	return link;
@@ -2967,7 +2968,7 @@ static void dm_test_dump_links_with_sinks(struct kunit *test)
 	link->local_sink = local_sink;
 	link->sink_count = 1;
 	link->remote_sinks[0] = remote_sink;
-	adev->dm.dc->link_count = 2;
+	dc_test_set_link_count(adev->dm.dc, 2);
 
 	amdgpu_dm_dump_links_and_sinks(adev);
 }
@@ -3328,7 +3329,7 @@ static void dm_test_trigger_timing_sync_streams(struct kunit *test)
 
 	context->streams[0] = stream;
 	context->stream_count = 1;
-	dc->current_state = context;
+	dc_test_set_current_state(dc, context);
 	adev->dm.dc = dc;
 	adev->dm.force_timing_sync = true;
 	mutex_init(&adev->dm.dc_lock);
@@ -3387,8 +3388,8 @@ static void dm_test_oem_i2c_hw_init_no_device(struct kunit *test)
 	struct amdgpu_device *adev = dm_kunit_alloc_adev(test);
 	struct dc *dc = dm_kunit_alloc_dc_with_ctx(test);
 
-	dc->res_pool = kunit_kzalloc(test, sizeof(*dc->res_pool), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc->res_pool);
+	dc_test_set_res_pool(dc, kunit_kzalloc(test, sizeof(*dc_get_res_pool(dc)), GFP_KERNEL));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_res_pool(dc));
 	adev->dm.dc = dc;
 
 	KUNIT_EXPECT_EQ(test, dm_oem_i2c_hw_init(adev), 0);
@@ -4471,8 +4472,8 @@ static void dm_test_commit_zero_streams_empty(struct kunit *test)
 {
 	struct dc *dc = dm_kunit_alloc_dc_with_ctx(test);
 
-	dc->current_state = dm_kunit_alloc_dc_state(test);
-	KUNIT_ASSERT_NOT_NULL(test, dc->current_state);
+	dc_test_set_current_state(dc, dm_kunit_alloc_dc_state(test));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_current_state(dc));
 
 	KUNIT_EXPECT_EQ(test, (int)amdgpu_dm_commit_zero_streams(dc), (int)DC_OK);
 }
@@ -4550,7 +4551,7 @@ static void dm_test_clear_writeback_removes_stream(struct kunit *test)
 	acrtc = kunit_kzalloc(test, sizeof(*acrtc), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, acrtc);
 	stream = dm_kunit_alloc_stream(test, NULL);
-	dm->dc->hwss.update_bandwidth = dm_test_update_bandwidth;
+	dc_test_hwss(dm->dc)->update_bandwidth = dm_test_update_bandwidth;
 	crtc_state->stream = stream;
 	stream->num_wb_info = 1;
 	stream->writeback_info[0].dwb_pipe_inst = 0;
@@ -4588,7 +4589,7 @@ static void dm_test_set_writeback_no_pipe(struct kunit *test)
 	acrtc = kunit_kzalloc(test, sizeof(*acrtc), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, acrtc);
 	dc = dm_kunit_alloc_dc_with_ctx(test);
-	dc->current_state = dm_kunit_alloc_dc_state(test);
+	dc_test_set_current_state(dc, dm_kunit_alloc_dc_state(test));
 
 	adev->dm.adev = adev;
 	adev->dm.dc = dc;
@@ -4735,8 +4736,8 @@ dm_test_plane_attr_ctx_alloc(struct kunit *test, u32 drm_format)
 
 	ctx->adev = dm_kunit_alloc_adev(test);
 	ctx->adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
-	ctx->adev->dm.dc->caps.planes[0].max_upscale_factor.argb8888 = 1;
-	ctx->adev->dm.dc->caps.planes[0].max_downscale_factor.argb8888 = 1;
+	dc_test_caps(ctx->adev->dm.dc)->planes[0].max_upscale_factor.argb8888 = 1;
+	dc_test_caps(ctx->adev->dm.dc)->planes[0].max_downscale_factor.argb8888 = 1;
 
 	ctx->crtc_state->stream = dm_kunit_alloc_stream(test, NULL);
 	/* Colour management resolves the device through the commit backpointer. */
@@ -4821,7 +4822,7 @@ static void dm_test_plane_attributes_bad_color_mgmt(struct kunit *test)
 	/* A 3D LUT that is not a perfect cube fails validation. */
 	blob->data = lut;
 	blob->length = 16 * sizeof(*lut);
-	ctx->adev->dm.dc->caps.color.dpp.hw_3d_lut = true;
+	dc_test_caps(ctx->adev->dm.dc)->color.dpp.hw_3d_lut = true;
 	ctx->plane->dm_plane_state->lut3d = blob;
 
 	KUNIT_EXPECT_EQ(test, dm_test_fill_plane_attr(ctx), -EINVAL);
@@ -4980,8 +4981,8 @@ static struct amdgpu_device *dm_test_late_init_adev(struct kunit *test)
 	struct amdgpu_device *adev = dm_kunit_alloc_adev(test);
 	struct dc *dc = dm_kunit_alloc_dc_with_ctx(test);
 
-	dc->res_pool = kunit_kzalloc(test, sizeof(*dc->res_pool), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc->res_pool);
+	dc_test_set_res_pool(dc, kunit_kzalloc(test, sizeof(*dc_get_res_pool(dc)), GFP_KERNEL));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_res_pool(dc));
 	adev->dm.dc = dc;
 
 	return adev;
@@ -5044,7 +5045,7 @@ static void dm_test_late_init_boot_crc_disabled(struct kunit *test)
 	dm_test_fw_boot_options.bits.bootcrc_en_at_S0i3 = 0;
 	dmub->hw_funcs.get_fw_boot_option = dm_test_get_fw_boot_option;
 	dmub_srv->dmub = dmub;
-	adev->dm.dc->ctx->dmub_srv = dmub_srv;
+	dc_get_ctx(adev->dm.dc)->dmub_srv = dmub_srv;
 	adev->ip_versions[DCE_HWIP][0] = IP_VERSION(3, 6, 0);
 
 	KUNIT_EXPECT_EQ(test, dm_test_run_late_init(adev), 0);
@@ -5074,8 +5075,8 @@ static struct amdgpu_device *dm_test_mode_config_adev(struct kunit *test)
 	long saved_audio = amdgpu_dm_audio_get_param();
 
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
-	adev->dm.dc->current_state = dm_kunit_alloc_dc_state(test);
-	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc->current_state);
+	dc_test_set_current_state(adev->dm.dc, dm_kunit_alloc_dc_state(test));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_current_state(adev->dm.dc));
 
 	amdgpu_dm_audio_set_param(0);
 	KUNIT_ASSERT_EQ(test, kunit_add_action_or_reset(test, dm_test_restore_audio_param,
@@ -5141,7 +5142,7 @@ static void dm_test_initialize_plane_primary(struct kunit *test)
 	adev->family = AMDGPU_FAMILY_NV;
 	adev->dm.adev = adev;
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
-	adev->dm.dc->caps.max_streams = 1;
+	dc_test_caps(adev->dm.dc)->max_streams = 1;
 
 	KUNIT_ASSERT_EQ(test, initialize_plane(&adev->dm, mode_info, 0,
 					       DRM_PLANE_TYPE_PRIMARY, NULL), 0);
@@ -5167,7 +5168,7 @@ static void dm_test_initialize_plane_overlay(struct kunit *test)
 	adev->family = AMDGPU_FAMILY_NV;
 	adev->dm.adev = adev;
 	adev->dm.dc = dm_kunit_alloc_dc_with_ctx(test);
-	adev->dm.dc->caps.max_streams = 1;
+	dc_test_caps(adev->dm.dc)->max_streams = 1;
 	plane_cap->per_pixel_alpha = true;
 	plane_cap->pixel_format_support.nv12 = true;
 

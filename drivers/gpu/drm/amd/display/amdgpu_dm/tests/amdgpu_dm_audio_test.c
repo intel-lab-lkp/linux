@@ -18,6 +18,7 @@
 #include <drm/drm_probe_helper.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "dc/inc/core_types.h"
 #include "dc/inc/hw/audio.h"
 #include "amdgpu.h"
@@ -103,7 +104,7 @@ static void dm_test_audio_init_enabled_success(struct kunit *test)
 	int saved_audio = amdgpu_dm_audio_get_param();
 
 	adev = kunit_kzalloc(test, sizeof(*adev), GFP_KERNEL);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
+	dc = dm_kunit_alloc_dc(test);
 	res_pool = kunit_kzalloc(test, sizeof(*res_pool), GFP_KERNEL);
 	audio0 = kunit_kzalloc(test, sizeof(*audio0), GFP_KERNEL);
 	audio1 = kunit_kzalloc(test, sizeof(*audio1), GFP_KERNEL);
@@ -121,7 +122,7 @@ static void dm_test_audio_init_enabled_success(struct kunit *test)
 	res_pool->audio_count = 2;
 	res_pool->audios[0] = audio0;
 	res_pool->audios[1] = audio1;
-	dc->res_pool = res_pool;
+	dc_test_set_res_pool(dc, res_pool);
 	adev->dm.dc = dc;
 	adev->dev = dev;
 
@@ -810,16 +811,16 @@ static void dm_test_commit_audio_notifies_added_connector(struct kunit *test)
 
 	adev->dm.dc = kunit_kzalloc(test, sizeof(*adev->dm.dc), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc);
-	adev->dm.dc->current_state = kunit_kzalloc(test,
-							 sizeof(*adev->dm.dc->current_state),
-							 GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc->current_state);
+	dc_test_set_current_state(adev->dm.dc, kunit_kzalloc(test,
+							 sizeof(*dc_get_current_state(adev->dm.dc)),
+							 GFP_KERNEL));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_current_state(adev->dm.dc));
 	stream->ctx = kunit_kzalloc(test, sizeof(*stream->ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, stream->ctx);
 	stream->ctx->dc = adev->dm.dc;
-	adev->dm.dc->current_state->stream_count = 1;
-	adev->dm.dc->current_state->streams[0] = stream;
-	adev->dm.dc->current_state->stream_status[0].audio_inst = 8;
+	dc_get_current_state(adev->dm.dc)->stream_count = 1;
+	dc_get_current_state(adev->dm.dc)->streams[0] = stream;
+	dc_get_current_state(adev->dm.dc)->stream_status[0].audio_inst = 8;
 
 	mutex_init(&adev->dm.audio_lock);
 	dm_test_audio_setup_notify_component(test, adev);
@@ -968,10 +969,10 @@ static void dm_test_commit_audio_skips_without_stream_status(struct kunit *test)
 
 	adev->dm.dc = kunit_kzalloc(test, sizeof(*adev->dm.dc), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc);
-	adev->dm.dc->current_state = kunit_kzalloc(test,
-							 sizeof(*adev->dm.dc->current_state),
-							 GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc->current_state);
+	dc_test_set_current_state(adev->dm.dc, kunit_kzalloc(test,
+							 sizeof(*dc_get_current_state(adev->dm.dc)),
+							 GFP_KERNEL));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_current_state(adev->dm.dc));
 	stream->ctx = kunit_kzalloc(test, sizeof(*stream->ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, stream->ctx);
 	stream->ctx->dc = adev->dm.dc;
@@ -1173,16 +1174,16 @@ static void dm_test_commit_audio_skips_writeback_addition(struct kunit *test)
 
 	adev->dm.dc = kunit_kzalloc(test, sizeof(*adev->dm.dc), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc);
-	adev->dm.dc->current_state = kunit_kzalloc(test,
-							 sizeof(*adev->dm.dc->current_state),
-							 GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc->current_state);
+	dc_test_set_current_state(adev->dm.dc, kunit_kzalloc(test,
+							 sizeof(*dc_get_current_state(adev->dm.dc)),
+							 GFP_KERNEL));
+	KUNIT_ASSERT_NOT_NULL(test, dc_get_current_state(adev->dm.dc));
 	stream->ctx = kunit_kzalloc(test, sizeof(*stream->ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, stream->ctx);
 	stream->ctx->dc = adev->dm.dc;
-	adev->dm.dc->current_state->stream_count = 1;
-	adev->dm.dc->current_state->streams[0] = stream;
-	adev->dm.dc->current_state->stream_status[0].audio_inst = 14;
+	dc_get_current_state(adev->dm.dc)->stream_count = 1;
+	dc_get_current_state(adev->dm.dc)->streams[0] = stream;
+	dc_get_current_state(adev->dm.dc)->stream_status[0].audio_inst = 14;
 
 	mutex_init(&adev->dm.audio_lock);
 	dm_test_audio_setup_notify_component(test, adev);

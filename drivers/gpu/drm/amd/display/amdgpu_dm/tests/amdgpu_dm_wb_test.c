@@ -18,6 +18,7 @@
 #include <drm/drm_writeback.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "amdgpu.h"
 #include "amdgpu_dm.h"
 #include "amdgpu_dm_wb.h"
@@ -495,13 +496,12 @@ static void dm_test_wb_connector_init_success(struct kunit *test)
 	dm = &adev->dm;
 	dm->adev = adev;
 
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	link = kunit_kzalloc(test, sizeof(*link), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link);
 
-	dc->links[0] = link;
+	dc_test_set_link(dc, 0, link);
 	dm->dc = dc;
 
 	ret = amdgpu_dm_wb_connector_init(dm, wbcon, 0);

@@ -13,6 +13,7 @@
 #include <drm/display/drm_dp_mst_helper.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "core_types.h"
 #include "clk_mgr.h"
 #include "link_service.h"
@@ -193,15 +194,16 @@ static void dm_test_apply_edid_quirks_psr_phy_power_down(struct kunit *test)
 	struct edid *embedded = dm_test_edid_with_panel_id(test,
 			drm_edid_encode_panel_id('S', 'D', 'C', 0x4203));
 
-	link->ctx = dc->ctx;
+	link->ctx = dc_get_ctx(dc);
 
 	link->connector_signal = SIGNAL_TYPE_DISPLAY_PORT;
 	apply_edid_quirks(link, external, &edid_caps);
-	KUNIT_EXPECT_FALSE(test, dc->debug.psr_phy_force_phy_power_down_up_level_2);
+	KUNIT_EXPECT_FALSE(
+		test, dc_test_debug_options(dc)->psr_phy_force_phy_power_down_up_level_2);
 
 	link->connector_signal = SIGNAL_TYPE_EDP;
 	apply_edid_quirks(link, embedded, &edid_caps);
-	KUNIT_EXPECT_TRUE(test, dc->debug.psr_phy_force_phy_power_down_up_level_2);
+	KUNIT_EXPECT_TRUE(test, dc_test_debug_options(dc)->psr_phy_force_phy_power_down_up_level_2);
 }
 
 /**
@@ -430,11 +432,10 @@ static void dm_test_parse_edid_caps_hdmi_frl(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, dc_edid);
 	edid_caps = kunit_kzalloc(test, sizeof(*edid_caps), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, edid_caps);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	link->dc = dc;
-	dc->config.enable_frl = true;
+	dc_test_config(dc)->enable_frl = true;
 
 	dm_test_fill_base_edid(dc_edid, true);
 
@@ -473,11 +474,10 @@ static void dm_test_parse_edid_caps_hdmi_frl_dsc(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, dc_edid);
 	edid_caps = kunit_kzalloc(test, sizeof(*edid_caps), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, edid_caps);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 
 	link->dc = dc;
-	dc->config.enable_frl = true;
+	dc_test_config(dc)->enable_frl = true;
 
 	dm_test_fill_base_edid(dc_edid, true);
 
@@ -512,7 +512,7 @@ static void dm_test_parse_edid_caps_hdmi_comp_auto(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, edid_caps);
 
 	link->dc = dc;
-	link->ctx = dc->ctx;
+	link->ctx = dc_get_ctx(dc);
 
 	dm_test_fill_base_edid(dc_edid, true);
 
@@ -521,8 +521,8 @@ static void dm_test_parse_edid_caps_hdmi_comp_auto(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, dm_helpers_parse_edid_caps(link, dc_edid, edid_caps), EDID_OK);
 	KUNIT_EXPECT_TRUE(test, edid_caps->panel_patch.hdmi_comp_auto);
-	KUNIT_EXPECT_TRUE(test, dc->debug.force_frl_max);
-	KUNIT_EXPECT_TRUE(test, dc->debug.force_frl_dsc);
+	KUNIT_EXPECT_TRUE(test, dc_test_debug_options(dc)->force_frl_max);
+	KUNIT_EXPECT_TRUE(test, dc_test_debug_options(dc)->force_frl_dsc);
 }
 
 /*
@@ -2143,13 +2143,12 @@ static void dm_test_override_panel_settings_debug_mask_disables_dsc(struct kunit
 
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link_srv);
 	link = dm_kunit_alloc_link(test);
 	ctx->dc = dc;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 	link->dc = dc;
 	link_srv->dp_should_enable_fec = dm_test_dp_should_enable_fec;
 	link->connector_signal = SIGNAL_TYPE_DISPLAY_PORT;
@@ -2176,21 +2175,20 @@ static void dm_test_override_panel_settings_second_edp_disables_psr(struct kunit
 
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link_srv);
 	first_link = dm_kunit_alloc_link(test);
 	second_link = dm_kunit_alloc_link(test);
 
 	ctx->dc = dc;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 	link_srv->dp_should_enable_fec = dm_test_dp_should_enable_fec;
 	first_link->dc = dc;
 	second_link->dc = dc;
-	dc->link_count = 2;
-	dc->links[0] = first_link;
-	dc->links[1] = second_link;
+	dc_test_set_link_count(dc, 2);
+	dc_test_set_link(dc, 0, first_link);
+	dc_test_set_link(dc, 1, second_link);
 	first_link->connector_signal = SIGNAL_TYPE_EDP;
 	second_link->connector_signal = SIGNAL_TYPE_EDP;
 
@@ -2538,7 +2536,7 @@ static void dm_test_dmub_aux_transfer_sync_hpd_discon(struct kunit *test)
  * @test: The KUnit test context
  *
  * With HPD connected the helper forwards the payload to
- * amdgpu_dm_process_dmub_aux_transfer_sync(). dc->link_count is zero, so the
+ * amdgpu_dm_process_dmub_aux_transfer_sync(). dc_get_link_count(dc) is zero, so the
  * async transfer is rejected and the engine-acquire error is reported.
  */
 static void dm_test_dmub_aux_transfer_sync_hpd_connected(struct kunit *test)
@@ -4117,15 +4115,14 @@ static void dm_test_dp_handle_test_pattern_no_pipe(struct kunit *test)
 	adev = dm_kunit_alloc_adev(test);
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	state = kunit_kzalloc(test, sizeof(*state), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, state);
 	link = dm_kunit_alloc_link(test);
 	aconnector = dm_kunit_alloc_connector(test, adev, link);
 
 	ctx->dc = dc;
-	dc->current_state = state;
+	dc_test_set_current_state(dc, state);
 	link->dc = dc;
 	link->priv = aconnector;
 
@@ -4267,14 +4264,13 @@ static void dm_test_dmub_set_config_sync_unknown_error(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, ctx);
 	dc_ctx = kunit_kzalloc(test, sizeof(*dc_ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, dc_ctx);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	notify = kunit_kzalloc(test, sizeof(*notify), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, notify);
 	link = dm_kunit_alloc_link(test);
 
-	dc->ctx = dc_ctx;
-	dc->links[0] = link;
+	dc_test_set_ctx(dc, dc_ctx);
+	dc_test_set_link(dc, 0, link);
 	ctx->dc = dc;
 	ctx->driver_context = adev;
 	adev->dm.dmub_notify = notify;
@@ -4309,8 +4305,7 @@ static void dm_test_is_dp_sink_present_queries_link_service(struct kunit *test)
 
 	adev = dm_kunit_alloc_adev(test);
 	KUNIT_ASSERT_NOT_NULL(test, adev);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, link_srv);
 	link = dm_kunit_alloc_link(test);
@@ -4321,7 +4316,7 @@ static void dm_test_is_dp_sink_present_queries_link_service(struct kunit *test)
 	drm_dp_aux_init(&aconnector->dm_dp_aux.aux);
 
 	link_srv->dp_is_sink_present = dm_test_dp_sink_present_true;
-	dc->link_srv = link_srv;
+	dc_test_install_link_service(dc, link_srv);
 	link->dc = dc;
 	link->priv = aconnector;
 
@@ -4588,8 +4583,7 @@ static struct dm_test_pattern_fixture dm_test_setup_pattern(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, adev);
 	fixture.ctx = kunit_kzalloc(test, sizeof(*fixture.ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, fixture.ctx);
-	dc = kunit_kzalloc(test, sizeof(*dc), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, dc);
+	dc = dm_kunit_alloc_dc(test);
 	state = kunit_kzalloc(test, sizeof(*state), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, state);
 	link_srv = kunit_kzalloc(test, sizeof(*link_srv), GFP_KERNEL);
@@ -4607,9 +4601,9 @@ static struct dm_test_pattern_fixture dm_test_setup_pattern(struct kunit *test)
 	clk_mgr->funcs = &dm_test_clk_mgr_funcs;
 	clk_mgr->bw_params = bw_params;
 
-	dc->link_srv = link_srv;
-	dc->clk_mgr = clk_mgr;
-	dc->current_state = state;
+	dc_test_install_link_service(dc, link_srv);
+	dc_test_set_clk_mgr(dc, clk_mgr);
+	dc_test_set_current_state(dc, state);
 	fixture.ctx->dc = dc;
 	fixture.link->dc = dc;
 	fixture.link->priv = fixture.aconnector;
@@ -4794,7 +4788,7 @@ static void dm_test_read_local_edid_i2c_no_response(struct kunit *test)
 	fixture.link->aux_mode = false;
 	fixture.link->ddc_hw_inst = 1;
 	fixture.aconnector->i2c = (struct amdgpu_i2c_adapter *)ddc;
-	fixture.dc->hwss.prepare_ddc = dm_test_prepare_ddc;
+	dc_test_hwss(fixture.dc)->prepare_ddc = dm_test_prepare_ddc;
 	dm_test_prepare_ddc_calls = 0;
 
 	KUNIT_EXPECT_EQ(test,

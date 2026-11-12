@@ -13,6 +13,7 @@
 #include <uapi/drm/drm_mode.h>
 
 #include "dc.h"
+#include "dc_test.h"
 #include "amdgpu.h"
 #include "amdgpu_mode.h"
 #include "amdgpu_dm.h"
@@ -1759,7 +1760,7 @@ dm_test_verify_lut3d_alloc_adev(struct kunit *test, bool has_3dlut)
 
 	adev->dm.dc = kunit_kzalloc(test, sizeof(*adev->dm.dc), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, adev->dm.dc);
-	adev->dm.dc->caps.color.dpp.hw_3d_lut = has_3dlut;
+	dc_test_caps(adev->dm.dc)->color.dpp.hw_3d_lut = has_3dlut;
 
 	return adev;
 }
@@ -2201,7 +2202,7 @@ static void dm_test_update_plane_color_mgmt_bad_lut3d(struct kunit *test)
 {
 	struct dm_test_color_update_fixture f = dm_test_color_update_setup(test);
 
-	f.adev->dm.dc->caps.color.dpp.hw_3d_lut = true;
+	dc_test_caps(f.adev->dm.dc)->color.dpp.hw_3d_lut = true;
 	f.dm_plane_state->lut3d = dm_test_make_lut_blob(test, 128);
 
 	KUNIT_EXPECT_EQ(test,
@@ -2385,7 +2386,7 @@ static void dm_test_update_plane_color_mgmt_legacy_luts(struct kunit *test)
 	struct drm_plane_state *plane_state = &f.dm_plane_state->base;
 	int ret;
 
-	f.adev->dm.dc->caps.color.dpp.hw_3d_lut = true;
+	dc_test_caps(f.adev->dm.dc)->color.dpp.hw_3d_lut = true;
 	f.dm_plane_state->shaper_lut =
 		dm_test_make_lut_blob(test, MAX_COLOR_LUT_ENTRIES);
 	f.dm_plane_state->lut3d = dm_test_make_lut_blob(test, lut3d_entries);
@@ -2537,7 +2538,7 @@ static void dm_test_update_plane_color_mgmt_colorop_bypass_pipeline(struct kunit
 	};
 	struct dm_test_color_update_fixture f = dm_test_color_update_setup(test);
 
-	f.adev->dm.dc->caps.color.dpp.hw_3d_lut = true;
+	dc_test_caps(f.adev->dm.dc)->color.dpp.hw_3d_lut = true;
 	f.dm_plane_state->base.color_pipeline =
 		dm_test_colorop_pipeline_setup(test, &f, types, curves, bypass, ARRAY_SIZE(types));
 
@@ -2635,7 +2636,7 @@ static void dm_test_update_plane_color_mgmt_colorop_truncated(struct kunit *test
 	struct dm_crtc_state *crtc_state = f.crtc_state;
 	int count, ret;
 
-	f.adev->dm.dc->caps.color.dpp.hw_3d_lut = true;
+	dc_test_caps(f.adev->dm.dc)->color.dpp.hw_3d_lut = true;
 
 	for (count = 3; count <= ARRAY_SIZE(types); count++) {
 		f.dm_plane_state->base.color_pipeline =
@@ -2681,11 +2682,11 @@ static void dm_test_update_plane_color_mgmt_colorop_no_3dlut_hw(struct kunit *te
 	};
 	struct dm_test_color_update_fixture f = dm_test_color_update_setup(test);
 
-	f.adev->dm.dc->caps.color.dpp.hw_3d_lut = true;
+	dc_test_caps(f.adev->dm.dc)->color.dpp.hw_3d_lut = true;
 	f.dm_plane_state->base.color_pipeline =
 		dm_test_colorop_pipeline_setup(test, &f, types, curves, bypass,
 					       ARRAY_SIZE(types));
-	f.adev->dm.dc->caps.color.dpp.hw_3d_lut = false;
+	dc_test_caps(f.adev->dm.dc)->color.dpp.hw_3d_lut = false;
 
 	KUNIT_EXPECT_EQ(test,
 		amdgpu_dm_update_plane_color_mgmt(f.crtc_state, &f.dm_plane_state->base,
@@ -2729,7 +2730,7 @@ static void dm_test_update_plane_color_mgmt_colorop_shaper(struct kunit *test)
 	struct drm_property_blob *blob;
 	int ret;
 
-	f.adev->dm.dc->caps.color.dpp.hw_3d_lut = true;
+	dc_test_caps(f.adev->dm.dc)->color.dpp.hw_3d_lut = true;
 	f.dm_plane_state->base.color_pipeline =
 		dm_test_colorop_pipeline_setup(test, &f, types, curves, bypass,
 					       ARRAY_SIZE(types));
@@ -2784,7 +2785,7 @@ static void dm_test_update_plane_color_mgmt_colorop_3dlut(struct kunit *test)
 	struct drm_property_blob *blob;
 	int ret;
 
-	f.adev->dm.dc->caps.color.dpp.hw_3d_lut = true;
+	dc_test_caps(f.adev->dm.dc)->color.dpp.hw_3d_lut = true;
 	f.dm_plane_state->base.color_pipeline =
 		dm_test_colorop_pipeline_setup(test, &f, types, curves, bypass,
 					       ARRAY_SIZE(types));
@@ -2839,7 +2840,7 @@ static void dm_test_update_plane_color_mgmt_colorop_3dlut_no_data(struct kunit *
 	struct drm_plane_state *plane_state = &f.dm_plane_state->base;
 	int ret;
 
-	f.adev->dm.dc->caps.color.dpp.hw_3d_lut = true;
+	dc_test_caps(f.adev->dm.dc)->color.dpp.hw_3d_lut = true;
 	f.dm_plane_state->base.color_pipeline =
 		dm_test_colorop_pipeline_setup(test, &f, types, curves, bypass,
 					       ARRAY_SIZE(types));
