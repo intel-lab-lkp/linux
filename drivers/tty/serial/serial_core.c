@@ -2890,6 +2890,27 @@ struct tty_driver *uart_console_device(struct console *co, int *index)
 }
 EXPORT_SYMBOL_GPL(uart_console_device);
 
+/**
+ * uart_console_port - look up the port behind a console
+ * @co: console whose @data points at its &struct uart_driver
+ *
+ * Serial core registers a port's console only after linking the port into
+ * the driver's state table, and unregisters it before unlinking the port, so
+ * the result stays valid for the console's ->setup() and ->write() callbacks.
+ *
+ * Return: the port registered on line @co->index, or %NULL if there is none.
+ */
+struct uart_port *uart_console_port(struct console *co)
+{
+	struct uart_driver *drv = co->data;
+
+	if (co->index < 0 || co->index >= drv->nr)
+		return NULL;
+
+	return drv->state[co->index].uart_port;
+}
+EXPORT_SYMBOL_GPL(uart_console_port);
+
 static ssize_t uartclk_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {

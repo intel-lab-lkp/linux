@@ -1127,6 +1127,7 @@ void uart_parse_options(const char *options, int *baud, int *parity, int *bits,
 int uart_set_options(struct uart_port *port, struct console *co, int baud,
 		     int parity, int bits, int flow);
 struct tty_driver *uart_console_device(struct console *co, int *index);
+struct uart_port *uart_console_port(struct console *co);
 void uart_console_write(struct uart_port *port, const char *s,
 			unsigned int count,
 			void (*putchar)(struct uart_port *, unsigned char));
