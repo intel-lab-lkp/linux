@@ -14,12 +14,26 @@
 #include "link_service.h"
 #include <linux/math.h>
 
-#define DC_TRACE_LEVEL_MESSAGE(...) /* do nothing */
-#define DC_TRACE_LEVEL_MESSAGEP(...) /* do nothing */
-
 #define DIV_ROUNDUP(a, b) (((a)+((b)/2))/(b))
 #define bswap16_based_on_endian(big_endian, value) \
 	((big_endian) ? cpu_to_be16(value) : cpu_to_le16(value))
+
+#define DC_TRACE_LEVEL_MESSAGE(...) /* do nothing */
+#define DC_TRACE_LEVEL_MESSAGEP(...) /* do nothing */
+
+
+#define MOD_POWER_MAX_CONCURRENT_STREAMS 32
+#define SMOOTH_BRIGHTNESS_ADJUSTMENT_TIME_IN_MS 500
+
+/* If system or panel does not report some sort of brightness percent to nits
+ * mapping, we will use following default values so backlight control using
+ * nits based interfaces will still work, but might not describe panel
+ * correctly. In this case percentage based backlight control should ideally
+ * be used.
+ * Min = 5 nits
+ * Max = 300 nits
+ */
+
 
 /* Possible Min Reduction config from least aggressive to most aggressive
  *  0    1     2     3     4     5     6     7     8     9     10    11   12
@@ -230,17 +244,6 @@ struct iram_table_v_2_2 {
 };
 #pragma pack(pop)
 
-#define MOD_POWER_MAX_CONCURRENT_STREAMS 32
-#define SMOOTH_BRIGHTNESS_ADJUSTMENT_TIME_IN_MS 500
-
-/* If system or panel does not report some sort of brightness percent to nits
- * mapping, we will use following default values so backlight control using
- * nits based interfaces will still work, but might not describe panel
- * correctly. In this case percentage based backlight control should ideally
- * be used.
- * Min = 5 nits
- * Max = 300 nits
- */
 
 #define MOD_POWER_TO_CORE(mod_power)\
 		container_of(mod_power, struct core_power, mod_public)
@@ -849,7 +852,6 @@ bool mod_power_hw_init_backlight(struct mod_power *mod_power)
 {
 	struct core_power *core_power = NULL;
 	struct dc *dc = NULL;
-	struct dmcu *dmcu = NULL;
 	struct dmcu_iram_parameters params;
 	unsigned int i;
 
@@ -868,16 +870,14 @@ bool mod_power_hw_init_backlight(struct mod_power *mod_power)
 		params.backlight_lut_array_size = core_power->bl_prop[i].num_backlight_levels;
 		params.min_abm_backlight = core_power->bl_prop[i].min_abm_backlight;
 
-		dmcu = dc_get_res_pool(dc)->dmcu;
-
 		// In the case where abm is implemented on dmcub,
 		// dmcu object will be null.
 		// ABM 2.4 and up are implemented on dmcub.
-		if (dmcu) {
+		if (dc_has_dmcu(dc)) {
 			//DMCU does not support multiple eDP
-			return dmcu_load_iram(dmcu, params);
+			return dmcu_load_iram(dc, params);
 		} else if (dc_get_ctx(dc)->dmub_srv) {
-			if (!dmub_init_abm_config(dc_get_res_pool(dc), params, i))
+			if (!dmub_init_abm_config(dc, params, i))
 				return false;
 		} else
 			return false;
@@ -1659,7 +1659,7 @@ bool mod_power_is_abm_supported(struct mod_power *mod_power,
 
 	// It's only implemented on dmcub.
 	if (dc_get_ctx(dc)->dmub_srv) {
-		if (!dmub_is_abm_supported(dc_get_res_pool(dc), inst))
+		if (!dc_abm_is_supported(dc, inst))
 			return false;
 	} else
 		return false;
@@ -1683,9 +1683,8 @@ bool mod_power_abm_set_event(struct mod_power *mod_power,
 
 	// It's only implemented on dmcub.
 	if (dc_get_ctx(dc)->dmub_srv) {
-		if (!dmub_set_abm_event(dc_get_res_pool(dc), full_screen,
-				trans_info, hdr_mode, scaling_enable,
-				scaling_strength_map, inst))
+		if (!dc_abm_set_event(dc, full_screen, trans_info,
+				hdr_mode, scaling_enable, scaling_strength_map, inst))
 			return false;
 	} else
 		return false;
@@ -1708,7 +1707,7 @@ bool mod_power_abm_set_strength(struct mod_power *mod_power,
 
 	// It's only implemented on dmcub.
 	if (dc_get_ctx(dc)->dmub_srv) {
-		if (!dmub_set_abm_strength(dc_get_res_pool(dc), strength, inst))
+		if (!dc_abm_set_strength(dc, strength, inst))
 			return false;
 	} else
 		return false;
@@ -2176,17 +2175,17 @@ static void fill_iram_v_2_3(struct iram_table_v_2_2 *ram_table, struct dmcu_iram
 			params, ram_table, big_endian);
 }
 
-bool dmub_init_abm_config(struct resource_pool *res_pool,
+
+bool dmub_init_abm_config(struct dc *dc,
 	struct dmcu_iram_parameters params,
 	unsigned int inst)
 {
 	struct iram_table_v_2_2 ram_table;
 	struct abm_config_table config;
 	unsigned int set = params.set;
-	bool result = false;
 	uint32_t i, j = 0;
 
-	if (res_pool->abm == NULL && res_pool->multiple_abms[inst] == NULL)
+	if (!dc_abm_is_supported(dc, inst))
 		return false;
 
 	memset(&ram_table, 0, sizeof(ram_table));
@@ -2243,109 +2242,49 @@ bool dmub_init_abm_config(struct resource_pool *res_pool,
 
 	config.min_abm_backlight = ram_table.min_abm_backlight;
 
-	if (res_pool->multiple_abms[inst]) {
-		result = res_pool->multiple_abms[inst]->funcs->init_abm_config(
-			res_pool->multiple_abms[inst], (char *)(&config), sizeof(struct abm_config_table), inst);
-	} else
-		result = res_pool->abm->funcs->init_abm_config(
-			res_pool->abm, (char *)(&config), sizeof(struct abm_config_table), 0);
-
-	return result;
+	return dc_abm_program_config(dc, (const char *)&config,
+			sizeof(struct abm_config_table), inst);
 }
 
-bool dmub_is_abm_supported(struct resource_pool *res_pool, unsigned int inst)
-{
-
-	if (res_pool->abm == NULL && res_pool->multiple_abms[inst] == NULL)
-		return false;
-
-	return true;
-}
-
-bool dmub_set_abm_event(struct resource_pool *res_pool,
-		unsigned int full_screen, unsigned int trans_info,
-		unsigned int hdr_mode, unsigned int scaling_enable, unsigned int scaling_strength_map,
-		unsigned int inst)
-{
-	bool result = false;
-
-	if (res_pool->abm == NULL && res_pool->multiple_abms[inst] == NULL)
-		return false;
-
-	if (res_pool->multiple_abms[inst]) {
-		if (res_pool->multiple_abms[inst]->funcs->set_abm_event)
-			result = res_pool->multiple_abms[inst]->funcs->set_abm_event(
-				res_pool->multiple_abms[inst], full_screen, trans_info,
-					hdr_mode, scaling_enable, scaling_strength_map, inst);
-	} else {
-		if (res_pool->abm->funcs->set_abm_event)
-			result = res_pool->abm->funcs->set_abm_event(
-					res_pool->abm, full_screen, trans_info,
-					hdr_mode, scaling_enable, scaling_strength_map, inst);
-	}
-
-	return result;
-}
-
-bool dmub_set_abm_strength(struct resource_pool *res_pool,
-	unsigned int strength,
-	unsigned int inst)
-{
-	bool result = false;
-
-	if (res_pool->abm == NULL && res_pool->multiple_abms[inst] == NULL)
-		return false;
-
-	if (res_pool->multiple_abms[inst]) {
-		if (res_pool->multiple_abms[inst]->funcs->set_abm_level)
-			result = res_pool->multiple_abms[inst]->funcs->set_abm_level(
-				res_pool->multiple_abms[inst], strength);
-	} else {
-		if (res_pool->abm->funcs->set_abm_level)
-			result = res_pool->abm->funcs->set_abm_level(
-					res_pool->abm, strength);
-	}
-
-	return result;
-}
-
-bool dmcu_load_iram(struct dmcu *dmcu,
+bool dmcu_load_iram(struct dc *dc,
 	struct dmcu_iram_parameters params)
 {
 	unsigned char ram_table[IRAM_SIZE];
+	unsigned int abm_version;
 	bool result = false;
 
-	if (dmcu == NULL)
+	if (!dc_has_dmcu(dc))
 		return false;
 
-	if (dmcu && !dmcu->funcs->is_dmcu_initialized(dmcu))
+	if (!dc_dmcu_is_initialized(dc))
 		return true;
 
 	memset(&ram_table, 0, sizeof(ram_table));
 
-	if (dmcu->dmcu_version.abm_version == 0x24) {
+	abm_version = dc_get_dmcu_abm_version(dc);
+	if (abm_version == 0x24) {
 		fill_iram_v_2_3((struct iram_table_v_2_2 *)ram_table, params, true);
-		result = dmcu->funcs->load_iram(dmcu, 0, (char *)(&ram_table),
+		result = dc_dmcu_load_iram(dc, 0, (char *)(&ram_table),
 						IRAM_RESERVE_AREA_START_V2_2);
-	} else if (dmcu->dmcu_version.abm_version == 0x23) {
+	} else if (abm_version == 0x23) {
 		fill_iram_v_2_3((struct iram_table_v_2_2 *)ram_table, params, true);
 
-		result = dmcu->funcs->load_iram(
-				dmcu, 0, (char *)(&ram_table), IRAM_RESERVE_AREA_START_V2_2);
-	} else if (dmcu->dmcu_version.abm_version == 0x22) {
+		result = dc_dmcu_load_iram(
+				dc, 0, (char *)(&ram_table), IRAM_RESERVE_AREA_START_V2_2);
+	} else if (abm_version == 0x22) {
 		fill_iram_v_2_2((struct iram_table_v_2_2 *)ram_table, params);
 
-		result = dmcu->funcs->load_iram(
-				dmcu, 0, (char *)(&ram_table), IRAM_RESERVE_AREA_START_V2_2);
+		result = dc_dmcu_load_iram(
+				dc, 0, (char *)(&ram_table), IRAM_RESERVE_AREA_START_V2_2);
 	} else {
 		fill_iram_v_2((struct iram_table_v_2 *)ram_table, params);
 
-		result = dmcu->funcs->load_iram(
-				dmcu, 0, (char *)(&ram_table), IRAM_RESERVE_AREA_START_V2);
+		result = dc_dmcu_load_iram(
+				dc, 0, (char *)(&ram_table), IRAM_RESERVE_AREA_START_V2);
 
 		if (result)
-			result = dmcu->funcs->load_iram(
-					dmcu, IRAM_RESERVE_AREA_END_V2 + 1,
+			result = dc_dmcu_load_iram(
+					dc, IRAM_RESERVE_AREA_END_V2 + 1,
 					(char *)(&ram_table) + IRAM_RESERVE_AREA_END_V2 + 1,
 					sizeof(ram_table) - IRAM_RESERVE_AREA_END_V2 - 1);
 	}

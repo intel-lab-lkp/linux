@@ -1207,9 +1207,6 @@ STATIC_IFN_KUNIT int dm_late_init(struct amdgpu_ip_block *ip_block)
 	struct dmcu_iram_parameters params;
 	unsigned int linear_lut[16];
 	int i;
-	struct dmcu *dmcu = NULL;
-
-	dmcu = dc_get_res_pool(adev->dm.dc)->dmcu;
 
 	/* Init the boot time CRC (skip in resume) */
 	if ((adev->in_suspend == 0) &&
@@ -1234,8 +1231,8 @@ STATIC_IFN_KUNIT int dm_late_init(struct amdgpu_ip_block *ip_block)
 	 * dmcu object will be null.
 	 * ABM 2.4 and up are implemented on dmcub.
 	 */
-	if (dmcu) {
-		if (!dmcu_load_iram(dmcu, params))
+	if (dc_has_dmcu(adev->dm.dc)) {
+		if (!dmcu_load_iram(adev->dm.dc, params))
 			return -EINVAL;
 	} else if (dc_get_ctx(adev->dm.dc)->dmub_srv) {
 		struct dc_link *edp_links[MAX_NUM_EDP];
@@ -1243,7 +1240,7 @@ STATIC_IFN_KUNIT int dm_late_init(struct amdgpu_ip_block *ip_block)
 
 		dc_get_edp_links(adev->dm.dc, edp_links, &edp_num);
 		for (i = 0; i < edp_num; i++) {
-			if (!dmub_init_abm_config(dc_get_res_pool(adev->dm.dc), params, i))
+			if (!dmub_init_abm_config(adev->dm.dc, params, i))
 				return -EINVAL;
 		}
 	}

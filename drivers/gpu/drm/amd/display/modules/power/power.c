@@ -192,8 +192,7 @@ struct mod_power *mod_power_create(struct dc *dc,
 	}
 
 	// ABM used to contain 4 different configs. There is only 3 since ABM 2.3.
-	if (dc_get_res_pool(dc)->dmcu != NULL &&
-	    dc_get_res_pool(dc)->dmcu->dmcu_version.abm_version < 0x23)
+	if (dc_has_dmcu(dc) && dc_get_dmcu_abm_version(dc) < 0x23)
 		abm_max_config = 4;
 	else
 		abm_max_config = 3;

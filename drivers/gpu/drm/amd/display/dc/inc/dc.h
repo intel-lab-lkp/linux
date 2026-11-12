@@ -2390,6 +2390,48 @@ struct resource_pool *dc_get_res_pool(const struct dc *dc);
 void dc_force_max_dramclk(struct dc *dc, struct dc_state *context);
 
 /*
+ * ABM (Adaptive Backlight Management) hardware primitives.
+ *
+ * The ABM curve and iRAM table baking is module policy and lives in
+ * modules/power; these entry points program the baked blobs through the
+ * ABM/DMCU objects that DC owns. Callers pick the DMCU path with
+ * dc_has_dmcu().
+ */
+
+/* Whether ABM is implemented in the DMCU block on this ASIC. */
+bool dc_has_dmcu(const struct dc *dc);
+
+/* The DMCU firmware ABM version, 0 when there is no DMCU. */
+unsigned int dc_get_dmcu_abm_version(const struct dc *dc);
+
+/* Whether the DMCU firmware finished initializing. */
+bool dc_dmcu_is_initialized(struct dc *dc);
+
+/* Load a baked iRAM blob into the DMCU at the given offset. */
+bool dc_dmcu_load_iram(struct dc *dc, unsigned int start_offset,
+		const char *src, unsigned int bytes);
+
+/* Whether ABM is supported for the given eDP panel instance. */
+bool dc_abm_is_supported(struct dc *dc, unsigned int panel_inst);
+
+/*
+ * Program a baked ABM configuration table for the given eDP panel
+ * instance.
+ */
+bool dc_abm_program_config(struct dc *dc, const char *config,
+		unsigned int size, unsigned int panel_inst);
+
+/* Queue an ABM event (fullscreen transition info) for a panel instance. */
+bool dc_abm_set_event(struct dc *dc, unsigned int full_screen,
+		unsigned int trans_info, unsigned int hdr_mode,
+		unsigned int scaling_enable, unsigned int scaling_strength_map,
+		unsigned int panel_inst);
+
+/* Set the ABM strength for a panel instance. */
+bool dc_abm_set_strength(struct dc *dc, unsigned int strength,
+		unsigned int panel_inst);
+
+/*
  * Query DCC compression support for a surface.
  * return false - when the asic does not implement the query.
  */

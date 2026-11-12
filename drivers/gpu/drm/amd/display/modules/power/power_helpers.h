@@ -30,7 +30,7 @@
 #include "dc/inc/core_types.h"
 #include "mod_power.h"
 
-struct resource_pool;
+struct dc;
 
 
 enum abm_defines {
@@ -47,6 +47,7 @@ struct dmcu_iram_parameters {
 	unsigned int min_abm_backlight;
 	unsigned int set;
 };
+
 struct backlight_state {
 	/* HW uses u16.16 format for backlight PWM */
 	unsigned int backlight_pwm;
@@ -147,20 +148,10 @@ union dmcu_abm_set_bl_params {
 	} bits;
 	unsigned int u32All;
 };
-bool dmcu_load_iram(struct dmcu *dmcu,
+bool dmcu_load_iram(struct dc *dc,
 		struct dmcu_iram_parameters params);
-bool dmub_init_abm_config(struct resource_pool *res_pool,
+bool dmub_init_abm_config(struct dc *dc,
 		struct dmcu_iram_parameters params,
-		unsigned int inst);
-
-bool dmub_is_abm_supported(struct resource_pool *res_pool,
-		unsigned int inst);
-bool dmub_set_abm_event(struct resource_pool *res_pool,
-		unsigned int full_screen, unsigned int trans_info,
-		unsigned int hdr_mode, unsigned int scaling_enable,
-		unsigned int scaling_strength_map, unsigned int inst);
-bool dmub_set_abm_strength(struct resource_pool *res_pool,
-		unsigned int strength,
 		unsigned int inst);
 
 void init_replay_config(struct dc_link *link, struct replay_config *pr_config);
