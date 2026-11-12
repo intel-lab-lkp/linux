@@ -295,9 +295,11 @@ xfs_iomap_write_direct(
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp;
 	xfs_filblks_t		resaligned;
+	xfs_extlen_t		extsz;
 	int			nimaps;
 	unsigned int		dblocks, rblocks;
 	bool			force = false;
+	bool			rt;
 	int			error;
 	int			bmapi_flags = XFS_BMAPI_PREALLOC;
 	int			nr_exts = XFS_IEXT_ADD_NOSPLIT_CNT;
@@ -312,9 +314,11 @@ xfs_iomap_write_direct(
 	 */
 	count_fsb = min_t(xfs_filblks_t, count_fsb, XFS_MAX_BMBT_EXTLEN);
 
-	resaligned = xfs_aligned_fsb_count(offset_fsb, count_fsb,
-					   xfs_get_extsz_hint(ip));
-	if (unlikely(XFS_IS_REALTIME_INODE(ip))) {
+retry:
+	extsz = xfs_get_extsz_hint(ip);
+	rt = XFS_IS_REALTIME_INODE(ip);
+	resaligned = xfs_aligned_fsb_count(offset_fsb, count_fsb, extsz);
+	if (unlikely(rt)) {
 		dblocks = XFS_DIOSTRAT_SPACE_RES(mp, 0);
 		rblocks = resaligned;
 	} else {
@@ -356,6 +360,17 @@ xfs_iomap_write_direct(
 	if (xfs_is_zoned_inode(ip)) {
 		error = xfs_iomap_rtflag_changed(ip, flags);
 		goto out_trans_cancel;
+	}
+
+	/*
+	 * A write fault doesn't hold the IOLOCK, so what sized the reservation
+	 * can change until we hold the ILOCK.
+	 */
+	if (extsz != xfs_get_extsz_hint(ip) ||
+	    rt != XFS_IS_REALTIME_INODE(ip)) {
+		xfs_trans_cancel(tp);
+		xfs_iunlock(ip, XFS_ILOCK_EXCL);
+		goto retry;
 	}
 
 	error = xfs_iext_count_extend(tp, ip, XFS_DATA_FORK, nr_exts);
