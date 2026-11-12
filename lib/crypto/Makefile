@@ -21,6 +21,11 @@ libcryptoutils-y				:= memneq.o utils.o
 
 ################################################################################
 
+obj-$(CONFIG_CRYPTO_LIB_AEGIS128X4) += libaegis128x4.o
+libaegis128x4-y := aegis128x4.o
+
+################################################################################
+
 obj-$(CONFIG_CRYPTO_LIB_AES) += libaes.o
 libaes-y := aes.o
 ifeq ($(CONFIG_CRYPTO_LIB_AES_ARCH),y)
