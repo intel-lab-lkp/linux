@@ -724,6 +724,8 @@ int tpm2_auto_startup(struct tpm_chip *chip)
 		goto out;
 
 	if (rc == TPM2_RC_INITIALIZE) {
+		chip->flags &= ~TPM_CHIP_FLAG_DISABLE;
+
 		rc = tpm2_startup(chip);
 		if (rc)
 			goto out;
