@@ -1229,7 +1229,7 @@ static void apply_dsc_policy_for_edp(struct amdgpu_dm_connector *aconnector,
 	if (edp_max_bpp_x16 < edp_min_bpp_x16)
 		edp_min_bpp_x16 = edp_max_bpp_x16;
 
-	if (dc_dsc_compute_bandwidth_range(dc->res_pool->dscs[0],
+	if (dc_dsc_compute_bandwidth_range(dc,
 				dc->debug.dsc_min_slice_height_override,
 				edp_min_bpp_x16, edp_max_bpp_x16,
 				dsc_caps,
@@ -1238,7 +1238,7 @@ static void apply_dsc_policy_for_edp(struct amdgpu_dm_connector *aconnector,
 				&bw_range)) {
 
 		if (bw_range.max_kbps < link_bw_in_kbps) {
-			if (dc_dsc_compute_config(dc->res_pool->dscs[0],
+			if (dc_dsc_compute_config(dc,
 					dsc_caps,
 					&dsc_options,
 					0,
@@ -1253,7 +1253,7 @@ static void apply_dsc_policy_for_edp(struct amdgpu_dm_connector *aconnector,
 		}
 	}
 
-	if (dc_dsc_compute_config(dc->res_pool->dscs[0],
+	if (dc_dsc_compute_config(dc,
 				dsc_caps,
 				&dsc_options,
 				link_bw_in_kbps,
@@ -1309,7 +1309,7 @@ static void apply_dsc_policy_for_stream(struct amdgpu_dm_connector *aconnector,
 
 	} else if (sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT) {
 		if (sink->link->dpcd_caps.dongle_type == DISPLAY_DONGLE_NONE) {
-			if (dc_dsc_compute_config(aconnector->dc_link->ctx->dc->res_pool->dscs[0],
+			if (dc_dsc_compute_config(dc,
 						dsc_caps,
 						&dsc_options,
 						link_bandwidth_kbps,
@@ -1339,7 +1339,7 @@ static void apply_dsc_policy_for_stream(struct amdgpu_dm_connector *aconnector,
 			if (timing_bw_in_kbps > max_supported_bw_in_kbps &&
 					max_supported_bw_in_kbps > 0 &&
 					dsc_max_supported_bw_in_kbps > 0)
-				if (dc_dsc_compute_config(aconnector->dc_link->ctx->dc->res_pool->dscs[0],
+				if (dc_dsc_compute_config(dc,
 						dsc_caps,
 						&dsc_options,
 						dsc_max_supported_bw_in_kbps,
@@ -1368,7 +1368,7 @@ static void apply_dsc_policy_for_stream(struct amdgpu_dm_connector *aconnector,
 
 		if ((timing_bw_in_kbps > link_bandwidth_kbps && dsc_sink_bw_in_kbps > 0) ||
 		    (dsc_policy.enable_dsc_when_not_needed || dsc_options.force_dsc_when_not_needed)) {
-			if (dc_dsc_compute_config(aconnector->dc_link->ctx->dc->res_pool->dscs[0],
+			if (dc_dsc_compute_config(dc,
 					dsc_caps,
 					&dsc_options,
 					dsc_sink_bw_in_kbps,

@@ -924,7 +924,7 @@ bool dc_dsc_parse_dsc_edid(const struct dc *dc, const struct dc_edid_caps *edid_
  * If DSC is not possible, leave '*range' untouched.
  */
 bool dc_dsc_compute_bandwidth_range(
-		const struct display_stream_compressor *dsc,
+		const struct dc *dc,
 		uint32_t dsc_min_slice_height_override,
 		uint32_t min_bpp_x16,
 		uint32_t max_bpp_x16,
@@ -939,6 +939,12 @@ bool dc_dsc_compute_bandwidth_range(
 	struct dsc_enc_caps dsc_common_caps;
 	struct dc_dsc_config config = {0};
 	struct dc_dsc_config_options options = {0};
+	const struct display_stream_compressor *dsc;
+
+	if (!dc || !dc->res_pool)
+		return false;
+
+	dsc = dc->res_pool->dscs[0];
 
 	options.dsc_min_slice_height_override = dsc_min_slice_height_override;
 	options.max_target_bpp_limit_override_x16 = max_bpp_x16;
@@ -2020,7 +2026,7 @@ done:
 }
 
 bool dc_dsc_compute_config(
-		const struct display_stream_compressor *dsc,
+		const struct dc *dc,
 		const struct dsc_dec_dpcd_caps *dsc_sink_caps,
 		const struct dc_dsc_config_options *options,
 		uint32_t target_bandwidth_kbps,
@@ -2031,6 +2037,13 @@ bool dc_dsc_compute_config(
 	bool is_dsc_possible = false;
 	struct dsc_enc_caps dsc_enc_caps;
 	unsigned int min_dsc_slice_count;
+	const struct display_stream_compressor *dsc;
+
+	if (!dc || !dc->res_pool)
+		return false;
+
+	dsc = dc->res_pool->dscs[0];
+
 	get_dsc_enc_caps(dsc, &dsc_enc_caps, timing->pix_clk_100hz);
 
 	min_dsc_slice_count = get_min_dsc_slice_count_for_odm(dsc, &dsc_enc_caps, timing);

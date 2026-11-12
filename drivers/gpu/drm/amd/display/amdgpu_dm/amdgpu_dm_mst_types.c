@@ -980,7 +980,7 @@ static void set_dsc_configs_from_fairness_vars(struct dsc_mst_fairness_params *p
 
 		memset(&params[i].timing->dsc_cfg, 0, sizeof(params[i].timing->dsc_cfg));
 		if (vars[i + k].dsc_enabled && dc_dsc_compute_config(
-					params[i].sink->ctx->dc->res_pool->dscs[0],
+					params[i].sink->ctx->dc,
 					&params[i].sink->dsc_caps.dsc_dec_caps,
 					&dsc_options,
 					0,
@@ -1033,7 +1033,7 @@ static int bpp_x16_from_pbn(struct dsc_mst_fairness_params param, int pbn)
 
 	kbps = div_u64((u64)pbn * 994 * 8 * 54, 64);
 	dc_dsc_compute_config(
-			param.sink->ctx->dc->res_pool->dscs[0],
+			param.sink->ctx->dc,
 			&param.sink->dsc_caps.dsc_dec_caps,
 			&dsc_options,
 			(int) kbps, param.timing,
@@ -1278,7 +1278,7 @@ static void build_frl_mst_dsc_params(struct amdgpu_dm_connector *aconnector,
 			stream->sink->edid_caps.panel_patch.max_dsc_target_bpp_limit * 16;
 
 	if (dc_dsc_compute_config(
-			stream->sink->ctx->dc->res_pool->dscs[0],
+			stream->sink->ctx->dc,
 			&stream->sink->dsc_caps.dsc_dec_caps,
 			&dsc_options,
 			frl_conv_dsc_bw_in_kbps,
@@ -1398,7 +1398,7 @@ static int compute_mst_dsc_configs_for_link(struct drm_atomic_commit *state,
 				stream->sink->dsc_caps.dsc_dec_caps.is_frl)
 			build_frl_mst_dsc_params(aconnector, stream, &dsc_policy, &params[count], frl_conv_dsc_bw_in_kbps);
 		if (!dc_dsc_compute_bandwidth_range(
-				stream->sink->ctx->dc->res_pool->dscs[0],
+				stream->sink->ctx->dc,
 				stream->sink->ctx->dc->debug.dsc_min_slice_height_override,
 				min_target_bpp_x16,
 				max_target_bpp_x16,
@@ -1651,7 +1651,7 @@ int compute_mst_dsc_configs_for_state(struct drm_atomic_commit *state,
 
 	for (i = 0; i < dc_state->stream_count; i++) {
 		stream = dc_state->streams[i];
-		res_pool = stream->ctx->dc->res_pool;
+		res_pool = dc_get_res_pool(stream->ctx->dc);
 
 		if (stream->signal != SIGNAL_TYPE_DISPLAY_PORT_MST)
 			continue;
@@ -1943,7 +1943,7 @@ static bool is_dsc_common_config_possible(struct dc_stream_state *stream,
 	bool is_dsc_possible;
 
 	dc_dsc_get_policy_for_timing(&stream->timing, 0, &dsc_policy, dc_link_get_highest_encoding_format(stream->link));
-	is_dsc_possible = dc_dsc_compute_bandwidth_range(stream->sink->ctx->dc->res_pool->dscs[0],
+	is_dsc_possible = dc_dsc_compute_bandwidth_range(stream->sink->ctx->dc,
 							 stream->sink->ctx->dc->debug.dsc_min_slice_height_override,
 							 dsc_policy.min_target_bpp * 16,
 							 dsc_policy.max_target_bpp * 16,
@@ -2108,7 +2108,7 @@ enum dc_status dm_dp_mst_is_port_support_mode(
 		/*Confirm if we can obtain dsc config*/
 		dc_dsc_get_default_config_option(stream->link->dc, &dsc_options);
 		dsc_options.max_target_bpp_limit_override_x16 = aconnector->base.display_info.max_dsc_bpp * 16;
-		if (dc_dsc_compute_config(stream->sink->ctx->dc->res_pool->dscs[0],
+		if (dc_dsc_compute_config(stream->sink->ctx->dc,
 				&stream->sink->dsc_caps.dsc_dec_caps,
 				&dsc_options,
 				end_to_end_bw_in_kbps,
