@@ -38,6 +38,7 @@
 #include <linux/iopoll.h>
 #include <linux/ktime.h>
 #include <linux/list.h>
+#include <linux/math64.h>
 #include <linux/mutex.h>
 #include <linux/rbtree.h>
 #include <linux/rwsem.h>
@@ -2841,6 +2842,25 @@ int cppc_get_highest_perf(int cpunum, u64 *highest_perf)
 }
 EXPORT_SYMBOL_GPL(cppc_get_highest_perf);
 
+/* Keep the EPP interface on an 8-bit scale, including firmware readback. */
+static u64 cppc_scale_epp(const struct cpc_register_resource *reg,
+			  u64 epp, bool to_reg)
+{
+	unsigned int width = reg->cpc_entry.reg.bit_width;
+	u32 max;
+
+	if (reg->type != ACPI_TYPE_BUFFER || width < 4 || width >= 8)
+		return epp;
+
+	max = BIT(width) - 1;
+	if (to_reg)
+		return DIV_ROUND_CLOSEST_ULL(epp * max,
+					     CPPC_EPP_ENERGY_EFFICIENCY_PREF);
+
+	return DIV_ROUND_CLOSEST_ULL(epp * CPPC_EPP_ENERGY_EFFICIENCY_PREF,
+				     max);
+}
+
 /**
  * cppc_get_epp_perf - Get the epp register value.
  * @cpunum: CPU from which to get epp preference value.
@@ -2850,7 +2870,15 @@ EXPORT_SYMBOL_GPL(cppc_get_highest_perf);
  */
 int cppc_get_epp_perf(int cpunum, u64 *epp_perf)
 {
-	return cppc_get_reg_val(cpunum, ENERGY_PERF, epp_perf);
+	struct cpc_desc *cpc_desc = per_cpu(cpc_desc_ptr, cpunum);
+	int ret;
+
+	ret = cppc_get_reg_val(cpunum, ENERGY_PERF, epp_perf);
+	if (!ret)
+		*epp_perf = cppc_scale_epp(&cpc_desc->cpc_regs[ENERGY_PERF],
+					   *epp_perf, false);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(cppc_get_epp_perf);
 
@@ -3150,6 +3178,7 @@ int cppc_set_epp_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls, bool enable)
 	bool auto_sel_non_pcc;
 	bool epp_pcc;
 	bool epp_non_pcc;
+	u64 epp;
 	int ret;
 
 	if (!cpc_desc) {
@@ -3159,6 +3188,7 @@ int cppc_set_epp_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls, bool enable)
 
 	auto_sel_reg = &cpc_desc->cpc_regs[AUTO_SEL_ENABLE];
 	epp_set_reg = &cpc_desc->cpc_regs[ENERGY_PERF];
+	epp = cppc_scale_epp(epp_set_reg, perf_ctrls->energy_perf, true);
 	if (!enable && auto_sel_reg->type == ACPI_TYPE_INTEGER &&
 	    auto_sel_reg->cpc_entry.int_value == 1)
 		return -EOPNOTSUPP;
@@ -3177,7 +3207,7 @@ int cppc_set_epp_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls, bool enable)
 			return ret;
 	}
 	if (epp_non_pcc) {
-		ret = cpc_write(cpu, epp_set_reg, perf_ctrls->energy_perf);
+		ret = cpc_write(cpu, epp_set_reg, epp);
 		if (ret)
 			return ret;
 	}
@@ -3205,7 +3235,7 @@ int cppc_set_epp_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls, bool enable)
 		}
 
 		if (epp_pcc) {
-			ret = cpc_write(cpu, epp_set_reg, perf_ctrls->energy_perf);
+			ret = cpc_write(cpu, epp_set_reg, epp);
 			if (ret)
 				goto out_unlock;
 		}
@@ -3235,8 +3265,16 @@ EXPORT_SYMBOL_GPL(cppc_set_epp_perf);
  */
 int cppc_set_epp(int cpu, u64 epp_val)
 {
+	struct cpc_desc *cpc_desc = per_cpu(cpc_desc_ptr, cpu);
+
 	if (epp_val > CPPC_EPP_ENERGY_EFFICIENCY_PREF)
 		return -EINVAL;
+
+	if (!cpc_desc)
+		return -ENODEV;
+
+	epp_val = cppc_scale_epp(&cpc_desc->cpc_regs[ENERGY_PERF],
+				 epp_val, true);
 
 	return cppc_set_reg_val(cpu, ENERGY_PERF, epp_val);
 }
@@ -3496,7 +3534,7 @@ int cppc_get_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls)
 		if (ret)
 			goto out_err;
 	}
-	perf_ctrls->energy_perf = energy_perf;
+	perf_ctrls->energy_perf = cppc_scale_epp(energy_perf_reg, energy_perf, false);
 
 	if (CPC_SUPPORTED(auto_sel_reg)) {
 		ret = cpc_read(cpu, auto_sel_reg, &auto_sel);

@@ -322,6 +322,11 @@ Description:	Energy performance preference
 		performance increase/decrease and the result of the hardware's
 		energy efficiency and performance optimization policies.
 
+		For supported EPP registers narrower than eight bits, values are
+		scaled and rounded to the nearest hardware preference.
+		Reads use the same 0-255 scale and may differ from the requested
+		value due to the reduced precision.
+
 		Writing to this file only has meaning when Autonomous Selection is
 		enabled.
 
