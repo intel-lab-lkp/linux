@@ -3214,6 +3214,7 @@ int ext4_get_fc_inode_loc(struct super_block *sb, unsigned long ino,
 extern int ext4_inode_attach_jinode(struct inode *inode);
 extern int ext4_can_truncate(struct inode *inode);
 extern int ext4_truncate(struct inode *);
+extern void ext4_wait_for_tail_page_commit(struct inode *inode);
 extern int ext4_break_layouts(struct inode *);
 extern int ext4_truncate_page_cache_block_range(struct inode *inode,
 						loff_t start, loff_t end);

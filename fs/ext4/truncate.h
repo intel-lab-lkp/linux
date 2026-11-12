@@ -17,6 +17,9 @@ static inline void ext4_truncate_failed_write(struct inode *inode)
 	 * We don't need to call ext4_break_layouts() because the blocks we
 	 * are truncating were never visible to userspace.
 	 */
+	if (ext4_should_journal_data(inode))
+		ext4_wait_for_tail_page_commit(inode);
+
 	filemap_invalidate_lock(mapping);
 	truncate_inode_pages(mapping, inode->i_size);
 	ext4_truncate(inode);
