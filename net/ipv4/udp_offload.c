@@ -948,6 +948,8 @@ int udp_gro_complete(struct sk_buff *skb, int nhoff,
 		skb->encapsulation = 1;
 		err = udp_sk(sk)->gro_complete(sk, skb,
 				nhoff + sizeof(struct udphdr));
+		if (!err)
+			skb_set_transport_header(skb, nhoff);
 	} else {
 		err = udp_gro_complete_segment(skb);
 	}
