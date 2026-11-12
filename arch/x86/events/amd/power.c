@@ -282,13 +282,16 @@ static int __init amd_power_pmu_init(void)
 	}
 
 
-	cpuhp_setup_state(CPUHP_AP_PERF_X86_AMD_POWER_ONLINE,
-			  "perf/x86/amd/power:online",
-			  power_cpu_init, power_cpu_exit);
+	ret = cpuhp_setup_state(CPUHP_AP_PERF_X86_AMD_POWER_ONLINE,
+				"perf/x86/amd/power:online",
+				power_cpu_init, power_cpu_exit);
+	if (ret)
+		return ret;
 
 	ret = perf_pmu_register(&pmu_class, "power", -1);
 	if (WARN_ON(ret)) {
 		pr_warn("AMD Power PMU registration failed\n");
+		cpuhp_remove_state(CPUHP_AP_PERF_X86_AMD_POWER_ONLINE);
 		return ret;
 	}
 
