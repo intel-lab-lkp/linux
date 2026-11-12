@@ -478,6 +478,12 @@ static int array_show(struct seq_file *m, void *v)
 
 DEFINE_SHOW_ATTRIBUTE(array);
 
+/*
+ * The general debugfs rule is that most callers should ignore errors returned
+ * by the nodes creation functions. This is not most callers - if those
+ * debugfs attributes are not created, then the CEC controls are not there and
+ * users cannot modify its behavior.
+ */
 static int __init create_debugfs_nodes(void)
 {
 	struct dentry *d, *pfn, *decay, *count, *array, *dfs;
