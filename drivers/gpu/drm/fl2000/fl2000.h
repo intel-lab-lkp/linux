@@ -1,0 +1,89 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * (C) Copyright 2017, Fresco Logic, Incorporated.
+ * (C) Copyright 2018-2020, Artem Mygaiev
+ */
+
+#ifndef FL2000_H
+#define FL2000_H
+
+#include <linux/device.h>
+#include <linux/i2c.h>
+#include <linux/module.h>
+#include <linux/regmap.h>
+#include <linux/types.h>
+#include <linux/usb.h>
+
+#include <drm/drm_atomic_helper.h>
+#include <drm/drm_bridge.h>
+#include <drm/drm_crtc.h>
+#include <drm/drm_damage_helper.h>
+#include <drm/drm_device.h>
+#include <drm/drm_drv.h>
+#include <drm/drm_fourcc.h>
+#include <drm/drm_framebuffer.h>
+#include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_gem_shmem_helper.h>
+#include <drm/drm_print.h>
+#include <drm/drm_probe_helper.h>
+#include <drm/drm_crtc_helper.h>
+#include <drm/drm_plane.h>
+#include <drm/drm_encoder.h>
+#include <drm/drm_modeset_helper_vtables.h>
+
+#include "fl2000_registers.h"
+
+/* Known USB interfaces of FL2000 */
+enum fl2000_interface {
+	FL2000_USBIF_AVCONTROL = 0,
+	FL2000_USBIF_STREAMING = 1,
+	FL2000_USBIF_INTERRUPT = 2,
+	FL2000_USBIF_NUM,
+};
+
+struct fl2000_timings {
+	u32 hactive;
+	u32 htotal;
+	u32 hsync_width;
+	u32 hstart;
+	u32 vactive;
+	u32 vtotal;
+	u32 vsync_width;
+	u32 vstart;
+};
+
+struct fl2000_pll {
+	u32 prescaler;
+	u32 multiplier;
+	u32 divisor;
+	u32 function;
+};
+
+/* Polling interval and timeout in us for I2C read/write operations */
+#define I2C_RDWR_INTERVAL 200
+#define I2C_RDWR_TIMEOUT  (256 * 1000)
+
+/* I2C adapter interface creation */
+struct i2c_adapter *fl2000_i2c_init(struct usb_interface *interface, struct regmap *regmap);
+int fl2000_ddc_read_block(struct i2c_adapter *adapter, u8 *buf, unsigned int block, size_t len);
+
+/* Register map creation */
+struct regmap *fl2000_regmap_init(struct device *dev, struct usb_device *usb_dev);
+void fl2000_regmap_drop_cache(struct regmap *regmap);
+
+/* Registers interface */
+int fl2000_reset(struct regmap *regmap);
+int fl2000_usb_magic(struct regmap *regmap);
+int fl2000_afe_magic(struct regmap *regmap);
+int fl2000_set_transfers(struct regmap *regmap);
+int fl2000_set_pixfmt(struct regmap *regmap, u32 bytes_pix);
+int fl2000_set_timings(struct regmap *regmap, struct fl2000_timings *timings);
+int fl2000_set_pll(struct regmap *regmap, struct fl2000_pll *pll);
+int fl2000_force_connect(struct regmap *regmap, bool force);
+bool fl2000_force_connect_active(struct regmap *regmap);
+int fl2000_enable_sink_interrupts(struct regmap *regmap);
+int fl2000_stream_interrupts(struct regmap *regmap, bool enable);
+int fl2000_read_status(struct regmap *regmap, u32 *status);
+int fl2000_i2c_dword(struct regmap *regmap, bool read, u16 addr, u8 offset, u32 *data);
+
+#endif /* FL2000_H */
