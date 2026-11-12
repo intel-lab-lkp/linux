@@ -264,6 +264,25 @@ xfs_iomap_eof_align_last_fsb(
 	return end_fsb;
 }
 
+/*
+ * A write fault picks the zoned or the regular path before it takes a lock, and
+ * it never takes the IOLOCK.  The realtime flag cannot change under the ILOCK,
+ * so look at it again there, before reserving or allocating blocks.  Only a
+ * fault can start over, so refuse any other caller, as the write path does.
+ */
+static int
+xfs_iomap_rtflag_changed(
+	struct xfs_inode	*ip,
+	unsigned int		flags)
+{
+	xfs_warn_ratelimited(ip->i_mount,
+		"RT flag modifying during block mapping for inode 0x%llx.",
+		I_INO(ip));
+	if (flags & IOMAP_FAULT)
+		return -EAGAIN;
+	return -EINVAL;
+}
+
 int
 xfs_iomap_write_direct(
 	struct xfs_inode	*ip,
@@ -333,6 +352,11 @@ xfs_iomap_write_direct(
 			rblocks, force, &tp);
 	if (error)
 		return error;
+
+	if (xfs_is_zoned_inode(ip)) {
+		error = xfs_iomap_rtflag_changed(ip, flags);
+		goto out_trans_cancel;
+	}
 
 	error = xfs_iext_count_extend(tp, ip, XFS_DATA_FORK, nr_exts);
 	if (error)
@@ -918,6 +942,11 @@ relock:
 	error = xfs_ilock_for_iomap(ip, flags, &lockmode);
 	if (error)
 		return error;
+
+	if (xfs_is_zoned_inode(ip)) {
+		error = xfs_iomap_rtflag_changed(ip, flags);
+		goto out_unlock;
+	}
 
 	/*
 	 * The reflink iflag could have changed since the earlier unlocked
@@ -1666,9 +1695,7 @@ xfs_zoned_buffered_write_iomap_begin(
 	struct xfs_iext_cursor	icur;
 	int			error = 0;
 
-	ASSERT(!xfs_get_extsz_hint(ip));
 	ASSERT(!(flags & IOMAP_UNSHARE));
-	ASSERT(ac);
 
 	if (xfs_is_shutdown(mp))
 		return -EIO;
@@ -1681,6 +1708,12 @@ restart:
 	error = xfs_ilock_for_iomap(ip, flags, &lockmode);
 	if (error)
 		return error;
+
+	if (!xfs_is_zoned_inode(ip) || !ac) {
+		error = xfs_iomap_rtflag_changed(ip, flags);
+		goto out_unlock;
+	}
+	ASSERT(!xfs_get_extsz_hint(ip));
 
 	if (XFS_IS_CORRUPT(mp, !xfs_ifork_has_extents(&ip->i_df)) ||
 	    XFS_TEST_ERROR(mp, XFS_ERRTAG_BMAPIFORMAT)) {
@@ -1864,6 +1897,11 @@ xfs_buffered_write_iomap_begin(
 	error = xfs_ilock_for_iomap(ip, flags, &lockmode);
 	if (error)
 		return error;
+
+	if (xfs_is_zoned_inode(ip)) {
+		error = xfs_iomap_rtflag_changed(ip, flags);
+		goto out_unlock;
+	}
 
 	if (XFS_IS_CORRUPT(mp, !xfs_ifork_has_extents(&ip->i_df)) ||
 	    XFS_TEST_ERROR(mp, XFS_ERRTAG_BMAPIFORMAT)) {
