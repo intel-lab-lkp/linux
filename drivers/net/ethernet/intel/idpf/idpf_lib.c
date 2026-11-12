@@ -948,6 +948,7 @@ static int idpf_cfg_netdev(struct idpf_vport *vport)
 	netdev->vlan_features |= netdev->features | other_offloads;
 	netdev->hw_enc_features |= dflt_features | other_offloads;
 	idpf_xdp_set_features(vport);
+	idpf_vport_set_hsplit(vport, ETHTOOL_TCP_DATA_SPLIT_ENABLED);
 
 	idpf_set_ethtool_ops(netdev);
 	netif_set_affinity_auto(netdev);
