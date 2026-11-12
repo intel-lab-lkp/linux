@@ -545,6 +545,91 @@ void dc_link_edp_replay_residency(const struct dc_link *link,
 		link->dc->link_srv->edp_replay_residency(link, residency, is_start, mode);
 }
 
+void dc_link_edp_get_psr_residency(const struct dc_link *link,
+		uint32_t *residency, enum psr_residency_mode mode)
+{
+	if (link && link->dc && link->dc->link_srv)
+		link->dc->link_srv->edp_get_psr_residency(link, residency, mode);
+}
+
+bool dc_link_edp_set_sink_vtotal_in_psr_active(const struct dc_link *link,
+		uint16_t psr_vtotal_idle, uint16_t psr_vtotal_su)
+{
+	if (!link || !link->dc || !link->dc->link_srv)
+		return false;
+
+	return link->dc->link_srv->edp_set_sink_vtotal_in_psr_active(
+			link, psr_vtotal_idle, psr_vtotal_su);
+}
+
+bool dc_link_edp_send_replay_cmd(struct dc_link *link,
+		enum replay_FW_Message_type msg,
+		union dmub_replay_cmd_set *cmd_data)
+{
+	if (!link || !link->dc || !link->dc->link_srv)
+		return false;
+
+	return link->dc->link_srv->edp_send_replay_cmd(link, msg, cmd_data);
+}
+
+bool dc_link_edp_set_coasting_vtotal(struct dc_link *link,
+		uint32_t coasting_vtotal, uint16_t frame_skip_number)
+{
+	if (!link || !link->dc || !link->dc->link_srv)
+		return false;
+
+	return link->dc->link_srv->edp_set_coasting_vtotal(
+			link, coasting_vtotal, frame_skip_number);
+}
+
+bool dc_link_edp_replay_get_cumulative_residency(const struct dc_link *link,
+		uint32_t *residency_milli_pct)
+{
+	if (!link || !link->dc || !link->dc->link_srv)
+		return false;
+
+	return link->dc->link_srv->edp_replay_get_cumulative_residency(
+			link, residency_milli_pct);
+}
+
+bool dc_link_edp_set_replay_power_opt_and_coasting_vtotal(
+		struct dc_link *link, const unsigned int *power_opts,
+		uint32_t coasting_vtotal, uint16_t frame_skip_number)
+{
+	if (!link || !link->dc || !link->dc->link_srv)
+		return false;
+
+	return link->dc->link_srv->edp_set_replay_power_opt_and_coasting_vtotal(
+			link, power_opts, coasting_vtotal, frame_skip_number);
+}
+
+bool dc_link_dp_setup_replay(struct dc_link *link,
+		const struct dc_stream_state *stream)
+{
+	if (!link || !link->dc || !link->dc->link_srv)
+		return false;
+
+	return link->dc->link_srv->dp_setup_replay(link, stream);
+}
+
+uint8_t dc_link_get_ddc_aux_inst(const struct dc_link *link)
+{
+	if (!link || !link->dc || !link->dc->link_srv)
+		return 0;
+
+	return link->dc->link_srv->get_ddc_aux_inst(link);
+}
+
+enum dp_link_encoding dc_link_dp_get_encoding_format(
+		const struct dc_link *link)
+{
+	if (!link || !link->dc || !link->dc->link_srv)
+		return DP_8b_10b_ENCODING;
+
+	return link->dc->link_srv->dp_get_encoding_format(
+			&link->verified_link_cap);
+}
+
 bool dc_link_get_pr_state(const struct dc_link *link, uint64_t *state)
 {
 	return link->dc->link_srv->dp_pr_get_state(link, state);

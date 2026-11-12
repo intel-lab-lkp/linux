@@ -2464,6 +2464,92 @@ uint32_t dc_bandwidth_in_kbps_from_timing(
 		const struct dc_crtc_timing *timing,
 		const enum dc_link_encoding_format link_encoding);
 
+/*
+ * DC accessors.
+ *
+ * struct dc is private to DC. These accessors are the supported way for
+ * DM and DAL modules to query DC-wide state. Some of them return pointers
+ * to still-public sub-structures; treat those as read-only unless the
+ * documentation says otherwise.
+ */
+
+/* Number of links; valid indices for dc_get_link_at_index(). */
+uint8_t dc_get_link_count(const struct dc *dc);
+
+/* The DC context (logging, register access, dmub service). */
+struct dc_context *dc_get_ctx(const struct dc *dc);
+
+/* Capabilities detected at dc_create() time. Read-only. */
+const struct dc_caps *dc_get_caps(const struct dc *dc);
+
+/* Configuration captured at dc_create() time. Read-only. */
+const struct dc_config *dc_get_config(const struct dc *dc);
+
+/* Debug overrides (module parameters, debugfs). Writable. */
+struct dc_debug_options *dc_get_debug_options(struct dc *dc);
+
+/* The currently committed state. Owned by DC; read-only for DM. */
+struct dc_state *dc_get_current_state(const struct dc *dc);
+
+/* Whether DC may enter idle power optimizations right now. */
+bool dc_is_idle_optimizations_allowed(const struct dc *dc);
+
+/*
+ * The hardware resource pool (DSC engines, audio instances, DMCU/ABM...).
+ * Interim accessor; prefer purpose-built DC interfaces where available.
+ */
+struct resource_pool *dc_get_res_pool(const struct dc *dc);
+
+/* The clock manager. Interim accessor. */
+struct clk_mgr *dc_get_clk_mgr(struct dc *dc);
+
+/*
+ * Query DCC compression support for a surface.
+ * return false - when the asic does not implement the query.
+ */
+bool dc_get_dcc_compression_cap(const struct dc *dc,
+		const struct dc_dcc_surface_param *input,
+		struct dc_surface_dcc_cap *output);
+
+/*
+ * Whether SubVP is enabled in the given state.
+ * return false - when the asic does not support SubVP.
+ */
+bool dc_get_subvp_en(struct dc *dc, struct dc_state *context);
+
+/*
+ * Dump hardware state into the log buffer, or into the kernel log when
+ * log_ctx is NULL.
+ * return false - when the asic does not implement the dump.
+ */
+bool dc_log_hw_state(struct dc *dc, struct dc_log_buffer_ctx *log_ctx);
+
+/*
+ * Read the per-pipe DCC enable bits.
+ * return false - when the asic does not implement the query.
+ */
+bool dc_get_dcc_en_bits(struct dc *dc, int *dcc_en_bits);
+
+/*
+ * Run the DDC prepare sequence on the link ahead of aux transactions that
+ * require a prepared DDC line. Optional; silently skipped when the asic
+ * does not implement it.
+ */
+void dc_prepare_ddc(struct dc_link *link);
+
+/* Whether an FBC compressor is instantiated for this DC. */
+bool dc_is_fbc_compressor_available(const struct dc *dc);
+
+/*
+ * Provide the GPU address of the FBC compression buffer that DM allocated.
+ * Only meaningful while an FBC compressor is instantiated.
+ */
+void dc_set_fbc_gpu_addr(struct dc *dc, uint64_t gpu_addr);
+
+/* Configure the alternate channel aperture consumed by DML2. */
+void dc_set_dml2_alt_ch_cfg(struct dc *dc,
+		const struct dml2_soc_alt_ch_info *alt_ch_cfg);
+
 /* Link Interfaces */
 /* Return an enumerated dc_link.
  * dc_link order is constant and determined at
@@ -3018,6 +3104,94 @@ bool dc_link_set_pr_general_cmd(struct dc_link *link,
  */
 void dc_link_edp_replay_residency(const struct dc_link *link,
 		unsigned int *residency, bool is_start, enum pr_residency_mode mode);
+
+/*
+ * Measure PSR residency for the given link.
+ * mode: PSR_RESIDENCY_MODE_PHY, PSR_RESIDENCY_MODE_ALPM, or
+ *       PSR_RESIDENCY_MODE_ENABLEMENT_PERIOD
+ */
+void dc_link_edp_get_psr_residency(const struct dc_link *link,
+		uint32_t *residency, enum psr_residency_mode mode);
+
+/*
+ * Set the sink vtotal in psr active to restore sink timing after
+ * exit psr with firmware initiated mode switching.
+ * return false - if the setting is not applied by firmware.
+ */
+bool dc_link_edp_set_sink_vtotal_in_psr_active(const struct dc_link *link,
+		uint16_t psr_vtotal_idle, uint16_t psr_vtotal_su);
+
+/*
+ * Send general command to Panel Replay firmware:
+ *
+ * @link: link to send the replay command on
+ * @msg: message type which indicates the variable passed to DMUB
+ * @cmd_data: payload for message types that carry one
+ *
+ * return: true if successful, false otherwise
+ */
+bool dc_link_edp_send_replay_cmd(struct dc_link *link,
+		enum replay_FW_Message_type msg,
+		union dmub_replay_cmd_set *cmd_data);
+
+/*
+ * Set panel replay coasting vtotal.
+ *
+ * @link: link to set the coasting vtotal on
+ * @coasting_vtotal: coasting vtotal to program
+ * @frame_skip_number: number of frames to skip
+ *
+ * return: true if successful, false otherwise
+ */
+bool dc_link_edp_set_coasting_vtotal(struct dc_link *link,
+		uint32_t coasting_vtotal, uint16_t frame_skip_number);
+
+/*
+ * Measure cumulative Panel Replay residency for the given link.
+ *
+ * @link: pointer to the dc_link struct instance
+ * @residency_milli_pct: residency in milli-percentage
+ *
+ * return: true if successful, false otherwise
+ */
+bool dc_link_edp_replay_get_cumulative_residency(const struct dc_link *link,
+		uint32_t *residency_milli_pct);
+
+/*
+ * Set panel replay power optimization and coasting vtotal together.
+ *
+ * @link: link to configure
+ * @power_opts: power optimization bits to enable
+ * @coasting_vtotal: coasting vtotal to program
+ * @frame_skip_number: number of frames to skip
+ *
+ * return: true if successful, false otherwise
+ */
+bool dc_link_edp_set_replay_power_opt_and_coasting_vtotal(
+		struct dc_link *link, const unsigned int *power_opts,
+		uint32_t coasting_vtotal, uint16_t frame_skip_number);
+
+/*
+ * Set up the link for panel replay.
+ *
+ * @link: link to configure
+ * @stream: stream to enable panel replay for
+ *
+ * return: true if successful, false otherwise
+ */
+bool dc_link_dp_setup_replay(struct dc_link *link,
+		const struct dc_stream_state *stream);
+
+/*
+ * Get the instance id of the DDC aux service backing the link.
+ */
+uint8_t dc_link_get_ddc_aux_inst(const struct dc_link *link);
+
+/*
+ * Get the DP link encoding format of the link's verified link settings.
+ */
+enum dp_link_encoding dc_link_dp_get_encoding_format(
+		const struct dc_link *link);
 
 /*
  * Get Panel Replay state:

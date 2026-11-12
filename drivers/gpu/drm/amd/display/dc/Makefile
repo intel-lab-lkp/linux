@@ -68,6 +68,7 @@ FILES += dc_fused_io.o
 FILES += dc_helper.o
 FILES += dc_memory_pool.o
 FILES += core/dc.o
+FILES += core/dc_accessors.o
 FILES += dc_api_dispatch/api_shim.o
 FILES += core/dc_debug.o
 FILES += core/dc_hw_sequencer.o
