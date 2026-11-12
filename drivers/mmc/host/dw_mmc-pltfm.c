@@ -56,7 +56,7 @@ int dw_mci_pltfm_register(struct platform_device *pdev,
 }
 EXPORT_SYMBOL_GPL(dw_mci_pltfm_register);
 
-static int dw_mci_socfpga_priv_init(struct dw_mci *host)
+static void dw_mci_socfpga_priv_set_ios(struct dw_mci *host, struct mmc_ios *ios)
 {
 	struct device_node *np = host->dev->of_node;
 	struct mmc_clk_phase phase;
@@ -64,14 +64,13 @@ static int dw_mci_socfpga_priv_init(struct dw_mci *host)
 	u32 reg_offset, reg_shift;
 	int hs_timing;
 
-	phase = host->phase_map.phase[MMC_TIMING_SD_HS];
-	if (!phase.valid)
-		return 0;
+	phase = host->phase_map.phase[ios->timing];
+	if ((ios->timing != MMC_TIMING_SD_HS) || !phase.valid)
+		return;
 
 	sys_mgr_base_addr = altr_sysmgr_regmap_lookup_by_phandle(np, "altr,sysmgr-syscon");
 	if (IS_ERR(sys_mgr_base_addr)) {
 		dev_warn(host->dev, "clk-phase-sd-hs was specified, but failed to find altr,sys-mgr regmap!\n");
-		return 0;
 	}
 
 	of_property_read_u32_index(np, "altr,sysmgr-syscon", 1, &reg_offset);
@@ -82,12 +81,10 @@ static int dw_mci_socfpga_priv_init(struct dw_mci *host)
 
 	hs_timing = SYSMGR_SDMMC_CTRL_SET(phase.in_deg, phase.out_deg, reg_shift);
 	regmap_write(sys_mgr_base_addr, reg_offset, hs_timing);
-
-	return 0;
 }
 
 static const struct dw_mci_drv_data socfpga_drv_data = {
-	.init		= dw_mci_socfpga_priv_init,
+	.set_ios	= dw_mci_socfpga_priv_set_ios,
 };
 
 static const struct of_device_id dw_mci_pltfm_match[] = {
