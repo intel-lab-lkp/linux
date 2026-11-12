@@ -314,15 +314,4 @@ config CRYPTO_ARIA_GFNI_AVX512_X86_64
 
 	  Processes 64 blocks in parallel.
 
-config CRYPTO_AEGIS128_AESNI_SSE2
-	tristate "AEAD ciphers: AEGIS-128 (AES-NI/SSE4.1)"
-	depends on 64BIT
-	select CRYPTO_AEAD
-	help
-	  AEGIS-128 AEAD algorithm
-
-	  Architecture: x86_64 using:
-	  - AES-NI (AES New Instructions)
-	  - SSE4.1 (Streaming SIMD Extensions 4.1)
-
 endmenu
