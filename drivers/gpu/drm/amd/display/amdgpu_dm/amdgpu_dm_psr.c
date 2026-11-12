@@ -37,10 +37,10 @@ bool link_supports_psrsu(struct dc_link *link)
 {
 	struct dc *dc = link->ctx->dc;
 
-	if (!dc->caps.dmcub_support)
+	if (!dc_get_caps(dc)->dmcub_support)
 		return false;
 
-	if (dc->ctx->dce_version < DCN_VERSION_3_1)
+	if (dc_get_dce_version(dc) < DCN_VERSION_3_1)
 		return false;
 
 	if (!is_psr_su_specific_panel(link))
@@ -111,7 +111,7 @@ bool amdgpu_dm_set_psr_caps(struct dc_link *link, struct amdgpu_dm_connector *ac
 	/* Reset psr version first */
 	link->psr_settings.psr_version = DC_PSR_VERSION_UNSUPPORTED;
 
-	if (!dc->caps.dmub_caps.psr)
+	if (!dc_get_caps(dc)->dmub_caps.psr)
 		return false;
 
 	if (!(link->connector_signal & SIGNAL_TYPE_EDP))
@@ -148,8 +148,8 @@ bool amdgpu_dm_psr_is_active_allowed(struct amdgpu_display_manager *dm)
 {
 	unsigned int i;
 
-	for (i = 0; i < dm->dc->current_state->stream_count; i++) {
-		const struct dc_link *link = dm->dc->current_state->streams[i]->link;
+	for (i = 0; i < dc_get_current_state(dm->dc)->stream_count; i++) {
+		const struct dc_link *link = dc_get_current_state(dm->dc)->streams[i]->link;
 
 		if (!link)
 			continue;

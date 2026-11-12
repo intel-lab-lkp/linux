@@ -97,8 +97,8 @@ bool amdgpu_dm_set_replay_caps(struct dc_link *link, struct amdgpu_dm_connector 
 	if (!amdgpu_dm_link_supports_replay(link, aconnector))
 		return false;
 
-	if (!dc->ctx->dmub_srv || !dc->ctx->dmub_srv->dmub ||
-		!dc->ctx->dmub_srv->dmub->feature_caps.replay_supported)
+	if (!dc_get_ctx(dc)->dmub_srv || !dc_get_ctx(dc)->dmub_srv->dmub ||
+		!dc_get_ctx(dc)->dmub_srv->dmub->feature_caps.replay_supported)
 		return false;
 
 	/* Mark Replay is supported in link and update related attributes
@@ -121,8 +121,10 @@ bool amdgpu_dm_set_replay_caps(struct dc_link *link, struct amdgpu_dm_connector 
 
 	debug_flags = (union replay_debug_flags *)&pr_config.debug_flags;
 	debug_flags->u32All = 0;
-	debug_flags->bitfields.visual_confirm =	dc->debug.visual_confirm == VISUAL_CONFIRM_REPLAY;
-	debug_flags->bitfields.skip_crtc_disabled = dc->debug.replay_skip_crtc_disabled;
+	debug_flags->bitfields.visual_confirm =
+		dc_get_debug_options(dc)->visual_confirm == VISUAL_CONFIRM_REPLAY;
+	debug_flags->bitfields.skip_crtc_disabled =
+		dc_get_debug_options(dc)->replay_skip_crtc_disabled;
 
 	init_replay_config(link, &pr_config);
 

@@ -2479,14 +2479,20 @@ uint8_t dc_get_link_count(const struct dc *dc);
 /* The DC context (logging, register access, dmub service). */
 struct dc_context *dc_get_ctx(const struct dc *dc);
 
+/* The ASIC display engine version. */
+enum dce_version dc_get_dce_version(const struct dc *dc);
+
 /* Capabilities detected at dc_create() time. Read-only. */
 const struct dc_caps *dc_get_caps(const struct dc *dc);
 
 /* Configuration captured at dc_create() time. Read-only. */
 const struct dc_config *dc_get_config(const struct dc *dc);
 
-/* Debug overrides (module parameters, debugfs). Writable. */
-struct dc_debug_options *dc_get_debug_options(struct dc *dc);
+/* Debug overrides (module parameters, debugfs). Read-only view. */
+const struct dc_debug_options *dc_get_debug_options(const struct dc *dc);
+
+/* Debug overrides; writable view for module parameter and debugfs writes. */
+struct dc_debug_options *dc_get_debug_options_mutable(struct dc *dc);
 
 /* The currently committed state. Owned by DC; read-only for DM. */
 struct dc_state *dc_get_current_state(const struct dc *dc);

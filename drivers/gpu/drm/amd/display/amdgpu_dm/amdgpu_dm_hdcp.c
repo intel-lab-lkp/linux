@@ -43,7 +43,7 @@ STATIC_IFN_KUNIT bool lp_write_i2c(void *handle, uint32_t address, const uint8_t
 	struct dc_link *link = handle;
 	struct i2c_payload i2c_payloads[] = {{true, address, size, (void *)data} };
 	struct i2c_command cmd = {i2c_payloads, 1, I2C_COMMAND_ENGINE_HW,
-				  link->dc->caps.i2c_speed_in_khz};
+				  dc_get_caps(link->dc)->i2c_speed_in_khz};
 
 	return dm_helpers_submit_i2c(link->ctx, link, &cmd);
 }
@@ -56,7 +56,7 @@ STATIC_IFN_KUNIT bool lp_read_i2c(void *handle, uint32_t address, uint8_t offset
 	struct i2c_payload i2c_payloads[] = {{true, address, 1, &offset},
 					     {false, address, size, data} };
 	struct i2c_command cmd = {i2c_payloads, 2, I2C_COMMAND_ENGINE_HW,
-				  link->dc->caps.i2c_speed_in_khz};
+				  dc_get_caps(link->dc)->i2c_speed_in_khz};
 
 	return dm_helpers_submit_i2c(link->ctx, link, &cmd);
 }
@@ -308,9 +308,9 @@ void hdcp_update_display(struct hdcp_workqueue *hdcp_work,
 	hdcp_w->aconnector[conn_index] = aconnector;
 
 	hdcp_get_link_display_adjustments(enable_encryption, content_type,
-			dc->caps.fused_io_supported,
-			dc->debug.hdcp_lc_force_fw_enable,
-			dc->debug.hdcp_lc_enable_sw_fallback,
+			dc_get_caps(dc)->fused_io_supported,
+			dc_get_debug_options(dc)->hdcp_lc_force_fw_enable,
+			dc_get_debug_options(dc)->hdcp_lc_enable_sw_fallback,
 			&link_adjust, &display_adjust);
 	hdcp_update_display_encryption_control(hdcp_work, hdcp_w, conn_index,
 					      enable_encryption);
@@ -676,8 +676,11 @@ void update_config(void *handle, struct cp_psp_stream_config *config)
 	link->adjust.auth_delay = 2;
 	link->adjust.retry_limit = MAX_NUM_OF_ATTEMPTS;
 	link->adjust.hdcp1.disable = 0;
-	link->adjust.hdcp2.use_fw_locality_check = (dc->caps.fused_io_supported || dc->debug.hdcp_lc_force_fw_enable);
-	link->adjust.hdcp2.use_sw_locality_fallback = dc->debug.hdcp_lc_enable_sw_fallback;
+	link->adjust.hdcp2.use_fw_locality_check =
+		(dc_get_caps(dc)->fused_io_supported ||
+		 dc_get_debug_options(dc)->hdcp_lc_force_fw_enable);
+	link->adjust.hdcp2.use_sw_locality_fallback =
+		dc_get_debug_options(dc)->hdcp_lc_enable_sw_fallback;
 	hdcp_w->encryption_status[display->index] = MOD_HDCP_ENCRYPTION_STATUS_HDCP_OFF;
 
 	DRM_DEBUG_DRIVER("[HDCP_DM] display %d, CP %d, type %d\n", aconnector->base.index,
@@ -839,7 +842,7 @@ static const struct bin_attribute data_attr = {
 struct hdcp_workqueue *hdcp_create_workqueue(struct amdgpu_device *adev,
 					     struct cp_psp *cp_psp, struct dc *dc)
 {
-	int max_caps = dc->caps.max_links;
+	int max_caps = dc_get_caps(dc)->max_links;
 	struct hdcp_workqueue *hdcp_work;
 	int i = 0;
 
@@ -874,16 +877,16 @@ struct hdcp_workqueue *hdcp_create_workqueue(struct amdgpu_device *adev,
 		struct mod_hdcp_ddc_funcs *ddc_funcs = &config->ddc.funcs;
 
 		config->psp.handle = &adev->psp;
-		if (dc->ctx->dce_version == DCN_VERSION_3_1  ||
-		    dc->ctx->dce_version == DCN_VERSION_3_14 ||
-		    dc->ctx->dce_version == DCN_VERSION_3_15 ||
-		    dc->ctx->dce_version == DCN_VERSION_3_16 ||
-		    dc->ctx->dce_version == DCN_VERSION_3_2  ||
-		    dc->ctx->dce_version == DCN_VERSION_3_21 ||
-		    dc->ctx->dce_version == DCN_VERSION_3_5  ||
-		    dc->ctx->dce_version == DCN_VERSION_3_51 ||
-		    dc->ctx->dce_version == DCN_VERSION_3_6  ||
-		    dc->ctx->dce_version == DCN_VERSION_4_01)
+		if (dc_get_dce_version(dc) == DCN_VERSION_3_1  ||
+		    dc_get_dce_version(dc) == DCN_VERSION_3_14 ||
+		    dc_get_dce_version(dc) == DCN_VERSION_3_15 ||
+		    dc_get_dce_version(dc) == DCN_VERSION_3_16 ||
+		    dc_get_dce_version(dc) == DCN_VERSION_3_2  ||
+		    dc_get_dce_version(dc) == DCN_VERSION_3_21 ||
+		    dc_get_dce_version(dc) == DCN_VERSION_3_5  ||
+		    dc_get_dce_version(dc) == DCN_VERSION_3_51 ||
+		    dc_get_dce_version(dc) == DCN_VERSION_3_6  ||
+		    dc_get_dce_version(dc) == DCN_VERSION_4_01)
 			config->psp.caps.dtm_v3_supported = 1;
 
 		config->ddc.handle = dc_get_link_at_index(dc, i);

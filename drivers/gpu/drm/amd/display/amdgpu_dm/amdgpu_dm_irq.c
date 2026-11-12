@@ -808,7 +808,7 @@ static inline int dm_irq_state(struct amdgpu_device *adev,
 
 	st = (state == AMDGPU_IRQ_STATE_ENABLE);
 
-	if (dc && dc->caps.ips_support && dc->idle_optimizations_allowed)
+	if (dc && dc_get_caps(dc)->ips_support && dc_is_idle_optimizations_allowed(dc))
 		dc_allow_idle_optimizations(dc, false);
 
 	amdgpu_dm_irq_set(adev, irq_source, st);
@@ -989,8 +989,8 @@ void amdgpu_dm_hpd_init(struct amdgpu_device *adev)
 	 * has rather than over the whole enum: the unused slots of the DC
 	 * interrupt table hold dummy handlers that assert when touched.
 	 */
-	for (i = 0; i < adev->dm.dc->link_count; i++) {
-		const struct dc_link *link = adev->dm.dc->links[i];
+	for (i = 0; i < dc_get_link_count(adev->dm.dc); i++) {
+		const struct dc_link *link = dc_get_link_at_index(adev->dm.dc, i);
 
 		if (link->irq_source_hpd != DC_IRQ_SOURCE_INVALID &&
 		    !amdgpu_dm_irq_set(adev, link->irq_source_hpd, false))
@@ -1226,7 +1226,7 @@ EXPORT_IF_KUNIT(dm_handle_hpd_rx_offload_work);
 struct hpd_rx_irq_offload_work_queue *amdgpu_dm_hpd_rx_irq_create_workqueue(struct amdgpu_device *adev)
 {
 	struct dc *dc = adev->dm.dc;
-	int max_caps = dc->caps.max_links;
+	int max_caps = dc_get_caps(dc)->max_links;
 	int i = 0;
 	struct hpd_rx_irq_offload_work_queue *hpd_rx_offload_wq = NULL;
 
@@ -1265,7 +1265,7 @@ void amdgpu_dm_hpd_rx_irq_work_suspend(struct amdgpu_display_manager *dm)
 	int i;
 
 	if (dm->hpd_rx_offload_wq) {
-		for (i = 0; i < dm->dc->caps.max_links; i++)
+		for (i = 0; i < dc_get_caps(dm->dc)->max_links; i++)
 			flush_workqueue(dm->hpd_rx_offload_wq[i].wq);
 	}
 }
@@ -1321,7 +1321,7 @@ void amdgpu_dm_hdmi_hpd_debounce_work(struct work_struct *work)
 
 	/* Re-detect the display */
 	scoped_guard(mutex, &adev->dm.dc_lock) {
-		if (dc->caps.ips_support && dc->ctx->dmub_srv->idle_allowed) {
+		if (dc_get_caps(dc)->ips_support && dc_get_ctx(dc)->dmub_srv->idle_allowed) {
 			dc_allow_idle_optimizations(dc, false);
 			reallow_idle = true;
 		}
@@ -1359,7 +1359,7 @@ void amdgpu_dm_hdmi_hpd_debounce_work(struct work_struct *work)
 	}
 
 	scoped_guard(mutex, &adev->dm.dc_lock) {
-		if (reallow_idle && dc->caps.ips_support)
+		if (reallow_idle && dc_get_caps(dc)->ips_support)
 			dc_allow_idle_optimizations(dc, true);
 	}
 }
@@ -1668,7 +1668,7 @@ STATIC_IFN_KUNIT void dmub_hpd_callback(struct amdgpu_device *adev,
 	}
 
 	link_index = notify->link_index;
-	link = adev->dm.dc->links[link_index];
+	link = dc_get_link_at_index(adev->dm.dc, link_index);
 	dev = adev->dm.ddev;
 
 	drm_connector_list_iter_begin(dev, &iter);
@@ -2362,7 +2362,7 @@ int amdgpu_dm_dce110_register_irq_handlers(struct amdgpu_device *adev)
 	unsigned int client_id = AMDGPU_IRQ_CLIENTID_LEGACY;
 	/* Use different interrupts for VBLANK on DCE 6 vs. newer. */
 	const unsigned int vblank_d1 =
-		adev->dm.dc->ctx->dce_version >= DCE_VERSION_8_0
+		dc_get_dce_version(adev->dm.dc) >= DCE_VERSION_8_0
 		? VISLANDS30_IV_SRCID_D1_VERTICAL_INTERRUPT0 : 1;
 
 	if (adev->family >= AMDGPU_FAMILY_AI)
@@ -2413,7 +2413,7 @@ int amdgpu_dm_dce110_register_irq_handlers(struct amdgpu_device *adev)
 			return -ENOMEM;
 	}
 
-	if (dc_supports_vrr(adev->dm.dc->ctx->dce_version)) {
+	if (dc_supports_vrr(dc_get_dce_version(adev->dm.dc))) {
 		/* Use VUPDATE interrupt */
 		for (i = 0; i < adev->mode_info.num_crtc; i++) {
 			src_id = VISLANDS30_IV_SRCID_D1_V_UPDATE_INT + i * 2;
@@ -2626,7 +2626,7 @@ int amdgpu_dm_register_outbox_irq_handlers(struct amdgpu_device *adev)
 		return r;
 	}
 
-	if (dc->ctx->dmub_srv) {
+	if (dc_get_ctx(dc)->dmub_srv) {
 		i = DCN_1_0__SRCID__DMCUB_OUTBOX_LOW_PRIORITY_READY_INT;
 		int_params.int_context = INTERRUPT_LOW_IRQ_CONTEXT;
 		int_params.irq_source =

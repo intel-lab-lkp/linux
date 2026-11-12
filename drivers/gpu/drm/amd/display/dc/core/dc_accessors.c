@@ -42,6 +42,11 @@ struct dc_context *dc_get_ctx(const struct dc *dc)
 	return dc->ctx;
 }
 
+enum dce_version dc_get_dce_version(const struct dc *dc)
+{
+	return dc->ctx->dce_version;
+}
+
 const struct dc_caps *dc_get_caps(const struct dc *dc)
 {
 	return &dc->caps;
@@ -52,7 +57,12 @@ const struct dc_config *dc_get_config(const struct dc *dc)
 	return &dc->config;
 }
 
-struct dc_debug_options *dc_get_debug_options(struct dc *dc)
+const struct dc_debug_options *dc_get_debug_options(const struct dc *dc)
+{
+	return &dc->debug;
+}
+
+struct dc_debug_options *dc_get_debug_options_mutable(struct dc *dc)
 {
 	return &dc->debug;
 }

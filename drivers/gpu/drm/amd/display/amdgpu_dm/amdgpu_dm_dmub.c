@@ -179,6 +179,7 @@ dm_get_alt_channel_pstate_switch_aperture(struct amdgpu_device *adev,
 		G7_PSTATE_APERTURE2_ID,
 	};
 	struct mem_reserved_info apertures[ARRAY_SIZE(region_ids)];
+	struct dml2_soc_alt_ch_info alt_ch_cfg = {0};
 	u64 aperture_mc_bases[ARRAY_SIZE(region_ids)];
 	u32 i;
 	int r;
@@ -214,11 +215,13 @@ dm_get_alt_channel_pstate_switch_aperture(struct amdgpu_device *adev,
 		hw_params->soc_fb_info.alt_channel_region_size[i] =
 			apertures[i].reserved_region_size;
 		/* DML consumes the MC base address bits [47:16]. */
-		adev->dm.dc->dml2_options.alt_ch_cfg.region_base_addr_47_16[i] =
+		alt_ch_cfg.region_base_addr_47_16[i] =
 				(u32)(aperture_mc_bases[i] >> 16);
-		adev->dm.dc->dml2_options.alt_ch_cfg.region_size_bytes[i] =
+		alt_ch_cfg.region_size_bytes[i] =
 				(u32)apertures[i].reserved_region_size;
 	}
+
+	dc_set_dml2_alt_ch_cfg(adev->dm.dc, &alt_ch_cfg);
 }
 
 
@@ -229,9 +232,10 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 	struct dmub_srv_fb_info *fb_info = adev->dm.dmub_fb_info;
 	const struct firmware *dmub_fw = adev->dm.dmub_fw;
 	struct dc *dc = adev->dm.dc;
-	struct dmcu *dmcu = adev->dm.dc->res_pool->dmcu;
-	struct abm *abm = adev->dm.dc->res_pool->abm;
-	struct dc_context *ctx = adev->dm.dc->ctx;
+	struct resource_pool *res_pool = dc_get_res_pool(dc);
+	struct dmcu *dmcu = res_pool->dmcu;
+	struct abm *abm = res_pool->abm;
+	struct dc_context *ctx = dc_get_ctx(adev->dm.dc);
 	struct dmub_srv_hw_params hw_params;
 	enum dmub_status status;
 	const unsigned char *fw_inst_const, *fw_bss_data;
@@ -335,14 +339,15 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 	hw_params.fb_info = fb_info;
 
 	/* Enable usb4 dpia in the FW APU */
-	if (dc->caps.is_apu &&
-		dc->res_pool->usb4_dpia_count != 0 &&
-		!dc->debug.dpia_debug.bits.disable_dpia) {
+	if (dc_get_caps(dc)->is_apu &&
+		dc_get_res_pool(dc)->usb4_dpia_count != 0 &&
+		!dc_get_debug_options(dc)->dpia_debug.bits.disable_dpia) {
 		hw_params.dpia_supported = true;
-		hw_params.disable_dpia = dc->debug.dpia_debug.bits.disable_dpia;
+		hw_params.disable_dpia = dc_get_debug_options(dc)->dpia_debug.bits.disable_dpia;
 		hw_params.dpia_hpd_int_enable_supported = false;
-		hw_params.enable_non_transparent_setconfig = dc->config.consolidated_dpia_dp_lt;
-		hw_params.disable_dpia_bw_allocation = !dc->config.usb4_bw_alloc_support;
+		hw_params.enable_non_transparent_setconfig =
+			dc_get_config(dc)->consolidated_dpia_dp_lt;
+		hw_params.disable_dpia_bw_allocation = !dc_get_config(dc)->usb4_bw_alloc_support;
 	}
 
 	switch (amdgpu_ip_version(adev, DCE_HWIP, 0)) {
@@ -375,9 +380,9 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 		abm->dmcu_is_running = dmcu->funcs->is_dmcu_initialized(dmcu);
 	}
 
-	if (!adev->dm.dc->ctx->dmub_srv)
-		adev->dm.dc->ctx->dmub_srv = dc_dmub_srv_create(adev->dm.dc, dmub_srv);
-	if (!adev->dm.dc->ctx->dmub_srv) {
+	if (!dc_get_ctx(adev->dm.dc)->dmub_srv)
+		dc_get_ctx(adev->dm.dc)->dmub_srv = dc_dmub_srv_create(adev->dm.dc, dmub_srv);
+	if (!dc_get_ctx(adev->dm.dc)->dmub_srv) {
 		drm_err(adev_to_drm(adev), "Couldn't allocate DC DMUB server!\n");
 		return -ENOMEM;
 	}
@@ -401,13 +406,13 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 		if (adev->dm.dmcub_fw_version &&
 		    adev->dm.dmcub_fw_version >= DMUB_FW_VERSION(4, 0, 0) &&
 		    adev->dm.dmcub_fw_version < DMUB_FW_VERSION(4, 0, 59))
-			adev->dm.dc->debug.sanity_checks = true;
+			dc_get_debug_options_mutable(adev->dm.dc)->sanity_checks = true;
 		break;
 	case IP_VERSION(3, 1, 4):
 		if (adev->dm.dmcub_fw_version &&
 		    adev->dm.dmcub_fw_version >= DMUB_FW_VERSION(4, 0, 0) &&
 		    adev->dm.dmcub_fw_version < DMUB_FW_VERSION(8, 0, 16))
-			adev->dm.dc->debug.sanity_checks = true;
+			dc_get_debug_options_mutable(adev->dm.dc)->sanity_checks = true;
 		break;
 	default:
 		break;
@@ -565,7 +570,7 @@ STATIC_IFN_KUNIT uint32_t amdgpu_dm_dmub_reg_read(void *ctx, uint32_t address)
 {
 	struct amdgpu_device *adev = ctx;
 
-	return dm_read_reg(adev->dm.dc->ctx, address);
+	return dm_read_reg(dc_get_ctx(adev->dm.dc), address);
 }
 EXPORT_IF_KUNIT(amdgpu_dm_dmub_reg_read);
 
@@ -574,7 +579,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_dmub_reg_write(void *ctx, uint32_t address,
 {
 	struct amdgpu_device *adev = ctx;
 
-	return dm_write_reg(adev->dm.dc->ctx, address, value);
+	return dm_write_reg(dc_get_ctx(adev->dm.dc), address, value);
 }
 EXPORT_IF_KUNIT(amdgpu_dm_dmub_reg_write);
 
