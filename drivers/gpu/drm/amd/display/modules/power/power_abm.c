@@ -712,7 +712,7 @@ void initialize_backlight_caps(struct core_power *core_power, unsigned int inst)
 
 	/* Retrieve ACPI extended brightness caps */
 	if (dm_query_extended_brightness_caps
-		(dc->ctx, acpi_display_type, ext_backlight_caps)) {
+		(dc_get_ctx(dc), acpi_display_type, ext_backlight_caps)) {
 		custom_curve_present = validate_ext_backlight_caps(ext_backlight_caps);
 	}
 
@@ -868,7 +868,7 @@ bool mod_power_hw_init_backlight(struct mod_power *mod_power)
 		params.backlight_lut_array_size = core_power->bl_prop[i].num_backlight_levels;
 		params.min_abm_backlight = core_power->bl_prop[i].min_abm_backlight;
 
-		dmcu = dc->res_pool->dmcu;
+		dmcu = dc_get_res_pool(dc)->dmcu;
 
 		// In the case where abm is implemented on dmcub,
 		// dmcu object will be null.
@@ -876,8 +876,8 @@ bool mod_power_hw_init_backlight(struct mod_power *mod_power)
 		if (dmcu) {
 			//DMCU does not support multiple eDP
 			return dmcu_load_iram(dmcu, params);
-		} else if (dc->ctx->dmub_srv) {
-			if (!dmub_init_abm_config(dc->res_pool, params, i))
+		} else if (dc_get_ctx(dc)->dmub_srv) {
+			if (!dmub_init_abm_config(dc_get_res_pool(dc), params, i))
 				return false;
 		} else
 			return false;
@@ -935,7 +935,7 @@ static bool set_backlight_millinits_aux(struct core_power *core_power,
 
 	// only use internal backlight control if dmub capabilities are not present
 	if (link->backlight_control_type == BACKLIGHT_CONTROL_VESA_AUX &&
-		link->dc->caps.dmub_caps.aux_backlight_support)
+		dc_get_caps(link->dc)->dmub_caps.aux_backlight_support)
 		return true;
 
 	return dc_link_set_backlight_level_nits(link, core_power->bl_state[inst].isHDR,
@@ -1041,7 +1041,7 @@ bool mod_power_set_backlight_nits(struct mod_power *mod_power,
 	core_power = MOD_POWER_TO_CORE(mod_power);
 	link = dc_stream_get_link(stream);
 
-	aux_inst = link->dc->link_srv->get_ddc_aux_inst(link);
+	aux_inst = dc_link_get_ddc_aux_inst(link);
 
 	if (!dc_get_edp_link_panel_inst(core_power->dc, stream->link, &panel_inst))
 		return false;
@@ -1128,7 +1128,7 @@ bool mod_power_set_backlight_percent(struct mod_power *mod_power,
 
 	core_power = MOD_POWER_TO_CORE(mod_power);
 	link = dc_stream_get_link(stream);
-	aux_inst = link->dc->link_srv->get_ddc_aux_inst(link);
+	aux_inst = dc_link_get_ddc_aux_inst(link);
 
 	if (!dc_get_edp_link_panel_inst(core_power->dc, stream->link, &panel_inst))
 		return false;
@@ -1658,8 +1658,8 @@ bool mod_power_is_abm_supported(struct mod_power *mod_power,
 	dc = core_power->dc;
 
 	// It's only implemented on dmcub.
-	if (dc->ctx->dmub_srv) {
-		if (!dmub_is_abm_supported(dc->res_pool, inst))
+	if (dc_get_ctx(dc)->dmub_srv) {
+		if (!dmub_is_abm_supported(dc_get_res_pool(dc), inst))
 			return false;
 	} else
 		return false;
@@ -1682,9 +1682,10 @@ bool mod_power_abm_set_event(struct mod_power *mod_power,
 	dc = core_power->dc;
 
 	// It's only implemented on dmcub.
-	if (dc->ctx->dmub_srv) {
-		if (!dmub_set_abm_event(dc->res_pool, full_screen, trans_info,
-				hdr_mode, scaling_enable, scaling_strength_map, inst))
+	if (dc_get_ctx(dc)->dmub_srv) {
+		if (!dmub_set_abm_event(dc_get_res_pool(dc), full_screen,
+				trans_info, hdr_mode, scaling_enable,
+				scaling_strength_map, inst))
 			return false;
 	} else
 		return false;
@@ -1706,8 +1707,8 @@ bool mod_power_abm_set_strength(struct mod_power *mod_power,
 	dc = core_power->dc;
 
 	// It's only implemented on dmcub.
-	if (dc->ctx->dmub_srv) {
-		if (!dmub_set_abm_strength(dc->res_pool, strength, inst))
+	if (dc_get_ctx(dc)->dmub_srv) {
+		if (!dmub_set_abm_strength(dc_get_res_pool(dc), strength, inst))
 			return false;
 	} else
 		return false;

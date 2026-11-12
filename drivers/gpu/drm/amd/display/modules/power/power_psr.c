@@ -70,13 +70,13 @@ bool mod_power_psr_notify_mode_change(struct mod_power *mod_power,
 
 	psr_config.psr_exit_link_training_required =
 			core_power->map[stream_index].caps->psr_exit_link_training_required;
-	if (dc->ctx->asic_id.chip_family >= AMDGPU_FAMILY_GC_11_0_1)
+	if (dc_get_ctx(dc)->asic_id.chip_family >= AMDGPU_FAMILY_GC_11_0_1)
 		psr_config.allow_smu_optimizations =
 				core_power->psr_smu_optimizations_support && dc_is_embedded_signal(stream->signal);
 	else
 		psr_config.allow_smu_optimizations =
 				core_power->psr_smu_optimizations_support &&
-				mod_power_only_edp(dc->current_state, stream);
+				mod_power_only_edp(dc_get_current_state(dc), stream);
 
 	psr_config.allow_multi_disp_optimizations = core_power->multi_disp_optimizations_support;
 
@@ -455,7 +455,7 @@ void mod_power_psr_residency(struct mod_power *mod_power,
 	link = dc_stream_get_link(stream);
 
 	if (link != NULL)
-		link->dc->link_srv->edp_get_psr_residency(link, residency, mode);
+		dc_link_edp_get_psr_residency(link, residency, mode);
 }
 bool mod_power_psr_get_active_psr_events(struct mod_power *mod_power,
 		const struct dc_stream_state *stream, unsigned int *active_psr_events)
@@ -510,7 +510,7 @@ bool mod_power_psr_set_sink_vtotal_in_psr_active(struct mod_power *mod_power,
 
 	link = dc_stream_get_link(stream);
 
-	return link->dc->link_srv->edp_set_sink_vtotal_in_psr_active(
+	return dc_link_edp_set_sink_vtotal_in_psr_active(
 			link, psr_vtotal_idle, psr_vtotal_su);
 }
 /*
@@ -645,7 +645,7 @@ bool psr_su_set_dsc_slice_height(struct dc *dc, struct dc_link *link,
 
 	config->dsc_slice_height = 0;
 	if (!(link->connector_signal & SIGNAL_TYPE_EDP) ||
-	    !dc->caps.edp_dsc_support ||
+	    !dc_get_caps(dc)->edp_dsc_support ||
 	    link->panel_config.dsc.disable_dsc_edp ||
 	    !link->dpcd_caps.dsc_caps.dsc_basic_caps.fields.dsc_support.DSC_SUPPORT ||
 	    !stream->timing.dsc_cfg.num_slices_v)

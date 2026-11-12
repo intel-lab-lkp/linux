@@ -28,6 +28,7 @@
 
 #include "logger_types.h"
 
+struct dc;
 struct dc_context;
 struct dc_link;
 struct dc_surface_update;

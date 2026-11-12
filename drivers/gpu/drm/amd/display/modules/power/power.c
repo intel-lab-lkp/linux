@@ -192,7 +192,8 @@ struct mod_power *mod_power_create(struct dc *dc,
 	}
 
 	// ABM used to contain 4 different configs. There is only 3 since ABM 2.3.
-	if ((dc->res_pool->dmcu != NULL) && (dc->res_pool->dmcu->dmcu_version.abm_version < 0x23))
+	if (dc_get_res_pool(dc)->dmcu != NULL &&
+	    dc_get_res_pool(dc)->dmcu->dmcu_version.abm_version < 0x23)
 		abm_max_config = 4;
 	else
 		abm_max_config = 3;
@@ -480,7 +481,7 @@ bool mod_power_notify_mode_change(struct mod_power *mod_power,
 	link = dc_stream_get_link(stream);
 
 	if (link != NULL && dc_get_edp_link_panel_inst(dc, link, &panel_inst)) {
-		aux_inst = link->dc->link_srv->get_ddc_aux_inst(link);
+		aux_inst = dc_link_get_ddc_aux_inst(link);
 
 		mod_power_update_backlight_on_mode_change(core_power, link, panel_inst, aux_inst, is_hdr);
 

@@ -372,7 +372,7 @@ bool mod_power_replay_set_coasting_vtotal(struct mod_power *mod_power,
 	if (core_power->num_entities == 0)
 		return false;
 
-	return link->dc->link_srv->edp_set_coasting_vtotal(link, coasting_vtotal, frame_skip_number);
+	return dc_link_edp_set_coasting_vtotal(link, coasting_vtotal, frame_skip_number);
 }
 
 void mod_power_replay_set_timing_sync_supported(struct mod_power *mod_power,
@@ -400,7 +400,7 @@ void mod_power_replay_set_timing_sync_supported(struct mod_power *mod_power,
 
 	cmd_data.sync_data.timing_sync_supported = link->replay_settings.config.replay_timing_sync_supported;
 
-	link->dc->link_srv->edp_send_replay_cmd(link, Replay_Set_Timing_Sync_Supported,
+	dc_link_edp_send_replay_cmd(link, Replay_Set_Timing_Sync_Supported,
 		&cmd_data);
 }
 
@@ -429,7 +429,7 @@ void mod_power_replay_disabled_adaptive_sync_sdp(struct mod_power *mod_power,
 
 	cmd_data.disabled_adaptive_sync_sdp_data.force_disabled = force_disabled;
 
-	link->dc->link_srv->edp_send_replay_cmd(link, Replay_Disabled_Adaptive_Sync_SDP,
+	dc_link_edp_send_replay_cmd(link, Replay_Disabled_Adaptive_Sync_SDP,
 		&cmd_data);
 }
 
@@ -461,7 +461,7 @@ static void mod_power_replay_set_general_cmd(struct mod_power *mod_power,
 	cmd_data.set_general_cmd_data.subtype = general_cmd_type;
 	cmd_data.set_general_cmd_data.param1 = param1;
 	cmd_data.set_general_cmd_data.param2 = param2;
-	link->dc->link_srv->edp_send_replay_cmd(link, Replay_Set_General_Cmd,
+	dc_link_edp_send_replay_cmd(link, Replay_Set_General_Cmd,
 		&cmd_data);
 }
 
@@ -500,7 +500,7 @@ static void mod_power_replay_set_pseudo_vtotal(struct mod_power *mod_power,
 
 	if (link->replay_settings.last_pseudo_vtotal != vtotal) {
 		link->replay_settings.last_pseudo_vtotal = vtotal;
-		link->dc->link_srv->edp_send_replay_cmd(link, Replay_Set_Pseudo_VTotal, &cmd_data);
+		dc_link_edp_send_replay_cmd(link, Replay_Set_Pseudo_VTotal, &cmd_data);
 	}
 }
 
@@ -759,8 +759,7 @@ void mod_power_replay_residency(const struct dc_stream_state *stream,
 	else
 		mode = PR_RESIDENCY_MODE_PHY;
 
-	if (link && link->dc && link->dc->link_srv)
-		link->dc->link_srv->edp_replay_residency(link, residency, is_start, mode);
+	dc_link_edp_replay_residency(link, residency, is_start, mode);
 }
 
 bool mod_power_replay_get_cumulative_residency(const struct dc_stream_state *stream,
@@ -768,10 +767,7 @@ bool mod_power_replay_get_cumulative_residency(const struct dc_stream_state *str
 {
 	const struct dc_link *link = dc_stream_get_link(stream);
 
-	if (!link || !link->dc || !link->dc->link_srv)
-		return false;
-
-	return link->dc->link_srv->edp_replay_get_cumulative_residency(
+	return dc_link_edp_replay_get_cumulative_residency(
 		link, residency_milli_pct);
 }
 
@@ -802,7 +798,8 @@ bool mod_power_replay_set_power_opt_and_coasting_vtotal(struct mod_power *mod_po
 
 	power_opt = mod_power_replay_setup_power_opt(link, active_replay_events, is_ultra_sleep_mode);
 
-	return link->dc->link_srv->edp_set_replay_power_opt_and_coasting_vtotal(link, &power_opt, coasting_vtotal, frame_skip_number);
+	return dc_link_edp_set_replay_power_opt_and_coasting_vtotal(
+			link, &power_opt, coasting_vtotal, frame_skip_number);
 }
 
 void mod_power_replay_notify_mode_change(struct mod_power *mod_power,
@@ -829,14 +826,14 @@ void mod_power_replay_notify_mode_change(struct mod_power *mod_power,
 
 	link->replay_settings.replay_smu_opt_enable =
 		(link->replay_settings.config.replay_smu_opt_supported &&
-		mod_power_only_edp(dc->current_state, stream));
+		mod_power_only_edp(dc_get_current_state(dc), stream));
 
 	if (active_replay_events & replay_event_os_request_force_ffu) {
 		link->replay_settings.config.os_request_force_ffu = true;
 	}
 
 	if (dc_is_embedded_signal(stream->signal))
-		dc->link_srv->dp_setup_replay(link, stream);
+		dc_link_dp_setup_replay(link, stream);
 }
 
 void init_replay_config(struct dc_link *link, struct replay_config *pr_config)

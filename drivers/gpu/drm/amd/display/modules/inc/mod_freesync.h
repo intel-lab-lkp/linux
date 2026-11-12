@@ -28,6 +28,8 @@
 
 #include "mod_shared.h"
 
+struct dc;
+
 // Access structures
 struct mod_freesync {
 	int dummy;

@@ -125,11 +125,10 @@ static unsigned int calc_duration_in_us_from_v_total(
 
 static unsigned int calc_max_hardware_v_total(const struct dc_stream_state *stream)
 {
-	unsigned int max_hw_v_total = stream->ctx->dc->caps.max_v_total;
+	unsigned int max_hw_v_total = dc_get_caps(stream->ctx->dc)->max_v_total;
 
-	if (stream->ctx->dc->caps.vtotal_limited_by_fp2) {
+	if (dc_get_caps(stream->ctx->dc)->vtotal_limited_by_fp2)
 		max_hw_v_total -= stream->timing.v_front_porch + 1;
-	}
 
 	return max_hw_v_total;
 }
@@ -1008,7 +1007,7 @@ void mod_freesync_build_vrr_params(struct mod_freesync *mod_freesync,
 	nominal_field_rate_in_uhz =
 			mod_freesync_calc_nominal_field_rate(stream);
 
-	if (stream->ctx->dc->caps.max_v_total != 0 && stream->timing.h_total != 0) {
+	if (dc_get_caps(stream->ctx->dc)->max_v_total != 0 && stream->timing.h_total != 0) {
 		min_hardware_refresh_in_uhz = div64_u64((stream->timing.pix_clk_100hz * 100000000ULL),
 			(stream->timing.h_total * (long long)calc_max_hardware_v_total(stream)));
 	}
@@ -1196,9 +1195,10 @@ void mod_freesync_handle_v_update(struct mod_freesync *mod_freesync,
 	if (in_out_vrr->supported == false)
 		return;
 
-	cur_tick = dm_get_timestamp(core_freesync->dc->ctx);
-	cur_timestamp_in_us = (unsigned int)
-			div_u64(dm_get_elapse_time_in_ns(core_freesync->dc->ctx, cur_tick, 0), 1000);
+	cur_tick = dm_get_timestamp(dc_get_ctx(core_freesync->dc));
+	cur_timestamp_in_us = (unsigned int)div_u64(
+			dm_get_elapse_time_in_ns(dc_get_ctx(core_freesync->dc), cur_tick, 0),
+			1000);
 
 	in_out_vrr->flip_interval.vsyncs_between_flip++;
 	in_out_vrr->flip_interval.v_update_timestamp_in_us = cur_timestamp_in_us;
