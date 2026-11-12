@@ -810,7 +810,21 @@ static void panfrost_reset_work(struct work_struct *work)
 	struct panfrost_device *pfdev;
 
 	pfdev = container_of(work, struct panfrost_device, reset.work);
+
+	/* The work can run long after it was queued, when the GPU has gone
+	 * idle and been runtime suspended. Power it up for the reset: its
+	 * registers are not accessible while it is suspended. If it cannot
+	 * be resumed (runtime PM is disabled during system sleep), there is
+	 * no job on it, and panfrost_device_runtime_resume() resets it when
+	 * it comes back up.
+	 */
+	if (pm_runtime_resume_and_get(pfdev->base.dev)) {
+		atomic_set(&pfdev->reset.pending, 0);
+		return;
+	}
+
 	panfrost_reset(pfdev, NULL);
+	pm_runtime_put_autosuspend(pfdev->base.dev);
 }
 
 static const struct drm_sched_backend_ops panfrost_sched_ops = {
