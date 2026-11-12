@@ -641,7 +641,7 @@ static inline struct mddev *mddev_get(struct mddev *mddev)
 {
 	lockdep_assert_held(&all_mddevs_lock);
 
-	if (test_bit(MD_DELETED, &mddev->flags))
+	if (test_bit(MD_DELETED, &mddev->flags) || !mddev->sysfs_live)
 		return NULL;
 	atomic_inc(&mddev->active);
 	return mddev;
@@ -6432,10 +6432,16 @@ struct mddev *md_alloc(dev_t dev, char *name)
 		return ERR_PTR(error);
 	}
 
-	kobject_uevent(&mddev->kobj, KOBJ_ADD);
 	mddev->sysfs_state = sysfs_get_dirent_safe(mddev->kobj.sd, "array_state");
 	mddev->sysfs_level = sysfs_get_dirent_safe(mddev->kobj.sd, "level");
+
+	spin_lock(&all_mddevs_lock);
+	mddev->sysfs_live = true;
+	spin_unlock(&all_mddevs_lock);
+
+	kobject_uevent(&mddev->kobj, KOBJ_ADD);
 	mutex_unlock(&disks_mutex);
+
 	return mddev;
 
 out_put_disk:

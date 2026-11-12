@@ -417,6 +417,10 @@ struct mddev {
 	struct mutex			suspend_mutex;
 	struct percpu_ref		active_io;
 	int				ro;
+	bool				sysfs_live; /* set under all_mddevs_lock
+						     * after kobject_add()
+						     * succeeds, never cleared
+						     */
 	int				sysfs_active; /* set when sysfs deletes
 						       * are happening, so run/
 						       * takeover/stop are not safe
