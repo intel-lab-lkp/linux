@@ -266,7 +266,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_fbc_init(struct drm_connector *connector)
 	struct drm_display_mode *mode;
 	unsigned long max_size = 0;
 
-	if (adev->dm.dc->fbc_compressor == NULL)
+	if (!dc_is_fbc_compressor_available(adev->dm.dc))
 		return;
 
 	if (aconn->dc_link->connector_signal != SIGNAL_TYPE_EDP)
@@ -289,7 +289,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_fbc_init(struct drm_connector *connector)
 		if (r)
 			drm_err(adev_to_drm(adev), "DM: Failed to initialize FBC\n");
 		else {
-			adev->dm.dc->ctx->fbc_gpu_addr = compressor->gpu_addr;
+			dc_set_fbc_gpu_addr(adev->dm.dc, compressor->gpu_addr);
 			drm_info(adev_to_drm(adev), "DM: FBC alloc %lu\n", max_size*4);
 		}
 
@@ -1230,7 +1230,7 @@ static void apply_dsc_policy_for_edp(struct amdgpu_dm_connector *aconnector,
 		edp_min_bpp_x16 = edp_max_bpp_x16;
 
 	if (dc_dsc_compute_bandwidth_range(dc,
-				dc->debug.dsc_min_slice_height_override,
+				dc_get_debug_options(dc)->dsc_min_slice_height_override,
 				edp_min_bpp_x16, edp_max_bpp_x16,
 				dsc_caps,
 				&stream->timing,
@@ -1303,7 +1303,8 @@ static void apply_dsc_policy_for_stream(struct amdgpu_dm_connector *aconnector,
 
 	if (sink->sink_signal == SIGNAL_TYPE_EDP &&
 	    !aconnector->dc_link->panel_config.dsc.disable_dsc_edp &&
-	    dc->caps.edp_dsc_support && aconnector->dsc_settings.dsc_force_enable != DSC_CLK_FORCE_DISABLE) {
+	    dc_get_caps(dc)->edp_dsc_support &&
+	    aconnector->dsc_settings.dsc_force_enable != DSC_CLK_FORCE_DISABLE) {
 
 		apply_dsc_policy_for_edp(aconnector, sink, stream, dsc_caps, max_dsc_target_bpp_limit_override);
 
@@ -3190,15 +3191,13 @@ STATIC_IFN_KUNIT int amdgpu_dm_connector_get_modes(struct drm_connector *connect
 	struct dc_link *dc_link = amdgpu_dm_connector->dc_link;
 	struct drm_encoder *encoder;
 	const struct drm_edid *drm_edid = amdgpu_dm_connector->drm_edid;
-	struct dc_link_settings *verified_link_cap = &dc_link->verified_link_cap;
-	const struct dc *dc = dc_link->dc;
 
 	encoder = amdgpu_dm_connector_to_encoder(connector);
 
 	if (!drm_edid) {
 		amdgpu_dm_connector->num_modes =
 				drm_add_modes_noedid(connector, 640, 480);
-		if (dc->link_srv->dp_get_encoding_format(verified_link_cap) == DP_128b_132b_ENCODING)
+		if (dc_link_dp_get_encoding_format(dc_link) == DP_128b_132b_ENCODING)
 			amdgpu_dm_connector->num_modes +=
 				drm_add_modes_noedid(connector, 1920, 1080);
 
@@ -3249,7 +3248,7 @@ void hdmi_frl_status_polling_work(struct work_struct *work)
 	/* Defer to the next cycle rather than block on a busy dc_lock. */
 	if (mutex_trylock(&dm->dc_lock)) {
 		for (int i = 0; i < MAX_LINKS; i++) {
-			dc_link = dc->links[i];
+			dc_link = dc_get_link_at_index(dc, i);
 
 			if (!dc_link || !dc_link->local_sink)
 				continue;
@@ -4027,13 +4026,15 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 
 	/* Handle MCCS */
 	if (do_mccs) {
-		dm_helpers_read_mccs_caps(adev->dm.dc->ctx, amdgpu_dm_connector->dc_link, sink);
+		dm_helpers_read_mccs_caps(dc_get_ctx(adev->dm.dc),
+					 amdgpu_dm_connector->dc_link, sink);
 
 		if (sink->edid_caps.freesync_vcp_code && !sink->mccs_caps.freesync_supported)
 			freesync_capable = false;
 
 		if (sink->mccs_caps.freesync_supported && freesync_capable)
-			dm_helpers_mccs_vcp_set(adev->dm.dc->ctx, amdgpu_dm_connector->dc_link, sink);
+			dm_helpers_mccs_vcp_set(dc_get_ctx(adev->dm.dc),
+					  amdgpu_dm_connector->dc_link, sink);
 	}
 
 update:
