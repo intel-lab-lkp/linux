@@ -34,6 +34,10 @@ properties:
     description:
       Output GPIO pin used to enter firmware mode and sleep/wakeup control
 
+  pvdd-supply:
+    description:
+      Power supply of the PVDD pin
+
   s3fwrn5,en-gpios:
     maxItems: 1
     deprecated: true
@@ -84,6 +88,7 @@ examples:
             wake-gpios = <&gpj0 2 GPIO_ACTIVE_HIGH>;
 
             clocks = <&rpmcc 20>;
+            pvdd-supply = <&nfc_pvdd>;
         };
     };
   # UART example on Raspberry Pi
