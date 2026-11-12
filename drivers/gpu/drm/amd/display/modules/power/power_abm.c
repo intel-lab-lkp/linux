@@ -935,7 +935,7 @@ static bool set_backlight_millinits_aux(struct core_power *core_power,
 
 	// only use internal backlight control if dmub capabilities are not present
 	if (link->backlight_control_type == BACKLIGHT_CONTROL_VESA_AUX &&
-		dc_get_caps(link->dc)->dmub_caps.aux_backlight_support)
+		dc_dmub_supports_aux_backlight(link->dc))
 		return true;
 
 	return dc_link_set_backlight_level_nits(link, core_power->bl_state[inst].isHDR,

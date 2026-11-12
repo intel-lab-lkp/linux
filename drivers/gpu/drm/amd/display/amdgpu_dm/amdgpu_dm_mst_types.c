@@ -1239,7 +1239,7 @@ STATIC_IFN_KUNIT bool get_conv_frl_bw(struct amdgpu_dm_connector *aconnector,
 	unsigned int dsc_max_sink_bw_in_kbps = 0;
 
 	if (aconnector->dc_sink &&
-	    dc_get_caps(aconnector->dc_link->dc)->dp_hdmi21_pcon_support &&
+	    dc_get_dp_hdmi21_pcon_support(aconnector->dc_link->dc) &&
 	    aconnector->mst_downstream_port_caps.bytes.byte0.bits.DWN_STRM_PORTX_TYPE == DOWN_STREAM_DETAILED_HDMI) {
 		max_conv_bw_in_kbps = dc_link_bw_kbps_from_raw_frl_link_rate_data(
 				aconnector->dc_link->dc,

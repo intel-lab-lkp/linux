@@ -4459,8 +4459,8 @@ static int capabilities_show(struct seq_file *m, void *unused)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)m->private;
 	struct dc *dc = adev->dm.dc;
-	bool mall_supported = dc_get_caps(dc)->mall_size_total;
-	bool subvp_supported = dc_get_caps(dc)->subvp_fw_processing_delay_us;
+	bool mall_supported = dc_get_mall_size_total(dc);
+	bool subvp_supported = dc_get_subvp_fw_processing_delay_us(dc);
 	unsigned int mall_in_use = false;
 	unsigned int subvp_in_use = false;
 
@@ -4708,7 +4708,7 @@ void dtn_debugfs_init(struct amdgpu_device *adev)
 	debugfs_create_file_unsafe("amdgpu_dm_disable_hpd", 0644, root, adev,
 				   &disable_hpd_ops);
 
-	if (dc_get_caps(adev->dm.dc)->ips_support) {
+	if (dc_get_ips_support(adev->dm.dc)) {
 		debugfs_create_file_unsafe("amdgpu_dm_ips_status", 0644, root, adev,
 					   &ips_status_fops);
 

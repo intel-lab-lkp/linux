@@ -43,7 +43,7 @@ STATIC_IFN_KUNIT bool lp_write_i2c(void *handle, uint32_t address, const uint8_t
 	struct dc_link *link = handle;
 	struct i2c_payload i2c_payloads[] = {{true, address, size, (void *)data} };
 	struct i2c_command cmd = {i2c_payloads, 1, I2C_COMMAND_ENGINE_HW,
-				  dc_get_caps(link->dc)->i2c_speed_in_khz};
+				  dc_get_i2c_speed_in_khz(link->dc)};
 
 	return dm_helpers_submit_i2c(link->ctx, link, &cmd);
 }
@@ -56,7 +56,7 @@ STATIC_IFN_KUNIT bool lp_read_i2c(void *handle, uint32_t address, uint8_t offset
 	struct i2c_payload i2c_payloads[] = {{true, address, 1, &offset},
 					     {false, address, size, data} };
 	struct i2c_command cmd = {i2c_payloads, 2, I2C_COMMAND_ENGINE_HW,
-				  dc_get_caps(link->dc)->i2c_speed_in_khz};
+				  dc_get_i2c_speed_in_khz(link->dc)};
 
 	return dm_helpers_submit_i2c(link->ctx, link, &cmd);
 }
@@ -308,7 +308,7 @@ void hdcp_update_display(struct hdcp_workqueue *hdcp_work,
 	hdcp_w->aconnector[conn_index] = aconnector;
 
 	hdcp_get_link_display_adjustments(enable_encryption, content_type,
-			dc_get_caps(dc)->fused_io_supported,
+			dc_get_fused_io_support(dc),
 			dc_get_debug_options(dc)->hdcp_lc_force_fw_enable,
 			dc_get_debug_options(dc)->hdcp_lc_enable_sw_fallback,
 			&link_adjust, &display_adjust);
@@ -677,7 +677,7 @@ void update_config(void *handle, struct cp_psp_stream_config *config)
 	link->adjust.retry_limit = MAX_NUM_OF_ATTEMPTS;
 	link->adjust.hdcp1.disable = 0;
 	link->adjust.hdcp2.use_fw_locality_check =
-		(dc_get_caps(dc)->fused_io_supported ||
+		(dc_get_fused_io_support(dc) ||
 		 dc_get_debug_options(dc)->hdcp_lc_force_fw_enable);
 	link->adjust.hdcp2.use_sw_locality_fallback =
 		dc_get_debug_options(dc)->hdcp_lc_enable_sw_fallback;
@@ -842,7 +842,7 @@ static const struct bin_attribute data_attr = {
 struct hdcp_workqueue *hdcp_create_workqueue(struct amdgpu_device *adev,
 					     struct cp_psp *cp_psp, struct dc *dc)
 {
-	int max_caps = dc_get_caps(dc)->max_links;
+	int max_caps = dc_get_max_links(dc);
 	struct hdcp_workqueue *hdcp_work;
 	int i = 0;
 

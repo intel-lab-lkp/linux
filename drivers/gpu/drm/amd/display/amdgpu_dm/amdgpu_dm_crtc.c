@@ -308,7 +308,7 @@ static inline int amdgpu_dm_crtc_set_vblank(struct drm_crtc *crtc, bool enable)
 		 * Call this function to estimate missed vblanks by using timestamps and
 		 * update the vblank counter in DRM.
 		 */
-		if (dc_get_caps(dc)->ips_support &&
+		if (dc_get_ips_support(dc) &&
 			dc_get_disable_ips(dc) != DMUB_IPS_DISABLE_ALL &&
 			sr_supported && vblank->config.disable_immediate)
 			drm_crtc_vblank_restore(crtc);
@@ -529,8 +529,11 @@ static void
 dm_crtc_additional_color_mgmt(struct drm_crtc *crtc)
 {
 	struct amdgpu_device *adev = drm_to_adev(crtc->dev);
+	struct dc_color_caps color_caps;
 
-	if (dc_get_caps(adev->dm.dc)->color.mpc.ogam_ram)
+	dc_get_color_caps(adev->dm.dc, &color_caps);
+
+	if (color_caps.mpc.ogam_ram)
 		drm_object_attach_property(&crtc->base,
 					   adev->mode_info.regamma_tf_property,
 					   AMDGPU_TRANSFER_FUNCTION_DEFAULT);
@@ -770,8 +773,11 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 {
 	struct amdgpu_crtc *acrtc = NULL;
 	struct drm_plane *cursor_plane;
+	struct dc_color_caps color_caps;
 	bool has_degamma;
 	int res = -ENOMEM;
+
+	dc_get_color_caps(dm->dc, &color_caps);
 
 	cursor_plane = kzalloc_obj(*cursor_plane);
 	if (!cursor_plane)
@@ -809,12 +815,11 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 			res = PTR_ERR(crtc_state);
 			goto error_ism_fini;
 		}
-
 		acrtc->base.state = crtc_state;
 	}
 
-	acrtc->max_cursor_width = dc_get_caps(dm->adev->dm.dc)->max_cursor_size;
-	acrtc->max_cursor_height = dc_get_caps(dm->adev->dm.dc)->max_cursor_size;
+	acrtc->max_cursor_width = dc_get_max_cursor_size(dm->adev->dm.dc);
+	acrtc->max_cursor_height = dc_get_max_cursor_size(dm->adev->dm.dc);
 
 	acrtc->crtc_id = crtc_index;
 	acrtc->base.enabled = false;
@@ -830,7 +835,7 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 	 * or the COLOR_PIPELINE property. An atomic commit which attempts to enable
 	 * both is rejected.
 	 */
-	has_degamma = dc_get_caps(dm->adev->dm.dc)->color.dpp.dcn_arch &&
+	has_degamma = color_caps.dpp.dcn_arch &&
 		      dc_get_dce_version(dm->adev->dm.dc) != DCN_VERSION_4_01;
 
 	drm_crtc_enable_color_mgmt(&acrtc->base, has_degamma ? MAX_COLOR_LUT_ENTRIES : 0,

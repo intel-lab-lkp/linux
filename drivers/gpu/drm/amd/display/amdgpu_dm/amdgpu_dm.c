@@ -204,7 +204,7 @@ STATIC_IFN_KUNIT int dm_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc
 		return 0;
 	}
 
-	if (dc && dc_get_caps(dc)->ips_support && dc_is_idle_optimizations_allowed(dc))
+	if (dc && dc_get_ips_support(dc) && dc_is_idle_optimizations_allowed(dc))
 		dc_allow_idle_optimizations(dc, false);
 
 	/*
@@ -709,7 +709,7 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	/* temporary enable immediate restore for FAMS2 */
 	debug_opts->fams2_imm_restore_drr = true;
 
-	if (dc_get_caps(adev->dm.dc)->dp_hdmi21_pcon_support)
+	if (dc_get_dp_hdmi21_pcon_support(adev->dm.dc))
 		drm_info(adev_to_drm(adev), "DP-HDMI FRL PCON supported\n");
 
 	r = dm_dmub_hw_init(adev);
@@ -753,18 +753,18 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 
 	amdgpu_dm_init_color_mod();
 
-	if (dc_get_caps(adev->dm.dc)->max_links > 0) {
+	if (dc_get_max_links(adev->dm.dc) > 0) {
 		adev->dm.vblank_control_workqueue =
 			create_singlethread_workqueue("dm_vblank_control_workqueue");
 		if (!adev->dm.vblank_control_workqueue)
 			drm_err(adev_to_drm(adev), "failed to initialize vblank_workqueue.\n");
 	}
 
-	if (dc_get_caps(adev->dm.dc)->ips_support &&
+	if (dc_get_ips_support(adev->dm.dc) &&
 	    dc_get_disable_ips(adev->dm.dc) != DMUB_IPS_DISABLE_ALL)
 		adev->dm.idle_workqueue = idle_create_workqueue(adev);
 
-	if (dc_get_caps(adev->dm.dc)->max_links > 0 && adev->family >= AMDGPU_FAMILY_RV) {
+	if (dc_get_max_links(adev->dm.dc) > 0 && adev->family >= AMDGPU_FAMILY_RV) {
 		adev->dm.hdcp_workqueue = hdcp_create_workqueue(adev, &init_params.cp_psp, adev->dm.dc);
 
 		if (!adev->dm.hdcp_workqueue)
@@ -776,7 +776,7 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 
 		dc_init_callbacks(adev->dm.dc, &init_params);
 	}
-	if (dc_get_caps(adev->dm.dc)->max_links > 0) {
+	if (dc_get_max_links(adev->dm.dc) > 0) {
 		adev->dm.hdmi_frl_status_polling_wq =
 			create_singlethread_workqueue("hdmi_frl_status_polling_wq");
 		if (!adev->dm.hdmi_frl_status_polling_wq)
@@ -840,8 +840,8 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	/* TODO: Add_display_info? */
 
 	/* TODO use dynamic cursor width */
-	adev_to_drm(adev)->mode_config.cursor_width = dc_get_caps(adev->dm.dc)->max_cursor_size;
-	adev_to_drm(adev)->mode_config.cursor_height = dc_get_caps(adev->dm.dc)->max_cursor_size;
+	adev_to_drm(adev)->mode_config.cursor_width = dc_get_max_cursor_size(adev->dm.dc);
+	adev_to_drm(adev)->mode_config.cursor_height = dc_get_max_cursor_size(adev->dm.dc);
 
 	if (drm_vblank_init(adev_to_drm(adev), adev->dm.display_indexes_num)) {
 		drm_err(adev_to_drm(adev),
@@ -949,7 +949,7 @@ static void amdgpu_dm_fini(struct amdgpu_device *adev)
 					&adev->dm.boot_time_crc_info.cpu_addr);
 
 	if (adev->dm.hpd_rx_offload_wq && adev->dm.dc) {
-		for (i = 0; i < dc_get_caps(adev->dm.dc)->max_links; i++) {
+		for (i = 0; i < dc_get_max_links(adev->dm.dc); i++) {
 			if (adev->dm.hpd_rx_offload_wq[i].wq) {
 				destroy_workqueue(adev->dm.hpd_rx_offload_wq[i].wq);
 				adev->dm.hpd_rx_offload_wq[i].wq = NULL;
@@ -1672,7 +1672,7 @@ static int dm_suspend(struct amdgpu_ip_block *ip_block)
 
 	dc_set_power_state(dm->dc, DC_ACPI_CM_POWER_STATE_D3);
 
-	if (dc_get_caps(dm->dc)->ips_support && adev->in_s0ix)
+	if (dc_get_ips_support(dm->dc) && adev->in_s0ix)
 		dc_allow_idle_optimizations(dm->dc, true);
 
 	dc_dmub_srv_set_power_state(dc_get_ctx(dm->dc)->dmub_srv, DC_ACPI_CM_POWER_STATE_D3);
@@ -1897,7 +1897,7 @@ static int dm_resume(struct amdgpu_ip_block *ip_block)
 	int i, r, j;
 	struct dc_commit_streams_params commit_params = {};
 
-	if (dc_get_caps(dm->dc)->ips_support) {
+	if (dc_get_ips_support(dm->dc)) {
 		if (!amdgpu_in_reset(adev))
 			mutex_lock(&dm->dc_lock);
 
@@ -2343,7 +2343,7 @@ STATIC_IFN_KUNIT int initialize_plane(struct amdgpu_display_manager *dm,
 	 * for a CRTC - like overlay or underlay planes.
 	 */
 	possible_crtcs = 1 << plane_id;
-	if (plane_id >= dc_get_caps(dm->dc)->max_streams)
+	if (plane_id >= dc_get_max_streams(dm->dc))
 		possible_crtcs = 0xff;
 
 	ret = amdgpu_dm_plane_init(dm, plane, possible_crtcs, plane_cap);
@@ -2380,25 +2380,28 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 	u32 link_cnt;
 	s32 primary_planes;
 	enum dc_connection_type new_connection_type = dc_connection_none;
+	const struct dc_plane_cap *plane_caps;
+	unsigned int plane_count;
 	const struct dc_plane_cap *plane;
 	bool psr_feature_enabled = false;
 	bool replay_feature_enabled = false;
-	int max_overlay = dc_get_caps(dm->dc)->max_slave_planes;
+	int max_overlay = dc_get_max_slave_planes(dm->dc);
 
-	dm->display_indexes_num = dc_get_caps(dm->dc)->max_streams;
+	dm->display_indexes_num = dc_get_max_streams(dm->dc);
 	/* Update the actual used number of crtc */
 	adev->mode_info.num_crtc = adev->dm.display_indexes_num;
 
 	amdgpu_dm_set_irq_funcs(adev);
 
-	link_cnt = dc_get_caps(dm->dc)->max_links;
+	link_cnt = dc_get_max_links(dm->dc);
+	plane_caps = dc_get_plane_caps(dm->dc, &plane_count);
 	if (amdgpu_dm_mode_config_init(dm->adev)) {
 		drm_err(adev_to_drm(adev), "DM: Failed to initialize mode config\n");
 		return -EINVAL;
 	}
 
 	/* There is one primary plane per CRTC */
-	primary_planes = dc_get_caps(dm->dc)->max_streams;
+	primary_planes = dc_get_max_streams(dm->dc);
 	if (primary_planes > AMDGPU_MAX_PLANES) {
 		drm_err(adev_to_drm(adev), "DM: Plane nums out of 6 planes\n");
 		return -EINVAL;
@@ -2409,7 +2412,7 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 	 * Order is reversed to match iteration order in atomic check.
 	 */
 	for (i = (primary_planes - 1); i >= 0; i--) {
-		plane = &dc_get_caps(dm->dc)->planes[i];
+		plane = &plane_caps[i];
 
 		if (initialize_plane(dm, mode_info, i,
 				     DRM_PLANE_TYPE_PRIMARY, plane)) {
@@ -2427,8 +2430,8 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 	 * Only support DCN for now, and only expose one so we don't encourage
 	 * userspace to use up all the pipes.
 	 */
-	for (i = 0; i < dc_get_caps(dm->dc)->max_planes; ++i) {
-		const struct dc_plane_cap *plane = &dc_get_caps(dm->dc)->planes[i];
+	for (i = 0; i < plane_count; ++i) {
+		const struct dc_plane_cap *plane = &plane_caps[i];
 
 		/* Do not create overlay if MPO disabled */
 		if (amdgpu_dc_debug_mask & DC_DISABLE_MPO)
@@ -2450,7 +2453,7 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 		}
 	}
 
-	for (i = 0; i < dc_get_caps(dm->dc)->max_streams; i++)
+	for (i = 0; i < dc_get_max_streams(dm->dc); i++)
 		if (amdgpu_dm_crtc_init(dm, mode_info->planes[i], i)) {
 			drm_err(adev_to_drm(adev), "KMS: Failed to initialize crtc\n");
 			goto fail;
@@ -3681,6 +3684,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_update_cursor(struct drm_plane *plane,
 	uint64_t address = afb ? afb->address : 0;
 	struct dc_cursor_position position = {0};
 	struct dc_cursor_attributes attributes;
+	struct dc_color_caps color_caps;
 	int ret;
 
 	if (!plane->state->fb && !old_plane_state->fb)
@@ -3707,6 +3711,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_update_cursor(struct drm_plane *plane,
 	amdgpu_crtc->cursor_width = plane->state->crtc_w;
 	amdgpu_crtc->cursor_height = plane->state->crtc_h;
 
+	dc_get_color_caps(adev->dm.dc, &color_caps);
 	memset(&attributes, 0, sizeof(attributes));
 	attributes.address.high_part = upper_32_bits(address);
 	attributes.address.low_part  = lower_32_bits(address);
@@ -3719,8 +3724,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_update_cursor(struct drm_plane *plane,
 	/* Enable cursor degamma ROM on DCN3+ for implicit sRGB degamma in DRM
 	 * legacy gamma setup.
 	 */
-	if (crtc_state->cm_is_degamma_srgb &&
-	    dc_get_caps(adev->dm.dc)->color.dpp.gamma_corr)
+	if (crtc_state->cm_is_degamma_srgb && color_caps.dpp.gamma_corr)
 		attributes.attribute_flags.bits.ENABLE_CURSOR_DEGAMMA = 1;
 
 	if (afb)

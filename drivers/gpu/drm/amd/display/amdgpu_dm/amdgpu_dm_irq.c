@@ -808,7 +808,7 @@ static inline int dm_irq_state(struct amdgpu_device *adev,
 
 	st = (state == AMDGPU_IRQ_STATE_ENABLE);
 
-	if (dc && dc_get_caps(dc)->ips_support && dc_is_idle_optimizations_allowed(dc))
+	if (dc && dc_get_ips_support(dc) && dc_is_idle_optimizations_allowed(dc))
 		dc_allow_idle_optimizations(dc, false);
 
 	amdgpu_dm_irq_set(adev, irq_source, st);
@@ -1226,7 +1226,7 @@ EXPORT_IF_KUNIT(dm_handle_hpd_rx_offload_work);
 struct hpd_rx_irq_offload_work_queue *amdgpu_dm_hpd_rx_irq_create_workqueue(struct amdgpu_device *adev)
 {
 	struct dc *dc = adev->dm.dc;
-	int max_caps = dc_get_caps(dc)->max_links;
+	int max_caps = dc_get_max_links(dc);
 	int i = 0;
 	struct hpd_rx_irq_offload_work_queue *hpd_rx_offload_wq = NULL;
 
@@ -1265,7 +1265,7 @@ void amdgpu_dm_hpd_rx_irq_work_suspend(struct amdgpu_display_manager *dm)
 	int i;
 
 	if (dm->hpd_rx_offload_wq) {
-		for (i = 0; i < dc_get_caps(dm->dc)->max_links; i++)
+		for (i = 0; i < dc_get_max_links(dm->dc); i++)
 			flush_workqueue(dm->hpd_rx_offload_wq[i].wq);
 	}
 }
@@ -1321,7 +1321,7 @@ void amdgpu_dm_hdmi_hpd_debounce_work(struct work_struct *work)
 
 	/* Re-detect the display */
 	scoped_guard(mutex, &adev->dm.dc_lock) {
-		if (dc_get_caps(dc)->ips_support && dc_get_ctx(dc)->dmub_srv->idle_allowed) {
+		if (dc_get_ips_support(dc) && dc_get_ctx(dc)->dmub_srv->idle_allowed) {
 			dc_allow_idle_optimizations(dc, false);
 			reallow_idle = true;
 		}
@@ -1359,7 +1359,7 @@ void amdgpu_dm_hdmi_hpd_debounce_work(struct work_struct *work)
 	}
 
 	scoped_guard(mutex, &adev->dm.dc_lock) {
-		if (reallow_idle && dc_get_caps(dc)->ips_support)
+		if (reallow_idle && dc_get_ips_support(dc))
 			dc_allow_idle_optimizations(dc, true);
 	}
 }

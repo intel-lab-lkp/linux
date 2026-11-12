@@ -125,9 +125,9 @@ static unsigned int calc_duration_in_us_from_v_total(
 
 static unsigned int calc_max_hardware_v_total(const struct dc_stream_state *stream)
 {
-	unsigned int max_hw_v_total = dc_get_caps(stream->ctx->dc)->max_v_total;
+	unsigned int max_hw_v_total = dc_get_max_v_total(stream->ctx->dc);
 
-	if (dc_get_caps(stream->ctx->dc)->vtotal_limited_by_fp2)
+	if (dc_get_vtotal_limited_by_fp2(stream->ctx->dc))
 		max_hw_v_total -= stream->timing.v_front_porch + 1;
 
 	return max_hw_v_total;
@@ -1007,7 +1007,7 @@ void mod_freesync_build_vrr_params(struct mod_freesync *mod_freesync,
 	nominal_field_rate_in_uhz =
 			mod_freesync_calc_nominal_field_rate(stream);
 
-	if (dc_get_caps(stream->ctx->dc)->max_v_total != 0 && stream->timing.h_total != 0) {
+	if (dc_get_max_v_total(stream->ctx->dc) != 0 && stream->timing.h_total != 0) {
 		min_hardware_refresh_in_uhz = div64_u64((stream->timing.pix_clk_100hz * 100000000ULL),
 			(stream->timing.h_total * (long long)calc_max_hardware_v_total(stream)));
 	}

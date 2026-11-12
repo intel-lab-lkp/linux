@@ -299,8 +299,11 @@ int amdgpu_dm_initialize_default_pipeline(struct drm_plane *plane, struct drm_pr
 {
 	struct drm_device *dev = plane->dev;
 	struct amdgpu_device *adev = drm_to_adev(dev);
-	bool hw_3d_lut = dc_get_caps(adev->dm.dc)->color.dpp.hw_3d_lut ||
-			 dc_get_caps(adev->dm.dc)->color.mpc.preblend;
+	struct dc_color_caps color_caps;
+	bool hw_3d_lut;
+
+	dc_get_color_caps(adev->dm.dc, &color_caps);
+	hw_3d_lut = color_caps.dpp.hw_3d_lut || color_caps.mpc.preblend;
 
 	return amdgpu_dm_build_default_pipeline(dev, plane, hw_3d_lut, list);
 }

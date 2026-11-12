@@ -383,7 +383,7 @@ void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 	}
 
 	mutex_lock(&dm->dc_lock);
-	if (dc_get_caps(dm->dc)->ips_support && dc_get_ctx(dm->dc)->dmub_srv->idle_allowed) {
+	if (dc_get_ips_support(dm->dc) && dc_get_ctx(dm->dc)->dmub_srv->idle_allowed) {
 		dc_allow_idle_optimizations(dm->dc, false);
 		reallow_idle = true;
 	}
@@ -415,7 +415,7 @@ void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 	amdgpu_dm_replay_set_event(dm, stream, true,
 		replay_event_hw_programming, true);
 
-	if (dc_get_caps(dm->dc)->ips_support && reallow_idle)
+	if (dc_get_ips_support(dm->dc) && reallow_idle)
 		dc_allow_idle_optimizations(dm->dc, true);
 
 	mutex_unlock(&dm->dc_lock);

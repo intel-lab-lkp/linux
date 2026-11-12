@@ -2351,8 +2351,38 @@ struct dc_context *dc_get_ctx(const struct dc *dc);
 /* The ASIC display engine version. */
 enum dce_version dc_get_dce_version(const struct dc *dc);
 
-/* Capabilities detected at dc_create() time. Read-only. */
-const struct dc_caps *dc_get_caps(const struct dc *dc);
+/*
+ * Capabilities detected at dc_create() time. Read-only; prefer the
+ * purpose-built queries below over reaching into the caps structure.
+ */
+bool dc_is_apu(const struct dc *dc);
+bool dc_get_ips_support(const struct dc *dc);
+bool dc_get_dmcub_support(const struct dc *dc);
+unsigned int dc_get_max_links(const struct dc *dc);
+unsigned int dc_get_max_streams(const struct dc *dc);
+unsigned int dc_get_max_planes(const struct dc *dc);
+unsigned int dc_get_max_slave_planes(const struct dc *dc);
+unsigned int dc_get_max_cursor_size(const struct dc *dc);
+unsigned int dc_get_max_v_total(const struct dc *dc);
+bool dc_get_vtotal_limited_by_fp2(const struct dc *dc);
+unsigned int dc_get_i2c_speed_in_khz(const struct dc *dc);
+bool dc_get_dp_hdmi21_pcon_support(const struct dc *dc);
+bool dc_get_edp_dsc_support(const struct dc *dc);
+bool dc_get_fused_io_support(const struct dc *dc);
+unsigned int dc_get_subvp_fw_processing_delay_us(const struct dc *dc);
+unsigned int dc_get_mall_size_total(const struct dc *dc);
+bool dc_dmub_supports_psr(const struct dc *dc);
+bool dc_dmub_supports_aux_backlight(const struct dc *dc);
+
+/* Copy out the color pipeline capabilities. */
+void dc_get_color_caps(const struct dc *dc, struct dc_color_caps *caps);
+
+/*
+ * Return the static plane capability array and its entry count.
+ * Valid until the DC is destroyed.
+ */
+const struct dc_plane_cap *dc_get_plane_caps(const struct dc *dc,
+		unsigned int *count);
 
 /*
  * Select which eDP connectors get hotplug detection enabled; see
@@ -2512,7 +2542,7 @@ void dc_set_dml2_alt_ch_cfg(struct dc *dc,
 /* Return an enumerated dc_link.
  * dc_link order is constant and determined at
  * boot time.  They cannot be created or destroyed.
- * Use dc_get_caps() to get number of links.
+ * Use dc_get_max_links() to get number of links.
  */
 struct dc_link *dc_get_link_at_index(struct dc *dc, uint32_t link_index);
 

@@ -37,7 +37,7 @@ bool link_supports_psrsu(struct dc_link *link)
 {
 	struct dc *dc = link->ctx->dc;
 
-	if (!dc_get_caps(dc)->dmcub_support)
+	if (!dc_get_dmcub_support(dc))
 		return false;
 
 	if (dc_get_dce_version(dc) < DCN_VERSION_3_1)
@@ -111,7 +111,7 @@ bool amdgpu_dm_set_psr_caps(struct dc_link *link, struct amdgpu_dm_connector *ac
 	/* Reset psr version first */
 	link->psr_settings.psr_version = DC_PSR_VERSION_UNSUPPORTED;
 
-	if (!dc_get_caps(dc)->dmub_caps.psr)
+	if (!dc_dmub_supports_psr(dc))
 		return false;
 
 	if (!(link->connector_signal & SIGNAL_TYPE_EDP))

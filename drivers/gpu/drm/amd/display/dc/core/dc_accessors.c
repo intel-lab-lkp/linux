@@ -52,9 +52,108 @@ enum dce_version dc_get_dce_version(const struct dc *dc)
 	return dc->ctx->dce_version;
 }
 
-const struct dc_caps *dc_get_caps(const struct dc *dc)
+bool dc_is_apu(const struct dc *dc)
 {
-	return &dc->caps;
+	return dc->caps.is_apu;
+}
+
+bool dc_get_ips_support(const struct dc *dc)
+{
+	return dc->caps.ips_support;
+}
+
+bool dc_get_dmcub_support(const struct dc *dc)
+{
+	return dc->caps.dmcub_support;
+}
+
+unsigned int dc_get_max_links(const struct dc *dc)
+{
+	return dc->caps.max_links;
+}
+
+unsigned int dc_get_max_streams(const struct dc *dc)
+{
+	return dc->caps.max_streams;
+}
+
+unsigned int dc_get_max_planes(const struct dc *dc)
+{
+	return dc->caps.max_planes;
+}
+
+unsigned int dc_get_max_slave_planes(const struct dc *dc)
+{
+	return dc->caps.max_slave_planes;
+}
+
+unsigned int dc_get_max_cursor_size(const struct dc *dc)
+{
+	return dc->caps.max_cursor_size;
+}
+
+unsigned int dc_get_max_v_total(const struct dc *dc)
+{
+	return dc->caps.max_v_total;
+}
+
+bool dc_get_vtotal_limited_by_fp2(const struct dc *dc)
+{
+	return dc->caps.vtotal_limited_by_fp2;
+}
+
+unsigned int dc_get_i2c_speed_in_khz(const struct dc *dc)
+{
+	return dc->caps.i2c_speed_in_khz;
+}
+
+bool dc_get_dp_hdmi21_pcon_support(const struct dc *dc)
+{
+	return dc->caps.dp_hdmi21_pcon_support;
+}
+
+bool dc_get_edp_dsc_support(const struct dc *dc)
+{
+	return dc->caps.edp_dsc_support;
+}
+
+bool dc_get_fused_io_support(const struct dc *dc)
+{
+	return dc->caps.fused_io_supported;
+}
+
+unsigned int dc_get_subvp_fw_processing_delay_us(const struct dc *dc)
+{
+	return dc->caps.subvp_fw_processing_delay_us;
+}
+
+unsigned int dc_get_mall_size_total(const struct dc *dc)
+{
+	return dc->caps.mall_size_total;
+}
+
+bool dc_dmub_supports_psr(const struct dc *dc)
+{
+	return dc->caps.dmub_caps.psr;
+}
+
+bool dc_dmub_supports_aux_backlight(const struct dc *dc)
+{
+	return dc->caps.dmub_caps.aux_backlight_support;
+}
+
+void dc_get_color_caps(const struct dc *dc, struct dc_color_caps *caps)
+{
+	*caps = dc->caps.color;
+}
+
+const struct dc_plane_cap *dc_get_plane_caps(const struct dc *dc,
+		unsigned int *count)
+{
+	if (count)
+		*count = dc->caps.max_planes;
+
+	return dc->caps.planes;
 }
 
 unsigned int dc_get_disable_ips(const struct dc *dc)

@@ -336,7 +336,7 @@ int dm_dmub_hw_init(struct amdgpu_device *adev)
 	hw_params.fb_info = fb_info;
 
 	/* Enable usb4 dpia in the FW APU */
-	if (dc_get_caps(dc)->is_apu &&
+	if (dc_is_apu(dc) &&
 		dc_get_usb4_dpia_count(dc) != 0 &&
 		!dc_get_debug_options(dc)->dpia_debug.bits.disable_dpia) {
 		hw_params.dpia_supported = true;

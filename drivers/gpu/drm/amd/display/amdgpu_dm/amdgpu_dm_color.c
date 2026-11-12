@@ -1168,9 +1168,11 @@ int amdgpu_dm_verify_lut3d_size(struct amdgpu_device *adev,
 	struct dm_plane_state *dm_plane_state = to_dm_plane_state(plane_state);
 	const struct drm_color_lut *shaper = NULL, *lut3d = NULL;
 	uint32_t exp_size, size, dim_size = MAX_COLOR_3DLUT_SIZE;
-	const struct dc_caps *caps = dc_get_caps(adev->dm.dc);
-	bool has_3dlut =
-		caps->color.dpp.hw_3d_lut || caps->color.mpc.preblend;
+	struct dc_color_caps color_caps;
+	bool has_3dlut;
+
+	dc_get_color_caps(adev->dm.dc, &color_caps);
+	has_3dlut = color_caps.dpp.hw_3d_lut || color_caps.mpc.preblend;
 
 	/* shaper LUT is only available if 3D LUT color caps */
 	exp_size = has_3dlut ? MAX_COLOR_LUT_ENTRIES : 0;
@@ -1553,7 +1555,7 @@ __set_colorop_in_tf_1d_curve(struct dc_plane_state *dc_plane_state,
 	struct dc_transfer_func *tf = &dc_plane_state->in_transfer_func;
 	struct drm_colorop *colorop = colorop_state->colorop;
 	struct drm_device *drm = colorop->dev;
-	const struct dc_color_caps *color_caps = NULL;
+	struct dc_color_caps color_caps = { };
 	bool is_subsampled_format;
 
 	if (colorop->type != DRM_COLOROP_1D_CURVE)
@@ -1577,9 +1579,9 @@ __set_colorop_in_tf_1d_curve(struct dc_plane_state *dc_plane_state,
 	tf->tf = amdgpu_colorop_tf_to_dc_tf(colorop_state->curve_1d_type);
 
 	if (dc_plane_state->ctx && dc_plane_state->ctx->dc)
-		color_caps = &dc_get_caps(dc_plane_state->ctx->dc)->color;
+		dc_get_color_caps(dc_plane_state->ctx->dc, &color_caps);
 
-	if (!mod_color_calculate_degamma_params(color_caps, tf, NULL,
+	if (!mod_color_calculate_degamma_params(&color_caps, tf, NULL,
 						is_subsampled_format)) {
 		drm_err(drm, "Failed to calculate degamma params\n");
 		return -EINVAL;
@@ -1867,9 +1869,11 @@ __set_dm_plane_colorop_3dlut(struct drm_plane_state *plane_state,
 	struct dc_transfer_func *tf = &dc_plane_state->cm.shaper_func;
 	struct drm_atomic_commit *state = plane_state->state;
 	const struct amdgpu_device *adev = drm_to_adev(colorop->dev);
-	const struct dc_caps *caps = dc_get_caps(adev->dm.dc);
-	bool has_3dlut =
-		caps->color.dpp.hw_3d_lut || caps->color.mpc.preblend;
+	struct dc_color_caps color_caps;
+	bool has_3dlut;
+
+	dc_get_color_caps(adev->dm.dc, &color_caps);
+	has_3dlut = color_caps.dpp.hw_3d_lut || color_caps.mpc.preblend;
 	const struct drm_device *dev = colorop->dev;
 	const struct drm_color_lut32 *lut3d;
 	uint32_t lut3d_size;
@@ -2048,9 +2052,11 @@ amdgpu_dm_plane_set_colorop_properties(struct drm_plane_state *plane_state,
 	struct drm_colorop *colorop = plane_state->color_pipeline;
 	struct drm_device *dev = plane_state->plane->dev;
 	struct amdgpu_device *adev = drm_to_adev(dev);
-	const struct dc_caps *caps = dc_get_caps(adev->dm.dc);
-	bool has_3dlut =
-		caps->color.dpp.hw_3d_lut || caps->color.mpc.preblend;
+	struct dc_color_caps color_caps;
+	bool has_3dlut;
+
+	dc_get_color_caps(adev->dm.dc, &color_caps);
+	has_3dlut = color_caps.dpp.hw_3d_lut || color_caps.mpc.preblend;
 	int ret;
 
 	/* Fixed Matrix (YUV to RGB) */
@@ -2162,7 +2168,7 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 	struct amdgpu_device *adev = drm_to_adev(crtc->base.state->dev);
 	struct dm_plane_state *dm_plane_state = to_dm_plane_state(plane_state);
 	struct drm_color_ctm_3x4 *ctm = NULL;
-	const struct dc_color_caps *color_caps = NULL;
+	struct dc_color_caps color_caps = { };
 	bool has_crtc_cm_degamma;
 	int ret;
 
@@ -2173,7 +2179,7 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 	}
 
 	if (dc_plane_state->ctx && dc_plane_state->ctx->dc)
-		color_caps = &dc_get_caps(dc_plane_state->ctx->dc)->color;
+		dc_get_color_caps(dc_plane_state->ctx->dc, &color_caps);
 
 	/* Initially, we can just bypass the DGM block. */
 	dc_plane_state->in_transfer_func.type = TF_TYPE_BYPASS;
@@ -2182,7 +2188,7 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 	/* After, we start to update values according to color props */
 	has_crtc_cm_degamma = (crtc->cm_has_degamma || crtc->cm_is_degamma_srgb);
 
-	ret = __set_dm_plane_degamma(plane_state, dc_plane_state, color_caps);
+	ret = __set_dm_plane_degamma(plane_state, dc_plane_state, &color_caps);
 	if (ret == -ENOMEM)
 		return ret;
 
@@ -2209,7 +2215,7 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
 		 * linearize (implicit degamma) from sRGB/BT709 according to
 		 * the input space.
 		 */
-		ret = map_crtc_degamma_to_dc_plane(crtc, dc_plane_state, color_caps);
+		ret = map_crtc_degamma_to_dc_plane(crtc, dc_plane_state, &color_caps);
 		if (ret)
 			return ret;
 	}
