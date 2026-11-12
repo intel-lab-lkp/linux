@@ -188,9 +188,19 @@ struct b43_tx_legacy_rate_phy_ctl_entry {
 #define  B43_TXH_PHY1_MODUL_QAM256	0x2000 /* QAM256 */
 
 
+/*
+ * rev 40+ (AC) TX buffer: 4-byte TX offload passthrough prefix, then the
+ * 124-byte descriptor (packet info + 4 rate entries + cache).
+ */
+#define B43_TXH_AC_PREFIX		4
+#define B43_TXH_AC_LEN			(B43_TXH_AC_PREFIX + 124)
+#define B43_TXH_AC_RATE(i)		(0x14 + (i) * 0x14)
+
 static inline
 size_t b43_txhdr_size(struct b43_wldev *dev)
 {
+	if (b43_ucode_is_ac(dev))
+		return B43_TXH_AC_LEN;
 	switch (dev->fw.hdr_format) {
 	case B43_FW_HDR_598:
 		return 112 + sizeof(struct b43_plcp_hdr6);
@@ -214,6 +224,7 @@ struct b43_txstatus {
 	u16 seq;		/* Sequence number */
 	u8 phy_stat;		/* PHY TX status */
 	u8 frame_count;		/* Frame transmit count */
+	u8 fb_count;		/* AC: attempts at the fallback rate */
 	u8 rts_count;		/* RTS transmit count */
 	u8 supp_reason;		/* Suppression reason */
 	/* flags */

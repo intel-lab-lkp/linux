@@ -1343,6 +1343,74 @@ static void handle_irq_transmit_status(struct b43_wldev *dev)
 			break;
 		v1 = b43_read32(dev, B43_MMIO_XMITSTAT_1);
 
+		if (b43_ucode_is_ac(dev)) {
+			/* rev 40+ ucode: two 4-word records per frame */
+			u32 v2 = b43_read32(dev, B43_MMIO_XMITSTAT_0 + 8);
+			u32 v3 = b43_read32(dev, B43_MMIO_XMITSTAT_0 + 12);
+			unsigned int n;
+
+			/*
+			 * second package: words 1 and 2 are the block ack
+			 * bitmap
+			 */
+			u32 w0 = b43_read32(dev, B43_MMIO_XMITSTAT_0);
+			u32 w1 = b43_read32(dev, B43_MMIO_XMITSTAT_1);
+			u32 w2 = b43_read32(dev, B43_MMIO_XMITSTAT_0 + 8);
+			u32 w3 = b43_read32(dev, B43_MMIO_XMITSTAT_0 + 12);
+			unsigned int mpdus = (v0 >> 8) & 0x7f, i;
+			u64 bitmap = ((u64)w2 << 32) | w1;
+
+			memset(&stat, 0, sizeof(stat));
+			stat.cookie = v0 >> 16;
+			stat.seq = v1 & 0xffff;
+			stat.phy_stat = (v1 >> 16) & 0xff;
+			stat.intermediate = !!(v0 & 0x0004);
+			stat.pm_indicated = !!(v0 & 0x0008);
+			stat.supp_reason = (v0 & 0x00f0) >> 4;
+			stat.acked = !!(v0 & 0x8000);
+			/*
+			 * : the attempt count is the LOW BYTE of word 2 only.
+			 * Bits 16-23 hold a constant 1 on every acknowledged
+			 * frame (0 on suppressed ones), not a second attempt
+			 * counter: summing it made every frame look like it
+			 * needed a retry, so minstrel saw ~50 % failures at
+			 * every rate and TX stayed at 1-6 Mbit/s (1.2 "retries"
+			 * per frame regardless of rate or TX power).
+			 */
+			n = v2 & 0xff;
+			stat.frame_count = min(n, 15u);
+			stat.fb_count = min((v2 >> 16) & 0xff, 15u);
+			b43dbg(dev->wl,
+			       "AC txstatus %08x %08x %08x %08x / %08x %08x %08x %08x\n",
+			       v0, v1, v2, v3, w0, w1, w2, w3);
+			if (mpdus > 1) {
+				/*
+				 * A-MPDU: one status for @mpdus frames with
+				 * consecutive cookies
+				 */
+				u16 cookie = stat.cookie;
+
+				/*
+				 * the attempt count covers the whole aggregate
+				 */
+				stat.frame_count =
+					min(DIV_ROUND_UP(n, mpdus), 15u);
+				stat.fb_count =
+					min(DIV_ROUND_UP((v2 >> 16) & 0xff,
+							 mpdus), 15u);
+				for (i = 0; i < mpdus; i++) {
+					stat.cookie = cookie;
+					stat.acked = !!(bitmap & (1ULL << i));
+					b43_handle_txstatus(dev, &stat);
+					cookie = b43_dma_cookie_advance(
+						dev, cookie, 1);
+				}
+				continue;
+			}
+			b43_handle_txstatus(dev, &stat);
+			continue;
+		}
+
 		stat.cookie = (v0 >> 16);
 		stat.seq = (v1 & 0x0000FFFF);
 		stat.phy_stat = ((v1 & 0x00FF0000) >> 16);
@@ -1373,6 +1441,14 @@ static void drain_txstatus_queue(struct b43_wldev *dev)
 		if (!(dummy & 0x00000001))
 			break;
 		dummy = b43_read32(dev, B43_MMIO_XMITSTAT_1);
+		if (b43_ucode_is_ac(dev)) {
+			int i;
+
+			b43_read32(dev, B43_MMIO_XMITSTAT_0 + 8);
+			b43_read32(dev, B43_MMIO_XMITSTAT_0 + 12);
+			for (i = 0; i < 4; i++)
+				b43_read32(dev, B43_MMIO_XMITSTAT_0 + 4 * i);
+		}
 	}
 }
 

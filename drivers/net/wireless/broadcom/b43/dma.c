@@ -1408,6 +1408,19 @@ out:
 	return err;
 }
 
+/* The cookie of the frame @n frames after @cookie on the same ring. */
+u16 b43_dma_cookie_advance(struct b43_wldev *dev, u16 cookie, unsigned int n)
+{
+	struct b43_dmaring *ring;
+	int slot;
+
+	ring = parse_cookie(dev, cookie, &slot);
+	if (!ring)
+		return cookie;
+	return generate_cookie(ring, (slot + n * TX_SLOTS_PER_FRAME) %
+					     ring->nr_slots);
+}
+
 void b43_dma_handle_txstatus(struct b43_wldev *dev,
 			     const struct b43_txstatus *status)
 {

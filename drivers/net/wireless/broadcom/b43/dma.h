@@ -293,6 +293,7 @@ void b43_dma_tx_resume(struct b43_wldev *dev);
 
 int b43_dma_tx(struct b43_wldev *dev,
 	       struct sk_buff *skb);
+u16 b43_dma_cookie_advance(struct b43_wldev *dev, u16 cookie, unsigned int n);
 void b43_dma_handle_txstatus(struct b43_wldev *dev,
 			     const struct b43_txstatus *status);
 

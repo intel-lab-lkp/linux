@@ -231,6 +231,216 @@ static u8 b43_calc_fallback_rate(u8 bitrate, int gmode)
 	return 0;
 }
 
+/*
+ * One VHT rate block (frame type 3), as the stock driver lays it out and
+ * Alessio Ferri's driver builds it: the width in word 0 bits 15:14, the
+ * subband of the primary within that width in word 1, MCS and NSS - 1 in
+ * word 2, VHT-SIG-A1/A2 in the PLCP bytes (group ID 63, both reserved bits
+ * set), FBW 0x0300 and the rate in 500 kbit/s.
+ */
+static void b43_txhdr_ac_vht_block(u8 *ri, const struct ieee80211_tx_rate *t,
+				   u16 chanspec)
+{
+	static const u8 rate_bw[] = {
+		RATE_INFO_BW_20, RATE_INFO_BW_40, RATE_INFO_BW_80,
+	};
+	u8 mcs = ieee80211_rate_get_vht_mcs(t);
+	u8 nss = ieee80211_rate_get_vht_nss(t);
+	unsigned int bw = 0;
+	struct rate_info rinfo = { .flags = RATE_INFO_FLAGS_VHT_MCS };
+	u16 sb = 0;
+	u32 a1, a2;
+
+	/* wider than 20 MHz only inside the 80 MHz channel */
+	if ((chanspec & 0x3800) == 0x2000) {
+		if (t->flags & IEEE80211_TX_RC_80_MHZ_WIDTH)
+			bw = 2;
+		else if (t->flags & IEEE80211_TX_RC_40_MHZ_WIDTH)
+			bw = 1;
+		sb = ((chanspec >> 8) & 0x7) >> bw;
+	}
+	rinfo.mcs = mcs;
+	rinfo.nss = nss;
+	rinfo.bw = rate_bw[bw];
+
+	put_unaligned_le16(3 | 0x0004 |
+			   ((nss > 1 ? 3 : 1) << 6) |
+			   (bw << 14), ri + 0x00);
+	put_unaligned_le16(sb, ri + 0x02);
+	put_unaligned_le16((mcs & 0xf) | ((nss - 1) << 4), ri + 0x04);
+	a1 = bw | BIT(2) | (63 << 4) | ((nss - 1) << 10) | BIT(23);
+	a2 = (mcs << 4) | BIT(9);
+	ri[0x06] = a1;
+	ri[0x07] = a1 >> 8;
+	ri[0x08] = a1 >> 16;
+	ri[0x09] = a2;
+	ri[0x0a] = a2 >> 8;
+	ri[0x0b] = a2 >> 16;
+	put_unaligned_le16(0x0300, ri + 0x0c);
+	put_unaligned_le16(cfg80211_calculate_bitrate(&rinfo) / 5, ri + 0x0e);
+}
+
+static int b43_generate_txhdr_ac(struct b43_wldev *dev, u8 *h,
+				 struct sk_buff *skb,
+				 struct ieee80211_tx_info *info, u16 cookie)
+{
+	static const u8 cck[] = { B43_CCK_RATE_1MB, B43_CCK_RATE_2MB,
+				  B43_CCK_RATE_5MB, B43_CCK_RATE_11MB };
+	static const u8 ofdm[] = { B43_OFDM_RATE_6MB, B43_OFDM_RATE_9MB,
+				   B43_OFDM_RATE_12MB, B43_OFDM_RATE_18MB,
+				   B43_OFDM_RATE_24MB, B43_OFDM_RATE_36MB,
+				   B43_OFDM_RATE_48MB, B43_OFDM_RATE_54MB };
+	const struct ieee80211_hdr *wlhdr = (const void *)skb->data;
+	struct ieee80211_rate *txrate =
+		ieee80211_get_tx_rate(dev->wl->hw, info);
+	u8 rate = txrate ? txrate->hw_value : B43_CCK_RATE_1MB;
+	bool is_ofdm = b43_is_ofdm_rate(rate);
+	unsigned int len = skb->len + FCS_LEN;
+	u8 *ri = h + B43_TXH_AC_RATE(0);
+	u16 mac_lo = 0, phy0, idx = 0, chanspec, subband;
+	int ht_mcs = -1;
+	/* Only HT rates go out as session frames: a legacy probe frame with the
+	 * aggregate header fails at every attempt.
+	 */
+	bool vht = info->control.rates[0].flags & IEEE80211_TX_RC_VHT_MCS;
+	bool agg = (info->flags & IEEE80211_TX_CTL_AMPDU) &&
+		   (info->control.rates[0].flags &
+		    (IEEE80211_TX_RC_MCS | IEEE80211_TX_RC_VHT_MCS));
+	const u8 *tbl = is_ofdm ? ofdm : cck;
+	unsigned int n = is_ofdm ? ARRAY_SIZE(ofdm) : ARRAY_SIZE(cck);
+
+	/* Hardware crypto needs the AC key fields; load with nohwcrypt=1. */
+	if (info->control.hw_key)
+		return -EOPNOTSUPP;
+
+	memset(h, 0, B43_TXH_AC_LEN);
+	h[0] = 0x02;	/* passthrough prefix, as wl sends it */
+	h[2] = 0x02;
+	h += B43_TXH_AC_PREFIX;
+	ri = h + B43_TXH_AC_RATE(0);
+	while (idx < n && tbl[idx] != rate)
+		idx++;
+	if (idx == n)
+		idx = 0;
+
+	if (!is_multicast_ether_addr(wlhdr->addr1) &&
+	    !(info->flags & IEEE80211_TX_CTL_NO_ACK))
+		mac_lo |= 0x0080;	/* expect immediate ACK */
+	if (!(le16_to_cpu(wlhdr->seq_ctrl) & IEEE80211_SCTL_FRAG))
+		mac_lo |= 0x4000;	/* start of MSDU */
+	if (ieee80211_is_beacon(wlhdr->frame_control))
+		mac_lo |= 0x0200;	/* ignore PMQ */
+
+	chanspec = b43_ac_chanspec(dev, dev->phy.channel);
+	/* A 20 MHz frame inside an 80 MHz channel names its subband (word 1) */
+	subband = (chanspec & 0x3800) == 0x2000 ? (chanspec >> 8) & 0x7 : 0;
+
+	if (agg) {
+		/* MPDU of a block ack session, as the stock driver posts it
+		 * (rxtx-1s-ht20-40-80.zip): MAC control 0x45c0, no fixed rate,
+		 * the sequence number, and the cache info at +0x64: no cipher
+		 * (we encrypt in software; the stock 50 04 makes the microcode
+		 * encrypt again), MPDUs per aggregate at the primary and the
+		 * fallback rate, duration 5414 us, window 63, max length 0x14.
+		 * Without the cache info the AP deauthenticates us.
+		 */
+		static const u8 cache[8] = { 0x00, 0x00, 0x04, 0x04,
+					     0x26, 0x15, 0x3f, 0x14 };
+
+		mac_lo = 0x45c0;
+		memcpy(h + 0x64, cache, sizeof(cache));
+	}
+	put_unaligned_le16(mac_lo, h + 0x02);
+	put_unaligned_le16(agg ? 0 : 0x0002, h + 0x04);	/* fixed rate */
+	put_unaligned_le16(chanspec, h + 0x06);
+	h[0x08] = ieee80211_hdrlen(wlhdr->frame_control);
+	put_unaligned_le16(len, h + 0x0a);
+	put_unaligned_le16(cookie, h + 0x0c);
+	if (agg)
+		put_unaligned_le16(le16_to_cpu(wlhdr->seq_ctrl), h + 0x0e);
+
+	/* Rate entry 0: frame type, always-set bit 2, TX core 0 mask. */
+	phy0 = (is_ofdm ? 1 : 0) | 0x0004 | (1 << 6);
+	if (!is_ofdm && rate != B43_CCK_RATE_1MB &&
+	    (info->control.rates[0].flags & IEEE80211_TX_RC_USE_SHORT_PREAMBLE))
+		phy0 |= 0x0010;
+	if (info->control.rates[0].flags & IEEE80211_TX_RC_MCS) {
+		ht_mcs = info->control.rates[0].idx;
+	} else if (vht && !agg) {
+		/*
+		 * A VHT frame always goes out as an A-MPDU; outside a session
+		 * send the HT20 rate of the same stream count instead.
+		 */
+		const struct ieee80211_tx_rate *r = &info->control.rates[0];
+
+		ht_mcs = min_t(int, ieee80211_rate_get_vht_mcs(r), 7) +
+			 8 * (ieee80211_rate_get_vht_nss(r) - 1);
+	}
+
+	if (vht && agg) {
+		b43_txhdr_ac_vht_block(ri, &info->control.rates[0], chanspec);
+	} else if (ht_mcs >= 0 && ht_mcs <= 15) {
+		/*
+		 * HT20: frame type 2, PLCP as brcmsmac lays it out, rate
+		 * index = MCS
+		 */
+		static const u8 ht20_500k[8] = { 13, 26,  39,  52,
+						 78, 104, 117, 130 };
+		u8 mcs = ht_mcs;
+		u8 *plcp = ri + 0x06;
+
+		phy0 = 2 | 0x0004 | ((mcs > 7 ? 3 : 1) << 6);
+		put_unaligned_le16(phy0, ri + 0x00);
+		put_unaligned_le16(subband, ri + 0x02);
+		put_unaligned_le16(mcs, ri + 0x04);
+		plcp[0] = mcs;
+		plcp[1] = len & 0xff;
+		plcp[2] = len >> 8;
+		/* smoothing, not sounding, reserved (brcmsmac) */
+		plcp[3] = 0x07;
+		plcp[4] = 0;
+		plcp[5] = 0;
+		put_unaligned_le16(ht20_500k[mcs & 7] * (mcs > 7 ? 2 : 1),
+				   ri + 0x0e);
+	} else {
+		put_unaligned_le16(phy0, ri + 0x00);
+		put_unaligned_le16(subband, ri + 0x02);
+		put_unaligned_le16(idx, ri + 0x04);
+		b43_generate_plcp_hdr((struct b43_plcp_hdr4 *)(ri + 0x06),
+				      len, rate);
+		put_unaligned_le16(rate, ri + 0x0e);	/* 500 kbit/s units */
+	}
+	if (vht && agg && info->control.rates[1].idx >= 0 &&
+	    (info->control.rates[1].flags & IEEE80211_TX_RC_VHT_MCS)) {
+		put_unaligned_le16(0, ri + 0x10);
+		ri += 0x14;
+		b43_txhdr_ac_vht_block(ri, &info->control.rates[1], chanspec);
+	} else if (agg && !vht && info->control.rates[1].idx >= 0 &&
+	    info->control.rates[1].idx <= 15 &&
+	    (info->control.rates[1].flags & IEEE80211_TX_RC_MCS)) {
+		/* Second rate block: the fallback rate of the session frame */
+		static const u8 ht20_500k[8] = { 13, 26,  39,  52,
+						 78, 104, 117, 130 };
+		u8 mcs = info->control.rates[1].idx;
+
+		put_unaligned_le16(0, ri + 0x10);
+		ri += 0x14;
+		put_unaligned_le16(2 | 0x0004 | ((mcs > 7 ? 3 : 1) << 6),
+				   ri + 0x00);
+		put_unaligned_le16(subband, ri + 0x02);
+		put_unaligned_le16(mcs, ri + 0x04);
+		ri[0x06] = mcs;
+		ri[0x07] = len & 0xff;
+		ri[0x08] = len >> 8;
+		ri[0x09] = 0x07;
+		put_unaligned_le16(ht20_500k[mcs & 7] * (mcs > 7 ? 2 : 1),
+				   ri + 0x0e);
+	}
+	put_unaligned_le16(0x0020, ri + 0x10);	/* last rate entry */
+
+	return 0;
+}
+
 /* Generate a TX data header. */
 int b43_generate_txhdr(struct b43_wldev *dev,
 		       u8 *_txhdr,
@@ -258,6 +468,10 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 	u8 extra_ft = 0;
 	struct ieee80211_rate *txrate;
 	struct ieee80211_tx_rate *rates;
+
+	if (b43_ucode_is_ac(dev))
+		return b43_generate_txhdr_ac(dev, _txhdr, skb_frag, info,
+					     cookie);
 
 	memset(txhdr, 0, sizeof(*txhdr));
 
