@@ -50,7 +50,7 @@
 #include "link_service.h"
 #include "dce/dmub_hw_lock_mgr.h"
 #include "dcn10/dcn10_hwseq.h"
-#include "inc/link_enc_cfg.h"
+#include "link_enc_cfg.h"
 #include "dcn30/dcn30_vpg.h"
 #include "dce/dce_i2c_hw.h"
 #include "dsc.h"

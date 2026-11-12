@@ -8,7 +8,7 @@
 #include "dmub_cmd.h"
 #include "grph_object_ctrl_defs.h"
 #include "bios_parser_types.h"
-#include "inc/hw/hw_shared.h"
+#include "hw/hw_shared.h"
 
 /*
  * DC2_DC1_Wrapped hardware init: dcn401_init_hw as twelve BLS stages.

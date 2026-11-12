@@ -33,7 +33,7 @@
  * blocks for the Data Fabric Interface that are not clock/power gated.
  */
 
-#include "dc/dc_hw_types.h"
+#include "dc_hw_types.h"
 
 enum dcc_control {
 	dcc_control__256_256_xxx,

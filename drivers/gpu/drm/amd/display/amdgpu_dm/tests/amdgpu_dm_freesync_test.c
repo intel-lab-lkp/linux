@@ -14,7 +14,7 @@
 
 #include "dc.h"
 #include "dc_test.h"
-#include "inc/core_types.h"
+#include "core_types.h"
 #include "amd_shared.h"
 #include "amdgpu.h"
 #include "amdgpu_mode.h"

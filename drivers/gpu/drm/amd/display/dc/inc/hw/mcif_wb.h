@@ -27,7 +27,7 @@
 
 #include "dc_hw_types.h"
 
-#include "dml2_0/dml21/inc/dml_top_dchub_registers.h"
+#include "../../dml2_0/dml21/inc/dml_top_dchub_registers.h"
 
 enum mmhubbub_wbif_mode {
 	PACKED_444 = 0,

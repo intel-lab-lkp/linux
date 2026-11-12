@@ -32,9 +32,9 @@
 #include "amdgpu_dm_hdcp.h"
 #include "amdgpu_dm_mst_types.h"
 #include "amdgpu_dm_kunit_test_helpers.h"
-#include "dsc/dsc.h"
-#include "inc/core_types.h"
-#include "inc/link_service.h"
+#include "dc/dsc/dsc.h"
+#include "core_types.h"
+#include "link_service.h"
 
 /*
  * Minimal mock DPCD backing store and AUX transfer callback used to exercise

@@ -30,7 +30,7 @@
 #include "amdgpu_dm.h"
 #include "modules/power/power_helpers.h"
 #include "dmub/inc/dmub_cmd.h"
-#include "dc/inc/link_service.h"
+#include "link_service.h"
 #include "dm_helpers.h"
 
 

@@ -26,7 +26,7 @@
 #ifndef __DCE_I2C_H__
 #define __DCE_I2C_H__
 
-#include "inc/core_types.h"
+#include "core_types.h"
 #include "dce_i2c_hw.h"
 #include "dce_i2c_sw.h"
 

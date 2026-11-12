@@ -28,7 +28,7 @@
 #include "link_ddc.h"
 #include "link_dpcd.h"
 #include "dm_helpers.h"
-#include "dc/dc_dmub_srv.h"
+#include "dc_dmub_srv.h"
 #include "dce/dmub_replay.h"
 #include "dc_priv.h"
 

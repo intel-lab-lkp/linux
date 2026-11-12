@@ -7,7 +7,7 @@
 
 #include "dc.h"
 #include "dc_priv.h"
-#include "inc/dc_core_interface.h"
+#include "dc_core_interface.h"
 #include "bls_builder/dmub_abi.h"
 
 struct dc2 {

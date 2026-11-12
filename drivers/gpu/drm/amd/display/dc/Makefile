@@ -98,3 +98,13 @@ endif
 
 AMD_DISPLAY_FILES += $(addprefix $(AMDDALPATH)/dc/, $(FILES))
 
+# The dc directory root holds private headers (dc_priv.h and friends) that
+# must not be reachable outside DC, so the global include path deliberately
+# stops at dc/inc. DC-internal objects still need the root on their include
+# path for the many "subdir/header.h" includes inside DC, so add it per
+# object instead of through a global ccflags-y entry.
+DC_INTERNAL_OBJS := $(filter $(AMDDALPATH)/dc/%,$(AMD_DISPLAY_FILES))
+$(foreach obj,$(DC_INTERNAL_OBJS),\
+	$(eval CFLAGS_$(obj) += -I$(FULL_AMD_DISPLAY_PATH)/dc))
+
+

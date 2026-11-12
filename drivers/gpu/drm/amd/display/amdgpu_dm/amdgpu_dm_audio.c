@@ -36,7 +36,7 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_eld.h>
 
-#include "dc/inc/core_types.h"
+#include "core_types.h"
 
 static int amdgpu_dm_audio_component_get_eld(struct device *kdev, int port,
 					  int pipe, bool *enabled,

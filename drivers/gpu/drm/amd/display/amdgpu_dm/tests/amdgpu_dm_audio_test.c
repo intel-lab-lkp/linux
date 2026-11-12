@@ -19,8 +19,8 @@
 
 #include "dc.h"
 #include "dc_test.h"
-#include "dc/inc/core_types.h"
-#include "dc/inc/hw/audio.h"
+#include "core_types.h"
+#include "hw/audio.h"
 #include "amdgpu.h"
 #include "amdgpu_mode.h"
 #include "amdgpu_dm.h"

@@ -37,22 +37,22 @@
 #include "gpio_types.h"
 #include "link_service_types.h"
 #include "grph_object_ctrl_defs.h"
-#include <inc/hw/opp.h>
-#include <inc/hw/rmcm.h>
+#include "hw/opp.h"
+#include "hw/rmcm.h"
 
-#include "hwss/hw_sequencer.h"
-#include "inc/compressor.h"
-#include "inc/hw/dmcu.h"
-#include "dml/display_mode_lib.h"
+#include "../hwss/hw_sequencer.h"
+#include "compressor.h"
+#include "hw/dmcu.h"
+#include "../dml/display_mode_lib.h"
 
-#include "dml2_wrapper/dml2_wrapper.h"
+#include "../dml2_wrapper/dml2_wrapper.h"
 
 #include "dmub/inc/dmub_cmd.h"
 
-#include "dml/dml1_frl_cap_chk.h"
+#include "../dml/dml1_frl_cap_chk.h"
 
-#include "sspl/dc_spl_types.h"
-#include "inc/dc_core_interface.h"
+#include "../sspl/dc_spl_types.h"
+#include "dc_core_interface.h"
 
 struct abm_save_restore;
 

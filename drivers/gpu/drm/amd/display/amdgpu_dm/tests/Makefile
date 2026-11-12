@@ -8,7 +8,6 @@ ccflags-y += -I$(src)/..
 ccflags-y += -I$(src)/../..
 ccflags-y += -I$(src)/../../include
 ccflags-y += -I$(src)/../../modules/inc
-ccflags-y += -I$(src)/../../dc
 ccflags-y += -I$(src)/../../../amdgpu
 ccflags-y += -I$(src)/../../../amdkfd
 ccflags-y += -I$(src)/../../../include

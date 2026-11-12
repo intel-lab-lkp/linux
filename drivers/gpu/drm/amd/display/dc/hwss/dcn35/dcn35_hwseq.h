@@ -27,7 +27,7 @@
 #ifndef __DC_HWSS_DCN35_H__
 #define __DC_HWSS_DCN35_H__
 
-#include "inc/core_types.h"
+#include "core_types.h"
 #include "dc.h"
 #include "hw_sequencer_private.h"
 

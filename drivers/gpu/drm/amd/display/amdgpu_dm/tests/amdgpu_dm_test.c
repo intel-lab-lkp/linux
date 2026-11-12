@@ -23,11 +23,11 @@
 
 #include "dc.h"
 #include "dc_test.h"
-#include "dc/dc_dmub_srv.h"
+#include "dc_dmub_srv.h"
 #include "dal_asic_id.h"
 #include "dm_services_types.h"
 #include "dmub/dmub_srv.h"
-#include "inc/core_types.h"
+#include "core_types.h"
 #include "logger_types.h"
 #include "amd_shared.h"
 #include "amdgpu.h"

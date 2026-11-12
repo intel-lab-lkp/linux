@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "inc/dc_core_interface.h"
+#include "dc_core_interface.h"
 
 struct dc;
 

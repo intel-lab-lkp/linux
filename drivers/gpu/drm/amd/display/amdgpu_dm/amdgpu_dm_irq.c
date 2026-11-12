@@ -26,8 +26,8 @@
 
 #include "dm_services_types.h"
 #include "dc.h"
-#include "dc/dc_dmub_srv.h"
-#include "dc/dc_stat.h"
+#include "dc_dmub_srv.h"
+#include "dc_stat.h"
 
 #include "amdgpu.h"
 #include "amdgpu_display.h"
@@ -39,7 +39,7 @@
 #include "amdgpu_dm_mst_types.h"
 #include "amdgpu_dm_dmub.h"
 #include "amdgpu_dm_trace.h"
-#include "link/protocols/link_dpcd.h"
+#include "dc/link/protocols/link_dpcd.h"
 #include "link_service_types.h"
 #include "ivsrcid/ivsrcid_vislands30.h"
 #include "ivsrcid/dcn/irqsrcs_dcn_1_0.h"

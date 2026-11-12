@@ -34,9 +34,9 @@
 #include "amdgpu_dm_psr.h"
 #include "include/grph_object_id.h"
 #include "amdgpu_dm_kunit_test_helpers.h"
-#include "inc/link_service.h"
-#include "inc/resource.h"
-#include "inc/hw/timing_generator.h"
+#include "link_service.h"
+#include "resource.h"
+#include "dc/inc/hw/timing_generator.h"
 
 /* Tests for get_subconnector_type() */
 

@@ -25,7 +25,7 @@
  */
 
 #include "dc.h"
-#include "inc/core_status.h"
+#include "core_status.h"
 #include "dpcd_defs.h"
 
 #include "link_dp_dpia.h"

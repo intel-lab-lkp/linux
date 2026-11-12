@@ -43,7 +43,7 @@
 #include "amdgpu_dm_irq.h"
 #include "amdgpu_dm_mst_types.h"
 #include "dpcd_defs.h"
-#include "dc/inc/core_types.h"
+#include "core_types.h"
 
 #include "dm_helpers.h"
 #include "ddc_service_types.h"

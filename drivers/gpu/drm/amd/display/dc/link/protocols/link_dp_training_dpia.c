@@ -29,7 +29,7 @@
 #include "link_dp_training_dpia.h"
 #include "dc.h"
 #include "dc_priv.h"
-#include "inc/core_status.h"
+#include "core_status.h"
 #include "dpcd_defs.h"
 
 #include "link_dp_dpia.h"

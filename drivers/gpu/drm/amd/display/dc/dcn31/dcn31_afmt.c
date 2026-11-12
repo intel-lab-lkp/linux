@@ -28,7 +28,7 @@
 #include "dcn30/dcn30_afmt.h"
 #include "dcn31_afmt.h"
 #include "reg_helper.h"
-#include "dc/dc.h"
+#include "dc.h"
 #include "dc_priv.h"
 
 #define DC_LOGGER \

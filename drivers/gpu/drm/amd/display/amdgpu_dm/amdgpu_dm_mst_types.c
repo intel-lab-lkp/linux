@@ -39,6 +39,7 @@
 #include "amdgpu_dm_hdcp.h"
 
 #include "dc.h"
+#include "core_types.h"
 #include "dm_helpers.h"
 
 #include "ddc_service_types.h"
@@ -48,7 +49,6 @@
 #include "amdgpu_dm_debugfs.h"
 #endif
 
-#include "dc/resource/dcn20/dcn20_resource.h"
 
 #define PEAK_FACTOR_X1000 1006
 

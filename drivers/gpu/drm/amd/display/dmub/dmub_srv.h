@@ -66,7 +66,7 @@
  */
 
 #include "inc/dmub_cmd.h"
-#include "dc/dc_types.h"
+#include "dc_types.h"
 
 #define DMUB_PC_SNAPSHOT_COUNT 10
 #define DMUB_TRACE_SNAPSHOT_COUNT 8

@@ -53,7 +53,7 @@
 #include "dce/dmub_hw_lock_mgr.h"
 #include "hw_sequencer.h"
 #include "dpcd_defs.h"
-#include "inc/link_enc_cfg.h"
+#include "link_enc_cfg.h"
 #include "link_hwss.h"
 #include "link_service.h"
 #include "dc_state_priv.h"

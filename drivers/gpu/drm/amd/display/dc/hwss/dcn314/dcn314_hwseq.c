@@ -48,7 +48,7 @@
 #include "dce/dmub_outbox.h"
 #include "link_service.h"
 #include "dcn10/dcn10_hwseq.h"
-#include "inc/link_enc_cfg.h"
+#include "link_enc_cfg.h"
 #include "dcn30/dcn30_vpg.h"
 #include "dce/dce_i2c_hw.h"
 #include "dsc.h"

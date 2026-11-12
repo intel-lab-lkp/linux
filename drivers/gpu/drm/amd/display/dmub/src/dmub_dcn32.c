@@ -26,7 +26,7 @@
 #include "../dmub_srv.h"
 #include "dmub_reg.h"
 #include "dmub_dcn32.h"
-#include "dc/dc_types.h"
+#include "dc_types.h"
 #include "dc_hw_types.h"
 
 #include "dcn/dcn_3_2_0_offset.h"

@@ -39,9 +39,9 @@
 #include "resource.h"
 #include "dsc.h"
 #include "link_hwss.h"
-#include "dc/dc_dmub_srv.h"
-#include "link/protocols/link_dp_capability.h"
-#include "inc/hw/dchubbub.h"
+#include "dc_dmub_srv.h"
+#include "dc/link/protocols/link_dp_capability.h"
+#include "dc/inc/hw/dchubbub.h"
 
 #ifdef CONFIG_DRM_AMD_SECURE_DISPLAY
 #include "amdgpu_dm_psr.h"

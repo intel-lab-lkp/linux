@@ -38,9 +38,9 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_atomic.h>
-#include "dc/inc/hw/optc.h"
+#include "hw/optc.h"
 
-#include "dc/inc/core_types.h"
+#include "core_types.h"
 
 DECLARE_EVENT_CLASS(amdgpu_dc_reg_template,
 		    TP_PROTO(unsigned long *count, uint32_t reg, uint32_t value),

@@ -22,7 +22,7 @@
  * Authors: AMD
  */
 
-#include "dc/dc_stat.h"
+#include "dc_stat.h"
 #include "dmub/dmub_srv_stat.h"
 #include "dc_dmub_srv.h"
 #include "dc_priv.h"

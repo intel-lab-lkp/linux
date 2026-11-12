@@ -26,11 +26,11 @@
 
 #include "dm_services_types.h"
 #include "dc.h"
-#include "dc/inc/core_types.h"
-#include "dc/dc_dmub_srv.h"
+#include "core_types.h"
+#include "dc_dmub_srv.h"
 #include "dmub/dmub_srv.h"
-#include "dc/inc/hw/dmcu.h"
-#include "dc/inc/hw/abm.h"
+#include "hw/dmcu.h"
+#include "hw/abm.h"
 #include "dal_asic_id.h"
 
 #include "amdgpu.h"

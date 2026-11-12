@@ -26,7 +26,7 @@
 #ifndef _DC_STATE_H_
 #define _DC_STATE_H_
 
-#include "inc/core_status.h"
+#include "core_status.h"
 
 struct dc_state *dc_state_create(struct dc *dc, struct dc_state_create_params *params);
 void dc_state_copy(struct dc_state *dst_state, struct dc_state *src_state);

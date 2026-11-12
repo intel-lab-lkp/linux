@@ -30,7 +30,7 @@
 #include "dmcu.h"
 #include "abm.h"
 #include "power_helpers.h"
-#include "dce/dmub_psr.h"
+#include "dc/dce/dmub_psr.h"
 #include "dal_asic_id.h"
 #include "link_service.h"
 #include <linux/math.h>

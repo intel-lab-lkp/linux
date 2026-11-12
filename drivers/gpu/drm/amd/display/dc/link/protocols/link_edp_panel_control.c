@@ -36,7 +36,7 @@
 #include "dal_asic_id.h"
 #include "link_dp_phy.h"
 #include "dce/dmub_psr.h"
-#include "dc/dc_dmub_srv.h"
+#include "dc_dmub_srv.h"
 #include "dce/dmub_replay.h"
 #include "abm.h"
 #include "resource.h"

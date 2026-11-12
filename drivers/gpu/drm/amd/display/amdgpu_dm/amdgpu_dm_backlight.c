@@ -24,9 +24,9 @@
  */
 
 #include "dc.h"
-#include "dc/dc_dmub_srv.h"
-#include "dc/dc_state.h"
-#include "dc/dc_stat.h"
+#include "dc_dmub_srv.h"
+#include "dc_state.h"
+#include "dc_stat.h"
 
 #include "amdgpu.h"
 #include "amdgpu_display.h"

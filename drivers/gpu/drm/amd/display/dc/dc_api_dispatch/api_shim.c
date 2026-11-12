@@ -7,7 +7,7 @@
 #include "dc.h"
 #include "dc_api_dispatch/api_shim.h"
 #include "core2/dc_core2.h"
-#include "inc/dc_core_interface.h"
+#include "dc_core_interface.h"
 
 void api_shim_construct(struct dc *dc, const struct dc_init_data *init_params)
 {

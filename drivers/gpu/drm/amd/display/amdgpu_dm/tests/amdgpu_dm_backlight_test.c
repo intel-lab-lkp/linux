@@ -24,7 +24,7 @@
 #include "amdgpu_dm_kunit_test_helpers.h"
 #include "amd_shared.h"
 #include "link_service.h"
-#include "dc/inc/hw/panel_cntl.h"
+#include "hw/panel_cntl.h"
 
 struct dm_backlight_connector_fixture {
 	struct amdgpu_device *adev;

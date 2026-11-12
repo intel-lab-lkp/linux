@@ -29,7 +29,7 @@
 /* TODO: this needs to be looked at, used by Stella's workaround*/
 
 #include "include/logger_interface.h"
-#include "inc/dce_calcs.h"
+#include "dce_calcs.h"
 
 #include "dce/dce_mem_input.h"
 #include "dce110_mem_input_v.h"

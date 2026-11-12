@@ -5,7 +5,7 @@
 #ifndef __DC_HWSS_DCN50_H__
 #define __DC_HWSS_DCN50_H__
 
-#include "inc/core_types.h"
+#include "core_types.h"
 #include "dc.h"
 #include "dc_stream.h"
 #include "hw_sequencer_private.h"

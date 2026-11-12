@@ -27,7 +27,7 @@
 #include "dc_types.h"
 #include "dmub_reg.h"
 #include "dmub_dcn35.h"
-#include "dc/dc_types.h"
+#include "dc_types.h"
 
 #include "dcn/dcn_3_5_0_offset.h"
 #include "dcn/dcn_3_5_0_sh_mask.h"

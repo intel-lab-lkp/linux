@@ -40,9 +40,9 @@
 #include "mcif_wb.h"
 #include "panel_cntl.h"
 #include "dmub/inc/dmub_cmd.h"
-#include "bls_builder/bls_builder_legacy_init.h"
+#include "../bls_builder/bls_builder_legacy_init.h"
 #include "pg_cntl.h"
-#include "sspl/dc_spl.h"
+#include "../sspl/dc_spl.h"
 
 #define MAX_CLOCK_SOURCES 7
 #define MAX_SVP_PHANTOM_STREAMS 2
@@ -61,8 +61,8 @@
 #include "transform.h"
 #include "dpp.h"
 
-#include "dml2_0/dml21/inc/dml_top_dchub_registers.h"
-#include "dml2_0/dml21/inc/dml_top_types.h"
+#include "../dml2_0/dml21/inc/dml_top_dchub_registers.h"
+#include "../dml2_0/dml21/inc/dml_top_types.h"
 
 struct resource_pool;
 struct dc_state;

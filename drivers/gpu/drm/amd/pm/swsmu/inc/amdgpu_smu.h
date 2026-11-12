@@ -28,7 +28,7 @@
 #include "amdgpu.h"
 #include "kgd_pp_interface.h"
 #include "dm_pp_interface.h"
-#include "dm_pp_smu.h"
+#include "dc/inc/dm_pp_smu.h"
 #include "smu_types.h"
 #include "linux/firmware.h"
 #include <linux/ktime.h>

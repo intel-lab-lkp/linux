@@ -16,9 +16,9 @@
 
 #include "dc.h"
 #include "dc_test.h"
-#include "inc/core_types.h"
-#include "inc/hw/timing_generator.h"
-#include "irq/irq_service.h"
+#include "core_types.h"
+#include "dc/inc/hw/timing_generator.h"
+#include "dc/irq/irq_service.h"
 #include "amdgpu.h"
 #include "amdgpu_mode.h"
 #include "amdgpu_dm.h"
