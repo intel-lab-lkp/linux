@@ -145,6 +145,107 @@ enum usb_port_connect_type usb_of_get_connect_type(struct usb_device *hub, int p
 }
 EXPORT_SYMBOL_GPL(usb_of_get_connect_type);
 
+static bool usb_of_is_connector(const struct device_node *np)
+{
+	return of_device_is_compatible(np, "usb-a-connector") ||
+	       of_device_is_compatible(np, "usb-b-connector") ||
+	       of_device_is_compatible(np, "usb-c-connector");
+}
+
+/*
+ * Return the device node owning the far end of @con's endpoint on @con_port,
+ * and in @port1 the number of the port that endpoint belongs to.
+ */
+static struct device_node *usb_of_connector_remote(struct device_node *con,
+						   u32 con_port, u32 *port1)
+{
+	struct device_node *ep, *remote;
+	struct of_endpoint endpoint;
+
+	ep = of_graph_get_endpoint_by_regs(con, con_port, -1);
+	if (!ep)
+		return NULL;
+
+	remote = of_graph_get_remote_endpoint(ep);
+	of_node_put(ep);
+	if (!remote)
+		return NULL;
+
+	if (of_graph_parse_endpoint(remote, &endpoint)) {
+		of_node_put(remote);
+		return NULL;
+	}
+	*port1 = endpoint.port;
+
+	ep = remote;
+	remote = of_graph_get_port_parent(ep);
+	of_node_put(ep);
+
+	return remote;
+}
+
+/**
+ * usb_of_get_connector_peer() - find a port's peer through its connector
+ * @hub: hub to which the port @port1 belongs
+ * @port1: one-based index of the port
+ * @superspeed: whether @hub is a SuperSpeed hub
+ * @peer_port1: returns the one-based index of the peer port
+ *
+ * A USB connector carries its USB 2.0 data lines on graph port 0 and its
+ * SuperSpeed lanes on graph port 1. Usually both reach the same hub or host
+ * controller, whose USB 2.0 and SuperSpeed ports are paired by default. Some
+ * SoCs instead route the two halves of a connector to different host
+ * controllers, for example a SuperSpeed-only xHCI paired with an EHCI. In that
+ * case the two ports can only be paired through the connector.
+ *
+ * Return: the device node of the hub or host controller providing the peer
+ * port, with its refcount incremented, if @port1 is the @superspeed half of a
+ * connector whose other half leads to a different node. NULL otherwise.
+ */
+struct device_node *usb_of_get_connector_peer(struct usb_device *hub,
+					      int port1, bool superspeed,
+					      u32 *peer_port1)
+{
+	struct device_node *np = hub->dev.of_node;
+	struct device_node *ep, *con, *remote, *peer = NULL;
+	u32 remote_port1;
+
+	if (!np || !of_graph_is_present(np))
+		return NULL;
+
+	ep = of_graph_get_endpoint_by_regs(np, port1, -1);
+	if (!ep)
+		return NULL;
+
+	con = of_graph_get_remote_port_parent(ep);
+	of_node_put(ep);
+	if (!con)
+		return NULL;
+
+	if (!usb_of_is_connector(con) || !of_device_is_available(con))
+		goto out;
+
+	/* The connector's half for our speed must lead back to this port */
+	remote = usb_of_connector_remote(con, superspeed ? 1 : 0, &remote_port1);
+	if (!remote)
+		goto out;
+	of_node_put(remote);
+	if (remote != np || remote_port1 != port1)
+		goto out;
+
+	/* Peers on the same node are paired without the connector's help */
+	peer = usb_of_connector_remote(con, superspeed ? 0 : 1, peer_port1);
+	if (peer && (peer == np || !*peer_port1 ||
+		     !of_device_is_available(peer))) {
+		of_node_put(peer);
+		peer = NULL;
+	}
+out:
+	of_node_put(con);
+	return peer;
+}
+EXPORT_SYMBOL_GPL(usb_of_get_connector_peer);
+
 /**
  * usb_of_get_interface_node() - get a USB interface node
  * @udev: USB device of interface
