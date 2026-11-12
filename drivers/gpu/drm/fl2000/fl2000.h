@@ -41,6 +41,24 @@ enum fl2000_interface {
 	FL2000_USBIF_NUM,
 };
 
+/* Called from URB completion handlers, i.e. in atomic context */
+static inline int fl2000_urb_status(struct usb_device *usb_dev, int status)
+{
+	switch (status) {
+	case 0:
+	case -ECONNRESET:
+	case -ENOENT:
+	case -ESHUTDOWN:
+		/* Success, or the URB was unlinked / the device is going away */
+		break;
+	default:
+		dev_err_ratelimited(&usb_dev->dev, "Nonzero urb status, %d\n", status);
+		break;
+	}
+
+	return status;
+}
+
 struct fl2000_timings {
 	u32 hactive;
 	u32 htotal;
@@ -62,6 +80,25 @@ struct fl2000_pll {
 /* Polling interval and timeout in us for I2C read/write operations */
 #define I2C_RDWR_INTERVAL 200
 #define I2C_RDWR_TIMEOUT  (256 * 1000)
+
+/* Streaming transfer task */
+struct fl2000_stream;
+struct fl2000_stream *fl2000_stream_create(struct usb_device *usb_dev);
+void fl2000_stream_destroy(struct fl2000_stream *stream);
+
+/* Streaming interface */
+int fl2000_stream_mode_set(struct fl2000_stream *stream, unsigned int width,
+			   unsigned int height, u32 bytes_pix);
+struct drm_rect;
+struct iosys_map;
+void fl2000_stream_compress(struct fl2000_stream *stream, const struct iosys_map *src_map,
+			    bool imported, unsigned int pitch,
+			    const struct drm_rect *src, const struct drm_rect *clip);
+void fl2000_stream_note_render(struct fl2000_stream *stream, unsigned int conv_us,
+			       unsigned int damage_px);
+
+int fl2000_stream_enable(struct fl2000_stream *stream);
+void fl2000_stream_disable(struct fl2000_stream *stream);
 
 /* I2C adapter interface creation */
 struct i2c_adapter *fl2000_i2c_init(struct usb_interface *interface, struct regmap *regmap);
