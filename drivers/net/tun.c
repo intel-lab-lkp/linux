@@ -1960,7 +1960,6 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 		net_zcopy_complete(NULL, msg_control, false);
 
 	skb_reset_network_header(skb);
-	skb_probe_transport_header(skb);
 	skb_record_rx_queue(skb, tfile->queue_index);
 
 	if (skb_xdp) {
