@@ -691,6 +691,8 @@ static int dmacontroller_setup(struct b43_dmaring *ring)
 			    & B43_DMA64_TXADDREXT_MASK;
 			if (!parity)
 				value |= B43_DMA64_TXPARITYDISABLE;
+			if (b43_is_ac_core(ring->dev))
+				value |= B43_DMA64_TXCTL_AC;
 			if (ring->dev->dma.ptr_is_addr) {
 				ring->ptr_base = lower_32_bits(ring->dmabase);
 				value |= b43_dma_read(ring, B43_DMA64_TXCTL) &
@@ -733,6 +735,8 @@ static int dmacontroller_setup(struct b43_dmaring *ring)
 			    & B43_DMA64_RXADDREXT_MASK;
 			if (!parity)
 				value |= B43_DMA64_RXPARITYDISABLE;
+			if (b43_is_ac_core(ring->dev))
+				value |= B43_DMA64_RXCTL_AC;
 			if (ring->dev->dma.ptr_is_addr) {
 				ring->ptr_base = lower_32_bits(ring->dmabase);
 				value |= b43_dma_read(ring, B43_DMA64_RXCTL) &

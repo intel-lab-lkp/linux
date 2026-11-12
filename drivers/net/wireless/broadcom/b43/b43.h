@@ -1001,6 +1001,12 @@ static inline enum nl80211_band b43_current_band(struct b43_wl *wl)
 	return wl->hw->conf.chandef.chan->band;
 }
 
+/* MAC core of the BCM4352 and BCM4360 (core revisions 40 and 42). */
+static inline bool b43_is_ac_core(struct b43_wldev *dev)
+{
+	return dev->dev->core_rev == 40 || dev->dev->core_rev == 42;
+}
+
 static inline int b43_bus_may_powerdown(struct b43_wldev *wldev)
 {
 	return wldev->dev->bus_may_powerdown(wldev->dev);
