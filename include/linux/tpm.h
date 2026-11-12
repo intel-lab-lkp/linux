@@ -131,6 +131,7 @@ struct tpm_chip {
 	struct hwrng hwrng;
 
 	struct mutex tpm_mutex;	/* tpm is processing */
+	unsigned int nr_unanswered;	/* commands in a row that timed out */
 
 	unsigned long timeout_a; /* jiffies */
 	unsigned long timeout_b; /* jiffies */
