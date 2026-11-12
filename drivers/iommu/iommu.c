@@ -481,8 +481,12 @@ static int iommu_init_device(struct device *dev)
 	 * still a big job, so for now just invoke the whole thing. The device
 	 * already having a driver bound means dma_configure has already run and
 	 * found no IOMMU to wait for, so there's no point calling it again.
+	 * A driver that is still binding in another context (dev->driver set,
+	 * but not bound yet) has not got that far: its own dma_configure will
+	 * defer in iommu_device_use_default_domain() until we are done here.
 	 */
-	if (!dev->iommu->fwspec && !dev->driver && dev->bus->dma_configure) {
+	if (!dev->iommu->fwspec && !device_is_bound(dev) &&
+	    dev->bus->dma_configure) {
 		mutex_unlock(&iommu_probe_device_lock);
 		dev->bus->dma_configure(dev);
 		mutex_lock(&iommu_probe_device_lock);
@@ -648,9 +652,13 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 		return ret;
 	/*
 	 * And if we do now see any replay calls, they would indicate someone
-	 * misusing the dma_configure path outside bus code.
+	 * misusing the dma_configure path outside bus code. For bus_iommu_probe()
+	 * (@group_list set) dev->driver may also be set by a driver which is
+	 * binding concurrently in another context; that driver will defer in
+	 * iommu_device_use_default_domain(), so only a driver that is already
+	 * bound is a late probe there.
 	 */
-	if (dev->driver)
+	if (group_list ? device_is_bound(dev) : !!dev->driver)
 		dev_WARN(dev, "late IOMMU probe at driver bind, something fishy here!\n");
 
 	group = dev->iommu_group;
@@ -3316,9 +3324,26 @@ out_unlock:
 int iommu_device_use_default_domain(struct device *dev)
 {
 	/* Caller is the driver core during the pre-probe path */
-	struct iommu_group *group = dev->iommu_group;
+	struct iommu_group *group;
+	bool probing;
 	int ret = 0;
 
+	/*
+	 * bus_iommu_probe() in another context may be probing the device right
+	 * now, with iommu_probe_device_lock dropped while it replays
+	 * dma_configure. Our own dma_configure can then see its dev->iommu or
+	 * fwspec and return early, although the device is not in a group yet
+	 * and has no default domain or DMA ops. A fwspec without a group means
+	 * exactly that (a failed probe frees the fwspec), so make the driver
+	 * wait until the probe has finished.
+	 */
+	mutex_lock(&iommu_probe_device_lock);
+	group = dev->iommu_group;
+	probing = !group && dev->iommu && dev->iommu->fwspec;
+	mutex_unlock(&iommu_probe_device_lock);
+
+	if (probing)
+		return -EPROBE_DEFER;
 	if (!group)
 		return 0;
 
