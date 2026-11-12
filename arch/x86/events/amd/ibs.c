@@ -1980,6 +1980,7 @@ static int x86_pmu_amd_ibs_dying_cpu(unsigned int cpu)
 static __init int amd_ibs_init(void)
 {
 	u32 caps;
+	int ret;
 
 	caps = __get_ibs_caps();
 	if (!caps)
@@ -2007,12 +2008,27 @@ static __init int amd_ibs_init(void)
 	 * x86_pmu_amd_ibs_starting_cpu will be called from core on
 	 * all online cpus.
 	 */
-	cpuhp_setup_state(CPUHP_AP_PERF_X86_AMD_IBS_STARTING,
-			  "perf/x86/amd/ibs:starting",
-			  x86_pmu_amd_ibs_starting_cpu,
-			  x86_pmu_amd_ibs_dying_cpu);
+	ret = cpuhp_setup_state(CPUHP_AP_PERF_X86_AMD_IBS_STARTING,
+				"perf/x86/amd/ibs:starting",
+				x86_pmu_amd_ibs_starting_cpu,
+				x86_pmu_amd_ibs_dying_cpu);
+	if (ret)
+		goto err_pm;
 
-	return perf_event_ibs_init();
+	ret = perf_event_ibs_init();
+	if (ret) {
+		cpuhp_remove_state(CPUHP_AP_PERF_X86_AMD_IBS_STARTING);
+		goto err_pm;
+	}
+
+	return 0;
+
+err_pm:
+#ifdef CONFIG_PM
+	unregister_syscore(&perf_ibs_syscore);
+#endif
+	ibs_caps = 0;
+	return ret;
 }
 
 /* Since we need the pci subsystem to init ibs we can't do this earlier: */
