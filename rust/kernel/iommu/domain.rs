@@ -19,7 +19,10 @@ use crate::{
         Bound,
         Device, //
     },
-    error::from_err_ptr,
+    error::{
+        from_err_ptr,
+        to_result, //
+    },
     prelude::*, //
 };
 
@@ -43,6 +46,11 @@ pub struct Domain<'a> {
 
 // SAFETY: A `struct iommu_domain` is not tied to the thread that allocated it.
 unsafe impl<'a> Send for Domain<'a> {}
+
+// SAFETY: `&Domain` allows the following from several threads at once:
+// - Attaching and detaching the domain. `iommu_attach_device()` and `iommu_detach_device()` may
+//   be called concurrently for the same domain.
+unsafe impl<'a> Sync for Domain<'a> {}
 
 impl<'a> Domain<'a> {
     /// Allocates a paging domain for `dev`.
@@ -70,11 +78,56 @@ impl<'a> Domain<'a> {
             _dev: PhantomData,
         })
     }
+
+    /// Attaches the domain to `dev`.
+    ///
+    /// This may sleep.
+    ///
+    /// # Safety
+    ///
+    /// - The caller must be the driver bound to `dev`.
+    /// - The caller must ensure that `dev` stops using the domain before the returned
+    ///   [`Attachment`] is dropped.
+    /// - The caller must not `mem::forget()` the returned [`Attachment`] or otherwise prevent its
+    ///   [`Drop`] implementation from running.
+    pub unsafe fn attach<'d>(&'d self, dev: &'d Device<Bound>) -> Result<Attachment<'d>> {
+        // SAFETY: By the type invariant, `self.ptr` is a valid domain, and `dev` is a valid
+        // device. The caller is the driver bound to `dev`.
+        to_result(unsafe { bindings::iommu_attach_device(self.ptr.as_ptr(), dev.as_raw()) })?;
+
+        // INVARIANT: The domain is attached to `dev`.
+        Ok(Attachment { domain: self, dev })
+    }
 }
 
 impl<'a> Drop for Domain<'a> {
     fn drop(&mut self) {
-        // SAFETY: By the type invariant, `self.ptr` is a domain owned by `self`.
+        // SAFETY: By the type invariant, `self.ptr` is a domain owned by `self`. Every
+        // `Attachment` borrows `self`, and the caller of `attach()` promised not to leak it, so
+        // the domain is attached to no device.
         unsafe { bindings::iommu_domain_free(self.ptr.as_ptr()) };
+    }
+}
+
+/// A [`Domain`] attached to a device.
+///
+/// An attachment cannot outlive the domain or the binding of the device it is attached to.
+/// Dropping it detaches the domain from the device, which may sleep.
+///
+/// # Invariants
+///
+/// `domain` is attached to `dev`.
+#[must_use = "the domain is detached when the attachment is dropped"]
+pub struct Attachment<'d> {
+    domain: &'d Domain<'d>,
+    dev: &'d Device<Bound>,
+}
+
+impl<'d> Drop for Attachment<'d> {
+    fn drop(&mut self) {
+        // SAFETY: By the type invariant, `self.domain` is attached to `self.dev`. The caller of
+        // `Domain::attach()` is the driver bound to `self.dev`, and promised that the device
+        // stopped using the domain.
+        unsafe { bindings::iommu_detach_device(self.domain.ptr.as_ptr(), self.dev.as_raw()) };
     }
 }
