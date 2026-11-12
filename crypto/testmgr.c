@@ -4069,6 +4069,13 @@ static const struct alg_test_desc alg_test_descs[] = {
 			.aead = __VECS(aegis128_tv_template)
 		}
 	}, {
+		.alg = "aegis128x4",
+		.generic_driver = "aegis128x4-lib",
+		.test = alg_test_aead,
+		.suite = {
+			.aead = __VECS(aegis128x4_tv_template)
+		}
+	}, {
 		.alg = "authenc(hmac(md5),cbc(aes))",
 		.generic_driver = "authenc(hmac-md5-lib,cbc(aes-lib))",
 		.test = alg_test_aead,

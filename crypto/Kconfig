@@ -760,6 +760,17 @@ config CRYPTO_AEGIS128_SIMD
 	  Architecture: arm or arm64 using:
 	  - NEON (Advanced SIMD) extension
 
+config CRYPTO_AEGIS128X4
+	tristate "AEGIS-128X4"
+	select CRYPTO_AEAD
+	select CRYPTO_LIB_AEGIS128X4
+	help
+	  AEGIS-128X4 AEAD algorithm (RFC 10032), the 4-way parallel variant of
+	  AEGIS-128L.
+
+	  This is a wrapper around the AEGIS-128X4 library, which has an
+	  optimized implementation for x86_64 CPUs with VAES and AVX-512.
+
 config CRYPTO_CHACHA20POLY1305
 	tristate "ChaCha20-Poly1305"
 	select CRYPTO_CHACHA20
