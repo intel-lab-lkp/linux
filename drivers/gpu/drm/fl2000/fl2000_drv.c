@@ -5,6 +5,7 @@
  */
 
 #include "fl2000.h"
+#include "fl2000_it66121.h"
 
 #define USB_VENDOR_FRESCO_LOGIC 0x1D5C
 #define USB_PRODUCT_FL2000	0x2000
@@ -33,6 +34,7 @@ MODULE_DEVICE_TABLE(usb, fl2000_id_table);
 struct fl2000_devs {
 	struct regmap *regmap;
 	struct i2c_adapter *adapter;
+	struct drm_bridge *bridge;
 };
 
 /* Interface 0 is what the driver is probing: claim the others */
@@ -102,13 +104,26 @@ static int fl2000_probe(struct usb_interface *interface, const struct usb_device
 		return PTR_ERR(devs->adapter);
 	}
 
+	/* The IT66121 is looked for with the I2C engine, ready as for reading the EDID */
+	fl2000_reset(devs->regmap);
+	fl2000_usb_magic(devs->regmap);
+
+	devs->bridge = it66121_create(devs->adapter);
+	if (IS_ERR(devs->bridge))
+		return PTR_ERR(devs->bridge);
+
 	ret = fl2000_claim_interfaces(usb_dev, devs);
 	if (ret)
-		return ret;
+		goto err_destroy_bridge;
 
 	usb_set_intfdata(interface, devs);
 
 	return 0;
+
+err_destroy_bridge:
+	it66121_destroy(devs->bridge);
+
+	return ret;
 }
 
 static void fl2000_disconnect(struct usb_interface *interface)
@@ -122,6 +137,8 @@ static void fl2000_disconnect(struct usb_interface *interface)
 
 	for (int i = 0; i < FL2000_USBIF_NUM; i++)
 		usb_set_intfdata(usb_ifnum_to_if(usb_dev, i), NULL);
+
+	it66121_destroy(devs->bridge);
 
 	/* Last, as devs goes with interface 0, which may be one of these */
 	fl2000_release_interfaces(usb_dev, interface);
