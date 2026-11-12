@@ -409,11 +409,14 @@ static struct dma_fence *panfrost_job_run(struct drm_sched_job *sched_job)
 	if (unlikely(job->base.s_fence->finished.error))
 		return NULL;
 
-	/* Nothing to execute: can happen if the job has finished while
-	 * we were resetting the GPU.
+	/* Nothing to execute: the job has finished (or failed) on the GPU
+	 * while we were resetting it, after drm_sched_stop() had detached the
+	 * scheduler from its done fence. Hand that fence back, so that the job
+	 * completes with the status the GPU gave it: with no fence,
+	 * drm_sched_start() would complete it as cancelled.
 	 */
 	if (!job->jc)
-		return NULL;
+		return dma_fence_get(job->done_fence);
 
 	fence = panfrost_fence_create(pfdev, slot);
 	if (IS_ERR(fence))
