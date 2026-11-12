@@ -6669,6 +6669,10 @@ long hugetlb_change_protection(struct vm_area_struct *vma,
 	 * In the case of shared PMDs, the area to flush could be beyond
 	 * start/end.  Set range.start/range.end to cover the maximum possible
 	 * range if PMD sharing is possible.
+	 *
+	 * MMU_NOTIFIER_RANGE_PERM_UPGRADE is never set here. hugetlb does not
+	 * restore the write bit, and huge_pmd_unshare() may drop the mapping,
+	 * so this is not a strict permission upgrade.
 	 */
 	mmu_notifier_range_init(&range, MMU_NOTIFY_PROTECTION_VMA,
 				0, mm, start, end);
