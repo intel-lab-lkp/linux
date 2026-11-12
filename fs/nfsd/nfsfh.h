@@ -226,8 +226,8 @@ extern char * SVCFH_fmt(struct svc_fh *fhp);
 /*
  * Function prototypes
  */
-__be32	nfsd_check_port(struct svc_rqst *rqstp,
-			struct svc_cred *cred, struct svc_export *exp);
+__be32	nfsd_check_port(struct svc_rqst *rqstp, struct svc_cred *cred,
+			struct svc_export *exp, int access);
 __be32	fh_verify(struct svc_rqst *, struct svc_fh *, umode_t, int);
 __be32	fh_verify_local(struct net *, struct svc_cred *, struct auth_domain *,
 			struct svc_fh *, umode_t, int);
