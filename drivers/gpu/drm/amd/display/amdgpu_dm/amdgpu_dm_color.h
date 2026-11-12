@@ -74,9 +74,9 @@ int __set_output_tf_32(struct dc_transfer_func *func,
 		       const struct drm_color_lut32 *lut, uint32_t lut_size,
 		       bool has_rom);
 struct dc_color_caps;
-int __set_input_tf(struct dc_color_caps *caps, struct dc_transfer_func *func,
+int __set_input_tf(const struct dc_color_caps *caps, struct dc_transfer_func *func,
 		   const struct drm_color_lut *lut, uint32_t lut_size);
-int __set_input_tf_32(struct dc_color_caps *caps, struct dc_transfer_func *func,
+int __set_input_tf_32(const struct dc_color_caps *caps, struct dc_transfer_func *func,
 		      const struct drm_color_lut32 *lut, uint32_t lut_size);
 enum dc_transfer_func_predefined
 amdgpu_tf_to_dc_tf(enum amdgpu_transfer_function tf);

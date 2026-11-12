@@ -140,6 +140,7 @@ EXPORT_IF_KUNIT(amdgpu_dm_audio_init_pins);
 int amdgpu_dm_audio_init(struct amdgpu_device *adev)
 {
 	unsigned int inst_array[MAX_AUDIOS];
+	struct resource_pool *res_pool;
 	int audio_count;
 	int i, ret;
 
@@ -148,9 +149,10 @@ int amdgpu_dm_audio_init(struct amdgpu_device *adev)
 
 	adev->mode_info.audio.enabled = true;
 
-	audio_count = adev->dm.dc->res_pool->audio_count;
+	res_pool = dc_get_res_pool(adev->dm.dc);
+	audio_count = res_pool->audio_count;
 	for (i = 0; i < audio_count; i++)
-		inst_array[i] = adev->dm.dc->res_pool->audios[i]->inst;
+		inst_array[i] = res_pool->audios[i]->inst;
 	amdgpu_dm_audio_init_pins(adev, audio_count, inst_array);
 
 	ret = component_add(adev->dev, &amdgpu_dm_audio_component_bind_ops);

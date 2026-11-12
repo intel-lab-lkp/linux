@@ -111,7 +111,7 @@ bool mod_color_calculate_regamma_params(struct dc_transfer_func *output_tf,
 		const struct hdr_tm_params *fs_params,
 		struct calculate_buffer *cal_buffer);
 
-bool mod_color_calculate_degamma_params(struct dc_color_caps *dc_caps,
+bool mod_color_calculate_degamma_params(const struct dc_color_caps *dc_caps,
 		struct dc_transfer_func *output_tf,
 		const struct dc_gamma *ramp, bool mapUserRamp);
 

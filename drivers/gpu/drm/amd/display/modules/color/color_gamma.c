@@ -1669,7 +1669,7 @@ static bool map_regamma_hw_to_x_user(
 
 #define _EXTRA_POINTS 3
 
-bool mod_color_calculate_degamma_params(struct dc_color_caps *dc_caps,
+bool mod_color_calculate_degamma_params(const struct dc_color_caps *dc_caps,
 		struct dc_transfer_func *input_tf,
 		const struct dc_gamma *ramp, bool map_user_ramp)
 {
