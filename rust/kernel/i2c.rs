@@ -123,7 +123,6 @@ unsafe impl<T: Driver> driver::RegistrationOps for Adapter<T> {
         unsafe {
             (*idrv.get()).driver.name = name.as_char_ptr();
             (*idrv.get()).probe = Some(Self::probe_callback);
-            (*idrv.get()).remove = Some(Self::remove_callback);
             (*idrv.get()).shutdown = Some(Self::shutdown_callback);
             (*idrv.get()).id_table = i2c_table;
             (*idrv.get()).driver.of_match_table = of_table;
@@ -159,18 +158,6 @@ impl<T: Driver> Adapter<T> {
             idev.as_ref().set_drvdata(data)?;
             Ok(0)
         })
-    }
-
-    extern "C" fn remove_callback(idev: *mut bindings::i2c_client) {
-        // SAFETY: `idev` is a valid pointer to a `struct i2c_client`.
-        let idev = unsafe { &*idev.cast::<I2cClient<device::CoreInternal<'_>>>() };
-
-        // SAFETY: `remove_callback` is only ever called after a successful call to
-        // `probe_callback`, hence it's guaranteed that `I2cClient::set_drvdata()` has been called
-        // and stored a `Pin<KBox<T::Data<'_>>>`.
-        let data = unsafe { idev.as_ref().drvdata_borrow::<T::Data<'_>>() };
-
-        T::unbind(idev, data);
     }
 
     extern "C" fn shutdown_callback(idev: *mut bindings::i2c_client) {
@@ -312,6 +299,10 @@ pub trait Driver {
     type IdInfo: 'static;
 
     /// The type of the driver's bus device private data.
+    ///
+    /// Device teardown should be performed in [`Drop`] or [`PinnedDrop`](pin_init::PinnedDrop)
+    /// for this type. The `'bound` lifetime allows the data to retain device resources and a
+    /// [`I2cClient<device::Bound>`] reference for use during teardown.
     type Data<'bound>: Send + 'bound;
 
     /// The table of device ids supported by the driver.
@@ -344,20 +335,6 @@ pub trait Driver {
     /// after it returns. Any deallocation or teardown of driver-owned resources should instead be
     /// handled in `Drop`.
     fn shutdown<'bound>(dev: &'bound I2cClient<device::Core<'_>>, this: Pin<&Self::Data<'bound>>) {
-        let _ = (dev, this);
-    }
-
-    /// I2C driver unbind.
-    ///
-    /// Called when the [`I2cClient`] is unbound from its bound [`Driver`]. Implementing this
-    /// callback is optional.
-    ///
-    /// This callback serves as a place for drivers to perform teardown operations that require a
-    /// `&Device<Core>` or `&Device<Bound>` reference. For instance, drivers may try to perform I/O
-    /// operations to gracefully tear down the device.
-    ///
-    /// Otherwise, release operations for driver resources should be performed in `Drop`.
-    fn unbind<'bound>(dev: &'bound I2cClient<device::Core<'_>>, this: Pin<&Self::Data<'bound>>) {
         let _ = (dev, this);
     }
 }
