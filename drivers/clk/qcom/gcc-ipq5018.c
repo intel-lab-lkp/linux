@@ -1970,9 +1970,9 @@ static struct clk_branch gcc_lpass_sway_clk = {
 };
 
 static struct clk_branch gcc_mdio0_ahb_clk = {
-	.halt_reg = 0x58004,
+	.halt_reg = 0x58014,
 	.clkr = {
-		.enable_reg = 0x58004,
+		.enable_reg = 0x58014,
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data) {
 			.name = "gcc_mdioi0_ahb_clk",
@@ -1987,9 +1987,9 @@ static struct clk_branch gcc_mdio0_ahb_clk = {
 };
 
 static struct clk_branch gcc_mdio1_ahb_clk = {
-	.halt_reg = 0x58014,
+	.halt_reg = 0x58004,
 	.clkr = {
-		.enable_reg = 0x58014,
+		.enable_reg = 0x58004,
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data) {
 			.name = "gcc_mdio1_ahb_clk",
@@ -3589,8 +3589,8 @@ static const struct qcom_reset_map gcc_ipq5018_resets[] = {
 	[GCC_GMAC1_SYS_ARES] = { 0x68438, 1 },
 	[GCC_IMEM_BCR] = { 0x0e000, 0 },
 	[GCC_LPASS_BCR] = { 0x2e000, 0 },
-	[GCC_MDIO0_BCR] = { 0x58000, 0 },
-	[GCC_MDIO1_BCR] = { 0x58010, 0 },
+	[GCC_MDIO0_BCR] = { 0x58010, 0 },
+	[GCC_MDIO1_BCR] = { 0x58000, 0 },
 	[GCC_MPM_BCR] = { 0x2c000, 0 },
 	[GCC_PCIE0_BCR] = { 0x75004, 0 },
 	[GCC_PCIE0_LINK_DOWN_BCR] = { 0x750a8, 0 },
