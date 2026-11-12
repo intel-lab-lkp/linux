@@ -3501,9 +3501,13 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 				clear_current_stateid(cstate);
 
 			if (current_fh->fh_export &&
-					need_wrongsec_check(rqstp))
+					need_wrongsec_check(rqstp)) {
 				op->status = check_nfsd_access(current_fh->fh_export,
 							       rqstp, 0);
+				/* READ with a stateid does not call fh_verify(). */
+				if (!op->status)
+					svc_xprt_set_valid(rqstp->rq_xprt);
+			}
 		}
 encode_op:
 		if (op->status == nfserr_replay_me) {

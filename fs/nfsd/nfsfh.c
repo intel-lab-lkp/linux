@@ -500,9 +500,8 @@ __fh_verify(struct svc_rqst *rqstp,
 		error = check_security_flavor(exp, rqstp, may_bypass_gss);
 		if (error)
 			goto out;
+		svc_xprt_set_valid(rqstp->rq_xprt);
 	}
-
-	svc_xprt_set_valid(rqstp->rq_xprt);
 
 check_permissions:
 	/* Finally, check access permissions. */
