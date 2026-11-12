@@ -21,6 +21,7 @@ use crate::{
     },
     error::{
         from_err_ptr,
+        from_result,
         to_result, //
     },
     prelude::*,
@@ -126,6 +127,8 @@ unsafe impl<'a> Send for Domain<'a> {}
 //   be called concurrently for the same domain.
 // - Mapping and unmapping ranges. `iommu_map_sg()` and `iommu_unmap()` may be called concurrently
 //   for the same domain, except in the cases that the safety requirements of `map()` exclude.
+// - Getting the identifier of the domain. `id()` takes the address held in `ptr` and does not
+//   dereference it.
 unsafe impl<'a> Sync for Domain<'a> {}
 
 impl<'a> Domain<'a> {
@@ -153,6 +156,39 @@ impl<'a> Domain<'a> {
             ptr,
             _dev: PhantomData,
         })
+    }
+
+    /// Allocates a paging domain for `dev` that reports its faults to `handler`.
+    ///
+    /// A handler can serve several domains, which [`Domain::id`] tells apart.
+    ///
+    /// # Safety
+    ///
+    /// This function has the same safety requirements as [`Domain::new`].
+    pub unsafe fn with_fault_handler<H: FaultHandler>(
+        dev: &'a Device<Bound>,
+        handler: &'a H,
+    ) -> Result<Self> {
+        // SAFETY: The caller meets the safety requirements of `Domain::new()`.
+        let domain = unsafe { Self::new(dev)? };
+
+        // SAFETY: By the type invariant, `domain.ptr` is a valid domain, which nothing else uses
+        // yet. `handler` outlives `'a`, and thus the domain.
+        unsafe {
+            bindings::iommu_set_fault_handler(
+                domain.ptr.as_ptr(),
+                Some(fault_callback::<H>),
+                core::ptr::from_ref(handler).cast_mut().cast(),
+            )
+        };
+
+        Ok(domain)
+    }
+
+    /// Returns the identifier that [`FaultHandler::fault`] receives for faults on this domain.
+    #[inline]
+    pub fn id(&self) -> DomainId {
+        DomainId(self.ptr.as_ptr().addr())
     }
 
     /// Attaches the domain to `dev`.
@@ -310,4 +346,80 @@ impl<'d, S> Drop for Mapping<'d, S> {
         // `self.domain`, and nothing else unmaps it.
         unsafe { bindings::iommu_unmap(self.domain.ptr.as_ptr(), self.iova, self.size) };
     }
+}
+
+/// Identifies a [`Domain`] in fault reports.
+///
+/// Two identifiers are equal if they identify the same domain. An identifier can be reused once
+/// its domain is freed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct DomainId(usize);
+
+/// A handler for the IOMMU faults of a [`Domain`], see [`Domain::with_fault_handler`].
+///
+/// Only IOMMU drivers that report faults with `report_iommu_fault()` call it.
+///
+/// # Examples
+///
+/// ```
+/// use kernel::{
+///     device::{
+///         Bound,
+///         Device, //
+///     },
+///     iommu::domain::{
+///         Domain,
+///         DomainId,
+///         FaultHandler, //
+///     },
+///     prelude::*,
+///     sync::atomic::{
+///         Atomic,
+///         Relaxed, //
+///     }, //
+/// };
+///
+/// struct Faults {
+///     count: Atomic<u32>,
+/// }
+///
+/// impl FaultHandler for Faults {
+///     fn fault(&self, _domain: DomainId, _iova: usize, _write: bool) -> Result {
+///         self.count.add(1, Relaxed);
+///         Ok(())
+///     }
+/// }
+///
+/// fn test<'a>(dev: &'a Device<Bound>, faults: &'a Faults) -> Result<Domain<'a>> {
+///     // SAFETY: The IOMMU driver that `dev` is behind meets the requirements of `Domain::new()`.
+///     unsafe { Domain::with_fault_handler(dev, faults) }
+/// }
+/// ```
+pub trait FaultHandler: Sync {
+    /// Handles a faulting access to `iova` through the domain identified by `domain`. `write` is
+    /// true if the IOMMU driver reported a write access.
+    ///
+    /// This may be executed in atomic context and must not sleep. Implementations return `Ok(())`
+    /// if the fault was handled. The result is passed to the IOMMU driver.
+    fn fault(&self, domain: DomainId, iova: usize, write: bool) -> Result;
+}
+
+/// # Safety
+///
+/// `token` must be the `&H` that [`Domain::with_fault_handler`] registered for `domain`.
+unsafe extern "C" fn fault_callback<H: FaultHandler>(
+    domain: *mut bindings::iommu_domain,
+    _dev: *mut bindings::device,
+    iova: c_ulong,
+    flags: c_int,
+    token: *mut c_void,
+) -> c_int {
+    // SAFETY: By the safety requirements, `token` is a `&H` that outlives `domain`.
+    let handler = unsafe { &*token.cast_const().cast::<H>() };
+    let write = flags & cv!(bindings::IOMMU_FAULT_WRITE => c_int) != 0;
+
+    from_result(|| {
+        handler.fault(DomainId(domain.addr()), iova, write)?;
+        Ok(0)
+    })
 }
