@@ -3275,6 +3275,25 @@ bool nfsd4_cache_this_op(struct nfsd4_op *op)
 	return OPDESC(op)->op_flags & OP_CACHEME;
 }
 
+/*
+ * RFC 8881 Section 2.6.3.1.1.7: only an OPEN by component name may
+ * report NFS4ERR_WRONGSEC itself.
+ */
+static bool open_handles_wrongsec(const struct nfsd4_op *op)
+{
+	/* After a failed decode, op_claim_type can read as CLAIM_NULL. */
+	if (op->status != nfs_ok)
+		return false;
+	switch (op->u.open.op_claim_type) {
+	case NFS4_OPEN_CLAIM_NULL:
+	case NFS4_OPEN_CLAIM_DELEGATE_CUR:
+	case NFS4_OPEN_CLAIM_DELEGATE_PREV:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static bool need_wrongsec_check(struct svc_rqst *rqstp)
 {
 	struct nfsd4_compoundres *resp = rqstp->rq_resp;
@@ -3312,6 +3331,8 @@ static bool need_wrongsec_check(struct svc_rqst *rqstp)
 	 */
 	if (resp->cstate.minorversion == 0 && next->opnum == OP_SECINFO)
 		return true;
+	if (next->opnum == OP_OPEN)
+		return !open_handles_wrongsec(next);
 	nextd = OPDESC(next);
 	/*
 	 * RFC 8881 Section 2.6.3.1.1.2: a later put-filehandle operation
@@ -4025,7 +4046,7 @@ static const struct nfsd4_operation nfsd4_ops[] = {
 	},
 	[OP_OPEN] = {
 		.op_func = nfsd4_open,
-		.op_flags = OP_HANDLES_WRONGSEC | OP_MODIFIES_SOMETHING,
+		.op_flags = OP_MODIFIES_SOMETHING,
 		.op_name = "OP_OPEN",
 		.op_rsize_bop = nfsd4_open_rsize,
 		.op_set_currentstateid = nfsd4_set_openstateid,
