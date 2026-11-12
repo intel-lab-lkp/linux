@@ -14,7 +14,7 @@ use kernel::{
 };
 
 struct SampleDriver {
-    _intf: ARef<usb::Interface>,
+    intf: ARef<usb::Interface>,
 }
 
 kernel::usb_device_table!(
@@ -36,12 +36,13 @@ impl usb::Driver for SampleDriver {
         let dev: &device::Device<Core<'_>> = intf.as_ref();
         dev_info!(dev, "Rust USB driver sample probed\n");
 
-        Ok(Self { _intf: intf.into() })
+        Ok(Self { intf: intf.into() })
     }
+}
 
-    fn disconnect<'bound>(intf: &'bound usb::Interface<Core<'_>>, _data: Pin<&Self>) {
-        let dev: &device::Device<Core<'_>> = intf.as_ref();
-        dev_info!(dev, "Rust USB driver sample disconnected\n");
+impl Drop for SampleDriver {
+    fn drop(&mut self) {
+        dev_info!(self.intf, "Rust USB driver sample disconnected\n");
     }
 }
 

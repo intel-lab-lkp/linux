@@ -98,22 +98,8 @@ impl<T: Driver> Adapter<T> {
         })
     }
 
-    extern "C" fn disconnect_callback(intf: *mut bindings::usb_interface) {
-        // SAFETY: The USB core only ever calls the disconnect callback with a valid pointer to a
-        // `struct usb_interface`.
-        //
-        // INVARIANT: `intf` is valid for the duration of `disconnect_callback()`.
-        let intf = unsafe { &*intf.cast::<Interface<device::CoreInternal<'_>>>() };
-
-        let dev: &device::Device<device::CoreInternal<'_>> = intf.as_ref();
-
-        // SAFETY: `disconnect_callback` is only ever called after a successful call to
-        // `probe_callback`, hence it's guaranteed that `Device::set_drvdata()` has been called
-        // and stored a `Pin<KBox<T::Data<'_>>>`.
-        let data = unsafe { dev.drvdata_borrow::<T::Data<'_>>() };
-
-        T::disconnect(intf, data);
-    }
+    // The USB core calls `disconnect` unconditionally.
+    extern "C" fn disconnect_callback(_intf: *mut bindings::usb_interface) {}
 }
 
 /// Abstraction for the USB device ID structure, i.e. [`struct usb_device_id`].
@@ -278,12 +264,6 @@ macro_rules! usb_device_table {
 ///     ) -> impl PinInit<Self::Data<'bound>, Error> + 'bound {
 ///         Err(ENODEV)
 ///     }
-///
-///     fn disconnect<'bound>(
-///         _interface: &'bound usb::Interface<Core<'_>>,
-///         _data: Pin<&Self::Data<'bound>>,
-///     ) {
-///     }
 /// }
 ///```
 pub trait Driver {
@@ -291,6 +271,10 @@ pub trait Driver {
     type IdInfo: 'static;
 
     /// The type of the driver's bus device private data.
+    ///
+    /// Device teardown should be performed in [`Drop`] or [`PinnedDrop`](pin_init::PinnedDrop)
+    /// for this type. The `'bound` lifetime allows the data to retain device resources and an
+    /// [`Interface<device::Bound>`] reference for use during teardown.
     type Data<'bound>: Send + 'bound;
 
     /// The table of device ids supported by the driver.
@@ -305,14 +289,6 @@ pub trait Driver {
         id: &DeviceId,
         id_info: Option<&'bound Self::IdInfo>,
     ) -> impl PinInit<Self::Data<'bound>, Error> + 'bound;
-
-    /// USB driver disconnect.
-    ///
-    /// Called when the USB interface is about to be unbound from this driver.
-    fn disconnect<'bound>(
-        interface: &'bound Interface<device::Core<'_>>,
-        data: Pin<&Self::Data<'bound>>,
-    );
 }
 
 /// A USB interface.
