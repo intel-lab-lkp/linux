@@ -194,6 +194,17 @@ static __always_inline void set_write_prot_commit_flush_ptes(struct vm_area_stru
 {
 	bool set_write;
 
+	/*
+	 * Writes did not need a fault before the change either. All PTEs in
+	 * the batch share the write bit.
+	 */
+	if (pte_write(oldpte)) {
+		set_write = maybe_change_pte_writable(vma, ptent);
+		prot_commit_flush_ptes(vma, addr, ptep, oldpte, ptent, nr_ptes,
+				       /* idx = */ 0, set_write, tlb);
+		return;
+	}
+
 	if (vma_test(vma, VMA_SHARED_BIT)) {
 		set_write = can_change_shared_pte_writable(vma, ptent);
 		prot_commit_flush_ptes(vma, addr, ptep, oldpte, ptent, nr_ptes,

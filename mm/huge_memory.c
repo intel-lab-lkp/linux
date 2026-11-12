@@ -2269,7 +2269,8 @@ fallback:
 }
 
 static inline bool can_change_pmd_writable(struct vm_area_struct *vma,
-					   unsigned long addr, pmd_t pmd)
+					   unsigned long addr, pmd_t oldpmd,
+					   pmd_t pmd)
 {
 	struct page *page;
 
@@ -2287,6 +2288,10 @@ static inline bool can_change_pmd_writable(struct vm_area_struct *vma,
 	/* Do we need write faults for uffd-wp tracking? */
 	if (userfaultfd_huge_pmd_wp(vma, pmd))
 		return false;
+
+	/* Writes did not need a fault before the change either. */
+	if (pmd_write(oldpmd))
+		return true;
 
 	if (!(vma->vm_flags & VM_SHARED)) {
 		/* See can_change_pte_writable(). */
@@ -2317,7 +2322,7 @@ vm_fault_t do_huge_pmd_uffd_rwp(struct vm_fault *vmf)
 	pmd = pmd_mkyoung(pmd);
 	if (!pmd_write(pmd) &&
 	    vma_wants_manual_pte_write_upgrade(vma) &&
-	    can_change_pmd_writable(vma, vmf->address, pmd))
+	    can_change_pmd_writable(vma, vmf->address, vmf->orig_pmd, pmd))
 		pmd = pmd_mkwrite(pmd, vma);
 	set_pmd_at(vma->vm_mm, vmf->address & HPAGE_PMD_MASK,
 		   vmf->pmd, pmd);
@@ -2354,7 +2359,7 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 	 */
 	writable = pmd_write(pmd);
 	if (!writable && vma_wants_manual_pte_write_upgrade(vma) &&
-	    can_change_pmd_writable(vma, vmf->address, pmd))
+	    can_change_pmd_writable(vma, vmf->address, old_pmd, pmd))
 		writable = true;
 
 	folio = vm_normal_folio_pmd(vma, haddr, pmd);
@@ -2820,7 +2825,7 @@ int change_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 
 	/* See change_pte_range(). */
 	if ((cp_flags & MM_CP_TRY_CHANGE_WRITABLE) && !pmd_write(entry) &&
-	    can_change_pmd_writable(vma, addr, entry))
+	    can_change_pmd_writable(vma, addr, oldpmd, entry))
 		entry = pmd_mkwrite(entry, vma);
 
 	ret = HPAGE_PMD_NR;
@@ -2835,7 +2840,8 @@ unlock:
 
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
 static inline bool can_change_pud_writable(struct vm_area_struct *vma,
-					   unsigned long addr, pud_t pud)
+					   unsigned long addr, pud_t oldpud,
+					   pud_t pud)
 {
 	struct page *page;
 
@@ -2845,6 +2851,10 @@ static inline bool can_change_pud_writable(struct vm_area_struct *vma,
 	/* Do we need write faults for softdirty tracking? */
 	if (vma_soft_dirty_enabled(vma) && !pud_soft_dirty(pud))
 		return false;
+
+	/* Writes did not need a fault before the change either. */
+	if (pud_write(oldpud))
+		return true;
 
 	if (!(vma->vm_flags & VM_SHARED)) {
 		/* See can_change_pte_writable(). */
@@ -2896,7 +2906,7 @@ int change_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	entry = pud_modify(oldpud, newprot);
 	/* See change_pte_range(). */
 	if ((cp_flags & MM_CP_TRY_CHANGE_WRITABLE) && !pud_write(entry) &&
-	    can_change_pud_writable(vma, addr, entry))
+	    can_change_pud_writable(vma, addr, oldpud, entry))
 		entry = pud_mkwrite(entry);
 	set_pud_at(mm, addr, pudp, entry);
 	tlb_flush_pud_range(tlb, addr, HPAGE_PUD_SIZE);
