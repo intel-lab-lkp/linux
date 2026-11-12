@@ -2307,10 +2307,14 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 
 	trace_nfsd_vfs_link(rqstp, ffhp, tfhp, name, len);
 
-	err = fh_verify(rqstp, ffhp, S_IFDIR, NFSD_MAY_CREATE);
+	/*
+	 * Verify @ffhp last so that the credentials of its export are in
+	 * effect for vfs_link() and after return.
+	 */
+	err = fh_verify(rqstp, tfhp, 0, NFSD_MAY_NOP);
 	if (err)
 		goto out;
-	err = fh_verify(rqstp, tfhp, 0, NFSD_MAY_NOP);
+	err = fh_verify(rqstp, ffhp, S_IFDIR, NFSD_MAY_CREATE);
 	if (err)
 		goto out;
 	err = nfserr_isdir;
