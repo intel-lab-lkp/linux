@@ -123,6 +123,7 @@ TEST_PROGS := \
 	test_vxlan_vnifiltering.sh \
 	tfo_passive.sh \
 	traceroute.sh \
+	tun_vhost.sh \
 	txtimestamp.sh \
 	udpgro.sh \
 	udpgro_bench.sh \
@@ -177,6 +178,7 @@ TEST_GEN_FILES := \
 	tcp_mmap \
 	tfo \
 	timestamping \
+	tun_vhost \
 	txring_overwrite \
 	txtimestamp \
 	udpgso \

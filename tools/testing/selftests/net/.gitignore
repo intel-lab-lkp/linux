@@ -56,6 +56,7 @@ timestamping
 tls
 tools
 tun
+tun_vhost
 txring_overwrite
 txtimestamp
 udp_splice_checksum
