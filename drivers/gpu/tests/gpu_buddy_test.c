@@ -38,7 +38,7 @@ static void gpu_test_buddy_subtree_offset_alignment_stress(struct kunit *test)
 	};
 	struct list_head allocated[ARRAY_SIZE(alignments)];
 	unsigned int i, max_subtree_align = 0;
-	int ret, tree, order;
+	int ret, order;
 	struct gpu_buddy mm;
 
 	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_init(&mm, mm_size, SZ_4K),
@@ -78,15 +78,11 @@ static void gpu_test_buddy_subtree_offset_alignment_stress(struct kunit *test)
 		}
 
 		for (order = mm.max_order; order >= 0 && !root; order--) {
-			for (tree = 0; tree < 2; tree++) {
-				node = mm.free_trees[tree][order].rb_node;
-				if (node) {
-					root = container_of(node,
-							    struct gpu_buddy_block,
-							    rb);
-					break;
-				}
-			}
+			node = mm.free_tree[order].rb_node;
+			if (node)
+				root = container_of(node,
+						    struct gpu_buddy_block,
+						    rb);
 		}
 
 		KUNIT_ASSERT_NOT_NULL(test, root);
@@ -97,15 +93,13 @@ static void gpu_test_buddy_subtree_offset_alignment_stress(struct kunit *test)
 		gpu_buddy_free_list(&mm, &allocated[i], 0);
 
 		for (order = 0; order <= mm.max_order; order++) {
-			for (tree = 0; tree < 2; tree++) {
-				node = mm.free_trees[tree][order].rb_node;
-				if (!node)
-					continue;
+			node = mm.free_tree[order].rb_node;
+			if (!node)
+				continue;
 
-				block = container_of(node, struct gpu_buddy_block, rb);
-				max_subtree_align = max(max_subtree_align,
-							block->subtree_max_alignment);
-			}
+			block = container_of(node, struct gpu_buddy_block, rb);
+			max_subtree_align = max(max_subtree_align,
+						block->subtree_max_alignment);
 		}
 
 		KUNIT_EXPECT_GE(test, max_subtree_align, ilog2(alignments[i]));
@@ -1046,10 +1040,12 @@ static void gpu_test_buddy_alloc_clear(struct kunit *test)
 	/*
 	 * Create a new mm. Intentionally fragment the address space by creating
 	 * two alternating lists. Free both lists, one as dirty the other as clean.
-	 * Try to allocate double the previous size with matching min_page_size. The
-	 * allocation should never fail as it calls the force_merge. Also check that
-	 * the page is always dirty after force_merge. Free the page as dirty, then
-	 * repeat the whole thing, increment the order until we hit the max_order.
+	 * Try to allocate double the previous size with matching min_page_size.
+	 * The allocation should never fail because buddy pairs coalesce
+	 * unconditionally at free() time, rebuilding the larger block. Also check
+	 * that the page is always dirty (a merged block spanning a dirty half is
+	 * dirty). Free the page as dirty, then repeat the whole thing, increment
+	 * the order until we hit the max_order.
 	 */
 
 	i = 0;
@@ -1142,7 +1138,7 @@ static void gpu_test_buddy_alloc_clear(struct kunit *test)
 	gpu_buddy_free_list(&mm, &clean, GPU_BUDDY_CLEARED);
 	gpu_buddy_free_list(&mm, &dirty, 0);
 	gpu_buddy_reset_clear(&mm, false);
-	KUNIT_EXPECT_EQ(test, mm.clear_avail, 0);
+	KUNIT_EXPECT_EQ(test, gpu_buddy_clear_avail(&mm), 0);
 	gpu_buddy_fini(&mm);
 
 	/*
@@ -1165,7 +1161,7 @@ static void gpu_test_buddy_alloc_clear(struct kunit *test)
 	gpu_buddy_free_list(&mm, &clean, GPU_BUDDY_CLEARED);
 	gpu_buddy_free_list(&mm, &dirty, 0);
 	gpu_buddy_reset_clear(&mm, true);
-	KUNIT_EXPECT_EQ(test, mm.clear_avail, mm_size);
+	KUNIT_EXPECT_EQ(test, gpu_buddy_clear_avail(&mm), mm_size);
 	gpu_buddy_fini(&mm);
 }
 
@@ -1601,6 +1597,89 @@ static int gpu_buddy_suite_init(struct kunit_suite *suite)
 	return 0;
 }
 
+static void gpu_test_buddy_alloc_range_clear_guard(struct kunit *test)
+{
+	const unsigned long chunk = SZ_1M, mm_size = SZ_4M;
+	struct gpu_buddy_block *block;
+	LIST_HEAD(low_dirty);
+	LIST_HEAD(high_a);
+	LIST_HEAD(high_b);
+	LIST_HEAD(barrier);
+	LIST_HEAD(dirty_res);
+	LIST_HEAD(clear_res);
+	struct gpu_buddy mm;
+
+	KUNIT_ASSERT_FALSE_MSG(test, gpu_buddy_init(&mm, mm_size, chunk),
+			       "buddy_init failed\n");
+
+	/*
+	 * Idea is to lay out a range allocation as a low dirty block, an
+	 * allocated barrier, and a high naturally-aligned clear extent, then
+	 * issue a dirty range allocation. It must take the low dirty block and
+	 * leave the clear extent intact; if it instead cuts the clear extent,
+	 * a following same-class clear allocation can no longer find a
+	 * contiguous clear run and fails with -ENOSPC.
+	 *
+	 *   [0,  1M)   dirty free
+	 *   [1M, 2M)   allocated  (barrier, keeps the halves un-mergeable)
+	 *   [2M, 4M)   clear free (one naturally aligned 2 MiB extent)
+	 */
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 0, chunk, chunk, chunk,
+						      &low_dirty, GPU_BUDDY_RANGE_ALLOCATION),
+			       "alloc [0, 1M) failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, chunk, 2 * chunk, chunk, chunk,
+						      &barrier, GPU_BUDDY_RANGE_ALLOCATION),
+			       "alloc [1M, 2M) failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 2 * chunk, 3 * chunk, chunk, chunk,
+						      &high_a, GPU_BUDDY_RANGE_ALLOCATION),
+			       "alloc [2M, 3M) failed\n");
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 3 * chunk, 4 * chunk, chunk, chunk,
+						      &high_b, GPU_BUDDY_RANGE_ALLOCATION),
+			       "alloc [3M, 4M) failed\n");
+
+	/* [2M, 4M) coalesces into one aligned clear extent; [0, 1M) stays dirty. */
+	gpu_buddy_free_list(&mm, &low_dirty, 0);
+	gpu_buddy_free_list(&mm, &high_a, GPU_BUDDY_CLEARED);
+	gpu_buddy_free_list(&mm, &high_b, GPU_BUDDY_CLEARED);
+
+	/* Dirty 1 MiB range alloc: must land at [0, 1M), not cut the clear extent. */
+	KUNIT_ASSERT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 0, mm_size, chunk, chunk,
+						      &dirty_res, GPU_BUDDY_RANGE_ALLOCATION),
+			       "dirty range alloc failed\n");
+	block = list_first_entry(&dirty_res, struct gpu_buddy_block, link);
+	KUNIT_EXPECT_FALSE_MSG(test, gpu_buddy_block_is_clear(block),
+			       "dirty range alloc cut the clear extent (offset=%llx)\n",
+			       gpu_buddy_block_offset(block));
+	KUNIT_EXPECT_EQ(test, gpu_buddy_block_offset(block), 0ULL);
+
+	/*
+	 * The 2 MiB clear extent must still be intact: a clear order-1 range
+	 * allocation has to succeed. Without the guard the extent was cut
+	 * above and this returns -ENOSPC.
+	 */
+	KUNIT_EXPECT_FALSE_MSG(test,
+			       gpu_buddy_alloc_blocks(&mm, 0, mm_size, 2 * chunk, 2 * chunk,
+						      &clear_res,
+						      GPU_BUDDY_RANGE_ALLOCATION |
+						      GPU_BUDDY_CLEAR_ALLOCATION),
+			       "clear 2M range alloc failed: clear extent was fragmented (-ENOSPC)\n");
+	if (!list_empty(&clear_res)) {
+		block = list_first_entry(&clear_res, struct gpu_buddy_block, link);
+		KUNIT_EXPECT_TRUE(test, gpu_buddy_block_is_clear(block));
+		KUNIT_EXPECT_EQ(test, gpu_buddy_block_offset(block), (u64)(2 * chunk));
+	}
+
+	gpu_buddy_free_list(&mm, &clear_res, GPU_BUDDY_CLEARED);
+	gpu_buddy_free_list(&mm, &dirty_res, 0);
+	gpu_buddy_free_list(&mm, &barrier, 0);
+	gpu_buddy_fini(&mm);
+}
+
 static struct kunit_case gpu_buddy_tests[] = {
 	KUNIT_CASE(gpu_test_buddy_alloc_limit),
 	KUNIT_CASE(gpu_test_buddy_alloc_optimistic),
@@ -1610,6 +1689,7 @@ static struct kunit_case gpu_buddy_tests[] = {
 	KUNIT_CASE(gpu_test_buddy_alloc_clear),
 	KUNIT_CASE(gpu_test_buddy_alloc_range),
 	KUNIT_CASE(gpu_test_buddy_alloc_range_bias),
+	KUNIT_CASE(gpu_test_buddy_alloc_range_clear_guard),
 	KUNIT_CASE_SLOW(gpu_test_buddy_fragmentation_performance),
 	KUNIT_CASE_SLOW(gpu_test_buddy_dirty_tracker_performance),
 	KUNIT_CASE(gpu_test_buddy_alloc_exceeds_max_order),
