@@ -771,7 +771,7 @@ static int check_codec(struct aoa_codec *codec,
 		       struct codec_connect_info *cci)
 {
 	const u32 *ref;
-	char propname[32];
+	char propname[MAX_CODEC_NAME_LEN + 20];
 	const struct codec_connection *cc;
 
 	/* if the codec has a 'codec' node, we require a reference */
