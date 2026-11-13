@@ -1527,6 +1527,9 @@ static int kdb_md(int argc, const char **argv)
 	kdbgetintenv("RADIX", &radix);
 	kdbgetintenv("BYTESPERWORD", &bytesperword);
 
+	if (!bytesperword)
+		return KDB_BADWIDTH;
+
 	/* Assume 'md <addr>' and start with environment values */
 	repeat = mdcount * 16 / bytesperword;
 
