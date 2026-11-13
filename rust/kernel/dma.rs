@@ -1237,7 +1237,13 @@ impl<'a, T: ?Sized + KnownSize> IoBase<'a> for &'a Coherent<'_, T> {
     #[inline]
     fn as_view(self) -> CoherentView<'a, Self::Target> {
         CoherentView {
-            // SAFETY: `cpu_addr` is valid and aligned kernel accessible memory.
+            // SAFETY:
+            // - Per type invariant, `cpu_addr` is valid and aligned kernel accessible memory.
+            // - Plain accesses to the region are only possible through `unsafe` APIs, that is
+            //   `Coherent::{as_ref,as_mut}`, `CoherentView::{as_ref,as_mut}` and dereferencing
+            //   the raw pointers returned by `Coherent::{as_ptr,as_mut_ptr}`, all of which require
+            //   the caller to avoid racing with other accesses to the region, including accesses
+            //   through this view.
             cpu_addr: unsafe { SysMem::new(self.cpu_addr.as_ptr()) },
             dma_addr: self.dma_addr,
         }

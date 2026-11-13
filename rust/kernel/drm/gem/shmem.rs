@@ -471,6 +471,8 @@ where
         // - `addr` is page-aligned, which satisfies `Region`'s 4-byte alignment requirement.
         // - The memory remains valid until this `VMap` is dropped; since `self` is `&'a VMap`,
         //   the borrow prevents the `VMap` from being dropped for the lifetime `'a`.
+        // - `VMap` does not expose the mapping in any other way, so all accesses to the region
+        //   from Rust go through views created here, and those are never plain accesses.
         unsafe { SysMem::new(ptr) }
     }
 }
