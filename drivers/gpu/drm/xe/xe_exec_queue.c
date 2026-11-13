@@ -1510,8 +1510,14 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
 
 	/* user id alloc must always be last in ioctl to prevent UAF */
 	err = xa_alloc(&xef->exec_queue.xa, &id, q, xa_limit_32b, GFP_KERNEL);
-	if (err)
+	if (err) {
+		/*
+		 * q->xef is already set, so xe_exec_queue_fini() will
+		 * decrement pending_removal even without an xarray entry.
+		 */
+		atomic_inc(&xef->exec_queue.pending_removal);
 		goto del_hw_engine_group;
+	}
 
 	args->exec_queue_id = id;
 
