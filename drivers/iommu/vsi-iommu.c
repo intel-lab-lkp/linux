@@ -33,6 +33,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 
@@ -669,6 +670,7 @@ MODULE_DEVICE_TABLE(of, vsi_iommu_dt_ids);
 static int vsi_iommu_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct reset_control *resets;
 	struct vsi_iommu *iommu;
 	int err;
 
@@ -687,6 +689,20 @@ static int vsi_iommu_probe(struct platform_device *pdev)
 	iommu->num_clocks = devm_clk_bulk_get_all(dev, &iommu->clocks);
 	if  (iommu->num_clocks < 0)
 		return iommu->num_clocks;
+
+	/* Shared with the decoder. */
+	resets = devm_reset_control_array_get(dev, RESET_CONTROL_OPTIONAL_EXCLUSIVE_RELEASED);
+	if (IS_ERR(resets))
+		return PTR_ERR(resets);
+
+	err = reset_control_acquire(resets);
+	if (err)
+		return err;
+
+	err = reset_control_deassert(resets);
+	reset_control_release(resets);
+	if (err)
+		return err;
 
 	err = clk_bulk_prepare(iommu->num_clocks, iommu->clocks);
 	if (err)
