@@ -896,10 +896,15 @@ static void gpiochip_free_remaining_irqs(struct gpio_chip *gc)
 static void gpiodev_release(struct device *dev)
 {
 	struct gpio_device *gdev = to_gpio_device(dev);
+	unsigned int i;
 
 	/* Call pending kfree()s for descriptor labels. */
 	synchronize_srcu(&gdev->desc_srcu);
 	cleanup_srcu_struct(&gdev->desc_srcu);
+
+	/* Lines released after the chip was removed still hold their label. */
+	for (i = 0; gdev->descs && i < gdev->ngpio; i++)
+		kfree(rcu_access_pointer(gdev->descs[i].label));
 
 	ida_free(&gpio_ida, gdev->id);
 	kfree_const(gdev->label);
