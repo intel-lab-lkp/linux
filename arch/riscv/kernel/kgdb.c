@@ -365,7 +365,7 @@ static int kgdb_riscv_notify(struct notifier_block *self, unsigned long cmd,
 		return NOTIFY_DONE;
 
 	if (type == KGDB_COMPILED_BREAK)
-		regs->epc += 4;
+		regs->epc += BREAK_INSTR_SIZE;
 
 	local_irq_restore(flags);
 
