@@ -252,6 +252,11 @@ ssize_t tpm_transmit(struct tpm_chip *chip, u8 *buf, size_t bufsiz)
 		if (ret < 0)
 			break;
 		rc = be32_to_cpu(header->return_code);
+		/* A TPM that is already started fails TPM2_Startup this way. */
+		if (rc == TPM2_RC_INITIALIZE && cc != TPM2_CC_STARTUP) {
+			chip->flags |= TPM_CHIP_FLAG_DISABLE;
+			break;
+		}
 		if (rc != TPM2_RC_RETRY && rc != TPM2_RC_TESTING)
 			break;
 		/*
