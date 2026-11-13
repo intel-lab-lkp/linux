@@ -59,17 +59,6 @@
 
 #define RPCDBG_FACILITY	RPCDBG_SVCXPRT
 
-/*
- * For UDP:
- * 1 for header page
- * enough pages for RPCSVC_MAXPAYLOAD_UDP
- * 1 in case payload is not aligned
- * 1 for tail page
- */
-enum {
-	SUNRPC_MAX_UDP_SENDPAGES = 1 + RPCSVC_MAXPAYLOAD_UDP / PAGE_SIZE + 1 + 1
-};
-
 /* To-do: to avoid tying up an nfsd thread while waiting for a
  * handshake request, the request could instead be deferred.
  */
@@ -1516,17 +1505,6 @@ void svc_sock_update_bufs(struct svc_serv *serv)
 	spin_unlock_bh(&serv->sv_lock);
 }
 
-static int svc_sock_sendpages(struct socket *sock)
-{
-	switch (sock->type) {
-	case SOCK_STREAM:
-		return 0;
-	case SOCK_DGRAM:
-		return SUNRPC_MAX_UDP_SENDPAGES;
-	}
-	return -EINVAL;
-}
-
 /*
  * Initialize socket for RPC use and create svc_sock struct
  */
@@ -1537,25 +1515,12 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 	struct svc_sock	*svsk;
 	struct sock	*inet;
 	int		pmap_register = !(flags & SVC_SOCK_ANONYMOUS);
-	int		sendpages;
 	unsigned long	pages;
-
-	sendpages = svc_sock_sendpages(sock);
-	if (sendpages < 0)
-		return ERR_PTR(sendpages);
 
 	pages = svc_serv_maxpages(serv);
 	svsk = kzalloc_flex(*svsk, sk_pages, pages);
 	if (!svsk)
 		return ERR_PTR(-ENOMEM);
-
-	if (sendpages) {
-		svsk->sk_bvec = kzalloc_objs(*svsk->sk_bvec, sendpages);
-		if (!svsk->sk_bvec) {
-			kfree(svsk);
-			return ERR_PTR(-ENOMEM);
-		}
-	}
 
 	svsk->sk_maxpages = pages;
 
@@ -1568,7 +1533,6 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 				     inet->sk_protocol,
 				     ntohs(inet_sk(inet)->inet_sport));
 		if (err < 0) {
-			kfree(svsk->sk_bvec);
 			kfree(svsk);
 			return ERR_PTR(err);
 		}
@@ -1637,6 +1601,9 @@ int svc_addsock(struct svc_serv *serv, struct net *net, const int fd,
 		goto out;
 	err = -EBUSY;
 	if (so->sk->sk_user_data)
+		goto out;
+	err = -EINVAL;
+	if (so->type != SOCK_STREAM && so->type != SOCK_DGRAM)
 		goto out;
 	err = -ENOENT;
 	if (!try_module_get(THIS_MODULE))
@@ -1789,6 +1756,5 @@ static void svc_sock_free(struct svc_xprt *xprt)
 		sock_release(sock);
 
 	page_frag_cache_drain(&svsk->sk_frag_cache);
-	kfree(svsk->sk_bvec);
 	kfree(svsk);
 }
