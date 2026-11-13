@@ -40,6 +40,11 @@ module_param_named(suspend_pcr, tpm_suspend_pcr, uint, 0644);
 MODULE_PARM_DESC(suspend_pcr,
 		 "PCR to use for dummy writes to facilitate flush on suspend.");
 
+static unsigned int tpm_max_missed_responses = 60;
+module_param_named(max_missed_responses, tpm_max_missed_responses, uint, 0444);
+MODULE_PARM_DESC(max_missed_responses,
+		 "Disable the TPM after this many commands in a row time out (0 = never).");
+
 /**
  * tpm_calc_ordinal_duration() - calculate the maximum command duration
  * @chip:    TPM chip to use.
@@ -267,6 +272,15 @@ ssize_t tpm_transmit(struct tpm_chip *chip, u8 *buf, size_t bufsiz)
 		tpm_msleep(delay_msec);
 		delay_msec *= 2;
 		memcpy(buf, save, save_size);
+	}
+
+	if (ret >= 0) {
+		chip->nr_missed_responses = 0;
+	} else if (ret == -ETIME && tpm_max_missed_responses &&
+		   !(++chip->nr_missed_responses % tpm_max_missed_responses)) {
+		dev_err(&chip->dev, "%u commands in a row timed out, disabling the TPM\n",
+			chip->nr_missed_responses);
+		chip->flags |= TPM_CHIP_FLAG_DISABLE;
 	}
 	return ret;
 }

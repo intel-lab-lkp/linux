@@ -7682,6 +7682,14 @@ Kernel parameters
 			causing a major performance hit, and the space where
 			machines are deployed is by other means guarded.
 
+	tpm.max_missed_responses= [HW,TPM]
+			Number of commands in a row that may time out before
+			the TPM is disabled. It stays disabled until the
+			driver is rebound or the machine reboots. Set to 0
+			to never disable the TPM.
+			Format: <unsigned int>
+			Default: 60
+
 	tpm_crb_ffa.busy_timeout_ms= [ARM64,TPM]
 			Maximum time in milliseconds to retry sending a message
 			to the TPM service before giving up. This parameter controls
