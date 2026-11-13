@@ -595,7 +595,7 @@ static inline const char *strprefix(const char *s, const char *prefix)
  */
 static inline bool strstarts(const char *str, const char *prefix)
 {
-	return strncmp(str, prefix, strlen(prefix)) == 0;
+	return strprefix(str, prefix);
 }
 
 /**
