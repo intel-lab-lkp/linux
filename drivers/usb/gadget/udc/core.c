@@ -1647,6 +1647,13 @@ static int gadget_match_driver(struct device *dev, const struct device_driver *d
 	return 1;
 }
 
+/* Forget the state that a gadget driver left behind, so the next starts afresh */
+static void usb_udc_forget_driver_locked(struct usb_udc *udc)
+	__must_hold(&udc->connect_lock)
+{
+	udc->gadget->deactivated = false;
+}
+
 static int gadget_bind_driver(struct device *dev)
 {
 	struct usb_gadget *gadget = dev_to_usb_gadget(dev);
@@ -1705,6 +1712,11 @@ static int gadget_bind_driver(struct device *dev)
 		dev_err(&udc->dev, "failed to start %s: %d\n",
 			driver->function, ret);
 
+	/* The driver may have deactivated the gadget before failing */
+	mutex_lock(&udc->connect_lock);
+	usb_udc_forget_driver_locked(udc);
+	mutex_unlock(&udc->connect_lock);
+
 	mutex_lock(&udc_lock);
 	udc->driver = NULL;
 	driver->is_bound = false;
@@ -1734,6 +1746,7 @@ static void gadget_unbind_driver(struct device *dev)
 
 	mutex_lock(&udc->connect_lock);
 	usb_gadget_udc_stop_locked(udc);
+	usb_udc_forget_driver_locked(udc);
 	mutex_unlock(&udc->connect_lock);
 
 	mutex_lock(&udc_lock);
