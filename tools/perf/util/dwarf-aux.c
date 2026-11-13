@@ -14,6 +14,11 @@
 #include "strbuf.h"
 #include "string2.h"
 
+/* DWARF 5 address index, libdw's dwarf_getlocations() returns it unresolved */
+#ifndef DW_OP_addrx
+#define DW_OP_addrx 0xa1
+#endif
+
 /**
  * cu_find_realpath - Find the realpath of the target file
  * @cu_die: A DIE(dwarf information entry) of CU(compilation Unit)
@@ -1621,6 +1626,31 @@ Dwarf_Die *die_find_variable_by_reg(Dwarf_Die *sc_die, Dwarf_Addr pc, int reg,
 	return result;
 }
 
+/*
+ * Get the absolute address of a location expression that consists of a
+ * single address, either DW_OP_addr or DW_OP_addrx.  libdw leaves the
+ * DWARF 5 address index unresolved, it has to be looked up in .debug_addr.
+ */
+static bool die_get_location_addr(Dwarf_Attribute *attr, Dwarf_Op *ops,
+				  Dwarf_Addr *addr)
+{
+	if (ops->atom == DW_OP_addr) {
+		*addr = ops->number;
+		return true;
+	}
+
+	if (ops->atom == DW_OP_addrx) {
+		Dwarf_Attribute addr_attr;
+
+		if (dwarf_getlocation_attr(attr, ops, &addr_attr) != 0)
+			return false;
+
+		return dwarf_formaddr(&addr_attr, addr) == 0;
+	}
+
+	return false;
+}
+
 /* Only checks direct child DIEs in the given scope */
 static int __die_find_var_addr_cb(Dwarf_Die *die_mem, void *arg)
 {
@@ -1639,11 +1669,13 @@ static int __die_find_var_addr_cb(Dwarf_Die *die_mem, void *arg)
 		return DIE_FIND_CB_SIBLING;
 
 	while ((off = dwarf_getlocations(&attr, off, &base, &start, &end, &ops, &nops)) > 0) {
-		if (ops->atom != DW_OP_addr)
+		Dwarf_Addr addr;
+
+		if (!die_get_location_addr(&attr, ops, &addr))
 			continue;
 
 		if (check_allowed_ops(ops, nops) &&
-		    match_var_offset(die_mem, data, data->addr, ops->number,
+		    match_var_offset(die_mem, data, data->addr, addr,
 				     /*is_pointer=*/false))
 			return DIE_FIND_CB_END;
 	}
@@ -1769,7 +1801,7 @@ static int __die_collect_global_vars_cb(Dwarf_Die *die_mem, void *arg)
 	Dwarf_Die type_die;
 	int tag = dwarf_tag(die_mem);
 	Dwarf_Attribute attr;
-	Dwarf_Addr base, start, end;
+	Dwarf_Addr base, start, end, addr;
 	Dwarf_Op *ops;
 	size_t nops;
 	struct die_var_type *vt;
@@ -1784,7 +1816,7 @@ static int __die_collect_global_vars_cb(Dwarf_Die *die_mem, void *arg)
 	if (dwarf_getlocations(&attr, 0, &base, &start, &end, &ops, &nops) <= 0)
 		return DIE_FIND_CB_SIBLING;
 
-	if (ops->atom != DW_OP_addr)
+	if (!die_get_location_addr(&attr, ops, &addr))
 		return DIE_FIND_CB_SIBLING;
 
 	if (!check_allowed_ops(ops, nops))
@@ -1800,7 +1832,7 @@ static int __die_collect_global_vars_cb(Dwarf_Die *die_mem, void *arg)
 	vt->die_off = dwarf_dieoffset(&type_die);
 	vt->die_tag = dwarf_tag(&type_die);
 	vt->from_alt = !die_same_file(die_mem, &type_die);
-	vt->addr = ops->number;
+	vt->addr = addr;
 	vt->end = 0;
 	vt->has_range = false;
 	vt->reg = -1;
