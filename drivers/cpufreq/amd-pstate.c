@@ -36,9 +36,13 @@
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
+#include <linux/cleanup.h>
+#include <linux/cpuset.h>
+#include <linux/mutex.h>
 #include <linux/power_supply.h>
 #include <linux/static_call.h>
 #include <linux/topology.h>
+#include <linux/workqueue.h>
 
 #include <acpi/processor.h>
 #include <acpi/cppc_acpi.h>
@@ -87,6 +91,23 @@ static struct cpufreq_driver amd_pstate_epp_driver;
 static int cppc_state = AMD_PSTATE_UNDEFINED;
 static bool amd_pstate_prefcore = true;
 static struct quirk_entry *quirks;
+
+struct amd_hybrid_cpu_cap {
+	u32 highest_perf;
+	u32 nominal_perf;
+};
+
+static DEFINE_PER_CPU(struct amd_hybrid_cpu_cap, amd_hybrid_caps);
+static DEFINE_MUTEX(amd_hybrid_cap_lock);
+static u32 amd_hybrid_max_perf;
+static bool amd_hybrid_cap_enabled;
+
+static void amd_hybrid_cap_workfn(struct work_struct *work)
+{
+	rebuild_sched_domains();
+}
+
+static DECLARE_WORK(amd_hybrid_cap_work, amd_hybrid_cap_workfn);
 
 /*
  * The numeric EPP value programmed for each named preference. First dimension
@@ -969,6 +990,99 @@ static void amd_pstate_init_prefcore(struct amd_cpudata *cpudata)
 	sched_set_itmt_core_prio((int)READ_ONCE(cpudata->prefcore_ranking), cpudata->cpu);
 }
 
+static void amd_pstate_record_hybrid_cap(struct amd_cpudata *cpudata)
+{
+	struct amd_hybrid_cpu_cap *cap;
+	union perf_cached perf;
+	u32 highest_perf;
+
+	if (!cpu_feature_enabled(X86_FEATURE_AMD_HTR_CORES))
+		return;
+
+	perf = READ_ONCE(cpudata->perf);
+	highest_perf = READ_ONCE(cpudata->prefcore_ranking);
+	if (!highest_perf)
+		highest_perf = perf.highest_perf;
+
+	guard(mutex)(&amd_hybrid_cap_lock);
+	cap = per_cpu_ptr(&amd_hybrid_caps, cpudata->cpu);
+	cap->highest_perf = highest_perf;
+	cap->nominal_perf = perf.nominal_perf;
+}
+
+static void amd_pstate_sync_hybrid_capacity(void)
+{
+	u32 max_perf = 0, min_perf = U32_MAX;
+	bool updated = false;
+	int cpu;
+
+	if (!cpu_feature_enabled(X86_FEATURE_AMD_HTR_CORES))
+		return;
+
+	guard(mutex)(&amd_hybrid_cap_lock);
+
+	for_each_online_cpu(cpu) {
+		const struct cpumask *sib_mask = topology_sibling_cpumask(cpu);
+		u32 sib_max = 0;
+		int sib;
+
+		/*
+		 * SMT siblings share SD_SHARE_CPUCAPACITY and must expose identical
+		 * arch_scale_cpu_capacity() values to avoid scheduler warnings.
+		 */
+		for_each_cpu(sib, sib_mask) {
+			u32 p = per_cpu(amd_hybrid_caps, sib).highest_perf;
+
+			if (p > sib_max)
+				sib_max = p;
+		}
+		if (!sib_max)
+			continue;
+
+		for_each_cpu(sib, sib_mask)
+			per_cpu(amd_hybrid_caps, sib).highest_perf = sib_max;
+
+		if (sib_max > max_perf)
+			max_perf = sib_max;
+		if (sib_max < min_perf)
+			min_perf = sib_max;
+	}
+
+	if (!max_perf || min_perf >= max_perf)
+		return;
+
+	if (!amd_hybrid_cap_enabled) {
+		if (!arch_enable_hybrid_capacity_scale())
+			return;
+		amd_hybrid_cap_enabled = true;
+		updated = true;
+	}
+
+	if (max_perf != amd_hybrid_max_perf) {
+		amd_hybrid_max_perf = max_perf;
+		updated = true;
+	}
+
+	for_each_online_cpu(cpu) {
+		struct amd_hybrid_cpu_cap info = per_cpu(amd_hybrid_caps, cpu);
+		unsigned long prev_cap;
+
+		if (!info.highest_perf || !info.nominal_perf)
+			continue;
+
+		prev_cap = arch_scale_cpu_capacity(cpu);
+		arch_set_cpu_capacity(cpu, info.highest_perf, max_perf,
+				      info.highest_perf, info.nominal_perf);
+		topology_set_cpu_scale(cpu, arch_scale_cpu_capacity(cpu));
+
+		if (arch_scale_cpu_capacity(cpu) != prev_cap)
+			updated = true;
+	}
+
+	if (updated)
+		schedule_work(&amd_hybrid_cap_work);
+}
+
 static void amd_pstate_update_limits(struct cpufreq_policy *policy)
 {
 	struct amd_cpudata *cpudata;
@@ -1130,6 +1244,7 @@ static int amd_pstate_cpu_init(struct cpufreq_policy *policy)
 	if (ret)
 		goto free_cpudata1;
 
+	amd_pstate_record_hybrid_cap(cpudata);
 	amd_pstate_init_prefcore(cpudata);
 
 	ret = amd_pstate_init_freq(cpudata);
@@ -1769,11 +1884,14 @@ static int amd_pstate_register_driver(int mode)
 	if (amd_pstate_prefcore)
 		sched_set_itmt_support();
 
+	amd_pstate_sync_hybrid_capacity();
+
 	return 0;
 }
 
 static int amd_pstate_unregister_driver(int dummy)
 {
+	cancel_work_sync(&amd_hybrid_cap_work);
 	cpufreq_unregister_driver(current_pstate_driver);
 	amd_pstate_driver_cleanup();
 	return 0;
@@ -1985,6 +2103,7 @@ static int amd_pstate_epp_cpu_init(struct cpufreq_policy *policy)
 	if (ret)
 		goto free_cpudata1;
 
+	amd_pstate_record_hybrid_cap(cpudata);
 	amd_pstate_init_prefcore(cpudata);
 
 	ret = amd_pstate_init_freq(cpudata);
@@ -2149,6 +2268,8 @@ static int amd_pstate_cpu_online(struct cpufreq_policy *policy)
 		return ret;
 
 	cached_floor_perf = freq_to_perf(perf, cpudata->nominal_freq, cpudata->floor_freq);
+	amd_pstate_record_hybrid_cap(cpudata);
+	amd_pstate_sync_hybrid_capacity();
 	return amd_pstate_set_floor_perf(policy, cached_floor_perf);
 }
 
