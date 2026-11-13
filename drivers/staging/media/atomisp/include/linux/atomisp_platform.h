@@ -168,7 +168,6 @@ void atomisp_unregister_subdev(struct v4l2_subdev *subdev);
 
 /* API from old platform_camera.h, new CPUID implementation */
 #define __IS_SOC(x) (boot_cpu_data.x86_vfm == x)
-#define __IS_SOCS(x, y) (boot_cpu_data.x86_vfm == x || boot_cpu_data.x86_vfm == y)
 
 #define IS_MFLD	__IS_SOC(INTEL_ATOM_SALTWELL_MID)
 #define IS_BYT	__IS_SOC(INTEL_ATOM_SILVERMONT)
@@ -177,7 +176,6 @@ void atomisp_unregister_subdev(struct v4l2_subdev *subdev);
 #define IS_MOFD	__IS_SOC(INTEL_ATOM_SILVERMONT_MID2)
 
 /* Both CHT and MOFD come with ISP2401 */
-#define IS_ISP2401 __IS_SOCS(INTEL_ATOM_AIRMONT, \
-			     INTEL_ATOM_SILVERMONT_MID2)
+#define IS_ISP2401 (IS_CHT || IS_MOFD)
 
 #endif /* ATOMISP_PLATFORM_H_ */
