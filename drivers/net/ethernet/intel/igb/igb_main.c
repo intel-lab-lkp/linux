@@ -2115,6 +2115,30 @@ void igb_set_queue_napi(struct igb_adapter *adapter, int vector,
 				     NETDEV_QUEUE_TYPE_TX, napi);
 }
 
+static void igb_link_queue_napis(struct igb_adapter *adapter)
+{
+	int i;
+
+	for (i = 0; i < adapter->num_q_vectors; i++)
+		igb_set_queue_napi(adapter, i, &adapter->q_vector[i]->napi);
+}
+
+/* Linking queues to NAPIs requires RTNL, which isn't held when resuming
+ * from runtime suspend: do it from here instead. The q_vectors are only
+ * freed under RTNL with __IGB_DOWN set, so checking it under RTNL is safe.
+ */
+static void igb_queue_napi_task(struct work_struct *work)
+{
+	struct igb_adapter *adapter = container_of(work, struct igb_adapter,
+						   queue_napi_task);
+
+	rtnl_lock();
+	if (!test_bit(__IGB_DOWN, &adapter->state) &&
+	    netif_running(adapter->netdev))
+		igb_link_queue_napis(adapter);
+	rtnl_unlock();
+}
+
 /**
  *  igb_up - Open the interface and prepare it to handle traffic
  *  @adapter: board private structure
@@ -3426,6 +3450,7 @@ static int igb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	INIT_WORK(&adapter->reset_task, igb_reset_task);
 	INIT_WORK(&adapter->watchdog_task, igb_watchdog_task);
+	INIT_WORK(&adapter->queue_napi_task, igb_queue_napi_task);
 
 	/* Initialize link properties that are user-changeable */
 	adapter->fc_autoneg = true;
@@ -3889,6 +3914,7 @@ static void igb_remove(struct pci_dev *pdev)
 
 	cancel_work_sync(&adapter->reset_task);
 	cancel_work_sync(&adapter->watchdog_task);
+	cancel_work_sync(&adapter->queue_napi_task);
 
 #ifdef CONFIG_IGB_DCA
 	if (adapter->flags & IGB_FLAG_DCA_ENABLED) {
@@ -4184,7 +4210,8 @@ static int __igb_open(struct net_device *netdev, bool resuming)
 	for (i = 0; i < adapter->num_q_vectors; i++) {
 		napi = &adapter->q_vector[i]->napi;
 		napi_enable(napi);
-		igb_set_queue_napi(adapter, i, napi);
+		if (!resuming)
+			igb_set_queue_napi(adapter, i, napi);
 	}
 
 	/* Clear any pending interrupts. */
@@ -9636,8 +9663,15 @@ static int __igb_resume(struct device *dev, bool rpm)
 
 	if (!rpm)
 		rtnl_lock();
-	if (!err && netif_running(netdev))
+	if (!err && netif_running(netdev)) {
 		err = __igb_open(netdev, true);
+		if (!err) {
+			if (rpm)
+				schedule_work(&adapter->queue_napi_task);
+			else
+				igb_link_queue_napis(adapter);
+		}
+	}
 
 	if (!err)
 		netif_device_attach(netdev);
