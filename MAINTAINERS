@@ -15173,6 +15173,12 @@ F:	Documentation/wmi/devices/lenovo-wmi-other.rst
 F:	drivers/platform/lenovo/
 F:	drivers/platform/x86/lenovo/*
 
+LENOVO WMI HOTKEYS DRIVER
+M:	David Cemin <dcemin@nvidia.com>
+L:	platform-driver-x86@vger.kernel.org
+S:	Maintained
+F:	drivers/platform/lenovo/wmi-hotkeys.c
+
 LENOVO WMI HOTKEY UTILITIES DRIVER
 M:	Jackie Dong <xy-jackie@139.com>
 L:	platform-driver-x86@vger.kernel.org
