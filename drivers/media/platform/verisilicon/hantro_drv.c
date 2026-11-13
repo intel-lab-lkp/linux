@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/videodev2.h>
 #include <linux/workqueue.h>
@@ -1071,7 +1072,6 @@ init_new_m2m_dev:
 
 static int hantro_probe(struct platform_device *pdev)
 {
-	const struct of_device_id *match;
 	struct hantro_dev *vpu;
 	int num_bases;
 	int i, ret;
@@ -1085,8 +1085,9 @@ static int hantro_probe(struct platform_device *pdev)
 	mutex_init(&vpu->vpu_mutex);
 	spin_lock_init(&vpu->irqlock);
 
-	match = of_match_node(of_hantro_match, pdev->dev.of_node);
-	vpu->variant = match->data;
+	vpu->variant = device_get_match_data(&pdev->dev);
+	if (!vpu->variant)
+		return -ENODEV;
 
 	ret = hantro_disable_multicore(vpu);
 	if (ret)
@@ -1098,8 +1099,7 @@ static int hantro_probe(struct platform_device *pdev)
 	 * nxp,imx8mq-vpu-g1 or nxp,imx8mq-vpu-g2 instead.
 	 */
 	if (of_device_is_compatible(pdev->dev.of_node, "nxp,imx8mq-vpu"))
-		dev_warn(&pdev->dev, "%s compatible is deprecated\n",
-			 match->compatible);
+		dev_warn(&pdev->dev, "nxp,imx8mq-vpu compatible is deprecated\n");
 
 	INIT_DELAYED_WORK(&vpu->watchdog_work, hantro_watchdog);
 
