@@ -12,6 +12,7 @@
 
 #include <linux/acpi.h>
 #include <linux/cpu.h>
+#include <linux/cpumask.h>
 #include <linux/debugfs.h>
 #include <linux/gfp.h>
 #include <linux/init.h>
@@ -261,11 +262,26 @@ static void amd_hfi_remove(struct platform_device *pdev)
 
 static int amd_set_hfi_ipcc_score(struct amd_hfi_cpuinfo *hfi_cpuinfo, int cpu)
 {
+	const struct cpumask *sib_mask;
+	int prio;
+
 	for (int i = 0; i < hfi_cpuinfo->nr_class; i++)
 		WRITE_ONCE(hfi_cpuinfo->ipcc_scores[i],
 			   hfi_cpuinfo->amd_hfi_classes[i].perf);
 
-	sched_set_itmt_core_prio(hfi_cpuinfo->ipcc_scores[0], cpu);
+	/*
+	 * Rank secondary SMT siblings slightly below primary threads so
+	 * SD_ASYM_PACKING fills idle physical cores first while still keeping
+	 * classic Zen 5 SMT siblings ordered ahead of dense Zen 5c cores.
+	 */
+	prio = hfi_cpuinfo->ipcc_scores[0];
+	if (cpu_feature_enabled(X86_FEATURE_AMD_HTR_CORES)) {
+		sib_mask = topology_sibling_cpumask(cpu);
+		if (!cpumask_empty(sib_mask) && cpumask_first(sib_mask) != cpu)
+			prio = (prio * 7) / 8;
+	}
+
+	sched_set_itmt_core_prio(prio, cpu);
 
 	return 0;
 }
