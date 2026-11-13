@@ -36,6 +36,8 @@ struct panfrost_job {
 
 	struct panfrost_engine_usage *engine_usage;
 	bool is_profiled;
+	/* Holds a reference on the cycle counter */
+	bool cycle_counter_ref;
 	ktime_t start_time;
 	u64 start_cycles;
 };
