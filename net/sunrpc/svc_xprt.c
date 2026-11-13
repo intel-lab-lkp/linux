@@ -19,6 +19,7 @@
 #include <linux/sunrpc/bc_xprt.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/highmem.h>
 #include <trace/events/sunrpc.h>
 
 #define RPCDBG_FACILITY	RPCDBG_SVCXPRT
@@ -763,6 +764,60 @@ static bool svc_alloc_arg(struct svc_rqst *rqstp)
 
 	rqstp->rq_xid = xdr_zero;
 	return true;
+}
+
+/**
+ * svc_rqst_arg_iter_init - Map a range of rq_pages for a receive
+ * @rqstp: RPC transaction context
+ * @iter: set up as an ITER_DEST iterator backed by rq_bvec
+ * @offset: byte offset into rq_pages of the first octet to receive
+ * @len: count of octets to receive
+ *
+ * Maps only the pages that [@offset, @offset + @len) covers, so a transport
+ * that receives a message in pieces does not re-map the untouched remainder on
+ * every piece.
+ *
+ * Return: %0 on success, or %-EINVAL when the range does not fit in
+ * rq_pages, in which case @iter is not touched.
+ */
+int svc_rqst_arg_iter_init(struct svc_rqst *rqstp, struct iov_iter *iter,
+			   size_t offset, size_t len)
+{
+	unsigned int first = offset >> PAGE_SHIFT;
+	size_t seek = offset_in_page(offset);
+	unsigned int i, pages;
+	size_t end;
+
+	if (check_add_overflow(offset, len, &end) ||
+	    end > (size_t)rqstp->rq_maxpages << PAGE_SHIFT)
+		return -EINVAL;
+
+	pages = DIV_ROUND_UP(seek + len, PAGE_SIZE);
+	for (i = 0; i < pages; i++)
+		bvec_set_page(&rqstp->rq_bvec[i], rqstp->rq_pages[first + i],
+			      PAGE_SIZE, 0);
+
+	iov_iter_bvec(iter, ITER_DEST, rqstp->rq_bvec, pages, seek + len);
+	iov_iter_advance(iter, seek);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(svc_rqst_arg_iter_init);
+
+/**
+ * svc_rqst_arg_flush - Flush the dcache for a received Call
+ * @rqstp: RPC transaction context
+ * @len: count of octets received, measured from the start of rq_pages[0]
+ *
+ * A copy through the iterator that svc_rqst_arg_iter_init() sets up
+ * does not flush the dcache. Call this once after the whole message
+ * has been received.
+ */
+void svc_rqst_arg_flush(struct svc_rqst *rqstp, size_t len)
+{
+	unsigned int pg, pages = DIV_ROUND_UP(len, PAGE_SIZE);
+
+	for (pg = 0; pg < pages; pg++)
+		flush_dcache_page(rqstp->rq_pages[pg]);
 }
 
 /**

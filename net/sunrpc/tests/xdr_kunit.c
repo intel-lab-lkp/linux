@@ -9,6 +9,7 @@
 #include <kunit/test.h>
 #include <linux/mm.h>
 #include <linux/string.h>
+#include <linux/uio.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/sunrpc/xdr.h>
 
@@ -720,6 +721,101 @@ static void xdr_test_set_arg_len_clamp(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_base, 0);
 }
 
+#define XDR_TEST_ARG_MAXPAGES	8
+
+static struct svc_rqst *xdr_test_arg_iter_rqst(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_rqst(test);
+	struct page *pages;
+	unsigned int i;
+
+	rqstp->rq_maxpages = XDR_TEST_ARG_MAXPAGES;
+	rqstp->rq_pages = kunit_kcalloc(test, XDR_TEST_ARG_MAXPAGES,
+					sizeof(struct page *), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, rqstp->rq_pages);
+	/* Nothing reads these pages. They give each rq_pages slot a
+	 * distinct address to compare against.
+	 */
+	pages = kunit_kcalloc(test, XDR_TEST_ARG_MAXPAGES,
+			      sizeof(struct page), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, pages);
+	for (i = 0; i < XDR_TEST_ARG_MAXPAGES; i++)
+		rqstp->rq_pages[i] = &pages[i];
+	rqstp->rq_bvec = kunit_kcalloc(test, XDR_TEST_ARG_MAXPAGES +
+				       RPCSVC_BVEC_HEADROOM,
+				       sizeof(struct bio_vec), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, rqstp->rq_bvec);
+	return rqstp;
+}
+
+static void xdr_test_arg_iter_init_span(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_iter_rqst(test);
+	struct iov_iter iter;
+	unsigned int i;
+
+	KUNIT_EXPECT_EQ(test, svc_rqst_arg_iter_init(rqstp, &iter,
+						     PAGE_SIZE + 100,
+						     3 * PAGE_SIZE), 0);
+	KUNIT_EXPECT_EQ(test, iov_iter_count(&iter), 3 * PAGE_SIZE);
+	KUNIT_EXPECT_EQ(test, iter.iov_offset, 100);
+	KUNIT_ASSERT_EQ(test, iter.nr_segs, 4);
+	for (i = 0; i < 4; i++)
+		KUNIT_EXPECT_PTR_EQ(test, rqstp->rq_bvec[i].bv_page,
+				    rqstp->rq_pages[1 + i]);
+}
+
+static void xdr_test_arg_iter_init_empty(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_iter_rqst(test);
+	struct iov_iter iter;
+
+	KUNIT_EXPECT_EQ(test, svc_rqst_arg_iter_init(rqstp, &iter, 0, 0), 0);
+	KUNIT_EXPECT_EQ(test, iov_iter_count(&iter), 0);
+	KUNIT_EXPECT_EQ(test, svc_rqst_arg_iter_init(rqstp, &iter,
+						     8 * PAGE_SIZE, 0), 0);
+	KUNIT_EXPECT_EQ(test, iov_iter_count(&iter), 0);
+}
+
+static void xdr_test_arg_iter_init_fits(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_iter_rqst(test);
+	struct iov_iter iter;
+
+	KUNIT_EXPECT_EQ(test, svc_rqst_arg_iter_init(rqstp, &iter,
+						     7 * PAGE_SIZE + 100,
+						     PAGE_SIZE - 100), 0);
+	KUNIT_EXPECT_EQ(test, iov_iter_count(&iter), PAGE_SIZE - 100);
+	KUNIT_EXPECT_EQ(test, iter.iov_offset, 100);
+	KUNIT_EXPECT_EQ(test, iter.nr_segs, 1);
+}
+
+/*
+ * A check on the page count alone would accept these ranges. Each needs fewer
+ * than rq_maxpages pages but runs past the end of rq_pages.
+ */
+static void xdr_test_arg_iter_init_range(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_iter_rqst(test);
+	struct iov_iter iter;
+
+	KUNIT_EXPECT_EQ(test, svc_rqst_arg_iter_init(rqstp, &iter,
+						     7 * PAGE_SIZE,
+						     2 * PAGE_SIZE), -EINVAL);
+	KUNIT_EXPECT_EQ(test, svc_rqst_arg_iter_init(rqstp, &iter,
+						     8 * PAGE_SIZE, 1),
+			-EINVAL);
+}
+
+static void xdr_test_arg_iter_init_overflow(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_iter_rqst(test);
+	struct iov_iter iter;
+
+	KUNIT_EXPECT_EQ(test, svc_rqst_arg_iter_init(rqstp, &iter, SIZE_MAX,
+						     2), -EINVAL);
+}
+
 static struct kunit_case xdr_test_cases[] = {
 	KUNIT_CASE_PARAM(xdr_test_payload, xdr_test_base_gen_params),
 	KUNIT_CASE_PARAM(xdr_test_exact_fit, xdr_test_base_gen_params),
@@ -751,6 +847,11 @@ static struct kunit_case xdr_test_cases[] = {
 	KUNIT_CASE(xdr_test_set_arg_len_pages),
 	KUNIT_CASE(xdr_test_set_arg_len_exact_fit),
 	KUNIT_CASE(xdr_test_set_arg_len_clamp),
+	KUNIT_CASE(xdr_test_arg_iter_init_fits),
+	KUNIT_CASE(xdr_test_arg_iter_init_span),
+	KUNIT_CASE(xdr_test_arg_iter_init_empty),
+	KUNIT_CASE(xdr_test_arg_iter_init_range),
+	KUNIT_CASE(xdr_test_arg_iter_init_overflow),
 	{}
 };
 

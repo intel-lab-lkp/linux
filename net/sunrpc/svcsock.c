@@ -39,7 +39,6 @@
 #include <net/tls_prot.h>
 #include <net/handshake.h>
 #include <linux/uaccess.h>
-#include <linux/highmem.h>
 #include <asm/ioctls.h>
 #include <linux/key.h>
 
@@ -1045,41 +1044,6 @@ struct svc_tcp_recv_ctx {
 };
 
 /*
- * Nothing reads the message body before the message is complete, and
- * partial receives refill the same pages. Flush once here, after the
- * socket lock is released, rather than once per copy in the actor.
- */
-static void svc_tcp_flush_pages(struct svc_sock *svsk,
-				struct svc_rqst *rqstp)
-{
-	unsigned int pg, pages = DIV_ROUND_UP(svsk->sk_datalen, PAGE_SIZE);
-
-	for (pg = 0; pg < pages; pg++)
-		flush_dcache_page(rqstp->rq_pages[pg]);
-}
-
-/*
- * Mapping the message's unfilled remainder would re-map untouched
- * pages on every call, at a cost that grows with the message rather
- * than with the octets copied.
- */
-static void svc_tcp_recv_iter_init(struct svc_rqst *rqstp,
-				   struct iov_iter *iter, size_t body_off,
-				   size_t len)
-{
-	unsigned int first = body_off >> PAGE_SHIFT;
-	size_t seek = offset_in_page(body_off);
-	unsigned int i, pages = DIV_ROUND_UP(seek + len, PAGE_SIZE);
-
-	for (i = 0; i < pages; i++)
-		bvec_set_page(&rqstp->rq_bvec[i], rqstp->rq_pages[first + i],
-			      PAGE_SIZE, 0);
-
-	iov_iter_bvec(iter, ITER_DEST, rqstp->rq_bvec, pages, seek + len);
-	iov_iter_advance(iter, seek);
-}
-
-/*
  * ->read_sock actor, called under the socket lock. sk_datalen is both
  * the count of body octets received so far and their write offset into
  * rq_pages.
@@ -1137,7 +1101,9 @@ static int svc_tcp_recv_actor(read_descriptor_t *desc, struct sk_buff *skb,
 	if (take) {
 		struct iov_iter iter;
 
-		svc_tcp_recv_iter_init(rqstp, &iter, svsk->sk_datalen, take);
+		if (svc_rqst_arg_iter_init(rqstp, &iter, svsk->sk_datalen,
+					   take))
+			goto toobig;
 		if (skb_copy_datagram_iter(skb, offset, &iter, take))
 			goto fault;
 		svsk->sk_datalen += take;
@@ -1159,6 +1125,10 @@ static int svc_tcp_recv_actor(read_descriptor_t *desc, struct sk_buff *skb,
 
 	return consumed;
 
+toobig:
+	desc->error = -EMSGSIZE;
+	desc->count = 0;
+	return consumed;
 fault:
 	desc->error = -EFAULT;
 	desc->count = 0;
@@ -1254,7 +1224,12 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 	if (svsk->sk_datalen < 8)
 		goto err_nuts;
 
-	svc_tcp_flush_pages(svsk, rqstp);
+	/* Nothing reads the message body before the message is
+	 * complete, and partial receives refill the same pages. Flush
+	 * once here, after the socket lock is released, rather than
+	 * once per copy in the actor.
+	 */
+	svc_rqst_arg_flush(rqstp, svsk->sk_datalen);
 
 	if (WARN_ON_ONCE(!svc_rqst_set_arg_len(rqstp, svsk->sk_datalen))) {
 		len = -EMSGSIZE;
