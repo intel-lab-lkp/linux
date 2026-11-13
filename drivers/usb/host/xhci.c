@@ -1879,8 +1879,8 @@ err_giveback:
 	if (urb_priv)
 		xhci_urb_free_priv(urb_priv);
 	usb_hcd_unlink_urb_from_ep(hcd, urb);
-	spin_unlock_irqrestore(&xhci->lock, flags);
 	usb_hcd_giveback_urb(hcd, urb, -ESHUTDOWN);
+	spin_unlock_irqrestore(&xhci->lock, flags);
 	return ret;
 }
 
