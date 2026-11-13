@@ -62,13 +62,14 @@ config SUNRPC_DEBUG_TRACE
           with sunrpc-based clients or services.
 
 config SUNRPC_KUNIT_TEST
-	tristate "KUnit tests for the SunRPC XDR encoder" if !KUNIT_ALL_TESTS
+	tristate "KUnit tests for SunRPC XDR buffers" if !KUNIT_ALL_TESTS
 	depends on SUNRPC && KUNIT
 	default KUNIT_ALL_TESTS
 	help
 	  This builds KUnit tests for encoding an RPC Reply into pages
 	  that begin at a nonzero offset, as an NFSD direct READ leaves
-	  them. The tests report their results in TAP format.
+	  them, and for converting an xdr_buf to a bio_vec array. The
+	  tests report their results in TAP format.
 
 	  For more information on KUnit and unit tests in general, refer
 	  to the KUnit documentation in Documentation/dev-tools/kunit/.

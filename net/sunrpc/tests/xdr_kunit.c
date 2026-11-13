@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * KUnit tests for encoding an RPC Reply into pages that begin at a
- * nonzero page_base, as an NFSD direct READ leaves them. The entry past
- * the last Reply page holds a canary in place of the NULL sentinel,
- * since a store through page_address(NULL) kills the test thread.
+ * KUnit tests for encoding an RPC Reply into pages that begin at a nonzero
+ * page_base, as an NFSD direct READ leaves them, and for converting an xdr_buf
+ * to a bio_vec array. The entry past the last Reply page holds a canary in
+ * place of the NULL sentinel, since a store through page_address(NULL) kills
+ * the test thread.
  */
 #include <kunit/test.h>
 #include <linux/mm.h>
@@ -50,19 +51,10 @@ static struct page *xdr_test_canary(struct kunit *test)
 	return f->respages[XDR_TEST_NPAGES + 1];
 }
 
-/*
- * Mirror a direct READ: nfsd_direct_read() sets page_base before the
- * payload is reserved, and nfsd4_encode_readv() takes the pad off buflen
- * because len never counts it.
- */
-static struct xdr_stream *xdr_test_setup(struct kunit *test,
-					 unsigned int page_base)
+static struct xdr_test_fixture *xdr_test_alloc_fixture(struct kunit *test)
 {
 	struct xdr_test_fixture *f;
-	struct svc_rqst *rqstp;
-	struct xdr_buf *buf;
 	unsigned int i;
-	__be32 *p;
 	int ret;
 
 	f = kunit_kzalloc(test, sizeof(*f), GFP_KERNEL);
@@ -76,10 +68,25 @@ static struct xdr_stream *xdr_test_setup(struct kunit *test,
 	memset(page_address(f->respages[XDR_TEST_NPAGES + 1]),
 	       XDR_TEST_CANARY, PAGE_SIZE);
 
-	rqstp = kunit_kzalloc(test, sizeof(*rqstp), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_NULL(test, rqstp);
-	f->rqstp = rqstp;
+	f->rqstp = kunit_kzalloc(test, sizeof(*f->rqstp), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, f->rqstp);
 	test->priv = f;
+	return f;
+}
+
+/*
+ * Mirror a direct READ: nfsd_direct_read() sets page_base before the
+ * payload is reserved, and nfsd4_encode_readv() takes the pad off buflen
+ * because len never counts it.
+ */
+static struct xdr_stream *xdr_test_setup(struct kunit *test,
+					 unsigned int page_base)
+{
+	struct xdr_test_fixture *f = xdr_test_alloc_fixture(test);
+	struct svc_rqst *rqstp = f->rqstp;
+	struct xdr_buf *buf;
+	__be32 *p;
+	int ret;
 
 	rqstp->rq_page_end = &f->respages[XDR_TEST_NPAGES + 1];
 	buf = &rqstp->rq_res;
@@ -474,6 +481,163 @@ static void xdr_test_restore_slack_page_boundary(struct kunit *test)
 	xdr_test_check_two_words(test, xdr->buf, XDR_TEST_HEAD_LEN + count);
 }
 
+#define XDR_TEST_BVEC_SIZE	(XDR_TEST_NPAGES + 2)
+
+static struct xdr_buf *xdr_test_bvec_buf(struct kunit *test,
+					 unsigned int head_len,
+					 unsigned int page_base,
+					 unsigned int page_len,
+					 unsigned int tail_len)
+{
+	struct xdr_test_fixture *f = xdr_test_alloc_fixture(test);
+	struct xdr_buf *buf = &f->rqstp->rq_res;
+	void *head = page_address(f->respages[0]);
+
+	buf->head[0].iov_base = head;
+	buf->head[0].iov_len = head_len;
+	buf->pages = &f->respages[1];
+	buf->page_base = page_base;
+	buf->page_len = page_len;
+	buf->tail[0].iov_base = head + PAGE_SIZE - tail_len;
+	buf->tail[0].iov_len = tail_len;
+	buf->len = head_len + page_len + tail_len;
+	buf->buflen = buf->len;
+	return buf;
+}
+
+static struct page *xdr_test_head_page(struct kunit *test)
+{
+	struct xdr_test_fixture *f = test->priv;
+
+	return f->respages[0];
+}
+
+static void xdr_test_bvec_expect(struct kunit *test, const struct bio_vec *bv,
+				 struct page *page, unsigned int offset,
+				 unsigned int len)
+{
+	KUNIT_EXPECT_PTR_EQ(test, bv->bv_page, page);
+	KUNIT_EXPECT_EQ(test, bv->bv_offset, offset);
+	KUNIT_EXPECT_EQ(test, bv->bv_len, len);
+}
+
+static void xdr_test_bvec_head_tail_same_page(struct kunit *test)
+{
+	struct xdr_buf *buf = xdr_test_bvec_buf(test, 100, 0, 0, 8);
+	struct page *head = xdr_test_head_page(test);
+	struct bio_vec bvec[XDR_TEST_BVEC_SIZE] = { };
+	int count;
+
+	count = xdr_buf_to_bvec(bvec, ARRAY_SIZE(bvec), buf);
+
+	KUNIT_ASSERT_EQ(test, count, 2);
+	xdr_test_bvec_expect(test, &bvec[0], head, 0, 100);
+	xdr_test_bvec_expect(test, &bvec[1], head, PAGE_SIZE - 8, 8);
+}
+
+static void xdr_test_bvec_page_base(struct kunit *test)
+{
+	unsigned int base = *(const unsigned int *)test->param_value;
+	struct xdr_buf *buf = xdr_test_bvec_buf(test, 64, base, PAGE_SIZE, 0);
+	struct page **pages = buf->pages + (base >> PAGE_SHIFT);
+	unsigned int offset = offset_in_page(base);
+	struct bio_vec bvec[XDR_TEST_BVEC_SIZE] = { };
+	int count;
+
+	count = xdr_buf_to_bvec(bvec, ARRAY_SIZE(bvec), buf);
+
+	KUNIT_ASSERT_EQ(test, count, offset ? 3 : 2);
+	xdr_test_bvec_expect(test, &bvec[0], xdr_test_head_page(test), 0, 64);
+	xdr_test_bvec_expect(test, &bvec[1], pages[0], offset,
+			     PAGE_SIZE - offset);
+	if (offset)
+		xdr_test_bvec_expect(test, &bvec[2], pages[1], 0, offset);
+}
+
+static void xdr_test_bvec_exact_fit_last_page(struct kunit *test)
+{
+	unsigned int page_len = (XDR_TEST_NPAGES - 1) * PAGE_SIZE;
+	struct xdr_buf *buf = xdr_test_bvec_buf(test, 64, PAGE_SIZE, page_len, 0);
+	struct bio_vec bvec[XDR_TEST_BVEC_SIZE] = { };
+	unsigned int i;
+	int count;
+
+	count = xdr_buf_to_bvec(bvec, ARRAY_SIZE(bvec), buf);
+
+	KUNIT_ASSERT_EQ(test, count, XDR_TEST_NPAGES);
+	xdr_test_bvec_expect(test, &bvec[0], xdr_test_head_page(test), 0, 64);
+	for (i = 1; i < XDR_TEST_NPAGES; i++)
+		xdr_test_bvec_expect(test, &bvec[i], buf->pages[i], 0,
+				     PAGE_SIZE);
+}
+
+static void xdr_test_bvec_head_pages_tail(struct kunit *test)
+{
+	struct xdr_buf *buf = xdr_test_bvec_buf(test, 64, 512, PAGE_SIZE, 8);
+	struct page *head = xdr_test_head_page(test);
+	struct bio_vec bvec[XDR_TEST_BVEC_SIZE] = { };
+	int count;
+
+	count = xdr_buf_to_bvec(bvec, ARRAY_SIZE(bvec), buf);
+
+	KUNIT_ASSERT_EQ(test, count, 4);
+	xdr_test_bvec_expect(test, &bvec[0], head, 0, 64);
+	xdr_test_bvec_expect(test, &bvec[1], buf->pages[0], 512,
+			     PAGE_SIZE - 512);
+	xdr_test_bvec_expect(test, &bvec[2], buf->pages[1], 0, 512);
+	xdr_test_bvec_expect(test, &bvec[3], head, PAGE_SIZE - 8, 8);
+}
+
+static void xdr_test_bvec_exact_fill(struct kunit *test)
+{
+	struct xdr_buf *buf = xdr_test_bvec_buf(test, 64, 0, 2 * PAGE_SIZE, 0);
+	struct bio_vec bvec[XDR_TEST_BVEC_SIZE] = { };
+	int count;
+
+	count = xdr_buf_to_bvec(bvec, 3, buf);
+
+	KUNIT_ASSERT_EQ(test, count, 3);
+	xdr_test_bvec_expect(test, &bvec[0], xdr_test_head_page(test), 0, 64);
+	xdr_test_bvec_expect(test, &bvec[1], buf->pages[0], 0, PAGE_SIZE);
+	xdr_test_bvec_expect(test, &bvec[2], buf->pages[1], 0, PAGE_SIZE);
+}
+
+static void xdr_test_bvec_overflow_head(struct kunit *test)
+{
+	struct xdr_buf *buf = xdr_test_bvec_buf(test, 64, 0, 0, 0);
+	struct bio_vec bvec[XDR_TEST_BVEC_SIZE] = { };
+	int count;
+
+	count = xdr_buf_to_bvec(bvec, 0, buf);
+
+	KUNIT_EXPECT_EQ(test, count, -ESERVERFAULT);
+	KUNIT_EXPECT_NULL(test, bvec[0].bv_page);
+}
+
+static void xdr_test_bvec_overflow_pages(struct kunit *test)
+{
+	struct xdr_buf *buf = xdr_test_bvec_buf(test, 64, 0, 2 * PAGE_SIZE, 0);
+	struct bio_vec bvec[XDR_TEST_BVEC_SIZE] = { };
+	int count;
+
+	count = xdr_buf_to_bvec(bvec, 2, buf);
+
+	KUNIT_EXPECT_EQ(test, count, -ESERVERFAULT);
+	KUNIT_EXPECT_NULL(test, bvec[2].bv_page);
+}
+
+static void xdr_test_bvec_overflow_tail(struct kunit *test)
+{
+	struct xdr_buf *buf = xdr_test_bvec_buf(test, 64, 0, PAGE_SIZE, 8);
+	struct bio_vec bvec[XDR_TEST_BVEC_SIZE] = { };
+	int count;
+
+	count = xdr_buf_to_bvec(bvec, 2, buf);
+
+	KUNIT_EXPECT_EQ(test, count, -ESERVERFAULT);
+	KUNIT_EXPECT_NULL(test, bvec[2].bv_page);
+}
+
 static struct kunit_case xdr_test_cases[] = {
 	KUNIT_CASE_PARAM(xdr_test_payload, xdr_test_base_gen_params),
 	KUNIT_CASE_PARAM(xdr_test_exact_fit, xdr_test_base_gen_params),
@@ -491,6 +655,14 @@ static struct kunit_case xdr_test_cases[] = {
 			 xdr_test_base_gen_params),
 	KUNIT_CASE_PARAM(xdr_test_restore_slack_page_boundary,
 			 xdr_test_base_gen_params),
+	KUNIT_CASE(xdr_test_bvec_head_tail_same_page),
+	KUNIT_CASE_PARAM(xdr_test_bvec_page_base, xdr_test_base_gen_params),
+	KUNIT_CASE(xdr_test_bvec_exact_fit_last_page),
+	KUNIT_CASE(xdr_test_bvec_head_pages_tail),
+	KUNIT_CASE(xdr_test_bvec_exact_fill),
+	KUNIT_CASE(xdr_test_bvec_overflow_head),
+	KUNIT_CASE(xdr_test_bvec_overflow_pages),
+	KUNIT_CASE(xdr_test_bvec_overflow_tail),
 	{}
 };
 
@@ -501,5 +673,5 @@ static struct kunit_suite xdr_test_suite = {
 
 kunit_test_suite(xdr_test_suite);
 
-MODULE_DESCRIPTION("KUnit tests for the SunRPC XDR encoder");
+MODULE_DESCRIPTION("KUnit tests for SunRPC XDR buffers");
 MODULE_LICENSE("GPL");
