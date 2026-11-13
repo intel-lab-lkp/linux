@@ -2024,6 +2024,15 @@ int smc_conn_create(struct smc_sock *smc, struct smc_init_info *ini)
 	spinlock_t *lgr_lock;
 	int rc = 0;
 
+	/* A retried handshake comes back with the buffer pointers of the
+	 * failed attempt still set: clear them before the connection is
+	 * registered. smc_cdc_msg_recv_action() tests rmb_desc under this lock.
+	 */
+	spin_lock_bh(&smc->sk.sk_lock.slock);
+	WRITE_ONCE(conn->rmb_desc, NULL);
+	WRITE_ONCE(conn->sndbuf_desc, NULL);
+	spin_unlock_bh(&smc->sk.sk_lock.slock);
+
 	lgr_list = ini->is_smcd ? &ini->ism_dev[ini->ism_selected]->lgr_list :
 				  &smc_lgr_list.list;
 	lgr_lock = ini->is_smcd ? &ini->ism_dev[ini->ism_selected]->lgr_lock :

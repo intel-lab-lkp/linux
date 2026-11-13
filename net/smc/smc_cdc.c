@@ -334,6 +334,10 @@ static void smc_cdc_msg_recv_action(struct smc_sock *smc,
 	struct smc_connection *conn = &smc->conn;
 	int diff_cons, diff_prod, diff_tx;
 
+	/* smc_conn_create() can have cleared rmb_desc */
+	if (!smp_load_acquire(&conn->rmb_desc))
+		return;
+
 	smc_curs_copy(&prod_old, &conn->local_rx_ctrl.prod, conn);
 	smc_curs_copy(&cons_old, &conn->local_rx_ctrl.cons, conn);
 	smc_cdc_msg_to_host(&conn->local_rx_ctrl, cdc, conn);
@@ -484,7 +488,8 @@ static void smc_cdc_rx_handler(struct ib_wc *wc, void *buf)
 	read_lock_bh(&lgr->conns_lock);
 	conn = smc_lgr_find_conn(ntohl(cdc->token), lgr);
 	/* The connection is in the token tree before __smc_buf_create()
-	 * sets its RMB: drop a CDC that comes earlier.
+	 * sets its RMB: drop a CDC that comes earlier. rmb_desc is cleared
+	 * under the socket spinlock; smc_cdc_msg_recv_action() tests it there.
 	 */
 	if (!conn || conn->out_of_sync || !smp_load_acquire(&conn->rmb_desc)) {
 		read_unlock_bh(&lgr->conns_lock);
