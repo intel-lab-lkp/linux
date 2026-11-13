@@ -41,6 +41,13 @@ properties:
   power-domains:
     maxItems: 1
 
+  resets:
+    items:
+      - description: AXI reset line
+      - description: AXI bus interface unit reset line
+      - description: APB reset line
+      - description: APB bus interface unit reset line
+
 required:
   - compatible
   - reg
@@ -55,6 +62,7 @@ examples:
   - |
     #include <dt-bindings/clock/rockchip,rk3588-cru.h>
     #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/reset/rockchip,rk3588-cru.h>
 
     bus {
       #address-cells = <2>;
@@ -67,5 +75,7 @@ examples:
         clocks = <&cru ACLK_AV1>, <&cru PCLK_AV1>;
         clock-names = "core", "iface";
         #iommu-cells = <0>;
+        resets = <&cru SRST_A_AV1>, <&cru SRST_A_AV1_BIU>,
+                 <&cru SRST_P_AV1>, <&cru SRST_P_AV1_BIU>;
       };
     };
