@@ -589,6 +589,12 @@ enum {
 /* double-buffering Bloom filters */
 #define NR_BLOOM_FILTERS	2
 
+enum bloom_filter_level {
+	BLOOM_FILTER_PUD,
+	BLOOM_FILTER_PMD,
+	BLOOM_FILTER_LEVELS,
+};
+
 struct lru_gen_mm_state {
 	/* synced with max_seq after each iteration */
 	unsigned long seq;
@@ -596,8 +602,8 @@ struct lru_gen_mm_state {
 	struct list_head *head;
 	/* where the last iteration ended before */
 	struct list_head *tail;
-	/* Bloom filters flip after each iteration */
-	unsigned long *filters[NR_BLOOM_FILTERS];
+	/* Bloom filters flip after each iteration, indexed by level */
+	unsigned long *filters[BLOOM_FILTER_LEVELS][NR_BLOOM_FILTERS];
 	/* the mm stats for debugging */
 	unsigned long stats[NR_HIST_GENS][NR_MM_STATS];
 };
