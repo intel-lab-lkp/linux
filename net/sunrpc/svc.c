@@ -656,7 +656,7 @@ svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node)
 	if (!svc_init_buffer(rqstp, serv, node))
 		goto out_enomem;
 
-	rqstp->rq_bvec = kcalloc_node(rqstp->rq_maxpages,
+	rqstp->rq_bvec = kcalloc_node(rqstp->rq_maxpages + RPCSVC_BVEC_HEADROOM,
 				      sizeof(struct bio_vec),
 				      GFP_KERNEL, node);
 	if (!rqstp->rq_bvec)
@@ -992,6 +992,25 @@ void svc_rqst_release_pages(struct svc_rqst *rqstp)
 	if (rqstp->rq_fbatch.nr)
 		__folio_batch_release(&rqstp->rq_fbatch);
 }
+
+/**
+ * svc_rqst_res_to_bvec - Convert the Reply buffer into rq_bvec
+ * @rqstp: RPC transaction context
+ * @skip: count of leading rq_bvec entries left for the transport
+ *
+ * The filled entries point into rq_res without holding page references. The
+ * caller leaves rq_res intact while rq_bvec is in use.
+ *
+ * Return: the count of entries filled after @skip, or -ESERVERFAULT
+ * when rq_res does not fit in the remaining entries.
+ */
+int svc_rqst_res_to_bvec(struct svc_rqst *rqstp, unsigned int skip)
+{
+	return xdr_buf_to_bvec(rqstp->rq_bvec + skip,
+			       rqstp->rq_maxpages + RPCSVC_BVEC_HEADROOM - skip,
+			       &rqstp->rq_res);
+}
+EXPORT_SYMBOL_GPL(svc_rqst_res_to_bvec);
 
 /**
  * svc_exit_thread - finalise the termination of a sunrpc server thread

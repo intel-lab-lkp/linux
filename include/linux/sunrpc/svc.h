@@ -136,6 +136,9 @@ enum {
 	RPCSVC_MAXPAYLOAD_UDP	= 32 * 1024,
 };
 
+/* rq_bvec entries a transport can fill ahead of the Reply message */
+#define RPCSVC_BVEC_HEADROOM	1
+
 extern u32 svc_max_payload(const struct svc_rqst *rqstp);
 
 /*
@@ -464,6 +467,8 @@ struct svc_serv *svc_create(struct svc_program *, unsigned int,
 bool		   svc_rqst_replace_page(struct svc_rqst *rqstp,
 					 struct page *page);
 void		   svc_rqst_release_pages(struct svc_rqst *rqstp);
+int		   svc_rqst_res_to_bvec(struct svc_rqst *rqstp,
+					unsigned int skip);
 int		   svc_new_thread(struct svc_serv *serv, struct svc_pool *pool);
 void		   svc_exit_thread(struct svc_rqst *);
 struct svc_serv *  svc_create_pooled(struct svc_program *prog,
