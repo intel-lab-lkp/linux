@@ -262,6 +262,7 @@ int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 {
 	if (surface_cmd_type == QXL_SURFACE_CMD_DESTROY && create_rel) {
 		int idr_ret;
+		int ret;
 		struct qxl_bo *bo;
 		union qxl_release_info *info;
 
@@ -269,12 +270,17 @@ int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 		idr_ret = qxl_release_alloc(qdev, QXL_RELEASE_SURFACE_CMD, release);
 		if (idr_ret < 0)
 			return idr_ret;
+		atomic_inc(&qdev->release_count);
 		bo = create_rel->release_bo;
 
 		(*release)->release_bo = bo;
 		(*release)->release_offset = create_rel->release_offset + 64;
 
-		qxl_release_list_add(*release, bo);
+		ret = qxl_release_list_add(*release, bo);
+		if (ret) {
+			qxl_release_free(qdev, *release);
+			return ret;
+		}
 
 		info = qxl_release_map(qdev, *release);
 		info->id = idr_ret;
