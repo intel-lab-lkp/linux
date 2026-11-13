@@ -238,11 +238,12 @@ void sched_clock_register(u64 (*read)(void), int bits, unsigned long rate)
 	pr_info("sched_clock: %u bits at %lu%cHz, resolution %lluns, wraps every %lluns\n",
 		bits, r, r_unit, res, wrap);
 
+	/* Restore interrupts now as enable_sched_clock_irqtime() might sleep */
+	local_irq_restore(flags);
+
 	/* Enable IRQ time accounting if we have a fast enough sched_clock() */
 	if (irqtime > 0 || (irqtime == -1 && rate >= 1000000))
 		enable_sched_clock_irqtime();
-
-	local_irq_restore(flags);
 
 	pr_debug("Registered %pS as sched_clock source\n", read);
 }
