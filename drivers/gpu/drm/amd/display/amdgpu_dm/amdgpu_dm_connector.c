@@ -123,6 +123,14 @@ STATIC_IFN_KUNIT int dm_encoder_helper_atomic_check(struct drm_encoder *encoder,
 				       drm_mode_vrefresh(adjusted_mode));
 			dm_new_connector_state->scaling = RMX_ASPECT;
 		}
+
+		/* The 5K panel reports no scaling info, scale every non 5K mode to full */
+		if (aconnector->dc_link && aconnector->dc_link->dc->config.imac5K_support) {
+			if (crtc_state->mode.vdisplay != 2880)
+				dm_new_connector_state->scaling = RMX_FULL;
+			else
+				dm_new_connector_state->scaling = RMX_OFF;
+		}
 		return 0;
 	}
 
@@ -3126,8 +3134,18 @@ STATIC_IFN_KUNIT int amdgpu_dm_connector_get_modes(struct drm_connector *connect
 	const struct drm_edid *drm_edid = amdgpu_dm_connector->drm_edid;
 	struct dc_link_settings *verified_link_cap = &dc_link->verified_link_cap;
 	const struct dc *dc = dc_link->dc;
+	struct dc_sink *sink = amdgpu_dm_connector->dc_sink;
 
 	encoder = amdgpu_dm_connector_to_encoder(connector);
+
+	if (dc->config.imac5K_support && sink &&
+	    sink->link->link_index == 1 && !connector->edid_blob_ptr) {
+		const struct drm_edid *kept = drm_edid_alloc(sink->dc_edid.raw_edid,
+							     sink->dc_edid.length);
+
+		drm_edid_connector_update(connector, kept);
+		drm_edid_free(kept);
+	}
 
 	if (!drm_edid) {
 		amdgpu_dm_connector->num_modes =
@@ -3316,7 +3334,8 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 				adev->mode_info.underscan_vborder_property,
 				0);
 
-	if (!aconnector->mst_root)
+	/* Both 5K panel tiles must run at the same bpc, so userspace cannot set it */
+	if (!aconnector->mst_root && !(dm->imac5K_support && link_index <= 1))
 		drm_connector_attach_max_bpc_property(&aconnector->base, 8, 16);
 
 	aconnector->base.state->max_bpc = 16;

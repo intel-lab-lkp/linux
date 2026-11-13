@@ -1510,6 +1510,8 @@ struct dp_trace {
 /* TODO - This is a temporary location for any new DPCD definitions.
  * We should move these to drm_dp header.
  */
+/* Apple 5K iMac TCON, 1 drives the panel as two tiles */
+#define DP_APPLE_5K_TILE_MODE				0x4F1
 #ifndef DP_LINK_SQUARE_PATTERN
 #define DP_LINK_SQUARE_PATTERN				0x10F
 #endif

@@ -1540,8 +1540,16 @@ static enum link_training_result dp_transition_to_video_idle(
 		 */
 		if (link->connector_signal != SIGNAL_TYPE_EDP && status == LINK_TRAINING_SUCCESS) {
 			msleep(5);
-			if (!link->skip_fallback_on_link_loss)
+			if (link->dc->config.imac5K_support && link->link_index == 1) {
+				/* The 5K tile link only has to answer AUX */
+				uint8_t lanes;
+
+				if (core_link_read_dpcd(link, DP_LANE0_1_STATUS,
+							&lanes, 1) != DC_OK)
+					status = LINK_TRAINING_LINK_LOSS;
+			} else if (!link->skip_fallback_on_link_loss) {
 				status = dp_check_link_loss_status(link, lt_settings);
+			}
 		}
 		return status;
 	}
