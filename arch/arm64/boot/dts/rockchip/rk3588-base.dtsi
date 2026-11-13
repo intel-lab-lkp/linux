@@ -1471,7 +1471,8 @@
 		clocks = <&cru ACLK_AV1>, <&cru PCLK_AV1>;
 		clock-names = "aclk", "hclk";
 		power-domains = <&power RK3588_PD_AV1>;
-		resets = <&cru SRST_A_AV1>, <&cru SRST_P_AV1>, <&cru SRST_A_AV1_BIU>, <&cru SRST_P_AV1_BIU>;
+		resets = <&cru SRST_A_AV1>, <&cru SRST_A_AV1_BIU>,
+			 <&cru SRST_P_AV1>, <&cru SRST_P_AV1_BIU>;
 		iommus = <&av1d_mmu>;
 	};
 
