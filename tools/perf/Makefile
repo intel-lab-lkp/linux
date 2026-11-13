@@ -140,6 +140,15 @@ check-headers:
 sync-headers:
 	@./scripts/sync-headers.sh $(SYNC_HEADERS_ARGS)
 
+coverage-prep:
+	@./scripts/coverage.sh --prep $(if $(O),--build-dir=$(O)) $(COVERAGE_ARGS)
+
+coverage:
+	@./scripts/coverage.sh $(COVERAGE_ARGS)
+
+coverage-table:
+	@./scripts/coverage.sh --table $(COVERAGE_ARGS)
+
 #
 # All other targets get passed through:
 #
@@ -147,4 +156,4 @@ sync-headers:
 	$(print_msg)
 	$(make)
 
-.PHONY: all clean tags TAGS FORCE Makefile build-test build-test-tarball check-headers sync-headers
+.PHONY: all clean tags TAGS FORCE Makefile build-test build-test-tarball check-headers sync-headers coverage coverage-prep coverage-table
