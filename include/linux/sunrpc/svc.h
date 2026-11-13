@@ -471,6 +471,8 @@ bool		   svc_rqst_replace_page(struct svc_rqst *rqstp,
 void		   svc_rqst_release_pages(struct svc_rqst *rqstp);
 int		   svc_rqst_res_to_bvec(struct svc_rqst *rqstp,
 					unsigned int skip);
+bool		   svc_rqst_set_arg_len(struct svc_rqst *rqstp,
+					unsigned int len);
 int		   svc_new_thread(struct svc_serv *serv, struct svc_pool *pool);
 void		   svc_exit_thread(struct svc_rqst *);
 struct svc_serv *  svc_create_pooled(struct svc_program *prog,

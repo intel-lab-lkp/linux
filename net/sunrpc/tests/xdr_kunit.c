@@ -638,6 +638,88 @@ static void xdr_test_bvec_overflow_tail(struct kunit *test)
 	KUNIT_EXPECT_NULL(test, bvec[2].bv_page);
 }
 
+#define XDR_TEST_ARG_HEAD_LEN	4096
+#define XDR_TEST_ARG_PAGE_LEN	8192
+
+/* Fills in only the svc_rqst fields svc_rqst_set_arg_len() uses. */
+static struct svc_rqst *xdr_test_arg_rqst(struct kunit *test)
+{
+	struct svc_rqst *rqstp;
+
+	rqstp = kunit_kzalloc(test, sizeof(*rqstp), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, rqstp);
+	rqstp->rq_arg.head[0].iov_len = XDR_TEST_ARG_HEAD_LEN;
+	rqstp->rq_arg.page_len = XDR_TEST_ARG_PAGE_LEN;
+	rqstp->rq_arg.page_base = 512;
+	return rqstp;
+}
+
+static void xdr_test_set_arg_len_zero(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_rqst(test);
+
+	KUNIT_EXPECT_TRUE(test, svc_rqst_set_arg_len(rqstp, 0));
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.len, 0);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.head[0].iov_len, 0);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_len, 0);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_base, 0);
+}
+
+static void xdr_test_set_arg_len_head(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_rqst(test);
+
+	KUNIT_EXPECT_TRUE(test, svc_rqst_set_arg_len(rqstp, 100));
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.len, 100);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.head[0].iov_len, 100);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_len, 0);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_base, 0);
+}
+
+static void xdr_test_set_arg_len_head_full(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_rqst(test);
+
+	KUNIT_EXPECT_TRUE(test, svc_rqst_set_arg_len(rqstp, 4096));
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.len, 4096);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.head[0].iov_len, 4096);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_len, 0);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_base, 0);
+}
+
+static void xdr_test_set_arg_len_pages(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_rqst(test);
+
+	KUNIT_EXPECT_TRUE(test, svc_rqst_set_arg_len(rqstp, 6000));
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.len, 6000);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.head[0].iov_len, 4096);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_len, 1904);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_base, 0);
+}
+
+static void xdr_test_set_arg_len_exact_fit(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_rqst(test);
+
+	KUNIT_EXPECT_TRUE(test, svc_rqst_set_arg_len(rqstp, 12288));
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.len, 12288);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.head[0].iov_len, 4096);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_len, 8192);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_base, 0);
+}
+
+static void xdr_test_set_arg_len_clamp(struct kunit *test)
+{
+	struct svc_rqst *rqstp = xdr_test_arg_rqst(test);
+
+	KUNIT_EXPECT_FALSE(test, svc_rqst_set_arg_len(rqstp, 20000));
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.len, 12288);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.head[0].iov_len, 4096);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_len, 8192);
+	KUNIT_EXPECT_EQ(test, rqstp->rq_arg.page_base, 0);
+}
+
 static struct kunit_case xdr_test_cases[] = {
 	KUNIT_CASE_PARAM(xdr_test_payload, xdr_test_base_gen_params),
 	KUNIT_CASE_PARAM(xdr_test_exact_fit, xdr_test_base_gen_params),
@@ -663,6 +745,12 @@ static struct kunit_case xdr_test_cases[] = {
 	KUNIT_CASE(xdr_test_bvec_overflow_head),
 	KUNIT_CASE(xdr_test_bvec_overflow_pages),
 	KUNIT_CASE(xdr_test_bvec_overflow_tail),
+	KUNIT_CASE(xdr_test_set_arg_len_zero),
+	KUNIT_CASE(xdr_test_set_arg_len_head),
+	KUNIT_CASE(xdr_test_set_arg_len_head_full),
+	KUNIT_CASE(xdr_test_set_arg_len_pages),
+	KUNIT_CASE(xdr_test_set_arg_len_exact_fit),
+	KUNIT_CASE(xdr_test_set_arg_len_clamp),
 	{}
 };
 
