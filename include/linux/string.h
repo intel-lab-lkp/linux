@@ -194,6 +194,7 @@ extern char * strstr(const char *, const char *);
 #ifndef __HAVE_ARCH_STRNSTR
 extern char * strnstr(const char *, const char *, size_t);
 #endif
+extern size_t str_has_prefix(const char *str, const char *prefix);
 #ifndef __HAVE_ARCH_STRLEN
 extern __kernel_size_t strlen(const char *);
 #endif
@@ -551,24 +552,6 @@ static inline char *strprefix(const char *s, const char *prefix)
 {
 	size_t len = strlen(prefix);
 	return strncmp(s, prefix, len) == 0 ? (char *) s + len : NULL;
-}
-
-/**
- * str_has_prefix - Test if a string has a given prefix
- * @str: The string to test
- * @prefix: The string to see if @str starts with
- *
- * This is similar to strprefix(), but returns an offset instead of
- * a pointer.
- *
- * Returns:
- * * strlen(@prefix) if @str starts with @prefix
- * * 0 if @str does not start with @prefix
- */
-static __always_inline size_t str_has_prefix(const char *str, const char *prefix)
-{
-	size_t len = strlen(prefix);
-	return strncmp(str, prefix, len) == 0 ? len : 0;
 }
 
 /**

@@ -774,6 +774,30 @@ char *strnstr(const char *s1, const char *s2, size_t len)
 EXPORT_SYMBOL(strnstr);
 #endif
 
+/**
+ * str_has_prefix - Test if a string has a given prefix
+ * @str: The string to test
+ * @prefix: The string to see if @str starts with
+ *
+ * This is similar to strprefix(), but returns an offset instead of
+ * a pointer.
+ *
+ * Unlike for strprefix(), if the prefix is an empty string, the
+ * behavior is undefined.  If you need to support arbitrary prefixes,
+ * use strprefix().
+ *
+ * Returns:
+ * * strlen(@prefix) if @str starts with @prefix
+ * * 0 if @str does not start with @prefix
+ */
+size_t str_has_prefix(const char *str, const char *prefix)
+{
+	size_t len = strlen(prefix);
+	WARN_ON_ONCE(len == 0);
+	return strncmp(str, prefix, len) == 0 ? len : 0;
+}
+EXPORT_SYMBOL(str_has_prefix);
+
 #ifndef __HAVE_ARCH_MEMCHR
 /**
  * memchr - Find a character in an area of memory.
