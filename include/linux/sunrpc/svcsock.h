@@ -26,9 +26,6 @@ struct svc_sock {
 	void			(*sk_odata)(struct sock *);
 	void			(*sk_owspace)(struct sock *);
 
-	/* For sends (protected by xpt_mutex) */
-	struct bio_vec		*sk_bvec;
-
 	/* private TCP part */
 	/* On-the-wire fragment header: */
 	__be32			sk_marker;
@@ -39,6 +36,7 @@ struct svc_sock {
 	 * received so far in the fragments making up this rpc: */
 	u32			sk_datalen;
 
+	/* For sends (protected by xpt_mutex) */
 	struct page_frag_cache  sk_frag_cache;
 
 	struct completion	sk_handshake_done;
