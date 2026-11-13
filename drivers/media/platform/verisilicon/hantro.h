@@ -193,6 +193,9 @@ hantro_vdev_to_func(struct video_device *vdev)
  *			shared with interrupt handlers.
  * @variant:		Hardware variant-specific parameters.
  * @watchdog_work:	Delayed work for hardware timeout handling.
+ * @empty_domain:	Empty IOMMU domain, used to reinitialize the IOMMU after
+ *			a reset of the core. NULL if not needed.
+ * @iommu_lost:		The IOMMU couldn't be reinitialized, no job can run.
  */
 struct hantro_dev {
 	struct v4l2_device v4l2_dev;
@@ -213,6 +216,8 @@ struct hantro_dev {
 	spinlock_t irqlock;
 	const struct hantro_variant *variant;
 	struct delayed_work watchdog_work;
+	struct iommu_domain *empty_domain;
+	bool iommu_lost;
 };
 
 /**
