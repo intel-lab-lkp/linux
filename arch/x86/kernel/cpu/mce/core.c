@@ -150,8 +150,12 @@ EXPORT_PER_CPU_SYMBOL_GPL(injectm);
 
 void mce_log(struct mce_hw_err *err)
 {
+	/* Not more than two messages every minute */
+	static DEFINE_RATELIMIT_STATE(ratelimit, 60*HZ, 2);
+
 	if (mce_gen_pool_add(err)) {
-		pr_info(HW_ERR "Machine check events logged\n");
+		if (__ratelimit(&ratelimit))
+			pr_info(HW_ERR "Machine check events logged\n");
 		irq_work_queue(&mce_irq_work);
 	}
 }
