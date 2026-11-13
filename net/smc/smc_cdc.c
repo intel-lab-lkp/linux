@@ -333,6 +333,7 @@ static void smc_cdc_msg_recv_action(struct smc_sock *smc,
 	union smc_host_cursor cons_old, prod_old;
 	struct smc_connection *conn = &smc->conn;
 	int diff_cons, diff_prod, diff_tx;
+	struct smc_buf_desc *sndbuf_desc;
 
 	/* smc_conn_create() can have cleared rmb_desc */
 	if (!smp_load_acquire(&conn->rmb_desc))
@@ -357,12 +358,19 @@ static void smc_cdc_msg_recv_action(struct smc_sock *smc,
 		 * peer RMB, then update tx_curs_fin and sndbuf_space
 		 * here since peer has already consumed the data.
 		 */
+		sndbuf_desc = NULL;
 		if (conn->lgr->is_smcd &&
 		    smc_ism_support_dmb_nocopy(conn->lgr->smcd)) {
+			/* NULL until smcd_buf_attach(), but the old peer of
+			 * a reused DMB can already signal us.
+			 */
+			sndbuf_desc = smp_load_acquire(&conn->sndbuf_desc);
+		}
+		if (sndbuf_desc) {
 			/* Calculate consumed data and
 			 * increment free send buffer space.
 			 */
-			diff_tx = smc_curs_diff(conn->sndbuf_desc->len,
+			diff_tx = smc_curs_diff(sndbuf_desc->len,
 						&conn->tx_curs_fin,
 						&conn->local_rx_ctrl.cons);
 			/* increase local sndbuf space and fin_curs */
