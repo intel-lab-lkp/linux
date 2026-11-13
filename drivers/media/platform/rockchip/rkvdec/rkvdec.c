@@ -1089,10 +1089,10 @@ static void rkvdec_job_finish_no_pm(struct rkvdec_ctx *ctx,
 					 result);
 }
 
-static void rkvdec_job_finish(struct rkvdec_ctx *ctx,
+static void rkvdec_job_finish(struct rkvdec_dev *rkvdec,
 			      enum vb2_buffer_state result)
 {
-	struct rkvdec_dev *rkvdec = ctx->dev;
+	struct rkvdec_ctx *ctx = v4l2_m2m_get_curr_priv(rkvdec->m2m_dev);
 
 	pm_runtime_put_autosuspend(rkvdec->dev);
 	rkvdec_job_finish_no_pm(ctx, result);
@@ -1176,7 +1176,7 @@ static void rkvdec_device_run(void *priv)
 
 	ret = desc->ops->run(ctx);
 	if (ret)
-		rkvdec_job_finish(ctx, VB2_BUF_STATE_ERROR);
+		rkvdec_job_finish(rkvdec, VB2_BUF_STATE_ERROR);
 }
 
 static const struct v4l2_m2m_ops rkvdec_m2m_ops = {
@@ -1434,9 +1434,8 @@ static void rkvdec_iommu_restore(struct rkvdec_dev *rkvdec)
 	}
 }
 
-static irqreturn_t rk3399_irq_handler(struct rkvdec_ctx *ctx)
+static irqreturn_t rk3399_irq_handler(struct rkvdec_dev *rkvdec)
 {
-	struct rkvdec_dev *rkvdec = ctx->dev;
 	enum vb2_buffer_state state;
 	u32 status;
 
@@ -1452,14 +1451,13 @@ static irqreturn_t rk3399_irq_handler(struct rkvdec_ctx *ctx)
 	}
 
 	if (cancel_delayed_work(&rkvdec->watchdog_work))
-		rkvdec_job_finish(ctx, state);
+		rkvdec_job_finish(rkvdec, state);
 
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t vdpu381_irq_handler(struct rkvdec_ctx *ctx)
+static irqreturn_t vdpu381_irq_handler(struct rkvdec_dev *rkvdec)
 {
-	struct rkvdec_dev *rkvdec = ctx->dev;
 	enum vb2_buffer_state state;
 	bool need_reset = 0;
 	u32 status;
@@ -1481,14 +1479,13 @@ static irqreturn_t vdpu381_irq_handler(struct rkvdec_ctx *ctx)
 		rkvdec_iommu_restore(rkvdec);
 
 	if (cancel_delayed_work(&rkvdec->watchdog_work))
-		rkvdec_job_finish(ctx, state);
+		rkvdec_job_finish(rkvdec, state);
 
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t vdpu383_irq_handler(struct rkvdec_ctx *ctx)
+static irqreturn_t vdpu383_irq_handler(struct rkvdec_dev *rkvdec)
 {
-	struct rkvdec_dev *rkvdec = ctx->dev;
 	enum vb2_buffer_state state;
 	bool need_reset = 0;
 	u32 status;
@@ -1510,7 +1507,7 @@ static irqreturn_t vdpu383_irq_handler(struct rkvdec_ctx *ctx)
 		rkvdec_iommu_restore(rkvdec);
 
 	if (cancel_delayed_work(&rkvdec->watchdog_work))
-		rkvdec_job_finish(ctx, state);
+		rkvdec_job_finish(rkvdec, state);
 
 	return IRQ_HANDLED;
 }
@@ -1518,10 +1515,9 @@ static irqreturn_t vdpu383_irq_handler(struct rkvdec_ctx *ctx)
 static irqreturn_t rkvdec_irq_handler(int irq, void *priv)
 {
 	struct rkvdec_dev *rkvdec = priv;
-	struct rkvdec_ctx *ctx = v4l2_m2m_get_curr_priv(rkvdec->m2m_dev);
 	const struct rkvdec_variant *variant = rkvdec->variant;
 
-	return variant->ops->irq_handler(ctx);
+	return variant->ops->irq_handler(rkvdec);
 }
 
 /*
@@ -1607,7 +1603,7 @@ static void rkvdec_watchdog_func(struct work_struct *work)
 	if (ctx) {
 		dev_err(rkvdec->dev, "Frame processing timed out!\n");
 		writel(RKVDEC_IRQ_DIS, rkvdec->regs + RKVDEC_REG_INTERRUPT);
-		rkvdec_job_finish(ctx, VB2_BUF_STATE_ERROR);
+		rkvdec_job_finish(rkvdec, VB2_BUF_STATE_ERROR);
 	}
 }
 
