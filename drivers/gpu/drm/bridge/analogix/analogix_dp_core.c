@@ -42,6 +42,36 @@
 
 static const bool verify_fast_training;
 
+/*
+ * Only the RK3576 and RK3588 platforms are confirmed to support the
+ * DP mode hotplug detection for now, which relies on their HDPTX PHY
+ * and requires the controller to stay powered and clocked.  So the
+ * runtime PM reference is held only for them, and not for the GPIO
+ * HPD mode, the force HPD mode or the fixed panels, which need no
+ * such detection.
+ */
+static bool analogix_dp_require_pm_for_hpd_irq(struct analogix_dp_device *dp)
+{
+	return (dp->plat_data->dev_type == RK3576_EDP || dp->plat_data->dev_type == RK3588_EDP) &&
+	       !dp->hpd_gpiod && !dp->force_hpd && !dp->force_connected_mode;
+}
+
+/*
+ * The hotplug events are reported either through the optional GPIO HPD
+ * pin or through the native controller interrupt, which is confirmed
+ * to work only on the RK3576 and RK3588 platforms.
+ */
+static bool analogix_dp_supports_hpd(struct analogix_dp_device *dp)
+{
+	if (dp->force_connected_mode || dp->force_hpd)
+		return false;
+
+	if (dp->hpd_gpiod)
+		return true;
+
+	return dp->plat_data->dev_type == RK3576_EDP || dp->plat_data->dev_type == RK3588_EDP;
+}
+
 static void analogix_dp_init_dp(struct analogix_dp_device *dp)
 {
 	analogix_dp_reset(dp);
@@ -1616,7 +1646,14 @@ int analogix_dp_bind(struct analogix_dp_device *dp, struct drm_device *drm_dev)
 		goto err_unregister_aux;
 	}
 
-	enable_irq(dp->irq);
+	if (analogix_dp_require_pm_for_hpd_irq(dp)) {
+		ret = pm_runtime_resume_and_get(dp->dev);
+		if (ret)
+			goto err_unregister_aux;
+	}
+
+	if (analogix_dp_supports_hpd(dp))
+		enable_irq(dp->irq);
 
 	return 0;
 
@@ -1629,7 +1666,12 @@ EXPORT_SYMBOL_GPL(analogix_dp_bind);
 
 void analogix_dp_unbind(struct analogix_dp_device *dp)
 {
-	disable_irq(dp->irq);
+	if (analogix_dp_supports_hpd(dp))
+		disable_irq(dp->irq);
+
+	if (analogix_dp_require_pm_for_hpd_irq(dp))
+		pm_runtime_put_sync(dp->dev);
+
 	drm_dp_aux_unregister(&dp->aux);
 }
 EXPORT_SYMBOL_GPL(analogix_dp_unbind);
