@@ -197,6 +197,8 @@ size_t fault_in_iov_iter_writeable(const struct iov_iter *i, size_t bytes);
 size_t iov_iter_single_seg_count(const struct iov_iter *i);
 size_t copy_page_to_iter(struct page *page, size_t offset, size_t bytes,
 			 struct iov_iter *i);
+bool copy_bvecs_to_iter_full(const struct bio_vec *bv, unsigned int nr,
+			     struct iov_iter *i);
 size_t copy_page_from_iter(struct page *page, size_t offset, size_t bytes,
 			 struct iov_iter *i);
 size_t copy_folio_from_iter_atomic(struct folio *folio, size_t offset,

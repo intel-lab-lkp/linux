@@ -387,6 +387,67 @@ size_t copy_page_to_iter(struct page *page, size_t offset, size_t bytes,
 }
 EXPORT_SYMBOL(copy_page_to_iter);
 
+#ifdef unsafe_copy_user_generic
+static bool copy_bvecs_to_ubuf_full(const struct bio_vec *bv, unsigned int nr,
+				    struct iov_iter *i)
+{
+	char __user *dst = i->ubuf + i->iov_offset;
+	size_t len = 0, off = 0;
+	unsigned int k;
+
+	for (k = 0; k < nr; k++)
+		len += bv[k].bv_len;
+	if (len > iov_iter_count(i) || should_fail_usercopy())
+		return false;
+
+	might_fault();
+	scoped_user_write_access_size(dst, len, efault) {
+		for (k = 0; k < nr; off += bv[k].bv_len, k++) {
+			void *src = page_address(bv[k].bv_page) +
+				    bv[k].bv_offset;
+
+			instrument_copy_to_user(dst + off, src, bv[k].bv_len);
+			if (unsafe_copy_user_generic((__force void *)dst + off,
+						     src, bv[k].bv_len))
+				goto efault;
+		}
+	}
+	iov_iter_advance(i, len);
+	return true;
+
+efault:
+	return false;
+}
+#endif
+
+/*
+ * Copy the pages in @bv to @i one after the other, like copy_page_to_iter(),
+ * but all or nothing: after a short copy @i is reverted. For a plain user
+ * buffer the copies share one user access section where the architecture
+ * allows it.
+ */
+bool copy_bvecs_to_iter_full(const struct bio_vec *bv, unsigned int nr,
+			     struct iov_iter *i)
+{
+	size_t copied = 0, n;
+	unsigned int k;
+
+#ifdef unsafe_copy_user_generic
+	if (iter_is_ubuf(i))
+		return copy_bvecs_to_ubuf_full(bv, nr, i);
+#endif
+	for (k = 0; k < nr; k++) {
+		n = copy_page_to_iter(bv[k].bv_page, bv[k].bv_offset,
+				      bv[k].bv_len, i);
+		copied += n;
+		if (n != bv[k].bv_len) {
+			iov_iter_revert(i, copied);
+			return false;
+		}
+	}
+	return true;
+}
+
 size_t copy_page_to_iter_nofault(struct page *page, unsigned offset, size_t bytes,
 				 struct iov_iter *i)
 {
