@@ -2278,6 +2278,14 @@ static int ideapad_wmi_probe(struct wmi_device *wdev, const void *context)
 {
 	struct ideapad_wmi_private *wpriv;
 
+	/*
+	 * The events are only delivered once the VPC platform driver is bound
+	 * (ideapad_shared).  Without the VPC device this driver can never
+	 * report them, so leave the WMI device to another consumer.
+	 */
+	if (!acpi_dev_found("VPC2004"))
+		return -ENODEV;
+
 	wpriv = devm_kzalloc_obj(&wdev->dev, *wpriv);
 	if (!wpriv)
 		return -ENOMEM;
