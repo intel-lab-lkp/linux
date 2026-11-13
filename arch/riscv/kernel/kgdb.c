@@ -48,7 +48,7 @@ static int get_step_address(struct pt_regs *regs, unsigned long *next_addr)
 		if (riscv_insn_is_c_jalr(op_code) ||
 		    riscv_insn_is_c_jr(op_code)) {
 			rs1_num = decode_register_index(op_code, RVC_C2_RS1_OPOFF);
-			*next_addr = regs_ptr[rs1_num];
+			*next_addr = regs_ptr[rs1_num] & ~1UL;
 		} else if (riscv_insn_is_c_j(op_code) ||
 			   riscv_insn_is_c_jal(op_code)) {
 			*next_addr = RVC_EXTRACT_JTYPE_IMM(op_code) + pc;
@@ -109,6 +109,7 @@ static int get_step_address(struct pt_regs *regs, unsigned long *next_addr)
 			if (rs1_num)
 				*next_addr = ((unsigned long *)regs)[rs1_num];
 			*next_addr += RV_EXTRACT_ITYPE_IMM(op_code);
+			*next_addr &= ~1UL;
 		} else if (riscv_insn_is_sret(op_code)) {
 			*next_addr = pc;
 		} else {
