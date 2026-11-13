@@ -4208,8 +4208,10 @@ unwind_ops:
 		vm_bind_ioctl_ops_unwind(vm, ops, args->num_binds);
 	xe_vma_ops_fini(&vops);
 	for (i = args->num_binds - 1; i >= 0; --i)
-		if (ops[i])
+		if (ops[i]) {
+			xe_svm_prefetch_gpuva_ops_fini(ops[i]);
 			drm_gpuva_ops_free(&vm->gpuvm, ops[i]);
+		}
 free_syncs:
 	if (err == -ENODATA)
 		err = vm_bind_ioctl_signal_fences(vm, q, syncs, num_syncs);
