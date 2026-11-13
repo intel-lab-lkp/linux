@@ -1342,42 +1342,36 @@ err_noclose:
 	return 0;	/* record not complete */
 }
 
+#define SVC_TCP_MARKER_BVECS	1
+
 /*
  * MSG_SPLICE_PAGES is used exclusively to reduce the number of
  * copy operations in this path. Therefore the caller must ensure
- * that the pages backing @xdr are unchanging.
+ * that the pages backing rq_res are unchanging.
  */
 static int svc_tcp_sendmsg(struct svc_sock *svsk, struct svc_rqst *rqstp,
-			   rpc_fraghdr marker)
+			   rpc_fraghdr marker, unsigned int count)
 {
 	struct msghdr msg = {
 		.msg_flags	= MSG_SPLICE_PAGES,
 	};
-	int count;
 	void *buf;
 	int ret;
 
 	/* The stream record marker is copied into a temporary page
-	 * fragment buffer so that it can be included in sk_bvec.
+	 * fragment buffer so that it can be included in rq_bvec.
 	 */
 	buf = page_frag_alloc(&svsk->sk_frag_cache, sizeof(marker),
 			      GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 	memcpy(buf, &marker, sizeof(marker));
-	bvec_set_virt(svsk->sk_bvec, buf, sizeof(marker));
+	bvec_set_virt(rqstp->rq_bvec, buf, sizeof(marker));
 
-	count = xdr_buf_to_bvec(svsk->sk_bvec + 1, rqstp->rq_maxpages,
-				&rqstp->rq_res);
-	if (count < 0) {
-		ret = count;
-		goto out;
-	}
-
-	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, svsk->sk_bvec,
-		      1 + count, sizeof(marker) + rqstp->rq_res.len);
+	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, rqstp->rq_bvec,
+		      SVC_TCP_MARKER_BVECS + count,
+		      sizeof(marker) + rqstp->rq_res.len);
 	ret = sock_sendmsg(svsk->sk_sock, &msg);
-out:
 	page_frag_free(buf);
 	return ret;
 }
@@ -1398,15 +1392,20 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 	struct xdr_buf *xdr = &rqstp->rq_res;
 	rpc_fraghdr marker = cpu_to_be32(RPC_LAST_STREAM_FRAGMENT |
 					 (u32)xdr->len);
-	int sent;
+	int count, sent;
 
 	svc_tcp_release_ctxt(xprt, rqstp->rq_xprt_ctxt);
 	rqstp->rq_xprt_ctxt = NULL;
 
+	BUILD_BUG_ON(SVC_TCP_MARKER_BVECS > RPCSVC_BVEC_HEADROOM);
+	count = svc_rqst_res_to_bvec(rqstp, SVC_TCP_MARKER_BVECS);
+
 	mutex_lock(&xprt->xpt_mutex);
 	if (svc_xprt_is_dead(xprt))
 		goto out_notconn;
-	sent = svc_tcp_sendmsg(svsk, rqstp, marker);
+	sent = count;
+	if (count >= 0)
+		sent = svc_tcp_sendmsg(svsk, rqstp, marker, count);
 	trace_svcsock_tcp_send(xprt, sent);
 	if (sent < 0 || sent != (xdr->len + sizeof(marker)))
 		goto out_close;
@@ -1520,13 +1519,10 @@ void svc_sock_update_bufs(struct svc_serv *serv)
 	spin_unlock_bh(&serv->sv_lock);
 }
 
-static int svc_sock_sendpages(struct svc_serv *serv, struct socket *sock, int flags)
+static int svc_sock_sendpages(struct socket *sock)
 {
 	switch (sock->type) {
 	case SOCK_STREAM:
-		/* +1 for TCP record marker */
-		if (flags & SVC_SOCK_TEMPORARY)
-			return svc_serv_maxpages(serv) + 1;
 		return 0;
 	case SOCK_DGRAM:
 		return SUNRPC_MAX_UDP_SENDPAGES;
@@ -1547,7 +1543,7 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 	int		sendpages;
 	unsigned long	pages;
 
-	sendpages = svc_sock_sendpages(serv, sock, flags);
+	sendpages = svc_sock_sendpages(sock);
 	if (sendpages < 0)
 		return ERR_PTR(sendpages);
 

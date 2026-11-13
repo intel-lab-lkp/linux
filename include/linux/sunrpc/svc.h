@@ -232,6 +232,8 @@ struct svc_rqst {
 	struct page *		*rq_page_end;  /* one past the last reply page */
 
 	struct folio_batch	rq_fbatch;
+
+	/* Scratch array: ->xpo_recvfrom and ->xpo_sendto overwrite it */
 	struct bio_vec		*rq_bvec;
 
 	__be32			rq_xid;		/* transmission id */
