@@ -781,8 +781,9 @@ unsigned long random_kmalloc_seed __ro_after_init;
 EXPORT_SYMBOL(random_kmalloc_seed);
 #endif
 
-static bool kmalloc_partition_enabled __ro_after_init =
+bool kmalloc_partition_enabled __ro_after_init =
 	IS_ENABLED(CONFIG_KMALLOC_PARTITION_CACHES);
+EXPORT_SYMBOL_IF_KUNIT(kmalloc_partition_enabled);
 
 static int __init setup_kmalloc_partition(char *str)
 {

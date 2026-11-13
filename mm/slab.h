@@ -391,6 +391,7 @@ extern struct list_head slab_caches;
 extern struct kmem_cache *kmem_cache;
 
 extern bool slab_buckets_enabled;
+extern bool kmalloc_partition_enabled;
 
 /* A table of kmalloc cache names and sizes */
 extern const struct kmalloc_info_struct {
