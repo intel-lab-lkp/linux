@@ -576,7 +576,11 @@ found_mmu:
 		    offset < (node->start + node->size)) {
 			mapping = drm_mm_node_to_panfrost_mapping(node);
 
-			kref_get(&mapping->refcount);
+			/* The node stays in the mm after the last reference is
+			 * dropped: don't revive a mapping that is being freed.
+			 */
+			if (!kref_get_unless_zero(&mapping->refcount))
+				mapping = NULL;
 			break;
 		}
 	}
