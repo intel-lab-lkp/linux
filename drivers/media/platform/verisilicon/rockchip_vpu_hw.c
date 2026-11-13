@@ -481,10 +481,16 @@ static void rockchip_vpu_enc_hw_reset(struct hantro_dev *vpu)
 	if (!vpu->resets)
 		return;
 
+	ret = reset_control_acquire(vpu->resets);
+	if (ret) {
+		dev_warn(vpu->dev, "Failed to acquire resets: %d\n", ret);
+		return;
+	}
+
 	ret = reset_control_assert(vpu->resets);
 	if (ret) {
 		dev_warn(vpu->dev, "Failed to assert resets: %d\n", ret);
-		return;
+		goto release;
 	}
 
 	udelay(5);
@@ -492,10 +498,12 @@ static void rockchip_vpu_enc_hw_reset(struct hantro_dev *vpu)
 	ret = reset_control_deassert(vpu->resets);
 	if (ret) {
 		dev_err(vpu->dev, "Failed to deassert resets: %d\n", ret);
-		return;
+		goto release;
 	}
 
 	hantro_iommu_restore(vpu);
+release:
+	reset_control_release(vpu->resets);
 }
 
 static void rockchip_vpu1_enc_reset(struct hantro_ctx *ctx)

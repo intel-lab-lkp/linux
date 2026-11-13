@@ -1188,7 +1188,9 @@ static int hantro_probe(struct platform_device *pdev)
 			return PTR_ERR(vpu->clocks[0].clk);
 	}
 
-	vpu->resets = devm_reset_control_array_get_optional_exclusive(&pdev->dev);
+	/* Released: the IOMMU of a core can share its reset lines. */
+	vpu->resets = devm_reset_control_array_get(&pdev->dev,
+						   RESET_CONTROL_OPTIONAL_EXCLUSIVE_RELEASED);
 	if (IS_ERR(vpu->resets))
 		return PTR_ERR(vpu->resets);
 
@@ -1267,7 +1269,11 @@ static int hantro_probe(struct platform_device *pdev)
 	pm_runtime_use_autosuspend(vpu->dev);
 	pm_runtime_enable(vpu->dev);
 
-	ret = reset_control_deassert(vpu->resets);
+	ret = reset_control_acquire(vpu->resets);
+	if (!ret) {
+		ret = reset_control_deassert(vpu->resets);
+		reset_control_release(vpu->resets);
+	}
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to deassert resets\n");
 		goto err_pm_disable;

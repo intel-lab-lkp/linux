@@ -91,7 +91,11 @@ static void sunxi_vpu_reset(struct hantro_ctx *ctx)
 {
 	struct hantro_dev *vpu = ctx->dev;
 
+	if (reset_control_acquire(vpu->resets))
+		return;
+
 	reset_control_reset(vpu->resets);
+	reset_control_release(vpu->resets);
 }
 
 static const struct hantro_codec_ops sunxi_vpu_codec_ops[] = {

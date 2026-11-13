@@ -115,7 +115,11 @@ static void stm32mp25_venc_reset(struct hantro_ctx *ctx)
 {
 	struct hantro_dev *vpu = ctx->dev;
 
+	if (reset_control_acquire(vpu->resets))
+		return;
+
 	reset_control_reset(vpu->resets);
+	reset_control_release(vpu->resets);
 }
 
 /*
