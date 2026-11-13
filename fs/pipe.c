@@ -297,6 +297,40 @@ static inline unsigned int pipe_update_tail(struct pipe_inode_info *pipe,
 	return tail;
 }
 
+/*
+ * Read the anonymous buffers at @tail that the read consumes whole with one
+ * copy_bvecs_to_iter_full() call, which can copy them to a user buffer in one
+ * user access section. Returns the bytes read, or 0 to go buffer by buffer.
+ */
+static size_t anon_pipe_read_batch(struct pipe_inode_info *pipe,
+				   struct iov_iter *to, size_t total_len,
+				   unsigned int head, unsigned int *tailp,
+				   bool *wake_writer)
+{
+	struct bio_vec bv[PIPE_DEF_BUFFERS];
+	unsigned int tail = *tailp, n;
+	size_t len = 0;
+
+	for (n = 0; n < PIPE_DEF_BUFFERS && !pipe_empty(head, tail + n); n++) {
+		struct pipe_buffer *buf = pipe_buf(pipe, tail + n);
+
+		if (buf->ops != &anon_pipe_buf_ops ||
+		    (buf->flags & PIPE_BUF_FLAG_PACKET) ||
+		    buf->len > total_len - len)
+			break;
+		bvec_set_page(&bv[n], buf->page, buf->len, buf->offset);
+		len += buf->len;
+	}
+	if (!n || !copy_bvecs_to_iter_full(bv, n, to))
+		return 0;
+
+	*wake_writer |= pipe_full(head, tail, pipe->max_usage);
+	while (n--)
+		tail = pipe_update_tail(pipe, pipe_buf(pipe, tail), tail);
+	*tailp = tail;
+	return len;
+}
+
 static ssize_t
 anon_pipe_read(struct kiocb *iocb, struct iov_iter *to)
 {
@@ -304,7 +338,7 @@ anon_pipe_read(struct kiocb *iocb, struct iov_iter *to)
 	struct file *filp = iocb->ki_filp;
 	struct pipe_inode_info *pipe = filp->private_data;
 	bool wake_writer = false, wake_next_reader = false;
-	ssize_t ret;
+	ssize_t ret, batched;
 
 	/* Null read succeeds. */
 	if (unlikely(total_len == 0))
@@ -350,6 +384,14 @@ anon_pipe_read(struct kiocb *iocb, struct iov_iter *to)
 		}
 #endif
 
+		batched = anon_pipe_read_batch(pipe, to, total_len, head,
+					       &tail, &wake_writer);
+		if (batched) {
+			ret += batched;
+			total_len -= batched;
+			if (!total_len)
+				break;	/* common path: read succeeded */
+		}
 		if (!pipe_empty(head, tail)) {
 			struct pipe_buffer *buf = pipe_buf(pipe, tail);
 			size_t chars = buf->len;
