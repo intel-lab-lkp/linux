@@ -58,6 +58,7 @@
 #include <linux/nsproxy.h>
 #include <linux/virtio_net.h>
 #include <linux/rcupdate.h>
+#include <net/hotdata.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
 #include <net/rtnetlink.h>
@@ -227,6 +228,16 @@ struct veth {
 static void tun_flow_init(struct tun_struct *tun);
 static void tun_flow_uninit(struct tun_struct *tun);
 
+/* In IFF_NAPI mode written packets wait in the tfile's sk_write_queue for the
+ * NAPI poll, which may run later in a kthread or ksoftirqd. Bound that queue
+ * like the per-CPU backlog of netif_rx().
+ */
+static bool tun_napi_queue_full(const struct sk_buff_head *queue)
+{
+	return skb_queue_len_lockless(queue) >
+	       READ_ONCE(net_hotdata.max_backlog);
+}
+
 static int tun_napi_receive(struct napi_struct *napi, int budget)
 {
 	struct tun_file *tfile = container_of(napi, struct tun_file, napi);
@@ -237,19 +248,22 @@ static int tun_napi_receive(struct napi_struct *napi, int budget)
 
 	__skb_queue_head_init(&process_queue);
 
+	/* Take at most budget skbs, so that the queue never looks emptier to
+	 * writers than it is.
+	 */
 	spin_lock(&queue->lock);
-	skb_queue_splice_tail_init(queue, &process_queue);
+	if (skb_queue_len(queue) <= budget) {
+		skb_queue_splice_tail_init(queue, &process_queue);
+	} else {
+		while (skb_queue_len(&process_queue) < budget &&
+		       (skb = __skb_dequeue(queue)))
+			__skb_queue_tail(&process_queue, skb);
+	}
 	spin_unlock(&queue->lock);
 
-	while (received < budget && (skb = __skb_dequeue(&process_queue))) {
+	while ((skb = __skb_dequeue(&process_queue))) {
 		napi_gro_receive(napi, skb);
 		++received;
-	}
-
-	if (!skb_queue_empty(&process_queue)) {
-		spin_lock(&queue->lock);
-		skb_queue_splice(&process_queue, queue);
-		spin_unlock(&queue->lock);
 	}
 
 	return received;
@@ -1862,6 +1876,20 @@ static ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,
 			zerocopy = true;
 	}
 
+	/* NAPI queue full: drop before allocating, and schedule NAPI, which a
+	 * MSG_MORE sender may not have done yet. Lockless: concurrent writers
+	 * can each still add one.
+	 */
+	if (tfile->napi_enabled &&
+	    unlikely(tun_napi_queue_full(&tfile->sk.sk_write_queue))) {
+		local_bh_disable();
+		napi_schedule(&tfile->napi);
+		local_bh_enable();
+		net_zcopy_put(msg_control);
+		dev_core_stats_rx_dropped_inc(tun->dev);
+		return total_len;
+	}
+
 	if (!frags && tun_can_build_skb(tun, tfile, len, noblock, zerocopy)) {
 		/* For the packet that is not easy to be processed
 		 * (e.g gso or jumbo packet), we will do it at after
@@ -2566,6 +2594,17 @@ static int tun_xdp_one(struct tun_struct *tun,
 		put_page(virt_to_head_page(xdp->data));
 		dev_core_stats_rx_dropped_inc(tun->dev);
 		return -EIO;
+	}
+
+	/* NAPI queue full: drop, and schedule NAPI so that it drains even if
+	 * nothing in this batch gets queued
+	 */
+	if (tfile->napi_enabled &&
+	    unlikely(tun_napi_queue_full(&tfile->sk.sk_write_queue))) {
+		napi_schedule(&tfile->napi);
+		put_page(virt_to_head_page(xdp->data));
+		dev_core_stats_rx_dropped_inc(tun->dev);
+		return 0;
 	}
 
 	xdp_prog = rcu_dereference(tun->xdp_prog);
