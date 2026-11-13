@@ -1256,14 +1256,15 @@ retry:
 		 * unlock and release the folio.
 		 */
 		old_size = iter->inode->i_size;
-		if (pos + written > old_size &&
+		if (pos + written > old_size && !S_ISBLK(iter->inode->i_mode) &&
 		    !(iter->iomap.flags & IOMAP_F_FSVERITY)) {
 			i_size_write(iter->inode, pos + written);
 			iter->iomap.flags |= IOMAP_F_SIZE_CHANGED;
 		}
 		__iomap_put_folio(iter, write_ops, written, folio);
 
-		if (old_size < pos && !(iter->iomap.flags & IOMAP_F_FSVERITY))
+		if (old_size < pos && !S_ISBLK(iter->inode->i_mode) &&
+		    !(iter->iomap.flags & IOMAP_F_FSVERITY))
 			pagecache_isize_extended(iter->inode, old_size, pos);
 
 		cond_resched();
