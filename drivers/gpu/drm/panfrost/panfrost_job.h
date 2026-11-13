@@ -38,6 +38,8 @@ struct panfrost_job {
 	bool is_profiled;
 	/* Holds a reference on the cycle counter */
 	bool cycle_counter_ref;
+	/* JS_COMMAND_START was written for this submission */
+	bool started;
 	ktime_t start_time;
 	u64 start_cycles;
 };
