@@ -567,7 +567,7 @@ static int panfrost_device_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int panfrost_device_resume(struct device *dev)
+static int panfrost_device_power_up(struct device *dev)
 {
 	struct panfrost_device *pfdev = dev_get_drvdata(dev);
 	int ret;
@@ -604,14 +604,36 @@ err_clk:
 	return ret;
 }
 
+static void panfrost_device_enable_reset(struct panfrost_device *pfdev)
+{
+	enable_work(&pfdev->reset.work);
+	if (atomic_read(&pfdev->reset.pending))
+		queue_work(pfdev->reset.wq, &pfdev->reset.work);
+}
+
+static int panfrost_device_resume(struct device *dev)
+{
+	int ret = panfrost_device_power_up(dev);
+
+	panfrost_device_enable_reset(dev_get_drvdata(dev));
+	return ret;
+}
+
 static int panfrost_device_suspend(struct device *dev)
 {
 	struct panfrost_device *pfdev = dev_get_drvdata(dev);
 	int ret;
 
+	/* pm_runtime_force_suspend() ignores the reset work's runtime PM
+	 * reference: keep the work off the GPU until resume.
+	 */
+	disable_work_sync(&pfdev->reset.work);
+
 	ret = pm_runtime_force_suspend(dev);
-	if (ret)
+	if (ret) {
+		panfrost_device_enable_reset(pfdev);
 		return ret;
+	}
 
 	if (pfdev->comp->pm_features & BIT(GPU_PM_CLK_DIS))
 		panfrost_clks_disable(pfdev, false);
