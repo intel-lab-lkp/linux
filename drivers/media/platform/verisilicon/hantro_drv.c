@@ -176,16 +176,20 @@ static void device_run(void *priv)
 	dst = hantro_get_dst_buf(ctx);
 
 	ret = pm_runtime_resume_and_get(vpu->dev);
-	if (ret < 0) {
-		hantro_job_finish_no_pm(ctx, VB2_BUF_STATE_ERROR);
-		return;
-	}
+	if (ret < 0)
+		goto err_cancel_job;
 
 	v4l2_m2m_buf_copy_metadata(src, dst);
 
 	ret = ctx->codec_ops->run(ctx);
 	if (ret)
 		hantro_job_finish(ctx, VB2_BUF_STATE_ERROR);
+
+	return;
+
+err_cancel_job:
+	v4l2_ctrl_request_complete(src->vb2_buf.req_obj.req, &ctx->ctrl_handler);
+	hantro_job_finish_no_pm(ctx, VB2_BUF_STATE_ERROR);
 }
 
 static const struct v4l2_m2m_ops vpu_m2m_ops = {
