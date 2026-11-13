@@ -53,7 +53,6 @@
 #include <trace/events/sock.h>
 #include <trace/events/sunrpc.h>
 
-#include "socklib.h"
 #include "sunrpc.h"
 
 #define RPCDBG_FACILITY	RPCDBG_SVCXPRT
@@ -113,27 +112,13 @@ static void svc_reclassify_socket(struct socket *sock)
 #endif
 
 /**
- * svc_tcp_release_ctxt - Release transport-related resources
+ * svc_sock_release_ctxt - Release transport-related resources
  * @xprt: the transport which owned the context
  * @ctxt: the context from rqstp->rq_xprt_ctxt or dr->xprt_ctxt
  *
  */
-static void svc_tcp_release_ctxt(struct svc_xprt *xprt, void *ctxt)
+static void svc_sock_release_ctxt(struct svc_xprt *xprt, void *ctxt)
 {
-}
-
-/**
- * svc_udp_release_ctxt - Release transport-related resources
- * @xprt: the transport which owned the context
- * @ctxt: the context from rqstp->rq_xprt_ctxt or dr->xprt_ctxt
- *
- */
-static void svc_udp_release_ctxt(struct svc_xprt *xprt, void *ctxt)
-{
-	struct sk_buff *skb = ctxt;
-
-	if (skb)
-		consume_skb(skb);
 }
 
 union svc_pktinfo_u {
@@ -613,22 +598,20 @@ static int svc_udp_recvfrom(struct svc_rqst *rqstp)
 		goto out_cmsg_err;
 	rqstp->rq_daddrlen = svc_addr_len(svc_daddr(rqstp));
 
-	if (skb_is_nonlinear(skb)) {
-		/* we have to copy */
-		local_bh_disable();
-		if (csum_partial_copy_to_xdr(&rqstp->rq_arg, skb))
-			goto out_bh_enable;
-		local_bh_enable();
-		consume_skb(skb);
-	} else {
-		/* we can use it in-place */
-		rqstp->rq_arg.head[0].iov_base = skb->data;
-		rqstp->rq_arg.head[0].iov_len = len;
-		if (skb_checksum_complete(skb))
-			goto out_free;
-		rqstp->rq_xprt_ctxt = skb;
+	if (len > rqstp->rq_arg.head[0].iov_len + rqstp->rq_arg.page_len ||
+	    svc_rqst_arg_iter_init(rqstp, &msg.msg_iter, 0, len)) {
+		trace_svcsock_udp_recv_err(&svsk->sk_xprt, -EMSGSIZE);
+		goto out_free;
 	}
+	if (skb_csum_unnecessary(skb))
+		err = skb_copy_datagram_iter(skb, 0, &msg.msg_iter, len);
+	else
+		err = skb_copy_and_csum_datagram_msg(skb, 0, &msg);
+	if (err)
+		goto out_free;
+	consume_skb(skb);
 
+	svc_rqst_arg_flush(rqstp, len);
 	svc_rqst_set_arg_len(rqstp, len);
 
 	if (serv->sv_stats)
@@ -648,9 +631,6 @@ out_recv_err:
 out_cmsg_err:
 	net_warn_ratelimited("svc: received unknown control message %d/%d; dropping RPC reply datagram\n",
 			     cmh->cmsg_level, cmh->cmsg_type);
-	goto out_free;
-out_bh_enable:
-	local_bh_enable();
 out_free:
 	kfree_skb(skb);
 out_clear_busy:
@@ -682,9 +662,6 @@ static int svc_udp_sendto(struct svc_rqst *rqstp)
 	};
 	int count;
 	int err;
-
-	svc_udp_release_ctxt(xprt, rqstp->rq_xprt_ctxt);
-	rqstp->rq_xprt_ctxt = NULL;
 
 	svc_set_cmsg_data(rqstp, cmh);
 
@@ -762,7 +739,7 @@ static const struct svc_xprt_ops svc_udp_ops = {
 	.xpo_recvfrom = svc_udp_recvfrom,
 	.xpo_sendto = svc_udp_sendto,
 	.xpo_result_payload = svc_sock_result_payload,
-	.xpo_release_ctxt = svc_udp_release_ctxt,
+	.xpo_release_ctxt = svc_sock_release_ctxt,
 	.xpo_detach = svc_sock_detach,
 	.xpo_free = svc_sock_free,
 	.xpo_has_wspace = svc_udp_has_wspace,
@@ -1345,7 +1322,7 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 					 (u32)xdr->len);
 	int count, sent;
 
-	svc_tcp_release_ctxt(xprt, rqstp->rq_xprt_ctxt);
+	svc_sock_release_ctxt(xprt, rqstp->rq_xprt_ctxt);
 	rqstp->rq_xprt_ctxt = NULL;
 
 	BUILD_BUG_ON(SVC_TCP_MARKER_BVECS > RPCSVC_BVEC_HEADROOM);
@@ -1389,7 +1366,7 @@ static const struct svc_xprt_ops svc_tcp_ops = {
 	.xpo_recvfrom = svc_tcp_recvfrom,
 	.xpo_sendto = svc_tcp_sendto,
 	.xpo_result_payload = svc_sock_result_payload,
-	.xpo_release_ctxt = svc_tcp_release_ctxt,
+	.xpo_release_ctxt = svc_sock_release_ctxt,
 	.xpo_detach = svc_tcp_sock_detach,
 	.xpo_free = svc_sock_free,
 	.xpo_has_wspace = svc_tcp_has_wspace,
