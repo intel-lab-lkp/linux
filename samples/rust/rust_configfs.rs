@@ -83,7 +83,12 @@ impl configfs::GroupOperations for Configuration {
             ],
         };
 
-        Ok(configfs::Group::new(name.try_into()?, tpe, Child::new()))
+        Ok(configfs::Group::new(
+            name.try_into()?,
+            tpe,
+            Child::new(),
+            core::iter::empty(),
+        ))
     }
 }
 
@@ -152,6 +157,7 @@ impl configfs::GroupOperations for Child {
             name.try_into()?,
             tpe,
             GrandChild::new(),
+            core::iter::empty(),
         ))
     }
 }

@@ -11,7 +11,8 @@
 //! - Items. All group children are groups.
 //! - Symlink support.
 //! - `disconnect_notify` hook.
-//! - Default groups.
+//! - Default groups, except for groups allocated and initialized by C code. See
+//!   [`CDefaultGroup`] and [`UnattachedGroup`].
 //!
 //! See the [`rust_configfs.rs`] sample for a full example use of this module.
 //!
@@ -109,7 +110,10 @@
 //! [C documentation]: srctree/Documentation/filesystems/configfs.rst
 //! [`rust_configfs.rs`]: srctree/samples/rust/rust_configfs.rs
 
-use crate::alloc::flags;
+use crate::alloc::{
+    flags,
+    Flags, //
+};
 use crate::container_of;
 use crate::page::PAGE_SIZE;
 use crate::prelude::*;
@@ -242,19 +246,36 @@ unsafe impl<Data> HasGroup<Data> for Subsystem<Data> {
 ///
 /// To add a subgroup to configfs, pass this type as `ctype` to
 /// [`crate::configfs_attrs`] when creating a group in [`GroupOperations::make_group`].
-#[pin_data]
+#[pin_data(PinnedDrop)]
 pub struct Group<Data> {
     #[pin]
     group: Opaque<bindings::config_group>,
     #[pin]
     data: Data,
+    default_groups: KVec<Arc<dyn CDefaultGroup>>,
 }
 
-// SAFETY: We do not provide any operations on `Group`.
+#[pinned_drop]
+impl<Data> PinnedDrop for Group<Data> {
+    fn drop(self: Pin<&mut Self>) {
+        // SAFETY: We have exclusive access to `self` and we know the default groups are alive
+        // because we reference them through `self.default_groups`.
+        //
+        // `configfs_remove_default_groups` releases one reference on each default group. That is
+        // the reference `Self::new` acquired before adding the group, so the references owned by
+        // the `Arc` values in `self.default_groups` are not affected. Those are released when the
+        // field is dropped, which happens after this function returns.
+        unsafe { bindings::configfs_remove_default_groups(self.group.get()) };
+    }
+}
+
+// SAFETY: We do not provide any operations on `Group`, and `self.default_groups` only holds
+// values that are `Send` and `Sync`, because [`CDefaultGroup`] requires both.
 unsafe impl<Data> Sync for Group<Data> {}
 
 // SAFETY: Ownership of `Group` can safely be transferred to other threads if
-// its data can be transferred as well.
+// its data can be transferred as well. The same holds for `self.default_groups`, because
+// [`CDefaultGroup`] requires `Send`.
 unsafe impl<Data: Send> Send for Group<Data> {}
 
 impl<Data> Group<Data> {
@@ -262,23 +283,168 @@ impl<Data> Group<Data> {
     ///
     /// When instantiated, the group will appear as a directory with the name
     /// given by `name` and it will contain attributes specified by `item_type`.
+    ///
+    /// Each element of `default_groups` is added as a default group of the new group and will
+    /// appear as a subdirectory of it.
     pub fn new(
         name: CString,
         item_type: &'static ItemType<Group<Data>, Data>,
         data: impl PinInit<Data, Error>,
+        default_groups: impl IntoIterator<Item = UnattachedGroup<dyn CDefaultGroup>>,
     ) -> impl PinInit<Self, Error> {
-        try_pin_init!(Self {
-            group <- pin_init::init_zeroed().chain(|v: &mut Opaque<bindings::config_group>| {
-                let place = v.get();
-                let name = name.to_bytes_with_nul().as_ptr();
-                // SAFETY: It is safe to initialize a group once it has been zeroed.
-                unsafe {
-                    bindings::config_group_init_type_name(place, name.cast(), item_type.as_ptr())
-                };
-                Ok(())
-            }),
-            data <- data,
+        pin_init::pin_init_scope(move || {
+            // Transition the permission tokens into `Arc`s.
+            let mut dg: KVec<Arc<dyn CDefaultGroup>> = KVec::new();
+            for group in default_groups {
+                dg.push(group.into_arc(), GFP_KERNEL)?;
+            }
+
+            Ok(try_pin_init!(Self {
+                // `data` is initialized first because it is the only fallible step. Nothing may
+                // fail after the default groups below have been added to `group`, because the
+                // references acquired for them are only released by the
+                // `configfs_remove_default_groups` call in `PinnedDrop`, which does not run if
+                // initialization fails.
+                data <- data,
+                group <- pin_init::init_zeroed().chain(|v: &mut Opaque<bindings::config_group>| {
+                    let place = v.get();
+                    let name = name.to_bytes_with_nul().as_ptr();
+                    // SAFETY: It is safe to initialize a group once it has been zeroed.
+                    unsafe {
+                        bindings::config_group_init_type_name(
+                            place,
+                            name.cast(),
+                            item_type.as_ptr(),
+                        )
+                    };
+
+                    for default_group in &dg {
+                        let child = default_group.group_ptr();
+
+                        // `configfs_add_default_group` does not acquire a reference on the group
+                        // it adds, but `configfs_remove_default_groups` releases one. Acquire the
+                        // reference that the removal in `PinnedDrop` will release, so that the
+                        // reference owned by `default_group` stays intact.
+                        //
+                        // SAFETY: By the safety requirements of `CDefaultGroup`, `child` points to
+                        // an initialized `struct config_group`, and it stays live because
+                        // `default_group` keeps it alive.
+                        unsafe { bindings::config_item_get(&raw mut (*child).cg_item) };
+
+                        // SAFETY: As above, `child` points to an initialized
+                        // `struct config_group` that stays live until `Self` is dropped, because
+                        // `dg` is a field of `Self`.
+                        //
+                        // `child` is not already a default group of any group: each element of
+                        // `dg` came from an `UnattachedGroup` consumed above, whose type
+                        // invariants say so, and the only way to attach a group is to pass such a
+                        // token to this function, so nothing can have attached it in between.
+                        unsafe { bindings::configfs_add_default_group(child, place) }
+                    }
+                    Ok(())
+                }),
+                default_groups: dg,
+            }))
         })
+    }
+}
+
+/// A trait for default configfs groups added by C code.
+///
+/// Rust abstractions that work with C code that creates configfs groups can implement this trait to
+/// add the groups as default groups via the Rust configfs API.
+///
+/// Note that implementing this trait is not by itself enough to add a group as a default group of a
+/// [`Group`]. Construct the implementer with [`UnattachedGroup::new`] and pass the resulting
+/// [`UnattachedGroup`] to [`Group::new`].
+///
+/// # Safety
+///
+/// Implementers must ensure that:
+///
+/// - [`CDefaultGroup::group_ptr`] returns a pointer to a `struct config_group` that has been
+///   initialized by `config_group_init_type_name`, or by a C function that calls it.
+/// - Every call to [`CDefaultGroup::group_ptr`] on the same value returns the same pointer.
+/// - The pointee stays live, initialized and in place for as long as `self` is live.
+/// - The reference on the embedded `struct config_item` that was acquired when the group was
+///   initialized is owned by `self` and is released when `self` is dropped.
+/// - The implementer never adds the group as a default group of any group itself. Only
+///   [`Group::new`] may do that.
+pub unsafe trait CDefaultGroup: Send + Sync {
+    /// Return a raw pointer to the group definition.
+    fn group_ptr(&self) -> *mut bindings::config_group;
+}
+
+/// A group that is not yet attached as a default group of a [`Group`].
+///
+/// This type is a token that grants permission to attach a group once. It cannot be cloned, and
+/// [`Group::new`] consumes it, so a group cannot be attached twice. Use
+/// [`UnattachedGroup::clone_arc`] to obtain a handle to the group, which can be cloned freely but
+/// cannot be used to attach the group.
+///
+/// [`Group::new`] takes an `UnattachedGroup<dyn CDefaultGroup>`, so that one [`Group`] can have
+/// default groups of different types. An `UnattachedGroup<T>` coerces to that type.
+///
+/// # Invariants
+///
+/// The `struct config_group` returned by [`CDefaultGroup::group_ptr`] on `self.0` is not a default
+/// group of any group.
+#[repr(transparent)]
+#[derive(core::marker::CoercePointee)]
+pub struct UnattachedGroup<T: ?Sized>(Arc<T>);
+
+impl<T: CDefaultGroup + 'static> UnattachedGroup<T> {
+    /// Create a group that can be attached as a default group of a [`Group`].
+    ///
+    /// The returned value grants permission to attach the group to exactly one [`Group`] via
+    /// [`Group::new`]. Use [`UnattachedGroup::clone_arc`] to obtain a handle to the group itself.
+    #[inline]
+    pub fn new<E>(init: impl PinInit<T, E>, flags: Flags) -> Result<Self>
+    where
+        Error: From<E>,
+    {
+        let group = Arc::pin_init(init, flags)?;
+
+        // INVARIANT: `group` was just created and this function holds the only reference to it, so
+        // by the safety requirements of `CDefaultGroup` the group it wraps is not a default group
+        // of any group. The reference on the embedded `struct config_item` is owned by the group
+        // itself, also by the safety requirements of `CDefaultGroup`.
+        //
+        // SAFETY: Same as above.
+        Ok(unsafe { Self::from_arc(group) })
+    }
+
+    /// Create an [`UnattachedGroup`] from an existing [`Arc`].
+    ///
+    /// # Safety
+    ///
+    /// The `struct config_group` returned by `group.group_ptr()` must not be a default group of any
+    /// group.
+    #[inline]
+    unsafe fn from_arc(group: Arc<T>) -> Self {
+        // INVARIANT: By the safety requirements of this function, the group is not a default group
+        // of any group.
+        Self(group)
+    }
+}
+
+impl<T: CDefaultGroup + ?Sized> UnattachedGroup<T> {
+    /// Clone an [`UnattachedGroup`] into an [`Arc`].
+    ///
+    /// The returned [`Arc`] can be cloned, and it keeps the group alive independently of the
+    /// [`Group`] that the group is attached to. It cannot be used to attach the group.
+    #[inline]
+    pub fn clone_arc(&self) -> Arc<T> {
+        self.0.clone()
+    }
+
+    /// Convert an [`UnattachedGroup`] into an [`Arc`].
+    ///
+    /// This gives up the permission to attach the group, so the group can no longer be attached as
+    /// a default group of a [`Group`].
+    #[inline]
+    pub fn into_arc(self) -> Arc<T> {
+        self.0
     }
 }
 
