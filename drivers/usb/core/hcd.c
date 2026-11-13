@@ -1731,6 +1731,7 @@ static void usb_giveback_urb_bh(struct work_struct *work)
 void usb_hcd_giveback_urb(struct usb_hcd *hcd, struct urb *urb, int status)
 {
 	struct giveback_urb_bh *bh;
+	unsigned long flags;
 	bool running;
 
 	/* pass status to BH via unlinked */
@@ -1747,10 +1748,10 @@ void usb_hcd_giveback_urb(struct usb_hcd *hcd, struct urb *urb, int status)
 	else
 		bh = &hcd->low_prio_bh;
 
-	spin_lock(&bh->lock);
+	spin_lock_irqsave(&bh->lock, flags);
 	list_add_tail(&urb->urb_list, &bh->head);
 	running = bh->running;
-	spin_unlock(&bh->lock);
+	spin_unlock_irqrestore(&bh->lock, flags);
 
 	if (running)
 		;
