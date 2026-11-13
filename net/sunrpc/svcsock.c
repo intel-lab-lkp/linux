@@ -606,7 +606,6 @@ static int svc_udp_recvfrom(struct svc_rqst *rqstp)
 	set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags); /* there may be more data... */
 
 	len = skb->len;
-	rqstp->rq_arg.len = len;
 	trace_svcsock_udp_recv(&svsk->sk_xprt, len);
 
 	rqstp->rq_prot = IPPROTO_UDP;
@@ -631,13 +630,7 @@ static int svc_udp_recvfrom(struct svc_rqst *rqstp)
 		rqstp->rq_xprt_ctxt = skb;
 	}
 
-	rqstp->rq_arg.page_base = 0;
-	if (len <= rqstp->rq_arg.head[0].iov_len) {
-		rqstp->rq_arg.head[0].iov_len = len;
-		rqstp->rq_arg.page_len = 0;
-	} else {
-		rqstp->rq_arg.page_len = len - rqstp->rq_arg.head[0].iov_len;
-	}
+	svc_rqst_set_arg_len(rqstp, len);
 
 	if (serv->sv_stats)
 		serv->sv_stats->netudpcnt++;
@@ -1263,13 +1256,10 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 
 	svc_tcp_flush_pages(svsk, rqstp);
 
-	rqstp->rq_arg.len = svsk->sk_datalen;
-	rqstp->rq_arg.page_base = 0;
-	if (rqstp->rq_arg.len <= rqstp->rq_arg.head[0].iov_len) {
-		rqstp->rq_arg.head[0].iov_len = rqstp->rq_arg.len;
-		rqstp->rq_arg.page_len = 0;
-	} else
-		rqstp->rq_arg.page_len = rqstp->rq_arg.len - rqstp->rq_arg.head[0].iov_len;
+	if (WARN_ON_ONCE(!svc_rqst_set_arg_len(rqstp, svsk->sk_datalen))) {
+		len = -EMSGSIZE;
+		goto err_nuts;
+	}
 
 	rqstp->rq_xprt_ctxt   = NULL;
 	rqstp->rq_prot	      = IPPROTO_TCP;

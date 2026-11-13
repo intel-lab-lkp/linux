@@ -765,6 +765,38 @@ static bool svc_alloc_arg(struct svc_rqst *rqstp)
 	return true;
 }
 
+/**
+ * svc_rqst_set_arg_len - Trim the Call buffer to a received length
+ * @rqstp: RPC transaction context
+ * @len: count of octets received into rq_arg
+ *
+ * On entry head[0].iov_len and page_len give the capacity of rq_arg. On return
+ * page_base is zero. The head and page buffers are not read or written, so the
+ * helper works whatever memory backs rq_arg.
+ *
+ * Return: %true when @len fits, %false when it exceeds the capacity
+ * and rq_arg was clamped to the capacity instead.
+ */
+bool svc_rqst_set_arg_len(struct svc_rqst *rqstp, unsigned int len)
+{
+	struct xdr_buf *arg = &rqstp->rq_arg;
+	unsigned int capacity = arg->head[0].iov_len + arg->page_len;
+	bool fits = len <= capacity;
+
+	if (!fits)
+		len = capacity;
+	arg->len = len;
+	arg->page_base = 0;
+	if (len <= arg->head[0].iov_len) {
+		arg->head[0].iov_len = len;
+		arg->page_len = 0;
+	} else {
+		arg->page_len = len - arg->head[0].iov_len;
+	}
+	return fits;
+}
+EXPORT_SYMBOL_GPL(svc_rqst_set_arg_len);
+
 static bool
 svc_thread_should_sleep(struct svc_rqst *rqstp)
 {
