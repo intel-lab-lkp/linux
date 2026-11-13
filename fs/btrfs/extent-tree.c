@@ -5433,6 +5433,13 @@ out_free_buf:
 	free_extent_buffer(buf);
 out_free_reserved:
 	btrfs_free_reserved_extent(fs_info, ins.objectid, ins.offset, false);
+	/*
+	 * btrfs_reserve_extent() moved blocksize from bytes_may_use to
+	 * bytes_reserved, and freeing the extent does not give it back to
+	 * bytes_may_use, so the reservation is consumed. Crediting block_rsv
+	 * here, as out_unuse does, would count the block twice.
+	 */
+	return ERR_PTR(ret);
 out_unuse:
 	btrfs_unuse_block_rsv(fs_info, block_rsv, blocksize);
 	return ERR_PTR(ret);
