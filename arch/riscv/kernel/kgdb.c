@@ -12,6 +12,7 @@
 #include <asm/cacheflush.h>
 #include <asm/gdb_xml.h>
 #include <asm/insn.h>
+#include <asm/text-patching.h>
 
 enum {
 	NOT_KGDB_BREAK = 0,
@@ -134,9 +135,9 @@ static int do_single_step(struct pt_regs *regs)
 	stepped_address = addr;
 
 	/* Replace the op code with the break instruction */
-	error = copy_to_kernel_nofault((void *)stepped_address,
-				   arch_kgdb_ops.gdb_bpt_instr,
-				   BREAK_INSTR_SIZE);
+	error = patch_insn_write((void *)stepped_address,
+				 arch_kgdb_ops.gdb_bpt_instr,
+				 BREAK_INSTR_SIZE);
 	/* Flush and return */
 	if (!error) {
 		flush_icache_range(addr, addr + BREAK_INSTR_SIZE);
@@ -154,8 +155,8 @@ static int do_single_step(struct pt_regs *regs)
 static void undo_single_step(struct pt_regs *regs)
 {
 	if (stepped_opcode != 0) {
-		copy_to_kernel_nofault((void *)stepped_address,
-				   (void *)&stepped_opcode, BREAK_INSTR_SIZE);
+		patch_insn_write((void *)stepped_address,
+				 (void *)&stepped_opcode, BREAK_INSTR_SIZE);
 		flush_icache_range(stepped_address,
 				   stepped_address + BREAK_INSTR_SIZE);
 	}
@@ -259,6 +260,29 @@ noinline void arch_kgdb_breakpoint(void)
 {
 	asm(".global kgdb_compiled_break\n"
 	    "kgdb_compiled_break: ebreak\n");
+}
+
+/*
+ * Kernel text may be read-only (CONFIG_STRICT_KERNEL_RWX), so software
+ * breakpoints must be planted through the writable patch alias instead of
+ * writing the text address directly.
+ */
+int kgdb_arch_set_breakpoint(struct kgdb_bkpt *bpt)
+{
+	int err;
+
+	err = copy_from_kernel_nofault(bpt->saved_instr, (char *)bpt->bpt_addr,
+				       BREAK_INSTR_SIZE);
+	if (err)
+		return err;
+	return patch_insn_write((void *)bpt->bpt_addr,
+				arch_kgdb_ops.gdb_bpt_instr, BREAK_INSTR_SIZE);
+}
+
+int kgdb_arch_remove_breakpoint(struct kgdb_bkpt *bpt)
+{
+	return patch_insn_write((void *)bpt->bpt_addr, bpt->saved_instr,
+				BREAK_INSTR_SIZE);
 }
 
 void kgdb_arch_handle_qxfer_pkt(char *remcom_in_buffer,
