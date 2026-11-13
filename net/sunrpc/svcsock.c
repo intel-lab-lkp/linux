@@ -681,16 +681,12 @@ out_clear_busy:
  * svc_udp_sendto - Send out a reply on a UDP socket
  * @rqstp: completed svc_rqst
  *
- * xpt_mutex ensures @rqstp's whole message is written to the socket
- * without interruption.
- *
- * Returns the number of bytes sent, or a negative errno.
+ * Return: the number of bytes sent, or a negative errno.
  */
 static int svc_udp_sendto(struct svc_rqst *rqstp)
 {
 	struct svc_xprt *xprt = rqstp->rq_xprt;
 	struct svc_sock	*svsk = container_of(xprt, struct svc_sock, sk_xprt);
-	struct xdr_buf *xdr = &rqstp->rq_res;
 	union {
 		struct cmsghdr	hdr;
 		long		all[SVC_PKTINFO_SPACE / sizeof(long)];
@@ -711,23 +707,24 @@ static int svc_udp_sendto(struct svc_rqst *rqstp)
 
 	svc_set_cmsg_data(rqstp, cmh);
 
+	count = svc_rqst_res_to_bvec(rqstp, 0);
+
 	mutex_lock(&xprt->xpt_mutex);
 
 	if (svc_xprt_is_dead(xprt))
 		goto out_notconn;
 
-	count = xdr_buf_to_bvec(svsk->sk_bvec, SUNRPC_MAX_UDP_SENDPAGES, xdr);
 	if (count < 0) {
 		err = count;
 		goto out_trace;
 	}
 
-	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, svsk->sk_bvec,
+	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, rqstp->rq_bvec,
 		      count, rqstp->rq_res.len);
 	err = sock_sendmsg(svsk->sk_sock, &msg);
 	if (err == -ECONNREFUSED) {
 		/* ICMP error on earlier request. */
-		iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, svsk->sk_bvec,
+		iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, rqstp->rq_bvec,
 			      count, rqstp->rq_res.len);
 		err = sock_sendmsg(svsk->sk_sock, &msg);
 	}
