@@ -24544,6 +24544,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/media/rockchip,vdec.yaml
 F:	drivers/media/platform/rockchip/rkvdec/
 
+ROCKCHIP RKVENC VIDEO ENCODER DRIVER
+M:	Daniel Golle <daniel@makrotopia.org>
+L:	linux-media@vger.kernel.org
+L:	linux-rockchip@lists.infradead.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/media/rockchip,rv1126-rkvenc.yaml
+
 ROCKCHIP RK3308 INTERNAL AUDIO CODEC
 M:	Luca Ceresoli <luca.ceresoli@bootlin.com>
 S:	Maintained
