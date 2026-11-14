@@ -273,7 +273,7 @@ enum stf_barrier_type stf_barrier_type_get(void)
 /* This is the generic flag used by other architectures */
 static int __init handle_ssbd(char *p)
 {
-	if (!p || strncmp(p, "auto", 5) == 0 || strncmp(p, "on", 2) == 0 ) {
+	if (!p || strncmp(p, "auto", 4) == 0 || strncmp(p, "on", 2) == 0 ) {
 		/* Until firmware tells us, we have the barrier with auto */
 		return 0;
 	} else if (strncmp(p, "off", 3) == 0) {
