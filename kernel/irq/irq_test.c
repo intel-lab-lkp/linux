@@ -25,7 +25,7 @@ static int noop_affinity(struct irq_data *data, const struct cpumask *dest,
 {
 	irq_data_update_effective_affinity(data, dest);
 
-	return 0;
+	return IRQ_SET_MASK_OK_DONE;
 }
 
 static struct irq_chip fake_irq_chip = {
@@ -39,6 +39,40 @@ static struct irq_chip fake_irq_chip = {
 	.irq_unmask     = noop,
 	.irq_set_affinity = noop_affinity,
 	.flags          = IRQCHIP_SKIP_SET_WAKE,
+};
+
+static int noop_nmi_setup(struct irq_data *data)
+{
+	return 0;
+}
+
+static struct irq_chip fake_nmi_irq_chip = {
+	.name			= "fake-nmi",
+	.irq_startup		= noop_ret,
+	.irq_shutdown		= noop,
+	.irq_enable		= noop,
+	.irq_disable		= noop,
+	.irq_ack		= noop,
+	.irq_mask		= noop,
+	.irq_unmask		= noop,
+	.irq_set_affinity	= noop_affinity,
+	.irq_nmi_setup		= noop_nmi_setup,
+	.irq_nmi_teardown	= noop,
+	.flags			= IRQCHIP_SKIP_SET_WAKE | IRQCHIP_SUPPORTS_NMI,
+};
+
+static struct irq_chip fake_nmi_noaffinity_irq_chip = {
+	.name			= "fake-nmi-noaffinity",
+	.irq_startup		= noop_ret,
+	.irq_shutdown		= noop,
+	.irq_enable		= noop,
+	.irq_disable		= noop,
+	.irq_ack		= noop,
+	.irq_mask		= noop,
+	.irq_unmask		= noop,
+	.irq_nmi_setup		= noop_nmi_setup,
+	.irq_nmi_teardown	= noop,
+	.flags			= IRQCHIP_SKIP_SET_WAKE | IRQCHIP_SUPPORTS_NMI,
 };
 
 static int irq_test_setup_fake_irq(struct kunit *test, struct irq_affinity_desc *affd)
@@ -55,6 +89,22 @@ static int irq_test_setup_fake_irq(struct kunit *test, struct irq_affinity_desc 
 	KUNIT_ASSERT_PTR_NE(test, desc, NULL);
 
 	/* On some architectures, IRQs are NOREQUEST | NOPROBE by default. */
+	irq_settings_clr_norequest(desc);
+
+	return virq;
+}
+
+static int irq_test_setup_fake_nmi(struct kunit *test, struct irq_chip *chip)
+{
+	struct irq_desc *desc;
+	int virq;
+
+	virq = irq_domain_alloc_descs(-1, 1, 0, NUMA_NO_NODE, NULL);
+	KUNIT_ASSERT_GE(test, virq, 0);
+	irq_set_chip_and_handler(virq, chip, handle_simple_irq);
+
+	desc = irq_to_desc(virq);
+	KUNIT_ASSERT_PTR_NE(test, desc, NULL);
 	irq_settings_clr_norequest(desc);
 
 	return virq;
@@ -164,6 +214,93 @@ static void irq_shutdown_depth_test(struct kunit *test)
 	free_irq(virq, NULL);
 }
 
+static void irq_nmi_migratable_test(struct kunit *test)
+{
+	struct irq_desc *desc;
+	struct irq_data *data;
+	const struct cpumask *affinity;
+	int virq, ret;
+
+	if (!IS_ENABLED(CONFIG_SMP))
+		kunit_skip(test, "requires CONFIG_SMP for NMI migration");
+	if (!get_cpu_device(1))
+		kunit_skip(test, "requires more than 1 CPU for NMI migration");
+	if (!cpu_is_hotpluggable(1))
+		kunit_skip(test, "CPU 1 must be hotpluggable");
+	if (!cpu_online(1))
+		kunit_skip(test, "CPU 1 must be online");
+
+	virq = irq_test_setup_fake_nmi(test, &fake_nmi_irq_chip);
+	desc = irq_to_desc(virq);
+	KUNIT_ASSERT_PTR_NE(test, desc, NULL);
+
+	data = irq_desc_get_irq_data(desc);
+	KUNIT_ASSERT_PTR_NE(test, data, NULL);
+
+	ret = request_nmi(virq, noop_handler,
+			  IRQF_NMI_MIGRATABLE | IRQF_NO_AUTOEN,
+			  "test_nmi", NULL);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	KUNIT_EXPECT_TRUE(test, irq_is_nmi(desc));
+	KUNIT_EXPECT_FALSE(test, irqd_is_per_cpu(data));
+	KUNIT_EXPECT_FALSE(test, irq_settings_is_per_cpu(desc));
+	/* Userspace affinity remains disabled by IRQF_NOBALANCING. */
+	KUNIT_EXPECT_FALSE(test, irq_can_set_affinity(virq));
+	KUNIT_EXPECT_EQ(test, desc->depth, 1);
+
+	enable_nmi(virq);
+	KUNIT_EXPECT_TRUE(test, irqd_is_started(data));
+	KUNIT_EXPECT_EQ(test, desc->depth, 0);
+
+	ret = irq_set_affinity(virq, cpumask_of(1));
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	affinity = irq_data_get_effective_affinity_mask(data);
+	KUNIT_EXPECT_TRUE(test, cpumask_test_cpu(1, affinity));
+
+	ret = remove_cpu(1);
+	if (ret) {
+		KUNIT_FAIL(test, "failed to offline CPU 1: %d", ret);
+		goto out_disable_nmi;
+	}
+
+	affinity = irq_data_get_effective_affinity_mask(data);
+	KUNIT_EXPECT_FALSE(test, cpumask_test_cpu(1, affinity));
+	KUNIT_EXPECT_TRUE(test, cpumask_intersects(affinity, cpu_online_mask));
+
+	ret = add_cpu(1);
+	KUNIT_EXPECT_EQ(test, ret, 0);
+
+out_disable_nmi:
+	disable_nmi_nosync(virq);
+	free_nmi(virq, NULL);
+}
+
+static void irq_nmi_migratable_invalid_test(struct kunit *test)
+{
+	int virq, ret;
+
+	virq = irq_test_setup_fake_nmi(test, &fake_nmi_irq_chip);
+	ret = request_nmi(virq, noop_handler, IRQF_NO_AUTOEN, "test_nmi", NULL);
+	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
+
+	ret = request_nmi(virq, noop_handler,
+			  IRQF_PERCPU | IRQF_NMI_MIGRATABLE | IRQF_NO_AUTOEN,
+			  "test_nmi", NULL);
+	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
+
+	ret = request_irq(virq, noop_handler,
+			  IRQF_NMI_MIGRATABLE, "test_irq", NULL);
+	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
+
+	virq = irq_test_setup_fake_nmi(test, &fake_nmi_noaffinity_irq_chip);
+	ret = request_nmi(virq, noop_handler,
+			  IRQF_NMI_MIGRATABLE | IRQF_NO_AUTOEN,
+			  "test_nmi", NULL);
+	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
+}
+
 static void irq_cpuhotplug_test(struct kunit *test)
 {
 	struct irq_desc *desc;
@@ -222,6 +359,8 @@ static struct kunit_case irq_test_cases[] = {
 	KUNIT_CASE(irq_disable_depth_test),
 	KUNIT_CASE(irq_free_disabled_test),
 	KUNIT_CASE(irq_shutdown_depth_test),
+	KUNIT_CASE(irq_nmi_migratable_test),
+	KUNIT_CASE(irq_nmi_migratable_invalid_test),
 	KUNIT_CASE(irq_cpuhotplug_test),
 	{}
 };

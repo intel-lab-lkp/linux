@@ -154,6 +154,8 @@ EXPORT_SYMBOL(synchronize_irq);
 #ifdef CONFIG_SMP
 cpumask_var_t irq_default_affinity;
 
+static bool irq_is_migratable_nmi(struct irq_desc *desc);
+
 static bool __irq_can_set_affinity(struct irq_desc *desc)
 {
 	if (!desc || !irqd_can_balance(&desc->irq_data) ||
@@ -598,8 +600,8 @@ int irq_setup_affinity(struct irq_desc *desc)
 	static DEFINE_RAW_SPINLOCK(mask_lock);
 	static struct cpumask mask;
 
-	/* Excludes PER_CPU and NO_BALANCE interrupts */
-	if (!__irq_can_set_affinity(desc))
+	/* Excludes PER_CPU and NO_BALANCE interrupts. */
+	if (!__irq_can_set_affinity(desc) && !irq_is_migratable_nmi(desc))
 		return 0;
 
 	guard(raw_spinlock)(&mask_lock);
@@ -1382,6 +1384,15 @@ static bool irq_supports_nmi(struct irq_desc *desc)
 	return d->chip->flags & IRQCHIP_SUPPORTS_NMI;
 }
 
+#ifdef CONFIG_SMP
+static bool irq_is_migratable_nmi(struct irq_desc *desc)
+{
+	return irq_is_nmi(desc) && desc->action &&
+	       (desc->action->flags & IRQF_NMI_MIGRATABLE) &&
+	       desc->irq_data.chip->irq_set_affinity;
+}
+#endif
+
 static int irq_nmi_setup(struct irq_desc *desc)
 {
 	struct irq_data *d = irq_desc_get_irq_data(desc);
@@ -2145,7 +2156,8 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 	 * Also IRQF_COND_SUSPEND only makes sense for shared interrupts and
 	 * it cannot be set along with IRQF_NO_SUSPEND.
 	 */
-	if (((irqflags & IRQF_SHARED) && !dev_id) ||
+	if ((irqflags & IRQF_NMI_MIGRATABLE) ||
+	    ((irqflags & IRQF_SHARED) && !dev_id) ||
 	    ((irqflags & IRQF_SHARED) && (irqflags & IRQF_NO_AUTOEN)) ||
 	    (!(irqflags & IRQF_SHARED) && (irqflags & IRQF_COND_SUSPEND)) ||
 	    ((irqflags & IRQF_NO_SUSPEND) && (irqflags & IRQF_COND_SUSPEND)))
@@ -2267,8 +2279,9 @@ EXPORT_SYMBOL_GPL(request_any_context_irq);
  * An interrupt line delivering NMIs cannot be shared and IRQ handling
  * cannot be threaded.
  *
- * Interrupt lines requested for NMI delivering must produce per cpu
- * interrupts and have auto enabling setting disabled.
+ * Interrupt lines requested for NMI delivery must either produce per CPU
+ * interrupts or be migratable during CPU hotplug, and must have auto enabling
+ * disabled.
  *
  * @dev_id must be globally unique. Normally the address of the device data
  * structure is used as the cookie. Since the handler receives this value
@@ -2291,7 +2304,9 @@ int request_nmi(unsigned int irq, irq_handler_t handler,
 	if (irqflags & (IRQF_SHARED | IRQF_COND_SUSPEND | IRQF_IRQPOLL))
 		return -EINVAL;
 
-	if (!(irqflags & IRQF_PERCPU))
+	/* Exactly one NMI topology must be specified. */
+	if (!!(irqflags & IRQF_PERCPU) ==
+	    !!(irqflags & IRQF_NMI_MIGRATABLE))
 		return -EINVAL;
 
 	if (!handler)
@@ -2303,7 +2318,11 @@ int request_nmi(unsigned int irq, irq_handler_t handler,
 	    !(irqflags & IRQF_NO_AUTOEN)) ||
 	    !irq_settings_can_request(desc) ||
 	    WARN_ON(irq_settings_is_per_cpu_devid(desc)) ||
-	    !irq_supports_nmi(desc))
+	    !irq_supports_nmi(desc) ||
+	    ((irqflags & IRQF_NMI_MIGRATABLE) &&
+	     (irqd_is_per_cpu(&desc->irq_data) ||
+	      irq_settings_is_per_cpu(desc) ||
+	      !desc->irq_data.chip->irq_set_affinity)))
 		return -EINVAL;
 
 	action = kzalloc_obj(struct irqaction);

@@ -46,6 +46,7 @@
  * IRQF_TIMER - Flag to mark this interrupt as timer interrupt
  * IRQF_PERCPU - Interrupt is per cpu
  * IRQF_NOBALANCING - Flag to exclude this interrupt from irq balancing
+ * IRQF_NMI_MIGRATABLE - NMI source can be migrated during CPU hotplug
  * IRQF_IRQPOLL - Interrupt is used for polling (only the interrupt that is
  *                registered first in a shared interrupt is considered for
  *                performance reasons)
@@ -86,6 +87,7 @@
 #define IRQF_NO_AUTOEN		0x00080000
 #define IRQF_NO_DEBUG		0x00100000
 #define IRQF_COND_ONESHOT	0x00200000
+#define IRQF_NMI_MIGRATABLE	0x00400000
 
 #define IRQF_TIMER		(__IRQF_TIMER | IRQF_NO_SUSPEND | IRQF_NO_THREAD)
 
