@@ -67,7 +67,7 @@ size_t hp_calculate_security_buffer(const char *authentication)
 int hp_populate_security_buffer(u16 *authbuf, const char *authentication)
 {
 	u16 *auth = authbuf;
-	char *strprefix = NULL;
+	char *prefix = NULL;
 	int ret = 0;
 
 	if (strstarts(authentication, BEAM_PREFIX)) {
@@ -87,13 +87,13 @@ int hp_populate_security_buffer(u16 *authbuf, const char *authentication)
 		 */
 
 		/* append UTF_PREFIX to part and then convert it to unicode */
-		strprefix = kasprintf(GFP_KERNEL, "%s%s", UTF_PREFIX,
+		prefix = kasprintf(GFP_KERNEL, "%s%s", UTF_PREFIX,
 				      authentication);
-		if (!strprefix)
+		if (!prefix)
 			return -ENOMEM;
 
-		auth = hp_ascii_to_utf16_unicode(auth, strprefix);
-		kfree(strprefix);
+		auth = hp_ascii_to_utf16_unicode(auth, prefix);
+		kfree(prefix);
 
 		if (!auth) {
 			ret = -EINVAL;
