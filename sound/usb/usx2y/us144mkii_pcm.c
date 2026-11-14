@@ -278,93 +278,89 @@ int tascam_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct tascam_card *tascam = snd_pcm_substream_chip(substream);
 	int err = 0;
 	int i;
-	bool do_start = false;
-	bool do_stop = false;
 
-	scoped_guard(spinlock_irqsave, &tascam->lock) {
-		switch (cmd) {
-		case SNDRV_PCM_TRIGGER_START:
-		case SNDRV_PCM_TRIGGER_RESUME:
-			if (!atomic_read(&tascam->playback_active)) {
-				atomic_set(&tascam->playback_active, 1);
-				atomic_set(&tascam->capture_active, 1);
-				do_start = true;
-			}
-			break;
-		case SNDRV_PCM_TRIGGER_STOP:
-		case SNDRV_PCM_TRIGGER_SUSPEND:
-		case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-			if (atomic_read(&tascam->playback_active)) {
-				atomic_set(&tascam->playback_active, 0);
-				atomic_set(&tascam->capture_active, 0);
-				do_stop = true;
-			}
-			break;
-		default:
-			err = -EINVAL;
-			break;
-		}
-	}
+	/*
+	 * Hold the lock while submitting, so that a STOP of the other
+	 * substream cannot schedule stop_work in the middle of a START.
+	 */
+	guard(spinlock_irqsave)(&tascam->lock);
 
-	if (do_start) {
-		if (atomic_read(&tascam->active_urbs) > 0) {
+	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_START:
+	case SNDRV_PCM_TRIGGER_RESUME:
+		if (atomic_read(&tascam->playback_active))
+			return 0;
+		/*
+		 * stop_work kills the URBs of the previous run asynchronously;
+		 * they must not be anchored and submitted again before it is
+		 * done.
+		 */
+		if (tascam->stop_pending ||
+		    atomic_read(&tascam->active_urbs) > 0) {
 			dev_warn(tascam->card->dev,
 				 "Cannot start, URBs still active.\n");
 			return -EAGAIN;
 		}
-
-		for (i = 0; i < NUM_FEEDBACK_URBS; i++) {
-			usb_get_urb(tascam->feedback_urbs[i]);
-			usb_anchor_urb(tascam->feedback_urbs[i],
-					       &tascam->feedback_anchor);
-			err = usb_submit_urb(tascam->feedback_urbs[i],
-						     GFP_ATOMIC);
-			if (err < 0) {
-				usb_unanchor_urb(tascam->feedback_urbs[i]);
-				usb_put_urb(tascam->feedback_urbs[i]);
-				atomic_dec(&tascam->active_urbs);
-				goto start_rollback;
-			}
-			atomic_inc(&tascam->active_urbs);
-		}
-		for (i = 0; i < NUM_PLAYBACK_URBS; i++) {
-			usb_get_urb(tascam->playback_urbs[i]);
-			usb_anchor_urb(tascam->playback_urbs[i],
-					       &tascam->playback_anchor);
-			err = usb_submit_urb(tascam->playback_urbs[i],
-						     GFP_ATOMIC);
-			if (err < 0) {
-				usb_unanchor_urb(tascam->playback_urbs[i]);
-				usb_put_urb(tascam->playback_urbs[i]);
-				atomic_dec(&tascam->active_urbs);
-				goto start_rollback;
-			}
-			atomic_inc(&tascam->active_urbs);
-		}
-		for (i = 0; i < NUM_CAPTURE_URBS; i++) {
-			usb_get_urb(tascam->capture_urbs[i]);
-			usb_anchor_urb(tascam->capture_urbs[i],
-				       &tascam->capture_anchor);
-			err = usb_submit_urb(tascam->capture_urbs[i],
-					     GFP_ATOMIC);
-			if (err < 0) {
-				usb_unanchor_urb(tascam->capture_urbs[i]);
-				usb_put_urb(tascam->capture_urbs[i]);
-				atomic_dec(&tascam->active_urbs);
-				goto start_rollback;
-			}
-			atomic_inc(&tascam->active_urbs);
-		}
-
-		return 0;
-start_rollback:
-		dev_err(tascam->card->dev,
-			"Failed to submit URBs to start stream: %d\n", err);
-		do_stop = true;
+		atomic_set(&tascam->playback_active, 1);
+		atomic_set(&tascam->capture_active, 1);
+		break;
+	case SNDRV_PCM_TRIGGER_STOP:
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+		if (!atomic_read(&tascam->playback_active))
+			return 0;
+		goto stop;
+	default:
+		return -EINVAL;
 	}
 
-	if (do_stop)
-		schedule_work(&tascam->stop_work);
+	for (i = 0; i < NUM_FEEDBACK_URBS; i++) {
+		usb_get_urb(tascam->feedback_urbs[i]);
+		usb_anchor_urb(tascam->feedback_urbs[i],
+			       &tascam->feedback_anchor);
+		err = usb_submit_urb(tascam->feedback_urbs[i], GFP_ATOMIC);
+		if (err < 0) {
+			usb_unanchor_urb(tascam->feedback_urbs[i]);
+			usb_put_urb(tascam->feedback_urbs[i]);
+			goto start_rollback;
+		}
+		atomic_inc(&tascam->active_urbs);
+	}
+	for (i = 0; i < NUM_PLAYBACK_URBS; i++) {
+		usb_get_urb(tascam->playback_urbs[i]);
+		usb_anchor_urb(tascam->playback_urbs[i],
+			       &tascam->playback_anchor);
+		err = usb_submit_urb(tascam->playback_urbs[i], GFP_ATOMIC);
+		if (err < 0) {
+			usb_unanchor_urb(tascam->playback_urbs[i]);
+			usb_put_urb(tascam->playback_urbs[i]);
+			goto start_rollback;
+		}
+		atomic_inc(&tascam->active_urbs);
+	}
+	for (i = 0; i < NUM_CAPTURE_URBS; i++) {
+		usb_get_urb(tascam->capture_urbs[i]);
+		usb_anchor_urb(tascam->capture_urbs[i],
+			       &tascam->capture_anchor);
+		err = usb_submit_urb(tascam->capture_urbs[i], GFP_ATOMIC);
+		if (err < 0) {
+			usb_unanchor_urb(tascam->capture_urbs[i]);
+			usb_put_urb(tascam->capture_urbs[i]);
+			goto start_rollback;
+		}
+		atomic_inc(&tascam->active_urbs);
+	}
+
+	return 0;
+
+start_rollback:
+	dev_err(tascam->card->dev,
+		"Failed to submit URBs to start stream: %d\n", err);
+stop:
+	atomic_set(&tascam->playback_active, 0);
+	atomic_set(&tascam->capture_active, 0);
+	tascam->stop_pending = true;
+	schedule_work(&tascam->stop_work);
 
 	return err;
 }
