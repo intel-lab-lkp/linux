@@ -18,8 +18,10 @@
 #include <linux/hwmon-vid.h>
 #include <linux/err.h>
 #include <linux/jiffies.h>
+#include <linux/math64.h>
 #include <linux/of.h>
 #include <linux/property.h>
+#include <linux/pwm.h>
 #include <linux/util_macros.h>
 
 #include <dt-bindings/pwm/pwm.h>
@@ -219,6 +221,7 @@ struct adt7475_data {
 	u8 pwmctl[3];
 	u8 pwmchan[3];
 	u8 enh_acoustics[2];
+	u8 pwm_held;		/* Channels requested through the PWM framework */
 
 	u8 vid;
 	u8 vrm;
@@ -668,13 +671,31 @@ static ssize_t pwm_show(struct device *dev, struct device_attribute *attr,
 	return sprintf(buf, "%d\n", data->pwm[sattr->nr][sattr->index]);
 }
 
-static void adt7475_pwm_set(struct adt7475_data *data, int nr, int index,
-			    long val)
+/*
+ * Writes to the hwmon attributes of a PWM channel fail while a PWM consumer
+ * holds it. Call with data->lock held.
+ */
+static int adt7475_pwm_check_held(struct adt7475_data *data, int index)
+{
+	lockdep_assert_held(&data->lock);
+
+	return data->pwm_held & BIT(index) ? -EBUSY : 0;
+}
+
+static int adt7475_pwm_set(struct adt7475_data *data, int nr, int index,
+			   long val)
 {
 	struct i2c_client *client = data->client;
 	unsigned char reg = 0;
+	int ret;
 
 	mutex_lock(&data->lock);
+
+	ret = adt7475_pwm_check_held(data, index);
+	if (ret) {
+		mutex_unlock(&data->lock);
+		return ret;
+	}
 
 	switch (nr) {
 	case INPUT:
@@ -688,7 +709,7 @@ static void adt7475_pwm_set(struct adt7475_data *data, int nr, int index,
 		 */
 		if (((data->pwm[CONTROL][index] >> 5) & 7) != 7) {
 			mutex_unlock(&data->lock);
-			return;
+			return 0;
 		}
 
 		reg = PWM_REG(index);
@@ -706,6 +727,8 @@ static void adt7475_pwm_set(struct adt7475_data *data, int nr, int index,
 	data->pwm[nr][index] = clamp_val(val, 0, 0xFF);
 	i2c_smbus_write_byte_data(client, reg, data->pwm[nr][index]);
 	mutex_unlock(&data->lock);
+
+	return 0;
 }
 
 static ssize_t pwm_store(struct device *dev, struct device_attribute *attr,
@@ -714,13 +737,14 @@ static ssize_t pwm_store(struct device *dev, struct device_attribute *attr,
 	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
 	struct adt7475_data *data = dev_get_drvdata(dev);
 	long val;
+	int ret;
 
 	if (kstrtol(buf, 10, &val))
 		return -EINVAL;
 
-	adt7475_pwm_set(data, sattr->nr, sattr->index, val);
+	ret = adt7475_pwm_set(data, sattr->nr, sattr->index, val);
 
-	return count;
+	return ret ? ret : count;
 }
 
 static ssize_t stall_disable_show(struct device *dev,
@@ -748,6 +772,11 @@ static ssize_t stall_disable_store(struct device *dev,
 		return -EINVAL;
 
 	mutex_lock(&data->lock);
+
+	if (adt7475_pwm_check_held(data, sattr->index)) {
+		mutex_unlock(&data->lock);
+		return -EBUSY;
+	}
 
 	data->enh_acoustics[0] &= ~mask;
 	if (val)
@@ -1111,22 +1140,30 @@ static int adt7475_pwm_write(struct device *dev, u32 attr, int channel,
 
 	switch (attr) {
 	case hwmon_pwm_input:
-		adt7475_pwm_set(data, INPUT, channel, val);
+		ret = adt7475_pwm_set(data, INPUT, channel, val);
 		break;
 
 	case hwmon_pwm_enable:
 		mutex_lock(&data->lock);
-		/* Read Modify Write PWM values */
-		adt7475_read_pwm(client, channel);
-		ret = hw_set_pwm(client, channel, val, data->pwmchan[channel]);
+		ret = adt7475_pwm_check_held(data, channel);
+		if (!ret) {
+			/* Read Modify Write PWM values */
+			adt7475_read_pwm(client, channel);
+			ret = hw_set_pwm(client, channel, val,
+					 data->pwmchan[channel]);
+		}
 		mutex_unlock(&data->lock);
 		break;
 
 	case hwmon_pwm_auto_channels_temp:
 		mutex_lock(&data->lock);
-		/* Read Modify Write PWM values */
-		adt7475_read_pwm(client, channel);
-		ret = hw_set_pwm(client, channel, data->pwmctl[channel], val);
+		ret = adt7475_pwm_check_held(data, channel);
+		if (!ret) {
+			/* Read Modify Write PWM values */
+			adt7475_read_pwm(client, channel);
+			ret = hw_set_pwm(client, channel,
+					 data->pwmctl[channel], val);
+		}
 		mutex_unlock(&data->lock);
 		break;
 
@@ -1135,6 +1172,12 @@ static int adt7475_pwm_write(struct device *dev, u32 attr, int channel,
 				   ARRAY_SIZE(pwmfreq_table));
 
 		mutex_lock(&data->lock);
+
+		ret = adt7475_pwm_check_held(data, channel);
+		if (ret) {
+			mutex_unlock(&data->lock);
+			break;
+		}
 
 		data->range[channel] =
 			adt7475_read(TEMP_TRANGE_REG(channel));
@@ -1804,6 +1847,250 @@ static int adt7475_fan_pwm_config(struct i2c_client *client)
 	return 0;
 }
 
+/*
+ * PWM framework provider. Requesting a channel only marks it held: the
+ * hardware is left alone until the consumer applies a state.
+ *
+ * Limitations:
+ * - Only the fixed periods of pwmfreq_table (11 Hz to 22.5 kHz) are
+ *   supported. The duty cycle is set in 1/255 steps of the period.
+ * - The duty offset is not supported and is always 0.
+ * - Disabling a channel in manual mode sets its duty cycle to 0, so the
+ *   output is constant low. A channel in any other mode is left alone.
+ * - Mode, duty cycle and frequency are separate register writes, in that
+ *   order. An update is not atomic, and the output can briefly run with
+ *   a mix of old and new settings.
+ */
+static int adt7475_pwm_request(struct pwm_chip *chip, struct pwm_device *pwm)
+{
+	struct adt7475_data *data = pwmchip_get_drvdata(chip);
+
+	/* The PWM2 pin is the SMBALERT# output */
+	if (pwm->hwpwm == 1 && !data->has_pwm2)
+		return -ENODEV;
+
+	mutex_lock(&data->lock);
+	data->pwm_held |= BIT(pwm->hwpwm);
+	mutex_unlock(&data->lock);
+
+	return 0;
+}
+
+static void adt7475_pwm_free(struct pwm_chip *chip, struct pwm_device *pwm)
+{
+	struct adt7475_data *data = pwmchip_get_drvdata(chip);
+
+	mutex_lock(&data->lock);
+	data->pwm_held &= ~BIT(pwm->hwpwm);
+	mutex_unlock(&data->lock);
+}
+
+/*
+ * The waveform API has no polarity: duty is the high time in 1/255 steps of
+ * the period.
+ */
+struct adt7475_pwm_wfhw {
+	bool enabled;
+	u8 duty;
+	u8 freq_idx;	/* Index into pwmfreq_table */
+};
+
+static u64 adt7475_pwm_period(int freq_idx)
+{
+	return NSEC_PER_SEC / pwmfreq_table[freq_idx];
+}
+
+static int adt7475_pwm_round_waveform_tohw(struct pwm_chip *chip,
+					   struct pwm_device *pwm,
+					   const struct pwm_waveform *wf,
+					   void *_wfhw)
+{
+	struct adt7475_pwm_wfhw *wfhw = _wfhw;
+	u64 period;
+	int i;
+
+	if (!wf->period_length_ns) {
+		*wfhw = (struct adt7475_pwm_wfhw){ .enabled = false };
+		return 0;
+	}
+
+	/* The longest supported period that does not exceed the request */
+	for (i = 0; i < ARRAY_SIZE(pwmfreq_table) - 1; i++)
+		if (adt7475_pwm_period(i) <= wf->period_length_ns)
+			break;
+	period = adt7475_pwm_period(i);
+
+	wfhw->enabled = true;
+	wfhw->freq_idx = i;
+	if (wf->duty_length_ns >= period)
+		wfhw->duty = 0xFF;
+	else
+		wfhw->duty = mul_u64_u64_div_u64(wf->duty_length_ns, 0xFF,
+						 period);
+
+	/* Requested period shorter than the shortest supported one */
+	return period > wf->period_length_ns ? 1 : 0;
+}
+
+static int adt7475_pwm_round_waveform_fromhw(struct pwm_chip *chip,
+					     struct pwm_device *pwm,
+					     const void *_wfhw,
+					     struct pwm_waveform *wf)
+{
+	const struct adt7475_pwm_wfhw *wfhw = _wfhw;
+	u64 period;
+
+	if (!wfhw->enabled) {
+		*wf = (struct pwm_waveform){ };
+		return 0;
+	}
+
+	period = adt7475_pwm_period(wfhw->freq_idx);
+	wf->period_length_ns = period;
+	wf->duty_length_ns = DIV_ROUND_UP_ULL((u64)wfhw->duty * period, 0xFF);
+	wf->duty_offset_ns = 0;
+
+	return 0;
+}
+
+/*
+ * A channel that is not in manual mode is not driven by the PWM framework
+ * and reads as disabled. A consumer's first enabled request then always
+ * differs from the read-back state, so the core does not skip it.
+ */
+static int adt7475_pwm_read_waveform(struct pwm_chip *chip,
+				     struct pwm_device *pwm, void *_wfhw)
+{
+	struct adt7475_data *data = pwmchip_get_drvdata(chip);
+	struct i2c_client *client = data->client;
+	struct adt7475_pwm_wfhw *wfhw = _wfhw;
+	int config, duty, range;
+
+	mutex_lock(&data->lock);
+	config = adt7475_read(PWM_CONFIG_REG(pwm->hwpwm));
+	duty = adt7475_read(PWM_REG(pwm->hwpwm));
+	range = adt7475_read(TEMP_TRANGE_REG(pwm->hwpwm));
+	mutex_unlock(&data->lock);
+
+	if (config < 0)
+		return config;
+	if (duty < 0)
+		return duty;
+	if (range < 0)
+		return range;
+
+	if (((config >> 5) & 7) != 7) {
+		*wfhw = (struct adt7475_pwm_wfhw){ .enabled = false };
+		return 0;
+	}
+
+	wfhw->enabled = true;
+	wfhw->duty = config & BIT(4) ? 0xFF - duty : duty;
+	wfhw->freq_idx = clamp_val(range & 0xf, 0,
+				   ARRAY_SIZE(pwmfreq_table) - 1);
+
+	return 0;
+}
+
+/*
+ * Switch the channel to manual mode with normal polarity and write the duty
+ * cycle. A negative freq_idx keeps the current frequency. A negative duty
+ * means disabled: a channel in manual mode gets duty 0, a channel in another
+ * mode is left alone. Each cache is updated as soon as its register write
+ * succeeds. Call with data->lock held.
+ */
+static int adt7475_pwm_write_hw(struct adt7475_data *data, int index,
+				int duty, int freq_idx)
+{
+	struct i2c_client *client = data->client;
+	int ret;
+	u8 val;
+
+	ret = adt7475_read(PWM_CONFIG_REG(index));
+	if (ret < 0)
+		return ret;
+	if (duty < 0) {
+		if (((ret >> 5) & 7) != 7)
+			return 0;
+		duty = 0;
+	}
+	val = (ret & ~(0xE0 | BIT(4))) | (7 << 5);
+	if (val != ret) {
+		ret = i2c_smbus_write_byte_data(client, PWM_CONFIG_REG(index),
+						val);
+		if (ret)
+			return ret;
+	}
+	data->pwm[CONTROL][index] = val;
+	data->pwmctl[index] = 1;
+
+	ret = i2c_smbus_write_byte_data(client, PWM_REG(index), duty);
+	if (ret)
+		return ret;
+	data->pwm[INPUT][index] = duty;
+
+	if (freq_idx < 0)
+		return 0;
+
+	ret = adt7475_read(TEMP_TRANGE_REG(index));
+	if (ret < 0)
+		return ret;
+	val = (ret & ~0xf) | freq_idx;
+	if (val != ret) {
+		ret = i2c_smbus_write_byte_data(client, TEMP_TRANGE_REG(index),
+						val);
+		if (ret)
+			return ret;
+	}
+	data->range[index] = val;
+
+	return 0;
+}
+
+static int adt7475_pwm_write_waveform(struct pwm_chip *chip,
+				      struct pwm_device *pwm,
+				      const void *_wfhw)
+{
+	struct adt7475_data *data = pwmchip_get_drvdata(chip);
+	const struct adt7475_pwm_wfhw *wfhw = _wfhw;
+	int ret;
+
+	mutex_lock(&data->lock);
+	if (wfhw->enabled)
+		ret = adt7475_pwm_write_hw(data, pwm->hwpwm, wfhw->duty,
+					   wfhw->freq_idx);
+	else
+		ret = adt7475_pwm_write_hw(data, pwm->hwpwm, -1, -1);
+	mutex_unlock(&data->lock);
+
+	return ret;
+}
+
+static const struct pwm_ops adt7475_pwm_ops = {
+	.request = adt7475_pwm_request,
+	.free = adt7475_pwm_free,
+	.sizeof_wfhw = sizeof(struct adt7475_pwm_wfhw),
+	.round_waveform_tohw = adt7475_pwm_round_waveform_tohw,
+	.round_waveform_fromhw = adt7475_pwm_round_waveform_fromhw,
+	.read_waveform = adt7475_pwm_read_waveform,
+	.write_waveform = adt7475_pwm_write_waveform,
+};
+
+static int adt7475_pwm_register(struct i2c_client *client)
+{
+	struct adt7475_data *data = i2c_get_clientdata(client);
+	struct pwm_chip *chip;
+
+	chip = devm_pwmchip_alloc(&client->dev, ADT7475_PWM_COUNT, 0);
+	if (IS_ERR(chip))
+		return PTR_ERR(chip);
+
+	chip->ops = &adt7475_pwm_ops;
+	pwmchip_set_drvdata(chip, data);
+
+	return devm_pwmchip_add(&client->dev, chip);
+}
+
 static int adt7475_probe(struct i2c_client *client)
 {
 	enum chips chip;
@@ -1960,6 +2247,14 @@ static int adt7475_probe(struct i2c_client *client)
 	if (IS_ERR(hwmon_dev)) {
 		ret = PTR_ERR(hwmon_dev);
 		return ret;
+	}
+
+	if (IS_ENABLED(CONFIG_PWM) &&
+	    device_property_present(&client->dev, "#pwm-cells")) {
+		ret = adt7475_pwm_register(client);
+		if (ret)
+			return dev_err_probe(&client->dev, ret,
+					     "Failed to register PWM chip\n");
 	}
 
 	dev_info(&client->dev, "%s device, revision %d\n",

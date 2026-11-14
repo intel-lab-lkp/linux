@@ -152,6 +152,21 @@ The responsiveness of the ADT747x to temperature changes can be configured.
 This allows smoothing of the fan speed transition. To set the transition time
 set the value in ms in the `temp[1-*]_smoothing` sysfs attribute.
 
+PWM Provider
+------------
+
+With CONFIG_PWM enabled and a ``#pwm-cells`` property in the device node, the
+driver registers the PWM outputs as a PWM chip, so that a consumer such as
+``pwm-fan`` can drive them.
+
+While a consumer holds a channel, writes to that channel's ``pwmN``,
+``pwmN_enable``, ``pwmN_freq``, ``pwmN_auto_channels_temp``,
+``pwmN_auto_point[12]_pwm`` and ``pwmN_stall_disable`` attributes fail with
+-EBUSY. Reads still work. Once a consumer has enabled a channel, the channel
+is in manual mode and ``pwmN_enable`` reads 1. When the consumer releases the
+channel, the attributes become writable again and the channel keeps its last
+mode and duty cycle.
+
 Notes
 -----
 
