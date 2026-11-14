@@ -93,15 +93,6 @@ static void drm_fbdev_dma_shadowed_fb_destroy(struct fb_info *info)
 	drm_client_release(&fb_helper->client);
 }
 
-static const struct fb_ops drm_fbdev_dma_shadowed_fb_ops = {
-	.owner = THIS_MODULE,
-	.fb_open = drm_fbdev_dma_fb_open,
-	.fb_release = drm_fbdev_dma_fb_release,
-	FB_DEFAULT_DEFERRED_OPS(drm_fbdev_dma_shadowed),
-	DRM_FB_HELPER_DEFAULT_OPS,
-	.fb_destroy = drm_fbdev_dma_shadowed_fb_destroy,
-};
-
 /*
  * struct drm_fb_helper
  */
@@ -195,6 +186,45 @@ static const struct drm_fb_helper_funcs drm_fbdev_dma_helper_funcs = {
 /*
  * struct drm_fb_helper
  */
+
+static int drm_fbdev_dma_shadowed_fb_blank(int blank, struct fb_info *info)
+{
+	struct drm_fb_helper *fb_helper = info->par;
+	struct drm_clip_rect clip = {
+		.x2 = fb_helper->fb->width,
+		.y2 = fb_helper->fb->height,
+	};
+
+	/*
+	 * Turning the display on shows the framebuffer memory. Copy the
+	 * shadow buffer into it first, so it holds what was drawn. This
+	 * does not need the display; the damage worker still flushes the
+	 * damage once the display is on.
+	 *
+	 * The copy takes a mutex, so skip it during an oops, where the
+	 * console is unblanked in atomic context. drm_fb_helper_blank()
+	 * does nothing then.
+	 */
+	if (blank == FB_BLANK_UNBLANK && !oops_in_progress)
+		drm_fbdev_dma_damage_blit(fb_helper, &clip);
+
+	return drm_fb_helper_blank(blank, info);
+}
+
+static const struct fb_ops drm_fbdev_dma_shadowed_fb_ops = {
+	.owner = THIS_MODULE,
+	.fb_open = drm_fbdev_dma_fb_open,
+	.fb_release = drm_fbdev_dma_fb_release,
+	FB_DEFAULT_DEFERRED_OPS(drm_fbdev_dma_shadowed),
+	/* DRM_FB_HELPER_DEFAULT_OPS, with a blank that copies the shadow */
+	.fb_check_var = drm_fb_helper_check_var,
+	.fb_set_par = drm_fb_helper_set_par,
+	.fb_setcmap = drm_fb_helper_setcmap,
+	.fb_blank = drm_fbdev_dma_shadowed_fb_blank,
+	.fb_pan_display = drm_fb_helper_pan_display,
+	.fb_ioctl = drm_fb_helper_ioctl,
+	.fb_destroy = drm_fbdev_dma_shadowed_fb_destroy,
+};
 
 static int drm_fbdev_dma_driver_fbdev_probe_tail(struct drm_fb_helper *fb_helper,
 						 struct drm_fb_helper_surface_size *sizes)
