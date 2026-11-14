@@ -728,6 +728,13 @@ static int hso_net_close(struct net_device *net)
 
 	hso_stop_net_device(odev->parent);
 
+	/*
+	 * A frame stashed by hso_net_start_xmit() will never be transmitted now,
+	 * so drop it instead of leaking it.
+	 */
+	dev_kfree_skb(odev->skb_tx_buf);
+	odev->skb_tx_buf = NULL;
+
 	/* done */
 	return 0;
 }
@@ -3055,12 +3062,13 @@ static int hso_resume(struct usb_interface *iface)
 				/* First transmit any lingering data,
 				   then restart the device. */
 				if (hso_net->skb_tx_buf) {
+					struct sk_buff *skb = hso_net->skb_tx_buf;
+
 					dev_dbg(&iface->dev,
 						"Transmitting"
 						" lingering data\n");
-					hso_net_start_xmit(hso_net->skb_tx_buf,
-							   hso_net->net);
 					hso_net->skb_tx_buf = NULL;
+					hso_net_start_xmit(skb, hso_net->net);
 				}
 				result = hso_start_net_device(network_table[i]);
 				if (result)
