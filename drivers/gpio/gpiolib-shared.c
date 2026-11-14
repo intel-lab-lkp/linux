@@ -182,8 +182,8 @@ static int gpio_shared_of_traverse(struct device_node *curr)
 		 * them. We can always just export the quirk list and
 		 * iterate over it here.
 		 */
-		if (!strends(prop->name, "-gpios") &&
-		    !strends(prop->name, "-gpio") &&
+		if (!strsuffix(prop->name, "-gpios") &&
+		    !strsuffix(prop->name, "-gpio") &&
 		    strcmp(prop->name, "gpios") != 0 &&
 		    strcmp(prop->name, "gpio") != 0)
 			continue;
@@ -240,9 +240,9 @@ static int gpio_shared_of_traverse(struct device_node *curr)
 				list_add_tail(&entry->list, &gpio_shared_list);
 			}
 
-			if (strends(prop->name, "gpios"))
+			if (strsuffix(prop->name, "gpios"))
 				suffix = "-gpios";
-			else if (strends(prop->name, "gpio"))
+			else if (strsuffix(prop->name, "gpio"))
 				suffix = "-gpio";
 			else
 				suffix = NULL;

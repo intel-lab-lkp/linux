@@ -712,16 +712,16 @@ static void string_test_memtostr(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, dest[7], '\0');
 }
 
-static void string_test_strends(struct kunit *test)
+static void string_test_strsuffix(struct kunit *test)
 {
-	KUNIT_EXPECT_TRUE(test, strends("foo-bar", "bar"));
-	KUNIT_EXPECT_TRUE(test, strends("foo-bar", "-bar"));
-	KUNIT_EXPECT_TRUE(test, strends("foobar", "foobar"));
-	KUNIT_EXPECT_TRUE(test, strends("foobar", ""));
-	KUNIT_EXPECT_FALSE(test, strends("bar", "foobar"));
-	KUNIT_EXPECT_FALSE(test, strends("", "foo"));
-	KUNIT_EXPECT_FALSE(test, strends("foobar", "ba"));
-	KUNIT_EXPECT_TRUE(test, strends("", ""));
+	KUNIT_EXPECT_TRUE(test, streq(strsuffix("foo-bar", "bar"), "bar"));
+	KUNIT_EXPECT_TRUE(test, streq(strsuffix("foo-bar", "-bar"), "-bar"));
+	KUNIT_EXPECT_TRUE(test, streq(strsuffix("foobar", "foobar"), "foobar"));
+	KUNIT_EXPECT_TRUE(test, streq(strsuffix("foobar", ""), ""));
+	KUNIT_EXPECT_NULL(test, strsuffix("bar", "foobar"));
+	KUNIT_EXPECT_NULL(test, strsuffix("", "foo"));
+	KUNIT_EXPECT_NULL(test, strsuffix("foobar", "ba"));
+	KUNIT_EXPECT_TRUE(test, streq(strsuffix("", ""), ""));
 }
 
 #if IS_ENABLED(CONFIG_STRING_KUNIT_BENCH)
@@ -914,7 +914,7 @@ static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_test_strlcat),
 	KUNIT_CASE(string_test_strtomem),
 	KUNIT_CASE(string_test_memtostr),
-	KUNIT_CASE(string_test_strends),
+	KUNIT_CASE(string_test_strsuffix),
 	KUNIT_CASE(string_bench_strlen),
 	KUNIT_CASE(string_bench_strnlen),
 	KUNIT_CASE(string_bench_strchr),

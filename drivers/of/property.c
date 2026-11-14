@@ -1344,7 +1344,7 @@ static struct device_node *parse_suffix_prop_cells(struct device_node *np,
 {
 	struct of_phandle_args sup_args;
 
-	if (!strends(prop_name, suffix))
+	if (!strsuffix(prop_name, suffix))
 		return NULL;
 
 	if (of_parse_phandle_with_args(np, prop_name, cells_name, index,
@@ -1433,7 +1433,7 @@ static struct device_node *parse_pinctrl_n(struct device_node *np,
 static struct device_node *parse_gpios(struct device_node *np,
 				       const char *prop_name, int index)
 {
-	if (strends(prop_name, ",nr-gpios"))
+	if (strsuffix(prop_name, ",nr-gpios"))
 		return NULL;
 
 	return parse_suffix_prop_cells(np, prop_name, index, "-gpios",
