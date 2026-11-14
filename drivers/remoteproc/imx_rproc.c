@@ -675,10 +675,10 @@ static int imx_rproc_prepare(struct rproc *rproc)
 		 * Ignore the first memory region which will be used vdev buffer.
 		 * No need to do extra handlings, rproc_add_virtio_dev will handle it.
 		 */
-		if (strstarts(res.name, "vdev0buffer"))
+		if (strprefix(res.name, "vdev0buffer"))
 			continue;
 
-		if (strstarts(res.name, "rsc-table"))
+		if (strprefix(res.name, "rsc-table"))
 			continue;
 
 		/* No need to translate pa to da, i.MX use same map */
@@ -859,7 +859,7 @@ static int imx_rproc_addr_init(struct imx_rproc *priv,
 		}
 
 		/* Not map vdevbuffer, vdevring region */
-		if (strstarts(res.name, "vdev"))
+		if (strprefix(res.name, "vdev"))
 			continue;
 
 		if (b >= IMX_RPROC_MEM_MAX)
@@ -873,7 +873,7 @@ static int imx_rproc_addr_init(struct imx_rproc *priv,
 		}
 		priv->mem[b].sys_addr = res.start;
 		priv->mem[b].size = resource_size(&res);
-		if (strstarts(res.name, "rsc-table"))
+		if (strprefix(res.name, "rsc-table"))
 			priv->rsc_table = priv->mem[b].cpu_addr;
 		b++;
 	}

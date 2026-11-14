@@ -513,7 +513,7 @@ bool psmouse_matches_pnp_id(struct psmouse *psmouse, const char * const ids[])
 	struct serio *serio = psmouse->ps2dev.serio;
 	const char *p = serio->firmware_id;
 
-	if (!strstarts(p, "PNP: "))
+	if (!strprefix(p, "PNP: "))
 		return false;
 
 	p += 5;

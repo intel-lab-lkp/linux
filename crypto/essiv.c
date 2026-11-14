@@ -508,7 +508,7 @@ static int essiv_create(struct crypto_template *tmpl, struct rtattr **tb)
 			goto out_free_inst;
 		aead_alg = crypto_spawn_aead_alg(&ictx->u.aead_spawn);
 		block_base = &aead_alg->base;
-		if (!strstarts(block_base->cra_name, "authenc(")) {
+		if (!strprefix(block_base->cra_name, "authenc(")) {
 			pr_warn("Only authenc() type AEADs are supported by ESSIV\n");
 			err = -EINVAL;
 			goto out_drop_skcipher;

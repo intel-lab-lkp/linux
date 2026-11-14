@@ -636,14 +636,14 @@ static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 		tas_hda->priv->chip_id = TAS2781;
 		hda_priv->save_calibration = tas2781_save_calibration;
 		tas_hda->priv->global_addr = TAS2781_GLOBAL_ADDR;
-	} else if (strstarts(dev_name(&clt->dev), "i2c-TXNW2770")) {
+	} else if (strprefix(dev_name(&clt->dev), "i2c-TXNW2770")) {
 		/*
 		 * TAS2770, has no on-chip DSP, so no calibration data
 		 * required; has no global I2C address supported.
 		 */
 		device_name = "TXNW2770";
 		hda_priv->hda_chip_id = HDA_TAS2770;
-	} else if (strstarts(dev_name(&clt->dev),
+	} else if (strprefix(dev_name(&clt->dev),
 			     "i2c-TXNW2781:00-tas2781-hda.0")) {
 		device_name = "TXNW2781";
 		hda_priv->hda_chip_id = HDA_TAS2781;
@@ -659,7 +659,7 @@ static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 		hda_priv->hda_chip_id = HDA_TAS2563;
 		hda_priv->save_calibration = tas2563_save_calibration;
 		tas_hda->priv->global_addr = TAS2563_GLOBAL_ADDR;
-	} else if (strstarts(dev_name(&clt->dev), "i2c-TXNW5825")) {
+	} else if (strprefix(dev_name(&clt->dev), "i2c-TXNW5825")) {
 		/*
 		 * TAS5825, integrated on-chip DSP without
 		 * global I2C address and calibration supported.

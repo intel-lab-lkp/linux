@@ -1195,7 +1195,7 @@ static bool verify_module_namespace(const char *namespace, const char *modname)
 	const char *sep;
 	bool glob;
 
-	if (!strstarts(namespace, prefix))
+	if (!strprefix(namespace, prefix))
 		return false;
 
 	for (namespace += strlen(prefix); *namespace; namespace = sep) {
@@ -1836,7 +1836,7 @@ static int setup_modinfo(struct module *mod, struct load_info *info)
 		 * 'module:' prefixed namespaces are implicit, disallow
 		 * explicit imports.
 		 */
-		if (strstarts(imported_namespace, "module:")) {
+		if (strprefix(imported_namespace, "module:")) {
 			pr_err("%s: module tries to import module namespace: %s\n",
 			       mod->name, imported_namespace);
 			return -EPERM;
@@ -1863,12 +1863,12 @@ static void free_modinfo(struct module *mod)
 
 bool __weak module_init_section(const char *name)
 {
-	return strstarts(name, ".init");
+	return strprefix(name, ".init");
 }
 
 bool __weak module_exit_section(const char *name)
 {
-	return strstarts(name, ".exit");
+	return strprefix(name, ".exit");
 }
 
 static int validate_section_offset(const struct load_info *info, Elf_Shdr *shdr)

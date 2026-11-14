@@ -159,7 +159,7 @@ static bool pci_pwrctrl_is_required(struct device_node *np)
 	if (ret < 0)
 		return false;
 
-	if (!strstarts(compat, "pci"))
+	if (!strprefix(compat, "pci"))
 		return false;
 
 	if (of_pci_supply_present(np))

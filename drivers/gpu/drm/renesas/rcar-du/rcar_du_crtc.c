@@ -1051,7 +1051,7 @@ static int rcar_du_crtc_parse_crc_source(struct rcar_du_crtc *rcrtc,
 	} else if (!strcmp(source_name, "auto")) {
 		*source = VSP1_DU_CRC_OUTPUT;
 		return 0;
-	} else if (strstarts(source_name, "plane")) {
+	} else if (strprefix(source_name, "plane")) {
 		unsigned int i;
 
 		*source = VSP1_DU_CRC_PLANE;

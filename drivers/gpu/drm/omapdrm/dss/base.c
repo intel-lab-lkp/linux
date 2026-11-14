@@ -260,7 +260,7 @@ static bool omapdss_component_is_loaded(struct omapdss_comp_node *comp)
 {
 	if (comp->dss_core_component)
 		return true;
-	if (!strstarts(comp->compat, "omapdss,"))
+	if (!strprefix(comp->compat, "omapdss,"))
 		return true;
 	if (omapdss_device_is_registered(comp->node))
 		return true;

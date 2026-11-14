@@ -106,7 +106,7 @@ static int st_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
 			return ret;
 
 		/*  No need to map vdev buffer */
-		if (!strstarts(res.name, "vdev0buffer")) {
+		if (!strprefix(res.name, "vdev0buffer")) {
 			/* Register memory region */
 			mem = rproc_mem_entry_init(dev, NULL,
 						   (dma_addr_t)res.start,

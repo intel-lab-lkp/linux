@@ -42,7 +42,7 @@ static bool parse_modenum(char *option, char **next)
 {
 	u32 m;
 
-	if (!strstarts(option, "mode="))
+	if (!strprefix(option, "mode="))
 		return false;
 	option += strlen("mode=");
 	m = simple_strtoull(option, &option, 0);
@@ -68,10 +68,10 @@ static bool parse_res(char *option, char **next)
 	h = simple_strtoull(option, &option, 10);
 	if (*option == '-') {
 		option++;
-		if (strstarts(option, "rgb")) {
+		if (strprefix(option, "rgb")) {
 			option += strlen("rgb");
 			pf = PIXEL_RGB_RESERVED_8BIT_PER_COLOR;
-		} else if (strstarts(option, "bgr")) {
+		} else if (strprefix(option, "bgr")) {
 			option += strlen("bgr");
 			pf = PIXEL_BGR_RESERVED_8BIT_PER_COLOR;
 		} else if (isdigit(*option))
@@ -93,7 +93,7 @@ static bool parse_res(char *option, char **next)
 
 static bool parse_auto(char *option, char **next)
 {
-	if (!strstarts(option, "auto"))
+	if (!strprefix(option, "auto"))
 		return false;
 	option += strlen("auto");
 	if (*option && *option++ != ',')
@@ -106,7 +106,7 @@ static bool parse_auto(char *option, char **next)
 
 static bool parse_list(char *option, char **next)
 {
-	if (!strstarts(option, "list"))
+	if (!strprefix(option, "list"))
 		return false;
 	option += strlen("list");
 	if (*option && *option++ != ',')

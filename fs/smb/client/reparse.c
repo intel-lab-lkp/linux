@@ -97,7 +97,7 @@ static int create_native_symlink(const unsigned int xid, struct inode *inode,
 		 * ensure compatibility of this symlink stored in absolute form
 		 * on the SMB server.
 		 */
-		if (!strstarts(symname, symroot)) {
+		if (!strprefix(symname, symroot)) {
 			/*
 			 * If the absolute Linux symlink target path is not
 			 * inside "symlinkroot" location then there is no way
@@ -171,7 +171,7 @@ static int create_native_symlink(const unsigned int xid, struct inode *inode,
 	 * letter so the prefix occupies six characters in UTF-16 too.
 	 */
 	if (!(sbflags & CIFS_MOUNT_POSIX_PATHS) && symname[0] == '/') {
-		if (!strstarts(sym, "\\??\\") || !isascii(sym[4]) ||
+		if (!strprefix(sym, "\\??\\") || !isascii(sym[4]) ||
 		    !isalpha(sym[4]) || sym[5] != ':') {
 			rc = -EINVAL;
 			goto out;
@@ -905,11 +905,11 @@ int smb2_parse_native_symlink(char **target, const char *buf, unsigned int len,
 		 */
 		abs_path = smb_target;
 globalroot:
-		if (strstarts(abs_path, "\\??\\"))
+		if (strprefix(abs_path, "\\??\\"))
 			abs_path += sizeof("\\??\\")-1;
-		else if (strstarts(abs_path, "\\DosDevices\\"))
+		else if (strprefix(abs_path, "\\DosDevices\\"))
 			abs_path += sizeof("\\DosDevices\\")-1;
-		else if (strstarts(abs_path, "\\GLOBAL??\\"))
+		else if (strprefix(abs_path, "\\GLOBAL??\\"))
 			abs_path += sizeof("\\GLOBAL??\\")-1;
 		else
 			goto out_unhandled_target;
@@ -918,10 +918,10 @@ globalroot:
 		if (abs_path[0] == '\\')
 			abs_path++;
 
-		while (strstarts(abs_path, "Global\\"))
+		while (strprefix(abs_path, "Global\\"))
 			abs_path += sizeof("Global\\")-1;
 
-		if (strstarts(abs_path, "GLOBALROOT\\")) {
+		if (strprefix(abs_path, "GLOBALROOT\\")) {
 			/* Label globalroot requires path with leading '\\', so do not trim '\\' */
 			abs_path += sizeof("GLOBALROOT")-1;
 			goto globalroot;

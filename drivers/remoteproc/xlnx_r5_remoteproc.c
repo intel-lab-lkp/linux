@@ -471,7 +471,7 @@ static int add_mem_regions_carveout(struct rproc *rproc)
 		if (err)
 			return 0;
 
-		if (strstarts(res.name, "vdev0buffer")) {
+		if (strprefix(res.name, "vdev0buffer")) {
 			/* Init reserved memory for vdev buffer */
 			rproc_mem = rproc_of_resm_mem_entry_init(&rproc->dev, i,
 								 resource_size(&res),

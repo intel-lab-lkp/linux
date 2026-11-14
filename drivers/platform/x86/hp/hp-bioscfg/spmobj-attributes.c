@@ -49,7 +49,7 @@ size_t hp_calculate_security_buffer(const char *authentication)
 
 	authlen = strlen(authentication);
 	size = sizeof(u16) + authlen * sizeof(u16);
-	if (!strstarts(authentication, BEAM_PREFIX))
+	if (!strprefix(authentication, BEAM_PREFIX))
 		size += strlen(UTF_PREFIX) * sizeof(u16);
 
 	return size;
@@ -70,7 +70,7 @@ int hp_populate_security_buffer(u16 *authbuf, const char *authentication)
 	char *prefix = NULL;
 	int ret = 0;
 
-	if (strstarts(authentication, BEAM_PREFIX)) {
+	if (strprefix(authentication, BEAM_PREFIX)) {
 		/*
 		 * BEAM_PREFIX is append to authbuf when a signature
 		 * is provided and Sure Admin is enabled in BIOS

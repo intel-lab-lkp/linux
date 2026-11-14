@@ -1311,9 +1311,9 @@ static int tpacpi_rfk_procfs_write(const enum tpacpi_rfk_id id, char *buf)
 		return -ENODEV;
 
 	while ((cmd = strsep(&buf, ","))) {
-		if (strstarts(cmd, "enable"))
+		if (strprefix(cmd, "enable"))
 			status = TPACPI_RFK_RADIO_ON;
-		else if (strstarts(cmd, "disable"))
+		else if (strprefix(cmd, "disable"))
 			status = TPACPI_RFK_RADIO_OFF;
 		else
 			return -EINVAL;
@@ -4119,12 +4119,12 @@ static int hotkey_write(char *buf)
 
 	res = 0;
 	while ((cmd = strsep(&buf, ","))) {
-		if (strstarts(cmd, "enable")) {
+		if (strprefix(cmd, "enable")) {
 			hotkey_enabledisable_warn(1);
-		} else if (strstarts(cmd, "disable")) {
+		} else if (strprefix(cmd, "disable")) {
 			hotkey_enabledisable_warn(0);
 			res = -EPERM;
-		} else if (strstarts(cmd, "reset")) {
+		} else if (strprefix(cmd, "reset")) {
 			mask = (hotkey_all_mask | hotkey_source_mask)
 				& ~hotkey_reserved_mask;
 		} else if (sscanf(cmd, "0x%x", &mask) == 1) {
@@ -5043,33 +5043,33 @@ static int video_write(char *buf)
 	disable = 0;
 
 	while ((cmd = strsep(&buf, ","))) {
-		if (strstarts(cmd, "lcd_enable")) {
+		if (strprefix(cmd, "lcd_enable")) {
 			enable |= TP_ACPI_VIDEO_S_LCD;
-		} else if (strstarts(cmd, "lcd_disable")) {
+		} else if (strprefix(cmd, "lcd_disable")) {
 			disable |= TP_ACPI_VIDEO_S_LCD;
-		} else if (strstarts(cmd, "crt_enable")) {
+		} else if (strprefix(cmd, "crt_enable")) {
 			enable |= TP_ACPI_VIDEO_S_CRT;
-		} else if (strstarts(cmd, "crt_disable")) {
+		} else if (strprefix(cmd, "crt_disable")) {
 			disable |= TP_ACPI_VIDEO_S_CRT;
 		} else if (video_supported == TPACPI_VIDEO_NEW &&
-			   strstarts(cmd, "dvi_enable")) {
+			   strprefix(cmd, "dvi_enable")) {
 			enable |= TP_ACPI_VIDEO_S_DVI;
 		} else if (video_supported == TPACPI_VIDEO_NEW &&
-			   strstarts(cmd, "dvi_disable")) {
+			   strprefix(cmd, "dvi_disable")) {
 			disable |= TP_ACPI_VIDEO_S_DVI;
-		} else if (strstarts(cmd, "auto_enable")) {
+		} else if (strprefix(cmd, "auto_enable")) {
 			res = video_autosw_set(1);
 			if (res)
 				return res;
-		} else if (strstarts(cmd, "auto_disable")) {
+		} else if (strprefix(cmd, "auto_disable")) {
 			res = video_autosw_set(0);
 			if (res)
 				return res;
-		} else if (strstarts(cmd, "video_switch")) {
+		} else if (strprefix(cmd, "video_switch")) {
 			res = video_outputsw_cycle();
 			if (res)
 				return res;
-		} else if (strstarts(cmd, "expand_toggle")) {
+		} else if (strprefix(cmd, "expand_toggle")) {
 			res = video_expand_toggle();
 			if (res)
 				return res;
@@ -5458,9 +5458,9 @@ static int light_write(char *buf)
 		return -ENODEV;
 
 	while ((cmd = strsep(&buf, ","))) {
-		if (strstarts(cmd, "on")) {
+		if (strprefix(cmd, "on")) {
 			newstatus = 1;
-		} else if (strstarts(cmd, "off")) {
+		} else if (strprefix(cmd, "off")) {
 			newstatus = 0;
 		} else
 			return -EINVAL;
@@ -6983,10 +6983,10 @@ static int brightness_write(char *buf)
 		return level;
 
 	while ((cmd = strsep(&buf, ","))) {
-		if (strstarts(cmd, "up")) {
+		if (strprefix(cmd, "up")) {
 			if (level < bright_maxlvl)
 				level++;
-		} else if (strstarts(cmd, "down")) {
+		} else if (strprefix(cmd, "down")) {
 			if (level > 0)
 				level--;
 		} else if (sscanf(cmd, "level %d", &level) == 1 &&
@@ -7731,13 +7731,13 @@ static int volume_write(char *buf)
 
 	while ((cmd = strsep(&buf, ","))) {
 		if (!tp_features.mixer_no_level_control) {
-			if (strstarts(cmd, "up")) {
+			if (strprefix(cmd, "up")) {
 				if (new_mute)
 					new_mute = 0;
 				else if (new_level < TP_EC_VOLUME_MAX)
 					new_level++;
 				continue;
-			} else if (strstarts(cmd, "down")) {
+			} else if (strprefix(cmd, "down")) {
 				if (new_mute)
 					new_mute = 0;
 				else if (new_level > 0)
@@ -7749,9 +7749,9 @@ static int volume_write(char *buf)
 				continue;
 			}
 		}
-		if (strstarts(cmd, "mute"))
+		if (strprefix(cmd, "mute"))
 			new_mute = TP_EC_AUDIO_MUTESW_MSK;
-		else if (strstarts(cmd, "unmute"))
+		else if (strprefix(cmd, "unmute"))
 			new_mute = 0;
 		else
 			return -EINVAL;
@@ -9245,9 +9245,9 @@ static int fan_write_cmd_level(const char *cmd, int *rc)
 {
 	int level;
 
-	if (strstarts(cmd, "level auto"))
+	if (strprefix(cmd, "level auto"))
 		level = TP_EC_FAN_AUTO;
-	else if (strstarts(cmd, "level disengaged") || strstarts(cmd, "level full-speed"))
+	else if (strprefix(cmd, "level disengaged") || strprefix(cmd, "level full-speed"))
 		level = TP_EC_FAN_FULLSPEED;
 	else if (sscanf(cmd, "level %d", &level) != 1)
 		return 0;
@@ -9265,7 +9265,7 @@ static int fan_write_cmd_level(const char *cmd, int *rc)
 
 static int fan_write_cmd_enable(const char *cmd, int *rc)
 {
-	if (!strstarts(cmd, "enable"))
+	if (!strprefix(cmd, "enable"))
 		return 0;
 
 	*rc = fan_set_enable();
@@ -9280,7 +9280,7 @@ static int fan_write_cmd_enable(const char *cmd, int *rc)
 
 static int fan_write_cmd_disable(const char *cmd, int *rc)
 {
-	if (!strstarts(cmd, "disable"))
+	if (!strprefix(cmd, "disable"))
 		return 0;
 
 	*rc = fan_set_disable();

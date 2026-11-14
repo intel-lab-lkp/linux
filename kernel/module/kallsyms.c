@@ -68,7 +68,7 @@ static char elf_type(const Elf_Sym *sym, const struct load_info *info)
 		else
 			return 'b';
 	}
-	if (strstarts(info->secstrings + sechdrs[sym->st_shndx].sh_name,
+	if (strprefix(info->secstrings + sechdrs[sym->st_shndx].sh_name,
 		      ".debug")) {
 		return 'n';
 	}

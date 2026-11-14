@@ -179,36 +179,36 @@ static ssize_t musb_test_mode_write(struct file *file,
 		goto ret;
 	}
 
-	if (strstarts(buf, "force host full-speed"))
+	if (strprefix(buf, "force host full-speed"))
 		test = MUSB_TEST_FORCE_HOST | MUSB_TEST_FORCE_FS;
 
-	else if (strstarts(buf, "force host high-speed"))
+	else if (strprefix(buf, "force host high-speed"))
 		test = MUSB_TEST_FORCE_HOST | MUSB_TEST_FORCE_HS;
 
-	else if (strstarts(buf, "force host"))
+	else if (strprefix(buf, "force host"))
 		test = MUSB_TEST_FORCE_HOST;
 
-	else if (strstarts(buf, "fifo access"))
+	else if (strprefix(buf, "fifo access"))
 		test = MUSB_TEST_FIFO_ACCESS;
 
-	else if (strstarts(buf, "force full-speed"))
+	else if (strprefix(buf, "force full-speed"))
 		test = MUSB_TEST_FORCE_FS;
 
-	else if (strstarts(buf, "force high-speed"))
+	else if (strprefix(buf, "force high-speed"))
 		test = MUSB_TEST_FORCE_HS;
 
-	else if (strstarts(buf, "test packet")) {
+	else if (strprefix(buf, "test packet")) {
 		test = MUSB_TEST_PACKET;
 		musb_load_testpacket(musb);
 	}
 
-	else if (strstarts(buf, "test K"))
+	else if (strprefix(buf, "test K"))
 		test = MUSB_TEST_K;
 
-	else if (strstarts(buf, "test J"))
+	else if (strprefix(buf, "test J"))
 		test = MUSB_TEST_J;
 
-	else if (strstarts(buf, "test SE0 NAK"))
+	else if (strprefix(buf, "test SE0 NAK"))
 		test = MUSB_TEST_SE0_NAK;
 
 	musb_writeb(musb->mregs, MUSB_TESTMODE, test);

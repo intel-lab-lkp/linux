@@ -408,8 +408,8 @@ tegra20_mc_of_icc_xlate_extended(const struct of_phandle_args *spec, void *data)
 		ndata->node = node;
 
 		/* these clients are isochronous by default */
-		if (strstarts(node->name, "display") ||
-		    strstarts(node->name, "vi"))
+		if (strprefix(node->name, "display") ||
+		    strprefix(node->name, "vi"))
 			ndata->tag = TEGRA_MC_ICC_TAG_ISO;
 		else
 			ndata->tag = TEGRA_MC_ICC_TAG_DEFAULT;

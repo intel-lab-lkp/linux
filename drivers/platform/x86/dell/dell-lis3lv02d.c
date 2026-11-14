@@ -106,7 +106,7 @@ static bool i2c_adapter_is_main_i801(struct i2c_adapter *adap)
 	 * Only match the main I801 adapter and reject secondary adapters
 	 * which names start with "SMBus I801 IDF adapter".
 	 */
-	return strstarts(adap->name, "SMBus I801 adapter");
+	return strprefix(adap->name, "SMBus I801 adapter");
 }
 
 static int find_i801(struct device *dev, void *data)

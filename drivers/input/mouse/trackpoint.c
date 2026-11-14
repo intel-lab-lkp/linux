@@ -418,7 +418,7 @@ static bool trackpoint_is_dt_capable(const char *pnp_id)
 		return false;
 
 	/* Must start with "PNP: LEN03" */
-	if (!strstarts(pnp_id, "PNP: LEN03"))
+	if (!strprefix(pnp_id, "PNP: LEN03"))
 		return false;
 
 	/* Ensure enough length before comparing */

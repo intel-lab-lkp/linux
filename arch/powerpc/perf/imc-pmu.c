@@ -1023,7 +1023,7 @@ static int thread_imc_event_init(struct perf_event *event)
 
 static bool is_thread_imc_pmu(struct perf_event *event)
 {
-	return strstarts(event->pmu->name, "thread_imc");
+	return strprefix(event->pmu->name, "thread_imc");
 }
 
 static __be64 *get_event_base_addr(struct perf_event *event)

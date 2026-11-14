@@ -582,9 +582,9 @@ static int __init acerhdf_check_hardware(void)
 		 * check if actual hardware BIOS vendor, product and version
 		 * IDs start with the strings of BIOS table entry
 		 */
-		if (strstarts(vendor, bt->vendor) &&
-		    strstarts(product, bt->product) &&
-		    strstarts(version, bt->version)) {
+		if (strprefix(vendor, bt->vendor) &&
+		    strprefix(product, bt->product) &&
+		    strprefix(version, bt->version)) {
 			found = 1;
 			break;
 		}

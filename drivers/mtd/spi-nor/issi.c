@@ -138,7 +138,7 @@ static bool issi_pm25lv_match(const struct spi_nor *nor)
 {
 	const char *name = nor->info ? nor->info->name : NULL;
 
-	return name && strstarts(name, "pm25lv");
+	return name && strprefix(name, "pm25lv");
 }
 
 static const struct spi_nor_fixup issi_fixup_list[] = {

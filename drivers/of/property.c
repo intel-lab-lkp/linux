@@ -1421,7 +1421,7 @@ DEFINE_SUFFIX_PROP(gpio, "-gpio", "#gpio-cells")
 static struct device_node *parse_pinctrl_n(struct device_node *np,
 					   const char *prop_name, int index)
 {
-	if (!strstarts(prop_name, "pinctrl-"))
+	if (!strprefix(prop_name, "pinctrl-"))
 		return NULL;
 
 	if (!isdigit(prop_name[strlen("pinctrl-")]))

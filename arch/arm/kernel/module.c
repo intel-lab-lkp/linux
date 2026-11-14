@@ -22,16 +22,16 @@
 
 bool module_init_section(const char *name)
 {
-	return strstarts(name, ".init") ||
-		strstarts(name, ".ARM.extab.init") ||
-		strstarts(name, ".ARM.exidx.init");
+	return strprefix(name, ".init") ||
+		strprefix(name, ".ARM.extab.init") ||
+		strprefix(name, ".ARM.exidx.init");
 }
 
 bool module_exit_section(const char *name)
 {
-	return strstarts(name, ".exit") ||
-		strstarts(name, ".ARM.extab.exit") ||
-		strstarts(name, ".ARM.exidx.exit");
+	return strprefix(name, ".exit") ||
+		strprefix(name, ".ARM.extab.exit") ||
+		strprefix(name, ".ARM.exidx.exit");
 }
 
 #ifdef CONFIG_ARM_HAS_GROUP_RELOCS

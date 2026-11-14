@@ -699,7 +699,7 @@ static int imx_dsp_rproc_add_carveout(struct imx_dsp_rproc *priv)
 		 * Ignore the first memory region which will be used vdev buffer.
 		 * No need to do extra handlings, rproc_add_virtio_dev will handle it.
 		 */
-		if (strstarts(res.name, "vdev0buffer"))
+		if (strprefix(res.name, "vdev0buffer"))
 			continue;
 
 		if (imx_dsp_rproc_sys_to_da(priv, res.start, resource_size(&res), &da))

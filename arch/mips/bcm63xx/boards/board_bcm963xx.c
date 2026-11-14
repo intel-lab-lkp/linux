@@ -748,7 +748,7 @@ void __init board_prom_init(void)
 
 	/* dump cfe version */
 	cfe = boot_addr + BCM963XX_CFE_VERSION_OFFSET;
-	if (strstarts(cfe, "cfe-")) {
+	if (strprefix(cfe, "cfe-")) {
 		if(cfe[4] == 'v') {
 			if(cfe[5] == 'd')
 				snprintf(cfe_version, 11, "%s",

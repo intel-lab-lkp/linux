@@ -301,7 +301,7 @@ static int dwc3_pci_quirks(struct dwc3_pci *dwc,
 			    acpi_quirk_skip_acpi_ac_and_battery() &&
 			    /* Lenovo Yoga Tablet 2 Pro 1380 uses LC824206XA instead */
 			    !(bios_ver &&
-			      strstarts(bios_ver, "BLADE_21.X64.0005.R00.1504101516"))) {
+			      strprefix(bios_ver, "BLADE_21.X64.0005.R00.1504101516"))) {
 				dev_info(&pdev->dev, "Using TUSB1211 phy for charger detection\n");
 				swnode = &dwc3_pci_intel_phy_charger_detect_swnode;
 			}

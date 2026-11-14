@@ -1375,15 +1375,15 @@ static void ice_parse_lbl_item(struct ice_hw *hw, u16 idx, void *item,
 	lbl_item->idx = lbl_data->idx;
 	memcpy(lbl_item->label, lbl_data->label, sizeof(lbl_item->label));
 
-	if (strstarts(lbl_item->label, ICE_LBL_BST_DVM))
+	if (strprefix(lbl_item->label, ICE_LBL_BST_DVM))
 		lbl_item->type = ICE_LBL_BST_TYPE_DVM;
-	else if (strstarts(lbl_item->label, ICE_LBL_BST_SVM))
+	else if (strprefix(lbl_item->label, ICE_LBL_BST_SVM))
 		lbl_item->type = ICE_LBL_BST_TYPE_SVM;
-	else if (strstarts(lbl_item->label, ICE_LBL_TNL_VXLAN))
+	else if (strprefix(lbl_item->label, ICE_LBL_TNL_VXLAN))
 		lbl_item->type = ICE_LBL_BST_TYPE_VXLAN;
-	else if (strstarts(lbl_item->label, ICE_LBL_TNL_GENEVE))
+	else if (strprefix(lbl_item->label, ICE_LBL_TNL_GENEVE))
 		lbl_item->type = ICE_LBL_BST_TYPE_GENEVE;
-	else if (strstarts(lbl_item->label, ICE_LBL_TNL_UDP_ECPRI))
+	else if (strprefix(lbl_item->label, ICE_LBL_TNL_UDP_ECPRI))
 		lbl_item->type = ICE_LBL_BST_TYPE_UDP_ECPRI;
 
 	if (hw->debug_mask & ICE_DBG_PARSER)
