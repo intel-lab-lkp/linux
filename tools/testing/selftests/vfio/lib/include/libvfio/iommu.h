@@ -22,6 +22,8 @@ struct dma_region {
 	void *vaddr;
 	iova_t iova;
 	u64 size;
+	int fd;
+	u64 fd_offset;
 };
 
 struct iommu {
@@ -34,6 +36,13 @@ struct iommu {
 
 struct iommu *iommu_init(const char *iommu_mode);
 void iommu_cleanup(struct iommu *iommu);
+
+int __iommufd_map_file(struct iommu *iommu, struct dma_region *region);
+
+static inline void iommufd_map_file(struct iommu *iommu, struct dma_region *region)
+{
+	VFIO_ASSERT_EQ(__iommufd_map_file(iommu, region), 0);
+}
 
 int __iommu_map(struct iommu *iommu, struct dma_region *region);
 
