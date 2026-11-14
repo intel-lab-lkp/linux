@@ -603,11 +603,12 @@ void memcpy_and_pad(void *dest, size_t dest_len, const void *src, size_t count,
  * *  NULL if @s does not start with @prefix
  */
 __attribute__((nonnull(1, 2)))
-static inline char *strprefix(const char *s, const char *prefix)
+static inline const char *strprefix(const char *s, const char *prefix)
 {
 	size_t len = strlen(prefix);
-	return strncmp(s, prefix, len) == 0 ? (char *) s + len : NULL;
+	return strncmp(s, prefix, len) == 0 ? s + len : NULL;
 }
+#define strprefix(s, pfx)  const_cast(CQChar_of(s) *, strprefix(s, pfx))
 
 /**
  * str_has_prefix - Test if a string has a given prefix
