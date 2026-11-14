@@ -606,6 +606,7 @@ static int vxlan_vni_update_group(struct vxlan_dev *vxlan,
 	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
 	const union vxlan_addr *newrip = NULL, *oldrip = NULL;
 	union vxlan_addr old_remote_ip;
+	bool joined = false;
 	int ret = 0;
 
 	memcpy(&old_remote_ip, &vninode->remote_ip, sizeof(old_remote_ip));
@@ -633,13 +634,31 @@ static int vxlan_vni_update_group(struct vxlan_dev *vxlan,
 	if (!create && oldrip && newrip && vxlan_addr_equal(oldrip, newrip))
 		return 0;
 
+	/* A new VNI joins its group before its default FDB entry is installed,
+	 * so that installing the entry is the last step that can fail, and a
+	 * failure leaves vxlan_vni_add() only the VNI itself to undo.
+	 */
+	if (create && group && (vxlan->dev->flags & IFF_UP) &&
+	    vxlan_addr_multicast(group)) {
+		ret = vxlan_igmp_join(vxlan, group, 0);
+		if (ret == -EADDRINUSE)
+			ret = 0;
+		else if (!ret)
+			joined = true;
+		if (ret)
+			goto out;
+	}
+
 	ret = vxlan_update_default_fdb_entry(vxlan, vninode->vni,
 					     oldrip, newrip,
 					     cfg->remote_ifindex,
 					     cfg->remote_ifindex,
 					     extack);
-	if (ret)
+	if (ret) {
+		if (joined)
+			vxlan_igmp_leave(vxlan, group, 0);
 		goto out;
+	}
 
 	if (group) {
 		memcpy(&vninode->remote_ip, group, sizeof(vninode->remote_ip));
@@ -647,7 +666,7 @@ static int vxlan_vni_update_group(struct vxlan_dev *vxlan,
 			vxlan_vnifilter_seq_inc(dev_net(vxlan->dev));
 	}
 
-	if (vxlan->dev->flags & IFF_UP) {
+	if (!create && (vxlan->dev->flags & IFF_UP)) {
 		if (vxlan_addr_multicast(&old_remote_ip) &&
 		    !vxlan_group_used(vn, vxlan, vninode->vni,
 				      &old_remote_ip,
@@ -850,6 +869,14 @@ static void vxlan_vni_free(struct vxlan_vni_node *vninode)
 	kfree(vninode);
 }
 
+static void vxlan_vni_node_rcu_free(struct rcu_head *rcu)
+{
+	struct vxlan_vni_node *v;
+
+	v = container_of(rcu, struct vxlan_vni_node, rcu);
+	vxlan_vni_free(v);
+}
+
 static int vxlan_vni_add(struct vxlan_dev *vxlan,
 			 struct vxlan_vni_group *vg,
 			 u32 vni, union vxlan_addr *group,
@@ -889,18 +916,21 @@ static int vxlan_vni_add(struct vxlan_dev *vxlan,
 
 	err = vxlan_vni_update_group(vxlan, vninode, group, true, &changed,
 				     extack);
+	if (err)
+		goto err_unpublish;
 
 	vxlan_vnifilter_notify(vxlan, vninode, RTM_NEWTUNNEL);
 
+	return 0;
+
+err_unpublish:
+	if (vxlan->dev->flags & IFF_UP)
+		vxlan_vs_add_del_vninode(vxlan, vninode, true);
+	__vxlan_vni_del_list(vxlan, vg, vninode);
+	rhashtable_remove_fast(&vg->vni_hash, &vninode->vnode,
+			       vxlan_vni_rht_params);
+	call_rcu(&vninode->rcu, vxlan_vni_node_rcu_free);
 	return err;
-}
-
-static void vxlan_vni_node_rcu_free(struct rcu_head *rcu)
-{
-	struct vxlan_vni_node *v;
-
-	v = container_of(rcu, struct vxlan_vni_node, rcu);
-	vxlan_vni_free(v);
 }
 
 static int vxlan_vni_del(struct vxlan_dev *vxlan,
