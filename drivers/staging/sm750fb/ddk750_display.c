@@ -7,7 +7,8 @@
 static void set_dac(unsigned int off)
 {
 	poke32(MISC_CTRL,
-	       (peek32(MISC_CTRL) & ~MISC_CTRL_DAC_POWER_OFF) | off);
+	       (peek32(MISC_CTRL) & ~MISC_CTRL_DAC_POWER_OFF) |
+	       (off ? MISC_CTRL_DAC_POWER_OFF : 0));
 }
 
 static void set_display_control(int ctrl, int disp_state)
