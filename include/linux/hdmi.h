@@ -271,8 +271,8 @@ struct hdmi_spd_infoframe {
 	enum hdmi_infoframe_type type;
 	unsigned char version;
 	unsigned char length;
-	char vendor[8];
-	char product[16];
+	char vendor[8] __nonstring;
+	char product[16] __nonstring;
 	enum hdmi_spd_sdi sdi;
 };
 
