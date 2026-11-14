@@ -1704,6 +1704,22 @@ do {									\
 	lockdep_init_map(&(sk)->sk_lock.dep_map, (name), (key), 0);	\
 } while (0)
 
+/*
+ * Reclassify the lockdep class of a live socket lock.  Unlike
+ * sock_lock_init_class_and_name() this variant does not touch the
+ * lock itself, sk_lock.owned or the wait queue, so it is safe on a
+ * socket that userspace still holds.  The caller should check
+ * sock_allow_reclassification() first to narrow the window in which
+ * the lock is in use by lock_sock().
+ */
+#define sock_lock_reclassify_and_name(sk, sname, skey, name, key)	\
+do {									\
+	sk_owner_set(sk, THIS_MODULE);					\
+	lockdep_set_class_and_name(&(sk)->sk_lock.slock,		\
+				   (skey), (sname));			\
+	lockdep_init_map(&(sk)->sk_lock.dep_map, (name), (key), 0);	\
+} while (0)
+
 static inline bool lockdep_sock_is_held(const struct sock *sk)
 {
 	return lockdep_is_held(&sk->sk_lock) ||
