@@ -176,6 +176,8 @@ PNAME(mux_i2s2_out2io_p)		= { "mclk_i2s2", "xin12m" };
 PNAME(mux_gpll_cpll_xin24m_p)		= { "gpll", "cpll", "xin24m" };
 PNAME(mux_audpwm_p)			= { "sclk_audpwm_div", "sclk_audpwm_fracdiv", "xin24m" };
 PNAME(mux_dclk_vop_p)			= { "dclk_vop_div", "dclk_vop_fracdiv", "xin24m" };
+PNAME(mux_cpll_gpll_hpll_p) = { "cpll", "gpll", "hpll" };
+PNAME(mux_cpll_hpll_gpll_p) = { "cpll", "hpll", "gpll" };
 PNAME(mux_usb480m_gpll_p)		= { "usb480m", "gpll" };
 PNAME(clk_gmac_src_m0_p)		= { "clk_gmac_div", "clk_gmac_rgmii_m0" };
 PNAME(clk_gmac_src_m1_p)		= { "clk_gmac_div", "clk_gmac_rgmii_m1" };
@@ -718,6 +720,25 @@ static struct rockchip_clk_branch rv1126_clk_branches[] __initdata = {
 	COMPOSITE(CLK_ACDCDIG_I2C, "clk_acdcdig_i2c", mux_gpll_xin24m_p, 0,
 			RV1126_CLKSEL_CON(72), 8, 1, MFLAGS, 0, 7, DFLAGS,
 			RV1126_CLKGATE_CON(11), 1, GFLAGS),
+
+	/* PD_VEPU */
+	COMPOSITE(ACLK_PDVEPU, "aclk_pdvepu", mux_cpll_hpll_gpll_p, 0,
+		  RV1126_CLKSEL_CON(40), 6, 2, MFLAGS, 0, 5, DFLAGS,
+		  RV1126_CLKGATE_CON(12), 0, GFLAGS),
+	COMPOSITE_NOMUX(HCLK_PDVEPU, "hclk_pdvepu", "aclk_pdvepu", 0,
+			RV1126_CLKSEL_CON(41), 0, 5, DFLAGS,
+			RV1126_CLKGATE_CON(12), 2, GFLAGS),
+	GATE(ACLK_VENC, "aclk_venc", "aclk_pdvepu", 0,
+	     RV1126_CLKGATE_CON(12), 5, GFLAGS),
+	GATE(HCLK_VENC, "hclk_venc", "hclk_pdvepu", 0,
+	     RV1126_CLKGATE_CON(12), 6, GFLAGS),
+	COMPOSITE(CLK_VENC_CORE, "clk_venc_core", mux_cpll_gpll_hpll_p, 0,
+		  RV1126_CLKSEL_CON(40), 14, 2, MFLAGS, 8, 5, DFLAGS,
+		  RV1126_CLKGATE_CON(12), 1, GFLAGS),
+	GATE(0, "aclk_pdvepu_niu", "aclk_pdvepu", CLK_IGNORE_UNUSED,
+	     RV1126_CLKGATE_CON(12), 3, GFLAGS),
+	GATE(0, "hclk_pdvepu_niu", "hclk_pdvepu", CLK_IGNORE_UNUSED,
+	     RV1126_CLKGATE_CON(12), 4, GFLAGS),
 
 	/*
 	 * Clock-Architecture Diagram 9
