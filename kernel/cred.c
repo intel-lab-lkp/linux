@@ -189,7 +189,12 @@ struct cred *prepare_creds(void)
 	kdebug("prepare_creds() alloc %p", new);
 
 	old = task->cred;
-	memcpy(new, old, sizeof(struct cred));
+	/*
+	 * Another task can be in get_cred() on the old cred, clearing
+	 * non_rcu. That and usage are the only fields that change on a
+	 * published cred, and both are set fresh below.
+	 */
+	data_race(memcpy(new, old, sizeof(struct cred)));
 
 	new->non_rcu = 0;
 	atomic_long_set(&new->usage, 1);
@@ -573,7 +578,8 @@ struct cred *prepare_kernel_cred(struct task_struct *daemon)
 
 	old = get_task_cred(daemon);
 
-	*new = *old;
+	/* Same race as in prepare_creds(). */
+	data_race(memcpy(new, old, sizeof(struct cred)));
 	new->non_rcu = 0;
 	atomic_long_set(&new->usage, 1);
 	get_uid(new->user);
