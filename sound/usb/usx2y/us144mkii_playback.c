@@ -166,6 +166,7 @@ void playback_urb_complete(struct urb *urb)
 	size_t total_bytes_for_urb = 0;
 	snd_pcm_uframes_t offset_frames;
 	snd_pcm_uframes_t frames_to_copy;
+	bool running;
 	int ret, i;
 
 	if (urb->status) {
@@ -207,13 +208,25 @@ void playback_urb_complete(struct urb *urb)
 		}
 		urb->transfer_buffer_length = total_bytes_for_urb;
 
-		offset_frames = tascam->driver_playback_pos;
-		frames_to_copy = bytes_to_frames(runtime, total_bytes_for_urb);
-		tascam->driver_playback_pos =
-			(offset_frames + frames_to_copy) % runtime->buffer_size;
+		/*
+		 * The URBs also run when only the capture stream was started;
+		 * the playback buffer is only valid while the playback stream
+		 * itself is running.  Send silence otherwise.
+		 */
+		running = snd_pcm_running(substream);
+		if (running) {
+			offset_frames = tascam->driver_playback_pos;
+			frames_to_copy = bytes_to_frames(runtime,
+							 total_bytes_for_urb);
+			tascam->driver_playback_pos =
+				(offset_frames + frames_to_copy) %
+				runtime->buffer_size;
+		}
 	}
 
-	if (total_bytes_for_urb > 0) {
+	if (!running) {
+		memset(urb->transfer_buffer, 0, total_bytes_for_urb);
+	} else if (total_bytes_for_urb > 0) {
 		u8 *dst_buf = urb->transfer_buffer;
 
 		/* Handle ring buffer wrap-around */
