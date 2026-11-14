@@ -16,7 +16,7 @@
 #include "thread.h"
 #include "vdso.h"
 
-static inline int is_android_lib(const char *filename)
+static inline bool is_android_lib(const char *filename)
 {
 	return strstarts(filename, "/data/app-lib/") ||
 	       strstarts(filename, "/system/lib/");
