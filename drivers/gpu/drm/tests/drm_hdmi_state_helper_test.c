@@ -38,6 +38,9 @@ struct drm_atomic_helper_connector_hdmi_priv {
 	size_t current_edid_len;
 
 	int hdmi_update_failures;
+
+	u8 spd_infoframe[HDMI_INFOFRAME_SIZE(SPD)];
+	size_t spd_infoframe_len;
 };
 
 #define connector_to_priv(c) \
@@ -3444,6 +3447,167 @@ retry_crtc_state:
 	drm_modeset_acquire_fini(&ctx);
 }
 
+struct drm_hdmi_spd_infoframe_test {
+	const char *name;
+	const char *vendor;
+	const char *product;
+	char expected_vendor[HDMI_SPD_INFOFRAME_VENDOR_LEN];
+	char expected_product[HDMI_SPD_INFOFRAME_PRODUCT_LEN];
+};
+
+static const struct drm_hdmi_spd_infoframe_test drm_hdmi_spd_infoframe_tests[] = {
+	{
+		.name = "shorter-than-field",
+		.vendor = "Vend",
+		.product = "Prod",
+		.expected_vendor = { 'V', 'e', 'n', 'd' },
+		.expected_product = { 'P', 'r', 'o', 'd' },
+	},
+	{
+		.name = "whole-field",
+		.vendor = "VendorVe",
+		.product = "ProductProductPr",
+		.expected_vendor = {
+			'V', 'e', 'n', 'd', 'o', 'r', 'V', 'e',
+		},
+		.expected_product = {
+			'P', 'r', 'o', 'd', 'u', 'c', 't',
+			'P', 'r', 'o', 'd', 'u', 'c', 't',
+			'P', 'r',
+		},
+	},
+};
+
+static void drm_hdmi_spd_infoframe_desc(const struct drm_hdmi_spd_infoframe_test *t,
+					char *desc)
+{
+	strscpy(desc, t->name, KUNIT_PARAM_DESC_SIZE);
+}
+
+KUNIT_ARRAY_PARAM(drm_hdmi_spd_infoframe, drm_hdmi_spd_infoframe_tests,
+		  drm_hdmi_spd_infoframe_desc);
+
+static int capture_spd_write_infoframe(struct drm_connector *connector,
+				       const u8 *buffer, size_t len)
+{
+	struct drm_atomic_helper_connector_hdmi_priv *priv =
+		connector_to_priv(connector);
+
+	if (len > sizeof(priv->spd_infoframe))
+		return -EINVAL;
+
+	memcpy(priv->spd_infoframe, buffer, len);
+	priv->spd_infoframe_len = len;
+
+	return 0;
+}
+
+/*
+ * The SPD InfoFrame is only generated for connectors implementing the
+ * related hooks, hence the SPD tests cannot rely on the plain dummy funcs.
+ */
+static const struct drm_connector_hdmi_funcs dummy_connector_hdmi_spd_funcs = {
+	.vendor = "Vendor",
+	.product = "Product",
+	.supported_hdmi_ver = HDMI_VERSION_1_4,
+	.supported_formats = BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444),
+	.max_bpc = 8,
+	.avi = {
+		.clear_infoframe = accept_infoframe_clear_infoframe,
+		.write_infoframe = accept_infoframe_write_infoframe,
+	},
+	.hdmi = {
+		.clear_infoframe = accept_infoframe_clear_infoframe,
+		.write_infoframe = accept_infoframe_write_infoframe,
+	},
+	.spd = {
+		.clear_infoframe = accept_infoframe_clear_infoframe,
+		.write_infoframe = capture_spd_write_infoframe,
+	},
+};
+
+/*
+ * Test that the vendor and product names end up in the SPD InfoFrame padded
+ * with zeros, and without any trailing NUL when spanning the whole field,
+ * both in the connector state and in the packed buffer handed over to the
+ * driver.
+ */
+static void drm_test_check_spd_infoframe(struct kunit *test)
+{
+	const struct drm_hdmi_spd_infoframe_test *param = test->param_value;
+	struct drm_connector_hdmi_funcs hdmi_funcs = dummy_connector_hdmi_spd_funcs;
+	struct drm_atomic_helper_connector_hdmi_priv *priv;
+	struct drm_modeset_acquire_ctx ctx;
+	struct drm_connector_state *conn_state;
+	struct drm_display_mode *preferred;
+	struct hdmi_spd_infoframe *frame;
+	struct drm_connector *conn;
+	struct drm_device *drm;
+	struct drm_crtc *crtc;
+	const u8 *payload;
+	int ret;
+
+	hdmi_funcs.vendor = param->vendor;
+	hdmi_funcs.product = param->product;
+
+	priv = drm_kunit_helper_connector_hdmi_init_with_edid_funcs(test,
+				&hdmi_funcs,
+				test_edid_hdmi_1080p_rgb_max_200mhz);
+	KUNIT_ASSERT_NOT_NULL(test, priv);
+
+	drm = &priv->drm;
+	crtc = priv->crtc;
+	conn = &priv->connector;
+
+	preferred = find_preferred_mode(conn);
+	KUNIT_ASSERT_NOT_NULL(test, preferred);
+
+	drm_encoder_helper_add(&priv->encoder, &test_encoder_helper_funcs);
+
+	drm_modeset_acquire_init(&ctx, 0);
+
+retry_conn_enable:
+	ret = drm_kunit_helper_enable_crtc_connector(test, drm,
+						     crtc, conn,
+						     preferred,
+						     &ctx);
+	if (ret == -EDEADLK) {
+		ret = drm_modeset_backoff(&ctx);
+		if (!ret)
+			goto retry_conn_enable;
+	}
+	KUNIT_ASSERT_EQ(test, ret, 0);
+	KUNIT_ASSERT_EQ(test, priv->hdmi_update_failures, 0);
+
+	conn_state = conn->state;
+	KUNIT_ASSERT_NOT_NULL(test, conn_state);
+	KUNIT_ASSERT_TRUE(test, conn_state->hdmi.infoframes.spd.set);
+
+	frame = &conn_state->hdmi.infoframes.spd.data.spd;
+
+	KUNIT_EXPECT_MEMEQ(test, frame->vendor, param->expected_vendor,
+			   sizeof(frame->vendor));
+	KUNIT_EXPECT_MEMEQ(test, frame->product, param->expected_product,
+			   sizeof(frame->product));
+
+	KUNIT_ASSERT_EQ(test, priv->spd_infoframe_len, HDMI_INFOFRAME_SIZE(SPD));
+	KUNIT_EXPECT_EQ(test, priv->spd_infoframe[0], HDMI_INFOFRAME_TYPE_SPD);
+
+	payload = priv->spd_infoframe + HDMI_INFOFRAME_HEADER_SIZE;
+	KUNIT_EXPECT_MEMEQ(test, payload, param->expected_vendor,
+			   HDMI_SPD_INFOFRAME_VENDOR_LEN);
+	KUNIT_EXPECT_MEMEQ(test, payload + HDMI_SPD_INFOFRAME_VENDOR_LEN,
+			   param->expected_product,
+			   HDMI_SPD_INFOFRAME_PRODUCT_LEN);
+	KUNIT_EXPECT_EQ(test,
+			payload[HDMI_SPD_INFOFRAME_VENDOR_LEN +
+				HDMI_SPD_INFOFRAME_PRODUCT_LEN],
+			HDMI_SPD_SDI_PC);
+
+	drm_modeset_drop_locks(&ctx);
+	drm_modeset_acquire_fini(&ctx);
+}
+
 static int reject_infoframe_write_infoframe(struct drm_connector *connector,
 					    const u8 *buffer, size_t len)
 {
@@ -3917,9 +4081,10 @@ retry_crtc_state_2:
 	drm_modeset_acquire_fini(&ctx);
 }
 
-
 static struct kunit_case drm_atomic_helper_connector_hdmi_infoframes_tests[] = {
 	KUNIT_CASE(drm_test_check_infoframes),
+	KUNIT_CASE_PARAM(drm_test_check_spd_infoframe,
+			 drm_hdmi_spd_infoframe_gen_params),
 	KUNIT_CASE(drm_test_check_reject_avi_infoframe),
 	KUNIT_CASE(drm_test_check_reject_hdr_infoframe_bpc_8),
 	KUNIT_CASE(drm_test_check_reject_hdr_infoframe_bpc_10),
