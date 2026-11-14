@@ -84,6 +84,9 @@ ret=0
 # all tests in this script. Can be overridden with -t option
 TESTS="
 	vxlan_vnifilter_api
+	vxlan_vnifilter_dump_replay
+	vxlan_vnifilter_add_rollback
+	vxlan_vnifilter_refused_fdb_update
 	vxlan_vnifilter_datapath
 	vxlan_vnifilter_datapath_pervni
 	vxlan_vnifilter_datapath_mgroup
@@ -139,8 +142,9 @@ check_vm_connectivity() {
 cleanup() {
 	ip link del veth-hv-1 2>/dev/null || true
 	ip link del vethhv-11 vethhv-12 vethhv-21 vethhv-22 2>/dev/null || true
+	ip link del veth-host 2>/dev/null || true
 
-	cleanup_ns $hv_1 $hv_2 $vm_11 $vm_21 $vm_12 $vm_22 $vm_31 $vm_32
+	cleanup_ns $hv_1 $hv_2 $vm_11 $vm_21 $vm_12 $vm_22 $vm_31 $vm_32 $testns
 }
 
 trap cleanup EXIT
@@ -285,6 +289,37 @@ cleanup_vnifilter_api()
 	ip netns del $testns 2>/dev/null || true
 }
 
+# Succeed if "bridge vni show" lists VNI $2 on device $1. A failed show
+# returns 2, so a probe expecting the VNI to be absent cannot pass on it.
+vni_listed()
+{
+	local out
+
+	out=$(bridge -netns $testns vni show dev $1) || return 2
+	grep -qw "$2" <<< "$out"
+}
+
+# Print the VNI ranges "bridge vni show" reports for device $1, sorted;
+# fail if the show itself fails.
+vni_ranges()
+{
+	local out
+
+	out=$(bridge -netns $testns vni show dev $1) || return 1
+	grep -oE '[0-9]+-[0-9]+|[0-9]{2,}' <<< "$out" | sort
+}
+
+# Succeed if "bridge fdb show" lists, on device $1, an entry whose line
+# matches the extended regex $2. A failed show returns 2, so a probe
+# expecting the entry to be absent cannot pass on it.
+fdb_listed()
+{
+	local out
+
+	out=$(bridge -netns $testns fdb show dev $1) || return 2
+	grep -qE "$2" <<< "$out"
+}
+
 # tests vxlan filtering api
 vxlan_vnifilter_api()
 {
@@ -347,6 +382,215 @@ vxlan_vnifilter_api()
 	# change vxlan vnifilter flag
 	run_cmd "ip -netns $testns link set dev vxlan-ext1 type vxlan external novnifilter"
 	log_test $? 2 "Cannot unset vnifilter flag on a device"
+
+	# A single request may add at most 4096 VNIs. bridge(8) puts one
+	# VXLAN_VNIFILTER_ENTRY per comma-separated item into a single message,
+	# so both the single-entry and the multi-entry paths are reachable here.
+
+	# The largest accepted add, and one VNI more rejected.
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 10000-14095"
+	log_test $? 0 "Add a request of the maximum VNI count"
+
+	# The rejected oversized add must install nothing. Assert the range is
+	# absent first: vxlan_vni_add() folds an already-present VNI into the
+	# update path and returns 0, so a later probe cannot tell "installed
+	# nothing" from "installed part" unless it started absent.
+	run_cmd "vni_listed vxlan-ext1 20000"
+	log_test $? 1 "VNI 20000 absent before the oversized add"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 20000-24096"
+	log_test $? 255 "Cannot add a request over the maximum VNI count"
+	run_cmd "vni_listed vxlan-ext1 20000"
+	log_test $? 1 "The rejected oversized add installed nothing"
+
+	# Two entries each under the limit but summing over it: the per-message
+	# total is what is bounded, not the span of one entry. This is the shape
+	# a per-entry check would have let through.
+	run_cmd "vni_listed vxlan-ext1 30000"
+	log_test $? 1 "VNI 30000 absent before the oversized multi-entry add"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 \
+		 vni 30000-32047,32048-34097"
+	log_test $? 255 "Cannot add multiple entries summing over the maximum"
+	run_cmd "vni_listed vxlan-ext1 30000"
+	log_test $? 1 "The rejected multi-entry add installed nothing"
+
+	# The cap is symmetric: a delete may touch at most the maximum too.
+	# Install a maximum-size range and the VNI past it, so the max+1 delete
+	# below has every VNI present and can only be refused by the cap, not by
+	# a missing VNI.
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 40000-44095"
+	log_test $? 0 "Populate a maximum-size range to delete"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 44096"
+	log_test $? 0 "Add the VNI past the maximum range"
+	run_cmd "bridge -netns $testns vni del dev vxlan-ext1 vni 40000-44096"
+	log_test $? 255 "Cannot delete a request over the maximum VNI count"
+	run_cmd "bridge -netns $testns vni del dev vxlan-ext1 vni 40000-44095"
+	log_test $? 0 "Delete a request of the maximum VNI count"
+	run_cmd "bridge -netns $testns vni del dev vxlan-ext1 vni 44096"
+	log_test $? 0 "Delete the VNI past the maximum range"
+
+	# A within-cap delete of a never-installed range reaches the handler and
+	# fails there on the missing VNI, not on the cap.
+	run_cmd "bridge -netns $testns vni del dev vxlan-ext1 vni 50000-50010"
+	log_test $? 255 "Cannot delete a range that was never installed"
+
+	# A start above the end selects nothing and is accepted as a no-op.
+	# Use a VNI no earlier case installs, so the absence check is
+	# meaningful.
+	run_cmd "vni_listed vxlan-ext1 55000"
+	log_test $? 1 "VNI 55000 absent before the inverted range"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 55000-50000"
+	log_test $? 0 "An inverted range is accepted as a no-op"
+	run_cmd "vni_listed vxlan-ext1 55000"
+	log_test $? 1 "The inverted range installed nothing"
+
+	# The VXLAN header carries 24 bits, and both endpoints are bounded. A
+	# lone VNI is sent as START only and spans one VNI, so only the START
+	# bound refuses it; a range from a valid START spans two VNIs, so only
+	# the END bound refuses it. Neither is large enough for the request
+	# limit to catch.
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 16777215"
+	log_test $? 0 "Add the highest VNI the header can carry"
+	run_cmd "bridge -netns $testns vni del dev vxlan-ext1 vni 16777215"
+	log_test $? 0 "Delete the highest VNI the header can carry"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 vni 16777216"
+	log_test $? 255 "Cannot add a VNI past the 24-bit space"
+	run_cmd "bridge -netns $testns vni add dev vxlan-ext1 \
+		 vni 16777215-16777216"
+	log_test $? 255 "Cannot add a range whose END leaves the 24-bit space"
+}
+
+# A device may hold a contiguous run longer than one request's limit, built
+# from several requests. The dump coalesces it, so the dump must break the run
+# into entries each no larger than the limit, or the configuration it reports
+# cannot be replayed. Install such a run, then feed every range the dump
+# reports back into a second device and require all to be accepted.
+vxlan_vnifilter_dump_replay()
+{
+	local opts="external vnifilter local 172.16.0.1 dev veth-testns"
+	local range replay_rc src_ranges dst_ranges
+
+	cleanup_vnifilter_api &>/dev/null
+	setup_vnifilter_api
+
+	# The destination is on a different dstport so re-adding the same VNIs
+	# does not collide with the source under vxlan_vni_in_use().
+	run_cmd "ip -netns $testns link add vxlan-src type vxlan $opts \
+		 dstport 4789"
+	log_test $? 0 "dump/replay: create source device"
+	run_cmd "ip -netns $testns link add vxlan-dst type vxlan $opts \
+		 dstport 4790"
+	log_test $? 0 "dump/replay: create destination device"
+
+	# 8192 contiguous VNIs sharing the default remote: one run, twice the
+	# limit, installed in two accepted requests.
+	run_cmd "bridge -netns $testns vni add dev vxlan-src vni 10000-14095"
+	log_test $? 0 "dump/replay: populate the first half of the run"
+	run_cmd "bridge -netns $testns vni add dev vxlan-src vni 14096-18191"
+	log_test $? 0 "dump/replay: populate the second half of the run"
+
+	# The run must come back split at the limit, exactly. Comparing with
+	# the literal split, not only with the replayed copy, also catches a
+	# dump that drops or repeats VNIs where it resumes.
+	src_ranges=$(vni_ranges vxlan-src)
+	log_test $? 0 "dump/replay: dump the source device"
+	[ "$src_ranges" = "$(printf '10000-14095\n14096-18191')" ]
+	log_test $? 0 "dump/replay: the run is dumped split at the limit"
+
+	# bridge(8) prints entries, not netlink messages, so this replays one
+	# entry per request; it does not see the per-message budget.
+	replay_rc=0
+	for range in $src_ranges; do
+		bridge -netns $testns vni add dev vxlan-dst vni "$range" \
+			2>/dev/null || replay_rc=$?
+	done
+	log_test $replay_rc 0 "dump/replay: replay accepts every dumped entry"
+
+	dst_ranges=$(vni_ranges vxlan-dst)
+	log_test $? 0 "dump/replay: dump the destination device"
+	[ "$src_ranges" = "$dst_ranges" ]
+	log_test $? 0 "dump/replay: source and destination dump the same ranges"
+}
+
+# A VNI whose add fails must not be left installed. Two steps can fail
+# after the VNI is published, and both are reachable without memory
+# pressure: installing its default FDB entry, once the device holds
+# maxaddress entries, and joining its group, once the socket holds
+# net.ipv4.igmp_max_memberships groups.
+vxlan_vnifilter_add_rollback()
+{
+	local opts="external vnifilter local 172.16.0.1 dev veth-testns"
+	local full="dstport 4789 remote 172.16.0.2 maxaddress 1"
+	local groups grp vni k fail=0
+
+	cleanup_vnifilter_api &>/dev/null
+	setup_vnifilter_api
+
+	# The device's own default entry uses up maxaddress 1, so no VNI that
+	# inherits the device remote can install its own.
+	run_cmd "ip -netns $testns link add vxlan-full type vxlan $opts $full"
+	log_test $? 0 "rollback: create a device with room for one FDB entry"
+	run_cmd "ip -netns $testns link set dev vxlan-full up"
+	run_cmd "bridge -netns $testns vni add dev vxlan-full vni 100"
+	log_test $? 255 "rollback: refuse a VNI whose FDB entry does not fit"
+	run_cmd "vni_listed vxlan-full 100"
+	log_test $? 1 "rollback: the VNI whose FDB entry failed is absent"
+
+	groups=$(ip netns exec $testns sysctl -n net.ipv4.igmp_max_memberships)
+	run_cmd "ip -netns $testns link add vxlan-mc type vxlan $opts \
+		 dstport 4790"
+	log_test $? 0 "rollback: create a device for multicast groups"
+	run_cmd "ip -netns $testns link set dev vxlan-mc up"
+	# VNIs above 255 so that no group address can match the VNI probe.
+	for k in $(seq 1 $groups); do
+		grp=239.1.$((k / 256)).$((k % 256))
+		bridge -netns $testns vni add dev vxlan-mc vni $((1000 + k)) \
+			group $grp 2>/dev/null || fail=1
+	done
+	log_test $fail 0 "rollback: join as many groups as the socket allows"
+	vni=$((1001 + groups))
+	run_cmd "bridge -netns $testns vni add dev vxlan-mc vni $vni \
+		 group 239.2.0.1"
+	log_test $? 255 "rollback: refuse a VNI whose group cannot be joined"
+	run_cmd "vni_listed vxlan-mc $vni"
+	log_test $? 1 "rollback: the VNI whose join failed is not installed"
+}
+
+# A refused FDB update must leave the entry's state as it was. Replacing a
+# VNI's permanent default (all-zeros) entry with a dynamic one is refused,
+# because only unicast entries can be replaced, so the entry must stay
+# permanent and survive ageing. A dynamic entry added after the refused
+# request is due for ageing no earlier than the default entry, so once it
+# has been aged out the default entry has been through the same pass. The
+# check is on the end state only: a request that changed the state and
+# put it back before returning would pass it too.
+vxlan_vnifilter_refused_fdb_update()
+{
+	local opts="external vnifilter local 172.16.0.1 dev veth-testns"
+	local zero="^00:00:00:00:00:00 dst 172.16.0.2 .*src_vni 100 .*self"
+	local mac=02:00:00:00:00:01
+
+	cleanup_vnifilter_api &>/dev/null
+	setup_vnifilter_api
+
+	run_cmd "ip -netns $testns link add vxlan-age type vxlan $opts \
+		 dstport 4789 ageing 1"
+	log_test $? 0 "refused update: create a device with ageing 1"
+	run_cmd "ip -netns $testns link set dev vxlan-age up"
+	run_cmd "bridge -netns $testns vni add dev vxlan-age vni 100 \
+		 remote 172.16.0.2"
+	log_test $? 0 "refused update: add a VNI with a remote"
+	run_cmd "fdb_listed vxlan-age '$zero permanent'"
+	log_test $? 0 "refused update: the VNI's default entry is permanent"
+	run_cmd "bridge -netns $testns fdb replace 00:00:00:00:00:00 \
+		 dev vxlan-age dst 172.16.0.3 src_vni 100 self dynamic"
+	log_test $? 255 "refused update: cannot replace the default entry"
+	run_cmd "bridge -netns $testns fdb add $mac dev vxlan-age \
+		 dst 172.16.0.4 src_vni 100 self dynamic"
+	log_test $? 0 "refused update: add a dynamic entry"
+	slowwait 25 eval "! fdb_listed vxlan-age '^$mac '"
+	log_test $? 0 "refused update: the dynamic entry is aged out"
+	run_cmd "fdb_listed vxlan-age '$zero permanent'"
+	log_test $? 0 "refused update: the default entry is still permanent"
 }
 
 # Sanity test vnifilter datapath
