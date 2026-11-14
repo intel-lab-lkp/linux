@@ -11,8 +11,6 @@
 
 #include "clk.h"
 
-#define streq(a, b) (strcmp((a), (b)) == 0)
-
 #define to_socfpga_gate_clk(p) container_of(p, struct socfpga_gate_clk, hw.hw)
 
 /* SDMMC Group for System Manager defines */
