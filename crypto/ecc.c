@@ -1609,13 +1609,22 @@ int ecc_gen_privkey(unsigned int curve_id, unsigned int ndigits,
 }
 EXPORT_SYMBOL(ecc_gen_privkey);
 
+/* Random initial Z for ecc_point_mult(), below 2^nbits */
+static void ecc_rand_z(const struct ecc_curve *curve, u64 *z,
+		       unsigned int ndigits)
+{
+	get_random_bytes(z, ndigits << ECC_DIGITS_TO_BYTES_SHIFT);
+	/* P-521: the fast reduction only takes products of 521-bit numbers */
+	if (curve->nbits % 64)
+		z[ndigits - 1] &= GENMASK_ULL(curve->nbits % 64 - 1, 0);
+}
+
 int ecc_make_pub_key(unsigned int curve_id, unsigned int ndigits,
 		     const u64 *private_key, u64 *public_key)
 {
 	int ret = 0;
 	struct ecc_point *pk;
 	u64 rand_z[ECC_MAX_DIGITS];
-	unsigned int nbytes;
 	const struct ecc_curve *curve = ecc_get_curve(curve_id);
 
 	if (!private_key || ndigits > ARRAY_SIZE(rand_z)) {
@@ -1623,9 +1632,7 @@ int ecc_make_pub_key(unsigned int curve_id, unsigned int ndigits,
 		goto out;
 	}
 
-	nbytes = ndigits << ECC_DIGITS_TO_BYTES_SHIFT;
-
-	get_random_bytes(rand_z, nbytes);
+	ecc_rand_z(curve, rand_z, ndigits);
 
 	pk = ecc_alloc_point(ndigits);
 	if (!pk) {
@@ -1719,7 +1726,6 @@ int crypto_ecdh_shared_secret(unsigned int curve_id, unsigned int ndigits,
 	int ret = 0;
 	struct ecc_point *product, *pk;
 	u64 rand_z[ECC_MAX_DIGITS];
-	unsigned int nbytes;
 	const struct ecc_curve *curve = ecc_get_curve(curve_id);
 
 	if (!private_key || !public_key || ndigits > ARRAY_SIZE(rand_z)) {
@@ -1727,9 +1733,7 @@ int crypto_ecdh_shared_secret(unsigned int curve_id, unsigned int ndigits,
 		goto out;
 	}
 
-	nbytes = ndigits << ECC_DIGITS_TO_BYTES_SHIFT;
-
-	get_random_bytes(rand_z, nbytes);
+	ecc_rand_z(curve, rand_z, ndigits);
 
 	pk = ecc_alloc_point(ndigits);
 	if (!pk) {
