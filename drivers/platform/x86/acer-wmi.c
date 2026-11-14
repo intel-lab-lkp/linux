@@ -14,11 +14,13 @@
 #include <linux/kernel.h>
 #include <linux/minmax.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/dmi.h>
 #include <linux/fixp-arith.h>
 #include <linux/backlight.h>
+#include <linux/led-class-multicolor.h>
 #include <linux/leds.h>
 #include <linux/platform_device.h>
 #include <linux/platform_profile.h>
@@ -36,6 +38,10 @@
 #include <linux/unaligned.h>
 #include <linux/bitfield.h>
 #include <linux/bitmap.h>
+#include <linux/bits.h>
+#include <linux/container_of.h>
+#include <linux/compiler_attributes.h>
+#include <linux/cleanup.h>
 
 MODULE_AUTHOR("Carlos Corbacho");
 MODULE_DESCRIPTION("Acer Laptop WMI Extras Driver");
@@ -76,6 +82,21 @@ MODULE_LICENSE("GPL");
 #define ACER_WMID_GET_GAMING_FAN_SPEED_METHODID 17
 #define ACER_WMID_SET_GAMING_MISC_SETTING_METHODID 22
 #define ACER_WMID_GET_GAMING_MISC_SETTING_METHODID 23
+
+#define ACER_WMID_SET_GAMING_STATIC_LED_METHODID 6
+#define ACER_WMID_SET_GAMING_KBD_BL_METHODID 20
+
+#define ACER_GAMING_LED_KBD_BL_ENABLE	BIT_ULL(3)
+#define ACER_GAMING_LED_KBD_BL_INTERFACE_MASK	GENMASK_ULL(43, 40)
+
+#define ACER_EC_KBD_BL_ZONE_COLOR_BASE_ADDR       0x3C
+
+#define ACER_KBD_STATIC_PREAMBLE_BRIGHTNESS 100
+#define ACER_KBD_RGB_MAX_INTENSITY         255
+#define ACER_KBD_NUM_ZONES                 4
+#define ACER_KBD_NUM_COLOR_CHANNELS        3
+
+#define ACER_KBD_MODE_STATIC               0
 
 #define ACER_GAMING_FAN_BEHAVIOR_CPU BIT(0)
 #define ACER_GAMING_FAN_BEHAVIOR_GPU BIT(3)
@@ -389,6 +410,136 @@ struct wmi_interface {
 /* The static interface pointer, points to the currently detected interface */
 static struct wmi_interface *interface;
 
+static acpi_status WMI_gaming_execute_u64(u32 method_id, u64 in, u64 *out);
+static int WMI_gaming_execute_buf(u32 method_id, const void *in, size_t in_size, u64 *out);
+
+struct led_information {
+	struct led_classdev_mc led_general;
+	struct mc_subled led_colors[3];
+	struct rgb_wmi *parent;
+	u8 zone_id;
+	u8 current_brightness;
+};
+
+struct rgb_wmi {
+	struct mutex led_lock; /* making sure EC receives single command at a time */
+	struct led_information zones[4];
+};
+
+struct acer_gaming_kbd_bl_input {
+	u8 mode;
+	u8 speed;
+	u8 brightness;
+	u8 reserved;
+	u8 direction;
+	u8 r;
+	u8 g;
+	u8 b;
+	u8 cmd_flags[2];
+	u8 padding[6];
+} __packed;
+
+static int acer_kbd_set_static_preamble(u8 ec_brightness)
+{
+	struct acer_gaming_kbd_bl_input gm_input = {
+		.mode = ACER_KBD_MODE_STATIC,
+		.brightness = ec_brightness,
+		.r = ACER_KBD_RGB_MAX_INTENSITY,
+		.g = ACER_KBD_RGB_MAX_INTENSITY,
+		.b = ACER_KBD_RGB_MAX_INTENSITY,
+		.cmd_flags = { 3, 1 },
+	};
+	u64 resp = 0;
+	int ret;
+
+	if (ec_read(ACER_EC_KBD_BL_ZONE_COLOR_BASE_ADDR, &gm_input.r) ||
+	    ec_read(ACER_EC_KBD_BL_ZONE_COLOR_BASE_ADDR + 1, &gm_input.g) ||
+	    ec_read(ACER_EC_KBD_BL_ZONE_COLOR_BASE_ADDR + 2, &gm_input.b)) {
+		gm_input.r = ACER_KBD_RGB_MAX_INTENSITY;
+		gm_input.g = ACER_KBD_RGB_MAX_INTENSITY;
+		gm_input.b = ACER_KBD_RGB_MAX_INTENSITY;
+	}
+
+	ret = WMI_gaming_execute_buf(ACER_WMID_SET_GAMING_KBD_BL_METHODID,
+				     &gm_input, sizeof(gm_input), &resp);
+	if (ret < 0 || resp)
+		return -EIO;
+
+	return 0;
+}
+
+struct acer_gaming_static_led_input {
+	u8 zone_bit;
+	u8 r;
+	u8 g;
+	u8 b;
+	u32 padding;
+} __packed;
+
+static int send_zone_color(u8 zone_bit, u8 r, u8 g, u8 b)
+{
+	struct acer_gaming_static_led_input input = {
+		.zone_bit = zone_bit,
+		.r = r,
+		.g = g,
+		.b = b,
+	};
+	acpi_status status;
+	u64 resp = 0;
+	u64 payload;
+
+	memcpy(&payload, &input, sizeof(payload));
+
+	status = WMI_gaming_execute_u64(ACER_WMID_SET_GAMING_STATIC_LED_METHODID,
+					payload, &resp);
+	if (ACPI_FAILURE(status) || resp)
+		return -EIO;
+
+	return 0;
+}
+
+static enum led_brightness rgb_get(struct led_classdev *led_cdev)
+{
+	struct led_classdev_mc *general_mcolor = lcdev_to_mccdev(led_cdev);
+	struct led_information *led_info = container_of(general_mcolor,
+							struct led_information,
+							led_general);
+	return led_info->current_brightness;
+}
+
+static int rgb_set(struct led_classdev *led_cdev, enum led_brightness brightness)
+{
+	struct led_classdev_mc *general_mcolor = lcdev_to_mccdev(led_cdev);
+	struct led_information *led_info = container_of(general_mcolor,
+							struct led_information,
+							led_general);
+	struct rgb_wmi *data = led_info->parent;
+	u8 r, g, b;
+	int ret;
+
+	guard(mutex)(&data->led_lock);
+
+	if (brightness == 0) {
+		r = 0;
+		g = 0;
+		b = 0;
+	} else {
+		led_mc_calc_color_components(general_mcolor, brightness);
+		r = led_info->led_colors[0].brightness;
+		g = led_info->led_colors[1].brightness;
+		b = led_info->led_colors[2].brightness;
+	}
+
+	ret = send_zone_color(led_info->zone_id, r, g, b);
+	if (ret)
+		return ret;
+
+	led_info->current_brightness = brightness;
+	led_cdev->brightness = brightness;
+
+	return 0;
+}
+
 /*
  * Embedded Controller quirks
  * Some laptops require us to directly access the EC to either enable or query
@@ -406,9 +557,106 @@ struct quirk_entry {
 	bool hwmon;
 	bool platform_profile;
 	bool pwm;
+	u8 kbl_four_zone;
 };
 
 static struct quirk_entry *quirks;
+
+static int acer_kbd_rgb_init(struct platform_device *device, struct rgb_wmi *rgb_data)
+{
+	static const char * const zone_names[] = {
+		"acer-wmi:rgb:kbd_backlight-left",
+		"acer-wmi:rgb:kbd_backlight-center-left",
+		"acer-wmi:rgb:kbd_backlight-center-right",
+		"acer-wmi:rgb:kbd_backlight-right",
+	};
+	acpi_status status;
+	u64 gaming_sysinfo;
+	u64 led_mode;
+	int ret, i;
+
+	if (!quirks || !quirks->kbl_four_zone)
+		return -ENODEV;
+
+	status = WMI_gaming_execute_u64(ACER_WMID_GET_GAMING_SYS_INFO_METHODID,
+					0, &gaming_sysinfo);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	led_mode = ACER_GAMING_LED_KBD_BL_ENABLE |
+		   FIELD_PREP(ACER_GAMING_LED_KBD_BL_INTERFACE_MASK,
+			      FIELD_MAX(ACER_GAMING_LED_KBD_BL_INTERFACE_MASK));
+
+	status = WMI_gaming_execute_u64(ACER_WMID_SET_GAMING_LED_METHODID,
+					led_mode, NULL);
+
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	ret = acer_kbd_set_static_preamble(ACER_KBD_STATIC_PREAMBLE_BRIGHTNESS);
+	if (ret)
+		dev_warn(&device->dev, "Failed to set static preamble on init: %d\n", ret);
+
+	ret = devm_mutex_init(&device->dev, &rgb_data->led_lock);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < ACER_KBD_NUM_ZONES; i++) {
+		u8 start_offset = ACER_EC_KBD_BL_ZONE_COLOR_BASE_ADDR +
+				  (i * ACER_KBD_NUM_COLOR_CHANNELS);
+		struct led_information *zone = &rgb_data->zones[i];
+		u8 r = 0, g = 0, b = 0;
+		u8 max_val;
+
+		zone->zone_id = BIT(i);
+		zone->parent = rgb_data;
+
+		if (ec_read(start_offset, &r) != 0 ||
+		    ec_read(start_offset + 1, &g) != 0 ||
+		    ec_read(start_offset + 2, &b) != 0) {
+			dev_warn(&device->dev,
+				 "Failed to read initial color for zone %d, defaulting to white\n",
+				 i);
+			r = ACER_KBD_RGB_MAX_INTENSITY;
+			g = ACER_KBD_RGB_MAX_INTENSITY;
+			b = ACER_KBD_RGB_MAX_INTENSITY;
+		}
+
+		max_val = max3(r, g, b);
+
+		if (max_val == 0) {
+			zone->led_colors[0].intensity = ACER_KBD_RGB_MAX_INTENSITY;
+			zone->led_colors[1].intensity = ACER_KBD_RGB_MAX_INTENSITY;
+			zone->led_colors[2].intensity = ACER_KBD_RGB_MAX_INTENSITY;
+			zone->current_brightness = 0;
+		} else {
+			zone->led_colors[0].intensity = (r * ACER_KBD_RGB_MAX_INTENSITY) / max_val;
+			zone->led_colors[1].intensity = (g * ACER_KBD_RGB_MAX_INTENSITY) / max_val;
+			zone->led_colors[2].intensity = (b * ACER_KBD_RGB_MAX_INTENSITY) / max_val;
+			zone->current_brightness = max_val;
+		}
+
+		zone->led_colors[0].color_index = LED_COLOR_ID_RED;
+		zone->led_colors[1].color_index = LED_COLOR_ID_GREEN;
+		zone->led_colors[2].color_index = LED_COLOR_ID_BLUE;
+
+		zone->led_general.subled_info = zone->led_colors;
+		zone->led_general.num_colors = ACER_KBD_NUM_COLOR_CHANNELS;
+
+		zone->led_general.led_cdev.name = zone_names[i];
+		zone->led_general.led_cdev.max_brightness = ACER_KBD_RGB_MAX_INTENSITY;
+		zone->led_general.led_cdev.brightness = zone->current_brightness;
+		zone->led_general.led_cdev.brightness_set_blocking = rgb_set;
+		zone->led_general.led_cdev.brightness_get = rgb_get;
+		zone->led_general.led_cdev.flags = LED_RETAIN_AT_SHUTDOWN;
+
+		ret = devm_led_classdev_multicolor_register(&device->dev,
+							    &zone->led_general);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
 
 static void __init set_quirks(void)
 {
@@ -466,6 +714,7 @@ static struct quirk_entry quirk_acer_nitro_an515_58 = {
 	.hwmon = true,
 	.platform_profile = true,
 	.pwm = true,
+	.kbl_four_zone = 1,
 };
 
 static struct quirk_entry quirk_acer_predator_ph315_53 = {
@@ -1608,6 +1857,46 @@ WMI_gaming_execute_u64(u32 method_id, u64 in, u64 *out)
 	kfree(result.pointer);
 
 	return status;
+}
+
+static int WMI_gaming_execute_buf(u32 method_id, const void *in, size_t in_size, u64 *out)
+{
+	struct acpi_buffer result = { ACPI_ALLOCATE_BUFFER, NULL };
+	struct acpi_buffer input = {
+		.length = in_size,
+		.pointer = (void *)in,
+	};
+	acpi_status status;
+
+	status = wmi_evaluate_method(WMID_GUID4, 0, method_id, &input, &result);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	union acpi_object *obj __free(kfree) = result.pointer;
+
+	if (!out)
+		return 0;
+
+	if (!obj)
+		return -ENOMSG;
+
+	switch (obj->type) {
+	case ACPI_TYPE_INTEGER:
+		*out = obj->integer.value;
+		return 0;
+	case ACPI_TYPE_BUFFER:
+		if (obj->buffer.length >= 8)
+			*out = get_unaligned_le64(obj->buffer.pointer);
+		else if (obj->buffer.length >= 4)
+			*out = get_unaligned_le32(obj->buffer.pointer);
+		else if (obj->buffer.length >= 1)
+			*out = ((u8 *)obj->buffer.pointer)[0];
+		else
+			return -ENOMSG;
+		return 0;
+	default:
+		return -ENOMSG;
+	}
 }
 
 static int WMI_gaming_execute_u32_u64(u32 method_id, u32 in, u64 *out)
@@ -2815,6 +3104,8 @@ static int acer_wmi_hwmon_init(void);
 /*
  * Platform device
  */
+static struct rgb_wmi acer_rgb_data;
+
 static int acer_platform_probe(struct platform_device *device)
 {
 	int err;
@@ -2845,6 +3136,12 @@ static int acer_platform_probe(struct platform_device *device)
 		err = acer_wmi_hwmon_init();
 		if (err)
 			goto error_hwmon;
+	}
+	if (quirks->kbl_four_zone) {
+		err = acer_kbd_rgb_init(device, &acer_rgb_data);
+		if (err)
+			dev_warn(&device->dev, "Failed to initialize 4-zone RGB keyboard: %d\n",
+				 err);
 	}
 
 	return 0;
@@ -2898,6 +3195,7 @@ static int acer_suspend(struct device *dev)
 static int acer_resume(struct device *dev)
 {
 	struct acer_data *data = &interface->data;
+	int ret;
 
 	if (!data)
 		return -ENOMEM;
@@ -2910,6 +3208,13 @@ static int acer_resume(struct device *dev)
 
 	if (acer_wmi_accel_dev)
 		acer_gsensor_init();
+
+	if (quirks && quirks->kbl_four_zone) {
+		ret = acer_kbd_set_static_preamble(ACER_KBD_STATIC_PREAMBLE_BRIGHTNESS);
+		if (ret)
+			dev_warn(dev, "Failed to restore keyboard static mode on resume: %d\n",
+				 ret);
+	}
 
 	return 0;
 }
