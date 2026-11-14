@@ -40,6 +40,12 @@ static int tascam_capture_close(struct snd_pcm_substream *substream)
 		tascam->capture_substream = NULL;
 	/* The stop work may still be using this substream; wait for it. */
 	flush_work(&tascam->stop_pcm_work);
+	/*
+	 * The capture work keeps a pointer to the runtime, which is freed
+	 * when this callback returns. The capture URBs (and so the work) keep
+	 * running as long as the playback stream does, so wait for it here.
+	 */
+	cancel_work_sync(&tascam->capture_work);
 
 	return 0;
 }
