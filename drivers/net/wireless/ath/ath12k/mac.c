@@ -12125,7 +12125,7 @@ void ath12k_mac_fill_reg_tpc_info(struct ath12k *ar,
 	start_freq = ath12k_mac_get_6ghz_start_frequency(&ctx->def);
 	pwr_reduction = bss_conf->pwr_reduction;
 
-	if (arvif->reg_tpc_info.num_pwr_levels) {
+	if (reg_tpc_info->tpe_present) {
 		is_tpe_present = true;
 		num_pwr_levels = arvif->reg_tpc_info.num_pwr_levels;
 	} else {
@@ -12314,6 +12314,7 @@ static void ath12k_mac_parse_tx_pwr_env(struct ath12k *ar,
 		ath12k_warn(ab,
 			    "no transmit power envelope match client power type %d\n",
 			    client_type);
+		tpc_info->tpe_present = false;
 		return;
 	}
 
@@ -12353,6 +12354,8 @@ static void ath12k_mac_parse_tx_pwr_env(struct ath12k *ar,
 				   i, tpc_info->tpe[i]);
 		}
 	}
+
+	tpc_info->tpe_present = tpc_info->num_pwr_levels > 0;
 }
 
 int

@@ -119,6 +119,7 @@ struct ath12k_chan_power_info {
 /**
  * struct ath12k_reg_tpc_power_info - regulatory TPC power info
  * @is_psd_power: is PSD power or not
+ * @tpe_present: @num_pwr_levels and @tpe are from a parsed TPE element
  * @eirp_power: Maximum EIRP power (dBm), valid only if power is PSD
  * @ap_power_type: type of power (SP/LPI/VLP)
  * @num_pwr_levels: number of power levels
@@ -129,6 +130,7 @@ struct ath12k_chan_power_info {
  */
 struct ath12k_reg_tpc_power_info {
 	bool is_psd_power;
+	bool tpe_present;
 	u8 eirp_power;
 	enum wmi_reg_6g_ap_type ap_power_type;
 	u8 num_pwr_levels;
