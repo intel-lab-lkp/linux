@@ -351,6 +351,7 @@ static void rkvenc_stop_streaming(struct vb2_queue *q)
 	struct vb2_v4l2_buffer *vbuf;
 
 	v4l2_m2m_update_stop_streaming_state(ctx->m2m_ctx, q);
+	rkvenc_dvfs_ctx_idle(ctx->dev, ctx);
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
 		while ((vbuf = v4l2_m2m_src_buf_remove(ctx->m2m_ctx)))
@@ -457,16 +458,21 @@ static void rkvenc_device_run(void *priv)
 	else
 		rkvenc_hevc_build_pic(ctx, &f.hevc, idr);
 
+	rkvenc_dvfs_job_begin(dev);
+
 	ret = pm_runtime_resume_and_get(dev->dev);
 	if (ret)
-		goto finish_error;
+		goto finish_error_idle;
 
 	ret = rkvenc_hw_run(dev, &f);
 	if (ret) {
 		pm_runtime_put(dev->dev);
-		goto finish_error;
+		goto finish_error_idle;
 	}
 	return;
+
+finish_error_idle:
+	rkvenc_dvfs_job_end(dev, ctx);
 
 finish_error:
 	dev->job_running = false;
@@ -478,8 +484,16 @@ finish_error:
 		v4l2_m2m_job_finish(dev->m2m_dev, ctx->m2m_ctx);
 }
 
+static int rkvenc_job_ready(void *priv)
+{
+	struct rkvenc_ctx *ctx = priv;
+
+	return rkvenc_dvfs_start_allowed(ctx->dev);
+}
+
 const struct v4l2_m2m_ops rkvenc_m2m_ops = {
 	.device_run = rkvenc_device_run,
+	.job_ready = rkvenc_job_ready,
 };
 
 static int rkvenc_s_ctrl(struct v4l2_ctrl *ctrl)
@@ -944,6 +958,7 @@ static int rkvenc_open(struct file *filp)
 	if (ret)
 		goto err_m2m;
 
+	rkvenc_dvfs_ctx_add(dev, ctx);
 	v4l2_fh_add(&ctx->fh, filp);
 	return 0;
 
@@ -959,6 +974,7 @@ static int rkvenc_release(struct file *filp)
 {
 	struct rkvenc_ctx *ctx = fh_to_rkvenc_ctx(filp->private_data);
 
+	rkvenc_dvfs_ctx_del(ctx->dev, ctx);
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);
 	v4l2_ctrl_handler_free(&ctx->ctrl_hdl);
 	v4l2_fh_del(&ctx->fh, filp);

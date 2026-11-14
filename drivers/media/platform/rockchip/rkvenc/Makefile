@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 rockchip-rkvenc-y += rkvenc.o \
+		     rkvenc-dvfs.o \
 		     rkvenc-v4l2.o \
 		     rkvenc-gop.o \
 		     rkvenc-ref.o \

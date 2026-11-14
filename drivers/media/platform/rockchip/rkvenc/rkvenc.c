@@ -187,6 +187,7 @@ static void rkvenc_finish_job(struct rkvenc_dev *dev, struct rkvenc_ctx *ctx,
 			ctx->joined_header_done = false;
 		dev->job_ctx = NULL;
 		pm_runtime_put(dev->dev);
+		rkvenc_dvfs_job_end(dev, ctx);
 		rkvenc_m2m_ops.device_run(ctx);
 		return;
 	} else {
@@ -210,6 +211,7 @@ static void rkvenc_finish_job(struct rkvenc_dev *dev, struct rkvenc_ctx *ctx,
 
 	dev->job_ctx = NULL;
 	pm_runtime_put(dev->dev);
+	rkvenc_dvfs_job_end(dev, ctx);
 
 	v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->m2m_ctx, state);
 }
@@ -422,12 +424,18 @@ static int rkvenc_probe(struct platform_device *pdev)
 		goto err_unreg_v4l2;
 	}
 
-	ret = rkvenc_v4l2_init(rkvenc);
+	ret = rkvenc_dvfs_init(rkvenc);
 	if (ret)
 		goto err_release_m2m;
 
+	ret = rkvenc_v4l2_init(rkvenc);
+	if (ret)
+		goto err_dvfs;
+
 	return 0;
 
+err_dvfs:
+	rkvenc_dvfs_exit(rkvenc);
 err_release_m2m:
 	v4l2_m2m_release(rkvenc->m2m_dev);
 err_unreg_v4l2:
@@ -442,6 +450,7 @@ static void rkvenc_remove(struct platform_device *pdev)
 	struct rkvenc_dev *rkvenc = platform_get_drvdata(pdev);
 
 	cancel_delayed_work_sync(&rkvenc->watchdog);
+	rkvenc_dvfs_exit(rkvenc);
 	rkvenc_v4l2_cleanup(rkvenc);
 	v4l2_m2m_release(rkvenc->m2m_dev);
 	v4l2_device_unregister(&rkvenc->v4l2_dev);

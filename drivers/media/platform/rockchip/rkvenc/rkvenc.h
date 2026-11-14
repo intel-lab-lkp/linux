@@ -12,8 +12,14 @@
 #include <linux/clk.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
+#include <linux/devfreq.h>
+#include <linux/ktime.h>
+#include <linux/list.h>
 #include <linux/mutex.h>
+#include <linux/pm_qos.h>
 #include <linux/spinlock.h>
+#include <linux/thermal.h>
+#include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <linux/reset.h>
 
@@ -30,10 +36,39 @@
 
 #define RKVENC_NUM_CLKS		3
 #define RKVENC_NUM_RESETS	3
+#define RKVENC_CLK_CORE 2
 
 #define RKVENC_MAX_CONSEC_ERRORS	2
 
 struct rkvenc_dev;
+
+struct rkvenc_dvfs {
+	struct devfreq *devfreq;
+	struct devfreq_dev_profile profile;
+	unsigned long *freqs;
+	unsigned int num_freqs;
+
+	struct mutex freq_lock;
+	wait_queue_head_t idle_wq;
+
+	struct thermal_cooling_device *cdev;
+	struct dev_pm_qos_request max_freq_req;
+	bool qos_added;
+	unsigned int cooling_state;
+	struct delayed_work throttle_work;
+	struct mutex ctx_lock; /* protects ctx_list */
+	struct list_head ctx_list;
+
+	spinlock_t lock; /* protects the fields below */
+	bool busy;
+	ktime_t job_start;
+	ktime_t busy_since;
+	ktime_t busy_total;
+	ktime_t last_eval;
+	ktime_t next_start;
+	unsigned int duty_pct;
+	struct rkvenc_ctx *round_ctx;
+};
 
 /**
  * struct rkvenc_variant - per-SoC integration differences.
@@ -59,6 +94,7 @@ struct rkvenc_dev {
 	const struct rkvenc_variant *variant;
 
 	struct rkvenc_img img;
+	struct rkvenc_dvfs dvfs;
 
 	struct mutex vdev_lock;		/* serialises the video node ioctls */
 	spinlock_t irq_lock;
@@ -120,6 +156,7 @@ struct rkvenc_ctx {
 	struct v4l2_m2m_ctx *m2m_ctx;
 	struct v4l2_ctrl_handler ctrl_hdl;
 	struct mutex vlock;
+	struct list_head dvfs_node;
 
 	u32 src_fourcc;
 	u32 coded_fourcc;
@@ -180,6 +217,16 @@ void rkvenc_hw_status_read(struct rkvenc_dev *dev, u32 *int_sta, u32 *bytes,
 void rkvenc_hw_recover(struct rkvenc_dev *dev);
 int rkvenc_v4l2_init(struct rkvenc_dev *dev);
 void rkvenc_v4l2_cleanup(struct rkvenc_dev *dev);
+
+/* rkvenc-dvfs.c */
+int rkvenc_dvfs_init(struct rkvenc_dev *dev);
+void rkvenc_dvfs_exit(struct rkvenc_dev *dev);
+void rkvenc_dvfs_job_begin(struct rkvenc_dev *dev);
+void rkvenc_dvfs_job_end(struct rkvenc_dev *dev, struct rkvenc_ctx *ctx);
+bool rkvenc_dvfs_start_allowed(struct rkvenc_dev *dev);
+void rkvenc_dvfs_ctx_add(struct rkvenc_dev *dev, struct rkvenc_ctx *ctx);
+void rkvenc_dvfs_ctx_idle(struct rkvenc_dev *dev, struct rkvenc_ctx *ctx);
+void rkvenc_dvfs_ctx_del(struct rkvenc_dev *dev, struct rkvenc_ctx *ctx);
 
 /* rkvenc-v4l2.c */
 extern const struct v4l2_m2m_ops rkvenc_m2m_ops;
