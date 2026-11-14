@@ -30,6 +30,8 @@
 struct drm_bridge_priv {
 	unsigned int enable_count;
 	unsigned int disable_count;
+	unsigned int scrambler_enable_count;
+	unsigned int scrambler_disable_count;
 	struct drm_bridge bridge;
 	void *data;
 };
@@ -542,8 +544,10 @@ drm_test_bridge_chain_init(struct kunit *test, unsigned int num_bridges,
 }
 
 static struct drm_bridge_init_priv *
-drm_test_bridge_hdmi_init(struct kunit *test, const struct drm_bridge_funcs *funcs,
-			  unsigned int supported_formats, int max_bpc)
+__drm_test_bridge_hdmi_init(struct kunit *test, const struct drm_bridge_funcs *funcs,
+			    unsigned int supported_formats, int max_bpc,
+			    enum hdmi_version hdmi_ver,
+			    unsigned long long max_tmds_char_rate)
 {
 	struct drm_bridge_init_priv *priv;
 	struct drm_encoder *enc;
@@ -598,7 +602,8 @@ drm_test_bridge_hdmi_init(struct kunit *test, const struct drm_bridge_funcs *fun
 	bridge->ops |= DRM_BRIDGE_OP_HDMI;
 	bridge->vendor = "LNX";
 	bridge->product = "KUnit";
-	bridge->supported_hdmi_ver = HDMI_VERSION_1_4;
+	bridge->supported_hdmi_ver = hdmi_ver;
+	bridge->max_tmds_char_rate = max_tmds_char_rate;
 
 	ret = drm_kunit_bridge_add(test, bridge);
 	if (ret)
@@ -617,6 +622,14 @@ drm_test_bridge_hdmi_init(struct kunit *test, const struct drm_bridge_funcs *fun
 	drm_mode_config_reset(drm);
 
 	return priv;
+}
+
+static struct drm_bridge_init_priv *
+drm_test_bridge_hdmi_init(struct kunit *test, const struct drm_bridge_funcs *funcs,
+			  unsigned int supported_formats, int max_bpc)
+{
+	return __drm_test_bridge_hdmi_init(test, funcs, supported_formats,
+					   max_bpc, HDMI_VERSION_1_4, 0);
 }
 
 /*
@@ -1373,11 +1386,177 @@ static struct kunit_suite drm_bridge_bus_fmt_test_suite = {
 	.test_cases = drm_bridge_bus_fmt_tests,
 };
 
+static int drm_test_bridge_hdmi_scrambler_enable(struct drm_bridge *bridge)
+{
+	bridge_to_priv(bridge)->scrambler_enable_count++;
+
+	return 0;
+}
+
+static int drm_test_bridge_hdmi_scrambler_disable(struct drm_bridge *bridge)
+{
+	bridge_to_priv(bridge)->scrambler_disable_count++;
+
+	return 0;
+}
+
+#define DRM_TEST_BRIDGE_HDMI_SCRAMBLER_FUNCS(_enable, _disable)				\
+	{										\
+		.atomic_destroy_state	= drm_atomic_helper_bridge_destroy_state,	\
+		.atomic_duplicate_state	= drm_atomic_helper_bridge_duplicate_state,	\
+		.atomic_create_state	= drm_atomic_helper_bridge_create_state,	\
+		.hdmi_write_avi_infoframe	= dummy_write_infoframe,		\
+		.hdmi_write_hdmi_infoframe	= dummy_write_infoframe,		\
+		.hdmi_clear_avi_infoframe	= dummy_clear_infoframe,		\
+		.hdmi_clear_hdmi_infoframe	= dummy_clear_infoframe,		\
+		.hdmi_scrambler_enable		= (_enable),				\
+		.hdmi_scrambler_disable		= (_disable),				\
+	}
+
+static const struct drm_bridge_funcs drm_test_bridge_hdmi_scrambler_funcs =
+	DRM_TEST_BRIDGE_HDMI_SCRAMBLER_FUNCS(drm_test_bridge_hdmi_scrambler_enable,
+					     drm_test_bridge_hdmi_scrambler_disable);
+
+static const struct drm_bridge_funcs drm_test_bridge_hdmi_no_scrambler_enable_funcs =
+	DRM_TEST_BRIDGE_HDMI_SCRAMBLER_FUNCS(NULL,
+					     drm_test_bridge_hdmi_scrambler_disable);
+
+static const struct drm_bridge_funcs drm_test_bridge_hdmi_no_scrambler_disable_funcs =
+	DRM_TEST_BRIDGE_HDMI_SCRAMBLER_FUNCS(drm_test_bridge_hdmi_scrambler_enable,
+					     NULL);
+
+/*
+ * Test that the connector created for an HDMI 2.0 bridge reports the
+ * scrambling capability along with the HDMI 2.0 max TMDS character rate,
+ * and forwards the scrambler callbacks to the bridge.
+ */
+static void drm_test_bridge_connector_hdmi_scrambler(struct kunit *test)
+{
+	struct drm_bridge_init_priv *priv;
+	struct drm_connector *connector;
+	int ret;
+
+	priv = __drm_test_bridge_hdmi_init(test, &drm_test_bridge_hdmi_scrambler_funcs,
+					   BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444), 8,
+					   HDMI_VERSION_2_0, 0);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv);
+
+	connector = priv->connector;
+	KUNIT_EXPECT_TRUE(test, drm_connector_hdmi_scrambler_supported(connector));
+	KUNIT_EXPECT_EQ(test, connector->hdmi.max_tmds_char_rate,
+			HDMI_2_0_TMDS_CHAR_RATE_MAX_HZ);
+
+	KUNIT_ASSERT_NOT_NULL(test, connector->hdmi.funcs->scrambler_enable);
+	ret = connector->hdmi.funcs->scrambler_enable(connector);
+	KUNIT_EXPECT_EQ(test, ret, 0);
+	KUNIT_EXPECT_EQ(test, priv->test_bridge->scrambler_enable_count, 1);
+	KUNIT_EXPECT_EQ(test, priv->test_bridge->scrambler_disable_count, 0);
+
+	KUNIT_ASSERT_NOT_NULL(test, connector->hdmi.funcs->scrambler_disable);
+	ret = connector->hdmi.funcs->scrambler_disable(connector);
+	KUNIT_EXPECT_EQ(test, ret, 0);
+	KUNIT_EXPECT_EQ(test, priv->test_bridge->scrambler_enable_count, 1);
+	KUNIT_EXPECT_EQ(test, priv->test_bridge->scrambler_disable_count, 1);
+}
+
+/*
+ * Test that the connector created for an HDMI 1.4 bridge doesn't report the
+ * scrambling capability and ignores the bridge scrambler callbacks.
+ */
+static void drm_test_bridge_connector_hdmi_no_scrambler(struct kunit *test)
+{
+	struct drm_bridge_init_priv *priv;
+	struct drm_connector *connector;
+
+	priv = __drm_test_bridge_hdmi_init(test, &drm_test_bridge_hdmi_scrambler_funcs,
+					   BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444), 8,
+					   HDMI_VERSION_1_4, 0);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv);
+
+	connector = priv->connector;
+	KUNIT_EXPECT_FALSE(test, drm_connector_hdmi_scrambler_supported(connector));
+	KUNIT_EXPECT_EQ(test, connector->hdmi.max_tmds_char_rate,
+			HDMI_1_3_TMDS_CHAR_RATE_MAX_HZ);
+	KUNIT_EXPECT_NULL(test, connector->hdmi.funcs->scrambler_enable);
+	KUNIT_EXPECT_NULL(test, connector->hdmi.funcs->scrambler_disable);
+}
+
+/*
+ * Test that the max TMDS character rate of an HDMI bridge overrides the
+ * one inferred from the supported HDMI version.
+ */
+static void drm_test_bridge_connector_hdmi_max_tmds_char_rate(struct kunit *test)
+{
+	struct drm_bridge_init_priv *priv;
+
+	priv = __drm_test_bridge_hdmi_init(test, &drm_test_bridge_hdmi_scrambler_funcs,
+					   BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444), 8,
+					   HDMI_VERSION_2_0,
+					   HDMI_1_3_TMDS_CHAR_RATE_MAX_HZ);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv);
+
+	KUNIT_EXPECT_EQ(test, priv->connector->hdmi.max_tmds_char_rate,
+			HDMI_1_3_TMDS_CHAR_RATE_MAX_HZ);
+}
+
+struct drm_bridge_connector_hdmi_missing_scrambler_test {
+	const char *desc;
+	const struct drm_bridge_funcs *funcs;
+};
+
+static const struct drm_bridge_connector_hdmi_missing_scrambler_test
+drm_bridge_connector_hdmi_missing_scrambler_params[] = {
+	{ "hdmi_scrambler_enable", &drm_test_bridge_hdmi_no_scrambler_enable_funcs },
+	{ "hdmi_scrambler_disable", &drm_test_bridge_hdmi_no_scrambler_disable_funcs },
+};
+
+static void
+drm_bridge_connector_hdmi_missing_scrambler_desc(const struct drm_bridge_connector_hdmi_missing_scrambler_test *t,
+						 char *desc)
+{
+	strscpy(desc, t->desc, KUNIT_PARAM_DESC_SIZE);
+}
+
+KUNIT_ARRAY_PARAM(drm_bridge_connector_hdmi_missing_scrambler,
+		  drm_bridge_connector_hdmi_missing_scrambler_params,
+		  drm_bridge_connector_hdmi_missing_scrambler_desc);
+
+/*
+ * Test that creating the connector for an HDMI 2.0 bridge fails when any of
+ * the bridge scrambler callbacks is missing.
+ */
+static void drm_test_bridge_connector_hdmi_missing_scrambler(struct kunit *test)
+{
+	const struct drm_bridge_connector_hdmi_missing_scrambler_test *params =
+		test->param_value;
+	struct drm_bridge_init_priv *priv;
+
+	priv = __drm_test_bridge_hdmi_init(test, params->funcs,
+					   BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444), 8,
+					   HDMI_VERSION_2_0, 0);
+	KUNIT_EXPECT_EQ(test, PTR_ERR_OR_ZERO(priv), -EINVAL);
+}
+
+static struct kunit_case drm_bridge_connector_hdmi_tests[] = {
+	KUNIT_CASE(drm_test_bridge_connector_hdmi_scrambler),
+	KUNIT_CASE(drm_test_bridge_connector_hdmi_no_scrambler),
+	KUNIT_CASE(drm_test_bridge_connector_hdmi_max_tmds_char_rate),
+	KUNIT_CASE_PARAM(drm_test_bridge_connector_hdmi_missing_scrambler,
+			 drm_bridge_connector_hdmi_missing_scrambler_gen_params),
+	{ }
+};
+
+static struct kunit_suite drm_bridge_connector_hdmi_test_suite = {
+	.name = "drm_bridge_connector_hdmi",
+	.test_cases = drm_bridge_connector_hdmi_tests,
+};
+
 kunit_test_suites(
 	&drm_bridge_get_current_state_test_suite,
 	&drm_bridge_helper_reset_crtc_test_suite,
 	&drm_bridge_alloc_test_suite,
 	&drm_bridge_bus_fmt_test_suite,
+	&drm_bridge_connector_hdmi_test_suite,
 );
 
 MODULE_AUTHOR("Maxime Ripard <mripard@kernel.org>");
