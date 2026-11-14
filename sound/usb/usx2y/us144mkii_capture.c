@@ -40,6 +40,8 @@ static int tascam_capture_close(struct snd_pcm_substream *substream)
 		tascam->capture_substream = NULL;
 	/* The stop work may still be using this substream; wait for it. */
 	flush_work(&tascam->stop_pcm_work);
+	/* So may the URB completion handlers, see tascam_pcm_sync_stop(). */
+	synchronize_rcu();
 	/*
 	 * The capture work keeps a pointer to the runtime, which is freed
 	 * when this callback returns. The capture URBs (and so the work) keep
@@ -113,6 +115,7 @@ const struct snd_pcm_ops tascam_capture_ops = {
 	.ioctl = snd_pcm_lib_ioctl,
 	.hw_params = tascam_pcm_hw_params,
 	.hw_free = tascam_pcm_hw_free,
+	.sync_stop = tascam_pcm_sync_stop,
 	.prepare = tascam_capture_prepare,
 	.trigger = tascam_pcm_trigger,
 	.pointer = tascam_capture_pointer,

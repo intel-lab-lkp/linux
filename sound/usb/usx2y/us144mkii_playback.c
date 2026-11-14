@@ -40,6 +40,8 @@ static int tascam_playback_close(struct snd_pcm_substream *substream)
 		tascam->playback_substream = NULL;
 	/* The stop work may still be using this substream; wait for it. */
 	flush_work(&tascam->stop_pcm_work);
+	/* So may the URB completion handlers, see tascam_pcm_sync_stop(). */
+	synchronize_rcu();
 
 	return 0;
 }
@@ -153,6 +155,7 @@ const struct snd_pcm_ops tascam_playback_ops = {
 	.ioctl = snd_pcm_lib_ioctl,
 	.hw_params = tascam_pcm_hw_params,
 	.hw_free = tascam_pcm_hw_free,
+	.sync_stop = tascam_pcm_sync_stop,
 	.prepare = tascam_playback_prepare,
 	.trigger = tascam_pcm_trigger,
 	.pointer = tascam_playback_pointer,
@@ -180,9 +183,13 @@ void playback_urb_complete(struct urb *urb)
 	if (!tascam || !atomic_read(&tascam->playback_active))
 		goto out;
 
-	substream = tascam->playback_substream;
-	if (!substream || !substream->runtime)
+	/* Pairs with synchronize_rcu() in close and sync_stop. */
+	rcu_read_lock();
+	substream = READ_ONCE(tascam->playback_substream);
+	if (!substream || !substream->runtime) {
+		rcu_read_unlock();
 		goto out;
+	}
 	runtime = substream->runtime;
 
 	scoped_guard(spinlock_irqsave, &tascam->lock) {
@@ -252,6 +259,7 @@ void playback_urb_complete(struct urb *urb)
 		process_playback_routing_us144mkii(tascam, dst_buf, dst_buf,
 						   frames_to_copy);
 	}
+	rcu_read_unlock();
 
 	urb->dev = tascam->dev;
 	usb_get_urb(urb);
@@ -295,12 +303,16 @@ void feedback_urb_complete(struct urb *urb)
 	if (!tascam || !atomic_read(&tascam->playback_active))
 		goto out;
 
-	playback_ss = tascam->playback_substream;
-	if (!playback_ss || !playback_ss->runtime)
+	/* Pairs with synchronize_rcu() in close and sync_stop. */
+	rcu_read_lock();
+	playback_ss = READ_ONCE(tascam->playback_substream);
+	if (!playback_ss || !playback_ss->runtime) {
+		rcu_read_unlock();
 		goto out;
+	}
 	playback_rt = playback_ss->runtime;
 
-	capture_ss = tascam->capture_substream;
+	capture_ss = READ_ONCE(tascam->capture_substream);
 	capture_rt = capture_ss ? capture_ss->runtime : NULL;
 
 	scoped_guard(spinlock_irqsave, &tascam->lock) {
@@ -444,6 +456,7 @@ void feedback_urb_complete(struct urb *urb)
 		snd_pcm_period_elapsed(playback_ss);
 	if (capture_period_elapsed)
 		snd_pcm_period_elapsed(capture_ss);
+	rcu_read_unlock();
 
 	urb->dev = tascam->dev;
 	usb_get_urb(urb);
