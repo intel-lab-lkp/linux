@@ -1520,7 +1520,7 @@ static const struct snd_rawmidi_ops snd_hdsp_midi_input =
 
 static int snd_hdsp_create_midi (struct snd_card *card, struct hdsp *hdsp, int id)
 {
-	char buf[40];
+	char buf[64];
 
 	hdsp->midi[id].id = id;
 	hdsp->midi[id].rmidi = NULL;
