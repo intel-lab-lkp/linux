@@ -633,6 +633,7 @@ static inline const char *strsuffix(const char *s, const char *suffix)
 	return streq(s + off, suffix) ? s + off : NULL;
 }
 #define strsuffix(s, sfx)  const_cast(CQChar_of(s) *, strsuffix(s, sfx))
+#define strends(s, sfx)    strsuffix(s, sfx)  // legacy alias
 
 /**
  * str_has_prefix - Test if a string has a given prefix
@@ -654,25 +655,6 @@ static __always_inline size_t str_has_prefix(const char *str, const char *prefix
 {
 	size_t len = strlen(prefix);
 	return strncmp(str, prefix, len) == 0 ? len : 0;
-}
-
-/**
- * strends - Check if a string ends with another string.
- * @str: NULL-terminated string to check against @suffix
- * @suffix: NULL-terminated string defining the suffix to look for in @str
- *
- * Returns:
- * True if @str ends with @suffix. False in all other cases.
- */
-static inline bool __attribute__((nonnull(1, 2)))
-strends(const char *str, const char *suffix)
-{
-	unsigned int str_len = strlen(str), suffix_len = strlen(suffix);
-
-	if (str_len < suffix_len)
-		return false;
-
-	return !(strcmp(str + str_len - suffix_len, suffix));
 }
 
 #endif /* _LINUX_STRING_H_ */
