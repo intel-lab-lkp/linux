@@ -45,7 +45,7 @@ SECTIONS
   INIT_DATA_SECTION(16)
   .m68k_fixup : {
 	__start_fixup = .;
-	*(.m68k_fixup)
+	KEEP(*(.m68k_fixup))
 	__stop_fixup = .;
   }
   .init_end : {
