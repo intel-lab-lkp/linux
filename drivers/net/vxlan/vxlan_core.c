@@ -577,7 +577,7 @@ static int vxlan_fdb_replace(struct vxlan_fdb *f,
 /* Add/update destinations for multicast */
 static int vxlan_fdb_append(struct vxlan_fdb *f,
 			    union vxlan_addr *ip, __be16 port, __be32 vni,
-			    __u32 ifindex, struct vxlan_rdst **rdp)
+			    __u32 ifindex, struct vxlan_rdst **rdp, gfp_t gfp)
 {
 	struct vxlan_rdst *rd;
 
@@ -585,14 +585,14 @@ static int vxlan_fdb_append(struct vxlan_fdb *f,
 	if (rd)
 		return 0;
 
-	rd = kmalloc_obj(*rd, GFP_ATOMIC);
+	rd = kmalloc_obj(*rd, gfp);
 	if (rd == NULL)
 		return -ENOMEM;
 
 	/* The driver can work correctly without a dst cache, so do not treat
 	 * dst cache initialization errors as fatal.
 	 */
-	dst_cache_init(&rd->dst_cache, GFP_ATOMIC | __GFP_NOWARN);
+	dst_cache_init(&rd->dst_cache, gfp | __GFP_NOWARN);
 
 	rd->remote_ip = *ip;
 	rd->remote_port = port;
@@ -779,11 +779,11 @@ static int vxlan_gpe_gro_complete(struct sock *sk, struct sk_buff *skb, int nhof
 
 static struct vxlan_fdb *vxlan_fdb_alloc(struct vxlan_dev *vxlan, const u8 *mac,
 					 __u16 state, __be32 src_vni,
-					 __u16 ndm_flags)
+					 __u16 ndm_flags, gfp_t gfp)
 {
 	struct vxlan_fdb *f;
 
-	f = kmalloc_obj(*f, GFP_ATOMIC);
+	f = kmalloc_obj(*f, gfp);
 	if (!f)
 		return NULL;
 	memset(&f->key, 0, sizeof(f->key));
@@ -869,7 +869,7 @@ int vxlan_fdb_create(struct vxlan_dev *vxlan,
 		     __u16 state, __be16 port, __be32 src_vni,
 		     __be32 vni, __u32 ifindex, __u16 ndm_flags,
 		     u32 nhid, struct vxlan_fdb **fdb,
-		     struct netlink_ext_ack *extack)
+		     struct netlink_ext_ack *extack, gfp_t gfp)
 {
 	const struct vxlan_config *cfg = rcu_dereference_rtnl(vxlan->cfg);
 	struct vxlan_rdst *rd = NULL;
@@ -881,14 +881,14 @@ int vxlan_fdb_create(struct vxlan_dev *vxlan,
 		return -ENOSPC;
 
 	netdev_dbg(vxlan->dev, "add %pM -> %pIS\n", mac, ip);
-	f = vxlan_fdb_alloc(vxlan, mac, state, src_vni, ndm_flags);
+	f = vxlan_fdb_alloc(vxlan, mac, state, src_vni, ndm_flags, gfp);
 	if (!f)
 		return -ENOMEM;
 
 	if (nhid)
 		rc = vxlan_fdb_nh_update(vxlan, f, nhid, extack);
 	else
-		rc = vxlan_fdb_append(f, ip, port, vni, ifindex, &rd);
+		rc = vxlan_fdb_append(f, ip, port, vni, ifindex, &rd, gfp);
 	if (rc < 0)
 		goto errout;
 
@@ -984,7 +984,7 @@ static int vxlan_fdb_update_existing(struct vxlan_dev *vxlan,
 				     __u32 ifindex, __u16 ndm_flags,
 				     struct vxlan_fdb *f, u32 nhid,
 				     bool swdev_notify,
-				     struct netlink_ext_ack *extack)
+				     struct netlink_ext_ack *extack, gfp_t gfp)
 {
 	__u16 fdb_flags = (ndm_flags & ~NTF_USE);
 	__u16 old_flags = f->flags;
@@ -1028,7 +1028,8 @@ static int vxlan_fdb_update_existing(struct vxlan_dev *vxlan,
 	if ((flags & NLM_F_APPEND) &&
 	    (is_multicast_ether_addr(f->key.eth_addr) ||
 	     is_zero_ether_addr(f->key.eth_addr))) {
-		rc = vxlan_fdb_append(f, ip, port, vni, ifindex, &rd);
+		rc = vxlan_fdb_append(f, ip, port, vni, ifindex, &rd,
+				      gfp);
 
 		if (rc < 0)
 			return rc;
@@ -1090,7 +1091,7 @@ static int vxlan_fdb_update_create(struct vxlan_dev *vxlan,
 				   __be16 port, __be32 src_vni, __be32 vni,
 				   __u32 ifindex, __u16 ndm_flags, u32 nhid,
 				   bool swdev_notify,
-				   struct netlink_ext_ack *extack)
+				   struct netlink_ext_ack *extack, gfp_t gfp)
 {
 	__u16 fdb_flags = (ndm_flags & ~NTF_USE);
 	struct vxlan_fdb *f;
@@ -1103,7 +1104,7 @@ static int vxlan_fdb_update_create(struct vxlan_dev *vxlan,
 
 	netdev_dbg(vxlan->dev, "add %pM -> %pIS\n", mac, ip);
 	rc = vxlan_fdb_create(vxlan, mac, ip, state, port, src_vni,
-			      vni, ifindex, fdb_flags, nhid, &f, extack);
+			      vni, ifindex, fdb_flags, nhid, &f, extack, gfp);
 	if (rc < 0)
 		return rc;
 
@@ -1126,7 +1127,7 @@ int vxlan_fdb_update(struct vxlan_dev *vxlan,
 		     __be16 port, __be32 src_vni, __be32 vni,
 		     __u32 ifindex, __u16 ndm_flags, u32 nhid,
 		     bool swdev_notify,
-		     struct netlink_ext_ack *extack)
+		     struct netlink_ext_ack *extack, gfp_t gfp)
 {
 	struct vxlan_fdb *f;
 
@@ -1140,7 +1141,8 @@ int vxlan_fdb_update(struct vxlan_dev *vxlan,
 
 		return vxlan_fdb_update_existing(vxlan, ip, state, flags, port,
 						 vni, ifindex, ndm_flags, f,
-						 nhid, swdev_notify, extack);
+						 nhid, swdev_notify, extack,
+						 gfp);
 	} else {
 		if (!(flags & NLM_F_CREATE))
 			return -ENOENT;
@@ -1148,7 +1150,7 @@ int vxlan_fdb_update(struct vxlan_dev *vxlan,
 		return vxlan_fdb_update_create(vxlan, mac, ip, state, flags,
 					       port, src_vni, vni, ifindex,
 					       ndm_flags, nhid, swdev_notify,
-					       extack);
+					       extack, gfp);
 	}
 }
 
@@ -1284,7 +1286,7 @@ static int vxlan_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 	err = vxlan_fdb_update(vxlan, addr, &ip, ndm->ndm_state, flags,
 			       port, src_vni, vni, ifindex,
 			       ndm->ndm_flags | NTF_VXLAN_ADDED_BY_USER,
-			       nhid, true, extack);
+			       nhid, true, extack, GFP_ATOMIC);
 	spin_unlock_bh(&vxlan->hash_lock);
 
 	if (!err)
@@ -1504,7 +1506,8 @@ static enum skb_drop_reason vxlan_snoop(struct net_device *dev,
 					 cfg->dst_port,
 					 vni,
 					 cfg->vni,
-					 ifindex, NTF_SELF, 0, true, NULL);
+					 ifindex, NTF_SELF, 0, true, NULL,
+					 GFP_ATOMIC);
 		spin_unlock(&vxlan->hash_lock);
 	}
 
@@ -4154,7 +4157,7 @@ static int vxlan_dev_create(struct net *net, struct net_device *dev,
 				       cfg->vni,
 				       cfg->vni,
 				       cfg->remote_ifindex,
-				       NTF_SELF, 0, true, extack);
+				       NTF_SELF, 0, true, extack, GFP_ATOMIC);
 		spin_unlock_bh(&vxlan->hash_lock);
 		if (err)
 			goto unlink;
@@ -4617,7 +4620,8 @@ static int vxlan_changelink(struct net_device *dev, struct nlattr *tb[],
 					       cfg->dst_port,
 					       conf.vni, conf.vni,
 					       conf.remote_ifindex,
-					       NTF_SELF, 0, true, extack);
+					       NTF_SELF, 0, true, extack,
+					       GFP_ATOMIC);
 			if (err) {
 				spin_unlock_bh(&vxlan->hash_lock);
 				if (lowerdev_changed)
@@ -4652,7 +4656,8 @@ static int vxlan_changelink(struct net_device *dev, struct nlattr *tb[],
 							       &cfg->remote_ip,
 							       conf.remote_ifindex,
 							       cfg->remote_ifindex,
-							       NULL);
+							       NULL,
+							       GFP_ATOMIC);
 				if (lowerdev_changed)
 					netdev_adjacent_change_abort(vxlan->lowerdev,
 								     lowerdev, dev);
@@ -4972,7 +4977,7 @@ vxlan_fdb_external_learn_add(struct net_device *dev,
 			       fdb_info->remote_vni,
 			       fdb_info->remote_ifindex,
 			       NTF_USE | NTF_SELF | NTF_EXT_LEARNED,
-			       0, false, extack);
+			       0, false, extack, GFP_ATOMIC);
 	spin_unlock_bh(&vxlan->hash_lock);
 
 	return err;

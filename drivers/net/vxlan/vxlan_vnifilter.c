@@ -554,7 +554,7 @@ int vxlan_update_default_fdb_entry(struct vxlan_dev *vxlan, __be32 vni,
 				   const union vxlan_addr *old_remote_ip,
 				   const union vxlan_addr *remote_ip,
 				   u32 old_ifindex, u32 new_ifindex,
-				   struct netlink_ext_ack *extack)
+				   struct netlink_ext_ack *extack, gfp_t gfp)
 {
 	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
 	int err = 0;
@@ -576,7 +576,8 @@ int vxlan_update_default_fdb_entry(struct vxlan_dev *vxlan, __be32 vni,
 				       vni,
 				       vni,
 				       new_ifindex,
-				       NTF_SELF, 0, true, extack);
+				       NTF_SELF, 0, true, extack,
+				       gfp);
 		if (err && extack) {
 			spin_unlock_bh(&vxlan->hash_lock);
 			return err;
@@ -653,7 +654,8 @@ static int vxlan_vni_update_group(struct vxlan_dev *vxlan,
 					     oldrip, newrip,
 					     cfg->remote_ifindex,
 					     cfg->remote_ifindex,
-					     extack);
+					     extack,
+					     GFP_NOWAIT | __GFP_ACCOUNT);
 	if (ret) {
 		if (joined)
 			vxlan_igmp_leave(vxlan, group, 0);
@@ -727,7 +729,8 @@ int vxlan_vnilist_update_group(struct vxlan_dev *vxlan,
 		ret = vxlan_update_default_fdb_entry(vxlan, vent->vni,
 						     oldrip, newrip,
 						     old_ifindex, new_ifindex,
-						     extack);
+						     extack, GFP_ATOMIC |
+						     __GFP_ACCOUNT);
 		if (ret)
 			goto err_unwind;
 	}
@@ -749,7 +752,8 @@ err_unwind:
 		vxlan_update_default_fdb_entry(vxlan, vent->vni,
 					       newrip, oldrip,
 					       new_ifindex, old_ifindex,
-					       NULL);
+					       NULL,
+					       GFP_ATOMIC | __GFP_ACCOUNT);
 	}
 	return ret;
 }
