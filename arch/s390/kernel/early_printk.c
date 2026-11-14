@@ -36,7 +36,7 @@ static int __init setup_early_printk(char *buf)
 	if (early_console)
 		return 0;
 	/* Accept only "earlyprintk" and "earlyprintk=sclp" */
-	if (buf && !str_has_prefix(buf, "sclp"))
+	if (buf && !strprefix(buf, "sclp"))
 		return 0;
 	register_early_console();
 	return 0;

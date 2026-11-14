@@ -476,7 +476,7 @@ int hsc_common_probe(struct device *dev, hsc_recv_fn recv)
 		return dev_err_probe(dev, ret,
 			     "honeywell,pressure-triplet could not be read\n");
 
-	if (str_has_prefix(triplet, "NA")) {
+	if (strprefix(triplet, "NA")) {
 		ret = device_property_read_u32(dev, "honeywell,pmin-pascal",
 					       &hsc->pmin);
 		if (ret)

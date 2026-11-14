@@ -33,7 +33,7 @@ static const struct codec_route_map codec_routes[] = {
 static const struct codec_route_map *get_codec_route_map(const char *dai_name)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(codec_routes); i++) {
-		if (str_has_prefix(dai_name, codec_routes[i].codec_name))
+		if (strprefix(dai_name, codec_routes[i].codec_name))
 			return &codec_routes[i];
 	}
 	return NULL;

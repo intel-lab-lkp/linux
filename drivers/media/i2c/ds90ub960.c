@@ -4692,7 +4692,7 @@ ub960_fwnode_get_link_by_regs(struct fwnode_handle *links_fwnode,
 	fwnode_for_each_child_node(links_fwnode, link_fwnode) {
 		u32 link_num;
 
-		if (!str_has_prefix(fwnode_get_name(link_fwnode), "link@"))
+		if (!strprefix(fwnode_get_name(link_fwnode), "link@"))
 			continue;
 
 		ret = fwnode_property_read_u32(link_fwnode, "reg", &link_num);

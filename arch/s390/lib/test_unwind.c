@@ -87,10 +87,10 @@ static noinline int test_unwind(struct task_struct *task, struct pt_regs *regs,
 				kunit_err(current_test, "backtrace buffer is too small\n");
 		}
 		frame_count += 1;
-		if (prev_is_func2 && str_has_prefix(sym, "unwindme_func1"))
+		if (prev_is_func2 && strprefix(sym, "unwindme_func1"))
 			seen_func2_func1 = true;
-		prev_is_func2 = str_has_prefix(sym, "unwindme_func2");
-		if (str_has_prefix(sym, "arch_rethook_trampoline+0x0/"))
+		prev_is_func2 = strprefix(sym, "unwindme_func2");
+		if (strprefix(sym, "arch_rethook_trampoline+0x0/"))
 			seen_arch_rethook_trampoline = true;
 	}
 

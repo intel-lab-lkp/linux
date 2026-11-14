@@ -1860,8 +1860,8 @@ static bool is_cfi_preamble_symbol(unsigned long addr)
 	if (lookup_symbol_name(addr, symbuf))
 		return false;
 
-	return str_has_prefix(symbuf, "__cfi_") ||
-		str_has_prefix(symbuf, "__pfx_");
+	return strprefix(symbuf, "__cfi_") ||
+		strprefix(symbuf, "__pfx_");
 }
 
 static int check_kprobe_address_safe(struct kprobe *p,

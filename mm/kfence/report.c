@@ -97,9 +97,9 @@ static int get_stack_skipnr(const unsigned long stack_entries[], int num_entries
 	for (skipnr = 0; skipnr < num_entries; skipnr++) {
 		int len = scnprintf(buf, sizeof(buf), "%ps", (void *)stack_entries[skipnr]);
 
-		if (str_has_prefix(buf, ARCH_FUNC_PREFIX "kfence_") ||
-		    str_has_prefix(buf, ARCH_FUNC_PREFIX "__kfence_") ||
-		    str_has_prefix(buf, ARCH_FUNC_PREFIX "__kmem_cache_free") ||
+		if (strprefix(buf, ARCH_FUNC_PREFIX "kfence_") ||
+		    strprefix(buf, ARCH_FUNC_PREFIX "__kfence_") ||
+		    strprefix(buf, ARCH_FUNC_PREFIX "__kmem_cache_free") ||
 		    !strncmp(buf, ARCH_FUNC_PREFIX "__slab_free", len)) {
 			/*
 			 * In case of tail calls from any of the below to any of
@@ -114,10 +114,10 @@ static int get_stack_skipnr(const unsigned long stack_entries[], int num_entries
 		 * into the slab allocators. Includes the *_bulk() variants by
 		 * checking prefixes.
 		 */
-		if (str_has_prefix(buf, ARCH_FUNC_PREFIX "kfree") ||
-		    str_has_prefix(buf, ARCH_FUNC_PREFIX "kmem_cache_free") ||
-		    str_has_prefix(buf, ARCH_FUNC_PREFIX "__kmalloc") ||
-		    str_has_prefix(buf, ARCH_FUNC_PREFIX "kmem_cache_alloc"))
+		if (strprefix(buf, ARCH_FUNC_PREFIX "kfree") ||
+		    strprefix(buf, ARCH_FUNC_PREFIX "kmem_cache_free") ||
+		    strprefix(buf, ARCH_FUNC_PREFIX "__kmalloc") ||
+		    strprefix(buf, ARCH_FUNC_PREFIX "kmem_cache_alloc"))
 			goto found;
 	}
 	if (fallback < num_entries)

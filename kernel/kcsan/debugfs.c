@@ -233,7 +233,7 @@ debugfs_write(struct file *file, const char __user *buf, size_t count, loff_t *o
 		WRITE_ONCE(kcsan_enabled, true);
 	} else if (!strcmp(arg, "off")) {
 		WRITE_ONCE(kcsan_enabled, false);
-	} else if (str_has_prefix(arg, "microbench=")) {
+	} else if (strprefix(arg, "microbench=")) {
 		unsigned long iters;
 
 		if (kstrtoul(&arg[strlen("microbench=")], 0, &iters))

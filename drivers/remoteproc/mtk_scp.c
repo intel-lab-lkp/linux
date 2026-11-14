@@ -1149,7 +1149,7 @@ static const char *scp_get_default_fw_path(struct device *dev, int core_id)
 		return ERR_PTR(-EINVAL);
 
 	/* If the compatible string starts with "mediatek,mt" assume that it's ok */
-	if (!str_has_prefix(compatible, "mediatek,mt"))
+	if (!strprefix(compatible, "mediatek,mt"))
 		return ERR_PTR(-EINVAL);
 
 	if (core_id >= 0)

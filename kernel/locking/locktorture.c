@@ -1277,16 +1277,16 @@ static int __init lock_torture_init(void)
 	}
 
 #ifdef CONFIG_DEBUG_MUTEXES
-	if (str_has_prefix(torture_type, "mutex"))
+	if (strprefix(torture_type, "mutex"))
 		cxt.debug_lock = true;
 #endif
 #ifdef CONFIG_DEBUG_RT_MUTEXES
-	if (str_has_prefix(torture_type, "rtmutex"))
+	if (strprefix(torture_type, "rtmutex"))
 		cxt.debug_lock = true;
 #endif
 #ifdef CONFIG_DEBUG_SPINLOCK
-	if ((str_has_prefix(torture_type, "spin")) ||
-	    (str_has_prefix(torture_type, "rw_lock")))
+	if ((strprefix(torture_type, "spin")) ||
+	    (strprefix(torture_type, "rw_lock")))
 		cxt.debug_lock = true;
 #endif
 

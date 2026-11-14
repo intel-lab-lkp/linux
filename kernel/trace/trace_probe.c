@@ -370,10 +370,10 @@ static int parse_this_cpu(char *arg, struct traceprobe_parse_context *ctx)
 		trace_probe_log_err(ctx->offset, NOSUP_PERCPU);
 		return -EINVAL;
 	}
-	if (str_has_prefix(arg, THIS_CPU_PTR_PREFIX)) {
+	if (strprefix(arg, THIS_CPU_PTR_PREFIX)) {
 		arg += THIS_CPU_PTR_LEN;
 		ctx->offset += THIS_CPU_PTR_LEN;
-	} else if (str_has_prefix(arg, THIS_CPU_READ_PREFIX)) {
+	} else if (strprefix(arg, THIS_CPU_READ_PREFIX)) {
 		arg += THIS_CPU_READ_LEN;
 		ctx->offset += THIS_CPU_READ_LEN;
 		is_read = true;
@@ -745,7 +745,7 @@ static int parse_btf_arg(char *varname,
 	u32 tid;
 
 	/* Note: field is not separated at this point, so check prefix. */
-	if (!str_has_prefix(varname, "$current") &&
+	if (!strprefix(varname, "$current") &&
 	    !ctx->funcname && !(ctx->flags & TPARG_FL_TEVENT))
 		return -EINVAL;
 
@@ -1001,8 +1001,8 @@ static int handle_typecast(char *arg, struct traceprobe_parse_context *ctx)
 		ctx->offset += 1;
 		tmp++;
 	} else if (*tmp == '+' || *tmp == '-' ||
-		   str_has_prefix(tmp, THIS_CPU_PTR_PREFIX) ||
-		   str_has_prefix(tmp, THIS_CPU_READ_PREFIX)) {
+		   strprefix(tmp, THIS_CPU_PTR_PREFIX) ||
+		   strprefix(tmp, THIS_CPU_READ_PREFIX)) {
 		/* Dereference can have another field access inside it. */
 		char *open = strchr(tmp + 1, '(');
 
@@ -1412,7 +1412,7 @@ static int parse_probe_vars(char *orig_arg, const struct fetch_type *t,
 	if (ctx->flags & TPARG_FL_TEVENT)
 		goto inval;
 
-	if (str_has_prefix(arg, "retval"))
+	if (strprefix(arg, "retval"))
 		return parse_probe_var_retval(orig_arg, pcode, end, ctx);
 
 	len = str_has_prefix(arg, "stack");
@@ -1420,7 +1420,7 @@ static int parse_probe_vars(char *orig_arg, const struct fetch_type *t,
 		return parse_probe_var_stack(arg, len, code, ctx);
 
 	/* $current returns the address of the current task_struct. */
-	if (str_has_prefix(arg, "current"))
+	if (strprefix(arg, "current"))
 		return parse_probe_var_current(orig_arg, arg, pcode, end, ctx);
 
 	len = str_has_prefix(arg, "arg");
@@ -1642,8 +1642,8 @@ static int parse_probe_arg_nested(char **parg, struct traceprobe_parse_context *
 	while (true) {
 		/* Determine if this is a nested argument */
 		if (arg[0] != '+' && arg[0] != '-' && arg[0] != '(' &&
-		    !str_has_prefix(arg, THIS_CPU_PTR_PREFIX) &&
-		    !str_has_prefix(arg, THIS_CPU_READ_PREFIX))
+		    !strprefix(arg, THIS_CPU_PTR_PREFIX) &&
+		    !strprefix(arg, THIS_CPU_READ_PREFIX))
 			break;
 
 		/* If nested, check the maximum depth limit */
@@ -2228,7 +2228,7 @@ static int argv_has_var_arg(int argc, const char *argv[], int *args_idx,
 	int i, found = 0;
 
 	for (i = 0; i < argc; i++)
-		if (str_has_prefix(argv[i], "$arg")) {
+		if (strprefix(argv[i], "$arg")) {
 			trace_probe_log_set_index(i + 2);
 
 			if (!tparg_is_function_entry(ctx->flags) &&
@@ -2335,7 +2335,7 @@ const char **traceprobe_expand_meta_args(int argc, const char *argv[],
 			continue;
 		}
 
-		if (str_has_prefix(argv[i], "$arg")) {
+		if (strprefix(argv[i], "$arg")) {
 			char *type = NULL;
 
 			n = simple_strtoul(argv[i] + 4, &type, 10);

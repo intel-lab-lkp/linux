@@ -56,7 +56,7 @@ static void __init setup_cmdline(char **cmdline_p)
 
 	/* autodetect console type (if not done by palo yet) */
 	p = boot_command_line;
-	if (!str_has_prefix(p, "console=") && !strstr(p, " console=")) {
+	if (!strprefix(p, "console=") && !strstr(p, " console=")) {
 		strlcat(p, " console=", COMMAND_LINE_SIZE);
 		if (PAGE0->mem_cons.cl_class == CL_DUPLEX)
 			strlcat(p, "ttyS0", COMMAND_LINE_SIZE);

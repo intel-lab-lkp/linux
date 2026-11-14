@@ -257,7 +257,7 @@ static int inlinecrypt_ctr_optional(struct dm_target *ti,
 			ti->error = "Not enough feature arguments";
 			return -EINVAL;
 		}
-		if (str_has_prefix(opt_string, "keytype:")) {
+		if (strprefix(opt_string, "keytype:")) {
 			const char *val = opt_string + strlen("keytype:");
 
 			if (!*val) {

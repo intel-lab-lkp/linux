@@ -521,7 +521,7 @@ static const struct engine_info *lookup_engine_info(const char *pattern, u64 *ma
 		u8 instance;
 		u16 bit;
 
-		if (!str_has_prefix(pattern, engine_info[i].cls))
+		if (!strprefix(pattern, engine_info[i].cls))
 			continue;
 
 		pattern += strlen(engine_info[i].cls);
@@ -836,7 +836,7 @@ static ssize_t parse_wa_bb_lines(const char *lines,
 		p += ret;
 		p += strspn(p, " \t");
 
-		if (str_has_prefix(p, "cmd")) {
+		if (strprefix(p, "cmd")) {
 			for (p += strlen("cmd"); *p;) {
 				ret = parse_hex(p, &val);
 				if (ret < 0)
@@ -848,7 +848,7 @@ static ssize_t parse_wa_bb_lines(const char *lines,
 				dwords++;
 				wa_bb_append(&wa_bb[info->engine_class], val);
 			}
-		} else if (str_has_prefix(p, "reg")) {
+		} else if (strprefix(p, "reg")) {
 			p += strlen("reg");
 			ret = parse_hex(p, &val);
 			if (ret <= 0)

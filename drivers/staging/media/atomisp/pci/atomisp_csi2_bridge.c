@@ -222,7 +222,7 @@ static int atomisp_csi2_get_pmc_clk_nr_from_acpi_pr0(struct acpi_device *adev)
 
 		acpi_get_name(rhandle, ACPI_SINGLE_NAME, &b_name);
 
-		if (str_has_prefix(name, "CLK") && !kstrtou8(&name[3], 10, &clock_num) &&
+		if (strprefix(name, "CLK") && !kstrtou8(&name[3], 10, &clock_num) &&
 		    clock_num <= 4) {
 			ret = clock_num;
 			break;

@@ -1546,7 +1546,7 @@ static ssize_t gpio_aggregator_delete_device_store(struct device_driver *driver,
 	unsigned int id;
 	int error;
 
-	if (!str_has_prefix(buf, DRV_NAME "."))
+	if (!strprefix(buf, DRV_NAME "."))
 		return -EINVAL;
 
 	error = kstrtouint(buf + strlen(DRV_NAME "."), 10, &id);

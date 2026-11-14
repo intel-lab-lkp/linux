@@ -1098,13 +1098,13 @@ static int user_field_size(const char *type)
 		return sizeof(char);
 	if (strcmp(type, "unsigned char") == 0)
 		return sizeof(unsigned char);
-	if (str_has_prefix(type, "char["))
+	if (strprefix(type, "char["))
 		return user_field_array_size(type);
-	if (str_has_prefix(type, "unsigned char["))
+	if (strprefix(type, "unsigned char["))
 		return user_field_array_size(type);
-	if (str_has_prefix(type, "__data_loc "))
+	if (strprefix(type, "__data_loc "))
 		return sizeof(u32);
-	if (str_has_prefix(type, "__rel_loc "))
+	if (strprefix(type, "__rel_loc "))
 		return sizeof(u32);
 
 	/* Unknown basic type, error */
@@ -1145,10 +1145,10 @@ static int user_event_add_field(struct user_event *user, const char *type,
 	if (!field)
 		return -ENOMEM;
 
-	if (str_has_prefix(type, "__data_loc "))
+	if (strprefix(type, "__data_loc "))
 		goto add_validator;
 
-	if (str_has_prefix(type, "__rel_loc ")) {
+	if (strprefix(type, "__rel_loc ")) {
 		validator_flags |= VALIDATOR_REL;
 		goto add_validator;
 	}
@@ -1349,12 +1349,12 @@ static const char *user_field_format(const char *type)
 
 static bool user_field_is_dyn_string(const char *type, const char **str_func)
 {
-	if (str_has_prefix(type, "__data_loc ")) {
+	if (strprefix(type, "__data_loc ")) {
 		*str_func = "__get_str";
 		goto check;
 	}
 
-	if (str_has_prefix(type, "__rel_loc ")) {
+	if (strprefix(type, "__rel_loc ")) {
 		*str_func = "__get_rel_str";
 		goto check;
 	}
@@ -1401,7 +1401,7 @@ static int user_field_set_string(struct ftrace_event_field *field,
 	pos += snprintf(buf + pos, LEN_OR_ZERO, " ");
 	pos += snprintf(buf + pos, LEN_OR_ZERO, "%s", field->name);
 
-	if (str_has_prefix(field->type, "struct "))
+	if (strprefix(field->type, "struct "))
 		pos += snprintf(buf + pos, LEN_OR_ZERO, " %d", field->size);
 
 	if (colon)
@@ -1808,7 +1808,7 @@ static int user_event_create(const char *raw_command)
 	char *name;
 	int ret;
 
-	if (!str_has_prefix(raw_command, USER_EVENTS_PREFIX))
+	if (!strprefix(raw_command, USER_EVENTS_PREFIX))
 		return -ECANCELED;
 
 	raw_command += USER_EVENTS_PREFIX_LEN;
@@ -1861,7 +1861,7 @@ static int user_event_show(struct seq_file *m, struct dyn_event *ev)
 
 		seq_printf(m, "%s %s", field->type, field->name);
 
-		if (str_has_prefix(field->type, "struct "))
+		if (strprefix(field->type, "struct "))
 			seq_printf(m, " %d", field->size);
 
 		depth++;

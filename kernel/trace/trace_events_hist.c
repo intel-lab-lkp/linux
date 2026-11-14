@@ -1468,9 +1468,9 @@ static int parse_action(char *str, struct hist_trigger_attrs *attrs)
 	if (attrs->n_actions >= HIST_ACTIONS_MAX)
 		return ret;
 
-	if ((str_has_prefix(str, "onmatch(")) ||
-	    (str_has_prefix(str, "onmax(")) ||
-	    (str_has_prefix(str, "onchange("))) {
+	if ((strprefix(str, "onmatch(")) ||
+	    (strprefix(str, "onmax(")) ||
+	    (strprefix(str, "onchange("))) {
 		attrs->action_str[attrs->n_actions] = kstrdup(str, GFP_KERNEL);
 		if (!attrs->action_str[attrs->n_actions]) {
 			ret = -ENOMEM;
@@ -1508,7 +1508,7 @@ static int parse_assignment(struct trace_array *tr,
 			ret = -ENOMEM;
 			goto out;
 		}
-	} else if (str_has_prefix(str, "name=")) {
+	} else if (strprefix(str, "name=")) {
 		attrs->name = kstrdup(str, GFP_KERNEL);
 		if (!attrs->name) {
 			ret = -ENOMEM;
@@ -3775,7 +3775,7 @@ static int action_parse(struct trace_array *tr, char *str, struct action_data *d
 		goto out;
 	}
 
-	if (str_has_prefix(action_name, "save")) {
+	if (strprefix(action_name, "save")) {
 		char *params = strsep(&str, ")");
 
 		if (!params) {
@@ -3801,7 +3801,7 @@ static int action_parse(struct trace_array *tr, char *str, struct action_data *d
 		data->track_data.save_data = save_track_data_vars;
 		data->fn = ontrack_action;
 		data->action = ACTION_SAVE;
-	} else if (str_has_prefix(action_name, "snapshot")) {
+	} else if (strprefix(action_name, "snapshot")) {
 		char *params = strsep(&str, ")");
 
 		if (!str) {
@@ -3826,7 +3826,7 @@ static int action_parse(struct trace_array *tr, char *str, struct action_data *d
 	} else {
 		char *params = strsep(&str, ")");
 
-		if (str_has_prefix(action_name, "trace"))
+		if (strprefix(action_name, "trace"))
 			data->use_trace_keyword = true;
 
 		if (params) {

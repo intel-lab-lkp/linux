@@ -520,15 +520,15 @@ int module_finalize(const Elf_Ehdr *hdr,
 			apply_alternatives(aseg, aseg + s->sh_size);
 
 		if (IS_ENABLED(CONFIG_EXPOLINE) &&
-		    (str_has_prefix(secname, ".s390_indirect")))
+		    (strprefix(secname, ".s390_indirect")))
 			nospec_revert(aseg, aseg + s->sh_size);
 
 		if (IS_ENABLED(CONFIG_EXPOLINE) &&
-		    (str_has_prefix(secname, ".s390_return")))
+		    (strprefix(secname, ".s390_return")))
 			nospec_revert(aseg, aseg + s->sh_size);
 
 		if (IS_ENABLED(CONFIG_STACKPROTECTOR) &&
-		    (str_has_prefix(secname, "__stack_protector_loc"))) {
+		    (strprefix(secname, "__stack_protector_loc"))) {
 			rc = stack_protector_apply(aseg, aseg + s->sh_size);
 			if (rc)
 				break;

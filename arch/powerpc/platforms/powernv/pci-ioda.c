@@ -1629,7 +1629,7 @@ int64_t pnv_opal_pci_msi_eoi(struct irq_data *d)
  */
 bool is_pnv_opal_msi(struct irq_chip *chip)
 {
-	return chip && chip->name && str_has_prefix(chip->name, "PNV-");
+	return chip && chip->name && strprefix(chip->name, "PNV-");
 }
 EXPORT_SYMBOL_GPL(is_pnv_opal_msi);
 
