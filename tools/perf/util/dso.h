@@ -282,6 +282,17 @@ struct dso_bpf_prog {
 	struct perf_env	*env;
 };
 
+/* The file that lazy symbol names are read from, as it was at load time. */
+struct dso_lazy_file {
+	u64		dev;
+	u64		ino;
+	u64		size;
+	u64		mtime_sec;
+	u64		mtime_nsec;
+	/* The file changed after the names were loaded. */
+	bool		rejected;
+};
+
 struct auxtrace_cache;
 
 DECLARE_RC_STRUCT(dso) {
@@ -321,6 +332,7 @@ DECLARE_RC_STRUCT(dso) {
 	struct dso_bpf_prog bpf_prog;
 	/* dso data file */
 	struct dso_data	 data;
+	struct dso_lazy_file lazy_file;
 	struct dso_id	 id;
 	unsigned int	 a2l_fails;
 	int		 comp;
@@ -369,7 +381,7 @@ int dso_id__cmp(const struct dso_id *a, const struct dso_id *b);
  * @n: the 'struct rb_node *' to use as a temporary storage
  */
 #define dso__for_each_symbol(dso, pos, n)	\
-	symbols__for_each_entry(dso__symbols(dso), pos, n)
+	symbols__for_each_entry(dso__named_symbols(dso), pos, n)
 
 static inline void *dso__a2l(const struct dso *dso)
 {
@@ -501,6 +513,11 @@ static inline void dso__set_comp(struct dso *dso, int comp)
 static inline struct dso_data *dso__data(struct dso *dso)
 {
 	return &RC_CHK_ACCESS(dso)->data;
+}
+
+static inline struct dso_lazy_file *dso__lazy_file(struct dso *dso)
+{
+	return &RC_CHK_ACCESS(dso)->lazy_file;
 }
 
 static inline u64 dso__db_id(const struct dso *dso)
@@ -831,6 +848,7 @@ char *dso__filename_with_chroot(const struct dso *dso, const char *filename);
 bool dso__sorted_by_name(const struct dso *dso);
 void dso__set_sorted_by_name(struct dso *dso);
 void dso__sort_by_name(struct dso *dso);
+struct rb_root_cached *dso__named_symbols(struct dso *dso);
 
 int dso__swap_init(struct dso *dso, unsigned char eidata);
 
