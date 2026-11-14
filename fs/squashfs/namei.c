@@ -203,7 +203,7 @@ static struct dentry *squashfs_lookup(struct inode *dir, struct dentry *dentry,
 		 * Read directory header.
 		 */
 		if (!squashfs_dir_space(dir, length, sizeof(dirh)))
-			goto read_failure;
+			goto data_error;
 
 		err = squashfs_read_metadata(dir->i_sb, &dirh, &block,
 				&offset, sizeof(dirh));
@@ -222,7 +222,7 @@ static struct dentry *squashfs_lookup(struct inode *dir, struct dentry *dentry,
 			 * Read directory entry.
 			 */
 			if (!squashfs_dir_space(dir, length, sizeof(*dire)))
-				goto read_failure;
+				goto data_error;
 
 			err = squashfs_read_metadata(dir->i_sb, dire, &block,
 					&offset, sizeof(*dire));
@@ -237,7 +237,7 @@ static struct dentry *squashfs_lookup(struct inode *dir, struct dentry *dentry,
 				goto data_error;
 
 			if (!squashfs_dir_space(dir, length, size))
-				goto read_failure;
+				goto data_error;
 
 			err = squashfs_read_metadata(dir->i_sb, dire->name,
 					&block, &offset, size);
