@@ -449,6 +449,8 @@ static
 void bcm2835_prepare_dma(struct bcm2835_host *host, struct mmc_data *data)
 {
 	int sg_len, dir_data, dir_slave;
+	struct scatterlist *trimmed_sg = NULL;
+	unsigned int original_len = 0;
 	struct dma_async_tx_descriptor *desc = NULL;
 	struct dma_chan *dma_chan;
 
@@ -480,6 +482,8 @@ void bcm2835_prepare_dma(struct bcm2835_host *host, struct mmc_data *data)
 		for_each_sg(data->sg, sg, data->sg_len, i) {
 			if (sg_is_last(sg)) {
 				WARN_ON(sg->length < len);
+				trimmed_sg = sg;
+				original_len = sg->length;
 				sg->length -= len;
 				host->drain_page = sg_page(sg);
 				host->drain_offset = sg->offset + sg->length;
@@ -495,14 +499,21 @@ void bcm2835_prepare_dma(struct bcm2835_host *host, struct mmc_data *data)
 				     &host->dma_cfg_tx);
 
 	sg_len = dma_map_sg(host->dma_dev, data->sg, data->sg_len, dir_data);
-	if (!sg_len)
+	if (!sg_len) {
+		if (trimmed_sg)
+			trimmed_sg->length = original_len;
+		host->drain_words = 0;
 		return;
+	}
 
 	desc = dmaengine_prep_slave_sg(dma_chan, data->sg, sg_len, dir_slave,
 				       DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
 
 	if (!desc) {
 		dma_unmap_sg(host->dma_dev, data->sg, data->sg_len, dir_data);
+		if (trimmed_sg)
+			trimmed_sg->length = original_len;
+		host->drain_words = 0;
 		return;
 	}
 
