@@ -755,8 +755,13 @@ static int ni_try_remove_attr_list(struct ntfs_inode *ni)
 	kfree(mrec);
 	return 0;
 out:
-	/* Restore primary record. */
-	swap(mrec, ni->mi.mrec);
+	/*
+	 * Restore the primary record contents in place.  ntfs_readdir() walks
+	 * the root index header after releasing ni_lock (see commit 7a5aa6c45072),
+	 * so a concurrent reader may still hold pointers into this buffer; swapping
+	 * it out and freeing it would leave that reader with freed memory.
+	 */
+	memcpy(ni->mi.mrec, mrec, sbi->record_size);
 	kfree(mrec);
 	return 0;
 }
