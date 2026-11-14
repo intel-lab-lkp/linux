@@ -862,10 +862,13 @@ Kernel parameters
 			contiguous memory allocations and optionally the
 			placement constraint by the physical address range of
 			memory allocations. A value of 0 disables CMA
-			altogether. For more information, see
+			altogether. The size is absolute; only 'cma_pernuma='
+			and 'numa_cma=' accept a percentage. Without 'cma=',
+			CONFIG_CMA_SIZE_PERCENTAGE can size this area as a
+			fraction of memory. For more information, see
 			kernel/dma/contiguous.c
 
-	cma_pernuma=nn[MG]
+	cma_pernuma=nn[MG]|nn%[-nn[MG]]
 			[KNL,CMA,EARLY]
 			Sets the size of kernel per-numa memory area for
 			contiguous memory allocations. A value of 0 disables
@@ -875,14 +878,34 @@ Kernel parameters
 			first try to allocate buffer from the pernuma area
 			which is located in node nid, if the allocation fails,
 			they will fallback to the global default memory area.
+			The size may also be a decimal percentage of each
+			node's memory as memblock sees it at boot, optionally
+			less a size to keep back, so cma_pernuma=95%-1G
+			reserves 95% of each node minus 1G. Hot-added memory is
+			not counted. A nonzero percentage that leaves nothing
+			to reserve on a node warns and reserves nothing there.
+			If the option is given more than once, the last valid
+			value counts. An invalid value is ignored, and it still
+			stops CONFIG_CMA_SIZE_PERNUMA from mirroring the
+			default area onto every node.
 
-	numa_cma=<node>:nn[MG][,<node>:nn[MG]]
+	numa_cma=<node>:nn[MG]|nn%[-nn[MG]][,<node>:nn[MG]|nn%[-nn[MG]]]
 			[KNL,CMA,EARLY]
 			Sets the size of kernel numa memory area for
 			contiguous memory allocations. It will reserve CMA
-			area for the specified node.
+			area for the specified node. A size may also be a
+			percentage of that node's memory, optionally less a
+			size to keep back, as for 'cma_pernuma='. A size of 0
+			or 0% is the same as not naming the node, so it falls
+			back to 'cma_pernuma='. A nonzero percentage that
+			leaves nothing to reserve does not fall back. If a node
+			is named more than once, also across several numa_cma=
+			options, the last valid size counts. An entry that does
+			not parse, including an empty list or a trailing comma,
+			makes the kernel ignore that whole option, and the
+			default area is not mirrored either.
 
-			If it is setup together with upper 'cmd_pernuma='
+			If it is set up together with upper 'cma_pernuma='
 			(unlikely), its size setting takes priority for the
 			specified numa nodes.
 
