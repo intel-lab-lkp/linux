@@ -539,10 +539,10 @@ static char stack_trace_filter_buf[COMMAND_LINE_SIZE+1] __initdata;
 
 static __init int enable_stacktrace(char *str)
 {
-	int len;
+	char *p;
 
-	if ((len = str_has_prefix(str, "_filter=")))
-		strscpy(stack_trace_filter_buf, str + len);
+	if ((p = strprefix(str, "_filter=")))
+		strscpy(stack_trace_filter_buf, p);
 
 	stack_tracer_enabled = 1;
 	return 1;

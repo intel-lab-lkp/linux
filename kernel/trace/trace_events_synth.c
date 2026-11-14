@@ -2268,12 +2268,14 @@ static int create_synth_event(const char *raw_command)
 
 	/* This interface accepts group name prefix */
 	if (strchr(name, '/')) {
-		len = str_has_prefix(name, SYNTH_SYSTEM "/");
-		if (len == 0) {
+		const char *n;
+
+		n = strprefix(name, SYNTH_SYSTEM "/");
+		if (!n) {
 			synth_err(SYNTH_ERR_INVALID_DYN_CMD, 0);
 			return -EINVAL;
 		}
-		name += len;
+		name = n;
 	}
 
 	len = name - raw_command;

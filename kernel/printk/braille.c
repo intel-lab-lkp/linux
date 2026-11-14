@@ -11,18 +11,18 @@
 
 int _braille_console_setup(char **str, char **brl_options)
 {
-	size_t len;
+	char *p;
 
-	len = str_has_prefix(*str, "brl,");
-	if (len) {
+	p = strprefix(*str, "brl,");
+	if (p) {
 		*brl_options = "";
-		*str += len;
+		*str = p;
 		return 0;
 	}
 
-	len = str_has_prefix(*str, "brl=");
-	if (len) {
-		*brl_options = *str + len;
+	p = strprefix(*str, "brl=");
+	if (p) {
+		*brl_options = p;
 		*str = strchr(*brl_options, ',');
 		if (!*str) {
 			pr_err("need port name after brl=\n");

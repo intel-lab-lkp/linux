@@ -1485,25 +1485,26 @@ static int parse_action(char *str, struct hist_trigger_attrs *attrs)
 static int parse_assignment(struct trace_array *tr,
 			    char *str, struct hist_trigger_attrs *attrs)
 {
-	int len, ret = 0;
+	char *p;
+	int ret = 0;
 
-	if ((len = str_has_prefix(str, "key=")) ||
-	    (len = str_has_prefix(str, "keys="))) {
-		attrs->keys_str = kstrdup(str + len, GFP_KERNEL);
+	if ((p = strprefix(str, "key=")) ||
+	    (p = strprefix(str, "keys="))) {
+		attrs->keys_str = kstrdup(p, GFP_KERNEL);
 		if (!attrs->keys_str) {
 			ret = -ENOMEM;
 			goto out;
 		}
-	} else if ((len = str_has_prefix(str, "val=")) ||
-		   (len = str_has_prefix(str, "vals=")) ||
-		   (len = str_has_prefix(str, "values="))) {
-		attrs->vals_str = kstrdup(str + len, GFP_KERNEL);
+	} else if ((p = strprefix(str, "val=")) ||
+		   (p = strprefix(str, "vals=")) ||
+		   (p = strprefix(str, "values="))) {
+		attrs->vals_str = kstrdup(p, GFP_KERNEL);
 		if (!attrs->vals_str) {
 			ret = -ENOMEM;
 			goto out;
 		}
-	} else if ((len = str_has_prefix(str, "sort="))) {
-		attrs->sort_key_str = kstrdup(str + len, GFP_KERNEL);
+	} else if ((p = strprefix(str, "sort="))) {
+		attrs->sort_key_str = kstrdup(p, GFP_KERNEL);
 		if (!attrs->sort_key_str) {
 			ret = -ENOMEM;
 			goto out;
@@ -1514,17 +1515,15 @@ static int parse_assignment(struct trace_array *tr,
 			ret = -ENOMEM;
 			goto out;
 		}
-	} else if ((len = str_has_prefix(str, "clock="))) {
-		str += len;
-
-		str = strstrip(str);
-		attrs->clock = kstrdup(str, GFP_KERNEL);
+	} else if ((p = strprefix(str, "clock="))) {
+		p = strstrip(p);
+		attrs->clock = kstrdup(p, GFP_KERNEL);
 		if (!attrs->clock) {
 			ret = -ENOMEM;
 			goto out;
 		}
-	} else if ((len = str_has_prefix(str, "size="))) {
-		int map_bits = parse_map_size(str + len);
+	} else if ((p = strprefix(str, "size="))) {
+		int map_bits = parse_map_size(p);
 
 		if (map_bits < 0) {
 			ret = map_bits;
@@ -4881,8 +4880,7 @@ static int parse_actions(struct hist_trigger_data *hist_data)
 	struct action_data *data;
 	unsigned int i;
 	int ret = 0;
-	char *str;
-	int len;
+	char *str, *p;
 
 	for (i = 0; i < hist_data->attrs->n_actions; i++) {
 		enum handler_id hid = 0;
@@ -4890,14 +4888,14 @@ static int parse_actions(struct hist_trigger_data *hist_data)
 
 		str = hist_data->attrs->action_str[i];
 
-		if ((len = str_has_prefix(str, "onmatch(")))
+		if ((p = strprefix(str, "onmatch(")))
 			hid = HANDLER_ONMATCH;
-		else if ((len = str_has_prefix(str, "onmax(")))
+		else if ((p = strprefix(str, "onmax(")))
 			hid = HANDLER_ONMAX;
-		else if ((len = str_has_prefix(str, "onchange(")))
+		else if ((p = strprefix(str, "onchange(")))
 			hid = HANDLER_ONCHANGE;
 
-		action_str = str + len;
+		action_str = p ?: str;
 
 		switch (hid) {
 		case HANDLER_ONMATCH:

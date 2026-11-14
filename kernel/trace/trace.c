@@ -4085,19 +4085,18 @@ int set_tracer_flag(struct trace_array *tr, u64 mask, int enabled)
 
 int trace_set_options(struct trace_array *tr, char *option)
 {
-	char *cmp;
+	char *cmp, *p;
 	int neg = 0;
 	int ret;
 	size_t orig_len = strlen(option);
-	int len;
 
 	cmp = strstrip(option);
 
-	len = str_has_prefix(cmp, "no");
-	if (len)
+	p = strprefix(cmp, "no");
+	if (p)
 		neg = 1;
 
-	cmp += len;
+	cmp = p;
 
 	mutex_lock(&event_mutex);
 	mutex_lock(&trace_types_lock);

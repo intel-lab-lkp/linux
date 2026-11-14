@@ -50,16 +50,13 @@ void pdsc_fw_components_invalidate(struct pdsc *pdsc)
 
 static u8 pdsc_name_to_fw_type(const char *name)
 {
-	size_t prefix_len;
 	int i;
 
 	/* "fw" without suffix maps to main firmware */
 	if (!strcmp(name, "fw"))
 		return PDS_CORE_FW_TYPE_MAIN;
 
-	prefix_len = str_has_prefix(name, PDSC_FW_COMPONENT_PREFIX);
-	if (prefix_len)
-		name += prefix_len;
+	name = strprefix(name, PDSC_FW_COMPONENT_PREFIX) ?: name;
 
 	for (i = 1; i < ARRAY_SIZE(pdsc_fw_type_names); i++) {
 		if (pdsc_fw_type_names[i] &&

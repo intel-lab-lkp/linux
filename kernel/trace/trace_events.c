@@ -266,9 +266,8 @@ static struct trace_event_fields *find_event_field(const char *fmt,
 	const char *p = fmt;
 	int len;
 
-	if (!(len = str_has_prefix(fmt, "REC->")))
+	if (!(fmt = strprefix(fmt, "REC->")))
 		return NULL;
-	fmt += len;
 	for (p = fmt; *p; p++) {
 		if (!isalnum(*p) && *p != '_')
 			break;
