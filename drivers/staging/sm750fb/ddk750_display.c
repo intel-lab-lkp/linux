@@ -4,6 +4,12 @@
 #include "ddk750_display.h"
 #include "ddk750_power.h"
 
+static void set_dac(unsigned int off)
+{
+	poke32(MISC_CTRL,
+	       (peek32(MISC_CTRL) & ~MISC_CTRL_DAC_POWER_OFF) | off);
+}
+
 static void set_display_control(int ctrl, int disp_state)
 {
 	/* state != 0 means turn on both timing & plane en_bit */
@@ -151,7 +157,7 @@ void ddk750_set_logical_disp_out(enum disp_output output)
 	}
 
 	if (output & DAC_USAGE)
-		set_DAC((output & DAC_MASK) >> DAC_OFFSET);
+		set_dac((output & DAC_MASK) >> DAC_OFFSET);
 
 	if (output & DPMS_USAGE)
 		ddk750_set_dpms((output & DPMS_MASK) >> DPMS_OFFSET);
