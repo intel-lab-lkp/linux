@@ -185,6 +185,14 @@ v3d_prime_import_sg_table(struct drm_device *dev,
 
 	ret = v3d_bo_create_finish(obj);
 	if (ret) {
+		/*
+		 * obj->import_attach is only set by drm_gem_prime_import_dev()
+		 * after we return, so drm_gem_shmem_release() would treat this
+		 * object as native and unmap/free the attachment's sg_table,
+		 * which the caller unmaps again on its error path. Hand the
+		 * table back to its owner before freeing the object.
+		 */
+		to_v3d_bo(obj)->base.sgt = NULL;
 		drm_gem_shmem_free(&to_v3d_bo(obj)->base);
 		return ERR_PTR(ret);
 	}
