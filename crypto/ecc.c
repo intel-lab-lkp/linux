@@ -1365,11 +1365,14 @@ static void ecc_point_mult(struct ecc_point *result,
 
 	carry = vli_add(sk[0], scalar, curve->n, ndigits);
 	vli_add(sk[1], sk[0], curve->n, ndigits);
-	scalar = sk[!carry];
-	if (curve->nbits == 521)	/* NIST P521 */
-		num_bits = curve->nbits + 2;
-	else
+	if (curve->nbits == 521) {	/* NIST P521 */
+		/* k + n or k + 2n, whichever has bit 521 as its top bit */
+		carry = !!vli_test_bit(sk[0], curve->nbits);
+		num_bits = curve->nbits + 1;
+	} else {
 		num_bits = sizeof(u64) * ndigits * 8 + 1;
+	}
+	scalar = sk[!carry];
 
 	vli_set(rx[1], point->x, ndigits);
 	vli_set(ry[1], point->y, ndigits);
