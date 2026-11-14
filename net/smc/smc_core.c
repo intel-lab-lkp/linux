@@ -1054,22 +1054,28 @@ static int smc_switch_cursor(struct smc_sock *smc, struct smc_cdc_tx_pend *pend,
 			     struct smc_wr_buf *wr_buf)
 {
 	struct smc_connection *conn = &smc->conn;
-	union smc_host_cursor cons, fin;
+	union smc_host_cursor cons, fin, sent;
 	int rc = 0;
-	int diff;
+	s64 diff;
 
 	conn->tx_switch_gen++;	/* completions of earlier sends: no credit */
+	smc_curs_copy(&sent, &conn->tx_curs_sent, conn);
 	smc_curs_copy(&conn->tx_curs_sent, &conn->tx_curs_fin, conn);
 	smc_curs_copy(&fin, &conn->local_tx_ctrl_fin, conn);
 	/* set prod cursor to old state, enforce tx_rdma_writes() */
 	smc_curs_copy(&conn->local_tx_ctrl.prod, &fin, conn);
 	smc_curs_copy(&cons, &conn->local_rx_ctrl.cons, conn);
 
-	if (smc_curs_comp(conn->peer_rmbe_size, &cons, &fin) < 0) {
+	/* not past what was sent, whatever cons says; that also keeps
+	 * diff within one send buffer for smc_curs_add()
+	 */
+	diff = min(smc_curs_sdiff(conn->peer_rmbe_size, &fin, &cons),
+		   smc_curs_sdiff(conn->sndbuf_desc->len,
+				  &conn->tx_curs_fin, &sent));
+	if (diff > 0) {
 		/* cons cursor advanced more than fin, and prod was set
 		 * fin above, so now prod is smaller than cons. Fix that.
 		 */
-		diff = smc_curs_diff(conn->peer_rmbe_size, &fin, &cons);
 		smc_curs_add(conn->sndbuf_desc->len,
 			     &conn->tx_curs_sent, diff);
 		smc_curs_add(conn->sndbuf_desc->len,
@@ -1079,10 +1085,10 @@ static int smc_switch_cursor(struct smc_sock *smc, struct smc_cdc_tx_pend *pend,
 		atomic_add(diff, &conn->sndbuf_space);
 		smp_mb__after_atomic();
 
-		smc_curs_add(conn->peer_rmbe_size,
-			     &conn->local_tx_ctrl.prod, diff);
-		smc_curs_add(conn->peer_rmbe_size,
-			     &conn->local_tx_ctrl_fin, diff);
+		smc_curs_advance(conn->peer_rmbe_size,
+				 &conn->local_tx_ctrl.prod, diff);
+		smc_curs_advance(conn->peer_rmbe_size,
+				 &conn->local_tx_ctrl_fin, diff);
 	}
 	/* recalculate, value is used by tx_rdma_writes() */
 	atomic_set(&smc->conn.peer_rmbe_space, smc_write_space(conn));

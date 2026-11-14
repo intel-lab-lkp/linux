@@ -97,6 +97,16 @@ static inline void smc_curs_add(int size, union smc_host_cursor *curs,
 	}
 }
 
+/* smc_curs_add() for a value that may span more than one ring */
+static inline void smc_curs_advance(unsigned int size,
+				    union smc_host_cursor *curs, u32 value)
+{
+	u32 count = curs->count + value;
+
+	curs->wrap += count / size;
+	curs->count = count % size;
+}
+
 /* Copy cursor src into tgt */
 static inline void smc_curs_copy(union smc_host_cursor *tgt,
 				 union smc_host_cursor *src,
