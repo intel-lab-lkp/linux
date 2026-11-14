@@ -1058,6 +1058,7 @@ static int smc_switch_cursor(struct smc_sock *smc, struct smc_cdc_tx_pend *pend,
 	int rc = 0;
 	int diff;
 
+	conn->tx_switch_gen++;	/* completions of earlier sends: no credit */
 	smc_curs_copy(&conn->tx_curs_sent, &conn->tx_curs_fin, conn);
 	smc_curs_copy(&fin, &conn->local_tx_ctrl_fin, conn);
 	/* set prod cursor to old state, enforce tx_rdma_writes() */

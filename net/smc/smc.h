@@ -233,6 +233,9 @@ struct smc_connection {
 	atomic_t		sndbuf_space;	/* remaining space in sndbuf */
 	u16			tx_cdc_seq;	/* sequence # for CDC send */
 	u16			tx_cdc_seq_fin;	/* sequence # - tx completed */
+	u16			tx_switch_gen;	/* bumped when a link switch
+						 * rewinds the tx cursors
+						 */
 	spinlock_t		send_lock;	/* protect wr_sends */
 	atomic_t		cdc_pend_tx_wr; /* number of pending tx CDC wqe
 						 * - inc when post wqe,

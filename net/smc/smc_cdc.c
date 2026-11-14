@@ -36,7 +36,15 @@ static void smc_cdc_tx_handler(struct smc_wr_tx_pend_priv *pnd_snd,
 	sndbuf_desc = conn->sndbuf_desc;
 	smc = container_of(conn, struct smc_sock, conn);
 	bh_lock_sock(&smc->sk);
-	if (!wc_status && sndbuf_desc) {
+	/* A CDC posted before a link switch rewound the cursors: its bytes
+	 * are resent on the new link or credited by the switch's catch-up.
+	 * A cursor behind tx_curs_fin (completions on two links in any
+	 * order) was credited already.
+	 */
+	if (!wc_status && sndbuf_desc &&
+	    cdcpend->switch_gen == conn->tx_switch_gen &&
+	    smc_curs_sdiff(sndbuf_desc->len, &conn->tx_curs_fin,
+			   &cdcpend->cursor) >= 0) {
 		diff = smc_curs_diff(sndbuf_desc->len,
 				     &cdcpend->conn->tx_curs_fin,
 				     &cdcpend->cursor);
@@ -107,6 +115,7 @@ static inline void smc_cdc_add_pending_send(struct smc_connection *conn,
 	pend->cursor = conn->tx_curs_sent;
 	pend->p_cursor = conn->local_tx_ctrl.prod;
 	pend->ctrl_seq = conn->tx_cdc_seq;
+	pend->switch_gen = conn->tx_switch_gen;
 }
 
 int smc_cdc_msg_send(struct smc_connection *conn,

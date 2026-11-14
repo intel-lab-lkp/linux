@@ -170,6 +170,18 @@ static inline int smc_curs_comp(unsigned int size,
 	return smc_curs_diff(size, old, new);
 }
 
+/* signed distance from old to new; the wrap difference is taken as s16,
+ * so it holds across the u16 wrap rollover, for cursors less than 32768
+ * rings apart
+ */
+static inline s64 smc_curs_sdiff(unsigned int size,
+				 union smc_host_cursor *old,
+				 union smc_host_cursor *new)
+{
+	return (s64)(s16)(new->wrap - old->wrap) * size +
+	       (s64)new->count - old->count;
+}
+
 /* calculate cursor difference between old and new, where old <= new and
  * difference may exceed size
  */
@@ -284,6 +296,7 @@ struct smc_cdc_tx_pend {
 	union smc_host_cursor	cursor;		/* tx sndbuf cursor sent */
 	union smc_host_cursor	p_cursor;	/* rx RMBE cursor produced */
 	u16			ctrl_seq;	/* conn. tx sequence # */
+	u16			switch_gen;	/* tx_switch_gen at send */
 };
 
 int smc_cdc_get_free_slot(struct smc_connection *conn,
