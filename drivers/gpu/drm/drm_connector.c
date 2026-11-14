@@ -618,13 +618,13 @@ int drmm_connector_hdmi_init(struct drm_device *dev,
 		return ret;
 
 	/*
-	 * The supported HDMI version can be used to determinate the maximum
+	 * The supported HDMI version can be used to determine the maximum
 	 * TMDS character rate allowed by the specification. Some controllers,
 	 * however, may support a lower rate than that version would imply.
 	 *
-	 * A non-zero caps->max_tmds_char_rate lets drivers override this
-	 * default with the actual controller capability. A value of zero keeps
-	 * the limit inferred from supported_hdmi_ver.
+	 * A non-zero hdmi_funcs->supported_tmds_char_rate lets drivers override
+	 * this default with the actual controller capability. A value of zero
+	 * keeps the limit inferred from supported_hdmi_ver.
 	 */
 	if (hdmi_funcs->supported_hdmi_ver >= HDMI_VERSION_2_0)
 		connector->hdmi.max_tmds_char_rate = HDMI_2_0_TMDS_CHAR_RATE_MAX_HZ;
