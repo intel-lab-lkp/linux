@@ -9425,6 +9425,7 @@ static void ath11k_mac_op_sta_statistics(struct ieee80211_hw *hw,
 {
 	struct ath11k_sta *arsta = ath11k_sta_to_arsta(sta);
 	struct ath11k *ar = arsta->arvif->ar;
+	struct rate_info txrate;
 	s8 signal;
 	bool db2dbm = test_bit(WMI_TLV_SERVICE_HW_DB2DBM_CONVERSION_SUPPORT,
 			       ar->ab->wmi_ab.svc_map);
@@ -9435,18 +9436,23 @@ static void ath11k_mac_op_sta_statistics(struct ieee80211_hw *hw,
 	sinfo->tx_duration = arsta->tx_duration;
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_DURATION);
 
-	if (arsta->txrate.legacy || arsta->txrate.nss) {
-		if (arsta->txrate.legacy) {
-			sinfo->txrate.legacy = arsta->txrate.legacy;
+	/* The TX status paths clear and refill txrate under base_lock */
+	spin_lock_bh(&ar->ab->base_lock);
+	txrate = arsta->txrate;
+	spin_unlock_bh(&ar->ab->base_lock);
+
+	if (txrate.legacy || txrate.nss) {
+		if (txrate.legacy) {
+			sinfo->txrate.legacy = txrate.legacy;
 		} else {
-			sinfo->txrate.mcs = arsta->txrate.mcs;
-			sinfo->txrate.nss = arsta->txrate.nss;
-			sinfo->txrate.bw = arsta->txrate.bw;
-			sinfo->txrate.he_gi = arsta->txrate.he_gi;
-			sinfo->txrate.he_dcm = arsta->txrate.he_dcm;
-			sinfo->txrate.he_ru_alloc = arsta->txrate.he_ru_alloc;
+			sinfo->txrate.mcs = txrate.mcs;
+			sinfo->txrate.nss = txrate.nss;
+			sinfo->txrate.bw = txrate.bw;
+			sinfo->txrate.he_gi = txrate.he_gi;
+			sinfo->txrate.he_dcm = txrate.he_dcm;
+			sinfo->txrate.he_ru_alloc = txrate.he_ru_alloc;
 		}
-		sinfo->txrate.flags = arsta->txrate.flags;
+		sinfo->txrate.flags = txrate.flags;
 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
 	}
 
