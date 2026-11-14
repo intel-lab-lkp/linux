@@ -609,7 +609,6 @@ static inline const char *strprefix(const char *s, const char *prefix)
 	return strncmp(s, prefix, len) == 0 ? s + len : NULL;
 }
 #define strprefix(s, pfx)  const_cast(CQChar_of(s) *, strprefix(s, pfx))
-#define strstarts(s, pfx)  strprefix(s, pfx)  // legacy alias
 
 /**
  * str_has_prefix - Test if a string has a given prefix
