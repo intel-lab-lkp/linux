@@ -68,8 +68,8 @@ static int smc_rx_update_consumer(struct smc_sock *smc,
 
 	/* did we process urgent data? */
 	if (conn->urg_state == SMC_URG_VALID || conn->urg_rx_skip_pend) {
-		diff = smc_curs_comp(conn->rmb_desc->len, &cons,
-				     &conn->urg_curs);
+		diff = smc_curs_sdiff(conn->rmb_desc->len, &cons,
+				      &conn->urg_curs);
 		if (sock_flag(sk, SOCK_URGINLINE)) {
 			if (diff == 0) {
 				force = true;
