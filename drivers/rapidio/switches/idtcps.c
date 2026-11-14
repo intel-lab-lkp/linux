@@ -115,7 +115,7 @@ idtcps_get_domain(struct rio_mport *mport, u16 destid, u8 hopcount,
 	return 0;
 }
 
-static struct rio_switch_ops idtcps_switch_ops = {
+static const struct rio_switch_ops idtcps_switch_ops = {
 	.owner = THIS_MODULE,
 	.add_entry = idtcps_route_add_entry,
 	.get_entry = idtcps_route_get_entry,

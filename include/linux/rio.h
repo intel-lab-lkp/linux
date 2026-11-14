@@ -98,7 +98,7 @@ struct rio_switch {
 	struct list_head node;
 	u8 *route_table;
 	u32 port_ok;
-	struct rio_switch_ops *ops;
+	const struct rio_switch_ops *ops;
 	spinlock_t lock;
 	struct rio_dev *nextdev[];
 };

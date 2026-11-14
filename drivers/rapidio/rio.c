@@ -1615,7 +1615,7 @@ int rio_route_add_entry(struct rio_dev *rdev,
 			u16 table, u16 route_destid, u8 route_port, int lock)
 {
 	int rc = -EINVAL;
-	struct rio_switch_ops *ops = rdev->rswitch->ops;
+	const struct rio_switch_ops *ops = rdev->rswitch->ops;
 
 	if (lock) {
 		rc = rio_lock_device(rdev->net->hport, rdev->destid,
@@ -1668,7 +1668,7 @@ int rio_route_get_entry(struct rio_dev *rdev, u16 table,
 			u16 route_destid, u8 *route_port, int lock)
 {
 	int rc = -EINVAL;
-	struct rio_switch_ops *ops = rdev->rswitch->ops;
+	const struct rio_switch_ops *ops = rdev->rswitch->ops;
 
 	if (lock) {
 		rc = rio_lock_device(rdev->net->hport, rdev->destid,
@@ -1716,7 +1716,7 @@ EXPORT_SYMBOL_GPL(rio_route_get_entry);
 int rio_route_clr_table(struct rio_dev *rdev, u16 table, int lock)
 {
 	int rc = -EINVAL;
-	struct rio_switch_ops *ops = rdev->rswitch->ops;
+	const struct rio_switch_ops *ops = rdev->rswitch->ops;
 
 	if (lock) {
 		rc = rio_lock_device(rdev->net->hport, rdev->destid,

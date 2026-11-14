@@ -402,7 +402,7 @@ static int idtg2_sysfs(struct rio_dev *rdev, bool create)
 	return err;
 }
 
-static struct rio_switch_ops idtg2_switch_ops = {
+static const struct rio_switch_ops idtg2_switch_ops = {
 	.owner = THIS_MODULE,
 	.add_entry = idtg2_route_add_entry,
 	.get_entry = idtg2_route_get_entry,

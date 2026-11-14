@@ -258,7 +258,7 @@ idtg3_em_handler(struct rio_dev *rdev, u8 pnum)
 	return 0;
 }
 
-static struct rio_switch_ops idtg3_switch_ops = {
+static const struct rio_switch_ops idtg3_switch_ops = {
 	.owner = THIS_MODULE,
 	.add_entry = idtg3_route_add_entry,
 	.get_entry = idtg3_route_get_entry,
