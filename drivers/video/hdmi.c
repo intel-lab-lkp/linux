@@ -304,9 +304,11 @@ ssize_t hdmi_spd_infoframe_pack_only(const struct hdmi_spd_infoframe *frame,
 	ptr += HDMI_INFOFRAME_HEADER_SIZE;
 
 	memcpy(ptr, frame->vendor, sizeof(frame->vendor));
-	memcpy(ptr + 8, frame->product, sizeof(frame->product));
+	memcpy(ptr + HDMI_SPD_INFOFRAME_VENDOR_LEN, frame->product,
+	       sizeof(frame->product));
 
-	ptr[24] = frame->sdi;
+	ptr[HDMI_SPD_INFOFRAME_VENDOR_LEN + HDMI_SPD_INFOFRAME_PRODUCT_LEN] =
+		frame->sdi;
 
 	hdmi_infoframe_set_checksum(buffer, length);
 
@@ -1284,10 +1286,12 @@ static void hdmi_spd_infoframe_log(const char *level,
 	hdmi_infoframe_log_header(level, dev,
 				  (const struct hdmi_any_infoframe *)frame);
 
-	hdmi_log("    vendor: %.8s\n", frame->vendor);
-	hdmi_log("    product: %.16s\n", frame->product);
+	hdmi_log("    vendor: %.*s\n", HDMI_SPD_INFOFRAME_VENDOR_LEN,
+		 frame->vendor);
+	hdmi_log("    product: %.*s\n", HDMI_SPD_INFOFRAME_PRODUCT_LEN,
+		 frame->product);
 	hdmi_log("    source device information: %s (0x%x)\n",
-		hdmi_spd_sdi_get_name(frame->sdi), frame->sdi);
+		 hdmi_spd_sdi_get_name(frame->sdi), frame->sdi);
 }
 
 static const char *
@@ -1642,11 +1646,13 @@ static int hdmi_spd_infoframe_unpack(struct hdmi_spd_infoframe *frame,
 
 	ptr += HDMI_INFOFRAME_HEADER_SIZE;
 
-	ret = hdmi_spd_infoframe_init(frame, ptr, ptr + 8);
+	ret = hdmi_spd_infoframe_init(frame, ptr,
+				      ptr + HDMI_SPD_INFOFRAME_VENDOR_LEN);
 	if (ret)
 		return ret;
 
-	frame->sdi = ptr[24];
+	frame->sdi = ptr[HDMI_SPD_INFOFRAME_VENDOR_LEN +
+			 HDMI_SPD_INFOFRAME_PRODUCT_LEN];
 
 	return 0;
 }
