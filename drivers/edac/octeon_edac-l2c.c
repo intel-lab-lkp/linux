@@ -62,7 +62,7 @@ static void _octeon_l2c_poll_oct2(struct edac_device_ctl_info *l2c, int tad)
 	union cvmx_l2c_err_tdtx err_tdtx, err_tdtx_reset;
 	union cvmx_l2c_err_ttgx err_ttgx, err_ttgx_reset;
 	char buf1[64];
-	char buf2[80];
+	char buf2[128];
 
 	err_tdtx_reset.u64 = 0;
 	err_tdtx.u64 = cvmx_read_csr(CVMX_L2C_ERR_TDTX(tad));
