@@ -118,6 +118,9 @@ with a resolution of 0.25 degree Celsius. Temperature readings can be
 configured either for two's complement format or "Offset 64" format,
 wherein 64 is subtracted from the raw value to get the temperature value.
 
+With ``#thermal-sensor-cells = <1>`` in the device node, thermal sensor id N
+is temperature channel N, reported as temp(N+1).
+
 The datasheet is very detailed and describes a procedure for determining
 an optimal configuration for the automatic PWM control.
 

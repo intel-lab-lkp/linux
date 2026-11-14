@@ -1243,6 +1243,9 @@ static const struct hwmon_ops adt7475_hwmon_ops = {
 				 HWMON_PWM_FREQ | HWMON_PWM_AUTO_CHANNELS_TEMP)
 
 static const struct hwmon_channel_info * const adt7475_info[] = {
+	/* The hwmon core only looks for HWMON_C_REGISTER_TZ in info[0] */
+	HWMON_CHANNEL_INFO(chip,
+			   HWMON_C_REGISTER_TZ),
 	HWMON_CHANNEL_INFO(in,
 			   ADT7475_IN_CONFIG,	/* in0: +2.5V */
 			   ADT7475_IN_CONFIG,	/* in1: Vccp */
@@ -1928,6 +1931,15 @@ static int adt7475_probe(struct i2c_client *client)
 		break;
 	}
 
+	/*
+	 * Read the limits and settings once, before registering: the hwmon
+	 * core reads the thermal sensors while registering, and that needs
+	 * the temperature encoding from CONFIG5.
+	 */
+	ret = adt7475_update_limits(client);
+	if (ret)
+		return ret;
+
 	data->groups[group_num++] = &adt7475_attr_group;
 
 	/* Features that can be disabled individually */
@@ -1965,11 +1977,6 @@ static int adt7475_probe(struct i2c_client *client)
 			 (data->bypass_attn & (1 << 1)) ? " in1" : "",
 			 (data->bypass_attn & (1 << 3)) ? " in3" : "",
 			 (data->bypass_attn & (1 << 4)) ? " in4" : "");
-
-	/* Limits and settings, should never change update more than once */
-	ret = adt7475_update_limits(client);
-	if (ret)
-		return ret;
 
 	return 0;
 }
