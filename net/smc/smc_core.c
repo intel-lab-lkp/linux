@@ -1171,11 +1171,18 @@ again:
 		/* pre-fetch buffer outside of send_lock, might sleep */
 		rc = smc_cdc_get_free_slot(conn, to_lnk, &wr_buf, NULL, &pend);
 		if (!rc) {
-			/* avoid race with smcr_tx_sndbuf_nonempty() */
-			spin_lock_bh(&conn->send_lock);
+			/* the CDC completion handler and the receive path
+			 * update the same cursors under the socket's spinlock,
+			 * smcr_tx_sndbuf_nonempty() under send_lock
+			 */
+			local_bh_disable();
+			bh_lock_sock(&smc->sk);
+			spin_lock(&conn->send_lock);
 			smc_switch_link_and_count(conn, to_lnk);
 			rc = smc_switch_cursor(smc, pend, wr_buf);
-			spin_unlock_bh(&conn->send_lock);
+			spin_unlock(&conn->send_lock);
+			bh_unlock_sock(&smc->sk);
+			local_bh_enable();
 		}
 		sock_put(&smc->sk);
 		if (rc)
