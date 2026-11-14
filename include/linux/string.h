@@ -633,7 +633,6 @@ static inline const char *strsuffix(const char *s, const char *suffix)
 	return streq(s + off, suffix) ? s + off : NULL;
 }
 #define strsuffix(s, sfx)  const_cast(CQChar_of(s) *, strsuffix(s, sfx))
-#define strends(s, sfx)    strsuffix(s, sfx)  // legacy alias
 
 /**
  * str_has_prefix - Test if a string has a given prefix
