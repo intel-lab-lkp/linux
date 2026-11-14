@@ -104,6 +104,30 @@
 		#clock-cells = <0>;
 	};
 
+	venc_opp_table: opp-table-venc {
+		compatible = "operating-points-v2";
+
+		opp-297000000 {
+			opp-hz = /bits/ 64 <297000000>;
+			opp-microvolt = <725000 725000 1000000>;
+		};
+
+		opp-396000000 {
+			opp-hz = /bits/ 64 <396000000>;
+			opp-microvolt = <725000 725000 1000000>;
+		};
+
+		opp-500000000 {
+			opp-hz = /bits/ 64 <500000000>;
+			opp-microvolt = <750000 750000 1000000>;
+		};
+
+		opp-594000000 {
+			opp-hz = /bits/ 64 <594000000>;
+			opp-microvolt = <825000 825000 1000000>;
+		};
+	};
+
 	grf: syscon@fe000000 {
 		compatible = "rockchip,rv1126-grf", "syscon", "simple-mfd";
 		reg = <0xfe000000 0x20000>;
@@ -665,6 +689,8 @@
 		clock-names = "axi", "ahb", "core";
 		assigned-clocks = <&cru ACLK_VENC>, <&cru CLK_VENC_CORE>;
 		assigned-clock-rates = <297000000>, <396000000>;
+		operating-points-v2 = <&venc_opp_table>;
+		#cooling-cells = <2>;
 		resets = <&cru SRST_VENC_A>, <&cru SRST_VENC_H>,
 			 <&cru SRST_VENC_CORE>;
 		reset-names = "axi", "ahb", "core";
