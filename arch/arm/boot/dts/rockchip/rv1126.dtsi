@@ -139,6 +139,21 @@
 		reg = <0xfe86c000 0x20>;
 	};
 
+	qos_venc_rd_m0: qos@fe870000 {
+		compatible = "rockchip,rv1126-qos", "syscon";
+		reg = <0xfe870000 0x20>;
+	};
+
+	qos_venc_rd_m1: qos@fe870080 {
+		compatible = "rockchip,rv1126-qos", "syscon";
+		reg = <0xfe870080 0x20>;
+	};
+
+	qos_venc_wr: qos@fe870100 {
+		compatible = "rockchip,rv1126-qos", "syscon";
+		reg = <0xfe870100 0x20>;
+	};
+
 	qos_iep: qos@fe8a0000 {
 		compatible = "rockchip,rv1126-qos", "syscon";
 		reg = <0xfe8a0000 0x20>;
@@ -221,6 +236,17 @@
 					 <&qos_rga_wr>,
 					 <&qos_vop>,
 					 <&qos_iep>;
+				#power-domain-cells = <0>;
+			};
+
+			power-domain@RV1126_PD_VEPU {
+				reg = <RV1126_PD_VEPU>;
+				clocks = <&cru ACLK_VENC>,
+					 <&cru HCLK_VENC>,
+					 <&cru CLK_VENC_CORE>;
+				pm_qos = <&qos_venc_rd_m0>,
+					 <&qos_venc_rd_m1>,
+					 <&qos_venc_wr>;
 				#power-domain-cells = <0>;
 			};
 		};
@@ -628,6 +654,34 @@
 		#iommu-cells = <0>;
 		power-domains = <&power RV1126_PD_VO>;
 		status = "disabled";
+	};
+
+	venc: video-codec@ffbb0000 {
+		compatible = "rockchip,rv1126-rkvenc";
+		reg = <0xffbb0000 0xf00>;
+		interrupts = <GIC_SPI 68 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&cru ACLK_VENC>, <&cru HCLK_VENC>,
+			 <&cru CLK_VENC_CORE>;
+		clock-names = "axi", "ahb", "core";
+		assigned-clocks = <&cru ACLK_VENC>, <&cru CLK_VENC_CORE>;
+		assigned-clock-rates = <297000000>, <396000000>;
+		resets = <&cru SRST_VENC_A>, <&cru SRST_VENC_H>,
+			 <&cru SRST_VENC_CORE>;
+		reset-names = "axi", "ahb", "core";
+		iommus = <&venc_mmu>;
+		power-domains = <&power RV1126_PD_VEPU>;
+	};
+
+	venc_mmu: iommu@ffbb0f00 {
+		compatible = "rockchip,iommu";
+		reg = <0xffbb0f00 0x40>, <0xffbb0f40 0x40>;
+		interrupts = <GIC_SPI 69 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&cru ACLK_VENC>, <&cru HCLK_VENC>;
+		clock-names = "aclk", "iface";
+		#iommu-cells = <0>;
+		power-domains = <&power RV1126_PD_VEPU>;
+		rockchip,disable-mmu-reset;
 	};
 
 	gmac: ethernet@ffc40000 {
