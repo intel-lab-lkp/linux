@@ -202,14 +202,6 @@ static unsigned char sw_i2c_read_sda(void)
 }
 
 /*
- *  This function sends ACK signal
- */
-static void sw_i2c_ack(void)
-{
-	return;  /* Single byte read is ok without it. */
-}
-
-/*
  *  This function sends the start command to the slave device
  */
 static void sw_i2c_start(void)
@@ -300,14 +292,10 @@ static long sw_i2c_write_byte(unsigned char data)
 /*
  *  This function reads one byte from the slave device
  *
- *  Parameters:
- *      ack    - Flag to indicate either to send the acknowledge
- *            message to the slave device or not
- *
  *  Return Value:
  *      One byte data read from the Slave device
  */
-static unsigned char sw_i2c_read_byte(unsigned char ack)
+static unsigned char sw_i2c_read_byte(void)
 {
 	int i;
 	unsigned char data = 0;
@@ -325,9 +313,6 @@ static unsigned char sw_i2c_read_byte(unsigned char ack)
 		/* Read data bits from SDA */
 		data |= (sw_i2c_read_sda() << i);
 	}
-
-	if (ack)
-		sw_i2c_ack();
 
 	/* Set the SCL Low and SDA High */
 	sw_i2c_scl(0);
@@ -458,7 +443,7 @@ unsigned char sm750_sw_i2c_read_reg(unsigned char addr, unsigned char reg)
 	/* Get the bus again and get the data from the device read address */
 	sw_i2c_start();
 	sw_i2c_write_byte(addr + 1);
-	data = sw_i2c_read_byte(1);
+	data = sw_i2c_read_byte();
 
 	/* Stop swI2C and release the bus */
 	sw_i2c_stop();
