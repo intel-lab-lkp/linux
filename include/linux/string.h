@@ -609,6 +609,7 @@ static inline const char *strprefix(const char *s, const char *prefix)
 	return strncmp(s, prefix, len) == 0 ? s + len : NULL;
 }
 #define strprefix(s, pfx)  const_cast(CQChar_of(s) *, strprefix(s, pfx))
+#define strstarts(s, pfx)  strprefix(s, pfx)  // legacy alias
 
 /**
  * str_has_prefix - Test if a string has a given prefix
@@ -630,19 +631,6 @@ static __always_inline size_t str_has_prefix(const char *str, const char *prefix
 {
 	size_t len = strlen(prefix);
 	return strncmp(str, prefix, len) == 0 ? len : 0;
-}
-
-/**
- * strstarts - does @str start with @prefix?
- * @str: string to examine
- * @prefix: prefix to look for.
- *
- * Returns:
- * True if @str begins with @prefix. False in all other cases.
- */
-static inline bool strstarts(const char *str, const char *prefix)
-{
-	return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
 /**
