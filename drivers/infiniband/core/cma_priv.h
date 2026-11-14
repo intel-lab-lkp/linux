@@ -110,6 +110,7 @@ struct rdma_id_private {
 	 */
 	struct rdma_restrack_entry     res;
 	struct rdma_ucm_ece ece;
+	struct work_struct destroy_work;
 };
 
 #if IS_ENABLED(CONFIG_INFINIBAND_ADDR_TRANS_CONFIGFS)

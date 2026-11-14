@@ -484,7 +484,7 @@ static int rds_ib_laddr_check_cm(struct net *net, const struct in6_addr *addr,
 		 cm_id->device ? cm_id->device->node_type : -1);
 
 out:
-	rdma_destroy_id(cm_id);
+	rdma_destroy_id_wq(cm_id);
 
 	return ret;
 }

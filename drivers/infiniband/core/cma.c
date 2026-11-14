@@ -2126,6 +2126,25 @@ void rdma_destroy_id(struct rdma_cm_id *id)
 }
 EXPORT_SYMBOL(rdma_destroy_id);
 
+static void destroy_id_work(struct work_struct *work)
+{
+	struct rdma_id_private *id_priv =
+		container_of(work, struct rdma_id_private, destroy_work);
+
+	mutex_lock(&id_priv->handler_mutex);
+	destroy_id_handler_unlock(id_priv);
+}
+
+void rdma_destroy_id_wq(struct rdma_cm_id *id)
+{
+	struct rdma_id_private *id_priv =
+		container_of(id, struct rdma_id_private, id);
+
+	INIT_WORK(&id_priv->destroy_work, destroy_id_work);
+	queue_work(cma_wq, &id_priv->destroy_work);
+}
+EXPORT_SYMBOL(rdma_destroy_id_wq);
+
 static int cma_rep_recv(struct rdma_id_private *id_priv)
 {
 	int ret;

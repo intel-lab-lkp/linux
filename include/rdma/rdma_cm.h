@@ -167,6 +167,7 @@ struct rdma_cm_id *rdma_create_user_id(rdma_cm_event_handler event_handler,
   * asynchronous operations associated with the id.
   */
 void rdma_destroy_id(struct rdma_cm_id *id);
+void rdma_destroy_id_wq(struct rdma_cm_id *id);
 
 /**
  * rdma_restrict_node_type - Restrict an RDMA identifier to specific
