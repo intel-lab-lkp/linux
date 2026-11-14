@@ -47,8 +47,8 @@
 /**
  * streq - strings equal
  *
- * @s1: string to compare
- * @s2: string to compare
+ * @s1: String to compare
+ * @s2: String to compare
  *
  * Compare two strings for equality.
  *
@@ -609,6 +609,30 @@ static inline const char *strprefix(const char *s, const char *prefix)
 	return strncmp(s, prefix, len) == 0 ? s + len : NULL;
 }
 #define strprefix(s, pfx)  const_cast(CQChar_of(s) *, strprefix(s, pfx))
+
+/**
+ * strsuffix - string suffix
+ * @s: The string to be tested
+ * @suffix: The string to see if @s ends with
+ *
+ * Returns:
+ * *  @s + strlen(@s) - strlen(@suffix) if @s ends with @suffix
+ * *  NULL if @s does not end with @suffix
+ */
+__attribute__((nonnull(1, 2)))
+static inline const char *strsuffix(const char *s, const char *suffix)
+{
+	size_t  len, sfxlen, off;
+
+	len = strlen(s);
+	sfxlen = strlen(suffix);
+	if (len < sfxlen)
+		return NULL;
+
+	off = len - sfxlen;
+	return streq(s + off, suffix) ? s + off : NULL;
+}
+#define strsuffix(s, sfx)  const_cast(CQChar_of(s) *, strsuffix(s, sfx))
 
 /**
  * str_has_prefix - Test if a string has a given prefix
