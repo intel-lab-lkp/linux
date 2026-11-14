@@ -46,7 +46,10 @@ int __iommu_unmap(struct iommu *iommu, struct dma_region *region, u64 *unmapped)
 
 static inline void iommu_unmap(struct iommu *iommu, struct dma_region *region)
 {
-	VFIO_ASSERT_EQ(__iommu_unmap(iommu, region, NULL), 0);
+	u64 unmapped;
+
+	VFIO_ASSERT_EQ(__iommu_unmap(iommu, region, &unmapped), 0);
+	VFIO_ASSERT_EQ(unmapped, region->size);
 }
 
 int __iommu_unmap_all(struct iommu *iommu, u64 *unmapped);
