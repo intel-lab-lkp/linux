@@ -987,6 +987,8 @@ static int vxlan_fdb_update_existing(struct vxlan_dev *vxlan,
 				     struct netlink_ext_ack *extack)
 {
 	__u16 fdb_flags = (ndm_flags & ~NTF_USE);
+	__u16 old_flags = f->flags;
+	__u16 old_state = f->state;
 	struct vxlan_rdst *rd = NULL;
 	struct vxlan_rdst oldrd;
 	int notify = 0;
@@ -1003,21 +1005,6 @@ static int vxlan_fdb_update_existing(struct vxlan_dev *vxlan,
 		NL_SET_ERR_MSG(extack,
 			       "Cannot append to a nexthop fdb");
 		return -EOPNOTSUPP;
-	}
-
-	/* Do not allow an externally learned entry to take over an entry added
-	 * by the user.
-	 */
-	if (!(fdb_flags & NTF_EXT_LEARNED) ||
-	    !(f->flags & NTF_VXLAN_ADDED_BY_USER)) {
-		if (f->state != state) {
-			f->state = state;
-			notify = 1;
-		}
-		if (f->flags != fdb_flags) {
-			f->flags = fdb_flags;
-			notify = 1;
-		}
 	}
 
 	if ((flags & NLM_F_REPLACE)) {
@@ -1048,6 +1035,23 @@ static int vxlan_fdb_update_existing(struct vxlan_dev *vxlan,
 		notify |= rc;
 	}
 
+	/* Do not allow an externally learned entry to take over an entry added
+	 * by the user. The state and flags are written only after the steps
+	 * above that can fail, so that a request they refuse never changes
+	 * them, not even briefly: the ageing timer reads them without the lock.
+	 */
+	if (!(fdb_flags & NTF_EXT_LEARNED) ||
+	    !(f->flags & NTF_VXLAN_ADDED_BY_USER)) {
+		if (f->state != state) {
+			f->state = state;
+			notify = 1;
+		}
+		if (f->flags != fdb_flags) {
+			f->flags = fdb_flags;
+			notify = 1;
+		}
+	}
+
 	if (ndm_flags & NTF_USE)
 		WRITE_ONCE(f->updated, jiffies);
 
@@ -1066,13 +1070,17 @@ static int vxlan_fdb_update_existing(struct vxlan_dev *vxlan,
 
 err_notify:
 	if (nhid)
-		return err;
+		goto err_restore;
 	if ((flags & NLM_F_REPLACE) && rc)
 		*rd = oldrd;
 	else if ((flags & NLM_F_APPEND) && rc) {
 		list_del_rcu(&rd->list);
 		call_rcu(&rd->rcu, vxlan_dst_free);
 	}
+err_restore:
+	/* The notification was vetoed: put back the state and flags. */
+	f->state = old_state;
+	f->flags = old_flags;
 	return err;
 }
 
