@@ -73,6 +73,14 @@ properties:
       - 2: PWM flags 0 or PWM_POLARITY_INVERTED
       - 3: The default PWM duty cycle in nanoseconds, defaults to period.
 
+  "#thermal-sensor-cells":
+    const: 1
+    description: |
+      The cell is the temperature channel.
+      - 0: Remote 1
+      - 1: Local
+      - 2: Remote 2
+
 patternProperties:
   "^adi,bypass-attenuator-in[0-4]$":
     description: |
@@ -111,6 +119,13 @@ required:
   - compatible
   - reg
 
+allOf:
+  - if:
+      required:
+        - "#thermal-sensor-cells"
+    then:
+      $ref: /schemas/thermal/thermal-sensor.yaml#
+
 additionalProperties: false
 
 examples:
@@ -128,6 +143,7 @@ examples:
         adi,pin10-function = "smbalert#";
         adi,pin14-function = "tach4";
         #pwm-cells = <3>;
+        #thermal-sensor-cells = <1>;
 
         /* PWMs at 22.5 kHz frequency */
         fan-0 {
