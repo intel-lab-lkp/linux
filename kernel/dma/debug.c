@@ -543,6 +543,9 @@ void debug_dma_dump_mappings(struct device *dev)
 	int idx;
 	phys_addr_t cln;
 
+	if (!dma_debug_initialized)
+		return;
+
 	for (idx = 0; idx < HASH_SIZE; idx++) {
 		struct hash_bucket *bucket = &dma_entry_hash[idx];
 		struct dma_debug_entry *entry;
@@ -575,6 +578,9 @@ static int dump_show(struct seq_file *seq, void *v)
 {
 	int idx;
 	phys_addr_t cln;
+
+	if (!dma_debug_initialized)
+		return 0;
 
 	for (idx = 0; idx < HASH_SIZE; idx++) {
 		struct hash_bucket *bucket = &dma_entry_hash[idx];
