@@ -885,20 +885,26 @@ static void zloop_complete_rq(struct request *rq)
 	blk_mq_end_request(rq, sts);
 }
 
-static bool zloop_set_zone_append_sector(struct request *rq)
+static blk_status_t zloop_set_zone_append_sector(struct request *rq)
 {
 	struct zloop_device *zlo = rq->q->queuedata;
 	unsigned int zone_no = rq_zone_no(rq);
 	struct zloop_zone *zone = &zlo->zones[zone_no];
 	sector_t zone_end = zone->start + zlo->zone_capacity;
 	sector_t nr_sectors = blk_rq_sectors(rq);
+	static blk_status_t ret = BLK_STS_OK;
 
 	spin_lock(&zone->wp_lock);
 
 	if (zone->cond == BLK_ZONE_COND_FULL ||
 	    zone->wp + nr_sectors > zone_end) {
-		spin_unlock(&zone->wp_lock);
-		return false;
+		ret = BLK_STS_IOERR;
+		goto unlock;
+	}
+
+	if (!zloop_do_open_zone(zlo, zone, false)) {
+		ret = BLK_STS_ZONE_OPEN_RESOURCE;
+		goto unlock;
 	}
 
 	rq->__sector = zone->wp;
@@ -906,9 +912,10 @@ static bool zloop_set_zone_append_sector(struct request *rq)
 	if (zone->wp >= zone_end)
 		zloop_mark_full(zlo, zone);
 
+ unlock:
 	spin_unlock(&zone->wp_lock);
 
-	return true;
+	return ret;
 }
 
 static blk_status_t zloop_queue_rq(struct blk_mq_hw_ctx *hctx,
@@ -917,6 +924,7 @@ static blk_status_t zloop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	struct request *rq = bd->rq;
 	struct zloop_cmd *cmd = blk_mq_rq_to_pdu(rq);
 	struct zloop_device *zlo = rq->q->queuedata;
+	blk_status_t ret;
 
 	if (data_race(READ_ONCE(zlo->state)) == Zlo_deleting) {
 		rq->rq_flags |= RQF_QUIET;
@@ -929,8 +937,9 @@ static blk_status_t zloop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	 * command work runs.
 	 */
 	if (zlo->ordered_zone_append && req_op(rq) == REQ_OP_ZONE_APPEND) {
-		if (!zloop_set_zone_append_sector(rq))
-			return BLK_STS_IOERR;
+		ret = zloop_set_zone_append_sector(rq);
+		if (ret != BLK_STS_OK)
+			return ret;
 	}
 
 	blk_mq_start_request(rq);
