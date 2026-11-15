@@ -158,6 +158,7 @@ struct scsi_disk {
 	unsigned	use_atomic_write_boundary : 1;
 	unsigned	depop_report_supported : 1;
 	unsigned	depop_modify_zones_supported : 1;
+	unsigned	depop_restore_supported : 1;
 };
 #define to_scsi_disk(obj) container_of(obj, struct scsi_disk, disk_dev)
 
@@ -243,6 +244,8 @@ unsigned int sd_zbc_complete(struct scsi_cmnd *cmd, unsigned int good_bytes,
 			     struct scsi_sense_hdr *sshdr);
 int sd_zbc_report_zones(struct gendisk *disk, sector_t sector,
 		unsigned int nr_zones, struct blk_report_zones_args *args);
+
+extern const struct blk_se_ops sd_zbc_se_ops;
 
 #else /* CONFIG_BLK_DEV_ZONED */
 
