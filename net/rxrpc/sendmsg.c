@@ -90,6 +90,31 @@ no_wait:
 }
 
 /*
+ * Check that a service call's connection is secured.  A DATA buffer's layout
+ * depends on the security level, which isn't known until the client's
+ * RESPONSE is verified.  The lock pairs with rxrpc_process_event() setting
+ * the level and keys before the state.
+ */
+static int rxrpc_check_service_secured(struct rxrpc_call *call)
+{
+	struct rxrpc_connection *conn = call->conn;
+	enum rxrpc_conn_proto_state state;
+
+	spin_lock_irq(&conn->state_lock);
+	state = conn->state;
+	spin_unlock_irq(&conn->state_lock);
+
+	switch (state) {
+	case RXRPC_CONN_SERVICE:
+		return 0;
+	case RXRPC_CONN_ABORTED:
+		return -ECONNABORTED;
+	default:
+		return -EBUSY;
+	}
+}
+
+/*
  * Return true if there's sufficient Tx queue space.
  */
 static bool rxrpc_check_tx_space(struct rxrpc_call *call, rxrpc_seq_t *_tx_win)
@@ -345,6 +370,12 @@ static int rxrpc_send_data(struct rxrpc_sock *rx,
 
 	if (call->conn->state == RXRPC_CONN_CLIENT_UNSECURED) {
 		ret = rxrpc_init_client_conn_security(call->conn);
+		if (ret < 0)
+			goto out_unlock;
+	}
+
+	if (rxrpc_is_service_call(call)) {
+		ret = rxrpc_check_service_secured(call);
 		if (ret < 0)
 			goto out_unlock;
 	}
