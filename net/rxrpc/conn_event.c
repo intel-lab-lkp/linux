@@ -511,6 +511,16 @@ bool rxrpc_input_conn_packet(struct rxrpc_connection *conn, struct sk_buff *skb)
 				rxrpc_send_conn_abort(conn);
 			return true;
 		}
+		/* No genuine peer can challenge before the client has sent
+		 * DATA, and until then there is no session key to respond
+		 * with.  Pairs with rxrpc_init_client_conn_security().
+		 */
+		spin_lock_irq(&conn->state_lock);
+		if (conn->state == RXRPC_CONN_CLIENT_UNSECURED) {
+			spin_unlock_irq(&conn->state_lock);
+			return true;
+		}
+		spin_unlock_irq(&conn->state_lock);
 		if (!conn->security->validate_challenge(conn, skb))
 			return false;
 		return rxrpc_post_challenge(conn, skb);
