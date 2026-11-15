@@ -3055,6 +3055,10 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 		if (pci_bridge_d3_disable)
 			return false;
 
+		/* The port is known not to work correctly in D3 */
+		if (bridge->dev_flags & PCI_DEV_FLAGS_NO_D3)
+			return false;
+
 		/*
 		 * Hotplug ports handled by platform firmware may not be put
 		 * into D3 by the OS, e.g. ACPI slots ...
