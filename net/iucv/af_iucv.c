@@ -1471,7 +1471,7 @@ static int iucv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 	rlen   = skb->len - offset;		/* real length of skb */
 	copied = min_t(unsigned int, rlen, len);
 	if (!rlen)
-		sk->sk_shutdown = sk->sk_shutdown | RCV_SHUTDOWN;
+		WRITE_ONCE(sk->sk_shutdown, sk->sk_shutdown | RCV_SHUTDOWN);
 
 	cskb = skb;
 	if (skb_copy_datagram_msg(cskb, offset, msg, copied)) {
@@ -1674,16 +1674,28 @@ static int iucv_sock_shutdown(struct socket *sock, int how)
 			iucv_send_ctrl(sk, AF_IUCV_FLAG_SHT);
 	}
 
-	sk->sk_shutdown |= how;
-	if (how == RCV_SHUTDOWN || how == SHUTDOWN_MASK) {
-		if ((iucv->transport == AF_IUCV_TRANS_IUCV) &&
-		    iucv->path) {
-			err = pr_iucv->path_quiesce(iucv->path, NULL);
-			if (err)
-				err = -ENOTCONN;
-/*			skb_queue_purge(&sk->sk_receive_queue); */
+	if (iucv->transport == AF_IUCV_TRANS_HIPER) {
+		/* Set the bit and purge under sk_lock.slock: a frame handled
+		 * on arrival tests RCV_SHUTDOWN under it, also while this
+		 * task owns the socket, and one that passed the test would
+		 * be queued after the purge. A frame that waited runs when
+		 * the owner releases the socket, not in between.
+		 */
+		spin_lock_bh(&sk->sk_lock.slock);
+		WRITE_ONCE(sk->sk_shutdown, sk->sk_shutdown | how);
+		if (how == RCV_SHUTDOWN || how == SHUTDOWN_MASK)
+			skb_queue_purge(&sk->sk_receive_queue);
+		spin_unlock_bh(&sk->sk_lock.slock);
+	} else {
+		sk->sk_shutdown |= how;
+		if (how == RCV_SHUTDOWN || how == SHUTDOWN_MASK) {
+			if (iucv->path) {
+				err = pr_iucv->path_quiesce(iucv->path, NULL);
+				if (err)
+					err = -ENOTCONN;
+			}
+			skb_queue_purge(&sk->sk_receive_queue);
 		}
-		skb_queue_purge(&sk->sk_receive_queue);
 	}
 
 	/* Wake up anyone sleeping in poll */
@@ -2217,7 +2229,7 @@ static int afiucv_hs_callback_rx(struct sock *sk, struct sk_buff *skb)
 		return NET_RX_SUCCESS;
 	}
 
-	if (sk->sk_shutdown & RCV_SHUTDOWN) {
+	if (READ_ONCE(sk->sk_shutdown) & RCV_SHUTDOWN) {
 		kfree_skb(skb);
 		return NET_RX_SUCCESS;
 	}
