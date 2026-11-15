@@ -715,12 +715,12 @@ static void iscsi_target_sk_state_change(struct sock *sk)
 		pr_debug("iscsi_target_sk_state_change got failed state\n");
 		set_bit(LOGIN_FLAGS_CLOSED, &conn->login_flags);
 		state = test_bit(LOGIN_FLAGS_INITIAL_PDU, &conn->login_flags);
+		if (!state)
+			schedule_delayed_work(&conn->login_work, 0);
 		write_unlock_bh(&sk->sk_callback_lock);
 
 		orig_state_change(sk);
 
-		if (!state)
-			schedule_delayed_work(&conn->login_work, 0);
 		return;
 	}
 	write_unlock_bh(&sk->sk_callback_lock);
