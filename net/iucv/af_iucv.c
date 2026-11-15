@@ -176,6 +176,22 @@ static inline int iucv_below_msglim(struct sock *sk)
 			(atomic_read(&iucv->pendings) <= 0));
 }
 
+/**
+ * afiucv_hs_window() - the window a HiperSockets socket gave its peer
+ * @iucv:	the socket
+ *
+ * The msglimit carried by its first SYN that was handed to the device, or
+ * by its SYN|ACK. A socket that sent neither has msglimit as its window:
+ * one about to send its first SYN, or one connected by a SYN|ACK it did not
+ * ask for.
+ *
+ * Return: the frames the peer may send before it needs a window update.
+ */
+static u16 afiucv_hs_window(const struct iucv_sock *iucv)
+{
+	return iucv->msglimit_adv ?: iucv->msglimit;
+}
+
 /*
  * iucv_sock_wake_msglim() - Wake up thread waiting on msg limit
  */
@@ -200,6 +216,7 @@ static int afiucv_hs_send(struct iucv_message *imsg, struct sock *sock,
 	struct iucv_sock *iucv = iucv_sk(sock);
 	struct af_iucv_trans_hdr *phs_hdr;
 	int err, confirm_recv = 0;
+	bool first_syn = false;
 
 	phs_hdr = skb_push(skb, sizeof(*phs_hdr));
 	memset(phs_hdr, 0, sizeof(*phs_hdr));
@@ -209,7 +226,7 @@ static int afiucv_hs_send(struct iucv_message *imsg, struct sock *sock,
 	phs_hdr->version = 1;
 	phs_hdr->flags = flags;
 	if (flags == AF_IUCV_FLAG_SYN)
-		phs_hdr->window = iucv->msglimit;
+		phs_hdr->window = afiucv_hs_window(iucv);
 	memcpy(phs_hdr->destUserID, iucv->dst_user_id, 8);
 	memcpy(phs_hdr->destAppName, iucv->dst_name, 8);
 	memcpy(phs_hdr->srcUserID, iucv->src_user_id, 8);
@@ -255,11 +272,21 @@ static int afiucv_hs_send(struct iucv_message *imsg, struct sock *sock,
 			phs_hdr->flags = phs_hdr->flags | AF_IUCV_FLAG_WIN;
 	}
 
+	/* The first SYN to leave: its window is what the peer may send us,
+	 * whatever msglimit becomes. A later SYN carries it.
+	 */
+	if (flags == AF_IUCV_FLAG_SYN && !iucv->msglimit_adv) {
+		iucv->msglimit_adv = iucv->msglimit;
+		first_syn = true;
+	}
+
 	atomic_inc(&iucv->skbs_in_xmit);
 	err = dev_queue_xmit(skb);
 	if (net_xmit_eval(err)) {
 		atomic_dec(&iucv->skbs_in_xmit);
 		atomic_add(confirm_recv, &iucv->msg_recv);
+		if (first_syn)
+			iucv->msglimit_adv = 0;
 	}
 	return net_xmit_eval(err);
 
@@ -1320,7 +1347,8 @@ static int iucv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 		consume_skb(skb);
 		if (iucv->transport == AF_IUCV_TRANS_HIPER) {
 			atomic_inc(&iucv->msg_recv);
-			if (atomic_read(&iucv->msg_recv) > iucv->msglimit) {
+			if (atomic_read(&iucv->msg_recv) >
+			    afiucv_hs_window(iucv)) {
 				WARN_ON(1);
 				iucv_sock_close(sk);
 				return -EFAULT;
@@ -1345,7 +1373,7 @@ static int iucv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 				iucv_process_message_q(sk);
 			if (iucv->transport == AF_IUCV_TRANS_HIPER &&
 			    atomic_read(&iucv->msg_recv) >=
-							iucv->msglimit / 2)
+						afiucv_hs_window(iucv) / 2)
 				send_win = true;
 		}
 		spin_unlock_bh(&iucv->message_q.lock);
@@ -1926,6 +1954,7 @@ static int afiucv_hs_callback_syn(struct sock *sk, struct sk_buff *skb)
 	afiucv_swap_src_dest(skb);
 	trans_hdr->flags = AF_IUCV_FLAG_SYN | AF_IUCV_FLAG_ACK;
 	trans_hdr->window = niucv->msglimit;
+	niucv->msglimit_adv = niucv->msglimit;
 	/* if receiver acks the xmit connection is established */
 	err = dev_queue_xmit(skb);
 	if (!err) {
