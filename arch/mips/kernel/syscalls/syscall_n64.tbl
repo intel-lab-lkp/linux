@@ -388,3 +388,4 @@
 471	n64	rseq_slice_yield		sys_rseq_slice_yield
 472	n64	fchroot				sys_fchroot
 473	n64	set_robust_list2		sys_set_robust_list2
+474	n64	get_robust_list2		sys_get_robust_list2

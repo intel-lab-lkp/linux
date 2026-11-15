@@ -869,9 +869,11 @@ __SYSCALL(__NR_fchroot, sys_fchroot)
 
 #define __NR_set_robust_list2 473
 __SYSCALL(__NR_set_robust_list2, sys_set_robust_list2)
+#define __NR_get_robust_list2 474
+__SYSCALL(__NR_get_robust_list2, sys_get_robust_list2)
 
 #undef __NR_syscalls
-#define __NR_syscalls 474
+#define __NR_syscalls 475
 
 /*
  * 32 bit systems traditionally used different

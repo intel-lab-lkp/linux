@@ -479,3 +479,4 @@
 471	i386	rseq_slice_yield	sys_rseq_slice_yield
 472	i386	fchroot			sys_fchroot
 473	i386	set_robust_list2	sys_set_robust_list2
+474	i386	get_robust_list2	sys_get_robust_list2
