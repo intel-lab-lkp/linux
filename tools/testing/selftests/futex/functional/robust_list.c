@@ -792,6 +792,9 @@ TEST_F(futex_op, test_futex_robust_unlock)
 	ret = sys_futex_robust_unlock(futex, FUTEX_ROBUST_UNLOCK | variant->op, tid,
 				      &head.list_op_pending, variant->val3);
 
+	if (ret == -1 && errno == ENOSYS)
+		SKIP(return, "No support for FUTEX_ROBUST_UNLOCK");
+
 	ASSERT_EQ(ret, 0);
 	ASSERT_EQ(*futex, 0);
 
