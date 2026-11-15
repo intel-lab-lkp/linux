@@ -478,4 +478,9 @@ extern int futex_lock_pi(u32 __user *uaddr, unsigned int flags, ktime_t *time, i
 
 bool futex_robust_list_clear_pending(void __user *pop, unsigned int flags);
 
+int futex_robust_list_create(uintptr_t head, enum robust_list2_cmd cmd);
+
+int futex_robust_list_modify(uintptr_t head, enum robust_list2_cmd cmd, unsigned
+			     int index);
+
 #endif /* _FUTEX_H */
