@@ -3082,6 +3082,14 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 			return true;
 
 		/*
+		 * pciehp masks the hotplug interrupt on runtime suspend and
+		 * relies on PME to resume the port on a slot event. A port
+		 * that cannot signal PME from D3hot is not resumed.
+		 */
+		if (bridge->is_pciehp && !pci_pme_capable(bridge, PCI_D3hot))
+			return false;
+
+		/*
 		 * Hotplug ports handled natively by the OS on x86 platforms
 		 * were not validated by vendors for runtime D3 at least until
 		 * 2018 because there was no OS support.
@@ -3247,7 +3255,6 @@ void pci_pm_init(struct pci_dev *dev)
 	dev->pm_cap = pm;
 	dev->d3hot_delay = PCI_PM_D3HOT_WAIT;
 	dev->d3cold_delay = PCI_PM_D3COLD_WAIT;
-	dev->bridge_d3 = pci_bridge_d3_possible(dev);
 	dev->d3cold_allowed = true;
 
 	dev->d1_support = false;
@@ -3282,6 +3289,9 @@ void pci_pm_init(struct pci_dev *dev)
 		/* Disable the PME# generation functionality */
 		pci_pme_active(dev, false);
 	}
+
+	/* pci_bridge_d3_possible() looks at pme_support */
+	dev->bridge_d3 = pci_bridge_d3_possible(dev);
 
 poweron:
 	pci_update_current_state(dev, PCI_UNKNOWN);
