@@ -71,6 +71,16 @@ config NETFILTER_NETLINK_LOG
 	  and is also scheduled to replace the old syslog-based ipt_LOG
 	  and ip6t_LOG modules.
 
+config NETFILTER_NETLINK_QUEUE_KUNIT_TEST
+	bool "NFQUEUE memory accounting tests" if !KUNIT_ALL_TESTS
+	depends on NETFILTER_NETLINK_QUEUE=y && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Test NFQUEUE byte admission, saved charges across detachment, and
+	  live queue limit updates without sending network traffic.
+	  The tests run with KUnit and do not need a userspace queue listener.
+	  Say N unless you are testing changes to NFQUEUE accounting.
+
 config NETFILTER_NETLINK_OSF
 	tristate "Netfilter OSF over NFNETLINK interface"
 	depends on NETFILTER_ADVANCED

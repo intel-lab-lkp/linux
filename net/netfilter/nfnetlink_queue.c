@@ -51,6 +51,10 @@
 
 #include <linux/atomic.h>
 
+#if IS_ENABLED(CONFIG_NETFILTER_NETLINK_QUEUE_KUNIT_TEST)
+#include <kunit/static_stub.h>
+#endif
+
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 #include "../bridge/br_private.h"
 #endif
@@ -209,6 +213,11 @@ static int nfqnl_set_config(struct nfqnl_instance *queue, unsigned int maxlen,
 	unsigned int range = 0;
 	bool activated;
 	int err = 0;
+
+#if IS_ENABLED(CONFIG_NETFILTER_NETLINK_QUEUE_KUNIT_TEST)
+	KUNIT_STATIC_STUB_REDIRECT(nfqnl_set_config, queue, maxlen, params,
+				   flags, mask);
+#endif
 
 	if (params && params->copy_mode == NFQNL_COPY_PACKET) {
 		range = ntohl(params->copy_range);
@@ -2390,3 +2399,7 @@ MODULE_ALIAS_NFNL_SUBSYS(NFNL_SUBSYS_QUEUE);
 
 module_init(nfnetlink_queue_init);
 module_exit(nfnetlink_queue_fini);
+
+#if IS_ENABLED(CONFIG_NETFILTER_NETLINK_QUEUE_KUNIT_TEST)
+#include "nfnetlink_queue_test.c"
+#endif
