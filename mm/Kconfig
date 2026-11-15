@@ -1531,6 +1531,16 @@ config PTDUMP
 	bool
 
 
+config MEMCG_HIGH_KUNIT_TEST
+	bool "Memory cgroup high limit tests" if !KUNIT_ALL_TESTS
+	depends on MEMCG && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Test deferred memory.high debt saturation through the real charging
+	  path with isolated counters and small charges. Delay tests cover
+	  fixed-point rounding and arithmetic bounds on 32-bit and 64-bit
+	  kernels. Say N unless developing memory cgroup high limit handling.
+
 source "mm/damon/Kconfig"
 
 endmenu

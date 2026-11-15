@@ -6532,3 +6532,7 @@ void mem_cgroup_show_protected_memory(struct mem_cgroup *memcg)
 		K(atomic_long_read(&memcg->memory.children_min_usage)),
 		K(atomic_long_read(&memcg->memory.children_low_usage)));
 }
+
+#if IS_ENABLED(CONFIG_MEMCG_HIGH_KUNIT_TEST)
+#include "memcontrol_high_test.c"
+#endif
