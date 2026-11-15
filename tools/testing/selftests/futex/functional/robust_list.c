@@ -51,6 +51,7 @@
 
 #ifndef SYS_set_robust_list2
 # define SYS_set_robust_list2 473
+# define SYS_get_robust_list2 474
 
 enum robust_list_cmd {
 	FUTEX_ROBUST_LIST_CMD_CREATE_64,
@@ -100,6 +101,12 @@ static int set_robust_list2(struct robust_list_head *head, enum robust_list_cmd 
 			    unsigned int index, unsigned int flags)
 {
 	return syscall(SYS_set_robust_list2, head, cmd, index, flags, 0, 0);
+}
+
+static int get_robust_list2(int pid, struct robust_list_head **head,
+			    unsigned int index, unsigned int flags)
+{
+	return syscall(SYS_get_robust_list2, pid, head, index, flags);
 }
 
 static bool robust_list2_support(void)
@@ -238,6 +245,23 @@ static int set_list(struct robust_list_head *head, bool robust2, int *index)
 static int modify_list(struct robust_list_head *head, int index)
 {
 	return set_robust_list2(head, get_cmd_modify(), index, 0);
+}
+
+static int get_list(pid_t pid, struct robust_list_head **head, bool robust2, int index)
+{
+	int ret;
+
+	if (!robust2) {
+		size_t len_ptr;
+
+		ret = get_robust_list(pid, head, &len_ptr);
+		if (sizeof(**head) != len_ptr)
+			return -EINVAL;
+
+		return ret;
+	}
+
+	return get_robust_list2(pid, head, index, 0);
 }
 
 /*
@@ -454,40 +478,45 @@ TEST(test_set_robust_list2_inval)
 /*
  * Test get_robust_list with pid = 0, getting the list of the running thread
  */
-TEST(test_get_robust_list_self)
+TEST_F(robust_api, test_get_robust_list_self)
 {
 	struct robust_list_head head, head2, *get_head;
-	size_t head_size = sizeof(head), len_ptr;
-	int ret;
+	bool robust2 = variant->robust2;
+	int ret, index = 0;
 
-	ret = set_robust_list(&head, head_size);
-	ASSERT_EQ(ret, 0);
+	ret = set_list(&head, robust2, 0);
+	ASSERT_GE(ret, 0);
 
-	ret = get_robust_list(0, &get_head, &len_ptr);
+	ret = get_list(0, &get_head, robust2, 0);
 	ASSERT_EQ(ret, 0);
 	ASSERT_EQ(get_head, &head);
-	ASSERT_EQ(head_size, len_ptr);
 
-	ret = set_robust_list(&head2, head_size);
-	ASSERT_EQ(ret, 0);
+	ret = set_list(&head2, robust2, &index);
+	ASSERT_GE(ret, 0);
 
-	ret = get_robust_list(0, &get_head, &len_ptr);
+	ret = get_list(0, &get_head, robust2, index);
 	ASSERT_EQ(ret, 0);
 	ASSERT_EQ(get_head, &head2);
-	ASSERT_EQ(head_size, len_ptr);
 }
+
+struct child_arg_struct {
+	struct robust_list_head *head;
+	bool robust2;
+};
 
 static int child_list(void *arg)
 {
 	struct child_args *cargs = arg;
 	struct __test_metadata *_metadata = cargs->_metadata;
-	struct robust_list_head *head = cargs->arg;
+	struct child_arg_struct *child_arg = (struct child_arg_struct *) cargs->arg;
+	struct robust_list_head *head = child_arg->head;
+	bool robust2 = child_arg->robust2;
 	int ret;
 
 	free(cargs);
 
-	ret = set_robust_list(head, sizeof(*head));
-	ASSERT_EQ(ret, 0)
+	ret = set_list(head, robust2, 0);
+	ASSERT_GE(ret, 0)
 		TH_LOG("set_robust_list error");
 
 	/*
@@ -507,23 +536,26 @@ static int child_list(void *arg)
  * parent
  *   2) the child thread still alive when we try to get the list from it
  */
-TEST(test_get_robust_list_child)
+TEST_F(robust_api, test_get_robust_list_child)
 {
 	struct robust_list_head head, *get_head;
+	bool robust2 = variant->robust2;
+	struct child_arg_struct child =
+		{.robust2 = robust2, .head = &head};
 	int ret, wstatus;
-	size_t len_ptr;
 	pid_t tid;
+
 
 	ret = pthread_barrier_init(&barrier, NULL, 2);
 	ret = pthread_barrier_init(&barrier2, NULL, 2);
 	ASSERT_EQ(ret, 0);
 
-	tid = create_child(_metadata, &child_list, &head);
+	tid = create_child(_metadata, &child_list, &child);
 	ASSERT_NE(tid, -1);
 
 	pthread_barrier_wait(&barrier);
 
-	ret = get_robust_list(tid, &get_head, &len_ptr);
+	ret = get_list(tid, &get_head, robust2, 0);
 	ASSERT_EQ(ret, 0);
 	ASSERT_EQ(&head, get_head);
 
@@ -1073,9 +1105,9 @@ static int child_lock_holder32(void *arg)
 	struct child_args *cargs = arg;
 	struct lock_struct32 *locks = cargs->arg;
 	struct __test_metadata *_metadata = cargs->_metadata;
-	struct robust_list_head32 *head;
+	struct robust_list_head32 *head, *head_ptr;
 	pid_t tid = gettid();
-	int i, ret;
+	int i, ret, index;
 
 	head = mmap((void *)0x10000, sizeof(*head), PROT_READ | PROT_WRITE,
 		    MAP_FIXED_NOREPLACE | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -1088,9 +1120,20 @@ static int child_lock_holder32(void *arg)
 	head->list.next = (uint32_t)(uintptr_t) &head->list;
 	head->list_op_pending = (uint32_t)(uintptr_t) NULL;
 
-	ret = set_robust_list2((struct robust_list_head *) head,
+	index = set_robust_list2((struct robust_list_head *)head,
 			FUTEX_ROBUST_LIST_CMD_CREATE_32, 0, 0);
+	ASSERT_GE(index, 0);
+
+	/* Test get list */
+	ret = get_robust_list2(0, (struct robust_list_head **)&head_ptr, index, 0);
 	ASSERT_GE(ret, 0);
+	ASSERT_EQ(head, head_ptr);
+
+	/* Test trying to set a 64 bit list in the same index */
+	ret = set_robust_list2((struct robust_list_head *)head,
+			       FUTEX_ROBUST_LIST_CMD_MODIFY_64, 0, 0);
+	ASSERT_EQ(ret, -1);
+	ASSERT_TRUE(errno & (EOPNOTSUPP | EINVAL));
 
 	/*
 	 * Take all the locks and insert them in the list
@@ -1201,6 +1244,85 @@ TEST(test_32bit_lists)
 	pthread_barrier_destroy(&barrier2);
 
 	munmap(locks, sizeof(*locks) * CHILD_NR);
+}
+
+/*
+ * Test setting and getting mutiple head lists
+ */
+TEST(set_and_get_robust2)
+{
+	struct robust_list_head *head = NULL, *heads;
+	int list_limit, ret, *index, i, j;
+
+	if (!robust_list2_support()) {
+		SKIP(return, "robust_list2 not supported\n");
+		return;
+	}
+
+	list_limit = set_robust_list2(NULL, FUTEX_ROBUST_LIST_CMD_LIST_LIMIT, 0, 0);
+	ASSERT_GT(list_limit, 1);
+
+	heads = malloc(list_limit * sizeof(*heads));
+	ASSERT_NE(heads, NULL);
+
+	index = malloc(list_limit * sizeof(*index));
+	ASSERT_NE(index, NULL);
+
+	/*
+	 * Insert various elements into the lists
+	 */
+	for (i = 0; i < list_limit; i++) {
+		ret = set_list(&heads[i], true, &index[i]);
+		ASSERT_GE(ret, 0);
+		ASSERT_EQ(i, index[i]);
+	}
+
+	for (i = 0; i < list_limit; i++) {
+		ret = get_list(0, &head, true, index[i]);
+		ASSERT_EQ(ret, 0);
+		ASSERT_EQ(head, &heads[i]);
+	}
+
+	/*
+	 * Modify the list, adding the elements in the other ordering
+	 */
+	for (i = 0, j = list_limit; i < list_limit; i++, j--) {
+		ret = modify_list(&heads[j], index[i]);
+		ASSERT_GE(ret, 0);
+	}
+
+	for (i = 0, j = list_limit; i < list_limit; i++, j--) {
+		ret = get_list(0, &head, true, index[i]);
+		ASSERT_EQ(ret, 0);
+		ASSERT_EQ(head, &heads[j]);
+	}
+
+	/*
+	 * Delete all elements
+	 */
+	for (i = 0; i < list_limit; i++) {
+		ret = modify_list(NULL, index[i]);
+		ASSERT_EQ(ret, 0);
+	}
+
+	for (i = 0; i < list_limit; i++) {
+		ret = get_list(0, &head, true, index[i]);
+		ASSERT_EQ(ret, 0);
+		ASSERT_EQ(head, NULL);
+	}
+
+	/*
+	 * Recreate the list. It should support the same number of elements as
+	 * before, given that we just cleared the list.
+	 */
+	for (i = 0; i < list_limit; i++) {
+		ret = set_list(&heads[i], true, &index[i]);
+		ASSERT_GE(ret, 0);
+		ASSERT_EQ(i, index[i]);
+	}
+
+	free(heads);
+	free(index);
 }
 
 TEST_HARNESS_MAIN
