@@ -1541,6 +1541,17 @@ config MEMCG_HIGH_KUNIT_TEST
 	  fixed-point rounding and arithmetic bounds on 32-bit and 64-bit
 	  kernels. Say N unless developing memory cgroup high limit handling.
 
+config MEMCG_RESERVATION_KUNIT_TEST
+	bool "Memory cgroup capacity reservation tests" if !KUNIT_ALL_TESTS
+	depends on MEMCG && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Test capacity reservation transactions, including partial growth
+	  failure, architecture support, and uncharged growth after reparenting
+	  to root. Transaction tests inject charge results. The root refund test
+	  checks real counters with a temporary eight-page charge while other
+	  CPUs are stopped. Say N unless developing this interface.
+
 source "mm/damon/Kconfig"
 
 endmenu

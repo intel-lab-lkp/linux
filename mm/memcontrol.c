@@ -73,6 +73,10 @@
 
 #include <linux/uaccess.h>
 
+#if IS_ENABLED(CONFIG_MEMCG_RESERVATION_KUNIT_TEST)
+#include <kunit/static_stub.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/memcg.h>
 #undef CREATE_TRACE_POINTS
@@ -3264,6 +3268,10 @@ static int mem_cgroup_reservation_charge(struct obj_cgroup *objcg,
 	struct mem_cgroup *memcg;
 	int ret = 0;
 
+#if IS_ENABLED(CONFIG_MEMCG_RESERVATION_KUNIT_TEST)
+	KUNIT_STATIC_STUB_REDIRECT(mem_cgroup_reservation_charge, objcg, pages,
+				   charged);
+#endif
 	memcg = get_mem_cgroup_from_objcg(objcg);
 	*charged = false;
 	/* Reparenting to root removes the limit, not previously held charges. */
@@ -3291,6 +3299,10 @@ static void mem_cgroup_reservation_uncharge_batch(struct mem_cgroup *memcg,
 
 static void mem_cgroup_reservation_uncharge(struct obj_cgroup *objcg, u64 pages)
 {
+#if IS_ENABLED(CONFIG_MEMCG_RESERVATION_KUNIT_TEST)
+	KUNIT_STATIC_STUB_REDIRECT(mem_cgroup_reservation_uncharge, objcg,
+				   pages);
+#endif
 	while (pages) {
 		unsigned int batch = min_t(u64, pages, MEMCG_RESERVATION_BATCH);
 		struct mem_cgroup *memcg;
@@ -6698,4 +6710,8 @@ void mem_cgroup_show_protected_memory(struct mem_cgroup *memcg)
 
 #if IS_ENABLED(CONFIG_MEMCG_HIGH_KUNIT_TEST)
 #include "memcontrol_high_test.c"
+#endif
+
+#if IS_ENABLED(CONFIG_MEMCG_RESERVATION_KUNIT_TEST)
+#include "memcontrol_reservation_test.c"
 #endif
