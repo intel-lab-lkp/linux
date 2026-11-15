@@ -435,6 +435,10 @@ static int __add_disk(struct device *parent, struct gendisk *disk,
 	if (WARN_ON_ONCE(bdev_nr_sectors(disk->part0) > BLK_DEV_MAX_SECTORS))
 		return -EINVAL;
 
+	ret = disk_init_storage_element_mgmt(disk);
+	if (ret)
+		return ret;
+
 	if (queue_is_mq(disk->queue)) {
 		/*
 		 * ->submit_bio and ->poll_bio are bypassed for blk-mq drivers.
