@@ -112,6 +112,14 @@ static int rpmsg_ept_cb(struct rpmsg_device *rpdev, void *buf, int len,
 	if (!eptdev)
 		return 0;
 
+	/*
+	 * A channel's default endpoint stays bound while the device is closed,
+	 * so this callback keeps running. Queuing now would grow the queue
+	 * without limit until the device is opened again. Drop the message.
+	 */
+	if (!eptdev->ept)
+		return 0;
+
 	skb = alloc_skb(len, GFP_ATOMIC);
 	if (!skb)
 		return -ENOMEM;
