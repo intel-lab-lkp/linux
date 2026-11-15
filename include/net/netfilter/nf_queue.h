@@ -16,6 +16,7 @@ struct nf_queue_entry {
 	struct sk_buff		*skb;
 	struct net_device	*skb_dev;
 	unsigned int		id;
+	unsigned int truesize; /* saved NFQUEUE charge, zero if uncharged */
 	unsigned int		hook_index;	/* index in hook_entries->hook[] */
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	struct net_device	*bridge_dev;
