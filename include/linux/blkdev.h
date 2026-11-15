@@ -190,6 +190,11 @@ struct gendisk {
 
 #ifdef CONFIG_BLK_DEV_ZONED
 	/*
+	 * Total number of storage elements of the disk. This is always 0 for
+	 * disks that do not support storage element management.
+	 */
+	unsigned int		nr_storage_elements;
+	/*
 	 * Zoned block device information. Reads of this information must be
 	 * protected with blk_queue_enter() / blk_queue_exit() or by holding a
 	 * lock on zone_revalidate_mutex. blk_revalidate_disk_zones() may modify
@@ -951,6 +956,13 @@ static inline unsigned int bdev_zone_capacity(struct block_device *bdev,
 
 bool bdev_zone_is_seq(struct block_device *bdev, sector_t sector);
 
+int bdev_report_storage_elements(struct block_device *bdev,
+				 struct blk_se *elements,
+				 unsigned int *nr_elements);
+int bdev_remove_storage_element(struct block_device *bdev,
+				unsigned int element_id);
+int bdev_restore_storage_elements(struct block_device *bdev);
+
 #else /* CONFIG_BLK_DEV_ZONED */
 static inline unsigned int disk_nr_zones(struct gendisk *disk)
 {
@@ -977,6 +989,25 @@ static inline bool blk_zone_plug_bio(struct bio *bio, unsigned int nr_segs)
 {
 	return false;
 }
+
+static inline int bdev_report_storage_elements(struct block_device *bdev,
+					       struct blk_se *elements,
+					       unsigned int *nr_elements)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int bdev_remove_storage_element(struct block_device *bdev,
+					      unsigned int element_id)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int bdev_restore_storage_elements(struct block_device *bdev)
+{
+	return -EOPNOTSUPP;
+}
+
 #endif /* CONFIG_BLK_DEV_ZONED */
 
 static inline unsigned int bdev_nr_zones(struct block_device *bdev)
@@ -1581,6 +1612,29 @@ enum blk_unique_id {
 	BLK_UID_NAA	= 3,
 };
 
+/**
+ * struct blk_se_ops - Storage element management operations.
+ * @report_elements: Report at most nr_elements storage elements of the
+ *		     specified disk. If the elements argument is NULL, only
+ *		     report the number of storage elements of the target disk.
+ * @remove_element: Remove (depopulate) the specified storage element from the
+ *		    target disk. This is a blocking operation called with
+ *		    zone_revalidate_mutex held. This callback must return only
+ *		    after the remove operation completes or an error occurs.
+ * @restore_elements: Restore (re-populate), if possible, all removed storage
+ *		      elements of the target disk. This operation is called with
+ *		      zone_revalidate_mutex held. This callback must return only
+ *		      after the restoration operation completes or an error
+ *		      occurs.
+ */
+struct blk_se_ops {
+	int (*report_elements)(struct gendisk *disk,
+			       struct blk_se *elements,
+			       unsigned int *nr_elements);
+	int (*remove_element)(struct gendisk *disk, unsigned int element_id);
+	int (*restore_elements)(struct gendisk *disk);
+};
+
 struct block_device_operations {
 	void (*submit_bio)(struct bio *bio);
 	int (*poll_bio)(struct bio *bio, struct io_comp_batch *iob,
@@ -1610,6 +1664,7 @@ struct block_device_operations {
 				   struct dma_buf_io_ctx *);
 	struct module *owner;
 	const struct pr_ops *pr_ops;
+	const struct blk_se_ops	*se_ops;
 
 	/*
 	 * Special callback for probing GPT entry at a given sector.
