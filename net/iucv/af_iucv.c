@@ -1050,7 +1050,17 @@ static int iucv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		}
 	}
 	skb = sock_alloc_send_pskb(sk, headroom + linear, len - linear,
-				   noblock, &err, 0);
+				   1, &err, 0);
+	if (!skb && err == -EAGAIN && !noblock) {
+		/* Wait without the socket lock: recvmsg() takes it, and over
+		 * z/VM the memory comes back only when the peer reads, which
+		 * may wait for our own reader.
+		 */
+		release_sock(sk);
+		skb = sock_alloc_send_pskb(sk, headroom + linear,
+					   len - linear, 0, &err, 0);
+		lock_sock(sk);
+	}
 	if (!skb)
 		goto out;
 	if (headroom)
@@ -1277,6 +1287,54 @@ static void iucv_process_message_q(struct sock *sk)
 	}
 }
 
+/**
+ * iucv_sock_recv_skb() - get the next skb for recvmsg(), waiting for one
+ * @sk:		the socket, locked by the caller
+ * @flags:	recvmsg() flags; MSG_PEEK leaves the skb queued and returns
+ *		it with a reference
+ * @err:	set when no skb is returned
+ *
+ * skb_recv_datagram() would sleep with the socket lock held. This sleeps in
+ * sk_wait_event(), which drops it.
+ *
+ * Context: Process context, socket lock held; sleeps with it released.
+ * Return: the skb, or NULL with @err set. At RCV_SHUTDOWN the caller
+ * returns EOF whatever @err is.
+ */
+static struct sk_buff *iucv_sock_recv_skb(struct sock *sk, int flags, int *err)
+{
+	long timeo = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
+	struct sk_buff_head *queue = &sk->sk_receive_queue;
+	DEFINE_WAIT_FUNC(wait, woken_wake_function);
+	struct sk_buff *skb;
+
+	for (;;) {
+		skb = skb_recv_datagram(sk, flags | MSG_DONTWAIT, err);
+		if (skb || *err != -EAGAIN)
+			break;
+		if (sk->sk_shutdown & RCV_SHUTDOWN)
+			break;
+		if (!timeo)
+			break;
+		if (sk->sk_state != IUCV_CONNECTED) {
+			*err = -ENOTCONN;
+			break;
+		}
+		if (signal_pending(current)) {
+			*err = sock_intr_errno(timeo);
+			break;
+		}
+		add_wait_queue(sk_sleep(sk), &wait);
+		sk_wait_event(sk, &timeo,
+			      !skb_queue_empty_lockless(queue) ||
+			      READ_ONCE(sk->sk_err) ||
+			      (READ_ONCE(sk->sk_shutdown) & RCV_SHUTDOWN) ||
+			      sk->sk_state != IUCV_CONNECTED, &wait);
+		remove_wait_queue(sk_sleep(sk), &wait);
+	}
+	return skb;
+}
+
 static int iucv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 			     size_t len, int flags)
 {
@@ -1288,24 +1346,25 @@ static int iucv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 	int err = 0;
 	u32 offset;
 
+	lock_sock(sk);
 	if ((sk->sk_state == IUCV_DISCONN) &&
 	    skb_queue_empty(&iucv->backlog_skb_q) &&
 	    skb_queue_empty(&sk->sk_receive_queue) &&
-	    list_empty(&iucv->message_q.list))
-		return 0;
+	    list_empty(&iucv->message_q.list)) {
+		copied = 0;
+		goto unlock;
+	}
 
-	if (flags & (MSG_OOB))
-		return -EOPNOTSUPP;
+	if (flags & (MSG_OOB)) {
+		err = -EOPNOTSUPP;
+		goto err_unlock;
+	}
 
-	/* receive/dequeue next skb:
-	 * the function understands MSG_PEEK and, thus, does not dequeue skb
-	 * only refcount is increased.
-	 */
-	skb = skb_recv_datagram(sk, flags, &err);
+	skb = iucv_sock_recv_skb(sk, flags, &err);
 	if (!skb) {
 		if (sk->sk_shutdown & RCV_SHUTDOWN)
-			return 0;
-		return err;
+			err = 0;
+		goto err_unlock;
 	}
 
 	offset = IUCV_SKB_CB(skb)->offset;
@@ -1355,8 +1414,9 @@ static int iucv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 			if (atomic_read(&iucv->msg_recv) >
 			    afiucv_hs_window(iucv)) {
 				WARN_ON(1);
-				iucv_sock_close(sk);
-				return -EFAULT;
+				__iucv_sock_close(sk);
+				err = -EFAULT;
+				goto err_unlock;
 			}
 		}
 
@@ -1398,7 +1458,8 @@ done:
 		copied = rlen;
 	if (flags & MSG_PEEK)
 		skb_unref(skb);
-
+unlock:
+	release_sock(sk);
 	return copied;
 
 err_out:
@@ -1406,7 +1467,8 @@ err_out:
 		skb_queue_head(&sk->sk_receive_queue, skb);
 	else
 		skb_unref(skb);
-
+err_unlock:
+	release_sock(sk);
 	return err;
 }
 
