@@ -7,14 +7,13 @@
 #include <linux/mutex_types.h>
 #include <linux/types.h>
 
-struct compat_robust_list_head;
 struct futex_pi_state;
 struct robust_list_head;
 
 /**
  * struct futex_sched_data - Futex related per task data
  * @robust_list:	User space registered robust list pointer
- * @compat_robust_list:	User space registered robust list pointer for compat tasks
+ * @robust_list32:	User space registered robust list pointer for compat tasks
  * @pi_state_list:	List head for Priority Inheritance (PI) state management
  * @pi_state_cache:	Pointer to cache one PI state object per task
  * @exit_mutex:		Mutex for serializing exit
@@ -23,7 +22,7 @@ struct robust_list_head;
 struct futex_sched_data {
 	struct robust_list_head __user		*robust_list;
 #ifdef CONFIG_COMPAT
-	struct compat_robust_list_head __user	*compat_robust_list;
+	struct robust_list_head32 __user *robust_list32;
 #endif
 	struct list_head			pi_state_list;
 	struct futex_pi_state			*pi_state_cache;
