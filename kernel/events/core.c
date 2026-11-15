@@ -4747,7 +4747,6 @@ out:
 		put_ctx(clone_ctx);
 }
 
-static void perf_remove_from_owner(struct perf_event *event);
 static void perf_event_exit_event(struct perf_event *event,
 				  struct perf_event_context *ctx,
 				  struct task_struct *task,
@@ -4756,6 +4755,11 @@ static void perf_event_exit_event(struct perf_event *event,
 /*
  * Removes all events from the current task that have been marked
  * remove-on-exec, and feeds their values back to parent events.
+ *
+ * Top-level events stay on their owner's perf_event_list, like the events of
+ * an exited task, until perf_event_release_kernel() or the owner's
+ * perf_event_exit_task() takes them off. They cannot be unlinked here:
+ * owner->perf_event_mutex nests outside of ctx->mutex.
  */
 static void perf_event_remove_on_exec(struct perf_event_context *ctx)
 {
@@ -4772,9 +4776,6 @@ static void perf_event_remove_on_exec(struct perf_event_context *ctx)
 	list_for_each_entry_safe(event, next, &ctx->event_list, event_entry) {
 		if (!event->attr.remove_on_exec)
 			continue;
-
-		if (!is_kernel_event(event))
-			perf_remove_from_owner(event);
 
 		modified = true;
 
@@ -5876,6 +5877,9 @@ static void free_event(struct perf_event *event)
 
 /*
  * Remove user event from the owner task.
+ *
+ * Must not be called with a ctx->mutex held: owner->perf_event_mutex nests
+ * outside of it, see perf_event_task_enable().
  */
 static void perf_remove_from_owner(struct perf_event *event)
 {
@@ -5900,15 +5904,7 @@ static void perf_remove_from_owner(struct perf_event *event)
 	rcu_read_unlock();
 
 	if (owner) {
-		/*
-		 * If we're here through perf_event_exit_task() we're already
-		 * holding ctx->mutex which would be an inversion wrt. the
-		 * normal lock order.
-		 *
-		 * However we can safely take this lock because its the child
-		 * ctx->mutex.
-		 */
-		mutex_lock_nested(&owner->perf_event_mutex, SINGLE_DEPTH_NESTING);
+		mutex_lock(&owner->perf_event_mutex);
 
 		/*
 		 * We have to re-check the event->owner field, if it is cleared
