@@ -660,6 +660,33 @@ void iscsit_stop_kthreads(struct iscsit_conn *conn)
 	spin_unlock(&iscsit_global->ts_bitmap_lock);
 }
 
+/*
+ * Drop a connection whose kthreads are already running but that must not enter
+ * full feature phase.  conn->sess must not be touched once this returns.
+ */
+static void iscsi_post_login_fail_conn(struct iscsit_conn *conn)
+{
+	/*
+	 * The login is refused before conn_state leaves
+	 * TARG_CONN_STATE_IN_LOGIN, so iscsi_target_tx_thread() still leaves
+	 * the cleanup to this context and cannot be inside
+	 * iscsit_close_connection() waiting on conn_usage_count.
+	 */
+	iscsit_stop_kthreads(conn);
+	iscsit_dec_conn_usage_count(conn);
+
+	if (conn->sock) {
+		sock_release(conn->sock);
+		conn->sock = NULL;
+	}
+	if (conn->conn_transport->iscsit_wait_conn)
+		conn->conn_transport->iscsit_wait_conn(conn);
+	if (conn->conn_transport->iscsit_free_conn)
+		conn->conn_transport->iscsit_free_conn(conn);
+
+	iscsit_free_conn(conn);
+}
+
 void iscsi_post_login_handler(
 	struct iscsi_np *np,
 	struct iscsit_conn *conn,
@@ -676,9 +703,6 @@ void iscsi_post_login_handler(
 	iscsit_collect_login_stats(conn, ISCSI_STATUS_CLS_SUCCESS,
 			ISCSI_LOGIN_STATUS_ACCEPT);
 
-	pr_debug("Moving to TARG_CONN_STATE_LOGGED_IN.\n");
-	conn->conn_state = TARG_CONN_STATE_LOGGED_IN;
-
 	iscsi_set_connection_parameters(conn->conn_ops, conn->param_list);
 	/*
 	 * SCSI Initiator -> SCSI Target Port Mapping
@@ -689,7 +713,28 @@ void iscsi_post_login_handler(
 		iscsi_release_param_list(conn->param_list);
 		conn->param_list = NULL;
 
+		spin_lock_bh(&se_tpg->session_lock);
 		spin_lock_bh(&sess->conn_lock);
+		/*
+		 * iscsi_login_non_zero_tsih_s2() sampled these before the
+		 * negotiation and never looked again.  Re-test all of them under
+		 * the lock that serialises against the ->nconn test in
+		 * iscsit_close_connection(), and before this connection reaches
+		 * sess_conn_list or TARG_CONN_STATE_LOGGED_IN.
+		 */
+		if (atomic_read(&sess->session_close) ||
+		    atomic_read(&sess->session_fall_back_to_erl0) ||
+		    atomic_read(&sess->session_logout) ||
+		    (sess->time2retain_timer_flags & ISCSI_TF_EXPIRED)) {
+			spin_unlock_bh(&sess->conn_lock);
+			spin_unlock_bh(&se_tpg->session_lock);
+			pr_err("iSCSI session is closing, failing login on CID: %u\n",
+			       conn->cid);
+			iscsi_post_login_fail_conn(conn);
+			/* Last access to @sess: this lets close_session() free it. */
+			iscsit_dec_session_usage_count(sess);
+			return;
+		}
 		atomic_set(&sess->session_continuation, 0);
 		if (sess->session_state == TARG_SESS_STATE_FAILED) {
 			pr_debug("Moving to"
@@ -707,7 +752,10 @@ void iscsi_post_login_handler(
 		pr_debug("Incremented iSCSI Connection count to %d"
 			" from node: %s\n", atomic_read(&sess->nconn),
 			sess->sess_ops->InitiatorName);
+		pr_debug("Moving to TARG_CONN_STATE_LOGGED_IN.\n");
+		conn->conn_state = TARG_CONN_STATE_LOGGED_IN;
 		spin_unlock_bh(&sess->conn_lock);
+		spin_unlock_bh(&se_tpg->session_lock);
 
 		iscsi_post_login_start_timers(conn);
 		/*
@@ -755,6 +803,8 @@ void iscsi_post_login_handler(
 	pr_debug("Incremented iSCSI Connection count to %d from node:"
 		" %s\n", atomic_read(&sess->nconn),
 		sess->sess_ops->InitiatorName);
+	pr_debug("Moving to TARG_CONN_STATE_LOGGED_IN.\n");
+	conn->conn_state = TARG_CONN_STATE_LOGGED_IN;
 	spin_unlock_bh(&sess->conn_lock);
 
 	sess->sid = tpg->sid++;
