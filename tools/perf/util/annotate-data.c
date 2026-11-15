@@ -140,6 +140,10 @@ static void pr_debug_location(Dwarf_Die *die, u64 pc, int reg)
 		case DW_OP_addr:
 			pr_info("address=%#lx\n", (long)ops->number);
 			break;
+		case DW_OP_addrx:
+		case DW_OP_GNU_addr_index:
+			pr_info("address index=%#lx\n", (long)ops->number);
+			break;
 		default:
 			pr_info("unknown: code=%#x, number=%#lx\n",
 				ops->atom, (long)ops->number);
