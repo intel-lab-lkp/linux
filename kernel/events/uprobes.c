@@ -2052,6 +2052,9 @@ static void ri_timer(struct timer_list *timer)
 	 */
 	raw_write_seqcount_begin(&utask->ri_seqcount);
 
+	/* Pair with prepare_uretprobe() to avoid a missed rearm. */
+	smp_mb();
+
 	for_each_ret_instance_rcu(ri, utask->return_instances)
 		hprobe_expire(&ri->hprobe, false);
 
@@ -2304,7 +2307,9 @@ static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs,
 	ri->next = utask->return_instances;
 	rcu_assign_pointer(utask->return_instances, ri);
 
-	mod_timer(&utask->ri_timer, jiffies + RI_TIMER_PERIOD);
+	/* Pair with ri_timer() after publishing the instance. */
+	smp_mb();
+	timer_reduce(&utask->ri_timer, jiffies + RI_TIMER_PERIOD);
 
 	return;
 free:
