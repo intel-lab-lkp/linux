@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/chemical/sensirion,sgp41.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Sensirion SGP41 VOC and NOx gas sensor
+
+maintainers:
+  - Akshat Chandra <notmissinge@gmail.com>
+
+description: |
+  Sensirion SGP41 indoor air quality sensor measuring raw VOC and NOx
+  signals over I2C.
+
+properties:
+  compatible:
+    const: sensirion,sgp41
+
+  reg:
+    const: 0x59
+
+  vdd-supply: true
+
+required:
+  - compatible
+  - reg
+  - vdd-supply
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      gas-sensor@59 {
+        compatible = "sensirion,sgp41";
+        reg = <0x59>;
+        vdd-supply = <&vdd>;
+      };
+    };
+...
