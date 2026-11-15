@@ -407,6 +407,7 @@ static int scmi_zones_register(struct device *dev,
 							       node);
 		}
 	}
+	ret = 0;
 
 out:
 	kfree(zones_stack);
