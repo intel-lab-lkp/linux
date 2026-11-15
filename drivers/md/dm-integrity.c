@@ -3915,6 +3915,13 @@ static void dm_integrity_resume(struct dm_target *ti)
 		memcpy(ic->sb, ic->sb_copy, sizeof(struct superblock));
 		DMERR("The superblock was changed while the device was suspended");
 		dm_integrity_io_error(ic, "superblock check", -EINVAL);
+		/*
+		 * replay_journal() is skipped below, so the journal accounting stays
+		 * zero-initialized and pad_uncommitted() would trigger its WARN_ON.
+		 * Restore the free sector count; the section counters are already zero
+		 * and nothing is committed because the device is marked failed.
+		 */
+		ic->free_sectors = ic->journal_entries;
 		goto skip_writes;
 	}
 
