@@ -287,8 +287,6 @@ void __init dma_contiguous_reserve(phys_addr_t limit)
 						  selected_limit,
 						  &dma_contiguous_default_area,
 						  fixed);
-		if (ret)
-			return;
 
 		/*
 		 * We need to insert the new area in our list to avoid
@@ -305,9 +303,11 @@ void __init dma_contiguous_reserve(phys_addr_t limit)
 		 * but we also need to insert it in our list to avoid
 		 * having a default area but an empty list.
 		 */
-		ret = dma_contiguous_insert_area(dma_contiguous_default_area);
-		if (ret)
-			pr_warn("Couldn't queue default CMA region for heap creation.");
+		if (!ret) {
+			ret = dma_contiguous_insert_area(dma_contiguous_default_area);
+			if (ret)
+				pr_warn("Couldn't queue default CMA region for heap creation.");
+		}
 	}
 
 	dma_numa_cma_reserve();
