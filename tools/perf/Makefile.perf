@@ -873,6 +873,10 @@ help:
 	@echo '  check-headers		- check which header copies are out of sync with the kernel'
 	@echo '  sync-headers		- sync those header copies with the kernel, creating commits'
 	@echo '			  (SYNC_HEADERS_ARGS="..." passes options to the script)'
+	@echo '  coverage-prep		- build perf with clang coverage, ready for a root test run'
+	@echo '  coverage		- build perf with clang coverage, run the tests and report'
+	@echo '  coverage-table	- print an ASCII table of the last coverage run'
+	@echo '			  (COVERAGE_ARGS="..." passes options to the script)'
 
 
 DOC_TARGETS := doc man html info pdf
