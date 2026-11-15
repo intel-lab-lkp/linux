@@ -2521,6 +2521,15 @@ static void high_irq_work_func(struct irq_work *work)
  #define MEMCG_DELAY_PRECISION_SHIFT 20
  #define MEMCG_DELAY_SCALING_SHIFT 14
 
+/*
+ * An overage of twice the high limit gives a nominal delay of 256 * HZ.
+ * Even one page of debt then exceeds the two-second cap. Bounding the
+ * overage here keeps the delay products in u64: with HZ < 12288, the
+ * square times HZ is below 2^56, and after scaling the product with
+ * UINT_MAX pages of debt is below 2^54.
+ */
+#define MEMCG_MAX_HIGH_OVERAGE (2ULL << MEMCG_DELAY_PRECISION_SHIFT)
+
 static u64 calculate_overage(unsigned long usage, unsigned long high)
 {
 	u64 overage;
@@ -2535,8 +2544,12 @@ static u64 calculate_overage(unsigned long usage, unsigned long high)
 	high = max(high, 1UL);
 
 	overage = usage - high;
-	overage <<= MEMCG_DELAY_PRECISION_SHIFT;
-	return div64_u64(overage, high);
+	if (overage >= high && overage - high >= high)
+		return MEMCG_MAX_HIGH_OVERAGE;
+
+	/* The scaled numerator may overflow u64 even for a small ratio. */
+	return mul_u64_u64_div_u64(overage, 1ULL << MEMCG_DELAY_PRECISION_SHIFT,
+				   high);
 }
 
 static u64 mem_find_max_overage(struct mem_cgroup *memcg)
@@ -2576,9 +2589,9 @@ static u64 swap_find_max_overage(struct mem_cgroup *memcg)
 static unsigned long calculate_high_delay(unsigned int nr_pages,
 					  u64 max_overage)
 {
-	unsigned long penalty_jiffies;
+	u64 penalty_jiffies;
 
-	if (!max_overage)
+	if (!nr_pages || !max_overage)
 		return 0;
 
 	/*
@@ -2589,6 +2602,7 @@ static unsigned long calculate_high_delay(unsigned int nr_pages,
 	 * its crazy behaviour, so we exponentially increase the delay based on
 	 * overage amount.
 	 */
+	max_overage = min(max_overage, MEMCG_MAX_HIGH_OVERAGE);
 	penalty_jiffies = max_overage * max_overage * HZ;
 	penalty_jiffies >>= MEMCG_DELAY_PRECISION_SHIFT;
 	penalty_jiffies >>= MEMCG_DELAY_SCALING_SHIFT;
@@ -2601,7 +2615,9 @@ static unsigned long calculate_high_delay(unsigned int nr_pages,
 	 * MEMCG_CHARGE_BATCH pages is nominal, so work out how much smaller or
 	 * larger the current charge patch is than that.
 	 */
-	return penalty_jiffies * nr_pages / MEMCG_CHARGE_BATCH;
+	penalty_jiffies =
+		div_u64(penalty_jiffies * nr_pages, MEMCG_CHARGE_BATCH);
+	return min_t(u64, penalty_jiffies, MEMCG_MAX_HIGH_DELAY_JIFFIES);
 }
 
 /*
@@ -2654,6 +2670,7 @@ retry_reclaim:
 	penalty_jiffies = calculate_high_delay(nr_pages,
 					       mem_find_max_overage(memcg));
 
+	/* Each component is capped, so their sum also fits unsigned long. */
 	penalty_jiffies += calculate_high_delay(nr_pages,
 						swap_find_max_overage(memcg));
 
