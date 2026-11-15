@@ -214,8 +214,18 @@ ___update_load_sum(u64 now, struct sched_avg *sa,
 	 *
 	 * Also see the comment in accumulate_sum().
 	 */
-	if (!load)
+	if (!load) {
+		/*
+		 * Skip decay and divisions when sums are already zero; check
+		 * load_avg for newly forked tasks (init_entity_runnable_average).
+		 */
+		if (unlikely(!(sa->load_sum | sa->runnable_sum | sa->util_sum |
+			       sa->load_avg))) {
+			sa->period_contrib = (delta + sa->period_contrib) % 1024;
+			return 0;
+		}
 		runnable = running = 0;
+	}
 
 	/*
 	 * Now we know we crossed measurement unit boundaries. The *_avg
@@ -437,8 +447,10 @@ int update_irq_load_avg(struct rq *rq, u64 running)
 	 * clock_task. Instead we directly scale the running time to
 	 * reflect the real amount of computation
 	 */
-	running = cap_scale(running, arch_scale_freq_capacity(cpu_of(rq)));
-	running = cap_scale(running, arch_scale_cpu_capacity(cpu_of(rq)));
+	if (running) {
+		running = cap_scale(running, arch_scale_freq_capacity(cpu_of(rq)));
+		running = cap_scale(running, arch_scale_cpu_capacity(cpu_of(rq)));
+	}
 
 	/*
 	 * We know the time that has been used by interrupt since last update
@@ -455,10 +467,12 @@ int update_irq_load_avg(struct rq *rq, u64 running)
 				0,
 				0,
 				0);
-	ret += ___update_load_sum(rq->clock, &rq->avg_irq,
-				1,
-				1,
-				1);
+	if (running) {
+		ret += ___update_load_sum(rq->clock, &rq->avg_irq,
+					1,
+					1,
+					1);
+	}
 
 	if (ret) {
 		___update_load_avg(&rq->avg_irq, 1);

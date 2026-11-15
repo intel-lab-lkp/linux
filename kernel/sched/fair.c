@@ -11620,6 +11620,8 @@ static bool __update_blocked_fair(struct rq *rq, bool *done)
 
 			if (cfs_rq == &rq->cfs)
 				decayed = true;
+		} else if (cfs_rq->tg_load_avg_contrib) {
+			update_tg_load_avg(cfs_rq);
 		}
 
 		/* Propagate pending load changes to the parent, if any: */
