@@ -37,6 +37,7 @@ TEST_PROGS := \
 	nft_nat_zones.sh \
 	nft_offload.sh \
 	nft_queue.sh \
+	nft_queue_memory.py \
 	nft_synproxy.sh \
 	nft_tproxy_tcp.sh \
 	nft_tproxy_udp.sh \
