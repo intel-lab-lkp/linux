@@ -75,6 +75,8 @@ static void afiucv_hs_synfin(struct sock *sk)
 static void afiucv_hs_fin(struct sock *sk)
 {
 	sk->sk_state = IUCV_DISCONN;
+	/* as a TCP FIN: EOF for a reader, EPOLLRDHUP for poll() */
+	WRITE_ONCE(sk->sk_shutdown, sk->sk_shutdown | RCV_SHUTDOWN);
 	sk->sk_state_change(sk);
 }
 
@@ -1398,8 +1400,9 @@ static void iucv_process_message_q(struct sock *sk)
  * then and ends the wait.
  *
  * Context: Process context, socket lock held; sleeps with it released.
- * Return: the skb, or NULL with @err set. At RCV_SHUTDOWN the caller
- * returns EOF whatever @err is.
+ * Return: the skb, or NULL with @err set: 0 if the connection is gone with
+ * nothing left to read and the call could still wait. At RCV_SHUTDOWN the
+ * caller returns EOF whatever @err is.
  */
 static struct sk_buff *iucv_sock_recv_skb(struct sock *sk, int flags, int *err)
 {
@@ -1417,7 +1420,16 @@ static struct sk_buff *iucv_sock_recv_skb(struct sock *sk, int flags, int *err)
 		if (!timeo)
 			break;
 		if (sk->sk_state != IUCV_CONNECTED) {
-			*err = -ENOTCONN;
+			/* disconnected and nothing left to read: EOF, as at
+			 * the top of iucv_sock_recvmsg()
+			 */
+			if (sk->sk_state == IUCV_DISCONN &&
+			    skb_queue_empty(&iucv_sk(sk)->backlog_skb_q) &&
+			    skb_queue_empty(&sk->sk_receive_queue) &&
+			    list_empty(&iucv_sk(sk)->message_q.list))
+				*err = 0;
+			else
+				*err = -ENOTCONN;
 			break;
 		}
 		if (signal_pending(current)) {
