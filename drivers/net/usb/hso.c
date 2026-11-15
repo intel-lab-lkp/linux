@@ -720,6 +720,7 @@ static int hso_net_open(struct net_device *net)
 static int hso_net_close(struct net_device *net)
 {
 	struct hso_net *odev = netdev_priv(net);
+	struct sk_buff *skb;
 
 	/* we don't need the queue anymore */
 	netif_stop_queue(net);
@@ -727,6 +728,14 @@ static int hso_net_close(struct net_device *net)
 	clear_bit(HSO_NET_RUNNING, &odev->flags);
 
 	hso_stop_net_device(odev->parent);
+
+	/*
+	 * Take ownership of a frame stashed by hso_net_start_xmit() and drop it.
+	 * hso_resume() takes it the same way, so only one of the two paths frees
+	 * it.
+	 */
+	skb = xchg(&odev->skb_tx_buf, NULL);
+	dev_kfree_skb(skb);
 
 	/* done */
 	return 0;
@@ -3032,6 +3041,7 @@ static int hso_resume(struct usb_interface *iface)
 {
 	int i, result = 0;
 	struct hso_net *hso_net;
+	struct sk_buff *skb;
 
 	/* Start all serial ports */
 	for (i = 0; i < HSO_SERIAL_TTY_MINORS; i++) {
@@ -3054,13 +3064,17 @@ static int hso_resume(struct usb_interface *iface)
 			if (hso_net->flags & IFF_UP) {
 				/* First transmit any lingering data,
 				   then restart the device. */
-				if (hso_net->skb_tx_buf) {
+				skb = xchg(&hso_net->skb_tx_buf, NULL);
+				if (skb) {
 					dev_dbg(&iface->dev,
 						"Transmitting"
 						" lingering data\n");
-					hso_net_start_xmit(hso_net->skb_tx_buf,
-							   hso_net->net);
-					hso_net->skb_tx_buf = NULL;
+					if (test_bit(HSO_NET_RUNNING,
+						     &hso_net->flags))
+						hso_net_start_xmit(skb,
+								   hso_net->net);
+					else
+						dev_kfree_skb(skb);
 				}
 				result = hso_start_net_device(network_table[i]);
 				if (result)
