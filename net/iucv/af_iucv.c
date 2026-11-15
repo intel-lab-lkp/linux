@@ -401,26 +401,25 @@ static void iucv_sever_path(struct sock *sk, int with_user_data)
 static int iucv_send_ctrl(struct sock *sk, u8 flags)
 {
 	struct iucv_sock *iucv = iucv_sk(sk);
-	int err = 0;
 	int blen;
 	struct sk_buff *skb;
-	u8 shutdown = 0;
 
 	blen = sizeof(struct af_iucv_trans_hdr) +
 	       LL_RESERVED_SPACE(iucv->hs_dev);
-	if (sk->sk_shutdown & SEND_SHUTDOWN) {
-		/* controlling flags should be sent anyway */
-		shutdown = sk->sk_shutdown;
-		sk->sk_shutdown &= RCV_SHUTDOWN;
+	/* Control frames go out after a shutdown too, so this is not
+	 * sock_alloc_send_skb(), which fails on SEND_SHUTDOWN. sk_shutdown is
+	 * left alone: it is read without the socket lock, and not every
+	 * caller here holds it.
+	 */
+	if (sk_wmem_alloc_get(sk) >= READ_ONCE(sk->sk_sndbuf)) {
+		sk_set_bit(SOCKWQ_ASYNC_NOSPACE, sk);
+		return -EAGAIN;
 	}
-	skb = sock_alloc_send_skb(sk, blen, 1, &err);
-	if (skb) {
-		skb_reserve(skb, blen);
-		err = afiucv_hs_send(NULL, sk, skb, flags);
-	}
-	if (shutdown)
-		sk->sk_shutdown = shutdown;
-	return err;
+	skb = sock_wmalloc(sk, blen, 1, sk->sk_allocation);
+	if (!skb)
+		return -ENOBUFS;
+	skb_reserve(skb, blen);
+	return afiucv_hs_send(NULL, sk, skb, flags);
 }
 
 /**
