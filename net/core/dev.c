@@ -7001,7 +7001,10 @@ void __napi_schedule_irqoff(struct napi_struct *n)
 }
 EXPORT_SYMBOL(__napi_schedule_irqoff);
 
-bool napi_complete_done(struct napi_struct *n, int work_done)
+/* Inline so the legacy API eliminates the optional mask callback path. */
+static __always_inline bool
+__napi_complete_done(struct napi_struct *n, int work_done,
+		     void (*mask)(void *data), void *data)
 {
 	unsigned long flags, val, new, timeout = 0;
 	bool ret = true;
@@ -7013,8 +7016,11 @@ bool napi_complete_done(struct napi_struct *n, int work_done)
 	 *    the guarantee we will be called later.
 	 */
 	if (unlikely(n->state & (NAPIF_STATE_NPSVC |
-				 NAPIF_STATE_IN_BUSY_POLL)))
+				 NAPIF_STATE_IN_BUSY_POLL))) {
+		if (mask)
+			mask(data);
 		return false;
+	}
 
 	if (work_done) {
 		if (n->gro.bitmask)
@@ -7047,6 +7053,13 @@ bool napi_complete_done(struct napi_struct *n, int work_done)
 	do {
 		WARN_ON_ONCE(!(val & NAPIF_STATE_SCHED));
 
+		/*
+		 * A false result is not proof of retained ownership. Mask
+		 * before the state transition lets another CPU enter poll.
+		 */
+		if (mask && (!ret || (val & NAPIF_STATE_MISSED)))
+			mask(data);
+
 		new = val & ~(NAPIF_STATE_MISSED | NAPIF_STATE_SCHED |
 			      NAPIF_STATE_SCHED_THREADED |
 			      NAPIF_STATE_PREFER_BUSY_POLL);
@@ -7069,7 +7082,19 @@ bool napi_complete_done(struct napi_struct *n, int work_done)
 			      HRTIMER_MODE_REL_PINNED);
 	return ret;
 }
+
+bool napi_complete_done(struct napi_struct *n, int work_done)
+{
+	return __napi_complete_done(n, work_done, NULL, NULL);
+}
 EXPORT_SYMBOL(napi_complete_done);
+
+bool napi_complete_done_with_irq_mask(struct napi_struct *n, int work_done,
+				      void (*mask)(void *data), void *data)
+{
+	return __napi_complete_done(n, work_done, mask, data);
+}
+EXPORT_SYMBOL(napi_complete_done_with_irq_mask);
 
 static void __skb_defer_free_flush(struct skb_defer_node *sdn, int budget)
 {
