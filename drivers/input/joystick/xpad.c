@@ -406,6 +406,7 @@ static const struct xpad_device {
 	{ 0x3285, 0x0663, "Nacon Evol-X", 0, XTYPE_XBOXONE },
 	{ 0x3507, 0x000b, "ZENAIM LEVERLESS", 0, XTYPE_XBOX360 },
 	{ 0x3537, 0x1004, "GameSir T4 Kaleid", 0, XTYPE_XBOX360 },
+	{ 0x3537, 0x1004, "GameSir G7 Pro", MAP_SHARE_BUTTON, XTYPE_XBOXONE },
 	{ 0x3537, 0x100f, "GameSir Nova 2 Lite", 0, XTYPE_XBOX360 },
 	{ 0x3537, 0x1010, "GameSir G7 SE", 0, XTYPE_XBOXONE },
 	{ 0x3537, 0x1040, "GameSir Nova Lite", 0, XTYPE_XBOX360 },
@@ -2054,6 +2055,30 @@ err_free_input:
 	return error;
 }
 
+/*
+ * Some vendors reuse the VID/PID of an Xbox 360 protocol controller for a
+ * device speaking GIP: GameSir 3537:1004 is the T4 Kaleid, but also the
+ * G7 Pro 2.4GHz dongle in Xbox mode. Never apply an Xbox 360 entry to a GIP
+ * interface.
+ */
+static bool xpad_device_match(const struct xpad_device *xdev,
+			      struct usb_device *udev,
+			      struct usb_interface *intf)
+{
+	const struct usb_interface_descriptor *desc = &intf->cur_altsetting->desc;
+
+	if (le16_to_cpu(udev->descriptor.idVendor) != xdev->idVendor ||
+	    le16_to_cpu(udev->descriptor.idProduct) != xdev->idProduct)
+		return false;
+
+	if (xdev->xtype == XTYPE_XBOX360 &&
+	    desc->bInterfaceClass == USB_CLASS_VENDOR_SPEC &&
+	    desc->bInterfaceProtocol == 208)
+		return false;
+
+	return true;
+}
+
 static int xpad_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
 	struct usb_device *udev = interface_to_usbdev(intf);
@@ -2065,8 +2090,7 @@ static int xpad_probe(struct usb_interface *intf, const struct usb_device_id *id
 		return -ENODEV;
 
 	for (i = 0; xpad_device[i].idVendor; i++) {
-		if ((le16_to_cpu(udev->descriptor.idVendor) == xpad_device[i].idVendor) &&
-		    (le16_to_cpu(udev->descriptor.idProduct) == xpad_device[i].idProduct))
+		if (xpad_device_match(&xpad_device[i], udev, intf))
 			break;
 	}
 
