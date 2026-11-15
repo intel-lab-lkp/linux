@@ -350,6 +350,8 @@ struct claw_drvdata {
 	/* Gamepad Variables */
 	enum claw_mkeys_function_index mkeys_function;
 	enum claw_gamepad_mode_index gamepad_mode;
+	struct work_struct mode_event; /* uevent when the MCU changes the mode */
+	unsigned int mode_reports; /* Mode reports stored, guarded by mode_lock */
 	u8 m1_codes[CLAW_KEYS_MAX];
 	u8 m2_codes[CLAW_KEYS_MAX];
 	u8 rumble_intensity_right;
@@ -387,18 +389,45 @@ static int get_endpoint_address(struct hid_device *hdev)
 	return -ENODEV;
 }
 
+static void claw_mode_event_fn(struct work_struct *work)
+{
+	struct claw_drvdata *drvdata = container_of(work, struct claw_drvdata, mode_event);
+
+	kobject_uevent(&drvdata->hdev->dev.kobj, KOBJ_CHANGE);
+}
+
+static void claw_queue_mode_event(struct claw_drvdata *drvdata)
+{
+	guard(spinlock_irqsave)(&drvdata->registration_lock);
+	/* Pairs with smp_store_release from cfg_setup_fn and claw_remove */
+	if (smp_load_acquire(&drvdata->gp_registered))
+		schedule_work(&drvdata->mode_event);
+}
+
 static int claw_gamepad_mode_event(struct claw_drvdata *drvdata,
 				   struct claw_command_report *cmd_rep)
 {
+	bool changed;
+
 	if (cmd_rep->data[0] >= ARRAY_SIZE(claw_gamepad_mode_text) ||
 	    !claw_gamepad_mode_text[cmd_rep->data[0]] ||
 	    cmd_rep->data[1] >= ARRAY_SIZE(claw_mkeys_function_text))
 		return -EINVAL;
 
 	scoped_guard(spinlock_irqsave, &drvdata->mode_lock) {
+		changed = drvdata->gamepad_mode != cmd_rep->data[0] ||
+			  drvdata->mkeys_function != cmd_rep->data[1];
 		drvdata->gamepad_mode = cmd_rep->data[0];
 		drvdata->mkeys_function = cmd_rep->data[1];
+		drvdata->mode_reports++;
 	}
+
+	/*
+	 * The MCU changes the mode or M-key function by itself, e.g. while
+	 * View+LB is held. Userspace learns of changes only through uevents.
+	 */
+	if (changed)
+		claw_queue_mode_event(drvdata);
 
 	return 0;
 }
@@ -656,11 +685,15 @@ static int claw_hw_output_report(struct hid_device *hdev, u8 index, u8 *data,
 static int claw_switch_mode(struct hid_device *hdev, enum claw_mode_field field, u8 val)
 {
 	struct claw_drvdata *drvdata = hid_get_drvdata(hdev);
+	unsigned int reports;
+	bool raced;
 	u8 data[2];
+	int ret;
 
 	guard(mutex)(&drvdata->cfg_mutex);
 
 	scoped_guard(spinlock_irqsave, &drvdata->mode_lock) {
+		reports = drvdata->mode_reports;
 		switch (field) {
 		case CLAW_FIELD_GAMEPAD_MODE:
 			data[0] = val;
@@ -673,8 +706,32 @@ static int claw_switch_mode(struct hid_device *hdev, enum claw_mode_field field,
 		}
 	}
 
-	return __claw_hw_output_report(hdev, CLAW_COMMAND_TYPE_SWITCH_MODE, data,
-				       ARRAY_SIZE(data), 0);
+	ret = __claw_hw_output_report(hdev, CLAW_COMMAND_TYPE_SWITCH_MODE, data,
+				      ARRAY_SIZE(data), 0);
+	if (ret)
+		return ret;
+
+	/* The driver's own change is no change to report */
+	scoped_guard(spinlock_irqsave, &drvdata->mode_lock) {
+		raced = drvdata->mode_reports != reports;
+		if (!raced) {
+			drvdata->gamepad_mode = data[0];
+			drvdata->mkeys_function = data[1];
+		}
+	}
+
+	/*
+	 * A report came in during the transfer. The MCU sent it either before
+	 * it applied the write or after it changed the state again by itself,
+	 * so the stored state may be wrong and a change may have gone
+	 * unreported. Read the state back and let userspace check it.
+	 */
+	if (raced) {
+		__claw_hw_output_report(hdev, CLAW_COMMAND_TYPE_READ_GAMEPAD_MODE, NULL, 0, 25);
+		claw_queue_mode_event(drvdata);
+	}
+
+	return 0;
 }
 
 static ssize_t gamepad_mode_store(struct device *dev, struct device_attribute *attr,
@@ -1871,6 +1928,7 @@ static int claw_probe(struct hid_device *hdev, u8 ep)
 	INIT_DELAYED_WORK(&drvdata->cfg_resume, &cfg_resume_fn);
 	INIT_DELAYED_WORK(&drvdata->cfg_setup, &cfg_setup_fn);
 	INIT_DELAYED_WORK(&drvdata->rgb_queue, &claw_rgb_queue_fn);
+	INIT_WORK(&drvdata->mode_event, &claw_mode_event_fn);
 
 	/* For control interface: open the HID transport for sending commands. */
 	ret = hid_hw_open(hdev);
@@ -1945,6 +2003,9 @@ static void claw_remove(struct hid_device *hdev)
 		/* Pairs with smp_load_acquire in attribute show/store functions */
 		smp_store_release(&drvdata->rgb_registered, false);
 	}
+
+	/* gp_registered is false now, so no new mode event can be queued */
+	cancel_work_sync(&drvdata->mode_event);
 
 	if (gp_registered)
 		device_remove_group(&hdev->dev, &claw_gamepad_attr_group);
