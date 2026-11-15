@@ -5,6 +5,7 @@
  * Copyright (C) 2022 ARM Ltd.
  */
 
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/math.h>
 #include <linux/limits.h>
@@ -368,11 +369,12 @@ static int scmi_powercap_register_zone(struct scmi_powercap_root *pr,
 static int scmi_zones_register(struct device *dev,
 			       struct scmi_powercap_root *pr)
 {
-	int ret = 0;
 	unsigned int sp = 0, reg_zones = 0;
-	struct scmi_powercap_zone *spz, **zones_stack;
+	struct scmi_powercap_zone *spz;
+	int ret = 0;
 
-	zones_stack = kzalloc_objs(spz, pr->num_zones);
+	struct scmi_powercap_zone **zones_stack __free(kfree) =
+		kzalloc_objs(spz, pr->num_zones);
 	if (!zones_stack)
 		return -ENOMEM;
 
@@ -396,9 +398,7 @@ static int scmi_zones_register(struct device *dev,
 					parent->invalid ? "hole" : "cycle",
 					parent->info->id);
 				scmi_powercap_unregister_all_zones(pr);
-				ret = -EINVAL;
-				reg_zones = 0;
-				goto out;
+				return -EINVAL;
 			}
 			zones_stack[sp++] = spz;
 			spz = parent;
@@ -407,16 +407,14 @@ static int scmi_zones_register(struct device *dev,
 			if (!ret) {
 				reg_zones++;
 			} else if (sp) {
-				/* Failed to register a non-leaf zone.
-				 * Bail-out.
-				 */
+				/* Failed to register a non-leaf zone. Bail-out. */
 				dev_err(dev,
 					"Failed to register non-leaf zone ID %u - ret:%d\n",
 					spz->info->id, ret);
 				scmi_powercap_unregister_all_zones(pr);
-				reg_zones = 0;
-				goto out;
+				return ret;
 			}
+
 			/* Pick next zone to process */
 			if (sp)
 				spz = zones_stack[--sp];
@@ -426,13 +424,11 @@ static int scmi_zones_register(struct device *dev,
 							       node);
 		}
 	}
-	ret = 0;
 
-out:
-	kfree(zones_stack);
+	/* If we get here any previous error was on a leaf zone, so ignored */
 	dev_info(dev, "Registered %d SCMI Powercap domains !\n", reg_zones);
 
-	return ret;
+	return 0;
 }
 
 static int scmi_powercap_probe(struct scmi_device *sdev)
