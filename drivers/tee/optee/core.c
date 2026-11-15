@@ -184,11 +184,9 @@ void optee_release(struct tee_context *ctx)
 	optee_release_helper(ctx, optee_close_session_helper);
 }
 
-void optee_release_supp(struct tee_context *ctx)
+void optee_close_context_supp(struct tee_context *ctx)
 {
 	struct optee *optee = tee_get_drvdata(ctx->teedev);
-
-	optee_release_helper(ctx, optee_close_session_helper);
 
 	optee_supp_release(&optee->supp);
 }

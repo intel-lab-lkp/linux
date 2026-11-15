@@ -370,7 +370,7 @@ void optee_set_dev_group(struct optee *optee);
 void optee_remove_common(struct optee *optee);
 int optee_open(struct tee_context *ctx, bool cap_memref_null);
 void optee_release(struct tee_context *ctx);
-void optee_release_supp(struct tee_context *ctx);
+void optee_close_context_supp(struct tee_context *ctx);
 
 static inline void optee_from_msg_param_value(struct tee_param *p, u32 attr,
 					      const struct optee_msg_param *mp)
