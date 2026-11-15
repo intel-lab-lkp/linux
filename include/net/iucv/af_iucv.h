@@ -15,6 +15,7 @@
 #include <linux/list.h>
 #include <linux/poll.h>
 #include <linux/socket.h>
+#include <net/net_trackers.h>
 #include <net/iucv/iucv.h>
 
 #ifndef AF_IUCV
@@ -128,14 +129,19 @@ struct iucv_sock {
 	struct sock_msg_q	message_q;
 	unsigned int		send_tag;
 	u8			flags;
+	u8			hs_pending;	/* AF_IUCV_PEND_*, af_iucv.c */
 	u16			msglimit;
 	u16			msglimit_peer;
 	u16			msglimit_adv;	/* window given to the peer */
+	u16			hs_pending_window;
 	atomic_t		skbs_in_xmit;
 	atomic_t		msg_sent;
 	atomic_t		msg_recv;
 	atomic_t		pendings;
 	int			transport;
+	/* frames in sk_backlog since it was empty */
+	unsigned int		hs_backlog_data;
+	unsigned int		hs_backlog_syn;
 	void			(*sk_txnotify)(struct sock *sk,
 					       enum iucv_tx_notify n);
 };
@@ -144,6 +150,7 @@ struct iucv_skb_cb {
 	u32	class;		/* target class of message */
 	u32	tag;		/* tag associated with message */
 	u32	offset;		/* offset for skb receival */
+	netdevice_tracker	dev_tracker;	/* SYN in the socket backlog */
 };
 
 #define IUCV_SKB_CB(__skb)	((struct iucv_skb_cb *)&((__skb)->cb[0]))

@@ -44,7 +44,8 @@ static char iucv_userid[80];
  * @sk:		the socket, in IUCV_BOUND
  * @window:	the window in the SYN|ACK: the frames the peer takes from us
  *
- * Context: Softirq, under bh_lock_sock().
+ * Context: sk_lock.slock held: softirq with no task owning the socket, or
+ * the owner in afiucv_hs_apply().
  */
 static void afiucv_hs_synack(struct sock *sk, u16 window)
 {
@@ -77,10 +78,58 @@ static void afiucv_hs_fin(struct sock *sk)
 	sk->sk_state_change(sk);
 }
 
+/* iucv_sock.hs_pending: control frames recorded for the owner */
+#define AF_IUCV_PEND_SYNACK	0x01
+#define AF_IUCV_PEND_SYNFIN	0x02
+#define AF_IUCV_PEND_SYNREPLY	(AF_IUCV_PEND_SYNACK | AF_IUCV_PEND_SYNFIN)
+#define AF_IUCV_PEND_FIN	0x04
+#define AF_IUCV_PEND_ALL	(AF_IUCV_PEND_SYNREPLY | AF_IUCV_PEND_FIN)
+
+/**
+ * afiucv_hs_apply() - apply the control frames afiucv_hs_record() kept
+ * @sk:		the socket, owned by the caller
+ * @mask:	the AF_IUCV_PEND_* bits to apply
+ *
+ * A socket closed meanwhile takes none. The test is SOCK_ZAPPED, since
+ * __iucv_sock_close() leaves IUCV_BOUND as it is.
+ *
+ * Context: Process context, under sk_lock.slock.
+ */
+static void afiucv_hs_apply(struct sock *sk, u8 mask)
+{
+	struct iucv_sock *iucv = iucv_sk(sk);
+	u8 pending = iucv->hs_pending & mask;
+
+	iucv->hs_pending &= ~pending;
+	if (sock_flag(sk, SOCK_ZAPPED))
+		return;
+	if ((pending & AF_IUCV_PEND_SYNACK) && sk->sk_state == IUCV_BOUND)
+		afiucv_hs_synack(sk, iucv->hs_pending_window);
+	if ((pending & AF_IUCV_PEND_SYNFIN) && sk->sk_state == IUCV_BOUND)
+		afiucv_hs_synfin(sk);
+	if ((pending & AF_IUCV_PEND_FIN) && sk->sk_state == IUCV_CONNECTED)
+		afiucv_hs_fin(sk);
+}
+
+/**
+ * afiucv_hs_release_cb() - proto->release_cb, apply what was recorded
+ * @sk:		the socket, still owned by the caller
+ *
+ * Runs after the backlog, so a recorded FIN follows the data before it.
+ *
+ * Context: Process context, under sk_lock.slock.
+ */
+static void afiucv_hs_release_cb(struct sock *sk)
+{
+	if (iucv_sk(sk)->hs_pending)
+		afiucv_hs_apply(sk, AF_IUCV_PEND_ALL);
+}
+
 static struct proto iucv_proto = {
 	.name		= "AF_IUCV",
 	.owner		= THIS_MODULE,
 	.obj_size	= sizeof(struct iucv_sock),
+	.release_cb	= afiucv_hs_release_cb,
 };
 
 static struct iucv_interface *pr_iucv;
@@ -131,6 +180,7 @@ static void iucv_sock_kill(struct sock *sk);
 static void __iucv_sock_close(struct sock *sk);
 
 static void afiucv_hs_callback_txnotify(struct sock *sk, enum iucv_tx_notify);
+static int afiucv_hs_backlog_rcv(struct sock *sk, struct sk_buff *skb);
 
 static struct iucv_sock_list iucv_sk_list = {
 	.lock = __RW_LOCK_UNLOCKED(iucv_sk_list.lock),
@@ -571,6 +621,8 @@ static struct sock *iucv_sock_alloc(struct socket *sock, int proto, gfp_t prio, 
 		iucv->transport = AF_IUCV_TRANS_HIPER;
 
 	sk->sk_destruct = iucv_sock_destruct;
+	/* not from iucv_proto: sk_alloc() does not copy proto->backlog_rcv */
+	sk->sk_backlog_rcv = afiucv_hs_backlog_rcv;
 	sk->sk_sndtimeo = IUCV_CONN_TIMEOUT;
 
 	sock_reset_flag(sk, SOCK_ZAPPED);
@@ -844,6 +896,15 @@ static int iucv_sock_connect(struct socket *sock, struct sockaddr_unsized *addr,
 		err = afiucv_path_connect(sock, addr);
 	if (err)
 		goto done;
+
+	/* The reply may be in already, recorded while we own the socket:
+	 * apply it, or a non-blocking connect() misses it.
+	 */
+	if (iucv->transport == AF_IUCV_TRANS_HIPER) {
+		spin_lock_bh(&sk->sk_lock.slock);
+		afiucv_hs_apply(sk, AF_IUCV_PEND_SYNREPLY);
+		spin_unlock_bh(&sk->sk_lock.slock);
+	}
 
 	if (sk->sk_state != IUCV_CONNECTED)
 		err = iucv_sock_wait(sk, iucv_sock_in_state(sk, IUCV_CONNECTED,
@@ -1333,7 +1394,8 @@ static void iucv_process_message_q(struct sock *sk)
  * @err:	set when no skb is returned
  *
  * skb_recv_datagram() would sleep with the socket lock held. This sleeps in
- * sk_wait_event(), which drops it.
+ * sk_wait_event(), which drops it; a FIN recorded for the owner is applied
+ * then and ends the wait.
  *
  * Context: Process context, socket lock held; sleeps with it released.
  * Return: the skb, or NULL with @err set. At RCV_SHUTDOWN the caller
@@ -2027,7 +2089,6 @@ static int afiucv_hs_callback_syn(struct sock *sk, struct sk_buff *skb)
 	}
 
 	nsk = iucv_sock_alloc(NULL, sk->sk_protocol, GFP_ATOMIC, 0);
-	bh_lock_sock(sk);
 	if ((sk->sk_state != IUCV_LISTEN) ||
 	    sk_acceptq_is_full(sk) ||
 	    !nsk) {
@@ -2037,7 +2098,6 @@ static int afiucv_hs_callback_syn(struct sock *sk, struct sk_buff *skb)
 		err = dev_queue_xmit(skb);
 		if (nsk)
 			iucv_sock_kill(nsk);
-		bh_unlock_sock(sk);
 		goto out;
 	}
 
@@ -2068,7 +2128,6 @@ static int afiucv_hs_callback_syn(struct sock *sk, struct sk_buff *skb)
 		sk->sk_data_ready(sk);
 	} else
 		iucv_sock_kill(nsk);
-	bh_unlock_sock(sk);
 
 out:
 	return NET_RX_SUCCESS;
@@ -2084,9 +2143,7 @@ static int afiucv_hs_callback_synack(struct sock *sk, struct sk_buff *skb)
 		return NET_RX_SUCCESS;
 	}
 
-	bh_lock_sock(sk);
 	afiucv_hs_synack(sk, iucv_trans_hdr(skb)->window);
-	bh_unlock_sock(sk);
 	consume_skb(skb);
 	return NET_RX_SUCCESS;
 }
@@ -2101,9 +2158,7 @@ static int afiucv_hs_callback_synfin(struct sock *sk, struct sk_buff *skb)
 		return NET_RX_SUCCESS;
 	}
 
-	bh_lock_sock(sk);
 	afiucv_hs_synfin(sk);
-	bh_unlock_sock(sk);
 	consume_skb(skb);
 	return NET_RX_SUCCESS;
 }
@@ -2119,10 +2174,8 @@ static int afiucv_hs_callback_fin(struct sock *sk, struct sk_buff *skb)
 		return NET_RX_SUCCESS;
 	}
 
-	bh_lock_sock(sk);
 	if (sk->sk_state == IUCV_CONNECTED)
 		afiucv_hs_fin(sk);
-	bh_unlock_sock(sk);
 	consume_skb(skb);
 	return NET_RX_SUCCESS;
 }
@@ -2137,6 +2190,7 @@ static int afiucv_hs_callback_win(struct sock *sk, struct sk_buff *skb)
 	if (!iucv)
 		return NET_RX_SUCCESS;
 
+	/* also runs while a task owns the socket, see afiucv_hs_defer() */
 	if (sk->sk_state != IUCV_CONNECTED)
 		return NET_RX_SUCCESS;
 
@@ -2157,6 +2211,7 @@ static int afiucv_hs_callback_rx(struct sock *sk, struct sk_buff *skb)
 		return NET_RX_SUCCESS;
 	}
 
+	/* also runs while a task owns the socket, see afiucv_hs_defer() */
 	if (sk->sk_state != IUCV_CONNECTED) {
 		kfree_skb(skb);
 		return NET_RX_SUCCESS;
@@ -2190,11 +2245,173 @@ static int afiucv_hs_callback_rx(struct sock *sk, struct sk_buff *skb)
 }
 
 /**
+ * afiucv_hs_stray() - test for a frame that no state of the socket can use
+ * @sk:		the socket the frame is for, under bh_lock_sock()
+ * @flags:	the flags of the frame
+ *
+ * A stray never waits for the owner. A SYN is one outside IUCV_LISTEN and a
+ * SYN|ACK or SYN|FIN outside IUCV_BOUND, the state tests of their
+ * callbacks; a full accept queue is not tested here. A FIN is one unless
+ * the socket is connected or a recorded SYN|ACK is about to connect it.
+ * Data, SHT and WIN are strays once the peer's FIN is recorded: the socket
+ * stays IUCV_CONNECTED until the owner applies it.
+ *
+ * Context: Softirq, under bh_lock_sock().
+ * Return: true if the frame is to be freed or, for a SYN, refused.
+ */
+static bool afiucv_hs_stray(struct sock *sk, u8 flags)
+{
+	struct iucv_sock *iucv = iucv_sk(sk);
+
+	switch (flags) {
+	case 0:
+	case AF_IUCV_FLAG_SHT:
+	case AF_IUCV_FLAG_WIN:
+		return iucv->hs_pending & AF_IUCV_PEND_FIN;
+	case AF_IUCV_FLAG_FIN:
+		return sk->sk_state != IUCV_CONNECTED &&
+		       !(iucv->hs_pending & AF_IUCV_PEND_SYNACK);
+	case AF_IUCV_FLAG_SYN:
+		return sk->sk_state != IUCV_LISTEN;
+	case AF_IUCV_FLAG_SYN | AF_IUCV_FLAG_ACK:
+	case AF_IUCV_FLAG_SYN | AF_IUCV_FLAG_FIN:
+		return sk->sk_state != IUCV_BOUND;
+	}
+	return true;
+}
+
+/**
+ * afiucv_hs_defer() - test whether a data, SHT or WIN frame has to wait
+ * @sk:		the socket, owned by a task, under bh_lock_sock()
+ *
+ * These frames do not change sk_state and are handled on arrival, also
+ * while a task owns the socket. They wait in the socket backlog only if:
+ *
+ * - the reply to our SYN is recorded and not applied yet: the socket is
+ *   still IUCV_BOUND, where data is freed and a WIN ignored;
+ * - frames wait already: a later one must not overtake them, and
+ *   sk_backlog.len stays non-zero until __release_sock() has run them all.
+ *
+ * Context: Softirq, under bh_lock_sock().
+ * Return: true if the frame has to wait in the backlog.
+ */
+static bool afiucv_hs_defer(struct sock *sk)
+{
+	return (iucv_sk(sk)->hs_pending & AF_IUCV_PEND_SYNREPLY) ||
+	       sk->sk_backlog.len != 0;
+}
+
+/**
+ * afiucv_hs_record() - keep a control frame for the task that owns the socket
+ * @sk:		the socket, owned by a task, under bh_lock_sock()
+ * @skb:	the frame, consumed here
+ * @flags:	the flags of the frame: SYN|ACK, SYN|FIN or FIN
+ *
+ * Not queued: nothing resends a control frame, and the socket backlog has
+ * to refuse a pfmemalloc skb. A bit in hs_pending is kept instead, and the
+ * window of a SYN|ACK. The first reply to our SYN decides; a FIN is applied
+ * after it.
+ *
+ * Context: Softirq, under bh_lock_sock().
+ */
+static void afiucv_hs_record(struct sock *sk, struct sk_buff *skb, u8 flags)
+{
+	struct iucv_sock *iucv = iucv_sk(sk);
+
+	switch (flags) {
+	case AF_IUCV_FLAG_SYN | AF_IUCV_FLAG_ACK:
+		if (!(iucv->hs_pending & AF_IUCV_PEND_SYNREPLY)) {
+			iucv->hs_pending_window = iucv_trans_hdr(skb)->window;
+			iucv->hs_pending |= AF_IUCV_PEND_SYNACK;
+		}
+		break;
+	case AF_IUCV_FLAG_SYN | AF_IUCV_FLAG_FIN:
+		if (!(iucv->hs_pending & AF_IUCV_PEND_SYNREPLY))
+			iucv->hs_pending |= AF_IUCV_PEND_SYNFIN;
+		break;
+	case AF_IUCV_FLAG_FIN:
+		iucv->hs_pending |= AF_IUCV_PEND_FIN;
+		break;
+	}
+	consume_skb(skb);
+}
+
+/**
+ * afiucv_hs_backlog_add() - make a frame wait for the task that owns the socket
+ * @sk:		the socket, owned by a task, under bh_lock_sock()
+ * @skb:	the frame
+ * @flags:	the flags of the frame: a SYN, or a data, SHT or WIN frame
+ *
+ * sk_add_backlog() is not used: its limit is in bytes and counts the
+ * receive queue too, while the window is in frames. So frames are counted:
+ *
+ * - data, SHT and WIN up to the window given to the peer plus one. They
+ *   wait only from the reply to our SYN until the owner has run them, and
+ *   a peer that keeps to its window sends at most that many data frames
+ *   and its SHT by then, and no WIN;
+ * - SYNs up to the accept queue plus the one sk_acceptq_is_full() admits.
+ *
+ * The counts restart only when __release_sock() has run every frame, so a
+ * peer cannot keep the owner in its loop. Past the limit a frame is
+ * dropped and a SYN refused; so is a pfmemalloc skb, on which
+ * __sk_backlog_rcv() BUG()s unless the socket is SOCK_MEMALLOC. A waiting
+ * SYN is cut to its header, all the reply needs, and holds its device:
+ * close() drops hs_dev before the release runs the SYN.
+ *
+ * Context: Softirq, under bh_lock_sock().
+ */
+static void afiucv_hs_backlog_add(struct sock *sk, struct sk_buff *skb,
+				  u8 flags)
+{
+	struct iucv_sock *iucv = iucv_sk(sk);
+	unsigned int *count;
+	unsigned int limit;
+
+	if (!sk->sk_backlog.len) {
+		iucv->hs_backlog_data = 0;
+		iucv->hs_backlog_syn = 0;
+	}
+	if (flags == AF_IUCV_FLAG_SYN) {
+		count = &iucv->hs_backlog_syn;
+		limit = sk->sk_max_ack_backlog + 1;
+	} else {
+		count = &iucv->hs_backlog_data;
+		limit = afiucv_hs_window(iucv) + 1;
+	}
+	if (*count >= limit ||
+	    (skb_pfmemalloc(skb) && !sock_flag(sk, SOCK_MEMALLOC)))
+		goto refuse;
+	if (flags == AF_IUCV_FLAG_SYN) {
+		if (pskb_trim(skb, sizeof(struct af_iucv_trans_hdr)))
+			goto refuse;
+		BUILD_BUG_ON(sizeof(struct iucv_skb_cb) >
+			     sizeof_field(struct sk_buff, cb));
+		netdev_hold(skb->dev, &IUCV_SKB_CB(skb)->dev_tracker,
+			    GFP_ATOMIC);
+	}
+	__sk_add_backlog(sk, skb);
+	/* a window of 65535 frames of 64K each would wrap the int */
+	sk->sk_backlog.len = min_t(u32, sk->sk_backlog.len + skb->truesize,
+				   INT_MAX);
+	(*count)++;
+	return;
+
+refuse:
+	if (flags == AF_IUCV_FLAG_SYN) {
+		afiucv_hs_callback_syn(NULL, skb);
+	} else {
+		sk_drops_inc(sk);
+		kfree_skb_reason(skb, SKB_DROP_REASON_SOCKET_BACKLOG);
+	}
+}
+
+/**
  * afiucv_hs_dispatch() - run the callback of a frame
  * @sk:		the socket the frame is for, or NULL if there is none
  * @skb:	the frame
  *
- * Context: Softirq.
+ * Context: BH disabled. @sk is under bh_lock_sock(), or owned by the caller
+ * in afiucv_hs_backlog_rcv().
  * Return: NET_RX_SUCCESS.
  */
 static int afiucv_hs_dispatch(struct sock *sk, struct sk_buff *skb)
@@ -2238,6 +2455,74 @@ static int afiucv_hs_dispatch(struct sock *sk, struct sk_buff *skb)
 		kfree_skb(skb);
 	}
 	return err;
+}
+
+/**
+ * afiucv_hs_backlog_rcv() - sk_backlog_rcv, run a frame that waited
+ * @sk:		the socket, owned by the caller
+ * @skb:	the frame
+ *
+ * Frames run in the order of arrival. The reply to our SYN came before any
+ * of them, so it is applied first. A SYN is refused if the listener was
+ * closed or its accept queue filled meanwhile.
+ *
+ * Context: Process context, socket owned by the caller, no sk_lock.slock.
+ * Return: 0.
+ */
+static int afiucv_hs_backlog_rcv(struct sock *sk, struct sk_buff *skb)
+{
+	struct net_device *dev = NULL;
+	netdevice_tracker tracker;
+
+	spin_lock_bh(&sk->sk_lock.slock);
+	afiucv_hs_apply(sk, AF_IUCV_PEND_SYNREPLY);
+	spin_unlock_bh(&sk->sk_lock.slock);
+	if (iucv_trans_hdr(skb)->flags == AF_IUCV_FLAG_SYN) {
+		/* held by afiucv_hs_backlog_add(); the reply uses up the skb */
+		dev = skb->dev;
+		tracker = IUCV_SKB_CB(skb)->dev_tracker;
+		if (sk->sk_state != IUCV_LISTEN || sk_acceptq_is_full(sk)) {
+			afiucv_hs_callback_syn(NULL, skb);
+			netdev_put(dev, &tracker);
+			return 0;
+		}
+	}
+	/* BH off: the callbacks take message_q.lock with spin_lock() */
+	local_bh_disable();
+	afiucv_hs_dispatch(sk, skb);
+	local_bh_enable();
+	netdev_put(dev, &tracker);
+	return 0;
+}
+
+/**
+ * afiucv_hs_rcv_owned() - handle a frame while a task owns the socket
+ * @sk:		the socket, under bh_lock_sock()
+ * @skb:	the frame
+ * @flags:	the flags of the frame
+ *
+ * A SYN|ACK, SYN|FIN or FIN is recorded, a SYN waits in the backlog, and a
+ * data, SHT or WIN frame is handled now unless afiucv_hs_defer() says wait.
+ *
+ * Context: Softirq, under bh_lock_sock().
+ * Return: NET_RX_SUCCESS.
+ */
+static int afiucv_hs_rcv_owned(struct sock *sk, struct sk_buff *skb, u8 flags)
+{
+	switch (flags) {
+	case AF_IUCV_FLAG_SYN | AF_IUCV_FLAG_ACK:
+	case AF_IUCV_FLAG_SYN | AF_IUCV_FLAG_FIN:
+	case AF_IUCV_FLAG_FIN:
+		afiucv_hs_record(sk, skb, flags);
+		return NET_RX_SUCCESS;
+	case AF_IUCV_FLAG_SYN:
+		break;
+	default:
+		if (!afiucv_hs_defer(sk))
+			return afiucv_hs_dispatch(sk, skb);
+	}
+	afiucv_hs_backlog_add(sk, skb, flags);
+	return NET_RX_SUCCESS;
 }
 
 /*
@@ -2311,18 +2596,25 @@ static int afiucv_hs_rcv(struct sk_buff *skb, struct net_device *dev,
 	if (!iucv)
 		sk = NULL;
 
-	/* no sock
-	how should we send with no sock
-	1) send without sock no send rc checking?
-	2) introduce default sock to handle this cases
+	/* no socket: a SYN is refused, anything else freed */
+	if (!sk)
+		return afiucv_hs_dispatch(NULL, skb);
 
-	 SYN -> send SYN|ACK in good case, send SYN|FIN in bad case
-	 data -> send FIN
-	 SYN|ACK, SYN|FIN, FIN -> no action? */
-
-	err = afiucv_hs_dispatch(sk, skb);
-	if (sk)
-		sock_put(sk);
+	bh_lock_sock(sk);
+	if (afiucv_hs_stray(sk, trans_hdr->flags)) {
+		if (trans_hdr->flags == AF_IUCV_FLAG_SYN)
+			afiucv_hs_callback_syn(NULL, skb);
+		else if (trans_hdr->flags == AF_IUCV_FLAG_FIN)
+			consume_skb(skb);
+		else
+			kfree_skb_reason(skb, SKB_DROP_REASON_NO_SOCKET);
+	} else if (sock_owned_by_user(sk)) {
+		err = afiucv_hs_rcv_owned(sk, skb, trans_hdr->flags);
+	} else {
+		err = afiucv_hs_dispatch(sk, skb);
+	}
+	bh_unlock_sock(sk);
+	sock_put(sk);
 	return err;
 }
 
