@@ -22,6 +22,7 @@ static const struct scmi_powercap_proto_ops *powercap_ops;
 struct scmi_powercap_zone {
 	bool registered;
 	bool invalid;
+	bool visited;
 	unsigned int height;
 	struct device *dev;
 	struct scmi_protocol_handle *ph;
@@ -316,6 +317,7 @@ static int scmi_powercap_register_zone(struct scmi_powercap_root *pr,
 			spz->info->name, parent ? parent->info->name : "ROOT",
 			spz->height);
 	} else {
+		spz->invalid = true;
 		list_del(&spz->node);
 		ret = PTR_ERR(z);
 		dev_err(spz->dev,
@@ -379,8 +381,25 @@ static int scmi_zones_register(struct device *dev,
 	while (spz) {
 		struct scmi_powercap_zone *parent;
 
+		spz->visited = true;
 		parent = scmi_powercap_get_parent_zone(spz);
 		if (parent && !parent->registered) {
+			/*
+			 * An un-registered parent node is never visited twice:
+			 * when that happens it is either a cycle or a hole, i.e.
+			 * the attempt to walk again through a node which was already
+			 * removed from @scmi_zones since it previously failed to
+			 * register.
+			 */
+			if (parent->visited) {
+				dev_err(dev, "Found a %s in zone ID %u\n",
+					parent->invalid ? "hole" : "cycle",
+					parent->info->id);
+				scmi_powercap_unregister_all_zones(pr);
+				ret = -EINVAL;
+				reg_zones = 0;
+				goto out;
+			}
 			zones_stack[sp++] = spz;
 			spz = parent;
 		} else {
@@ -392,8 +411,8 @@ static int scmi_zones_register(struct device *dev,
 				 * Bail-out.
 				 */
 				dev_err(dev,
-					"Failed to register non-leaf zone - ret:%d\n",
-					ret);
+					"Failed to register non-leaf zone ID %u - ret:%d\n",
+					spz->info->id, ret);
 				scmi_powercap_unregister_all_zones(pr);
 				reg_zones = 0;
 				goto out;
