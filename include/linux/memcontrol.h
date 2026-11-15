@@ -32,6 +32,41 @@ struct mm_struct;
 struct kmem_cache;
 struct swap_cluster_info;
 
+/* Capacity accounting without allocating the reserved pages. */
+struct mem_cgroup_reservation {
+	struct obj_cgroup *objcg;
+	u64 pages;
+	u64 charged_pages; /* excludes growth after reparenting to root */
+};
+
+#ifdef CONFIG_MEMCG
+void mem_cgroup_reservation_init(struct mem_cgroup_reservation *res);
+int mem_cgroup_reservation_resize(struct mem_cgroup_reservation *res,
+				  u64 pages);
+void mem_cgroup_reservation_destroy(struct mem_cgroup_reservation *res);
+#else
+static inline void
+mem_cgroup_reservation_init(struct mem_cgroup_reservation *res)
+{
+	res->objcg = NULL;
+	res->pages = 0;
+	res->charged_pages = 0;
+}
+
+static inline int
+mem_cgroup_reservation_resize(struct mem_cgroup_reservation *res, u64 pages)
+{
+	res->pages = pages;
+	return 0;
+}
+
+static inline void
+mem_cgroup_reservation_destroy(struct mem_cgroup_reservation *res)
+{
+	mem_cgroup_reservation_init(res);
+}
+#endif
+
 /* Cgroup-specific page state, on top of universal node page state */
 enum memcg_stat_item {
 	MEMCG_SWAP = NR_VM_NODE_STAT_ITEMS,
