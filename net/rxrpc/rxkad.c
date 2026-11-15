@@ -176,20 +176,36 @@ static struct rxrpc_txbuf *rxkad_alloc_txbuf(struct rxrpc_call *call, size_t rem
 }
 
 /*
+ * Find the rxkad token in a key.  rxkad may have been chosen because of a
+ * token that isn't the first (see rxrpc_init_client_call_security()), so
+ * payload.data[0] mustn't be assumed to be one.
+ */
+static const struct rxrpc_key_token *rxkad_find_token(const struct key *key)
+{
+	const struct rxrpc_key_token *token;
+
+	for (token = key->payload.data[0]; token; token = token->next) {
+		if (token->security_index == RXRPC_SECURITY_RXKAD)
+			return token;
+	}
+	return NULL;
+}
+
+/*
  * prime the encryption state with the invariant parts of a connection's
  * description
  */
 static void rxkad_prime_packet_security(struct rxrpc_connection *conn,
 					const struct fcrypt_key *cipher)
 {
-	struct rxrpc_key_token *token;
+	const struct rxrpc_key_token *token;
 	__be32 tmpbuf[4];
 
 	_enter("");
 
 	if (!conn->key)
 		return;
-	token = conn->key->payload.data[0];
+	token = rxkad_find_token(conn->key);
 
 	tmpbuf[0] = htonl(conn->proto.epoch);
 	tmpbuf[1] = htonl(conn->proto.cid);
@@ -266,7 +282,7 @@ static void rxkad_secure_packet_encrypt(const struct rxrpc_call *call,
 	/* Now txb->pkt_len % FCRYPT_BSIZE == 0. */
 
 	/* encrypt from the session key */
-	token = call->conn->key->payload.data[0];
+	token = rxkad_find_token(call->conn->key);
 	fcrypt_pcbc_encrypt(call->conn->rxkad.cipher, token->kad->session_key,
 			    rxkhdr, rxkhdr, txb->pkt_len / FCRYPT_BSIZE);
 	_leave("");
@@ -412,7 +428,7 @@ static int rxkad_verify_packet_2(struct rxrpc_call *call, struct sk_buff *skb,
 	len = round_down(len, 8);
 
 	/* decrypt from the session key */
-	token = call->conn->key->payload.data[0];
+	token = rxkad_find_token(call->conn->key);
 	fcrypt_pcbc_decrypt(call->conn->rxkad.cipher, token->kad->session_key,
 			    data, data, len / FCRYPT_BSIZE);
 
@@ -710,7 +726,10 @@ static int rxkad_respond_to_challenge(struct rxrpc_connection *conn,
 		return rxrpc_abort_conn(conn, challenge, RXKADEXPIRED, ret,
 					rxkad_abort_chall_key_expired);
 
-	token = conn->key->payload.data[0];
+	token = rxkad_find_token(conn->key);
+	if (!token)
+		return rxrpc_abort_conn(conn, challenge, RX_PROTOCOL_ERROR,
+					-EPROTO, rxkad_abort_chall_no_key);
 
 	/* build the response packet */
 	len = sizeof(struct rxrpc_wire_header) +
