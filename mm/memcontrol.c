@@ -2894,8 +2894,12 @@ done_restock:
 			 * Target some best-effort fairness between the tasks,
 			 * and distribute reclaim work and delay penalties
 			 * based on how much each task is actually allocating.
+			 * Saturate so repeated nonblocking charges cannot erase
+			 * pending work by wrapping the counter back to zero.
 			 */
-			current->memcg_nr_pages_over_high += batch;
+			current->memcg_nr_pages_over_high += min(
+				batch,
+				UINT_MAX - current->memcg_nr_pages_over_high);
 			set_notify_resume(current);
 			break;
 		}
