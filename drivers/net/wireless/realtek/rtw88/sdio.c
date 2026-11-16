@@ -675,6 +675,135 @@ static atomic_t *rtw_sdio_8723bs_free_txpg(struct rtw_dev *rtwdev, u8 queue)
 	}
 }
 
+/*
+ * The other chips with a non-8051 MCU (RTL8822BS, RTL8822CS, RTL8821CS) report
+ * their free pages in three registers, one 12 bit count per FIFO, and the
+ * free entries of the AC output queue in the third. Reading them for every
+ * transfer costs three register reads, more bus time than the transfer of a
+ * small frame. The chip only frees pages and entries, so counts read earlier
+ * and reduced by every transfer since then never exceed what is really free:
+ * keep them and read the registers again only when they say a transfer does
+ * not fit.
+ */
+static void rtw_sdio_88xx_sync_free_txpg(struct rtw_dev *rtwdev)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+	u32 free_txpg[3];
+
+	lockdep_assert_held(&rtwsdio->tx_credit_lock);
+
+	free_txpg[0] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG);
+	free_txpg[1] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG + 4);
+	free_txpg[2] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG + 8);
+
+	atomic_set(&rtwsdio->free_pg_high, free_txpg[0] & 0xfff);
+	atomic_set(&rtwsdio->free_pg_normal, (free_txpg[0] >> 16) & 0xfff);
+	atomic_set(&rtwsdio->free_pg_low, free_txpg[1] & 0xfff);
+	atomic_set(&rtwsdio->free_pg_pub, (free_txpg[1] >> 16) & 0xfff);
+	atomic_set(&rtwsdio->free_pg_extra, free_txpg[2] & 0xfff);
+	atomic_set(&rtwsdio->tx_oqt_free, (free_txpg[2] >> 16) & 0xff);
+
+	rtwsdio->free_txpg_valid = true;
+}
+
+static void rtw_sdio_88xx_invalidate_free_txpg(struct rtw_dev *rtwdev)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
+	guard(mutex)(&rtwsdio->tx_credit_lock);
+
+	rtwsdio->free_txpg_valid = false;
+}
+
+static atomic_t *rtw_sdio_88xx_free_txpg(struct rtw_dev *rtwdev, u8 queue)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
+	switch (queue) {
+	case RTW_TX_QUEUE_BCN:
+	case RTW_TX_QUEUE_H2C:
+	case RTW_TX_QUEUE_HI0:
+		return &rtwsdio->free_pg_high;
+	case RTW_TX_QUEUE_VI:
+	case RTW_TX_QUEUE_VO:
+		return &rtwsdio->free_pg_normal;
+	case RTW_TX_QUEUE_BE:
+	case RTW_TX_QUEUE_BK:
+		return &rtwsdio->free_pg_low;
+	case RTW_TX_QUEUE_MGMT:
+		return &rtwsdio->free_pg_extra;
+	default:
+		return NULL;
+	}
+}
+
+static bool rtw_sdio_queue_is_ac(u8 queue)
+{
+	return queue <= RTW_TX_QUEUE_VO;
+}
+
+static bool rtw_sdio_88xx_txpg_fits(struct rtw_dev *rtwdev, atomic_t *dedicated,
+				    u8 queue, unsigned int pages,
+				    unsigned int frames)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
+	if (atomic_read(dedicated) + atomic_read(&rtwsdio->free_pg_pub) < pages)
+		return false;
+
+	/* every frame of an AC queue takes an entry of the output queue */
+	if (rtw_sdio_queue_is_ac(queue) &&
+	    atomic_read(&rtwsdio->tx_oqt_free) < frames)
+		return false;
+
+	return true;
+}
+
+/*
+ * Reserve the pages and output queue entries for a transfer of @frames frames
+ * needing @pages pages, from the queue's dedicated pages first and then from
+ * the public ones, as the chip charges them. The caller holds tx_credit_lock
+ * until the transfer is done, so that the counts are never read back from the
+ * chip while a transfer they were already reduced for has not reached it.
+ */
+static int rtw_sdio_88xx_reserve_txpg(struct rtw_dev *rtwdev, u8 queue,
+				      unsigned int pages, unsigned int frames)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+	atomic_t *dedicated;
+	unsigned int taken;
+
+	lockdep_assert_held(&rtwsdio->tx_credit_lock);
+
+	dedicated = rtw_sdio_88xx_free_txpg(rtwdev, queue);
+	if (!dedicated) {
+		rtw_warn(rtwdev, "Unknown mapping for queue %u\n", queue);
+		return -EINVAL;
+	}
+
+	if (!rtwsdio->free_txpg_valid ||
+	    !rtw_sdio_88xx_txpg_fits(rtwdev, dedicated, queue, pages, frames))
+		rtw_sdio_88xx_sync_free_txpg(rtwdev);
+
+	if (!rtw_sdio_88xx_txpg_fits(rtwdev, dedicated, queue, pages, frames)) {
+		rtw_dbg(rtwdev, RTW_DBG_SDIO,
+			"Not enough free pages (%u needed, %u free) or output queue entries (%u needed, %u free) in queue %u\n",
+			pages, atomic_read(dedicated) +
+			atomic_read(&rtwsdio->free_pg_pub), frames,
+			atomic_read(&rtwsdio->tx_oqt_free), queue);
+		return -EBUSY;
+	}
+
+	taken = min_t(unsigned int, pages, atomic_read(dedicated));
+	atomic_sub(taken, dedicated);
+	atomic_sub(pages - taken, &rtwsdio->free_pg_pub);
+
+	if (rtw_sdio_queue_is_ac(queue))
+		atomic_sub(frames, &rtwsdio->tx_oqt_free);
+
+	return 0;
+}
+
 static int rtw_sdio_check_free_txpg(struct rtw_dev *rtwdev, u8 queue,
 				    size_t count)
 {
@@ -727,40 +856,8 @@ static int rtw_sdio_check_free_txpg(struct rtw_dev *rtwdev, u8 queue,
 		/* add the pages from the public queue */
 		pages_free += (free_txpg >> 24) & 0xff;
 	} else {
-		u32 free_txpg[3];
-
-		free_txpg[0] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG);
-		free_txpg[1] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG + 4);
-		free_txpg[2] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG + 8);
-
-		switch (queue) {
-		case RTW_TX_QUEUE_BCN:
-		case RTW_TX_QUEUE_H2C:
-		case RTW_TX_QUEUE_HI0:
-			/* high */
-			pages_free = free_txpg[0] & 0xfff;
-			break;
-		case RTW_TX_QUEUE_VI:
-		case RTW_TX_QUEUE_VO:
-			/* normal */
-			pages_free = (free_txpg[0] >> 16) & 0xfff;
-			break;
-		case RTW_TX_QUEUE_BE:
-		case RTW_TX_QUEUE_BK:
-			/* low */
-			pages_free = free_txpg[1] & 0xfff;
-			break;
-		case RTW_TX_QUEUE_MGMT:
-			/* extra */
-			pages_free = free_txpg[2] & 0xfff;
-			break;
-		default:
-			rtw_warn(rtwdev, "Unknown mapping for queue %u\n", queue);
-			return -EINVAL;
-		}
-
-		/* add the pages from the public queue */
-		pages_free += (free_txpg[1] >> 16) & 0xfff;
+		/* the other chips use rtw_sdio_88xx_reserve_txpg() */
+		return -EINVAL;
 	}
 
 	pages_needed = DIV_ROUND_UP(count, rtwdev->chip->page_size);
@@ -889,6 +986,32 @@ static int rtw_sdio_write_port_8723bs(struct rtw_dev *rtwdev,
 	return 0;
 }
 
+static int rtw_sdio_write_port_88xx(struct rtw_dev *rtwdev,
+				    struct sk_buff *skb,
+				    enum rtw_tx_queue_type queue, u32 txaddr,
+				    size_t write_size)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+	unsigned int pages;
+	int ret;
+
+	/* the chip charges pages by frame length, not by the padded transfer */
+	pages = DIV_ROUND_UP(skb->len, rtwdev->chip->page_size);
+
+	guard(mutex)(&rtwsdio->tx_credit_lock);
+
+	ret = rtw_sdio_88xx_reserve_txpg(rtwdev, queue, pages, 1);
+	if (ret)
+		return ret;
+
+	ret = rtw_sdio_write_to_port(rtwdev, skb, queue, txaddr, write_size);
+	if (ret)
+		/* the pages may or may not have been used, read them again */
+		rtwsdio->free_txpg_valid = false;
+
+	return ret;
+}
+
 static int rtw_sdio_write_port_generic(struct rtw_dev *rtwdev,
 				       struct sk_buff *skb,
 				       enum rtw_tx_queue_type queue, u32 txaddr,
@@ -932,6 +1055,10 @@ static int rtw_sdio_write_port(struct rtw_dev *rtwdev, struct sk_buff *skb,
 	if (rtw_is_8723bs(rtwdev))
 		return rtw_sdio_write_port_8723bs(rtwdev, skb, queue, txaddr,
 						  write_size);
+
+	if (!rtw_chip_wcpu_8051(rtwdev))
+		return rtw_sdio_write_port_88xx(rtwdev, skb, queue, txaddr,
+						write_size);
 
 	return rtw_sdio_write_port_generic(rtwdev, skb, queue, txaddr,
 					   write_size);
@@ -1067,6 +1194,9 @@ static int rtw_sdio_start(struct rtw_dev *rtwdev)
 			return ret;
 	}
 
+	if (!rtw_chip_wcpu_8051(rtwdev))
+		rtw_sdio_88xx_invalidate_free_txpg(rtwdev);
+
 	rtw_sdio_enable_rx_aggregation(rtwdev);
 
 	if (rtw_is_8723bs(rtwdev)) {
@@ -1083,6 +1213,9 @@ static int rtw_sdio_start(struct rtw_dev *rtwdev)
 static void rtw_sdio_stop(struct rtw_dev *rtwdev)
 {
 	rtw_sdio_disable_interrupt(rtwdev);
+
+	if (!rtw_chip_wcpu_8051(rtwdev))
+		rtw_sdio_88xx_invalidate_free_txpg(rtwdev);
 }
 
 static void rtw_sdio_deep_ps_enter(struct rtw_dev *rtwdev)

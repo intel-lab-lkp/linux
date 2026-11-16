@@ -178,7 +178,10 @@ struct rtw_sdio {
 	atomic_t free_pg_normal;
 	atomic_t free_pg_low;
 	atomic_t free_pg_pub;
+	atomic_t free_pg_extra;
 	atomic_t tx_oqt_free;
+	/* the non-8051 chips' counters hold what the chip last reported */
+	bool free_txpg_valid;
 	/* one writer at a time between the credit check and the accounting */
 	struct mutex tx_credit_lock;
 };
