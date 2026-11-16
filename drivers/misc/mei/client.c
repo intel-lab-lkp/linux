@@ -2248,7 +2248,7 @@ int mei_cl_irq_dma_unmap(struct mei_cl *cl, struct mei_cl_cb *cb,
 
 static int mei_cl_dma_alloc(struct mei_cl *cl, u8 buf_id, size_t size)
 {
-	cl->dma.vaddr = dmam_alloc_coherent(&cl->dev->dev, size,
+	cl->dma.vaddr = dmam_alloc_coherent(cl->dev->parent, size,
 					    &cl->dma.daddr, GFP_KERNEL);
 	if (!cl->dma.vaddr)
 		return -ENOMEM;
@@ -2262,7 +2262,7 @@ static int mei_cl_dma_alloc(struct mei_cl *cl, u8 buf_id, size_t size)
 static void mei_cl_dma_free(struct mei_cl *cl)
 {
 	cl->dma.buffer_id = 0;
-	dmam_free_coherent(&cl->dev->dev,
+	dmam_free_coherent(cl->dev->parent,
 			   cl->dma.size, cl->dma.vaddr, cl->dma.daddr);
 	cl->dma.size = 0;
 	cl->dma.vaddr = NULL;
