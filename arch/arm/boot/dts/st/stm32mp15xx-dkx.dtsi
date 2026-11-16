@@ -13,6 +13,7 @@
 		serial0 = &uart4;
 		serial1 = &usart3;
 		serial2 = &uart7;
+		watchdog0 = &iwdg1;
 	};
 
 	memory@c0000000 {
@@ -508,6 +509,11 @@
 };
 
 &ipcc {
+	status = "okay";
+};
+
+&iwdg1 {
+	timeout-sec = <32>;
 	status = "okay";
 };
 
