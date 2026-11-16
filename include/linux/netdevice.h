@@ -3805,8 +3805,15 @@ static inline void netif_tx_wake_all_queues(struct net_device *dev)
 
 static __always_inline void netif_tx_stop_queue(struct netdev_queue *dev_queue)
 {
-	/* Paired with READ_ONCE() from dev_watchdog() */
-	WRITE_ONCE(dev_queue->trans_start, jiffies);
+	/* Only write trans_start on the initial state transition
+	 * (when the DRV_XOFF bit changes from 0 to 1).
+	 * This prevents recursive driver watchdog polls from continuously
+	 * resetting the timeout timeline and blinding dev_watchdog().
+	 *
+	 * Paired with READ_ONCE() from dev_watchdog()
+	 */
+	if (!test_bit(__QUEUE_STATE_DRV_XOFF, &dev_queue->state))
+		WRITE_ONCE(dev_queue->trans_start, jiffies);
 
 	/* This barrier is paired with smp_mb() from dev_watchdog() */
 	smp_mb__before_atomic();
