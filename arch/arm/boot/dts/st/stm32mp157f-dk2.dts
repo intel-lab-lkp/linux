@@ -20,6 +20,7 @@
 	aliases {
 		ethernet0 = &ethernet0;
 		serial3 = &usart2;
+		watchdog0 = &arm_wdt;
 	};
 
 	chosen {

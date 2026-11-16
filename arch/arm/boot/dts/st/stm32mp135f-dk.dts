@@ -24,6 +24,7 @@
 		serial1 = &usart1;
 		serial2 = &uart8;
 		serial3 = &usart2;
+		watchdog0 = &arm_wdt;
 	};
 
 	chosen {
