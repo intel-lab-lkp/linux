@@ -98,8 +98,9 @@ static int exfat_set_vol_flags(struct super_block *sb, unsigned short new_flags)
 
 	/* skip updating volume dirty flag,
 	 * if this volume has been mounted with read-only
+	 * or was shut down (it stays dirty then)
 	 */
-	if (sb_rdonly(sb))
+	if (sb_rdonly(sb) || exfat_forced_shutdown(sb))
 		return 0;
 
 	p_boot->vol_flags = cpu_to_le16(new_flags);
