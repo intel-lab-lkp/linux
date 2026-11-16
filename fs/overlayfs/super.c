@@ -1233,10 +1233,10 @@ static struct ovl_entry *ovl_get_lowerstack(struct super_block *sb,
 	for (i = 0; i < ctx->nr; i++) {
 		l = &ctx->lower[i];
 
-		/* Pseudo filesystems don't hold data for metacopy files. */
-		if (i >= ctx->nr - ctx->nr_data &&
+		/* Pseudo filesystems don't belong in composefs setup */
+		if (ctx->nr_data &&
 		    (l->path.dentry->d_sb->s_iflags & SB_I_PSEUDO)) {
-			pr_err("filesystem on %s not supported as data-only layer\n",
+			pr_err("pseudo filesystem on %s not supported along with data-only layers\n",
 			       l->name);
 			return ERR_PTR(-EINVAL);
 		}
