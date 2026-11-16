@@ -28549,7 +28549,7 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tsm/linux.git
 F:	Documentation/ABI/testing/configfs-tsm-report
 F:	Documentation/driver-api/coco/
 F:	Documentation/driver-api/pci/tsm.rst
-F:	drivers/pci/tsm.c
+F:	drivers/pci/tsm/
 F:	drivers/virt/coco/guest/
 F:	drivers/virt/coco/tsm-core.c
 F:	include/linux/*tsm*.h
