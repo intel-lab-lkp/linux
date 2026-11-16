@@ -25,9 +25,6 @@ typedef struct {
 	char      *program_name;    /** not used on hardware, only for simulation */
 } ia_css_spctrl_cfg;
 
-/* Get the code addr in DDR of SP */
-ia_css_ptr get_sp_code_addr(sp_ID_t  sp_id);
-
 /* ! Load firmware on to specfied SP
 */
 int ia_css_spctrl_load_fw(sp_ID_t sp_id,
