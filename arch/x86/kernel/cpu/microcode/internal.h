@@ -43,6 +43,7 @@ struct microcode_ops {
 struct early_load_data {
 	u32 old_rev;
 	u32 new_rev;
+	bool is_safe;
 };
 
 extern struct early_load_data early_data;

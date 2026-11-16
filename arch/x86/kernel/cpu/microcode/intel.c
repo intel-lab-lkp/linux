@@ -830,9 +830,8 @@ static bool ucode_validate_minrev(struct microcode_header_intel *mc_header)
 	int cur_rev = boot_cpu_data.microcode;
 
 	/*
-	 * When late-loading, ensure the header declares a minimum revision
-	 * required to perform a late-load. The previously reserved field
-	 * is 0 in older microcode blobs.
+	 * Ensure the header declares a minimum revision required to perform a
+	 * load. The previously reserved field is 0 in older microcode blobs.
 	 */
 	if (!mc_header->min_req_ver) {
 		pr_info("Unsafe microcode update: Microcode header does not specify a required min version\n");
@@ -845,7 +844,7 @@ static bool ucode_validate_minrev(struct microcode_header_intel *mc_header)
 	 */
 	if (cur_rev < mc_header->min_req_ver) {
 		pr_info("Unsafe microcode update: Current revision 0x%x too old\n", cur_rev);
-		pr_info("Current should be at 0x%x or higher. Use early loading instead\n", mc_header->min_req_ver);
+		pr_info("Current should be at 0x%x or higher. Update incrementally.\n", mc_header->min_req_ver);
 		return false;
 	}
 	return true;

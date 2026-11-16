@@ -609,8 +609,8 @@ static int load_late_stop_cpus(bool is_safe)
 	struct cpuinfo_x86 prev_info;
 
 	if (!is_safe) {
-		pr_err("Late microcode loading without minimal revision check.\n");
-		pr_err("You should switch to early loading, if possible.\n");
+		pr_err("Late microcode loading without minimum revision check.\n");
+		pr_err("You should update microcode incrementally.\n");
 	}
 
 	/*
@@ -959,8 +959,15 @@ static int __init microcode_init(void)
 
 	pr_info_once("Current revision: 0x%08x\n", (early_data.new_rev ?: early_data.old_rev));
 
-	if (early_data.new_rev)
+	if (early_data.new_rev) {
 		pr_info_once("Updated early from: 0x%08x\n", early_data.old_rev);
+
+		if (!early_data.is_safe) {
+			pr_err("Early microcode loading without minimum revision check.\n");
+			pr_err("You should update microcode incrementally.\n");
+			add_taint(TAINT_CPU_OUT_OF_SPEC, LOCKDEP_STILL_OK);
+		}
+	}
 
 	if (incremental_loading && !microcode_ops->support_incremental) {
 		pr_warn("Incremental late loading not supported, disabling\n");
