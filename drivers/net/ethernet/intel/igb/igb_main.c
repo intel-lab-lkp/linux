@@ -4178,16 +4178,20 @@ static int __igb_open(struct net_device *netdev, bool resuming)
 	if (err)
 		goto err_req_irq;
 
-	/* Notify the stack of the actual queue counts. */
-	err = netif_set_real_num_tx_queues(adapter->netdev,
-					   adapter->num_tx_queues);
-	if (err)
-		goto err_set_queues;
+	/* Notify the stack of the actual queue counts. This needs RTNL,
+	 * which isn't held when resuming from runtime suspend.
+	 */
+	if (!resuming) {
+		err = netif_set_real_num_tx_queues(adapter->netdev,
+						   adapter->num_tx_queues);
+		if (err)
+			goto err_set_queues;
 
-	err = netif_set_real_num_rx_queues(adapter->netdev,
-					   adapter->num_rx_queues);
-	if (err)
-		goto err_set_queues;
+		err = netif_set_real_num_rx_queues(adapter->netdev,
+						   adapter->num_rx_queues);
+		if (err)
+			goto err_set_queues;
+	}
 
 	/* From here on the code is the same as igb_up() */
 	clear_bit(__IGB_DOWN, &adapter->state);
