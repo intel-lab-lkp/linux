@@ -1,0 +1,49 @@
+What:           /dev/tac[0-9]*
+Date:           November 2026
+Contact:        platform-driver-x86@vger.kernel.org
+Description:
+                Lenovo Other Mode WMI GetDataByPackage (method 99).
+                Each firmware WMI instance gets a misc character device with
+                mode 0600. Numbering follows allocation order, not necessarily
+                the firmware instance number. Registration does not probe
+                support for method 99. The parent is the bound WMI device.
+
+                Open with O_RDWR. One write submits one complete request of
+                1..100 raw bytes; shorter requests are padded with zeroes to
+                100 bytes. Empty and oversized writes fail with EINVAL without
+                calling firmware. Successful writes return the full submitted
+                length and execute two identical WMI calls for the BIOS
+                duplicate-call workaround. Request pairs through this
+                interface are serialized; calls made by other driver
+                interfaces are not covered by this serialization.
+                Evaluation failures abort the pair; the driver does not
+                automatically retry.
+
+                Each open file description owns its response. A write while
+                that response remains unread fails with EBUSY, including after
+                partial reads. A new open cannot read another open's response.
+                Descriptors shared by dup/fork share the same transaction;
+                applications must coordinate the complete write/read sequence.
+
+                Read returns little-endian u32 DataSize followed by exactly
+                DataSize data bytes. Response storage is erased when fully
+                read or closed. Further reads return EOF until a new successful
+                write. Before a successful write, or after a failed firmware
+                evaluation, reads return ENODATA. A zero-length read returns
+                zero without consuming data.
+
+                Requests are synchronous even with O_NONBLOCK. Seeking and
+                positional I/O are not supported. There is no ioctl interface.
+                A removed WMI device causes nonempty reads and valid writes
+                on existing descriptors to fail with ENODEV.
+
+                Firmware evaluation failures map to EIO. WMI marshalling
+                failures return the error reported by the WMI subsystem.
+                A truncated response or invalid DataSize maps to EPROTO.
+                Bad userspace memory maps to EFAULT. Failure does not imply
+                firmware had no side effects; never blindly resubmit commands.
+                Interrupted waits can return EINTR before firmware evaluation.
+
+                The WMI subsystem converts returned ACPI objects to a buffer.
+                This raw firmware interface may change device state. Use only
+                commands whose behavior and side effects are understood.

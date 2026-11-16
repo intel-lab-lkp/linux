@@ -34,16 +34,23 @@
 #include <linux/device.h>
 #include <linux/export.h>
 #include <linux/firmware_attributes.h>
+#include <linux/fs.h>
 #include <linux/gfp_types.h>
 #include <linux/hwmon.h>
 #include <linux/idr.h>
 #include <linux/kdev_t.h>
 #include <linux/kobject.h>
+#include <linux/kref.h>
 #include <linux/limits.h>
+#include <linux/miscdevice.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/platform_profile.h>
 #include <linux/power_supply.h>
+#include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/uaccess.h>
+#include <linux/unaligned.h>
 #include <linux/wmi.h>
 
 #include <acpi/battery.h>
@@ -91,6 +98,9 @@ enum lwmi_feature_id_psu {
 #define LWMI_FEATURE_VALUE_GET 17
 #define LWMI_FEATURE_VALUE_SET 18
 
+#define LWMI_DATA_PACKAGE_GET 99
+#define LWMI_DATA_PACKAGE_INPUT_MAX 100
+
 #define LWMI_FAN_ID_BASE 1
 #define LWMI_FAN_NR 4
 #define LWMI_FAN_ID(x) ((x) + LWMI_FAN_ID_BASE)
@@ -114,6 +124,27 @@ enum lwmi_feature_id_psu {
 #define LWMI_OM_HWMON_NAME "lenovo_wmi_other"
 
 static DEFINE_IDA(lwmi_om_ida);
+
+static DEFINE_IDA(lwmi_tac_ida);
+static DEFINE_MUTEX(lwmi_tac_lock);
+
+struct lwmi_tac {
+	struct miscdevice misc;
+	struct kref ref;
+	struct wmi_device *wdev;
+	u8 instance;
+	int id;
+};
+
+struct lwmi_tac_file {
+	struct lwmi_tac *tac;
+	/* Protects the per-open response and its position. */
+	struct mutex lock;
+	void *result;
+	size_t result_len;
+	loff_t position;
+	bool completed;
+};
 
 enum attribute_property {
 	DEFAULT_VAL,
@@ -1609,6 +1640,295 @@ static void lwmi_om_fw_attr_remove(struct lwmi_om_priv *priv)
 	priv->ida_id = -EIDRM;
 }
 
+/**
+ * lwmi_tac_free() - Free an unregistered endpoint after its last close
+ * @ref: Reference belonging to the endpoint.
+ */
+static void lwmi_tac_free(struct kref *ref)
+{
+	struct lwmi_tac *tac = container_of(ref, struct lwmi_tac, ref);
+
+	ida_free(&lwmi_tac_ida, tac->id);
+	kfree(tac->misc.name);
+	kfree(tac);
+}
+
+/**
+ * lwmi_tac_open() - Allocate independent response state for an open file
+ * @inode: Character device inode.
+ * @file: File initially pointing to the registered miscdevice.
+ *
+ * The misc core serializes open against deregistration, so the registration
+ * reference remains valid while the file acquires its own reference.
+ *
+ * Return: 0 on success, or -ENOMEM.
+ */
+static int lwmi_tac_open(struct inode *inode, struct file *file)
+{
+	struct lwmi_tac *tac = container_of(file->private_data, struct lwmi_tac, misc);
+	struct lwmi_tac_file *state;
+
+	state = kzalloc_obj(*state);
+	if (!state)
+		return -ENOMEM;
+	mutex_init(&state->lock);
+	state->tac = tac;
+	kref_get(&tac->ref);
+	file->private_data = state;
+	return stream_open(inode, file);
+}
+
+/**
+ * lwmi_tac_release() - Erase the response and drop the endpoint reference
+ * @inode: Character device inode.
+ * @file: File holding the endpoint state.
+ *
+ * Return: 0.
+ */
+static int lwmi_tac_release(struct inode *inode, struct file *file)
+{
+	struct lwmi_tac_file *state = file->private_data;
+
+	kfree_sensitive(state->result);
+	mutex_destroy(&state->lock);
+	kref_put(&state->tac->ref, lwmi_tac_free);
+	kfree(state);
+	return 0;
+}
+
+/**
+ * lwmi_tac_invoke() - Execute GetDataByPackage and retain the response
+ * @state: Open file whose response buffer is empty.
+ * @data: Zero-padded 100-byte input buffer.
+ *
+ * The caller holds state->lock and lwmi_tac_lock. The latter serializes call
+ * pairs across instances and keeps the WMI device valid during evaluation.
+ *
+ * Return: 0 on success, or a negative error code.
+ */
+static int lwmi_tac_invoke(struct lwmi_tac_file *state, u8 *data)
+{
+	struct lwmi_tac *tac = state->tac;
+	struct wmi_buffer input = { .length = LWMI_DATA_PACKAGE_INPUT_MAX, .data = data };
+	struct wmi_buffer output;
+	u32 data_size;
+	int ret;
+
+	if (!tac->wdev)
+		return -ENODEV;
+	/*
+	 * Duplicated call required to match BIOS workaround for behavior
+	 * seen when WMI accessed via scripting on other OS.
+	 */
+	for (unsigned int call = 0; call < 2; call++) {
+		ret = wmidev_invoke_method(tac->wdev, tac->instance,
+					   LWMI_DATA_PACKAGE_GET, &input, &output, 0);
+		if (ret)
+			return ret;
+		if (!call)
+			kfree_sensitive(output.data);
+	}
+	/* Validate DataSize before preserving the complete firmware response. */
+	if (output.length < sizeof(__le32)) {
+		ret = -EPROTO;
+		goto free_output;
+	}
+	data_size = get_unaligned_le32(output.data);
+	if (data_size > output.length - sizeof(__le32)) {
+		ret = -EPROTO;
+		goto free_output;
+	}
+	/* Transfer ownership without another allocation after firmware ran. */
+	state->result = output.data;
+	state->result_len = sizeof(__le32) + data_size;
+	state->position = 0;
+	state->completed = true;
+	return 0;
+free_output:
+	kfree_sensitive(output.data);
+	return ret;
+}
+
+/**
+ * lwmi_tac_write() - Submit one complete TAC request
+ * @file: Open TAC endpoint with independent response state.
+ * @buffer: Userspace input bytes.
+ * @count: Input size, from 1 to 100 bytes.
+ * @ppos: Unused; TAC is a nonseekable request/response stream.
+ *
+ * Short inputs are zero-padded. An unread response must be consumed before
+ * submitting another request. A failed firmware call is never retried here.
+ *
+ * Return: @count on success, or a negative error code.
+ */
+static ssize_t lwmi_tac_write(struct file *file, const char __user *buffer,
+			      size_t count, loff_t *ppos)
+{
+	struct lwmi_tac_file *state = file->private_data;
+	u8 input[LWMI_DATA_PACKAGE_INPUT_MAX] = {};
+	int ret;
+
+	if (!count || count > sizeof(input))
+		return -EINVAL;
+	if (copy_from_user(input, buffer, count)) {
+		ret = -EFAULT;
+		goto clear_input;
+	}
+	ret = mutex_lock_interruptible(&state->lock);
+	if (ret)
+		goto clear_input;
+	ret = mutex_lock_interruptible(&lwmi_tac_lock);
+	if (ret)
+		goto unlock;
+	if (!state->tac->wdev) {
+		ret = -ENODEV;
+	} else if (state->result) {
+		ret = -EBUSY;
+	} else {
+		state->completed = false;
+		ret = lwmi_tac_invoke(state, input);
+	}
+	mutex_unlock(&lwmi_tac_lock);
+unlock:
+	mutex_unlock(&state->lock);
+clear_input:
+	memzero_explicit(input, sizeof(input));
+	if (ret)
+		return ret;
+	return count;
+}
+
+/**
+ * lwmi_tac_read() - Read only this open file's firmware response
+ * @file: Open TAC endpoint.
+ * @buffer: Userspace destination.
+ * @count: Maximum number of bytes to return.
+ * @ppos: Unused; the response position is protected by state->lock.
+ *
+ * Responses contain little-endian u32 DataSize followed by Data. Partial
+ * reads advance the response position. Consuming the result erases its
+ * storage immediately; subsequent reads return EOF until another write.
+ *
+ * Return: Bytes read, 0 at EOF or for zero @count, or a negative error code.
+ */
+static ssize_t lwmi_tac_read(struct file *file, char __user *buffer,
+			     size_t count, loff_t *ppos)
+{
+	struct lwmi_tac_file *state = file->private_data;
+	ssize_t ret;
+
+	if (!count)
+		return 0;
+	ret = mutex_lock_interruptible(&state->lock);
+	if (ret)
+		return ret;
+	ret = mutex_lock_interruptible(&lwmi_tac_lock);
+	if (ret)
+		goto unlock;
+	if (!state->tac->wdev)
+		ret = -ENODEV;
+	mutex_unlock(&lwmi_tac_lock);
+	if (ret) {
+		kfree_sensitive(state->result);
+		state->result = NULL;
+		goto unlock;
+	}
+	if (!state->completed) {
+		ret = -ENODATA;
+		goto unlock;
+	}
+	if (!state->result)
+		goto unlock;
+	ret = simple_read_from_buffer(buffer, count, &state->position,
+				      state->result, state->result_len);
+	if (state->position == (loff_t)state->result_len) {
+		kfree_sensitive(state->result);
+		state->result = NULL;
+	}
+unlock:
+	mutex_unlock(&state->lock);
+	return ret;
+}
+
+static const struct file_operations lwmi_tac_fops = {
+	.owner = THIS_MODULE,
+	.open = lwmi_tac_open,
+	.release = lwmi_tac_release,
+	.read = lwmi_tac_read,
+	.write = lwmi_tac_write,
+};
+
+/**
+ * lwmi_tac_remove() - Unregister an endpoint and block further firmware calls
+ * @data: Endpoint registered as a device-managed cleanup action.
+ *
+ * Stop new opens before waiting for an in-flight call pair. Existing files
+ * retain the endpoint state, but their subsequent reads/writes return -ENODEV.
+ */
+static void lwmi_tac_remove(void *data)
+{
+	struct lwmi_tac *tac = data;
+
+	misc_deregister(&tac->misc);
+	mutex_lock(&lwmi_tac_lock);
+	tac->wdev = NULL;
+	mutex_unlock(&lwmi_tac_lock);
+	kref_put(&tac->ref, lwmi_tac_free);
+}
+
+/**
+ * lwmi_tac_add() - Register TAC endpoints independently of capability data
+ * @wdev: Bound Lenovo Other Mode WMI device.
+ *
+ * No capability describes method 99, so registration does not probe firmware
+ * support. Each firmware instance gets an endpoint; unsupported method calls
+ * are reported to userspace when requested.
+ *
+ * Return: 0 on success, or a negative error code. Device-managed cleanup
+ * unregisters earlier endpoints if a later registration or probe step fails.
+ */
+static int lwmi_tac_add(struct wmi_device *wdev)
+{
+	unsigned int instances = wmidev_instance_count(wdev);
+	int ret;
+
+	for (unsigned int instance = 0; instance < instances; instance++) {
+		struct lwmi_tac *tac;
+
+		tac = kzalloc_obj(*tac);
+		if (!tac)
+			return -ENOMEM;
+		ret = ida_alloc(&lwmi_tac_ida, GFP_KERNEL);
+		if (ret < 0) {
+			kfree(tac);
+			return ret;
+		}
+		tac->id = ret;
+		kref_init(&tac->ref);
+		tac->wdev = wdev;
+		tac->instance = instance;
+		tac->misc.minor = MISC_DYNAMIC_MINOR;
+		tac->misc.name = kasprintf(GFP_KERNEL, "tac%d", tac->id);
+		tac->misc.fops = &lwmi_tac_fops;
+		tac->misc.parent = &wdev->dev;
+		tac->misc.mode = 0600;
+		if (!tac->misc.name) {
+			kref_put(&tac->ref, lwmi_tac_free);
+			return -ENOMEM;
+		}
+		ret = misc_register(&tac->misc);
+		if (ret) {
+			kref_put(&tac->ref, lwmi_tac_free);
+			return ret;
+		}
+		/* Unregister before the WMI device and its managed state disappear. */
+		ret = devm_add_action_or_reset(&wdev->dev, lwmi_tac_remove, tac);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 /* ======== Self (master: lenovo-wmi-other) ======== */
 
 /**
@@ -1693,6 +2013,7 @@ static int lwmi_other_probe(struct wmi_device *wdev, const void *context)
 {
 	struct component_match *master_match = NULL;
 	struct lwmi_om_priv *priv;
+	int ret;
 
 	priv = devm_kzalloc_obj(&wdev->dev, *priv);
 	if (!priv)
@@ -1707,6 +2028,10 @@ static int lwmi_other_probe(struct wmi_device *wdev, const void *context)
 	lwmi_cd_match_add_all(&wdev->dev, &master_match);
 	if (IS_ERR(master_match))
 		return PTR_ERR(master_match);
+
+	ret = lwmi_tac_add(wdev);
+	if (ret)
+		return ret;
 
 	return component_master_add_with_match(&wdev->dev, &lwmi_om_master_ops,
 					       master_match);

@@ -33,6 +33,10 @@ under the following path:
 
 Additionally, this driver also exports attributes to HWMON.
 
+The driver also exposes GetDataByPackage (method 99) through a raw character
+device for each WMI instance. See Documentation/ABI/testing/dev-tac for the
+request and response format and its access restrictions.
+
 LENOVO_CAPABILITY_DATA_00
 -------------------------
 
@@ -108,6 +112,10 @@ WMI interface description
 
 The WMI interface description can be decoded from the embedded binary MOF (bmof)
 data using the `bmfdec <https://github.com/pali/bmfdec>`_ utility:
+
+The example below describes an older firmware revision and specifies a
+40-byte maximum input for GetDataByPackage. Newer firmware uses a 100-byte
+input, which is the size used by the raw interface described above.
 
 ::
 
