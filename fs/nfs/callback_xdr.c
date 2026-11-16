@@ -44,8 +44,9 @@
 
 #define NFSDBG_FACILITY NFSDBG_CALLBACK
 
-/* Internal error code */
+/* Internal error codes */
 #define NFS4ERR_RESOURCE_HDR	11050
+#define NFS4ERR_BADXDR_HDR	11051
 
 struct callback_op {
 	__be32 (*process_op)(void *, void *, struct cb_process_state *);
@@ -168,7 +169,7 @@ static __be32 decode_op_hdr(struct xdr_stream *xdr, unsigned int *op)
 	__be32 *p;
 	p = xdr_inline_decode(xdr, 4);
 	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE_HDR);
+		return htonl(NFS4ERR_BADXDR_HDR);
 	*op = ntohl(*p);
 	return 0;
 }
@@ -985,9 +986,11 @@ static __be32 nfs4_callback_compound(struct svc_rqst *rqstp)
 		nops++;
 	}
 
-	/* Buffer overflow in decode_ops_hdr or encode_ops_hdr. Return
-	* resource error in cb_compound status without returning op */
-	if (unlikely(status == htonl(NFS4ERR_RESOURCE_HDR))) {
+	/* The reply omits an op whose header failed to decode or encode. */
+	if (unlikely(status == htonl(NFS4ERR_BADXDR_HDR))) {
+		status = htonl(NFS4ERR_BADXDR);
+		nops--;
+	} else if (unlikely(status == htonl(NFS4ERR_RESOURCE_HDR))) {
 		status = htonl(NFS4ERR_RESOURCE);
 		nops--;
 	}
