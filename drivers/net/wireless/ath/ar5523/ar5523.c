@@ -48,6 +48,7 @@ static void ar5523_data_tx_pkt_put(struct ar5523 *ar);
 static void ar5523_read_reply(struct ar5523 *ar, struct ar5523_cmd_hdr *hdr,
 			      struct ar5523_tx_cmd *cmd)
 {
+	unsigned long flags;
 	int dlen, olen;
 	__be32 *rp;
 
@@ -75,6 +76,7 @@ static void ar5523_read_reply(struct ar5523 *ar, struct ar5523_cmd_hdr *hdr,
 	} else
 		olen = 0;
 
+	spin_lock_irqsave(&cmd->lock, flags);
 	if (cmd->odata) {
 		if (cmd->olen < olen) {
 			ar5523_err(ar, "olen too small %d < %d\n",
@@ -87,6 +89,7 @@ static void ar5523_read_reply(struct ar5523 *ar, struct ar5523_cmd_hdr *hdr,
 			cmd->res = 0;
 		}
 	}
+	spin_unlock_irqrestore(&cmd->lock, flags);
 
 out:
 	complete(&cmd->done);
@@ -97,6 +100,7 @@ static void ar5523_cmd_rx_cb(struct urb *urb)
 	struct ar5523 *ar = urb->context;
 	struct ar5523_tx_cmd *cmd = &ar->tx_cmd;
 	struct ar5523_cmd_hdr *hdr = ar->rx_cmd_buf;
+	unsigned long flags;
 	int dlen;
 	u32 code, hdrlen;
 
@@ -156,12 +160,15 @@ static void ar5523_cmd_rx_cb(struct urb *urb)
 			ar5523_err(ar, "Invalid reply to WDCMSG_TARGET_START");
 			return;
 		}
+		spin_lock_irqsave(&cmd->lock, flags);
 		if (!cmd->odata) {
+			spin_unlock_irqrestore(&cmd->lock, flags);
 			ar5523_err(ar, "Unexpected WDCMSG_TARGET_START reply");
 			return;
 		}
 		memcpy(cmd->odata, hdr + 1, sizeof(u32));
 		cmd->olen = sizeof(u32);
+		spin_unlock_irqrestore(&cmd->lock, flags);
 		cmd->res = 0;
 		complete(&cmd->done);
 		break;
@@ -254,6 +261,7 @@ static int ar5523_cmd(struct ar5523 *ar, u32 code, const void *idata,
 {
 	struct ar5523_cmd_hdr *hdr;
 	struct ar5523_tx_cmd *cmd = &ar->tx_cmd;
+	unsigned long irqflags;
 	int xferlen, error;
 
 	/* always bulk-out a multiple of 4 bytes */
@@ -270,8 +278,10 @@ static int ar5523_cmd(struct ar5523 *ar, u32 code, const void *idata,
 	if (ilen)
 		memcpy(hdr + 1, idata, ilen);
 
+	spin_lock_irqsave(&cmd->lock, irqflags);
 	cmd->odata = odata;
 	cmd->olen = olen;
+	spin_unlock_irqrestore(&cmd->lock, irqflags);
 	cmd->flags = flags;
 
 	ar5523_dbg(ar, "do cmd %02x\n", code);
@@ -287,12 +297,11 @@ static int ar5523_cmd(struct ar5523 *ar, u32 code, const void *idata,
 	if (error) {
 		ar5523_err(ar, "could not send command 0x%x, error=%d\n",
 			   code, error);
-		return error;
+		goto out;
 	}
 
 	if (!wait_for_completion_timeout(&cmd->done, 2 * HZ)) {
 		ar5523_cancel_tx_cmd(ar);
-		cmd->odata = NULL;
 		ar5523_err(ar, "timeout waiting for command %02x reply\n",
 			   code);
 		cmd->res = -ETIMEDOUT;
@@ -305,7 +314,18 @@ static int ar5523_cmd(struct ar5523 *ar, u32 code, const void *idata,
 		 */
 		ar5523_cancel_tx_cmd(ar);
 	}
-	return cmd->res;
+	error = cmd->res;
+
+out:
+	/*
+	 * The caller's output buffer is often on its stack. Make sure a
+	 * late or unsolicited reply from the device can no longer write
+	 * to it once we return, whatever the outcome of the command.
+	 */
+	spin_lock_irqsave(&cmd->lock, irqflags);
+	cmd->odata = NULL;
+	spin_unlock_irqrestore(&cmd->lock, irqflags);
+	return error;
 }
 
 static int ar5523_cmd_write(struct ar5523 *ar, u32 code, const void *data,
@@ -969,6 +989,7 @@ static int ar5523_alloc_tx_cmd(struct ar5523 *ar)
 
 	cmd->ar = ar;
 	init_completion(&cmd->done);
+	spin_lock_init(&cmd->lock);
 
 	cmd->urb_tx = usb_alloc_urb(0, GFP_KERNEL);
 	if (!cmd->urb_tx)

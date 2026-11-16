@@ -61,6 +61,7 @@ struct ar5523_tx_cmd {
 	struct ar5523		*ar;
 	struct urb		*urb_tx;
 	void			*buf_tx;
+	spinlock_t		lock;		/* protects odata and olen */
 	void			*odata;
 	int			olen;
 	int			flags;
