@@ -59,7 +59,7 @@ static void *pi_start(struct seq_file *s, loff_t *pos)
 	if (*pos == 0)
 		return SEQ_START_TOKEN;
 
-	return pi_next(s, NULL, pos);
+	return pi_get_entry(s->file->f_inode->i_private, *pos - 1);
 }
 
 /*
