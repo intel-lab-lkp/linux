@@ -5,6 +5,7 @@ subdir-y += anlogic
 subdir-y += canaan
 subdir-y += eswin
 subdir-y += microchip
+subdir-y += mips
 subdir-y += renesas
 subdir-y += sifive
 subdir-y += sophgo
