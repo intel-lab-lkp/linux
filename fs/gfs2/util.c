@@ -238,6 +238,13 @@ void gfs2_withdraw_func(struct work_struct *work)
 	fs_err(sdp, "file system withdrawn\n");
 }
 
+/* The withdraw work must only run once. */
+void gfs2_queue_withdraw(struct gfs2_sbd *sdp)
+{
+	if (!test_and_set_bit(SDF_WITHDRAW_QUEUED, &sdp->sd_flags))
+		schedule_work(&sdp->sd_withdraw_work);
+}
+
 void gfs2_withdraw(struct gfs2_sbd *sdp)
 {
 	if (sdp->sd_args.ar_errors == GFS2_ERRORS_WITHDRAW ||
@@ -253,7 +260,7 @@ void gfs2_withdraw(struct gfs2_sbd *sdp)
 		if (!(sdp->sd_vfs->s_flags & SB_BORN))
 			return;
 		fs_err(sdp, "about to withdraw this file system\n");
-		schedule_work(&sdp->sd_withdraw_work);
+		gfs2_queue_withdraw(sdp);
 		return;
 	}
 

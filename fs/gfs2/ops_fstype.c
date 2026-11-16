@@ -1590,6 +1590,11 @@ static int gfs2_reconfigure(struct fs_context *fc)
 
 	if ((sb->s_flags ^ fc->sb_flags) & SB_RDONLY) {
 		if (fc->sb_flags & SB_RDONLY) {
+			/* gfs2_withdraw() doesn't queue the work during mount. */
+			if (gfs2_withdrawn(sdp)) {
+				gfs2_queue_withdraw(sdp);
+				flush_work(&sdp->sd_withdraw_work);
+			}
 			gfs2_make_fs_ro(sdp);
 		} else {
 			error = gfs2_make_fs_rw(sdp);
