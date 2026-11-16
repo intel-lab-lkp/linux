@@ -56,7 +56,6 @@ static int k3_m4_rproc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	rproc->has_iommu = false;
-	rproc->recovery_disabled = true;
 	kproc = rproc->priv;
 	kproc->dev = dev;
 	kproc->rproc = rproc;
@@ -105,6 +104,11 @@ static int k3_m4_rproc_probe(struct platform_device *pdev)
 	/* configure devices for either remoteproc or IPC-only mode */
 	if (p_state) {
 		rproc->state = RPROC_DETACHED;
+		/*
+		 * Recovery boots rproc->firmware, which is not necessarily what
+		 * was started before Linux attached.
+		 */
+		rproc->recovery_disabled = true;
 		dev_info(dev, "configured M4F for IPC-only mode\n");
 	} else {
 		dev_info(dev, "configured M4F for remoteproc mode\n");
