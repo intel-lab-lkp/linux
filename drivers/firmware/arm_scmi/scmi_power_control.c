@@ -43,6 +43,7 @@
  * possibly emitted by the platform will be ignored.
  */
 
+#include <linux/cleanup.h>
 #include <linux/math.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -51,6 +52,7 @@
 #include <linux/reboot.h>
 #include <linux/scmi_protocol.h>
 #include <linux/slab.h>
+#include <linux/srcu.h>
 #include <linux/suspend.h>
 #include <linux/time64.h>
 #include <linux/timer.h>
@@ -75,6 +77,8 @@ enum scmi_syspower_state {
  * @state_mtx: @state related mutex
  * @required_transition: The requested transition as decribed in the received
  *			 SCMI SystemPower notification
+ * @dead_srcu: Am SRCU to protect dead flag
+ * @dead: A boolean flag to be set during driver removal
  * @userspace_nb: The notifier_block registered against the SCMI SystemPower
  *		  notification to start the needed userspace interactions.
  * @reboot_nb: A notifier_block optionally used to track reboot progress
@@ -88,6 +92,10 @@ struct scmi_syspower_conf {
 	/* Protect access to state */
 	struct mutex state_mtx;
 	enum scmi_system_events required_transition;
+
+	/* Protect dead */
+	struct srcu_struct dead_srcu;
+	bool dead;
 
 	struct notifier_block userspace_nb;
 	struct notifier_block reboot_nb;
@@ -122,6 +130,10 @@ static int scmi_reboot_notifier(struct notifier_block *nb,
 {
 	struct scmi_syspower_conf *sc = reboot_nb_to_sconf(nb);
 	bool cancel_work;
+
+	guard(srcu)(&sc->dead_srcu);
+	if (READ_ONCE(sc->dead))
+		return NOTIFY_DONE;
 
 	mutex_lock(&sc->state_mtx);
 	switch (reason) {
@@ -197,6 +209,10 @@ static void scmi_forceful_work_func(struct work_struct *work)
 	dwork = to_delayed_work(work);
 	sc = dwork_to_sconf(dwork);
 
+	guard(srcu)(&sc->dead_srcu);
+	if (READ_ONCE(sc->dead))
+		return;
+
 	mutex_lock(&sc->state_mtx);
 	needs_forceful = sc->state == SCMI_SYSPOWER_IN_PROGRESS;
 	mutex_unlock(&sc->state_mtx);
@@ -236,8 +252,6 @@ static void scmi_request_graceful_transition(struct scmi_syspower_conf *sc,
 		if (!ret) {
 			/* Wait only up to 75% of the advertised timeout */
 			adj_timeout_ms = mult_frac(timeout_ms, 3, 4);
-			INIT_DELAYED_WORK(&sc->forceful_work,
-					  scmi_forceful_work_func);
 			schedule_delayed_work(&sc->forceful_work,
 					      msecs_to_jiffies(adj_timeout_ms));
 		} else {
@@ -295,6 +309,10 @@ static int scmi_userspace_notifier(struct notifier_block *nb,
 {
 	struct scmi_system_power_state_notifier_report *er = data;
 	struct scmi_syspower_conf *sc = userspace_nb_to_sconf(nb);
+
+	guard(srcu)(&sc->dead_srcu);
+	if (READ_ONCE(sc->dead))
+		return NOTIFY_DONE;
 
 	if (er->system_state >= SCMI_SYSTEM_MAX ||
 	    er->system_state == SCMI_SYSTEM_POWERUP) {
@@ -357,6 +375,10 @@ static int scmi_syspower_probe(struct scmi_device *sdev)
 	if (!sc)
 		return -ENOMEM;
 
+	ret = init_srcu_struct(&sc->dead_srcu);
+	if (ret)
+		return ret;
+
 	sc->state = SCMI_SYSPOWER_IDLE;
 	mutex_init(&sc->state_mtx);
 	sc->required_transition = SCMI_SYSTEM_MAX;
@@ -364,12 +386,53 @@ static int scmi_syspower_probe(struct scmi_device *sdev)
 	sc->dev = &sdev->dev;
 	dev_set_drvdata(&sdev->dev, sc);
 
+	INIT_DELAYED_WORK(&sc->forceful_work, scmi_forceful_work_func);
 	INIT_WORK(&sc->suspend_work, scmi_suspend_work_func);
 
-	return handle->notify_ops->devm_event_notifier_register(sdev,
-							   SCMI_PROTOCOL_SYSTEM,
-					 SCMI_EVENT_SYSTEM_POWER_STATE_NOTIFIER,
-						       NULL, &sc->userspace_nb);
+	ret = handle->notify_ops->event_notifier_register(handle, SCMI_PROTOCOL_SYSTEM,
+							  SCMI_EVENT_SYSTEM_POWER_STATE_NOTIFIER,
+							  NULL, &sc->userspace_nb);
+	if (ret) {
+		cleanup_srcu_struct(&sc->dead_srcu);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void scmi_syspower_remove(struct scmi_device *sdev)
+{
+	struct scmi_handle *handle = sdev->handle;
+	struct scmi_syspower_conf *sc;
+	int ret;
+
+	sc = dev_get_drvdata(&sdev->dev);
+	if (!sc)
+		return;
+
+	/* Wait for any notifier to complete and inhibit further processing */
+	WRITE_ONCE(sc->dead, true);
+	synchronize_srcu(&sc->dead_srcu);
+
+	/*
+	 * Once here any possible in-flight userspace or reboot notifier
+	 * will have completed and further notifiers will bailout immediately.
+	 * Cancel any work which was possibly already scheduled.
+	 */
+	cancel_delayed_work_sync(&sc->forceful_work);
+
+	/* Unregister reboot notifier...if any */
+	unregister_reboot_notifier(&sc->reboot_nb);
+
+	/* Unregister userspace notifier */
+	ret = handle->notify_ops->event_notifier_unregister(handle,
+							    SCMI_PROTOCOL_SYSTEM,
+							    SCMI_EVENT_SYSTEM_POWER_STATE_NOTIFIER,
+							    NULL, &sc->userspace_nb);
+	if (ret)
+		dev_warn(sc->dev, "Failed to unregister notifier\n");
+
+	cleanup_srcu_struct(&sc->dead_srcu);
 }
 
 static int scmi_system_power_resume(struct device *dev)
@@ -396,6 +459,7 @@ static struct scmi_driver scmi_system_power_driver = {
 	},
 	.name = "scmi-system-power",
 	.probe = scmi_syspower_probe,
+	.remove = scmi_syspower_remove,
 	.id_table = scmi_id_table,
 };
 module_scmi_driver(scmi_system_power_driver);
