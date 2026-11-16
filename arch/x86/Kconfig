@@ -1353,6 +1353,19 @@ config MICROCODE_LATE_FORCE_MINREV
 
 	  If unsure say Y.
 
+config MICROCODE_LATE_INCREMENTAL_LOADING
+	bool "Incremental microcode late loading"
+	default n
+	depends on MICROCODE_LATE_LOADING
+	depends on CPU_SUP_INTEL
+	help
+	  Apply the microcode blobs in a concatenated image one at a time, in
+	  ascending revision order, so that revisions with prerequisites can be
+	  applied in a single load.
+
+	  This loading option can also be controlled via the
+	  "microcode=incremental_loading=" parameter on the kernel command line.
+
 config MICROCODE_DBG
 	bool "Enable microcode loader debugging"
 	default n

@@ -34,9 +34,10 @@ struct microcode_ops {
 	void			(*stage_microcode)(void);
 	int			(*collect_cpu_info)(int cpu, struct cpu_signature *csig);
 	void			(*finalize_late_load)(int result);
-	unsigned int		nmi_safe	: 1,
-				use_nmi		: 1,
-				use_staging	: 1;
+	unsigned int		nmi_safe	    : 1,
+				use_nmi		    : 1,
+				use_staging	    : 1,
+				support_incremental : 1;
 };
 
 struct early_load_data {

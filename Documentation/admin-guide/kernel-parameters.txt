@@ -4091,6 +4091,10 @@ Kernel parameters
 			for the runtime microcode loader according to <bool>. If
 			<bool> is not given, enable the enforcement.
 
+			incremental_loading=<bool>:
+			Enable or disable incremental microcode late loading
+			according to <bool>.
+
 	mitigations=
 			[X86,PPC,S390,ARM64,EARLY] Control optional mitigations for
 			CPU vulnerabilities.  This is a set of curated,
