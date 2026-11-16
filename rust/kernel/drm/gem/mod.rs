@@ -21,7 +21,7 @@ use crate::{
     prelude::*,
     sync::aref::{
         ARef,
-        AlwaysRefCounted, //
+        RefCounted, //
     },
     types::Opaque,
 };
@@ -34,7 +34,7 @@ use core::{
 #[cfg(CONFIG_RUST_DRM_GEM_SHMEM_HELPER)]
 pub mod shmem;
 
-/// A macro for implementing [`AlwaysRefCounted`] for any GEM object type.
+/// A macro for implementing [`RefCounted`] for any GEM object type.
 ///
 /// Since all GEM objects use the same refcounting scheme.
 #[macro_export]
@@ -47,7 +47,7 @@ macro_rules! impl_aref_for_gem_obj {
         )?
     ) => {
         // SAFETY: All GEM objects are refcounted.
-        unsafe impl $( <$( $tparam_id ),+> )? $crate::sync::aref::AlwaysRefCounted for $type
+        unsafe impl $( <$( $tparam_id ),+> )? $crate::sync::aref::RefCounted for $type
         where
             Self: IntoGEMObject,
             $( $( $bind_param : $bind_trait ),+ )?
@@ -66,6 +66,14 @@ macro_rules! impl_aref_for_gem_obj {
                 unsafe { bindings::drm_gem_object_put(obj) };
             }
         }
+
+        // SAFETY: All instances of `$type` are reference counted, so a `&$type` proves that the
+        // refcount is non-zero and it is okay to obtain an `ARef<$type>` from it.
+        unsafe impl $( <$( $tparam_id ),+> )? $crate::sync::aref::AlwaysRefCounted for $type
+        where
+            Self: IntoGEMObject,
+            $( $( $bind_param : $bind_trait ),+ )?
+        {}
     };
 }
 #[cfg_attr(not(CONFIG_RUST_DRM_GEM_SHMEM_HELPER), allow(unused))]
@@ -197,7 +205,7 @@ pub trait BaseObject: IntoGEMObject {
     /// Looks up an object by its handle for a given `File`.
     fn lookup_handle<D, F>(file: &drm::File<F>, handle: u32) -> Result<ARef<Self>>
     where
-        Self: AllocImpl<Driver = D> + AlwaysRefCounted,
+        Self: AllocImpl<Driver = D> + RefCounted,
         D: drm::Driver<Object = Self, File = F>,
         F: drm::file::DriverFile<Driver = D>,
     {

@@ -18,9 +18,15 @@ pub use for_lt::{
     ForLt, //
 };
 
-pub use crate::owned::{
-    Ownable,
-    Owned, //
+pub use crate::{
+    owned::{
+        Ownable,
+        Owned, //
+    },
+    sync::aref::{
+        AlwaysRefCounted,
+        RefCounted, //
+    }, //
 };
 
 /// Used to transfer ownership to and from foreign (non-Rust) languages.

@@ -11,7 +11,8 @@ use crate::{
     prelude::*,
     sync::aref::{
         ARef,
-        AlwaysRefCounted, //
+        AlwaysRefCounted,
+        RefCounted, //
     },
     types::Opaque, //
 };
@@ -259,7 +260,7 @@ impl<T: Operations> AsRef<device::Device> for Device<T> {
 
 // SAFETY: `fwctl_get` increments the refcount of a valid fwctl_device.
 // `fwctl_put` decrements it and frees the device when it reaches zero.
-unsafe impl<T: Operations> AlwaysRefCounted for Device<T> {
+unsafe impl<T: Operations> RefCounted for Device<T> {
     #[inline]
     fn inc_ref(&self) {
         // SAFETY: `self` holds a live reference.
@@ -272,6 +273,10 @@ unsafe impl<T: Operations> AlwaysRefCounted for Device<T> {
         unsafe { bindings::fwctl_put(obj.cast().as_ptr()) };
     }
 }
+
+// SAFETY: All instances of `Device<T>` are reference counted, so a `&Device<T>` proves that the
+// refcount is non-zero and it is okay to obtain an `ARef<Device<T>>` from it.
+unsafe impl<T: Operations> AlwaysRefCounted for Device<T> {}
 
 // SAFETY: `Device<T>` is refcounted by the fwctl core and may be released from any thread.
 unsafe impl<T: Operations> Send for Device<T> {}

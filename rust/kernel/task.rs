@@ -10,7 +10,12 @@ use crate::{
     pid_namespace::PidNamespace,
     prelude::*,
     sync::aref::ARef,
-    types::{NotThreadSafe, Opaque},
+    types::{
+        AlwaysRefCounted,
+        NotThreadSafe,
+        Opaque,
+        RefCounted, //
+    },
 };
 use core::{
     ops::Deref,
@@ -347,7 +352,7 @@ impl CurrentTask {
 }
 
 // SAFETY: The type invariants guarantee that `Task` is always refcounted.
-unsafe impl crate::sync::aref::AlwaysRefCounted for Task {
+unsafe impl RefCounted for Task {
     #[inline]
     fn inc_ref(&self) {
         // SAFETY: The existence of a shared reference means that the refcount is nonzero.
@@ -360,6 +365,10 @@ unsafe impl crate::sync::aref::AlwaysRefCounted for Task {
         unsafe { bindings::put_task_struct(obj.cast().as_ptr()) }
     }
 }
+
+// SAFETY: All instances of `Task` are reference counted, so a `&Task` proves that the refcount is
+// non-zero and it is okay to obtain an `ARef<Task>` from it.
+unsafe impl AlwaysRefCounted for Task {}
 
 impl PartialEq for Task {
     #[inline]

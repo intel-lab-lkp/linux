@@ -17,7 +17,10 @@ use crate::{
     of,
     prelude::*,
     sync::{
-        aref::AlwaysRefCounted,
+        aref::{
+            AlwaysRefCounted,
+            RefCounted, //
+        },
         Mutex, //
     },
     time::Jiffies,
@@ -570,7 +573,7 @@ kernel::impl_device_context_deref!(unsafe { Device });
 kernel::impl_device_context_into_aref!(Device);
 
 // SAFETY: Instances of `Device` are always reference-counted.
-unsafe impl AlwaysRefCounted for Device {
+unsafe impl RefCounted for Device {
     fn inc_ref(&self) {
         self.as_ref().inc_ref();
     }
@@ -580,6 +583,10 @@ unsafe impl AlwaysRefCounted for Device {
         unsafe { bindings::serdev_device_put(obj.cast().as_ptr()) }
     }
 }
+
+// SAFETY: All instances of `Device` are reference counted, so a `&Device` proves that the refcount
+// is non-zero and it is okay to obtain an `ARef<Device>` from it.
+unsafe impl AlwaysRefCounted for Device {}
 
 impl<Ctx: device::DeviceContext> AsRef<device::Device<Ctx>> for Device<Ctx> {
     fn as_ref(&self) -> &device::Device<Ctx> {

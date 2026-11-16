@@ -36,7 +36,8 @@ use kernel::{
     sync::{
         aref::{
             ARef,
-            AlwaysRefCounted, //
+            AlwaysRefCounted,
+            RefCounted, //
         },
         atomic::{
             Atomic,
@@ -565,7 +566,7 @@ impl Fence {
 
 // SAFETY: These implement the C backends refcounting methods which are proven
 // to work correctly.
-unsafe impl AlwaysRefCounted for Fence {
+unsafe impl RefCounted for Fence {
     fn inc_ref(&self) {
         // SAFETY: `self.as_raw()` is a pointer to a valid `struct dma_fence`.
         unsafe { bindings::dma_fence_get(self.as_raw()) }
@@ -581,6 +582,10 @@ unsafe impl AlwaysRefCounted for Fence {
         unsafe { bindings::dma_fence_put(fence) }
     }
 }
+
+// SAFETY: All instances of `Fence` are reference counted, so a `&Fence` proves that the refcount is
+// non-zero and it is okay to obtain an `ARef<Fence>` from it.
+unsafe impl AlwaysRefCounted for Fence {}
 
 // Necessary to guarantee that `inner` always comes first and can be freed by C.
 // Also useful for using casts instead of container_of().

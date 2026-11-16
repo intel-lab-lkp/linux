@@ -13,7 +13,11 @@ use crate::{
     devres,
     error::{self, to_result},
     prelude::*,
-    sync::aref::{ARef, AlwaysRefCounted},
+    sync::aref::{
+        ARef,
+        AlwaysRefCounted,
+        RefCounted, //
+    },
     types::Opaque, //
 };
 use core::{
@@ -627,7 +631,7 @@ impl<T: PwmOps> Chip<T> {
 }
 
 // SAFETY: Implements refcounting for `Chip` using the embedded `struct device`.
-unsafe impl<T: PwmOps> AlwaysRefCounted for Chip<T> {
+unsafe impl<T: PwmOps> RefCounted for Chip<T> {
     #[inline]
     fn inc_ref(&self) {
         // SAFETY: `self.0.get()` points to a valid `pwm_chip` because `self` exists.
@@ -644,6 +648,10 @@ unsafe impl<T: PwmOps> AlwaysRefCounted for Chip<T> {
         unsafe { bindings::put_device(&raw mut (*c_chip_ptr).dev) };
     }
 }
+
+// SAFETY: All instances of `Chip<T>` are reference counted, so a `&Chip<T>` proves that the
+// refcount is non-zero and it is okay to obtain an `ARef<Chip<T>>` from it.
+unsafe impl<T: PwmOps> AlwaysRefCounted for Chip<T> {}
 
 // SAFETY: `Chip` is a wrapper around `*mut bindings::pwm_chip`. The underlying C
 // structure's state is managed and synchronized by the kernel's device model

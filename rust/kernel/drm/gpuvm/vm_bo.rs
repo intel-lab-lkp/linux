@@ -29,7 +29,7 @@ unsafe impl<T: DriverGpuVm> Send for GpuVmBo<T> {}
 unsafe impl<T: DriverGpuVm> Sync for GpuVmBo<T> {}
 
 // SAFETY: By type invariants, the allocation is managed by the refcount in `self.inner`.
-unsafe impl<T: DriverGpuVm> AlwaysRefCounted for GpuVmBo<T> {
+unsafe impl<T: DriverGpuVm> RefCounted for GpuVmBo<T> {
     fn inc_ref(&self) {
         // SAFETY: By type invariants, the allocation is managed by the refcount in `self.inner`.
         unsafe { bindings::drm_gpuvm_bo_get(self.inner.get()) };
@@ -43,6 +43,10 @@ unsafe impl<T: DriverGpuVm> AlwaysRefCounted for GpuVmBo<T> {
         unsafe { bindings::drm_gpuvm_bo_put_deferred(obj.as_ptr().cast()) };
     }
 }
+
+// SAFETY: All instances of `GpuVmBo<T>` are reference counted, so a `&GpuVmBo<T>` proves that the
+// refcount is non-zero and it is okay to obtain an `ARef<GpuVmBo<T>>` from it.
+unsafe impl<T: DriverGpuVm> AlwaysRefCounted for GpuVmBo<T> {}
 
 impl<T: DriverGpuVm> PartialEq for GpuVmBo<T> {
     #[inline]

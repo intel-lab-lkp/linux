@@ -7,7 +7,14 @@
 //! C header: [`include/linux/pid_namespace.h`](srctree/include/linux/pid_namespace.h) and
 //! [`include/linux/pid.h`](srctree/include/linux/pid.h)
 
-use crate::{bindings, sync::aref::AlwaysRefCounted, types::Opaque};
+use crate::{
+    bindings,
+    sync::aref::RefCounted,
+    types::{
+        AlwaysRefCounted,
+        Opaque, //
+    }, //
+};
 use core::ptr;
 
 /// Wraps the kernel's `struct pid_namespace`. Thread safe.
@@ -41,7 +48,7 @@ impl PidNamespace {
 }
 
 // SAFETY: Instances of `PidNamespace` are always reference-counted.
-unsafe impl AlwaysRefCounted for PidNamespace {
+unsafe impl RefCounted for PidNamespace {
     #[inline]
     fn inc_ref(&self) {
         // SAFETY: The existence of a shared reference means that the refcount is nonzero.
@@ -54,6 +61,10 @@ unsafe impl AlwaysRefCounted for PidNamespace {
         unsafe { bindings::put_pid_ns(obj.cast().as_ptr()) }
     }
 }
+
+// SAFETY: All instances of `PidNamespace` are reference counted, so a `&PidNamespace` proves that
+// the refcount is non-zero and it is okay to obtain an `ARef<PidNamespace>` from it.
+unsafe impl AlwaysRefCounted for PidNamespace {}
 
 // SAFETY:
 // - `PidNamespace::dec_ref` can be called from any thread.

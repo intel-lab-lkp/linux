@@ -17,7 +17,8 @@ use crate::{
     prelude::*,
     sync::aref::{
         ARef,
-        AlwaysRefCounted, //
+        AlwaysRefCounted,
+        RefCounted, //
     },
     types::{
         NotThreadSafe,
@@ -480,7 +481,7 @@ impl<T: drm::Driver> Deref for Device<T, Ioctl> {
 
 // SAFETY: DRM device objects are always reference counted and the get/put functions
 // satisfy the requirements.
-unsafe impl<T: drm::Driver> AlwaysRefCounted for Device<T> {
+unsafe impl<T: drm::Driver> RefCounted for Device<T> {
     fn inc_ref(&self) {
         // SAFETY: The existence of a shared reference guarantees that the refcount is non-zero.
         unsafe { bindings::drm_dev_get(self.as_raw()) };
@@ -494,6 +495,10 @@ unsafe impl<T: drm::Driver> AlwaysRefCounted for Device<T> {
         unsafe { bindings::drm_dev_put(drm_dev) };
     }
 }
+
+// SAFETY: All instances of `Device` are reference counted, so a `&Device` proves that the refcount
+// is non-zero and it is okay to obtain an `ARef<Device>` from it.
+unsafe impl<T: drm::Driver> AlwaysRefCounted for Device<T> {}
 
 impl<T: drm::Driver> AsRef<T::ParentDevice<device::Normal>> for Device<T> {
     fn as_ref(&self) -> &T::ParentDevice<device::Normal> {

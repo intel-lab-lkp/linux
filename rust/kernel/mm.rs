@@ -13,8 +13,15 @@
 
 use crate::{
     bindings,
-    sync::aref::{ARef, AlwaysRefCounted},
-    types::{NotThreadSafe, Opaque},
+    sync::aref::{
+        ARef,
+        RefCounted, //
+    },
+    types::{
+        AlwaysRefCounted,
+        NotThreadSafe,
+        Opaque, //
+    }, //
 };
 use core::{ops::Deref, ptr::NonNull};
 
@@ -55,7 +62,7 @@ unsafe impl Send for Mm {}
 unsafe impl Sync for Mm {}
 
 // SAFETY: By the type invariants, this type is always refcounted.
-unsafe impl AlwaysRefCounted for Mm {
+unsafe impl RefCounted for Mm {
     #[inline]
     fn inc_ref(&self) {
         // SAFETY: The pointer is valid since self is a reference.
@@ -68,6 +75,10 @@ unsafe impl AlwaysRefCounted for Mm {
         unsafe { bindings::mmdrop(obj.cast().as_ptr()) };
     }
 }
+
+// SAFETY: All instances of `Mm` are reference counted, so a `&Mm` proves that the refcount is
+// non-zero and it is okay to obtain an `ARef<Mm>` from it.
+unsafe impl AlwaysRefCounted for Mm {}
 
 /// A wrapper for the kernel's `struct mm_struct`.
 ///
@@ -91,7 +102,7 @@ unsafe impl Send for MmWithUser {}
 unsafe impl Sync for MmWithUser {}
 
 // SAFETY: By the type invariants, this type is always refcounted.
-unsafe impl AlwaysRefCounted for MmWithUser {
+unsafe impl RefCounted for MmWithUser {
     #[inline]
     fn inc_ref(&self) {
         // SAFETY: The pointer is valid since self is a reference.
@@ -104,6 +115,10 @@ unsafe impl AlwaysRefCounted for MmWithUser {
         unsafe { bindings::mmput(obj.cast().as_ptr()) };
     }
 }
+
+// SAFETY: All instances of `MmWithUser` are reference counted, so a `&MmWithUser` proves that the
+// refcount is non-zero and it is okay to obtain an `ARef<MmWithUser>` from it.
+unsafe impl AlwaysRefCounted for MmWithUser {}
 
 // Make all `Mm` methods available on `MmWithUser`.
 impl Deref for MmWithUser {

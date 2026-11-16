@@ -11,7 +11,8 @@ use crate::{
     sync::{
         aref::{
             ARef,
-            AlwaysRefCounted, //
+            AlwaysRefCounted,
+            RefCounted, //
         },
         atomic::Relaxed,
         Refcount, //
@@ -235,11 +236,10 @@ unsafe impl<T: Operations> Send for Request<T> {}
 // mutate `self` are internally synchronized`
 unsafe impl<T: Operations> Sync for Request<T> {}
 
-// SAFETY: All instances of `Request<T>` are reference counted. This
-// implementation of `AlwaysRefCounted` ensure that increments to the ref count
-// keeps the object alive in memory at least until a matching reference count
-// decrement is executed.
-unsafe impl<T: Operations> AlwaysRefCounted for Request<T> {
+// SAFETY: All instances of `Request<T>` are reference counted. This implementation of `RefCounted`
+// ensure that increments to the ref count keeps the object alive in memory at least until a
+// matching reference count decrement is executed.
+unsafe impl<T: Operations> RefCounted for Request<T> {
     fn inc_ref(&self) {
         self.wrapper_ref().refcount().inc();
     }
@@ -261,3 +261,8 @@ unsafe impl<T: Operations> AlwaysRefCounted for Request<T> {
         }
     }
 }
+
+// SAFETY: All instances of `Request<T>` are currently reference counted, so a `&Request<T>` proves
+// that the refcount is non-zero and it is okay to obtain an `ARef<Request<T>>` from it (but this
+// will change in the future).
+unsafe impl<T: Operations> AlwaysRefCounted for Request<T> {}

@@ -20,6 +20,10 @@ use crate::{
     io::resource,
     prelude::*,
     str::CStr,
+    sync::aref::{
+        AlwaysRefCounted,
+        RefCounted, //
+    },
     types::Opaque,
     ThisModule, //
 };
@@ -510,7 +514,7 @@ kernel::impl_device_context_into_aref!(Device);
 impl<'a> crate::dma::Device<'a> for Device<device::Core<'a>> {}
 
 // SAFETY: Instances of `Device` are always reference-counted.
-unsafe impl crate::sync::aref::AlwaysRefCounted for Device {
+unsafe impl RefCounted for Device {
     #[inline]
     fn inc_ref(&self) {
         // SAFETY: The existence of a shared reference guarantees that the refcount is non-zero.
@@ -523,6 +527,10 @@ unsafe impl crate::sync::aref::AlwaysRefCounted for Device {
         unsafe { bindings::pci_dev_put(obj.cast().as_ptr()) }
     }
 }
+
+// SAFETY: All instances of `Device` are reference counted, so a `&Device` proves that the refcount
+// is non-zero and it is okay to obtain an `ARef<Device>` from it.
+unsafe impl AlwaysRefCounted for Device {}
 
 impl<Ctx: device::DeviceContext> AsRef<device::Device<Ctx>> for Device<Ctx> {
     fn as_ref(&self) -> &device::Device<Ctx> {

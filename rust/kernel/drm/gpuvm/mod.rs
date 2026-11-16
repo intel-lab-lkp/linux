@@ -22,7 +22,8 @@ use kernel::{
     prelude::*,
     sync::aref::{
         ARef,
-        AlwaysRefCounted, //
+        AlwaysRefCounted,
+        RefCounted, //
     },
     types::Opaque, //
 };
@@ -81,7 +82,7 @@ unsafe impl<T: DriverGpuVm> Send for GpuVm<T> {}
 unsafe impl<T: DriverGpuVm> Sync for GpuVm<T> {}
 
 // SAFETY: By type invariants, the allocation is managed by the refcount in `self.vm`.
-unsafe impl<T: DriverGpuVm> AlwaysRefCounted for GpuVm<T> {
+unsafe impl<T: DriverGpuVm> RefCounted for GpuVm<T> {
     fn inc_ref(&self) {
         // SAFETY: By type invariants, the allocation is managed by the refcount in `self.vm`.
         unsafe { bindings::drm_gpuvm_get(self.vm.get()) };
@@ -92,6 +93,10 @@ unsafe impl<T: DriverGpuVm> AlwaysRefCounted for GpuVm<T> {
         unsafe { bindings::drm_gpuvm_put((*obj.as_ptr()).vm.get()) };
     }
 }
+
+// SAFETY: All instances of `GpuVm<T>` are reference counted, so a `&GpuVm<T>` proves that the
+// refcount is non-zero and it is okay to obtain an `ARef<GpuVm<T>>` from it.
+unsafe impl<T: DriverGpuVm> AlwaysRefCounted for GpuVm<T> {}
 
 impl<T: DriverGpuVm> PartialEq for GpuVm<T> {
     #[inline]
