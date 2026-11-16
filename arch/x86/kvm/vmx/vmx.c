@@ -3281,6 +3281,7 @@ int vmx_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 #endif
 
 	vmx_setup_uret_msrs(vmx);
+	vmx->vt.emulation_required = vmx_emulation_required(vcpu);
 	return 0;
 }
 
@@ -3927,7 +3928,7 @@ static bool tr_valid(struct kvm_vcpu *vcpu)
 		return false;
 	if (tr.selector & SEGMENT_TI_MASK)	/* TI = 1 */
 		return false;
-	if (tr.type != 3 && tr.type != 11) /* TODO: Check if guest is in IA32e mode */
+	if (tr.type != 11 && (is_long_mode(vcpu) || tr.type != 3))
 		return false;
 	if (!tr.present)
 		return false;
