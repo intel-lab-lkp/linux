@@ -2865,7 +2865,7 @@ static int kvm_inject_nested(struct kvm_vcpu *vcpu, u64 esr_el2,
 			     enum exception_type type)
 {
 	u64 pstate, mode;
-	bool direct_inject;
+	bool direct_inject, loaded;
 
 	if (!vcpu_has_nv(vcpu)) {
 		kvm_err("Unexpected call to %s for the non-nesting configuration\n",
@@ -2894,6 +2894,7 @@ static int kvm_inject_nested(struct kvm_vcpu *vcpu, u64 esr_el2,
 	}
 
 	preempt_disable();
+	loaded = (vcpu->cpu != -1);
 
 	vcpu_set_flag(vcpu, IN_NESTED_EXCEPTION);
 
@@ -2903,7 +2904,8 @@ static int kvm_inject_nested(struct kvm_vcpu *vcpu, u64 esr_el2,
 	 */
 	__kvm_adjust_pc(vcpu);
 
-	kvm_arch_vcpu_put(vcpu);
+	if (loaded)
+		kvm_arch_vcpu_put(vcpu);
 
 	kvm_inject_el2_exception(vcpu, esr_el2, type);
 
@@ -2918,7 +2920,8 @@ static int kvm_inject_nested(struct kvm_vcpu *vcpu, u64 esr_el2,
 	 */
 	__kvm_adjust_pc(vcpu);
 
-	kvm_arch_vcpu_load(vcpu, smp_processor_id());
+	if (loaded)
+		kvm_arch_vcpu_load(vcpu, smp_processor_id());
 	vcpu_clear_flag(vcpu, IN_NESTED_EXCEPTION);
 
 	preempt_enable();
