@@ -28,6 +28,8 @@
 #include <linux/soc/qcom/mdt_loader.h>
 #include <linux/iopoll.h>
 #include <linux/slab.h>
+#include <linux/soc/qcom/smem.h>
+#include <linux/soc/qcom/socinfo.h>
 
 #include "remoteproc_internal.h"
 #include "qcom_common.h"
@@ -38,6 +40,12 @@
 #include <linux/firmware/qcom/qcom_scm.h>
 
 #define MPSS_CRASH_REASON_SMEM		421
+
+/*
+ * First vendor-reserved SMEM item; Google's modem firmware reads the SoC
+ * platform information from it when the modem boots.
+ */
+#define SMEM_ID_VENDOR0			134
 
 #define MBA_LOG_SIZE			SZ_4K
 
@@ -252,6 +260,7 @@ struct q6v5 {
 	bool has_ext_bhs_reg;
 	bool has_ext_cntl_regs;
 	bool has_vq6;
+	bool need_socinfo;
 	u64 mpss_perm;
 	u64 mba_perm;
 	const char *hexagon_mdt_image;
@@ -1673,11 +1682,75 @@ static void qcom_q6v5_dump_segment(struct rproc *rproc,
 	}
 }
 
+/* Layout of the vendor-defined SMEM item read by the Pixel modem firmware */
+struct modem_smem_info {
+	__le32 version;
+	__le32 modem_flag;
+	__le32 major_id;
+	__le32 minor_id;
+	__le32 subtype;
+	__le32 platform;
+	__le32 efs_magic;
+	__le32 ftm_magic;
+};
+
+#define MODEM_SMEM_VERSION	0
+#define PLAT_VER_TO_MAJOR_ID(v)	(((v) >> 16) & 0xff)
+#define PLAT_VER_TO_MINOR_ID(v)	((v) & 0xff)
+
+static int q6v5_socinfo_publish(struct q6v5 *qproc)
+{
+	struct modem_smem_info *info;
+	struct socinfo *socinfo;
+	u32 plat_ver;
+	int ret;
+
+	socinfo = qcom_smem_get(QCOM_SMEM_HOST_ANY, SMEM_HW_SW_BUILD_ID, NULL);
+	if (IS_ERR(socinfo))
+		return dev_err_probe(qproc->dev, PTR_ERR(socinfo),
+				     "could not get socinfo\n");
+
+	/* hw_plat_subtype was added in socinfo format 0.6 */
+	if (le32_to_cpu(socinfo->fmt) < SOCINFO_VERSION(0, 6))
+		return dev_err_probe(qproc->dev, -EOPNOTSUPP,
+				     "socinfo format too old\n");
+
+	/* -EEXIST: the item survived an earlier boot */
+	ret = qcom_smem_alloc(QCOM_SMEM_HOST_ANY, SMEM_ID_VENDOR0, sizeof(*info));
+	if (ret && ret != -EEXIST)
+		return dev_err_probe(qproc->dev, ret,
+				     "could not allocate modem smem\n");
+
+	info = qcom_smem_get(QCOM_SMEM_HOST_ANY, SMEM_ID_VENDOR0, NULL);
+	if (IS_ERR(info))
+		return dev_err_probe(qproc->dev, PTR_ERR(info),
+				     "could not get modem smem\n");
+
+	plat_ver = le32_to_cpu(socinfo->plat_ver);
+
+	/* modem_flag, efs_magic and ftm_magic are left zero */
+	*info = (struct modem_smem_info) {
+		.version   = cpu_to_le32(MODEM_SMEM_VERSION),
+		.major_id  = cpu_to_le32(PLAT_VER_TO_MAJOR_ID(plat_ver)),
+		.minor_id  = cpu_to_le32(PLAT_VER_TO_MINOR_ID(plat_ver)),
+		.subtype   = socinfo->hw_plat_subtype,
+		.platform  = socinfo->hw_plat,
+	};
+
+	return 0;
+}
+
 static int q6v5_start(struct rproc *rproc)
 {
 	struct q6v5 *qproc = rproc->priv;
 	int xfermemop_ret;
 	int ret;
+
+	if (qproc->need_socinfo) {
+		ret = q6v5_socinfo_publish(qproc);
+		if (ret)
+			return ret;
+	}
 
 	ret = q6v5_mba_load(qproc);
 	if (ret)
@@ -2132,6 +2205,8 @@ static int q6v5_probe(struct platform_device *pdev)
 	qproc->has_ext_cntl_regs = desc->has_ext_cntl_regs;
 	qproc->has_vq6 = desc->has_vq6;
 	qproc->has_spare_reg = desc->has_spare_reg;
+	qproc->need_socinfo =
+		of_property_read_bool(pdev->dev.of_node, "google,require-socinfo");
 	ret = q6v5_init_mem(qproc, pdev);
 	if (ret)
 		return ret;
