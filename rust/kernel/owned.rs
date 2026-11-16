@@ -14,6 +14,10 @@ use core::{
     pin::Pin,
     ptr::NonNull, //
 };
+use kernel::{
+    sync::aref::ARef,
+    types::RefCounted, //
+};
 
 use kernel::types::ForeignOwnable;
 
@@ -28,7 +32,9 @@ use kernel::types::ForeignOwnable;
 ///
 /// Note: The underlying object is not required to provide internal reference counting, because it
 /// represents a unique, owned reference. If reference counting (on the Rust side) is required,
-/// [`RefCounted`](crate::types::RefCounted) should be implemented.
+/// [`RefCounted`] should be implemented. [`OwnableIntoShared`] should be implemented if conversion
+/// from unique to shared (reference counted) ownership is needed, and [`OwnableTryFromShared`] if
+/// conversion from shared back to unique ownership is needed.
 ///
 /// # Access model
 ///
@@ -327,5 +333,162 @@ unsafe impl<T: Ownable> ForeignOwnable for Owned<T> {
         // SAFETY: We never move out of inner, and we do not hand out mutable
         // references when `T: !Unpin`.
         unsafe { Pin::new_unchecked(inner) }
+    }
+}
+
+/// A trait for types that support converting a unique reference [`Owned<Self>`] into a shared
+/// reference [`ARef<Self>`].
+///
+/// The conversion consumes the [`Owned`], so it cannot fail. Implementing this trait does not make
+/// the opposite conversion available. Types that can become unique again after having been shared
+/// can implement [`OwnableTryFromShared`] in addition.
+///
+/// # Examples
+///
+/// A minimal example implementation of [`OwnableIntoShared`], [`OwnableTryFromShared`],
+/// [`Ownable`] and its usage with [`ARef`] and [`Owned`] looks like this:
+///
+/// ```
+/// # #![expect(clippy::disallowed_names)]
+/// # use core::ptr::NonNull;
+/// # use kernel::alloc::{flags, kbox::KBox, AllocError};
+/// # use kernel::sync::aref::{ARef, RefCounted};
+/// # use kernel::sync::atomic::Acquire;
+/// # use kernel::sync::Refcount;
+/// # use kernel::types::{Owned, Ownable, OwnableIntoShared, OwnableTryFromShared};
+/// // An internally refcounted struct for demonstration purposes.
+/// //
+/// // # Invariants
+/// //
+/// // - `refcount` counts the live references to the object, so the object is valid while
+/// //   `refcount` is non-zero.
+/// // - `Foo` does not allow other references to exist together with an `Owned<Foo>`: while an
+/// //   `Owned<Foo>` exists, `refcount` is 1 and no `ARef<Foo>` exists.
+/// struct Foo {
+///     refcount: Refcount,
+/// }
+///
+/// impl Foo {
+///     fn new() -> Result<Owned<Self>> {
+///         // We are just using a `KBox` here to handle the actual allocation, as our `Foo` is
+///         // not actually a C-allocated object.
+///         // INVARIANT: We initialize `refcount` to 1, counting the reference held by the
+///         // returned `Owned<Foo>`. No `ARef<Foo>` exists for the new object.
+///         let result = KBox::new(
+///             Foo {
+///                 refcount: Refcount::new(1),
+///             },
+///             flags::GFP_KERNEL,
+///         )?;
+///         let result = KBox::into_non_null(result);
+///         // SAFETY:
+///         //  - We just allocated the `Self`, thus it is valid until the refcount drops to zero.
+///         //  - No other pointer to the allocation exists, so this is the only `Owned<Foo>` and
+///         //    no other reference to the `Foo` exists. Thus access through the `Owned<Foo>` is
+///         //    sound, and it can be used from any thread that `Foo` can be used from.
+///         //  - The `Foo` is not moved until it is freed in `dec_ref`.
+///         Ok(unsafe { Owned::from_raw(result) })
+///     }
+/// }
+///
+/// // SAFETY: We increment and decrement the refcount each time the respective function is
+/// // called, and only free the `Foo` when the refcount reaches zero.
+/// unsafe impl RefCounted for Foo {
+///     fn inc_ref(&self) {
+///         self.refcount.inc();
+///     }
+///
+///     unsafe fn dec_ref(this: NonNull<Self>) {
+///         // SAFETY: By requirement on calling this function, the refcount is non-zero,
+///         // implying the underlying object is valid.
+///         let refcount = unsafe { &this.as_ref().refcount };
+///         if refcount.dec_and_test() {
+///             // SAFETY: The refcount reached zero, so by requirement on calling this function
+///             // no reference to the object remains and it will no longer be used. We can
+///             // reclaim the allocation by passing ownership back to the [`KBox`], which frees
+///             // the `Foo` when dropped.
+///             drop(unsafe { KBox::from_raw(this.as_ptr()) });
+///         }
+///     }
+/// }
+///
+/// impl OwnableIntoShared for Foo {
+///     fn into_shared(this: Owned<Self>) -> ARef<Self> {
+///         // SAFETY: By the type invariants of `Foo`, an `Owned<Foo>` holds the only reference
+///         // (refcount 1). We consume the `Owned<Foo>` and transfer the reference to the new
+///         // `ARef`.
+///         unsafe { ARef::from_raw(Owned::into_raw(this)) }
+///     }
+/// }
+///
+/// impl OwnableTryFromShared for Foo {
+///     fn try_from_shared(this: ARef<Self>) -> Result<Owned<Self>, ARef<Self>> {
+///         // `this` is a live reference, so the refcount cannot drop below 1, and it can only
+///         // grow through an existing reference. Thus observing 1 means that `this` is the only
+///         // reference to the object. The `Acquire` ordering synchronizes with the release
+///         // decrements of references dropped on other threads.
+///         if this.refcount.as_atomic().load(Acquire) == 1 {
+///             // SAFETY: The `Foo` is valid and `this` holds the only reference to it, so we
+///             // can transfer this last reference to the returned `Owned<Foo>`. No other
+///             // reference to the `Foo` exists, so this is the only `Owned<Foo>` and access
+///             // through it is sound. The `Foo` is not moved until it is freed in `dec_ref`.
+///             // INVARIANT: `refcount` is 1 and we consumed the only `ARef<Foo>`.
+///             Ok(unsafe { Owned::from_raw(ARef::into_raw(this)) })
+///         } else {
+///             Err(this)
+///         }
+///     }
+/// }
+///
+/// impl Ownable for Foo {
+///     unsafe fn release(this: NonNull<Self>) {
+///         // SAFETY: Using `dec_ref()` from [`RefCounted`] to release is okay, as the refcount is
+///         // always 1 for an [`Owned<Foo>`].
+///         unsafe { Foo::dec_ref(this) };
+///     }
+/// }
+///
+/// let foo = Foo::new()?;
+/// let foo = ARef::from(foo);
+/// {
+///     let bar = foo.clone();
+///     assert!(Owned::try_from(bar).is_err());
+/// }
+/// assert!(Owned::try_from(foo).is_ok());
+/// # Ok::<(), Error>(())
+/// ```
+pub trait OwnableIntoShared: RefCounted + Ownable + Sized {
+    /// Converts the [`Owned`] into an [`ARef`].
+    fn into_shared(this: Owned<Self>) -> ARef<Self>;
+}
+
+/// A trait for types that support converting a shared reference [`ARef<Self>`] back into a unique
+/// reference [`Owned<Self>`].
+///
+/// The conversion can only succeed when no [`Owned`] exists for the object, and when the
+/// requirements for creating one are satisfied, so it is fallible. For a type that does not allow
+/// other references to exist together with an [`Owned`], this means that the [`ARef`] must be the
+/// only reference to the object. See the *Access model* section of [`Ownable`].
+///
+/// Not all types that implement [`OwnableIntoShared`] are able to become unique again after having
+/// been shared, so this capability is provided by a separate trait.
+///
+/// # Examples
+///
+/// See the example for [`OwnableIntoShared`].
+pub trait OwnableTryFromShared: RefCounted + Ownable + Sized {
+    /// Checks if the [`ARef`] can be converted to an [`Owned`] and converts it if that is the case.
+    /// Otherwise it returns again an [`ARef`] to the same underlying object.
+    fn try_from_shared(this: ARef<Self>) -> Result<Owned<Self>, ARef<Self>>;
+}
+
+impl<T: OwnableTryFromShared> TryFrom<ARef<T>> for Owned<T> {
+    type Error = ARef<T>;
+    /// Tries to convert the [`ARef`] to an [`Owned`] by calling
+    /// [`try_from_shared()`](OwnableTryFromShared::try_from_shared). In case the conversion is not
+    /// possible, it returns again an [`ARef`] to the same underlying object.
+    #[inline]
+    fn try_from(b: ARef<T>) -> Result<Owned<T>, Self::Error> {
+        T::try_from_shared(b)
     }
 }

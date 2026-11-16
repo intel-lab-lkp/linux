@@ -23,6 +23,10 @@ use core::{
     ops::Deref,
     ptr::NonNull, //
 };
+use kernel::types::{
+    OwnableIntoShared,
+    Owned, //
+};
 
 use crate::{
     prelude::*,
@@ -40,7 +44,10 @@ use crate::{
 /// Note: Implementing this trait allows types to be wrapped in an [`ARef<Self>`]. It requires an
 /// internal reference count and provides only shared references. If unique references are required
 /// [`Ownable`](crate::types::Ownable) should be implemented which allows types to be wrapped in an
-/// [`Owned<Self>`](crate::types::Owned).
+/// [`Owned<Self>`](crate::types::Owned). Implementing the trait [`OwnableIntoShared`] allows to
+/// convert a unique reference into a shared one (i.e. [`Owned<Self>`](crate::types::Owned) into
+/// [`ARef<Self>`]), and implementing
+/// [`OwnableTryFromShared`](crate::types::OwnableTryFromShared) allows to convert back.
 ///
 /// # Safety
 ///
@@ -190,6 +197,13 @@ impl<T: AlwaysRefCounted> From<&T> for ARef<T> {
         b.inc_ref();
         // SAFETY: We just incremented the refcount above.
         unsafe { Self::from_raw(NonNull::from(b)) }
+    }
+}
+
+impl<T: OwnableIntoShared> From<Owned<T>> for ARef<T> {
+    #[inline]
+    fn from(b: Owned<T>) -> Self {
+        T::into_shared(b)
     }
 }
 

@@ -21,6 +21,8 @@ pub use for_lt::{
 pub use crate::{
     owned::{
         Ownable,
+        OwnableIntoShared,
+        OwnableTryFromShared,
         Owned, //
     },
     sync::aref::{
