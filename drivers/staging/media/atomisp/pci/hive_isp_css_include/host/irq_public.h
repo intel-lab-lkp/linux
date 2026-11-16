@@ -107,7 +107,6 @@ void irq_raise(
 
  \return any(VIRQ.channel[irq_ID] != 0)
  */
-bool any_virq_signal(void);
 
 /*! Enable an IRQ channel of the virtual super IRQ
 
