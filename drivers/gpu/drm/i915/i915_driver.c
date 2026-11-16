@@ -904,6 +904,7 @@ out_cleanup_modeset2:
 	intel_display_driver_remove(display);
 	intel_irq_uninstall(i915);
 	intel_display_driver_remove_noirq(display);
+	intel_display_driver_mode_config_cleanup(display);
 	goto out_cleanup_modeset;
 out_cleanup_irq:
 	intel_irq_uninstall(i915);
@@ -949,6 +950,7 @@ void i915_driver_remove(struct drm_i915_private *i915)
 	intel_irq_uninstall(i915);
 
 	intel_display_driver_remove_noirq(display);
+	intel_display_driver_mode_config_cleanup(display);
 
 	i915_reset_error_state(i915);
 	i915_gem_driver_remove(i915);

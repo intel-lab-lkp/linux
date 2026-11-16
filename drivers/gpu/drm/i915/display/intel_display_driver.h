@@ -23,6 +23,7 @@ void intel_display_driver_register(struct intel_display *display);
 void intel_display_driver_remove(struct intel_display *display);
 void intel_display_driver_remove_noirq(struct intel_display *display);
 void intel_display_driver_remove_nogem(struct intel_display *display);
+void intel_display_driver_mode_config_cleanup(struct intel_display *display);
 void intel_display_driver_unregister(struct intel_display *display);
 void intel_display_driver_shutdown(struct intel_display *display);
 void intel_display_driver_shutdown_late(struct intel_display *display);

@@ -162,6 +162,18 @@ static void intel_mode_config_cleanup(struct intel_display *display)
 {
 	intel_atomic_global_obj_cleanup(display);
 	intel_encoder_remove_all(display);
+}
+
+/*
+ * Free the KMS objects, including the encoders torn down by
+ * intel_display_driver_remove_noirq(). Userspace can keep referring to them
+ * until the last reference to the DRM device is gone.
+ */
+void intel_display_driver_mode_config_cleanup(struct intel_display *display)
+{
+	if (!HAS_DISPLAY(display))
+		return;
+
 	drm_mode_config_cleanup(display->drm);
 }
 

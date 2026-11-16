@@ -73,6 +73,7 @@ static void xe_display_fini_early(void *arg)
 		return;
 
 	intel_display_driver_remove_noirq(display);
+	intel_display_driver_mode_config_cleanup(display);
 	intel_display_driver_remove_nogem(display);
 	intel_display_power_cleanup(display);
 }
@@ -110,6 +111,7 @@ int xe_display_init_early(struct xe_device *xe)
 	return devm_add_action_or_reset(xe->drm.dev, xe_display_fini_early, xe);
 err_noirq:
 	intel_display_driver_remove_noirq(display);
+	intel_display_driver_mode_config_cleanup(display);
 	intel_display_power_cleanup(display);
 
 	return err;
