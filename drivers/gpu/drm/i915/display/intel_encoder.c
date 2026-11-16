@@ -104,6 +104,15 @@ void intel_encoder_shutdown_all(struct intel_display *display)
 			encoder->shutdown_complete(encoder);
 }
 
+void intel_encoder_remove_all(struct intel_display *display)
+{
+	struct intel_encoder *encoder;
+
+	for_each_intel_encoder(display->drm, encoder)
+		if (encoder->remove)
+			encoder->remove(encoder);
+}
+
 struct intel_digital_port *intel_dig_port_alloc(void)
 {
 	struct intel_digital_port *dig_port;

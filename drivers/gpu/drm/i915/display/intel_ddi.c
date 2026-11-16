@@ -4699,15 +4699,20 @@ static int intel_ddi_compute_config_late(struct intel_atomic_state *state,
 	return 0;
 }
 
-static void intel_ddi_encoder_destroy(struct drm_encoder *encoder)
+static void intel_ddi_encoder_remove(struct intel_encoder *encoder)
 {
-	struct intel_display *display = to_intel_display(encoder->dev);
-	struct intel_digital_port *dig_port = enc_to_dig_port(to_intel_encoder(encoder));
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 
-	intel_dp_encoder_flush_work(encoder);
-	if (intel_encoder_is_tc(&dig_port->base))
+	intel_dp_encoder_flush_work(&encoder->base);
+	if (intel_encoder_is_tc(encoder))
 		intel_tc_port_cleanup(dig_port);
 	intel_display_power_flush_work(display);
+}
+
+static void intel_ddi_encoder_destroy(struct drm_encoder *encoder)
+{
+	struct intel_digital_port *dig_port = enc_to_dig_port(to_intel_encoder(encoder));
 
 	drm_encoder_cleanup(encoder);
 	kfree(dig_port->hdcp.port_data.streams);
@@ -5355,6 +5360,7 @@ void intel_ddi_init(struct intel_display *display,
 	encoder->initial_fastset_check = intel_ddi_initial_fastset_check;
 	encoder->suspend = intel_ddi_encoder_suspend;
 	encoder->shutdown = intel_ddi_encoder_shutdown;
+	encoder->remove = intel_ddi_encoder_remove;
 	encoder->get_power_domains = intel_ddi_get_power_domains;
 
 	encoder->type = INTEL_OUTPUT_DDI;

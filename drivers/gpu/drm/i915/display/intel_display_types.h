@@ -275,6 +275,13 @@ struct intel_encoder {
 	 */
 	void (*shutdown_complete)(struct intel_encoder *encoder);
 	/*
+	 * Called on driver remove after interrupts are disabled, to release
+	 * everything needing the hardware or exposed to userspace. The encoder
+	 * itself may be destroyed later, once the last reference to the DRM
+	 * device is gone.
+	 */
+	void (*remove)(struct intel_encoder *encoder);
+	/*
 	 * Enable/disable the clock to the port.
 	 */
 	void (*enable_clock)(struct intel_encoder *encoder,

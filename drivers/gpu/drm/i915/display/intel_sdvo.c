@@ -2548,9 +2548,8 @@ static const struct drm_connector_helper_funcs intel_sdvo_connector_helper_funcs
 	.atomic_check = intel_sdvo_atomic_check,
 };
 
-static void intel_sdvo_encoder_destroy(struct drm_encoder *_encoder)
+static void intel_sdvo_encoder_remove(struct intel_encoder *encoder)
 {
-	struct intel_encoder *encoder = to_intel_encoder(_encoder);
 	struct intel_sdvo *sdvo = to_sdvo(encoder);
 	int i;
 
@@ -2558,6 +2557,12 @@ static void intel_sdvo_encoder_destroy(struct drm_encoder *_encoder)
 		if (sdvo->ddc[i].ddc_bus)
 			i2c_del_adapter(&sdvo->ddc[i].ddc);
 	}
+}
+
+static void intel_sdvo_encoder_destroy(struct drm_encoder *_encoder)
+{
+	struct intel_encoder *encoder = to_intel_encoder(_encoder);
+	struct intel_sdvo *sdvo = to_sdvo(encoder);
 
 	drm_encoder_cleanup(&encoder->base);
 	kfree(sdvo);
@@ -3439,6 +3444,7 @@ bool intel_sdvo_init(struct intel_display *display,
 	intel_encoder->audio_disable = intel_sdvo_disable_audio;
 	intel_encoder->get_hw_state = intel_sdvo_get_hw_state;
 	intel_encoder->get_config = intel_sdvo_get_config;
+	intel_encoder->remove = intel_sdvo_encoder_remove;
 
 	/* In default case sdvo lvds is false */
 	if (!intel_sdvo_get_capabilities(intel_sdvo, &intel_sdvo->caps))
@@ -3518,6 +3524,7 @@ err_output:
 	intel_sdvo_output_cleanup(intel_sdvo);
 err:
 	intel_sdvo_unselect_i2c_bus(intel_sdvo);
+	intel_sdvo_encoder_remove(intel_encoder);
 	intel_sdvo_encoder_destroy(&intel_encoder->base);
 
 	return false;

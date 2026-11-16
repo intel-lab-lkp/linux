@@ -1251,11 +1251,14 @@ static void g4x_dp_suspend_complete(struct intel_encoder *encoder)
 	intel_encoder_link_check_flush_work(encoder);
 }
 
+static void intel_dp_encoder_remove(struct intel_encoder *encoder)
+{
+	intel_dp_encoder_flush_work(&encoder->base);
+}
+
 static void intel_dp_encoder_destroy(struct drm_encoder *encoder)
 {
 	struct intel_digital_port *dig_port = enc_to_dig_port(to_intel_encoder(encoder));
-
-	intel_dp_encoder_flush_work(encoder);
 
 	drm_encoder_cleanup(encoder);
 	intel_dp_link_cleanup(&dig_port->dp);
@@ -1332,6 +1335,7 @@ bool g4x_dp_init(struct intel_display *display,
 	intel_encoder->suspend = intel_dp_encoder_suspend;
 	intel_encoder->suspend_complete = g4x_dp_suspend_complete;
 	intel_encoder->shutdown = intel_dp_encoder_shutdown;
+	intel_encoder->remove = intel_dp_encoder_remove;
 	if (display->platform.cherryview) {
 		intel_encoder->pre_pll_enable = chv_dp_pre_pll_enable;
 		intel_encoder->pre_enable = chv_pre_enable_dp;

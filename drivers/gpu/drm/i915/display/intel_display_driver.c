@@ -161,6 +161,7 @@ static void intel_mode_config_init(struct intel_display *display)
 static void intel_mode_config_cleanup(struct intel_display *display)
 {
 	intel_atomic_global_obj_cleanup(display);
+	intel_encoder_remove_all(display);
 	drm_mode_config_cleanup(display->drm);
 }
 
@@ -623,7 +624,7 @@ void intel_display_driver_remove(struct intel_display *display)
 	/*
 	 * MST topology needs to be suspended so we don't have any calls to
 	 * fbdev after it's finalized. MST will be destroyed later as part of
-	 * drm_mode_config_cleanup()
+	 * intel_encoder_remove_all().
 	 */
 	intel_dp_mst_suspend(display);
 }
