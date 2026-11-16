@@ -426,6 +426,34 @@ static const struct reorder_buffer_case {
 			.head_sn = 100,
 		},
 	},
+	{
+		.desc = "RX packet beyond the reorder window, release older packets first",
+		.rx_pkt = {
+			.fc = FC_QOS_DATA,
+			.sn = 164,
+			.nssn = 165,
+		},
+		.reorder_buf_state = {
+			.valid = true,
+			.head_sn = 100,
+			.num_entries = 2,
+			.entries[0].sn = 101,
+			.entries[1].sn = 102,
+		},
+		.expected = {
+			/* 1. Reorder buffer contains SN={101, 102}, hole at 100.
+			 * 2. RX packet SN=164 = head_sn + BA_WINDOW_SIZE: the
+			 *    transmitter gave up on SN=100 (no BAR), NSSN moves
+			 *    past it. SN=164 maps to the slot of SN=100.
+			 * The stored packets are released before the RX packet.
+			 */
+			.reorder_res = IWL_MLD_BUFFERED_SKB,
+			.num_stored = 0,
+			.head_sn = 165,
+			.skb_release_order = {101, 102, 164},
+			.skb_release_order_count = 3,
+		},
+	},
 };
 
 KUNIT_ARRAY_PARAM_DESC(test_reorder_buffer, reorder_buffer_cases, desc);

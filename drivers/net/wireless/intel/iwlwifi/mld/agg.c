@@ -305,6 +305,20 @@ iwl_mld_reorder(struct iwl_mld *mld, struct napi_struct *napi,
 		return IWL_MLD_PASS_SKB;
 	}
 
+	/* A frame beyond the end of the reorder window means that the
+	 * transmitter gave up on older frames without sending a BAR. The
+	 * firmware moves the window (NSSN) for it, but the frame would be
+	 * stored in the slot of an older SN and released ahead of the frames
+	 * before it, which would then all fail the PN check. Release the
+	 * older frames first, as for a BAR.
+	 */
+	if (!ieee80211_sn_less(sn, ieee80211_sn_add(buffer->head_sn,
+						    baid_data->buf_size)))
+		iwl_mld_reorder_release_frames(mld, link_sta, napi, baid_data,
+					       buffer,
+					       ieee80211_sn_less(sn, nssn) ?
+					       sn : nssn);
+
 	/* put in reorder buffer */
 	index = sn % baid_data->buf_size;
 	__skb_queue_tail(&entries[index].frames, skb);
