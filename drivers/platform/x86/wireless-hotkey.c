@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/acpi.h>
 #include <acpi/acpi_bus.h>
 
@@ -21,17 +22,20 @@ MODULE_ALIAS("acpi*:HPQ6001:*");
 MODULE_ALIAS("acpi*:WSTADEF:*");
 MODULE_ALIAS("acpi*:AMDI0051:*");
 MODULE_ALIAS("acpi*:LGEX0815:*");
+MODULE_ALIAS("acpi*:PTK0001:*");
 
 struct wl_button {
 	struct input_dev *input_dev;
 	char phys[32];
+	u32 event;
 };
 
 static const struct acpi_device_id wl_ids[] = {
-	{"HPQ6001", 0},
-	{"WSTADEF", 0},
-	{"AMDI0051", 0},
-	{"LGEX0815", 0},
+	{"HPQ6001", 0x80},
+	{"WSTADEF", 0x80},
+	{"AMDI0051", 0x80},
+	{"LGEX0815", 0x80},
+	{"PTK0001", 0x88},
 	{"", 0},
 };
 
@@ -76,7 +80,7 @@ static void wl_notify(acpi_handle handle, u32 event, void *data)
 {
 	struct wl_button *button = data;
 
-	if (event != 0x80) {
+	if (event != button->event) {
 		pr_info("Received unknown event (0x%x)\n", event);
 		return;
 	}
@@ -101,6 +105,7 @@ static int wl_probe(struct platform_device *pdev)
 	if (!button)
 		return -ENOMEM;
 
+	button->event = (uintptr_t)device_get_match_data(&pdev->dev);
 	platform_set_drvdata(pdev, button);
 
 	err = wireless_input_setup(&pdev->dev);
