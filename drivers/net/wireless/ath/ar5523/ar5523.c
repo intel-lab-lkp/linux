@@ -280,6 +280,9 @@ static int ar5523_cmd(struct ar5523 *ar, u32 code, const void *idata,
 			  cmd->buf_tx, xferlen, ar5523_cmd_tx_cb, cmd);
 	cmd->urb_tx->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 
+	/* drop completions left over from earlier commands or stray replies */
+	reinit_completion(&cmd->done);
+
 	error = usb_submit_urb(cmd->urb_tx, GFP_KERNEL);
 	if (error) {
 		ar5523_err(ar, "could not send command 0x%x, error=%d\n",
@@ -293,6 +296,14 @@ static int ar5523_cmd(struct ar5523 *ar, u32 code, const void *idata,
 		ar5523_err(ar, "timeout waiting for command %02x reply\n",
 			   code);
 		cmd->res = -ETIMEDOUT;
+	} else {
+		/*
+		 * A reply from the device ends the wait even if the device
+		 * has not taken the command yet. Make sure the TX URB is not
+		 * left in flight: it must not be resubmitted by the next
+		 * command or freed while it is still active.
+		 */
+		ar5523_cancel_tx_cmd(ar);
 	}
 	return cmd->res;
 }
