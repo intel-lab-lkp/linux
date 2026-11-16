@@ -20,8 +20,10 @@ The ``ptp_ocp`` driver reports the following versions
      - Description
    * - ``fw``
      - running
-     - Version of the firmware running on the card.  Reported as ``loader``
-       instead when the card is running the firmware loader.
+     - Version of the firmware running on the card. Where the driver can
+       distinguish a firmware loader, it reports ``loader`` instead.
+       WiWi reports the raw build ID as ``fw``; it does not identify the
+       boot slot or distinguish a fallback boot.
    * - ``board.id``
      - fixed
      - Board identifier, read from the on-card EEPROM.
@@ -54,7 +56,8 @@ selected with the component name.
      - Description
    * - (none)
      - The card's own flash, written through the SPI controller the driver
-       exposes.  The card runs the new image after its next reset.
+       exposes. Not supported on WiWi. The card runs the new image after
+       its next reset.
    * - ``fw.cpld``
      - The configuration flash of the TAP CPLD on ADVA TimeCard X1 boards,
        programmed over I2C with the MachXO3 in-system programming commands
@@ -73,3 +76,41 @@ with the standard devlink status notifications.
 Example::
 
     $ devlink dev flash pci/0000:02:00.0 file adva-cpld.bin component fw.cpld
+
+WiWi production firmware
+========================
+
+WiWi Time Cards with PCI ID ``2163:1008`` and subsystem ID ``10ee:0007``
+use the PCI Revision ID to identify the register interface. The driver
+supports revision ``02`` (LitePCIe/MSI-X) and rejects unknown revisions
+before accessing FPGA registers. Incompatible interface changes require
+a new revision. The driver also checks the BAR and MSI-X layout before
+initializing the card.
+
+The image ID at BAR0 offset ``0x02020000`` identifies a firmware build,
+not the register interface. The running ``fw`` version in devlink reports
+the full image ID, for example ``0x0000800f``. Compatible builds need not
+have the same image ID or individual core versions. PCIe access to the
+CoreList is not required.
+
+WiWi reuses the peripheral layout described by the driver's shared
+resource table. Its PCI interface is distinct from that of the existing
+Celestica entry (``18d4:1008``). Only the WiWi match adds ``0x02000000``
+to peripheral offsets and requires aligned 32-bit MMIO. Interrupt input
+``n`` uses MSI-X vector ``n + 32``. The per-input enable mask is at BAR0
+offset ``0x1800``. Until the timing gate is open, attempts to arm a
+timestamp, PPS or signal generator return ``-EAGAIN`` and can be retried.
+The driver exposes neither a second GNSS serial port nor a GNSS2 SMA
+output source on this board. Neither is a supported capability inferred
+from revision 02. This does not disable the external SMA PPS2 input.
+The separate EEPROM and RGB I2C inputs (17 and 18) have no handlers in
+this driver and stay masked; these are distinct from its I2C input 7.
+
+The driver does not register the WiWi SPI flash controller, so there is
+no raw MTD device for this flash, even for reads. Its IRQ remains masked.
+WiWi firmware updates through ``devlink dev flash`` are also rejected.
+The WiWi image has a different flash header from the Celestica image.
+The golden image at flash offset zero boots the update image via MultiBoot
+with watchdog fallback. The vendor's programming path requires a modified
+``spi-xilinx`` driver. Successful clock registration does not establish
+GNSS synchronization or valid UTC.
