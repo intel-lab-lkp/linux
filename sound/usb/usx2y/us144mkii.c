@@ -266,7 +266,10 @@ void tascam_stop_work_handler(struct work_struct *work)
 	usb_kill_anchored_urbs(&tascam->playback_anchor);
 	usb_kill_anchored_urbs(&tascam->feedback_anchor);
 	usb_kill_anchored_urbs(&tascam->capture_anchor);
+
+	guard(spinlock_irqsave)(&tascam->lock);
 	atomic_set(&tascam->active_urbs, 0);
+	tascam->stop_pending = false;
 }
 
 /*
@@ -311,7 +314,7 @@ static int tascam_suspend(struct usb_interface *intf, pm_message_t message)
 
 	snd_pcm_suspend_all(tascam->pcm);
 
-	cancel_work_sync(&tascam->stop_work);
+	flush_work(&tascam->stop_work);
 	cancel_work_sync(&tascam->capture_work);
 	cancel_work_sync(&tascam->midi_in_work);
 	cancel_work_sync(&tascam->midi_out_work);

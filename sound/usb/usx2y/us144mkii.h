@@ -174,6 +174,7 @@ struct us144mkii_frame_pattern_observer {
  *
  * @lock: Main spinlock for protecting shared driver state.
  * @active_urbs: Atomic counter for active URBs.
+ * @stop_pending: stop_work is queued or running; protected by @lock.
  * @current_rate: Currently configured sample rate of the device.
  * @line_out_source: Source for Line Outputs (0: Playback 1-2, 1: Playback 3-4).
  * @digital_out_source: Source for Digital Outputs (0: Playback 1-2, 1: Playback
@@ -232,6 +233,7 @@ struct tascam_card {
 	atomic_t playback_active;
 	atomic_t capture_active;
 	atomic_t active_urbs;
+	bool stop_pending;
 	int current_rate;
 
 	/* --- Playback State --- */
