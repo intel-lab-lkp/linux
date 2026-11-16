@@ -32,6 +32,8 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <linux/un.h>
+#include <linux/suspend.h>
+#include <net/net_namespace.h>
 
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/addr.h>
@@ -880,6 +882,116 @@ int rpc_clnt_iterate_for_each_xprt(struct rpc_clnt *clnt,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(rpc_clnt_iterate_for_each_xprt);
+
+/*
+ * After hibernation takes its snapshot, the kernel keeps running with the
+ * network up while it writes the image. rpciod and xprtiod are frozen by
+ * then, so no RPC is sent, but TCP still acknowledges anything the server
+ * sends, such as a reply that was in flight when the snapshot was taken.
+ * The restored image has not seen that data, and the server will not send
+ * it again, so the connection cannot make progress.
+ *
+ * Once the system has resumed, disconnect every client transport. Requests
+ * in flight are retransmitted on a new connection, and the server answers
+ * any it has already executed from its reply cache. Because nothing was
+ * sent after the snapshot, NFSv4.1 session slot sequence ids still agree.
+ */
+/*
+ * Take a reference to each client transport in every network namespace and
+ * store it in @xprts, up to @max of them. Returns the number of transports
+ * found, which exceeds @max if the array was too small. Called with
+ * net_rwsem held for reading.
+ */
+static unsigned int rpc_pm_get_xprts(struct rpc_xprt **xprts,
+				     unsigned int max)
+{
+	unsigned int n = 0;
+	struct net *net;
+
+	for_each_net(net) {
+		struct sunrpc_net *sn = net_generic(net, sunrpc_net_id);
+		struct rpc_clnt *clnt;
+
+		spin_lock(&sn->rpc_client_lock);
+		rcu_read_lock();
+		list_for_each_entry(clnt, &sn->all_clients, cl_clients) {
+			struct rpc_xprt_switch *xps;
+			struct rpc_xprt *xprt;
+
+			xps = rcu_dereference(clnt->cl_xpi.xpi_xpswitch);
+			if (!xps)
+				continue;
+			list_for_each_entry_rcu(xprt, &xps->xps_xprt_list,
+						xprt_switch) {
+				if (n < max) {
+					xprts[n] = xprt_get(xprt);
+					if (!xprts[n])
+						continue;
+				}
+				n++;
+			}
+		}
+		rcu_read_unlock();
+		spin_unlock(&sn->rpc_client_lock);
+	}
+	return n;
+}
+
+static int rpc_pm_notify(struct notifier_block *nb, unsigned long action,
+			 void *data)
+{
+	struct rpc_xprt **xprts = NULL;
+	unsigned int i, n, max = 0;
+
+	if (action != PM_POST_HIBERNATION)
+		return NOTIFY_DONE;
+
+	/*
+	 * The references are taken under spinlocks, but xprt_put() may sleep,
+	 * so collect them in an array and disconnect after the locks are
+	 * dropped. Count first so that the array can be allocated without
+	 * GFP_ATOMIC, and recount if transports were added in the meantime:
+	 * a transport left out would keep the stalled connection.
+	 */
+	for (;;) {
+		down_read(&net_rwsem);
+		n = rpc_pm_get_xprts(xprts, max);
+		up_read(&net_rwsem);
+		if (n <= max)
+			break;
+
+		for (i = 0; i < max; i++)
+			xprt_put(xprts[i]);
+		kfree(xprts);
+		max = n + 8;
+		xprts = kmalloc_objs(*xprts, max);
+		if (!xprts) {
+			pr_warn("RPC: no memory to reset transports after resume\n");
+			return NOTIFY_DONE;
+		}
+	}
+
+	for (i = 0; i < n; i++) {
+		xprt_force_disconnect(xprts[i]);
+		xprt_put(xprts[i]);
+	}
+	kfree(xprts);
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block rpc_pm_nb = {
+	.notifier_call = rpc_pm_notify,
+};
+
+int rpc_pm_notifier_register(void)
+{
+	return register_pm_notifier(&rpc_pm_nb);
+}
+
+void rpc_pm_notifier_unregister(void)
+{
+	unregister_pm_notifier(&rpc_pm_nb);
+}
 
 /*
  * Kill all tasks for the given client.

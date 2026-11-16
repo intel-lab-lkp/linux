@@ -116,6 +116,10 @@ init_sunrpc(void)
 	if (err)
 		goto out6;
 
+	err = rpc_pm_notifier_register();
+	if (err)
+		goto out7;
+
 	sunrpc_debugfs_init();
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
 	rpc_register_sysctl();
@@ -124,6 +128,8 @@ init_sunrpc(void)
 	init_socket_xprt();	/* clnt sock transport */
 	return 0;
 
+out7:
+	genl_unregister_family(&sunrpc_nl_family);
 out6:
 	rpc_sysfs_exit();
 out5:
@@ -141,6 +147,7 @@ out:
 static void __exit
 cleanup_sunrpc(void)
 {
+	rpc_pm_notifier_unregister();
 	genl_unregister_family(&sunrpc_nl_family);
 	rpc_sysfs_exit();
 	rpc_cleanup_clids();
