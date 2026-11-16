@@ -822,9 +822,12 @@ static const struct iwl_fw_runtime_ops iwl_mvm_fwrt_ops = {
 static int iwl_mvm_start_get_nvm(struct iwl_mvm *mvm)
 {
 	struct iwl_trans *trans = mvm->trans;
+	bool tried_csme = false;
 	int ret;
 
+get_nvm_from_csme:
 	if (trans->csme_own) {
+		tried_csme = true;
 		if (WARN(!mvm->mei_registered,
 			 "csme is owner, but we aren't registered to iwlmei\n"))
 			goto get_nvm_from_fw;
@@ -859,6 +862,16 @@ get_nvm_from_fw:
 		mutex_unlock(&mvm->mutex);
 		wiphy_unlock(mvm->hw->wiphy);
 		rtnl_unlock();
+		/*
+		 * Right after CSME (Intel AMT) powered the host on, ownership
+		 * can still move between CSME and the host: the probe's last
+		 * check may get the device and CSME take it back before we
+		 * start it. Then the device is busy and csme_own is set again,
+		 * so take the NVM from CSME, as when CSME owned it at probe,
+		 * and get the device over SAP when the interface comes up.
+		 */
+		if (ret == -EBUSY && trans->csme_own && !tried_csme)
+			goto get_nvm_from_csme;
 		return ret;
 	}
 
