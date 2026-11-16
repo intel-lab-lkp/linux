@@ -5,6 +5,7 @@
  *
  * Copyright (C) 2025 Advanced Micro Devices, Inc.
  */
+#include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/fs.h>
@@ -185,19 +186,18 @@ static int rmi_cpuid_input_ext(struct sbrmi_data *data, struct apml_cpuid_msg *m
 }
 
 /* Read CPUID function protocol */
-static int rmi_cpuid_read(struct sbrmi_data *data,
-			  struct apml_cpuid_msg *msg)
+static int __rmi_cpuid_read(struct sbrmi_data *data,
+			    struct apml_cpuid_msg *msg)
 {
 	struct cpu_msr_outdata output = {0};
 	int ret, hw_status;
 	u16 thread;
 
-	mutex_lock(&data->lock);
 	/* cache the rev value to identify if protocol is supported or not */
 	if (!data->rev) {
 		ret = sbrmi_get_rev(data);
 		if (ret < 0)
-			goto exit_unlock;
+			return ret;
 	}
 
 	/* Extract thread from the input msg structure */
@@ -206,22 +206,20 @@ static int rmi_cpuid_read(struct sbrmi_data *data,
 	switch (data->rev) {
 	case 0x10:
 		/* CPUID protocol for REV 0x10 is not supported*/
-		ret = -EOPNOTSUPP;
-		goto exit_unlock;
+		return -EOPNOTSUPP;
 	case 0x20:
 		ret = rmi_cpuid_input(data, msg, thread);
 		if (ret)
-			goto exit_unlock;
+			return ret;
 		break;
 	case 0x21:
 	case 0x31:
 		ret = rmi_cpuid_input_ext(data, msg, thread);
 		if (ret)
-			goto exit_unlock;
+			return ret;
 		break;
 	default:
-		ret = -EOPNOTSUPP;
-		goto exit_unlock;
+		return -EOPNOTSUPP;
 	}
 
 	/*
@@ -233,32 +231,40 @@ static int rmi_cpuid_read(struct sbrmi_data *data,
 	ret = regmap_read_poll_timeout(data->regmap, SBRMI_STATUS, hw_status,
 				       hw_status & HW_ALERT_MASK, 500, 2000000);
 	if (ret)
-		goto exit_unlock;
+		return ret;
 
 	ret = regmap_bulk_read(data->regmap, CPUID_MCA_CMD,
 			       &output, CPUID_RD_REG_LEN);
 	if (ret < 0)
-		goto exit_unlock;
+		return ret;
 
 	ret = regmap_write(data->regmap, SBRMI_STATUS,
 			   HW_ALERT_MASK);
 	if (ret < 0)
-		goto exit_unlock;
+		return ret;
 
-	if (output.num_bytes != CPUID_RD_REG_LEN - 1) {
-		ret = -EMSGSIZE;
-		goto exit_unlock;
-	}
+	if (output.num_bytes != CPUID_RD_REG_LEN - 1)
+		return -EMSGSIZE;
 	if (output.status) {
-		ret = -EPROTOTYPE;
 		msg->fw_ret_code = output.status;
-		goto exit_unlock;
+		return -EPROTOTYPE;
 	}
 	msg->cpu_in_out = output.value;
-exit_unlock:
+
+	return 0;
+}
+
+static int rmi_cpuid_read(struct sbrmi_data *data,
+			  struct apml_cpuid_msg *msg)
+{
+	int ret;
+
+	guard(mutex)(&data->lock);
+
+	ret = __rmi_cpuid_read(data, msg);
 	if (ret < 0)
 		msg->cpu_in_out = 0;
-	mutex_unlock(&data->lock);
+
 	return ret;
 }
 
@@ -306,12 +312,13 @@ static int rmi_mca_msr_read(struct sbrmi_data *data,
 	int hw_status;
 	u16 thread;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
+
 	/* cache the rev value to identify if protocol is supported or not */
 	if (!data->rev) {
 		ret = sbrmi_get_rev(data);
 		if (ret < 0)
-			goto exit_unlock;
+			return ret;
 	}
 
 	/* Extract thread from the input msg structure */
@@ -320,22 +327,20 @@ static int rmi_mca_msr_read(struct sbrmi_data *data,
 	switch (data->rev) {
 	case 0x10:
 		/* MCAMSR protocol for REV 0x10 is not supported*/
-		ret = -EOPNOTSUPP;
-		goto exit_unlock;
+		return -EOPNOTSUPP;
 	case 0x20:
 		ret = rmi_mcamsr_input(data, msg, thread);
 		if (ret)
-			goto exit_unlock;
+			return ret;
 		break;
 	case 0x21:
 	case 0x31:
 		ret = rmi_mcamsr_input_ext(data, msg, thread);
 		if (ret)
-			goto exit_unlock;
+			return ret;
 		break;
 	default:
-		ret = -EOPNOTSUPP;
-		goto exit_unlock;
+		return -EOPNOTSUPP;
 	}
 
 	/*
@@ -347,32 +352,27 @@ static int rmi_mca_msr_read(struct sbrmi_data *data,
 	ret = regmap_read_poll_timeout(data->regmap, SBRMI_STATUS, hw_status,
 				       hw_status & HW_ALERT_MASK, 500, 2000000);
 	if (ret)
-		goto exit_unlock;
+		return ret;
 
 	ret = regmap_bulk_read(data->regmap, CPUID_MCA_CMD,
 			       &output, MSR_RD_REG_LEN);
 	if (ret < 0)
-		goto exit_unlock;
+		return ret;
 
 	ret = regmap_write(data->regmap, SBRMI_STATUS,
 			   HW_ALERT_MASK);
 	if (ret < 0)
-		goto exit_unlock;
+		return ret;
 
-	if (output.num_bytes != MSR_RD_REG_LEN - 1) {
-		ret = -EMSGSIZE;
-		goto exit_unlock;
-	}
+	if (output.num_bytes != MSR_RD_REG_LEN - 1)
+		return -EMSGSIZE;
 	if (output.status) {
-		ret = -EPROTOTYPE;
 		msg->fw_ret_code = output.status;
-		goto exit_unlock;
+		return -EPROTOTYPE;
 	}
 	msg->mcamsr_in_out = output.value;
 
-exit_unlock:
-	mutex_unlock(&data->lock);
-	return ret;
+	return 0;
 }
 
 int rmi_mailbox_xfer(struct sbrmi_data *data,
@@ -383,19 +383,19 @@ int rmi_mailbox_xfer(struct sbrmi_data *data,
 	int sw_status;
 	u8 byte;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	msg->fw_ret_code = 0;
 
 	/* Indicate firmware a command is to be serviced */
 	ret = regmap_write(data->regmap, SBRMI_INBNDMSG7, START_CMD);
 	if (ret < 0)
-		goto exit_unlock;
+		return ret;
 
 	/* Write the command to SBRMI::InBndMsg_inst0 */
 	ret = regmap_write(data->regmap, SBRMI_INBNDMSG0, msg->cmd);
 	if (ret < 0)
-		goto exit_unlock;
+		return ret;
 
 	/*
 	 * For both read and write the initiator (BMC) writes
@@ -406,7 +406,7 @@ int rmi_mailbox_xfer(struct sbrmi_data *data,
 		byte = (msg->mb_in_out >> i * 8) & 0xff;
 		ret = regmap_write(data->regmap, SBRMI_INBNDMSG1 + i, byte);
 		if (ret < 0)
-			goto exit_unlock;
+			return ret;
 	}
 
 	/*
@@ -415,7 +415,7 @@ int rmi_mailbox_xfer(struct sbrmi_data *data,
 	 */
 	ret = regmap_write(data->regmap, SBRMI_SW_INTERRUPT, TRIGGER_MAILBOX);
 	if (ret < 0)
-		goto exit_unlock;
+		return ret;
 
 	/*
 	 * Firmware will write SBRMI::Status[SwAlertSts]=1 to generate
@@ -425,29 +425,27 @@ int rmi_mailbox_xfer(struct sbrmi_data *data,
 	ret = regmap_read_poll_timeout(data->regmap, SBRMI_STATUS, sw_status,
 				       sw_status & SW_ALERT_MASK, 500, 2000000);
 	if (ret)
-		goto exit_unlock;
+		return ret;
 
 	ret = regmap_read(data->regmap, SBRMI_OUTBNDMSG7, &ec);
-	if (ret || ec)
-		goto exit_clear_alert;
+	if (!ret && !ec) {
+		/* Clear the input value before updating the output data */
+		msg->mb_in_out = 0;
 
-	/* Clear the input value before updating the output data */
-	msg->mb_in_out = 0;
-
-	/*
-	 * For a read operation, the initiator (BMC) reads the firmware
-	 * response Command Data Out[31:0] from SBRMI::OutBndMsg_inst[4:1]
-	 * {SBRMI_x34(MSB):SBRMI_x31(LSB)}.
-	 */
-	for (i = 0; i < AMD_SBI_MB_DATA_SIZE; i++) {
-		ret = regmap_read(data->regmap,
-				  SBRMI_OUTBNDMSG1 + i, &bytes);
-		if (ret < 0)
-			break;
-		msg->mb_in_out |= bytes << i * 8;
+		/*
+		 * For a read operation, the initiator (BMC) reads the firmware
+		 * response Command Data Out[31:0] from SBRMI::OutBndMsg_inst[4:1]
+		 * {SBRMI_x34(MSB):SBRMI_x31(LSB)}.
+		 */
+		for (i = 0; i < AMD_SBI_MB_DATA_SIZE; i++) {
+			ret = regmap_read(data->regmap,
+					  SBRMI_OUTBNDMSG1 + i, &bytes);
+			if (ret < 0)
+				break;
+			msg->mb_in_out |= bytes << i * 8;
+		}
 	}
 
-exit_clear_alert:
 	/*
 	 * BMC must write 1'b1 to SBRMI::Status[SwAlertSts] to clear the
 	 * ALERT to initiator
@@ -458,8 +456,7 @@ exit_clear_alert:
 		ret = -EPROTOTYPE;
 		msg->fw_ret_code = ec;
 	}
-exit_unlock:
-	mutex_unlock(&data->lock);
+
 	return ret;
 }
 
@@ -474,16 +471,15 @@ static int apml_rmi_reg_xfer(struct sbrmi_data *data,
 	if (copy_from_user(&msg, arg, sizeof(struct apml_reg_xfer_msg)))
 		return -EFAULT;
 
-	mutex_lock(&data->lock);
-	if (msg.rflag) {
-		ret = regmap_read(data->regmap, msg.reg_addr, &data_read);
-		if (!ret)
-			msg.data_in_out = data_read;
-	} else {
-		ret = regmap_write(data->regmap, msg.reg_addr, msg.data_in_out);
+	scoped_guard(mutex, &data->lock) {
+		if (msg.rflag) {
+			ret = regmap_read(data->regmap, msg.reg_addr, &data_read);
+			if (!ret)
+				msg.data_in_out = data_read;
+		} else {
+			ret = regmap_write(data->regmap, msg.reg_addr, msg.data_in_out);
+		}
 	}
-
-	mutex_unlock(&data->lock);
 
 	if (msg.rflag && !ret)
 		if (copy_to_user(arg, &msg, sizeof(struct apml_reg_xfer_msg)))
