@@ -1276,13 +1276,18 @@ static int rpciod_start(void)
 	struct workqueue_struct *wq;
 
 	/*
-	 * Create the rpciod thread and wait for it to start.
+	 * Both workqueues are freezable so that no RPC is transmitted, and
+	 * no connection is made, between taking a hibernation snapshot and
+	 * powering off. Anything sent then changes the server's state but is
+	 * missing from the image, and is forgotten when the image is restored.
 	 */
-	wq = alloc_workqueue("rpciod", WQ_MEM_RECLAIM | WQ_UNBOUND, 0);
+	wq = alloc_workqueue("rpciod",
+			     WQ_MEM_RECLAIM | WQ_UNBOUND | WQ_FREEZABLE, 0);
 	if (!wq)
 		goto out_failed;
 	rpciod_workqueue = wq;
-	wq = alloc_workqueue("xprtiod", WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
+	wq = alloc_workqueue("xprtiod",
+			     WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_FREEZABLE, 0);
 	if (!wq)
 		goto free_rpciod;
 	xprtiod_workqueue = wq;
