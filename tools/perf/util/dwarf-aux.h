@@ -10,6 +10,11 @@
 #include <elfutils/libdwfl.h>
 #include <elfutils/version.h>
 
+/* DWARF 5 address index, libdw's dwarf_getlocations() returns it unresolved */
+#ifndef DW_OP_addrx
+#define DW_OP_addrx 0xa1
+#endif
+
 static inline const char *die_name(Dwarf_Die *die)
 {
 	return dwarf_diename(die) ?: "<unknown>";
