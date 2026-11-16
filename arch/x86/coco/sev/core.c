@@ -723,6 +723,22 @@ void snp_kexec_finish(void)
 	}
 }
 
+/*
+ * Without DebugSwap, a DR7 write raises a #VC, which can no longer be serviced
+ * once snp_kexec_finish() has torn down the GHCBs.  The kexec'ed kernel
+ * re-initializes DR7, so skip the write in that case.
+ */
+bool snp_hw_breakpoint_disable(void)
+{
+	if (!cc_platform_has(CC_ATTR_GUEST_STATE_ENCRYPT))
+		return false;
+
+	if (sev_status & MSR_AMD64_SNP_DEBUG_SWAP)
+		return false;
+
+	return !sev_cfg.ghcbs_initialized;
+}
+
 #define __ATTR_BASE		(SVM_SELECTOR_P_MASK | SVM_SELECTOR_S_MASK)
 #define INIT_CS_ATTRIBS		(__ATTR_BASE | SVM_SELECTOR_READ_MASK | SVM_SELECTOR_CODE_MASK)
 #define INIT_DS_ATTRIBS		(__ATTR_BASE | SVM_SELECTOR_WRITE_MASK)

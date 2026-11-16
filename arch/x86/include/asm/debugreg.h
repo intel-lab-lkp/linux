@@ -8,6 +8,7 @@
 
 #include <asm/cpufeature.h>
 #include <asm/msr.h>
+#include <asm/sev.h>
 
 /*
  * Define bits that are always set to 1 in DR7, only bit 10 is
@@ -108,6 +109,9 @@ static __always_inline void native_set_debugreg(int regno, unsigned long value)
 
 static inline void hw_breakpoint_disable(void)
 {
+	if (snp_hw_breakpoint_disable())
+		return;
+
 	/* Reset the control register for HW Breakpoint */
 	set_debugreg(DR7_FIXED_1, 7);
 
