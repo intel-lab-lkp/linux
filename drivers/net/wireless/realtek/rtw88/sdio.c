@@ -34,6 +34,14 @@
 #define RTW_SDIO_88XX_TX_FIFO_LOWATER			32
 #define RTW_SDIO_TX_RETRY_DELAY			msecs_to_jiffies(1)
 
+/*
+ * The interrupt handler holds the host while it reads RX data. Bound how much
+ * it reads per interrupt, and with frames waiting to be sent, let the TX path
+ * have the host after a smaller amount.
+ */
+#define RTW_SDIO_RX_BUDGET				SZ_64K
+#define RTW_SDIO_RX_BUDGET_TX_PENDING			SZ_8K
+
 static bool rtw_sdio_is_bus_addr(u32 addr)
 {
 	return !!(addr & RTW_SDIO_BUS_MSK);
@@ -1597,6 +1605,34 @@ static void rtw_sdio_rxfifo_recv(struct rtw_dev *rtwdev, u32 rx_len)
 	}
 }
 
+static bool rtw_sdio_tx_pending(struct rtw_dev *rtwdev)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+	int queue;
+
+	for (queue = 0; queue <= RTW_TX_QUEUE_VO; queue++)
+		if (!skb_queue_empty(&rtwsdio->tx_queue[queue]))
+			return true;
+
+	return false;
+}
+
+static bool rtw_sdio_rx_budget_left(struct rtw_dev *rtwdev, u32 rx_bytes)
+{
+	if (rx_bytes >= RTW_SDIO_RX_BUDGET)
+		return false;
+
+	/*
+	 * The 8051 chips send one frame per transfer and are not limited by
+	 * the bus in the same way, keep their behaviour.
+	 */
+	if (rtw_chip_wcpu_8051(rtwdev))
+		return true;
+
+	return rx_bytes < RTW_SDIO_RX_BUDGET_TX_PENDING ||
+	       !rtw_sdio_tx_pending(rtwdev);
+}
+
 static void rtw_sdio_rx_isr(struct rtw_dev *rtwdev)
 {
 	u32 rx_len, hisr, total_rx_bytes = 0;
@@ -1631,7 +1667,8 @@ static void rtw_sdio_rx_isr(struct rtw_dev *rtwdev)
 			 */
 			hisr = REG_SDIO_HISR_RX_REQUEST;
 		}
-	} while (total_rx_bytes < SZ_64K && hisr & REG_SDIO_HISR_RX_REQUEST);
+	} while (rtw_sdio_rx_budget_left(rtwdev, total_rx_bytes) &&
+		 hisr & REG_SDIO_HISR_RX_REQUEST);
 }
 
 static void rtw_sdio_handle_interrupt(struct sdio_func *sdio_func)
