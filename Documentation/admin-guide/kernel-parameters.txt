@@ -4086,9 +4086,10 @@ Kernel parameters
 
 			dis_ucode_ldr: disable the microcode loader
 
-			force_minrev:
-			Enable or disable the microcode minimal revision
-			enforcement for the runtime microcode loader.
+			force_minrev[=<bool>]:
+			Enable or disable microcode minimal revision enforcement
+			for the runtime microcode loader according to <bool>. If
+			<bool> is not given, enable the enforcement.
 
 	mitigations=
 			[X86,PPC,S390,ARM64,EARLY] Control optional mitigations for
