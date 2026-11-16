@@ -1195,7 +1195,7 @@ void __init_or_module apply_seal_endbr(s32 *start, s32 *end) { }
 #endif
 
 enum cfi_mode cfi_mode __ro_after_init = __CFI_DEFAULT;
-static bool cfi_debug __ro_after_init;
+static bool cfi_debug __ro_after_init __maybe_unused;
 
 #ifdef CONFIG_FINEIBT_BHI
 bool cfi_bhi __ro_after_init = false;
