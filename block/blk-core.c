@@ -1283,6 +1283,12 @@ void __blk_flush_plug(struct blk_plug *plug, bool from_schedule)
 
 	plug->cur_ktime = 0;
 	current->flags &= ~PF_BLOCK_TS;
+	/*
+	 * Ensure PF_BLOCK_TS is cleared before blk_finish_plug() sets
+	 * current->plug to NULL, otherwise blk_plug_invalidate_ts() can
+	 * dereference a NULL current->plug if preempted in between.
+	 */
+	barrier();
 }
 
 /**
