@@ -48,6 +48,14 @@ enum sbrmi_msg_id {
 	SBRMI_WRITE_PKG_PWR_LIMIT,
 	SBRMI_READ_PKG_PWR_LIMIT,
 	SBRMI_READ_PKG_MAX_PWR_LIMIT,
+	SBRMI_READ_DIMM_THERMAL_SENSOR = 0x48,
+};
+
+/* DIMM thermal config; dimm_ids[] is indexed by hwmon channel */
+struct sbrmi_dimm_config {
+	u8 *dimm_ids;
+	const char **labels;
+	u8 dpc;			/* DIMMs per memory channel */
 };
 
 /* Each client has this additional data */
@@ -56,6 +64,8 @@ struct sbrmi_data {
 	struct regmap *regmap;
 	/* Mutex locking */
 	struct mutex lock;
+	/* DIMM thermal config (hwmon) */
+	struct sbrmi_dimm_config dimm;
 	u32 pwr_limit_max;
 	u8 dev_static_addr;
 	u8 rev;
