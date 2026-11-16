@@ -141,15 +141,23 @@ static void time_travel_handle_message(struct um_timetravel_msg *msg,
 	}
 
 	if (unlikely(mode == TTMH_READ_START_ACK)) {
-		int fd[UM_TIMETRAVEL_SHARED_MAX_FDS];
+		int fd[UM_TIMETRAVEL_SHARED_MAX_FDS] = {
+			[0 ... UM_TIMETRAVEL_SHARED_MAX_FDS - 1] = -1,
+		};
 
 		ret = os_rcv_fd_msg(time_travel_ext_fd, fd,
 				    ARRAY_SIZE(fd), msg, sizeof(*msg));
 		if (ret == sizeof(*msg)) {
-			time_travel_setup_shm(fd[UM_TIMETRAVEL_SHARED_MEMFD],
-					      msg->time & UM_TIMETRAVEL_START_ACK_ID);
+			/*
+			 * A controller without shared memory support
+			 * sends no file descriptors with its ACK.
+			 */
+			if (fd[UM_TIMETRAVEL_SHARED_MEMFD] >= 0)
+				time_travel_setup_shm(fd[UM_TIMETRAVEL_SHARED_MEMFD],
+						      msg->time & UM_TIMETRAVEL_START_ACK_ID);
 			/* we don't use the logging for now */
-			os_close_file(fd[UM_TIMETRAVEL_SHARED_LOGFD]);
+			if (fd[UM_TIMETRAVEL_SHARED_LOGFD] >= 0)
+				os_close_file(fd[UM_TIMETRAVEL_SHARED_LOGFD]);
 		}
 	} else {
 		ret = os_read_file(time_travel_ext_fd, msg, sizeof(*msg));
