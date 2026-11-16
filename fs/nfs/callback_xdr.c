@@ -387,8 +387,10 @@ static __be32 decode_rc_list(struct xdr_stream *xdr,
 			goto out;
 		rc_list->rcl_refcalls = kmalloc_objs(*rc_list->rcl_refcalls,
 						     rc_list->rcl_nrefcalls);
-		if (unlikely(rc_list->rcl_refcalls == NULL))
+		if (unlikely(rc_list->rcl_refcalls == NULL)) {
+			status = htonl(NFS4ERR_DELAY);
 			goto out;
+		}
 		for (i = 0; i < rc_list->rcl_nrefcalls; i++) {
 			rc_list->rcl_refcalls[i].rc_sequenceid = ntohl(*p++);
 			rc_list->rcl_refcalls[i].rc_slotid = ntohl(*p++);
@@ -428,7 +430,7 @@ static __be32 decode_cb_sequence_args(struct svc_rqst *rqstp,
 		args->csa_rclists = kzalloc_objs(*args->csa_rclists,
 						 args->csa_nrclists);
 		if (unlikely(args->csa_rclists == NULL))
-			return htonl(NFS4ERR_RESOURCE);
+			return htonl(NFS4ERR_DELAY);
 
 		for (i = 0; i < args->csa_nrclists; i++) {
 			status = decode_rc_list(xdr, &args->csa_rclists[i]);
