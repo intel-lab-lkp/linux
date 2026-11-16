@@ -222,7 +222,7 @@ bool rv_is_container_monitor(struct rv_monitor *mon)
 	struct rv_monitor *next;
 
 	if (list_is_last(&mon->list, &rv_monitors_list))
-		return false;
+		return !mon->enable;
 
 	next = list_next_entry(mon, list);
 
