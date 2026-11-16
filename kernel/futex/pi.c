@@ -515,6 +515,18 @@ static int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
 		return ret;
 	}
 
+	/*
+	 * A usermode helper thread runs with PF_KTHREAD cleared and acquires
+	 * an mm at exec(), so the kernel thread test above lets it through.
+	 * Its exec() or exit() cleanup runs exit_pi_state_list(), which uses
+	 * current->mm.
+	 */
+	if (unlikely(!p->mm)) {
+		raw_spin_unlock_irq(&p->pi_lock);
+		put_task_struct(p);
+		return -EPERM;
+	}
+
 	if (IS_ENABLED(CONFIG_MMU) && futex_key_is_private(key)) {
 		/*
 		 * A private futex key holds a pointer to the waiter's mm
