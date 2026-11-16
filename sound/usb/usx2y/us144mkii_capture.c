@@ -36,7 +36,10 @@ static int tascam_capture_close(struct snd_pcm_substream *substream)
 {
 	struct tascam_card *tascam = snd_pcm_substream_chip(substream);
 
-	tascam->capture_substream = NULL;
+	scoped_guard(spinlock_irqsave, &tascam->lock)
+		tascam->capture_substream = NULL;
+	/* The stop work may still be using this substream; wait for it. */
+	flush_work(&tascam->stop_pcm_work);
 
 	return 0;
 }

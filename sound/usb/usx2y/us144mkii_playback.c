@@ -36,7 +36,10 @@ static int tascam_playback_close(struct snd_pcm_substream *substream)
 {
 	struct tascam_card *tascam = snd_pcm_substream_chip(substream);
 
-	tascam->playback_substream = NULL;
+	scoped_guard(spinlock_irqsave, &tascam->lock)
+		tascam->playback_substream = NULL;
+	/* The stop work may still be using this substream; wait for it. */
+	flush_work(&tascam->stop_pcm_work);
 
 	return 0;
 }
@@ -448,9 +451,15 @@ void tascam_stop_pcm_work_handler(struct work_struct *work)
 {
 	struct tascam_card *tascam =
 		container_of(work, struct tascam_card, stop_pcm_work);
+	struct snd_pcm_substream *playback_ss, *capture_ss;
 
-	if (tascam->playback_substream)
-		snd_pcm_stop(tascam->playback_substream, SNDRV_PCM_STATE_XRUN);
-	if (tascam->capture_substream)
-		snd_pcm_stop(tascam->capture_substream, SNDRV_PCM_STATE_XRUN);
+	scoped_guard(spinlock_irqsave, &tascam->lock) {
+		playback_ss = tascam->playback_substream;
+		capture_ss = tascam->capture_substream;
+	}
+
+	if (playback_ss)
+		snd_pcm_stop_xrun(playback_ss);
+	if (capture_ss)
+		snd_pcm_stop_xrun(capture_ss);
 }
