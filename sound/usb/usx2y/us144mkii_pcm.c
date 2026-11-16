@@ -259,6 +259,18 @@ int tascam_pcm_hw_free(struct snd_pcm_substream *substream)
 	return 0;
 }
 
+int tascam_pcm_sync_stop(struct snd_pcm_substream *substream)
+{
+	/*
+	 * The URBs of both streams keep running as long as one of them does.
+	 * The URB completion handlers and the capture work use the substream
+	 * inside an RCU read-side section; wait for them before the buffer is
+	 * freed or reallocated.
+	 */
+	synchronize_rcu();
+	return 0;
+}
+
 int tascam_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	struct tascam_card *tascam = snd_pcm_substream_chip(substream);

@@ -209,8 +209,8 @@ struct tascam_card {
 	struct snd_rawmidi *rmidi;
 
 	/* --- PCM Substreams --- */
-	struct snd_pcm_substream *playback_substream;
-	struct snd_pcm_substream *capture_substream;
+	struct snd_pcm_substream __rcu *playback_substream;
+	struct snd_pcm_substream __rcu *capture_substream;
 
 	/* --- URBs and Anchors --- */
 	struct urb *playback_urbs[NUM_PLAYBACK_URBS];

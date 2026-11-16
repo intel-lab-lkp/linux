@@ -17,7 +17,8 @@ static int tascam_capture_open(struct snd_pcm_substream *substream)
 	struct tascam_card *tascam = snd_pcm_substream_chip(substream);
 
 	substream->runtime->hw = tascam_pcm_hw;
-	tascam->capture_substream = substream;
+	/* Pairs with rcu_dereference() in feedback_urb_complete() and the work. */
+	rcu_assign_pointer(tascam->capture_substream, substream);
 	atomic_set(&tascam->capture_active, 0);
 
 	return 0;
@@ -37,9 +38,11 @@ static int tascam_capture_close(struct snd_pcm_substream *substream)
 	struct tascam_card *tascam = snd_pcm_substream_chip(substream);
 
 	scoped_guard(spinlock_irqsave, &tascam->lock)
-		tascam->capture_substream = NULL;
+		RCU_INIT_POINTER(tascam->capture_substream, NULL);
 	/* The stop work may still be using this substream; wait for it. */
 	flush_work(&tascam->stop_pcm_work);
+	/* So may the URB completion handlers, see tascam_pcm_sync_stop(). */
+	synchronize_rcu();
 	/*
 	 * The capture work keeps a pointer to the runtime, which is freed
 	 * when this callback returns. The capture URBs (and so the work) keep
@@ -113,6 +116,7 @@ const struct snd_pcm_ops tascam_capture_ops = {
 	.ioctl = snd_pcm_lib_ioctl,
 	.hw_params = tascam_pcm_hw_params,
 	.hw_free = tascam_pcm_hw_free,
+	.sync_stop = tascam_pcm_sync_stop,
 	.prepare = tascam_capture_prepare,
 	.trigger = tascam_pcm_trigger,
 	.pointer = tascam_capture_pointer,
@@ -167,12 +171,15 @@ void tascam_capture_work_handler(struct work_struct *work)
 {
 	struct tascam_card *tascam =
 		container_of(work, struct tascam_card, capture_work);
-	struct snd_pcm_substream *substream = tascam->capture_substream;
+	struct snd_pcm_substream *substream;
 	struct snd_pcm_runtime *runtime;
 	u8 *raw_block = tascam->capture_decode_raw_block;
 	s32 *decoded_block = tascam->capture_decode_dst_block;
 	s32 *routed_block = tascam->capture_routing_buffer;
 
+	/* Pairs with synchronize_rcu() in close and sync_stop. */
+	guard(rcu)();
+	substream = rcu_dereference(tascam->capture_substream);
 	if (!substream || !substream->runtime)
 		return;
 	runtime = substream->runtime;

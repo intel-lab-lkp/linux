@@ -140,6 +140,14 @@ int tascam_pcm_hw_params(struct snd_pcm_substream *substream,
 int tascam_pcm_hw_free(struct snd_pcm_substream *substream);
 
 /**
+ * tascam_pcm_sync_stop() - Waits for the URB completion handlers after a stop.
+ * @substream: The ALSA PCM substream.
+ *
+ * Return: 0.
+ */
+int tascam_pcm_sync_stop(struct snd_pcm_substream *substream);
+
+/**
  * tascam_pcm_trigger() - Triggers the start or stop of PCM streams.
  * @substream: The ALSA PCM substream.
  * @cmd: The trigger command (e.g., SNDRV_PCM_TRIGGER_START).
