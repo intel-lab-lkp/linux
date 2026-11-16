@@ -1056,10 +1056,11 @@ static const struct vop2_regs_dump rk3576_regs_dump[] = {
 static const struct vop2_video_port_data rk3588_vop_video_ports[] = {
 	{
 		.id = 0,
+		.splice_vp_id = 1,
 		.feature = VOP2_VP_FEATURE_OUTPUT_10BIT,
 		.gamma_lut_len = 1024,
 		.cubic_lut_len = 9 * 9 * 9, /* 9x9x9 */
-		.max_output = { 4096, 2304 },
+		.max_output = { 7680, 4320 },
 		/* hdr2sdr sdr2hdr hdr2hdr sdr2sdr */
 		.pre_scan_max_dly = { 76, 65, 65, 54 },
 		.offset = 0xc00,
@@ -1121,6 +1122,7 @@ static const struct vop2_win_data rk3588_vop_win_data[] = {
 	{
 		.name = "Cluster0-win0",
 		.phys_id = ROCKCHIP_VOP2_CLUSTER0,
+		.splice_win_id = ROCKCHIP_VOP2_CLUSTER1,
 		.base = 0x1000,
 		.possible_vp_mask = BIT(0) | BIT(1) | BIT(2) | BIT(3),
 		.formats = formats_cluster,
@@ -1136,7 +1138,7 @@ static const struct vop2_win_data rk3588_vop_win_data[] = {
 		.max_downscale_factor = 4,
 		.dly = { 4, 26, 29 },
 		.type = DRM_PLANE_TYPE_PRIMARY,
-		.feature = WIN_FEATURE_AFBDC | WIN_FEATURE_CLUSTER,
+		.feature = WIN_FEATURE_AFBDC | WIN_FEATURE_CLUSTER | WIN_FEATURE_SPLICE_LEFT,
 	}, {
 		.name = "Cluster1-win0",
 		.phys_id = ROCKCHIP_VOP2_CLUSTER1,
@@ -1159,6 +1161,7 @@ static const struct vop2_win_data rk3588_vop_win_data[] = {
 	}, {
 		.name = "Cluster2-win0",
 		.phys_id = ROCKCHIP_VOP2_CLUSTER2,
+		.splice_win_id = ROCKCHIP_VOP2_CLUSTER3,
 		.base = 0x1400,
 		.possible_vp_mask = BIT(0) | BIT(1) | BIT(2) | BIT(3),
 		.formats = formats_cluster,
@@ -1174,7 +1177,7 @@ static const struct vop2_win_data rk3588_vop_win_data[] = {
 		.max_upscale_factor = 4,
 		.max_downscale_factor = 4,
 		.dly = { 4, 26, 29 },
-		.feature = WIN_FEATURE_AFBDC | WIN_FEATURE_CLUSTER,
+		.feature = WIN_FEATURE_AFBDC | WIN_FEATURE_CLUSTER | WIN_FEATURE_SPLICE_LEFT,
 	}, {
 		.name = "Cluster3-win0",
 		.phys_id = ROCKCHIP_VOP2_CLUSTER3,
@@ -1197,6 +1200,7 @@ static const struct vop2_win_data rk3588_vop_win_data[] = {
 	}, {
 		.name = "Esmart0-win0",
 		.phys_id = ROCKCHIP_VOP2_ESMART0,
+		.splice_win_id = ROCKCHIP_VOP2_ESMART1,
 		.possible_vp_mask = BIT(0) | BIT(1) | BIT(2) | BIT(3),
 		.formats = formats_esmart,
 		.nformats = ARRAY_SIZE(formats_esmart),
@@ -1211,6 +1215,7 @@ static const struct vop2_win_data rk3588_vop_win_data[] = {
 		.max_upscale_factor = 8,
 		.max_downscale_factor = 8,
 		.dly = { 23, 45, 48 },
+		.feature = WIN_FEATURE_SPLICE_LEFT,
 	}, {
 		.name = "Esmart1-win0",
 		.phys_id = ROCKCHIP_VOP2_ESMART1,
@@ -1231,6 +1236,7 @@ static const struct vop2_win_data rk3588_vop_win_data[] = {
 	}, {
 		.name = "Esmart2-win0",
 		.phys_id = ROCKCHIP_VOP2_ESMART2,
+		.splice_win_id = ROCKCHIP_VOP2_ESMART3,
 		.base = 0x1c00,
 		.possible_vp_mask = BIT(0) | BIT(1) | BIT(2) | BIT(3),
 		.formats = formats_esmart,
@@ -1245,6 +1251,7 @@ static const struct vop2_win_data rk3588_vop_win_data[] = {
 		.max_upscale_factor = 8,
 		.max_downscale_factor = 8,
 		.dly = { 23, 45, 48 },
+		.feature = WIN_FEATURE_SPLICE_LEFT,
 	}, {
 		.name = "Esmart3-win0",
 		.phys_id = ROCKCHIP_VOP2_ESMART3,
@@ -1385,6 +1392,19 @@ static struct vop2_win *vop2_find_win_by_phys_id(struct vop2 *vop2, uint8_t phys
 	}
 
 	return NULL;
+}
+
+/*
+ * The right window in splice mode shares the plane state of the left one,
+ * only its registers and position on the screen are different.
+ */
+static struct drm_plane_state *
+vop2_win_get_pstate(struct vop2_video_port *vp, struct vop2_win *win)
+{
+	if (win->left_win && vp->splice_mode_right)
+		return win->left_win->base.state;
+
+	return win->base.state;
 }
 
 static unsigned long rk3568_set_intf_mux(struct vop2_video_port *vp, int id, u32 polflags)
@@ -1873,7 +1893,7 @@ static int vop2_find_start_mixer_id_for_vp(struct vop2_video_port *vp)
 
 	for (i = 0; i < 31; i += 4) {
 		match = false;
-		for_each_set_bit(phys_id, &win_mask, ROCKCHIP_VOP2_ESMART3) {
+		for_each_set_bit(phys_id, &win_mask, BITS_PER_TYPE(u32)) {
 			win = vop2_find_win_by_phys_id(vop2, phys_id);
 			if (win->data->layer_sel_id[vp->id] == ((layer_sel >> i) & 0xf)) {
 				match = true;
@@ -1890,11 +1910,11 @@ static int vop2_find_start_mixer_id_for_vp(struct vop2_video_port *vp)
 	return used_layer;
 }
 
-static void vop2_setup_cluster_alpha(struct vop2 *vop2, struct vop2_win *main_win)
+static void vop2_setup_cluster_alpha(struct vop2 *vop2, struct vop2_win *main_win,
+				     struct drm_plane_state *pstate)
 {
 	struct vop2_alpha_config alpha_config;
 	struct vop2_alpha alpha;
-	struct drm_plane_state *bottom_win_pstate;
 	bool src_pixel_alpha_en = false;
 	u16 src_glb_alpha_val, dst_glb_alpha_val;
 	u32 src_color_ctrl_reg, dst_color_ctrl_reg, src_alpha_ctrl_reg, dst_alpha_ctrl_reg;
@@ -1903,11 +1923,10 @@ static void vop2_setup_cluster_alpha(struct vop2 *vop2, struct vop2_win *main_wi
 	bool swap = false;
 
 	/* At one win mode, win0 is dst/bottom win, and win1 is a all zero src/top win */
-	bottom_win_pstate = main_win->base.state;
 	src_glb_alpha_val = 0;
-	dst_glb_alpha_val = main_win->base.state->alpha;
+	dst_glb_alpha_val = pstate->alpha;
 
-	if (!bottom_win_pstate->fb)
+	if (!pstate->fb)
 		return;
 
 	alpha_config.src_premulti_en = premulti_en;
@@ -1959,7 +1978,10 @@ static void vop2_setup_alpha(struct vop2_video_port *vp)
 	struct drm_framebuffer *fb;
 	struct vop2_alpha_config alpha_config;
 	struct vop2_alpha alpha;
-	struct drm_plane *plane;
+	struct drm_plane_state *pstate;
+	struct vop2_win *win;
+	unsigned long win_mask = vp->win_mask;
+	int phys_id;
 	int pixel_alpha_en;
 	int premulti_en, gpremulti_en = 0;
 	int mixer_id;
@@ -1975,11 +1997,12 @@ static void vop2_setup_alpha(struct vop2_video_port *vp)
 
 	alpha_config.dst_pixel_alpha_en = true; /* alpha value need transfer to next mix */
 
-	drm_atomic_crtc_for_each_plane(plane, &vp->crtc) {
-		struct vop2_win *win = to_vop2_win(plane);
+	for_each_set_bit(phys_id, &win_mask, BITS_PER_TYPE(u32)) {
+		win = vop2_find_win_by_phys_id(vop2, phys_id);
+		pstate = vop2_win_get_pstate(vp, win);
 
-		if (plane->state->normalized_zpos == 0 &&
-		    !is_opaque(plane->state->alpha) &&
+		if (pstate->normalized_zpos == 0 &&
+		    !is_opaque(pstate->alpha) &&
 		    !vop2_cluster_window(win)) {
 			/*
 			 * If bottom layer have global alpha effect [except cluster layer,
@@ -1987,7 +2010,7 @@ static void vop2_setup_alpha(struct vop2_video_port *vp)
 			 * at cluster mix], bottom layer mix need deal with global alpha.
 			 */
 			bottom_layer_alpha_en = true;
-			dst_global_alpha = plane->state->alpha;
+			dst_global_alpha = pstate->alpha;
 		}
 	}
 
@@ -2003,9 +2026,12 @@ static void vop2_setup_alpha(struct vop2_video_port *vp)
 		dst_alpha_ctrl_reg = RK3576_OVL_MIX0_DST_ALPHA_CTRL(vp->id);
 	}
 
-	drm_atomic_crtc_for_each_plane(plane, &vp->crtc) {
-		struct vop2_win *win = to_vop2_win(plane);
-		int zpos = plane->state->normalized_zpos;
+	for_each_set_bit(phys_id, &win_mask, BITS_PER_TYPE(u32)) {
+		int zpos;
+
+		win = vop2_find_win_by_phys_id(vop2, phys_id);
+		pstate = vop2_win_get_pstate(vp, win);
+		zpos = pstate->normalized_zpos;
 
 		/*
 		 * Need to configure alpha from second layer.
@@ -2013,13 +2039,12 @@ static void vop2_setup_alpha(struct vop2_video_port *vp)
 		if (zpos == 0)
 			continue;
 
-		if (plane->state->pixel_blend_mode == DRM_MODE_BLEND_PREMULTI)
+		if (pstate->pixel_blend_mode == DRM_MODE_BLEND_PREMULTI)
 			premulti_en = 1;
 		else
 			premulti_en = 0;
 
-		plane = &win->base;
-		fb = plane->state->fb;
+		fb = pstate->fb;
 
 		pixel_alpha_en = fb->format->has_alpha;
 
@@ -2030,7 +2055,7 @@ static void vop2_setup_alpha(struct vop2_video_port *vp)
 			/* Cd = Cs + (1 - As) * Cd * Agd */
 			alpha_config.dst_premulti_en = false;
 			alpha_config.src_pixel_alpha_en = pixel_alpha_en;
-			alpha_config.src_glb_alpha_value = plane->state->alpha;
+			alpha_config.src_glb_alpha_value = pstate->alpha;
 			alpha_config.dst_glb_alpha_value = dst_global_alpha;
 		} else if (vop2_cluster_window(win)) {
 			/* Mix output data only have pixel alpha */
@@ -2042,7 +2067,7 @@ static void vop2_setup_alpha(struct vop2_video_port *vp)
 			/* Cd = Cs + (1 - As) * Cd */
 			alpha_config.dst_premulti_en = true;
 			alpha_config.src_pixel_alpha_en = pixel_alpha_en;
-			alpha_config.src_glb_alpha_value = plane->state->alpha;
+			alpha_config.src_glb_alpha_value = pstate->alpha;
 			alpha_config.dst_glb_alpha_value = DRM_BLEND_ALPHA_OPAQUE;
 		}
 
@@ -2132,7 +2157,10 @@ static void rk3568_vop2_wait_for_layer_cfg_done(struct vop2 *vop2)
 static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
 {
 	struct vop2 *vop2 = vp->vop2;
-	struct drm_plane *plane;
+	struct drm_crtc *crtc = &vp->crtc;
+	struct drm_plane_state *pstate;
+	struct vop2_win *win;
+	unsigned long win_mask;
 	u32 layer_sel;
 	u32 port_sel;
 	u32 atv_layer_sel;
@@ -2142,11 +2170,33 @@ static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
 	unsigned int ofs;
 	u32 ovl_ctrl;
 	u32 cfg_done;
+	int phys_id;
 	int i;
 	struct vop2_video_port *vp0 = &vop2->vps[0];
 	struct vop2_video_port *vp1 = &vop2->vps[1];
 	struct vop2_video_port *vp2 = &vop2->vps[2];
-	struct rockchip_crtc_state *vcstate = to_rockchip_crtc_state(vp->crtc.state);
+	struct rockchip_crtc_state *vcstate;
+	struct vop2_video_port *main_vp = vp;
+	struct vop2_video_port *splice_vp = NULL;
+	u32 own_cfg_done_mask;
+	u32 yuv_mask;
+	int vp_idx;
+
+	/* right vp share the same crtc state in splice mode */
+	if (vp->splice_mode_right)
+		main_vp = vp->left_vp;
+	crtc = &main_vp->crtc;
+	vcstate = to_rockchip_crtc_state(crtc->state);
+	if (vcstate->splice_mode)
+		splice_vp = vop2_get_splice_vp(main_vp);
+
+	/* In splice mode, update main_vp and splice vp */
+	own_cfg_done_mask = BIT(main_vp->id);
+	yuv_mask = RK3568_OVL_CTRL__YUV_MODE(main_vp->id);
+	if (splice_vp) {
+		own_cfg_done_mask |= BIT(splice_vp->id);
+		yuv_mask |= RK3568_OVL_CTRL__YUV_MODE(splice_vp->id);
+	}
 
 	mutex_lock(&vop2->ovl_lock);
 	ovl_ctrl = vop2_readl(vop2, RK3568_OVL_CTRL);
@@ -2154,9 +2204,9 @@ static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
 	ovl_ctrl &= ~RK3568_OVL_CTRL__LAYERSEL_REGDONE_SEL;
 
 	if (vcstate->yuv_overlay)
-		ovl_ctrl |= RK3568_OVL_CTRL__YUV_MODE(vp->id);
+		ovl_ctrl |= yuv_mask;
 	else
-		ovl_ctrl &= ~RK3568_OVL_CTRL__YUV_MODE(vp->id);
+		ovl_ctrl &= ~yuv_mask;
 
 	port_sel = vop2->old_port_sel;
 	port_sel &= RK3568_OVL_PORT_SEL__SEL_PORT;
@@ -2186,86 +2236,97 @@ static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
 	atv_layer_sel = vop2_readl(vop2, RK3568_OVL_LAYER_SEL);
 	layer_sel = vop2->old_layer_sel;
 
-	ofs = 0;
-	for (i = 0; i < vp->id; i++)
-		ofs += vop2->vps[i].nlayers;
+	/* Calculate main_vp and splice_vp */
+	for (vp_idx = 0; vp_idx < (splice_vp ? 2 : 1); vp_idx++) {
+		vp = vp_idx ? splice_vp : main_vp;
+		ofs = 0;
+		for (i = 0; i < vp->id; i++)
+			ofs += vop2->vps[i].nlayers;
 
-	drm_atomic_crtc_for_each_plane(plane, &vp->crtc) {
-		struct vop2_win *win = to_vop2_win(plane);
-		struct vop2_win *old_win;
+		win_mask = vp->win_mask;
+		for_each_set_bit(phys_id, &win_mask, BITS_PER_TYPE(u32)) {
+			struct vop2_win *old_win;
 
-		layer_id = (u8)(plane->state->normalized_zpos + ofs);
-		/*
-		 * Find the layer this win bind in old state.
-		 */
-		for (old_layer_id = 0; old_layer_id < vop2->data->win_size; old_layer_id++) {
-			layer_sel_id = (layer_sel >> (4 * old_layer_id)) & 0xf;
-			if (layer_sel_id == win->data->layer_sel_id[vp->id])
+			win = vop2_find_win_by_phys_id(vop2, phys_id);
+			pstate = vop2_win_get_pstate(vp, win);
+
+			layer_id = (u8)(pstate->normalized_zpos + ofs);
+			/*
+			 * Find the layer this win bind in old state.
+			 */
+			for (old_layer_id = 0;
+			     old_layer_id < vop2->data->win_size; old_layer_id++) {
+				layer_sel_id = (layer_sel >> (4 * old_layer_id)) & 0xf;
+				if (layer_sel_id == win->data->layer_sel_id[vp->id])
+					break;
+			}
+
+			/*
+			 * Find the win bind to this layer in old state
+			 */
+			for (i = 0; i < vop2->data->win_size; i++) {
+				old_win = &vop2->win[i];
+				layer_sel_id = (layer_sel >> (4 * layer_id)) & 0xf;
+				if (layer_sel_id == old_win->data->layer_sel_id[vp->id])
+					break;
+			}
+
+			switch (win->data->phys_id) {
+			case ROCKCHIP_VOP2_CLUSTER0:
+				port_sel &= ~RK3568_OVL_PORT_SEL__CLUSTER0;
+				port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__CLUSTER0, vp->id);
 				break;
-		}
-
-		/*
-		 * Find the win bind to this layer in old state
-		 */
-		for (i = 0; i < vop2->data->win_size; i++) {
-			old_win = &vop2->win[i];
-			layer_sel_id = (layer_sel >> (4 * layer_id)) & 0xf;
-			if (layer_sel_id == old_win->data->layer_sel_id[vp->id])
+			case ROCKCHIP_VOP2_CLUSTER1:
+				port_sel &= ~RK3568_OVL_PORT_SEL__CLUSTER1;
+				port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__CLUSTER1, vp->id);
 				break;
-		}
+			case ROCKCHIP_VOP2_CLUSTER2:
+				port_sel &= ~RK3588_OVL_PORT_SEL__CLUSTER2;
+				port_sel |= FIELD_PREP(RK3588_OVL_PORT_SEL__CLUSTER2, vp->id);
+				break;
+			case ROCKCHIP_VOP2_CLUSTER3:
+				port_sel &= ~RK3588_OVL_PORT_SEL__CLUSTER3;
+				port_sel |= FIELD_PREP(RK3588_OVL_PORT_SEL__CLUSTER3, vp->id);
+				break;
+			case ROCKCHIP_VOP2_ESMART0:
+				port_sel &= ~RK3568_OVL_PORT_SEL__ESMART0;
+				port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__ESMART0, vp->id);
+				break;
+			case ROCKCHIP_VOP2_ESMART1:
+				port_sel &= ~RK3568_OVL_PORT_SEL__ESMART1;
+				port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__ESMART1, vp->id);
+				break;
+			case ROCKCHIP_VOP2_ESMART2:
+				port_sel &= ~RK3588_OVL_PORT_SEL__ESMART2;
+				port_sel |= FIELD_PREP(RK3588_OVL_PORT_SEL__ESMART2, vp->id);
+				break;
+			case ROCKCHIP_VOP2_ESMART3:
+				port_sel &= ~RK3588_OVL_PORT_SEL__ESMART3;
+				port_sel |= FIELD_PREP(RK3588_OVL_PORT_SEL__ESMART3, vp->id);
+				break;
+			case ROCKCHIP_VOP2_SMART0:
+				port_sel &= ~RK3568_OVL_PORT_SEL__SMART0;
+				port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__SMART0, vp->id);
+				break;
+			case ROCKCHIP_VOP2_SMART1:
+				port_sel &= ~RK3568_OVL_PORT_SEL__SMART1;
+				port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__SMART1, vp->id);
+				break;
+			}
 
-		switch (win->data->phys_id) {
-		case ROCKCHIP_VOP2_CLUSTER0:
-			port_sel &= ~RK3568_OVL_PORT_SEL__CLUSTER0;
-			port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__CLUSTER0, vp->id);
-			break;
-		case ROCKCHIP_VOP2_CLUSTER1:
-			port_sel &= ~RK3568_OVL_PORT_SEL__CLUSTER1;
-			port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__CLUSTER1, vp->id);
-			break;
-		case ROCKCHIP_VOP2_CLUSTER2:
-			port_sel &= ~RK3588_OVL_PORT_SEL__CLUSTER2;
-			port_sel |= FIELD_PREP(RK3588_OVL_PORT_SEL__CLUSTER2, vp->id);
-			break;
-		case ROCKCHIP_VOP2_CLUSTER3:
-			port_sel &= ~RK3588_OVL_PORT_SEL__CLUSTER3;
-			port_sel |= FIELD_PREP(RK3588_OVL_PORT_SEL__CLUSTER3, vp->id);
-			break;
-		case ROCKCHIP_VOP2_ESMART0:
-			port_sel &= ~RK3568_OVL_PORT_SEL__ESMART0;
-			port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__ESMART0, vp->id);
-			break;
-		case ROCKCHIP_VOP2_ESMART1:
-			port_sel &= ~RK3568_OVL_PORT_SEL__ESMART1;
-			port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__ESMART1, vp->id);
-			break;
-		case ROCKCHIP_VOP2_ESMART2:
-			port_sel &= ~RK3588_OVL_PORT_SEL__ESMART2;
-			port_sel |= FIELD_PREP(RK3588_OVL_PORT_SEL__ESMART2, vp->id);
-			break;
-		case ROCKCHIP_VOP2_ESMART3:
-			port_sel &= ~RK3588_OVL_PORT_SEL__ESMART3;
-			port_sel |= FIELD_PREP(RK3588_OVL_PORT_SEL__ESMART3, vp->id);
-			break;
-		case ROCKCHIP_VOP2_SMART0:
-			port_sel &= ~RK3568_OVL_PORT_SEL__SMART0;
-			port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__SMART0, vp->id);
-			break;
-		case ROCKCHIP_VOP2_SMART1:
-			port_sel &= ~RK3568_OVL_PORT_SEL__SMART1;
-			port_sel |= FIELD_PREP(RK3568_OVL_PORT_SEL__SMART1, vp->id);
-			break;
+			layer_sel &= ~RK3568_OVL_LAYER_SEL__LAYER(layer_id, 0x7);
+			layer_sel |= RK3568_OVL_LAYER_SEL__LAYER(layer_id,
+								 win->data->layer_sel_id[vp->id]);
+			/*
+			 * When we bind a window from layerM to layerN, we also need to move the
+			 * old window on layerN to layerM to avoid one window selected by two or
+			 * more layers.
+			 */
+			layer_sel &= ~RK3568_OVL_LAYER_SEL__LAYER(old_layer_id, 0x7);
+			layer_sel |=
+				RK3568_OVL_LAYER_SEL__LAYER(old_layer_id,
+							    old_win->data->layer_sel_id[vp->id]);
 		}
-
-		layer_sel &= ~RK3568_OVL_LAYER_SEL__LAYER(layer_id, 0x7);
-		layer_sel |= RK3568_OVL_LAYER_SEL__LAYER(layer_id, win->data->layer_sel_id[vp->id]);
-		/*
-		 * When we bind a window from layerM to layerN, we also need to move the old
-		 * window on layerN to layerM to avoid one window selected by two or more layers.
-		 */
-		layer_sel &= ~RK3568_OVL_LAYER_SEL__LAYER(old_layer_id, 0x7);
-		layer_sel |= RK3568_OVL_LAYER_SEL__LAYER(old_layer_id,
-			     old_win->data->layer_sel_id[vp->id]);
 	}
 
 	/*
@@ -2286,7 +2347,7 @@ static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
 	if (layer_sel != vop2->old_layer_sel && atv_layer_sel != vop2->old_layer_sel) {
 		cfg_done = vop2_readl(vop2, RK3568_REG_CFG_DONE);
 		cfg_done &= (BIT(vop2->data->nr_vps) - 1);
-		cfg_done &= ~BIT(vp->id);
+		cfg_done &= ~own_cfg_done_mask;
 		/*
 		 * Changes of other VPs' overlays have not taken effect
 		 */
@@ -2295,13 +2356,13 @@ static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
 	}
 
 	if (layer_sel != vop2->old_layer_sel || port_sel != vop2->old_port_sel)
-		ovl_ctrl |= FIELD_PREP(RK3568_OVL_CTRL__LAYERSEL_REGDONE_SEL, vp->id);
+		ovl_ctrl |= FIELD_PREP(RK3568_OVL_CTRL__LAYERSEL_REGDONE_SEL, main_vp->id);
 	vop2_writel(vop2, RK3568_OVL_CTRL, ovl_ctrl);
 
 	if (port_sel != vop2->old_port_sel) {
 		vop2->old_port_sel = port_sel;
 		vop2_writel(vop2, RK3568_OVL_PORT_SEL, port_sel);
-		vop2_cfg_done(vp);
+		vop2_cfg_done(main_vp, vcstate->splice_mode);
 		rk3568_vop2_wait_for_port_mux_done(vop2);
 	}
 
@@ -2354,31 +2415,59 @@ static void rk3568_vop2_setup_dly_for_windows(struct vop2_video_port *vp)
 	vop2_writel(vop2, RK3568_SMART_DLY_NUM, sdly);
 }
 
-static void rk3568_vop2_setup_overlay(struct vop2_video_port *vp)
+static void rk3568_vop2_setup_overlay_for_vp(struct vop2_video_port *vp)
 {
 	struct vop2 *vop2 = vp->vop2;
-	struct drm_crtc *crtc = &vp->crtc;
-	struct drm_plane *plane;
+	unsigned long win_mask = vp->win_mask;
+	struct vop2_win *win;
+	int phys_id;
 
-	vp->win_mask = 0;
+	if (!win_mask)
+		return;
 
-	drm_atomic_crtc_for_each_plane(plane, crtc) {
-		struct vop2_win *win = to_vop2_win(plane);
+	for_each_set_bit(phys_id, &win_mask, BITS_PER_TYPE(u32)) {
+		win = vop2_find_win_by_phys_id(vop2, phys_id);
+		if (WARN_ON(!win))
+			continue;
 
 		win->delay = win->data->dly[VOP2_DLY_MODE_DEFAULT];
 
-		vp->win_mask |= BIT(win->data->phys_id);
-
 		if (vop2_cluster_window(win))
-			vop2_setup_cluster_alpha(vop2, win);
+			vop2_setup_cluster_alpha(vop2, win,
+						 vop2_win_get_pstate(vp, win));
 	}
 
-	if (!vp->win_mask)
-		return;
-
-	rk3568_vop2_setup_layer_mixer(vp);
 	vop2_setup_alpha(vp);
 	rk3568_vop2_setup_dly_for_windows(vp);
+}
+
+static void rk3568_vop2_setup_overlay(struct vop2_video_port *vp)
+{
+	struct rockchip_crtc_state *vcstate = to_rockchip_crtc_state(vp->crtc.state);
+	struct vop2_video_port *splice_vp = NULL;
+	struct drm_plane *plane;
+
+	vp->win_mask = 0;
+	if (vcstate->splice_mode) {
+		splice_vp = vop2_get_splice_vp(vp);
+		splice_vp->win_mask = 0;
+	}
+
+	/* The right video port shares the plane state of the left one */
+	drm_atomic_crtc_for_each_plane(plane, &vp->crtc) {
+		struct vop2_win *win = to_vop2_win(plane);
+
+		vp->win_mask |= BIT(win->data->phys_id);
+		if (splice_vp && win->splice_win)
+			splice_vp->win_mask |= BIT(win->splice_win->data->phys_id);
+	}
+
+	if (vp->win_mask || (splice_vp && splice_vp->win_mask))
+		rk3568_vop2_setup_layer_mixer(vp);
+
+	rk3568_vop2_setup_overlay_for_vp(vp);
+	if (splice_vp)
+		rk3568_vop2_setup_overlay_for_vp(splice_vp);
 }
 
 static void rk3576_vop2_setup_layer_mixer(struct vop2_video_port *vp)
@@ -2435,7 +2524,8 @@ static void rk3576_vop2_setup_overlay(struct vop2_video_port *vp)
 		vp->win_mask |= BIT(win->data->phys_id);
 
 		if (vop2_cluster_window(win))
-			vop2_setup_cluster_alpha(vop2, win);
+			vop2_setup_cluster_alpha(vop2, win,
+						 vop2_win_get_pstate(vp, win));
 	}
 
 	if (!vp->win_mask)
@@ -2449,17 +2539,38 @@ static void rk3576_vop2_setup_overlay(struct vop2_video_port *vp)
 static void rk3568_vop2_setup_bg_dly(struct vop2_video_port *vp)
 {
 	struct drm_crtc *crtc = &vp->crtc;
-	struct drm_display_mode *mode = &crtc->state->adjusted_mode;
-	u16 hdisplay = mode->crtc_hdisplay;
-	u16 hsync_len = mode->crtc_hsync_end - mode->crtc_hsync_start;
+	struct rockchip_crtc_state *vcstate;
+	struct drm_display_mode *mode;
+	u16 hdisplay, hsync_len;
 	u32 bg_dly;
 	u32 pre_scan_dly;
+
+	/* right vp share the same crtc state in splice mode */
+	if (vp->splice_mode_right)
+		crtc = &vp->left_vp->crtc;
+
+	vcstate = to_rockchip_crtc_state(crtc->state);
+	mode = &crtc->state->adjusted_mode;
+	hdisplay = mode->crtc_hdisplay;
+	hsync_len = mode->crtc_hsync_end - mode->crtc_hsync_start;
 
 	bg_dly = vp->data->pre_scan_max_dly[3];
 	vop2_writel(vp->vop2, RK3568_VP_BG_MIX_CTRL(vp->id),
 		    FIELD_PREP(RK3568_VP_BG_MIX_CTRL__BG_DLY, bg_dly));
 
-	pre_scan_dly = ((bg_dly + (hdisplay >> 1) - 1) << 16) | hsync_len;
+	/*
+	 * splice mode: hdisplay must roundup as 4 pixel,
+	 * no splice mode: hdisplay must roundup as 2 pixel.
+	 */
+	if (vcstate->splice_mode)
+		pre_scan_dly = bg_dly + (roundup(hdisplay, 4) >> 2) - 1;
+	else
+		pre_scan_dly = bg_dly + (roundup(hdisplay, 2) >> 1) - 1;
+
+	if (vp->vop2->version == VOP_VERSION_RK3588 && hsync_len < 8)
+		hsync_len = 8;
+
+	pre_scan_dly = (pre_scan_dly << 16) | hsync_len;
 	vop2_vp_write(vp, RK3568_VP_PRE_SCAN_HTIMING, pre_scan_dly);
 }
 
@@ -2483,6 +2594,15 @@ static void rk3576_vop2_setup_bg_dly(struct vop2_video_port *vp)
 	vop2_vp_write(vp, RK3568_VP_PRE_SCAN_HTIMING, pre_scan_dly);
 }
 
+static void rk3588_vop2_setup_splice(struct vop2_video_port *vp, bool enable)
+{
+	struct vop2 *vop2 = vp->vop2;
+
+	regmap_update_bits(vop2->map, RK3568_LUT_PORT_SEL,
+			   RK3568_LUT_PORT_SEL__SPLICE_EN,
+			   enable ? RK3568_LUT_PORT_SEL__SPLICE_EN : 0);
+}
+
 static const struct vop2_ops rk3568_vop_ops = {
 	.setup_intf_mux = rk3568_set_intf_mux,
 	.setup_bg_dly = rk3568_vop2_setup_bg_dly,
@@ -2499,6 +2619,7 @@ static const struct vop2_ops rk3588_vop_ops = {
 	.setup_intf_mux = rk3588_set_intf_mux,
 	.setup_bg_dly = rk3568_vop2_setup_bg_dly,
 	.setup_overlay = rk3568_vop2_setup_overlay,
+	.setup_splice = rk3588_vop2_setup_splice,
 };
 
 static const struct vop2_data rk3566_vop = {
@@ -2561,10 +2682,11 @@ static const struct vop2_data rk3576_vop = {
 static const struct vop2_data rk3588_vop = {
 	.version = VOP_VERSION_RK3588,
 	.feature = VOP2_FEATURE_HAS_SYS_GRF | VOP2_FEATURE_HAS_VO1_GRF |
-		   VOP2_FEATURE_HAS_VOP_GRF | VOP2_FEATURE_HAS_SYS_PMU,
+		   VOP2_FEATURE_HAS_VOP_GRF | VOP2_FEATURE_HAS_SYS_PMU |
+		   VOP2_FEATURE_SPLICE,
 	.nr_vps = 4,
 	.max_input = { 4096, 4320 },
-	.max_output = { 4096, 4320 },
+	.max_output = { 7680, 4320 },
 	.vp = rk3588_vop_video_ports,
 	.win = rk3588_vop_win_data,
 	.win_size = ARRAY_SIZE(rk3588_vop_win_data),
