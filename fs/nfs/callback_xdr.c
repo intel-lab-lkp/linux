@@ -885,6 +885,14 @@ preprocess_nfs4_op(unsigned int op_nr, struct callback_op **op)
 	return htonl(NFS_OK);
 }
 
+static __be32 cb_reply_too_big(const struct cb_process_state *cps)
+{
+	/* RFC 8881 does not define NFS4ERR_RESOURCE */
+	if (cps->minorversion)
+		return htonl(NFS4ERR_REP_TOO_BIG);
+	return htonl(NFS4ERR_RESOURCE);
+}
+
 static __be32 process_op(int nop, struct svc_rqst *rqstp,
 			 struct cb_process_state *cps)
 {
@@ -931,14 +939,17 @@ static __be32 process_op(int nop, struct svc_rqst *rqstp,
 			status = op->process_op(rqstp->rq_argp, rqstp->rq_resp,
 						cps);
 	} else
-		status = htonl(NFS4ERR_RESOURCE);
+		status = cb_reply_too_big(cps);
 
 encode_hdr:
 	res = encode_op_hdr(xdr_out, op_nr, status);
 	if (unlikely(res))
 		return res;
-	if (op->encode_res != NULL && status == 0)
+	if (op->encode_res != NULL && status == 0) {
 		status = op->encode_res(rqstp, xdr_out, rqstp->rq_resp);
+		if (unlikely(status))
+			status = cb_reply_too_big(cps);
+	}
 	return status;
 }
 
@@ -993,7 +1004,7 @@ static __be32 nfs4_callback_compound(struct svc_rqst *rqstp)
 		status = htonl(NFS4ERR_BADXDR);
 		nops--;
 	} else if (unlikely(status == htonl(NFS4ERR_RESOURCE_HDR))) {
-		status = htonl(NFS4ERR_RESOURCE);
+		status = cb_reply_too_big(&cps);
 		nops--;
 	}
 
