@@ -14260,6 +14260,18 @@ SYSCALL_DEFINE5(perf_event_open,
 		}
 
 		/*
+		 * Likewise against CPU hot-unplug, which detaches the events
+		 * of a CPU context and breaks up its groups without putting
+		 * them in a terminal state. perf_group_detach() does nothing
+		 * for a leader that is already detached, so a sibling added
+		 * to one would stay linked to it after the leader is freed.
+		 */
+		if (!(group_leader->attach_state & PERF_ATTACH_CONTEXT)) {
+			err = -ENODEV;
+			goto err_locked;
+		}
+
+		/*
 		 * Only a group leader can be exclusive or pinned
 		 */
 		if (attr.exclusive || attr.pinned)
