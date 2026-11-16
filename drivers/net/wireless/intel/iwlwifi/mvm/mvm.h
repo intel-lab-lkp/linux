@@ -2683,6 +2683,8 @@ static inline bool iwl_mvm_mei_filter_scan(struct iwl_mvm *mvm,
 	return false;
 }
 
+void iwl_mvm_send_ip_refresh_event(struct iwl_mvm *mvm,
+				   struct ieee80211_vif *vif);
 void iwl_mvm_send_roaming_forbidden_event(struct iwl_mvm *mvm,
 					  struct ieee80211_vif *vif,
 					  bool forbidden);

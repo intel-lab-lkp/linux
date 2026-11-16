@@ -106,6 +106,7 @@ static const struct wiphy_vendor_command iwl_mvm_vendor_commands[] = {
 enum iwl_mvm_vendor_events_idx {
 	/* 0x0 - 0x3 are deprecated */
 	IWL_MVM_VENDOR_EVENT_IDX_ROAMING_FORBIDDEN = 4,
+	IWL_MVM_VENDOR_EVENT_IDX_IP_REFRESH,
 	NUM_IWL_MVM_VENDOR_EVENT_IDX
 };
 
@@ -115,6 +116,10 @@ iwl_mvm_vendor_events[NUM_IWL_MVM_VENDOR_EVENT_IDX] = {
 		.vendor_id = INTEL_OUI,
 		.subcmd = IWL_MVM_VENDOR_CMD_ROAMING_FORBIDDEN_EVENT,
 	},
+	[IWL_MVM_VENDOR_EVENT_IDX_IP_REFRESH] = {
+		.vendor_id = INTEL_OUI,
+		.subcmd = IWL_MVM_VENDOR_CMD_IP_REFRESH_EVENT,
+	},
 };
 
 void iwl_mvm_vendor_cmds_register(struct iwl_mvm *mvm)
@@ -123,6 +128,25 @@ void iwl_mvm_vendor_cmds_register(struct iwl_mvm *mvm)
 	mvm->hw->wiphy->n_vendor_commands = ARRAY_SIZE(iwl_mvm_vendor_commands);
 	mvm->hw->wiphy->vendor_events = iwl_mvm_vendor_events;
 	mvm->hw->wiphy->n_vendor_events = ARRAY_SIZE(iwl_mvm_vendor_events);
+}
+
+void iwl_mvm_send_ip_refresh_event(struct iwl_mvm *mvm,
+				   struct ieee80211_vif *vif)
+{
+	struct sk_buff *msg =
+		cfg80211_vendor_event_alloc(mvm->hw->wiphy,
+					    ieee80211_vif_to_wdev(vif),
+					    100, IWL_MVM_VENDOR_EVENT_IDX_IP_REFRESH,
+					    GFP_KERNEL);
+	if (!msg)
+		return;
+
+	if (nla_put(msg, IWL_MVM_VENDOR_ATTR_VIF_ADDR, ETH_ALEN, vif->addr)) {
+		kfree_skb(msg);
+		return;
+	}
+
+	cfg80211_vendor_event(msg, GFP_KERNEL);
 }
 
 void iwl_mvm_send_roaming_forbidden_event(struct iwl_mvm *mvm,

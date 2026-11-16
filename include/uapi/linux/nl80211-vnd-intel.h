@@ -45,12 +45,19 @@
  * @IWL_MVM_VENDOR_CMD_ROAMING_FORBIDDEN_EVENT: notifies if roaming is allowed.
  *	It contains a &IWL_MVM_VENDOR_ATTR_ROAMING_FORBIDDEN and a
  *	&IWL_MVM_VENDOR_ATTR_VIF_ADDR attributes.
+ * @IWL_MVM_VENDOR_CMD_IP_REFRESH_EVENT: the CSME firmware needs the host to
+ *	refresh its DHCP lease on the interface with the
+ *	&IWL_MVM_VENDOR_ATTR_VIF_ADDR attribute. The CSME firmware shares the
+ *	host's IPv4 address and learns it from the host's DHCP exchange; without
+ *	a refresh it falls back to a lease of its own after a timeout. The user
+ *	space DHCP client should renew the lease when it receives this event.
  */
 
 enum iwl_mvm_vendor_cmd {
 	IWL_MVM_VENDOR_CMD_GET_CSME_CONN_INFO			= 0x2d,
 	IWL_MVM_VENDOR_CMD_HOST_GET_OWNERSHIP			= 0x30,
 	IWL_MVM_VENDOR_CMD_ROAMING_FORBIDDEN_EVENT		= 0x32,
+	IWL_MVM_VENDOR_CMD_IP_REFRESH_EVENT			= 0x3c,
 };
 
 enum iwl_vendor_auth_akm_mode {

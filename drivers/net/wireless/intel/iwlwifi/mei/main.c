@@ -149,6 +149,8 @@ struct iwl_mei_filters {
  * @filters: the filters sent by CSME
  * @got_ownership: true if we own the device
  * @amt_enabled: true if CSME has wireless enabled
+ * @ip_refresh_on_filters: refresh the host's DHCP lease once CSME's filters
+ *	pass a DHCP reply to CSME, after CSME's wireless was enabled
  * @csa_throttled: when true, we can't send CHECK_SHARED_AREA over the MEI
  *	bus, but rather need to wait until send_csa_msg_wk runs
  * @csme_taking_ownership: true when CSME is taking ownership. Used to remember
@@ -180,6 +182,7 @@ struct iwl_mei {
 	struct iwl_mei_filters __rcu *filters;
 	bool got_ownership;
 	bool amt_enabled;
+	bool ip_refresh_on_filters;
 	bool csa_throttled;
 	bool csme_taking_ownership;
 	bool link_prot_state;
@@ -692,6 +695,57 @@ iwl_mei_handle_rx_start_ok(struct mei_cl_device *cldev,
 	mutex_unlock(&iwl_mei_mutex);
 }
 
+/*
+ * CSME shares the host's IPv4 address and learns it by watching the host's
+ * DHCP exchange: iwlmei copies the host's DHCP requests to CSME, and CSME's
+ * filters pass the replies to it. Without a fresh exchange CSME only falls
+ * back to a lease of its own after a timeout, so have the op mode ask the
+ * DHCP client in user space to refresh the lease: when CSME asks for it, and
+ * as soon as CSME's filters pass a DHCP reply after its wireless was enabled
+ * (the first filters it sends then do not yet).
+ */
+static void iwl_mei_request_ip_refresh(struct mei_cl_device *cldev)
+{
+	if (!iwl_mei_cache.ops || !iwl_mei_cache.ops->ip_refresh)
+		return;
+
+	dev_dbg(&cldev->dev, "Asking for an IP refresh\n");
+	iwl_mei_cache.ops->ip_refresh(iwl_mei_cache.priv);
+}
+
+static void iwl_mei_handle_ip_refresh(struct mei_cl_device *cldev,
+				      const struct iwl_sap_hdr *hdr)
+{
+	struct iwl_mei *mei = mei_cldev_get_drvdata(cldev);
+
+	mei->ip_refresh_on_filters = false;
+	iwl_mei_request_ip_refresh(cldev);
+}
+
+/* Whether a DHCP reply (UDP from port 67 to port 68) reaches CSME. */
+static bool iwl_mei_filters_pass_dhcp_reply(const struct iwl_sap_oob_filters *filters)
+{
+	const struct iwl_sap_flex_filter *filt;
+
+	for (filt = &filters->flex_filters[0];
+	     filt < &filters->flex_filters[0] + ARRAY_SIZE(filters->flex_filters);
+	     filt++) {
+		if (!(filt->flags & SAP_FLEX_FILTER_ENABLED))
+			break;
+
+		if (filt->flags & SAP_FLEX_FILTER_TCP)
+			continue;
+
+		if ((filt->src_port && filt->src_port != cpu_to_be16(67)) ||
+		    (filt->dst_port && filt->dst_port != cpu_to_be16(68)))
+			continue;
+
+		return true;
+	}
+
+	return false;
+}
+
 static void iwl_mei_handle_csme_filters(struct mei_cl_device *cldev,
 					const struct iwl_sap_csme_filters *filters)
 {
@@ -714,6 +768,17 @@ static void iwl_mei_handle_csme_filters(struct mei_cl_device *cldev,
 
 	if (old_filters)
 		kfree_rcu(old_filters, rcu_head);
+
+	if (mei->ip_refresh_on_filters) {
+		bool pass = iwl_mei_filters_pass_dhcp_reply(&filters->filters);
+
+		dev_dbg(&cldev->dev, "CSME filters %s DHCP replies\n",
+			pass ? "pass" : "do not yet pass");
+		if (pass) {
+			mei->ip_refresh_on_filters = false;
+			iwl_mei_request_ip_refresh(cldev);
+		}
+	}
 }
 
 static void
@@ -825,6 +890,8 @@ static void iwl_mei_handle_amt_state(struct mei_cl_device *cldev,
 		goto out;
 
 	mei->amt_enabled = dw->val;
+
+	mei->ip_refresh_on_filters = mei->amt_enabled;
 
 	if (mei->amt_enabled)
 		iwl_mei_set_init_conf(mei);
@@ -1019,6 +1086,7 @@ static void iwl_mei_handle_sap_msg(struct mei_cl_device *cldev,
 			iwl_mei_handle_csme_taking_ownership, 0);
 	SAP_MSG_HANDLER(PLDR_ACK, iwl_mei_handle_pldr_ack,
 			sizeof(struct iwl_sap_pldr_ack_data));
+	SAP_MSG_HANDLER(TRIGGER_IP_REFRESH, iwl_mei_handle_ip_refresh, 0);
 	default:
 	/*
 	 * This is not really an error, there are message that we decided

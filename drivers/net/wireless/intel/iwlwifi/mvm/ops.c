@@ -1183,12 +1183,23 @@ static void iwl_mvm_mei_nic_stolen(void *priv)
 	rtnl_unlock();
 }
 
+static void iwl_mvm_mei_ip_refresh(void *priv)
+{
+	struct iwl_mvm *mvm = priv;
+
+	if (!mvm->hw_registered || !mvm->csme_vif)
+		return;
+
+	iwl_mvm_send_ip_refresh_event(mvm, mvm->csme_vif);
+}
+
 static const struct iwl_mei_ops mei_ops = {
 	.me_conn_status = iwl_mvm_me_conn_status,
 	.rfkill = iwl_mvm_mei_rfkill,
 	.roaming_forbidden = iwl_mvm_mei_roaming_forbidden,
 	.sap_connected = iwl_mvm_mei_sap_connected,
 	.nic_stolen = iwl_mvm_mei_nic_stolen,
+	.ip_refresh = iwl_mvm_mei_ip_refresh,
 };
 
 static struct iwl_op_mode *

@@ -307,6 +307,8 @@ enum iwl_mei_sap_version {
  *	when the SAP connection is re-established.
  * @nic_stolen: this means that device is no longer available. The device can
  *	still be used until the callback returns.
+ * @ip_refresh: CSME needs the host to refresh its DHCP lease, so that CSME
+ *	learns the IPv4 address it shares with the host.
  */
 struct iwl_mei_ops {
 	void (*me_conn_status)(void *priv,
@@ -315,6 +317,7 @@ struct iwl_mei_ops {
 	void (*roaming_forbidden)(void *priv, bool forbidden);
 	void (*sap_connected)(void *priv);
 	void (*nic_stolen)(void *priv);
+	void (*ip_refresh)(void *priv);
 };
 
 #if IS_ENABLED(CONFIG_IWLMEI)
