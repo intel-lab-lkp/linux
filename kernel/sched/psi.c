@@ -1261,8 +1261,10 @@ int psi_show(struct seq_file *m, struct psi_group *group, enum psi_res res)
 	mutex_lock(&group->avgs_lock);
 	now = sched_clock();
 	collect_percpu_times(group, PSI_AVGS, NULL);
-	if (now >= group->avg_next_update)
+	if (now >= group->avg_next_update) {
+		update_triggers(group, now, PSI_AVGS);
 		group->avg_next_update = update_averages(group, now);
+	}
 	mutex_unlock(&group->avgs_lock);
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
