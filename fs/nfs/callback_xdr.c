@@ -79,7 +79,7 @@ static __be32 decode_string(struct xdr_stream *xdr, unsigned int *len,
 
 	err = xdr_stream_decode_opaque_inline(xdr, (void **)str, maxlen);
 	if (err < 0)
-		return cpu_to_be32(NFS4ERR_RESOURCE);
+		return cpu_to_be32(NFS4ERR_BADXDR);
 	*len = err;
 	return 0;
 }
@@ -90,13 +90,13 @@ static __be32 decode_fh(struct xdr_stream *xdr, struct nfs_fh *fh)
 
 	p = xdr_inline_decode(xdr, 4);
 	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE);
+		return htonl(NFS4ERR_BADXDR);
 	fh->size = ntohl(*p);
 	if (fh->size > NFS4_FHSIZE)
 		return htonl(NFS4ERR_BADHANDLE);
 	p = xdr_inline_decode(xdr, fh->size);
 	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE);
+		return htonl(NFS4ERR_BADXDR);
 	memcpy_and_pad(fh->data, sizeof(fh->data), p, fh->size, 0);
 	return 0;
 }
@@ -108,11 +108,11 @@ static __be32 decode_bitmap(struct xdr_stream *xdr, uint32_t *bitmap)
 
 	p = xdr_inline_decode(xdr, 4);
 	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE);
+		return htonl(NFS4ERR_BADXDR);
 	attrlen = ntohl(*p);
 	p = xdr_inline_decode(xdr, attrlen << 2);
 	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE);
+		return htonl(NFS4ERR_BADXDR);
 	if (likely(attrlen > 0))
 		bitmap[0] = ntohl(*p++);
 	if (attrlen > 1)
@@ -128,7 +128,7 @@ static __be32 decode_stateid(struct xdr_stream *xdr, nfs4_stateid *stateid)
 
 	p = xdr_inline_decode(xdr, NFS4_STATEID_SIZE);
 	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE);
+		return htonl(NFS4ERR_BADXDR);
 	memcpy(stateid->data, p, NFS4_STATEID_SIZE);
 	return 0;
 }
@@ -149,7 +149,7 @@ static __be32 decode_compound_hdr_arg(struct xdr_stream *xdr, struct cb_compound
 		return status;
 	p = xdr_inline_decode(xdr, 12);
 	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE);
+		return htonl(NFS4ERR_BADXDR);
 	hdr->minorversion = ntohl(*p++);
 	/* Check for minor version support */
 	if (hdr->minorversion <= NFS4_MAX_MINOR_VERSION) {
@@ -198,7 +198,7 @@ static __be32 decode_recall_args(struct svc_rqst *rqstp,
 		return status;
 	p = xdr_inline_decode(xdr, 4);
 	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE);
+		return htonl(NFS4ERR_BADXDR);
 	args->truncate = ntohl(*p);
 	return decode_fh(xdr, &args->fh);
 }
@@ -355,7 +355,7 @@ static __be32 decode_sessionid(struct xdr_stream *xdr,
 
 	p = xdr_inline_decode(xdr, NFS4_MAX_SESSIONID_LEN);
 	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE);
+		return htonl(NFS4ERR_BADXDR);
 
 	memcpy(sid->data, p, NFS4_MAX_SESSIONID_LEN);
 	return 0;
@@ -372,7 +372,7 @@ static __be32 decode_rc_list(struct xdr_stream *xdr,
 	if (status)
 		goto out;
 
-	status = htonl(NFS4ERR_RESOURCE);
+	status = htonl(NFS4ERR_BADXDR);
 	p = xdr_inline_decode(xdr, sizeof(uint32_t));
 	if (unlikely(p == NULL))
 		goto out;
@@ -417,7 +417,7 @@ static __be32 decode_cb_sequence_args(struct svc_rqst *rqstp,
 
 	p = xdr_inline_decode(xdr, 5 * sizeof(uint32_t));
 	if (unlikely(p == NULL))
-		return htonl(NFS4ERR_RESOURCE);
+		return htonl(NFS4ERR_BADXDR);
 
 	args->csa_addr = svc_addr(rqstp);
 	args->csa_sequenceid = ntohl(*p++);
@@ -550,7 +550,7 @@ static __be32 decode_write_response(struct xdr_stream *xdr,
 		return 0;
 	}
 out:
-	return htonl(NFS4ERR_RESOURCE);
+	return htonl(NFS4ERR_BADXDR);
 }
 
 static __be32 decode_offload_args(struct svc_rqst *rqstp,
@@ -588,7 +588,7 @@ static __be32 decode_offload_args(struct svc_rqst *rqstp,
 	}
 	return 0;
 out:
-	return htonl(NFS4ERR_RESOURCE);
+	return htonl(NFS4ERR_BADXDR);
 }
 #endif /* CONFIG_NFS_V4_2 */
 static __be32 encode_string(struct xdr_stream *xdr, unsigned int len, const char *str)
@@ -958,7 +958,7 @@ static __be32 nfs4_callback_compound(struct svc_rqst *rqstp)
 	__be32 status;
 
 	status = decode_compound_hdr_arg(&rqstp->rq_arg_stream, &hdr_arg);
-	if (status == htonl(NFS4ERR_RESOURCE))
+	if (status == htonl(NFS4ERR_BADXDR))
 		return rpc_garbage_args;
 
 	if (hdr_arg.minorversion == 0) {
