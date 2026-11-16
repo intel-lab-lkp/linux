@@ -96,6 +96,15 @@ properties:
     $ref: /schemas/types.yaml#/definitions/phandle
     description: Reference to the AOSS side-channel message RAM.
 
+  google,require-socinfo:
+    type: boolean
+    description:
+      The modem firmware on Google Pixel boards (Pixel 3 through Pixel 5a)
+      expects the application processor to publish the SoC platform type,
+      subtype and revision in the first vendor-reserved SMEM item (item 134)
+      before the modem is started. When present, the MSS driver fills that
+      item from the socinfo SMEM data before booting the modem.
+
   qcom,smem-states:
     $ref: /schemas/types.yaml#/definitions/phandle-array
     description: States used by the AP to signal the Hexagon core
