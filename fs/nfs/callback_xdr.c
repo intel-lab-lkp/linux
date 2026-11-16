@@ -898,7 +898,7 @@ static __be32 process_op(int nop, struct svc_rqst *rqstp,
 {
 	struct xdr_stream *xdr_out = &rqstp->rq_res_stream;
 	struct callback_op *op = &callback_ops[0];
-	unsigned int op_nr;
+	unsigned int op_nr, hdr_start;
 	__be32 status;
 	long maxlen;
 	__be32 res;
@@ -942,13 +942,18 @@ static __be32 process_op(int nop, struct svc_rqst *rqstp,
 		status = cb_reply_too_big(cps);
 
 encode_hdr:
+	hdr_start = xdr_out->buf->len;
 	res = encode_op_hdr(xdr_out, op_nr, status);
 	if (unlikely(res))
 		return res;
 	if (op->encode_res != NULL && status == 0) {
 		status = op->encode_res(rqstp, xdr_out, rqstp->rq_resp);
-		if (unlikely(status))
+		if (unlikely(status)) {
 			status = cb_reply_too_big(cps);
+			/* A partial result can hold unwritten words */
+			xdr_truncate_encode(xdr_out, hdr_start);
+			encode_op_hdr(xdr_out, op_nr, status);
+		}
 	}
 	return status;
 }
