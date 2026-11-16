@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/gpio/andestech,ae350-gpio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Andes ATCGPIO100 GPIO controller on AE350 platform
+
+maintainers:
+  - CL Wang <cl634@andestech.com>
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - enum:
+              - andestech,qilai-gpio
+          - const: andestech,ae350-gpio
+      - const: andestech,ae350-gpio
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  interrupt-controller: true
+
+  "#interrupt-cells":
+    const: 2
+
+  gpio-controller: true
+
+  "#gpio-cells":
+    const: 2
+
+  ngpios:
+    minimum: 1
+    maximum: 32
+
+  gpio-line-names:
+    minItems: 1
+    maxItems: 32
+
+  clocks:
+    minItems: 1
+    items:
+      - description: APB bus clock
+      - description: External clock for debounce
+
+  clock-names:
+    minItems: 1
+    items:
+      - const: pclk
+      - const: extclk
+
+patternProperties:
+  "^.+-hog(-[0-9]+)?$":
+    type: object
+    required:
+      - gpio-hog
+
+required:
+  - compatible
+  - reg
+  - gpio-controller
+  - "#gpio-cells"
+  - clocks
+  - clock-names
+
+additionalProperties: false
+
+dependencies:
+  interrupt-controller: [ interrupts, "#interrupt-cells" ]
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    gpio@f0700000 {
+        compatible = "andestech,ae350-gpio";
+        reg = <0xf0700000 0x100>;
+        interrupts = <7 IRQ_TYPE_LEVEL_HIGH>;
+        interrupt-parent = <&plic>;
+        interrupt-controller;
+        #interrupt-cells = <2>;
+        gpio-controller;
+        #gpio-cells = <2>;
+        ngpios = <32>;
+        clocks = <&pclk>, <&extclk>;
+        clock-names = "pclk", "extclk";
+    };
