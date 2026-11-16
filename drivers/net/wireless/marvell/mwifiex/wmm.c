@@ -611,8 +611,10 @@ mwifiex_clean_txrx(struct mwifiex_private *priv)
 	}
 	atomic_set(&priv->adapter->bypass_tx_pending, 0);
 
+	spin_lock_bh(&priv->ack_status_lock);
 	idr_for_each(&priv->ack_status_frames, mwifiex_free_ack_frame, NULL);
 	idr_destroy(&priv->ack_status_frames);
+	spin_unlock_bh(&priv->ack_status_lock);
 }
 
 /*
