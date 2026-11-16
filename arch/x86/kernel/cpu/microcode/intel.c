@@ -766,6 +766,29 @@ static int __init save_builtin_microcode(void)
 }
 early_initcall(save_builtin_microcode);
 
+static bool ucode_validate_minrev(u32 cur_rev, struct microcode_header_intel *mc_header)
+{
+	/*
+	 * Ensure the header declares a minimum revision required to perform a
+	 * load. The previously reserved field is 0 in older microcode blobs.
+	 */
+	if (!mc_header->min_req_ver) {
+		pr_info("Unsafe microcode update: Microcode header does not specify a required min version\n");
+		return false;
+	}
+
+	/*
+	 * Check whether the current revision is either greater or equal to
+	 * the minimum revision specified in the header.
+	 */
+	if (cur_rev < mc_header->min_req_ver) {
+		pr_info("Unsafe microcode update: Current revision 0x%x too old.\n", cur_rev);
+		pr_info("Current should be at 0x%x or higher. Update incrementally.\n", mc_header->min_req_ver);
+		return false;
+	}
+	return true;
+}
+
 /* Load microcode on BSP from initrd or builtin blobs */
 void __init load_ucode_intel_bsp(struct early_load_data *ed)
 {
@@ -777,6 +800,7 @@ void __init load_ucode_intel_bsp(struct early_load_data *ed)
 	if (uci.mc && apply_microcode_early(&uci) == UCODE_UPDATED) {
 		ucode_patch_va = UCODE_BSP_LOADED;
 		ed->new_rev = uci.cpu_sig.rev;
+		ed->is_safe = ucode_validate_minrev(ed->old_rev, uci.mc);
 	}
 }
 
@@ -823,31 +847,6 @@ static enum ucode_state apply_microcode_late(int cpu)
 		boot_cpu_data.microcode = uci->cpu_sig.rev;
 
 	return ret;
-}
-
-static bool ucode_validate_minrev(struct microcode_header_intel *mc_header)
-{
-	int cur_rev = boot_cpu_data.microcode;
-
-	/*
-	 * Ensure the header declares a minimum revision required to perform a
-	 * load. The previously reserved field is 0 in older microcode blobs.
-	 */
-	if (!mc_header->min_req_ver) {
-		pr_info("Unsafe microcode update: Microcode header does not specify a required min version\n");
-		return false;
-	}
-
-	/*
-	 * Check whether the current revision is either greater or equal to
-	 * to the minimum revision specified in the header.
-	 */
-	if (cur_rev < mc_header->min_req_ver) {
-		pr_info("Unsafe microcode update: Current revision 0x%x too old\n", cur_rev);
-		pr_info("Current should be at 0x%x or higher. Update incrementally.\n", mc_header->min_req_ver);
-		return false;
-	}
-	return true;
 }
 
 static bool is_revision_candidate(unsigned int cur_rev, unsigned int rev)
@@ -921,7 +920,7 @@ static enum ucode_state parse_microcode_blobs(int cpu, struct iov_iter *iter)
 		if (!revision_is_safe(&uci->cpu_sig, mc_header.rev))
 			continue;
 
-		is_safe = ucode_validate_minrev(&mc_header);
+		is_safe = ucode_validate_minrev(uci->cpu_sig.rev, &mc_header);
 		if (force_minrev && !is_safe)
 			continue;
 
