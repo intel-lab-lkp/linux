@@ -13,13 +13,29 @@
 
 static void guest_code(void)
 {
-	u64 mmfr0 = read_sysreg_s(SYS_ID_AA64MMFR0_EL1);
-	u64 mmfr1 = read_sysreg_s(SYS_ID_AA64MMFR1_EL1);
-	u64 mmfr4 = read_sysreg_s(SYS_ID_AA64MMFR4_EL1);
-	u8 e2h0 = SYS_FIELD_GET(ID_AA64MMFR4_EL1, E2H0, mmfr4);
+	u64 mmfr0, mmfr1, mmfr4, hcr;
+	u8 e2h0;
 
 	GUEST_ASSERT_EQ(get_current_el(), 2);
-	GUEST_ASSERT(read_sysreg(hcr_el2) & HCR_EL2_E2H);
+
+	hcr = read_sysreg(hcr_el2);
+	GUEST_ASSERT(hcr & HCR_EL2_E2H);
+
+	/*
+	 * Attempt to clear HCR_EL2.E2H (RES1) and set HCR_EL2.NV1 (RES0).
+	 * KVM sanitises VNCR-backed HCR_EL2 across exits such as the
+	 * trapped ID register reads below.
+	 */
+	write_sysreg((hcr & ~HCR_EL2_E2H) | HCR_EL2_NV1, hcr_el2);
+
+	mmfr0 = read_sysreg_s(SYS_ID_AA64MMFR0_EL1);
+	mmfr1 = read_sysreg_s(SYS_ID_AA64MMFR1_EL1);
+	mmfr4 = read_sysreg_s(SYS_ID_AA64MMFR4_EL1);
+	e2h0 = SYS_FIELD_GET(ID_AA64MMFR4_EL1, E2H0, mmfr4);
+
+	hcr = read_sysreg(hcr_el2);
+	GUEST_ASSERT(hcr & HCR_EL2_E2H);
+	GUEST_ASSERT(!(hcr & HCR_EL2_NV1));
 	GUEST_ASSERT_EQ(SYS_FIELD_GET(ID_AA64MMFR1_EL1, VH, mmfr1),
 			ID_AA64MMFR1_EL1_VH_IMP);
 
@@ -45,6 +61,7 @@ int main(void)
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 	struct ucall uc;
+	u64 hcr;
 
 	TEST_REQUIRE(kvm_check_cap(KVM_CAP_ARM_EL2));
 
@@ -65,6 +82,13 @@ int main(void)
 	default:
 		TEST_FAIL("Unhandled ucall: %ld\n", uc.cmd);
 	}
+
+	hcr = vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(SYS_HCR_EL2));
+	vcpu_set_reg(vcpu, KVM_ARM64_SYS_REG(SYS_HCR_EL2),
+		     (hcr & ~HCR_EL2_E2H) | HCR_EL2_NV1);
+	hcr = vcpu_get_reg(vcpu, KVM_ARM64_SYS_REG(SYS_HCR_EL2));
+	TEST_ASSERT(hcr & HCR_EL2_E2H, "HCR_EL2.E2H should be RES1");
+	TEST_ASSERT(!(hcr & HCR_EL2_NV1), "HCR_EL2.NV1 should be RES0");
 
 	kvm_vm_free(vm);
 	return 0;
