@@ -328,6 +328,63 @@ static int at25_ee_write(void *priv, unsigned int off, void *val, size_t count)
 	return status;
 }
 
+/*
+ * FRAM has no write cycle, so a single WRITE command can be issued from
+ * panic context.  EEPROMs need status polling and are not supported here.
+ */
+static int at25_ee_write_panic(void *priv, unsigned int off, void *val,
+			       size_t count)
+{
+	struct at25_data *at25 = priv;
+	struct spi_device *spi = at25->spimem->spi;
+	struct spi_transfer xfers[3] = { };
+	struct spi_message msg;
+	u8 wren = AT25_WREN;
+	u8 cmd[EE_MAXADDRLEN + 1];
+	size_t cmd_len;
+	unsigned int i;
+	int ret;
+
+	if (unlikely(off >= at25->chip.byte_len))
+		return -EFBIG;
+	if ((off + count) > at25->chip.byte_len)
+		count = at25->chip.byte_len - off;
+	if (unlikely(!count) || count > UINT_MAX)
+		return -EINVAL;
+
+	cmd[0] = at25_instr(at25, AT25_WRITE, off);
+	for (i = 0; i < at25->addrlen; i++)
+		cmd[i + 1] = off >> (8 * (at25->addrlen - i - 1));
+	cmd_len = at25->addrlen + 1;
+
+	xfers[0].tx_buf = &wren;
+	xfers[0].len = sizeof(wren);
+	xfers[0].cs_change = 1;
+	xfers[0].bits_per_word = 8;
+	xfers[0].speed_hz = spi->max_speed_hz;
+
+	xfers[1].tx_buf = cmd;
+	xfers[1].len = cmd_len;
+	xfers[1].bits_per_word = 8;
+	xfers[1].speed_hz = spi->max_speed_hz;
+
+	xfers[2].tx_buf = val;
+	xfers[2].len = count;
+	xfers[2].bits_per_word = 8;
+	xfers[2].speed_hz = spi->max_speed_hz;
+
+	spi_message_init(&msg);
+	spi_message_add_tail(&xfers[0], &msg);
+	spi_message_add_tail(&xfers[1], &msg);
+	spi_message_add_tail(&xfers[2], &msg);
+
+	ret = spi_sync_atomic(spi, &msg);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
 /*-------------------------------------------------------------------------*/
 
 static int at25_fw_to_chip(struct device *dev, struct spi_eeprom *chip)
@@ -545,6 +602,8 @@ static int at25_probe(struct spi_mem *mem)
 	at25->nvmem_config.base_dev = &spi->dev;
 	at25->nvmem_config.reg_read = at25_ee_read;
 	at25->nvmem_config.reg_write = at25_ee_write;
+	if (is_fram)
+		at25->nvmem_config.reg_write_panic = at25_ee_write_panic;
 	at25->nvmem_config.priv = at25;
 	at25->nvmem_config.stride = 1;
 	at25->nvmem_config.word_size = 1;
