@@ -557,15 +557,37 @@ static bool vf_recovery(struct xe_guc *guc)
 	return xe_gt_recovery_pending(guc_to_gt(guc));
 }
 
-static void xe_guc_exec_queue_trigger_cleanup(struct xe_exec_queue *q)
+static void xe_guc_exec_queue_wake_ufence(struct xe_exec_queue *q)
 {
 	struct xe_guc *guc = exec_queue_to_guc(q);
 	struct xe_device *xe = guc_to_xe(guc);
 
 	/** to wakeup xe_wait_user_fence ioctl if exec queue is reset */
 	wake_up_all(&xe->ufence_wq);
+}
+
+static void xe_guc_exec_queue_trigger_cleanup(struct xe_exec_queue *q)
+{
+	xe_guc_exec_queue_wake_ufence(q);
 
 	xe_sched_tdr_queue_imm(&q->guc->sched);
+}
+
+/*
+ * Allow callers to wake user-fence waiters without triggering the TDR.
+ * The memory CAT handler uses this to avoid starting cleanup before
+ * the context-reset notification arrives.
+ */
+static void xe_queue_trigger_cleanup_for_reset(struct xe_exec_queue *q,
+					       bool trigger_tdr)
+{
+	if (exec_queue_banned(q))
+		return;
+
+	if (trigger_tdr)
+		xe_guc_exec_queue_trigger_cleanup(q);
+	else
+		xe_guc_exec_queue_wake_ufence(q);
 }
 
 static void xe_guc_exec_queue_group_stop(struct xe_exec_queue *q)
@@ -653,7 +675,8 @@ static void xe_guc_exec_queue_group_trigger_cleanup(struct xe_exec_queue *q)
 	mutex_unlock(&group->list_lock);
 }
 
-static void xe_guc_exec_queue_reset_trigger_cleanup(struct xe_exec_queue *q)
+static void xe_guc_exec_queue_reset_trigger_cleanup(struct xe_exec_queue *q,
+						    bool trigger_tdr)
 {
 	if (xe_exec_queue_is_multi_queue(q)) {
 		struct xe_exec_queue *primary = xe_exec_queue_multi_queue_primary(q);
@@ -664,20 +687,17 @@ static void xe_guc_exec_queue_reset_trigger_cleanup(struct xe_exec_queue *q)
 		WRITE_ONCE(group->banned, true);
 
 		set_exec_queue_reset(primary);
-		if (!exec_queue_banned(primary))
-			xe_guc_exec_queue_trigger_cleanup(primary);
+		xe_queue_trigger_cleanup_for_reset(primary, trigger_tdr);
 
 		mutex_lock(&group->list_lock);
 		list_for_each_entry(eq, &group->list, multi_queue.link) {
 			set_exec_queue_reset(eq);
-			if (!exec_queue_banned(eq))
-				xe_guc_exec_queue_trigger_cleanup(eq);
+			xe_queue_trigger_cleanup_for_reset(eq, trigger_tdr);
 		}
 		mutex_unlock(&group->list_lock);
 	} else {
 		set_exec_queue_reset(q);
-		if (!exec_queue_banned(q))
-			xe_guc_exec_queue_trigger_cleanup(q);
+		xe_queue_trigger_cleanup_for_reset(q, trigger_tdr);
 	}
 }
 
@@ -3523,7 +3543,7 @@ int xe_guc_exec_queue_reset_handler(struct xe_guc *guc, u32 *msg, u32 len)
 	 * jobs by setting timeout of the job to the minimum value kicking
 	 * guc_exec_queue_timedout_job.
 	 */
-	xe_guc_exec_queue_reset_trigger_cleanup(q);
+	xe_guc_exec_queue_reset_trigger_cleanup(q, true);
 
 	return 0;
 }
@@ -3601,8 +3621,12 @@ int xe_guc_exec_queue_memory_cat_error_handler(struct xe_guc *guc, u32 *msg,
 
 	trace_xe_exec_queue_memory_cat_error(q);
 
-	/* Treat the same as engine reset */
-	xe_guc_exec_queue_reset_trigger_cleanup(q);
+	/*
+	 * Starting the TDR here can send a scheduling-disable request before
+	 * the context-reset notification arrives. Mark the queue reset and
+	 * wake user-fence waiters, leaving that notification to trigger cleanup.
+	 */
+	xe_guc_exec_queue_reset_trigger_cleanup(q, false);
 
 	return 0;
 }
@@ -3644,7 +3668,7 @@ int xe_guc_uncorrectable_error_handler(struct xe_guc *guc, u32 *msg, u32 len)
 	trace_xe_guc_uncorrectable_error(q);
 
 	/* Treat the same as engine reset */
-	xe_guc_exec_queue_reset_trigger_cleanup(q);
+	xe_guc_exec_queue_reset_trigger_cleanup(q, true);
 
 	return 0;
 }
@@ -3696,7 +3720,7 @@ int xe_guc_exec_queue_cgp_context_error_handler(struct xe_guc *guc, u32 *msg,
 	trace_xe_exec_queue_cgp_context_error(q);
 
 	/* Treat the same as engine reset */
-	xe_guc_exec_queue_reset_trigger_cleanup(q);
+	xe_guc_exec_queue_reset_trigger_cleanup(q, true);
 
 	return 0;
 }
