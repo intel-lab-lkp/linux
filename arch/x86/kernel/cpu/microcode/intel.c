@@ -851,13 +851,31 @@ static bool ucode_validate_minrev(struct microcode_header_intel *mc_header)
 	return true;
 }
 
+static bool is_revision_candidate(unsigned int cur_rev, unsigned int rev)
+{
+	/*
+	 * A revision must be newer than the active microcode revision to be
+	 * loadable.
+	 */
+	if (rev <= boot_cpu_data.microcode)
+		return false;
+
+	return incremental_loading ? rev < cur_rev : rev > cur_rev;
+}
+
 static enum ucode_state parse_microcode_blobs(int cpu, struct iov_iter *iter)
 {
 	struct ucode_cpu_info *uci = ucode_cpu_info + cpu;
+	unsigned int cur_rev, curr_mc_size = 0;
 	bool is_safe, new_is_safe = false;
-	int cur_rev = uci->cpu_sig.rev;
-	unsigned int curr_mc_size = 0;
 	u8 *new_mc = NULL, *mc = NULL;
+
+	/*
+	 * Start from the boundary value for the revision search. With
+	 * incremental loading, the search walks downward, while the legacy
+	 * search walks upward.
+	 */
+	cur_rev = incremental_loading ? UINT_MAX : 0;
 
 	while (iov_iter_count(iter)) {
 		struct microcode_header_intel mc_header;
@@ -895,7 +913,7 @@ static enum ucode_state parse_microcode_blobs(int cpu, struct iov_iter *iter)
 		    intel_microcode_sanity_check(mc, true, MC_HEADER_TYPE_MICROCODE) < 0)
 			goto fail;
 
-		if (cur_rev >= mc_header.rev)
+		if (!is_revision_candidate(cur_rev, mc_header.rev))
 			continue;
 
 		if (!intel_find_matching_signature(mc, &uci->cpu_sig))
@@ -999,6 +1017,7 @@ static struct microcode_ops microcode_intel_ops = {
 	.finalize_late_load	= finalize_late_load,
 	.stage_microcode	= stage_microcode,
 	.use_nmi		= IS_ENABLED(CONFIG_X86_64),
+	.support_incremental	= true,
 };
 
 static __init void calc_llc_size_per_core(struct cpuinfo_x86 *c)
