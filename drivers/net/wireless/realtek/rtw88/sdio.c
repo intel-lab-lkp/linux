@@ -700,16 +700,59 @@ static atomic_t *rtw_sdio_8723bs_free_txpg(struct rtw_dev *rtwdev, u8 queue)
  * keep them and read the registers again only when they say a transfer does
  * not fit.
  */
+/*
+ * Read consecutive SDIO local registers with one transfer instead of one per
+ * register. buf must be DMA-safe. Like rtw_sdio_readl(), this only uses CMD53
+ * while the chip is powered on; otherwise it fails with -EAGAIN and the caller
+ * reads the registers one by one.
+ */
+static int rtw_sdio_read_local_regs(struct rtw_dev *rtwdev, u32 addr,
+				    __le32 *buf, unsigned int num)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+	bool bus_claim;
+	int ret;
+
+	if (!rtw_sdio_use_memcpy_io(rtwdev, addr, 4))
+		return -EAGAIN;
+
+	bus_claim = rtw_sdio_bus_claim_needed(rtwsdio);
+
+	if (bus_claim)
+		sdio_claim_host(rtwsdio->sdio_func);
+
+	ret = sdio_memcpy_fromio(rtwsdio->sdio_func, buf,
+				 rtw_sdio_to_io_address(rtwdev, addr, true),
+				 num * sizeof(*buf));
+
+	if (bus_claim)
+		sdio_release_host(rtwsdio->sdio_func);
+
+	if (ret)
+		rtw_warn(rtwdev, "sdio read of %u registers at 0x%x failed: %d",
+			 num, addr, ret);
+
+	return ret;
+}
+
 static void rtw_sdio_88xx_sync_free_txpg(struct rtw_dev *rtwdev)
 {
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+	__le32 *regs = rtwsdio->txpg_regs;
 	u32 free_txpg[3];
 
 	lockdep_assert_held(&rtwsdio->tx_credit_lock);
 
-	free_txpg[0] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG);
-	free_txpg[1] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG + 4);
-	free_txpg[2] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG + 8);
+	if (regs && !rtw_sdio_read_local_regs(rtwdev, REG_SDIO_FREE_TXPG,
+					      regs, 3)) {
+		free_txpg[0] = le32_to_cpu(regs[0]);
+		free_txpg[1] = le32_to_cpu(regs[1]);
+		free_txpg[2] = le32_to_cpu(regs[2]);
+	} else {
+		free_txpg[0] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG);
+		free_txpg[1] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG + 4);
+		free_txpg[2] = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG + 8);
+	}
 
 	atomic_set(&rtwsdio->free_pg_high, free_txpg[0] & 0xfff);
 	atomic_set(&rtwsdio->free_pg_normal, (free_txpg[0] >> 16) & 0xfff);
@@ -1633,12 +1676,15 @@ static bool rtw_sdio_rx_budget_left(struct rtw_dev *rtwdev, u32 rx_bytes)
 	       !rtw_sdio_tx_pending(rtwdev);
 }
 
-static void rtw_sdio_rx_isr(struct rtw_dev *rtwdev)
+/* rx_len: the RX request length if it was read together with HISR, or 0 */
+static void rtw_sdio_rx_isr(struct rtw_dev *rtwdev, u32 rx_len)
 {
-	u32 rx_len, hisr, total_rx_bytes = 0;
+	u32 hisr, total_rx_bytes = 0;
 
 	do {
-		if (rtw_chip_wcpu_8051(rtwdev))
+		if (rx_len)
+			;
+		else if (rtw_chip_wcpu_8051(rtwdev))
 			rx_len = rtw_read16(rtwdev, REG_SDIO_RX0_REQ_LEN);
 		else
 			rx_len = rtw_read32(rtwdev, REG_SDIO_RX0_REQ_LEN);
@@ -1649,6 +1695,7 @@ static void rtw_sdio_rx_isr(struct rtw_dev *rtwdev)
 		rtw_sdio_rxfifo_recv(rtwdev, rx_len);
 
 		total_rx_bytes += rx_len;
+		rx_len = 0;
 
 		if (rtw_chip_wcpu_8051(rtwdev)) {
 			/* Stop if no more RX requests are pending, even if
@@ -1676,20 +1723,28 @@ static void rtw_sdio_handle_interrupt(struct sdio_func *sdio_func)
 	struct ieee80211_hw *hw = sdio_get_drvdata(sdio_func);
 	struct rtw_sdio *rtwsdio;
 	struct rtw_dev *rtwdev;
-	u32 hisr;
+	u32 hisr, rx_len = 0;
 
 	rtwdev = hw->priv;
 	rtwsdio = (struct rtw_sdio *)rtwdev->priv;
 
 	rtwsdio->irq_thread = current;
 
-	hisr = rtw_read32(rtwdev, REG_SDIO_HISR);
+	/* RX0_REQ_LEN follows HISR, read both at once where possible */
+	if (rtwsdio->rx_regs &&
+	    !rtw_sdio_read_local_regs(rtwdev, REG_SDIO_HISR,
+				      rtwsdio->rx_regs, 2)) {
+		hisr = le32_to_cpu(rtwsdio->rx_regs[0]);
+		rx_len = le32_to_cpu(rtwsdio->rx_regs[1]);
+	} else {
+		hisr = rtw_read32(rtwdev, REG_SDIO_HISR);
+	}
 
 	if (hisr & REG_SDIO_HISR_TXERR)
 		rtw_sdio_tx_err_isr(rtwdev);
 	if (hisr & REG_SDIO_HISR_RX_REQUEST) {
 		hisr &= ~REG_SDIO_HISR_RX_REQUEST;
-		rtw_sdio_rx_isr(rtwdev);
+		rtw_sdio_rx_isr(rtwdev, rx_len);
 	}
 
 	/*
@@ -2127,9 +2182,14 @@ static int rtw_sdio_init_tx(struct rtw_dev *rtwdev)
 	 * that only the non-8051 chips keep; without the buffer, frames are
 	 * sent one by one.
 	 */
-	if (!rtw_chip_wcpu_8051(rtwdev))
+	if (!rtw_chip_wcpu_8051(rtwdev)) {
 		rtwsdio->tx_agg_buf = kmalloc(RTW_SDIO_TX_AGG_MAX_SIZE +
 					      RTW_SDIO_BLOCK_SIZE, GFP_KERNEL);
+		/* without these, the registers are read one by one */
+		rtwsdio->rx_regs = kmalloc_array(2, sizeof(__le32), GFP_KERNEL);
+		rtwsdio->txpg_regs = kmalloc_array(3, sizeof(__le32),
+						   GFP_KERNEL);
+	}
 
 	for (i = 0; i < RTK_MAX_TX_QUEUE_NUM; i++) {
 		skb_queue_head_init(&rtwsdio->tx_queue[i]);
@@ -2146,6 +2206,8 @@ static int rtw_sdio_init_tx(struct rtw_dev *rtwdev)
 
 err_destroy_wq:
 	kfree(rtwsdio->tx_agg_buf);
+	kfree(rtwsdio->rx_regs);
+	kfree(rtwsdio->txpg_regs);
 	mutex_destroy(&rtwsdio->tx_credit_lock);
 	destroy_workqueue(rtwsdio->txwq);
 	return -ENOMEM;
@@ -2164,6 +2226,8 @@ static void rtw_sdio_deinit_tx(struct rtw_dev *rtwdev)
 		ieee80211_purge_tx_queue(rtwdev->hw, &rtwsdio->tx_queue[i]);
 
 	kfree(rtwsdio->tx_agg_buf);
+	kfree(rtwsdio->rx_regs);
+	kfree(rtwsdio->txpg_regs);
 	mutex_destroy(&rtwsdio->tx_credit_lock);
 }
 

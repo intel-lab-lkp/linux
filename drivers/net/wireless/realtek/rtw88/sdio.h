@@ -188,6 +188,10 @@ struct rtw_sdio {
 	bool free_txpg_valid;
 	/* TX aggregation buffer of the non-8051 chips, under tx_credit_lock */
 	u8 *tx_agg_buf;
+	/* non-8051 chips: HISR + RX0_REQ_LEN, read by the interrupt handler */
+	__le32 *rx_regs;
+	/* non-8051 chips: the REG_SDIO_FREE_TXPG words, under tx_credit_lock */
+	__le32 *txpg_regs;
 	/* one writer at a time between the credit check and the accounting */
 	struct mutex tx_credit_lock;
 };
