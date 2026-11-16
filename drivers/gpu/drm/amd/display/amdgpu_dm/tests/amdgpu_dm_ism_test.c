@@ -1375,6 +1375,114 @@ static void dm_test_ism_commit_disallows_idle_on_timer_aborted(struct kunit *tes
 	amdgpu_dm_ism_flush(&acrtc->ism);
 }
 
+/*
+ * Config and history shared by the cursor tests below: a non-zero idle-allow
+ * delay parks the FSM in HYSTERESIS_WAITING, and sso_num_frames = 0 lets the
+ * timer cascade straight to OPTIMIZED_IDLE_SSO.
+ */
+static const struct amdgpu_dm_ism_config dm_ism_test_cursor_config = {
+	.filter_num_frames = 5,
+	.filter_entry_count = 3,
+	.activation_num_delay_frames = 10,
+	.filter_history_size = 8,
+	.filter_old_history_threshold = 0,
+	.sso_num_frames = 0,
+};
+
+/**
+ * dm_test_ism_cursor_in_hysteresis_disallows_idle - cursor vetoes foreign idle
+ * @test: KUnit test context
+ *
+ * Idle optimizations are HW-wide; here another CRTC is modelled as having
+ * allowed them while this CRTC waits in HYSTERESIS_WAITING. A cursor update
+ * (BEGIN_CURSOR_UPDATE -> HYSTERESIS_BUSY) must disallow idle so that cursor
+ * programming does not exit and re-enter idle per update. END_CURSOR_UPDATE
+ * must re-arm the hysteresis timer without re-allowing, and the timer must
+ * allow idle again.
+ */
+static void dm_test_ism_cursor_in_hysteresis_disallows_idle(struct kunit *test)
+{
+	struct amdgpu_device *adev;
+	struct amdgpu_crtc *acrtc = alloc_test_acrtc(test, &adev);
+	struct amdgpu_dm_ism_config config = dm_ism_test_cursor_config;
+	struct dc_stream_state *stream;
+
+	stream = setup_commit_test(test, acrtc, &config);
+	setup_idle_delay_history(&acrtc->ism, stream);
+
+	scoped_guard(mutex, &adev->dm.dc_lock) {
+		amdgpu_dm_ism_commit_event(&acrtc->ism,
+					   DM_ISM_EVENT_ENTER_IDLE_REQUESTED);
+		KUNIT_EXPECT_EQ(test, (int)acrtc->ism.current_state,
+				(int)DM_ISM_STATE_HYSTERESIS_WAITING);
+
+		/* Another CRTC's ISM allowed HW-wide idle. */
+		adev->dm.dc->idle_optimizations_allowed = true;
+
+		amdgpu_dm_ism_commit_event(&acrtc->ism,
+					   DM_ISM_EVENT_BEGIN_CURSOR_UPDATE);
+		KUNIT_EXPECT_EQ(test, (int)acrtc->ism.current_state,
+				(int)DM_ISM_STATE_HYSTERESIS_BUSY);
+		KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 1);
+		KUNIT_EXPECT_FALSE(test, dm_ism_test_idle.last_allow);
+		KUNIT_EXPECT_FALSE(test, adev->dm.dc->idle_optimizations_allowed);
+
+		amdgpu_dm_ism_commit_event(&acrtc->ism,
+					   DM_ISM_EVENT_END_CURSOR_UPDATE);
+		KUNIT_EXPECT_EQ(test, (int)acrtc->ism.current_state,
+				(int)DM_ISM_STATE_HYSTERESIS_WAITING);
+		KUNIT_EXPECT_TRUE(test, delayed_work_pending(&acrtc->ism.delayed_work));
+		KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 1);
+		KUNIT_EXPECT_FALSE(test, adev->dm.dc->idle_optimizations_allowed);
+
+		/* Run the hysteresis timer's event by hand. */
+		cancel_delayed_work(&acrtc->ism.delayed_work);
+		amdgpu_dm_ism_commit_event(&acrtc->ism,
+					   DM_ISM_EVENT_TIMER_ELAPSED);
+		KUNIT_EXPECT_EQ(test, (int)acrtc->ism.current_state,
+				(int)DM_ISM_STATE_OPTIMIZED_IDLE_SSO);
+		KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 2);
+		KUNIT_EXPECT_TRUE(test, dm_ism_test_idle.last_allow);
+		KUNIT_EXPECT_TRUE(test, adev->dm.dc->idle_optimizations_allowed);
+	}
+
+	amdgpu_dm_ism_flush(&acrtc->ism);
+}
+
+/**
+ * dm_test_ism_cursor_in_full_power_leaves_idle - FULL_POWER cursor is a no-op
+ * @test: KUnit test context
+ *
+ * A CRTC in FULL_POWER_RUNNING has no pending hysteresis timer that would
+ * allow idle again, so a cursor update there must not disallow idle;
+ * otherwise idle could stay off after the cursor stops.
+ */
+static void dm_test_ism_cursor_in_full_power_leaves_idle(struct kunit *test)
+{
+	struct amdgpu_device *adev;
+	struct amdgpu_crtc *acrtc = alloc_test_acrtc(test, &adev);
+	struct amdgpu_dm_ism_config config = dm_ism_test_cursor_config;
+
+	setup_commit_test(test, acrtc, &config);
+	adev->dm.dc->idle_optimizations_allowed = true;
+
+	scoped_guard(mutex, &adev->dm.dc_lock) {
+		amdgpu_dm_ism_commit_event(&acrtc->ism,
+					   DM_ISM_EVENT_BEGIN_CURSOR_UPDATE);
+		KUNIT_EXPECT_EQ(test, (int)acrtc->ism.current_state,
+				(int)DM_ISM_STATE_FULL_POWER_BUSY);
+		amdgpu_dm_ism_commit_event(&acrtc->ism,
+					   DM_ISM_EVENT_END_CURSOR_UPDATE);
+		KUNIT_EXPECT_EQ(test, (int)acrtc->ism.current_state,
+				(int)DM_ISM_STATE_FULL_POWER_RUNNING);
+
+		KUNIT_EXPECT_EQ(test, dm_ism_test_idle.calls, 0);
+		KUNIT_EXPECT_TRUE(test, adev->dm.dc->idle_optimizations_allowed);
+	}
+
+	amdgpu_dm_ism_flush(&acrtc->ism);
+}
+
 /**
  * dm_test_ism_exit_from_optimized_idle_disallows_idle - leaving OPTIMIZED_IDLE
  * @test: KUnit test context
@@ -1615,6 +1723,8 @@ static struct kunit_case dm_ism_test_cases[] = {
 	KUNIT_CASE(dm_test_ism_commit_allows_idle_on_optimized_idle),
 	KUNIT_CASE(dm_test_ism_commit_enables_sso_on_optimized_idle_sso),
 	KUNIT_CASE(dm_test_ism_commit_disallows_idle_on_timer_aborted),
+	KUNIT_CASE(dm_test_ism_cursor_in_hysteresis_disallows_idle),
+	KUNIT_CASE(dm_test_ism_cursor_in_full_power_leaves_idle),
 	/* dm_ism_dispatch_power_state previous-state arms */
 	KUNIT_CASE(dm_test_ism_exit_from_optimized_idle_disallows_idle),
 	KUNIT_CASE(dm_test_ism_exit_from_sso_disallows_idle),

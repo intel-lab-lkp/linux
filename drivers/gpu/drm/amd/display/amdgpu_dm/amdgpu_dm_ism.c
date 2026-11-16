@@ -401,6 +401,23 @@ static enum amdgpu_dm_ism_event dm_ism_dispatch_power_state(
 			mod_delayed_work(system_dfl_wq, &ism->delayed_work,
 					 nsecs_to_jiffies(delay_ns));
 		break;
+	case DM_ISM_STATE_HYSTERESIS_BUSY:
+		/*
+		 * Idle optimizations are HW-wide, so another CRTC's ISM may have
+		 * allowed them while this CRTC was still in hysteresis. Every
+		 * cursor update would then exit and re-enter idle through DMUB.
+		 * Disallow idle when a cursor update starts here; this CRTC's
+		 * hysteresis timer, re-armed on END_CURSOR_UPDATE, allows it
+		 * again once the cursor stops. Only idle is touched, not static
+		 * screen optimizations.
+		 */
+		if (ism->previous_state == DM_ISM_STATE_HYSTERESIS_WAITING) {
+			struct amdgpu_crtc *acrtc = ism_to_amdgpu_crtc(ism);
+			struct dc *dc = drm_to_adev(acrtc->base.dev)->dm.dc;
+
+			dc_allow_idle_optimizations(dc, false);
+		}
+		break;
 	case DM_ISM_STATE_OPTIMIZED_IDLE:
 		sso_delay_ns = dm_ism_get_sso_delay(ism, acrtc_state->stream);
 		if (sso_delay_ns > 0) {
