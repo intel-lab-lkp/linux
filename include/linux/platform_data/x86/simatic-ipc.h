@@ -38,6 +38,7 @@ enum simatic_ipc_station_ids {
 	SIMATIC_IPC_IPCBX_21A = 0x00001101,
 	SIMATIC_IPC_IPCBX_56A = 0x00001201,
 	SIMATIC_IPC_IPCBX_59A = 0x00001202,
+	SIMATIC_IPC_IPCRW_548A = 0x00001402,
 };
 
 static inline u32 simatic_ipc_get_station_id(u8 *data, int max_len)
