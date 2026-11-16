@@ -15,6 +15,8 @@ use core::{
     ptr::NonNull, //
 };
 
+use kernel::types::ForeignOwnable;
+
 /// Types that specify their own way of performing allocation and destruction. Typically, this trait
 /// is implemented on types from the C side.
 ///
@@ -270,5 +272,60 @@ impl<T: Ownable> Drop for Owned<T> {
         // `Owned<T>` for it. As we are dropping `self`, we can transfer the ownership it represents
         // to the `release` method, and we do not use `ptr` afterwards.
         unsafe { T::release(self.ptr) };
+    }
+}
+
+// SAFETY: We derive the pointer to `T` from a valid `T`, so the returned
+// pointer satisfy alignment requirements of `T`.
+unsafe impl<T: Ownable> ForeignOwnable for Owned<T> {
+    const FOREIGN_ALIGN: usize = core::mem::align_of::<T>();
+
+    type Borrowed<'a>
+        = &'a T
+    where
+        Self: 'a;
+    type BorrowedMut<'a>
+        = Pin<&'a mut T>
+    where
+        Self: 'a;
+
+    #[inline]
+    fn into_foreign(self) -> *mut kernel::ffi::c_void {
+        Owned::into_raw(self).as_ptr().cast()
+    }
+
+    #[inline]
+    unsafe fn from_foreign(ptr: *mut kernel::ffi::c_void) -> Self {
+        // SAFETY: By function safety contract, `ptr` came from `into_foreign` and cannot be null.
+        let ptr = unsafe { NonNull::new_unchecked(ptr.cast()) };
+
+        // SAFETY: By the function safety contract, `ptr` was returned by `into_foreign`, which
+        // consumed an `Owned<T>` without calling `T::release`. The requirements that were upheld
+        // for that `Owned<T>` are still upheld, as the ownership it represented was only held by
+        // the foreign pointer in the meantime. We retake that ownership here.
+        unsafe { Owned::from_raw(ptr) }
+    }
+
+    #[inline]
+    unsafe fn borrow<'a>(ptr: *mut kernel::ffi::c_void) -> Self::Borrowed<'a> {
+        // SAFETY: By function safety requirements, `ptr` came from `into_foreign` and the
+        // `Owned<T>` it was created from is not reconstructed or mutably borrowed during `'a`. By
+        // the type invariants of that `Owned<T>`, `ptr` points to a valid `T` and it is sound to
+        // create a shared reference to the `T` for `'a`.
+        unsafe { &*ptr.cast() }
+    }
+
+    #[inline]
+    unsafe fn borrow_mut<'a>(ptr: *mut kernel::ffi::c_void) -> Self::BorrowedMut<'a> {
+        // SAFETY: By function safety requirements, `ptr` came from `into_foreign` and the
+        // `Owned<T>` it was created from is not reconstructed or otherwise borrowed during `'a`. By
+        // the type invariants of that `Owned<T>`, `ptr` points to a valid `T` and it is sound to
+        // create a mutable reference to the `T` for `'a`, given that we only hand it out as a
+        // `Pin<&mut T>` below.
+        let inner = unsafe { &mut *ptr.cast() };
+
+        // SAFETY: We never move out of inner, and we do not hand out mutable
+        // references when `T: !Unpin`.
+        unsafe { Pin::new_unchecked(inner) }
     }
 }
