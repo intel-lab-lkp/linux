@@ -4097,6 +4097,14 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 		entry = folio_mk_pte(new_folio, vma->vm_page_prot);
 		entry = pte_sw_mkyoung(entry);
 		if (unlikely(unshare)) {
+			/*
+			 * The PTE stays clean, and pte_mkdirty() would also
+			 * set soft-dirty, which is carried over below. Mark
+			 * the folio dirty instead: MADV_FREE and lazyfree
+			 * reclaim may drop a clean anon folio that has no
+			 * swap entry, even one others still map.
+			 */
+			folio_set_dirty(new_folio);
 			if (pte_soft_dirty(vmf->orig_pte))
 				entry = pte_mksoft_dirty(entry);
 			if (pte_uffd(vmf->orig_pte)) {
