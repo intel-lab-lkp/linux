@@ -41,6 +41,8 @@ power on AMD platforms using mailbox command and resembles a typical 8-pin remot
 power sensor's I2C interface to BMC.
 
 This driver implements current power with power cap and power cap max.
+It also reports DIMM thermal sensor (TS0 and TS1) temperatures read with
+the SB-RMI DIMM thermal mailbox command.
 
 sysfs-Interface
 ---------------
@@ -56,6 +58,28 @@ power1_input     RO    Current Power consumed
 power1_cap       RW    Power limit can be set between 0 and power1_cap_max
 power1_cap_max   RO    Maximum powerlimit calculated and reported by the SMU FW
 ================ ===== ========================================================
+
+DIMM thermal sensors are reported as temperature channels:
+
+================ ===== ========================================================
+Name             Perm   Description
+================ ===== ========================================================
+tempX_input      RO    DIMM thermal sensor temperature in milli-degrees Celsius
+tempX_label      RO    Channel label, ``DIMM_TS0_UMCn`` or ``DIMM_TS1_UMCn``
+                       (n = 0..15)
+================ ===== ========================================================
+
+Each DIMM has two sensors, TS0 and TS1. DIMM ``n`` (0-15) is reported on
+``temp(n+1)_*`` (TS0) and ``temp(n+17)_*`` (TS1). With one DIMM per memory
+channel (the default), ``n`` is the memory channel and the labels are
+``DIMM_TS0_UMCn`` and ``DIMM_TS1_UMCn``. With two
+(``amd,dpc = /bits/ 8 <2>``), ``n`` is memory channel * 2 + slot,
+the DIMM number on the board, with the same labels.
+
+The optional ``amd,dimm-ids`` firmware property lists the DIMM_ADDRESS of
+each sensor (TS0 or TS1) and only those sensors are reported; without it,
+all 16 DIMMs are reported. A read fails with an error if the DIMM or sensor
+is not present or the firmware rejects the command.
 
 The following example show how the 'Power' attribute from the i2c-addresses
 can be monitored using the userspace utilities like ``sensors`` binary::
@@ -77,3 +101,16 @@ Also, Below shows how get and set the values from sysfs entries individually::
   # echo 180000000 > /sys/class/hwmon/hwmon1/power1_cap
   # cat /sys/class/hwmon/hwmon1/power1_cap
   180000000
+
+Reading the TS0 and TS1 sensors of the first DIMM without ``amd,dimm-ids``
+(temperatures are in milli-degrees Celsius)::
+
+  # cat /sys/class/hwmon/hwmonN/temp1_label
+  DIMM_TS0_UMC0
+  # cat /sys/class/hwmon/hwmonN/temp1_input
+  42000
+
+  # cat /sys/class/hwmon/hwmonN/temp17_label
+  DIMM_TS1_UMC0
+  # cat /sys/class/hwmon/hwmonN/temp17_input
+  41750

@@ -34,7 +34,9 @@ among protocols as transactions may create race condition.
    crw-------    1 root     root       10,  53 Jul 10 11:13 /dev/sbrmi-3c
 
 apml_sbrmi driver registers hwmon sensors for monitoring power_cap_max,
-current power consumption and managing power_cap.
+current power consumption and managing power_cap. It also reports the
+TS0/TS1 DIMM thermal sensors as temperature channels; see
+Documentation/hwmon/sbrmi.rst.
 
 Characteristics of the dev node:
  * Differnet xfer protocols are defined:
