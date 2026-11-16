@@ -883,11 +883,10 @@ static void iwl_mei_handle_nvm(struct mei_cl_device *cldev,
 			       const struct iwl_sap_nvm *sap_nvm)
 {
 	struct iwl_mei *mei = mei_cldev_get_drvdata(cldev);
-	const struct iwl_mei_nvm *mei_nvm = (const void *)sap_nvm;
 	int i;
 
 	kfree(mei->nvm);
-	mei->nvm = kzalloc_obj(*mei_nvm);
+	mei->nvm = kzalloc_obj(*mei->nvm);
 	if (!mei->nvm)
 		return;
 
