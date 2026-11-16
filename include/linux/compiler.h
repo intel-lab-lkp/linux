@@ -348,7 +348,7 @@ static inline void *offset_to_ptr(const int *off)
  * Whether 'type' is a signed type or an unsigned type. Supports scalar types,
  * bool and also pointer types.
  */
-#define is_signed_type(type) (((type)(-1)) < (__force type)1)
+#define is_signed_type(type) (((type)(-1LL)) < (__force type)1)
 #define is_unsigned_type(type) (!is_signed_type(type))
 
 /*

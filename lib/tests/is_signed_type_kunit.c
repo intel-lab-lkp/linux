@@ -18,6 +18,8 @@ enum signed_enum {
 
 static void is_signed_type_test(struct kunit *test)
 {
+	typedef __bitwise long long bitwise_long_long;
+
 	KUNIT_EXPECT_EQ(test, is_signed_type(bool), false);
 	KUNIT_EXPECT_EQ(test, is_signed_type(signed char), true);
 	KUNIT_EXPECT_EQ(test, is_signed_type(unsigned char), false);
@@ -27,7 +29,10 @@ static void is_signed_type_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, is_signed_type(long), true);
 	KUNIT_EXPECT_EQ(test, is_signed_type(unsigned long), false);
 	KUNIT_EXPECT_EQ(test, is_signed_type(long long), true);
+	KUNIT_EXPECT_EQ(test, is_signed_type(bitwise_long_long), true);
 	KUNIT_EXPECT_EQ(test, is_signed_type(unsigned long long), false);
+	KUNIT_EXPECT_EQ(test, is_signed_type(__be64), false);
+	KUNIT_EXPECT_EQ(test, is_signed_type(__le64), false);
 	KUNIT_EXPECT_EQ(test, is_signed_type(enum unsigned_enum), false);
 	KUNIT_EXPECT_EQ(test, is_signed_type(enum signed_enum), true);
 	KUNIT_EXPECT_EQ(test, is_signed_type(void *), false);
