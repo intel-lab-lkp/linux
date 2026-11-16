@@ -84,13 +84,14 @@ static int update_disc_vol(struct sp_usbphy *usbphy)
 	u32 val, set;
 
 	cell = nvmem_cell_get(usbphy->dev, disc_name);
-	if (IS_ERR_OR_NULL(cell)) {
+	if (IS_ERR(cell)) {
 		if (PTR_ERR(cell) == -EPROBE_DEFER)
 			return -EPROBE_DEFER;
+		otp_v = ERR_CAST(cell);
+	} else {
+		otp_v = nvmem_cell_read(cell, &otp_l);
+		nvmem_cell_put(cell);
 	}
-
-	otp_v = nvmem_cell_read(cell, &otp_l);
-	nvmem_cell_put(cell);
 
 	if (!IS_ERR(otp_v)) {
 		set = *(otp_v + 1);
