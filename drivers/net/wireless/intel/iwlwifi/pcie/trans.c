@@ -4182,6 +4182,40 @@ static void iwl_pcie_check_me_status(struct iwl_trans *trans)
 	schedule_delayed_work(&trans_pcie->me_recheck_wk, HZ);
 }
 
+/*
+ * CSME (Intel AMT) can still be driving the NIC while it hands the device
+ * over to the host, for example right after the host was powered on through
+ * AMT: the host gets the hardware semaphore, but the MAC does not wake. If
+ * the SAP connection to CSME is up, or comes up shortly, continue as when
+ * CSME visibly owns the device: the op mode gets the NVM from CSME and asks
+ * it for the device over SAP before using it.
+ */
+static bool iwl_pcie_csme_drives_nic(struct iwl_trans *trans)
+{
+	int t;
+
+	for (t = 0; !iwl_mei_is_connected() && t < 5000; t += 100)
+		msleep(100);
+
+	if (!iwl_mei_is_connected())
+		return false;
+
+	IWL_INFO(trans,
+		 "Couldn't wake the NIC but SAP is connected, CSME owns it (HW_IF_CONFIG 0x%08x)\n",
+		 iwl_trans_pcie_read32(trans, CSR_HW_IF_CONFIG_REG));
+
+	if (trans->mac_cfg->device_family >= IWL_DEVICE_FAMILY_BZ)
+		iwl_trans_clear_bit(trans, CSR_GP_CNTRL,
+				    CSR_GP_CNTRL_REG_FLAG_BZ_MAC_ACCESS_REQ |
+				    CSR_GP_CNTRL_REG_FLAG_MAC_INIT);
+	else
+		iwl_trans_clear_bit(trans, CSR_GP_CNTRL,
+				    CSR_GP_CNTRL_REG_FLAG_INIT_DONE);
+
+	trans->csme_own = true;
+	return true;
+}
+
 int _iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent,
 		   const struct iwl_mac_cfg *mac_cfg,
 		   u8 __iomem *hw_base, u32 hw_rev)
@@ -4218,9 +4252,11 @@ int _iwl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent,
 	ret = iwl_pcie_prepare_card_hw(iwl_trans);
 	if (!ret) {
 		ret = iwl_trans_activate_nic(iwl_trans);
-		if (ret)
+		if (ret && iwl_pcie_csme_drives_nic(iwl_trans)) {
+			ret = 0;
+		} else if (ret) {
 			goto out_free_trans;
-		if (iwl_trans_grab_nic_access(iwl_trans)) {
+		} else if (iwl_trans_grab_nic_access(iwl_trans)) {
 			get_crf_id(iwl_trans, &info, &hw_wfpm_id);
 			/* all good */
 			iwl_trans_release_nic_access(iwl_trans);
