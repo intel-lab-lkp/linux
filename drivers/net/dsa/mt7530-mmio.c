@@ -30,6 +30,7 @@ static int
 mt7988_probe(struct platform_device *pdev)
 {
 	struct mt7530_priv *priv;
+	struct device_node *mnp;
 	void __iomem *base_addr;
 	int ret;
 
@@ -61,7 +62,27 @@ mt7988_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->regmap))
 		return PTR_ERR(priv->regmap);
 
-	return dsa_register_switch(priv->ds);
+	ret = dsa_register_switch(priv->ds);
+
+	if (ret)
+		return ret;
+
+	/*
+	 * If not all switches in the hierarchy have been probed,
+	 * dsa_register_switch() returns 0 without calling mt753x_setup().
+	 * Call mt7530_setup_mdio() because there's a chance that the missing
+	 * switch is on the MDIO bus. If "mdio" node is not present then there
+	 * is definitely no MDIO switch in the DT, and also if "mdio" is not
+	 * present then phys_mii_mask is relevant and that is not set until
+	 * dsa_switch_setup.
+	 */
+	mnp = of_get_child_by_name(pdev->dev.of_node, "mdio");
+	if (mnp) {
+		of_node_put(mnp);
+		ret = mt7530_setup_mdio(priv);
+	}
+
+	return ret;
 }
 
 static void mt7988_remove(struct platform_device *pdev)

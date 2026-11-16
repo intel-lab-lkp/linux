@@ -2497,11 +2497,6 @@ mt7530_setup_irq(struct mt7530_priv *priv)
 		return irq ? : -EINVAL;
 	}
 
-	/* This register must be set for MT7530 to properly fire interrupts */
-	if (priv->id == ID_MT7530 || priv->id == ID_MT7621)
-		regmap_set_bits(priv->regmap, MT7530_TOP_SIG_CTRL,
-				TOP_SIG_CTRL_NORMAL);
-
 	ret = devm_regmap_add_irq_chip_fwnode(dev, dev_fwnode(dev),
 					      priv->regmap, irq,
 					      IRQF_ONESHOT,
@@ -2530,7 +2525,7 @@ mt7530_free_mdio_irq(struct mt7530_priv *priv)
 	}
 }
 
-static int
+int
 mt7530_setup_mdio(struct mt7530_priv *priv)
 {
 	struct device_node *mnp, *np = priv->dev->of_node;
@@ -2539,6 +2534,14 @@ mt7530_setup_mdio(struct mt7530_priv *priv)
 	struct mii_bus *bus;
 	static int idx;
 	int ret = 0;
+
+	/* Already done */
+	if (priv->child_bus)
+		return 0;
+
+	ret = mt7530_setup_irq(priv);
+	if (ret)
+		return ret;
 
 	mnp = of_get_child_by_name(np, "mdio");
 
@@ -2581,6 +2584,7 @@ out:
 	of_node_put(mnp);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(mt7530_setup_mdio);
 
 static int
 mt7530_setup(struct dsa_switch *ds)
@@ -2683,6 +2687,10 @@ mt7530_setup(struct dsa_switch *ds)
 	regmap_update_bits(priv->regmap, MT753X_MTRAP,
 			   MT7530_CHG_TRAP | MT7530_PHY_INDIRECT_ACCESS,
 			   MT7530_CHG_TRAP);
+
+	/* This register must be set for MT7530 to properly fire interrupts */
+	regmap_set_bits(priv->regmap, MT7530_TOP_SIG_CTRL,
+			TOP_SIG_CTRL_NORMAL);
 
 	if ((val & MT7530_XTAL_MASK) == MT7530_XTAL_40MHZ)
 		mt7530_pll_setup(priv);
@@ -3405,10 +3413,10 @@ mt753x_setup(struct dsa_switch *ds)
 	if (ret)
 		return ret;
 
-	ret = mt7530_setup_irq(priv);
-	if (ret)
-		return ret;
-
+	/*
+	 * This must be called before mt753x_setup() returns because the DSA
+	 * core synchronously sets up ports and expects PHYs to be operational.
+	 */
 	ret = mt7530_setup_mdio(priv);
 	if (ret)
 		return ret;
@@ -3834,6 +3842,15 @@ const struct mt753x_info mt753x_table[] = {
 };
 EXPORT_SYMBOL_GPL(mt753x_table);
 
+/*
+ * An MMIO switch can have another MDIO switch connected to its
+ * MDIO interface and in that case, actions on the MDIO switch will call
+ * through to mt7531_ind_c(22|45)_phy_(read|write) making a lock
+ * dependency.
+ */
+static struct lock_class_key mt7530_mmio_mutex_key;
+static struct lock_class_key mt7530_mdio_mutex_key;
+
 int
 mt7530_probe_common(struct mt7530_priv *priv)
 {
@@ -3872,6 +3889,11 @@ mt7530_probe_common(struct mt7530_priv *priv)
 	mutex_init(&priv->reg_mutex);
 	spin_lock_init(&priv->stats_lock);
 	INIT_DELAYED_WORK(&priv->stats_work, mt7530_stats_poll);
+
+	if (priv->bus)
+		lockdep_set_class(&priv->reg_mutex, &mt7530_mdio_mutex_key);
+	else
+		lockdep_set_class(&priv->reg_mutex, &mt7530_mmio_mutex_key);
 
 	dev_set_drvdata(dev, priv);
 
