@@ -640,6 +640,7 @@ static int ext4_dx_readdir(struct file *file, struct dir_context *ctx)
 			info->curr_minor_hash = fname->minor_hash;
 		} else {
 			if (info->next_hash == ~0) {
+				free_rb_tree_fname(&info->root);
 				ctx->pos = ext4_get_htree_eof(file);
 				break;
 			}
