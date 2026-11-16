@@ -14,8 +14,11 @@ allOf:
 
 properties:
   compatible:
-    enum:
-      - samsung,s2mu005-fuel-gauge
+    oneOf:
+      - const: samsung,s2mu005-fuel-gauge
+      - items:
+          - const: samsung,s2mu106-fuel-gauge
+          - const: samsung,s2mu005-fuel-gauge
 
   reg:
     maxItems: 1
