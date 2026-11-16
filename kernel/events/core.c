@@ -14959,6 +14959,15 @@ inherit_event(struct perf_event *parent_event,
 	struct perf_event_pmu_context *pmu_ctx;
 	struct perf_event *child_event;
 	unsigned long flags;
+	struct pmu *pmu;
+
+	/*
+	 * @parent_event is attached to @parent_ctx, whose mutex is held, so
+	 * its pmu_ctx is stable. The original it is replaced with below can
+	 * be in another context, where perf_event_open()'s move_group path
+	 * may have dropped the pmu_ctx and not yet installed the new one.
+	 */
+	pmu = parent_event->pmu_ctx->pmu;
 
 	/*
 	 * Instead of creating recursive hierarchies of events,
@@ -14988,7 +14997,7 @@ inherit_event(struct perf_event *parent_event,
 	get_ctx(child_ctx);
 	child_event->ctx = child_ctx;
 
-	pmu_ctx = find_get_pmu_context(parent_event->pmu_ctx->pmu, child_ctx, child_event);
+	pmu_ctx = find_get_pmu_context(pmu, child_ctx, child_event);
 	if (IS_ERR(pmu_ctx)) {
 		free_event(child_event);
 		return ERR_CAST(pmu_ctx);
