@@ -557,6 +557,9 @@ static inline void svcxdr_init_decode(struct svc_rqst *rqstp)
  *
  * The stream records @rqstp, so a codec running on it reaches the
  * transaction with svcxdr_rqst().
+ *
+ * When @rqstp->rq_res has no page array, the caller sets rq_res.buflen
+ * to the size of the head kvec, and the stream ends there.
  */
 static inline void svcxdr_init_encode(struct svc_rqst *rqstp)
 {
@@ -569,10 +572,15 @@ static inline void svcxdr_init_encode(struct svc_rqst *rqstp)
 	xdr->buf = buf;
 	xdr->iov = resv;
 	xdr->p   = resv->iov_base + resv->iov_len;
-	xdr->end = resv->iov_base + PAGE_SIZE;
 	buf->len = resv->iov_len;
 	xdr->page_ptr = buf->pages - 1;
-	buf->buflen = PAGE_SIZE * (rqstp->rq_page_end - buf->pages);
+	if (buf->pages) {
+		xdr->end = resv->iov_base + PAGE_SIZE;
+		buf->buflen = PAGE_SIZE * (rqstp->rq_page_end - buf->pages);
+	} else {
+		/* svc_process_bc() passes the transport's send buffer */
+		xdr->end = resv->iov_base + buf->buflen;
+	}
 	xdr->rqst = NULL;
 	xdr->xdrgen_ctx = rqstp;
 }
