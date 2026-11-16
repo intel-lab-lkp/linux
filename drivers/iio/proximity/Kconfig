@@ -67,6 +67,17 @@ config IRSD200
 	  To compile this driver as a module, choose M here: the module will be
 	  called irsd200.
 
+config ISG5320A
+	tristate "Imagis ISG5320A SAR proximity sensor"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y here to build a driver for the Imagis ISG5320A capacitive
+	  SAR/grip proximity sensor.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called isg5320a.
+
 config ISL29501
 	tristate "Intersil ISL29501 Time Of Flight sensor"
 	depends on I2C
