@@ -3079,6 +3079,10 @@ static int copy_from_dinode(struct dinode * dip, struct inode *ip)
 	}
 
 	ip->i_size = le64_to_cpu(dip->di_size);
+	if (ip->i_size < 0) {
+		jfs_error(ip->i_sb, "Negative inode size\n");
+		return -EIO;
+	}
 	inode_set_atime(ip, le32_to_cpu(dip->di_atime.tv_sec),
 			le32_to_cpu(dip->di_atime.tv_nsec));
 	inode_set_mtime(ip, le32_to_cpu(dip->di_mtime.tv_sec),
