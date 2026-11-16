@@ -103,12 +103,6 @@ void irq_raise(
     const irq_ID_t				ID,
     const irq_sw_channel_id_t	irq_id);
 
-/*! Test if any IRQ channel of the virtual super IRQ has raised a signal
-
- \return any(VIRQ.channel[irq_ID] != 0)
- */
-bool any_virq_signal(void);
-
 /*! Enable an IRQ channel of the virtual super IRQ
 
  \param	irq[in]				IRQ (channel) identifier
