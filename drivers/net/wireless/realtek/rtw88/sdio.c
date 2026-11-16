@@ -22,9 +22,16 @@
 #define RTW_SDIO_INDIRECT_RW_RETRIES			50
 #define RTW_SDIO_OQT_TIMEOUT_MS				1000
 
-/* Bounds the queueing latency of the unbounded per-AC software FIFO. */
+/*
+ * Bound the queueing latency of the per-AC software FIFO, so that the
+ * backlog stays in mac80211, where it is scheduled fairly between flows and
+ * stations. The 88xx chips send up to RTW_SDIO_TX_AGG_MAX_NUM frames per
+ * transfer and need a deeper FIFO to keep doing that.
+ */
 #define RTW_SDIO_TX_FIFO_HIWATER			16
 #define RTW_SDIO_TX_FIFO_LOWATER			8
+#define RTW_SDIO_88XX_TX_FIFO_HIWATER			64
+#define RTW_SDIO_88XX_TX_FIFO_LOWATER			32
 #define RTW_SDIO_TX_RETRY_DELAY			msecs_to_jiffies(1)
 
 static bool rtw_sdio_is_bus_addr(u32 addr)
@@ -1391,19 +1398,43 @@ static int rtw_sdio_write_data_h2c(struct rtw_dev *rtwdev, u8 *buf, u32 size)
 	return rtw_sdio_write_data(rtwdev, &pkt_info, skb, RTW_TX_QUEUE_H2C);
 }
 
+static bool rtw_sdio_tx_queue_limited(struct rtw_dev *rtwdev,
+				      enum rtw_tx_queue_type queue)
+{
+	if (queue >= RTW_TX_QUEUE_BCN)
+		return false;
+
+	return rtw_is_8723bs(rtwdev) || !rtw_chip_wcpu_8051(rtwdev);
+}
+
+static u32 rtw_sdio_tx_fifo_hiwater(struct rtw_dev *rtwdev)
+{
+	if (rtw_chip_wcpu_8051(rtwdev))
+		return RTW_SDIO_TX_FIFO_HIWATER;
+
+	return RTW_SDIO_88XX_TX_FIFO_HIWATER;
+}
+
+static u32 rtw_sdio_tx_fifo_lowater(struct rtw_dev *rtwdev)
+{
+	if (rtw_chip_wcpu_8051(rtwdev))
+		return RTW_SDIO_TX_FIFO_LOWATER;
+
+	return RTW_SDIO_88XX_TX_FIFO_LOWATER;
+}
+
 /*
  * Both this and the wake below hold the TX queue lock across the length check
  * and the flag update, so a queue is only ever stopped while it really is
  * above the watermark, and the drain path always sees the flag the producer
  * set.
  */
-static void rtw_sdio_8723bs_stop_tx_queue(struct rtw_dev *rtwdev,
-					  enum rtw_tx_queue_type queue,
-					  u16 q_map)
+static void rtw_sdio_stop_tx_queue(struct rtw_dev *rtwdev,
+				   enum rtw_tx_queue_type queue, u16 q_map)
 {
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
 
-	if (!rtw_is_8723bs(rtwdev) || queue >= RTW_TX_QUEUE_BCN)
+	if (!rtw_sdio_tx_queue_limited(rtwdev, queue))
 		return;
 
 	guard(spinlock_irqsave)(&rtwsdio->tx_queue[queue].lock);
@@ -1411,20 +1442,20 @@ static void rtw_sdio_8723bs_stop_tx_queue(struct rtw_dev *rtwdev,
 	if (rtwsdio->tx_queue_stopped[queue])
 		return;
 
-	if (skb_queue_len(&rtwsdio->tx_queue[queue]) < RTW_SDIO_TX_FIFO_HIWATER)
+	if (skb_queue_len(&rtwsdio->tx_queue[queue]) <
+	    rtw_sdio_tx_fifo_hiwater(rtwdev))
 		return;
 
 	rtwsdio->tx_queue_stopped[queue] = true;
 	ieee80211_stop_queue(rtwdev->hw, q_map);
 }
 
-static void rtw_sdio_8723bs_wake_tx_queue(struct rtw_dev *rtwdev,
-					  enum rtw_tx_queue_type queue,
-					  u16 q_map)
+static void rtw_sdio_wake_tx_queue(struct rtw_dev *rtwdev,
+				   enum rtw_tx_queue_type queue, u16 q_map)
 {
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
 
-	if (!rtw_is_8723bs(rtwdev) || queue >= RTW_TX_QUEUE_BCN)
+	if (!rtw_sdio_tx_queue_limited(rtwdev, queue))
 		return;
 
 	guard(spinlock_irqsave)(&rtwsdio->tx_queue[queue].lock);
@@ -1432,7 +1463,8 @@ static void rtw_sdio_8723bs_wake_tx_queue(struct rtw_dev *rtwdev,
 	if (!rtwsdio->tx_queue_stopped[queue])
 		return;
 
-	if (skb_queue_len(&rtwsdio->tx_queue[queue]) > RTW_SDIO_TX_FIFO_LOWATER)
+	if (skb_queue_len(&rtwsdio->tx_queue[queue]) >
+	    rtw_sdio_tx_fifo_lowater(rtwdev))
 		return;
 
 	rtwsdio->tx_queue_stopped[queue] = false;
@@ -1456,7 +1488,7 @@ static int rtw_sdio_tx_write(struct rtw_dev *rtwdev,
 	/* The TX worker may already have freed the skb, so do not touch it. */
 	skb_queue_tail(&rtwsdio->tx_queue[queue], skb);
 
-	rtw_sdio_8723bs_stop_tx_queue(rtwdev, queue, q_map);
+	rtw_sdio_stop_tx_queue(rtwdev, queue, q_map);
 
 	return 0;
 }
@@ -1820,6 +1852,7 @@ static int rtw_sdio_process_tx_agg(struct rtw_dev *rtwdev,
 	struct sk_buff *skb;
 	u8 ac = U8_MAX;
 	u32 txaddr;
+	u16 q_map;
 	int ret;
 
 	__skb_queue_head_init(&agg);
@@ -1895,8 +1928,13 @@ static int rtw_sdio_process_tx_agg(struct rtw_dev *rtwdev,
 
 	mutex_unlock(&rtwsdio->tx_credit_lock);
 
+	/* all frames are of the same AC, and the skbs are consumed below */
+	q_map = skb_get_queue_mapping(skb_peek(&agg));
+
 	while ((skb = __skb_dequeue(&agg)))
 		rtw_sdio_indicate_tx_status(rtwdev, skb);
+
+	rtw_sdio_wake_tx_queue(rtwdev, queue, q_map);
 
 	return 0;
 
@@ -1944,7 +1982,7 @@ static int rtw_sdio_process_tx_queue(struct rtw_dev *rtwdev,
 
 	rtw_sdio_indicate_tx_status(rtwdev, skb);
 
-	rtw_sdio_8723bs_wake_tx_queue(rtwdev, queue, q_map);
+	rtw_sdio_wake_tx_queue(rtwdev, queue, q_map);
 
 	return 0;
 }
@@ -1990,6 +2028,7 @@ static void rtw_sdio_tx_handler(struct work_struct *work)
 	struct rtw_sdio *rtwsdio;
 	struct rtw_dev *rtwdev;
 	int limit, queue, ret;
+	bool resched = false;
 
 	rtwdev = work_data->rtwdev;
 	rtwsdio = (struct rtw_sdio *)rtwdev->priv;
@@ -2010,7 +2049,19 @@ static void rtw_sdio_tx_handler(struct work_struct *work)
 			if (skb_queue_empty(&rtwsdio->tx_queue[queue]))
 				break;
 		}
+
+		/*
+		 * A stopped queue is handed no further frames, so nothing
+		 * else would kick this work item if the chip stayed full for
+		 * the whole loop.
+		 */
+		if (ret == -EBUSY && !rtw_chip_wcpu_8051(rtwdev))
+			resched = true;
 	}
+
+	if (resched)
+		queue_delayed_work(rtwsdio->txwq, &work_data->work,
+				   RTW_SDIO_TX_RETRY_DELAY);
 }
 
 static void rtw_sdio_free_irq(struct rtw_dev *rtwdev,
