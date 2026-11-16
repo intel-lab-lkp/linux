@@ -194,6 +194,22 @@ config GPIO_ASPEED_SGPIO
 	help
 	  Say Y here to support Aspeed AST2500 SGPIO functionality.
 
+config GPIO_ATCGPIO100
+	tristate "Andes ATCGPIO100 GPIO support"
+	depends on ARCH_ANDES || COMPILE_TEST
+	select GPIOLIB_IRQCHIP
+	select GPIO_GENERIC
+	help
+	  Say Y or M here to build support for the Andes ATCGPIO100 GPIO
+	  controller.
+
+	  This IP block provides up to 32 general-purpose I/O pins with
+	  configurable direction, pull-up and pull-down bias, edge and level
+	  triggered interrupts, hardware input debounce and wakeup support.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called gpio-atcgpio100.
+
 config GPIO_ATH79
 	tristate "Atheros AR71XX/AR724X/AR913X GPIO support"
 	default y if ATH79
