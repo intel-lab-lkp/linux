@@ -72,6 +72,9 @@ static_assert(BTRFS_MAX_FOLIO_SIZE > PAGE_SIZE);
 
 #define BTRFS_MAX_EXTENT_SIZE SZ_128M
 
+/* The maximum size of one extent created by btrfs_prealloc_file_range(). */
+#define BTRFS_MAX_PREALLOC_EXTENT_SIZE		SZ_256M
+
 /*
  * Maximum length to trim in a single iteration to avoid holding device list
  * mutex for too long.

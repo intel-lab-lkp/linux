@@ -9175,7 +9175,7 @@ int btrfs_prealloc_file_range(struct inode *inode, int mode,
 	u64 end = start + num_bytes - 1;
 
 	while (num_bytes > 0) {
-		cur_bytes = min_t(u64, num_bytes, SZ_256M);
+		cur_bytes = min_t(u64, num_bytes, BTRFS_MAX_PREALLOC_EXTENT_SIZE);
 		cur_bytes = max(cur_bytes, min_size);
 		/*
 		 * If we are severely fragmented we could end up with really
