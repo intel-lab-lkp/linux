@@ -431,6 +431,8 @@
 	firmware-name = "qcom/sdm845/Google/blueline/mba.mbn",
 			"qcom/sdm845/Google/blueline/modem.mbn";
 
+	google,require-socinfo;
+
 	status = "okay";
 };
 
