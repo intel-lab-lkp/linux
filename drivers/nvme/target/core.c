@@ -1341,10 +1341,17 @@ out_err:
 
 static struct pci_dev *nvmet_req_find_p2p_dev(struct nvmet_req *req)
 {
+	struct pci_dev *p2p_dev;
+
 	if (!IS_ENABLED(CONFIG_PCI_P2PDMA) ||
 	    !req->sq->ctrl || !req->sq->qid || !req->ns)
 		return NULL;
-	return radix_tree_lookup(&req->sq->ctrl->p2p_ns_map, req->ns->nsid);
+
+	rcu_read_lock();
+	p2p_dev = radix_tree_lookup(&req->sq->ctrl->p2p_ns_map, req->ns->nsid);
+	rcu_read_unlock();
+
+	return p2p_dev;
 }
 
 int nvmet_req_alloc_sgls(struct nvmet_req *req)
