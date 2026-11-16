@@ -3055,6 +3055,10 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 		if (pci_bridge_d3_disable)
 			return false;
 
+		/* The port is known not to work correctly in D3 */
+		if (bridge->no_d3)
+			return false;
+
 		/*
 		 * Hotplug ports handled by platform firmware may not be put
 		 * into D3 by the OS, e.g. ACPI slots ...
@@ -3226,6 +3230,12 @@ void pci_pm_init(struct pci_dev *dev)
 
 	dev->pm_cap = 0;
 	dev->pme_support = 0;
+
+	/*
+	 * pci_bridge_d3_possible() must not change after this point, so
+	 * ignore NO_D3 set by later fixups.
+	 */
+	dev->no_d3 = !!(dev->dev_flags & PCI_DEV_FLAGS_NO_D3);
 
 	/* find PCI PM capability in list */
 	pm = pci_find_capability(dev, PCI_CAP_ID_PM);
