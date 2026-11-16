@@ -3613,14 +3613,13 @@ lpfc_cmpl_ct_cmd_vmid(struct lpfc_hba *phba, struct lpfc_iocbq *cmdiocb,
 
 		hash = lpfc_vmid_hash_fn(app->obj.entity_id,
 					 app->obj.entity_id_len);
+		write_lock(&vport->vmid_lock);
 		vmp = lpfc_get_vmid_from_hashtable(vport, hash,
 						  app->obj.entity_id);
 		if (vmp) {
-			write_lock(&vport->vmid_lock);
 			vmp->un.app_id = be32_to_cpu(app->app_id);
 			vmp->flag |= LPFC_VMID_REGISTERED;
 			vmp->flag &= ~LPFC_VMID_REQ_REGISTER;
-			write_unlock(&vport->vmid_lock);
 			/* Set IN USE flag */
 			vport->vmid_flag |= LPFC_VMID_IN_USE;
 		} else {
@@ -3628,6 +3627,7 @@ lpfc_cmpl_ct_cmd_vmid(struct lpfc_hba *phba, struct lpfc_iocbq *cmdiocb,
 					 "6901 No entry found %s hash %d\n",
 					 app->obj.entity_id, hash);
 		}
+		write_unlock(&vport->vmid_lock);
 		break;
 	case SLI_CTAS_DAPP_IDENT:
 		app = (struct app_id_object *)(DAPP_IDENT_OFFSET + data);
