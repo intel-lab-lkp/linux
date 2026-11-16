@@ -148,6 +148,10 @@
 
 #define RTW_SDIO_DATA_PTR_ALIGN			8
 
+/* TX aggregation of the 88xx chips: at most this much per transfer */
+#define RTW_SDIO_TX_AGG_MAX_SIZE		(20 * 1024)
+#define RTW_SDIO_TX_AGG_MAX_NUM			32
+
 struct sdio_func;
 struct sdio_device_id;
 
@@ -182,6 +186,8 @@ struct rtw_sdio {
 	atomic_t tx_oqt_free;
 	/* the non-8051 chips' counters hold what the chip last reported */
 	bool free_txpg_valid;
+	/* TX aggregation buffer of the non-8051 chips, under tx_credit_lock */
+	u8 *tx_agg_buf;
 	/* one writer at a time between the credit check and the accounting */
 	struct mutex tx_credit_lock;
 };
