@@ -166,6 +166,7 @@ void playback_urb_complete(struct urb *urb)
 	size_t total_bytes_for_urb = 0;
 	snd_pcm_uframes_t offset_frames;
 	snd_pcm_uframes_t frames_to_copy;
+	bool running;
 	int ret, i;
 
 	if (urb->status) {
@@ -207,13 +208,25 @@ void playback_urb_complete(struct urb *urb)
 		}
 		urb->transfer_buffer_length = total_bytes_for_urb;
 
-		offset_frames = tascam->driver_playback_pos;
-		frames_to_copy = bytes_to_frames(runtime, total_bytes_for_urb);
-		tascam->driver_playback_pos =
-			(offset_frames + frames_to_copy) % runtime->buffer_size;
+		/*
+		 * The URBs also run when only the capture stream was started;
+		 * the playback buffer is only valid while the playback stream
+		 * itself is running.  Send silence otherwise.
+		 */
+		running = snd_pcm_running(substream);
+		if (running) {
+			offset_frames = tascam->driver_playback_pos;
+			frames_to_copy = bytes_to_frames(runtime,
+							 total_bytes_for_urb);
+			tascam->driver_playback_pos =
+				(offset_frames + frames_to_copy) %
+				runtime->buffer_size;
+		}
 	}
 
-	if (total_bytes_for_urb > 0) {
+	if (!running) {
+		memset(urb->transfer_buffer, 0, total_bytes_for_urb);
+	} else if (total_bytes_for_urb > 0) {
 		u8 *dst_buf = urb->transfer_buffer;
 
 		/* Handle ring buffer wrap-around */
@@ -267,6 +280,7 @@ void feedback_urb_complete(struct urb *urb)
 	unsigned int old_in_idx, new_in_idx;
 	bool playback_period_elapsed = false;
 	bool capture_period_elapsed = false;
+	bool playback_running, capture_running;
 
 	if (urb->status) {
 		if (urb->status != -ENOENT && urb->status != -ECONNRESET &&
@@ -395,14 +409,26 @@ void feedback_urb_complete(struct urb *urb)
 			}
 		}
 
+		/*
+		 * As in playback_urb_complete() and the capture work, which
+		 * only move driver_playback_pos and driver_capture_pos while
+		 * their substream is running, only advance the position of a
+		 * running substream, so that a substream started after the
+		 * other one starts at the beginning of its buffer.
+		 */
+		playback_running = snd_pcm_running(playback_ss);
+		capture_running = capture_rt && snd_pcm_running(capture_ss);
+
 		if (total_frames_in_urb > 0) {
-			tascam->playback_frames_consumed += total_frames_in_urb;
-			if (atomic_read(&tascam->capture_active))
+			if (playback_running)
+				tascam->playback_frames_consumed +=
+					total_frames_in_urb;
+			if (capture_running)
 				tascam->capture_frames_processed +=
 					total_frames_in_urb;
 		}
 
-		if (playback_rt->period_size > 0) {
+		if (playback_running && playback_rt->period_size > 0) {
 			u64 current_period =
 				div_u64(tascam->playback_frames_consumed,
 						playback_rt->period_size);
@@ -413,8 +439,7 @@ void feedback_urb_complete(struct urb *urb)
 			}
 		}
 
-		if (atomic_read(&tascam->capture_active) && capture_rt &&
-		    capture_rt->period_size > 0) {
+		if (capture_running && capture_rt->period_size > 0) {
 			u64 current_capture_period =
 				div_u64(tascam->capture_frames_processed,
 						capture_rt->period_size);

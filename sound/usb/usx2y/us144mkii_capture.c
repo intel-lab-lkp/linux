@@ -231,7 +231,13 @@ void tascam_capture_work_handler(struct work_struct *work)
 						  routed_block);
 
 		scoped_guard(spinlock_irqsave, &tascam->lock) {
-			if (atomic_read(&tascam->capture_active)) {
+			/*
+			 * capture_active is also set when only the playback
+			 * stream was started; the capture buffer is only valid
+			 * while the capture stream itself is running.
+			 */
+			if (atomic_read(&tascam->capture_active) &&
+			    snd_pcm_running(substream)) {
 				int f;
 
 				for (f = 0; f < FRAMES_PER_DECODE_BLOCK; ++f) {
