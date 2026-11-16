@@ -1533,6 +1533,8 @@ static int proc_setintf(struct usb_dev_state *ps, void __user *arg)
 
 	if (copy_from_user(&setintf, arg, sizeof(setintf)))
 		return -EFAULT;
+	if (ps->suspend_allowed)
+		return -EHOSTUNREACH;
 	ret = checkintf(ps, setintf.interface);
 	if (ret)
 		return ret;
