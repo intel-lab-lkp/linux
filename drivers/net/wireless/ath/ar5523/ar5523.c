@@ -54,7 +54,10 @@ static void ar5523_read_reply(struct ar5523 *ar, struct ar5523_cmd_hdr *hdr,
 	dlen = be32_to_cpu(hdr->len) - sizeof(*hdr);
 
 	if (dlen < 0) {
-		WARN_ON(1);
+		ar5523_err(ar, "invalid reply length %u\n",
+			   be32_to_cpu(hdr->len));
+		cmd->olen = 0;
+		cmd->res = -EPROTO;
 		goto out;
 	}
 
