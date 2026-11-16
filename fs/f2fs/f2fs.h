@@ -3676,8 +3676,9 @@ static inline void f2fs_i_size_write(struct inode *inode, loff_t i_size)
 {
 	bool clean = !is_inode_flag_set(inode, FI_DIRTY_INODE);
 	bool recover = is_inode_flag_set(inode, FI_AUTO_RECOVER);
+	loff_t old_size = i_size_read(inode);
 
-	if (i_size_read(inode) == i_size)
+	if (old_size == i_size)
 		return;
 
 	i_size_write(inode, i_size);
@@ -3686,8 +3687,16 @@ static inline void f2fs_i_size_write(struct inode *inode, loff_t i_size)
 		return;
 
 	f2fs_mark_inode_dirty_sync(inode, true);
-	if (clean || recover)
+
+	/*
+	 * Roll-forward recovery extends i_size only by a block that starts at
+	 * or beyond the recovered i_size, so it cannot recover a size that grew
+	 * within the block holding the old size.
+	 */
+	if ((clean || recover) && !(old_size & ~PAGE_MASK))
 		set_inode_flag(inode, FI_AUTO_RECOVER);
+	else
+		clear_inode_flag(inode, FI_AUTO_RECOVER);
 }
 
 static inline void f2fs_i_depth_write(struct inode *inode, unsigned int depth)
