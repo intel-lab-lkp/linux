@@ -1094,6 +1094,26 @@ static void asus_disable_nvme_d3cold(struct pci_dev *pdev)
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x9a09, asus_disable_nvme_d3cold);
 
+#ifdef CONFIG_PCIEAER
+/*
+ * On iMac20,1 and iMac20,2 the XHCI controller gives ACSViolations
+ * When switching from D3Hot/D3cold to D0, and it happens because of
+ * the D0 write, so we mask ACSViol at boot on these devices.
+ */
+static void titan_ridge_xhci_mask_acsv(struct pci_dev *pdev)
+{
+	struct pci_dev *up = pci_upstream_bridge(pdev);
+
+	if (!dmi_match(DMI_PRODUCT_NAME, "iMac20,1") &&
+	    !dmi_match(DMI_PRODUCT_NAME, "iMac20,2"))
+		return;
+	if (up && up->aer_cap)
+		pci_clear_and_set_config_dword(up, up->aer_cap + PCI_ERR_UNCOR_MASK,
+					       0, PCI_ERR_UNC_ACSV);
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x15ec, titan_ridge_xhci_mask_acsv);
+#endif /* CONFIG_PCIEAER */
+
 #ifdef CONFIG_SUSPEND
 /*
  * Root Ports on some AMD SoCs advertise PME_Support for D3hot and D3cold, but
