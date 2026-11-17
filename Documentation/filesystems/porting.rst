@@ -1447,3 +1447,14 @@ which notify_change() sets for the duration of the call; it must not be
 stored beyond that.  Filesystems that forward a change to another inode
 can use notify_change_target() to update the target dentry while keeping
 the caller-supplied path in ia_path.
+
+---
+
+**mandatory**
+
+vfs_set_acl(), vfs_get_acl() and vfs_remove_acl(), along with
+do_set_acl() and do_get_acl(), now take a const struct path * instead of a
+struct dentry *, keeping the mnt_idmap as a separate first argument.  The
+idmap is not derived from the path: it must be the idmap of the mount the
+operation is performed through, which for a stacking filesystem may belong
+to a different mount than the one the passed path was built from.

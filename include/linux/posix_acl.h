@@ -15,6 +15,7 @@
 #include <linux/refcount.h>
 #include <uapi/linux/posix_acl.h>
 
+struct path;
 struct user_namespace;
 
 struct posix_acl_entry {
@@ -105,11 +106,12 @@ static inline void cache_no_acl(struct inode *inode)
 	inode->i_default_acl = NULL;
 }
 
-int vfs_set_acl(const struct mnt_idmap *idmap, struct dentry *dentry,
+int vfs_set_acl(const struct mnt_idmap *idmap, const struct path *path,
 		const char *acl_name, struct posix_acl *kacl);
 struct posix_acl *vfs_get_acl(const struct mnt_idmap *idmap,
-			      struct dentry *dentry, const char *acl_name);
-int vfs_remove_acl(const struct mnt_idmap *idmap, struct dentry *dentry,
+			      const struct path *path,
+			      const char *acl_name);
+int vfs_remove_acl(const struct mnt_idmap *idmap, const struct path *path,
 		   const char *acl_name);
 int posix_acl_listxattr(struct inode *inode, char **buffer,
 			ssize_t *remaining_size);
@@ -142,21 +144,22 @@ static inline void forget_all_cached_acls(struct inode *inode)
 }
 
 static inline int vfs_set_acl(const struct mnt_idmap *idmap,
-			      struct dentry *dentry, const char *name,
+			      const struct path *path, const char *name,
 			      struct posix_acl *acl)
 {
 	return -EOPNOTSUPP;
 }
 
 static inline struct posix_acl *vfs_get_acl(const struct mnt_idmap *idmap,
-					    struct dentry *dentry,
+					    const struct path *path,
 					    const char *acl_name)
 {
 	return ERR_PTR(-EOPNOTSUPP);
 }
 
 static inline int vfs_remove_acl(const struct mnt_idmap *idmap,
-				 struct dentry *dentry, const char *acl_name)
+				 const struct path *path,
+				 const char *acl_name)
 {
 	return -EOPNOTSUPP;
 }
