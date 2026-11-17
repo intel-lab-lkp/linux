@@ -467,37 +467,82 @@ int ksmbd_populate_dot_dotdot_entries(struct ksmbd_work *work, int info_level,
 {
 	int i, rc = 0;
 	struct ksmbd_conn *conn = work->conn;
-	const struct mnt_idmap *idmap = file_mnt_idmap(dir->filp);
+	const struct path *const share_root = &work->tcon->share_conf->vfs_path;
 
 	for (i = 0; i < 2; i++) {
 		struct kstat kstat;
 		struct ksmbd_kstat ksmbd_kstat;
-		struct dentry *dentry;
+		struct path path = dir->filp->f_path;
+		const struct mnt_idmap *idmap;
+		struct dentry *parent;
 
 		if (!dir->dot_dotdot[i]) { /* fill dot entry info */
 			if (i == 0) {
 				d_info->name = ".";
 				d_info->name_len = 1;
-				dentry = dget(dir->filp->f_path.dentry);
+				path_get(&path);
 			} else {
 				d_info->name = "..";
 				d_info->name_len = 2;
-				dentry = dget_parent(dir->filp->f_path.dentry);
+				path_get(&path);
+				/*
+				 * A ".." entry must not walk above the
+				 * share root, so it designates the share
+				 * root itself in that case.
+				 */
+				if (!path_equal(&path, share_root)) {
+					/*
+					 * The parent of a mount root dentry
+					 * is not covered by the same mount,
+					 * so follow the mount stack up like
+					 * a ".." path walk would, to keep
+					 * the path valid.
+					 */
+					while (path.dentry == path.mnt->mnt_root &&
+					       follow_up(&path))
+						;
+					if (path.dentry == path.mnt->mnt_root) {
+						/*
+						 * The mount is detached, for
+						 * example after a lazy umount
+						 * which the open file pins
+						 * down, so the parent would
+						 * not be covered by path.mnt:
+						 * report the share root
+						 * instead, as for any other
+						 * ".." above the share root.
+						 */
+						path_put(&path);
+						path_get(share_root);
+						path = *share_root;
+					} else {
+						parent = dget_parent(path.dentry);
+						dput(path.dentry);
+						path.dentry = parent;
+					}
+				}
 			}
+
+			/*
+			 * The path may now live in an ancestor mount, so
+			 * derive the idmap from it instead of reusing the
+			 * one of the enumerated directory.
+			 */
+			idmap = mnt_idmap(path.mnt);
 
 			if (!match_pattern(d_info->name, d_info->name_len,
 					   search_pattern)) {
 				dir->dot_dotdot[i] = 1;
-				dput(dentry);
+				path_put(&path);
 				continue;
 			}
 
 			ksmbd_kstat.kstat = &kstat;
 			rc = ksmbd_vfs_fill_dentry_attrs(work,
 							 idmap,
-							 dentry,
+							 &path,
 							 &ksmbd_kstat);
-			dput(dentry);
+			path_put(&path);
 			if (rc)
 				break;
 

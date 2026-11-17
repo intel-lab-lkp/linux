@@ -1210,6 +1210,7 @@ int smb_inherit_dacl(struct ksmbd_conn *conn,
 	struct smb_ntsd *parent_pntsd = NULL;
 	struct smb_sid owner_sid, group_sid;
 	struct dentry *parent;
+	struct path parent_path;
 	const struct mnt_idmap *idmap = mnt_idmap(path->mnt);
 	int inherited_flags = 0, flags = 0, i, nt_size = 0, pdacl_size;
 	int rc = 0, pntsd_type, ppntsd_size, acl_len, aces_size;
@@ -1224,8 +1225,10 @@ int smb_inherit_dacl(struct ksmbd_conn *conn,
 		dput(parent);
 		return -ENOENT;
 	}
-	ppntsd_size = ksmbd_vfs_get_sd_xattr(conn, idmap,
-					    parent, &parent_pntsd);
+	parent_path.mnt = path->mnt;
+	parent_path.dentry = parent;
+	ppntsd_size = ksmbd_vfs_get_sd_xattr(conn, idmap, &parent_path,
+					    &parent_pntsd);
 	dput(parent);
 	if (ppntsd_size <= 0)
 		return -ENOENT;
@@ -1543,8 +1546,7 @@ int smb_check_perm_dacl(struct ksmbd_conn *conn, const struct path *path,
 	vfsuid_t vfsuid;
 
 	ksmbd_debug(SMB, "check permission using windows acl\n");
-	pntsd_size = ksmbd_vfs_get_sd_xattr(conn, idmap,
-					    path->dentry, &pntsd);
+	pntsd_size = ksmbd_vfs_get_sd_xattr(conn, idmap, path, &pntsd);
 	if (pntsd_size <= 0 || !pntsd) {
 		if (pntsd_size < 0 && !smb_no_stored_sd(pntsd_size))
 			rc = pntsd_size == -ENOMEM ? -ENOMEM : -EACCES;

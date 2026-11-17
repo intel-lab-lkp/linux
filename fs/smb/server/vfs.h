@@ -104,18 +104,18 @@ int ksmbd_vfs_copy_file_ranges(struct ksmbd_work *work,
 			       unsigned int *chunk_count_written,
 			       unsigned int *chunk_size_written,
 			       loff_t  *total_size_written);
-ssize_t ksmbd_vfs_listxattr(struct dentry *dentry, char **list);
+ssize_t ksmbd_vfs_listxattr(const struct path *path, char **list);
 ssize_t ksmbd_vfs_getxattr(const struct mnt_idmap *idmap,
-			   struct dentry *dentry,
+			   const struct path *path,
 			   char *xattr_name,
 			   char **xattr_buf);
 ssize_t ksmbd_vfs_xattr_len(const struct mnt_idmap *idmap,
-			    struct dentry *dentry, char *xattr_name);
+			    const struct path *path, char *xattr_name);
 ssize_t ksmbd_vfs_getcasexattr(const struct mnt_idmap *idmap,
-			       struct dentry *dentry, char *attr_name,
+			       const struct path *path, char *attr_name,
 			       int attr_name_len, char **attr_value);
 ssize_t ksmbd_vfs_casexattr_len(const struct mnt_idmap *idmap,
-				struct dentry *dentry, char *attr_name,
+				const struct path *path, char *attr_name,
 				int attr_name_len, char *actual_name);
 int ksmbd_vfs_setxattr(const struct mnt_idmap *idmap,
 		       const struct path *path, const char *attr_name,
@@ -154,7 +154,7 @@ int ksmbd_vfs_unlink(struct file *filp);
 void *ksmbd_vfs_init_kstat(char **p, struct ksmbd_kstat *ksmbd_kstat);
 int ksmbd_vfs_fill_dentry_attrs(struct ksmbd_work *work,
 				const struct mnt_idmap *idmap,
-				struct dentry *dentry,
+				const struct path *path,
 				struct ksmbd_kstat *ksmbd_kstat);
 void ksmbd_vfs_posix_lock_wait(struct file_lock *flock);
 void ksmbd_vfs_posix_lock_unblock(struct file_lock *flock);
@@ -168,14 +168,14 @@ int ksmbd_vfs_set_sd_xattr(struct ksmbd_conn *conn,
 			   bool get_write);
 int ksmbd_vfs_get_sd_xattr(struct ksmbd_conn *conn,
 			   const struct mnt_idmap *idmap,
-			   struct dentry *dentry,
+			   const struct path *path,
 			   struct smb_ntsd **pntsd);
 int ksmbd_vfs_set_dos_attrib_xattr(const struct mnt_idmap *idmap,
 				   const struct path *path,
 				   struct xattr_dos_attrib *da,
 				   bool get_write);
 int ksmbd_vfs_get_dos_attrib_xattr(const struct mnt_idmap *idmap,
-				   struct dentry *dentry,
+				   const struct path *path,
 				   struct xattr_dos_attrib *da);
 int ksmbd_vfs_set_init_posix_acl(const struct mnt_idmap *idmap,
 				 const struct path *path);
