@@ -2062,6 +2062,7 @@ M:	Christian Brauner <christian@brauner.io>
 M:	Carlos Llamas <cmllamas@google.com>
 M:	Alice Ryhl <aliceryhl@google.com>
 L:	linux-kernel@vger.kernel.org
+L:	rust-for-linux@vger.kernel.org
 S:	Supported
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/gregkh/staging.git
 F:	Documentation/netlink/specs/binder.yaml
