@@ -1474,3 +1474,18 @@ to a different mount than the one the passed path was built from.
 vfs_set_acl(), vfs_get_acl() and vfs_remove_acl() also take a trailing
 struct file through which the operation is requested, or NULL for
 path-based callers.
+
+---
+
+**mandatory**
+
+vfs_fileattr_get() and vfs_fileattr_set() now take a const struct path *
+instead of a struct dentry *, and vfs_fileattr_set() keeps its mnt_idmap
+as a separate first argument.  The idmap is not derived from the path: it
+must be the idmap of the mount the operation is performed through, which
+for a stacking filesystem may belong to a different mount than the one
+the passed path was built from.  Both also take a trailing struct file
+through which the operation is requested, or NULL for path-based
+callers.  The fileattr_get() and fileattr_set() inode operations they
+call are unchanged.  The new __vfs_fileattr_get() helper is their
+counterpart without the security hook, for kernel-internal readers.

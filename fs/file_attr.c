@@ -75,27 +75,65 @@ void fileattr_fill_flags(struct file_kattr *fa, u32 flags)
 EXPORT_SYMBOL(fileattr_fill_flags);
 
 /**
- * vfs_fileattr_get - retrieve miscellaneous file attributes
+ * __vfs_fileattr_get - retrieve miscellaneous file attributes
  * @dentry:	the object to retrieve from
  * @fa:		fileattr pointer
+ *
+ * Call i_op->fileattr_get() callback, if exists.  Unlike
+ * vfs_fileattr_get(), no security hook is called.  This is for
+ * kernel-internal users that do not authorize the operation through the
+ * fileattr hooks themselves: nfsd's casefold probe, and the read of the
+ * current attributes performed as part of a user-facing change, which
+ * do_vfs_fileattr_set() authorizes as a whole through the file attribute
+ * set hook.
+ *
+ * Callers may or may not hold the inode lock: do_vfs_fileattr_set() calls
+ * this with the lock held, while nfsd_get_case_info() calls it without.
+ * ->fileattr_get() must cope with both, as documented in
+ * Documentation/filesystems/locking.rst.
+ *
+ * Return: 0 on success, or a negative error on failure.
+ */
+int __vfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
+{
+	struct inode *inode = d_inode(dentry);
+
+	if (!inode->i_op->fileattr_get)
+		return -ENOIOCTLCMD;
+
+	return inode->i_op->fileattr_get(dentry, fa);
+}
+EXPORT_SYMBOL(__vfs_fileattr_get);
+
+/**
+ * vfs_fileattr_get - retrieve miscellaneous file attributes
+ * @path:	the object to retrieve from
+ * @fa:		fileattr pointer
+ * @file:	file through which the attributes are retrieved, if any
  *
  * Call i_op->fileattr_get() callback, if exists.
  *
  * Return: 0 on success, or a negative error on failure.
  */
-int vfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
+int vfs_fileattr_get(const struct path *path, struct file_kattr *fa,
+		     struct file *file)
 {
-	struct inode *inode = d_inode(dentry);
+	struct inode *inode = d_inode(path->dentry);
 	int error;
 
+	/*
+	 * Keep the -ENOIOCTLCMD fallback for filesystems that do not
+	 * implement fileattr_get before running the security hook, as
+	 * ioctl_getflags() and friends rely on it.
+	 */
 	if (!inode->i_op->fileattr_get)
 		return -ENOIOCTLCMD;
 
-	error = security_inode_file_getattr(dentry, fa);
+	error = security_inode_file_getattr(path, fa, file);
 	if (error)
 		return error;
 
-	return inode->i_op->fileattr_get(dentry, fa);
+	return __vfs_fileattr_get(path->dentry, fa);
 }
 EXPORT_SYMBOL(vfs_fileattr_get);
 
@@ -254,25 +292,12 @@ static int fileattr_set_prepare(struct inode *inode,
 	return 0;
 }
 
-/**
- * vfs_fileattr_set - change miscellaneous file attributes
- * @idmap:	idmap of the mount
- * @dentry:	the object to change
- * @fa:		fileattr pointer
- *
- * After verifying permissions, call i_op->fileattr_set() callback, if
- * exists.
- *
- * Verifying attributes involves retrieving current attributes with
- * i_op->fileattr_get(), this also allows initializing attributes that have
- * not been set by the caller to current values.  Inode lock is held
- * thoughout to prevent racing with another instance.
- *
- * Return: 0 on success, or a negative error on failure.
- */
-int vfs_fileattr_set(const struct mnt_idmap *idmap, struct dentry *dentry,
-		     struct file_kattr *fa)
+static int do_vfs_fileattr_set(const struct path *const path,
+			       const struct mnt_idmap *const idmap,
+			       struct file_kattr *const fa,
+			       struct file *const file)
 {
+	struct dentry *const dentry = path->dentry;
 	struct inode *inode = d_inode(dentry);
 	struct file_kattr old_ma = {};
 	int err;
@@ -284,7 +309,7 @@ int vfs_fileattr_set(const struct mnt_idmap *idmap, struct dentry *dentry,
 		return -EPERM;
 
 	inode_lock(inode);
-	err = vfs_fileattr_get(dentry, &old_ma);
+	err = __vfs_fileattr_get(dentry, &old_ma);
 	if (!err) {
 		/* initialize missing bits from old_ma */
 		if (fa->flags_valid) {
@@ -300,7 +325,7 @@ int vfs_fileattr_set(const struct mnt_idmap *idmap, struct dentry *dentry,
 		err = fileattr_set_prepare(inode, &old_ma, fa);
 		if (err)
 			goto out;
-		err = security_inode_file_setattr(dentry, fa);
+		err = security_inode_file_setattr(path, fa, file);
 		if (err)
 			goto out;
 		err = inode->i_op->fileattr_set(idmap, dentry, fa);
@@ -313,6 +338,24 @@ out:
 	inode_unlock(inode);
 	return err;
 }
+
+/**
+ * vfs_fileattr_set - change miscellaneous file attributes
+ * @idmap:	idmap of the mount
+ * @path:	the object to change
+ * @fa:		fileattr pointer
+ * @file:	file through which the attributes are set, if any
+ *
+ * After verifying permissions, call i_op->fileattr_set() callback, if
+ * exists.
+ *
+ * Return: 0 on success, or a negative error on failure.
+ */
+int vfs_fileattr_set(const struct mnt_idmap *idmap, const struct path *path,
+		     struct file_kattr *fa, struct file *file)
+{
+	return do_vfs_fileattr_set(path, idmap, fa, file);
+}
 EXPORT_SYMBOL(vfs_fileattr_set);
 
 int ioctl_getflags(struct file *file, unsigned int __user *argp)
@@ -320,7 +363,7 @@ int ioctl_getflags(struct file *file, unsigned int __user *argp)
 	struct file_kattr fa = { .flags_valid = true }; /* hint only */
 	int err;
 
-	err = vfs_fileattr_get(file->f_path.dentry, &fa);
+	err = vfs_fileattr_get(&file->f_path, &fa, file);
 	if (!err)
 		err = put_user(fa.flags, argp);
 	return err;
@@ -329,7 +372,6 @@ int ioctl_getflags(struct file *file, unsigned int __user *argp)
 int ioctl_setflags(struct file *file, unsigned int __user *argp)
 {
 	const struct mnt_idmap *idmap = file_mnt_idmap(file);
-	struct dentry *dentry = file->f_path.dentry;
 	struct file_kattr fa = {};
 	unsigned int flags;
 	int err;
@@ -339,7 +381,7 @@ int ioctl_setflags(struct file *file, unsigned int __user *argp)
 		err = mnt_want_write_file(file);
 		if (!err) {
 			fileattr_fill_flags(&fa, flags);
-			err = vfs_fileattr_set(idmap, dentry, &fa);
+			err = vfs_fileattr_set(idmap, &file->f_path, &fa, file);
 			mnt_drop_write_file(file);
 		}
 	}
@@ -351,7 +393,7 @@ int ioctl_fsgetxattr(struct file *file, void __user *argp)
 	struct file_kattr fa = { .fsx_valid = true }; /* hint only */
 	int err;
 
-	err = vfs_fileattr_get(file->f_path.dentry, &fa);
+	err = vfs_fileattr_get(&file->f_path, &fa, file);
 	if (!err)
 		err = copy_fsxattr_to_user(&fa, argp);
 
@@ -361,7 +403,6 @@ int ioctl_fsgetxattr(struct file *file, void __user *argp)
 int ioctl_fssetxattr(struct file *file, void __user *argp)
 {
 	const struct mnt_idmap *idmap = file_mnt_idmap(file);
-	struct dentry *dentry = file->f_path.dentry;
 	struct file_kattr fa = {};
 	int err;
 
@@ -369,7 +410,7 @@ int ioctl_fssetxattr(struct file *file, void __user *argp)
 	if (!err) {
 		err = mnt_want_write_file(file);
 		if (!err) {
-			err = vfs_fileattr_set(idmap, dentry, &fa);
+			err = vfs_fileattr_set(idmap, &file->f_path, &fa, file);
 			mnt_drop_write_file(file);
 		}
 	}
@@ -407,16 +448,16 @@ SYSCALL_DEFINE5(file_getattr, int, dfd, const char __user *, filename,
 		if (fd_empty(f))
 			return -EBADF;
 
-		filepath = fd_file(f)->f_path;
-		path_get(&filepath);
+		error = vfs_fileattr_get(&fd_file(f)->f_path, &fa,
+					 fd_file(f));
 	} else {
 		error = filename_lookup(dfd, name, lookup_flags, &filepath,
 					NULL);
 		if (error)
 			return error;
-	}
 
-	error = vfs_fileattr_get(filepath.dentry, &fa);
+		error = vfs_fileattr_get(&filepath, &fa, NULL);
+	}
 	if (error == -ENOIOCTLCMD || error == -ENOTTY)
 		error = -EOPNOTSUPP;
 	if (error)
@@ -469,23 +510,28 @@ SYSCALL_DEFINE5(file_setattr, int, dfd, const char __user *, filename,
 		if (fd_empty(f))
 			return -EBADF;
 
-		filepath = fd_file(f)->f_path;
-		path_get(&filepath);
+		error = mnt_want_write_file(fd_file(f));
+		if (!error) {
+			error = vfs_fileattr_set(file_mnt_idmap(fd_file(f)),
+						 &fd_file(f)->f_path, &fa,
+						 fd_file(f));
+			mnt_drop_write_file(fd_file(f));
+		}
 	} else {
 		error = filename_lookup(dfd, name, lookup_flags, &filepath,
 					NULL);
 		if (error)
 			return error;
-	}
 
-	error = mnt_want_write(filepath.mnt);
-	if (!error) {
-		error = vfs_fileattr_set(mnt_idmap(filepath.mnt),
-					 filepath.dentry, &fa);
-		if (error == -ENOIOCTLCMD || error == -ENOTTY)
-			error = -EOPNOTSUPP;
-		mnt_drop_write(filepath.mnt);
+		error = mnt_want_write(filepath.mnt);
+		if (!error) {
+			error = vfs_fileattr_set(mnt_idmap(filepath.mnt),
+						 &filepath, &fa, NULL);
+			mnt_drop_write(filepath.mnt);
+		}
 	}
+	if (error == -ENOIOCTLCMD || error == -ENOTTY)
+		error = -EOPNOTSUPP;
 
 	return error;
 }

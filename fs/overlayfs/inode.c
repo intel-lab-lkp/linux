@@ -609,12 +609,12 @@ static int ovl_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 }
 
 /*
- * Work around the fact that security_file_ioctl() takes a file argument.
- * Introducing security_inode_fileattr_get/set() hooks would solve this issue
- * properly.
+ * The inode hooks only see the layer inode, while the operation was
+ * requested through an ioctl on the overlay file.  Run the file-based
+ * checks that an ioctl on the real file would have carried.
  */
-static int ovl_security_fileattr(const struct path *realpath, struct file_kattr *fa,
-				 bool set)
+static int ovl_security_fileattr(const struct path *realpath,
+				 struct file_kattr *fa, bool set)
 {
 	struct file *file;
 	unsigned int cmd;
@@ -648,7 +648,13 @@ int ovl_real_fileattr_set(const struct path *realpath, struct file_kattr *fa)
 	if (err)
 		return err;
 
-	return vfs_fileattr_set(mnt_idmap(realpath->mnt), realpath->dentry, fa);
+	/*
+	 * Run the security hook on the underlying path as well: the
+	 * lower/upper layer can carry a different security label than the
+	 * overlay inode, and the copy-up caller does not go through the
+	 * overlay path at all.
+	 */
+	return vfs_fileattr_set(mnt_idmap(realpath->mnt), realpath, fa, NULL);
 }
 
 int ovl_fileattr_set(const struct mnt_idmap *idmap,
@@ -730,7 +736,7 @@ int ovl_real_fileattr_get(const struct path *realpath, struct file_kattr *fa)
 	if (err)
 		return err;
 
-	err = vfs_fileattr_get(realpath->dentry, fa);
+	err = vfs_fileattr_get(realpath, fa, NULL);
 	if (err == -ENOIOCTLCMD)
 		err = -ENOTTY;
 	return err;
