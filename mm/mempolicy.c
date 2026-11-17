@@ -1684,7 +1684,7 @@ static int get_bitmap(unsigned long *mask, const unsigned long __user *nmask,
 static int get_nodes(nodemask_t *nodes, const unsigned long __user *nmask,
 		     unsigned long maxnode)
 {
-	--maxnode;
+	--maxnode; /* user space ABI uses number of bits plus 1 */
 	nodes_clear(*nodes);
 	if (maxnode == 0 || !nmask)
 		return 0;
@@ -1717,15 +1717,18 @@ static int get_nodes(nodemask_t *nodes, const unsigned long __user *nmask,
 }
 
 /* Copy a kernel node mask to user space */
-static int copy_nodes_to_user(unsigned long __user *mask, unsigned long maxnode,
-			      nodemask_t *nodes)
+static int put_nodes(unsigned long __user *mask, nodemask_t *nodes,
+		     unsigned long maxnode)
 {
-	unsigned long copy = ALIGN(maxnode-1, BITS_PER_LONG) / 8;
 	unsigned int nbytes = BITS_TO_LONGS(nr_node_ids) * sizeof(long);
 	bool compat = in_compat_syscall();
+	unsigned long copy;
 
+	--maxnode; /* user space ABI uses number of bits plus 1 */
+
+	copy = ALIGN(maxnode, BITS_PER_LONG) / 8;
 	if (compat)
-		copy = ALIGN(maxnode-1, BITS_PER_COMPAT_LONG) / 8;
+		copy = ALIGN(maxnode, BITS_PER_COMPAT_LONG) / 8;
 
 	if (copy > nbytes) {
 		if (copy > PAGE_SIZE)
@@ -1733,12 +1736,12 @@ static int copy_nodes_to_user(unsigned long __user *mask, unsigned long maxnode,
 		if (clear_user((char __user *)mask + nbytes, copy - nbytes))
 			return -EFAULT;
 		copy = nbytes;
-		maxnode = nr_node_ids+1;
+		maxnode = nr_node_ids;
 	}
 
 	if (compat)
 		return compat_put_bitmap((compat_ulong_t __user *)mask,
-					 nodes_addr(*nodes), maxnode-1);
+					 nodes_addr(*nodes), maxnode);
 
 	return copy_to_user(mask, nodes_addr(*nodes), copy) ? -EFAULT : 0;
 }
@@ -2001,7 +2004,7 @@ static int kernel_get_mempolicy(int __user *policy,
 		return -EFAULT;
 
 	if (nmask)
-		err = copy_nodes_to_user(nmask, maxnode, &nodes);
+		err = put_nodes(nmask, &nodes, maxnode);
 
 	return err;
 }
