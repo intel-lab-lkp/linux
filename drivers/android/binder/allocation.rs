@@ -182,6 +182,13 @@ impl Allocation {
         buffer_offset: usize,
         close_on_free: bool,
     ) -> Result {
+        // SAFETY: `file` is valid; read `f_op` with `READ_ONCE` semantics.
+        let f_op = unsafe { (&raw const (*file.as_ptr()).f_op).read_volatile() };
+        if core::ptr::eq(f_op, &crate::rust_binder_fops.0) {
+            // Binder FD transfers are not allowed.
+            return Err(EINVAL);
+        }
+
         self.get_or_init_info().file_list.files_to_translate.push(
             FileEntry {
                 file,
