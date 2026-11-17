@@ -53,6 +53,7 @@ static const struct key_entry dell_wmi_aio_keymap[] = {
 	{ KE_KEY, 0xe006, { KEY_BRIGHTNESSUP } },
 	{ KE_KEY, 0xe005, { KEY_BRIGHTNESSDOWN } },
 	{ KE_KEY, 0xe00b, { KEY_SWITCHVIDEOMODE } },
+	{ KE_IGNORE, 0xddf2, { KEY_UNKNOWN } }, /* HDMI Input enabled */
 	{ KE_END, 0 }
 };
 
