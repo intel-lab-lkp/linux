@@ -1531,6 +1531,13 @@ static int proc_setintf(struct usb_dev_state *ps, void __user *arg)
 	struct usbdevfs_setinterface setintf;
 	int ret;
 
+	/*
+	 * Avoid racing with a reset during device resume, which restores
+	 * the altsettings without holding the device lock. The device can
+	 * only be suspended while suspend is allowed.
+	 */
+	if (ps->suspend_allowed)
+		return -EHOSTUNREACH;
 	if (copy_from_user(&setintf, arg, sizeof(setintf)))
 		return -EFAULT;
 	ret = checkintf(ps, setintf.interface);
