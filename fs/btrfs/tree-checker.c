@@ -244,7 +244,10 @@ static int check_extent_data_item(struct extent_buffer *leaf,
 	struct btrfs_file_extent_item *fi;
 	u32 sectorsize = fs_info->sectorsize;
 	u32 item_size = btrfs_item_size(leaf, slot);
+	u32 max_disk_num_bytes;
+	u32 max_ram_bytes;
 	u64 extent_end;
+	u64 ram_end;
 	u8 fi_type;
 
 	if (unlikely(!IS_ALIGNED(key->offset, sectorsize))) {
@@ -376,6 +379,58 @@ static int check_extent_data_item(struct extent_buffer *leaf,
 		     CHECK_FE_ALIGNED(leaf, slot, fi, offset, sectorsize) ||
 		     CHECK_FE_ALIGNED(leaf, slot, fi, num_bytes, sectorsize)))
 		return -EUCLEAN;
+
+	/*
+	 * Compressed extents are at most 128K both on disk and uncompressed.
+	 * Uncompressed extents should never get close to U32_MAX.
+	 */
+	if (btrfs_file_extent_compression(leaf, fi) != BTRFS_COMPRESS_NONE) {
+		max_disk_num_bytes = BTRFS_MAX_COMPRESSED;
+		max_ram_bytes = BTRFS_MAX_UNCOMPRESSED;
+	} else {
+		max_disk_num_bytes = U32_MAX;
+		max_ram_bytes = U32_MAX;
+	}
+	if (unlikely(btrfs_file_extent_disk_num_bytes(leaf, fi) > max_disk_num_bytes)) {
+		file_extent_err(leaf, slot,
+		"invalid disk_num_bytes for file extent, have %llu expect <= %u",
+				btrfs_file_extent_disk_num_bytes(leaf, fi),
+				max_disk_num_bytes);
+		return -EUCLEAN;
+	}
+
+	/*
+	 * The remaining checks only apply to extents with data on disk. Holes
+	 * are skipped, as without NO_HOLES their ram_bytes is the hole size.
+	 */
+	if (btrfs_file_extent_disk_bytenr(leaf, fi)) {
+		if (unlikely(btrfs_file_extent_disk_num_bytes(leaf, fi) == 0)) {
+			file_extent_err(leaf, slot,
+		"invalid zero disk_num_bytes for file extent with disk_bytenr %llu",
+					btrfs_file_extent_disk_bytenr(leaf, fi));
+			return -EUCLEAN;
+		}
+		if (unlikely(btrfs_file_extent_ram_bytes(leaf, fi) > max_ram_bytes)) {
+			file_extent_err(leaf, slot,
+		"invalid ram_bytes for file extent, have %llu expect <= %u",
+					btrfs_file_extent_ram_bytes(leaf, fi),
+					max_ram_bytes);
+			return -EUCLEAN;
+		}
+		/* Reads of compressed extents use offset and num_bytes in ram_bytes. */
+		if (btrfs_file_extent_compression(leaf, fi) != BTRFS_COMPRESS_NONE &&
+		    unlikely(check_add_overflow(btrfs_file_extent_offset(leaf, fi),
+						btrfs_file_extent_num_bytes(leaf, fi),
+						&ram_end) ||
+			     ram_end > btrfs_file_extent_ram_bytes(leaf, fi))) {
+			file_extent_err(leaf, slot,
+	"invalid offset + num_bytes for compressed file extent, have %llu + %llu expect <= %llu",
+					btrfs_file_extent_offset(leaf, fi),
+					btrfs_file_extent_num_bytes(leaf, fi),
+					btrfs_file_extent_ram_bytes(leaf, fi));
+			return -EUCLEAN;
+		}
+	}
 
 	/* Catch extent end overflow */
 	if (unlikely(check_add_overflow(btrfs_file_extent_num_bytes(leaf, fi),
