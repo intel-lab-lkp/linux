@@ -56,6 +56,8 @@ AUDIT_LANDLOCK_ACCESS
         - fs.truncate (ABI 3+)
         - fs.ioctl_dev (ABI 5+)
         - fs.resolve_unix (ABI 9+)
+        - fs.read_metadata (ABI 13+)
+        - fs.write_metadata (ABI 13+)
 
     **net.*** - Network access rights (ABI 4+):
         - net.bind_tcp - TCP port binding was denied
