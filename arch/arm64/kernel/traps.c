@@ -13,6 +13,7 @@
 #include <linux/kprobes.h>
 #include <linux/spinlock.h>
 #include <linux/uaccess.h>
+#include <linux/iommu.h>
 #include <linux/hardirq.h>
 #include <linux/kdebug.h>
 #include <linux/module.h>
@@ -543,6 +544,56 @@ void do_el1_mops(struct pt_regs *regs, unsigned long esr)
 	kernel_fastforward_single_step(regs);
 }
 
+/*
+ * PASID/ACCDATA is shared by the entire mm, while sctlr_el1
+ * is maintained per thread. Keep things simple and enable
+ * ACCDATA dynamically on first access if the feature is
+ * available and a valid pasid is set.
+ *
+ * After exiting back to userspace, the st64bv0 instruction
+ * should no longer trap.
+ */
+static bool try_enable_st64bv0(struct pt_regs *regs, unsigned long esr)
+{
+	u32 pasid;
+	u64 sctlr;
+
+	if (!system_supports_ls64_accdata())
+		return false;
+
+	pasid = mm_get_enqcmd_pasid(current->mm);
+	if (pasid == IOMMU_PASID_INVALID)
+		return false;
+
+	preempt_disable();
+	write_sysreg(pasid, accdata_el1);
+	sctlr = current->thread.sctlr_user;
+	sctlr |= SCTLR_EL1_EnAS0;
+	current->thread.sctlr_user = sctlr;
+	update_sctlr_el1(sctlr);
+	preempt_enable();
+
+	return true;
+}
+
+void do_el0_other(struct pt_regs *regs, unsigned long esr)
+{
+	switch (ESR_ELx_ISS(esr)) {
+	case ESR_ELx_ISS_OTHER_ST64BV0:
+		if (try_enable_st64bv0(regs, esr))
+			return;
+		break;
+
+	case ESR_ELx_ISS_OTHER_ST64BV:
+	case ESR_ELx_ISS_OTHER_LDST64B:
+	default:
+		break;
+	}
+
+	/* Treat all other "other" trapping instructions as illegal opcode */
+	force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc, 0);
+}
+
 #define __user_cache_maint(insn, address, res)			\
 	if (address >= TASK_SIZE_MAX) {				\
 		res = -EFAULT;					\
@@ -842,6 +893,7 @@ static const char *esr_class_str[] = {
 	[ESR_ELx_EC_FP_ASIMD]		= "ASIMD",
 	[ESR_ELx_EC_CP10_ID]		= "CP10 MRC/VMRS",
 	[ESR_ELx_EC_PAC]		= "PAC",
+	[ESR_ELx_EC_OTHER]		= "OTHER",
 	[ESR_ELx_EC_CP14_64]		= "CP14 MCRR/MRRC",
 	[ESR_ELx_EC_BTI]		= "BTI",
 	[ESR_ELx_EC_ILL]		= "PSTATE.IL",
