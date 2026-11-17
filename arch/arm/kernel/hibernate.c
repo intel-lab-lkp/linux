@@ -7,9 +7,9 @@
  * Ubuntu project, hibernation support for mach-dove
  * Copyright (C) 2010 Nokia Corporation (Hiroshi Doyu)
  * Copyright (C) 2010 Texas Instruments, Inc. (Teerth Reddy et al.)
- *  https://lkml.org/lkml/2010/6/18/4
- *  https://lists.linux-foundation.org/pipermail/linux-pm/2010-June/027422.html
- *  https://patchwork.kernel.org/patch/96442/
+ *  https://lore.kernel.org/r/AANLkTimmvPMG0GFEXfgFlXgC7V4dIWmW8vEC5gegsKSE@mail.gmail.com/
+ *  https://lore.kernel.org/r/1277908081-17195-1-git-send-email-Hiroshi.DOYU@nokia.com/
+ *  https://lore.kernel.org/r/5A47E75E594F054BAF48C5E4FC4B92AB0322A8AACA@dbde02.ent.ti.com/
  *
  * Copyright (C) 2006 Rafael J. Wysocki <rjw@sisk.pl>
  */
