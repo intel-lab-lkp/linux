@@ -41,6 +41,7 @@ use kernel::{
         ARM64LPAES1, //
     },
     new_mutex,
+    num::casts::FromSafeCast,
     prelude::*,
     ptr::{
         Alignable,
@@ -1063,8 +1064,9 @@ fn pt_unmap(dev: &Device, pt: &IoPageTable<'_, ARM64LPAES1>, range: Range<u64>) 
             return Err(EINVAL);
         }
 
-        bytes_left_to_unmap -= unmapped as u64;
-        iova += unmapped as u64;
+        let unmapped = u64::from_safe_cast(unmapped);
+        bytes_left_to_unmap = bytes_left_to_unmap.checked_sub(unmapped).ok_or(EINVAL)?;
+        iova += unmapped;
     }
 
     Ok(())
