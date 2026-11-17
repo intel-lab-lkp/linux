@@ -862,6 +862,7 @@ struct page *make_device_exclusive(struct mm_struct *mm, unsigned long addr,
 #define PVMW_PGTABLE_CROSSED	(1 << 16)
 
 struct page_vma_mapped_walk {
+	struct folio *folio;
 	unsigned long pfn;
 	unsigned long nr_pages;
 	pgoff_t pgoff;	/* Only meaningful if nr_pages > 1 and not a KSM walk */
@@ -876,6 +877,7 @@ struct page_vma_mapped_walk {
 
 #define DEFINE_FOLIO_VMA_WALK(name, _folio, _vma, _address, _flags)	\
 	struct page_vma_mapped_walk name = {				\
+		.folio = _folio,					\
 		.pfn = folio_pfn(_folio),				\
 		.nr_pages = folio_nr_pages(_folio),			\
 		.pgoff = folio_pgoff(_folio),				\

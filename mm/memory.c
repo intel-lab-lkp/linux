@@ -2054,8 +2054,15 @@ retry:
 	 * Clear the PMD after the rmaps for the table have been removed, in case
 	 * an incorrect mapcount is observed after unmapping the folio.
 	 */
-	if (can_reclaim_pt && direct_reclaim && addr == end)
+	if (can_reclaim_pt && direct_reclaim && addr == end) {
+		/*
+		 * rmap changes need to be observed before page tables get zapped.
+		 *
+		 * Pairs with smp_rmb() in sync_with_folio_pmd_zap().
+		 */
+		smp_wmb();
 		direct_reclaim = zap_empty_pte_table(mm, pmd, ptl, &pmdval);
+	}
 	pte_unmap_unlock(start_pte, ptl);
 
 	/*
@@ -2110,7 +2117,8 @@ static inline unsigned long zap_pmd_range(struct mmu_gather *tlb,
 			/* fall through */
 		} else if (pmd_none(*pmd)) {
 			if (details && details->single_folio)
-				sync_with_folio_pmd_zap(tlb->mm, pmd);
+				sync_with_folio_pmd_zap(tlb->mm, pmd,
+							details->single_folio);
 			addr = next;
 			continue;
 		}

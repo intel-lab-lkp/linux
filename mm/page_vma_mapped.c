@@ -294,8 +294,8 @@ restart:
 			spin_unlock(pvmw->ptl);
 			pvmw->ptl = NULL;
 		} else if (!pmd_present(pmde)) {
-			if (pvmw->flags & PVMW_SYNC)
-				sync_with_folio_pmd_zap(mm, pvmw->pmd);
+			if ((pvmw->flags & PVMW_SYNC) && pvmw->folio)
+				sync_with_folio_pmd_zap(mm, pvmw->pmd, pvmw->folio);
 
 			goto next_pmd;
 		}

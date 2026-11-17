@@ -592,6 +592,7 @@ void pmd_install(struct mm_struct *mm, pmd_t *pmd, pgtable_t *pte);
  * sync_with_folio_pmd_zap - sync with concurrent zapping of folios
  * @mm: The mm_struct.
  * @pmdp: Pointer to the pmd that was found to be pmd_none().
+ * @folio: The folio being zapped.
  *
  * When we find a pmd_none() while unmapping a folio without holding the PTL,
  * zap_huge_pmd() may have cleared the PMD but not yet updated the folio
@@ -600,13 +601,30 @@ void pmd_install(struct mm_struct *mm, pmd_t *pmd, pgtable_t *pte);
  * against later mapcount reads. Skipping the PMD without synchronization
  * could make folio unmapping code assume that unmapping failed.
  *
- * Wait for concurrent zapping to complete by grabbing the PTL.
+ * Wait for concurrent zapping to complete by grabbing the PTL for PMD-sized
+ * folios, otherwise smp_rmb() is sufficient.
  */
-static inline void sync_with_folio_pmd_zap(struct mm_struct *mm, pmd_t *pmdp)
+static inline void sync_with_folio_pmd_zap(struct mm_struct *mm,
+		pmd_t *pmdp, struct folio *folio)
 {
-	spinlock_t *ptl = pmd_lock(mm, pmdp);
+	if (folio_test_pmd_mappable(folio)) {
+		spinlock_t *ptl = pmd_lock(mm, pmdp);
 
-	spin_unlock(ptl);
+		spin_unlock(ptl);
+		return;
+	}
+
+	/*
+	 * For non PMD-sized folios zapping, concurrent zap_empty_pte_table()
+	 * may clear the PMD after the rmaps for the table have been removed,
+	 * but later mapcount reads could still be observed before the PMD
+	 * read, making the folio appear to be still mapped after unmapping.
+	 * Order the PMD read before later mapcount reads, so that observing
+	 * the cleared PMD implies observing the rmap removals.
+	 *
+	 * Pairs with smp_wmb() in zap_pte_range().
+	 */
+	smp_rmb();
 }
 
 struct zap_details;
