@@ -8023,6 +8023,10 @@ static __init void vmx_set_cpu_caps(void)
 	 */
 	kvm_cpu_cap_set(X86_FEATURE_EFER_LMSLE_MBZ);
 
+	/* eVMCS isn't prepared yet for APX */
+	if (kvm_is_using_evmcs())
+		kvm_cpu_cap_clear(X86_FEATURE_APX);
+
 	kvm_setup_xss_caps();
 	kvm_finalize_cpu_caps();
 }

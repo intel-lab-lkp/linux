@@ -5730,6 +5730,7 @@ static __init void svm_set_cpu_caps(void)
 	 * but that require explicit SVM support (that isn't yet implemented).
 	 */
 	kvm_cpu_cap_clear(X86_FEATURE_MSR_IMM);
+	kvm_cpu_cap_clear(X86_FEATURE_APX);
 
 	/*
 	 * LBR Virtualization must be enabled to support BusLockTrap inside the
