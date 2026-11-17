@@ -1101,16 +1101,17 @@ static int qcom_glink_rx_open_ack(struct qcom_glink *glink, unsigned int lcid)
 
 	spin_lock(&glink->idr_lock);
 	channel = idr_find(&glink->lcids, lcid);
-	spin_unlock(&glink->idr_lock);
 
 	trace_qcom_glink_cmd_open_ack_rx(glink->label, channel ? channel->name : NULL,
 					 lcid, channel ? channel->rcid : 0);
 	if (!channel) {
+		spin_unlock(&glink->idr_lock);
 		dev_err(glink->dev, "Invalid open ack packet\n");
 		return -EINVAL;
 	}
 
 	complete_all(&channel->open_ack);
+	spin_unlock(&glink->idr_lock);
 
 	return 0;
 }
