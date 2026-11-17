@@ -1119,9 +1119,6 @@ enum regex_type filter_parse_regex(char *buff, int len, char **search, int *not)
 
 	*search = buff;
 
-	if (isdigit(buff[0]))
-		return MATCH_INDEX;
-
 	for (i = 0; i < len; i++) {
 		if (buff[i] == '*') {
 			if (!i) {
@@ -1159,8 +1156,6 @@ static void filter_build_regex(struct filter_pred *pred)
 	}
 
 	switch (type) {
-	/* MATCH_INDEX should not happen, but if it does, match full */
-	case MATCH_INDEX:
 	case MATCH_FULL:
 		r->match = regex_match_full;
 		break;

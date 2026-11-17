@@ -1810,7 +1810,6 @@ enum regex_type {
 	MATCH_MIDDLE_ONLY,
 	MATCH_END_ONLY,
 	MATCH_GLOB,
-	MATCH_INDEX,
 };
 
 struct regex {
