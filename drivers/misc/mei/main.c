@@ -53,10 +53,13 @@ static int mei_open(struct inode *inode, struct file *file)
 
 	int err;
 
+	mutex_lock(&mei_minor_lock);
 	dev = idr_find(&mei_idr, iminor(inode));
+	if (dev)
+		get_device(&dev->dev);
+	mutex_unlock(&mei_minor_lock);
 	if (!dev)
 		return -ENODEV;
-	get_device(&dev->dev);
 
 	mutex_lock(&dev->device_lock);
 
@@ -1324,8 +1327,8 @@ int mei_register(struct mei_device *dev, struct device *parent)
 err_del_cdev:
 	cdev_del(dev->cdev);
 err:
-	put_device(&dev->dev);
 	mei_minor_free(minor);
+	put_device(&dev->dev);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(mei_register);
@@ -1339,6 +1342,11 @@ void mei_deregister(struct mei_device *dev)
 	cdev_del(dev->cdev);
 
 	mei_dbgfs_deregister(dev);
+
+	/* Keep the minor reserved, but stop mei_open() from finding dev. */
+	mutex_lock(&mei_minor_lock);
+	idr_replace(&mei_idr, NULL, minor);
+	mutex_unlock(&mei_minor_lock);
 
 	device_destroy(&mei_class, devno);
 
