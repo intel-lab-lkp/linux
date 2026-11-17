@@ -6553,7 +6553,11 @@ static void run_state_machine(struct tcpm_port *port)
 	/* Cable states */
 	case SRC_VDM_IDENTITY_REQUEST:
 		mod_vdm_discovery_delayed_work(port, 0);
-		port->upcoming_state = SRC_SEND_CAPABILITIES;
+		/*
+		 * Go on with Source_Capabilities whatever becomes of Discover
+		 * Identity, unless the cable plug answers sooner
+		 */
+		tcpm_set_state(port, SRC_SEND_CAPABILITIES, PD_T_SEND_SOURCE_CAP);
 		break;
 
 	default:
