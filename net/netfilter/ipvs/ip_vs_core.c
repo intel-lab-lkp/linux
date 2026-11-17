@@ -1206,6 +1206,16 @@ static int ip_vs_out_icmp_v6(struct netns_ipvs *ipvs, struct sk_buff *skb,
 				     true, &ciph))
 		return NF_ACCEPT; /* The packet looks wrong, ignore */
 
+	/* ipv6_find_hdr() stops at the Fragment header of a non-first
+	 * fragment and leaves ciph.len == ciph.off. Only AH and ESP
+	 * (pp->dont_defrag) pass the fragoffs check below and their
+	 * lookup reads only the addresses, but handle_response_icmp()
+	 * sizes skb_ensure_writable() from ciph.len before
+	 * ip_vs_nat_icmp_v6() rewrites the embedded header. Include it.
+	 */
+	if (ciph.len == ciph.off)
+		ciph.len += sizeof(struct ipv6hdr);
+
 	pp = ip_vs_proto_get(ciph.protocol);
 	if (!pp)
 		return NF_ACCEPT;
@@ -2035,6 +2045,16 @@ static int ip_vs_in_icmp_v6(struct netns_ipvs *ipvs, struct sk_buff *skb,
 	offset = iph->len + sizeof(_icmph);
 	if (!ip_vs_fill_iph_skb_icmp(AF_INET6, skb, offset, true, &ciph))
 		return NF_ACCEPT;
+
+	/* ipv6_find_hdr() stops at the Fragment header of a non-first
+	 * fragment and leaves ciph.len == ciph.off. Only AH and ESP
+	 * (pp->dont_defrag) pass the fragoffs check below and their
+	 * lookup reads only the addresses, but ip_vs_icmp_xmit_v6()
+	 * sizes skb_ensure_writable() from ciph.len before
+	 * ip_vs_nat_icmp_v6() rewrites the embedded header. Include it.
+	 */
+	if (ciph.len == ciph.off)
+		ciph.len += sizeof(struct ipv6hdr);
 
 	pd = ip_vs_proto_data_get(ipvs, ciph.protocol);
 	if (!pd)
