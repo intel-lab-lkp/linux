@@ -109,6 +109,11 @@ accumulate_sum(u64 delta, struct sched_avg *sa,
 	delta += sa->period_contrib;
 	periods = delta / 1024; /* A period is 1024us (~1ms) */
 
+	if (!load && !(sa->load_sum | sa->runnable_sum | sa->util_sum)) {
+		sa->period_contrib = delta % 1024;
+		return periods;
+	}
+
 	/*
 	 * Step 1: decay old *_sum if we crossed period boundaries.
 	 */
@@ -262,9 +267,11 @@ ___update_load_avg(struct sched_avg *sa, unsigned long load)
 	/*
 	 * Step 2: update *_avg.
 	 */
-	sa->load_avg = div_u64(load * sa->load_sum, divider);
-	sa->runnable_avg = div_u64(sa->runnable_sum, divider);
-	WRITE_ONCE(sa->util_avg, sa->util_sum / divider);
+	sa->load_avg = sa->load_sum ? div_u64(load * sa->load_sum, divider) : 0;
+	sa->runnable_avg = sa->runnable_sum ?
+				div_u64(sa->runnable_sum, divider) : 0;
+	WRITE_ONCE(sa->util_avg,
+		   sa->util_sum ? sa->util_sum / divider : 0);
 }
 
 /*
@@ -437,8 +444,10 @@ int update_irq_load_avg(struct rq *rq, u64 running)
 	 * clock_task. Instead we directly scale the running time to
 	 * reflect the real amount of computation
 	 */
-	running = cap_scale(running, arch_scale_freq_capacity(cpu_of(rq)));
-	running = cap_scale(running, arch_scale_cpu_capacity(cpu_of(rq)));
+	if (running) {
+		running = cap_scale(running, arch_scale_freq_capacity(cpu_of(rq)));
+		running = cap_scale(running, arch_scale_cpu_capacity(cpu_of(rq)));
+	}
 
 	/*
 	 * We know the time that has been used by interrupt since last update
@@ -455,10 +464,12 @@ int update_irq_load_avg(struct rq *rq, u64 running)
 				0,
 				0,
 				0);
-	ret += ___update_load_sum(rq->clock, &rq->avg_irq,
-				1,
-				1,
-				1);
+	if (running) {
+		ret += ___update_load_sum(rq->clock, &rq->avg_irq,
+					1,
+					1,
+					1);
+	}
 
 	if (ret) {
 		___update_load_avg(&rq->avg_irq, 1);
