@@ -88,7 +88,7 @@ Landlock, not from regular file permissions::
   $ LC_ALL=C LL_FS_RO=/usr:/lib:/lib64:/bin:/etc/ld.so.cache LL_FS_RW=/tmp \
       ./sandboxer cat /etc/passwd
   $ cat /sys/kernel/tracing/trace_pipe
-  cat-127 [...] landlock_create_ruleset: ruleset=195cc6b76.0 handled_fs=execute|write_file|read_file|read_dir|remove_dir|remove_file|make_char|make_dir|make_reg|make_sock|make_fifo|make_block|make_sym|refer|truncate|ioctl_dev|resolve_unix handled_net= scoped= handled_permissions=
+  cat-127 [...] landlock_create_ruleset: ruleset=195cc6b76.0 handled_fs=execute|write_file|read_file|read_dir|remove_dir|remove_file|make_char|make_dir|make_reg|make_sock|make_fifo|make_block|make_sym|refer|truncate|ioctl_dev|resolve_unix|read_metadata|write_metadata handled_net= scoped= handled_permissions=
   cat-127 [...] landlock_create_domain: domain=195cc6b7c parent=0 ruleset=195cc6b76.6
   cat-127 [...] landlock_enforce_domain: domain=195cc6b7c complete=1 process_wide=1 no_new_privs=1
   cat-127 [...] landlock_deny_access_fs: domain=195cc6b7c same_exec=0 logged=0 blockers=read_file dev=0:17 ino=5901179 path=/etc/passwd
@@ -279,20 +279,22 @@ For example, a program sandboxed with read and execute access to the
 whole filesystem reads ``/etc/passwd``; both the ``execve()`` and the
 read match the rule covering ``/`` (inode 2), so ``check_rule_inode`` fires
 with the requested rights intersected against what that rule grants.
-The ``access_request=`` mask includes ``truncate`` because the file-open hook
-evaluates that optional right alongside the required access, but the
-rule does not grant it, so ``truncate`` never appears in ``grants=``::
+The ``access_request=`` mask includes ``truncate``, ``read_metadata`` and
+``write_metadata`` because the file-open hook evaluates those optional rights
+alongside the required access.  The read-only rule grants ``read_metadata``,
+so it appears in ``grants=``, while ``truncate`` and ``write_metadata`` are
+not granted and therefore do not::
 
-  cat-127 [...] landlock_check_rule_inode: domain=1e40cb56f access_request=execute|read_file|truncate dev=0:17 ino=2 grants={execute|read_file}
-  cat-127 [...] landlock_check_rule_inode: domain=1e40cb56f access_request=read_file|truncate dev=0:17 ino=2 grants={read_file}
+  cat-127 [...] landlock_check_rule_inode: domain=1e40cb56f access_request=execute|read_file|truncate|read_metadata|write_metadata dev=0:17 ino=2 grants={execute|read_file|read_metadata}
+  cat-127 [...] landlock_check_rule_inode: domain=1e40cb56f access_request=read_file|truncate|read_metadata|write_metadata dev=0:17 ino=2 grants={read_file|read_metadata}
 
 The ``[...]`` replaces the ftrace CPU, flags, and timestamp columns.  A
 single ``grants=`` group means the enforcing domain has one layer.  With
 two nested sandboxes that each grant the same rights, the rule spans both
 layers, so ``grants=`` has one group per layer::
 
-  cat-128 [...] landlock_check_rule_inode: domain=184788b52 access_request=execute|read_file|truncate dev=0:17 ino=2 grants={execute|read_file,execute|read_file}
-  cat-128 [...] landlock_check_rule_inode: domain=184788b52 access_request=read_file|truncate dev=0:17 ino=2 grants={read_file,read_file}
+  cat-128 [...] landlock_check_rule_inode: domain=184788b52 access_request=execute|read_file|truncate|read_metadata|write_metadata dev=0:17 ino=2 grants={execute|read_file|read_metadata,execute|read_file|read_metadata}
+  cat-128 [...] landlock_check_rule_inode: domain=184788b52 access_request=read_file|truncate|read_metadata|write_metadata dev=0:17 ino=2 grants={read_file|read_metadata,read_file|read_metadata}
 
 eBPF access
 ===========
