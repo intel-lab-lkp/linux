@@ -1552,7 +1552,7 @@ static int smack_path_removexattr(const struct mnt_idmap *idmap,
 }
 
 /**
- * smack_inode_set_acl - Smack check for setting posix acls
+ * smack_path_set_acl - Smack check for setting posix acls
  * @idmap: idmap of the mnt this request came from
  * @path: the object
  * @acl_name: name of the posix acl
@@ -1561,10 +1561,10 @@ static int smack_path_removexattr(const struct mnt_idmap *idmap,
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_set_acl(const struct mnt_idmap *idmap,
-			       const struct path *path,
-			       const char *acl_name, struct posix_acl *kacl,
-			       struct file *file)
+static int smack_path_set_acl(const struct mnt_idmap *idmap,
+			      const struct path *path,
+			      const char *acl_name, struct posix_acl *kacl,
+			      struct file *file)
 {
 	struct smk_audit_info ad;
 	int rc;
@@ -1579,7 +1579,7 @@ static int smack_inode_set_acl(const struct mnt_idmap *idmap,
 }
 
 /**
- * smack_inode_get_acl - Smack check for getting posix acls
+ * smack_path_get_acl - Smack check for getting posix acls
  * @idmap: idmap of the mnt this request came from
  * @path: the object
  * @acl_name: name of the posix acl
@@ -1587,9 +1587,9 @@ static int smack_inode_set_acl(const struct mnt_idmap *idmap,
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_get_acl(const struct mnt_idmap *idmap,
-			       const struct path *path,
-			       const char *acl_name, struct file *file)
+static int smack_path_get_acl(const struct mnt_idmap *idmap,
+			      const struct path *path,
+			      const char *acl_name, struct file *file)
 {
 	struct smk_audit_info ad;
 	int rc;
@@ -1604,7 +1604,7 @@ static int smack_inode_get_acl(const struct mnt_idmap *idmap,
 }
 
 /**
- * smack_inode_remove_acl - Smack check for getting posix acls
+ * smack_path_remove_acl - Smack check for removing posix acls
  * @idmap: idmap of the mnt this request came from
  * @path: the object
  * @acl_name: name of the posix acl
@@ -1612,9 +1612,9 @@ static int smack_inode_get_acl(const struct mnt_idmap *idmap,
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_remove_acl(const struct mnt_idmap *idmap,
-				  const struct path *path,
-				  const char *acl_name, struct file *file)
+static int smack_path_remove_acl(const struct mnt_idmap *idmap,
+				 const struct path *path,
+				 const char *acl_name, struct file *file)
 {
 	struct smk_audit_info ad;
 	int rc;
@@ -5213,9 +5213,9 @@ static struct security_hook_list smack_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(inode_post_setxattr, smack_inode_post_setxattr),
 	LSM_HOOK_INIT(path_getxattr, smack_path_getxattr),
 	LSM_HOOK_INIT(path_removexattr, smack_path_removexattr),
-	LSM_HOOK_INIT(inode_set_acl, smack_inode_set_acl),
-	LSM_HOOK_INIT(inode_get_acl, smack_inode_get_acl),
-	LSM_HOOK_INIT(inode_remove_acl, smack_inode_remove_acl),
+	LSM_HOOK_INIT(path_set_acl, smack_path_set_acl),
+	LSM_HOOK_INIT(path_get_acl, smack_path_get_acl),
+	LSM_HOOK_INIT(path_remove_acl, smack_path_remove_acl),
 	LSM_HOOK_INIT(inode_getsecurity, smack_inode_getsecurity),
 	LSM_HOOK_INIT(inode_setsecurity, smack_inode_setsecurity),
 	LSM_HOOK_INIT(inode_listsecurity, smack_inode_listsecurity),
