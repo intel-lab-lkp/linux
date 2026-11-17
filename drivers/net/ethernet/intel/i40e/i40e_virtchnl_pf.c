@@ -3624,9 +3624,11 @@ static int i40e_validate_cloud_filter(struct i40e_vf *vf,
 	 */
 	if (mask.dst_mac[0] && !mask.dst_ip[0]) {
 		vsi = pf->vsi[vf->lan_vsi_idx];
+		spin_lock_bh(&vsi->mac_filter_hash_lock);
 		f = i40e_find_mac(vsi, data.dst_mac);
 
 		if (!f) {
+			spin_unlock_bh(&vsi->mac_filter_hash_lock);
 			dev_info(&pf->pdev->dev,
 				 "Destination MAC %pM doesn't belong to VF %d\n",
 				 data.dst_mac, vf->vf_id);
@@ -3641,6 +3643,10 @@ static int i40e_validate_cloud_filter(struct i40e_vf *vf,
 					break;
 				}
 			}
+		}
+		spin_unlock_bh(&vsi->mac_filter_hash_lock);
+
+		if (mask.vlan_id) {
 			if (!found) {
 				dev_info(&pf->pdev->dev,
 					 "VF %d doesn't have any VLAN id %u\n",
