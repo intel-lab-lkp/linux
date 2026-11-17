@@ -3170,6 +3170,18 @@ static int raid1_run(struct mddev *mddev)
 	}
 
 	/*
+	 * The resync and r1bio pools are sized from raid_disks * 2.  A
+	 * raid_disks value large enough to make those allocations exceed
+	 * KMALLOC_MAX_SIZE would only trigger a kmalloc WARN_ON() when the
+	 * resync starts, see r1buf_pool_alloc(), and the resync would not
+	 * run at all.  Reject such a value before anything is allocated.
+	 */
+	if (mddev->raid_disks <= 0 ||
+	    mddev->raid_disks > KMALLOC_MAX_SIZE /
+				(2 * sizeof(struct resync_pages)))
+		return -EINVAL;
+
+	/*
 	 * copy the already verified devices into our private RAID1
 	 * bookkeeping area. [whatever we allocate in run(),
 	 * should be freed in raid1_free()]
