@@ -8,6 +8,8 @@ err=0
 test_dir=$(mktemp -d /tmp/perf-test-inline-addr2line.XXXXXXXXXX)
 perf_data="${test_dir}/perf.data"
 perf_script_txt="${test_dir}/perf_script.txt"
+perf_record_err="${test_dir}/perf_record.err"
+lbr_skipped=0
 
 cleanup() {
     rm -rf "${test_dir}"
@@ -71,7 +73,22 @@ test_lbr() {
     fi
 
     # Record data. Currently only dwarf callchains support inlined functions.
-    perf record --call-graph lbr -e cycles:u -o "${perf_data}" -- perf test -w inlineloop 1
+    # Some PMUs advertise branches but reject branch sampling for cycles, e.g.
+    # AMD BRS, which only samples its own retired branches event.
+    if ! perf record --call-graph lbr -e cycles:u -o "${perf_data}" -- \
+            perf test -w inlineloop 1 2> "${perf_record_err}"
+    then
+        if grep -Fq "doesn't support branch stack sampling" "${perf_record_err}"
+        then
+            echo "Skip: LBR not supported by the PMU"
+            lbr_skipped=1
+        else
+            cat "${perf_record_err}"
+            echo "Inline unwinding lbr verification test [Failed to record]"
+            err=1
+        fi
+        return
+    fi
 
     # Check output with inline (default) and srcline
     perf script -i "${perf_data}" --fields +srcline > "${perf_script_txt}"
@@ -93,4 +110,8 @@ test_dwarf
 test_lbr
 
 cleanup
+if [ $err -eq 0 ] && [ $lbr_skipped -eq 1 ]
+then
+    exit 2
+fi
 exit $err
