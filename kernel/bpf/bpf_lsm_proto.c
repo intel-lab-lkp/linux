@@ -94,20 +94,20 @@ noinline int bpf_lsm_path_removexattr(const struct mnt_idmap *idmap,
 }
 
 /*
- * Strong definitions of the inode fileattr BPF LSM hooks.  The file argument
- * is only set for file descriptor-based operations and is NULL for path-based
+ * Strong definitions of the path fileattr BPF LSM hooks.  The file argument is
+ * only set for file descriptor-based operations and is NULL for path-based
  * and in-kernel callers, so mark it as PTR_MAYBE_NULL.
  */
-noinline int bpf_lsm_inode_file_setattr(const struct path *path,
-					struct file_kattr *fa,
-					struct file *file__nullable)
+noinline int bpf_lsm_path_file_setattr(const struct path *path,
+				       struct file_kattr *fa,
+				       struct file *file__nullable)
 {
 	return 0;
 }
 
-noinline int bpf_lsm_inode_file_getattr(const struct path *path,
-					struct file_kattr *fa,
-					struct file *file__nullable)
+noinline int bpf_lsm_path_file_getattr(const struct path *path,
+				       struct file_kattr *fa,
+				       struct file *file__nullable)
 {
 	return 0;
 }
