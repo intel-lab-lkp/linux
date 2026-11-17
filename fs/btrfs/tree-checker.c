@@ -244,6 +244,7 @@ static int check_extent_data_item(struct extent_buffer *leaf,
 	struct btrfs_file_extent_item *fi;
 	u32 sectorsize = fs_info->sectorsize;
 	u32 item_size = btrfs_item_size(leaf, slot);
+	u32 max_disk_num_bytes;
 	u64 extent_end;
 	u8 fi_type;
 
@@ -376,6 +377,30 @@ static int check_extent_data_item(struct extent_buffer *leaf,
 		     CHECK_FE_ALIGNED(leaf, slot, fi, offset, sectorsize) ||
 		     CHECK_FE_ALIGNED(leaf, slot, fi, num_bytes, sectorsize)))
 		return -EUCLEAN;
+
+	/*
+	 * Compressed extents are at most 128K both on disk and uncompressed.
+	 * Uncompressed extents should never get close to U32_MAX.
+	 */
+	if (btrfs_file_extent_compression(leaf, fi) != BTRFS_COMPRESS_NONE) {
+		if (unlikely(btrfs_file_extent_ram_bytes(leaf, fi) > BTRFS_MAX_UNCOMPRESSED)) {
+			file_extent_err(leaf, slot,
+		"invalid ram_bytes for compressed file extent, have %llu expect <= %u",
+					btrfs_file_extent_ram_bytes(leaf, fi),
+					BTRFS_MAX_UNCOMPRESSED);
+			return -EUCLEAN;
+		}
+		max_disk_num_bytes = BTRFS_MAX_COMPRESSED;
+	} else {
+		max_disk_num_bytes = U32_MAX;
+	}
+	if (unlikely(btrfs_file_extent_disk_num_bytes(leaf, fi) > max_disk_num_bytes)) {
+		file_extent_err(leaf, slot,
+		"invalid disk_num_bytes for file extent, have %llu expect <= %u",
+				btrfs_file_extent_disk_num_bytes(leaf, fi),
+				max_disk_num_bytes);
+		return -EUCLEAN;
+	}
 
 	/* Catch extent end overflow */
 	if (unlikely(check_add_overflow(btrfs_file_extent_num_bytes(leaf, fi),
