@@ -397,35 +397,11 @@ int may_setattr(const struct mnt_idmap *idmap, struct inode *inode,
 }
 EXPORT_SYMBOL(may_setattr);
 
-/**
- * notify_change - modify attributes of a filesystem object
- * @idmap:	idmap of the mount the inode was found from
- * @dentry:	object affected
- * @attr:	new attributes
- * @delegated_inode: returns inode, if the inode is delegated
- *
- * The caller must hold the i_rwsem exclusively on the affected object.
- *
- * If notify_change discovers a delegation in need of breaking,
- * it will return -EWOULDBLOCK and return a reference to the inode in
- * delegated_inode.  The caller should then break the delegation and
- * retry.  Because breaking a delegation may take a long time, the
- * caller should drop the i_rwsem before doing so.
- *
- * Alternatively, a caller may pass NULL for delegated_inode.  This may
- * be appropriate for callers that expect the underlying filesystem not
- * to be NFS exported.  Also, passing NULL is fine for callers holding
- * the file open for write, as there can be no conflicting delegation in
- * that case.
- *
- * If the inode has been found through an idmapped mount the idmap of
- * the vfsmount must be passed through @idmap. This function will then
- * take care to map the inode according to @idmap before checking
- * permissions. On non-idmapped mounts or if permission checking is to be
- * performed on the raw inode simply pass @nop_mnt_idmap.
- */
-int notify_change(const struct mnt_idmap *idmap, struct dentry *dentry,
-		  struct iattr *attr, struct delegated_inode *delegated_inode)
+static int do_notify_change(const struct path *const path,
+			    const struct mnt_idmap *const idmap,
+			    struct dentry *const dentry,
+			    struct iattr *attr,
+			    struct delegated_inode *delegated_inode)
 {
 	struct inode *inode = dentry->d_inode;
 	umode_t mode = inode->i_mode;
@@ -552,10 +528,20 @@ int notify_change(const struct mnt_idmap *idmap, struct dentry *dentry,
 			return error;
 	}
 
+	/*
+	 * Filesystems that forward the change to another inode (e.g. NTFS
+	 * named streams) can pass @ia_path back to notify_change_target()
+	 * instead of losing the path the change was requested through.
+	 */
+	attr->ia_path = path;
+
 	if (inode->i_op->setattr)
 		error = inode->i_op->setattr(idmap, dentry, attr);
 	else
 		error = simple_setattr(idmap, dentry, attr);
+
+	/* @attr is caller-owned: do not leave a borrowed path behind. */
+	attr->ia_path = NULL;
 
 	if (!error) {
 		fsnotify_change(dentry, ia_valid);
@@ -564,4 +550,69 @@ int notify_change(const struct mnt_idmap *idmap, struct dentry *dentry,
 
 	return error;
 }
+
+/**
+ * notify_change - modify attributes of a filesystem object
+ * @idmap:	idmap of the mount the inode was found from
+ * @path:	object affected
+ * @attr:	new attributes
+ * @delegated_inode: returns inode, if the inode is delegated
+ *
+ * The caller must hold the i_rwsem exclusively on the affected object.
+ *
+ * If notify_change discovers a delegation in need of breaking,
+ * it will return -EWOULDBLOCK and return a reference to the inode in
+ * delegated_inode.  The caller should then break the delegation and
+ * retry.  Because breaking a delegation may take a long time, the
+ * caller should drop the i_rwsem before doing so.
+ *
+ * Alternatively, a caller may pass NULL for delegated_inode.  This may
+ * be appropriate for callers that expect the underlying filesystem not
+ * to be NFS exported.  Also, passing NULL is fine for callers holding
+ * the file open for write, as there can be no conflicting delegation in
+ * that case.
+ *
+ * If the inode has been found through an idmapped mount the idmap of
+ * the vfsmount must be passed through @idmap. This function will then
+ * take care to map the inode according to @idmap before checking
+ * permissions. On non-idmapped mounts or if permission checking is to
+ * be performed on the raw inode simply pass @nop_mnt_idmap.
+ *
+ * Return: 0 on success, or a negative error on failure.
+ */
+int notify_change(const struct mnt_idmap *idmap, const struct path *path,
+		  struct iattr *attr, struct delegated_inode *delegated_inode)
+{
+	return do_notify_change(path, idmap, path->dentry, attr,
+				delegated_inode);
+}
 EXPORT_SYMBOL(notify_change);
+
+/**
+ * notify_change_target - change attributes of a target inode
+ * @idmap: idmap of the mount the inode was found from
+ * @path: path on which the change was requested
+ * @target: dentry of the inode whose attributes are changed
+ * @attr: attributes to change
+ * @delegated_inode: returns inode needing a delegation break
+ *
+ * This is for filesystems that apply a metadata change to an inode other
+ * than the one the caller named (e.g. NTFS named streams).  The path the
+ * change was requested through is recorded in @attr->ia_path so that the
+ * caller can pass it back when it forwards the change; @target supplies
+ * the inode to update.  @target must be the inode of the same file as
+ * @path, e.g. the base inode of a named stream.  The caller must hold the
+ * i_rwsem exclusively on @target.
+ *
+ * Return: 0 on success, or a negative error on failure.
+ */
+int notify_change_target(const struct mnt_idmap *idmap,
+			 const struct path *path, struct dentry *target,
+			 struct iattr *attr,
+			 struct delegated_inode *delegated_inode)
+{
+	if (WARN_ON_ONCE(!target))
+		return -EINVAL;
+	return do_notify_change(path, idmap, target, attr, delegated_inode);
+}
+EXPORT_SYMBOL_GPL(notify_change_target);

@@ -896,11 +896,16 @@ static int ntfs_stream_setattr_common(const struct mnt_idmap *idmap,
 			inode_unlock(base_vi);
 			goto out;
 		}
-		if (base_attr.ia_valid)
-			err = notify_change(idmap, base_dentry, &base_attr,
-					NULL);
-		else
+		if (base_attr.ia_valid) {
+			if (WARN_ON_ONCE(!attr->ia_path)) {
+				err = -EINVAL;
+			} else {
+				err = notify_change_target(idmap, attr->ia_path,
+							   base_dentry, &base_attr, NULL);
+			}
+		} else {
 			err = 0;
+		}
 		if (!err)
 			ntfs_stream_inode_refresh(inode);
 		inode_unlock(base_vi);

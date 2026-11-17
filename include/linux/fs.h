@@ -289,6 +289,16 @@ struct iattr {
 	 * check for (ia_valid & ATTR_FILE), and not for (ia_file != NULL).
 	 */
 	struct file	*ia_file;
+
+	/*
+	 * Not an attribute, but the path on which the change was requested.
+	 * This is set by notify_change() so that filesystems which forward a
+	 * change to another inode (e.g. NTFS named streams) can pass the path
+	 * supplied by the caller back to notify_change_target().  The pointer
+	 * is valid only for the duration of the notify_change() call and must
+	 * not be stored.
+	 */
+	const struct path *ia_path;
 };
 
 /*
@@ -2495,8 +2505,8 @@ static inline bool is_idmapped_mnt(const struct vfsmount *mnt)
 }
 
 int vfs_truncate(const struct path *, loff_t);
-int do_truncate(const struct mnt_idmap *, struct dentry *, loff_t start,
-		unsigned int time_attrs, struct file *filp);
+int do_truncate(const struct mnt_idmap *idmap, const struct path *path,
+		loff_t length, unsigned int time_attrs, struct file *filp);
 extern int vfs_fallocate(struct file *file, int mode, loff_t offset,
 			loff_t len);
 int do_sys_open(int dfd, const char __user *filename, int flags,
@@ -2719,8 +2729,12 @@ static inline int bmap(struct inode *inode,  sector_t *block)
 }
 #endif
 
-int notify_change(const struct mnt_idmap *, struct dentry *,
+int notify_change(const struct mnt_idmap *, const struct path *,
 		  struct iattr *, struct delegated_inode *);
+int notify_change_target(const struct mnt_idmap *idmap,
+			 const struct path *path, struct dentry *target,
+			 struct iattr *attr,
+			 struct delegated_inode *delegated_inode);
 int inode_permission(const struct mnt_idmap *, struct inode *, int);
 int generic_permission(const struct mnt_idmap *, struct inode *, int);
 static inline int file_permission(struct file *file, int mask)

@@ -1435,3 +1435,15 @@ directory has been created.  Filesystems that cannot do this, those
 that implement ->atomic_open() and those whose ->mkdir() drops the
 parent's i_rwsem, must set SB_I_NO_ATOMIC_MKDIR in sb->s_iflags, which
 makes that flag combination fail with -EOPNOTSUPP before any lookup.
+
+---
+
+**mandatory**
+
+notify_change() and do_truncate() now take a const struct path * instead
+of a struct dentry *.  They use path->dentry, so callers that only have a
+dentry must provide a struct path.  struct iattr has a new ia_path member,
+which notify_change() sets for the duration of the call; it must not be
+stored beyond that.  Filesystems that forward a change to another inode
+can use notify_change_target() to update the target dentry while keeping
+the caller-supplied path in ia_path.
