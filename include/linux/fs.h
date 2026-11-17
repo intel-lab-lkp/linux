@@ -3241,6 +3241,9 @@ void generic_fill_statx_atomic_writes(struct kstat *stat,
 				      unsigned int unit_max_opt);
 extern int vfs_getattr_nosec(const struct path *, struct kstat *, u32, unsigned int);
 extern int vfs_getattr(const struct path *, struct kstat *, u32, unsigned int);
+int vfs_getattr_file(const struct path *path, struct kstat *stat,
+		     u32 request_mask, unsigned int query_flags,
+		     struct file *file);
 void __inode_add_bytes(struct inode *inode, loff_t bytes);
 void inode_add_bytes(struct inode *inode, loff_t bytes);
 void __inode_sub_bytes(struct inode *inode, loff_t bytes);

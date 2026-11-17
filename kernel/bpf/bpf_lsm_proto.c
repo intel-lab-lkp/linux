@@ -50,6 +50,17 @@ noinline int bpf_lsm_path_setattr(const struct mnt_idmap *idmap,
 }
 
 /*
+ * Strong definition of the path_getattr() BPF LSM hook.  The file argument is
+ * only set by callers that hold the struct file the operation is requested
+ * through, and is NULL for path-based callers, so mark it as PTR_MAYBE_NULL.
+ */
+noinline int bpf_lsm_path_getattr(const struct path *path,
+				  struct file *file__nullable)
+{
+	return 0;
+}
+
+/*
  * Strong definitions of the inode xattr BPF LSM hooks.  The file argument is
  * only set for file descriptor-based operations and is NULL for path-based
  * and in-kernel callers, so mark it as PTR_MAYBE_NULL.

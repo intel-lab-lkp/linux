@@ -538,7 +538,7 @@ BTF_SET_END(bpf_inode_init_xattr_hooks)
  * would update the victim without i_rwsem, and the non-locking one would
  * deadlock on the parent.  Reject both kfuncs for these hooks.
  *
- * inode_getattr() is also reached both with and without i_rwsem: path-based
+ * path_getattr() is also reached both with and without i_rwsem: path-based
  * callers such as stat(2) hold no lock, while nfsd fills the pre-operation
  * attributes from nfsd_setattr() with the inode already write-locked.
  */
@@ -546,7 +546,7 @@ BTF_ID_LIST_SINGLE(bpf_set_dentry_xattr_ids, func, bpf_set_dentry_xattr)
 BTF_ID_LIST_SINGLE(bpf_remove_dentry_xattr_ids, func, bpf_remove_dentry_xattr)
 
 BTF_SET_START(d_inode_ambiguous_hooks)
-BTF_ID(func, bpf_lsm_inode_getattr)
+BTF_ID(func, bpf_lsm_path_getattr)
 #ifdef CONFIG_SECURITY_PATH
 BTF_ID(func, bpf_lsm_path_link)
 BTF_ID(func, bpf_lsm_path_rename)

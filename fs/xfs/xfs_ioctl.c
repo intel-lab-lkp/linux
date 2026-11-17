@@ -1249,7 +1249,7 @@ xfs_ioc_dioinfo(
 	struct dioattr		da;
 	int			error;
 
-	error = vfs_getattr(&file->f_path, &st, STATX_DIOALIGN, 0);
+	error = vfs_getattr_file(&file->f_path, &st, STATX_DIOALIGN, 0, file);
 	if (error)
 		return error;
 

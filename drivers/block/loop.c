@@ -462,7 +462,7 @@ static void loop_update_dio_alignment(struct loop_device *lo)
 	 * file can't be used for direct-io at all, so fall back to the block
 	 * device limits in that case.
 	 */
-	if (!vfs_getattr(&file->f_path, &st, STATX_DIOALIGN, 0) &&
+	if (!vfs_getattr_file(&file->f_path, &st, STATX_DIOALIGN, 0, file) &&
 	    (st.result_mask & STATX_DIOALIGN) && st.dio_mem_align) {
 		lo->lo_min_dio_size = st.dio_offset_align;
 		lo->lo_dio_mem_align = min(st.dio_mem_align - 1, PAGE_SIZE - 1);
@@ -1220,7 +1220,15 @@ loop_get_status(struct loop_device *lo, struct loop_info64 *info)
 	path = lo->lo_backing_file->f_path;
 	path_get(&path);
 	mutex_unlock(&lo->lo_mutex);
-	ret = vfs_getattr(&path, &stat, STATX_INO, AT_STATX_SYNC_AS_STAT);
+	/*
+	 * The backing file was opened by the task that configured the
+	 * device, not by the one querying it, and the attributes are
+	 * returned to the requester: do not hand the file over to the LSM
+	 * hook, the metadata read is checked against the requester's
+	 * domain instead.
+	 */
+	ret = vfs_getattr_file(&path, &stat, STATX_INO,
+			       AT_STATX_SYNC_AS_STAT, NULL);
 	if (!ret) {
 		info->lo_device = huge_encode_dev(stat.dev);
 		info->lo_inode = stat.ino;

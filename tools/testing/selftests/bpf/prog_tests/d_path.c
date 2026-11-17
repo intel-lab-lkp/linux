@@ -98,7 +98,7 @@ static int trigger_fstat_events(pid_t pid)
 	if (!ASSERT_GE(ret, 0, "set_pathname for dir"))
 		goto out_close;
 
-	/* triggers vfs_getattr */
+	/* triggers vfs_fstat() */
 	fstat(pipefd[0], &fileStat);
 	fstat(pipefd[1], &fileStat);
 	fstat(sockfd, &fileStat);

@@ -11,9 +11,8 @@ struct {
 	__uint(max_entries, 1 << 12);
 } ringbuf SEC(".maps");
 
-SEC("fentry/security_inode_getattr")
-int BPF_PROG(d_path_check_rdonly_mem, struct path *path, struct kstat *stat,
-	     __u32 request_mask, unsigned int query_flags)
+SEC("fentry/security_path_getattr")
+int BPF_PROG(d_path_check_rdonly_mem, struct path *path, struct file *file)
 {
 	void *active;
 	u32 cpu;

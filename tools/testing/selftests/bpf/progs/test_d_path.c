@@ -19,9 +19,8 @@ int called_stat = 0;
 int called_close = 0;
 int path_match_fallocate = 0;
 
-SEC("fentry/security_inode_getattr")
-int BPF_PROG(prog_stat, struct path *path, struct kstat *stat,
-	     __u32 request_mask, unsigned int query_flags)
+SEC("fentry/security_path_getattr")
+int BPF_PROG(prog_stat, struct path *path, struct file *file)
 {
 	pid_t pid = bpf_get_current_pid_tgid() >> 32;
 	__u32 cnt = cnt_stat;

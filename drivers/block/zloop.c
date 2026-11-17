@@ -316,7 +316,13 @@ static int zloop_update_seq_zone(struct zloop_device *zlo, unsigned int zone_no)
 
 	lockdep_assert_held(&zone->lock);
 
-	ret = vfs_getattr(&zone->file->f_path, &stat, STATX_SIZE, 0);
+	/*
+	 * The zone file belongs to the task that set up the zone, not to
+	 * the one using the block device, so check the metadata read
+	 * against the current domain.
+	 */
+	ret = vfs_getattr_file(&zone->file->f_path, &stat, STATX_SIZE, 0,
+			       NULL);
 	if (ret < 0) {
 		pr_err("%pg: Failed to get zone %u file stat (err=%d)\n",
 		       zlo->disk->part0, zone_no, ret);
@@ -1074,7 +1080,8 @@ static int zloop_get_block_size(struct zloop_device *zlo,
 	 * file can't be used for direct-io at all, so fall back to the block
 	 * device limits in that case.
 	 */
-	if (!vfs_getattr(&zone->file->f_path, &st, STATX_DIOALIGN, 0) &&
+	if (!vfs_getattr_file(&zone->file->f_path, &st, STATX_DIOALIGN, 0,
+			      zone->file) &&
 	    (st.result_mask & STATX_DIOALIGN) && st.dio_mem_align) {
 		zlo->block_size = st.dio_offset_align;
 		zlo->dio_mem_align = min(st.dio_mem_align - 1, PAGE_SIZE - 1);
@@ -1153,7 +1160,8 @@ static int zloop_init_zone(struct zloop_device *zlo, struct zloop_options *opts,
 		zone->cond = BLK_ZONE_COND_NOT_WP;
 		zone->wp = U64_MAX;
 
-		ret = vfs_getattr(&zone->file->f_path, &stat, STATX_SIZE, 0);
+		ret = vfs_getattr_file(&zone->file->f_path, &stat,
+				       STATX_SIZE, 0, zone->file);
 		if (ret < 0) {
 			pr_err("Failed to get zone %u file stat\n", zone_no);
 			goto out_fput;
