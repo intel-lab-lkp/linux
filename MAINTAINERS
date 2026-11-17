@@ -7534,6 +7534,12 @@ M:	Pali Rohár <pali@kernel.org>
 S:	Maintained
 F:	drivers/platform/x86/dell/dell-wmi-base.c
 
+DELL WMI PEGA DRIVER
+M:	Armin Wolf <W_Armin@gmx.de>
+S:	Odd Fixes
+F:	Documentation/wmi/devices/dell-wmi-pega.rst
+F:	drivers/platform/x86/dell/dell-wmi-pega.c
+
 DELL WMI SYSMAN DRIVER
 M:	Prasanth Ksr <prasanth.ksr@dell.com>
 L:	Dell.Client.Kernel@dell.com
