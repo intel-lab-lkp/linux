@@ -1422,6 +1422,11 @@ static enum scan_result collapse_huge_page(struct mm_struct *mm,
 		if (pte_ptl != pmd_ptl)
 			spin_lock_nested(pte_ptl, SINGLE_DEPTH_NESTING);
 		pmd_populate(mm, pmd, pmd_pgtable(_pmd));
+		/*
+		 * The PTEs are clean in a read-only VMA, but the folio holds
+		 * copied data: mark it dirty so reclaim cannot drop it.
+		 */
+		folio_set_dirty(folio);
 		map_anon_folio_pte_nopf(folio, pte, vma, start_addr,
 					  /*uffd_wp=*/ false);
 		if (pte_ptl != pmd_ptl)
