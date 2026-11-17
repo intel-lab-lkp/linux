@@ -153,10 +153,12 @@ static bool sof_ipc4_volume_put(struct snd_sof_control *scontrol,
 
 	/* update each channel */
 	for (i = 0; i < channels; i++) {
+		u32 old = ipc_to_mixer(cdata->chanv[i].value,
+				       scontrol->volume_table, scontrol->max + 1);
 		u32 value = mixer_to_ipc(ucontrol->value.integer.value[i],
 					 scontrol->volume_table, scontrol->max + 1);
 
-		change = change || (value != cdata->chanv[i].value);
+		change = change || (ucontrol->value.integer.value[i] != old);
 		cdata->chanv[i].channel = i;
 		cdata->chanv[i].value = value;
 	}
