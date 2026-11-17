@@ -675,6 +675,21 @@ int security_capable(const struct cred *cred,
 }
 
 /**
+ * security_memcg_charge_task() - Check if cross-cgroup memory charging is allowed
+ * @from: credentials of the process requesting the charge
+ * @to: credentials of the process to charge
+ *
+ * Check whether the process with credentials @from is allowed to charge
+ * memory to the cgroup of the process with credentials @to.
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_memcg_charge_task(const struct cred *from, const struct cred *to)
+{
+	return call_int_hook(memcg_charge_task, from, to);
+}
+
+/**
  * security_quotactl() - Check if a quotactl() syscall is allowed for this fs
  * @cmds: commands
  * @type: type
