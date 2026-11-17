@@ -129,6 +129,7 @@ struct zloop_device {
 	struct gendisk		*disk;
 
 	struct workqueue_struct *workqueue;
+	struct workqueue_struct *append_workqueue;
 	bool			buffered_io;
 	bool			zone_append;
 	bool			ordered_zone_append;
@@ -590,32 +591,24 @@ static int zloop_seq_write_prep(struct zloop_cmd *cmd)
 	 * when submitted.
 	 */
 	if (is_append) {
-		/*
-		 * If ordered zone append is in use, we already checked and set
-		 * the target sector in zloop_queue_rq().
-		 */
-		if (!zlo->ordered_zone_append) {
-			if (zone->cond == BLK_ZONE_COND_FULL ||
-			    zone->wp + nr_sectors > zone_end) {
-				ret = -EIO;
-				goto out_unlock;
-			}
-			cmd->sector = zone->wp;
-		}
-	} else {
-		if (cmd->sector != zone->wp) {
-			if (zone->wp == ULLONG_MAX)
-				pr_err("%pg: Zone %u: write to %s zone: sect %llu\n",
-				       zlo->disk->part0, zone_no,
-				       blk_zone_cond_str(zone->cond),
-				       cmd->sector);
-			else
-				pr_err("%pg: Zone %u: unaligned write: sect %llu, wp %llu\n",
-				       zlo->disk->part0, zone_no, cmd->sector,
-				       zone->wp);
+		if (zone->cond == BLK_ZONE_COND_FULL ||
+		    zone->wp + nr_sectors > zone_end) {
 			ret = -EIO;
 			goto out_unlock;
 		}
+		cmd->sector = zone->wp;
+	} else if (cmd->sector != zone->wp) {
+		if (zone->wp == ULLONG_MAX)
+			pr_err("%pg: Zone %u: write to %s zone: sect %llu\n",
+			       zlo->disk->part0, zone_no,
+			       blk_zone_cond_str(zone->cond),
+			       cmd->sector);
+		else
+			pr_err("%pg: Zone %u: unaligned write: sect %llu, wp %llu\n",
+			       zlo->disk->part0, zone_no, cmd->sector,
+			       zone->wp);
+		ret = -EIO;
+		goto out_unlock;
 	}
 
 	/* Implicitly open the target zone. */
@@ -625,15 +618,13 @@ static int zloop_seq_write_prep(struct zloop_cmd *cmd)
 	}
 
 	/*
-	 * Advance the write pointer, unless ordered zone append is in use. If
-	 * the write fails, the write pointer position will be corrected when
-	 * the next I/O starts execution.
+	 * Advance the write pointer. If the write fails, the write pointer
+	 * position will be corrected when the next I/O starts execution.
 	 */
-	if (!is_append || !zlo->ordered_zone_append) {
-		zone->wp += nr_sectors;
-		if (zone->wp == zone_end)
-			zloop_mark_full(zlo, zone);
-	}
+	zone->wp += nr_sectors;
+	if (zone->wp == zone_end)
+		zloop_mark_full(zlo, zone);
+
 out_unlock:
 	spin_unlock(&zone->wp_lock);
 	return ret;
@@ -885,32 +876,6 @@ static void zloop_complete_rq(struct request *rq)
 	blk_mq_end_request(rq, sts);
 }
 
-static bool zloop_set_zone_append_sector(struct request *rq)
-{
-	struct zloop_device *zlo = rq->q->queuedata;
-	unsigned int zone_no = rq_zone_no(rq);
-	struct zloop_zone *zone = &zlo->zones[zone_no];
-	sector_t zone_end = zone->start + zlo->zone_capacity;
-	sector_t nr_sectors = blk_rq_sectors(rq);
-
-	spin_lock(&zone->wp_lock);
-
-	if (zone->cond == BLK_ZONE_COND_FULL ||
-	    zone->wp + nr_sectors > zone_end) {
-		spin_unlock(&zone->wp_lock);
-		return false;
-	}
-
-	rq->__sector = zone->wp;
-	zone->wp += blk_rq_sectors(rq);
-	if (zone->wp >= zone_end)
-		zloop_mark_full(zlo, zone);
-
-	spin_unlock(&zone->wp_lock);
-
-	return true;
-}
-
 static blk_status_t zloop_queue_rq(struct blk_mq_hw_ctx *hctx,
 				   const struct blk_mq_queue_data *bd)
 {
@@ -923,20 +888,13 @@ static blk_status_t zloop_queue_rq(struct blk_mq_hw_ctx *hctx,
 		return BLK_STS_IOERR;
 	}
 
-	/*
-	 * If we need to strongly order zone append operations, set the request
-	 * sector to the zone write pointer location now instead of when the
-	 * command work runs.
-	 */
-	if (zlo->ordered_zone_append && req_op(rq) == REQ_OP_ZONE_APPEND) {
-		if (!zloop_set_zone_append_sector(rq))
-			return BLK_STS_IOERR;
-	}
-
 	blk_mq_start_request(rq);
 
 	INIT_WORK(&cmd->work, zloop_cmd_workfn);
-	queue_work(zlo->workqueue, &cmd->work);
+	if (zlo->ordered_zone_append && req_op(rq) == REQ_OP_ZONE_APPEND)
+		queue_work(zlo->append_workqueue, &cmd->work);
+	else
+		queue_work(zlo->workqueue, &cmd->work);
 
 	return BLK_STS_OK;
 }
@@ -1029,6 +987,8 @@ static void zloop_free_disk(struct gendisk *disk)
 
 	fput(zlo->data_dir);
 	destroy_workqueue(zlo->workqueue);
+	if (zlo->append_workqueue)
+		destroy_workqueue(zlo->append_workqueue);
 	kfree(zlo->base_dir);
 	kvfree(zlo);
 }
@@ -1285,6 +1245,21 @@ static int zloop_ctl_add(struct zloop_options *opts)
 		goto out_free_idr;
 	}
 
+	/*
+	 * Use an ordered workqueue for strongly ordered zone append operations
+	 * so that we can keep processing the operations in the same order as
+	 * they are submitted.
+	 */
+	if (zlo->ordered_zone_append) {
+		zlo->append_workqueue =
+			alloc_ordered_workqueue("zloop%d_append", WQ_FREEZABLE,
+						zlo->id);
+		if (!zlo->append_workqueue) {
+			ret = -ENOMEM;
+			goto out_destroy_workqueue;
+		}
+	}
+
 	if (opts->base_dir)
 		zlo->base_dir = kstrdup(opts->base_dir, GFP_KERNEL);
 	else
@@ -1391,6 +1366,8 @@ out_free_base_dir:
 	kfree(zlo->base_dir);
 out_destroy_workqueue:
 	destroy_workqueue(zlo->workqueue);
+	if (zlo->append_workqueue)
+		destroy_workqueue(zlo->append_workqueue);
 out_free_idr:
 	mutex_lock(&zloop_ctl_mutex);
 	idr_remove(&zloop_index_idr, zlo->id);
