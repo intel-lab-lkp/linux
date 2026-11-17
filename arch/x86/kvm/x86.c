@@ -9601,9 +9601,33 @@ static void kvm_xstate_reset(struct kvm_vcpu *vcpu, bool init_event)
 		kvm_load_guest_fpu(vcpu);
 }
 
-void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
+static void kvm_vcpu_regs_reset(struct kvm_vcpu *vcpu, bool init_event)
 {
 	struct kvm_cpuid_entry2 *cpuid_0x1;
+	int idx;
+
+	/*
+	 * All legacy GPRs except RDX (handled below) are zeroed on RESET/INIT.
+	 * EGPRs (R16-R31), however, retain their values on INIT.
+	 */
+	for (idx = VCPU_REGS_RAX; idx < NR_VCPU_GENERAL_PURPOSE_REGS; idx++)
+		vcpu->arch.regs[idx] = idx > 15 && init_event ? vcpu->arch.regs[idx] : 0;
+
+	kvm_register_mark_dirty(vcpu, VCPU_REGS_RSP);
+
+	/*
+	 * Fall back to KVM's default Family/Model/Stepping of 0x600 (P6/Athlon)
+	 * if no CPUID match is found.  Note, it's impossible to get a match at
+	 * RESET since KVM emulates RESET before exposing the vCPU to userspace,
+	 * i.e. it's impossible for kvm_find_cpuid_entry() to find a valid entry
+	 * on RESET.  But, go through the motions in case that's ever remedied.
+	 */
+	cpuid_0x1 = kvm_find_cpuid_entry(vcpu, 1);
+	kvm_edx_write(vcpu, cpuid_0x1 ? cpuid_0x1->eax : 0x600);
+}
+
+void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
+{
 	unsigned long old_cr0 = kvm_read_cr0(vcpu);
 	unsigned long new_cr0;
 
@@ -9673,19 +9697,7 @@ void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 		kvm_msr_write(vcpu, MSR_IA32_XSS, 0);
 	}
 
-	/* All GPRs except RDX (handled below) are zeroed on RESET/INIT. */
-	memset(vcpu->arch.regs, 0, sizeof(vcpu->arch.regs));
-	kvm_register_mark_dirty(vcpu, VCPU_REGS_RSP);
-
-	/*
-	 * Fall back to KVM's default Family/Model/Stepping of 0x600 (P6/Athlon)
-	 * if no CPUID match is found.  Note, it's impossible to get a match at
-	 * RESET since KVM emulates RESET before exposing the vCPU to userspace,
-	 * i.e. it's impossible for kvm_find_cpuid_entry() to find a valid entry
-	 * on RESET.  But, go through the motions in case that's ever remedied.
-	 */
-	cpuid_0x1 = kvm_find_cpuid_entry(vcpu, 1);
-	kvm_edx_write(vcpu, cpuid_0x1 ? cpuid_0x1->eax : 0x600);
+	kvm_vcpu_regs_reset(vcpu, init_event);
 
 	kvm_x86_call(vcpu_reset)(vcpu, init_event);
 
