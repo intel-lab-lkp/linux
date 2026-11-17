@@ -384,7 +384,8 @@ static inline int ovl_do_set_acl(struct ovl_fs *ofs, struct dentry *dentry,
 		.dentry = dentry,
 	};
 
-	return vfs_set_acl(ovl_upper_mnt_idmap(ofs), &path, acl_name, acl);
+	return vfs_set_acl(ovl_upper_mnt_idmap(ofs), &path, acl_name, acl,
+			   NULL);
 }
 
 static inline int ovl_do_remove_acl(struct ovl_fs *ofs, struct dentry *dentry,
@@ -395,7 +396,8 @@ static inline int ovl_do_remove_acl(struct ovl_fs *ofs, struct dentry *dentry,
 		.dentry = dentry,
 	};
 
-	return vfs_remove_acl(ovl_upper_mnt_idmap(ofs), &path, acl_name);
+	return vfs_remove_acl(ovl_upper_mnt_idmap(ofs), &path, acl_name,
+			      NULL);
 }
 
 static inline int ovl_do_rename_rd(struct renamedata *rd)

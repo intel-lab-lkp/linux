@@ -670,7 +670,7 @@ static int do_setxattr(const struct mnt_idmap *idmap, const struct path *path,
 {
 	if (is_posix_acl_xattr(ctx->kname->name))
 		return do_set_acl(idmap, path, ctx->kname->name,
-				  ctx->kvalue, ctx->size);
+				  ctx->kvalue, ctx->size, file);
 
 	return vfs_setxattr(idmap, path, ctx->kname->name,
 			ctx->kvalue, ctx->size, ctx->flags, file);
@@ -816,7 +816,8 @@ do_getxattr(const struct mnt_idmap *idmap, const struct path *path,
 	}
 
 	if (is_posix_acl_xattr(kname))
-		error = do_get_acl(idmap, path, kname, kvalue, ctx->size);
+		error = do_get_acl(idmap, path, kname, kvalue,
+				   ctx->size, file);
 	else
 		error = vfs_getxattr(idmap, path, kname, kvalue,
 				     ctx->size, file);
@@ -1048,7 +1049,7 @@ removexattr(const struct mnt_idmap *idmap, const struct path *path,
 	    const char *name, struct file *file)
 {
 	if (is_posix_acl_xattr(name))
-		return vfs_remove_acl(idmap, path, name);
+		return vfs_remove_acl(idmap, path, name, file);
 	return vfs_removexattr(idmap, path, name, file);
 }
 
