@@ -301,6 +301,11 @@ static int __init sifive_ccache_init(void)
 	if (!np)
 		return -ENODEV;
 
+	if (!of_device_is_available(np)) {
+		rc = -ENODEV;
+		goto err_node_put;
+	}
+
 	quirks = (uintptr_t)match->data;
 
 	if (of_address_to_resource(np, 0, &res)) {
