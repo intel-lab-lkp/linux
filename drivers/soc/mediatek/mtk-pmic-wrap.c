@@ -1321,6 +1321,7 @@ enum pwrap_type {
 	PWRAP_MT6873,
 	PWRAP_MT7622,
 	PWRAP_MT8135,
+	PWRAP_MT8163,
 	PWRAP_MT8173,
 	PWRAP_MT8183,
 	PWRAP_MT8186,
@@ -1843,6 +1844,7 @@ static int pwrap_init_cipher(struct pmic_wrapper *wrp)
 	case PWRAP_MT6779:
 	case PWRAP_MT6795:
 	case PWRAP_MT6797:
+	case PWRAP_MT8163:
 	case PWRAP_MT8173:
 	case PWRAP_MT8186:
 	case PWRAP_MT8365:
@@ -2062,6 +2064,8 @@ static int pwrap_init(struct pmic_wrapper *wrp)
 
 	switch (wrp->master->type) {
 	case PWRAP_MT6795:
+		fallthrough;
+	case PWRAP_MT8163:
 		fallthrough;
 	case PWRAP_MT8173:
 		/* Enable DCM */
@@ -2367,6 +2371,18 @@ static const struct pmic_wrapper_type pwrap_mt8135 = {
 	.init_soc_specific = pwrap_mt8135_init_soc_specific,
 };
 
+static const struct pmic_wrapper_type pwrap_mt8163 = {
+	.regs = mt8516_regs,
+	.type = PWRAP_MT8163,
+	.arb_en_all = 0xff,
+	.int_en_all = ~(u32)(BIT(31) | BIT(2)),
+	.int1_en_all = 0,
+	.spi_w = PWRAP_MAN_CMD_SPI_WRITE,
+	.wdt_src = PWRAP_WDT_SRC_MASK_ALL,
+	.caps = PWRAP_CAP_RESET | PWRAP_CAP_DCM,
+	.init_reg_clock = pwrap_mt2701_init_reg_clock,
+};
+
 static const struct pmic_wrapper_type pwrap_mt8173 = {
 	.regs = mt8173_regs,
 	.type = PWRAP_MT8173,
@@ -2453,6 +2469,7 @@ static const struct of_device_id of_pwrap_match_tbl[] = {
 	{ .compatible = "mediatek,mt6873-pwrap", .data = &pwrap_mt6873 },
 	{ .compatible = "mediatek,mt7622-pwrap", .data = &pwrap_mt7622 },
 	{ .compatible = "mediatek,mt8135-pwrap", .data = &pwrap_mt8135 },
+	{ .compatible = "mediatek,mt8163-pwrap", .data = &pwrap_mt8163 },
 	{ .compatible = "mediatek,mt8173-pwrap", .data = &pwrap_mt8173 },
 	{ .compatible = "mediatek,mt8183-pwrap", .data = &pwrap_mt8183 },
 	{ .compatible = "mediatek,mt8186-pwrap", .data = &pwrap_mt8186 },
