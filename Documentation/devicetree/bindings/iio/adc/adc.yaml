@@ -114,15 +114,12 @@ properties:
       Burn-out current sources provide current to the channel's input pins for
       open-circuit or short-circuit detection.
 
-anyOf:
-  - oneOf:
-      - required:
-          - reg
-          - diff-channels
-      - required:
-          - reg
-          - single-channel
-  - required:
-      - reg
+required:
+  - reg
+
+not:
+  required:
+    - single-channel
+    - diff-channels
 
 additionalProperties: true
