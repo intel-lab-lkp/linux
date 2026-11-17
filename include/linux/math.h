@@ -128,6 +128,10 @@ __STRUCT_FRACT(u32)
 	q * n_ + r * n_ / d_;	\
 })
 
+/* Same as above but for a struct __Txx_fract fraction */
+#define mult_fract(x, f) 				\
+	mult_frac(x, (f)->numerator, (f)->denominator)
+
 #define sector_div(a, b) do_div(a, b)
 
 /**
