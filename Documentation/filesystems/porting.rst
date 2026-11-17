@@ -1446,7 +1446,16 @@ dentry must provide a struct path.  struct iattr has a new ia_path member,
 which notify_change() sets for the duration of the call; it must not be
 stored beyond that.  Filesystems that forward a change to another inode
 can use notify_change_target() to update the target dentry while keeping
-the caller-supplied path in ia_path.
+the caller-supplied path in ia_path; path-based LSM checks are performed
+on that path, and the setattr LSM hook receives both it and the target
+dentry, so inode-based LSMs keep authorizing the inode that is actually
+changed.  notify_change() also takes the struct file through which the
+change was requested, if any.  vfs_utimes() takes the same trailing struct
+file argument.  The inode_setattr LSM hook is renamed to
+path_setattr and now receives the struct path and the target dentry
+before struct iattr, plus a trailing struct file (NULL for path-based
+and kernel-internal callers); the security_inode_setattr() wrapper is
+renamed to security_path_setattr() accordingly.
 
 ---
 

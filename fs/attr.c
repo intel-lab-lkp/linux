@@ -401,7 +401,8 @@ static int do_notify_change(const struct path *const path,
 			    const struct mnt_idmap *const idmap,
 			    struct dentry *const dentry,
 			    struct iattr *attr,
-			    struct delegated_inode *delegated_inode)
+			    struct delegated_inode *delegated_inode,
+			    struct file *const file)
 {
 	struct inode *inode = dentry->d_inode;
 	umode_t mode = inode->i_mode;
@@ -513,7 +514,7 @@ static int do_notify_change(const struct path *const path,
 	    !vfsgid_valid(i_gid_into_vfsgid(idmap, inode)))
 		return -EOVERFLOW;
 
-	error = security_inode_setattr(idmap, dentry, attr);
+	error = security_path_setattr(idmap, path, dentry, attr, file);
 	if (error)
 		return error;
 
@@ -557,6 +558,7 @@ static int do_notify_change(const struct path *const path,
  * @path:	object affected
  * @attr:	new attributes
  * @delegated_inode: returns inode, if the inode is delegated
+ * @file:	file through which the attribute change is requested, if any
  *
  * The caller must hold the i_rwsem exclusively on the affected object.
  *
@@ -581,10 +583,11 @@ static int do_notify_change(const struct path *const path,
  * Return: 0 on success, or a negative error on failure.
  */
 int notify_change(const struct mnt_idmap *idmap, const struct path *path,
-		  struct iattr *attr, struct delegated_inode *delegated_inode)
+		  struct iattr *attr, struct delegated_inode *delegated_inode,
+		  struct file *file)
 {
 	return do_notify_change(path, idmap, path->dentry, attr,
-				delegated_inode);
+				delegated_inode, file);
 }
 EXPORT_SYMBOL(notify_change);
 
@@ -595,24 +598,29 @@ EXPORT_SYMBOL(notify_change);
  * @target: dentry of the inode whose attributes are changed
  * @attr: attributes to change
  * @delegated_inode: returns inode needing a delegation break
+ * @file: file through which the change was requested, if any
  *
  * This is for filesystems that apply a metadata change to an inode other
  * than the one the caller named (e.g. NTFS named streams).  The path the
  * change was requested through is recorded in @attr->ia_path so that the
- * caller can pass it back when it forwards the change; @target supplies
- * the inode to update.  @target must be the inode of the same file as
- * @path, e.g. the base inode of a named stream.  The caller must hold the
- * i_rwsem exclusively on @target.
+ * caller can pass it back when it forwards the change; path-based LSM
+ * checks are then performed on @path, while inode-based LSM checks and the
+ * update itself use @target.  @target must be the inode of the same file
+ * as @path, e.g. the base inode of a named stream.  The caller must hold
+ * the i_rwsem exclusively on @target, and on @path->dentry->d_inode, which
+ * ->setattr already holds: the LSM hook is called with both inodes locked.
  *
  * Return: 0 on success, or a negative error on failure.
  */
 int notify_change_target(const struct mnt_idmap *idmap,
 			 const struct path *path, struct dentry *target,
 			 struct iattr *attr,
-			 struct delegated_inode *delegated_inode)
+			 struct delegated_inode *delegated_inode,
+			 struct file *file)
 {
 	if (WARN_ON_ONCE(!target))
 		return -EINVAL;
-	return do_notify_change(path, idmap, target, attr, delegated_inode);
+	return do_notify_change(path, idmap, target, attr, delegated_inode,
+				file);
 }
 EXPORT_SYMBOL_GPL(notify_change_target);

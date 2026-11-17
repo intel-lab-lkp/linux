@@ -107,7 +107,7 @@ int __init init_chown(const char *filename, uid_t user, gid_t group, int flags)
 		return error;
 	error = mnt_want_write(path.mnt);
 	if (!error) {
-		error = chown_common(&path, user, group);
+		error = chown_common(&path, user, group, NULL);
 		mnt_drop_write(path.mnt);
 	}
 	path_put(&path);
@@ -122,7 +122,7 @@ int __init init_chmod(const char *filename, umode_t mode)
 	error = kern_path(filename, LOOKUP_FOLLOW, &path);
 	if (error)
 		return error;
-	error = chmod_common(&path, mode);
+	error = chmod_common(&path, mode, NULL);
 	path_put(&path);
 	return error;
 }
@@ -201,7 +201,7 @@ int __init init_utimes(char *filename, struct timespec64 *ts)
 	error = kern_path(filename, 0, &path);
 	if (error)
 		return error;
-	error = vfs_utimes(&path, ts);
+	error = vfs_utimes(&path, ts, NULL);
 	path_put(&path);
 	return error;
 }

@@ -6688,6 +6688,18 @@ BTF_TYPE_SAFE_TRUSTED(struct file) {
 };
 
 /*
+ * LSM hooks that take a struct path hand over a path that is valid for the
+ * duration of the hook, so that BPF LSM programs can safely reach its dentry
+ * (e.g. to call the dentry xattr kfuncs).  Only the dentry is marked as
+ * trusted: the template applies to every trusted struct path, and some
+ * callers (e.g. the Landlock tracepoints) build one with mnt left NULL, which
+ * a trusted pointer would make dereferenceable without a fault check.
+ */
+BTF_TYPE_SAFE_TRUSTED(struct path) {
+	struct dentry *dentry;
+};
+
+/*
  * The pointer fields in the sched_ext ops argument containers are pinned by the
  * callers for the duration of the ops calls and are never NULL.
  */
@@ -6757,6 +6769,7 @@ static bool type_is_trusted(struct bpf_verifier_env *env,
 	BTF_TYPE_EMIT(BTF_TYPE_SAFE_TRUSTED(struct bpf_iter__task));
 	BTF_TYPE_EMIT(BTF_TYPE_SAFE_TRUSTED(struct linux_binprm));
 	BTF_TYPE_EMIT(BTF_TYPE_SAFE_TRUSTED(struct file));
+	BTF_TYPE_EMIT(BTF_TYPE_SAFE_TRUSTED(struct path));
 	BTF_TYPE_EMIT(BTF_TYPE_SAFE_TRUSTED(struct scx_init_task_args));
 	BTF_TYPE_EMIT(BTF_TYPE_SAFE_TRUSTED(struct scx_cpu_release_args));
 	BTF_TYPE_EMIT(BTF_TYPE_SAFE_TRUSTED(struct scx_sub_attach_args));

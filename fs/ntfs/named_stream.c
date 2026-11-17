@@ -901,7 +901,8 @@ static int ntfs_stream_setattr_common(const struct mnt_idmap *idmap,
 				err = -EINVAL;
 			} else {
 				err = notify_change_target(idmap, attr->ia_path,
-							   base_dentry, &base_attr, NULL);
+							   base_dentry, &base_attr,
+							   NULL, NULL);
 			}
 		} else {
 			err = 0;

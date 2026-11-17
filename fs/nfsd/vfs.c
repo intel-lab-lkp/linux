@@ -478,7 +478,7 @@ static int __nfsd_setattr(const struct path *path, struct iattr *iap)
 			return -EFBIG;
 
 		host_err = notify_change(&nop_mnt_idmap, path, &size_attr,
-					  NULL);
+					  NULL, NULL);
 		if (host_err)
 			return host_err;
 		iap->ia_valid &= ~ATTR_SIZE;
@@ -504,7 +504,7 @@ static int __nfsd_setattr(const struct path *path, struct iattr *iap)
 	if (!(iap->ia_valid & ATTR_DELEG))
 		iap->ia_valid |= ATTR_CTIME;
 
-	return notify_change(&nop_mnt_idmap, path, iap, NULL);
+	return notify_change(&nop_mnt_idmap, path, iap, NULL, NULL);
 }
 
 /**

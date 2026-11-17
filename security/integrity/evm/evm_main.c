@@ -982,16 +982,19 @@ static int evm_attr_change(const struct mnt_idmap *idmap,
 }
 
 /**
- * evm_inode_setattr - prevent updating an invalid EVM extended attribute
+ * evm_path_setattr - prevent updating an invalid EVM extended attribute
  * @idmap: idmap of the mount
- * @dentry: pointer to the affected dentry
+ * @path: pointer to the affected object
+ * @dentry: inode whose attributes are changed
  * @attr: iattr structure containing the new file attributes
+ * @file: file through which the attribute change is requested, if any
  *
  * Permit update of file attributes when files have a valid EVM signature,
  * except in the case of them having an immutable portable signature.
  */
-static int evm_inode_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
-			     struct iattr *attr)
+static int evm_path_setattr(const struct mnt_idmap *idmap,
+			    const struct path *path, struct dentry *dentry,
+			    struct iattr *attr, struct file *file)
 {
 	unsigned int ia_valid = attr->ia_valid;
 	enum integrity_status evm_status;
@@ -1229,7 +1232,7 @@ error:
 }
 
 static struct security_hook_list evm_hooks[] __ro_after_init = {
-	LSM_HOOK_INIT(inode_setattr, evm_inode_setattr),
+	LSM_HOOK_INIT(path_setattr, evm_path_setattr),
 	LSM_HOOK_INIT(inode_post_setattr, evm_inode_post_setattr),
 	LSM_HOOK_INIT(inode_copy_up_xattr, evm_inode_copy_up_xattr),
 	LSM_HOOK_INIT(inode_setxattr, evm_inode_setxattr),

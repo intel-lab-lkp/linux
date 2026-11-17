@@ -34,6 +34,22 @@ noinline int bpf_lsm_inode_init_security(struct inode *inode, struct inode *dir,
 }
 
 /*
+ * Strong definition of the path_setattr() BPF LSM hook.  @dentry is the
+ * inode whose attributes are changed and can differ from @path->dentry for
+ * filesystems that forward the change.  The file argument is only set for
+ * file descriptor-based operations and is NULL for path-based and in-kernel
+ * callers, so mark it as PTR_MAYBE_NULL.
+ */
+noinline int bpf_lsm_path_setattr(const struct mnt_idmap *idmap,
+				  const struct path *path,
+				  struct dentry *dentry,
+				  struct iattr *attr,
+				  struct file *file__nullable)
+{
+	return 0;
+}
+
+/*
  * Strong definitions of the inode xattr BPF LSM hooks.  The file argument is
  * only set for file descriptor-based operations and is NULL for path-based
  * and in-kernel callers, so mark it as PTR_MAYBE_NULL.

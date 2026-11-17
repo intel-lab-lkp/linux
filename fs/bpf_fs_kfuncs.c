@@ -527,6 +527,34 @@ BTF_SET_START(bpf_inode_init_xattr_hooks)
 BTF_ID(func, bpf_lsm_inode_init_security)
 BTF_SET_END(bpf_inode_init_xattr_hooks)
 
+/*
+ * Hooks that expose two dentries, only one of which is locked: the path
+ * argument names the parent directory, which the caller already write-locked,
+ * while the dentry argument is the victim, whose inode is only locked later
+ * by vfs_link(), vfs_rename(), vfs_rmdir() or vfs_unlink().
+ *
+ * The dentry xattr kfuncs cannot pick a correct variant for such a hook, and
+ * the verifier cannot tell which dentry a program passes: the locking variant
+ * would update the victim without i_rwsem, and the non-locking one would
+ * deadlock on the parent.  Reject both kfuncs for these hooks.
+ *
+ * inode_getattr() is also reached both with and without i_rwsem: path-based
+ * callers such as stat(2) hold no lock, while nfsd fills the pre-operation
+ * attributes from nfsd_setattr() with the inode already write-locked.
+ */
+BTF_ID_LIST_SINGLE(bpf_set_dentry_xattr_ids, func, bpf_set_dentry_xattr)
+BTF_ID_LIST_SINGLE(bpf_remove_dentry_xattr_ids, func, bpf_remove_dentry_xattr)
+
+BTF_SET_START(d_inode_ambiguous_hooks)
+BTF_ID(func, bpf_lsm_inode_getattr)
+#ifdef CONFIG_SECURITY_PATH
+BTF_ID(func, bpf_lsm_path_link)
+BTF_ID(func, bpf_lsm_path_rename)
+BTF_ID(func, bpf_lsm_path_rmdir)
+BTF_ID(func, bpf_lsm_path_unlink)
+#endif /* CONFIG_SECURITY_PATH */
+BTF_SET_END(d_inode_ambiguous_hooks)
+
 static int bpf_fs_kfuncs_filter(const struct bpf_prog *prog, u32 kfunc_id)
 {
 	if (!btf_id_set8_contains(&bpf_fs_kfunc_set_ids, kfunc_id))
@@ -539,8 +567,14 @@ static int bpf_fs_kfuncs_filter(const struct bpf_prog *prog, u32 kfunc_id)
 			return -EACCES;
 		return 0;
 	}
-	if (prog->type == BPF_PROG_TYPE_LSM)
+	if (prog->type == BPF_PROG_TYPE_LSM) {
+		if ((kfunc_id == bpf_set_dentry_xattr_ids[0] ||
+		     kfunc_id == bpf_remove_dentry_xattr_ids[0]) &&
+		    btf_id_set_contains(&d_inode_ambiguous_hooks,
+					prog->aux->attach_btf_id))
+			return -EACCES;
 		return 0;
+	}
 	if (prog->type != BPF_PROG_TYPE_STRUCT_OPS)
 		return -EACCES;
 	/* ->st_ops is unset during the cfg pass; enforced once it is set. */
@@ -568,9 +602,25 @@ BTF_ID(func, bpf_lsm_inode_post_setattr)
 BTF_ID(func, bpf_lsm_inode_post_setxattr)
 BTF_ID(func, bpf_lsm_inode_removexattr)
 BTF_ID(func, bpf_lsm_inode_rmdir)
-BTF_ID(func, bpf_lsm_inode_setattr)
+BTF_ID(func, bpf_lsm_path_setattr)
 BTF_ID(func, bpf_lsm_inode_setxattr)
 BTF_ID(func, bpf_lsm_inode_unlink)
+/*
+ * Path hooks whose path argument is already locked by the caller.  They can
+ * run sleepable programs (see sleepable_lsm_hooks), so the dentry xattr
+ * kfuncs must use their _locked variants there.
+ *
+ * path_link, path_rename, path_rmdir and path_unlink hand over both a locked
+ * parent (the path) and an unlocked victim (the dentry), so the dentry xattr
+ * kfuncs are rejected for programs attached to them (see
+ * d_inode_ambiguous_hooks).
+ */
+#ifdef CONFIG_SECURITY_PATH
+BTF_ID(func, bpf_lsm_path_chmod)
+BTF_ID(func, bpf_lsm_path_chown)
+BTF_ID(func, bpf_lsm_path_mkdir)
+BTF_ID(func, bpf_lsm_path_symlink)
+#endif /* CONFIG_SECURITY_PATH */
 BTF_SET_END(d_inode_locked_hooks)
 
 bool bpf_lsm_has_d_inode_locked(const struct bpf_prog *prog)

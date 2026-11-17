@@ -147,8 +147,21 @@ LSM_HOOK(int, 0, inode_follow_link, struct dentry *dentry, struct inode *inode,
 	 bool rcu)
 LSM_HOOK(int, 0, inode_permission, const struct mnt_idmap *idmap,
 	 struct inode *inode, int mask)
-LSM_HOOK(int, 0, inode_setattr, const struct mnt_idmap *idmap, struct dentry *dentry,
-	 struct iattr *attr)
+/*
+ * The struct file argument of the hooks below is NULL when the operation
+ * is not performed through a file descriptor.  It is a borrowed reference
+ * that is only valid for the duration of the hook call: implementations
+ * must neither take a reference on it nor use it after the hook returns.
+ *
+ * path_setattr runs with the i_rwsem held exclusively on the inode of both
+ * @dentry and @path->dentry: the VFS locks the inode named by @path before
+ * calling ->setattr, and a filesystem forwarding the change locks the target
+ * inode before notify_change_target() invokes the hook.  BPF LSM programs
+ * attached to this hook therefore use the locked dentry xattr kfuncs.
+ */
+LSM_HOOK(int, 0, path_setattr, const struct mnt_idmap *idmap,
+	 const struct path *path, struct dentry *dentry,
+	 struct iattr *attr, struct file *file)
 LSM_HOOK(void, LSM_RET_VOID, inode_post_setattr, const struct mnt_idmap *idmap,
 	 struct dentry *dentry, int ia_valid)
 LSM_HOOK(int, 0, inode_getattr, const struct path *path)

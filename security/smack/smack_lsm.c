@@ -1265,15 +1265,19 @@ static int smack_inode_permission(const struct mnt_idmap *idmap, struct inode *i
 }
 
 /**
- * smack_inode_setattr - Smack check for setting attributes
+ * smack_path_setattr - Smack check for setting attributes
  * @idmap: idmap of the mount
- * @dentry: the object
+ * @path: the object
+ * @dentry: inode whose attributes are changed
  * @iattr: for the force flag
+ * @file: file through which the attribute change is requested, if any
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
-			       struct iattr *iattr)
+static int smack_path_setattr(const struct mnt_idmap *idmap,
+			      const struct path *path,
+			      struct dentry *dentry,
+			      struct iattr *iattr, struct file *file)
 {
 	struct smk_audit_info ad;
 	int rc;
@@ -5200,7 +5204,7 @@ static struct security_hook_list smack_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(inode_rmdir, smack_inode_rmdir),
 	LSM_HOOK_INIT(inode_rename, smack_inode_rename),
 	LSM_HOOK_INIT(inode_permission, smack_inode_permission),
-	LSM_HOOK_INIT(inode_setattr, smack_inode_setattr),
+	LSM_HOOK_INIT(path_setattr, smack_path_setattr),
 	LSM_HOOK_INIT(inode_getattr, smack_inode_getattr),
 	LSM_HOOK_INIT(inode_xattr_skipcap, smack_inode_xattr_skipcap),
 	LSM_HOOK_INIT(inode_setxattr, smack_inode_setxattr),
