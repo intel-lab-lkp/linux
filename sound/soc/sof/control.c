@@ -15,6 +15,21 @@
 #include "sof-priv.h"
 #include "sof-audio.h"
 
+static bool snd_sof_values_in_range(const struct snd_sof_control *scontrol,
+				    const struct snd_ctl_elem_value *ucontrol)
+{
+	unsigned int i;
+
+	for (i = 0; i < scontrol->num_channels; i++) {
+		long value = ucontrol->value.integer.value[i];
+
+		if (value < 0 || value > scontrol->max)
+			return false;
+	}
+
+	return true;
+}
+
 int snd_sof_volume_get(struct snd_kcontrol *kcontrol,
 		       struct snd_ctl_elem_value *ucontrol)
 {
@@ -38,6 +53,9 @@ int snd_sof_volume_put(struct snd_kcontrol *kcontrol,
 	struct snd_soc_component *scomp = scontrol->scomp;
 	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 	const struct sof_ipc_tplg_ops *tplg_ops = sof_ipc_get_ops(sdev, tplg);
+
+	if (!snd_sof_values_in_range(scontrol, ucontrol))
+		return -EINVAL;
 
 	if (tplg_ops && tplg_ops->control && tplg_ops->control->volume_put)
 		return tplg_ops->control->volume_put(scontrol, ucontrol);
