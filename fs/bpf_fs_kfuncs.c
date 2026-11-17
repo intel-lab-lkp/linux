@@ -600,10 +600,10 @@ BTF_SET_START(d_inode_locked_hooks)
 BTF_ID(func, bpf_lsm_inode_post_removexattr)
 BTF_ID(func, bpf_lsm_inode_post_setattr)
 BTF_ID(func, bpf_lsm_inode_post_setxattr)
-BTF_ID(func, bpf_lsm_inode_removexattr)
+BTF_ID(func, bpf_lsm_path_removexattr)
 BTF_ID(func, bpf_lsm_inode_rmdir)
 BTF_ID(func, bpf_lsm_path_setattr)
-BTF_ID(func, bpf_lsm_inode_setxattr)
+BTF_ID(func, bpf_lsm_path_setxattr)
 BTF_ID(func, bpf_lsm_inode_unlink)
 /*
  * Path hooks whose path argument is already locked by the caller.  They can

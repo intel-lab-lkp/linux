@@ -1924,7 +1924,7 @@ int security_path_getattr(const struct path *path, struct file *file)
 }
 
 /**
- * security_inode_setxattr() - Check if setting file xattrs is allowed
+ * security_path_setxattr() - Check if setting file xattrs is allowed
  * @idmap: idmap of the mount
  * @path: file (the VFS makes no guarantees with regard to @path->mnt)
  * @name: xattr name
@@ -1950,10 +1950,10 @@ int security_path_getattr(const struct path *path, struct file *file)
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_setxattr(const struct mnt_idmap *idmap,
-			    const struct path *path, const char *name,
-			    const void *value, size_t size, int flags,
-			    struct file *file)
+int security_path_setxattr(const struct mnt_idmap *idmap,
+			   const struct path *path, const char *name,
+			   const void *value, size_t size, int flags,
+			   struct file *file)
 {
 	int rc;
 
@@ -1967,7 +1967,7 @@ int security_inode_setxattr(const struct mnt_idmap *idmap,
 			return rc;
 	}
 
-	return call_int_hook(inode_setxattr, idmap, path, name, value,
+	return call_int_hook(path_setxattr, idmap, path, name, value,
 			     size, flags, file);
 }
 
@@ -2095,7 +2095,7 @@ void security_inode_post_setxattr(struct dentry *dentry, const char *name,
 }
 
 /**
- * security_inode_getxattr() - Check if xattr access is allowed
+ * security_path_getxattr() - Check if xattr access is allowed
  * @path: file (the VFS makes no guarantees with regard to @path->mnt)
  * @name: xattr name
  * @file: file through which the xattr access is requested, if any
@@ -2105,16 +2105,16 @@ void security_inode_post_setxattr(struct dentry *dentry, const char *name,
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_getxattr(const struct path *path,
-			    const char *name, struct file *file)
+int security_path_getxattr(const struct path *path,
+			   const char *name, struct file *file)
 {
 	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_getxattr, path, name, file);
+	return call_int_hook(path_getxattr, path, name, file);
 }
 
 /**
- * security_inode_listxattr() - Check if listing xattrs is allowed
+ * security_path_listxattr() - Check if listing xattrs is allowed
  * @path: file (the VFS makes no guarantees with regard to @path->mnt)
  * @file: file through which the xattr names are listed, if any
  *
@@ -2123,15 +2123,16 @@ int security_inode_getxattr(const struct path *path,
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_listxattr(const struct path *path, struct file *file)
+int security_path_listxattr(const struct path *path,
+			    struct file *file)
 {
 	if (unlikely(IS_PRIVATE(d_backing_inode(path->dentry))))
 		return 0;
-	return call_int_hook(inode_listxattr, path, file);
+	return call_int_hook(path_listxattr, path, file);
 }
 
 /**
- * security_inode_removexattr() - Check if removing an xattr is allowed
+ * security_path_removexattr() - Check if removing an xattr is allowed
  * @idmap: idmap of the mount
  * @path: file (the VFS makes no guarantees with regard to @path->mnt)
  * @name: xattr name
@@ -2154,9 +2155,9 @@ int security_inode_listxattr(const struct path *path, struct file *file)
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_inode_removexattr(const struct mnt_idmap *idmap,
-			       const struct path *path, const char *name,
-			       struct file *file)
+int security_path_removexattr(const struct mnt_idmap *idmap,
+			      const struct path *path, const char *name,
+			      struct file *file)
 {
 	int rc;
 
@@ -2170,7 +2171,7 @@ int security_inode_removexattr(const struct mnt_idmap *idmap,
 			return rc;
 	}
 
-	return call_int_hook(inode_removexattr, idmap, path, name, file);
+	return call_int_hook(path_removexattr, idmap, path, name, file);
 }
 
 /**

@@ -53,7 +53,7 @@ static void test_get_xattr(const char *name, const char *value, bool allow_acces
 	if (!ASSERT_GE(fd, 0, "open_file"))
 		goto out;
 
-	/* Trigger security_inode_getxattr */
+	/* Trigger security_path_getxattr */
 	err = getxattr(testfile, name, v, sizeof(v));
 
 	if (allow_access) {
@@ -148,13 +148,13 @@ static void test_set_remove_xattr(void)
 
 	/* First, test not _locked version of the kfuncs with getxattr. */
 
-	/* Read security.bpf.foo and trigger test_inode_getxattr. This
+	/* Read security.bpf.foo and trigger test_path_getxattr. This
 	 * bpf program will set security.bpf.bar to "world".
 	 */
 	read_and_validate_foo(skel);
 	validate_bar_match(skel);
 
-	/* Read security.bpf.foo and trigger test_inode_getxattr again.
+	/* Read security.bpf.foo and trigger test_path_getxattr again.
 	 * This will remove xattr security.bpf.bar.
 	 */
 	read_and_validate_foo(skel);
@@ -167,13 +167,13 @@ static void test_set_remove_xattr(void)
 
 	/* Second, test _locked version of the kfuncs, with setxattr */
 
-	/* Set security.bpf.foo and trigger test_inode_setxattr. This
+	/* Set security.bpf.foo and trigger test_path_setxattr. This
 	 * bpf program will set security.bpf.bar to "world".
 	 */
 	set_foo(skel);
 	validate_bar_match(skel);
 
-	/* Set security.bpf.foo and trigger test_inode_setxattr again.
+	/* Set security.bpf.foo and trigger test_path_setxattr again.
 	 * This will remove xattr security.bpf.bar.
 	 */
 	set_foo(skel);

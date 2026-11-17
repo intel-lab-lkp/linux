@@ -392,7 +392,7 @@ static void ovl_idmap_posix_acl(const struct inode *realinode,
  * > and following it on overlayfs.
  * >
  * > Applying the same logic to acl: we do need to call the
- * > security_inode_getxattr() on the underlying fs, even if just want to
+ * > security_path_getxattr() on the underlying fs, even if just want to
  * > check permissions on overlay. This is currently not done, which is an
  * > inconsistency.
  * >

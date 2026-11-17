@@ -55,8 +55,8 @@ int BPF_PROG(test_file_open, struct file *f)
 	return 0;
 }
 
-SEC("lsm.s/inode_getxattr")
-int BPF_PROG(test_inode_getxattr, const struct path *path, char *name,
+SEC("lsm.s/path_getxattr")
+int BPF_PROG(test_path_getxattr, const struct path *path, char *name,
 	     struct file *file)
 {
 	struct bpf_dynptr value_ptr;

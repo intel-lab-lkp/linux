@@ -309,8 +309,8 @@ __vfs_setxattr_locked(const struct mnt_idmap *idmap, const struct path *path,
 	if (error)
 		return error;
 
-	error = security_inode_setxattr(idmap, path, name, value, size,
-					flags, file);
+	error = security_path_setxattr(idmap, path, name, value, size,
+				       flags, file);
 	if (error)
 		goto out;
 
@@ -464,7 +464,7 @@ vfs_getxattr(const struct mnt_idmap *idmap, const struct path *path,
 	if (error)
 		return error;
 
-	error = security_inode_getxattr(path, name, file);
+	error = security_path_getxattr(path, name, file);
 	if (error)
 		return error;
 
@@ -517,7 +517,7 @@ vfs_listxattr(const struct path *path, char *list, size_t size,
 	struct inode *inode = d_inode(dentry);
 	ssize_t error;
 
-	error = security_inode_listxattr(path, file);
+	error = security_path_listxattr(path, file);
 	if (error)
 		return error;
 
@@ -580,7 +580,7 @@ __vfs_removexattr_locked(const struct mnt_idmap *idmap,
 	if (error)
 		return error;
 
-	error = security_inode_removexattr(idmap, path, name, file);
+	error = security_path_removexattr(idmap, path, name, file);
 	if (error)
 		goto out;
 
