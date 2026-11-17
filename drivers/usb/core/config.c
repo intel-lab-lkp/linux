@@ -170,12 +170,12 @@ static void usb_parse_ss_endpoint_companion(struct device *ddev, int cfgno,
 	}
 
 	if (usb_endpoint_xfer_isoc(&ep->desc))
-		max_tx = (desc->bMaxBurst + 1) *
-			(USB_SS_MULT(desc->bmAttributes)) *
+		max_tx = (ep->ss_ep_comp.bMaxBurst + 1) *
+			(USB_SS_MULT(ep->ss_ep_comp.bmAttributes)) *
 			usb_endpoint_maxp(&ep->desc);
 	else if (usb_endpoint_xfer_int(&ep->desc))
 		max_tx = usb_endpoint_maxp(&ep->desc) *
-			(desc->bMaxBurst + 1);
+			(ep->ss_ep_comp.bMaxBurst + 1);
 	else
 		max_tx = 999999;
 	/*
