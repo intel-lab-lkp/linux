@@ -140,7 +140,7 @@ static int scmi_reboot_notifier(struct notifier_block *nb,
 
 	if (sc->state == SCMI_SYSPOWER_REBOOTING) {
 		dev_dbg(sc->dev, "Reboot in progress...cancel delayed work.\n");
-		cancel_delayed_work_sync(&sc->forceful_work);
+		cancel_delayed_work(&sc->forceful_work);
 	}
 	mutex_unlock(&sc->state_mtx);
 
@@ -188,12 +188,13 @@ static void scmi_forceful_work_func(struct work_struct *work)
 	dwork = to_delayed_work(work);
 	sc = dwork_to_sconf(dwork);
 
-	dev_dbg(sc->dev, "Graceful request timed out...forcing !\n");
 	mutex_lock(&sc->state_mtx);
-	/* avoid deadlock by unregistering reboot notifier first */
-	unregister_reboot_notifier(&sc->reboot_nb);
-	if (sc->state == SCMI_SYSPOWER_IN_PROGRESS)
+	if (sc->state == SCMI_SYSPOWER_IN_PROGRESS) {
+		dev_dbg(sc->dev, "Graceful request timed out...forcing !\n");
+		/* avoid deadlock by unregistering reboot notifier first */
+		unregister_reboot_notifier(&sc->reboot_nb);
 		scmi_request_forceful_transition(sc);
+	}
 	mutex_unlock(&sc->state_mtx);
 }
 
