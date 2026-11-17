@@ -46,7 +46,7 @@ static int ovl_xattr_set(struct dentry *dentry, struct inode *inode, const char 
 		ovl_path_lower(dentry, &realpath);
 		with_ovl_creds(dentry->d_sb)
 			err = vfs_getxattr(mnt_idmap(realpath.mnt), &realpath,
-					   name, NULL, 0);
+					   name, NULL, 0, NULL);
 		if (err < 0)
 			goto out;
 	}
@@ -88,7 +88,7 @@ static int ovl_xattr_get(struct dentry *dentry, struct inode *inode, const char 
 	/* Use vfs_getxattr(), not __vfs_getxattr(): it idmaps the security.capability rootid. */
 	with_ovl_creds(dentry->d_sb)
 		return vfs_getxattr(mnt_idmap(realpath.mnt), &realpath,
-				    name, value, size);
+				    name, value, size, NULL);
 }
 
 static bool ovl_can_list(struct super_block *sb, const char *s)
@@ -117,7 +117,7 @@ ssize_t ovl_listxattr(struct dentry *dentry, char *list, size_t size)
 	ovl_path_real(dentry, &realpath);
 
 	with_ovl_creds(dentry->d_sb)
-		res = vfs_listxattr(&realpath, list, size);
+		res = vfs_listxattr(&realpath, list, size, NULL);
 	if (res <= 0 || size == 0)
 		return res;
 

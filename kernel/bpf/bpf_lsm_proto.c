@@ -32,3 +32,36 @@ noinline int bpf_lsm_inode_init_security(struct inode *inode, struct inode *dir,
 {
 	return -EOPNOTSUPP;
 }
+
+/*
+ * Strong definitions of the inode xattr BPF LSM hooks.  The file argument is
+ * only set for file descriptor-based operations and is NULL for path-based
+ * and in-kernel callers, so mark it as PTR_MAYBE_NULL.
+ */
+noinline int bpf_lsm_inode_setxattr(const struct mnt_idmap *idmap,
+				    const struct path *path, const char *name,
+				    const void *value, size_t size, int flags,
+				    struct file *file__nullable)
+{
+	return 0;
+}
+
+noinline int bpf_lsm_inode_getxattr(const struct path *path, const char *name,
+				    struct file *file__nullable)
+{
+	return 0;
+}
+
+noinline int bpf_lsm_inode_listxattr(const struct path *path,
+				     struct file *file__nullable)
+{
+	return 0;
+}
+
+noinline int bpf_lsm_inode_removexattr(const struct mnt_idmap *idmap,
+				       const struct path *path,
+				       const char *name,
+				       struct file *file__nullable)
+{
+	return 0;
+}

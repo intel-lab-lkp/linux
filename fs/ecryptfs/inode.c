@@ -1003,7 +1003,7 @@ ecryptfs_setxattr(struct dentry *dentry, struct inode *inode,
 	}
 	inode_lock(lower_inode);
 	rc = __vfs_setxattr_locked(&nop_mnt_idmap, &lower_path, name, value,
-				   size, flags, NULL);
+				   size, flags, NULL, NULL);
 	inode_unlock(lower_inode);
 	if (!rc && inode)
 		fsstack_copy_attr_all(inode, lower_inode);

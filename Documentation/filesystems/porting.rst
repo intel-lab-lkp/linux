@@ -1452,6 +1452,19 @@ the caller-supplied path in ia_path.
 
 **mandatory**
 
+vfs_setxattr(), vfs_getxattr(), vfs_listxattr() and vfs_removexattr()
+along with their __vfs_setxattr_locked() and __vfs_removexattr_locked()
+counterparts now take a const struct path * instead of a struct dentry *.
+The ones that already had a mnt_idmap, i.e. all of them but
+vfs_listxattr(), keep it as a separate argument: like for the POSIX ACL
+helpers, the idmap is not derived from the path.  All six helpers also
+take a trailing struct file through which the operation is requested, or
+NULL for path-based callers.
+
+---
+
+**mandatory**
+
 vfs_set_acl(), vfs_get_acl() and vfs_remove_acl(), along with
 do_set_acl() and do_get_acl(), now take a const struct path * instead of a
 struct dentry *, keeping the mnt_idmap as a separate first argument.  The

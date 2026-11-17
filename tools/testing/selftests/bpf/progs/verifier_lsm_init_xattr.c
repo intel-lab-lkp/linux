@@ -234,8 +234,10 @@ int BPF_PROG(reject_lsm_cgroup, struct inode *inode, struct inode *dir,
 
 SEC("lsm/inode_setxattr")
 __failure __msg("calling kernel function bpf_inode_init_xattr is not allowed")
-int BPF_PROG(reject_wrong_hook, struct mnt_idmap *idmap, struct dentry *dentry,
-	     const char *name, const void *value, size_t size, int flags)
+int BPF_PROG(reject_wrong_hook, const struct mnt_idmap *idmap,
+	     const struct path *path,
+	     const char *name, const void *value, size_t size, int flags,
+	     struct file *file)
 {
 	struct bpf_dynptr val;
 

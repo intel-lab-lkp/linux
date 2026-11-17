@@ -33,7 +33,8 @@ static inline bool name_match_foo(const char *name)
 
 /* Test bpf_set_dentry_xattr and bpf_remove_dentry_xattr */
 SEC("lsm.s/inode_getxattr")
-int BPF_PROG(test_inode_getxattr, struct dentry *dentry, char *name)
+int BPF_PROG(test_inode_getxattr, const struct path *path, char *name,
+	     struct file *file)
 {
 	struct bpf_dynptr value_ptr;
 	__u32 pid;
@@ -50,25 +51,25 @@ int BPF_PROG(test_inode_getxattr, struct dentry *dentry, char *name)
 	bpf_dynptr_from_mem(read_value, sizeof(read_value), 0, &value_ptr);
 
 	/* read security.bpf.bar */
-	ret = bpf_get_dentry_xattr(dentry, xattr_bar, &value_ptr);
+	ret = bpf_get_dentry_xattr(path->dentry, xattr_bar, &value_ptr);
 
 	if (ret < 0) {
 		/* If security.bpf.bar doesn't exist, set it */
 		bpf_dynptr_from_mem(value_bar, sizeof(value_bar), 0, &value_ptr);
 
-		ret = bpf_set_dentry_xattr(dentry, xattr_bar, &value_ptr, 0);
+		ret = bpf_set_dentry_xattr(path->dentry, xattr_bar, &value_ptr, 0);
 		if (!ret)
 			set_security_bpf_bar_success = true;
-		ret = bpf_set_dentry_xattr(dentry, xattr_selinux, &value_ptr, 0);
+		ret = bpf_set_dentry_xattr(path->dentry, xattr_selinux, &value_ptr, 0);
 		if (ret)
 			set_security_selinux_fail = true;
 	} else {
 		/* If security.bpf.bar exists, remove it */
-		ret = bpf_remove_dentry_xattr(dentry, xattr_bar);
+		ret = bpf_remove_dentry_xattr(path->dentry, xattr_bar);
 		if (!ret)
 			remove_security_bpf_bar_success = true;
 
-		ret = bpf_remove_dentry_xattr(dentry, xattr_selinux);
+		ret = bpf_remove_dentry_xattr(path->dentry, xattr_selinux);
 		if (ret)
 			remove_security_selinux_fail = true;
 	}
@@ -87,9 +88,10 @@ bool locked_remove_security_selinux_fail;
  * properly.
  */
 SEC("lsm.s/inode_setxattr")
-int BPF_PROG(test_inode_setxattr, struct mnt_idmap *idmap,
-	     struct dentry *dentry, const char *name,
-	     const void *value, size_t size, int flags)
+int BPF_PROG(test_inode_setxattr, const struct mnt_idmap *idmap,
+	     const struct path *path,
+	     const char *name, const void *value, size_t size, int flags,
+	     struct file *file)
 {
 	struct bpf_dynptr value_ptr;
 	__u32 pid;
@@ -106,25 +108,25 @@ int BPF_PROG(test_inode_setxattr, struct mnt_idmap *idmap,
 	bpf_dynptr_from_mem(read_value, sizeof(read_value), 0, &value_ptr);
 
 	/* read security.bpf.bar */
-	ret = bpf_get_dentry_xattr(dentry, xattr_bar, &value_ptr);
+	ret = bpf_get_dentry_xattr(path->dentry, xattr_bar, &value_ptr);
 
 	if (ret < 0) {
 		/* If security.bpf.bar doesn't exist, set it */
 		bpf_dynptr_from_mem(value_bar, sizeof(value_bar), 0, &value_ptr);
 
-		ret = bpf_set_dentry_xattr(dentry, xattr_bar, &value_ptr, 0);
+		ret = bpf_set_dentry_xattr(path->dentry, xattr_bar, &value_ptr, 0);
 		if (!ret)
 			locked_set_security_bpf_bar_success = true;
-		ret = bpf_set_dentry_xattr(dentry, xattr_selinux, &value_ptr, 0);
+		ret = bpf_set_dentry_xattr(path->dentry, xattr_selinux, &value_ptr, 0);
 		if (ret)
 			locked_set_security_selinux_fail = true;
 	} else {
 		/* If security.bpf.bar exists, remove it */
-		ret = bpf_remove_dentry_xattr(dentry, xattr_bar);
+		ret = bpf_remove_dentry_xattr(path->dentry, xattr_bar);
 		if (!ret)
 			locked_remove_security_bpf_bar_success = true;
 
-		ret = bpf_remove_dentry_xattr(dentry, xattr_selinux);
+		ret = bpf_remove_dentry_xattr(path->dentry, xattr_selinux);
 		if (ret)
 			locked_remove_security_selinux_fail = true;
 	}

@@ -56,7 +56,8 @@ int cachefiles_preset_object_xattr(struct cachefiles_object *object, struct file
 		if (ret == 0) {
 			ret = vfs_setxattr(&nop_mnt_idmap, &file->f_path,
 					   cachefiles_xattr_cache, buf,
-					   sizeof(struct cachefiles_xattr) + len, 0);
+					   sizeof(struct cachefiles_xattr) + len,
+					   0, NULL);
 			mnt_drop_write_file(file);
 		}
 	}
@@ -120,7 +121,8 @@ int cachefiles_set_object_xattr(struct cachefiles_object *object)
 		if (ret == 0) {
 			ret = vfs_setxattr(&nop_mnt_idmap, &file->f_path,
 					   cachefiles_xattr_cache, buf,
-					   sizeof(struct cachefiles_xattr) + len, 0);
+					   sizeof(struct cachefiles_xattr) + len,
+					   0, NULL);
 			mnt_drop_write_file(file);
 		}
 	}
@@ -174,7 +176,7 @@ int cachefiles_check_auxdata(struct cachefiles_object *object, struct file *file
 	xlen = cachefiles_inject_read_error();
 	if (xlen == 0)
 		xlen = vfs_getxattr(&nop_mnt_idmap, &file->f_path,
-				    cachefiles_xattr_cache, buf, tlen);
+				    cachefiles_xattr_cache, buf, tlen, NULL);
 	if (xlen != tlen) {
 		if (xlen < 0) {
 			ret = xlen;
@@ -234,7 +236,7 @@ int cachefiles_remove_object_xattr(struct cachefiles_cache *cache,
 		ret = mnt_want_write(cache->mnt);
 		if (ret == 0) {
 			ret = vfs_removexattr(&nop_mnt_idmap, &path,
-					      cachefiles_xattr_cache);
+					      cachefiles_xattr_cache, NULL);
 			mnt_drop_write(cache->mnt);
 		}
 	}
@@ -299,7 +301,7 @@ bool cachefiles_set_volume_xattr(struct cachefiles_volume *volume)
 		if (ret == 0) {
 			ret = vfs_setxattr(&nop_mnt_idmap, &path,
 					   cachefiles_xattr_cache,
-					   buf, len, 0);
+					   buf, len, 0, NULL);
 			mnt_drop_write(volume->cache->mnt);
 		}
 	}
@@ -345,7 +347,7 @@ int cachefiles_check_volume_xattr(struct cachefiles_volume *volume)
 	xlen = cachefiles_inject_read_error();
 	if (xlen == 0)
 		xlen = vfs_getxattr(&nop_mnt_idmap, &path,
-				    cachefiles_xattr_cache, buf, len);
+				    cachefiles_xattr_cache, buf, len, NULL);
 	if (xlen != len) {
 		if (xlen < 0) {
 			ret = xlen;

@@ -293,11 +293,13 @@ int __vfs_setxattr_noperm(const struct mnt_idmap *idmap,
  *  @flags: flags to pass into filesystem operations
  *  @delegated_inode: on return, will contain an inode pointer that
  *  a delegation was broken on, NULL if none.
+ *  @file: file to perform setxattr on, or NULL
  */
 int
 __vfs_setxattr_locked(const struct mnt_idmap *idmap, const struct path *path,
 		      const char *name, const void *value, size_t size,
-		      int flags, struct delegated_inode *delegated_inode)
+		      int flags, struct delegated_inode *delegated_inode,
+		      struct file *file)
 {
 	struct dentry *dentry = path->dentry;
 	struct inode *inode = dentry->d_inode;
@@ -307,8 +309,8 @@ __vfs_setxattr_locked(const struct mnt_idmap *idmap, const struct path *path,
 	if (error)
 		return error;
 
-	error = security_inode_setxattr(idmap, dentry, name, value, size,
-					flags);
+	error = security_inode_setxattr(idmap, path, name, value, size,
+					flags, file);
 	if (error)
 		goto out;
 
@@ -326,7 +328,8 @@ EXPORT_SYMBOL_GPL(__vfs_setxattr_locked);
 
 int
 vfs_setxattr(const struct mnt_idmap *idmap, const struct path *path,
-	     const char *name, const void *value, size_t size, int flags)
+	     const char *name, const void *value, size_t size, int flags,
+	     struct file *file)
 {
 	struct dentry *dentry = path->dentry;
 	struct inode *inode = dentry->d_inode;
@@ -344,7 +347,7 @@ vfs_setxattr(const struct mnt_idmap *idmap, const struct path *path,
 retry_deleg:
 	inode_lock(inode);
 	error = __vfs_setxattr_locked(idmap, path, name, value, size,
-				      flags, &delegated_inode);
+				      flags, &delegated_inode, file);
 	inode_unlock(inode);
 
 	if (is_delegated(&delegated_inode)) {
@@ -451,7 +454,7 @@ EXPORT_SYMBOL(__vfs_getxattr);
 
 ssize_t
 vfs_getxattr(const struct mnt_idmap *idmap, const struct path *path,
-	     const char *name, void *value, size_t size)
+	     const char *name, void *value, size_t size, struct file *file)
 {
 	struct dentry *dentry = path->dentry;
 	struct inode *inode = dentry->d_inode;
@@ -461,7 +464,7 @@ vfs_getxattr(const struct mnt_idmap *idmap, const struct path *path,
 	if (error)
 		return error;
 
-	error = security_inode_getxattr(dentry, name);
+	error = security_inode_getxattr(path, name, file);
 	if (error)
 		return error;
 
@@ -488,6 +491,7 @@ EXPORT_SYMBOL_GPL(vfs_getxattr);
  * @path: the path from whose inode the xattr names are retrieved
  * @list: buffer to store xattr names into
  * @size: size of the buffer
+ * @file: file through which the xattr names are retrieved, if any
  *
  * This function returns the names of all xattrs associated with the
  * inode of @path->dentry.
@@ -506,13 +510,14 @@ EXPORT_SYMBOL_GPL(vfs_getxattr);
  *         negative error code.
  */
 ssize_t
-vfs_listxattr(const struct path *path, char *list, size_t size)
+vfs_listxattr(const struct path *path, char *list, size_t size,
+	      struct file *file)
 {
 	struct dentry *dentry = path->dentry;
 	struct inode *inode = d_inode(dentry);
 	ssize_t error;
 
-	error = security_inode_listxattr(dentry);
+	error = security_inode_listxattr(path, file);
 	if (error)
 		return error;
 
@@ -559,11 +564,13 @@ EXPORT_SYMBOL(__vfs_removexattr);
  *  @name: name of xattr to remove
  *  @delegated_inode: on return, will contain an inode pointer that
  *  a delegation was broken on, NULL if none.
+ *  @file: file to perform removexattr on, or NULL
  */
 int
 __vfs_removexattr_locked(const struct mnt_idmap *idmap,
 			 const struct path *path, const char *name,
-			 struct delegated_inode *delegated_inode)
+			 struct delegated_inode *delegated_inode,
+			 struct file *file)
 {
 	struct dentry *dentry = path->dentry;
 	struct inode *inode = dentry->d_inode;
@@ -573,7 +580,7 @@ __vfs_removexattr_locked(const struct mnt_idmap *idmap,
 	if (error)
 		return error;
 
-	error = security_inode_removexattr(idmap, dentry, name);
+	error = security_inode_removexattr(idmap, path, name, file);
 	if (error)
 		goto out;
 
@@ -595,7 +602,7 @@ EXPORT_SYMBOL_GPL(__vfs_removexattr_locked);
 
 int
 vfs_removexattr(const struct mnt_idmap *idmap, const struct path *path,
-		const char *name)
+		const char *name, struct file *file)
 {
 	struct dentry *dentry = path->dentry;
 	struct inode *inode = dentry->d_inode;
@@ -604,7 +611,8 @@ vfs_removexattr(const struct mnt_idmap *idmap, const struct path *path,
 
 retry_deleg:
 	inode_lock(inode);
-	error = __vfs_removexattr_locked(idmap, path, name, &delegated_inode);
+	error = __vfs_removexattr_locked(idmap, path, name, &delegated_inode,
+					  file);
 	inode_unlock(inode);
 
 	if (is_delegated(&delegated_inode)) {
@@ -658,14 +666,14 @@ int setxattr_copy(const char __user *name, struct kernel_xattr_ctx *ctx)
 }
 
 static int do_setxattr(const struct mnt_idmap *idmap, const struct path *path,
-		       struct kernel_xattr_ctx *ctx)
+		       struct kernel_xattr_ctx *ctx, struct file *file)
 {
 	if (is_posix_acl_xattr(ctx->kname->name))
 		return do_set_acl(idmap, path, ctx->kname->name,
 				  ctx->kvalue, ctx->size);
 
 	return vfs_setxattr(idmap, path, ctx->kname->name,
-			ctx->kvalue, ctx->size, ctx->flags);
+			ctx->kvalue, ctx->size, ctx->flags, file);
 }
 
 int file_setxattr(struct file *f, struct kernel_xattr_ctx *ctx)
@@ -674,7 +682,7 @@ int file_setxattr(struct file *f, struct kernel_xattr_ctx *ctx)
 
 	if (!error) {
 		audit_file(f);
-		error = do_setxattr(file_mnt_idmap(f), &f->f_path, ctx);
+		error = do_setxattr(file_mnt_idmap(f), &f->f_path, ctx, f);
 		mnt_drop_write_file(f);
 	}
 	return error;
@@ -692,7 +700,7 @@ retry:
 		return error;
 	error = mnt_want_write(path.mnt);
 	if (!error) {
-		error = do_setxattr(mnt_idmap(path.mnt), &path, ctx);
+		error = do_setxattr(mnt_idmap(path.mnt), &path, ctx, NULL);
 		mnt_drop_write(path.mnt);
 	}
 	path_put(&path);
@@ -793,7 +801,7 @@ SYSCALL_DEFINE5(fsetxattr, int, fd, const char __user *, name,
  */
 static ssize_t
 do_getxattr(const struct mnt_idmap *idmap, const struct path *path,
-	    struct kernel_xattr_ctx *ctx)
+	    struct kernel_xattr_ctx *ctx, struct file *file)
 {
 	ssize_t error;
 	char *kname = ctx->kname->name;
@@ -810,7 +818,8 @@ do_getxattr(const struct mnt_idmap *idmap, const struct path *path,
 	if (is_posix_acl_xattr(kname))
 		error = do_get_acl(idmap, path, kname, kvalue, ctx->size);
 	else
-		error = vfs_getxattr(idmap, path, kname, kvalue, ctx->size);
+		error = vfs_getxattr(idmap, path, kname, kvalue,
+				     ctx->size, file);
 	if (error > 0) {
 		if (ctx->size && copy_to_user(ctx->value, kvalue, error))
 			error = -EFAULT;
@@ -827,7 +836,7 @@ do_getxattr(const struct mnt_idmap *idmap, const struct path *path,
 ssize_t file_getxattr(struct file *f, struct kernel_xattr_ctx *ctx)
 {
 	audit_file(f);
-	return do_getxattr(file_mnt_idmap(f), &f->f_path, ctx);
+	return do_getxattr(file_mnt_idmap(f), &f->f_path, ctx, f);
 }
 
 ssize_t filename_getxattr(int dfd, struct filename *filename,
@@ -839,7 +848,7 @@ retry:
 	error = filename_lookup(dfd, filename, lookup_flags, &path, NULL);
 	if (error)
 		return error;
-	error = do_getxattr(mnt_idmap(path.mnt), &path, ctx);
+	error = do_getxattr(mnt_idmap(path.mnt), &path, ctx, NULL);
 	path_put(&path);
 	if (retry_estale(error, lookup_flags)) {
 		lookup_flags |= LOOKUP_REVAL;
@@ -930,7 +939,8 @@ SYSCALL_DEFINE4(fgetxattr, int, fd, const char __user *, name,
  * Extended attribute LIST operations
  */
 static ssize_t
-listxattr(const struct path *path, char __user *list, size_t size)
+listxattr(const struct path *path, char __user *list, size_t size,
+	   struct file *file)
 {
 	ssize_t error;
 	char *klist = NULL;
@@ -943,7 +953,7 @@ listxattr(const struct path *path, char __user *list, size_t size)
 			return -ENOMEM;
 	}
 
-	error = vfs_listxattr(path, klist, size);
+	error = vfs_listxattr(path, klist, size, file);
 	if (error > 0) {
 		if (size && copy_to_user(list, klist, error))
 			error = -EFAULT;
@@ -962,7 +972,7 @@ static
 ssize_t file_listxattr(struct file *f, char __user *list, size_t size)
 {
 	audit_file(f);
-	return listxattr(&f->f_path, list, size);
+	return listxattr(&f->f_path, list, size, f);
 }
 
 static
@@ -976,7 +986,7 @@ retry:
 	error = filename_lookup(dfd, filename, lookup_flags, &path, NULL);
 	if (error)
 		return error;
-	error = listxattr(&path, list, size);
+	error = listxattr(&path, list, size, NULL);
 	path_put(&path);
 	if (retry_estale(error, lookup_flags)) {
 		lookup_flags |= LOOKUP_REVAL;
@@ -1035,11 +1045,11 @@ SYSCALL_DEFINE3(flistxattr, int, fd, char __user *, list, size_t, size)
  */
 static long
 removexattr(const struct mnt_idmap *idmap, const struct path *path,
-	    const char *name)
+	    const char *name, struct file *file)
 {
 	if (is_posix_acl_xattr(name))
 		return vfs_remove_acl(idmap, path, name);
-	return vfs_removexattr(idmap, path, name);
+	return vfs_removexattr(idmap, path, name, file);
 }
 
 static int file_removexattr(struct file *f, struct xattr_name *kname)
@@ -1048,7 +1058,8 @@ static int file_removexattr(struct file *f, struct xattr_name *kname)
 
 	if (!error) {
 		audit_file(f);
-		error = removexattr(file_mnt_idmap(f), &f->f_path, kname->name);
+		error = removexattr(file_mnt_idmap(f), &f->f_path,
+				    kname->name, f);
 		mnt_drop_write_file(f);
 	}
 	return error;
@@ -1066,7 +1077,8 @@ retry:
 		return error;
 	error = mnt_want_write(path.mnt);
 	if (!error) {
-		error = removexattr(mnt_idmap(path.mnt), &path, kname->name);
+		error = removexattr(mnt_idmap(path.mnt), &path,
+				    kname->name, NULL);
 		mnt_drop_write(path.mnt);
 	}
 	path_put(&path);
