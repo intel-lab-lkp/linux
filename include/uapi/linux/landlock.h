@@ -430,10 +430,49 @@ struct landlock_capability_attr {
  *   The rationale for this design is described in
  *   :ref:`Documentation/security/landlock.rst <scoped-flags-interaction>`.
  *
+ * The following access rights apply to both files and directories:
+ *
+ * - %LANDLOCK_ACCESS_FS_READ_METADATA: Read file or directory metadata (e.g.
+ *   inode attributes, extended attributes, and POSIX ACLs) through
+ *   :manpage:`stat(2)`, :manpage:`fstat(2)`, :manpage:`lstat(2)`,
+ *   :manpage:`newfstatat(2)`, :manpage:`statx(2)`, :manpage:`getxattr(2)`,
+ *   and :manpage:`listxattr(2)`.
+ *
+ *   This access right is available since the thirteenth version of the
+ *   Landlock ABI.
+ * - %LANDLOCK_ACCESS_FS_WRITE_METADATA: Change file or directory metadata
+ *   (e.g. inode attributes, extended attributes, and POSIX ACLs) through
+ *   :manpage:`chmod(2)`, :manpage:`chown(2)`, :manpage:`utimensat(2)`,
+ *   :manpage:`setxattr(2)`, and :manpage:`removexattr(2)`, as well as related
+ *   system calls.  Metadata changes that the kernel performs implicitly on
+ *   behalf of another operation (e.g. timestamp updates with
+ *   :manpage:`write(2)`, or set-user-ID and set-group-ID bit clearing with
+ *   :manpage:`write(2)` or :manpage:`truncate(2)`) are not restricted by
+ *   this access right.
+ *
+ *   This access right is available since the thirteenth version of the
+ *   Landlock ABI.
+ *
  * Whether an opened file can be truncated with :manpage:`ftruncate(2)` or used
  * with `ioctl(2)` is determined during :manpage:`open(2)`, in the same way as
  * read and write permissions are checked during :manpage:`open(2)` using
- * %LANDLOCK_ACCESS_FS_READ_FILE and %LANDLOCK_ACCESS_FS_WRITE_FILE.
+ * %LANDLOCK_ACCESS_FS_READ_FILE and %LANDLOCK_ACCESS_FS_WRITE_FILE.  The same
+ * applies to metadata operations performed on an already opened file through
+ * its file descriptor (e.g. :manpage:`fstat(2)`, :manpage:`fchmod(2)`,
+ * :manpage:`fchown(2)`, :manpage:`futimens(2)`, :manpage:`fgetxattr(2)`,
+ * :manpage:`fsetxattr(2)`, the ``FS_IOC_GETFLAGS`` and ``FS_IOC_SETFLAGS``
+ * ioctls, and :manpage:`file_getattr(2)` and :manpage:`file_setattr(2)` with
+ * ``AT_EMPTY_PATH``): these are authorized with
+ * %LANDLOCK_ACCESS_FS_READ_METADATA and %LANDLOCK_ACCESS_FS_WRITE_METADATA at
+ * :manpage:`open(2)` time.  O_PATH file descriptors are an exception: they do
+ * not record any access right at :manpage:`open(2)` time, so metadata
+ * operations performed through them are checked against the Landlock domain
+ * of the calling thread instead.  Only the metadata system calls that accept
+ * O_PATH file descriptors behave that way, e.g. fstat(2), and statx(2),
+ * fchmodat(2), fchownat(2) or utimensat(2) with an empty path; the other
+ * file descriptor based metadata system calls and the
+ * FS_IOC_GETFLAGS and FS_IOC_SETFLAGS ioctls reject O_PATH file descriptors
+ * with EBADF.
  *
  * A directory can receive access rights related to files or directories.  The
  * following access right is applied to the directory itself, and the
@@ -494,9 +533,7 @@ struct landlock_capability_attr {
  *
  *   It is currently not possible to restrict some file-related actions
  *   accessible through these syscall families: :manpage:`chdir(2)`,
- *   :manpage:`stat(2)`, :manpage:`flock(2)`, :manpage:`chmod(2)`,
- *   :manpage:`chown(2)`, :manpage:`setxattr(2)`, :manpage:`utime(2)`,
- *   :manpage:`fcntl(2)`, :manpage:`access(2)`.
+ *   :manpage:`flock(2)`, :manpage:`fcntl(2)`, :manpage:`access(2)`.
  *   Future Landlock evolutions will enable to restrict them.
  */
 /* clang-format off */
@@ -517,6 +554,8 @@ struct landlock_capability_attr {
 #define LANDLOCK_ACCESS_FS_TRUNCATE			(1ULL << 14)
 #define LANDLOCK_ACCESS_FS_IOCTL_DEV			(1ULL << 15)
 #define LANDLOCK_ACCESS_FS_RESOLVE_UNIX			(1ULL << 16)
+#define LANDLOCK_ACCESS_FS_READ_METADATA		(1ULL << 17)
+#define LANDLOCK_ACCESS_FS_WRITE_METADATA		(1ULL << 18)
 /* clang-format on */
 
 /**

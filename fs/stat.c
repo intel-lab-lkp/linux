@@ -19,6 +19,7 @@
 #include <linux/pagemap.h>
 #include <linux/compat.h>
 #include <linux/iversion.h>
+#include <linux/audit.h>
 
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
@@ -361,6 +362,7 @@ static int vfs_statx_fd(int fd, int flags, struct kstat *stat,
 	CLASS(fd_raw, f)(fd);
 	if (fd_empty(f))
 		return -EBADF;
+	audit_file(fd_file(f));
 	return vfs_statx_path(&fd_file(f)->f_path, flags, stat, request_mask,
 			      fd_file(f));
 }
@@ -390,6 +392,18 @@ static int vfs_statx(int dfd, struct filename *filename, int flags,
 	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH |
 		      AT_STATX_SYNC_TYPE))
 		return -EINVAL;
+
+	/*
+	 * An empty pathname with AT_EMPTY_PATH refers to the file descriptor
+	 * itself.  Resolve it as such so that the struct file is passed down
+	 * to the LSM hooks, like sys_statx() does for a NULL pathname and
+	 * unlike a plain path lookup from the file descriptor.  This branch
+	 * replaces a path lookup, so vfs_statx_fd() keeps auditing the file
+	 * descriptor as that lookup would have.
+	 */
+	if ((flags & AT_EMPTY_PATH) && dfd >= 0 && !IS_ERR_OR_NULL(filename) &&
+	    !filename->name[0])
+		return vfs_statx_fd(dfd, flags, stat, request_mask);
 
 retry:
 	error = filename_lookup(dfd, filename, lookup_flags, &path, NULL);

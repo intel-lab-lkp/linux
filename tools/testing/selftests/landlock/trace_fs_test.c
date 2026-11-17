@@ -252,7 +252,8 @@ TEST_F(trace_fs, add_rule_path_beneath)
 TEST_F(trace_fs, add_rule_path_beneath_escaped_path_overflow)
 {
 	static const char access_prefix[] = "execute|write_file|read_file|";
-	static const char access_suffix[] = "|ioctl_dev|resolve_unix";
+	static const char access_suffix[] =
+		"|ioctl_dev|resolve_unix|read_metadata|write_metadata";
 	struct landlock_ruleset_attr ruleset_attr = {
 		.handled_access_fs = LANDLOCK_ACCESS_FS_READ_FILE,
 	};
