@@ -20,7 +20,6 @@ int omapdss_device_init_output(struct omap_dss_device *out,
 			       struct drm_bridge *local_bridge)
 {
 	struct drm_bridge *bridge;
-	int ret;
 
 	bridge = of_drm_get_bridge_by_endpoint(out->dev->of_node, out->of_port, 0);
 	if (IS_ERR(bridge)) {
@@ -34,20 +33,11 @@ int omapdss_device_init_output(struct omap_dss_device *out,
 	out->bridge = bridge;
 
 	if (local_bridge) {
-		if (!out->bridge) {
-			ret = -EPROBE_DEFER;
-			goto error;
-		}
-
 		out->next_bridge = out->bridge;
 		out->bridge = drm_bridge_get(local_bridge);
 	}
 
 	return 0;
-
-error:
-	omapdss_device_cleanup_output(out);
-	return ret;
 }
 
 void omapdss_device_cleanup_output(struct omap_dss_device *out)
