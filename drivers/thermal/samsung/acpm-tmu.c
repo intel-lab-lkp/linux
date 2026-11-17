@@ -37,6 +37,8 @@
 				  EXYNOS_TMU_SENSOR(2))
 
 #define GS101_REG_INTPEND(i)		((i) * 0x50 + 0xf8)
+#define GS101_TMU_THRESHOLD_COUNT	8
+#define GS101_TMU_CRITICAL_THRESHOLD	7
 
 enum {
 	P0_INTPEND,
@@ -68,6 +70,9 @@ struct acpm_tmu_sensor {
 	struct thermal_zone_device *tzd;
 	struct acpm_tmu_priv *priv;
 	struct mutex lock; /* protects sensor state */
+	int low;
+	int high;
+	int critical;
 	bool enabled;
 };
 
@@ -250,7 +255,7 @@ static int acpm_tmu_get_temp(struct thermal_zone_device *tz, int *temp)
 }
 
 static int acpm_tmu_update_thresholds(struct acpm_tmu_sensor *sensor,
-				      u8 thresholds[2], u8 inten)
+				      u8 thresholds[GS101_TMU_THRESHOLD_COUNT], u8 inten)
 {
 	struct acpm_tmu_priv *priv = sensor->priv;
 	struct acpm_handle *handle = priv->handle;
@@ -260,7 +265,7 @@ static int acpm_tmu_update_thresholds(struct acpm_tmu_sensor *sensor,
 	bool was_enabled;
 	int ret, restore_ret;
 
-	guard(mutex)(&sensor->lock);
+	lockdep_assert_held(&sensor->lock);
 
 	was_enabled = sensor->enabled;
 
@@ -271,7 +276,7 @@ static int acpm_tmu_update_thresholds(struct acpm_tmu_sensor *sensor,
 	}
 
 	ret = ops->set_threshold(handle, mbox_chan_id, acpm_sensor_id,
-				 thresholds, 2);
+				 thresholds, GS101_TMU_THRESHOLD_COUNT);
 	if (!ret) {
 		ret = ops->set_interrupt_enable(handle, mbox_chan_id,
 						acpm_sensor_id, inten);
@@ -289,14 +294,20 @@ static int acpm_tmu_update_thresholds(struct acpm_tmu_sensor *sensor,
 	return ret;
 }
 
-static int acpm_tmu_set_trips(struct thermal_zone_device *tz, int low, int high)
+static int acpm_tmu_set_thresholds(struct acpm_tmu_sensor *sensor,
+				   int low, int high, int critical)
 {
-	struct acpm_tmu_sensor *sensor = thermal_zone_device_priv(tz);
 	struct acpm_tmu_priv *priv = sensor->priv;
 	struct device *dev = priv->dev;
-	u8 thresholds[2] = {};
+	u8 thresholds[GS101_TMU_THRESHOLD_COUNT] = {};
 	u8 inten = 0;
 	int ret;
+
+	if (critical < 0 || critical > 255 * MILLIDEGREE_PER_DEGREE)
+		return -EINVAL;
+
+	/* Slot 7 throttles CPU clocks independently of the interrupt mask. */
+	thresholds[GS101_TMU_CRITICAL_THRESHOLD] = critical / MILLIDEGREE_PER_DEGREE;
 
 	/* If a valid lower bound exists, set the threshold and enable its interrupt */
 	if (low > -INT_MAX) {
@@ -315,15 +326,43 @@ static int acpm_tmu_set_trips(struct thermal_zone_device *tz, int low, int high)
 		return ret;
 
 	ret = acpm_tmu_update_thresholds(sensor, thresholds, inten);
+	if (!ret) {
+		sensor->low = low;
+		sensor->high = high;
+		sensor->critical = critical;
+	}
 
 	pm_runtime_put_autosuspend(dev);
 
 	return ret;
 }
 
+static int acpm_tmu_set_trips(struct thermal_zone_device *tz, int low, int high)
+{
+	struct acpm_tmu_sensor *sensor = thermal_zone_device_priv(tz);
+
+	guard(mutex)(&sensor->lock);
+
+	return acpm_tmu_set_thresholds(sensor, low, high, sensor->critical);
+}
+
+static int acpm_tmu_set_trip_temp(struct thermal_zone_device *tz,
+				  const struct thermal_trip *trip, int temp)
+{
+	struct acpm_tmu_sensor *sensor = thermal_zone_device_priv(tz);
+
+	if (trip->type != THERMAL_TRIP_CRITICAL)
+		return 0;
+
+	guard(mutex)(&sensor->lock);
+
+	return acpm_tmu_set_thresholds(sensor, sensor->low, sensor->high, temp);
+}
+
 static const struct thermal_zone_device_ops acpm_tmu_sensor_ops = {
 	.get_temp = acpm_tmu_get_temp,
 	.set_trips = acpm_tmu_set_trips,
+	.set_trip_temp = acpm_tmu_set_trip_temp,
 };
 
 static int acpm_tmu_has_pending_irq(struct acpm_tmu_sensor *sensor,
@@ -471,6 +510,7 @@ static int acpm_tmu_probe(struct platform_device *pdev)
 
 	for (i = 0; i < priv->num_sensors; i++) {
 		struct acpm_tmu_sensor *sensor = &priv->sensors[i];
+		int critical;
 
 		mutex_init(&sensor->lock);
 		sensor->group = &data->sensor_groups[i];
@@ -490,8 +530,16 @@ static int acpm_tmu_probe(struct platform_device *pdev)
 			goto err_rollback;
 		}
 
+		ret = thermal_zone_get_crit_temp(sensor->tzd, &critical);
+		if (ret) {
+			ret = dev_err_probe(dev, ret, "Sensor %d has no critical trip\n", i);
+			goto err_rollback;
+		}
+
 		mutex_lock(&sensor->lock);
-		ret = acpm_tmu_op_tz_control(sensor, true);
+		ret = acpm_tmu_set_thresholds(sensor, -INT_MAX, INT_MAX, critical);
+		if (!ret)
+			ret = acpm_tmu_op_tz_control(sensor, true);
 		mutex_unlock(&sensor->lock);
 		if (ret) {
 			ret = dev_err_probe(dev, ret, "Failed to enable sensor %d\n", i);
