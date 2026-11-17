@@ -112,7 +112,7 @@ static __always_inline unsigned long vt_get_exit_qual(struct kvm_vcpu *vcpu)
 
 static __always_inline int vt_get_exit_qual_reg(unsigned long exit_qualification)
 {
-	return (exit_qualification >> 8) & 0xf;
+	return (exit_qualification >> 8) & (vmx_instr_info_extended() ? 0x1f : 0xf);
 }
 
 static __always_inline u32 vt_get_intr_info(struct kvm_vcpu *vcpu)
