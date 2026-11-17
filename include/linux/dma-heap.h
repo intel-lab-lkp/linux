@@ -12,6 +12,7 @@
 #include <linux/types.h>
 
 struct dma_heap;
+struct obj_cgroup;
 
 /**
  * struct dma_heap_ops - ops to operate on a given heap
@@ -23,7 +24,8 @@ struct dma_heap_ops {
 	struct dma_buf *(*allocate)(struct dma_heap *heap,
 				    unsigned long len,
 				    u32 fd_flags,
-				    u64 heap_flags);
+				    u64 heap_flags,
+				    struct obj_cgroup *objcg);
 };
 
 /**

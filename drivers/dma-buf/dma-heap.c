@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
+#include <linux/memcontrol.h>
 #include <linux/err.h>
 #include <linux/export.h>
 #include <linux/list.h>
@@ -78,6 +79,7 @@ static struct dma_buf *dma_heap_ioctl_allocate(struct file *file, void *data)
 	struct dma_heap_allocation_data *heap_allocation = data;
 	struct dma_heap *heap = file->private_data;
 	struct dma_buf *dmabuf;
+	struct obj_cgroup *objcg = NULL;
 	int fd;
 	size_t len;
 
@@ -90,15 +92,34 @@ static struct dma_buf *dma_heap_ioctl_allocate(struct file *file, void *data)
 	if (heap_allocation->heap_flags & ~DMA_HEAP_VALID_HEAP_FLAGS)
 		return ERR_PTR(-EINVAL);
 
-	len = PAGE_ALIGN(heap_allocation->len);
-	if (!len)
+	if (heap_allocation->__padding != 0)
 		return ERR_PTR(-EINVAL);
 
-	dmabuf = heap->ops->allocate(heap, len, heap_allocation->fd_flags,
-				     heap_allocation->heap_flags);
+	if (heap_allocation->charge_fd) {
+		objcg = get_obj_cgroup_from_fd(heap_allocation->charge_fd);
+		if (IS_ERR(objcg))
+			return ERR_CAST(objcg);
+	}
 
-	if (IS_ERR(dmabuf))
+	if (!objcg && mem_accounting && !mem_cgroup_disabled())
+		objcg = get_obj_cgroup_from_current();
+
+	len = PAGE_ALIGN(heap_allocation->len);
+	if (!len) {
+		obj_cgroup_put(objcg);
+		return ERR_PTR(-EINVAL);
+	}
+
+	dmabuf = heap->ops->allocate(heap, len, heap_allocation->fd_flags,
+				     heap_allocation->heap_flags, objcg);
+
+	if (IS_ERR(dmabuf)) {
+		obj_cgroup_put(objcg);
 		return dmabuf;
+	}
+
+	if (!dmabuf->objcg)
+		obj_cgroup_put(objcg);
 
 	fd = get_unused_fd_flags(heap_allocation->fd_flags);
 	if (fd < 0) {
