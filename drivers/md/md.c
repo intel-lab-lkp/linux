@@ -5063,6 +5063,7 @@ metadata_store(struct mddev *mddev, const char *buf, size_t len)
 		mddev->external = 0;
 		mddev->major_version = 0;
 		mddev->minor_version = 90;
+		mddev->max_disks = 0;
 		goto out_unlock;
 	}
 	if (strncmp(buf, "external:", 9) == 0) {
@@ -5077,6 +5078,7 @@ metadata_store(struct mddev *mddev, const char *buf, size_t len)
 		mddev->external = 1;
 		mddev->major_version = 0;
 		mddev->minor_version = 90;
+		mddev->max_disks = 0;
 		goto out_unlock;
 	}
 	major = simple_strtoul(buf, &e, 10);
@@ -5090,10 +5092,17 @@ metadata_store(struct mddev *mddev, const char *buf, size_t len)
 	err = -ENOENT;
 	if (major >= ARRAY_SIZE(super_types) || super_types[major].name == NULL)
 		goto out_unlock;
+	err = -EINVAL;
+	if (major == 0 &&
+	    (mddev->raid_disks < 0 || mddev->raid_disks > MD_SB_DISKS ||
+	     (s64)mddev->raid_disks - mddev->delta_disks < 0 ||
+	     (s64)mddev->raid_disks - mddev->delta_disks > MD_SB_DISKS))
+		goto out_unlock;
 	mddev->major_version = major;
 	mddev->minor_version = minor;
 	mddev->persistent = 1;
 	mddev->external = 0;
+	mddev->max_disks = (major == 0) ? MD_SB_DISKS : 0;
 	err = 0;
 out_unlock:
 	mddev_unlock(mddev);
@@ -7975,16 +7984,33 @@ int md_set_array_info(struct mddev *mddev, struct mdu_array_info_s *info)
 				info->major_version);
 			return -EINVAL;
 		}
+		if (!info->not_persistent && info->major_version == 0 &&
+		    (mddev->raid_disks < 0 ||
+		     mddev->raid_disks > MD_SB_DISKS ||
+		     (s64)mddev->raid_disks - mddev->delta_disks < 0 ||
+		     (s64)mddev->raid_disks - mddev->delta_disks > MD_SB_DISKS))
+			return -EINVAL;
 		mddev->major_version = info->major_version;
 		mddev->minor_version = info->minor_version;
 		mddev->patch_version = info->patch_version;
 		mddev->persistent = !info->not_persistent;
+		mddev->max_disks = (mddev->persistent &&
+				    info->major_version == 0) ?
+				   MD_SB_DISKS : 0;
 		/* ensure mddev_put doesn't delete this now that there
 		 * is some minimal configuration.
 		 */
 		mddev->ctime         = ktime_get_real_seconds();
 		return 0;
 	}
+
+	if (info->raid_disks < 0 ||
+	    (!info->not_persistent && info->raid_disks > MD_SB_DISKS)) {
+		pr_warn("md: %s: invalid raid_disks %d for v0.90 superblock\n",
+			mdname(mddev), info->raid_disks);
+		return -EINVAL;
+	}
+
 	mddev->major_version = MD_MAJOR_VERSION;
 	mddev->minor_version = MD_MINOR_VERSION;
 	mddev->patch_version = MD_PATCHLEVEL_VERSION;
@@ -8014,6 +8040,8 @@ int md_set_array_info(struct mddev *mddev, struct mdu_array_info_s *info)
 		mddev->max_disks = MD_SB_DISKS;
 		mddev->flags = 0;
 		mddev->sb_flags = 0;
+	} else {
+		mddev->max_disks = 0;
 	}
 	set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
 
