@@ -19,11 +19,10 @@
 #define ECONET_BITS			32
 #define ECONET_MIN_DELTA		0x00001000
 #define ECONET_MAX_DELTA		GENMASK(ECONET_BITS - 2, 0)
-/* 34Kc hardware has 1 block and 1004Kc has 2. */
-#define ECONET_NUM_BLOCKS		DIV_ROUND_UP(NR_CPUS, 2)
 
 static struct {
-	void __iomem	*membase[ECONET_NUM_BLOCKS];
+	void __iomem	**membase;
+	int		num_membase;
 	int		*irqs;
 	int		num_irqs;
 	bool		is_percpu;
@@ -37,6 +36,10 @@ static DEFINE_PER_CPU(struct clock_event_device, econet_timer_pcpu);
  */
 static inline void __iomem *reg_ctl(u32 timer_n)
 {
+	/* reg_ctl() is used to check if a clock exists */
+	if (timer_n >> 1 >= econet_timer.num_membase)
+		return NULL;
+
 	return econet_timer.membase[timer_n >> 1];
 }
 
@@ -202,11 +205,6 @@ static int __init timer_init(struct device_node *np)
 		       num_irqs);
 		return -EINVAL;
 	}
-	if (num_blocks > ARRAY_SIZE(econet_timer.membase)) {
-		pr_err("%pOFn: Too many regs: max %zd got %d\n", np,
-		       ARRAY_SIZE(econet_timer.membase), num_blocks);
-		return -EINVAL;
-	}
 	if (num_blocks == 0) {
 		pr_err("%pOFn: At least one reg block must be provided\n", np);
 		return -EINVAL;
@@ -226,6 +224,15 @@ static int __init timer_init(struct device_node *np)
 				    GFP_KERNEL);
 	if (!econet_timer.irqs)
 		return -ENOMEM;
+
+	econet_timer.num_membase = num_blocks;
+	econet_timer.membase = kcalloc(num_blocks,
+				       sizeof(*econet_timer.membase),
+				       GFP_KERNEL);
+	if (!econet_timer.membase) {
+		ret = -ENOMEM;
+		goto out_kfree_irqs;
+	}
 
 	for (i = 0; i < num_blocks; i++) {
 		econet_timer.membase[i] = of_iomap(np, i);
@@ -305,13 +312,17 @@ out_irq_mapping:
 			irq_dispose_mapping(econet_timer.irqs[i]);
 	}
 out_membase:
-	for (int i = 0; i < ARRAY_SIZE(econet_timer.membase); i++) {
+	for (int i = 0; i < num_blocks; i++) {
 		if (econet_timer.membase[i]) {
 			iounmap(econet_timer.membase[i]);
 			econet_timer.membase[i] = NULL;
 		}
 	}
 
+	kfree(econet_timer.membase);
+	econet_timer.membase = NULL;
+
+out_kfree_irqs:
 	kfree(econet_timer.irqs);
 	econet_timer.irqs = NULL;
 
