@@ -478,6 +478,13 @@ HWCAP3_SVE_LUT6
     Functionality implied by ID_AA64PFR0_EL1.SVE == 0b0001 and
     ID_AA64ISAR2_EL1.LUT == 0b0010.
 
+HWCAP3_LS64_ACCDATA
+    Functionality implied by ID_AA64ISAR1_EL1.LS64 >= 0b0011. Note that
+    the function of instruction st64bv0 requires support by CPU, system
+    and target (device) memory location and HWCAP3_LS64_ACCDATA implies
+    the support of CPU. User should only use st64bv0 on supported target
+    (device) memory location, otherwise fallback to the non-atomic
+    alternatives.
 
 4. Unused AT_HWCAP bits
 -----------------------
