@@ -781,6 +781,13 @@ struct clk *rockchip_clk_register_ddrclk(const char *name, int flags,
 					 int ddr_flags, void __iomem *reg_base,
 					 spinlock_t *lock);
 
+struct clk *rockchip_clk_register_frac_v2(struct device *dev,
+					  const char *name, const char *parent_name,
+					  unsigned long flags, void __iomem *reg,
+					  u8 mshift, u8 width,
+					  void __iomem *high_reg, u8 high_mshift, u8 high_width,
+					  u8 clk_divider_flags, spinlock_t *lock);
+
 #define ROCKCHIP_INVERTER_HIWORD_MASK	BIT(0)
 
 struct clk *rockchip_clk_register_inverter(const char *name,
@@ -806,6 +813,7 @@ enum rockchip_clk_branch_type {
 	branch_grf_mux,
 	branch_divider,
 	branch_fraction_divider,
+	branch_fraction_divider_v2,
 	branch_gate,
 	branch_grf_gate,
 	branch_linked_gate,
@@ -1012,6 +1020,23 @@ struct rockchip_clk_branch {
 		.gate_shift	= gs,				\
 		.gate_flags	= gf,				\
 		.child		= ch,				\
+	}
+
+#define COMPOSITE_FRAC_V2(_id, cname, pname, f, mo, ms, mw, do, ds, dw, df) \
+	{							\
+		.id		= _id,				\
+		.branch_type	= branch_fraction_divider_v2,	\
+		.name		= cname,			\
+		.parent_names	= (const char *[]){ pname },	\
+		.num_parents	= 1,				\
+		.flags		= f,				\
+		.muxdiv_offset	= mo,				\
+		.mux_shift	= ms,				\
+		.mux_width	= mw,				\
+		.div_offset	= do,				\
+		.div_shift	= ds,				\
+		.div_width	= dw,				\
+		.div_flags	= df,				\
 	}
 
 #define COMPOSITE_FRACMUX_NOGATE(_id, cname, pname, f, mo, df, ch) \
