@@ -1827,6 +1827,11 @@ static inline struct obj_cgroup *get_obj_cgroup_from_current(void)
 int obj_cgroup_charge(struct obj_cgroup *objcg, gfp_t gfp, size_t size);
 void obj_cgroup_uncharge(struct obj_cgroup *objcg, size_t size);
 
+bool obj_cgroup_transfer_charge(struct obj_cgroup **ptr_objcg,
+				struct obj_cgroup *new_objcg,
+				enum memcg_stat_item item,
+				unsigned int nr_pages);
+
 extern struct static_key_false memcg_bpf_enabled_key;
 static inline bool memcg_bpf_enabled(void)
 {
@@ -1928,6 +1933,14 @@ static inline struct obj_cgroup *get_obj_cgroup_from_fd(int fd)
 static inline struct obj_cgroup *get_obj_cgroup_from_current(void)
 {
 	return NULL;
+}
+
+static inline bool obj_cgroup_transfer_charge(struct obj_cgroup **ptr_objcg,
+					      struct obj_cgroup *new_objcg,
+					      enum memcg_stat_item item,
+					      unsigned int nr_pages)
+{
+	return true;
 }
 
 static inline bool memcg_bpf_enabled(void)
