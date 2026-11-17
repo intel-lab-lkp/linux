@@ -584,9 +584,6 @@ static void ssbs_thread_switch(struct task_struct *next)
 /*
  * We store our current task in sp_el0, which is clobbered by userspace. Keep a
  * shadow copy so that we can restore this upon entry from userspace.
- *
- * This is *only* for exception entry from EL0, and is not valid until we
- * __switch_to() a user task.
  */
 DEFINE_PER_CPU(struct task_struct *, __entry_task);
 
