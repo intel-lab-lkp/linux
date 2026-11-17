@@ -8571,6 +8571,10 @@ __init int vmx_hardware_setup(void)
 		kvm_caps.supported_xcr0 &= ~(XFEATURE_MASK_BNDREGS |
 					     XFEATURE_MASK_BNDCSR);
 
+	/* eVMCS isn't prepared yet for APX */
+	if (kvm_is_using_evmcs())
+		kvm_caps.supported_xcr0 &= ~XFEATURE_MASK_APX;
+
 	if (!cpu_has_vmx_vpid() || !cpu_has_vmx_invvpid() ||
 	    !(cpu_has_vmx_invvpid_single() || cpu_has_vmx_invvpid_global()))
 		enable_vpid = 0;
