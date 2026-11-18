@@ -432,7 +432,7 @@ int nfs_read_folio(struct file *file, struct folio *folio)
 		goto out_unlock;
 
 	ret = nfs_netfs_read_folio(file, folio);
-	if (ret)
+	if (ret == -ENOBUFS)
 		ret = nfs_do_read_folio(file, folio);
 out:
 	trace_nfs_aop_readpage_done(inode, pos, len, ret);
