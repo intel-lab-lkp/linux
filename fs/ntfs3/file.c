@@ -415,6 +415,8 @@ static int ntfs_file_mmap_prepare(struct vm_area_desc *desc)
 		}
 		/* Turn off readahead for compressed files. */
 		file->f_ra.ra_pages = 0;
+		/* Do not allow mprotect() to make this mapping writable. */
+		vma_desc_clear_flags(desc, VMA_MAYWRITE_BIT);
 	}
 
 	if (rw) {
