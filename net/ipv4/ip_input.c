@@ -572,7 +572,11 @@ static struct sk_buff *ip_rcv_core(struct sk_buff *skb, struct net *net)
 	}
 
 	iph = ip_hdr(skb);
-	skb->transport_header = skb->network_header + iph->ihl*4;
+	if (!skb_set_transport_header_careful(skb, iph->ihl * 4)) {
+		drop_reason = SKB_DROP_REASON_PKT_TOO_BIG;
+		__IP_INC_STATS(net, IPSTATS_MIB_INDISCARDS);
+		goto drop;
+	}
 
 	/* Remove any debris in the socket control block */
 	memset(IPCB(skb), 0, sizeof(struct inet_skb_parm));
