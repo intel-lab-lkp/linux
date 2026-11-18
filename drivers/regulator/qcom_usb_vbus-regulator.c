@@ -181,4 +181,4 @@ static struct platform_driver qcom_usb_vbus_regulator_driver = {
 module_platform_driver(qcom_usb_vbus_regulator_driver);
 
 MODULE_DESCRIPTION("Qualcomm USB vbus regulator driver");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");
