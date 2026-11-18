@@ -1555,6 +1555,28 @@ struct vfio_device_feature_zpci_err {
 
 #define VFIO_DEVICE_FEATURE_ZPCI_ERROR 13
 
+/*
+ * VFIO_DEVICE_FEATURE_TPH - Control and query VFIO TPH feature capabilities
+ *
+ * SET: Opt-in to enable the VFIO TPH feature for the device; flags must be
+ *      zero.
+ * GET: Return VFIO-usable TPH capability bits in flags (currently zero).
+ *      Returns an error if SET opt-in has not been performed.
+ *
+ * Typical userspace sequence:
+ * 1. Read virtualized PCI TPH capability via VFIO config space access to
+ *    discover underlying hardware PCI TPH support.
+ * 2. Invoke SET to opt-in for VFIO TPH feature permission.
+ * 3. Invoke GET to retrieve the set of TPH capabilities accessible via VFIO.
+ * 4. Write the TPH control register through VFIO config space to activate
+ *    device TPH hardware.
+ */
+#define VFIO_DEVICE_FEATURE_TPH			14
+
+struct vfio_device_feature_tph {
+	__u32 flags;
+};
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**

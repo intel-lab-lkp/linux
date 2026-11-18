@@ -22,6 +22,7 @@
 #include <linux/notifier.h>
 #include <linux/pagemap.h>
 #include <linux/pci.h>
+#include <linux/pci-tph.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -628,6 +629,8 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 	ret = vfio_config_init(vdev);
 	if (ret)
 		goto out_free_zdev;
+
+	vdev->tph_opt_in = 0;
 
 	msix_pos = pdev->msix_cap;
 	if (msix_pos) {
@@ -1594,6 +1597,47 @@ static int vfio_pci_core_feature_token(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
+static u32 vfio_pci_tph_get_capability(struct vfio_pci_core_device *vdev)
+{
+	/* NO-ST only, no capability bits exposed now */
+	return 0;
+}
+
+static int vfio_pci_core_feature_tph(struct vfio_pci_core_device *vdev,
+				     u32 flags,
+				     struct vfio_device_feature_tph __user *arg,
+				     size_t argsz)
+{
+	struct vfio_device_feature_tph tph;
+	int ret;
+
+	if (!pcie_std_tph_supported(vdev->pdev))
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz,
+			VFIO_DEVICE_FEATURE_GET | VFIO_DEVICE_FEATURE_SET,
+			sizeof(tph));
+	if (ret != 1)
+		return ret;
+
+	if (copy_from_user(&tph, arg, sizeof(tph)))
+		return -EFAULT;
+
+	if (flags & VFIO_DEVICE_FEATURE_SET) {
+		if (tph.flags != 0)
+			return -EINVAL;
+		vdev->tph_opt_in = 1;
+		return 0;
+	}
+
+	if (!vdev->tph_opt_in)
+		return -EINVAL;
+
+	tph.flags = vfio_pci_tph_get_capability(vdev);
+
+	return copy_to_user(arg, &tph, sizeof(tph)) ? -EFAULT : 0;
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1614,6 +1658,8 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 		return vfio_pci_core_feature_dma_buf(vdev, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_ZPCI_ERROR:
 		return vfio_pci_zdev_feature_err(device, flags, arg, argsz);
+	case VFIO_DEVICE_FEATURE_TPH:
+		return vfio_pci_core_feature_tph(vdev, flags, arg, argsz);
 	default:
 		return -ENOTTY;
 	}
