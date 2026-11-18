@@ -627,15 +627,16 @@ out_launder:
  * Write an mmapped page to the server.
  */
 static int nfs_writepage_locked(struct folio *folio,
-				struct writeback_control *wbc)
+				struct writeback_control *wbc, bool force_mds)
 {
 	struct nfs_pageio_descriptor pgio;
 	struct inode *inode = folio->mapping->host;
 	int err;
 
 	nfs_inc_stats(inode, NFSIOS_VFSWRITEPAGE);
-	nfs_pageio_init_write(&pgio, inode, 0, false,
+	nfs_pageio_init_write(&pgio, inode, 0, force_mds,
 			      &nfs_async_write_completion_ops);
+	pgio.pg_allow_mds = 1;
 	err = nfs_do_writepage(folio, wbc, &pgio);
 	pgio.pg_error = 0;
 	nfs_pageio_complete(&pgio);
@@ -2057,7 +2058,7 @@ int nfs_wb_folio_reclaim(struct inode *inode, struct folio *folio)
 		return -EBUSY;
 	if (folio_clear_dirty_for_io(folio)) {
 		trace_nfs_writeback_folio_reclaim(inode, range_start, len);
-		ret = nfs_writepage_locked(folio, &wbc);
+		ret = nfs_writepage_locked(folio, &wbc, false);
 		trace_nfs_writeback_folio_reclaim_done(inode, range_start, len,
 						       ret);
 		return ret;
@@ -2084,6 +2085,7 @@ int nfs_wb_folio(struct inode *inode, struct folio *folio)
 		.range_start = range_start,
 		.range_end = range_start + len - 1,
 	};
+	bool force_mds = false;
 	int ret;
 
 	trace_nfs_writeback_folio(inode, range_start, len);
@@ -2091,7 +2093,16 @@ int nfs_wb_folio(struct inode *inode, struct folio *folio)
 	for (;;) {
 		folio_wait_writeback(folio);
 		if (folio_clear_dirty_for_io(folio)) {
-			ret = nfs_writepage_locked(folio, &wbc);
+			ret = nfs_writepage_locked(folio, &wbc, force_mds);
+			/*
+			 * -EAGAIN asks for a resend, which can't wait for a
+			 * layout with the folio locked: resend it through the
+			 * MDS once any part of it already sent has completed.
+			 */
+			if (ret == -EAGAIN && !force_mds) {
+				force_mds = true;
+				continue;
+			}
 			if (ret < 0)
 				goto out_error;
 			continue;

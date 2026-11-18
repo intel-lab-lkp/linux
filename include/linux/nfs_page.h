@@ -120,6 +120,11 @@ struct nfs_pageio_descriptor {
 	u32			pg_mirror_idx;	/* current mirror */
 	unsigned short		pg_maxretrans;
 	unsigned char		pg_moreio : 1;
+	/*
+	 * Set when the caller holds the folio locked and can't wait for a
+	 * layout: the write goes through the MDS instead of waiting for one.
+	 */
+	unsigned char		pg_allow_mds : 1;
 };
 
 /* arbitrarily selected limit to number of mirrors */

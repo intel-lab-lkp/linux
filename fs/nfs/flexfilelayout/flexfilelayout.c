@@ -1176,7 +1176,8 @@ retry:
 					       mirror_ds, dss_id, OP_WRITE);
 		if (IS_ERR(ds)) {
 			nfs4_ff_layout_put_deviceid(mirror_ds);
-			if (!ff_layout_no_fallback_to_mds(pgio->pg_lseg))
+			if (pgio->pg_allow_mds ||
+			    !ff_layout_no_fallback_to_mds(pgio->pg_lseg))
 				goto out_mds;
 			pnfs_generic_pg_cleanup(pgio);
 			/* Sleep for 1 second before retrying */
@@ -1229,7 +1230,7 @@ ff_layout_pg_get_mirror_count_write(struct nfs_pageio_descriptor *pgio,
 			0, NFS4_MAX_UINT64, IOMODE_RW,
 			NFS_I(pgio->pg_inode)->layout,
 			pgio->pg_lseg);
-	if (NFS_I(pgio->pg_inode)->layout &&
+	if (!pgio->pg_allow_mds && NFS_I(pgio->pg_inode)->layout &&
 	    ff_layout_hdr_no_fallback_to_mds(NFS_I(pgio->pg_inode)->layout)) {
 		/*
 		 * FF_FLAGS_NO_IO_THRU_MDS: no current lseg but the server's
