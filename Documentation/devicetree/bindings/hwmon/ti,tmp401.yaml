@@ -30,6 +30,12 @@ properties:
   reg:
     maxItems: 1
 
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
   ti,extended-range-enable:
     description:
       When set, this sensor measures over extended temperature range.
@@ -53,6 +59,26 @@ properties:
   "#thermal-sensor-cells":
     const: 1
 
+patternProperties:
+  "^channel@([0-2])$":
+    type: object
+    description: Represents channels of the device and their specific configuration.
+
+    properties:
+      reg:
+        description: The channel number. 0 is local channel, 1-2 are remote channels.
+        items:
+          minimum: 0
+          maximum: 2
+
+      label:
+        description: A descriptive name for this channel, like "ambient" or "psu".
+
+    required:
+      - reg
+
+    additionalProperties: false
+
 allOf:
   - if:
       properties:
@@ -74,6 +100,16 @@ allOf:
     then:
       properties:
         ti,beta-compensation: false
+
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              const: ti,tmp432
+    then:
+      properties:
+        channel@2: false
 
 required:
   - compatible
@@ -103,5 +139,17 @@ examples:
         ti,extended-range-enable;
         ti,n-factor = <0x3b>;
         ti,beta-compensation = <0x7>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        channel@0 {
+          reg = <0x0>;
+          label = "mainboard";
+        };
+
+        channel@1 {
+          reg = <0x1>;
+          label = "fpga";
+        };
       };
     };
