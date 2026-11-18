@@ -50,6 +50,7 @@
 #include <linux/of.h>
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/smp.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
@@ -151,13 +152,31 @@ SMMU_PMU_EVENT_ATTR_EXTRACTOR(filter_stream_id, config1, 0, 31);
 SMMU_PMU_EVENT_ATTR_EXTRACTOR(filter_span, config1, 32, 32);
 SMMU_PMU_EVENT_ATTR_EXTRACTOR(filter_enable, config1, 33, 33);
 
+static inline void __smmu_pmu_enable(struct smmu_pmu *smmu_pmu)
+{
+	writel(SMMU_PMCG_IRQ_CTRL_IRQEN,
+	       smmu_pmu->reg_base + SMMU_PMCG_IRQ_CTRL);
+	writel(SMMU_PMCG_CR_ENABLE, smmu_pmu->reg_base + SMMU_PMCG_CR);
+}
+
+/*
+ * perf keeps calling ->pmu_enable()/->pmu_disable() for a PMU in a CPU context
+ * after its last event there is gone, and a shared or late interrupt can call
+ * the IRQ handler. Without counters in use, no event holds a runtime PM
+ * reference and the PMCG may be powered off, so its registers must not be
+ * touched. used_counters only changes in ->add()/->del() on the event's CPU.
+ */
+static inline bool smmu_pmu_in_use(struct smmu_pmu *smmu_pmu)
+{
+	return !bitmap_empty(smmu_pmu->used_counters, smmu_pmu->num_counters);
+}
+
 static inline void smmu_pmu_enable(struct pmu *pmu)
 {
 	struct smmu_pmu *smmu_pmu = to_smmu_pmu(pmu);
 
-	writel(SMMU_PMCG_IRQ_CTRL_IRQEN,
-	       smmu_pmu->reg_base + SMMU_PMCG_IRQ_CTRL);
-	writel(SMMU_PMCG_CR_ENABLE, smmu_pmu->reg_base + SMMU_PMCG_CR);
+	if (smmu_pmu_in_use(smmu_pmu))
+		__smmu_pmu_enable(smmu_pmu);
 }
 
 static int smmu_pmu_apply_event_filter(struct smmu_pmu *smmu_pmu,
@@ -174,12 +193,18 @@ static inline void smmu_pmu_enable_quirk_hip08_09(struct pmu *pmu)
 	smmu_pmu_enable(pmu);
 }
 
+static inline void __smmu_pmu_disable(struct smmu_pmu *smmu_pmu)
+{
+	writel(0, smmu_pmu->reg_base + SMMU_PMCG_CR);
+	writel(0, smmu_pmu->reg_base + SMMU_PMCG_IRQ_CTRL);
+}
+
 static inline void smmu_pmu_disable(struct pmu *pmu)
 {
 	struct smmu_pmu *smmu_pmu = to_smmu_pmu(pmu);
 
-	writel(0, smmu_pmu->reg_base + SMMU_PMCG_CR);
-	writel(0, smmu_pmu->reg_base + SMMU_PMCG_IRQ_CTRL);
+	if (smmu_pmu_in_use(smmu_pmu))
+		__smmu_pmu_disable(smmu_pmu);
 }
 
 static inline void smmu_pmu_disable_quirk_hip08_09(struct pmu *pmu)
@@ -392,6 +417,14 @@ static bool smmu_pmu_events_compatible(struct perf_event *curr,
  * the core perf events code.
  */
 
+static void smmu_pmu_event_destroy(struct perf_event *event)
+{
+	struct smmu_pmu *smmu_pmu = to_smmu_pmu(event->pmu);
+
+	/* Only set when smmu_pmu_event_init() took a reference. */
+	pm_runtime_put(smmu_pmu->dev);
+}
+
 static int smmu_pmu_event_init(struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
@@ -439,18 +472,26 @@ static int smmu_pmu_event_init(struct perf_event *event)
 
 	hwc->idx = -1;
 
-	if (event->group_leader == event)
-		return 0;
+	if (event->group_leader != event) {
+		for_each_sibling_event(sibling, event->group_leader) {
+			if (is_software_event(sibling))
+				continue;
 
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (is_software_event(sibling))
-			continue;
+			if (!smmu_pmu_events_compatible(sibling, event))
+				return -EINVAL;
 
-		if (!smmu_pmu_events_compatible(sibling, event))
-			return -EINVAL;
+			if (++group_num_events > smmu_pmu->num_counters)
+				return -EINVAL;
+		}
+	}
 
-		if (++group_num_events > smmu_pmu->num_counters)
-			return -EINVAL;
+	/* The same condition smmu_pmu_probe() enables runtime PM on. */
+	if (dev->pm_domain) {
+		int ret = pm_runtime_resume_and_get(dev);
+
+		if (ret < 0)
+			return ret;
+		event->destroy = smmu_pmu_event_destroy;
 	}
 
 	return 0;
@@ -692,6 +733,9 @@ static irqreturn_t smmu_pmu_handle_irq(int irq_num, void *data)
 	u64 ovsr;
 	unsigned int idx;
 
+	if (!smmu_pmu_in_use(smmu_pmu))
+		return IRQ_NONE;
+
 	ovsr = readq(smmu_pmu->reloc_base + SMMU_PMCG_OVSSET0);
 	if (!ovsr)
 		return IRQ_NONE;
@@ -779,7 +823,7 @@ static void smmu_pmu_reset(struct smmu_pmu *smmu_pmu)
 {
 	u64 counter_present_mask = GENMASK_ULL(smmu_pmu->num_counters - 1, 0);
 
-	smmu_pmu_disable(&smmu_pmu->pmu);
+	__smmu_pmu_disable(smmu_pmu);
 
 	/* Disable counter and interrupt */
 	writeq_relaxed(counter_present_mask,
@@ -910,10 +954,21 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 
 	smmu_pmu_reset(smmu_pmu);
 
+	/*
+	 * Runtime PM must be enabled before the IRQ handler and the PMU go
+	 * live: from then on ->event_init() takes a reference for each event.
+	 * Hold one until probe is done.
+	 */
+	if (dev->pm_domain) {
+		pm_runtime_get_noresume(dev);
+		pm_runtime_set_active(dev);
+		pm_runtime_enable(dev);
+	}
+
 	err = smmu_pmu_setup_irq(smmu_pmu);
 	if (err) {
 		dev_err(dev, "Setup irq failed, PMU @%pa\n", &res_0->start);
-		return err;
+		goto out_rpm;
 	}
 
 	smmu_pmu_get_iidr(smmu_pmu);
@@ -922,7 +977,8 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 			      (res_0->start) >> SMMU_PMCG_PA_SHIFT);
 	if (!name) {
 		dev_err(dev, "Create name failed, PMU @%pa\n", &res_0->start);
-		return -EINVAL;
+		err = -EINVAL;
+		goto out_rpm;
 	}
 
 	if (!dev->of_node)
@@ -947,7 +1003,7 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 	if (err) {
 		dev_err(dev, "Error %d registering hotplug, PMU @%pa\n",
 			err, &res_0->start);
-		return err;
+		goto out_rpm;
 	}
 
 	err = perf_pmu_register(&smmu_pmu->pmu, name, -1);
@@ -962,10 +1018,19 @@ static int smmu_pmu_probe(struct platform_device *pdev)
 		 smmu_pmu->global_filter ? "Global(Counter0)" :
 		 "Individual");
 
+	if (dev->pm_domain)
+		pm_runtime_put_sync(dev);
+
 	return 0;
 
 out_unregister:
 	cpuhp_state_remove_instance_nocalls(cpuhp_state_num, &smmu_pmu->node);
+out_rpm:
+	if (dev->pm_domain) {
+		pm_runtime_disable(dev);
+		pm_runtime_set_suspended(dev);
+		pm_runtime_put_noidle(dev);
+	}
 	return err;
 }
 
@@ -975,14 +1040,44 @@ static void smmu_pmu_remove(struct platform_device *pdev)
 
 	perf_pmu_unregister(&smmu_pmu->pmu);
 	cpuhp_state_remove_instance_nocalls(cpuhp_state_num, &smmu_pmu->node);
+	if (pdev->dev.pm_domain)
+		pm_runtime_disable(&pdev->dev);
 }
 
 static void smmu_pmu_shutdown(struct platform_device *pdev)
 {
 	struct smmu_pmu *smmu_pmu = platform_get_drvdata(pdev);
 
-	smmu_pmu_disable(&smmu_pmu->pmu);
+	if (pdev->dev.pm_domain) {
+		if (pm_runtime_get_if_active(&pdev->dev) <= 0)
+			return;
+		__smmu_pmu_disable(smmu_pmu);
+		pm_runtime_put(&pdev->dev);
+		return;
+	}
+
+	__smmu_pmu_disable(smmu_pmu);
 }
+
+static int smmu_pmu_runtime_suspend(struct device *dev)
+{
+	struct smmu_pmu *smmu_pmu = dev_get_drvdata(dev);
+
+	__smmu_pmu_disable(smmu_pmu);
+	return 0;
+}
+
+static int smmu_pmu_runtime_resume(struct device *dev)
+{
+	struct smmu_pmu *smmu_pmu = dev_get_drvdata(dev);
+
+	smmu_pmu_reset(smmu_pmu);
+	return 0;
+}
+
+static const struct dev_pm_ops smmu_pmu_pm_ops = {
+	RUNTIME_PM_OPS(smmu_pmu_runtime_suspend, smmu_pmu_runtime_resume, NULL)
+};
 
 #ifdef CONFIG_OF
 static const struct of_device_id smmu_pmu_of_match[] = {
@@ -996,6 +1091,7 @@ static struct platform_driver smmu_pmu_driver = {
 	.driver = {
 		.name = "arm-smmu-v3-pmcg",
 		.of_match_table = of_match_ptr(smmu_pmu_of_match),
+		.pm = pm_ptr(&smmu_pmu_pm_ops),
 		.suppress_bind_attrs = true,
 	},
 	.probe = smmu_pmu_probe,
