@@ -1378,6 +1378,14 @@ static int ath10k_htt_tx_hl(struct ath10k_htt *htt, enum ath10k_hw_txrx_mode txm
 	tx_desc->peerid = __cpu_to_le32(HTT_INVALID_PEERID);
 
 	res = ath10k_htc_send_hl(&htt->ar->htc, htt->eid, msdu);
+	if (res) {
+		if (ar->bus_param.hl_msdu_ids) {
+			spin_lock_bh(&htt->tx_lock);
+			ath10k_htt_tx_free_msdu_id(htt, msdu_id);
+			spin_unlock_bh(&htt->tx_lock);
+		}
+		dev_kfree_skb_any(msdu);
+	}
 
 out:
 	return res;
