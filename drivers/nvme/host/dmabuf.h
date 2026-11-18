@@ -3,8 +3,8 @@
  * Copyright (C) 2026 Pavel Begunkov <asml.silence@gmail.com>
  */
 
-#ifndef _NVME_PCI_DMABUF_H
-#define _NVME_PCI_DMABUF_H
+#ifndef _NVME_DMABUF_H
+#define _NVME_DMABUF_H
 
 #include <linux/dma-buf-io.h>
 
@@ -44,15 +44,15 @@ static inline struct nvme_dmabuf_map *nvme_req_to_map(struct request *req)
 	return to_nvme_dmabuf_map(map);
 }
 
-void __nvme_pci_remove_dmabuf(struct nvme_dma_buf_list *list);
+void __nvme_remove_dmabufs(struct nvme_dma_buf_list *list);
 int __nvme_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
 		struct nvme_dma_buf_list *buf_list,
 		struct dma_buf_io_ctx *ctx);
 
-static inline void nvme_pci_remove_dmabuf(struct nvme_dma_buf_list *list)
+static inline void nvme_remove_dmabufs(struct nvme_dma_buf_list *list)
 {
 	if (IS_ENABLED(CONFIG_DMA_SHARED_BUFFER))
-		__nvme_pci_remove_dmabuf(list);
+		__nvme_remove_dmabufs(list);
 }
 
 static inline int nvme_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
@@ -72,4 +72,4 @@ static inline void nvme_init_buf_list(struct nvme_dma_buf_list *buf_list)
 }
 
 
-#endif /* _NVME_PCI_DMABUF_H */
+#endif /* _NVME_DMABUF_H */
