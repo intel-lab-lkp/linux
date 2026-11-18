@@ -367,6 +367,9 @@ struct ptp_ocp {
 	struct pci_dev		*pdev;
 	struct device		dev;
 	spinlock_t		lock;
+	/* Serializes timestamp arming and teardown. */
+	struct mutex		ts_lock;
+	bool			ts_stopping;
 	struct ocp_reg __iomem	*reg;
 	struct tod_reg __iomem	*tod;
 	struct pps_reg __iomem	*pps_to_ext;
@@ -2550,6 +2553,13 @@ ptp_ocp_ts_enable(void *priv, u32 req, bool enable)
 	struct ptp_ocp_ext_src *ext = priv;
 	struct ts_reg __iomem *reg = ext->mem;
 	struct ptp_ocp *bp = ext->bp;
+	int err = 0;
+
+	mutex_lock(&bp->ts_lock);
+	if (enable && bp->ts_stopping) {
+		err = -ENODEV;
+		goto out;
+	}
 
 	if (ext == bp->pps) {
 		u32 old_map = bp->pps_req_map;
@@ -2561,7 +2571,7 @@ ptp_ocp_ts_enable(void *priv, u32 req, bool enable)
 
 		/* if no state change, just return */
 		if ((!!old_map ^ !!bp->pps_req_map) == 0)
-			return 0;
+			goto out;
 	}
 
 	if (enable) {
@@ -2578,7 +2588,9 @@ ptp_ocp_ts_enable(void *priv, u32 req, bool enable)
 			synchronize_irq(irq_vec);
 	}
 
-	return 0;
+out:
+	mutex_unlock(&bp->ts_lock);
+	return err;
 }
 
 static void
@@ -5613,6 +5625,7 @@ ptp_ocp_device_init(struct ptp_ocp *bp, struct pci_dev *pdev)
 
 	bp->ptp_info = ptp_ocp_clock_info;
 	spin_lock_init(&bp->lock);
+	mutex_init(&bp->ts_lock);
 
 	for (i = 0; i < __PORT_COUNT; i++)
 		bp->port[i].uport = NULL;
@@ -5755,6 +5768,10 @@ ptp_ocp_detach(struct ptp_ocp *bp)
 	ptp_ocp_detach_sysfs(bp);
 	ptp_ocp_attr_group_del(bp);
 	timer_delete_sync(&bp->watchdog);
+	/* Drain in-flight enables and prevent rearming before unregister. */
+	mutex_lock(&bp->ts_lock);
+	bp->ts_stopping = true;
+	mutex_unlock(&bp->ts_lock);
 	/* Disable interrupts on all timestampers */
 	if (bp->ts0)
 		ptp_ocp_ts_enable(bp->ts0, 0, false);
@@ -5789,6 +5806,7 @@ ptp_ocp_detach(struct ptp_ocp *bp)
 	if (bp->n_irqs)
 		pci_free_irq_vectors(bp->pdev);
 	mutex_destroy(&bp->cpld_lock);
+	mutex_destroy(&bp->ts_lock);
 	device_unregister(&bp->dev);
 }
 
