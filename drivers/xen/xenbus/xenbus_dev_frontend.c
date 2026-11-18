@@ -89,8 +89,12 @@ struct xenbus_file_priv {
 	/*
 	 * msgbuffer_mutex is held while partial requests are built up
 	 * and complete requests are acted on.  It therefore protects
-	 * the "transactions" and "watches" lists, and the partial
-	 * request length and buffer.
+	 * the "watches" list, and the partial request length and buffer.
+	 *
+	 * transactions_mutex protects the "transactions" list.  It nests
+	 * inside msgbuffer_mutex, and xenbus_thread takes it alone to
+	 * deliver a reply, so a (UN)WATCH that holds msgbuffer_mutex
+	 * while it waits on xenbus_thread cannot stall that delivery.
 	 *
 	 * reply_mutex protects the reply being built up to return to
 	 * usermode.  It nests inside msgbuffer_mutex but may be held
@@ -99,6 +103,7 @@ struct xenbus_file_priv {
 	struct mutex msgbuffer_mutex;
 
 	/* In-progress transactions */
+	struct mutex transactions_mutex;
 	struct list_head transactions;
 
 	/* Active watches. */
@@ -369,7 +374,7 @@ void xenbus_dev_queue_reply(struct xb_req_data *req)
 
 	xs_request_exit(req);
 
-	mutex_lock(&u->msgbuffer_mutex);
+	mutex_lock(&u->transactions_mutex);
 
 	if (req->type == XS_TRANSACTION_START) {
 		trans = xenbus_get_transaction(u, 0);
@@ -391,7 +396,7 @@ void xenbus_dev_queue_reply(struct xb_req_data *req)
 		kfree(trans);
 	}
 
-	mutex_unlock(&u->msgbuffer_mutex);
+	mutex_unlock(&u->transactions_mutex);
 
 	mutex_lock(&u->reply_mutex);
 	rc = queue_reply(&staging_q, &req->msg, sizeof(req->msg));
@@ -413,7 +418,7 @@ void xenbus_dev_queue_reply(struct xb_req_data *req)
 	return;
 
  out:
-	mutex_unlock(&u->msgbuffer_mutex);
+	mutex_unlock(&u->transactions_mutex);
 }
 
 static int xenbus_command_reply(struct xenbus_file_priv *u,
@@ -453,6 +458,8 @@ static int xenbus_write_transaction(unsigned msg_type,
 		char body[];
 	} *msg = (void *)u->u.buffer;
 
+	mutex_lock(&u->transactions_mutex);
+
 	if (msg_type == XS_TRANSACTION_START) {
 		trans = kzalloc_obj(*trans);
 		if (!trans) {
@@ -462,24 +469,27 @@ static int xenbus_write_transaction(unsigned msg_type,
 		trans->generation_id = xb_dev_generation_id;
 		list_add(&trans->list, &u->transactions);
 	} else if (msg->hdr.tx_id != 0 &&
-		   !xenbus_get_transaction(u, msg->hdr.tx_id))
-		return xenbus_command_reply(u, XS_ERROR, "ENOENT");
-	else if (msg_type == XS_TRANSACTION_END &&
-		 !(msg->hdr.len == 2 &&
-		   (!strcmp(msg->body, "T") || !strcmp(msg->body, "F"))))
-		return xenbus_command_reply(u, XS_ERROR, "EINVAL");
-	else if (msg_type == XS_TRANSACTION_END) {
+		   !xenbus_get_transaction(u, msg->hdr.tx_id)) {
+		rc = xenbus_command_reply(u, XS_ERROR, "ENOENT");
+		goto out;
+	} else if (msg_type == XS_TRANSACTION_END &&
+		   !(msg->hdr.len == 2 &&
+		     (!strcmp(msg->body, "T") || !strcmp(msg->body, "F")))) {
+		rc = xenbus_command_reply(u, XS_ERROR, "EINVAL");
+		goto out;
+	} else if (msg_type == XS_TRANSACTION_END) {
 		trans = xenbus_get_transaction(u, msg->hdr.tx_id);
 		if (trans && trans->generation_id != xb_dev_generation_id) {
 			list_del(&trans->list);
 			kfree(trans);
 			if (!strcmp(msg->body, "T"))
-				return xenbus_command_reply(u, XS_ERROR,
-							    "EAGAIN");
+				rc = xenbus_command_reply(u, XS_ERROR,
+							  "EAGAIN");
 			else
-				return xenbus_command_reply(u,
-							    XS_TRANSACTION_END,
-							    "OK");
+				rc = xenbus_command_reply(u,
+							  XS_TRANSACTION_END,
+							  "OK");
+			goto out;
 		}
 	}
 
@@ -490,6 +500,7 @@ static int xenbus_write_transaction(unsigned msg_type,
 	}
 
 out:
+	mutex_unlock(&u->transactions_mutex);
 	return rc;
 }
 
@@ -669,6 +680,7 @@ static int xenbus_file_open(struct inode *inode, struct file *filp)
 
 	mutex_init(&u->reply_mutex);
 	mutex_init(&u->msgbuffer_mutex);
+	mutex_init(&u->transactions_mutex);
 
 	filp->private_data = u;
 
