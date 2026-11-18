@@ -116,6 +116,7 @@ static struct platform_driver vfio_platform_driver = {
 	.remove		= vfio_platform_remove,
 	.driver	= {
 		.name	= "vfio-platform",
+		.support_driver_override = true,
 	},
 	.driver_managed_dma = true,
 };

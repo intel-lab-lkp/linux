@@ -358,6 +358,7 @@ static struct cdx_driver vfio_cdx_driver = {
 	.match_id_table	= vfio_cdx_table,
 	.driver	= {
 		.name	= "vfio-cdx",
+		.support_driver_override = true,
 	},
 	.driver_managed_dma = true,
 };

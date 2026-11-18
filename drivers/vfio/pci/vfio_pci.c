@@ -260,7 +260,8 @@ static struct pci_driver vfio_pci_driver = {
 	.remove			= vfio_pci_remove,
 	.sriov_configure	= vfio_pci_sriov_configure,
 	.err_handler		= &vfio_pci_err_handlers,
-	.driver		= { .pm = pm_ptr(&vfio_pci_pm_ops) },
+	.driver		= { .pm = pm_ptr(&vfio_pci_pm_ops),
+			    .support_driver_override = true },
 	.driver_managed_dma	= true,
 };
 

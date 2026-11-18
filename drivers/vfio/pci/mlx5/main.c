@@ -1451,7 +1451,8 @@ static struct pci_driver mlx5vf_pci_driver = {
 	.id_table = mlx5vf_pci_table,
 	.probe = mlx5vf_pci_probe,
 	.remove = mlx5vf_pci_remove,
-	.driver	= { .pm = pm_ptr(&mlx5vf_pm_ops) },
+	.driver	= { .pm = pm_ptr(&mlx5vf_pm_ops),
+		    .support_driver_override = true },
 	.err_handler = &mlx5vf_err_handlers,
 	.driver_managed_dma = true,
 };

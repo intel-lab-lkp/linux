@@ -597,6 +597,7 @@ static struct fsl_mc_driver vfio_fsl_mc_driver = {
 	.remove		= vfio_fsl_mc_remove,
 	.driver	= {
 		.name	= "vfio-fsl-mc",
+		.support_driver_override = true,
 	},
 	.driver_managed_dma = true,
 };

@@ -184,7 +184,8 @@ static struct pci_driver pds_vfio_pci_driver = {
 	.id_table = pds_vfio_pci_table,
 	.probe = pds_vfio_pci_probe,
 	.remove = pds_vfio_pci_remove,
-	.driver = { .pm = pm_ptr(&pds_vfio_pm_ops) },
+	.driver = { .pm = pm_ptr(&pds_vfio_pm_ops),
+		    .support_driver_override = true },
 	.err_handler = &pds_vfio_pci_err_handlers,
 	.driver_managed_dma = true,
 };

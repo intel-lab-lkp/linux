@@ -137,6 +137,7 @@ static struct amba_driver vfio_amba_driver = {
 	.id_table = vfio_amba_ids,
 	.drv = {
 		.name = "vfio-amba",
+		.support_driver_override = true,
 	},
 	.driver_managed_dma = true,
 };

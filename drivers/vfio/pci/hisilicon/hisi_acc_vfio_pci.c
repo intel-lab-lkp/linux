@@ -1737,7 +1737,8 @@ static struct pci_driver hisi_acc_vfio_pci_driver = {
 	.id_table = hisi_acc_vfio_pci_table,
 	.probe = hisi_acc_vfio_pci_probe,
 	.remove = hisi_acc_vfio_pci_remove,
-	.driver = { .pm = pm_ptr(&hisi_acc_vf_pm_ops) },
+	.driver = { .pm = pm_ptr(&hisi_acc_vf_pm_ops),
+		    .support_driver_override = true },
 	.err_handler = &hisi_acc_vf_err_handlers,
 	.driver_managed_dma = true,
 };

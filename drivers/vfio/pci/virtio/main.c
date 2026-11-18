@@ -222,7 +222,8 @@ static struct pci_driver virtiovf_pci_driver = {
 	.id_table = virtiovf_pci_table,
 	.probe = virtiovf_pci_probe,
 	.remove = virtiovf_pci_remove,
-	.driver = { .pm = pm_ptr(&virtiovf_pm_ops) },
+	.driver = { .pm = pm_ptr(&virtiovf_pm_ops),
+		    .support_driver_override = true },
 	.err_handler = &virtiovf_err_handlers,
 	.driver_managed_dma = true,
 };

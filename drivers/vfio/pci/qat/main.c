@@ -695,7 +695,8 @@ static struct pci_driver qat_vf_vfio_pci_driver = {
 	.id_table = qat_vf_vfio_pci_table,
 	.probe = qat_vf_vfio_pci_probe,
 	.remove = qat_vf_vfio_pci_remove,
-	.driver	= { .pm = pm_ptr(&qat_vf_pm_ops) },
+	.driver	= { .pm = pm_ptr(&qat_vf_pm_ops),
+		    .support_driver_override = true },
 	.err_handler = &qat_vf_err_handlers,
 	.driver_managed_dma = true,
 };

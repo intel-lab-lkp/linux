@@ -1438,7 +1438,8 @@ static struct pci_driver nvgrace_gpu_vfio_pci_driver = {
 	.id_table = nvgrace_gpu_vfio_pci_table,
 	.probe = nvgrace_gpu_probe,
 	.remove = nvgrace_gpu_remove,
-	.driver = { .pm = pm_ptr(&nvgrace_gpu_pm_ops) },
+	.driver = { .pm = pm_ptr(&nvgrace_gpu_pm_ops),
+		    .support_driver_override = true },
 	.err_handler = &nvgrace_gpu_vfio_pci_err_handlers,
 	.driver_managed_dma = true,
 };

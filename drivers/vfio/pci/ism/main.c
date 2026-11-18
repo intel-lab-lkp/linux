@@ -399,7 +399,8 @@ static struct pci_driver ism_vfio_pci_driver = {
 	.id_table = ism_device_table,
 	.probe = ism_vfio_pci_probe,
 	.remove = ism_vfio_pci_remove,
-	.driver	= { .pm = pm_ptr(&ism_vfio_pm_ops) },
+	.driver	= { .pm = pm_ptr(&ism_vfio_pm_ops),
+		    .support_driver_override = true },
 	.err_handler = &ism_vfio_err_handlers,
 	.driver_managed_dma = true,
 };
