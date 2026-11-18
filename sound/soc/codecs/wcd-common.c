@@ -115,9 +115,7 @@ EXPORT_SYMBOL_GPL(wcd_update_status);
 
 int wcd_bus_config(struct sdw_slave *slave, struct sdw_bus_params *params)
 {
-	sdw_write(slave, SWRS_SCP_HOST_CLK_DIV2_CTL_BANK(params->next_bank), 0x01);
-
-	return 0;
+	return sdw_write(slave, SWRS_SCP_HOST_CLK_DIV2_CTL_BANK(params->next_bank), 0x01);
 }
 EXPORT_SYMBOL_GPL(wcd_bus_config);
 
