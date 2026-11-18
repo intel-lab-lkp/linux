@@ -14357,6 +14357,12 @@ S:	Maintained
 F:	Documentation/hwmon/k8temp.rst
 F:	drivers/hwmon/k8temp.c
 
+KAMSTRUP BOARD SUPPORT
+M:	Bruno Thomsen <bruno.thomsen@gmail.com>
+S:	Maintained
+F:	arch/arm/boot/dts/nxp/imx/imx7d-flex-concentrator*.dts*
+F:	arch/arm/boot/dts/ti/omap/am335x-emperor*.dts*
+
 KANDOU KB9002 PCIE RETIMER HWMON DRIVER
 M:	Andy Chung <andy.chung@amd.com>
 L:	linux-hwmon@vger.kernel.org
