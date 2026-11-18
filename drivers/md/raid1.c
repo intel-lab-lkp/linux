@@ -3152,6 +3152,18 @@ static int raid1_set_limits(struct mddev *mddev)
 	return queue_limits_set(mddev->gendisk->queue, &lim);
 }
 
+/*
+ * setup_conf(), raid1_reshape() and r1buf_pool_alloc() size the mirrors
+ * array, the r1bio pool and the resync buffer pool by raid_disks * 2.
+ * Reject a disk count for which those allocations would exceed
+ * KMALLOC_MAX_SIZE instead of letting kmalloc warn and fail later.
+ */
+static int raid1_max_disks(void)
+{
+	return KMALLOC_MAX_SIZE /
+		(2 * max(sizeof(struct resync_pages), sizeof(struct raid1_info)));
+}
+
 static int raid1_run(struct mddev *mddev)
 {
 	struct r1conf *conf;
@@ -3168,6 +3180,9 @@ static int raid1_run(struct mddev *mddev)
 			mdname(mddev));
 		return -EIO;
 	}
+
+	if (mddev->raid_disks <= 0 || mddev->raid_disks > raid1_max_disks())
+		return -EINVAL;
 
 	/*
 	 * copy the already verified devices into our private RAID1
@@ -3317,6 +3332,9 @@ static int raid1_reshape(struct mddev *mddev)
 		md_allow_write(mddev);
 
 	raid_disks = mddev->raid_disks + mddev->delta_disks;
+
+	if (raid_disks <= 0 || raid_disks > raid1_max_disks())
+		return -EINVAL;
 
 	if (raid_disks < conf->raid_disks) {
 		cnt=0;
