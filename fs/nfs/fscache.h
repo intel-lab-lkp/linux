@@ -73,6 +73,7 @@ static inline void nfs_netfs_put(struct nfs_netfs_io_data *netfs)
 	 * length, and thus avoid netfs's "Subreq overread" warning message.
 	 */
 	netfs->sreq->transferred = min_t(s64, netfs->sreq->len,
+					 netfs->sreq->transferred +
 					 atomic64_read(&netfs->transferred));
 	netfs->sreq->error = netfs->error;
 	netfs_read_subreq_terminated(netfs->sreq);
