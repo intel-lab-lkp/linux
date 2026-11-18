@@ -852,6 +852,8 @@ static int dmatest_func(void *data)
 		}
 
 		if (!done->done) {
+			if (!params->polled)
+				dmaengine_terminate_sync(chan);
 			result("test timed out", total_tests, src->off, dst->off,
 			       len, 0);
 			goto error_unmap_continue;
@@ -859,6 +861,7 @@ static int dmatest_func(void *data)
 			   !(dma_has_cap(DMA_COMPLETION_NO_ORDER,
 					 dev->cap_mask) &&
 			     status == DMA_OUT_OF_ORDER)) {
+			dmaengine_terminate_sync(chan);
 			result(status == DMA_ERROR ?
 			       "completion error status" :
 			       "completion busy status", total_tests, src->off,
