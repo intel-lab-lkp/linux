@@ -2504,10 +2504,6 @@ static int mtip_service_thread(void *data)
 			test_bit(MTIP_PF_SVC_THD_STOP_BIT, &port->flags))
 			goto st_out;
 
-		if (unlikely(test_bit(MTIP_DDF_REMOVE_PENDING_BIT,
-				&dd->dd_flag)))
-			goto st_out;
-
 		set_bit(MTIP_PF_SVC_THD_ACTIVE_BIT, &port->flags);
 
 		if (test_and_clear_bit(MTIP_PF_SR_BIT, &port->flags)) {
@@ -2588,7 +2584,9 @@ restart_eh:
 		}
 
 		if (test_bit(MTIP_PF_REBUILD_BIT, &port->flags)) {
-			if (mtip_ftl_rebuild_poll(dd) == 0)
+			if (test_bit(MTIP_DDF_REMOVE_PENDING_BIT,
+				     &dd->dd_flag) ||
+			    mtip_ftl_rebuild_poll(dd) <= 0)
 				clear_bit(MTIP_PF_REBUILD_BIT, &port->flags);
 		}
 	}
@@ -3925,6 +3923,9 @@ static void mtip_pci_remove(struct pci_dev *pdev)
 
 	set_bit(MTIP_DDF_REMOVE_PENDING_BIT, &dd->dd_flag);
 	mutex_lock(&dd->ioctl_mutex);
+
+	if (dd->sr && !dd->mtip_svc_handler)
+		mtip_handle_surprise_removal(dd);
 
 	if (test_bit(MTIP_DDF_INIT_DONE_BIT, &dd->dd_flag))
 		del_gendisk(dd->disk);
