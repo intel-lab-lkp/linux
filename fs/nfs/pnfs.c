@@ -551,6 +551,28 @@ pnfs_layout_io_test_failed(struct pnfs_layout_hdr *lo, u32 iomode)
 	return true;
 }
 
+/*
+ * Returns true if a LAYOUTGET for @iomode failed with an error, such as
+ * NFS4ERR_LAYOUTUNAVAILABLE, in the last PNFS_LAYOUTGET_RETRY_TIMEOUT.
+ * pnfs_layout_io_test_failed() clears an expired fail bit only when
+ * pnfs_update_layout() gets that far, so check the time here too.
+ */
+bool pnfs_layout_get_failed(struct inode *inode, u32 iomode)
+{
+	struct pnfs_layout_hdr *lo;
+	unsigned long now = jiffies;
+	bool ret = false;
+
+	spin_lock(&inode->i_lock);
+	lo = NFS_I(inode)->layout;
+	if (lo && test_bit(pnfs_iomode_to_fail_bit(iomode), &lo->plh_flags))
+		ret = time_in_range(lo->plh_retry_timestamp,
+				    now - PNFS_LAYOUTGET_RETRY_TIMEOUT, now);
+	spin_unlock(&inode->i_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(pnfs_layout_get_failed);
+
 static void
 pnfs_init_lseg(struct pnfs_layout_hdr *lo, struct pnfs_layout_segment *lseg,
 		const struct pnfs_layout_range *range,

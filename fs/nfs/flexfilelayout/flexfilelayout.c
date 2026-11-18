@@ -980,10 +980,14 @@ static bool ff_layout_pg_retry_wait(struct nfs_pageio_descriptor *pgio)
 
 /*
  * Returns true if the inode's layouts forbid I/O through the MDS.
+ * FF_FLAGS_NO_IO_THRU_MDS is a hint (RFC 8435, section 5.1.2), so set it
+ * aside while a failed LAYOUTGET for @iomode (NFS4ERR_LAYOUTUNAVAILABLE or
+ * NFS4ERR_TOOSMALL) keeps pnfs_update_layout() from sending another.
  */
 static bool ff_layout_inode_no_fallback_to_mds(struct inode *inode, u32 iomode)
 {
-	return nfs_no_io_thru_mds(inode);
+	return nfs_no_io_thru_mds(inode) &&
+	       !pnfs_layout_get_failed(inode, iomode);
 }
 
 /*
@@ -1135,13 +1139,12 @@ out_nolseg:
 	}
 	/*
 	 * No segment, and no error to report either: pnfs_update_layout()
-	 * simply has nothing to give (NFS_LAYOUT_BULK_RECALL, a failed
-	 * pnfs_layout_io_test, blocked LAYOUTGETs, a layout being
-	 * returned).  If the server forbids reading this file through the
-	 * MDS there is no fallback to take, so wait for a layout on the
-	 * same terms as the -EAGAIN above.  The layout hdr that carried
-	 * FF_FLAGS_NO_IO_THRU_MDS may itself be gone by now, which is why
-	 * the flag is kept on the inode.
+	 * simply has nothing to give (NFS_LAYOUT_BULK_RECALL, blocked
+	 * LAYOUTGETs, a layout being returned).  If the server forbids
+	 * reading this file through the MDS there is no fallback to take,
+	 * so wait for a layout on the same terms as the -EAGAIN above.  The
+	 * layout hdr that carried FF_FLAGS_NO_IO_THRU_MDS may itself be
+	 * gone by now, which is why the flag is kept on the inode.
 	 */
 	if (!ff_layout_inode_no_fallback_to_mds(pgio->pg_inode, IOMODE_READ))
 		goto out_mds;
@@ -1395,7 +1398,8 @@ static int ff_layout_async_handle_error_v4(struct rpc_task *task,
 					   struct nfs4_state *state,
 					   struct nfs_client *clp,
 					   struct pnfs_layout_segment *lseg,
-					   struct nfs4_deviceid_node *devid)
+					   struct nfs4_deviceid_node *devid,
+					   u32 iomode)
 {
 	struct pnfs_layout_hdr *lo = lseg->pls_layout;
 	struct inode *inode = lo->plh_inode;
@@ -1484,8 +1488,9 @@ static int ff_layout_async_handle_error_v4(struct rpc_task *task,
 		return -NFS4ERR_RESET_TO_PNFS;
 reset:
 	/*
-	 * FF_FLAGS_NO_IO_THRU_MDS: never resend through the MDS.  The
-	 * caller would do so with force_mds set (ff_layout_reset_read(),
+	 * FF_FLAGS_NO_IO_THRU_MDS: don't resend through the MDS (see
+	 * ff_layout_inode_no_fallback_to_mds()).  The caller would do so
+	 * with force_mds set (ff_layout_reset_read(),
 	 * ff_layout_reset_write(hdr, false) -> pnfs_*_done_resend_to_mds()),
 	 * which builds a descriptor out of the plain MDS page ops and so
 	 * consults no layout at all -- this is the last point at which the
@@ -1495,7 +1500,7 @@ reset:
 	 * pnfs_destroy_layout().  Having done so they can no longer ask the
 	 * layout hdr about the flag, hence the inode.
 	 */
-	if (nfs_no_io_thru_mds(inode)) {
+	if (ff_layout_inode_no_fallback_to_mds(inode, iomode)) {
 		dprintk("%s Retry through pNFS, no MDS fallback. Error %d\n",
 			__func__, task->tk_status);
 		return -NFS4ERR_RESET_TO_PNFS;
@@ -1580,7 +1585,8 @@ static int ff_layout_async_handle_error(struct rpc_task *task,
 					struct nfs4_state *state,
 					struct nfs_client *clp,
 					struct pnfs_layout_segment *lseg,
-					struct nfs4_deviceid_node *devid)
+					struct nfs4_deviceid_node *devid,
+					u32 iomode)
 {
 	int vers = clp->cl_nfs_mod->rpc_vers->number;
 
@@ -1600,7 +1606,7 @@ static int ff_layout_async_handle_error(struct rpc_task *task,
 						       lseg, devid);
 	case 4:
 		return ff_layout_async_handle_error_v4(task, op_status, state,
-						       clp, lseg, devid);
+						       clp, lseg, devid, iomode);
 	default:
 		/* should never happen */
 		WARN_ON_ONCE(1);
@@ -1734,7 +1740,7 @@ static int ff_layout_read_done_cb(struct rpc_task *task,
 	err = ff_layout_async_handle_error(task, hdr->res.op_status,
 					   hdr->args.context->state,
 					   hdr->ds_clp, hdr->lseg,
-					   hdr->ds_dev);
+					   hdr->ds_dev, IOMODE_READ);
 
 	trace_nfs4_pnfs_read(hdr, err);
 	clear_bit(NFS_IOHDR_RESEND_PNFS, &hdr->flags);
@@ -1944,7 +1950,7 @@ static int ff_layout_write_done_cb(struct rpc_task *task,
 	err = ff_layout_async_handle_error(task, hdr->res.op_status,
 					   hdr->args.context->state,
 					   hdr->ds_clp, hdr->lseg,
-					   hdr->ds_dev);
+					   hdr->ds_dev, IOMODE_RW);
 
 	trace_nfs4_pnfs_write(hdr, err);
 	clear_bit(NFS_IOHDR_RESEND_PNFS, &hdr->flags);
@@ -1995,7 +2001,7 @@ static int ff_layout_commit_done_cb(struct rpc_task *task,
 
 	err = ff_layout_async_handle_error(task, data->res.op_status,
 					   NULL, data->ds_clp, data->lseg,
-					   data->ds_dev);
+					   data->ds_dev, IOMODE_RW);
 
 	trace_nfs4_pnfs_commit_ds(data, err);
 	switch (err) {

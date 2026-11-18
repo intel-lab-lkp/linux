@@ -558,8 +558,10 @@ static inline bool nfs_file_io_is_buffered(struct nfs_inode *nfsi)
  * thing pnfs_within_mdsthreshold() can ask for is the one thing the
  * layout forbids.  Flexfiles also retries reads and writes that have no
  * layout segment instead of sending them through the MDS, except
- * writeback of a single locked folio (pg_allow_mds).  Servers are
- * assumed to be consistent in their no-fallback policy per file.
+ * writeback of a single locked folio (pg_allow_mds), and unless a
+ * LAYOUTGET for that iomode has failed with NFS4ERR_LAYOUTUNAVAILABLE or
+ * NFS4ERR_TOOSMALL.  Servers are assumed to be consistent in their
+ * no-fallback policy per file.
  */
 #define NFS_INO_NO_IO_THRU_MDS	(30)
 
