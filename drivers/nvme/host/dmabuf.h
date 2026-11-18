@@ -21,6 +21,8 @@ struct nvme_dma_buf_io_ctx {
 	struct nvme_dma_buf_list *buf_list;
 	struct dma_buf_io_ctx *base;
 	struct nvme_ctrl *ctrl;
+	/* transport-specific device identifier */
+	void *owner;
 	struct list_head list;
 };
 
@@ -47,15 +49,29 @@ static inline struct nvme_dmabuf_map *nvme_req_to_map(struct request *req)
 extern const struct dma_buf_attach_ops nvme_dmabuf_importer_ops;
 
 void __nvme_remove_dmabufs(struct nvme_dma_buf_list *list);
+bool __nvme_dmabufs_use_owner(struct nvme_dma_buf_list *list, void *owner);
 int __nvme_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
 		struct nvme_dma_buf_list *buf_list,
 		struct dma_buf_attachment *attach,
 		struct dma_buf_io_ctx *ctx);
+int __nvme_init_dma_buf_io_ctx_locked(struct nvme_ctrl *ctrl,
+		struct nvme_dma_buf_list *buf_list,
+		struct dma_buf_attachment *attach, void *owner,
+		struct dma_buf_io_ctx *ctx)
+	__must_hold(&buf_list->lock);
 
 static inline void nvme_remove_dmabufs(struct nvme_dma_buf_list *list)
 {
 	if (IS_ENABLED(CONFIG_DMA_SHARED_BUFFER))
 		__nvme_remove_dmabufs(list);
+}
+
+static inline bool nvme_dmabufs_use_owner(struct nvme_dma_buf_list *list,
+		void *owner)
+{
+	if (!IS_ENABLED(CONFIG_DMA_SHARED_BUFFER))
+		return false;
+	return __nvme_dmabufs_use_owner(list, owner);
 }
 
 static inline int nvme_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
@@ -66,6 +82,18 @@ static inline int nvme_init_dma_buf_io_ctx(struct nvme_ctrl *ctrl,
 	if (!IS_ENABLED(CONFIG_DMA_SHARED_BUFFER))
 		return -EOPNOTSUPP;
 	return __nvme_init_dma_buf_io_ctx(ctrl, buf_list, attach, ctx);
+}
+
+static inline int nvme_init_dma_buf_io_ctx_locked(struct nvme_ctrl *ctrl,
+		struct nvme_dma_buf_list *buf_list,
+		struct dma_buf_attachment *attach, void *owner,
+		struct dma_buf_io_ctx *ctx)
+	__must_hold(&buf_list->lock)
+{
+	if (!IS_ENABLED(CONFIG_DMA_SHARED_BUFFER))
+		return -EOPNOTSUPP;
+	return __nvme_init_dma_buf_io_ctx_locked(ctrl, buf_list, attach, owner,
+						 ctx);
 }
 
 static inline void nvme_init_buf_list(struct nvme_dma_buf_list *buf_list)
