@@ -5459,9 +5459,9 @@ static int load_advanced_binaries(struct ia_css_pipe *pipe)
 		need_isp_copy = pipe->stream->config.mode == IA_CSS_INPUT_MODE_SENSOR;
 
 	if (need_isp_copy)
-		load_copy_binary(pipe,
-				 &pipe->pipe_settings.capture.copy_binary,
-				 &pipe->pipe_settings.capture.pre_isp_binary);
+		err = load_copy_binary(pipe,
+				       &pipe->pipe_settings.capture.copy_binary,
+				       &pipe->pipe_settings.capture.pre_isp_binary);
 
 	return err;
 }
