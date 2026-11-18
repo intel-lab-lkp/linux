@@ -105,6 +105,8 @@ properties:
         items:
           - enum:
               - compulab,cm-t335
+              - kam,am335x-emperor      # Kamstrup READy Concentrator 1M/2M/2C
+              - kam,am335x-emperor-mini # Kamstrup connectIQ IoT Gateway 500
               - moxa,uc-8100-me-t
               - novatech,am335x-lxm
               - seeed,am335x-bone-green-eco
