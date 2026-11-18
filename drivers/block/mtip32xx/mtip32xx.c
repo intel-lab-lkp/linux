@@ -141,8 +141,11 @@ static bool mtip_check_surprise_removal(struct driver_data *dd)
 	pci_read_config_word(dd->pdev, 0x00, &vendor_id);
 	if (vendor_id == 0xFFFF) {
 		dd->sr = true;
-		if (dd->disk)
-			blk_mark_disk_dead(dd->disk);
+		set_bit(MTIP_DDF_DEAD_BIT, &dd->dd_flag);
+		if (dd->port) {
+			set_bit(MTIP_PF_SR_BIT, &dd->port->flags);
+			wake_up_interruptible(&dd->port->svc_wait);
+		}
 		return true; /* device removed */
 	}
 
@@ -2438,9 +2441,12 @@ static bool mtip_abort_cmd(struct request *req, void *data)
 
 	dbg_printk(MTIP_DRV_NAME " Aborting request, tag = %d\n", req->tag);
 
+	if (blk_mq_request_completed(req))
+		return true;
+
 	clear_bit(req->tag, dd->port->cmds_to_issue);
 	cmd->status = BLK_STS_IOERR;
-	mtip_softirq_done_fn(req);
+	blk_mq_complete_request(req);
 	return true;
 }
 
@@ -2461,6 +2467,18 @@ static bool mtip_queue_cmd(struct request *req, void *data)
  * return value
  *	0
  */
+
+static void mtip_handle_surprise_removal(struct driver_data *dd)
+{
+	if (dd->queue) {
+		blk_mq_quiesce_queue(dd->queue);
+		blk_mq_tagset_busy_iter(&dd->tags, mtip_abort_cmd, dd);
+		blk_mq_unquiesce_queue(dd->queue);
+	}
+	if (test_bit(MTIP_DDF_INIT_DONE_BIT, &dd->dd_flag) &&
+	    !test_and_set_bit(MTIP_DDF_DISK_DEAD_BIT, &dd->dd_flag))
+		blk_mark_disk_dead(dd->disk);
+}
 
 static int mtip_service_thread(void *data)
 {
@@ -2491,6 +2509,15 @@ static int mtip_service_thread(void *data)
 			goto st_out;
 
 		set_bit(MTIP_PF_SVC_THD_ACTIVE_BIT, &port->flags);
+
+		if (test_and_clear_bit(MTIP_PF_SR_BIT, &port->flags)) {
+			mtip_handle_surprise_removal(dd);
+			clear_bit(MTIP_PF_EH_ACTIVE_BIT, &port->flags);
+			clear_bit(MTIP_PF_TO_ACTIVE_BIT, &port->flags);
+			clear_bit(MTIP_PF_ISSUE_CMDS_BIT, &port->flags);
+			clear_bit(MTIP_PF_REBUILD_BIT, &port->flags);
+			continue;
+		}
 
 restart_eh:
 		/* Demux bits: start with error handling */
@@ -3241,6 +3268,8 @@ static inline bool is_stopped(struct driver_data *dd, struct request *rq)
 		return true;
 	if (test_bit(MTIP_DDF_REBUILD_FAILED_BIT, &dd->dd_flag))
 		return true;
+	if (test_bit(MTIP_DDF_DEAD_BIT, &dd->dd_flag))
+		return true;
 
 	return false;
 }
@@ -3278,6 +3307,9 @@ static blk_status_t mtip_issue_reserved_cmd(struct blk_mq_hw_ctx *hctx,
 	struct mtip_cmd_hdr *hdr =
 		dd->port->command_list + sizeof(struct mtip_cmd_hdr) * rq->tag;
 	struct mtip_cmd_sg *command_sg;
+
+	if (test_bit(MTIP_DDF_DEAD_BIT, &dd->dd_flag))
+		return BLK_STS_IOERR;
 
 	if (mtip_commands_active(dd->port))
 		return BLK_STS_DEV_RESOURCE;
