@@ -1135,11 +1135,11 @@ static long do_msgrcv(int msqid, void __user *buf, size_t bufsz, long msgtyp, in
 	for (;;) {
 		struct msg_receiver msr_d;
 
+		ipc_lock_object(&msq->q_perm);
+
 		msg = ERR_PTR(-EACCES);
 		if (ipcperms(ns, &msq->q_perm, S_IRUGO))
-			goto out_unlock1;
-
-		ipc_lock_object(&msq->q_perm);
+			goto out_unlock0;
 
 		/* raced with RMID? */
 		if (!ipc_valid_object(&msq->q_perm)) {
